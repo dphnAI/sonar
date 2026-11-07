@@ -5,12 +5,12 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Instant;
 
-use aphrodite_llm::current_unix_timestamp_secs;
-use aphrodite_text::{
-    DecodedTextEvent, Prompt, SampledDelta, TextOutputStream, TextOutputStreamExt as _, TextRequest,
-};
 use asynk_strim_attr::{TryYielder, try_stream};
 use futures::{Stream, StreamExt as _, pin_mut};
+use sonar_llm::current_unix_timestamp_secs;
+use sonar_text::{
+    DecodedTextEvent, Prompt, SampledDelta, TextOutputStream, TextOutputStreamExt as _, TextRequest,
+};
 use thiserror_ext::AsReport as _;
 use tonic::{Request, Response, Status};
 use tracing::{Span, info, info_span, warn};
@@ -40,7 +40,7 @@ struct PreparedGrpcRequest {
 fn apply_encoder_cache_placeholders(text_request: &mut TextRequest) {
     let is_decode_kv_consumer = text_request
         .sampling_params
-        .aphrodite_xargs
+        .sonar_xargs
         .as_ref()
         .and_then(|args| args.get("kv_transfer_params"))
         .and_then(|params| params.get("do_remote_prefill"))
@@ -48,7 +48,7 @@ fn apply_encoder_cache_placeholders(text_request: &mut TextRequest) {
         .unwrap_or(false);
     let ec_items = text_request
         .sampling_params
-        .aphrodite_xargs
+        .sonar_xargs
         .as_ref()
         .and_then(|args| args.get("ec_transfer_params"))
         .and_then(|params| params.get("ec_items"))
@@ -56,9 +56,7 @@ fn apply_encoder_cache_placeholders(text_request: &mut TextRequest) {
         .cloned();
 
     // Decode uses EC metadata only to prepare the prompt; EngineCore consumes KV.
-    if is_decode_kv_consumer
-        && let Some(args) = text_request.sampling_params.aphrodite_xargs.as_mut()
-    {
+    if is_decode_kv_consumer && let Some(args) = text_request.sampling_params.sonar_xargs.as_mut() {
         args.remove("ec_transfer_params");
     }
 
@@ -254,7 +252,7 @@ impl pb::inference_server::Inference for InferenceServiceImpl {
             collected.prompt_logprobs.as_ref(),
             &response_opts,
         );
-        let finish_info = aphrodite_text::Finished {
+        let finish_info = sonar_text::Finished {
             usage: collected.usage,
             finish_reason: collected.finish_reason,
             kv_transfer_params: collected.kv_transfer_params.map(Box::new),
@@ -375,7 +373,7 @@ async fn generate_stream_responses(
     Ok(())
 }
 
-fn text_error_to_status(error: aphrodite_text::Error) -> Status {
+fn text_error_to_status(error: sonar_text::Error) -> Status {
     let message = error.to_report_string();
     if error.is_request_validation_error() {
         Status::invalid_argument(message)
@@ -388,7 +386,7 @@ fn log_text_error(
     request_span: &Span,
     started_at: Instant,
     phase: &'static str,
-    error: aphrodite_text::Error,
+    error: sonar_text::Error,
 ) -> Status {
     let status = text_error_to_status(error);
     warn!(

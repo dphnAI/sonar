@@ -7,7 +7,7 @@ import functools
 
 import torch
 
-from aphrodite.models.minimax_m3.amd.ops.flydsl_utils import (
+from sonar.models.minimax_m3.amd.ops.flydsl_utils import (
     run_compiled,
 )
 
@@ -31,7 +31,7 @@ def _get_decode_kernel():
 
 
 def supports_index_topk(topk_blocks: int, block_size: int) -> bool:
-    from aphrodite.platforms.rocm import on_gfx950
+    from sonar.platforms.rocm import on_gfx950
 
     return on_gfx950() and topk_blocks == _kernel.TOPK and block_size == _kernel.BLK
 

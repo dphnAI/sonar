@@ -7,9 +7,9 @@ from unittest.mock import Mock
 import pytest
 import torch
 
-import aphrodite.v1.worker.workspace as workspace
-from aphrodite.config import AphroditeConfig
-from aphrodite.v1.worker.gpu_worker import _num_workspace_lanes
+import sonar.v1.worker.workspace as workspace
+from sonar.config import SonarConfig
+from sonar.v1.worker.gpu_worker import _num_workspace_lanes
 
 
 class _SpecConfig:
@@ -25,7 +25,7 @@ class _SpecConfig:
         return self._dspark
 
 
-class _AphroditeConfig:
+class _SonarConfig:
     def __init__(self, spec_config: _SpecConfig | None) -> None:
         self.speculative_config = spec_config
 
@@ -44,7 +44,7 @@ def test_workspace_lane_count_is_dspark_only(
     spec_config: _SpecConfig | None,
     expected: int,
 ) -> None:
-    config = cast(AphroditeConfig, _AphroditeConfig(spec_config))
+    config = cast(SonarConfig, _SonarConfig(spec_config))
     assert _num_workspace_lanes(config, use_v2_model_runner) == expected
 
 

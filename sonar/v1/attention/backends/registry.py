@@ -6,11 +6,11 @@ from collections.abc import Callable
 from enum import Enum, EnumMeta
 from typing import TYPE_CHECKING, cast
 
-from aphrodite.logger import init_logger
-from aphrodite.utils.import_utils import resolve_obj_by_qualname
+from sonar.logger import init_logger
+from sonar.utils.import_utils import resolve_obj_by_qualname
 
 if TYPE_CHECKING:
-    from aphrodite.v1.attention.backend import AttentionBackend
+    from sonar.v1.attention.backend import AttentionBackend
 
 logger = init_logger(__name__)
 
@@ -38,76 +38,76 @@ class AttentionBackendEnum(Enum, metaclass=_AttentionBackendEnumMeta):
         backend.get_class()
     """
 
-    FLASH_ATTN = "aphrodite.v1.attention.backends.flash_attn.FlashAttentionBackend"
-    FLASH_ATTN_DIFFKV = "aphrodite.v1.attention.backends.flash_attn_diffkv.FlashAttentionDiffKVBackend"
-    TRITON_ATTN = "aphrodite.v1.attention.backends.triton_attn.TritonAttentionBackend"
-    TRITON_ATTN_DIFFKV = "aphrodite.v1.attention.backends.triton_attn_diffkv.TritonAttentionDiffKVBackend"
-    TRITON_FLASH_ATTN = "aphrodite.v1.attention.backends.triton_flash_attn.TritonFlashAttentionBackend"
-    ROCM_ATTN = "aphrodite.v1.attention.backends.rocm_attn.RocmAttentionBackend"
-    ROCM_SEGMENTED_ATTN = "aphrodite.v1.attention.backends.rocm_segmented_attn.RocmSegmentedAttentionBackend"
-    ROCM_AITER_MLA = "aphrodite.v1.attention.backends.mla.rocm_aiter_mla.AiterMLABackend"
-    ROCM_AITER_TRITON_MLA = "aphrodite.v1.attention.backends.mla.aiter_triton_mla.AiterTritonMLABackend"
-    ROCM_AITER_FA = "aphrodite.v1.attention.backends.rocm_aiter_fa.AiterFlashAttentionBackend"
-    ROCM_AITER_MLA_SPARSE = "aphrodite.v1.attention.backends.mla.rocm_aiter_mla_sparse.ROCMAiterMLASparseBackend"
-    XPU_MLA_SPARSE = "aphrodite.v1.attention.backends.mla.xpu_mla_sparse.XPUMLASparseBackend"
+    FLASH_ATTN = "sonar.v1.attention.backends.flash_attn.FlashAttentionBackend"
+    FLASH_ATTN_DIFFKV = "sonar.v1.attention.backends.flash_attn_diffkv.FlashAttentionDiffKVBackend"
+    TRITON_ATTN = "sonar.v1.attention.backends.triton_attn.TritonAttentionBackend"
+    TRITON_ATTN_DIFFKV = "sonar.v1.attention.backends.triton_attn_diffkv.TritonAttentionDiffKVBackend"
+    TRITON_FLASH_ATTN = "sonar.v1.attention.backends.triton_flash_attn.TritonFlashAttentionBackend"
+    ROCM_ATTN = "sonar.v1.attention.backends.rocm_attn.RocmAttentionBackend"
+    ROCM_SEGMENTED_ATTN = "sonar.v1.attention.backends.rocm_segmented_attn.RocmSegmentedAttentionBackend"
+    ROCM_AITER_MLA = "sonar.v1.attention.backends.mla.rocm_aiter_mla.AiterMLABackend"
+    ROCM_AITER_TRITON_MLA = "sonar.v1.attention.backends.mla.aiter_triton_mla.AiterTritonMLABackend"
+    ROCM_AITER_FA = "sonar.v1.attention.backends.rocm_aiter_fa.AiterFlashAttentionBackend"
+    ROCM_AITER_MLA_SPARSE = "sonar.v1.attention.backends.mla.rocm_aiter_mla_sparse.ROCMAiterMLASparseBackend"
+    XPU_MLA_SPARSE = "sonar.v1.attention.backends.mla.xpu_mla_sparse.XPUMLASparseBackend"
     TORCH_SDPA = ""  # this tag is only used for ViT
-    FLASHINFER = "aphrodite.v1.attention.backends.flashinfer.FlashInferBackend"
-    FLASHINFER_TS = "aphrodite.v1.attention.backends.flashinfer_ts.FlashInferTSBackend"
-    TRITON_FLASHINFER = "aphrodite.v1.attention.backends.triton_flashinfer.TritonFlashInferBackend"
-    FLASHINFER_MLA = "aphrodite.v1.attention.backends.mla.flashinfer_mla.FlashInferMLABackend"
-    TOKENSPEED_MLA = "aphrodite.v1.attention.backends.mla.tokenspeed_mla.TokenspeedMLABackend"
-    FLASHINFER_MLA_SPARSE = "aphrodite.v1.attention.backends.mla.flashinfer_mla_sparse.FlashInferMLASparseTRTLLMBackend"
+    FLASHINFER = "sonar.v1.attention.backends.flashinfer.FlashInferBackend"
+    FLASHINFER_TS = "sonar.v1.attention.backends.flashinfer_ts.FlashInferTSBackend"
+    TRITON_FLASHINFER = "sonar.v1.attention.backends.triton_flashinfer.TritonFlashInferBackend"
+    FLASHINFER_MLA = "sonar.v1.attention.backends.mla.flashinfer_mla.FlashInferMLABackend"
+    TOKENSPEED_MLA = "sonar.v1.attention.backends.mla.tokenspeed_mla.TokenspeedMLABackend"
+    FLASHINFER_MLA_SPARSE = "sonar.v1.attention.backends.mla.flashinfer_mla_sparse.FlashInferMLASparseTRTLLMBackend"
     FLASHINFER_MLA_SPARSE_SM120 = (
-        "aphrodite.v1.attention.backends.mla.flashinfer_mla_sparse.FlashInferMLASparseSM120Backend"
+        "sonar.v1.attention.backends.mla.flashinfer_mla_sparse.FlashInferMLASparseSM120Backend"
     )
     FLASHINFER_MLA_SPARSE_SM90 = (
-        "aphrodite.v1.attention.backends.mla.flashinfer_mla_sparse_sm90.FlashInferMLASparseSM90Backend"
+        "sonar.v1.attention.backends.mla.flashinfer_mla_sparse_sm90.FlashInferMLASparseSM90Backend"
     )
-    TRITON_MLA = "aphrodite.v1.attention.backends.mla.triton_mla.TritonMLABackend"
-    CUTLASS_MLA = "aphrodite.v1.attention.backends.mla.cutlass_mla.CutlassMLABackend"
-    FLASHMLA = "aphrodite.v1.attention.backends.mla.flashmla.FlashMLABackend"
-    FLASHMLA_SPARSE = "aphrodite.v1.attention.backends.mla.flashmla_sparse.FlashMLASparseBackend"
+    TRITON_MLA = "sonar.v1.attention.backends.mla.triton_mla.TritonMLABackend"
+    CUTLASS_MLA = "sonar.v1.attention.backends.mla.cutlass_mla.CutlassMLABackend"
+    FLASHMLA = "sonar.v1.attention.backends.mla.flashmla.FlashMLABackend"
+    FLASHMLA_SPARSE = "sonar.v1.attention.backends.mla.flashmla_sparse.FlashMLASparseBackend"
     # DeepSeek V4 sparse MLA backends (model-driven; selected via the V4 layer).
-    FLASHMLA_SPARSE_DSV4 = "aphrodite.models.deepseek_v4.sparse_mla.DeepseekV4FlashMLABackend"
+    FLASHMLA_SPARSE_DSV4 = "sonar.models.deepseek_v4.sparse_mla.DeepseekV4FlashMLABackend"
     FLASHINFER_MLA_SPARSE_DSV4 = (
-        "aphrodite.models.deepseek_v4.nvidia.flashinfer_sparse.DeepseekV4FlashInferMLASparseBackend"
+        "sonar.models.deepseek_v4.nvidia.flashinfer_sparse.DeepseekV4FlashInferMLASparseBackend"
     )
-    ROCM_FLASHMLA_SPARSE_DSV4 = "aphrodite.models.deepseek_v4.amd.rocm.DeepseekV4ROCMAiterMLASparseBackend"
+    ROCM_FLASHMLA_SPARSE_DSV4 = "sonar.models.deepseek_v4.amd.rocm.DeepseekV4ROCMAiterMLASparseBackend"
     # DeepSeek V4.1 sparse MLA backends (model-driven; selected via the V4.1
     # layer). Separate names from DSV4 so a V4.1 model never resolves the
     # V4.0 backend classes through this enum.
-    FLASHMLA_SPARSE_DSV41 = "aphrodite.models.deepseek_v41.sparse_mla.DeepseekV4FlashMLABackend"
+    FLASHMLA_SPARSE_DSV41 = "sonar.models.deepseek_v41.sparse_mla.DeepseekV4FlashMLABackend"
     FLASHINFER_MLA_SPARSE_DSV41 = (
-        "aphrodite.models.deepseek_v41.nvidia.flashinfer_sparse.DeepseekV4FlashInferMLASparseBackend"
+        "sonar.models.deepseek_v41.nvidia.flashinfer_sparse.DeepseekV4FlashInferMLASparseBackend"
     )
-    ROCM_FLASHMLA_SPARSE_DSV41 = "aphrodite.models.deepseek_v41.amd.rocm.DeepseekV41ROCMAiterMLASparseBackend"
-    FLASHMLA_MEGA_ATTN_DSV41 = "aphrodite.models.deepseek_v41.sparse_mla.FlashMLAMegaAttnBackend"
-    B12X_DSV41 = "aphrodite.models.deepseek_v41.sm120.sparse_mla.DeepseekV41B12xBackend"
-    B12X = "aphrodite.v1.attention.backends.b12x.B12xPagedAttentionBackend"
-    FLASH_ATTN_MLA = "aphrodite.v1.attention.backends.mla.flashattn_mla.FlashAttnMLABackend"
-    FLASH_ATTN_MLA_SPARSE = "aphrodite.v1.attention.backends.mla.flashattn_mla_sparse.FlashAttnMLASparseBackend"
-    SM89_MLA_SPARSE = "aphrodite.v1.attention.backends.mla.sm89_mla_sparse.Sm89MLASparseBackend"
-    FLASH_ATTN_MLA_SPARSE_FA4 = "aphrodite.v1.attention.backends.mla.flashattn_mla_sparse.FlashAttnMLASparseFA4Backend"
-    MINIMAX_M3_SPARSE = "aphrodite.models.minimax_m3.common.sparse_attention.MiniMaxM3SparseBackend"
-    CUTLASS_MSA = "aphrodite.models.minimax_m3.nvidia.sparse_attention_msa.MiniMaxM3SparseCutlassBackend"
-    TRITON_MSA = "aphrodite.models.minimax_m3.nvidia.sparse_attention_msa.MiniMaxM3SparseTritonBackend"
-    STEP5_DSA = "aphrodite.models.step5.nvidia.sparse_attention.Step5DSAAttentionBackend"
-    KIMI_K3_KV_BALANCED_MLA = "aphrodite.models.kimi_k3.nvidia.kv_balanced_mla.backend.KimiK3KvBalancedMLABackend"
-    NO_ATTENTION = "aphrodite.v1.attention.backends.no_attention.NoAttentionBackend"
-    FLEX_ATTENTION = "aphrodite.v1.attention.backends.flex_attention.FlexAttentionBackend"
+    ROCM_FLASHMLA_SPARSE_DSV41 = "sonar.models.deepseek_v41.amd.rocm.DeepseekV41ROCMAiterMLASparseBackend"
+    FLASHMLA_MEGA_ATTN_DSV41 = "sonar.models.deepseek_v41.sparse_mla.FlashMLAMegaAttnBackend"
+    B12X_DSV41 = "sonar.models.deepseek_v41.sm120.sparse_mla.DeepseekV41B12xBackend"
+    B12X = "sonar.v1.attention.backends.b12x.B12xPagedAttentionBackend"
+    FLASH_ATTN_MLA = "sonar.v1.attention.backends.mla.flashattn_mla.FlashAttnMLABackend"
+    FLASH_ATTN_MLA_SPARSE = "sonar.v1.attention.backends.mla.flashattn_mla_sparse.FlashAttnMLASparseBackend"
+    SM89_MLA_SPARSE = "sonar.v1.attention.backends.mla.sm89_mla_sparse.Sm89MLASparseBackend"
+    FLASH_ATTN_MLA_SPARSE_FA4 = "sonar.v1.attention.backends.mla.flashattn_mla_sparse.FlashAttnMLASparseFA4Backend"
+    MINIMAX_M3_SPARSE = "sonar.models.minimax_m3.common.sparse_attention.MiniMaxM3SparseBackend"
+    CUTLASS_MSA = "sonar.models.minimax_m3.nvidia.sparse_attention_msa.MiniMaxM3SparseCutlassBackend"
+    TRITON_MSA = "sonar.models.minimax_m3.nvidia.sparse_attention_msa.MiniMaxM3SparseTritonBackend"
+    STEP5_DSA = "sonar.models.step5.nvidia.sparse_attention.Step5DSAAttentionBackend"
+    KIMI_K3_KV_BALANCED_MLA = "sonar.models.kimi_k3.nvidia.kv_balanced_mla.backend.KimiK3KvBalancedMLABackend"
+    NO_ATTENTION = "sonar.v1.attention.backends.no_attention.NoAttentionBackend"
+    FLEX_ATTENTION = "sonar.v1.attention.backends.flex_attention.FlexAttentionBackend"
     # HPC Attention Backend:
     # powered by operators from https://github.com/Tencent/hpc-ops.
     # Only supported on NVIDIA Hopper GPUs (e.g. H20, H200),
     # currently limited to the Hy3 model,
     # and requires a block size of 64.
-    HPC_ATTN = "aphrodite.v1.attention.backends.hpc_attn.HpcAttentionBackend"
-    ROCM_AITER_UNIFIED_ATTN = "aphrodite.v1.attention.backends.rocm_aiter_unified_attn.RocmAiterUnifiedAttentionBackend"
-    CPU_ATTN = "aphrodite.v1.attention.backends.cpu_attn.CPUAttentionBackend"
-    CPU_MLA = "aphrodite.v1.attention.backends.mla.cpu_mla.CPUMLABackend"
-    AMX_MLA = "aphrodite.v1.attention.backends.mla.amx_mla.AMXMLABackend"
-    TURBOQUANT = "aphrodite.v1.attention.backends.turboquant_attn.TurboQuantAttentionBackend"
-    ROCM_OCTAVE = "aphrodite.v1.attention.backends.rocm_octave_attn.RocmOctaveAttentionBackend"
-    ULTRAQUANT = "aphrodite.v1.attention.backends.ultraquant_attn.UltraQuantAttentionBackend"
+    HPC_ATTN = "sonar.v1.attention.backends.hpc_attn.HpcAttentionBackend"
+    ROCM_AITER_UNIFIED_ATTN = "sonar.v1.attention.backends.rocm_aiter_unified_attn.RocmAiterUnifiedAttentionBackend"
+    CPU_ATTN = "sonar.v1.attention.backends.cpu_attn.CPUAttentionBackend"
+    CPU_MLA = "sonar.v1.attention.backends.mla.cpu_mla.CPUMLABackend"
+    AMX_MLA = "sonar.v1.attention.backends.mla.amx_mla.AMXMLABackend"
+    TURBOQUANT = "sonar.v1.attention.backends.turboquant_attn.TurboQuantAttentionBackend"
+    ROCM_OCTAVE = "sonar.v1.attention.backends.rocm_octave_attn.RocmOctaveAttentionBackend"
+    ULTRAQUANT = "sonar.v1.attention.backends.ultraquant_attn.UltraQuantAttentionBackend"
     # Placeholder for third-party/custom backends - must be registered before use
     # set to None to avoid alias with other backend, whose value is an empty string
     CUSTOM = None
@@ -232,11 +232,11 @@ class MambaAttentionBackendEnum(Enum, metaclass=_AttentionBackendEnumMeta):
         logger.info("Registered new attention backend: %s -> %s", name, value)
         return member
 
-    MAMBA1 = "aphrodite.v1.attention.backends.mamba1_attn.Mamba1AttentionBackend"
-    MAMBA2 = "aphrodite.v1.attention.backends.mamba2_attn.Mamba2AttentionBackend"
-    SHORT_CONV = "aphrodite.v1.attention.backends.short_conv_attn.ShortConvAttentionBackend"
-    LINEAR = "aphrodite.v1.attention.backends.linear_attn.LinearAttentionBackend"
-    GDN_ATTN = "aphrodite.v1.attention.backends.gdn_attn.GDNAttentionBackend"
+    MAMBA1 = "sonar.v1.attention.backends.mamba1_attn.Mamba1AttentionBackend"
+    MAMBA2 = "sonar.v1.attention.backends.mamba2_attn.Mamba2AttentionBackend"
+    SHORT_CONV = "sonar.v1.attention.backends.short_conv_attn.ShortConvAttentionBackend"
+    LINEAR = "sonar.v1.attention.backends.linear_attn.LinearAttentionBackend"
+    GDN_ATTN = "sonar.v1.attention.backends.gdn_attn.GDNAttentionBackend"
     # Placeholder for third-party/custom backends - must be registered before use
     # set to None to avoid alias with other backend, whose value is an empty string
     CUSTOM = None

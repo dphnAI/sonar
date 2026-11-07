@@ -5,9 +5,9 @@ from typing import Any
 
 from starlette.datastructures import State
 
-from aphrodite.engine.protocol import EngineClient
-from aphrodite.entrypoints.serve.utils.request_logger import RequestLogger
-from aphrodite.tasks import SupportedTask
+from sonar.engine.protocol import EngineClient
+from sonar.entrypoints.serve.utils.request_logger import RequestLogger
+from sonar.tasks import SupportedTask
 
 from .serving import OpenAIServingDecisions
 from .strategies import ReadContext, ReadStrategy, select_read_strategy

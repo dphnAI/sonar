@@ -7,16 +7,16 @@ from typing import TYPE_CHECKING
 
 import torch
 
-from aphrodite.distributed.ec_transfer.ec_connector.base import (
+from sonar.distributed.ec_transfer.ec_connector.base import (
     ECConnectorMetadata,
     ECConnectorWorkerMetadata,
 )
-from aphrodite.distributed.ec_transfer.ec_connector.cpu.ec_shared_region import (
+from sonar.distributed.ec_transfer.ec_connector.cpu.ec_shared_region import (
     ECSharedRegion,
 )
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
+    from sonar.config import SonarConfig
 
 
 @dataclass
@@ -66,20 +66,20 @@ class ECCPUWorkerMetadata(ECConnectorWorkerMetadata):
         return self
 
 
-def create_ec_shared_region(aphrodite_config: "AphroditeConfig") -> ECSharedRegion:
-    """Build the EC mmap region from `aphrodite_config`.
+def create_ec_shared_region(sonar_config: "SonarConfig") -> ECSharedRegion:
+    """Build the EC mmap region from `sonar_config`.
 
     Both `ECCPUScheduler` and `ECCPUWorker` call this to get the same
     shared region (same engine_id, same block_size_bytes).
     """
-    ec_config = aphrodite_config.ec_transfer_config
+    ec_config = sonar_config.ec_transfer_config
     assert ec_config is not None, "ec_transfer_config required to build region"
 
-    dp_index = aphrodite_config.parallel_config.data_parallel_index
-    engine_id = f"{aphrodite_config.instance_id}_dp{dp_index}"
+    dp_index = sonar_config.parallel_config.data_parallel_index
+    engine_id = f"{sonar_config.instance_id}_dp{dp_index}"
 
-    dtype = aphrodite_config.model_config.dtype
-    hidden_dim = aphrodite_config.model_config.get_inputs_embeds_size()
+    dtype = sonar_config.model_config.dtype
+    hidden_dim = sonar_config.model_config.get_inputs_embeds_size()
     element_size = torch.empty(0, dtype=dtype).element_size()
     block_size_bytes = hidden_dim * element_size
 

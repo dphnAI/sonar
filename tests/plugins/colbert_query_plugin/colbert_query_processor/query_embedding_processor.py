@@ -3,14 +3,14 @@
 from collections.abc import Iterator, Sequence
 from typing import cast
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.entrypoints.serve.engine.protocol import UsageInfo
-from aphrodite.inputs import PromptType, TokensPrompt
-from aphrodite.outputs import PoolingRequestOutput
-from aphrodite.plugins.io_processors.interface import IOProcessor
-from aphrodite.pooling_params import PoolingParams
-from aphrodite.renderers import BaseRenderer
-from aphrodite.utils.collection_utils import is_list_of
+from sonar.config import SonarConfig
+from sonar.entrypoints.serve.engine.protocol import UsageInfo
+from sonar.inputs import PromptType, TokensPrompt
+from sonar.outputs import PoolingRequestOutput
+from sonar.plugins.io_processors.interface import IOProcessor
+from sonar.pooling_params import PoolingParams
+from sonar.renderers import BaseRenderer
+from sonar.utils.collection_utils import is_list_of
 
 from .types import (
     QUERY_MAXLEN,
@@ -28,13 +28,13 @@ class ColBERTQueryEmbeddingProcessor(IOProcessor[ColBERTEmbeddingCompletionReque
     It does not support all ColBERT-style variants (e.g. colbert-ir/colbertv2.0).
     """
 
-    def __init__(self, aphrodite_config: AphroditeConfig, renderer: BaseRenderer):
-        super().__init__(aphrodite_config, renderer)
+    def __init__(self, sonar_config: SonarConfig, renderer: BaseRenderer):
+        super().__init__(sonar_config, renderer)
         self.requests_cache: dict[str, ColBERTEmbeddingCompletionRequestMixin] = {}
         self.renderer: BaseRenderer = renderer
         # Context window (8192 for jinaai/jina-colbert-v2); caps document
         # content length minus the 3 special-token slots.
-        self.max_model_len = aphrodite_config.model_config.max_model_len
+        self.max_model_len = sonar_config.model_config.max_model_len
         self._query_marker_id: int | None = None
         self._document_marker_id: int | None = None
 

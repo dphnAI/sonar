@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-from aphrodite.config import SpeculativeConfig
-from aphrodite.v1.worker.gpu.spec_decode.dflash.config import DFlashSpeculatorConfig
+from sonar.config import SpeculativeConfig
+from sonar.v1.worker.gpu.spec_decode.dflash.config import DFlashSpeculatorConfig
 
 
 class XPressSpeculatorConfig(DFlashSpeculatorConfig):
-    speculator_class = "aphrodite.v1.worker.gpu.spec_decode.xpress.speculator.XPressSpeculator"
+    speculator_class = "sonar.v1.worker.gpu.spec_decode.xpress.speculator.XPressSpeculator"
     supported_options = frozenset({"xpress_topc"})
 
     @classmethod

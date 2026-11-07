@@ -8,8 +8,8 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-import aphrodite.envs as envs
-from aphrodite.entrypoints.generate.base.protocol import (
+import sonar.envs as envs
+from sonar.entrypoints.generate.base.protocol import (
     MMPayload,
     resolve_return_mm_kwargs_alias,
 )
@@ -30,7 +30,7 @@ class AnthropicErrorResponse(BaseModel):
 
 
 # Anthropic SDKs dispatch on ``error.type``, which must use Anthropic's own
-# vocabulary rather than Aphrodite's internal/Python error class names.
+# vocabulary rather than Sonar's internal/Python error class names.
 _ANTHROPIC_ERROR_TYPE_BY_STATUS: dict[int, str] = {
     HTTPStatus.BAD_REQUEST.value: "invalid_request_error",
     HTTPStatus.UNAUTHORIZED.value: "authentication_error",
@@ -38,7 +38,7 @@ _ANTHROPIC_ERROR_TYPE_BY_STATUS: dict[int, str] = {
     HTTPStatus.NOT_FOUND.value: "not_found_error",
     HTTPStatus.REQUEST_ENTITY_TOO_LARGE.value: "request_too_large",
     HTTPStatus.TOO_MANY_REQUESTS.value: "rate_limit_error",
-    # Aphrodite reports overload (e.g. QueueOverflowError) as HTTP 503.
+    # Sonar reports overload (e.g. QueueOverflowError) as HTTP 503.
     HTTPStatus.SERVICE_UNAVAILABLE.value: "overloaded_error",
 }
 
@@ -258,7 +258,7 @@ class AnthropicMessagesRequest(BaseModel):
     metadata: dict[str, Any] | None = None
     output_config: AnthropicOutputConfig | None = None
     thinking: AnthropicThinkingConfig | None = None
-    stop_sequences: Annotated[list[str], Field(max_length=envs.APHRODITE_MAX_STOP_STRINGS)] | None = None
+    stop_sequences: Annotated[list[str], Field(max_length=envs.SONAR_MAX_STOP_STRINGS)] | None = None
     stream: bool | None = False
     system: str | list[AnthropicContentBlock] | None = None
     temperature: float | None = None
@@ -267,7 +267,7 @@ class AnthropicMessagesRequest(BaseModel):
     top_k: int | None = None
     top_p: float | None = None
 
-    # Aphrodite-specific fields that are not in Anthropic spec
+    # Sonar-specific fields that are not in Anthropic spec
     mm_payload: MMPayload = Field(
         default="tensors",
         description=(
@@ -311,7 +311,7 @@ class AnthropicMessagesRequest(BaseModel):
         default=None,
         description="ECTransfer parameters used for encoder-cache disaggregated serving.",
     )
-    aphrodite_xargs: dict[str, str | int | float | list[str | int | float]] | None = Field(
+    sonar_xargs: dict[str, str | int | float | list[str | int | float]] | None = Field(
         default=None,
         description=(
             "Additional request parameters with (list of) string or numeric values, used by custom extensions."
@@ -407,7 +407,7 @@ class AnthropicMessagesResponse(BaseModel):
     stop_sequence: str | None = None
     usage: AnthropicUsage | None = None
 
-    # Aphrodite-specific fields that are not in Anthropic spec
+    # Sonar-specific fields that are not in Anthropic spec
     kv_transfer_params: dict[str, Any] | None = Field(default=None, description="KVTransfer parameters.")
     ec_transfer_params: dict[str, Any] | None = Field(default=None, description="ECTransfer parameters.")
 
@@ -433,7 +433,7 @@ class AnthropicCountTokensRequest(BaseModel):
     tool_choice: AnthropicToolChoice | None = None
     tools: list[AnthropicTool] | None = None
 
-    # Aphrodite-specific fields that are not in Anthropic spec
+    # Sonar-specific fields that are not in Anthropic spec
     chat_template_kwargs: dict[str, Any] | None = Field(
         default=None,
         description=(

@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from typing_extensions import override
 
-from aphrodite.v1.kv_offload.base import (
+from sonar.v1.kv_offload.base import (
     ConfigInfo,
     ConfigInfoMapping,
     LookupResult,
@@ -24,7 +24,7 @@ from aphrodite.v1.kv_offload.base import (
     ReqContext,
     RequestOffloadingContext,
 )
-from aphrodite.v1.kv_offload.tiering.base import (
+from sonar.v1.kv_offload.tiering.base import (
     JobResult,
     SecondaryTierManager,
     TransferJob,
@@ -33,8 +33,8 @@ from aphrodite.v1.kv_offload.tiering.base import (
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    from aphrodite.v1.kv_offload.base import OffloadingSpec
-    from aphrodite.v1.kv_offload.tiering.backpressure import BackpressureDetector
+    from sonar.v1.kv_offload.base import OffloadingSpec
+    from sonar.v1.kv_offload.tiering.backpressure import BackpressureDetector
 
 
 @dataclass(frozen=True)

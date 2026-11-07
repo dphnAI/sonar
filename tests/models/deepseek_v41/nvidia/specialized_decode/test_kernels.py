@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Single-GPU kernels of the DeepSeek-V4.1 specialized decode
-(``aphrodite/models/deepseek_v41/nvidia/specialized_decode``), each against the stock path
+(``sonar/models/deepseek_v41/nvidia/specialized_decode``), each against the stock path
 it replaces, eagerly and replayed from a CUDA graph where the decode captures
 it. Needs one SM100-family GPU; about 5 minutes, mostly kernel compilation.
 
@@ -14,49 +14,49 @@ import pytest
 import torch
 from torch import nn
 
-from aphrodite.config import CUDAGraphMode
-from aphrodite.forward_context import ForwardContext, override_forward_context
-from aphrodite.model_executor.kernels.linear.cute_dsl import ll_bf16
-from aphrodite.model_executor.kernels.linear.mxfp8.flashinfer import (
+from sonar.config import CUDAGraphMode
+from sonar.forward_context import ForwardContext, override_forward_context
+from sonar.model_executor.kernels.linear.cute_dsl import ll_bf16
+from sonar.model_executor.kernels.linear.mxfp8.flashinfer import (
     FlashInferCutedslMxfp8LinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.mxfp8.Mxfp8LinearKernel import (
+from sonar.model_executor.kernels.linear.mxfp8.Mxfp8LinearKernel import (
     Mxfp8LinearLayerConfig,
 )
-from aphrodite.model_executor.layers.fusion.quant_activation import QuantizedActivation
-from aphrodite.model_executor.layers.quantization.utils.mxfp8_utils import (
+from sonar.model_executor.layers.fusion.quant_activation import QuantizedActivation
+from sonar.model_executor.layers.quantization.utils.mxfp8_utils import (
     mxfp8_e4m3_quantize,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import kMxfp8Dynamic
-from aphrodite.models.deepseek_v41.common.engram import Engram
-from aphrodite.models.deepseek_v41.common.ops.indexer_k_store import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import kMxfp8Dynamic
+from sonar.models.deepseek_v41.common.engram import Engram
+from sonar.models.deepseek_v41.common.ops.indexer_k_store import (
     indexer_k_norm_rope_store,
 )
-from aphrodite.models.deepseek_v41.nvidia import flashinfer_sparse
-from aphrodite.models.deepseek_v41.nvidia.flashinfer_sparse import (
+from sonar.models.deepseek_v41.nvidia import flashinfer_sparse
+from sonar.models.deepseek_v41.nvidia.flashinfer_sparse import (
     DeepseekV4FlashInferMLAAttention,
 )
-from aphrodite.models.deepseek_v41.nvidia.specialized_decode.attention import (
+from sonar.models.deepseek_v41.nvidia.specialized_decode.attention import (
     mxfp8 as mxfp8_linear,
 )
-from aphrodite.models.deepseek_v41.nvidia.specialized_decode.attention import sparse_mla
-from aphrodite.models.deepseek_v41.nvidia.specialized_decode.attention.aux_projections import (  # noqa: E501
+from sonar.models.deepseek_v41.nvidia.specialized_decode.attention import sparse_mla
+from sonar.models.deepseek_v41.nvidia.specialized_decode.attention.aux_projections import (  # noqa: E501
     aux_projection_gemm,
 )
-from aphrodite.models.deepseek_v41.nvidia.specialized_decode.attention.candidate_topk import (  # noqa: E501
+from sonar.models.deepseek_v41.nvidia.specialized_decode.attention.candidate_topk import (  # noqa: E501
     select_candidate_blocks_cooperative,
 )
-from aphrodite.models.deepseek_v41.nvidia.specialized_decode.attention.indexer_k_store import (  # noqa: E501
+from sonar.models.deepseek_v41.nvidia.specialized_decode.attention.indexer_k_store import (  # noqa: E501
     indexer_k_norm_rope_store_fp32,
 )
-from aphrodite.models.deepseek_v41.nvidia.specialized_decode.attention.sparse_mla import (
+from sonar.models.deepseek_v41.nvidia.specialized_decode.attention.sparse_mla import (
     SparseIndexTables,
     SparseMlaDecode,
 )
-from aphrodite.models.deepseek_v41.nvidia.specialized_decode.engram.prefetch import (
+from sonar.models.deepseek_v41.nvidia.specialized_decode.engram.prefetch import (
     EngramPrefetch,
 )
-from aphrodite.models.deepseek_v41.nvidia.specialized_decode.moe.routed_expert_gemm import (
+from sonar.models.deepseek_v41.nvidia.specialized_decode.moe.routed_expert_gemm import (
     EXPERTS,
     HIDDEN,
     PADDED,
@@ -65,10 +65,10 @@ from aphrodite.models.deepseek_v41.nvidia.specialized_decode.moe.routed_expert_g
     FrontConfig,
     RoutedExpertGemm,
 )
-from aphrodite.models.deepseek_v41.nvidia.specialized_decode.runtime.metadata_graphs import (
+from sonar.models.deepseek_v41.nvidia.specialized_decode.runtime.metadata_graphs import (
     AttnMetadataCudaGraphs,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 pytestmark = pytest.mark.skipif(
     not (current_platform.is_cuda() and current_platform.is_device_capability_family(100)),
@@ -112,9 +112,9 @@ def _routing(rows: int, generator: torch.Generator) -> torch.Tensor:
 
 @pytest.fixture(scope="module")
 def experts():
-    """Random MXFP4 experts converted by Aphrodite for the TRT-LLM-gen backend, the
+    """Random MXFP4 experts converted by Sonar for the TRT-LLM-gen backend, the
     tensors both the FlashInfer path and the low-batch kernels read."""
-    from aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 import (
+    from sonar.model_executor.layers.fused_moe.oracle.mxfp4 import (
         Mxfp4MoeBackend,
         convert_weight_to_mxfp4_moe_kernel_format,
     )
@@ -149,10 +149,10 @@ def experts():
 
 
 def _gemm(experts) -> RoutedExpertGemm:
-    from aphrodite.model_executor.layers.fused_moe.config import (
+    from sonar.model_executor.layers.fused_moe.config import (
         mxfp4_mxfp8_moe_quant_config,
     )
-    from aphrodite.model_executor.layers.fused_moe.prepare_finalize.no_dp_ep import (
+    from sonar.model_executor.layers.fused_moe.prepare_finalize.no_dp_ep import (
         MoEPrepareAndFinalizeNoDPEPModular,
     )
 
@@ -175,9 +175,9 @@ def _flashinfer_experts(experts, routing, output=None):
     input: GEMM2 rows and their permutation, or the finalized ``output``."""
     from flashinfer import trtllm_fp4_block_scale_routed_moe
 
-    from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-    from aphrodite.model_executor.layers.fused_moe.config import RoutingMethodType
-    from aphrodite.model_executor.layers.quantization.utils.flashinfer_utils import (
+    from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+    from sonar.model_executor.layers.fused_moe.config import RoutingMethodType
+    from sonar.model_executor.layers.quantization.utils.flashinfer_utils import (
         activation_to_flashinfer_int,
     )
 
@@ -293,7 +293,7 @@ def _front_inputs(rows: int, generator: torch.Generator, image_rows: int):
 
 def _chain(gemm: RoutedExpertGemm, x, logits, ids):
     """What the front replaces: the DSv4 top-k, then quantization and route."""
-    from aphrodite.model_executor.layers.fused_moe.router.dsv4_topk import dsv4_topk
+    from sonar.model_executor.layers.fused_moe.router.dsv4_topk import dsv4_topk
 
     config = gemm.front_config
     weights, topk_ids = dsv4_topk(
@@ -369,7 +369,7 @@ def test_front_matches_the_chain(experts, rows, image, scale):
 def test_cooperative_candidates_match_stock(workspace_init, ends, k):
     """Each row's candidate set equals the stock ``torch.topk`` selection,
     including the pinned newest block and -inf blocks left as -1."""
-    from aphrodite.model_executor.kernels.attention.dsa.candidate_blocks import (
+    from sonar.model_executor.kernels.attention.dsa.candidate_blocks import (
         select_candidate_blocks,
     )
 
@@ -519,14 +519,14 @@ def test_low_latency_mxfp8_mm(shape, rows):
 
 
 @pytest.mark.parametrize("rows", [1, 5, 6, 8, 16, 17])
-def test_low_batch_lm_head(dist_init, default_aphrodite_config, rows):
+def test_low_batch_lm_head(dist_init, default_sonar_config, rows):
     """The logits processor's LM head on CuTe DSL ``mm_bf16`` for 1-16 rows,
     within BF16 rounding of the FP32 product; 17 rows keep the default GEMM."""
-    from aphrodite.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
-    from aphrodite.models.deepseek_v41.nvidia.specialized_decode.logits.lm_head import (
+    from sonar.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
+    from sonar.models.deepseek_v41.nvidia.specialized_decode.logits.lm_head import (
         low_batch_lm_head_applies,
     )
-    from aphrodite.models.deepseek_v41.nvidia.specialized_decode.logits.logits import (
+    from sonar.models.deepseek_v41.nvidia.specialized_decode.logits.logits import (
         SpecializedDecodeLogitsProcessor,
     )
 
@@ -997,8 +997,8 @@ def test_metadata_graph_replay_matches_eager_build():
     table, so the build forks into four branches) refreshes, on replay, every
     buffer the FULL forward graphs read to the eager build's values, also
     after an eager build of another batch left other values there."""
-    from aphrodite.v1.worker.gpu.attn_utils import build_attn_metadata
-    from aphrodite.v1.worker.utils import AttentionGroup
+    from sonar.v1.worker.gpu.attn_utils import build_attn_metadata
+    from sonar.v1.worker.utils import AttentionGroup
 
     num_reqs, query_len, groups = 3, 4, 5
     tokens = num_reqs * query_len

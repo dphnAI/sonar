@@ -39,10 +39,10 @@ from aiter.ops.flydsl.kernels import buffer_ops as bo
 from flydsl.expr import const_expr, gpu, range_constexpr
 from flydsl.expr.typing import Int32, Int64, T
 
-from aphrodite.models.kimi_k3.amd.specialized_decode.mono.common.debug import (
+from sonar.models.kimi_k3.amd.specialized_decode.mono.common.debug import (
     region_ids,
 )
-from aphrodite.models.kimi_k3.amd.specialized_decode.mono.common.ops import (
+from sonar.models.kimi_k3.amd.specialized_decode.mono.common.ops import (
     CM_DEV,
     CM_NT,
     bf_hi,
@@ -58,7 +58,7 @@ from aphrodite.models.kimi_k3.amd.specialized_decode.mono.common.ops import (
     uniform,
     wave_max,
 )
-from aphrodite.models.kimi_k3.amd.specialized_decode.mono.common.plan import (
+from sonar.models.kimi_k3.amd.specialized_decode.mono.common.plan import (
     BLOCKS,
     THREADS,
     WAVES,
@@ -68,12 +68,12 @@ from aphrodite.models.kimi_k3.amd.specialized_decode.mono.common.plan import (
     pair_layout,
     source_digest,
 )
-from aphrodite.models.kimi_k3.amd.specialized_decode.mono.common.sync import (
+from sonar.models.kimi_k3.amd.specialized_decode.mono.common.sync import (
     Mailbox,
     publish,
     sreg,
 )
-from aphrodite.v1.attention.ops.flydsl_kernels import _run_compiled
+from sonar.v1.attention.ops.flydsl_kernels import _run_compiled
 
 HIDDEN = 7168
 NA = 56  # attn CTAs

@@ -10,11 +10,11 @@ import numpy as np
 import torch
 from typing_extensions import TypeVar
 
-from aphrodite.exceptions import AphroditeValidationError, GenerationError, RetryableRequestError
-from aphrodite.logger import init_logger
-from aphrodite.logprobs import PromptLogprobs, SampleLogprobs
-from aphrodite.lora.request import LoRARequest
-from aphrodite.v1.metrics.stats import RequestSpecDecodeMetrics, RequestStateStats
+from sonar.exceptions import GenerationError, RetryableRequestError, SonarValidationError
+from sonar.logger import init_logger
+from sonar.logprobs import PromptLogprobs, SampleLogprobs
+from sonar.lora.request import LoRARequest
+from sonar.v1.metrics.stats import RequestSpecDecodeMetrics, RequestStateStats
 
 logger = init_logger(__name__)
 
@@ -27,9 +27,9 @@ class RequestError:
     message: str
     retryable: bool = False
 
-    def to_exception(self) -> GenerationError | AphroditeValidationError:
+    def to_exception(self) -> GenerationError | SonarValidationError:
         if self.code == "validation_error":
-            return AphroditeValidationError(self.message)
+            return SonarValidationError(self.message)
         if self.retryable:
             return RetryableRequestError(self.message)
         return GenerationError(self.message)
@@ -183,7 +183,7 @@ class RequestOutput:
         kv_transfer_params: dict[str, Any] | None = None,
         ec_transfer_params: dict[str, Any] | None = None,
         # Forward compatibility, code that uses args added in new release can
-        # still run with older versions of Aphrodite without breaking.
+        # still run with older versions of Sonar without breaking.
         **kwargs: Any,
     ) -> None:
         if kwargs:

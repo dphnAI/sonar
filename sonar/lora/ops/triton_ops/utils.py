@@ -9,14 +9,14 @@ from typing import Any
 
 import torch
 
-from aphrodite import envs
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.utils.math_utils import next_power_of_2
-from aphrodite.utils.torch_utils import async_tensor_h2d
+from sonar import envs
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.utils.math_utils import next_power_of_2
+from sonar.utils.torch_utils import async_tensor_h2d
 
 logger = init_logger(__name__)
-is_batch_invariant = envs.APHRODITE_BATCH_INVARIANT
+is_batch_invariant = envs.SONAR_BATCH_INVARIANT
 
 _LORA_A_PTR_DICT: dict[tuple[int, ...], tuple[torch.tensor, ...]] = {}
 _LORA_B_PTR_DICT: dict[tuple[int, ...], tuple[torch.tensor, ...]] = {}
@@ -138,7 +138,7 @@ def _get_lora_b_ptr(lora_weights: list[torch.Tensor], offset_start: int, device:
 
 @functools.lru_cache
 def load_lora_op_config(op_type: str, add_inputs: bool | None) -> dict | None:
-    user_defined_config_folder = envs.APHRODITE_TUNED_CONFIG_FOLDER
+    user_defined_config_folder = envs.SONAR_TUNED_CONFIG_FOLDER
     # Avoid optimizing for the batch invariant case. Use default config
     if user_defined_config_folder is not None and not is_batch_invariant:
         gpu_name = torch.cuda.get_device_name()
@@ -283,11 +283,7 @@ def supports_pdl(device: torch.device | None = None) -> bool:
     """Refer to: https://github.com/triton-lang/triton/blob/v3.5.0/python/tutorials/11-programmatic-dependent-launch.py."""
     # PDL requires compute capability SM90 or above
 
-    return (
-        current_platform.is_cuda()
-        and current_platform.has_device_capability(90)
-        and not envs.APHRODITE_LORA_DISABLE_PDL
-    )
+    return current_platform.is_cuda() and current_platform.has_device_capability(90) and not envs.SONAR_LORA_DISABLE_PDL
 
 
 @lru_cache

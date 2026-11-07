@@ -2,8 +2,8 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import torch
 
-from aphrodite.model_executor.layers.quantization.utils.ocp_mx_utils import OCP_MX_BLOCK_SIZE
-from aphrodite.utils.torch_utils import direct_register_custom_op
+from sonar.model_executor.layers.quantization.utils.ocp_mx_utils import OCP_MX_BLOCK_SIZE
+from sonar.utils.torch_utils import direct_register_custom_op
 
 
 def _quant_dequant_mxfp6(
@@ -113,7 +113,7 @@ def quant_dequant_mxfp6(
     quant_dtype: str,
     scale_calculation_mode: str = "even",
 ) -> torch.Tensor:
-    return torch.ops.aphrodite.quant_dequant_mxfp6(x, quant_dtype, scale_calculation_mode)
+    return torch.ops.sonar.quant_dequant_mxfp6(x, quant_dtype, scale_calculation_mode)
 
 
 try:
@@ -128,4 +128,4 @@ except AttributeError as error:
 
 
 def dequant_mxfp6(x: torch.Tensor, scale: torch.Tensor, float_dtype: torch.dtype, quant_dtype: str) -> torch.Tensor:
-    return torch.ops.aphrodite.dequant_mxfp6(x, scale, float_dtype, quant_dtype)
+    return torch.ops.sonar.dequant_mxfp6(x, scale, float_dtype, quant_dtype)

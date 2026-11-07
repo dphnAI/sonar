@@ -6,9 +6,9 @@ from __future__ import annotations
 
 import torch
 
-from aphrodite.model_executor.layers.linear import UnquantizedLinearMethod
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.linear import UnquantizedLinearMethod
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     UnquantizedEmbeddingMethod,
     VocabParallelEmbedding,
 )

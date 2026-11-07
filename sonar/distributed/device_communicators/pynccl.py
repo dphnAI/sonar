@@ -10,8 +10,8 @@ import torch
 import torch.distributed as dist
 from torch.distributed import ProcessGroup, ReduceOp
 
-import aphrodite.envs as envs
-from aphrodite.distributed.device_communicators.pynccl_wrapper import (
+import sonar.envs as envs
+from sonar.distributed.device_communicators.pynccl_wrapper import (
     NCCL_UNIQUE_ID_BYTES,
     NCCLLibrary,
     buffer_type,
@@ -21,9 +21,9 @@ from aphrodite.distributed.device_communicators.pynccl_wrapper import (
     ncclRedOpTypeEnum,
     ncclUniqueId,
 )
-from aphrodite.distributed.utils import StatelessProcessGroup
-from aphrodite.logger import init_logger
-from aphrodite.utils.torch_utils import current_stream
+from sonar.distributed.utils import StatelessProcessGroup
+from sonar.logger import init_logger
+from sonar.utils.torch_utils import current_stream
 
 logger = init_logger(__name__)
 
@@ -41,7 +41,7 @@ def defer_comm_warmup_on_rocm():
     communicators still have collectives in flight; instead the warm-up is
     deferred to when the engine is quiet (during commit).
     """
-    from aphrodite.platforms import current_platform
+    from sonar.platforms import current_platform
 
     if not current_platform.is_rocm():
         yield
@@ -60,10 +60,10 @@ _NCCL_SUSPEND_MEM = 0x01
 
 
 def register_nccl_symmetric_ops(pynccl_comm):
-    from aphrodite.distributed.device_communicators.pynccl_allocator import (
+    from sonar.distributed.device_communicators.pynccl_allocator import (
         nccl_symm_mem_context,
     )
-    from aphrodite.utils.torch_utils import direct_register_custom_op
+    from sonar.utils.torch_utils import direct_register_custom_op
 
     global _NCCL_SYMM_OPS_REGISTERED
     if _NCCL_SYMM_OPS_REGISTERED:
@@ -124,7 +124,7 @@ class PyNcclCommunicator:
         self.group = group
 
         # if world_size == 1, no need to create communicator
-        if self.world_size == 1 or envs.APHRODITE_DISABLE_PYNCCL:
+        if self.world_size == 1 or envs.SONAR_DISABLE_PYNCCL:
             self.available = False
             self.disabled = True
             return
@@ -145,7 +145,7 @@ class PyNcclCommunicator:
         if self.rank == 0:
             # get the unique id from NCCL
             self.unique_id = self.nccl.ncclGetUniqueId()
-            logger.info_once("Aphrodite is using nccl==%s", self.nccl.ncclGetVersion())
+            logger.info_once("Sonar is using nccl==%s", self.nccl.ncclGetVersion())
         else:
             # construct an empty unique id
             self.unique_id = ncclUniqueId()
@@ -207,7 +207,7 @@ class PyNcclCommunicator:
 
         Warm-up handshake: immediately after ``ncclCommInitRank`` this issues a
         one-element ``all_reduce`` (mirroring ``__init__``). It is a collective,
-        so every peer -- including a foreign, non-Aphrodite rank -- must issue a
+        so every peer -- including a foreign, non-Sonar rank -- must issue a
         matching one-element ``all_reduce`` before any other collective, or all
         ranks deadlock.
         """
@@ -221,7 +221,7 @@ class PyNcclCommunicator:
         self.world_size = world_size
         self.group = None
 
-        if self.world_size == 1 or envs.APHRODITE_DISABLE_PYNCCL:
+        if self.world_size == 1 or envs.SONAR_DISABLE_PYNCCL:
             self.available = False
             self.disabled = True
             return self

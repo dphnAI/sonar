@@ -9,8 +9,8 @@ each program projects the step's Markov embedding through its own block of
 
 import torch
 
-from aphrodite.triton_utils import tl, triton
-from aphrodite.v1.worker.gpu.sample.gumbel import gumbel_noised_argmax, spec_step_seed
+from sonar.triton_utils import tl, triton
+from sonar.v1.worker.gpu.sample.gumbel import gumbel_noised_argmax, spec_step_seed
 
 
 @triton.jit

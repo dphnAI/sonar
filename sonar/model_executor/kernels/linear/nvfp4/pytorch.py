@@ -3,14 +3,14 @@
 
 import torch
 
-from aphrodite._custom_ops import scaled_fp4_quant
-from aphrodite.model_executor.layers.quantization.utils.nvfp4_utils import (
+from sonar._custom_ops import scaled_fp4_quant
+from sonar.model_executor.layers.quantization.utils.nvfp4_utils import (
     pad_nvfp4_weight_for_cutlass,
     slice_nvfp4_output,
     swizzle_blockscale,
 )
-from aphrodite.model_executor.utils import replace_parameter
-from aphrodite.platforms import current_platform
+from sonar.model_executor.utils import replace_parameter
+from sonar.platforms import current_platform
 
 from .base import NvFp4LinearKernel, NvFp4LinearLayerConfig
 

@@ -9,9 +9,9 @@
 # ruff: noqa: E501
 import torch
 
-from aphrodite.triton_utils import triton
-from aphrodite.utils.gpu_sync_debug import gpu_sync_allowed
-from aphrodite.utils.torch_utils import async_tensor_h2d
+from sonar.triton_utils import triton
+from sonar.utils.gpu_sync_debug import gpu_sync_allowed
+from sonar.utils.torch_utils import async_tensor_h2d
 
 from .utils import tensor_cache
 

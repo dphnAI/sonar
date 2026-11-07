@@ -22,8 +22,8 @@ from dataclasses import dataclass
 import torch
 import torch.distributed as dist
 
-import aphrodite._custom_ops as ops
-from aphrodite.distributed.device_communicators.custom_all_reduce import CustomAllreduce
+import sonar._custom_ops as ops
+from sonar.distributed.device_communicators.custom_all_reduce import CustomAllreduce
 
 _DTYPES = {
     "bf16": torch.bfloat16,

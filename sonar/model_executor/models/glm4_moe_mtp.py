@@ -31,21 +31,21 @@ import torch
 import torch.nn as nn
 from transformers import PreTrainedConfig
 
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.config import AphroditeConfig, CacheConfig, ParallelConfig
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.config import CacheConfig, ParallelConfig, SonarConfig
+from sonar.model_executor.layers.fused_moe import (
     MoERunner,
     fused_moe_make_expert_params_mapping,
 )
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
-from aphrodite.sequence import IntermediateTensors
+from sonar.model_executor.model_loader.weight_utils import default_weight_loader
+from sonar.sequence import IntermediateTensors
 
 from .glm4_moe import (
     Glm4MixtureOfExperts,
@@ -126,9 +126,9 @@ class Glm4MoeMultiTokenPredictorLayer(nn.Module):
 
 
 class Glm4MoeMultiTokenPredictor(nn.Module):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
         self.mtp_start_layer_idx = config.num_hidden_layers
         self.num_mtp_layers = config.num_nextn_predict_layers
         # to map the exact layer index from weights
@@ -137,9 +137,9 @@ class Glm4MoeMultiTokenPredictor(nn.Module):
                 str(idx): Glm4MoeMultiTokenPredictorLayer(
                     config,
                     f"{prefix}.layers.{idx}",
-                    cache_config=aphrodite_config.cache_config,
-                    quant_config=aphrodite_config.quant_config,
-                    parallel_config=aphrodite_config.parallel_config,
+                    cache_config=sonar_config.cache_config,
+                    quant_config=sonar_config.quant_config,
+                    parallel_config=sonar_config.parallel_config,
                 )
                 for idx in range(
                     self.mtp_start_layer_idx,
@@ -187,10 +187,10 @@ class Glm4MoeMultiTokenPredictor(nn.Module):
 
 
 class Glm4MoeMTP(nn.Module, Glm4MixtureOfExperts):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        self.config = aphrodite_config.model_config.hf_config
-        self.model = Glm4MoeMultiTokenPredictor(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.config = sonar_config.model_config.hf_config
+        self.model = Glm4MoeMultiTokenPredictor(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
 
         # Set MoE hyperparameters
         self.num_moe_layers = self.config.num_nextn_predict_layers
@@ -211,7 +211,7 @@ class Glm4MoeMTP(nn.Module, Glm4MixtureOfExperts):
         self.fused_shared_expert_layers = get_fused_shared_expert_layers(
             self,
             Glm4MoE,
-            enable_eplb=aphrodite_config.parallel_config.enable_eplb,
+            enable_eplb=sonar_config.parallel_config.enable_eplb,
         )
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:

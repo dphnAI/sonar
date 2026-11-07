@@ -5,9 +5,9 @@
 import torch
 import torch.distributed as dist
 
-from aphrodite.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
-from aphrodite.utils.flashinfer import has_flashinfer
-from aphrodite.utils.math_utils import cdiv, round_up
+from sonar.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
+from sonar.utils.flashinfer import has_flashinfer
+from sonar.utils.math_utils import cdiv, round_up
 
 _NUM_LAMPORT_BUFFERS = 3
 # FlashInfer's MNNVL one-shot cutoff on the BF16 payload staged across ranks.

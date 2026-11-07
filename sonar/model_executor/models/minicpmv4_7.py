@@ -11,10 +11,10 @@ from typing import Any, NamedTuple
 
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.logger import init_logger
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import MultiModalFeatureSpec, MultiModalFieldConfig
+from sonar.config import SonarConfig
+from sonar.logger import init_logger
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import MultiModalFeatureSpec, MultiModalFieldConfig
 
 from .minicpmv import MiniCPMVDummyInputsBuilder
 from .minicpmv4_6 import (
@@ -122,16 +122,16 @@ def _sequential_positions(seq_len: int) -> torch.Tensor:
     dummy_inputs=MiniCPMVDummyInputsBuilder,
 )
 class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_6ForConditionalGeneration):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
-        super().__init__(aphrodite_config=aphrodite_config, prefix=prefix)
-        self._init_canvas_mrope(aphrodite_config)
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
+        super().__init__(sonar_config=sonar_config, prefix=prefix)
+        self._init_canvas_mrope(sonar_config)
 
     def _drop_vision_last_layer(self) -> bool:
         # MiniCPMV4_7Config no longer carries this field (transformers marks it
         # removed), and 4.7 keeps every vision encoder layer.
         return False
 
-    def _init_canvas_mrope(self, aphrodite_config: AphroditeConfig) -> None:
+    def _init_canvas_mrope(self, sonar_config: SonarConfig) -> None:
         config = self.config
         uses_canvas = bool(getattr(config, "uses_mrope_canvas", False))
         if not uses_canvas:
@@ -158,9 +158,9 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_6ForConditionalGeneration):
             self._canvas_special_ids = {name: int(value) for name, value in configured_ids.items() if value is not None}
             return
 
-        from aphrodite.tokenizers.registry import get_tokenizer
+        from sonar.tokenizers.registry import get_tokenizer
 
-        model_config = aphrodite_config.model_config
+        model_config = sonar_config.model_config
         tokenizer = get_tokenizer(
             model_config.tokenizer,
             revision=model_config.tokenizer_revision,

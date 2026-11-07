@@ -4,11 +4,11 @@
 
 import pytest
 
-from aphrodite.distributed.ec_transfer.ec_connector.base import ECConnectorWorkerMetadata
-from aphrodite.distributed.ec_transfer.ec_connector.metrics import ECConnectorStats
-from aphrodite.distributed.ec_transfer.ec_connector.utils import ECOutputAggregator
-from aphrodite.distributed.kv_transfer.kv_connector.utils import KVOutputAggregator
-from aphrodite.v1.outputs import (
+from sonar.distributed.ec_transfer.ec_connector.base import ECConnectorWorkerMetadata
+from sonar.distributed.ec_transfer.ec_connector.metrics import ECConnectorStats
+from sonar.distributed.ec_transfer.ec_connector.utils import ECOutputAggregator
+from sonar.distributed.kv_transfer.kv_connector.utils import KVOutputAggregator
+from sonar.v1.outputs import (
     EMPTY_MODEL_RUNNER_OUTPUT,
     ECConnectorOutput,
     KVConnectorOutput,

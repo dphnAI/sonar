@@ -4,7 +4,7 @@
 
 from pydantic import Field
 
-from aphrodite.config.utils import config
+from sonar.config.utils import config
 
 
 @config

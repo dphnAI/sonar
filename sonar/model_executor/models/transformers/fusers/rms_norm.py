@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 # SPDX-FileCopyrightText: Copyright contributors to the Aphrodite project
-"""RMSNorm fuser: detect the norm structurally and swap in Aphrodite's fused RMSNorm."""
+"""RMSNorm fuser: detect the norm structurally and swap in Sonar's fused RMSNorm."""
 
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -9,16 +9,16 @@ from typing import TYPE_CHECKING
 import torch
 from torch import fx, nn
 
-from aphrodite.distributed import (
+from sonar.distributed import (
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
     tensor_model_parallel_all_gather,
 )
-from aphrodite.distributed.parallel_state import model_parallel_is_initialized
-from aphrodite.distributed.utils import split_tensor_along_last_dim
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.models.transformers.fusers.base import BaseFuser
-from aphrodite.model_executor.models.transformers.fx_utils import (
+from sonar.distributed.parallel_state import model_parallel_is_initialized
+from sonar.distributed.utils import split_tensor_along_last_dim
+from sonar.logger import init_logger
+from sonar.model_executor.models.transformers.fusers.base import BaseFuser
+from sonar.model_executor.models.transformers.fx_utils import (
     find_node,
     forward_input_count,
     is_op,
@@ -26,13 +26,13 @@ from aphrodite.model_executor.models.transformers.fx_utils import (
     peel,
     trace,
 )
-from aphrodite.model_executor.models.transformers.layers import (
+from sonar.model_executor.models.transformers.layers import (
     GemmaRMSNorm,
     RMSNorm,
 )
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
+    from sonar.config import SonarConfig
 
 logger = init_logger(__name__)
 
@@ -256,17 +256,17 @@ class RMSNormFuser(BaseFuser):
                 return eps
         return None
 
-    def validate(self, module: nn.Module, aphrodite_config: "AphroditeConfig") -> bool:
+    def validate(self, module: nn.Module, sonar_config: "SonarConfig") -> bool:
         return True
 
-    def fuse(self, module: nn.Module, prefix: str, aphrodite_config: "AphroditeConfig") -> nn.Module:
-        """Fuse the matched RMSNorm pattern into a Aphrodite fused RMSNorm CustomOp."""
+    def fuse(self, module: nn.Module, prefix: str, sonar_config: "SonarConfig") -> nn.Module:
+        """Fuse the matched RMSNorm pattern into a Sonar fused RMSNorm CustomOp."""
         weight = getattr(module, "weight", None)
         hidden_size = weight.size(0) if weight is not None else 0
         eps = getattr(module, self.eps_attr, None) if self.eps_attr else self.eps
         if not isinstance(eps, (int, float)):
             # If eps was not detected, match torch behaviour.
-            config_dtype = aphrodite_config.model_config.dtype
+            config_dtype = sonar_config.model_config.dtype
             dtype = weight.dtype if weight is not None else config_dtype
             eps = torch.finfo(dtype).eps
         if self.zero_centered:

@@ -13,26 +13,26 @@ from collections.abc import Callable
 import torch
 from compressed_tensors.compressors.pack_quantized.helpers import pack_to_int32
 
-from aphrodite.distributed.utils import verify_group_size_divides_partition
-from aphrodite.model_executor.kernels.linear import (
+from sonar.distributed.utils import verify_group_size_divides_partition
+from sonar.model_executor.kernels.linear import (
     MPLinearLayerConfig,
     choose_mp_linear_kernel,
 )
-from aphrodite.model_executor.layers.quantization.compressed_tensors.schemes import (
+from sonar.model_executor.layers.quantization.compressed_tensors.schemes import (
     CompressedTensorsScheme,
 )
-from aphrodite.model_executor.layers.quantization.utils.marlin_utils import (
+from sonar.model_executor.layers.quantization.utils.marlin_utils import (
     marlin_repeat_scales_on_all_ranks,
 )
-from aphrodite.model_executor.parameter import (
-    BaseAphroditeParameter,
+from sonar.model_executor.parameter import (
+    BaseSonarParameter,
     ChannelQuantScaleParameter,
     GroupQuantScaleParameter,
     ModelWeightParameter,
-    PackedAphroditeParameter,
+    PackedSonarParameter,
 )
-from aphrodite.model_executor.utils import move_parameter, replace_parameter
-from aphrodite.scalar_type import scalar_types
+from sonar.model_executor.utils import move_parameter, replace_parameter
+from sonar.scalar_type import scalar_types
 
 __all__ = ["CompressedTensorsWNA8O8Int", "fake_quant_static_int8"]
 
@@ -135,7 +135,7 @@ class CompressedTensorsWNA8O8Int(CompressedTensorsScheme):
         else:
             layer.register_parameter(
                 "weight_packed",
-                PackedAphroditeParameter(
+                PackedSonarParameter(
                     input_dim=1,
                     output_dim=0,
                     packed_dim=1,
@@ -150,7 +150,7 @@ class CompressedTensorsWNA8O8Int(CompressedTensorsScheme):
             )
             layer.register_parameter(
                 "weight_shape",
-                BaseAphroditeParameter(data=torch.empty(2, dtype=torch.int64), weight_loader=weight_loader),
+                BaseSonarParameter(data=torch.empty(2, dtype=torch.int64), weight_loader=weight_loader),
             )
 
         # Scale: per-output-channel, or per group along the input dim under TP.
@@ -174,7 +174,7 @@ class CompressedTensorsWNA8O8Int(CompressedTensorsScheme):
             if present:
                 layer.register_parameter(
                     name,
-                    BaseAphroditeParameter(
+                    BaseSonarParameter(
                         data=torch.empty(1, dtype=torch.float32),
                         weight_loader=weight_loader,
                     ),
@@ -209,7 +209,7 @@ class CompressedTensorsWNA8O8Int(CompressedTensorsScheme):
 
         layer.register_parameter(
             "weight_shape",
-            BaseAphroditeParameter(
+            BaseSonarParameter(
                 data=torch.tensor([out_features, in_features], dtype=torch.int64),
                 weight_loader=_noop_loader,
             ),

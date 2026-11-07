@@ -10,9 +10,9 @@ from typing import Any
 
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.config import get_current_aphrodite_config
-from aphrodite.model_executor.layers.attention.attention import get_attention_context
+from sonar import _custom_ops as ops
+from sonar.config import get_current_sonar_config
+from sonar.model_executor.layers.attention.attention import get_attention_context
 
 # nvfp4 pages a different layout and keeps the unfused path.
 SUPPORTED_KV_CACHE_DTYPES = frozenset({"auto", "bfloat16", "float16", "fp8", "fp8_e4m3", "fp8_e5m2"})
@@ -24,7 +24,7 @@ def supports_fused_kv_insert(attn_layer: torch.nn.Module) -> bool:
     The backend must keep its KV write out of ``forward``. Off under DCP, whose
     FlashInfer prefill attends over the raw new-token k/v.
     """
-    parallel_config = get_current_aphrodite_config().parallel_config
+    parallel_config = get_current_sonar_config().parallel_config
     if parallel_config.decode_context_parallel_size > 1:
         return False
     if attn_layer.attn_backend.forward_includes_kv_cache_update:
@@ -55,7 +55,7 @@ def fused_qk_norm_rope_kv_insert(
         # SM90 may mix FP8 prefill Q with BF16 decode Q; emit FP8 Q only when
         # every token uses it. The builder's Q dtypes are fixed for its
         # lifetime, so full CUDA graph replays stay consistent.
-        from aphrodite.v1.attention.backends.flashinfer import FlashInferMetadata
+        from sonar.v1.attention.backends.flashinfer import FlashInferMetadata
 
         if (
             isinstance(metadata, FlashInferMetadata)

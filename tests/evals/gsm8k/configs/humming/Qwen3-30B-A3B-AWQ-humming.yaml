@@ -10,4 +10,4 @@ server_args: >-
   --linear-backend humming
   --dtype bfloat16
 env:
-  APHRODITE_HUMMING_MOE_GEMM_TYPE: "grouped_contiguous"
+  SONAR_HUMMING_MOE_GEMM_TYPE: "grouped_contiguous"

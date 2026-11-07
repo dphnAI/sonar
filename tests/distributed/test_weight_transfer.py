@@ -24,58 +24,58 @@ import ray
 import torch
 from torch.multiprocessing.reductions import reduce_tensor
 
-from aphrodite.config.parallel import ParallelConfig
-from aphrodite.config.weight_transfer import WeightTransferConfig
-from aphrodite.distributed.weight_transfer import (
-    AphroditeWeightSyncClient,
-    HTTPAphroditeWeightSyncClient,
+from sonar.config.parallel import ParallelConfig
+from sonar.config.weight_transfer import WeightTransferConfig
+from sonar.distributed.weight_transfer import (
+    HTTPSonarWeightSyncClient,
     ModuleSource,
     ParamMeta,
-    RayAphroditeWeightSyncClient,
+    RaySonarWeightSyncClient,
     Shard,
+    SonarWeightSyncClient,
     TrainerWeightTransferEngine,
     WeightSource,
     WeightTransferEngineFactory,
     WeightTransferTrainerFactory,
 )
-from aphrodite.distributed.weight_transfer.base import (
+from sonar.distributed.weight_transfer.base import (
     TrainerInitInfo,
     WeightTransferEngine,
     WeightTransferInitRequest,
     WeightTransferUpdateRequest,
 )
-from aphrodite.distributed.weight_transfer.ipc_engine import (
+from sonar.distributed.weight_transfer.ipc_engine import (
     IPCTrainerInitInfo,
     IPCTrainerWeightTransferEngine,
     IPCWeightTransferEngine,
     IPCWeightTransferInitInfo,
     IPCWeightTransferUpdateInfo,
 )
-from aphrodite.distributed.weight_transfer.nccl_common import (
+from sonar.distributed.weight_transfer.nccl_common import (
     run_trainer_rendezvous,
     uid_init_process_group,
 )
-from aphrodite.distributed.weight_transfer.nccl_engine import (
+from sonar.distributed.weight_transfer.nccl_engine import (
     NCCLTrainerInitInfo,
     NCCLTrainerWeightTransferEngine,
     NCCLWeightTransferEngine,
     NCCLWeightTransferInitInfo,
     NCCLWeightTransferUpdateInfo,
 )
-from aphrodite.distributed.weight_transfer.packed_tensor import (
+from sonar.distributed.weight_transfer.packed_tensor import (
     DEFAULT_PACKED_BUFFER_SIZE_BYTES,
     DEFAULT_PACKED_NUM_BUFFERS,
 )
-from aphrodite.distributed.weight_transfer.sparse_nccl_engine import (
+from sonar.distributed.weight_transfer.sparse_nccl_engine import (
     SparseNCCLTrainerInitInfo,
     SparseNCCLTrainerWeightTransferEngine,
     SparseNCCLWeightTransferEngine,
     SparseNCCLWeightTransferUpdateInfo,
     SparseWeightPatch,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.nccl import _nccl_has_no_cache
-from aphrodite.utils.network_utils import get_open_port
+from sonar.platforms import current_platform
+from sonar.utils.nccl import _nccl_has_no_cache
+from sonar.utils.network_utils import get_open_port
 
 
 def _init_ray_for_weight_transfer() -> None:
@@ -120,16 +120,16 @@ def create_mock_parallel_config(
     return config
 
 
-def create_mock_aphrodite_config(
+def create_mock_sonar_config(
     rank: int = 0,
     world_size: int = 1,
     dp_rank: int = 0,
 ) -> MagicMock:
-    """Create a mock AphroditeConfig exposing parallel_config and model_config."""
-    aphrodite_config = MagicMock()
-    aphrodite_config.parallel_config = create_mock_parallel_config(rank, world_size, dp_rank)
-    aphrodite_config.model_config = MagicMock()
-    return aphrodite_config
+    """Create a mock SonarConfig exposing parallel_config and model_config."""
+    sonar_config = MagicMock()
+    sonar_config.parallel_config = create_mock_parallel_config(rank, world_size, dp_rank)
+    sonar_config.model_config = MagicMock()
+    return sonar_config
 
 
 # --- Unit Tests: NCCLWeightTransferUpdateInfo Validation ---
@@ -252,7 +252,7 @@ class TestNCCLEngineParsing:
         config = WeightTransferConfig(backend="nccl")
         return NCCLWeightTransferEngine(
             config,
-            create_mock_aphrodite_config(),
+            create_mock_sonar_config(),
             torch.device("cuda"),
             MagicMock(spec=torch.nn.Module),
         )
@@ -305,7 +305,7 @@ class TestEngineRegistry:
         config = WeightTransferConfig(backend="nccl")
         engine = WeightTransferEngineFactory.create_engine(
             config,
-            create_mock_aphrodite_config(),
+            create_mock_sonar_config(),
             torch.device("cuda"),
             MagicMock(spec=torch.nn.Module),
         )
@@ -315,7 +315,7 @@ class TestEngineRegistry:
         config = WeightTransferConfig(backend="ipc")
         engine = WeightTransferEngineFactory.create_engine(
             config,
-            create_mock_aphrodite_config(),
+            create_mock_sonar_config(),
             torch.device("cuda"),
             MagicMock(spec=torch.nn.Module),
         )
@@ -325,14 +325,14 @@ class TestEngineRegistry:
         config = WeightTransferConfig(backend="sparse_nccl")
         engine = WeightTransferEngineFactory.create_engine(
             config,
-            create_mock_aphrodite_config(),
+            create_mock_sonar_config(),
             torch.device("cuda"),
             MagicMock(spec=torch.nn.Module),
         )
         assert isinstance(engine, SparseNCCLWeightTransferEngine)
 
     def test_modelexpress_registration_is_native_and_lazy(self, monkeypatch):
-        from aphrodite.distributed.weight_transfer import factory
+        from sonar.distributed.weight_transfer import factory
 
         imported = []
         module = MagicMock()
@@ -344,15 +344,15 @@ class TestEngineRegistry:
 
         monkeypatch.setattr(factory.importlib, "import_module", import_module)
         config = WeightTransferConfig(backend="modelexpress")
-        aphrodite_config = create_mock_aphrodite_config()
+        sonar_config = create_mock_sonar_config()
         device = torch.device("cpu")
         model = MagicMock(spec=torch.nn.Module)
 
         assert imported == []
-        engine = WeightTransferEngineFactory.create_engine(config, aphrodite_config, device, model)
+        engine = WeightTransferEngineFactory.create_engine(config, sonar_config, device, model)
 
-        assert imported == ["aphrodite.distributed.weight_transfer.modelexpress_engine"]
-        module.ModelExpressWeightTransferEngine.assert_called_once_with(config, aphrodite_config, device, model)
+        assert imported == ["sonar.distributed.weight_transfer.modelexpress_engine"]
+        module.ModelExpressWeightTransferEngine.assert_called_once_with(config, sonar_config, device, model)
         assert engine is module.ModelExpressWeightTransferEngine.return_value
 
     def test_create_engine_invalid_backend(self):
@@ -360,7 +360,7 @@ class TestEngineRegistry:
         with pytest.raises(ValueError, match="Invalid weight transfer backend"):
             WeightTransferEngineFactory.create_engine(
                 config,
-                create_mock_aphrodite_config(),
+                create_mock_sonar_config(),
                 torch.device("cuda"),
                 MagicMock(spec=torch.nn.Module),
             )
@@ -381,7 +381,7 @@ def test_nccl_receive_weights_without_init_raises():
     config = WeightTransferConfig(backend="nccl")
     engine = NCCLWeightTransferEngine(
         config,
-        create_mock_aphrodite_config(),
+        create_mock_sonar_config(),
         torch.device("cuda"),
         MagicMock(spec=torch.nn.Module),
     )
@@ -394,7 +394,7 @@ def test_nccl_receive_weights_without_init_raises():
 
 def test_nccl_disabled_communicator_raises(monkeypatch):
     """A disabled PyNccl communicator would turn every broadcast into a no-op."""
-    monkeypatch.setenv("APHRODITE_DISABLE_PYNCCL", "1")
+    monkeypatch.setenv("SONAR_DISABLE_PYNCCL", "1")
     with pytest.raises(RuntimeError, match="would be a no-op"):
         uid_init_process_group(b"\x00" * 128, rank=0, world_size=2, device=0)
 
@@ -407,7 +407,7 @@ def test_sparse_nccl_receive_weights_without_init_raises():
     config = WeightTransferConfig(backend="sparse_nccl")
     engine = SparseNCCLWeightTransferEngine(
         config,
-        create_mock_aphrodite_config(),
+        create_mock_sonar_config(),
         torch.device("cuda"),
         MagicMock(spec=torch.nn.Module),
     )
@@ -439,8 +439,8 @@ def trainer_broadcast_tensor(
 
     device = _set_ray_assigned_device()
 
-    from aphrodite.distributed.device_communicators.pynccl import PyNcclCommunicator
-    from aphrodite.distributed.utils import StatelessProcessGroup
+    from sonar.distributed.device_communicators.pynccl import PyNcclCommunicator
+    from sonar.distributed.utils import StatelessProcessGroup
 
     # Create process group as rank 0 (trainer)
     pg = StatelessProcessGroup.create(
@@ -478,12 +478,12 @@ def inference_receive_tensor(
 
     _set_ray_assigned_device()
     if batch_invariant:
-        from aphrodite.model_executor.determinism.batch_invariant import (
+        from sonar.model_executor.determinism.batch_invariant import (
             override_envs_for_invariance,
         )
 
         override_envs_for_invariance()
-        # Like Aphrodite's own groups, a pinned communicator makes NCCL read the
+        # Like Sonar's own groups, a pinned communicator makes NCCL read the
         # pins before the transfer group exists.
         torch.distributed.init_process_group(
             "nccl",
@@ -493,9 +493,9 @@ def inference_receive_tensor(
         )
         torch.distributed.all_reduce(torch.ones(1, device="cuda"))
 
-    from aphrodite.config.parallel import ParallelConfig
-    from aphrodite.config.weight_transfer import WeightTransferConfig
-    from aphrodite.distributed.weight_transfer.nccl_engine import (
+    from sonar.config.parallel import ParallelConfig
+    from sonar.config.weight_transfer import WeightTransferConfig
+    from sonar.distributed.weight_transfer.nccl_engine import (
         NCCLWeightTransferEngine,
         NCCLWeightTransferInitInfo,
         NCCLWeightTransferUpdateInfo,
@@ -511,22 +511,22 @@ def inference_receive_tensor(
                 self.received.append((name, tensor.clone()))
 
     config = WeightTransferConfig(backend="nccl")
-    aphrodite_config = MagicMock()
+    sonar_config = MagicMock()
     parallel_config = MagicMock(spec=ParallelConfig)
     parallel_config.rank = 0
     parallel_config.world_size = 1
     parallel_config.data_parallel_rank = 0
     parallel_config.data_parallel_index = 0
-    aphrodite_config.parallel_config = parallel_config
-    aphrodite_config.model_config = MagicMock()
+    sonar_config.parallel_config = parallel_config
+    sonar_config.model_config = MagicMock()
 
     recorder = Recorder()
-    engine = NCCLWeightTransferEngine(config, aphrodite_config, torch.device("cuda"), recorder)
-    # Transport-only test: bypass the set_current_aphrodite_config context that
-    # receive_weights enters, since aphrodite_config here is a mock.
-    import aphrodite.config as _aphrodite_config_mod
+    engine = NCCLWeightTransferEngine(config, sonar_config, torch.device("cuda"), recorder)
+    # Transport-only test: bypass the set_current_sonar_config context that
+    # receive_weights enters, since sonar_config here is a mock.
+    import sonar.config as _sonar_config_mod
 
-    _aphrodite_config_mod.set_current_aphrodite_config = lambda cfg: contextlib.nullcontext()
+    _sonar_config_mod.set_current_sonar_config = lambda cfg: contextlib.nullcontext()
 
     # Initialize the engine (joins as rank 1)
     # Trainer broadcasts a single tensor unpacked, so the worker must not
@@ -631,8 +631,8 @@ class MultiSourceInferenceWorker:
 
         device = _set_ray_assigned_device()
 
-        from aphrodite.config.weight_transfer import WeightTransferConfig
-        from aphrodite.distributed.weight_transfer.nccl_engine import (
+        from sonar.config.weight_transfer import WeightTransferConfig
+        from sonar.distributed.weight_transfer.nccl_engine import (
             NCCLWeightTransferEngine,
         )
 
@@ -650,13 +650,13 @@ class MultiSourceInferenceWorker:
         self.recorder = Recorder()
         self.engine = NCCLWeightTransferEngine(
             WeightTransferConfig(backend="nccl"),
-            create_mock_aphrodite_config(rank=worker_rank, world_size=num_workers),
+            create_mock_sonar_config(rank=worker_rank, world_size=num_workers),
             device,
             self.recorder,
         )
-        import aphrodite.config as aphrodite_config_mod
+        import sonar.config as sonar_config_mod
 
-        aphrodite_config_mod.set_current_aphrodite_config = lambda cfg: contextlib.nullcontext()
+        sonar_config_mod.set_current_sonar_config = lambda cfg: contextlib.nullcontext()
 
     def ready(self):
         return True
@@ -693,12 +693,12 @@ def trainer_send_from_source(
 
     device = _set_ray_assigned_device()
 
-    from aphrodite.distributed.weight_transfer import (
+    from sonar.distributed.weight_transfer import (
         ParamMeta,
         WeightSource,
         WeightTransferTrainerFactory,
     )
-    from aphrodite.distributed.weight_transfer.nccl_engine import NCCLTrainerInitInfo
+    from sonar.distributed.weight_transfer.nccl_engine import NCCLTrainerInitInfo
 
     class Source(WeightSource):
         """Rank r owns (and broadcasts) `source_r.*`, like a pipeline stage."""
@@ -914,7 +914,7 @@ def test_sparse_nccl_checkpoint_chunks_to_ep_local_experts_cpu(monkeypatch):
         model.load_weights = load_weights
         receiver = SparseNCCLWeightTransferEngine(
             WeightTransferConfig(backend="sparse_nccl"),
-            create_mock_aphrodite_config(rank=ep_rank, world_size=2),
+            create_mock_sonar_config(rank=ep_rank, world_size=2),
             torch.device("cpu"),
             model,
         )
@@ -1023,7 +1023,7 @@ class TestIPCWeightTransferUpdateInfoValidation:
         if torch.accelerator.device_count() < 1:
             pytest.skip("Need at least 1 GPU for this test")
 
-        monkeypatch.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
+        monkeypatch.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")
 
         dummy_tensor = torch.ones(10, 10, device="cuda:0")
         ipc_handle = reduce_tensor(dummy_tensor)
@@ -1042,9 +1042,9 @@ class TestIPCWeightTransferUpdateInfoValidation:
         assert info.ipc_handles_pickled is None
 
     def test_pickled_requires_insecure_serialization_flag(self, monkeypatch):
-        monkeypatch.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "0")
+        monkeypatch.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "0")
 
-        with pytest.raises(ValueError, match="APHRODITE_ALLOW_INSECURE_SERIALIZATION=1"):
+        with pytest.raises(ValueError, match="SONAR_ALLOW_INSECURE_SERIALIZATION=1"):
             IPCWeightTransferUpdateInfo(
                 names=[],
                 dtype_names=[],
@@ -1100,7 +1100,7 @@ class TestIPCEngineParsing:
         config = WeightTransferConfig(backend="ipc")
         return IPCWeightTransferEngine(
             config,
-            create_mock_aphrodite_config(),
+            create_mock_sonar_config(),
             torch.device("cuda"),
             MagicMock(spec=torch.nn.Module),
         )
@@ -1137,7 +1137,7 @@ class TestIPCEngineParsing:
         if torch.accelerator.device_count() < 1:
             pytest.skip("Need at least 1 GPU for this test")
 
-        monkeypatch.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
+        monkeypatch.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")
 
         engine = self._make_engine()
 
@@ -1256,7 +1256,7 @@ def inference_receive_ipc_tensor(
 
     # Worker-side: ipc_handles_pickled is deserialized via pickle.
     if mode == "http":
-        os.environ["APHRODITE_ALLOW_INSECURE_SERIALIZATION"] = "1"
+        os.environ["SONAR_ALLOW_INSECURE_SERIALIZATION"] = "1"
 
     from unittest.mock import MagicMock
 
@@ -1264,9 +1264,9 @@ def inference_receive_ipc_tensor(
 
     device = _set_ray_assigned_device()
 
-    from aphrodite.config.parallel import ParallelConfig
-    from aphrodite.config.weight_transfer import WeightTransferConfig
-    from aphrodite.distributed.weight_transfer.ipc_engine import (
+    from sonar.config.parallel import ParallelConfig
+    from sonar.config.weight_transfer import WeightTransferConfig
+    from sonar.distributed.weight_transfer.ipc_engine import (
         IPCWeightTransferEngine,
     )
 
@@ -1280,22 +1280,22 @@ def inference_receive_ipc_tensor(
                 self.received.append((name, tensor.clone()))
 
     config = WeightTransferConfig(backend="ipc")
-    aphrodite_config = MagicMock()
+    sonar_config = MagicMock()
     parallel_config = MagicMock(spec=ParallelConfig)
     parallel_config.rank = 0
     parallel_config.world_size = 1
     parallel_config.data_parallel_rank = 0
     parallel_config.data_parallel_index = 0
-    aphrodite_config.parallel_config = parallel_config
-    aphrodite_config.model_config = MagicMock()
+    sonar_config.parallel_config = parallel_config
+    sonar_config.model_config = MagicMock()
 
     recorder = Recorder()
-    engine = IPCWeightTransferEngine(config, aphrodite_config, device, recorder)
-    # Transport-only test: bypass the set_current_aphrodite_config context that
-    # receive_weights enters, since aphrodite_config here is a mock.
-    import aphrodite.config as _aphrodite_config_mod
+    engine = IPCWeightTransferEngine(config, sonar_config, device, recorder)
+    # Transport-only test: bypass the set_current_sonar_config context that
+    # receive_weights enters, since sonar_config here is a mock.
+    import sonar.config as _sonar_config_mod
 
-    _aphrodite_config_mod.set_current_aphrodite_config = lambda cfg: contextlib.nullcontext()
+    _sonar_config_mod.set_current_sonar_config = lambda cfg: contextlib.nullcontext()
 
     init_info = IPCWeightTransferInitInfo()
     engine.init_transfer_engine(init_info)
@@ -1394,7 +1394,7 @@ def test_ipc_receive_weights_missing_gpu_uuid_raises():
     config = WeightTransferConfig(backend="ipc")
     engine = IPCWeightTransferEngine(
         config,
-        create_mock_aphrodite_config(),
+        create_mock_sonar_config(),
         torch.device("cuda:0"),
         MagicMock(spec=torch.nn.Module),
     )
@@ -1416,7 +1416,7 @@ def test_ipc_receive_weights_missing_gpu_uuid_raises():
 
 
 class RecordingClient:
-    """A fake AphroditeWeightSyncClient that records the order of calls."""
+    """A fake SonarWeightSyncClient that records the order of calls."""
 
     def __init__(self):
         self.order: list[str] = []
@@ -1461,18 +1461,18 @@ class TestTrainerClients:
     """Structural protocol conformance for the built-in clients."""
 
     def test_recording_client_is_protocol(self):
-        assert isinstance(RecordingClient(), AphroditeWeightSyncClient)
+        assert isinstance(RecordingClient(), SonarWeightSyncClient)
 
     def test_http_client_is_protocol(self):
         assert isinstance(
-            HTTPAphroditeWeightSyncClient("http://localhost:8000"),
-            AphroditeWeightSyncClient,
+            HTTPSonarWeightSyncClient("http://localhost:8000"),
+            SonarWeightSyncClient,
         )
 
     def test_ray_client_is_protocol(self):
         assert isinstance(
-            RayAphroditeWeightSyncClient(MagicMock()),
-            AphroditeWeightSyncClient,
+            RaySonarWeightSyncClient(MagicMock()),
+            SonarWeightSyncClient,
         )
 
     def test_ray_client_sends_typed_requests(self, monkeypatch):
@@ -1481,7 +1481,7 @@ class TestTrainerClients:
 
         monkeypatch.setattr(ray, "get", lambda refs: None)
         handle = MagicMock()
-        client = RayAphroditeWeightSyncClient(handle)
+        client = RaySonarWeightSyncClient(handle)
 
         client.init_weight_transfer_engine({"master_addr": "x"})
         (init_req,), _ = handle.init_weight_transfer_engine.remote.call_args
@@ -1508,8 +1508,8 @@ class TestTrainerClients:
             captured["path"] = path
             captured["json"] = json
 
-        monkeypatch.setattr(HTTPAphroditeWeightSyncClient, "_post", fake_post)
-        client = HTTPAphroditeWeightSyncClient("http://localhost:8000")
+        monkeypatch.setattr(HTTPSonarWeightSyncClient, "_post", fake_post)
+        client = HTTPSonarWeightSyncClient("http://localhost:8000")
         client.update_weights({"names": ["w"], "ipc_handles": [{"gpu": ("args",)}]})
         sent = captured["json"]["update_info"]
         assert "ipc_handles" not in sent
@@ -1529,8 +1529,8 @@ class TestTrainerClients:
             captured["path"] = path
             captured["json"] = json
 
-        monkeypatch.setattr(HTTPAphroditeWeightSyncClient, "_post", fake_post)
-        client = HTTPAphroditeWeightSyncClient("http://localhost:8000")
+        monkeypatch.setattr(HTTPSonarWeightSyncClient, "_post", fake_post)
+        client = HTTPSonarWeightSyncClient("http://localhost:8000")
         update_info = {"names": ["w"], "dtype_names": ["float32"], "shapes": [[4]]}
         client.update_weights(update_info)
         assert captured["json"]["update_info"] == update_info
@@ -1868,7 +1868,7 @@ def test_nccl_trainer_init_ships_worker_init_info(monkeypatch, packed):
     """The sender's trainer_init drives the inference-side init handshake with
     the worker-shaped init info (rank_offset=1) while opening its own endpoint,
     and propagates the must-agree wire params to the worker."""
-    import aphrodite.distributed.weight_transfer.nccl_engine as nccl_engine_mod
+    import sonar.distributed.weight_transfer.nccl_engine as nccl_engine_mod
 
     # Bypass the real NCCL rendezvous.
     group = object()
@@ -1945,13 +1945,13 @@ def test_nccl_worker_learns_wire_params_from_init_handshake(monkeypatch):
     """The worker engine reads packed + buffer geometry from the
     trainer-supplied init info at the handshake, not from the config or the
     per-round update info."""
-    import aphrodite.distributed.weight_transfer.nccl_engine as nccl_engine_mod
+    import sonar.distributed.weight_transfer.nccl_engine as nccl_engine_mod
 
     monkeypatch.setattr(nccl_engine_mod, "worker_init_process_group", lambda info, pc: MagicMock())
 
     engine = NCCLWeightTransferEngine(
         WeightTransferConfig(backend="nccl"),
-        create_mock_aphrodite_config(),
+        create_mock_sonar_config(),
         torch.device("cuda:0"),
         MagicMock(spec=torch.nn.Module),
     )
@@ -2053,7 +2053,7 @@ def test_nccl_worker_reuses_metadata_per_model(monkeypatch):
     """Empty update info reuses the previous call's metadata for the same
     (model, src) and receives from that src; re-init clears every entry, and
     src must be a trainer rank."""
-    import aphrodite.distributed.weight_transfer.nccl_engine as nccl_engine_mod
+    import sonar.distributed.weight_transfer.nccl_engine as nccl_engine_mod
 
     monkeypatch.setattr(nccl_engine_mod, "worker_init_process_group", lambda info, pc: MagicMock())
     target, draft = MagicMock(spec=torch.nn.Module), MagicMock(spec=torch.nn.Module)
@@ -2062,7 +2062,7 @@ def test_nccl_worker_reuses_metadata_per_model(monkeypatch):
         model.load_weights = lambda w, m=model: received.append((m, w[0][0], tuple(w[0][1].shape)))
     engine = NCCLWeightTransferEngine(
         WeightTransferConfig(backend="nccl"),
-        create_mock_aphrodite_config(),
+        create_mock_sonar_config(),
         torch.device("cpu"),
         target,
     )
@@ -2330,7 +2330,7 @@ def _sparse_patch(device: str = "cpu") -> SparseWeightPatch:
 def test_sparse_nccl_trainer_init_ships_worker_init_info(monkeypatch):
     """The sender's trainer_init sends worker-shaped init info with
     `packed=False` and default buffer settings. Sparse takes no `source`."""
-    import aphrodite.distributed.weight_transfer.sparse_nccl_engine as sparse_mod
+    import sonar.distributed.weight_transfer.sparse_nccl_engine as sparse_mod
 
     group = object()
     monkeypatch.setattr(sparse_mod, "open_trainer_endpoint", lambda info: group)
@@ -2471,7 +2471,7 @@ def test_sparse_nccl_trainer_non_sender_skips_client():
 
 
 def _import_modelexpress_shim():
-    spec = importlib.util.find_spec("aphrodite.distributed.weight_transfer.modelexpress_engine")
+    spec = importlib.util.find_spec("sonar.distributed.weight_transfer.modelexpress_engine")
     assert spec is not None and spec.origin is not None
     runpy.run_path(spec.origin, run_name="_test_modelexpress_shim")
 
@@ -2483,8 +2483,8 @@ def _import_modelexpress_shim():
         "modelexpress_rl",
         "modelexpress_rl.inference",
         "modelexpress_rl.inference.engines",
-        "modelexpress_rl.inference.engines.aphrodite",
-        "modelexpress_rl.inference.engines.aphrodite.weight_transfer_engine",
+        "modelexpress_rl.inference.engines.vllm",
+        "modelexpress_rl.inference.engines.vllm.weight_transfer_engine",
     ],
 )
 def test_modelexpress_missing_backend_explains_source_install(monkeypatch, missing_module):
@@ -2546,12 +2546,12 @@ def _make_modelexpress_engine():
 
 @pytest.fixture
 def mx_worker(mx_client, monkeypatch):
-    from aphrodite.v1.worker import gpu_worker
+    from sonar.v1.worker import gpu_worker
 
-    monkeypatch.setattr(gpu_worker, "set_current_aphrodite_config", lambda _: nullcontext())
+    monkeypatch.setattr(gpu_worker, "set_current_sonar_config", lambda _: nullcontext())
     worker = object.__new__(gpu_worker.Worker)
     worker.weight_transfer_engine = _make_modelexpress_engine()
-    worker.aphrodite_config = worker.weight_transfer_engine.aphrodite_config
+    worker.sonar_config = worker.weight_transfer_engine.sonar_config
     worker._weight_update_active = False
     worker._weight_update_is_draft = False
     worker.model_runner = MagicMock()
@@ -2622,11 +2622,11 @@ def test_modelexpress_worker_can_retry_failed_finish(mx_worker, mx_client):
 
 
 def test_native_engine_applies_and_releases_exact_versions(mx_client):
-    from modelexpress_rl.inference.engines.aphrodite import (
+    from modelexpress_rl.inference.engines.sonar import (
         weight_transfer_engine as mx_engine,
     )
 
-    from aphrodite.distributed.weight_transfer import modelexpress_engine
+    from sonar.distributed.weight_transfer import modelexpress_engine
 
     engine = _make_modelexpress_engine()
     assert type(engine) is mx_engine.ModelExpressWeightTransferEngine
@@ -2682,7 +2682,7 @@ def test_vime_init_config_reaches_mx_client(mx_client):
     )
     config = ModelExpressGeneratorClient.initialize.call_args.args[0]
     assert config.engine_context.model is engine.model
-    assert config.engine_context.aphrodite_config is engine.aphrodite_config
+    assert config.engine_context.sonar_config is engine.sonar_config
     assert config.model_name == "policy"
     assert config.server_url == "mx:8001"
     assert config.initial_serving_version_id == "serving-a"
@@ -2753,10 +2753,10 @@ def test_update_failure_preserves_error_and_releases_handle(mx_client, failure):
 
 
 def test_plugin_does_not_replace_native_backend(mx_client):
-    from modelexpress.engines.aphrodite.registration import (
+    from modelexpress.engines.sonar.registration import (
         register_plugin_weight_transfer_engine,
     )
-    from modelexpress_rl.inference.engines.aphrodite.weight_transfer_engine import (
+    from modelexpress_rl.inference.engines.sonar.weight_transfer_engine import (
         ModelExpressWeightTransferEngine,
     )
 

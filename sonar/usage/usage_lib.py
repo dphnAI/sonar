@@ -18,27 +18,27 @@ import psutil
 import requests
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.logger import init_logger
-from aphrodite.utils.platform_utils import cuda_get_device_properties
-from aphrodite.version import __version__ as APHRODITE_VERSION
+import sonar.envs as envs
+from sonar.logger import init_logger
+from sonar.utils.platform_utils import cuda_get_device_properties
+from sonar.version import __version__ as SONAR_VERSION
 
 logger = init_logger(__name__)
 
-_config_home = envs.APHRODITE_CONFIG_ROOT
+_config_home = envs.SONAR_CONFIG_ROOT
 _USAGE_STATS_JSON_PATH = os.path.join(_config_home, "usage_stats.json")
 _USAGE_STATS_DO_NOT_TRACK_PATH = os.path.join(_config_home, "do_not_track")
 _USAGE_STATS_ENABLED = None
-_USAGE_STATS_SERVER = envs.APHRODITE_USAGE_STATS_SERVER
+_USAGE_STATS_SERVER = envs.SONAR_USAGE_STATS_SERVER
 
 _GLOBAL_RUNTIME_DATA = dict[str, str | int | bool]()
 
 _USAGE_ENV_VARS_TO_COLLECT = [
-    "APHRODITE_USE_MODELSCOPE",
-    "APHRODITE_USE_FLASHINFER_SAMPLER",
-    "APHRODITE_PP_LAYER_PARTITION",
-    "APHRODITE_USE_TRITON_AWQ",
-    "APHRODITE_ENABLE_V1_MULTIPROCESSING",
+    "SONAR_USE_MODELSCOPE",
+    "SONAR_USE_FLASHINFER_SAMPLER",
+    "SONAR_PP_LAYER_PARTITION",
+    "SONAR_USE_TRITON_AWQ",
+    "SONAR_ENABLE_V1_MULTIPROCESSING",
 ]
 
 
@@ -52,16 +52,16 @@ def is_usage_stats_enabled():
     The logic is as follows:
     - By default, it should be enabled.
     - Three environment variables can disable it:
-        - APHRODITE_DO_NOT_TRACK=1
+        - SONAR_DO_NOT_TRACK=1
         - DO_NOT_TRACK=1
-        - APHRODITE_NO_USAGE_STATS=1
+        - SONAR_NO_USAGE_STATS=1
     - A file in the home directory can disable it if it exists:
-        - $HOME/.config/aphrodite/do_not_track
+        - $HOME/.config/sonar/do_not_track
     """
     global _USAGE_STATS_ENABLED
     if _USAGE_STATS_ENABLED is None:
-        do_not_track = envs.APHRODITE_DO_NOT_TRACK
-        no_usage_stats = envs.APHRODITE_NO_USAGE_STATS
+        do_not_track = envs.SONAR_DO_NOT_TRACK
+        no_usage_stats = envs.SONAR_NO_USAGE_STATS
         do_not_track_file = os.path.exists(_USAGE_STATS_DO_NOT_TRACK_PATH)
 
         _USAGE_STATS_ENABLED = not (do_not_track or no_usage_stats or do_not_track_file)
@@ -121,7 +121,7 @@ class UsageMessage:
     """Collect platform information and send it to the usage stats server."""
 
     def __init__(self) -> None:
-        # NOTE: Aphrodite's server _only_ support flat KV pair.
+        # NOTE: Sonar's server _only_ support flat KV pair.
         # Do not use nested fields.
 
         self.uuid = str(uuid4())
@@ -141,9 +141,9 @@ class UsageMessage:
         self.gpu_memory_per_device: int | None = None
         self.env_var_json: str | None = None
 
-        # Aphrodite Information
+        # Sonar Information
         self.model_architecture: str | None = None
-        self.aphrodite_version: str | None = None
+        self.sonar_version: str | None = None
         self.context: str | None = None
 
         # Metadata
@@ -191,7 +191,7 @@ class UsageMessage:
         extra_kvs: dict[str, Any],
     ) -> None:
         # Platform information
-        from aphrodite.platforms import current_platform
+        from sonar.platforms import current_platform
 
         if current_platform.is_cuda_alike():
             self.gpu_count = current_platform.device_count()
@@ -222,9 +222,9 @@ class UsageMessage:
             ]
         )
 
-        # Aphrodite information
+        # Sonar information
         self.context = usage_context.value
-        self.aphrodite_version = APHRODITE_VERSION
+        self.sonar_version = SONAR_VERSION
         self.model_architecture = model_architecture
 
         # Environment variables
@@ -232,7 +232,7 @@ class UsageMessage:
 
         # Metadata
         self.log_time = _get_current_timestamp_ns()
-        self.source = envs.APHRODITE_USAGE_SOURCE
+        self.source = envs.SONAR_USAGE_SOURCE
 
         data = vars(self)
         if extra_kvs:
@@ -244,7 +244,7 @@ class UsageMessage:
     def _report_continuous_usage(self):
         """Report usage every 10 minutes.
 
-        This helps us to collect more data points for uptime of Aphrodite usages.
+        This helps us to collect more data points for uptime of Sonar usages.
         This function can also help send over performance metrics over time.
         """
         while True:

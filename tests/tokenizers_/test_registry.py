@@ -9,8 +9,8 @@ import pytest
 from transformers import AutoConfig, Qwen3_5MoeConfig
 from transformers.models.auto.configuration_auto import CONFIG_MAPPING
 
-from aphrodite.tokenizers import TokenizerLike, registry
-from aphrodite.tokenizers.registry import (
+from sonar.tokenizers import TokenizerLike, registry
+from sonar.tokenizers.registry import (
     TokenizerRegistry,
     cached_get_tokenizer,
     cached_resolve_tokenizer_args,
@@ -144,15 +144,15 @@ def test_cached_tokenizer_from_config_registers_local_config(tmp_path: Path):
 
         with (
             patch(
-                "aphrodite.tokenizers.registry.logger.debug_once",
+                "sonar.tokenizers.registry.logger.debug_once",
                 lambda *args, **kwargs: None,
             ),
             patch(
-                "aphrodite.tokenizers.hf.AutoTokenizer.from_pretrained",
+                "sonar.tokenizers.hf.AutoTokenizer.from_pretrained",
                 side_effect=fake_from_pretrained,
             ),
             patch(
-                "aphrodite.tokenizers.hf.get_cached_tokenizer",
+                "sonar.tokenizers.hf.get_cached_tokenizer",
                 side_effect=lambda tokenizer: tokenizer,
             ),
         ):

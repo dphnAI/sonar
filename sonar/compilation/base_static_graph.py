@@ -4,7 +4,7 @@
 from collections.abc import Callable
 from typing import Any, Protocol
 
-from aphrodite.config import AphroditeConfig, CUDAGraphMode
+from sonar.config import CUDAGraphMode, SonarConfig
 
 
 class AbstractStaticGraphWrapper(Protocol):
@@ -15,7 +15,7 @@ class AbstractStaticGraphWrapper(Protocol):
     def __init__(
         self,
         runnable: Callable[..., Any],
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         runtime_mode: CUDAGraphMode,
         **kwargs: Any,
     ) -> None:
@@ -24,9 +24,9 @@ class AbstractStaticGraphWrapper(Protocol):
 
         Args:
             runnable (Callable): The callable to be wrapped and captured.
-            aphrodite_config (AphroditeConfig): Global configuration for Aphrodite.
+            sonar_config (SonarConfig): Global configuration for Sonar.
             runtime_mode (CUDAGraphMode): The style of the static
-                graph runtime. See CUDAGraphMode in aphrodite/config.py.
+                graph runtime. See CUDAGraphMode in sonar/config.py.
                 Note that only the subset enum `NONE`, `PIECEWISE` and `FULL`
                 are used as concrete runtime mode for cudagraph dispatching.
 

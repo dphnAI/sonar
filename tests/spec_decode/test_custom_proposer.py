@@ -11,8 +11,8 @@ import os
 
 import torch
 
-from aphrodite import LLM, SamplingParams
-from aphrodite.config import AphroditeConfig
+from sonar import LLM, SamplingParams
+from sonar.config import SonarConfig
 
 MODEL_ID = "facebook/opt-125m"
 NUM_SPEC_TOKENS = 5
@@ -24,16 +24,16 @@ class DummyDraftProposer:
     This demonstrates the class-based custom proposer interface.
     """
 
-    def __init__(self, aphrodite_config: AphroditeConfig):
+    def __init__(self, sonar_config: SonarConfig):
         """Initialize the custom proposer.
 
         Args:
-            aphrodite_config: Aphrodite configuration containing model and speculative settings.
+            sonar_config: Sonar configuration containing model and speculative settings.
 
         """
-        assert aphrodite_config.speculative_config is not None
-        self.num_speculative_tokens = aphrodite_config.speculative_config.num_speculative_tokens
-        self.max_model_len = aphrodite_config.model_config.max_model_len
+        assert sonar_config.speculative_config is not None
+        self.num_speculative_tokens = sonar_config.speculative_config.num_speculative_tokens
+        self.max_model_len = sonar_config.model_config.max_model_len
         print(
             f"[DummyDraftProposer.__init__] num_speculative_tokens="
             f"{self.num_speculative_tokens}, max_model_len={self.max_model_len}"

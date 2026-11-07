@@ -9,7 +9,7 @@ import pytest_asyncio
 import torch
 from transformers import AutoConfig
 
-from aphrodite.utils.serial_utils import tensor2base64
+from sonar.utils.serial_utils import tensor2base64
 from tests.conftest import ImageTestAssets
 from tests.utils import RemoteOpenAIServer
 

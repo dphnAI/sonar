@@ -10,13 +10,13 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 #[derive(Parser)]
 #[command(
-    name = "aphrodite-bench",
+    name = "sonar-bench",
     about = "Benchmark online serving throughput and offline multimodal preprocessing",
-    version = aphrodite_build_info::VERSION
+    version = sonar_build_info::VERSION
 )]
 struct Cli {
     #[command(flatten)]
-    args: aphrodite_bench::BenchServeArgs,
+    args: sonar_bench::BenchServeArgs,
 
     /// Optional subcommand; absent by default for the online serving benchmark.
     #[command(subcommand)]
@@ -26,13 +26,13 @@ struct Cli {
 #[derive(Subcommand)]
 enum Command {
     /// Offline multimodal preprocessing latency benchmark.
-    MmProcessor(aphrodite_bench::MmProcessorArgs),
+    MmProcessor(sonar_bench::MmProcessorArgs),
 }
 
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
-    aphrodite_bench::prepare_process();
+    sonar_bench::prepare_process();
 
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
@@ -41,13 +41,13 @@ fn main() -> anyhow::Result<()> {
 
     match cli.command {
         Some(Command::MmProcessor(args)) => {
-            let (timing_layer, timing_stats) = aphrodite_chat::mm_timing_layer();
-            aphrodite_tracing::init_tracing_with("Bench", timing_layer);
-            runtime.block_on(aphrodite_bench::run_mm_processor(args, timing_stats))
+            let (timing_layer, timing_stats) = sonar_chat::mm_timing_layer();
+            sonar_tracing::init_tracing_with("Bench", timing_layer);
+            runtime.block_on(sonar_bench::run_mm_processor(args, timing_stats))
         }
         None => {
-            aphrodite_tracing::init_tracing("Bench");
-            runtime.block_on(aphrodite_bench::run(cli.args))
+            sonar_tracing::init_tracing("Bench");
+            runtime.block_on(sonar_bench::run(cli.args))
         }
     }
 }

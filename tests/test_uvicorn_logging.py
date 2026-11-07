@@ -4,7 +4,7 @@
 
 import logging
 
-from aphrodite.logging_utils.uvicorn_logging import (
+from sonar.logging_utils.uvicorn_logging import (
     UvicornAccessLogFilter,
     create_uvicorn_log_config,
 )

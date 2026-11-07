@@ -18,17 +18,17 @@ from typing import Literal
 import torch
 from torch import nn
 
-import aphrodite.envs as envs
-from aphrodite import _custom_ops as ops
-from aphrodite.model_executor.kernels.linear.cute_dsl.skinny_gemm import (
+import sonar.envs as envs
+from sonar import _custom_ops as ops
+from sonar.model_executor.kernels.linear.cute_dsl.skinny_gemm import (
     SkinnyGemmConfig,
     shape_dynamic_skinny_gemm,
 )
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.linear import (
     LinearBase,
     UnquantizedLinearMethod,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 Backend = Literal["cute", "dsv3_fused_a"]
 ResolvedCall = tuple[Backend, SkinnyGemmConfig | None]
@@ -342,7 +342,7 @@ def _is_supported_row_major(tensor: torch.Tensor) -> bool:
 
 def _runtime_ok(x: torch.Tensor, weight: torch.Tensor) -> bool:
     return (
-        not envs.APHRODITE_BATCH_INVARIANT
+        not envs.SONAR_BATCH_INVARIANT
         and _is_supported_row_major(x)
         and _is_supported_row_major(weight)
         and x.dtype == torch.bfloat16

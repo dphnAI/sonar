@@ -8,7 +8,7 @@ from functools import lru_cache
 
 import torch
 
-from aphrodite.model_executor.layers.quantization.utils.mxfp8_utils import (
+from sonar.model_executor.layers.quantization.utils.mxfp8_utils import (
     mxfp8_e4m3_quantize,
 )
 
@@ -201,7 +201,7 @@ def _compile_grouped(
 
 
 @torch.library.custom_op(
-    "aphrodite::cutedsl_grouped_mxfp6_gemm",
+    "sonar::cutedsl_grouped_mxfp6_gemm",
     mutates_args={"out"},
 )
 def cutedsl_grouped_mxfp6_gemm(
@@ -219,7 +219,7 @@ def cutedsl_grouped_mxfp6_gemm(
     import cuda.bindings.driver as cuda
     from cutlass.cute.runtime import from_dlpack
 
-    from aphrodite.model_executor.layers.quantization.utils.mxfp6_online_utils import (
+    from sonar.model_executor.layers.quantization.utils.mxfp6_online_utils import (
         quantize_mxfp6_cuda,
     )
 

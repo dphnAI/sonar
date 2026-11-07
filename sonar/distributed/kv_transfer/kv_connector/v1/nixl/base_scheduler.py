@@ -9,42 +9,42 @@ from typing import TYPE_CHECKING, Any
 import msgspec
 import zmq
 
-from aphrodite import envs
-from aphrodite.distributed.kv_transfer.kv_connector.utils import (
+from sonar import envs
+from sonar.distributed.kv_transfer.kv_connector.utils import (
     BlockIds,
     EngineId,
     clip_ssm_state_blocks,
     yield_req_data,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.base import (
+from sonar.distributed.kv_transfer.kv_connector.v1.base import (
     KVConnectorHandshakeMetadata,
     KVConnectorMetadata,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.metadata import (
+from sonar.distributed.kv_transfer.kv_connector.v1.nixl.metadata import (
     GET_META_MSG,
     HeartbeatInfo,
     NixlConnectorMetadata,
     NixlHandshakePayload,
     ReqId,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.utils import zmq_ctx
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.utils.network_utils import make_zmq_path
-from aphrodite.v1.core.sched.output import SchedulerOutput
-from aphrodite.v1.kv_cache_interface import (
+from sonar.distributed.kv_transfer.kv_connector.v1.nixl.utils import zmq_ctx
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.utils.math_utils import cdiv
+from sonar.utils.network_utils import make_zmq_path
+from sonar.v1.core.sched.output import SchedulerOutput
+from sonar.v1.kv_cache_interface import (
     FullAttentionSpec,
     MambaSpec,
     SlidingWindowSpec,
 )
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
-    from aphrodite.v1.core.kv_cache_manager import KVCacheBlocks
-    from aphrodite.v1.kv_cache_interface import KVCacheConfig
-    from aphrodite.v1.outputs import KVConnectorOutput
-    from aphrodite.v1.request import Request
+    from sonar.config import SonarConfig
+    from sonar.v1.core.kv_cache_manager import KVCacheBlocks
+    from sonar.v1.kv_cache_interface import KVCacheConfig
+    from sonar.v1.outputs import KVConnectorOutput
+    from sonar.v1.request import Request
 
 logger = init_logger(__name__)
 
@@ -59,36 +59,32 @@ class NixlBaseConnectorScheduler:
 
     def __init__(
         self,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
         engine_id: str,
         kv_cache_config: "KVCacheConfig",
     ):
-        self.aphrodite_config = aphrodite_config
-        parallel_config = aphrodite_config.parallel_config
+        self.sonar_config = sonar_config
+        parallel_config = sonar_config.parallel_config
         # TP1 PCP+DCP exposes its DCP shards as transfer ranks.
         self.transfer_tp_size = max(
             parallel_config.tensor_parallel_size,
             parallel_config.decode_context_parallel_size,
         )
-        self.block_size = aphrodite_config.cache_config.block_size
+        self.block_size = sonar_config.cache_config.block_size
         self.engine_id: EngineId = engine_id
         self.kv_cache_config = kv_cache_config
-        self.side_channel_host = envs.APHRODITE_NIXL_SIDE_CHANNEL_HOST
-        self.side_channel_port = (
-            envs.APHRODITE_NIXL_SIDE_CHANNEL_PORT + aphrodite_config.parallel_config.data_parallel_index
-        )
-        assert aphrodite_config.kv_transfer_config is not None
-        self._kv_lease_duration: int = aphrodite_config.kv_transfer_config.get_from_extra_config(
-            "kv_lease_duration", 30
-        )
+        self.side_channel_host = envs.SONAR_NIXL_SIDE_CHANNEL_HOST
+        self.side_channel_port = envs.SONAR_NIXL_SIDE_CHANNEL_PORT + sonar_config.parallel_config.data_parallel_index
+        assert sonar_config.kv_transfer_config is not None
+        self._kv_lease_duration: int = sonar_config.kv_transfer_config.get_from_extra_config("kv_lease_duration", 30)
         # NOTE (NickLucche): For now we use a hardcoded value for a simpler interface.
         self._heartbeat_interval = self._kv_lease_duration // 6
         if current_platform.device_type == "cpu":
             self.use_host_buffer = False
         else:
-            self.use_host_buffer = aphrodite_config.kv_transfer_config.kv_buffer_device == "cpu"
+            self.use_host_buffer = sonar_config.kv_transfer_config.kv_buffer_device == "cpu"
         self._is_hma_required = (
-            not aphrodite_config.scheduler_config.disable_hybrid_kv_cache_manager
+            not sonar_config.scheduler_config.disable_hybrid_kv_cache_manager
             # Also handle unlikely SW-only model case instead of checking num_groups>1.
             and any(not isinstance(g.kv_cache_spec, FullAttentionSpec) for g in kv_cache_config.transfer_groups)
         )
@@ -96,7 +92,7 @@ class NixlBaseConnectorScheduler:
         self._bounded_replay = any(g.kv_cache_spec.prefix_replay_tokens > 0 for g in kv_cache_config.kv_cache_groups)
 
         logger.info("Initializing NIXL Scheduler %s", engine_id)
-        if aphrodite_config.scheduler_config.disable_hybrid_kv_cache_manager:
+        if sonar_config.scheduler_config.disable_hybrid_kv_cache_manager:
             logger.info("Hybrid Memory Allocator is enabled with NIXL")
 
         # Background thread for handling new handshake requests.
@@ -150,17 +146,15 @@ class NixlBaseConnectorScheduler:
         # or pull from a remote node: minimum number of remote
         # tokens to amortize the xfer latencies
         self.kv_recompute_threshold: int = int(
-            aphrodite_config.kv_transfer_config.get_from_extra_config("kv_recompute_threshold", 64)
+            sonar_config.kv_transfer_config.get_from_extra_config("kv_recompute_threshold", 64)
         )
 
         # Bi-directional KV transfer feature supports KV block
         # transfers from D node to P node
-        self.is_bidirectional_kv_xfer_enabled = aphrodite_config.kv_transfer_config.get_from_extra_config(
+        self.is_bidirectional_kv_xfer_enabled = sonar_config.kv_transfer_config.get_from_extra_config(
             "bidirectional_kv_xfer", False
         )
-        self.decoder_kv_blocks_ttl = aphrodite_config.kv_transfer_config.get_from_extra_config(
-            "decoder_kv_blocks_ttl", 480
-        )
+        self.decoder_kv_blocks_ttl = sonar_config.kv_transfer_config.get_from_extra_config("decoder_kv_blocks_ttl", 480)
 
         if self.is_bidirectional_kv_xfer_enabled and self.kv_recompute_threshold > 0:
             logger.info(
@@ -365,7 +359,7 @@ class NixlBaseConnectorScheduler:
         """
         return max(
             1 if self._has_mamba or self._bounded_replay else 0,
-            self.aphrodite_config.num_prefill_lookahead_tokens - 1,
+            self.sonar_config.num_prefill_lookahead_tokens - 1,
         )
 
     def _get_remote_prefill_token_count(self, num_prompt_tokens: int) -> int:

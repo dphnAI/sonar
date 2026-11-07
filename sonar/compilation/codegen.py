@@ -74,7 +74,7 @@ def generate_execution_code_with_name(
             all_args = ", ".join(filter(None, [args_str, kwargs_str]))
             submod = getattr(split_gm, target)
             if isinstance(submod, torch.fx.GraphModule):
-                callable_name = f"__aphrodite_inlined_submods__{idx}"
+                callable_name = f"__sonar_inlined_submods__{idx}"
                 inlined_code, _, _ = generate_execution_code_with_name(
                     submod,
                     callable_name,
@@ -84,7 +84,7 @@ def generate_execution_code_with_name(
                 )
                 inlined_submods.append(inlined_code)
             else:
-                callable_name = f"__aphrodite_submods__[{idx}]"
+                callable_name = f"__sonar_submods__[{idx}]"
             lines.append(f"    {node.name} = {callable_name}({all_args})")
 
         elif node.op == "call_function":
@@ -114,7 +114,7 @@ def generate_execution_code_with_name(
 
     assert len(param_names) > 0
     params = ", ".join(param_names)
-    kw_params = ", *, __aphrodite_submods__" if with_submod else ""
+    kw_params = ", *, __sonar_submods__" if with_submod else ""
     header = f"\ndef {fn_name}({params}{kw_params}):"
     return (
         "".join(inlined_submods) + "\n".join([header] + lines) + "\n",
@@ -123,14 +123,14 @@ def generate_execution_code_with_name(
     )
 
 
-@dynamo_timed("aphrodite.generate_execution_code")
+@dynamo_timed("sonar.generate_execution_code")
 def generate_execution_code(
     split_gm: torch.fx.GraphModule,
 ) -> tuple[str, list[str], list[Any]]:
     """Generate Python source code from a split_gm's stitching graph.
 
     Walks split_gm.graph.nodes and produces a function that calls
-    submodules via a __aphrodite_submods__ list, avoiding FX GraphModule overhead
+    submodules via a __sonar_submods__ list, avoiding FX GraphModule overhead
     and dict lookup cost.
 
     Non-primitive constant arguments (e.g. torch.device, DTensor placement
@@ -148,7 +148,7 @@ def generate_execution_code(
         source, submod_names is the ordered list of submodule target names
         corresponding to list indices used in the generated code, and
         consts is a list of non-primitive constant objects referenced
-        by the generated code via __aphrodite_consts__. These objects are
+        by the generated code via __sonar_consts__. These objects are
         kept alive for the lifetime of the compiled function.
 
     """
@@ -156,7 +156,7 @@ def generate_execution_code(
     return "import torch\nimport operator\n" + code, submod_names, consts
 
 
-@dynamo_timed("aphrodite.compile_execution_fn")
+@dynamo_timed("sonar.compile_execution_fn")
 def compile_execution_fn(
     code: str,
     submod_callables: dict[str, Callable[..., Any]],
@@ -171,7 +171,7 @@ def compile_execution_fn(
         submod_names: Ordered list of submodule names matching the indices
             used in the generated code.
         consts: List of non-primitive constant objects referenced by the
-            generated code via __aphrodite_consts__. None for legacy cached
+            generated code via __sonar_consts__. None for legacy cached
             code that predates this feature.
 
     Returns:
@@ -181,14 +181,14 @@ def compile_execution_fn(
     trace_structured(
         "artifact",
         metadata_fn=lambda: {
-            "name": "aphrodite_execution_code",
+            "name": "sonar_execution_code",
             "encoding": "string",
         },
         payload_fn=lambda: code,
     )
     namespace: dict[str, Any] = {}
     if consts is not None:
-        namespace["__aphrodite_consts__"] = consts
+        namespace["__sonar_consts__"] = consts
     exec(code, namespace)  # noqa: S102
     fn = namespace["execution_fn"]
     # Using .get() is intentional here because only piecewise backend will
@@ -197,7 +197,7 @@ def compile_execution_fn(
     # should use None as placeholder to ensure the list indices are preserved
     # for better debuggability.
     submods_list = [submod_callables.get(name) for name in submod_names]
-    return partial(fn, __aphrodite_submods__=submods_list)
+    return partial(fn, __sonar_submods__=submods_list)
 
 
 def _node_ref(arg: Any, consts: list[Any], const_index: dict[int, int]) -> str:
@@ -226,4 +226,4 @@ def _node_ref(arg: Any, consts: list[Any], const_index: dict[int, int]) -> str:
     if key not in const_index:
         const_index[key] = len(consts)
         consts.append(arg)
-    return f"__aphrodite_consts__[{const_index[key]}]"
+    return f"__sonar_consts__[{const_index[key]}]"

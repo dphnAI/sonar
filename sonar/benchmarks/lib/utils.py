@@ -59,12 +59,12 @@ def convert_to_pytorch_benchmark_format(
 
         record = {
             "benchmark": {
-                "name": "Aphrodite benchmark",
+                "name": "Sonar benchmark",
                 "extra_info": {
                     "args": vars(args),
                     "compilation_config.mode": extract_field(args, extra_info, "compilation_config.mode"),
                     "optimization_level": extract_field(args, extra_info, "optimization_level"),
-                    # A boolean field used by Aphrodite benchmark HUD dashboard
+                    # A boolean field used by Sonar benchmark HUD dashboard
                     "use_compile": use_compile(args, extra_info),
                 },
             },
@@ -116,11 +116,11 @@ def write_to_json(filename: str, records: list) -> None:
 
 
 @contextmanager
-def default_aphrodite_config():
-    """Set a default AphroditeConfig for cases that directly test CustomOps or pathways
-    that use get_current_aphrodite_config() outside of a full engine context.
+def default_sonar_config():
+    """Set a default SonarConfig for cases that directly test CustomOps or pathways
+    that use get_current_sonar_config() outside of a full engine context.
     """
-    from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
+    from sonar.config import SonarConfig, set_current_sonar_config
 
-    with set_current_aphrodite_config(AphroditeConfig()):
+    with set_current_sonar_config(SonarConfig()):
         yield

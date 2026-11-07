@@ -6,14 +6,14 @@ import torch
 import torch.nn as nn
 from transformers import PreTrainedConfig
 
-from aphrodite.config.lora import LoRAConfig
-from aphrodite.distributed import (
+from sonar.config.lora import LoRAConfig
+from sonar.distributed import (
     split_tensor_along_last_dim,
     tensor_model_parallel_all_reduce,
 )
-from aphrodite.model_executor.custom_op import maybe_get_oot_by_class
-from aphrodite.model_executor.layers.linear import RowParallelLinear
-from aphrodite.platforms import current_platform
+from sonar.model_executor.custom_op import maybe_get_oot_by_class
+from sonar.model_executor.layers.linear import RowParallelLinear
+from sonar.platforms import current_platform
 
 from .base_linear import BaseLinearLayerWithLoRA
 from .utils import _fully_sharded_can_replace, _not_fully_sharded_can_replace

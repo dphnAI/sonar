@@ -7,12 +7,12 @@ import torch
 from torch._higher_order_ops import auto_functionalized
 from torch._ops import OpOverload
 
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.config import get_current_aphrodite_config
-from aphrodite.model_executor.layers.activation import SiluAndMul
-from aphrodite.model_executor.layers.layernorm import RMSNormGated
-from aphrodite.model_executor.layers.quantization.input_quant_fp8 import QuantFP8
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.config import get_current_sonar_config
+from sonar.model_executor.layers.activation import SiluAndMul
+from sonar.model_executor.layers.layernorm import RMSNormGated
+from sonar.model_executor.layers.quantization.input_quant_fp8 import QuantFP8
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     GroupShape,
     QuantKey,
     _normalize_quant_group_shape,
@@ -23,15 +23,15 @@ from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
     kFp8StaticTensorSym,
     kNvfp4Dynamic,
 )
-from aphrodite.model_executor.layers.rotary_embedding import RotaryEmbedding
-from aphrodite.model_executor.layers.rotary_embedding.deepseek_scaling_rope import (
+from sonar.model_executor.layers.rotary_embedding import RotaryEmbedding
+from sonar.model_executor.layers.rotary_embedding.deepseek_scaling_rope import (
     DeepseekScalingRotaryEmbedding,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 ROTARY_OP = torch.ops._C.rotary_embedding.default
-FLASHINFER_ROTARY_OP = torch.ops.aphrodite.flashinfer_rotary_embedding.default
-MROPE_OP = torch.ops.aphrodite.mrope.default
+FLASHINFER_ROTARY_OP = torch.ops.sonar.flashinfer_rotary_embedding.default
+MROPE_OP = torch.ops.sonar.mrope.default
 
 QUANT_OPS: dict[QuantKey, OpOverload] = {
     kFp8StaticTensorSym: torch.ops._C.static_scaled_fp8_quant.default,  # noqa: E501
@@ -52,7 +52,7 @@ SILU_MUL_OP = torch.ops._C.silu_and_mul.default
 
 class MatcherCustomOp(ABC):
     def __init__(self, enabled: bool) -> None:
-        config = get_current_aphrodite_config()
+        config = get_current_sonar_config()
         self.model_dtype = config.model_config.dtype if config.model_config else None
         self.device = config.device_config.device if config.device_config else None
 
@@ -259,7 +259,7 @@ class MatcherRMSNormGated(MatcherCustomOp):
         z: torch.Tensor,
         weight: torch.Tensor,
     ) -> torch.Tensor:
-        return torch.ops.aphrodite.fla_rms_norm_gated(
+        return torch.ops.sonar.fla_rms_norm_gated(
             x,
             z,
             weight,
@@ -324,7 +324,7 @@ class MatcherDeepseekScalingRotaryEmbedding(MatcherCustomOp):
         cos_sin_cache: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         if self.use_flashinfer:
-            torch.ops.aphrodite.flashinfer_rotary_embedding(
+            torch.ops.sonar.flashinfer_rotary_embedding(
                 positions,
                 query,
                 key,

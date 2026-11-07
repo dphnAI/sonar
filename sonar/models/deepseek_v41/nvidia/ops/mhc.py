@@ -7,19 +7,19 @@ from typing import TYPE_CHECKING, cast
 
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed import get_tp_group
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.kernels.mhc.tilelang import (
+from sonar.config import SonarConfig
+from sonar.distributed import get_tp_group
+from sonar.logger import init_logger
+from sonar.model_executor.kernels.mhc.tilelang import (
     mhc_fused_post_pre_delayed_tilelang,
     mhc_post_tilelang,
 )
-from aphrodite.model_executor.layers.fused_moe.moe_output import (
+from sonar.model_executor.layers.fused_moe.moe_output import (
     MoEOutput,
     UnfinalizedMoEOutput,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.deep_gemm import is_deep_gemm_supported
+from sonar.platforms import current_platform
+from sonar.utils.deep_gemm import is_deep_gemm_supported
 
 from .mega_mhc import (
     can_use_mega_mhc,
@@ -27,7 +27,7 @@ from .mega_mhc import (
 )
 
 if TYPE_CHECKING:
-    from aphrodite.distributed.device_communicators.cuda_communicator import CudaCommunicator
+    from sonar.distributed.device_communicators.cuda_communicator import CudaCommunicator
 
     from .cute_dsl import AllReduceMHC
 
@@ -41,9 +41,9 @@ MHC_OVERLAP_MAX_TOKENS = 16
 _all_reduce_mhc: "AllReduceMHC | None" = None
 
 
-def supports_mhc_overlap(aphrodite_config: AphroditeConfig) -> bool:
+def supports_mhc_overlap(sonar_config: SonarConfig) -> bool:
     """Check kernel requirements and safety of sharing the coefficient stream."""
-    config = aphrodite_config.model_config.hf_config
+    config = sonar_config.model_config.hf_config
     # DeepGEMM's prenorm kernel requires K % 64 == 0, N % 8 == 0, and N <= 32.
     mix_size = config.hc_mult * (config.hc_mult + 2)
     return (
@@ -52,13 +52,13 @@ def supports_mhc_overlap(aphrodite_config: AphroditeConfig) -> bool:
         and config.hidden_size % 64 == 0
         and 0 < mix_size <= 32
         and mix_size % 8 == 0
-        and not aphrodite_config.parallel_config.use_ubatching
+        and not sonar_config.parallel_config.use_ubatching
     )
 
 
-def supports_mhc_all_reduce(aphrodite_config: AphroditeConfig) -> bool:
-    parallel = aphrodite_config.parallel_config
-    config = aphrodite_config.model_config.hf_config
+def supports_mhc_all_reduce(sonar_config: SonarConfig) -> bool:
+    parallel = sonar_config.parallel_config
+    config = sonar_config.model_config.hf_config
     if (
         parallel.tensor_parallel_size != 4
         or parallel.enable_expert_parallel
@@ -72,7 +72,7 @@ def supports_mhc_all_reduce(aphrodite_config: AphroditeConfig) -> bool:
     return comm is not None and bool(comm.mnnvl_lamport_ag_multicast_ptr)
 
 
-def init_mhc_all_reduce(aphrodite_config: AphroditeConfig) -> None:
+def init_mhc_all_reduce(sonar_config: SonarConfig) -> None:
     """Build the fused all-reduce + mHC kernel the overlap path reduces with.
 
     Collective over the TP group, so every rank must call it, and only when
@@ -81,7 +81,7 @@ def init_mhc_all_reduce(aphrodite_config: AphroditeConfig) -> None:
     global _all_reduce_mhc
     from .cute_dsl import AllReduceMHC
 
-    config = aphrodite_config.model_config.hf_config
+    config = sonar_config.model_config.hf_config
     _all_reduce_mhc = AllReduceMHC(
         hidden_size=config.hidden_size,
         hc_mult=config.hc_mult,
@@ -119,11 +119,11 @@ def mhc_pre_delayed_overlap(
     input is ready on the caller stream; join stream before using coefficients.
     The caller must retain the weights and coefficient outputs until the join.
     """
-    from aphrodite.model_executor.kernels.mhc.warmup import (
+    from sonar.model_executor.kernels.mhc.warmup import (
         MHC_PRE_NORM_KERNEL,
         compute_mhc_pre_num_splits,
     )
-    from aphrodite.utils.deep_gemm import tf32_hc_prenorm_gemm
+    from sonar.utils.deep_gemm import tf32_hc_prenorm_gemm
 
     n, hc, hidden = residual.shape
     assert residual.is_contiguous() and residual.dtype == torch.bfloat16

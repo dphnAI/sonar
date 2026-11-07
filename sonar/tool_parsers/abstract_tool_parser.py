@@ -13,27 +13,27 @@ from openai.types.responses import (
 )
 from openai.types.responses.function_tool import FunctionTool
 
-import aphrodite.envs as envs
-from aphrodite.entrypoints.generate.base.protocol import (
+import sonar.envs as envs
+from sonar.entrypoints.generate.base.protocol import (
     DeltaMessage,
     ExtractedToolCallInformation,
 )
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionRequest,
     ChatCompletionToolsParam,
 )
-from aphrodite.entrypoints.openai.responses.protocol import (
+from sonar.entrypoints.openai.responses.protocol import (
     ResponsesRequest,
 )
-from aphrodite.logger import init_logger
-from aphrodite.sampling_params import (
+from sonar.logger import init_logger
+from sonar.sampling_params import (
     StructuredOutputsParams,
 )
-from aphrodite.tokenizers import TokenizerLike
-from aphrodite.tool_parsers.tool_strict_level import ToolStrictLevel
-from aphrodite.tool_parsers.utils import Tool, get_json_schema_from_tools
-from aphrodite.utils.collection_utils import is_list_of
-from aphrodite.utils.import_utils import import_plugin
+from sonar.tokenizers import TokenizerLike
+from sonar.tool_parsers.tool_strict_level import ToolStrictLevel
+from sonar.tool_parsers.utils import Tool, get_json_schema_from_tools
+from sonar.utils.collection_utils import is_list_of
+from sonar.utils.import_utils import import_plugin
 
 __all__ = ["Tool"]
 
@@ -61,13 +61,13 @@ class ToolParser:
     structural_tag_model: str | None = None
     # Strict level applied when the operator leaves ``--tool-strict-level``
     # unset. Operator flags override it, and
-    # ``APHRODITE_ENFORCE_STRICT_TOOL_CALLING=0`` still disables structural tags.
+    # ``SONAR_ENFORCE_STRICT_TOOL_CALLING=0`` still disables structural tags.
     default_tool_strict_level: ToolStrictLevel = ToolStrictLevel.AUTO
     engine_based_streaming: bool = False
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
-        if cls.structural_tag_model is not None and envs.APHRODITE_ENFORCE_STRICT_TOOL_CALLING:
+        if cls.structural_tag_model is not None and envs.SONAR_ENFORCE_STRICT_TOOL_CALLING:
             cls.supports_required_and_named = False
 
     def __init__(
@@ -174,9 +174,9 @@ class ToolParser:
     ):
         if self.structural_tag_model is None:
             return None
-        if not envs.APHRODITE_ENFORCE_STRICT_TOOL_CALLING:
+        if not envs.SONAR_ENFORCE_STRICT_TOOL_CALLING:
             return None
-        from aphrodite.tool_parsers.structural_tag_registry import get_model_structural_tag
+        from sonar.tool_parsers.structural_tag_registry import get_model_structural_tag
 
         return get_model_structural_tag(
             model=self.structural_tag_model,
@@ -295,7 +295,7 @@ class ToolParserManager:
         Example:
             ToolParserManager.register_lazy_module(
                 name="kimi_k2",
-                module_path="aphrodite.tool_parsers.kimi_k2_parser",
+                module_path="sonar.tool_parsers.kimi_k2_parser",
                 class_name="KimiK2ToolParser",
             )
 

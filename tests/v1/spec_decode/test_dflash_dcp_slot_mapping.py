@@ -7,10 +7,10 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.v1.attention.backends.utils import PAD_SLOT_ID
-from aphrodite.v1.worker.gpu.input_batch import InputBuffers
-from aphrodite.v1.worker.gpu.spec_decode.dflash.speculator import (
+from sonar.platforms import current_platform
+from sonar.v1.attention.backends.utils import PAD_SLOT_ID
+from sonar.v1.worker.gpu.input_batch import InputBuffers
+from sonar.v1.worker.gpu.spec_decode.dflash.speculator import (
     prepare_dflash_inputs,
 )
 
@@ -230,7 +230,7 @@ def test_dflash_context_slots_partition_across_dcp(cp_size: int, cp_interleave: 
 
 @pytest.mark.parametrize("use_global_cache_positions", [False, True])
 def test_restored_draft_prefix_keeps_cache_origin_consistent(use_global_cache_positions: bool):
-    from aphrodite.v1.worker.gpu.spec_decode.dflash.speculator import shift_draft_block_tables
+    from sonar.v1.worker.gpu.spec_decode.dflash.speculator import shift_draft_block_tables
 
     cached_tokens = [64, 0, 32]
     result = _run_prepare(1, 0, 1, use_global_cache_positions=use_global_cache_positions, cached_tokens=cached_tokens)

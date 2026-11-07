@@ -8,73 +8,73 @@ from collections.abc import AsyncGenerator, Iterable, Mapping
 from copy import copy
 from typing import Any
 
-import aphrodite.envs as envs
-from aphrodite import TokensPrompt
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.kv_events import KVEventsConfig
-from aphrodite.config.profiler import (
+import sonar.envs as envs
+from sonar import TokensPrompt
+from sonar.config import SonarConfig
+from sonar.config.kv_events import KVEventsConfig
+from sonar.config.profiler import (
     validate_profile_iteration_bounds,
     validate_profile_prefix,
 )
-from aphrodite.distributed.weight_transfer.base import (
+from sonar.distributed.weight_transfer.base import (
     WeightTransferInitRequest,
     WeightTransferUpdateRequest,
 )
-from aphrodite.engine.arg_utils import AsyncEngineArgs
-from aphrodite.engine.protocol import EngineClient, StreamingInput
-from aphrodite.entrypoints.serve.elastic_ep.middleware import (
+from sonar.engine.arg_utils import AsyncEngineArgs
+from sonar.engine.protocol import EngineClient, StreamingInput
+from sonar.entrypoints.serve.elastic_ep.middleware import (
     get_elastic_ep_rank_retired,
     set_elastic_ep_rank_retired,
     set_scaling_elastic_ep,
 )
-from aphrodite.exceptions import (
-    AphroditeClientError,
-    AphroditeValidationError,
+from sonar.exceptions import (
     EngineFaultedError,
     GenerationError,
     GracefulHTTPError,
     MaxQueuedTokensError,
     ProfilerAlreadyActiveError,
     QueueOverflowError,
+    SonarClientError,
+    SonarValidationError,
 )
-from aphrodite.inputs import EngineInput, PromptType
-from aphrodite.logger import configure_logging_if_needed, init_logger
-from aphrodite.lora.request import LoRARequest
-from aphrodite.multimodal import MULTIMODAL_REGISTRY, MultiModalRegistry
-from aphrodite.outputs import STREAM_FINISHED, PoolingRequestOutput, RequestOutput
-from aphrodite.pooling_params import PoolingParams
-from aphrodite.profiler.wrapper import TorchProfilerWrapper, create_frontend_profiler
-from aphrodite.renderers import renderer_from_config
-from aphrodite.renderers.inputs.preprocess import extract_prompt_components
-from aphrodite.sampling_params import RequestOutputKind, SamplingParams
-from aphrodite.tasks import SupportedTask
-from aphrodite.tokenizers import TokenizerLike
-from aphrodite.tracing import init_tracer, log_tracing_disabled_warning
-from aphrodite.transformers_utils.config import maybe_register_config_serialize_by_value
-from aphrodite.usage.usage_lib import UsageContext
-from aphrodite.utils.async_utils import cancel_task_threadsafe
-from aphrodite.utils.collection_utils import as_list
-from aphrodite.v1.engine import CheckpointState, EngineCoreRequest, PauseMode
-from aphrodite.v1.engine.admission_control import SharedAdmissionStats
-from aphrodite.v1.engine.core_client import EngineCoreClient
-from aphrodite.v1.engine.exceptions import EngineDeadError, EngineGenerateError
-from aphrodite.v1.engine.input_processor import InputProcessor
-from aphrodite.v1.engine.output_processor import (
+from sonar.inputs import EngineInput, PromptType
+from sonar.logger import configure_logging_if_needed, init_logger
+from sonar.lora.request import LoRARequest
+from sonar.multimodal import MULTIMODAL_REGISTRY, MultiModalRegistry
+from sonar.outputs import STREAM_FINISHED, PoolingRequestOutput, RequestOutput
+from sonar.pooling_params import PoolingParams
+from sonar.profiler.wrapper import TorchProfilerWrapper, create_frontend_profiler
+from sonar.renderers import renderer_from_config
+from sonar.renderers.inputs.preprocess import extract_prompt_components
+from sonar.sampling_params import RequestOutputKind, SamplingParams
+from sonar.tasks import SupportedTask
+from sonar.tokenizers import TokenizerLike
+from sonar.tracing import init_tracer, log_tracing_disabled_warning
+from sonar.transformers_utils.config import maybe_register_config_serialize_by_value
+from sonar.usage.usage_lib import UsageContext
+from sonar.utils.async_utils import cancel_task_threadsafe
+from sonar.utils.collection_utils import as_list
+from sonar.v1.engine import CheckpointState, EngineCoreRequest, PauseMode
+from sonar.v1.engine.admission_control import SharedAdmissionStats
+from sonar.v1.engine.core_client import EngineCoreClient
+from sonar.v1.engine.exceptions import EngineDeadError, EngineGenerateError
+from sonar.v1.engine.input_processor import InputProcessor
+from sonar.v1.engine.output_processor import (
     OutputProcessor,
     RequestOutputCollector,
     StreamingInputOutputCollector,
 )
-from aphrodite.v1.engine.parallel_sampling import ParentRequest
-from aphrodite.v1.executor import Executor
-from aphrodite.v1.fault_tolerance.utils import FaultToleranceRequest, FaultToleranceResult
-from aphrodite.v1.kv_hints import KvHintsEnvelope
-from aphrodite.v1.metrics.loggers import (
+from sonar.v1.engine.parallel_sampling import ParentRequest
+from sonar.v1.executor import Executor
+from sonar.v1.fault_tolerance.utils import FaultToleranceRequest, FaultToleranceResult
+from sonar.v1.kv_hints import KvHintsEnvelope
+from sonar.v1.metrics.loggers import (
     StatLoggerFactory,
     StatLoggerManager,
     load_stat_logger_plugin_factories,
 )
-from aphrodite.v1.metrics.prometheus import shutdown_prometheus
-from aphrodite.v1.metrics.stats import IterationStats
+from sonar.v1.metrics.prometheus import shutdown_prometheus
+from sonar.v1.metrics.stats import IterationStats
 
 logger = init_logger(__name__)
 
@@ -92,11 +92,11 @@ class InputStreamError(Exception):
 
 
 class AsyncLLM(EngineClient):
-    """An asynchronous wrapper for the Aphrodite engine."""
+    """An asynchronous wrapper for the Sonar engine."""
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         executor_class: type[Executor],
         log_stats: bool,
         usage_context: UsageContext = UsageContext.ENGINE_CONTEXT,
@@ -113,7 +113,7 @@ class AsyncLLM(EngineClient):
         """Create an AsyncLLM.
 
         Args:
-            aphrodite_config: global configuration.
+            sonar_config: global configuration.
             executor_class: an Executor impl, e.g. MultiprocExecutor.
             log_stats: Whether to log stats.
             usage_context: Usage context of the LLM.
@@ -136,20 +136,20 @@ class AsyncLLM(EngineClient):
             None
 
         """
-        configure_logging_if_needed(aphrodite_config.logging_config)
+        configure_logging_if_needed(sonar_config.logging_config)
 
         # Ensure we can serialize custom transformer configs
         maybe_register_config_serialize_by_value()
 
-        self.aphrodite_config = aphrodite_config
+        self.sonar_config = sonar_config
         self._elastic_ep_lock = asyncio.Lock()
-        self.model_config = aphrodite_config.model_config
-        self.scheduler_config = aphrodite_config.scheduler_config
-        self.observability_config = aphrodite_config.observability_config
+        self.model_config = sonar_config.model_config
+        self.scheduler_config = sonar_config.scheduler_config
+        self.observability_config = sonar_config.observability_config
 
         tracing_endpoint = self.observability_config.otlp_traces_endpoint
         if tracing_endpoint is not None:
-            init_tracer("aphrodite.llm_engine", tracing_endpoint)
+            init_tracer("sonar.llm_engine", tracing_endpoint)
 
         self.log_requests = log_requests
 
@@ -165,10 +165,10 @@ class AsyncLLM(EngineClient):
                 "enabling logging without default stat loggers."
             )
 
-        self.renderer = renderer = renderer_from_config(self.aphrodite_config)
+        self.renderer = renderer = renderer_from_config(self.sonar_config)
 
         # Convert EngineInput --> EngineCoreRequest.
-        self.input_processor = InputProcessor(self.aphrodite_config, renderer)
+        self.input_processor = InputProcessor(self.sonar_config, renderer)
 
         self.admission_stats = (
             SharedAdmissionStats(client_addresses, client_count, client_index)
@@ -180,7 +180,7 @@ class AsyncLLM(EngineClient):
         self.output_processor = OutputProcessor(
             renderer.tokenizer,
             log_stats=self.log_stats,
-            stream_interval=self.aphrodite_config.scheduler_config.stream_interval,
+            stream_interval=self.sonar_config.scheduler_config.stream_interval,
             tracing_enabled=tracing_endpoint is not None,
             admission_stats=self.admission_stats,
         )
@@ -191,7 +191,7 @@ class AsyncLLM(EngineClient):
         # BaseRenderer.start_mm_warmup_in_background). The warmup is joined
         # by reset_mm_cache / warmup / shutdown.
         self.engine_core = EngineCoreClient.make_async_mp_client(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             executor_class=executor_class,
             log_stats=self.log_stats,
             client_addresses=client_addresses,
@@ -204,7 +204,7 @@ class AsyncLLM(EngineClient):
         self.logger_manager: StatLoggerManager | None = None
         if self.log_stats:
             self.logger_manager = StatLoggerManager(
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 engine_idxs=self.engine_core.engine_ranks_managed,
                 custom_stat_loggers=custom_stat_loggers,
                 enable_default_loggers=log_stats,
@@ -228,20 +228,20 @@ class AsyncLLM(EngineClient):
         self._profile_lock = asyncio.Lock()
         self._profile_session_guard_enabled = client_count == 1
         self._profile_session_active = False
-        if not self._frontend_profiler_injected and aphrodite_config.profiler_config.should_profile_frontend:
+        if not self._frontend_profiler_injected and sonar_config.profiler_config.should_profile_frontend:
             if self._profile_session_guard_enabled:
                 self._frontend_profiler_worker_name = f"{socket.gethostname()}_{os.getpid()}.async_llm"
                 self.profiler = create_frontend_profiler(
-                    aphrodite_config.profiler_config,
+                    sonar_config.profiler_config,
                     worker_name=self._frontend_profiler_worker_name,
                 )
             else:
                 logger.warning("Frontend CPU profiling is disabled when multiple API server processes share an engine.")
 
     @classmethod
-    def from_aphrodite_config(
+    def from_sonar_config(
         cls,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         start_engine_loop: bool = True,
         usage_context: UsageContext = UsageContext.ENGINE_CONTEXT,
         stat_loggers: list[StatLoggerFactory] | None = None,
@@ -254,8 +254,8 @@ class AsyncLLM(EngineClient):
     ) -> "AsyncLLM":
         # Create the LLMEngine.
         return cls(
-            aphrodite_config=aphrodite_config,
-            executor_class=Executor.get_class(aphrodite_config),
+            sonar_config=sonar_config,
+            executor_class=Executor.get_class(sonar_config),
             start_engine_loop=start_engine_loop,
             stat_loggers=stat_loggers,
             log_requests=enable_log_requests,
@@ -277,12 +277,12 @@ class AsyncLLM(EngineClient):
     ) -> "AsyncLLM":
         """Create an AsyncLLM from the EngineArgs."""
         # Create the engine configs.
-        aphrodite_config = engine_args.create_engine_config(usage_context)
-        executor_class = Executor.get_class(aphrodite_config)
+        sonar_config = engine_args.create_engine_config(usage_context)
+        executor_class = Executor.get_class(sonar_config)
 
         # Create the AsyncLLM.
         return cls(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             executor_class=executor_class,
             log_requests=engine_args.enable_log_requests,
             log_stats=not engine_args.disable_log_stats,
@@ -344,7 +344,7 @@ class AsyncLLM(EngineClient):
 
         """
         if (
-            self.aphrodite_config.parallel_config.enable_fault_tolerance
+            self.sonar_config.parallel_config.enable_fault_tolerance
             and self.engine_core.engine_status.get("status") != "healthy"
         ):
             logger.info(
@@ -423,11 +423,11 @@ class AsyncLLM(EngineClient):
             trace_headers = None
 
         if (
-            self.aphrodite_config.cache_config.kv_sharing_fast_prefill
+            self.sonar_config.cache_config.kv_sharing_fast_prefill
             and isinstance(params, SamplingParams)
             and params.prompt_logprobs
         ):
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 "--kv-sharing-fast-prefill produces incorrect logprobs for "
                 "prompt tokens, please disable it when the requests need "
                 "prompt logprobs"
@@ -653,7 +653,7 @@ class AsyncLLM(EngineClient):
                     )
                     req.external_req_id = request_id
                     if req.prompt_embeds is not None:
-                        raise AphroditeValidationError("prompt_embeds not supported for streaming inputs")
+                        raise SonarValidationError("prompt_embeds not supported for streaming inputs")
                     prompt_text, _, _ = extract_prompt_components(self.model_config, input_chunk.prompt)
                     await self._add_request(req, prompt_text, None, 0, queue)
                     any_added = True
@@ -683,8 +683,8 @@ class AsyncLLM(EngineClient):
         return queue
 
     def _validate_resumable_request(self) -> None:
-        if self.aphrodite_config.is_mm_encoder_only or self.model_config.is_diffusion:
-            raise AphroditeValidationError("Resumable requests are not supported for encoder-only or diffusion models.")
+        if self.sonar_config.is_mm_encoder_only or self.model_config.is_diffusion:
+            raise SonarValidationError("Resumable requests are not supported for encoder-only or diffusion models.")
 
     @staticmethod
     def _validate_streaming_input_sampling_params(
@@ -696,7 +696,7 @@ class AsyncLLM(EngineClient):
             or params.output_kind == RequestOutputKind.FINAL_ONLY
             or params.stop
         ):
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 "Input streaming not currently supported "
                 "for pooling models, n > 1, request_kind = FINAL_ONLY "
                 "or with stop strings."
@@ -742,7 +742,7 @@ class AsyncLLM(EngineClient):
             Advanced power-users can manually bypass the raw-prompt fallback
             path using the Engine's underlying Renderer pipeline:
 
-            >>> from aphrodite.inputs import parse_model_prompt
+            >>> from sonar.inputs import parse_model_prompt
             >>> parsed = parse_model_prompt(self.model_config, "Prompt text")
             >>> params = self.renderer.default_cmpl_tok_params
             >>> (engine_input,) = self.renderer.render_cmpl([parsed], params)
@@ -799,7 +799,7 @@ class AsyncLLM(EngineClient):
             raise
 
         # Request validation error or admission control rejection.
-        except (AphroditeClientError, GracefulHTTPError, GenerationError) as e:
+        except (SonarClientError, GracefulHTTPError, GenerationError) as e:
             if q is not None:
                 # E.g. a paused engine rejected one child: reclaim its n>1 siblings.
                 await self.abort(q.request_id, internal=True)
@@ -848,7 +848,7 @@ class AsyncLLM(EngineClient):
         renderer = self.renderer
         # P0 multi-modal sender ("shadow") cache; None for text-only models.
         mm_processor_cache = renderer.mm_processor_cache
-        chunk_size = envs.APHRODITE_V1_OUTPUT_PROC_CHUNK_SIZE
+        chunk_size = envs.SONAR_V1_OUTPUT_PROC_CHUNK_SIZE
 
         async def output_handler():
             try:
@@ -860,7 +860,7 @@ class AsyncLLM(EngineClient):
                     iteration_stats = IterationStats() if (log_stats and num_outputs) else None
 
                     # Split outputs into chunks of at most
-                    # APHRODITE_V1_OUTPUT_PROC_CHUNK_SIZE, so that we don't block the
+                    # SONAR_V1_OUTPUT_PROC_CHUNK_SIZE, so that we don't block the
                     # event loop for too long.
                     engine_core_outputs = outputs.outputs
                     for start in range(0, num_outputs, chunk_size):
@@ -1059,7 +1059,7 @@ class AsyncLLM(EngineClient):
             raise
 
         # Request validation error or admission control rejection.
-        except (AphroditeClientError, GracefulHTTPError, GenerationError):
+        except (SonarClientError, GracefulHTTPError, GenerationError):
             if self.log_requests:
                 logger.info("Request %s failed (bad request).", request_id)
             raise
@@ -1224,13 +1224,13 @@ class AsyncLLM(EngineClient):
 
     async def dphn_prove(self, request_id: str, nonce: str, output_token_ids: list[int]) -> list[dict[str, Any]]:
         """Sample weights on every worker of every engine managed by this instance."""
-        if self.aphrodite_config.dphn_network_config is None:
+        if self.sonar_config.dphn_network_config is None:
             raise RuntimeError("DPHN weight receipts are not enabled")
         return await self.engine_core.dphn_prove_async(request_id, nonce, output_token_ids)
 
     async def dphn_snapshot(self, output_dir: str) -> list[dict[str, Any]]:
         """Export runtime-weight snapshots from every managed engine and worker."""
-        if self.aphrodite_config.dphn_network_config is None:
+        if self.sonar_config.dphn_network_config is None:
             raise RuntimeError("DPHN weight receipts are not enabled")
         return await self.engine_core.dphn_snapshot_async(output_dir)
 
@@ -1249,10 +1249,10 @@ class AsyncLLM(EngineClient):
 
     async def _drain_requests_for_elastic_ep(self, drain_timeout: int) -> None:
         try:
-            logger.info("APHRODITE_ELASTIC_EP_DRAIN_REQUESTS is set, waiting for requests to drain before scaling")
+            logger.info("SONAR_ELASTIC_EP_DRAIN_REQUESTS is set, waiting for requests to drain before scaling")
             await self.wait_for_requests_to_drain(drain_timeout)
         except BaseException as e:
-            if self.aphrodite_config.parallel_config.data_parallel_external_lb:
+            if self.sonar_config.parallel_config.data_parallel_external_lb:
                 await self.engine_core.abort_external_elastic_ep(str(e) or type(e).__name__)
             else:
                 set_scaling_elastic_ep(False)
@@ -1264,7 +1264,7 @@ class AsyncLLM(EngineClient):
             await self._scale_elastic_ep(new_data_parallel_size, drain_timeout)
 
     async def _scale_elastic_ep(self, new_data_parallel_size: int, drain_timeout: int) -> None:
-        parallel_config = self.aphrodite_config.parallel_config
+        parallel_config = self.sonar_config.parallel_config
         old_data_parallel_size = parallel_config.data_parallel_size
         if old_data_parallel_size == new_data_parallel_size:
             logger.info(
@@ -1282,7 +1282,7 @@ class AsyncLLM(EngineClient):
             # unregister during initialization. Need to understand
             # the intended behavior here better.
             self.logger_manager = StatLoggerManager(
-                aphrodite_config=self.aphrodite_config,
+                sonar_config=self.sonar_config,
                 engine_idxs=list(range(new_data_parallel_size)),
                 custom_stat_loggers=None,
             )
@@ -1293,7 +1293,7 @@ class AsyncLLM(EngineClient):
             self.logger_manager.log_engine_initialized()
 
         set_scaling_elastic_ep(True)
-        if envs.APHRODITE_ELASTIC_EP_DRAIN_REQUESTS:
+        if envs.SONAR_ELASTIC_EP_DRAIN_REQUESTS:
             await self._drain_requests_for_elastic_ep(drain_timeout)
 
         rank_will_retire = (

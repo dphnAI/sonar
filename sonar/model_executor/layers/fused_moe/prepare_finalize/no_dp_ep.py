@@ -2,13 +2,13 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite.model_executor.layers.fused_moe.config import FusedMoEQuantConfig
-from aphrodite.model_executor.layers.fused_moe.topk_weight_and_reduce import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar.model_executor.layers.fused_moe.config import FusedMoEQuantConfig
+from sonar.model_executor.layers.fused_moe.topk_weight_and_reduce import (
     TopKWeightAndReduceContiguous,
     TopKWeightAndReduceDelegate,
 )
-from aphrodite.model_executor.layers.fused_moe.utils import moe_kernel_quantize_input
+from sonar.model_executor.layers.fused_moe.utils import moe_kernel_quantize_input
 
 
 def _quantize_input(

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Kimi-K2.5 Model Implementation for Aphrodite.
+"""Kimi-K2.5 Model Implementation for Sonar.
 
 Kimi-K2.5 extends Kimi-K2 with vision support.
 """
@@ -13,16 +13,16 @@ import torch
 from torch import nn
 from transformers import BatchFeature, Kimi_K25Config
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.multimodal import MultiModalDummyOptions
-from aphrodite.inputs import MultiModalDataDict
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fusion.mm_input_norm import build_mm_input_norm
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.quantization.compressed_tensors import (
+from sonar.config import SonarConfig
+from sonar.config.multimodal import MultiModalDummyOptions
+from sonar.inputs import MultiModalDataDict
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fusion.mm_input_norm import build_mm_input_norm
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.quantization.compressed_tensors import (
     compressed_tensors,
 )
-from aphrodite.model_executor.models.interfaces import (
+from sonar.model_executor.models.interfaces import (
     SupportsEagle,
     SupportsEagle3,
     SupportsEncoderCudaGraph,
@@ -32,28 +32,28 @@ from aphrodite.model_executor.models.interfaces import (
 )
 
 if TYPE_CHECKING:
-    from aphrodite.v1.worker.encoder_cudagraph_defs import (
+    from sonar.v1.worker.encoder_cudagraph_defs import (
         EncoderCudaGraphCaptureInputs,
         EncoderCudaGraphConfig,
         EncoderCudaGraphReplayBuffers,
         EncoderItemSpec,
     )
-from aphrodite.model_executor.models.kimi_k25_vit import (
+from sonar.model_executor.models.kimi_k25_vit import (
     KimiK25MultiModalProjector,
     MoonViT3dPretrainedModel,
     vision_tower_forward,
 )
-from aphrodite.model_executor.models.vision import is_vit_use_data_parallel
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import (
+from sonar.model_executor.models.vision import is_vit_use_data_parallel
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import (
     MultiModalFieldConfig,
     MultiModalKwargsItems,
     NestedTensors,
     VisionChunkImage,
     VisionChunkVideo,
 )
-from aphrodite.multimodal.parse import MultiModalDataItems, VisionChunkProcessorItems
-from aphrodite.multimodal.processing import (
+from sonar.multimodal.parse import MultiModalDataItems, VisionChunkProcessorItems
+from sonar.multimodal.processing import (
     BaseDummyInputsBuilder,
     BaseMultiModalProcessor,
     BaseProcessingInfo,
@@ -61,20 +61,20 @@ from aphrodite.multimodal.processing import (
     PromptReplacement,
     PromptUpdate,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.transformers_utils.processor import cached_get_image_processor
-from aphrodite.transformers_utils.processors.kimi_k25 import KimiK25Processor
-from aphrodite.transformers_utils.processors.kimi_k25_vision_fused import (
+from sonar.platforms import current_platform
+from sonar.sequence import IntermediateTensors
+from sonar.transformers_utils.processor import cached_get_image_processor
+from sonar.transformers_utils.processors.kimi_k25 import KimiK25Processor
+from sonar.transformers_utils.processors.kimi_k25_vision_fused import (
     KimiK25FusedVisionProcessor,
 )
-from aphrodite.utils.import_utils import is_numba_available
-from aphrodite.utils.tensor_schema import TensorSchema, TensorShape
+from sonar.utils.import_utils import is_numba_available
+from sonar.utils.tensor_schema import TensorSchema, TensorShape
 
 from .utils import (
     AutoWeightsLoader,
     WeightsMapper,
-    init_aphrodite_registered_model,
+    init_sonar_registered_model,
     maybe_prefix,
 )
 
@@ -304,7 +304,7 @@ class KimiK25ForConditionalGeneration(
     supports_encoder_cudagraph: ClassVar[Literal[True]] = True
     supports_mm_device_do_normalize = True
 
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={
             # For legacy NVFP4 checkpoint compatibility:
             # see https://github.com/vllm-project/vllm/pull/33346#issuecomment-3851475033
@@ -328,23 +328,23 @@ class KimiK25ForConditionalGeneration(
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
     ) -> None:
         super().__init__()
-        model_config = aphrodite_config.model_config
+        model_config = sonar_config.model_config
         config: Kimi_K25Config = model_config.hf_config
         self.config = config
-        quant_config = aphrodite_config.quant_config
+        quant_config = sonar_config.quant_config
 
         self.use_data_parallel = is_vit_use_data_parallel(config.vision_config.num_attention_heads)
         self.hidden_size = config.text_config.hidden_size
         self.device = current_platform.current_device()
-        with self._mark_tower_model(aphrodite_config, "vision_chunk"):
+        with self._mark_tower_model(sonar_config, "vision_chunk"):
             self.vision_tower = MoonViT3dPretrainedModel(
                 config.vision_config,
                 quant_config=self._maybe_ignore_quant_config(quant_config),
-                input_norm=build_mm_input_norm(aphrodite_config.model_config),
+                input_norm=build_mm_input_norm(sonar_config.model_config),
                 prefix=maybe_prefix(prefix, "vision_tower"),
             )
             if self._maybe_ignore_quant_config(quant_config) is not None:
@@ -362,9 +362,9 @@ class KimiK25ForConditionalGeneration(
             self.mm_projector = self.mm_projector.to(device=self.device, dtype=model_config.dtype)
 
         self.quant_config = quant_config
-        with self._mark_language_model(aphrodite_config):
-            self.language_model = init_aphrodite_registered_model(
-                aphrodite_config=aphrodite_config,
+        with self._mark_language_model(sonar_config):
+            self.language_model = init_sonar_registered_model(
+                sonar_config=sonar_config,
                 hf_config=config.text_config,
                 prefix=maybe_prefix(prefix, "language_model"),
                 architectures=["DeepseekV2ForCausalLM"],
@@ -457,7 +457,7 @@ class KimiK25ForConditionalGeneration(
     # ------------------------------------------------------------------ #
 
     def get_encoder_cudagraph_config(self) -> "EncoderCudaGraphConfig":
-        from aphrodite.v1.worker.encoder_cudagraph_defs import EncoderCudaGraphConfig
+        from sonar.v1.worker.encoder_cudagraph_defs import EncoderCudaGraphConfig
 
         def pad_cu_seqlens(dst: torch.Tensor, src: torch.Tensor) -> None:
             # Zero-length padding (same as Qwen): tail slots repeat the last
@@ -483,13 +483,13 @@ class KimiK25ForConditionalGeneration(
 
     def get_encoder_cudagraph_budget_range(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
     ) -> tuple[int, int]:
         # Min: 64 output tokens (e.g. ~128×128 image with patch 14 + merge 2×2).
         min_budget = 64
         max_budget = min(
-            aphrodite_config.scheduler_config.max_num_batched_tokens,
-            aphrodite_config.model_config.max_model_len,
+            sonar_config.scheduler_config.max_num_batched_tokens,
+            sonar_config.model_config.max_model_len,
         )
         return (min_budget, max_budget)
 
@@ -506,7 +506,7 @@ class KimiK25ForConditionalGeneration(
         self,
         mm_kwargs: dict[str, Any],
     ) -> list["EncoderItemSpec"]:
-        from aphrodite.v1.worker.encoder_cudagraph_defs import EncoderItemSpec
+        from sonar.v1.worker.encoder_cudagraph_defs import EncoderItemSpec
 
         kh, kw = self.vision_tower.merge_kernel_size
         specs = []
@@ -561,7 +561,7 @@ class KimiK25ForConditionalGeneration(
         path: str = "default",
         axis_keys: tuple[Hashable, ...] | None = None,
     ) -> "EncoderCudaGraphCaptureInputs":
-        from aphrodite.v1.worker.encoder_cudagraph_defs import EncoderCudaGraphCaptureInputs
+        from sonar.v1.worker.encoder_cudagraph_defs import EncoderCudaGraphCaptureInputs
 
         kh, kw = self.vision_tower.merge_kernel_size
         # Output tokens per item in the dummy grid (ceiling so total >= budget).
@@ -615,7 +615,7 @@ class KimiK25ForConditionalGeneration(
         max_frames_per_batch: int,
         path: str = "default",
     ) -> "EncoderCudaGraphReplayBuffers":
-        from aphrodite.v1.worker.encoder_cudagraph_defs import EncoderCudaGraphReplayBuffers
+        from sonar.v1.worker.encoder_cudagraph_defs import EncoderCudaGraphReplayBuffers
 
         grid_thw_list = self._get_grid_thw_list(mm_kwargs)
         pixel_values = mm_kwargs["pixel_values"]
@@ -672,4 +672,4 @@ class KimiK25ForConditionalGeneration(
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]):
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)

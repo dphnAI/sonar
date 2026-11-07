@@ -10,7 +10,7 @@
  * shape.
  */
 
-namespace aphrodite {
+namespace sonar {
 
 template <typename InType, typename OutType,
           template <typename, typename> typename Epilogue>
@@ -53,30 +53,30 @@ struct sm89_fp8_config_default {
     if (np2 <= 4096) {
       using TileShape = typename cutlass::gemm::GemmShape<128, 128, 64>;
 
-      return aphrodite::fallback_cutlass_gemm_caller<
-          aphrodite::cutlass_2x_gemm<cutlass::arch::Sm89, enable_sm89_to_sm90,
-                                     InType, OutType, Epilogue, TileShape,
-                                     WarpShape, InstructionShape, 5,
-                                     FP8MathOperator>,
+      return sonar::fallback_cutlass_gemm_caller<
+          sonar::cutlass_2x_gemm<cutlass::arch::Sm89, enable_sm89_to_sm90,
+                                 InType, OutType, Epilogue, TileShape,
+                                 WarpShape, InstructionShape, 5,
+                                 FP8MathOperator>,
           FallbackGemm>(out, a, b, std::forward<EpilogueArgs>(args)...);
     } else if (np2 <= 8192) {
       using TileShape = typename cutlass::gemm::GemmShape<256, 128, 64>;
 
-      return aphrodite::fallback_cutlass_gemm_caller<
-          aphrodite::cutlass_2x_gemm<cutlass::arch::Sm89, enable_sm89_to_sm90,
-                                     InType, OutType, Epilogue, TileShape,
-                                     WarpShape, InstructionShape, 3,
-                                     FP8MathOperator>,
+      return sonar::fallback_cutlass_gemm_caller<
+          sonar::cutlass_2x_gemm<cutlass::arch::Sm89, enable_sm89_to_sm90,
+                                 InType, OutType, Epilogue, TileShape,
+                                 WarpShape, InstructionShape, 3,
+                                 FP8MathOperator>,
           FallbackGemm>(out, a, b, std::forward<EpilogueArgs>(args)...);
 
     } else {
       using TileShape = typename cutlass::gemm::GemmShape<128, 128, 64>;
 
-      return aphrodite::fallback_cutlass_gemm_caller<
-          aphrodite::cutlass_2x_gemm<cutlass::arch::Sm89, enable_sm89_to_sm90,
-                                     InType, OutType, Epilogue, TileShape,
-                                     WarpShape, InstructionShape, 5,
-                                     FP8MathOperator>,
+      return sonar::fallback_cutlass_gemm_caller<
+          sonar::cutlass_2x_gemm<cutlass::arch::Sm89, enable_sm89_to_sm90,
+                                 InType, OutType, Epilogue, TileShape,
+                                 WarpShape, InstructionShape, 5,
+                                 FP8MathOperator>,
           FallbackGemm>(out, a, b, std::forward<EpilogueArgs>(args)...);
     }
   }
@@ -108,20 +108,20 @@ struct sm89_fp8_config_M256 {
     if (np2 <= 4096) {
       using TileShape = typename cutlass::gemm::GemmShape<64, 128, 128>;
 
-      return aphrodite::fallback_cutlass_gemm_caller<
-          aphrodite::cutlass_2x_gemm<cutlass::arch::Sm89, enable_sm89_to_sm90,
-                                     InType, OutType, Epilogue, TileShape,
-                                     WarpShape, InstructionShape, 3,
-                                     FP8MathOperator>,
+      return sonar::fallback_cutlass_gemm_caller<
+          sonar::cutlass_2x_gemm<cutlass::arch::Sm89, enable_sm89_to_sm90,
+                                 InType, OutType, Epilogue, TileShape,
+                                 WarpShape, InstructionShape, 3,
+                                 FP8MathOperator>,
           FallbackGemm>(out, a, b, std::forward<EpilogueArgs>(args)...);
     } else {
       using TileShape = typename cutlass::gemm::GemmShape<128, 128, 64>;
 
-      return aphrodite::fallback_cutlass_gemm_caller<
-          aphrodite::cutlass_2x_gemm<cutlass::arch::Sm89, enable_sm89_to_sm90,
-                                     InType, OutType, Epilogue, TileShape,
-                                     WarpShape, InstructionShape, 5,
-                                     FP8MathOperator>,
+      return sonar::fallback_cutlass_gemm_caller<
+          sonar::cutlass_2x_gemm<cutlass::arch::Sm89, enable_sm89_to_sm90,
+                                 InType, OutType, Epilogue, TileShape,
+                                 WarpShape, InstructionShape, 5,
+                                 FP8MathOperator>,
           FallbackGemm>(out, a, b, std::forward<EpilogueArgs>(args)...);
     }
   }
@@ -153,30 +153,30 @@ struct sm89_fp8_config_M128 {
     if (np2 <= 8192) {
       using TileShape = typename cutlass::gemm::GemmShape<64, 128, 128>;
 
-      return aphrodite::fallback_cutlass_gemm_caller<
-          aphrodite::cutlass_2x_gemm<cutlass::arch::Sm89, enable_sm89_to_sm90,
-                                     InType, OutType, Epilogue, TileShape,
-                                     WarpShape, InstructionShape, 3,
-                                     FP8MathOperator>,
+      return sonar::fallback_cutlass_gemm_caller<
+          sonar::cutlass_2x_gemm<cutlass::arch::Sm89, enable_sm89_to_sm90,
+                                 InType, OutType, Epilogue, TileShape,
+                                 WarpShape, InstructionShape, 3,
+                                 FP8MathOperator>,
           FallbackGemm>(out, a, b, std::forward<EpilogueArgs>(args)...);
 
     } else if (np2 <= 16384) {
       using TileShape = typename cutlass::gemm::GemmShape<128, 128, 64>;
 
-      return aphrodite::fallback_cutlass_gemm_caller<
-          aphrodite::cutlass_2x_gemm<cutlass::arch::Sm89, enable_sm89_to_sm90,
-                                     InType, OutType, Epilogue, TileShape,
-                                     WarpShape, InstructionShape, 5,
-                                     FP8MathOperator>,
+      return sonar::fallback_cutlass_gemm_caller<
+          sonar::cutlass_2x_gemm<cutlass::arch::Sm89, enable_sm89_to_sm90,
+                                 InType, OutType, Epilogue, TileShape,
+                                 WarpShape, InstructionShape, 5,
+                                 FP8MathOperator>,
           FallbackGemm>(out, a, b, std::forward<EpilogueArgs>(args)...);
     } else {
       using TileShape = typename cutlass::gemm::GemmShape<128, 64, 128>;
 
-      return aphrodite::fallback_cutlass_gemm_caller<
-          aphrodite::cutlass_2x_gemm<cutlass::arch::Sm89, enable_sm89_to_sm90,
-                                     InType, OutType, Epilogue, TileShape,
-                                     WarpShape, InstructionShape, 3,
-                                     FP8MathOperator>,
+      return sonar::fallback_cutlass_gemm_caller<
+          sonar::cutlass_2x_gemm<cutlass::arch::Sm89, enable_sm89_to_sm90,
+                                 InType, OutType, Epilogue, TileShape,
+                                 WarpShape, InstructionShape, 3,
+                                 FP8MathOperator>,
           FallbackGemm>(out, a, b, std::forward<EpilogueArgs>(args)...);
     }
   }
@@ -208,33 +208,33 @@ struct sm89_fp8_config_M64 {
       using WarpShape = typename cutlass::gemm::GemmShape<32, 64, 64>;
       using FP8MathOperator = typename cutlass::arch::OpMultiplyAdd;
 
-      return aphrodite::fallback_cutlass_gemm_caller<
-          aphrodite::cutlass_2x_gemm<cutlass::arch::Sm89, enable_sm89_to_sm90,
-                                     InType, OutType, Epilogue, TileShape,
-                                     WarpShape, InstructionShape, 5,
-                                     FP8MathOperator>,
+      return sonar::fallback_cutlass_gemm_caller<
+          sonar::cutlass_2x_gemm<cutlass::arch::Sm89, enable_sm89_to_sm90,
+                                 InType, OutType, Epilogue, TileShape,
+                                 WarpShape, InstructionShape, 5,
+                                 FP8MathOperator>,
           FallbackGemm>(out, a, b, std::forward<EpilogueArgs>(args)...);
     } else if (np2 <= 16384) {
       using TileShape = typename cutlass::gemm::GemmShape<64, 128, 128>;
       using WarpShape = typename cutlass::gemm::GemmShape<64, 64, 64>;
       using FP8MathOperator = typename cutlass::arch::OpMultiplyAddFastAccum;
 
-      return aphrodite::fallback_cutlass_gemm_caller<
-          aphrodite::cutlass_2x_gemm<cutlass::arch::Sm89, enable_sm89_to_sm90,
-                                     InType, OutType, Epilogue, TileShape,
-                                     WarpShape, InstructionShape, 3,
-                                     FP8MathOperator>,
+      return sonar::fallback_cutlass_gemm_caller<
+          sonar::cutlass_2x_gemm<cutlass::arch::Sm89, enable_sm89_to_sm90,
+                                 InType, OutType, Epilogue, TileShape,
+                                 WarpShape, InstructionShape, 3,
+                                 FP8MathOperator>,
           FallbackGemm>(out, a, b, std::forward<EpilogueArgs>(args)...);
     } else {
       using TileShape = typename cutlass::gemm::GemmShape<64, 64, 128>;
       using WarpShape = typename cutlass::gemm::GemmShape<32, 64, 64>;
       using FP8MathOperator = typename cutlass::arch::OpMultiplyAdd;
 
-      return aphrodite::fallback_cutlass_gemm_caller<
-          aphrodite::cutlass_2x_gemm<cutlass::arch::Sm89, enable_sm89_to_sm90,
-                                     InType, OutType, Epilogue, TileShape,
-                                     WarpShape, InstructionShape, 5,
-                                     FP8MathOperator>,
+      return sonar::fallback_cutlass_gemm_caller<
+          sonar::cutlass_2x_gemm<cutlass::arch::Sm89, enable_sm89_to_sm90,
+                                 InType, OutType, Epilogue, TileShape,
+                                 WarpShape, InstructionShape, 5,
+                                 FP8MathOperator>,
           FallbackGemm>(out, a, b, std::forward<EpilogueArgs>(args)...);
     }
   }
@@ -266,31 +266,31 @@ struct sm89_fp8_config_M32 {
       using TileShape = typename cutlass::gemm::GemmShape<32, 64, 128>;
       using WarpShape = typename cutlass::gemm::GemmShape<16, 64, 64>;
 
-      return aphrodite::fallback_cutlass_gemm_caller<
-          aphrodite::cutlass_2x_gemm<cutlass::arch::Sm89, enable_sm89_to_sm90,
-                                     InType, OutType, Epilogue, TileShape,
-                                     WarpShape, InstructionShape, 5,
-                                     FP8MathOperator>,
+      return sonar::fallback_cutlass_gemm_caller<
+          sonar::cutlass_2x_gemm<cutlass::arch::Sm89, enable_sm89_to_sm90,
+                                 InType, OutType, Epilogue, TileShape,
+                                 WarpShape, InstructionShape, 5,
+                                 FP8MathOperator>,
           FallbackGemm>(out, a, b, std::forward<EpilogueArgs>(args)...);
     } else if (np2 <= 16384) {
       using TileShape = typename cutlass::gemm::GemmShape<32, 128, 128>;
       using WarpShape = typename cutlass::gemm::GemmShape<32, 64, 64>;
 
-      return aphrodite::fallback_cutlass_gemm_caller<
-          aphrodite::cutlass_2x_gemm<cutlass::arch::Sm89, enable_sm89_to_sm90,
-                                     InType, OutType, Epilogue, TileShape,
-                                     WarpShape, InstructionShape, 4,
-                                     FP8MathOperator>,
+      return sonar::fallback_cutlass_gemm_caller<
+          sonar::cutlass_2x_gemm<cutlass::arch::Sm89, enable_sm89_to_sm90,
+                                 InType, OutType, Epilogue, TileShape,
+                                 WarpShape, InstructionShape, 4,
+                                 FP8MathOperator>,
           FallbackGemm>(out, a, b, std::forward<EpilogueArgs>(args)...);
     } else {
       using TileShape = typename cutlass::gemm::GemmShape<32, 64, 128>;
       using WarpShape = typename cutlass::gemm::GemmShape<16, 64, 64>;
 
-      return aphrodite::fallback_cutlass_gemm_caller<
-          aphrodite::cutlass_2x_gemm<cutlass::arch::Sm89, enable_sm89_to_sm90,
-                                     InType, OutType, Epilogue, TileShape,
-                                     WarpShape, InstructionShape, 5,
-                                     FP8MathOperator>,
+      return sonar::fallback_cutlass_gemm_caller<
+          sonar::cutlass_2x_gemm<cutlass::arch::Sm89, enable_sm89_to_sm90,
+                                 InType, OutType, Epilogue, TileShape,
+                                 WarpShape, InstructionShape, 5,
+                                 FP8MathOperator>,
           FallbackGemm>(out, a, b, std::forward<EpilogueArgs>(args)...);
     }
   }
@@ -323,29 +323,29 @@ struct sm89_fp8_config_M16 {
     if (np2 <= 8192) {
       using TileShape = typename cutlass::gemm::GemmShape<16, 64, 128>;
 
-      return aphrodite::fallback_cutlass_gemm_caller<
-          aphrodite::cutlass_2x_gemm<cutlass::arch::Sm89, enable_sm89_to_sm90,
-                                     InType, OutType, Epilogue, TileShape,
-                                     WarpShape, InstructionShape,
-                                     MainLoopStages, FP8MathOperator>,
+      return sonar::fallback_cutlass_gemm_caller<
+          sonar::cutlass_2x_gemm<cutlass::arch::Sm89, enable_sm89_to_sm90,
+                                 InType, OutType, Epilogue, TileShape,
+                                 WarpShape, InstructionShape, MainLoopStages,
+                                 FP8MathOperator>,
           FallbackGemm>(out, a, b, std::forward<EpilogueArgs>(args)...);
     } else if (np2 <= 24576) {
       using TileShape = typename cutlass::gemm::GemmShape<16, 128, 64>;
 
-      return aphrodite::fallback_cutlass_gemm_caller<
-          aphrodite::cutlass_2x_gemm<cutlass::arch::Sm89, enable_sm89_to_sm90,
-                                     InType, OutType, Epilogue, TileShape,
-                                     WarpShape, InstructionShape,
-                                     MainLoopStages, FP8MathOperator>,
+      return sonar::fallback_cutlass_gemm_caller<
+          sonar::cutlass_2x_gemm<cutlass::arch::Sm89, enable_sm89_to_sm90,
+                                 InType, OutType, Epilogue, TileShape,
+                                 WarpShape, InstructionShape, MainLoopStages,
+                                 FP8MathOperator>,
           FallbackGemm>(out, a, b, std::forward<EpilogueArgs>(args)...);
     } else {
       using TileShape = typename cutlass::gemm::GemmShape<32, 64, 128>;
 
-      return aphrodite::fallback_cutlass_gemm_caller<
-          aphrodite::cutlass_2x_gemm<cutlass::arch::Sm89, enable_sm89_to_sm90,
-                                     InType, OutType, Epilogue, TileShape,
-                                     WarpShape, InstructionShape,
-                                     MainLoopStages, FP8MathOperator>,
+      return sonar::fallback_cutlass_gemm_caller<
+          sonar::cutlass_2x_gemm<cutlass::arch::Sm89, enable_sm89_to_sm90,
+                                 InType, OutType, Epilogue, TileShape,
+                                 WarpShape, InstructionShape, MainLoopStages,
+                                 FP8MathOperator>,
           FallbackGemm>(out, a, b, std::forward<EpilogueArgs>(args)...);
     }
   }
@@ -434,4 +434,4 @@ void cutlass_scaled_mm_sm89_fp8_batch_invariant_epilogue(
   }
 }
 
-}  // namespace aphrodite
+}  // namespace sonar

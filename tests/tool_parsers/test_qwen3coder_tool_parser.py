@@ -9,22 +9,22 @@ import pytest
 from openai.types.responses.function_tool import FunctionTool
 from xgrammar import StructuralTag
 
-from aphrodite.entrypoints.generate.base.protocol import (
+from sonar.entrypoints.generate.base.protocol import (
     DeltaMessage,
     FunctionCall,
     ToolCall,
 )
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionNamedFunction,
     ChatCompletionNamedToolChoiceParam,
     ChatCompletionRequest,
     ChatCompletionToolsParam,
     FunctionDefinition,
 )
-from aphrodite.parser.abstract_parser import DelegatingParser
-from aphrodite.tokenizers import TokenizerLike, get_tokenizer
-from aphrodite.tokenizers.detokenizer_utils import detokenize_incrementally
-from aphrodite.tool_parsers.qwen3_engine_tool_parser import (
+from sonar.parser.abstract_parser import DelegatingParser
+from sonar.tokenizers import TokenizerLike, get_tokenizer
+from sonar.tokenizers.detokenizer_utils import detokenize_incrementally
+from sonar.tool_parsers.qwen3_engine_tool_parser import (
     Qwen3EngineToolParser,
 )
 from tests.tool_parsers.utils import ToolState, ToolStateWithHeader
@@ -616,7 +616,7 @@ def test_extract_tool_calls_anyof_type_conversion_streaming(qwen3_tokenizer):
     model_output = """<tool_call>
 <function=search_web>
 <parameter=query>
-aphrodite tool parser
+sonar tool parser
 </parameter>
 <parameter=count>
 10
@@ -647,7 +647,7 @@ true
     assert tool_states[0]["name"] == "search_web"
     assert tool_states[0]["arguments"] is not None
     args = json.loads(tool_states[0]["arguments"])
-    assert args["query"] == "aphrodite tool parser"
+    assert args["query"] == "sonar tool parser"
     assert isinstance(args["query"], str)
     assert args["count"] == 10
     assert isinstance(args["count"], int)
@@ -1343,7 +1343,7 @@ def test_no_double_serialization_string_args(qwen3_tool_parser):
     assert '\\"hello world\\"' not in raw_arguments
 
 
-def test_get_aphrodite_registry_structural_tag_returns_structural_tag(
+def test_get_sonar_registry_structural_tag_returns_structural_tag(
     qwen3_tool_parser: Qwen3EngineToolParser,
     sample_tools: list[ChatCompletionToolsParam],
 ) -> None:
@@ -1382,7 +1382,7 @@ def test_get_aphrodite_registry_structural_tag_returns_structural_tag(
 
 
 @pytest.mark.parametrize("include_reasoning", [True, False])
-def test_adjust_request_auto_uses_aphrodite_registry_structural_tag(
+def test_adjust_request_auto_uses_sonar_registry_structural_tag(
     sample_tools: list[ChatCompletionToolsParam],
     include_reasoning: bool,
 ) -> None:

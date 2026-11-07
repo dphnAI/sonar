@@ -8,19 +8,19 @@ from collections.abc import Generator
 import torch
 import torch.nn as nn
 
-import aphrodite.envs as envs
-from aphrodite.config import AphroditeConfig, ModelConfig
-from aphrodite.config.load import LoadConfig
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.model_loader.reload import finalize_layerwise_processing
-from aphrodite.model_executor.model_loader.utils import (
+import sonar.envs as envs
+from sonar.config import ModelConfig, SonarConfig
+from sonar.config.load import LoadConfig
+from sonar.logger import init_logger
+from sonar.model_executor.model_loader.reload import finalize_layerwise_processing
+from sonar.model_executor.model_loader.utils import (
     initialize_model,
     process_weights_after_loading,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.tracing import instrument
-from aphrodite.utils.mem_utils import format_gib
-from aphrodite.utils.torch_utils import set_default_torch_dtype
+from sonar.platforms import current_platform
+from sonar.tracing import instrument
+from sonar.utils.mem_utils import format_gib
+from sonar.utils.torch_utils import set_default_torch_dtype
 
 logger = init_logger(__name__)
 
@@ -31,7 +31,7 @@ class BaseModelLoader(ABC):
     def __init__(self, load_config: LoadConfig):
         self.load_config = load_config
 
-    def get_external_weight_memory(self, aphrodite_config: AphroditeConfig) -> int:
+    def get_external_weight_memory(self, sonar_config: SonarConfig) -> int:
         """Get weights memory from external process;
         0 when the weights are not external."""
         return 0
@@ -47,14 +47,14 @@ class BaseModelLoader(ABC):
         inplace weights loading for an already-initialized model"""
         raise NotImplementedError
 
-    def create_model(self, aphrodite_config: AphroditeConfig, model_config: ModelConfig, prefix: str = "") -> nn.Module:
+    def create_model(self, sonar_config: SonarConfig, model_config: ModelConfig, prefix: str = "") -> nn.Module:
         """Create a model with the given configurations."""
         model = initialize_model(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             model_config=model_config,
             prefix=prefix,
         )
-        log_online_quantization(aphrodite_config)
+        log_online_quantization(sonar_config)
         log_model_inspection(model)
         return model
 
@@ -70,17 +70,17 @@ class BaseModelLoader(ABC):
         )
 
     @instrument(span_name="Load model")
-    def load_model(self, aphrodite_config: AphroditeConfig, model_config: ModelConfig, prefix: str = "") -> nn.Module:
+    def load_model(self, sonar_config: SonarConfig, model_config: ModelConfig, prefix: str = "") -> nn.Module:
         """Load a model with the given configurations."""
-        device_config = aphrodite_config.device_config
-        load_config = aphrodite_config.load_config
+        device_config = sonar_config.device_config
+        load_config = sonar_config.load_config
         load_device = device_config.device if load_config.device is None else load_config.device
         target_device = torch.device(load_device)
         with set_default_torch_dtype(model_config.dtype):
             with target_device:
                 time_before_load = time.perf_counter()
                 model = self.create_model(
-                    aphrodite_config=aphrodite_config,
+                    sonar_config=sonar_config,
                     model_config=model_config,
                     prefix=prefix,
                 )
@@ -113,7 +113,7 @@ class BaseModelLoader(ABC):
                 finalize_layerwise_processing(model, model_config)
 
             process_weights_after_loading(model, model_config, target_device)
-            log_online_quantization_time(aphrodite_config)
+            log_online_quantization_time(sonar_config)
 
             gc.collect()
             torch.accelerator.empty_cache()
@@ -122,22 +122,22 @@ class BaseModelLoader(ABC):
 
 
 def log_model_inspection(model: nn.Module) -> None:
-    """Log model structure if APHRODITE_LOG_MODEL_INSPECTION=1."""
-    if not envs.APHRODITE_LOG_MODEL_INSPECTION:
+    """Log model structure if SONAR_LOG_MODEL_INSPECTION=1."""
+    if not envs.SONAR_LOG_MODEL_INSPECTION:
         return
 
-    from aphrodite.model_inspection import format_model_inspection
+    from sonar.model_inspection import format_model_inspection
 
-    logger.info("Aphrodite model structure:\n%s", format_model_inspection(model))
+    logger.info("Sonar model structure:\n%s", format_model_inspection(model))
 
 
-def _get_online_quantization_config(aphrodite_config: AphroditeConfig):
+def _get_online_quantization_config(sonar_config: SonarConfig):
     """Return the online quantization config when one is configured."""
-    from aphrodite.model_executor.layers.quantization.online.base import (
+    from sonar.model_executor.layers.quantization.online.base import (
         OnlineQuantizationConfig,
     )
 
-    quant_config = aphrodite_config.quant_config
+    quant_config = sonar_config.quant_config
     online_quantization_config = getattr(quant_config, "online_quantization_config", None)
     if isinstance(online_quantization_config, OnlineQuantizationConfig):
         quant_config = online_quantization_config
@@ -146,9 +146,9 @@ def _get_online_quantization_config(aphrodite_config: AphroditeConfig):
     return quant_config
 
 
-def log_online_quantization(aphrodite_config: AphroditeConfig) -> None:
+def log_online_quantization(sonar_config: SonarConfig) -> None:
     """Log the online-quantized layer count and types, when applicable."""
-    quant_config = _get_online_quantization_config(aphrodite_config)
+    quant_config = _get_online_quantization_config(sonar_config)
     if quant_config is None:
         return
 
@@ -159,9 +159,9 @@ def log_online_quantization(aphrodite_config: AphroditeConfig) -> None:
     )
 
 
-def log_online_quantization_time(aphrodite_config: AphroditeConfig) -> None:
+def log_online_quantization_time(sonar_config: SonarConfig) -> None:
     """Log online quantization processing time, when applicable."""
-    quant_config = _get_online_quantization_config(aphrodite_config)
+    quant_config = _get_online_quantization_config(sonar_config)
     if quant_config is None:
         return
 

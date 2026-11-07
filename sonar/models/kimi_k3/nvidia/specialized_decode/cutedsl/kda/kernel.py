@@ -106,7 +106,7 @@ class KdaSplit:
     (two CTAs per head) also stages the gate warp's F_B rows.
 
     ``tokens`` q > 1 (speculative verify; ``batch`` counts requests, rows b * q + t)
-    runs each request's q tokens in order with Aphrodite's spec cache semantics: slots
+    runs each request's q tokens in order with Sonar's spec cache semantics: slots
     [B, >= q] and accepted [B] (an extra last tensor, read early like the slots); the
     state comes from slot[b, accepted - 1] and token t's state goes to slot[b, t] if
     > 0; conv slot[b, 0] holds [dim, q + 2] with taps at accepted - 1 ..., rewritten to

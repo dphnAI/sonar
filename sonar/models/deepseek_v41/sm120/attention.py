@@ -14,11 +14,11 @@ from b12x.attention.compressed_sparse_mla import rotary, weight_scale
 from b12x.gemm import wo_projection
 from torch import nn
 
-from aphrodite.compilation.breakable_cudagraph import eager_break_during_capture
-from aphrodite.distributed import get_tensor_model_parallel_world_size, get_tp_group
-from aphrodite.forward_context import get_forward_context
-from aphrodite.model_executor.layers.attention_layer_base import AttentionLayerBase
-from aphrodite.model_executor.layers.linear import (
+from sonar.compilation.breakable_cudagraph import eager_break_during_capture
+from sonar.distributed import get_tensor_model_parallel_world_size, get_tp_group
+from sonar.forward_context import get_forward_context
+from sonar.model_executor.layers.attention_layer_base import AttentionLayerBase
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     LinearMethodBase,
     MergedColumnParallelLinear,
@@ -26,18 +26,18 @@ from aphrodite.model_executor.layers.linear import (
     RowParallelLinear,
     UnquantizedLinearMethod,
 )
-from aphrodite.models.deepseek_v41.common.rope import build_deepseek_v4_rope
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.b12x import (
+from sonar.models.deepseek_v41.common.rope import build_deepseek_v4_rope
+from sonar.triton_utils import tl, triton
+from sonar.utils.b12x import (
     B12xPreparationUnit,
     B12xWorkload,
     PreparationResourceUnavailableError,
     register_b12x_unit_provider,
     set_b12x_preparation_provider,
 )
-from aphrodite.utils.torch_utils import current_stream
-from aphrodite.v1.kv_cache_interface import MLAAttentionSpec, SlidingWindowMLASpec
-from aphrodite.v1.worker.workspace import (
+from sonar.utils.torch_utils import current_stream
+from sonar.v1.kv_cache_interface import MLAAttentionSpec, SlidingWindowMLASpec
+from sonar.v1.worker.workspace import (
     current_workspace_manager,
     retain_cuda_graph_capture_resource,
 )
@@ -214,7 +214,7 @@ class DeepseekV4Indexer(nn.Module):
             self.k_norm = B12xRMSNorm(128, hf.rms_norm_eps)
 
 
-@torch.library.custom_op("aphrodite::dsv41_b12x_attention", mutates_args=())
+@torch.library.custom_op("sonar::dsv41_b12x_attention", mutates_args=())
 def _attention(
     hidden: torch.Tensor,
     positions: torch.Tensor,
@@ -233,7 +233,7 @@ def _attention_fake(hidden, positions, prefix, global_kv_ready):
     return torch.empty_like(hidden, memory_format=torch.contiguous_format)
 
 
-@torch.library.custom_op("aphrodite::dsv41_b12x_prepare_global_kv", mutates_args=())
+@torch.library.custom_op("sonar::dsv41_b12x_prepare_global_kv", mutates_args=())
 def _prepare_global_kv(
     hidden: torch.Tensor,
     positions: torch.Tensor,
@@ -259,13 +259,13 @@ class DeepseekV41B12xAttention(nn.Module, AttentionLayerBase):
 
     def __init__(
         self,
-        aphrodite_config,
+        sonar_config,
         prefix,
         topk_indices_buffer,
     ):
         super().__init__()
-        self.config = aphrodite_config
-        hf = aphrodite_config.model_config.hf_config
+        self.config = sonar_config
+        hf = sonar_config.model_config.hf_config
         self.prefix = prefix
         layer_match = re.search(r"layers\.(\d+)", prefix)
         if layer_match is None:
@@ -274,7 +274,7 @@ class DeepseekV41B12xAttention(nn.Module, AttentionLayerBase):
         self.hidden_size, self.head_dim = hf.hidden_size, hf.head_dim
         self.rope_head_dim = hf.qk_rope_head_dim
         tp = get_tensor_model_parallel_world_size()
-        self.indexer_tp_shard_min_rows = aphrodite_config.attention_config.indexer_tp_shard_min_rows
+        self.indexer_tp_shard_min_rows = sonar_config.attention_config.indexer_tp_shard_min_rows
         if (
             hf.num_attention_heads <= 0
             or hf.o_groups <= 0
@@ -287,19 +287,19 @@ class DeepseekV41B12xAttention(nn.Module, AttentionLayerBase):
         self.n_local_groups = hf.o_groups // tp
         self.o_lora_rank = hf.o_lora_rank
         self.q_lora_rank, self.window_size = hf.q_lora_rank, hf.sliding_window
-        spec = aphrodite_config.speculative_config
+        spec = sonar_config.speculative_config
         self.is_draft = self.layer_id >= hf.num_hidden_layers and spec is not None and spec.use_dspark()
         boundary = ced_decoder_start(hf)
         self.is_ced_decoder = not self.is_draft and boundary is not None and self.layer_id >= boundary
         self.swa_width = self.window_size
         if self.is_draft:
-            from aphrodite.v1.attention.backends.mla.compressor_utils import (
+            from sonar.v1.attention.backends.mla.compressor_utils import (
                 get_dspark_swa_index_width,
             )
 
             self.swa_width = get_dspark_swa_index_width(self.window_size, spec.num_speculative_tokens)
-        self.capacity = aphrodite_config.scheduler_config.max_num_batched_tokens
-        self.max_model_len = aphrodite_config.model_config.max_model_len
+        self.capacity = sonar_config.scheduler_config.max_num_batched_tokens
+        self.max_model_len = sonar_config.model_config.max_model_len
         self.compress_ratio = hf.compress_ratios[self.layer_id] if self.layer_id < len(hf.compress_ratios) else 0
         # Decode in one launch (csrc/attention/mla/dsv41_sparse_decode_sm120.cu) when the SWA
         # and indexed widths fit its 8-CTA split. It reads the same metadata
@@ -362,18 +362,18 @@ class DeepseekV41B12xAttention(nn.Module, AttentionLayerBase):
             or self.o_lora_rank % 32
         ):
             raise ValueError("unsupported V4.1 native indexer or WO geometry")
-        if aphrodite_config.cache_config.block_size % 32:
+        if sonar_config.cache_config.block_size % 32:
             raise ValueError("V4.1 native cache blocks must be a multiple of 32")
-        if aphrodite_config.parallel_config.use_ubatching:
+        if sonar_config.parallel_config.use_ubatching:
             raise ValueError("V4.1 native attention does not support DBO or ubatching")
-        if aphrodite_config.parallel_config.pipeline_parallel_size != 1:
+        if sonar_config.parallel_config.pipeline_parallel_size != 1:
             raise ValueError("V4.1 native cross-layer cache ownership does not support PP")
         if (
-            aphrodite_config.parallel_config.decode_context_parallel_size != 1
-            or aphrodite_config.parallel_config.prefill_context_parallel_size != 1
+            sonar_config.parallel_config.decode_context_parallel_size != 1
+            or sonar_config.parallel_config.prefill_context_parallel_size != 1
         ):
             raise ValueError("V4.1 TP shards heads, not context; context parallel is unsupported")
-        self._context = aphrodite_config.compilation_config.static_forward_context
+        self._context = sonar_config.compilation_config.static_forward_context
         if prefix in self._context:
             raise ValueError(f"Duplicate attention layer {prefix}")
         self._context[prefix] = self
@@ -386,7 +386,7 @@ class DeepseekV41B12xAttention(nn.Module, AttentionLayerBase):
             hf.hidden_size,
             [hf.q_lora_rank, 512],
             bias=False,
-            quant_config=aphrodite_config.quant_config,
+            quant_config=sonar_config.quant_config,
             disable_tp=True,
             prefix=f"{prefix}.fused_wqa_wkv",
         )
@@ -398,7 +398,7 @@ class DeepseekV41B12xAttention(nn.Module, AttentionLayerBase):
             hf.num_attention_heads * 512,
             bias=False,
             return_bias=False,
-            quant_config=aphrodite_config.quant_config,
+            quant_config=sonar_config.quant_config,
             prefix=f"{prefix}.wq_b",
         )
         self.wo_a = ColumnParallelLinear(
@@ -406,7 +406,7 @@ class DeepseekV41B12xAttention(nn.Module, AttentionLayerBase):
             hf.o_groups * hf.o_lora_rank,
             bias=False,
             return_bias=False,
-            quant_config=aphrodite_config.quant_config,
+            quant_config=sonar_config.quant_config,
             prefix=f"{prefix}.wo_a",
         )
         self.wo_a.quant_method = _WOProjectionWeightMethod(self.wo_a.quant_method)
@@ -415,7 +415,7 @@ class DeepseekV41B12xAttention(nn.Module, AttentionLayerBase):
             hf.hidden_size,
             bias=False,
             return_bias=False,
-            quant_config=aphrodite_config.quant_config,
+            quant_config=sonar_config.quant_config,
             prefix=f"{prefix}.wo_b",
             reduce_results=False,
         )
@@ -435,7 +435,7 @@ class DeepseekV41B12xAttention(nn.Module, AttentionLayerBase):
             compress_ratio=self.compress_ratio,
         )
         self.swa_cache_layer = _Cache(
-            aphrodite_config,
+            sonar_config,
             f"{prefix}.swa_cache",
             kind="swa",
             window=self.window_size,
@@ -443,7 +443,7 @@ class DeepseekV41B12xAttention(nn.Module, AttentionLayerBase):
         )
         self.compressor = (
             DeepseekCompressor(
-                aphrodite_config,
+                sonar_config,
                 self.compress_ratio,
                 hf.hidden_size,
                 512,
@@ -456,7 +456,7 @@ class DeepseekV41B12xAttention(nn.Module, AttentionLayerBase):
         if self.is_index_source:
             if self.is_kv_source:
                 k_cache = _Cache(
-                    aphrodite_config,
+                    sonar_config,
                     f"{prefix}.indexer.k_cache",
                     kind="index",
                     ratio=self.compress_ratio,
@@ -464,7 +464,7 @@ class DeepseekV41B12xAttention(nn.Module, AttentionLayerBase):
             else:
                 k_cache = self._context[f"{_source(prefix, self.kv_source_layer_id)}.indexer.k_cache"]
             self.indexer = DeepseekV4Indexer(
-                aphrodite_config,
+                sonar_config,
                 f"{prefix}.indexer",
                 owns_k=self.is_kv_source,
                 k_cache=k_cache,

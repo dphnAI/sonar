@@ -31,14 +31,14 @@
 //! model opens holds non-empty reasoning: an empty one would come back as null
 //! reasoning and fail the next request.
 //!
-//! Unless `APHRODITE_BEAM_ALWAYS_CONSTRAIN_OUTPUT` turns it off, the grammar
+//! Unless `SONAR_BEAM_ALWAYS_CONSTRAIN_OUTPUT` turns it off, the grammar
 //! applies to every message, including one the request does not constrain.
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, LazyLock};
 
-use aphrodite_tokenizer::{DecodedText, DynTokenizer};
 use serde_json::Value;
+use sonar_tokenizer::{DecodedText, DynTokenizer};
 use xgrammar_structural_tag::ToolChoice;
 use xgrammar_structural_tag::format::{EndBoundary, Format};
 use xgrammar_structural_tag::tool::{
@@ -83,10 +83,10 @@ const CALL_TERMINATORS: [&str; 2] = [END, CALL];
 
 /// Whether every Beam message follows the grammar, even when the request
 /// constrains neither tool calls nor the answer. Read from
-/// `APHRODITE_BEAM_ALWAYS_CONSTRAIN_OUTPUT` like the Python frontend: on unless
+/// `SONAR_BEAM_ALWAYS_CONSTRAIN_OUTPUT` like the Python frontend: on unless
 /// set to something other than `true` or `1`.
 static ALWAYS_CONSTRAIN_OUTPUT: LazyLock<bool> = LazyLock::new(|| {
-    std::env::var("APHRODITE_BEAM_ALWAYS_CONSTRAIN_OUTPUT").map_or(true, |value| {
+    std::env::var("SONAR_BEAM_ALWAYS_CONSTRAIN_OUTPUT").map_or(true, |value| {
         matches!(value.to_lowercase().as_str(), "true" | "1")
     })
 });

@@ -5,12 +5,12 @@
 import pytest
 from transformers import AutoModel
 
-from aphrodite.assets.image import ImageAsset
-from aphrodite.logprobs import Logprob, SampleLogprobs
+from sonar.assets.image import ImageAsset
+from sonar.logprobs import Logprob, SampleLogprobs
 from tests.models.registry import HF_EXAMPLE_MODELS
 from tests.models.utils import check_logprobs_close
 
-from ....conftest import AphroditeRunner, HfRunner, PromptImageInput
+from ....conftest import HfRunner, PromptImageInput, SonarRunner
 from .test_nemotron_parse import mask_bbox_tokens
 
 MODEL = "nvidia/Nemotron-3.5-Parse"
@@ -56,7 +56,7 @@ def generate_hf_logprobs_from_logits(
 @pytest.mark.parametrize("num_logprobs", [5])
 def test_model(
     hf_runner: type[HfRunner],
-    aphrodite_runner: type[AphroditeRunner],
+    sonar_runner: type[SonarRunner],
     dtype: str,
     num_logprobs: int,
 ) -> None:
@@ -68,7 +68,7 @@ def test_model(
     images = [image] * 10
     max_tokens = 100
 
-    with aphrodite_runner(
+    with sonar_runner(
         MODEL,
         dtype=dtype,
         max_model_len=16384,
@@ -76,22 +76,22 @@ def test_model(
         max_num_seqs=64,
         limit_mm_per_prompt={"image": 1},
         trust_remote_code=True,
-    ) as aphrodite_model:
+    ) as sonar_model:
         # The native causal-prefix processor expands this image placeholder.
-        aphrodite_outputs = aphrodite_model.generate_greedy_logprobs(
+        sonar_outputs = sonar_model.generate_greedy_logprobs(
             [f"<pad>{prompt}" for prompt in prompts],
             max_tokens,
             num_logprobs=num_logprobs,
             images=images,
         )
-        tokenizer = aphrodite_model.llm.get_tokenizer()
+        tokenizer = sonar_model.llm.get_tokenizer()
 
     with hf_runner(MODEL, dtype=dtype, auto_cls=AutoModel) as hf_model:
         hf_outputs = generate_hf_logprobs_from_logits(hf_model, prompts, images, max_tokens, num_logprobs)
 
     check_logprobs_close(
         outputs_0_lst=[mask_bbox_tokens(output, tokenizer) for output in hf_outputs],
-        outputs_1_lst=[mask_bbox_tokens(output, tokenizer) for output in aphrodite_outputs],
+        outputs_1_lst=[mask_bbox_tokens(output, tokenizer) for output in sonar_outputs],
         name_0="hf",
-        name_1="aphrodite",
+        name_1="sonar",
     )

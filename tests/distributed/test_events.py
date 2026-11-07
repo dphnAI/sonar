@@ -6,7 +6,7 @@ import time
 import msgspec
 import pytest
 
-from aphrodite.distributed.kv_events import (
+from sonar.distributed.kv_events import (
     EventBatch,
     EventPublisherFactory,
     NullEventPublisher,
@@ -306,8 +306,8 @@ def test_data_parallel_rank_tagging(publisher_config):
 
 def test_event_publisher_factory(random_port):
     """Test event publisher factory creation behavior under different configurations."""
-    from aphrodite.config.kv_events import KVEventsConfig
-    from aphrodite.distributed.kv_events import ZmqEventPublisher
+    from sonar.config.kv_events import KVEventsConfig
+    from sonar.distributed.kv_events import ZmqEventPublisher
 
     # test config is None
     publisher = EventPublisherFactory.create(None, DP_RANK)
@@ -364,7 +364,7 @@ def test_event_publisher_factory(random_port):
 )
 def test_offset_endpoint_port_keeps_port_zero(endpoint, expected):
     """Port 0 is not offset: every rank asks the OS for its own port."""
-    from aphrodite.distributed.kv_events import ZmqEventPublisher
+    from sonar.distributed.kv_events import ZmqEventPublisher
 
     assert ZmqEventPublisher.offset_endpoint_port(endpoint, 1) == expected
 
@@ -373,9 +373,9 @@ def test_offset_endpoint_port_keeps_port_zero(endpoint, expected):
 def test_ephemeral_publishers_report_bound_endpoints(monkeypatch, node_ip):
     """Two ranks binding tcp://*:0 get distinct OS-assigned ports on this
     node's IP and report endpoints a subscriber can use for events and replay."""
-    from aphrodite.config.kv_events import KVEventsConfig
-    from aphrodite.distributed import kv_events
-    from aphrodite.utils.network_utils import split_zmq_path
+    from sonar.config.kv_events import KVEventsConfig
+    from sonar.distributed import kv_events
+    from sonar.utils.network_utils import split_zmq_path
 
     from .conftest import MockSubscriber
 
@@ -421,10 +421,10 @@ def test_ephemeral_publishers_report_bound_endpoints(monkeypatch, node_ip):
 def test_ephemeral_bind_needs_a_node_ip(monkeypatch, node_ip):
     """tcp://*:0 is advertised as this node's IP; with no usable IP the
     publisher refuses instead of reporting a wildcard."""
-    from aphrodite.config.kv_events import KVEventsConfig
-    from aphrodite.distributed import kv_events
+    from sonar.config.kv_events import KVEventsConfig
+    from sonar.distributed import kv_events
 
     monkeypatch.setattr(kv_events, "get_ip", lambda: node_ip)
     config = KVEventsConfig(enable_kv_cache_events=True, publisher="zmq", endpoint="tcp://*:0")
-    with pytest.raises(ValueError, match="APHRODITE_HOST_IP"):
+    with pytest.raises(ValueError, match="SONAR_HOST_IP"):
         EventPublisherFactory.create(config, DP_RANK)

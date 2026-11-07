@@ -6,19 +6,19 @@ from collections.abc import Sequence
 from dataclasses import replace
 from typing import TYPE_CHECKING, NamedTuple, cast
 
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.v1.core.block_pool import BlockPool
-from aphrodite.v1.core.kv_cache_coordinator import replay_boundaries
-from aphrodite.v1.core.kv_cache_utils import (
+from sonar.utils.math_utils import cdiv
+from sonar.v1.core.block_pool import BlockPool
+from sonar.v1.core.kv_cache_coordinator import replay_boundaries
+from sonar.v1.core.kv_cache_utils import (
     BlockHash,
     KVCacheBlock,
     eagle_proof_margin,
     resolve_dcp_kv_cache_spec,
 )
-from aphrodite.v1.core.single_type_kv_cache_manager import (
+from sonar.v1.core.single_type_kv_cache_manager import (
     SingleTypeKVCacheManager,
 )
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.kv_cache_interface import (
     FullAttentionSpec,
     KVCacheConfig,
     KVCacheGroupSpec,
@@ -27,10 +27,10 @@ from aphrodite.v1.kv_cache_interface import (
     SlidingWindowSpec,
     UniformTypeKVCacheSpecs,
 )
-from aphrodite.v1.kv_cache_spec_registry import KVCacheSpecRegistry
+from sonar.v1.kv_cache_spec_registry import KVCacheSpecRegistry
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
+    from sonar.config import SonarConfig
 
 
 class StoreSpecGroup(NamedTuple):
@@ -113,7 +113,7 @@ class MooncakeStoreCoordinator:
         # Core's decision: whether hits land on the hash unit, below the block.
         self.enable_partial_hash_hits = enable_partial_hash_hits
         self.use_eagle = use_eagle
-        # Mirror Aphrodite core's KVCacheCoordinator.retention_interval.
+        # Mirror Sonar core's KVCacheCoordinator.retention_interval.
         self.retention_interval = retention_interval
         self._verify_and_split_kv_cache_groups()
 
@@ -121,7 +121,7 @@ class MooncakeStoreCoordinator:
     def from_kv_cache_config(
         cls,
         kv_cache_config: KVCacheConfig,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
         scheduler_block_size: int,
         hash_block_size: int,
     ) -> "MooncakeStoreCoordinator":
@@ -133,8 +133,8 @@ class MooncakeStoreCoordinator:
         unset (a config the engine core did not resolve) keeps hits on the
         block.
         """
-        dcp_world_size = aphrodite_config.parallel_config.decode_context_parallel_size
-        spec_config = aphrodite_config.speculative_config
+        dcp_world_size = sonar_config.parallel_config.decode_context_parallel_size
+        spec_config = sonar_config.speculative_config
         alignment = kv_cache_config.cache_hit_alignment_tokens
         return cls(
             [

@@ -6,19 +6,19 @@ import importlib
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
-from aphrodite.distributed.weight_transfer.base import (
+from sonar.distributed.weight_transfer.base import (
     TrainerWeightTransferEngine,
     WeightTransferEngine,
 )
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 if TYPE_CHECKING:
     import torch
 
-    from aphrodite.config import AphroditeConfig
-    from aphrodite.config.weight_transfer import WeightTransferConfig
-    from aphrodite.distributed.weight_transfer.base import (
-        AphroditeWeightSyncClient,
+    from sonar.config import SonarConfig
+    from sonar.config.weight_transfer import WeightTransferConfig
+    from sonar.distributed.weight_transfer.base import (
+        SonarWeightSyncClient,
         TrainerInitInfo,
         WeightSource,
     )
@@ -83,7 +83,7 @@ class WeightTransferEngineFactory:
     def create_engine(
         cls,
         config: "WeightTransferConfig",
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
         device: "torch.device",
         model: "torch.nn.Module",
     ) -> WeightTransferEngine:
@@ -91,7 +91,7 @@ class WeightTransferEngineFactory:
 
         Args:
             config: Weight transfer configuration containing the backend name
-            aphrodite_config: The full Aphrodite config (provides parallel/model config)
+            sonar_config: The full Sonar config (provides parallel/model config)
             device: The device this worker's model lives on
             model: The local model instance which will receive the weights
 
@@ -113,7 +113,7 @@ class WeightTransferEngineFactory:
             engine_cls.__name__,
         )
 
-        return engine_cls(config, aphrodite_config, device, model)
+        return engine_cls(config, sonar_config, device, model)
 
 
 class WeightTransferTrainerFactory:
@@ -159,7 +159,7 @@ class WeightTransferTrainerFactory:
         cls,
         init_info: "TrainerInitInfo",
         *,
-        client: "AphroditeWeightSyncClient",
+        client: "SonarWeightSyncClient",
         source: "WeightSource | None" = None,
     ) -> TrainerWeightTransferEngine:
         """Build and rendezvous a ready-to-send trainer engine.
@@ -209,38 +209,38 @@ class WeightTransferTrainerFactory:
 
 WeightTransferEngineFactory.register_engine(
     "nccl",
-    "aphrodite.distributed.weight_transfer.nccl_engine",
+    "sonar.distributed.weight_transfer.nccl_engine",
     "NCCLWeightTransferEngine",
 )
 
 WeightTransferEngineFactory.register_engine(
     "ipc",
-    "aphrodite.distributed.weight_transfer.ipc_engine",
+    "sonar.distributed.weight_transfer.ipc_engine",
     "IPCWeightTransferEngine",
 )
 
 WeightTransferEngineFactory.register_engine(
     "sparse_nccl",
-    "aphrodite.distributed.weight_transfer.sparse_nccl_engine",
+    "sonar.distributed.weight_transfer.sparse_nccl_engine",
     "SparseNCCLWeightTransferEngine",
 )
 
 WeightTransferEngineFactory.register_engine(
     "sharded_rdt",
-    "aphrodite.distributed.weight_transfer.sharded_rdt_engine",
+    "sonar.distributed.weight_transfer.sharded_rdt_engine",
     "ShardedRDTWeightTransferEngine",
 )
 
 WeightTransferEngineFactory.register_engine(
     "nccl_m2n",
-    "aphrodite.distributed.weight_transfer.m2n_engine",
+    "sonar.distributed.weight_transfer.m2n_engine",
     "M2NWeightTransferEngine",
 )
 
 
 WeightTransferEngineFactory.register_engine(
     "modelexpress",
-    "aphrodite.distributed.weight_transfer.modelexpress_engine",
+    "sonar.distributed.weight_transfer.modelexpress_engine",
     "ModelExpressWeightTransferEngine",
 )
 
@@ -248,30 +248,30 @@ WeightTransferEngineFactory.register_engine(
 # Trainer-side engines, parallel to the worker registry above.
 WeightTransferTrainerFactory.register_engine(
     "nccl",
-    "aphrodite.distributed.weight_transfer.nccl_engine",
+    "sonar.distributed.weight_transfer.nccl_engine",
     "NCCLTrainerWeightTransferEngine",
 )
 
 WeightTransferTrainerFactory.register_engine(
     "ipc",
-    "aphrodite.distributed.weight_transfer.ipc_engine",
+    "sonar.distributed.weight_transfer.ipc_engine",
     "IPCTrainerWeightTransferEngine",
 )
 
 WeightTransferTrainerFactory.register_engine(
     "sparse_nccl",
-    "aphrodite.distributed.weight_transfer.sparse_nccl_engine",
+    "sonar.distributed.weight_transfer.sparse_nccl_engine",
     "SparseNCCLTrainerWeightTransferEngine",
 )
 
 WeightTransferTrainerFactory.register_engine(
     "sharded_rdt",
-    "aphrodite.distributed.weight_transfer.sharded_rdt_trainer",
+    "sonar.distributed.weight_transfer.sharded_rdt_trainer",
     "ShardedRDTTrainerWeightTransferEngine",
 )
 
 WeightTransferTrainerFactory.register_engine(
     "nccl_m2n",
-    "aphrodite.distributed.weight_transfer.m2n_trainer",
+    "sonar.distributed.weight_transfer.m2n_trainer",
     "M2NTrainerWeightTransferEngine",
 )

@@ -7,22 +7,22 @@ from collections.abc import Sequence
 
 import regex as re
 
-import aphrodite.envs as envs
-from aphrodite.entrypoints.generate.base.protocol import (
+import sonar.envs as envs
+from sonar.entrypoints.generate.base.protocol import (
     DeltaMessage,
     ExtractedToolCallInformation,
 )
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionRequest,
 )
-from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
-from aphrodite.logger import init_logger
-from aphrodite.tokenizers import TokenizerLike
-from aphrodite.tool_parsers.abstract_tool_parser import (
+from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
+from sonar.logger import init_logger
+from sonar.tokenizers import TokenizerLike
+from sonar.tool_parsers.abstract_tool_parser import (
     Tool,
     ToolParser,
 )
-from aphrodite.tool_parsers.utils import (
+from sonar.tool_parsers.utils import (
     UnexpectedAstError,
     compute_tool_delta,
     contains_broken_string_literal,
@@ -163,7 +163,7 @@ class Lfm2ToolParser(ToolParser):
             is_tool_call_pattern = (
                 self.TOOL_CALL_REGEX.match(
                     tool_text,
-                    timeout=envs.APHRODITE_TOOL_PARSE_REGEX_TIMEOUT_SECONDS,
+                    timeout=envs.SONAR_TOOL_PARSE_REGEX_TIMEOUT_SECONDS,
                 )
                 is not None
             )

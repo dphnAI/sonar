@@ -8,10 +8,10 @@ from typing import Any, Literal
 
 import torch
 
-from aphrodite.model_executor.layers.mamba.mamba_utils import is_conv_state_dim_first
-from aphrodite.models.kimi_k3.nvidia.recoverssm.kernels import cute_recoverssm_commit
-from aphrodite.triton_utils import tl, triton
-from aphrodite.v1.attention.backends.utils import NULL_BLOCK_ID
+from sonar.model_executor.layers.mamba.mamba_utils import is_conv_state_dim_first
+from sonar.models.kimi_k3.nvidia.recoverssm.kernels import cute_recoverssm_commit
+from sonar.triton_utils import tl, triton
+from sonar.v1.attention.backends.utils import NULL_BLOCK_ID
 
 
 @triton.jit

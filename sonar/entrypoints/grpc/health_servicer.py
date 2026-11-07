@@ -3,10 +3,10 @@
 # SPDX-FileCopyrightText: Copyright 2023-2024 SGLang Team
 # Adapted from smg-grpc-servicer 0.5.2; the external VllmEngine wire identity is retained.
 """
-Standard gRPC health check service for Aphrodite Kubernetes probes.
+Standard gRPC health check service for Sonar Kubernetes probes.
 
 Implements grpc.health.v1.Health protocol, delegating health status
-to AsyncLLM.check_health() from the Aphrodite EngineClient protocol.
+to AsyncLLM.check_health() from the Sonar EngineClient protocol.
 """
 
 from collections.abc import AsyncIterator
@@ -15,15 +15,15 @@ from typing import TYPE_CHECKING
 import grpc
 from grpc_health.v1 import health_pb2, health_pb2_grpc
 
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 if TYPE_CHECKING:
-    from aphrodite.v1.engine.async_llm import AsyncLLM
+    from sonar.v1.engine.async_llm import AsyncLLM
 
 logger = init_logger(__name__)
 
 
-class AphroditeHealthServicer(health_pb2_grpc.HealthServicer):
+class SonarHealthServicer(health_pb2_grpc.HealthServicer):
     """
     Standard gRPC health check service for Kubernetes probes.
     Implements grpc.health.v1.Health protocol.
@@ -34,7 +34,7 @@ class AphroditeHealthServicer(health_pb2_grpc.HealthServicer):
        - for readiness probes
 
     Health is determined by calling async_llm.check_health(), the same
-    EngineClient protocol method used by Aphrodite's HTTP /health endpoint.
+    EngineClient protocol method used by Sonar's HTTP /health endpoint.
     """
 
     OVERALL_SERVER = ""

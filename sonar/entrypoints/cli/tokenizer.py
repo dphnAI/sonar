@@ -1,31 +1,31 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""`aphrodite tokenizer`: serve only a model's tokenizer."""
+"""`sonar tokenizer`: serve only a model's tokenizer."""
 
 import argparse
 
 import uvloop
 
-from aphrodite.entrypoints.cli.types import CLISubcommand
-from aphrodite.entrypoints.common.cli_args import make_arg_parser, validate_parsed_serve_args
-from aphrodite.entrypoints.common.startup import APHRODITE_SUBCMD_PARSER_EPILOG
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
+from sonar.entrypoints.cli.types import CLISubcommand
+from sonar.entrypoints.common.cli_args import make_arg_parser, validate_parsed_serve_args
+from sonar.entrypoints.common.startup import SONAR_SUBCMD_PARSER_EPILOG
+from sonar.utils.argparse_utils import FlexibleArgumentParser
 
 DESCRIPTION = (
     "Start a tokenizer-only HTTP server. It loads the model's tokenizer and config but no "
     "weights or engine, and serves /tokenize and /detokenize with the same behavior as "
-    "`aphrodite serve`."
+    "`sonar serve`."
 )
 
 
 class TokenizerSubcommand(CLISubcommand):
-    """The `tokenizer` subcommand for the Aphrodite CLI."""
+    """The `tokenizer` subcommand for the Sonar CLI."""
 
     name = "tokenizer"
 
     @staticmethod
     def cmd(args: argparse.Namespace) -> None:
-        from aphrodite.entrypoints.launchers.tokenizer.entry import run_tokenizer_server
+        from sonar.entrypoints.launchers.tokenizer.entry import run_tokenizer_server
 
         if getattr(args, "model_tag", None) is not None:
             args.model = args.model_tag
@@ -39,10 +39,10 @@ class TokenizerSubcommand(CLISubcommand):
             self.name,
             help="Start a tokenizer-only server (no engine or GPU).",
             description=DESCRIPTION,
-            usage="aphrodite tokenizer [model_tag] [options]",
+            usage="sonar tokenizer [model_tag] [options]",
         )
         parser = make_arg_parser(parser)
-        parser.epilog = APHRODITE_SUBCMD_PARSER_EPILOG.format(subcmd=self.name)
+        parser.epilog = SONAR_SUBCMD_PARSER_EPILOG.format(subcmd=self.name)
         return parser
 
 

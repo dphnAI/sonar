@@ -3,9 +3,9 @@
 """MiniMax-M3.1 DSpark draft fusions against the unfused ops they replace.
 
 - The context-KV CUDA kernel
-  (aphrodite/models/minimax_m3/common/ops/dspark_context_kv.py) against flashinfer
-  gemma_rmsnorm per layer, aphrodite._custom_ops.rotary_embedding (partial NeoX) and
-  aphrodite._custom_ops.reshape_and_cache_flash into FlashAttention-layout caches
+  (sonar/models/minimax_m3/common/ops/dspark_context_kv.py) against flashinfer
+  gemma_rmsnorm per layer, sonar._custom_ops.rotary_embedding (partial NeoX) and
+  sonar._custom_ops.reshape_and_cache_flash into FlashAttention-layout caches
   [num_blocks, nkv, block_size, 2 * hd] viewed as
   kv_cache.transpose(1, 2).split(hd, dim=-1).
 - The draft attention's fused q/k Gemma norm + RoPE against DFlash's q-norm,
@@ -17,12 +17,12 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-import aphrodite._custom_ops as ops
-from aphrodite.models.minimax_m3.common.ops.dspark_context_kv import (
+import sonar._custom_ops as ops
+from sonar.models.minimax_m3.common.ops.dspark_context_kv import (
     DSparkContextKVWriter,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_default_torch_dtype
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_default_torch_dtype
 
 flashinfer_norm = pytest.importorskip("flashinfer.norm")
 
@@ -249,14 +249,14 @@ class _CaptureAttention(torch.nn.Module):
 
 
 @pytest.mark.parametrize("kv_cache_dtype", ["auto", "fp8"])
-def test_draft_attention_fused_qk_norm_rope(dist_init, default_aphrodite_config, kv_cache_dtype):
+def test_draft_attention_fused_qk_norm_rope(dist_init, default_sonar_config, kv_cache_dtype):
     """One fused launch gives the q of DFlash's q-norm and RoPE and stores its
     k/v in a bf16 or fp8 cache as the layer's reshape_and_cache_flash would;
     the attention layer gets q alone."""
-    from aphrodite.forward_context import set_forward_context
-    from aphrodite.model_executor.models.qwen3_dflash import DFlashQwen3Attention
-    from aphrodite.models.minimax_m3.common.dspark import MiniMaxM3DSparkAttention
-    from aphrodite.transformers_utils.configs.minimax_m3 import MiniMaxM3TextConfig
+    from sonar.forward_context import set_forward_context
+    from sonar.model_executor.models.qwen3_dflash import DFlashQwen3Attention
+    from sonar.models.minimax_m3.common.dspark import MiniMaxM3DSparkAttention
+    from sonar.transformers_utils.configs.minimax_m3 import MiniMaxM3TextConfig
 
     torch.manual_seed(0)
     config = MiniMaxM3TextConfig(
@@ -288,7 +288,7 @@ def test_draft_attention_fused_qk_norm_rope(dist_init, default_aphrodite_config,
     DFlashQwen3Attention.forward(attn, positions, hidden)
     q_ref, k_ref, v_ref = attn.attn.qkv
     assert k_ref is not None and v_ref is not None
-    with set_forward_context(None, default_aphrodite_config, slot_mapping={layer.layer_name: slots}):
+    with set_forward_context(None, default_sonar_config, slot_mapping={layer.layer_name: slots}):
         attn(positions, hidden)
     q, k, v = attn.attn.qkv
     torch.testing.assert_close(q, q_ref, atol=2e-2, rtol=2e-2)
@@ -333,17 +333,17 @@ class _FixedOutputAttention(torch.nn.Module):
     reason="Native MXFP8 kernels require SM100-family CUDA",
 )
 @torch.inference_mode()
-def test_draft_fp16_attention_output_feeds_mxfp8_o_proj(dist_init, default_aphrodite_config):
+def test_draft_fp16_attention_output_feeds_mxfp8_o_proj(dist_init, default_sonar_config):
     """A backend that writes an FP8 query's output as FP16 hands it to the
     MXFP8 o_proj without a conversion pass; o_proj quantizes it and still
     returns bf16, bit-identical to the bf16 path for values both dtypes hold."""
-    from aphrodite.forward_context import set_forward_context
-    from aphrodite.model_executor.layers.quantization.modelopt import ModelOptMxFp8Config
-    from aphrodite.model_executor.layers.quantization.utils.mxfp8_utils import (
+    from sonar.forward_context import set_forward_context
+    from sonar.model_executor.layers.quantization.modelopt import ModelOptMxFp8Config
+    from sonar.model_executor.layers.quantization.utils.mxfp8_utils import (
         _mxfp8_e4m3_quantize_torch,
     )
-    from aphrodite.models.minimax_m3.common.dspark import MiniMaxM3DSparkAttention
-    from aphrodite.transformers_utils.configs.minimax_m3 import MiniMaxM3TextConfig
+    from sonar.models.minimax_m3.common.dspark import MiniMaxM3DSparkAttention
+    from sonar.transformers_utils.configs.minimax_m3 import MiniMaxM3TextConfig
 
     torch.manual_seed(0)
     config = MiniMaxM3TextConfig(
@@ -387,7 +387,7 @@ def test_draft_fp16_attention_output_feeds_mxfp8_o_proj(dist_init, default_aphro
     outputs = []
     for attn_output_dtype in (torch.float16, None):
         attn._attn_output_dtype = attn_output_dtype
-        with set_forward_context(None, default_aphrodite_config, slot_mapping={layer.layer_name: positions}):
+        with set_forward_context(None, default_sonar_config, slot_mapping={layer.layer_name: positions}):
             outputs.append(attn(positions, hidden))
     assert attn.attn.output_dtypes == [torch.float16, torch.bfloat16]
     assert outputs[0].dtype == torch.bfloat16

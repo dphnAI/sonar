@@ -10,20 +10,6 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
-use aphrodite_chat::{
-    ChatBackend, ChatLlm, ChatRenderer, ChatRequest, ChatTextBackend, DefaultChatOutputProcessor,
-    DynChatOutputProcessor, DynChatRenderer, NewChatOutputProcessorOptions, RenderedPrompt,
-};
-use aphrodite_engine_core_client::protocol::output::{
-    EngineCoreFinishReason, EngineCoreOutput, EngineCoreOutputs, RequestBatchOutputs,
-};
-use aphrodite_engine_core_client::protocol::request::EngineCoreRequest;
-use aphrodite_engine_core_client::test_utils::{IpcNamespace, spawn_mock_engine_task};
-use aphrodite_engine_core_client::{EngineCoreClient, EngineCoreClientConfig, EngineId};
-use aphrodite_llm::Llm;
-use aphrodite_text::tokenizer::DynTokenizer;
-use aphrodite_text::{Prompt, TextBackend};
-use aphrodite_tokenizer::test_utils::TestTokenizer;
 use async_openai::Client;
 use async_openai::config::OpenAIConfig;
 use async_openai::types::chat::{
@@ -31,6 +17,20 @@ use async_openai::types::chat::{
 };
 use futures::StreamExt as _;
 use serial_test::serial;
+use sonar_chat::{
+    ChatBackend, ChatLlm, ChatRenderer, ChatRequest, ChatTextBackend, DefaultChatOutputProcessor,
+    DynChatOutputProcessor, DynChatRenderer, NewChatOutputProcessorOptions, RenderedPrompt,
+};
+use sonar_engine_core_client::protocol::output::{
+    EngineCoreFinishReason, EngineCoreOutput, EngineCoreOutputs, RequestBatchOutputs,
+};
+use sonar_engine_core_client::protocol::request::EngineCoreRequest;
+use sonar_engine_core_client::test_utils::{IpcNamespace, spawn_mock_engine_task};
+use sonar_engine_core_client::{EngineCoreClient, EngineCoreClientConfig, EngineId};
+use sonar_llm::Llm;
+use sonar_text::tokenizer::DynTokenizer;
+use sonar_text::{Prompt, TextBackend};
+use sonar_tokenizer::test_utils::TestTokenizer;
 use zeromq::prelude::{SocketRecv, SocketSend};
 use zeromq::{DealerSocket, PushSocket, ZmqMessage};
 
@@ -161,7 +161,7 @@ impl ChatBackend for FakeChatBackend {
         &self,
         request: &mut ChatRequest,
         options: NewChatOutputProcessorOptions<'_>,
-    ) -> aphrodite_chat::Result<DynChatOutputProcessor> {
+    ) -> sonar_chat::Result<DynChatOutputProcessor> {
         Ok(Box::new(DefaultChatOutputProcessor::new(
             request,
             self.model_id(),
@@ -174,7 +174,7 @@ impl ChatBackend for FakeChatBackend {
 }
 
 impl ChatRenderer for FakeChatBackend {
-    fn render(&self, request: &ChatRequest) -> aphrodite_chat::Result<RenderedPrompt> {
+    fn render(&self, request: &ChatRequest) -> sonar_chat::Result<RenderedPrompt> {
         let mut prompt = String::new();
         for message in &request.messages {
             prompt.push_str(message.role().as_str());

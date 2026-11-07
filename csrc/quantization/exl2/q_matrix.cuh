@@ -28,7 +28,7 @@
 #include <cstdint>
 #include <cstdio>
 
-namespace aphrodite {
+namespace sonar {
 namespace exl2 {
 
 #define MAX_SUPERGROUPS 16
@@ -80,6 +80,6 @@ class QMatrix {
 };
 
 }  // namespace exl2
-}  // namespace aphrodite
+}  // namespace sonar
 
 #endif

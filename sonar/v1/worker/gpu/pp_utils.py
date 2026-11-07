@@ -8,12 +8,12 @@ from dataclasses import dataclass
 import numpy as np
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.distributed.parallel_state import get_pp_group
-from aphrodite.platforms import current_platform
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.utils.torch_utils import async_tensor_h2d
-from aphrodite.v1.worker.gpu.input_batch import InputBatch
+import sonar.envs as envs
+from sonar.distributed.parallel_state import get_pp_group
+from sonar.platforms import current_platform
+from sonar.sequence import IntermediateTensors
+from sonar.utils.torch_utils import async_tensor_h2d
+from sonar.v1.worker.gpu.input_batch import InputBatch
 
 
 @dataclass
@@ -75,9 +75,9 @@ class PPHandler:
         # pushed by step T's `receive` is consumed pp_size steps later. Pre-seeded
         # with pp_size None placeholders so the first pp_size consumes are no-ops.
         # None means no postprocess is pending for that step (broadcast skipped).
-        # Only XPU can disable microbatching via APHRODITE_XPU_PP_MICROBATCH.
+        # Only XPU can disable microbatching via SONAR_XPU_PP_MICROBATCH.
         ring_depth = get_pp_group().world_size
-        if current_platform.is_xpu() and not envs.APHRODITE_XPU_PP_MICROBATCH:
+        if current_platform.is_xpu() and not envs.SONAR_XPU_PP_MICROBATCH:
             ring_depth = 1
         self.queue: deque[PendingRecv | None] = deque() if self.is_last_rank else deque([None] * ring_depth)
 
@@ -100,7 +100,7 @@ class PPHandler:
         return self.max_sample_len if input_batch.num_draft_tokens > 0 else 1
 
     def configure_aux_hidden_state_relay(self, model: torch.nn.Module) -> None:
-        from aphrodite.v1.worker.gpu.spec_decode.eagle.eagle3_utils import (
+        from sonar.v1.worker.gpu.spec_decode.eagle.eagle3_utils import (
             aux_hidden_state_relay_keys,
         )
 

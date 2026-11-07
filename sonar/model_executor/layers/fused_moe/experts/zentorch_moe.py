@@ -6,21 +6,21 @@ from collections.abc import Callable
 
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite.model_executor.kernels.linear.zentorch_utils import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar.model_executor.kernels.linear.zentorch_utils import (
     _ZENTORCH_MOE_ACTIVATIONS,
     _moe_activation_to_str,
     has_zentorch_op,
 )
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEParallelConfig,
     FusedMoEQuantConfig,
     RoutingMethodType,
 )
-from aphrodite.model_executor.layers.fused_moe.router.cpu_router import select_experts
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.fused_moe.router.cpu_router import select_experts
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     kInt4Static,
     kInt4Static32,

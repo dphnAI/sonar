@@ -6,7 +6,7 @@ from threading import RLock
 
 from cachetools import LRUCache, cached
 
-import aphrodite._phrase_matcher as _phrase_matcher
+import sonar._phrase_matcher as _phrase_matcher
 
 MAX_PHRASES = 2048
 MAX_PHRASE_CHARS = 256

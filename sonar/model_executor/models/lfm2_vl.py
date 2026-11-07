@@ -20,26 +20,26 @@ from transformers.models.lfm2_vl.image_processing_lfm2_vl import (
 )
 from typing_extensions import Buffer
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.multimodal import MultiModalDummyOptions
-from aphrodite.forward_context import set_forward_context
-from aphrodite.inputs import MultiModalDataDict
-from aphrodite.model_executor.layers.linear import ReplicatedLinear
-from aphrodite.model_executor.layers.mamba.mamba_utils import (
+from sonar.config import SonarConfig
+from sonar.config.multimodal import MultiModalDummyOptions
+from sonar.forward_context import set_forward_context
+from sonar.inputs import MultiModalDataDict
+from sonar.model_executor.layers.linear import ReplicatedLinear
+from sonar.model_executor.layers.mamba.mamba_utils import (
     MambaStateCopyFunc,
     MambaStateCopyFuncCalculator,
     MambaStateDtypeCalculator,
     MambaStateShapeCalculator,
 )
-from aphrodite.model_executor.models.module_mapping import MultiModelKeys
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import (
+from sonar.model_executor.models.module_mapping import MultiModelKeys
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import (
     MultiModalFieldConfig,
     MultiModalKwargsItem,
     MultiModalKwargsItems,
 )
-from aphrodite.multimodal.parse import ImageProcessorItems, ImageSize, MultiModalDataItems
-from aphrodite.multimodal.processing import (
+from sonar.multimodal.parse import ImageProcessorItems, ImageSize, MultiModalDataItems
+from sonar.multimodal.processing import (
     BaseDummyInputsBuilder,
     BaseMultiModalProcessor,
     BaseProcessingInfo,
@@ -47,9 +47,9 @@ from aphrodite.multimodal.processing import (
     PromptUpdateDetails,
     cached_encode,
 )
-from aphrodite.renderers import TokenizeParams
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.utils.tensor_schema import TensorSchema, TensorShape
+from sonar.renderers import TokenizeParams
+from sonar.sequence import IntermediateTensors
+from sonar.utils.tensor_schema import TensorSchema, TensorShape
 
 from .interfaces import (
     IsHybrid,
@@ -63,7 +63,7 @@ from .lfm2_siglip2 import Siglip2Model
 from .utils import (
     AutoWeightsLoader,
     WeightsMapper,
-    init_aphrodite_registered_model,
+    init_sonar_registered_model,
     maybe_prefix,
 )
 from .vision import is_vit_use_data_parallel
@@ -579,7 +579,7 @@ class Lfm2VLForConditionalGeneration(
     supports_tower_connector_lora = True
     merge_by_field_config = True
 
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={
             "lm_head.": "language_model.lm_head.",
             "model.language_model.": "language_model.model.",
@@ -598,30 +598,30 @@ class Lfm2VLForConditionalGeneration(
     @classmethod
     def get_mamba_state_dtype_from_config(
         cls,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
     ) -> tuple[torch.dtype, ...]:
         return MambaStateDtypeCalculator.short_conv_state_dtype(
-            aphrodite_config.model_config.dtype,
-            aphrodite_config.cache_config.mamba_cache_dtype,
+            sonar_config.model_config.dtype,
+            sonar_config.cache_config.mamba_cache_dtype,
         )
 
     @classmethod
     def get_mamba_state_shape_from_config(
         cls,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
     ) -> tuple[tuple[int, int]]:
         """Calculate shapes for LFM2's convolutional cache.
 
         Args:
-            aphrodite_config: Aphrodite config
+            sonar_config: Sonar config
 
         Returns:
             Tuple containing:
             - conv_state_shape: Shape for convolutional state cache
 
         """
-        parallel_config = aphrodite_config.parallel_config
-        hf_language_config = aphrodite_config.model_config.hf_config.text_config
+        parallel_config = sonar_config.parallel_config
+        hf_language_config = sonar_config.model_config.hf_config.text_config
 
         return MambaStateShapeCalculator.short_conv_state_shape(
             tp_world_size=parallel_config.tensor_parallel_size,
@@ -633,21 +633,21 @@ class Lfm2VLForConditionalGeneration(
     def get_mamba_state_copy_func(cls) -> tuple[MambaStateCopyFunc]:
         return MambaStateCopyFuncCalculator.short_conv_state_copy_func()
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "model"):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "model"):
         super().__init__()
-        config: Lfm2VlConfig = aphrodite_config.model_config.hf_config
-        multimodal_config = aphrodite_config.model_config.multimodal_config
+        config: Lfm2VlConfig = sonar_config.model_config.hf_config
+        multimodal_config = sonar_config.model_config.multimodal_config
         assert multimodal_config is not None
         vision_config = config.vision_config
-        quant_config = aphrodite_config.quant_config
+        quant_config = sonar_config.quant_config
 
         self.config = config
-        self.aphrodite_config = aphrodite_config
-        self.model_config = aphrodite_config.model_config
+        self.sonar_config = sonar_config
+        self.model_config = sonar_config.model_config
         self.multimodal_config = multimodal_config
         self.use_data_parallel = multimodal_config.mm_encoder_tp_mode == "data"
 
-        with self._mark_tower_model(aphrodite_config, "image"):
+        with self._mark_tower_model(sonar_config, "image"):
             if vision_config.model_type == "siglip2_vision_model":
                 self.vision_tower = Siglip2Model(
                     config=vision_config,
@@ -662,9 +662,9 @@ class Lfm2VLForConditionalGeneration(
                 prefix=maybe_prefix(prefix, "multi_modal_projector"),
             )
 
-        with self._mark_language_model(aphrodite_config):
-            self.language_model = init_aphrodite_registered_model(
-                aphrodite_config=aphrodite_config,
+        with self._mark_language_model(sonar_config):
+            self.language_model = init_sonar_registered_model(
+                sonar_config=sonar_config,
                 hf_config=config.text_config,
                 prefix=maybe_prefix(prefix, "language"),
                 architectures=config.text_config.architectures,
@@ -727,7 +727,7 @@ class Lfm2VLForConditionalGeneration(
         )
         cu_seqlens[1:] = torch.cumsum(lengths, dim=0)
 
-        with set_forward_context(None, self.aphrodite_config):
+        with set_forward_context(None, self.sonar_config):
             vision_outputs = self.vision_tower(
                 pixel_values_packed=packed_pixel_values,
                 spatial_shapes=spatial_shapes,
@@ -786,7 +786,7 @@ class Lfm2VLForConditionalGeneration(
         return self._process_image_input(image_input)
 
     def get_encoder_cudagraph_config(self):
-        from aphrodite.v1.worker.encoder_cudagraph_defs import (
+        from sonar.v1.worker.encoder_cudagraph_defs import (
             EncoderCudaGraphConfig,
         )
 
@@ -810,11 +810,11 @@ class Lfm2VLForConditionalGeneration(
 
     def get_encoder_cudagraph_budget_range(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
     ) -> tuple[int, int]:
         min_budget = self._get_lfm2vl_min_image_tokens()
         max_budget = min(
-            aphrodite_config.scheduler_config.max_num_batched_tokens,
+            sonar_config.scheduler_config.max_num_batched_tokens,
             self.model_config.max_model_len,
         )
         return min_budget, max_budget
@@ -880,7 +880,7 @@ class Lfm2VLForConditionalGeneration(
         self,
         mm_kwargs: dict[str, Any],
     ):
-        from aphrodite.v1.worker.encoder_cudagraph_defs import EncoderItemSpec
+        from sonar.v1.worker.encoder_cudagraph_defs import EncoderItemSpec
 
         spatial_shapes = mm_kwargs["spatial_shapes"]
         num_patches = mm_kwargs["num_patches"]
@@ -1074,7 +1074,7 @@ class Lfm2VLForConditionalGeneration(
         path: str = "default",
         axis_keys: tuple[Hashable, ...] | None = None,
     ):
-        from aphrodite.v1.worker.encoder_cudagraph_defs import (
+        from sonar.v1.worker.encoder_cudagraph_defs import (
             EncoderCudaGraphCaptureInputs,
         )
 
@@ -1118,7 +1118,7 @@ class Lfm2VLForConditionalGeneration(
         max_frames_per_batch: int,
         path: str = "default",
     ):
-        from aphrodite.v1.worker.encoder_cudagraph_defs import (
+        from sonar.v1.worker.encoder_cudagraph_defs import (
             EncoderCudaGraphReplayBuffers,
         )
 
@@ -1138,7 +1138,7 @@ class Lfm2VLForConditionalGeneration(
         patch_embeds = embeddings.patch_embedding(pixel_values)
         hidden_states = (patch_embeds + values["pos_embeds"]).unsqueeze(0)
 
-        with set_forward_context(None, self.aphrodite_config):
+        with set_forward_context(None, self.sonar_config):
             encoder_outputs = self.vision_tower.vision_model.encoder(
                 inputs_embeds=hidden_states,
                 cu_seqlens=values["cu_seqlens"],
@@ -1194,7 +1194,7 @@ class Lfm2VLForConditionalGeneration(
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
     def get_mm_mapping(self) -> MultiModelKeys:
         """Get the module prefix in multimodal models."""

@@ -3,19 +3,19 @@
 
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.config import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEParallelConfig,
     FusedMoEQuantConfig,
     RoutingMethodType,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     kInt4Static32,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 
 class TrtLlmMxint4ExpertsMonolithic(mk.FusedMoEExpertsMonolithic):
@@ -41,7 +41,7 @@ class TrtLlmMxint4ExpertsMonolithic(mk.FusedMoEExpertsMonolithic):
 
     @staticmethod
     def _supports_current_device() -> bool:
-        from aphrodite.model_executor.layers.quantization.utils.flashinfer_mxint4_moe import (  # noqa: E501
+        from sonar.model_executor.layers.quantization.utils.flashinfer_mxint4_moe import (  # noqa: E501
             is_flashinfer_mxint4_moe_available,
         )
 
@@ -62,7 +62,7 @@ class TrtLlmMxint4ExpertsMonolithic(mk.FusedMoEExpertsMonolithic):
     @staticmethod
     def _supports_activation(activation: MoEActivation) -> bool:
         # FlashInfer MxInt4 names the standard gated SiLU path "SwiGLU".
-        # In Aphrodite MoE configs that maps to SILU/silu_and_mul; SWIGLUOAI is
+        # In Sonar MoE configs that maps to SILU/silu_and_mul; SWIGLUOAI is
         # kept as an alias for consistency with other FlashInfer backends.
         return activation in (MoEActivation.SILU, MoEActivation.SWIGLUOAI)
 
@@ -129,7 +129,7 @@ class TrtLlmMxint4ExpertsMonolithic(mk.FusedMoEExpertsMonolithic):
         topk_group: int | None = None,
         routing_replay_out: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        from aphrodite.model_executor.layers.quantization.utils.flashinfer_mxint4_moe import (  # noqa: E501
+        from sonar.model_executor.layers.quantization.utils.flashinfer_mxint4_moe import (  # noqa: E501
             flashinfer_trtllm_mxint4_moe,
         )
 

@@ -4,7 +4,7 @@
 
 Tests cover:
   - Flat MoE-style filename generation
-  - APHRODITE_TUNED_CONFIG_FOLDER env-var override
+  - SONAR_TUNED_CONFIG_FOLDER env-var override
   - Fallback to heuristic when no config file exists
   - Nearest effective_batch interpolation
   - Edge cases: non-dict JSON, empty config
@@ -12,7 +12,7 @@ Tests cover:
 
 import json
 
-from aphrodite.model_executor.layers.mamba.ops.mamba_ssm import (
+from sonar.model_executor.layers.mamba.ops.mamba_ssm import (
     _get_default_ssm_launch_config,
     _try_get_optimal_ssm_config_cached,
     get_ssm_config_file_name,
@@ -51,12 +51,12 @@ def test_config_file_name_format():
 
 
 # ---------------------------------------------------------------------------
-# APHRODITE_TUNED_CONFIG_FOLDER override
+# SONAR_TUNED_CONFIG_FOLDER override
 # ---------------------------------------------------------------------------
 
 
 def test_env_override_loads_custom_config(monkeypatch, tmp_path):
-    """APHRODITE_TUNED_CONFIG_FOLDER should take precedence over the bundled dir."""
+    """SONAR_TUNED_CONFIG_FOLDER should take precedence over the bundled dir."""
     _write_config(
         tmp_path,
         dstate=16,
@@ -65,7 +65,7 @@ def test_env_override_loads_custom_config(monkeypatch, tmp_path):
         },
     )
 
-    monkeypatch.setenv("APHRODITE_TUNED_CONFIG_FOLDER", str(tmp_path))
+    monkeypatch.setenv("SONAR_TUNED_CONFIG_FOLDER", str(tmp_path))
     _clear_caches()
 
     cfg = get_ssm_configs(_HEADDIM, 16, _CACHE_DTYPE)
@@ -85,9 +85,9 @@ def test_fallback_when_no_config(monkeypatch, tmp_path):
     when no JSON file is found for the current
     (device, headdim, dstate, cache_dtype) combination.
     """
-    monkeypatch.setenv("APHRODITE_TUNED_CONFIG_FOLDER", str(tmp_path))
+    monkeypatch.setenv("SONAR_TUNED_CONFIG_FOLDER", str(tmp_path))
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.mamba.ops.mamba_ssm._CONFIGS_DIR",
+        "sonar.model_executor.layers.mamba.ops.mamba_ssm._CONFIGS_DIR",
         str(tmp_path),
     )
 
@@ -124,7 +124,7 @@ def test_nearest_effective_batch_interpolation(monkeypatch, tmp_path):
         },
     )
 
-    monkeypatch.setenv("APHRODITE_TUNED_CONFIG_FOLDER", str(tmp_path))
+    monkeypatch.setenv("SONAR_TUNED_CONFIG_FOLDER", str(tmp_path))
     _clear_caches()
 
     # effective_batch = 1*128 = 128 -> closer to 64 than to 4096
@@ -165,9 +165,9 @@ def test_non_dict_json_returns_none(monkeypatch, tmp_path):
     with open(config_path, "w") as f:
         json.dump([1, 2, 3], f)
 
-    monkeypatch.setenv("APHRODITE_TUNED_CONFIG_FOLDER", str(tmp_path))
+    monkeypatch.setenv("SONAR_TUNED_CONFIG_FOLDER", str(tmp_path))
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.mamba.ops.mamba_ssm._CONFIGS_DIR",
+        "sonar.model_executor.layers.mamba.ops.mamba_ssm._CONFIGS_DIR",
         str(tmp_path),
     )
     _clear_caches()
@@ -182,7 +182,7 @@ def test_empty_config_falls_back_to_heuristic(monkeypatch, tmp_path):
     to the hard-coded heuristic."""
     _write_config(tmp_path, dstate=64, payload={})
 
-    monkeypatch.setenv("APHRODITE_TUNED_CONFIG_FOLDER", str(tmp_path))
+    monkeypatch.setenv("SONAR_TUNED_CONFIG_FOLDER", str(tmp_path))
     _clear_caches()
 
     dstate = 64

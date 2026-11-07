@@ -1,18 +1,18 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Taken from https://github.com/ModelTC/LightLLM/blob/8ed97c74c18f11505b048b1ba00ba5c0cef8bff6/lightllm/common/fused_moe/deepep_scatter_gather.py
-and updated to fit aphrodite needs and terminology.
+and updated to fit sonar needs and terminology.
 """
 
 import math
 
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite.model_executor.layers.fused_moe.utils import count_expert_num_tokens
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.deep_gemm import get_mk_alignment_for_contiguous_layout
-from aphrodite.utils.math_utils import round_up
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar.model_executor.layers.fused_moe.utils import count_expert_num_tokens
+from sonar.triton_utils import tl, triton
+from sonar.utils.deep_gemm import get_mk_alignment_for_contiguous_layout
+from sonar.utils.math_utils import round_up
 
 
 def expert_num_tokens_round_up_and_sum(expert_num_tokens: torch.Tensor, alignment: int) -> int:
@@ -54,7 +54,7 @@ def compute_aligned_M_and_alignment(
     # SM100/SM120 when smaller.
     expected_m = M * num_topk
     try:
-        from aphrodite.utils.deep_gemm import (
+        from sonar.utils.deep_gemm import (
             get_theoretical_mk_alignment_for_contiguous_layout,
         )
 

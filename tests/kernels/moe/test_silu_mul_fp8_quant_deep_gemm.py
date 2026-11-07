@@ -7,20 +7,20 @@ import random
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.fused_moe.experts.batched_deep_gemm_moe import (
+from sonar.model_executor.layers.fused_moe.experts.batched_deep_gemm_moe import (
     persistent_masked_m_silu_mul_quant,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     get_fp8_min_max,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.deep_gemm import (
+from sonar.platforms import current_platform
+from sonar.utils.deep_gemm import (
     DeepGemmQuantScaleFMT,
     has_deep_gemm,
     transform_sf_into_required_layout,
 )
-from aphrodite.utils.math_utils import cdiv, round_up
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.utils.math_utils import cdiv, round_up
+from sonar.utils.torch_utils import set_random_seed
 
 fp8_dtype = current_platform.fp8_dtype()
 DEVICE = current_platform.device_type

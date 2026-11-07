@@ -8,7 +8,7 @@
 #include "custom_all_reduce.cuh"
 #include "custom_all_gather_reduce_scatter.cuh"
 
-namespace aphrodite {
+namespace sonar {
 
 void CustomAllreduce::allgather(cudaStream_t stream, void* input, void* output,
                                 int size_bytes, int threads, int block_limit) {
@@ -240,7 +240,7 @@ void CustomAllreduce::mnnvl_multimem_reduce_scatter(
 #endif
 }
 
-}  // namespace aphrodite
+}  // namespace sonar
 
 using fptr_t = int64_t;
 static_assert(sizeof(void*) == sizeof(fptr_t));
@@ -250,7 +250,7 @@ bool _is_weak_contiguous(torch::stable::Tensor& t);
 void custom_all_gather(fptr_t _fa, torch::stable::Tensor& inp,
                        torch::stable::Tensor& out, fptr_t _reg_buffer,
                        int64_t reg_buffer_sz_bytes) {
-  auto fa = reinterpret_cast<aphrodite::CustomAllreduce*>(_fa);
+  auto fa = reinterpret_cast<sonar::CustomAllreduce*>(_fa);
   const torch::stable::accelerator::DeviceGuard device_guard(
       inp.get_device_index());
   const cudaStream_t stream = get_current_cuda_stream(inp.get_device_index());
@@ -272,7 +272,7 @@ void mnnvl_lamport_all_gather(fptr_t _fa, torch::stable::Tensor& inp,
                               torch::stable::Tensor& out, fptr_t _local_buffer,
                               fptr_t _multicast_buffer, fptr_t _epoch_buffer,
                               int64_t stage_sz_bytes) {
-  auto fa = reinterpret_cast<aphrodite::CustomAllreduce*>(_fa);
+  auto fa = reinterpret_cast<sonar::CustomAllreduce*>(_fa);
   const torch::stable::accelerator::DeviceGuard device_guard(
       inp.get_device_index());
   const cudaStream_t stream = get_current_cuda_stream(inp.get_device_index());
@@ -320,7 +320,7 @@ void mnnvl_lamport_all_gather(fptr_t _fa, torch::stable::Tensor& inp,
 void custom_reduce_scatter(fptr_t _fa, torch::stable::Tensor& inp,
                            torch::stable::Tensor& out, fptr_t _reg_buffer,
                            int64_t reg_buffer_sz_bytes) {
-  auto fa = reinterpret_cast<aphrodite::CustomAllreduce*>(_fa);
+  auto fa = reinterpret_cast<sonar::CustomAllreduce*>(_fa);
   const torch::stable::accelerator::DeviceGuard device_guard(
       inp.get_device_index());
   const cudaStream_t stream = get_current_cuda_stream(inp.get_device_index());
@@ -366,7 +366,7 @@ void mnnvl_lamport_reduce_scatter(fptr_t _fa, torch::stable::Tensor& inp,
                                   torch::stable::Tensor& out,
                                   fptr_t _local_buffer, fptr_t _epoch_buffer,
                                   int64_t stage_sz_bytes) {
-  auto fa = reinterpret_cast<aphrodite::CustomAllreduce*>(_fa);
+  auto fa = reinterpret_cast<sonar::CustomAllreduce*>(_fa);
   const torch::stable::accelerator::DeviceGuard device_guard(
       inp.get_device_index());
   const cudaStream_t stream = get_current_cuda_stream(inp.get_device_index());
@@ -416,7 +416,7 @@ void mnnvl_multimem_reduce_scatter(fptr_t _fa, torch::stable::Tensor& inp,
                                    fptr_t _multicast_buffer,
                                    int64_t stage_sz_bytes,
                                    int64_t block_limit) {
-  auto fa = reinterpret_cast<aphrodite::CustomAllreduce*>(_fa);
+  auto fa = reinterpret_cast<sonar::CustomAllreduce*>(_fa);
   const torch::stable::accelerator::DeviceGuard device_guard(
       inp.get_device_index());
   const cudaStream_t stream = get_current_cuda_stream(inp.get_device_index());
@@ -432,10 +432,10 @@ void mnnvl_multimem_reduce_scatter(fptr_t _fa, torch::stable::Tensor& inp,
   auto multicast_buffer = reinterpret_cast<void*>(_multicast_buffer);
   STD_TORCH_CHECK(local_buffer != nullptr);
   STD_TORCH_CHECK(multicast_buffer != nullptr);
-  auto* local_signal = reinterpret_cast<aphrodite::Signal*>(
-      static_cast<char*>(local_buffer) - sizeof(aphrodite::Signal));
-  auto* multicast_signal = reinterpret_cast<aphrodite::Signal*>(
-      static_cast<char*>(multicast_buffer) - sizeof(aphrodite::Signal));
+  auto* local_signal = reinterpret_cast<sonar::Signal*>(
+      static_cast<char*>(local_buffer) - sizeof(sonar::Signal));
+  auto* multicast_signal = reinterpret_cast<sonar::Signal*>(
+      static_cast<char*>(multicast_buffer) - sizeof(sonar::Signal));
   STD_CUDA_CHECK(cudaMemcpyAsync(local_buffer, inp.const_data_ptr(), input_size,
                                  cudaMemcpyDeviceToDevice, stream));
   switch (out.scalar_type()) {

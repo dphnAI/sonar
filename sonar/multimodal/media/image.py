@@ -9,9 +9,9 @@ import pybase64
 import torch
 from PIL import Image
 
-import aphrodite.envs as envs
-from aphrodite.utils.serial_utils import tensor2base64
-from aphrodite.utils.sparse_utils import (
+import sonar.envs as envs
+from sonar.utils.serial_utils import tensor2base64
+from sonar.utils.sparse_utils import (
     check_sparse_tensor_invariants_threadsafe,
     safe_to_dense,
 )
@@ -78,12 +78,12 @@ class ImageMediaIO(MediaIO[Image.Image]):
         try:
             image = open_image(BytesIO(data))
             w, h = image.size
-            max_pixels = envs.APHRODITE_MAX_IMAGE_PIXELS
+            max_pixels = envs.SONAR_MAX_IMAGE_PIXELS
             if max_pixels > 0 and w * h > max_pixels:
                 raise ValueError(
                     f"Image dimensions {w}x{h} ({w * h} pixels) exceed "
                     f"the maximum of {max_pixels} pixels. Set "
-                    f"APHRODITE_MAX_IMAGE_PIXELS to increase this limit."
+                    f"SONAR_MAX_IMAGE_PIXELS to increase this limit."
                 )
             if self.decoded_budget is not None:
                 self.decoded_budget.charge(w * h * 4)

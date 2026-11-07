@@ -8,12 +8,12 @@ from http import HTTPStatus
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from aphrodite.distributed.elastic_ep.external_elastic_ep import ExternalElasticEPScalePhase
-from aphrodite.engine.protocol import EngineClient
-from aphrodite.entrypoints.serve.elastic_ep.middleware import get_scaling_elastic_ep
-from aphrodite.entrypoints.serve.engine.protocol import ErrorResponse
-from aphrodite.entrypoints.serve.utils.api_utils import validate_json_request
-from aphrodite.logger import init_logger
+from sonar.distributed.elastic_ep.external_elastic_ep import ExternalElasticEPScalePhase
+from sonar.engine.protocol import EngineClient
+from sonar.entrypoints.serve.elastic_ep.middleware import get_scaling_elastic_ep
+from sonar.entrypoints.serve.engine.protocol import ErrorResponse
+from sonar.entrypoints.serve.utils.api_utils import validate_json_request
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 

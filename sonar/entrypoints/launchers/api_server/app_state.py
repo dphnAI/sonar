@@ -6,19 +6,19 @@ from typing import cast
 
 from starlette.datastructures import State
 
-from aphrodite.engine.protocol import EngineClient
-from aphrodite.entrypoints.common.cli_args import resolve_default_chat_template_kwargs
-from aphrodite.entrypoints.mcp.tool_server import init_tool_server
-from aphrodite.entrypoints.openai.models.protocol import BaseModelPath
-from aphrodite.entrypoints.openai.models.serving import OpenAIServingModels
-from aphrodite.entrypoints.serve.tokenize.serving import ServingTokenization
-from aphrodite.entrypoints.serve.utils.api_utils import process_lora_modules
-from aphrodite.entrypoints.serve.utils.request_logger import RequestLogger
-from aphrodite.plugins.endpoint_plugins.interface import init_endpoint_plugins_state
-from aphrodite.renderers.chat_utils import load_chat_template
-from aphrodite.renderers.online_derenderer import OnlineDerenderer
-from aphrodite.renderers.online_renderer import OnlineRenderer
-from aphrodite.tasks import FALLBACK_SUPPORTED_TASKS, POOLING_TASKS, SupportedTask
+from sonar.engine.protocol import EngineClient
+from sonar.entrypoints.common.cli_args import resolve_default_chat_template_kwargs
+from sonar.entrypoints.mcp.tool_server import init_tool_server
+from sonar.entrypoints.openai.models.protocol import BaseModelPath
+from sonar.entrypoints.openai.models.serving import OpenAIServingModels
+from sonar.entrypoints.serve.tokenize.serving import ServingTokenization
+from sonar.entrypoints.serve.utils.api_utils import process_lora_modules
+from sonar.entrypoints.serve.utils.request_logger import RequestLogger
+from sonar.plugins.endpoint_plugins.interface import init_endpoint_plugins_state
+from sonar.renderers.chat_utils import load_chat_template
+from sonar.renderers.online_derenderer import OnlineDerenderer
+from sonar.renderers.online_renderer import OnlineRenderer
+from sonar.tasks import FALLBACK_SUPPORTED_TASKS, POOLING_TASKS, SupportedTask
 
 
 async def init_app_state(
@@ -27,12 +27,12 @@ async def init_app_state(
     args: Namespace,
     supported_tasks: tuple["SupportedTask", ...] | None = None,
 ) -> None:
-    aphrodite_config = engine_client.aphrodite_config
+    sonar_config = engine_client.sonar_config
 
     if args.tool_call_parser is not None:
-        from aphrodite.parser.metrics import init_parser_metrics
+        from sonar.parser.metrics import init_parser_metrics
 
-        init_parser_metrics(model_name=cast(str, aphrodite_config.model_config.served_model_name))
+        init_parser_metrics(model_name=cast(str, sonar_config.model_config.served_model_name))
 
     if supported_tasks is None:
         warnings.warn(
@@ -58,14 +58,14 @@ async def init_app_state(
 
     state.engine_client = engine_client
     state.log_stats = not args.disable_log_stats
-    state.aphrodite_config = aphrodite_config
+    state.sonar_config = sonar_config
     state.args = args
     resolved_chat_template = load_chat_template(args.chat_template)
     default_chat_template_kwargs = resolve_default_chat_template_kwargs(args)
     state.tool_server = await init_tool_server(args) if "generate" in supported_tasks else None
 
     # Merge default_mm_loras into the static lora_modules
-    default_mm_loras = aphrodite_config.lora_config.default_mm_loras if aphrodite_config.lora_config is not None else {}
+    default_mm_loras = sonar_config.lora_config.default_mm_loras if sonar_config.lora_config is not None else {}
     lora_modules = process_lora_modules(args.lora_modules, default_mm_loras)
 
     state.openai_serving_models = OpenAIServingModels(
@@ -122,7 +122,7 @@ async def init_app_state(
     )
 
     if "generate" in supported_tasks:
-        from aphrodite.entrypoints.generate.api_router import init_generate_state
+        from sonar.entrypoints.generate.api_router import init_generate_state
 
         await init_generate_state(
             engine_client,
@@ -133,21 +133,21 @@ async def init_app_state(
             default_chat_template_kwargs,
         )
 
-        from aphrodite.entrypoints.scale_out.factories import init_scale_out_state
+        from sonar.entrypoints.scale_out.factories import init_scale_out_state
 
         init_scale_out_state(state, args, engine_client, request_logger)
 
     if "transcription" in supported_tasks or "realtime" in supported_tasks:
-        from aphrodite.entrypoints.speech_to_text.factories import init_speech_to_text_state
+        from sonar.entrypoints.speech_to_text.factories import init_speech_to_text_state
 
         init_speech_to_text_state(engine_client, state, args, request_logger, supported_tasks)
 
     if any(task in POOLING_TASKS for task in supported_tasks):
-        from aphrodite.entrypoints.pooling.factories import init_pooling_state
+        from sonar.entrypoints.pooling.factories import init_pooling_state
 
         init_pooling_state(engine_client, state, args, request_logger, supported_tasks)
 
-    from aphrodite.entrypoints.generate.structured_decisions.api_router import (
+    from sonar.entrypoints.generate.structured_decisions.api_router import (
         init_structured_decisions_state,
     )
 

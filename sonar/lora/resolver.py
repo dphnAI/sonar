@@ -5,8 +5,8 @@ from abc import ABC, abstractmethod
 from collections.abc import Set
 from dataclasses import dataclass, field
 
-from aphrodite.logger import init_logger
-from aphrodite.lora.request import LoRARequest
+from sonar.logger import init_logger
+from sonar.lora.request import LoRARequest
 
 logger = init_logger(__name__)
 

@@ -6,8 +6,8 @@ bookkeeping."""
 import torch
 from transformers import PreTrainedConfig
 
-from aphrodite.distributed import get_tp_group
-from aphrodite.platforms import current_platform
+from sonar.distributed import get_tp_group
+from sonar.platforms import current_platform
 
 from ...ops.cute_dsl import AllReduceMHC
 from .. import FUSED_MHC_MAX_ROWS

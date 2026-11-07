@@ -21,24 +21,24 @@ from transformers.models.internvl.video_processing_internvl import (
     InternVLVideoProcessor,
 )
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.multimodal import MultiModalDummyOptions
-from aphrodite.inputs import MultiModalDataDict
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.models.interns1_vit import InternS1VisionModel
-from aphrodite.model_executor.models.module_mapping import MultiModelKeys
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import (
+from sonar.config import SonarConfig
+from sonar.config.multimodal import MultiModalDummyOptions
+from sonar.inputs import MultiModalDataDict
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.models.interns1_vit import InternS1VisionModel
+from sonar.model_executor.models.module_mapping import MultiModelKeys
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import (
     MultiModalFieldConfig,
     MultiModalKwargsItems,
 )
-from aphrodite.multimodal.parse import (
+from sonar.multimodal.parse import (
     ImageEmbeddingItems,
     ImageProcessorItems,
     ImageSize,
     MultiModalDataItems,
 )
-from aphrodite.multimodal.processing import (
+from sonar.multimodal.processing import (
     BaseDummyInputsBuilder,
     BaseMultiModalProcessor,
     BaseProcessingInfo,
@@ -47,9 +47,9 @@ from aphrodite.multimodal.processing import (
     PromptUpdateDetails,
     cached_encode,
 )
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.transformers_utils.processor import cached_video_processor_from_config
-from aphrodite.utils.tensor_schema import TensorSchema, TensorShape
+from sonar.sequence import IntermediateTensors
+from sonar.transformers_utils.processor import cached_video_processor_from_config
+from sonar.utils.tensor_schema import TensorSchema, TensorShape
 
 from .interfaces import (
     MultiModalEmbeddings,
@@ -60,7 +60,7 @@ from .interfaces import (
 from .utils import (
     AutoWeightsLoader,
     WeightsMapper,
-    init_aphrodite_registered_model,
+    init_sonar_registered_model,
     maybe_prefix,
 )
 
@@ -506,7 +506,7 @@ class InternS1MultiModalProcessor(BaseMultiModalProcessor[InternS1ProcessingInfo
 )
 class InternS1ForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsPP, SupportsLoRA):
     # To ensure correct weight loading and mapping.
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={
             "lm_head.": "language_model.lm_head.",
             "model.language_model.": "language_model.model.",
@@ -526,11 +526,11 @@ class InternS1ForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsPP
 
         raise ValueError("Only image or video modality is supported")
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
-        multimodal_config = aphrodite_config.model_config.multimodal_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
+        multimodal_config = sonar_config.model_config.multimodal_config
 
         self.config = config
         self.multimodal_config = multimodal_config
@@ -541,7 +541,7 @@ class InternS1ForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsPP
         self.num_image_token = int((image_size // patch_size) ** 2 * (config.downsample_ratio**2))
         self.downsample_ratio = config.downsample_ratio
 
-        with self._mark_tower_model(aphrodite_config, {"image", "video"}):
+        with self._mark_tower_model(sonar_config, {"image", "video"}):
             self.vision_tower = self._init_vision_model(
                 config,
                 quant_config=quant_config,
@@ -549,9 +549,9 @@ class InternS1ForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsPP
             )
             self.multi_modal_projector = self._init_mlp1(config)
 
-        with self._mark_language_model(aphrodite_config):
-            self.language_model = init_aphrodite_registered_model(
-                aphrodite_config=aphrodite_config,
+        with self._mark_language_model(sonar_config):
+            self.language_model = init_sonar_registered_model(
+                sonar_config=sonar_config,
                 hf_config=config.text_config,
                 prefix=maybe_prefix(prefix, "language_model"),
             )
@@ -789,7 +789,7 @@ class InternS1ForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsPP
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
     def get_mm_mapping(self) -> MultiModelKeys:
         """Get the module prefix in multimodal models."""

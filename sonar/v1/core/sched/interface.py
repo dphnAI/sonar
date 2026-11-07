@@ -5,20 +5,20 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
-from aphrodite.multimodal import MULTIMODAL_REGISTRY, MultiModalRegistry
+from sonar.multimodal import MULTIMODAL_REGISTRY, MultiModalRegistry
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
-    from aphrodite.config.kv_events import KVEventsConfig
-    from aphrodite.distributed.ec_transfer.ec_connector.base import ECConnectorBase
-    from aphrodite.distributed.kv_transfer.kv_connector.v1 import KVConnectorBase_V1
-    from aphrodite.v1.core.sched.output import GrammarOutput, SchedulerOutput
-    from aphrodite.v1.engine import EngineCoreOutputs
-    from aphrodite.v1.kv_cache_interface import KVCacheConfig
-    from aphrodite.v1.metrics.stats import SchedulerStats
-    from aphrodite.v1.outputs import DraftTokenIds, ModelRunnerOutput
-    from aphrodite.v1.request import Request, RequestStatus
-    from aphrodite.v1.structured_output import StructuredOutputManager
+    from sonar.config import SonarConfig
+    from sonar.config.kv_events import KVEventsConfig
+    from sonar.distributed.ec_transfer.ec_connector.base import ECConnectorBase
+    from sonar.distributed.kv_transfer.kv_connector.v1 import KVConnectorBase_V1
+    from sonar.v1.core.sched.output import GrammarOutput, SchedulerOutput
+    from sonar.v1.engine import EngineCoreOutputs
+    from sonar.v1.kv_cache_interface import KVCacheConfig
+    from sonar.v1.metrics.stats import SchedulerStats
+    from sonar.v1.outputs import DraftTokenIds, ModelRunnerOutput
+    from sonar.v1.request import Request, RequestStatus
+    from sonar.v1.structured_output import StructuredOutputManager
 
 
 class PauseState(enum.IntEnum):
@@ -39,7 +39,7 @@ class SchedulerInterface(ABC):
     @abstractmethod
     def __init__(
         self,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
         kv_cache_config: "KVCacheConfig",
         structured_output_manager: "StructuredOutputManager",
         block_size: int,

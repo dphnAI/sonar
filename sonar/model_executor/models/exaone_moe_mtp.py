@@ -7,19 +7,19 @@ from collections.abc import Iterable
 import torch
 from torch import nn
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed.parallel_state import get_pp_group
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import ColumnParallelLinear
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import SonarConfig
+from sonar.distributed.parallel_state import get_pp_group
+from sonar.logger import init_logger
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import ColumnParallelLinear
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.models.exaone_moe import ExaoneMoeDecoderLayer
-from aphrodite.sequence import IntermediateTensors
+from sonar.model_executor.models.exaone_moe import ExaoneMoeDecoderLayer
+from sonar.sequence import IntermediateTensors
 
 from .utils import AutoWeightsLoader, WeightsMapper, maybe_prefix
 
@@ -30,7 +30,7 @@ KVCache = tuple[torch.Tensor, torch.Tensor]
 
 @support_torch_compile
 class ExaoneMoeMultiTokenPredictor(nn.Module):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_stacked={
             ".q_proj": (".qkv_proj", "q"),
             ".k_proj": (".qkv_proj", "k"),
@@ -41,11 +41,11 @@ class ExaoneMoeMultiTokenPredictor(nn.Module):
         }
     )
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
 
-        model_config = aphrodite_config.model_config
-        quant_config = aphrodite_config.quant_config
+        model_config = sonar_config.model_config
+        quant_config = sonar_config.quant_config
         config = model_config.hf_config
 
         self.config = config
@@ -71,7 +71,7 @@ class ExaoneMoeMultiTokenPredictor(nn.Module):
         )
         self.layers = nn.ModuleList(
             ExaoneMoeDecoderLayer(
-                aphrodite_config.model_config.hf_config,
+                sonar_config.model_config.hf_config,
                 quant_config=quant_config,
                 prefix=f"{prefix}.layers.{idx}",
                 is_mtp=True,
@@ -124,19 +124,19 @@ class ExaoneMoeMultiTokenPredictor(nn.Module):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
 
 @support_torch_compile
 class ExaoneMoeMTP(nn.Module):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
-        config = aphrodite_config.model_config.hf_config
-        self.aphrodite_config = aphrodite_config
-        self.quant_config = aphrodite_config.quant_config
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
+        config = sonar_config.model_config.hf_config
+        self.sonar_config = sonar_config
+        self.quant_config = sonar_config.quant_config
 
         super().__init__()
         self.config = config
-        self.model = ExaoneMoeMultiTokenPredictor(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "mtp"))
+        self.model = ExaoneMoeMultiTokenPredictor(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "mtp"))
         self.unpadded_vocab_size = config.vocab_size
         self.lm_head = ParallelLMHead(
             self.unpadded_vocab_size,

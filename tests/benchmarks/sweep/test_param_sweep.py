@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from aphrodite.benchmarks.sweep import serve as sweep_serve
-from aphrodite.benchmarks.sweep.param_sweep import ParameterSweep, ParameterSweepItem
+from sonar.benchmarks.sweep import serve as sweep_serve
+from sonar.benchmarks.sweep.param_sweep import ParameterSweep, ParameterSweepItem
 
 
 class TestParameterSweepItem:
@@ -29,7 +29,7 @@ class TestParameterSweepItem:
     def test_nested_boolean_params(self, input_dict, expected):
         """Test that nested boolean params use =true/false syntax."""
         item = ParameterSweepItem.from_record(input_dict)
-        cmd = item.apply_to_cmd(["aphrodite", "serve", "model"])
+        cmd = item.apply_to_cmd(["sonar", "serve", "model"])
         assert expected in cmd
 
     @pytest.mark.parametrize(
@@ -44,7 +44,7 @@ class TestParameterSweepItem:
     def test_non_nested_boolean_params(self, input_dict, expected):
         """Test that non-nested boolean params use --no- prefix."""
         item = ParameterSweepItem.from_record(input_dict)
-        cmd = item.apply_to_cmd(["aphrodite", "serve", "model"])
+        cmd = item.apply_to_cmd(["sonar", "serve", "model"])
         assert expected in cmd
 
     @pytest.mark.parametrize(
@@ -61,7 +61,7 @@ class TestParameterSweepItem:
     def test_nested_dict_value(self, compilation_config):
         """Test that nested dict values are serialized as JSON."""
         item = ParameterSweepItem.from_record({"compilation_config": compilation_config})
-        cmd = item.apply_to_cmd(["aphrodite", "serve", "model"])
+        cmd = item.apply_to_cmd(["sonar", "serve", "model"])
         assert "--compilation-config" in cmd
         # The dict should be JSON serialized
         idx = cmd.index("--compilation-config")
@@ -78,7 +78,7 @@ class TestParameterSweepItem:
     def test_string_and_numeric_values(self, input_dict, expected_key, expected_value):
         """Test that string and numeric values are handled correctly."""
         item = ParameterSweepItem.from_record(input_dict)
-        cmd = item.apply_to_cmd(["aphrodite", "serve"])
+        cmd = item.apply_to_cmd(["sonar", "serve"])
         assert expected_key in cmd
         assert expected_value in cmd
 
@@ -95,14 +95,14 @@ class TestParameterSweepItem:
 
         if key_idx_offset == 1:
             # Key-value pair
-            cmd = item.apply_to_cmd(["aphrodite", "serve", "--max-tokens", "100", "model"])
+            cmd = item.apply_to_cmd(["sonar", "serve", "--max-tokens", "100", "model"])
             assert expected_key in cmd
             idx = cmd.index(expected_key)
             assert cmd[idx + 1] == "200"
             assert "100" not in cmd
         else:
             # Boolean flag
-            cmd = item.apply_to_cmd(["aphrodite", "serve", "--enable-prefix-caching", "model"])
+            cmd = item.apply_to_cmd(["sonar", "serve", "--enable-prefix-caching", "model"])
             assert expected_key in cmd
             assert "--enable-prefix-caching" not in cmd
 
@@ -231,14 +231,14 @@ class TestParameterSweepItemKeyNormalization:
     def test_underscore_to_hyphen_conversion(self):
         """Test that underscores are converted to hyphens in CLI."""
         item = ParameterSweepItem.from_record({"max_tokens": 100})
-        cmd = item.apply_to_cmd(["aphrodite", "serve"])
+        cmd = item.apply_to_cmd(["sonar", "serve"])
         assert "--max-tokens" in cmd
 
     def test_nested_key_preserves_suffix(self):
         """Test that nested keys preserve the suffix format."""
         # The suffix after the dot should preserve underscores
         item = ParameterSweepItem.from_record({"compilation_config.some_nested_param": "value"})
-        cmd = item.apply_to_cmd(["aphrodite", "serve"])
+        cmd = item.apply_to_cmd(["sonar", "serve"])
         # The prefix (compilation_config) gets converted to hyphens,
         # but the suffix (some_nested_param) is preserved
         assert any("compilation-config.some_nested_param" in arg for arg in cmd)

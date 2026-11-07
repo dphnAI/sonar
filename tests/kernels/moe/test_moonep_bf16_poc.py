@@ -18,13 +18,13 @@ import torch
 import torch.nn.functional as F
 from torch.distributed import ProcessGroup
 
-from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.topk_weight_and_reduce import (
+from sonar.config import SonarConfig, set_current_sonar_config
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.topk_weight_and_reduce import (
     TopKWeightAndReduceNoOP,
 )
-from aphrodite.utils.import_utils import has_moonep
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.utils.import_utils import has_moonep
+from sonar.utils.torch_utils import set_random_seed
 from tests.kernels.moe.utils import make_test_weights
 from tests.kernels.utils import torch_experts
 
@@ -32,7 +32,7 @@ from ...utils import multi_gpu_test
 from .parallel_utils import ProcessGroupInfo, parallel_launch
 
 if has_moonep():
-    from aphrodite.model_executor.layers.fused_moe.prepare_finalize.moonep import (
+    from sonar.model_executor.layers.fused_moe.prepare_finalize.moonep import (
         MoonEPExpertWeightLayout,
         MoonEPPrepareAndFinalize,
         make_moonep_weight_layout,
@@ -126,7 +126,7 @@ def make_moonep_prepare_finalize(
 ):
     from moonep._C import nvl_multicast_supported
 
-    from aphrodite.model_executor.layers.fused_moe.prepare_finalize.moonep import (
+    from sonar.model_executor.layers.fused_moe.prepare_finalize.moonep import (
         MoonEPBufferPool,
     )
 
@@ -211,7 +211,7 @@ def moonep_moe_impl(
 
 
 def _no_quant_config():
-    from aphrodite.model_executor.layers.fused_moe.config import FusedMoEQuantConfig
+    from sonar.model_executor.layers.fused_moe.config import FusedMoEQuantConfig
 
     return FusedMoEQuantConfig.make(quant_dtype=None)
 
@@ -225,10 +225,10 @@ def moonep_modular_kernel_impl(
     num_prefetch_slots: int,
 ) -> torch.Tensor:
     """Full modular-kernel path: MoonEPPrepareAndFinalize + MoonEPExperts."""
-    from aphrodite.model_executor.layers.fused_moe.experts.moonep_experts import (
+    from sonar.model_executor.layers.fused_moe.experts.moonep_experts import (
         MoonEPExperts,
     )
-    from aphrodite.model_executor.layers.fused_moe.modular_kernel import FusedMoEKernel
+    from sonar.model_executor.layers.fused_moe.modular_kernel import FusedMoEKernel
     from tests.kernels.moe.utils import make_dummy_moe_config
 
     config = test_tensors.config
@@ -287,7 +287,7 @@ def _moonep_moe(
     num_prefetch_slots: int,
     use_modular_kernel: bool,
 ):
-    from aphrodite.v1.worker.workspace import init_workspace_manager
+    from sonar.v1.worker.workspace import init_workspace_manager
 
     device_idx = torch.accelerator.current_device_index()
     init_workspace_manager(torch.device("cuda", device_idx))
@@ -298,7 +298,7 @@ def _moonep_moe(
     set_random_seed(7 + pgi.rank)
     test_tensors = TestTensors.make(config)
 
-    with set_current_aphrodite_config(AphroditeConfig()):
+    with set_current_sonar_config(SonarConfig()):
         torch_combined = torch_experts(
             test_tensors.rank_tokens,
             w1,

@@ -11,13 +11,13 @@ from typing import Any, Literal
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_random_seed
 from tests.kernels.attention.test_triton_unified_attention import ref_paged_attn
 
 _SKIP_NON_CDNA_2_PLUS = True
 if current_platform.is_rocm():
-    from aphrodite.platforms.rocm import get_cdna_version
+    from sonar.platforms.rocm import get_cdna_version
 
     _SKIP_NON_CDNA_2_PLUS = get_cdna_version() < 2
 
@@ -79,7 +79,7 @@ FP8_SEQ_LENS = [
 
 
 def _require_aiter() -> None:
-    from aphrodite._aiter_ops import is_aiter_found_and_supported
+    from sonar._aiter_ops import is_aiter_found_and_supported
 
     if not is_aiter_found_and_supported():
         pytest.skip("aiter is required on supported ROCm hardware for this test")
@@ -186,7 +186,7 @@ def _run_aiter_unified_attention(case: dict[str, Any]) -> torch.Tensor:
     from aiter.ops.triton.unified_attention import unified_attention
 
     kernel_query = case["kernel_query"]
-    # Kernel writes high-precision output even when Q is FP8 (matches Aphrodite usage).
+    # Kernel writes high-precision output even when Q is FP8 (matches Sonar usage).
     output = torch.empty_like(case["query"])
     unified_attention(
         q=kernel_query,

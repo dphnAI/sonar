@@ -12,24 +12,24 @@ is applied on activations via `moe_kernel_quantize_input`.
 
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.config import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEQuantConfig,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.triton_moe import TritonExperts
-from aphrodite.model_executor.layers.quantization.utils.mxfp4_utils import dequant_mxfp4
-from aphrodite.model_executor.layers.quantization.utils.mxfp6_utils import dequant_mxfp6
-from aphrodite.model_executor.layers.quantization.utils.ocp_mx_utils import (
+from sonar.model_executor.layers.fused_moe.experts.triton_moe import TritonExperts
+from sonar.model_executor.layers.quantization.utils.mxfp4_utils import dequant_mxfp4
+from sonar.model_executor.layers.quantization.utils.mxfp6_utils import dequant_mxfp6
+from sonar.model_executor.layers.quantization.utils.ocp_mx_utils import (
     OCP_MX_Scheme,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.import_utils import has_quark
+from sonar.platforms import current_platform
+from sonar.utils.import_utils import has_quark
 
 logger = init_logger(__name__)
 

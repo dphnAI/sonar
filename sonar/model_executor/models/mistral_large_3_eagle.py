@@ -10,18 +10,18 @@ import regex
 import torch
 import torch.nn as nn
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed.parallel_state import get_pp_group
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import RowParallelLinear
-from aphrodite.model_executor.layers.vocab_parallel_embedding import VocabParallelEmbedding
-from aphrodite.model_executor.models.deepseek_v2 import (
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import SonarConfig
+from sonar.distributed.parallel_state import get_pp_group
+from sonar.logger import init_logger
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import RowParallelLinear
+from sonar.model_executor.layers.vocab_parallel_embedding import VocabParallelEmbedding
+from sonar.model_executor.models.deepseek_v2 import (
     DeepseekV2DecoderLayer,
     DeepseekV2Model,
 )
-from aphrodite.model_executor.models.mistral_large_3 import MistralLarge3ForCausalLM
+from sonar.model_executor.models.mistral_large_3 import MistralLarge3ForCausalLM
 
 from .interfaces import (
     MultiModalEmbeddings,
@@ -49,15 +49,15 @@ else:
 
 @support_torch_compile
 class EagleMistralLarge3Model(DeepseekV2Model):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "", start_layer_id: int = 0):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "", start_layer_id: int = 0):
         nn.Module.__init__(self)
 
-        config = copy.deepcopy(aphrodite_config.model_config.hf_config)
+        config = copy.deepcopy(sonar_config.model_config.hf_config)
         config.first_k_dense_replace += start_layer_id
 
-        quant_config = aphrodite_config.quant_config
+        quant_config = sonar_config.quant_config
         self.config = config
-        self.aphrodite_config = aphrodite_config
+        self.sonar_config = sonar_config
 
         self.vocab_size = config.vocab_size
 
@@ -72,7 +72,7 @@ class EagleMistralLarge3Model(DeepseekV2Model):
         self.layers = nn.ModuleList(
             [
                 DeepseekV2DecoderLayer(
-                    aphrodite_config=aphrodite_config,
+                    sonar_config=sonar_config,
                     prefix=maybe_prefix(prefix, f"layers.{i + start_layer_id}"),
                     config=config,
                 )
@@ -98,7 +98,7 @@ class EagleMistralLarge3Model(DeepseekV2Model):
         qk_nope_head_dim = getattr(config, "qk_nope_head_dim", 0)
         qk_rope_head_dim = getattr(config, "qk_rope_head_dim", 0)
         self.use_mha = config.model_type == "deepseek" or all(dim == 0 for dim in (qk_nope_head_dim, qk_rope_head_dim))
-        self.num_redundant_experts = aphrodite_config.parallel_config.eplb_config.num_redundant_experts
+        self.num_redundant_experts = sonar_config.parallel_config.eplb_config.num_redundant_experts
         self.make_empty_intermediate_tensors = make_empty_intermediate_tensors_factory(
             ["hidden_states", "residual"], config.hidden_size
         )
@@ -119,7 +119,7 @@ class EagleMistralLarge3Model(DeepseekV2Model):
 
 
 class EagleMistralLarge3ForCausalLM(_EagleMistralLarge3ForCausalLMBase, SupportsMultiModalEmbeddings):
-    hf_to_aphrodite_mapper = MistralLarge3ForCausalLM.hf_to_aphrodite_mapper | WeightsMapper(
+    hf_to_sonar_mapper = MistralLarge3ForCausalLM.hf_to_sonar_mapper | WeightsMapper(
         orig_to_new_regex={
             regex.compile(r"\Aeagle_linear\.weight\Z"): r"model.fc.weight",
             regex.compile(r"\Aeagle_linear\.qscale_act\Z"): r"model.fc.input_scale",
@@ -127,18 +127,18 @@ class EagleMistralLarge3ForCausalLM(_EagleMistralLarge3ForCausalLMBase, Supports
         },
     )
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
-        speculative_config = aphrodite_config.speculative_config
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
+        speculative_config = sonar_config.speculative_config
         assert speculative_config is not None
-        target_layer_num = aphrodite_config.model_config.get_num_layers(aphrodite_config.parallel_config)
-        aphrodite_config.model_config = speculative_config.draft_model_config
+        target_layer_num = sonar_config.model_config.get_num_layers(sonar_config.parallel_config)
+        sonar_config.model_config = speculative_config.draft_model_config
         # draft model quantization config may differ from target model
-        self.quant_config = AphroditeConfig.get_quantization_config(
-            speculative_config.draft_model_config, aphrodite_config.load_config
+        self.quant_config = SonarConfig.get_quantization_config(
+            speculative_config.draft_model_config, sonar_config.load_config
         )
-        aphrodite_config.quant_config = self.quant_config
+        sonar_config.quant_config = self.quant_config
         self.model_cls = partial(EagleMistralLarge3Model, start_layer_id=target_layer_num)
-        super().__init__(aphrodite_config=aphrodite_config, prefix=prefix)
+        super().__init__(sonar_config=sonar_config, prefix=prefix)
 
     def get_language_model(self) -> torch.nn.Module:
         return self.model

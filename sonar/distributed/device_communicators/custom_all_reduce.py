@@ -8,15 +8,15 @@ import torch
 import torch.distributed as dist
 from torch.distributed import ProcessGroup
 
-import aphrodite.envs as envs
-from aphrodite import _custom_ops as ops
-from aphrodite.distributed.device_communicators.all_reduce_utils import (
+import sonar.envs as envs
+from sonar import _custom_ops as ops
+from sonar.distributed.device_communicators.all_reduce_utils import (
     CUSTOM_ALL_REDUCE_MAX_SIZES,
     gpu_p2p_access_check,
 )
-from aphrodite.distributed.parallel_state import in_the_same_node_as
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
+from sonar.distributed.parallel_state import in_the_same_node_as
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
 
 try:
     ops.meta_size()
@@ -87,7 +87,7 @@ def _can_p2p(rank: int, world_size: int) -> bool:
     for i in range(world_size):
         if i == rank:
             continue
-        if envs.APHRODITE_SKIP_P2P_CHECK:
+        if envs.SONAR_SKIP_P2P_CHECK:
             logger.debug("Skipping P2P check and trusting the driver's P2P report.")
             # can_device_access_peer takes visible device ordinals, while
             # rank and i are logical local IDs.
@@ -109,7 +109,7 @@ def _supports_mnnvl_multimem_reduce_scatter(device: torch.device, world_size: in
     )
 
 
-from aphrodite.distributed.utils import is_weak_contiguous  # noqa: E402
+from sonar.distributed.utils import is_weak_contiguous  # noqa: E402
 
 
 class CustomAllreduce:
@@ -177,7 +177,7 @@ class CustomAllreduce:
         self.mnnvl_multimem_rs_local_ptr = 0
         self.mnnvl_multimem_rs_multicast_ptr = 0
         self.mnnvl_only = False
-        self.batch_invariant = envs.APHRODITE_BATCH_INVARIANT
+        self.batch_invariant = envs.SONAR_BATCH_INVARIANT
 
         if not custom_ar:
             # disable because of missing custom allreduce library
@@ -589,7 +589,7 @@ class CustomAllreduce:
                     self.mnnvl_multimem_rs_multicast_ptr
                     or (self.mnnvl_multimem_rs_supported and not self.mnnvl_multimem_rs_initialized)
                 )
-                and not envs.APHRODITE_BATCH_INVARIANT
+                and not envs.SONAR_BATCH_INVARIANT
                 and inp_size <= self.max_mnnvl_multimem_reduce_scatter_size
             ):
                 return "mnnvl_multimem"

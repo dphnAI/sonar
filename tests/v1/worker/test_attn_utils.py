@@ -16,14 +16,14 @@ import numpy as np
 import pytest
 import torch
 
-import aphrodite.v1.hisparse.binding as attn_utils_module
-import aphrodite.v1.hisparse.runtime as hisparse_runtime_module
-from aphrodite.config.compilation import CompilationConfig, CUDAGraphMode
-from aphrodite.v1.attention.backend import AttentionBackend, AttentionCGSupport, MultipleOf
-from aphrodite.v1.core.kv_cache_utils import KVCacheBlockCopy
-from aphrodite.v1.hisparse.backend import CUDAHiSparseBackend
-from aphrodite.v1.hisparse.binding import allocate_hisparse_kv_caches
-from aphrodite.v1.kv_cache_interface import (
+import sonar.v1.hisparse.binding as attn_utils_module
+import sonar.v1.hisparse.runtime as hisparse_runtime_module
+from sonar.config.compilation import CompilationConfig, CUDAGraphMode
+from sonar.v1.attention.backend import AttentionBackend, AttentionCGSupport, MultipleOf
+from sonar.v1.core.kv_cache_utils import KVCacheBlockCopy
+from sonar.v1.hisparse.backend import CUDAHiSparseBackend
+from sonar.v1.hisparse.binding import allocate_hisparse_kv_caches
+from sonar.v1.kv_cache_interface import (
     FullAttentionSpec,
     HiSparseResidentSpec,
     KVCacheConfig,
@@ -34,14 +34,14 @@ from aphrodite.v1.kv_cache_interface import (
     SparseCacheRole,
     compute_layout_strides,
 )
-from aphrodite.v1.worker.gpu import attn_utils
-from aphrodite.v1.worker.gpu.attn_utils import (
+from sonar.v1.worker.gpu import attn_utils
+from sonar.v1.worker.gpu.attn_utils import (
     FastPrefillHelper,
     get_attn_cg_support,
     get_query_lens_mismatch_unsupported_backend,
 )
-from aphrodite.v1.worker.gpu.cudagraph_utils import BatchExecutionDescriptor
-from aphrodite.v1.worker.utils import (
+from sonar.v1.worker.gpu.cudagraph_utils import BatchExecutionDescriptor
+from sonar.v1.worker.utils import (
     AttentionGroup,
     allocate_kv_cache,
     copy_kv_cache_blocks_inplace,
@@ -92,7 +92,7 @@ def test_get_kv_cache_spec_resolves_hisparse_block_size(
             get_attn_backend=lambda backend=backend: backend,
             is_draft_layer=False,
         )
-    monkeypatch.setattr(attn_utils, "get_layers_from_aphrodite_config", lambda *_: layers)
+    monkeypatch.setattr(attn_utils, "get_layers_from_sonar_config", lambda *_: layers)
     monkeypatch.setattr(attn_utils_module, "get_hisparse_kv_cache_groups", lambda *_: [])
     config = SimpleNamespace(attention_config=SimpleNamespace(hisparse_config=object() if enabled else None))
     if expected is None:
@@ -121,7 +121,7 @@ def test_get_kv_cache_spec_tags_draft_layers(monkeypatch):
         )
         for name in ("target", "draft")
     }
-    monkeypatch.setattr(attn_utils, "get_layers_from_aphrodite_config", lambda *_: layers)
+    monkeypatch.setattr(attn_utils, "get_layers_from_sonar_config", lambda *_: layers)
     config = SimpleNamespace(attention_config=SimpleNamespace(hisparse_config=None))
 
     specs = attn_utils.get_kv_cache_spec(config)
@@ -255,7 +255,7 @@ def test_flashinfer_sparse_full_graphs_exclude_prefill_keep_varlen_decode(
     num_speculative_tokens,
 ):
     """Prefill must fall back without disabling adaptive verification graphs."""
-    from aphrodite.v1.attention.backends.mla.flashinfer_mla_sparse import (
+    from sonar.v1.attention.backends.mla.flashinfer_mla_sparse import (
         FlashInferMLASparseTRTLLMBackend,
     )
 
@@ -290,20 +290,20 @@ def test_flashinfer_sparse_full_graphs_exclude_prefill_keep_varlen_decode(
 @pytest.mark.parametrize(
     ("module_name", "backend_name"),
     [
-        ("aphrodite.models.deepseek_v41.sparse_mla", "DeepseekV4FlashMLABackend"),
+        ("sonar.models.deepseek_v41.sparse_mla", "DeepseekV4FlashMLABackend"),
         (
-            "aphrodite.models.deepseek_v41.nvidia.flashinfer_sparse",
+            "sonar.models.deepseek_v41.nvidia.flashinfer_sparse",
             "DeepseekV4FlashInferMLASparseBackend",
         ),
         (
-            "aphrodite.models.deepseek_v41.nvidia.flashinfer_sparse",
+            "sonar.models.deepseek_v41.nvidia.flashinfer_sparse",
             "DeepseekSparseSWAFlashInferBackend",
         ),
         (
-            "aphrodite.models.deepseek_v41.nvidia.flashmla",
+            "sonar.models.deepseek_v41.nvidia.flashmla",
             "DeepseekSparseSWAFlashMLABackend",
         ),
-        ("aphrodite.models.deepseek_v41.compressor", "CompressorBackend"),
+        ("sonar.models.deepseek_v41.compressor", "CompressorBackend"),
     ],
     ids=["flashmla", "flashinfer_mla", "swa_flashinfer", "swa_flashmla", "compressor"],
 )
@@ -354,12 +354,12 @@ def test_get_kv_sharing_fast_prefill_eligible_layers(monkeypatch: pytest.MonkeyP
     ) -> set[str]:
         monkeypatch.setattr(
             attn_utils,
-            "get_layers_from_aphrodite_config",
+            "get_layers_from_sonar_config",
             lambda *a, **k: {name: None for name in layer_names},
         )
         monkeypatch.setattr(attn_utils, "get_shared_kv_cache_layers", lambda *a: shared)
-        aphrodite_config = SimpleNamespace(cache_config=SimpleNamespace(kv_sharing_fast_prefill=True))
-        return attn_utils.get_kv_sharing_fast_prefill_eligible_layers(aphrodite_config, draft_layer_names)
+        sonar_config = SimpleNamespace(cache_config=SimpleNamespace(kv_sharing_fast_prefill=True))
+        return attn_utils.get_kv_sharing_fast_prefill_eligible_layers(sonar_config, draft_layer_names)
 
     # No KV sharing: nothing is eligible.
     assert check(["t0", "t1"], {}) == set()
@@ -385,10 +385,10 @@ def test_get_kv_sharing_fast_prefill_eligible_layers(monkeypatch: pytest.MonkeyP
     ) == {"t2", "t3"}
 
     # Feature flag off: nothing is eligible even with sharing layers.
-    monkeypatch.setattr(attn_utils, "get_layers_from_aphrodite_config", lambda *a, **k: {"t0": None})
+    monkeypatch.setattr(attn_utils, "get_layers_from_sonar_config", lambda *a, **k: {"t0": None})
     monkeypatch.setattr(attn_utils, "get_shared_kv_cache_layers", lambda *a: {"t0": "t0"})
-    aphrodite_config = SimpleNamespace(cache_config=SimpleNamespace(kv_sharing_fast_prefill=False))
-    assert attn_utils.get_kv_sharing_fast_prefill_eligible_layers(aphrodite_config) == set()
+    sonar_config = SimpleNamespace(cache_config=SimpleNamespace(kv_sharing_fast_prefill=False))
+    assert attn_utils.get_kv_sharing_fast_prefill_eligible_layers(sonar_config) == set()
 
 
 @pytest.mark.parametrize("num_tokens", [1, 2, 3, 4, 7, 8, 15, 16, 31, 32, 63, 64, 127, 128])
@@ -459,9 +459,9 @@ def test_profiling_cleanup_keeps_host_pool_for_real_kv_cache(monkeypatch):
     allocate_pinned = MagicMock(return_value=(pinned, pinned))
     monkeypatch.setattr(hisparse_runtime_module, "allocate_pinned_host_pool", allocate_pinned)
     monkeypatch.setattr(hisparse_runtime_module, "check_hisparse_host_memory", lambda size: None)
-    aphrodite_config = SimpleNamespace(instance_id="profiling-reuse")
+    sonar_config = SimpleNamespace(instance_id="profiling-reuse")
     kv_cache_config = SimpleNamespace(hisparse_shared_host_pool=False)
-    pool = attn_utils_module.get_hisparse_host_pool(aphrodite_config, kv_cache_config)
+    pool = attn_utils_module.get_hisparse_host_pool(sonar_config, kv_cache_config)
     backing = pool.allocate(8)
     runtime = SimpleNamespace(
         _host_cache=backing,
@@ -475,11 +475,11 @@ def test_profiling_cleanup_keeps_host_pool_for_real_kv_cache(monkeypatch):
 
     assert not hasattr(runtime, "_host_cache")
     assert runtime.host_pool is None
-    reused = attn_utils_module.get_hisparse_host_pool(aphrodite_config, kv_cache_config)
+    reused = attn_utils_module.get_hisparse_host_pool(sonar_config, kv_cache_config)
     assert reused is pool
     assert reused.allocate(8) is backing
     allocate_pinned.assert_called_once_with(8)
-    hisparse_runtime_module.drop_hisparse_host_pool(aphrodite_config)
+    hisparse_runtime_module.drop_hisparse_host_pool(sonar_config)
 
 
 @pytest.mark.parametrize("failure_phase", ["allocation", "views", "binding", "buffers"])
@@ -501,7 +501,7 @@ def test_init_hisparse_rolls_back_host_pool(monkeypatch, failure_phase, shared):
     cudart.cudaHostUnregister.return_value.value = 0
     monkeypatch.setattr(torch.accelerator, "synchronize", lambda: None)
     monkeypatch.setattr(torch.cuda, "cudart", lambda: cudart)
-    aphrodite_config = SimpleNamespace(
+    sonar_config = SimpleNamespace(
         cache_config=SimpleNamespace(get_resolved_kv_cache_layout=lambda: KVCacheLayout.BLHNC),
         scheduler_config=SimpleNamespace(max_num_seqs=1),
         instance_id="rollback",
@@ -536,14 +536,14 @@ def test_init_hisparse_rolls_back_host_pool(monkeypatch, failure_phase, shared):
             SimpleNamespace(),
             torch.device("cpu"),
             [],
-            aphrodite_config,
+            sonar_config,
             {},
             SimpleNamespace(),
         )
     assert region.cleanup_calls == int(shared)
     cudart.cudaHostUnregister.assert_called_once_with(registered.data_ptr())
-    assert attn_utils_module.get_hisparse_host_pool(aphrodite_config, None) is not pools[0]
-    hisparse_runtime_module.drop_hisparse_host_pool(aphrodite_config)
+    assert attn_utils_module.get_hisparse_host_pool(sonar_config, None) is not pools[0]
+    hisparse_runtime_module.drop_hisparse_host_pool(sonar_config)
 
 
 def test_reshape_padded_kv_cache_strides_by_padded_page():
@@ -809,14 +809,14 @@ class _TableBuilder:
     requires_block_table_width = False
     supports_update_block_table = False
 
-    def __init__(self, kv_cache_spec, layer_names, aphrodite_config, device):
+    def __init__(self, kv_cache_spec, layer_names, sonar_config, device):
         self.kv_cache_spec = kv_cache_spec
 
     def build(self, common_prefix_len, common_attn_metadata, fast_build=False):
         return common_attn_metadata.block_table_tensor
 
 
-_APHRODITE_CONFIG = SimpleNamespace(
+_SONAR_CONFIG = SimpleNamespace(
     model_config=SimpleNamespace(max_model_len=8192),
     scheduler_config=SimpleNamespace(max_num_seqs=4),
     parallel_config=SimpleNamespace(decode_context_parallel_size=1),
@@ -846,7 +846,7 @@ def test_packed_compressed_group_gets_kernel_block_table():
     a bound view in kernel blocks that address the same packed-block rows."""
     row, stride_rows = 132, 5 * 64
     group = _packed_group(4, row, [128, 256])
-    group.create_metadata_builders(_APHRODITE_CONFIG, "cpu", kernel_block_size=1024)
+    group.create_metadata_builders(_SONAR_CONFIG, "cpu", kernel_block_size=1024)
     assert group.get_metadata_builder().kv_cache_spec.block_size == 256
 
     backing = torch.arange(3 * stride_rows).repeat_interleave(row)
@@ -863,7 +863,7 @@ def test_split_group_maps_manager_block_table():
     """Groups split in a dense layout keep manager block tables; builders get
     b * blocks_per_kv_block + j against the view allocated in kernel blocks."""
     group = _packed_group(4, 132, [128, 256])
-    group.create_metadata_builders(_APHRODITE_CONFIG, "cpu", kernel_block_size=256)
+    group.create_metadata_builders(_SONAR_CONFIG, "cpu", kernel_block_size=256)
     kernel_view = torch.zeros(12, 1, 64, 132)
     bound = map_kv_caches_to_kernel_blocks({"layer.0": kernel_view}, [group])
     assert bound["layer.0"] is kernel_view
@@ -886,7 +886,7 @@ def test_split_blocks_align_to_kernel_blocks(block_size, page_states):
 
 def test_packed_token_cache_cannot_be_split():
     group = _packed_group(1, 1152, [64])
-    group.create_metadata_builders(_APHRODITE_CONFIG, "cpu", kernel_block_size=1024)
+    group.create_metadata_builders(_SONAR_CONFIG, "cpu", kernel_block_size=1024)
     packed = torch.zeros(3, 1, 2048, 1152, dtype=torch.uint8)[:, :, :1024]
     with pytest.raises(ValueError, match="cannot be split"):
         map_kv_caches_to_kernel_blocks({"layer.0": packed}, [group])

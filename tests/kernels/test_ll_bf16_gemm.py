@@ -13,7 +13,7 @@ pytestmark = pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA requ
 def _require_sm90_and_cutedsl():
     if torch.cuda.get_device_capability()[0] < 9:
         pytest.skip("Requires SM90+ (Hopper/Blackwell)")
-    from aphrodite.model_executor.kernels.linear.cute_dsl.ll_bf16 import (
+    from sonar.model_executor.kernels.linear.cute_dsl.ll_bf16 import (
         is_available,
     )
 
@@ -53,7 +53,7 @@ def _can_precompile(a, b):
 
 
 def _gemm(a, b):
-    from aphrodite.model_executor.kernels.linear.cute_dsl.ll_bf16 import (
+    from sonar.model_executor.kernels.linear.cute_dsl.ll_bf16 import (
         ll_bf16_gemm,
         ll_bf16_gemm_kernel,
     )
@@ -65,7 +65,7 @@ def _gemm(a, b):
 
 
 def test_c1_pdl_kernel_is_selected_automatically(monkeypatch):
-    from aphrodite.model_executor.kernels.linear.cute_dsl import ll_bf16
+    from sonar.model_executor.kernels.linear.cute_dsl import ll_bf16
 
     calls = []
 
@@ -374,26 +374,26 @@ def test_cudagraph_input_update():
 
 def _make_gate_linear(monkeypatch, *, params_dtype, out_dtype=torch.float32):
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.linear.get_tensor_model_parallel_rank",
+        "sonar.model_executor.layers.linear.get_tensor_model_parallel_rank",
         lambda: 0,
     )
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.linear.get_tensor_model_parallel_world_size",
+        "sonar.model_executor.layers.linear.get_tensor_model_parallel_world_size",
         lambda: 1,
     )
     monkeypatch.setattr(
-        "aphrodite.model_executor.parameter.get_tensor_model_parallel_rank",
+        "sonar.model_executor.parameter.get_tensor_model_parallel_rank",
         lambda: 0,
     )
     monkeypatch.setattr(
-        "aphrodite.model_executor.parameter.get_tensor_model_parallel_world_size",
+        "sonar.model_executor.parameter.get_tensor_model_parallel_world_size",
         lambda: 1,
     )
 
-    from aphrodite.model_executor.layers.fused_moe.router.gate_linear import GateLinear
+    from sonar.model_executor.layers.fused_moe.router.gate_linear import GateLinear
 
     monkeypatch.setattr(
-        "aphrodite.model_executor.kernels.linear.cute_dsl.ll_bf16.is_available",
+        "sonar.model_executor.kernels.linear.cute_dsl.ll_bf16.is_available",
         lambda: True,
     )
     return GateLinear(
@@ -420,7 +420,7 @@ def test_gate_linear_uses_ll_bf16_for_bf16_fast_path(monkeypatch):
         )
 
     monkeypatch.setattr(
-        "aphrodite.model_executor.kernels.linear.cute_dsl.ll_bf16.ll_bf16_gemm",
+        "sonar.model_executor.kernels.linear.cute_dsl.ll_bf16.ll_bf16_gemm",
         fake_ll_bf16_gemm,
     )
     out, bias = gate(x)
@@ -441,7 +441,7 @@ def test_gate_linear_fp32_weight_falls_back(monkeypatch):
         raise AssertionError("ll_bf16_gemm should not run for fp32 weights")
 
     monkeypatch.setattr(
-        "aphrodite.model_executor.kernels.linear.cute_dsl.ll_bf16.ll_bf16_gemm",
+        "sonar.model_executor.kernels.linear.cute_dsl.ll_bf16.ll_bf16_gemm",
         fail_ll_bf16_gemm,
     )
     out, _ = gate(x)
@@ -457,7 +457,7 @@ def test_gate_linear_non_bf16_activation_falls_back(monkeypatch):
         raise AssertionError("ll_bf16_gemm should not run for non-bf16 activations")
 
     monkeypatch.setattr(
-        "aphrodite.model_executor.kernels.linear.cute_dsl.ll_bf16.ll_bf16_gemm",
+        "sonar.model_executor.kernels.linear.cute_dsl.ll_bf16.ll_bf16_gemm",
         fail_ll_bf16_gemm,
     )
     out, _ = gate(x)
@@ -486,7 +486,7 @@ def test_gate_linear_m_gt_16_falls_back(monkeypatch):
         raise AssertionError("ll_bf16_gemm should not run for M > 16")
 
     monkeypatch.setattr(
-        "aphrodite.model_executor.kernels.linear.cute_dsl.ll_bf16.ll_bf16_gemm",
+        "sonar.model_executor.kernels.linear.cute_dsl.ll_bf16.ll_bf16_gemm",
         fail_ll_bf16_gemm,
     )
     out, _ = gate(x)
@@ -555,13 +555,13 @@ def test_invalid_output_dtype():
     a = torch.randn(4, 2048, dtype=torch.bfloat16, device="cuda")
     b = torch.randn(64, 2048, dtype=torch.bfloat16, device="cuda")
     with pytest.raises(ValueError, match="output_dtype=torch.float32"):
-        from aphrodite.model_executor.kernels.linear.cute_dsl.ll_bf16 import ll_bf16_gemm
+        from sonar.model_executor.kernels.linear.cute_dsl.ll_bf16 import ll_bf16_gemm
 
         ll_bf16_gemm(a, b, output_dtype=torch.float16)
 
 
 def test_cache_miss_compiles_dotprod():
-    from aphrodite.model_executor.kernels.linear.cute_dsl.ll_bf16 import LLBf16Gemm
+    from sonar.model_executor.kernels.linear.cute_dsl.ll_bf16 import LLBf16Gemm
 
     torch.manual_seed(42)
     a = torch.randn(3, 64, dtype=torch.bfloat16, device="cuda")
@@ -577,7 +577,7 @@ def test_cache_miss_compiles_dotprod():
 @torch.inference_mode()
 def test_bf16_output_and_fp32_cache_coexist(M, N):
     """BF16 epilogues retain FP32 accumulation and can replay with new inputs."""
-    from aphrodite.model_executor.kernels.linear.cute_dsl.ll_bf16 import ll_bf16_gemm
+    from sonar.model_executor.kernels.linear.cute_dsl.ll_bf16 import ll_bf16_gemm
 
     torch.manual_seed(42)
     x = torch.randn(M, 5120, device="cuda", dtype=torch.bfloat16)

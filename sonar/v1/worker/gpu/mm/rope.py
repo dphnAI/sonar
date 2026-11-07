@@ -5,10 +5,10 @@ from typing import cast
 import torch
 import torch.nn as nn
 
-from aphrodite.config import ModelConfig
-from aphrodite.model_executor.models.interfaces import SupportsMRoPE
-from aphrodite.triton_utils import tl, triton
-from aphrodite.v1.worker.gpu.buffer_utils import StagedWriteTensor, UvaBackedTensor
+from sonar.config import ModelConfig
+from sonar.model_executor.models.interfaces import SupportsMRoPE
+from sonar.triton_utils import tl, triton
+from sonar.v1.worker.gpu.buffer_utils import StagedWriteTensor, UvaBackedTensor
 
 
 class RopeState:

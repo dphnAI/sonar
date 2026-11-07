@@ -15,8 +15,8 @@ The fix: use `get_ip()` (local node IP) instead of `master_addr`.
 import pytest
 import zmq
 
-from aphrodite.distributed.device_communicators.shm_broadcast import MessageQueue
-from aphrodite.utils.network_utils import get_ip
+from sonar.distributed.device_communicators.shm_broadcast import MessageQueue
+from sonar.utils.network_utils import get_ip
 
 
 def test_mq_bind_with_local_ip():

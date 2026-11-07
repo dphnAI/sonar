@@ -33,35 +33,35 @@ import pytest
 import torch
 from transformers import PreTrainedConfig
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 if not current_platform.is_rocm():
     pytest.skip("MiniMax-M3 AMD fused ops require ROCm.", allow_module_level=True)
 if not torch.cuda.is_available():
     pytest.skip("Requires a GPU.", allow_module_level=True)
 
-from aphrodite.model_executor.layers.quantization.utils.mxfp8_utils import (  # noqa: E402
+from sonar.model_executor.layers.quantization.utils.mxfp8_utils import (  # noqa: E402
     _mxfp8_e4m3_quantize_torch,
     _mxfp8_e4m3_quantize_triton,
     dequant_mxfp8_to_bf16,
     mxfp8_e4m3_quantize,
 )
-from aphrodite.models.minimax_m3.amd.model import (  # noqa: E402
+from sonar.models.minimax_m3.amd.model import (  # noqa: E402
     MiniMAXGemmaRMSNorm,
     MiniMaxM3SparseAttention,
     _build_rotary_emb,
     _can_fuse_input_norm_mxfp8,
     _kv_insert_operand,
 )
-from aphrodite.models.minimax_m3.amd.ops import (  # noqa: E402
+from sonar.models.minimax_m3.amd.ops import (  # noqa: E402
     gemma_fused_add_rmsnorm,
     gemma_fused_add_rmsnorm_mxfp8,
     gemma_rmsnorm,
     swiglu_oai_quantize_mxfp8,
     swiglu_oai_split,
 )
-from aphrodite.models.minimax_m3.amd.ops.gemma_rmsnorm import _num_warps  # noqa: E402
-from aphrodite.platforms.rocm import on_gfx942  # noqa: E402
+from sonar.models.minimax_m3.amd.ops.gemma_rmsnorm import _num_warps  # noqa: E402
+from sonar.platforms.rocm import on_gfx942  # noqa: E402
 
 DEVICE = "cuda"
 EPS = 1e-6
@@ -285,7 +285,7 @@ def test_mxfp8_quant_triton_matches_torch(shape, dtype):
 @pytest.mark.parametrize("m,n,k", [(64, 256, 128), (37, 512, 256), (1, 6144, 4096)])
 @torch.inference_mode()
 def test_mxfp8_native_linear(m, n, k):
-    from aphrodite.model_executor.kernels.linear.mxfp8.rocm_native import (
+    from sonar.model_executor.kernels.linear.mxfp8.rocm_native import (
         _mxfp8_dot_scaled_linear,
     )
 
@@ -331,7 +331,7 @@ def _ref_moe(x, w13, w2, topk_weights, topk_ids, alpha, beta, limit):
 @pytest.mark.parametrize("T,H,inter,E,top_k", [(8, 256, 512, 8, 2), (1, 512, 256, 16, 4)])
 @torch.inference_mode()
 def test_mxfp8_native_moe(T, H, inter, E, top_k):
-    from aphrodite.model_executor.layers.fused_moe.experts.mxfp8_native_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.mxfp8_native_moe import (
         fused_moe_mxfp8_native,
     )
 
@@ -407,10 +407,10 @@ def test_mxfp8_grouped_gemm_native(T, N, K, E, top_k, weighted):
       * ``weighted=True``  -> g2: ``a_div=1`` (one a-row per expansion), output
         scaled by ``topk_weights``.
     """
-    from aphrodite.model_executor.layers.fused_moe.experts.mxfp8_native_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.mxfp8_native_moe import (
         _grouped_gemm_mxfp8,
     )
-    from aphrodite.model_executor.layers.fused_moe.moe_align_block_size import (
+    from sonar.model_executor.layers.fused_moe.moe_align_block_size import (
         moe_align_block_size,
     )
 
@@ -464,16 +464,16 @@ def test_mxfp8_grouped_gemm_native(T, N, K, E, top_k, weighted):
 @torch.inference_mode()
 def test_mxfp8_linear_emulation_bf16_at_load(shape, act_dtype, dequant_at_load, monkeypatch):
     """EmulationMxfp8LinearKernel load-time BF16 dequant (default) and the
-    ``APHRODITE_MXFP8_EMULATION_DEQUANT_AT_LOAD=0`` per-step fallback must produce the
+    ``SONAR_MXFP8_EMULATION_DEQUANT_AT_LOAD=0`` per-step fallback must produce the
     same result; the dtype-match (BF16/FP16 activations) must also hold."""
-    from aphrodite.model_executor.kernels.linear.mxfp8.emulation import (
+    from sonar.model_executor.kernels.linear.mxfp8.emulation import (
         EmulationMxfp8LinearKernel,
     )
-    from aphrodite.model_executor.kernels.linear.mxfp8.Mxfp8LinearKernel import (
+    from sonar.model_executor.kernels.linear.mxfp8.Mxfp8LinearKernel import (
         Mxfp8LinearLayerConfig,
     )
 
-    monkeypatch.setenv("APHRODITE_MXFP8_EMULATION_DEQUANT_AT_LOAD", "1" if dequant_at_load else "0")
+    monkeypatch.setenv("SONAR_MXFP8_EMULATION_DEQUANT_AT_LOAD", "1" if dequant_at_load else "0")
     N, K = shape
     torch.manual_seed(0)
     w_bf16 = torch.randn(N, K, device=DEVICE, dtype=torch.bfloat16)
@@ -519,8 +519,8 @@ def test_mxfp8_rocm_native_unaligned_k_dequantizes_at_load(shape):
     invalid path, which is what keying the dispatch on the weight dtype alone
     would do.
     """
-    from aphrodite.model_executor.kernels.linear.mxfp8 import rocm_native
-    from aphrodite.model_executor.kernels.linear.mxfp8.Mxfp8LinearKernel import (
+    from sonar.model_executor.kernels.linear.mxfp8 import rocm_native
+    from sonar.model_executor.kernels.linear.mxfp8.Mxfp8LinearKernel import (
         Mxfp8LinearLayerConfig,
     )
 
@@ -570,14 +570,14 @@ def test_mxfp8_rocm_native_unaligned_k_dequantizes_at_load(shape):
 # --------------------------------------------------------------------------- #
 def _quark_mxfp8_linear(n: int, k: int, block32: bool = False):
     """A Quark MXFP8 linear layer (weights loaded, not yet processed)."""
-    from aphrodite.model_executor.layers.quantization.quark.schemes.quark_ocp_mx import (
+    from sonar.model_executor.layers.quantization.quark.schemes.quark_ocp_mx import (
         QuarkOCP_MX,
     )
-    from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+    from sonar.model_executor.layers.quantization.utils.quant_utils import (
         kMxfp8Dynamic,
         kMxfp8Static,
     )
-    from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
+    from sonar.model_executor.model_loader.weight_utils import default_weight_loader
 
     torch.manual_seed(0)
     w_bf16 = torch.randn(n, k, device=DEVICE, dtype=torch.bfloat16) * 0.1
@@ -620,10 +620,10 @@ def test_fused_input_norm_mxfp8_qkv_proj(dist_init, n, k, block32, m):
     assert fused == (k % 128 == 0)
     scheme.process_weights_after_loading(layer)
 
-    from aphrodite.model_executor.layers.fusion.quant_activation import (
+    from sonar.model_executor.layers.fusion.quant_activation import (
         QuantizedActivation,
     )
-    from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+    from sonar.model_executor.layers.quantization.utils.quant_utils import (
         kMxfp8Dynamic,
     )
 
@@ -646,11 +646,11 @@ def test_fused_input_norm_mxfp8_qkv_proj(dist_init, n, k, block32, m):
 
 @requires_gfx950
 def test_fused_input_norm_mxfp8_off_under_batch_invariance(dist_init, monkeypatch):
-    import aphrodite.envs as envs
+    import sonar.envs as envs
 
     layer, _ = _quark_mxfp8_linear(2560, 6144)
     assert _can_fuse_input_norm_mxfp8(layer)
-    monkeypatch.setattr(envs, "APHRODITE_BATCH_INVARIANT", True)
+    monkeypatch.setattr(envs, "SONAR_BATCH_INVARIANT", True)
     assert not _can_fuse_input_norm_mxfp8(layer)
 
 
@@ -658,7 +658,7 @@ def test_fused_input_norm_mxfp8_off_under_batch_invariance(dist_init, monkeypatc
 # The map/mask choice lives in ``RoutedExperts.expert_map``: it hands AITER
 # experts (``consumes_expert_mask``) the precomputed 0/1 ``expert_mask`` and
 # everyone else the canonical -1 index map, keyed on the resolved experts kernel
-# rather than the global APHRODITE_ROCM_USE_AITER switch. ``AiterMxfp8Experts.apply``
+# rather than the global SONAR_ROCM_USE_AITER switch. ``AiterMxfp8Experts.apply``
 # forwards that mask to aiter unchanged (it no longer rebuilds it via
 # ``(expert_map >= 0)``, which collapsed an already-0/1 mask to all-ones and
 # produced EP garbage).
@@ -668,9 +668,9 @@ def _capture_expert_mask(expert_mask, *, global_num_experts):
     from types import SimpleNamespace
     from unittest import mock
 
-    from aphrodite._aiter_ops import rocm_aiter_ops
-    from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-    from aphrodite.model_executor.layers.fused_moe.experts.aiter_mxfp8_moe import (
+    from sonar._aiter_ops import rocm_aiter_ops
+    from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+    from sonar.model_executor.layers.fused_moe.experts.aiter_mxfp8_moe import (
         AiterMxfp8Experts,
     )
 
@@ -731,7 +731,7 @@ def test_routed_experts_expert_map_delegates_to_kernel():
     on the resolved kernel, not the global aiter switch."""
     from types import SimpleNamespace
 
-    from aphrodite.model_executor.layers.fused_moe.routed_experts import RoutedExperts
+    from sonar.model_executor.layers.fused_moe.routed_experts import RoutedExperts
 
     canonical = torch.tensor([0, 1, 2, 3, -1, -1, -1, -1], dtype=torch.int32)
     mask = torch.tensor([1, 1, 1, 1, 0, 0, 0, 0, 0], dtype=torch.int32)
@@ -865,9 +865,9 @@ def test_gfx942_native_qknorm_rope_writes_main_and_index_caches():
         partial_rotary_factor=0.5,
         max_position_embeddings=32,
     )
-    from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
+    from sonar.config import SonarConfig, set_current_sonar_config
 
-    with set_current_aphrodite_config(AphroditeConfig()):
+    with set_current_sonar_config(SonarConfig()):
         attention.rotary_emb = _build_rotary_emb(config, head_dim).to(DEVICE)
     attention.index_rotary_emb = attention.rotary_emb
 

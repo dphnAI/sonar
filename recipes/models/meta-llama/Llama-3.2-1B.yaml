@@ -57,7 +57,7 @@ guide: |
   ## Prerequisites
 
   - Hardware: 1x Xeon 6 NUMA node
-  - Aphrodite >= 0.6.2
+  - Sonar >= 0.6.2
 
   ### pip (Intel Xeon 6 CPUs)
 
@@ -80,7 +80,7 @@ guide: |
     tuning for workload shape, latency targets, and platform capacity.
   - `--gpu-memory-utilization`: platform memory-budget tuning.
   - `--no-enable-prefix-caching`: workload/benchmark cache-policy tuning.
-  - `APHRODITE_ENGINE_ITERATION_TIMEOUT_S`: runtime operational timeout tuning.
+  - `SONAR_ENGINE_ITERATION_TIMEOUT_S`: runtime operational timeout tuning.
 
   Hardware-specific overrides may still use these settings when they are part of a
   validated platform configuration.
@@ -92,7 +92,7 @@ guide: |
   not prescribe a Xeon 6 TP value or hard-code NUMA node IDs.
 
   ```bash
-  aphrodite serve meta-llama/Llama-3.2-1B
+  sonar serve meta-llama/Llama-3.2-1B
   ```
 
   Docker:
@@ -122,4 +122,4 @@ guide: |
   ## References
 
   - [Model card](https://huggingface.co/meta-llama/Llama-3.2-1B)
-  - [Aphrodite CPU installation](https://docs.vllm.ai/en/latest/getting_started/installation/cpu/)
+  - [Sonar CPU installation](https://docs.vllm.ai/en/latest/getting_started/installation/cpu/)

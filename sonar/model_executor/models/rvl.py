@@ -7,10 +7,10 @@ import torch
 import torch.nn as nn
 from transformers.activations import GELUActivation
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.multimodal import MultiModalDummyOptions
-from aphrodite.inputs import MultiModalDataDict
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
+from sonar.config import SonarConfig
+from sonar.config.multimodal import MultiModalDummyOptions
+from sonar.inputs import MultiModalDataDict
+from sonar.multimodal import MULTIMODAL_REGISTRY
 
 from .llava_next import (
     LlavaDummyInputsBuilder,
@@ -85,7 +85,7 @@ class RVLMultiModalProjector(nn.Module):
     dummy_inputs=RVLDummyInputsBuilder,
 )
 class RForConditionalGeneration(LlavaOnevisionForConditionalGeneration):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={
             # mapping for new names in checkpoint saved after transformers
             # v4.52
@@ -97,7 +97,7 @@ class RForConditionalGeneration(LlavaOnevisionForConditionalGeneration):
         }
     )
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
-        super().__init__(aphrodite_config=aphrodite_config, prefix=prefix)
-        config = aphrodite_config.model_config.hf_config
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
+        super().__init__(sonar_config=sonar_config, prefix=prefix)
+        config = sonar_config.model_config.hf_config
         self.multi_modal_projector = RVLMultiModalProjector(config)

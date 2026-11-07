@@ -3,7 +3,7 @@
 import pandas as pd
 import pytest
 
-from aphrodite.benchmarks.sweep.plot import (
+from sonar.benchmarks.sweep.plot import (
     PlotBinner,
     PlotEqualTo,
     PlotFilterBase,

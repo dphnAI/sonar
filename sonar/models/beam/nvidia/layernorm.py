@@ -5,7 +5,7 @@
 import torch
 from torch import nn
 
-from aphrodite.triton_utils import tl, triton
+from sonar.triton_utils import tl, triton
 
 
 class RMSNorm(nn.Module):

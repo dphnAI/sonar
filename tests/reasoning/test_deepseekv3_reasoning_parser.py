@@ -4,12 +4,12 @@
 import pytest
 from transformers import AutoTokenizer, PreTrainedTokenizerBase
 
-from aphrodite.entrypoints.generate.base.protocol import DeltaMessage
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-from aphrodite.reasoning import ReasoningParserManager
-from aphrodite.reasoning.deepseek_r1_reasoning_parser import DeepSeekR1ReasoningParser
-from aphrodite.reasoning.deepseek_v3_reasoning_parser import DeepSeekV3ReasoningParser
-from aphrodite.reasoning.identity_reasoning_parser import IdentityReasoningParser
+from sonar.entrypoints.generate.base.protocol import DeltaMessage
+from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+from sonar.reasoning import ReasoningParserManager
+from sonar.reasoning.deepseek_r1_reasoning_parser import DeepSeekR1ReasoningParser
+from sonar.reasoning.deepseek_v3_reasoning_parser import DeepSeekV3ReasoningParser
+from sonar.reasoning.identity_reasoning_parser import IdentityReasoningParser
 
 REASONING_MODEL_NAME = "deepseek-ai/DeepSeek-V3.1"
 

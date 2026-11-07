@@ -4,16 +4,16 @@
 import pytest
 import torch
 
-from aphrodite.models.qwen4_exp.nvidia.ops.cute_dsl.hc_down_silu import hc_down_silu
-from aphrodite.models.qwen4_exp.nvidia.ops.hc import (
+from sonar.models.qwen4_exp.nvidia.ops.cute_dsl.hc_down_silu import hc_down_silu
+from sonar.models.qwen4_exp.nvidia.ops.hc import (
     grouped_gemma_rmsnorm,
     hc_combine,
     hc_combine_norm,
     hc_gate_mix,
     hc_silu,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import HAS_TRITON
+from sonar.platforms import current_platform
+from sonar.triton_utils import HAS_TRITON
 
 pytestmark = pytest.mark.skipif(
     not current_platform.is_cuda() or not HAS_TRITON,
@@ -127,7 +127,7 @@ def test_hc_combine_norm_unit_injection(num_tokens: int) -> None:
 @pytest.mark.parametrize("num_tokens", [1, 3, 5, 17, 48])
 def test_hc_down_silu_fused(num_tokens: int) -> None:
     # Compare computed columns with the unfused ll_bf16 + hc_silu reference.
-    from aphrodite.model_executor.kernels.linear.cute_dsl.ll_bf16 import ll_bf16_gemm
+    from sonar.model_executor.kernels.linear.cute_dsl.ll_bf16 import ll_bf16_gemm
 
     torch.manual_seed(0)
     x = torch.randn(num_tokens, HYPER_HIDDEN_SIZE, dtype=torch.bfloat16, device="cuda")

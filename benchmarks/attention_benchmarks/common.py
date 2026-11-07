@@ -17,7 +17,7 @@ from batch_spec import get_batch_type, parse_batch_spec
 from rich.console import Console
 from rich.table import Table
 
-from aphrodite.triton_utils import triton
+from sonar.triton_utils import triton
 
 
 def batch_spec_sort_key(spec: str) -> tuple[int, int, int]:
@@ -90,7 +90,7 @@ class MockHfConfig:
 
 # Import AttentionLayerBase at module level to avoid circular dependencies
 try:
-    from aphrodite.model_executor.layers.attention_layer_base import AttentionLayerBase
+    from sonar.model_executor.layers.attention_layer_base import AttentionLayerBase
 except ImportError:
     AttentionLayerBase = object  # Fallback
 
@@ -185,7 +185,7 @@ class MockLayer(AttentionLayerBase):
     """Mock attention layer with scale parameters and impl.
 
     Inherits from AttentionLayerBase so it passes isinstance checks
-    in get_layers_from_aphrodite_config when FlashInfer prefill is enabled.
+    in get_layers_from_sonar_config when FlashInfer prefill is enabled.
     """
 
     def __init__(self, device: torch.device, impl=None, kv_cache_spec=None):
@@ -543,7 +543,7 @@ def is_mla_backend(backend: str) -> bool:
         True if the backend is an MLA backend, False otherwise
 
     """
-    from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
+    from sonar.v1.attention.backends.registry import AttentionBackendEnum
 
     try:
         backend_enum = AttentionBackendEnum[backend]

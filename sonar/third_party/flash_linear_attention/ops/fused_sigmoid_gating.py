@@ -9,7 +9,7 @@
 
 import torch
 
-from aphrodite.triton_utils import tl, triton
+from sonar.triton_utils import tl, triton
 
 
 @triton.heuristics(

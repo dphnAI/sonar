@@ -4,35 +4,35 @@
 
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite.forward_context import get_forward_context, is_forward_context_available
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.config import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar.forward_context import get_forward_context, is_forward_context_available
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEParallelConfig,
     FusedMoEQuantConfig,
 )
-from aphrodite.model_executor.layers.fused_moe.topk_weight_and_reduce import (
+from sonar.model_executor.layers.fused_moe.topk_weight_and_reduce import (
     TopKWeightAndReduceDelegate,
 )
-from aphrodite.model_executor.layers.fused_moe.utils import _resize_cache
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.fused_moe.utils import _resize_cache
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     get_fp8_min_max,
     kFp8Dynamic128Sym,
     kFp8Static128BlockSym,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.deep_gemm import (
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
+from sonar.utils.deep_gemm import (
     DeepGemmQuantScaleFMT,
     fp8_m_grouped_gemm_nt_masked,
     get_mk_alignment_for_contiguous_layout,
     is_deep_gemm_e8m0_used,
     is_deep_gemm_supported,
 )
-from aphrodite.utils.math_utils import cdiv, round_up
+from sonar.utils.math_utils import cdiv, round_up
 
 logger = init_logger(__name__)
 

@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from aphrodite.compilation.compiler_interface import InductorStandaloneAdaptor
+from sonar.compilation.compiler_interface import InductorStandaloneAdaptor
 
 
 @pytest.mark.parametrize("save_format", ["binary", "unpacked"])
@@ -54,14 +54,14 @@ def test_opt_out_functorch_config_is_scoped(monkeypatch, raises):
 
     import torch
 
-    from aphrodite.compilation.compiler_interface import (
+    from sonar.compilation.compiler_interface import (
         get_inductor_factors,
         set_functorch_config,
     )
 
     config = torch._functorch.config
-    monkeypatch.setenv("APHRODITE_USE_MEGA_AOT_ARTIFACT", "1")
-    from aphrodite.envs import disable_envs_cache
+    monkeypatch.setenv("SONAR_USE_MEGA_AOT_ARTIFACT", "1")
+    from sonar.envs import disable_envs_cache
 
     disable_envs_cache()
     with config.patch(bundled_autograd_cache=True):
@@ -88,18 +88,18 @@ def test_opt_out_functorch_config_is_scoped(monkeypatch, raises):
 def test_opt_out_ignores_existing_direct_cache_index(tmp_path, monkeypatch):
     import builtins
 
-    from aphrodite.compilation.backends import CompilerManager
-    from aphrodite.config import CompilationConfig, CompilationMode
-    from aphrodite.config.utils import Range
-    from aphrodite.envs import disable_envs_cache
+    from sonar.compilation.backends import CompilerManager
+    from sonar.config import CompilationConfig, CompilationMode
+    from sonar.config.utils import Range
+    from sonar.envs import disable_envs_cache
 
-    monkeypatch.setenv("APHRODITE_USE_STANDALONE_COMPILE", "1")
+    monkeypatch.setenv("SONAR_USE_STANDALONE_COMPILE", "1")
     disable_envs_cache()
     cache = tmp_path / "rank_0_0" / "decoder"
     cache.mkdir(parents=True)
-    index = cache / "aphrodite_compile_cache.py"
+    index = cache / "sonar_compile_cache.py"
     index.write_text("old index must not be read")
-    manager = CompilerManager(CompilationConfig(mode=CompilationMode.APHRODITE_COMPILE), use_aot_compile=False)
+    manager = CompilerManager(CompilationConfig(mode=CompilationMode.SONAR_COMPILE), use_aot_compile=False)
     real_open = builtins.open
     reads = []
 

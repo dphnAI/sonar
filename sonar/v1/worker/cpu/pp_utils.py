@@ -8,8 +8,8 @@ from dataclasses import dataclass
 import numpy as np
 import torch
 
-from aphrodite.distributed.parallel_state import get_pp_group
-from aphrodite.v1.worker.cpu.input_batch import InputBatch
+from sonar.distributed.parallel_state import get_pp_group
+from sonar.v1.worker.cpu.input_batch import InputBatch
 
 
 @dataclass

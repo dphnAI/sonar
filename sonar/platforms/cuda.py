@@ -38,34 +38,34 @@ _preload_cuda_driver()
 
 # Import custom ops after preloading the CUDA driver so driver symbols such as
 # cuMemAddressFree are globally available during shared library resolution.
-import aphrodite._C_stable_libtorch  # noqa
-import aphrodite.envs as envs
-from aphrodite.logger import init_logger
-from aphrodite.utils.import_utils import import_pynvml
-from aphrodite.utils.platform_utils import cuda_get_device_properties
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
+import sonar._C_stable_libtorch  # noqa
+import sonar.envs as envs
+from sonar.logger import init_logger
+from sonar.utils.import_utils import import_pynvml
+from sonar.utils.platform_utils import cuda_get_device_properties
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
 
 from .interface import DeviceCapability, Platform, PlatformEnum, in_wsl
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
-    from aphrodite.config.cache import CacheDType
-    from aphrodite.config.kernel import IrOpPriorityConfig
-    from aphrodite.v1.attention.backend import AttentionBackend
-    from aphrodite.v1.attention.selector import AttentionSelectorConfig
+    from sonar.config import SonarConfig
+    from sonar.config.cache import CacheDType
+    from sonar.config.kernel import IrOpPriorityConfig
+    from sonar.v1.attention.backend import AttentionBackend
+    from sonar.v1.attention.selector import AttentionSelectorConfig
 else:
-    AphroditeConfig = None
+    SonarConfig = None
     CacheDType = None
 
 logger = init_logger(__name__)
 
 try:
-    import aphrodite._qutlass_C  # noqa: F401
+    import sonar._qutlass_C  # noqa: F401
 except ImportError as e:
     # QuTLASS is only built for SM100 and SM120; on every other arch
     # (SM110/Thor, Ampere, Ada, ...) its absence is expected, so keep this at
     # debug to avoid log spam.
-    logger.debug("Failed to import from aphrodite._qutlass_C: %r", e)
+    logger.debug("Failed to import from sonar._qutlass_C: %r", e)
 
 _P = ParamSpec("_P")
 _R = TypeVar("_R")
@@ -114,7 +114,7 @@ def _get_backend_priorities(
     use_mm_prefix: bool = False,
 ) -> list[AttentionBackendEnum]:
     """Get backend priorities with lazy import to avoid circular dependency."""
-    from aphrodite.v1.kv_cache_interface import is_quantized_kv_cache
+    from sonar.v1.kv_cache_interface import is_quantized_kv_cache
 
     if use_mla:
         if device_capability.major == 10:
@@ -257,7 +257,7 @@ class CudaPlatformBase(Platform):
 
     @classmethod
     def get_hisparse_backend_cls(cls) -> str | None:
-        return "aphrodite.v1.hisparse.backend.CUDAHiSparseBackend"
+        return "sonar.v1.hisparse.backend.CUDAHiSparseBackend"
 
     @classmethod
     def import_kernels(cls) -> None:
@@ -268,22 +268,22 @@ class CudaPlatformBase(Platform):
         via ``STABLE_TORCH_LIBRARY`` regardless of the ``.so`` filename). The
         legacy fork ``_C``/``_moe_C`` extensions are intentionally NOT imported
         here: they would double-register the same op schemas and collide.
-        Aphrodite's DRY and EXL3 ops also live in ``_C_stable_libtorch``.
+        Sonar's DRY and EXL3 ops also live in ``_C_stable_libtorch``.
         """
         try:
-            import aphrodite._C_stable_libtorch  # noqa: F401
+            import sonar._C_stable_libtorch  # noqa: F401
         except ImportError as e:
-            logger.warning_once("Failed to import from aphrodite._C_stable_libtorch: %r", e)
+            logger.warning_once("Failed to import from sonar._C_stable_libtorch: %r", e)
         try:
-            import aphrodite._moe_C_stable_libtorch  # noqa: F401
+            import sonar._moe_C_stable_libtorch  # noqa: F401
         except ImportError as e:
-            logger.warning_once("Failed to import from aphrodite._moe_C_stable_libtorch: %r", e)
+            logger.warning_once("Failed to import from sonar._moe_C_stable_libtorch: %r", e)
         try:
-            import aphrodite._qutlass_C  # noqa: F401
+            import sonar._qutlass_C  # noqa: F401
         except ImportError as e:
             # QuTLASS is only built for SM100 and SM120; expected to be absent
             # on every other arch (SM110/Thor, Ampere, Ada, ...).
-            logger.debug("Failed to import from aphrodite._qutlass_C: %r", e)
+            logger.debug("Failed to import from sonar._qutlass_C: %r", e)
 
     @classmethod
     def check_runner_kv_caches_multi_layer(cls) -> None:
@@ -298,7 +298,7 @@ class CudaPlatformBase(Platform):
             # Pascal, Volta and Turing NVIDIA GPUs, BF16 is not supported
             return [torch.float16, torch.float32]
         # Kepler and Maxwell NVIDIA GPUs, only FP32 is supported,
-        # though Aphrodite doesn't support these GPUs.
+        # though Sonar doesn't support these GPUs.
         return [torch.float32]
 
     @classmethod
@@ -352,14 +352,14 @@ class CudaPlatformBase(Platform):
                 )
                 return False
             # On compatible WSL2 kernels, pinned memory is supported but
-            # disabled by default. Enable it via APHRODITE_WSL2_ENABLE_PIN_MEMORY=1.
-            import aphrodite.envs as envs
+            # disabled by default. Enable it via SONAR_WSL2_ENABLE_PIN_MEMORY=1.
+            import sonar.envs as envs
 
-            return envs.APHRODITE_WSL2_ENABLE_PIN_MEMORY
+            return envs.SONAR_WSL2_ENABLE_PIN_MEMORY
         return True
 
     @classmethod
-    def check_and_update_config(cls, aphrodite_config: AphroditeConfig) -> None:
+    def check_and_update_config(cls, sonar_config: SonarConfig) -> None:
         # Thor / SM 11.0: PyTorch's default cuBLAS workspace (~8 MiB) is too
         # small here and yields CUBLAS_STATUS_NOT_SUPPORTED for some GEMM/GEMV
         # shapes. Force the 32 MiB workspace torch already uses for majors
@@ -370,13 +370,13 @@ class CudaPlatformBase(Platform):
         if device_capability is not None and device_capability.major == 11:
             os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
 
-        parallel_config = aphrodite_config.parallel_config
-        model_config = aphrodite_config.model_config
+        parallel_config = sonar_config.parallel_config
+        model_config = sonar_config.model_config
 
         if parallel_config.worker_cls == "auto":
-            parallel_config.worker_cls = "aphrodite.v1.worker.gpu_worker.Worker"
+            parallel_config.worker_cls = "sonar.v1.worker.gpu_worker.Worker"
 
-        scheduler_config = aphrodite_config.scheduler_config
+        scheduler_config = sonar_config.scheduler_config
         # Note: model_config may be None during testing
         if (
             model_config is not None
@@ -391,8 +391,8 @@ class CudaPlatformBase(Platform):
 
         if (
             in_wsl()
-            and aphrodite_config.offload_config.uva.cpu_offload_gb > 0
-            and bool(aphrodite_config.compilation_config.cudagraph_mode)
+            and sonar_config.offload_config.uva.cpu_offload_gb > 0
+            and bool(sonar_config.compilation_config.cudagraph_mode)
         ):
             logger.warning_once(
                 "--cpu-offload-gb is enabled with CUDA graphs on WSL2. "
@@ -603,11 +603,11 @@ class CudaPlatformBase(Platform):
 
     @classmethod
     def get_punica_wrapper(cls) -> str:
-        return "aphrodite.lora.punica_wrapper.punica_gpu.PunicaWrapperGPU"
+        return "sonar.lora.punica_wrapper.punica_gpu.PunicaWrapperGPU"
 
     @classmethod
     def get_device_communicator_cls(cls) -> str:
-        return "aphrodite.distributed.device_communicators.cuda_communicator.CudaCommunicator"  # noqa
+        return "sonar.distributed.device_communicators.cuda_communicator.CudaCommunicator"  # noqa
 
     @classmethod
     def supports_fp8(cls) -> bool:
@@ -623,7 +623,7 @@ class CudaPlatformBase(Platform):
 
     @classmethod
     def get_static_graph_wrapper_cls(cls) -> str:
-        return "aphrodite.compilation.cuda_graph.CUDAGraphWrapper"
+        return "sonar.compilation.cuda_graph.CUDAGraphWrapper"
 
     @classmethod
     def stateless_init_device_torch_dist_pg(
@@ -733,21 +733,21 @@ class CudaPlatformBase(Platform):
         return True
 
     @classmethod
-    def get_default_ir_op_priority(cls, aphrodite_config: AphroditeConfig) -> IrOpPriorityConfig:
-        from aphrodite.config.compilation import CompilationMode
-        from aphrodite.config.kernel import IrOpPriorityConfig
+    def get_default_ir_op_priority(cls, sonar_config: SonarConfig) -> IrOpPriorityConfig:
+        from sonar.config.compilation import CompilationMode
+        from sonar.config.kernel import IrOpPriorityConfig
 
         # Native used by default when compiling,
-        # use aphrodite_c kernels where available when no codegen
-        cc = aphrodite_config.compilation_config
+        # use sonar_c kernels where available when no codegen
+        cc = sonar_config.compilation_config
         using_inductor = cc.backend == "inductor" and cc.mode != CompilationMode.NONE
-        default = ["native"] if using_inductor else ["aphrodite_c", "native"]
+        default = ["native"] if using_inductor else ["sonar_c", "native"]
 
         # Use oink if enabled for rms_norm
         # TODO(Laurawly/luka): remove this env var,
         #  users can just use IR op priority directly
         rms_norm = default
-        if envs.APHRODITE_USE_OINK_OPS:
+        if envs.SONAR_USE_OINK_OPS:
             rms_norm = ["oink"] + default
 
         return IrOpPriorityConfig.with_default(

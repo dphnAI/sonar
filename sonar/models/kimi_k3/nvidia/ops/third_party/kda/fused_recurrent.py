@@ -9,10 +9,10 @@
 
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.third_party.flash_linear_attention.ops.op import exp, log
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.math_utils import cdiv, next_power_of_2
+from sonar.platforms import current_platform
+from sonar.third_party.flash_linear_attention.ops.op import exp, log
+from sonar.triton_utils import tl, triton
+from sonar.utils.math_utils import cdiv, next_power_of_2
 
 
 @triton.heuristics(
@@ -197,21 +197,13 @@ def fused_recurrent_kda_fwd_kernel(
         initial_token = tl.load(num_accepted_tokens + i_n).to(tl.int64) - 1
     else:
         initial_token = 0
-    state_index = tl.load(state_indices + i_n * stride_indices_seq + initial_token).to(
-        tl.int64
-    )
+    state_index = tl.load(state_indices + i_n * stride_indices_seq + initial_token).to(tl.int64)
     p_out = out + bos * stride_out_token + i_h * V + o_v
     if state_index <= 0:
         tl.store(p_out, tl.zeros([BV], dtype=tl.float32), mask=m_v)
         return
 
-    p_state = (
-        state
-        + state_index * stride_state_token
-        + i_h * V * K
-        + o_v[:, None] * K
-        + o_k[None, :]
-    )
+    p_state = state + state_index * stride_state_token + i_h * V * K + o_v[:, None] * K + o_k[None, :]
     b_state = tl.load(p_state, mask=m_state, other=0.0).to(tl.float32)
 
     p_q = q + bos * stride_qkv_token + i_h * K + o_k
@@ -220,15 +212,9 @@ def fused_recurrent_kda_fwd_kernel(
     p_g = g + bos * stride_g_token + i_h * K + o_k
     p_beta = beta + bos * stride_beta_token + i_h
     for i_t in tl.range(0, sequence_length, num_stages=num_stages):
-        b_q = tl.load(p_q, mask=m_k, other=0.0, eviction_policy="evict_last").to(
-            tl.float32
-        )
-        b_k = tl.load(p_k, mask=m_k, other=0.0, eviction_policy="evict_last").to(
-            tl.float32
-        )
-        b_v = tl.load(p_v, mask=m_v, other=0.0, eviction_policy="evict_first").to(
-            tl.float32
-        )
+        b_q = tl.load(p_q, mask=m_k, other=0.0, eviction_policy="evict_last").to(tl.float32)
+        b_k = tl.load(p_k, mask=m_k, other=0.0, eviction_policy="evict_last").to(tl.float32)
+        b_v = tl.load(p_v, mask=m_v, other=0.0, eviction_policy="evict_first").to(tl.float32)
         if USE_QK_L2NORM_IN_KERNEL:
             b_q = b_q / tl.sqrt(tl.sum(b_q * b_q) + 1e-6)
             b_k = b_k / tl.sqrt(tl.sum(b_k * b_k) + 1e-6)
@@ -274,16 +260,10 @@ def fused_recurrent_kda_fwd_kernel(
             eviction_policy="evict_first",
         )
 
-        final_state_index = tl.load(state_indices + i_n * stride_indices_seq + i_t).to(
-            tl.int64
-        )
+        final_state_index = tl.load(state_indices + i_n * stride_indices_seq + i_t).to(tl.int64)
         if final_state_index > 0:
             p_final_state = (
-                state
-                + final_state_index * stride_state_token
-                + i_h * V * K
-                + o_v[:, None] * K
-                + o_k[None, :]
+                state + final_state_index * stride_state_token + i_h * V * K + o_v[:, None] * K + o_k[None, :]
             )
             tl.store(
                 p_final_state,
@@ -483,9 +463,7 @@ def fused_recurrent_kda(
     )
 
 
-@triton.jit(
-    do_not_specialize=["stride_beta_token", "stride_state_indices"]
-)
+@triton.jit(do_not_specialize=["stride_beta_token", "stride_state_indices"])
 def fused_recurrent_kda_packed_decode_kernel(
     mixed_qkv,
     raw_g,
@@ -570,9 +548,7 @@ def fused_recurrent_kda_packed_decode_kernel(
 
     b_state *= exp(b_gate[None, :])
     b_v -= tl.sum(b_state * b_k[None, :], axis=1)
-    b_beta = tl.sigmoid(
-        tl.load(raw_beta + i_n * stride_beta_token + i_h).to(tl.float32)
-    )
+    b_beta = tl.sigmoid(tl.load(raw_beta + i_n * stride_beta_token + i_h).to(tl.float32))
     b_v *= b_beta
     b_state += b_v[:, None] * b_k[None, :]
     b_out = tl.sum(b_state * b_q[None, :], axis=1)
@@ -617,10 +593,7 @@ def fused_recurrent_kda_packed_decode(
         raise ValueError("`dt_bias` must be contiguous.")
 
     device = mixed_qkv.device
-    if any(
-        x.device != device
-        for x in (raw_g, raw_beta, A_log, dt_bias, initial_state, state_indices)
-    ):
+    if any(x.device != device for x in (raw_g, raw_beta, A_log, dt_bias, initial_state, state_indices)):
         raise ValueError("All packed KDA inputs must be on the same device.")
 
     B = mixed_qkv.shape[0]

@@ -3,23 +3,23 @@
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from aphrodite.logger import init_logger
-from aphrodite.tokenizers import TokenizerLike
-from aphrodite.tokenizers.registry import (
+from sonar.logger import init_logger
+from sonar.tokenizers import TokenizerLike
+from sonar.tokenizers.registry import (
     cached_tokenizer_from_config,
     tokenizer_args_from_config,
 )
-from aphrodite.utils.import_utils import resolve_obj_by_qualname
+from sonar.utils.import_utils import resolve_obj_by_qualname
 
 from .base import BaseRenderer
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
+    from sonar.config import SonarConfig
 
 logger = init_logger(__name__)
 
 
-_APHRODITE_RENDERERS = {
+_SONAR_RENDERERS = {
     "alpamayo2_super": ("hf", "HfRenderer"),
     "cohere": ("cohere", "CohereRenderer"),
     "deepseek_v32": ("deepseek_v32", "DeepseekV32Renderer"),
@@ -65,7 +65,7 @@ class RendererRegistry:
     def load_renderer(
         self,
         renderer_mode: str,
-        config: "AphroditeConfig",
+        config: "SonarConfig",
         tokenizer: TokenizerLike | None,
     ) -> BaseRenderer:
         renderer_cls = self.load_renderer_cls(renderer_mode)
@@ -73,15 +73,12 @@ class RendererRegistry:
 
 
 RENDERER_REGISTRY = RendererRegistry(
-    {
-        mode: (f"aphrodite.renderers.{mod_relname}", cls_name)
-        for mode, (mod_relname, cls_name) in _APHRODITE_RENDERERS.items()
-    }
+    {mode: (f"sonar.renderers.{mod_relname}", cls_name) for mode, (mod_relname, cls_name) in _SONAR_RENDERERS.items()}
 )
 """The global `RendererRegistry` instance."""
 
 
-def renderer_from_config(config: "AphroditeConfig", **kwargs):
+def renderer_from_config(config: "SonarConfig", **kwargs):
     model_config = config.model_config
 
     tokenizer = cached_tokenizer_from_config(model_config, **kwargs)

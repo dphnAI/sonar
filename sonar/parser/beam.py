@@ -9,20 +9,20 @@ from typing import TYPE_CHECKING, Any, cast
 
 from openai.types.responses import ToolChoiceFunction
 
-from aphrodite import envs
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar import envs
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionNamedToolChoiceParam,
     ChatCompletionRequest,
 )
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.logger import init_logger
-from aphrodite.parser.abstract_parser import (
+from sonar.exceptions import SonarValidationError
+from sonar.logger import init_logger
+from sonar.parser.abstract_parser import (
     _xgrammar_supports,
     structured_outputs_to_format,
 )
-from aphrodite.parser.chat_parsing import ResponseParser
-from aphrodite.parser.chat_parsing.response_templates import ResponseTemplate
-from aphrodite.parser.response_template import (
+from sonar.parser.chat_parsing import ResponseParser
+from sonar.parser.chat_parsing.response_templates import ResponseTemplate
+from sonar.parser.response_template import (
     CONTENT_FIELD,
     THINKING_FIELD,
     TOOL_FIELD,
@@ -33,17 +33,17 @@ from aphrodite.parser.response_template import (
     _is_named_tool_choice,
     _tool_parsing_enabled,
 )
-from aphrodite.parser.response_template_grammar import (
+from sonar.parser.response_template_grammar import (
     _openers,
     answer_rest_structural_tag,
     message_start_anchors,
     tool_call_structural_tag,
 )
-from aphrodite.sampling_params import StructuredOutputsParams
-from aphrodite.tool_parsers.structural_tag_registry import resolve_tool_strictness
+from sonar.sampling_params import StructuredOutputsParams
+from sonar.tool_parsers.structural_tag_registry import resolve_tool_strictness
 
 if TYPE_CHECKING:
-    from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
+    from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
 
 logger = init_logger(__name__)
 
@@ -154,7 +154,7 @@ class BeamParser(ResponseTemplateParser):
         # model from calling them.
         tools_forbidden = bool(request.tools) and request.tool_choice == "none" and TOOL_FIELD in fields
         constrained_tools = None
-        if tools_enabled and (forced or envs.APHRODITE_ENFORCE_STRICT_TOOL_CALLING):
+        if tools_enabled and (forced or envs.SONAR_ENFORCE_STRICT_TOOL_CALLING):
             assert self._tool_parser is not None
             strict_level = self.tool_strict_level
             if strict_level is None:
@@ -178,7 +178,7 @@ class BeamParser(ResponseTemplateParser):
             return None
         # Without a tool or structured output constraint, the output still
         # follows the template.
-        always_constrain = envs.APHRODITE_BEAM_ALWAYS_CONSTRAIN_OUTPUT and not forced
+        always_constrain = envs.SONAR_BEAM_ALWAYS_CONSTRAIN_OUTPUT and not forced
         if constrained_tools is None and output is None and not tools_forbidden and not always_constrain:
             return None
 
@@ -216,10 +216,10 @@ class BeamParser(ResponseTemplateParser):
                     strict_arguments=True,
                 )
             except ValueError as exc:
-                raise AphroditeValidationError(str(exc), parameter="tools") from exc
+                raise SonarValidationError(str(exc), parameter="tools") from exc
         if tag is None and forced:
             kind = "named" if named else "required"
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 f"response_template parsing cannot guarantee {kind} tool choice for this request",
                 parameter="tool_choice",
             )

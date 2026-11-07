@@ -5,8 +5,8 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Generic, Protocol, TypeVar, cast
 
-from aphrodite.logger import init_logger
-from aphrodite.tokenizers import TokenizerLike, cached_tokenizer_from_config
+from sonar.logger import init_logger
+from sonar.tokenizers import TokenizerLike, cached_tokenizer_from_config
 
 from .processing import (
     BaseDummyInputsBuilder,
@@ -17,8 +17,8 @@ from .processing import (
 )
 
 if TYPE_CHECKING:
-    from aphrodite.config import ModelConfig, ObservabilityConfig
-    from aphrodite.model_executor.models.interfaces import SupportsMultiModal
+    from sonar.config import ModelConfig, ObservabilityConfig
+    from sonar.model_executor.models.interfaces import SupportsMultiModal
 
 logger = init_logger(__name__)
 
@@ -29,7 +29,7 @@ _I_co = TypeVar("_I_co", bound=BaseProcessingInfo, covariant=True)
 
 class ProcessingInfoFactory(Protocol[_I_co]):
     """Constructs a
-    [`BaseMultiModalProcessor`][aphrodite.multimodal.processing.BaseMultiModalProcessor]
+    [`BaseMultiModalProcessor`][sonar.multimodal.processing.BaseMultiModalProcessor]
     instance from the context.
     """
 
@@ -41,7 +41,7 @@ class ProcessingInfoFactory(Protocol[_I_co]):
 
 class DummyInputsBuilderFactory(Protocol[_I]):  # type: ignore[misc]
     """Constructs a
-    [`BaseDummyInputsBuilder`][aphrodite.multimodal.processing.BaseDummyInputsBuilder]
+    [`BaseDummyInputsBuilder`][sonar.multimodal.processing.BaseDummyInputsBuilder]
     instance from the context.
     """
 
@@ -50,7 +50,7 @@ class DummyInputsBuilderFactory(Protocol[_I]):  # type: ignore[misc]
 
 class MultiModalProcessorFactory(Protocol[_I]):  # type: ignore[misc]
     """Constructs a
-    [`BaseMultiModalProcessor`][aphrodite.multimodal.processing.BaseMultiModalProcessor]
+    [`BaseMultiModalProcessor`][sonar.multimodal.processing.BaseMultiModalProcessor]
     instance from the context.
     """
 
@@ -114,7 +114,7 @@ class MultiModalRegistry:
 
     def _get_model_cls(self, model_config: "ModelConfig") -> "SupportsMultiModal":
         # Avoid circular import
-        from aphrodite.model_executor.model_loader import get_model_architecture
+        from sonar.model_executor.model_loader import get_model_architecture
 
         model_cls, _ = get_model_architecture(model_config)
         if not hasattr(model_cls, "_processor_factory"):

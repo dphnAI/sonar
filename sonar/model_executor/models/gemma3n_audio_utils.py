@@ -3,7 +3,7 @@
 """Lightweight utility functions for Gemma3n audio processing.
 
 This module is separate from gemma3n_mm.py to avoid heavy CUDA dependencies,
-making it testable without a full Aphrodite build.
+making it testable without a full Sonar build.
 """
 
 import torch

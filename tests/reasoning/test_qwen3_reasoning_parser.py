@@ -4,8 +4,8 @@
 import pytest
 from transformers import AutoTokenizer, PreTrainedTokenizerBase
 
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-from aphrodite.reasoning import ReasoningParser, ReasoningParserManager
+from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+from sonar.reasoning import ReasoningParser, ReasoningParserManager
 from tests.reasoning.utils import (
     StreamingReasoningReconstructor,
     run_reasoning_extraction,

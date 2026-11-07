@@ -10,58 +10,58 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from aphrodite.config import AphroditeConfig, get_layers_from_aphrodite_config
-from aphrodite.config.compilation import CUDAGraphMode
-from aphrodite.config.speculative import _DRAFT_APHRODITE_CONFIG_OVERRIDES
-from aphrodite.distributed.eplb.eplb_state import EplbState
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.attention_layer_base import AttentionLayerBase
-from aphrodite.model_executor.models import supports_multimodal_embeddings
-from aphrodite.v1.kv_cache_interface import KVCacheConfig
-from aphrodite.v1.watermarking import create_watermarker
-from aphrodite.v1.watermarking.gpu_sampler import GPUWatermarkSampler
-from aphrodite.v1.watermarking.spec_decode import (
+from sonar.config import SonarConfig, get_layers_from_sonar_config
+from sonar.config.compilation import CUDAGraphMode
+from sonar.config.speculative import _DRAFT_SONAR_CONFIG_OVERRIDES
+from sonar.distributed.eplb.eplb_state import EplbState
+from sonar.logger import init_logger
+from sonar.model_executor.layers.attention_layer_base import AttentionLayerBase
+from sonar.model_executor.models import supports_multimodal_embeddings
+from sonar.v1.kv_cache_interface import KVCacheConfig
+from sonar.v1.watermarking import create_watermarker
+from sonar.v1.watermarking.gpu_sampler import GPUWatermarkSampler
+from sonar.v1.watermarking.spec_decode import (
     DraftWatermarker,
     create_speculative_draft_watermarker,
 )
-from aphrodite.v1.worker.gpu.attn_utils import (
+from sonar.v1.worker.gpu.attn_utils import (
     build_attn_metadata,
     build_slot_mappings_by_layer,
     init_attn_backend,
 )
-from aphrodite.v1.worker.gpu.block_table import BlockTables
-from aphrodite.v1.worker.gpu.cp_utils import prepare_dcp_local_seq_lens
-from aphrodite.v1.worker.gpu.cudagraph_utils import BatchExecutionDescriptor
-from aphrodite.v1.worker.gpu.dp_utils import DPSyncState
-from aphrodite.v1.worker.gpu.input_batch import InputBatch, InputBuffers
-from aphrodite.v1.worker.gpu.model_states.interface import ModelState
-from aphrodite.v1.worker.gpu.sample.batch_shard import batch_sharded_sampling_enabled
-from aphrodite.v1.worker.gpu.sample.greedy_argmax import greedy_argmax
-from aphrodite.v1.worker.gpu.sample.gumbel import gumbel_sample
-from aphrodite.v1.worker.gpu.sample.vocab_parallel import VocabShard
-from aphrodite.v1.worker.gpu.spec_decode.acceptance_estimator import (
+from sonar.v1.worker.gpu.block_table import BlockTables
+from sonar.v1.worker.gpu.cp_utils import prepare_dcp_local_seq_lens
+from sonar.v1.worker.gpu.cudagraph_utils import BatchExecutionDescriptor
+from sonar.v1.worker.gpu.dp_utils import DPSyncState
+from sonar.v1.worker.gpu.input_batch import InputBatch, InputBuffers
+from sonar.v1.worker.gpu.model_states.interface import ModelState
+from sonar.v1.worker.gpu.sample.batch_shard import batch_sharded_sampling_enabled
+from sonar.v1.worker.gpu.sample.greedy_argmax import greedy_argmax
+from sonar.v1.worker.gpu.sample.gumbel import gumbel_sample
+from sonar.v1.worker.gpu.sample.vocab_parallel import VocabShard
+from sonar.v1.worker.gpu.spec_decode.acceptance_estimator import (
     OnlineAcceptanceEstimator,
 )
-from aphrodite.v1.worker.gpu.spec_decode.draft_logits import DraftLogitsCache
-from aphrodite.v1.worker.utils import AttentionGroup
+from sonar.v1.worker.gpu.spec_decode.draft_logits import DraftLogitsCache
+from sonar.v1.worker.utils import AttentionGroup
 
 if TYPE_CHECKING:
-    from aphrodite.v1.worker.gpu.pcp_manager import PCPManager
-    from aphrodite.v1.worker.gpu.sample.sampler import Sampler
+    from sonar.v1.worker.gpu.pcp_manager import PCPManager
+    from sonar.v1.worker.gpu.sample.sampler import Sampler
 
 logger = init_logger(__name__)
 
 
-def _target_feeds_hc_residual(aphrodite_config: AphroditeConfig) -> bool:
+def _target_feeds_hc_residual(sonar_config: SonarConfig) -> bool:
     """Whether the target replaces the drafter's input with its HC residual.
 
     Keyed on the same hook the model runner calls to perform that swap. It is
     resolved from the target model class because speculators are built before
     the target model is instantiated.
     """
-    from aphrodite.model_executor.model_loader.utils import get_model_cls
+    from sonar.model_executor.model_loader.utils import get_model_cls
 
-    target_cls = get_model_cls(aphrodite_config.model_config)
+    target_cls = get_model_cls(sonar_config.model_config)
     return hasattr(target_cls, "get_mtp_target_hidden_states")
 
 
@@ -137,17 +137,17 @@ class DraftModelSpeculator(BaseSpeculator):
     # forward's attention metadata. Otherwise the drafter rebuilds it.
     can_reuse_target_attn_metadata: bool = True
 
-    def __init__(self, aphrodite_config: AphroditeConfig, device: torch.device):
-        self.aphrodite_config = aphrodite_config
+    def __init__(self, sonar_config: SonarConfig, device: torch.device):
+        self.sonar_config = sonar_config
         self.device = device
 
-        assert aphrodite_config.speculative_config is not None
-        self.speculative_config = aphrodite_config.speculative_config
+        assert sonar_config.speculative_config is not None
+        self.speculative_config = sonar_config.speculative_config
         self.method = self.speculative_config.method
         self.num_speculative_steps = self.speculative_config.num_speculative_tokens
         self.draft_model_config = self.speculative_config.draft_model_config
 
-        self.scheduler_config = aphrodite_config.scheduler_config
+        self.scheduler_config = sonar_config.scheduler_config
         self.max_num_reqs = self.scheduler_config.max_num_seqs
         self.max_num_tokens = self.scheduler_config.max_num_batched_tokens
         self.draft_max_seq_len = self.max_model_len
@@ -162,19 +162,19 @@ class DraftModelSpeculator(BaseSpeculator):
         # that hook rather than hc_mult alone -- HY V4 runs iHC in its backbone
         # (hc_mult=4) but its MTP head consumes the collapsed states, so
         # widening it feeds propose() a 4x-too-wide buffer.
-        if _target_feeds_hc_residual(aphrodite_config):
+        if _target_feeds_hc_residual(sonar_config):
             hc_mult = getattr(self.draft_model_config.hf_config, "hc_mult", 1)
             self.hidden_size = self.hidden_size * hc_mult
         self.vocab_size = self.draft_model_config.get_vocab_size()
-        self.dtype = aphrodite_config.model_config.dtype
-        self.use_fp64_gumbel = aphrodite_config.model_config.use_fp64_gumbel
+        self.dtype = sonar_config.model_config.dtype
+        self.use_fp64_gumbel = sonar_config.model_config.use_fp64_gumbel
         self.use_local_argmax_reduction = self.speculative_config.use_local_argmax_reduction
 
         # DP configuration
-        self.dp_size = aphrodite_config.parallel_config.data_parallel_size
-        self.dp_rank = aphrodite_config.parallel_config.data_parallel_rank
-        self.dcp_size = aphrodite_config.parallel_config.decode_context_parallel_size
-        if aphrodite_config.parallel_config.use_ubatching:
+        self.dp_size = sonar_config.parallel_config.data_parallel_size
+        self.dp_rank = sonar_config.parallel_config.data_parallel_rank
+        self.dcp_size = sonar_config.parallel_config.decode_context_parallel_size
+        if sonar_config.parallel_config.use_ubatching:
             # A microbatched target forward builds only per-microbatch metadata.
             self.can_reuse_target_attn_metadata = False
 
@@ -208,7 +208,7 @@ class DraftModelSpeculator(BaseSpeculator):
         self.use_draft_logits = self.speculative_config.draft_sample_method == "probabilistic"
 
         self.draft_watermarker: DraftWatermarker | None = None
-        watermark_config = getattr(aphrodite_config, "watermark_config", None)
+        watermark_config = getattr(sonar_config, "watermark_config", None)
         if watermark_config is not None:
             watermarker = create_watermarker(watermark_config)
             self.draft_watermarker = create_speculative_draft_watermarker(
@@ -230,7 +230,7 @@ class DraftModelSpeculator(BaseSpeculator):
     @property
     def max_model_len(self) -> int:
         # Auto-fit can reduce the limit after the speculator is built.
-        return self.aphrodite_config.model_config.max_model_len
+        return self.sonar_config.model_config.max_model_len
 
     @abstractmethod
     def load_draft_model(self, target_model: nn.Module, target_attn_layer_names: set[str]) -> nn.Module:
@@ -238,8 +238,8 @@ class DraftModelSpeculator(BaseSpeculator):
 
     def load_model(self, target_model: nn.Module) -> None:
         target_attn_layer_names = set(
-            get_layers_from_aphrodite_config(
-                self.aphrodite_config,
+            get_layers_from_sonar_config(
+                self.sonar_config,
                 AttentionLayerBase,  # type: ignore[type-abstract]
             ).keys()
         )
@@ -249,15 +249,15 @@ class DraftModelSpeculator(BaseSpeculator):
         if self.use_draft_logits:
             self._init_draft_logits(target_model)
 
-        all_attn_layers = get_layers_from_aphrodite_config(
-            self.aphrodite_config,
+        all_attn_layers = get_layers_from_sonar_config(
+            self.sonar_config,
             AttentionLayerBase,  # type: ignore[type-abstract]
         )
         self.draft_attn_layer_names = set(all_attn_layers) - target_attn_layer_names
         for layer_name in self.draft_attn_layer_names:
             all_attn_layers[layer_name].is_draft_layer = True
 
-        target_supports_mm = self.aphrodite_config.model_config.supports_multimodal_inputs
+        target_supports_mm = self.sonar_config.model_config.supports_multimodal_inputs
         draft_supports_mm = supports_multimodal_embeddings(self.model)
         self.supports_mm_inputs = target_supports_mm and draft_supports_mm
         if target_supports_mm and not draft_supports_mm:
@@ -297,8 +297,8 @@ class DraftModelSpeculator(BaseSpeculator):
         A speculator that set draft_vocab_shard in load_draft_model caches only
         this rank's vocab columns instead.
         """
-        parallel_config = self.aphrodite_config.parallel_config
-        dtype, fill = self.draft_logits_spec(self.aphrodite_config)
+        parallel_config = self.sonar_config.parallel_config
+        dtype, fill = self.draft_logits_spec(self.sonar_config)
         vocab_shard = self.draft_vocab_shard
         self.draft_logits = DraftLogitsCache(
             self.max_num_reqs,
@@ -309,7 +309,7 @@ class DraftModelSpeculator(BaseSpeculator):
             device=self.device,
             sharded=(
                 vocab_shard is None
-                and batch_sharded_sampling_enabled(self.aphrodite_config, target_model)
+                and batch_sharded_sampling_enabled(self.sonar_config, target_model)
                 # PCPManager.sync_drafts indexes the draft logits by request
                 # state, so it must see every request's logits.
                 and parallel_config.prefill_context_parallel_size == 1
@@ -331,14 +331,14 @@ class DraftModelSpeculator(BaseSpeculator):
             )
 
     @property
-    def attn_aphrodite_config(self) -> AphroditeConfig:
+    def attn_sonar_config(self) -> SonarConfig:
         """Config for the draft's attention metadata builders. Overridden by
         speculators whose attention mode differs from the target's."""
         # Shallow copies instead of apply_draft_overrides: its replace()
         # rebuilds each sub-config and drops engine-resolved init=False state
         # such as cache_config.kv_cache_layout.
-        config = copy.copy(self.aphrodite_config)
-        for src, config_name, dst in _DRAFT_APHRODITE_CONFIG_OVERRIDES:
+        config = copy.copy(self.sonar_config)
+        for src, config_name, dst in _DRAFT_SONAR_CONFIG_OVERRIDES:
             if (value := getattr(self.speculative_config, src)) is not None:
                 sub_config = copy.copy(getattr(config, config_name))
                 setattr(sub_config, dst, value)
@@ -357,7 +357,7 @@ class DraftModelSpeculator(BaseSpeculator):
         self.kv_cache_config = kv_cache_config
         self.attn_groups, self.attn_cg_support, _ = init_attn_backend(
             kv_cache_config,
-            self.attn_aphrodite_config,
+            self.attn_sonar_config,
             self.device,
             active_layer_names=self.draft_attn_layer_names,
         )
@@ -480,12 +480,12 @@ class DraftModelSpeculator(BaseSpeculator):
         )
         return attn_metadata
 
-    def draft_logits_spec(self, aphrodite_config: AphroditeConfig) -> tuple[torch.dtype, float]:
+    def draft_logits_spec(self, sonar_config: SonarConfig) -> tuple[torch.dtype, float]:
         """Dtype and fill for the cached proposal distribution.
 
         Speculators that write only a subset of columns each step override this.
         """
-        return aphrodite_config.model_config.head_dtype, 0.0
+        return sonar_config.model_config.head_dtype, 0.0
 
     def _validate_local_argmax_reduction(self) -> None:
         if not self.use_local_argmax_reduction:

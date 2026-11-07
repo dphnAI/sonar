@@ -6,8 +6,8 @@ from functools import partial
 
 import pytest
 
-from aphrodite.multimodal.video import sample_frames_from_video
-from aphrodite.platforms import current_platform
+from sonar.multimodal.video import sample_frames_from_video
+from sonar.platforms import current_platform
 
 from ....conftest import IMAGE_ASSETS, VIDEO_ASSETS
 from ...utils import dummy_hf_overrides
@@ -26,7 +26,7 @@ class VitCudagraphTestConfig:
     max_num_seqs: int = 2
     num_video_frames: int = 16
     needs_video_metadata: bool = False
-    aphrodite_runner_kwargs: dict = field(default_factory=dict)
+    sonar_runner_kwargs: dict = field(default_factory=dict)
     compilation_config_overrides: dict = field(default_factory=dict)
     marks: list = field(default_factory=list)
     skip: bool = False
@@ -113,7 +113,7 @@ MODEL_CONFIGS: dict[str, VitCudagraphTestConfig] = {
         max_model_len=4096,
         max_tokens=32,
         max_num_seqs=2,
-        aphrodite_runner_kwargs={
+        sonar_runner_kwargs={
             "load_format": "dummy",
             "hf_overrides": partial(
                 dummy_hf_overrides,
@@ -157,7 +157,7 @@ MODEL_CONFIGS: dict[str, VitCudagraphTestConfig] = {
         # test runs on any CI GPU (incl. L4) and skips the multi-GiB
         # weight download. The test only validates that encoder CG
         # capture/replay functions correctly, not output quality.
-        aphrodite_runner_kwargs={
+        sonar_runner_kwargs={
             "trust_remote_code": True,
             "load_format": "dummy",
             "hf_overrides": partial(
@@ -174,7 +174,7 @@ MODEL_CONFIGS: dict[str, VitCudagraphTestConfig] = {
         compilation_config_overrides={
             "encoder_cudagraph_token_budgets": [512],
         },
-        aphrodite_runner_kwargs={
+        sonar_runner_kwargs={
             "trust_remote_code": True,
             "load_format": "dummy",
             "hf_overrides": partial(
@@ -192,7 +192,7 @@ MODEL_CONFIGS: dict[str, VitCudagraphTestConfig] = {
             "<|vision_start|><|video_pad|><|vision_end|>Describe this video in one sentence."
         ),
         needs_video_metadata=True,
-        aphrodite_runner_kwargs={"enable_chunked_prefill": True},
+        sonar_runner_kwargs={"enable_chunked_prefill": True},
         marks=[pytest.mark.core_model],
     ),
     "qwen3_5": VitCudagraphTestConfig(
@@ -210,7 +210,7 @@ MODEL_CONFIGS: dict[str, VitCudagraphTestConfig] = {
         image_prompt=internvl_chat_template("<image>\nWhat is in this image?"),
         video_prompt=internvl_chat_template("<video>\nDescribe this video in one sentence."),
         needs_video_metadata=False,
-        aphrodite_runner_kwargs={"trust_remote_code": True},
+        sonar_runner_kwargs={"trust_remote_code": True},
         marks=[pytest.mark.core_model],
     ),
     "idefics3": VitCudagraphTestConfig(
@@ -221,7 +221,7 @@ MODEL_CONFIGS: dict[str, VitCudagraphTestConfig] = {
         compilation_config_overrides={
             "encoder_cudagraph_token_budgets": [4096],
         },
-        aphrodite_runner_kwargs={"gpu_memory_utilization": 0.80},
+        sonar_runner_kwargs={"gpu_memory_utilization": 0.80},
         marks=[pytest.mark.core_model],
     ),
     "deepseek_v41": VitCudagraphTestConfig(
@@ -231,7 +231,7 @@ MODEL_CONFIGS: dict[str, VitCudagraphTestConfig] = {
         compilation_config_overrides={
             "encoder_cudagraph_token_budgets": [1024],
         },
-        aphrodite_runner_kwargs={
+        sonar_runner_kwargs={
             "load_format": "dummy",
             "attention_backend": (
                 "ROCM_FLASHMLA_SPARSE_DSV41" if current_platform.is_rocm() else "FLASHMLA_SPARSE_DSV41"
@@ -258,7 +258,7 @@ MODEL_CONFIGS: dict[str, VitCudagraphTestConfig] = {
         # test runs on any CI GPU (incl. L4) and skips the 20 GiB weight
         # download. The test only validates that encoder CG capture/
         # replay functions correctly, not output quality.
-        aphrodite_runner_kwargs={
+        sonar_runner_kwargs={
             "load_format": "dummy",
             "hf_overrides": partial(
                 dummy_hf_overrides,
@@ -282,7 +282,7 @@ MODEL_CONFIGS: dict[str, VitCudagraphTestConfig] = {
         # Shrink to 1 text + 1 vision layer with random weights so the test
         # runs on any CI GPU and skips the ~56 GiB weight download. The test
         # only validates encoder CG capture/replay, not output quality.
-        aphrodite_runner_kwargs={
+        sonar_runner_kwargs={
             "load_format": "dummy",
             "trust_remote_code": True,
             "revision": "refs/pr/17",
@@ -306,7 +306,7 @@ MODEL_CONFIGS: dict[str, VitCudagraphTestConfig] = {
         ),
         needs_video_metadata=True,
         marks=[pytest.mark.core_model],
-        aphrodite_runner_kwargs={
+        sonar_runner_kwargs={
             "load_format": "dummy",
             "hf_overrides": partial(
                 dummy_hf_overrides,
@@ -324,7 +324,7 @@ MODEL_CONFIGS: dict[str, VitCudagraphTestConfig] = {
             "mode": 0,
             "cudagraph_mode": 2,
         },
-        aphrodite_runner_kwargs={
+        sonar_runner_kwargs={
             "load_format": "dummy",
             "hf_overrides": partial(
                 dummy_hf_overrides,
@@ -337,7 +337,7 @@ MODEL_CONFIGS: dict[str, VitCudagraphTestConfig] = {
         model="deepseek-ai/deepseek-vl2-tiny",
         modalities=["image"],
         image_prompt=deepseek_vl2_chat_template("<image>\nWhat is in this image?"),
-        aphrodite_runner_kwargs={
+        sonar_runner_kwargs={
             "hf_overrides": {"architectures": ["DeepseekVLV2ForCausalLM"]},
         },
         marks=[pytest.mark.core_model],
@@ -371,7 +371,7 @@ MODEL_CONFIGS: dict[str, VitCudagraphTestConfig] = {
         compilation_config_overrides={
             "encoder_cudagraph_token_budgets": [64, 1024],
         },
-        aphrodite_runner_kwargs={"trust_remote_code": True},
+        sonar_runner_kwargs={"trust_remote_code": True},
         marks=[pytest.mark.core_model],
     ),
     "minicpmv_26": VitCudagraphTestConfig(
@@ -385,7 +385,7 @@ MODEL_CONFIGS: dict[str, VitCudagraphTestConfig] = {
             "encoder_cudagraph_token_budgets": [64, 1024],
             "encoder_cudagraph_max_frames_per_batch": 4,
         },
-        aphrodite_runner_kwargs={"trust_remote_code": True},
+        sonar_runner_kwargs={"trust_remote_code": True},
         marks=[pytest.mark.core_model],
     ),
     "minicpmv_40": VitCudagraphTestConfig(
@@ -398,7 +398,7 @@ MODEL_CONFIGS: dict[str, VitCudagraphTestConfig] = {
             "encoder_cudagraph_token_budgets": [64, 1024],
             "encoder_cudagraph_max_frames_per_batch": 4,
         },
-        aphrodite_runner_kwargs={"trust_remote_code": True},
+        sonar_runner_kwargs={"trust_remote_code": True},
         marks=[pytest.mark.core_model],
     ),
 }
@@ -420,7 +420,7 @@ def get_compilation_config(config: VitCudagraphTestConfig):
 
 @pytest.mark.parametrize("model_id", params_with_marks(MODEL_CONFIGS))
 @pytest.mark.skipif(not current_platform.is_cuda_alike(), reason="Skip if not cuda or rocm")
-def test_vit_cudagraph_image(model_id, aphrodite_runner, image_assets):
+def test_vit_cudagraph_image(model_id, sonar_runner, image_assets):
     config = MODEL_CONFIGS[model_id]
 
     if config.skip:
@@ -437,16 +437,16 @@ def test_vit_cudagraph_image(model_id, aphrodite_runner, image_assets):
     )
     images = [[asset.pil_image] for asset in image_assets]
 
-    with aphrodite_runner(
+    with sonar_runner(
         config.model,
         dtype=config.dtype,
         max_model_len=config.max_model_len,
         max_num_seqs=config.max_num_seqs,
         limit_mm_per_prompt={"image": 1},
         compilation_config=get_compilation_config(config),
-        **config.aphrodite_runner_kwargs,
-    ) as aphrodite_model:
-        outputs = aphrodite_model.generate_greedy(image_prompts, config.max_tokens, images=images)
+        **config.sonar_runner_kwargs,
+    ) as sonar_model:
+        outputs = sonar_model.generate_greedy(image_prompts, config.max_tokens, images=images)
 
         # Basic validation that we got a response
         assert len(outputs) == 2
@@ -462,7 +462,7 @@ def test_vit_cudagraph_image(model_id, aphrodite_runner, image_assets):
 
 @pytest.mark.parametrize("model_id", params_with_marks(MODEL_CONFIGS))
 @pytest.mark.skipif(not current_platform.is_cuda_alike(), reason="Skip if not cuda or rocm")
-def test_vit_cudagraph_video(model_id, aphrodite_runner, video_assets):
+def test_vit_cudagraph_video(model_id, sonar_runner, video_assets):
     config = MODEL_CONFIGS[model_id]
 
     if config.skip:
@@ -486,16 +486,16 @@ def test_vit_cudagraph_video(model_id, aphrodite_runner, video_assets):
         sampled_vids = [sample_frames_from_video(asset.np_ndarrays, config.num_video_frames) for asset in video_assets]
     videos = [sampled_vids[0]]
 
-    with aphrodite_runner(
+    with sonar_runner(
         config.model,
         dtype=config.dtype,
         max_model_len=config.max_model_len,
         max_num_seqs=config.max_num_seqs,
         limit_mm_per_prompt={"video": 1},
         compilation_config=get_compilation_config(config),
-        **config.aphrodite_runner_kwargs,
-    ) as aphrodite_model:
-        outputs = aphrodite_model.generate_greedy(video_prompts, config.max_tokens, videos=videos)
+        **config.sonar_runner_kwargs,
+    ) as sonar_model:
+        outputs = sonar_model.generate_greedy(video_prompts, config.max_tokens, videos=videos)
 
         # Basic validation that we got a response
         assert len(outputs) == 1
@@ -513,7 +513,7 @@ def _check_eonly_encoder_outputs(worker, batches):
     """Compare real E-only replay with eager, retaining outputs across replay."""
     import torch
 
-    from aphrodite.v1.worker.mm_encoder_model_runner import MMEncoderModelRunner
+    from sonar.v1.worker.mm_encoder_model_runner import MMEncoderModelRunner
 
     runner = worker.model_runner
     assert isinstance(runner, MMEncoderModelRunner)
@@ -552,14 +552,14 @@ def _check_eonly_encoder_outputs(worker, batches):
     params_with_marks({key: MODEL_CONFIGS[key] for key in ("qwen3_vl", "qwen3_5")}),
 )
 @pytest.mark.skipif(not current_platform.is_cuda(), reason="Requires CUDA graphs")
-def test_eonly_vit_cudagraph_outputs(model_id, aphrodite_runner, image_assets, video_assets, monkeypatch):
+def test_eonly_vit_cudagraph_outputs(model_id, sonar_runner, image_assets, video_assets, monkeypatch):
     """Exercise startup capture, image/video replay, fallback and output ownership."""
     import numpy as np
     from PIL import Image
     from transformers import AutoProcessor
 
-    monkeypatch.setenv("APHRODITE_USE_V2_MODEL_RUNNER", "1")
-    monkeypatch.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
+    monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", "1")
+    monkeypatch.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")
     config = MODEL_CONFIGS[model_id]
     token_budgets = [64, 256, 2048]
     processor = AutoProcessor.from_pretrained(config.model)
@@ -574,7 +574,7 @@ def test_eonly_vit_cudagraph_outputs(model_id, aphrodite_runner, image_assets, v
     ]
     frames = sample_frames_from_video(video_assets[0].np_ndarrays, 2)
     video = np.stack([np.asarray(Image.fromarray(frame).resize((224, 224))) for frame in frames])
-    with aphrodite_runner(
+    with sonar_runner(
         config.model,
         dtype=config.dtype,
         mm_encoder_only=True,
@@ -592,7 +592,7 @@ def test_eonly_vit_cudagraph_outputs(model_id, aphrodite_runner, image_assets, v
             "encoder_cudagraph_max_frames_per_batch": 2,
         },
     ) as model:
-        mm_config = model.llm.llm_engine.aphrodite_config.model_config.multimodal_config
+        mm_config = model.llm.llm_engine.sonar_config.model_config.multimodal_config
         processor_kwargs = mm_config.merge_mm_processor_kwargs({})
         inputs = [
             dict(processor.image_processor(images=images, return_tensors="pt", **processor_kwargs))

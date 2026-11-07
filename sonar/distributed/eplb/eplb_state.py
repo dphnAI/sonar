@@ -34,22 +34,22 @@ from dataclasses import dataclass
 import torch
 from torch.distributed import ProcessGroup, all_reduce
 
-from aphrodite.config import ModelConfig, ParallelConfig
-from aphrodite.config.utils import compute_hash_cached
-from aphrodite.distributed.parallel_state import (
+from sonar.config import ModelConfig, ParallelConfig
+from sonar.config.utils import compute_hash_cached
+from sonar.distributed.parallel_state import (
     GroupCoordinator,
     get_ep_group,
     get_eplb_group,
     get_node_count,
     in_the_same_node_as,
 )
-from aphrodite.distributed.stateless_coordinator import StatelessGroupCoordinator
-from aphrodite.distributed.utils import StatelessProcessGroup
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.models.interfaces import MixtureOfExperts
-from aphrodite.platforms import current_platform
-from aphrodite.utils.gpu_sync_debug import gpu_sync_allowed
-from aphrodite.utils.torch_utils import PIN_MEMORY
+from sonar.distributed.stateless_coordinator import StatelessGroupCoordinator
+from sonar.distributed.utils import StatelessProcessGroup
+from sonar.logger import init_logger
+from sonar.model_executor.models.interfaces import MixtureOfExperts
+from sonar.platforms import current_platform
+from sonar.utils.gpu_sync_debug import gpu_sync_allowed
+from sonar.utils.torch_utils import PIN_MEMORY
 
 from .async_worker import start_async_worker
 from .eplb_communicator import EplbCommunicator, create_eplb_communicator

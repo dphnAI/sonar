@@ -6,55 +6,55 @@ from itertools import islice
 import torch
 from torch import nn
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import (
     CacheConfig,
-    get_current_aphrodite_config,
+    SonarConfig,
+    get_current_sonar_config,
     str_dtype_to_torch_dtype,
 )
-from aphrodite.distributed import (
+from sonar.distributed import (
     get_ep_group,
     get_pp_group,
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
     tensor_model_parallel_all_gather,
 )
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.activation import SiluAndMul
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.activation import SiluAndMul
+from sonar.model_executor.layers.attention import Attention
+from sonar.model_executor.layers.fused_moe import (
     FusedMoEFactory,
     fused_moe_make_expert_params_mapping,
 )
-from aphrodite.model_executor.layers.fused_moe.router.gate_linear import GateLinear
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.fused_moe.router.gate_linear import GateLinear
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     MergedColumnParallelLinear,
     QKVParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     GroupShape,
     scaled_quantize,
 )
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.model_loader.weight_utils import (
+from sonar.model_executor.model_loader.weight_utils import (
     default_weight_loader,
     make_attention_sink,
     maybe_remap_kv_scale_name,
 )
-from aphrodite.model_executor.models.utils import sequence_parallel_chunk
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.v1.attention.backend import AttentionType
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
+from sonar.model_executor.models.utils import sequence_parallel_chunk
+from sonar.sequence import IntermediateTensors
+from sonar.utils.math_utils import cdiv
+from sonar.v1.attention.backend import AttentionType
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
 
 from .interfaces import (
     EagleModelMixin,
@@ -115,15 +115,15 @@ class MiMoV2MLP(nn.Module):
 class MiMoV2MoE(nn.Module):
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
         is_nextn: bool = False,
     ):
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_text_config
-        parallel_config = aphrodite_config.parallel_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_text_config
+        parallel_config = sonar_config.parallel_config
+        quant_config = sonar_config.quant_config
 
         self.tp_size = get_tensor_model_parallel_world_size()
 
@@ -141,8 +141,8 @@ class MiMoV2MoE(nn.Module):
         if config.hidden_act != "silu":
             raise ValueError(f"Unsupported activation: {config.hidden_act}. Only silu is supported for now.")
 
-        aphrodite_config = get_current_aphrodite_config()
-        eplb_config = aphrodite_config.parallel_config.eplb_config
+        sonar_config = get_current_sonar_config()
+        eplb_config = sonar_config.parallel_config.eplb_config
         self.enable_eplb = parallel_config.enable_eplb
 
         self.n_logical_experts = self.n_routed_experts
@@ -309,7 +309,7 @@ class MiMoV2Attention(nn.Module):
         # declares it can serve that geometry; anything else keeps the auto-pick
         # below, with a warning.
         if self.v_head_dim != self.head_dim:
-            requested = get_current_aphrodite_config().attention_config.backend
+            requested = get_current_sonar_config().attention_config.backend
             if requested is not None and requested.get_class().supports_head_size_v(self.head_dim, self.v_head_dim):
                 backend_enum = requested
             else:
@@ -375,10 +375,10 @@ class MiMoV2Attention(nn.Module):
 
 
 class MiMoV2FlashDecoderLayer(nn.Module):
-    def __init__(self, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__()
-        config = aphrodite_config.model_config.hf_text_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_text_config
+        quant_config = sonar_config.quant_config
         fused_qkv_chunks = (
             config.num_key_value_heads
             if getattr(config, "attention_projection_layout", None) == "fused_qkv"
@@ -397,7 +397,7 @@ class MiMoV2FlashDecoderLayer(nn.Module):
         v_scale = getattr(config, "attention_value_scale", None)
         # cache_config.sliding_window holds MiMo's SWA window; global layers
         # would otherwise fall back to it in Attention.
-        cache_config = aphrodite_config.cache_config
+        cache_config = sonar_config.cache_config
         cache_config.sliding_window = None
 
         if self.is_compressed_softmax_layer():
@@ -443,7 +443,7 @@ class MiMoV2FlashDecoderLayer(nn.Module):
         self.is_layer_sparse = self.is_moe_layer(layer_id)
         if self.is_layer_sparse:
             self.mlp = MiMoV2MoE(
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 prefix=f"{prefix}.mlp",
             )
         else:
@@ -605,7 +605,7 @@ def _shard_fp8_qkv_proj(
             f"fused qkv_proj is pre-sharded at {ckpt_tp} chunks, which do not "
             f"divide num_heads={num_heads} / num_kv_heads={num_kv_heads}."
         )
-    # When there are fewer KV heads than ranks, Aphrodite replicates them
+    # When there are fewer KV heads than ranks, Sonar replicates them
     # (`num_kv_head_replicas`) and rank r owns KV head r // replicas, which
     # keeps every Q head grouped with the KV head it attends to.
     if tp_size <= num_kv_heads:
@@ -722,12 +722,12 @@ def _shard_fp8_qkv_proj(
 
 @support_torch_compile
 class MiMoV2Model(nn.Module, EagleModelMixin):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_config.get_text_config()
-        quant_config = aphrodite_config.quant_config
-        eplb_config = aphrodite_config.parallel_config.eplb_config
+        config = sonar_config.model_config.hf_config.get_text_config()
+        quant_config = sonar_config.quant_config
+        eplb_config = sonar_config.parallel_config.eplb_config
 
         self.config = config
         self.quant_config = quant_config
@@ -747,7 +747,7 @@ class MiMoV2Model(nn.Module, EagleModelMixin):
         self.start_layer, self.end_layer, self.layers = make_layers(
             config.num_hidden_layers,
             lambda prefix: MiMoV2FlashDecoderLayer(
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 prefix=prefix,
             ),
             prefix=f"{prefix}.layers",
@@ -1004,15 +1004,15 @@ class MiMoV2FlashForCausalLM(nn.Module, SupportsPP, MixtureOfExperts, SupportsEa
         "gate_up_proj": ["gate_proj", "up_proj"],
     }
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
 
         self.config = config
         self.quant_config = quant_config
         self.model = MiMoV2Model(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             prefix=maybe_prefix(prefix, "model"),
         )
 

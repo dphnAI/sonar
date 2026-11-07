@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-from aphrodite.distributed.weight_transfer.base import (
+from sonar.distributed.weight_transfer.base import (
     WeightTransferInitRequest,
     WeightTransferUpdateRequest,
 )
-from aphrodite.entrypoints.common.offline import OfflineInferenceMixin
+from sonar.entrypoints.common.offline import OfflineInferenceMixin
 
 
 class RLOfflineMixin(OfflineInferenceMixin):

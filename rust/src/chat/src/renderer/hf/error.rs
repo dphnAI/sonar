@@ -9,11 +9,9 @@ use thiserror::Error as ThisError;
 pub(crate) enum TemplateError {
     #[error("failed to render jinja template")]
     Jinja(#[from] minijinja::Error),
-    #[error(
-        "chat template exceeded its fuel budget; adjust APHRODITE_CHAT_TEMPLATE_FUEL to override"
-    )]
+    #[error("chat template exceeded its fuel budget; adjust SONAR_CHAT_TEMPLATE_FUEL to override")]
     OutOfFuel(#[source] minijinja::Error),
-    #[error("APHRODITE_CHAT_TEMPLATE_FUEL must be a non-negative integer, got {0:?}")]
+    #[error("SONAR_CHAT_TEMPLATE_FUEL must be a non-negative integer, got {0:?}")]
     InvalidFuel(OsString),
     #[error("failed to read chat template file")]
     ReadTemplateFile(#[source] std::io::Error),

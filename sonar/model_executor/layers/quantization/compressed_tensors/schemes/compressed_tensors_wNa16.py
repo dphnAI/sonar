@@ -8,32 +8,32 @@ from fractions import Fraction
 import torch
 from compressed_tensors.compressors.pack_quantized.helpers import unpack_from_int32
 
-from aphrodite import envs
-from aphrodite.distributed.utils import verify_group_size_divides_partition
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.determinism.batch_invariant import matmul_batch_invariant
-from aphrodite.model_executor.kernels.linear import (
+from sonar import envs
+from sonar.distributed.utils import verify_group_size_divides_partition
+from sonar.logger import init_logger
+from sonar.model_executor.determinism.batch_invariant import matmul_batch_invariant
+from sonar.model_executor.kernels.linear import (
     MarlinLinearKernel,
     MPLinearKernel,
     MPLinearLayerConfig,
     choose_mp_linear_kernel,
 )
-from aphrodite.model_executor.layers.quantization.compressed_tensors.schemes import (
+from sonar.model_executor.layers.quantization.compressed_tensors.schemes import (
     CompressedTensorsScheme,
 )
-from aphrodite.model_executor.layers.quantization.utils.marlin_utils import (
+from sonar.model_executor.layers.quantization.utils.marlin_utils import (
     get_marlin_input_dtype,
     marlin_repeat_scales_on_all_ranks,
 )
-from aphrodite.model_executor.parameter import (
-    BaseAphroditeParameter,
+from sonar.model_executor.parameter import (
+    BaseSonarParameter,
     ChannelQuantScaleParameter,
     GroupQuantScaleParameter,
-    PackedAphroditeParameter,
     PackedColumnParameter,
+    PackedSonarParameter,
 )
-from aphrodite.model_executor.utils import replace_parameter
-from aphrodite.scalar_type import scalar_types
+from sonar.model_executor.utils import replace_parameter
+from sonar.scalar_type import scalar_types
 
 logger = init_logger(__name__)
 
@@ -79,7 +79,7 @@ class CompressedTensorsWNA16(CompressedTensorsScheme):
         # Marlin picks its tiling and K-split from the number of tokens, so its
         # results depend on the batch size. In batch-invariant mode keep the
         # checkpoint layout, unpack the weight and use the batch-invariant matmul.
-        self.use_batch_invariant = envs.APHRODITE_BATCH_INVARIANT
+        self.use_batch_invariant = envs.SONAR_BATCH_INVARIANT
         self.kernel: MPLinearKernel | None = None
 
         if self.group_size == -1 and self.strategy != "channel":
@@ -167,7 +167,7 @@ class CompressedTensorsWNA16(CompressedTensorsScheme):
             scales_and_zp_size = input_size_per_partition // group_size
 
         packed_input_dim = math.ceil(input_size_per_partition * self.num_bits / 32)
-        weight = PackedAphroditeParameter(
+        weight = PackedSonarParameter(
             input_dim=1,
             output_dim=0,
             weight_loader=weight_loader,
@@ -212,7 +212,7 @@ class CompressedTensorsWNA16(CompressedTensorsScheme):
         else:
             weight_scale = GroupQuantScaleParameter(output_dim=0, input_dim=1, **weight_scale_args)
             if not self.symmetric:
-                qzeros = PackedAphroditeParameter(
+                qzeros = PackedSonarParameter(
                     input_dim=1,
                     output_dim=0,
                     packed_dim=0,
@@ -222,7 +222,7 @@ class CompressedTensorsWNA16(CompressedTensorsScheme):
 
         # A 2D array defining the original shape of the weights
         # before packing
-        weight_shape = BaseAphroditeParameter(data=torch.empty(2, dtype=torch.int64), weight_loader=weight_loader)
+        weight_shape = BaseSonarParameter(data=torch.empty(2, dtype=torch.int64), weight_loader=weight_loader)
 
         layer.register_parameter("weight_packed", weight)
         layer.register_parameter("weight_scale", weight_scale)

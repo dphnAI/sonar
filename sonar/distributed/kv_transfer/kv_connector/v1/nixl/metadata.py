@@ -5,13 +5,13 @@
 from dataclasses import dataclass, field
 from typing import Any
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed.kv_transfer.kv_connector.utils import BlockIds, EngineId
-from aphrodite.distributed.kv_transfer.kv_connector.v1.base import (
+from sonar.config import SonarConfig
+from sonar.distributed.kv_transfer.kv_connector.utils import BlockIds, EngineId
+from sonar.distributed.kv_transfer.kv_connector.v1.base import (
     KVConnectorHandshakeMetadata,
     KVConnectorMetadata,
 )
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 
@@ -105,10 +105,10 @@ class NixlHandshakePayload(KVConnectorHandshakeMetadata):
 
 
 def _get_speculative_compatibility_factors(
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
 ) -> dict[str, Any] | None:
     """Return NIXL compatibility factors for hidden-state-based speculators."""
-    speculative_config = aphrodite_config.speculative_config
+    speculative_config = sonar_config.speculative_config
     if speculative_config is None or not speculative_config.uses_target_hidden_states:
         return None
 
@@ -124,7 +124,7 @@ def _get_speculative_compatibility_factors(
     # the target's --kv-cache-dtype". Resolve it to the effective value so an
     # explicit setting on one side and inheritance on the other (same effective
     # dtype) don't spuriously mismatch.
-    kv_cache_dtype = speculative_config.kv_cache_dtype or aphrodite_config.cache_config.cache_dtype
+    kv_cache_dtype = speculative_config.kv_cache_dtype or sonar_config.cache_config.cache_dtype
 
     # Note: the draft attention_backend is intentionally not hashed. Its only
     # transfer-relevant effect is the KV block layout/size, which is validated
@@ -144,7 +144,7 @@ def _get_speculative_compatibility_factors(
 
 
 def compute_nixl_compatibility_hash(
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     attn_backend_name: str,
     transfer_mode: str = "pull",
 ) -> str:
@@ -154,7 +154,7 @@ def compute_nixl_compatibility_hash(
     successfully transfer KV cache data.
 
     Factors included:
-    - Aphrodite version and NIXL connector version
+    - Sonar version and NIXL connector version
     - Model architecture (name, dtype, KV heads, layers)
     - KV cache format (dtype, sliding window)
     - Attention backend
@@ -176,16 +176,16 @@ def compute_nixl_compatibility_hash(
         SHA-256 hex digest
 
     """
-    from aphrodite import __version__ as aphrodite_version
-    from aphrodite.config.utils import hash_factors
+    from sonar import __version__ as sonar_version
+    from sonar.config.utils import hash_factors
 
-    model_config = aphrodite_config.model_config
-    cache_config = aphrodite_config.cache_config
-    is_hma_enabled = not aphrodite_config.scheduler_config.disable_hybrid_kv_cache_manager
+    model_config = sonar_config.model_config
+    cache_config = sonar_config.cache_config
+    is_hma_enabled = not sonar_config.scheduler_config.disable_hybrid_kv_cache_manager
 
     factors = {
         # Version compatibility
-        "aphrodite_version": aphrodite_version,
+        "sonar_version": sonar_version,
         "nixl_connector_version": NIXL_CONNECTOR_VERSION,
         # Model architecture - affects KV cache shape
         "model": model_config.model,
@@ -197,7 +197,7 @@ def compute_nixl_compatibility_hash(
         "attn_backend_name": attn_backend_name,
         "cache_dtype": str(cache_config.cache_dtype),
         "is_hma_enabled": is_hma_enabled,
-        "speculative_config": _get_speculative_compatibility_factors(aphrodite_config),
+        "speculative_config": _get_speculative_compatibility_factors(sonar_config),
         # push (WRITE) and pull (READ) connectors are protocol-incompatible
         "transfer_mode": transfer_mode,
     }

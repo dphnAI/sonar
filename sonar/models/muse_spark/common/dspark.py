@@ -9,37 +9,37 @@ from typing import TYPE_CHECKING
 import torch
 import torch.nn as nn
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig
-from aphrodite.model_executor.layers.linear import ReplicatedLinear
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import SonarConfig
+from sonar.model_executor.layers.linear import ReplicatedLinear
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.models.qwen3_dflash import DFlashQwen3Model
-from aphrodite.model_executor.models.qwen3_dspark import (
+from sonar.model_executor.models.qwen3_dflash import DFlashQwen3Model
+from sonar.model_executor.models.qwen3_dspark import (
     DSparkConfidenceHead,
     DSparkMarkovHead,
     Qwen3DSparkForCausalLM,
 )
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.models.utils import (
     AutoWeightsLoader,
     WeightsMapper,
     get_draft_quant_config,
     maybe_prefix,
 )
-from aphrodite.models.muse_spark.common.layers import (
+from sonar.models.muse_spark.common.layers import (
     MuseSpark1xRMSNorm,
     materialize_residual_path_constants,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.transformers_utils.configs.muse_spark import MuseSparkDSparkConfig
+from sonar.platforms import current_platform
+from sonar.transformers_utils.configs.muse_spark import MuseSparkDSparkConfig
 
 if TYPE_CHECKING or not current_platform.is_rocm():
-    from aphrodite.models.muse_spark.nvidia.model import MuseSpark1xDecoderLayer
+    from sonar.models.muse_spark.nvidia.model import MuseSpark1xDecoderLayer
 else:
-    from aphrodite.models.muse_spark.amd.model import (  # type: ignore[assignment]
+    from sonar.models.muse_spark.amd.model import (  # type: ignore[assignment]
         MuseSpark1xDecoderLayer,
     )
 
@@ -47,15 +47,15 @@ else:
 class MuseSparkDSparkDecoderLayer(MuseSpark1xDecoderLayer):
     """Dense Muse layer with the draft's materialized, gated FP32 residual."""
 
-    def __init__(self, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
-        super().__init__(aphrodite_config, prefix)
+    def __init__(self, sonar_config: SonarConfig, prefix: str = "") -> None:
+        super().__init__(sonar_config, prefix)
         # The draft stream stays replicated even when the target runs SP.
         if getattr(self, "is_sequence_parallel", False):
             self.is_sequence_parallel = False
             self.is_sequence_parallel_input = False
             self.self_attn.is_sequence_parallel_output = False
             self.self_attn.o_proj.reduce_results = True
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
         self.self_attn.causal = True
         if (self.self_attn.rotary_emb is not None) != config.use_rope:
             raise ValueError("Muse Spark DSpark layers must share their positional mode")
@@ -85,24 +85,24 @@ class MuseSparkDSparkModel(DFlashQwen3Model):
     def __init__(
         self,
         *,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         start_layer_id: int = 0,
         prefix: str = "",
     ) -> None:
         nn.Module.__init__(self)
-        assert aphrodite_config.speculative_config is not None
-        config = aphrodite_config.speculative_config.draft_model_config.hf_config
+        assert sonar_config.speculative_config is not None
+        config = sonar_config.speculative_config.draft_model_config.hf_config
         if not isinstance(config, MuseSparkDSparkConfig):
             raise TypeError("MuseSparkDSparkModel requires MuseSparkDSparkConfig")
         self.config = config
         self.default_dtype = torch.get_default_dtype()
         self.vocab_size = config.vocab_size
-        self.quant_config = get_draft_quant_config(aphrodite_config)
+        self.quant_config = get_draft_quant_config(sonar_config)
         self.use_aux_hidden_state = True
         self.target_layer_ids = tuple(config.target_layer_ids)
-        # Avoid rerunning AphroditeConfig validation against the target's shared configs.
-        draft_config = copy(aphrodite_config)
-        draft_config.model_config = aphrodite_config.speculative_config.draft_model_config
+        # Avoid rerunning SonarConfig validation against the target's shared configs.
+        draft_config = copy(sonar_config)
+        draft_config.model_config = sonar_config.speculative_config.draft_model_config
         draft_config.quant_config = self.quant_config
 
         self.embed_tokens = VocabParallelEmbedding(
@@ -113,7 +113,7 @@ class MuseSparkDSparkModel(DFlashQwen3Model):
         self.mask_token_id = config.mask_token_id
         self.register_buffer(
             "mask_embedding",
-            torch.zeros(config.hidden_size, dtype=aphrodite_config.model_config.dtype),
+            torch.zeros(config.hidden_size, dtype=sonar_config.model_config.dtype),
             persistent=False,
         )
         self.has_separate_mask_embedding = False
@@ -121,7 +121,7 @@ class MuseSparkDSparkModel(DFlashQwen3Model):
             input_size=config.target_hidden_size * len(self.target_layer_ids),
             output_size=config.hidden_size,
             bias=False,
-            params_dtype=aphrodite_config.model_config.dtype,
+            params_dtype=sonar_config.model_config.dtype,
             quant_config=self.quant_config,
             prefix=maybe_prefix(prefix, "fc"),
             return_bias=False,
@@ -263,7 +263,7 @@ class MuseSparkDSparkForCausalLM(Qwen3DSparkForCausalLM):
 
     has_own_lm_head = True
 
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_stacked={
             ".self_attn.q_proj.": (".self_attn.qkv_proj.", "q"),
             ".self_attn.k_proj.": (".self_attn.qkv_proj.", "k"),
@@ -274,14 +274,14 @@ class MuseSparkDSparkForCausalLM(Qwen3DSparkForCausalLM):
         }
     )
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         nn.Module.__init__(self)
-        assert aphrodite_config.speculative_config is not None
-        self.draft_model_config = aphrodite_config.speculative_config.draft_model_config
+        assert sonar_config.speculative_config is not None
+        self.draft_model_config = sonar_config.speculative_config.draft_model_config
         self.config = self.draft_model_config.hf_config
-        target_layer_num = aphrodite_config.model_config.get_total_num_hidden_layers()
+        target_layer_num = sonar_config.model_config.get_total_num_hidden_layers()
         self.model = MuseSparkDSparkModel(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             prefix=maybe_prefix(prefix, "model"),
             start_layer_id=target_layer_num,
         )
@@ -291,7 +291,7 @@ class MuseSparkDSparkForCausalLM(Qwen3DSparkForCausalLM):
             prefix=maybe_prefix(prefix, "lm_head"),
         )
         self.logits_processor = LogitsProcessor(self.config.draft_vocab_size)
-        self.target_vocab_size = aphrodite_config.model_config.get_vocab_size()
+        self.target_vocab_size = sonar_config.model_config.get_vocab_size()
         self.draft_id_to_target_id = nn.Parameter(
             torch.zeros(self.config.draft_vocab_size, dtype=torch.long),
             requires_grad=False,
@@ -347,7 +347,7 @@ class MuseSparkDSparkForCausalLM(Qwen3DSparkForCausalLM):
                 "model.embed_tokens": None,
                 "model.mask_embedding": None,
             },
-            orig_to_new_stacked=self.hf_to_aphrodite_mapper.orig_to_new_stacked,
+            orig_to_new_stacked=self.hf_to_sonar_mapper.orig_to_new_stacked,
         )
         return AutoWeightsLoader(self).load_weights(model_weights.items(), mapper=mapper)
 

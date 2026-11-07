@@ -7,15 +7,15 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.model_executor.kernels.linear import (
+from sonar.model_executor.kernels.linear import (
     B12xFp8BlockScaledMMKernel,
     B12xMxFp4LinearKernel,
     B12xMxfp8LinearKernel,
     B12xNvFp4LinearKernel,
     B12xTensorFP8ScaledMMLinearKernel,
 )
-from aphrodite.model_executor.warmup.b12x_warmup import b12x_warmup
-from aphrodite.utils.b12x import B12xWarmupUnit, b12x_warmup_token_counts
+from sonar.model_executor.warmup.b12x_warmup import b12x_warmup
+from sonar.utils.b12x import B12xWarmupUnit, b12x_warmup_token_counts
 
 
 def test_b12x_warmup_token_counts_cover_serving_regimes() -> None:
@@ -27,10 +27,10 @@ def test_b12x_warmup_token_counts_cover_serving_regimes() -> None:
 
 @pytest.mark.parametrize("is_embedding", [False, True])
 def test_b12x_block_quant_warmup_covers_each_layers_plans(monkeypatch, is_embedding):
-    from aphrodite.model_executor.layers.quantization.modelopt_block_quant import (
+    from sonar.model_executor.layers.quantization.modelopt_block_quant import (
         ModelOptBlockQuantLinearMethod,
     )
-    from aphrodite.model_executor.warmup.b12x_warmup import _collect_warmup_units
+    from sonar.model_executor.warmup.b12x_warmup import _collect_warmup_units
 
     method = object.__new__(ModelOptBlockQuantLinearMethod)
     method.codec = "q8_0"
@@ -72,7 +72,7 @@ def test_b12x_block_quant_warmup_covers_each_layers_plans(monkeypatch, is_embedd
     [
         (
             B12xMxFp4LinearKernel,
-            "aphrodite.model_executor.kernels.linear.mxfp4.b12x",
+            "sonar.model_executor.kernels.linear.mxfp4.b12x",
             "_apply_b12x_mxfp4_linear",
             SimpleNamespace(
                 weight=torch.empty((48, 64), dtype=torch.uint8),
@@ -82,7 +82,7 @@ def test_b12x_block_quant_warmup_covers_each_layers_plans(monkeypatch, is_embedd
         ),
         (
             B12xNvFp4LinearKernel,
-            "aphrodite.model_executor.kernels.linear.nvfp4.b12x",
+            "sonar.model_executor.kernels.linear.nvfp4.b12x",
             "_apply_b12x_nvfp4_linear",
             SimpleNamespace(
                 weight=torch.empty((48, 64), dtype=torch.uint8),
@@ -94,7 +94,7 @@ def test_b12x_block_quant_warmup_covers_each_layers_plans(monkeypatch, is_embedd
         ),
         (
             B12xFp8BlockScaledMMKernel,
-            "aphrodite.model_executor.kernels.linear.scaled_mm.b12x",
+            "sonar.model_executor.kernels.linear.scaled_mm.b12x",
             "_run_b12x_fp8_block_scaled_mm",
             SimpleNamespace(
                 weight=torch.empty((256, 128), dtype=torch.float8_e4m3fn),
@@ -129,7 +129,7 @@ def test_b12x_warmup_units_cover_token_counts(
 
 
 def test_b12x_mxfp8_warmup_unit(monkeypatch) -> None:
-    import aphrodite.model_executor.kernels.linear.mxfp8.b12x as b12x_mod
+    import sonar.model_executor.kernels.linear.mxfp8.b12x as b12x_mod
 
     calls = []
     monkeypatch.setattr(
@@ -159,7 +159,7 @@ def test_b12x_mxfp8_warmup_unit(monkeypatch) -> None:
 
 
 def test_b12x_tensor_fp8_warmup_unit(monkeypatch) -> None:
-    import aphrodite.model_executor.kernels.linear.scaled_mm.b12x as b12x_mod
+    import sonar.model_executor.kernels.linear.scaled_mm.b12x as b12x_mod
 
     calls = []
     monkeypatch.setattr(
@@ -189,7 +189,7 @@ def test_b12x_tensor_fp8_warmup_unit(monkeypatch) -> None:
 
 
 def test_b12x_warmup_deduplicates_registered_signatures(monkeypatch) -> None:
-    import aphrodite.model_executor.warmup.b12x_warmup as warmup_mod
+    import sonar.model_executor.warmup.b12x_warmup as warmup_mod
 
     calls: list[tuple[str, tuple[int, ...], torch.dtype]] = []
 
@@ -222,7 +222,7 @@ def test_b12x_warmup_deduplicates_registered_signatures(monkeypatch) -> None:
             max_num_scheduled_tokens=32,
         ),
         model_config=SimpleNamespace(dtype=torch.float32),
-        aphrodite_config=SimpleNamespace(compilation_config=SimpleNamespace(compile_sizes=[4, 16])),
+        sonar_config=SimpleNamespace(compilation_config=SimpleNamespace(compile_sizes=[4, 16])),
     )
     platform = SimpleNamespace(
         is_cuda=lambda: True,

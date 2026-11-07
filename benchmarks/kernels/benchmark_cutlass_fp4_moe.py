@@ -10,24 +10,24 @@ import nvtx
 import torch
 import torch.utils.benchmark as benchmark
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite import _custom_ops as ops
-from aphrodite.config import AphroditeConfig, ParallelConfig, set_current_aphrodite_config
-from aphrodite.model_executor.layers.fused_moe.all2all_utils import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar import _custom_ops as ops
+from sonar.config import ParallelConfig, SonarConfig, set_current_sonar_config
+from sonar.model_executor.layers.fused_moe.all2all_utils import (
     maybe_make_prepare_finalize,
 )
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe.config import (
     fp8_w8a8_moe_quant_config,
     nvfp4_moe_quant_config,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.cutlass_moe import (
+from sonar.model_executor.layers.fused_moe.experts.cutlass_moe import (
     CutlassExpertsFp4,
 )
-from aphrodite.model_executor.layers.fused_moe.fused_moe import fused_experts
-from aphrodite.model_executor.layers.fused_moe.router.fused_topk_router import fused_topk
-from aphrodite.scalar_type import scalar_types
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
-from aphrodite.v1.worker.workspace import init_workspace_manager
+from sonar.model_executor.layers.fused_moe.fused_moe import fused_experts
+from sonar.model_executor.layers.fused_moe.router.fused_topk_router import fused_topk
+from sonar.scalar_type import scalar_types
+from sonar.utils.argparse_utils import FlexibleArgumentParser
+from sonar.v1.worker.workspace import init_workspace_manager
 from tests.kernels.moe.utils import make_dummy_moe_config
 
 WEIGHT_SHAPES_MOE = {
@@ -256,7 +256,7 @@ def bench_run(
             ),
         )
 
-        with set_current_aphrodite_config(AphroditeConfig(parallel_config=ParallelConfig(pipeline_parallel_size=1))):
+        with set_current_sonar_config(SonarConfig(parallel_config=ParallelConfig(pipeline_parallel_size=1))):
             return kernel(
                 hidden_states=a,
                 w1=w1_fp4,
@@ -275,7 +275,7 @@ def bench_run(
         w2_scale: torch.Tensor,
         a_fp8_scale: torch.Tensor,
     ):
-        with set_current_aphrodite_config(AphroditeConfig(parallel_config=ParallelConfig(pipeline_parallel_size=1))):
+        with set_current_sonar_config(SonarConfig(parallel_config=ParallelConfig(pipeline_parallel_size=1))):
             quant_config = fp8_w8a8_moe_quant_config(
                 w1_scale=w1_scale,
                 w2_scale=w2_scale,

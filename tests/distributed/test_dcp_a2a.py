@@ -15,10 +15,10 @@ import pytest
 import torch
 import torch.distributed as dist
 
-import aphrodite.envs as envs
-from aphrodite.config.parallel import ParallelConfig
-from aphrodite.utils.network_utils import get_file_store_init_method
-from aphrodite.utils.system_utils import update_environment_variables
+import sonar.envs as envs
+from sonar.config.parallel import ParallelConfig
+from sonar.utils.network_utils import get_file_store_init_method
+from sonar.utils.system_utils import update_environment_variables
 
 mp.set_start_method("spawn", force=True)
 
@@ -44,7 +44,7 @@ def _packed_a2a_reference(
     h_per_rank: int,
     is_lse_base_on_e: bool,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    from aphrodite.v1.attention.ops.dcp import _lse_weighted_combine
+    from sonar.v1.attention.ops.dcp import _lse_weighted_combine
 
     B, _H, D = cp_attn_out.shape
     outputs = cp_attn_out.view(B, world_size, h_per_rank, D).permute(1, 0, 2, 3).contiguous().float()
@@ -142,13 +142,13 @@ class TestLSEWeightedCombine:
 
     def test_importable(self):
         """Verify _lse_weighted_combine is importable."""
-        from aphrodite.v1.attention.ops.dcp import _lse_weighted_combine
+        from sonar.v1.attention.ops.dcp import _lse_weighted_combine
 
         assert callable(_lse_weighted_combine)
 
     def test_single_rank(self):
         """Single rank: output unchanged."""
-        from aphrodite.v1.attention.ops.dcp import _lse_weighted_combine
+        from sonar.v1.attention.ops.dcp import _lse_weighted_combine
 
         # N=1, B=2, H=4, D=8
         outputs = torch.randn(1, 2, 4, 8)
@@ -161,7 +161,7 @@ class TestLSEWeightedCombine:
 
     def test_equal_lse(self):
         """Equal LSE values: outputs averaged equally."""
-        from aphrodite.v1.attention.ops.dcp import _lse_weighted_combine
+        from sonar.v1.attention.ops.dcp import _lse_weighted_combine
 
         _N, B, H, D = 2, 1, 1, 4
         outputs = torch.tensor(
@@ -185,7 +185,7 @@ class TestLSEWeightedCombine:
 
     def test_dominant_rank(self):
         """Different LSE values: larger LSE gets more weight."""
-        from aphrodite.v1.attention.ops.dcp import _lse_weighted_combine
+        from sonar.v1.attention.ops.dcp import _lse_weighted_combine
 
         B, H, D = 1, 1, 2
         outputs = torch.tensor(
@@ -207,7 +207,7 @@ class TestLSEWeightedCombine:
         torch.testing.assert_close(result, outputs[1], atol=1e-5, rtol=1e-5)
 
     def test_empty_shard_ignores_undefined_output(self):
-        from aphrodite.v1.attention.ops.dcp import _lse_weighted_combine
+        from sonar.v1.attention.ops.dcp import _lse_weighted_combine
 
         outputs = torch.tensor([[[[float("nan")]]], [[[3.0]]]])
         lses = torch.tensor([[[-float("inf")]], [[0.0]]])
@@ -217,7 +217,7 @@ class TestLSEWeightedCombine:
         torch.testing.assert_close(result, outputs[1])
 
     def test_ag_rs_masks_empty_shard_and_padded_lse(self, monkeypatch):
-        import aphrodite.v1.attention.ops.dcp as dcp
+        import sonar.v1.attention.ops.dcp as dcp
 
         class FakeGroup:
             world_size = 2
@@ -251,7 +251,7 @@ class TestLSEWeightedCombine:
 
     def test_mathematically_correct(self):
         """Verify mathematical correctness of LSE combination."""
-        from aphrodite.v1.attention.ops.dcp import _lse_weighted_combine
+        from sonar.v1.attention.ops.dcp import _lse_weighted_combine
 
         outputs = torch.tensor(
             [
@@ -276,7 +276,7 @@ class TestLSEWeightedCombine:
 
     def test_return_lse(self):
         """return_lse=True returns global LSE (logsumexp of inputs)."""
-        from aphrodite.v1.attention.ops.dcp import _lse_weighted_combine
+        from sonar.v1.attention.ops.dcp import _lse_weighted_combine
 
         B, H, D = 1, 1, 2
         outputs = torch.tensor(
@@ -302,7 +302,7 @@ class TestLSEWeightedCombine:
 
     def test_base2_return_lse(self):
         """Base-2 LSE mode returns log2-sum-exp2 global LSE."""
-        from aphrodite.v1.attention.ops.dcp import _lse_weighted_combine
+        from sonar.v1.attention.ops.dcp import _lse_weighted_combine
 
         outputs = torch.tensor(
             [
@@ -339,7 +339,7 @@ class TestLSEWeightedCombine:
 
     def test_lse_pack_dim(self):
         """Packed A2A stores one fp32 LSE in output-dtype lanes."""
-        from aphrodite.v1.attention.ops.dcp import _dcp_a2a_lse_pack_dim
+        from sonar.v1.attention.ops.dcp import _dcp_a2a_lse_pack_dim
 
         assert _dcp_a2a_lse_pack_dim(torch.bfloat16) == 2
         assert _dcp_a2a_lse_pack_dim(torch.float16) == 2
@@ -357,7 +357,7 @@ class TestPackedA2AKernels:
         return_lse: bool,
         is_lse_base_on_e: bool,
     ):
-        from aphrodite.v1.attention.ops.dcp import (
+        from sonar.v1.attention.ops.dcp import (
             _dcp_a2a_lse_pack_dim,
             _dcp_a2a_pack_send,
             _dcp_a2a_unpack_combine,
@@ -400,7 +400,7 @@ class TestPackedA2AKernels:
 
     @pytest.mark.skipif(torch.accelerator.device_count() < 1, reason="CUDA is required.")
     def test_empty_seq_lens_ignore_undefined_output(self):
-        from aphrodite.v1.attention.ops.dcp import (
+        from sonar.v1.attention.ops.dcp import (
             _dcp_a2a_lse_pack_dim,
             _dcp_a2a_pack_send,
             _dcp_a2a_unpack_combine,
@@ -461,7 +461,7 @@ def _distributed_packed_a2a_worker(env: dict[str, str]) -> None:
     local_rank = int(env["LOCAL_RANK"])
     world_size = int(env["WORLD_SIZE"])
     torch.accelerator.set_device_index(local_rank)
-    if envs.APHRODITE_DISTRIBUTED_USE_SPLIT_GROUP:
+    if envs.SONAR_DISTRIBUTED_USE_SPLIT_GROUP:
         dist.init_process_group(
             backend="cpu:gloo,cuda:nccl",
             device_id=torch.device(f"cuda:{local_rank}"),
@@ -478,11 +478,11 @@ def _distributed_packed_a2a_worker(env: dict[str, str]) -> None:
         )
     use_workspace = env.get("USE_WORKSPACE") == "1"
     if use_workspace:
-        from aphrodite.v1.worker.workspace import init_workspace_manager
+        from sonar.v1.worker.workspace import init_workspace_manager
 
         init_workspace_manager(torch.device(f"cuda:{local_rank}"))
     try:
-        from aphrodite.v1.attention.ops.dcp import dcp_a2a_lse_reduce
+        from sonar.v1.attention.ops.dcp import dcp_a2a_lse_reduce
 
         dtype = _dtype_from_name(env["TEST_DTYPE"])
         return_lse = env["RETURN_LSE"] == "1"
@@ -529,7 +529,7 @@ def _distributed_packed_a2a_worker(env: dict[str, str]) -> None:
             [t[:, rank * h_per_rank : (rank + 1) * h_per_rank] for t in gathered_lse],
             dim=0,
         )
-        from aphrodite.v1.attention.ops.dcp import _lse_weighted_combine
+        from sonar.v1.attention.ops.dcp import _lse_weighted_combine
 
         expected_out, expected_lse = _lse_weighted_combine(
             outputs,
@@ -546,7 +546,7 @@ def _distributed_packed_a2a_worker(env: dict[str, str]) -> None:
             _assert_packed_a2a_close(actual, expected_out, dtype)
     finally:
         if use_workspace:
-            from aphrodite.v1.worker.workspace import reset_workspace_manager
+            from sonar.v1.worker.workspace import reset_workspace_manager
 
             reset_workspace_manager()
         dist.destroy_process_group()

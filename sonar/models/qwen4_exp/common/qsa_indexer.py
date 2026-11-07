@@ -19,24 +19,24 @@ from typing import ClassVar
 import torch
 from torch import nn
 
-from aphrodite.config import AphroditeConfig, CacheConfig
-from aphrodite.config.cache import CacheDType
-from aphrodite.model_executor.layers.attention_layer_base import AttentionLayerBase
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import HAS_TRITON, tl, triton
-from aphrodite.utils.math_utils import cdiv, round_up
-from aphrodite.v1.attention.backend import (
+from sonar.config import CacheConfig, SonarConfig
+from sonar.config.cache import CacheDType
+from sonar.model_executor.layers.attention_layer_base import AttentionLayerBase
+from sonar.platforms import current_platform
+from sonar.triton_utils import HAS_TRITON, tl, triton
+from sonar.utils.math_utils import cdiv, round_up
+from sonar.v1.attention.backend import (
     AttentionBackend,
     AttentionCGSupport,
     AttentionMetadata,
     AttentionMetadataBuilder,
     CommonAttentionMetadata,
 )
-from aphrodite.v1.attention.backends.utils import (
+from sonar.v1.attention.backends.utils import (
     PAD_SLOT_ID,
     split_decodes_and_prefills,
 )
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.kv_cache_interface import (
     AttentionSpec,
     CircularBufferSpec,
     KVCacheLayout,
@@ -553,7 +553,7 @@ class QSAIndexerMetadata(AttentionMetadata):
 
 
 class QSAIndexerMetadataBuilder(AttentionMetadataBuilder[QSAIndexerMetadata]):
-    """Build QSA metadata from Aphrodite's cache-group-specific common metadata."""
+    """Build QSA metadata from Sonar's cache-group-specific common metadata."""
 
     _cudagraph_support: ClassVar[AttentionCGSupport] = AttentionCGSupport.UNIFORM_BATCH
 
@@ -561,10 +561,10 @@ class QSAIndexerMetadataBuilder(AttentionMetadataBuilder[QSAIndexerMetadata]):
         self,
         kv_cache_spec: AttentionSpec,
         layer_names: list[str],
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
     ) -> None:
-        super().__init__(kv_cache_spec, layer_names, aphrodite_config, device)
+        super().__init__(kv_cache_spec, layer_names, sonar_config, device)
         self._init_reorder_batch_threshold(1, supports_spec_as_decode=True)
         assert self.reorder_batch_threshold is not None
         self.is_circular_buffer = isinstance(kv_cache_spec, CircularBufferSpec)
@@ -575,12 +575,12 @@ class QSAIndexerMetadataBuilder(AttentionMetadataBuilder[QSAIndexerMetadata]):
         else:
             self.compress_ratio = 1
         self.storage_block_size = kv_cache_spec.num_states
-        max_tokens = aphrodite_config.scheduler_config.max_num_batched_tokens
+        max_tokens = sonar_config.scheduler_config.max_num_batched_tokens
         self.token_to_req_buffer = torch.empty(max_tokens, dtype=torch.int32, device=device)
         self.slot_mapping_buffer = torch.empty(max_tokens, dtype=torch.int64, device=device)
         self.logical_positions_buffer = torch.empty(max_tokens, dtype=torch.int64, device=device)
         self.visible_blocks_buffer = torch.empty(max_tokens, dtype=torch.int32, device=device)
-        max_requests = aphrodite_config.scheduler_config.max_num_seqs
+        max_requests = sonar_config.scheduler_config.max_num_seqs
         self.request_capacity = max_requests
         if not self.is_circular_buffer and self.compress_ratio != 1:
             max_k_work = (max_tokens + (self.compress_ratio - 1) * max_requests) // self.compress_ratio
@@ -694,7 +694,7 @@ class _QSAIndexerCache(nn.Module, AttentionLayerBase):
         dtype: torch.dtype,
         cache_config: CacheConfig,
         prefix: str,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         compress_ratio: int = 1,
     ) -> None:
         super().__init__()
@@ -711,7 +711,7 @@ class _QSAIndexerCache(nn.Module, AttentionLayerBase):
         self.compress_ratio = compress_ratio
         self.kv_cache = torch.tensor([])
 
-        static_context = aphrodite_config.compilation_config.static_forward_context
+        static_context = sonar_config.compilation_config.static_forward_context
         if prefix in static_context:
             raise ValueError(f"Duplicate layer name: {prefix}")
         static_context[prefix] = self
@@ -763,13 +763,13 @@ class QSARawKeyCache(_QSAIndexerCache):
             return None
         return self.kv_cache[..., self.rope_position_offset :].view(torch.int64)
 
-    def get_kv_cache_spec(self, aphrodite_config: AphroditeConfig) -> KVCacheSpec:
+    def get_kv_cache_spec(self, sonar_config: SonarConfig) -> KVCacheSpec:
         # Hold the open group's committed keys plus every row a speculative
         # step stores before acceptance is known, rounded up to whole groups so
         # the ring divides the attention block size (it joins the LCM that sets
         # the scheduler block size). Anything narrower lets a rejected draft row
         # overwrite a committed key the next step needs to close the group.
-        span = self.compress_ratio + aphrodite_config.num_speculative_tokens
+        span = self.compress_ratio + sonar_config.num_speculative_tokens
         capacity = round_up(span, self.compress_ratio)
         assert self.cache_config.block_size % capacity == 0, (
             f"QSA ring capacity {capacity} must divide the attention block size {self.cache_config.block_size}"
@@ -786,8 +786,8 @@ class QSARawKeyCache(_QSAIndexerCache):
 class QSACompressedKeyCache(_QSAIndexerCache):
     """Normed, group-first-RoPE key at one row per complete group."""
 
-    def get_kv_cache_spec(self, aphrodite_config: AphroditeConfig) -> KVCacheSpec:
-        del aphrodite_config
+    def get_kv_cache_spec(self, sonar_config: SonarConfig) -> KVCacheSpec:
+        del sonar_config
         return MLAAttentionSpec(
             block_size=self.cache_config.block_size,
             num_kv_heads=1,
@@ -812,7 +812,7 @@ __all__ = [
 
 def qsa_kv_cache_dtype(cache_config: CacheConfig, prefix: str) -> CacheDType | str:
     """The layer's KV cache dtype, honoring ``--kv-cache-dtype-skip-layers``."""
-    from aphrodite.model_executor.models.utils import extract_layer_index
+    from sonar.model_executor.models.utils import extract_layer_index
 
     if str(extract_layer_index(prefix)) in cache_config.kv_cache_dtype_skip_layers:
         return "auto"

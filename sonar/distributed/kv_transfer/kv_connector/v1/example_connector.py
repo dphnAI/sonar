@@ -7,24 +7,24 @@ from typing import TYPE_CHECKING, Any
 import safetensors
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed.kv_transfer.kv_connector.v1.base import (
+from sonar.config import SonarConfig
+from sonar.distributed.kv_transfer.kv_connector.v1.base import (
     KVConnectorBase_V1,
     KVConnectorMetadata,
     KVConnectorRole,
 )
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.attention.mla_attention import MLACommonMetadata
-from aphrodite.utils.gpu_sync_debug import gpu_sync_allowed
-from aphrodite.utils.hashing import safe_hash
-from aphrodite.v1.attention.backend import AttentionMetadata
-from aphrodite.v1.core.sched.output import SchedulerOutput
+from sonar.logger import init_logger
+from sonar.model_executor.layers.attention.mla_attention import MLACommonMetadata
+from sonar.utils.gpu_sync_debug import gpu_sync_allowed
+from sonar.utils.hashing import safe_hash
+from sonar.v1.attention.backend import AttentionMetadata
+from sonar.v1.core.sched.output import SchedulerOutput
 
 if TYPE_CHECKING:
-    from aphrodite.forward_context import ForwardContext
-    from aphrodite.v1.core.kv_cache_manager import KVCacheBlocks
-    from aphrodite.v1.kv_cache_interface import KVCacheConfig
-    from aphrodite.v1.request import Request
+    from sonar.forward_context import ForwardContext
+    from sonar.v1.core.kv_cache_manager import KVCacheBlocks
+    from sonar.v1.kv_cache_interface import KVCacheConfig
+    from sonar.v1.request import Request
 
 logger = init_logger(__name__)
 
@@ -85,23 +85,23 @@ class ExampleConnector(KVConnectorBase_V1):
 
     def __init__(
         self,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
         role: KVConnectorRole,
         kv_cache_config: "KVCacheConfig",
     ):
         super().__init__(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             role=role,
             kv_cache_config=kv_cache_config,
         )
-        self._block_size = aphrodite_config.cache_config.block_size
+        self._block_size = sonar_config.cache_config.block_size
         self._requests_need_load: dict[str, Request] = {}
         self._storage_path = self._kv_transfer_config.get_from_extra_config("shared_storage_path", "/tmp")
         logger.info(self._kv_transfer_config)
         logger.info("Shared storage path is %s", self._storage_path)
 
     def start_load_kv(self, forward_context: "ForwardContext", **kwargs: Any) -> None:
-        """Start loading the KV cache from the connector buffer to Aphrodite's
+        """Start loading the KV cache from the connector buffer to Sonar's
         paged KV buffer.
 
         Args:
@@ -185,7 +185,7 @@ class ExampleConnector(KVConnectorBase_V1):
                     )
 
     def wait_for_layer_load(self, layer_name: str) -> None:
-        """Blocking until the KV for a specific layer is loaded into Aphrodite's
+        """Blocking until the KV for a specific layer is loaded into Sonar's
         paged buffer.
 
         This interface will be useful for layer-by-layer pipelining.
@@ -203,13 +203,13 @@ class ExampleConnector(KVConnectorBase_V1):
         attn_metadata: AttentionMetadata,
         **kwargs: Any,
     ) -> None:
-        """Start saving the KV cache of the layer from Aphrodite's paged buffer
+        """Start saving the KV cache of the layer from Sonar's paged buffer
         to the connector.
 
         Args:
             layer_name (str): the name of the layer.
             kv_layer (torch.Tensor): the paged KV buffer of the current
-                layer in Aphrodite.
+                layer in Sonar.
             attn_metadata (AttentionMetadata): the attention metadata.
             **kwargs: additional arguments for the save operation.
 

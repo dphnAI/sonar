@@ -6,13 +6,13 @@ from collections.abc import Sequence
 
 import torch
 
-from aphrodite import envs
-from aphrodite.entrypoints.pooling.typing import AnyPoolingRequest
-from aphrodite.entrypoints.serve.engine.typing import AnyRequest
-from aphrodite.logger import init_logger
-from aphrodite.lora.request import LoRARequest
-from aphrodite.pooling_params import PoolingParams
-from aphrodite.sampling_params import BeamSearchParams, SamplingParams
+from sonar import envs
+from sonar.entrypoints.pooling.typing import AnyPoolingRequest
+from sonar.entrypoints.serve.engine.typing import AnyRequest
+from sonar.logger import init_logger
+from sonar.lora.request import LoRARequest
+from sonar.pooling_params import PoolingParams
+from sonar.sampling_params import BeamSearchParams, SamplingParams
 
 logger = init_logger(__name__)
 
@@ -70,11 +70,11 @@ class RequestLogger:
 
     def log_request_body(self, request: AnyRequest | AnyPoolingRequest) -> None:
         try:
-            level = logging.getLevelNamesMapping()[envs.APHRODITE_REQUEST_BODY_LOG_LEVEL]
+            level = logging.getLevelNamesMapping()[envs.SONAR_REQUEST_BODY_LOG_LEVEL]
         except KeyError:
             logger.warning_once(
                 "Invalid logging level for request content: %s. Request JSON body will not be logged.",
-                envs.APHRODITE_REQUEST_BODY_LOG_LEVEL,
+                envs.SONAR_REQUEST_BODY_LOG_LEVEL,
             )
             return
 

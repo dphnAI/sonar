@@ -5,19 +5,19 @@ from collections import OrderedDict
 from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.ec_manager_config import EncoderCacheManagerMetadata
-from aphrodite.logger import init_logger
-from aphrodite.v1.request import Request
+from sonar.config import SonarConfig
+from sonar.config.ec_manager_config import EncoderCacheManagerMetadata
+from sonar.logger import init_logger
+from sonar.v1.request import Request
 
 if TYPE_CHECKING:
-    from aphrodite.config import SchedulerConfig
+    from sonar.config import SchedulerConfig
 
 logger = init_logger(__name__)
 
 
 class EncoderCacheManager:
-    """Manages caching of encoder outputs for multimodal models in Aphrodite V1.
+    """Manages caching of encoder outputs for multimodal models in Sonar V1.
 
     The EncoderCacheManager handles the lifecycle of multimodal encoder outputs
     (such as vision embeddings from images) during request processing. It
@@ -70,7 +70,7 @@ class EncoderCacheManager:
     """
 
     @classmethod
-    def create_manager(cls, *, cache_size: int, aphrodite_config: "AphroditeConfig") -> "EncoderCacheManager":
+    def create_manager(cls, *, cache_size: int, sonar_config: "SonarConfig") -> "EncoderCacheManager":
         return cls(cache_size=cache_size)
 
     def __init__(self, cache_size: int):

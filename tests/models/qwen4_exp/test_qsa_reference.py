@@ -7,20 +7,20 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.models.qwen4_exp.common import qsa_indexer as qsa_common
-from aphrodite.models.qwen4_exp.common.qsa_indexer import (
+from sonar.models.qwen4_exp.common import qsa_indexer as qsa_common
+from sonar.models.qwen4_exp.common.qsa_indexer import (
     QSAIndexerMetadataBuilder,
     qsa_kv_cache_dtype,
 )
-from aphrodite.models.qwen4_exp.nvidia import (
+from sonar.models.qwen4_exp.nvidia import (
     model as _qwen4_exp_model,  # noqa: F401
 )
-from aphrodite.models.qwen4_exp.nvidia import qsa_indexer
-from aphrodite.models.qwen4_exp.nvidia.ops import qsa as qsa_ops
-from aphrodite.models.qwen4_exp.nvidia.ops import qsa_indexer as qsa_indexer_ops
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import HAS_TRITON
-from aphrodite.v1.worker.utils import clear_layer_kv_caches
+from sonar.models.qwen4_exp.nvidia import qsa_indexer
+from sonar.models.qwen4_exp.nvidia.ops import qsa as qsa_ops
+from sonar.models.qwen4_exp.nvidia.ops import qsa_indexer as qsa_indexer_ops
+from sonar.platforms import current_platform
+from sonar.triton_utils import HAS_TRITON
+from sonar.v1.worker.utils import clear_layer_kv_caches
 
 requires_qsa_kernels = pytest.mark.skipif(
     not current_platform.is_cuda() or not HAS_TRITON,
@@ -380,7 +380,7 @@ def _qsa_key_cache(block_size: int, compress_ratio: int, **kwargs) -> qsa_common
         dtype=torch.bfloat16,
         cache_config=SimpleNamespace(block_size=block_size),
         prefix=f"raw.{block_size}.{compress_ratio}",
-        aphrodite_config=SimpleNamespace(compilation_config=SimpleNamespace(static_forward_context={})),
+        sonar_config=SimpleNamespace(compilation_config=SimpleNamespace(static_forward_context={})),
         compress_ratio=compress_ratio,
         **kwargs,
     )
@@ -393,7 +393,7 @@ def test_qsa_state_caches_adapt_the_unified_logical_layout() -> None:
         dtype=torch.bfloat16,
         cache_config=SimpleNamespace(block_size=32),
         prefix="compressed.bind",
-        aphrodite_config=SimpleNamespace(compilation_config=SimpleNamespace(static_forward_context={})),
+        sonar_config=SimpleNamespace(compilation_config=SimpleNamespace(static_forward_context={})),
         compress_ratio=4,
     )
     raw_view = torch.empty(2, 1, 8, 64, dtype=torch.bfloat16)
@@ -487,10 +487,10 @@ def test_qsa_compressed_metadata_keeps_dummy_slots_inert() -> None:
 
 
 @requires_qsa_kernels
-@pytest.mark.usefixtures("default_aphrodite_config")
+@pytest.mark.usefixtures("default_sonar_config")
 def test_qsa_unfused_cache_update_ignores_padded_qk() -> None:
     """Padded projected Q/K rows must not affect either indexer cache."""
-    from aphrodite.model_executor.layers.rotary_embedding import get_rope
+    from sonar.model_executor.layers.rotary_embedding import get_rope
 
     device = torch.device("cuda")
     # Five tokens complete one compressed group and retain four keys in the ring.
@@ -781,7 +781,7 @@ def test_qsa_prefill_selection_correctness(
     # spec-decode case where the bound is an over-estimate. force_chunk
     # drives the logits budget to one row per chunk.
     if force_chunk:
-        monkeypatch.setenv("APHRODITE_SPARSE_INDEXER_MAX_LOGITS_MB", "0")
+        monkeypatch.setenv("SONAR_SPARSE_INDEXER_MAX_LOGITS_MB", "0")
     torch.manual_seed(2)
     query_lens = [3, 33]
     rows, heads, head_dim = sum(query_lens), 4, 128

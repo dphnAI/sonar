@@ -18,7 +18,7 @@ only to reduce them; fusing the add into the reduction never writes them.
 
 import torch
 
-from aphrodite.triton_utils import tl, triton
+from sonar.triton_utils import tl, triton
 
 
 @triton.jit

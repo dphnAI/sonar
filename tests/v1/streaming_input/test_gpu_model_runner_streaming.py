@@ -7,14 +7,14 @@ from unittest.mock import Mock
 
 import pytest
 
-from aphrodite.multimodal.inputs import (
+from sonar.multimodal.inputs import (
     MultiModalFeatureSpec,
     MultiModalKwargsItem,
     PlaceholderRange,
 )
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.v1.worker.gpu_input_batch import CachedRequestState, InputBatch
-from aphrodite.v1.worker.gpu_model_runner import GPUModelRunner
+from sonar.sampling_params import SamplingParams
+from sonar.v1.worker.gpu_input_batch import CachedRequestState, InputBatch
+from sonar.v1.worker.gpu_model_runner import GPUModelRunner
 
 # Not cpu_test: InputBatch allocates pinned (UVA) memory, which requires a
 # CUDA device even though the batch tensors live on the CPU.

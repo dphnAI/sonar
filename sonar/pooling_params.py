@@ -6,11 +6,11 @@ from typing import Any
 
 import msgspec
 
-from aphrodite.config import ModelConfig, PoolerConfig
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.logger import init_logger
-from aphrodite.sampling_params import RequestOutputKind
-from aphrodite.tasks import PoolingTask, check_removed_pooling_task
+from sonar.config import ModelConfig, PoolerConfig
+from sonar.exceptions import SonarValidationError
+from sonar.logger import init_logger
+from sonar.sampling_params import RequestOutputKind
+from sonar.tasks import PoolingTask, check_removed_pooling_task
 
 logger = init_logger(__name__)
 
@@ -37,13 +37,13 @@ class LateInteractionParams(
 
     def verify(self) -> None:
         if self.mode not in ("cache_query", "score_doc"):
-            raise AphroditeValidationError(f"mode must be 'cache_query' or 'score_doc', got {self.mode!r}")
+            raise SonarValidationError(f"mode must be 'cache_query' or 'score_doc', got {self.mode!r}")
         # cache_query without a positive use count poisons the worker cache
         # lifecycle: a None count crashes the runner's assert, and a
         # non-positive one pops the entry on the first score_doc, so the
         # paired requests fail with a cache miss.
         if self.mode == "cache_query" and (type(self.query_uses) is not int or self.query_uses <= 0):
-            raise AphroditeValidationError("query_uses must be a positive integer for cache_query mode")
+            raise SonarValidationError("query_uses must be a positive integer for cache_query mode")
 
 
 class LateChunkingParams(
@@ -69,7 +69,7 @@ class LateChunkingParams(
 
     def verify(self) -> None:
         if type(self.chunk_size) is not int or not 0 < self.chunk_size < 2**63:
-            raise AphroditeValidationError("chunk_size must be a positive integer less than 2**63")
+            raise SonarValidationError("chunk_size must be a positive integer less than 2**63")
 
 
 class PoolingParams(
@@ -142,9 +142,9 @@ class PoolingParams(
         if self.late_chunking_params is not None:
             self.late_chunking_params.verify()
             if self.task != "token_embed":
-                raise AphroditeValidationError("Late chunking requires token_embed")
+                raise SonarValidationError("Late chunking requires token_embed")
             if self.late_interaction_params is not None:
-                raise AphroditeValidationError("Late chunking cannot be combined with late-interaction scoring")
+                raise SonarValidationError("Late chunking cannot be combined with late-interaction scoring")
 
         # plugin task uses io_processor.parse_data to verify inputs,
         # skipping PoolingParams verify
@@ -165,7 +165,7 @@ class PoolingParams(
         self._verify_valid_parameters()
         if self.late_chunking_params is not None:
             if self.step_tag_id is not None:
-                raise AphroditeValidationError("Late chunking requires all token rows")
+                raise SonarValidationError("Late chunking requires all token rows")
             # KV cache hits omit hidden states needed for complete chunk means.
             self.skip_reading_prefix_cache = True
 
@@ -209,7 +209,7 @@ class PoolingParams(
                     invalid_parameters.append(k)
 
             if invalid_parameters:
-                raise AphroditeValidationError(
+                raise SonarValidationError(
                     f"Task {self.task} only supports {valid_parameters} "
                     f"parameters, does not support "
                     f"{invalid_parameters} parameters"
@@ -234,20 +234,20 @@ class PoolingParams(
                 valid_range = f"[1, {embedding_size}]"
                 dimensions_in_range = 1 <= dimensions <= embedding_size
                 if not model_config.is_matryoshka:
-                    raise AphroditeValidationError(
+                    raise SonarValidationError(
                         f"Model {model_name!r} does not support Matryoshka "
                         f"embeddings; dimensions must be unset "
                         f"(received dimensions={dimensions})."
                     )
 
                 if not dimensions_in_range:
-                    raise AphroditeValidationError(
+                    raise SonarValidationError(
                         f"Model {model_name!r} only supports dimensions in range {valid_range}, got {dimensions}."
                     )
 
                 mds = model_config.matryoshka_dimensions
                 if mds is not None and dimensions not in mds:
-                    raise AphroditeValidationError(
+                    raise SonarValidationError(
                         f"Model {model_name!r} only supports Matryoshka dimensions {str(mds)}, got {dimensions}."
                     )
 
@@ -270,7 +270,7 @@ class PoolingParams(
                 invalid_parameters.append(k)
 
         if invalid_parameters:
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 f"Task {self.task!r} only supports {valid_parameters} "
                 f"parameters, does not support "
                 f"{invalid_parameters} parameters"
@@ -294,4 +294,4 @@ class PoolingParams(
     def __post_init__(self) -> None:
         check_removed_pooling_task(self.task)
         if self.output_kind != RequestOutputKind.FINAL_ONLY:
-            raise AphroditeValidationError(f"For pooling output_kind has to be FINAL_ONLY, got {self.output_kind!r}")
+            raise SonarValidationError(f"For pooling output_kind has to be FINAL_ONLY, got {self.output_kind!r}")

@@ -3,7 +3,7 @@
 //
 // DeepSeek-V4 mHC (multi-residual-stream hyper-connection) gating kernels.
 //
-// Difference from upstream: Aphrodite's `mhc_pre_torch` reference (kernels/
+// Difference from upstream: Sonar's `mhc_pre_torch` reference (kernels/
 // mhc/torch.py) exposes separate `hc_pre_eps`/`hc_sinkhorn_eps`/
 // `hc_post_mult_value`/`n_splits` knobs this kernel doesn't implement --
 // only ever called with hc_pre_eps == hc_sinkhorn_eps, hc_post_mult_value

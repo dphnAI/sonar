@@ -2,29 +2,29 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import warnings
 
-from aphrodite.entrypoints.launchers.api_server.app_state import init_app_state
-from aphrodite.entrypoints.launchers.api_server.entry import (
+from sonar.entrypoints.launchers.api_server.app_state import init_app_state
+from sonar.entrypoints.launchers.api_server.entry import (
     build_and_serve,
     build_async_engine_client,
     build_async_engine_client_from_engine_args,
     run_server,
     run_server_worker,
 )
-from aphrodite.entrypoints.launchers.api_server.routers import register_api_routers
-from aphrodite.entrypoints.launchers.app import build_app
-from aphrodite.entrypoints.launchers.launcher import (
+from sonar.entrypoints.launchers.api_server.routers import register_api_routers
+from sonar.entrypoints.launchers.app import build_app
+from sonar.entrypoints.launchers.launcher import (
     create_server_socket,
     create_server_unix_socket,
     setup_server,
     validate_api_server_args,
 )
-from aphrodite.entrypoints.launchers.render.app_state import init_render_app_state
-from aphrodite.entrypoints.launchers.render.entry import build_and_serve_renderer
+from sonar.entrypoints.launchers.render.app_state import init_render_app_state
+from sonar.entrypoints.launchers.render.entry import build_and_serve_renderer
 
 warnings.warn(
-    "`aphrodite.entrypoints.openai.api_server` is deprecated and will likely be"
+    "`sonar.entrypoints.openai.api_server` is deprecated and will likely be"
     "unsupported in a future version. Use the corresponding function from "
-    "`aphrodite.entrypoints.launchers` instead.",
+    "`sonar.entrypoints.launchers` instead.",
     DeprecationWarning,
     stacklevel=1,
 )
@@ -49,11 +49,11 @@ __all__ = [
 
 if __name__ == "__main__":
     warnings.warn(
-        "The `python -m aphrodite.entrypoints.openai.api_server` command is deprecated "
-        "and may be removed in a future release. Please use `aphrodite server` instead.",
+        "The `python -m sonar.entrypoints.openai.api_server` command is deprecated "
+        "and may be removed in a future release. Please use `sonar server` instead.",
         DeprecationWarning,
         stacklevel=1,
     )
-    from aphrodite.entrypoints.launchers.api_server.entry import main
+    from sonar.entrypoints.launchers.api_server.entry import main
 
     main()

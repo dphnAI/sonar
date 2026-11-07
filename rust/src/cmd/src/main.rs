@@ -8,7 +8,7 @@ use std::ffi::OsStr;
 use std::process::{ExitCode, ExitStatus};
 
 use anyhow::{Context, Result, anyhow, bail};
-use aphrodite_managed_engine::ManagedEngineHandle;
+use sonar_managed_engine::ManagedEngineHandle;
 use thiserror_ext::AsReport as _;
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info, warn};
@@ -89,7 +89,7 @@ fn main() -> ExitCode {
             "serve" | "frontend" => "RustFrontend",
             _ => "Rust",
         };
-    aphrodite_tracing::init_tracing(process_label);
+    sonar_tracing::init_tracing(process_label);
 
     let cli = Cli::parse();
 
@@ -116,12 +116,10 @@ fn main() -> ExitCode {
 async fn async_main(cli: Cli) -> Result<()> {
     match cli.command {
         Command::Bench(BenchCommand::Serve(bench_args)) => {
-            aphrodite_bench::prepare_process();
-            aphrodite_bench::run(bench_args).await
+            sonar_bench::prepare_process();
+            sonar_bench::run(bench_args).await
         }
-        Command::Frontend(args) => {
-            aphrodite_server::serve(args.into_config(), shutdown_signal()).await
-        }
+        Command::Frontend(args) => sonar_server::serve(args.into_config(), shutdown_signal()).await,
         Command::Serve(args) => {
             let topology = args.data_parallel_lb.resolve(&args.managed_engine, args.headless)?;
             let handshake_port = args.managed_engine.resolve_handshake_port()?;
@@ -138,7 +136,7 @@ async fn async_main(cli: Cli) -> Result<()> {
                     "running Rust frontend without a managed local Python engine"
                 );
                 let config = args.to_frontend_config(handshake_address, &topology);
-                return aphrodite_server::serve(config, shutdown_signal()).await;
+                return sonar_server::serve(config, shutdown_signal()).await;
             }
 
             let shutdown_timeout = args.runtime.shutdown_timeout();
@@ -179,7 +177,7 @@ async fn async_main(cli: Cli) -> Result<()> {
                 let config = frontend_config.expect("non-headless frontend configuration");
                 let shutdown = shutdown.clone();
                 tokio::spawn(async move {
-                    let result = aphrodite_server::serve(config, shutdown).await;
+                    let result = sonar_server::serve(config, shutdown).await;
                     if result.is_ok() {
                         info!("OpenAI server shut down gracefully");
                     }
@@ -232,7 +230,7 @@ async fn async_main(cli: Cli) -> Result<()> {
             }
         }
         Command::Render(args) => {
-            aphrodite_server::serve_render(args.into_config(), shutdown_signal()).await
+            sonar_server::serve_render(args.into_config(), shutdown_signal()).await
         }
     }
 }

@@ -8,14 +8,14 @@ from collections.abc import AsyncGenerator, Mapping
 
 import numpy as np
 
-from aphrodite import CompletionOutput, RequestOutput
-from aphrodite.engine.protocol import EngineClient
-from aphrodite.inputs import EngineInput
-from aphrodite.lora.request import LoRARequest
-from aphrodite.renderers import BaseRenderer
-from aphrodite.sampling_params import BeamSearchParams, SamplingParams
-from aphrodite.utils import random_uuid
-from aphrodite.utils.async_utils import collect_from_async_generator
+from sonar import CompletionOutput, RequestOutput
+from sonar.engine.protocol import EngineClient
+from sonar.inputs import EngineInput
+from sonar.lora.request import LoRARequest
+from sonar.renderers import BaseRenderer
+from sonar.sampling_params import BeamSearchParams, SamplingParams
+from sonar.utils import random_uuid
+from sonar.utils.async_utils import collect_from_async_generator
 
 from .utils import (
     BeamSearchSequence,
@@ -68,7 +68,7 @@ class BeamSearchOnlineMixin(ABC):
             watermarking=False,
             detokenize=False,
         )
-        params.configure_logprobs(sampling_params, self.engine_client.input_processor.aphrodite_config)
+        params.configure_logprobs(sampling_params, self.engine_client.input_processor.sonar_config)
         allowed = set(params.allowed_token_ids) if params.allowed_token_ids else None
         eos_token_ids = get_beam_search_eos_token_ids(
             self.engine_client.input_processor.generation_config_fields,

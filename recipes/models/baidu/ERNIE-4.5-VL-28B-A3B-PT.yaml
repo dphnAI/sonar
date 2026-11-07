@@ -94,21 +94,21 @@ guide: |
 
   ## Prerequisites
 
-  - Aphrodite: support added to main branch recently; install latest
+  - Sonar: support added to main branch recently; install latest
   - Hardware depends on variant
 
-  ### Install Aphrodite (CUDA)
+  ### Install Sonar (CUDA)
 
   ```bash
   uv venv --python 3.12 --seed
   source .venv/bin/activate
-  uv pip install -U aphrodite-engine --torch-backend auto
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   ```
 
-  ### Install Aphrodite (AMD ROCm MI300X/MI325X/MI355X)
+  ### Install Sonar (AMD ROCm MI300X/MI325X/MI355X)
 
   ```bash
-  uv pip install aphrodite-engine --extra-index-url https://wheels.vllm.ai/rocm/
+  uv pip install sonar --index-strategy first-index --extra-index-url https://sonar.dphn.ai/whl/release/rocm/x86_64/simple
   ```
 
   ## Launch commands
@@ -116,13 +116,13 @@ guide: |
   28B on 1x80GB:
 
   ```bash
-  aphrodite serve baidu/ERNIE-4.5-VL-28B-A3B-PT --trust-remote-code
+  sonar serve baidu/ERNIE-4.5-VL-28B-A3B-PT --trust-remote-code
   ```
 
   424B BF16 on 8x140GB:
 
   ```bash
-  aphrodite serve baidu/ERNIE-4.5-VL-424B-A47B-PT \
+  sonar serve baidu/ERNIE-4.5-VL-424B-A47B-PT \
     --trust-remote-code \
     --tensor-parallel-size 8
   ```
@@ -130,7 +130,7 @@ guide: |
   424B with FP8 + CPU offload on 8x80GB (testing only):
 
   ```bash
-  aphrodite serve baidu/ERNIE-4.5-VL-424B-A47B-PT \
+  sonar serve baidu/ERNIE-4.5-VL-424B-A47B-PT \
     --trust-remote-code \
     --tensor-parallel-size 8 \
     --quantization fp8 \
@@ -140,8 +140,8 @@ guide: |
   28B on AMD MI300X+:
 
   ```bash
-  APHRODITE_ROCM_USE_AITER=1 SAFETENSORS_FAST_GPU=1 \
-    aphrodite serve baidu/ERNIE-4.5-VL-28B-A3B-PT \
+  SONAR_ROCM_USE_AITER=1 SAFETENSORS_FAST_GPU=1 \
+    sonar serve baidu/ERNIE-4.5-VL-28B-A3B-PT \
     --tensor-parallel-size 4 \
     --gpu-memory-utilization 0.9 \
     --trust-remote-code
@@ -150,7 +150,7 @@ guide: |
   ## Benchmarking
 
   ```bash
-  aphrodite bench serve \
+  sonar bench serve \
     --model baidu/ERNIE-4.5-VL-28B-A3B-PT \
     --dataset-name random \
     --random-input-len 8000 --random-output-len 1000 \

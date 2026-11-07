@@ -6,7 +6,7 @@ import asyncio
 import pytest
 from starlette.responses import StreamingResponse
 
-from aphrodite.entrypoints.serve.utils.sse_keep_alive import (
+from sonar.entrypoints.serve.utils.sse_keep_alive import (
     SSE_KEEP_ALIVE_COMMENT,
     with_sse_keep_alive,
 )

@@ -8,7 +8,7 @@ Install Sonar before you use this guide.
 ## Start a server
 
 ```bash
-aphrodite serve Qwen/Qwen3-0.6B \
+sonar serve Qwen/Qwen3-0.6B \
   --host 0.0.0.0 \
   --port 2242
 ```

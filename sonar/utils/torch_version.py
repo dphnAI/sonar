@@ -2,8 +2,8 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Torch version checks.
 
-Kept free of other Aphrodite imports so that early importers such as
-`aphrodite.env_override` don't pull in `aphrodite.utils.torch_utils`, which resolves
+Kept free of other Sonar imports so that early importers such as
+`sonar.env_override` don't pull in `sonar.utils.torch_utils`, which resolves
 `current_platform` at import time.
 """
 

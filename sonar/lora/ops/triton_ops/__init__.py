@@ -2,21 +2,21 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
 
-from aphrodite.lora.ops.triton_ops.fused_moe_lora_fp8_op import (
+from sonar.lora.ops.triton_ops.fused_moe_lora_fp8_op import (
     fused_moe_lora_expand_fp8,
     fused_moe_lora_fp8,
     fused_moe_lora_shrink_fp8,
 )
-from aphrodite.lora.ops.triton_ops.fused_moe_lora_op import (
+from sonar.lora.ops.triton_ops.fused_moe_lora_op import (
     fused_moe_lora,
     fused_moe_lora_expand,
     fused_moe_lora_shrink,
 )
-from aphrodite.lora.ops.triton_ops.lora_expand_fp8_op import lora_expand_fp8
-from aphrodite.lora.ops.triton_ops.lora_expand_op import lora_expand
-from aphrodite.lora.ops.triton_ops.lora_kernel_metadata import LoRAKernelMeta
-from aphrodite.lora.ops.triton_ops.lora_shrink_fp8_op import lora_shrink_fp8
-from aphrodite.lora.ops.triton_ops.lora_shrink_op import lora_shrink
+from sonar.lora.ops.triton_ops.lora_expand_fp8_op import lora_expand_fp8
+from sonar.lora.ops.triton_ops.lora_expand_op import lora_expand
+from sonar.lora.ops.triton_ops.lora_kernel_metadata import LoRAKernelMeta
+from sonar.lora.ops.triton_ops.lora_shrink_fp8_op import lora_shrink_fp8
+from sonar.lora.ops.triton_ops.lora_shrink_op import lora_shrink
 
 __all__ = [
     "lora_expand",

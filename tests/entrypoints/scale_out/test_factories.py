@@ -8,14 +8,14 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from aphrodite.entrypoints.launchers.api_server.routers import register_api_routers
-from aphrodite.entrypoints.scale_out.factories import register_scale_out_api_routers
-from aphrodite.entrypoints.scale_out.token_in_token_out.api_router import attach_router
-from aphrodite.entrypoints.serve.middleware.authenticate import (
+from sonar.entrypoints.launchers.api_server.routers import register_api_routers
+from sonar.entrypoints.scale_out.factories import register_scale_out_api_routers
+from sonar.entrypoints.scale_out.token_in_token_out.api_router import attach_router
+from sonar.entrypoints.serve.middleware.authenticate import (
     GUARDED_PREFIX,
     AuthenticationMiddleware,
 )
-from aphrodite.tasks import SupportedTask
+from sonar.tasks import SupportedTask
 
 RENDER_PATHS = {
     "/v1/chat/completions/render",
@@ -67,7 +67,7 @@ def test_disabled_scale_out_routes_explain_opt_in_without_parsing(path, authoriz
 
 
 def test_disabled_scale_out_routes_are_logged_at_info(caplog):
-    with caplog.at_level("INFO", logger="aphrodite.entrypoints.scale_out.factories"):
+    with caplog.at_level("INFO", logger="sonar.entrypoints.scale_out.factories"):
         registered_paths(("generate",))
 
     assert [record.levelno for record in caplog.records if "--enable-scale-out" in record.message] == [logging.INFO]

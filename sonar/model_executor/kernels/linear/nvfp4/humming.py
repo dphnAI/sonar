@@ -3,22 +3,22 @@
 
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.quantization.utils.humming import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.quantization.utils.humming import (
     apply_humming_linear,
     get_humming_linear_compute_config,
     prepare_humming_linear_layer_config,
     quant_key_to_input_schema,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import kNvfp4Dynamic
-from aphrodite.model_executor.utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import kNvfp4Dynamic
+from sonar.model_executor.utils import (
     move_parameter,
     replace_parameter,
     set_kernel_parameter,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.humming import create_humming_locks
-from aphrodite.utils.import_utils import has_humming
+from sonar.platforms import current_platform
+from sonar.utils.humming import create_humming_locks
+from sonar.utils.import_utils import has_humming
 
 from .base import NvFp4LinearKernel, NvFp4LinearLayerConfig
 

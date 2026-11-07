@@ -4,16 +4,16 @@
 
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.config import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEQuantConfig,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.cutlass_moe import CutlassExpertsFp8
-from aphrodite.model_executor.layers.fused_moe.experts.fallback import FallbackExperts
-from aphrodite.model_executor.layers.fused_moe.experts.triton_moe import TritonExperts
-from aphrodite.platforms import current_platform
+from sonar.model_executor.layers.fused_moe.experts.cutlass_moe import CutlassExpertsFp8
+from sonar.model_executor.layers.fused_moe.experts.fallback import FallbackExperts
+from sonar.model_executor.layers.fused_moe.experts.triton_moe import TritonExperts
+from sonar.platforms import current_platform
 
 
 class TritonOrCutlassExperts(FallbackExperts):

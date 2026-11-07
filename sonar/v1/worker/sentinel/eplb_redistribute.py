@@ -18,12 +18,12 @@ from typing import TYPE_CHECKING
 
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.logger import init_logger
-from aphrodite.v1.worker.sentinel.expert_reload import _placement_weight_loader
+from sonar.config import SonarConfig
+from sonar.logger import init_logger
+from sonar.v1.worker.sentinel.expert_reload import _placement_weight_loader
 
 if TYPE_CHECKING:
-    from aphrodite.v1.worker.gpu_model_runner import GPUModelRunner
+    from sonar.v1.worker.gpu_model_runner import GPUModelRunner
 
 logger = init_logger(__name__)
 
@@ -136,7 +136,7 @@ def redistribute_expert_placement(
 
 def reload_experts_from_disk(
     model: torch.nn.Module,
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     reload_set: set[tuple[int, int]],
     physical_to_logical_map: torch.Tensor,
 ) -> None:
@@ -144,7 +144,7 @@ def reload_experts_from_disk(
 
     Args:
         model: The model whose FusedMoE layers receive the reloaded weights.
-        aphrodite_config: Engine config, used for the model loader and model config.
+        sonar_config: Engine config, used for the model loader and model config.
         reload_set: {(moe_layer_idx, logical_expert_id), ...} from
             redistribute_expert_placement.
         physical_to_logical_map: Recovered placement, including all replicas.
@@ -153,15 +153,15 @@ def reload_experts_from_disk(
     if not reload_set:
         return
 
-    from aphrodite.model_executor.model_loader import get_model_loader
-    from aphrodite.model_executor.model_loader.reload import (
+    from sonar.model_executor.model_loader import get_model_loader
+    from sonar.model_executor.model_loader.reload import (
         finalize_layerwise_reload,
         initialize_layerwise_reload,
     )
-    from aphrodite.model_executor.model_loader.reload.utils import get_layer_tensors
+    from sonar.model_executor.model_loader.reload.utils import get_layer_tensors
 
     moe_layers = list(model.moe_layers)
-    prefix_renames = getattr(getattr(model, "hf_to_aphrodite_mapper", None), "orig_to_new_prefix", {})
+    prefix_renames = getattr(getattr(model, "hf_to_sonar_mapper", None), "orig_to_new_prefix", {})
 
     def ckpt_prefix(layer_idx: int) -> str:
         prefix = moe_layers[layer_idx].layer_name + "."
@@ -176,8 +176,8 @@ def reload_experts_from_disk(
     layer_indices = sorted({i for i, _ in reload_set})
     prefixes = tuple(ckpt_prefix(i) for i in layer_indices)
     layers = [getattr(moe_layers[i], "routed_experts", moe_layers[i]) for i in layer_indices]
-    loader = get_model_loader(aphrodite_config.load_config)
-    all_weights = loader.get_all_weights(aphrodite_config.model_config, model)
+    loader = get_model_loader(sonar_config.load_config)
+    all_weights = loader.get_all_weights(sonar_config.model_config, model)
     matched: set[int] = set()
     rename_checkpoint_weight = getattr(model, "_rename_weight_for_modelopt_checkpoint", lambda name: name)
 
@@ -224,7 +224,7 @@ def reload_experts_from_disk(
     if unmatched:
         raise RuntimeError(f"[FT] MoE layers {sorted(unmatched)} had no matching checkpoint weights.")
     for layer in layers:
-        finalize_layerwise_reload(layer, aphrodite_config.model_config)
+        finalize_layerwise_reload(layer, sonar_config.model_config)
 
     logger.info(
         "[FT] Expert weight reload complete: loaded=%d tensors.",

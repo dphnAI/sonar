@@ -4,13 +4,13 @@
 
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.model_executor.warmup.jit_warmup_triton_helper import (
+import sonar.envs as envs
+from sonar.model_executor.warmup.jit_warmup_triton_helper import (
     TritonWarmupTensor,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.math_utils import round_up
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
+from sonar.utils.math_utils import round_up
 
 _TOPK_WORKSPACE_BYTES = 1024 * 1024
 _DECODE_BLOCK_N = 64
@@ -592,9 +592,9 @@ def qsa_select_paged_prefill(
     logits_width = round_up(triton.cdiv(max_seq_len, compress_ratio), 64)
     logits_width = min(max(64, logits_width), page_table.shape[1] * k_cache.shape[1])
 
-    # chunk the inputs to keep temp logits below APHRODITE_SPARSE_INDEXER_MAX_LOGITS_MB
+    # chunk the inputs to keep temp logits below SONAR_SPARSE_INDEXER_MAX_LOGITS_MB
     # always allocate the worst case to avoid memory fragmentation.
-    max_logits_bytes = envs.APHRODITE_SPARSE_INDEXER_MAX_LOGITS_MB * 1024 * 1024
+    max_logits_bytes = envs.SONAR_SPARSE_INDEXER_MAX_LOGITS_MB * 1024 * 1024
     rows_per_chunk = max(1, max_logits_bytes // (logits_width * 4))
 
     budget_bytes = max(max_logits_bytes, page_table.shape[1] * k_cache.shape[1] * 4)

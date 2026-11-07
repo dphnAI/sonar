@@ -41,12 +41,12 @@ from unittest.mock import patch
 import numpy as np
 import torch
 
-from aphrodite.distributed.device_communicators.shm_broadcast import (
+from sonar.distributed.device_communicators.shm_broadcast import (
     check_shm_free_space,
     memory_fence,
 )
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
 
 logger = init_logger(__name__)
 

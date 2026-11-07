@@ -10,14 +10,14 @@ unpacked and dequantized, so the packed weight is never densified.
 import torch
 from compressed_tensors.quantization import QuantizationArgs, QuantizationStrategy
 
-from aphrodite.model_executor.layers.quantization.base_config import QuantizeMethodBase
-from aphrodite.model_executor.parameter import (
-    BaseAphroditeParameter,
+from sonar.model_executor.layers.quantization.base_config import QuantizeMethodBase
+from sonar.model_executor.parameter import (
+    BaseSonarParameter,
     ChannelQuantScaleParameter,
     GroupQuantScaleParameter,
-    PackedAphroditeParameter,
+    PackedSonarParameter,
 )
-from aphrodite.triton_utils import tl, triton
+from sonar.triton_utils import tl, triton
 
 __all__ = ["CompressedTensorsEmbeddingWNA16Int"]
 
@@ -112,7 +112,7 @@ class CompressedTensorsEmbeddingWNA16Int(QuantizeMethodBase):
         hidden = input_size_per_partition
         layer.hidden_size = hidden
 
-        weight_packed = PackedAphroditeParameter(
+        weight_packed = PackedSonarParameter(
             input_dim=1,
             output_dim=0,
             packed_dim=1,
@@ -136,7 +136,7 @@ class CompressedTensorsEmbeddingWNA16Int(QuantizeMethodBase):
                 data=torch.empty(vocab_pp, 1, dtype=params_dtype),
             )
 
-        weight_shape = BaseAphroditeParameter(data=torch.empty(2, dtype=torch.int64), weight_loader=weight_loader)
+        weight_shape = BaseSonarParameter(data=torch.empty(2, dtype=torch.int64), weight_loader=weight_loader)
 
         layer.register_parameter("weight_packed", weight_packed)
         layer.register_parameter("weight_scale", weight_scale)

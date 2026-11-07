@@ -4,17 +4,17 @@
 
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.model_executor.layers.quantization.utils.machete_utils import (
+from sonar import _custom_ops as ops
+from sonar.model_executor.layers.quantization.utils.machete_utils import (
     check_machete_supports_shape,
     query_machete_supported_group_sizes,
     query_machete_supported_quant_types,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     unpack_quantized_values_into_int32,
 )
-from aphrodite.model_executor.parameter import BaseAphroditeParameter, permute_param_layout_
-from aphrodite.platforms import current_platform
+from sonar.model_executor.parameter import BaseSonarParameter, permute_param_layout_
+from sonar.platforms import current_platform
 
 from .MPLinearKernel import MPLinearKernel, MPLinearLayerConfig
 
@@ -59,7 +59,7 @@ class MacheteLinearKernel(MPLinearKernel):
         c = self.config
 
         def transform_w_q(x):
-            assert isinstance(x, BaseAphroditeParameter)
+            assert isinstance(x, BaseSonarParameter)
             permute_param_layout_(x, input_dim=0, output_dim=1, packed_dim=0)
             x.data = ops.machete_prepack_B(
                 x.data.t().contiguous().t(),
@@ -70,13 +70,13 @@ class MacheteLinearKernel(MPLinearKernel):
             return x
 
         def transform_w_s(x):
-            assert isinstance(x, BaseAphroditeParameter)
+            assert isinstance(x, BaseSonarParameter)
             permute_param_layout_(x, input_dim=0, output_dim=1)
             x.data = x.data.contiguous()
             return x
 
         def transform_w_zp(x):
-            assert isinstance(x, BaseAphroditeParameter)
+            assert isinstance(x, BaseSonarParameter)
             permute_param_layout_(x, input_dim=0, output_dim=1, packed_dim=1)
             x_unpacked = unpack_quantized_values_into_int32(x.data, c.weight_type, packed_dim=1)
             w_s = getattr(layer, self.w_s_name).data

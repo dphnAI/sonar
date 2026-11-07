@@ -7,25 +7,25 @@ from typing import Any, Union
 import torch
 from packaging import version
 
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.model_executor.layers.fused_moe import (
     FusedMoEConfig,
     FusedMoEMethodBase,
     FusedMoEQuantConfig,
     RoutedExperts,
     SharedExperts,
 )
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.linear import (
     LinearBase,
     LinearMethodBase,
     UnquantizedLinearMethod,
     set_weight_attrs,
 )
-from aphrodite.model_executor.layers.quantization import (
+from sonar.model_executor.layers.quantization import (
     QuantizationConfig,
     QuantizationMethods,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import direct_register_custom_op
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import direct_register_custom_op
 
 
 def _check_bitsandbytes_version():
@@ -401,7 +401,7 @@ try:
         fake_impl=_apply_bnb_4bit_fake,
         dispatch_key=current_platform.dispatch_key,
     )
-    apply_bnb_4bit = torch.ops.aphrodite.apply_bnb_4bit
+    apply_bnb_4bit = torch.ops.sonar.apply_bnb_4bit
 
 except AttributeError as error:
     raise error
@@ -457,7 +457,7 @@ class BitsAndBytesMoEMethod(FusedMoEMethodBase):
         shared_experts: SharedExperts | None,
         shared_experts_input: torch.Tensor | None,
     ) -> torch.Tensor:
-        from aphrodite.model_executor.layers.fused_moe import fused_experts
+        from sonar.model_executor.layers.fused_moe import fused_experts
 
         # TODO(bnell): Do these need to be called on the hot path?
         if self.quant_config.load_in_8bit:

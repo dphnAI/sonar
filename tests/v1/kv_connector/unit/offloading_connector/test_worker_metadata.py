@@ -3,7 +3,7 @@
 
 import pytest
 
-from aphrodite.distributed.kv_transfer.kv_connector.v1.offloading.common import (
+from sonar.distributed.kv_transfer.kv_connector.v1.offloading.common import (
     DirectionalTransferStats,
     OffloadingWorkerMetadata,
     TransferStats,

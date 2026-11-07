@@ -11,7 +11,7 @@ from typing import Any
 
 import torch
 
-from aphrodite.model_executor.warmup.jit_warmup import AphroditeJitKernel, zip_inputs
+from sonar.model_executor.warmup.jit_warmup import SonarJitKernel, zip_inputs
 
 from ._ll_router_common import (
     current_cuda_stream,
@@ -60,7 +60,7 @@ _TUNED_DOTPROD_CONFIGS: dict[tuple[int, int], dict[int, tuple[int, int, int]]] =
 _SUPPORTED_ACTIVATION_DTYPES = (torch.bfloat16, torch.float16, torch.float32)
 
 
-class LLFp32WGemm(AphroditeJitKernel["LLFp32WGemm.CompileKey"]):
+class LLFp32WGemm(SonarJitKernel["LLFp32WGemm.CompileKey"]):
     # Dot-prod is specialized on M/K, tile shape, and activation dtype.
     @dataclass(frozen=True, slots=True)
     class CompileKey:

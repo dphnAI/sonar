@@ -8,18 +8,18 @@ import torch
 from PIL import Image as PILImage
 from transformers.models.gemma4 import Gemma4AudioFeatureExtractor
 
-from aphrodite.model_executor.models.gemma4_mm import (
+from sonar.model_executor.models.gemma4_mm import (
     Gemma4ImagePixelInputs,
     _dummy_audio_num_samples,
 )
-from aphrodite.model_executor.models.gemma4_unified import (
+from sonar.model_executor.models.gemma4_unified import (
     Gemma4UnifiedForConditionalGeneration,
     Gemma4UnifiedProcessingInfo,
     Gemma4UnifiedVisionEmbedder,
 )
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import MultiModalFieldConfig
-from aphrodite.utils.gpu_sync_debug import gpu_sync_allowed
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import MultiModalFieldConfig
+from sonar.utils.gpu_sync_debug import gpu_sync_allowed
 
 from ....conftest import ImageTestAssets
 from ...utils import build_model_context

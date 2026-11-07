@@ -11,17 +11,17 @@ from __future__ import annotations
 
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
-from aphrodite.v1.attention.ops.triton_unified_attention import (
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
+from sonar.v1.attention.ops.triton_unified_attention import (
     reduce_segments,
 )
 
 # Reuse the sequence-index search and vectorized partition reducer.
-from aphrodite.v1.attention.ops.turboquant_soa.triton_turboquant_unified_attention import (
+from sonar.v1.attention.ops.turboquant_soa.triton_turboquant_unified_attention import (
     _find_seq_idx,
 )
-from aphrodite.v1.attention.ops.ultraquant.format import (
+from sonar.v1.attention.ops.ultraquant.format import (
     UE8M0_BIAS,
     get_group_size,
     k_scales_offset,
@@ -30,7 +30,7 @@ from aphrodite.v1.attention.ops.ultraquant.format import (
     v_codes_offset,
     v_scales_offset,
 )
-from aphrodite.v1.attention.ops.ultraquant.triton_store import _kv_cache_flat
+from sonar.v1.attention.ops.ultraquant.triton_store import _kv_cache_flat
 
 _is_hip = current_platform.is_rocm()
 

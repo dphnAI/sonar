@@ -31,49 +31,49 @@ from transformers.modeling_outputs import (
 )
 from transformers.utils import torch_int
 
-from aphrodite.compilation.decorators import (
+from sonar.compilation.decorators import (
     should_torch_compile_mm_encoder,
     support_torch_compile,
 )
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.multimodal import MultiModalDummyOptions
-from aphrodite.distributed import parallel_state
-from aphrodite.distributed import utils as dist_utils
-from aphrodite.inputs import MultiModalDataDict
-from aphrodite.model_executor.layers.attention import (
+from sonar.config import SonarConfig
+from sonar.config.multimodal import MultiModalDummyOptions
+from sonar.distributed import parallel_state
+from sonar.distributed import utils as dist_utils
+from sonar.inputs import MultiModalDataDict
+from sonar.model_executor.layers.attention import (
     MMEncoderAttention,
 )
-from aphrodite.model_executor.layers.conv import Conv2dLayer
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.conv import Conv2dLayer
+from sonar.model_executor.layers.linear import (
     QKVParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.rotary_embedding.common import (
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.rotary_embedding.common import (
     ApplyRotaryEmb,
 )
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import (
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import (
     MultiModalFeatureSpec,
     MultiModalFieldConfig,
     MultiModalKwargsItems,
 )
-from aphrodite.multimodal.parse import (
+from sonar.multimodal.parse import (
     ImageProcessorItems,
     ImageSize,
     MultiModalDataItems,
 )
-from aphrodite.multimodal.processing import (
+from sonar.multimodal.processing import (
     BaseDummyInputsBuilder,
     BaseMultiModalProcessor,
     BaseProcessingInfo,
     PromptReplacement,
     PromptUpdate,
 )
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.utils.tensor_schema import TensorSchema, TensorShape
-from aphrodite.utils.torch_utils import PIN_MEMORY, async_tensor_h2d
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
+from sonar.sequence import IntermediateTensors
+from sonar.utils.tensor_schema import TensorSchema, TensorShape
+from sonar.utils.torch_utils import PIN_MEMORY, async_tensor_h2d
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
 
 from .ernie45 import Ernie4_5ForCausalLM
 from .interfaces import MultiModalEmbeddings, SupportsMRoPE, SupportsMultiModal
@@ -251,7 +251,7 @@ class PaddleOCRVLMultiModalProcessor(BaseMultiModalProcessor[PaddleOCRVLProcessi
     ) -> BatchFeature:
         final_mm_kwargs = dict(hf_kwargs or {})
         final_mm_kwargs.setdefault("images_kwargs", {})
-        # Aphrodite use PIL.Image, always set channel_last
+        # Sonar use PIL.Image, always set channel_last
         final_mm_kwargs["input_data_format"] = ChannelDimension.LAST
         return self.info.ctx.call_hf_processor(
             self.info.get_hf_processor(**final_mm_kwargs),
@@ -834,7 +834,7 @@ class SiglipVisionTransformer(nn.Module):
 
 
 class SiglipVisionModel(nn.Module):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_stacked={
             ".q_proj": (".qkv_proj", "q"),
             ".k_proj": (".qkv_proj", "k"),
@@ -895,7 +895,7 @@ class SiglipVisionModel(nn.Module):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
 
 @MULTIMODAL_REGISTRY.register_processor(
@@ -904,7 +904,7 @@ class SiglipVisionModel(nn.Module):
     dummy_inputs=PaddleOCRVLDummyInputsBuilder,
 )
 class PaddleOCRVLForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsMRoPE):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={
             "model.": "language_model.model.",
             "lm_head.": "language_model.lm_head.",
@@ -918,9 +918,9 @@ class PaddleOCRVLForConditionalGeneration(nn.Module, SupportsMultiModal, Support
 
         raise ValueError("Only image modality is supported")
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
         if hasattr(config, "text_config"):
             text_config = config.text_config.to_dict()
             unsafe_keys = ["model_type", "architectures", "tie_word_embeddings"]
@@ -928,11 +928,11 @@ class PaddleOCRVLForConditionalGeneration(nn.Module, SupportsMultiModal, Support
                 text_config.pop(key, None)
             config.update(text_config)
 
-        quant_config = aphrodite_config.quant_config
+        quant_config = sonar_config.quant_config
 
         self.config = config
 
-        with self._mark_tower_model(aphrodite_config, "image"):
+        with self._mark_tower_model(sonar_config, "image"):
             self.visual = SiglipVisionModel(
                 config=config.vision_config,
                 quant_config=quant_config,
@@ -940,9 +940,9 @@ class PaddleOCRVLForConditionalGeneration(nn.Module, SupportsMultiModal, Support
             )
             self.mlp_AR = Projector(config, config.vision_config)
 
-        with self._mark_language_model(aphrodite_config):
+        with self._mark_language_model(sonar_config):
             self.language_model = Ernie4_5ForCausalLM(
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 prefix=maybe_prefix(prefix, "language_model"),
             )
 
@@ -1110,5 +1110,5 @@ class PaddleOCRVLForConditionalGeneration(nn.Module, SupportsMultiModal, Support
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        autoloaded_weights = loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        autoloaded_weights = loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
         return autoloaded_weights

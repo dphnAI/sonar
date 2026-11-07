@@ -4,8 +4,8 @@ import dataclasses
 
 import pytest
 
-from aphrodite.config import CompilationMode
-from aphrodite.platforms import current_platform
+from sonar.config import CompilationMode
+from sonar.platforms import current_platform
 
 from ...utils import compare_all_settings
 
@@ -79,7 +79,7 @@ def test_compile_correctness(
 
     # Pin every compared setting to the same model runner so that only the
     # compilation mode differs within a comparison.
-    runner_env = {"APHRODITE_USE_V2_MODEL_RUNNER": str(int(use_v2_model_runner))}
+    runner_env = {"SONAR_USE_V2_MODEL_RUNNER": str(int(use_v2_model_runner))}
 
     all_args: list[list[str]] = []
     all_envs: list[dict[str, str] | None] = []
@@ -89,7 +89,7 @@ def test_compile_correctness(
         CompilationMode.NONE,
         CompilationMode.STOCK_TORCH_COMPILE,
         CompilationMode.DYNAMO_TRACE_ONCE,
-        CompilationMode.APHRODITE_COMPILE,
+        CompilationMode.SONAR_COMPILE,
     ]:
         all_args.append(final_args + [f"-cc.mode={mode.name}", "-cc.backend=inductor"])
         all_envs.append(dict(runner_env))
@@ -110,7 +110,7 @@ def test_compile_correctness(
         CompilationMode.NONE,
         CompilationMode.STOCK_TORCH_COMPILE,
         CompilationMode.DYNAMO_TRACE_ONCE,
-        CompilationMode.APHRODITE_COMPILE,
+        CompilationMode.SONAR_COMPILE,
     ]:
         all_args.append(final_args + [f"-cc.mode={mode.name}", "-cc.backend=eager"])
         all_envs.append(dict(runner_env))

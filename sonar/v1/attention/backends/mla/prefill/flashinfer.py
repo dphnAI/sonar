@@ -6,26 +6,26 @@ from typing import TYPE_CHECKING, ClassVar
 
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.utils.gpu_sync_debug import gpu_sync_allowed
-from aphrodite.v1.attention.backends.mla.prefill.base import (
+import sonar.envs as envs
+from sonar.utils.gpu_sync_debug import gpu_sync_allowed
+from sonar.v1.attention.backends.mla.prefill.base import (
     MLADimensions,
     MLAPrefillBackend,
 )
-from aphrodite.v1.attention.backends.utils import (
+from sonar.v1.attention.backends.utils import (
     PerLayerParameters,
     get_per_layer_parameters,
     infer_global_hyperparameters,
     log2_lse_to_ln,
 )
-from aphrodite.v1.worker.workspace import current_workspace_manager
+from sonar.v1.worker.workspace import current_workspace_manager
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
-    from aphrodite.model_executor.layers.attention.mla_attention import (
+    from sonar.config import SonarConfig
+    from sonar.model_executor.layers.attention.mla_attention import (
         MLACommonPrefillMetadata,
     )
-    from aphrodite.platforms.interface import DeviceCapability
+    from sonar.platforms.interface import DeviceCapability
 
 try:
     from flashinfer import BatchPrefillWithRaggedKVCacheWrapper
@@ -76,7 +76,7 @@ class FlashInferPrefillBackend(MLAPrefillBackend):
         qk_nope_head_dim: int,
         qk_rope_head_dim: int,
         v_head_dim: int,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
     ) -> None:
         super().__init__(
             num_heads=num_heads,
@@ -85,7 +85,7 @@ class FlashInferPrefillBackend(MLAPrefillBackend):
             qk_nope_head_dim=qk_nope_head_dim,
             qk_rope_head_dim=qk_rope_head_dim,
             v_head_dim=v_head_dim,
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
         )
 
         self._prefill_main: BatchPrefillWithRaggedKVCacheWrapper | None = None
@@ -93,7 +93,7 @@ class FlashInferPrefillBackend(MLAPrefillBackend):
         self._global_hyperparameters: PerLayerParameters | None = None
         self._wrapper_workspace_ptr = 0
         self._workspace_spec = (
-            (envs.APHRODITE_FLASHINFER_WORKSPACE_BUFFER_SIZE,),
+            (envs.SONAR_FLASHINFER_WORKSPACE_BUFFER_SIZE,),
             torch.uint8,
         )
         # Reserve capacity without retaining a view: a retained view would pin
@@ -115,17 +115,17 @@ class FlashInferPrefillBackend(MLAPrefillBackend):
         if self._global_hyperparameters is not None:
             return self._global_hyperparameters
 
-        from aphrodite.model_executor.layers.attention.mla_attention import (
+        from sonar.model_executor.layers.attention.mla_attention import (
             MLACommonImpl,
         )
-        from aphrodite.model_executor.layers.attention_layer_base import (
+        from sonar.model_executor.layers.attention_layer_base import (
             AttentionLayerBase,
         )
 
         # Match any layer with an MLA impl, not just the MLAAttention wrapper:
         # fused MLA modules (Kimi-K3's MultiHeadLatentAttention) register a
         # different layer type. Keying on impl also excludes linear/KDA layers.
-        forward_context = self.aphrodite_config.compilation_config.static_forward_context
+        forward_context = self.sonar_config.compilation_config.static_forward_context
         layer_names = [
             name
             for name, layer in forward_context.items()
@@ -134,7 +134,7 @@ class FlashInferPrefillBackend(MLAPrefillBackend):
 
         self._global_hyperparameters = infer_global_hyperparameters(
             get_per_layer_parameters(
-                self.aphrodite_config,
+                self.sonar_config,
                 layer_names,
                 MLACommonImpl,  # type: ignore[type-abstract]
             )

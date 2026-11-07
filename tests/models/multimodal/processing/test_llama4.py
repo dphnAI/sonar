@@ -5,8 +5,8 @@
 import pytest
 import torch
 
-from aphrodite.model_executor.models.mllama4 import Mllama4ProcessingInfo
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
+from sonar.model_executor.models.mllama4 import Mllama4ProcessingInfo
+from sonar.multimodal import MULTIMODAL_REGISTRY
 
 from ....conftest import ImageTestAssets
 from ...utils import build_model_context

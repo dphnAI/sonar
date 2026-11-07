@@ -17,7 +17,7 @@ def merge_multimodal_embeddings(
 ) -> mx.array:
     """Splice multimodal embeddings into placeholder positions.
 
-    Mirrors ``aphrodite/model_executor/models/utils.py``
+    Mirrors ``sonar/model_executor/models/utils.py``
     ``_merge_multimodal_embeddings`` for MLX arrays.  Returns a new array;
     ``inputs_embeds`` is not mutated.
     """

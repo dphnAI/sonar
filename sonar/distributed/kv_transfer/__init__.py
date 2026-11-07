@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-from aphrodite.distributed.kv_transfer.kv_transfer_state import (
+from sonar.distributed.kv_transfer.kv_transfer_state import (
     KVConnectorBaseType,
     ensure_kv_transfer_initialized,
     ensure_kv_transfer_shutdown,

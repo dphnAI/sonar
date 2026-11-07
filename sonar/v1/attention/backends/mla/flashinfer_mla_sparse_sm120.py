@@ -6,24 +6,24 @@ from typing import TYPE_CHECKING, cast
 
 import torch
 
-from aphrodite.config import get_current_aphrodite_config
-from aphrodite.model_executor.layers.attention.sparse_mla_attention import (
+from sonar.config import get_current_sonar_config
+from sonar.model_executor.layers.attention.sparse_mla_attention import (
     SparseMLACommonImpl,
 )
-from aphrodite.v1.attention.backend import AttentionLayer, AttentionType
-from aphrodite.v1.attention.backends.mla.flashinfer_mla_sparse import (
+from sonar.v1.attention.backend import AttentionLayer, AttentionType
+from sonar.v1.attention.backends.mla.flashinfer_mla_sparse import (
     FlashInferMLASparseMetadata,
     _get_workspace_buffer,
 )
-from aphrodite.v1.attention.backends.mla.index_group import HiSparseMLAIndexGroup
-from aphrodite.v1.attention.backends.mla.sparse_utils import (
+from sonar.v1.attention.backends.mla.index_group import HiSparseMLAIndexGroup
+from sonar.v1.attention.backends.mla.sparse_utils import (
     flat_kv_row_view,
     triton_convert_req_index_to_global_index,
     triton_filter_and_convert_dcp_index,
 )
 
 if TYPE_CHECKING:
-    from aphrodite.model_executor.models.deepseek_v2 import Indexer
+    from sonar.model_executor.models.deepseek_v2 import Indexer
 
 
 def _kv_scale_format_for_model(model_type: str | None) -> str:
@@ -92,13 +92,13 @@ class FlashInferMLASparseSM120Impl(SparseMLACommonImpl[FlashInferMLASparseMetada
             topk_indices_buffer=topk_indices_buffer,
             **mla_args,
         )
-        aphrodite_config = get_current_aphrodite_config()
+        sonar_config = get_current_sonar_config()
         model_type = None
-        if aphrodite_config.model_config is not None:
-            model_type = getattr(aphrodite_config.model_config.hf_text_config, "model_type", None)
+        if sonar_config.model_config is not None:
+            model_type = getattr(sonar_config.model_config.hf_text_config, "model_type", None)
         self.kv_scale_format = _kv_scale_format_for_model(model_type)
 
-        from aphrodite.utils.flashinfer import has_flashinfer_sparse_mla_sm120
+        from sonar.utils.flashinfer import has_flashinfer_sparse_mla_sm120
 
         if not has_flashinfer_sparse_mla_sm120():
             raise RuntimeError("FLASHINFER_MLA_SPARSE_SM120 requires FlashInfer's sparse MLA decode API.")
@@ -237,7 +237,7 @@ class FlashInferMLASparseSM120Impl(SparseMLACommonImpl[FlashInferMLASparseMetada
         if self._workspace_buffer is None:
             self._workspace_buffer = _get_workspace_buffer(q.device)
 
-        from aphrodite.utils.flashinfer import (
+        from sonar.utils.flashinfer import (
             flashinfer_trtllm_batch_decode_with_kv_cache_mla,
         )
 

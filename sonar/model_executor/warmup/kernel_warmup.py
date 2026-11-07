@@ -13,46 +13,46 @@ from typing import TYPE_CHECKING
 
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.warmup.attention_warmup import (
+import sonar.envs as envs
+from sonar.logger import init_logger
+from sonar.model_executor.warmup.attention_warmup import (
     mixed_batch_attention_warmup,
 )
-from aphrodite.model_executor.warmup.b12x_warmup import b12x_warmup
-from aphrodite.model_executor.warmup.cutedsl_warmup import cutedsl_warmup
-from aphrodite.model_executor.warmup.deep_gemm_warmup import deep_gemm_warmup
-from aphrodite.model_executor.warmup.flashinfer_autotune_cache import (
+from sonar.model_executor.warmup.b12x_warmup import b12x_warmup
+from sonar.model_executor.warmup.cutedsl_warmup import cutedsl_warmup
+from sonar.model_executor.warmup.deep_gemm_warmup import deep_gemm_warmup
+from sonar.model_executor.warmup.flashinfer_autotune_cache import (
     resolve_flashinfer_autotune_v2_root,
     resolve_rank_flashinfer_autotune_file,
     use_flashinfer_autotune_v2,
 )
-from aphrodite.model_executor.warmup.flashinfer_sparse_mla_warmup import (
+from sonar.model_executor.warmup.flashinfer_sparse_mla_warmup import (
     autotune_hisparse_flashinfer_attention,
     deepseek_v4_sparse_mla_attention_warmup,
     flashinfer_sparse_mla_decode_autotune_warmup,
 )
-from aphrodite.model_executor.warmup.kimi_k3_triton_warmup import (
+from sonar.model_executor.warmup.kimi_k3_triton_warmup import (
     kimi_k3_triton_warmup,
 )
-from aphrodite.model_executor.warmup.mamba_triton_warmup import mamba_triton_warmup
-from aphrodite.model_executor.warmup.qwen4_exp_qsa_warmup import (
+from sonar.model_executor.warmup.mamba_triton_warmup import mamba_triton_warmup
+from sonar.model_executor.warmup.qwen4_exp_qsa_warmup import (
     qwen4_exp_qsa_triton_warmup,
 )
-from aphrodite.model_executor.warmup.qwen_triton_warmup import qwen_triton_warmup
-from aphrodite.model_executor.warmup.qwen_vl_triton_warmup import qwen_vl_triton_warmup
-from aphrodite.model_executor.warmup.replayssm_warmup import (
+from sonar.model_executor.warmup.qwen_triton_warmup import qwen_triton_warmup
+from sonar.model_executor.warmup.qwen_vl_triton_warmup import qwen_vl_triton_warmup
+from sonar.model_executor.warmup.replayssm_warmup import (
     replayssm_autotune_warmup,
 )
-from aphrodite.model_executor.warmup.watermark_sample_warmup import (
+from sonar.model_executor.warmup.watermark_sample_warmup import (
     watermark_sample_warmup,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.deep_gemm import is_deep_gemm_supported
-from aphrodite.utils.flashinfer import has_flashinfer
+from sonar.platforms import current_platform
+from sonar.utils.deep_gemm import is_deep_gemm_supported
+from sonar.utils.flashinfer import has_flashinfer
 
 if TYPE_CHECKING:
-    from aphrodite.v1.worker.gpu_model_runner import GPUModelRunner
-    from aphrodite.v1.worker.gpu_worker import Worker
+    from sonar.v1.worker.gpu_model_runner import GPUModelRunner
+    from sonar.v1.worker.gpu_worker import Worker
 
 logger = init_logger(__name__)
 
@@ -60,7 +60,7 @@ _LL_BF16_WARMUP_M_RANGE = range(1, 17)
 
 
 def _warmup_flashinfer_attention(worker: "Worker") -> None:
-    from aphrodite.distributed.parallel_state import get_pp_group
+    from sonar.distributed.parallel_state import get_pp_group
 
     # Only warmup if the model has FlashInfer attention groups
     # and is not a pooling model
@@ -100,7 +100,7 @@ def _warmup_flashinfer_attention(worker: "Worker") -> None:
 def _ll_bf16_router_shapes_from_model(
     model: torch.nn.Module,
 ) -> tuple[tuple[int, int], ...]:
-    from aphrodite.model_executor.layers.fused_moe.router.gate_linear import GateLinear
+    from sonar.model_executor.layers.fused_moe.router.gate_linear import GateLinear
 
     shapes: set[tuple[int, int]] = set()
     for module in model.modules():
@@ -118,10 +118,10 @@ def _ll_bf16_router_shapes_from_model(
 
 
 def _warmup_ll_bf16_router_gemm(model: torch.nn.Module) -> None:
-    from aphrodite.model_executor.kernels.linear.cute_dsl.ll_bf16 import (
+    from sonar.model_executor.kernels.linear.cute_dsl.ll_bf16 import (
         is_available as is_ll_bf16_gemm_available,
     )
-    from aphrodite.model_executor.kernels.linear.cute_dsl.ll_bf16 import (
+    from sonar.model_executor.kernels.linear.cute_dsl.ll_bf16 import (
         ll_bf16_gemm_kernel,
     )
 
@@ -147,11 +147,11 @@ def _warmup_ll_bf16_router_gemm(model: torch.nn.Module) -> None:
 
 
 def _warmup_skinny_gemm(model: torch.nn.Module) -> None:
-    from aphrodite.model_executor.kernels.linear.cute_dsl.skinny_gemm import (
+    from sonar.model_executor.kernels.linear.cute_dsl.skinny_gemm import (
         SkinnyGemmConfig,
         shape_dynamic_skinny_gemm,
     )
-    from aphrodite.model_executor.kernels.linear.cute_dsl.skinny_gemm_plans import (
+    from sonar.model_executor.kernels.linear.cute_dsl.skinny_gemm_plans import (
         get_skinny_gemm_plan,
     )
 
@@ -171,10 +171,10 @@ def _warmup_bf16x3_router_gemm(
     model: torch.nn.Module,
     max_num_tokens: int,
 ) -> None:
-    from aphrodite.model_executor.layers.fused_moe.router.bf16x3_router_gemm_sm100 import (  # noqa: E501
+    from sonar.model_executor.layers.fused_moe.router.bf16x3_router_gemm_sm100 import (  # noqa: E501
         warmup_bf16x3_router_gemm,
     )
-    from aphrodite.model_executor.layers.fused_moe.router.gate_linear import GateLinear
+    from sonar.model_executor.layers.fused_moe.router.gate_linear import GateLinear
 
     gate = next(
         (module for module in model.modules() if isinstance(module, GateLinear) and module.allow_bf16x3_router_gemm),
@@ -204,7 +204,7 @@ def _warmup_gemm_rs_ar() -> None:
     # when GEMM-RS/AR is enabled and initializes its singleton before
     # kernel_warmup runs. Avoid importing it here so other models do not
     # compile the RS/AR variants.
-    module = sys.modules.get("aphrodite.model_executor.kernels.linear.cute_dsl.gemm_rs_ar")
+    module = sys.modules.get("sonar.model_executor.kernels.linear.cute_dsl.gemm_rs_ar")
     if module is None:
         return
     compiled = module.warmup_gemm_rs_ar()
@@ -213,13 +213,13 @@ def _warmup_gemm_rs_ar() -> None:
 
 
 def _autotune_kimi_k3_kda_qkvg(model: torch.nn.Module) -> None:
-    module = sys.modules.get("aphrodite.models.kimi_k3.nvidia.low_latency_gemm")
+    module = sys.modules.get("sonar.models.kimi_k3.nvidia.low_latency_gemm")
     if module is not None:
         module.autotune_kda_qkvg(model)
 
 
 def kernel_warmup(worker: "Worker", *, process_local_only: bool = False):
-    from aphrodite.model_executor.warmup.step5_dsa_warmup import step5_dsa_warmup
+    from sonar.model_executor.warmup.step5_dsa_warmup import step5_dsa_warmup
 
     if not worker.use_v2_model_runner:
         # The KV-block zeroing kernel is driven by the scheduler's
@@ -228,7 +228,7 @@ def kernel_warmup(worker: "Worker", *, process_local_only: bool = False):
         if zeroer is not None:
             zeroer.warmup(worker.model_runner.kv_cache_config.num_blocks)
 
-    enable_jit_warmup = worker.aphrodite_config.kernel_config.enable_jit_warmup
+    enable_jit_warmup = worker.sonar_config.kernel_config.enable_jit_warmup
     if enable_jit_warmup:
         logger.info("JIT kernel warmup starting.")
         jit_warmup_start = time.perf_counter()
@@ -248,11 +248,11 @@ def kernel_warmup(worker: "Worker", *, process_local_only: bool = False):
             time.perf_counter() - jit_warmup_start,
         )
 
-    qwen_triton_warmup(worker.model_runner, worker.aphrodite_config.model_config)
+    qwen_triton_warmup(worker.model_runner, worker.sonar_config.model_config)
     qwen_vl_triton_warmup(worker.model_runner)
     mamba_triton_warmup(worker.model_runner)
 
-    compilation_config = worker.aphrodite_config.compilation_config
+    compilation_config = worker.sonar_config.compilation_config
     cudagraph_capture_sizes = list(compilation_config.cudagraph_capture_sizes or [])
 
     # Run next so input-prep kernels JIT against pristine runner state.
@@ -278,7 +278,7 @@ def kernel_warmup(worker: "Worker", *, process_local_only: bool = False):
 
     _warmup_gemm_rs_ar()
 
-    if worker.aphrodite_config.kernel_config.enable_cutedsl_warmup:
+    if worker.sonar_config.kernel_config.enable_cutedsl_warmup:
         # TODO(roberto): Remove after registered CuTeDSL warmups are migrated
         # to the shared JIT warmup infrastructure.
         # https://github.com/vllm-project/vllm/pull/47451
@@ -289,7 +289,7 @@ def kernel_warmup(worker: "Worker", *, process_local_only: bool = False):
         return
 
     if current_platform.is_rocm():
-        from aphrodite.model_executor.warmup.rocm_segmented_attn_autotune_warmup import (
+        from sonar.model_executor.warmup.rocm_segmented_attn_autotune_warmup import (
             rocm_segmented_attn_autotune_warmup,
         )
 
@@ -300,7 +300,7 @@ def kernel_warmup(worker: "Worker", *, process_local_only: bool = False):
     step5_dsa_warmup(worker)
 
     # Deep GEMM warmup
-    do_deep_gemm_warmup = is_deep_gemm_supported() and envs.APHRODITE_DEEP_GEMM_WARMUP != "skip"
+    do_deep_gemm_warmup = is_deep_gemm_supported() and envs.SONAR_DEEP_GEMM_WARMUP != "skip"
     if do_deep_gemm_warmup:
         model = worker.get_model()
         max_tokens = worker.scheduler_config.max_num_batched_tokens
@@ -310,7 +310,7 @@ def kernel_warmup(worker: "Worker", *, process_local_only: bool = False):
 
     if current_platform.is_cuda():
         # The MSA kernels, and the CuTe DSL their modules import, are CUDA-only.
-        from aphrodite.model_executor.warmup.minimax_m3_msa_warmup import (
+        from sonar.model_executor.warmup.minimax_m3_msa_warmup import (
             minimax_m3_msa_warmup,
         )
 
@@ -320,14 +320,14 @@ def kernel_warmup(worker: "Worker", *, process_local_only: bool = False):
     # resolve every CUDA Graph bucket before capture begins.
     # Lazy import: flashinfer_pcie_ipc_all_reduce imports flashinfer.comm,
     # which initializes CUDA at import time and must not run at module scope.
-    if envs.APHRODITE_ALLREDUCE_USE_FLASHINFER_PCIE_IPC:
-        from aphrodite.distributed.device_communicators import (
+    if envs.SONAR_ALLREDUCE_USE_FLASHINFER_PCIE_IPC:
+        from sonar.distributed.device_communicators import (
             flashinfer_pcie_ipc_all_reduce,
         )
 
         flashinfer_pcie_ipc_all_reduce.warmup_flashinfer_pcie_ipc_allreduce(worker)
 
-    enable_flashinfer_autotune = worker.aphrodite_config.kernel_config.enable_flashinfer_autotune
+    enable_flashinfer_autotune = worker.sonar_config.kernel_config.enable_flashinfer_autotune
     # FlashInfer autotune for Hopper (SM 9.0) and Blackwell (SM 10.0) GPUs
     if enable_flashinfer_autotune is False:
         logger.info_once("Skipping FlashInfer autotune because it is disabled.")
@@ -338,10 +338,10 @@ def kernel_warmup(worker: "Worker", *, process_local_only: bool = False):
 
 
 def _flashinfer_autotune_skip_ops(runner: "GPUModelRunner") -> set[str] | None:
-    if envs.APHRODITE_FLASHINFER_AUTOTUNE_SKIP_OPS is not None:
-        return set(envs.APHRODITE_FLASHINFER_AUTOTUNE_SKIP_OPS) or None
+    if envs.SONAR_FLASHINFER_AUTOTUNE_SKIP_OPS is not None:
+        return set(envs.SONAR_FLASHINFER_AUTOTUNE_SKIP_OPS) or None
 
-    from aphrodite.model_executor.kernels.linear import (
+    from sonar.model_executor.kernels.linear import (
         FlashInferCuteDslNvFp4LinearKernel,
     )
 
@@ -360,7 +360,7 @@ def _flashinfer_deferred_moe_token_counts(
     runner: "GPUModelRunner",
 ) -> tuple[int, ...]:
     """Return bounded token counts that exercise deferred MoE finalization."""
-    from aphrodite.model_executor.layers.fused_moe import MoERunner
+    from sonar.model_executor.layers.fused_moe import MoERunner
 
     max_tokens = runner.scheduler_config.max_num_batched_tokens
     token_counts: list[int] = []
@@ -385,7 +385,7 @@ def _flashinfer_autotune_token_counts(runner: "GPUModelRunner") -> tuple[int, ..
 
 
 def _run_flashinfer_autotune_dummy_runs(runner: "GPUModelRunner", *, skip_attn: bool = False) -> None:
-    import aphrodite.utils.flashinfer as fi_utils
+    import sonar.utils.flashinfer as fi_utils
 
     dummy_run_kwargs = {"skip_attn": True} if skip_attn else {}
     for num_tokens in _flashinfer_autotune_token_counts(runner):
@@ -486,8 +486,8 @@ def flashinfer_autotune(runner: "GPUModelRunner", *, skip_attn: bool = False) ->
     """
     from flashinfer.autotuner import AutoTuner, set_autotune_process_group
 
-    import aphrodite.utils.flashinfer as fi_utils
-    from aphrodite.distributed.parallel_state import (
+    import sonar.utils.flashinfer as fi_utils
+    from sonar.distributed.parallel_state import (
         get_pp_group,
         get_tp_group,
         get_world_group,
@@ -536,7 +536,7 @@ def flashinfer_autotune(runner: "GPUModelRunner", *, skip_attn: bool = False) ->
     set_autotune_process_group(group)
     try:
         with torch.inference_mode(), autotune_context:
-            hisparse_enabled = runner.aphrodite_config.attention_config.hisparse_config is not None
+            hisparse_enabled = runner.sonar_config.attention_config.hisparse_config is not None
             skip_attn = skip_attn or hisparse_enabled
             if hisparse_enabled:
                 # HiSparse hot-buffer attention is bounded by decode batch

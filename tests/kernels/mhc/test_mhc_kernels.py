@@ -7,24 +7,24 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-import aphrodite.model_executor.kernels.mhc  # noqa: F401
-import aphrodite.model_executor.layers.mhc as mhc_layers
-from aphrodite.model_executor.kernels.mhc.tilelang import (
+import sonar.model_executor.kernels.mhc  # noqa: F401
+import sonar.model_executor.layers.mhc as mhc_layers
+from sonar.model_executor.kernels.mhc.tilelang import (
     mhc_fused_post_pre_tilelang,
     mhc_fused_post_pre_tilelang_reuse_residual,
     mhc_post_tilelang,
     mhc_pre_delayed_tilelang,
 )
-from aphrodite.model_executor.kernels.mhc.tilelang_kernels import (
+from sonar.model_executor.kernels.mhc.tilelang_kernels import (
     _HC_PRENORM_GEMM_TILELANG_KERNEL,
     mhc_fused_post_pre_split_config,
 )
-from aphrodite.model_executor.kernels.mhc.torch import (
+from sonar.model_executor.kernels.mhc.torch import (
     mhc_post_torch,
     mhc_pre_delayed_torch,
 )
-from aphrodite.model_executor.kernels.mhc.triton import hc_collapse_triton
-from aphrodite.model_executor.layers.mhc import (
+from sonar.model_executor.kernels.mhc.triton import hc_collapse_triton
+from sonar.model_executor.layers.mhc import (
     HAS_AITER_MHC,
     HAS_AITER_MHC_FUSED,
     HAS_AITER_MHC_FUSED_NORM,
@@ -35,19 +35,19 @@ from aphrodite.model_executor.layers.mhc import (
     MHCPreDelayedOp,
     MHCPreOp,
 )
-from aphrodite.models.deepseek_v4.nvidia.model import (
+from sonar.models.deepseek_v4.nvidia.model import (
     DeepseekV4DecoderLayer,
     DeepseekV4Model,
 )
-from aphrodite.models.deepseek_v41.nvidia.model import (
+from sonar.models.deepseek_v41.nvidia.model import (
     DeepseekV4DecoderLayer as DeepseekV41DecoderLayer,
 )
-from aphrodite.models.deepseek_v41.nvidia.ops.mega_mhc import (
+from sonar.models.deepseek_v41.nvidia.ops.mega_mhc import (
     is_mega_mhc_supported,
     mhc_shifted_post_pre_deep_gemm,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_random_seed
 
 DEVICE = current_platform.device_type
 
@@ -65,7 +65,7 @@ DEVICE = current_platform.device_type
 )
 def test_deepseek_v41_all_reduce_fusion_requires_kernel_support(monkeypatch, tp, ep, hidden, hc, multicast, expected):
     """Eligibility depends on kernel inputs, not serving or attention settings."""
-    from aphrodite.models.deepseek_v41.nvidia.ops import mhc
+    from sonar.models.deepseek_v41.nvidia.ops import mhc
 
     config = SimpleNamespace(
         parallel_config=SimpleNamespace(tensor_parallel_size=tp, enable_expert_parallel=ep),
@@ -130,14 +130,14 @@ def test_hc_collapse_preserves_weighted_residual_sum(num_tokens, hc_mult, hidden
 def test_hc_collapse_custom_op_supports_compile():
     x = torch.randn(2, 4, 5120, dtype=torch.bfloat16, device=DEVICE)
     pre = torch.rand(2, 4, device=DEVICE)
-    torch.library.opcheck(torch.ops.aphrodite.hc_collapse_triton.default, (x, pre))
+    torch.library.opcheck(torch.ops.sonar.hc_collapse_triton.default, (x, pre))
 
 
 @pytest.mark.skipif(not current_platform.is_cuda(), reason="CUDA required")
 @pytest.mark.parametrize("num_tokens", [1, 7])
 def test_v41_dspark_head_collapses_with_last_ffn_mix(num_tokens, monkeypatch):
     """Match reference DSparkBlock.forward_head's hc_pre before its RMSNorm."""
-    from aphrodite.models.deepseek_v41.nvidia import dspark
+    from sonar.models.deepseek_v41.nvidia import dspark
 
     set_random_seed(0)
     hidden_size, hc_mult = 5120, 4
@@ -213,11 +213,11 @@ def test_deepseek_v41_mhc_pre_delayed(
     monkeypatch,
 ):
     """Collapse with the carried pre-mix and save the new one for the next sublayer."""
-    from aphrodite.utils.deep_gemm import is_deep_gemm_supported
+    from sonar.utils.deep_gemm import is_deep_gemm_supported
 
     if use_deep_gemm and not is_deep_gemm_supported():
         pytest.skip("DeepGEMM not available")
-    monkeypatch.setattr("aphrodite.utils.deep_gemm.is_deep_gemm_supported", lambda: use_deep_gemm)
+    monkeypatch.setattr("sonar.utils.deep_gemm.is_deep_gemm_supported", lambda: use_deep_gemm)
     set_random_seed(0)
     hc_mult, hidden_size = 4, 5120
     residual = torch.randn(num_tokens, hc_mult, hidden_size, dtype=torch.bfloat16, device=DEVICE)
@@ -283,8 +283,8 @@ def test_deepseek_v41_mhc_pre_delayed(
 @pytest.mark.parametrize("hidden_size,hc_mult", [(4096, 2), (5120, 4), (7168, 4)])
 def test_deepseek_v41_mhc_overlap_preserves_outputs_on_replay(num_tokens, entry, hidden_size, hc_mult):
     """The input is usable before joining; coefficients stay exact on graph replay."""
-    from aphrodite.models.deepseek_v41.nvidia.ops.mhc import mhc_pre_delayed_overlap
-    from aphrodite.utils.deep_gemm import is_deep_gemm_supported
+    from sonar.models.deepseek_v41.nvidia.ops.mhc import mhc_pre_delayed_overlap
+    from sonar.utils.deep_gemm import is_deep_gemm_supported
 
     if not is_deep_gemm_supported():
         pytest.skip("DeepGEMM required")
@@ -379,7 +379,7 @@ def test_deepseek_v41_mhc_fused_post_pre_delayed(num_tokens, hidden_size, carrie
     weight.uniform_(0.5, 1.5)
     mix_args = (fn, scale, base, 1e-20, 1e-6, 1e-6, 2.0, 20)
 
-    residual_cur, post, comb, layer_input, next_pre, aux = torch.ops.aphrodite.mhc_fused_post_pre_delayed_tilelang(
+    residual_cur, post, comb, layer_input, next_pre, aux = torch.ops.sonar.mhc_fused_post_pre_delayed_tilelang(
         x, residual, post_layer_mix, comb_res_mix, *mix_args, pre_mix, weight, 1e-6
     )
     assert aux.shape == (0, hidden_size)
@@ -403,7 +403,7 @@ def test_deepseek_v41_mhc_fused_post_pre_delayed(num_tokens, hidden_size, carrie
     # The two kernels may round a near-midpoint residual differently (FMA
     # contraction is up to the compiler), so allow one bf16 ulp there and
     # check the collapse against the fused kernel's own residual.
-    residual_ref = torch.ops.aphrodite.mhc_post_tilelang(x, residual, post_layer_mix, comb_res_mix)
+    residual_ref = torch.ops.sonar.mhc_post_tilelang(x, residual, post_layer_mix, comb_res_mix)
     layer_input_ref = mhc_pre_delayed_tilelang(
         residual_cur, *mix_args, pre_mix=pre_mix, norm_weight=weight, norm_eps=1e-6
     )[2]
@@ -425,7 +425,7 @@ def test_deepseek_v41_mhc_fused_post_pre_delayed(num_tokens, hidden_size, carrie
 
     # Folding the stream mean into the collapse must not change it, or anything
     # else the op returns.
-    captured = torch.ops.aphrodite.mhc_fused_post_pre_delayed_tilelang(
+    captured = torch.ops.sonar.mhc_fused_post_pre_delayed_tilelang(
         x,
         residual,
         post_layer_mix,
@@ -442,7 +442,7 @@ def test_deepseek_v41_mhc_fused_post_pre_delayed(num_tokens, hidden_size, carrie
         torch.testing.assert_close(with_aux, without, atol=0, rtol=0)
 
     # The unnormalized epilogue has its own fused aux path.
-    bare = torch.ops.aphrodite.mhc_fused_post_pre_delayed_tilelang(
+    bare = torch.ops.sonar.mhc_fused_post_pre_delayed_tilelang(
         x, residual, post_layer_mix, comb_res_mix, *mix_args, pre_mix, None, 1e-6, True
     )
     torch.testing.assert_close(bare[5], bare[0].mean(dim=1), atol=0, rtol=0)
@@ -450,7 +450,7 @@ def test_deepseek_v41_mhc_fused_post_pre_delayed(num_tokens, hidden_size, carrie
     # Decode replays this op from a captured graph.
     graph = torch.cuda.CUDAGraph()
     with torch.cuda.graph(graph):
-        captured = torch.ops.aphrodite.mhc_fused_post_pre_delayed_tilelang(
+        captured = torch.ops.sonar.mhc_fused_post_pre_delayed_tilelang(
             x, residual, post_layer_mix, comb_res_mix, *mix_args, pre_mix, weight, 1e-6
         )
     graph.replay()
@@ -476,8 +476,8 @@ def test_deepseek_v41_mhc_fused_post_pre_delayed(num_tokens, hidden_size, carrie
 )
 def test_mhc_sm120_projection_boundaries_graph(num_tokens, carried, fused_norm, capture_aux):
     """Source FP32 intermediates and delayed outputs survive changed-input replay."""
-    from aphrodite.model_executor.kernels.mhc.sm120 import mhc_warp_partials_sm120
-    from aphrodite.utils.deep_gemm import is_deep_gemm_supported
+    from sonar.model_executor.kernels.mhc.sm120 import mhc_warp_partials_sm120
+    from sonar.utils.deep_gemm import is_deep_gemm_supported
 
     if DEVICE != "cuda" or torch.cuda.get_device_capability() != (12, 0) or is_deep_gemm_supported():
         pytest.skip("SM120 TileLang projection required")
@@ -495,7 +495,7 @@ def test_mhc_sm120_projection_boundaries_graph(num_tokens, carried, fused_norm, 
     mix_args = (fn, scale, base, 1e-20, 1e-6, 1e-6, 2.0, 20)
 
     def run():
-        return torch.ops.aphrodite.mhc_fused_post_pre_delayed_tilelang(
+        return torch.ops.sonar.mhc_fused_post_pre_delayed_tilelang(
             x, residual, post_mix, comb_mix, *mix_args, pre_mix, weight, 1e-6, capture_aux
         )
 
@@ -560,7 +560,7 @@ def test_mhc_fused_post_pre_delayed_custom_op_supports_compile(carried, capture_
     scale = torch.ones(3, device=DEVICE)
     base = torch.zeros(24, device=DEVICE)
     torch.library.opcheck(
-        torch.ops.aphrodite.mhc_fused_post_pre_delayed_tilelang.default,
+        torch.ops.sonar.mhc_fused_post_pre_delayed_tilelang.default,
         (
             x,
             residual,
@@ -585,9 +585,9 @@ def test_mhc_fused_post_pre_delayed_custom_op_supports_compile(carried, capture_
 @pytest.mark.skipif(not HAS_TILELANG_MHC, reason="TileLang MHC support required")
 @pytest.mark.parametrize("entry", ["broadcast", "pipeline", "residual", "engram"])
 @pytest.mark.parametrize("mhc_mode", ["disabled", "eager", "overlap", "piecewise", "large_batch"])
-def test_deepseek_v41_decoder_mixes_match_torch(entry, mhc_mode, monkeypatch, default_aphrodite_config):
+def test_deepseek_v41_decoder_mixes_match_torch(entry, mhc_mode, monkeypatch, default_sonar_config):
     """Preserve carried pre-mixes and Engram ordering at every decoder entry."""
-    from aphrodite.models.deepseek_v41.nvidia.ops.mhc import MHC_OVERLAP_MAX_TOKENS
+    from sonar.models.deepseek_v41.nvidia.ops.mhc import MHC_OVERLAP_MAX_TOKENS
 
     num_tokens = MHC_OVERLAP_MAX_TOKENS + 1 if mhc_mode == "large_batch" else 3
     set_random_seed(0)
@@ -602,7 +602,7 @@ def test_deepseek_v41_decoder_mixes_match_torch(entry, mhc_mode, monkeypatch, de
     decoder.fuse_mhc_all_reduce = False
     decoder.mhc_stream = None
     if mhc_mode != "disabled":
-        from aphrodite.utils.deep_gemm import is_deep_gemm_supported
+        from sonar.utils.deep_gemm import is_deep_gemm_supported
 
         if not current_platform.is_device_capability_family(100) or not is_deep_gemm_supported():
             pytest.skip("SM100 DeepGEMM required for overlap")
@@ -613,15 +613,15 @@ def test_deepseek_v41_decoder_mixes_match_torch(entry, mhc_mode, monkeypatch, de
             pytest.fail("unsupported execution must retain native mHC")
 
         monkeypatch.setattr(
-            "aphrodite.models.deepseek_v41.nvidia.model.mhc_pre_delayed_overlap",
+            "sonar.models.deepseek_v41.nvidia.model.mhc_pre_delayed_overlap",
             unexpected_overlap,
         )
         monkeypatch.setattr(
-            "aphrodite.models.deepseek_v41.nvidia.ops.mhc.mhc_pre_delayed_overlap",
+            "sonar.models.deepseek_v41.nvidia.ops.mhc.mhc_pre_delayed_overlap",
             unexpected_overlap,
         )
     decoder.engram = None
-    from aphrodite.model_executor.layers.layernorm import RMSNorm
+    from sonar.model_executor.layers.layernorm import RMSNorm
 
     decoder.attn_norm = decoder.ffn_norm = RMSNorm(5120, 1e-6).to(device=DEVICE, dtype=torch.bfloat16)
     decoder.attn = lambda positions, x, _: x * 0.5
@@ -657,13 +657,13 @@ def test_deepseek_v41_decoder_mixes_match_torch(entry, mhc_mode, monkeypatch, de
             decoder.engram = FakeEngram()
             kwargs["engram_hashes"] = torch.zeros(num_tokens, 1, 1, dtype=torch.int32)
 
-    from aphrodite.config import CUDAGraphMode
-    from aphrodite.forward_context import set_forward_context
+    from sonar.config import CUDAGraphMode
+    from sonar.forward_context import set_forward_context
 
     mode = CUDAGraphMode.PIECEWISE if mhc_mode == "piecewise" else CUDAGraphMode.NONE
     overlap_calls = []
     if mhc_mode == "overlap":
-        from aphrodite.models.deepseek_v41.nvidia.ops.mhc import mhc_pre_delayed_overlap
+        from sonar.models.deepseek_v41.nvidia.ops.mhc import mhc_pre_delayed_overlap
 
         def checked_overlap(*args, **kwargs):
             overlap_calls.append(torch.cuda.is_current_stream_capturing())
@@ -671,10 +671,10 @@ def test_deepseek_v41_decoder_mixes_match_torch(entry, mhc_mode, monkeypatch, de
 
         for module in ("model", "ops.mhc"):
             monkeypatch.setattr(
-                f"aphrodite.models.deepseek_v41.nvidia.{module}.mhc_pre_delayed_overlap",
+                f"sonar.models.deepseek_v41.nvidia.{module}.mhc_pre_delayed_overlap",
                 checked_overlap,
             )
-    with set_forward_context(None, default_aphrodite_config, cudagraph_runtime_mode=mode):
+    with set_forward_context(None, default_sonar_config, cudagraph_runtime_mode=mode):
         actual = decoder(x, positions, None, **kwargs)
         if mhc_mode == "overlap":
             graph = torch.cuda.CUDAGraph()
@@ -703,12 +703,12 @@ def test_deepseek_v41_decoder_mixes_match_torch(entry, mhc_mode, monkeypatch, de
         return residual, *reference(residual, *args, **kw), aux
 
     monkeypatch.setattr(
-        "aphrodite.models.deepseek_v41.nvidia.model.mhc_pre_delayed_tilelang",
+        "sonar.models.deepseek_v41.nvidia.model.mhc_pre_delayed_tilelang",
         reference,
     )
     decoder.mhc_stream = None
     monkeypatch.setattr(
-        "aphrodite.models.deepseek_v41.nvidia.model.mhc_shifted_post_pre",
+        "sonar.models.deepseek_v41.nvidia.model.mhc_shifted_post_pre",
         fused_reference,
     )
     expected = decoder(x, positions, None, **kwargs)
@@ -719,7 +719,7 @@ def test_deepseek_v41_decoder_mixes_match_torch(entry, mhc_mode, monkeypatch, de
 
 @pytest.mark.skipif(not HAS_TILELANG_MHC, reason="TileLang MHC support required")
 @pytest.mark.parametrize("entry", ["fused", "engram"])
-def test_deepseek_v41_capture_previous_aux(entry, monkeypatch, default_aphrodite_config):
+def test_deepseek_v41_capture_previous_aux(entry, monkeypatch, default_sonar_config):
     """Read the aux hidden state back out of the seam that already computed it.
 
     The draft model's input is the mean over hc streams of the previous
@@ -740,7 +740,7 @@ def test_deepseek_v41_capture_previous_aux(entry, monkeypatch, default_aphrodite
     decoder.fuse_mhc_all_reduce = False
     decoder.mhc_stream = None
     decoder.engram = None
-    from aphrodite.model_executor.layers.layernorm import RMSNorm
+    from sonar.model_executor.layers.layernorm import RMSNorm
 
     decoder.attn_norm = decoder.ffn_norm = RMSNorm(5120, 1e-6).to(device=DEVICE, dtype=torch.bfloat16)
     decoder.attn = lambda positions, x, _: x * 0.5
@@ -770,7 +770,7 @@ def test_deepseek_v41_capture_previous_aux(entry, monkeypatch, default_aphrodite
             kwargs["engram_hashes"] = torch.zeros(3, 1, 1, dtype=torch.int32)
         positions = torch.arange(3)
 
-    expected = torch.ops.aphrodite.mhc_post_tilelang(x, kwargs["residual"], kwargs["post_mix"], kwargs["res_mix"]).mean(
+    expected = torch.ops.sonar.mhc_post_tilelang(x, kwargs["residual"], kwargs["post_mix"], kwargs["res_mix"]).mean(
         dim=1
     )
     previous_aux = decoder(x, positions, None, **kwargs, capture_previous_aux=True)[-1]
@@ -788,7 +788,7 @@ def test_mhc_pre_delayed_custom_op_supports_compile(carried):
     scale = torch.ones(3, device=DEVICE)
     base = torch.zeros(24, device=DEVICE)
     torch.library.opcheck(
-        torch.ops.aphrodite.mhc_pre_delayed_tilelang.default,
+        torch.ops.sonar.mhc_pre_delayed_tilelang.default,
         (x, fn, scale, base, 1e-20, 1e-6, 1e-6, 2.0, 20, pre_mix),
     )
 
@@ -1002,7 +1002,7 @@ def test_mhc_pre_tilelang(num_tokens, hidden_size, hc_mult, fused_norm):
         weight = torch.ones(hidden_size, dtype=torch.bfloat16)
         norm_kwargs = dict(norm_weight=weight, norm_eps=rms_eps)
         ref = (*ref[:2], F.rms_norm(ref[2], (hidden_size,), weight, rms_eps))
-    out = torch.ops.aphrodite.mhc_pre_tilelang(
+    out = torch.ops.sonar.mhc_pre_tilelang(
         residual,
         fn,
         hc_scale,
@@ -1096,7 +1096,7 @@ def test_mhc_post_tilelang(num_tokens, hidden_size, hc_mult):
     comb_res_mix = torch.randn((num_tokens, hc_mult, hc_mult), dtype=torch.float32)
 
     ref = mhc_post_ref(x, residual, post_layer_mix, comb_res_mix)
-    out = torch.ops.aphrodite.mhc_post_tilelang(
+    out = torch.ops.sonar.mhc_post_tilelang(
         x,
         residual,
         post_layer_mix,
@@ -1153,7 +1153,7 @@ def test_mhc_fused_post_pre(num_tokens, hidden_size, hc_mult):
 
     residual_ref, post_mix_ref, res_mix_ref, layer_input_ref = run_ref()
 
-    residual, post_mix, res_mix, x = torch.ops.aphrodite.mhc_fused_post_pre_tilelang(
+    residual, post_mix, res_mix, x = torch.ops.sonar.mhc_fused_post_pre_tilelang(
         x,
         residual,
         post_layer_mix,
@@ -1476,7 +1476,7 @@ def test_mhc_pre_delayed_rocm_aiter_declines_unsupported(monkeypatch):
     args = (residual, fn, hc_scale, hc_base, 1e-6, 1e-6, 1e-6, 1.0, 20)
     op = object.__new__(MHCPreDelayedOp)
 
-    aiter_op = torch.ops.aphrodite.mhc_pre_delayed_aiter
+    aiter_op = torch.ops.sonar.mhc_pre_delayed_aiter
     took_aiter = False
 
     def spy(*spy_args, **spy_kwargs):
@@ -1484,9 +1484,9 @@ def test_mhc_pre_delayed_rocm_aiter_declines_unsupported(monkeypatch):
         took_aiter = True
         return aiter_op(*spy_args, **spy_kwargs)
 
-    monkeypatch.setattr(torch.ops.aphrodite, "mhc_pre_delayed_aiter", spy)
+    monkeypatch.setattr(torch.ops.sonar, "mhc_pre_delayed_aiter", spy)
 
-    fused_op = torch.ops.aphrodite.mhc_fused_post_pre_delayed_rms_norm_aiter
+    fused_op = torch.ops.sonar.mhc_fused_post_pre_delayed_rms_norm_aiter
     took_fused = False
 
     def fused_spy(*spy_args, **spy_kwargs):
@@ -1494,7 +1494,7 @@ def test_mhc_pre_delayed_rocm_aiter_declines_unsupported(monkeypatch):
         took_fused = True
         return fused_op(*spy_args, **spy_kwargs)
 
-    monkeypatch.setattr(torch.ops.aphrodite, "mhc_fused_post_pre_delayed_rms_norm_aiter", fused_spy)
+    monkeypatch.setattr(torch.ops.sonar, "mhc_fused_post_pre_delayed_rms_norm_aiter", fused_spy)
 
     x = residual[:, 0].contiguous()
     broadcast_fn = fn.view(-1, hc_mult, hidden_size).sum(1)
@@ -1634,7 +1634,7 @@ def test_hc_head_triton(num_tokens, hidden_size, hc_mult):
     out = torch.empty((num_tokens, hidden_size), dtype=torch.bfloat16)
     out.fill_(float("nan"))
 
-    result = torch.ops.aphrodite.hc_head_triton(
+    result = torch.ops.sonar.hc_head_triton(
         residual,
         fn,
         hc_scale,
@@ -1670,7 +1670,7 @@ def test_hc_head_tilelang(num_tokens, hidden_size, hc_mult):
     hc_base = torch.randn((hc_mult,), dtype=torch.float32) * 0.1
     rms_eps = hc_eps = 1e-6
 
-    out = torch.ops.aphrodite.hc_head_fused_kernel_tilelang(
+    out = torch.ops.sonar.hc_head_fused_kernel_tilelang(
         residual,
         fn,
         hc_scale,
@@ -1703,7 +1703,7 @@ def _make_mhc_decoder_layer(hc_mult: int, hidden_size: int) -> DeepseekV4Decoder
 
 def _patch_first_rank_pp_group(monkeypatch):
     monkeypatch.setattr(
-        "aphrodite.models.deepseek_v4.nvidia.model.get_pp_group",
+        "sonar.models.deepseek_v4.nvidia.model.get_pp_group",
         lambda: SimpleNamespace(is_first_rank=True),
     )
 
@@ -1799,7 +1799,7 @@ def test_deepseek_v4_mhc_broadcast_refit_refreshes_in_place(monkeypatch):
 )
 @pytest.mark.parametrize("num_tokens", [1, 2, 7, 128])
 @pytest.mark.parametrize("carried", [False, True])
-def test_mhc_fused_post_pre_delayed_rocm_aiter(num_tokens, carried, default_aphrodite_config):
+def test_mhc_fused_post_pre_delayed_rocm_aiter(num_tokens, carried, default_sonar_config):
     """Folding the post into the pre projection must match doing them apart.
 
     The residual is bfloat16, so the two accumulation orders are allowed to
@@ -1841,7 +1841,7 @@ def test_mhc_fused_post_pre_delayed_rocm_aiter(num_tokens, carried, default_aphr
 )
 def test_mhc_fused_post_pre_delayed_falls_back_for_large_batches():
     """AITER's heuristic hands large batches back to the unfused path."""
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     assert not rocm_aiter_ops.mhc_fused_post_pre_delayed_prefers_unfused(1)
     assert rocm_aiter_ops.mhc_fused_post_pre_delayed_prefers_unfused(1 << 20)

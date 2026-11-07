@@ -21,17 +21,17 @@ from functools import cache
 import torch
 from torch import nn
 
-from aphrodite.model_executor.kernels.linear.mxfp8.flashinfer import (
+from sonar.model_executor.kernels.linear.mxfp8.flashinfer import (
     FlashInferCutedslMxfp8LinearKernel,
 )
-from aphrodite.model_executor.layers.fusion.quant_activation import (
+from sonar.model_executor.layers.fusion.quant_activation import (
     QuantizedActivation,
     as_quantized_activation,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import kMxfp8Dynamic
-from aphrodite.models.deepseek_v41.common.ops.query_quant import mxfp8_scale_bytes
-from aphrodite.platforms import current_platform
-from aphrodite.utils import flashinfer as aphrodite_flashinfer
+from sonar.model_executor.layers.quantization.utils.quant_utils import kMxfp8Dynamic
+from sonar.models.deepseek_v41.common.ops.query_quant import mxfp8_scale_bytes
+from sonar.platforms import current_platform
+from sonar.utils import flashinfer as sonar_flashinfer
 
 from .. import LOW_BATCH_MAX_ROWS
 
@@ -50,7 +50,7 @@ _PINNED_MIN_ROWS = LOW_BATCH_MAX_ROWS // 2 + 1
 
 def mxfp8_mm(layer: nn.Module, qa: QuantizedActivation) -> torch.Tensor:
     """``layer``'s GEMM on ``cutedsl_low_latency``."""
-    out = aphrodite_flashinfer.mm_mxfp8(
+    out = sonar_flashinfer.mm_mxfp8(
         qa.data,
         layer.weight,
         qa.scale,

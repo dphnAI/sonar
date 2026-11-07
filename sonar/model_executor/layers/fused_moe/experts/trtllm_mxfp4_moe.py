@@ -3,35 +3,35 @@
 
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.config import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEParallelConfig,
     FusedMoEQuantConfig,
     RoutingMethodType,
 )
-from aphrodite.model_executor.layers.fused_moe.moe_output import (
+from sonar.model_executor.layers.fused_moe.moe_output import (
     UnfinalizedMoEOutput,
     convert_flashinfer_moe_output,
 )
-from aphrodite.model_executor.layers.fused_moe.topk_weight_and_reduce import (
+from sonar.model_executor.layers.fused_moe.topk_weight_and_reduce import (
     TopKWeightAndReduceNoOP,
 )
-from aphrodite.model_executor.layers.fused_moe.utils import (
+from sonar.model_executor.layers.fused_moe.utils import (
     fi_moe_largest_bucket,
 )
-from aphrodite.model_executor.layers.quantization.utils.flashinfer_utils import (
+from sonar.model_executor.layers.quantization.utils.flashinfer_utils import (
     activation_to_flashinfer_int,
     has_flashinfer_situ_activation,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     kMxfp4Static,
     kMxfp8Dynamic,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.flashinfer import has_flashinfer
+from sonar.platforms import current_platform
+from sonar.utils.flashinfer import has_flashinfer
 
 
 class TrtLlmMxfp4ExpertsBase:

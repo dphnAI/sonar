@@ -6,10 +6,10 @@ import pytest
 import time
 from opentelemetry.sdk.environment_variables import OTEL_EXPORTER_OTLP_TRACES_INSECURE
 
-from aphrodite import LLM, SamplingParams
-from aphrodite.distributed import cleanup_dist_env_and_memory
-from aphrodite.platforms import current_platform
-from aphrodite.tracing import SpanAttributes
+from sonar import LLM, SamplingParams
+from sonar.distributed import cleanup_dist_env_and_memory
+from sonar.platforms import current_platform
+from sonar.tracing import SpanAttributes
 
 # Import shared fixtures from the tracing conftest
 from tests.tracing.conftest import (  # noqa: F401
@@ -28,7 +28,7 @@ def test_traces(
         # The fake OTLP server starts gRPC worker threads before the engine
         # core is launched. gRPC's C-core is not fork-safe and can segfault
         # if forked.
-        m.setenv("APHRODITE_WORKER_MULTIPROC_METHOD", "spawn")
+        m.setenv("SONAR_WORKER_MULTIPROC_METHOD", "spawn")
 
         sampling_params = SamplingParams(
             temperature=0.01,

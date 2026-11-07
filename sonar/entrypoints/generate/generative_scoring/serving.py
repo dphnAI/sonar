@@ -16,23 +16,23 @@ from typing import Any, Literal
 from fastapi import Request
 from pydantic import Field, model_validator
 
-from aphrodite.engine.protocol import EngineClient
-from aphrodite.entrypoints.generate.base.protocol import validate_cache_salt
-from aphrodite.entrypoints.generate.label_reads import next_token_label_reads
-from aphrodite.entrypoints.openai.models.serving import OpenAIServingModels
-from aphrodite.entrypoints.serve.engine.protocol import (
+from sonar.engine.protocol import EngineClient
+from sonar.entrypoints.generate.base.protocol import validate_cache_salt
+from sonar.entrypoints.generate.label_reads import next_token_label_reads
+from sonar.entrypoints.openai.models.serving import OpenAIServingModels
+from sonar.entrypoints.serve.engine.protocol import (
     ErrorResponse,
     OpenAIBaseModel,
     UsageInfo,
 )
-from aphrodite.entrypoints.serve.engine.serving import BaseServing
-from aphrodite.entrypoints.serve.utils.request_logger import RequestLogger
-from aphrodite.exceptions import GenerationError
-from aphrodite.inputs import EngineInput, tokens_input
-from aphrodite.logger import init_logger
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.tokenizers import TokenizerLike
-from aphrodite.utils import random_uuid
+from sonar.entrypoints.serve.engine.serving import BaseServing
+from sonar.entrypoints.serve.utils.request_logger import RequestLogger
+from sonar.exceptions import GenerationError
+from sonar.inputs import EngineInput, tokens_input
+from sonar.logger import init_logger
+from sonar.sampling_params import SamplingParams
+from sonar.tokenizers import TokenizerLike
+from sonar.utils import random_uuid
 
 logger = init_logger(__name__)
 

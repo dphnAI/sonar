@@ -35,18 +35,18 @@
 #include "nvfp4_utils.cuh"
 
 #if defined(CUDART_VERSION) && CUDART_VERSION >= 12090
-  #define APHRODITE_MXFP4_EXPERTS_QUANT_SUPPORTED 1
+  #define SONAR_MXFP4_EXPERTS_QUANT_SUPPORTED 1
 static_assert(CVT_FP4_ELTS_PER_THREAD == 16,
               "MXFP4 experts quant requires PACK16 mode (CUDA >= 12.9)");
 #else
-  #define APHRODITE_MXFP4_EXPERTS_QUANT_SUPPORTED 0
+  #define SONAR_MXFP4_EXPERTS_QUANT_SUPPORTED 0
 #endif
 
 #include "launch_bounds_utils.h"
 
-#if APHRODITE_MXFP4_EXPERTS_QUANT_SUPPORTED
+#if SONAR_MXFP4_EXPERTS_QUANT_SUPPORTED
 
-namespace aphrodite {
+namespace sonar {
 
 // MXFP4 block size constants
 static constexpr int MXFP4_SF_VEC_SIZE = 32;
@@ -62,7 +62,7 @@ static constexpr int MXFP4_NUM_THREADS_PER_SF =
 // SiLU(gate)*up before quantization.
 template <class Type, bool FUSE_SILU_MUL = false,
           bool SMALL_NUM_EXPERTS = false>
-__global__ void __launch_bounds__(512, APHRODITE_BLOCKS_PER_SM(512))
+__global__ void __launch_bounds__(512, SONAR_BLOCKS_PER_SM(512))
     mxfp4_cvt_fp16_to_fp4(int32_t numRows, int32_t numCols, Type const* in,
                           fp4_packed_t* out, uint32_t* SFout,
                           uint32_t* input_offset_by_experts,
@@ -168,7 +168,7 @@ __global__ void __launch_bounds__(512, APHRODITE_BLOCKS_PER_SM(512))
 // Large M_topk variant using shared memory for expert offsets
 template <class Type, bool FUSE_SILU_MUL = false,
           bool SMALL_NUM_EXPERTS = false>
-__global__ void __launch_bounds__(1024, APHRODITE_BLOCKS_PER_SM(1024))
+__global__ void __launch_bounds__(1024, SONAR_BLOCKS_PER_SM(1024))
     mxfp4_cvt_fp16_to_fp4(int32_t numRows, int32_t numCols, Type const* in,
                           fp4_packed_t* out, uint32_t* SFout,
                           uint32_t* input_offset_by_experts,
@@ -279,7 +279,7 @@ void mxfp4_quant_impl(void* output, void* output_scale, void* input,
   int const totalWorkSize = m_topk * workSizePerRow;
   dim3 block(std::min(workSizePerRow, 512));
   int const numBlocksPerSM =
-      aphrodite_runtime_blocks_per_sm(static_cast<int>(block.x));
+      sonar_runtime_blocks_per_sm(static_cast<int>(block.x));
   dim3 grid(std::min(static_cast<int>((totalWorkSize + block.x - 1) / block.x),
                      multiProcessorCount * numBlocksPerSM));
   while (grid.x <= multiProcessorCount && block.x > 64) {
@@ -334,7 +334,7 @@ void mxfp4_quant_impl(void* output, void* output_scale, void* input,
   }
 }
 
-}  // namespace aphrodite
+}  // namespace sonar
 
   /*Quantization entry for mxfp4 experts quantization*/
   #define CHECK_TH_CUDA(x, m) \
@@ -400,10 +400,10 @@ static void validate_mxfp4_experts_quant_inputs(
   STD_TORCH_CHECK(output_scale.size(1) * 4 == padded_k);
 }
 
-#endif  // APHRODITE_MXFP4_EXPERTS_QUANT_SUPPORTED
+#endif  // SONAR_MXFP4_EXPERTS_QUANT_SUPPORTED
 
 static bool mxfp4_experts_quant_sm_supported(int64_t cuda_device_capability) {
-#if APHRODITE_MXFP4_EXPERTS_QUANT_SUPPORTED
+#if SONAR_MXFP4_EXPERTS_QUANT_SUPPORTED
   return cuda_device_capability >= 100 && cuda_device_capability < 120;
 #else
   return false;
@@ -417,7 +417,7 @@ void mxfp4_experts_quant(
     torch::stable::Tensor const& output_scale_offset_by_experts,
     int64_t n_experts,
     std::optional<torch::stable::Tensor> const& sorted_expert_ids) {
-#if APHRODITE_MXFP4_EXPERTS_QUANT_SUPPORTED
+#if SONAR_MXFP4_EXPERTS_QUANT_SUPPORTED
   int32_t sm = get_sm_version_num();
   STD_TORCH_CHECK(mxfp4_experts_quant_sm_supported(sm),
                   "No compiled MXFP4 experts quant kernel for SM ", sm,
@@ -434,10 +434,10 @@ void mxfp4_experts_quant(
       input.get_device_index());
   const cudaStream_t stream = get_current_cuda_stream(input.get_device_index());
 
-  APHRODITE_STABLE_DISPATCH_HALF_TYPES(
+  SONAR_STABLE_DISPATCH_HALF_TYPES(
       input.scalar_type(), "mxfp4_experts_quant_kernel", [&] {
-        using cuda_type = aphrodite::CUDATypeConverter<scalar_t>::Type;
-        aphrodite::mxfp4_quant_impl<cuda_type, /*FUSE_SILU_MUL=*/false>(
+        using cuda_type = sonar::CUDATypeConverter<scalar_t>::Type;
+        sonar::mxfp4_quant_impl<cuda_type, /*FUSE_SILU_MUL=*/false>(
             output.data_ptr(), output_scale.data_ptr(), input.data_ptr(),
             input_offset_by_experts.data_ptr(),
             output_scale_offset_by_experts.data_ptr(),
@@ -459,7 +459,7 @@ void silu_and_mul_mxfp4_experts_quant(
     torch::stable::Tensor const& output_scale_offset_by_experts,
     int64_t n_experts,
     std::optional<torch::stable::Tensor> const& sorted_expert_ids) {
-#if APHRODITE_MXFP4_EXPERTS_QUANT_SUPPORTED
+#if SONAR_MXFP4_EXPERTS_QUANT_SUPPORTED
   int32_t sm = get_sm_version_num();
   STD_TORCH_CHECK(mxfp4_experts_quant_sm_supported(sm),
                   "No compiled SiLU+Mul MXFP4 experts quant kernel for SM ", sm,
@@ -478,10 +478,10 @@ void silu_and_mul_mxfp4_experts_quant(
       input.get_device_index());
   const cudaStream_t stream = get_current_cuda_stream(input.get_device_index());
 
-  APHRODITE_STABLE_DISPATCH_HALF_TYPES(
+  SONAR_STABLE_DISPATCH_HALF_TYPES(
       input.scalar_type(), "silu_mul_mxfp4_experts_quant_kernel", [&] {
-        using cuda_type = aphrodite::CUDATypeConverter<scalar_t>::Type;
-        aphrodite::mxfp4_quant_impl<cuda_type, /*FUSE_SILU_MUL=*/true>(
+        using cuda_type = sonar::CUDATypeConverter<scalar_t>::Type;
+        sonar::mxfp4_quant_impl<cuda_type, /*FUSE_SILU_MUL=*/true>(
             output.data_ptr(), output_scale.data_ptr(), input.data_ptr(),
             input_offset_by_experts.data_ptr(),
             output_scale_offset_by_experts.data_ptr(),

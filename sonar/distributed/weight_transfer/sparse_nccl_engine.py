@@ -16,28 +16,28 @@ from typing import TYPE_CHECKING, ClassVar, Self
 import torch
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
-    from aphrodite.distributed.device_communicators.pynccl import PyNcclCommunicator
+    from sonar.config import SonarConfig
+    from sonar.distributed.device_communicators.pynccl import PyNcclCommunicator
 
-from aphrodite.config.weight_transfer import WeightTransferConfig
-from aphrodite.distributed.weight_transfer.base import (
-    AphroditeWeightSyncClient,
+from sonar.config.weight_transfer import WeightTransferConfig
+from sonar.distributed.weight_transfer.base import (
+    SonarWeightSyncClient,
     TrainerInitInfo,
     TrainerWeightTransferEngine,
     WeightSource,
     WeightTransferEngine,
     WeightTransferUpdateInfo,
 )
-from aphrodite.distributed.weight_transfer.nccl_common import (
+from sonar.distributed.weight_transfer.nccl_common import (
     NCCLWeightTransferInitInfo,
     build_worker_init_payload,
     run_trainer_rendezvous,
     worker_init_process_group,
 )
-from aphrodite.distributed.weight_transfer.nccl_common import (
+from sonar.distributed.weight_transfer.nccl_common import (
     trainer_init as open_trainer_endpoint,
 )
-from aphrodite.model_executor.model_loader.checkpoint_weight_patch import (
+from sonar.model_executor.model_loader.checkpoint_weight_patch import (
     CheckpointWeightPatch,
     load_checkpoint_weight_patches,
 )
@@ -126,11 +126,11 @@ class SparseNCCLWeightTransferEngine(
     def __init__(
         self,
         config: WeightTransferConfig,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
         device: torch.device,
         model: torch.nn.Module,
     ) -> None:
-        super().__init__(config, aphrodite_config, device, model)
+        super().__init__(config, sonar_config, device, model)
         self.model_update_group: PyNcclCommunicator | None = None
 
     def init_transfer_engine(self, init_info: NCCLWeightTransferInitInfo) -> None:
@@ -143,7 +143,7 @@ class SparseNCCLWeightTransferEngine(
 
     def finish_weight_update(self) -> None:
         """No layerwise reload; rebuild model-level derived state once."""
-        from aphrodite.model_executor.model_loader.weight_utils import (
+        from sonar.model_executor.model_loader.weight_utils import (
             finalize_model_weights,
         )
 
@@ -211,7 +211,7 @@ class SparseNCCLTrainerWeightTransferEngine(TrainerWeightTransferEngine[SparseNC
     def __init__(
         self,
         *,
-        client: AphroditeWeightSyncClient,
+        client: SonarWeightSyncClient,
         source: WeightSource | None = None,
         is_sender: bool = True,
     ) -> None:
@@ -235,7 +235,7 @@ class SparseNCCLTrainerWeightTransferEngine(TrainerWeightTransferEngine[SparseNC
         cls,
         init_info: SparseNCCLTrainerInitInfo,
         *,
-        client: AphroditeWeightSyncClient,
+        client: SonarWeightSyncClient,
         source: WeightSource | None = None,
     ) -> Self:
         engine = cls(client=client, source=source, is_sender=init_info.is_sender)

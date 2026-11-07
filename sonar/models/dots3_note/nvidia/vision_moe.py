@@ -4,20 +4,20 @@
 
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.model_executor.layers.fused_moe.activation import (
+from sonar import _custom_ops as ops
+from sonar.model_executor.layers.fused_moe.activation import (
     MoEActivation,
     apply_moe_activation,
 )
-from aphrodite.model_executor.layers.fused_moe.fused_moe import (
+from sonar.model_executor.layers.fused_moe.fused_moe import (
     _prepare_expert_assignment,
     dispatch_fused_moe_kernel,
     try_get_optimal_moe_config,
 )
-from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
+from sonar.model_executor.layers.quantization.utils.fp8_utils import (
     per_token_group_quant_fp8,
 )
-from aphrodite.triton_utils import tl
+from sonar.triton_utils import tl
 
 _BLOCK_SHAPE = [128, 128]
 
@@ -33,7 +33,7 @@ def note_vision_fused_moe_fp8(
 ) -> torch.Tensor:
     """Run top-k SwiGLU MoE with the encoder's block-FP8 formula.
 
-    Unlike Aphrodite's generic functional MoE path, the native NOTE encoder keeps
+    Unlike Sonar's generic functional MoE path, the native NOTE encoder keeps
     dynamic activation scales as FP32 instead of rounding them to E8M0.  Weight
     scales are block 128x128 and activations are quantized per token/group-128.
     """

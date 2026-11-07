@@ -33,8 +33,8 @@ import torch.distributed._symmetric_memory as symm_mem
 from cutlass import BFloat16, Float32, Int32, Int64, Uint8, Uint32
 from cutlass.cute.runtime import make_fake_compact_tensor
 
-from aphrodite.distributed import get_tp_group
-from aphrodite.models.common.ops.moe_tail_fusion.primitives import (
+from sonar.distributed import get_tp_group
+from sonar.models.common.ops.moe_tail_fusion.primitives import (
     ACTIVE_STAGE,
     LAMPORT_GENERATIONS,
     NEGATIVE_ZERO_BF16_BITS,
@@ -69,7 +69,7 @@ from aphrodite.models.common.ops.moe_tail_fusion.primitives import (
     to_cute,
     to_cute_dynamic,
 )
-from aphrodite.models.deepseek_v41.common.ops.query_quant import mxfp8_scale_bytes
+from sonar.models.deepseek_v41.common.ops.query_quant import mxfp8_scale_bytes
 
 # One UE8M0 scale per 32 values: four adjacent threads' BF16 fragments.
 MXFP8_BLOCK = 32

@@ -8,8 +8,8 @@ Run `pytest tests/kernels/test_shuffle_rows.py`.
 import pytest
 import torch
 
-from aphrodite._custom_ops import shuffle_rows
-from aphrodite.platforms import current_platform
+from sonar._custom_ops import shuffle_rows
+from sonar.platforms import current_platform
 
 
 @pytest.mark.parametrize("num_tokens", [1, 16, 64, 128, 256, 512, 1024])

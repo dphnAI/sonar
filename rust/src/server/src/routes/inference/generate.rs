@@ -10,13 +10,6 @@ use std::convert::Infallible;
 use std::result::Result;
 use std::sync::Arc;
 
-use aphrodite_engine_core_client::protocol::dtype::Endianness;
-use aphrodite_engine_core_client::protocol::logprobs::{Logprobs, PositionLogprobs};
-use aphrodite_engine_core_client::protocol::multimodal::MmFeatureSpec;
-use aphrodite_engine_core_client::protocol::tensor::WireNdArray;
-use aphrodite_llm::{
-    CollectedGenerateOutput, FinishReason, GenerateOutput, GenerateOutputStreamExt as _, TokenUsage,
-};
 use asynk_strim_attr::{TryYielder, try_stream};
 use axum::Json;
 use axum::extract::State;
@@ -25,6 +18,13 @@ use axum::response::sse::Event;
 use axum::response::{IntoResponse, Response};
 use base64::Engine as _;
 use futures::{Stream, StreamExt as _, pin_mut};
+use sonar_engine_core_client::protocol::dtype::Endianness;
+use sonar_engine_core_client::protocol::logprobs::{Logprobs, PositionLogprobs};
+use sonar_engine_core_client::protocol::multimodal::MmFeatureSpec;
+use sonar_engine_core_client::protocol::tensor::WireNdArray;
+use sonar_llm::{
+    CollectedGenerateOutput, FinishReason, GenerateOutput, GenerateOutputStreamExt as _, TokenUsage,
+};
 use thiserror_ext::AsReport as _;
 use tracing::{error, info, trace};
 use tracing_futures::Instrument as _;
@@ -50,7 +50,7 @@ use crate::state::AppState;
 use crate::utils::{resolve_request_context, sse_response, unix_timestamp};
 
 /// Validate one token-in/token-out request and proxy it into the shared
-/// `aphrodite-text` stack.
+/// `sonar-text` stack.
 pub async fn generate(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
@@ -63,7 +63,7 @@ pub async fn generate(
         match state
             .chat
             .prepare_media(parts, &mut body.token_ids)
-            .instrument(aphrodite_chat::mm_request_span(&request_context.request_id))
+            .instrument(sonar_chat::mm_request_span(&request_context.request_id))
             .await
         {
             Ok(features) => features,
@@ -157,7 +157,7 @@ pub async fn generate(
 
 #[try_stream]
 async fn generate_chunk_stream(
-    stream: impl Stream<Item = aphrodite_llm::Result<GenerateOutput>>,
+    stream: impl Stream<Item = sonar_llm::Result<GenerateOutput>>,
     request_id: String,
     ApiServerOptions {
         enable_log_requests,
@@ -520,7 +520,7 @@ fn npy_base64(array: &WireNdArray) -> Result<String, ApiError> {
     let Some(data) = array.data.as_raw_view() else {
         bail_server_error!("ndarray data was not resolved");
     };
-    // NumPy writes `|` for single-byte types; Aphrodite hosts are little-endian.
+    // NumPy writes `|` for single-byte types; Sonar hosts are little-endian.
     let byte_order = match array.dtype.endianness {
         _ if array.dtype.scalar.element_size() == 1 => '|',
         Endianness::Big => '>',
@@ -599,12 +599,12 @@ fn done_sse_event() -> Event {
 mod tests {
     use std::sync::Arc;
 
-    use aphrodite_engine_core_client::protocol::dtype::TensorDtype;
-    use aphrodite_engine_core_client::protocol::multimodal::{MmModality, PlaceholderRange};
-    use aphrodite_engine_core_client::protocol::output::{RequestSpecDecodeMetrics, StopReason};
-    use aphrodite_engine_core_client::protocol::sampling_mask::SamplingMask;
-    use aphrodite_llm::{GeneratePromptInfo, PromptCacheUsage, WeightVersionSpan};
     use futures::{TryStreamExt as _, stream};
+    use sonar_engine_core_client::protocol::dtype::TensorDtype;
+    use sonar_engine_core_client::protocol::multimodal::{MmModality, PlaceholderRange};
+    use sonar_engine_core_client::protocol::output::{RequestSpecDecodeMetrics, StopReason};
+    use sonar_engine_core_client::protocol::sampling_mask::SamplingMask;
+    use sonar_llm::{GeneratePromptInfo, PromptCacheUsage, WeightVersionSpan};
 
     use super::*;
 
@@ -613,7 +613,7 @@ mod tests {
             entries: entries
                 .iter()
                 .map(|&(token_id, logprob, rank)| {
-                    aphrodite_engine_core_client::protocol::logprobs::TokenLogprob {
+                    sonar_engine_core_client::protocol::logprobs::TokenLogprob {
                         token_id,
                         logprob,
                         rank,
@@ -1244,7 +1244,7 @@ mod tests {
             token_ids: vec![3],
             logprobs: None,
             finish_reason: FinishReason::stop_eos(),
-            usage: aphrodite_llm::TokenUsage {
+            usage: sonar_llm::TokenUsage {
                 prompt_token_count: prompt_token_ids.len(),
                 output_token_count: 1,
                 prompt_cache_usage: Default::default(),

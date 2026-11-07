@@ -13,24 +13,24 @@ from transformers.models.llava_onevision.modeling_llava_onevision import (
     unpad_image,
 )
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.multimodal import MultiModalDummyOptions
-from aphrodite.inputs import MultiModalDataDict
-from aphrodite.model_executor.layers.activation import get_act_fn
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import (
+from sonar.config import SonarConfig
+from sonar.config.multimodal import MultiModalDummyOptions
+from sonar.inputs import MultiModalDataDict
+from sonar.model_executor.layers.activation import get_act_fn
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import (
     MultiModalFieldConfig,
     MultiModalKwargsItems,
 )
-from aphrodite.multimodal.parse import (
+from sonar.multimodal.parse import (
     ImageSize,
     MultiModalDataItems,
     VideoEmbeddingItems,
     VideoProcessorItems,
 )
-from aphrodite.multimodal.processing import PromptReplacement, PromptUpdate
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.utils.tensor_schema import TensorSchema, TensorShape
+from sonar.multimodal.processing import PromptReplacement, PromptUpdate
+from sonar.sequence import IntermediateTensors
+from sonar.utils.tensor_schema import TensorSchema, TensorShape
 
 from .clip import CLIPVisionModel
 from .interfaces import MultiModalEmbeddings, SupportsMultiModal, SupportsPP
@@ -44,7 +44,7 @@ from .siglip import SiglipVisionModel
 from .utils import (
     AutoWeightsLoader,
     WeightsMapper,
-    init_aphrodite_registered_model,
+    init_sonar_registered_model,
     maybe_prefix,
 )
 
@@ -436,7 +436,7 @@ class LlavaOnevisionMultiModalProjector(nn.Module):
     dummy_inputs=LlavaOnevisionDummyInputsBuilder,
 )
 class LlavaOnevisionForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsPP):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={
             # mapping for new names in checkpoint saved after transformers v4.52
             "model.language_model.": "language_model.model.",
@@ -456,16 +456,16 @@ class LlavaOnevisionForConditionalGeneration(nn.Module, SupportsMultiModal, Supp
 
         raise ValueError("Only image or video modality is supported")
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
-        multimodal_config = aphrodite_config.model_config.multimodal_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
+        multimodal_config = sonar_config.model_config.multimodal_config
 
         self.config = config
         self.multimodal_config = multimodal_config
 
-        with self._mark_tower_model(aphrodite_config, {"image", "video"}):
+        with self._mark_tower_model(sonar_config, {"image", "video"}):
             # Initialize the vision tower only up to the required feature layer
             self.vision_tower = init_vision_tower_for_llava(
                 config,
@@ -476,9 +476,9 @@ class LlavaOnevisionForConditionalGeneration(nn.Module, SupportsMultiModal, Supp
             self.image_newline = nn.Parameter(torch.empty(config.text_config.hidden_size))
             self.multi_modal_projector = LlavaOnevisionMultiModalProjector(config)
 
-        with self._mark_language_model(aphrodite_config):
-            self.language_model = init_aphrodite_registered_model(
-                aphrodite_config=aphrodite_config,
+        with self._mark_language_model(sonar_config):
+            self.language_model = init_sonar_registered_model(
+                sonar_config=sonar_config,
                 hf_config=config.text_config,
                 prefix=maybe_prefix(prefix, "language_model"),
             )
@@ -819,4 +819,4 @@ class LlavaOnevisionForConditionalGeneration(nn.Module, SupportsMultiModal, Supp
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)

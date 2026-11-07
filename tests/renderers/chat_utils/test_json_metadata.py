@@ -3,9 +3,9 @@
 import pytest
 import torch
 
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.renderers.chat_utils.content_parser import _load_embeds_dict
-from aphrodite.renderers.chat_utils.item_tracker import _parse_metadata_array
+from sonar.exceptions import SonarValidationError
+from sonar.renderers.chat_utils.content_parser import _load_embeds_dict
+from sonar.renderers.chat_utils.item_tracker import _parse_metadata_array
 
 
 @pytest.mark.parametrize("values", [[1, 32, 48], [0.0, 0.12345678912345678]])
@@ -27,7 +27,7 @@ def test_json_metadata_preserves_numeric_precision(values):
     ],
 )
 def test_json_arrays_are_only_valid_numeric_metadata(key, values):
-    with pytest.raises(AphroditeValidationError):
+    with pytest.raises(SonarValidationError):
         _parse_metadata_array(key, values, {"grid"})
 
 

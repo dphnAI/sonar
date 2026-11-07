@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Included inside aphrodite::pcie_pull after the shared checked-protocol
+// Included inside sonar::pcie_pull after the shared checked-protocol
 // helpers.
 
 __device__ __forceinline__ HostLane* host_lane(const Params& p, int rank,

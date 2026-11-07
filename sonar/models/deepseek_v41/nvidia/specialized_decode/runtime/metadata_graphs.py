@@ -17,22 +17,22 @@ from typing import Any
 
 import torch
 
-from aphrodite.compilation.cudagraph_pool import capture_pool
-from aphrodite.config import AphroditeConfig, CUDAGraphMode
-from aphrodite.logger import init_logger
-from aphrodite.models.deepseek_v41.compressor import CompressorMetadataBuilder
-from aphrodite.models.deepseek_v41.nvidia.flashinfer_sparse import (
+from sonar.compilation.cudagraph_pool import capture_pool
+from sonar.config import CUDAGraphMode, SonarConfig
+from sonar.logger import init_logger
+from sonar.models.deepseek_v41.compressor import CompressorMetadataBuilder
+from sonar.models.deepseek_v41.nvidia.flashinfer_sparse import (
     DeepseekSparseSWAFlashInferMetadataBuilder,
     DeepseekV4FlashInferSparseMLAMetadataBuilder,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.math_utils import round_up
-from aphrodite.utils.torch_utils import current_stream
-from aphrodite.v1.attention.backends.mla.sparse_indexer import (
+from sonar.platforms import current_platform
+from sonar.utils.math_utils import round_up
+from sonar.utils.torch_utils import current_stream
+from sonar.v1.attention.backends.mla.sparse_indexer import (
     DeepseekV41SparseIndexerMetadataBuilder,
 )
-from aphrodite.v1.worker.gpu.input_batch import InputBatch
-from aphrodite.v1.worker.utils import AttentionGroup
+from sonar.v1.worker.gpu.input_batch import InputBatch
+from sonar.v1.worker.utils import AttentionGroup
 
 logger = init_logger(__name__)
 
@@ -63,8 +63,8 @@ class AttnMetadataCudaGraphs:
     addresses: every capture releases and records them again.
     """
 
-    def __init__(self, aphrodite_config: AphroditeConfig, decode_query_len: int) -> None:
-        self._aphrodite_config = aphrodite_config
+    def __init__(self, sonar_config: SonarConfig, decode_query_len: int) -> None:
+        self._sonar_config = sonar_config
         self._decode_query_len = decode_query_len
         self._graphs: dict[GraphKey, tuple[torch.cuda.CUDAGraph, dict[str, Any]]] = {}
         self._side_streams: list[torch.cuda.Stream] = []
@@ -99,10 +99,10 @@ class AttnMetadataCudaGraphs:
         requests of the decode query length, and a step runs the smallest graph
         that holds its requests.
         """
-        config = self._aphrodite_config.compilation_config
+        config = self._sonar_config.compilation_config
         query_len = self._decode_query_len
         max_tokens = min(
-            self._aphrodite_config.scheduler_config.max_num_seqs * query_len,
+            self._sonar_config.scheduler_config.max_num_seqs * query_len,
             config.max_cudagraph_capture_size,
         )
         graph_reqs = sorted(
@@ -139,7 +139,7 @@ class AttnMetadataCudaGraphs:
         self._forked_build(attn_groups, block_tables, build_fn)
         graph = torch.cuda.CUDAGraph()
         with (
-            capture_pool(current_platform.get_global_graph_pool(), self._aphrodite_config) as pool,
+            capture_pool(current_platform.get_global_graph_pool(), self._sonar_config) as pool,
             torch.cuda.graph(graph, pool),
         ):
             attn_metadata = self._forked_build(attn_groups, block_tables, build_fn)

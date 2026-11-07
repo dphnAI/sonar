@@ -5,9 +5,9 @@ import os
 
 import torch.distributed as dist
 
-from aphrodite.distributed.parallel_state import _node_count
-from aphrodite.distributed.utils import StatelessProcessGroup
-from aphrodite.utils.network_utils import get_ip, get_open_port
+from sonar.distributed.parallel_state import _node_count
+from sonar.distributed.utils import StatelessProcessGroup
+from sonar.utils.network_utils import get_ip, get_open_port
 
 if __name__ == "__main__":
     dist.init_process_group(backend="gloo")

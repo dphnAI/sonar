@@ -17,8 +17,8 @@ import msgspec
 if TYPE_CHECKING:
     from b12x.preparation import PreparationRequest, TuningCacheRequirement, TuningRequirement
 
-    from aphrodite.distributed.utils import StatelessProcessGroup
-    from aphrodite.model_executor.warmup.b12x_prepare import B12xPreparedBatch
+    from sonar.distributed.utils import StatelessProcessGroup
+    from sonar.model_executor.warmup.b12x_prepare import B12xPreparedBatch
 
 _TuningResult = tuple[
     str,
@@ -296,8 +296,8 @@ class B12xPreparationCoordinator:
         """Reserve winning plans' scratch on their serving lanes and streams."""
         if self._workspace is None:
             return
-        from aphrodite.utils.torch_utils import aux_stream
-        from aphrodite.v1.worker.workspace import use_workspace_lane
+        from sonar.utils.torch_utils import aux_stream
+        from sonar.v1.worker.workspace import use_workspace_lane
 
         for request in self._active_requests:
             specs = tuple(request.plan.scratch_specs())
@@ -443,7 +443,7 @@ def _get_control_group(world_group) -> StatelessProcessGroup:
     if control_group is None:
         import torch.distributed as dist
 
-        from aphrodite.distributed.utils import StatelessProcessGroup
+        from sonar.distributed.utils import StatelessProcessGroup
 
         control_group = StatelessProcessGroup(
             rank=rank,

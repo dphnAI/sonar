@@ -19,13 +19,13 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.model_executor.models.mimo_v2 import (
+from sonar.model_executor.models.mimo_v2 import (
     _fused_qkv_kv_chunk_rows,
     _shard_fp8_qkv_proj,
     _split_qkv,
 )
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.utils.torch_utils import set_default_torch_num_threads
+from sonar.utils.math_utils import cdiv
+from sonar.utils.torch_utils import set_default_torch_num_threads
 
 pytestmark = pytest.mark.cpu_test
 
@@ -370,7 +370,7 @@ def test_load_weights_pairs_split_fp8_qkv_proj_and_skips_absent_layers(monkeypat
     still load; the pair for a layer the instance does not have (checkpoint
     deeper than ``num_hidden_layers``) is skipped; nothing is left pending.
     """
-    from aphrodite.model_executor.models import mimo_v2
+    from sonar.model_executor.models import mimo_v2
 
     monkeypatch.setattr(mimo_v2, "get_tensor_model_parallel_rank", lambda: 0)
     monkeypatch.setattr(mimo_v2, "get_tensor_model_parallel_world_size", lambda: 1)

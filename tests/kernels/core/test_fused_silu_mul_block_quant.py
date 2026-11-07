@@ -5,14 +5,14 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-import aphrodite._custom_ops as ops
-from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
+import sonar._custom_ops as ops
+from sonar.model_executor.layers.quantization.utils.fp8_utils import (
     per_token_group_quant_fp8,
 )
-from aphrodite.model_executor.layers.quantization.utils.int8_utils import (
+from sonar.model_executor.layers.quantization.utils.int8_utils import (
     per_token_group_quant_int8,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 from tests.kernels.utils import opcheck
 from tests.utils import large_gpu_test
 
@@ -60,7 +60,7 @@ def ref_silu_and_mul_per_block_quant(
 @pytest.mark.parametrize("device_idx", CUDA_DEVICES)
 @torch.inference_mode()
 def test_silu_and_mul_per_block_quant(
-    default_aphrodite_config,
+    default_sonar_config,
     num_tokens: int,
     hidden_size: int,
     has_scale_ub: bool,
@@ -130,7 +130,7 @@ def test_silu_and_mul_per_block_quant(
 @pytest.mark.parametrize("num_tokens", [128])
 @pytest.mark.parametrize("group_size", [128])
 def test_silu_block_quant_shapes(
-    default_aphrodite_config,
+    default_sonar_config,
     dtype: torch.dtype,
     hidden_size: int,
     num_tokens: int,
@@ -164,7 +164,7 @@ def test_silu_block_quant_shapes(
 @pytest.mark.parametrize("dtype", [torch.float16])
 @pytest.mark.parametrize("batch_size", [1, 16, 256])
 @pytest.mark.parametrize("hidden_size", [1024, 5120, 14336])
-def test_silu_block_quant_edge_cases(default_aphrodite_config, dtype: torch.dtype, batch_size: int, hidden_size: int):
+def test_silu_block_quant_edge_cases(default_sonar_config, dtype: torch.dtype, batch_size: int, hidden_size: int):
     """Test edge cases: single token, large batch, large hidden size."""
     torch.set_default_device("cuda")
     x = torch.randn(batch_size, hidden_size * 2, dtype=dtype, device="cuda")
@@ -186,7 +186,7 @@ def test_silu_block_quant_edge_cases(default_aphrodite_config, dtype: torch.dtyp
 
 @large_gpu_test(min_gb=24)
 @torch.inference_mode()
-def test_silu_block_quant_int32_offset_overflow(default_aphrodite_config):
+def test_silu_block_quant_int32_offset_overflow(default_sonar_config):
     """Token offsets beyond INT32_MAX must not wrap (issue #53390)."""
     hidden_size = 16384
     group_size = 128

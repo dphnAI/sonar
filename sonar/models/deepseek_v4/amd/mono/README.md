@@ -1,6 +1,6 @@
 # DeepSeek-V4-Pro mono decode layer (gfx950, FlyDSL)
 
-One fused decoder layer for Aphrodite's decode steps on MI355X: the attention seam,
+One fused decoder layer for Sonar's decode steps on MI355X: the attention seam,
 the attention, the attention all-reduce, the FFN seam, the MoE and the MoE
 all-reduce, in two persistent launches a layer. This implementation builds on
 the DeepSeek-V4.1-Flash mono decode layer (`models/deepseek_v41/amd/mono`).
@@ -9,7 +9,7 @@ is the reference design: its persistent execution framework, synchronization,
 peer memory, mHC seam and MoE stages underpin this implementation. The adapted
 files name their ATOM origins and retain attribution to Advanced Micro
 Devices, Inc., under the MIT License. Here they are specialized to Pro's
-widths and numerics; the attention stages (`attention/`) read Aphrodite's KV records
+widths and numerics; the attention stages (`attention/`) read Sonar's KV records
 and weights as loaded.
 
 ## Scope
@@ -17,13 +17,13 @@ and weights as loaded.
 - Layers: the whole layer on all 61 backbone layers (CSA, compress ratio 4;
   HCA, ratio 128; layers 0-2 hash-routed). K1 takes the residual settled,
   without folding the previous output in, on layer 0 (the embedding broadcast
-  to the four streams). Between K1 and K2 every layer hands Aphrodite its normed
-  input and bf16 qr (`select`): Aphrodite's compressor runs there, and on a CSA
+  to the four streams). Between K1 and K2 every layer hands Sonar its normed
+  input and bf16 qr (`select`): Sonar's compressor runs there, and on a CSA
   layer its indexer; K2 then builds the key table, the CSA top-k through the
-  block table or the HCA layer's every compressed row from Aphrodite's c128a table
+  block table or the HCA layer's every compressed row from Sonar's c128a table
   (`global_keys`), as wide as the longest context (8192 at 1M): its rounds,
   split chunks and combine cover a token's own keys only (`bounded`). The MTP /
-  DSpark draft layers keep Aphrodite's path; the paths interleave freely (same
+  DSpark draft layers keep Sonar's path; the paths interleave freely (same
   tensors at the layer boundary).
 - Steps: decode only (FULL graph or eager), M <= 64 rows (8 requests x 7
   DSpark tokens and spare), TP8, `fp8_ds_mla` KV records (ROCm).
@@ -38,9 +38,9 @@ and weights as loaded.
     K1  seam (stages/seam.py): slice (224 x 32 columns): fold x into the
         residual (post x + sum comb r), partial mixes (fn . R') and sums of
         squares -> gate (S): 24 mixes -> pre / post / comb (Sinkhorn 20) ->
-        norm (S): the collapse (pre . R'), attn_norm -> Aphrodite MXFP8 -> X8
+        norm (S): the collapse (pre . R'), attn_norm -> Sonar MXFP8 -> X8
         attention front (attention/front.py): wqkv, q / kv norms + KV insert,
-        wq_b + RoPE -> Q; the normed input and qr out for Aphrodite's compressor
+        wq_b + RoPE -> Q; the normed input and qr out for Sonar's compressor
         and indexer
     K2  key table (attention/front.py, stage_kt), from the top-k the indexer
         selected after K1
@@ -83,15 +83,15 @@ and weights as loaded.
   bf16, rsq(sum / H + eps), (x w) rstd). The gate matches the fp32 reference;
   aiter's fused seam is ~2e-3 off it.
 - Attention: activations as MXFP8 (one E8M0 per 32 values, `code =
-  clamp(ceil(log2(amax / 448)) + 127, 0, 254)`), where Aphrodite's path quantizes
+  clamp(ceil(log2(amax / 448)) + 127, 0, 254)`), where Sonar's path quantizes
   per 128 with fp32 scales: the kernels match the exact result no worse.
-  Weights as Aphrodite loads them: wqkv, wo_b and the shared gate_up in aiter's
+  Weights as Sonar loads them: wqkv, wo_b and the shared gate_up in aiter's
   (16, 16) shuffle, the others e4m3 [N, K] row-major with rows padded as
-  `APHRODITE_ROCM_FP8_PADDING` pads them; the checkpoint's 128 x 128 E8M0 block
-  scales repeated as [N/32, K/32] (exact). KV records as Aphrodite's insert writes
+  `SONAR_ROCM_FP8_PADDING` pads them; the checkpoint's 128 x 128 E8M0 block
+  scales repeated as [N/32, K/32] (exact). KV records as Sonar's insert writes
   them (dims 0..447 e4m3 with a UE8M0 per 64, RoPE dims bf16, 584 B); softmax
   in base 2 with the attention sink folded in.
-- MoE: Aphrodite's router (bf16 gate GEMV, f32 logits, `topk_hash_softplus_sqrt`)
+- MoE: Sonar's router (bf16 gate GEMV, f32 logits, `topk_hash_softplus_sqrt`)
   and AITER a8w4 `fused_moe` (interleaved gate / up, swiglu limit 10, weights
   in aiter's (16, 16) shuffle and `shuffle_scale` order); the shared expert as
   MXFP8 linears with `silu_and_mul_with_clamp`.
@@ -102,7 +102,7 @@ and weights as loaded.
 
 ## Validation
 
-- Per layer against Aphrodite's own modules in a TP8 process group
+- Per layer against Sonar's own modules in a TP8 process group
   (`tests/models/test_dsv4_mono_numerics.py`), the protocol under graph
   replays; through the real model on random weights
   (`tests/models/test_dsv4_mono_layers.py`); the docking's path choice

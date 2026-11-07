@@ -3,8 +3,8 @@
 
 import torch.nn as nn
 
-from aphrodite.v1.worker.gpu.spec_decode.eagle.utils import load_eagle_model
-from aphrodite.v1.worker.gpu.spec_decode.target_dependent_ar.speculator import (
+from sonar.v1.worker.gpu.spec_decode.eagle.utils import load_eagle_model
+from sonar.v1.worker.gpu.spec_decode.target_dependent_ar.speculator import (
     TargetDependentARSpeculator,
 )
 
@@ -17,14 +17,14 @@ class MTPSpeculator(TargetDependentARSpeculator):
         target_model: nn.Module,
         target_attn_layer_names: set[str],
     ) -> nn.Module:
-        draft_model = load_eagle_model(target_model, self.aphrodite_config)
-        spec_config = self.aphrodite_config.speculative_config
+        draft_model = load_eagle_model(target_model, self.sonar_config)
+        spec_config = self.sonar_config.speculative_config
         draft_hf_config = spec_config.draft_model_config.hf_config if spec_config is not None else None
         # Detect index_share_for_mtp_iteration. When True, the proposer
         # toggles skip_topk so step 0 computes MTP's own indices and
         # steps 1+ reuse them.
         self.share_mtp_topk_indices = (
-            self.aphrodite_config.parallel_config.prefill_context_parallel_size == 1
+            self.sonar_config.parallel_config.prefill_context_parallel_size == 1
             and getattr(draft_hf_config, "index_share_for_mtp_iteration", False)
             and hasattr(draft_model.model, "set_skip_topk")
             and hasattr(draft_model.model, "compact_topk_indices")

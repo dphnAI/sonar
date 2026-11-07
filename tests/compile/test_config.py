@@ -9,28 +9,28 @@ import pytest
 import torch
 from pydantic import ValidationError
 
-from aphrodite.compilation.counter import compilation_counter
-from aphrodite.compilation.passes.utility.fix_functionalization import (
+from sonar.compilation.counter import compilation_counter
+from sonar.compilation.passes.utility.fix_functionalization import (
     FixFunctionalizationPass,
 )
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.config import (
     CompilationConfig,
     CUDAGraphMode,
     ModelConfig,
     ParallelConfig,
     SchedulerConfig,
+    SonarConfig,
     SpeculativeConfig,
 )
-from aphrodite.config.compilation import CompilationMode, PassConfig
-from aphrodite.engine.arg_utils import EngineArgs
-from aphrodite.platforms import current_platform
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.utils.torch_utils import (
+from sonar.config.compilation import CompilationMode, PassConfig
+from sonar.engine.arg_utils import EngineArgs
+from sonar.platforms import current_platform
+from sonar.utils.math_utils import cdiv
+from sonar.utils.torch_utils import (
     _is_torch_equal_or_newer,
     is_torch_equal,
 )
-from aphrodite.v1.cudagraph_dispatcher import CudagraphDispatcher
+from sonar.v1.cudagraph_dispatcher import CudagraphDispatcher
 
 # This import automatically registers `torch.ops.silly.attention`
 from . import silly_attention  # noqa: F401
@@ -102,14 +102,14 @@ def test_e8m0_custom_op_fullgraph(use_v2, use_fresh_inductor_cache):
 
 
 def test_copy_pass():
-    aphrodite_config = AphroditeConfig()
-    inductor_pass = FixFunctionalizationPass(aphrodite_config)
+    sonar_config = SonarConfig()
+    inductor_pass = FixFunctionalizationPass(sonar_config)
     copied_inductor_pass = copy.deepcopy(inductor_pass)
     assert (
         copied_inductor_pass.compilation_config.use_inductor_graph_partition
-        == aphrodite_config.compilation_config.use_inductor_graph_partition
+        == sonar_config.compilation_config.use_inductor_graph_partition
     )
-    assert copied_inductor_pass.compilation_config.splitting_ops == aphrodite_config.compilation_config.splitting_ops
+    assert copied_inductor_pass.compilation_config.splitting_ops == sonar_config.compilation_config.splitting_ops
 
 
 def test_custom_op():
@@ -146,14 +146,14 @@ def test_reject_contradictory_custom_ops(custom_ops, config_kwargs, match):
 
 # forked needed to workaround https://github.com/vllm-project/vllm/issues/21073
 @pytest.mark.forked
-# NB: We don't test APHRODITE_DISABLE_COMPILE_CACHE=0 because that depends
+# NB: We don't test SONAR_DISABLE_COMPILE_CACHE=0 because that depends
 # on the state of the cache directory on the current machine, which
 # may be influenced by other tests.
 @pytest.mark.parametrize("val", ["1"])
-def test_APHRODITE_DISABLE_COMPILE_CACHE(aphrodite_runner, monkeypatch, val):
+def test_SONAR_DISABLE_COMPILE_CACHE(sonar_runner, monkeypatch, val):
     # Disable multiprocessing so that the counter is in the same process
-    monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
-    monkeypatch.setenv("APHRODITE_DISABLE_COMPILE_CACHE", val)
+    monkeypatch.setenv("SONAR_ENABLE_V1_MULTIPROCESSING", "0")
+    monkeypatch.setenv("SONAR_DISABLE_COMPILE_CACHE", val)
 
     compilation_config = {
         "cudagraph_mode": CUDAGraphMode.NONE,  # speed things up a bit
@@ -161,7 +161,7 @@ def test_APHRODITE_DISABLE_COMPILE_CACHE(aphrodite_runner, monkeypatch, val):
     with (
         compilation_counter.expect(num_cache_entries_updated=0, num_compiled_artifacts_saved=0),
         # loading the model causes compilation (if enabled) to happen
-        aphrodite_runner(
+        sonar_runner(
             "facebook/opt-125m",
             compilation_config=compilation_config,
             gpu_memory_utilization=0.4,
@@ -181,9 +181,9 @@ def test_APHRODITE_DISABLE_COMPILE_CACHE(aphrodite_runner, monkeypatch, val):
         (CUDAGraphMode.FULL_AND_PIECEWISE, 14),
     ],
 )
-def test_use_cudagraphs(aphrodite_runner, monkeypatch, cudagraph_mode, num_cudagraph_captured):
+def test_use_cudagraphs(sonar_runner, monkeypatch, cudagraph_mode, num_cudagraph_captured):
     # Disable multiprocessing so that the counter is in the same process
-    monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
+    monkeypatch.setenv("SONAR_ENABLE_V1_MULTIPROCESSING", "0")
 
     compilation_config = {
         "cudagraph_capture_sizes": [100],
@@ -197,7 +197,7 @@ def test_use_cudagraphs(aphrodite_runner, monkeypatch, cudagraph_mode, num_cudag
             num_cudagraph_captured=num_cudagraph_captured,
         ),
         # loading the model causes compilation (if enabled) to happen
-        aphrodite_runner(
+        sonar_runner(
             "facebook/opt-125m",
             compilation_config=compilation_config,
             gpu_memory_utilization=0.4,
@@ -209,15 +209,15 @@ def test_use_cudagraphs(aphrodite_runner, monkeypatch, cudagraph_mode, num_cudag
 # forked needed to workaround https://github.com/vllm-project/vllm/issues/21073
 @pytest.mark.forked
 @pytest.mark.parametrize("use_v2_model_runner", [False, True])
-def test_stock_torch_compile(aphrodite_runner, monkeypatch, use_v2_model_runner):
-    monkeypatch.setenv("APHRODITE_USE_V2_MODEL_RUNNER", str(int(use_v2_model_runner)))
+def test_stock_torch_compile(sonar_runner, monkeypatch, use_v2_model_runner):
+    monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", str(int(use_v2_model_runner)))
     # Disable multiprocessing so that the counter is in the same process
-    monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
+    monkeypatch.setenv("SONAR_ENABLE_V1_MULTIPROCESSING", "0")
 
     with (
         compilation_counter.expect(stock_torch_compile_count=1),
         # loading the model causes compilation (if enabled) to happen
-        aphrodite_runner(
+        sonar_runner(
             "facebook/opt-125m",
             compilation_config={"mode": CompilationMode.STOCK_TORCH_COMPILE},
             gpu_memory_utilization=0.4,
@@ -229,13 +229,13 @@ def test_stock_torch_compile(aphrodite_runner, monkeypatch, use_v2_model_runner)
 
 # forked needed to workaround https://github.com/vllm-project/vllm/issues/21073
 @pytest.mark.forked
-def test_no_compilation(aphrodite_runner, monkeypatch):
+def test_no_compilation(sonar_runner, monkeypatch):
     # Disable multiprocessing so that the counter is in the same process
-    monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
+    monkeypatch.setenv("SONAR_ENABLE_V1_MULTIPROCESSING", "0")
     with (
         compilation_counter.expect(num_graphs_seen=0, stock_torch_compile_count=0),
         # loading the model causes compilation (if enabled) to happen
-        aphrodite_runner(
+        sonar_runner(
             "facebook/opt-125m",
             compilation_config={"mode": CompilationMode.NONE},
             gpu_memory_utilization=0.4,
@@ -246,14 +246,14 @@ def test_no_compilation(aphrodite_runner, monkeypatch):
 
 # forked needed to workaround https://github.com/vllm-project/vllm/issues/21073
 @pytest.mark.forked
-def test_enforce_eager(aphrodite_runner, monkeypatch):
+def test_enforce_eager(sonar_runner, monkeypatch):
     # Disable multiprocessing so that the counter is in the same process
-    monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
+    monkeypatch.setenv("SONAR_ENABLE_V1_MULTIPROCESSING", "0")
 
     with (
         compilation_counter.expect(num_graphs_seen=0, stock_torch_compile_count=0),
         # loading the model causes compilation (if enabled) to happen
-        aphrodite_runner("facebook/opt-125m", enforce_eager=True, gpu_memory_utilization=0.4) as _,
+        sonar_runner("facebook/opt-125m", enforce_eager=True, gpu_memory_utilization=0.4) as _,
     ):
         pass
 
@@ -265,7 +265,7 @@ def test_enforce_eager_jit_warmup(enable_fault_tolerance):
     FT fault detection runs against deadlines that in-inference Triton
     compilation latency spikes can blow past, so warmup stays enabled.
     """
-    config = AphroditeConfig(
+    config = SonarConfig(
         model_config=ModelConfig(model="facebook/opt-125m", enforce_eager=True),
         parallel_config=ParallelConfig(enable_fault_tolerance=enable_fault_tolerance),
     )
@@ -274,14 +274,14 @@ def test_enforce_eager_jit_warmup(enable_fault_tolerance):
 
 
 @pytest.mark.forked
-def test_torch_compile_disable(aphrodite_runner, monkeypatch):
-    monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
+def test_torch_compile_disable(sonar_runner, monkeypatch):
+    monkeypatch.setenv("SONAR_ENABLE_V1_MULTIPROCESSING", "0")
     monkeypatch.setenv("TORCH_COMPILE_DISABLE", "1")
-    monkeypatch.setenv("APHRODITE_DISABLE_COMPILE_CACHE", "1")
+    monkeypatch.setenv("SONAR_DISABLE_COMPILE_CACHE", "1")
 
     with (
         compilation_counter.expect(num_graphs_seen=0, stock_torch_compile_count=0),
-        aphrodite_runner(
+        sonar_runner(
             "facebook/opt-125m",
             gpu_memory_utilization=0.4,
         ) as _,
@@ -291,7 +291,7 @@ def test_torch_compile_disable(aphrodite_runner, monkeypatch):
 
 def test_splitting_ops_dynamic():
     # Default config
-    config = AphroditeConfig()
+    config = SonarConfig()
     # Default V1 config leaves cudagraph mode unset; splitting ops are only
     # populated when the engine decides to use piecewise compilation.
     assert config.compilation_config.cudagraph_mode == CUDAGraphMode.FULL_AND_PIECEWISE
@@ -299,25 +299,25 @@ def test_splitting_ops_dynamic():
     splitting_ops = config.compilation_config.splitting_ops
     assert splitting_ops is not None
     assert {
-        "aphrodite::qwen_gdn_attention_core_fused_norm_packed",
+        "sonar::qwen_gdn_attention_core_fused_norm_packed",
     } <= set(splitting_ops)
 
     # When use_inductor_graph_partition=True
-    config = AphroditeConfig(
+    config = SonarConfig(
         compilation_config=CompilationConfig(
-            mode=CompilationMode.APHRODITE_COMPILE,
+            mode=CompilationMode.SONAR_COMPILE,
             use_inductor_graph_partition=True,
-            splitting_ops=["aphrodite::unified_attention_with_output"],
+            splitting_ops=["sonar::unified_attention_with_output"],
         )
     )
     # with inductor partition we use splitting_ops directly for
     # partition rules
-    assert config.compilation_config.splitting_ops == ["aphrodite::unified_attention_with_output"]
+    assert config.compilation_config.splitting_ops == ["sonar::unified_attention_with_output"]
 
     # When attn_fusion pass enabled.
-    config = AphroditeConfig(
+    config = SonarConfig(
         compilation_config=CompilationConfig(
-            mode=CompilationMode.APHRODITE_COMPILE,
+            mode=CompilationMode.SONAR_COMPILE,
             pass_config=PassConfig(fuse_attn_quant=True, eliminate_noops=True),
             custom_ops=["+quant_fp8"],
             cudagraph_mode=CUDAGraphMode.PIECEWISE,
@@ -330,9 +330,9 @@ def test_splitting_ops_dynamic():
     # splitting_ops can not contain attention ops when attn_fusion
     # pass enabled.
     with pytest.raises(ValidationError):
-        config = AphroditeConfig(
+        config = SonarConfig(
             compilation_config=CompilationConfig(
-                mode=CompilationMode.APHRODITE_COMPILE,
+                mode=CompilationMode.SONAR_COMPILE,
                 pass_config=PassConfig(fuse_attn_quant=True, eliminate_noops=True),
                 custom_ops=["+quant_fp8"],
                 cudagraph_mode=CUDAGraphMode.PIECEWISE,
@@ -342,9 +342,9 @@ def test_splitting_ops_dynamic():
         )
 
     # When both use_inductor_graph_partition and attn_fusion pass enabled.
-    config = AphroditeConfig(
+    config = SonarConfig(
         compilation_config=CompilationConfig(
-            mode=CompilationMode.APHRODITE_COMPILE,
+            mode=CompilationMode.SONAR_COMPILE,
             use_inductor_graph_partition=True,
             pass_config=PassConfig(fuse_attn_quant=True, eliminate_noops=True),
             custom_ops=["+quant_fp8"],
@@ -363,33 +363,33 @@ def test_splitting_ops_dynamic():
 def test_moe_splitting_ops_deepep_ht_inductor_partition():
     # Inductor partition case: user-provided splitting_ops should be
     # preserved and MoE ops should be appended for DeepEP HT with dp>1.
-    config = AphroditeConfig(
+    config = SonarConfig(
         parallel_config=ParallelConfig(
             all2all_backend="deepep_high_throughput",
             data_parallel_size=8,
         ),
         compilation_config=CompilationConfig(
-            mode=CompilationMode.APHRODITE_COMPILE,
+            mode=CompilationMode.SONAR_COMPILE,
             use_inductor_graph_partition=True,
             splitting_ops=[
-                "aphrodite::unified_attention_with_output",
-                "aphrodite::moe_forward",
-                "aphrodite::moe_forward_shared",
+                "sonar::unified_attention_with_output",
+                "sonar::moe_forward",
+                "sonar::moe_forward_shared",
             ],
         ),
     )
     splitting_ops = config.compilation_config.splitting_ops
     assert splitting_ops == [
-        "aphrodite::unified_attention_with_output",
-        "aphrodite::moe_forward",
-        "aphrodite::moe_forward_shared",
+        "sonar::unified_attention_with_output",
+        "sonar::moe_forward",
+        "sonar::moe_forward_shared",
     ]
 
 
 def test_should_split():
     import torch
 
-    from aphrodite.compilation.partition_rules import should_split
+    from sonar.compilation.partition_rules import should_split
 
     graph = torch.fx.Graph()
     node = torch.fx.Node(
@@ -517,9 +517,9 @@ def test_cudagraph_sizes_post_init(
             max_num_batched_tokens=max_num_batched_tokens,
             compilation_config=compilation_config,
         )
-        aphrodite_config = engine_args.create_engine_config()
+        sonar_config = engine_args.create_engine_config()
 
-        assert aphrodite_config.compilation_config.max_cudagraph_capture_size == expected_max_size
+        assert sonar_config.compilation_config.max_cudagraph_capture_size == expected_max_size
 
 
 def _mock_config_for_cudagraph_sizes(
@@ -529,14 +529,14 @@ def _mock_config_for_cudagraph_sizes(
     compilation_config: CompilationConfig,
     num_speculative_tokens_per_batch_size: list[tuple[int, int, int]] | None = None,
 ) -> MagicMock:
-    """Mock AphroditeConfig wired up enough to run `_set_cudagraph_sizes`.
+    """Mock SonarConfig wired up enough to run `_set_cudagraph_sizes`.
 
     `num_speculative_tokens` and `uniform_decode_query_len` are filled in by
     calling the real property functions, so the tests below cover the
     derivation from `speculative_config` and not just the arithmetic
     downstream of it.
     """
-    config = MagicMock(spec=AphroditeConfig)
+    config = MagicMock(spec=SonarConfig)
     config.compilation_config = compilation_config
     config.scheduler_config = SchedulerConfig.default_factory(
         max_num_seqs=max_num_seqs,
@@ -557,8 +557,8 @@ def _mock_config_for_cudagraph_sizes(
         if num_speculative_tokens
         else None
     )
-    config.num_speculative_tokens = AphroditeConfig.num_speculative_tokens.fget(config)
-    config.uniform_decode_query_len = AphroditeConfig.uniform_decode_query_len.fget(config)
+    config.num_speculative_tokens = SonarConfig.num_speculative_tokens.fget(config)
+    config.uniform_decode_query_len = SonarConfig.uniform_decode_query_len.fget(config)
     return config
 
 
@@ -574,7 +574,7 @@ def test_default_cudagraph_capture_sizes_cover_off_stride_max_num_seqs(
         compilation_config=compilation_config,
     )
 
-    AphroditeConfig._set_cudagraph_sizes(config)
+    SonarConfig._set_cudagraph_sizes(config)
 
     assert max_num_seqs in compilation_config.cudagraph_capture_sizes
 
@@ -619,7 +619,7 @@ def test_default_cudagraph_capture_size_respects_platform_ceiling(
         compilation_config=compilation_config,
     )
 
-    AphroditeConfig._set_cudagraph_sizes(config)
+    SonarConfig._set_cudagraph_sizes(config)
 
     decode_query_len = 1 + num_speculative_tokens
     default_max_graph_size = 1024 if current_platform.is_device_capability_family(100) else 512
@@ -655,7 +655,7 @@ def test_default_cudagraph_capture_sizes_keep_all_sizes_bounded():
         return_value=False,
     ):
         default_max_graph_size = 1024 if current_platform.is_device_capability_family(100) else 512
-        AphroditeConfig._set_cudagraph_sizes(config)
+        SonarConfig._set_cudagraph_sizes(config)
 
     token_grid_max = min(max_num_seqs * decode_query_len * 2, default_max_graph_size)
     token_grid = [size for size in [1, 2, 4] if size <= token_grid_max]
@@ -683,7 +683,7 @@ def test_default_cudagraph_capture_sizes_keep_all_sizes_bounded():
 
 
 @pytest.mark.skipif(not current_platform.is_cuda(), reason="Only test CUDA")
-def test_real_aphrodite_config_caps_widest_ngram_decode_batch():
+def test_real_sonar_config_caps_widest_ngram_decode_batch():
     """Real config post-init preserves the default capture ceiling."""
     model_config = ModelConfig(model="facebook/opt-125m")
     speculative_config = SpeculativeConfig(
@@ -703,7 +703,7 @@ def test_real_aphrodite_config_caps_widest_ngram_decode_batch():
         "is_device_capability_family",
         return_value=False,
     ):
-        config = AphroditeConfig(
+        config = SonarConfig(
             model_config=model_config,
             speculative_config=speculative_config,
             scheduler_config=scheduler_config,
@@ -739,7 +739,7 @@ def test_default_cudagraph_capture_size_unchanged_without_speculation(max_num_se
         "is_device_capability_family",
         return_value=False,
     ):
-        AphroditeConfig._set_cudagraph_sizes(config)
+        SonarConfig._set_cudagraph_sizes(config)
 
     default_max_graph_size = 1024 if current_platform.is_device_capability_family(100) else 512
     assert compilation_config.max_cudagraph_capture_size == min(
@@ -763,7 +763,7 @@ def test_single_speculative_token_does_not_raise_default_capture_size():
         compilation_config=compilation_config,
     )
 
-    AphroditeConfig._set_cudagraph_sizes(config)
+    SonarConfig._set_cudagraph_sizes(config)
 
     default_max_graph_size = 1024 if current_platform.is_device_capability_family(100) else 512
     token_grid_max = min(300 * 2 * 2, default_max_graph_size)
@@ -786,7 +786,7 @@ def test_default_cudagraph_capture_size_caps_tokens():
         compilation_config=compilation_config,
     )
 
-    AphroditeConfig._set_cudagraph_sizes(config)
+    SonarConfig._set_cudagraph_sizes(config)
 
     default_max_graph_size = 1024 if current_platform.is_device_capability_family(100) else 512
     assert compilation_config.max_cudagraph_capture_size == default_max_graph_size
@@ -824,7 +824,7 @@ def test_default_cudagraph_capture_sizes_cover_every_dynamic_decode_width():
         num_speculative_tokens_per_batch_size=[(1, 16, 16), (17, 128, 2)],
     )
 
-    AphroditeConfig._set_cudagraph_sizes(config)
+    SonarConfig._set_cudagraph_sizes(config)
 
     sizes = compilation_config.cudagraph_capture_sizes
     # The wide tier only ever runs to a batch of 16, the narrow one to 128.
@@ -842,7 +842,7 @@ def test_dynamic_decode_capture_clamps_configured_width():
         num_speculative_tokens_per_batch_size=[(1, 16, 5)],
     )
 
-    AphroditeConfig._set_cudagraph_sizes(config)
+    SonarConfig._set_cudagraph_sizes(config)
 
     sizes = compilation_config.cudagraph_capture_sizes
     assert _widest_covered_request_count(sizes, 4, 16) == 16
@@ -859,7 +859,7 @@ def test_dynamic_decode_capture_covers_schedule_gap_and_tail():
         num_speculative_tokens_per_batch_size=[(1, 2, 4), (5, 5, 1)],
     )
 
-    AphroditeConfig._set_cudagraph_sizes(config)
+    SonarConfig._set_cudagraph_sizes(config)
 
     sizes = compilation_config.cudagraph_capture_sizes
     assert 20 in sizes
@@ -880,7 +880,7 @@ def test_default_cudagraph_capture_size_still_clamped_by_token_budget():
         compilation_config=compilation_config,
     )
 
-    AphroditeConfig._set_cudagraph_sizes(config)
+    SonarConfig._set_cudagraph_sizes(config)
 
     # The token budget still clamps the final capture size.
     default_max_graph_size = 1024 if current_platform.is_device_capability_family(100) else 512
@@ -905,15 +905,15 @@ def test_default_cudagraph_capture_size_still_clamped_by_token_budget():
 )
 @pytest.mark.parametrize(("is_blackwell", "expected_max_size"), [(False, 512), (True, 1024)])
 def test_blackwell_cudagraph_default(is_blackwell, expected_max_size):
-    aphrodite_config = AphroditeConfig()
-    aphrodite_config.model_config = MagicMock(enforce_eager=False)
-    aphrodite_config.scheduler_config = SchedulerConfig(
+    sonar_config = SonarConfig()
+    sonar_config.model_config = MagicMock(enforce_eager=False)
+    sonar_config.scheduler_config = SchedulerConfig(
         max_num_seqs=512,
         max_num_batched_tokens=2048,
         max_model_len=2048,
         is_encoder_decoder=False,
     )
-    aphrodite_config.compilation_config = CompilationConfig(
+    sonar_config.compilation_config = CompilationConfig(
         cudagraph_mode=CUDAGraphMode.FULL_AND_PIECEWISE,
     )
 
@@ -922,18 +922,18 @@ def test_blackwell_cudagraph_default(is_blackwell, expected_max_size):
         "is_device_capability_family",
         return_value=is_blackwell,
     ):
-        aphrodite_config._set_cudagraph_sizes()
+        sonar_config._set_cudagraph_sizes()
 
-    assert aphrodite_config.compilation_config.max_cudagraph_capture_size == expected_max_size
+    assert sonar_config.compilation_config.max_cudagraph_capture_size == expected_max_size
 
 
-def test_cached_compilation_config(default_aphrodite_config):
+def test_cached_compilation_config(default_sonar_config):
     import torch
     from torch._inductor.utils import run_and_get_code
 
-    from aphrodite.config import get_cached_compilation_config, set_current_aphrodite_config
-    from aphrodite.model_executor.layers.quantization.input_quant_fp8 import QuantFP8
-    from aphrodite.model_executor.layers.quantization.utils.quant_utils import GroupShape
+    from sonar.config import get_cached_compilation_config, set_current_sonar_config
+    from sonar.model_executor.layers.quantization.input_quant_fp8 import QuantFP8
+    from sonar.model_executor.layers.quantization.utils.quant_utils import GroupShape
 
     dtype = torch.bfloat16
     device = torch.device(f"{DEVICE_TYPE}:0")
@@ -945,16 +945,16 @@ def test_cached_compilation_config(default_aphrodite_config):
     # of the custom op `torch.ops._C.static_scaled_fp8_quant`.
     get_cached_compilation_config()
 
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         compilation_config=CompilationConfig(
-            mode=CompilationMode.APHRODITE_COMPILE,
+            mode=CompilationMode.SONAR_COMPILE,
             custom_ops=["+quant_fp8"],
         )
     )
 
-    # set_current_aphrodite_config should clear cached compilation config and
-    # use the new compilation_config in aphrodite_config
-    with set_current_aphrodite_config(aphrodite_config):
+    # set_current_sonar_config should clear cached compilation config and
+    # use the new compilation_config in sonar_config
+    with set_current_sonar_config(sonar_config):
         query_quant = QuantFP8(static=True, group_shape=GroupShape.PER_TENSOR)
         query_quant = torch.compile(query_quant)
 
@@ -967,11 +967,11 @@ def test_cached_compilation_config(default_aphrodite_config):
     assert "torch.ops._C.static_scaled_fp8_quant.default(" in code
 
 
-def _create_aphrodite_config_for_validation(
+def _create_sonar_config_for_validation(
     compilation_config: CompilationConfig,
 ) -> MagicMock:
-    """Helper to create a mock AphroditeConfig for padding validation testing."""
-    mock_config = MagicMock(spec=AphroditeConfig)
+    """Helper to create a mock SonarConfig for padding validation testing."""
+    mock_config = MagicMock(spec=SonarConfig)
     mock_config.compilation_config = compilation_config
     mock_config.scheduler_config = SchedulerConfig.default_factory(max_num_seqs=8)
     mock_config.parallel_config = ParallelConfig()
@@ -999,7 +999,7 @@ def test_compile_sizes_padding_validation():
             cudagraph_mode=CUDAGraphMode.FULL,
         )
         config.post_init_cudagraph_sizes()
-        dispatcher = CudagraphDispatcher(_create_aphrodite_config_for_validation(config))
+        dispatcher = CudagraphDispatcher(_create_sonar_config_for_validation(config))
         dispatcher.initialize_cudagraph_keys(CUDAGraphMode.FULL)
 
     with pytest.raises(ValueError, match="would be padded to"):
@@ -1010,7 +1010,7 @@ def test_compile_sizes_padding_validation():
             cudagraph_mode=CUDAGraphMode.FULL,
         )
         config.post_init_cudagraph_sizes()
-        dispatcher = CudagraphDispatcher(_create_aphrodite_config_for_validation(config))
+        dispatcher = CudagraphDispatcher(_create_sonar_config_for_validation(config))
         dispatcher.initialize_cudagraph_keys(CUDAGraphMode.FULL)
 
     config = CompilationConfig(
@@ -1021,7 +1021,7 @@ def test_compile_sizes_padding_validation():
     )
     config.post_init_cudagraph_sizes()
     assert sorted(config.compile_sizes) == [1, 2, 4, 8]
-    dispatcher = CudagraphDispatcher(_create_aphrodite_config_for_validation(config))
+    dispatcher = CudagraphDispatcher(_create_sonar_config_for_validation(config))
     dispatcher.initialize_cudagraph_keys(CUDAGraphMode.FULL)  # Should not raise
 
     config = CompilationConfig(
@@ -1053,20 +1053,20 @@ def test_compile_sizes_padding_validation():
     )
     config.post_init_cudagraph_sizes()
     assert sorted(config.compile_sizes) == [3, 5, 7]
-    dispatcher = CudagraphDispatcher(_create_aphrodite_config_for_validation(config))
+    dispatcher = CudagraphDispatcher(_create_sonar_config_for_validation(config))
     dispatcher.initialize_cudagraph_keys(CUDAGraphMode.NONE)  # Should not raise
 
 
 def test_inductor_asserts_default_disabled(monkeypatch):
     """Test that inductor runtime asserts are disabled by default
     (INFO logging level) on torch < 2.12."""
-    monkeypatch.setenv("APHRODITE_LOGGING_LEVEL", "INFO")
+    monkeypatch.setenv("SONAR_LOGGING_LEVEL", "INFO")
 
     import importlib
 
-    import aphrodite.envs
+    import sonar.envs
 
-    importlib.reload(aphrodite.envs)
+    importlib.reload(sonar.envs)
 
     config = CompilationConfig()
     if not _is_torch_equal_or_newer(torch.__version__, "2.12.0.dev"):
@@ -1076,15 +1076,15 @@ def test_inductor_asserts_default_disabled(monkeypatch):
 
 
 def test_inductor_asserts_enabled_in_debug(monkeypatch):
-    """Test that APHRODITE_LOGGING_LEVEL=DEBUG enables inductor runtime asserts
+    """Test that SONAR_LOGGING_LEVEL=DEBUG enables inductor runtime asserts
     on torch < 2.12."""
-    monkeypatch.setenv("APHRODITE_LOGGING_LEVEL", "DEBUG")
+    monkeypatch.setenv("SONAR_LOGGING_LEVEL", "DEBUG")
 
     import importlib
 
-    import aphrodite.envs
+    import sonar.envs
 
-    importlib.reload(aphrodite.envs)
+    importlib.reload(sonar.envs)
 
     config = CompilationConfig()
     if not _is_torch_equal_or_newer(torch.__version__, "2.12.0.dev"):
@@ -1098,7 +1098,7 @@ def test_get_inductor_factors_includes_configs():
     from torch._functorch import config as functorch_config
     from torch._inductor import config as inductor_config
 
-    from aphrodite.compilation.compiler_interface import get_inductor_factors
+    from sonar.compilation.compiler_interface import get_inductor_factors
 
     baseline = get_inductor_factors()
 
@@ -1114,13 +1114,13 @@ def test_get_inductor_factors_includes_configs():
 def test_inductor_asserts_user_override(monkeypatch):
     """Test that explicit inductor_compile_config overrides the
     debug-logging default."""
-    monkeypatch.setenv("APHRODITE_LOGGING_LEVEL", "INFO")
+    monkeypatch.setenv("SONAR_LOGGING_LEVEL", "INFO")
 
     import importlib
 
-    import aphrodite.envs
+    import sonar.envs
 
-    importlib.reload(aphrodite.envs)
+    importlib.reload(sonar.envs)
 
     config = CompilationConfig(
         inductor_compile_config={"size_asserts": True},
@@ -1138,7 +1138,7 @@ def test_combo_kernel_benchmarking_respects_deterministic(deterministic, overrid
     overrides = {} if override is None else {"deterministic": override}
     with (
         inductor_config.patch(deterministic=deterministic),
-        patch("aphrodite.config.compilation.current_platform.is_cpu", return_value=False),
+        patch("sonar.config.compilation.current_platform.is_cpu", return_value=False),
     ):
         config = CompilationConfig(inductor_compile_config=overrides)
 
@@ -1162,7 +1162,7 @@ def test_combo_kernel_explicit_settings_preserved(deterministic, overrides):
 
     with (
         inductor_config.patch(deterministic=deterministic),
-        patch("aphrodite.config.compilation.current_platform.is_cpu", return_value=False),
+        patch("sonar.config.compilation.current_platform.is_cpu", return_value=False),
     ):
         config = CompilationConfig(inductor_compile_config=overrides.copy())
 
@@ -1173,7 +1173,7 @@ def test_combo_kernel_explicit_settings_preserved(deterministic, overrides):
 @pytest.mark.parametrize("is_cpu,torch_version", [(True, "2.13.0"), (False, "2.8.0")])
 def test_combo_kernel_defaults_require_supported_platform_and_torch(is_cpu, torch_version):
     with (
-        patch("aphrodite.config.compilation.current_platform.is_cpu", return_value=is_cpu),
+        patch("sonar.config.compilation.current_platform.is_cpu", return_value=is_cpu),
         patch("torch.__version__", torch_version),
     ):
         config = CompilationConfig()
@@ -1185,7 +1185,7 @@ def test_combo_kernel_defaults_require_supported_platform_and_torch(is_cpu, torc
 def test_combo_kernel_defaults_without_inductor_deterministic_setting():
     with (
         patch("torch._inductor.config", SimpleNamespace()),
-        patch("aphrodite.config.compilation.current_platform.is_cpu", return_value=False),
+        patch("sonar.config.compilation.current_platform.is_cpu", return_value=False),
     ):
         config = CompilationConfig()
 

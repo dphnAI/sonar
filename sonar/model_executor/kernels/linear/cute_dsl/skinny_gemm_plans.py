@@ -8,11 +8,11 @@ count; other token counts use ``F.linear``. Entries are kept only where the
 skinny GEMM beats cuBLAS by more than 5% under CUDA graph replay.
 """
 
-from aphrodite.model_executor.kernels.linear.cute_dsl.skinny_gemm import (
+from sonar.model_executor.kernels.linear.cute_dsl.skinny_gemm import (
     SkinnyGemmConfig,
     shape_dynamic_skinny_gemm,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 SkinnyGemmPlan = dict[int, SkinnyGemmConfig]
 

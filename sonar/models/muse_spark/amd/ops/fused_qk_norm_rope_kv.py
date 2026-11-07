@@ -3,11 +3,11 @@
 
 import torch
 
-from aphrodite.models.muse_spark.common.ops.fused_qk_norm_rope_kv import (
+from sonar.models.muse_spark.common.ops.fused_qk_norm_rope_kv import (
     fused_qk_norm_rope_kv_insert,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import (
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import (
     LayerNameType,
     _encode_layer_name,
     _resolve_layer_name,
@@ -27,7 +27,7 @@ def rocm_fused_qk_norm_rope_kv_insert(
     eps: float,
 ) -> None:
     if torch.compiler.is_compiling():
-        torch.ops.aphrodite.muse_spark_fused_qk_norm_rope_kv_insert(
+        torch.ops.sonar.muse_spark_fused_qk_norm_rope_kv_insert(
             qkv,
             positions,
             cos_sin_cache,

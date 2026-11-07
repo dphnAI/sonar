@@ -3,8 +3,8 @@
 
 import torch
 
-from aphrodite.model_executor.layers.utils import apply_penalties
-from aphrodite.utils.torch_utils import PIN_MEMORY, make_tensor_with_pad
+from sonar.model_executor.layers.utils import apply_penalties
+from sonar.utils.torch_utils import PIN_MEMORY, make_tensor_with_pad
 
 
 def apply_all_penalties(

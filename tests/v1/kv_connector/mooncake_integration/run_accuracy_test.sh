@@ -2,7 +2,7 @@
 set -xe
 
 # Parse command line arguments
-ATTENTION_BACKEND=""  # Default to empty (use aphrodite default)
+ATTENTION_BACKEND=""  # Default to empty (use sonar default)
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -21,8 +21,8 @@ done
 if [[ -n "$ATTENTION_BACKEND" ]]; then
   echo "Using attention backend: $ATTENTION_BACKEND"
 fi
-if [[ -n "$APHRODITE_SERVE_EXTRA_ARGS" ]]; then
-  echo "Aphrodite serve extra args: $APHRODITE_SERVE_EXTRA_ARGS"
+if [[ -n "$SONAR_SERVE_EXTRA_ARGS" ]]; then
+  echo "Sonar serve extra args: $SONAR_SERVE_EXTRA_ARGS"
 fi
 
 # Mooncake discovers peers via its bootstrap server, so no side-channel
@@ -57,13 +57,13 @@ PREFILLER_TP_SIZE=${PREFILLER_TP_SIZE:-1}
 DECODER_TP_SIZE=${DECODER_TP_SIZE:-1}
 GPU_MEMORY_UTILIZATION=${GPU_MEMORY_UTILIZATION:-0.2}
 BLOCK_SIZE=${BLOCK_SIZE:-128}
-# Comma-separated extra args for aphrodite serve (e.g. --max-model-len,2048)
-APHRODITE_SERVE_EXTRA_ARGS=${APHRODITE_SERVE_EXTRA_ARGS:-}
+# Comma-separated extra args for sonar serve (e.g. --max-model-len,2048)
+SONAR_SERVE_EXTRA_ARGS=${SONAR_SERVE_EXTRA_ARGS:-}
 # Set to 1 to put every instance to sleep and wake it up before the eval.
 SLEEP_WAKE=${SLEEP_WAKE:-0}
 if [[ "$SLEEP_WAKE" == "1" ]]; then
-  export APHRODITE_SERVER_DEV_MODE=1
-  APHRODITE_SERVE_EXTRA_ARGS="${APHRODITE_SERVE_EXTRA_ARGS:+${APHRODITE_SERVE_EXTRA_ARGS},}--enable-sleep-mode"
+  export SONAR_SERVER_DEV_MODE=1
+  SONAR_SERVE_EXTRA_ARGS="${SONAR_SERVE_EXTRA_ARGS:+${SONAR_SERVE_EXTRA_ARGS},}--enable-sleep-mode"
 fi
 
 # Resolve the repository root from the script location instead of `.git`.
@@ -75,7 +75,7 @@ SMI_BIN=$(which nvidia-smi || which rocm-smi || echo "")
 # Trap the SIGINT signal (triggered by Ctrl+C)
 trap 'kill $(jobs -pr)' SIGINT SIGTERM EXIT
 
-# Waits for Aphrodite to start.
+# Waits for Sonar to start.
 wait_for_server() {
   local port=$1
   timeout 1200 bash -c "
@@ -100,8 +100,8 @@ EOF
 
 # Function to clean up previous instances
 cleanup_instances() {
-  echo "Cleaning up any running Aphrodite instances..."
-  pkill -f "aphrodite serve" || true
+  echo "Cleaning up any running Sonar instances..."
+  pkill -f "sonar serve" || true
   sleep 2
 }
 
@@ -148,16 +148,16 @@ run_tests_for_model() {
     echo "Starting prefill instance $i on GPU $GPU_ID, port $PORT, bootstrap $BOOTSTRAP_PORT"
 
     BASE_CMD="CUDA_VISIBLE_DEVICES=$GPU_ID \
-    APHRODITE_MOONCAKE_BOOTSTRAP_PORT=$BOOTSTRAP_PORT \
-    aphrodite serve $model_name \
+    SONAR_MOONCAKE_BOOTSTRAP_PORT=$BOOTSTRAP_PORT \
+    sonar serve $model_name \
     --port $PORT \
     --enforce-eager \
     --block-size ${BLOCK_SIZE} \
     --gpu-memory-utilization $GPU_MEMORY_UTILIZATION \
     --tensor-parallel-size $PREFILLER_TP_SIZE \
     --kv-transfer-config '$KV_CONFIG_P'"
-    if [[ -n "$APHRODITE_SERVE_EXTRA_ARGS" ]]; then
-      IFS=',' read -r -a extra_args <<< "$APHRODITE_SERVE_EXTRA_ARGS"
+    if [[ -n "$SONAR_SERVE_EXTRA_ARGS" ]]; then
+      IFS=',' read -r -a extra_args <<< "$SONAR_SERVE_EXTRA_ARGS"
       for arg in "${extra_args[@]}"; do
         BASE_CMD="${BASE_CMD} $arg"
       done
@@ -188,15 +188,15 @@ run_tests_for_model() {
     echo "Starting decode instance $i on GPU $GPU_ID, port $PORT"
 
     BASE_CMD="CUDA_VISIBLE_DEVICES=$GPU_ID \
-    aphrodite serve $model_name \
+    sonar serve $model_name \
     --port $PORT \
     --enforce-eager \
     --block-size ${BLOCK_SIZE} \
     --gpu-memory-utilization $GPU_MEMORY_UTILIZATION \
     --tensor-parallel-size $DECODER_TP_SIZE \
     --kv-transfer-config '$KV_CONFIG_D'"
-    if [[ -n "$APHRODITE_SERVE_EXTRA_ARGS" ]]; then
-      IFS=',' read -r -a extra_args <<< "$APHRODITE_SERVE_EXTRA_ARGS"
+    if [[ -n "$SONAR_SERVE_EXTRA_ARGS" ]]; then
+      IFS=',' read -r -a extra_args <<< "$SONAR_SERVE_EXTRA_ARGS"
       for arg in "${extra_args[@]}"; do
         BASE_CMD="${BASE_CMD} $arg"
       done

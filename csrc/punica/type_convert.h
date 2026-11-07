@@ -58,19 +58,19 @@ convert_type<float, __hip_bfloat16>(float val) {
 }
 
 template <typename T>
-__TYPE_CONVERT__HOST_DEVICE__ inline T aphrodite_add(T a, T b) {
+__TYPE_CONVERT__HOST_DEVICE__ inline T sonar_add(T a, T b) {
   return a + b;
 }
 
 template <>
-__TYPE_CONVERT__HOST_DEVICE__ inline __half aphrodite_add<__half>(__half a,
-                                                                  __half b) {
+__TYPE_CONVERT__HOST_DEVICE__ inline __half sonar_add<__half>(__half a,
+                                                              __half b) {
   return __hadd(a, b);
 }
 
 template <>
-__TYPE_CONVERT__HOST_DEVICE__ inline __hip_bfloat16
-aphrodite_add<__hip_bfloat16>(__hip_bfloat16 a, __hip_bfloat16 b) {
+__TYPE_CONVERT__HOST_DEVICE__ inline __hip_bfloat16 sonar_add<__hip_bfloat16>(
+    __hip_bfloat16 a, __hip_bfloat16 b) {
   return __hadd(a, b);
 }
 

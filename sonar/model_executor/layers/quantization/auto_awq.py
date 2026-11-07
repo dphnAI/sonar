@@ -8,15 +8,15 @@ from safetensors.torch import _TYPES as _SAFETENSORS_TO_TORCH_DTYPE
 from torch.nn import Parameter
 from transformers import PreTrainedConfig
 
-import aphrodite.model_executor.layers.fused_moe  # noqa
-from aphrodite import _custom_ops as ops
-from aphrodite import envs
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.kernels.linear import (
+import sonar.model_executor.layers.fused_moe  # noqa
+from sonar import _custom_ops as ops
+from sonar import envs
+from sonar.logger import init_logger
+from sonar.model_executor.kernels.linear import (
     MPLinearLayerConfig,
     choose_mp_linear_kernel,
 )
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.model_executor.layers.fused_moe import (
     FusedMoEConfig,
     FusedMoEMethodBase,
     FusedMoEQuantConfig,
@@ -25,47 +25,47 @@ from aphrodite.model_executor.layers.fused_moe import (
     SharedExperts,
     UnquantizedFusedMoEMethod,
 )
-from aphrodite.model_executor.layers.fused_moe.oracle.int_wna16 import (
+from sonar.model_executor.layers.fused_moe.oracle.int_wna16 import (
     WNA16MoEBackend,
     convert_to_wna16_moe_kernel_format,
     make_wna16_moe_kernel,
     make_wna16_moe_quant_config,
     select_wna16_moe_backend,
 )
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.linear import (
     LinearBase,
     LinearMethodBase,
     UnquantizedLinearMethod,
     set_weight_attrs,
 )
-from aphrodite.model_executor.layers.quantization.base_config import (
+from sonar.model_executor.layers.quantization.base_config import (
     QuantizationConfig,
     QuantizeMethodBase,
 )
-from aphrodite.model_executor.layers.quantization.utils.marlin_utils import (
+from sonar.model_executor.layers.quantization.utils.marlin_utils import (
     check_marlin_supported,
     check_marlin_supports_layer,
     check_moe_marlin_supports_layer,
     get_marlin_input_dtype,
     verify_marlin_supported,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     is_layer_skipped,
     kInt4Static,
 )
-from aphrodite.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
-from aphrodite.model_executor.parameter import (
+from sonar.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
+from sonar.model_executor.parameter import (
     GroupQuantScaleParameter,
-    PackedAphroditeParameter,
+    PackedSonarParameter,
 )
-from aphrodite.model_executor.utils import replace_parameter
-from aphrodite.platforms import current_platform
-from aphrodite.scalar_type import scalar_types
-from aphrodite.transformers_utils.config import get_safetensors_params_metadata
+from sonar.model_executor.utils import replace_parameter
+from sonar.platforms import current_platform
+from sonar.scalar_type import scalar_types
+from sonar.transformers_utils.config import get_safetensors_params_metadata
 
 if TYPE_CHECKING:
-    from aphrodite.model_executor.layers.quantization import QuantizationMethods
-    from aphrodite.model_executor.models.utils import WeightsMapper
+    from sonar.model_executor.layers.quantization import QuantizationMethods
+    from sonar.model_executor.models.utils import WeightsMapper
 
 logger = init_logger(__name__)
 
@@ -125,7 +125,7 @@ def _convert_awq_to_standard_format(
     def _noop_loader(*args, **kwargs):
         pass
 
-    new_param = PackedAphroditeParameter(
+    new_param = PackedSonarParameter(
         data=new_qw.contiguous(),
         input_dim=0,
         output_dim=1,
@@ -154,7 +154,7 @@ def _convert_awq_to_standard_format(
     unpacked_zp = unpacked_zp.reshape(N // pack_factor, pack_factor, G)
     new_qz = (unpacked_zp.to(torch.int32) << shifts[None, :, None]).sum(dim=1, dtype=torch.int32)
 
-    new_zp_param = PackedAphroditeParameter(
+    new_zp_param = PackedSonarParameter(
         data=new_qz.contiguous(),
         output_dim=0,
         input_dim=1,
@@ -298,7 +298,7 @@ class AutoAWQConfig(QuantizationConfig):
             # Check if Marlin is supported and not using batch invariant mode
             # (Marlin kernels are not batch invariant)
             use_marlin = (
-                not envs.APHRODITE_BATCH_INVARIANT
+                not envs.SONAR_BATCH_INVARIANT
                 and current_platform.is_cuda()
                 and check_marlin_supported(self.quant_type, self.group_size, self.zero_point)
             )
@@ -329,7 +329,7 @@ class AutoAWQConfig(QuantizationConfig):
                 logger.warning_once(
                     f"Layer '{prefix}' is not supported by AutoAWQMoEMarlin. Falling back to Moe WNA16 kernels."
                 )
-                from aphrodite.model_executor.layers.quantization.moe_wna16 import (
+                from sonar.model_executor.layers.quantization.moe_wna16 import (
                     MoeWNA16Config,
                 )
 
@@ -339,9 +339,9 @@ class AutoAWQConfig(QuantizationConfig):
 
         return None
 
-    def apply_aphrodite_mapper(self, hf_to_aphrodite_mapper: "WeightsMapper"):
+    def apply_sonar_mapper(self, hf_to_sonar_mapper: "WeightsMapper"):
         if self.modules_to_not_convert:
-            self.modules_to_not_convert = hf_to_aphrodite_mapper.apply_list(self.modules_to_not_convert)
+            self.modules_to_not_convert = hf_to_sonar_mapper.apply_list(self.modules_to_not_convert)
 
     def maybe_update_config(
         self,
@@ -428,7 +428,7 @@ class AutoAWQMarlinLinearMethod(LinearMethodBase):
 
         # Weights are loaded in AWQ checkpoint format (packed along output dim).
         # Conversion to GPTQ-like format happens in process_weights_after_loading.
-        qweight = PackedAphroditeParameter(
+        qweight = PackedSonarParameter(
             data=torch.empty(
                 input_size_per_partition,
                 output_size_per_partition // self.quant_config.pack_factor,
@@ -443,7 +443,7 @@ class AutoAWQMarlinLinearMethod(LinearMethodBase):
 
         num_groups = input_size_per_partition // group_size
 
-        qzeros = PackedAphroditeParameter(
+        qzeros = PackedSonarParameter(
             data=torch.empty(
                 num_groups,
                 output_size_per_partition // self.quant_config.pack_factor,
@@ -678,7 +678,7 @@ class AutoAWQMoEMethod(FusedMoEMethodBase):
 
     def get_fused_moe_quant_config(self, layer: RoutedExperts) -> FusedMoEQuantConfig:
         if self.wna16_moe_backend == WNA16MoEBackend.HUMMING:
-            from aphrodite.model_executor.layers.quantization.utils.humming import (
+            from sonar.model_executor.layers.quantization.utils.humming import (
                 get_humming_moe_quant_config,
             )
 
@@ -793,7 +793,7 @@ class BaseAWQLinearMethod(LinearMethodBase):
             )
 
         weight_loader = extra_weight_attrs.get("weight_loader")
-        qweight = PackedAphroditeParameter(
+        qweight = PackedSonarParameter(
             data=torch.empty(
                 input_size_per_partition,
                 output_size_per_partition // self.quant_config.pack_factor,
@@ -808,7 +808,7 @@ class BaseAWQLinearMethod(LinearMethodBase):
 
         num_groups = input_size_per_partition // group_size
 
-        qzeros = PackedAphroditeParameter(
+        qzeros = PackedSonarParameter(
             data=torch.empty(
                 num_groups,
                 output_size_per_partition // self.quant_config.pack_factor,
@@ -862,7 +862,7 @@ class AutoAWQLinearMethod(BaseAWQLinearMethod):
         FP16_MATMUL_HEURISTIC_CONDITION = x.shape[:-1].numel() >= 256
         # Batch invariant mode requires torch.matmul path
         # for Triton override
-        if FP16_MATMUL_HEURISTIC_CONDITION or envs.APHRODITE_BATCH_INVARIANT:
+        if FP16_MATMUL_HEURISTIC_CONDITION or envs.SONAR_BATCH_INVARIANT:
             out = ops.awq_dequantize(qweight, scales, qzeros, 0, 0, 0)
             out = torch.matmul(reshaped_x, out)
         else:

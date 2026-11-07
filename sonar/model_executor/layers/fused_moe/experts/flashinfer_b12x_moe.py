@@ -5,23 +5,23 @@ from typing import Any
 
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.config import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEParallelConfig,
     FusedMoEQuantConfig,
 )
-from aphrodite.model_executor.layers.fused_moe.topk_weight_and_reduce import (
+from sonar.model_executor.layers.fused_moe.topk_weight_and_reduce import (
     TopKWeightAndReduceNoOP,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     kNvfp4Dynamic,
     kNvfp4Static,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.flashinfer import (
+from sonar.platforms import current_platform
+from sonar.utils.flashinfer import (
     flashinfer_convert_sf_to_mma_layout,
     has_flashinfer_b12x_moe,
 )
@@ -88,7 +88,7 @@ class FlashInferB12xExperts(mk.FusedMoEExpertsModular):
 
     def process_weights_after_loading(self, layer: torch.nn.Module) -> None:
         # Normalise block scales to absorb the per-expert weight global scale
-        # (w_gs).  Aphrodite's NVFP4 convention stores:
+        # (w_gs).  Sonar's NVFP4 convention stores:
         #   block_scale = max_abs * w_gs / fp4_max,  g1_alphas = 1/w_gs
         # The SM12x kernel treats w1_alpha (= g1_alphas) as a per-expert weight
         # dequant multiplier separate from input_gs (activation scale).  We bake

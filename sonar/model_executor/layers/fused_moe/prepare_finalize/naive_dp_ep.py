@@ -5,18 +5,18 @@ from contextlib import contextmanager
 
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite.distributed import get_ep_group
-from aphrodite.model_executor.layers.fused_moe.config import FusedMoEQuantConfig
-from aphrodite.model_executor.layers.fused_moe.topk_weight_and_reduce import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar.distributed import get_ep_group
+from sonar.model_executor.layers.fused_moe.config import FusedMoEQuantConfig
+from sonar.model_executor.layers.fused_moe.topk_weight_and_reduce import (
     TopKWeightAndReduceContiguous,
     TopKWeightAndReduceDelegate,
     TopKWeightAndReduceNoOP,
 )
-from aphrodite.model_executor.layers.fused_moe.utils import moe_kernel_quantize_input
-from aphrodite.platforms import current_platform
-from aphrodite.utils.flashinfer import nvfp4_block_scale_interleave
-from aphrodite.v1.worker.ubatching import (
+from sonar.model_executor.layers.fused_moe.utils import moe_kernel_quantize_input
+from sonar.platforms import current_platform
+from sonar.utils.flashinfer import nvfp4_block_scale_interleave
+from sonar.v1.worker.ubatching import (
     dbo_enabled,
     dbo_switch_to_compute_sync,
     dbo_yield_and_switch_from_compute_to_comm,

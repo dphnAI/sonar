@@ -21,9 +21,9 @@ from huggingface_hub.utils import (
     RevisionNotFoundError,
 )
 
-from aphrodite import envs
-from aphrodite.logger import init_logger
-from aphrodite.version import __version__ as APHRODITE_VERSION
+from sonar import envs
+from sonar.logger import init_logger
+from sonar.version import __version__ as SONAR_VERSION
 
 logger = init_logger(__name__)
 
@@ -31,21 +31,21 @@ _hf_api: HfApi | None = None
 
 
 def hf_api() -> HfApi:
-    """Return a shared HfApi instance tagged with Aphrodite's library info."""
+    """Return a shared HfApi instance tagged with Sonar's library info."""
     global _hf_api
     if _hf_api is None:
         _hf_api = HfApi(
-            library_name="aphrodite",
-            library_version=APHRODITE_VERSION,
+            library_name="sonar",
+            library_version=SONAR_VERSION,
         )
     return _hf_api
 
 
 def hf_fs() -> "huggingface_hub.HfFileSystem":
-    """Return a fresh HfFileSystem tagged with Aphrodite's library info."""
+    """Return a fresh HfFileSystem tagged with Sonar's library info."""
     return huggingface_hub.HfFileSystem(
-        library_name="aphrodite",
-        library_version=APHRODITE_VERSION,
+        library_name="sonar",
+        library_version=SONAR_VERSION,
     )
 
 
@@ -73,7 +73,7 @@ def resolve_revision(
         (local path, ModelScope, or any Hub error).
 
     """
-    if Path(repo_id).exists() or envs.APHRODITE_USE_MODELSCOPE:
+    if Path(repo_id).exists() or envs.SONAR_USE_MODELSCOPE:
         return revision
 
     try:
@@ -145,8 +145,8 @@ def list_repo_files(
             return [str(file.relative_to(local_path)) for file in local_path.rglob("*") if file.is_file()]
         # if model is remote, use hf_hub api to list files
         try:
-            if envs.APHRODITE_USE_MODELSCOPE:
-                from aphrodite.transformers_utils.utils import modelscope_list_repo_files
+            if envs.SONAR_USE_MODELSCOPE:
+                from sonar.transformers_utils.utils import modelscope_list_repo_files
 
                 return modelscope_list_repo_files(
                     repo_id,
@@ -272,7 +272,7 @@ def get_model_path(model: str | Path, revision: str | None = None):
         "revision": revision,
     }
 
-    if envs.APHRODITE_USE_MODELSCOPE:
+    if envs.SONAR_USE_MODELSCOPE:
         from modelscope.hub.snapshot_download import snapshot_download
 
         return snapshot_download(model_id=model, **common_kwargs)
@@ -294,7 +294,7 @@ def get_subfolder_path(
     if os.path.isdir(model):
         return os.path.join(model, subfolder)
     # Avoid circular import
-    from aphrodite.model_executor.model_loader.weight_utils import get_lock
+    from sonar.model_executor.model_loader.weight_utils import get_lock
 
     with get_lock(model, cache_dir):
         snapshot = hf_api().snapshot_download(
@@ -352,7 +352,7 @@ def _snapshot_non_weight_files(
     token: str | bool | None,
 ) -> str:
     # Avoid circular import
-    from aphrodite.model_executor.model_loader.weight_utils import get_lock
+    from sonar.model_executor.model_loader.weight_utils import get_lock
 
     with get_lock(repo_id, cache_dir):
         return hf_api().snapshot_download(
@@ -378,7 +378,7 @@ def get_non_weight_snapshot_path(
     listing). Returns `repo_id` unchanged if it is local or cannot be fetched, so
     Transformers handles it as before. Failures are not cached, so they are retried.
     """
-    if envs.APHRODITE_USE_MODELSCOPE or Path(repo_id).exists():
+    if envs.SONAR_USE_MODELSCOPE or Path(repo_id).exists():
         return repo_id
     # Normalise so that `None` and "main" share a cache entry
     revision = revision or huggingface_hub.constants.DEFAULT_REVISION

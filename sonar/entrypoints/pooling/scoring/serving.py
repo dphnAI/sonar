@@ -3,14 +3,14 @@
 
 from fastapi.responses import JSONResponse, Response
 
-from aphrodite import PoolingParams
-from aphrodite.engine.protocol import EngineClient
-from aphrodite.entrypoints.serve.engine.protocol import UsageInfo
-from aphrodite.logger import init_logger
-from aphrodite.outputs import PoolingRequestOutput, ScoringRequestOutput
-from aphrodite.tasks import SCORE_TYPE_MAP, SupportedTask
-from aphrodite.utils import random_uuid
-from aphrodite.v1.pool.late_interaction import (
+from sonar import PoolingParams
+from sonar.engine.protocol import EngineClient
+from sonar.entrypoints.serve.engine.protocol import UsageInfo
+from sonar.logger import init_logger
+from sonar.outputs import PoolingRequestOutput, ScoringRequestOutput
+from sonar.tasks import SCORE_TYPE_MAP, SupportedTask
+from sonar.utils import random_uuid
+from sonar.v1.pool.late_interaction import (
     build_late_interaction_doc_params,
     build_late_interaction_query_params,
 )

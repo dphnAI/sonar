@@ -10,18 +10,18 @@ import numpy as np
 import pytest
 from prometheus_client import REGISTRY, Counter, Gauge, Histogram
 
-from aphrodite.config import KVTransferConfig
-from aphrodite.distributed.kv_transfer.kv_connector.v1.metrics import KVConnectorProm
-from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connector import (
+from sonar.config import KVTransferConfig
+from sonar.distributed.kv_transfer.kv_connector.v1.metrics import KVConnectorProm
+from sonar.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connector import (
     MooncakeConnector,
     MooncakeConnectorWorker,
     SendBlockMeta,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.stats import (
+from sonar.distributed.kv_transfer.kv_connector.v1.mooncake.stats import (
     MooncakeKVConnectorStats,
     MooncakePromMetrics,
 )
-from aphrodite.v1.metrics.prometheus import unregister_aphrodite_metrics
+from sonar.v1.metrics.prometheus import unregister_sonar_metrics
 
 
 def test_is_empty_on_fresh_stats():
@@ -299,10 +299,10 @@ TEST_MODEL = "test-model"
 
 @pytest.fixture(autouse=True)
 def _clean_registry():
-    """APHRODITE metrics share the process-wide registry, so drop them per test."""
-    unregister_aphrodite_metrics()
+    """SONAR metrics share the process-wide registry, so drop them per test."""
+    unregister_sonar_metrics()
     yield
-    unregister_aphrodite_metrics()
+    unregister_sonar_metrics()
 
 
 def _labels(engine_idx: int = 0) -> dict[str, str]:
@@ -313,7 +313,7 @@ def _sample(series: str, engine_idx: int = 0) -> float | None:
     return REGISTRY.get_sample_value(series, _labels(engine_idx))
 
 
-def _fake_aphrodite_config() -> Any:
+def _fake_sonar_config() -> Any:
     return SimpleNamespace(kv_transfer_config=SimpleNamespace())
 
 
@@ -321,7 +321,7 @@ def _build_prom_metrics(
     per_engine_labelvalues: dict[int, list[object]],
 ) -> MooncakePromMetrics:
     prom_metrics = MooncakeConnector.build_prom_metrics(
-        aphrodite_config=_fake_aphrodite_config(),  # type: ignore[arg-type]
+        sonar_config=_fake_sonar_config(),  # type: ignore[arg-type]
         metric_types={Gauge: Gauge, Counter: Counter, Histogram: Histogram},
         labelnames=["model_name", "engine"],
         per_engine_labelvalues=per_engine_labelvalues,
@@ -355,7 +355,7 @@ def exported_series():
 def test_kv_connector_prom_wires_the_mooncake_metrics():
     """The production entry point resolves the connector and builds its metrics."""
     prom = KVConnectorProm(
-        aphrodite_config=SimpleNamespace(
+        sonar_config=SimpleNamespace(
             kv_transfer_config=KVTransferConfig(kv_connector="MooncakeConnector", kv_role="kv_producer")
         ),
         labelnames=["model_name", "engine"],
@@ -369,19 +369,19 @@ def test_kv_connector_prom_wires_the_mooncake_metrics():
 def test_transfer_histograms_are_exported():
     # One distinct sum per histogram, so a series fed by the wrong stats key
     # cannot pass.
-    assert _sample("aphrodite:mooncake_xfer_time_seconds_count") == 2
-    assert _sample("aphrodite:mooncake_xfer_time_seconds_sum") == 2.0 + 0.001
+    assert _sample("sonar:mooncake_xfer_time_seconds_count") == 2
+    assert _sample("sonar:mooncake_xfer_time_seconds_sum") == 2.0 + 0.001
     # 0.001s falls into the lowest bucket (0.005s), 2.0s past the last edge.
-    assert REGISTRY.get_sample_value("aphrodite:mooncake_xfer_time_seconds_bucket", {**_labels(), "le": "0.005"}) == 1
-    assert _sample("aphrodite:mooncake_bytes_transferred_sum") == 1024 + 2048
-    assert _sample("aphrodite:mooncake_num_descriptors_sum") == 4 + 6
+    assert REGISTRY.get_sample_value("sonar:mooncake_xfer_time_seconds_bucket", {**_labels(), "le": "0.005"}) == 1
+    assert _sample("sonar:mooncake_bytes_transferred_sum") == 1024 + 2048
+    assert _sample("sonar:mooncake_num_descriptors_sum") == 4 + 6
 
 
 @pytest.mark.usefixtures("exported_series")
 def test_failure_counters_are_exported():
-    assert _sample("aphrodite:mooncake_num_failed_transfers_total") == 1
-    assert _sample("aphrodite:mooncake_num_failed_recvs_total") == 2
-    assert _sample("aphrodite:mooncake_num_kv_expired_reqs_total") == 3
+    assert _sample("sonar:mooncake_num_failed_transfers_total") == 1
+    assert _sample("sonar:mooncake_num_failed_recvs_total") == 2
+    assert _sample("sonar:mooncake_num_kv_expired_reqs_total") == 3
 
 
 def test_samples_are_routed_to_the_reported_engine():
@@ -389,10 +389,10 @@ def test_samples_are_routed_to_the_reported_engine():
 
     metrics.observe(_recorded_stats(), engine_idx=1)
 
-    assert _sample("aphrodite:mooncake_xfer_time_seconds_count", engine_idx=0) == 0
-    assert _sample("aphrodite:mooncake_xfer_time_seconds_count", engine_idx=1) == 2
-    assert _sample("aphrodite:mooncake_num_failed_recvs_total", engine_idx=0) == 0
-    assert _sample("aphrodite:mooncake_num_failed_recvs_total", engine_idx=1) == 2
+    assert _sample("sonar:mooncake_xfer_time_seconds_count", engine_idx=0) == 0
+    assert _sample("sonar:mooncake_xfer_time_seconds_count", engine_idx=1) == 2
+    assert _sample("sonar:mooncake_num_failed_recvs_total", engine_idx=0) == 0
+    assert _sample("sonar:mooncake_num_failed_recvs_total", engine_idx=1) == 2
 
 
 def test_observe_rejects_a_snapshot_missing_a_declared_key():

@@ -8,21 +8,21 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from aphrodite import _custom_ops as ops
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, CacheConfig, get_current_aphrodite_config
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import ColumnParallelLinear, ReplicatedLinear
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar import _custom_ops as ops
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import CacheConfig, SonarConfig, get_current_sonar_config
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import ColumnParallelLinear, ReplicatedLinear
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.model_loader.mtp_validation import (
+from sonar.model_executor.model_loader.mtp_validation import (
     is_mtp_completeness_check_enabled,
 )
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
+from sonar.model_executor.model_loader.weight_utils import default_weight_loader
 
 from .gemma4_mtp import Gemma4MTPAttention, Gemma4MTPDecoderLayer
 from .qwen3_dflash import (
@@ -132,7 +132,7 @@ class Gemma4DSparkDecoderLayer(Gemma4MTPDecoderLayer):
         prefix: str,
     ) -> None:
         super().__init__(config, cache_config=cache_config, quant_config=quant_config, prefix=prefix)
-        get_current_aphrodite_config().compilation_config.static_forward_context.pop(
+        get_current_sonar_config().compilation_config.static_forward_context.pop(
             f"{prefix}.self_attn.attn",
             None,
         )
@@ -148,16 +148,16 @@ class Gemma4DSparkDecoderLayer(Gemma4MTPDecoderLayer):
 class Gemma4DSparkModel(DFlashQwen3Model):
     """Gemma4 DSpark draft backbone (Gemma4 layers + DSpark Markov head)."""
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         nn.Module.__init__(self)
-        assert aphrodite_config.speculative_config is not None
-        config = aphrodite_config.speculative_config.draft_model_config.hf_config
+        assert sonar_config.speculative_config is not None
+        config = sonar_config.speculative_config.draft_model_config.hf_config
         self.config = config
         self.use_aux_hidden_state = True
         self.target_layer_ids = tuple(getattr(config, "dspark_target_layer_ids", None) or config.target_layer_ids)
-        current_aphrodite_config = get_current_aphrodite_config()
-        cache_config = current_aphrodite_config.cache_config
-        quant_config = get_draft_quant_config(aphrodite_config)
+        current_sonar_config = get_current_sonar_config()
+        cache_config = current_sonar_config.cache_config
+        quant_config = get_draft_quant_config(sonar_config)
 
         self.embed_tokens = VocabParallelEmbedding(
             config.vocab_size,
@@ -166,7 +166,7 @@ class Gemma4DSparkModel(DFlashQwen3Model):
         )
         self.register_buffer(
             "normalizer",
-            torch.tensor(config.hidden_size**0.5, dtype=aphrodite_config.model_config.dtype),
+            torch.tensor(config.hidden_size**0.5, dtype=sonar_config.model_config.dtype),
             persistent=False,
         )
         self.fc = ReplicatedLinear(
@@ -290,13 +290,13 @@ class Gemma4DSparkForCausalLM(Qwen3DSparkForCausalLM):
     dspark_shares_target_embeddings = False
     packed_modules_mapping = {"gate_up_proj": ["gate_proj", "up_proj"]}
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         nn.Module.__init__(self)
-        assert aphrodite_config.speculative_config is not None
-        self.draft_model_config = aphrodite_config.speculative_config.draft_model_config
+        assert sonar_config.speculative_config is not None
+        self.draft_model_config = sonar_config.speculative_config.draft_model_config
         self.config = self.draft_model_config.hf_config
         self.model = Gemma4DSparkModel(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             prefix=maybe_prefix(prefix, "model"),
         )
         self.lm_head = ParallelLMHead(

@@ -4,11 +4,11 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use aphrodite_parser::tool::Tool;
-use aphrodite_parser::tool::test_utils::test_tools;
-use aphrodite_parser::unified::Gemma4UnifiedParser;
-use aphrodite_tokenizer::test_utils::TestTokenizer;
 use criterion::{BatchSize, Criterion, Throughput, black_box, criterion_group, criterion_main};
+use sonar_parser::tool::Tool;
+use sonar_parser::tool::test_utils::test_tools;
+use sonar_parser::unified::Gemma4UnifiedParser;
+use sonar_tokenizer::test_utils::TestTokenizer;
 
 mod utils;
 use utils::{attributed_chunks, feed_unified_parser};

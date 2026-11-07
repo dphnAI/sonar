@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import pytest
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 
 @pytest.fixture(autouse=True)
@@ -17,8 +17,8 @@ def _mock_cpu_backend_block_sizes(monkeypatch):
     """
     if not current_platform.is_cpu():
         return
-    from aphrodite.v1.attention.backend import MultipleOf
-    from aphrodite.v1.attention.backends.cpu_attn import CPUAttentionBackend
+    from sonar.v1.attention.backend import MultipleOf
+    from sonar.v1.attention.backends.cpu_attn import CPUAttentionBackend
 
     monkeypatch.setattr(
         CPUAttentionBackend,

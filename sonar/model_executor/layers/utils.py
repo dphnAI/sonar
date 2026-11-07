@@ -8,17 +8,17 @@ from dataclasses import dataclass
 
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite import envs
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.logger import init_logger
-from aphrodite.platforms import CpuArchEnum, current_platform
-from aphrodite.utils.flashinfer import (
+from sonar import _custom_ops as ops
+from sonar import envs
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.logger import init_logger
+from sonar.platforms import CpuArchEnum, current_platform
+from sonar.utils.flashinfer import (
     flashinfer_bf16_mm,
     is_flashinfer_cutedsl_bf16_gemm_supported,
 )
-from aphrodite.utils.platform_utils import num_compute_units
-from aphrodite.utils.torch_utils import direct_register_custom_op
+from sonar.utils.platform_utils import num_compute_units
+from sonar.utils.torch_utils import direct_register_custom_op
 
 logger = init_logger(__name__)
 
@@ -63,7 +63,7 @@ def apply_penalties(
     output_bin_counts, output_mask = get_token_bin_counts_and_mask(output_tokens_tensor, vocab_size, num_seqs)
 
     # Apply repetition penalties as a custom op
-    from aphrodite._custom_ops import apply_repetition_penalties
+    from sonar._custom_ops import apply_repetition_penalties
 
     apply_repetition_penalties(logits, prompt_mask, output_mask, repetition_penalties)
 
@@ -144,12 +144,12 @@ _FLASHINFER_BF16_BACKENDS = {
 }
 
 
-def _get_flashinfer_bf16_backend(aphrodite_backend: str) -> _FlashInferBf16Backend:
-    backend_spec = _FLASHINFER_BF16_BACKENDS.get(aphrodite_backend)
+def _get_flashinfer_bf16_backend(sonar_backend: str) -> _FlashInferBf16Backend:
+    backend_spec = _FLASHINFER_BF16_BACKENDS.get(sonar_backend)
     if backend_spec is None:
         supported = ", ".join(sorted(_FLASHINFER_BF16_BACKENDS))
         raise ValueError(
-            f"Unsupported Aphrodite FlashInfer BF16 backend {aphrodite_backend!r}; supported backends: {supported}"
+            f"Unsupported Sonar FlashInfer BF16 backend {sonar_backend!r}; supported backends: {supported}"
         )
     return backend_spec
 
@@ -159,9 +159,9 @@ def cuda_flashinfer_bf16_gemm_impl(
     weight: torch.Tensor,
     bias: torch.Tensor | None,
     pdl: bool,
-    aphrodite_backend: str,
+    sonar_backend: str,
 ) -> torch.Tensor:
-    backend_spec = _get_flashinfer_bf16_backend(aphrodite_backend)
+    backend_spec = _get_flashinfer_bf16_backend(sonar_backend)
     if not backend_spec.can_implement(x, weight, bias):
         return torch.nn.functional.linear(x, weight, bias)
 
@@ -183,7 +183,7 @@ def cuda_flashinfer_bf16_gemm_fake(
     weight: torch.Tensor,
     bias: torch.Tensor | None,
     pdl: bool,
-    aphrodite_backend: str,
+    sonar_backend: str,
 ) -> torch.Tensor:
     return x.new_empty((*x.shape[:-1], weight.shape[0]))
 
@@ -194,15 +194,15 @@ def cuda_flashinfer_bf16_gemm(
     weight: torch.Tensor,
     bias: torch.Tensor | None = None,
     *,
-    aphrodite_backend: str,
+    sonar_backend: str,
     pdl: bool,
 ) -> torch.Tensor:
-    return torch.ops.aphrodite.cuda_flashinfer_bf16_gemm(
+    return torch.ops.sonar.cuda_flashinfer_bf16_gemm(
         x,
         weight,
         bias,
         pdl,
-        aphrodite_backend,
+        sonar_backend,
     )
 
 
@@ -214,7 +214,7 @@ direct_register_custom_op(
 
 
 def use_aiter_triton_gemm(n, m, k, dtype):
-    from aphrodite.platforms.rocm import on_gfx1250
+    from sonar.platforms.rocm import on_gfx1250
 
     if (
         not rocm_aiter_ops.is_triton_gemm_enabled()
@@ -297,7 +297,7 @@ def maybe_pad_weight_avoid_cache_aliasing(weight: torch.Tensor) -> torch.Tensor:
     Returns a view with the original shape whose row stride is one cache line
     wider, or ``weight`` unchanged when the pad does not apply.
     """
-    from aphrodite.platforms.rocm import on_gfx11
+    from sonar.platforms.rocm import on_gfx11
 
     if not (current_platform.is_rocm() and on_gfx11()):
         return weight
@@ -349,7 +349,7 @@ def _amd_l3_cache_bytes(cache_info: list | None = None) -> int | None:
 def _skinny_gemm_max_weight_bytes() -> int:
     """Effective skinny-GEMM weight cap in bytes, evaluated once.
 
-    APHRODITE_SKINNY_GEMM_MAX_WEIGHT_BYTES > 0 overrides; 0 (the default)
+    SONAR_SKINNY_GEMM_MAX_WEIGHT_BYTES > 0 overrides; 0 (the default)
     derives the cap from the hardware L3 (memory-side) cache size,
     falling back to _SKINNY_GEMM_FALLBACK_WEIGHT_BYTES where that cannot
     be read. lmhead_skinny_guard_permits runs per decode step, so this is
@@ -357,7 +357,7 @@ def _skinny_gemm_max_weight_bytes() -> int:
     Tests that change the env var or mock the hardware read must call
     cache_clear().
     """
-    env_bytes = envs.APHRODITE_SKINNY_GEMM_MAX_WEIGHT_BYTES
+    env_bytes = envs.SONAR_SKINNY_GEMM_MAX_WEIGHT_BYTES
     if env_bytes > 0:
         return env_bytes
     return _amd_l3_cache_bytes() or _SKINNY_GEMM_FALLBACK_WEIGHT_BYTES
@@ -370,7 +370,7 @@ def lmhead_skinny_guard_permits(weight: torch.Tensor, n: int) -> bool:
     the weight (MI355X measurements in the PR description), so past the
     last-level (memory-side) cache its effective bandwidth collapses:
     every pass beyond the first is an HBM round trip. Weights above
-    APHRODITE_SKINNY_GEMM_MAX_WEIGHT_BYTES (default: the memory-side cache
+    SONAR_SKINNY_GEMM_MAX_WEIGHT_BYTES (default: the memory-side cache
     size, read from the hardware once at first use, 256 MiB on MI355X;
     see envs.py for what the cap controls and how to tune it) therefore
     skip the skinny path at 1 < n <= 5 and fall through to the generic
@@ -394,7 +394,7 @@ def lmhead_skinny_guard_permits(weight: torch.Tensor, n: int) -> bool:
         _skinny_guard_warned.add(key)
         logger.warning(
             "lm_head skinny-GEMM guard engaged: weight %s (%d bytes) exceeds "
-            "the weight cap %d (APHRODITE_SKINNY_GEMM_MAX_WEIGHT_BYTES, or the "
+            "the weight cap %d (SONAR_SKINNY_GEMM_MAX_WEIGHT_BYTES, or the "
             "hardware memory-side cache size when unset) at n=%d; skipping "
             "wvSplitK for the generic GEMM fall-through",
             tuple(weight.shape),
@@ -406,14 +406,14 @@ def lmhead_skinny_guard_permits(weight: torch.Tensor, n: int) -> bool:
 
 
 def rocm_unquantized_gemm_impl(x: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor | None = None) -> torch.Tensor:
-    if envs.APHRODITE_BATCH_INVARIANT:
-        from aphrodite.model_executor.determinism.batch_invariant import (
+    if envs.SONAR_BATCH_INVARIANT:
+        from sonar.model_executor.determinism.batch_invariant import (
             linear_batch_invariant,
         )
 
         return linear_batch_invariant(x, weight, bias)
 
-    from aphrodite.platforms.rocm import on_gfx1x, on_gfx9, on_gfx11, on_gfx950, on_gfx1250
+    from sonar.platforms.rocm import on_gfx1x, on_gfx9, on_gfx11, on_gfx950, on_gfx1250
 
     n = x.numel() // x.size(-1)
     m = weight.shape[0]
@@ -426,7 +426,7 @@ def rocm_unquantized_gemm_impl(x: torch.Tensor, weight: torch.Tensor, bias: torc
     skinny_operands_compatible = weight.is_contiguous() and (bias is None or bias.is_contiguous())
 
     use_skinny_reduce_counting = (
-        envs.APHRODITE_ROCM_USE_SKINNY_GEMM
+        envs.SONAR_ROCM_USE_SKINNY_GEMM
         and on_gfx950()
         and x.dtype in [torch.float16, torch.bfloat16]
         and x.dim() == 2
@@ -445,7 +445,7 @@ def rocm_unquantized_gemm_impl(x: torch.Tensor, weight: torch.Tensor, bias: torc
         return gemm_a16w16(x, weight, bias)
 
     skinny_gemm_enabled = (
-        envs.APHRODITE_ROCM_USE_SKINNY_GEMM
+        envs.SONAR_ROCM_USE_SKINNY_GEMM
         and (on_gfx9() or on_gfx1x())
         # build (gfx9/gfx11 ISA); fall back to torch GEMM there.
         # TODO GFX1250: Include once skinny GEMM is supported on gfx1250
@@ -508,7 +508,7 @@ def rocm_unquantized_gemm(
     # through the device-agnostic fallback instead of hard-crashing.
     if not x.is_cuda:
         return default_unquantized_gemm(layer, x, weight, bias)
-    return torch.ops.aphrodite.rocm_unquantized_gemm(x, weight, bias)
+    return torch.ops.sonar.rocm_unquantized_gemm(x, weight, bias)
 
 
 direct_register_custom_op(
@@ -519,11 +519,11 @@ direct_register_custom_op(
 
 
 def cuda_skinny_unquantized_gemm_impl(x: torch.Tensor, weight: torch.Tensor) -> torch.Tensor:
-    from aphrodite.model_executor.kernels.linear.cute_dsl.skinny_gemm import (
+    from sonar.model_executor.kernels.linear.cute_dsl.skinny_gemm import (
         row_stride_ok,
         shape_dynamic_skinny_gemm,
     )
-    from aphrodite.model_executor.kernels.linear.cute_dsl.skinny_gemm_plans import (
+    from sonar.model_executor.kernels.linear.cute_dsl.skinny_gemm_plans import (
         get_skinny_gemm_plan,
     )
 
@@ -553,7 +553,7 @@ direct_register_custom_op(
 
 def maybe_use_skinny_gemm(layer: torch.nn.Module) -> None:
     """Mark ``layer`` for the skinny GEMM if its weight shape has a plan."""
-    from aphrodite.model_executor.kernels.linear.cute_dsl.skinny_gemm_plans import (
+    from sonar.model_executor.kernels.linear.cute_dsl.skinny_gemm_plans import (
         get_skinny_gemm_plan,
     )
 
@@ -562,7 +562,7 @@ def maybe_use_skinny_gemm(layer: torch.nn.Module) -> None:
         return
 
     if (
-        not envs.APHRODITE_BATCH_INVARIANT
+        not envs.SONAR_BATCH_INVARIANT
         and weight.dtype == torch.bfloat16
         and getattr(layer, "bias", None) is None
         and get_skinny_gemm_plan(*weight.shape) is not None
@@ -579,7 +579,7 @@ def cuda_unquantized_gemm(
     # The op picks the config from the token count at runtime, so the choice
     # stays out of the compiled graph.
     if bias is None and getattr(layer, "use_skinny_gemm", False) and x.is_cuda and x.dim() == 2:
-        return torch.ops.aphrodite.cuda_skinny_unquantized_gemm(x, weight)
+        return torch.ops.sonar.cuda_skinny_unquantized_gemm(x, weight)
     return torch.nn.functional.linear(x, weight, bias)
 
 
@@ -598,7 +598,7 @@ def warmup_rocm_skinny_gemm_workspaces(device: torch.device) -> None:
     inside a cudagraph capture, where it would be taken from the graph's private
     pool and its zero-fill would become a replayed graph node.
     """
-    from aphrodite.platforms.rocm import on_gfx950
+    from sonar.platforms.rocm import on_gfx950
 
     if not on_gfx950():
         return
@@ -708,7 +708,7 @@ def dispatch_cpu_unquantized_gemm(
         zen_weight = layer.weight.detach()
         is_prepacked = False
 
-        if envs.APHRODITE_ZENTORCH_WEIGHT_PREPACK and hasattr(torch.ops.zentorch, "zentorch_weight_prepack_for_linear"):
+        if envs.SONAR_ZENTORCH_WEIGHT_PREPACK and hasattr(torch.ops.zentorch, "zentorch_weight_prepack_for_linear"):
             zen_weight = torch.ops.zentorch.zentorch_weight_prepack_for_linear(zen_weight)
             is_prepacked = True
 
@@ -811,6 +811,6 @@ def dispatch_unquantized_gemm(
     )
     return functools.partial(
         cuda_flashinfer_bf16_gemm,
-        aphrodite_backend=linear_backend,
+        sonar_backend=linear_backend,
         pdl=current_platform.is_arch_support_pdl(),
     )

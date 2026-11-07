@@ -10,15 +10,15 @@
 
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.third_party.flash_linear_attention.ops.index import prepare_chunk_indices
-from aphrodite.third_party.flash_linear_attention.ops.op import (
+from sonar.platforms import current_platform
+from sonar.third_party.flash_linear_attention.ops.index import prepare_chunk_indices
+from sonar.third_party.flash_linear_attention.ops.op import (
     exp2,
     gather,
     make_tensor_descriptor,
 )
-from aphrodite.third_party.flash_linear_attention.ops.utils import is_gather_supported
-from aphrodite.triton_utils import tl, triton
+from sonar.third_party.flash_linear_attention.ops.utils import is_gather_supported
+from sonar.triton_utils import tl, triton
 
 from .chunk_intra_token_parallel import chunk_kda_fwd_intra_token_parallel
 
@@ -33,11 +33,7 @@ from .chunk_intra_token_parallel import chunk_kda_fwd_intra_token_parallel
     }
 )
 @triton.autotune(
-    configs=[
-        triton.Config({"BK": BK}, num_warps=num_warps)
-        for BK in [32, 64]
-        for num_warps in [1, 2, 4]
-    ],
+    configs=[triton.Config({"BK": BK}, num_warps=num_warps) for BK in [32, 64] for num_warps in [1, 2, 4]],
     key=["H", "HV", "K", "BC"],
 )
 @triton.jit(do_not_specialize=["T"])
@@ -160,9 +156,7 @@ def chunk_kda_fwd_kernel_inter_solve_fused(
                 b_k2 = desc_kk.load([i_tc2, i_k * BK]).to(tl.float32)
                 b_g2 = desc_gk.load([i_tc2, i_k * BK]).to(tl.float32)
                 # [BK]
-                b_gn2 = tl.load(g + i_tc2 * HV * K + o_k, mask=m_k, other=0).to(
-                    tl.float32
-                )
+                b_gn2 = tl.load(g + i_tc2 * HV * K + o_k, mask=m_k, other=0).to(tl.float32)
                 # [BC, BK]
                 b_gqn2 = tl.where(m_tc2[:, None], exp2(b_g2 - b_gn2[None, :]), 0)
                 b_qg2 = b_q2 * b_gqn2
@@ -183,9 +177,7 @@ def chunk_kda_fwd_kernel_inter_solve_fused(
                     b_k3 = desc_kk.load([i_tc3, i_k * BK]).to(tl.float32)
                     b_g3 = desc_gk.load([i_tc3, i_k * BK]).to(tl.float32)
                     # [BK]
-                    b_gn3 = tl.load(g + i_tc3 * HV * K + o_k, mask=m_k, other=0).to(
-                        tl.float32
-                    )
+                    b_gn3 = tl.load(g + i_tc3 * HV * K + o_k, mask=m_k, other=0).to(tl.float32)
                     # [BC, BK]
                     b_gqn3 = tl.where(m_tc3[:, None], exp2(b_g3 - b_gn3[None, :]), 0)
                     b_qg3 = b_q3 * b_gqn3
@@ -413,9 +405,7 @@ def chunk_kda_fwd_kernel_intra_sub_chunk(
     b_beta = tl.load(beta + o_c * HV, mask=m_c, other=0).to(tl.float32)
 
     if USE_GATHER:
-        b_gn = gather(
-            b_g, tl.full([1, BK], min(BC // 2, T - i_ti - 1), dtype=tl.int16), axis=0
-        )
+        b_gn = gather(b_g, tl.full([1, BK], min(BC // 2, T - i_ti - 1), dtype=tl.int16), axis=0)
     else:
         # caculate offset
         p_gn = g + (i_ti + min(BC // 2, T - i_ti - 1)) * HV * K + tl.arange(0, BK)
@@ -527,9 +517,7 @@ def chunk_kda_fwd_intra(
 
     # Step 2: Fused inter + solve_tril (works for both fixed-len and varlen)
     solve_tril_dot_precision = (
-        "tf32"
-        if current_platform.is_cuda() and current_platform.has_device_capability(80)
-        else "ieee"
+        "tf32" if current_platform.is_cuda() and current_platform.has_device_capability(80) else "ieee"
     )
     grid = (NT, B * HV)
     chunk_kda_fwd_kernel_inter_solve_fused[grid](

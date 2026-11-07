@@ -3,12 +3,12 @@
 
 import pytest
 
-from aphrodite._aiter_ops import is_aiter_found, rocm_aiter_ops
-from aphrodite.config import CompilationConfig, CompilationMode, CUDAGraphMode
-from aphrodite.envs import disable_envs_cache
-from aphrodite.platforms import current_platform
+from sonar._aiter_ops import is_aiter_found, rocm_aiter_ops
+from sonar.config import CompilationConfig, CompilationMode, CUDAGraphMode
+from sonar.envs import disable_envs_cache
+from sonar.platforms import current_platform
 
-from ....conftest import AphroditeRunner
+from ....conftest import SonarRunner
 from ....utils import (
     assert_rocm_custom_allreduce_backend_state_on_worker,
     multi_gpu_test,
@@ -18,7 +18,7 @@ PROMPTS = ["Hello, my name is", "The capital of France is"]
 
 
 def _run_generation(
-    aphrodite_runner: type[AphroditeRunner],
+    sonar_runner: type[SonarRunner],
     monkeypatch: pytest.MonkeyPatch,
     compilation_config: CompilationConfig,
     *,
@@ -28,17 +28,17 @@ def _run_generation(
     quick_reduce_quantization: str,
 ) -> list[tuple[list[int], str]]:
     with monkeypatch.context() as m:
-        m.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
-        m.setenv("APHRODITE_ROCM_USE_AITER", "1")
+        m.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")
+        m.setenv("SONAR_ROCM_USE_AITER", "1")
         m.setenv(
-            "APHRODITE_ROCM_USE_AITER_CUSTOM_AR",
+            "SONAR_ROCM_USE_AITER_CUSTOM_AR",
             "1" if use_aiter_custom_ar else "0",
         )
-        m.setenv("APHRODITE_ROCM_QUICK_REDUCE_QUANTIZATION", quick_reduce_quantization)
+        m.setenv("SONAR_ROCM_QUICK_REDUCE_QUANTIZATION", quick_reduce_quantization)
         disable_envs_cache()
         rocm_aiter_ops.refresh_env_variables()
 
-        with aphrodite_runner(
+        with sonar_runner(
             model,
             dtype="half",
             tensor_parallel_size=2,
@@ -79,23 +79,21 @@ def _run_generation(
     ],
 )
 def test_rocm_aiter_custom_ar_e2e(
-    aphrodite_runner: type[AphroditeRunner],
+    sonar_runner: type[SonarRunner],
     monkeypatch: pytest.MonkeyPatch,
     cudagraph_mode: CUDAGraphMode,
     quick_reduce_quantization: str,
     model: str,
     max_tokens: int,
 ):
-    compilation_mode = (
-        CompilationMode.NONE if cudagraph_mode == CUDAGraphMode.NONE else CompilationMode.APHRODITE_COMPILE
-    )
+    compilation_mode = CompilationMode.NONE if cudagraph_mode == CUDAGraphMode.NONE else CompilationMode.SONAR_COMPILE
     compilation_config = CompilationConfig(
         mode=compilation_mode,
         cudagraph_mode=cudagraph_mode,
     )
 
     baseline_generations = _run_generation(
-        aphrodite_runner,
+        sonar_runner,
         monkeypatch,
         compilation_config,
         model=model,
@@ -104,7 +102,7 @@ def test_rocm_aiter_custom_ar_e2e(
         quick_reduce_quantization=quick_reduce_quantization,
     )
     aiter_custom_ar_generations = _run_generation(
-        aphrodite_runner,
+        sonar_runner,
         monkeypatch,
         compilation_config,
         model=model,

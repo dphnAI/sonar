@@ -16,9 +16,9 @@ Skipped unless running on ROCm/gfx950 with FlyDSL importable.
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
-# Guard the ROCm-only import: `aphrodite.platforms.rocm` pulls in amdsmi and other
+# Guard the ROCm-only import: `sonar.platforms.rocm` pulls in amdsmi and other
 # ROCm-specific modules that are not importable on non-ROCm platforms, so it
 # must not be imported at module load time on CUDA/CPU CI.
 if not current_platform.is_rocm():
@@ -27,7 +27,7 @@ if not current_platform.is_rocm():
         allow_module_level=True,
     )
 
-from aphrodite.platforms.rocm import on_gfx950  # noqa: E402
+from sonar.platforms.rocm import on_gfx950  # noqa: E402
 
 if not on_gfx950():
     pytest.skip(
@@ -35,7 +35,7 @@ if not on_gfx950():
         allow_module_level=True,
     )
 
-from aphrodite.v1.attention.ops.flydsl_turboquant_decode import (  # noqa: E402
+from sonar.v1.attention.ops.flydsl_turboquant_decode import (  # noqa: E402
     flydsl_turboquant_decode_attention,
     is_flydsl_available,
 )

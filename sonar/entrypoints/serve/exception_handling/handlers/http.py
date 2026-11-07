@@ -5,8 +5,8 @@ from http import HTTPStatus
 from fastapi import HTTPException, Request
 from starlette.responses import JSONResponse
 
-from aphrodite.entrypoints.serve.engine.protocol import ErrorInfo, ErrorResponse
-from aphrodite.logger import init_logger
+from sonar.entrypoints.serve.engine.protocol import ErrorInfo, ErrorResponse
+from sonar.logger import init_logger
 
 from ..utils import sanitize_message
 

@@ -6,8 +6,8 @@ from unittest.mock import patch
 
 import pytest
 
-import aphrodite.envs as envs
-from aphrodite.envs import (
+import sonar.envs as envs
+from sonar.envs import (
     disable_envs_cache,
     enable_envs_cache,
     env_list_with_choices,
@@ -15,7 +15,7 @@ from aphrodite.envs import (
     env_with_choices,
     environment_variables,
 )
-from aphrodite.exceptions import AphroditeValidationError
+from sonar.exceptions import SonarValidationError
 
 
 def test_object_storage_shm_default_name():
@@ -24,12 +24,12 @@ def test_object_storage_shm_default_name():
 
 
 def test_getattr_without_cache(monkeypatch: pytest.MonkeyPatch):
-    assert envs.APHRODITE_HOST_IP == ""
-    assert envs.APHRODITE_PORT is None
-    monkeypatch.setenv("APHRODITE_HOST_IP", "1.1.1.1")
-    monkeypatch.setenv("APHRODITE_PORT", "1234")
-    assert envs.APHRODITE_HOST_IP == "1.1.1.1"
-    assert envs.APHRODITE_PORT == 1234
+    assert envs.SONAR_HOST_IP == ""
+    assert envs.SONAR_PORT is None
+    monkeypatch.setenv("SONAR_HOST_IP", "1.1.1.1")
+    monkeypatch.setenv("SONAR_PORT", "1234")
+    assert envs.SONAR_HOST_IP == "1.1.1.1"
+    assert envs.SONAR_PORT == 1234
     # __getattr__ is not decorated with functools.cache
     assert not hasattr(envs.__getattr__, "cache_info")
 
@@ -37,87 +37,87 @@ def test_getattr_without_cache(monkeypatch: pytest.MonkeyPatch):
 def test_nixl_side_channel_host_is_not_compile_factor(
     monkeypatch: pytest.MonkeyPatch,
 ):
-    monkeypatch.setenv("APHRODITE_NIXL_SIDE_CHANNEL_HOST", "10.0.0.15")
+    monkeypatch.setenv("SONAR_NIXL_SIDE_CHANNEL_HOST", "10.0.0.15")
 
-    assert "APHRODITE_NIXL_SIDE_CHANNEL_HOST" not in envs.compile_factors()
+    assert "SONAR_NIXL_SIDE_CHANNEL_HOST" not in envs.compile_factors()
 
 
 def test_api_key_is_not_compile_factor(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setenv("APHRODITE_API_KEY", "sk-super-secret")
+    monkeypatch.setenv("SONAR_API_KEY", "sk-super-secret")
 
-    assert "APHRODITE_API_KEY" not in envs.compile_factors()
+    assert "SONAR_API_KEY" not in envs.compile_factors()
 
 
 def test_ray_bundle_indices_is_not_compile_factor(monkeypatch: pytest.MonkeyPatch):
     # Engines sharing a placement group get different bundle indices but
     # compile the same graphs, so they must share a cache key.
-    monkeypatch.setenv("APHRODITE_RAY_BUNDLE_INDICES", "4,5,6,7")
+    monkeypatch.setenv("SONAR_RAY_BUNDLE_INDICES", "4,5,6,7")
 
-    assert "APHRODITE_RAY_BUNDLE_INDICES" not in envs.compile_factors()
+    assert "SONAR_RAY_BUNDLE_INDICES" not in envs.compile_factors()
 
 
 def test_chat_template_fuel_is_not_compile_factor(monkeypatch: pytest.MonkeyPatch):
     # Only bounds chat template rendering in the Rust frontend.
-    monkeypatch.setenv("APHRODITE_CHAT_TEMPLATE_FUEL", "2000000")
+    monkeypatch.setenv("SONAR_CHAT_TEMPLATE_FUEL", "2000000")
 
-    assert "APHRODITE_CHAT_TEMPLATE_FUEL" not in envs.compile_factors()
+    assert "SONAR_CHAT_TEMPLATE_FUEL" not in envs.compile_factors()
 
 
 def test_p2p_side_channel_defaults_and_override(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.delenv("APHRODITE_P2P_SIDE_CHANNEL_HOST", raising=False)
-    monkeypatch.delenv("APHRODITE_P2P_SIDE_CHANNEL_PORT", raising=False)
-    assert envs.APHRODITE_P2P_SIDE_CHANNEL_HOST == "localhost"
-    assert envs.APHRODITE_P2P_SIDE_CHANNEL_PORT == 5710
+    monkeypatch.delenv("SONAR_P2P_SIDE_CHANNEL_HOST", raising=False)
+    monkeypatch.delenv("SONAR_P2P_SIDE_CHANNEL_PORT", raising=False)
+    assert envs.SONAR_P2P_SIDE_CHANNEL_HOST == "localhost"
+    assert envs.SONAR_P2P_SIDE_CHANNEL_PORT == 5710
 
-    monkeypatch.setenv("APHRODITE_P2P_SIDE_CHANNEL_HOST", "10.0.0.20")
-    monkeypatch.setenv("APHRODITE_P2P_SIDE_CHANNEL_PORT", "5799")
-    assert envs.APHRODITE_P2P_SIDE_CHANNEL_HOST == "10.0.0.20"
-    assert envs.APHRODITE_P2P_SIDE_CHANNEL_PORT == 5799
+    monkeypatch.setenv("SONAR_P2P_SIDE_CHANNEL_HOST", "10.0.0.20")
+    monkeypatch.setenv("SONAR_P2P_SIDE_CHANNEL_PORT", "5799")
+    assert envs.SONAR_P2P_SIDE_CHANNEL_HOST == "10.0.0.20"
+    assert envs.SONAR_P2P_SIDE_CHANNEL_PORT == 5799
 
 
 def test_p2p_side_channel_envs_are_not_compile_factors(
     monkeypatch: pytest.MonkeyPatch,
 ):
-    monkeypatch.setenv("APHRODITE_P2P_SIDE_CHANNEL_HOST", "10.0.0.20")
-    monkeypatch.setenv("APHRODITE_P2P_SIDE_CHANNEL_PORT", "5799")
+    monkeypatch.setenv("SONAR_P2P_SIDE_CHANNEL_HOST", "10.0.0.20")
+    monkeypatch.setenv("SONAR_P2P_SIDE_CHANNEL_PORT", "5799")
 
-    assert "APHRODITE_P2P_SIDE_CHANNEL_HOST" not in envs.compile_factors()
-    assert "APHRODITE_P2P_SIDE_CHANNEL_PORT" not in envs.compile_factors()
+    assert "SONAR_P2P_SIDE_CHANNEL_HOST" not in envs.compile_factors()
+    assert "SONAR_P2P_SIDE_CHANNEL_PORT" not in envs.compile_factors()
 
 
 def test_p2p_resource_limit_defaults_and_override(
     monkeypatch: pytest.MonkeyPatch,
 ):
-    monkeypatch.delenv("APHRODITE_P2P_MAX_PEERS", raising=False)
-    monkeypatch.delenv("APHRODITE_P2P_HANDSHAKE_TIMEOUT_S", raising=False)
-    monkeypatch.delenv("APHRODITE_P2P_IDLE_TIMEOUT_S", raising=False)
-    assert envs.APHRODITE_P2P_MAX_PEERS == 128
-    assert envs.APHRODITE_P2P_HANDSHAKE_TIMEOUT_S == 30
-    assert envs.APHRODITE_P2P_IDLE_TIMEOUT_S == 300
+    monkeypatch.delenv("SONAR_P2P_MAX_PEERS", raising=False)
+    monkeypatch.delenv("SONAR_P2P_HANDSHAKE_TIMEOUT_S", raising=False)
+    monkeypatch.delenv("SONAR_P2P_IDLE_TIMEOUT_S", raising=False)
+    assert envs.SONAR_P2P_MAX_PEERS == 128
+    assert envs.SONAR_P2P_HANDSHAKE_TIMEOUT_S == 30
+    assert envs.SONAR_P2P_IDLE_TIMEOUT_S == 300
 
-    monkeypatch.setenv("APHRODITE_P2P_MAX_PEERS", "64")
-    monkeypatch.setenv("APHRODITE_P2P_HANDSHAKE_TIMEOUT_S", "15")
-    monkeypatch.setenv("APHRODITE_P2P_IDLE_TIMEOUT_S", "60")
-    assert envs.APHRODITE_P2P_MAX_PEERS == 64
-    assert envs.APHRODITE_P2P_HANDSHAKE_TIMEOUT_S == 15
-    assert envs.APHRODITE_P2P_IDLE_TIMEOUT_S == 60
+    monkeypatch.setenv("SONAR_P2P_MAX_PEERS", "64")
+    monkeypatch.setenv("SONAR_P2P_HANDSHAKE_TIMEOUT_S", "15")
+    monkeypatch.setenv("SONAR_P2P_IDLE_TIMEOUT_S", "60")
+    assert envs.SONAR_P2P_MAX_PEERS == 64
+    assert envs.SONAR_P2P_HANDSHAKE_TIMEOUT_S == 15
+    assert envs.SONAR_P2P_IDLE_TIMEOUT_S == 60
 
 
 def test_pcie_transport_defaults_and_choices(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.delenv("APHRODITE_ALLREDUCE_PCIE_TRANSPORT", raising=False)
-    assert envs.APHRODITE_ALLREDUCE_PCIE_TRANSPORT == "paired"
+    monkeypatch.delenv("SONAR_ALLREDUCE_PCIE_TRANSPORT", raising=False)
+    assert envs.SONAR_ALLREDUCE_PCIE_TRANSPORT == "paired"
 
-    monkeypatch.setenv("APHRODITE_ALLREDUCE_PCIE_TRANSPORT", "host")
-    assert envs.APHRODITE_ALLREDUCE_PCIE_TRANSPORT == "host"
+    monkeypatch.setenv("SONAR_ALLREDUCE_PCIE_TRANSPORT", "host")
+    assert envs.SONAR_ALLREDUCE_PCIE_TRANSPORT == "host"
 
-    monkeypatch.setenv("APHRODITE_ALLREDUCE_PCIE_TRANSPORT", "automatic")
-    with pytest.raises(ValueError, match="APHRODITE_ALLREDUCE_PCIE_TRANSPORT"):
-        _ = envs.APHRODITE_ALLREDUCE_PCIE_TRANSPORT
+    monkeypatch.setenv("SONAR_ALLREDUCE_PCIE_TRANSPORT", "automatic")
+    with pytest.raises(ValueError, match="SONAR_ALLREDUCE_PCIE_TRANSPORT"):
+        _ = envs.SONAR_ALLREDUCE_PCIE_TRANSPORT
 
 
 def test_getattr_with_cache(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setenv("APHRODITE_HOST_IP", "1.1.1.1")
-    monkeypatch.setenv("APHRODITE_PORT", "1234")
+    monkeypatch.setenv("SONAR_HOST_IP", "1.1.1.1")
+    monkeypatch.setenv("SONAR_PORT", "1234")
     # __getattr__ is not decorated with functools.cache
     assert not hasattr(envs.__getattr__, "cache_info")
 
@@ -128,9 +128,9 @@ def test_getattr_with_cache(monkeypatch: pytest.MonkeyPatch):
     assert hasattr(envs.__getattr__, "cache_info")
     start_hits = envs.__getattr__.cache_info().hits
 
-    # 2 more hits due to APHRODITE_HOST_IP and APHRODITE_PORT accesses
-    assert envs.APHRODITE_HOST_IP == "1.1.1.1"
-    assert envs.APHRODITE_PORT == 1234
+    # 2 more hits due to SONAR_HOST_IP and SONAR_PORT accesses
+    assert envs.SONAR_HOST_IP == "1.1.1.1"
+    assert envs.SONAR_PORT == 1234
     assert envs.__getattr__.cache_info().hits == start_hits + 2
 
     # All environment variables are cached
@@ -144,23 +144,23 @@ def test_getattr_with_cache(monkeypatch: pytest.MonkeyPatch):
 
 
 def test_getattr_with_reset(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("APHRODITE_HOST_IP", "1.1.1.1")
+    monkeypatch.setenv("SONAR_HOST_IP", "1.1.1.1")
     # __getattr__ is not decorated with functools.cache
     assert not hasattr(envs.__getattr__, "cache_info")
 
     # Enable envs cache and ignore ongoing environment changes
     enable_envs_cache()
-    assert envs.APHRODITE_HOST_IP == "1.1.1.1"
+    assert envs.SONAR_HOST_IP == "1.1.1.1"
     # With cache enabled, the environment variable value is cached and unchanged
-    monkeypatch.setenv("APHRODITE_HOST_IP", "2.2.2.2")
-    assert envs.APHRODITE_HOST_IP == "1.1.1.1"
+    monkeypatch.setenv("SONAR_HOST_IP", "2.2.2.2")
+    assert envs.SONAR_HOST_IP == "1.1.1.1"
 
     disable_envs_cache()
-    assert envs.APHRODITE_HOST_IP == "2.2.2.2"
+    assert envs.SONAR_HOST_IP == "2.2.2.2"
     # After cache disabled, the environment variable value would be synced
     # with os.environ
-    monkeypatch.setenv("APHRODITE_HOST_IP", "3.3.3.3")
-    assert envs.APHRODITE_HOST_IP == "3.3.3.3"
+    monkeypatch.setenv("SONAR_HOST_IP", "3.3.3.3")
+    assert envs.SONAR_HOST_IP == "3.3.3.3"
 
 
 def test_is_envs_cache_enabled() -> None:
@@ -182,11 +182,11 @@ def test_is_envs_cache_enabled() -> None:
 
 def test_rust_bench_auto_path_missing_fails_fast() -> None:
     with (
-        patch.dict(os.environ, {"APHRODITE_USE_RUST_BENCH": "1"}, clear=True),
-        patch("aphrodite.envs.os.path.isfile", return_value=False),
-        pytest.raises(FileNotFoundError, match="aphrodite-rs binary was not found"),
+        patch.dict(os.environ, {"SONAR_USE_RUST_BENCH": "1"}, clear=True),
+        patch("sonar.envs.os.path.isfile", return_value=False),
+        pytest.raises(FileNotFoundError, match="sonar-rs binary was not found"),
     ):
-        environment_variables["APHRODITE_RUST_FRONTEND_PATH"]()
+        environment_variables["SONAR_RUST_FRONTEND_PATH"]()
 
 
 class TestEnvWithChoices:
@@ -264,17 +264,17 @@ class TestEnvWithChoices:
 
 
 def test_gdn_decode_kernel_env(monkeypatch: pytest.MonkeyPatch):
-    env_func = environment_variables["APHRODITE_GDN_DECODE_KERNEL"]
-    monkeypatch.delenv("APHRODITE_GDN_DECODE_KERNEL", raising=False)
+    env_func = environment_variables["SONAR_GDN_DECODE_KERNEL"]
+    monkeypatch.delenv("SONAR_GDN_DECODE_KERNEL", raising=False)
     assert env_func() == "cuda"
 
     for value in ("cuda", "triton"):
-        monkeypatch.setenv("APHRODITE_GDN_DECODE_KERNEL", value)
+        monkeypatch.setenv("SONAR_GDN_DECODE_KERNEL", value)
         assert env_func() == value
 
     for value in ("fused", "invalid"):
-        monkeypatch.setenv("APHRODITE_GDN_DECODE_KERNEL", value)
-        with pytest.raises(ValueError, match="APHRODITE_GDN_DECODE_KERNEL"):
+        monkeypatch.setenv("SONAR_GDN_DECODE_KERNEL", value)
+        with pytest.raises(ValueError, match="SONAR_GDN_DECODE_KERNEL"):
             env_func()
 
 
@@ -472,90 +472,90 @@ class TestEnvSetWithChoices:
             assert env_func() == {"option1", "option2"}
 
 
-class TestAphroditeConfigureLogging:
-    """Test cases for APHRODITE_CONFIGURE_LOGGING environment variable."""
+class TestSonarConfigureLogging:
+    """Test cases for SONAR_CONFIGURE_LOGGING environment variable."""
 
     def test_configure_logging_defaults_to_true(self):
-        """Test that APHRODITE_CONFIGURE_LOGGING defaults to True when not set."""
+        """Test that SONAR_CONFIGURE_LOGGING defaults to True when not set."""
         # Ensure the env var is not set
         with patch.dict(os.environ, {}, clear=False):
-            if "APHRODITE_CONFIGURE_LOGGING" in os.environ:
-                del os.environ["APHRODITE_CONFIGURE_LOGGING"]
+            if "SONAR_CONFIGURE_LOGGING" in os.environ:
+                del os.environ["SONAR_CONFIGURE_LOGGING"]
 
             # Clear cache if it exists
             if hasattr(envs.__getattr__, "cache_clear"):
                 envs.__getattr__.cache_clear()
 
-            result = envs.APHRODITE_CONFIGURE_LOGGING
+            result = envs.SONAR_CONFIGURE_LOGGING
             assert result is True
             assert isinstance(result, bool)
 
     def test_configure_logging_with_zero_string(self):
-        """Test that APHRODITE_CONFIGURE_LOGGING='0' evaluates to False."""
-        with patch.dict(os.environ, {"APHRODITE_CONFIGURE_LOGGING": "0"}):
+        """Test that SONAR_CONFIGURE_LOGGING='0' evaluates to False."""
+        with patch.dict(os.environ, {"SONAR_CONFIGURE_LOGGING": "0"}):
             # Clear cache if it exists
             if hasattr(envs.__getattr__, "cache_clear"):
                 envs.__getattr__.cache_clear()
 
-            result = envs.APHRODITE_CONFIGURE_LOGGING
+            result = envs.SONAR_CONFIGURE_LOGGING
             assert result is False
             assert isinstance(result, bool)
 
     def test_configure_logging_with_one_string(self):
-        """Test that APHRODITE_CONFIGURE_LOGGING='1' evaluates to True."""
-        with patch.dict(os.environ, {"APHRODITE_CONFIGURE_LOGGING": "1"}):
+        """Test that SONAR_CONFIGURE_LOGGING='1' evaluates to True."""
+        with patch.dict(os.environ, {"SONAR_CONFIGURE_LOGGING": "1"}):
             # Clear cache if it exists
             if hasattr(envs.__getattr__, "cache_clear"):
                 envs.__getattr__.cache_clear()
 
-            result = envs.APHRODITE_CONFIGURE_LOGGING
+            result = envs.SONAR_CONFIGURE_LOGGING
             assert result is True
             assert isinstance(result, bool)
 
     def test_configure_logging_with_invalid_value_raises_error(self):
-        """Test that invalid APHRODITE_CONFIGURE_LOGGING value raises ValueError."""
-        with patch.dict(os.environ, {"APHRODITE_CONFIGURE_LOGGING": "invalid"}):
+        """Test that invalid SONAR_CONFIGURE_LOGGING value raises ValueError."""
+        with patch.dict(os.environ, {"SONAR_CONFIGURE_LOGGING": "invalid"}):
             # Clear cache if it exists
             if hasattr(envs.__getattr__, "cache_clear"):
                 envs.__getattr__.cache_clear()
 
             with pytest.raises(ValueError, match="invalid literal for int"):
-                _ = envs.APHRODITE_CONFIGURE_LOGGING
+                _ = envs.SONAR_CONFIGURE_LOGGING
 
 
-class TestAphroditeMaxNSequences:
+class TestSonarMaxNSequences:
     def test_default_value(self):
-        """Test that APHRODITE_MAX_N_SEQUENCES defaults to 64."""
+        """Test that SONAR_MAX_N_SEQUENCES defaults to 64."""
         with patch.dict(os.environ, {}, clear=False):
-            os.environ.pop("APHRODITE_MAX_N_SEQUENCES", None)
+            os.environ.pop("SONAR_MAX_N_SEQUENCES", None)
             if hasattr(envs.__getattr__, "cache_clear"):
                 envs.__getattr__.cache_clear()
 
-            assert envs.APHRODITE_MAX_N_SEQUENCES == 16384
+            assert envs.SONAR_MAX_N_SEQUENCES == 16384
 
     def test_custom_value(self, monkeypatch: pytest.MonkeyPatch):
-        """Test that APHRODITE_MAX_N_SEQUENCES can be overridden."""
-        monkeypatch.setenv("APHRODITE_MAX_N_SEQUENCES", "128")
+        """Test that SONAR_MAX_N_SEQUENCES can be overridden."""
+        monkeypatch.setenv("SONAR_MAX_N_SEQUENCES", "128")
         if hasattr(envs.__getattr__, "cache_clear"):
             envs.__getattr__.cache_clear()
 
-        assert envs.APHRODITE_MAX_N_SEQUENCES == 128
+        assert envs.SONAR_MAX_N_SEQUENCES == 128
 
     def test_sampling_params_respects_limit(
         self,
         monkeypatch: pytest.MonkeyPatch,
     ):
         """Test that SamplingParams rejects n above the limit."""
-        from aphrodite.sampling_params import SamplingParams
+        from sonar.sampling_params import SamplingParams
 
-        monkeypatch.delenv("APHRODITE_MAX_N_SEQUENCES", raising=False)
+        monkeypatch.delenv("SONAR_MAX_N_SEQUENCES", raising=False)
         if hasattr(envs.__getattr__, "cache_clear"):
             envs.__getattr__.cache_clear()
 
-        max_n = envs.APHRODITE_MAX_N_SEQUENCES
+        max_n = envs.SONAR_MAX_N_SEQUENCES
         SamplingParams(n=max_n)
 
-        with pytest.raises(AphroditeValidationError):
+        with pytest.raises(SonarValidationError):
             SamplingParams(n=max_n + 1)
 
     def test_sampling_params_respects_custom_limit(
@@ -563,13 +563,13 @@ class TestAphroditeMaxNSequences:
         monkeypatch: pytest.MonkeyPatch,
     ):
         """Test that SamplingParams uses the overridden env var limit."""
-        from aphrodite.sampling_params import SamplingParams
+        from sonar.sampling_params import SamplingParams
 
-        monkeypatch.setenv("APHRODITE_MAX_N_SEQUENCES", "128")
+        monkeypatch.setenv("SONAR_MAX_N_SEQUENCES", "128")
         if hasattr(envs.__getattr__, "cache_clear"):
             envs.__getattr__.cache_clear()
 
         SamplingParams(n=128)
 
-        with pytest.raises(AphroditeValidationError):
+        with pytest.raises(SonarValidationError):
             SamplingParams(n=129)

@@ -2,11 +2,11 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """
 This file demonstrates the example usage of cpu offloading
-with LMCache in Aphrodite v1 or v0.
+with LMCache in Sonar v1 or v0.
 
 Usage:
 
-    Specify Aphrodite version
+    Specify Sonar version
 
     -v v0 : Use LMCacheConnector
             model = mistralai/Mistral-7B-Instruct-v0.2
@@ -31,13 +31,13 @@ from dataclasses import asdict
 
 from lmcache.v1.cache_engine import LMCacheEngineBuilder
 
-from aphrodite import LLM, SamplingParams
-from aphrodite.config import KVTransferConfig
-from aphrodite.distributed.kv_transfer.kv_connector.v1.lmcache_integration.aphrodite_v1_adapter import ENGINE_NAME
-from aphrodite.engine.arg_utils import EngineArgs
+from sonar import LLM, SamplingParams
+from sonar.config import KVTransferConfig
+from sonar.distributed.kv_transfer.kv_connector.v1.lmcache_integration.sonar_v1_adapter import ENGINE_NAME
+from sonar.engine.arg_utils import EngineArgs
 
 
-def setup_environment_variables(aphrodite_version: str):
+def setup_environment_variables(sonar_version: str):
     # LMCache-related environment variables
     # Use experimental features in LMCache
     os.environ["LMCACHE_USE_EXPERIMENTAL"] = "True"
@@ -47,20 +47,20 @@ def setup_environment_variables(aphrodite_version: str):
     os.environ["LMCACHE_LOCAL_CPU"] = "True"
     # Set local CPU memory limit to 5.0 GB
     os.environ["LMCACHE_MAX_LOCAL_CPU_SIZE"] = "5.0"
-    if aphrodite_version == "v0":
-        os.environ["APHRODITE_USE_V1"] = "0"
+    if sonar_version == "v0":
+        os.environ["SONAR_USE_V1"] = "0"
 
 
 @contextlib.contextmanager
-def build_llm_with_lmcache(lmcache_connector: str, model: str, aphrodite_version: str):
+def build_llm_with_lmcache(lmcache_connector: str, model: str, sonar_version: str):
     ktc = KVTransferConfig(
         kv_connector=lmcache_connector,
         kv_role="kv_both",
     )
     # Set GPU memory utilization to 0.8 for an A40 GPU with 40GB
     # memory. Reduce the value if your GPU has less memory.
-    # Note: LMCache supports chunked prefill (see Aphrodite#14505, LMCache#392).
-    if aphrodite_version == "v0":
+    # Note: LMCache supports chunked prefill (see Sonar#14505, LMCache#392).
+    if sonar_version == "v0":
         llm_args = EngineArgs(
             model=model,
             kv_transfer_config=ktc,
@@ -110,7 +110,7 @@ def parse_args():
         "--version",
         choices=["v0", "v1"],
         default="v1",
-        help="Specify Aphrodite version (default: v1)",
+        help="Specify Sonar version (default: v1)",
     )
     return parser.parse_args()
 

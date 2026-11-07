@@ -9,10 +9,10 @@ from dataclasses import asdict, dataclass
 
 import torch
 
-from aphrodite import LLM, SamplingParams
-from aphrodite.engine.arg_utils import EngineArgs
-from aphrodite.profiler import layerwise_profile
-from aphrodite.utils import FlexibleArgumentParser
+from sonar import LLM, SamplingParams
+from sonar.engine.arg_utils import EngineArgs
+from sonar.profiler import layerwise_profile
+from sonar.utils import FlexibleArgumentParser
 
 BATCH_SIZE_DEFAULT = 1
 PROMPT_LEN_DEFAULT = 256

@@ -8,13 +8,13 @@ from typing import TYPE_CHECKING
 
 import regex as re
 
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 if TYPE_CHECKING:
     import torch
 
-    from aphrodite.model_executor.layers.quantization.base_config import QuantizationConfig
-    from aphrodite.model_executor.layers.quantization.utils.quant_utils import QuantKey
+    from sonar.model_executor.layers.quantization.base_config import QuantizationConfig
+    from sonar.model_executor.layers.quantization.utils.quant_utils import QuantKey
 
 logger = init_logger(__name__)
 
@@ -27,8 +27,8 @@ def get_quark_ocp_mx_group_size(
     if quant_config is None:
         return None
 
-    from aphrodite.model_executor.layers.quantization.quark.quark import QuarkConfig
-    from aphrodite.model_executor.layers.quantization.quark.utils import should_ignore_layer
+    from sonar.model_executor.layers.quantization.quark.quark import QuarkConfig
+    from sonar.model_executor.layers.quantization.quark.utils import should_ignore_layer
 
     if not isinstance(quant_config, QuarkConfig):
         return None
@@ -72,7 +72,7 @@ def _get_effective_quant_keys(
         NotImplementedError: If the checkpoint format can not be determined.
 
     """
-    from aphrodite.model_executor.layers.linear import UnquantizedLinearMethod
+    from sonar.model_executor.layers.linear import UnquantizedLinearMethod
 
     online_quant_config = quant_config.online_quantization_config
     target = (
@@ -101,10 +101,10 @@ def get_checkpoint_quant_keys(
         NotImplementedError: If the checkpoint format can not be determined.
 
     """
-    from aphrodite.model_executor.layers.fused_moe import RoutedExperts
-    from aphrodite.model_executor.layers.quantization.modelopt import ModelOptMxFp8Config
-    from aphrodite.model_executor.layers.quantization.quark.quark import QuarkConfig
-    from aphrodite.model_executor.layers.quantization.utils.quant_utils import kMxfp8Static
+    from sonar.model_executor.layers.fused_moe import RoutedExperts
+    from sonar.model_executor.layers.quantization.modelopt import ModelOptMxFp8Config
+    from sonar.model_executor.layers.quantization.quark.quark import QuarkConfig
+    from sonar.model_executor.layers.quantization.utils.quant_utils import kMxfp8Static
 
     if isinstance(quant_config, QuarkConfig):
         weight_key, activation_key, _ = quant_config.get_quant_method_target(prefix, layer_type)
@@ -139,16 +139,16 @@ def is_shared_expert_quant_fse_compatible(
         A compatibility flag and, when incompatible, the reason.
 
     """
-    from aphrodite.model_executor.layers.quantization.fp8 import Fp8Config
-    from aphrodite.model_executor.layers.quantization.modelopt import ModelOptMxFp8Config
-    from aphrodite.model_executor.layers.quantization.quark.quark import QuarkConfig
-    from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+    from sonar.model_executor.layers.quantization.fp8 import Fp8Config
+    from sonar.model_executor.layers.quantization.modelopt import ModelOptMxFp8Config
+    from sonar.model_executor.layers.quantization.quark.quark import QuarkConfig
+    from sonar.model_executor.layers.quantization.utils.quant_utils import (
         is_layer_skipped,
         kMxfp4Static,
         kMxfp8Static,
     )
-    from aphrodite.models.deepseek_v4.quant_config import DeepseekV4FP8Config
-    from aphrodite.models.deepseek_v41.quant_config import (
+    from sonar.models.deepseek_v4.quant_config import DeepseekV4FP8Config
+    from sonar.models.deepseek_v41.quant_config import (
         DeepseekV4FP8Config as DeepseekV41FP8Config,
     )
 
@@ -161,8 +161,8 @@ def is_shared_expert_quant_fse_compatible(
     # Re-quantization of a pre-quantized checkpoint.
     online_quant_config = quant_config.online_quantization_config
     if online_quant_config is not None:
-        from aphrodite.model_executor.layers.fused_moe import RoutedExperts
-        from aphrodite.model_executor.layers.linear import LinearBase
+        from sonar.model_executor.layers.fused_moe import RoutedExperts
+        from sonar.model_executor.layers.linear import LinearBase
 
         online_quant_config.packed_modules_mapping = quant_config.packed_modules_mapping
         shared_prefixes = [f"{shared_expert_prefix}.{projection_name}" for projection_name in projection_names]
@@ -217,10 +217,10 @@ def is_shared_expert_quant_fse_compatible(
         )
 
     if isinstance(quant_config, (DeepseekV4FP8Config, DeepseekV41FP8Config)) and quant_config.expert_dtype == "fp4":
-        from aphrodite.config import get_current_aphrodite_config
-        from aphrodite.model_executor.models.utils import extract_layer_index
+        from sonar.config import get_current_sonar_config
+        from sonar.model_executor.models.utils import extract_layer_index
 
-        hf_config = get_current_aphrodite_config().model_config.hf_config
+        hf_config = get_current_sonar_config().model_config.hf_config
 
         # TODO: This is adapted from former `_shared_experts_are_fp4`, and
         # needs to be cleaned up this . There should not be Quark-specific
@@ -276,7 +276,7 @@ def is_shared_expert_quant_fse_compatible(
         )
 
     if isinstance(quant_config, QuarkConfig):
-        from aphrodite.model_executor.layers.quantization.quark.utils import (
+        from sonar.model_executor.layers.quantization.quark.utils import (
             should_ignore_layer,
         )
 

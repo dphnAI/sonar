@@ -9,9 +9,9 @@ import os
 
 import pytest
 
-from aphrodite import LLM, SamplingParams
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.lora.request import LoRARequest
+from sonar import LLM, SamplingParams
+from sonar.exceptions import SonarValidationError
+from sonar.lora.request import LoRARequest
 from tests.utils import multi_gpu_test
 
 MODEL_PATH = "Qwen/Qwen3-0.6B"
@@ -41,14 +41,14 @@ def format_chatml_messages(prompt: str, system_prompt: str = "You are a helpful 
 
 @pytest.fixture(autouse=True)
 def set_mrv2_env():
-    original = os.environ.get("APHRODITE_USE_V2_MODEL_RUNNER", "0")
-    os.environ["APHRODITE_USE_V2_MODEL_RUNNER"] = "1"
+    original = os.environ.get("SONAR_USE_V2_MODEL_RUNNER", "0")
+    os.environ["SONAR_USE_V2_MODEL_RUNNER"] = "1"
     yield
 
     if original is None:
-        os.environ.pop("APHRODITE_USE_V2_MODEL_RUNNER", None)
+        os.environ.pop("SONAR_USE_V2_MODEL_RUNNER", None)
     else:
-        os.environ["APHRODITE_USE_V2_MODEL_RUNNER"] = original
+        os.environ["SONAR_USE_V2_MODEL_RUNNER"] = original
 
 
 def make_add_lora_request(name: str, path: str):
@@ -121,7 +121,7 @@ def test_multi_loras_with_tp_sync():
 
     def reload_lora(name: str):
         """Reload a lora to simulate the case:
-        setting `APHRODITE_ALLOW_RUNTIME_LORA_UPDATING=true`
+        setting `SONAR_ALLOW_RUNTIME_LORA_UPDATING=true`
         for dynamic lora loading and unloading
         """
         remove_lora_response = llm.llm_engine.remove_lora(lora_id=LORA_NAME_ID_MAP[name])
@@ -182,7 +182,7 @@ def test_multiple_lora_requests():
     assert len(PROMPTS) == len(outputs)
 
     # Exception raised, if the size of params does not match the size of prompts
-    with pytest.raises(AphroditeValidationError):
+    with pytest.raises(SonarValidationError):
         outputs = llm.generate(PROMPTS, lora_request=lora_request[:1])
 
     # Single LoRARequest should be applied to every prompt

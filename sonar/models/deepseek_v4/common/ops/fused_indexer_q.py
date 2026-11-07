@@ -6,15 +6,15 @@ from typing import Any
 
 import torch
 
-from aphrodite.model_executor.warmup.jit_warmup import kernel_launcher
-from aphrodite.model_executor.warmup.jit_warmup_triton_helper import (
-    AphroditeTritonJitKernel,
+from sonar.model_executor.warmup.jit_warmup import kernel_launcher
+from sonar.model_executor.warmup.jit_warmup_triton_helper import (
     LaunchSpec,
+    SonarTritonJitKernel,
     TritonWarmupTensor,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.import_utils import has_cutedsl
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
+from sonar.utils.import_utils import has_cutedsl
 
 # MXFP4: 32 elements per block, packed 2 nibbles per byte, ue8m0 block scale.
 MXFP4_BLOCK_SIZE = 32
@@ -76,7 +76,7 @@ def _quantize_mxfp4_pair(x_lo, x_hi):
     return packed, ue8m0
 
 
-class FusedIndexerQRopeQuantTritonKernel(AphroditeTritonJitKernel["FusedIndexerQRopeQuantTritonKernel.CompileKey"]):
+class FusedIndexerQRopeQuantTritonKernel(SonarTritonJitKernel["FusedIndexerQRopeQuantTritonKernel.CompileKey"]):
     @dataclass(frozen=True)
     class CompileKey:
         dtype: torch.dtype
@@ -217,8 +217,8 @@ class FusedIndexerQRopeQuantTritonKernel(AphroditeTritonJitKernel["FusedIndexerQ
             use_explicit_fma=current_platform.is_rocm(),
         )
 
-    def get_warmup_keys(self, aphrodite_config: Any) -> list[CompileKey]:
-        hf_config = aphrodite_config.model_config.hf_config
+    def get_warmup_keys(self, sonar_config: Any) -> list[CompileKey]:
+        hf_config = sonar_config.model_config.hf_config
         num_heads = int(getattr(hf_config, "index_n_heads", 0) or 0)
         head_dim = int(getattr(hf_config, "index_head_dim", 0) or 0)
         rope_dim = int(getattr(hf_config, "qk_rope_head_dim", 0) or 0)
@@ -226,7 +226,7 @@ class FusedIndexerQRopeQuantTritonKernel(AphroditeTritonJitKernel["FusedIndexerQ
             return []
 
         return self._trace_dispatch(self.dispatch)(
-            dtype=aphrodite_config.model_config.dtype,
+            dtype=sonar_config.model_config.dtype,
             num_heads=num_heads,
             head_dim=head_dim,
             rope_dim=rope_dim,
@@ -302,16 +302,16 @@ class FusedIndexerQRopeQuantTritonKernel(AphroditeTritonJitKernel["FusedIndexerQ
         )
 
 
-def _indexer_weights_out_dtypes(aphrodite_config: Any) -> tuple[torch.dtype, ...]:
+def _indexer_weights_out_dtypes(sonar_config: Any) -> tuple[torch.dtype, ...]:
     """Weights dtypes the model's indexer layers ask for: fp32 for the dense
     scoring kernels, plus bf16 when the DeepSeek V4.1 sparse-logits indexer
     (`SparseMQAIndexer`) is enabled."""
-    if aphrodite_config.attention_config.indexer_sparse_logits:
+    if sonar_config.attention_config.indexer_sparse_logits:
         return (torch.float32, torch.bfloat16)
     return (torch.float32,)
 
 
-class FusedIndexerQRopeMxFp4TritonKernel(AphroditeTritonJitKernel["FusedIndexerQRopeMxFp4TritonKernel.CompileKey"]):
+class FusedIndexerQRopeMxFp4TritonKernel(SonarTritonJitKernel["FusedIndexerQRopeMxFp4TritonKernel.CompileKey"]):
     @dataclass(frozen=True)
     class CompileKey:
         dtype: torch.dtype
@@ -434,8 +434,8 @@ class FusedIndexerQRopeMxFp4TritonKernel(AphroditeTritonJitKernel["FusedIndexerQ
             mxfp4_block=MXFP4_BLOCK_SIZE,
         )
 
-    def get_warmup_keys(self, aphrodite_config: Any) -> list[CompileKey]:
-        hf_config = aphrodite_config.model_config.hf_config
+    def get_warmup_keys(self, sonar_config: Any) -> list[CompileKey]:
+        hf_config = sonar_config.model_config.hf_config
         num_heads = int(getattr(hf_config, "index_n_heads", 0) or 0)
         head_dim = int(getattr(hf_config, "index_head_dim", 0) or 0)
         rope_dim = int(getattr(hf_config, "qk_rope_head_dim", 0) or 0)
@@ -443,8 +443,8 @@ class FusedIndexerQRopeMxFp4TritonKernel(AphroditeTritonJitKernel["FusedIndexerQ
             return []
 
         return self._trace_dispatch(self.dispatch)(
-            dtype=aphrodite_config.model_config.dtype,
-            weights_out_dtype=_indexer_weights_out_dtypes(aphrodite_config),
+            dtype=sonar_config.model_config.dtype,
+            weights_out_dtype=_indexer_weights_out_dtypes(sonar_config),
             num_heads=num_heads,
             head_dim=head_dim,
             rope_dim=rope_dim,
@@ -606,7 +606,7 @@ def fused_indexer_q_rope_quant(
         assert index_q_scale.shape == scale_shape
         if has_cutedsl():
             # lazily import, otherwise some tests fail due to CUDA driver init failure.
-            from aphrodite.models.deepseek_v4.nvidia.ops.fused_indexer_q_cutedsl import (
+            from sonar.models.deepseek_v4.nvidia.ops.fused_indexer_q_cutedsl import (
                 _INDEXER_Q_MXFP4_KERNEL,
             )
 
@@ -623,7 +623,7 @@ def fused_indexer_q_rope_quant(
             )
         elif current_platform.is_xpu():
             assert weights_out_dtype == torch.float32, weights_out_dtype
-            torch.ops.aphrodite.xpu_deepseek_fused_indexer_q_rope_mxfp4(
+            torch.ops.sonar.xpu_deepseek_fused_indexer_q_rope_mxfp4(
                 index_q,
                 positions,
                 index_q_cos_sin_cache,
@@ -668,7 +668,7 @@ def fused_indexer_q_rope_quant(
         assert index_q_fp8.shape == index_q.shape
     if has_cutedsl():
         # lazily import, otherwise some tests fail due to CUDA driver init failure.
-        from aphrodite.models.deepseek_v4.nvidia.ops.fused_indexer_q_cutedsl import (
+        from sonar.models.deepseek_v4.nvidia.ops.fused_indexer_q_cutedsl import (
             _INDEXER_Q_FP8_KERNEL,
         )
 
@@ -683,7 +683,7 @@ def fused_indexer_q_rope_quant(
             weights_out=index_weights_out,
         )
     elif current_platform.is_xpu():
-        torch.ops.aphrodite.xpu_deepseek_fused_indexer_q_rope_fp8(
+        torch.ops.sonar.xpu_deepseek_fused_indexer_q_rope_fp8(
             index_q,
             positions,
             index_q_cos_sin_cache,
@@ -694,7 +694,7 @@ def fused_indexer_q_rope_quant(
             index_weights_out,
         )
     elif current_platform.is_cpu():
-        from aphrodite._custom_ops import fused_indexer_q_rope_quant_cpu
+        from sonar._custom_ops import fused_indexer_q_rope_quant_cpu
 
         fused_indexer_q_rope_quant_cpu(
             positions.contiguous(),

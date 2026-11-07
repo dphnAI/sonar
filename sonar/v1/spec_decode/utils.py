@@ -4,18 +4,18 @@ from typing import Any
 
 import torch
 
-from aphrodite.model_executor.warmup.jit_warmup import (
+from sonar.model_executor.warmup.jit_warmup import (
     WarmupChoices,
     WarmupIntRange,
 )
-from aphrodite.model_executor.warmup.jit_warmup_triton_helper import (
+from sonar.model_executor.warmup.jit_warmup_triton_helper import (
     DispatchSpec,
     TritonWarmupTensor,
     triton_kernel_dispatcher_with_warmup,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
-from aphrodite.v1.attention.backends.utils import (
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
+from sonar.v1.attention.backends.utils import (
     CommonAttentionMetadata,
 )
 

@@ -7,18 +7,18 @@ from typing import Any
 from pydantic import ConfigDict
 from pydantic.dataclasses import dataclass
 
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 
 
 @dataclass(config=ConfigDict(arbitrary_types_allowed=True))
 class ModelArchitectureConfig:
-    """Configuration for model architecture that required by Aphrodite runtime."""
+    """Configuration for model architecture that required by Sonar runtime."""
 
     architectures: list[str]
     """List of model architecture class names (e.g., ['LlamaForCausalLM']).
-       It can be None upon calling `aphrodite_config.with_hf_config(config.text_config)`"""
+       It can be None upon calling `sonar_config.with_hf_config(config.text_config)`"""
 
     model_type: str
     """Model type identifier (e.g., 'llama', 'gpt_oss')."""
@@ -133,6 +133,6 @@ class ModelArchitectureConfig:
             raise ValueError(
                 f"got {len(layers)} per-layer configs for a model with {merged['total_num_hidden_layers']} layers"
             )
-        # A checkpoint can be heterogeneous over attributes Aphrodite never reads, in
+        # A checkpoint can be heterogeneous over attributes Sonar never reads, in
         # which case there is nothing to keep the layers apart for.
         return cls(**merged, per_layer_overrides=overrides if any(overrides) else None)

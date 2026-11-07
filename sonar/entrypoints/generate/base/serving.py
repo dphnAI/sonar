@@ -10,36 +10,36 @@ from typing import ClassVar, Generic, TypeVar
 from fastapi import Request
 from pydantic import ConfigDict
 
-from aphrodite import RequestOutput
-from aphrodite.engine.protocol import EngineClient
-from aphrodite.entrypoints.generate.base.protocol import (
+from sonar import RequestOutput
+from sonar.engine.protocol import EngineClient
+from sonar.entrypoints.generate.base.protocol import (
     PerRequestMetrics,
     SpeculativeDecodingMetrics,
 )
-from aphrodite.entrypoints.generate.beam_search.online import BeamSearchOnlineMixin
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-from aphrodite.entrypoints.openai.completion.protocol import CompletionRequest
-from aphrodite.entrypoints.openai.models.serving import OpenAIServingModels
-from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
-from aphrodite.entrypoints.serve.engine.protocol import ErrorResponse
-from aphrodite.entrypoints.serve.engine.serving import BaseServing
-from aphrodite.entrypoints.serve.engine.typing import AnyRequest
-from aphrodite.entrypoints.serve.utils.request_logger import RequestLogger
-from aphrodite.exceptions import GenerationError
-from aphrodite.inputs import EngineInput
-from aphrodite.logger import init_logger
-from aphrodite.logprobs import Logprob, PromptLogprobs
-from aphrodite.lora.request import LoRARequest
-from aphrodite.tokenizers import TokenizerLike
-from aphrodite.tokenizers.detokenizer_utils import convert_ids_list_to_tokens
-from aphrodite.v1.metrics.stats import RequestStateStats
+from sonar.entrypoints.generate.beam_search.online import BeamSearchOnlineMixin
+from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+from sonar.entrypoints.openai.completion.protocol import CompletionRequest
+from sonar.entrypoints.openai.models.serving import OpenAIServingModels
+from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
+from sonar.entrypoints.serve.engine.protocol import ErrorResponse
+from sonar.entrypoints.serve.engine.serving import BaseServing
+from sonar.entrypoints.serve.engine.typing import AnyRequest
+from sonar.entrypoints.serve.utils.request_logger import RequestLogger
+from sonar.exceptions import GenerationError
+from sonar.inputs import EngineInput
+from sonar.logger import init_logger
+from sonar.logprobs import Logprob, PromptLogprobs
+from sonar.lora.request import LoRARequest
+from sonar.tokenizers import TokenizerLike
+from sonar.tokenizers.detokenizer_utils import convert_ids_list_to_tokens
+from sonar.v1.metrics.stats import RequestStateStats
 
 logger = init_logger(__name__)
 
 RequestT = TypeVar("RequestT", bound=AnyRequest)
 _T = TypeVar("_T")
 SESSION_ID_HEADER = "X-Session-ID"
-PRIORITY_HEADER = "X-Aphrodite-Priority"
+PRIORITY_HEADER = "X-Sonar-Priority"
 
 
 def build_per_request_timing_metrics(
@@ -149,17 +149,17 @@ class GenerateBaseServing(BaseServing, BeamSearchOnlineMixin):
         self.return_tokens_as_token_ids = return_tokens_as_token_ids
         self.renderer = engine_client.renderer
         self.input_processor = engine_client.input_processor
-        aphrodite_config = getattr(engine_client, "aphrodite_config", None)
-        kv_transfer_config = getattr(aphrodite_config, "kv_transfer_config", None)
+        sonar_config = getattr(engine_client, "sonar_config", None)
+        kv_transfer_config = getattr(sonar_config, "kv_transfer_config", None)
         self.has_kv_connector = kv_transfer_config is not None
 
-        # Computed once at startup (cached by ``aphrodite_config`` identity) and
+        # Computed once at startup (cached by ``sonar_config`` identity) and
         # stamped on non-streaming responses. Streaming chunks deliberately
         # omit it to avoid per-chunk overhead.
-        from aphrodite.entrypoints.serve.utils.fingerprint import get_system_fingerprint
+        from sonar.entrypoints.serve.utils.fingerprint import get_system_fingerprint
 
         try:
-            self.system_fingerprint: str | None = get_system_fingerprint(engine_client.aphrodite_config)
+            self.system_fingerprint: str | None = get_system_fingerprint(engine_client.sonar_config)
         except Exception:
             # Never fail server startup over the fingerprint.
             self.system_fingerprint = None
@@ -240,8 +240,8 @@ class GenerateBaseServing(BaseServing, BeamSearchOnlineMixin):
             return request.session_id
         if value := GenerateBaseServing._get_session_id_from_headers(raw_request):
             return value
-        if request.aphrodite_xargs:
-            session_id = request.aphrodite_xargs.get("session_id")
+        if request.sonar_xargs:
+            session_id = request.sonar_xargs.get("session_id")
             if isinstance(session_id, str) and session_id:
                 return session_id
         return None

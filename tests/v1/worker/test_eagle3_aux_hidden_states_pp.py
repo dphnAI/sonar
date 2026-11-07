@@ -5,22 +5,22 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.distributed import parallel_state
-from aphrodite.model_executor.models.interfaces import EagleModelMixin
-from aphrodite.model_executor.models.mimo import MiMoModel
-from aphrodite.models.minimax_m3.nvidia import model as minimax_m3
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.v1.worker.gpu.spec_decode.dflash.config import DFlashSpeculatorConfig
-from aphrodite.v1.worker.gpu.spec_decode.dspark.config import DSparkSpeculatorConfig
-from aphrodite.v1.worker.gpu.spec_decode.eagle.config import Eagle3SpeculatorConfig
-from aphrodite.v1.worker.gpu.spec_decode.eagle.eagle3_utils import (
+from sonar.distributed import parallel_state
+from sonar.model_executor.models.interfaces import EagleModelMixin
+from sonar.model_executor.models.mimo import MiMoModel
+from sonar.models.minimax_m3.nvidia import model as minimax_m3
+from sonar.sequence import IntermediateTensors
+from sonar.v1.worker.gpu.spec_decode.dflash.config import DFlashSpeculatorConfig
+from sonar.v1.worker.gpu.spec_decode.dspark.config import DSparkSpeculatorConfig
+from sonar.v1.worker.gpu.spec_decode.eagle.config import Eagle3SpeculatorConfig
+from sonar.v1.worker.gpu.spec_decode.eagle.eagle3_utils import (
     reserve_aux_intermediate_tensor_slots,
     verify_supports_aux_hidden_states_over_pp,
 )
-from aphrodite.v1.worker.gpu.spec_decode.extract_hidden_states_config import (
+from sonar.v1.worker.gpu.spec_decode.extract_hidden_states_config import (
     ExtractHiddenStatesSpeculatorConfig,
 )
-from aphrodite.v1.worker.gpu.spec_decode.mtp.config import MTPSpeculatorConfig
+from sonar.v1.worker.gpu.spec_decode.mtp.config import MTPSpeculatorConfig
 
 
 @pytest.mark.parametrize(
@@ -157,7 +157,7 @@ def minimax_pp_stage(monkeypatch):
         group.is_last_rank = end == 6
         config = SimpleNamespace(vocab_size=16, hidden_size=6144, num_hidden_layers=6, rms_norm_eps=1e-6)
         model = minimax_m3.MiniMaxM3Model(
-            aphrodite_config=SimpleNamespace(
+            sonar_config=SimpleNamespace(
                 model_config=SimpleNamespace(hf_text_config=config),
                 quant_config=None,
                 speculative_config=None,

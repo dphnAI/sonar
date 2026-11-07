@@ -14,19 +14,19 @@ from typing import cast
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 pytest.importorskip("triton")
 if not (current_platform.is_cuda_alike() or current_platform.is_xpu()):
     pytest.skip("CUDA required for trace-replay tests", allow_module_level=True)
 
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.v1.worker.gpu.sample.trace_replay import (
+from sonar.sampling_params import SamplingParams
+from sonar.v1.worker.gpu.sample.trace_replay import (
     TraceReplayState,
     apply_trace_tokens,
     apply_trace_tokens_to_verified,
 )
-from aphrodite.v1.worker.gpu.states import RequestState
+from sonar.v1.worker.gpu.states import RequestState
 
 DEVICE = current_platform.device_type
 TEST_MAX_MODEL_LEN = 2048

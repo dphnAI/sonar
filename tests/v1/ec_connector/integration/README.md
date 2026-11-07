@@ -24,7 +24,7 @@ Please refer to [Disaggregated Encoder Feature](../../../../docs/features/disagg
 ### Multimodal Prompts (Default)
 
 ```bash
-cd aphrodite
+cd sonar
 ./tests/v1/ec_connector/integration/run_epd_correctness_test.sh
 ```
 
@@ -33,7 +33,7 @@ This runs the test with actual multimodal (image) prompts.
 ### Text-Only Prompts
 
 ```bash
-cd aphrodite
+cd sonar
 USE_MM_PROMPTS=0 ./tests/v1/ec_connector/integration/run_epd_correctness_test.sh
 ```
 
@@ -123,7 +123,7 @@ the CI job log; full files remain under `LOG_PATH` while the container exists.
 
 1. Start a single Sonar instance on the GPU.
 2. Run test prompts (multimodal or text-only)
-3. Save outputs to `.aphrodite_epd_baseline.txt`
+3. Save outputs to `.sonar_epd_baseline.txt`
 4. Shutdown instance
 
 ### Step 2: EPD (1E + 1PD)
@@ -190,7 +190,7 @@ Quick sanity check:
 - Multiple GPUs (3 for 1E+1P+1D, 2 for 1E+1PD, 1 for baseline)
     - 1E+1P+1D is runnable with 2 GPU by assign E and P on the same GPU now.
 - Multimodal model (e.g., Qwen2.5-VL-3B-Instruct)
-- Internet access (for accessing aphrodite test images)
+- Internet access (for accessing sonar test images)
 
 ## Debugging
 

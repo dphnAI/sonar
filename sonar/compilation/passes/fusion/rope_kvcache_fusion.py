@@ -8,15 +8,15 @@ from torch._higher_order_ops import auto_functionalized
 from torch._inductor.fx_passes.post_grad import view_to_reshape
 from torch._inductor.pattern_matcher import PatternMatcherPass
 
-from aphrodite.config import AphroditeConfig, get_layers_from_aphrodite_config
-from aphrodite.config.utils import Range
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.attention.attention import (
+from sonar.config import SonarConfig, get_layers_from_sonar_config
+from sonar.config.utils import Range
+from sonar.logger import init_logger
+from sonar.model_executor.layers.attention.attention import (
     Attention,
     get_attention_context,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import (
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import (
     _USE_LAYERNAME,
     LayerNameType,
     _encode_layer_name,
@@ -24,8 +24,8 @@ from aphrodite.utils.torch_utils import (
     direct_register_custom_op,
 )
 
-from ..aphrodite_inductor_pass import AphroditeInductorPass, AphroditePatternMatcherPass
 from ..inductor_pass import enable_fake_mode
+from ..sonar_inductor_pass import SonarInductorPass, SonarPatternMatcherPass
 from .matcher_utils import (
     MatcherRotaryEmbedding,
 )
@@ -101,7 +101,7 @@ class RopeStaticQQuantKVCachePattern:
     dependency ordering.
     """
 
-    FUSED_ROPE_KV_OP = torch.ops.aphrodite.fused_rope_and_unified_kv_cache_update.default
+    FUSED_ROPE_KV_OP = torch.ops.sonar.fused_rope_and_unified_kv_cache_update.default
 
     def __init__(
         self,
@@ -153,7 +153,7 @@ class RopeStaticQQuantKVCachePattern:
             q_view = q_fp8.view(-1, self.num_heads, self.head_size)
             k_view = k.view(-1, self.num_kv_heads, self.head_size)
             v_view = v.view(-1, self.num_kv_heads, self.head_size_v)
-            kv_cache_dummy = torch.ops.aphrodite.unified_kv_cache_update(k_view, v_view, layer_name)
+            kv_cache_dummy = torch.ops.sonar.unified_kv_cache_update(k_view, v_view, layer_name)
             return kv_cache_dummy, q_view, k_view, v_view
 
         def replacement(qkv, positions, cos_sin_cache, q_scale, layer_name):
@@ -207,7 +207,7 @@ class RopeStaticQQuantKVCachePattern:
             q_view = q_fp8.view(-1, self.num_heads, self.head_size)
             k_view = k.view(-1, self.num_kv_heads, self.head_size)
             v_view = v.view(-1, self.num_kv_heads, self.head_size_v)
-            kv_cache_dummy = torch.ops.aphrodite.unified_kv_cache_update(k_view, v_view, _ln)
+            kv_cache_dummy = torch.ops.sonar.unified_kv_cache_update(k_view, v_view, _ln)
             return kv_cache_dummy, q_view, k_view, v_view
 
         def replacement(qkv, positions, cos_sin_cache, q_scale):
@@ -279,7 +279,7 @@ class RopeReshapeKVCachePattern:
       )
     """
 
-    FUSED_OP = torch.ops.aphrodite.fused_rope_and_unified_kv_cache_update.default
+    FUSED_OP = torch.ops.sonar.fused_rope_and_unified_kv_cache_update.default
 
     def __init__(
         self,
@@ -325,7 +325,7 @@ class RopeReshapeKVCachePattern:
             q = q.view(-1, self.num_heads, self.head_size)
             k = k.view(-1, self.num_kv_heads, self.head_size)
             v = v.view(-1, self.num_kv_heads, self.head_size_v)
-            return torch.ops.aphrodite.unified_kv_cache_update(k, v, layer_name), q, k, v
+            return torch.ops.sonar.unified_kv_cache_update(k, v, layer_name), q, k, v
 
         def replacement(qkv, positions, cos_sin_cache, layer_name):
             q, k, v = qkv.split([self.q_size, self.k_size, self.v_size], dim=-1)
@@ -355,7 +355,7 @@ class RopeReshapeKVCachePattern:
             q = q.view(-1, self.num_heads, self.head_size)
             k = k.view(-1, self.num_kv_heads, self.head_size)
             v = v.view(-1, self.num_kv_heads, self.head_size_v)
-            return torch.ops.aphrodite.unified_kv_cache_update(k, v, _ln), q, k, v
+            return torch.ops.sonar.unified_kv_cache_update(k, v, _ln), q, k, v
 
         def replacement(qkv, positions, cos_sin_cache):
             q, k, v = qkv.split([self.q_size, self.k_size, self.v_size], dim=-1)
@@ -400,7 +400,7 @@ class RopeReshapeKVCachePattern:
         )
 
 
-class RopeKVCacheFusionPass(AphroditePatternMatcherPass):
+class RopeKVCacheFusionPass(SonarPatternMatcherPass):
     """This pass fuses the rotary embedding and KV cache update operations
     into a single fused kernel if available.
 
@@ -413,7 +413,7 @@ class RopeKVCacheFusionPass(AphroditePatternMatcherPass):
     """
 
     @enable_fake_mode
-    def __init__(self, config: AphroditeConfig) -> None:
+    def __init__(self, config: SonarConfig) -> None:
         super().__init__(config)
 
         self.patterns: PatternMatcherPass = PatternMatcherPass(pass_name="rope_kv_cache_fusion_pass")
@@ -421,7 +421,7 @@ class RopeKVCacheFusionPass(AphroditePatternMatcherPass):
         cc = config.compilation_config
         self.max_token_num = cc.pass_config.rope_kvcache_fusion_max_token_num
 
-        attn_layers = get_layers_from_aphrodite_config(config, Attention)
+        attn_layers = get_layers_from_sonar_config(config, Attention)
         # When _USE_LAYERNAME is enabled, layer_name is a wildcard so all
         # layers produce the same pattern — register once then break.
         for _, layer in attn_layers.items():
@@ -441,7 +441,7 @@ class RopeKVCacheFusionPass(AphroditePatternMatcherPass):
 
         self.dump_patterns(config, self.patterns)
 
-    @AphroditeInductorPass.time_and_log
+    @SonarInductorPass.time_and_log
     def __call__(self, graph: fx.Graph) -> None:
         self.matched_count = self.patterns.apply(graph)
         logger.debug("Replaced %s patterns", self.matched_count)
@@ -453,4 +453,4 @@ class RopeKVCacheFusionPass(AphroditePatternMatcherPass):
         return compile_range.end <= self.max_token_num
 
     def uuid(self) -> str:
-        return AphroditeInductorPass.hash_source(self, RopeStaticQQuantKVCachePattern, RopeReshapeKVCachePattern)
+        return SonarInductorPass.hash_source(self, RopeStaticQQuantKVCachePattern, RopeReshapeKVCachePattern)

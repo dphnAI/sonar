@@ -16,49 +16,49 @@ class DecodeConfig:
     capture_sizes: tuple[int, ...]
 
 
-def specialized_decode_config(aphrodite_config) -> DecodeConfig | None:
+def specialized_decode_config(sonar_config) -> DecodeConfig | None:
     """The deployment's specialized decode settings, None for the stock decode.
     Raises when the specialized decode is requested for an unsupported deployment."""
-    extra = aphrodite_config.additional_config
+    extra = sonar_config.additional_config
     backend = extra.get("decode_backend", "auto") if isinstance(extra, dict) else "auto"
     if backend == "auto":
         return None
     if backend != "latency_specialized":
         raise ValueError("Supported decode_backend values are auto/latency_specialized")
-    reason = unsupported(aphrodite_config)
+    reason = unsupported(sonar_config)
     if reason is not None:
         raise ValueError(f"Kimi K3 specialized decode does not support {reason}")
-    spec = aphrodite_config.speculative_config
+    spec = sonar_config.speculative_config
     return DecodeConfig(
-        max_context=aphrodite_config.model_config.max_model_len,
+        max_context=sonar_config.model_config.max_model_len,
         mla_core=extra.get("mla_core", "auto"),
-        dcp=aphrodite_config.parallel_config.decode_context_parallel_size,
+        dcp=sonar_config.parallel_config.decode_context_parallel_size,
         q=1 + spec.num_speculative_tokens if spec is not None else 1,
-        capture_sizes=tuple(aphrodite_config.compilation_config.cudagraph_capture_sizes or ()),
+        capture_sizes=tuple(sonar_config.compilation_config.cudagraph_capture_sizes or ()),
     )
 
 
-def kda_dtypes(aphrodite_config):
+def kda_dtypes(sonar_config):
     """(conv, recurrent) KDA state dtypes the deployment's cache config selects."""
-    from aphrodite.model_executor.layers.mamba.mamba_utils import MambaStateDtypeCalculator
+    from sonar.model_executor.layers.mamba.mamba_utils import MambaStateDtypeCalculator
 
-    cache = aphrodite_config.cache_config
+    cache = sonar_config.cache_config
     return MambaStateDtypeCalculator.kda_state_dtype(
-        aphrodite_config.model_config.dtype,
+        sonar_config.model_config.dtype,
         cache.mamba_cache_dtype,
         cache.mamba_ssm_cache_dtype,
     )
 
 
-def unsupported(aphrodite_config) -> str | None:
+def unsupported(sonar_config) -> str | None:
     import torch
 
-    from aphrodite import envs
-    from aphrodite.config import CompilationMode, CUDAGraphMode
-    from aphrodite.platforms import current_platform
+    from sonar import envs
+    from sonar.config import CompilationMode, CUDAGraphMode
+    from sonar.platforms import current_platform
 
-    parallel, spec = aphrodite_config.parallel_config, aphrodite_config.speculative_config
-    text = aphrodite_config.model_config.hf_text_config
+    parallel, spec = sonar_config.parallel_config, sonar_config.speculative_config
+    text = sonar_config.model_config.hf_text_config
     moe = tuple(
         getattr(text, name, None)
         for name in (
@@ -72,7 +72,7 @@ def unsupported(aphrodite_config) -> str | None:
             "moe_router_activation_func",
         )
     )
-    compilation = aphrodite_config.compilation_config
+    compilation = sonar_config.compilation_config
     graphs = compilation.cudagraph_mode
     checks = (
         (not current_platform.is_device_capability_family(100), "this GPU (SM100/103)"),
@@ -88,10 +88,10 @@ def unsupported(aphrodite_config) -> str | None:
             parallel.decode_context_parallel_size not in (1, parallel.tensor_parallel_size),
             "decode context parallel other than 1 or TP",
         ),
-        (aphrodite_config.model_config.enable_sleep_mode, "sleep mode"),
-        (aphrodite_config.lora_config is not None, "LoRA"),
+        (sonar_config.model_config.enable_sleep_mode, "sleep mode"),
+        (sonar_config.lora_config is not None, "LoRA"),
         # The runner's ModelState hooks build the executor and prepare the KV layouts.
-        (not aphrodite_config.use_v2_model_runner, "the V1 model runner"),
+        (not sonar_config.use_v2_model_runner, "the V1 model runner"),
         # The decode loop runs in forward; a compiled forward would trace it.
         (compilation.mode == CompilationMode.STOCK_TORCH_COMPILE, "torch.compile"),
         # The loop runs only in FULL decode graphs; eager and PIECEWISE steps run stock.
@@ -110,11 +110,11 @@ def unsupported(aphrodite_config) -> str | None:
         # KdaSplit keeps a BF16 conv state and an FP32 recurrent state in place; it
         # maintains neither other cache dtypes nor ReplaySSM / RecoverSSM records.
         (
-            kda_dtypes(aphrodite_config) != (torch.bfloat16, torch.float32),
+            kda_dtypes(sonar_config) != (torch.bfloat16, torch.float32),
             "KDA cache dtypes other than a BF16 conv state and an FP32 recurrent state (mamba cache dtype)",
         ),
         (
-            aphrodite_config.cache_config.use_replayssm or aphrodite_config.cache_config.use_kda_recoverssm,
+            sonar_config.cache_config.use_replayssm or sonar_config.cache_config.use_kda_recoverssm,
             "ReplaySSM / RecoverSSM (--use-replayssm)",
         ),
         # The verify kernels take at most 8 tokens per request (KdaSplit's barriers).
@@ -123,7 +123,7 @@ def unsupported(aphrodite_config) -> str | None:
             "more than 7 speculative tokens",
         ),
         (
-            spec is not None and envs.APHRODITE_KIMI_K3_AUX_ATTN_RES_STREAM,
+            spec is not None and envs.SONAR_KIMI_K3_AUX_ATTN_RES_STREAM,
             "the AttnRes aux stream",
         ),
     )

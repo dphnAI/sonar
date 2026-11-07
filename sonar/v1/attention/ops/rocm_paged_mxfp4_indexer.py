@@ -19,25 +19,25 @@ from typing import TYPE_CHECKING, NamedTuple
 
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.compilation.breakable_cudagraph import eager_break_during_capture
-from aphrodite.config import CUDAGraphMode
-from aphrodite.forward_context import get_forward_context
-from aphrodite.model_executor.kernels.attention.dsa.candidate_blocks import (
+import sonar.envs as envs
+from sonar.compilation.breakable_cudagraph import eager_break_during_capture
+from sonar.config import CUDAGraphMode
+from sonar.forward_context import get_forward_context
+from sonar.model_executor.kernels.attention.dsa.candidate_blocks import (
     apply_candidate_mask,
 )
-from aphrodite.triton_utils import tl, triton
-from aphrodite.v1.attention.ops.rocm_aiter_mla_sparse import (
+from sonar.triton_utils import tl, triton
+from sonar.v1.attention.ops.rocm_aiter_mla_sparse import (
     _apply_candidate_mask_strided,
     _max_decode_logits_rows,
 )
-from aphrodite.v1.worker.workspace import current_workspace_manager
+from sonar.v1.worker.workspace import current_workspace_manager
 
 if TYPE_CHECKING:
-    from aphrodite.v1.attention.backends.mla.indexer import (
+    from sonar.v1.attention.backends.mla.indexer import (
         DeepseekV32IndexerPrefillChunkMetadata,
     )
-    from aphrodite.v1.attention.backends.mla.rocm_paged_mxfp4_indexer import (
+    from sonar.v1.attention.backends.mla.rocm_paged_mxfp4_indexer import (
         RocmMxfp4GatherLaunch,
         RocmMxfp4IndexerMetadata,
         RocmMxfp4NativeDecode,
@@ -88,7 +88,7 @@ _WAVE_SIZE = 64
 
 @functools.cache
 def rocm_paged_mxfp4_cache_layout(num_heads: int, head_dim: int, page_entries: int) -> RocmPagedMxfp4CacheLayout:
-    """The K page layout from aiter's ``cache_format``, the only place Aphrodite
+    """The K page layout from aiter's ``cache_format``, the only place Sonar
     reads it, so a change there cannot reach the writer unchecked.
 
     Raises:
@@ -246,7 +246,7 @@ def _kv_view(kv_cache: torch.Tensor, head_dim: int) -> torch.Tensor:
 def rocm_mxfp4_consumer_rows(num_candidate_cols: int) -> int:
     """Query rows per candidate-consumer launch. Its logits are [rows, pool]
     fp32 whatever the context, so the logits budget alone sizes it."""
-    budget = envs.APHRODITE_SPARSE_INDEXER_MAX_LOGITS_MB * 1024 * 1024
+    budget = envs.SONAR_SPARSE_INDEXER_MAX_LOGITS_MB * 1024 * 1024
     return max(1, budget // (4 * num_candidate_cols))
 
 
@@ -262,7 +262,7 @@ def reserve_rocm_mxfp4_indexer_workspace(
     when it gathers."""
     rows = _max_decode_logits_rows(hidden_states.shape[0])
     specs = [((rows, logits_width), torch.float32)]
-    budget = envs.APHRODITE_SPARSE_INDEXER_MAX_LOGITS_MB * 1024 * 1024
+    budget = envs.SONAR_SPARSE_INDEXER_MAX_LOGITS_MB * 1024 * 1024
     if candidate_block_size:
         nblocks = triton.cdiv(logits_width, candidate_block_size)
         specs.append(((rows, nblocks), torch.float32))
@@ -287,7 +287,7 @@ def _topk(logits: torch.Tensor, lengths: torch.Tensor, out: torch.Tensor, k: int
     """Top-k over each row's [0, lengths[row]); -1 pads rows shorter than k.
 
     aiter's kernel is faster on the candidate top-k and from 128 rows on; below
-    that, a wide decode step is faster on Aphrodite's. Shape alone decides, so a FULL
+    that, a wide decode step is faster on Sonar's. Shape alone decides, so a FULL
     graph replays the same choice at every context length.
     """
     rows, width = logits.shape
@@ -405,7 +405,7 @@ def _layer(
     candidate_blocks: torch.Tensor | None,
     candidate_block_size: int,
 ) -> _Layer:
-    from aphrodite.v1.attention.backends.mla.rocm_paged_mxfp4_indexer import (
+    from sonar.v1.attention.backends.mla.rocm_paged_mxfp4_indexer import (
         RocmMxfp4IndexerMetadata,
     )
 

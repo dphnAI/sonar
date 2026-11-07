@@ -5,7 +5,7 @@
 import torch
 from torch import Tensor
 
-from aphrodite.v1.sample.metadata import SamplingMetadata
+from sonar.v1.sample.metadata import SamplingMetadata
 
 
 def _fetch_mirostat_args(

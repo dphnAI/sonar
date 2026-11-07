@@ -8,35 +8,35 @@ from typing import TYPE_CHECKING, Any, cast
 import numpy as np
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.config import (
-    AphroditeConfig,
-    get_layers_from_aphrodite_config,
+import sonar.envs as envs
+from sonar.config import (
+    SonarConfig,
+    get_layers_from_sonar_config,
 )
-from aphrodite.config.compilation import CUDAGraphMode
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.layers.attention_layer_base import AttentionLayerBase
-from aphrodite.platforms import current_platform
-from aphrodite.v1.attention.backend import (
+from sonar.config.compilation import CUDAGraphMode
+from sonar.logger import init_logger
+from sonar.model_executor.layers.attention import Attention
+from sonar.model_executor.layers.attention_layer_base import AttentionLayerBase
+from sonar.platforms import current_platform
+from sonar.v1.attention.backend import (
     AttentionCGSupport,
     CommonAttentionMetadata,
 )
-from aphrodite.v1.attention.backends.utils import create_fast_prefill_custom_backend
-from aphrodite.v1.hisparse.binding import (
+from sonar.v1.attention.backends.utils import create_fast_prefill_custom_backend
+from sonar.v1.hisparse.binding import (
     init_hisparse_kv_cache,
     resolve_hisparse_specs,
 )
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.kv_cache_interface import (
     AttentionSpec,
     KVCacheConfig,
     KVCacheSpec,
     MambaSpec,
     UniformTypeKVCacheSpecs,
 )
-from aphrodite.v1.worker.gpu.model_states.interface import ModelSpecificAttnMetadata
-from aphrodite.v1.worker.ubatch_utils import get_num_ubatches
-from aphrodite.v1.worker.utils import (
+from sonar.v1.worker.gpu.model_states.interface import ModelSpecificAttnMetadata
+from sonar.v1.worker.ubatch_utils import get_num_ubatches
+from sonar.v1.worker.utils import (
     AttentionGroup,
     add_kv_sharing_layers_to_kv_cache_groups,
     allocate_kv_cache,
@@ -49,8 +49,8 @@ from aphrodite.v1.worker.utils import (
 logger = init_logger(__name__)
 
 if TYPE_CHECKING:
-    from aphrodite.v1.worker.gpu.block_table import BlockTables
-    from aphrodite.v1.worker.gpu.cudagraph_utils import (
+    from sonar.v1.worker.gpu.block_table import BlockTables
+    from sonar.v1.worker.gpu.cudagraph_utils import (
         BatchExecutionDescriptor,
         CudaGraphManager,
     )
@@ -127,28 +127,28 @@ class FastPrefillHelper:
         )
 
 
-def get_kv_cache_spec(aphrodite_config: AphroditeConfig) -> dict[str, KVCacheSpec]:
+def get_kv_cache_spec(sonar_config: SonarConfig) -> dict[str, KVCacheSpec]:
     kv_cache_spec: dict[str, KVCacheSpec] = {}
     layer_type = cast(type[Any], AttentionLayerBase)
-    attn_layers = get_layers_from_aphrodite_config(aphrodite_config, layer_type)
+    attn_layers = get_layers_from_sonar_config(sonar_config, layer_type)
     for layer_name, attn_module in attn_layers.items():
         if getattr(attn_module, "kv_sharing_target_layer_name", None):
             # This layer will use KV cache of the sharing target layer.
             continue
         # Skip modules that don't need KV cache (eg encoder-only attention)
-        if spec := attn_module.get_kv_cache_spec(aphrodite_config):
+        if spec := attn_module.get_kv_cache_spec(sonar_config):
             if isinstance(spec, AttentionSpec):
                 spec = customize_attention_spec(attn_module.get_attn_backend(), spec)
             if attn_module.is_draft_layer:
                 spec = replace(spec, is_draft=True)
             kv_cache_spec[layer_name] = spec
-    if aphrodite_config.attention_config.hisparse_config is not None:
-        kv_cache_spec = resolve_hisparse_specs(aphrodite_config, kv_cache_spec, attn_layers)
+    if sonar_config.attention_config.hisparse_config is not None:
+        kv_cache_spec = resolve_hisparse_specs(sonar_config, kv_cache_spec, attn_layers)
     return kv_cache_spec
 
 
-def get_shared_kv_cache_layers(aphrodite_config: AphroditeConfig):
-    attn_layers = get_layers_from_aphrodite_config(aphrodite_config, Attention)
+def get_shared_kv_cache_layers(sonar_config: SonarConfig):
+    attn_layers = get_layers_from_sonar_config(sonar_config, Attention)
     return {
         layer_name: kv_tgt_layer
         for layer_name, attn_module in attn_layers.items()
@@ -157,7 +157,7 @@ def get_shared_kv_cache_layers(aphrodite_config: AphroditeConfig):
 
 
 def get_kv_sharing_fast_prefill_eligible_layers(
-    aphrodite_config: AphroditeConfig, draft_layer_names: set[str] | None = None
+    sonar_config: SonarConfig, draft_layer_names: set[str] | None = None
 ) -> set[str]:
     """Trailing run of KV-sharing layers, eligible for fast prefill.
 
@@ -170,13 +170,13 @@ def get_kv_sharing_fast_prefill_eligible_layers(
     Speculator draft layers register after the target model's layers (and may
     themselves share KV), so they are excluded from the walk.
     """
-    if not aphrodite_config.cache_config.kv_sharing_fast_prefill:
+    if not sonar_config.cache_config.kv_sharing_fast_prefill:
         return set()
-    shared_kv_cache_layers = get_shared_kv_cache_layers(aphrodite_config)
+    shared_kv_cache_layers = get_shared_kv_cache_layers(sonar_config)
     if not shared_kv_cache_layers:
         return set()
     eligible_layers: set[str] = set()
-    attn_layers = get_layers_from_aphrodite_config(aphrodite_config, Attention)
+    attn_layers = get_layers_from_sonar_config(sonar_config, Attention)
     for layer_name in reversed(attn_layers):
         if draft_layer_names is not None and layer_name in draft_layer_names:
             continue
@@ -188,7 +188,7 @@ def get_kv_sharing_fast_prefill_eligible_layers(
 
 def init_attn_backend(
     kv_cache_config: KVCacheConfig,
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     device: torch.device,
     active_layer_names: set[str] | None = None,
     draft_layer_names: set[str] | None = None,
@@ -198,10 +198,8 @@ def init_attn_backend(
 
     # Add KV-sharing layers to their target's kv cache group so they are
     # discovered alongside the target layer in Phase 1 below.
-    add_kv_sharing_layers_to_kv_cache_groups(
-        get_shared_kv_cache_layers(aphrodite_config), kv_cache_config.kv_cache_groups
-    )
-    fast_prefill_eligible_layers = get_kv_sharing_fast_prefill_eligible_layers(aphrodite_config, draft_layer_names)
+    add_kv_sharing_layers_to_kv_cache_groups(get_shared_kv_cache_layers(sonar_config), kv_cache_config.kv_cache_groups)
+    fast_prefill_eligible_layers = get_kv_sharing_fast_prefill_eligible_layers(sonar_config, draft_layer_names)
 
     # Phase 1: discover attention groups for each kv cache group.
     for kv_cache_group_id, kv_cache_group_spec in enumerate(kv_cache_config.kv_cache_groups):
@@ -213,15 +211,15 @@ def init_attn_backend(
             layer_names = list(active_layer_names.intersection(layer_names))
 
         layer_type = cast(type[Any], AttentionLayerBase)
-        attn_layers = get_layers_from_aphrodite_config(aphrodite_config, layer_type, layer_names)
+        attn_layers = get_layers_from_sonar_config(sonar_config, layer_type, layer_names)
 
         group_map: dict[tuple[tuple[str, str], KVCacheSpec, int, str | None], AttentionGroup] = {}
         group_order: list[tuple[tuple[str, str], KVCacheSpec, int, str | None]] = []
 
         for layer_name in layer_names:
             attn_backend = attn_layers[layer_name].get_attn_backend()
-            if envs.APHRODITE_BATCH_INVARIANT and not attn_backend.supports_batch_invariance():
-                raise RuntimeError(f"APHRODITE batch_invariant mode is not supported for {attn_backend.get_name()}.")
+            if envs.SONAR_BATCH_INVARIANT and not attn_backend.supports_batch_invariance():
+                raise RuntimeError(f"SONAR batch_invariant mode is not supported for {attn_backend.get_name()}.")
             if layer_name in fast_prefill_eligible_layers:
                 attn_backend = create_fast_prefill_custom_backend("FastPrefill", attn_backend)
 
@@ -273,13 +271,13 @@ def init_attn_backend(
             kernel_block_size = kernel_block_sizes[kv_cache_group_id]
         for group in groups:
             group.create_metadata_builders(
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 device=device,
                 kernel_block_size=kernel_block_size,
                 # Microbatches build attention metadata concurrently, and some
                 # builders keep the prepared metadata on themselves (MLA stores
                 # it on the prefill backend), so each ubatch needs its own.
-                num_metadata_builders=get_num_ubatches(aphrodite_config.parallel_config),
+                num_metadata_builders=get_num_ubatches(sonar_config.parallel_config),
             )
             # The microbatches' builders share the workspace: they all issue
             # attention on the one compute stream the threads hand off, so the
@@ -290,13 +288,13 @@ def init_attn_backend(
                         attn_backend_workspace = builder._get_workspace_buffer()
                 elif hasattr(builder, "set_workspace_buffer"):
                     builder.set_workspace_buffer(attn_backend_workspace)
-    attn_cg_support_info = get_attn_cg_support(attn_groups, aphrodite_config)
+    attn_cg_support_info = get_attn_cg_support(attn_groups, sonar_config)
     return attn_groups, attn_cg_support_info, kernel_block_sizes
 
 
 def get_attn_cg_support(
     attn_groups: list[list[AttentionGroup]],
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     checked_layer_names: set[str] | None = None,
 ) -> AttentionCGSupportInfo:
     """Return the weakest CUDA graph support among the checked layers."""
@@ -308,7 +306,7 @@ def get_attn_cg_support(
                 continue
             builder = group.get_metadata_builder(0)
             cg_support = builder.get_cudagraph_support(
-                aphrodite_config,
+                sonar_config,
                 group.kv_cache_spec,
             )
             if cg_support.value < min_cg_support.value:
@@ -341,7 +339,7 @@ def get_query_lens_mismatch_unsupported_backend(
 
 def get_varlen_cudagraph_unsupported_backend(
     attn_groups: list[list[AttentionGroup]],
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     max_query_len: int,
     checked_layer_names: set[str] | None = None,
 ) -> tuple[str, int | None] | None:
@@ -357,14 +355,14 @@ def get_varlen_cudagraph_unsupported_backend(
                 continue
             builder = group.get_metadata_builder(0)
             spec = group.kv_cache_spec
-            support = builder.get_cudagraph_support(aphrodite_config, spec)
+            support = builder.get_cudagraph_support(sonar_config, spec)
             if support == AttentionCGSupport.ALWAYS:
                 continue
             bound = (
                 # NEVER means never, whatever an inherited override says.
                 None
                 if support == AttentionCGSupport.NEVER
-                else builder.get_varlen_cudagraph_max_query_len(aphrodite_config, spec)
+                else builder.get_varlen_cudagraph_max_query_len(sonar_config, spec)
             )
             if bound is None or bound < max_query_len:
                 return group.backend.__name__, bound
@@ -376,7 +374,7 @@ def init_kv_cache(
     kv_cache_config: KVCacheConfig,
     device: torch.device,
     kernel_block_sizes: list[int],
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     kv_cache_allocation_context: AbstractContextManager | None = None,
     *,
     block_tables: "BlockTables | None" = None,
@@ -384,13 +382,13 @@ def init_kv_cache(
 ) -> dict[str, Any]:
     allocation_context = kv_cache_allocation_context or nullcontext()
     with allocation_context:
-        if aphrodite_config.attention_config.hisparse_config is not None:
+        if sonar_config.attention_config.hisparse_config is not None:
             assert block_tables is not None
             kv_caches = init_hisparse_kv_cache(
                 kv_cache_config,
                 device,
                 kernel_block_sizes,
-                aphrodite_config,
+                sonar_config,
                 forward_context,
                 block_tables,
             )
@@ -398,14 +396,14 @@ def init_kv_cache(
             kv_caches = allocate_kv_cache(
                 kv_cache_config,
                 device,
-                aphrodite_config.cache_config.get_resolved_kv_cache_layout(),
+                sonar_config.cache_config.get_resolved_kv_cache_layout(),
                 kernel_block_sizes,
             )
-    for layer_name, target in get_shared_kv_cache_layers(aphrodite_config).items():
+    for layer_name, target in get_shared_kv_cache_layers(sonar_config).items():
         kv_caches[layer_name] = kv_caches[target]
     # Dual-attention models (e.g. LongCat-Flash) put two Attention modules per
     # decoder layer, so a layer name carries two integers (layer + module index).
-    num_attn_module = 2 if aphrodite_config.model_config.hf_config.model_type == "longcat_flash" else 1
+    num_attn_module = 2 if sonar_config.model_config.hf_config.model_type == "longcat_flash" else 1
     bindable_caches = map_kv_caches_to_kernel_blocks(
         {name: cache for name, cache in kv_caches.items() if name in forward_context},
         attn_groups,

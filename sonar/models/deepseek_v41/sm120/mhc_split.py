@@ -29,7 +29,7 @@ from b12x._lib.runtime_control import raise_if_kernel_resolution_frozen
 from b12x.norm.hyperconnection import _cute as provider
 from cutlass import BFloat16, Float32, Int32, Int64
 
-from aphrodite.utils.b12x import PreparationResourceUnavailableError
+from sonar.utils.b12x import PreparationResourceUnavailableError
 
 MULT = 4
 MIXES = 24
@@ -471,7 +471,7 @@ def _compile(kernel, name, key, pointers):
         *(provider._fake_pointer(dtype) for dtype in pointers),
         Int32(1),
         utils.current_cuda_stream(),
-        compile_spec=KernelCompileSpec.from_key(f"aphrodite.dsv41.mhc_split.{name}", 1, (*key, _KERNEL_SHA)),
+        compile_spec=KernelCompileSpec.from_key(f"sonar.dsv41.mhc_split.{name}", 1, (*key, _KERNEL_SHA)),
     )
 
 

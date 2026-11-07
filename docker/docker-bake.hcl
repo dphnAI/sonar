@@ -1,6 +1,6 @@
-# docker-bake.hcl - Aphrodite Docker build configuration
+# docker-bake.hcl - Sonar Docker build configuration
 #
-# This file lives in the Aphrodite repo at docker/docker-bake.hcl
+# This file lives in the Sonar repo at docker/docker-bake.hcl
 #
 # Usage:
 #   cd docker && docker buildx bake        # Build default target (openai)
@@ -51,10 +51,10 @@ target "_common" {
 
 target "_labels" {
   labels = {
-    "org.opencontainers.image.source"      = "https://github.com/aphrodite-engine/aphrodite-engine"
-    "org.opencontainers.image.vendor"      = "Aphrodite"
-    "org.opencontainers.image.title"       = "Aphrodite"
-    "org.opencontainers.image.description" = "Aphrodite: A high-throughput and memory-efficient inference and serving engine for LLMs"
+    "org.opencontainers.image.source"      = "https://github.com/dphnAI/sonar"
+    "org.opencontainers.image.vendor"      = "Sonar"
+    "org.opencontainers.image.title"       = "Sonar"
+    "org.opencontainers.image.description" = "Sonar: A high-throughput and memory-efficient inference and serving engine for LLMs"
     "org.opencontainers.image.licenses"    = "AGPL-3.0"
     "org.opencontainers.image.revision"    = COMMIT
   }
@@ -68,14 +68,14 @@ target "_labels" {
 target "test" {
   inherits = ["_common", "_labels"]
   target   = "test"
-  tags     = ["aphrodite:test"]
+  tags     = ["sonar:test"]
   output   = ["type=docker"]
 }
 
 target "openai" {
   inherits = ["_common", "_labels"]
-  target   = "aphrodite-openai"
-  tags     = ["aphrodite:openai"]
+  target   = "sonar-openai"
+  tags     = ["sonar:openai"]
   output   = ["type=docker"]
 }
 
@@ -84,7 +84,7 @@ target "openai" {
 target "test-ubuntu2404" {
   inherits = ["_common", "_labels"]
   target   = "test"
-  tags     = ["aphrodite:test-ubuntu24.04"]
+  tags     = ["sonar:test-ubuntu24.04"]
   args = {
     UBUNTU_VERSION          = "24.04"
     GDRCOPY_OS_VERSION      = "Ubuntu24_04"
@@ -94,8 +94,8 @@ target "test-ubuntu2404" {
 
 target "openai-ubuntu2404" {
   inherits = ["_common", "_labels"]
-  target   = "aphrodite-openai"
-  tags     = ["aphrodite:openai-ubuntu24.04"]
+  target   = "sonar-openai"
+  tags     = ["sonar:openai-ubuntu24.04"]
   args = {
     UBUNTU_VERSION          = "24.04"
     GDRCOPY_OS_VERSION      = "Ubuntu24_04"

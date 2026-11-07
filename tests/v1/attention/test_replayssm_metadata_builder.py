@@ -10,15 +10,15 @@ from dataclasses import dataclass
 import pytest
 import torch
 
-from aphrodite.config import SpeculativeConfig
-from aphrodite.config.compilation import CUDAGraphMode
-from aphrodite.config.mamba import MambaBackendEnum
-from aphrodite.v1.kv_cache_interface import MambaSpec
+from sonar.config import SpeculativeConfig
+from sonar.config.compilation import CUDAGraphMode
+from sonar.config.mamba import MambaBackendEnum
+from sonar.v1.kv_cache_interface import MambaSpec
 from tests.v1.attention.utils import (
     BatchSpec,
     MockMambaBuilder,
-    create_aphrodite_config,
     create_common_attn_metadata,
+    create_sonar_config,
 )
 
 BLOCK_SIZE = 16
@@ -217,24 +217,24 @@ def _create_replayssm_builder(
     mamba_backend: MambaBackendEnum = MambaBackendEnum.TRITON,
     num_speculative_tokens: int = 0,
 ) -> MockMambaBuilder:
-    aphrodite_config = create_aphrodite_config(model_name="Qwen/Qwen3.5-0.8B", block_size=BLOCK_SIZE)
+    sonar_config = create_sonar_config(model_name="Qwen/Qwen3.5-0.8B", block_size=BLOCK_SIZE)
     # Set the flags after construction to skip validate_mamba_cached_kernel
     # (it requires a real SupportsReplaySSM model) on the mock model.
-    aphrodite_config.cache_config.use_replayssm = True
-    aphrodite_config.cache_config.replayssm_buffer_len = buffer_len
-    aphrodite_config.cache_config.mamba_cache_mode = mamba_cache_mode
-    aphrodite_config.mamba_config.backend = mamba_backend
+    sonar_config.cache_config.use_replayssm = True
+    sonar_config.cache_config.replayssm_buffer_len = buffer_len
+    sonar_config.cache_config.mamba_cache_mode = mamba_cache_mode
+    sonar_config.mamba_config.backend = mamba_backend
     if num_speculative_tokens > 0:
         # Triton ReplaySSM requires exact synchronous CPU metadata.
-        aphrodite_config.scheduler_config.async_scheduling = False
-        aphrodite_config.speculative_config = SpeculativeConfig(
+        sonar_config.scheduler_config.async_scheduling = False
+        sonar_config.speculative_config = SpeculativeConfig(
             method="ngram",
             num_speculative_tokens=num_speculative_tokens,
         )
     return MockMambaBuilder(
         _make_mamba_spec(buffer_len, mamba_backend, num_speculative_tokens),
         ["layer0"],
-        aphrodite_config,
+        sonar_config,
         DEVICE,
     )
 

@@ -13,35 +13,35 @@ from collections.abc import Iterable
 import torch
 from torch import nn
 
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.config import (
     CacheConfig,
     ParallelConfig,
-    get_current_aphrodite_config,
+    SonarConfig,
+    get_current_sonar_config,
 )
-from aphrodite.distributed import get_tensor_model_parallel_world_size
-from aphrodite.forward_context import get_forward_context
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.layers.attention.attention import (
+from sonar.distributed import get_tensor_model_parallel_world_size
+from sonar.forward_context import get_forward_context
+from sonar.model_executor.layers.attention import Attention
+from sonar.model_executor.layers.attention.attention import (
     unified_attention_with_output,
 )
-from aphrodite.model_executor.layers.fused_moe import FusedMoEFactory, GateLinear
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.fused_moe import FusedMoEFactory, GateLinear
+from sonar.model_executor.layers.linear import (
     MergedColumnParallelLinear,
     QKVParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.quantization.modelopt import ModelOptNvFp4Config
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.quantization.modelopt import ModelOptNvFp4Config
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.model_loader.weight_utils import make_attention_sink
-from aphrodite.model_executor.models.interfaces import SupportsPP
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.model_loader.weight_utils import make_attention_sink
+from sonar.model_executor.models.interfaces import SupportsPP
+from sonar.model_executor.models.utils import (
     AutoWeightsLoader,
     WeightsMapper,
     extract_layer_index,
@@ -49,8 +49,8 @@ from aphrodite.model_executor.models.utils import (
     make_layers,
     maybe_prefix,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.sequence import IntermediateTensors
+from sonar.platforms import current_platform
+from sonar.sequence import IntermediateTensors
 
 from .configs import FlintConfig
 from .gguf_nvfp4 import find_gguf_file, gguf_nvfp4_weights_iterator
@@ -72,7 +72,7 @@ from .ops.qkv_fused import flint_qkv_fused
 
 def _flint_kernels(quant_config: QuantizationConfig | None, parallel: ParallelConfig | None = None) -> bool:
     """Flint's kernels serve the BF16 and NVFP4 checkpoints on a single SM100
-    GPU (TP=1, and for the MoE no EP/EPLB); other configurations use Aphrodite's
+    GPU (TP=1, and for the MoE no EP/EPLB); other configurations use Sonar's
     stock layers."""
     if not current_platform.is_device_capability_family(100):
         return False
@@ -155,11 +155,11 @@ class FlintSparseMoeBlock(nn.Module):
             reduce_results=False,
             prefix=f"{prefix}.shared_expert",
         )
-        aphrodite_config = get_current_aphrodite_config()
+        sonar_config = get_current_sonar_config()
         # NVFP4: Flint's MoE for all batch sizes. BF16: Flint's decode kernels
         # for small batches on the TRTLLM-layout experts, TRTLLM MoE otherwise.
         is_nvfp4 = isinstance(quant_config, ModelOptNvFp4Config)
-        use_flint = _flint_kernels(quant_config, aphrodite_config.parallel_config)
+        use_flint = _flint_kernels(quant_config, sonar_config.parallel_config)
         if use_flint:
             assert config.router_score_function == "sigmoid"
             assert config.norm_topk_prob
@@ -172,7 +172,7 @@ class FlintSparseMoeBlock(nn.Module):
                 config.hidden_size,
                 config.moe_intermediate_size,
                 config.num_experts_per_tok,
-                aphrodite_config.scheduler_config.max_num_batched_tokens,
+                sonar_config.scheduler_config.max_num_batched_tokens,
             )
             return
         self.experts = FusedMoEFactory(
@@ -301,7 +301,7 @@ class FlintAttention(nn.Module):
         # The fused kernel writes the KV cache itself (in the FlashInfer layout)
         # and then calls the attention backend directly. Imported here so the
         # module imports on platforms without FlashInfer.
-        from aphrodite.v1.attention.backends.flashinfer import (
+        from sonar.v1.attention.backends.flashinfer import (
             FlashInferImpl,
             FlashInferMetadata,
             FlashInferTrtllmAPIDecode,
@@ -311,7 +311,7 @@ class FlintAttention(nn.Module):
         assert isinstance(impl, FlashInferImpl), "Flint requires FlashInfer attention"
         self._metadata_cls = FlashInferMetadata
         self._decode_cls = FlashInferTrtllmAPIDecode
-        assert get_current_aphrodite_config().model_config.dtype == torch.bfloat16
+        assert get_current_sonar_config().model_config.dtype == torch.bfloat16
         assert self.attn.kv_cache_dtype in ("auto", "bfloat16")
         assert impl.kv_sharing_target_layer_name is None
         self.impl = impl
@@ -520,13 +520,13 @@ class FlintDecoderLayer(nn.Module):
 class FlintModel(nn.Module):
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         quant_config: QuantizationConfig | None,
         prefix: str = "",
     ) -> None:
         super().__init__()
-        config: FlintConfig = aphrodite_config.model_config.hf_config
-        cache_config = aphrodite_config.cache_config
+        config: FlintConfig = sonar_config.model_config.hf_config
+        cache_config = sonar_config.cache_config
         self.config = config
         self.embed_tokens = VocabParallelEmbedding(
             config.vocab_size,
@@ -568,7 +568,7 @@ class FlintModel(nn.Module):
 
 
 class FlintForCausalLM(nn.Module, SupportsPP):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_stacked={
             ".q_proj": (".qkv_proj", "q"),
             ".k_proj": (".qkv_proj", "k"),
@@ -584,25 +584,25 @@ class FlintForCausalLM(nn.Module, SupportsPP):
         "gate_up_proj": ["gate_proj", "up_proj"],
     }
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__()
-        config: FlintConfig = aphrodite_config.model_config.hf_config
+        config: FlintConfig = sonar_config.model_config.hf_config
         self.config = config
 
-        model_config = aphrodite_config.model_config
+        model_config = sonar_config.model_config
         self.gguf_path = find_gguf_file(
             model_config.model,
             model_config.revision,
-            aphrodite_config.load_config.download_dir,
+            sonar_config.load_config.download_dir,
         )
-        quant_config = aphrodite_config.quant_config
+        quant_config = sonar_config.quant_config
         if self.gguf_path is not None:
             if quant_config is not None:
                 raise ValueError(
                     "Flint NVFP4 GGUF checkpoints carry their own quantization; do not pass --quantization."
                 )
             quant_config = _nvfp4_gguf_quant_config()
-            aphrodite_config.quant_config = quant_config
+            sonar_config.quant_config = quant_config
             # load_weights reads the GGUF itself and never consumes the default
             # loader's (lazy) iterator; the pattern just names the right file.
             self.allow_patterns_overrides = ["*.gguf"]
@@ -610,7 +610,7 @@ class FlintForCausalLM(nn.Module, SupportsPP):
             quant_config.packed_modules_mapping = self.packed_modules_mapping
         self.quant_config = quant_config
 
-        self.model = FlintModel(aphrodite_config, quant_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = FlintModel(sonar_config, quant_config, prefix=maybe_prefix(prefix, "model"))
         self.flint_dense = _flint_kernels(quant_config)
         if self.flint_dense:
             flint_linear.install_flint_dense_kernels(self.model)
@@ -647,7 +647,7 @@ class FlintForCausalLM(nn.Module, SupportsPP):
             if self.flint_dense:
                 weights = flint_linear.check_merged_global_scales(weights)
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
     def _apply_dequantized_scales(
         self, weights: Iterable[tuple[str, torch.Tensor]]

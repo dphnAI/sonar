@@ -5,9 +5,9 @@ from typing import cast
 import torch
 import torch.nn as nn
 
-from aphrodite import _custom_ops as ops
-from aphrodite.config import ModelConfig
-from aphrodite.model_executor.models.interfaces import SupportsMRoPE
+from sonar import _custom_ops as ops
+from sonar.config import ModelConfig
+from sonar.model_executor.models.interfaces import SupportsMRoPE
 
 
 class RopeState:

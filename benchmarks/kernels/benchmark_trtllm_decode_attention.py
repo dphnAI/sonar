@@ -7,7 +7,7 @@ from datetime import datetime
 import flashinfer
 import torch
 
-from aphrodite.utils.math_utils import round_up
+from sonar.utils.math_utils import round_up
 
 FLOAT32_BYTES = torch.finfo(torch.float).bits // 8
 FP8_DTYPE = torch.float8_e4m3fn

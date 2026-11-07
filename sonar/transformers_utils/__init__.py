@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-from aphrodite import envs
+from sonar import envs
 
-if envs.APHRODITE_USE_MODELSCOPE:
+if envs.SONAR_USE_MODELSCOPE:
     try:
         # Patch here, before each import happens
         import modelscope
@@ -12,8 +12,7 @@ if envs.APHRODITE_USE_MODELSCOPE:
         # patch_hub begins from modelscope>=1.18.1
         if version.parse(modelscope.__version__) <= version.parse("1.18.0"):
             raise ImportError(
-                "Using Aphrodite with ModelScope needs modelscope>=1.18.1, please "
-                "install by `pip install modelscope -U`"
+                "Using Sonar with ModelScope needs modelscope>=1.18.1, please install by `pip install modelscope -U`"
             )
         from modelscope.utils.hf_util import patch_hub
 

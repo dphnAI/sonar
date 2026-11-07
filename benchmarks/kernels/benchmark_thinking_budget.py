@@ -8,11 +8,11 @@ from typing import Literal
 import numpy as np
 import torch
 
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.triton_utils import triton
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
-from aphrodite.v1.worker.gpu.sample.thinking_budget import ThinkingBudgetState
-from aphrodite.v1.worker.gpu.states import RequestState
+from sonar.sampling_params import SamplingParams
+from sonar.triton_utils import triton
+from sonar.utils.argparse_utils import FlexibleArgumentParser
+from sonar.v1.worker.gpu.sample.thinking_budget import ThinkingBudgetState
+from sonar.v1.worker.gpu.states import RequestState
 
 START_TOKEN_ID = 90
 END_TOKEN_ID = 91

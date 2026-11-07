@@ -7,7 +7,7 @@ import os
 
 from transformers import PreTrainedConfig
 
-from aphrodite.transformers_utils.utils import without_trust_remote_code
+from sonar.transformers_utils.utils import without_trust_remote_code
 
 
 class ExtractHiddenStatesConfig(PreTrainedConfig):

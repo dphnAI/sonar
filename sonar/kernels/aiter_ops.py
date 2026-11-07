@@ -6,9 +6,9 @@ import torch
 from torch import Tensor
 from torch.library import Library
 
-from aphrodite import ir
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import direct_register_custom_op
+from sonar import ir
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import direct_register_custom_op
 
 current_platform.import_kernels()
 
@@ -19,7 +19,7 @@ def is_aiter_found() -> bool:
     return find_spec("aiter") is not None
 
 
-aiter_lib = Library("aphrodite_aiter", "FRAGMENT")
+aiter_lib = Library("sonar_aiter", "FRAGMENT")
 """
 This library holds torch custom ops for wrapped AITER ops.
 Many AITER ops want to remain invisible to torch.compile even after lowering.
@@ -72,7 +72,7 @@ def rms_norm(x: Tensor, weight: Tensor | None, epsilon: float, variance_size: in
     assert x.dtype in (torch.float16, torch.bfloat16)
     if weight is None:
         weight = torch.ones(x.shape[-1], device=x.device, dtype=x.dtype)
-    return torch.ops.aphrodite_aiter.rms_norm(x, weight, epsilon)
+    return torch.ops.sonar_aiter.rms_norm(x, weight, epsilon)
 
 
 def _rms_norm_impl(x: Tensor, weight: Tensor, variance_epsilon: float) -> Tensor:
@@ -119,7 +119,7 @@ def fused_add_rms_norm(
     assert x.dtype in (torch.float16, torch.bfloat16)
     if weight is None:
         weight = torch.ones(x.shape[-1], device=x.device, dtype=x.dtype)
-    return torch.ops.aphrodite_aiter.fused_add_rms_norm(x, x_residual, weight, epsilon)
+    return torch.ops.sonar_aiter.fused_add_rms_norm(x, x_residual, weight, epsilon)
 
 
 def _rocm_aiter_rmsnorm2d_fwd_with_add_impl(

@@ -12,18 +12,18 @@ import torch
 from PIL import Image
 from transformers import BatchFeature
 
-from aphrodite.config.multimodal import (
+from sonar.config.multimodal import (
     MultiModalDummyOptions,
 )
-from aphrodite.inputs import MultiModalDataDict
-from aphrodite.multimodal.inputs import MultiModalFieldConfig, MultiModalKwargsItems
-from aphrodite.multimodal.media import MediaWithBytes
-from aphrodite.multimodal.parse import (
+from sonar.inputs import MultiModalDataDict
+from sonar.multimodal.inputs import MultiModalFieldConfig, MultiModalKwargsItems
+from sonar.multimodal.media import MediaWithBytes
+from sonar.multimodal.parse import (
     MultiModalDataItems,
     MultiModalDataParser,
     VideoProcessorItems,
 )
-from aphrodite.multimodal.processing import (
+from sonar.multimodal.processing import (
     BaseDummyInputsBuilder,
     BaseMultiModalProcessor,
     BaseProcessingInfo,
@@ -31,8 +31,8 @@ from aphrodite.multimodal.processing import (
     PromptUpdate,
     PromptUpdateDetails,
 )
-from aphrodite.multimodal.processing.processor import HFMultiModalInputs
-from aphrodite.transformers_utils.repo_utils import get_hf_file_to_dict
+from sonar.multimodal.processing.processor import HFMultiModalInputs
+from sonar.transformers_utils.repo_utils import get_hf_file_to_dict
 
 from .video import preprocess_dots3_note_video
 
@@ -205,7 +205,7 @@ class Dots3NoteImageProcessor:
 
 
 class Dots3NoteProcessor:
-    """Small HF-like processor used by Aphrodite's multimodal frontend."""
+    """Small HF-like processor used by Sonar's multimodal frontend."""
 
     def __init__(
         self,

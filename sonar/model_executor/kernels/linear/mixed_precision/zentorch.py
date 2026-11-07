@@ -10,12 +10,12 @@ falls through to the next kernel in ``_POSSIBLE_KERNELS[PlatformEnum.CPU]``.
 import torch
 from torch.nn import Parameter
 
-from aphrodite import envs
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.kernels.linear.zentorch_utils import has_zentorch_op
-from aphrodite.model_executor.utils import replace_parameter
-from aphrodite.platforms import current_platform
-from aphrodite.scalar_type import scalar_types
+from sonar import envs
+from sonar.logger import init_logger
+from sonar.model_executor.kernels.linear.zentorch_utils import has_zentorch_op
+from sonar.model_executor.utils import replace_parameter
+from sonar.platforms import current_platform
+from sonar.scalar_type import scalar_types
 
 from .cpu import _CPUWNA16_SUPPORTED_QUANT_TYPES, CPUWNA16LinearKernel
 from .MPLinearKernel import MPLinearLayerConfig
@@ -125,7 +125,7 @@ class ZentorchWNA16LinearKernel(CPUWNA16LinearKernel):
         Returns False without mutating the layer when it is not eligible, so
         the caller falls through to the W4A16 paths.
         """
-        if not envs.APHRODITE_CPU_INT4_W4A8:
+        if not envs.SONAR_CPU_INT4_W4A8:
             return False
 
         if not has_zentorch_op(["zentorch_dynamic_qlinear"]):

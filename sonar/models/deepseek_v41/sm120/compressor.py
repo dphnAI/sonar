@@ -8,17 +8,17 @@ from b12x.attention import mla_compress
 from b12x.gemm import bf16_gemv
 from b12x.preparation import PreparedCall
 
-from aphrodite.model_executor.layers.attention_layer_base import AttentionLayerBase
-from aphrodite.model_executor.layers.linear import MergedColumnParallelLinear
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.b12x import (
+from sonar.model_executor.layers.attention_layer_base import AttentionLayerBase
+from sonar.model_executor.layers.linear import MergedColumnParallelLinear
+from sonar.triton_utils import tl, triton
+from sonar.utils.b12x import (
     B12xPreparationUnit,
     B12xWorkload,
     PreparationResourceUnavailableError,
     set_b12x_preparation_provider,
 )
-from aphrodite.v1.attention.backend import MultipleOf
-from aphrodite.v1.kv_cache_interface import CircularBufferSpec
+from sonar.v1.attention.backend import MultipleOf
+from sonar.v1.kv_cache_interface import CircularBufferSpec
 
 from .sparse_mla import DeepseekV41B12xBackend
 
@@ -130,7 +130,7 @@ class CompressorStateCache(nn.Module, AttentionLayerBase):
 class DeepseekCompressor(nn.Module):
     def __init__(
         self,
-        aphrodite_config,
+        sonar_config,
         compress_ratio,
         hidden_size,
         head_dim,
@@ -140,8 +140,8 @@ class DeepseekCompressor(nn.Module):
         if compress_ratio not in (1, 2) or head_dim != 512:
             raise ValueError("V4.1 compression requires ratio1/2 and head512")
         self.prefix, self.compress_ratio = prefix, compress_ratio
-        self.capacity = aphrodite_config.scheduler_config.max_num_batched_tokens
-        self.requests = aphrodite_config.scheduler_config.max_num_seqs
+        self.capacity = sonar_config.scheduler_config.max_num_batched_tokens
+        self.requests = sonar_config.scheduler_config.max_num_seqs
         self.fused_wkv_wgate = MergedColumnParallelLinear(
             hidden_size,
             [512] * compress_ratio,
@@ -154,9 +154,7 @@ class DeepseekCompressor(nn.Module):
         )
         self.norm = nn.Module()
         self.norm.register_parameter("weight", nn.Parameter(torch.ones(512, dtype=torch.float32), requires_grad=False))
-        self.state_cache = (
-            CompressorStateCache(aphrodite_config, f"{prefix}.state_cache") if compress_ratio == 2 else None
-        )
+        self.state_cache = CompressorStateCache(sonar_config, f"{prefix}.state_cache") if compress_ratio == 2 else None
         self._plan = None
         self._projection_plans = {}
         self._values = self._latent = self._emitted = self._slots = None

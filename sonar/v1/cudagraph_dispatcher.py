@@ -4,10 +4,10 @@ from collections.abc import Set as AbstractSet
 from dataclasses import replace
 from itertools import product
 
-from aphrodite.config import AphroditeConfig, CUDAGraphMode
-from aphrodite.forward_context import BatchDescriptor
-from aphrodite.logger import init_logger
-from aphrodite.lora.utils import get_captured_lora_counts
+from sonar.config import CUDAGraphMode, SonarConfig
+from sonar.forward_context import BatchDescriptor
+from sonar.logger import init_logger
+from sonar.lora.utils import get_captured_lora_counts
 
 logger = init_logger(__name__)
 
@@ -30,10 +30,10 @@ class CudagraphDispatcher:
     runnable without cudagraph (if the mode does not match or mode is NONE).
     """
 
-    def __init__(self, aphrodite_config: AphroditeConfig):
-        self.aphrodite_config = aphrodite_config
-        self.compilation_config = aphrodite_config.compilation_config
-        self.uniform_decode_query_len = 1 + self.aphrodite_config.num_speculative_tokens
+    def __init__(self, sonar_config: SonarConfig):
+        self.sonar_config = sonar_config
+        self.compilation_config = sonar_config.compilation_config
+        self.uniform_decode_query_len = 1 + self.sonar_config.num_speculative_tokens
 
         # Dict to store valid cudagraph dispatching keys.
         self.cudagraph_keys: dict[CUDAGraphMode, set[BatchDescriptor]] = {
@@ -41,7 +41,7 @@ class CudagraphDispatcher:
             CUDAGraphMode.FULL: set(),
         }
 
-        from aphrodite.compilation.breakable_cudagraph import (
+        from sonar.compilation.breakable_cudagraph import (
             is_breakable_cudagraph_enabled,
         )
 
@@ -50,7 +50,7 @@ class CudagraphDispatcher:
             or self.compilation_config.is_attention_compiled_piecewise()
             or is_breakable_cudagraph_enabled()
         ), (
-            "Compilation mode should be CompilationMode.APHRODITE_COMPILE when "
+            "Compilation mode should be CompilationMode.SONAR_COMPILE when "
             "cudagraph_mode piecewise cudagraphs is used, "
             "and attention should be in splitting_ops or "
             "inductor splitting should be used. "
@@ -61,9 +61,7 @@ class CudagraphDispatcher:
 
         self.keys_initialized = False
         self.specialize_lora_count = (
-            self.aphrodite_config.lora_config.specialize_active_lora
-            if self.aphrodite_config.lora_config is not None
-            else False
+            self.sonar_config.lora_config.specialize_active_lora if self.sonar_config.lora_config is not None else False
         )
         # Default cudagraph_mode to NONE until initialize_cudagraph_keys is called
         self.cudagraph_mode = CUDAGraphMode.NONE
@@ -104,7 +102,7 @@ class CudagraphDispatcher:
         """Returns list of has_lora values for CUDA graph capture.
         This is the single source of truth for LoRA capture cases.
         """
-        lora_config = self.aphrodite_config.lora_config
+        lora_config = self.sonar_config.lora_config
         if lora_config is None:
             # No LoRA configured - single case with no LoRA
             return [0]
@@ -125,7 +123,7 @@ class CudagraphDispatcher:
         has_lora: bool,
         num_active_loras: int = 0,
     ) -> BatchDescriptor:
-        max_num_seqs = self.aphrodite_config.scheduler_config.max_num_seqs
+        max_num_seqs = self.sonar_config.scheduler_config.max_num_seqs
         uniform_decode_query_len = self.uniform_decode_query_len
         num_tokens_padded = self._bs_to_padded_graph_size[num_tokens]
 
@@ -184,7 +182,7 @@ class CudagraphDispatcher:
         # if decode cudagraph mode is FULL, and we don't already have mixed
         # mode full cudagraphs then add them here.
         if cudagraph_mode.decode_mode() == CUDAGraphMode.FULL and cudagraph_mode.separate_routine():
-            max_num_tokens = uniform_decode_query_len * self.aphrodite_config.scheduler_config.max_num_seqs
+            max_num_tokens = uniform_decode_query_len * self.sonar_config.scheduler_config.max_num_seqs
             assert self.compilation_config.cudagraph_capture_sizes is not None, (
                 "Cudagraph capture sizes must be set when full mode is enabled."
             )
@@ -262,8 +260,8 @@ class CudagraphDispatcher:
             else:
                 # When not specializing, graphs are captured only with max_loras + 1,
                 # so we must use max_loras + 1 for dispatch to find a matching graph.
-                assert self.aphrodite_config.lora_config is not None, "LoRA config must be set when has_lora is True."
-                effective_num_active_loras = self.aphrodite_config.lora_config.max_loras + 1
+                assert self.sonar_config.lora_config is not None, "LoRA config must be set when has_lora is True."
+                effective_num_active_loras = self.sonar_config.lora_config.max_loras + 1
 
         normalized_uniform = uniform_decode and self.cudagraph_mode.separate_routine()
         batch_desc = self._create_padded_batch_descriptor(

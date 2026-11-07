@@ -1,5 +1,5 @@
 [package]
-name = "aphrodite-engine-core-client"
+name = "sonar-engine-core-client"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -37,7 +37,7 @@ thiserror-ext.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
 tracing.workspace = true
-aphrodite-metrics.workspace = true
+sonar-metrics.workspace = true
 zeromq.workspace = true
 
 [dev-dependencies]

@@ -13,8 +13,8 @@ layer stages both once in ``process_weights_after_loading``.
 
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.mamba.mamba_utils import is_conv_state_dim_first
+from sonar.logger import init_logger
+from sonar.model_executor.layers.mamba.mamba_utils import is_conv_state_dim_first
 
 logger = init_logger(__name__)
 
@@ -33,7 +33,7 @@ def is_fused_kda_decode_supported(
     recurrent_state_dtype: torch.dtype,
 ) -> bool:
     """Whether the fused decode kernel can serve this layer on this device."""
-    from aphrodite.platforms.rocm import on_gfx942, on_gfx950
+    from sonar.platforms.rocm import on_gfx942, on_gfx950
 
     if (
         num_heads not in SUPPORTED_NUM_HEADS

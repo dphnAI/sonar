@@ -2,13 +2,13 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 from typing import TypeVar
 
-from aphrodite.entrypoints.generate.base.protocol import DeltaMessage, FunctionCall
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.generate.base.protocol import DeltaMessage, FunctionCall
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionNamedToolChoiceParam,
     ChatCompletionRequest,
     ChatCompletionResponseStreamChoice,
 )
-from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
+from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
 
 # Used internally
 _ToolCallsContainerT = TypeVar(

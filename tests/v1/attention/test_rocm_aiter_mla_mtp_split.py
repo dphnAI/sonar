@@ -9,22 +9,22 @@ from unittest import mock
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 if not current_platform.is_rocm():
     pytest.skip("ROCm AITER MLA tests", allow_module_level=True)
 
-from aphrodite.v1.attention.backends.mla import rocm_aiter_mla  # noqa: E402
-from aphrodite.v1.attention.backends.mla.rocm_aiter_mla import (  # noqa: E402
+from sonar.v1.attention.backends.mla import rocm_aiter_mla  # noqa: E402
+from sonar.v1.attention.backends.mla.rocm_aiter_mla import (  # noqa: E402
     AiterMLAHelper,
     AiterMLAImpl,
     AiterMLAMetadataBuilder,
 )
-from aphrodite.v1.attention.ops.dcp import (  # noqa: E402
+from sonar.v1.attention.ops.dcp import (  # noqa: E402
     CPTritonContext,
     correct_attn_out,
 )
-from aphrodite.v1.attention.ops.rocm_aiter_mla_merge import (  # noqa: E402
+from sonar.v1.attention.ops.rocm_aiter_mla_merge import (  # noqa: E402
     merge_mla_segments_triton,
 )
 
@@ -493,7 +493,7 @@ def test_non_causal_dcp_block_bypasses_cprr_in_forward(monkeypatch):
 def test_single_token_dcp_decode_returns_unpadded_lse(monkeypatch):
     """Single-token DCP decode must come back with an LSE the merge can use.
 
-    This is the path every DCP step takes outside verification. The Aphrodite custom
+    This is the path every DCP step takes outside verification. The Sonar custom
     op drops aiter's LSE, so the impl calls aiter directly; without an LSE the
     MLA layer's cross-rank combine asserts. The head count is deliberately a
     non-divisor of 16 so both the output and the LSE have to be unpadded back
@@ -880,7 +880,7 @@ def test_builder_init_sizes_decode_metadata_and_filters_dcp_maps(
     builder = AiterMLAMetadataBuilder(
         kv_cache_spec=SimpleNamespace(block_size=1, dtype=torch.bfloat16, cache_dtype_str=group_cache_dtype),
         layer_names=["layer.0"],
-        aphrodite_config=config,
+        sonar_config=config,
         device=torch.device("cpu"),
     )
 
@@ -1005,7 +1005,7 @@ def test_builder_sizes_metadata_for_every_decode_qlen(monkeypatch):
     builder = AiterMLAMetadataBuilder(
         kv_cache_spec=SimpleNamespace(block_size=1, dtype=torch.bfloat16, cache_dtype_str="auto"),
         layer_names=["layer.0"],
-        aphrodite_config=config,
+        sonar_config=config,
         device=torch.device("cpu"),
     )
 
@@ -1463,11 +1463,11 @@ def test_varlen_cudagraph_bound_follows_adaptive_verification(monkeypatch):
 
 
 def test_backend_rejects_unsupported_adaptive_dcp(monkeypatch):
-    import aphrodite.config
+    import sonar.config
 
     monkeypatch.setattr(
-        aphrodite.config,
-        "get_current_aphrodite_config_or_none",
+        sonar.config,
+        "get_current_sonar_config_or_none",
         lambda: _adaptive_config(dcp=8, cp_interleave=2),
     )
 

@@ -8,13 +8,13 @@ from unittest.mock import Mock
 import pytest
 import torch
 
-from aphrodite.v1.core.sched.output import (
+from sonar.v1.core.sched.output import (
     CachedRequestData,
     NewRequestData,
     SchedulerOutput,
 )
-from aphrodite.v1.worker.gpu.model_runner import GPUModelRunner
-from aphrodite.v1.worker.gpu.states import RequestState
+from sonar.v1.worker.gpu.model_runner import GPUModelRunner
+from sonar.v1.worker.gpu.states import RequestState
 
 # Not cpu_test: RequestState allocates pinned (UVA) memory, which requires a
 # CUDA device even though the request state itself lives on the CPU.

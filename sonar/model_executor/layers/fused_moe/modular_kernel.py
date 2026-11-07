@@ -9,42 +9,42 @@ from typing import Any, final
 
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe.activation import (
+import sonar.envs as envs
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe.activation import (
     ApplyMoEActivationConfig,
     MoEActivation,
     apply_moe_activation,
 )
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEParallelConfig,
     FusedMoEQuantConfig,
     RoutingMethodType,
 )
-from aphrodite.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
-from aphrodite.model_executor.layers.fused_moe.routed_experts_capturer import (
+from sonar.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
+from sonar.model_executor.layers.fused_moe.routed_experts_capturer import (
     RoutedExpertsSink,
 )
-from aphrodite.model_executor.layers.fused_moe.runner.shared_experts import (
+from sonar.model_executor.layers.fused_moe.runner.shared_experts import (
     SharedExperts,
     SharedExpertsOrder,
 )
-from aphrodite.model_executor.layers.fused_moe.utils import (
+from sonar.model_executor.layers.fused_moe.utils import (
     _resize_cache,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import PIN_MEMORY
-from aphrodite.v1.worker.ubatching import (
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import PIN_MEMORY
+from sonar.v1.worker.ubatching import (
     dbo_enabled,
     dbo_maybe_run_recv_hook,
     dbo_register_recv_hook,
     dbo_yield,
 )
-from aphrodite.v1.worker.workspace import current_workspace_manager
+from sonar.v1.worker.workspace import current_workspace_manager
 
 logger = init_logger(__name__)
 
@@ -602,7 +602,7 @@ class FusedMoEExperts(ABC):
             return False, _make_reason(f"{moe_config.hidden_dim} hidden dim is not supported")
         elif activation_format != cls.activation_format():
             return False, _make_reason(f"{activation_format.value} activation format")
-        elif envs.APHRODITE_BATCH_INVARIANT and not cls._supports_batch_invariance():
+        elif envs.SONAR_BATCH_INVARIANT and not cls._supports_batch_invariance():
             return False, _make_reason("batch invariance")
         elif moe_config.is_lora_enabled and not cls.supports_lora():
             return False, _make_reason("LoRA")
@@ -693,7 +693,7 @@ class FusedMoEExperts(ABC):
     def _supports_batch_invariance() -> bool:
         """Whether the kernel supports batch invariance, i.e. the output does not
         depend on the order of the tokens in the input batch. This is useful
-        for determining if the kernel can used with APHRODITE_BATCH_INVARIANT=1.
+        for determining if the kernel can used with SONAR_BATCH_INVARIANT=1.
         """
         return False
 
@@ -1078,7 +1078,7 @@ class FusedMoEKernelModularImpl:
         self.fused_experts = fused_experts
         # Experts that globalize recv_topk_idx themselves let a capable prepare
         # stage skip its standalone launch.
-        from aphrodite.model_executor.layers.fused_moe.experts.fused_humming_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.fused_humming_moe import (
             HummingIndexedExperts,
         )
 
@@ -1343,7 +1343,7 @@ class FusedMoEKernelModularImpl:
         # This eliminates ~94% of __amd_rocclr_copyBuffer events (Copy 2 of the
         # double-copy MoE write-back path).
         if current_platform.is_rocm():
-            from aphrodite._aiter_ops import rocm_aiter_ops
+            from sonar._aiter_ops import rocm_aiter_ops
 
             if use_output_alias and rocm_aiter_ops.is_fused_moe_enabled():
                 fused_out = output_alias

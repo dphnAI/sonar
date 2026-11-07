@@ -6,12 +6,12 @@ import pytest
 import torch
 from transformers import Gemma3Config, PreTrainedConfig, Qwen2Config
 
-from aphrodite.config import AphroditeConfig, LoadConfig
-from aphrodite.model_executor.models.adapters import (
+from sonar.config import LoadConfig, SonarConfig
+from sonar.model_executor.models.adapters import (
     _create_pooling_model_cls,
     _resolve_num_labels,
 )
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.models.utils import (
     AutoWeightsLoader,
     StageMissingLayer,
     WeightsMapper,
@@ -102,7 +102,7 @@ def _make_pooling_model(base_cls=SimpleModel, load_format="fastsafetensors"):
     PoolingModel = _create_pooling_model_cls(base_cls)
     model = base_cls()
     model.__class__ = PoolingModel
-    model.aphrodite_config = AphroditeConfig(load_config=LoadConfig(load_format=load_format))
+    model.sonar_config = SonarConfig(load_config=LoadConfig(load_format=load_format))
     model.lm_head = StageMissingLayer("output", model.lm_head)
     return model
 
@@ -172,14 +172,14 @@ class _LanguageModelWrapper(torch.nn.Module):
 
 
 class ModelWithWeightsMapper(torch.nn.Module):
-    """Stand-in for models whose keys only align after hf_to_aphrodite_mapper.
+    """Stand-in for models whose keys only align after hf_to_sonar_mapper.
 
     Checkpoint keys like ``model.language_model.*`` never match
     ``""`` / ``model.`` + raw name against ``language_model.model.*`` params.
     The pooling prefix probe must consult the mapper so it can early-exit.
     """
 
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={
             "model.language_model.": "language_model.model.",
         }
@@ -196,17 +196,17 @@ class ModelWithWeightsMapper(torch.nn.Module):
         self.seen_names = []
         for name, tensor in weights:
             self.seen_names.append(name)
-            mapped = self.hf_to_aphrodite_mapper._map_name(name)
+            mapped = self.hf_to_sonar_mapper._map_name(name)
             if mapped is not None and mapped in params:
                 params[mapped].data.copy_(tensor)
                 loaded.add(mapped)
         return loaded
 
 
-def test_pooling_prefix_probe_uses_hf_to_aphrodite_mapper(monkeypatch):
+def test_pooling_prefix_probe_uses_hf_to_sonar_mapper(monkeypatch):
     """Mapper lets the prefix probe early-exit without cloning the full ckpt.
 
-    Checkpoint keys only align after ``hf_to_aphrodite_mapper``. The probe must use
+    Checkpoint keys only align after ``hf_to_sonar_mapper``. The probe must use
     the mapped name for membership, keep forwarding original names to the
     parent loader, and stop after the first hit instead of cloning everything.
     """

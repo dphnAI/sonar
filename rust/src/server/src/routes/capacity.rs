@@ -3,10 +3,10 @@
 
 use std::sync::Arc;
 
-use aphrodite_engine_core_client::protocol::handshake::EngineCoreReadyResponse;
 use axum::Json;
 use axum::extract::State;
 use serde_json::{Value, json};
+use sonar_engine_core_client::protocol::handshake::EngineCoreReadyResponse;
 
 use crate::state::AppState;
 
@@ -37,7 +37,7 @@ fn capacity_response(mut reports: Vec<&EngineCoreReadyResponse>) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use aphrodite_engine_core_client::mock_engine::default_ready_response;
+    use sonar_engine_core_client::mock_engine::default_ready_response;
 
     #[test]
     fn capacity_preserves_distinct_replica_values_in_rank_order() {

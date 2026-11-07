@@ -12,7 +12,7 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from ....conftest import AphroditeRunner
+from ....conftest import SonarRunner
 
 MODELS = [
     "athrael-soju/colqwen3.5-4.5B-v3",
@@ -36,24 +36,24 @@ DTYPE = "half"
 
 
 @pytest.fixture(scope="module", params=MODELS)
-def colqwen3_5_model(request, aphrodite_runner):
+def colqwen3_5_model(request, sonar_runner):
     model = request.param
-    with aphrodite_runner(
+    with sonar_runner(
         model,
         runner="pooling",
         dtype=DTYPE,
         max_model_len=4096,
         enforce_eager=True,
-    ) as aphrodite_model:
-        yield model, aphrodite_model
+    ) as sonar_model:
+        yield model, sonar_model
 
 
 def _run_token_embed_test(
-    aphrodite_model: AphroditeRunner,
+    sonar_model: SonarRunner,
     model: str,
 ) -> None:
     """Verify per-token embedding shape and L2 normalization."""
-    outputs = aphrodite_model.token_embed([TEXT_QUERIES[0]])
+    outputs = sonar_model.token_embed([TEXT_QUERIES[0]])
 
     assert len(outputs) == 1
     emb = torch.tensor(outputs[0])
@@ -73,27 +73,27 @@ def _run_token_embed_test(
 
 
 def _run_late_interaction_test(
-    aphrodite_model: AphroditeRunner,
+    sonar_model: SonarRunner,
 ) -> None:
     """Verify MaxSim scoring matches manual computation."""
-    from aphrodite.entrypoints.pooling.scoring.utils import compute_maxsim_score
+    from sonar.entrypoints.pooling.scoring.utils import compute_maxsim_score
 
-    q_outputs = aphrodite_model.token_embed([TEXT_QUERIES[0]])
-    d_outputs = aphrodite_model.token_embed([TEXT_DOCUMENTS[0]])
+    q_outputs = sonar_model.token_embed([TEXT_QUERIES[0]])
+    d_outputs = sonar_model.token_embed([TEXT_DOCUMENTS[0]])
 
     q_emb = torch.tensor(q_outputs[0])
     d_emb = torch.tensor(d_outputs[0])
 
     manual_score = compute_maxsim_score(q_emb, d_emb).item()
 
-    aphrodite_scores = aphrodite_model.score(TEXT_QUERIES[0], TEXT_DOCUMENTS[0])
+    sonar_scores = sonar_model.score(TEXT_QUERIES[0], TEXT_DOCUMENTS[0])
 
-    assert len(aphrodite_scores) == 1
-    assert aphrodite_scores[0] == pytest.approx(manual_score, rel=0.01)
+    assert len(sonar_scores) == 1
+    assert sonar_scores[0] == pytest.approx(manual_score, rel=0.01)
 
 
 def _run_relevance_test(
-    aphrodite_model: AphroditeRunner,
+    sonar_model: SonarRunner,
 ) -> None:
     """Verify that relevant documents score higher than irrelevant ones."""
     query = "What is machine learning?"
@@ -103,7 +103,7 @@ def _run_relevance_test(
         "Deep learning uses neural networks for complex tasks.",
     ]
 
-    scores = aphrodite_model.score(query, documents)
+    scores = sonar_model.score(query, documents)
 
     assert len(scores) == 3
     assert scores[0] > scores[1], "ML doc should score higher than weather doc"
@@ -111,18 +111,18 @@ def _run_relevance_test(
 
 
 def test_colqwen3_5_token_embed(colqwen3_5_model) -> None:
-    model, aphrodite_model = colqwen3_5_model
-    _run_token_embed_test(aphrodite_model, model)
+    model, sonar_model = colqwen3_5_model
+    _run_token_embed_test(sonar_model, model)
 
 
 def test_colqwen3_5_late_interaction_scoring(colqwen3_5_model) -> None:
-    _, aphrodite_model = colqwen3_5_model
-    _run_late_interaction_test(aphrodite_model)
+    _, sonar_model = colqwen3_5_model
+    _run_late_interaction_test(sonar_model)
 
 
 def test_colqwen3_5_relevance_ordering(colqwen3_5_model) -> None:
-    _, aphrodite_model = colqwen3_5_model
-    _run_relevance_test(aphrodite_model)
+    _, sonar_model = colqwen3_5_model
+    _run_relevance_test(sonar_model)
 
 
 @pytest.mark.parametrize(
@@ -133,7 +133,7 @@ def test_colqwen3_5_config_applies_declared_attention_contract(
     contract: str,
     expected_is_causal: bool,
 ) -> None:
-    from aphrodite.model_executor.models.config import (
+    from sonar.model_executor.models.config import (
         MODELS_CONFIG_MAP,
         ColQwen3_5Config,
     )
@@ -163,7 +163,7 @@ def test_colqwen3_5_config_applies_declared_attention_contract(
     ],
 )
 def test_colqwen3_5_config_rejects_invalid_attention_contract(hf_config) -> None:
-    from aphrodite.model_executor.models.config import ColQwen3_5Config
+    from sonar.model_executor.models.config import ColQwen3_5Config
 
     text_config = getattr(hf_config, "text_config", SimpleNamespace())
     model_config = SimpleNamespace(
@@ -177,9 +177,9 @@ def test_colqwen3_5_config_rejects_invalid_attention_contract(hf_config) -> None
 def test_colqwen3_5_bidirectional_contract_builds_encoder_only_attention(
     monkeypatch,
 ) -> None:
-    from aphrodite.model_executor.models import qwen3_next
-    from aphrodite.model_executor.models.config import ColQwen3_5Config
-    from aphrodite.v1.attention.backend import AttentionType
+    from sonar.model_executor.models import qwen3_next
+    from sonar.model_executor.models.config import ColQwen3_5Config
+    from sonar.v1.attention.backend import AttentionType
 
     hf_config = SimpleNamespace(retrieval_attention_contract="bidirectional")
     text_config = SimpleNamespace(
@@ -221,10 +221,10 @@ def test_colqwen3_5_bidirectional_contract_builds_encoder_only_attention(
 
 
 def test_colqwen3_5_encoder_only_attention_has_no_kv_cache_spec() -> None:
-    from aphrodite.model_executor.layers.attention import Attention
-    from aphrodite.v1.attention.backend import AttentionType
+    from sonar.model_executor.layers.attention import Attention
+    from sonar.v1.attention.backend import AttentionType
 
     attention = SimpleNamespace(attn_type=AttentionType.ENCODER_ONLY)
-    aphrodite_config = SimpleNamespace(cache_config=SimpleNamespace(block_size=16))
+    sonar_config = SimpleNamespace(cache_config=SimpleNamespace(block_size=16))
 
-    assert Attention.get_kv_cache_spec(attention, aphrodite_config) is None
+    assert Attention.get_kv_cache_spec(attention, sonar_config) is None

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Whisper runtime adapter for Aphrodite STT execution."""
+"""Whisper runtime adapter for Sonar STT execution."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import logging
 
 import mlx.core as mx
 
-from aphrodite.metal.stt.runtime import STTAudioInput, STTRuntimeAdapter
+from sonar.metal.stt.runtime import STTAudioInput, STTRuntimeAdapter
 
 from .model import WhisperModel
 from .transcriber import WhisperTranscriber

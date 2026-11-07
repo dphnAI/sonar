@@ -3,10 +3,10 @@
 """
 This file demonstrates the example usage of disaggregated prefilling
 with LMCache.
-We will launch 2 aphrodite instances (GPU 0 for prefill and GPU 1 for decode),
+We will launch 2 sonar instances (GPU 0 for prefill and GPU 1 for decode),
 and launch an additional LMCache server.
 KV cache is transferred in the following manner:
-Aphrodite prefill node -> LMCache server -> Aphrodite decode node.
+Sonar prefill node -> LMCache server -> Sonar decode node.
 
 Note that `pip install lmcache` is needed to run this example.
 Learn more about LMCache in https://github.com/LMCache/LMCache.
@@ -19,9 +19,9 @@ from multiprocessing import Event, Process
 
 from lmcache.experimental.cache_engine import LMCacheEngineBuilder
 
-from aphrodite import LLM, SamplingParams
-from aphrodite.config import KVTransferConfig
-from aphrodite.distributed.kv_transfer.kv_connector.v1.lmcache_integration.aphrodite_v1_adapter import ENGINE_NAME
+from sonar import LLM, SamplingParams
+from sonar.config import KVTransferConfig
+from sonar.distributed.kv_transfer.kv_connector.v1.lmcache_integration.sonar_v1_adapter import ENGINE_NAME
 
 # LMCache-related environment variables
 # The port to start LMCache server
@@ -36,7 +36,7 @@ os.environ["LMCACHE_LOCAL_CPU"] = "False"
 os.environ["LMCACHE_MAX_LOCAL_CPU_SIZE"] = "5.0"
 # Set the remote URL for LMCache server
 os.environ["LMCACHE_REMOTE_URL"] = f"lm://localhost:{port}"
-# Set the serializer/deserializer between aphrodite and LMCache server
+# Set the serializer/deserializer between sonar and LMCache server
 # `naive` indicates using raw bytes of the tensor without any compression
 os.environ["LMCACHE_REMOTE_SERDE"] = "naive"
 

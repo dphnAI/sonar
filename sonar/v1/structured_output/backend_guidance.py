@@ -10,19 +10,19 @@ from typing import TYPE_CHECKING, Any
 import torch
 from transformers import TokenizersBackend
 
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.logger import init_logger
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.tokenizers import TokenizerLike
-from aphrodite.utils.import_utils import LazyLoader
-from aphrodite.utils.mistral import is_mistral_tokenizer
-from aphrodite.v1.structured_output.backend_types import (
+from sonar.exceptions import SonarValidationError
+from sonar.logger import init_logger
+from sonar.sampling_params import SamplingParams
+from sonar.tokenizers import TokenizerLike
+from sonar.utils.import_utils import LazyLoader
+from sonar.utils.mistral import is_mistral_tokenizer
+from sonar.v1.structured_output.backend_types import (
     StructuredOutputBackend,
     StructuredOutputGrammar,
     StructuredOutputOptions,
 )
-from aphrodite.v1.structured_output.request import get_structured_output_key
-from aphrodite.v1.structured_output.utils import strip_speculative_padding
+from sonar.v1.structured_output.request import get_structured_output_key
+from sonar.v1.structured_output.utils import strip_speculative_padding
 
 if TYPE_CHECKING:
     import llguidance
@@ -138,15 +138,15 @@ class GuidanceBackend(StructuredOutputBackend):
         so, we MUST verify tokenizer before using guidance
         The problem is that guidance API does not provide
         a way to validate tokenizer before building LLTokenizer
-        So, we have to do it manually here in Aphrodite.
+        So, we have to do it manually here in Sonar.
         This is ofcourse very bad, we duplicate complex logic
         that can change arbitrary in future.
         Our check here is based on guidance source code
         on function `from_tokenizer` implementation:
         https://github.com/guidance-ai/llguidance/blob/main/python/llguidance/hf.py#L29-L47
-        If you want to contribute to Aphrodite, please, add to llguidance
+        If you want to contribute to Sonar, please, add to llguidance
         API function to implement this check there.
-        In that case we will remove this check from Aphrodite.
+        In that case we will remove this check from Sonar.
         That kind of work is really appreciated!
         """
         if is_mistral_tokenizer(tokenizer):
@@ -161,10 +161,8 @@ class GuidanceBackend(StructuredOutputBackend):
         return llguidance_hf.from_tokenizer(tokenizer, max(vocab_size, len(tokenizer)))
 
     def __post_init__(self):
-        self.disable_any_whitespace = self.aphrodite_config.structured_outputs_config.disable_any_whitespace
-        self.disable_additional_properties = (
-            self.aphrodite_config.structured_outputs_config.disable_additional_properties
-        )
+        self.disable_any_whitespace = self.sonar_config.structured_outputs_config.disable_any_whitespace
+        self.disable_additional_properties = self.sonar_config.structured_outputs_config.disable_additional_properties
 
         if not self.is_tokenizer_supported(self.tokenizer):
             raise ValueError(
@@ -362,7 +360,7 @@ def serialize_guidance_grammar(
                 begin: str = s["begin"]
                 trig = next((t for t in triggers if begin.startswith(t)), None)
                 if trig is None:
-                    raise AphroditeValidationError(f"Trigger {begin} not found in triggers {triggers}")
+                    raise SonarValidationError(f"Trigger {begin} not found in triggers {triggers}")
                 tags.append(
                     llguidance.StructTag(
                         trigger=trig,
@@ -372,7 +370,7 @@ def serialize_guidance_grammar(
                     )
                 )
             if not tags:
-                raise AphroditeValidationError("No structural tags found in the grammar spec.")
+                raise SonarValidationError("No structural tags found in the grammar spec.")
             return llguidance.StructTag.to_grammar(tags)
         else:
             logger.error("Validation should have already occurred. Please file an issue.")
@@ -388,7 +386,7 @@ def validate_guidance_grammar(sampling_params: SamplingParams, tokenizer: llguid
     try:
         guidance_grm = serialize_guidance_grammar(tp, grm)
     except (ValueError, KeyError, TypeError) as e:
-        raise AphroditeValidationError(f"Invalid grammar specification: {e}") from e
+        raise SonarValidationError(f"Invalid grammar specification: {e}") from e
     err = llguidance.LLMatcher.validate_grammar(guidance_grm, tokenizer)
     if err:
-        raise AphroditeValidationError(f"Grammar error: {err}")
+        raise SonarValidationError(f"Grammar error: {err}")

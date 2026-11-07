@@ -3,9 +3,9 @@
 
 import pytest
 
-from aphrodite import SamplingParams
-from aphrodite.platforms import current_platform
-from aphrodite.v1.kv_cache_interface import MambaSpec
+from sonar import SamplingParams
+from sonar.platforms import current_platform
+from sonar.v1.kv_cache_interface import MambaSpec
 
 from ...utils import large_gpu_mark
 
@@ -63,7 +63,7 @@ MESSAGES = [
     HYBRID_MTP_MODELS,
 )
 @pytest.mark.parametrize("enable_prefix_caching", [False, True])
-def test_mtp_speculative_mixed_batch_short_prefill(aphrodite_runner, model_name, enable_prefix_caching):
+def test_mtp_speculative_mixed_batch_short_prefill(sonar_runner, model_name, enable_prefix_caching):
     """Test to ensure MTP speculative decoding correctly handles
     short prefill chunks that fall below the reorder_batch_threshold."""
     # Set so large that both prefills will be classified as decodes in a mixed batch
@@ -71,7 +71,7 @@ def test_mtp_speculative_mixed_batch_short_prefill(aphrodite_runner, model_name,
     chunk_size = 256 if not enable_prefix_caching else 2048
     num_draft_tokens = 100
 
-    with aphrodite_runner(
+    with sonar_runner(
         model_name,
         speculative_config={
             "method": "mtp",
@@ -138,11 +138,11 @@ def _build_access_code_manual(tokenizer, target_tokens: int) -> tuple[str, list[
 
 
 @large_gpu_mark(min_gb=30)
-def test_qwen_mtp_mamba_prefix_cache_hit_is_bounded(aphrodite_runner, monkeypatch):
+def test_qwen_mtp_mamba_prefix_cache_hit_is_bounded(sonar_runner, monkeypatch):
     """MTP must not extend a hybrid Mamba hit past the attention hit."""
-    monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
+    monkeypatch.setenv("SONAR_ENABLE_V1_MULTIPROCESSING", "0")
 
-    with aphrodite_runner(
+    with sonar_runner(
         QWEN_MODEL,
         tensor_parallel_size=1,
         max_model_len=8192,

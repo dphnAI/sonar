@@ -8,13 +8,13 @@ from unittest.mock import MagicMock, patch
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.v1.attention.backend import AttentionType
-from aphrodite.v1.attention.backends.cpu_attn import (
+from sonar.platforms import current_platform
+from sonar.v1.attention.backend import AttentionType
+from sonar.v1.attention.backends.cpu_attn import (
     CPUAttentionBackendImpl,
     CPUAttentionMetadataBuilder,
 )
-from aphrodite.v1.attention.backends.flash_attn import FlashAttentionMetadataBuilder
+from sonar.v1.attention.backends.flash_attn import FlashAttentionMetadataBuilder
 
 requires_cpu = pytest.mark.skipif(not current_platform.is_cpu(), reason="CPU attention backend")
 
@@ -47,26 +47,26 @@ def _build(
     cache_dtype: str = "auto",
 ) -> CPUAttentionMetadataBuilder:
     layers = _layers(layer_num_heads)
-    aphrodite_config = MagicMock()
-    aphrodite_config.model_config.dtype = torch.bfloat16
-    aphrodite_config.model_config.get_num_attention_heads.return_value = MODEL_WIDE_NUM_HEADS
-    aphrodite_config.cache_config.cache_dtype = cache_dtype
+    sonar_config = MagicMock()
+    sonar_config.model_config.dtype = torch.bfloat16
+    sonar_config.model_config.get_num_attention_heads.return_value = MODEL_WIDE_NUM_HEADS
+    sonar_config.cache_config.cache_dtype = cache_dtype
     kv_cache_spec = SimpleNamespace(num_kv_heads=num_kv_heads, head_size=head_size, block_size=block_size)
 
     with (
         patch(
-            "aphrodite.v1.attention.backends.utils.get_layers_from_aphrodite_config",
+            "sonar.v1.attention.backends.utils.get_layers_from_sonar_config",
             return_value=layers,
         ),
         patch(
-            "aphrodite.v1.attention.backends.cpu_attn.get_layers_from_aphrodite_config",
+            "sonar.v1.attention.backends.cpu_attn.get_layers_from_sonar_config",
             return_value=layers,
         ),
     ):
         return CPUAttentionMetadataBuilder(
             kv_cache_spec=kv_cache_spec,
             layer_names=list(layers),
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             device=torch.device("cpu"),
         )
 
@@ -122,7 +122,7 @@ def _request_group(
         causal=True,
     )
     with patch(
-        "aphrodite.v1.attention.backends.cpu_attn.envs.APHRODITE_CPU_ATTN_SPLIT_KV",
+        "sonar.v1.attention.backends.cpu_attn.envs.SONAR_CPU_ATTN_SPLIT_KV",
         enable_kv_split,
     ):
         metadata = builder.build(0, common).scheduler_metadata
@@ -183,15 +183,15 @@ def test_cpu_builder_selects_native_group_for_single_request(query_len, seq_len,
 def test_flash_attention_geometry_comes_from_the_group():
     """FA3 must use group geometry for layers without an ``impl`` wrapper."""
     layers = {f"layer_{i}": SimpleNamespace(num_heads=16) for i in range(2)}
-    aphrodite_config = MagicMock()
-    aphrodite_config.model_config.get_num_attention_heads.return_value = MODEL_WIDE_NUM_HEADS
-    aphrodite_config.model_config.get_num_kv_heads.return_value = NUM_KV_HEADS
-    aphrodite_config.model_config.get_head_size.return_value = 128
-    aphrodite_config.model_config.rswa_window = None
-    aphrodite_config.model_config.is_mm_prefix_lm = False
-    aphrodite_config.parallel_config.cp_kv_cache_interleave_size = 1
-    aphrodite_config.compilation_config.cudagraph_mode.has_full_cudagraphs.return_value = False
-    aphrodite_config.compilation_config.max_cudagraph_capture_size = None
+    sonar_config = MagicMock()
+    sonar_config.model_config.get_num_attention_heads.return_value = MODEL_WIDE_NUM_HEADS
+    sonar_config.model_config.get_num_kv_heads.return_value = NUM_KV_HEADS
+    sonar_config.model_config.get_head_size.return_value = 128
+    sonar_config.model_config.rswa_window = None
+    sonar_config.model_config.is_mm_prefix_lm = False
+    sonar_config.parallel_config.cp_kv_cache_interleave_size = 1
+    sonar_config.compilation_config.cudagraph_mode.has_full_cudagraphs.return_value = False
+    sonar_config.compilation_config.max_cudagraph_capture_size = None
     kv_cache_spec = SimpleNamespace(
         block_size=16,
         num_kv_heads=2,
@@ -202,22 +202,22 @@ def test_flash_attention_geometry_comes_from_the_group():
 
     with (
         patch(
-            "aphrodite.v1.attention.backends.utils.get_layers_from_aphrodite_config",
+            "sonar.v1.attention.backends.utils.get_layers_from_sonar_config",
             return_value=layers,
         ),
         patch(
-            "aphrodite.distributed.parallel_state.get_dcp_group",
+            "sonar.distributed.parallel_state.get_dcp_group",
             side_effect=AssertionError,
         ),
         patch(
-            "aphrodite.v1.attention.backends.flash_attn.get_flash_attn_version",
+            "sonar.v1.attention.backends.flash_attn.get_flash_attn_version",
             return_value=3,
         ),
     ):
         builder = FlashAttentionMetadataBuilder(
             kv_cache_spec=kv_cache_spec,
             layer_names=list(layers),
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             device=torch.device("cpu"),
         )
 

@@ -5,7 +5,7 @@ the ROCm MXFP4 (AITER top-1 per route) experts take."""
 
 import torch
 
-from aphrodite.triton_utils import tl, triton
+from sonar.triton_utils import tl, triton
 
 # Set on the returned first-route view; holds the full expanded buffer.
 _EXPANDED_ATTR = "_muse_route_expanded"

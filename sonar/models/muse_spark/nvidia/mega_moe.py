@@ -13,28 +13,28 @@ from typing import TYPE_CHECKING
 import torch
 from torch import nn
 
-from aphrodite import envs
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed import (
+from sonar import envs
+from sonar.config import SonarConfig
+from sonar.distributed import (
     get_ep_group,
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
 )
-from aphrodite.forward_context import get_forward_context, is_forward_context_available
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.quantization.modelopt import ModelOptNvFp4Config
-from aphrodite.model_executor.utils import set_weight_attrs
-from aphrodite.models.common.ops.sequence_parallel import is_sequence_parallel_active
-from aphrodite.models.muse_spark.nvidia.ops.prepare_megamoe_bf16 import (
+from sonar.forward_context import get_forward_context, is_forward_context_available
+from sonar.logger import init_logger
+from sonar.model_executor.layers.quantization.modelopt import ModelOptNvFp4Config
+from sonar.model_executor.utils import set_weight_attrs
+from sonar.models.common.ops.sequence_parallel import is_sequence_parallel_active
+from sonar.models.muse_spark.nvidia.ops.prepare_megamoe_bf16 import (
     prepare_megamoe_bf16_inputs,
 )
-from aphrodite.models.muse_spark.nvidia.ops.prepare_megamoe_nvfp4 import (
+from sonar.models.muse_spark.nvidia.ops.prepare_megamoe_nvfp4 import (
     prepare_megamoe_nvfp4_inputs,
 )
-from aphrodite.utils.deep_gemm import _import_deep_gemm
+from sonar.utils.deep_gemm import _import_deep_gemm
 
 if TYPE_CHECKING:
-    from aphrodite.models.muse_spark.nvidia.model import MuseSpark1xRMSNorm
+    from sonar.models.muse_spark.nvidia.model import MuseSpark1xRMSNorm
 
 logger = init_logger(__name__)
 
@@ -55,16 +55,16 @@ def _get_deep_gemm():
         raise RuntimeError(
             "Muse Spark MegaMoE requires the pinned DeepGEMM build "
             "with BF16 post-expert normalization and TRT-LLM NVFP4 weight layout. "
-            "Install it with tools/install_deepgemm.sh or rebuild the Aphrodite wheel."
+            "Install it with tools/install_deepgemm.sh or rebuild the Sonar wheel."
         )
     return module
 
 
-def get_trtllm_token_threshold(aphrodite_config: AphroditeConfig) -> int:
-    parallel = aphrodite_config.parallel_config
+def get_trtllm_token_threshold(sonar_config: SonarConfig) -> int:
+    parallel = sonar_config.parallel_config
     if (
-        aphrodite_config.kernel_config.moe_backend == "deep_gemm_mega_moe"
-        and isinstance(aphrodite_config.quant_config, ModelOptNvFp4Config)
+        sonar_config.kernel_config.moe_backend == "deep_gemm_mega_moe"
+        and isinstance(sonar_config.quant_config, ModelOptNvFp4Config)
         and parallel.tensor_parallel_size in (4, 8)
         and parallel.data_parallel_size == 1
         and parallel.pipeline_parallel_size == 1
@@ -88,7 +88,7 @@ class MuseSparkMegaMoEExperts(nn.Module):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         *,
         num_experts: int,
         num_local_experts: int,
@@ -115,7 +115,7 @@ class MuseSparkMegaMoEExperts(nn.Module):
         self.is_sequence_parallel = is_sequence_parallel
         self.post_expert_norm = post_expert_norm
         self.is_nvfp4 = is_nvfp4
-        self.trtllm_token_threshold = get_trtllm_token_threshold(aphrodite_config)
+        self.trtllm_token_threshold = get_trtllm_token_threshold(sonar_config)
         self.sp_min_tokens = self.trtllm_token_threshold + 1
         self.weight_layout = "trtllm" if is_nvfp4 and self.trtllm_token_threshold else "native"
         if hidden_size % 256 != 0 or intermediate_size % 256 != 0:
@@ -181,7 +181,7 @@ class MuseSparkMegaMoEExperts(nn.Module):
         self._transformed_l2: torch.Tensor | tuple[torch.Tensor, torch.Tensor] | None = None
         self._norm_gamma: torch.Tensor | None = None
 
-        compilation_config = aphrodite_config.compilation_config
+        compilation_config = sonar_config.compilation_config
         if prefix in compilation_config.static_forward_context:
             raise ValueError(f"Duplicate layer name: {prefix}")
         compilation_config.static_forward_context[prefix] = self
@@ -249,7 +249,7 @@ class MuseSparkMegaMoEExperts(nn.Module):
         self._norm_gamma = gamma.contiguous()
 
     def _prepare_trtllm_weights(self) -> None:
-        from aphrodite.model_executor.layers.quantization.utils.flashinfer_fp4_moe import (
+        from sonar.model_executor.layers.quantization.utils.flashinfer_fp4_moe import (
             prepare_static_weights_for_trtllm_fp4_moe,
             reorder_w1w3_to_w3w1,
         )
@@ -341,7 +341,7 @@ class MuseSparkMegaMoEExperts(nn.Module):
         return buffers[1 if self.is_nvfp4 else 0]
 
     def get_padding_mask(self, num_tokens: int) -> torch.Tensor | None:
-        if not envs.APHRODITE_MOE_SKIP_PADDING or not is_forward_context_available():
+        if not envs.SONAR_MOE_SKIP_PADDING or not is_forward_context_available():
             return None
         is_padding = get_forward_context().is_padding
         if is_padding is None:

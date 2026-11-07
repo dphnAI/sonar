@@ -28,12 +28,12 @@ model:
 
 features:
   reasoning:
-    description: "Split the model's <think>…</think> chain-of-thought into a separate reasoning field via Aphrodite's qwen3 parser"
+    description: "Split the model's <think>…</think> chain-of-thought into a separate reasoning field via Sonar's qwen3 parser"
     args:
       - "--reasoning-parser"
       - "qwen3"
   tool_calling:
-    description: "Surface LFM2.5's Pythonic tool calls (wrapped in <|tool_call_start|>…<|tool_call_end|>) as OpenAI tool_calls via Aphrodite's native lfm2 parser"
+    description: "Surface LFM2.5's Pythonic tool calls (wrapped in <|tool_call_start|>…<|tool_call_end|>) as OpenAI tool_calls via Sonar's native lfm2 parser"
     args:
       - "--enable-auto-tool-choice"
       - "--tool-call-parser"
@@ -53,7 +53,7 @@ hardware_overrides:
   # output identical). Inert (falls back to native) on non-Blackwell GPUs.
   blackwell:
     extra_env:
-      APHRODITE_USE_OINK_OPS: "1"
+      SONAR_USE_OINK_OPS: "1"
 strategy_overrides:
   single_node_tp:
     tp: 1
@@ -66,14 +66,14 @@ guide: |
   backbone** (short-range gated convolution blocks interleaved with grouped-query attention). On
   reasoning-heavy tasks it produces an explicit `<think>…</think>` chain-of-thought before its
   final answer, so it reasons well above its weight class while still serving on a single small
-  GPU through Aphrodite's OpenAI-compatible API.
+  GPU through Sonar's OpenAI-compatible API.
 
   ### Key Features
   - **Hybrid backbone**: Gated short convolutions interleaved with grouped-query attention — a smaller KV cache and lower decode latency than a same-size full-attention transformer.
-  - **`<think>` reasoning**: Emits an explicit `<think>…</think>` chain-of-thought on non-trivial problems; Aphrodite's `qwen3` parser splits it into a separate `reasoning` field.
+  - **`<think>` reasoning**: Emits an explicit `<think>…</think>` chain-of-thought on non-trivial problems; Sonar's `qwen3` parser splits it into a separate `reasoning` field.
   - **32K context**: 32,768-token context window.
-  - **Tool calling**: Pythonic tool calls surfaced as OpenAI `tool_calls` by Aphrodite's native `lfm2` parser.
-  - **Native Aphrodite support**: Served via the `Lfm2ForCausalLM` architecture.
+  - **Tool calling**: Pythonic tool calls surfaced as OpenAI `tool_calls` by Sonar's native `lfm2` parser.
+  - **Native Sonar support**: Served via the `Lfm2ForCausalLM` architecture.
 
   ### Supported Variants
 
@@ -96,13 +96,13 @@ guide: |
   ## Prerequisites
 
   - **Hardware**: 1× GPU with ≥8 GB VRAM.
-  - **Aphrodite**: ≥ 0.23.0.
+  - **Sonar**: ≥ 0.23.0.
 
   ### pip (NVIDIA CUDA)
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U aphrodite-engine --torch-backend auto
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   ```
 
   ## Deployment Configurations
@@ -110,14 +110,14 @@ guide: |
   ### Quick Start (Single GPU, BF16)
   Enable the reasoning parser so the chain-of-thought is returned in `reasoning`:
   ```bash
-  aphrodite serve LiquidAI/LFM2.5-1.2B-Thinking \
+  sonar serve LiquidAI/LFM2.5-1.2B-Thinking \
     --reasoning-parser qwen3
   ```
 
   ### Full-Featured Server Launch
   Reasoning **and** tool calling:
   ```bash
-  aphrodite serve LiquidAI/LFM2.5-1.2B-Thinking \
+  sonar serve LiquidAI/LFM2.5-1.2B-Thinking \
     --reasoning-parser qwen3 \
     --enable-auto-tool-choice \
     --tool-call-parser lfm2 \
@@ -164,17 +164,17 @@ guide: |
   model can reason about which tool to call before emitting it.
 
   ### Structured Outputs
-  Aphrodite's guided decoding constrains output to a JSON schema via `response_format`. The model does
+  Sonar's guided decoding constrains output to a JSON schema via `response_format`. The model does
   not see the schema itself — put semantic instructions in the system prompt.
 
   ## Configuration Tips
   - Give reasoning room: leave `max_tokens` unset so the `<think>` block and answer aren't truncated.
   - Set `--max-model-len` to match your workload (up to 32K).
   - `--gpu-memory-utilization 0.90–0.95` maximizes KV cache capacity.
-  - Sampling presets are per-request client defaults — don't bake them into `aphrodite serve`.
+  - Sampling presets are per-request client defaults — don't bake them into `sonar serve`.
 
   ## References
   - [Model card](https://huggingface.co/LiquidAI/LFM2.5-1.2B-Thinking)
   - [LFM2.5 usage guide](../../LiquidAI/LFM2.5)
   - [Liquid AI](https://www.liquid.ai/)
-  - [Aphrodite supported models](https://docs.vllm.ai/en/latest/models/supported_models.html)
+  - [Sonar supported models](https://docs.vllm.ai/en/latest/models/supported_models.html)

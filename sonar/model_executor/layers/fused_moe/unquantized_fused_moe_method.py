@@ -6,38 +6,38 @@ from typing import TYPE_CHECKING
 import torch
 import torch.nn.functional as F
 
-import aphrodite.envs as envs
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.custom_op import CustomOp
-from aphrodite.model_executor.layers.fused_moe.config import (
+import sonar.envs as envs
+from sonar.logger import init_logger
+from sonar.model_executor.custom_op import CustomOp
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEParallelConfig,
     FusedMoEQuantConfig,
     biased_moe_quant_config,
 )
-from aphrodite.model_executor.layers.fused_moe.fused_moe_method_base import (
+from sonar.model_executor.layers.fused_moe.fused_moe_method_base import (
     FusedMoEMethodBase,
 )
-from aphrodite.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
-from aphrodite.model_executor.layers.fused_moe.oracle.unquantized import (
+from sonar.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
+from sonar.model_executor.layers.fused_moe.oracle.unquantized import (
     UnquantizedMoeBackend,
     convert_to_unquantized_kernel_format,
     make_unquantized_moe_kernel,
     select_unquantized_moe_backend,
     unquantized_round_up_hidden_size_and_intermediate_size,
 )
-from aphrodite.model_executor.layers.fused_moe.runner.shared_experts import (
+from sonar.model_executor.layers.fused_moe.runner.shared_experts import (
     SharedExperts,
 )
-from aphrodite.model_executor.utils import (
+from sonar.model_executor.utils import (
     is_weights_pre_processed,
     replace_parameter,
     set_weight_attrs,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 if TYPE_CHECKING:
-    from aphrodite.model_executor.layers.fused_moe.routed_experts import RoutedExperts
+    from sonar.model_executor.layers.fused_moe.routed_experts import RoutedExperts
 
 logger = init_logger(__name__)
 
@@ -147,7 +147,7 @@ class UnquantizedFusedMoEMethod(FusedMoEMethodBase, CustomOp):
         # Skip padding when EPLB is enabled because EPLB requires contiguous
         # weights for the view/rearrangement operations.
         if (
-            envs.APHRODITE_ROCM_MOE_PADDING
+            envs.SONAR_ROCM_MOE_PADDING
             and current_platform.is_rocm()
             and not self.moe.moe_parallel_config.enable_eplb
             and weight.stride(-1) == 1

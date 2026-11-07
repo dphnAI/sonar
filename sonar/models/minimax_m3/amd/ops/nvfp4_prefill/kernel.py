@@ -15,7 +15,7 @@ from flydsl.expr import const_expr, range_constexpr
 from flydsl.expr.typing import T
 from flydsl.expr.typing import Vector as Vec
 
-from aphrodite.models.minimax_m3.amd.ops.flydsl_utils import (
+from sonar.models.minimax_m3.amd.ops.flydsl_utils import (
     cvt_fp4x2_f16,
     cvt_fp8x2_f16,
     exp2,

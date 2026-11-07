@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Adapted from aphrodite/model_executor/kernels/linear/cute_dsl/ll_bf16.py.
+"""Adapted from sonar/model_executor/kernels/linear/cute_dsl/ll_bf16.py.
 
 Fused Qwen4Exp mHC down projection + SiLU epilogue, where
 columns < lora_rank get ``silu(bf16(acc) / hc_count)``, the hc_count
@@ -19,7 +19,7 @@ from typing import Any, Literal
 
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 logger = logging.getLogger(__name__)
 
@@ -114,7 +114,7 @@ class HcDownSiluGemm:
         self._warmup_m.update(m_values)
         if self._warmup_registered:
             return
-        from aphrodite.model_executor.warmup.cutedsl_warmup import (
+        from sonar.model_executor.warmup.cutedsl_warmup import (
             register_cutedsl_warmup_provider,
         )
 
@@ -122,7 +122,7 @@ class HcDownSiluGemm:
         self._warmup_registered = True
 
     def get_cutedsl_warmup_compile_units(self):
-        from aphrodite.model_executor.warmup.cutedsl_warmup import CuTeDSLCompileUnit
+        from sonar.model_executor.warmup.cutedsl_warmup import CuTeDSLCompileUnit
 
         return tuple(
             CuTeDSLCompileUnit(

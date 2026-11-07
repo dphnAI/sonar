@@ -44,7 +44,7 @@ def test_cmake_install_removes_only_legacy_deepgemm_bindings(tmp_path: Path, use
         destination = Path(environment["DESTDIR"] + str(prefix))
     else:
         destination = prefix
-    package = destination / "aphrodite/third_party/deep_gemm"
+    package = destination / "sonar/third_party/deep_gemm"
     seed_installed_package(package)
 
     subprocess.run(
@@ -76,12 +76,12 @@ def test_editable_copy_removes_only_legacy_deepgemm_bindings(tmp_path: Path, mon
     }
     exec(compile(module, "setup.py", "exec"), namespace)
     staging = tmp_path / "build"
-    (staging / "aphrodite/third_party/triton_kernels").mkdir(parents=True)
-    staged_package = staging / "aphrodite/third_party/deep_gemm"
+    (staging / "sonar/third_party/triton_kernels").mkdir(parents=True)
+    staged_package = staging / "sonar/third_party/deep_gemm"
     staged_package.mkdir()
     (staged_package / "_C.py").write_text("# stable facade\n")
     (staged_package / "_C_extension.abi3.so").write_bytes(b"stable binding")
-    installed_package = tmp_path / "aphrodite/third_party/deep_gemm"
+    installed_package = tmp_path / "sonar/third_party/deep_gemm"
     seed_installed_package(installed_package)
     command = namespace["cmake_build_ext"]()
     command.build_lib = str(staging)

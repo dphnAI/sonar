@@ -22,8 +22,8 @@ import aiohttp
 import numpy as np
 import pytest
 
-import aphrodite.benchmarks.lib.endpoint_request_func as request_func_module
-from aphrodite.benchmarks.lib.endpoint_request_func import (
+import sonar.benchmarks.lib.endpoint_request_func as request_func_module
+from sonar.benchmarks.lib.endpoint_request_func import (
     RequestFuncInput,
     RequestFuncOutput,
     _update_server_metrics,
@@ -31,7 +31,7 @@ from aphrodite.benchmarks.lib.endpoint_request_func import (
     async_request_openai_chat_completions,
     async_request_openai_completions,
 )
-from aphrodite.benchmarks.serve import _get_server_metrics_results
+from sonar.benchmarks.serve import _get_server_metrics_results
 
 pytestmark = pytest.mark.skip_global_cleanup
 
@@ -113,7 +113,7 @@ def _build_stream(
 ) -> list[tuple[float, bytes]]:
     """Build ``(delay_before_chunk, payload)`` pairs for one streamed response.
 
-    ``aphrodite bench serve`` always requests ``stream_options.include_usage``, so a
+    ``sonar bench serve`` always requests ``stream_options.include_usage``, so a
     choice-less usage chunk always trails the final token.
     """
     chunks = [(ttft_delay if i == 0 else itl_delay, _token_chunk(i, chat=chat)) for i in range(n_tokens)]

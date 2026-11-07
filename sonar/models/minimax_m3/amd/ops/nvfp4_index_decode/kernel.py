@@ -19,7 +19,7 @@ from flydsl.expr import const_expr, range_constexpr
 from flydsl.expr.typing import T
 from flydsl.expr.typing import Vector as Vec
 
-from aphrodite.models.minimax_m3.amd.ops.flydsl_utils import (
+from sonar.models.minimax_m3.amd.ops.flydsl_utils import (
     NT,
     as_f32,
     bits,
@@ -31,7 +31,7 @@ from aphrodite.models.minimax_m3.amd.ops.flydsl_utils import (
     pack8,
     xlane4,
 )
-from aphrodite.models.minimax_m3.amd.ops.nvfp4_index_prefill.kernel import with_sentinels
+from sonar.models.minimax_m3.amd.ops.nvfp4_index_prefill.kernel import with_sentinels
 
 NW = 4
 MAX_REQS = 64  # requests per chunk, one per lane

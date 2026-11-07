@@ -6,7 +6,7 @@ description: Serve models through OpenAI-compatible HTTP endpoints.
 Start the server with a model repository or a local model path.
 
 ```bash
-aphrodite serve Qwen/Qwen3-0.6B \
+sonar serve Qwen/Qwen3-0.6B \
   --served-model-name qwen3 \
   --api-key "$SONAR_API_KEY"
 ```
@@ -105,7 +105,7 @@ the [model matrix](/reference/models/) before you deploy a model.
 Start the server with parsers that match the model:
 
 ```bash
-aphrodite serve MODEL \
+sonar serve MODEL \
   --enable-auto-tool-choice \
   --tool-call-parser hermes \
   --reasoning-parser deepseek_r1
@@ -152,7 +152,7 @@ Test the same endpoint, proxy, authentication, and model name that production
 uses:
 
 ```bash
-aphrodite bench serve \
+sonar bench serve \
   --backend openai \
   --base-url http://127.0.0.1:2242 \
   --model qwen3 \
@@ -164,5 +164,5 @@ aphrodite bench serve \
   --save-result
 ```
 
-Read [Benchmark with `aphrodite bench`](/deployment/benchmarking/) before you
+Read [Benchmark with `sonar bench`](/deployment/benchmarking/) before you
 compare configurations.

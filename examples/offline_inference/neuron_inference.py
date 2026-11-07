@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import os
 
-from aphrodite import LLM, SamplingParams
+from sonar import LLM, SamplingParams
 
 # creates XLA hlo graphs for all the context length buckets.
 os.environ["NEURON_CONTEXT_LENGTH_BUCKETS"] = "128,512,1024,2048"

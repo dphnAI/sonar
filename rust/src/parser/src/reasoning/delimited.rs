@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-use aphrodite_tokenizer::{DecodedText, DynTokenizer, Tokenizer};
+use sonar_tokenizer::{DecodedText, DynTokenizer, Tokenizer};
 use winnow::Parser;
 use winnow::combinator::alt;
 use winnow::error::ErrMode;

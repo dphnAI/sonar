@@ -5,9 +5,9 @@ from types import SimpleNamespace
 
 import torch
 
-import aphrodite.models.inkling.nvidia.ops.fa4_rel_attention as fa4_rel_attention
-from aphrodite.models.inkling.configs import InklingMMConfig, InklingModelConfig
-from aphrodite.models.inkling.nvidia.ops.fa4_rel_attention import (
+import sonar.models.inkling.nvidia.ops.fa4_rel_attention as fa4_rel_attention
+from sonar.models.inkling.configs import InklingMMConfig, InklingModelConfig
+from sonar.models.inkling.nvidia.ops.fa4_rel_attention import (
     InklingFA4RelAttentionKernel,
     _num_warps_bucket,
     bucket_max_seqlen_q,
@@ -15,7 +15,7 @@ from aphrodite.models.inkling.nvidia.ops.fa4_rel_attention import (
 )
 
 
-def _aphrodite_config_from_reference_config(config: SimpleNamespace) -> SimpleNamespace:
+def _sonar_config_from_reference_config(config: SimpleNamespace) -> SimpleNamespace:
     return SimpleNamespace(
         model_config=SimpleNamespace(
             hf_config=InklingMMConfig(
@@ -78,9 +78,9 @@ def test_warmup_enumerates_every_runtime_compile_class(monkeypatch):
         max_num_reqs=64,
         max_num_batched_tokens=192,
     )
-    aphrodite_config = _aphrodite_config_from_reference_config(config)
+    sonar_config = _sonar_config_from_reference_config(config)
     kernel = InklingFA4RelAttentionKernel()
-    warmed_keys = set(kernel.get_warmup_keys(aphrodite_config))
+    warmed_keys = set(kernel.get_warmup_keys(sonar_config))
     expected_keys: set[InklingFA4RelAttentionKernel.CompileKey] = set()
 
     for is_local in (False, True):

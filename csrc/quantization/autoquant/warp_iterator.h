@@ -19,7 +19,7 @@
 
 #include "common.h"
 
-namespace aphrodite {
+namespace sonar {
 namespace autoquant {
 
 template <int CTA_M, int CTA_K, int WARP_M, int WARP_K, int OP_M, int OP_K,
@@ -179,4 +179,4 @@ struct WarpIteratorB {
 };
 
 }  // namespace autoquant
-}  // namespace aphrodite
+}  // namespace sonar

@@ -26,14 +26,14 @@ On gfx942 and gfx950 with --monokernel
 (``ops.swa_decode_meta_enabled()``), decode batches of up to MAX_ROWS rows,
 causal or the draft block, use it. Other batches take the rest of
 DeepseekV41ROCMAiterSparseSWAMetadataBuilder.build.
-tests/kernels/models/amd/test_dsv41_gfx942_decode_meta.py compares it with the Aphrodite ops
+tests/kernels/models/amd/test_dsv41_gfx942_decode_meta.py compares it with the Sonar ops
 that it replaces.
 """
 
 import torch
 
-from aphrodite.models.deepseek_v41.amd.ops import swa_decode_meta_enabled
-from aphrodite.triton_utils import tl, triton
+from sonar.models.deepseek_v41.amd.ops import swa_decode_meta_enabled
+from sonar.triton_utils import tl, triton
 
 # One program holds all rows of the batch in registers, as a ROWS x WIDTH
 # tile of int32. 32 rows of a 128 wide window are 16 values per thread.
@@ -185,8 +185,8 @@ def build(builder, common_prefix_len, cam, fast_build, replay_start, metadata_cl
     of DeepseekV41ROCMAiterSparseSWAMetadataBuilder.build."""
     if not swa_decode_meta_enabled():
         return None
-    from aphrodite.v1.attention.backends.mla import sparse_swa
-    from aphrodite.v1.attention.backends.utils import split_decodes_and_prefills
+    from sonar.v1.attention.backends.mla import sparse_swa
+    from sonar.v1.attention.backends.utils import split_decodes_and_prefills
 
     noncausal = not cam.causal
     if noncausal and not builder.is_dspark:

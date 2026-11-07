@@ -4,11 +4,11 @@
 import numpy as np
 import pytest
 
-from aphrodite.config import ModelConfig
-from aphrodite.model_executor.models.transformers.multimodal import (
+from sonar.config import ModelConfig
+from sonar.model_executor.models.transformers.multimodal import (
     MultiModalProcessor as TransformersMultiModalProcessor,
 )
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal import MULTIMODAL_REGISTRY
 
 AUDIO_MODEL_SETTINGS = {
     "ibm-granite/granite-speech-3.3-2b": {
@@ -68,7 +68,7 @@ AUDIO_MODEL_SETTINGS = {
                 reason="Voxtral's mistral_common processor does not compose with "
                 "the Transformers modelling backend. Loading it currently fails "
                 "outright, because MistralCommonBackend.from_pretrained rejects "
-                "the kwargs Aphrodite passes, and it implements no "
+                "the kwargs Sonar passes, and it implements no "
                 "`replace_audio_token`, so it would report no replacement "
                 "offsets. Both fixes belong in mistral_common or transformers.",
                 strict=False,

@@ -20,22 +20,22 @@ from collections.abc import Sequence
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
-from aphrodite.entrypoints.generate.base.protocol import DeltaMessage
-from aphrodite.parser.abstract_parser import DelegatingParser
-from aphrodite.parser.engine.parser_engine import ParserEngine
-from aphrodite.parser.engine.parser_engine_config import (
+from sonar.entrypoints.generate.base.protocol import DeltaMessage
+from sonar.parser.abstract_parser import DelegatingParser
+from sonar.parser.engine.parser_engine import ParserEngine
+from sonar.parser.engine.parser_engine_config import (
     ParserEngineConfig,
     ParserState,
     Transition,
 )
-from aphrodite.parser.qwen3 import Qwen3Parser, qwen3_config
+from sonar.parser.qwen3 import Qwen3Parser, qwen3_config
 
 if TYPE_CHECKING:
-    from aphrodite.entrypoints.generate.base.protocol import FunctionCall
-    from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-    from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
-    from aphrodite.tokenizers import TokenizerLike
-    from aphrodite.tool_parsers.abstract_tool_parser import Tool
+    from sonar.entrypoints.generate.base.protocol import FunctionCall
+    from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+    from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
+    from sonar.tokenizers import TokenizerLike
+    from sonar.tool_parsers.abstract_tool_parser import Tool
 
 
 _RESERVED_MARKER_IDS = range(12, 16)

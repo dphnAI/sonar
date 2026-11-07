@@ -94,7 +94,7 @@ fn build_payload(input: &RequestFuncInput) -> serde_json::Value {
         "max_output_tokens": input.output_len,
         "stream": true,
         // `store` defaults to true. A server started with
-        // APHRODITE_ENABLE_RESPONSES_API_STORE=1 would keep every response for the
+        // SONAR_ENABLE_RESPONSES_API_STORE=1 would keep every response for the
         // lifetime of the process.
         "store": false,
     });
@@ -185,7 +185,7 @@ impl ResponsesStream {
                 // `latency - ttft` equals `sum(itl)`.
                 self.most_recent_timestamp = timestamp;
             }
-            // Aphrodite reports truncation at the output limit as `response.completed`
+            // Sonar reports truncation at the output limit as `response.completed`
             // with `status: "incomplete"`; the spec also has `response.incomplete`.
             Some("response.completed" | "response.incomplete") => {
                 self.saw_terminal_event = true;

@@ -6,15 +6,15 @@ from collections.abc import Set
 import torch
 import torch.nn as nn
 
-from aphrodite.tasks import PoolingTask
-from aphrodite.v1.outputs import PoolerOutput
-from aphrodite.v1.pool.metadata import PoolingMetadata
+from sonar.tasks import PoolingTask
+from sonar.v1.outputs import PoolerOutput
+from sonar.v1.pool.metadata import PoolingMetadata
 
 from .common import PoolingParamsUpdate
 
 
 class Pooler(nn.Module, ABC):
-    """The interface required for all poolers used in pooling models in Aphrodite."""
+    """The interface required for all poolers used in pooling models in Sonar."""
 
     @abstractmethod
     def get_supported_tasks(self) -> Set[PoolingTask]:

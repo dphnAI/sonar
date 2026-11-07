@@ -15,11 +15,11 @@ from typing import NamedTuple
 import torch
 from cuda.bindings import driver as cu
 
-from aphrodite.distributed.parallel_state import GroupCoordinator
-from aphrodite.logger import init_logger
-from aphrodite.models.deepseek_v41.common.engram import describe_error, gather_errors
-from aphrodite.utils.cpu_resource_utils import get_memory_node_info
-from aphrodite.utils.math_utils import round_up
+from sonar.distributed.parallel_state import GroupCoordinator
+from sonar.logger import init_logger
+from sonar.models.deepseek_v41.common.engram import describe_error, gather_errors
+from sonar.utils.cpu_resource_utils import get_memory_node_info
+from sonar.utils.math_utils import round_up
 
 logger = init_logger(__name__)
 

@@ -3,12 +3,12 @@
 
 from typing import TYPE_CHECKING, cast
 
-from aphrodite.logger import init_logger
-from aphrodite.v1.worker.gpu.warmup import run_mixed_prefill_decode_warmup
+from sonar.logger import init_logger
+from sonar.v1.worker.gpu.warmup import run_mixed_prefill_decode_warmup
 
 if TYPE_CHECKING:
-    from aphrodite.v1.worker.gpu.model_runner import GPUModelRunner
-    from aphrodite.v1.worker.gpu_worker import Worker
+    from sonar.v1.worker.gpu.model_runner import GPUModelRunner
+    from sonar.v1.worker.gpu_worker import Worker
 
 logger = init_logger(__name__)
 

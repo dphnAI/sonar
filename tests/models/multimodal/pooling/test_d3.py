@@ -3,8 +3,8 @@
 """Decision 3.0 against the checkpoint's own runtime (`trust_remote_code`).
 
 The runtime reads a question's options from the 255 code logits of its readout
-at the last prompt token. Aphrodite's classify head must give the same code logits
-for the same prompt tokens, and for an image prompt that Aphrodite processes itself.
+at the last prompt token. Sonar's classify head must give the same code logits
+for the same prompt tokens, and for an image prompt that Sonar processes itself.
 d3-edge has an irregular layer layout; d3-nano ships its backbone as a single
 weight file without an index, next to the readout file.
 """
@@ -13,8 +13,8 @@ import pytest
 import torch
 from transformers import AutoModel
 
-from aphrodite.assets.image import ImageAsset
-from aphrodite.distributed import cleanup_dist_env_and_memory
+from sonar.assets.image import ImageAsset
+from sonar.distributed import cleanup_dist_env_and_memory
 
 MODELS = ["vllm-sr/d3-edge", "vllm-sr/d3-nano"]
 STATE = "The order arrived damaged yesterday. The customer has a receipt and asks for a replacement today."
@@ -47,7 +47,7 @@ def option_probs(logits: torch.Tensor, count: int) -> torch.Tensor:
 
 
 @pytest.mark.parametrize("model", MODELS)
-def test_d3_matches_the_checkpoint_runtime(aphrodite_runner, model: str) -> None:
+def test_d3_matches_the_checkpoint_runtime(sonar_runner, model: str) -> None:
     reference = AutoModel.from_pretrained(model, trust_remote_code=True)
     runtime = reference.runtime
     text = runtime.prepare(STATE, QUESTIONS)
@@ -65,16 +65,16 @@ def test_d3_matches_the_checkpoint_runtime(aphrodite_runner, model: str) -> None
     del reference, runtime
     cleanup_dist_env_and_memory()
 
-    with aphrodite_runner(model, runner="pooling", max_model_len=4096) as aphrodite_model:
-        outputs = aphrodite_model.llm.classify(
+    with sonar_runner(model, runner="pooling", max_model_len=4096) as sonar_model:
+        outputs = sonar_model.llm.classify(
             [{"prompt_token_ids": ids} for ids in sequences]
             + [{"prompt": image_prompt, "multi_modal_data": {"image": image}}],
             use_tqdm=False,
         )
     # The head returns raw code logits by default.
-    aphrodite_logits = [torch.tensor(output.outputs.probs) for output in outputs]
-    assert all(len(logits) == 255 for logits in aphrodite_logits)
+    sonar_logits = [torch.tensor(output.outputs.probs) for output in outputs]
+    assert all(len(logits) == 255 for logits in sonar_logits)
 
-    for ref, ours, count in zip(ref_logits, aphrodite_logits, counts):
+    for ref, ours, count in zip(ref_logits, sonar_logits, counts):
         ref_probs, our_probs = option_probs(ref, count), option_probs(ours, count)
         torch.testing.assert_close(our_probs, ref_probs, atol=0.02, rtol=0)

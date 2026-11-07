@@ -26,15 +26,15 @@ def _pixel_size(factor: int):
 @pytest.mark.parametrize("mm_device_do_normalize", [True, False])
 def test_ppl(
     hf_runner,
-    aphrodite_runner,
+    sonar_runner,
     model_info: GenerateModelInfo,
     factor: int,
     mm_device_do_normalize: bool,
 ):
     vqa_ppl_test(
         hf_runner,
-        aphrodite_runner,
+        sonar_runner,
         model_info,
-        aphrodite_extra_kwargs={"mm_device_do_normalize": mm_device_do_normalize},
+        sonar_extra_kwargs={"mm_device_do_normalize": mm_device_do_normalize},
         mm_processor_kwargs=_pixel_size(factor),
     )

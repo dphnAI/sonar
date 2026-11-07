@@ -29,11 +29,11 @@ import torch
 from PIL import Image, ImageOps
 from transformers import BatchFeature, DeepseekV4Config
 
-from aphrodite.config.multimodal import MultiModalDummyOptions
-from aphrodite.inputs import MultiModalDataDict
-from aphrodite.multimodal.inputs import MultiModalFieldConfig, MultiModalKwargsItems
-from aphrodite.multimodal.parse import ImageSize, MultiModalDataItems
-from aphrodite.multimodal.processing import (
+from sonar.config.multimodal import MultiModalDummyOptions
+from sonar.inputs import MultiModalDataDict
+from sonar.multimodal.inputs import MultiModalFieldConfig, MultiModalKwargsItems
+from sonar.multimodal.parse import ImageSize, MultiModalDataItems
+from sonar.multimodal.processing import (
     BaseDummyInputsBuilder,
     BaseMultiModalProcessor,
     BaseProcessingInfo,
@@ -41,7 +41,7 @@ from aphrodite.multimodal.processing import (
     PromptUpdate,
     PromptUpdateDetails,
 )
-from aphrodite.multimodal.processing.processor import (
+from sonar.multimodal.processing.processor import (
     MultiModalPromptUpdates,
     MultiModalPromptUpdatesApplyResult,
     PlaceholderFeaturesInfo,
@@ -155,7 +155,7 @@ def load_image(
     """Transform one PIL image into ViT patches.
 
     Same math as the reference ``load_image``, except the image is already
-    decoded (Aphrodite supplies PIL images instead of a record dict).
+    decoded (Sonar supplies PIL images instead of a record dict).
     """
     p = patch_size
     image = image.convert("RGB")

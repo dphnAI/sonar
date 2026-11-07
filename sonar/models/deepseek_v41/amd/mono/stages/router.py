@@ -20,8 +20,8 @@ from aiter.ops.flydsl.kernels import buffer_ops as bo
 from flydsl.expr import const_expr, range_constexpr
 from flydsl.expr.typing import T
 
-from aphrodite.models.deepseek_v41.amd.mono.common.ops import mfma_bf16, rsrc
-from aphrodite.models.deepseek_v41.amd.mono.common.plan import WAVES
+from sonar.models.deepseek_v41.amd.mono.common.ops import mfma_bf16, rsrc
+from sonar.models.deepseek_v41.amd.mono.common.plan import WAVES
 
 HIDDEN = 5120
 ROWS = 16  # a tile's rows: the MFMA's M

@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Host-side weight preparation for the gfx942 (MI300X, MI325X) mono kernels.
 
-On gfx942 Aphrodite dequantizes the dense MXFP8 linears to bf16 when it loads them
+On gfx942 Sonar dequantizes the dense MXFP8 linears to bf16 when it loads them
 and keeps their E8M0 scales. ``ocp_from_dequant`` rebuilds the original e4m3
 bytes from the two, exactly. ``dense_copy`` turns OCP e4m3 bytes into the
 copy the gfx942 GEMV reads (``attention.gemv._step_load_942``):
@@ -31,7 +31,7 @@ EVEN_ODD = [0, 2, 4, 6, 1, 3, 5, 7]
 
 
 def ocp_from_dequant(w: torch.Tensor, scale: torch.Tensor) -> torch.Tensor:
-    """The OCP e4m3 bytes [N, K] behind a bf16 weight Aphrodite dequantized at load
+    """The OCP e4m3 bytes [N, K] behind a bf16 weight Sonar dequantized at load
     (``w`` = e4m3 value x 2^(code - 127), ``scale`` the codes in 32 x 32
     blocks [N / 32, K / 32]). Refuses a weight the bytes do not give back
     exactly."""
@@ -73,13 +73,13 @@ def dense_copy(w8: torch.Tensor, scale: torch.Tensor, chunk_q: bool = False):
 
 
 def linear_copy(w: torch.Tensor, scale: torch.Tensor):
-    """A Aphrodite-loaded MXFP8 linear on gfx942 (bf16 dequantized, or e4m3 bytes)
+    """A Sonar-loaded MXFP8 linear on gfx942 (bf16 dequantized, or e4m3 bytes)
     with its E8M0 codes [N / 32, K / 32] -> ``dense_copy`` with natural chunks
     (the attention and shared expert activations are not reordered)."""
     scale = scale if scale.dtype == torch.uint8 else scale.view(torch.uint8)
     n, k = w.shape
     if scale.shape == (n, k // 32):
-        # Aphrodite on gfx942 repeats each 32 x 32 block's code over the block's
+        # Sonar on gfx942 repeats each 32 x 32 block's code over the block's
         # 32 rows when it loads the checkpoint. Fold them back to one code
         # a block, and refuse a block whose rows do not agree.
         rows = scale.view(n // 32, 32, k // 32)
@@ -96,7 +96,7 @@ def linear_copy(w: torch.Tensor, scale: torch.Tensor):
 
 
 def moe_copies(w13, w13_s, w2, w2_s, inter: int):
-    """APHRODITE's plain MXFP4 expert tensors before its kernel conversion (w13
+    """SONAR's plain MXFP4 expert tensors before its kernel conversion (w13
     [E, 2 Np, K / 2], w2 [E, H, Np / 2] and codes [E, rows, K / 32], with
     w13's gate rows, then its up rows, each padded with zero rows from
     ``inter`` to Np) -> the gfx942 mono copies: w13 [E, 2 inter, K / 2] with
@@ -194,7 +194,7 @@ def fp4_lane_major(w: torch.Tensor) -> torch.Tensor:
 
 def fp4_drop_negative_zero_(w: torch.Tensor) -> int:
     """Rewrite every -0 nibble (0x8) of a packed e2m1 tensor to +0, in place,
-    chunk by chunk. -0 and +0 give the same products, so Aphrodite's own MoE
+    chunk by chunk. -0 and +0 give the same products, so Sonar's own MoE
     kernels compute the same results afterwards. gfx942's FP4 conversion
     (``common.gfx942.fp4x8_fnuz``) would turn -0 into the FNUZ NaN. Returns
     how many nibbles changed."""

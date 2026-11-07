@@ -7,40 +7,40 @@ import torch
 import torch.nn as nn
 from transformers import Lfm2MoeConfig
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, CacheConfig, ModelConfig, get_current_aphrodite_config
-from aphrodite.distributed import (
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import CacheConfig, ModelConfig, SonarConfig, get_current_sonar_config
+from sonar.distributed import (
     get_ep_group,
     get_pp_group,
     get_tensor_model_parallel_world_size,
 )
-from aphrodite.model_executor.layers.activation import SiluAndMul
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.model_executor.layers.activation import SiluAndMul
+from sonar.model_executor.layers.attention import Attention
+from sonar.model_executor.layers.fused_moe import (
     FusedMoEFactory,
     GateLinear,
 )
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     MergedColumnParallelLinear,
     QKVParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.mamba.mamba_utils import (
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.mamba.mamba_utils import (
     MambaStateCopyFunc,
     MambaStateCopyFuncCalculator,
     MambaStateDtypeCalculator,
     MambaStateShapeCalculator,
 )
-from aphrodite.model_executor.layers.mamba.short_conv import ShortConv
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.mamba.short_conv import ShortConv
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.sequence import IntermediateTensors
+from sonar.sequence import IntermediateTensors
 
 from .interfaces import (
     HasInnerState,
@@ -116,8 +116,8 @@ class Lfm2MoeSparseMoeBlock(nn.Module):
             )
 
         # Load balancing settings.
-        aphrodite_config = get_current_aphrodite_config()
-        eplb_config = aphrodite_config.parallel_config.eplb_config
+        sonar_config = get_current_sonar_config()
+        eplb_config = sonar_config.parallel_config.eplb_config
         self.enable_eplb = enable_eplb
 
         self.n_logical_experts = self.n_routed_experts
@@ -387,7 +387,7 @@ class Lfm2MoeShortConvDecoderLayer(nn.Module):
 
 @support_torch_compile
 class Lfm2MoeModel(nn.Module):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_substr={
             ".conv.": ".short_conv.",
             "expert_bias": "gate.e_score_correction_bias",
@@ -403,15 +403,15 @@ class Lfm2MoeModel(nn.Module):
         },
     )
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_config
-        model_config = aphrodite_config.model_config
-        cache_config = aphrodite_config.cache_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        model_config = sonar_config.model_config
+        cache_config = sonar_config.cache_config
+        quant_config = sonar_config.quant_config
 
-        parallel_config = aphrodite_config.parallel_config
+        parallel_config = sonar_config.parallel_config
         enable_eplb = parallel_config.enable_eplb
         eplb_config = parallel_config.eplb_config
         self.num_redundant_experts = eplb_config.num_redundant_experts
@@ -484,7 +484,7 @@ class Lfm2MoeModel(nn.Module):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self, ignore_unexpected_suffixes=[".bias", "_bias"])
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
 
 class Lfm2MoeForCausalLM(
@@ -509,10 +509,10 @@ class Lfm2MoeForCausalLM(
         "in_proj": ["in_proj"],
     }
 
-    # HF uses .conv. but Aphrodite uses .short_conv. to avoid LoRA regex collision
+    # HF uses .conv. but Sonar uses .short_conv. to avoid LoRA regex collision
     # with the inner .conv.conv child (ShortConv has a child self.conv, so
     # naming the container .conv too makes _match_target_modules match both)
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_substr={".conv.": ".short_conv."},
     )
 
@@ -525,30 +525,30 @@ class Lfm2MoeForCausalLM(
     @classmethod
     def get_mamba_state_dtype_from_config(
         cls,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
     ) -> tuple[torch.dtype, ...]:
         return MambaStateDtypeCalculator.short_conv_state_dtype(
-            aphrodite_config.model_config.dtype,
-            aphrodite_config.cache_config.mamba_cache_dtype,
+            sonar_config.model_config.dtype,
+            sonar_config.cache_config.mamba_cache_dtype,
         )
 
     @classmethod
     def get_mamba_state_shape_from_config(
         cls,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
     ) -> tuple[tuple[int, int]]:
         """Calculate shapes for LFM2's convolutional cache.
 
         Args:
-            aphrodite_config: Aphrodite config
+            sonar_config: Sonar config
 
         Returns:
             Tuple containing:
             - conv_state_shape: Shape for convolutional state cache
 
         """
-        parallel_config = aphrodite_config.parallel_config
-        hf_config = aphrodite_config.model_config.hf_config
+        parallel_config = sonar_config.parallel_config
+        hf_config = sonar_config.model_config.hf_config
 
         return MambaStateShapeCalculator.short_conv_state_shape(
             tp_world_size=parallel_config.tensor_parallel_size,
@@ -560,14 +560,14 @@ class Lfm2MoeForCausalLM(
     def get_mamba_state_copy_func(cls) -> tuple[MambaStateCopyFunc]:
         return MambaStateCopyFuncCalculator.short_conv_state_copy_func()
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
 
         super().__init__()
         self.config = config
         self.use_tied_lm_head = model_should_use_tied_lm_head(config, quant_config)
-        self.model = Lfm2MoeModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = Lfm2MoeModel(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
 
         if get_pp_group().is_last_rank:
             self.lm_head = ParallelLMHead(

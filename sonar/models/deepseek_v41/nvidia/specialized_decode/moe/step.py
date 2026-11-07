@@ -19,16 +19,16 @@ from typing import TYPE_CHECKING
 
 import torch
 
-from aphrodite.model_executor.layers.fused_moe.config import FusedMoEConfig
-from aphrodite.model_executor.layers.fused_moe.experts.trtllm_mxfp4_moe import (
+from sonar.model_executor.layers.fused_moe.config import FusedMoEConfig
+from sonar.model_executor.layers.fused_moe.experts.trtllm_mxfp4_moe import (
     TrtLlmMxfp4ExpertsModular,
 )
-from aphrodite.model_executor.layers.fused_moe.moe_output import (
+from sonar.model_executor.layers.fused_moe.moe_output import (
     MoEOutput,
     UnfinalizedMoEOutput,
 )
-from aphrodite.model_executor.layers.fused_moe.runner.moe_runner import _unpack
-from aphrodite.model_executor.layers.fused_moe.runner.shared_experts import (
+from sonar.model_executor.layers.fused_moe.runner.moe_runner import _unpack
+from sonar.model_executor.layers.fused_moe.runner.shared_experts import (
     SharedExpertsOrder,
 )
 

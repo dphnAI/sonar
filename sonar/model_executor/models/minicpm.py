@@ -33,38 +33,38 @@ import torch
 from torch import nn
 from transformers import PreTrainedConfig
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, CacheConfig
-from aphrodite.distributed import (
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import CacheConfig, SonarConfig
+from sonar.distributed import (
     get_pp_group,
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
     tensor_model_parallel_all_reduce,
 )
-from aphrodite.model_executor.layers.activation import FatreluAndMul, SiluAndMul
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.model_executor.layers.activation import FatreluAndMul, SiluAndMul
+from sonar.model_executor.layers.attention import Attention
+from sonar.model_executor.layers.fused_moe import (
     GateLinear,
     fused_experts,
     fused_topk,
 )
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     MergedColumnParallelLinear,
     QKVParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
-from aphrodite.model_executor.utils import set_weight_attrs
-from aphrodite.platforms import current_platform
-from aphrodite.sequence import IntermediateTensors
+from sonar.model_executor.model_loader.weight_utils import default_weight_loader
+from sonar.model_executor.utils import set_weight_attrs
+from sonar.platforms import current_platform
+from sonar.sequence import IntermediateTensors
 
 from .interfaces import (
     EagleModelMixin,
@@ -382,12 +382,12 @@ class MiniCPMDecoderLayer(nn.Module):
 
 @support_torch_compile
 class MiniCPMModel(nn.Module, EagleModelMixin):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_config
-        cache_config = aphrodite_config.cache_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        cache_config = sonar_config.cache_config
+        quant_config = sonar_config.quant_config
 
         self.config = config
         self.cache_config = cache_config
@@ -545,22 +545,22 @@ class MiniCPMForCausalLM(nn.Module, SupportsLoRA, SupportsPP, SupportsEagle, Sup
         "lm_head": "output_embeddings",
     }
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        cache_config = aphrodite_config.cache_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        cache_config = sonar_config.cache_config
+        quant_config = sonar_config.quant_config
 
-        parallel_config = aphrodite_config.parallel_config
+        parallel_config = sonar_config.parallel_config
 
         self.prefix = prefix
-        self.aphrodite_config = aphrodite_config
+        self.sonar_config = sonar_config
         self.config = config
 
         self.cache_config = cache_config
         self.quant_config = quant_config
 
-        self.model = self._init_model(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = self._init_model(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
 
         self.lm_head = ParallelLMHead(
             config.vocab_size,
@@ -577,8 +577,8 @@ class MiniCPMForCausalLM(nn.Module, SupportsLoRA, SupportsPP, SupportsEagle, Sup
         if parallel_config.enable_eplb and getattr(config, "num_experts", 0) > 0:
             raise NotImplementedError("EPLB is not supported for MiniCPM yet.")
 
-    def _init_model(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
-        return MiniCPMModel(aphrodite_config=aphrodite_config, prefix=prefix)
+    def _init_model(self, *, sonar_config: SonarConfig, prefix: str = ""):
+        return MiniCPMModel(sonar_config=sonar_config, prefix=prefix)
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.model.embed_input_ids(input_ids)

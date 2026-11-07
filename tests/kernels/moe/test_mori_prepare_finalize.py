@@ -16,14 +16,14 @@ def _describe(tensor):
 
 
 def _import_mori_prepare_finalize(monkeypatch):
-    # This is a contract test for Aphrodite's adapter; it does not need a real MoRI
+    # This is a contract test for Sonar's adapter; it does not need a real MoRI
     # installation or GPU kernels.
     fake_mori = types.ModuleType("mori")
     fake_mori.ops = SimpleNamespace(  # type: ignore[attr-defined]
         EpDispatchCombineOp=object
     )
     monkeypatch.setitem(sys.modules, "mori", fake_mori)
-    module_name = "aphrodite.model_executor.layers.fused_moe.prepare_finalize.mori"
+    module_name = "sonar.model_executor.layers.fused_moe.prepare_finalize.mori"
     sys.modules.pop(module_name, None)
     return importlib.import_module(module_name)
 

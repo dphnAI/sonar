@@ -7,14 +7,14 @@ from unittest.mock import Mock
 import pytest
 import torch
 
-from aphrodite.forward_context import ForwardContext, override_forward_context
-from aphrodite.models.deepseek_v41 import attention as attention_module
-from aphrodite.models.deepseek_v41.decoder_replay_layers import (
+from sonar.forward_context import ForwardContext, override_forward_context
+from sonar.models.deepseek_v41 import attention as attention_module
+from sonar.models.deepseek_v41.decoder_replay_layers import (
     DecoderReplayLayers,
     ReplayBatch,
 )
-from aphrodite.models.deepseek_v41.nvidia import model as model_module
-from aphrodite.platforms import current_platform
+from sonar.models.deepseek_v41.nvidia import model as model_module
+from sonar.platforms import current_platform
 
 
 @pytest.mark.distributed(num_gpus=8)
@@ -40,9 +40,9 @@ def test_pcp_generates_with_pipeline_or_data_parallelism(pp_size, dp_size):
         --enable-chunked-prefill --no-enable-prefix-caching --no-swa-bounded-replay
         --enforce-eager --no-async-scheduling
     """.split()
-    env = {"APHRODITE_USE_V2_MODEL_RUNNER": "1"}
+    env = {"SONAR_USE_V2_MODEL_RUNNER": "1"}
     if pp_size > 1:
-        env["APHRODITE_PP_LAYER_PARTITION"] = "14,26"
+        env["SONAR_PP_LAYER_PARTITION"] = "14,26"
     with (
         RemoteOpenAIServer(model, args, env_dict=env, max_wait_seconds=1200) as server,
         server.get_client(timeout=300) as client,
@@ -218,4 +218,4 @@ def test_pcp_rejects_speculation_other_than_fixed_length_dspark(method, adaptive
         ),
     )
     with pytest.raises(NotImplementedError, match="fixed-length DSpark"):
-        model_module.DeepseekV4Model(aphrodite_config=config)
+        model_module.DeepseekV4Model(sonar_config=config)

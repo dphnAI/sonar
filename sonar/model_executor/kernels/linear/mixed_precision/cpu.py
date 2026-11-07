@@ -3,15 +3,15 @@
 
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite import envs
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar import _custom_ops as ops
+from sonar import envs
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     pack_quantized_values_into_int32,
     unpack_quantized_values_into_int32,
 )
-from aphrodite.model_executor.utils import replace_parameter
-from aphrodite.platforms import CpuArchEnum, current_platform
-from aphrodite.scalar_type import scalar_types
+from sonar.model_executor.utils import replace_parameter
+from sonar.platforms import CpuArchEnum, current_platform
+from sonar.scalar_type import scalar_types
 
 from .MPLinearKernel import MPLinearKernel, MPLinearLayerConfig
 
@@ -161,7 +161,7 @@ class CPUWNA16LinearKernel(MPLinearKernel):
         supports_amx = torch.cpu._is_amx_tile_supported()
         supports_riscv = current_platform.get_cpu_architecture() == CpuArchEnum.RISCV
         layer.use_w4a8 = (
-            envs.APHRODITE_CPU_INT4_W4A8 and self.config.act_type == torch.bfloat16 and (supports_amx or supports_riscv)
+            envs.SONAR_CPU_INT4_W4A8 and self.config.act_type == torch.bfloat16 and (supports_amx or supports_riscv)
         )
         # layer.use_w4a8 = False
         # AWQ format will be converted to GPTQ format in `AutoAWQMarlinLinearMethod`

@@ -25,19 +25,19 @@ from typing import TYPE_CHECKING
 
 import regex as re
 
-from aphrodite.parser.engine.events import EventType
-from aphrodite.parser.engine.parser_engine import ParserEngine
-from aphrodite.parser.engine.parser_engine_config import (
+from sonar.parser.engine.events import EventType
+from sonar.parser.engine.parser_engine import ParserEngine
+from sonar.parser.engine.parser_engine_config import (
     ArgValueExtender,
     ParserEngineConfig,
     ParserState,
     Transition,
 )
-from aphrodite.tool_parsers.utils import find_tool_properties
+from sonar.tool_parsers.utils import find_tool_properties
 
 if TYPE_CHECKING:
-    from aphrodite.tokenizers import TokenizerLike
-    from aphrodite.tool_parsers.abstract_tool_parser import Tool
+    from sonar.tokenizers import TokenizerLike
+    from sonar.tool_parsers.abstract_tool_parser import Tool
 
 _DSML = "｜DSML｜"
 

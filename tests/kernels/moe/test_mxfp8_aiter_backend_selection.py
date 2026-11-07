@@ -14,44 +14,44 @@ from unittest.mock import patch
 
 import pytest
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 if not current_platform.is_rocm():
     pytest.skip("This test can only run on ROCm.", allow_module_level=True)
 
-from aphrodite.model_executor.layers.fused_moe.activation import (  # noqa: E402
+from sonar.model_executor.layers.fused_moe.activation import (  # noqa: E402
     MoEActivation,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.aiter_mxfp8_moe import (  # noqa: E402
+from sonar.model_executor.layers.fused_moe.experts.aiter_mxfp8_moe import (  # noqa: E402
     _AITER_SWIGLU_ALPHA,
     _AITER_SWIGLU_BETA,
     AiterMxfp8Experts,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.mxfp8_emulation_moe import (  # noqa: E402
+from sonar.model_executor.layers.fused_moe.experts.mxfp8_emulation_moe import (  # noqa: E402
     Mxfp8EmulationTritonExperts,
 )
-from aphrodite.model_executor.layers.fused_moe.modular_kernel import (  # noqa: E402
+from sonar.model_executor.layers.fused_moe.modular_kernel import (  # noqa: E402
     FusedMoEActivationFormat,
 )
-from aphrodite.model_executor.layers.fused_moe.oracle.fp8 import (  # noqa: E402
+from sonar.model_executor.layers.fused_moe.oracle.fp8 import (  # noqa: E402
     Fp8MoeBackend,
 )
-from aphrodite.model_executor.layers.fused_moe.oracle.mxfp8 import (  # noqa: E402
+from sonar.model_executor.layers.fused_moe.oracle.mxfp8 import (  # noqa: E402
     _BACKEND_NAME_MAP,
     _SUPPORTED_BACKENDS,
     _mxfp8_backend_to_kernel_cls,
     _select_kernel_cls,
     select_mxfp8_moe_backend,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (  # noqa: E402
+from sonar.model_executor.layers.quantization.utils.quant_utils import (  # noqa: E402
     kMxfp8Dynamic,
     kMxfp8Static,
 )
 from tests.kernels.moe.utils import make_dummy_moe_config  # noqa: E402
 
-from aphrodite._aiter_ops import rocm_aiter_ops  # noqa: E402  # isort: skip
+from sonar._aiter_ops import rocm_aiter_ops  # noqa: E402  # isort: skip
 
-_AITER_MOD = "aphrodite.model_executor.layers.fused_moe.experts.aiter_mxfp8_moe"
+_AITER_MOD = "sonar.model_executor.layers.fused_moe.experts.aiter_mxfp8_moe"
 
 
 def _config(ep_size: int = 1):

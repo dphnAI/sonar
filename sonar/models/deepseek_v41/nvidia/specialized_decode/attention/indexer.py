@@ -25,37 +25,37 @@ that every TP rank shares: the step's row and request counts.
 import torch
 from torch import nn
 
-from aphrodite.distributed import get_tp_group
-from aphrodite.forward_context import get_forward_context
-from aphrodite.model_executor.kernels.attention.dsa.candidate_blocks import (
+from sonar.distributed import get_tp_group
+from sonar.forward_context import get_forward_context
+from sonar.model_executor.kernels.attention.dsa.candidate_blocks import (
     apply_candidate_mask,
     select_candidate_blocks,
 )
-from aphrodite.model_executor.kernels.attention.dsa.sparse_mqa_logits import (
+from sonar.model_executor.kernels.attention.dsa.sparse_mqa_logits import (
     candidate_blocks_to_sparse_indices,
 )
-from aphrodite.model_executor.layers.indexer_topk import get_indexer_topk
-from aphrodite.model_executor.layers.sparse_attn_indexer import (
+from sonar.model_executor.layers.indexer_topk import get_indexer_topk
+from sonar.model_executor.layers.sparse_attn_indexer import (
     SparseAttnIndexer,
     as_fp32_logits,
     kv_cache_as_quant_view,
 )
-from aphrodite.model_executor.layers.sparse_mqa_indexer import SparseMQAIndexer
-from aphrodite.models.common.ops.sequence_parallel import sp_all_gather
-from aphrodite.models.deepseek_v41.attention import DeepseekV4Indexer
-from aphrodite.models.deepseek_v41.common.ops import fused_indexer_q_rope_quant
-from aphrodite.triton_utils import triton
-from aphrodite.utils.deep_gemm import (
+from sonar.model_executor.layers.sparse_mqa_indexer import SparseMQAIndexer
+from sonar.models.common.ops.sequence_parallel import sp_all_gather
+from sonar.models.deepseek_v41.attention import DeepseekV4Indexer
+from sonar.models.deepseek_v41.common.ops import fused_indexer_q_rope_quant
+from sonar.triton_utils import triton
+from sonar.utils.deep_gemm import (
     fp8_fp4_paged_mqa_logits,
     get_paged_mqa_logits_metadata,
     get_paged_sparse_mqa_logits_metadata,
     mqa_logits_mx_inputs,
 )
-from aphrodite.v1.attention.backends.mla.indexer import (
+from sonar.v1.attention.backends.mla.indexer import (
     DeepSeekV32IndexerDecodeMetadata,
     DeepseekV32IndexerMetadata,
 )
-from aphrodite.v1.attention.backends.mla.sparse_indexer import (
+from sonar.v1.attention.backends.mla.sparse_indexer import (
     DeepseekV41SparseIndexerMetadata,
     SparseMQARowsMetadata,
 )

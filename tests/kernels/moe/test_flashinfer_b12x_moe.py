@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 if not current_platform.is_device_capability_family(120):
     pytest.skip(
@@ -14,7 +14,7 @@ if not current_platform.is_device_capability_family(120):
         allow_module_level=True,
     )
 
-from aphrodite.utils.flashinfer import has_flashinfer_b12x_moe
+from sonar.utils.flashinfer import has_flashinfer_b12x_moe
 
 if not has_flashinfer_b12x_moe():
     pytest.skip(
@@ -25,21 +25,21 @@ if not has_flashinfer_b12x_moe():
 # Import fp4_quantize after the skip guard — FlashInfer must be installed.
 from flashinfer.fp4_quantization import fp4_quantize
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite.config import AphroditeConfig, ParallelConfig, set_current_aphrodite_config
-from aphrodite.model_executor.layers.fused_moe import fused_topk
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.all2all_utils import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar.config import ParallelConfig, SonarConfig, set_current_sonar_config
+from sonar.model_executor.layers.fused_moe import fused_topk
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.all2all_utils import (
     maybe_make_prepare_finalize,
 )
-from aphrodite.model_executor.layers.fused_moe.config import nvfp4_moe_quant_config
-from aphrodite.model_executor.layers.fused_moe.experts.flashinfer_b12x_moe import (
+from sonar.model_executor.layers.fused_moe.config import nvfp4_moe_quant_config
+from sonar.model_executor.layers.fused_moe.experts.flashinfer_b12x_moe import (
     FlashInferB12xExperts,
 )
-from aphrodite.model_executor.layers.quantization.utils.flashinfer_fp4_moe import (
+from sonar.model_executor.layers.quantization.utils.flashinfer_fp4_moe import (
     reorder_w1w3_to_w3w1,
 )
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.utils.torch_utils import set_random_seed
 from tests.kernels.moe.utils import make_dummy_moe_config
 from tests.kernels.utils import torch_moe
 
@@ -97,12 +97,12 @@ def test_flashinfer_b12x_moe(
     conflated into a single parameter in ``launch_sm120_moe``, so they must
     equal the same value.  We use ``global_scale = 1.0`` for
     ``fp4_quantize`` so that ``w1_alpha = ones`` satisfies both roles
-    simultaneously.  The alternative — Aphrodite's convention of baking a large
+    simultaneously.  The alternative — Sonar's convention of baking a large
     ``w_gs`` into block-scale values and compensating with
     ``g1_alphas = 1/w_gs`` — is incompatible with this kernel.
     """
     set_random_seed(7)
-    with set_current_aphrodite_config(AphroditeConfig(parallel_config=ParallelConfig(pipeline_parallel_size=1))):
+    with set_current_sonar_config(SonarConfig(parallel_config=ParallelConfig(pipeline_parallel_size=1))):
         a = torch.randn((m, k), device="cuda", dtype=dtype) / 10
 
         # Generate BF16 reference weights in [gate, up] order.
@@ -237,7 +237,7 @@ def test_flashinfer_b12x_moe_relu2(
     is relu(x)^2 without a gate/up split.
     """
     set_random_seed(7)
-    with set_current_aphrodite_config(AphroditeConfig(parallel_config=ParallelConfig(pipeline_parallel_size=1))):
+    with set_current_sonar_config(SonarConfig(parallel_config=ParallelConfig(pipeline_parallel_size=1))):
         a = torch.randn((m, k), device="cuda", dtype=dtype) / 10
 
         # Non-gated: w1 shape is (e, n, k), not (e, 2n, k).

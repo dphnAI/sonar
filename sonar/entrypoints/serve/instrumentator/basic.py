@@ -4,10 +4,10 @@
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-from aphrodite.engine.protocol import EngineClient
-from aphrodite.entrypoints.serve.tokenize.serving import ServingTokenization
-from aphrodite.logger import init_logger
-from aphrodite.version import __version__ as APHRODITE_VERSION
+from sonar.engine.protocol import EngineClient
+from sonar.entrypoints.serve.tokenize.serving import ServingTokenization
+from sonar.logger import init_logger
+from sonar.version import __version__ as SONAR_VERSION
 
 router = APIRouter()
 
@@ -52,7 +52,7 @@ async def get_server_load_metrics(request: Request):
 
 @router.get("/version")
 async def show_version():
-    ver = {"version": APHRODITE_VERSION}
+    ver = {"version": SONAR_VERSION}
     return JSONResponse(content=ver)
 
 

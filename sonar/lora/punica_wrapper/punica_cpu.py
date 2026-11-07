@@ -6,7 +6,7 @@ from typing import Any
 
 import torch
 
-from aphrodite.lora.ops.torch_ops import (
+from sonar.lora.ops.torch_ops import (
     bgmv_expand,
     bgmv_expand_slice,
     bgmv_shrink,

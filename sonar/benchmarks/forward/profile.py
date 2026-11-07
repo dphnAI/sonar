@@ -1,18 +1,18 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""GPU kernel profiles of `aphrodite bench forward` cases.
+"""GPU kernel profiles of `sonar bench forward` cases.
 
 With `--profile-dir`, each case's graph is replayed a few more times under
 `torch.profiler` after timing. Each rank writes a Perfetto trace and a kernel
 summary (`<case>.rank<r>.kernels.json`): per-kernel time per forward, sorted.
 
 Summarize one file or compare two (e.g. before/after a change):
-`python -m aphrodite.benchmarks.forward.profile A.kernels.json [B.kernels.json]`.
+`python -m sonar.benchmarks.forward.profile A.kernels.json [B.kernels.json]`.
 
 The same replays run between `cudaProfilerStart`/`Stop` in an NVTX range per
 case (with or without `--profile-dir`), so Nsight Systems can record just them:
 `nsys profile --capture-range=cudaProfilerApi --capture-range-end=repeat
---cuda-graph-trace=node aphrodite bench forward ...`.
+--cuda-graph-trace=node sonar bench forward ...`.
 """
 
 import argparse
@@ -25,8 +25,8 @@ from typing import Any
 import regex as re
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.profiler.wrapper import get_default_torch_profiler_activities
+from sonar.platforms import current_platform
+from sonar.profiler.wrapper import get_default_torch_profiler_activities
 
 _GPU_CATEGORIES = ("kernel", "gpu_memcpy", "gpu_memset")
 # Kernels named after a generic launcher are identified by their first

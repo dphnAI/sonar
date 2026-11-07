@@ -9,16 +9,16 @@ from collections.abc import Callable
 
 from fastapi import FastAPI
 
-from aphrodite import AsyncEngineArgs, envs
-from aphrodite.config import AphroditeConfig
-from aphrodite.logger import configure_logging_from_args, init_logger
+from sonar import AsyncEngineArgs, envs
+from sonar.config import SonarConfig
+from sonar.logger import configure_logging_from_args, init_logger
 
 from ..app import build_app
 from ..launcher import serve_http, setup_server
 from ..utils.server_utils import get_uvicorn_log_config
 from .app_state import init_render_app_state
 
-logger = init_logger("aphrodite.entrypoints.launchers.render.entry")
+logger = init_logger("sonar.entrypoints.launchers.render.entry")
 
 
 def build_render_app(args: Namespace) -> FastAPI:
@@ -26,7 +26,7 @@ def build_render_app(args: Namespace) -> FastAPI:
 
 
 async def build_and_serve_renderer(
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     listen_address: str,
     sock: socket.socket,
     args: Namespace,
@@ -45,9 +45,9 @@ async def build_and_serve_renderer(
         uvicorn_kwargs["log_config"] = log_config
 
     app = app_builder(args)
-    await init_render_app_state(aphrodite_config, app.state, args)
+    await init_render_app_state(sonar_config, app.state, args)
 
-    logger.info("Starting Aphrodite server on %s", listen_address)
+    logger.info("Starting Sonar server on %s", listen_address)
 
     return await serve_http(
         app,
@@ -59,7 +59,7 @@ async def build_and_serve_renderer(
         # NOTE: When the 'disable_uvicorn_access_log' value is True,
         # no access log will be output.
         access_log=not args.disable_uvicorn_access_log,
-        timeout_keep_alive=envs.APHRODITE_HTTP_TIMEOUT_KEEP_ALIVE,
+        timeout_keep_alive=envs.SONAR_HTTP_TIMEOUT_KEEP_ALIVE,
         ssl_keyfile=args.ssl_keyfile,
         ssl_certfile=args.ssl_certfile,
         ssl_ca_certs=args.ssl_ca_certs,
@@ -71,24 +71,24 @@ async def build_and_serve_renderer(
     )
 
 
-def create_render_config(args: argparse.Namespace) -> AphroditeConfig:
-    """Build the AphroditeConfig for a GPU-less server (render or tokenizer-only)."""
+def create_render_config(args: argparse.Namespace) -> SonarConfig:
+    """Build the SonarConfig for a GPU-less server (render or tokenizer-only)."""
     engine_args = AsyncEngineArgs.from_cli_args(args)
     model_config = engine_args.create_model_config()
 
     # Render servers preprocess data only — no inference, no quantized kernels.
-    # Clear quantization so AphroditeConfig skips quant dtype/capability validation.
+    # Clear quantization so SonarConfig skips quant dtype/capability validation.
     model_config.quantization = None
 
     # Render servers never allocate KV cache; suppress the spurious CPU KV
     # cache space warning from CpuPlatform.check_and_update_config.
-    envs.APHRODITE_CPU_KVCACHE_SPACE = 0
+    envs.SONAR_CPU_KVCACHE_SPACE = 0
 
     # Merge frontend parser flags (e.g. --reasoning-parser) into the
     # structured outputs config, mirroring `create_engine_config`, which this
     # GPU-less entrypoint bypasses. Model-specific defaults are then applied
-    # by `verify_and_update_config` during AphroditeConfig construction.
-    return AphroditeConfig(
+    # by `verify_and_update_config` during SonarConfig construction.
+    return SonarConfig(
         model_config=model_config,
         logging_config=engine_args.create_logging_config(),
         structured_outputs_config=engine_args.create_structured_outputs_config(),
@@ -112,8 +112,8 @@ async def run_launch_fastapi(
     listen_address, sock = setup_server(args, reuse_port=False)
 
     # 2. Build and serve the API server
-    aphrodite_config = create_render_config(args)
-    shutdown_task = await build_and_serve_renderer(aphrodite_config, listen_address, sock, args, app_builder)
+    sonar_config = create_render_config(args)
+    shutdown_task = await build_and_serve_renderer(sonar_config, listen_address, sock, args, app_builder)
     try:
         await shutdown_task
     finally:
@@ -123,12 +123,12 @@ async def run_launch_fastapi(
 if __name__ == "__main__":
     import uvloop
 
-    from aphrodite.entrypoints.common.cli_args import (
+    from sonar.entrypoints.common.cli_args import (
         make_arg_parser,
         validate_parsed_serve_args,
     )
-    from aphrodite.entrypoints.common.startup import cli_env_setup
-    from aphrodite.utils.argparse_utils import FlexibleArgumentParser
+    from sonar.entrypoints.common.startup import cli_env_setup
+    from sonar.utils.argparse_utils import FlexibleArgumentParser
 
     cli_env_setup()
     parser = FlexibleArgumentParser(

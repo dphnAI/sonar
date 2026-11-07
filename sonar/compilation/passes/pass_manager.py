@@ -6,17 +6,17 @@ from typing import Any, ParamSpec, TypeVar
 
 from torch import fx as fx
 
-from aphrodite import envs
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.compilation.passes.utility.post_cleanup import PostCleanupPass
-from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.utils.system_utils import set_env_var
+from sonar import envs
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.compilation.passes.utility.post_cleanup import PostCleanupPass
+from sonar.config import SonarConfig, set_current_sonar_config
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.utils.system_utils import set_env_var
 
-from .aphrodite_inductor_pass import AphroditeInductorPass, AphroditePatternMatcherPass
 from .ir.clone_elimination import UnsafeCloneEliminationPass
-from .ir.lowering_pass import AphroditeIRLoweringPass
+from .ir.lowering_pass import SonarIRLoweringPass
+from .sonar_inductor_pass import SonarInductorPass, SonarPatternMatcherPass
 
 if rocm_aiter_ops.is_enabled() or rocm_aiter_ops.is_rdna_aiter_enabled():
     from .fusion.allreduce_rms_fusion import (
@@ -73,7 +73,7 @@ def with_pattern_match_debug(fn: Callable[P, R]) -> Callable[P, R]:
 
     @functools.wraps(fn)
     def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
-        if (debug_val := envs.APHRODITE_PATTERN_MATCH_DEBUG) is not None:
+        if (debug_val := envs.SONAR_PATTERN_MATCH_DEBUG) is not None:
             # optionally check rank here
             with set_env_var("TORCHINDUCTOR_PATTERN_MATCH_DEBUG", debug_val):
                 return fn(*args, **kwargs)
@@ -101,39 +101,39 @@ class PostGradPassManager(CustomGraphPass):  # type: ignore[misc]
 
     @with_pattern_match_debug
     def __call__(self, graph: fx.Graph) -> None:
-        AphroditeInductorPass.dump_prefix = 0  # reset dump index
+        SonarInductorPass.dump_prefix = 0  # reset dump index
 
         compile_range = get_pass_context().compile_range
         for pass_ in self.passes:
             if pass_.is_applicable_for_range(compile_range):
                 pass_(graph)
-                AphroditeInductorPass.dump_prefix += 1
+                SonarInductorPass.dump_prefix += 1
             else:
                 logger.debug("Skipping %s with compile range %s", pass_, compile_range)
 
         # perform the first post-cleanup before IR lowering to clean up fusion artifacts
         # and make sure no dead IR ops are lowered.
         self.post_cleanup(graph)
-        AphroditeInductorPass.dump_prefix += 1
+        SonarInductorPass.dump_prefix += 1
 
         # lowering before cleanup so DCE can clean up lowered ops.
         # DCE handles mutating ops correctly as well.
         self.ir_lowering(graph)
-        AphroditeInductorPass.dump_prefix += 1
+        SonarInductorPass.dump_prefix += 1
         self.clone_elimination(graph)
-        AphroditeInductorPass.dump_prefix += 1
+        SonarInductorPass.dump_prefix += 1
 
         # clean up after lowering again
         self.post_cleanup(graph)
-        AphroditeInductorPass.dump_prefix += 1
+        SonarInductorPass.dump_prefix += 1
 
         # always run fix_functionalization last
         self.fix_functionalization(graph)
-        AphroditeInductorPass.dump_prefix = None  # Cleanup index
+        SonarInductorPass.dump_prefix = None  # Cleanup index
 
-        AphroditePatternMatcherPass.log_match_summary()
+        SonarPatternMatcherPass.log_match_summary()
 
-    def configure(self, config: AphroditeConfig) -> None:
+    def configure(self, config: SonarConfig) -> None:
         self.pass_config = config.compilation_config.pass_config
         model_config = config.model_config
         enable_transformers_norm_canonicalization = (
@@ -146,8 +146,8 @@ class PostGradPassManager(CustomGraphPass):  # type: ignore[misc]
             and model_config.using_transformers_backend()
         )
 
-        # Set the current aphrodite config to allow tracing CustomOp instances
-        with set_current_aphrodite_config(config, check_compile=False):
+        # Set the current sonar config to allow tracing CustomOp instances
+        with set_current_sonar_config(config, check_compile=False):
             if self.pass_config.eliminate_noops:
                 self.passes += [NoOpEliminationPass(config)]
 
@@ -206,7 +206,7 @@ class PostGradPassManager(CustomGraphPass):  # type: ignore[misc]
                 self.passes += [SplitCoalescingPass(config)]
                 self.passes += [QKNormRoPEFusionPass(config)]
 
-            self.ir_lowering = AphroditeIRLoweringPass(config)
+            self.ir_lowering = SonarIRLoweringPass(config)
             self.clone_elimination = UnsafeCloneEliminationPass(config)
             self.post_cleanup = PostCleanupPass(config)
             self.fix_functionalization = FixFunctionalizationPass(config)

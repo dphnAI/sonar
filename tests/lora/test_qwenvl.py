@@ -4,12 +4,12 @@ from dataclasses import dataclass
 
 import pytest
 
-import aphrodite
-from aphrodite.assets.image import ImageAsset
-from aphrodite.lora.request import LoRARequest
-from aphrodite.platforms import current_platform
-from aphrodite.sampling_params import BeamSearchParams
-from tests.conftest import AphroditeRunner
+import sonar
+from sonar.assets.image import ImageAsset
+from sonar.lora.request import LoRARequest
+from sonar.platforms import current_platform
+from sonar.sampling_params import BeamSearchParams
+from tests.conftest import SonarRunner
 
 
 @dataclass
@@ -47,7 +47,7 @@ class Qwen2VLTester:
 
     def __init__(self, config: TestConfig):
         self.config = config
-        self._runner = AphroditeRunner(
+        self._runner = SonarRunner(
             model_name=config.model_path,
             max_num_seqs=config.max_num_seqs,
             enable_lora=True,
@@ -61,7 +61,7 @@ class Qwen2VLTester:
         )
 
     @property
-    def llm(self) -> aphrodite.LLM:
+    def llm(self) -> sonar.LLM:
         return self._runner.get_llm()
 
     def __enter__(self) -> "Qwen2VLTester":
@@ -79,7 +79,7 @@ class Qwen2VLTester:
         temperature: float = 0,
         max_tokens: int = 5,
     ):
-        sampling_params = aphrodite.SamplingParams(
+        sampling_params = sonar.SamplingParams(
             temperature=temperature,
             max_tokens=max_tokens,
         )
@@ -175,11 +175,11 @@ def _enable_deterministic_lora_shrink(monkeypatch: pytest.MonkeyPatch) -> None:
     # kernel to use SPLIT_K=1 so it stores the complete reduction directly
     # instead of accumulating split-K partial results with atomic_add. This
     # targets reduction determinism, not full batch invariance.
-    monkeypatch.setenv("APHRODITE_BATCH_INVARIANT", "1")
-    # The kernel configuration reads APHRODITE_BATCH_INVARIANT at import time.
+    monkeypatch.setenv("SONAR_BATCH_INVARIANT", "1")
+    # The kernel configuration reads SONAR_BATCH_INVARIANT at import time.
     # Spawn the engine process so it observes this setting even if the LoRA
     # Triton utilities were already imported during test collection.
-    monkeypatch.setenv("APHRODITE_WORKER_MULTIPROC_METHOD", "spawn")
+    monkeypatch.setenv("SONAR_WORKER_MULTIPROC_METHOD", "spawn")
 
 
 def test_qwen2vl_lora(qwen2vl_lora_files):

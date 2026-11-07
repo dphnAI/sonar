@@ -9,7 +9,7 @@ import pytest
 import requests
 import torch
 
-from aphrodite.utils.serial_utils import tensor2base64
+from sonar.utils.serial_utils import tensor2base64
 from tests.utils import RemoteOpenAIServer
 
 # Prithvi requires terratorch, which is temporarily unavailable while PyPI has

@@ -13,29 +13,29 @@ from mistral_common.protocol.transcription.request import (
 )
 from mistral_common.tokens.tokenizers.audio import Audio, AudioConfig
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, ModelConfig, SpeechToTextConfig
-from aphrodite.config.speech_to_text import SpeechToTextParams
-from aphrodite.inputs import PromptType, TokensPrompt
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.models.interfaces import MultiModalEmbeddings, SupportsRealtime
-from aphrodite.model_executor.models.voxtral import (
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import ModelConfig, SonarConfig, SpeechToTextConfig
+from sonar.config.speech_to_text import SpeechToTextParams
+from sonar.inputs import PromptType, TokensPrompt
+from sonar.logger import init_logger
+from sonar.model_executor.models.interfaces import MultiModalEmbeddings, SupportsRealtime
+from sonar.model_executor.models.voxtral import (
     VoxtralDummyInputsBuilder,
     VoxtralForConditionalGeneration,
     VoxtralMultiModalProcessor,
     VoxtralProcessingInfo,
 )
-from aphrodite.model_executor.models.whisper_causal import WhisperCausalEncoder
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.parse import MultiModalDataItems
-from aphrodite.multimodal.processing import ProcessorInputs, TimingContext
-from aphrodite.multimodal.processing.processor import (
+from sonar.model_executor.models.whisper_causal import WhisperCausalEncoder
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.parse import MultiModalDataItems
+from sonar.multimodal.processing import ProcessorInputs, TimingContext
+from sonar.multimodal.processing.processor import (
     MultiModalProcessingResult,
     PlaceholderFeaturesInfo,
 )
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.tokenizers import cached_tokenizer_from_config
-from aphrodite.utils.torch_utils import is_torch_equal_or_newer
+from sonar.sequence import IntermediateTensors
+from sonar.tokenizers import cached_tokenizer_from_config
+from sonar.utils.torch_utils import is_torch_equal_or_newer
 
 from .utils import _flatten_embeddings
 
@@ -228,14 +228,14 @@ class VoxtralRealtimeGeneration(VoxtralForConditionalGeneration, SupportsRealtim
     # and cached_get_processor. Let's skip until fixed
     skip_warmup_audio_preprocessing = True
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
-        super().__init__(aphrodite_config=aphrodite_config, prefix=prefix)
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
+        super().__init__(sonar_config=sonar_config, prefix=prefix)
 
         # Full cudagraphs are supported for decode-only batches (the encoder's
         # block-pooling attention builder is capture-safe for uniform
         # single-token decode). Mixed/prefill batches are not, so block only
         # pure FULL; FULL_DECODE_ONLY and FULL_AND_PIECEWISE are allowed.
-        cudagraph_mode = aphrodite_config.compilation_config.cudagraph_mode
+        cudagraph_mode = sonar_config.compilation_config.cudagraph_mode
         assert not cudagraph_mode.mixed_mode().has_full_cudagraphs(), (
             "Voxtral realtime supports full cudagraphs for decode-only batches. "
             "Use cudagraph_mode=FULL_DECODE_ONLY or FULL_AND_PIECEWISE (not FULL)."

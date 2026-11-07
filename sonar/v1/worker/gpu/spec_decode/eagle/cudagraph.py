@@ -4,19 +4,19 @@ from collections.abc import Callable
 
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.compilation import CUDAGraphMode
-from aphrodite.v1.kv_cache_interface import KVCacheConfig
-from aphrodite.v1.worker.gpu.block_table import BlockTables
-from aphrodite.v1.worker.gpu.cudagraph_utils import (
+from sonar.config import SonarConfig
+from sonar.config.compilation import CUDAGraphMode
+from sonar.v1.kv_cache_interface import KVCacheConfig
+from sonar.v1.worker.gpu.block_table import BlockTables
+from sonar.v1.worker.gpu.cudagraph_utils import (
     AttentionState,
     BatchExecutionDescriptor,
     CudaGraphManager,
     prepare_inputs_to_capture,
 )
-from aphrodite.v1.worker.gpu.input_batch import InputBuffers
-from aphrodite.v1.worker.gpu.model_states.interface import ModelState
-from aphrodite.v1.worker.utils import AttentionGroup
+from sonar.v1.worker.gpu.input_batch import InputBuffers
+from sonar.v1.worker.gpu.model_states.interface import ModelState
+from sonar.v1.worker.utils import AttentionGroup
 
 
 class EagleCudaGraphManagerBase(CudaGraphManager):
@@ -24,12 +24,12 @@ class EagleCudaGraphManagerBase(CudaGraphManager):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
         cudagraph_mode: CUDAGraphMode,
         decode_query_len: int,
     ):
-        super().__init__(aphrodite_config, device, cudagraph_mode, decode_query_len)
+        super().__init__(sonar_config, device, cudagraph_mode, decode_query_len)
 
         # Use a dedicated pool for Eagle to avoid memory overlap with the main
         # model's cudagraph. The base class uses a shared global pool, but Eagle's

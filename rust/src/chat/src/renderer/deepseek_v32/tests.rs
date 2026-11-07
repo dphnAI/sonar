@@ -102,10 +102,10 @@ fn assert_fixture(input_name: &str, expected: ExpectFile) {
 }
 
 #[test]
-fn renders_aphrodite_parity_prompt_for_request_level_tools_fixture() {
+fn renders_sonar_parity_prompt_for_request_level_tools_fixture() {
     assert_fixture(
         "test_input.json",
-        expect_file!["fixtures/test_output_aphrodite_parity.txt"],
+        expect_file!["fixtures/test_output_sonar_parity.txt"],
     );
 }
 

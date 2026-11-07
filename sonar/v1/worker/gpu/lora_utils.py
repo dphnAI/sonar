@@ -7,12 +7,12 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from aphrodite.lora.request import LoRARequest
-from aphrodite.lora.utils import get_captured_lora_counts
+from sonar.lora.request import LoRARequest
+from sonar.lora.utils import get_captured_lora_counts
 
 if TYPE_CHECKING:
-    from aphrodite.config.compilation import CompilationConfig
-    from aphrodite.config.lora import LoRAConfig
+    from sonar.config.compilation import CompilationConfig
+    from sonar.config.lora import LoRAConfig
 
 NO_LORA_ID = 0
 

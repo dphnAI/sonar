@@ -11,7 +11,7 @@ from collections import OrderedDict
 from collections.abc import Iterable
 from dataclasses import dataclass
 
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 
@@ -41,7 +41,7 @@ class BackgroundBlockObjectStore:
         self._thread = threading.Thread(
             target=self._run,
             daemon=True,
-            name="aphrodite-aux-output-writer",
+            name="sonar-aux-output-writer",
         )
         self._thread.start()
 

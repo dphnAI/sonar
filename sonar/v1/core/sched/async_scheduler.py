@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-import aphrodite.envs as envs
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.v1.core.sched.output import SchedulerOutput
-from aphrodite.v1.core.sched.scheduler import Scheduler
+import sonar.envs as envs
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.v1.core.sched.output import SchedulerOutput
+from sonar.v1.core.sched.scheduler import Scheduler
 
 logger = init_logger(__name__)
 
@@ -16,9 +16,9 @@ class AsyncScheduler(Scheduler):
         # reusable read-only placeholder list for speculative decoding.
         self._spec_token_placeholders: list[int] = [-1] * self.num_spec_tokens
         self.pp_size = self.parallel_config.pipeline_parallel_size
-        # Only XPU can disable PP decode microbatching via APHRODITE_XPU_PP_MICROBATCH.
+        # Only XPU can disable PP decode microbatching via SONAR_XPU_PP_MICROBATCH.
         self.decode_stagger = self.pp_size
-        if current_platform.is_xpu() and not envs.APHRODITE_XPU_PP_MICROBATCH:
+        if current_platform.is_xpu() and not envs.SONAR_XPU_PP_MICROBATCH:
             self.decode_stagger = 1
 
     def _update_after_schedule(self, scheduler_output: SchedulerOutput) -> None:

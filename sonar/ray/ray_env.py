@@ -3,12 +3,12 @@
 import json
 import os
 
-import aphrodite.envs as envs
-from aphrodite.logger import init_logger
+import sonar.envs as envs
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 
-CONFIG_HOME = envs.APHRODITE_CONFIG_ROOT
+CONFIG_HOME = envs.SONAR_CONFIG_ROOT
 
 # Env vars that should NOT be copied from the driver to Ray workers.
 RAY_NON_CARRY_OVER_ENV_VARS_FILE = os.path.join(CONFIG_HOME, "ray_non_carry_over_env_vars.json")
@@ -28,11 +28,11 @@ except json.JSONDecodeError:
 
 # ---------------------------------------------------------------------------
 # Built-in defaults for env var propagation.
-# Users can add more via APHRODITE_RAY_EXTRA_ENV_VAR_PREFIXES_TO_COPY and
-# APHRODITE_RAY_EXTRA_ENV_VARS_TO_COPY (additive, not replacing).
+# Users can add more via SONAR_RAY_EXTRA_ENV_VAR_PREFIXES_TO_COPY and
+# SONAR_RAY_EXTRA_ENV_VARS_TO_COPY (additive, not replacing).
 # ---------------------------------------------------------------------------
 DEFAULT_ENV_VAR_PREFIXES: set[str] = {
-    "APHRODITE_",
+    "SONAR_",
     "FLASH_ATTENTION_",
     "LMCACHE_",
     "NCCL_",
@@ -60,11 +60,11 @@ def get_env_vars_to_copy(
 
     The result is the union of:
 
-    1. Env vars registered in ``aphrodite.envs.environment_variables``.
+    1. Env vars registered in ``sonar.envs.environment_variables``.
     2. Env vars in ``os.environ`` matching a prefix in
-       ``DEFAULT_ENV_VAR_PREFIXES`` + ``APHRODITE_RAY_EXTRA_ENV_VAR_PREFIXES_TO_COPY``.
+       ``DEFAULT_ENV_VAR_PREFIXES`` + ``SONAR_RAY_EXTRA_ENV_VAR_PREFIXES_TO_COPY``.
     3. Individual names in ``DEFAULT_EXTRA_ENV_VARS`` +
-       ``APHRODITE_RAY_EXTRA_ENV_VARS_TO_COPY``.
+       ``SONAR_RAY_EXTRA_ENV_VARS_TO_COPY``.
     4. Caller-supplied *additional_vars* (e.g. platform-specific).
 
     Minus any names in *exclude_vars* or ``RAY_NON_CARRY_OVER_ENV_VARS``.
@@ -79,15 +79,15 @@ def get_env_vars_to_copy(
     exclude = (exclude_vars or set()) | RAY_NON_CARRY_OVER_ENV_VARS
 
     # -- prefixes (built-in + user-supplied, additive) ----------------------
-    prefixes = DEFAULT_ENV_VAR_PREFIXES | _parse_csv(envs.APHRODITE_RAY_EXTRA_ENV_VAR_PREFIXES_TO_COPY)
+    prefixes = DEFAULT_ENV_VAR_PREFIXES | _parse_csv(envs.SONAR_RAY_EXTRA_ENV_VAR_PREFIXES_TO_COPY)
 
     # -- collect env var names ----------------------------------------------
-    # 1. Aphrodite's registered env vars
+    # 1. Sonar's registered env vars
     result = set(envs.environment_variables)
     # 2. Prefix-matched vars present in the current environment
     result |= {name for name in os.environ if any(name.startswith(p) for p in prefixes)}
     # 3. Individual extra vars (built-in + user-supplied, additive)
-    result |= DEFAULT_EXTRA_ENV_VARS | _parse_csv(envs.APHRODITE_RAY_EXTRA_ENV_VARS_TO_COPY)
+    result |= DEFAULT_EXTRA_ENV_VARS | _parse_csv(envs.SONAR_RAY_EXTRA_ENV_VARS_TO_COPY)
     # 4. Caller-supplied extra vars (e.g. platform-specific)
     result |= additional_vars or set()
     # 5. Exclude worker-specific and user-blacklisted vars

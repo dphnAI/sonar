@@ -3,9 +3,8 @@
 
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.config import (
-    AphroditeConfig,
+import sonar.envs as envs
+from sonar.config import (
     CacheConfig,
     DiffusionConfig,
     ECTransferConfig,
@@ -16,23 +15,24 @@ from aphrodite.config import (
     ObservabilityConfig,
     ParallelConfig,
     SchedulerConfig,
+    SonarConfig,
     SpeculativeConfig,
 )
-from aphrodite.config.model import RunnerOption
-from aphrodite.config.scheduler import SchedulerPolicy
-from aphrodite.multimodal.inputs import (
+from sonar.config.model import RunnerOption
+from sonar.config.scheduler import SchedulerPolicy
+from sonar.multimodal.inputs import (
     MultiModalFeatureSpec,
     MultiModalKwargsItem,
     PlaceholderRange,
 )
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.utils.hashing import sha256
-from aphrodite.v1.core import kv_cache_planning
-from aphrodite.v1.core.kv_cache_utils import get_request_block_hasher, init_none_hash
-from aphrodite.v1.core.sched.async_scheduler import AsyncScheduler
-from aphrodite.v1.core.sched.scheduler import Scheduler
-from aphrodite.v1.core.single_type_kv_cache_manager import register_all_kvcache_specs
-from aphrodite.v1.kv_cache_interface import (
+from sonar.sampling_params import SamplingParams
+from sonar.utils.hashing import sha256
+from sonar.v1.core import kv_cache_planning
+from sonar.v1.core.kv_cache_utils import get_request_block_hasher, init_none_hash
+from sonar.v1.core.sched.async_scheduler import AsyncScheduler
+from sonar.v1.core.sched.scheduler import Scheduler
+from sonar.v1.core.single_type_kv_cache_manager import register_all_kvcache_specs
+from sonar.v1.kv_cache_interface import (
     FullAttentionSpec,
     KVCacheConfig,
     KVCacheGroupSpec,
@@ -42,8 +42,8 @@ from aphrodite.v1.kv_cache_interface import (
     MLAAttentionSpec,
     SlidingWindowSpec,
 )
-from aphrodite.v1.request import Request
-from aphrodite.v1.structured_output import StructuredOutputManager
+from sonar.v1.request import Request
+from sonar.v1.structured_output import StructuredOutputManager
 from tests.v1.kv_connector.unit.utils import MockKVConfig
 
 EOS_TOKEN_ID = 50256
@@ -202,7 +202,7 @@ def create_scheduler(
         model_config.hf_config.canvas_length = diffusion_canvas_length
         diffusion_config = DiffusionConfig(canvas_length=diffusion_canvas_length)
 
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         scheduler_config=scheduler_config,
         model_config=model_config,
         cache_config=cache_config,
@@ -235,18 +235,18 @@ def create_scheduler(
         kv_cache_groups=[KVCacheGroupSpec(["layer"], kv_cache_spec)],
     )
     cache_config.num_gpu_blocks = num_blocks
-    register_all_kvcache_specs(aphrodite_config)
+    register_all_kvcache_specs(sonar_config)
     if scheduler_cls is None:
         scheduler_cls = AsyncScheduler if async_scheduling else Scheduler
     scheduler = scheduler_cls(
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         kv_cache_config=kv_cache_config,
         block_size=block_size,
         log_stats=True,
-        structured_output_manager=StructuredOutputManager(aphrodite_config),
+        structured_output_manager=StructuredOutputManager(sonar_config),
     )
     if use_v2_model_runner is None:
-        use_v2_model_runner = envs.APHRODITE_USE_V2_MODEL_RUNNER is not False
+        use_v2_model_runner = envs.SONAR_USE_V2_MODEL_RUNNER is not False
     scheduler.use_v2_model_runner = use_v2_model_runner
     return scheduler
 
@@ -412,13 +412,13 @@ def new_mla_spec(cache_dtype_str=None, block_size: int = 16):
 
 
 def get_kv_cache_configs(
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     kv_cache_specs: list[dict[str, KVCacheSpec]],
     available_memory: list[int],
 ) -> list[KVCacheConfig]:
     return kv_cache_planning.get_kv_cache_configs(
-        aphrodite_config,
+        sonar_config,
         kv_cache_specs,
         available_memory,
-        kv_cache_planning.get_global_kv_cache_groups(aphrodite_config, kv_cache_specs),
+        kv_cache_planning.get_global_kv_cache_groups(sonar_config, kv_cache_specs),
     )

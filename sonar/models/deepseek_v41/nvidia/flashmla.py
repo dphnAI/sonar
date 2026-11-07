@@ -5,37 +5,37 @@ from typing import TYPE_CHECKING, ClassVar, cast
 
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.forward_context import get_forward_context
-from aphrodite.models.deepseek_v4.nvidia.ops.o_proj import compute_fp8_einsum_recipe
-from aphrodite.models.deepseek_v41.attention import DeepseekV4Attention
-from aphrodite.models.deepseek_v41.common.ops import (
+from sonar.config import SonarConfig
+from sonar.forward_context import get_forward_context
+from sonar.models.deepseek_v4.nvidia.ops.o_proj import compute_fp8_einsum_recipe
+from sonar.models.deepseek_v41.attention import DeepseekV4Attention
+from sonar.models.deepseek_v41.common.ops import (
     combine_topk_swa_indices,
     compute_global_topk_indices_and_lens,
     dequantize_and_gather_k_cache,
 )
-from aphrodite.models.deepseek_v41.nvidia.ops.o_proj import (
+from sonar.models.deepseek_v41.nvidia.ops.o_proj import (
     dsv41_o_proj,
     register_dsv41_o_proj_warmup,
 )
-from aphrodite.models.deepseek_v41.sparse_mla import (
+from sonar.models.deepseek_v41.sparse_mla import (
     DeepseekV4FlashMLABackend,
     DeepseekV4FlashMLAMetadata,
     DeepseekV41SparseSWAMetadataBuilder,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.math_utils import round_up
-from aphrodite.v1.attention.backend import AttentionCGSupport, max_decode_query_len
-from aphrodite.v1.attention.backends.mla.sparse_swa import DeepseekSparseSWABackend
-from aphrodite.v1.attention.ops.flashmla import (
+from sonar.platforms import current_platform
+from sonar.utils.math_utils import round_up
+from sonar.v1.attention.backend import AttentionCGSupport, max_decode_query_len
+from sonar.v1.attention.backends.mla.sparse_swa import DeepseekSparseSWABackend
+from sonar.v1.attention.ops.flashmla import (
     flash_mla_sparse_fwd,
     flash_mla_with_kvcache,
 )
-from aphrodite.v1.kv_cache_interface import KVCacheSpec
-from aphrodite.v1.worker.workspace import current_workspace_manager
+from sonar.v1.kv_cache_interface import KVCacheSpec
+from sonar.v1.worker.workspace import current_workspace_manager
 
 if TYPE_CHECKING:
-    from aphrodite.v1.attention.backends.mla.sparse_swa import DeepseekSparseSWAMetadata
+    from sonar.v1.attention.backends.mla.sparse_swa import DeepseekSparseSWAMetadata
 
 
 class DeepseekSparseSWAFlashMLAMetadataBuilder(DeepseekV41SparseSWAMetadataBuilder):
@@ -46,12 +46,12 @@ class DeepseekSparseSWAFlashMLAMetadataBuilder(DeepseekV41SparseSWAMetadataBuild
     @classmethod
     def get_varlen_cudagraph_max_query_len(
         cls,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         kv_cache_spec: KVCacheSpec,
     ) -> int | None:
         # Decode replays use device request boundaries; prefill metadata is
         # not graph-safe.
-        return max_decode_query_len(aphrodite_config)
+        return max_decode_query_len(sonar_config)
 
 
 class DeepseekSparseSWAFlashMLABackend(DeepseekSparseSWABackend):

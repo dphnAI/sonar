@@ -12,10 +12,10 @@ from functools import wraps
 from multiprocessing.process import BaseProcess
 from typing import Any, cast
 
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.utils.cuda_process_checkpoint import CudaProcessCheckpoint
-from aphrodite.v1.executor.multiproc_executor import MultiprocExecutor
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.utils.cuda_process_checkpoint import CudaProcessCheckpoint
+from sonar.v1.executor.multiproc_executor import MultiprocExecutor
 
 logger = init_logger(__name__)
 
@@ -30,7 +30,7 @@ def _serialized(method):
 
 
 def _validate_nccl_checkpoint(worker, suspended):
-    from aphrodite.distributed import get_tp_group
+    from sonar.distributed import get_tp_group
 
     comm = cast(Any, get_tp_group().device_communicator).pynccl_comm
     if (
@@ -47,32 +47,32 @@ def _validate_nccl_checkpoint(worker, suspended):
 class CUDACheckpointExecutor(MultiprocExecutor):
     """Use dedicated workers even at TP=1 so failed restoration is terminable."""
 
-    def __init__(self, aphrodite_config, monitor_workers=True):
+    def __init__(self, sonar_config, monitor_workers=True):
         self._checkpoint_lock = threading.RLock()
         self._checkpoint = None
         self._checkpoint_active = False
-        parallel = aphrodite_config.parallel_config
+        parallel = sonar_config.parallel_config
         if sys.platform != "linux" or not current_platform.is_cuda():
             raise ValueError("CUDA checkpoint requires Linux and NVIDIA CUDA")
         if (
-            not aphrodite_config.use_v2_model_runner
-            or aphrodite_config.model_config.sleep_mode_backend != "cumem"
+            not sonar_config.use_v2_model_runner
+            or sonar_config.model_config.sleep_mode_backend != "cumem"
             or parallel.enable_expert_parallel
-            or parallel.worker_cls not in ("auto", "aphrodite.v1.worker.gpu_worker.Worker")
+            or parallel.worker_cls not in ("auto", "sonar.v1.worker.gpu_worker.Worker")
         ):
             raise ValueError(
                 "CUDA checkpoint requires the V2 GPU model runner, cumem sleep "
                 "backend and standard GPU worker, without expert parallelism"
             )
-        compilation = getattr(aphrodite_config, "compilation_config", None)
+        compilation = getattr(sonar_config, "compilation_config", None)
         passes = getattr(compilation, "pass_config", None)
         fused_allreduce = bool(getattr(compilation, "mode", 0)) and bool(getattr(passes, "fuse_allreduce_rms", False))
-        standalone_flashinfer = os.environ.get("APHRODITE_ALLREDUCE_USE_FLASHINFER") == "1"
+        standalone_flashinfer = os.environ.get("SONAR_ALLREDUCE_USE_FLASHINFER") == "1"
         # The compiler fusion allocates FlashInfer workspaces independently
         # of the standalone all-reduce environment switch.
         self._checkpoint_flashinfer = parallel.tensor_parallel_size > 1 and (standalone_flashinfer or fused_allreduce)
         self._use_nccl_suspend = (
-            parallel.tensor_parallel_size > 1 and aphrodite_config.model_config.enable_nccl_comm_suspend
+            parallel.tensor_parallel_size > 1 and sonar_config.model_config.enable_nccl_comm_suspend
         )
         if (
             parallel.tensor_parallel_size < 1
@@ -84,13 +84,9 @@ class CUDACheckpointExecutor(MultiprocExecutor):
             or parallel.world_size != parallel.tensor_parallel_size
         ):
             raise ValueError("CUDA checkpoint requires single-node tensor parallelism")
-        if (
-            aphrodite_config.kv_transfer_config
-            or aphrodite_config.ec_transfer_config
-            or aphrodite_config.weight_transfer_config
-        ):
+        if sonar_config.kv_transfer_config or sonar_config.ec_transfer_config or sonar_config.weight_transfer_config:
             raise ValueError("CUDA checkpoint does not support external cache or weight transfer")
-        if not aphrodite_config.model_config.enable_sleep_mode:
+        if not sonar_config.model_config.enable_sleep_mode:
             raise ValueError("CUDA checkpoint requires enable_sleep_mode=True")
         if parallel.tensor_parallel_size > 1:
             required = {
@@ -99,12 +95,12 @@ class CUDACheckpointExecutor(MultiprocExecutor):
                 "NCCL_IB_DISABLE": "1",
                 "NCCL_CUMEM_ENABLE": "0",
                 "NCCL_CUMEM_HOST_ENABLE": "0",
-                "APHRODITE_ALLREDUCE_USE_FLASHINFER": "0",
-                "APHRODITE_ALLREDUCE_USE_SYMM_MEM": "0",
-                "APHRODITE_ALLREDUCE_USE_FLASHINFER_PCIE_IPC": "0",
-                "APHRODITE_USE_NCCL_SYMM_MEM": "0",
+                "SONAR_ALLREDUCE_USE_FLASHINFER": "0",
+                "SONAR_ALLREDUCE_USE_SYMM_MEM": "0",
+                "SONAR_ALLREDUCE_USE_FLASHINFER_PCIE_IPC": "0",
+                "SONAR_USE_NCCL_SYMM_MEM": "0",
             }
-            if aphrodite_config.model_config.enable_nccl_comm_suspend:
+            if sonar_config.model_config.enable_nccl_comm_suspend:
                 # Suspension releases P2P mappings while retaining addresses.
                 # Legacy SHM also survives CUDA checkpoint; let NCCL select
                 # P2P or SHM rather than requiring one transport topology.
@@ -119,17 +115,17 @@ class CUDACheckpointExecutor(MultiprocExecutor):
                     {
                         "NCCL_CUMEM_ENABLE": "1",
                         "NCCL_NVLS_ENABLE": "0",
-                        "APHRODITE_ALLREDUCE_USE_FLASHINFER": "1" if standalone_flashinfer else "0",
+                        "SONAR_ALLREDUCE_USE_FLASHINFER": "1" if standalone_flashinfer else "0",
                     }
                 )
             if self._checkpoint_flashinfer:
-                required["APHRODITE_FLASHINFER_ALLREDUCE_BACKEND"] = "trtllm"
+                required["SONAR_FLASHINFER_ALLREDUCE_BACKEND"] = "trtllm"
             if not parallel.disable_custom_all_reduce or any(os.environ.get(k) != v for k, v in required.items()):
                 raise ValueError(
                     "CUDA checkpoint currently requires disabled custom "
                     f"all-reduce and NCCL checkpoint configuration: {required}"
                 )
-        super().__init__(aphrodite_config, monitor_workers)
+        super().__init__(sonar_config, monitor_workers)
 
     def _record(self, **event):
         event["monotonic_s"] = time.monotonic()

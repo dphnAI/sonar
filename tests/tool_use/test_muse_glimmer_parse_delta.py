@@ -51,7 +51,7 @@ def tok():
 
 @pytest.fixture(scope="module")
 def parser_cls():
-    from aphrodite.parser import ParserManager
+    from sonar.parser import ParserManager
 
     return ParserManager.get_parser(
         tool_parser_name="muse_glimmer",
@@ -62,7 +62,7 @@ def parser_cls():
 
 def _drive(parser_cls, tok, gen_text, req=None):
     """Feed gen_text token-by-token through parse_delta (as serving does)."""
-    from aphrodite.parser.abstract_parser import StreamState
+    from sonar.parser.abstract_parser import StreamState
 
     if req is None:
         req = _Req()

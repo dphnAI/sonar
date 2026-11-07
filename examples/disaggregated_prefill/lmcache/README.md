@@ -2,7 +2,7 @@
 
 This folder demonstrates how to use LMCache for disaggregated prefilling, CPU offloading and KV cache sharing.
 
-## 1. Disaggregated Prefill in Aphrodite v1
+## 1. Disaggregated Prefill in Sonar v1
 
 This example demonstrates how to run LMCache with disaggregated prefill using NIXL on a single node.
 
@@ -29,7 +29,7 @@ to run disaggregated prefill and benchmark the performance.
 
 #### Server Scripts
 
-- `disagg_prefill_lmcache_v1/disagg_aphrodite_launcher.sh` - Launches individual Aphrodite servers for prefill/decode, and also launches the proxy server.
+- `disagg_prefill_lmcache_v1/disagg_sonar_launcher.sh` - Launches individual Sonar servers for prefill/decode, and also launches the proxy server.
 - `disagg_prefill_lmcache_v1/disagg_proxy_server.py` - FastAPI proxy server that coordinates between prefiller and decoder
 - `disagg_prefill_lmcache_v1/disagg_example_nixl.sh` - Main script to run the example
 
@@ -48,13 +48,13 @@ The main script generates several log files:
 
 ## 2. CPU Offload Examples
 
-- `python cpu_offload_lmcache.py -v v0` - CPU offloading implementation for Aphrodite v0
-- `python cpu_offload_lmcache.py -v v1` - CPU offloading implementation for Aphrodite v1
+- `python cpu_offload_lmcache.py -v v0` - CPU offloading implementation for Sonar v0
+- `python cpu_offload_lmcache.py -v v1` - CPU offloading implementation for Sonar v1
 
 ## 3. KV Cache Sharing
 
-The `kv_cache_sharing_lmcache_v1.py` example demonstrates how to share KV caches between Aphrodite v1 instances.
+The `kv_cache_sharing_lmcache_v1.py` example demonstrates how to share KV caches between Sonar v1 instances.
 
-## 4. Disaggregated Prefill in Aphrodite v0
+## 4. Disaggregated Prefill in Sonar v0
 
-The `disaggregated_prefill_lmcache_v0.py` provides an example of how to run disaggregated prefill in Aphrodite v0.
+The `disaggregated_prefill_lmcache_v0.py` provides an example of how to run disaggregated prefill in Sonar v0.

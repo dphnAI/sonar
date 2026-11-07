@@ -10,22 +10,22 @@ from unittest.mock import MagicMock
 import pytest
 import torch
 
-from aphrodite.v1.kv_offload.base import (
+from sonar.v1.kv_offload.base import (
     CanonicalKVCaches,
     OffloadingHistogramMetadata,
     OffloadingManager,
     OffloadingSpec,
     OffloadingWorker,
 )
-from aphrodite.v1.kv_offload.config import (
+from sonar.v1.kv_offload.config import (
     OffloadingGroupConfig,
 )
-from aphrodite.v1.kv_offload.cpu.common import CPUOffloadingInfo
-from aphrodite.v1.kv_offload.cpu.shared_offload_region import SharedOffloadRegion
-from aphrodite.v1.kv_offload.cpu.spec import CPUOffloadingSpec
-from aphrodite.v1.kv_offload.factory import OffloadingSpecFactory
-from aphrodite.v1.kv_offload.tiering.manager import CPUPrimaryTierOffloadingManager
-from aphrodite.v1.kv_offload.tiering.spec import TieringOffloadingSpec
+from sonar.v1.kv_offload.cpu.common import CPUOffloadingInfo
+from sonar.v1.kv_offload.cpu.shared_offload_region import SharedOffloadRegion
+from sonar.v1.kv_offload.cpu.spec import CPUOffloadingSpec
+from sonar.v1.kv_offload.factory import OffloadingSpecFactory
+from sonar.v1.kv_offload.tiering.manager import CPUPrimaryTierOffloadingManager
+from sonar.v1.kv_offload.tiering.spec import TieringOffloadingSpec
 from tests.v1.kv_offload.conftest import make_offloading_config
 
 
@@ -165,7 +165,7 @@ def test_cpu_config_info_capacity_dedups_a_replicated_layout(monkeypatch):
     Same TP=4 sizing as the test above, which yields 3 slots; deduplicating to a
     single copy yields 12.
     """
-    import aphrodite.v1.kv_offload.cpu.spec as cpu_spec_module
+    import sonar.v1.kv_offload.cpu.spec as cpu_spec_module
 
     monkeypatch.setattr(cpu_spec_module.current_platform, "is_cuda_alike", lambda: True)
     # Pin the ROCm answer too: on a ROCm runner the shared-region path is off,
@@ -359,7 +359,7 @@ def test_tiering_spec_replicated_sizing_removes_world_factor(world_size: int):
 
 
 def test_tiering_spec_create_worker_uses_single_slot_for_replicated_layout(monkeypatch):
-    import aphrodite.v1.kv_offload.tiering.spec as tiering_spec_module
+    import sonar.v1.kv_offload.tiering.spec as tiering_spec_module
 
     worker_kv_bytes_per_block = SharedOffloadRegion.BLOCK_SIZE_ALIGNMENT
     spec = _create_spec(
@@ -397,7 +397,7 @@ def test_tiering_spec_create_worker_uses_single_slot_for_replicated_layout(monke
 
 
 def test_tiering_spec_create_worker_uses_worker_rank_for_sharded_layout(monkeypatch):
-    import aphrodite.v1.kv_offload.tiering.spec as tiering_spec_module
+    import sonar.v1.kv_offload.tiering.spec as tiering_spec_module
 
     spec = _create_spec(
         spec_name="TieringOffloadingSpec",
@@ -430,7 +430,7 @@ def test_tiering_spec_create_worker_uses_worker_rank_for_sharded_layout(monkeypa
 def test_cpu_spec_replicated_sizing_on_shared_region(monkeypatch, world_size: int):
     # On CUDA the default spec honors
     # replicated layout: a single MLA copy (num_copies=1), matching tiering.
-    import aphrodite.v1.kv_offload.cpu.spec as cpu_spec_module
+    import sonar.v1.kv_offload.cpu.spec as cpu_spec_module
 
     monkeypatch.setattr(cpu_spec_module.current_platform, "is_cuda_alike", lambda: True)
     monkeypatch.setattr(cpu_spec_module.current_platform, "is_rocm", lambda: False)
@@ -456,7 +456,7 @@ def test_cpu_spec_replicated_disabled_without_shared_region(monkeypatch, world_s
     # tensor (no shared medium), so replicated layout MUST stay off. Otherwise
     # the rank-0 writer gate would ack rank>0 stores without writing, leaving
     # those private buffers empty and corrupting subsequent loads.
-    import aphrodite.v1.kv_offload.cpu.spec as cpu_spec_module
+    import sonar.v1.kv_offload.cpu.spec as cpu_spec_module
 
     monkeypatch.setattr(cpu_spec_module.current_platform, "is_xpu", lambda: False)
     monkeypatch.setattr(cpu_spec_module.current_platform, "is_cuda_alike", lambda: rocm)
@@ -491,7 +491,7 @@ def test_cpu_spec_replicated_layout_truth_matrix(
 ):
     # replicated_layout is enabled iff the config gate passes AND the deployment
     # actually allocates on the shared region.
-    import aphrodite.v1.kv_offload.cpu.spec as cpu_spec_module
+    import sonar.v1.kv_offload.cpu.spec as cpu_spec_module
 
     monkeypatch.setattr(cpu_spec_module.current_platform, "is_xpu", lambda: False)
     monkeypatch.setattr(cpu_spec_module.current_platform, "is_cuda_alike", lambda: cuda_alike)
@@ -509,7 +509,7 @@ def test_cpu_spec_replicated_layout_truth_matrix(
 
 
 def test_cpu_spec_create_worker_uses_mmap_on_cuda(monkeypatch):
-    import aphrodite.v1.kv_offload.cpu.spec as cpu_spec_module
+    import sonar.v1.kv_offload.cpu.spec as cpu_spec_module
 
     worker_kv_bytes_per_block = SharedOffloadRegion.BLOCK_SIZE_ALIGNMENT
     spec = _create_spec(
@@ -548,7 +548,7 @@ def test_cpu_spec_create_worker_uses_mmap_on_cuda(monkeypatch):
 
 @pytest.mark.parametrize("rocm", [False, True], ids=["non-cuda-alike", "rocm"])
 def test_cpu_spec_create_worker_uses_tensor_path_without_shared_region(monkeypatch, rocm):
-    import aphrodite.v1.kv_offload.cpu.spec as cpu_spec_module
+    import sonar.v1.kv_offload.cpu.spec as cpu_spec_module
 
     spec = _create_spec(worker_kv_bytes_per_block=4096, world_size=4)
     assert isinstance(spec, CPUOffloadingSpec)
@@ -578,7 +578,7 @@ def test_cpu_spec_create_worker_uses_tensor_path_without_shared_region(monkeypat
 
 
 def test_cpu_spec_create_worker_skips_mmap_for_empty_cache(monkeypatch):
-    import aphrodite.v1.kv_offload.cpu.spec as cpu_spec_module
+    import sonar.v1.kv_offload.cpu.spec as cpu_spec_module
 
     # worker_kv_bytes_per_block=0 yields num_chunks=0; a zero-byte region cannot
     # be mmap'd, so even on CUDA this must fall back to the tensor path.
@@ -620,7 +620,7 @@ def test_cpu_spec_create_worker_skips_mmap_for_empty_cache(monkeypatch):
 def test_cpu_spec_create_worker_rank_assignment(
     monkeypatch, replicated_layout, rank, device_index, world_size, expected_rank
 ):
-    import aphrodite.v1.kv_offload.cpu.spec as cpu_spec_module
+    import sonar.v1.kv_offload.cpu.spec as cpu_spec_module
 
     monkeypatch.setattr(cpu_spec_module.current_platform, "is_cuda_alike", lambda: True)
     monkeypatch.setattr(cpu_spec_module.current_platform, "is_rocm", lambda: False)
@@ -684,7 +684,7 @@ def test_create_dynamic_spec_receives_config():
 
 def test_dynamic_load_via_spec_module_path():
     del OffloadingSpecFactory._registry["CPUOffloadingSpec"]
-    config = make_offloading_config(extra_config={"spec_module_path": "aphrodite.v1.kv_offload.cpu.spec"})
+    config = make_offloading_config(extra_config={"spec_module_path": "sonar.v1.kv_offload.cpu.spec"})
 
     spec_cls = OffloadingSpecFactory.get_spec_cls(config.extra_config)
 
@@ -711,7 +711,7 @@ def test_duplicate_registration_raises():
 
 
 def test_build_metric_definitions_below_threshold():
-    from aphrodite.v1.kv_offload.cpu.common import CPUOffloadingMetrics
+    from sonar.v1.kv_offload.cpu.common import CPUOffloadingMetrics
 
     extra_config = {"store_threshold": 1}
     spec_cls = OffloadingSpecFactory.get_spec_cls({"spec_name": "CPUOffloadingSpec"})
@@ -722,7 +722,7 @@ def test_build_metric_definitions_below_threshold():
 
 
 def test_build_metric_definitions_allocation_size_histogram():
-    from aphrodite.v1.kv_offload.cpu.common import CPUOffloadingMetrics
+    from sonar.v1.kv_offload.cpu.common import CPUOffloadingMetrics
 
     spec_cls = OffloadingSpecFactory.get_spec_cls({"spec_name": "CPUOffloadingSpec"})
     metrics = spec_cls.build_metric_definitions({})
@@ -744,7 +744,7 @@ def test_build_metric_definitions_allocation_size_histogram():
 
 
 def test_build_metric_definitions_returns_counter_at_threshold():
-    from aphrodite.v1.kv_offload.cpu.common import CPUOffloadingMetrics
+    from sonar.v1.kv_offload.cpu.common import CPUOffloadingMetrics
 
     extra_config = {"store_threshold": 2}
     spec_cls = OffloadingSpecFactory.get_spec_cls({"spec_name": "CPUOffloadingSpec"})
@@ -764,8 +764,8 @@ def test_build_metric_definitions_returns_counter_at_threshold():
     ],
 )
 def test_tiering_spec_rejects_secondary_tiers_across_nodes(monkeypatch, secondary_tiers, spanning_group, rejected):
-    import aphrodite.distributed.parallel_state as parallel_state
-    import aphrodite.v1.kv_offload.tiering.spec as tiering_spec_module
+    import sonar.distributed.parallel_state as parallel_state
+    import sonar.v1.kv_offload.tiering.spec as tiering_spec_module
 
     spec = _create_spec(
         spec_name="TieringOffloadingSpec",

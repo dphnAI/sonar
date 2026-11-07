@@ -13,8 +13,8 @@ import numpy as np
 import numpy.typing as npt
 from PIL import Image
 
-from aphrodite.inputs import MultiModalPlaceholders
-from aphrodite.utils.import_utils import LazyLoader
+from sonar.inputs import MultiModalPlaceholders
+from sonar.utils.import_utils import LazyLoader
 
 from .inputs import (
     BatchedTensorInputs,

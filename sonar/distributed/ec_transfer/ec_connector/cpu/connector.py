@@ -12,21 +12,21 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 
-from aphrodite.distributed.ec_transfer.ec_connector.base import (
+from sonar.distributed.ec_transfer.ec_connector.base import (
     ECConnectorBase,
     ECConnectorRole,
     ECConnectorWorkerMetadata,
 )
-from aphrodite.distributed.ec_transfer.ec_connector.cpu.common import (
+from sonar.distributed.ec_transfer.ec_connector.cpu.common import (
     ECCPUConnectorMetadata,
 )
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
-    from aphrodite.v1.core.sched.output import SchedulerOutput
-    from aphrodite.v1.outputs import ECConnectorOutput
-    from aphrodite.v1.request import Request
+    from sonar.config import SonarConfig
+    from sonar.v1.core.sched.output import SchedulerOutput
+    from sonar.v1.outputs import ECConnectorOutput
+    from sonar.v1.request import Request
 
 logger = init_logger(__name__)
 
@@ -34,38 +34,38 @@ logger = init_logger(__name__)
 class ECCPUConnector(ECConnectorBase):
     """EC connector that offloads encoder cache to a shared CPU mmap region."""
 
-    def __init__(self, aphrodite_config: "AphroditeConfig", role: ECConnectorRole) -> None:
-        super().__init__(aphrodite_config=aphrodite_config, role=role)
+    def __init__(self, sonar_config: "SonarConfig", role: ECConnectorRole) -> None:
+        super().__init__(sonar_config=sonar_config, role=role)
 
-        if not aphrodite_config.use_v2_model_runner:
-            raise ValueError("ECCPUConnector requires the V2 model runner. Set APHRODITE_USE_V2_MODEL_RUNNER=1.")
+        if not sonar_config.use_v2_model_runner:
+            raise ValueError("ECCPUConnector requires the V2 model runner. Set SONAR_USE_V2_MODEL_RUNNER=1.")
 
         self.connector_worker = None
         self.connector_scheduler = None
 
         if role == ECConnectorRole.WORKER:
-            self.connector_worker = self._make_worker(aphrodite_config)
+            self.connector_worker = self._make_worker(sonar_config)
         elif role == ECConnectorRole.SCHEDULER:
-            self.connector_scheduler = self._make_scheduler(aphrodite_config)
+            self.connector_scheduler = self._make_scheduler(sonar_config)
         else:
             raise ValueError(f"Unknown ECConnectorRole: {role}")
 
     # Construction seams.
-    def _make_worker(self, aphrodite_config: "AphroditeConfig"):
+    def _make_worker(self, sonar_config: "SonarConfig"):
         # Deferred import: the worker module touches torch/CUDA at import time
         # via the region, so keep that cost off the scheduler path.
-        from aphrodite.distributed.ec_transfer.ec_connector.cpu.worker import (
+        from sonar.distributed.ec_transfer.ec_connector.cpu.worker import (
             ECCPUWorker,
         )
 
-        return ECCPUWorker(aphrodite_config)
+        return ECCPUWorker(sonar_config)
 
-    def _make_scheduler(self, aphrodite_config: "AphroditeConfig"):
-        from aphrodite.distributed.ec_transfer.ec_connector.cpu.scheduler import (
+    def _make_scheduler(self, sonar_config: "SonarConfig"):
+        from sonar.distributed.ec_transfer.ec_connector.cpu.scheduler import (
             ECCPUScheduler,
         )
 
-        return ECCPUScheduler(aphrodite_config)
+        return ECCPUScheduler(sonar_config)
 
     # Worker-side forwarders.
     def start_load_caches(self, encoder_cache: dict[str, torch.Tensor], **kwargs) -> None:

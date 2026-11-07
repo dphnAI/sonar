@@ -21,18 +21,18 @@ import torch
 from PIL import Image, UnidentifiedImageError
 from urllib3.util import Url, parse_url
 
-import aphrodite.envs as envs
-from aphrodite.connections import (
+import sonar.envs as envs
+from sonar.connections import (
     HTTPConnection,
     MediaDownloadSizeExceededError,
     MediaRequestDownloadBudget,
     MediaRequestDownloadSizeExceededError,
     global_http_connection,
 )
-from aphrodite.exceptions import AphroditeUnprocessableEntityError, AphroditeValidationError
-from aphrodite.logger import init_logger
-from aphrodite.multimodal.video import get_video_loader_backend_for_processor
-from aphrodite.utils.registry import ExtensionManager
+from sonar.exceptions import SonarUnprocessableEntityError, SonarValidationError
+from sonar.logger import init_logger
+from sonar.multimodal.video import get_video_loader_backend_for_processor
+from sonar.utils.registry import ExtensionManager
 
 from .audio import AudioEmbeddingMediaIO, AudioMediaIO
 from .base import MediaDecodedBudget, MediaIO, MediaWithBytes
@@ -43,7 +43,7 @@ logger = init_logger(__name__)
 
 _M = TypeVar("_M")
 
-global_thread_pool = ThreadPoolExecutor(max_workers=envs.APHRODITE_MEDIA_LOADING_THREAD_COUNT)
+global_thread_pool = ThreadPoolExecutor(max_workers=envs.SONAR_MEDIA_LOADING_THREAD_COUNT)
 atexit.register(global_thread_pool.shutdown)
 
 MEDIA_CONNECTOR_REGISTRY = ExtensionManager()
@@ -55,8 +55,8 @@ MODALITY_IO_MAP: dict[str, type[MediaIO]] = {
 }
 
 
-def _wrap_media_fetch_error(url: str, exc: Exception) -> AphroditeUnprocessableEntityError | Exception:
-    """Convert media fetch exceptions to AphroditeUnprocessableEntityError.
+def _wrap_media_fetch_error(url: str, exc: Exception) -> SonarUnprocessableEntityError | Exception:
+    """Convert media fetch exceptions to SonarUnprocessableEntityError.
 
     This handles HTTP errors that indicate the media resource is invalid
     (4xx responses except 408/429, malformed URLs) and converts them to a
@@ -67,20 +67,20 @@ def _wrap_media_fetch_error(url: str, exc: Exception) -> AphroditeUnprocessableE
     appropriately.
 
     Returns:
-        AphroditeUnprocessableEntityError for permanent client errors (4xx except
+        SonarUnprocessableEntityError for permanent client errors (4xx except
             408/429, invalid URL)
         Original exception for transient errors (5xx, 408, 429, network blips)
             or other exceptions
 
     """
-    if isinstance(exc, AphroditeValidationError):
+    if isinstance(exc, SonarValidationError):
         return exc
 
     if isinstance(exc, aiohttp.ClientResponseError):
         if exc.status in (408, 429):
             return exc
         if exc.status < 500:
-            return AphroditeUnprocessableEntityError(
+            return SonarUnprocessableEntityError(
                 f"Failed to fetch media from URL: HTTP {exc.status} error",
                 parameter="image_url",
                 value=url,
@@ -93,7 +93,7 @@ def _wrap_media_fetch_error(url: str, exc: Exception) -> AphroditeUnprocessableE
             if status_code in (408, 429):
                 return exc
             if status_code < 500:
-                return AphroditeUnprocessableEntityError(
+                return SonarUnprocessableEntityError(
                     f"Failed to fetch media from URL: HTTP {status_code} error",
                     parameter="image_url",
                     value=url,
@@ -101,21 +101,21 @@ def _wrap_media_fetch_error(url: str, exc: Exception) -> AphroditeUnprocessableE
         return exc
 
     if isinstance(exc, requests.exceptions.InvalidURL):
-        return AphroditeUnprocessableEntityError(
+        return SonarUnprocessableEntityError(
             "Failed to fetch media from URL: Invalid URL format",
             parameter="image_url",
             value=url,
         )
 
     if isinstance(exc, (MediaDownloadSizeExceededError, MediaRequestDownloadSizeExceededError)):
-        return AphroditeUnprocessableEntityError(
+        return SonarUnprocessableEntityError(
             f"Failed to fetch media from URL: {exc}",
             parameter="image_url",
             value=url,
         )
 
     if isinstance(exc, ValueError):
-        return AphroditeUnprocessableEntityError(
+        return SonarUnprocessableEntityError(
             "Failed to fetch media from URL: Invalid URL",
             parameter="image_url",
             value=url,
@@ -200,11 +200,11 @@ class MediaConnector:
         self.decoded_budget = decoded_budget
         self.download_budget = download_budget
 
-        # Media download cache (opt-in via APHRODITE_MEDIA_CACHE)
+        # Media download cache (opt-in via SONAR_MEDIA_CACHE)
         self._media_cache_dir: str | None = None
         self._media_cache_max_bytes: int = 0
         self._media_cache_ttl_secs: float = 0
-        media_cache = envs.APHRODITE_MEDIA_CACHE
+        media_cache = envs.SONAR_MEDIA_CACHE
         if media_cache:
             try:
                 os.makedirs(media_cache, exist_ok=True)
@@ -212,17 +212,17 @@ class MediaConnector:
                 with tempfile.NamedTemporaryFile(dir=media_cache, delete=True):
                     pass
                 self._media_cache_dir = media_cache
-                self._media_cache_max_bytes = envs.APHRODITE_MEDIA_CACHE_MAX_SIZE_MB * 1024 * 1024
-                self._media_cache_ttl_secs = envs.APHRODITE_MEDIA_CACHE_TTL_HOURS * 3600
+                self._media_cache_max_bytes = envs.SONAR_MEDIA_CACHE_MAX_SIZE_MB * 1024 * 1024
+                self._media_cache_ttl_secs = envs.SONAR_MEDIA_CACHE_TTL_HOURS * 3600
                 logger.info(
                     "Media cache enabled at %s (max %d MB, TTL %s hours)",
                     media_cache,
-                    envs.APHRODITE_MEDIA_CACHE_MAX_SIZE_MB,
-                    envs.APHRODITE_MEDIA_CACHE_TTL_HOURS,
+                    envs.SONAR_MEDIA_CACHE_MAX_SIZE_MB,
+                    envs.SONAR_MEDIA_CACHE_TTL_HOURS,
                 )
             except OSError:
                 logger.warning(
-                    "APHRODITE_MEDIA_CACHE path %s is not writable, media caching disabled",
+                    "SONAR_MEDIA_CACHE path %s is not writable, media caching disabled",
                     media_cache,
                 )
 
@@ -338,7 +338,7 @@ class MediaConnector:
     ) -> _M:  # type: ignore[type-var]
         allowed_local_media_path = self.allowed_local_media_path
         if allowed_local_media_path is None:
-            raise AphroditeValidationError("Cannot load local files without `--allowed-local-media-path`.")
+            raise SonarValidationError("Cannot load local files without `--allowed-local-media-path`.")
 
         url_spec_path = url_spec.path or ""
         url_spec_netloc = url_spec.netloc or ""
@@ -385,13 +385,13 @@ class MediaConnector:
                 data = connection.get_bytes(
                     url_spec.url,
                     timeout=fetch_timeout,
-                    allow_redirects=envs.APHRODITE_MEDIA_URL_ALLOW_REDIRECTS,
+                    allow_redirects=envs.SONAR_MEDIA_URL_ALLOW_REDIRECTS,
                     max_bytes=max_bytes,
                     **budget_kwargs,
                 )
             except Exception as e:
                 wrapped = _wrap_media_fetch_error(url, e)
-                if isinstance(wrapped, AphroditeUnprocessableEntityError):
+                if isinstance(wrapped, SonarUnprocessableEntityError):
                     raise wrapped from e
                 raise
 
@@ -434,13 +434,13 @@ class MediaConnector:
                 data = await connection.async_get_bytes(
                     url_spec.url,
                     timeout=fetch_timeout,
-                    allow_redirects=envs.APHRODITE_MEDIA_URL_ALLOW_REDIRECTS,
+                    allow_redirects=envs.SONAR_MEDIA_URL_ALLOW_REDIRECTS,
                     max_bytes=max_bytes,
                     **budget_kwargs,
                 )
             except Exception as e:
                 wrapped = _wrap_media_fetch_error(url, e)
-                if isinstance(wrapped, AphroditeUnprocessableEntityError):
+                if isinstance(wrapped, SonarUnprocessableEntityError):
                     raise wrapped from e
                 raise
 
@@ -464,7 +464,7 @@ class MediaConnector:
         return self.load_from_url(
             audio_url,
             audio_io,
-            fetch_timeout=envs.APHRODITE_AUDIO_FETCH_TIMEOUT,
+            fetch_timeout=envs.SONAR_AUDIO_FETCH_TIMEOUT,
         )
 
     async def fetch_audio_async(
@@ -477,7 +477,7 @@ class MediaConnector:
         return await self.load_from_url_async(
             audio_url,
             audio_io,
-            fetch_timeout=envs.APHRODITE_AUDIO_FETCH_TIMEOUT,
+            fetch_timeout=envs.SONAR_AUDIO_FETCH_TIMEOUT,
         )
 
     def fetch_image(
@@ -498,7 +498,7 @@ class MediaConnector:
             return self.load_from_url(
                 image_url,
                 image_io,
-                fetch_timeout=envs.APHRODITE_IMAGE_FETCH_TIMEOUT,
+                fetch_timeout=envs.SONAR_IMAGE_FETCH_TIMEOUT,
             )
         except UnidentifiedImageError as e:
             # convert to ValueError to be properly caught upstream
@@ -522,7 +522,7 @@ class MediaConnector:
             return await self.load_from_url_async(
                 image_url,
                 image_io,
-                fetch_timeout=envs.APHRODITE_IMAGE_FETCH_TIMEOUT,
+                fetch_timeout=envs.SONAR_IMAGE_FETCH_TIMEOUT,
             )
         except UnidentifiedImageError as e:
             # convert to ValueError to be properly caught upstream
@@ -547,7 +547,7 @@ class MediaConnector:
         return self.load_from_url(
             video_url,
             video_io,
-            fetch_timeout=envs.APHRODITE_VIDEO_FETCH_TIMEOUT,
+            fetch_timeout=envs.SONAR_VIDEO_FETCH_TIMEOUT,
         )
 
     async def fetch_video_async(
@@ -574,7 +574,7 @@ class MediaConnector:
         return await self.load_from_url_async(
             video_url,
             video_io,
-            fetch_timeout=envs.APHRODITE_VIDEO_FETCH_TIMEOUT,
+            fetch_timeout=envs.SONAR_VIDEO_FETCH_TIMEOUT,
         )
 
     def fetch_image_embedding(

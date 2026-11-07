@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-use aphrodite_tokenizer::{DecodedText, DynTokenizer};
+use sonar_tokenizer::{DecodedText, DynTokenizer};
 
 use super::detect_hy_token_suffix;
 use crate::output_grammar::{self, BuiltOutputGrammar, OutputGrammarContext};
@@ -75,9 +75,9 @@ impl UnifiedParser for HyV4UnifiedParser {
 mod tests {
     use std::sync::Arc;
 
-    use aphrodite_tokenizer::Tokenizer;
-    use aphrodite_tokenizer::test_utils::{TestTokenizer, decode_chunks};
     use serde_json::json;
+    use sonar_tokenizer::Tokenizer;
+    use sonar_tokenizer::test_utils::{TestTokenizer, decode_chunks};
     use xgrammar_structural_tag::{StructuralTag, ToolChoice};
 
     use super::{HyV4UnifiedParser, UnifiedParser};

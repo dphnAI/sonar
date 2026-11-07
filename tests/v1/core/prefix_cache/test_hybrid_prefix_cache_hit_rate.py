@@ -12,7 +12,7 @@ import pytest
 from openai.types.chat import ChatCompletionMessageParam
 from prometheus_client.parser import text_string_to_metric_families
 
-from aphrodite.utils.math_utils import round_down
+from sonar.utils.math_utils import round_down
 from tests.utils import RemoteOpenAIServer
 
 MODEL = "Qwen/Qwen3.5-0.8B"
@@ -46,7 +46,7 @@ async def _scheduler_block_size(client: httpx.AsyncClient) -> int:
     response.raise_for_status()
     for family in text_string_to_metric_families(response.text):
         for sample in family.samples:
-            if sample.name != "aphrodite:cache_config_info":
+            if sample.name != "sonar:cache_config_info":
                 continue
             sizes = [
                 int(value)
@@ -55,7 +55,7 @@ async def _scheduler_block_size(client: httpx.AsyncClient) -> int:
             ]
             assert sizes, f"no block size in {sample.labels}"
             return lcm(*sizes)
-    raise AssertionError("missing aphrodite:cache_config_info metric")
+    raise AssertionError("missing sonar:cache_config_info metric")
 
 
 async def _prefix_cache_counters(
@@ -63,7 +63,7 @@ async def _prefix_cache_counters(
 ) -> tuple[float, float]:
     response = await client.get("/metrics")
     response.raise_for_status()
-    names = ("aphrodite:prefix_cache_queries_total", "aphrodite:prefix_cache_hits_total")
+    names = ("sonar:prefix_cache_queries_total", "sonar:prefix_cache_hits_total")
     counters: dict[str, float] = {}
     for family in text_string_to_metric_families(response.text):
         for sample in family.samples:

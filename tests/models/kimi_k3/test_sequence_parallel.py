@@ -9,12 +9,12 @@ import pytest
 import torch
 from torch import nn
 
-from aphrodite.config import ParallelConfig
-from aphrodite.model_executor.layers.activation import SiluAndMul
-from aphrodite.models.common.ops import sequence_parallel as sp_ops
-from aphrodite.models.kimi_k3.nvidia import model as kimi_model
-from aphrodite.models.kimi_k3.nvidia import mtp as kimi_mtp
-from aphrodite.platforms import current_platform
+from sonar.config import ParallelConfig
+from sonar.model_executor.layers.activation import SiluAndMul
+from sonar.models.common.ops import sequence_parallel as sp_ops
+from sonar.models.kimi_k3.nvidia import model as kimi_model
+from sonar.models.kimi_k3.nvidia import mtp as kimi_mtp
+from sonar.platforms import current_platform
 
 
 class _IdentityNorm(nn.Module):
@@ -287,7 +287,7 @@ def test_shard_sequence_parallel_mlp_gating(
     tp_size: int,
     expected: bool,
 ):
-    monkeypatch.setattr(kimi_model.envs, "APHRODITE_KIMI_K3_SHARD_SP_SHARED_EXPERT", enabled)
+    monkeypatch.setattr(kimi_model.envs, "SONAR_KIMI_K3_SHARD_SP_SHARED_EXPERT", enabled)
     monkeypatch.setattr(kimi_model, "get_tensor_model_parallel_world_size", lambda: tp_size)
 
     assert (
@@ -314,15 +314,15 @@ def test_shared_expert_sharding_backend_gate(
     all2all_backend: str,
     expected: bool,
 ):
-    aphrodite_config = SimpleNamespace(
+    sonar_config = SimpleNamespace(
         kernel_config=SimpleNamespace(moe_backend=moe_backend),
         parallel_config=SimpleNamespace(all2all_backend=all2all_backend),
     )
 
-    assert kimi_model.can_shard_sequence_parallel_shared_expert(aphrodite_config) is expected
+    assert kimi_model.can_shard_sequence_parallel_shared_expert(sonar_config) is expected
 
 
-def test_sharded_sequence_parallel_mlp_matches_replicated(default_aphrodite_config):
+def test_sharded_sequence_parallel_mlp_matches_replicated(default_sonar_config):
     """Sharded SP MLP must reproduce the replicated result for every token.
 
     Each rank owns a *disjoint* token shard, so a weight shard alone cannot

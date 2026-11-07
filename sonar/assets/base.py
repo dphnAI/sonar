@@ -4,27 +4,27 @@
 from functools import lru_cache
 from pathlib import Path
 
-import aphrodite.envs as envs
-from aphrodite.connections import global_http_connection
+import sonar.envs as envs
+from sonar.connections import global_http_connection
 
-APHRODITE_S3_BUCKET_URL = "https://vllm-public-assets.s3.us-west-2.amazonaws.com"
+SONAR_S3_BUCKET_URL = "https://vllm-public-assets.s3.us-west-2.amazonaws.com"
 
 
 def get_cache_dir() -> Path:
     """Get the path to the cache for storing downloaded assets."""
-    path = Path(envs.APHRODITE_ASSETS_CACHE)
+    path = Path(envs.SONAR_ASSETS_CACHE)
     path.mkdir(parents=True, exist_ok=True)
 
     return path
 
 
 @lru_cache
-def get_aphrodite_public_assets(filename: str, s3_prefix: str | None = None) -> Path:
+def get_sonar_public_assets(filename: str, s3_prefix: str | None = None) -> Path:
     """
     Download an asset file from `s3://vllm-public-assets`
     and return the path to the downloaded file.
     """
-    asset_directory = get_cache_dir() / "aphrodite_public_assets"
+    asset_directory = get_cache_dir() / "sonar_public_assets"
     asset_directory.mkdir(parents=True, exist_ok=True)
 
     asset_path = asset_directory / filename
@@ -32,9 +32,9 @@ def get_aphrodite_public_assets(filename: str, s3_prefix: str | None = None) -> 
         if s3_prefix is not None:
             filename = s3_prefix + "/" + filename
         global_http_connection.download_file(
-            f"{APHRODITE_S3_BUCKET_URL}/{filename}",
+            f"{SONAR_S3_BUCKET_URL}/{filename}",
             asset_path,
-            timeout=envs.APHRODITE_IMAGE_FETCH_TIMEOUT,
+            timeout=envs.SONAR_IMAGE_FETCH_TIMEOUT,
         )
 
     return asset_path

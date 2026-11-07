@@ -6,51 +6,51 @@ import torch
 import torch.nn as nn
 from transformers import DeepseekV2Config, DeepseekV3Config
 
-import aphrodite.envs as envs
-from aphrodite.compilation.breakable_cudagraph import eager_break_during_capture
-from aphrodite.config import AphroditeConfig, CacheConfig, CUDAGraphMode
-from aphrodite.distributed import get_tensor_model_parallel_world_size
-from aphrodite.distributed.parallel_state import get_tp_group
-from aphrodite.forward_context import get_forward_context
-from aphrodite.model_executor.layers.attention import MLAAttention
-from aphrodite.model_executor.layers.attention.attention import get_attention_context
-from aphrodite.model_executor.layers.layernorm import LayerNorm, RMSNorm
-from aphrodite.model_executor.layers.linear import (
+import sonar.envs as envs
+from sonar.compilation.breakable_cudagraph import eager_break_during_capture
+from sonar.config import CacheConfig, CUDAGraphMode, SonarConfig
+from sonar.distributed import get_tensor_model_parallel_world_size
+from sonar.distributed.parallel_state import get_tp_group
+from sonar.forward_context import get_forward_context
+from sonar.model_executor.layers.attention import MLAAttention
+from sonar.model_executor.layers.attention.attention import get_attention_context
+from sonar.model_executor.layers.layernorm import LayerNorm, RMSNorm
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     DCPGroupColumnParallelLinear,
     MergedColumnParallelLinear,
     ReplicatedLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.layers.sparse_attn_indexer import (
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.layers.sparse_attn_indexer import (
     SparseAttnIndexer,
     sparse_attn_indexer,
 )
-from aphrodite.model_executor.models.deepseek_v2 import (
+from sonar.model_executor.models.deepseek_v2 import (
     DeepSeekV2FusedQkvAProjLinear,
     DeepseekV32IndexerCache,
     yarn_get_mscale,
 )
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.models.utils import (
     compute_skip_topk_layers,
     extract_layer_index,
 )
-from aphrodite.models.deepseek_v32.common.kernels import fused_norm_rope, fused_q
-from aphrodite.platforms import current_platform
-from aphrodite.v1.attention.ops.pcp import (
+from sonar.models.deepseek_v32.common.kernels import fused_norm_rope, fused_q
+from sonar.platforms import current_platform
+from sonar.v1.attention.ops.pcp import (
     finalize_mla_pcp_decode,
     maybe_gather_mla_latent_cache_inputs,
 )
-from aphrodite.v1.kv_cache_interface import is_quantized_kv_cache
+from sonar.v1.kv_cache_interface import is_quantized_kv_cache
 
 if TYPE_CHECKING:
-    from aphrodite.model_executor.layers.attention.mla_attention import MLACommonMetadata
-    from aphrodite.v1.attention.backends.mla.index_group import (
+    from sonar.model_executor.layers.attention.mla_attention import MLACommonMetadata
+    from sonar.v1.attention.backends.mla.index_group import (
         SparseMLAIndexGroupBuilder,
     )
-    from aphrodite.v1.attention.backends.mla.sm89_mla_sparse import (
+    from sonar.v1.attention.backends.mla.sm89_mla_sparse import (
         Sm89MLASparseImpl,
         Sm89MLASparseMetadata,
     )
@@ -61,7 +61,7 @@ class DeepseekV32Indexer(nn.Module):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         config: DeepseekV2Config | DeepseekV3Config,
         hidden_size: int,
         q_lora_rank: int,
@@ -107,14 +107,14 @@ class DeepseekV32Indexer(nn.Module):
             prefix=f"{prefix}.k_cache",
             cache_config=cache_config,
         )
-        self.max_model_len = aphrodite_config.model_config.max_model_len
+        self.max_model_len = sonar_config.model_config.max_model_len
         self.prefix = prefix
 
-        from aphrodite.v1.attention.backends.mla.indexer import (
+        from sonar.v1.attention.backends.mla.indexer import (
             get_max_prefill_buffer_size,
         )
 
-        self.max_total_seq_len = get_max_prefill_buffer_size(aphrodite_config)
+        self.max_total_seq_len = get_max_prefill_buffer_size(sonar_config)
         self.indexer_op = SparseAttnIndexer(
             self.k_cache,
             self.quant_block_size,
@@ -134,15 +134,15 @@ class DeepseekV32Attention(MLAAttention):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         config: DeepseekV2Config | DeepseekV3Config,
         prefix: str,
         topk_indices_buffer: torch.Tensor | None = None,
         attn_backend: "type | None" = None,
         index_group_builder: "SparseMLAIndexGroupBuilder | None" = None,
     ) -> None:
-        quant_config = aphrodite_config.quant_config
-        cache_config = aphrodite_config.cache_config
+        quant_config = sonar_config.quant_config
+        cache_config = sonar_config.cache_config
 
         hidden_size = config.hidden_size
         qk_nope_head_dim = config.qk_nope_head_dim
@@ -186,7 +186,7 @@ class DeepseekV32Attention(MLAAttention):
         indexer = None
         if not skip_topk or is_mtp_layer:
             indexer = type(self).indexer_cls(
-                aphrodite_config,
+                sonar_config,
                 config,
                 hidden_size,
                 q_lora_rank,
@@ -197,14 +197,14 @@ class DeepseekV32Attention(MLAAttention):
             )
         # Preserve the explicit environment override of the parallel config.
         qrep_requested = (
-            envs.APHRODITE_DCP_Q_REPLICATE
-            if envs.is_set("APHRODITE_DCP_Q_REPLICATE")
-            else bool(aphrodite_config.parallel_config.dcp_q_replicate)
+            envs.SONAR_DCP_Q_REPLICATE
+            if envs.is_set("SONAR_DCP_Q_REPLICATE")
+            else bool(sonar_config.parallel_config.dcp_q_replicate)
         )
         qrep_enabled = (
             qrep_requested
-            and aphrodite_config.parallel_config.decode_context_parallel_size > 1
-            and aphrodite_config.parallel_config.prefill_context_parallel_size <= 1
+            and sonar_config.parallel_config.decode_context_parallel_size > 1
+            and sonar_config.parallel_config.prefill_context_parallel_size <= 1
         )
 
         super().__init__(
@@ -505,8 +505,8 @@ class DeepseekV32Attention(MLAAttention):
                 pcp_shard_decode_requests=self.pcp_shard_decode_requests,
                 dense_mha_metadata_layer_name=self._dense_mha_metadata_layer_name,
                 dcp_rank=(self.dcp_manager.group.rank_in_group if self.dcp_manager is not None else 0),
-                dcp_world_size=(self._aphrodite_config.parallel_config.decode_context_parallel_size),
-                cp_kv_cache_interleave_size=(self._aphrodite_config.parallel_config.cp_kv_cache_interleave_size),
+                dcp_world_size=(self._sonar_config.parallel_config.decode_context_parallel_size),
+                cp_kv_cache_interleave_size=(self._sonar_config.parallel_config.cp_kv_cache_interleave_size),
                 skip_topk_buffer_clear=True,
                 topk_backend=self.indexer.indexer_op.topk_backend,
             )

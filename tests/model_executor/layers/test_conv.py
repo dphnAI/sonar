@@ -5,7 +5,7 @@ import pytest
 import torch
 from torch import nn
 
-from aphrodite.model_executor.layers.conv import Conv2dLayer, Conv3dLayer
+from sonar.model_executor.layers.conv import Conv2dLayer, Conv3dLayer
 
 
 @pytest.mark.parametrize(
@@ -15,7 +15,7 @@ from aphrodite.model_executor.layers.conv import Conv2dLayer, Conv3dLayer
         pytest.param((2, 3, 28, 28), True, id="multiple_spatial_patches"),
     ],
 )
-def test_conv2d_patch_embedding_correctness(default_aphrodite_config, input_shape, bias):
+def test_conv2d_patch_embedding_correctness(default_sonar_config, input_shape, bias):
     device = "cuda" if torch.cuda.is_available() else "cpu"
     dtype = torch.bfloat16 if device == "cuda" else torch.float32
     reference = nn.Conv2d(3, 1024, 14, stride=14, bias=bias).to(device=device, dtype=dtype)
@@ -39,7 +39,7 @@ def test_conv2d_patch_embedding_correctness(default_aphrodite_config, input_shap
         pytest.param((1, 3, 4, 28, 28), (2, 14, 14), 32, True, id="multiple_patches"),
     ],
 )
-def test_conv3d_patch_embedding_correctness(default_aphrodite_config, input_shape, kernel_size, out_channels, bias):
+def test_conv3d_patch_embedding_correctness(default_sonar_config, input_shape, kernel_size, out_channels, bias):
     device = "cuda" if torch.cuda.is_available() else "cpu"
     dtype = torch.bfloat16 if device == "cuda" else torch.float32
     reference = nn.Conv3d(input_shape[1], out_channels, kernel_size, stride=kernel_size, bias=bias).to(

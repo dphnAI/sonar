@@ -7,18 +7,18 @@ from typing import Any, Literal
 import torch
 from pydantic import ConfigDict, SkipValidation
 
-from aphrodite.config.utils import config
-from aphrodite.utils.hashing import safe_hash
+from sonar.config.utils import config
+from sonar.utils.hashing import safe_hash
 
 Device = Literal["auto", "cuda", "cpu", "tpu", "xpu", "metal"]
 
 
 @config(config=ConfigDict(arbitrary_types_allowed=True))
 class DeviceConfig:
-    """Configuration for the device to use for Aphrodite execution."""
+    """Configuration for the device to use for Sonar execution."""
 
     device: SkipValidation[Device | torch.device | None] = "auto"
-    """Device type for Aphrodite execution.
+    """Device type for Sonar execution.
     This parameter is deprecated and will be
     removed in a future release.
     It will now be set automatically based
@@ -40,7 +40,7 @@ class DeviceConfig:
         """
         # no factors to consider.
         # the device/platform information will be summarized
-        # by torch/aphrodite automatically.
+        # by torch/sonar automatically.
         factors: list[Any] = []
         hash_str = safe_hash(str(factors).encode(), usedforsecurity=False).hexdigest()
         return hash_str
@@ -48,13 +48,13 @@ class DeviceConfig:
     def __post_init__(self):
         if self.device == "auto":
             # Automated device type detection
-            from aphrodite.platforms import current_platform
+            from sonar.platforms import current_platform
 
             self.device_type = current_platform.device_type
             if not self.device_type:
                 raise RuntimeError(
                     "Failed to infer device type, please set "
-                    "the environment variable `APHRODITE_LOGGING_LEVEL=DEBUG` "
+                    "the environment variable `SONAR_LOGGING_LEVEL=DEBUG` "
                     "to turn on verbose logging to help debug the issue."
                 )
         else:
@@ -65,12 +65,12 @@ class DeviceConfig:
                 self.device_type = self.device.type
 
         # Some platforms require processing inputs on CPU.
-        from aphrodite.platforms import current_platform
+        from sonar.platforms import current_platform
 
         if current_platform.uses_host_device_handling() and self.device_type == current_platform.device_type:
             self.device = None
         elif self.device_type == "metal":
-            # Metal is an MLX-backed platform, but Aphrodite tensors still flow
+            # Metal is an MLX-backed platform, but Sonar tensors still flow
             # through CPU/MPS compatible paths rather than a torch "metal"
             # device.
             self.device = torch.device("cpu")

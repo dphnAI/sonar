@@ -12,35 +12,35 @@ import torch
 import torch.nn as nn
 from transformers import AutoProcessor, BatchFeature
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.multimodal import MultiModalDummyOptions
-from aphrodite.inputs import MultiModalDataDict
-from aphrodite.model_executor.layers.linear import (
+from sonar.config import SonarConfig
+from sonar.config.multimodal import MultiModalDummyOptions
+from sonar.inputs import MultiModalDataDict
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.quantization.fp8 import Fp8Config
-from aphrodite.model_executor.models.module_mapping import MultiModelKeys
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import (
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.quantization.fp8 import Fp8Config
+from sonar.model_executor.models.module_mapping import MultiModelKeys
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import (
     MultiModalFeatureSpec,
     MultiModalFieldConfig,
     MultiModalKwargsItem,
     MultiModalKwargsItems,
 )
-from aphrodite.multimodal.parse import MultiModalDataItems
-from aphrodite.multimodal.processing import (
+from sonar.multimodal.parse import MultiModalDataItems
+from sonar.multimodal.processing import (
     BaseDummyInputsBuilder,
     BaseMultiModalProcessor,
     PromptReplacement,
     PromptUpdate,
 )
-from aphrodite.multimodal.processing.processor import (
+from sonar.multimodal.processing.processor import (
     MultiModalPromptUpdates,
     PlaceholderFeaturesInfo,
 )
-from aphrodite.sequence import IntermediateTensors
+from sonar.sequence import IntermediateTensors
 
 from .bailing_moe_v3 import BailingMoeV3ForCausalLM
 from .interfaces import (
@@ -277,7 +277,7 @@ class BailingMoeV3VLForConditionalGeneration(
     SupportsPP,
     SupportsMRoPE,
 ):
-    """Native Aphrodite wrapper for ``BailingMoeV3VLConfig`` checkpoints."""
+    """Native Sonar wrapper for ``BailingMoeV3VLConfig`` checkpoints."""
 
     packed_modules_mapping = {
         **BailingMoeV3ForCausalLM.packed_modules_mapping,
@@ -285,7 +285,7 @@ class BailingMoeV3VLForConditionalGeneration(
         "qkv": ["qkv"],
     }
 
-    hf_to_aphrodite_mapper = BailingMoeV3ForCausalLM.hf_to_aphrodite_mapper | WeightsMapper(
+    hf_to_sonar_mapper = BailingMoeV3ForCausalLM.hf_to_sonar_mapper | WeightsMapper(
         orig_to_new_prefix={
             # Match module names as well as parameter names for quantization.
             "model.visual": "visual",
@@ -305,32 +305,32 @@ class BailingMoeV3VLForConditionalGeneration(
 
     @classmethod
     def get_mamba_state_shape_from_config(
-        cls, aphrodite_config: AphroditeConfig
+        cls, sonar_config: SonarConfig
     ) -> tuple[tuple[int, int], tuple[int, int, int]]:
-        text_config = aphrodite_config.model_config.hf_config.text_config
-        return BailingMoeV3ForCausalLM.get_mamba_state_shape_from_config(aphrodite_config.with_hf_config(text_config))
+        text_config = sonar_config.model_config.hf_config.text_config
+        return BailingMoeV3ForCausalLM.get_mamba_state_shape_from_config(sonar_config.with_hf_config(text_config))
 
     @classmethod
-    def get_mamba_state_dtype_from_config(cls, aphrodite_config: AphroditeConfig) -> tuple[torch.dtype, torch.dtype]:
-        text_config = aphrodite_config.model_config.hf_config.text_config
-        return BailingMoeV3ForCausalLM.get_mamba_state_dtype_from_config(aphrodite_config.with_hf_config(text_config))
+    def get_mamba_state_dtype_from_config(cls, sonar_config: SonarConfig) -> tuple[torch.dtype, torch.dtype]:
+        text_config = sonar_config.model_config.hf_config.text_config
+        return BailingMoeV3ForCausalLM.get_mamba_state_dtype_from_config(sonar_config.with_hf_config(text_config))
 
     @classmethod
     def get_mamba_state_copy_func(cls) -> tuple:
         return BailingMoeV3ForCausalLM.get_mamba_state_copy_func()
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "model") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "model") -> None:
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
         vision_config = config.vision_config
         text_config = config.text_config
-        quant_config = aphrodite_config.quant_config
+        quant_config = sonar_config.quant_config
 
         self.config = config
-        self.model_config = aphrodite_config.model_config
+        self.model_config = sonar_config.model_config
 
         merged_vision_size = vision_config.hidden_size * (vision_config.spatial_merge_size**2)
-        with self._mark_tower_model(aphrodite_config, "image"):
+        with self._mark_tower_model(sonar_config, "image"):
             self.visual = BailingMoeV3VisionTransformer(
                 vision_config,
                 norm_eps=getattr(config, "rms_norm_eps", 1e-6),
@@ -344,9 +344,9 @@ class BailingMoeV3VLForConditionalGeneration(
                 prefix=maybe_prefix(prefix, "linear_proj"),
             )
 
-        with self._mark_language_model(aphrodite_config):
+        with self._mark_language_model(sonar_config):
             self.language_model = BailingMoeV3ForCausalLM(
-                aphrodite_config=aphrodite_config.with_hf_config(text_config),
+                sonar_config=sonar_config.with_hf_config(text_config),
                 prefix=maybe_prefix(prefix, "language_model"),
             )
 
@@ -479,7 +479,7 @@ class BailingMoeV3VLForConditionalGeneration(
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
     def get_mm_mapping(self) -> MultiModelKeys:
         return MultiModelKeys.from_string_field(

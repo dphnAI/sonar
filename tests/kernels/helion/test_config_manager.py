@@ -11,19 +11,19 @@ from pathlib import Path
 
 import pytest
 
-from aphrodite.utils.import_utils import has_helion
+from sonar.utils.import_utils import has_helion
 
 # Skip entire module if helion is not available
 if not has_helion():
     pytest.skip(
-        "Helion is not installed. Install with: pip install aphrodite[helion]",
+        "Helion is not installed. Install sonar[helion] from the Sonar wheel index.",
         allow_module_level=True,
     )
 
 import helion
 
-from aphrodite.kernels.helion.case_key import CaseKey
-from aphrodite.kernels.helion.config_manager import (
+from sonar.kernels.helion.case_key import CaseKey
+from sonar.kernels.helion.config_manager import (
     ConfigManager,
     ConfigSet,
 )

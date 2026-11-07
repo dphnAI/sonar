@@ -10,8 +10,8 @@ import numpy as np
 import pybase64 as base64
 import pytest
 
-from aphrodite.config import ModelConfig, PoolerConfig
-from aphrodite.entrypoints.pooling.embed.protocol import (
+from sonar.config import ModelConfig, PoolerConfig
+from sonar.entrypoints.pooling.embed.protocol import (
     EmbeddingCompletionRequest,
     build_typed_embeddings,
 )

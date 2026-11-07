@@ -20,29 +20,29 @@ import pytest
 import torch
 from packaging import version
 
-from aphrodite._aiter_ops import is_aiter_found_and_supported, rocm_aiter_ops
-from aphrodite.config import get_current_aphrodite_config
-from aphrodite.forward_context import set_forward_context
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar._aiter_ops import is_aiter_found_and_supported, rocm_aiter_ops
+from sonar.config import get_current_sonar_config
+from sonar.forward_context import set_forward_context
+from sonar.model_executor.layers.fused_moe.config import (
     mxfp4_w4a8_moe_quant_config,
     mxfp4_w4a16_moe_quant_config,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.aiter_mxfp4_w4a8_moe import (
+from sonar.model_executor.layers.fused_moe.experts.aiter_mxfp4_w4a8_moe import (
     aiter_triton_kernel_w4a8_moe_forward,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.aiter_mxfp4_w4a16_moe import (
+from sonar.model_executor.layers.fused_moe.experts.aiter_mxfp4_w4a16_moe import (
     aiter_triton_kernel_w4a16_moe_forward,
 )
-from aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 import (
+from sonar.model_executor.layers.fused_moe.oracle.mxfp4 import (
     Mxfp4MoeBackend,
     convert_gpt_oss_weight_to_mxfp4_moe_kernel_format,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_random_seed
 from tests.quantization.lm_eval_utils import evaluate_sonar
 
 if current_platform.is_rocm():
-    from aphrodite.platforms.rocm import on_gfx950, on_gfx1250
+    from sonar.platforms.rocm import on_gfx950, on_gfx1250
 else:
 
     def on_gfx950() -> bool:
@@ -119,7 +119,7 @@ def test_gpt_oss_attention_quantization(
         pytest.skip("Not enough GPUs to run this test case")
 
     if "amd/gpt-oss-20b-MoE-Quant-W-MXFP4-A-FP8-KV-FP8" in model_name and on_gfx950():
-        monkeypatch.setenv("APHRODITE_ROCM_USE_AITER", "1")
+        monkeypatch.setenv("SONAR_ROCM_USE_AITER", "1")
 
     model_args = EvaluationConfig(model_name).get_model_args(tp_size)
 
@@ -257,7 +257,7 @@ def test_aiter_mxfp4_moe_ignores_padded_rows(
 
     # `rocm_aiter_ops` snapshots the environment at import time, so setting the
     # env var alone is not enough.
-    monkeypatch.setenv("APHRODITE_ROCM_USE_AITER", "1")
+    monkeypatch.setenv("SONAR_ROCM_USE_AITER", "1")
     rocm_aiter_ops.refresh_env_variables()
 
     set_random_seed(0)
@@ -304,7 +304,7 @@ def test_aiter_mxfp4_moe_ignores_padded_rows(
     del blocks
     torch.accelerator.synchronize()
 
-    with set_forward_context(None, get_current_aphrodite_config(), is_padding=is_padding):
+    with set_forward_context(None, get_current_sonar_config(), is_padding=is_padding):
         if is_w4a8:
             # AITER_MXFP4_FP8 routes through the triton monolithic expert, which
             # does its own top-k inside `aiter.ops.triton.moe.moe_routing`.
@@ -355,7 +355,7 @@ def test_aiter_w4a16_moe_expert_parallel_matches_full(
     Each rank holds a contiguous slice of experts and an `expert_map`; gates
     routed to other ranks must contribute nothing (no bias, no stale rows).
     """
-    monkeypatch.setenv("APHRODITE_ROCM_USE_AITER", "1")
+    monkeypatch.setenv("SONAR_ROCM_USE_AITER", "1")
     rocm_aiter_ops.refresh_env_variables()
 
     set_random_seed(0)
@@ -387,7 +387,7 @@ def test_aiter_w4a16_moe_expert_parallel_matches_full(
         )
 
     is_padding = torch.zeros(num_tokens, dtype=torch.bool, device=device)
-    with set_forward_context(None, get_current_aphrodite_config(), is_padding=is_padding):
+    with set_forward_context(None, get_current_sonar_config(), is_padding=is_padding):
         full = forward(None, None).float()
         summed = torch.zeros_like(full)
         for rank in range(ep_size):

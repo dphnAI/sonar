@@ -17,22 +17,22 @@ import torch
 from torch import nn
 from transformers.models.granitemoeshared import GraniteMoeSharedConfig
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, CacheConfig
-from aphrodite.distributed import get_pp_group
-from aphrodite.model_executor.layers.activation import SiluAndMul
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import CacheConfig, SonarConfig
+from sonar.distributed import get_pp_group
+from sonar.model_executor.layers.activation import SiluAndMul
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     MergedColumnParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.sequence import IntermediateTensors
+from sonar.sequence import IntermediateTensors
 
 from .granitemoe import GraniteMoeAttention, GraniteMoeModel, GraniteMoeMoE
 from .interfaces import EagleModelMixin, SupportsEagle3, SupportsLoRA, SupportsPP
@@ -145,12 +145,12 @@ class GraniteMoeSharedDecoderLayer(nn.Module):
 
 @support_torch_compile
 class GraniteMoeSharedModel(nn.Module, EagleModelMixin):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_config
-        cache_config = aphrodite_config.cache_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        cache_config = sonar_config.cache_config
+        quant_config = sonar_config.quant_config
 
         self.config = config
         self.quant_config = quant_config  # Required by MixtralModel
@@ -207,7 +207,7 @@ class GraniteMoeSharedModel(nn.Module, EagleModelMixin):
             return hidden_states, aux_hidden_states
         return hidden_states
 
-    hf_to_aphrodite_mapper = GraniteMoeModel.hf_to_aphrodite_mapper
+    hf_to_sonar_mapper = GraniteMoeModel.hf_to_sonar_mapper
     load_weights = GraniteMoeModel.load_weights
 
 
@@ -228,14 +228,14 @@ class GraniteMoeSharedForCausalLM(nn.Module, SupportsLoRA, SupportsPP, SupportsE
         "lm_head": "output_embeddings",
     }
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
 
         self.config = config
 
-        self.model = GraniteMoeSharedModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = GraniteMoeSharedModel(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
 
         self.lm_head = ParallelLMHead(
             config.vocab_size,

@@ -11,24 +11,24 @@ import pytest
 import torch
 from torch._subclasses.fake_tensor import FakeTensorMode
 
-from aphrodite.kernels.helion.case_key import CaseKey
-from aphrodite.kernels.helion.config_manager import ConfigManager
-from aphrodite.kernels.helion.ops.per_token_group_fp8_quant import (
+from sonar.kernels.helion.case_key import CaseKey
+from sonar.kernels.helion.config_manager import ConfigManager
+from sonar.kernels.helion.ops.per_token_group_fp8_quant import (
     _pick_cache,
     baseline,
     per_token_group_fp8_quant,
     pick_config,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     get_fp8_min_max,
 )
-from aphrodite.utils.import_utils import has_helion
+from sonar.utils.import_utils import has_helion
 from tests.kernels.helion.utils import skip_if_platform_unsupported
 from tests.kernels.quant_utils import FP8_DTYPE
 
 if not has_helion():
     pytest.skip(
-        "Helion is not installed. Install with: pip install aphrodite[helion]",
+        "Helion is not installed. Install sonar[helion] from the Sonar wheel index.",
         allow_module_level=True,
     )
 
@@ -197,7 +197,7 @@ class TestPerTokenGroupFp8QuantCorrectness:
 
 class TestPerTokenGroupFp8QuantIntegration:
     def test_kernel_registration_integration(self):
-        from aphrodite.kernels.helion.register import get_registered_kernels
+        from sonar.kernels.helion.register import get_registered_kernels
 
         registered_kernels = get_registered_kernels()
         assert "per_token_group_fp8_quant" in registered_kernels

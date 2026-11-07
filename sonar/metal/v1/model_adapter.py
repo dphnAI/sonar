@@ -6,10 +6,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Protocol
 
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 if TYPE_CHECKING:
-    from aphrodite.config import ModelConfig
+    from sonar.config import ModelConfig
 
 logger = init_logger(__name__)
 
@@ -53,11 +53,11 @@ class ModelAdapter(Protocol):
         """Return per-layer sliding window sizes, or None for no enforcement."""
 
 
-# Models/configs that Aphrodite flags as multimodal but must be loaded via mlx_lm.
+# Models/configs that Sonar flags as multimodal but must be loaded via mlx_lm.
 # gemma4: mlx_vlm forward path produces garbled output vs mlx_lm.
 _TEXT_BACKBONE_OVERRIDE_TYPES: frozenset[str] = frozenset({"gemma4"})
 # Qwen3.5/Qwen3.6 conditional-generation wrappers expose a multimodal config,
-# but Aphrodite metal only serves them in text-only mode. Route them through
+# but Sonar metal only serves them in text-only mode. Route them through
 # mlx_lm's qwen3_5 text loader; the mlx_vlm wrapper adds multimodal processing
 # overhead and some local text-only MLX checkpoints do not behave correctly
 # through the VLM forward path.
@@ -75,7 +75,7 @@ class DefaultModelAdapter(ModelAdapter):
     """Default adapter implementation for known model quirks."""
 
     def _multimodal_mode(self) -> str:
-        from aphrodite.metal.config import get_config
+        from sonar.metal.config import get_config
 
         return get_config().multimodal_mode
 
@@ -123,7 +123,7 @@ class DefaultModelAdapter(ModelAdapter):
 
         When the active serve mode routes a multimodal checkpoint through the
         text-only compatibility path, leaving ``multimodal_config`` populated
-        causes Aphrodite to eagerly initialize multimodal processors that the
+        causes Sonar to eagerly initialize multimodal processors that the
         compatibility path intentionally bypasses. Clearing it here makes
         ``is_multimodal_model`` ``False`` so the input processor skips that
         setup. The ``should_force_text_backbone`` predicate is the single
@@ -153,7 +153,7 @@ class DefaultModelAdapter(ModelAdapter):
     def require_uniform_kv_heads(self, args: dict[str, Any], num_kv_heads: int | None) -> None:
         """Reject configs with mismatched KV head counts under the uniform path.
 
-        Called from :meth:`aphrodite.metal.v1.cache_policy.ModelCachePolicy.\
+        Called from :meth:`sonar.metal.v1.cache_policy.ModelCachePolicy.\
 validate_paged_attention_support` only when ``kv_heads_per_layer`` has
         NOT been populated.  Models whose adapter populates per-layer shapes
         via :meth:`build_per_layer_kv_shapes` (Gemma4 26B/31B) handle
@@ -169,7 +169,7 @@ validate_paged_attention_support` only when ``kv_heads_per_layer`` has
                 f"without per-layer shape support: "
                 f"num_key_value_heads={num_kv_heads}, "
                 f"num_global_key_value_heads={global_kv_heads}. "
-                f"Use APHRODITE_METAL_USE_PAGED_ATTENTION=0 to fall back to the "
+                f"Use SONAR_METAL_USE_PAGED_ATTENTION=0 to fall back to the "
                 f"non-paged path."
             )
 

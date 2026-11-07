@@ -4,14 +4,14 @@ from dataclasses import replace
 
 import torch
 
-from aphrodite.config import AphroditeConfig, CacheConfig
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.layers.attention.encoder_only_attention import (
+from sonar.config import CacheConfig, SonarConfig
+from sonar.model_executor.layers.attention import Attention
+from sonar.model_executor.layers.attention.encoder_only_attention import (
     create_encoder_only_attention_backend,
 )
-from aphrodite.v1.attention.backend import AttentionType
-from aphrodite.v1.attention.selector import get_attn_backend
-from aphrodite.v1.kv_cache_interface import FullAttentionSpec, KVCacheSpec
+from sonar.v1.attention.backend import AttentionType
+from sonar.v1.attention.selector import get_attn_backend
+from sonar.v1.kv_cache_interface import FullAttentionSpec, KVCacheSpec
 
 
 class PrefillPrefixLMAttention(Attention):
@@ -68,7 +68,7 @@ class PrefillPrefixLMAttention(Attention):
             **kwargs,
         )
 
-    def get_kv_cache_spec(self, aphrodite_config: AphroditeConfig) -> KVCacheSpec | None:
+    def get_kv_cache_spec(self, sonar_config: SonarConfig) -> KVCacheSpec | None:
         """Tag the KV cache spec as non-causal.
 
         The layout is identical to a regular decoder full-attention layer, so
@@ -78,7 +78,7 @@ class PrefillPrefixLMAttention(Attention):
         attention -- chunked prefill and prefix caching -- which would
         otherwise corrupt the bidirectional prefill of a Prefix LM.
         """
-        spec = super().get_kv_cache_spec(aphrodite_config)
+        spec = super().get_kv_cache_spec(sonar_config)
         if isinstance(spec, FullAttentionSpec):
             return replace(spec, non_causal=True)
         return spec

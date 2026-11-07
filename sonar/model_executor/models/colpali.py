@@ -22,13 +22,13 @@ import torch
 import torch.nn as nn
 from transformers import ColPaliConfig, PaliGemmaConfig, PaliGemmaProcessor
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.model_executor.layers.pooler.tokwise import pooler_for_token_embed
-from aphrodite.model_executor.layers.pooler.tokwise.heads import TokenPoolerHead
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.parse import MultiModalDataItems
-from aphrodite.multimodal.processing.processor import HFMultiModalInputs
+from sonar.config import SonarConfig
+from sonar.model_executor.layers.pooler.tokwise import pooler_for_token_embed
+from sonar.model_executor.layers.pooler.tokwise.heads import TokenPoolerHead
+from sonar.model_executor.model_loader.weight_utils import default_weight_loader
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.parse import MultiModalDataItems
+from sonar.multimodal.processing.processor import HFMultiModalInputs
 
 from .interfaces import SupportsLateInteraction
 from .interfaces_base import default_pooling_type
@@ -63,7 +63,7 @@ class ColPaliMultiModalProcessor(PaliGemmaMultiModalProcessor):
         # The ColPali tokenizer_config.json ships with a small default
         # max_length (50) that truncates the 1024 image tokens inserted
         # by PaliGemmaProcessor, causing a token-count mismatch.
-        # Aphrodite enforces its own max_model_len, so we disable HF
+        # Sonar enforces its own max_model_len, so we disable HF
         # truncation to keep all image + text tokens intact.
         return hf_inputs._replace(hf_kwargs=dict(hf_inputs.hf_kwargs, truncation=False))
 
@@ -90,11 +90,11 @@ class ColPaliModel(
     3. L2-normalizing the projected embeddings
     """
 
-    # Mark this as a pooling model so Aphrodite routes to pooler path
+    # Mark this as a pooling model so Sonar routes to pooler path
     is_pooling_model = True
 
-    # Override hf_to_aphrodite_mapper to handle ColPali weight naming.
-    hf_to_aphrodite_mapper = WeightsMapper(
+    # Override hf_to_sonar_mapper to handle ColPali weight naming.
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={
             # HF transformers checkpoint (vidore/colpali-v1.3-hf)
             # Weights: vlm.vision_tower.*, vlm.language_model.*,
@@ -110,11 +110,11 @@ class ColPaliModel(
         }
     )
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
-        config = aphrodite_config.model_config.hf_config
-        super().__init__(aphrodite_config=aphrodite_config.with_hf_config(config.vlm_config), prefix=prefix)
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
+        config = sonar_config.model_config.hf_config
+        super().__init__(sonar_config=sonar_config.with_hf_config(config.vlm_config), prefix=prefix)
 
-        head_dtype = aphrodite_config.model_config.head_dtype
+        head_dtype = sonar_config.model_config.head_dtype
 
         hidden_size = config.vlm_config.text_config.hidden_size
         self._proj_hidden_size = hidden_size
@@ -140,7 +140,7 @@ class ColPaliModel(
             # Will be created during load_weights when dim is inferred
             self.custom_text_proj = None
 
-        pooler_config = aphrodite_config.model_config.pooler_config
+        pooler_config = sonar_config.model_config.pooler_config
         assert pooler_config is not None
         self.pooler = pooler_for_token_embed(
             pooler_config,
@@ -165,7 +165,7 @@ class ColPaliModel(
 
     # Names used for the projection layer across different ColPali variants
     _PROJ_LAYER_NAMES = {
-        "custom_text_proj",  # Aphrodite internal naming
+        "custom_text_proj",  # Sonar internal naming
         "embedding_proj_layer",  # colpali-engine / HF naming
     }
 
@@ -186,7 +186,7 @@ class ColPaliModel(
                 model_weights.append((name, weight))
 
         loader = AutoWeightsLoader(self)
-        loaded = loader.load_weights(model_weights, mapper=self.hf_to_aphrodite_mapper)
+        loaded = loader.load_weights(model_weights, mapper=self.hf_to_sonar_mapper)
 
         if proj_weights:
             model_dtype = next(self.language_model.parameters()).dtype

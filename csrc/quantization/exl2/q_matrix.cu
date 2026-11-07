@@ -35,7 +35,7 @@
 #include "quant/qdq_6.cuh"
 #include "quant/qdq_8.cuh"
 
-namespace aphrodite {
+namespace sonar {
 namespace exl2 {
 
 #define BLOCK_KN_SIZE 128
@@ -380,4 +380,4 @@ void QMatrix::reconstruct(half* out) {
 }
 
 }  // namespace exl2
-}  // namespace aphrodite
+}  // namespace sonar

@@ -10,8 +10,8 @@ from collections.abc import Mapping
 from contextlib import contextmanager
 from typing import Any
 
-from aphrodite.logger import init_logger
-from aphrodite.tracing.utils import TRACE_HEADERS, LoadingSpanAttributes
+from sonar.logger import init_logger
+from sonar.tracing.utils import TRACE_HEADERS, LoadingSpanAttributes
 
 logger = init_logger(__name__)
 
@@ -74,8 +74,8 @@ def init_otel_tracer(
     os.environ["OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"] = otlp_traces_endpoint
 
     resource_attrs = {}
-    resource_attrs["aphrodite.instrumenting_module_name"] = instrumenting_module_name
-    resource_attrs["aphrodite.process_id"] = str(os.getpid())
+    resource_attrs["sonar.instrumenting_module_name"] = instrumenting_module_name
+    resource_attrs["sonar.process_id"] = str(os.getpid())
     if extra_attributes:
         resource_attrs.update(extra_attributes)
     resource = Resource.create(resource_attrs)
@@ -115,8 +115,8 @@ def init_otel_worker_tracer(
         return None
 
     extra_attrs = {
-        "aphrodite.process_kind": process_kind,
-        "aphrodite.process_name": process_name,
+        "sonar.process_kind": process_kind,
+        "sonar.process_name": process_name,
     }
 
     return init_otel_tracer(instrumenting_module_name, otlp_endpoint, extra_attrs)
@@ -236,7 +236,7 @@ def _get_smart_context() -> Context | None:
 @contextmanager
 def propagate_trace_to_env():
     """Temporarily injects the current OTel context into os.environ.
-    This ensures that any subprocesses (like Aphrodite workers) spawned
+    This ensures that any subprocesses (like Sonar workers) spawned
     within this context inherit the correct traceparent.
     """
     if not _IS_OTEL_AVAILABLE:

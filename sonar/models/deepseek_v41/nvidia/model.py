@@ -9,57 +9,57 @@ import regex as re
 import torch
 import torch.nn as nn
 
-import aphrodite.envs as envs
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.kernel import MEGA_MOE_BACKENDS, NATIVE_MEGA_MOE_BACKENDS
-from aphrodite.distributed import (
+import sonar.envs as envs
+from sonar.config import SonarConfig
+from sonar.config.kernel import MEGA_MOE_BACKENDS, NATIVE_MEGA_MOE_BACKENDS
+from sonar.distributed import (
     get_pcp_group,
     get_pp_group,
     get_tensor_model_parallel_world_size,
     get_tp_group,
     tensor_model_parallel_all_reduce,
 )
-from aphrodite.forward_context import (
+from sonar.forward_context import (
     get_forward_context,
     in_piecewise_cudagraph,
     is_forward_context_available,
 )
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.kernels.mhc.tilelang import (
+from sonar.logger import init_logger
+from sonar.model_executor.kernels.mhc.tilelang import (
     mhc_post_tilelang,
     mhc_pre_delayed_tilelang,
 )
-from aphrodite.model_executor.kernels.mhc.triton import hc_collapse_triton
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.model_executor.kernels.mhc.triton import hc_collapse_triton
+from sonar.model_executor.layers.fused_moe import (
     fused_moe_make_expert_params_mapping,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.trtllm_mxfp4_moe import (
+from sonar.model_executor.layers.fused_moe.experts.trtllm_mxfp4_moe import (
     TrtLlmMxfp4ExpertsModular,
 )
-from aphrodite.model_executor.layers.fused_moe.moe_output import (
+from sonar.model_executor.layers.fused_moe.moe_output import (
     MoEOutput,
     UnfinalizedMoEOutput,
 )
-from aphrodite.model_executor.layers.fused_moe.runner.moe_runner import _unpack
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.fused_moe.runner.moe_runner import _unpack
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.model_loader.weight_utils import (
+from sonar.model_executor.model_loader.weight_utils import (
     default_weight_loader,
     drop_checkpoint_cache,
 )
-from aphrodite.model_executor.models.interfaces import (
+from sonar.model_executor.models.interfaces import (
     EagleModelMixin,
     MixtureOfExperts,
     SupportsEagle3,
     SupportsLoRA,
     SupportsPP,
 )
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.models.utils import (
     AutoWeightsLoader,
     PPMissingLayer,
     WeightsMapper,
@@ -68,36 +68,36 @@ from aphrodite.model_executor.models.utils import (
     make_layers,
     maybe_prefix,
 )
-from aphrodite.models.common.ops.sequence_parallel import (
+from sonar.models.common.ops.sequence_parallel import (
     sp_all_gather,
     sp_padding_mask,
     sp_reduce_scatter,
     sp_shard,
 )
-from aphrodite.models.deepseek_v4.common.spec_decode import needs_mtp_hidden_buffer
-from aphrodite.models.deepseek_v4.nvidia.model import (
+from sonar.models.deepseek_v4.common.spec_decode import needs_mtp_hidden_buffer
+from sonar.models.deepseek_v4.nvidia.model import (
     DeepseekV4MoE as DeepseekV4MoEBase,
 )
-from aphrodite.models.deepseek_v4.nvidia.model import (
+from sonar.models.deepseek_v4.nvidia.model import (
     MegaGateRoutingMetadata,
     make_deepseek_v4_expert_params_mapping,
     prepare_mega_gate_routing_metadata,
 )
-from aphrodite.models.deepseek_v41.attention import DeepseekV4Attention
-from aphrodite.models.deepseek_v41.decoder_replay_layers import DecoderReplayLayers
-from aphrodite.models.deepseek_v41.nvidia.flash_mla_mega_attn import (
+from sonar.models.deepseek_v41.attention import DeepseekV4Attention
+from sonar.models.deepseek_v41.decoder_replay_layers import DecoderReplayLayers
+from sonar.models.deepseek_v41.nvidia.flash_mla_mega_attn import (
     DeepseekV4MegaAttnAttention,
 )
-from aphrodite.models.deepseek_v41.nvidia.flashinfer_sparse import (
+from sonar.models.deepseek_v41.nvidia.flashinfer_sparse import (
     DeepseekV4FlashInferMLAAttention,
     DeepseekV4FlashInferSM120Attention,
 )
-from aphrodite.models.deepseek_v41.nvidia.flashmla import DeepseekV4FlashMLAAttention
-from aphrodite.platforms import current_platform
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
-from aphrodite.v1.worker.ubatching import dbo_current_ubatch_id
+from sonar.models.deepseek_v41.nvidia.flashmla import DeepseekV4FlashMLAAttention
+from sonar.platforms import current_platform
+from sonar.sequence import IntermediateTensors
+from sonar.utils.math_utils import cdiv
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
+from sonar.v1.worker.ubatching import dbo_current_ubatch_id
 
 from ..common.engram import (
     Engram,
@@ -119,7 +119,7 @@ from .ops.mhc import (
 from .specialized_decode import specialized_decode_config
 
 if typing.TYPE_CHECKING:
-    from aphrodite.v1.attention.backends.mla.sparse_swa import DeepseekSparseSWAMetadata
+    from sonar.v1.attention.backends.mla.sparse_swa import DeepseekSparseSWAMetadata
 
     from .specialized_decode.runtime.decode import DecodeStep, SpecializedDecode
 
@@ -129,19 +129,19 @@ logger = init_logger(__name__)
 class DeepseekV4MoE(DeepseekV4MoEBase):
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
         use_sequence_parallel: bool = False,
         reduce_results: bool = True,
     ):
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
         n_routed_experts = config.n_routed_experts
         n_activated_experts = config.num_experts_per_tok
         if extract_layer_index(prefix) >= config.num_hidden_layers:
             n_routed_experts = getattr(config, "dspark_n_routed_experts", 0) or n_routed_experts
             n_activated_experts = getattr(config, "dspark_num_experts_per_tok", 0) or n_activated_experts
         super().__init__(
-            aphrodite_config,
+            sonar_config,
             prefix=prefix,
             use_sequence_parallel=use_sequence_parallel,
             n_routed_experts=n_routed_experts,
@@ -181,7 +181,7 @@ class DeepseekV4MoE(DeepseekV4MoEBase):
         return MoEOutput(routed=routed, shared_output=shared_output)
 
 
-def _select_dsv4_attn_cls(aphrodite_config: AphroditeConfig) -> type[DeepseekV4Attention]:
+def _select_dsv4_attn_cls(sonar_config: SonarConfig) -> type[DeepseekV4Attention]:
     """Pick the CUDA sparse-MLA attention class for the configured backend.
 
     The generic CUDA backend selector does not instantiate DSv4 layers directly,
@@ -190,8 +190,8 @@ def _select_dsv4_attn_cls(aphrodite_config: AphroditeConfig) -> type[DeepseekV4A
     attention where the topology allows it, and everything else keeps the
     FlashMLA path.
     """
-    backend = aphrodite_config.attention_config.backend
-    if aphrodite_config.parallel_config.prefill_context_parallel_size > 1:
+    backend = sonar_config.attention_config.backend
+    if sonar_config.parallel_config.prefill_context_parallel_size > 1:
         if backend not in (
             None,
             AttentionBackendEnum.FLASHMLA_SPARSE,
@@ -234,14 +234,14 @@ def _select_dsv4_attn_cls(aphrodite_config: AphroditeConfig) -> type[DeepseekV4A
     # implementation itself stores. It declines topologies it cannot serve
     # (non-SM100, TP that leaves fewer than WV_GROUP_SIZE heads per wo_a
     # group, a build without the kernel), which then fall through to FlashMLA.
-    if DeepseekV4MegaAttnAttention.is_available_for(aphrodite_config):
+    if DeepseekV4MegaAttnAttention.is_available_for(sonar_config):
         return DeepseekV4MegaAttnAttention
     return DeepseekV4FlashMLAAttention
 
 
-def _use_sequence_parallel(aphrodite_config: AphroditeConfig) -> bool:
-    parallel_config = aphrodite_config.parallel_config
-    moe_needs_token_sharded_input = aphrodite_config.kernel_config.moe_backend in MEGA_MOE_BACKENDS
+def _use_sequence_parallel(sonar_config: SonarConfig) -> bool:
+    parallel_config = sonar_config.parallel_config
+    moe_needs_token_sharded_input = sonar_config.kernel_config.moe_backend in MEGA_MOE_BACKENDS
     return (
         parallel_config.enable_expert_parallel
         and parallel_config.tensor_parallel_size > 1
@@ -249,22 +249,22 @@ def _use_sequence_parallel(aphrodite_config: AphroditeConfig) -> bool:
     )
 
 
-def _shard_fused_wqa_wkv(aphrodite_config: AphroditeConfig) -> bool:
+def _shard_fused_wqa_wkv(sonar_config: SonarConfig) -> bool:
     """Whether large batches shard fused_wqa_wkv by token and all-gather the output."""
     ca_comm = getattr(get_tp_group().device_communicator, "ca_comm", None)
     return (
         current_platform.is_device_capability(90)
-        and not _use_sequence_parallel(aphrodite_config)
-        and aphrodite_config.lora_config is None
-        and not aphrodite_config.parallel_config.use_ubatching
-        and not envs.APHRODITE_BATCH_INVARIANT
+        and not _use_sequence_parallel(sonar_config)
+        and sonar_config.lora_config is None
+        and not sonar_config.parallel_config.use_ubatching
+        and not envs.SONAR_BATCH_INVARIANT
         and ca_comm is not None
         and not ca_comm.disabled
         and ca_comm.fully_connected
     )
 
 
-def maybe_init_gemm_rs(aphrodite_config: AphroditeConfig, use_sequence_parallel: bool) -> bool:
+def maybe_init_gemm_rs(sonar_config: SonarConfig, use_sequence_parallel: bool) -> bool:
     """Set up the fused ``wo_b`` GEMM + reduce-scatter when opted in.
 
     Sequence parallel is the only topology where ``wo_b`` ends in a
@@ -273,25 +273,25 @@ def maybe_init_gemm_rs(aphrodite_config: AphroditeConfig, use_sequence_parallel:
     (the DSpark drafter reuses it), and its NVLink multicast rendezvous is
     collective, so every TP rank must take the same decision here.
     """
-    if not (use_sequence_parallel and envs.APHRODITE_ENABLE_GEMM_RS):
+    if not (use_sequence_parallel and envs.SONAR_ENABLE_GEMM_RS):
         return False
 
     # The kernel module pulls in cute_dsl, so import it only once opted in.
-    from aphrodite.model_executor.kernels.linear.cute_dsl.gemm_rs_ar import (
+    from sonar.model_executor.kernels.linear.cute_dsl.gemm_rs_ar import (
         maybe_init_gemm_rs_ar,
     )
 
-    hidden_size = aphrodite_config.model_config.hf_config.hidden_size
-    if not maybe_init_gemm_rs_ar(aphrodite_config, N=hidden_size, all_reduce=False):
+    hidden_size = sonar_config.model_config.hf_config.hidden_size
+    if not maybe_init_gemm_rs_ar(sonar_config, N=hidden_size, all_reduce=False):
         return False
-    logger.info_once("To disable DeepSeek-V4.1 GEMM-RS, set APHRODITE_ENABLE_GEMM_RS=0.")
+    logger.info_once("To disable DeepSeek-V4.1 GEMM-RS, set SONAR_ENABLE_GEMM_RS=0.")
     return True
 
 
 class DeepseekV4DecoderLayer(nn.Module):
     def __init__(
         self,
-        aphrodite_config,
+        sonar_config,
         prefix,
         topk_indices_buffer: torch.Tensor | None = None,
         aux_stream_list: list[torch.cuda.Stream] | None = None,
@@ -304,11 +304,11 @@ class DeepseekV4DecoderLayer(nn.Module):
     ):
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
         self.hidden_size = config.hidden_size
         self.mhc_stream = mhc_stream
         self.fuse_mhc_all_reduce = fuse_mhc_all_reduce
-        self.use_sequence_parallel = _use_sequence_parallel(aphrodite_config)
+        self.use_sequence_parallel = _use_sequence_parallel(sonar_config)
 
         self.engram: Engram | None = None
         if engram_layout is not None:
@@ -316,7 +316,7 @@ class DeepseekV4DecoderLayer(nn.Module):
             if layer_id in engram_layout.layer_ids:
                 self.engram = Engram(
                     config,
-                    aphrodite_config.quant_config,
+                    sonar_config.quant_config,
                     engram_layout,
                     engram_layout.layer_ids.index(layer_id),
                     use_sequence_parallel=self.use_sequence_parallel,
@@ -325,8 +325,8 @@ class DeepseekV4DecoderLayer(nn.Module):
                 )
 
         self.rms_norm_eps = config.rms_norm_eps
-        self.attn = _select_dsv4_attn_cls(aphrodite_config)(
-            aphrodite_config,
+        self.attn = _select_dsv4_attn_cls(sonar_config)(
+            sonar_config,
             prefix=f"{prefix}.attn",
             topk_indices_buffer=topk_indices_buffer,
             aux_stream_list=aux_stream_list,
@@ -338,9 +338,9 @@ class DeepseekV4DecoderLayer(nn.Module):
                 # Binds only when wo_b's kernel and shape qualify; otherwise
                 # forward keeps the separate reduce-scatter below.
                 self.attn.bind_gemm_rs()
-        self.attn.shard_fused_wqa_wkv = _shard_fused_wqa_wkv(aphrodite_config)
+        self.attn.shard_fused_wqa_wkv = _shard_fused_wqa_wkv(sonar_config)
         self.ffn = DeepseekV4MoE(
-            aphrodite_config,
+            sonar_config,
             prefix=f"{prefix}.ffn",
             use_sequence_parallel=self.use_sequence_parallel,
             reduce_results=not fuse_mhc_all_reduce,
@@ -352,15 +352,15 @@ class DeepseekV4DecoderLayer(nn.Module):
         self.hc_sinkhorn_iters = config.hc_sinkhorn_iters
         self.hc_eps = config.hc_eps
         self.hc_post_alpha = 2.0
-        if aphrodite_config.kernel_config.enable_jit_warmup and current_platform.is_cuda():
-            from aphrodite.model_executor.kernels.mhc.tilelang_kernels import (
+        if sonar_config.kernel_config.enable_jit_warmup and current_platform.is_cuda():
+            from sonar.model_executor.kernels.mhc.tilelang_kernels import (
                 mhc_fused_post_pre_splits,
             )
-            from aphrodite.model_executor.kernels.mhc.warmup import MHC_PRE_NORM_KERNEL
+            from sonar.model_executor.kernels.mhc.warmup import MHC_PRE_NORM_KERNEL
 
-            max_tokens = aphrodite_config.scheduler_config.max_num_batched_tokens
+            max_tokens = sonar_config.scheduler_config.max_num_batched_tokens
             if self.use_sequence_parallel:
-                tp_size = aphrodite_config.parallel_config.tensor_parallel_size
+                tp_size = sonar_config.parallel_config.tensor_parallel_size
                 max_tokens = (max_tokens + tp_size - 1) // tp_size
             # The epilogue compiles per projection width and per pre-mix mode.
             # The first layer projects the broadcast embedding, so it reads one
@@ -383,7 +383,7 @@ class DeepseekV4DecoderLayer(nn.Module):
                 {**hc_stream, "use_pre_mix_in": False},
                 {**hc_stream, "use_pre_mix_in": True},
             ]
-            if aphrodite_config.speculative_config is not None:
+            if sonar_config.speculative_config is not None:
                 # Draft setups read aux hidden states out of the same collapse,
                 # which is its own specialization of the kernel.
                 variants.append({**hc_stream, "use_pre_mix_in": True, "write_aux": True})
@@ -664,31 +664,28 @@ class DeepseekV4DecoderLayer(nn.Module):
 
 
 class DeepseekV4Model(nn.Module, EagleModelMixin):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
         self.config = config
         self.quant_config = quant_config
-        self.parallel_config = aphrodite_config.parallel_config
+        self.parallel_config = sonar_config.parallel_config
         if self.parallel_config.prefill_context_parallel_size > 1 and (
             self.parallel_config.decode_context_parallel_size != 1
             or self.parallel_config.use_ubatching
             or (
-                aphrodite_config.speculative_config is not None
+                sonar_config.speculative_config is not None
                 and (
                     self.parallel_config.pipeline_parallel_size > 1
-                    or not aphrodite_config.speculative_config.use_dspark()
-                    or aphrodite_config.speculative_config.enable_adaptive_verification
+                    or not sonar_config.speculative_config.use_dspark()
+                    or sonar_config.speculative_config.enable_adaptive_verification
                 )
             )
-            or aphrodite_config.kv_transfer_config is not None
-            or (
-                aphrodite_config.cache_config.enable_prefix_caching
-                and not aphrodite_config.cache_config.swa_bounded_replay
-            )
-            or aphrodite_config.kernel_config.moe_backend in MEGA_MOE_BACKENDS
+            or sonar_config.kv_transfer_config is not None
+            or (sonar_config.cache_config.enable_prefix_caching and not sonar_config.cache_config.swa_bounded_replay)
+            or sonar_config.kernel_config.moe_backend in MEGA_MOE_BACKENDS
         ):
             raise NotImplementedError(
                 "DeepSeek-V4.1 PCP currently requires DCP=1, with no "
@@ -696,9 +693,9 @@ class DeepseekV4Model(nn.Module, EagleModelMixin):
                 "Speculative decoding requires fixed-length DSpark with PP=1. "
                 "Prefix caching requires SWA bounded replay."
             )
-        self.use_native_mega_moe = aphrodite_config.kernel_config.moe_backend in NATIVE_MEGA_MOE_BACKENDS
-        self.use_sequence_parallel = _use_sequence_parallel(aphrodite_config)
-        if self.use_native_mega_moe and not aphrodite_config.parallel_config.enable_expert_parallel:
+        self.use_native_mega_moe = sonar_config.kernel_config.moe_backend in NATIVE_MEGA_MOE_BACKENDS
+        self.use_sequence_parallel = _use_sequence_parallel(sonar_config)
+        if self.use_native_mega_moe and not sonar_config.parallel_config.enable_expert_parallel:
             raise NotImplementedError(
                 "DeepSeek V4 MegaMoE currently requires expert parallel. "
                 "Enable it with --enable-expert-parallel, or pick a different "
@@ -716,14 +713,14 @@ class DeepseekV4Model(nn.Module, EagleModelMixin):
         # the default stream.
         aux_stream_list = [torch.cuda.Stream() for _ in range(3)]
         # Keep mHC independent of the streams used inside attention.
-        mhc_stream = torch.cuda.Stream() if supports_mhc_overlap(aphrodite_config) else None
-        self.fuse_mhc_all_reduce = mhc_stream is not None and supports_mhc_all_reduce(aphrodite_config)
+        mhc_stream = torch.cuda.Stream() if supports_mhc_overlap(sonar_config) else None
+        self.fuse_mhc_all_reduce = mhc_stream is not None and supports_mhc_all_reduce(sonar_config)
         if self.fuse_mhc_all_reduce:
-            init_mhc_all_reduce(aphrodite_config)
+            init_mhc_all_reduce(sonar_config)
 
         # Reserved topk indices buffer for all Indexer layers to reuse.
         self.topk_indices_buffer = torch.empty(
-            aphrodite_config.scheduler_config.max_num_batched_tokens,
+            sonar_config.scheduler_config.max_num_batched_tokens,
             config.index_topk,
             dtype=torch.int32,
         )
@@ -736,7 +733,7 @@ class DeepseekV4Model(nn.Module, EagleModelMixin):
         candidate_topk_blocks = getattr(config, "candidate_topk_blocks", 0)
         if candidate_source_layer >= 0 and candidate_topk_blocks > 0:
             self.candidate_block_buffer = torch.empty(
-                aphrodite_config.scheduler_config.max_num_batched_tokens,
+                sonar_config.scheduler_config.max_num_batched_tokens,
                 candidate_topk_blocks,
                 dtype=torch.int32,
             )
@@ -754,8 +751,8 @@ class DeepseekV4Model(nn.Module, EagleModelMixin):
             self.embed_tokens = PPMissingLayer()
 
         self.engram_layout = EngramLayout.from_config(config)
-        engram_config = aphrodite_config.engram_config
-        self.aphrodite_config = aphrodite_config
+        engram_config = sonar_config.engram_config
+        self.sonar_config = sonar_config
         engram_prefetch_stream = (
             torch.cuda.Stream()
             if self.engram_layout is not None and engram_config is not None and engram_config.cpu_offload
@@ -766,21 +763,21 @@ class DeepseekV4Model(nn.Module, EagleModelMixin):
 
         if self.engram_layout is not None and engram_config and engram_config.use_thp:
             # Release old checkpoint cache before allocating the Engram host tables.
-            model_config = aphrodite_config.model_config
+            model_config = sonar_config.model_config
             drop_checkpoint_cache(
                 model_config.model_weights or model_config.model,
                 revision=model_config.revision,
-                cache_dir=aphrodite_config.load_config.download_dir,
+                cache_dir=sonar_config.load_config.download_dir,
             )
 
         # GEMM-RS uses NCCL symmetric-memory multicast, which requires all TP
         # ranks to belong to one NVLink domain. Collective: run before layers.
-        self.run_gemm_rs = maybe_init_gemm_rs(aphrodite_config, self.use_sequence_parallel)
+        self.run_gemm_rs = maybe_init_gemm_rs(sonar_config, self.use_sequence_parallel)
 
         self.start_layer, self.end_layer, self.layers = make_layers(
             config.num_hidden_layers,
             lambda prefix: DeepseekV4DecoderLayer(
-                aphrodite_config,
+                sonar_config,
                 prefix=prefix,
                 topk_indices_buffer=self.topk_indices_buffer,
                 aux_stream_list=aux_stream_list,
@@ -799,7 +796,7 @@ class DeepseekV4Model(nn.Module, EagleModelMixin):
                 for layer in islice(self.layers, self.start_layer, self.end_layer)
                 if getattr(layer, "engram", None) is not None
             ],
-            aphrodite_config.scheduler_config.max_num_batched_tokens,
+            sonar_config.scheduler_config.max_num_batched_tokens,
         )
         if self.fuse_mhc_all_reduce:
             # A MoE's top-k finalize folds into the next layer's first mHC
@@ -820,7 +817,7 @@ class DeepseekV4Model(nn.Module, EagleModelMixin):
         cut = max(config.kv_source_layer_ids)
         if (
             cut < self.end_layer - 1
-            and self._decoder_replay_supported(aphrodite_config, cut)
+            and self._decoder_replay_supported(sonar_config, cut)
             and self.layers[cut].attn.swa_cache_layer.bounded_replay
         ):
             assert self.layers[cut].attn.compress_ratio <= 1
@@ -858,9 +855,7 @@ class DeepseekV4Model(nn.Module, EagleModelMixin):
         # layer's sliding-window KV cache. Only PP ranks owning an engram
         # layer need it.
         self.engram_hash: NgramHashState | None = None
-        self.engram_dp_shared_memory = bool(
-            aphrodite_config.engram_config and aphrodite_config.engram_config.dp_shared_memory
-        )
+        self.engram_dp_shared_memory = bool(sonar_config.engram_config and sonar_config.engram_config.dp_shared_memory)
         self.engram_swa_prefix: str | None = None
         if self.engram_layout is not None:
             engram = next(
@@ -876,7 +871,7 @@ class DeepseekV4Model(nn.Module, EagleModelMixin):
                 self.engram_dp_shared_memory = engram.embed_tokens.dp_size == 1
                 first_layer = next(iter(islice(self.layers, self.start_layer, self.end_layer)))
                 swa_cache_module = first_layer.attn.swa_cache_layer
-                self.engram_hash = NgramHashState(aphrodite_config, self.engram_layout, swa_cache_module)
+                self.engram_hash = NgramHashState(sonar_config, self.engram_layout, swa_cache_module)
                 self.engram_swa_prefix = swa_cache_module.prefix
 
         if get_pp_group().is_last_rank:
@@ -884,12 +879,12 @@ class DeepseekV4Model(nn.Module, EagleModelMixin):
         else:
             self.norm = PPMissingLayer()
 
-        spec_config = aphrodite_config.speculative_config
+        spec_config = sonar_config.speculative_config
         if get_pp_group().is_last_rank and needs_mtp_hidden_buffer(spec_config):
             self._mtp_hidden_buffer = torch.empty(
-                aphrodite_config.scheduler_config.max_num_batched_tokens,
+                sonar_config.scheduler_config.max_num_batched_tokens,
                 self.hc_dim,
-                dtype=aphrodite_config.model_config.dtype,
+                dtype=sonar_config.model_config.dtype,
             )
         else:
             self._mtp_hidden_buffer = None
@@ -1000,7 +995,7 @@ class DeepseekV4Model(nn.Module, EagleModelMixin):
 
         full_num_tokens = positions.shape[0]
         if self.use_sequence_parallel:
-            if envs.APHRODITE_MOE_SKIP_PADDING and is_forward_context_available():
+            if envs.SONAR_MOE_SKIP_PADDING and is_forward_context_available():
                 forward_context = get_forward_context()
                 forward_context.is_padding = sp_padding_mask(forward_context.is_padding, hidden_states)
             hidden_states = sp_shard(hidden_states)
@@ -1217,10 +1212,10 @@ class DeepseekV4Model(nn.Module, EagleModelMixin):
             ),
         )
 
-    def _decoder_replay_supported(self, aphrodite_config: AphroditeConfig, cut: int) -> bool:
+    def _decoder_replay_supported(self, sonar_config: SonarConfig, cut: int) -> bool:
         """Whether this rank may replay from layer ``cut`` on; warns when not."""
-        parallel_config = aphrodite_config.parallel_config
-        spec_config = aphrodite_config.speculative_config
+        parallel_config = sonar_config.parallel_config
+        spec_config = sonar_config.speculative_config
         draft_config = spec_config.draft_model_config if spec_config else None
         draft_hf_config = getattr(draft_config, "hf_config", None)
         draft_window = getattr(draft_hf_config, "sliding_window", None)
@@ -1404,14 +1399,14 @@ class DeepseekV4Model(nn.Module, EagleModelMixin):
                 layer.hc_attn_fn_broadcast.copy_(broadcast)
 
 
-def _linear_scale_param_name(aphrodite_config: AphroditeConfig, expert_dtype: str) -> str:
+def _linear_scale_param_name(sonar_config: SonarConfig, expert_dtype: str) -> str:
     """Parameter name the linear quant method registers for weight scales.
 
     Native MXFP8 checkpoints ([32, 32] blocks with MXFP4 experts) route linear
     layers through ModelOptLinearMethod, which registers ``weight_scale``;
     block-FP8 linear layers register ``weight_scale_inv``.
     """
-    use_mxfp8 = getattr(aphrodite_config.quant_config, "weight_block_size", None) == [32, 32] and expert_dtype == "fp4"
+    use_mxfp8 = getattr(sonar_config.quant_config, "weight_block_size", None) == [32, 32] and expert_dtype == "fp4"
     return "weight_scale" if use_mxfp8 else "weight_scale_inv"
 
 
@@ -1514,7 +1509,7 @@ class DeepseekV41LLMForCausalLM(
 
     # Default mapper assumes the original FP4-expert checkpoint layout.
     # Overridden per-instance in __init__ when expert_dtype != "fp4".
-    hf_to_aphrodite_mapper = _make_deepseek_v4_weights_mapper("fp4")
+    hf_to_sonar_mapper = _make_deepseek_v4_weights_mapper("fp4")
 
     packed_modules_mapping = {
         "gate_up_proj": ["w1", "w3"],
@@ -1525,21 +1520,21 @@ class DeepseekV41LLMForCausalLM(
     # The MTP draft head is not LoRA-adapted.
     lora_skip_prefixes = ["mtp."]
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
         self.config = config
         # decode_backend=latency_specialized: a decode executor over self.model, built
         # by the model state once the weights are loaded.
-        self.specialized_decode_config = specialized_decode_config(aphrodite_config)
+        self.specialized_decode_config = specialized_decode_config(sonar_config)
         self.specialized_decode: SpecializedDecode | None = None
         expert_dtype = getattr(config, "expert_dtype", "fp4")
-        self.hf_to_aphrodite_mapper = _make_deepseek_v4_weights_mapper(
-            expert_dtype, _linear_scale_param_name(aphrodite_config, expert_dtype)
+        self.hf_to_sonar_mapper = _make_deepseek_v4_weights_mapper(
+            expert_dtype, _linear_scale_param_name(sonar_config, expert_dtype)
         )
 
-        self.model = self.model_cls(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = self.model_cls(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
         if get_pp_group().is_last_rank:
             self.lm_head = ParallelLMHead(
                 config.vocab_size,
@@ -1649,11 +1644,11 @@ class DeepseekV41LLMForCausalLM(
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
     def process_weights_after_loading(self) -> None:
         self.model.finalize_mhc_broadcast_weights()
-        config = self.model.aphrodite_config
+        config = self.model.sonar_config
         if config.engram_config and config.engram_config.use_thp:
             # Loading weights refills the file cache; release it before MADV_COLLAPSE.
             model_config = config.model_config

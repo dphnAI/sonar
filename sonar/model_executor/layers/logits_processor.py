@@ -8,20 +8,20 @@ from functools import cache
 import torch
 import torch.nn.functional as F
 
-from aphrodite.config import get_current_aphrodite_config_or_none
-from aphrodite.distributed import (
+from sonar.config import get_current_sonar_config_or_none
+from sonar.distributed import (
     tensor_model_parallel_all_gather,
     tensor_model_parallel_gather,
 )
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.custom_op import PluggableLayer
-from aphrodite.model_executor.layers.linear import UnquantizedLinearMethod
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.logger import init_logger
+from sonar.model_executor.custom_op import PluggableLayer
+from sonar.model_executor.layers.linear import UnquantizedLinearMethod
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     UnquantizedEmbeddingMethod,
     VocabParallelEmbedding,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.flashinfer import has_flashinfer
+from sonar.platforms import current_platform
+from sonar.utils.flashinfer import has_flashinfer
 
 logger = init_logger(__name__)
 
@@ -89,8 +89,8 @@ class LogitsProcessor(PluggableLayer):
         # Dtype of the lm_head projection. Defaults to the model dtype; an
         # fp32 head (via `--hf-overrides '{"head_dtype": "float32"}'`) is
         # required for RL training-inference consistency.
-        aphrodite_config = get_current_aphrodite_config_or_none()
-        model_config = aphrodite_config.model_config if aphrodite_config is not None else None
+        sonar_config = get_current_sonar_config_or_none()
+        model_config = sonar_config.model_config if sonar_config is not None else None
         self.head_dtype = model_config.head_dtype if model_config is not None else None
 
     def forward(

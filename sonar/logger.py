@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Logging configuration for Aphrodite."""
+"""Logging configuration for Sonar."""
 
 import datetime
 import json
@@ -18,53 +18,53 @@ from os import path
 from types import MethodType
 from typing import TYPE_CHECKING, Any, Literal, cast
 
-import aphrodite.envs as envs
-from aphrodite.logging_utils import ColoredFormatter, NewLineFormatter
-from aphrodite.logging_utils.formatter import JSON_FORMAT as _JSON_FORMAT
+import sonar.envs as envs
+from sonar.logging_utils import ColoredFormatter, NewLineFormatter
+from sonar.logging_utils.formatter import JSON_FORMAT as _JSON_FORMAT
 
 if TYPE_CHECKING:
-    from aphrodite.config.logging import LoggingConfig
+    from sonar.config.logging import LoggingConfig
 
-_FORMAT = f"{envs.APHRODITE_LOGGING_PREFIX}%(levelname)s %(asctime)s [%(fileinfo)-15s:%(lineno)4d] %(message)s"
-_FORMAT_INFO = f"{envs.APHRODITE_LOGGING_PREFIX}%(levelname)s %(asctime)s %(message)s"
+_FORMAT = f"{envs.SONAR_LOGGING_PREFIX}%(levelname)s %(asctime)s [%(fileinfo)-15s:%(lineno)4d] %(message)s"
+_FORMAT_INFO = f"{envs.SONAR_LOGGING_PREFIX}%(levelname)s %(asctime)s %(message)s"
 _DATE_FORMAT = "%m-%d %H:%M:%S"
-_aphrodite_process_info: tuple[str, int] | None = None
+_sonar_process_info: tuple[str, int] | None = None
 
 
-class _AphroditeLogRecordFactory:
-    """Add Aphrodite process metadata while preserving the wrapped record factory."""
+class _SonarLogRecordFactory:
+    """Add Sonar process metadata while preserving the wrapped record factory."""
 
     def __init__(self, factory: Callable[..., logging.LogRecord]) -> None:
         self._factory = factory
 
     def __call__(self, *args: Any, **kwargs: Any) -> logging.LogRecord:
         record = self._factory(*args, **kwargs)
-        process_info = _aphrodite_process_info
+        process_info = _sonar_process_info
         pid = os.getpid()
         if process_info is None or process_info[1] != pid:
-            record.aphrodite_process_name = record.processName
+            record.sonar_process_name = record.processName
         else:
-            record.aphrodite_process_name = process_info[0]
+            record.sonar_process_name = process_info[0]
         return record
 
 
-def set_aphrodite_process_name(process_name: str, *, skip_if_set: bool = False) -> None:
-    """Set the Aphrodite process name added to subsequent log records."""
-    global _aphrodite_process_info
+def set_sonar_process_name(process_name: str, *, skip_if_set: bool = False) -> None:
+    """Set the Sonar process name added to subsequent log records."""
+    global _sonar_process_info
     pid = os.getpid()
-    if skip_if_set and _aphrodite_process_info is not None and _aphrodite_process_info[1] == pid:
+    if skip_if_set and _sonar_process_info is not None and _sonar_process_info[1] == pid:
         return
-    _aphrodite_process_info = (process_name, pid)
+    _sonar_process_info = (process_name, pid)
 
 
 def _use_color() -> bool:
-    if envs.NO_COLOR or envs.APHRODITE_LOGGING_COLOR == "0":
+    if envs.NO_COLOR or envs.SONAR_LOGGING_COLOR == "0":
         return False
-    if envs.APHRODITE_LOGGING_COLOR == "1" or envs.FORCE_COLOR:
+    if envs.SONAR_LOGGING_COLOR == "1" or envs.FORCE_COLOR:
         return True
-    if envs.APHRODITE_LOGGING_STREAM == "ext://sys.stdout":  # stdout
+    if envs.SONAR_LOGGING_STREAM == "ext://sys.stdout":  # stdout
         return hasattr(sys.stdout, "isatty") and sys.stdout.isatty()
-    elif envs.APHRODITE_LOGGING_STREAM == "ext://sys.stderr":  # stderr
+    elif envs.SONAR_LOGGING_STREAM == "ext://sys.stderr":  # stderr
         return hasattr(sys.stderr, "isatty") and sys.stderr.isatty()
     return False
 
@@ -72,32 +72,32 @@ def _use_color() -> bool:
 DEFAULT_LOGGING_CONFIG: dict[str, dict[str, Any] | Any] = {
     "formatters": {
         # The "()" factory form forwards custom kwargs such as log_level.
-        "aphrodite": {
-            "()": "aphrodite.logging_utils.NewLineFormatter",
+        "sonar": {
+            "()": "sonar.logging_utils.NewLineFormatter",
             "datefmt": _DATE_FORMAT,
             "format": _FORMAT,
-            "log_level": envs.APHRODITE_LOGGING_LEVEL,
+            "log_level": envs.SONAR_LOGGING_LEVEL,
         },
-        "aphrodite_color": {
-            "()": "aphrodite.logging_utils.ColoredFormatter",
+        "sonar_color": {
+            "()": "sonar.logging_utils.ColoredFormatter",
             "datefmt": _DATE_FORMAT,
             "format": _FORMAT,
-            "log_level": envs.APHRODITE_LOGGING_LEVEL,
+            "log_level": envs.SONAR_LOGGING_LEVEL,
         },
     },
     "handlers": {
-        "aphrodite": {
+        "sonar": {
             "class": "logging.StreamHandler",
             # Choose formatter based on color setting.
-            "formatter": "aphrodite_color" if _use_color() else "aphrodite",
-            "level": envs.APHRODITE_LOGGING_LEVEL,
-            "stream": envs.APHRODITE_LOGGING_STREAM,
+            "formatter": "sonar_color" if _use_color() else "sonar",
+            "level": envs.SONAR_LOGGING_LEVEL,
+            "stream": envs.SONAR_LOGGING_STREAM,
         },
     },
     "loggers": {
-        "aphrodite": {
-            "handlers": ["aphrodite"],
-            "level": envs.APHRODITE_LOGGING_LEVEL,
+        "sonar": {
+            "handlers": ["sonar"],
+            "level": envs.SONAR_LOGGING_LEVEL,
             "propagate": False,
         },
     },
@@ -138,17 +138,17 @@ LogScope = Literal["process", "global", "local"]
 def _should_log_with_scope(scope: LogScope) -> bool:
     """Decide whether to log based on scope."""
     if scope == "global":
-        from aphrodite.distributed.parallel_state import is_global_first_rank
+        from sonar.distributed.parallel_state import is_global_first_rank
 
         return is_global_first_rank()
     if scope == "local":
-        from aphrodite.distributed.parallel_state import is_local_first_rank
+        from sonar.distributed.parallel_state import is_local_first_rank
 
         return is_local_first_rank()
     return True
 
 
-class _AphroditeLogger(Logger):
+class _SonarLogger(Logger):
     """Note:
     This class is just to provide type information.
     We actually patch the methods directly on the [`logging.Logger`][]
@@ -192,20 +192,20 @@ class _AphroditeLogger(Logger):
 
 # Pre-defined methods mapping to avoid repeated dictionary creation
 _METHODS_TO_PATCH = {
-    "debug_once": _AphroditeLogger.debug_once,
-    "info_once": _AphroditeLogger.info_once,
-    "warning_once": _AphroditeLogger.warning_once,
-    "error_once": _AphroditeLogger.error_once,
+    "debug_once": _SonarLogger.debug_once,
+    "info_once": _SonarLogger.info_once,
+    "warning_once": _SonarLogger.warning_once,
+    "error_once": _SonarLogger.error_once,
 }
 
 
-def _configure_aphrodite_root_logger(config: "LoggingConfig | None" = None) -> None:
+def _configure_sonar_root_logger(config: "LoggingConfig | None" = None) -> None:
     """Configure logging from explicit config or bootstrap environment values."""
     logging_config: dict[str, dict[str, Any] | Any] = {}
     if config is None:
-        configure_logging = envs.APHRODITE_CONFIGURE_LOGGING
-        log_level = envs.APHRODITE_LOGGING_LEVEL
-        log_config_file = envs.APHRODITE_LOGGING_CONFIG_PATH
+        configure_logging = envs.SONAR_CONFIGURE_LOGGING
+        log_level = envs.SONAR_LOGGING_LEVEL
+        log_config_file = envs.SONAR_LOGGING_CONFIG_PATH
         log_formatter = "text"
     else:
         configure_logging = config.configure_logging
@@ -222,30 +222,30 @@ def _configure_aphrodite_root_logger(config: "LoggingConfig | None" = None) -> N
 
     if configure_logging:
         factory = logging.getLogRecordFactory()
-        if not isinstance(factory, _AphroditeLogRecordFactory):
-            logging.setLogRecordFactory(_AphroditeLogRecordFactory(factory))
+        if not isinstance(factory, _SonarLogRecordFactory):
+            logging.setLogRecordFactory(_SonarLogRecordFactory(factory))
         logging_config = deepcopy(DEFAULT_LOGGING_CONFIG)
 
-        aphrodite_handler = logging_config["handlers"]["aphrodite"]
+        sonar_handler = logging_config["handlers"]["sonar"]
         # Refresh these values in case env vars have changed.
-        aphrodite_handler["level"] = log_level
-        aphrodite_handler["stream"] = envs.APHRODITE_LOGGING_STREAM
+        sonar_handler["level"] = log_level
+        sonar_handler["stream"] = envs.SONAR_LOGGING_STREAM
         for formatter in logging_config["formatters"].values():
             formatter["log_level"] = log_level
 
         if log_formatter == "json":
             logging_config["formatters"] = {
-                "aphrodite_json": {
+                "sonar_json": {
                     "class": "pythonjsonlogger.jsonlogger.JsonFormatter",
                     "format": _JSON_FORMAT,
                 }
             }
-            aphrodite_handler["formatter"] = "aphrodite_json"
+            sonar_handler["formatter"] = "sonar_json"
         else:
-            aphrodite_handler["formatter"] = "aphrodite_color" if _use_color() else "aphrodite"
+            sonar_handler["formatter"] = "sonar_color" if _use_color() else "sonar"
 
-        aphrodite_loggers = logging_config["loggers"]["aphrodite"]
-        aphrodite_loggers["level"] = log_level
+        sonar_loggers = logging_config["loggers"]["sonar"]
+        sonar_loggers["level"] = log_level
 
     if log_config_file:
         if not path.exists(log_config_file):
@@ -265,14 +265,14 @@ def _configure_aphrodite_root_logger(config: "LoggingConfig | None" = None) -> N
 
     for formatter in logging_config.get("formatters", {}).values():
         # This provides backwards compatibility after #10134.
-        if formatter.get("class") == "aphrodite.logging.NewLineFormatter":
-            formatter["class"] = "aphrodite.logging_utils.NewLineFormatter"
+        if formatter.get("class") == "sonar.logging.NewLineFormatter":
+            formatter["class"] = "sonar.logging_utils.NewLineFormatter"
 
     if logging_config:
         dictConfig(logging_config)
 
     # Transformers uses httpx to access the Hugging Face Hub. httpx is quite verbose,
-    # so we set its logging level to WARNING when Aphrodite's logging level is INFO.
+    # so we set its logging level to WARNING when Sonar's logging level is INFO.
     # httpx2 is the successor huggingface_hub switches to in its 2.x releases.
     if log_level == "INFO":
         logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -281,7 +281,7 @@ def _configure_aphrodite_root_logger(config: "LoggingConfig | None" = None) -> N
 
 def configure_logging(config: "LoggingConfig") -> None:
     """Apply a logging configuration in the current process."""
-    _configure_aphrodite_root_logger(config)
+    _configure_sonar_root_logger(config)
     global _last_configured_logging_config
     _last_configured_logging_config = config
     _log_platform_warnings(config)
@@ -293,7 +293,7 @@ def _log_platform_warnings(config: "LoggingConfig") -> None:
         return
 
     # Import lazily because platform modules use init_logger during import.
-    from aphrodite.platforms import current_platform
+    from sonar.platforms import current_platform
 
     current_platform.log_warnings()
 
@@ -306,7 +306,7 @@ def configure_logging_if_needed(config: "LoggingConfig") -> None:
 
 def configure_logging_from_args(args: Any) -> "LoggingConfig":
     """Apply parsed logging arguments and retain them for child processes."""
-    from aphrodite.config.logging import LoggingConfig
+    from sonar.config.logging import LoggingConfig
 
     config = getattr(args, "logging_config", None) or LoggingConfig()
     if hasattr(args, "log_level"):
@@ -320,14 +320,14 @@ def configure_logging_from_args(args: Any) -> "LoggingConfig":
     return config
 
 
-def init_logger(name: str) -> _AphroditeLogger:
-    """Retrieve a logger and add Aphrodite's convenience logging methods."""
+def init_logger(name: str) -> _SonarLogger:
+    """Retrieve a logger and add Sonar's convenience logging methods."""
     logger = logging.getLogger(name)
 
     for method_name, method in _METHODS_TO_PATCH.items():
         setattr(logger, method_name, MethodType(method, logger))
 
-    return cast(_AphroditeLogger, logger)
+    return cast(_SonarLogger, logger)
 
 
 @contextmanager
@@ -341,7 +341,7 @@ def suppress_logging(level: int = logging.INFO) -> Generator[None, Any, None]:
 def current_formatter_type(logger: Logger) -> Literal["color", "newline", None]:
     lgr: Logger | None = logger
     while lgr is not None:
-        if lgr.handlers and len(lgr.handlers) == 1 and lgr.handlers[0].name == "aphrodite":
+        if lgr.handlers and len(lgr.handlers) == 1 and lgr.handlers[0].name == "sonar":
             formatter = lgr.handlers[0].formatter
             if isinstance(formatter, ColoredFormatter):
                 return "color"
@@ -361,7 +361,7 @@ def _trace_calls(log_path, root_dir, frame, event, arg=None):
         lineno = frame.f_lineno
         func_name = frame.f_code.co_name
         if not filename.startswith(root_dir):
-            # only log the functions in the aphrodite root_dir
+            # only log the functions in the sonar root_dir
             return
         # Log every function call or return
         try:
@@ -402,18 +402,18 @@ def enable_trace_function_call(log_file_path: str, root_dir: str | None = None):
     This is useful for debugging hangs or crashes.
     `log_file_path` is the path to the log file.
     `root_dir` is the root directory of the code to trace. If None, it is the
-    aphrodite root directory.
+    sonar root directory.
 
     Note that this call is thread-level, any threads calling this function
     will have the trace enabled. Other threads will not be affected.
     """
     logger.warning(
-        "APHRODITE_TRACE_FUNCTION is enabled. It will record every"
+        "SONAR_TRACE_FUNCTION is enabled. It will record every"
         " function executed by Python. This will slow down the code. It "
         "is suggested to be used for debugging hang or crashes only."
     )
     logger.info("Trace frame log is saved to %s", log_file_path)
     if root_dir is None:
-        # by default, this is the aphrodite root directory
+        # by default, this is the sonar root directory
         root_dir = os.path.dirname(os.path.dirname(__file__))
     sys.settrace(partial(_trace_calls, log_file_path, root_dir))

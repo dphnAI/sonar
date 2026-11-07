@@ -15,13 +15,13 @@ from starlette.datastructures import Headers
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from aphrodite.proof import NONCE_HEADER, PROOF_VERSION
+from sonar.proof import NONCE_HEADER, PROOF_VERSION
 
 if TYPE_CHECKING:
     from fastapi import Request
 
-    from aphrodite.engine.protocol import EngineClient
-    from aphrodite.outputs import RequestOutput
+    from sonar.engine.protocol import EngineClient
+    from sonar.outputs import RequestOutput
 
 MAX_NONCE_BYTES = 1024
 
@@ -45,7 +45,7 @@ def validate_proof_nonce(headers: Headers) -> str:
 
 
 def get_proof_nonce(engine_client: "EngineClient", raw_request: "Request | None") -> str | None:
-    if getattr(getattr(engine_client, "aphrodite_config", None), "dphn_network_config", None) is None:
+    if getattr(getattr(engine_client, "sonar_config", None), "dphn_network_config", None) is None:
         return None
     if raw_request is None:
         raise DphnNonceError(f"DPHN network requests require {NONCE_HEADER}")

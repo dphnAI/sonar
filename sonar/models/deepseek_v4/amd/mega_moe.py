@@ -7,20 +7,20 @@ from typing import Any
 import torch
 import torch.nn as nn
 
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed import get_ep_group
-from aphrodite.forward_context import get_forward_context, is_forward_context_available
-from aphrodite.model_executor.layers.quantization.online.base import (
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.config import SonarConfig
+from sonar.distributed import get_ep_group
+from sonar.forward_context import get_forward_context, is_forward_context_available
+from sonar.model_executor.layers.quantization.online.base import (
     ONLINE_SHARED_EXPERT_QUANTIZERS,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     get_and_maybe_dequant_weights,
     kMxfp4Static,
 )
-from aphrodite.model_executor.utils import set_weight_attrs
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.math_utils import next_power_of_2, prev_power_of_2
+from sonar.model_executor.utils import set_weight_attrs
+from sonar.triton_utils import tl, triton
+from sonar.utils.math_utils import next_power_of_2, prev_power_of_2
 
 
 @triton.jit
@@ -62,7 +62,7 @@ class DeepseekV4AiterMegaMoEExperts(nn.Module):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         *,
         num_experts: int,
         top_k: int,
@@ -89,7 +89,7 @@ class DeepseekV4AiterMegaMoEExperts(nn.Module):
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
         self.swiglu_limit = swiglu_limit or 0.0
-        self.max_num_tokens = next_power_of_2(aphrodite_config.scheduler_config.max_num_batched_tokens)
+        self.max_num_tokens = next_power_of_2(sonar_config.scheduler_config.max_num_batched_tokens)
         self.prefix = prefix
 
         def make_param(rows: int, cols: int) -> nn.Parameter:

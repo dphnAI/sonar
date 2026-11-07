@@ -4,7 +4,7 @@
 layer's output, every TP reduction inside the kernel.
 
 One launch a layer and rank, ``BLOCKS`` x ``THREADS``, S <= 8 rows (a
-spec-verify step). The original path (Aphrodite ROCm, see MOE_SPEC.md) replicates the
+spec-verify step). The original path (Sonar ROCm, see MOE_SPEC.md) replicates the
 router and the latent down projection on every rank; here each rank computes
 its eighth and the rows are all-gathered over the peer buffer.
 
@@ -15,7 +15,7 @@ its eighth and the rows are all-gathered over the peer buffer.
       sgu     (96 x 16 rows of the shared gate | up): bf16 -> SGU
     route   (S, CTAs 131 ..): sigmoid (v_rcp), + bias, top-16, the pre-bias
             sigmoids renormalized (IEEE 1 / sum) -> ROUTE (every rank alike)
-    sdown   (448 x 16 rows, K 768, CTAs 131 ..): SiTU of SGU (Aphrodite's kernel) ->
+    sdown   (448 x 16 rows, K 768, CTAs 131 ..): SiTU of SGU (Sonar's kernel) ->
             bf16 -> GEMV -> bf16 partial; this rank's up columns -> SHP (plain,
             SHRDY flags), the rest -> every rank's FINAL
     ug      (|U| x 12, every CTA): the union U of the step's picks; an expert's
@@ -40,14 +40,14 @@ from aiter.ops.flydsl.kernels import buffer_ops as bo
 from flydsl.expr import const_expr, gpu, range_constexpr, rocdl
 from flydsl.expr.typing import T, as_ir_value
 
-from aphrodite.models.kimi_k3.amd.specialized_decode.mono.common.mx import (
+from sonar.models.kimi_k3.amd.specialized_decode.mono.common.mx import (
     FP4,
     UNIT_SCALE,
     fp4_tile_load,
     mfma_scaled,
     scale_index,
 )
-from aphrodite.models.kimi_k3.amd.specialized_decode.mono.common.ops import (
+from sonar.models.kimi_k3.amd.specialized_decode.mono.common.ops import (
     CM_DEV,
     ballot,
     bf16_round,
@@ -66,15 +66,15 @@ from aphrodite.models.kimi_k3.amd.specialized_decode.mono.common.ops import (
     uniform,
     wave_sum,
 )
-from aphrodite.models.kimi_k3.amd.specialized_decode.mono.common.plan import (
+from sonar.models.kimi_k3.amd.specialized_decode.mono.common.plan import (
     BLOCKS,
     THREADS,
     WAVES,
     pair_layout,
 )
-from aphrodite.models.kimi_k3.amd.specialized_decode.mono.common.ranks import sum_partials
-from aphrodite.models.kimi_k3.amd.specialized_decode.mono.common.sync import publish
-from aphrodite.models.kimi_k3.amd.specialized_decode.mono.stages import gemv as gemv
+from sonar.models.kimi_k3.amd.specialized_decode.mono.common.ranks import sum_partials
+from sonar.models.kimi_k3.amd.specialized_decode.mono.common.sync import publish
+from sonar.models.kimi_k3.amd.specialized_decode.mono.stages import gemv as gemv
 
 REGIONS = (
     "sgu",
@@ -176,8 +176,8 @@ def tanh_libm(x):
     return (x < fx.Float32(0.0)).select(-t, t)
 
 
-def situ_aphrodite(g, u):
-    """The ``situ_and_mul`` of Aphrodite on bf16 g, u:
+def situ_sonar(g, u):
+    """The ``situ_and_mul`` of Sonar on bf16 g, u:
     ((2 tanh(g/4)) (1 + tanh(g/2))) (25 tanh(u/25))."""
     a = fx.Float32(0.5 * BETA) * tanh_libm(g * fx.Float32(1.0 / BETA))
     a = a * (fx.Float32(1.0) + tanh_libm(g * fx.Float32(0.5)))
@@ -756,7 +756,7 @@ def stage_down(c, rgd, nu, ops0):
 # ---------------------------------------------------------------- shared down
 @traced
 def stage_h(c, t):
-    """Token t's shared h = SiTU(g, u) (Aphrodite's situ_and_mul, bf16) of SGU, once
+    """Token t's shared h = SiTU(g, u) (Sonar's situ_and_mul, bf16) of SGU, once
     -> H; a thread a column pair, its polls in one batch."""
     tid = c["tid"]
     n = SI // 2
@@ -769,7 +769,7 @@ def stage_h(c, t):
         )
         g0, g1 = bf_lo(got[0][0]), bf_hi(got[0][0])
         u0, u1 = bf_lo(got[1][0]), bf_hi(got[1][0])
-        c["put_bf"](c["h"], t * SI + 2 * tid, [situ_aphrodite(g0, u0), situ_aphrodite(g1, u1)])
+        c["put_bf"](c["h"], t * SI + 2 * tid, [situ_sonar(g0, u0), situ_sonar(g1, u1)])
     gpu.barrier()
 
 

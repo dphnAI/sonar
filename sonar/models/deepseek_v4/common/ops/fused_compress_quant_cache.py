@@ -25,20 +25,20 @@ from typing import Any
 
 import torch
 
-from aphrodite.model_executor.warmup.jit_warmup import kernel_launcher
-from aphrodite.model_executor.warmup.jit_warmup_triton_helper import (
-    AphroditeTritonJitKernel,
+from sonar.model_executor.warmup.jit_warmup import kernel_launcher
+from sonar.model_executor.warmup.jit_warmup_triton_helper import (
     LaunchSpec,
+    SonarTritonJitKernel,
     TritonWarmupTensor,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.deep_gemm import mqa_logits_use_mx_scales
-from aphrodite.utils.math_utils import round_up
-from aphrodite.v1.attention.ops.common import pack_ue8m0_x4
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
+from sonar.utils.deep_gemm import mqa_logits_use_mx_scales
+from sonar.utils.math_utils import round_up
+from sonar.v1.attention.ops.common import pack_ue8m0_x4
 
 if current_platform.is_rocm():
-    from aphrodite.platforms.rocm import _ON_GFX950
+    from sonar.platforms.rocm import _ON_GFX950
 else:
     _ON_GFX950 = False
 
@@ -1053,7 +1053,7 @@ def _fused_kv_compress_norm_rope_insert_indexer_mxfp4_attn(
 
 
 class FusedKVCompressNormRopeInsertIndexerTritonKernel(
-    AphroditeTritonJitKernel["FusedKVCompressNormRopeInsertIndexerTritonKernel.CompileKey"]
+    SonarTritonJitKernel["FusedKVCompressNormRopeInsertIndexerTritonKernel.CompileKey"]
 ):
     @dataclass(frozen=True)
     class CompileKey:
@@ -1129,17 +1129,17 @@ class FusedKVCompressNormRopeInsertIndexerTritonKernel(
             mx_scale=not use_fp4_cache and mqa_logits_use_mx_scales(),
         )
 
-    def get_warmup_keys(self, aphrodite_config: Any) -> list[CompileKey]:
-        hf_config = aphrodite_config.model_config.hf_config
+    def get_warmup_keys(self, sonar_config: Any) -> list[CompileKey]:
+        hf_config = sonar_config.model_config.hf_config
         if hf_config is None:
             return []
 
-        cache_block_size = aphrodite_config.cache_config.block_size
-        from aphrodite.v1.attention.backends.mla.indexer import (
+        cache_block_size = sonar_config.cache_config.block_size
+        from sonar.v1.attention.backends.mla.indexer import (
             dsa_indexer_uses_fp4,
         )
 
-        use_fp4_cache = dsa_indexer_uses_fp4(aphrodite_config)
+        use_fp4_cache = dsa_indexer_uses_fp4(sonar_config)
         # The MXFP4 variant packs FP4 with CUDA PTX; ROCm writes the MXFP4
         # indexer cache with aiter's op instead.
         if use_fp4_cache and current_platform.is_rocm():
@@ -1149,10 +1149,10 @@ class FusedKVCompressNormRopeInsertIndexerTritonKernel(
         if head_dim <= 0 or rope_head_dim <= 0 or cache_block_size <= 0:
             return []
 
-        cache_dtype = aphrodite_config.cache_config.cache_dtype
+        cache_dtype = sonar_config.cache_config.cache_dtype
         cache_alignment = 576 if cache_dtype == "fp8_ds_mla" else 512
         return self._trace_dispatch(self.dispatch)(
-            dtype=aphrodite_config.model_config.dtype,
+            dtype=sonar_config.model_config.dtype,
             use_fp4_cache=use_fp4_cache,
             head_dim=head_dim,
             rope_head_dim=rope_head_dim,

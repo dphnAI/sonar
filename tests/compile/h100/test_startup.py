@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Cold start and warm start tests for Aphrodite-compile.
+"""Cold start and warm start tests for Sonar-compile.
 
 Cold start runs in a separate child process which
 populates on-disk caches and asserts cold-start counters.  Warm start
@@ -13,25 +13,25 @@ from typing import NamedTuple
 import pytest
 from torch._dynamo.utils import counters
 
-import aphrodite.envs as envs
-from aphrodite.compilation.counter import compilation_counter
-from aphrodite.config import CompilationConfig, CompilationMode, CUDAGraphMode, PassConfig
-from aphrodite.utils.torch_utils import is_torch_equal_or_newer
+import sonar.envs as envs
+from sonar.compilation.counter import compilation_counter
+from sonar.config import CompilationConfig, CompilationMode, CUDAGraphMode, PassConfig
+from sonar.utils.torch_utils import is_torch_equal_or_newer
 
 from ...utils import create_new_process_for_each_test, requires_spawn_multiprocessing
 
 MODEL = "microsoft/Phi-tiny-MoE-instruct"
 
 
-def _run_aphrodite(aphrodite_runner):
-    with aphrodite_runner(
+def _run_sonar(sonar_runner):
+    with sonar_runner(
         MODEL,
         trust_remote_code=False,
         max_model_len=256,
         max_num_batched_tokens=1024,
         load_format="dummy",
         compilation_config=CompilationConfig(
-            mode=CompilationMode.APHRODITE_COMPILE,
+            mode=CompilationMode.SONAR_COMPILE,
             cudagraph_mode=CUDAGraphMode.NONE,
         ),
         # Phi-tiny-MoE uses SWA, whose admission cap is `cdiv(L, block_size) + 1`
@@ -42,13 +42,13 @@ def _run_aphrodite(aphrodite_runner):
         pass
 
 
-def _cold_start(aphrodite_runner):
+def _cold_start(sonar_runner):
     counters.clear()
     with compilation_counter.expect(
         num_compiled_artifacts_saved=3,
         num_compiled_artifacts_loaded=0,
     ):
-        _run_aphrodite(aphrodite_runner)
+        _run_sonar(sonar_runner)
     assert counters["aot_autograd"]["total"] == 33
     assert counters["aot_autograd"]["autograd_cache_miss"] == 3
     assert counters["aot_autograd"]["autograd_cache_hit"] == 0
@@ -56,16 +56,16 @@ def _cold_start(aphrodite_runner):
 
 @create_new_process_for_each_test()
 @pytest.mark.parametrize("mega_aot_artifact", ["0", "1"])
-def test_moe_startup(monkeypatch, aphrodite_runner, fresh_aphrodite_cache, mega_aot_artifact):
-    monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
-    monkeypatch.setenv("APHRODITE_USE_MEGA_AOT_ARTIFACT", mega_aot_artifact)
-    monkeypatch.setenv("APHRODITE_DEEP_GEMM_WARMUP", "skip")
+def test_moe_startup(monkeypatch, sonar_runner, fresh_sonar_cache, mega_aot_artifact):
+    monkeypatch.setenv("SONAR_ENABLE_V1_MULTIPROCESSING", "0")
+    monkeypatch.setenv("SONAR_USE_MEGA_AOT_ARTIFACT", mega_aot_artifact)
+    monkeypatch.setenv("SONAR_DEEP_GEMM_WARMUP", "skip")
 
     # ROCm and XPU cannot fork safely after device discovery.
     # This model has 32 identical transformer layers which produce
     # 33 subgraphs after splitting on attention — only 3 are unique.
     ctx = mp.get_context("spawn") if requires_spawn_multiprocessing() else mp.get_context("fork")
-    p = ctx.Process(target=_cold_start, args=(aphrodite_runner,))
+    p = ctx.Process(target=_cold_start, args=(sonar_runner,))
     p.start()
     p.join()
     assert p.exitcode == 0, "Cold-start child failed"
@@ -76,8 +76,8 @@ def test_moe_startup(monkeypatch, aphrodite_runner, fresh_aphrodite_cache, mega_
         num_compiled_artifacts_loaded=3,
         num_compiled_artifacts_saved=0,
     ):
-        _run_aphrodite(aphrodite_runner)
-    mega_aot_active = envs.APHRODITE_USE_MEGA_AOT_ARTIFACT and is_torch_equal_or_newer("2.10.0")
+        _run_sonar(sonar_runner)
+    mega_aot_active = envs.SONAR_USE_MEGA_AOT_ARTIFACT and is_torch_equal_or_newer("2.10.0")
     if mega_aot_active:
         # MEGA_AOT_ARTIFACT is enabled, so we expect no aot_autograd running on
         # subgraphs.
@@ -162,8 +162,8 @@ MODEL_SPECS = [
 ]
 
 
-def _run_model(aphrodite_runner, spec: ModelStartupSpec):
-    with aphrodite_runner(
+def _run_model(sonar_runner, spec: ModelStartupSpec):
+    with sonar_runner(
         spec.model,
         trust_remote_code=True,
         max_model_len=256,
@@ -172,7 +172,7 @@ def _run_model(aphrodite_runner, spec: ModelStartupSpec):
         load_format="dummy",
         hf_overrides=spec.hf_overrides,
         compilation_config=CompilationConfig(
-            mode=CompilationMode.APHRODITE_COMPILE,
+            mode=CompilationMode.SONAR_COMPILE,
             cudagraph_mode=CUDAGraphMode.NONE,
             pass_config=PassConfig(fuse_allreduce_rms=False),
         ),
@@ -181,10 +181,10 @@ def _run_model(aphrodite_runner, spec: ModelStartupSpec):
         pass
 
 
-def _check_model_run(aphrodite_runner, spec: ModelStartupSpec, is_cold_start: bool):
+def _check_model_run(sonar_runner, spec: ModelStartupSpec, is_cold_start: bool):
     """Runs a model and checks the number of compiled artifacts."""
     old = compilation_counter.clone()
-    _run_model(aphrodite_runner, spec)
+    _run_model(sonar_runner, spec)
     saved = compilation_counter.num_compiled_artifacts_saved - old.num_compiled_artifacts_saved
     loaded = compilation_counter.num_compiled_artifacts_loaded - old.num_compiled_artifacts_loaded
 
@@ -206,22 +206,22 @@ def _check_model_run(aphrodite_runner, spec: ModelStartupSpec, is_cold_start: bo
     assert loaded == expected_loaded, f"{start_type.lower()}_artifacts_loaded: got {loaded}"
 
 
-def _cold_start_model(aphrodite_runner, spec: ModelStartupSpec):
-    _check_model_run(aphrodite_runner, spec, is_cold_start=True)
+def _cold_start_model(sonar_runner, spec: ModelStartupSpec):
+    _check_model_run(sonar_runner, spec, is_cold_start=True)
 
 
 @pytest.mark.parametrize("spec", MODEL_SPECS)
 @create_new_process_for_each_test()
-def test_model_startup(monkeypatch, aphrodite_runner, fresh_aphrodite_cache, spec):
-    monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
-    monkeypatch.setenv("APHRODITE_DEEP_GEMM_WARMUP", "skip")
+def test_model_startup(monkeypatch, sonar_runner, fresh_sonar_cache, spec):
+    monkeypatch.setenv("SONAR_ENABLE_V1_MULTIPROCESSING", "0")
+    monkeypatch.setenv("SONAR_DEEP_GEMM_WARMUP", "skip")
 
     # ROCm and XPU cannot fork safely after device discovery.
     ctx = mp.get_context("spawn") if requires_spawn_multiprocessing() else mp.get_context("fork")
-    p = ctx.Process(target=_cold_start_model, args=(aphrodite_runner, spec))
+    p = ctx.Process(target=_cold_start_model, args=(sonar_runner, spec))
     p.start()
     p.join()
     assert p.exitcode == 0, "Cold-start child failed"
 
     # Warm start — compiled artifacts loaded from disk cache.
-    _check_model_run(aphrodite_runner, spec, is_cold_start=False)
+    _check_model_run(sonar_runner, spec, is_cold_start=False)

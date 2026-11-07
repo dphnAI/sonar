@@ -7,9 +7,9 @@ from typing import Any, Literal
 
 from pydantic import ConfigDict, Field, StrictBool, model_validator
 
-from aphrodite.entrypoints.generate.base.protocol import validate_cache_salt
-from aphrodite.entrypoints.serve.engine.protocol import OpenAIBaseModel
-from aphrodite.utils import random_uuid
+from sonar.entrypoints.generate.base.protocol import validate_cache_salt
+from sonar.entrypoints.serve.engine.protocol import OpenAIBaseModel
+from sonar.utils import random_uuid
 
 
 class QuestionSpec(OpenAIBaseModel):

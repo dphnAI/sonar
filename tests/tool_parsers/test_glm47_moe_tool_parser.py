@@ -9,16 +9,16 @@ from unittest.mock import Mock
 import pytest
 from openai.types.responses import ResponseFunctionToolCall
 
-from aphrodite.entrypoints.generate.base.protocol import FunctionCall
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.generate.base.protocol import FunctionCall
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionRequest,
     ChatCompletionToolsParam,
     FunctionDefinition,
 )
-from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
-from aphrodite.entrypoints.openai.responses.utils import build_response_output_items
-from aphrodite.tokenizers import get_tokenizer
-from aphrodite.tool_parsers.glm47_moe_tool_parser import Glm47MoeModelToolParser
+from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
+from sonar.entrypoints.openai.responses.utils import build_response_output_items
+from sonar.tokenizers import get_tokenizer
+from sonar.tool_parsers.glm47_moe_tool_parser import Glm47MoeModelToolParser
 
 MODEL = "zai-org/GLM-4.7"
 

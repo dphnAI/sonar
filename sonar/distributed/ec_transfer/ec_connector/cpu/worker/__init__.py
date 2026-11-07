@@ -17,26 +17,26 @@ from typing import TYPE_CHECKING
 import numpy as np
 import torch
 
-from aphrodite._custom_ops import swap_blocks_batch
-from aphrodite.distributed.ec_transfer.ec_connector.cpu.common import (
+from sonar._custom_ops import swap_blocks_batch
+from sonar.distributed.ec_transfer.ec_connector.cpu.common import (
     ECCPUConnectorMetadata,
     ECCPUWorkerMetadata,
     create_ec_shared_region,
 )
-from aphrodite.distributed.ec_transfer.ec_connector.cpu.worker.descriptor_buffers import (
+from sonar.distributed.ec_transfer.ec_connector.cpu.worker.descriptor_buffers import (
     DescriptorBufferPool,
     DescriptorBuffers,
 )
-from aphrodite.distributed.parallel_state import (
+from sonar.distributed.parallel_state import (
     get_pcp_group,
     get_tensor_model_parallel_rank,
 )
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.utils.platform_utils import is_pin_memory_available
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.utils.platform_utils import is_pin_memory_available
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
+    from sonar.config import SonarConfig
 
 logger = init_logger(__name__)
 
@@ -112,10 +112,10 @@ class ECCPUWorker:
     needs, since it only tracks the stream a buffer was allocated on.
     """
 
-    def __init__(self, aphrodite_config: "AphroditeConfig") -> None:
-        self._region = create_ec_shared_region(aphrodite_config)
+    def __init__(self, sonar_config: "SonarConfig") -> None:
+        self._region = create_ec_shared_region(sonar_config)
         # Model dtype; used to reinterpret raw int8 blocks on load.
-        self._dtype = aphrodite_config.model_config.dtype
+        self._dtype = sonar_config.model_config.dtype
 
         self._pin_shared_region()
 

@@ -11,5 +11,5 @@ server_args: >-
   --tokenizer-mode deepseek_v4
   --compilation-config '{"mode": 3, "cudagraph_mode": "FULL_DECODE_ONLY"}'
 env:
-  APHRODITE_ROCM_USE_AITER: "1"
-  APHRODITE_ROCM_USE_AITER_MOE: "1"
+  SONAR_ROCM_USE_AITER: "1"
+  SONAR_ROCM_USE_AITER_MOE: "1"

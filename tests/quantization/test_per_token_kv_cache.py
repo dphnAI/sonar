@@ -18,13 +18,13 @@ from unittest.mock import MagicMock
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     get_fp8_min_max,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
-from aphrodite.v1.attention.ops.int4_per_token_head import single_rht
-from aphrodite.v1.kv_cache_interface import KVQuantMode, is_quantized_kv_cache
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_random_seed
+from sonar.v1.attention.ops.int4_per_token_head import single_rht
+from sonar.v1.kv_cache_interface import KVQuantMode, is_quantized_kv_cache
 
 DEVICE_TYPE = current_platform.device_type
 
@@ -145,24 +145,24 @@ class TestIsQuantizedKvCache:
         assert not is_quantized_kv_cache("bfloat16")
 
     def test_kv_quant_mode_int4(self):
-        from aphrodite.v1.kv_cache_interface import get_kv_quant_mode
+        from sonar.v1.kv_cache_interface import get_kv_quant_mode
 
         assert get_kv_quant_mode("int4_per_token_head") == KVQuantMode.INT4_PER_TOKEN_HEAD
 
     def test_kv_quant_mode_int8(self):
-        from aphrodite.v1.kv_cache_interface import get_kv_quant_mode
+        from sonar.v1.kv_cache_interface import get_kv_quant_mode
 
         assert get_kv_quant_mode("int8_per_token_head") == KVQuantMode.INT8_PER_TOKEN_HEAD
 
     def test_kv_quant_mode_fp8(self):
-        from aphrodite.v1.kv_cache_interface import get_kv_quant_mode
+        from sonar.v1.kv_cache_interface import get_kv_quant_mode
 
         assert get_kv_quant_mode("fp8_per_token_head") == KVQuantMode.FP8_PER_TOKEN_HEAD
 
     @pytest.mark.parametrize("cache_dtype", ["octave_k3v4", "octave_k3v3", "octave_k3v3_compact"])
     def test_octave(self, cache_dtype):
-        from aphrodite.utils.torch_utils import kv_cache_dtype_str_to_dtype
-        from aphrodite.v1.kv_cache_interface import get_kv_quant_mode
+        from sonar.utils.torch_utils import kv_cache_dtype_str_to_dtype
+        from sonar.v1.kv_cache_interface import get_kv_quant_mode
 
         mode = get_kv_quant_mode(cache_dtype)
         assert mode.name.lower() == cache_dtype
@@ -189,7 +189,7 @@ def test_reshape_and_cache_per_token_head(
     seed: int,
 ):
     """Test triton_reshape_and_cache_flash_per_token_head_quant kernel."""
-    from aphrodite.v1.attention.ops.triton_reshape_and_cache_flash import (
+    from sonar.v1.attention.ops.triton_reshape_and_cache_flash import (
         triton_reshape_and_cache_flash_per_token_head_quant,
     )
 
@@ -299,7 +299,7 @@ def test_per_token_head_round_trip_accuracy(
     INT8: round-to-nearest before int8 store.
     FP8: hardware cast (clamp then cast).
     """
-    from aphrodite.v1.attention.ops.triton_reshape_and_cache_flash import (
+    from sonar.v1.attention.ops.triton_reshape_and_cache_flash import (
         triton_reshape_and_cache_flash_per_token_head_quant,
     )
 
@@ -369,7 +369,7 @@ def test_per_token_head_round_trip_accuracy(
 @torch.inference_mode()
 def test_int8_per_token_head_raw_cache_matches_round_reference():
     """INT8 cache writes should match round-to-nearest quantization exactly."""
-    from aphrodite.v1.attention.ops.triton_reshape_and_cache_flash import (
+    from sonar.v1.attention.ops.triton_reshape_and_cache_flash import (
         triton_reshape_and_cache_flash_per_token_head_quant,
     )
 
@@ -419,7 +419,7 @@ def test_int8_per_token_head_raw_cache_matches_round_reference():
 @torch.inference_mode()
 def test_per_token_head_negative_slot_skipped(qcfg: QuantConfig):
     """Tokens with slot_mapping=-1 should leave the cache unchanged."""
-    from aphrodite.v1.attention.ops.triton_reshape_and_cache_flash import (
+    from sonar.v1.attention.ops.triton_reshape_and_cache_flash import (
         triton_reshape_and_cache_flash_per_token_head_quant,
     )
 
@@ -477,7 +477,7 @@ def test_per_token_head_negative_slot_skipped(qcfg: QuantConfig):
 def test_process_weights_sets_placeholder_scales(kv_cache_dtype: str):
     """Per-token-head should set _k_scale=1.0, _v_scale=1.0
     and delete checkpoint attrs."""
-    from aphrodite.model_executor.layers.quantization.kv_cache import (
+    from sonar.model_executor.layers.quantization.kv_cache import (
         BaseKVCacheMethod,
     )
 
@@ -524,8 +524,8 @@ def test_triton_unified_attention_per_token_head_scale(
     block_size: int,
 ):
     """End-to-end: quantized KV with per-token-head scale caches."""
-    from aphrodite.utils.math_utils import next_power_of_2
-    from aphrodite.v1.attention.ops.triton_unified_attention import unified_attention
+    from sonar.utils.math_utils import next_power_of_2
+    from sonar.v1.attention.ops.triton_unified_attention import unified_attention
 
     torch.set_default_device(DEVICE_TYPE)
     set_random_seed(0)

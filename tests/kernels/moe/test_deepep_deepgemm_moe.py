@@ -13,45 +13,45 @@ import torch.distributed
 from torch.distributed import ProcessGroup
 from typing_extensions import ParamSpec
 
-import aphrodite.envs as envs
-from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-from aphrodite.forward_context import set_forward_context
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.config import (
+import sonar.envs as envs
+from sonar.config import SonarConfig, set_current_sonar_config
+from sonar.forward_context import set_forward_context
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEQuantConfig,
     fp8_w8a8_moe_quant_config,
 )
-from aphrodite.model_executor.layers.fused_moe.fused_moe import fused_experts
-from aphrodite.model_executor.layers.fused_moe.modular_kernel import FusedMoEKernel
-from aphrodite.utils.deep_gemm import (
+from sonar.model_executor.layers.fused_moe.fused_moe import fused_experts
+from sonar.model_executor.layers.fused_moe.modular_kernel import FusedMoEKernel
+from sonar.utils.deep_gemm import (
     get_mk_alignment_for_contiguous_layout,
     is_deep_gemm_e8m0_used,
     is_deep_gemm_supported,
 )
-from aphrodite.utils.import_utils import has_deep_ep, has_deep_gemm
-from aphrodite.utils.math_utils import next_power_of_2
-from aphrodite.utils.torch_utils import set_random_seed
-from aphrodite.v1.worker.workspace import init_workspace_manager
+from sonar.utils.import_utils import has_deep_ep, has_deep_gemm
+from sonar.utils.math_utils import next_power_of_2
+from sonar.utils.torch_utils import set_random_seed
+from sonar.v1.worker.workspace import init_workspace_manager
 
 from ...utils import multi_gpu_test
 from .parallel_utils import ProcessGroupInfo, parallel_launch
 from .utils import make_dummy_moe_config, make_test_weights
 
 if has_deep_ep():
-    from aphrodite.model_executor.layers.fused_moe.prepare_finalize.deepep_ht import (
+    from sonar.model_executor.layers.fused_moe.prepare_finalize.deepep_ht import (
         DeepEPHTPrepareAndFinalize,
     )
-    from aphrodite.model_executor.layers.fused_moe.prepare_finalize.deepep_ll import (
+    from sonar.model_executor.layers.fused_moe.prepare_finalize.deepep_ll import (
         DeepEPLLPrepareAndFinalize,
     )
 
     from .parallel_utils import DeepEPHTArgs, DeepEPLLArgs, make_deepep_a2a
 
 if has_deep_gemm():
-    from aphrodite.model_executor.layers.fused_moe.experts.batched_deep_gemm_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.batched_deep_gemm_moe import (
         BatchedDeepGemmExperts,
     )
-    from aphrodite.model_executor.layers.fused_moe.experts.deep_gemm_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.deep_gemm_moe import (
         DeepGemmExperts,
     )
 
@@ -72,13 +72,13 @@ P = ParamSpec("P")
 def with_dp_metadata(M: int, world_size: int):
     num_tokens_across_dp = torch.tensor([M] * world_size, device="cpu", dtype=torch.int)
 
-    aphrodite_config = AphroditeConfig()
-    aphrodite_config.parallel_config.data_parallel_size = world_size
-    aphrodite_config.parallel_config.enable_expert_parallel = True
+    sonar_config = SonarConfig()
+    sonar_config.parallel_config.data_parallel_size = world_size
+    sonar_config.parallel_config.enable_expert_parallel = True
 
     with set_forward_context(
         None,
-        aphrodite_config,
+        sonar_config,
         num_tokens=M,
         num_tokens_across_dp=num_tokens_across_dp,
     ):
@@ -371,7 +371,7 @@ def _test_deepep_deepgemm_moe(
     w1_scale = w1_scale.to(device=device)
     w2_scale = w2_scale.to(device=device)
 
-    if envs.APHRODITE_DISTRIBUTED_USE_SPLIT_GROUP:
+    if envs.SONAR_DISTRIBUTED_USE_SPLIT_GROUP:
         pg = torch.distributed.split_group(
             split_ranks=[list(range(pgi.world_size))],
             group_desc="deepep_deepgemm_test",
@@ -381,7 +381,7 @@ def _test_deepep_deepgemm_moe(
     test_tensors = TestTensors.make(config, pgi.rank)
     block_shape = [w1.size(1) // w1_scale.size(1), w1.size(2) // w1_scale.size(2)]
 
-    with set_current_aphrodite_config(AphroditeConfig()):
+    with set_current_sonar_config(SonarConfig()):
         # Reference
         triton_moe = triton_impl(
             a=test_tensors.rank_tokens,

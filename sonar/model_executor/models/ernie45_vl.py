@@ -35,35 +35,35 @@ import torch.nn.functional as F
 from einops import rearrange
 from transformers import BaseImageProcessor, BatchFeature
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.multimodal import MultiModalDummyOptions, VideoDummyOptions
-from aphrodite.distributed import parallel_state
-from aphrodite.distributed import utils as dist_utils
-from aphrodite.inputs import MultiModalDataDict
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.activation import QuickGELU
-from aphrodite.model_executor.layers.attention import (
+from sonar.config import SonarConfig
+from sonar.config.multimodal import MultiModalDummyOptions, VideoDummyOptions
+from sonar.distributed import parallel_state
+from sonar.distributed import utils as dist_utils
+from sonar.inputs import MultiModalDataDict
+from sonar.logger import init_logger
+from sonar.model_executor.layers.activation import QuickGELU
+from sonar.model_executor.layers.attention import (
     MMEncoderAttention,
 )
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     QKVParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.rotary_embedding.common import (
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.rotary_embedding.common import (
     ApplyRotaryEmb,
 )
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import (
+from sonar.model_executor.model_loader.weight_utils import default_weight_loader
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import (
     MultiModalFeatureSpec,
     MultiModalFieldConfig,
     MultiModalKwargsItems,
 )
-from aphrodite.multimodal.parse import ImageSize, MultiModalDataItems, MultiModalDataParser
-from aphrodite.multimodal.processing import (
+from sonar.multimodal.parse import ImageSize, MultiModalDataItems, MultiModalDataParser
+from sonar.multimodal.processing import (
     BaseDummyInputsBuilder,
     BaseMultiModalProcessor,
     BaseProcessingInfo,
@@ -71,12 +71,12 @@ from aphrodite.multimodal.processing import (
     PromptUpdate,
     cached_encode,
 )
-from aphrodite.multimodal.processing.processor import HFMultiModalInputs
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.utils.gpu_sync_debug import gpu_sync_allowed
-from aphrodite.utils.tensor_schema import TensorSchema, TensorShape
-from aphrodite.utils.torch_utils import async_tensor_h2d
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
+from sonar.multimodal.processing.processor import HFMultiModalInputs
+from sonar.sequence import IntermediateTensors
+from sonar.utils.gpu_sync_debug import gpu_sync_allowed
+from sonar.utils.tensor_schema import TensorSchema, TensorShape
+from sonar.utils.torch_utils import async_tensor_h2d
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
 
 from .ernie45_vl_moe import Ernie4_5_VLMoeForCausalLM
 from .interfaces import (
@@ -114,7 +114,7 @@ def all_gather_interleave(local_tensor, hidden_size: int, tp_size: int):
 
 
 class Ernie4_5_VisionAttention(nn.Module):
-    """VisionAttention using APHRODITE framework APIs."""
+    """VisionAttention using SONAR framework APIs."""
 
     def __init__(
         self,
@@ -1289,7 +1289,7 @@ class Ernie4_5_VLMoeForConditionalGeneration(
     }
 
     # To ensure correct weight loading and mapping.
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={
             "lm_head.": "language_model.lm_head.",
             "model.": "language_model.model.",
@@ -1317,16 +1317,16 @@ class Ernie4_5_VLMoeForConditionalGeneration(
 
         raise ValueError("Only image or video modality is supported")
 
-    def __init__(self, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
-        multimodal_config = aphrodite_config.model_config.multimodal_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
+        multimodal_config = sonar_config.model_config.multimodal_config
 
         self.config = config
         self.multimodal_config = multimodal_config
 
-        with self._mark_tower_model(aphrodite_config, {"image", "video"}):
+        with self._mark_tower_model(sonar_config, {"image", "video"}):
             self.vision_model = Ernie4_5_VisionTransformer(
                 config.vision_config,
                 norm_eps=getattr(config, "rms_norm_eps", 1e-6),
@@ -1342,9 +1342,9 @@ class Ernie4_5_VLMoeForConditionalGeneration(
                 prefix=maybe_prefix(prefix, "resampler_model"),
             )
 
-        with self._mark_language_model(aphrodite_config):
+        with self._mark_language_model(sonar_config):
             self.language_model = Ernie4_5_VLMoeForCausalLM(
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 prefix=maybe_prefix(prefix, "language_model"),
             )
 
@@ -1506,7 +1506,7 @@ class Ernie4_5_VLMoeForConditionalGeneration(
     # eager multimodal path for now.
 
     def get_encoder_cudagraph_config(self):
-        from aphrodite.v1.worker.encoder_cudagraph_defs import EncoderCudaGraphConfig
+        from sonar.v1.worker.encoder_cudagraph_defs import EncoderCudaGraphConfig
 
         return EncoderCudaGraphConfig(
             modalities=["image"],
@@ -1522,18 +1522,18 @@ class Ernie4_5_VLMoeForConditionalGeneration(
             out_hidden_size=self.config.hidden_size,
         )
 
-    def get_encoder_cudagraph_budget_range(self, aphrodite_config) -> tuple[int, int]:
+    def get_encoder_cudagraph_budget_range(self, sonar_config) -> tuple[int, int]:
         # Min: a 224x224 image -> 16x16 patches (patch_size=14),
         # spatial_merge_size=2 -> 8x8 = 64 output tokens.
         min_budget = 64
         max_budget = min(
-            aphrodite_config.scheduler_config.max_num_batched_tokens,
-            aphrodite_config.model_config.max_model_len,
+            sonar_config.scheduler_config.max_num_batched_tokens,
+            sonar_config.model_config.max_model_len,
         )
         return (min_budget, max_budget)
 
     def get_encoder_cudagraph_item_specs(self, mm_kwargs: dict[str, Any]):
-        from aphrodite.v1.worker.encoder_cudagraph_defs import EncoderItemSpec
+        from sonar.v1.worker.encoder_cudagraph_defs import EncoderItemSpec
 
         m = self.vision_model.spatial_merge_size
         grid_thw = mm_kwargs["image_grid_thw"].tolist()
@@ -1570,7 +1570,7 @@ class Ernie4_5_VLMoeForConditionalGeneration(
         path: str = "default",
         axis_keys: tuple[Hashable, ...] | None = None,
     ):
-        from aphrodite.v1.worker.encoder_cudagraph_defs import (
+        from sonar.v1.worker.encoder_cudagraph_defs import (
             EncoderCudaGraphCaptureInputs,
         )
 
@@ -1603,7 +1603,7 @@ class Ernie4_5_VLMoeForConditionalGeneration(
     def prepare_encoder_cudagraph_replay_buffers(
         self, mm_kwargs, max_batch_size, max_frames_per_batch, path: str = "default"
     ):
-        from aphrodite.v1.worker.encoder_cudagraph_defs import (
+        from sonar.v1.worker.encoder_cudagraph_defs import (
             EncoderCudaGraphReplayBuffers,
         )
 
@@ -1773,4 +1773,4 @@ class Ernie4_5_VLMoeForConditionalGeneration(
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)

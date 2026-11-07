@@ -6,8 +6,8 @@ from __future__ import annotations
 import torch
 import torch.nn.functional as F
 
-from aphrodite._custom_ops import causal_conv1d_update_cpu_vec
-from aphrodite.v1.attention.backends.utils import NULL_BLOCK_ID, PAD_SLOT_ID
+from sonar._custom_ops import causal_conv1d_update_cpu_vec
+from sonar.v1.attention.backends.utils import NULL_BLOCK_ID, PAD_SLOT_ID
 
 
 def causal_conv1d_fn_cpu(

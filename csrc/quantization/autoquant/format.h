@@ -21,7 +21,7 @@
 #include <cuda_fp16.h>
 #include <cuda_runtime.h>
 
-namespace aphrodite {
+namespace sonar {
 namespace autoquant {
 
 void reformat_s4_k8_m(uint32_t* dst, const uint32_t* src, int m, int k,
@@ -50,4 +50,4 @@ void dequantize_s4(uint4* dst, const uint32_t* src, size_t count,
                    cudaStream_t st = {});
 
 }  // namespace autoquant
-}  // namespace aphrodite
+}  // namespace sonar

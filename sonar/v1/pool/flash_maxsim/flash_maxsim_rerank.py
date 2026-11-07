@@ -15,7 +15,7 @@ Entry point:
 
 import torch
 
-from aphrodite.triton_utils import tl, triton
+from sonar.triton_utils import tl, triton
 
 from ._common import _get_configs, _next_pow2, _prune_configs
 

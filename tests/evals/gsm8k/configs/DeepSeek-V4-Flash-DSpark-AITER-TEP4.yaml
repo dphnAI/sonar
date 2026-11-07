@@ -24,6 +24,6 @@ server_args: >-
   "draft_sample_method":"probabilistic",
   "enable_adaptive_verification":false}'
 env:
-  APHRODITE_USE_V2_MODEL_RUNNER: "1"
-  APHRODITE_ROCM_USE_AITER: "1"
-  APHRODITE_ROCM_USE_AITER_MOE: "1"
+  SONAR_USE_V2_MODEL_RUNNER: "1"
+  SONAR_ROCM_USE_AITER: "1"
+  SONAR_ROCM_USE_AITER_MOE: "1"

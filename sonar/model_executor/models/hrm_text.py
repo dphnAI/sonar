@@ -7,7 +7,7 @@ Reference Hugging Face implementation:
 
 The model performs a hierarchical recurrent forward over two transformer
 stacks (``H`` slow, ``L`` fast) inside nested loops. Each recurrence step
-gets its own KV cache slot via a unique Aphrodite-visible layer index. The
+gets its own KV cache slot via a unique Sonar-visible layer index. The
 PrefixLM attention pattern (prompt bidirectional, response causal) is
 realized by reusing ``EncoderOnlyAttention`` (which sets ``causal=False``
 unconditionally on every metadata build) but with ``attn_type=DECODER``
@@ -27,24 +27,24 @@ import torch
 from torch import nn
 from transformers import PreTrainedConfig
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, CacheConfig
-from aphrodite.distributed import get_tensor_model_parallel_world_size
-from aphrodite.model_executor.layers.activation import SiluAndMul
-from aphrodite.model_executor.layers.attention import PrefillPrefixLMAttention
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import CacheConfig, SonarConfig
+from sonar.distributed import get_tensor_model_parallel_world_size
+from sonar.model_executor.layers.activation import SiluAndMul
+from sonar.model_executor.layers.attention import PrefillPrefixLMAttention
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     MergedColumnParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.sequence import IntermediateTensors
+from sonar.sequence import IntermediateTensors
 
 from .utils import AutoWeightsLoader, WeightsMapper, maybe_prefix
 
@@ -109,7 +109,7 @@ class HrmTextAttention(nn.Module):
         metadata build). The L stack steps are
         ``[high_cycle_idx*(L_cycles+1)+low_cycle_idx]`` and the H stack
         steps are ``[high_cycle_idx*(L_cycles+1)+L_cycles]``; the two
-        ranges are disjoint so each instance registers a unique Aphrodite
+        ranges are disjoint so each instance registers a unique Sonar
         ``layer_name``
         (``model.{H,L}_module.layers.{global_idx}.self_attn``) and gets
         its own KV cache slot. The global layer index per recurrence step
@@ -169,7 +169,7 @@ class HrmTextAttention(nn.Module):
             prefix=f"{prefix}.o_proj",
         )
 
-        # aphrodite get_rope accepts ``rope_parameters`` directly, matching
+        # sonar get_rope accepts ``rope_parameters`` directly, matching
         # the dict-shaped HF config field.
         self.rotary_emb = get_rope(
             head_size=self.head_dim,
@@ -245,7 +245,7 @@ class HrmTextDecoderLayer(nn.Module):
         # Attribute name `self_attn` matches HF's model class. The on-disk
         # `attn.{gqkv_proj,o_proj}.weight` keys are renamed to
         # `self_attn.{gqkv_proj,o_proj}.weight` by the `WeightsMapper` in
-        # `HrmTextForCausalLM` so Aphrodite's standard `AutoWeightsLoader`
+        # `HrmTextForCausalLM` so Sonar's standard `AutoWeightsLoader`
         # handles the rest.
         self.self_attn = HrmTextAttention(
             config=config,
@@ -355,11 +355,11 @@ class HrmTextModel(nn.Module):
         return hidden_states_high_cycle
     """
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        cache_config = aphrodite_config.cache_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        cache_config = sonar_config.cache_config
+        quant_config = sonar_config.quant_config
         self.config = config
 
         self.embed_tokens = VocabParallelEmbedding(
@@ -446,21 +446,21 @@ class HrmTextForCausalLM(nn.Module):
     # gate/q/k/v) and `mlp.gate_up_proj` (2-way fused gate/up) are loaded
     # directly via MergedColumnParallelLinear's fused-on-disk path; no
     # packed_modules_mapping entries are needed.
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_substr={".attn.": ".self_attn."},
     )
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
         self.config = config
         self.quant_config = quant_config
 
-        if aphrodite_config.parallel_config.pipeline_parallel_size > 1:
+        if sonar_config.parallel_config.pipeline_parallel_size > 1:
             raise ValueError("HrmTextForCausalLM does not support pipeline parallelism.")
 
-        self.model = HrmTextModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = HrmTextModel(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
 
         self.lm_head = ParallelLMHead(
             config.vocab_size,
@@ -497,4 +497,4 @@ class HrmTextForCausalLM(nn.Module):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)

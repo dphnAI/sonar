@@ -9,7 +9,7 @@ in ``tests/basic_correctness/memory/``.
 
 import pytest
 
-from aphrodite.device_allocator.sleep_mode_backend import (
+from sonar.device_allocator.sleep_mode_backend import (
     CuMemBackend,
     SleepModeBackend,
     SleepModeBackendFactory,
@@ -43,7 +43,7 @@ def test_worker_drives_communicator_suspension(monkeypatch, enable_nccl_comm_sus
     """Comm walkers run around sleep/wake only when explicitly enabled."""
     from types import SimpleNamespace
 
-    from aphrodite.v1.worker.gpu_worker import Worker
+    from sonar.v1.worker.gpu_worker import Worker
 
     calls: list[tuple[str, object]] = []
 
@@ -59,18 +59,18 @@ def test_worker_drives_communicator_suspension(monkeypatch, enable_nccl_comm_sus
     worker._sleep_saved_parameters = {}
     worker._sleep_saved_buffers = {}
     worker._sleep_saved_draft_buffers = {}
-    worker.aphrodite_config = SimpleNamespace(
+    worker.sonar_config = SimpleNamespace(
         model_config=SimpleNamespace(enable_nccl_comm_suspend=enable_nccl_comm_suspend)
     )
 
     monkeypatch.setattr("torch.accelerator.synchronize", lambda: None)
     monkeypatch.setattr("torch.accelerator.get_memory_info", lambda: (0, 0))
     monkeypatch.setattr(
-        "aphrodite.v1.worker.gpu_worker.suspend_device_comms",
+        "sonar.v1.worker.gpu_worker.suspend_device_comms",
         lambda: calls.append(("comms.suspend", None)),
     )
     monkeypatch.setattr(
-        "aphrodite.v1.worker.gpu_worker.resume_device_comms",
+        "sonar.v1.worker.gpu_worker.resume_device_comms",
         lambda: calls.append(("comms.resume", None)),
     )
 
@@ -97,7 +97,7 @@ def test_duplicate_registration_raises():
     with pytest.raises(ValueError, match="already registered"):
         SleepModeBackendFactory.register_backend(
             "cumem",
-            "aphrodite.device_allocator.sleep_mode_backend",
+            "sonar.device_allocator.sleep_mode_backend",
             "CuMemBackend",
         )
 

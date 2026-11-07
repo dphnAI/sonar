@@ -15,22 +15,22 @@ Run `pytest tests/kernels/quantization/test_rdna3_w4a16_selection.py`.
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 if not current_platform.is_rocm():
     pytest.skip("RDNA3 W4A16 kernel is ROCm-only", allow_module_level=True)
 
-from aphrodite.model_executor.kernels.linear import (  # noqa: E402
+from sonar.model_executor.kernels.linear import (  # noqa: E402
     choose_mp_linear_kernel,
 )
-from aphrodite.model_executor.kernels.linear.mixed_precision.MPLinearKernel import (  # noqa: E402
+from sonar.model_executor.kernels.linear.mixed_precision.MPLinearKernel import (  # noqa: E402
     MPLinearLayerConfig,
 )
-from aphrodite.model_executor.kernels.linear.mixed_precision.rdna3_w4a16 import (  # noqa: E402
+from sonar.model_executor.kernels.linear.mixed_precision.rdna3_w4a16 import (  # noqa: E402
     RDNA3W4A16LinearKernel,
 )
-from aphrodite.platforms.rocm import on_gfx1100  # noqa: E402
-from aphrodite.scalar_type import scalar_types  # noqa: E402
+from sonar.platforms.rocm import on_gfx1100  # noqa: E402
+from sonar.scalar_type import scalar_types  # noqa: E402
 
 WEIGHT_TYPE = scalar_types.uint4b8  # symmetric int4, bias = 8
 

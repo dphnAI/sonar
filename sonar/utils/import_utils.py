@@ -16,7 +16,7 @@ from typing import Any, Never
 
 import regex as re
 
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 
@@ -29,8 +29,8 @@ def import_pynvml():
     status without initializing CUDA context in the current process.
     Historically, there are two packages that provide pynvml:
     - `nvidia-ml-py` (https://pypi.org/project/nvidia-ml-py/): The official
-        wrapper. It is a dependency of Aphrodite, and is installed when users
-        install Aphrodite. It provides a Python module named `pynvml`.
+        wrapper. It is a dependency of Sonar, and is installed when users
+        install Sonar. It provides a Python module named `pynvml`.
     - `pynvml` (https://pypi.org/project/pynvml/): An unofficial wrapper.
         Prior to version 12.0, it also provides a Python module `pynvml`,
         and therefore conflicts with the official one. What's worse,
@@ -47,7 +47,7 @@ def import_pynvml():
     After all the troubles, we decide to copy the official `pynvml`
     module to our codebase, and use it directly.
     """
-    import aphrodite.third_party.pynvml as pynvml
+    import sonar.third_party.pynvml as pynvml
 
     return pynvml
 
@@ -55,7 +55,7 @@ def import_pynvml():
 @cache
 def import_triton_kernels():
     """For convenience, prioritize triton_kernels that is available in
-    `site-packages`. Use `aphrodite.third_party.triton_kernels` as a fall-back.
+    `site-packages`. Use `sonar.third_party.triton_kernels` as a fall-back.
     """
     if _has_module("triton_kernels"):
         import triton_kernels
@@ -63,8 +63,8 @@ def import_triton_kernels():
         logger.debug_once(
             f"Loading module triton_kernels from {triton_kernels.__file__}.",
         )
-    elif _has_module("aphrodite.third_party.triton_kernels"):
-        import aphrodite.third_party.triton_kernels as triton_kernels
+    elif _has_module("sonar.third_party.triton_kernels"):
+        import sonar.third_party.triton_kernels as triton_kernels
 
         logger.debug_once(
             f"Loading module triton_kernels from {triton_kernels.__file__}.",
@@ -122,8 +122,8 @@ def resolve_obj_by_qualname(qualname: str) -> Any:
 
 
 @cache
-def get_aphrodite_optional_dependencies():
-    metadata = importlib.metadata.metadata("aphrodite-engine")
+def get_sonar_optional_dependencies():
+    metadata = importlib.metadata.metadata("sonar")
     requirements = metadata.get_all("Requires-Dist", [])
     extras = metadata.get_all("Provides-Extra", [])
 
@@ -137,7 +137,7 @@ class _PlaceholderBase:
     """Disallows downstream usage of placeholder modules.
 
     We need to explicitly override each dunder method because
-    [`__getattr__`][aphrodite.utils.import_utils._PlaceholderBase.__getattr__]
+    [`__getattr__`][sonar.utils.import_utils._PlaceholderBase.__getattr__]
     is not called when they are accessed.
 
     Info:
@@ -309,9 +309,9 @@ class PlaceholderModule(_PlaceholderBase):
         try:
             importlib.import_module(name)
         except ImportError as exc:
-            for extra, names in get_aphrodite_optional_dependencies().items():
+            for extra, names in get_sonar_optional_dependencies().items():
                 if name in names:
-                    msg = f"Please install aphrodite[{extra}] for {extra} support"
+                    msg = f"Please install sonar[{extra}] for {extra} support"
                     raise ImportError(msg) from exc
 
             raise exc
@@ -411,7 +411,7 @@ def _has_module(module_name: str) -> bool:
 def _has_module_spec(module_name: str) -> bool:
     """Return True if *module_name* is installed, without importing it.
 
-    Unlike [`_has_module`][aphrodite.utils.import_utils._has_module], this only
+    Unlike [`_has_module`][sonar.utils.import_utils._has_module], this only
     resolves the import spec. It therefore does not pay the import cost of
     heavyweight modules, at the price of not verifying that native
     dependencies (shared libraries, etc.) are satisfied. The result is cached.
@@ -440,7 +440,7 @@ def _get_runtime_nccl_version() -> int | None:
     import ctypes
 
     try:
-        from aphrodite.utils.nccl import find_nccl_library
+        from sonar.utils.nccl import find_nccl_library
 
         lib = ctypes.CDLL(find_nccl_library())
         version = ctypes.c_int()
@@ -500,9 +500,9 @@ def has_deep_gemm() -> bool:
 
     Prefers an externally installed ``deep_gemm`` package (so users can
     override with a newer version), then falls back to the vendored copy
-    bundled in the Aphrodite wheel.
+    bundled in the Sonar wheel.
     """
-    return _has_module("deep_gemm") or _has_module("aphrodite.third_party.deep_gemm")
+    return _has_module("deep_gemm") or _has_module("sonar.third_party.deep_gemm")
 
 
 def has_nixl_ep() -> bool:
@@ -542,7 +542,7 @@ def is_numba_available() -> bool:
 
 def has_triton_kernels() -> bool:
     """Whether the optional `triton_kernels` package is available."""
-    is_available = _has_module("triton_kernels") or _has_module("aphrodite.third_party.triton_kernels")
+    is_available = _has_module("triton_kernels") or _has_module("sonar.third_party.triton_kernels")
     if is_available:
         import_triton_kernels()
     return is_available
@@ -579,10 +579,10 @@ def has_tilelang() -> bool:
     if not _has_module_spec("tilelang"):
         return False
     # ROCm-only guard, imported lazily to avoid loading rocm on CUDA.
-    from aphrodite.platforms import current_platform
+    from sonar.platforms import current_platform
 
     if current_platform.is_rocm():
-        from aphrodite.platforms.rocm import on_gfx1250
+        from sonar.platforms.rocm import on_gfx1250
 
         # TODO: Re-enable when tilelang supports gfx1250
         if on_gfx1250():

@@ -11,26 +11,26 @@ from transformers import (
     Qwen2Config,
 )
 
-from aphrodite.config import AphroditeConfig, ModelConfig, SpeechToTextConfig
-from aphrodite.config.multimodal import MultiModalDummyOptions
-from aphrodite.config.speech_to_text import SpeechToTextParams
-from aphrodite.inputs import MultiModalDataDict, PromptType
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.activation import _ACTIVATION_REGISTRY
-from aphrodite.model_executor.layers.linear import (
+from sonar.config import ModelConfig, SonarConfig, SpeechToTextConfig
+from sonar.config.multimodal import MultiModalDummyOptions
+from sonar.config.speech_to_text import SpeechToTextParams
+from sonar.inputs import MultiModalDataDict, PromptType
+from sonar.logger import init_logger
+from sonar.model_executor.layers.activation import _ACTIVATION_REGISTRY
+from sonar.model_executor.layers.linear import (
     ReplicatedLinear,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.models.whisper_utils import (
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.models.whisper_utils import (
     ISO639_1_SUPPORTED_LANGS,
 )
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import (
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import (
     MultiModalFieldConfig,
     MultiModalKwargsItems,
 )
-from aphrodite.multimodal.parse import MultiModalDataItems, MultiModalDataParser
-from aphrodite.multimodal.processing import (
+from sonar.multimodal.parse import MultiModalDataItems, MultiModalDataParser
+from sonar.multimodal.processing import (
     BaseDummyInputsBuilder,
     BaseMultiModalProcessor,
     BaseProcessingInfo,
@@ -38,12 +38,12 @@ from aphrodite.multimodal.processing import (
     PromptUpdate,
     PromptUpdateDetails,
 )
-from aphrodite.multimodal.processing.processor import HFMultiModalInputs
-from aphrodite.transformers_utils.processor import cached_processor_from_config
-from aphrodite.transformers_utils.processors.fireredasr2 import (
+from sonar.multimodal.processing.processor import HFMultiModalInputs
+from sonar.transformers_utils.processor import cached_processor_from_config
+from sonar.transformers_utils.processors.fireredasr2 import (
     FireRedASR2FeatureExtractor,
 )
-from aphrodite.utils.tensor_schema import TensorSchema, TensorShape
+from sonar.utils.tensor_schema import TensorSchema, TensorShape
 
 from .conformer_encoder import ConformerEncoder
 from .interfaces import (
@@ -122,27 +122,27 @@ class FireRedASR2Encoder(nn.Module):
     def __init__(
         self,
         *,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
     ):
         super().__init__()
-        self.audio_encoder = ConformerEncoder(**aphrodite_config.model_config.hf_config.audio_encoder_conf)
+        self.audio_encoder = ConformerEncoder(**sonar_config.model_config.hf_config.audio_encoder_conf)
 
 
 class FireRedASR2Model(nn.Module):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
         self.encoder = FireRedASR2Encoder(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
         )
         encoder_dim = self.encoder.audio_encoder.odim
-        llm_dim = aphrodite_config.model_config.hf_config.hidden_size
+        llm_dim = sonar_config.model_config.hf_config.hidden_size
         self.encoder_projector = FireRedASR2Adapter(
             encoder_dim,
             llm_dim,
-            aphrodite_config.model_config.hf_config.encoder_downsample_rate,
+            sonar_config.model_config.hf_config.encoder_downsample_rate,
         )
 
-        self.decoder = Qwen2ForCausalLM(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "decoder"))
+        self.decoder = Qwen2ForCausalLM(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "decoder"))
 
     def forward(
         self,
@@ -307,7 +307,7 @@ class FireRedASR2ForConditionalGeneration(nn.Module, SupportsTranscription, Supp
         "encoder_attn.kv_proj": ["encoder_attn.k_proj", "encoder_attn.v_proj"],
     }
 
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_substr={
             "llm.": "model.decoder.",
             "encoder.": "model.encoder.audio_encoder.",
@@ -381,19 +381,19 @@ class FireRedASR2ForConditionalGeneration(nn.Module, SupportsTranscription, Supp
         assert hop_length is not None
         return math.ceil(audio_duration_s * stt_config.sample_rate / hop_length)
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
         self.config = config
-        self.dtype = aphrodite_config.model_config.dtype
+        self.dtype = sonar_config.model_config.dtype
 
         with self._mark_composite_model(
-            aphrodite_config,
+            sonar_config,
             language_targets=Qwen2ForCausalLM,
             tower_targets={"audio": (FireRedASR2Encoder, FireRedASR2Adapter)},
         ):
             self.model = FireRedASR2Model(
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 prefix=maybe_prefix(prefix, "model"),
             )
 
@@ -457,4 +457,4 @@ class FireRedASR2ForConditionalGeneration(nn.Module, SupportsTranscription, Supp
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
 
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)

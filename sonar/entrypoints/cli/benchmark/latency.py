@@ -2,13 +2,13 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import argparse
 
-from aphrodite.benchmarks.latency import add_cli_args, main
-from aphrodite.entrypoints.cli.benchmark.base import BenchmarkSubcommandBase
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
+from sonar.benchmarks.latency import add_cli_args, main
+from sonar.entrypoints.cli.benchmark.base import BenchmarkSubcommandBase
+from sonar.utils.argparse_utils import FlexibleArgumentParser
 
 
 class BenchmarkLatencySubcommand(BenchmarkSubcommandBase):
-    """The `latency` subcommand for `aphrodite bench`."""
+    """The `latency` subcommand for `sonar bench`."""
 
     name = "latency"
     help = "Benchmark the latency of a single batch of requests."

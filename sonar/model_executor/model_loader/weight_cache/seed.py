@@ -27,8 +27,8 @@ import time
 from collections.abc import Iterable
 from typing import Any, NamedTuple, Protocol
 
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.model_loader.weight_cache.protocol import (
+from sonar.logger import init_logger
+from sonar.model_executor.model_loader.weight_cache.protocol import (
     recv_json,
     send_json,
 )
@@ -186,7 +186,7 @@ class SeedTransport:
         self._server = socket.create_server(listen, family=family)
         threading.Thread(
             target=self._serve,
-            name="aphrodite-weight-cache-d2d",
+            name="sonar-weight-cache-d2d",
             daemon=True,
         ).start()
         host, port = self._server.getsockname()[:2]

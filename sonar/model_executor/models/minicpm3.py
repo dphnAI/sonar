@@ -29,18 +29,18 @@ import torch
 from torch import nn
 from transformers import PreTrainedConfig
 
-from aphrodite.config import AphroditeConfig, CacheConfig
-from aphrodite.distributed import get_tensor_model_parallel_world_size
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.config import CacheConfig, SonarConfig
+from sonar.distributed import get_tensor_model_parallel_world_size
+from sonar.model_executor.layers.attention import Attention
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     ReplicatedLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.models.minicpm import (
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.models.minicpm import (
     MiniCPMDecoderLayer,
     MiniCPMForCausalLM,
     MiniCPMModel,
@@ -223,5 +223,5 @@ class MiniCPM3ForCausalLM(MiniCPMForCausalLM):
         ],
     }
 
-    def _init_model(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
-        return MiniCPM3Model(aphrodite_config=aphrodite_config, prefix=prefix)
+    def _init_model(self, *, sonar_config: SonarConfig, prefix: str = ""):
+        return MiniCPM3Model(sonar_config=sonar_config, prefix=prefix)

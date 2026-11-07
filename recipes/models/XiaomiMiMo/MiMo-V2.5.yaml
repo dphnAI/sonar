@@ -23,7 +23,7 @@ model:
   base_args:
     - "--trust-remote-code"
     - "--generation-config"
-    - "aphrodite"
+    - "sonar"
   base_env: {}
 
 features:
@@ -90,9 +90,9 @@ guide: |
 
   - Hardware: 4x H200 (TP4)
 
-  ### Pull the Aphrodite docker image
+  ### Pull the Sonar docker image
 
-  Stable Aphrodite does not yet support MiMo V2.5. Use the pre-built image:
+  Stable Sonar does not yet support MiMo V2.5. Use the pre-built image:
 
   ```bash
   docker pull vllm/vllm-openai:mimov25-cu129
@@ -103,18 +103,18 @@ guide: |
   Single-node TP4 (H200):
 
   ```bash
-  aphrodite serve XiaomiMiMo/MiMo-V2.5 \
+  sonar serve XiaomiMiMo/MiMo-V2.5 \
     --tensor-parallel-size 4 \
     --trust-remote-code \
     --gpu-memory-utilization 0.95 \
     --max-model-len auto \
-    --generation-config aphrodite
+    --generation-config sonar
   ```
 
   With tool calling + reasoning:
 
   ```bash
-  aphrodite serve XiaomiMiMo/MiMo-V2.5 \
+  sonar serve XiaomiMiMo/MiMo-V2.5 \
     --tensor-parallel-size 4 \
     --trust-remote-code \
     --gpu-memory-utilization 0.95 \
@@ -122,7 +122,7 @@ guide: |
     --reasoning-parser mimo \
     --tool-call-parser mimo \
     --enable-auto-tool-choice \
-    --generation-config aphrodite
+    --generation-config sonar
   ```
 
   Tunable flags:
@@ -150,7 +150,7 @@ guide: |
 
   ### VisionArena-Chat
   ```
-  aphrodite bench serve \
+  sonar bench serve \
     --model XiaomiMiMo/MiMo-V2.5 \
     --backend openai-chat \
     --endpoint /v1/chat/completions \
@@ -161,7 +161,7 @@ guide: |
 
   ### Random Synthetic
   ```bash
-  aphrodite bench serve \
+  sonar bench serve \
     --model XiaomiMiMo/MiMo-V2.5 \
     --dataset-name random --random-input-len 8000 --random-output-len 1000 \
     --request-rate 3 --num-prompts 1800 --ignore-eos

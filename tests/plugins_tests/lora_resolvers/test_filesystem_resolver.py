@@ -5,8 +5,8 @@ import shutil
 
 import pytest
 
-from aphrodite.plugins.lora_resolvers.filesystem_resolver import FilesystemResolver
-from aphrodite.transformers_utils.repo_utils import hf_api
+from sonar.plugins.lora_resolvers.filesystem_resolver import FilesystemResolver
+from sonar.transformers_utils.repo_utils import hf_api
 
 MODEL_NAME = "Qwen/Qwen3-0.6B"
 LORA_NAME = "charent/self_cognition_Alice"

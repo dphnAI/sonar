@@ -5,14 +5,14 @@
 import functools
 from dataclasses import replace
 
-from aphrodite.parser.deepseek_v4 import (
+from sonar.parser.deepseek_v4 import (
     DeepSeekV4Parser,
     _dsml_arg_converter,
     _dsml_arg_value_extender,
     _param_patterns,
     deepseek_v4_config,
 )
-from aphrodite.parser.engine.parser_engine_config import ParserEngineConfig
+from sonar.parser.engine.parser_engine_config import ParserEngineConfig
 
 DSML_TOOL_START = "<｜DSML｜ calls>"
 DSML_TOOL_END = "</｜DSML｜ calls>"

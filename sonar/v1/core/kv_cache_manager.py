@@ -6,17 +6,17 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Literal, overload
 
-from aphrodite.distributed.kv_events import BlockStored, KVCacheEventType
-from aphrodite.logger import init_logger
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.v1.core.kv_cache_coordinator import (
+from sonar.distributed.kv_events import BlockStored, KVCacheEventType
+from sonar.logger import init_logger
+from sonar.utils.math_utils import cdiv
+from sonar.v1.core.kv_cache_coordinator import (
     HybridKVCacheCoordinator,
     get_kv_cache_coordinator,
 )
-from aphrodite.v1.core.kv_cache_metrics import KVCacheMetricsCollector
-from aphrodite.v1.core.kv_cache_utils import KVCacheBlock, KVCacheBlockCopy, trim_null_head
-from aphrodite.v1.core.single_type_kv_cache_manager import MambaManager
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.core.kv_cache_metrics import KVCacheMetricsCollector
+from sonar.v1.core.kv_cache_utils import KVCacheBlock, KVCacheBlockCopy, trim_null_head
+from sonar.v1.core.single_type_kv_cache_manager import MambaManager
+from sonar.v1.kv_cache_interface import (
     AttentionSpec,
     CrossAttentionSpec,
     EncoderOnlyAttentionSpec,
@@ -25,8 +25,8 @@ from aphrodite.v1.kv_cache_interface import (
     get_kv_cache_spec_kind,
     get_kv_cache_spec_sliding_window,
 )
-from aphrodite.v1.metrics.stats import PrefixCacheStats
-from aphrodite.v1.request import Request, RequestStatus
+from sonar.v1.metrics.stats import PrefixCacheStats
+from sonar.v1.request import Request, RequestStatus
 
 logger = init_logger(__name__)
 
@@ -374,7 +374,7 @@ class KVCacheManager:
                 This is used by spec decode proposers with kv-cache such
                 as eagle.
             num_external_computed_tokens: The number of tokens that their
-                KV caches are not cached by Aphrodite but cached by the connector.
+                KV caches are not cached by Sonar but cached by the connector.
             delay_cache_blocks: Whether to skip caching the blocks. This is
                 used by P/D when allocating blocks used in a KV transfer
                 which will complete in a future step.
@@ -407,12 +407,12 @@ class KVCacheManager:
                                   | < to be cached (roughly, |
                                   | details below)>          |
         ----------------------------------------------------------------------
-        | Prefix-cached tokens from either Aphrodite   |
+        | Prefix-cached tokens from either Sonar   |
         | or connector. Can be safely removed if  |
         | they are outside sliding window.        |
         ----------------------------------------------------------------------
-        |   < cached by Aphrodite >    | not cached by |
-                                  | Aphrodite, but     |
+        |   < cached by Sonar >    | not cached by |
+                                  | Sonar, but     |
         | ref_cnt  | ref_cnt not  | cached by     |
         | increased| increased yet| connector     |
         ----------------------------------------------------------------------

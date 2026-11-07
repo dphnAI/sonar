@@ -13,7 +13,7 @@ from dataclasses import dataclass, replace
 
 import torch
 
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import QuantKey
+from sonar.model_executor.layers.quantization.utils.quant_utils import QuantKey
 
 
 @dataclass
@@ -37,7 +37,7 @@ class QuantizedActivation:
 
     def weak_ref(self) -> "QuantizedActivation":
         """Return a copy with non-owning tensor references for CUDA graph replay."""
-        from aphrodite.utils.torch_utils import weak_ref_tensor
+        from sonar.utils.torch_utils import weak_ref_tensor
 
         return replace(
             self,

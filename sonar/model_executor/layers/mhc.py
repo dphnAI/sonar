@@ -5,12 +5,12 @@ import inspect
 import torch
 
 # this import will also register the custom ops
-# import aphrodite.model_executor.kernels.mhc  # noqa: F401
-import aphrodite.model_executor.kernels.mhc as mhc_kernels
-from aphrodite._aiter_ops import is_aiter_found_and_supported
-from aphrodite.model_executor.custom_op import CustomOp
-from aphrodite.platforms import current_platform
-from aphrodite.utils.import_utils import has_tilelang
+# import sonar.model_executor.kernels.mhc  # noqa: F401
+import sonar.model_executor.kernels.mhc as mhc_kernels
+from sonar._aiter_ops import is_aiter_found_and_supported
+from sonar.model_executor.custom_op import CustomOp
+from sonar.platforms import current_platform
+from sonar.utils.import_utils import has_tilelang
 
 
 def _has_tilelang_mhc() -> bool:
@@ -19,7 +19,7 @@ def _has_tilelang_mhc() -> bool:
     if current_platform.is_cuda():
         return True
     if current_platform.is_rocm():
-        from aphrodite.platforms.rocm import on_gfx942
+        from sonar.platforms.rocm import on_gfx942
 
         # TileLang MHC currently produces incorrect results on gfx942. Keep
         # gfx942 on the existing torch/triton fallbacks until that path is fixed.
@@ -62,7 +62,7 @@ def _aiter_mhc_op_accepts_norm(op_name: str) -> bool:
 def _has_aiter_mhc_fused_post_pre_delayed_rms_norm() -> bool:
     if not HAS_AITER_MHC:
         return False
-    from aphrodite.platforms.rocm import on_gfx950
+    from sonar.platforms.rocm import on_gfx950
 
     # The fused delayed seam kernel is only validated on gfx950.
     return on_gfx950()
@@ -92,7 +92,7 @@ def _apply_mhc_norm(
 ) -> torch.Tensor:
     if norm_weight is None:
         return layer_input
-    from aphrodite import ir
+    from sonar import ir
 
     return ir.ops.rms_norm(layer_input, norm_weight, norm_eps)
 
@@ -127,7 +127,7 @@ class MHCPreOp(CustomOp):
         norm_weight: torch.Tensor | None = None,
         norm_eps: float = 0.0,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        return torch.ops.aphrodite.mhc_pre_tilelang(
+        return torch.ops.sonar.mhc_pre_tilelang(
             residual,
             fn,
             hc_scale,
@@ -162,7 +162,7 @@ class MHCPreOp(CustomOp):
             norm_weight,
             supports_norm=HAS_AITER_MHC_PRE_NORM,
         ):
-            return torch.ops.aphrodite.mhc_pre_aiter(
+            return torch.ops.sonar.mhc_pre_aiter(
                 residual,
                 fn,
                 hc_scale,
@@ -177,7 +177,7 @@ class MHCPreOp(CustomOp):
                 norm_eps,
             )
         elif HAS_TILELANG_MHC:
-            return torch.ops.aphrodite.mhc_pre_tilelang(
+            return torch.ops.sonar.mhc_pre_tilelang(
                 residual,
                 fn,
                 hc_scale,
@@ -321,7 +321,7 @@ class MHCPreDelayedOp(CustomOp):
     def __init__(self) -> None:
         super().__init__()
         # Built here, not lazily: CustomOp resolves dispatch against the
-        # current Aphrodite config, which is only set during model construction.
+        # current Sonar config, which is only set during model construction.
         self._post = MHCPostOp()
 
     def _maybe_post(
@@ -356,7 +356,7 @@ class MHCPreDelayedOp(CustomOp):
         comb_res_mix: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         residual = self._maybe_post(residual, sublayer_out, post_layer_mix, comb_res_mix)
-        return residual, *torch.ops.aphrodite.mhc_pre_delayed_tilelang(
+        return residual, *torch.ops.sonar.mhc_pre_delayed_tilelang(
             residual,
             fn,
             hc_scale,
@@ -401,7 +401,7 @@ class MHCPreDelayedOp(CustomOp):
             and _aiter_mhc_supported(residual, norm_weight, supports_norm=True)
         ):
             residual_out = torch.empty_like(residual) if sublayer_out is not None else None
-            rest = torch.ops.aphrodite.mhc_fused_post_pre_delayed_rms_norm_aiter(
+            rest = torch.ops.sonar.mhc_fused_post_pre_delayed_rms_norm_aiter(
                 residual,
                 fn,
                 hc_scale,
@@ -426,7 +426,7 @@ class MHCPreDelayedOp(CustomOp):
         # above did not take. Both are handled by TileLang, or by the reference
         # when TileLang is unavailable.
         if x is None and norm_weight is None and _aiter_mhc_supported(residual, None, supports_norm=False):
-            from aphrodite._aiter_ops import rocm_aiter_ops
+            from sonar._aiter_ops import rocm_aiter_ops
 
             num_tokens = residual.numel() // (residual.shape[-1] * residual.shape[-2])
             # Folding the post in only pays while the residual still fits in
@@ -439,7 +439,7 @@ class MHCPreDelayedOp(CustomOp):
             # than returning it, since on the unfused path it has none of its
             # own and an op must not hand back one of its inputs.
             residual_out = torch.empty_like(residual) if sublayer_out is not None else None
-            rest = torch.ops.aphrodite.mhc_pre_delayed_aiter(
+            rest = torch.ops.sonar.mhc_pre_delayed_aiter(
                 residual,
                 fn,
                 hc_scale,
@@ -458,7 +458,7 @@ class MHCPreDelayedOp(CustomOp):
             return (residual if residual_out is None else residual_out), *rest
         residual = self._maybe_post(residual, sublayer_out, post_layer_mix, comb_res_mix)
         if HAS_TILELANG_MHC:
-            return residual, *torch.ops.aphrodite.mhc_pre_delayed_tilelang(
+            return residual, *torch.ops.sonar.mhc_pre_delayed_tilelang(
                 residual,
                 fn,
                 hc_scale,
@@ -554,7 +554,7 @@ class MHCPostOp(CustomOp):
         post_layer_mix: torch.Tensor,
         comb_res_mix: torch.Tensor,
     ) -> torch.Tensor:
-        return torch.ops.aphrodite.mhc_post_tilelang(x, residual, post_layer_mix, comb_res_mix)
+        return torch.ops.sonar.mhc_post_tilelang(x, residual, post_layer_mix, comb_res_mix)
 
     def forward_hip(
         self,
@@ -564,14 +564,14 @@ class MHCPostOp(CustomOp):
         comb_res_mix: torch.Tensor,
     ) -> torch.Tensor:
         if _aiter_mhc_supported(residual, None, supports_norm=True):
-            return torch.ops.aphrodite.mhc_post_aiter(
+            return torch.ops.sonar.mhc_post_aiter(
                 x,
                 residual,
                 post_layer_mix,
                 comb_res_mix,
             )
         if HAS_TILELANG_MHC:
-            return torch.ops.aphrodite.mhc_post_tilelang(x, residual, post_layer_mix, comb_res_mix)
+            return torch.ops.sonar.mhc_post_tilelang(x, residual, post_layer_mix, comb_res_mix)
         else:
             return self.forward_native(x, residual, post_layer_mix, comb_res_mix)
 
@@ -640,7 +640,7 @@ class HCHeadOp(CustomOp):
         hc_mult, hidden_size = hidden_states.shape[-2:]
         outer_shape = hidden_states.shape[:-2]
         hs_flat = hidden_states.view(-1, hc_mult, hidden_size)
-        out = torch.ops.aphrodite.hc_head_fused_kernel_tilelang(
+        out = torch.ops.sonar.hc_head_fused_kernel_tilelang(
             hs_flat,
             hc_fn,
             hc_scale,
@@ -664,7 +664,7 @@ class HCHeadOp(CustomOp):
         hs_flat = hidden_states.view(-1, hc_mult, hidden_size)
 
         if HAS_TILELANG_MHC:
-            out = torch.ops.aphrodite.hc_head_fused_kernel_tilelang(
+            out = torch.ops.sonar.hc_head_fused_kernel_tilelang(
                 hs_flat,
                 hc_fn,
                 hc_scale,
@@ -680,7 +680,7 @@ class HCHeadOp(CustomOp):
                 dtype=torch.bfloat16,
                 device=hidden_states.device,
             )
-            torch.ops.aphrodite.hc_head_triton(
+            torch.ops.sonar.hc_head_triton(
                 hs_flat,
                 hc_fn,
                 hc_scale,
@@ -761,7 +761,7 @@ class MHCFusedPostPreOp(CustomOp):
         norm_weight: torch.Tensor | None = None,
         norm_eps: float = 0.0,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        return torch.ops.aphrodite.mhc_fused_post_pre_tilelang(
+        return torch.ops.sonar.mhc_fused_post_pre_tilelang(
             x,
             residual,
             post_layer_mix,
@@ -804,7 +804,7 @@ class MHCFusedPostPreOp(CustomOp):
             norm_weight,
             supports_norm=HAS_AITER_MHC_FUSED_NORM,
         ):
-            return torch.ops.aphrodite.mhc_fused_post_pre_aiter(
+            return torch.ops.sonar.mhc_fused_post_pre_aiter(
                 x,
                 residual,
                 post_layer_mix,
@@ -823,7 +823,7 @@ class MHCFusedPostPreOp(CustomOp):
                 norm_eps,
             )
         if HAS_TILELANG_MHC:
-            return torch.ops.aphrodite.mhc_fused_post_pre_tilelang(
+            return torch.ops.sonar.mhc_fused_post_pre_tilelang(
                 x,
                 residual,
                 post_layer_mix,

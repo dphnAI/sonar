@@ -1,22 +1,22 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-//! Thin PyO3 bindings for `aphrodite_parser::tool`.
+//! Thin PyO3 bindings for `sonar_parser::tool`.
 //!
 //! This crate exposes the Rust tool parser trait and data shapes to Python
 //! while keeping parser state, grammar, and schema-aware argument conversion in
 //! Rust. Python callers should use this module as a typed bridge and keep any
-//! Aphrodite protocol adaptation outside the binding.
+//! Sonar protocol adaptation outside the binding.
 
 use std::sync::Arc;
 
-use aphrodite_parser::tool::{Tool, ToolCallDelta, ToolParser, ToolParserOutput};
-use aphrodite_tokenizer::{DecodedText, DynTokenizer, Tokenizer, TokenizerError};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyModule};
 use pythonize::{depythonize, pythonize};
 use serde_json::Value;
+use sonar_parser::tool::{Tool, ToolCallDelta, ToolParser, ToolParserOutput};
+use sonar_tokenizer::{DecodedText, DynTokenizer, Tokenizer, TokenizerError};
 use thiserror_ext::AsReport as _;
 
 /// Tokenizer of the text-only Python boundary.
@@ -28,7 +28,7 @@ use thiserror_ext::AsReport as _;
 struct TextOnlyTokenizer;
 
 impl TextOnlyTokenizer {
-    fn unavailable<T>() -> aphrodite_tokenizer::Result<T> {
+    fn unavailable<T>() -> sonar_tokenizer::Result<T> {
         Err(TokenizerError(
             "the Python tool-parser bridge has no tokenizer vocabulary".to_owned(),
         ))
@@ -36,15 +36,11 @@ impl TextOnlyTokenizer {
 }
 
 impl Tokenizer for TextOnlyTokenizer {
-    fn encode(
-        &self,
-        _text: &str,
-        _add_special_tokens: bool,
-    ) -> aphrodite_tokenizer::Result<Vec<u32>> {
+    fn encode(&self, _text: &str, _add_special_tokens: bool) -> sonar_tokenizer::Result<Vec<u32>> {
         Self::unavailable()
     }
 
-    fn encode_ordinary(&self, _text: &str) -> aphrodite_tokenizer::Result<Vec<u32>> {
+    fn encode_ordinary(&self, _text: &str) -> sonar_tokenizer::Result<Vec<u32>> {
         Self::unavailable()
     }
 
@@ -52,7 +48,7 @@ impl Tokenizer for TextOnlyTokenizer {
         &self,
         _token_ids: &[u32],
         _skip_special_tokens: bool,
-    ) -> aphrodite_tokenizer::Result<String> {
+    ) -> sonar_tokenizer::Result<String> {
         Self::unavailable()
     }
 
@@ -75,7 +71,7 @@ macro_rules! tool_parser_factory {
             match name {
                 $(
                     stringify!($parser) => {
-                        <aphrodite_parser::tool::$parser as ToolParser>::create(tools, tokenizer)
+                        <sonar_parser::tool::$parser as ToolParser>::create(tools, tokenizer)
                     }
                 )+
                 _ => {
@@ -98,11 +94,7 @@ tool_parser_factory! {
     KimiK2ToolParser,
 }
 
-#[pyclass(
-    name = "Tool",
-    module = "aphrodite._rust_tool_parser",
-    skip_from_py_object
-)]
+#[pyclass(name = "Tool", module = "sonar._rust_tool_parser", skip_from_py_object)]
 #[derive(Clone)]
 struct PyTool(Tool);
 
@@ -163,7 +155,7 @@ impl PyTool {
 
 #[pyclass(
     name = "ToolCallDelta",
-    module = "aphrodite._rust_tool_parser",
+    module = "sonar._rust_tool_parser",
     skip_from_py_object
 )]
 #[derive(Clone)]
@@ -199,7 +191,7 @@ impl PyToolCallDelta {
 
 #[pyclass(
     name = "ToolParserOutput",
-    module = "aphrodite._rust_tool_parser",
+    module = "sonar._rust_tool_parser",
     skip_from_py_object
 )]
 #[derive(Clone)]
@@ -237,11 +229,7 @@ impl PyToolParserOutput {
     }
 }
 
-#[pyclass(
-    name = "ToolParser",
-    module = "aphrodite._rust_tool_parser",
-    unsendable
-)]
+#[pyclass(name = "ToolParser", module = "sonar._rust_tool_parser", unsendable)]
 struct PyToolParser(Box<dyn ToolParser>);
 
 impl PyToolParser {

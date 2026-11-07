@@ -16,17 +16,17 @@ from typing import TYPE_CHECKING, Any, Generic, Protocol, TypeVar
 import numpy as np
 import torch
 
-from aphrodite.sampling_params import SamplerID, SamplingParams
-from aphrodite.v1.sample.logits_processor import LogitsProcessors
-from aphrodite.v1.sample.metadata import SamplingMetadata
-from aphrodite.v1.sample.ops import SamplingOps
-from aphrodite.v1.sample.ops.temperatures import apply_all_temperatures
-from aphrodite.v1.sample.ops.topk_topp_sampler import apply_top_k_top_p
+from sonar.sampling_params import SamplerID, SamplingParams
+from sonar.v1.sample.logits_processor import LogitsProcessors
+from sonar.v1.sample.metadata import SamplingMetadata
+from sonar.v1.sample.ops import SamplingOps
+from sonar.v1.sample.ops.temperatures import apply_all_temperatures
+from sonar.v1.sample.ops.topk_topp_sampler import apply_top_k_top_p
 
 if TYPE_CHECKING:
     # Annotation-only: the standalone CPU runner reuses this module without
     # importing GPU worker state.
-    from aphrodite.v1.worker.gpu.states import RequestState
+    from sonar.v1.worker.gpu.states import RequestState
 
 
 class ForkRequestStates(Protocol):
@@ -360,7 +360,7 @@ class ForkSamplingState(ABC, Generic[StatesT]):
                     updates[row, col] = updates.new_tensor((offset + 1, next_mu, 1))
             state.pending.clear()
         if torch.distributed.is_initialized():
-            from aphrodite.distributed.parallel_state import get_tp_group
+            from sonar.distributed.parallel_state import get_tp_group
 
             group = get_tp_group()
             if group.world_size > 1:

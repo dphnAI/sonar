@@ -18,18 +18,18 @@ fptr_t init_custom_ar(const std::vector<fptr_t>& fake_ipc_ptrs,
                       torch::stable::Tensor& rank_data, int64_t rank,
                       bool fully_connected) {
   int world_size = fake_ipc_ptrs.size();
-  if (world_size > aphrodite::kMaxCustomCollectiveRanks)
+  if (world_size > sonar::kMaxCustomCollectiveRanks)
     throw std::invalid_argument("world size > 16 is not supported");
   if (world_size % 2 != 0)
     throw std::invalid_argument("Odd num gpus is not supported for now");
   if (rank < 0 || rank >= world_size)
     throw std::invalid_argument("invalid rank passed in");
 
-  aphrodite::Signal* ipc_ptrs[aphrodite::kMaxCustomCollectiveRanks];
+  sonar::Signal* ipc_ptrs[sonar::kMaxCustomCollectiveRanks];
   for (int i = 0; i < world_size; i++) {
-    ipc_ptrs[i] = reinterpret_cast<aphrodite::Signal*>(fake_ipc_ptrs[i]);
+    ipc_ptrs[i] = reinterpret_cast<sonar::Signal*>(fake_ipc_ptrs[i]);
   }
-  return (fptr_t) new aphrodite::CustomAllreduce(
+  return (fptr_t) new sonar::CustomAllreduce(
       ipc_ptrs, rank_data.mutable_data_ptr(), rank_data.numel(), rank,
       world_size, fully_connected);
 }
@@ -70,7 +70,7 @@ bool _is_weak_contiguous(torch::stable::Tensor& t) {
 void all_reduce(fptr_t _fa, torch::stable::Tensor& inp,
                 torch::stable::Tensor& out, fptr_t _reg_buffer,
                 int64_t reg_buffer_sz_bytes) {
-  auto fa = reinterpret_cast<aphrodite::CustomAllreduce*>(_fa);
+  auto fa = reinterpret_cast<sonar::CustomAllreduce*>(_fa);
   const torch::stable::accelerator::DeviceGuard device_guard(
       inp.get_device_index());
   const cudaStream_t stream = get_current_cuda_stream(inp.get_device_index());
@@ -116,15 +116,15 @@ void all_reduce(fptr_t _fa, torch::stable::Tensor& inp,
 }
 
 void dispose(fptr_t _fa) {
-  delete reinterpret_cast<aphrodite::CustomAllreduce*>(_fa);
+  delete reinterpret_cast<sonar::CustomAllreduce*>(_fa);
 }
 
-int64_t meta_size() { return sizeof(aphrodite::Signal); }
+int64_t meta_size() { return sizeof(sonar::Signal); }
 
 void register_buffer(fptr_t _fa, const std::vector<fptr_t>& fake_ipc_ptrs) {
-  auto fa = reinterpret_cast<aphrodite::CustomAllreduce*>(_fa);
+  auto fa = reinterpret_cast<sonar::CustomAllreduce*>(_fa);
   STD_TORCH_CHECK(fake_ipc_ptrs.size() == fa->world_size_);
-  void* ipc_ptrs[aphrodite::kMaxCustomCollectiveRanks];
+  void* ipc_ptrs[sonar::kMaxCustomCollectiveRanks];
   for (int i = 0; i < fake_ipc_ptrs.size(); i++) {
     ipc_ptrs[i] = reinterpret_cast<void*>(fake_ipc_ptrs[i]);
   }
@@ -134,7 +134,7 @@ void register_buffer(fptr_t _fa, const std::vector<fptr_t>& fake_ipc_ptrs) {
 // Use vector<int64_t> to represent byte data for python binding compatibility.
 std::tuple<std::vector<int64_t>, std::vector<int64_t>>
 get_graph_buffer_ipc_meta(fptr_t _fa) {
-  auto fa = reinterpret_cast<aphrodite::CustomAllreduce*>(_fa);
+  auto fa = reinterpret_cast<sonar::CustomAllreduce*>(_fa);
   auto [handle, offsets] = fa->get_graph_buffer_ipc_meta();
   std::vector<int64_t> bytes(handle.begin(), handle.end());
   return std::make_tuple(bytes, offsets);
@@ -144,7 +144,7 @@ get_graph_buffer_ipc_meta(fptr_t _fa) {
 void register_graph_buffers(fptr_t _fa,
                             const std::vector<std::vector<int64_t>>& handles,
                             const std::vector<std::vector<int64_t>>& offsets) {
-  auto fa = reinterpret_cast<aphrodite::CustomAllreduce*>(_fa);
+  auto fa = reinterpret_cast<sonar::CustomAllreduce*>(_fa);
   std::vector<std::string> bytes;
   bytes.reserve(handles.size());
   for (int i = 0; i < handles.size(); i++) {

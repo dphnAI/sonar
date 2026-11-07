@@ -2,8 +2,8 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """DeepseekV4 rotary embedding initialization."""
 
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.layers.rotary_embedding.base import RotaryEmbedding
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.layers.rotary_embedding.base import RotaryEmbedding
 
 
 def build_deepseek_v4_rope(

@@ -17,12 +17,12 @@ import torch
 import torch.distributed as dist
 from torch.distributed import ProcessGroup
 
-from aphrodite.distributed.parallel_state import in_the_same_node_as
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
+from sonar.distributed.parallel_state import in_the_same_node_as
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
 
 if TYPE_CHECKING:
-    from aphrodite.v1.worker.gpu_worker import Worker
+    from sonar.v1.worker.gpu_worker import Worker
 
 logger = init_logger(__name__)
 
@@ -39,7 +39,7 @@ except ImportError:
 
 
 class FlashInferPcieIpcAllReduce:
-    """Aphrodite lifecycle wrapper for FlashInfer's PCIe IPC all-reduce."""
+    """Sonar lifecycle wrapper for FlashInfer's PCIe IPC all-reduce."""
 
     def __init__(
         self,
@@ -193,11 +193,11 @@ class FlashInferPcieIpcAllReduce:
 
 def warmup_flashinfer_pcie_ipc_allreduce(worker: "Worker") -> None:
     """Initialize the TP PCIe IPC backend immediately before graph capture."""
-    from aphrodite.distributed.device_communicators.cuda_communicator import (
+    from sonar.distributed.device_communicators.cuda_communicator import (
         CudaCommunicator,
     )
-    from aphrodite.distributed.parallel_state import get_tp_group
-    from aphrodite.model_executor.warmup.flashinfer_autotune_cache import (
+    from sonar.distributed.parallel_state import get_tp_group
+    from sonar.model_executor.warmup.flashinfer_autotune_cache import (
         resolve_flashinfer_autotune_file,
     )
 
@@ -208,7 +208,7 @@ def warmup_flashinfer_pcie_ipc_allreduce(worker: "Worker") -> None:
     pcie_comm = communicator.fi_pcie_ipc_ar_comm
     if pcie_comm is None or pcie_comm.disabled:
         return
-    if worker.aphrodite_config.parallel_config.use_ubatching:
+    if worker.sonar_config.parallel_config.use_ubatching:
         logger.warning_once(
             "FlashInfer PCIe IPC all-reduce does not yet support DBO or "
             "multi-ubatch execution; falling back to another backend."
@@ -216,12 +216,12 @@ def warmup_flashinfer_pcie_ipc_allreduce(worker: "Worker") -> None:
         pcie_comm.disabled = True
         return
 
-    from aphrodite.v1.worker.gpu.cudagraph_utils import (
+    from sonar.v1.worker.gpu.cudagraph_utils import (
         CudaGraphManager,
         get_speculator_cudagraph_managers,
     )
 
-    capture_sizes = set(worker.aphrodite_config.compilation_config.cudagraph_capture_sizes or ())
+    capture_sizes = set(worker.sonar_config.compilation_config.cudagraph_capture_sizes or ())
     runner = worker.model_runner
     managers = [getattr(runner, "cudagraph_manager", None)]
     managers.extend(get_speculator_cudagraph_managers(getattr(runner, "speculator", None)).values())

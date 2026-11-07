@@ -6,24 +6,24 @@ from __future__ import annotations
 import torch
 import torch.nn.functional as F
 
-import aphrodite._custom_ops as ops
-from aphrodite.forward_context import ForwardContext, get_forward_context
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.mamba.mamba_utils import is_conv_state_dim_first
-from aphrodite.model_executor.layers.mamba.ops.cpu.causal_conv1d import (
+import sonar._custom_ops as ops
+from sonar.forward_context import ForwardContext, get_forward_context
+from sonar.logger import init_logger
+from sonar.model_executor.layers.mamba.mamba_utils import is_conv_state_dim_first
+from sonar.model_executor.layers.mamba.ops.cpu.causal_conv1d import (
     causal_conv1d_fn_cpu as causal_conv1d_torch,
 )
-from aphrodite.model_executor.layers.mamba.ops.cpu.causal_conv1d import (
+from sonar.model_executor.layers.mamba.ops.cpu.causal_conv1d import (
     causal_conv1d_update_cpu,
 )
-from aphrodite.platforms import CpuArchEnum, current_platform
-from aphrodite.triton_utils import HAS_TRITON
-from aphrodite.utils.torch_utils import (
+from sonar.platforms import CpuArchEnum, current_platform
+from sonar.triton_utils import HAS_TRITON
+from sonar.utils.torch_utils import (
     LayerNameType,
     _resolve_layer_name,
     direct_register_custom_op,
 )
-from aphrodite.v1.attention.backends.gdn_attn import GDNAttentionMetadata
+from sonar.v1.attention.backends.gdn_attn import GDNAttentionMetadata
 
 logger = init_logger(__name__)
 

@@ -8,16 +8,16 @@ from typing import ClassVar, Protocol, cast
 
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.v1.attention.backend import (
+from sonar.config import SonarConfig
+from sonar.v1.attention.backend import (
     AttentionBackend,
     AttentionCGSupport,
     AttentionImpl,
     AttentionMetadataBuilder,
     CommonAttentionMetadata,
 )
-from aphrodite.v1.attention.backends.utils import get_supported_kv_cache_layouts
-from aphrodite.v1.kv_cache_interface import KVCacheSpec
+from sonar.v1.attention.backends.utils import get_supported_kv_cache_layouts
+from sonar.v1.kv_cache_interface import KVCacheSpec
 
 
 def requires_mm_prefix(metadata: CommonAttentionMetadata, *, unclamped_window: bool = False) -> bool:
@@ -59,14 +59,14 @@ class CompositeAttentionRouting(Protocol):
     capture_variant: ClassVar[int]
     """Child used during graph capture; replay must select the same child."""
 
-    def __init__(self, layer_names: list[str], aphrodite_config: AphroditeConfig) -> None: ...
+    def __init__(self, layer_names: list[str], sonar_config: SonarConfig) -> None: ...
 
     def select(self, metadata: CommonAttentionMetadata) -> int:
         """Return 0 for the first child or 1 for the second child."""
         ...
 
     @staticmethod
-    def get_cudagraph_support(aphrodite_config: AphroditeConfig, kv_cache_spec: KVCacheSpec) -> AttentionCGSupport:
+    def get_cudagraph_support(sonar_config: SonarConfig, kv_cache_spec: KVCacheSpec) -> AttentionCGSupport:
         """Limit graph support to batches whose routing stays invariant."""
         ...
 
@@ -79,8 +79,8 @@ class CompositeAttentionRouting(Protocol):
 class MMPrefixAttentionRouting(CompositeAttentionRouting):
     """Route image masks to variant zero and causal queries to variant one."""
 
-    def __init__(self, layer_names: list[str], aphrodite_config: AphroditeConfig) -> None:
-        layers = aphrodite_config.compilation_config.static_forward_context
+    def __init__(self, layer_names: list[str], sonar_config: SonarConfig) -> None:
+        layers = sonar_config.compilation_config.static_forward_context
         self.unclamped_window = _has_unclamped_window(layers[name] for name in layer_names)
 
     def select(self, metadata: CommonAttentionMetadata) -> int:
@@ -89,8 +89,8 @@ class MMPrefixAttentionRouting(CompositeAttentionRouting):
     capture_variant: ClassVar[int] = 1
 
     @staticmethod
-    def get_cudagraph_support(aphrodite_config: AphroditeConfig, kv_cache_spec: KVCacheSpec) -> AttentionCGSupport:
-        if _has_unclamped_window(aphrodite_config.compilation_config.static_forward_context.values()):
+    def get_cudagraph_support(sonar_config: SonarConfig, kv_cache_spec: KVCacheSpec) -> AttentionCGSupport:
+        if _has_unclamped_window(sonar_config.compilation_config.static_forward_context.values()):
             return AttentionCGSupport.NEVER
         return AttentionCGSupport.UNIFORM_SINGLE_TOKEN_DECODE
 
@@ -104,7 +104,7 @@ def _intersect_kernel_block_sizes(
     second: type[AttentionBackend],
     kv_cache_spec: KVCacheSpec | None = None,
 ):
-    from aphrodite.v1.attention.backend import MultipleOf
+    from sonar.v1.attention.backend import MultipleOf
 
     result: list[int | MultipleOf] = []
     seen: set[tuple[type, int]] = set()
@@ -245,9 +245,9 @@ def create_composite_attention_backend(
             general_builder_cls.requires_block_table_width or causal_builder_cls.requires_block_table_width
         )
 
-        def __init__(self, kv_cache_spec, layer_names, aphrodite_config, device, **kwargs):
-            super().__init__(kv_cache_spec, layer_names, aphrodite_config, device)
-            args = (kv_cache_spec, layer_names, aphrodite_config, device)
+        def __init__(self, kv_cache_spec, layer_names, sonar_config, device, **kwargs):
+            super().__init__(kv_cache_spec, layer_names, sonar_config, device)
+            args = (kv_cache_spec, layer_names, sonar_config, device)
             # Only the variant that asked for the extra ctor kwargs receives them.
             self.general_builder = general_builder_cls(
                 *args,
@@ -265,14 +265,14 @@ def create_composite_attention_backend(
                 ),
                 default=None,
             )
-            self.routing = routing_policy(layer_names, aphrodite_config)
+            self.routing = routing_policy(layer_names, sonar_config)
 
         @classmethod
-        def get_cudagraph_support(cls, aphrodite_config, kv_cache_spec):
+        def get_cudagraph_support(cls, sonar_config, kv_cache_spec):
             return min(
-                general_builder_cls.get_cudagraph_support(aphrodite_config, kv_cache_spec),
-                causal_builder_cls.get_cudagraph_support(aphrodite_config, kv_cache_spec),
-                routing_policy.get_cudagraph_support(aphrodite_config, kv_cache_spec),
+                general_builder_cls.get_cudagraph_support(sonar_config, kv_cache_spec),
+                causal_builder_cls.get_cudagraph_support(sonar_config, kv_cache_spec),
+                routing_policy.get_cudagraph_support(sonar_config, kv_cache_spec),
                 key=lambda support: support.value,
             )
 

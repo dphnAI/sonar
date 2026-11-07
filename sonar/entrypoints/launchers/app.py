@@ -5,12 +5,12 @@ from argparse import Namespace
 
 from fastapi import FastAPI
 
-from aphrodite.config import ModelConfig
-from aphrodite.entrypoints.serve.exception_handling.register import init_exception_handler
-from aphrodite.entrypoints.serve.middleware.register import init_entrypoints_middleware
-from aphrodite.entrypoints.serve.sagemaker.api_router import sagemaker_standards_bootstrap
-from aphrodite.plugins.endpoint_plugins.interface import attach_endpoint_plugins
-from aphrodite.tasks import FALLBACK_SUPPORTED_TASKS, SupportedTask
+from sonar.config import ModelConfig
+from sonar.entrypoints.serve.exception_handling.register import init_exception_handler
+from sonar.entrypoints.serve.middleware.register import init_entrypoints_middleware
+from sonar.entrypoints.serve.sagemaker.api_router import sagemaker_standards_bootstrap
+from sonar.plugins.endpoint_plugins.interface import attach_endpoint_plugins
+from sonar.tasks import FALLBACK_SUPPORTED_TASKS, SupportedTask
 
 from .api_server.routers import register_api_routers
 from .utils.server_utils import lifespan

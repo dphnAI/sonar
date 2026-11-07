@@ -6,8 +6,8 @@ import torch
 import torch.nn as nn
 from transformers import BatchFeature
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.model_executor.models.mistral3 import (
+from sonar.config import SonarConfig
+from sonar.model_executor.models.mistral3 import (
     Mistral3DummyInputsBuilder,
     Mistral3ForConditionalGeneration,
     Mistral3ImageEmbeddingInputs,
@@ -16,21 +16,21 @@ from aphrodite.model_executor.models.mistral3 import (
     Mistral3ProcessingInfo,
     init_vision_tower_for_mistral3,
 )
-from aphrodite.model_executor.models.pixtral import PixtralHFEncoderInfo
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.models.pixtral import PixtralHFEncoderInfo
+from sonar.model_executor.models.utils import (
     AutoWeightsLoader,
     WeightsMapper,
-    init_aphrodite_registered_model,
+    init_sonar_registered_model,
     maybe_prefix,
 )
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import MultiModalFieldConfig, MultiModalKwargsItems
-from aphrodite.multimodal.parse import (
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import MultiModalFieldConfig, MultiModalKwargsItems
+from sonar.multimodal.parse import (
     ImageEmbeddingItems,
     ImageProcessorItems,
     MultiModalDataItems,
 )
-from aphrodite.multimodal.processing import (
+from sonar.multimodal.processing import (
     BaseMultiModalProcessor,
     PromptReplacement,
     PromptUpdate,
@@ -124,7 +124,7 @@ class LightOnOCRMultiModalProcessor(BaseMultiModalProcessor[LightOnOCRProcessing
 class LightOnOCRForConditionalGeneration(Mistral3ForConditionalGeneration):
     supports_mm_device_do_normalize = False
 
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={
             "model.vision_encoder.": "vision_tower.",
             "model.vision_projection.": "multi_modal_projector.",
@@ -133,17 +133,17 @@ class LightOnOCRForConditionalGeneration(Mistral3ForConditionalGeneration):
         }
     )
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         nn.Module.__init__(self)
 
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
-        multimodal_config = aphrodite_config.model_config.multimodal_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
+        multimodal_config = sonar_config.model_config.multimodal_config
 
         self.config = config
         self.multimodal_config = multimodal_config
 
-        with self._mark_tower_model(aphrodite_config, "image"):
+        with self._mark_tower_model(sonar_config, "image"):
             self.vision_tower = init_vision_tower_for_mistral3(
                 config,
                 quant_config=quant_config,
@@ -161,9 +161,9 @@ class LightOnOCRForConditionalGeneration(Mistral3ForConditionalGeneration):
                 prefix=maybe_prefix(prefix, "multi_modal_projector"),
             )
 
-        with self._mark_language_model(aphrodite_config):
-            self.language_model = init_aphrodite_registered_model(
-                aphrodite_config=aphrodite_config,
+        with self._mark_language_model(sonar_config):
+            self.language_model = init_sonar_registered_model(
+                sonar_config=sonar_config,
                 hf_config=config.text_config,
                 prefix=maybe_prefix(prefix, "language_model"),
             )
@@ -179,4 +179,4 @@ class LightOnOCRForConditionalGeneration(Mistral3ForConditionalGeneration):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)

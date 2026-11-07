@@ -7,12 +7,12 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.model_executor.models.funaudiochat import (
+from sonar.model_executor.models.funaudiochat import (
     FunAudioChatDummyInputsBuilder,
     FunAudioChatMultiModalProcessor,
     FunAudioChatProcessingInfo,
 )
-from aphrodite.transformers_utils.configs.funaudiochat import FunAudioChatConfig
+from sonar.transformers_utils.configs.funaudiochat import FunAudioChatConfig
 
 
 class RecordingFeatureExtractor:
@@ -63,11 +63,11 @@ def funaudiochat_processor(monkeypatch):
     tokenizer = MockTokenizer()
 
     monkeypatch.setattr(
-        "aphrodite.model_executor.models.funaudiochat.WhisperFeatureExtractor.from_pretrained",
+        "sonar.model_executor.models.funaudiochat.WhisperFeatureExtractor.from_pretrained",
         lambda *args, **kwargs: feature_extractor,
     )
     monkeypatch.setattr(
-        "aphrodite.model_executor.models.funaudiochat.TokenizersBackend.from_pretrained",
+        "sonar.model_executor.models.funaudiochat.TokenizersBackend.from_pretrained",
         lambda *args, **kwargs: speech_tokenizer,
     )
 

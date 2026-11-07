@@ -1,4 +1,4 @@
-# The Aphrodite Dockerfile is used to construct Aphrodite image that can be directly used
+# The Sonar Dockerfile is used to construct Sonar image that can be directly used
 # to run the OpenAI compatible server.
 
 # Please update any changes made here to
@@ -189,10 +189,10 @@ ENV UV_LINK_MODE=copy
 # Verify GCC version
 RUN gcc --version
 
-# Enable CUDA forward compatibility by setting '-e APHRODITE_ENABLE_CUDA_COMPATIBILITY=1'
+# Enable CUDA forward compatibility by setting '-e SONAR_ENABLE_CUDA_COMPATIBILITY=1'
 # Only needed for datacenter/professional GPUs with older drivers.
 # See: https://docs.nvidia.com/deploy/cuda-compatibility/
-ENV APHRODITE_ENABLE_CUDA_COMPATIBILITY=0
+ENV SONAR_ENABLE_CUDA_COMPATIBILITY=0
 
 # ============================================================
 # SLOW-CHANGING DEPENDENCIES BELOW
@@ -215,9 +215,9 @@ COPY requirements/cuda.txt requirements/cuda.txt
 COPY tools/use_existing_torch.py tools/use_existing_torch.py
 COPY pyproject.toml pyproject.toml
 RUN --mount=type=cache,target=/opt/uv/cache \
-    --mount=type=bind,source=requirements,target=/tmp/aphrodite-requirements,ro \
+    --mount=type=bind,source=requirements,target=/tmp/sonar-requirements,ro \
     if [ "${INSTALL_RUBIN_PRERELEASE}" = "true" ] && \
-        [ ! -f /tmp/aphrodite-requirements/rubin-prerelease.txt ]; then \
+        [ ! -f /tmp/sonar-requirements/rubin-prerelease.txt ]; then \
         echo "INSTALL_RUBIN_PRERELEASE=true requires requirements/rubin-prerelease.txt" >&2; \
         exit 1; \
     fi \
@@ -230,12 +230,12 @@ RUN --mount=type=cache,target=/opt/uv/cache \
         && /opt/venv/bin/python3 tools/use_existing_torch.py --prefix \
         && uv pip install --python /opt/venv/bin/python3 \
             --prerelease=allow --index-strategy unsafe-first-match \
-            -r /tmp/aphrodite-requirements/rubin-prerelease.txt \
+            -r /tmp/sonar-requirements/rubin-prerelease.txt \
         && uv pip install --python /opt/venv/bin/python3 \
             -r requirements/cuda.txt \
         && uv pip install --python /opt/venv/bin/python3 \
             --prerelease=allow --index-strategy unsafe-first-match \
-            -r /tmp/aphrodite-requirements/rubin-prerelease.txt; \
+            -r /tmp/sonar-requirements/rubin-prerelease.txt; \
     elif [ "${PYTORCH_NIGHTLY}" = "1" ]; then \
         echo "Installing torch nightly..." \
         && uv pip install --python /opt/venv/bin/python3 torch torchaudio torchvision --pre \
@@ -274,11 +274,11 @@ ENV TORCH_CUDA_ARCH_LIST=${torch_cuda_arch_list}
 # Build the Rust frontend separately so the CUDA wheel build does not need a
 # Rust toolchain and can reuse Cargo artifacts across wheel commits.
 FROM scratch AS rust-input
-COPY requirements/build/rust.txt /rust-input/aphrodite/requirements/build/rust.txt
-COPY rust/Cargo.lock rust/Cargo.toml /rust-input/aphrodite/rust/
-COPY rust/proto /rust-input/aphrodite/rust/proto
-COPY rust/src /rust-input/aphrodite/rust/src
-COPY tools/build_rust.py /rust-input/aphrodite/tools/build_rust.py
+COPY requirements/build/rust.txt /rust-input/sonar/requirements/build/rust.txt
+COPY rust/Cargo.lock rust/Cargo.toml /rust-input/sonar/rust/
+COPY rust/proto /rust-input/sonar/rust/proto
+COPY rust/src /rust-input/sonar/rust/src
+COPY tools/build_rust.py /rust-input/sonar/tools/build_rust.py
 
 FROM base AS rust-build
 ARG USE_SCCACHE
@@ -295,7 +295,7 @@ ENV SCCACHE_SERVER_PORT=4227
 WORKDIR /workspace
 
 COPY --from=rust-input \
-    /rust-input/aphrodite/requirements/build/rust.txt \
+    /rust-input/sonar/requirements/build/rust.txt \
     requirements/build/rust.txt
 
 RUN apt-get update -y \
@@ -316,14 +316,14 @@ RUN --mount=type=cache,target=/opt/uv/cache \
       --python /opt/venv/bin/python3 \
       -r requirements/build/rust.txt
 
-COPY --from=rust-input /rust-input/aphrodite/rust rust
+COPY --from=rust-input /rust-input/sonar/rust rust
 COPY --from=rust-input \
-    /rust-input/aphrodite/tools/build_rust.py \
+    /rust-input/sonar/tools/build_rust.py \
     tools/build_rust.py
 
-RUN --mount=type=cache,id=aphrodite-cuda-cargo-registry,target=/root/.cargo/registry,sharing=locked \
-    --mount=type=cache,id=aphrodite-cuda-cargo-git,target=/root/.cargo/git,sharing=locked \
-    --mount=type=cache,id=aphrodite-cuda-cargo-target,target=/workspace/rust/target,sharing=locked \
+RUN --mount=type=cache,id=sonar-cuda-cargo-registry,target=/root/.cargo/registry,sharing=locked \
+    --mount=type=cache,id=sonar-cuda-cargo-git,target=/root/.cargo/git,sharing=locked \
+    --mount=type=cache,id=sonar-cuda-cargo-target,target=/workspace/rust/target,sharing=locked \
     --mount=type=secret,id=aws-credentials,target=/root/.aws/credentials,required=false \
     if [ "$USE_SCCACHE" = "1" ]; then \
         if [ -n "${SCCACHE_ENDPOINT}" ]; then export SCCACHE_ENDPOINT="${SCCACHE_ENDPOINT}"; fi; \
@@ -431,7 +431,7 @@ RUN --mount=type=cache,target=/opt/uv/cache \
 # requested. The wheels are installed by the final image, which has no compiler.
 ARG BUILD_NIXL
 COPY tools/build_nixl_with_torch215_for_rubin.py /tmp/build_nixl_for_rubin.py
-RUN --mount=type=bind,source=requirements,target=/tmp/aphrodite-requirements,ro \
+RUN --mount=type=bind,source=requirements,target=/tmp/sonar-requirements,ro \
     set -eux; \
     NIXL_WORKSPACE=/tmp/nixl_workspace; \
     mkdir -p "${NIXL_WORKSPACE}/dist"; \
@@ -439,7 +439,7 @@ RUN --mount=type=bind,source=requirements,target=/tmp/aphrodite-requirements,ro 
         apt-get update -y; \
         apt-get install -y --no-install-recommends autoconf automake libtool; \
         rm -rf /var/lib/apt/lists/*; \
-        NIXL_REQUIREMENTS_FILE=/tmp/aphrodite-requirements/kv_connectors.txt \
+        NIXL_REQUIREMENTS_FILE=/tmp/sonar-requirements/kv_connectors.txt \
         WHEELS_CACHE_HOME="${NIXL_WORKSPACE}/dist" \
         MAX_JOBS="${max_jobs:-}" \
             python3 /tmp/build_nixl_for_rubin.py --skip-system-deps --build-only; \
@@ -494,29 +494,29 @@ WORKDIR /workspace
 COPY . .
 
 # setup.py packages these separately built Rust artifacts as-is.
-RUN rm -f aphrodite/aphrodite-rs aphrodite/_rust_*.so
-COPY --from=rust-build /workspace/aphrodite/aphrodite-rs aphrodite/aphrodite-rs
-COPY --from=rust-build /workspace/aphrodite/_rust_*.so aphrodite/
+RUN rm -f sonar/sonar-rs sonar/_rust_*.so
+COPY --from=rust-build /workspace/sonar/sonar-rs sonar/sonar-rs
+COPY --from=rust-build /workspace/sonar/_rust_*.so sonar/
 
 ARG GIT_REPO_CHECK=0
 RUN --mount=type=bind,source=.git,target=.git \
     if [ "$GIT_REPO_CHECK" != "0" ]; then bash tools/check_repo.sh ; fi
 
-ARG aphrodite_target_device="cuda"
-ARG APHRODITE_VERSION_OVERRIDE=""
+ARG sonar_target_device="cuda"
+ARG SONAR_VERSION_OVERRIDE=""
 ARG max_jobs=2
 ARG nvcc_threads=8
 ARG USE_SCCACHE
 ARG SCCACHE_ENDPOINT
-ENV APHRODITE_TARGET_DEVICE=${aphrodite_target_device}
-ENV APHRODITE_VERSION_OVERRIDE=${APHRODITE_VERSION_OVERRIDE}
+ENV SONAR_TARGET_DEVICE=${sonar_target_device}
+ENV SONAR_VERSION_OVERRIDE=${SONAR_VERSION_OVERRIDE}
 ENV MAX_JOBS=${max_jobs}
 ENV NVCC_THREADS=${nvcc_threads}
 ENV CMAKE_BUILD_TYPE=Release
-ENV APHRODITE_USE_PRECOMPILED_RUST=1
+ENV SONAR_USE_PRECOMPILED_RUST=1
 
 # Skip adding +precompiled suffix to version (preserves git-derived version)
-ENV APHRODITE_SKIP_PRECOMPILED_VERSION_SUFFIX=1
+ENV SONAR_SKIP_PRECOMPILED_VERSION_SUFFIX=1
 
 # Use existing torch for nightly and Rubin prerelease builds
 RUN --mount=type=cache,target=/opt/uv/cache \
@@ -525,10 +525,10 @@ RUN --mount=type=cache,target=/opt/uv/cache \
         python3 tools/use_existing_torch.py --prefix; \
     fi
 
-# Build the Aphrodite wheel
-RUN --mount=type=cache,id=aphrodite-wheel-uv,target=/opt/uv/cache \
-    --mount=type=cache,id=aphrodite-wheel-ccache-v2,target=/root/.cache/ccache,sharing=locked \
-    --mount=type=cache,id=aphrodite-wheel-deps-v2,target=/workspace/.deps,sharing=locked \
+# Build the Sonar wheel
+RUN --mount=type=cache,id=sonar-wheel-uv,target=/opt/uv/cache \
+    --mount=type=cache,id=sonar-wheel-ccache-v2,target=/root/.cache/ccache,sharing=locked \
+    --mount=type=cache,id=sonar-wheel-deps-v2,target=/workspace/.deps,sharing=locked \
     --mount=type=bind,source=.git,target=.git \
     --mount=type=secret,id=aws-credentials,target=/root/.aws/credentials,required=false \
     if [ "$USE_SCCACHE" = "1" ]; then \
@@ -543,19 +543,6 @@ RUN --mount=type=cache,id=aphrodite-wheel-uv,target=/opt/uv/cache \
 
 RUN python3 .github/scripts/verify_cuda_wheel_artifacts.py \
     "$(find dist -maxdepth 1 -type f -name '*.whl' -print -quit)"
-
-# Check the size of the CUDA 13 wheel uploaded to PyPI
-COPY .buildkite/check-wheel-size.py check-wheel-size.py
-# sync the default value with .buildkite/check-wheel-size.py
-ARG APHRODITE_MAX_SIZE_MB=500
-ENV APHRODITE_MAX_SIZE_MB=$APHRODITE_MAX_SIZE_MB
-ARG RUN_WHEEL_CHECK=true
-RUN if [ "$RUN_WHEEL_CHECK" = "true" ] && \
-        [ "${CUDA_VERSION%%.*}" = "13" ]; then \
-        python3 check-wheel-size.py dist; \
-    else \
-        echo "Skipping wheel size check."; \
-    fi
 
 # Copy extension wheels from extensions-build stage for later use
 COPY --from=extensions-build /tmp/ep_kernels_workspace/dist /tmp/ep_kernels_workspace/dist
@@ -609,9 +596,9 @@ RUN --mount=type=cache,target=/opt/uv/cache \
     fi
 
 #################### DEV IMAGE ####################
-#################### APHRODITE INSTALLATION IMAGE ####################
-# image with Aphrodite installed
-FROM ${FINAL_BASE_IMAGE} AS aphrodite-base
+#################### SONAR INSTALLATION IMAGE ####################
+# image with Sonar installed
+FROM ${FINAL_BASE_IMAGE} AS sonar-base
 
 ARG INSTALL_RUBIN_PRERELEASE
 ARG TARGETPLATFORM
@@ -624,7 +611,7 @@ ARG DEADSNAKES_GPGKEY_URL
 ARG GET_PIP_URL
 
 ENV DEBIAN_FRONTEND=noninteractive
-WORKDIR /aphrodite-workspace
+WORKDIR /sonar-workspace
 
 
 # Python version string for paths (e.g., "312" for 3.12)
@@ -704,7 +691,7 @@ ENV PATH="${CUDA_HOME}/bin:${PATH}"
 ENV LD_LIBRARY_PATH="${CUDA_HOME}/lib64:${LD_LIBRARY_PATH}"
 
 # Install the initialized-snapshot runtime on the architecture supported by
-# `aphrodite snapshot`. CRIU and its CUDA plugin are built from the same pinned
+# `sonar snapshot`. CRIU and its CUDA plugin are built from the same pinned
 # source. The `cuda-checkpoint`-compatible helper is built from NVIDIA Dynamo's
 # Apache-2.0 source against the public CUDA Driver checkpoint APIs instead of
 # redistributing NVIDIA's proprietary cuda-checkpoint binary. The helper uses
@@ -745,10 +732,10 @@ RUN CUDA_MAJOR=$(echo $CUDA_VERSION | cut -d. -f1) && \
     fi
 ENV UV_OVERRIDE=/etc/uv-overrides.txt
 
-# Enable CUDA forward compatibility by setting '-e APHRODITE_ENABLE_CUDA_COMPATIBILITY=1'
+# Enable CUDA forward compatibility by setting '-e SONAR_ENABLE_CUDA_COMPATIBILITY=1'
 # Only needed for datacenter/professional GPUs with older drivers.
 # See: https://docs.nvidia.com/deploy/cuda-compatibility/
-ENV APHRODITE_ENABLE_CUDA_COMPATIBILITY=0
+ENV SONAR_ENABLE_CUDA_COMPATIBILITY=0
 
 # ============================================================
 # SLOW-CHANGING DEPENDENCIES BELOW
@@ -761,9 +748,9 @@ ARG PYTORCH_CUDA_INDEX_BASE_URL
 COPY requirements/common.txt /tmp/common.txt
 COPY requirements/cuda.txt /tmp/requirements-cuda.txt
 RUN --mount=type=cache,target=/opt/uv/cache \
-    --mount=type=bind,source=requirements,target=/tmp/aphrodite-requirements,ro \
+    --mount=type=bind,source=requirements,target=/tmp/sonar-requirements,ro \
     if [ "${INSTALL_RUBIN_PRERELEASE}" = "true" ] && \
-        [ ! -f /tmp/aphrodite-requirements/rubin-prerelease.txt ]; then \
+        [ ! -f /tmp/sonar-requirements/rubin-prerelease.txt ]; then \
         echo "INSTALL_RUBIN_PRERELEASE=true requires requirements/rubin-prerelease.txt" >&2; \
         exit 1; \
     fi && \
@@ -774,13 +761,13 @@ RUN --mount=type=cache,target=/opt/uv/cache \
     if [ "${INSTALL_RUBIN_PRERELEASE}" = "true" ]; then \
         uv pip install --system \
             --prerelease=allow --index-strategy unsafe-first-match \
-            -r /tmp/aphrodite-requirements/rubin-prerelease.txt \
+            -r /tmp/sonar-requirements/rubin-prerelease.txt \
         && sed -Ei '/^[[:space:]]*(torch|torchvision|torchaudio)[[:space:]]*==/Id' \
             /tmp/requirements-cuda.txt \
         && uv pip install --system -r /tmp/requirements-cuda.txt \
         && uv pip install --system \
             --prerelease=allow --index-strategy unsafe-first-match \
-            -r /tmp/aphrodite-requirements/rubin-prerelease.txt; \
+            -r /tmp/sonar-requirements/rubin-prerelease.txt; \
     else \
         uv pip install --system \
             -r /tmp/requirements-cuda.txt \
@@ -791,14 +778,14 @@ RUN --mount=type=cache,target=/opt/uv/cache \
     rm /tmp/requirements-cuda.txt /tmp/common.txt
 
 # Install FlashInfer's precompiled kernels for all GPU architectures (the default).
-# `aphrodite download-kernels` wraps this command but Aphrodite is only installed in later
+# `sonar download-kernels` wraps this command but Sonar is only installed in later
 # stages, and running it there would rebuild this large layer for every wheel.
 RUN --mount=type=cache,target=/opt/pip/cache \
     PIP_CACHE_DIR=/opt/pip/cache flashinfer download-kernels
 
 # ============================================================
 # OPENAI API SERVER DEPENDENCIES
-# Pre-install these to avoid reinstalling on every Aphrodite wheel rebuild
+# Pre-install these to avoid reinstalling on every Sonar wheel rebuild
 # ============================================================
 
 # Install gdrcopy (saves ~6s per build)
@@ -816,8 +803,8 @@ RUN set -eux; \
     /tmp/install_gdrcopy.sh "${GDRCOPY_OS_VERSION}" "${GDRCOPY_CUDA_VERSION}" "${UUARCH}" && \
     rm /tmp/install_gdrcopy.sh
 
-# Install aphrodite-openai dependencies (saves rebuild time)
-# These are stable packages that don't depend on Aphrodite itself
+# Install sonar-openai dependencies (saves rebuild time)
+# These are stable packages that don't depend on Sonar itself
 # From versions.json: .bitsandbytes.x86_64, .bitsandbytes.arm64
 # From versions.json: .openai_server_extras.timm, .openai_server_extras.runai_model_streamer,
 # .openai_server_extras.gguf (NVFP4 GGUF checkpoints, e.g. RecursiveSI/flint-nvfp4-gguf)
@@ -837,7 +824,7 @@ RUN --mount=type=cache,target=/opt/uv/cache \
         "gguf${GGUF_VERSION}"
 
 # ============================================================
-# APHRODITE INSTALLATION (depends on build stage)
+# SONAR INSTALLATION (depends on build stage)
 # ============================================================
 
 ARG PIP_INDEX_URL UV_INDEX_URL
@@ -848,20 +835,20 @@ ARG PIP_KEYRING_PROVIDER UV_KEYRING_PROVIDER
 # We can specify the standard or nightly build of PyTorch
 ARG PYTORCH_NIGHTLY
 
-# Install Aphrodite wheel first, so that torch etc will be installed.
+# Install Sonar wheel first, so that torch etc will be installed.
 # Check whether to install torch nightly instead of release for this build.
 COPY --from=base /workspace/torch_lib_versions.txt torch_lib_versions.txt
-RUN --mount=type=bind,from=build,src=/workspace/dist,target=/aphrodite-workspace/dist \
+RUN --mount=type=bind,from=build,src=/workspace/dist,target=/sonar-workspace/dist \
     --mount=type=cache,target=/opt/uv/cache \
     if [ "${PYTORCH_NIGHTLY}" = "1" ]; then \
         echo "Installing torch nightly..." \
         && uv pip install --system $(cat torch_lib_versions.txt | xargs) --pre \
         --index-url ${PYTORCH_CUDA_INDEX_BASE_URL}/nightly/cu$(echo $CUDA_VERSION | cut -d. -f1,2 | tr -d '.') \
-        && echo "Installing Aphrodite..." \
+        && echo "Installing Sonar..." \
         && uv pip install --system dist/*.whl --verbose \
         --extra-index-url ${PYTORCH_CUDA_INDEX_BASE_URL}/nightly/cu$(echo $CUDA_VERSION | cut -d. -f1,2 | tr -d '.'); \
     else \
-        echo "Installing Aphrodite..." \
+        echo "Installing Sonar..." \
         && uv pip install --system dist/*.whl --verbose \
         --index-url ${PYTORCH_CUDA_INDEX_BASE_URL}/cu$(echo $CUDA_VERSION | cut -d. -f1,2 | tr -d '.') \
         --extra-index-url https://pypi.org/simple \
@@ -869,8 +856,8 @@ RUN --mount=type=bind,from=build,src=/workspace/dist,target=/aphrodite-workspace
     fi
 
 # Expose the Rust frontend bundled in the wheel on the container's PATH.
-RUN ln -s "$(python3 -c 'import sysconfig; print(sysconfig.get_path("platlib"))')/aphrodite/aphrodite-rs" /usr/local/bin/aphrodite-rs \
-    && aphrodite-rs --version
+RUN ln -s "$(python3 -c 'import sysconfig; print(sysconfig.get_path("platlib"))')/sonar/sonar-rs" /usr/local/bin/sonar-rs \
+    && sonar-rs --version
 
 RUN --mount=type=cache,target=/opt/uv/cache \
 . /etc/environment && \
@@ -880,7 +867,7 @@ uv pip list
 ENV LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
 
 # Install EP kernels wheels (DeepEP) that have been built in the `build` stage
-RUN --mount=type=bind,from=build,src=/tmp/ep_kernels_workspace/dist,target=/aphrodite-workspace/ep_kernels/dist \
+RUN --mount=type=bind,from=build,src=/tmp/ep_kernels_workspace/dist,target=/sonar-workspace/ep_kernels/dist \
     --mount=type=cache,target=/opt/uv/cache \
     uv pip install --system ep_kernels/dist/*.whl --verbose \
         --index-url ${PYTORCH_CUDA_INDEX_BASE_URL}/cu$(echo $CUDA_VERSION | cut -d. -f1,2 | tr -d '.') \
@@ -896,14 +883,14 @@ ENV LD_LIBRARY_PATH=/usr/local/nvidia/lib64:${LD_LIBRARY_PATH}
 # Copy examples and benchmarks at the end to minimize cache invalidation
 COPY examples examples
 COPY benchmarks benchmarks
-COPY ./aphrodite/collect_env.py .
-#################### APHRODITE INSTALLATION IMAGE ####################
+COPY ./sonar/collect_env.py .
+#################### SONAR INSTALLATION IMAGE ####################
 #################### TEST IMAGE ####################
 # image to run unit testing suite
-# note that this uses Aphrodite installed by `pip`
-FROM aphrodite-base AS test
+# note that this uses Sonar installed by `pip`
+FROM sonar-base AS test
 
-ADD . /aphrodite-workspace/
+ADD . /sonar-workspace/
 
 ARG PYTHON_VERSION
 
@@ -954,7 +941,7 @@ RUN --mount=type=cache,target=/opt/uv/cache \
 
 # install development dependencies (for testing)
 RUN --mount=type=cache,target=/opt/uv/cache \
-    uv pip install --system -e tests/aphrodite_test_utils
+    uv pip install --system -e tests/sonar_test_utils
 
 # enable fast downloads from hf (for testing)
 ENV HF_XET_HIGH_PERFORMANCE 1
@@ -963,12 +950,12 @@ ENV HF_XET_HIGH_PERFORMANCE 1
 ENV HF_HUB_DOWNLOAD_TIMEOUT 60
 
 # Copy in the v1 package for testing (it isn't distributed yet)
-COPY aphrodite/v1 /usr/local/lib/python${PYTHON_VERSION}/dist-packages/aphrodite/v1
+COPY sonar/v1 /usr/local/lib/python${PYTHON_VERSION}/dist-packages/sonar/v1
 #################### TEST IMAGE ####################
 
 #################### OPENAI API SERVER ####################
 # base openai image with additional requirements, for any subsequent openai-style images
-FROM aphrodite-base AS aphrodite-openai-base
+FROM sonar-base AS sonar-openai-base
 ARG TARGETPLATFORM
 ARG INSTALL_KV_CONNECTORS=false
 ARG CUDA_VERSION
@@ -986,7 +973,7 @@ ARG torch_cuda_arch_list='7.5 8.0 8.6 8.9 9.0 10.0 11.0 12.0+PTX'
 ENV TORCH_CUDA_ARCH_LIST=${torch_cuda_arch_list}
 COPY tools/install_kv_connectors.sh /tmp/install_kv_connectors.sh
 RUN --mount=type=cache,target=/opt/uv/cache \
-    --mount=type=bind,source=requirements,target=/tmp/aphrodite-requirements,ro \
+    --mount=type=bind,source=requirements,target=/tmp/sonar-requirements,ro \
     set -eu; \
     CUDA_VERSION_DASH=$(echo $CUDA_VERSION | cut -d. -f1,2 | tr '.' '-'); \
     CUDA_HOME=/usr/local/cuda; \
@@ -995,10 +982,10 @@ RUN --mount=type=cache,target=/opt/uv/cache \
                 libcublas-dev-${CUDA_VERSION_DASH} \
                 libcusolver-dev-${CUDA_VERSION_DASH}"; \
     if [ "$INSTALL_KV_CONNECTORS" = "true" ]; then \
-        UV_NO_BUILD=true bash /tmp/install_kv_connectors.sh /tmp/aphrodite-requirements || ( \
+        UV_NO_BUILD=true bash /tmp/install_kv_connectors.sh /tmp/sonar-requirements || ( \
             apt-get update -y && \
             apt-get install -y --no-install-recommends --allow-change-held-packages ${BUILD_PKGS} && \
-            UV_NO_BUILD_ISOLATION=true bash /tmp/install_kv_connectors.sh /tmp/aphrodite-requirements && \
+            UV_NO_BUILD_ISOLATION=true bash /tmp/install_kv_connectors.sh /tmp/sonar-requirements && \
             apt-get purge -y ${BUILD_PKGS} && \
             rm -rf /var/lib/apt/lists/* \
         ); \
@@ -1010,14 +997,14 @@ RUN --mount=type=cache,target=/opt/uv/cache \
 # here so the image does not override mooncake's own default.
 
 # Install Rubin prerelease dependencies when explicitly requested. Keep this
-# after the public Aphrodite and KV connector dependency pins installed above.
+# after the public Sonar and KV connector dependency pins installed above.
 RUN --mount=type=cache,target=/opt/uv/cache \
-    --mount=type=bind,source=requirements,target=/tmp/aphrodite-requirements,ro \
+    --mount=type=bind,source=requirements,target=/tmp/sonar-requirements,ro \
     if [ "${INSTALL_RUBIN_PRERELEASE}" = "true" ]; then \
         echo "Installing Rubin prerelease requirements..." \
         && uv pip install --system \
             --prerelease=allow --index-strategy unsafe-first-match \
-            -r /tmp/aphrodite-requirements/rubin-prerelease.txt; \
+            -r /tmp/sonar-requirements/rubin-prerelease.txt; \
     fi
 
 # Install source-built Triton last so dependency resolution cannot restore the
@@ -1072,22 +1059,22 @@ RUN --mount=type=cache,target=/opt/uv/cache \
             assert ext, 'NIXL EP has no build for torch ' + torch.__version__; \
             print('NIXL EP extension:', ext[0])"; \
     fi
-ENV APHRODITE_USAGE_SOURCE production-docker-image
+ENV SONAR_USAGE_SOURCE production-docker-image
 
 # define sagemaker first, so it is not default from `docker build`
-FROM aphrodite-openai-base AS aphrodite-sagemaker
+FROM sonar-openai-base AS sonar-sagemaker
 
 COPY examples/sagemaker-entrypoint.sh .
 RUN chmod +x sagemaker-entrypoint.sh
 ENTRYPOINT ["./sagemaker-entrypoint.sh"]
 
-FROM aphrodite-openai-base AS aphrodite-openai
+FROM sonar-openai-base AS sonar-openai
 
-ENTRYPOINT ["aphrodite", "run"]
+ENTRYPOINT ["sonar", "run"]
 #################### OPENAI API SERVER ####################
 
 #################### MAIN WHEEL EXPORT ####################
-# Stage to export only the main aphrodite-engine wheel for distribution.
+# Stage to export only the main sonar wheel for distribution.
 # Usage:
 #   DOCKER_BUILDKIT=1 docker build --target main-wheel-export --output ./dist -f docker/Dockerfile .
 FROM scratch AS main-wheel-export

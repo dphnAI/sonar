@@ -40,7 +40,7 @@ def _pixel_factor(factor: int):
 @pytest.mark.parametrize("mm_device_do_normalize", [True, False])
 def test_ppl(
     hf_runner,
-    aphrodite_runner,
+    sonar_runner,
     model_info: GenerateModelInfo,
     factor: int,
     extra_kwargs: dict,
@@ -48,9 +48,9 @@ def test_ppl(
 ):
     vqa_ppl_test(
         hf_runner,
-        aphrodite_runner,
+        sonar_runner,
         model_info,
-        aphrodite_extra_kwargs={
+        sonar_extra_kwargs={
             "mm_device_do_normalize": mm_device_do_normalize,
             **extra_kwargs,
         },

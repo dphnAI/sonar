@@ -9,11 +9,11 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_common import (
+from sonar.distributed.kv_transfer.kv_connector.v1.moriio.moriio_common import (
     ReqMeta,
     get_port_offset,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_connector import (
+from sonar.distributed.kv_transfer.kv_connector.v1.moriio.moriio_connector import (
     MoRIIOConnectorWorker,
 )
 

@@ -2,7 +2,7 @@
 
 #include "custom_collective_common.cuh"
 
-namespace aphrodite {
+namespace sonar {
 
 template <typename T, int ngpus>
 __global__ void __launch_bounds__(512, 1)
@@ -268,7 +268,7 @@ class CustomAllreduce {
     int blocks = std::min(block_limit, (size + threads - 1) / threads);
 
     // Check environment variable once
-    const char* env_algo = std::getenv("APHRODITE_CUSTOM_ALLREDUCE_ALGO");
+    const char* env_algo = std::getenv("SONAR_CUSTOM_ALLREDUCE_ALGO");
     bool force_1stage = false;
     bool force_2stage = false;
     if (env_algo != nullptr) {
@@ -280,8 +280,7 @@ class CustomAllreduce {
         force_2stage = true;
       } else {
         throw std::runtime_error(
-            "Invalid APHRODITE_CUSTOM_ALLREDUCE_ALGO: " +
-            std::string(env_algo) +
+            "Invalid SONAR_CUSTOM_ALLREDUCE_ALGO: " + std::string(env_algo) +
             ". Valid values: 1stage, oneshot, 2stage, twoshot");
       }
     }
@@ -357,7 +356,7 @@ class CustomAllreduce {
 /**
  * To inspect PTX/SASS, copy paste this header file to compiler explorer and
  add a template instantiation:
- * template void aphrodite::CustomAllreduce::allreduce<half>(cudaStream_t, half
+ * template void sonar::CustomAllreduce::allreduce<half>(cudaStream_t, half
  *, half *, int, int, int);
 */
-}  // namespace aphrodite
+}  // namespace sonar

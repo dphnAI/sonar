@@ -4,13 +4,13 @@
 
 import pytest
 
-from aphrodite.engine.arg_utils import AsyncEngineArgs, EngineArgs
-from aphrodite.entrypoints.launchers.api_server.entry import (
+from sonar.engine.arg_utils import AsyncEngineArgs, EngineArgs
+from sonar.entrypoints.launchers.api_server.entry import (
     build_async_engine_client_from_engine_args,
 )
-from aphrodite.lora.request import LoRARequest
-from aphrodite.v1.engine.async_llm import AsyncLLM
-from aphrodite.v1.engine.llm_engine import LLMEngine
+from sonar.lora.request import LoRARequest
+from sonar.v1.engine.async_llm import AsyncLLM
+from sonar.v1.engine.llm_engine import LLMEngine
 
 MODEL_PATH = "Qwen/Qwen3-0.6B"
 LORA_MODULE_PATH = "charent/self_cognition_Alice"

@@ -9,10 +9,10 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import torch
 
-    from aphrodite.config import AphroditeConfig
-    from aphrodite.tokenizers import TokenizerLike
+    from sonar.config import SonarConfig
+    from sonar.tokenizers import TokenizerLike
 else:
-    AphroditeConfig = object
+    SonarConfig = object
     TokenizerLike = object
 
 
@@ -99,7 +99,7 @@ class StructuredOutputGrammar(ABC):
 class StructuredOutputBackend(ABC):
     """Engine-level backend for structured output requests."""
 
-    aphrodite_config: AphroditeConfig
+    sonar_config: SonarConfig
     tokenizer: TokenizerLike
     vocab_size: int
 

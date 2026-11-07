@@ -5,23 +5,23 @@ from typing import TYPE_CHECKING
 
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.custom_op import CustomOp
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.logger import init_logger
+from sonar.model_executor.custom_op import CustomOp
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEQuantConfig,
 )
-from aphrodite.model_executor.layers.fused_moe.fused_moe_method_base import (
+from sonar.model_executor.layers.fused_moe.fused_moe_method_base import (
     FusedMoEMethodBase,
 )
-from aphrodite.model_executor.layers.fused_moe.modular_kernel import (
+from sonar.model_executor.layers.fused_moe.modular_kernel import (
     FusedMoEKernel,
 )
-from aphrodite.model_executor.layers.fused_moe.runner.shared_experts import (
+from sonar.model_executor.layers.fused_moe.runner.shared_experts import (
     SharedExperts,
 )
 
 if TYPE_CHECKING:
-    from aphrodite.model_executor.layers.fused_moe.routed_experts import (
+    from sonar.model_executor.layers.fused_moe.routed_experts import (
         RoutedExperts,
     )
 

@@ -5,9 +5,9 @@
 import pytest
 import torch
 
-from aphrodite.multimodal.image import rescale_image_size
+from sonar.multimodal.image import rescale_image_size
 
-from ...conftest import IMAGE_ASSETS, AphroditeRunner, ImageTestAssets
+from ...conftest import IMAGE_ASSETS, ImageTestAssets, SonarRunner
 from ..utils import check_logprobs_close
 
 HF_IMAGE_PROMPTS = IMAGE_ASSETS.prompts(
@@ -28,7 +28,7 @@ IMAGE_SIZE_FACTOR_GROUPS = (
 
 
 def run_awq_test(
-    aphrodite_runner: type[AphroditeRunner],
+    sonar_runner: type[SonarRunner],
     image_assets: ImageTestAssets,
     source_model: str,
     quant_model: str,
@@ -51,13 +51,13 @@ def run_awq_test(
         for image, prompt in zip(images, HF_IMAGE_PROMPTS)
     ]
 
-    # NOTE: take care of the order. run Aphrodite first, and then run HF.
-    # Aphrodite needs a fresh new process without cuda initialization.
+    # NOTE: take care of the order. run Sonar first, and then run HF.
+    # Sonar needs a fresh new process without cuda initialization.
     # if we run HF first, the cuda initialization will be done and it
     # will hurt multiprocessing backend with fork method (the default method).
 
     # max_model_len should be greater than image_feature_size
-    with aphrodite_runner(
+    with sonar_runner(
         source_model,
         max_model_len=4096,
         dtype=dtype,
@@ -65,13 +65,13 @@ def run_awq_test(
         distributed_executor_backend=distributed_executor_backend,
         enforce_eager=True,
         default_torch_num_threads=1,
-    ) as aphrodite_model:
+    ) as sonar_model:
         source_outputs_per_image = [
-            aphrodite_model.generate_greedy_logprobs(prompts, max_tokens, num_logprobs=num_logprobs, images=images)
+            sonar_model.generate_greedy_logprobs(prompts, max_tokens, num_logprobs=num_logprobs, images=images)
             for prompts, images in inputs_per_image_and_size_group
         ]
 
-    with aphrodite_runner(
+    with sonar_runner(
         quant_model,
         quantization="awq",
         max_model_len=4096,
@@ -80,9 +80,9 @@ def run_awq_test(
         distributed_executor_backend=distributed_executor_backend,
         enforce_eager=True,
         default_torch_num_threads=1,
-    ) as aphrodite_model:
+    ) as sonar_model:
         quant_outputs_per_image = [
-            aphrodite_model.generate_greedy_logprobs(prompts, max_tokens, num_logprobs=num_logprobs, images=images)
+            sonar_model.generate_greedy_logprobs(prompts, max_tokens, num_logprobs=num_logprobs, images=images)
             for prompts, images in inputs_per_image_and_size_group
         ]
 
@@ -110,21 +110,21 @@ def run_awq_test(
 )
 @torch.inference_mode()
 def test_awq_load(
-    aphrodite_runner: type[AphroditeRunner],
+    sonar_runner: type[SonarRunner],
     example_prompts: list[str],
     model: str,
     quantization: str,
     dtype: str,
 ) -> None:
     """Regression test: AWQ weight loading must not KeyError."""
-    with aphrodite_runner(
+    with sonar_runner(
         model,
         quantization=quantization,
         dtype=dtype,
         max_model_len=128,
         enforce_eager=True,
-    ) as aphrodite_model:
-        outputs = aphrodite_model.generate_greedy(example_prompts[:2], max_tokens=32)
+    ) as sonar_model:
+        outputs = sonar_model.generate_greedy(example_prompts[:2], max_tokens=32)
     assert len(outputs) == 2
 
 
@@ -137,7 +137,7 @@ def test_awq_load(
 @pytest.mark.parametrize("num_logprobs", [5])
 @torch.inference_mode()
 def test_awq_models(
-    aphrodite_runner,
+    sonar_runner,
     image_assets,
     source_model,
     quant_model,
@@ -146,7 +146,7 @@ def test_awq_models(
     num_logprobs,
 ) -> None:
     run_awq_test(
-        aphrodite_runner,
+        sonar_runner,
         image_assets,
         source_model,
         quant_model,

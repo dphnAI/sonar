@@ -10,11 +10,11 @@
 
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.third_party.flash_linear_attention.ops.index import prepare_chunk_indices
-from aphrodite.third_party.flash_linear_attention.ops.op import exp2, gather
-from aphrodite.third_party.flash_linear_attention.ops.utils import is_gather_supported
-from aphrodite.triton_utils import tl, triton
+from sonar.platforms import current_platform
+from sonar.third_party.flash_linear_attention.ops.index import prepare_chunk_indices
+from sonar.third_party.flash_linear_attention.ops.op import exp2, gather
+from sonar.third_party.flash_linear_attention.ops.utils import is_gather_supported
+from sonar.triton_utils import tl, triton
 
 from .chunk_intra_token_parallel import chunk_kda_fwd_intra_token_parallel
 
@@ -23,18 +23,16 @@ from .chunk_intra_token_parallel import chunk_kda_fwd_intra_token_parallel
 ################################################################################
 
 
-@triton.heuristics({
-    'IS_VARLEN': lambda args: args['cu_seqlens'] is not None,
-})
+@triton.heuristics(
+    {
+        "IS_VARLEN": lambda args: args["cu_seqlens"] is not None,
+    }
+)
 @triton.autotune(
-    configs=[
-        triton.Config({'BK': BK}, num_warps=num_warps)
-        for BK in [32, 64]
-        for num_warps in [1, 2, 4]
-    ],
+    configs=[triton.Config({"BK": BK}, num_warps=num_warps) for BK in [32, 64] for num_warps in [1, 2, 4]],
     key=["H", "HV", "K", "BC"],
 )
-@triton.jit(do_not_specialize=['T'])
+@triton.jit(do_not_specialize=["T"])
 def chunk_kda_fwd_kernel_inter_solve_fused(
     q,
     k,
@@ -152,7 +150,7 @@ def chunk_kda_fwd_kernel_inter_solve_fused(
             b_k1 = tl.load(p_k1, mask=m_ck1, other=0.0).to(tl.float32)
             b_g1 = tl.load(p_g1, mask=m_ck1, other=0.0).to(tl.float32)
             # [BK]
-            b_gn1 = tl.load(g + i_tc1 * HV*K + o_k, mask=m_k, other=0).to(tl.float32)
+            b_gn1 = tl.load(g + i_tc1 * HV * K + o_k, mask=m_k, other=0).to(tl.float32)
             # [BC, BK]
             b_gqn = tl.where(m_tc1[:, None], exp2(b_g1 - b_gn1[None, :]), 0)
             # [BK, BC]
@@ -171,7 +169,7 @@ def chunk_kda_fwd_kernel_inter_solve_fused(
                 b_k2 = tl.load(p_k2, mask=m_ck2, other=0.0).to(tl.float32)
                 b_g2 = tl.load(p_g2, mask=m_ck2, other=0.0).to(tl.float32)
                 # [BK]
-                b_gn2 = tl.load(g + i_tc2 * HV*K + o_k, mask=m_k, other=0).to(tl.float32)
+                b_gn2 = tl.load(g + i_tc2 * HV * K + o_k, mask=m_k, other=0).to(tl.float32)
                 # [BC, BK]
                 b_gqn2 = tl.where(m_tc2[:, None], exp2(b_g2 - b_gn2[None, :]), 0)
                 b_qg2 = b_q2 * b_gqn2
@@ -196,7 +194,7 @@ def chunk_kda_fwd_kernel_inter_solve_fused(
                     b_k3 = tl.load(p_k3, mask=m_ck3, other=0.0).to(tl.float32)
                     b_g3 = tl.load(p_g3, mask=m_ck3, other=0.0).to(tl.float32)
                     # [BK]
-                    b_gn3 = tl.load(g + i_tc3 * HV*K + o_k, mask=m_k, other=0).to(tl.float32)
+                    b_gn3 = tl.load(g + i_tc3 * HV * K + o_k, mask=m_k, other=0).to(tl.float32)
                     # [BC, BK]
                     b_gqn3 = tl.where(m_tc3[:, None], exp2(b_g3 - b_gn3[None, :]), 0)
                     b_qg3 = b_q3 * b_gqn3
@@ -274,25 +272,25 @@ def chunk_kda_fwd_kernel_inter_solve_fused(
         b_Ai33 = -tl.where(m_A, b_Ai33, 0)
 
         for i in range(2, min(BC, T - i_tc0)):
-            b_a00 = -tl.load(Akkd + (i_tc0 + i) * HV*BC + o_i)
-            b_a00 = tl.where(o_i < i, b_a00, 0.)
+            b_a00 = -tl.load(Akkd + (i_tc0 + i) * HV * BC + o_i)
+            b_a00 = tl.where(o_i < i, b_a00, 0.0)
             b_a00 += tl.sum(b_a00[:, None] * b_Ai00, 0)
             b_Ai00 = tl.where((o_i == i)[:, None], b_a00, b_Ai00)
-        for i in range(BC + 2, min(2*BC, T - i_tc0)):
-            b_a11 = -tl.load(Akkd + (i_tc0 + i) * HV*BC + o_i)
-            b_a11 = tl.where(o_i < i - BC, b_a11, 0.)
+        for i in range(BC + 2, min(2 * BC, T - i_tc0)):
+            b_a11 = -tl.load(Akkd + (i_tc0 + i) * HV * BC + o_i)
+            b_a11 = tl.where(o_i < i - BC, b_a11, 0.0)
             b_a11 += tl.sum(b_a11[:, None] * b_Ai11, 0)
             b_Ai11 = tl.where((o_i == i - BC)[:, None], b_a11, b_Ai11)
-        for i in range(2*BC + 2, min(3*BC, T - i_tc0)):
-            b_a22 = -tl.load(Akkd + (i_tc0 + i) * HV*BC + o_i)
-            b_a22 = tl.where(o_i < i - 2*BC, b_a22, 0.)
+        for i in range(2 * BC + 2, min(3 * BC, T - i_tc0)):
+            b_a22 = -tl.load(Akkd + (i_tc0 + i) * HV * BC + o_i)
+            b_a22 = tl.where(o_i < i - 2 * BC, b_a22, 0.0)
             b_a22 += tl.sum(b_a22[:, None] * b_Ai22, 0)
-            b_Ai22 = tl.where((o_i == i - 2*BC)[:, None], b_a22, b_Ai22)
-        for i in range(3*BC + 2, min(4*BC, T - i_tc0)):
-            b_a33 = -tl.load(Akkd + (i_tc0 + i) * HV*BC + o_i)
-            b_a33 = tl.where(o_i < i - 3*BC, b_a33, 0.)
+            b_Ai22 = tl.where((o_i == i - 2 * BC)[:, None], b_a22, b_Ai22)
+        for i in range(3 * BC + 2, min(4 * BC, T - i_tc0)):
+            b_a33 = -tl.load(Akkd + (i_tc0 + i) * HV * BC + o_i)
+            b_a33 = tl.where(o_i < i - 3 * BC, b_a33, 0.0)
             b_a33 += tl.sum(b_a33[:, None] * b_Ai33, 0)
-            b_Ai33 = tl.where((o_i == i - 3*BC)[:, None], b_a33, b_Ai33)
+            b_Ai33 = tl.where((o_i == i - 3 * BC)[:, None], b_a33, b_Ai33)
 
         b_Ai00 += m_I
         b_Ai11 += m_I
@@ -307,37 +305,37 @@ def chunk_kda_fwd_kernel_inter_solve_fused(
     b_Ai10 = -tl.dot(
         tl.dot(b_Ai11, b_Akk10, input_precision=SOLVE_TRIL_DOT_PRECISION),
         b_Ai00,
-        input_precision=SOLVE_TRIL_DOT_PRECISION
+        input_precision=SOLVE_TRIL_DOT_PRECISION,
     )
     b_Ai21 = -tl.dot(
         tl.dot(b_Ai22, b_Akk21, input_precision=SOLVE_TRIL_DOT_PRECISION),
         b_Ai11,
-        input_precision=SOLVE_TRIL_DOT_PRECISION
+        input_precision=SOLVE_TRIL_DOT_PRECISION,
     )
     b_Ai32 = -tl.dot(
         tl.dot(b_Ai33, b_Akk32, input_precision=SOLVE_TRIL_DOT_PRECISION),
         b_Ai22,
-        input_precision=SOLVE_TRIL_DOT_PRECISION
+        input_precision=SOLVE_TRIL_DOT_PRECISION,
     )
 
     b_Ai20 = -tl.dot(
         b_Ai22,
-        tl.dot(b_Akk20, b_Ai00, input_precision=SOLVE_TRIL_DOT_PRECISION) +
-        tl.dot(b_Akk21, b_Ai10, input_precision=SOLVE_TRIL_DOT_PRECISION),
-        input_precision=SOLVE_TRIL_DOT_PRECISION
+        tl.dot(b_Akk20, b_Ai00, input_precision=SOLVE_TRIL_DOT_PRECISION)
+        + tl.dot(b_Akk21, b_Ai10, input_precision=SOLVE_TRIL_DOT_PRECISION),
+        input_precision=SOLVE_TRIL_DOT_PRECISION,
     )
     b_Ai31 = -tl.dot(
         b_Ai33,
-        tl.dot(b_Akk31, b_Ai11, input_precision=SOLVE_TRIL_DOT_PRECISION) +
-        tl.dot(b_Akk32, b_Ai21, input_precision=SOLVE_TRIL_DOT_PRECISION),
-        input_precision=SOLVE_TRIL_DOT_PRECISION
+        tl.dot(b_Akk31, b_Ai11, input_precision=SOLVE_TRIL_DOT_PRECISION)
+        + tl.dot(b_Akk32, b_Ai21, input_precision=SOLVE_TRIL_DOT_PRECISION),
+        input_precision=SOLVE_TRIL_DOT_PRECISION,
     )
     b_Ai30 = -tl.dot(
         b_Ai33,
-        tl.dot(b_Akk30, b_Ai00, input_precision=SOLVE_TRIL_DOT_PRECISION) +
-        tl.dot(b_Akk31, b_Ai10, input_precision=SOLVE_TRIL_DOT_PRECISION) +
-        tl.dot(b_Akk32, b_Ai20, input_precision=SOLVE_TRIL_DOT_PRECISION),
-        input_precision=SOLVE_TRIL_DOT_PRECISION
+        tl.dot(b_Akk30, b_Ai00, input_precision=SOLVE_TRIL_DOT_PRECISION)
+        + tl.dot(b_Akk31, b_Ai10, input_precision=SOLVE_TRIL_DOT_PRECISION)
+        + tl.dot(b_Akk32, b_Ai20, input_precision=SOLVE_TRIL_DOT_PRECISION),
+        input_precision=SOLVE_TRIL_DOT_PRECISION,
     )
 
     ################################################################################
@@ -367,9 +365,11 @@ def chunk_kda_fwd_kernel_inter_solve_fused(
     tl.store(p_Akk33, b_Ai33.to(Akk.dtype.element_ty), mask=m_A3)
 
 
-@triton.heuristics({
-    'IS_VARLEN': lambda args: args['cu_seqlens'] is not None,
-})
+@triton.heuristics(
+    {
+        "IS_VARLEN": lambda args: args["cu_seqlens"] is not None,
+    }
+)
 @triton.autotune(
     configs=[
         triton.Config({}, num_warps=num_warps, num_stages=num_stages)
@@ -378,7 +378,7 @@ def chunk_kda_fwd_kernel_inter_solve_fused(
     ],
     key=["BK", "BT", "HV"],
 )
-@triton.jit(do_not_specialize=['B', 'T'])
+@triton.jit(do_not_specialize=["B", "T"])
 def chunk_kda_fwd_kernel_intra_sub_chunk(
     q,
     k,
@@ -445,10 +445,10 @@ def chunk_kda_fwd_kernel_intra_sub_chunk(
     b_beta = tl.load(p_beta, mask=m_c, other=0.0).to(tl.float32)
 
     if USE_GATHER:
-        b_gn = gather(b_g, tl.full([1, BK], min(BC//2, T - i_ti - 1), dtype=tl.int16), axis=0)
+        b_gn = gather(b_g, tl.full([1, BK], min(BC // 2, T - i_ti - 1), dtype=tl.int16), axis=0)
     else:
         # caculate offset
-        p_gn = g + (i_ti + min(BC // 2, T - i_ti - 1)) * HV*K + tl.arange(0, BK)
+        p_gn = g + (i_ti + min(BC // 2, T - i_ti - 1)) * HV * K + tl.arange(0, BK)
         b_gn = tl.load(p_gn, mask=tl.arange(0, BK) < K, other=0.0)
         b_gn = b_gn[None, :]
 
@@ -456,8 +456,8 @@ def chunk_kda_fwd_kernel_intra_sub_chunk(
     # less than 85 to avoid overflow in exp2
     b_gm = (b_g - b_gn).to(tl.float32)
 
-    b_gq = tl.where(m_c[:, None], exp2(b_gm), 0.)
-    b_gk = tl.where(m_c[:, None], exp2(-b_gm), 0.)
+    b_gq = tl.where(m_c[:, None], exp2(b_gm), 0.0)
+    b_gk = tl.where(m_c[:, None], exp2(-b_gm), 0.0)
 
     b_kgt = tl.trans(b_k * b_gk)
 
@@ -487,8 +487,8 @@ def chunk_kda_fwd_kernel_intra_sub_chunk(
 
     b_Ai = -b_Akk
     for i in range(2, min(BC, T - i_ti)):
-        b_a = -tl.load(Akk + (i_ti + i) * HV*BC + o_i)
-        b_a = tl.where(o_i < i, b_a, 0.)
+        b_a = -tl.load(Akk + (i_ti + i) * HV * BC + o_i)
+        b_a = tl.where(o_i < i, b_a, 0.0)
         b_a += tl.sum(b_a[:, None] * b_Ai, 0)
         b_Ai = tl.where((o_i == i)[:, None], b_a, b_Ai)
     b_Ai += m_I
@@ -559,10 +559,7 @@ def chunk_kda_fwd_intra(
 
     # Step 2: Fused inter + solve_tril (works for both fixed-len and varlen)
     solve_tril_dot_precision = (
-        "tf32"
-        if current_platform.is_cuda()
-        and current_platform.has_device_capability(80)
-        else "ieee"
+        "tf32" if current_platform.is_cuda() and current_platform.has_device_capability(80) else "ieee"
     )
     grid = (NT, B * HV)
     chunk_kda_fwd_kernel_inter_solve_fused[grid](

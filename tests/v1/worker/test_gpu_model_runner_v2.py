@@ -11,9 +11,9 @@ from unittest.mock import Mock
 import pytest
 import torch
 
-import aphrodite.distributed.aux_output_connector.worker as aux_output_worker
-import aphrodite.v1.worker.gpu.model_runner as model_runner_module
-from aphrodite.config import (
+import sonar.distributed.aux_output_connector.worker as aux_output_worker
+import sonar.v1.worker.gpu.model_runner as model_runner_module
+from sonar.config import (
     AttentionConfig,
     CacheConfig,
     KernelConfig,
@@ -22,9 +22,9 @@ from aphrodite.config import (
     ParallelConfig,
     SpeculativeConfig,
 )
-from aphrodite.model_executor.warmup.jit_warmup import JitWarmupRegistry
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
-from aphrodite.v1.kv_cache_interface import (
+from sonar.model_executor.warmup.jit_warmup import JitWarmupRegistry
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
+from sonar.v1.kv_cache_interface import (
     CircularBufferSpec,
     FullAttentionSpec,
     KVCacheConfig,
@@ -32,11 +32,11 @@ from aphrodite.v1.kv_cache_interface import (
     MambaSpec,
     UniformTypeKVCacheSpecs,
 )
-from aphrodite.v1.worker.gpu.async_utils import async_copy_to_np
-from aphrodite.v1.worker.gpu.block_table import BlockTables
-from aphrodite.v1.worker.gpu.model_runner import ExecuteModelState, GPUModelRunner
-from aphrodite.v1.worker.gpu.spec_decode.standalone_ar import speculator as ar_module
-from aphrodite.v1.worker.gpu.spec_decode.utils import get_drafter_hidden_states
+from sonar.v1.worker.gpu.async_utils import async_copy_to_np
+from sonar.v1.worker.gpu.block_table import BlockTables
+from sonar.v1.worker.gpu.model_runner import ExecuteModelState, GPUModelRunner
+from sonar.v1.worker.gpu.spec_decode.standalone_ar import speculator as ar_module
+from sonar.v1.worker.gpu.spec_decode.utils import get_drafter_hidden_states
 
 
 def test_non_last_pp_rank_uses_global_batch_for_sample_feedback(monkeypatch):
@@ -92,14 +92,14 @@ def test_profile_run_creates_aux_output_connector_before_forward(monkeypatch, en
     events = []
     capturer = object()
     model = torch.nn.Module()
-    aphrodite_config = SimpleNamespace(
+    sonar_config = SimpleNamespace(
         aux_output_config=SimpleNamespace(enabled=enabled),
         max_concurrent_batches=1,
         scheduler_config=SimpleNamespace(max_num_batched_tokens=8),
     )
 
     def allocate(**kwargs):
-        assert kwargs == {"max_num_batched_tokens": 8, "aphrodite_config": aphrodite_config}
+        assert kwargs == {"max_num_batched_tokens": 8, "sonar_config": sonar_config}
         events.append("allocate")
         return capturer
 
@@ -115,7 +115,7 @@ def test_profile_run_creates_aux_output_connector_before_forward(monkeypatch, en
     monkeypatch.setattr(aux_output_worker, "bind_routed_experts_capturer", bind)
     monkeypatch.setattr(torch.accelerator, "synchronize", lambda: None)
     runner = GPUModelRunner.__new__(GPUModelRunner)
-    runner.aphrodite_config = aphrodite_config
+    runner.sonar_config = sonar_config
     runner.model = model
     runner.aux_output_connector = None
     runner.supports_mm_inputs = False
@@ -148,11 +148,11 @@ def test_qsa_circular_group_uses_custom_slot_mapping(monkeypatch):
         cp_kv_cache_interleave_size=1,
     )
     runner.parallel_config = parallel_config
-    runner.aphrodite_config = SimpleNamespace(
+    runner.sonar_config = SimpleNamespace(
         parallel_config=parallel_config,
         cache_config=SimpleNamespace(mamba_cache_mode="none"),
     )
-    runner.jit_warmup_registry = JitWarmupRegistry(runner.aphrodite_config)
+    runner.jit_warmup_registry = JitWarmupRegistry(runner.sonar_config)
     runner.model_state = SimpleNamespace(
         get_additional_cg_support=lambda: (),
         num_new_sampled_tokens_per_step=1,
@@ -270,14 +270,14 @@ def test_initialize_kv_cache_does_not_dcp_shard_mamba_block_table(
         decode_context_parallel_size=dcp_size,
         cp_kv_cache_interleave_size=1,
     )
-    aphrodite_config = SimpleNamespace(
+    sonar_config = SimpleNamespace(
         parallel_config=parallel_config,
         cache_config=SimpleNamespace(mamba_cache_mode=mamba_cache_mode),
     )
     runner = SimpleNamespace(
         max_model_len=max_model_len,
         is_encoder_decoder=False,
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         parallel_config=parallel_config,
     )
 
@@ -503,7 +503,7 @@ def test_standalone_draft_kv_dtype_override(
     )
     target.parallel_config.data_parallel_index = data_parallel_index
     speculator = object.__new__(ar_module.StandaloneARSpeculator)
-    speculator.aphrodite_config = target
+    speculator.sonar_config = target
     speculator.draft_model_config = object()
     spec = SimpleNamespace(
         kv_cache_dtype=draft_dtype,
@@ -521,9 +521,9 @@ def test_standalone_draft_kv_dtype_override(
 
     speculator.load_draft_model(object(), set())
 
-    draft_config = get_model.call_args.kwargs["aphrodite_config"]
+    draft_config = get_model.call_args.kwargs["sonar_config"]
     assert draft_config.cache_config.cache_dtype == expected_dtype
-    assert speculator.attn_aphrodite_config.cache_config.cache_dtype == expected_dtype
+    assert speculator.attn_sonar_config.cache_config.cache_dtype == expected_dtype
     assert target.cache_config.cache_dtype == "fp8_e4m3"
     assert draft_config.parallel_config.data_parallel_index == data_parallel_index
     assert target.parallel_config.data_parallel_index == data_parallel_index

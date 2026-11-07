@@ -8,14 +8,14 @@ from typing import Literal, cast
 
 import numpy as np
 
-from aphrodite.engine.protocol import EngineClient, StreamingInput
-from aphrodite.entrypoints.generate.base.serving import GenerateBaseServing
-from aphrodite.entrypoints.openai.models.serving import OpenAIServingModels
-from aphrodite.entrypoints.serve.utils.request_logger import RequestLogger
-from aphrodite.inputs import PromptType
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.models.interfaces import SupportsRealtime
-from aphrodite.renderers.inputs.preprocess import parse_model_prompt
+from sonar.engine.protocol import EngineClient, StreamingInput
+from sonar.entrypoints.generate.base.serving import GenerateBaseServing
+from sonar.entrypoints.openai.models.serving import OpenAIServingModels
+from sonar.entrypoints.serve.utils.request_logger import RequestLogger
+from sonar.inputs import PromptType
+from sonar.logger import init_logger
+from sonar.model_executor.models.interfaces import SupportsRealtime
+from sonar.renderers.inputs.preprocess import parse_model_prompt
 
 logger = init_logger(__name__)
 
@@ -47,7 +47,7 @@ class OpenAIServingRealtime(GenerateBaseServing):
     @cached_property
     def model_cls(self) -> type[SupportsRealtime]:
         """Get the model class that supports transcription."""
-        from aphrodite.model_executor.model_loader import get_model_cls
+        from sonar.model_executor.model_loader import get_model_cls
 
         model_cls = get_model_cls(self.model_config)
         return cast(type[SupportsRealtime], model_cls)

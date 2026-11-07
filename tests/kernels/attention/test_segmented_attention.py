@@ -8,11 +8,11 @@ import math
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import triton
+from sonar.platforms import current_platform
+from sonar.triton_utils import triton
 
 if current_platform.is_rocm():
-    from aphrodite.platforms.rocm import on_gfx1x
+    from sonar.platforms.rocm import on_gfx1x
 
 pytestmark = [
     pytest.mark.skip_global_cleanup,
@@ -154,7 +154,7 @@ def _make_paged_attention_case(
 
 
 def _run_segmented_case(case, output, max_query_len, *, force_splits=None, **kwargs):
-    from aphrodite.v1.attention.ops.segmented_attention import (
+    from sonar.v1.attention.ops.segmented_attention import (
         run_segmented_attention,
         select_segmented_config,
     )
@@ -194,10 +194,10 @@ def _run_segmented_case(case, output, max_query_len, *, force_splits=None, **kwa
 
 def test_segmented_tuning_candidates_preserve_workspace_bound():
     """D128/D256 candidates retain their existing split scratch bound."""
-    from aphrodite.model_executor.warmup import (
+    from sonar.model_executor.warmup import (
         rocm_segmented_attn_autotune_warmup as tuning,
     )
-    from aphrodite.v1.attention.ops import segmented_attention as segmented
+    from sonar.v1.attention.ops import segmented_attention as segmented
 
     for batch, query_len, seq_len, heads, kv_heads, dim, fp8 in (
         (1, 1, 128, 8, 8, 128, True),
@@ -215,7 +215,7 @@ def test_segmented_tuning_candidates_preserve_workspace_bound():
 
 @pytest.mark.parametrize("dim", (128, 256))
 def test_segmented_fp8_long_extend_split_workspace_bound(dim):
-    from aphrodite.v1.attention.ops.segmented_attention import (
+    from sonar.v1.attention.ops.segmented_attention import (
         MAX_LONG_EXTEND_WORKSPACE_BYTES,
         segmented_query_capacity,
         select_segmented_config,
@@ -253,8 +253,8 @@ def test_segmented_fp8_long_extend_split_workspace_bound(dim):
 
 @torch.inference_mode()
 def test_segmented_bf16_d256_long_extend_matches_dense_reference():
-    from aphrodite.platforms.rocm import on_gfx1x
-    from aphrodite.v1.attention.ops.segmented_attention import run_segmented_attention
+    from sonar.platforms.rocm import on_gfx1x
+    from sonar.v1.attention.ops.segmented_attention import run_segmented_attention
 
     if not current_platform.is_rocm() or not on_gfx1x():
         pytest.skip("gfx1x segmented prefill")
@@ -304,8 +304,8 @@ def test_segmented_bf16_d256_long_extend_matches_dense_reference():
 )
 @torch.inference_mode()
 def test_segmented_fp8_long_extend_matches_dense_reference(query_len, heads, qk_amplitude, dim):
-    from aphrodite.platforms.rocm import on_gfx12x
-    from aphrodite.v1.attention.ops.segmented_attention import run_segmented_attention
+    from sonar.platforms.rocm import on_gfx12x
+    from sonar.v1.attention.ops.segmented_attention import run_segmented_attention
 
     if not current_platform.is_rocm() or not on_gfx12x():
         pytest.skip("FP8 KV requires gfx12")
@@ -356,7 +356,7 @@ def test_segmented_fp8_long_extend_matches_dense_reference(query_len, heads, qk_
 
 def test_segmented_tuning_protects_static_incumbent():
     """Noise-sized gains must not replace the static configuration."""
-    from aphrodite.model_executor.warmup import (
+    from sonar.model_executor.warmup import (
         rocm_segmented_attn_autotune_warmup as tuning,
     )
 
@@ -373,7 +373,7 @@ def test_segmented_tuning_protects_static_incumbent():
 
 def test_segmented_tuning_promotes_verified_challenger():
     """A finalist with a stable material gain should replace the incumbent."""
-    from aphrodite.model_executor.warmup import (
+    from sonar.model_executor.warmup import (
         rocm_segmented_attn_autotune_warmup as tuning,
     )
 
@@ -390,7 +390,7 @@ def test_segmented_tuning_promotes_verified_challenger():
 
 def test_segmented_tuning_balances_tp_workloads_without_overlap():
     """Every missing bucket belongs to exactly one reasonably balanced rank."""
-    from aphrodite.model_executor.warmup import (
+    from sonar.model_executor.warmup import (
         rocm_segmented_attn_autotune_warmup as tuning,
     )
 
@@ -422,7 +422,7 @@ def test_segmented_tuning_balances_tp_workloads_without_overlap():
 
 def test_segmented_tuning_prunes_scheduler_and_kv_limits():
     """Generated buckets must be reachable under scheduler and cache limits."""
-    from aphrodite.model_executor.warmup import (
+    from sonar.model_executor.warmup import (
         rocm_segmented_attn_autotune_warmup as tuning,
     )
 
@@ -479,12 +479,12 @@ def segmented_tuner(tmp_path, monkeypatch):
     """Exercise real cache files and lookup while replacing GPU timing only."""
     from types import SimpleNamespace
 
-    from aphrodite.model_executor.warmup import (
+    from sonar.model_executor.warmup import (
         rocm_segmented_attn_autotune_warmup as tuning,
     )
-    from aphrodite.v1.attention.ops import segmented_attention as segmented
+    from sonar.v1.attention.ops import segmented_attention as segmented
 
-    monkeypatch.setenv("APHRODITE_CACHE_ROOT", str(tmp_path))
+    monkeypatch.setenv("SONAR_CACHE_ROOT", str(tmp_path))
     monkeypatch.setattr(
         torch.cuda,
         "get_device_properties",
@@ -525,7 +525,7 @@ def test_segmented_tuning_releases_only_new_kernel_modules(monkeypatch, fail, de
     import weakref
     from types import SimpleNamespace
 
-    from aphrodite.model_executor.warmup import (
+    from sonar.model_executor.warmup import (
         rocm_segmented_attn_autotune_warmup as tuning,
     )
 
@@ -567,7 +567,7 @@ def test_segmented_tuning_cleanup_preserves_graphs_and_reloads_kernels():
     """Existing graphs survive cleanup, and released variants still run correctly."""
     import weakref
 
-    from aphrodite.model_executor.warmup import (
+    from sonar.model_executor.warmup import (
         rocm_segmented_attn_autotune_warmup as tuning,
     )
 
@@ -681,8 +681,8 @@ def test_segmented_attention_ragged_unified_graph_replay(
     monkeypatch, dim, page, hq, hk, dtype, kv_dtype, byte_cache, force_splits
 ):
     """Unified-cache segmented prefill follows metadata on graph replay."""
-    from aphrodite.platforms.rocm import on_gfx1x, on_gfx12x
-    from aphrodite.v1.attention.ops import segmented_attention as dispatcher
+    from sonar.platforms.rocm import on_gfx1x, on_gfx12x
+    from sonar.v1.attention.ops import segmented_attention as dispatcher
 
     if not current_platform.is_rocm() or not (on_gfx12x() if kv_dtype.itemsize == 1 else on_gfx1x()):
         pytest.skip("gfx1x segmented prefill (FP8 requires gfx12)")
@@ -807,7 +807,7 @@ def test_segmented_attention_ragged_unified_graph_replay(
 )
 @torch.inference_mode()
 def test_segmented_ragged_prefill_matches_dense_reference(fp8, force_splits):
-    from aphrodite.platforms.rocm import on_gfx1x, on_gfx12x
+    from sonar.platforms.rocm import on_gfx1x, on_gfx12x
 
     if not current_platform.is_rocm() or not (on_gfx12x() if fp8 else on_gfx1x()):
         pytest.skip("gfx1x segmented prefill (FP8 requires gfx12)")
@@ -832,9 +832,9 @@ def test_segmented_ragged_prefill_matches_dense_reference(fp8, force_splits):
 def test_rocm_segmented_attn_layout_cache_update(fp8):
     from types import SimpleNamespace
 
-    from aphrodite.platforms.rocm import on_gfx1x, on_gfx12x
-    from aphrodite.v1.attention.backend import AttentionType
-    from aphrodite.v1.attention.backends.rocm_segmented_attn import (
+    from sonar.platforms.rocm import on_gfx1x, on_gfx12x
+    from sonar.v1.attention.backend import AttentionType
+    from sonar.v1.attention.backends.rocm_segmented_attn import (
         RocmSegmentedAttentionImpl,
     )
 
@@ -875,8 +875,8 @@ def test_rocm_segmented_attn_layout_cache_update(fp8):
 
 @torch.inference_mode()
 def test_segmented_mixed_causality_matches_dense_reference():
-    from aphrodite.platforms.rocm import on_gfx1x
-    from aphrodite.v1.attention.ops import segmented_attention as dispatcher
+    from sonar.platforms.rocm import on_gfx1x
+    from sonar.v1.attention.ops import segmented_attention as dispatcher
 
     if not current_platform.is_rocm() or not on_gfx1x():
         pytest.skip("gfx1x unified attention per-request causal fallback")
@@ -922,7 +922,7 @@ def test_segmented_mixed_causality_matches_dense_reference():
 @pytest.mark.parametrize("window_size", [1, 2048])
 @torch.inference_mode()
 def test_segmented_sliding_window_matches_dense_reference(fp8, causal, window_size):
-    from aphrodite.platforms.rocm import on_gfx1x, on_gfx12x
+    from sonar.platforms.rocm import on_gfx1x, on_gfx12x
 
     if not current_platform.is_rocm() or not (on_gfx12x() if fp8 else on_gfx1x()):
         pytest.skip("gfx1x segmented prefill (FP8 requires gfx12)")
@@ -949,7 +949,7 @@ def test_segmented_sliding_window_matches_dense_reference(fp8, causal, window_si
 @pytest.mark.parametrize("head_size", [64, 128])
 @torch.inference_mode()
 def test_segmented_sinks_match_dense_reference(fp8, window_size, head_size):
-    from aphrodite.platforms.rocm import on_gfx1x, on_gfx12x
+    from sonar.platforms.rocm import on_gfx1x, on_gfx12x
 
     if not current_platform.is_rocm() or not (on_gfx12x() if fp8 else on_gfx1x()):
         pytest.skip("gfx1x segmented prefill (FP8 requires gfx12)")
@@ -988,8 +988,8 @@ def test_segmented_sinks_match_dense_reference(fp8, window_size, head_size):
 @pytest.mark.parametrize("query_len", [1, 8])
 @torch.inference_mode()
 def test_segmented_sink_split_reduce_matches_reference(fp8, window_size, query_len):
-    from aphrodite.platforms.rocm import on_gfx1x, on_gfx12x
-    from aphrodite.v1.attention.ops.segmented_attention import (
+    from sonar.platforms.rocm import on_gfx1x, on_gfx12x
+    from sonar.v1.attention.ops.segmented_attention import (
         run_segmented_attention,
         select_segmented_config,
     )
@@ -1038,7 +1038,7 @@ def test_segmented_sink_split_reduce_matches_reference(fp8, window_size, query_l
 @pytest.mark.parametrize("query_len,context_len", [(1, 8191), (8, 32760), (1, 131071)])
 @torch.inference_mode()
 def test_segmented_long_context_fp8_sinks_match_dense_reference(query_len, context_len):
-    from aphrodite.platforms.rocm import on_gfx12x
+    from sonar.platforms.rocm import on_gfx12x
 
     if not current_platform.is_rocm() or not on_gfx12x():
         pytest.skip("FP8 KV requires gfx12")
@@ -1069,8 +1069,8 @@ def test_segmented_long_context_fp8_sinks_match_dense_reference(query_len, conte
 )
 @torch.inference_mode()
 def test_segmented_softcap_and_output_scaling_match_dense_reference(feature):
-    from aphrodite.platforms.rocm import on_gfx1x
-    from aphrodite.v1.attention.ops import segmented_attention as dispatcher
+    from sonar.platforms.rocm import on_gfx1x
+    from sonar.v1.attention.ops import segmented_attention as dispatcher
 
     if not current_platform.is_rocm() or not on_gfx1x():
         pytest.skip("gfx1x unified attention feature fallback")
@@ -1132,8 +1132,8 @@ def test_segmented_softcap_and_output_scaling_match_dense_reference(feature):
 @torch.inference_mode()
 def test_segmented_attention_cache_offsets_cross_int32_boundary():
     """A small logical prefix can live beyond 2**31 elements in a strided cache."""
-    from aphrodite.platforms.rocm import on_gfx1x
-    from aphrodite.v1.attention.ops.segmented_attention import run_segmented_attention
+    from sonar.platforms.rocm import on_gfx1x
+    from sonar.v1.attention.ops.segmented_attention import run_segmented_attention
 
     if not current_platform.is_rocm() or not on_gfx1x():
         pytest.skip("gfx1x segmented prefill")
@@ -1180,7 +1180,7 @@ def test_segmented_attention_cache_offsets_cross_int32_boundary():
 @pytest.mark.parametrize("fp8", [False, True])
 def test_segmented_attention_reservation_covers_ragged_query_caps(monkeypatch, dim, hq, hk, fp8):
     """Every supported query bucket fits the startup buffer after locking."""
-    from aphrodite.v1.attention.ops import segmented_attention as segmented
+    from sonar.v1.attention.ops import segmented_attention as segmented
 
     sizes = segmented.segmented_attention_workspace_size(
         32,
@@ -1210,7 +1210,7 @@ def test_segmented_attention_reservation_respects_scheduler_token_limit(
     monkeypatch,
 ) -> None:
     """Workspace planning excludes batch/query pairs the scheduler cannot form."""
-    from aphrodite.v1.attention.ops import segmented_attention as segmented
+    from sonar.v1.attention.ops import segmented_attention as segmented
 
     calls = []
 
@@ -1236,7 +1236,7 @@ def test_segmented_attention_reservation_respects_scheduler_token_limit(
 
 
 def test_segmented_attention_query_capacity_buckets() -> None:
-    from aphrodite.v1.attention.ops.segmented_attention import (
+    from sonar.v1.attention.ops.segmented_attention import (
         MAX_QUERY_LEN,
         segmented_query_capacity,
     )
@@ -1257,8 +1257,8 @@ def test_segmented_attention_query_capacity_buckets() -> None:
 
 def test_segmented_scratch_is_stable_and_isolated_across_runtime_lanes(monkeypatch):
     """Draft/DBO scratch never aliases target scratch or generic workspace."""
-    import aphrodite.v1.worker.workspace as workspace
-    from aphrodite.v1.attention.ops import segmented_attention as segmented
+    import sonar.v1.worker.workspace as workspace
+    from sonar.v1.attention.ops import segmented_attention as segmented
 
     active_ubatch = [0]
     monkeypatch.setattr(workspace, "dbo_current_ubatch_id", lambda: active_ubatch[0])

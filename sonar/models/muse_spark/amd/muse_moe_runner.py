@@ -7,62 +7,62 @@ from dataclasses import dataclass, fields
 
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite import envs
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.config import get_current_aphrodite_config
-from aphrodite.distributed import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar import envs
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.config import get_current_sonar_config
+from sonar.distributed import (
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
     tensor_model_parallel_all_gather,
     tensor_model_parallel_all_reduce,
     tensor_model_parallel_reduce_scatter,
 )
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEQuantConfig,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
+from sonar.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
     AiterMxfp4Experts,
     rocm_aiter_fused_experts,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.triton_moe import TritonExperts
-from aphrodite.model_executor.layers.fused_moe.fused_moe_method_base import (
+from sonar.model_executor.layers.fused_moe.experts.triton_moe import TritonExperts
+from sonar.model_executor.layers.fused_moe.fused_moe_method_base import (
     FusedMoEMethodBase,
 )
-from aphrodite.model_executor.layers.fused_moe.oracle.fp8 import Fp8MoeBackend
-from aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 import Mxfp4MoeBackend
-from aphrodite.model_executor.layers.fused_moe.oracle.unquantized import (
+from sonar.model_executor.layers.fused_moe.oracle.fp8 import Fp8MoeBackend
+from sonar.model_executor.layers.fused_moe.oracle.mxfp4 import Mxfp4MoeBackend
+from sonar.model_executor.layers.fused_moe.oracle.unquantized import (
     UnquantizedMoeBackend,
 )
-from aphrodite.model_executor.layers.fused_moe.routed_experts import RoutedExperts
-from aphrodite.model_executor.layers.fused_moe.runner.moe_runner import MoERunner
-from aphrodite.model_executor.layers.fused_moe.unquantized_fused_moe_method import (
+from sonar.model_executor.layers.fused_moe.routed_experts import RoutedExperts
+from sonar.model_executor.layers.fused_moe.runner.moe_runner import MoERunner
+from sonar.model_executor.layers.fused_moe.unquantized_fused_moe_method import (
     UnquantizedFusedMoEMethod,
 )
-from aphrodite.model_executor.layers.quantization.base_config import QuantizationConfig
-from aphrodite.model_executor.layers.quantization.quark.quark import QuarkConfig
-from aphrodite.model_executor.layers.quantization.quark.quark_moe import (
+from sonar.model_executor.layers.quantization.base_config import QuantizationConfig
+from sonar.model_executor.layers.quantization.quark.quark import QuarkConfig
+from sonar.model_executor.layers.quantization.quark.quark_moe import (
     QuarkOCP_MX_MoEMethod,
     QuarkW8A8Fp8MoEMethod,
 )
-from aphrodite.model_executor.layers.quantization.utils.ocp_mx_utils import (
+from sonar.model_executor.layers.quantization.utils.ocp_mx_utils import (
     _ACTIVATION_QUANT_KEY_MAP,
     _WEIGHT_QUANT_KEY_MAP,
     OCP_MX_BLOCK_SIZE,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import QuantKey
-from aphrodite.model_executor.models.utils import extract_layer_index
-from aphrodite.model_executor.utils import set_weight_attrs
-from aphrodite.models.muse_spark.amd.ops.fused_norm_expand import take_expanded
-from aphrodite.models.muse_spark.common.layers import MuseSpark1xRMSNorm
-from aphrodite.models.muse_spark.common.moe import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import QuantKey
+from sonar.model_executor.models.utils import extract_layer_index
+from sonar.model_executor.utils import set_weight_attrs
+from sonar.models.muse_spark.amd.ops.fused_norm_expand import take_expanded
+from sonar.models.muse_spark.common.layers import MuseSpark1xRMSNorm
+from sonar.models.muse_spark.common.moe import (
     MuseSpark1xRouter,
     MuseSparkConsolidatedRoutedExperts,
     needs_pre_norm_all_reduce,
 )
-from aphrodite.models.muse_spark.common.ops.fused_finalize import (
+from sonar.models.muse_spark.common.ops.fused_finalize import (
     fused_post_expert_finalize,
 )
 
@@ -141,7 +141,7 @@ class MuseSparkTopKWeightAndReduce(mk.TopKWeightAndReduce):
         self.pre_norm_all_reduce = pre_norm_all_reduce
         self.take_route_output = take_route_output
         self.take_route_expert_map = take_route_expert_map
-        self.reduce_dtype = torch.bfloat16 if envs.APHRODITE_ROCM_MUSE_MOE_REDUCE_DTYPE == "bf16" else torch.float32
+        self.reduce_dtype = torch.bfloat16 if envs.SONAR_ROCM_MUSE_MOE_REDUCE_DTYPE == "bf16" else torch.float32
         self.rs_min_tokens = _TOKEN_SHARDED_MIN_TOKENS
         norm = getattr(post_expert_norm_fn, "__self__", None)
         self.fused_norm = norm if isinstance(norm, MuseSpark1xRMSNorm) and norm.variance_size_override is None else None
@@ -639,9 +639,9 @@ def _online_mxfp4_applies(prefix: str) -> bool:
 
     The first and last decoder layers stay BF16, as in the Quark MXFP4 export.
     """
-    if envs.APHRODITE_ROCM_MUSE_MOE_ONLINE_QUANT != "mxfp4":
+    if envs.SONAR_ROCM_MUSE_MOE_ONLINE_QUANT != "mxfp4":
         return False
-    num_layers = get_current_aphrodite_config().model_config.hf_text_config.num_hidden_layers
+    num_layers = get_current_sonar_config().model_config.hf_text_config.num_hidden_layers
     return extract_layer_index(prefix) not in (0, num_layers - 1)
 
 

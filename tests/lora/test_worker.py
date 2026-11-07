@@ -6,25 +6,25 @@ import random
 import tempfile
 from unittest.mock import patch
 
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.config import (
     CacheConfig,
     DeviceConfig,
     ModelConfig,
     ParallelConfig,
     SchedulerConfig,
-    set_current_aphrodite_config,
+    SonarConfig,
+    set_current_sonar_config,
 )
-from aphrodite.config.load import LoadConfig
-from aphrodite.config.lora import LoRAConfig
-from aphrodite.lora.model_manager import LoRAMapping
-from aphrodite.lora.request import LoRARequest
-from aphrodite.platforms import current_platform
+from sonar.config.load import LoadConfig
+from sonar.config.lora import LoRAConfig
+from sonar.lora.model_manager import LoRAMapping
+from sonar.lora.request import LoRARequest
+from sonar.platforms import current_platform
 
 if current_platform.is_xpu():
-    from aphrodite.v1.worker.xpu_worker import XPUWorker as Worker
+    from sonar.v1.worker.xpu_worker import XPUWorker as Worker
 else:
-    from aphrodite.v1.worker.gpu_worker import Worker
+    from sonar.v1.worker.gpu_worker import Worker
 
 MODEL_PATH = "Qwen/Qwen3-0.6B"
 NUM_LORAS = 16
@@ -47,7 +47,7 @@ def test_worker_apply_lora(qwen3_lora_files):
         enforce_eager=True,
     )
 
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         model_config=model_config,
         load_config=LoadConfig(
             download_dir=None,
@@ -73,13 +73,13 @@ def test_worker_apply_lora(qwen3_lora_files):
         lora_config=LoRAConfig(max_lora_rank=8, max_cpu_loras=NUM_LORAS, max_loras=NUM_LORAS),
     )
     worker = Worker(
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         local_rank=0,
         rank=0,
         distributed_init_method=f"file://{tempfile.mkstemp()[1]}",
     )
 
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         worker.init_device()
         worker.load_model()
 

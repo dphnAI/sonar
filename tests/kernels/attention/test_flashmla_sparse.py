@@ -9,8 +9,8 @@ def test_deepseek_v4_c128a_adaptive_width_has_capture_stable_stride(
     monkeypatch: pytest.MonkeyPatch,
     sm120: bool,
 ):
-    from aphrodite.models.deepseek_v4 import sparse_mla
-    from aphrodite.platforms.interface import DeviceCapability
+    from sonar.models.deepseek_v4 import sparse_mla
+    from sonar.platforms.interface import DeviceCapability
 
     monkeypatch.setattr(
         sparse_mla.current_platform,
@@ -75,7 +75,7 @@ def test_deepseek_v4_c128a_adaptive_width_has_capture_stable_stride(
 
 
 def test_sparse_flashmla_metadata_smoke():
-    import aphrodite.v1.attention.ops.flashmla as fm
+    import sonar.v1.attention.ops.flashmla as fm
 
     ok, reason = fm.is_flashmla_sparse_supported()
     if not ok:
@@ -106,8 +106,8 @@ def test_sparse_flashmla_metadata_smoke():
 
 
 def test_sparse_flashmla_decode_matches_cache_writer_scales():
-    import aphrodite.v1.attention.ops.flashmla as fm
-    from aphrodite import _custom_ops as ops
+    import sonar.v1.attention.ops.flashmla as fm
+    from sonar import _custom_ops as ops
 
     ok, reason = fm.is_flashmla_sparse_supported()
     if not ok:
@@ -187,7 +187,7 @@ def test_sparse_flashmla_decode_matches_cache_writer_scales():
 
 @pytest.mark.parametrize("h_q", [64, 128])
 def test_sparse_flashmla_prefill_smoke(h_q: int):
-    import aphrodite.v1.attention.ops.flashmla as fm
+    import sonar.v1.attention.ops.flashmla as fm
 
     ok, reason = fm.is_flashmla_sparse_supported()
     if not ok:
@@ -217,7 +217,7 @@ def test_sparse_flashmla_prefill_smoke(h_q: int):
 
 
 def test_deepseek_v4_prefill_chunk_planning_expands_for_short_sequences():
-    from aphrodite.v1.attention.backends.mla.sparse_swa import DeepseekSparseSWAMetadata
+    from sonar.v1.attention.backends.mla.sparse_swa import DeepseekSparseSWAMetadata
 
     metadata = DeepseekSparseSWAMetadata(
         block_table=torch.empty(0, dtype=torch.int32),
@@ -238,9 +238,9 @@ def test_deepseek_v4_prefill_chunk_planning_expands_for_short_sequences():
 
 
 def test_flashinfer_sparse_indices_cache(monkeypatch):
-    from aphrodite.models.deepseek_v4.nvidia import flashinfer_sparse as flashinfer_mod
-    from aphrodite.models.deepseek_v4.sparse_mla import DeepseekV4FlashMLAMetadata
-    from aphrodite.v1.attention.backends.mla.sparse_swa import DeepseekSparseSWAMetadata
+    from sonar.models.deepseek_v4.nvidia import flashinfer_sparse as flashinfer_mod
+    from sonar.models.deepseek_v4.sparse_mla import DeepseekV4FlashMLAMetadata
+    from sonar.v1.attention.backends.mla.sparse_swa import DeepseekSparseSWAMetadata
 
     builder_calls = 0
 
@@ -366,8 +366,8 @@ def test_flashinfer_sparse_indices_cache(monkeypatch):
 
 
 def test_flashinfer_sparse_index_preserves_logical_window(monkeypatch):
-    from aphrodite.models.deepseek_v4.nvidia import flashinfer_sparse as flashinfer_mod
-    from aphrodite.v1.attention.backends.mla.sparse_swa import DeepseekSparseSWAMetadata
+    from sonar.models.deepseek_v4.nvidia import flashinfer_sparse as flashinfer_mod
+    from sonar.v1.attention.backends.mla.sparse_swa import DeepseekSparseSWAMetadata
 
     captured_shapes_and_windows: list[tuple[int, int]] = []
 
@@ -449,7 +449,7 @@ def test_flashinfer_sparse_index_preserves_logical_window(monkeypatch):
 
 
 def test_flashinfer_mixed_sparse_indices_separates_window_and_padded_width():
-    from aphrodite.models.deepseek_v4.common.ops.cache_utils import (
+    from sonar.models.deepseek_v4.common.ops.cache_utils import (
         build_flashinfer_mixed_sparse_indices,
     )
 
@@ -485,7 +485,7 @@ def test_flashinfer_mixed_sparse_indices_noncausal_rows_have_no_active_gaps():
     of the block starts at column `window`, and the compressed entries follow
     directly; `sparse_topk_lens` ends right after them.
     """
-    from aphrodite.models.deepseek_v4.common.ops.cache_utils import (
+    from sonar.models.deepseek_v4.common.ops.cache_utils import (
         build_flashinfer_mixed_sparse_indices,
     )
 
@@ -524,7 +524,7 @@ def test_flashinfer_mixed_sparse_indices_noncausal_rows_have_no_active_gaps():
 def test_flashinfer_mixed_sparse_indices_noncausal_pad_rows_keep_min_length():
     """A CUDA-graph pad token of the DSpark graph (a zero-length request) gets
     a causal pad row's shape instead of negative spill arithmetic."""
-    from aphrodite.models.deepseek_v4.common.ops.cache_utils import (
+    from sonar.models.deepseek_v4.common.ops.cache_utils import (
         build_flashinfer_mixed_sparse_indices,
     )
 
@@ -557,15 +557,15 @@ def test_flashinfer_mixed_sparse_indices_noncausal_pad_rows_keep_min_length():
 @pytest.mark.parametrize("model", ["deepseek_v4", "deepseek_v41"])
 @pytest.mark.parametrize("page_padding", [0, 64])
 def test_flashinfer_sparse_forward_reads_packed_kv_rows(model, page_padding):
-    """Decode and prefill must read storage rows after Aphrodite remaps packed pages."""
+    """Decode and prefill must read storage rows after Sonar remaps packed pages."""
     import importlib
 
-    from aphrodite.platforms import current_platform
-    from aphrodite.v1.attention.backends.mla.sparse_swa import DeepseekSparseSWAMetadata
+    from sonar.platforms import current_platform
+    from sonar.v1.attention.backends.mla.sparse_swa import DeepseekSparseSWAMetadata
 
     if not current_platform.is_device_capability_family(100):
         pytest.skip("Requires FlashInfer TRTLLM sparse MLA on SM100/SM103")
-    mod = importlib.import_module(f"aphrodite.models.{model}.nvidia.flashinfer_sparse")
+    mod = importlib.import_module(f"sonar.models.{model}.nvidia.flashinfer_sparse")
     device = "cuda"
     block_size = 64
     storage = torch.full((3, block_size + page_padding, 512), 99, dtype=torch.bfloat16, device=device)
@@ -639,7 +639,7 @@ def _make_rope_quant_attn(mod, num_rows: int, device: str):
 
 def _rope_quant_vs_unfused(attn, q, cache, metadata, positions, num_tokens):
     """Run `_forward` unfused and fused; return (bf16 attention, z_unfused, z_fused)."""
-    from aphrodite.models.deepseek_v4.nvidia.ops.o_proj import rope_quant_attn_out
+    from sonar.models.deepseek_v4.nvidia.ops.o_proj import rope_quant_attn_out
 
     heads, groups = attn.n_local_heads, attn.n_local_groups
     unfused = torch.empty(q.shape, dtype=torch.bfloat16, device=q.device)
@@ -659,7 +659,7 @@ def _assert_projects_alike(z_unfused, z_fused):
 
 
 def _skip_unless_rope_quant():
-    from aphrodite.platforms import current_platform
+    from sonar.platforms import current_platform
 
     if not current_platform.is_device_capability_family(100):
         pytest.skip("Requires FlashInfer TRTLLM sparse MLA on SM100/SM103")
@@ -671,8 +671,8 @@ def test_flashinfer_rope_quant_matches_unfused_o_proj():
     One mixed step (two decodes, a three-token prefill) plus CUDA-graph pad rows,
     so both calls run over the full buffer with un-rebased cum_seq_lens_q.
     """
-    from aphrodite.models.deepseek_v4.nvidia import flashinfer_sparse as mod
-    from aphrodite.v1.attention.backends.mla.sparse_swa import DeepseekSparseSWAMetadata
+    from sonar.models.deepseek_v4.nvidia import flashinfer_sparse as mod
+    from sonar.v1.attention.backends.mla.sparse_swa import DeepseekSparseSWAMetadata
 
     _skip_unless_rope_quant()
     torch.manual_seed(0)
@@ -719,11 +719,11 @@ def test_flashinfer_dspark_noncausal_block_sees_future_tokens(context_len):
     builder must place the block around each query's causal window without -1
     gaps, down to an empty context.
     """
-    from aphrodite.models.deepseek_v4.nvidia import flashinfer_sparse as mod
-    from aphrodite.v1.attention.backends.mla.compressor_utils import (
+    from sonar.models.deepseek_v4.nvidia import flashinfer_sparse as mod
+    from sonar.v1.attention.backends.mla.compressor_utils import (
         get_dspark_swa_index_width,
     )
-    from aphrodite.v1.attention.backends.mla.sparse_swa import DeepseekSparseSWAMetadata
+    from sonar.v1.attention.backends.mla.sparse_swa import DeepseekSparseSWAMetadata
 
     _skip_unless_rope_quant()
     torch.manual_seed(0)

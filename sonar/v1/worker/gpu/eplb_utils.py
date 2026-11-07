@@ -9,17 +9,17 @@ from typing import TYPE_CHECKING, Any
 import torch
 import torch.nn as nn
 
-from aphrodite.config import ModelConfig
-from aphrodite.distributed.eplb.eplb_state import EplbState
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.models.interfaces import (
+from sonar.config import ModelConfig
+from sonar.distributed.eplb.eplb_state import EplbState
+from sonar.logger import init_logger
+from sonar.model_executor.models.interfaces import (
     MixtureOfExperts,
     get_mixture_of_experts_model,
 )
-from aphrodite.models.deepseek_v4.common.eplb_util import dspark_draft_supports_eplb
+from sonar.models.deepseek_v4.common.eplb_util import dspark_draft_supports_eplb
 
 if TYPE_CHECKING:
-    from aphrodite.v1.worker.gpu.model_runner import GPUModelRunner
+    from sonar.v1.worker.gpu.model_runner import GPUModelRunner
 
 logger = init_logger(__name__)
 

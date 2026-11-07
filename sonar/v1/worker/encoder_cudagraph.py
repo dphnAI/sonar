@@ -10,22 +10,22 @@ from typing import Any, TypeAlias
 
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed import (
+from sonar.config import SonarConfig
+from sonar.distributed import (
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
     tensor_model_parallel_all_gather,
 )
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.models.interfaces import (
+from sonar.logger import init_logger
+from sonar.model_executor.models.interfaces import (
     SupportsEncoderCudaGraph,
 )
-from aphrodite.model_executor.models.utils import scatter_output_slices
-from aphrodite.model_executor.models.vision import get_load_balance_assignment
-from aphrodite.utils.gpu_sync_debug import gpu_sync_allowed
-from aphrodite.utils.math_utils import round_up_to
-from aphrodite.utils.torch_utils import current_stream
-from aphrodite.v1.worker.encoder_cudagraph_defs import (
+from sonar.model_executor.models.utils import scatter_output_slices
+from sonar.model_executor.models.vision import get_load_balance_assignment
+from sonar.utils.gpu_sync_debug import gpu_sync_allowed
+from sonar.utils.math_utils import round_up_to
+from sonar.utils.torch_utils import current_stream
+from sonar.v1.worker.encoder_cudagraph_defs import (
     ENCODER_CUDAGRAPH_AXIS_KEYS_KWARG,
     EncoderCudaGraphConfig,
     EncoderItemSpec,
@@ -71,25 +71,25 @@ class EncoderCudaGraphManager:
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
         dtype: torch.dtype,
         model: SupportsEncoderCudaGraph,
     ):
         """Initialize CUDA graph manager with provided token budgets
         and max batch size."""
-        self.aphrodite_config = aphrodite_config
+        self.sonar_config = sonar_config
         self.device = device
         self.dtype = dtype
         self.model = model
         self.config: EncoderCudaGraphConfig = model.get_encoder_cudagraph_config()
 
-        comp_config = aphrodite_config.compilation_config
+        comp_config = sonar_config.compilation_config
         user_budgets = comp_config.encoder_cudagraph_token_budgets
         user_max_vision_items = comp_config.encoder_cudagraph_max_vision_items_per_batch
         user_max_frames = comp_config.encoder_cudagraph_max_frames_per_batch
 
-        multimodal_config = aphrodite_config.model_config.multimodal_config
+        multimodal_config = sonar_config.model_config.multimodal_config
 
         self._capture_axes: tuple[CaptureAxisKeys, ...] = tuple(tuple(axis) for axis in self.config.capture_axes)
         if any(len(axis) == 0 for axis in self._capture_axes):
@@ -121,7 +121,7 @@ class EncoderCudaGraphManager:
                 )
         else:
             # Auto-infer missing values from model.
-            min_budget, max_budget = model.get_encoder_cudagraph_budget_range(aphrodite_config)
+            min_budget, max_budget = model.get_encoder_cudagraph_budget_range(sonar_config)
             if min_budget <= 0 or max_budget <= 0:
                 raise ValueError(
                     f"Invalid encoder cudagraph budget range: "
@@ -165,11 +165,11 @@ class EncoderCudaGraphManager:
             max_frames_per_video = self.config.max_frames_per_video
             self.max_frames_per_batch = self.max_batch_size * max_frames_per_video
 
-        mm_config = aphrodite_config.model_config.multimodal_config
+        mm_config = sonar_config.model_config.multimodal_config
         self.use_dp = (
             mm_config is not None
             and mm_config.mm_encoder_tp_mode == "data"
-            and aphrodite_config.parallel_config.tensor_parallel_size > 1
+            and sonar_config.parallel_config.tensor_parallel_size > 1
         )
 
         self.budget_graphs: dict[str, dict[BudgetGraphMapKey, BudgetGraphMetadata]] = {}

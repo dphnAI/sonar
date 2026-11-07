@@ -6,9 +6,9 @@ from unittest.mock import Mock, patch
 import pytest
 import torch
 
-from aphrodite.config import AphroditeConfig, LoadConfig, ModelConfig, SpeculativeConfig
-from aphrodite.model_executor.models.utils import get_draft_quant_config
-from aphrodite.platforms import current_platform
+from sonar.config import LoadConfig, ModelConfig, SonarConfig, SpeculativeConfig
+from sonar.model_executor.models.utils import get_draft_quant_config
+from sonar.platforms import current_platform
 
 DEVICE_TYPE = current_platform.device_type
 DEVICES = (
@@ -24,15 +24,15 @@ def test_get_draft_quant_config_with_draft_model():
     mock_speculative_config = Mock(spec=SpeculativeConfig)
     mock_speculative_config.draft_model_config = mock_draft_model_config
 
-    mock_aphrodite_config = Mock(spec=AphroditeConfig)
-    mock_aphrodite_config.speculative_config = mock_speculative_config
-    mock_aphrodite_config.load_config = mock_load_config
+    mock_sonar_config = Mock(spec=SonarConfig)
+    mock_sonar_config.speculative_config = mock_speculative_config
+    mock_sonar_config.load_config = mock_load_config
 
     mock_quant_config = Mock()
     with patch.object(
-        AphroditeConfig, "get_quantization_config", return_value=mock_quant_config
+        SonarConfig, "get_quantization_config", return_value=mock_quant_config
     ) as mock_get_quantization_config:
-        result = get_draft_quant_config(mock_aphrodite_config)
+        result = get_draft_quant_config(mock_sonar_config)
 
         # Verify the function calls get_quantization_config with draft model config
         mock_get_quantization_config.assert_called_once_with(mock_draft_model_config, mock_load_config)
@@ -43,21 +43,21 @@ def test_get_draft_quant_config_without_draft_model():
     mock_speculative_config = Mock(spec=SpeculativeConfig)
     mock_speculative_config.draft_model_config = None
 
-    mock_aphrodite_config = Mock(spec=AphroditeConfig)
-    mock_aphrodite_config.speculative_config = mock_speculative_config
-    mock_aphrodite_config.load_config = Mock(spec=LoadConfig)
+    mock_sonar_config = Mock(spec=SonarConfig)
+    mock_sonar_config.speculative_config = mock_speculative_config
+    mock_sonar_config.load_config = Mock(spec=LoadConfig)
 
-    result = get_draft_quant_config(mock_aphrodite_config)
+    result = get_draft_quant_config(mock_sonar_config)
 
     assert result is None
 
 
 @torch.inference_mode()
 @pytest.mark.parametrize("device", DEVICES)
-def test_fc_layer_quant_config_usage(default_aphrodite_config, dist_init, device) -> None:
+def test_fc_layer_quant_config_usage(default_sonar_config, dist_init, device) -> None:
     import torch
 
-    from aphrodite.model_executor.layers.linear import ReplicatedLinear
+    from sonar.model_executor.layers.linear import ReplicatedLinear
 
     if current_platform.is_cuda_alike():
         torch.accelerator.set_device_index(device)
@@ -100,7 +100,7 @@ def test_fc_layer_quant_config_usage(default_aphrodite_config, dist_init, device
 
 
 def test_maybe_remap_kv_scale_name():
-    from aphrodite.model_executor.model_loader.weight_utils import maybe_remap_kv_scale_name
+    from sonar.model_executor.model_loader.weight_utils import maybe_remap_kv_scale_name
 
     params_dict = {
         "layers.0.self_attn.kv_scale": Mock(),
@@ -120,7 +120,7 @@ def test_eagle3_lm_head_receives_quant_config():
     in Eagle3 drafter checkpoints fail to load because ParallelLMHead doesn't
     expect weight_packed tensors.
     """
-    from aphrodite.model_executor.models.llama_eagle3 import Eagle3LlamaForCausalLM
+    from sonar.model_executor.models.llama_eagle3 import Eagle3LlamaForCausalLM
 
     mock_quant_config = Mock()
 
@@ -130,23 +130,23 @@ def test_eagle3_lm_head_receives_quant_config():
     mock_hf_config.vocab_size = 32000
     mock_hf_config.logit_scale = 1.0
 
-    mock_aphrodite_config = Mock()
-    mock_aphrodite_config.speculative_config.draft_model_config.hf_config = mock_hf_config
-    mock_aphrodite_config.model_config.get_num_layers.return_value = 32
-    mock_aphrodite_config.speculative_config.parallel_drafting = False
+    mock_sonar_config = Mock()
+    mock_sonar_config.speculative_config.draft_model_config.hf_config = mock_hf_config
+    mock_sonar_config.model_config.get_num_layers.return_value = 32
+    mock_sonar_config.speculative_config.parallel_drafting = False
 
     with (
-        patch("aphrodite.model_executor.models.llama_eagle3.LlamaModel") as MockModel,
-        patch("aphrodite.model_executor.models.llama_eagle3.ParallelLMHead") as MockLMHead,
-        patch("aphrodite.model_executor.models.llama_eagle3.LogitsProcessor"),
+        patch("sonar.model_executor.models.llama_eagle3.LlamaModel") as MockModel,
+        patch("sonar.model_executor.models.llama_eagle3.ParallelLMHead") as MockLMHead,
+        patch("sonar.model_executor.models.llama_eagle3.LogitsProcessor"),
         patch(
-            "aphrodite.model_executor.models.llama_eagle3.get_draft_quant_config",
+            "sonar.model_executor.models.llama_eagle3.get_draft_quant_config",
             return_value=mock_quant_config,
         ),
     ):
         MockModel.return_value.use_aux_hidden_state = True
 
-        Eagle3LlamaForCausalLM(aphrodite_config=mock_aphrodite_config)
+        Eagle3LlamaForCausalLM(sonar_config=mock_sonar_config)
 
         MockLMHead.assert_called_once()
         call_kwargs = MockLMHead.call_args.kwargs

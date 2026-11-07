@@ -4,7 +4,7 @@
 from dataclasses import dataclass
 from typing import Any
 
-from aphrodite.inputs import (
+from sonar.inputs import (
     DecoderOnlyEngineInput,
     EncoderDecoderInput,
     MultiModalInput,
@@ -12,9 +12,9 @@ from aphrodite.inputs import (
     mm_input,
     tokens_input,
 )
-from aphrodite.logprobs import Logprob
-from aphrodite.lora.request import LoRARequest
-from aphrodite.sampling_params import SamplingParams
+from sonar.logprobs import Logprob
+from sonar.lora.request import LoRARequest
+from sonar.sampling_params import SamplingParams
 
 
 @dataclass

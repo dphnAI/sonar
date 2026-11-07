@@ -12,9 +12,9 @@ from unittest.mock import Mock
 import pytest
 import torch
 
-from aphrodite.model_executor.models.interfaces import SupportsMRoPE
-from aphrodite.v1.worker.gpu_input_batch import CachedRequestState
-from aphrodite.v1.worker.gpu_model_runner import GPUModelRunner
+from sonar.model_executor.models.interfaces import SupportsMRoPE
+from sonar.v1.worker.gpu_input_batch import CachedRequestState
+from sonar.v1.worker.gpu_model_runner import GPUModelRunner
 
 
 class FakeMRoPEModel(SupportsMRoPE):

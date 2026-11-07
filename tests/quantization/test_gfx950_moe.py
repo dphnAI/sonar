@@ -8,28 +8,28 @@ These tests run on real hardware — no mocks. Skipped on non-GFX950 platforms.
 import pytest
 import torch
 
-from aphrodite.config.kernel import MoEBackend
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.config.kernel import MoEBackend
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEParallelConfig,
     RoutingMethodType,
 )
-from aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 import (
+from sonar.model_executor.layers.fused_moe.oracle.mxfp4 import (
     Mxfp4MoeBackend,
     select_mxfp4_moe_backend,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     kMxfp4Dynamic,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 ROCM_AVAILABLE = current_platform.is_rocm()
 ROCM_GFX950 = False
 ROCM_AITER_SUPPORTED = False
 
 if ROCM_AVAILABLE:
-    from aphrodite._aiter_ops import is_aiter_found_and_supported, rocm_aiter_ops
-    from aphrodite.platforms.rocm import on_gfx950
+    from sonar._aiter_ops import is_aiter_found_and_supported, rocm_aiter_ops
+    from sonar.platforms.rocm import on_gfx950
 
     ROCM_GFX950 = on_gfx950()
     ROCM_AITER_SUPPORTED = is_aiter_found_and_supported()
@@ -37,8 +37,8 @@ if ROCM_AVAILABLE:
 
 def set_rocm_aiter(monkeypatch: pytest.MonkeyPatch, enabled: bool) -> None:
     value = "1" if enabled else "0"
-    monkeypatch.setenv("APHRODITE_ROCM_USE_AITER", value)
-    monkeypatch.setenv("APHRODITE_ROCM_USE_AITER_MOE", value)
+    monkeypatch.setenv("SONAR_ROCM_USE_AITER", value)
+    monkeypatch.setenv("SONAR_ROCM_USE_AITER_MOE", value)
     monkeypatch.setattr(rocm_aiter_ops, "_AITER_ENABLED", enabled)
     monkeypatch.setattr(rocm_aiter_ops, "_FMOE_ENABLED", enabled)
 
@@ -54,7 +54,7 @@ def disable_rocm_aiter(monkeypatch: pytest.MonkeyPatch):
 
 
 def _make_w4a4_moe_config(moe_backend: MoEBackend = "auto") -> FusedMoEConfig:
-    from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
+    from sonar.model_executor.layers.fused_moe.activation import MoEActivation
 
     return FusedMoEConfig(
         num_experts=8,
@@ -73,7 +73,7 @@ def _make_w4a4_moe_config(moe_backend: MoEBackend = "auto") -> FusedMoEConfig:
 
 
 def _make_qwen38_tep8_moe_config() -> FusedMoEConfig:
-    from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
+    from sonar.model_executor.layers.fused_moe.activation import MoEActivation
 
     return FusedMoEConfig(
         num_experts=512,
@@ -105,7 +105,7 @@ def _make_qwen38_tep8_moe_config() -> FusedMoEConfig:
 
 @pytest.mark.parametrize("requested_backend", ["auto", "aiter"])
 def test_qwen38_tep8_selects_native_aiter(requested_backend, monkeypatch):
-    import aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 as mxfp4_oracle
+    import sonar.model_executor.layers.fused_moe.oracle.mxfp4 as mxfp4_oracle
 
     class SupportedExperts:
         @staticmethod
@@ -115,7 +115,7 @@ def test_qwen38_tep8_selects_native_aiter(requested_backend, monkeypatch):
     config = _make_qwen38_tep8_moe_config()
     config.moe_backend = requested_backend
     monkeypatch.setattr(current_platform, "is_rocm", lambda: True)
-    monkeypatch.setattr("aphrodite.platforms.rocm.on_gfx950", lambda: True)
+    monkeypatch.setattr("sonar.platforms.rocm.on_gfx950", lambda: True)
     monkeypatch.setattr(mxfp4_oracle, "_user_moe_activation_override", lambda: None)
     monkeypatch.setattr(mxfp4_oracle, "backend_to_kernel_cls", lambda backend: [SupportedExperts])
 
@@ -131,9 +131,7 @@ def mxfp4_oracle_config():
     so backend dispatch resolves without a real model / user override."""
     from unittest.mock import patch
 
-    with patch(
-        "aphrodite.model_executor.layers.fused_moe.oracle.mxfp4.get_current_aphrodite_config"
-    ) as mock_get_config:
+    with patch("sonar.model_executor.layers.fused_moe.oracle.mxfp4.get_current_sonar_config") as mock_get_config:
         mock_get_config.return_value.model_config.quantization_config = None
         yield
 

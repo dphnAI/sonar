@@ -16,38 +16,38 @@ from torch import nn
 from transformers import BatchFeature, CanaryConfig, ParakeetFeatureExtractor
 from transformers import ParakeetEncoder as HFParakeetEncoder
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, ModelConfig, SpeechToTextConfig
-from aphrodite.config.multimodal import MultiModalDummyOptions
-from aphrodite.config.speech_to_text import SpeechToTextParams
-from aphrodite.inputs import MultiModalDataDict, PromptType, TokensPrompt
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import ModelConfig, SonarConfig, SpeechToTextConfig
+from sonar.config.multimodal import MultiModalDummyOptions
+from sonar.config.speech_to_text import SpeechToTextParams
+from sonar.inputs import MultiModalDataDict, PromptType, TokensPrompt
+from sonar.logger import init_logger
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import MultiModalFieldConfig, MultiModalKwargsItems
-from aphrodite.multimodal.parse import (
+from sonar.model_executor.model_loader.weight_utils import default_weight_loader
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import MultiModalFieldConfig, MultiModalKwargsItems
+from sonar.multimodal.parse import (
     AudioProcessorItems,
     MultiModalDataItems,
     MultiModalDataParser,
 )
-from aphrodite.multimodal.processing import (
+from sonar.multimodal.processing import (
     BaseDummyInputsBuilder,
     BaseProcessingInfo,
     EncDecMultiModalProcessor,
     PromptReplacement,
     PromptUpdate,
 )
-from aphrodite.multimodal.processing.processor import HFMultiModalInputs
-from aphrodite.renderers import TokenizeParams
-from aphrodite.tokenizers import cached_tokenizer_from_config
-from aphrodite.utils.collection_utils import is_list_of
-from aphrodite.utils.gpu_sync_debug import gpu_sync_allowed
-from aphrodite.v1.attention.backend import AttentionType
+from sonar.multimodal.processing.processor import HFMultiModalInputs
+from sonar.renderers import TokenizeParams
+from sonar.tokenizers import cached_tokenizer_from_config
+from sonar.utils.collection_utils import is_list_of
+from sonar.utils.gpu_sync_debug import gpu_sync_allowed
+from sonar.v1.attention.backend import AttentionType
 
 from .cohere_asr import CohereASRAttention, CohereASRCrossAttention, CohereASRMLP
 from .interfaces import (
@@ -109,11 +109,11 @@ class CanaryPositionalEmbedding(nn.Module):
 
 
 class CanaryDecoderLayer(nn.Module):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config.decoder_config
-        cache_config = aphrodite_config.cache_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config.decoder_config
+        cache_config = sonar_config.cache_config
+        quant_config = sonar_config.quant_config
         hidden_size = config.hidden_size
 
         self.input_layernorm = nn.LayerNorm(hidden_size)
@@ -168,9 +168,9 @@ class CanaryDecoderLayer(nn.Module):
 
 @support_torch_compile(dynamic_arg_dims={"input_ids": 0, "positions": -1})
 class CanaryDecoder(nn.Module):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config.decoder_config
+        config = sonar_config.model_config.hf_config.decoder_config
         self.hidden_size = config.hidden_size
 
         self.embed_tokens = VocabParallelEmbedding(config.vocab_size, config.hidden_size)
@@ -178,7 +178,7 @@ class CanaryDecoder(nn.Module):
         self.embedding_layernorm = nn.LayerNorm(config.hidden_size)
         self.start_layer, self.end_layer, self.layers = make_layers(
             config.num_hidden_layers,
-            lambda prefix: CanaryDecoderLayer(aphrodite_config=aphrodite_config, prefix=prefix),
+            lambda prefix: CanaryDecoderLayer(sonar_config=sonar_config, prefix=prefix),
             prefix=f"{prefix}.layers",
         )
         self.norm = nn.LayerNorm(config.hidden_size)
@@ -201,12 +201,12 @@ class CanaryDecoder(nn.Module):
 
 
 class CanaryModel(nn.Module):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config: CanaryConfig = aphrodite_config.model_config.hf_config
+        config: CanaryConfig = sonar_config.model_config.hf_config
         # Reuses the Transformers FastConformer encoder as-is, like `parakeet.py`.
-        self.encoder = HFParakeetEncoder(config.encoder_config).to(aphrodite_config.model_config.dtype)
-        self.decoder = CanaryDecoder(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "decoder"))
+        self.encoder = HFParakeetEncoder(config.encoder_config).to(sonar_config.model_config.dtype)
+        self.decoder = CanaryDecoder(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "decoder"))
         assert config.encoder_config.hidden_size == config.decoder_config.hidden_size
 
     def forward(
@@ -405,9 +405,9 @@ class CanaryForConditionalGeneration(nn.Module, SupportsTranscription, SupportsM
         "kv_proj": ["k_proj", "v_proj"],
     }
 
-    # Only the decoder is built from Aphrodite layers; encoder weights keep their
+    # Only the decoder is built from Sonar layers; encoder weights keep their
     # Transformers names.
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_regex={
             re.compile(r"(decoder\.layers\.\d+\.\w+_attn)\.o_proj\."): (r"\1.out_projection."),
             re.compile(r"(decoder\.layers\.\d+\.mlp)\.fc1\."): r"\1.dense_in.",
@@ -420,7 +420,7 @@ class CanaryForConditionalGeneration(nn.Module, SupportsTranscription, SupportsM
     supports_transcription_only = True
     skip_warmup_audio_preprocessing = True
     # TODO: canary-1b-v2 handles long-form audio with dynamic chunking in NeMo;
-    # confirm the right per-chunk limit for Aphrodite's chunker.
+    # confirm the right per-chunk limit for Sonar's chunker.
     max_audio_clip_s: ClassVar[int] = 40
 
     @classmethod
@@ -519,19 +519,19 @@ class CanaryForConditionalGeneration(nn.Module, SupportsTranscription, SupportsM
         num_frames = int(audio_duration_s * stt_config.sample_rate) // 160
         return _subsampled_length(num_frames, model_config.hf_config.encoder_config)
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config: CanaryConfig = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        config: CanaryConfig = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
         self.config = config
-        self.dtype = aphrodite_config.model_config.dtype
+        self.dtype = sonar_config.model_config.dtype
 
         with self._mark_composite_model(
-            aphrodite_config,
+            sonar_config,
             language_targets=CanaryDecoder,
             tower_targets={"audio": HFParakeetEncoder},
         ):
-            self.model = CanaryModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+            self.model = CanaryModel(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
 
         decoder_config = config.decoder_config
         self.proj_out = ParallelLMHead(
@@ -594,7 +594,7 @@ class CanaryForConditionalGeneration(nn.Module, SupportsTranscription, SupportsM
         params_dict.update(self.named_buffers())
         loaded_params: set[str] = set()
 
-        for name, loaded_weight in self.hf_to_aphrodite_mapper.apply(weights):
+        for name, loaded_weight in self.hf_to_sonar_mapper.apply(weights):
             # The encoder is the Transformers module and keeps unfused q/k/v.
             is_decoder = name.startswith("model.decoder.")
             for param_name, shard_name, shard_id in stacked_params_mapping:

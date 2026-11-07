@@ -3,17 +3,17 @@
 
 import logging
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.plugins import IO_PROCESSOR_PLUGINS_GROUP, load_plugins_by_group
-from aphrodite.plugins.io_processors.interface import IOProcessor
-from aphrodite.renderers import BaseRenderer
-from aphrodite.utils.import_utils import resolve_obj_by_qualname
+from sonar.config import SonarConfig
+from sonar.plugins import IO_PROCESSOR_PLUGINS_GROUP, load_plugins_by_group
+from sonar.plugins.io_processors.interface import IOProcessor
+from sonar.renderers import BaseRenderer
+from sonar.utils.import_utils import resolve_obj_by_qualname
 
 logger = logging.getLogger(__name__)
 
 
 def has_io_processor(
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     plugin_from_init: str | None = None,
 ):
     if plugin_from_init:
@@ -22,7 +22,7 @@ def has_io_processor(
         # A plugin can be specified via the model config
         # Retrieve the model specific plugin if available
         # This is using a custom field in the hf_config for the model
-        hf_config = aphrodite_config.model_config.hf_config.to_dict()
+        hf_config = sonar_config.model_config.hf_config.to_dict()
         config_plugin = hf_config.get("io_processor_plugin")
         model_plugin = config_plugin
 
@@ -30,12 +30,12 @@ def has_io_processor(
 
 
 def get_io_processor(
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     renderer: BaseRenderer,
     plugin_from_init: str | None = None,
 ) -> IOProcessor | None:
     # Input.Output processors are loaded as plugins under the
-    # 'aphrodite.io_processor_plugins' group. Similar to platform
+    # 'sonar.io_processor_plugins' group. Similar to platform
     # plugins, these plugins register a function that returns the class
     # name for the processor to install.
 
@@ -45,7 +45,7 @@ def get_io_processor(
         # A plugin can be specified via the model config
         # Retrieve the model specific plugin if available
         # This is using a custom field in the hf_config for the model
-        hf_config = aphrodite_config.model_config.hf_config.to_dict()
+        hf_config = sonar_config.model_config.hf_config.to_dict()
         config_plugin = hf_config.get("io_processor_plugin")
         model_plugin = config_plugin
 
@@ -81,4 +81,4 @@ def get_io_processor(
 
     activated_plugin_cls = resolve_obj_by_qualname(loadable_plugins[model_plugin])
 
-    return activated_plugin_cls(aphrodite_config, renderer)
+    return activated_plugin_cls(sonar_config, renderer)

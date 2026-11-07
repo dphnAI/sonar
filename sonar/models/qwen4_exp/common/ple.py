@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 import torch
 
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     VocabParallelEmbedding,
 )
 

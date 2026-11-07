@@ -1,6 +1,6 @@
-# Automated Aphrodite Server Parameter Tuning
+# Automated Sonar Server Parameter Tuning
 
-This script automates the process of finding the optimal server parameter combination (`max-num-seqs` and `max-num-batched-tokens`) to maximize throughput for a Aphrodite server. It also supports additional constraints such as E2E latency and prefix cache hit rate.
+This script automates the process of finding the optimal server parameter combination (`max-num-seqs` and `max-num-batched-tokens`) to maximize throughput for a Sonar server. It also supports additional constraints such as E2E latency and prefix cache hit rate.
 
 ## Table of Contents
 
@@ -15,11 +15,11 @@ This script automates the process of finding the optimal server parameter combin
 
 Before running the script, please ensure the following steps are completed:
 
-1. **Clone Aphrodite & Set Up Branch**: Clone the Aphrodite repository and check out to your desired branch.
+1. **Clone Sonar & Set Up Branch**: Clone the Sonar repository and check out to your desired branch.
 
 ```bash
-git clone https://github.com/aphrodite-engine/aphrodite-engine.git
-cd aphrodite-engine
+git clone https://github.com/dphnAI/sonar.git
+cd sonar
 # git checkout <your-branch>
 ```
 
@@ -34,13 +34,13 @@ You must set the following variables at the top of the script before execution.
    Note: You can also override the default values below via environment variables when running the script.
 
 ```bash
-MODEL=meta-llama/Llama-3.3-70B-Instruct SYSTEM=TPU TP=8 DOWNLOAD_DIR='' INPUT_LEN=128 OUTPUT_LEN=2048 MAX_MODEL_LEN=2300 MIN_CACHE_HIT_PCT=0 MAX_LATENCY_ALLOWED_MS=100000000000 NUM_SEQS_LIST="128 256" NUM_BATCHED_TOKENS_LIST="1024 2048 4096" APHRODITE_LOGGING_LEVEL=DEBUG bash auto_tune.sh
+MODEL=meta-llama/Llama-3.3-70B-Instruct SYSTEM=TPU TP=8 DOWNLOAD_DIR='' INPUT_LEN=128 OUTPUT_LEN=2048 MAX_MODEL_LEN=2300 MIN_CACHE_HIT_PCT=0 MAX_LATENCY_ALLOWED_MS=100000000000 NUM_SEQS_LIST="128 256" NUM_BATCHED_TOKENS_LIST="1024 2048 4096" SONAR_LOGGING_LEVEL=DEBUG bash auto_tune.sh
 ```
 
 | Variable | Description | Example Value |
 | --- | --- | --- |
-| `BASE` | **Required.** The absolute path to the parent directory of your Aphrodite repository directory. | `"$HOME"` |
-| `MODEL` | **Required.** The Hugging Face model identifier to be served by aphrodite. | `"meta-llama/Llama-3.1-8B-Instruct"` |
+| `BASE` | **Required.** The absolute path to the parent directory of your Sonar repository directory. | `"$HOME"` |
+| `MODEL` | **Required.** The Hugging Face model identifier to be served by sonar. | `"meta-llama/Llama-3.1-8B-Instruct"` |
 | `SYSTEM`| **Required.** The hardware you are running on. Choices: `TPU` or `GPU`. (For other systems, it might not support saving profiles) | `"TPU"` |
 | `TP` | **Required.** The tensor-parallelism size. | `1` |
 | `DOWNLOAD_DIR` | **Required.** Directory to download and load model weights from. | `""` (default download path) |
@@ -64,7 +64,7 @@ cd <FOLDER_OF_THIS_SCRIPT>
 bash auto_tune.sh
 ```
 
-    Please note that the `bash auto_tune.sh` command cannot contain full or partial path with keyword `aphrodite`, otherwise `pkill -f aphrodite` command will also kill this script itself.
+    Please note that the `bash auto_tune.sh` command cannot contain full or partial path with keyword `sonar`, otherwise `pkill -f sonar` command will also kill this script itself.
 
 ## Example Use Cases
 
@@ -114,8 +114,8 @@ MAX_LATENCY_ALLOWED_MS=500
 After the script finishes, you will find the results in a new, timestamped directory created inside `$BASE/auto-benchmark/`.
 
 - **Log Files**: The directory (`$BASE/auto-benchmark/YYYY_MM_DD_HH_MM/`) contains detailed logs for each run:
-    - `aphrodite_log_...txt`: The log output from the Aphrodite server for each parameter combination.
-    - `bm_log_...txt`: The log output from the `aphrodite bench run` command for each benchmark run.
+    - `sonar_log_...txt`: The log output from the Sonar server for each parameter combination.
+    - `bm_log_...txt`: The log output from the `sonar bench run` command for each benchmark run.
 
 - **Final Result Summary**: A file named `result.txt` is created in the log directory. It contains a summary of each tested combination and concludes with the overall best parameters found.
 
@@ -125,7 +125,7 @@ hash:a1b2c3d4...
 max_num_seqs: 128, max_num_batched_tokens: 2048, request_rate: 10.0, e2el: 450.5, throughput: 9.8, goodput: 9.8
 max_num_seqs: 128, max_num_batched_tokens: 4096 does not meet latency requirement 500
 ...
-best_max_num_seqs: 256, best_num_batched_tokens: 2048, best_throughput: 12.5, profile saved in: /home/user/aphrodite/auto-benchmark/2024_08_01_10_30/profile
+best_max_num_seqs: 256, best_num_batched_tokens: 2048, best_throughput: 12.5, profile saved in: /home/user/sonar/auto-benchmark/2024_08_01_10_30/profile
 ```
 
   If it cannot find the best parameters, the final row will be `best_max_num_seqs: 0, best_num_batched_tokens: 0, best_throughput: 0`. This can be due to either the server not starting properly, or the latency requirement being too strict.
@@ -141,14 +141,14 @@ The script follows a systematic process to find the optimal parameters:
 2. **Iterate and Benchmark**: It then enters a nested loop, iterating through every combination of `max-num-seqs` and `max-num-batched-tokens` provided in the configuration lists.
 
 3. **Latency-Aware Throughput Search**: For each parameter combination:
-    - The Aphrodite server is started.
+    - The Sonar server is started.
     - A benchmark is first run with an infinite request rate (`--request-rate inf`).
     - If the resulting P99 E2E latency is within the `MAX_LATENCY_ALLOWED_MS` limit, this throughput is considered the maximum for this configuration.
     - If the latency is too high, the script performs a search by iteratively decreasing the request rate until the latency constraint is met. This finds the highest sustainable throughput for the given parameters and latency requirement.
 
 4. **Track Best Result**: Throughout the process, the script tracks the parameter combination that has yielded the highest valid throughput so far.
 
-5. **Profile Collection**: For the best-performing run, the script saves the Aphrodite profiler output, which can be used for deep-dive performance analysis with tools like TensorBoard.
+5. **Profile Collection**: For the best-performing run, the script saves the Sonar profiler output, which can be used for deep-dive performance analysis with tools like TensorBoard.
 
 ## Batched `auto_tune`
 

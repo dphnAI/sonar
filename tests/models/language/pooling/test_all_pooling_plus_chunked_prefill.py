@@ -4,10 +4,10 @@ import pytest
 import torch
 from transformers import AutoModel
 
-from aphrodite import TokensPrompt
-from aphrodite.config import PoolerConfig
+from sonar import TokensPrompt
+from sonar.config import PoolerConfig
 from tests.models.utils import check_embeddings_close
-from tests.utils import APHRODITE_PATH
+from tests.utils import SONAR_PATH
 
 
 @pytest.mark.parametrize(
@@ -15,25 +15,25 @@ from tests.utils import APHRODITE_PATH
     ["Qwen/Qwen3-Embedding-0.6B"],
 )
 @torch.inference_mode
-def test_decoder_token_embed_model_runner_v2(hf_runner, aphrodite_runner, monkeypatch, model: str):
-    monkeypatch.setenv("APHRODITE_USE_V2_MODEL_RUNNER", "1")
+def test_decoder_token_embed_model_runner_v2(hf_runner, sonar_runner, monkeypatch, model: str):
+    monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", "1")
     chunk_size = 10
     n_prompt_tokens = [55, 56, 57]
     token_prompts = [[1024 + i for i in range(n)] for n in n_prompt_tokens]
 
-    with aphrodite_runner(
+    with sonar_runner(
         model,
         runner="pooling",
         pooler_config=PoolerConfig(task="token_embed"),
         max_model_len=128,
         max_num_batched_tokens=chunk_size,
         enforce_eager=True,
-        # `enable_chunked_prefill`: Set to `False` instead of `None` in AphroditeRunner
+        # `enable_chunked_prefill`: Set to `False` instead of `None` in SonarRunner
         enable_chunked_prefill=True,
         enable_prefix_caching=True,
-    ) as aphrodite_model:
-        assert aphrodite_model.llm.llm_engine.aphrodite_config.use_v2_model_runner
-        aphrodite_outputs = aphrodite_model.token_embed(
+    ) as sonar_model:
+        assert sonar_model.llm.llm_engine.sonar_config.use_v2_model_runner
+        sonar_outputs = sonar_model.token_embed(
             [TokensPrompt(prompt_token_ids=t) for t in token_prompts],
         )
 
@@ -48,12 +48,12 @@ def test_decoder_token_embed_model_runner_v2(hf_runner, aphrodite_runner, monkey
             output = hf_model.model(input_ids)
             hf_outputs.append(output.last_hidden_state.cpu().float()[0])
 
-    for hf_output, aphrodite_output in zip(hf_outputs, aphrodite_outputs):
+    for hf_output, sonar_output in zip(hf_outputs, sonar_outputs):
         check_embeddings_close(
             embeddings_0_lst=hf_output,
-            embeddings_1_lst=aphrodite_output,
+            embeddings_1_lst=sonar_output,
             name_0="hf",
-            name_1="aphrodite",
+            name_1="sonar",
             tol=1e-2,
         )
 
@@ -63,13 +63,13 @@ _RERANKER_HF_OVERRIDES = {
     "classifier_from_token": ["no", "yes"],
     "is_original_qwen3_reranker": True,
 }
-_RERANKER_TEMPLATE = APHRODITE_PATH / "examples/pooling/score/template/qwen3_reranker.jinja"
+_RERANKER_TEMPLATE = SONAR_PATH / "examples/pooling/score/template/qwen3_reranker.jinja"
 
 
 @pytest.mark.parametrize("model", ["Qwen/Qwen3-Reranker-0.6B"])
 @torch.inference_mode
 def test_last_pool_score_chunked_prefill_matches_unchunked(
-    aphrodite_runner,
+    sonar_runner,
     model: str,
 ):
     """LAST-pooling score must not depend on whether the prompt is chunked.
@@ -90,7 +90,7 @@ def test_last_pool_score_chunked_prefill_matches_unchunked(
     ) * 400
 
     def score_with(max_num_batched_tokens: int) -> float:
-        with aphrodite_runner(
+        with sonar_runner(
             model,
             runner="pooling",
             hf_overrides=_RERANKER_HF_OVERRIDES,
@@ -98,8 +98,8 @@ def test_last_pool_score_chunked_prefill_matches_unchunked(
             max_num_batched_tokens=max_num_batched_tokens,
             enable_chunked_prefill=True,
             enable_prefix_caching=False,
-        ) as aphrodite_model:
-            return aphrodite_model.score(query, document, chat_template=chat_template)[0]
+        ) as sonar_model:
+            return sonar_model.score(query, document, chat_template=chat_template)[0]
 
     # Chunk size forces the prompt across several prefill chunks; the large
     # budget keeps it in a single chunk as the reference.
@@ -110,7 +110,7 @@ def test_last_pool_score_chunked_prefill_matches_unchunked(
 
 
 @torch.inference_mode
-def test_sequence_embed_model_runner_v2(hf_runner, aphrodite_runner, monkeypatch) -> None:
+def test_sequence_embed_model_runner_v2(hf_runner, sonar_runner, monkeypatch) -> None:
     model = "Qwen/Qwen3-Embedding-0.6B"
     chunk_size = 10
     token_prompts = [[1024 + i for i in range(n)] for n in (25, 27)]
@@ -124,8 +124,8 @@ def test_sequence_embed_model_runner_v2(hf_runner, aphrodite_runner, monkeypatch
             embedding = torch.nn.functional.normalize(output.last_hidden_state.float()[0, -1], dim=0)
             hf_outputs.append(embedding.cpu().tolist())
 
-    monkeypatch.setenv("APHRODITE_USE_V2_MODEL_RUNNER", "1")
-    with aphrodite_runner(
+    monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", "1")
+    with sonar_runner(
         model,
         runner="pooling",
         pooler_config=PoolerConfig(task="embed"),
@@ -135,14 +135,14 @@ def test_sequence_embed_model_runner_v2(hf_runner, aphrodite_runner, monkeypatch
         gpu_memory_utilization=0.25,
         enforce_eager=True,
         enable_chunked_prefill=True,
-    ) as aphrodite_model:
-        assert aphrodite_model.llm.llm_engine.aphrodite_config.use_v2_model_runner
-        aphrodite_outputs = aphrodite_model.embed(prompts)
+    ) as sonar_model:
+        assert sonar_model.llm.llm_engine.sonar_config.use_v2_model_runner
+        sonar_outputs = sonar_model.embed(prompts)
 
     check_embeddings_close(
         embeddings_0_lst=hf_outputs,
-        embeddings_1_lst=aphrodite_outputs,
+        embeddings_1_lst=sonar_outputs,
         name_0="hf",
-        name_1="aphrodite",
+        name_1="sonar",
         tol=1e-2,
     )

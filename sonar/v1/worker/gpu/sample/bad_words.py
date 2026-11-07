@@ -4,31 +4,31 @@ from typing import TYPE_CHECKING
 
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.triton_utils import tl, triton
-from aphrodite.v1.worker.gpu.buffer_utils import StagedWriteTensor, UvaBackedTensor
-from aphrodite.v1.worker.gpu.sample.logits_processor.interface import (
+import sonar.envs as envs
+from sonar.sampling_params import SamplingParams
+from sonar.triton_utils import tl, triton
+from sonar.v1.worker.gpu.buffer_utils import StagedWriteTensor, UvaBackedTensor
+from sonar.v1.worker.gpu.sample.logits_processor.interface import (
     LogitsContext,
     LogitsProcessor,
     LogitsProcRequestState,
 )
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
+    from sonar.config import SonarConfig
 
 
 class BadWordsState(LogitsProcessor):
-    def __init__(self, aphrodite_config: "AphroditeConfig", req_states: LogitsProcRequestState):
+    def __init__(self, sonar_config: "SonarConfig", req_states: LogitsProcRequestState):
         self.req_states = req_states
         max_num_reqs = req_states.max_num_reqs
         device = req_states.device
 
-        max_total_tokens = envs.APHRODITE_MAX_BAD_WORDS_TOTAL_TOKENS
-        max_num_bad_words = envs.APHRODITE_MAX_NUM_BAD_WORDS
-        # flattened bad word tokens: [max_num_reqs, APHRODITE_MAX_BAD_WORDS_TOTAL_TOKENS]
+        max_total_tokens = envs.SONAR_MAX_BAD_WORDS_TOTAL_TOKENS
+        max_num_bad_words = envs.SONAR_MAX_NUM_BAD_WORDS
+        # flattened bad word tokens: [max_num_reqs, SONAR_MAX_BAD_WORDS_TOTAL_TOKENS]
         self.bad_word_token_ids = StagedWriteTensor((max_num_reqs, max_total_tokens), dtype=torch.int32, device=device)
-        # cumulative offsets of bad words: [max_num_reqs, APHRODITE_MAX_NUM_BAD_WORDS + 1]
+        # cumulative offsets of bad words: [max_num_reqs, SONAR_MAX_NUM_BAD_WORDS + 1]
         self.bad_word_offsets = StagedWriteTensor(
             (max_num_reqs, max_num_bad_words + 1), dtype=torch.int32, device=device
         )
@@ -42,7 +42,7 @@ class BadWordsState(LogitsProcessor):
             return False
 
         num_bad_words = len(bad_words_token_ids)
-        max_num_bad_words = envs.APHRODITE_MAX_NUM_BAD_WORDS
+        max_num_bad_words = envs.SONAR_MAX_NUM_BAD_WORDS
         if num_bad_words > max_num_bad_words:
             raise ValueError(f"Too many bad words: {num_bad_words}. The max number is {max_num_bad_words}.")
 
@@ -53,7 +53,7 @@ class BadWordsState(LogitsProcessor):
             flattened_tokens.extend(bad_word)
             offsets.append(len(flattened_tokens))
 
-        max_total_tokens = envs.APHRODITE_MAX_BAD_WORDS_TOTAL_TOKENS
+        max_total_tokens = envs.SONAR_MAX_BAD_WORDS_TOTAL_TOKENS
         if len(flattened_tokens) > max_total_tokens:
             raise ValueError(f"Too many total bad word tokens: {len(flattened_tokens)}. The max is {max_total_tokens}.")
 

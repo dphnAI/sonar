@@ -11,13 +11,13 @@ from collections import defaultdict
 
 import torch.nn as nn
 
-from aphrodite.compilation.backends import set_model_tag
-from aphrodite.config import AphroditeConfig, replace
-from aphrodite.distributed.parallel_state import get_pp_group
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.model_loader import get_model
-from aphrodite.model_executor.model_loader.utils import get_draft_load_config
-from aphrodite.v1.worker.gpu.spec_decode.target_dependent_ar.speculator import (
+from sonar.compilation.backends import set_model_tag
+from sonar.config import SonarConfig, replace
+from sonar.distributed.parallel_state import get_pp_group
+from sonar.logger import init_logger
+from sonar.model_executor.model_loader import get_model
+from sonar.model_executor.model_loader.utils import get_draft_load_config
+from sonar.v1.worker.gpu.spec_decode.target_dependent_ar.speculator import (
     TargetDependentARSpeculator,
 )
 
@@ -57,18 +57,18 @@ class Gemma4Speculator(TargetDependentARSpeculator):
         target_model: nn.Module,
         target_attn_layer_names: set[str],
     ) -> nn.Module:
-        draft_aphrodite_config = self._create_draft_aphrodite_config()
+        draft_sonar_config = self._create_draft_sonar_config()
         with set_model_tag("eagle_head"):
             draft_model = get_model(
-                aphrodite_config=draft_aphrodite_config,
+                sonar_config=draft_sonar_config,
                 model_config=self.speculative_config.draft_model_config,
-                load_config=get_draft_load_config(draft_aphrodite_config),
+                load_config=get_draft_load_config(draft_sonar_config),
             )
         self._setup_gemma4_kv_sharing(draft_model, target_attn_layer_names)
         self._share_embeddings(draft_model, target_model)
         return draft_model
 
-    def _create_draft_aphrodite_config(self) -> AphroditeConfig:
+    def _create_draft_sonar_config(self) -> SonarConfig:
         """Preserve the target's forced TRITON_ATTN backend for draft layers.
 
         Gemma4 forces TRITON_ATTN due to heterogeneous head dimensions
@@ -78,20 +78,20 @@ class Gemma4Speculator(TargetDependentARSpeculator):
         KV-shared cache. Override to carry the target's backend through.
         """
         draft_model_config = self.speculative_config.draft_model_config
-        draft_aphrodite_config = replace(
-            self.aphrodite_config,
+        draft_sonar_config = replace(
+            self.sonar_config,
             model_config=draft_model_config,
         )
-        target_backend = self.aphrodite_config.attention_config.backend
+        target_backend = self.sonar_config.attention_config.backend
         if target_backend is not None:
-            draft_aphrodite_config = replace(
-                draft_aphrodite_config,
+            draft_sonar_config = replace(
+                draft_sonar_config,
                 attention_config=replace(
-                    draft_aphrodite_config.attention_config,
+                    draft_sonar_config.attention_config,
                     backend=target_backend,
                 ),
             )
-        return draft_aphrodite_config
+        return draft_sonar_config
 
     def _setup_gemma4_kv_sharing(
         self,
@@ -105,7 +105,7 @@ class Gemma4Speculator(TargetDependentARSpeculator):
         """
         draft_config = self.speculative_config.draft_model_config.hf_config
         draft_text_config = draft_config.get_text_config()
-        target_config = self.aphrodite_config.model_config.hf_config
+        target_config = self.sonar_config.model_config.hf_config
         target_text_config = target_config.get_text_config()
         target_layer_types = getattr(target_text_config, "layer_types", [])
 
@@ -152,7 +152,7 @@ class Gemma4Speculator(TargetDependentARSpeculator):
             # The BF16 draft model has no quantization config, so its K/V scales
             # otherwise remain at the default 1.0 while it reads the target's
             # calibrated FP8 cache.
-            target_attn = self.aphrodite_config.compilation_config.static_forward_context[target_layer_name]
+            target_attn = self.sonar_config.compilation_config.static_forward_context[target_layer_name]
             _copy_target_kv_scales(attn, target_attn)
 
             logger.info(

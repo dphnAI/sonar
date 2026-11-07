@@ -10,15 +10,15 @@ is reused unchanged from ``common.ops.sparse_attn``.
 
 import torch
 
-from aphrodite.models.minimax_m3.common.ops.sparse_attn import (
+from sonar.models.minimax_m3.common.ops.sparse_attn import (
     _FP8_DTYPES,
     _KV_SCALE_NONE,
     SPARSE_BLOCK_SIZE,
     _kv_scale_args,
     minimax_m3_sparse_attn_decode,
 )
-from aphrodite.platforms.rocm import on_gfx950, on_mi3xx
-from aphrodite.triton_utils import tl, triton
+from sonar.platforms.rocm import on_gfx950, on_mi3xx
+from sonar.triton_utils import tl, triton
 
 __all__ = ["minimax_m3_sparse_attn", "minimax_m3_sparse_attn_decode"]
 

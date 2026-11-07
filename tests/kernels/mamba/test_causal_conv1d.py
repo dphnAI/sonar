@@ -9,13 +9,13 @@ import torch
 import torch.nn.functional as F
 from einops import rearrange
 
-from aphrodite.model_executor.layers.mamba.ops.causal_conv1d import (
+from sonar.model_executor.layers.mamba.ops.causal_conv1d import (
     causal_conv1d_fn,
     causal_conv1d_update,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
-from aphrodite.v1.attention.backends.utils import NULL_BLOCK_ID
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_random_seed
+from sonar.v1.attention.backends.utils import NULL_BLOCK_ID
 
 DEVICE = current_platform.device_type
 

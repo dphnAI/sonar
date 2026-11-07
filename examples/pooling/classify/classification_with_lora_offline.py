@@ -2,9 +2,9 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Example of offline classification with a LoRA adapter."""
 
-from aphrodite import LLM
-from aphrodite.lora.request import LoRARequest
-from aphrodite.transformers_utils.repo_utils import hf_api
+from sonar import LLM
+from sonar.lora.request import LoRARequest
+from sonar.transformers_utils.repo_utils import hf_api
 
 
 def main():

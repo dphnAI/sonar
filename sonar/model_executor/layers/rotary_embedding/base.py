@@ -4,8 +4,8 @@
 
 import torch
 
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.model_executor.custom_op import CustomOp
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.model_executor.custom_op import CustomOp
 
 from .common import ApplyRotaryEmb
 
@@ -209,7 +209,7 @@ class RotaryEmbedding(RotaryEmbeddingBase):
         key: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         if self.use_flashinfer:
-            torch.ops.aphrodite.flashinfer_rotary_embedding(
+            torch.ops.sonar.flashinfer_rotary_embedding(
                 positions,
                 query,
                 key,
@@ -219,7 +219,7 @@ class RotaryEmbedding(RotaryEmbeddingBase):
             )
             return query, key
 
-        from aphrodite import _custom_ops as ops
+        from sonar import _custom_ops as ops
 
         cos_sin_cache = self._match_cos_sin_cache_dtype(query)
 
@@ -266,7 +266,7 @@ class RotaryEmbedding(RotaryEmbeddingBase):
         if key is None:
             return self.forward_native(positions, query, key)
         else:
-            from aphrodite import _custom_ops as ops
+            from sonar import _custom_ops as ops
 
             cos_sin_cache = self._match_cos_sin_cache_dtype(query)
             ops.rotary_embedding(
@@ -285,7 +285,7 @@ class RotaryEmbedding(RotaryEmbeddingBase):
         query: torch.Tensor,
         key: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        from aphrodite import _custom_ops as ops
+        from sonar import _custom_ops as ops
 
         cos_sin_cache = self._match_cos_sin_cache_dtype(query)
 

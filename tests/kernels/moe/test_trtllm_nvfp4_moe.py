@@ -13,36 +13,36 @@ from dataclasses import replace
 import pytest
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite import _custom_ops as ops
-from aphrodite.config import AphroditeConfig, ParallelConfig, set_current_aphrodite_config
-from aphrodite.model_executor.custom_op import CustomOp, op_registry
-from aphrodite.model_executor.layers.activation import SiluAndMulWithClamp, SituAndMul
-from aphrodite.model_executor.layers.fused_moe import fused_topk
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.all2all_utils import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar import _custom_ops as ops
+from sonar.config import ParallelConfig, SonarConfig, set_current_sonar_config
+from sonar.model_executor.custom_op import CustomOp, op_registry
+from sonar.model_executor.layers.activation import SiluAndMulWithClamp, SituAndMul
+from sonar.model_executor.layers.fused_moe import fused_topk
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.all2all_utils import (
     maybe_make_prepare_finalize,
 )
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEParallelConfig,
     FusedMoEQuantConfig,
     RoutingMethodType,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.trtllm_nvfp4_moe import (
+from sonar.model_executor.layers.fused_moe.experts.trtllm_nvfp4_moe import (
     TrtLlmNvFp4ExpertsModular,
 )
-from aphrodite.model_executor.layers.quantization.utils.flashinfer_fp4_moe import (
+from sonar.model_executor.layers.quantization.utils.flashinfer_fp4_moe import (
     prepare_static_weights_for_trtllm_fp4_moe,
     reorder_w1w3_to_w3w1,
 )
-from aphrodite.model_executor.layers.quantization.utils.flashinfer_utils import (
+from sonar.model_executor.layers.quantization.utils.flashinfer_utils import (
     NVFP4_PER_TOKEN_BASE_GLOBAL_SCALE,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.flashinfer import has_flashinfer_trtllm_fused_moe
-from aphrodite.utils.math_utils import next_power_of_2
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.platforms import current_platform
+from sonar.utils.flashinfer import has_flashinfer_trtllm_fused_moe
+from sonar.utils.math_utils import next_power_of_2
+from sonar.utils.torch_utils import set_random_seed
 from tests.kernels.moe.utils import check_deferred_moe_finalize, make_test_quant_config
 from tests.kernels.quantization.nvfp4_utils import (
     convert_swizzled_to_linear,
@@ -202,7 +202,7 @@ def test_trtllm_fp4_moe_no_graph(
         )
 
     set_random_seed(7)
-    with set_current_aphrodite_config(AphroditeConfig(parallel_config=ParallelConfig(pipeline_parallel_size=1))):
+    with set_current_sonar_config(SonarConfig(parallel_config=ParallelConfig(pipeline_parallel_size=1))):
         a = torch.randn((m, k), device="cuda", dtype=dtype) / 10
 
         quant_blocksize = 16
@@ -369,7 +369,7 @@ def test_trtllm_fp4_moe_reprocess_does_not_refold_swiglu_params():
     g1_alphas fold of clamp/beta must start from the unfolded values."""
     e, n, k = 8, 256, 256
     clamp, beta = 7.0, 1.0
-    with set_current_aphrodite_config(AphroditeConfig(parallel_config=ParallelConfig(pipeline_parallel_size=1))):
+    with set_current_sonar_config(SonarConfig(parallel_config=ParallelConfig(pipeline_parallel_size=1))):
         _, _, quant_config = make_test_quant_config(
             e,
             n,
@@ -428,7 +428,7 @@ def test_trtllm_fp4_moe_deferred_finalize(
         monkeypatch.setattr(TrtLlmNvFp4ExpertsModular, "_get_chunk_size", lambda self: chunk_size)
 
     set_random_seed(7)
-    with set_current_aphrodite_config(AphroditeConfig(parallel_config=ParallelConfig(pipeline_parallel_size=1))):
+    with set_current_sonar_config(SonarConfig(parallel_config=ParallelConfig(pipeline_parallel_size=1))):
         a = torch.randn((m, k), device="cuda", dtype=dtype) / 10
         w1_q, w2_q, quant_config = make_test_quant_config(
             e, n, k, in_dtype=dtype, quant_dtype="nvfp4", is_scale_swizzled=False

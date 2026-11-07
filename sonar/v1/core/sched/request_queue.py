@@ -7,7 +7,7 @@ from collections import deque
 from collections.abc import Iterable, Iterator
 from enum import Enum
 
-from aphrodite.v1.request import Request
+from sonar.v1.request import Request
 
 
 class SchedulingPolicy(Enum):

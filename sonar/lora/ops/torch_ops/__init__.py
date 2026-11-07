@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-from aphrodite.lora.ops.torch_ops.lora_ops import (
+from sonar.lora.ops.torch_ops.lora_ops import (
     bgmv_expand,  # noqa: F401
     bgmv_expand_slice,
     bgmv_shrink,

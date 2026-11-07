@@ -9,10 +9,10 @@ from typing import cast
 
 import torch
 
-from aphrodite.distributed.kv_events import BlockRemoved, KVCacheEventType
-from aphrodite.forward_context import ForwardContext
-from aphrodite.logger import init_logger
-from aphrodite.v1.core.kv_cache_utils import BlockHash, maybe_convert_block_hash
+from sonar.distributed.kv_events import BlockRemoved, KVCacheEventType
+from sonar.forward_context import ForwardContext
+from sonar.logger import init_logger
+from sonar.v1.core.kv_cache_utils import BlockHash, maybe_convert_block_hash
 
 from .data import (
     BlockIdentityCodec,
@@ -254,7 +254,7 @@ class UMBPStoreConnectorWorker:
             self._submit_store_plans(plans, request_id)
 
     def handle_preemptions(self, metadata: UMBPConnectorMetadata) -> None:
-        """Cancel request-local jobs before Aphrodite reuses their GPU blocks."""
+        """Cancel request-local jobs before Sonar reuses their GPU blocks."""
         preempted = metadata.preempted_request_ids
         if not preempted:
             return

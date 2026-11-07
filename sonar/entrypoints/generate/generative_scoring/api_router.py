@@ -5,18 +5,18 @@ from http import HTTPStatus
 from fastapi import APIRouter, Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from aphrodite.entrypoints.generate.generative_scoring.serving import (
+from sonar.entrypoints.generate.generative_scoring.serving import (
     GenerativeScoringRequest,
     GenerativeScoringResponse,
     ServingGenerativeScoring,
 )
-from aphrodite.entrypoints.serve.engine.protocol import ErrorResponse
-from aphrodite.entrypoints.serve.utils.api_utils import (
+from sonar.entrypoints.serve.engine.protocol import ErrorResponse
+from sonar.entrypoints.serve.utils.api_utils import (
     load_aware_call,
     validate_json_request,
     with_cancellation,
 )
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 router = APIRouter()
 

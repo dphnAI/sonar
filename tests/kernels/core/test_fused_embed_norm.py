@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Unit tests for the replicated-embedding fused gather/norm kernels
-(``aphrodite.model_executor.layers.fused_embed_norm``).
+(``sonar.model_executor.layers.fused_embed_norm``).
 
-The guarantee: enabling ``APHRODITE_REPLICATE_EMBED`` (replicated table + fused
+The guarantee: enabling ``SONAR_REPLICATE_EMBED`` (replicated table + fused
 kernels) must not change model outputs. The gathered residual is bit-exact and
 the fused norms match the unfused reference.
 """
@@ -11,15 +11,15 @@ the fused norms match the unfused reference.
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.fused_embed_norm import (
+from sonar.model_executor.layers.fused_embed_norm import (
     fused_embed_eh_norm,
     fused_embed_norm,
 )
 
 # The model-local (untouched) eh-norm the replicate path must match.
-from aphrodite.models.deepseek_v32.common.kernels import fused_eh_norm
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.models.deepseek_v32.common.kernels import fused_eh_norm
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_random_seed
 
 DEVICE = current_platform.device_type
 DTYPE = torch.bfloat16

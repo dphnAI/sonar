@@ -37,13 +37,13 @@ install(CODE "
     file(RELATIVE_PATH REL_PATH
       \"${tml_fa4_SOURCE_DIR}/flash_attn/cute\" \${SRC_FILE})
     set(DST_FILE
-      \"\${CMAKE_INSTALL_PREFIX}/aphrodite/third_party/tml_fa4/\${REL_PATH}\")
+      \"\${CMAKE_INSTALL_PREFIX}/sonar/third_party/tml_fa4/\${REL_PATH}\")
     get_filename_component(DST_DIR \${DST_FILE} DIRECTORY)
     file(MAKE_DIRECTORY \${DST_DIR})
     file(READ \${SRC_FILE} FILE_CONTENTS)
     string(REPLACE
       \"flash_attn.cute\"
-      \"aphrodite.third_party.tml_fa4\"
+      \"sonar.third_party.tml_fa4\"
       FILE_CONTENTS \"\${FILE_CONTENTS}\")
     file(WRITE \${DST_FILE} \"\${FILE_CONTENTS}\")
   endforeach()

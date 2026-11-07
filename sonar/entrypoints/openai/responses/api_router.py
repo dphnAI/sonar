@@ -8,19 +8,19 @@ from http import HTTPStatus
 from fastapi import APIRouter, Depends, FastAPI, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from aphrodite.entrypoints.openai.responses.protocol import (
+from sonar.entrypoints.openai.responses.protocol import (
     ResponsesRequest,
     ResponsesResponse,
     StreamingResponsesResponse,
 )
-from aphrodite.entrypoints.openai.responses.serving import OpenAIServingResponses
-from aphrodite.entrypoints.serve.engine.protocol import ErrorResponse
-from aphrodite.entrypoints.serve.utils.api_utils import (
+from sonar.entrypoints.openai.responses.serving import OpenAIServingResponses
+from sonar.entrypoints.serve.engine.protocol import ErrorResponse
+from sonar.entrypoints.serve.utils.api_utils import (
     load_aware_call,
     validate_json_request,
     with_cancellation,
 )
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 

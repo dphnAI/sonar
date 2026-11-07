@@ -26,15 +26,15 @@ from typing import TYPE_CHECKING, Generic, TypeVar
 
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite.config.kernel import MoEBackend
-from aphrodite.model_executor.layers.fused_moe.config import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar.config.kernel import MoEBackend
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEQuantConfig,
 )
 
 if TYPE_CHECKING:
-    from aphrodite.model_executor.layers.quantization.utils.quant_utils import QuantKey
+    from sonar.model_executor.layers.quantization.utils.quant_utils import QuantKey
 
 BackendT = TypeVar("BackendT", bound=Enum)
 
@@ -87,7 +87,7 @@ class MoEKernelOracle(ABC, Generic[BackendT]):
         (fp8, nvfp4, int8, ...) to disambiguate backends. The unquantized
         oracle ignores them. Subclasses with additional selection inputs
         (e.g. int_wna16 needs `weight_bits`, fp8 needs
-        `allow_aphrodite_cutlass`) widen the signature in their override; a
+        `allow_sonar_cutlass`) widen the signature in their override; a
         per-oracle config object is the longer-term target tracked in
         the #37753 follow-up PRs.
         """

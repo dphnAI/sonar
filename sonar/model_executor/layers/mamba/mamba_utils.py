@@ -8,17 +8,17 @@ from typing import Literal, TypeAlias
 
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.config.cache import MambaDType
-from aphrodite.config.mamba import MambaBackendEnum
-from aphrodite.config.model import ModelDType
-from aphrodite.distributed import divide
-from aphrodite.logger import init_logger
-from aphrodite.utils.torch_utils import (
+import sonar.envs as envs
+from sonar.config.cache import MambaDType
+from sonar.config.mamba import MambaBackendEnum
+from sonar.config.model import ModelDType
+from sonar.distributed import divide
+from sonar.logger import init_logger
+from sonar.utils.torch_utils import (
     STR_DTYPE_TO_TORCH_DTYPE,
     get_kv_cache_torch_dtype,
 )
-from aphrodite.v1.attention.backends.registry import MambaAttentionBackendEnum
+from sonar.v1.attention.backends.registry import MambaAttentionBackendEnum
 
 logger = init_logger(__name__)
 
@@ -33,10 +33,10 @@ def get_conv_state_layout() -> ConvStateLayoutType:
     DS = (dim, state_len) — TP-sharded dim is on dim-1 (like HND for KV
          cache), consistent with SSM temporal state layout.
     """
-    layout: ConvStateLayoutType | None = envs.APHRODITE_SSM_CONV_STATE_LAYOUT
+    layout: ConvStateLayoutType | None = envs.SONAR_SSM_CONV_STATE_LAYOUT
     if layout is not None:
         logger.info_once(
-            "APHRODITE_SSM_CONV_STATE_LAYOUT env detected. Setting SSM conv state layout to %s.",
+            "SONAR_SSM_CONV_STATE_LAYOUT env detected. Setting SSM conv state layout to %s.",
             layout,
         )
         return layout

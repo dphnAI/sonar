@@ -10,4 +10,4 @@ server_args: >-
   --linear-backend humming
   --dtype bfloat16
 env:
-  APHRODITE_HUMMING_INPUT_QUANT_CONFIG: '{"dtype":"int8"}'
+  SONAR_HUMMING_INPUT_QUANT_CONFIG: '{"dtype":"int8"}'

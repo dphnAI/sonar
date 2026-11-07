@@ -1,20 +1,20 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""fused_markov.sample_sequential against Aphrodite's
+"""fused_markov.sample_sequential against Sonar's
 DSparkSpeculator._sample_sequential.
 
 Both paths run on the same random Markov head, base logits and sampling
-state, for 1 and 2 requests at temperatures 0, 0.6 and 1.0. Aphrodite's bias is
+state, for 1 and 2 requests at temperatures 0, 0.6 and 1.0. Sonar's bias is
 the server's GEMV (rocm_unquantized_gemm). The fused launch adds the bias's
 256 products in another order, so a bias value can differ in its last bf16
 bit, and then a draft token can differ. That changes only what the draft
 proposes, because the rejection sampler checks every draft token against the
-target. So against Aphrodite's loop the test allows at most 1 in 1000 cached
+target. So against Sonar's loop the test allows at most 1 in 1000 cached
 logits of each request and draft step to differ, and a draft token may differ
 only when a cached logit of its own step differed.
 
 The sampling itself is checked exactly. Each fused draft token must be the
-token that Aphrodite's sampler (DSparkSpeculator._sample_logits) draws from the
+token that Sonar's sampler (DSparkSpeculator._sample_logits) draws from the
 logits that the fused launch cached for that request and step.
 """
 
@@ -23,7 +23,7 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 pytestmark = pytest.mark.skipif(not current_platform.is_rocm(), reason="the fused launch is for ROCm")
 
@@ -31,7 +31,7 @@ VOCAB, RANK, N_SPEC, MAX_REQS = 129280, 256, 5, 4
 
 
 def _set_gate(monkeypatch, on: bool):
-    from aphrodite.models.deepseek_v41.amd import ops
+    from sonar.models.deepseek_v41.amd import ops
 
     # The model records --monokernel when it is created. These tests have no
     # model, so they set the recorded flag themselves.
@@ -41,7 +41,7 @@ def _set_gate(monkeypatch, on: bool):
 
 class _MarkovW2(torch.nn.Module):
     def __init__(self, w):
-        from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+        from sonar.model_executor.layers.vocab_parallel_embedding import (
             UnquantizedEmbeddingMethod,
         )
 
@@ -68,7 +68,7 @@ class _Model:
         return self.model.markov_head.markov_w1(ids)
 
     def markov_bias(self, e):
-        from aphrodite.model_executor.layers.utils import rocm_unquantized_gemm
+        from sonar.model_executor.layers.utils import rocm_unquantized_gemm
 
         w2 = self.model.markov_head.markov_w2
         return rocm_unquantized_gemm(w2, e, w2.weight, None)
@@ -78,8 +78,8 @@ class _Model:
 
 
 def _speculator(temp: float, seed: int):
-    from aphrodite.v1.worker.gpu.spec_decode.draft_logits import DraftLogitsCache
-    from aphrodite.v1.worker.gpu.spec_decode.dspark.speculator import DSparkSpeculator
+    from sonar.v1.worker.gpu.spec_decode.draft_logits import DraftLogitsCache
+    from sonar.v1.worker.gpu.spec_decode.dspark.speculator import DSparkSpeculator
 
     dev = torch.device("cuda")
     bf16 = torch.bfloat16
@@ -117,9 +117,9 @@ def _speculator(temp: float, seed: int):
 
 @pytest.mark.parametrize("temp", [0.0, 0.6, 1.0])
 @pytest.mark.parametrize("num_reqs", [1, 2])
-def test_fused_markov_matches_aphrodite_loop(monkeypatch, num_reqs, temp):
-    from aphrodite.models.deepseek_v41.amd.ops import fused_markov
-    from aphrodite.v1.worker.gpu.spec_decode.dspark.speculator import DSparkSpeculator
+def test_fused_markov_matches_sonar_loop(monkeypatch, num_reqs, temp):
+    from sonar.models.deepseek_v41.amd.ops import fused_markov
+    from sonar.v1.worker.gpu.spec_decode.dspark.speculator import DSparkSpeculator
 
     s = _speculator(temp, seed=int(temp * 10) + num_reqs)
     hidden = torch.zeros(MAX_REQS * N_SPEC, 8, device="cuda")
@@ -155,7 +155,7 @@ def test_fused_markov_matches_aphrodite_loop(monkeypatch, num_reqs, temp):
         f"draft tokens differ at (request, step) {unexplained}, while every cached logit of that step is equal"
     )
 
-    # Each fused token must be exactly the token that Aphrodite's sampler draws
+    # Each fused token must be exactly the token that Sonar's sampler draws
     # from the logits that the fused launch cached for its request and step,
     # with the same request slot, seed, position, temperature and cache
     # column. This checks the sampling of every step without the bias GEMV,
@@ -168,5 +168,5 @@ def test_fused_markov_matches_aphrodite_loop(monkeypatch, num_reqs, temp):
         fused = got_tok[:num_reqs, k]
         assert torch.equal(drawn, fused), (
             f"draft step {k}: the fused launch drew {fused.tolist()}, "
-            f"Aphrodite's sampler draws {drawn.tolist()} from the same logits"
+            f"Sonar's sampler draws {drawn.tolist()} from the same logits"
         )

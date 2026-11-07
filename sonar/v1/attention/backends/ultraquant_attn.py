@@ -25,12 +25,12 @@ from typing import Any, ClassVar
 import torch
 import torch.nn.functional as F
 
-from aphrodite.config import get_current_aphrodite_config
-from aphrodite.config.cache import CacheDType
-from aphrodite.logger import init_logger
-from aphrodite.v1.attention.backend import AttentionType
-from aphrodite.v1.attention.backends.fa_utils import get_flash_attn_version
-from aphrodite.v1.attention.backends.turboquant_attn import (
+from sonar.config import get_current_sonar_config
+from sonar.config.cache import CacheDType
+from sonar.logger import init_logger
+from sonar.v1.attention.backend import AttentionType
+from sonar.v1.attention.backends.fa_utils import get_flash_attn_version
+from sonar.v1.attention.backends.turboquant_attn import (
     _CONTINUATION_DECODE_THRESHOLD,
     _HAS_FLASH_ATTN,
     TurboQuantAttentionBackend,
@@ -38,17 +38,17 @@ from aphrodite.v1.attention.backends.turboquant_attn import (
     TurboQuantMetadata,
     _build_hadamard,
 )
-from aphrodite.v1.attention.ops.flydsl_ultraquant_decode import (
+from sonar.v1.attention.ops.flydsl_ultraquant_decode import (
     flydsl_ultraquant_decode_attention,
     is_ultraquant_flydsl_available,
     ultraquant_flydsl_decode_eligible,
 )
-from aphrodite.v1.attention.ops.ultraquant.format import slot_size
-from aphrodite.v1.attention.ops.ultraquant.triton_unified_attention import (
+from sonar.v1.attention.ops.ultraquant.format import slot_size
+from sonar.v1.attention.ops.ultraquant.triton_unified_attention import (
     ultraquant_unified_attention,
 )
-from aphrodite.v1.kv_cache_interface import AttentionSpec
-from aphrodite.v1.worker.workspace import (
+from sonar.v1.kv_cache_interface import AttentionSpec
+from sonar.v1.worker.workspace import (
     current_workspace_manager,
     is_workspace_manager_initialized,
 )
@@ -141,11 +141,11 @@ class UltraQuantAttentionImpl(TurboQuantAttentionImpl):
 
         self.fa_version = get_flash_attn_version(head_size=head_size)
 
-        aphrodite_config = get_current_aphrodite_config()
-        self.max_num_kv_splits = aphrodite_config.attention_config.tq_max_kv_splits_for_cuda_graph
+        sonar_config = get_current_sonar_config()
+        self.max_num_kv_splits = sonar_config.attention_config.tq_max_kv_splits_for_cuda_graph
         self.sliding_window = sliding_window
         self.sinks = kwargs.get("sinks")
-        self._max_model_len = aphrodite_config.model_config.max_model_len
+        self._max_model_len = sonar_config.model_config.max_model_len
 
         self._use_ultraquant_flydsl = is_ultraquant_flydsl_available()
         # FlyDSL decode eligibility is static per layer config; compute once.
@@ -213,7 +213,7 @@ class UltraQuantAttentionImpl(TurboQuantAttentionImpl):
         layer: Any,
     ):
         """Rotate K by the Hadamard and pack K+V into FP4/UE8M0 slots."""
-        from aphrodite.v1.attention.ops.ultraquant.triton_store import ultraquant_store
+        from sonar.v1.attention.ops.ultraquant.triton_store import ultraquant_store
 
         ultraquant_store(
             key,
@@ -357,7 +357,7 @@ class UltraQuantAttentionImpl(TurboQuantAttentionImpl):
                 if D > _CK_MAX_HEAD_DIM:
                     # Head dims CK cannot handle (Gemma 4 global layers,
                     # D=512). This kernel is generic over head size.
-                    from aphrodite.v1.attention.ops.triton_unified_attention import (
+                    from sonar.v1.attention.ops.triton_unified_attention import (
                         unified_attention,
                     )
 
@@ -466,7 +466,7 @@ class UltraQuantAttentionImpl(TurboQuantAttentionImpl):
         K and the queries need rotating. Hadamard is symmetric orthonormal, so
         rotating both sides leaves the attention scores unchanged.
         """
-        from aphrodite.v1.attention.ops.ultraquant.triton_dequant import (
+        from sonar.v1.attention.ops.ultraquant.triton_dequant import (
             ultraquant_full_dequant_kv,
         )
 
@@ -519,7 +519,7 @@ class UltraQuantAttentionImpl(TurboQuantAttentionImpl):
         # Q/K are already in Hadamard-rotated space (q_rot, k_full) so the dot
         # products match the original-space attention scores.
         if self.sinks is not None or D > _CK_MAX_HEAD_DIM:
-            from aphrodite.v1.attention.ops.triton_unified_attention import (
+            from sonar.v1.attention.ops.triton_unified_attention import (
                 unified_attention,
             )
 

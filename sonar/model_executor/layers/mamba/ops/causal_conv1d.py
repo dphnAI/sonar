@@ -8,9 +8,9 @@
 import numpy as np
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
-from aphrodite.v1.attention.backends.utils import NULL_BLOCK_ID, PAD_SLOT_ID
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
+from sonar.v1.attention.backends.utils import NULL_BLOCK_ID, PAD_SLOT_ID
 
 
 @triton.jit(do_not_specialize_on_alignment=["num_cache_lines"])
@@ -442,7 +442,7 @@ def causal_conv1d_fn(
     num_cache_lines = 0
     BLOCK_M = 8
     if conv_states is not None:
-        # extensions to support Aphrodite:
+        # extensions to support Sonar:
         # 1. conv_states is used to replaced initial_states
         # 2. conv_states serve as a cache with num cache lines can be larger than batch size
         # 3. mapping from sequence x[idx] to a cache line at index as specified via cache_indices[idx]
@@ -983,7 +983,7 @@ def causal_conv1d_update(
         assert num_cache_lines >= batch
         assert weight.stride(1) == 1  # Need this
 
-    # adopt the strategy in Aphrodite that overwrite on 'x' directly, rather than creating a new tensor 'o'
+    # adopt the strategy in Sonar that overwrite on 'x' directly, rather than creating a new tensor 'o'
     out = x
     stride_w_dim, stride_w_width = weight.stride()
 
@@ -1060,7 +1060,7 @@ def causal_conv1d_update(
 
 
 if current_platform.is_cpu():
-    from aphrodite.model_executor.layers.mamba.ops.cpu.causal_conv1d import (
+    from sonar.model_executor.layers.mamba.ops.cpu.causal_conv1d import (
         causal_conv1d_fn_cpu,
         causal_conv1d_update_cpu,
     )

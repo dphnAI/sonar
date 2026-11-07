@@ -7,28 +7,28 @@ import time
 
 import uvloop
 
-import aphrodite
-import aphrodite.envs as envs
-from aphrodite.entrypoints.cli.types import CLISubcommand
-from aphrodite.entrypoints.common.cli_args import (
+import sonar
+import sonar.envs as envs
+from sonar.entrypoints.cli.types import CLISubcommand
+from sonar.entrypoints.common.cli_args import (
     make_arg_parser,
     propagate_flash_late_interaction,
     validate_parsed_serve_args,
 )
-from aphrodite.entrypoints.common.startup import APHRODITE_SUBCMD_PARSER_EPILOG
-from aphrodite.entrypoints.launchers.api_server.entry import run_server, setup_server
-from aphrodite.entrypoints.launchers.dp_supervisor import run_dp_supervisor
-from aphrodite.entrypoints.launchers.launcher import create_server_socket
-from aphrodite.logger import init_logger
-from aphrodite.reasoning import ReasoningParserManager
-from aphrodite.usage.usage_lib import UsageContext
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
-from aphrodite.utils.network_utils import get_tcp_uri
-from aphrodite.v1.engine.utils import CoreEngineProcManager, launch_core_engines
-from aphrodite.v1.executor import Executor
-from aphrodite.v1.executor.multiproc_executor import MultiprocExecutor
-from aphrodite.v1.metrics.prometheus import setup_multiprocess_prometheus
-from aphrodite.v1.utils import (
+from sonar.entrypoints.common.startup import SONAR_SUBCMD_PARSER_EPILOG
+from sonar.entrypoints.launchers.api_server.entry import run_server, setup_server
+from sonar.entrypoints.launchers.dp_supervisor import run_dp_supervisor
+from sonar.entrypoints.launchers.launcher import create_server_socket
+from sonar.logger import init_logger
+from sonar.reasoning import ReasoningParserManager
+from sonar.usage.usage_lib import UsageContext
+from sonar.utils.argparse_utils import FlexibleArgumentParser
+from sonar.utils.network_utils import get_tcp_uri
+from sonar.v1.engine.utils import CoreEngineProcManager, launch_core_engines
+from sonar.v1.executor import Executor
+from sonar.v1.executor.multiproc_executor import MultiprocExecutor
+from sonar.v1.metrics.prometheus import setup_multiprocess_prometheus
+from sonar.v1.utils import (
     APIServerProcessManager,
     RustFrontendProcessManager,
     wait_for_completion_or_failure,
@@ -46,7 +46,7 @@ Search by using: `--help=<ConfigGroup>` to explore options by section (e.g.,
 
 
 class ServeSubcommand(CLISubcommand):
-    """The `serve` subcommand for the Aphrodite CLI."""
+    """The `serve` subcommand for the Sonar CLI."""
 
     name = "serve"
 
@@ -57,12 +57,12 @@ class ServeSubcommand(CLISubcommand):
             args.model = args.model_tag
 
         if getattr(args, "grpc", False):
-            from aphrodite.entrypoints.launchers.grpc_server import serve_grpc
+            from sonar.entrypoints.launchers.grpc_server import serve_grpc
 
             uvloop.run(serve_grpc(args))
             return
 
-        rust_frontend_path = envs.APHRODITE_RUST_FRONTEND_PATH if envs.APHRODITE_USE_RUST_FRONTEND else None
+        rust_frontend_path = envs.SONAR_RUST_FRONTEND_PATH if envs.SONAR_USE_RUST_FRONTEND else None
 
         if args.headless:
             if args.api_server_count is not None and args.api_server_count > 0:
@@ -155,11 +155,11 @@ class ServeSubcommand(CLISubcommand):
             self.name,
             help="Launch a local OpenAI-compatible API server to serve LLM completions via HTTP.",
             description=DESCRIPTION,
-            usage="aphrodite serve [model_tag] [options]",
+            usage="sonar serve [model_tag] [options]",
         )
 
         serve_parser = make_arg_parser(serve_parser)
-        serve_parser.epilog = APHRODITE_SUBCMD_PARSER_EPILOG.format(subcmd=self.name)
+        serve_parser.epilog = SONAR_SUBCMD_PARSER_EPILOG.format(subcmd=self.name)
         return serve_parser
 
 
@@ -175,15 +175,15 @@ def run_headless(args: argparse.Namespace):
         ReasoningParserManager.import_reasoning_parser(args.reasoning_parser_plugin)
 
     # Create the EngineConfig.
-    engine_args = aphrodite.AsyncEngineArgs.from_cli_args(args)
+    engine_args = sonar.AsyncEngineArgs.from_cli_args(args)
     propagate_flash_late_interaction(args, engine_args)
     usage_context = UsageContext.OPENAI_API_SERVER
-    aphrodite_config = engine_args.create_engine_config(usage_context=usage_context, headless=True)
+    sonar_config = engine_args.create_engine_config(usage_context=usage_context, headless=True)
 
     if engine_args.data_parallel_hybrid_lb:
         raise ValueError("data_parallel_hybrid_lb is not applicable in headless mode")
 
-    parallel_config = aphrodite_config.parallel_config
+    parallel_config = sonar_config.parallel_config
     local_engine_count = parallel_config.data_parallel_size_local
 
     if local_engine_count <= 0:
@@ -203,19 +203,19 @@ def run_headless(args: argparse.Namespace):
     signal.signal(signal.SIGINT, signal_handler)
 
     if parallel_config.node_rank_within_dp > 0:
-        from aphrodite.version import __version__ as APHRODITE_VERSION
+        from sonar.version import __version__ as SONAR_VERSION
 
         # Run headless workers (for multi-node PP/TP).
         host = parallel_config.master_addr
         head_node_address = f"{host}:{parallel_config.master_port}"
         logger.info(
-            "Launching Aphrodite (v%s) headless multiproc executor, "
+            "Launching Sonar (v%s) headless multiproc executor, "
             "with head node address %s for torch.distributed process group.",
-            APHRODITE_VERSION,
+            SONAR_VERSION,
             head_node_address,
         )
 
-        executor = MultiprocExecutor(aphrodite_config, monitor_workers=False)
+        executor = MultiprocExecutor(sonar_config, monitor_workers=False)
         executor.start_worker_monitor(inline=True)
         return
 
@@ -236,12 +236,12 @@ def run_headless(args: argparse.Namespace):
     # Create the engines.
     engine_manager = CoreEngineProcManager(
         local_engine_count=local_engine_count,
-        start_index=aphrodite_config.parallel_config.data_parallel_rank,
+        start_index=sonar_config.parallel_config.data_parallel_rank,
         local_start_index=0,
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         local_client=client_handshake_address is not None,
         handshake_address=handshake_address,
-        executor_class=Executor.get_class(aphrodite_config),
+        executor_class=Executor.get_class(sonar_config),
         log_stats=not engine_args.disable_log_stats,
         client_handshake_address=client_handshake_address,
     )
@@ -251,7 +251,7 @@ def run_headless(args: argparse.Namespace):
     finally:
         timeout = None
         if shutdown_requested:
-            timeout = aphrodite_config.shutdown_timeout
+            timeout = sonar_config.shutdown_timeout
             logger.info("Waiting up to %d seconds for processes to exit", timeout)
         engine_manager.shutdown(timeout=timeout)
         logger.info("Shutting down.")
@@ -259,12 +259,12 @@ def run_headless(args: argparse.Namespace):
 
 def run_multi_api_server(args: argparse.Namespace):
     assert not args.headless
-    rust_frontend_path = envs.APHRODITE_RUST_FRONTEND_PATH if envs.APHRODITE_USE_RUST_FRONTEND else None
+    rust_frontend_path = envs.SONAR_RUST_FRONTEND_PATH if envs.SONAR_USE_RUST_FRONTEND else None
     num_api_servers: int = args.api_server_count
     assert num_api_servers > 0
 
     if rust_frontend_path and num_api_servers > 1:
-        raise ValueError("APHRODITE_RUST_FRONTEND_PATH does not support api_server_count > 1")
+        raise ValueError("SONAR_RUST_FRONTEND_PATH does not support api_server_count > 1")
 
     if num_api_servers > 1:
         setup_multiprocess_prometheus()
@@ -291,32 +291,32 @@ def run_multi_api_server(args: argparse.Namespace):
         grpc_host = "127.0.0.1" if args.uds else (args.host or "")
         grpc_sock = create_server_socket((grpc_host, args.grpc_port), reuse_port=False)
 
-    engine_args = aphrodite.AsyncEngineArgs.from_cli_args(args)
+    engine_args = sonar.AsyncEngineArgs.from_cli_args(args)
     propagate_flash_late_interaction(args, engine_args)
     engine_args._api_process_count = num_api_servers
     engine_args._api_process_rank = -1
 
     usage_context = UsageContext.OPENAI_API_SERVER
-    aphrodite_config = engine_args.create_engine_config(usage_context=usage_context)
+    sonar_config = engine_args.create_engine_config(usage_context=usage_context)
 
-    if num_api_servers > 1 and envs.APHRODITE_ALLOW_RUNTIME_LORA_UPDATING:
-        raise ValueError("APHRODITE_ALLOW_RUNTIME_LORA_UPDATING cannot be used with api_server_count > 1")
+    if num_api_servers > 1 and envs.SONAR_ALLOW_RUNTIME_LORA_UPDATING:
+        raise ValueError("SONAR_ALLOW_RUNTIME_LORA_UPDATING cannot be used with api_server_count > 1")
 
-    executor_class = Executor.get_class(aphrodite_config)
+    executor_class = Executor.get_class(sonar_config)
     log_stats = not engine_args.disable_log_stats
 
-    parallel_config = aphrodite_config.parallel_config
+    parallel_config = sonar_config.parallel_config
     dp_rank = parallel_config.data_parallel_rank
     assert parallel_config.local_engines_only or dp_rank == 0
 
     api_server_manager: APIServerProcessManager | RustFrontendProcessManager | None = None
 
-    from aphrodite.v1.engine.utils import bind_engine_zmq_listeners
+    from sonar.v1.engine.utils import bind_engine_zmq_listeners
 
-    zmq_listeners = bind_engine_zmq_listeners(aphrodite_config, num_api_servers)
+    zmq_listeners = bind_engine_zmq_listeners(sonar_config, num_api_servers)
     addresses = zmq_listeners.addresses
 
-    with launch_core_engines(aphrodite_config, executor_class, log_stats, addresses) as engine_launch:
+    with launch_core_engines(sonar_config, executor_class, log_stats, addresses) as engine_launch:
         local_engine_manager = engine_launch.engine_manager
         coordinator = engine_launch.coordinator
         addresses = engine_launch.addresses
@@ -370,7 +370,7 @@ def run_multi_api_server(args: argparse.Namespace):
     finally:
         timeout = shutdown_by = None
         if shutdown_requested:
-            timeout = aphrodite_config.shutdown_timeout
+            timeout = sonar_config.shutdown_timeout
             shutdown_by = time.monotonic() + timeout
             logger.info("Waiting up to %d seconds for processes to exit", timeout)
 

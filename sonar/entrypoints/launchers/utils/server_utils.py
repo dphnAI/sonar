@@ -7,11 +7,11 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from aphrodite import envs
-from aphrodite.config.logging import LogFormatter
-from aphrodite.engine.protocol import EngineClient
-from aphrodite.logger import init_logger
-from aphrodite.utils.gc_utils import freeze_gc_heap
+from sonar import envs
+from sonar.config.logging import LogFormatter
+from sonar.engine.protocol import EngineClient
+from sonar.logger import init_logger
+from sonar.utils.gc_utils import freeze_gc_heap
 
 logger = init_logger(__name__)
 
@@ -47,7 +47,7 @@ def get_uvicorn_log_config(args: Namespace) -> dict | None:
 
     formatter: LogFormatter = logging_config.formatter if logging_config is not None else "text"
     if args.disable_access_log_for_endpoints or formatter == "json":
-        from aphrodite.logging_utils import create_uvicorn_log_config
+        from sonar.logging_utils import create_uvicorn_log_config
 
         excluded_paths = [p.strip() for p in (args.disable_access_log_for_endpoints or "").split(",") if p.strip()]
         return create_uvicorn_log_config(
@@ -70,7 +70,7 @@ async def lifespan(app: FastAPI):
 
             async def _force_log():
                 while True:
-                    await asyncio.sleep(envs.APHRODITE_LOG_STATS_INTERVAL)
+                    await asyncio.sleep(envs.SONAR_LOG_STATS_INTERVAL)
                     await engine_client.do_log_stats()
 
             task = asyncio.create_task(_force_log())

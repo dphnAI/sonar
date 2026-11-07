@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 
-from aphrodite.config import AphroditeConfig, CompilationMode
+from sonar.config import CompilationMode, SonarConfig
 
 
 @dataclass(frozen=True)
@@ -19,7 +19,7 @@ class DecodeConfig:
     first_layer: int = 3
     last_layer: int = 59
 
-    def refusal_reasons(self, config: AphroditeConfig) -> list[str]:
+    def refusal_reasons(self, config: SonarConfig) -> list[str]:
         pc = config.parallel_config
         cc = config.cache_config
         reasons: list[str] = []
@@ -96,7 +96,7 @@ class DecodeConfig:
 DECODE_CONFIG = DecodeConfig()
 
 
-def specialized_decode_config(config: AphroditeConfig) -> DecodeConfig | None:
+def specialized_decode_config(config: SonarConfig) -> DecodeConfig | None:
     if not config.kernel_config.monokernel:
         return None
     layers = config.model_config.hf_text_config.num_hidden_layers

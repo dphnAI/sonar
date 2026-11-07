@@ -11,22 +11,22 @@ from typing import TYPE_CHECKING, Any, cast
 import numpy as np
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.config import AphroditeConfig, get_layers_from_aphrodite_config
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.layers.attention_layer_base import AttentionLayerBase
-from aphrodite.v1.attention.backend import CommonAttentionMetadata
-from aphrodite.v1.attention.backends.utils import (
+import sonar.envs as envs
+from sonar.config import SonarConfig, get_layers_from_sonar_config
+from sonar.model_executor.layers.attention import Attention
+from sonar.model_executor.layers.attention_layer_base import AttentionLayerBase
+from sonar.v1.attention.backend import CommonAttentionMetadata
+from sonar.v1.attention.backends.utils import (
     create_fast_prefill_custom_backend,
 )
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.kv_cache_interface import (
     AttentionSpec,
     KVCacheConfig,
     KVCacheSpec,
     MambaSpec,
     UniformTypeKVCacheSpecs,
 )
-from aphrodite.v1.worker.utils import (
+from sonar.v1.worker.utils import (
     AttentionGroup,
     add_kv_sharing_layers_to_kv_cache_groups,
     allocate_kv_cache,
@@ -37,7 +37,7 @@ from aphrodite.v1.worker.utils import (
 )
 
 if TYPE_CHECKING:
-    from aphrodite.v1.worker.cpu.model_states.interface import ModelSpecificAttnMetadata
+    from sonar.v1.worker.cpu.model_states.interface import ModelSpecificAttnMetadata
 
 
 @dataclass(frozen=True)
@@ -71,24 +71,24 @@ class FastPrefillHelper:
         )
 
 
-def get_kv_cache_spec(aphrodite_config: AphroditeConfig) -> dict[str, KVCacheSpec]:
+def get_kv_cache_spec(sonar_config: SonarConfig) -> dict[str, KVCacheSpec]:
     kv_cache_spec: dict[str, KVCacheSpec] = {}
     layer_type = cast(type[Any], AttentionLayerBase)
-    attn_layers = get_layers_from_aphrodite_config(aphrodite_config, layer_type)
+    attn_layers = get_layers_from_sonar_config(sonar_config, layer_type)
     for layer_name, attn_module in attn_layers.items():
         if getattr(attn_module, "kv_sharing_target_layer_name", None):
             # This layer will use KV cache of the sharing target layer.
             continue
         # Skip modules that don't need KV cache (eg encoder-only attention)
-        if spec := attn_module.get_kv_cache_spec(aphrodite_config):
+        if spec := attn_module.get_kv_cache_spec(sonar_config):
             if isinstance(spec, AttentionSpec):
                 spec = customize_attention_spec(attn_module.get_attn_backend(), spec)
             kv_cache_spec[layer_name] = spec
     return kv_cache_spec
 
 
-def get_shared_kv_cache_layers(aphrodite_config: AphroditeConfig):
-    attn_layers = get_layers_from_aphrodite_config(aphrodite_config, Attention)
+def get_shared_kv_cache_layers(sonar_config: SonarConfig):
+    attn_layers = get_layers_from_sonar_config(sonar_config, Attention)
     return {
         layer_name: kv_tgt_layer
         for layer_name, attn_module in attn_layers.items()
@@ -97,7 +97,7 @@ def get_shared_kv_cache_layers(aphrodite_config: AphroditeConfig):
 
 
 def get_kv_sharing_fast_prefill_eligible_layers(
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
 ) -> set[str]:
     """Trailing run of KV-sharing layers, eligible for fast prefill.
 
@@ -107,13 +107,13 @@ def get_kv_sharing_fast_prefill_eligible_layers(
     execution order, so the eligible layers are the contiguous suffix of
     KV-sharing layers.
     """
-    if not aphrodite_config.cache_config.kv_sharing_fast_prefill:
+    if not sonar_config.cache_config.kv_sharing_fast_prefill:
         return set()
-    shared_kv_cache_layers = get_shared_kv_cache_layers(aphrodite_config)
+    shared_kv_cache_layers = get_shared_kv_cache_layers(sonar_config)
     if not shared_kv_cache_layers:
         return set()
     eligible_layers: set[str] = set()
-    attn_layers = get_layers_from_aphrodite_config(aphrodite_config, Attention)
+    attn_layers = get_layers_from_sonar_config(sonar_config, Attention)
     for layer_name in reversed(attn_layers):
         if layer_name not in shared_kv_cache_layers:
             break
@@ -123,7 +123,7 @@ def get_kv_sharing_fast_prefill_eligible_layers(
 
 def init_attn_backend(
     kv_cache_config: KVCacheConfig,
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     device: torch.device,
 ) -> tuple[list[list[AttentionGroup]], list[int]]:
     # Phase 1: discover attention groups for each kv cache group.
@@ -131,10 +131,8 @@ def init_attn_backend(
 
     # Add KV-sharing layers to their target's kv cache group so they are
     # discovered alongside the target layer in Phase 1 below.
-    add_kv_sharing_layers_to_kv_cache_groups(
-        get_shared_kv_cache_layers(aphrodite_config), kv_cache_config.kv_cache_groups
-    )
-    fast_prefill_eligible_layers = get_kv_sharing_fast_prefill_eligible_layers(aphrodite_config)
+    add_kv_sharing_layers_to_kv_cache_groups(get_shared_kv_cache_layers(sonar_config), kv_cache_config.kv_cache_groups)
+    fast_prefill_eligible_layers = get_kv_sharing_fast_prefill_eligible_layers(sonar_config)
 
     for kv_cache_group_id, kv_cache_group_spec in enumerate(kv_cache_config.kv_cache_groups):
         layer_names = kv_cache_group_spec.layer_names
@@ -143,14 +141,14 @@ def init_attn_backend(
             continue
 
         layer_type = cast(type[Any], AttentionLayerBase)
-        attn_layers = get_layers_from_aphrodite_config(aphrodite_config, layer_type, layer_names)
+        attn_layers = get_layers_from_sonar_config(sonar_config, layer_type, layer_names)
         group_map: dict[tuple[tuple[str, str], KVCacheSpec, int], AttentionGroup] = {}
         group_order: list[tuple[tuple[str, str], KVCacheSpec, int]] = []
 
         for layer_name in layer_names:
             attn_backend = attn_layers[layer_name].get_attn_backend()
-            if envs.APHRODITE_BATCH_INVARIANT and not attn_backend.supports_batch_invariance():
-                raise RuntimeError(f"APHRODITE batch_invariant mode is not supported for {attn_backend.get_name()}.")
+            if envs.SONAR_BATCH_INVARIANT and not attn_backend.supports_batch_invariance():
+                raise RuntimeError(f"SONAR batch_invariant mode is not supported for {attn_backend.get_name()}.")
             if layer_name in fast_prefill_eligible_layers:
                 attn_backend = create_fast_prefill_custom_backend("FastPrefill", attn_backend)
 
@@ -181,7 +179,7 @@ def init_attn_backend(
             kernel_block_size = kernel_block_sizes[kv_cache_group_id]
         for group in groups:
             group.create_metadata_builders(
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 device=device,
                 kernel_block_size=kernel_block_size,
             )
@@ -194,7 +192,7 @@ def init_kv_cache(
     kv_cache_config: KVCacheConfig,
     device: torch.device,
     kernel_block_sizes: list[int],
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     kv_cache_allocation_context: AbstractContextManager | None = None,
     *,
     attn_groups: Iterable[AttentionGroup] = (),
@@ -204,15 +202,15 @@ def init_kv_cache(
         kv_caches = allocate_kv_cache(
             kv_cache_config,
             device,
-            aphrodite_config.cache_config.get_resolved_kv_cache_layout(),
+            sonar_config.cache_config.get_resolved_kv_cache_layout(),
             kernel_block_sizes,
         )
-    for layer_name, target in get_shared_kv_cache_layers(aphrodite_config).items():
+    for layer_name, target in get_shared_kv_cache_layers(sonar_config).items():
         kv_caches[layer_name] = kv_caches[target]
 
     # Dual-attention models (e.g. LongCat-Flash) put two Attention modules per
     # decoder layer, so a layer name carries two integers (layer + module index).
-    num_attn_module = 2 if aphrodite_config.model_config.hf_config.model_type == "longcat_flash" else 1
+    num_attn_module = 2 if sonar_config.model_config.hf_config.model_type == "longcat_flash" else 1
     bindable_caches = map_kv_caches_to_kernel_blocks(
         {name: cache for name, cache in kv_caches.items() if name in forward_context},
         attn_groups,

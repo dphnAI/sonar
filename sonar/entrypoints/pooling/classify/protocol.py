@@ -6,10 +6,10 @@ from typing import Annotated, TypeAlias
 
 from pydantic import BeforeValidator, Field
 
-from aphrodite import PoolingParams
-from aphrodite.entrypoints.serve.engine.protocol import OpenAIBaseModel, UsageInfo
-from aphrodite.logger import init_logger
-from aphrodite.utils import random_uuid
+from sonar import PoolingParams
+from sonar.entrypoints.serve.engine.protocol import OpenAIBaseModel, UsageInfo
+from sonar.logger import init_logger
+from sonar.utils import random_uuid
 
 from ..base.protocol import (
     ChatRequestMixin,

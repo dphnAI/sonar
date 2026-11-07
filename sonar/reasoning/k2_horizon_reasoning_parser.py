@@ -3,12 +3,12 @@
 
 from collections.abc import Iterable, Sequence
 
-from aphrodite.entrypoints.generate.base.protocol import DeltaMessage
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
-from aphrodite.reasoning.deepseek_r1_reasoning_parser import DeepSeekR1ReasoningParser
-from aphrodite.tokenizers import TokenizerLike
-from aphrodite.tool_parsers.utils import partial_tag_overlap
+from sonar.entrypoints.generate.base.protocol import DeltaMessage
+from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
+from sonar.reasoning.deepseek_r1_reasoning_parser import DeepSeekR1ReasoningParser
+from sonar.tokenizers import TokenizerLike
+from sonar.tool_parsers.utils import partial_tag_overlap
 
 
 class K2HorizonReasoningParser(DeepSeekR1ReasoningParser):

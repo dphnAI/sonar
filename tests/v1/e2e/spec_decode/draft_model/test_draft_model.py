@@ -6,12 +6,12 @@ from typing import Any
 
 import pytest
 
-from aphrodite import SamplingParams
-from aphrodite.config import AphroditeConfig, CompilationConfig, replace
-from aphrodite.config.kernel import MoEBackend
-from aphrodite.engine.arg_utils import EngineArgs
-from aphrodite.platforms import current_platform
-from aphrodite.v1.spec_decode.draft_model import DraftModelProposer
+from sonar import SamplingParams
+from sonar.config import CompilationConfig, SonarConfig, replace
+from sonar.config.kernel import MoEBackend
+from sonar.engine.arg_utils import EngineArgs
+from sonar.platforms import current_platform
+from sonar.v1.spec_decode.draft_model import DraftModelProposer
 from tests.utils import multi_gpu_only, single_gpu_only
 
 from ..utils import (
@@ -100,13 +100,13 @@ cases = [
 @pytest.mark.parametrize("args", cases)
 @pytest.mark.parametrize("enforce_eager", [True, False])
 @single_gpu_only
-def test_draft_model_correctness(args: ArgsTest, enforce_eager: bool, aphrodite_runner):
+def test_draft_model_correctness(args: ArgsTest, enforce_eager: bool, sonar_runner):
     args.enforce_eager = enforce_eager
-    assert_draft_model_correctness(args, aphrodite_runner)
+    assert_draft_model_correctness(args, sonar_runner)
 
 
 @single_gpu_only
-def test_draft_model_realistic_example(aphrodite_runner):
+def test_draft_model_realistic_example(sonar_runner):
     args = ArgsTest(
         target_model="Qwen/Qwen3-1.7B",
         draft_model="Qwen/Qwen3-0.6B",
@@ -117,11 +117,11 @@ def test_draft_model_realistic_example(aphrodite_runner):
         expected_acceptance_len=2.6,  # ref: 2.86
         expected_acceptance_rate=0.5,  # ref: 0.62
     )
-    assert_draft_model_correctness(args, aphrodite_runner)
+    assert_draft_model_correctness(args, sonar_runner)
 
 
 @single_gpu_only
-def test_draft_model_parallel_drafting(aphrodite_runner):
+def test_draft_model_parallel_drafting(sonar_runner):
     args = ArgsTest(
         target_model="Qwen/Qwen3-1.7B",
         draft_model="amd/PARD-Qwen3-0.6B",
@@ -133,7 +133,7 @@ def test_draft_model_parallel_drafting(aphrodite_runner):
         expected_acceptance_len=2.3,  # ref: 2.52
         expected_acceptance_rate=0.4,  # ref: 0.51
     )
-    assert_draft_model_correctness(args, aphrodite_runner)
+    assert_draft_model_correctness(args, sonar_runner)
 
 
 @pytest.mark.parametrize(
@@ -147,7 +147,7 @@ def test_draft_model_parallel_drafting(aphrodite_runner):
 )
 @pytest.mark.parametrize("enforce_eager", [True, False])
 @single_gpu_only
-def test_draft_model_quantization(models: tuple[str, str], enforce_eager: bool, aphrodite_runner):
+def test_draft_model_quantization(models: tuple[str, str], enforce_eager: bool, sonar_runner):
     tgt_model, draft_model = models
     sd_case = ArgsTest(
         target_model=tgt_model,
@@ -155,11 +155,11 @@ def test_draft_model_quantization(models: tuple[str, str], enforce_eager: bool, 
         **some_high_acceptance_metrics(),
         enforce_eager=enforce_eager,
     )
-    assert_draft_model_correctness(sd_case, aphrodite_runner)
+    assert_draft_model_correctness(sd_case, sonar_runner)
 
 
 @single_gpu_only
-def test_draft_model_transformers_backend(aphrodite_runner):
+def test_draft_model_transformers_backend(sonar_runner):
     """Ensure that Attention prefixes don't collide between the target and
     draft models when both models use the Transformers modelling backend."""
     sd_case = ArgsTest(
@@ -170,11 +170,11 @@ def test_draft_model_transformers_backend(aphrodite_runner):
         expected_acceptance_len=0.98 * (3 + 1),  # epsilon discount of K + 1
         expected_acceptance_rate=0.98,  # slight epsilon
     )
-    assert_draft_model_correctness(sd_case, aphrodite_runner)
+    assert_draft_model_correctness(sd_case, sonar_runner)
 
 
 @multi_gpu_only(num_gpus=2)
-def test_draft_model_tensor_parallelism(aphrodite_runner):
+def test_draft_model_tensor_parallelism(sonar_runner):
     """Ensure spec decode works when running with TP > 1."""
     sd_case = ArgsTest(
         target_model="Qwen/Qwen3-1.7B",
@@ -185,12 +185,12 @@ def test_draft_model_tensor_parallelism(aphrodite_runner):
         enforce_eager=False,
         expected_gsm8k_accuracy=0.5,
     )
-    assert_draft_model_correctness(sd_case, aphrodite_runner)
+    assert_draft_model_correctness(sd_case, sonar_runner)
 
 
 @multi_gpu_only(num_gpus=2)
 def test_draft_model_engine_args_tensor_parallelism():
-    """Ensure the aphrodite_config for the draft model is created correctly,
+    """Ensure the sonar_config for the draft model is created correctly,
     and independently of the target model (quantization, TP, etc.)"""
     engine_args = EngineArgs(
         model="Qwen/Qwen3-1.7B-FP8",  # <<< tgt quantized
@@ -202,14 +202,14 @@ def test_draft_model_engine_args_tensor_parallelism():
             "draft_tensor_parallel_size": 1,  # <<< valid arg name
         },
     )
-    target_config: AphroditeConfig = engine_args.create_engine_config()
+    target_config: SonarConfig = engine_args.create_engine_config()
     assert target_config.parallel_config.tensor_parallel_size == 2
     assert target_config.quant_config is not None
     assert target_config.quant_config.get_name() == "fp8"
 
     speculative_config = target_config.speculative_config
     assert speculative_config is not None
-    draft_config: AphroditeConfig = replace(
+    draft_config: SonarConfig = replace(
         target_config,
         quant_config=None,
         parallel_config=replace(
@@ -240,9 +240,9 @@ def test_draft_model_inherits_target_dcp_config(monkeypatch, dcp_size):
         },
     ).create_engine_config()
     proposer = object.__new__(DraftModelProposer)
-    proposer.aphrodite_config = target_config
+    proposer.sonar_config = target_config
     proposer.speculative_config = target_config.speculative_config
-    draft_config = proposer._create_draft_aphrodite_config()
+    draft_config = proposer._create_draft_sonar_config()
     draft_parallel = draft_config.parallel_config
     assert draft_parallel.decode_context_parallel_size == dcp_size
     assert draft_parallel.cp_kv_cache_interleave_size == 16
@@ -252,26 +252,26 @@ def test_draft_model_inherits_target_dcp_config(monkeypatch, dcp_size):
     assert target_config.parallel_config.decode_context_parallel_size == dcp_size
 
 
-def _apply_draft_moe_backend(aphrodite_config: AphroditeConfig) -> AphroditeConfig:
-    """Replicate SpecDecodeBaseProposer._create_draft_aphrodite_config logic
+def _apply_draft_moe_backend(sonar_config: SonarConfig) -> SonarConfig:
+    """Replicate SpecDecodeBaseProposer._create_draft_sonar_config logic
     so we can test it without instantiating a full proposer."""
-    spec_cfg = aphrodite_config.speculative_config
+    spec_cfg = sonar_config.speculative_config
     assert spec_cfg is not None
     if spec_cfg.moe_backend is not None:
         return replace(
-            aphrodite_config,
+            sonar_config,
             kernel_config=replace(
-                aphrodite_config.kernel_config,
+                sonar_config.kernel_config,
                 moe_backend=spec_cfg.moe_backend,
             ),
         )
-    return aphrodite_config
+    return sonar_config
 
 
 def _platform_moe_backend(monkeypatch: pytest.MonkeyPatch) -> MoEBackend:
     if current_platform.is_rocm():
-        monkeypatch.setenv("APHRODITE_ROCM_USE_AITER", "1")
-        monkeypatch.setenv("APHRODITE_ROCM_USE_AITER_MOE", "1")
+        monkeypatch.setenv("SONAR_ROCM_USE_AITER", "1")
+        monkeypatch.setenv("SONAR_ROCM_USE_AITER_MOE", "1")
         return "aiter"
     if current_platform.is_cuda():
         return "flashinfer_trtllm"
@@ -279,7 +279,7 @@ def _platform_moe_backend(monkeypatch: pytest.MonkeyPatch) -> MoEBackend:
 
 
 def test_draft_model_moe_backend_override(monkeypatch: pytest.MonkeyPatch):
-    """When moe_backend is set in speculative_config, the draft AphroditeConfig
+    """When moe_backend is set in speculative_config, the draft SonarConfig
     should use it while the target keeps its own setting."""
     target_moe_backend = _platform_moe_backend(monkeypatch)
     engine_args = EngineArgs(
@@ -293,7 +293,7 @@ def test_draft_model_moe_backend_override(monkeypatch: pytest.MonkeyPatch):
             "moe_backend": "triton",
         },
     )
-    tgt_config: AphroditeConfig = engine_args.create_engine_config()
+    tgt_config: SonarConfig = engine_args.create_engine_config()
     assert tgt_config.kernel_config.moe_backend == target_moe_backend
     assert tgt_config.speculative_config is not None
     assert tgt_config.speculative_config.moe_backend == "triton"
@@ -318,7 +318,7 @@ def test_draft_model_moe_backend_inherits_target(monkeypatch: pytest.MonkeyPatch
             "num_speculative_tokens": 3,
         },
     )
-    tgt_config: AphroditeConfig = engine_args.create_engine_config()
+    tgt_config: SonarConfig = engine_args.create_engine_config()
     assert tgt_config.kernel_config.moe_backend == target_moe_backend
     assert tgt_config.speculative_config is not None
     assert tgt_config.speculative_config.moe_backend is None
@@ -340,7 +340,7 @@ def test_draft_model_moe_backend_default_auto():
             "num_speculative_tokens": 3,
         },
     )
-    tgt_config: AphroditeConfig = engine_args.create_engine_config()
+    tgt_config: SonarConfig = engine_args.create_engine_config()
     assert tgt_config.kernel_config.moe_backend == "auto"
     assert tgt_config.speculative_config is not None
     assert tgt_config.speculative_config.moe_backend is None
@@ -354,7 +354,7 @@ def test_draft_model_kv_cache_dtype_override():
     """Apply the draft KV dtype without changing the target cache config."""
     from unittest.mock import Mock
 
-    from aphrodite.v1.spec_decode.llm_base_proposer import SpecDecodeBaseProposer
+    from sonar.v1.spec_decode.llm_base_proposer import SpecDecodeBaseProposer
 
     target_config = EngineArgs(
         model="Qwen/Qwen3-1.7B",
@@ -369,9 +369,9 @@ def test_draft_model_kv_cache_dtype_override():
     proposer = Mock(
         spec=SpecDecodeBaseProposer,
         speculative_config=target_config.speculative_config,
-        aphrodite_config=target_config,
+        sonar_config=target_config,
     )
-    draft_config = SpecDecodeBaseProposer._create_draft_aphrodite_config(proposer)
+    draft_config = SpecDecodeBaseProposer._create_draft_sonar_config(proposer)
     assert draft_config.cache_config.cache_dtype == "fp8"
     assert target_config.cache_config.cache_dtype == "bfloat16"
 
@@ -393,12 +393,12 @@ def test_draft_model_engine_args_rejects_invalid_tp_argname():
         engine_args.create_engine_config()
 
 
-def assert_draft_model_correctness(args: ArgsTest, aphrodite_runner):
+def assert_draft_model_correctness(args: ArgsTest, sonar_runner):
     """Check speculative decoding acceptance metrics and GSM8K accuracy."""
     test_prompts: list[Messages] = get_messages(dataset=args.dataset, n=args.num_prompts)
 
-    kwargs = aphrodite_runner_kwargs(args)
-    with aphrodite_runner(args.target_model, **kwargs) as spec_runner:
+    kwargs = sonar_runner_kwargs(args)
+    with sonar_runner(args.target_model, **kwargs) as spec_runner:
         spec_llm = spec_runner.llm
 
         # we don't check the outputs, only check the metrics
@@ -437,12 +437,12 @@ def assert_draft_model_correctness(args: ArgsTest, aphrodite_runner):
         if args.reject_full_acceptance:
             assert acceptance_len < args.num_speculative_tokens + 1, f"{context}; acceptance_len is at its ceiling"
         # Assert async scheduling is active by default.
-        has_async = spec_llm.llm_engine.aphrodite_config.scheduler_config.async_scheduling
+        has_async = spec_llm.llm_engine.sonar_config.scheduler_config.async_scheduling
 
     assert has_async, f"Expected async_scheduling=True for {args.method} spec decode"
 
 
-def aphrodite_runner_kwargs(args: ArgsTest) -> dict[str, Any]:
+def sonar_runner_kwargs(args: ArgsTest) -> dict[str, Any]:
     kwargs = dict(
         block_size=None,
         trust_remote_code=False,

@@ -12,8 +12,8 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from aphrodite.v1.executor.cuda_checkpoint_executor import CUDACheckpointExecutor
-from aphrodite.v1.executor.multiproc_executor import MultiprocExecutor
+from sonar.v1.executor.cuda_checkpoint_executor import CUDACheckpointExecutor
+from sonar.v1.executor.multiproc_executor import MultiprocExecutor
 
 
 @pytest.fixture
@@ -209,7 +209,7 @@ def test_failed_executor_never_acknowledges_pause(executor):
 def test_transport_requires_suspension_and_no_nvls(monkeypatch, nvls, suspend, accepted, fusion, backend, p2p, shm, tp):
     # Transport options are independent of the rejection rules; avoid their
     # Cartesian product while retaining each option and validation branch.
-    monkeypatch.setattr("aphrodite.platforms.current_platform.is_cuda", lambda: True)
+    monkeypatch.setattr("sonar.platforms.current_platform.is_cuda", lambda: True)
     env = {
         "NCCL_P2P_DISABLE": p2p,
         "NCCL_SHM_DISABLE": shm,
@@ -217,19 +217,19 @@ def test_transport_requires_suspension_and_no_nvls(monkeypatch, nvls, suspend, a
         "NCCL_CUMEM_ENABLE": "1",
         "NCCL_CUMEM_HOST_ENABLE": "0",
         "NCCL_NVLS_ENABLE": nvls,
-        "APHRODITE_ALLREDUCE_USE_FLASHINFER": "0",
-        "APHRODITE_ALLREDUCE_USE_SYMM_MEM": "0",
-        "APHRODITE_ALLREDUCE_USE_FLASHINFER_PCIE_IPC": "0",
-        "APHRODITE_USE_NCCL_SYMM_MEM": "0",
+        "SONAR_ALLREDUCE_USE_FLASHINFER": "0",
+        "SONAR_ALLREDUCE_USE_SYMM_MEM": "0",
+        "SONAR_ALLREDUCE_USE_FLASHINFER_PCIE_IPC": "0",
+        "SONAR_USE_NCCL_SYMM_MEM": "0",
     }
     for key, value in env.items():
         if value is None:
             monkeypatch.delenv(key, raising=False)
         else:
             monkeypatch.setenv(key, value)
-    monkeypatch.delenv("APHRODITE_FLASHINFER_ALLREDUCE_BACKEND", raising=False)
+    monkeypatch.delenv("SONAR_FLASHINFER_ALLREDUCE_BACKEND", raising=False)
     if backend is not None:
-        monkeypatch.setenv("APHRODITE_FLASHINFER_ALLREDUCE_BACKEND", backend)
+        monkeypatch.setenv("SONAR_FLASHINFER_ALLREDUCE_BACKEND", backend)
     config = SimpleNamespace(
         compilation_config=SimpleNamespace(
             mode=3 if fusion else 0,
@@ -245,7 +245,7 @@ def test_transport_requires_suspension_and_no_nvls(monkeypatch, nvls, suspend, a
             world_size=tp,
             disable_custom_all_reduce=True,
             enable_expert_parallel=False,
-            worker_cls="aphrodite.v1.worker.gpu_worker.Worker",
+            worker_cls="sonar.v1.worker.gpu_worker.Worker",
         ),
         model_config=SimpleNamespace(
             enable_sleep_mode=True,
@@ -275,7 +275,7 @@ def test_transport_requires_suspension_and_no_nvls(monkeypatch, nvls, suspend, a
     [(False, True, True), (True, False, True), (True, True, False)],
 )
 def test_validate_rejects_missing_or_inconsistent_nccl(monkeypatch, has_symbols, actual, expected):
-    from aphrodite.v1.executor.cuda_checkpoint_executor import _validate_nccl_checkpoint
+    from sonar.v1.executor.cuda_checkpoint_executor import _validate_nccl_checkpoint
 
     comm = SimpleNamespace(
         available=True,
@@ -284,7 +284,7 @@ def test_validate_rejects_missing_or_inconsistent_nccl(monkeypatch, has_symbols,
         nccl=SimpleNamespace(has_symbol=lambda _: has_symbols),
     )
     group = SimpleNamespace(device_communicator=SimpleNamespace(pynccl_comm=comm))
-    monkeypatch.setattr("aphrodite.distributed.get_tp_group", lambda: group)
+    monkeypatch.setattr("sonar.distributed.get_tp_group", lambda: group)
     with pytest.raises(RuntimeError, match="active suspend/resume"):
         _validate_nccl_checkpoint(None, expected)
 
@@ -376,7 +376,7 @@ def test_unsupported_checkpoint_configuration_fails_before_workers(component, fi
             pipeline_parallel_size=1,
             data_parallel_size=1,
             enable_expert_parallel=False,
-            worker_cls="aphrodite.v1.worker.gpu_worker.Worker",
+            worker_cls="sonar.v1.worker.gpu_worker.Worker",
         ),
         model_config=SimpleNamespace(
             enable_sleep_mode=True,
@@ -388,10 +388,10 @@ def test_unsupported_checkpoint_configuration_fails_before_workers(component, fi
         kv_transfer_config=None,
         ec_transfer_config=None,
     )
-    monkeypatch.setattr("aphrodite.platforms.current_platform.is_cuda", lambda: True)
+    monkeypatch.setattr("sonar.platforms.current_platform.is_cuda", lambda: True)
     if component == "platform":
         if field == "is_cuda":
-            monkeypatch.setattr("aphrodite.platforms.current_platform.is_cuda", lambda: value)
+            monkeypatch.setattr("sonar.platforms.current_platform.is_cuda", lambda: value)
         else:
             monkeypatch.setattr("sys.platform", "darwin")
     else:

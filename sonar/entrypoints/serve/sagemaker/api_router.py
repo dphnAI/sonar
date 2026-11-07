@@ -10,15 +10,15 @@ import pydantic
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
 
-from aphrodite.config import ModelConfig
-from aphrodite.entrypoints.generate.factories import get_generate_invocation_types
-from aphrodite.entrypoints.pooling.factories import get_pooling_invocation_types
-from aphrodite.entrypoints.serve.engine.protocol import ErrorResponse
-from aphrodite.entrypoints.serve.engine.serving import BaseServing
-from aphrodite.entrypoints.serve.instrumentator.basic import base
-from aphrodite.entrypoints.serve.instrumentator.health import health
-from aphrodite.entrypoints.serve.utils.api_utils import validate_json_request
-from aphrodite.tasks import SupportedTask
+from sonar.config import ModelConfig
+from sonar.entrypoints.generate.factories import get_generate_invocation_types
+from sonar.entrypoints.pooling.factories import get_pooling_invocation_types
+from sonar.entrypoints.serve.engine.protocol import ErrorResponse
+from sonar.entrypoints.serve.engine.serving import BaseServing
+from sonar.entrypoints.serve.instrumentator.basic import base
+from sonar.entrypoints.serve.instrumentator.health import health
+from sonar.entrypoints.serve.utils.api_utils import validate_json_request
+from sonar.tasks import SupportedTask
 
 # TODO: RequestType = TypeForm[BaseModel] when recognized by type checkers
 # (requires typing_extensions >= 4.13)
@@ -31,7 +31,7 @@ def _snapshot_handler_levels() -> list[tuple[logging.Handler, int]]:
     """Snapshot handler levels for loggers that may be affected by third-party
     logging configuration side effects (e.g. model_hosting_container_standards
     calling configure_root_logger() at import time)."""
-    loggers = [logging.getLogger(), logging.getLogger("aphrodite")]
+    loggers = [logging.getLogger(), logging.getLogger("sonar")]
     seen: set[int] = set()
     snapshot: list[tuple[logging.Handler, int]] = []
     for logger in loggers:

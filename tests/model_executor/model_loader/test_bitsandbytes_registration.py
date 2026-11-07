@@ -8,18 +8,18 @@ from typing import cast
 import pytest
 import torch
 
-from aphrodite.config import LoadConfig
-from aphrodite.model_executor.layers.fused_moe.routed_experts import RoutedExperts
-from aphrodite.model_executor.layers.linear import (
+from sonar.config import LoadConfig
+from sonar.model_executor.layers.fused_moe.routed_experts import RoutedExperts
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     MergedColumnParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.quantization import get_quantization_config
-from aphrodite.model_executor.layers.quantization.bitsandbytes import BitsAndBytesConfig
-from aphrodite.model_executor.model_loader import get_model_loader
-from aphrodite.model_executor.model_loader.bitsandbytes_loader import BitsAndBytesModelLoader
-from aphrodite.model_executor.model_loader.weight_utils import get_quant_config
+from sonar.model_executor.layers.quantization import get_quantization_config
+from sonar.model_executor.layers.quantization.bitsandbytes import BitsAndBytesConfig
+from sonar.model_executor.model_loader import get_model_loader
+from sonar.model_executor.model_loader.bitsandbytes_loader import BitsAndBytesModelLoader
+from sonar.model_executor.model_loader.weight_utils import get_quant_config
 
 
 def test_bitsandbytes_loader_registration():

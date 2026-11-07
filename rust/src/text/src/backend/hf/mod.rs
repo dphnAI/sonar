@@ -8,7 +8,7 @@ mod overrides;
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
-use aphrodite_tokenizer::{
+use sonar_tokenizer::{
     DynTokenizer, HuggingFaceTokenizer, TekkenTokenizer, TiktokenTokenizer, Tokenizer,
 };
 use tracing::info;
@@ -166,9 +166,9 @@ fn build_sampling_hints(
     let sampling_config = match mode {
         // Auto inherits sampling defaults from the model's generation config.
         GenerationConfigMode::Auto => Some(generation_config),
-        // Aphrodite skips model-provided sampling defaults. `lower_sampling_params`
-        // applies Aphrodite fallback values; separately resolved EOS tokens remain.
-        GenerationConfigMode::Aphrodite => None,
+        // Sonar skips model-provided sampling defaults. `lower_sampling_params`
+        // applies Sonar fallback values; separately resolved EOS tokens remain.
+        GenerationConfigMode::Sonar => None,
     };
 
     SamplingHints {
@@ -193,7 +193,7 @@ mod tests {
         GenerationConfig, GenerationConfigMode, HfTokenizerConfig, ModelConfig,
         build_sampling_hints, resolve_eos_token_ids,
     };
-    use aphrodite_tokenizer::Tokenizer;
+    use sonar_tokenizer::Tokenizer;
 
     struct FakeTokenizer;
 
@@ -202,11 +202,11 @@ mod tests {
             &self,
             _text: &str,
             _add_special_tokens: bool,
-        ) -> aphrodite_tokenizer::Result<Vec<u32>> {
+        ) -> sonar_tokenizer::Result<Vec<u32>> {
             Ok(vec![])
         }
 
-        fn encode_ordinary(&self, text: &str) -> aphrodite_tokenizer::Result<Vec<u32>> {
+        fn encode_ordinary(&self, text: &str) -> sonar_tokenizer::Result<Vec<u32>> {
             self.encode(text, false)
         }
 
@@ -214,7 +214,7 @@ mod tests {
             &self,
             _token_ids: &[u32],
             _skip_special_tokens: bool,
-        ) -> aphrodite_tokenizer::Result<String> {
+        ) -> sonar_tokenizer::Result<String> {
             Ok(String::new())
         }
 
@@ -266,7 +266,7 @@ mod tests {
     }
 
     #[test]
-    fn aphrodite_generation_config_keeps_eos_and_uses_neutral_sampling_defaults() {
+    fn sonar_generation_config_keeps_eos_and_uses_neutral_sampling_defaults() {
         let generation_config: GenerationConfig = serde_json::from_str(
             r#"{
                 "eos_token_id": [2, 3],
@@ -291,7 +291,7 @@ mod tests {
                 extra_eos_token_ids.clone(),
             ),
             build_sampling_hints(
-                GenerationConfigMode::Aphrodite,
+                GenerationConfigMode::Sonar,
                 &generation_config,
                 Some(2),
                 extra_eos_token_ids,

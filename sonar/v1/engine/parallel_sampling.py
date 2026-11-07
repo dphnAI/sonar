@@ -4,10 +4,10 @@
 from copy import copy
 from typing import cast
 
-from aphrodite.outputs import CompletionOutput
-from aphrodite.sampling_params import RequestOutputKind, SamplingParams
-from aphrodite.v1.engine import EngineCoreRequest
-from aphrodite.v1.metrics.stats import IterationStats
+from sonar.outputs import CompletionOutput
+from sonar.sampling_params import RequestOutputKind, SamplingParams
+from sonar.v1.engine import EngineCoreRequest
+from sonar.v1.metrics.stats import IterationStats
 
 
 class ParentRequest:

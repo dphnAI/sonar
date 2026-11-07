@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-from aphrodite.v1.kv_offload.tiering.p2p.session.session import (
+from sonar.v1.kv_offload.tiering.p2p.session.session import (
     LoadResult,
     P2PSession,
     SessionCloseResult,

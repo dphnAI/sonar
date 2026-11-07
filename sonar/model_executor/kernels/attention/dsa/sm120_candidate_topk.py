@@ -4,15 +4,15 @@
 
 import torch
 
-from aphrodite.model_executor.kernels.attention.dsa.sm120_indexer import _fp8_paged_cache_views
-from aphrodite.model_executor.kernels.attention.dsa.sparse_mqa_logits import (
+from sonar.model_executor.kernels.attention.dsa.sm120_indexer import _fp8_paged_cache_views
+from sonar.model_executor.kernels.attention.dsa.sparse_mqa_logits import (
     _sparse_topk_remap_kernel,
     candidate_blocks_to_sparse_indices,
 )
-from aphrodite.model_executor.layers.indexer_topk import RADIX_TOPK_WORKSPACE_SIZE
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
-from aphrodite.v1.worker.workspace import current_workspace_manager
+from sonar.model_executor.layers.indexer_topk import RADIX_TOPK_WORKSPACE_SIZE
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
+from sonar.v1.worker.workspace import current_workspace_manager
 
 
 def supports_sm120_candidate_topk(

@@ -5,14 +5,14 @@ import torch
 import torch.nn as nn
 from typing_extensions import override
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.utils import replace
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.model_loader import get_model
-from aphrodite.model_executor.model_loader.utils import get_draft_load_config
-from aphrodite.tokenizers.registry import get_tokenizer
-from aphrodite.v1.spec_decode.llm_base_proposer import SpecDecodeBaseProposer
-from aphrodite.v1.spec_decode.vocab_mapping import VocabMapping
+from sonar.config import SonarConfig
+from sonar.config.utils import replace
+from sonar.logger import init_logger
+from sonar.model_executor.model_loader import get_model
+from sonar.model_executor.model_loader.utils import get_draft_load_config
+from sonar.tokenizers.registry import get_tokenizer
+from sonar.v1.spec_decode.llm_base_proposer import SpecDecodeBaseProposer
+from sonar.v1.spec_decode.vocab_mapping import VocabMapping
 
 logger = init_logger(__name__)
 
@@ -20,12 +20,12 @@ logger = init_logger(__name__)
 class DraftModelProposer(SpecDecodeBaseProposer):
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
         runner=None,
     ):
         super().__init__(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             device=device,
             pass_hidden_states_to_model=False,
             runner=runner,
@@ -79,8 +79,8 @@ class DraftModelProposer(SpecDecodeBaseProposer):
             )
 
     @override
-    def _create_draft_aphrodite_config(self) -> AphroditeConfig:
-        base = super()._create_draft_aphrodite_config()
+    def _create_draft_sonar_config(self) -> SonarConfig:
+        base = super()._create_draft_sonar_config()
         spec = self.speculative_config
         target_parallel = base.parallel_config
 
@@ -100,14 +100,14 @@ class DraftModelProposer(SpecDecodeBaseProposer):
 
     @override
     def _get_model(self) -> nn.Module:
-        from aphrodite.compilation.backends import set_model_tag
+        from sonar.compilation.backends import set_model_tag
 
-        draft_aphrodite_config = self._create_draft_aphrodite_config()
+        draft_sonar_config = self._create_draft_sonar_config()
         with set_model_tag("draft_model"):
             model = get_model(
-                aphrodite_config=draft_aphrodite_config,
+                sonar_config=draft_sonar_config,
                 prefix="draft_model",
-                load_config=get_draft_load_config(draft_aphrodite_config),
+                load_config=get_draft_load_config(draft_sonar_config),
             )
         return model
 

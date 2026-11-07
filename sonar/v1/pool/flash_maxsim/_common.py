@@ -3,7 +3,7 @@
 """Shared utilities for flash-maxsim kernels: padding, autotune configs,
 and pruning."""
 
-from aphrodite.triton_utils import triton
+from sonar.triton_utils import triton
 
 
 def _next_pow2(x: int) -> int:
@@ -36,7 +36,7 @@ def _smem_budget() -> int:
         return int(props["max_shared_mem"])
     except Exception:
         try:
-            from aphrodite.platforms import current_platform
+            from sonar.platforms import current_platform
 
             cap = current_platform.get_device_capability()
             if cap is not None:

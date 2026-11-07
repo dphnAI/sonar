@@ -4,16 +4,16 @@
 
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.model_executor.layers.quantization.compressed_tensors.triton_scaled_mm import (  # noqa: E501
+from sonar import _custom_ops as ops
+from sonar.model_executor.layers.quantization.compressed_tensors.triton_scaled_mm import (  # noqa: E501
     triton_scaled_mm,
 )
-from aphrodite.model_executor.layers.quantization.utils import replace_parameter
-from aphrodite.model_executor.layers.quantization.utils.w8a8_utils import (
+from sonar.model_executor.layers.quantization.utils import replace_parameter
+from sonar.model_executor.layers.quantization.utils.w8a8_utils import (
     convert_to_channelwise,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import direct_register_custom_op
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import direct_register_custom_op
 
 from .BlockScaledMMLinearKernel import (
     Fp8BlockScaledMMLinearKernel,
@@ -128,7 +128,7 @@ class TritonInt8ScaledMMLinearKernel(CutlassInt8ScaledMMLinearKernel):
         symmetric = azp_adj is None
         x_q, x_s, x_zp = ops.scaled_int8_quant(x.contiguous(), i_s, i_zp, symmetric=symmetric)
 
-        out = torch.ops.aphrodite.int8_scaled_mm_func(x_q, w_q, x_s, w_s, x.dtype, bias)
+        out = torch.ops.sonar.int8_scaled_mm_func(x_q, w_q, x_s, w_s, x.dtype, bias)
 
         if azp_adj is not None:
             # Asymmetric quantization: subtract the zero-point correction.
@@ -197,7 +197,7 @@ class TritonFp8BlockScaledMMKernel(Fp8BlockScaledMMLinearKernel):
         As: torch.Tensor,
         Bs: torch.Tensor,
     ) -> torch.Tensor:
-        return torch.ops.aphrodite.w8a8_triton_block_scaled_mm_func(
+        return torch.ops.sonar.w8a8_triton_block_scaled_mm_func(
             A,
             B,
             As,
@@ -254,7 +254,7 @@ def _w8a8_triton_block_scaled_mm_func(
     block_size: list[int],
     output_dtype: torch.dtype,
 ) -> torch.Tensor:
-    from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
+    from sonar.model_executor.layers.quantization.utils.fp8_utils import (
         w8a8_triton_block_scaled_mm,
     )
 

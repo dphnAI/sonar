@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any, TypeAlias, TypeVar, overload
 if TYPE_CHECKING:
     import torch
 
-    from aphrodite.multimodal.inputs import BatchedTensorInputs
+    from sonar.multimodal.inputs import BatchedTensorInputs
 
 _T = TypeVar("_T")
 _U = TypeVar("_U")

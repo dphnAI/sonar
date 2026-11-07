@@ -20,9 +20,9 @@ from msgspec import msgpack
 from pydantic import GetCoreSchemaHandler
 from pydantic_core import core_schema
 
-from aphrodite import envs
-from aphrodite.logger import init_logger
-from aphrodite.multimodal.inputs import (
+from sonar import envs
+from sonar.logger import init_logger
+from sonar.multimodal.inputs import (
     BaseMultiModalField,
     MultiModalBatchedField,
     MultiModalFieldConfig,
@@ -33,8 +33,8 @@ from aphrodite.multimodal.inputs import (
     MultiModalSharedField,
     NestedTensors,
 )
-from aphrodite.utils.torch_utils import PIN_MEMORY
-from aphrodite.v1.utils import tensor_data
+from sonar.utils.torch_utils import PIN_MEMORY
+from sonar.v1.utils import tensor_data
 
 logger = init_logger(__name__)
 
@@ -75,7 +75,7 @@ OOBTensorProvider = Callable[[str, tuple[int, ...], dict], torch.Tensor]
 
 
 def _log_insecure_serialization_warning():
-    logger.warning_once("Allowing insecure serialization using pickle due to APHRODITE_ALLOW_INSECURE_SERIALIZATION=1")
+    logger.warning_once("Allowing insecure serialization using pickle due to SONAR_ALLOW_INSECURE_SERIALIZATION=1")
 
 
 def _typestr(val: Any) -> tuple[str, str] | None:
@@ -140,7 +140,7 @@ class MsgpackEncoder:
         oob_tensor_consumer: OOBTensorConsumer | None = None,
     ):
         if size_threshold is None:
-            size_threshold = envs.APHRODITE_MSGPACK_ZERO_COPY_THRESHOLD
+            size_threshold = envs.SONAR_MSGPACK_ZERO_COPY_THRESHOLD
         self.encoder = msgpack.Encoder(enc_hook=self.enc_hook)
         # This is used as a local stash of buffers that we can then access from
         # our custom `msgspec` hook, `enc_hook`. We don't have a way to
@@ -148,7 +148,7 @@ class MsgpackEncoder:
         self.aux_buffers: list[bytestr] | None = None
         self.size_threshold = size_threshold
         self.oob_tensor_consumer = oob_tensor_consumer
-        if envs.APHRODITE_ALLOW_INSECURE_SERIALIZATION:
+        if envs.SONAR_ALLOW_INSECURE_SERIALIZATION:
             _log_insecure_serialization_warning()
 
     def encode(self, obj: Any) -> Sequence[bytestr]:
@@ -196,17 +196,17 @@ class MsgpackEncoder:
 
         if isinstance(obj, UtilityResult):
             result = obj.result
-            if not envs.APHRODITE_ALLOW_INSECURE_SERIALIZATION:
+            if not envs.SONAR_ALLOW_INSECURE_SERIALIZATION:
                 return None, result
             # Since utility results are not strongly typed, we recursively
             # encode type information for nested structures of lists/dicts
             # to help with correct msgspec deserialization.
             return _encode_type_info_recursive(result), result
 
-        if not envs.APHRODITE_ALLOW_INSECURE_SERIALIZATION:
+        if not envs.SONAR_ALLOW_INSECURE_SERIALIZATION:
             raise TypeError(
                 f"Object of type {type(obj)} is not serializable"
-                "Set APHRODITE_ALLOW_INSECURE_SERIALIZATION=1 to allow "
+                "Set SONAR_ALLOW_INSECURE_SERIALIZATION=1 to allow "
                 "fallback to pickle-based serialization."
             )
 
@@ -309,7 +309,7 @@ class MsgpackDecoder:
         self.decoder = msgpack.Decoder(*args, ext_hook=self.ext_hook, dec_hook=self.dec_hook)
         self.aux_buffers: Sequence[bytestr] = ()
         self.oob_tensor_provider = oob_tensor_provider
-        if envs.APHRODITE_ALLOW_INSECURE_SERIALIZATION:
+        if envs.SONAR_ALLOW_INSECURE_SERIALIZATION:
             _log_insecure_serialization_warning()
 
     def decode(self, bufs: bytestr | Sequence[bytestr]) -> Any:
@@ -343,8 +343,8 @@ class MsgpackDecoder:
     def _decode_utility_result(self, obj: Any) -> UtilityResult:
         result_type, result = obj
         if result_type is not None:
-            if not envs.APHRODITE_ALLOW_INSECURE_SERIALIZATION:
-                raise TypeError("APHRODITE_ALLOW_INSECURE_SERIALIZATION must be set to use custom utility result types")
+            if not envs.SONAR_ALLOW_INSECURE_SERIALIZATION:
+                raise TypeError("SONAR_ALLOW_INSECURE_SERIALIZATION must be set to use custom utility result types")
             # Use recursive decoding to handle nested structures
             result = _decode_type_info_recursive(result_type, result, self._convert_result)
         return UtilityResult(result)
@@ -438,7 +438,7 @@ class MsgpackDecoder:
         if code == CUSTOM_TYPE_RAW_VIEW:
             return data
 
-        if envs.APHRODITE_ALLOW_INSECURE_SERIALIZATION:
+        if envs.SONAR_ALLOW_INSECURE_SERIALIZATION:
             if code == CUSTOM_TYPE_PICKLE:
                 return pickle.loads(data)
             if code == CUSTOM_TYPE_CLOUDPICKLE:

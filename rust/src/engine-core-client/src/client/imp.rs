@@ -6,10 +6,10 @@ use std::num::NonZeroU32;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use aphrodite_metrics::METRICS;
 use arc_swap::ArcSwapOption;
 use bytes::Bytes;
 use parking_lot::Mutex;
+use sonar_metrics::METRICS;
 use thiserror_ext::AsReport as _;
 use tokio::runtime::Handle;
 use tokio::sync::{mpsc, watch};
@@ -33,7 +33,7 @@ use crate::protocol::utility::UtilityOutput;
 use crate::transport::{ConnectedEngine, EngineId};
 use crate::{Error, Result, transport};
 
-const MSGPACK_ZERO_COPY_THRESHOLD_ENV: &str = "APHRODITE_MSGPACK_ZERO_COPY_THRESHOLD";
+const MSGPACK_ZERO_COPY_THRESHOLD_ENV: &str = "SONAR_MSGPACK_ZERO_COPY_THRESHOLD";
 const DEFAULT_MSGPACK_ZERO_COPY_THRESHOLD: usize = 256;
 
 fn msgpack_zero_copy_threshold() -> usize {
@@ -49,7 +49,7 @@ pub(crate) struct ClientInner {
     handle: Handle,
     model_name: String,
     /// Per-tensor byte threshold loaded from env variable
-    /// `APHRODITE_MSGPACK_ZERO_COPY_THRESHOLD` when this inner client is created.
+    /// `SONAR_MSGPACK_ZERO_COPY_THRESHOLD` when this inner client is created.
     msgpack_zero_copy_threshold: usize,
     /// Whether the connected engines record stats. See
     /// [`crate::EngineCoreClientConfig::engine_stats_enabled`].
@@ -106,7 +106,7 @@ impl ClientInner {
     }
 
     /// Record a completed sleep or wake transition in
-    /// `aphrodite:engine_sleep_state`, exported only when engines record stats.
+    /// `sonar:engine_sleep_state`, exported only when engines record stats.
     pub fn record_sleep_state(&self, state: EngineSleepState) {
         if let Some(recorder) = &self.scheduler_stats_recorder {
             recorder.record_sleep_state(state);
@@ -118,7 +118,7 @@ impl ClientInner {
     ///
     /// When `data_parallel_rank` is provided, the request is routed to that
     /// specific engine rank, bypassing load balancing. `lora_name` is the
-    /// request's LoRA adapter, tracked for `aphrodite:lora_requests_info`.
+    /// request's LoRA adapter, tracked for `sonar:lora_requests_info`.
     pub fn register_request(
         &self,
         request_id: String,
@@ -429,7 +429,7 @@ pub(crate) async fn run_abort_loop(
     }
 }
 
-/// Number of tokens one output accounts for in `aphrodite:iteration_tokens_total`.
+/// Number of tokens one output accounts for in `sonar:iteration_tokens_total`.
 fn output_iteration_tokens(output: &EngineCoreOutput) -> u64 {
     let mut tokens = output.new_token_ids.len() as u64;
     if let Some(prefill) = &output.prefill_stats {

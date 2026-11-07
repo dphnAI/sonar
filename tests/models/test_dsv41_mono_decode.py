@@ -14,9 +14,9 @@ from types import ModuleType, SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.config import CUDAGraphMode
-from aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 import Mxfp4MoeBackend
-from aphrodite.models.deepseek_v41.amd import mono_decode as md
+from sonar.config import CUDAGraphMode
+from sonar.model_executor.layers.fused_moe.oracle.mxfp4 import Mxfp4MoeBackend
+from sonar.models.deepseek_v41.amd import mono_decode as md
 
 M = 6
 
@@ -249,7 +249,7 @@ def test_other_steps_take_the_original_path(run, case):
 
 
 def _linear():
-    """A dense linear whose weights Aphrodite processes at load."""
+    """A dense linear whose weights Sonar processes at load."""
     return SimpleNamespace(
         weight=object(),
         weight_scale=object(),
@@ -300,7 +300,7 @@ def _decoder_layer(engram=None, routing=TARGET_ROUTING, **attn):
 
 
 def _indexer():
-    from aphrodite.models.deepseek_v41.amd.rocm import DeepseekV41RocmMxfp4Indexer
+    from sonar.models.deepseek_v41.amd.rocm import DeepseekV41RocmMxfp4Indexer
 
     return object.__new__(DeepseekV41RocmMxfp4Indexer)
 
@@ -333,7 +333,7 @@ def _indexer():
 def test_layers_take_whole_or_ffn_launch(monkeypatch, layer, path):
     """The whole-layer kernels serve every backbone layer of the checkpoint (an
     index source's compressor and indexer run between them); a layer outside
-    them keeps Aphrodite's attention and runs its FFN half as one launch."""
+    them keeps Sonar's attention and runs its FFN half as one launch."""
     _deployment(monkeypatch)
     mono = md.MonoDecodeLayer.create(layer, _config())
     got = None if mono is None else "ffn" if mono.ffn_only else "whole"
@@ -389,27 +389,27 @@ def _config(monokernel=True, **parallel):
 def _deployment(monkeypatch, cdna=4, cus=256, tp=2, target=None):
     """A deployment the kernels take (the runner module stubbed: no FlyDSL).
     ``target`` is the architecture FlyDSL compiles for, by default the GPU's."""
-    import aphrodite.platforms.rocm as rocm
+    import sonar.platforms.rocm as rocm
 
-    monkeypatch.delenv("APHRODITE_ROCM_USE_AITER_MOE_A4W4_DSV4", raising=False)
+    monkeypatch.delenv("SONAR_ROCM_USE_AITER_MOE_A4W4_DSV4", raising=False)
     monkeypatch.setattr(rocm, "get_cdna_version", lambda: cdna)
     monkeypatch.setattr(md, "get_tensor_model_parallel_world_size", lambda: tp)
     monkeypatch.setattr(md, "_compute_units", lambda: cus)
     gpu = "gfx942" if cdna == 3 else "gfx950"
     monkeypatch.setattr(md, "_gpu_arch", lambda: gpu)
-    arch = ModuleType("aphrodite.models.deepseek_v41.amd.mono.common.arch")
+    arch = ModuleType("sonar.models.deepseek_v41.amd.mono.common.arch")
     arch.target_arch = lambda: target or gpu  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, arch.__name__, arch)
     # On gfx942, create builds the top-k extension with hipcc. These tests do
     # not need it, so they skip the build.
-    from aphrodite.models.deepseek_v41.amd import ops
-    from aphrodite.models.deepseek_v41.amd.ops import topk
+    from sonar.models.deepseek_v41.amd import ops
+    from sonar.models.deepseek_v41.amd.ops import topk
 
     monkeypatch.setattr(topk, "build", lambda: True)
     # create records --monokernel for the gfx942 helper ops. The test puts the
     # recorded value back afterwards, so that no later test sees this one's.
     monkeypatch.setattr(ops, "_monokernel", ops._monokernel)
-    name = "aphrodite.models.deepseek_v41.amd.mono.runner"
+    name = "sonar.models.deepseek_v41.amd.mono.runner"
     runner = ModuleType(name)
     runner.BLOCKS = 256  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, name, runner)
@@ -423,9 +423,9 @@ def test_off_without_the_flag(monkeypatch):
 
 @pytest.mark.parametrize("on", [True, False])
 def test_create_records_the_flag_for_the_gfx942_helpers(monkeypatch, on):
-    """The gfx942 decode helpers (amd/ops) run in forward passes, where Aphrodite's
+    """The gfx942 decode helpers (amd/ops) run in forward passes, where Sonar's
     current config is not set, so create records --monokernel for them."""
-    from aphrodite.models.deepseek_v41.amd import ops
+    from sonar.models.deepseek_v41.amd import ops
 
     _deployment(monkeypatch, cdna=3, tp=4)
     md.MonoDecodeLayer.create(_decoder_layer(), _config(monokernel=on))
@@ -473,7 +473,7 @@ def test_opt_in_outside_the_kernels_moe_raises(monkeypatch, case, match):
     all 256 CTAs resident: any other deployment is an error, not garbage."""
     _deployment(monkeypatch, cus=case.get("cus", 256))
     if case.get("a4w4"):
-        monkeypatch.setenv("APHRODITE_ROCM_USE_AITER_MOE_A4W4_DSV4", "1")
+        monkeypatch.setenv("SONAR_ROCM_USE_AITER_MOE_A4W4_DSV4", "1")
     layer = case.get("layer", _decoder_layer)()
     with pytest.raises(ValueError, match=match):
         md.MonoDecodeLayer.create(layer, _config(**case.get("parallel", {})))
@@ -482,7 +482,7 @@ def test_opt_in_outside_the_kernels_moe_raises(monkeypatch, case, match):
 @pytest.mark.parametrize("rows, runs", [(md.MAX_ROWS_GFX942, True), (48, False)])
 def test_gfx942_decode_steps_of_up_to_42_rows(run, rows, runs):
     """On gfx942 the kernels take steps of up to MAX_ROWS_GFX942 rows. A step of
-    48 rows, which gfx950 takes, runs Aphrodite's path there."""
+    48 rows, which gfx950 takes, runs Sonar's path there."""
     swa = _swa(num_decode_tokens=rows)
     comp = SimpleNamespace(block_size=128, block_table=None)
     out, calls = run(
@@ -500,7 +500,7 @@ def _kind(mono):
 
 
 def _indexer_942():
-    from aphrodite.models.deepseek_v41.attention import DeepseekV4Indexer
+    from sonar.models.deepseek_v41.attention import DeepseekV4Indexer
 
     return object.__new__(DeepseekV4Indexer)
 
@@ -536,23 +536,23 @@ def _indexer_942():
 )
 def test_gfx942_layers(monkeypatch, layer, kind):
     """On gfx942 every backbone layer runs whole, as on gfx950. Its index
-    layers have Aphrodite's FP8 indexer, because the MXFP4 indexer cache needs
+    layers have Sonar's FP8 indexer, because the MXFP4 indexer cache needs
     CDNA4. The DSpark draft layers run the FFN launch with the draft's routing
     of 128 experts and top 3."""
     _deployment(monkeypatch, cdna=3, tp=4)
     assert _kind(md.MonoDecodeLayer.create(layer, _config())) == kind
 
 
-def test_gfx942_tp2_runs_aphrodite_path(monkeypatch):
+def test_gfx942_tp2_runs_sonar_path(monkeypatch):
     """The gfx942 kernels are built for TP4 only. At TP2 every layer runs
-    Aphrodite's path, and that is not an error."""
+    Sonar's path, and that is not an error."""
     _deployment(monkeypatch, cdna=3, tp=2)
     assert md.MonoDecodeLayer.create(_decoder_layer(), _config()) is None
 
 
 def test_gfx942_takes_any_moe_backend(monkeypatch):
     """The gfx942 kernels read their own copies of the experts, made before
-    Aphrodite's MoE backend converts them, so a backend other than AITER_MXFP4_BF16
+    Sonar's MoE backend converts them, so a backend other than AITER_MXFP4_BF16
     is not an error there."""
     _deployment(monkeypatch, cdna=3, tp=4)
     assert _kind(md.MonoDecodeLayer.create(_other_backend(), _config())) == "whole"
@@ -570,12 +570,12 @@ def test_gfx942_takes_any_moe_backend(monkeypatch):
     ids=["standard", "draft"],
 )
 def test_gfx942_copies_dense_linears_at_load(monkeypatch, make, copied):
-    """On gfx942 the kernels' copies of the dense linears are made when Aphrodite
-    processes each linear's weights at load, so that Aphrodite counts them as model
-    memory when it sizes the KV cache. A draft layer runs Aphrodite's attention, so
+    """On gfx942 the kernels' copies of the dense linears are made when Sonar
+    processes each linear's weights at load, so that Sonar counts them as model
+    memory when it sizes the KV cache. A draft layer runs Sonar's attention, so
     its attention linears get no copies."""
     _deployment(monkeypatch, cdna=3, tp=4)
-    weights942 = ModuleType("aphrodite.models.deepseek_v41.amd.mono.weights942")
+    weights942 = ModuleType("sonar.models.deepseek_v41.amd.mono.weights942")
     weights942.linear_copy = lambda w, s: ("copy", w, s)  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, weights942.__name__, weights942)
     layer = make()
@@ -598,7 +598,7 @@ def test_gfx942_reload_writes_the_copies_in_place(monkeypatch):
     read the first copies by their addresses, so the copies of the reload are
     written into the first copies instead of replacing them."""
     _deployment(monkeypatch, cdna=3, tp=4)
-    weights942 = ModuleType("aphrodite.models.deepseek_v41.amd.mono.weights942")
+    weights942 = ModuleType("sonar.models.deepseek_v41.amd.mono.weights942")
     weights942.linear_copy = lambda w, s: (w.clone(), s.clone())  # type: ignore[attr-defined]
     weights942.moe_copies = lambda w13, w13_s, w2, w2_s, inter: tuple(  # type: ignore[attr-defined]
         t.clone() for t in (w13, w13_s, w2, w2_s)
@@ -625,7 +625,7 @@ def test_gfx942_reload_writes_the_copies_in_place(monkeypatch):
 
 
 # With --monokernel on gfx942 the indexer layer and the DSpark draft sampling
-# run gfx942 launches from the model folder. Aphrodite's ROCm indexer op and its
+# run gfx942 launches from the model folder. Sonar's ROCm indexer op and its
 # DSpark speculator loop stay as they are, and they run every step that the
 # gfx942 code does not take.
 
@@ -642,12 +642,12 @@ def test_gfx942_reload_writes_the_copies_in_place(monkeypatch):
         ("without the flag", False),
     ],
 )
-def test_gfx942_indexer_runs_aphrodite_op_off_decode_steps(monkeypatch, case, gfx942_path):
+def test_gfx942_indexer_runs_sonar_op_off_decode_steps(monkeypatch, case, gfx942_path):
     """Only a step of only decode rows, whose K cache the model already wrote,
     takes the gfx942 decode path. The profiling run, prefill and mixed steps,
     a layer that writes its own K cache and a process without --monokernel on
-    gfx942 call Aphrodite's op with the same arguments."""
-    from aphrodite.models.deepseek_v41.amd.ops import sparse_indexer as si
+    gfx942 call Sonar's op with the same arguments."""
+    from sonar.models.deepseek_v41.amd.ops import sparse_indexer as si
 
     prefills, decodes = {"prefill": (1, 0), "mixed": (1, 1), "no rows": (0, 0)}.get(case, (0, 1))
     meta = SimpleNamespace(num_prefills=prefills, num_decodes=decodes)
@@ -657,15 +657,15 @@ def test_gfx942_indexer_runs_aphrodite_op_off_decode_steps(monkeypatch, case, gf
     monkeypatch.setattr(si, "enabled", lambda: case != "without the flag")
     calls = []
 
-    def aphrodite_op(*args, **kwargs):
-        calls.append(("aphrodite", args, kwargs))
-        return "aphrodite"
+    def sonar_op(*args, **kwargs):
+        calls.append(("sonar", args, kwargs))
+        return "sonar"
 
     def decode_step(*args):
         calls.append(("gfx942", args, {}))
         return "gfx942"
 
-    monkeypatch.setattr(si, "rocm_aiter_sparse_attn_indexer", aphrodite_op)
+    monkeypatch.setattr(si, "rocm_aiter_sparse_attn_indexer", sonar_op)
     monkeypatch.setattr(si, "_decode_step", decode_step)
     buffer = torch.zeros(6, 512, dtype=torch.int32)
     args = (torch.zeros(6, 4), "idx", torch.zeros(1), torch.zeros(1), None)
@@ -678,7 +678,7 @@ def test_gfx942_indexer_runs_aphrodite_op_off_decode_steps(monkeypatch, case, gf
         candidate_write=False,
     )
     out = si.gfx942_sparse_attn_indexer(*args, **kwargs)
-    assert out == ("gfx942" if gfx942_path else "aphrodite")
+    assert out == ("gfx942" if gfx942_path else "sonar")
     assert len(calls) == 1
     if not gfx942_path:
         assert calls[0][1] == args and calls[0][2] == kwargs
@@ -692,16 +692,16 @@ def test_rocm_attention_takes_the_gfx942_indexer_with_the_flag(monkeypatch, mono
     """The attention builds its indexer before the mono decode layer records
     the flag for ops.enabled(), so it reads --monokernel from the config of
     the model that is being built. Without the flag, and on gfx950, the layer
-    keeps Aphrodite's indexer."""
-    import aphrodite.platforms.rocm as rocm_platform
-    from aphrodite.models.deepseek_v41.amd import rocm
-    from aphrodite.models.deepseek_v41.amd.ops.sparse_indexer import (
+    keeps Sonar's indexer."""
+    import sonar.platforms.rocm as rocm_platform
+    from sonar.models.deepseek_v41.amd import rocm
+    from sonar.models.deepseek_v41.amd.ops.sparse_indexer import (
         Gfx942SparseAttnIndexer,
     )
-    from aphrodite.models.deepseek_v41.attention import DeepseekV4Indexer
+    from sonar.models.deepseek_v41.attention import DeepseekV4Indexer
 
     config = SimpleNamespace(kernel_config=SimpleNamespace(monokernel=monokernel))
-    monkeypatch.setattr(rocm, "get_current_aphrodite_config", lambda: config)
+    monkeypatch.setattr(rocm, "get_current_sonar_config", lambda: config)
     monkeypatch.setattr(rocm_platform, "on_gfx942", lambda: gfx942)
     attn_cls = rocm.DeepseekV41ROCMAiterMLAAttention
     indexer_cls = attn_cls._indexer_cls(attn_cls.__new__(attn_cls), SimpleNamespace(rocm_mxfp4=False))
@@ -715,10 +715,10 @@ def test_rocm_attention_takes_the_gfx942_indexer_with_the_flag(monkeypatch, mono
 def test_swa_decode_meta_runs_on_cdna3_and_cdna4_with_the_flag(monkeypatch, cdna, monokernel):
     """swa_decode_meta's kernel is plain Triton, so with --monokernel a decode
     batch gets its SWA metadata from the one launch on CDNA4 (gfx950) as on
-    CDNA3 (gfx942). Without the flag, the builder keeps Aphrodite's build."""
-    import aphrodite.platforms.rocm as rocm_platform
-    from aphrodite.models.deepseek_v41.amd import ops, rocm
-    from aphrodite.models.deepseek_v41.amd.ops import swa_decode_meta
+    CDNA3 (gfx942). Without the flag, the builder keeps Sonar's build."""
+    import sonar.platforms.rocm as rocm_platform
+    from sonar.models.deepseek_v41.amd import ops, rocm
+    from sonar.models.deepseek_v41.amd.ops import swa_decode_meta
 
     monkeypatch.setattr(ops, "current_platform", SimpleNamespace(is_rocm=lambda: True))
     monkeypatch.setattr(rocm_platform, "get_cdna_version", lambda: cdna)
@@ -763,10 +763,10 @@ def test_swa_decode_meta_runs_on_cdna3_and_cdna4_with_the_flag(monkeypatch, cdna
 
 
 def test_dspark_speculator_asks_the_draft_model_first():
-    """A draft model that samples a step itself returns True, and Aphrodite's
+    """A draft model that samples a step itself returns True, and Sonar's
     loop then does not run. The stub speculator has none of the loop's
     buffers, so the loop would fail here."""
-    from aphrodite.v1.worker.gpu.spec_decode.dspark.speculator import DSparkSpeculator
+    from sonar.v1.worker.gpu.spec_decode.dspark.speculator import DSparkSpeculator
 
     calls = []
 
@@ -786,8 +786,8 @@ def test_dspark_speculator_asks_the_draft_model_first():
 def test_dspark_draft_model_samples_with_fused_markov(monkeypatch, taken):
     """The DSv4.1 draft model answers the speculator with fused_markov, which
     returns False for a step that the fused launches do not take."""
-    from aphrodite.models.deepseek_v41.amd import dspark
-    from aphrodite.models.deepseek_v41.amd.ops import fused_markov
+    from sonar.models.deepseek_v41.amd import dspark
+    from sonar.models.deepseek_v41.amd.ops import fused_markov
 
     calls = []
 

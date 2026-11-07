@@ -145,7 +145,7 @@ class Step5Config(PreTrainedConfig):
         # layers, which use absolute layer indices.
         # transformers 5.x validates len(layer_types) == num_hidden_layers, so keep
         # the MTP-inclusive copy under a Step-owned name and expose only the dense
-        # slice as `layer_types`, which is what transformers and Aphrodite's
+        # slice as `layer_types`, which is what transformers and Sonar's
         # hybrid-attention detection both mean by it.
         total_num_layers = num_hidden_layers + num_nextn_predict_layers
         serialized_layer_types = kwargs.pop("layer_types_with_mtp", None)

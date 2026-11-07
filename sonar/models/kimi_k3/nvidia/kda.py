@@ -10,60 +10,60 @@ from einops import rearrange
 from torch import nn
 from torch.nn.parameter import Parameter
 
-from aphrodite import _custom_ops as ops
-from aphrodite.compilation.breakable_cudagraph import eager_break_during_capture
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed import divide, get_tensor_model_parallel_rank
-from aphrodite.forward_context import get_forward_context
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.linear import (
+from sonar import _custom_ops as ops
+from sonar.compilation.breakable_cudagraph import eager_break_during_capture
+from sonar.config import SonarConfig
+from sonar.distributed import divide, get_tensor_model_parallel_rank
+from sonar.forward_context import get_forward_context
+from sonar.logger import init_logger
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     MergedColumnParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.mamba.gdn.base import GatedDeltaNetAttention
-from aphrodite.model_executor.layers.mamba.kda_checkpoint import (
+from sonar.model_executor.layers.mamba.gdn.base import GatedDeltaNetAttention
+from sonar.model_executor.layers.mamba.kda_checkpoint import (
     FlashKDAPrefillCheckpointExporter,
     kda_prefill_checkpoint_alignment,
 )
-from aphrodite.model_executor.layers.mamba.mamba_utils import (
+from sonar.model_executor.layers.mamba.mamba_utils import (
     MambaStateDtypeCalculator,
     MambaStateShapeCalculator,
     is_conv_state_dim_first,
 )
-from aphrodite.model_executor.layers.mamba.ops.causal_conv1d import (
+from sonar.model_executor.layers.mamba.ops.causal_conv1d import (
     causal_conv1d_fn,
     causal_conv1d_update,
 )
-from aphrodite.model_executor.layers.mamba.ops.gather_initial_states import (
+from sonar.model_executor.layers.mamba.ops.gather_initial_states import (
     gather_initial_states,
 )
-from aphrodite.model_executor.layers.quantization.modelopt import (
+from sonar.model_executor.layers.quantization.modelopt import (
     ModelOptMixedPrecisionConfig,
 )
-from aphrodite.model_executor.model_loader.weight_utils import (
+from sonar.model_executor.model_loader.weight_utils import (
     default_weight_loader,
     sharded_weight_loader,
 )
-from aphrodite.model_executor.parameter import BaseAphroditeParameter, BlockQuantScaleParameter
-from aphrodite.model_executor.utils import set_weight_attrs
-from aphrodite.models.kimi_k3.nvidia.kda_metadata import (
+from sonar.model_executor.parameter import BaseSonarParameter, BlockQuantScaleParameter
+from sonar.model_executor.utils import set_weight_attrs
+from sonar.models.kimi_k3.nvidia.kda_metadata import (
     KimiK3KDAAttentionBackend,
     KimiK3KDAMetadata,
 )
-from aphrodite.models.kimi_k3.nvidia.ops.recoverssm import (
+from sonar.models.kimi_k3.nvidia.ops.recoverssm import (
     KDARecoverSSMRecords,
     kda_recoverssm_verify,
 )
-from aphrodite.models.kimi_k3.nvidia.recoverssm.kernels import (
+from sonar.models.kimi_k3.nvidia.recoverssm.kernels import (
     CuteRecoverSSMVerify,
     can_use_cute_recoverssm,
     compile_state_commit,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.third_party.flash_linear_attention.ops.kda import FusedRMSNormGated
-from aphrodite.transformers_utils.configs.kimi_linear import KimiLinearConfig
-from aphrodite.utils.flashinfer import (
+from sonar.platforms import current_platform
+from sonar.third_party.flash_linear_attention.ops.kda import FusedRMSNormGated
+from sonar.transformers_utils.configs.kimi_linear import KimiLinearConfig
+from sonar.utils.flashinfer import (
     flashinfer_fused_kda_decode,
     flashinfer_packed_fused_kda_decode,
     flashinfer_recurrent_kda,
@@ -71,9 +71,9 @@ from aphrodite.utils.flashinfer import (
     has_flashinfer_packed_fused_kda_decode,
     has_flashinfer_recurrent_kda,
 )
-from aphrodite.v1.attention.backend import AttentionBackend
-from aphrodite.v1.kv_cache_interface import MambaSpec
-from aphrodite.v1.worker.workspace import (
+from sonar.v1.attention.backend import AttentionBackend
+from sonar.v1.kv_cache_interface import MambaSpec
+from sonar.v1.worker.workspace import (
     current_workspace_manager,
     is_workspace_manager_initialized,
 )
@@ -159,7 +159,7 @@ class _KimiGDNMergedColumnParallelLinear(MergedColumnParallelLinear):
 
     def weight_loader_v2(
         self,
-        param: BaseAphroditeParameter,
+        param: BaseSonarParameter,
         loaded_weight: torch.Tensor,
         loaded_shard_id: tuple[int, ...] | int | None = None,
     ) -> None:
@@ -418,7 +418,7 @@ def _flashkda_prefill(
     checkpoint_state: torch.Tensor | None = None,
     checkpoint_offsets: torch.Tensor | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    import aphrodite._flashkda_C  # noqa: F401
+    import sonar._flashkda_C  # noqa: F401
 
     # FlashKDA hardcodes dense Q/K/V/G strides. Beta may be row-strided because
     # FlashKDA materializes its transposed [H, T] layout internally.
@@ -592,12 +592,12 @@ class KimiK3DeltaAttention(GatedDeltaNetAttention):
     def __init__(
         self,
         config: KimiLinearConfig,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
         aux_stream: torch.cuda.Stream | None = None,
         run_gemm_rs_ar: bool = False,
     ) -> None:
-        super().__init__(config, aphrodite_config, prefix)
+        super().__init__(config, sonar_config, prefix)
         self.use_recoverssm = self.cache_config.use_kda_recoverssm
         if self.cache_config.use_replayssm and not self.use_recoverssm:
             raise ValueError("Kimi-K3 supports --use-replayssm only with speculative decoding")
@@ -673,7 +673,7 @@ class KimiK3DeltaAttention(GatedDeltaNetAttention):
         # Keep a width-major copy for fused decode without changing the layout
         # consumed by the prefill and fallback decode kernels.
         conv_state_dtype, recurrent_state_dtype = self.get_state_dtype()[:2]
-        additional_config = aphrodite_config.additional_config
+        additional_config = sonar_config.additional_config
         decode_backend = (
             additional_config.get("kda_decode_backend", "auto") if isinstance(additional_config, dict) else "auto"
         )
@@ -683,7 +683,7 @@ class KimiK3DeltaAttention(GatedDeltaNetAttention):
             self.head_dim,
             self.conv_size,
             self.num_spec,
-            aphrodite_config.model_config.dtype,
+            sonar_config.model_config.dtype,
             conv_state_dtype,
             recurrent_state_dtype,
         )
@@ -696,7 +696,7 @@ class KimiK3DeltaAttention(GatedDeltaNetAttention):
             self.head_dim,
             self.conv_size,
             self.num_spec,
-            aphrodite_config.model_config.dtype,
+            sonar_config.model_config.dtype,
             conv_state_dtype,
             recurrent_state_dtype,
             self.gate_lower_bound,
@@ -710,14 +710,14 @@ class KimiK3DeltaAttention(GatedDeltaNetAttention):
         self.recoverssm_verify: CuteRecoverSSMVerify | None = None
         if self.use_recoverssm:
             self.recoverssm_records = KDARecoverSSMRecords.allocate(
-                aphrodite_config.scheduler_config.max_num_seqs,
+                sonar_config.scheduler_config.max_num_seqs,
                 self.local_num_heads,
                 self.spec_query_len,
                 self.head_dim,
-                aphrodite_config.model_config.dtype,
+                sonar_config.model_config.dtype,
                 self.conv1d.weight.device,
             )
-            max_num_seqs = aphrodite_config.scheduler_config.max_num_seqs
+            max_num_seqs = sonar_config.scheduler_config.max_num_seqs
             records_bytes = len(kda_config["kda_layers"]) * sum(
                 t.numel() * t.element_size()
                 for t in (
@@ -737,7 +737,7 @@ class KimiK3DeltaAttention(GatedDeltaNetAttention):
                 window=self.spec_query_len,
                 conv_width=self.conv_size,
                 has_conv_bias=self.conv1d.bias is not None,
-                activation_dtype=aphrodite_config.model_config.dtype,
+                activation_dtype=sonar_config.model_config.dtype,
                 conv_state_dtype=conv_state_dtype,
                 state_dtype=recurrent_state_dtype,
                 conv_weight_dtype=self.conv1d.weight.dtype,
@@ -797,7 +797,7 @@ class KimiK3DeltaAttention(GatedDeltaNetAttention):
         self.kda_prefill_backend = resolve_kda_prefill_backend(
             backend,
             self.head_dim,
-            aphrodite_config.model_config.dtype,
+            sonar_config.model_config.dtype,
             recurrent_state_dtype,
             self.gate_lower_bound,
         )
@@ -805,10 +805,10 @@ class KimiK3DeltaAttention(GatedDeltaNetAttention):
         self._flashinfer_kda_output_spec: tuple[tuple[int, ...], torch.dtype] | None = None
         self._checkpoint_exporter: FlashKDAPrefillCheckpointExporter | None = None
         if self.kda_prefill_backend == "flashkda":
-            T = aphrodite_config.scheduler_config.max_num_batched_tokens
-            N = aphrodite_config.scheduler_config.max_num_seqs
+            T = sonar_config.scheduler_config.max_num_batched_tokens
+            N = sonar_config.scheduler_config.max_num_seqs
             H, D = self.local_num_heads, self.head_dim
-            import aphrodite._flashkda_C  # noqa: F401
+            import sonar._flashkda_C  # noqa: F401
 
             workspace_size = torch.ops._flashkda_C.get_workspace_size(T, H, N)
             self._flashkda_buffer_specs = (
@@ -819,7 +819,7 @@ class KimiK3DeltaAttention(GatedDeltaNetAttention):
             )
             self._checkpoint_exporter = FlashKDAPrefillCheckpointExporter()
         elif self.kda_prefill_backend == "flashinfer":
-            T = aphrodite_config.scheduler_config.max_num_batched_tokens
+            T = sonar_config.scheduler_config.max_num_batched_tokens
             H, D = self.local_num_heads, self.head_dim
             self._flashinfer_kda_output_spec = (
                 (1, T, H, D),
@@ -861,7 +861,7 @@ class KimiK3DeltaAttention(GatedDeltaNetAttention):
         )
         self.gemm_rs_ar = None
         if run_gemm_rs_ar:
-            from aphrodite.model_executor.kernels.linear.cute_dsl.gemm_rs_ar import (
+            from sonar.model_executor.kernels.linear.cute_dsl.gemm_rs_ar import (
                 get_gemm_rs_ar,
             )
 
@@ -870,13 +870,13 @@ class KimiK3DeltaAttention(GatedDeltaNetAttention):
                 self.gemm_rs_ar = gemm_rs_ar
             else:
                 gemm_rs_ar.warn_incompatible_projection()
-        compilation_config = aphrodite_config.compilation_config
+        compilation_config = sonar_config.compilation_config
         if prefix in compilation_config.static_forward_context:
             raise ValueError(f"Duplicate layer name: {prefix}")
         compilation_config.static_forward_context[prefix] = self
 
-    def get_kv_cache_spec(self, aphrodite_config: AphroditeConfig) -> MambaSpec:
-        spec = super().get_kv_cache_spec(aphrodite_config)
+    def get_kv_cache_spec(self, sonar_config: SonarConfig) -> MambaSpec:
+        spec = super().get_kv_cache_spec(sonar_config)
         assert isinstance(spec, MambaSpec)
         alignment = kda_prefill_checkpoint_alignment(self.kda_prefill_backend)
         return replace(
@@ -900,7 +900,7 @@ class KimiK3DeltaAttention(GatedDeltaNetAttention):
             and projection_aux_stream is not None
             and torch.cuda.is_current_stream_capturing()
         ):
-            from aphrodite.models.kimi_k3.nvidia.low_latency_gemm import (
+            from sonar.models.kimi_k3.nvidia.low_latency_gemm import (
                 run_kda_projection_overlap,
             )
 
@@ -1049,7 +1049,7 @@ class KimiK3DeltaAttention(GatedDeltaNetAttention):
         if attn_metadata_raw is None:
             return
 
-        from aphrodite.models.kimi_k3.nvidia.ops.third_party.kda import (
+        from sonar.models.kimi_k3.nvidia.ops.third_party.kda import (
             chunk_kda_with_fused_gate,
             fused_recurrent_kda,
             fused_recurrent_kda_packed_decode,

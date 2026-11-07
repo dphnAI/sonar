@@ -6,12 +6,12 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 
-from aphrodite.v1.outputs import LogprobsLists, ModelRunnerOutput
-from aphrodite.v1.phrase_guard.logprobs import PendingLogprobs
-from aphrodite.v1.phrase_guard.matcher import PendingText
-from aphrodite.v1.phrase_guard.processor import PhraseRetryProcessor
-from aphrodite.v1.phrase_guard.scheduler import PhraseScheduler
-from aphrodite.v1.request import RequestStatus
+from sonar.v1.outputs import LogprobsLists, ModelRunnerOutput
+from sonar.v1.phrase_guard.logprobs import PendingLogprobs
+from sonar.v1.phrase_guard.matcher import PendingText
+from sonar.v1.phrase_guard.processor import PhraseRetryProcessor
+from sonar.v1.phrase_guard.scheduler import PhraseScheduler
+from sonar.v1.request import RequestStatus
 from tests.v1.core.utils import create_requests, create_scheduler
 
 pytestmark = pytest.mark.cpu_test
@@ -35,11 +35,11 @@ class FakeGuard:
 
 @pytest.fixture
 def scheduler(monkeypatch):
-    monkeypatch.setenv("APHRODITE_USE_V2_MODEL_RUNNER", "0")
+    monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", "0")
     with patch("tests.v1.core.utils.AsyncScheduler", PhraseScheduler):
         result = create_scheduler(async_scheduling=True, enable_prefix_caching=True, use_v2_model_runner=False)
     result.tokenizer = object()
-    result.aphrodite_config.model_config.logits_processors = [PhraseRetryProcessor]
+    result.sonar_config.model_config.logits_processors = [PhraseRetryProcessor]
     return result
 
 
@@ -47,7 +47,7 @@ def add_requests(scheduler):
     a, b = create_requests(2, num_tokens=48, same_prompt=True, max_tokens=24)
     a.sampling_params = a.sampling_params.clone()
     a.sampling_params.extra_args = {"banned_strings": ["Once upon time"]}
-    with patch("aphrodite.v1.phrase_guard.scheduler.RequestGuard", FakeGuard):
+    with patch("sonar.v1.phrase_guard.scheduler.RequestGuard", FakeGuard):
         scheduler.add_request(a)
         scheduler.add_request(b)
     return a, b

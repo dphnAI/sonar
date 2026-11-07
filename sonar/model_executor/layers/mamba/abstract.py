@@ -6,13 +6,13 @@ from math import lcm, prod
 
 import torch
 
-from aphrodite.config import AphroditeConfig, get_layers_from_aphrodite_config
-from aphrodite.model_executor.layers.attention_layer_base import AttentionLayerBase
-from aphrodite.utils.torch_utils import get_dtype_size
-from aphrodite.v1.attention.backend import AttentionBackend
-from aphrodite.v1.attention.backends.registry import MambaAttentionBackendEnum
-from aphrodite.v1.attention.selector import get_mamba_attn_backend
-from aphrodite.v1.kv_cache_interface import KVCacheSpec, MambaSpec
+from sonar.config import SonarConfig, get_layers_from_sonar_config
+from sonar.model_executor.layers.attention_layer_base import AttentionLayerBase
+from sonar.utils.torch_utils import get_dtype_size
+from sonar.v1.attention.backend import AttentionBackend
+from sonar.v1.attention.backends.registry import MambaAttentionBackendEnum
+from sonar.v1.attention.selector import get_mamba_attn_backend
+from sonar.v1.kv_cache_interface import KVCacheSpec, MambaSpec
 
 
 class MambaBase(AttentionLayerBase):
@@ -68,10 +68,10 @@ class MambaBase(AttentionLayerBase):
         """
         return None
 
-    def get_kv_cache_spec(self, aphrodite_config: AphroditeConfig) -> KVCacheSpec | None:
-        mamba_block_size = aphrodite_config.cache_config.mamba_block_size
+    def get_kv_cache_spec(self, sonar_config: SonarConfig) -> KVCacheSpec | None:
+        mamba_block_size = sonar_config.cache_config.mamba_block_size
         assert mamba_block_size is not None
-        page_size_padded = aphrodite_config.cache_config.mamba_page_size_padded
+        page_size_padded = sonar_config.cache_config.mamba_page_size_padded
         return MambaSpec(
             shapes=tuple(self.get_state_shape()),
             dtypes=self.get_state_dtype(),
@@ -79,11 +79,11 @@ class MambaBase(AttentionLayerBase):
             page_size_padded=page_size_padded,
             mamba_type=self.mamba_type,
             tp_replicated=self.is_kv_cache_tp_replicated,
-            mamba_cache_mode=aphrodite_config.cache_config.mamba_cache_mode,
+            mamba_cache_mode=sonar_config.cache_config.mamba_cache_mode,
             # ReplaySSM verifies the whole window off one checkpoint, so it
             # never writes the baseline's per-draft-token state slots.
             num_speculative_blocks=(
-                0 if aphrodite_config.cache_config.use_replayssm else aphrodite_config.num_speculative_tokens
+                0 if sonar_config.cache_config.use_replayssm else sonar_config.num_speculative_tokens
             ),
         )
 
@@ -92,15 +92,15 @@ class MambaBase(AttentionLayerBase):
         return get_mamba_attn_backend(self.mamba_type)
 
 
-def get_mamba_prefill_checkpoint_alignment(aphrodite_config: AphroditeConfig) -> int | None:
+def get_mamba_prefill_checkpoint_alignment(sonar_config: SonarConfig) -> int | None:
     """LCM of the Mamba layers' prefill checkpoint alignments.
 
     None unless every Mamba layer declares one: the scheduler takes internal
     checkpoints only when every Mamba group can export them.
     """
     alignment = 1
-    for layer in get_layers_from_aphrodite_config(
-        aphrodite_config,
+    for layer in get_layers_from_sonar_config(
+        sonar_config,
         MambaBase,  # type: ignore[type-abstract]
     ).values():
         layer_alignment = layer.get_prefill_checkpoint_alignment()
@@ -110,16 +110,16 @@ def get_mamba_prefill_checkpoint_alignment(aphrodite_config: AphroditeConfig) ->
     return alignment
 
 
-def get_mamba_prefill_checkpoint_grid(aphrodite_config: AphroditeConfig) -> int:
+def get_mamba_prefill_checkpoint_grid(sonar_config: SonarConfig) -> int:
     """Token grid every Mamba layer keeps its prefill checkpoint offsets on.
 
     Prefix-cache boundaries, made multiples of the layers' checkpoint alignment
     (the platform already keeps blocks on it). The scheduler checks offsets
     against one alignment, so every Mamba spec must use this one.
     """
-    alignment = get_mamba_prefill_checkpoint_alignment(aphrodite_config)
+    alignment = get_mamba_prefill_checkpoint_alignment(sonar_config)
     assert alignment is not None
-    cache_config = aphrodite_config.cache_config
+    cache_config = sonar_config.cache_config
     if cache_config.prefix_match_unit is not None:
         return lcm(cache_config.prefix_match_unit, alignment)
     assert cache_config.mamba_block_size is not None

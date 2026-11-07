@@ -9,17 +9,17 @@ from typing import Any, ClassVar, Literal, Protocol, get_args, runtime_checkable
 import torch
 from pydantic import Field, field_validator, model_validator
 
-from aphrodite.config.utils import config
-from aphrodite.logger import init_logger
-from aphrodite.utils.torch_utils import (
+from sonar.config.utils import config
+from sonar.logger import init_logger
+from sonar.utils.torch_utils import (
     STR_DTYPE_TO_TORCH_DTYPE,
 )
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.kv_cache_interface import (
     KVQuantMode,
     is_quantized_kv_cache,
     kv_cache_uses_per_token_head_scales,
 )
-from aphrodite.v1.kv_cache_layout import KVCacheLayout
+from sonar.v1.kv_cache_layout import KVCacheLayout
 
 logger = init_logger(__name__)
 
@@ -76,7 +76,7 @@ KV_CACHE_DTYPES: list[str] = list(get_args(CacheDType))
 class KVCacheDTypeHandler(Protocol):
     """Contract for a custom ``--kv-cache-dtype`` value.
 
-    A platform backend implements this protocol to answer the questions Aphrodite
+    A platform backend implements this protocol to answer the questions Sonar
     currently answers with closed tables (``STR_DTYPE_TO_TORCH_DTYPE`` /
     ``get_kv_quant_mode`` / ``is_quantized_kv_cache``). A single handler may
     be device-aware (e.g., resolving different torch dtypes per device
@@ -209,9 +209,9 @@ class CacheConfig:
     """The fraction of GPU memory to be used for the model executor, which can
     range from 0 to 1. For example, a value of 0.5 would imply 50% GPU memory
     utilization. If unspecified, will use the default value of 0.92. This is a
-    per-instance limit, and only applies to the current Aphrodite instance. It does
-    not matter if you have another Aphrodite instance running on the same GPU. For
-    example, if you have two Aphrodite instances running on the same GPU, you can
+    per-instance limit, and only applies to the current Sonar instance. It does
+    not matter if you have another Sonar instance running on the same GPU. For
+    example, if you have two Sonar instances running on the same GPU, you can
     set the GPU memory utilization to 0.5 for each instance. On non-GPU
     installs, this value controls the corresponding device memory utilization.
     """
@@ -229,7 +229,7 @@ class CacheConfig:
     """Data type for kv cache storage. If "auto", will use model data type.
     An explicit float16 or bfloat16 must match the model data type.
     Custom dtypes can registered by platform backends via
-    ``register_kv_cache_dtype`` are accepted (see aphrodite.config.cache).
+    ``register_kv_cache_dtype`` are accepted (see sonar.config.cache).
     CUDA 11.8+ supports fp8 (=fp8_e4m3) and fp8_e5m2. ROCm (AMD GPU) supports
     fp8 (=fp8_e4m3). Intel Gaudi (HPU) supports fp8 (using fp8_inc).
     Some models (namely DeepSeekV3.2) default to fp8, set to bfloat16 to use
@@ -366,7 +366,7 @@ class CacheConfig:
 
     kv_cache_memory_bytes: int | None = None
     """Size of KV Cache per GPU in bytes. By default, this is set to None
-    and aphrodite can automatically infer the kv cache size based on
+    and sonar can automatically infer the kv cache size based on
     gpu_memory_utilization. However, users may want to manually specify
     the kv cache memory size. kv_cache_memory_bytes allows more fine-grain
     control of how much memory gets used when compared with using
@@ -376,12 +376,12 @@ class CacheConfig:
     kv_offloading_size: float | None = None
     """Size of the KV cache offloading buffer in GiB. When TP > 1, this is
     the total buffer size summed across all TP ranks. By default, this is set
-    to None, which means no KV offloading is enabled. When set, Aphrodite will
+    to None, which means no KV offloading is enabled. When set, Sonar will
     enable KV cache offloading to CPU using the kv_offloading_backend."""
 
     kv_offloading_backend: KVOffloadingBackend = "native"
     """The backend to use for KV cache offloading. Supported backends include
-    'native' (Aphrodite native CPU offloading), 'lmcache'.
+    'native' (Sonar native CPU offloading), 'lmcache'.
     KV offloading is only activated when kv_offloading_size is set."""
 
     def compute_hash(self) -> str:
@@ -425,7 +425,7 @@ class CacheConfig:
             "swa_bounded_replay",
         }
 
-        from aphrodite.config.utils import get_hash_factors, hash_factors
+        from sonar.config.utils import get_hash_factors, hash_factors
 
         factors = get_hash_factors(self, ignored_factors)
         return hash_factors(factors)
@@ -448,7 +448,7 @@ class CacheConfig:
     @model_validator(mode="after")
     def _apply_block_size_default(self) -> "CacheConfig":
         # Pydantic re-runs validators when CacheConfig is nested inside
-        # another pydantic model (e.g. AphroditeConfig). Guard against that.
+        # another pydantic model (e.g. SonarConfig). Guard against that.
         if self._block_size_resolved:
             return self
         self._block_size_resolved = True

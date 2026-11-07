@@ -10,12 +10,12 @@ import json
 
 import pytest
 
-from aphrodite.entrypoints.generate.base.protocol import DeltaMessage
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
-from aphrodite.parser.abstract_parser import DelegatingParser
-from aphrodite.reasoning.basic_parsers import BaseThinkingReasoningParser
-from aphrodite.tool_parsers.hermes_tool_parser import Hermes2ProToolParser
+from sonar.entrypoints.generate.base.protocol import DeltaMessage
+from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
+from sonar.parser.abstract_parser import DelegatingParser
+from sonar.reasoning.basic_parsers import BaseThinkingReasoningParser
+from sonar.tool_parsers.hermes_tool_parser import Hermes2ProToolParser
 
 
 class ThinkReasoningParser(BaseThinkingReasoningParser):
@@ -41,7 +41,7 @@ MODEL_OUTPUT_CONTENT_ONLY = "The answer is 42."
 
 @pytest.fixture(scope="module")
 def tokenizer():
-    from aphrodite.tokenizers import get_tokenizer
+    from sonar.tokenizers import get_tokenizer
 
     return get_tokenizer("Qwen/Qwen3-32B")
 
@@ -71,7 +71,7 @@ def make_parser(tokenizer, reasoning=False, tool=False):
 
 def parse_and_build(parser, request, model_output, enable_auto_tools=False):
     """Mirror the non-streaming parse, suppression, and build-items path."""
-    from aphrodite.entrypoints.openai.responses.utils import (
+    from sonar.entrypoints.openai.responses.utils import (
         build_response_output_items,
     )
 
@@ -324,7 +324,7 @@ class TestParseDeltaIncludeReasoning:
 
 class TestParsableContextIncludeReasoning:
     def _make_context(self, tokenizer, request):
-        from aphrodite.entrypoints.openai.responses.context import ParsableContext
+        from sonar.entrypoints.openai.responses.context import ParsableContext
 
         class TestParser(DelegatingParser):
             reasoning_parser_cls = ThinkReasoningParser
@@ -341,7 +341,7 @@ class TestParsableContextIncludeReasoning:
         )
 
     def test_process_include_false_suppresses_reasoning(self, tokenizer):
-        from aphrodite.outputs import CompletionOutput, RequestOutput
+        from sonar.outputs import CompletionOutput, RequestOutput
 
         request = make_responses_request(include_reasoning=False)
         ctx = self._make_context(tokenizer, request)
@@ -374,7 +374,7 @@ class TestParsableContextIncludeReasoning:
         assert "message" in types
 
     def test_process_include_true_has_reasoning(self, tokenizer):
-        from aphrodite.outputs import CompletionOutput, RequestOutput
+        from sonar.outputs import CompletionOutput, RequestOutput
 
         request = make_responses_request(include_reasoning=True)
         ctx = self._make_context(tokenizer, request)

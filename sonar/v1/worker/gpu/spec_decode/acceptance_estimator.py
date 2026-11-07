@@ -3,8 +3,8 @@
 
 import torch
 
-from aphrodite.triton_utils import tl, triton
-from aphrodite.v1.worker.gpu.spec_decode.rejection_sampler_utils import (
+from sonar.triton_utils import tl, triton
+from sonar.v1.worker.gpu.spec_decode.rejection_sampler_utils import (
     _compute_max_and_sumexp,
 )
 

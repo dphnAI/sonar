@@ -4,12 +4,12 @@ from collections.abc import Sequence
 
 import pytest
 
-from aphrodite.v1.kv_offload.base import OffloadKey, ReqContext
-from aphrodite.v1.kv_offload.cpu.manager import CPUOffloadingManager
-from aphrodite.v1.kv_offload.cpu.policies.arc import ARCCachePolicy
-from aphrodite.v1.kv_offload.cpu.policies.base import CachePolicy, ChunkStatus
-from aphrodite.v1.kv_offload.cpu.policies.factory import CachePolicyFactory
-from aphrodite.v1.kv_offload.cpu.policies.lru import LRUCachePolicy
+from sonar.v1.kv_offload.base import OffloadKey, ReqContext
+from sonar.v1.kv_offload.cpu.manager import CPUOffloadingManager
+from sonar.v1.kv_offload.cpu.policies.arc import ARCCachePolicy
+from sonar.v1.kv_offload.cpu.policies.base import CachePolicy, ChunkStatus
+from sonar.v1.kv_offload.cpu.policies.factory import CachePolicyFactory
+from sonar.v1.kv_offload.cpu.policies.lru import LRUCachePolicy
 
 
 class _DummyCachePolicy(CachePolicy):

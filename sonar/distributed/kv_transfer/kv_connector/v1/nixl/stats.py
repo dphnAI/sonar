@@ -8,17 +8,17 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed.kv_transfer.kv_connector.v1.metrics import (
+from sonar.config import SonarConfig
+from sonar.distributed.kv_transfer.kv_connector.v1.metrics import (
     KVConnectorPromMetrics,
     KVConnectorStats,
     PromMetric,
     PromMetricT,
 )
-from aphrodite.v1.metrics.utils import create_metric_per_engine
+from sonar.v1.metrics.utils import create_metric_per_engine
 
 if TYPE_CHECKING:
-    from aphrodite.distributed.nixl_utils import nixlXferTelemetry
+    from sonar.distributed.nixl_utils import nixlXferTelemetry
 
 
 @dataclass
@@ -162,12 +162,12 @@ class NixlKVConnectorStats(KVConnectorStats):
 class NixlPromMetrics(KVConnectorPromMetrics):
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         metric_types: dict[type[PromMetric], type[PromMetricT]],
         labelnames: list[str],
         per_engine_labelvalues: dict[int, list[object]],
     ):
-        super().__init__(aphrodite_config, metric_types, labelnames, per_engine_labelvalues)
+        super().__init__(sonar_config, metric_types, labelnames, per_engine_labelvalues)
 
         buckets = [
             0.001,
@@ -185,14 +185,14 @@ class NixlPromMetrics(KVConnectorPromMetrics):
             5.0,
         ]
         nixl_histogram_xfer_time = self._histogram_cls(
-            name="aphrodite:nixl_xfer_time_seconds",
+            name="sonar:nixl_xfer_time_seconds",
             documentation="Histogram of transfer duration for NIXL KV Cache transfers.",
             buckets=buckets[1:],
             labelnames=labelnames,
         )
         self.nixl_histogram_xfer_time = create_metric_per_engine(nixl_histogram_xfer_time, self.per_engine_labelvalues)
         nixl_histogram_post_time = self._histogram_cls(
-            name="aphrodite:nixl_post_time_seconds",
+            name="sonar:nixl_post_time_seconds",
             documentation="Histogram of transfer post time for NIXL KV Cache transfers.",
             buckets=buckets,
             labelnames=labelnames,
@@ -201,7 +201,7 @@ class NixlPromMetrics(KVConnectorPromMetrics):
         # uniform 2kb to 16gb range
         buckets = [2 ** (10 + i) for i in range(1, 25, 2)]
         nixl_histogram_bytes_transferred = self._histogram_cls(
-            name="aphrodite:nixl_bytes_transferred",
+            name="sonar:nixl_bytes_transferred",
             documentation="Histogram of bytes transferred per NIXL KV Cache transfers.",
             buckets=buckets,
             labelnames=labelnames,
@@ -226,7 +226,7 @@ class NixlPromMetrics(KVConnectorPromMetrics):
             50000,
         ]
         nixl_histogram_num_descriptors = self._histogram_cls(
-            name="aphrodite:nixl_num_descriptors",
+            name="sonar:nixl_num_descriptors",
             documentation="Histogram of number of descriptors per NIXL  KV Cache transfers.",
             buckets=buckets,
             labelnames=labelnames,
@@ -235,10 +235,10 @@ class NixlPromMetrics(KVConnectorPromMetrics):
             nixl_histogram_num_descriptors, self.per_engine_labelvalues
         )
         counter_nixl_num_failed_transfers = self._counter_cls(
-            name="aphrodite:nixl_num_failed_transfers",
+            name="sonar:nixl_num_failed_transfers",
             documentation="Number of failed NIXL KV Cache transfers, including"
             " handshake and notification failures. NOTE: KV expiry is tracked"
-            " separately in aphrodite:nixl_num_kv_expired_reqs.",
+            " separately in sonar:nixl_num_kv_expired_reqs.",
             labelnames=labelnames,
         )
         self.counter_nixl_num_failed_transfers = create_metric_per_engine(
@@ -246,10 +246,10 @@ class NixlPromMetrics(KVConnectorPromMetrics):
         )
 
         counter_nixl_num_failed_notifications = self._counter_cls(
-            name="aphrodite:nixl_num_failed_notifications",
+            name="sonar:nixl_num_failed_notifications",
             documentation="Number of failed NIXL KV Cache notifications. "
             "Retained for compatibility; these failures are also included in "
-            "aphrodite:nixl_num_failed_transfers.",
+            "sonar:nixl_num_failed_transfers.",
             labelnames=labelnames,
         )
         self.counter_nixl_num_failed_notifications = create_metric_per_engine(
@@ -257,7 +257,7 @@ class NixlPromMetrics(KVConnectorPromMetrics):
         )
 
         counter_nixl_num_kv_expired_reqs = self._counter_cls(
-            name="aphrodite:nixl_num_kv_expired_reqs",
+            name="sonar:nixl_num_kv_expired_reqs",
             documentation="Number of requests that had their KV expire. "
             "NOTE: This metric is tracked on the P instance.",
             labelnames=labelnames,
@@ -267,7 +267,7 @@ class NixlPromMetrics(KVConnectorPromMetrics):
         )
 
         counter_nixl_num_notifications_after_expiry = self._counter_cls(
-            name="aphrodite:nixl_num_notifications_after_expiry",
+            name="sonar:nixl_num_notifications_after_expiry",
             documentation="Number of completion notifications for requests that "
             "were no longer tracked, usually because their KV lease expired. The "
             "KV blocks may have been reused before the transfer finished. Counted "

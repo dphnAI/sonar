@@ -4,7 +4,7 @@
 # Adapted from llama.py
 """Inference-only Phi3 model code inherit from Llama.py."""
 
-from aphrodite.model_executor.models.llama import LlamaForCausalLM
+from sonar.model_executor.models.llama import LlamaForCausalLM
 
 
 class Phi3ForCausalLM(LlamaForCausalLM):

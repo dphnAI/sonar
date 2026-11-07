@@ -2,8 +2,8 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import torch
 
-from aphrodite._custom_ops import scaled_fp4_quant
-from aphrodite.scalar_type import scalar_types
+from sonar._custom_ops import scaled_fp4_quant
+from sonar.scalar_type import scalar_types
 
 FLOAT4_E2M1_MAX = scalar_types.float4_e2m1f.max()
 FLOAT8_E4M3_MAX = torch.finfo(torch.float8_e4m3fn).max

@@ -9,13 +9,13 @@ import pybase64
 import pytest
 from PIL import Image, ImageChops
 
-from aphrodite.multimodal.image import (
+from sonar.multimodal.image import (
     _has_transparency,
     convert_image_mode,
     normalize_image,
 )
-from aphrodite.multimodal.media import MediaConnector
-from aphrodite.multimodal.parse import MultiModalDataParser
+from sonar.multimodal.media import MediaConnector
+from sonar.multimodal.parse import MultiModalDataParser
 
 pytestmark = pytest.mark.cpu_test
 

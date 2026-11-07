@@ -10,15 +10,15 @@ EPLB layer state, routing ids are mapped to physical replicas on the way.
 
 import torch
 
-from aphrodite.distributed.eplb.eplb_state import EplbLayerState
-from aphrodite.model_executor.layers.fused_moe.eplb_triton import eplb_map_and_record
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.distributed.eplb.eplb_state import EplbLayerState
+from sonar.model_executor.layers.fused_moe.eplb_triton import eplb_map_and_record
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     FP8_DTYPE,
     QuantKey,
     kMxfp8Dynamic,
 )
-from aphrodite.triton_utils import tl, triton
-from aphrodite.v1.worker.ubatching import dbo_current_ubatch_id
+from sonar.triton_utils import tl, triton
+from sonar.v1.worker.ubatching import dbo_current_ubatch_id
 
 _E8M0_SCALE_DTYPES = (torch.uint8, torch.float8_e8m0fnu)
 # Inverse of the NVFP4 range: E2M1 max (6) times E4M3 max (448).

@@ -15,27 +15,27 @@ from typing import TYPE_CHECKING, ClassVar
 
 import torch
 
-from aphrodite.config.cache import CacheDType
-from aphrodite.model_executor.layers.attention.mla_attention import (
+from sonar.config.cache import CacheDType
+from sonar.model_executor.layers.attention.mla_attention import (
     MLACommonBackend,
     MLACommonImpl,
     MLACommonMetadata,
     MLACommonMetadataBuilder,
     QueryLenSupport,
 )
-from aphrodite.platforms.interface import DeviceCapability
-from aphrodite.v1.attention.backend import (
+from sonar.platforms.interface import DeviceCapability
+from sonar.v1.attention.backend import (
     AttentionCGSupport,
     AttentionLayer,
     AttentionType,
     MultipleOf,
 )
-from aphrodite.v1.kv_cache_interface import AttentionSpec, is_quantized_kv_cache
+from sonar.v1.kv_cache_interface import AttentionSpec, is_quantized_kv_cache
 
 from .decode import LATENT, ROPE, KvBalancedDecode
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
+    from sonar.config import SonarConfig
 
 NOPE, V = 128, 128
 
@@ -52,13 +52,13 @@ class KimiK3KvBalancedMLAMetadataBuilder(MLACommonMetadataBuilder[MLACommonMetad
         self,
         kv_cache_spec: AttentionSpec,
         layer_names: list[str],
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
         device: torch.device,
     ) -> None:
         super().__init__(
             kv_cache_spec,
             layer_names,
-            aphrodite_config,
+            sonar_config,
             device,
             MLACommonMetadata,
             supports_dcp_with_varlen=True,
@@ -107,9 +107,9 @@ class KimiK3KvBalancedMLABackend(MLACommonBackend):
         use_mm_prefix: bool,
         device_capability: DeviceCapability,
     ) -> str | None:
-        from aphrodite.config import get_current_aphrodite_config
+        from sonar.config import get_current_sonar_config
 
-        model_config = get_current_aphrodite_config().model_config
+        model_config = get_current_sonar_config().model_config
         if model_config is None:
             return None
         text_config = model_config.hf_text_config

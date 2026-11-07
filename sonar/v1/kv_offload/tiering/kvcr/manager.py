@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Aphrodite secondary-tier adapter for KVCR."""
+"""Sonar secondary-tier adapter for KVCR."""
 
 import ctypes
 import mmap
@@ -51,16 +51,16 @@ from kvcr.types import (
 )
 from typing_extensions import override
 
-from aphrodite.distributed.kv_transfer.kv_connector.v1.offloading.metrics import (
+from sonar.distributed.kv_transfer.kv_connector.v1.offloading.metrics import (
     OffloadingConnectorStats,
 )
-from aphrodite.logger import init_logger
-from aphrodite.utils.import_utils import resolve_obj_by_qualname
-from aphrodite.v1.core.kv_cache_utils import (
+from sonar.logger import init_logger
+from sonar.utils.import_utils import resolve_obj_by_qualname
+from sonar.v1.core.kv_cache_utils import (
     BlockHash,
     maybe_convert_block_hash,
 )
-from aphrodite.v1.kv_offload.base import (
+from sonar.v1.kv_offload.base import (
     LookupResult,
     Medium,
     OffloadingCounterMetadata,
@@ -73,8 +73,8 @@ from aphrodite.v1.kv_offload.base import (
     RequestOffloadingContext,
     get_offload_block_hash,
 )
-from aphrodite.v1.kv_offload.cpu.policies.base import order_request_keys
-from aphrodite.v1.kv_offload.tiering.base import (
+from sonar.v1.kv_offload.cpu.policies.base import order_request_keys
+from sonar.v1.kv_offload.tiering.base import (
     JobResult,
     ParentManager,
     SecondaryTierManager,
@@ -82,8 +82,8 @@ from aphrodite.v1.kv_offload.tiering.base import (
 )
 
 if TYPE_CHECKING:
-    from aphrodite.v1.kv_offload.base import OffloadingSpec
-    from aphrodite.v1.kv_offload.tiering.backpressure import BackpressureDetector
+    from sonar.v1.kv_offload.base import OffloadingSpec
+    from sonar.v1.kv_offload.tiering.backpressure import BackpressureDetector
 
 
 _REQUIRED_ROUTER_CAPABILITIES = ROUTER_HINT_CAPABILITIES
@@ -115,25 +115,25 @@ def _resolve_policy(name: str | None) -> KVCachePolicy | None:
     return policy_type()
 
 
-def _aphrodite_metric_name(name: str) -> str:
-    return f"aphrodite:{name}"
+def _sonar_metric_name(name: str) -> str:
+    return f"sonar:{name}"
 
 
 def _kvcr_metric_definitions() -> dict[str, OffloadingMetricMetadata]:
     return {
-        _aphrodite_metric_name(DURATION_METRIC): OffloadingHistogramMetadata(
+        _sonar_metric_name(DURATION_METRIC): OffloadingHistogramMetadata(
             documentation="KVCR operation and stage duration in seconds.",
             labelnames=("scope", "result"),
         ),
-        _aphrodite_metric_name(TRANSFER_BYTES_METRIC): OffloadingCounterMetadata(
+        _sonar_metric_name(TRANSFER_BYTES_METRIC): OffloadingCounterMetadata(
             documentation="Bytes transferred by KVCR operations.",
             labelnames=("operation",),
         ),
-        _aphrodite_metric_name(TRANSFER_BLOCKS_METRIC): OffloadingCounterMetadata(
+        _sonar_metric_name(TRANSFER_BLOCKS_METRIC): OffloadingCounterMetadata(
             documentation="KV blocks transferred by successful KVCR operations.",
             labelnames=("operation",),
         ),
-        _aphrodite_metric_name(STATE_METRIC): OffloadingGaugeMetadata(
+        _sonar_metric_name(STATE_METRIC): OffloadingGaugeMetadata(
             documentation="Current KVCR metadata and operation counts.",
             labelnames=("resource",),
         ),
@@ -230,12 +230,12 @@ class _FrameworkPinAdapter:
         return results
 
 
-class _AphroditeKeyAdapter:
-    """Adapt Aphrodite's local key format to KVCR."""
+class _SonarKeyAdapter:
+    """Adapt Sonar's local key format to KVCR."""
 
     def encode(self, framework_key: object) -> BlockKey:
         if not isinstance(framework_key, bytes):
-            raise TypeError("Aphrodite offload keys must be bytes")
+            raise TypeError("Sonar offload keys must be bytes")
         return BlockKey(framework_key)
 
     def decode(self, key: BlockKey) -> int | bytes:
@@ -308,7 +308,7 @@ class KVCRSecondaryTierManager(SecondaryTierManager):
             and not self_describing_events
         ):
             raise ValueError("KVCR local G2/G3 inventory requires self_describing_kv_events")
-        self._key_adapter: KeyAdapter = _AphroditeKeyAdapter()
+        self._key_adapter: KeyAdapter = _SonarKeyAdapter()
         advertise_host = control_advertise_host or socket.gethostname()
         dp_local_rank = offloading_spec.config.parallel.data_parallel_rank_local
         if dp_local_rank is None:
@@ -482,10 +482,10 @@ class KVCRSecondaryTierManager(SecondaryTierManager):
     def get_stats(self) -> OffloadingConnectorStats | None:
         stats = cast(OffloadingConnectorStats | None, self._kvcr.get_stats())
         if stats is not None:
-            # Add the framework namespace only at the Aphrodite boundary.
+            # Add the framework namespace only at the Sonar boundary.
             for metrics in stats.metric_sections():
                 for name in tuple(metrics):
-                    metrics[_aphrodite_metric_name(name)] = metrics.pop(name)
+                    metrics[_sonar_metric_name(name)] = metrics.pop(name)
         return stats
 
     @override

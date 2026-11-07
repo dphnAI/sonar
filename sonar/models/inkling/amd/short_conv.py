@@ -27,9 +27,9 @@ import torch
 from torch import nn
 from torch.nn.parameter import Parameter
 
-from aphrodite.distributed import get_tensor_model_parallel_rank
-from aphrodite.forward_context import get_forward_context
-from aphrodite.model_executor.utils import set_weight_attrs
+from sonar.distributed import get_tensor_model_parallel_rank
+from sonar.forward_context import get_forward_context
+from sonar.model_executor.utils import set_weight_attrs
 
 from .ops import fused_sconv
 from .sconv_swa_attn import InklingConvState, InklingSconvMetadata

@@ -19,18 +19,18 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-import aphrodite.lora.ops.torch_ops as torch_ops
-import aphrodite.lora.ops.triton_ops as triton_ops
-from aphrodite.lora.ops.triton_ops import LoRAKernelMeta
-from aphrodite.lora.ops.triton_ops.lora_expand_fp8_op import (
+import sonar.lora.ops.torch_ops as torch_ops
+import sonar.lora.ops.triton_ops as triton_ops
+from sonar.lora.ops.triton_ops import LoRAKernelMeta
+from sonar.lora.ops.triton_ops.lora_expand_fp8_op import (
     _EXPAND_LORA_SCALE_PTR_DICT,
 )
-from aphrodite.lora.ops.triton_ops.lora_shrink_fp8_op import (
+from sonar.lora.ops.triton_ops.lora_shrink_fp8_op import (
     _SHRINK_LORA_SCALE_PTR_DICT,
 )
-from aphrodite.lora.ops.triton_ops.utils import _LORA_A_PTR_DICT, _LORA_B_PTR_DICT
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.lora.ops.triton_ops.utils import _LORA_A_PTR_DICT, _LORA_B_PTR_DICT
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_random_seed
 
 pytestmark = pytest.mark.skip_global_cleanup
 

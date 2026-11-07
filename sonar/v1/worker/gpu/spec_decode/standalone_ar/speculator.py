@@ -5,25 +5,25 @@ from typing import Any
 import torch
 import torch.nn as nn
 
-from aphrodite.compilation.backends import set_model_tag
-from aphrodite.config import AphroditeConfig, replace
-from aphrodite.config.compilation import CUDAGraphMode
-from aphrodite.forward_context import BatchDescriptor, set_forward_context
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.model_loader import get_model
-from aphrodite.model_executor.model_loader.utils import get_draft_load_config
-from aphrodite.triton_utils import tl, triton
-from aphrodite.v1.kv_cache_interface import KVCacheConfig
-from aphrodite.v1.spec_decode.utils import next_power_of_2
-from aphrodite.v1.worker.gpu.attn_utils import build_slot_mappings_by_layer
-from aphrodite.v1.worker.gpu.block_table import BlockTables
-from aphrodite.v1.worker.gpu.cudagraph_utils import BatchExecutionDescriptor
-from aphrodite.v1.worker.gpu.dp_utils import DPSyncState
-from aphrodite.v1.worker.gpu.input_batch import InputBatch, InputBuffers
-from aphrodite.v1.worker.gpu.model_states.interface import ModelState
-from aphrodite.v1.worker.gpu.spec_decode.speculator import DraftModelSpeculator
-from aphrodite.v1.worker.gpu.spec_decode.utils import get_pp_safe_draft_load_config
-from aphrodite.v1.worker.utils import AttentionGroup
+from sonar.compilation.backends import set_model_tag
+from sonar.config import SonarConfig, replace
+from sonar.config.compilation import CUDAGraphMode
+from sonar.forward_context import BatchDescriptor, set_forward_context
+from sonar.logger import init_logger
+from sonar.model_executor.model_loader import get_model
+from sonar.model_executor.model_loader.utils import get_draft_load_config
+from sonar.triton_utils import tl, triton
+from sonar.v1.kv_cache_interface import KVCacheConfig
+from sonar.v1.spec_decode.utils import next_power_of_2
+from sonar.v1.worker.gpu.attn_utils import build_slot_mappings_by_layer
+from sonar.v1.worker.gpu.block_table import BlockTables
+from sonar.v1.worker.gpu.cudagraph_utils import BatchExecutionDescriptor
+from sonar.v1.worker.gpu.dp_utils import DPSyncState
+from sonar.v1.worker.gpu.input_batch import InputBatch, InputBuffers
+from sonar.v1.worker.gpu.model_states.interface import ModelState
+from sonar.v1.worker.gpu.spec_decode.speculator import DraftModelSpeculator
+from sonar.v1.worker.gpu.spec_decode.utils import get_pp_safe_draft_load_config
+from sonar.v1.worker.utils import AttentionGroup
 
 logger = init_logger(__name__)
 
@@ -39,8 +39,8 @@ class StandaloneARSpeculator(DraftModelSpeculator):
     # Standalone AR drafting needs one extra slot per request for correction.
     num_extra_query_per_req = 1
 
-    def __init__(self, aphrodite_config: AphroditeConfig, device: torch.device):
-        super().__init__(aphrodite_config, device)
+    def __init__(self, sonar_config: SonarConfig, device: torch.device):
+        super().__init__(sonar_config, device)
 
         # draft_max_seq_len is read by the parent's attention metadata builder.
         # Standalone AR drafting doesn't do per-batch adjustment; cap at max.
@@ -65,10 +65,10 @@ class StandaloneARSpeculator(DraftModelSpeculator):
         pass  # CUDA graph not yet supported for standalone AR speculator.
 
     @property
-    def attn_aphrodite_config(self) -> AphroditeConfig:
+    def attn_sonar_config(self) -> SonarConfig:
         if self.speculative_config.kv_cache_dtype is not None:
-            return self._draft_aphrodite_config
-        return self.aphrodite_config
+            return self._draft_sonar_config
+        return self.sonar_config
 
     def set_attn(
         self,
@@ -99,24 +99,22 @@ class StandaloneARSpeculator(DraftModelSpeculator):
     ) -> nn.Module:
         spec = self.speculative_config
         assert spec is not None
-        draft_aphrodite_config = replace(
-            spec.apply_draft_overrides(self.aphrodite_config),
+        draft_sonar_config = replace(
+            spec.apply_draft_overrides(self.sonar_config),
             model_config=self.draft_model_config,
             quant_config=None,
             parallel_config=replace(
                 spec.draft_parallel_config,
-                rank=self.aphrodite_config.parallel_config.rank,
+                rank=self.sonar_config.parallel_config.rank,
             ),
         )
-        draft_aphrodite_config.parallel_config.data_parallel_index = (
-            self.aphrodite_config.parallel_config.data_parallel_index
-        )
-        self._draft_aphrodite_config = draft_aphrodite_config
+        draft_sonar_config.parallel_config.data_parallel_index = self.sonar_config.parallel_config.data_parallel_index
+        self._draft_sonar_config = draft_sonar_config
         with set_model_tag("draft_model"):
             return get_model(
-                aphrodite_config=draft_aphrodite_config,
+                sonar_config=draft_sonar_config,
                 prefix="draft_model",
-                load_config=get_pp_safe_draft_load_config(get_draft_load_config(draft_aphrodite_config)),
+                load_config=get_pp_safe_draft_load_config(get_draft_load_config(draft_sonar_config)),
             )
 
     @torch.inference_mode()
@@ -132,7 +130,7 @@ class StandaloneARSpeculator(DraftModelSpeculator):
         batch_descriptor = BatchDescriptor(num_tokens=num_tokens)
         with set_forward_context(
             attn_metadata,
-            self.aphrodite_config,
+            self.sonar_config,
             num_tokens=num_tokens,
             cudagraph_runtime_mode=CUDAGraphMode.NONE,
             num_tokens_across_dp=num_tokens_across_dp,

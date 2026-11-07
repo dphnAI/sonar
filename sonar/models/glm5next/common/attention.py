@@ -6,36 +6,36 @@ import torch.nn.functional as F
 from torch import nn
 from transformers import Glm5NextTextConfig
 
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.config import (
     CacheConfig,
+    SonarConfig,
 )
-from aphrodite.distributed import (
+from sonar.distributed import (
     get_tensor_model_parallel_world_size,
 )
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.layernorm import LayerNorm, RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.layernorm import LayerNorm, RMSNorm
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     MergedColumnParallelLinear,
     ReplicatedLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.mla import MLAModules, MultiHeadLatentAttentionWrapper
-from aphrodite.model_executor.layers.quantization.base_config import QuantizationConfig
-from aphrodite.model_executor.layers.rotary_embedding import RotaryEmbedding, get_rope
-from aphrodite.model_executor.models.deepseek_v2 import (
+from sonar.model_executor.layers.mla import MLAModules, MultiHeadLatentAttentionWrapper
+from sonar.model_executor.layers.quantization.base_config import QuantizationConfig
+from sonar.model_executor.layers.rotary_embedding import RotaryEmbedding, get_rope
+from sonar.model_executor.models.deepseek_v2 import (
     DeepSeekV2FusedQkvAProjLinear,
     DeepseekV32IndexerCache,
     yarn_get_mscale,
 )
-from aphrodite.model_executor.utils import maybe_disable_graph_partition
-from aphrodite.models.glm5next.nvidia.ops.kpool_compress import fwht128_quant_fp8
-from aphrodite.models.glm5next.sparse_indexer import SparseAttnIndexerKpool
-from aphrodite.platforms import current_platform
-from aphrodite.utils.math_utils import cdiv, next_power_of_2
-from aphrodite.v1.attention.backends.mla.indexer import Glm5NextIndexerBackend
-from aphrodite.v1.kv_cache_interface import CircularBufferSpec, MLAAttentionSpec
+from sonar.model_executor.utils import maybe_disable_graph_partition
+from sonar.models.glm5next.nvidia.ops.kpool_compress import fwht128_quant_fp8
+from sonar.models.glm5next.sparse_indexer import SparseAttnIndexerKpool
+from sonar.platforms import current_platform
+from sonar.utils.math_utils import cdiv, next_power_of_2
+from sonar.v1.attention.backends.mla.indexer import Glm5NextIndexerBackend
+from sonar.v1.kv_cache_interface import CircularBufferSpec, MLAAttentionSpec
 
 logger = init_logger(__name__)
 
@@ -77,7 +77,7 @@ def _pad_indexer_heads(x: torch.Tensor, pad: int) -> torch.Tensor:
 class Glm5NextIndexerCache(DeepseekV32IndexerCache):
     """Indexer K cache that stores kpool-compressed entries.
 
-    Setting ``tokens_per_state = index_kpool`` on the KV cache spec makes Aphrodite's
+    Setting ``tokens_per_state = index_kpool`` on the KV cache spec makes Sonar's
     indexer metadata builder emit pool-granular ``slot_mapping`` /
     ``seq_lens`` / ``cu_seq_lens`` / ``page_table`` for free, and shrinks the
     cache allocation store one state per ``index_kpool`` tokens. The pool
@@ -105,10 +105,10 @@ class Glm5NextIndexerCache(DeepseekV32IndexerCache):
         assert index_kpool > 1, "Glm5NextIndexerCache expects index_kpool > 1"
         self._index_kpool = index_kpool
 
-    def get_kv_cache_spec(self, aphrodite_config: AphroditeConfig):
+    def get_kv_cache_spec(self, sonar_config: SonarConfig):
         from dataclasses import replace
 
-        spec = super().get_kv_cache_spec(aphrodite_config)
+        spec = super().get_kv_cache_spec(sonar_config)
         # ``tokens_per_state`` is the KV-spec representation of kpool
         # compression in the current cache-layout API.
         assert isinstance(spec, MLAAttentionSpec)
@@ -147,13 +147,13 @@ class Glm5NextTailCache(DeepseekV32IndexerCache):
         assert index_kpool > 1, "Glm5NextTailCache expects index_kpool > 1"
         self._index_kpool = index_kpool
 
-    def get_kv_cache_spec(self, aphrodite_config: AphroditeConfig):
+    def get_kv_cache_spec(self, sonar_config: SonarConfig):
         # The two head slots form [K, gate score] in the generic
         # [block, head, state, content] cache view.
         # Drafts are stashed before acceptance. With a one-pool ring, the
         # drafts behind a rejected pool-completing draft overwrite the keys
         # read by its redo.
-        span = self._index_kpool + aphrodite_config.num_speculative_tokens
+        span = self._index_kpool + sonar_config.num_speculative_tokens
         ring = self._index_kpool * next_power_of_2(cdiv(span, self._index_kpool))
         # ring must divide the attention block size (a multiple of 128).
         assert self.cache_config.block_size % ring == 0, (
@@ -173,7 +173,7 @@ class Glm5NextTailCache(DeepseekV32IndexerCache):
         )
 
     def get_attn_backend(self):
-        from aphrodite.v1.attention.backends.mla.indexer import KpoolTailBackend
+        from sonar.v1.attention.backends.mla.indexer import KpoolTailBackend
 
         return KpoolTailBackend
 
@@ -181,7 +181,7 @@ class Glm5NextTailCache(DeepseekV32IndexerCache):
 class Indexer(nn.Module):
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         config: Glm5NextTextConfig,
         hidden_size: int,
         q_lora_rank: int,
@@ -191,7 +191,7 @@ class Indexer(nn.Module):
         prefix: str = "",
     ):
         super().__init__()
-        self.aphrodite_config = aphrodite_config
+        self.sonar_config = sonar_config
         self.config = config
         self.quant_config = quant_config
         # self.indexer_cfg = config.attn_module_list_cfg[0]["attn_index"]
@@ -265,11 +265,11 @@ class Indexer(nn.Module):
             cache_config=cache_config,
             index_kpool=self.index_kpool,
         )
-        self.max_pool_len = aphrodite_config.model_config.max_model_len // self.index_kpool
+        self.max_pool_len = sonar_config.model_config.max_model_len // self.index_kpool
         self.prefix = prefix
-        from aphrodite.v1.attention.backends.mla.indexer import get_max_prefill_buffer_size
+        from sonar.v1.attention.backends.mla.indexer import get_max_prefill_buffer_size
 
-        self.max_total_seq_len = get_max_prefill_buffer_size(aphrodite_config) // self.index_kpool
+        self.max_total_seq_len = get_max_prefill_buffer_size(sonar_config) // self.index_kpool
         self.indexer_op = SparseAttnIndexerKpool(
             self.k_cache,
             self.quant_block_size,
@@ -358,7 +358,7 @@ class Indexer(nn.Module):
 class Glm5NextMLAAttention(nn.Module):
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         config: Glm5NextTextConfig,
         hidden_size: int,
         num_heads: int,
@@ -485,7 +485,7 @@ class Glm5NextMLAAttention(nn.Module):
             # always set for v32 MLA configs; narrow away the `int | None`.
             assert q_lora_rank is not None
             self.indexer: Indexer | None = Indexer(
-                aphrodite_config,
+                sonar_config,
                 config,
                 hidden_size,
                 q_lora_rank,

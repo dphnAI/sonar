@@ -9,24 +9,24 @@ from typing import Any
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.layernorm import GemmaRMSNorm
-from aphrodite.models.qwen4_exp.amd import (
+from sonar.model_executor.layers.layernorm import GemmaRMSNorm
+from sonar.models.qwen4_exp.amd import (
     model as _qwen4_exp_model,  # noqa: F401
 )
-from aphrodite.models.qwen4_exp.amd import ple_layer as ple_layer_module
-from aphrodite.models.qwen4_exp.amd import qsa_indexer
-from aphrodite.models.qwen4_exp.amd.ops import qsa as qsa_ops
-from aphrodite.models.qwen4_exp.amd.ops.qsa_prepare import (
+from sonar.models.qwen4_exp.amd import ple_layer as ple_layer_module
+from sonar.models.qwen4_exp.amd import qsa_indexer
+from sonar.models.qwen4_exp.amd.ops import qsa as qsa_ops
+from sonar.models.qwen4_exp.amd.ops.qsa_prepare import (
     qsa_prepare,
     supports_fused_pre_indexer,
 )
-from aphrodite.models.qwen4_exp.amd.qsa_indexer import (
+from sonar.models.qwen4_exp.amd.qsa_indexer import (
     QSAIndexer,
     apply_qsa_rmsnorm,
     apply_qsa_rope,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import HAS_TRITON
+from sonar.platforms import current_platform
+from sonar.triton_utils import HAS_TRITON
 
 pytestmark = pytest.mark.skipif(
     not current_platform.is_rocm(),
@@ -116,7 +116,7 @@ def test_qsa_rope_uses_platform_dispatch() -> None:
     torch.testing.assert_close(output[..., 2:], tensor[..., 2:])
 
 
-def test_qsa_rmsnorm_uses_portable_implementation(default_aphrodite_config) -> None:
+def test_qsa_rmsnorm_uses_portable_implementation(default_sonar_config) -> None:
     norm = GemmaRMSNorm(4, eps=1e-6)
     norm.weight.data.copy_(torch.tensor([0.1, -0.2, 0.3, -0.4]))
     tensor = torch.arange(8, dtype=torch.float32).reshape(2, 4)
@@ -193,7 +193,7 @@ def _make_indexer(monkeypatch: pytest.MonkeyPatch, *, use_fused: bool, num_token
     return indexer
 
 
-@pytest.mark.usefixtures("default_aphrodite_config")
+@pytest.mark.usefixtures("default_sonar_config")
 def test_qsa_fused_prepare_replaces_the_unfused_chain(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -241,7 +241,7 @@ def test_qsa_fused_prepare_replaces_the_unfused_chain(
     assert passed["k_work_metadata"] is compressed_metadata.k_work_metadata
     assert passed["compress_ratio"] == indexer.compress_ratio
     assert passed["rope_pos_offset"] == indexer.index_head_dim
-    # Main attention: only the real tokens, the Aphrodite cache viewed per token,
+    # Main attention: only the real tokens, the Sonar cache viewed per token,
     # and the gate landing in the caller's buffer.
     assert passed["main_qkv"].shape[0] == 2
     assert passed["main_qkv"].data_ptr() == qkv.data_ptr()
@@ -254,7 +254,7 @@ def test_qsa_fused_prepare_replaces_the_unfused_chain(
     assert passed["main_k_norm_weight"] is attn.k_norm.weight
 
 
-@pytest.mark.usefixtures("default_aphrodite_config")
+@pytest.mark.usefixtures("default_sonar_config")
 def test_qsa_unsupported_config_keeps_the_unfused_chain(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -491,7 +491,7 @@ def test_qsa_sparse_paged_attention_matches_reference(
 @pytest.mark.parametrize("kv_cache_dtype", ["fp8", "fp8_e4m3"])
 def test_qsa_impl_constructs_with_fp8_kv(kv_cache_dtype: str) -> None:
     """QSA accepts FP8 KV cache dtypes without probing FlashAttention."""
-    from aphrodite.models.qwen4_exp.amd.qsa import Qwen4ExpQSAImpl
+    from sonar.models.qwen4_exp.amd.qsa import Qwen4ExpQSAImpl
 
     impl = Qwen4ExpQSAImpl(
         num_heads=24,

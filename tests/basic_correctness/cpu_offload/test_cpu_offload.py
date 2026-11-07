@@ -6,14 +6,14 @@ from operator import attrgetter
 import pytest
 import torch.nn as nn
 
-import aphrodite.envs as envs
-from aphrodite.model_executor.offloader import (
+import sonar.envs as envs
+from sonar.model_executor.offloader import (
     PrefetchOffloader,
     UVAOffloader,
     get_offloader,
     set_offloader,
 )
-from aphrodite.v1.worker.gpu.model_runner import GPUModelRunner
+from sonar.v1.worker.gpu.model_runner import GPUModelRunner
 
 from ...utils import compare_two_settings
 
@@ -22,8 +22,8 @@ from ...utils import compare_two_settings
 @pytest.mark.parametrize("disable_uva", [False, True])
 def test_cpu_offload(disable_pin_memory, disable_uva):
     env_vars = {
-        "APHRODITE_WEIGHT_OFFLOADING_DISABLE_PIN_MEMORY": str(int(disable_pin_memory)),
-        "APHRODITE_WEIGHT_OFFLOADING_DISABLE_UVA": str(int(disable_uva)),
+        "SONAR_WEIGHT_OFFLOADING_DISABLE_PIN_MEMORY": str(int(disable_pin_memory)),
+        "SONAR_WEIGHT_OFFLOADING_DISABLE_UVA": str(int(disable_uva)),
     }
 
     args = ["--cpu-offload-gb", "1"]
@@ -55,21 +55,21 @@ def test_cpu_offload(disable_pin_memory, disable_uva):
         ),
     ],
 )
-def test_mrv2_weight_offloading(aphrodite_runner, monkeypatch, offload_kwargs, offloader_type):
-    monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
+def test_mrv2_weight_offloading(sonar_runner, monkeypatch, offload_kwargs, offloader_type):
+    monkeypatch.setenv("SONAR_ENABLE_V1_MULTIPROCESSING", "0")
     envs.disable_envs_cache()
     original_offloader = get_offloader()
 
     try:
-        with aphrodite_runner(
+        with sonar_runner(
             "hmellor/tiny-random-LlamaForCausalLM",
             enforce_eager=True,
             gpu_memory_utilization=0.03,
             max_model_len=128,
             max_num_seqs=1,
             **offload_kwargs,
-        ) as aphrodite_model:
-            engine_core = aphrodite_model.llm.llm_engine.engine_core.engine_core
+        ) as sonar_model:
+            engine_core = sonar_model.llm.llm_engine.engine_core.engine_core
             model_runner = engine_core.model_executor.driver_worker.worker.model_runner
             assert isinstance(model_runner, GPUModelRunner)
 
@@ -86,25 +86,25 @@ def test_mrv2_weight_offloading(aphrodite_runner, monkeypatch, offload_kwargs, o
 
 
 def _is_offloaded(p: nn.Parameter) -> bool:
-    return p.device.type == "cpu" or getattr(p, "_aphrodite_is_uva_offloaded", False)
+    return p.device.type == "cpu" or getattr(p, "_sonar_is_uva_offloaded", False)
 
 
 @pytest.mark.parametrize("disable_uva", [False, True])
-def test_tower_weight_offloading(aphrodite_runner, monkeypatch, disable_uva):
+def test_tower_weight_offloading(sonar_runner, monkeypatch, disable_uva):
     """`cpu_offload_params` segments must reach towers built outside make_layers.
 
     Regression test: `wrap_modules` was only called from `make_layers`, so a
     directly-constructed vision tower never reached the offloader and segments
     targeting it silently matched nothing.
     """
-    monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
+    monkeypatch.setenv("SONAR_ENABLE_V1_MULTIPROCESSING", "0")
     if disable_uva:
-        monkeypatch.setenv("APHRODITE_WEIGHT_OFFLOADING_DISABLE_UVA", "1")
+        monkeypatch.setenv("SONAR_WEIGHT_OFFLOADING_DISABLE_UVA", "1")
     envs.disable_envs_cache()
     original_offloader = get_offloader()
 
     try:
-        with aphrodite_runner(
+        with sonar_runner(
             "Qwen/Qwen3.5-0.8B",
             enforce_eager=True,
             # allocate more vram as Qwen 3.5 has 1.6 GiB of weights
@@ -114,8 +114,8 @@ def test_tower_weight_offloading(aphrodite_runner, monkeypatch, disable_uva):
             enable_prefix_caching=False,
             cpu_offload_gb=1,
             cpu_offload_params={"visual"},
-        ) as aphrodite_model:
-            engine_core = aphrodite_model.llm.llm_engine.engine_core.engine_core
+        ) as sonar_model:
+            engine_core = sonar_model.llm.llm_engine.engine_core.engine_core
             model_runner = engine_core.model_executor.driver_worker.worker.model_runner
 
             offloader = get_offloader()

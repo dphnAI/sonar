@@ -5,18 +5,18 @@ from dataclasses import dataclass, replace
 
 import torch
 
-from aphrodite.config.compilation import CUDAGraphMode
-from aphrodite.v1.kv_cache_interface import KVCacheConfig
-from aphrodite.v1.spec_decode.dynamic.utils import build_dynamic_sd_schedule_lookup
-from aphrodite.v1.worker.gpu.block_table import BlockTables
-from aphrodite.v1.worker.gpu.cudagraph_utils import (
+from sonar.config.compilation import CUDAGraphMode
+from sonar.v1.kv_cache_interface import KVCacheConfig
+from sonar.v1.spec_decode.dynamic.utils import build_dynamic_sd_schedule_lookup
+from sonar.v1.worker.gpu.block_table import BlockTables
+from sonar.v1.worker.gpu.cudagraph_utils import (
     BatchExecutionDescriptor,
     CudaGraphManager,
     prepare_inputs_to_capture,
 )
-from aphrodite.v1.worker.gpu.input_batch import InputBuffers
-from aphrodite.v1.worker.gpu.model_states.interface import ModelState
-from aphrodite.v1.worker.utils import AttentionGroup
+from sonar.v1.worker.gpu.input_batch import InputBuffers
+from sonar.v1.worker.gpu.model_states.interface import ModelState
+from sonar.v1.worker.utils import AttentionGroup
 
 
 @dataclass(frozen=True)
@@ -54,12 +54,12 @@ class SpeculatorCudaGraphManager(CudaGraphManager):
         specialize_spec_tokens: bool = False,
     ) -> None:
         if specialize_spec_tokens:
-            speculative_config = self.aphrodite_config.speculative_config
+            speculative_config = self.sonar_config.speculative_config
             assert speculative_config is not None
             dense_schedule = build_dynamic_sd_schedule_lookup(
                 speculative_config.num_speculative_tokens_per_batch_size,
-                aphrodite_max_batch_size=self.max_num_reqs,
-                aphrodite_num_speculative_tokens=self.aphrodite_config.num_speculative_tokens,
+                sonar_max_batch_size=self.max_num_reqs,
+                sonar_num_speculative_tokens=self.sonar_config.num_speculative_tokens,
             )
             self._capture_descs = {
                 mode: [
@@ -96,7 +96,7 @@ class SpeculatorCudaGraphManager(CudaGraphManager):
                 forward_kwargs["num_speculative_steps"] = (
                     desc.num_speculative_tokens
                     if isinstance(desc, SpeculatorBatchDescriptor)
-                    else self.aphrodite_config.num_speculative_tokens
+                    else self.sonar_config.num_speculative_tokens
                 )
             return lambda cg_mode: forward_fn(
                 num_reqs,

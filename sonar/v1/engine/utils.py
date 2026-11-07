@@ -16,24 +16,24 @@ from typing import TYPE_CHECKING, cast
 import msgspec
 import zmq
 
-from aphrodite import envs
-from aphrodite.config import AphroditeConfig, CacheConfig, ParallelConfig
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.ray.ray_env import get_env_vars_to_copy
-from aphrodite.utils import numa_utils
-from aphrodite.utils.network_utils import (
+from sonar import envs
+from sonar.config import CacheConfig, ParallelConfig, SonarConfig
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.ray.ray_env import get_env_vars_to_copy
+from sonar.utils import numa_utils
+from sonar.utils.network_utils import (
     ZmqListener,
     get_open_zmq_ipc_path,
     get_tcp_uri,
     make_zmq_listener,
     zmq_socket_ctx,
 )
-from aphrodite.utils.system_utils import get_mp_context, set_env_var
-from aphrodite.v1.engine.coordinator import DPCoordinator
-from aphrodite.v1.executor import Executor, UniProcExecutor
-from aphrodite.v1.executor.ray_utils import WORKER_SPECIFIC_ENV_VARS
-from aphrodite.v1.utils import _SubprocessWrapper, get_engine_client_zmq_addr, shutdown
+from sonar.utils.system_utils import get_mp_context, set_env_var
+from sonar.v1.engine.coordinator import DPCoordinator
+from sonar.v1.executor import Executor, UniProcExecutor
+from sonar.v1.executor.ray_utils import WORKER_SPECIFIC_ENV_VARS
+from sonar.v1.utils import _SubprocessWrapper, get_engine_client_zmq_addr, shutdown
 
 if TYPE_CHECKING:
     from ray.util.placement_group import PlacementGroup
@@ -50,11 +50,11 @@ def get_engine_process_shutdown_timeout(
 ) -> float | None:
     """Return the EngineCore process-manager shutdown timeout.
 
-    ``AphroditeConfig.shutdown_timeout`` controls how long in-flight requests may
+    ``SonarConfig.shutdown_timeout`` controls how long in-flight requests may
     drain. A value of zero therefore tells EngineCore to abort requests as soon
     as it receives SIGTERM. The parent process manager still needs a separate
     window in which the EngineCore can release device resources before it is
-    force-killed. An explicitly set ``APHRODITE_WORKER_SHUTDOWN_TIMEOUT_SECONDS``
+    force-killed. An explicitly set ``SONAR_WORKER_SHUTDOWN_TIMEOUT_SECONDS``
     sets that window on every platform. Otherwise ROCm gets a fixed window:
     its teardown can take longer than the generic best-effort window, and
     force-killing during teardown can leave VRAM resident.
@@ -65,8 +65,8 @@ def get_engine_process_shutdown_timeout(
     because EngineCore relies on that deadline to enforce request draining.
     """
     if request_timeout == 0 and process_timeout == 0:
-        if envs.is_set("APHRODITE_WORKER_SHUTDOWN_TIMEOUT_SECONDS"):
-            return float(envs.APHRODITE_WORKER_SHUTDOWN_TIMEOUT_SECONDS)
+        if envs.is_set("SONAR_WORKER_SHUTDOWN_TIMEOUT_SECONDS"):
+            return float(envs.SONAR_WORKER_SHUTDOWN_TIMEOUT_SECONDS)
         if current_platform.is_rocm():
             return ROCM_ENGINE_PROCESS_SHUTDOWN_TIMEOUT_S
     return process_timeout
@@ -199,8 +199,8 @@ def _configure_uniproc_startup_threads(executor_class: type[Executor], local_eng
 
     import torch
 
-    from aphrodite.utils.torch_utils import (
-        OMP_NUM_THREADS_SET_BY_APHRODITE,
+    from sonar.utils.torch_utils import (
+        OMP_NUM_THREADS_SET_BY_SONAR,
         set_default_torch_num_threads,
         startup_omp_num_threads,
     )
@@ -213,7 +213,7 @@ def _configure_uniproc_startup_threads(executor_class: type[Executor], local_eng
     # Fork inherits Torch's setting; spawn reads OMP_NUM_THREADS on import.
     with (
         set_env_var("OMP_NUM_THREADS", str(num_threads)),
-        set_env_var(OMP_NUM_THREADS_SET_BY_APHRODITE, "1"),
+        set_env_var(OMP_NUM_THREADS_SET_BY_SONAR, "1"),
         torch_threads,
     ):
         yield
@@ -229,7 +229,7 @@ class CoreEngineProcManager:
         local_engine_count: int,
         start_index: int,
         local_start_index: int,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         local_client: bool,
         handshake_address: str,
         executor_class: type[Executor],
@@ -237,10 +237,10 @@ class CoreEngineProcManager:
         client_handshake_address: str | None = None,
         tensor_queue: Queue | None = None,
     ):
-        self._request_shutdown_timeout = aphrodite_config.shutdown_timeout
+        self._request_shutdown_timeout = sonar_config.shutdown_timeout
         context = get_mp_context()
         common_kwargs = {
-            "aphrodite_config": aphrodite_config,
+            "sonar_config": sonar_config,
             "local_client": local_client,
             "handshake_address": handshake_address,
             "executor_class": executor_class,
@@ -251,9 +251,9 @@ class CoreEngineProcManager:
         if client_handshake_address:
             common_kwargs["client_handshake_address"] = client_handshake_address
 
-        is_dp = aphrodite_config.parallel_config.data_parallel_size > 1
+        is_dp = sonar_config.parallel_config.data_parallel_size > 1
 
-        from aphrodite.v1.engine.core import EngineCoreProc
+        from sonar.v1.engine.core import EngineCoreProc
 
         self.processes: list[BaseProcess] = []
         local_dp_ranks = []
@@ -280,7 +280,7 @@ class CoreEngineProcManager:
         # --device-ids list before the per-rank shard overwrites it. Mutating
         # the config before each proc.start() works because the spawn method
         # pickles process args at start() time, sequentially per rank.
-        user_assigned_gpu_ids = aphrodite_config.parallel_config.assigned_physical_gpu_ids
+        user_assigned_gpu_ids = sonar_config.parallel_config.assigned_physical_gpu_ids
         try:
             with _configure_uniproc_startup_threads(executor_class, local_engine_count):
                 for proc, local_dp_rank in zip(self.processes, local_dp_ranks):
@@ -288,10 +288,8 @@ class CoreEngineProcManager:
                     # platforms that cannot rely on
                     # torch.accelerator.set_device_index(), and for Ray.
                     needs_device_env_isolation = not (current_platform.is_cuda_alike() or current_platform.is_xpu())
-                    if is_dp and (needs_device_env_isolation or aphrodite_config.parallel_config.use_ray):
-                        set_assigned_physical_gpu_ids_for_dp_rank(
-                            aphrodite_config, local_dp_rank, user_assigned_gpu_ids
-                        )
+                    if is_dp and (needs_device_env_isolation or sonar_config.parallel_config.use_ray):
+                        set_assigned_physical_gpu_ids_for_dp_rank(sonar_config, local_dp_rank, user_assigned_gpu_ids)
 
                     with numa_utils.configure_subprocess(
                         # EngineCore itself does not have a TP/PP-local rank.
@@ -301,7 +299,7 @@ class CoreEngineProcManager:
                         # this shard". The actual TP/PP worker processes spawned
                         # by the executor are bound separately with their own
                         # local_rank values.
-                        aphrodite_config,
+                        sonar_config,
                         local_rank=0,
                         dp_local_rank=local_dp_rank,
                         process_kind="EngineCore",
@@ -378,7 +376,7 @@ class SignalCallback:
 
 
 def set_assigned_physical_gpu_ids_for_dp_rank(
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     local_dp_rank: int,
     user_assigned_gpu_ids: list[int] | None = None,
 ) -> None:
@@ -389,8 +387,8 @@ def set_assigned_physical_gpu_ids_for_dp_rank(
     explicitly rather than read from the config because callers may reuse
     one config object across DP ranks, overwriting the field each time.
     """
-    world_size = aphrodite_config.parallel_config.world_size
-    local_world_size = aphrodite_config.parallel_config.local_world_size
+    world_size = sonar_config.parallel_config.world_size
+    local_world_size = sonar_config.parallel_config.local_world_size
     evar = current_platform.device_control_env_var
 
     physical_gpu_ids = get_physical_gpu_ids_for_local_dp_rank(
@@ -400,7 +398,7 @@ def set_assigned_physical_gpu_ids_for_dp_rank(
         local_world_size,
         user_assigned_gpu_ids=user_assigned_gpu_ids,
     )
-    aphrodite_config.parallel_config.assigned_physical_gpu_ids = physical_gpu_ids
+    sonar_config.parallel_config.assigned_physical_gpu_ids = physical_gpu_ids
 
 
 def get_physical_gpu_ids_for_local_dp_rank(
@@ -450,16 +448,14 @@ def get_physical_gpu_ids_for_local_dp_rank(
         ) from e
 
 
-def _apply_dp_identity_suffix(dp_aphrodite_config, dp_rank: int) -> None:
+def _apply_dp_identity_suffix(dp_sonar_config, dp_rank: int) -> None:
     # Ray actor names (RayExecutorV2) and KV-connector engine_ids must
     # be unique across sibling DP engines or registration collides.
     # Use the global DP rank, not a node-local rank, since sibling DP
     # engines can span multiple nodes.
-    dp_aphrodite_config.instance_id = f"{dp_aphrodite_config.instance_id}_dp{dp_rank}"
-    if dp_aphrodite_config.kv_transfer_config is not None:
-        dp_aphrodite_config.kv_transfer_config.engine_id = (
-            f"{dp_aphrodite_config.kv_transfer_config.engine_id}_dp{dp_rank}"
-        )
+    dp_sonar_config.instance_id = f"{dp_sonar_config.instance_id}_dp{dp_rank}"
+    if dp_sonar_config.kv_transfer_config is not None:
+        dp_sonar_config.kv_transfer_config.engine_id = f"{dp_sonar_config.kv_transfer_config.engine_id}_dp{dp_rank}"
 
 
 class CoreEngineActorManager:
@@ -472,7 +468,7 @@ class CoreEngineActorManager:
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         addresses: EngineZmqAddresses,
         executor_class: type[Executor],
         log_stats: bool,
@@ -485,10 +481,10 @@ class CoreEngineActorManager:
         from ray.runtime_env import RuntimeEnv
         from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 
-        from aphrodite.v1.engine.core import DPMoEEngineCoreActor, EngineCoreActor
+        from sonar.v1.engine.core import DPMoEEngineCoreActor, EngineCoreActor
 
-        dp_size = aphrodite_config.parallel_config.data_parallel_size
-        actor_class = DPMoEEngineCoreActor if dp_size > 1 and aphrodite_config.model_config.is_moe else EngineCoreActor
+        dp_size = sonar_config.parallel_config.data_parallel_size
+        actor_class = DPMoEEngineCoreActor if dp_size > 1 and sonar_config.model_config.is_moe else EngineCoreActor
 
         self.local_engine_actors: list[ray.ActorHandle] = []
         self.remote_engine_actors: list[ray.ActorHandle] = []
@@ -503,8 +499,8 @@ class CoreEngineActorManager:
         self.addresses = addresses
         self.executor_class = executor_class
         self.log_stats = log_stats
-        local_engine_count = aphrodite_config.parallel_config.data_parallel_size_local
-        world_size = aphrodite_config.parallel_config.world_size
+        local_engine_count = sonar_config.parallel_config.data_parallel_size_local
+        world_size = sonar_config.parallel_config.world_size
         self.manager_stopped = threading.Event()
         self.failed_proc_name: str | None = None
 
@@ -513,9 +509,9 @@ class CoreEngineActorManager:
         else:
             ray.init()
 
-        parallel_config = aphrodite_config.parallel_config
+        parallel_config = sonar_config.parallel_config
         if parallel_config.enable_elastic_ep:
-            from aphrodite.distributed.utils import create_tcp_store
+            from sonar.distributed.utils import create_tcp_store
 
             ip = parallel_config.data_parallel_master_ip
             store = create_tcp_store(
@@ -537,17 +533,17 @@ class CoreEngineActorManager:
             # TODO(rui): validate passed-in placement groups
             self.created_placement_groups = []
         else:
-            placement_groups, local_dp_ranks = CoreEngineActorManager.create_dp_placement_groups(aphrodite_config)
+            placement_groups, local_dp_ranks = CoreEngineActorManager.create_dp_placement_groups(sonar_config)
             self.created_placement_groups = placement_groups
         assert len(placement_groups) == dp_size, "Number of placement groups must match data parallel size"
 
         self.placement_group_is_local = []
         refs = []
         for index, local_index, pg in zip(range(dp_size), local_dp_ranks, placement_groups):
-            dp_aphrodite_config = copy.deepcopy(aphrodite_config)
+            dp_sonar_config = copy.deepcopy(sonar_config)
             if dp_size > 1:
-                _apply_dp_identity_suffix(dp_aphrodite_config, index)
-            dp_aphrodite_config.parallel_config.placement_group = pg
+                _apply_dp_identity_suffix(dp_sonar_config, index)
+            dp_sonar_config.parallel_config.placement_group = pg
             local_client = index < local_engine_count
 
             # Ray XPU known issue: dpctl initializes the GPU runtime early, so
@@ -571,7 +567,7 @@ class CoreEngineActorManager:
                     runtime_env=runtime_env,
                 )
                 .remote(
-                    aphrodite_config=dp_aphrodite_config,
+                    sonar_config=dp_sonar_config,
                     executor_class=executor_class,
                     log_stats=log_stats,
                     local_client=local_client,
@@ -597,26 +593,26 @@ class CoreEngineActorManager:
 
     @staticmethod
     def create_dp_placement_groups(
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
     ) -> tuple[list["PlacementGroup"], list[int]]:
         """Create placement groups for data parallel."""
         import ray
         from ray._private.state import available_resources_per_node
 
         logger.info("Creating placement groups for data parallel")
-        dp_master_ip = aphrodite_config.parallel_config.data_parallel_master_ip
-        dp_size = aphrodite_config.parallel_config.data_parallel_size
-        dp_size_local = aphrodite_config.parallel_config.data_parallel_size_local
+        dp_master_ip = sonar_config.parallel_config.data_parallel_master_ip
+        dp_size = sonar_config.parallel_config.data_parallel_size
+        dp_size_local = sonar_config.parallel_config.data_parallel_size_local
 
         available_resources = available_resources_per_node()
-        world_size = aphrodite_config.parallel_config.world_size
+        world_size = sonar_config.parallel_config.world_size
         placement_groups: list[PlacementGroup] = []
         local_dp_ranks: list[int] = []
 
         nodes = [node_resources for _, node_resources in _dp_nodes_master_first(available_resources, dp_master_ip)]
 
         # optionally restrict DP placement to a caller-provided node set.
-        requested_node_ips = {ip.strip() for ip in envs.APHRODITE_RAY_DP_PLACEMENT_NODE_IPS.split(",") if ip.strip()}
+        requested_node_ips = {ip.strip() for ip in envs.SONAR_RAY_DP_PLACEMENT_NODE_IPS.split(",") if ip.strip()}
         if requested_node_ips:
             allowed_node_ips = set(requested_node_ips)
             # The master node must host the local ranks, so it has to be allowed.
@@ -628,7 +624,7 @@ class CoreEngineActorManager:
                 if _node_ip_from_resources(node_resources) in allowed_node_ips
             ]
             logger.info(
-                "APHRODITE_RAY_DP_PLACEMENT_NODE_IPS set; restricting DP placement from %d to %d node(s): %s",
+                "SONAR_RAY_DP_PLACEMENT_NODE_IPS set; restricting DP placement from %d to %d node(s): %s",
                 len(nodes),
                 len(filtered_nodes),
                 sorted(allowed_node_ips),
@@ -642,24 +638,24 @@ class CoreEngineActorManager:
         assert n_node_devices, f"No {device_str} found in Ray cluster."
         max_device_per_node = max(n_node_devices)
 
-        pack_strategy = envs.APHRODITE_RAY_DP_PACK_STRATEGY
+        pack_strategy = envs.SONAR_RAY_DP_PACK_STRATEGY
         _supported_pack_strategies = ("strict", "fill", "span")
         if pack_strategy not in _supported_pack_strategies:
             raise ValueError(
-                f"{envs.APHRODITE_RAY_DP_PACK_STRATEGY} is not supported. "
-                "Make sure to set `APHRODITE_RAY_DP_PACK_STRATEGY` "
+                f"{envs.SONAR_RAY_DP_PACK_STRATEGY} is not supported. "
+                "Make sure to set `SONAR_RAY_DP_PACK_STRATEGY` "
                 f"to one of {_supported_pack_strategies}"
             )
 
-        all2all_backend = aphrodite_config.parallel_config.all2all_backend
+        all2all_backend = sonar_config.parallel_config.all2all_backend
         if pack_strategy == "fill" and (
             all2all_backend == "deepep_high_throughput" or all2all_backend == "deepep_low_latency"
         ):
             raise ValueError(
                 "DeepEP kernels require EP ranks [0,7] (same for [8,15], ...) "
-                "to be on the same node, but APHRODITE_RAY_DP_PACK_STRATEGY=fill "
+                "to be on the same node, but SONAR_RAY_DP_PACK_STRATEGY=fill "
                 "does not guarantee that. "
-                "Please use APHRODITE_RAY_DP_PACK_STRATEGY=strict instead."
+                "Please use SONAR_RAY_DP_PACK_STRATEGY=strict instead."
             )
 
         if pack_strategy in ("strict", "fill"):
@@ -670,7 +666,7 @@ class CoreEngineActorManager:
                 f"World size {world_size} is smaller than the "
                 "maximum number of devices per node "
                 f"{max_device_per_node}. Make sure to set "
-                "`APHRODITE_RAY_DP_PACK_STRATEGY` to `strict` or `fill`"
+                "`SONAR_RAY_DP_PACK_STRATEGY` to `strict` or `fill`"
             )
 
             # if we need multiple nodes per dp group, we require for now that
@@ -688,7 +684,7 @@ class CoreEngineActorManager:
             )
             assert dp_size_local == 1, (
                 f"data-parallel-size-local {dp_size_local} should be set as the "
-                "default (1) for APHRODITE_RAY_DP_PACK_STRATEGY=span. "
+                "default (1) for SONAR_RAY_DP_PACK_STRATEGY=span. "
                 "The actual data-parallel-size-local will be auto determined."
             )
 
@@ -786,7 +782,7 @@ class CoreEngineActorManager:
 
     @staticmethod
     def add_dp_placement_groups(
-        old_aphrodite_config: AphroditeConfig, new_data_parallel_size: int
+        old_sonar_config: SonarConfig, new_data_parallel_size: int
     ) -> tuple[list["PlacementGroup"], list[int]]:
         """Add placement groups for new data parallel size."""
         import ray
@@ -795,14 +791,14 @@ class CoreEngineActorManager:
             total_resources_per_node,
         )
 
-        old_dp_size = old_aphrodite_config.parallel_config.data_parallel_size
+        old_dp_size = old_sonar_config.parallel_config.data_parallel_size
         num_pg_to_create = new_data_parallel_size - old_dp_size
 
         if num_pg_to_create <= 0:
             return [], []
 
-        dp_master_ip = old_aphrodite_config.parallel_config.data_parallel_master_ip
-        world_size = old_aphrodite_config.parallel_config.world_size
+        dp_master_ip = old_sonar_config.parallel_config.data_parallel_master_ip
+        world_size = old_sonar_config.parallel_config.world_size
 
         # Both maps are keyed by node id and only contain live nodes.
         available_resources = available_resources_per_node()
@@ -865,7 +861,7 @@ class CoreEngineActorManager:
 
     def scale_up_elastic_ep(
         self,
-        cur_aphrodite_config: AphroditeConfig,
+        cur_sonar_config: SonarConfig,
         new_data_parallel_size: int,
         num_redundant_experts: int,
     ) -> None:
@@ -875,9 +871,9 @@ class CoreEngineActorManager:
         from ray.runtime_env import RuntimeEnv
         from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 
-        from aphrodite.v1.engine.core import DPMoEEngineCoreActor, EngineCoreActor
+        from sonar.v1.engine.core import DPMoEEngineCoreActor, EngineCoreActor
 
-        actor_class = DPMoEEngineCoreActor if cur_aphrodite_config.model_config.is_moe else EngineCoreActor
+        actor_class = DPMoEEngineCoreActor if cur_sonar_config.model_config.is_moe else EngineCoreActor
 
         cur_data_parallel_size = len(self.local_engine_actors) + len(self.remote_engine_actors)
 
@@ -887,22 +883,22 @@ class CoreEngineActorManager:
             "for scale up"
         )
 
-        placement_groups, local_dp_ranks = self.add_dp_placement_groups(cur_aphrodite_config, new_data_parallel_size)
+        placement_groups, local_dp_ranks = self.add_dp_placement_groups(cur_sonar_config, new_data_parallel_size)
 
-        world_size = cur_aphrodite_config.parallel_config.world_size
-        dp_master_ip = cur_aphrodite_config.parallel_config.data_parallel_master_ip
+        world_size = cur_sonar_config.parallel_config.world_size
+        dp_master_ip = cur_sonar_config.parallel_config.data_parallel_master_ip
         new_local_engines = 0
 
-        runtime_env = RuntimeEnv(env_vars=self.env_vars_dict | {"APHRODITE_ELASTIC_EP_SCALE_UP_LAUNCH": "1"})
+        runtime_env = RuntimeEnv(env_vars=self.env_vars_dict | {"SONAR_ELASTIC_EP_SCALE_UP_LAUNCH": "1"})
         new_actors = []
         for i, (pg, local_rank) in enumerate(zip(placement_groups, local_dp_ranks)):
             rank = cur_data_parallel_size + i
-            dp_aphrodite_config = copy.deepcopy(cur_aphrodite_config)
+            dp_sonar_config = copy.deepcopy(cur_sonar_config)
             if new_data_parallel_size > 1:
-                _apply_dp_identity_suffix(dp_aphrodite_config, rank)
-            dp_aphrodite_config.parallel_config.data_parallel_size = new_data_parallel_size
-            dp_aphrodite_config.parallel_config.eplb_config.num_redundant_experts = num_redundant_experts
-            dp_aphrodite_config.parallel_config.placement_group = pg
+                _apply_dp_identity_suffix(dp_sonar_config, rank)
+            dp_sonar_config.parallel_config.data_parallel_size = new_data_parallel_size
+            dp_sonar_config.parallel_config.eplb_config.num_redundant_experts = num_redundant_experts
+            dp_sonar_config.parallel_config.placement_group = pg
 
             # Check if this placement group is on the head node
             local_client = any(bundle.get("node:" + dp_master_ip, 0) > 0 for bundle in pg.bundle_specs)
@@ -910,8 +906,8 @@ class CoreEngineActorManager:
             if local_client:
                 new_local_engines += 1
                 # Update data_parallel_size_local
-                dp_aphrodite_config.parallel_config.data_parallel_size_local = (
-                    cur_aphrodite_config.parallel_config.data_parallel_size_local + new_local_engines
+                dp_sonar_config.parallel_config.data_parallel_size_local = (
+                    cur_sonar_config.parallel_config.data_parallel_size_local + new_local_engines
                 )
 
             actor = (
@@ -924,7 +920,7 @@ class CoreEngineActorManager:
                     runtime_env=runtime_env,
                 )
                 .remote(
-                    aphrodite_config=dp_aphrodite_config,
+                    sonar_config=dp_sonar_config,
                     executor_class=self.executor_class,
                     log_stats=self.log_stats,
                     local_client=local_client,
@@ -1022,7 +1018,7 @@ class CoreEngineActorManager:
 
 
 def get_engine_zmq_bind_addresses(
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     num_api_servers: int = 1,
 ) -> EngineZmqBindAddresses:
     """Create ZMQ endpoint templates for engine-client communication.
@@ -1031,7 +1027,7 @@ def get_engine_zmq_bind_addresses(
     ``MPClient`` binds its own ZMQ sockets. Cross-process frontends use
     ``bind_engine_zmq_listeners`` so the supervisor binds raw listeners before
     launching engines and transfers listener ownership to each frontend."""
-    parallel_config = aphrodite_config.parallel_config
+    parallel_config = sonar_config.parallel_config
     local_engine_count = parallel_config.data_parallel_size_local
     local_start_index = parallel_config.data_parallel_rank_local
     dp_size = parallel_config.data_parallel_size
@@ -1062,12 +1058,12 @@ def get_engine_zmq_bind_addresses(
 
 
 def bind_engine_zmq_listeners(
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     num_api_servers: int = 1,
 ) -> EngineZmqListeners:
     """Bind frontend transport listeners before launching engines."""
     bind_addresses = get_engine_zmq_bind_addresses(
-        aphrodite_config,
+        sonar_config,
         num_api_servers,
     )
     inputs: list[ZmqListener] = []
@@ -1100,13 +1096,13 @@ class CoreEngineLaunch:
 
 @contextlib.contextmanager
 def launch_core_engines(
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     executor_class: type[Executor],
     log_stats: bool,
     addresses: EngineZmqAddresses,
 ) -> Iterator[CoreEngineLaunch]:
     """Launch engine and DP coordinator processes as needed."""
-    parallel_config = aphrodite_config.parallel_config
+    parallel_config = sonar_config.parallel_config
     dp_size = parallel_config.data_parallel_size
     local_engine_count = parallel_config.data_parallel_size_local
     local_start_index = parallel_config.data_parallel_rank_local
@@ -1120,7 +1116,7 @@ def launch_core_engines(
     # API servers and engine core. Returns a single queue since we only support
     # DP=1 for this data flow.
     tensor_queue: Queue | None = None
-    multimodal_config = aphrodite_config.model_config.multimodal_config
+    multimodal_config = sonar_config.model_config.multimodal_config
     if multimodal_config is not None and multimodal_config.mm_tensor_ipc == "torch_shm":
         tensor_queue = get_mp_context().Queue()
 
@@ -1128,7 +1124,7 @@ def launch_core_engines(
     # The coordinator is needed for:
     # 1. Internal/hybrid LB: collecting and publishing queue stats for load balancing
     # 2. MoE models: wave coordination in addition to stats
-    run_coordinator = aphrodite_config.needs_dp_coordinator and not offline_mode and dp_rank == 0
+    run_coordinator = sonar_config.needs_dp_coordinator and not offline_mode and dp_rank == 0
 
     coord_store = None
 
@@ -1140,7 +1136,7 @@ def launch_core_engines(
     )
 
     if create_coord_store:
-        from aphrodite.distributed.utils import create_tcp_store
+        from sonar.distributed.utils import create_tcp_store
 
         coord_store = create_tcp_store(
             host,
@@ -1159,8 +1155,8 @@ def launch_core_engines(
     if run_coordinator:
         coordinator = DPCoordinator(
             parallel_config,
-            enable_wave_coordination=aphrodite_config.model_config.is_moe,
-            logging_config=aphrodite_config.logging_config,
+            enable_wave_coordination=sonar_config.model_config.is_moe,
+            logging_config=sonar_config.logging_config,
         )
 
         addresses.coordinator_input, addresses.coordinator_output = coordinator.get_engine_socket_addresses()
@@ -1181,7 +1177,7 @@ def launch_core_engines(
         and local_engine_count > 0
         and not parallel_config.enable_elastic_ep
     ):
-        from aphrodite.distributed.utils import create_tcp_store
+        from sonar.distributed.utils import create_tcp_store
 
         coord_store = create_tcp_store(host, 0, is_master=True, world_size=-1, wait_for_workers=False)
         parallel_config._coord_store_port = coord_store.port
@@ -1190,7 +1186,7 @@ def launch_core_engines(
         logger.info("Starting ray-based data parallel backend")
 
         engine_actor_manager = CoreEngineActorManager(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             addresses=addresses,
             executor_class=executor_class,
             log_stats=log_stats,
@@ -1243,7 +1239,7 @@ def launch_core_engines(
         # Start local engines.
         if local_engine_count:
             local_engine_manager = CoreEngineProcManager(
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 executor_class=executor_class,
                 log_stats=log_stats,
                 handshake_address=handshake_address,
@@ -1266,8 +1262,8 @@ def launch_core_engines(
             handshake_socket,
             engines_to_handshake,
             parallel_config,
-            dp_size > 1 and aphrodite_config.model_config.is_moe,
-            aphrodite_config.cache_config,
+            dp_size > 1 and sonar_config.model_config.is_moe,
+            sonar_config.cache_config,
             launch,
         )
 

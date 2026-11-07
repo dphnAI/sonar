@@ -10,25 +10,25 @@ from typing import TYPE_CHECKING, Any, Literal, cast
 
 import torch
 
-from aphrodite.config import get_current_aphrodite_config
-from aphrodite.config.kernel import (
+from sonar.config import get_current_sonar_config
+from sonar.config.kernel import (
     FLASHINFER_MOE_EP_BACKENDS,
     FLASHINFER_MOE_EP_CUTEDSL,
     FLASHINFER_MOE_EP_DEEP_GEMM,
 )
-from aphrodite.distributed import get_ep_group
-from aphrodite.model_executor.layers.fused_moe.config import RoutingMethodType
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.distributed import get_ep_group
+from sonar.model_executor.layers.fused_moe.config import RoutingMethodType
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     kMxfp4Static,
     kNvfp4Static,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.deep_gemm import _import_deep_gemm
+from sonar.platforms import current_platform
+from sonar.utils.deep_gemm import _import_deep_gemm
 
 if TYPE_CHECKING:
-    from aphrodite.model_executor.layers.fused_moe.config import FusedMoEConfig
-    from aphrodite.model_executor.layers.fused_moe.routed_experts import RoutedExperts
+    from sonar.model_executor.layers.fused_moe.config import FusedMoEConfig
+    from sonar.model_executor.layers.fused_moe.routed_experts import RoutedExperts
 
 FlashInferMoeEpKernel = Literal["cutedsl", "deep_gemm"]
 FlashInferMoeEpWeightFormat = Literal["nvfp4", "mxfp4"]
@@ -146,12 +146,12 @@ def flashinfer_moe_ep_unsupported_reasons(
     if spec.kernel == "deep_gemm" and moe.routing_method is not RoutingMethodType.DeepseekV4:
         unsupported.append(f"routing method {moe.routing_method.name}")
 
-    aphrodite_config = get_current_aphrodite_config()
-    if aphrodite_config.weight_transfer_config is not None:
+    sonar_config = get_current_sonar_config()
+    if sonar_config.weight_transfer_config is not None:
         unsupported.append("runtime weight transfer")
-    if aphrodite_config.parallel_config.enable_dbo:
+    if sonar_config.parallel_config.enable_dbo:
         unsupported.append("dual batch overlap")
-    if spec.kernel == "deep_gemm" and aphrodite_config.parallel_config.enable_eplb:
+    if spec.kernel == "deep_gemm" and sonar_config.parallel_config.enable_eplb:
         unsupported.append("EPLB")
     return tuple(unsupported)
 

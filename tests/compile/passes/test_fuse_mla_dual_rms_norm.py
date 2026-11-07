@@ -9,22 +9,22 @@ fused_mla_dual_rms_norm op backed by AITER's fused_qk_rmsnorm kernel.
 import pytest
 import torch
 
-import aphrodite.config
-from aphrodite._aiter_ops import (
+import sonar.config
+from sonar._aiter_ops import (
     is_aiter_found_and_supported,
     rocm_aiter_ops,
 )
-from aphrodite.compilation.passes.utility.noop_elimination import NoOpEliminationPass
-from aphrodite.compilation.passes.utility.post_cleanup import PostCleanupPass
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.compilation.passes.utility.noop_elimination import NoOpEliminationPass
+from sonar.compilation.passes.utility.post_cleanup import PostCleanupPass
+from sonar.config import (
     CompilationConfig,
     CompilationMode,
     ModelConfig,
     PassConfig,
+    SonarConfig,
 )
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.platforms import current_platform
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.platforms import current_platform
 from tests.compile.backend import TestBackend
 
 # MLA attention geometry for DeepSeek-V3 / Kimi-K2
@@ -80,10 +80,10 @@ class MLADualRMSNormTestModel(torch.nn.Module):
         return q_out, kv_normed, k_pe
 
     def ops_in_model_before(self):
-        return [torch.ops.aphrodite_ir.rms_norm.default]
+        return [torch.ops.sonar_ir.rms_norm.default]
 
     def ops_in_model_after(self):
-        return [torch.ops.aphrodite.fused_mla_dual_rms_norm.default]
+        return [torch.ops.sonar.fused_mla_dual_rms_norm.default]
 
 
 @pytest.mark.parametrize("dtype", [torch.bfloat16])
@@ -99,10 +99,10 @@ def test_fuse_mla_dual_rms_norm(
 ):
     torch._dynamo.reset()
 
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         model_config=ModelConfig(dtype=dtype),
         compilation_config=CompilationConfig(
-            mode=CompilationMode.APHRODITE_COMPILE,
+            mode=CompilationMode.SONAR_COMPILE,
             custom_ops=["+rms_norm"],
             pass_config=PassConfig(
                 fuse_mla_dual_rms_norm=True,
@@ -111,8 +111,8 @@ def test_fuse_mla_dual_rms_norm(
         ),
     )
 
-    with aphrodite.config.set_current_aphrodite_config(aphrodite_config), monkeypatch.context() as m:
-        from aphrodite.compilation.passes.fusion.rocm_aiter_fusion import (
+    with sonar.config.set_current_sonar_config(sonar_config), monkeypatch.context() as m:
+        from sonar.compilation.passes.fusion.rocm_aiter_fusion import (
             MLADualRMSNormFusionPass,
         )
 
@@ -120,14 +120,14 @@ def test_fuse_mla_dual_rms_norm(
         torch.set_default_dtype(dtype)
         torch.manual_seed(42)
 
-        m.setenv("APHRODITE_ROCM_USE_AITER", "1")
+        m.setenv("SONAR_ROCM_USE_AITER", "1")
         rocm_aiter_ops.refresh_env_variables()
 
-        fusion_pass = MLADualRMSNormFusionPass(aphrodite_config)
+        fusion_pass = MLADualRMSNormFusionPass(sonar_config)
         passes = [
-            NoOpEliminationPass(aphrodite_config),
+            NoOpEliminationPass(sonar_config),
             fusion_pass,
-            PostCleanupPass(aphrodite_config),
+            PostCleanupPass(sonar_config),
         ]
         backend = TestBackend(*passes)
         model = MLADualRMSNormTestModel(hidden_size)
@@ -188,21 +188,19 @@ class MLADualRMSNormFp8PerTokenTestModel(torch.nn.Module):
         q_c, kv_lora = projected.split([self.q_dim, self.kv_dim], dim=-1)
         kv_c, k_pe = kv_lora.split([self.kv_c_dim, self.k_pe_dim], dim=-1)
 
-        q_fp8, q_scale = torch.ops.aphrodite.rocm_aiter_rmsnorm_fused_dynamic_quant(
-            q_c, self.q_weight, self.eps, FP8_DTYPE
-        )
+        q_fp8, q_scale = torch.ops.sonar.rocm_aiter_rmsnorm_fused_dynamic_quant(q_c, self.q_weight, self.eps, FP8_DTYPE)
         kv_normed = self.kv_norm(kv_c)
 
         return self._dequant(q_fp8, q_scale), kv_normed, k_pe
 
     def ops_in_model_before(self):
         return [
-            torch.ops.aphrodite.rocm_aiter_rmsnorm_fused_dynamic_quant.default,
-            torch.ops.aphrodite_ir.rms_norm.default,
+            torch.ops.sonar.rocm_aiter_rmsnorm_fused_dynamic_quant.default,
+            torch.ops.sonar_ir.rms_norm.default,
         ]
 
     def ops_in_model_after(self):
-        return [torch.ops.aphrodite.fused_mla_dual_rms_norm_per_token_quant.default]
+        return [torch.ops.sonar.fused_mla_dual_rms_norm_per_token_quant.default]
 
 
 @pytest.mark.parametrize("dtype", [torch.bfloat16])
@@ -218,10 +216,10 @@ def test_fuse_mla_dual_rms_norm_fp8_per_token(
 ):
     torch._dynamo.reset()
 
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         model_config=ModelConfig(dtype=dtype),
         compilation_config=CompilationConfig(
-            mode=CompilationMode.APHRODITE_COMPILE,
+            mode=CompilationMode.SONAR_COMPILE,
             custom_ops=["+rms_norm"],
             pass_config=PassConfig(
                 fuse_mla_dual_rms_norm=True,
@@ -230,8 +228,8 @@ def test_fuse_mla_dual_rms_norm_fp8_per_token(
         ),
     )
 
-    with aphrodite.config.set_current_aphrodite_config(aphrodite_config), monkeypatch.context() as m:
-        from aphrodite.compilation.passes.fusion.rocm_aiter_fusion import (
+    with sonar.config.set_current_sonar_config(sonar_config), monkeypatch.context() as m:
+        from sonar.compilation.passes.fusion.rocm_aiter_fusion import (
             MLADualRMSNormFusionPass,
         )
 
@@ -239,14 +237,14 @@ def test_fuse_mla_dual_rms_norm_fp8_per_token(
         torch.set_default_dtype(dtype)
         torch.manual_seed(42)
 
-        m.setenv("APHRODITE_ROCM_USE_AITER", "1")
+        m.setenv("SONAR_ROCM_USE_AITER", "1")
         rocm_aiter_ops.refresh_env_variables()
 
-        fusion_pass = MLADualRMSNormFusionPass(aphrodite_config)
+        fusion_pass = MLADualRMSNormFusionPass(sonar_config)
         passes = [
-            NoOpEliminationPass(aphrodite_config),
+            NoOpEliminationPass(sonar_config),
             fusion_pass,
-            PostCleanupPass(aphrodite_config),
+            PostCleanupPass(sonar_config),
         ]
         backend = TestBackend(*passes)
         model = MLADualRMSNormFp8PerTokenTestModel(hidden_size)
@@ -320,7 +318,7 @@ class MLADualRMSNormFp8GroupTestModel(torch.nn.Module):
         projected = self.proj(x)
         q_c, kv_lora = projected.split([self.q_dim, self.kv_dim], dim=-1)
         kv_c, k_pe = kv_lora.split([self.kv_c_dim, self.k_pe_dim], dim=-1)
-        q_fp8, q_scale = torch.ops.aphrodite.rocm_aiter_rmsnorm_fp8_group_quant(
+        q_fp8, q_scale = torch.ops.sonar.rocm_aiter_rmsnorm_fp8_group_quant(
             q_c, self.q_weight, self.eps, self.GROUP_SIZE
         )
         kv_normed = self.kv_norm(kv_c)
@@ -330,12 +328,12 @@ class MLADualRMSNormFp8GroupTestModel(torch.nn.Module):
 
     def ops_in_model_before(self):
         return [
-            torch.ops.aphrodite.rocm_aiter_rmsnorm_fp8_group_quant.default,
-            torch.ops.aphrodite_ir.rms_norm.default,
+            torch.ops.sonar.rocm_aiter_rmsnorm_fp8_group_quant.default,
+            torch.ops.sonar_ir.rms_norm.default,
         ]
 
     def ops_in_model_after(self):
-        return [torch.ops.aphrodite.fused_mla_dual_rms_norm_group_quant.default]
+        return [torch.ops.sonar.fused_mla_dual_rms_norm_group_quant.default]
 
 
 @pytest.mark.parametrize("dtype", [torch.bfloat16])
@@ -350,10 +348,10 @@ def test_fuse_mla_dual_rms_norm_fp8_group(
     monkeypatch: pytest.MonkeyPatch,
 ):
     torch._dynamo.reset()
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         model_config=ModelConfig(dtype=dtype),
         compilation_config=CompilationConfig(
-            mode=CompilationMode.APHRODITE_COMPILE,
+            mode=CompilationMode.SONAR_COMPILE,
             custom_ops=["+rms_norm"],
             pass_config=PassConfig(
                 fuse_mla_dual_rms_norm=True,
@@ -361,22 +359,22 @@ def test_fuse_mla_dual_rms_norm_fp8_group(
             ),
         ),
     )
-    with aphrodite.config.set_current_aphrodite_config(aphrodite_config), monkeypatch.context() as m:
-        from aphrodite.compilation.passes.fusion.rocm_aiter_fusion import (
+    with sonar.config.set_current_sonar_config(sonar_config), monkeypatch.context() as m:
+        from sonar.compilation.passes.fusion.rocm_aiter_fusion import (
             MLADualRMSNormFusionPass,
         )
 
         torch.set_default_device("cuda")
         torch.set_default_dtype(dtype)
         torch.manual_seed(42)
-        m.setenv("APHRODITE_ROCM_USE_AITER", "1")
+        m.setenv("SONAR_ROCM_USE_AITER", "1")
         rocm_aiter_ops.refresh_env_variables()
 
-        fusion_pass = MLADualRMSNormFusionPass(aphrodite_config)
+        fusion_pass = MLADualRMSNormFusionPass(sonar_config)
         passes = [
-            NoOpEliminationPass(aphrodite_config),
+            NoOpEliminationPass(sonar_config),
             fusion_pass,
-            PostCleanupPass(aphrodite_config),
+            PostCleanupPass(sonar_config),
         ]
         backend = TestBackend(*passes)
         model = MLADualRMSNormFp8GroupTestModel(hidden_size)

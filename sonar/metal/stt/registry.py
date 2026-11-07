@@ -8,10 +8,10 @@ from collections.abc import Callable
 
 import mlx.core as mx
 
-from aphrodite.metal.stt.qwen3_asr.config import Qwen3ASRConfig
-from aphrodite.metal.stt.qwen3_asr.model import Qwen3ASRModel
-from aphrodite.metal.stt.whisper.config import WhisperConfig
-from aphrodite.metal.stt.whisper.model import WhisperModel
+from sonar.metal.stt.qwen3_asr.config import Qwen3ASRConfig
+from sonar.metal.stt.qwen3_asr.model import Qwen3ASRModel
+from sonar.metal.stt.whisper.config import WhisperConfig
+from sonar.metal.stt.whisper.model import WhisperModel
 
 STTModel = WhisperModel | Qwen3ASRModel
 STTModelConstructor = Callable[[dict, mx.Dtype], STTModel]

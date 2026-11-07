@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Qwen3-ASR runtime adapter for Aphrodite STT execution."""
+"""Qwen3-ASR runtime adapter for Sonar STT execution."""
 
 from __future__ import annotations
 
 import mlx.core as mx
 
-from aphrodite.metal.stt.runtime import STTAudioInput, STTRuntimeAdapter
+from sonar.metal.stt.runtime import STTAudioInput, STTRuntimeAdapter
 
 from .model import Qwen3ASRModel
 from .transcriber import Qwen3ASRTranscriber

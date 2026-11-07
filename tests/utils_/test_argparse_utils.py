@@ -12,9 +12,9 @@ import yaml
 from transformers import AutoTokenizer
 from pydantic import ValidationError
 
-from aphrodite.tokenizers.detokenizer_utils import convert_ids_list_to_tokens
+from sonar.tokenizers.detokenizer_utils import convert_ids_list_to_tokens
 
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
+from sonar.utils.argparse_utils import FlexibleArgumentParser
 from ..utils import flat_product
 
 
@@ -259,7 +259,7 @@ def test_dict_args(parser):
     }
 
 
-def test_duplicate_dict_args(caplog_aphrodite, parser):
+def test_duplicate_dict_args(caplog_sonar, parser):
     args = [
         "--model-name=something.something",
         "--hf-overrides.key1",
@@ -278,14 +278,14 @@ def test_duplicate_dict_args(caplog_aphrodite, parser):
     assert parsed_args.optimization_level == 3
     assert parsed_args.compilation_config == {"mode": 2}
 
-    assert len(caplog_aphrodite.records) == 1
-    assert "duplicate" in caplog_aphrodite.text
-    assert "--hf-overrides.key1" in caplog_aphrodite.text
-    assert "--optimization-level" in caplog_aphrodite.text
+    assert len(caplog_sonar.records) == 1
+    assert "duplicate" in caplog_sonar.text
+    assert "--hf-overrides.key1" in caplog_sonar.text
+    assert "--optimization-level" in caplog_sonar.text
 
 
 @pytest.mark.skipif(sys.version_info >= (3, 13), reason="argparse handles deprecated natively")
-def test_deprecated_arg_scoped_to_subcommand(caplog_aphrodite, disable_log_dedup):
+def test_deprecated_arg_scoped_to_subcommand(caplog_sonar, disable_log_dedup):
     """A deprecated arg of one subcommand must not warn for a sibling
     subcommand that defines a non-deprecated arg with the same dest."""
     parser = FlexibleArgumentParser()
@@ -296,10 +296,10 @@ def test_deprecated_arg_scoped_to_subcommand(caplog_aphrodite, disable_log_dedup
     chat.add_argument("--url", default="http://localhost:8000/v1")
 
     parser.parse_args(["chat", "--url", "http://localhost:9000/v1"])
-    assert "is deprecated" not in caplog_aphrodite.text
+    assert "is deprecated" not in caplog_sonar.text
 
     parser.parse_args(["run-batch", "--url", "1.2.3.4"])
-    assert caplog_aphrodite.text.count("argument 'url' is deprecated") == 1
+    assert caplog_sonar.text.count("argument 'url' is deprecated") == 1
 
 
 def test_model_specification(parser_with_config, cli_config_file, cli_config_file_with_model):
@@ -327,7 +327,7 @@ def test_model_specification(parser_with_config, cli_config_file, cli_config_fil
     # with pytest.raises(
     #         ValueError,
     #         match=
-    #     ("With `aphrodite serve`, you should provide the model as a positional "
+    #     ("With `sonar serve`, you should provide the model as a positional "
     #      "argument or in a config file instead of via the `--model` option."),
     # ):
     #     parser_with_config.parse_args(['serve', '--model', 'my-model'])
@@ -506,25 +506,25 @@ def test_compilation_mode_string_values(parser):
     args = parser.parse_args(["-cc.mode=DYNAMO_TRACE_ONCE"])
     assert args.compilation_config == {"mode": "DYNAMO_TRACE_ONCE"}
 
-    args = parser.parse_args(["-cc.mode", "APHRODITE_COMPILE"])
-    assert args.compilation_config == {"mode": "APHRODITE_COMPILE"}
+    args = parser.parse_args(["-cc.mode", "SONAR_COMPILE"])
+    assert args.compilation_config == {"mode": "SONAR_COMPILE"}
 
     args = parser.parse_args(["-cc.mode=none"])
     assert args.compilation_config == {"mode": "none"}
 
-    args = parser.parse_args(["-cc.mode=aphrodite_compile"])
-    assert args.compilation_config == {"mode": "aphrodite_compile"}
+    args = parser.parse_args(["-cc.mode=sonar_compile"])
+    assert args.compilation_config == {"mode": "sonar_compile"}
 
 
 def test_compilation_config_mode_validator():
     """Test that CompilationConfig.mode field validator converts strings to integers."""
-    from aphrodite.config.compilation import CompilationConfig, CompilationMode
+    from sonar.config.compilation import CompilationConfig, CompilationMode
 
     config = CompilationConfig(mode=0)
     assert config.mode == CompilationMode.NONE
 
     config = CompilationConfig(mode=3)
-    assert config.mode == CompilationMode.APHRODITE_COMPILE
+    assert config.mode == CompilationMode.SONAR_COMPILE
 
     config = CompilationConfig(mode="NONE")
     assert config.mode == CompilationMode.NONE
@@ -535,14 +535,14 @@ def test_compilation_config_mode_validator():
     config = CompilationConfig(mode="DYNAMO_TRACE_ONCE")
     assert config.mode == CompilationMode.DYNAMO_TRACE_ONCE
 
-    config = CompilationConfig(mode="APHRODITE_COMPILE")
-    assert config.mode == CompilationMode.APHRODITE_COMPILE
+    config = CompilationConfig(mode="SONAR_COMPILE")
+    assert config.mode == CompilationMode.SONAR_COMPILE
 
     config = CompilationConfig(mode="none")
     assert config.mode == CompilationMode.NONE
 
-    config = CompilationConfig(mode="aphrodite_compile")
-    assert config.mode == CompilationMode.APHRODITE_COMPILE
+    config = CompilationConfig(mode="sonar_compile")
+    assert config.mode == CompilationMode.SONAR_COMPILE
 
     with pytest.raises(ValidationError, match="Invalid compilation mode"):
         CompilationConfig(mode="INVALID_MODE")

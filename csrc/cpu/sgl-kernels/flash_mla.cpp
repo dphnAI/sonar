@@ -4,11 +4,11 @@
 // DeepSeek-V4 sparse MQA attention kernel for the fp8_ds_mla cache layout.
 // Near-verbatim port of `sparse_mla_decode_kernel_impl` (VNNI K/V packing +
 // AMX brgemm QK^T/PV + online softmax); the `V4_FP8Sparse` byte layout
-// matches Aphrodite's fp8_ds_mla layout exactly (see store_cache.cpp).
+// matches Sonar's fp8_ds_mla layout exactly (see store_cache.cpp).
 //
 // Differences from upstream:
 // - Outer shape: upstream takes a padded batch-major query `[B, S_q, H, D]`
-//   with per-batch topk sets; Aphrodite passes flat `[num_tokens, H, D]` with
+//   with per-batch topk sets; Sonar passes flat `[num_tokens, H, D]` with
 //   per-token resolved indices. The kernel's own `at::parallel_for` already
 //   flattens `(batch, s_q)` internally, so this is called with
 //   `batches = num_tokens, s_q = 1` -- no padding, no kernel-body changes.
@@ -34,7 +34,7 @@
 #if !defined(CPU_CAPABILITY_AVX512)
 static_assert(false,
               "flash_mla.cpp is only ever compiled into the AVX512+AMX-flagged "
-              "_C target (see cmake/cpu_extension.cmake's APHRODITE_EXT_SRC_SGL) and "
+              "_C target (see cmake/cpu_extension.cmake's SONAR_EXT_SRC_SGL) and "
               "relies on that unconditionally -- CPU_CAPABILITY_AVX512 must be "
               "defined here.");
 #endif
@@ -51,7 +51,7 @@ constexpr int64_t kTokenDataBytes = kNopeDim + kRopeDim * 2;
 
 // ---------------------------------------------------------------------------
 // V4_FP8Sparse layout (SGLang's `flash_mla.cpp`) -- byte-for-byte identical
-// to Aphrodite's own fp8_ds_mla layout above (d=512, d_nope=448, d_rope=64,
+// to Sonar's own fp8_ds_mla layout above (d=512, d_nope=448, d_rope=64,
 // tile=64, num_tiles=7):
 //   per block:
 //     [block_size * (d_nope + 2*d_rope) bytes ; FP8 NoPE + bf16 RoPE per token]
@@ -287,7 +287,7 @@ inline void fmla_finalize_out(scalar_t* __restrict__ out, const float* __restric
 
 // ---------------------------------------------------------------------------
 // query    : [num_tokens, H_q, D_qk]      bf16 (SGLang's `[B, S_q, H_q, D]`
-//            with S_q folded away -- Aphrodite's flat per-token convention)
+//            with S_q folded away -- Sonar's flat per-token convention)
 // indices  : [num_tokens, topk_main]      int64 (flat, block-table-resolved
 //            slot ids, -1 = invalid; SGLang's "main"/window index set)
 // extra_*  : same, for the optional "extra"/compressed index set
@@ -332,7 +332,7 @@ void sparse_mla_decode_kernel_impl(
   const int64_t BLOCK_H = (batches * s_q) >= 16 ? kBLOCK_H_MAX : 8;
   const int64_t num_h_blocks = div_up(num_heads, BLOCK_H);
 
-  // parallel on [B, S_q, head_block] -- with s_q == 1 (Aphrodite's flat call
+  // parallel on [B, S_q, head_block] -- with s_q == 1 (Sonar's flat call
   // convention) this collapses to a plain [num_tokens, head_block] loop,
   // one flat iteration per token with no padding to skip.
   at::parallel_for(0, batches * s_q * num_h_blocks, 0, [&](int64_t begin, int64_t end) {

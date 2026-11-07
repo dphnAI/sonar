@@ -10,13 +10,13 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from aphrodite.utils.cuda_process_checkpoint import CudaProcessCheckpoint, Driver
+from sonar.utils.cuda_process_checkpoint import CudaProcessCheckpoint, Driver
 
 
 @pytest.mark.parametrize("rank_count", [1, 2])
 def test_all_ranks_restore_before_any_unlock(rank_count):
     events: list[tuple[int, str]] = []
-    with patch("aphrodite.utils.cuda_process_checkpoint.Driver") as driver:
+    with patch("sonar.utils.cuda_process_checkpoint.Driver") as driver:
         driver.return_value.run_stage.side_effect = lambda pids, op: events.extend((pid, op) for pid in pids)
         checkpoint = CudaProcessCheckpoint(lambda **event: None)
         checkpoint.suspend(list(range(1, rank_count + 1)))
@@ -35,7 +35,7 @@ def test_partial_failure_prevents_further_rank_operations():
         if pid == 22 and op == "Restore":
             raise RuntimeError("injected restore failure")
 
-    with patch("aphrodite.utils.cuda_process_checkpoint.Driver") as driver:
+    with patch("sonar.utils.cuda_process_checkpoint.Driver") as driver:
         driver.return_value.run_stage.side_effect = lambda pids, op: [invoke(pid, op) for pid in pids]
         checkpoint = CudaProcessCheckpoint(lambda **event: None)
         checkpoint.suspend([11, 22])
@@ -98,7 +98,7 @@ def test_helper_close_reaps_real_process():
 def test_driver_stage_runs_ranks_concurrently():
     import threading
 
-    from aphrodite.utils.cuda_process_checkpoint import _run_parallel_stage
+    from sonar.utils.cuda_process_checkpoint import _run_parallel_stage
 
     pids = [11, 22, 33, 44]
     barrier = threading.Barrier(len(pids), timeout=2)
@@ -112,7 +112,7 @@ def test_driver_stage_runs_ranks_concurrently():
 
 
 def test_driver_stage_collects_rank_failure():
-    from aphrodite.utils.cuda_process_checkpoint import _run_parallel_stage
+    from sonar.utils.cuda_process_checkpoint import _run_parallel_stage
 
     def invoke(pid, op):
         if pid == 22:
@@ -186,7 +186,7 @@ def test_rank_failure_with_blocked_peer_times_out_and_reaps_helper():
                 import json
                 import sys
                 import time
-                from aphrodite.utils.cuda_process_checkpoint import _run_parallel_stage
+                from sonar.utils.cuda_process_checkpoint import _run_parallel_stage
 
                 def invoke(pid, op):
                     if pid == 11:

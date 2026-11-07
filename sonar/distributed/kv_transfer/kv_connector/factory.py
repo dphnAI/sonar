@@ -5,21 +5,21 @@ import importlib
 from collections.abc import Callable
 from typing import TYPE_CHECKING, cast
 
-from aphrodite.config.kv_transfer import KVTransferConfig
-from aphrodite.distributed.kv_transfer.kv_connector.base import (
+from sonar.config.kv_transfer import KVTransferConfig
+from sonar.distributed.kv_transfer.kv_connector.base import (
     KVConnectorBase,
     KVConnectorBaseType,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1 import (
+from sonar.distributed.kv_transfer.kv_connector.v1 import (
     KVConnectorRole,
     supports_hma,
 )
-from aphrodite.logger import init_logger
-from aphrodite.utils.func_utils import supports_kw
+from sonar.logger import init_logger
+from sonar.utils.func_utils import supports_kw
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
-    from aphrodite.v1.kv_cache_interface import KVCacheConfig
+    from sonar.config import SonarConfig
+    from sonar.v1.kv_cache_interface import KVCacheConfig
 
 logger = init_logger(__name__)
 
@@ -42,7 +42,7 @@ class KVConnectorFactory:
     @classmethod
     def create_connector(
         cls,
-        config: "AphroditeConfig",
+        config: "SonarConfig",
         role: KVConnectorRole,
         kv_cache_config: "KVCacheConfig",
     ) -> KVConnectorBase:
@@ -138,7 +138,7 @@ class KVConnectorFactory:
         if kv_transfer_config.kv_connector != "MultiConnector":
             return supports_hma(connector_cls)
 
-        from aphrodite.distributed.kv_transfer.kv_connector.v1.multi_connector import (
+        from sonar.distributed.kv_transfer.kv_connector.v1.multi_connector import (
             MultiConnector,
         )
 
@@ -151,103 +151,103 @@ class KVConnectorFactory:
 
 KVConnectorFactory.register_connector(
     "ExampleConnector",
-    "aphrodite.distributed.kv_transfer.kv_connector.v1.example_connector",
+    "sonar.distributed.kv_transfer.kv_connector.v1.example_connector",
     "ExampleConnector",
 )
 
 KVConnectorFactory.register_connector(
     "ExampleHiddenStatesConnector",
-    "aphrodite.distributed.kv_transfer.kv_connector.v1.example_hidden_states_connector",
+    "sonar.distributed.kv_transfer.kv_connector.v1.example_hidden_states_connector",
     "ExampleHiddenStatesConnector",
 )
 
 KVConnectorFactory.register_connector(
     "LMCacheConnectorV1",
-    "aphrodite.distributed.kv_transfer.kv_connector.v1.lmcache_connector",
+    "sonar.distributed.kv_transfer.kv_connector.v1.lmcache_connector",
     "LMCacheConnectorV1",
 )
 
 KVConnectorFactory.register_connector(
     "LMCacheMPConnector",
-    "aphrodite.distributed.kv_transfer.kv_connector.v1.lmcache_mp_connector",
+    "sonar.distributed.kv_transfer.kv_connector.v1.lmcache_mp_connector",
     "LMCacheMPConnector",
 )
 
 KVConnectorFactory.register_connector(
     "NixlConnector",
-    "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl",
+    "sonar.distributed.kv_transfer.kv_connector.v1.nixl",
     "NixlConnector",
 )
 
 KVConnectorFactory.register_connector(
     "NixlPullConnector",
-    "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl",
+    "sonar.distributed.kv_transfer.kv_connector.v1.nixl",
     "NixlPullConnector",
 )
 
 KVConnectorFactory.register_connector(
     "NixlPushConnector",
-    "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl",
+    "sonar.distributed.kv_transfer.kv_connector.v1.nixl",
     "NixlPushConnector",
 )
 
 KVConnectorFactory.register_connector(
     "MultiConnector",
-    "aphrodite.distributed.kv_transfer.kv_connector.v1.multi_connector",
+    "sonar.distributed.kv_transfer.kv_connector.v1.multi_connector",
     "MultiConnector",
 )
 
 KVConnectorFactory.register_connector(
     "HiSparseConnector",
-    "aphrodite.distributed.kv_transfer.kv_connector.v1.hisparse.connector",
+    "sonar.distributed.kv_transfer.kv_connector.v1.hisparse.connector",
     "HiSparseConnector",
 )
 
 KVConnectorFactory.register_connector(
     "MoRIIOConnector",
-    "aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_connector",
+    "sonar.distributed.kv_transfer.kv_connector.v1.moriio.moriio_connector",
     "MoRIIOConnector",
 )
 
 KVConnectorFactory.register_connector(
     "OffloadingConnector",
-    "aphrodite.distributed.kv_transfer.kv_connector.v1.offloading_connector",
+    "sonar.distributed.kv_transfer.kv_connector.v1.offloading_connector",
     "OffloadingConnector",
 )
 
 KVConnectorFactory.register_connector(
     "DecodeBenchConnector",
-    "aphrodite.distributed.kv_transfer.kv_connector.v1.decode_bench_connector",
+    "sonar.distributed.kv_transfer.kv_connector.v1.decode_bench_connector",
     "DecodeBenchConnector",
 )
 
 KVConnectorFactory.register_connector(
     "MooncakeConnector",
-    "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connector",
+    "sonar.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connector",
     "MooncakeConnector",
 )
 KVConnectorFactory.register_connector(
     "MooncakeStoreConnector",
-    "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.connector",
+    "sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.connector",
     "MooncakeStoreConnector",
 )
 KVConnectorFactory.register_connector(
     "UMBPStoreConnector",
-    "aphrodite.distributed.kv_transfer.kv_connector.v1.umbp",
+    "sonar.distributed.kv_transfer.kv_connector.v1.umbp",
     "UMBPStoreConnector",
 )
 KVConnectorFactory.register_connector(
     "FlexKVConnectorV1",
-    "aphrodite.distributed.kv_transfer.kv_connector.v1.flexkv_connector",
+    "sonar.distributed.kv_transfer.kv_connector.v1.flexkv_connector",
     "FlexKVConnectorV1",
 )
 KVConnectorFactory.register_connector(
     "SimpleCPUOffloadConnector",
-    "aphrodite.distributed.kv_transfer.kv_connector.v1.simple_cpu_offload_connector",
+    "sonar.distributed.kv_transfer.kv_connector.v1.simple_cpu_offload_connector",
     "SimpleCPUOffloadConnector",
 )
 KVConnectorFactory.register_connector(
     "HF3FSKVConnector",
-    "aphrodite.distributed.kv_transfer.kv_connector.v1.hf3fs.hf3fs_connector",
+    "sonar.distributed.kv_transfer.kv_connector.v1.hf3fs.hf3fs_connector",
     "HF3FSKVConnector",
 )

@@ -8,57 +8,57 @@ import torch.nn as nn
 from torch.nn import LayerNorm
 from transformers.models.qwen2_vl import Qwen2VLProcessor
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.multimodal import MultiModalDummyOptions
-from aphrodite.distributed import utils as dist_utils
-from aphrodite.distributed.parallel_state import (
+from sonar.config import SonarConfig
+from sonar.config.multimodal import MultiModalDummyOptions
+from sonar.distributed import utils as dist_utils
+from sonar.distributed.parallel_state import (
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
 )
-from aphrodite.inputs import MultiModalDataDict
-from aphrodite.model_executor.layers.activation import SiluAndMul
-from aphrodite.model_executor.layers.attention import (
+from sonar.inputs import MultiModalDataDict
+from sonar.model_executor.layers.activation import SiluAndMul
+from sonar.model_executor.layers.attention import (
     MMEncoderAttention,
 )
-from aphrodite.model_executor.layers.conv import Conv2dLayer
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.conv import Conv2dLayer
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     MergedColumnParallelLinear,
     QKVParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.rotary_embedding.common import (
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.rotary_embedding.common import (
     ApplyRotaryEmb,
 )
-from aphrodite.model_executor.models.interfaces import (
+from sonar.model_executor.models.interfaces import (
     MultiModalEmbeddings,
     SupportsLoRA,
     SupportsMultiModal,
     SupportsPP,
 )
-from aphrodite.model_executor.models.module_mapping import MultiModelKeys
-from aphrodite.model_executor.models.qwen2 import Qwen2ForCausalLM
-from aphrodite.model_executor.models.qwen2_vl import (
+from sonar.model_executor.models.module_mapping import MultiModelKeys
+from sonar.model_executor.models.qwen2 import Qwen2ForCausalLM
+from sonar.model_executor.models.qwen2_vl import (
     Qwen2VisionAttention,
     Qwen2VLDummyInputsBuilder,
     Qwen2VLMultiModalProcessor,
     Qwen2VLProcessingInfo,
 )
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.models.utils import (
     AutoWeightsLoader,
     WeightsMapper,
-    init_aphrodite_registered_model,
+    init_sonar_registered_model,
     maybe_prefix,
 )
-from aphrodite.model_executor.models.vision import get_vit_attn_backend
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import MultiModalKwargsItem
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.transformers_utils.configs.dotsocr import DotsOCRConfig, DotsVisionConfig
-from aphrodite.utils.tensor_schema import TensorSchema, TensorShape
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
+from sonar.model_executor.models.vision import get_vit_attn_backend
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import MultiModalKwargsItem
+from sonar.sequence import IntermediateTensors
+from sonar.transformers_utils.configs.dotsocr import DotsOCRConfig, DotsVisionConfig
+from sonar.utils.tensor_schema import TensorSchema, TensorShape
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
 
 from .vision import is_vit_use_data_parallel, run_dp_sharded_mrope_vision_model
 
@@ -570,7 +570,7 @@ class DotsVisionTransformer(nn.Module):
     dummy_inputs=DotsOCRDummyInputsBuilder,
 )
 class DotsOCRForCausalLM(nn.Module, SupportsMultiModal, SupportsPP, SupportsLoRA):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_substr={
             ".attn.qkv_proj.": ".attn.qkv.",
             ".attn.out_proj.": ".attn.proj.",
@@ -607,12 +607,12 @@ class DotsOCRForCausalLM(nn.Module, SupportsMultiModal, SupportsPP, SupportsLoRA
             return "<|img|><|imgpad|><|endofimg|>"
         return None
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
 
-        self.config: DotsOCRConfig = aphrodite_config.model_config.hf_config
-        self.quant_config = aphrodite_config.quant_config
-        multimodal_config = aphrodite_config.model_config.multimodal_config
+        self.config: DotsOCRConfig = sonar_config.model_config.hf_config
+        self.quant_config = sonar_config.quant_config
+        multimodal_config = sonar_config.model_config.multimodal_config
         assert multimodal_config is not None
         self.use_data_parallel = multimodal_config.mm_encoder_tp_mode == "data"
         if isinstance(self.config.vision_config, dict):
@@ -621,16 +621,16 @@ class DotsOCRForCausalLM(nn.Module, SupportsMultiModal, SupportsPP, SupportsLoRA
         else:
             vision_config = self.config.vision_config
 
-        with self._mark_tower_model(aphrodite_config, "image"):
+        with self._mark_tower_model(sonar_config, "image"):
             self.vision_tower = DotsVisionTransformer(
                 vision_config,
                 quant_config=self.quant_config,
                 prefix=maybe_prefix(prefix, "vision_tower"),
             )
 
-        with self._mark_language_model(aphrodite_config):
-            self.language_model: Qwen2ForCausalLM = init_aphrodite_registered_model(
-                aphrodite_config=aphrodite_config,
+        with self._mark_language_model(sonar_config):
+            self.language_model: Qwen2ForCausalLM = init_sonar_registered_model(
+                sonar_config=sonar_config,
                 hf_config=self.config,
                 prefix=maybe_prefix(prefix, "language_model"),
                 architectures=["Qwen2ForCausalLM"],
@@ -734,7 +734,7 @@ class DotsOCRForCausalLM(nn.Module, SupportsMultiModal, SupportsPP, SupportsLoRA
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
     def get_mm_mapping(self) -> MultiModelKeys:
         """Get the module prefix in multimodal models."""

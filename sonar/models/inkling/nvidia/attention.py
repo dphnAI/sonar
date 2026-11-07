@@ -7,26 +7,26 @@ from typing import cast
 import torch
 from torch import nn
 
-from aphrodite.compilation.breakable_cudagraph import eager_break_during_capture
-from aphrodite.config import AphroditeConfig, get_current_aphrodite_config
-from aphrodite.distributed import get_tensor_model_parallel_world_size
-from aphrodite.forward_context import get_forward_context
-from aphrodite.model_executor.layers.attention_layer_base import AttentionLayerBase
-from aphrodite.model_executor.layers.linear import (
+from sonar.compilation.breakable_cudagraph import eager_break_during_capture
+from sonar.config import SonarConfig, get_current_sonar_config
+from sonar.distributed import get_tensor_model_parallel_world_size
+from sonar.forward_context import get_forward_context
+from sonar.model_executor.layers.attention_layer_base import AttentionLayerBase
+from sonar.model_executor.layers.linear import (
     MergedColumnParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.utils.torch_utils import (
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.utils.torch_utils import (
     canonicalize_singleton_dim_strides,
     kv_cache_dtype_str_to_dtype,
 )
-from aphrodite.v1.attention.backend import AttentionBackend
-from aphrodite.v1.attention.backends.flash_attn import (
+from sonar.v1.attention.backend import AttentionBackend
+from sonar.v1.attention.backends.flash_attn import (
     FlashAttentionBackend,
     FlashAttentionMetadata,
 )
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.kv_cache_interface import (
     FullAttentionSpec,
     KVCacheSpec,
     SlidingWindowSpec,
@@ -144,30 +144,30 @@ class InklingAttention(nn.Module, AttentionLayerBase):
         self.window_size: tuple[int, int] = (local_extent - 1, 0) if is_local else (-1, -1)
         # Static per-layer-type KV length bound for the split heuristic: local
         # layers never see more than the sliding window.
-        aphrodite_config = get_current_aphrodite_config()
-        self._max_kv_len = local_extent if is_local else aphrodite_config.model_config.max_model_len
+        sonar_config = get_current_sonar_config()
+        self._max_kv_len = local_extent if is_local else sonar_config.model_config.max_model_len
 
         # ---- KV-cache wiring (reuse FlashAttentionBackend for metadata) ----
-        cache_config = aphrodite_config.cache_config
+        cache_config = sonar_config.cache_config
         self.kv_cache_dtype = cache_config.cache_dtype if cache_config is not None else "auto"
-        self.kv_cache_torch_dtype = kv_cache_dtype_str_to_dtype(self.kv_cache_dtype, aphrodite_config.model_config)
+        self.kv_cache_torch_dtype = kv_cache_dtype_str_to_dtype(self.kv_cache_dtype, sonar_config.model_config)
         self.register_buffer("k_scale", torch.ones((), dtype=torch.float32))
         self.register_buffer("v_scale", torch.ones((), dtype=torch.float32))
 
-        compilation_config = aphrodite_config.compilation_config
+        compilation_config = sonar_config.compilation_config
         if prefix in compilation_config.static_forward_context:
             raise ValueError(f"Duplicate layer name: {prefix}")
         compilation_config.static_forward_context[prefix] = self
         self.kv_cache = torch.tensor([])  # replaced by bind_kv_cache
 
-        if aphrodite_config.kernel_config.enable_jit_warmup:
+        if sonar_config.kernel_config.enable_jit_warmup:
             _INKLING_FA4_REL_ATTENTION_KERNEL.register_warmup()
 
     def get_attn_backend(self) -> type[AttentionBackend]:
         return FlashAttentionBackend
 
-    def get_kv_cache_spec(self, aphrodite_config: AphroditeConfig) -> KVCacheSpec:
-        block_size = aphrodite_config.cache_config.block_size
+    def get_kv_cache_spec(self, sonar_config: SonarConfig) -> KVCacheSpec:
+        block_size = sonar_config.cache_config.block_size
         if self.is_local:
             assert self.local_extent is not None
             return SlidingWindowSpec(

@@ -9,7 +9,7 @@ from typing import Any
 
 import torch
 
-from aphrodite.utils.torch_utils import is_torch_equal_or_newer
+from sonar.utils.torch_utils import is_torch_equal_or_newer
 
 _weights_pre_processed: ContextVar[bool] = ContextVar("weights_pre_processed", default=False)
 _weight_cache_model_construction: ContextVar[bool] = ContextVar("weight_cache_model_construction", default=False)
@@ -79,7 +79,7 @@ def set_weight_attrs(
         # This sometimes causes OOM errors during model loading. To avoid this,
         # we sync the param tensor after its weight loader is called.
         # TODO(woosuk): Remove this hack once we have a better solution.
-        from aphrodite.platforms import current_platform
+        from sonar.platforms import current_platform
 
         if current_platform.use_sync_weight_loader() and key == "weight_loader":
             value = current_platform.make_synced_weight_loader(value)
@@ -184,7 +184,7 @@ def replace_parameter(
 
     # `weight_loader` is the only attribute not ported over from new_tensor,
     # old_param.weight_loader only is supported. `_weight_loader` is
-    # `BaseAphroditeParameter`'s backing field for its `weight_loader` property, so
+    # `BaseSonarParameter`'s backing field for its `weight_loader` property, so
     # a loader riding along under that name has to be dropped as well.
     new_tensor_attrs.pop("weight_loader", None)
     new_tensor_attrs.pop("_weight_loader", None)
@@ -212,7 +212,7 @@ def replace_parameter(
         elif getattr(getattr(layer, "quant_method", None), "uses_meta_device", False):
             old_param.data = new_tensor  # online quantization frees the source
         else:
-            from aphrodite.model_executor.model_loader.reload.direct import (
+            from sonar.model_executor.model_loader.reload.direct import (
                 direct_reload_enabled,
             )
 

@@ -4,24 +4,24 @@
 import torch
 from torch import nn
 
-from aphrodite.config import CacheConfig
-from aphrodite.distributed import get_tensor_model_parallel_world_size
-from aphrodite.forward_context import get_forward_context
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.layers.linear import (
+from sonar.config import CacheConfig
+from sonar.distributed import get_tensor_model_parallel_world_size
+from sonar.forward_context import get_forward_context
+from sonar.model_executor.layers.attention import Attention
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     MergedColumnParallelLinear,
     QKVParallelLinear,
     RowParallelLinear,
     UnquantizedLinearMethod,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.model_loader.weight_utils import sharded_weight_loader
-from aphrodite.model_executor.models.utils import extract_layer_index
-from aphrodite.model_executor.utils import set_weight_attrs
-from aphrodite.transformers_utils.configs.beam import BeamConfig
-from aphrodite.v1.attention.backend import AttentionType
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.model_loader.weight_utils import sharded_weight_loader
+from sonar.model_executor.models.utils import extract_layer_index
+from sonar.model_executor.utils import set_weight_attrs
+from sonar.transformers_utils.configs.beam import BeamConfig
+from sonar.v1.attention.backend import AttentionType
 
 from .attention_ops import beam_output_gate, beam_qk_norm_rope
 from .layernorm import RMSNorm

@@ -5,10 +5,10 @@ import pytest
 import torch
 from transformers import Qwen3VLVideoProcessor
 
-from aphrodite.config import ModelConfig
-from aphrodite.model_executor.models.transformers.multimodal import MultiModalProcessingInfo
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.cache import MultiModalProcessorOnlyCache
+from sonar.config import ModelConfig
+from sonar.model_executor.models.transformers.multimodal import MultiModalProcessingInfo
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.cache import MultiModalProcessorOnlyCache
 
 VIDEO_MODEL_SETTINGS = {
     "Qwen/Qwen3-VL-2B-Instruct": {

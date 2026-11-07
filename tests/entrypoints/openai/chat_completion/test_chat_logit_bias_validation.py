@@ -5,7 +5,7 @@ import openai
 import pytest
 import pytest_asyncio
 
-from aphrodite.config import ModelConfig
+from sonar.config import ModelConfig
 from tests.utils import RemoteOpenAIServer
 
 MODEL_NAME = "Qwen/Qwen2.5-1.5B-Instruct"

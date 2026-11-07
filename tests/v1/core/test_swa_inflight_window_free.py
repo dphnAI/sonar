@@ -11,12 +11,12 @@ back), so `allocate_slots` frees on the processed-token basis:
 
 import torch
 
-from aphrodite.v1.core.sched.output import SchedulerOutput
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.core.sched.output import SchedulerOutput
+from sonar.v1.kv_cache_interface import (
     ChunkedLocalAttentionSpec,
     SlidingWindowSpec,
 )
-from aphrodite.v1.outputs import ModelRunnerOutput
+from sonar.v1.outputs import ModelRunnerOutput
 
 from .utils import create_requests, create_scheduler, mock_kv
 

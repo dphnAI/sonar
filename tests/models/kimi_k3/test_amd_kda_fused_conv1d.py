@@ -5,9 +5,9 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from aphrodite.model_executor.layers.mamba.ops.causal_conv1d import causal_conv1d_fn
-from aphrodite.platforms import current_platform
-from aphrodite.v1.attention.backends.utils import (
+from sonar.model_executor.layers.mamba.ops.causal_conv1d import causal_conv1d_fn
+from sonar.platforms import current_platform
+from sonar.v1.attention.backends.utils import (
     NULL_BLOCK_ID,
     compute_causal_conv1d_metadata,
 )
@@ -35,7 +35,7 @@ def _make_inputs(seqlens, has_initial_state, seed=0, device="cuda"):
     mixed_qkv = torch.randn(total, dim, dtype=torch.bfloat16, device=device)
     weight = torch.randn(dim, WIDTH, dtype=torch.bfloat16, device=device) * 0.3
     # More cache lines than sequences, assigned in a shuffled order. Line 0 is
-    # Aphrodite's null block (NULL_BLOCK_ID), which causal_conv1d_fn skips, so real
+    # Sonar's null block (NULL_BLOCK_ID), which causal_conv1d_fn skips, so real
     # sequences never map to it.
     n_lines = n_seqs + 2
     conv_state = torch.randn(n_lines, dim, STATE_LEN, dtype=torch.bfloat16, device=device)
@@ -155,7 +155,7 @@ def test_prebuilt_block_m_128_schedule(seqlens):
         _build_chunk_schedule,
     )
 
-    from aphrodite.models.kimi_k3.amd.kda_metadata import (
+    from sonar.models.kimi_k3.amd.kda_metadata import (
         PREFILL_CONV_BLOCK_M,
         build_conv1d_chunk_schedule,
     )

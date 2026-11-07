@@ -18,10 +18,10 @@ from typing import Generic, TypeVar
 
 import torch
 
-from aphrodite.distributed.ec_transfer.ec_connector.mooncake.transfer import (
+from sonar.distributed.ec_transfer.ec_connector.mooncake.transfer import (
     MooncakeTransfer,
 )
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 

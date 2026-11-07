@@ -12,11 +12,11 @@ import pytest
 import torch
 from safetensors.torch import load_file, save_file
 
-from aphrodite import SamplingParams
-from aphrodite.config.load import LoadConfig
-from aphrodite.model_executor.model_loader import get_model_loader
-from aphrodite.model_executor.model_loader import runai_streamer_loader as rsl
-from aphrodite.utils.mem_constants import GiB_bytes
+from sonar import SamplingParams
+from sonar.config.load import LoadConfig
+from sonar.model_executor.model_loader import get_model_loader
+from sonar.model_executor.model_loader import runai_streamer_loader as rsl
+from sonar.utils.mem_constants import GiB_bytes
 from tests.utils import create_new_process_for_each_test
 
 load_format = "runai_streamer"
@@ -45,14 +45,14 @@ def test_get_model_loader_with_runai_flag():
 
 
 def test_checkpoint_selection_hook_is_optional_for_model_detection():
-    from aphrodite.model_executor.models.interfaces import SupportsMultiModal
-    from aphrodite.model_executor.models.interfaces_base import (
-        AphroditeModel,
+    from sonar.model_executor.models.interfaces import SupportsMultiModal
+    from sonar.model_executor.models.interfaces_base import (
+        SonarModel,
         is_text_generation_model,
     )
 
     class ModelWithoutHook(torch.nn.Module):
-        def __init__(self, aphrodite_config, prefix=""):
+        def __init__(self, sonar_config, prefix=""):
             super().__init__()
 
         def embed_input_ids(self, input_ids):
@@ -67,7 +67,7 @@ def test_checkpoint_selection_hook_is_optional_for_model_detection():
     assert is_text_generation_model(ModelWithoutHook)
     assert is_text_generation_model(ModelWithoutHook(None))
 
-    class ModelWithDefaultRule(ModelWithoutHook, AphroditeModel):
+    class ModelWithDefaultRule(ModelWithoutHook, SonarModel):
         pass
 
     assert not ModelWithDefaultRule(None).is_unused_checkpoint_weight("any.weight")
@@ -80,20 +80,20 @@ def test_checkpoint_selection_hook_is_optional_for_model_detection():
         assert SupportsMultiModal.get_language_model(model) is model.language_model
 
 
-def test_runai_model_loader_download_files(aphrodite_runner):
-    with aphrodite_runner(test_model, load_format=load_format) as llm:
+def test_runai_model_loader_download_files(sonar_runner):
+    with sonar_runner(test_model, load_format=load_format) as llm:
         deserialized_outputs = llm.generate(prompts, sampling_params)
         assert deserialized_outputs
 
 
 # In-process MTP compilation must not retain GPU resources in the pytest worker.
 @create_new_process_for_each_test("spawn")
-def test_runai_mtp_real_checkpoint(aphrodite_runner, tmp_path, monkeypatch):
+def test_runai_mtp_real_checkpoint(sonar_runner, tmp_path, monkeypatch):
     """Skip main-only shards without changing a real MTP model's generation."""
-    from aphrodite.models.qwen3_5 import Qwen3_5MTP
-    from aphrodite.platforms import current_platform
-    from aphrodite.transformers_utils.repo_utils import hf_api
-    from aphrodite.v1.metrics.reader import Counter
+    from sonar.models.qwen3_5 import Qwen3_5MTP
+    from sonar.platforms import current_platform
+    from sonar.transformers_utils.repo_utils import hf_api
+    from sonar.v1.metrics.reader import Counter
 
     if not current_platform.is_cuda_alike():
         pytest.skip("MTP serving requires CUDA or ROCm")
@@ -122,7 +122,7 @@ def test_runai_mtp_real_checkpoint(aphrodite_runner, tmp_path, monkeypatch):
     )
     del tensors, main, draft
 
-    monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
+    monkeypatch.setenv("SONAR_ENABLE_V1_MULTIPROCESSING", "0")
     opened = []
     real_stream = rsl.runai_safetensors_weights_iterator
 
@@ -133,7 +133,7 @@ def test_runai_mtp_real_checkpoint(aphrodite_runner, tmp_path, monkeypatch):
     monkeypatch.setattr(rsl, "runai_safetensors_weights_iterator", stream)
     results = []
     for load_format in ("auto", "runai_streamer"):
-        with aphrodite_runner(
+        with sonar_runner(
             str(checkpoint),
             load_format=load_format,
             block_size=None,
@@ -147,7 +147,7 @@ def test_runai_mtp_real_checkpoint(aphrodite_runner, tmp_path, monkeypatch):
             accepted = next(
                 m.value
                 for m in runner.llm.get_metrics()
-                if isinstance(m, Counter) and m.name == "aphrodite:spec_decode_num_accepted_tokens"
+                if isinstance(m, Counter) and m.name == "sonar:spec_decode_num_accepted_tokens"
             )
             assert accepted > 0
     assert len(opened) == 2
@@ -161,11 +161,11 @@ def test_runai_mtp_real_checkpoint(aphrodite_runner, tmp_path, monkeypatch):
     reason="Temporarily disabled due to GCS access issues. "
     "TODO: Re-enable this test once the underlying issue is resolved."
 )
-def test_runai_model_loader_download_files_gcs(aphrodite_runner, monkeypatch: pytest.MonkeyPatch):
+def test_runai_model_loader_download_files_gcs(sonar_runner, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "fake-project")
     monkeypatch.setenv("RUNAI_STREAMER_GCS_USE_ANONYMOUS_CREDENTIALS", "true")
     monkeypatch.setenv("CLOUD_STORAGE_EMULATOR_ENDPOINT", "https://storage.googleapis.com")
-    with aphrodite_runner(test_gcs_model, load_format=load_format) as llm:
+    with sonar_runner(test_gcs_model, load_format=load_format) as llm:
         deserialized_outputs = llm.generate(prompts, sampling_params)
         assert deserialized_outputs
 
@@ -598,7 +598,7 @@ def test_runai_stale_index_keeps_actual_draft_weights(tmp_path, monkeypatch, sta
         ),
     ],
 )
-def test_runai_deep_sleep_reload_weights(base_model, mul_model, add_model, aphrodite_runner):
+def test_runai_deep_sleep_reload_weights(base_model, mul_model, add_model, sonar_runner):
     free, total = torch.accelerator.get_memory_info()
     used_bytes_baseline = total - free
 
@@ -615,7 +615,7 @@ def test_runai_deep_sleep_reload_weights(base_model, mul_model, add_model, aphro
         assert total - free - used_bytes_baseline < 4 * GiB_bytes
         llm.get_llm().wake_up(tags=["kv_cache"])
 
-    with aphrodite_runner(
+    with sonar_runner(
         model_name=base_model,
         load_format=load_format,
         enable_sleep_mode=True,

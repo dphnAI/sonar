@@ -5,7 +5,7 @@
 
 import torch
 
-from aphrodite.v1.watermarking.prfs.base import WatermarkPRF, uint32_to_uniform
+from sonar.v1.watermarking.prfs.base import WatermarkPRF, uint32_to_uniform
 
 _UINT32_MASK = 2**32 - 1
 _PHILOX_M0 = 0xD2511F53

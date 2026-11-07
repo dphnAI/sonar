@@ -12,7 +12,7 @@ import pytest
 import pytest_asyncio
 import requests
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 from tests.utils import RemoteOpenAIServer
 from tests.v1.utils import check_request_balancing
 
@@ -90,7 +90,7 @@ async def _run_request_bursts(
 
 
 class MultinodeInternalLBServerManager:
-    """Manages multi-node data parallel Aphrodite server instances for internal
+    """Manages multi-node data parallel Sonar server instances for internal
     load balancer testing using --headless mode."""
 
     def __init__(
@@ -166,9 +166,9 @@ class MultinodeInternalLBServerManager:
                         self.model_name,
                         sargs,
                         auto_port=False,
-                        max_wait_seconds=int(os.getenv("APHRODITE_ENGINE_READY_TIMEOUT_S", "480")),
+                        max_wait_seconds=int(os.getenv("SONAR_ENGINE_READY_TIMEOUT_S", "480")),
                         env_dict={
-                            "APHRODITE_SERVER_DEV_MODE": "1",
+                            "SONAR_SERVER_DEV_MODE": "1",
                             current_platform.device_control_env_var: ",".join(
                                 str(current_platform.device_id_to_physical_device_id(i))
                                 for i in range(r, r + gpus_per_node)
@@ -283,7 +283,7 @@ class APIOnlyServerManager:
                     api_server_args,
                     auto_port=False,
                     env_dict={
-                        "APHRODITE_SERVER_DEV_MODE": "1",
+                        "SONAR_SERVER_DEV_MODE": "1",
                         # No GPUs needed for API-only server
                     },
                 )
@@ -412,8 +412,8 @@ def _get_parallel_config(server: RemoteOpenAIServer):
     response = requests.get(server.url_for("server_info?config_format=json"))
     response.raise_for_status()
 
-    aphrodite_config = response.json()["aphrodite_config"]
-    return aphrodite_config["parallel_config"]
+    sonar_config = response.json()["sonar_config"]
+    return sonar_config["parallel_config"]
 
 
 def test_multinode_dp_server_info(server_manager):

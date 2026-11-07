@@ -8,34 +8,34 @@ import torch
 import torch.nn as nn
 from transformers import BatchFeature
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.multimodal import MultiModalDummyOptions
-from aphrodite.inputs import MultiModalDataDict
-from aphrodite.model_executor.layers.activation import get_act_fn
-from aphrodite.model_executor.layers.linear import (
+from sonar.config import SonarConfig
+from sonar.config.multimodal import MultiModalDummyOptions
+from sonar.inputs import MultiModalDataDict
+from sonar.model_executor.layers.activation import get_act_fn
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     ReplicatedLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.models.interfaces import (
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.models.interfaces import (
     MultiModalEmbeddings,
     SupportsMultiModal,
     SupportsPP,
 )
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import (
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import (
     MultiModalFieldConfig,
     MultiModalKwargsItem,
     MultiModalKwargsItems,
 )
-from aphrodite.multimodal.parse import (
+from sonar.multimodal.parse import (
     ImageEmbeddingItems,
     ImageProcessorItems,
     ImageSize,
     MultiModalDataItems,
 )
-from aphrodite.multimodal.processing import (
+from sonar.multimodal.processing import (
     BaseDummyInputsBuilder,
     BaseMultiModalProcessor,
     BaseProcessingInfo,
@@ -45,16 +45,16 @@ from aphrodite.multimodal.processing import (
     PromptUpdate,
     PromptUpdateDetails,
 )
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.transformers_utils.configs import OpenVLAConfig
-from aphrodite.transformers_utils.processors.openvla import (
+from sonar.sequence import IntermediateTensors
+from sonar.transformers_utils.configs import OpenVLAConfig
+from sonar.transformers_utils.processors.openvla import (
     OpenVLAImageProcessor,
     OpenVLAProcessor,
 )
-from aphrodite.utils.tensor_schema import TensorSchema, TensorShape
+from sonar.utils.tensor_schema import TensorSchema, TensorShape
 
 from .module_mapping import MultiModelKeys
-from .utils import AutoWeightsLoader, init_aphrodite_registered_model, maybe_prefix
+from .utils import AutoWeightsLoader, init_sonar_registered_model, maybe_prefix
 
 # openvla/openvla-7b uses 224x224 images with ViT patch size 14, yielding a
 # 16x16 image-token grid.
@@ -364,7 +364,7 @@ class OpenVLAMultiModalProcessor(BaseMultiModalProcessor[OpenVLAProcessingInfo])
     dummy_inputs=OpenVLADummyInputsBuilder,
 )
 class OpenVLAForActionPrediction(nn.Module, SupportsMultiModal, SupportsPP):
-    """OpenVLA wrapper with Aphrodite language-model execution wired in."""
+    """OpenVLA wrapper with Sonar language-model execution wired in."""
 
     @classmethod
     def get_placeholder_str(cls, modality: str, i: int) -> str | None:
@@ -372,17 +372,17 @@ class OpenVLAForActionPrediction(nn.Module, SupportsMultiModal, SupportsPP):
             return None
         raise ValueError("Only image modality is supported")
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
         self.config = config
-        self.multimodal_config = aphrodite_config.model_config.multimodal_config
+        self.multimodal_config = sonar_config.model_config.multimodal_config
         self.image_token_id = config.image_token_index
         self.n_action_bins = config.n_action_bins
         self.num_patches = _get_num_image_tokens(config.image_sizes[0])
 
-        with self._mark_tower_model(aphrodite_config, "image"):
+        with self._mark_tower_model(sonar_config, "image"):
             self.vision_backbone = PrismaticVisionBackbone(
                 image_sizes=config.image_sizes,
                 timm_model_ids=config.timm_model_ids,
@@ -397,9 +397,9 @@ class OpenVLAForActionPrediction(nn.Module, SupportsMultiModal, SupportsPP):
                 prefix=maybe_prefix(prefix, "projector"),
             )
 
-        with self._mark_language_model(aphrodite_config):
-            self.language_model = init_aphrodite_registered_model(
-                aphrodite_config=aphrodite_config,
+        with self._mark_language_model(sonar_config):
+            self.language_model = init_sonar_registered_model(
+                sonar_config=sonar_config,
                 hf_config=config.text_config,
                 prefix=maybe_prefix(prefix, "language_model"),
             )

@@ -4,7 +4,7 @@
 import pytest
 import requests
 
-from aphrodite.entrypoints.pooling.pooling.protocol import PoolingResponse
+from sonar.entrypoints.pooling.pooling.protocol import PoolingResponse
 from tests.utils import RemoteOpenAIServer
 
 MODEL_NAME = "jason9693/Qwen2.5-1.5B-apeach"

@@ -19,19 +19,19 @@ requests reproduces the model's own math.
 import pytest
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite._aiter_ops import is_aiter_found_and_supported, rocm_aiter_ops
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.config import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar._aiter_ops import is_aiter_found_and_supported, rocm_aiter_ops
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEParallelConfig,
     RoutingMethodType,
     get_routing_method_type,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.aiter_mxfp4_w4a16_moe import (
+from sonar.model_executor.layers.fused_moe.experts.aiter_mxfp4_w4a16_moe import (
     AiterW4A16ExpertsMonolithic,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import kMxfp4Static
+from sonar.model_executor.layers.quantization.utils.quant_utils import kMxfp4Static
 
 MIMO_EXPERTS = 256  # MiMo-V2.6-Flash
 MIMO_PRO_EXPERTS = 384  # MiMo-V2.6-Pro
@@ -86,7 +86,7 @@ def test_aiter_w4a16_supports_mimo_routing() -> None:
 )
 def test_aiter_w4a16_supports_mimo_config(monkeypatch: pytest.MonkeyPatch) -> None:
     """The same gate through the real config path, device check included."""
-    monkeypatch.setenv("APHRODITE_ROCM_USE_AITER", "1")
+    monkeypatch.setenv("SONAR_ROCM_USE_AITER", "1")
     rocm_aiter_ops.refresh_env_variables()
 
     supported, reason = AiterW4A16ExpertsMonolithic.is_supported_config(

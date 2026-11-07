@@ -4,10 +4,10 @@
 
 import torch
 
-from aphrodite.model_executor.layers.quantization.utils import replace_parameter
-from aphrodite.model_executor.utils import retire_parameter
-from aphrodite.platforms import CpuArchEnum, current_platform
-from aphrodite.scalar_type import scalar_types
+from sonar.model_executor.layers.quantization.utils import replace_parameter
+from sonar.model_executor.utils import retire_parameter
+from sonar.platforms import CpuArchEnum, current_platform
+from sonar.scalar_type import scalar_types
 
 from .MPLinearKernel import MPLinearKernel, MPLinearLayerConfig
 

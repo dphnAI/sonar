@@ -7,18 +7,18 @@ import openai
 import pytest
 import pytest_asyncio
 
-from aphrodite.assets.base import APHRODITE_S3_BUCKET_URL
-from aphrodite.multimodal.utils import encode_video_url, fetch_video
-from aphrodite.platforms import current_platform
+from sonar.assets.base import SONAR_S3_BUCKET_URL
+from sonar.multimodal.utils import encode_video_url, fetch_video
+from sonar.platforms import current_platform
 from tests.utils import RemoteOpenAIServer
 
 MODEL_NAME = "llava-hf/llava-onevision-qwen2-0.5b-ov-hf"
 MAXIMUM_VIDEOS = 3
 
 TEST_VIDEO_URLS = [
-    f"{APHRODITE_S3_BUCKET_URL}/multimodal_asset/slow_traffic_small.mp4",
-    f"{APHRODITE_S3_BUCKET_URL}/multimodal_asset/vtest.avi",
-    f"{APHRODITE_S3_BUCKET_URL}/multimodal_asset/Megamind.avi",
+    f"{SONAR_S3_BUCKET_URL}/multimodal_asset/slow_traffic_small.mp4",
+    f"{SONAR_S3_BUCKET_URL}/multimodal_asset/vtest.avi",
+    f"{SONAR_S3_BUCKET_URL}/multimodal_asset/Megamind.avi",
 ]
 
 
@@ -44,7 +44,7 @@ def server():
     env_overrides = {}
     if current_platform.is_rocm():
         env_overrides = {
-            "APHRODITE_VIDEO_FETCH_TIMEOUT": "120",
+            "SONAR_VIDEO_FETCH_TIMEOUT": "120",
         }
 
     with RemoteOpenAIServer(MODEL_NAME, args, env_dict=env_overrides) as remote_server:

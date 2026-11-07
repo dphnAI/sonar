@@ -5,13 +5,13 @@ from functools import partial
 
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.utils.torch_utils import supports_xpu_graph
-from aphrodite.v1.worker.gpu.model_runner import (
+from sonar.config import SonarConfig
+from sonar.utils.torch_utils import supports_xpu_graph
+from sonar.v1.worker.gpu.model_runner import (
     GPUModelRunner as GPUModelRunnerV2,
 )
-from aphrodite.v1.worker.gpu_model_runner import GPUModelRunner
-from aphrodite.v1.worker.mm_encoder_model_runner import MMEncoderModelRunner
+from sonar.v1.worker.gpu_model_runner import GPUModelRunner
+from sonar.v1.worker.mm_encoder_model_runner import MMEncoderModelRunner
 
 
 class XPUModelRunner(GPUModelRunner):
@@ -19,11 +19,11 @@ class XPUModelRunner(GPUModelRunner):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
     ):
         with _torch_cuda_wrapper():
-            super().__init__(aphrodite_config, device)
+            super().__init__(sonar_config, device)
 
 
 class XPUModelRunnerV2(GPUModelRunnerV2):
@@ -31,11 +31,11 @@ class XPUModelRunnerV2(GPUModelRunnerV2):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
     ):
         with _torch_cuda_wrapper():
-            super().__init__(aphrodite_config, device)
+            super().__init__(sonar_config, device)
 
 
 class XPUMMEncoderModelRunner(MMEncoderModelRunner):
@@ -43,11 +43,11 @@ class XPUMMEncoderModelRunner(MMEncoderModelRunner):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
     ):
         with _torch_cuda_wrapper():
-            super().__init__(aphrodite_config, device)
+            super().__init__(sonar_config, device)
 
 
 @contextmanager

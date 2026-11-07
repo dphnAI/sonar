@@ -15,22 +15,22 @@ from dataclasses import dataclass, fields
 
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.kernels.attention.dsa.sparse_mqa_logits import (
+from sonar.config import SonarConfig
+from sonar.logger import init_logger
+from sonar.model_executor.kernels.attention.dsa.sparse_mqa_logits import (
     check_deep_select_layout,
     has_deep_select,
     pick_sparse_block_kv,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.deep_gemm import has_deep_gemm_sparse_mqa
-from aphrodite.v1.attention.backend import CommonAttentionMetadata
-from aphrodite.v1.attention.backends.mla.indexer import (
+from sonar.platforms import current_platform
+from sonar.utils.deep_gemm import has_deep_gemm_sparse_mqa
+from sonar.v1.attention.backend import CommonAttentionMetadata
+from sonar.v1.attention.backends.mla.indexer import (
     DeepseekV32IndexerMetadata,
     DeepseekV32IndexerMetadataBuilder,
     DeepseekV41IndexerBackend,
 )
-from aphrodite.v1.kv_cache_interface import AttentionSpec
+from sonar.v1.kv_cache_interface import AttentionSpec
 
 logger = init_logger(__name__)
 
@@ -91,12 +91,12 @@ class DeepseekV41SparseIndexerMetadataBuilder(DeepseekV32IndexerMetadataBuilder)
         self,
         kv_cache_spec: AttentionSpec,
         layer_names: list[str],
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
         **kwargs,
     ) -> None:
-        super().__init__(kv_cache_spec, layer_names, aphrodite_config, device, **kwargs)
-        hf_config = aphrodite_config.model_config.hf_text_config
+        super().__init__(kv_cache_spec, layer_names, sonar_config, device, **kwargs)
+        hf_config = sonar_config.model_config.hf_text_config
         candidate_block_size = getattr(hf_config, "candidate_block_size", 0)
         candidate_topk_blocks = getattr(hf_config, "candidate_topk_blocks", 0)
         topk_tokens = getattr(hf_config, "index_topk", 0)
@@ -113,11 +113,9 @@ class DeepseekV41SparseIndexerMetadataBuilder(DeepseekV32IndexerMetadataBuilder)
             raise ValueError(f"{prefix} requires the varlen paged MQA logits decode layout.")
         # The top-k runs on the kernels' bf16 logits with DeepSelect; there is
         # no fp32 fallback, so the other top-k backends cannot be honored.
-        topk_backend = aphrodite_config.kernel_config.sparse_indexer_topk_backend
+        topk_backend = sonar_config.kernel_config.sparse_indexer_topk_backend
         if not has_deep_select():
-            raise ValueError(
-                f"{prefix} requires the DeepSelect top-k extension (aphrodite._deepselect_C) for this GPU."
-            )
+            raise ValueError(f"{prefix} requires the DeepSelect top-k extension (sonar._deepselect_C) for this GPU.")
         if topk_backend not in ("auto", "deep_select"):
             raise ValueError(
                 f"{prefix} uses DeepSelect for the top-k; "

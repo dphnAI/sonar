@@ -264,7 +264,7 @@ def main() -> int:
 
     result: dict = {
         "version": 1,
-        "commit": a.commit or os.environ.get("BUILDKITE_COMMIT") or os.environ.get("APHRODITE_BUILD_COMMIT") or "",
+        "commit": a.commit or os.environ.get("BUILDKITE_COMMIT") or os.environ.get("SONAR_BUILD_COMMIT") or "",
         "cuda": cuda_release(nvcc),
         "generated_at": dt.datetime.now(dt.UTC).isoformat(timespec="seconds"),
         "build_dirs": [],

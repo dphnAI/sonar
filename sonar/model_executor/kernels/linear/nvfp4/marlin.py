@@ -3,8 +3,8 @@
 
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.quantization.utils.marlin_utils_fp4 import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.quantization.utils.marlin_utils_fp4 import (
     apply_fp4_marlin_linear,
     is_fp4_marlin_supported,
     prepare_fp4_layer_for_marlin,

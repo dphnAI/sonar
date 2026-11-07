@@ -46,50 +46,50 @@ install(FILES
   "${FMHA_SM100_PY_ROOT}/q8kv4_prefill_adapter.py"
   "${FMHA_SM100_PY_ROOT}/sparse.py"
   "${FMHA_SM100_PY_ROOT}/sparse_fmha_adapter.py"
-  DESTINATION aphrodite/third_party/fmha_sm100
+  DESTINATION sonar/third_party/fmha_sm100
   COMPONENT fmha_sm100)
 
 install(DIRECTORY "${FMHA_SM100_PY_ROOT}/csrc/"
-  DESTINATION aphrodite/third_party/fmha_sm100/csrc
+  DESTINATION sonar/third_party/fmha_sm100/csrc
   COMPONENT fmha_sm100
   PATTERN "__pycache__" EXCLUDE
   PATTERN "*.pyc" EXCLUDE
   PATTERN ".git*" EXCLUDE)
 
 install(DIRECTORY "${FMHA_SM100_PY_ROOT}/decode_q8kv4/"
-  DESTINATION aphrodite/third_party/fmha_sm100/decode_q8kv4
+  DESTINATION sonar/third_party/fmha_sm100/decode_q8kv4
   COMPONENT fmha_sm100
   PATTERN "__pycache__" EXCLUDE
   PATTERN "*.pyc" EXCLUDE)
 
 install(DIRECTORY "${FMHA_SM100_PY_ROOT}/kvouter/"
-  DESTINATION aphrodite/third_party/fmha_sm100/kvouter
+  DESTINATION sonar/third_party/fmha_sm100/kvouter
   COMPONENT fmha_sm100
   PATTERN "__pycache__" EXCLUDE
   PATTERN "*.pyc" EXCLUDE)
 
 install(DIRECTORY "${FMHA_SM100_PY_ROOT}/prefill_q8kv4/"
-  DESTINATION aphrodite/third_party/fmha_sm100/prefill_q8kv4
+  DESTINATION sonar/third_party/fmha_sm100/prefill_q8kv4
   COMPONENT fmha_sm100
   PATTERN "__pycache__" EXCLUDE
   PATTERN "*.pyc" EXCLUDE)
 
 install(DIRECTORY "${FMHA_SM100_PY_ROOT}/cute/"
-  DESTINATION aphrodite/third_party/fmha_sm100/cute
+  DESTINATION sonar/third_party/fmha_sm100/cute
   COMPONENT fmha_sm100
   PATTERN "__pycache__" EXCLUDE
   PATTERN "*.pyc" EXCLUDE
   PATTERN ".git*" EXCLUDE)
 
 install(DIRECTORY "${FMHA_SM100_PY_ROOT}/cutlass/include/"
-  DESTINATION aphrodite/third_party/fmha_sm100/cutlass/include
+  DESTINATION sonar/third_party/fmha_sm100/cutlass/include
   COMPONENT fmha_sm100
   PATTERN "__pycache__" EXCLUDE
   PATTERN "*.pyc" EXCLUDE
   PATTERN ".git*" EXCLUDE)
 
 install(DIRECTORY "${FMHA_SM100_PY_ROOT}/cutlass/tools/util/include/"
-  DESTINATION aphrodite/third_party/fmha_sm100/cutlass/tools/util/include
+  DESTINATION sonar/third_party/fmha_sm100/cutlass/tools/util/include
   COMPONENT fmha_sm100
   PATTERN "__pycache__" EXCLUDE
   PATTERN "*.pyc" EXCLUDE

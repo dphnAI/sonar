@@ -11,9 +11,9 @@ import soundfile as sf
 from fastapi import UploadFile
 from transformers import WhisperConfig
 
-from aphrodite.config import ModelConfig, SpeechToTextConfig
-from aphrodite.entrypoints.speech_to_text.transcription.protocol import TranscriptionRequest
-from aphrodite.multimodal.audio import AudioResampler
+from sonar.config import ModelConfig, SpeechToTextConfig
+from sonar.entrypoints.speech_to_text.transcription.protocol import TranscriptionRequest
+from sonar.multimodal.audio import AudioResampler
 from tests.utils import ROCM_EXTRA_ARGS, RemoteOpenAIServer
 
 MISTRAL_FORMAT_ARGS = [
@@ -32,7 +32,7 @@ MING_ASR_ARGS = [
     "--max-num-batched-tokens",
     "1024",
     "--logits-processors",
-    "aphrodite.model_executor.models.ming_v3_asr_logits_processor:NoRepeatNGramLogitsProcessor",
+    "sonar.model_executor.models.ming_v3_asr_logits_processor:NoRepeatNGramLogitsProcessor",
 ]
 
 
@@ -73,7 +73,7 @@ def test_request_extensions_reach_prompt_and_sampling_params(tmp_path, encoding)
     extensions = {"frontend_window": 128, "custom_tags": ["speech", 1]}
     options = {}
     if encoding != "absent":
-        options["aphrodite_xargs"] = json.dumps(extensions) if encoding == "json" else extensions
+        options["sonar_xargs"] = json.dumps(extensions) if encoding == "json" else extensions
     request = TranscriptionRequest(file=UploadFile(BytesIO()), **options)
     params = request.build_stt_params(
         audio=np.zeros(160, dtype=np.float32),
@@ -149,7 +149,7 @@ async def test_basic_audio(mary_had_lamb, model_name):
         server_args = ["--enforce-eager", *MING_ASR_ARGS]
         extra_body = {
             "max_completion_tokens": 256,
-            "aphrodite_xargs": json.dumps({"no_repeat_ngram_size": 10}),
+            "sonar_xargs": json.dumps({"no_repeat_ngram_size": 10}),
         }
 
     # Based on https://github.com/openai/openai-cookbook/blob/main/examples/Whisper_prompting_guide.ipynb.
@@ -172,7 +172,7 @@ async def test_basic_audio_with_lora(mary_had_lamb):
     # ROCm SPECIFIC CONFIGURATION:
     # To ensure the test passes on ROCm, we modify the max model length to 512.
     # We DO NOT apply this to other platforms to maintain strict upstream parity.
-    from aphrodite.platforms import current_platform
+    from sonar.platforms import current_platform
 
     model_name = "ibm-granite/granite-speech-3.3-2b"
     lora_model_name = "speech"
@@ -238,7 +238,7 @@ async def test_ming_context(model_name, ming_server, ming_audio):
             response_format="json",
             extra_body={
                 "max_completion_tokens": 256,
-                "aphrodite_xargs": json.dumps({"no_repeat_ngram_size": 10}),
+                "sonar_xargs": json.dumps({"no_repeat_ngram_size": 10}),
                 "prompt": "This is an audio about 同囚.",
                 "hotwords": ("同囚,黄国权,游学修,关楚耀,赵永洪,赵咏瑶,狱警,长镜头,吞玻璃戏,糖化玻璃,真实案例数据."),
             },
@@ -264,7 +264,7 @@ async def test_ming_chunk_policy_prefix_cache(model_name, ming_server, ming_audi
             return sum(
                 float(line.rsplit(" ", 1)[1])
                 for line in response.text.splitlines()
-                if line.startswith("aphrodite:prefix_cache_hits_total{")
+                if line.startswith("sonar:prefix_cache_hits_total{")
             )
 
         for frames in (3000, 6000, 3000):
@@ -278,7 +278,7 @@ async def test_ming_chunk_policy_prefix_cache(model_name, ming_server, ming_audi
                 response_format="json",
                 extra_body={
                     "max_completion_tokens": 256,
-                    "aphrodite_xargs": json.dumps({"audio_chunk_frames": frames, "no_repeat_ngram_size": 10}),
+                    "sonar_xargs": json.dumps({"audio_chunk_frames": frames, "no_repeat_ngram_size": 10}),
                 },
             )
             assert "\t" not in text

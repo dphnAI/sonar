@@ -4,8 +4,8 @@
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.fused_moe import TritonExperts
-from aphrodite.model_executor.layers.fused_moe.prepare_finalize import (
+from sonar.model_executor.layers.fused_moe import TritonExperts
+from sonar.model_executor.layers.fused_moe.prepare_finalize import (
     MoEPrepareAndFinalizeNoDPEPModular,
 )
 

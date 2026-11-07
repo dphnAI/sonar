@@ -33,7 +33,7 @@ namespace {
 // stores coalesce. The fragment contract matches the decode kernels: word j
 // of lane T covers columns {16j + T/4, 16j + 8 + T/4} at sub-tile rows
 // 2(T%4) + {0, 1, 8, 9}.
-template <aphrodite::ScalarTypeId type_id, bool W8, bool HAS_ZP,
+template <sonar::ScalarTypeId type_id, bool W8, bool HAS_ZP,
           bool TRANSPOSED = false>
 __global__ void swordfish_dequant_dense_kernel(
     const int32_t* __restrict__ B,
@@ -96,15 +96,15 @@ __global__ void swordfish_dequant_dense_kernel(
     FragB frag_b0, frag_b1;
     if constexpr (W8) {
       const marlin::I4& src = j < 2 ? bq0 : bq1;
-      marlin::dequant<scalar_t2, aphrodite::kU8B128.id(), false>(
+      marlin::dequant<scalar_t2, sonar::kU8B128.id(), false>(
           src.elems[(2 * j) & 3], reinterpret_cast<scalar_t2*>(&frag_b0));
-      marlin::dequant<scalar_t2, aphrodite::kU8B128.id(), false>(
+      marlin::dequant<scalar_t2, sonar::kU8B128.id(), false>(
           src.elems[(2 * j + 1) & 3], reinterpret_cast<scalar_t2*>(&frag_b1));
     } else {
       const int q = bq0.elems[j];
-      marlin::dequant<scalar_t2, aphrodite::kU4B8.id(), false>(
+      marlin::dequant<scalar_t2, sonar::kU4B8.id(), false>(
           q, reinterpret_cast<scalar_t2*>(&frag_b0));
-      marlin::dequant<scalar_t2, aphrodite::kU4B8.id(), false>(
+      marlin::dequant<scalar_t2, sonar::kU4B8.id(), false>(
           q >> 8, reinterpret_cast<scalar_t2*>(&frag_b1));
     }
     const int n0 = 16 * j + c;
@@ -172,7 +172,7 @@ void swordfish_dense_tier_mm(const void* a, const int32_t* b, const void* s,
                              cudaStream_t stream) {
   dim3 grid(n / kBlockN, k / kBlockK, 1);
   const auto run = [&](auto tid, auto w8c, auto zpc) {
-    constexpr aphrodite::ScalarTypeId kTid = decltype(tid)::value;
+    constexpr sonar::ScalarTypeId kTid = decltype(tid)::value;
     using scalar_t = typename marlin::MarlinScalarType<kTid>::scalar_t;
     swordfish_dequant_dense_kernel<kTid, decltype(w8c)::value,
                                    decltype(zpc)::value>
@@ -182,9 +182,9 @@ void swordfish_dense_tier_mm(const void* a, const int32_t* b, const void* s,
                                    group_size);
   };
   using kF16 =
-      std::integral_constant<aphrodite::ScalarTypeId, aphrodite::kFloat16.id()>;
-  using kBF16 = std::integral_constant<aphrodite::ScalarTypeId,
-                                       aphrodite::kBFloat16.id()>;
+      std::integral_constant<sonar::ScalarTypeId, sonar::kFloat16.id()>;
+  using kBF16 =
+      std::integral_constant<sonar::ScalarTypeId, sonar::kBFloat16.id()>;
   using kT = std::true_type;
   using kF = std::false_type;
   if (is_half) {
@@ -259,7 +259,7 @@ torch::stable::Tensor swordfish_dequant_dense(
   const int k = int(size_k), n = int(size_n), gs = int(group_size);
 
   const auto run = [&](auto tid, auto w8c, auto zpc, auto trc) {
-    constexpr aphrodite::ScalarTypeId kTid = decltype(tid)::value;
+    constexpr sonar::ScalarTypeId kTid = decltype(tid)::value;
     using scalar_t = typename marlin::MarlinScalarType<kTid>::scalar_t;
     swordfish_dequant_dense_kernel<kTid, decltype(w8c)::value,
                                    decltype(zpc)::value, decltype(trc)::value>
@@ -269,9 +269,9 @@ torch::stable::Tensor swordfish_dequant_dense(
                                    n, gs);
   };
   using kF16 =
-      std::integral_constant<aphrodite::ScalarTypeId, aphrodite::kFloat16.id()>;
-  using kBF16 = std::integral_constant<aphrodite::ScalarTypeId,
-                                       aphrodite::kBFloat16.id()>;
+      std::integral_constant<sonar::ScalarTypeId, sonar::kFloat16.id()>;
+  using kBF16 =
+      std::integral_constant<sonar::ScalarTypeId, sonar::kBFloat16.id()>;
   using kT = std::true_type;
   using kF = std::false_type;
   const auto dispatch = [&](auto tid) {

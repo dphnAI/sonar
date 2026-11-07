@@ -10,14 +10,14 @@ from typing import NamedTuple
 import numpy as np
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.distributed.device_communicators.cuda_wrapper import CudaRTLibrary
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import HAS_TRITON, triton
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.utils.torch_utils import PIN_MEMORY
-from aphrodite.v1.kv_offload.base import (
+from sonar import _custom_ops as ops
+from sonar.distributed.device_communicators.cuda_wrapper import CudaRTLibrary
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.triton_utils import HAS_TRITON, triton
+from sonar.utils.math_utils import cdiv
+from sonar.utils.torch_utils import PIN_MEMORY
+from sonar.v1.kv_offload.base import (
     BlockIDsLoadStoreSpec,
     CanonicalKVCacheRef,
     CanonicalKVCaches,
@@ -27,9 +27,9 @@ from aphrodite.v1.kv_offload.base import (
     OffloadingWorker,
     TransferResult,
 )
-from aphrodite.v1.kv_offload.cpu.host_register import host_register, host_unregister
-from aphrodite.v1.kv_offload.cpu.shared_offload_region import SharedOffloadRegion
-from aphrodite.v1.kv_offload.cpu.swap_blocks_triton import (
+from sonar.v1.kv_offload.cpu.host_register import host_register, host_unregister
+from sonar.v1.kv_offload.cpu.shared_offload_region import SharedOffloadRegion
+from sonar.v1.kv_offload.cpu.swap_blocks_triton import (
     THRESHOLD_BYTES,
     swap_blocks_batch,
 )

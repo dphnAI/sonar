@@ -1,5 +1,5 @@
-name: ⚡ Discussion on the performance of Aphrodite
-description: Submit a proposal/discussion about the performance of Aphrodite
+name: ⚡ Discussion on the performance of Sonar
+description: Submit a proposal/discussion about the performance of Sonar
 title: "[Performance]: "
 labels: ["performance"]
 
@@ -7,19 +7,19 @@ body:
 - type: markdown
   attributes:
     value: >
-        #### Before submitting an issue, please make sure the issue hasn't been already addressed by searching through [the existing and past issues](https://github.com/PygmalionAI/aphrodite-engine/issues?q=is%3Aissue+sort%3Acreated-desc+).
+        #### Before submitting an issue, please make sure the issue hasn't been already addressed by searching through [the existing and past issues](https://github.com/dphnAI/sonar/issues?q=is%3Aissue+sort%3Acreated-desc+).
 - type: textarea
   attributes:
     label: Proposal to improve performance
     description: >
-      How do you plan to improve Aphrodite's performance?
+      How do you plan to improve Sonar's performance?
   validations:
     required: false
 - type: textarea
   attributes:
     label: Report of performance regression
     description: >
-      Please provide detailed description of performance comparison to confirm the regression. You may want to run the benchmark script at https://github.com/PygmalionAI/aphrodite-engine/tree/main/tests/benchmarks .
+      Please provide detailed description of performance comparison to confirm the regression. You may want to run the benchmark script at https://github.com/dphnAI/sonar/tree/main/benchmarks .
   validations:
     required: false
 - type: textarea
@@ -35,7 +35,7 @@ body:
     description: |
       Please run the following and paste the output below.
       ```sh
-      wget https://raw.githubusercontent.com/PygmalionAI/aphrodite-engine/main/env.py
+      wget https://raw.githubusercontent.com/dphnAI/sonar/main/env.py
       # For security purposes, please check the contents of env.py before running it.
       python env.py
       ```

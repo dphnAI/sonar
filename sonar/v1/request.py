@@ -10,24 +10,24 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 
-from aphrodite.multimodal.inputs import MultiModalFeatureSpec
-from aphrodite.pooling_params import PoolingParams
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.utils import length_from_prompt_token_ids_or_embeds
-from aphrodite.v1.engine import (
+from sonar.multimodal.inputs import MultiModalFeatureSpec
+from sonar.pooling_params import PoolingParams
+from sonar.sampling_params import SamplingParams
+from sonar.utils import length_from_prompt_token_ids_or_embeds
+from sonar.v1.engine import (
     EngineCoreEvent,
     EngineCoreEventType,
     EngineCoreRequest,
     FinishReason,
 )
-from aphrodite.v1.kv_hints import KvHintsEnvelope
-from aphrodite.v1.metrics.stats import PrefillStats, RequestSpecDecodeMetrics
-from aphrodite.v1.structured_output.request import StructuredOutputRequest
-from aphrodite.v1.utils import ConstantList
+from sonar.v1.kv_hints import KvHintsEnvelope
+from sonar.v1.metrics.stats import PrefillStats, RequestSpecDecodeMetrics
+from sonar.v1.structured_output.request import StructuredOutputRequest
+from sonar.v1.utils import ConstantList
 
 if TYPE_CHECKING:
-    from aphrodite.lora.request import LoRARequest
-    from aphrodite.v1.core.kv_cache_utils import BlockHash
+    from sonar.lora.request import LoRARequest
+    from sonar.v1.core.kv_cache_utils import BlockHash
 
 
 @dataclass

@@ -7,51 +7,51 @@ import torch
 import torch.nn as nn
 from transformers.configuration_utils import PreTrainedConfig
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, CacheConfig
-from aphrodite.distributed import (
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import CacheConfig, SonarConfig
+from sonar.distributed import (
     get_pp_group,
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
 )
-from aphrodite.forward_context import get_forward_context
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.forward_context import get_forward_context
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe import (
     FusedMoEFactory,
     GateLinear,
     fused_moe_make_expert_params_mapping,
 )
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     MergedColumnParallelLinear,
     ReplicatedLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.mamba.linear.bailing_linear_attn import (
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.mamba.linear.bailing_linear_attn import (
     BailingMoELinearAttention,
     _build_rope_parameters,
 )
-from aphrodite.model_executor.layers.mamba.mamba_utils import (
+from sonar.model_executor.layers.mamba.mamba_utils import (
     MambaStateCopyFuncCalculator,
     MambaStateDtypeCalculator,
     MambaStateShapeCalculator,
 )
-from aphrodite.model_executor.layers.mla import MLAModules, MultiHeadLatentAttentionWrapper
-from aphrodite.model_executor.layers.quantization.base_config import QuantizationConfig
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.mla import MLAModules, MultiHeadLatentAttentionWrapper
+from sonar.model_executor.layers.quantization.base_config import QuantizationConfig
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.model_loader.weight_utils import (
+from sonar.model_executor.model_loader.weight_utils import (
     default_weight_loader,
     maybe_remap_kv_scale_name,
 )
-from aphrodite.model_executor.models.bailing_moe import BailingMLP
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.v1.attention.backend import AttentionMetadata
+from sonar.model_executor.models.bailing_moe import BailingMLP
+from sonar.sequence import IntermediateTensors
+from sonar.v1.attention.backend import AttentionMetadata
 
 from .interfaces import HasInnerState, IsHybrid, SupportsPP
 from .utils import (
@@ -339,7 +339,7 @@ class BailingMoeV25DecoderLayer(nn.Module):
     def __init__(
         self,
         config: PreTrainedConfig,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "layer",
         layer_id: int = 0,
     ) -> None:
@@ -353,16 +353,16 @@ class BailingMoeV25DecoderLayer(nn.Module):
         if self.attention_type == 0:  # Linear attention
             self.self_attn = BailingMoELinearAttention(
                 config,
-                aphrodite_config,
+                sonar_config,
                 prefix=f"{prefix}.self_attn",
             )
         else:  # Full attention
             self.self_attn = BailingMoeV25MLAAttention(
                 config,
-                quant_config=aphrodite_config.quant_config,
+                quant_config=sonar_config.quant_config,
                 layer_id=layer_id,
                 prefix=f"{prefix}.self_attn",
-                cache_config=aphrodite_config.cache_config,
+                cache_config=sonar_config.cache_config,
             )
 
         # MLP/MoE
@@ -371,7 +371,7 @@ class BailingMoeV25DecoderLayer(nn.Module):
         if is_moe_layer:
             self.mlp = BailingMoeV25(
                 config,
-                quant_config=aphrodite_config.quant_config,
+                quant_config=sonar_config.quant_config,
                 layer_id=layer_id,
                 prefix=f"{prefix}.mlp",
             )
@@ -379,7 +379,7 @@ class BailingMoeV25DecoderLayer(nn.Module):
             self.mlp = BailingMLP(
                 intermediate_size=config.intermediate_size,
                 config=config,
-                quant_config=aphrodite_config.quant_config,
+                quant_config=sonar_config.quant_config,
                 reduce_results=True,
                 prefix=f"{prefix}.mlp",
             )
@@ -435,11 +435,11 @@ class BailingMoeV25Model(nn.Module):
     def __init__(
         self,
         *,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
     ):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
         self.config = config
         self.vocab_size = config.vocab_size
         self.embed_dim = config.hidden_size
@@ -461,7 +461,7 @@ class BailingMoeV25Model(nn.Module):
                 org_num_embeddings=self.vocab_size,
             )
         else:
-            from aphrodite.model_executor.models.utils import PPMissingLayer
+            from sonar.model_executor.models.utils import PPMissingLayer
 
             self.word_embeddings = PPMissingLayer()
 
@@ -473,7 +473,7 @@ class BailingMoeV25Model(nn.Module):
 
             return BailingMoeV25DecoderLayer(
                 config=layer_config,
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 prefix=prefix,
                 layer_id=layer_idx,
             )
@@ -489,7 +489,7 @@ class BailingMoeV25Model(nn.Module):
         if get_pp_group().is_last_rank:
             self.norm = RMSNorm(config.hidden_size, **norm_kwargs)
         else:
-            from aphrodite.model_executor.models.utils import PPMissingLayer
+            from sonar.model_executor.models.utils import PPMissingLayer
 
             self.norm = PPMissingLayer()
 
@@ -667,18 +667,18 @@ class BailingMoeV25ForCausalLM(nn.Module, HasInnerState, IsHybrid, SupportsPP):
     def __init__(
         self,
         *,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
     ) -> None:
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
 
         self.config = config
         self.quant_config = quant_config
 
         self.model = BailingMoeV25Model(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             prefix=maybe_prefix(prefix, "model"),
         )
 
@@ -730,11 +730,11 @@ class BailingMoeV25ForCausalLM(nn.Module, HasInnerState, IsHybrid, SupportsPP):
     @classmethod
     def get_mamba_state_shape_from_config(
         cls,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
     ) -> tuple[tuple[int, int, int]]:
         """Calculate shape for linear attention cache."""
-        config = aphrodite_config.model_config.hf_config
-        tp_size = aphrodite_config.parallel_config.tensor_parallel_size
+        config = sonar_config.model_config.hf_config
+        tp_size = sonar_config.parallel_config.tensor_parallel_size
 
         head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
 
@@ -748,11 +748,11 @@ class BailingMoeV25ForCausalLM(nn.Module, HasInnerState, IsHybrid, SupportsPP):
     @classmethod
     def get_mamba_state_dtype_from_config(
         cls,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
     ) -> tuple[torch.dtype, ...]:
         return MambaStateDtypeCalculator.linear_attention_state_dtype(
-            aphrodite_config.model_config.dtype,
-            aphrodite_config.cache_config.mamba_cache_dtype,
+            sonar_config.model_config.dtype,
+            sonar_config.cache_config.mamba_cache_dtype,
         )
 
     @classmethod

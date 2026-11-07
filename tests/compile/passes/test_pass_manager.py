@@ -5,14 +5,14 @@ import copy
 import pytest
 import torch
 
-from aphrodite.compilation.passes.inductor_pass import (
+from sonar.compilation.passes.inductor_pass import (
     CallableInductorPass,
     InductorPass,
     pass_context,
 )
-from aphrodite.compilation.passes.pass_manager import PostGradPassManager
-from aphrodite.config import AphroditeConfig, ModelConfig
-from aphrodite.config.utils import Range
+from sonar.compilation.passes.pass_manager import PostGradPassManager
+from sonar.config import ModelConfig, SonarConfig
+from sonar.config.utils import Range
 
 
 # dummy custom pass that doesn't inherit
@@ -22,7 +22,7 @@ def simple_callable(graph: torch.fx.Graph):
 
 # Should fail to add directly to the pass manager
 def test_bad_callable():
-    config = AphroditeConfig()
+    config = SonarConfig()
 
     pass_manager = PostGradPassManager()
     pass_manager.configure(config)
@@ -50,7 +50,7 @@ def test_pass_manager_uuid(callable):
     # Set the pass context as PassManager uuid uses it
     with pass_context(Range(start=1, end=8)):
         # Some passes need dtype to be set
-        config = AphroditeConfig(model_config=ModelConfig(dtype=torch.bfloat16))
+        config = SonarConfig(model_config=ModelConfig(dtype=torch.bfloat16))
 
         pass_manager = PostGradPassManager()
         pass_manager.configure(config)

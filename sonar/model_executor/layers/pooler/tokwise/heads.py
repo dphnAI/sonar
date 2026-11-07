@@ -7,11 +7,11 @@ from typing import TypeAlias
 import torch
 import torch.nn as nn
 
-import aphrodite.envs as envs
-from aphrodite.model_executor.layers.pooler import ActivationFn, ClassifierFn, ProjectorFn
-from aphrodite.pooling_params import PoolingParams
-from aphrodite.tasks import PoolingTask
-from aphrodite.v1.pool.metadata import PoolingMetadata
+import sonar.envs as envs
+from sonar.model_executor.layers.pooler import ActivationFn, ClassifierFn, ProjectorFn
+from sonar.pooling_params import PoolingParams
+from sonar.tasks import PoolingTask
+from sonar.v1.pool.metadata import PoolingMetadata
 
 from .methods import TokenPoolingMethodOutputItem
 
@@ -98,7 +98,7 @@ class TokenEmbeddingPoolerHead(TokenPoolerHead):
 
         Keep eligibility checks in sync with PoolingParams fields read by forward_chunk.
         """
-        if envs.APHRODITE_BATCH_INVARIANT or any(p.late_chunking_params is not None for p in pooling_params):
+        if envs.SONAR_BATCH_INVARIANT or any(p.late_chunking_params is not None for p in pooling_params):
             return None
         # [total_tokens, hidden_size] -> [total_tokens, embedding_size]
         embeddings = self._project(hidden_states)

@@ -18,20 +18,20 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from aphrodite.config.multimodal import MultiModalConfig
-from aphrodite.entrypoints.generate.generative_scoring.serving import (
+from sonar.config.multimodal import MultiModalConfig
+from sonar.entrypoints.generate.generative_scoring.serving import (
     GenerativeScoringItemResult,
     GenerativeScoringRequest,
     GenerativeScoringResponse,
     ServingGenerativeScoring,
 )
-from aphrodite.entrypoints.openai.models.protocol import BaseModelPath
-from aphrodite.entrypoints.openai.models.serving import OpenAIServingModels
-from aphrodite.entrypoints.serve.engine.protocol import ErrorResponse
-from aphrodite.logprobs import Logprob
-from aphrodite.outputs import CompletionOutput, RequestOutput
-from aphrodite.tokenizers import get_tokenizer
-from aphrodite.v1.engine.async_llm import AsyncLLM
+from sonar.entrypoints.openai.models.protocol import BaseModelPath
+from sonar.entrypoints.openai.models.serving import OpenAIServingModels
+from sonar.entrypoints.serve.engine.protocol import ErrorResponse
+from sonar.logprobs import Logprob
+from sonar.outputs import CompletionOutput, RequestOutput
+from sonar.tokenizers import get_tokenizer
+from sonar.v1.engine.async_llm import AsyncLLM
 
 MODEL_NAME = "Qwen/Qwen3-0.6B"
 BASE_MODEL_PATHS = [BaseModelPath(name=MODEL_NAME, model_path=MODEL_NAME)]
@@ -347,7 +347,7 @@ class TestGeneration:
         mock_engine.generate = mock_generate
         log_exception = MagicMock()
         monkeypatch.setattr(
-            "aphrodite.entrypoints.generate.generative_scoring.serving.logger.exception",
+            "sonar.entrypoints.generate.generative_scoring.serving.logger.exception",
             log_exception,
         )
         request = GenerativeScoringRequest(

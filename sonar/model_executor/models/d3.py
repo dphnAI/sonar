@@ -13,9 +13,9 @@ from typing import TYPE_CHECKING
 
 from transformers.models.qwen3_vl import Qwen3VLProcessor
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.model_executor.model_loader.default_loader import DefaultModelLoader
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
+from sonar.config import SonarConfig
+from sonar.model_executor.model_loader.default_loader import DefaultModelLoader
+from sonar.multimodal import MULTIMODAL_REGISTRY
 
 from .adapters import as_seq_cls_model
 from .interfaces_base import default_pooling_type
@@ -63,16 +63,16 @@ else:
     dummy_inputs=Qwen3VLDummyInputsBuilder,
 )
 class D3ForSequenceClassification(_D3ForSequenceClassificationBase):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={
             "language_model.": "language_model.model.",
             "mtp.": None,
         }
     )
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
-        super().__init__(aphrodite_config=aphrodite_config, prefix=prefix)
-        model_config = aphrodite_config.model_config
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
+        super().__init__(sonar_config=sonar_config, prefix=prefix)
+        model_config = sonar_config.model_config
         self.secondary_weights = [
             DefaultModelLoader.Source(
                 model_or_path=model_config.model,

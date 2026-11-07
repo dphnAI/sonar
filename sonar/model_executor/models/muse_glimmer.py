@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Inference-only MuseGlimmer multimodal model for Aphrodite.
+"""Inference-only MuseGlimmer multimodal model for Sonar.
 
 Native port of the MuseGlimmer text decoder (``MuseGlimmerForCausalLM``). The text
 stack is a Gemma2 derivative with the
@@ -42,37 +42,37 @@ import torch.nn.functional as F
 from torch import nn
 from transformers import BatchFeature, MuseGlimmerConfig, MuseGlimmerProcessor
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, CacheConfig
-from aphrodite.config.multimodal import MultiModalDummyOptions
-from aphrodite.distributed import (
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import CacheConfig, SonarConfig
+from sonar.config.multimodal import MultiModalDummyOptions
+from sonar.distributed import (
     divide,
     get_pp_group,
     get_tensor_model_parallel_world_size,
 )
-from aphrodite.inputs import MultiModalDataDict
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.activation import SiluAndMul
-from aphrodite.model_executor.layers.attention import Attention, MMEncoderAttention
-from aphrodite.model_executor.layers.linear import (
+from sonar.inputs import MultiModalDataDict
+from sonar.logger import init_logger
+from sonar.model_executor.layers.activation import SiluAndMul
+from sonar.model_executor.layers.attention import Attention, MMEncoderAttention
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     MergedColumnParallelLinear,
     QKVParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.layers.rotary_embedding.common import ApplyRotaryEmb
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.layers.rotary_embedding.common import ApplyRotaryEmb
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.models.module_mapping import MultiModelKeys
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import MultiModalFieldConfig, MultiModalKwargsItems
-from aphrodite.multimodal.parse import ImageSize, MultiModalDataItems
-from aphrodite.multimodal.processing import (
+from sonar.model_executor.models.module_mapping import MultiModelKeys
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import MultiModalFieldConfig, MultiModalKwargsItems
+from sonar.multimodal.parse import ImageSize, MultiModalDataItems
+from sonar.multimodal.processing import (
     BaseDummyInputsBuilder,
     BaseMultiModalProcessor,
     BaseProcessingInfo,
@@ -80,9 +80,9 @@ from aphrodite.multimodal.processing import (
     PromptUpdate,
     PromptUpdateDetails,
 )
-from aphrodite.renderers import TokenizeParams
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.utils.tensor_schema import TensorSchema, TensorShape
+from sonar.renderers import TokenizeParams
+from sonar.sequence import IntermediateTensors
+from sonar.utils.tensor_schema import TensorSchema, TensorShape
 
 from .interfaces import (
     EagleModelMixin,
@@ -228,7 +228,7 @@ class MuseGlimmerMultiModalProcessor(BaseMultiModalProcessor[MuseGlimmerProcessi
         hf_data: Mapping[str, object],
         hf_kwargs: Mapping[str, object],
     ) -> BatchFeature:
-        # Aphrodite samples video frames before processing
+        # Sonar samples video frames before processing
         hf_kwargs = {**hf_kwargs, "do_sample_frames": False}
         return super()._call_hf_processor(hf_data, hf_kwargs)
 
@@ -962,11 +962,11 @@ class MuseGlimmerDecoderLayer(nn.Module):
 
 @support_torch_compile
 class MuseGlimmerModel(nn.Module, EagleModelMixin):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = _text_config(aphrodite_config.model_config.hf_config)
-        cache_config = aphrodite_config.cache_config
-        quant_config = aphrodite_config.quant_config
+        config = _text_config(sonar_config.model_config.hf_config)
+        cache_config = sonar_config.cache_config
+        quant_config = sonar_config.quant_config
         self.config = config
         self.quant_config = quant_config
 
@@ -1069,7 +1069,7 @@ class MuseGlimmerForCausalLM(nn.Module, SupportsLoRA, SupportsMultiModal, Suppor
     # rule must precede the ``post_attn_norm`` -> ``post_attention_layernorm``
     # rule so the latter's output is not re-captured by the former (regex rules
     # apply as a single forward pass).
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_substr={
             "model.vision_tower.patch_embedder.position_embedding_table.weight": (
                 "model.vision_tower.positional_embedding_vlm"
@@ -1118,19 +1118,19 @@ class MuseGlimmerForCausalLM(nn.Module, SupportsLoRA, SupportsMultiModal, Suppor
             return VIDEO_TOKEN
         raise ValueError(f"Unsupported MuseGlimmer modality: {modality}")
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
         text_config = _text_config(config)
-        quant_config = aphrodite_config.quant_config
+        quant_config = sonar_config.quant_config
         self.config = config
         self.text_config = text_config
         self.quant_config = quant_config
         self.has_vision = _muse_glimmer_has_vision(config)
 
-        with self._mark_language_model(aphrodite_config):
+        with self._mark_language_model(sonar_config):
             self.model = MuseGlimmerModel(
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 prefix=maybe_prefix(prefix, "model"),
             )
 
@@ -1138,7 +1138,7 @@ class MuseGlimmerForCausalLM(nn.Module, SupportsLoRA, SupportsMultiModal, Suppor
         self.vision_adapter: MuseGlimmerVisionAdapter | None
         self.perception_emb_norm: MuseGlimmerRMSNorm | None
         if self.has_vision:
-            with self._mark_tower_model(aphrodite_config, {"image", "video"}):
+            with self._mark_tower_model(sonar_config, {"image", "video"}):
                 self.vision_encoder = MuseGlimmerVisionEncoder(
                     config,
                     prefix=maybe_prefix(prefix, "vision_encoder"),
@@ -1258,7 +1258,7 @@ class MuseGlimmerForCausalLM(nn.Module, SupportsLoRA, SupportsMultiModal, Suppor
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
     def get_mm_mapping(self) -> MultiModelKeys:
         """Get the module prefix in multimodal models"""

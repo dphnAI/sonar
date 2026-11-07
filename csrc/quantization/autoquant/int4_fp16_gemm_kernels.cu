@@ -32,9 +32,9 @@ void autoquant_convert_s4_k_m8(torch::Tensor _weight_dest,
         reinterpret_cast<half*>(_quant_scales.data_ptr<at::Half>());
     auto quant_zeros =
         reinterpret_cast<uint32_t*>(_quant_zeros.data_ptr<int32_t>());
-    aphrodite::autoquant::convert_s4_k_m8(
-        weight_dest, quant_scales_zeros_dest, workspace, quant_weight_src,
-        quant_scales, quant_zeros, m, k, group_size, stream);
+    sonar::autoquant::convert_s4_k_m8(weight_dest, quant_scales_zeros_dest,
+                                      workspace, quant_weight_src, quant_scales,
+                                      quant_zeros, m, k, group_size, stream);
   } else {
     auto weight_dest =
         reinterpret_cast<uint32_t*>(_weight_dest.data_ptr<int32_t>());
@@ -48,9 +48,9 @@ void autoquant_convert_s4_k_m8(torch::Tensor _weight_dest,
         _quant_scales.data_ptr<at::BFloat16>());
     auto quant_zeros =
         reinterpret_cast<uint32_t*>(_quant_zeros.data_ptr<int32_t>());
-    aphrodite::autoquant::convert_s4_k_m8(
-        weight_dest, quant_scales_zeros_dest, workspace, quant_weight_src,
-        quant_scales, quant_zeros, m, k, group_size, stream);
+    sonar::autoquant::convert_s4_k_m8(weight_dest, quant_scales_zeros_dest,
+                                      workspace, quant_weight_src, quant_scales,
+                                      quant_zeros, m, k, group_size, stream);
   }
 }
 
@@ -72,7 +72,7 @@ torch::Tensor autoquant_s4_f16_gemm(torch::Tensor _in_feats,
 
   auto st_ = _in_feats.scalar_type();
   if (st_ == at::ScalarType::Half) {
-    static aphrodite::autoquant::GemmS4F16<half, half2> gemm_s4_f16_;
+    static sonar::autoquant::GemmS4F16<half, half2> gemm_s4_f16_;
     auto in_feats = reinterpret_cast<half*>(_in_feats.data_ptr<at::Half>());
     auto kernel = reinterpret_cast<const uint*>(_kernel.data_ptr<int32_t>());
     auto out_feats = reinterpret_cast<half*>(_out_feats.data_ptr<at::Half>());
@@ -83,10 +83,10 @@ torch::Tensor autoquant_s4_f16_gemm(torch::Tensor _in_feats,
     const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
     gemm_s4_f16_.Run(out_feats, kernel, in_feats, scales_zeros,
                      num_out_channels, num_in_feats, num_in_channels,
-                     group_size, aphrodite::autoquant::kGemm, -1, stream);
+                     group_size, sonar::autoquant::kGemm, -1, stream);
     return _out_feats;
   } else {
-    static aphrodite::autoquant::GemmS4F16<__nv_bfloat16, __nv_bfloat162>
+    static sonar::autoquant::GemmS4F16<__nv_bfloat16, __nv_bfloat162>
         gemm_s4_bf16_;
     auto in_feats =
         reinterpret_cast<__nv_bfloat16*>(_in_feats.data_ptr<at::BFloat16>());
@@ -100,7 +100,7 @@ torch::Tensor autoquant_s4_f16_gemm(torch::Tensor _in_feats,
     const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
     gemm_s4_bf16_.Run(out_feats, kernel, in_feats, scales_zeros,
                       num_out_channels, num_in_feats, num_in_channels,
-                      group_size, aphrodite::autoquant::kGemm, -1, stream);
+                      group_size, sonar::autoquant::kGemm, -1, stream);
     return _out_feats;
   }
 }

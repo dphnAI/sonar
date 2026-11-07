@@ -42,14 +42,14 @@ from typing import TYPE_CHECKING, Any
 
 import msgspec
 
-from aphrodite.distributed.kv_transfer.kv_connector.utils import BlockIds
-from aphrodite.distributed.kv_transfer.kv_connector.v1.base import (
+from sonar.distributed.kv_transfer.kv_connector.utils import BlockIds
+from sonar.distributed.kv_transfer.kv_connector.v1.base import (
     KVConnectorTransferResults,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker import (
+from sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker import (
     NixlBaseConnectorWorker,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.metadata import (
+from sonar.distributed.kv_transfer.kv_connector.v1.nixl.metadata import (
     PUSH_REG_NOTIF_PREFIX,
     NixlAgentMetadata,
     NixlConnectorMetadata,
@@ -58,18 +58,18 @@ from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.metadata import (
     ReqMeta,
     TransferHandle,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.tp_mapping import (
+from sonar.distributed.kv_transfer.kv_connector.v1.nixl.tp_mapping import (
     ReadSpec,
     _is_attention_spec,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.utils import get_base_request_id
-from aphrodite.logger import init_logger
+from sonar.distributed.kv_transfer.kv_connector.v1.nixl.utils import get_base_request_id
+from sonar.logger import init_logger
 
 if TYPE_CHECKING:
     import torch
 
-    from aphrodite.config import AphroditeConfig
-    from aphrodite.v1.kv_cache_interface import KVCacheConfig
+    from sonar.config import SonarConfig
+    from sonar.v1.kv_cache_interface import KVCacheConfig
 
 logger = init_logger(__name__)
 
@@ -90,11 +90,11 @@ class NixlPushConnectorWorker(NixlBaseConnectorWorker):
 
     def __init__(
         self,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
         engine_id: str,
         kv_cache_config: "KVCacheConfig",
     ):
-        super().__init__(aphrodite_config, engine_id, kv_cache_config)
+        super().__init__(sonar_config, engine_id, kv_cache_config)
 
         # Heartbeat handshakes to a PP-sharded producer must be notif-only,
         # like the PUSH_REG path.

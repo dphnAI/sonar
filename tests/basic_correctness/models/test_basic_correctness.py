@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Compare the short outputs of HF and Aphrodite when using greedy sampling.
+"""Compare the short outputs of HF and Sonar when using greedy sampling.
 
 Run `pytest tests/basic_correctness/models/test_basic_correctness.py`.
 """
@@ -12,12 +12,12 @@ from unittest.mock import Mock
 import pytest
 import torch
 
-import aphrodite.envs as envs
-from aphrodite import LLM
-from aphrodite.platforms import current_platform
-from aphrodite.v1.engine.llm_engine import LLMEngine
+import sonar.envs as envs
+from sonar import LLM
+from sonar.platforms import current_platform
+from sonar.v1.engine.llm_engine import LLMEngine
 
-from ...conftest import AphroditeRunner, HfRunner
+from ...conftest import HfRunner, SonarRunner
 from ...models.utils import check_outputs_equal
 from ...utils import multi_gpu_test
 
@@ -28,7 +28,7 @@ MODELS = [
     "meta-llama/Llama-3.2-1B-Instruct",
 ]
 
-TARGET_TEST_SUITE_ENV = "APHRODITE_TARGET_TEST_SUITE"
+TARGET_TEST_SUITE_ENV = "SONAR_TARGET_TEST_SUITE"
 LEGACY_TARGET_TEST_SUITE_ENV = "TARGET_TEST_SUITE"
 
 GENERIC_DISTRIBUTED_TEST_SUITES = ("L4", "MI250", "MI300", "MI325", "MI355")
@@ -54,7 +54,7 @@ def _default_target_test_suite() -> str:
         return "MI250"
 
     try:
-        from aphrodite.platforms import rocm as rocm_platform
+        from sonar.platforms import rocm as rocm_platform
 
         if rocm_platform.on_gfx950():
             return "MI355"
@@ -86,33 +86,31 @@ TARGET_TEST_SUITE = _resolve_target_test_suite()
     only_rerun="AssertionError",
     condition=current_platform.is_rocm(),
 )
-def test_aphrodite_gc_ed():
-    """Verify aphrodite instance is GC'ed when it is deleted."""
+def test_sonar_gc_ed():
+    """Verify sonar instance is GC'ed when it is deleted."""
     llm = LLM("hmellor/tiny-random-LlamaForCausalLM")
     weak_llm = weakref.ref(llm)
     del llm
-    # If there's any circular reference to aphrodite, this fails
+    # If there's any circular reference to sonar, this fails
     # because llm instance is not GC'ed.
     assert weak_llm() is None
 
 
 def _fix_prompt_embed_outputs(
-    aphrodite_outputs: list[tuple[list[int], str]],
+    sonar_outputs: list[tuple[list[int], str]],
     hf_model: HfRunner,
     example_prompts: list[str],
 ) -> list[tuple[list[int], str]]:
-    fixed_aphrodite_outputs = []
-    for aphrodite_output, hf_input, prompt in zip(
-        aphrodite_outputs, hf_model.get_inputs(example_prompts), example_prompts
-    ):
+    fixed_sonar_outputs = []
+    for sonar_output, hf_input, prompt in zip(sonar_outputs, hf_model.get_inputs(example_prompts), example_prompts):
         hf_input_ids = hf_input["input_ids"].tolist()[0]
-        fixed_aphrodite_outputs.append(
+        fixed_sonar_outputs.append(
             (
-                hf_input_ids + aphrodite_output[0][len(hf_input_ids) :],
-                prompt + aphrodite_output[1],
+                hf_input_ids + sonar_output[0][len(hf_input_ids) :],
+                prompt + sonar_output[1],
             )
         )
-    return fixed_aphrodite_outputs
+    return fixed_sonar_outputs
 
 
 @pytest.mark.parametrize("model", MODELS)
@@ -144,7 +142,7 @@ def test_models(
             with torch.no_grad():
                 prompt_embeds = hf_model.get_prompt_embeddings(example_prompts)
 
-    with AphroditeRunner(
+    with SonarRunner(
         model,
         max_model_len=8192,
         enforce_eager=enforce_eager,
@@ -153,18 +151,18 @@ def test_models(
         async_scheduling=async_scheduling,
         distributed_executor_backend=model_executor,
         attention_config={"backend": backend},
-    ) as aphrodite_model:
+    ) as sonar_model:
         if enable_prompt_embeds:
-            aphrodite_outputs = aphrodite_model.generate_greedy(prompt_embeds, max_tokens)
-            aphrodite_outputs = _fix_prompt_embed_outputs(aphrodite_outputs, hf_model, example_prompts)
+            sonar_outputs = sonar_model.generate_greedy(prompt_embeds, max_tokens)
+            sonar_outputs = _fix_prompt_embed_outputs(sonar_outputs, hf_model, example_prompts)
         else:
-            aphrodite_outputs = aphrodite_model.generate_greedy(example_prompts, max_tokens)
+            sonar_outputs = sonar_model.generate_greedy(example_prompts, max_tokens)
 
     check_outputs_equal(
         outputs_0_lst=hf_outputs,
-        outputs_1_lst=aphrodite_outputs,
+        outputs_1_lst=sonar_outputs,
         name_0="hf",
-        name_1="aphrodite",
+        name_1="sonar",
     )
 
 
@@ -194,7 +192,7 @@ def test_models(
 def test_models_distributed(
     monkeypatch: pytest.MonkeyPatch,
     hf_runner,
-    aphrodite_runner,
+    sonar_runner,
     example_prompts,
     model: str,
     distributed_executor_backend: str,
@@ -213,13 +211,13 @@ def test_models_distributed(
         dtype = "half"
         max_tokens = 5
 
-        # NOTE: take care of the order. run Aphrodite first, and then run HF.
-        # Aphrodite needs a fresh new process without cuda initialization.
+        # NOTE: take care of the order. run Sonar first, and then run HF.
+        # Sonar needs a fresh new process without cuda initialization.
         # if we run HF first, the cuda initialization will be done and it
         # will hurt multiprocessing backend with fork method
         # (the default method).
         attention_config = {"backend": attention_backend} if attention_backend else None
-        with aphrodite_runner(
+        with sonar_runner(
             model,
             dtype=dtype,
             tensor_parallel_size=2,
@@ -227,48 +225,48 @@ def test_models_distributed(
             enable_prompt_embeds=enable_prompt_embeds,
             gpu_memory_utilization=0.7,
             attention_config=attention_config,
-        ) as aphrodite_model:
+        ) as sonar_model:
             if enable_prompt_embeds:
                 with hf_runner(model, dtype=dtype) as hf_model:
                     with torch.no_grad():
                         prompt_embeds = hf_model.get_prompt_embeddings(example_prompts)
-                    aphrodite_outputs = aphrodite_model.generate_greedy(prompt_embeds, max_tokens)
-                    aphrodite_outputs = _fix_prompt_embed_outputs(aphrodite_outputs, hf_model, example_prompts)
+                    sonar_outputs = sonar_model.generate_greedy(prompt_embeds, max_tokens)
+                    sonar_outputs = _fix_prompt_embed_outputs(sonar_outputs, hf_model, example_prompts)
                     hf_outputs = hf_model.generate_greedy(example_prompts, max_tokens)
             else:
-                aphrodite_outputs = aphrodite_model.generate_greedy(example_prompts, max_tokens)
+                sonar_outputs = sonar_model.generate_greedy(example_prompts, max_tokens)
                 with hf_runner(model, dtype=dtype) as hf_model:
                     hf_outputs = hf_model.generate_greedy(example_prompts, max_tokens)
 
     check_outputs_equal(
         outputs_0_lst=hf_outputs,
-        outputs_1_lst=aphrodite_outputs,
+        outputs_1_lst=sonar_outputs,
         name_0="hf",
-        name_1="aphrodite",
+        name_1="sonar",
     )
 
 
-def test_failed_model_execution(aphrodite_runner, monkeypatch) -> None:
+def test_failed_model_execution(sonar_runner, monkeypatch) -> None:
     # Needed to mock an error in the same process
-    monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
+    monkeypatch.setenv("SONAR_ENABLE_V1_MULTIPROCESSING", "0")
 
-    with aphrodite_runner("facebook/opt-125m", enforce_eager=True) as aphrodite_model:
-        if isinstance(aphrodite_model.llm.llm_engine, LLMEngine):
-            v1_test_failed_model_execution(aphrodite_model)
+    with sonar_runner("facebook/opt-125m", enforce_eager=True) as sonar_model:
+        if isinstance(sonar_model.llm.llm_engine, LLMEngine):
+            v1_test_failed_model_execution(sonar_model)
 
 
 @pytest.mark.parametrize("use_v2_model_runner", [False, True], ids=["v1", "v2"])
-def test_raise_on_logit_nans(aphrodite_runner, monkeypatch, use_v2_model_runner: bool) -> None:
-    monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
-    monkeypatch.setenv("APHRODITE_RAISE_ON_LOGIT_NANS", "1")
-    monkeypatch.setenv("APHRODITE_USE_V2_MODEL_RUNNER", str(int(use_v2_model_runner)))
+def test_raise_on_logit_nans(sonar_runner, monkeypatch, use_v2_model_runner: bool) -> None:
+    monkeypatch.setenv("SONAR_ENABLE_V1_MULTIPROCESSING", "0")
+    monkeypatch.setenv("SONAR_RAISE_ON_LOGIT_NANS", "1")
+    monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", str(int(use_v2_model_runner)))
     envs.disable_envs_cache()
 
     try:
-        with aphrodite_runner("facebook/opt-125m", enforce_eager=True) as aphrodite_model:
-            engine_core = aphrodite_model.llm.llm_engine.engine_core.engine_core
+        with sonar_runner("facebook/opt-125m", enforce_eager=True) as sonar_model:
+            engine_core = sonar_model.llm.llm_engine.engine_core.engine_core
             model_runner = engine_core.model_executor.driver_worker.worker.model_runner
-            assert model_runner.aphrodite_config.use_v2_model_runner is use_v2_model_runner
+            assert model_runner.sonar_config.use_v2_model_runner is use_v2_model_runner
             model_cls = type(model_runner.model)
             original_compute_logits = model_cls.compute_logits
 
@@ -281,13 +279,13 @@ def test_raise_on_logit_nans(aphrodite_runner, monkeypatch, use_v2_model_runner:
             monkeypatch.setattr(model_cls, "compute_logits", compute_nan_logits)
 
             with pytest.raises(RuntimeError, match="NaNs detected in logits"):
-                aphrodite_model.generate_greedy(["Hello, my name is"], 1, use_tqdm=False)
+                sonar_model.generate_greedy(["Hello, my name is"], 1, use_tqdm=False)
     finally:
         envs.disable_envs_cache()
 
 
-def v1_test_failed_model_execution(aphrodite_model):
-    engine = aphrodite_model.llm.llm_engine
+def v1_test_failed_model_execution(sonar_model):
+    engine = sonar_model.llm.llm_engine
     mocked_execute_model = Mock(side_effect=RuntimeError("Mocked Critical Error"))
     engine.engine_core.engine_core.model_executor.execute_model = mocked_execute_model
 
@@ -298,6 +296,6 @@ def v1_test_failed_model_execution(aphrodite_model):
             "The capital of France is",
             "The future of AI is",
         ]
-        aphrodite_model.generate_greedy(prompts, 200, use_tqdm=False)
+        sonar_model.generate_greedy(prompts, 200, use_tqdm=False)
     assert isinstance(exc_info.value, RuntimeError)
     assert "Mocked Critical Error" in str(exc_info.value)

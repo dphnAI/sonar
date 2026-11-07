@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import torch
 from torch import nn
 
-from aphrodite.models.inkling.amd.moe import InklingMoE
+from sonar.models.inkling.amd.moe import InklingMoE
 
 
 def _fake_moe() -> tuple[InklingMoE, SimpleNamespace]:

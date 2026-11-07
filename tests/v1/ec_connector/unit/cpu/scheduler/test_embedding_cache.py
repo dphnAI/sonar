@@ -9,7 +9,7 @@ import threading
 
 import pytest
 
-from aphrodite.distributed.ec_transfer.ec_connector.cpu.scheduler.embedding_cache import (
+from sonar.distributed.ec_transfer.ec_connector.cpu.scheduler.embedding_cache import (
     EmbeddingCache,
 )
 

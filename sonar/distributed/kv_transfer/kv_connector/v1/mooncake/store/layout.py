@@ -14,15 +14,15 @@ from typing import NamedTuple, cast
 import numpy as np
 import torch
 
-from aphrodite.distributed.kv_transfer.kv_connector.v1.ssm_conv_transfer_utils import (
+from sonar.distributed.kv_transfer.kv_connector.v1.ssm_conv_transfer_utils import (
     derive_mamba_conv_split,
 )
-from aphrodite.model_executor.layers.mamba.mamba_utils import is_conv_state_dim_first
-from aphrodite.utils.torch_utils import is_non_overlapping_and_dense
-from aphrodite.v1.attention.backends.registry import MambaAttentionBackendEnum
-from aphrodite.v1.core.kv_cache_utils import BlockHash
-from aphrodite.v1.kv_cache_interface import AttentionSpec, MambaSpec
-from aphrodite.v1.kv_cache_layout import KVCacheLayout
+from sonar.model_executor.layers.mamba.mamba_utils import is_conv_state_dim_first
+from sonar.utils.torch_utils import is_non_overlapping_and_dense
+from sonar.v1.attention.backends.registry import MambaAttentionBackendEnum
+from sonar.v1.core.kv_cache_utils import BlockHash
+from sonar.v1.kv_cache_interface import AttentionSpec, MambaSpec
+from sonar.v1.kv_cache_layout import KVCacheLayout
 
 
 def _schema_fingerprint(parts: tuple[object, ...]) -> str:

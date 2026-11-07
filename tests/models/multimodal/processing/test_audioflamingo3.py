@@ -24,7 +24,7 @@ import pytest
 import torch
 from transformers import PreTrainedConfig
 
-from aphrodite.config.multimodal import MultiModalDummyOptions
+from sonar.config.multimodal import MultiModalDummyOptions
 from tests.models.registry import HF_EXAMPLE_MODELS
 
 
@@ -88,7 +88,7 @@ def check_transformers_version():
 
 
 def test_audio_chunk_counting(mock_ctx):
-    from aphrodite.model_executor.models.audioflamingo3 import (
+    from sonar.model_executor.models.audioflamingo3 import (
         AudioFlamingo3DummyInputsBuilder,
         AudioFlamingo3MultiModalProcessor,
         AudioFlamingo3ProcessingInfo,
@@ -115,7 +115,7 @@ def test_audio_chunk_counting(mock_ctx):
 
 
 def test_dummy_data_generation(mock_ctx):
-    from aphrodite.model_executor.models.audioflamingo3 import (
+    from sonar.model_executor.models.audioflamingo3 import (
         AudioFlamingo3DummyInputsBuilder,
         AudioFlamingo3ProcessingInfo,
     )
@@ -136,7 +136,7 @@ def test_dummy_data_generation(mock_ctx):
 
 
 def test_audio_token_count_matches_hf_processor_math():
-    from aphrodite.model_executor.models.audioflamingo3 import (
+    from sonar.model_executor.models.audioflamingo3 import (
         _count_audio_tokens_from_mask,
     )
 

@@ -459,7 +459,7 @@ void sm89_sparse_mla_fwd(const torch::stable::Tensor& q,
 #endif
 }
 
-#ifdef APHRODITE_ENABLE_SM89_DSA
+#ifdef SONAR_ENABLE_SM89_DSA
 STABLE_TORCH_LIBRARY_IMPL(_C, CUDA, ops) {
   ops.impl("sm89_sparse_mla_fwd", TORCH_BOX(&sm89_sparse_mla_fwd));
 }

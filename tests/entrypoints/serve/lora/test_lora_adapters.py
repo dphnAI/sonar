@@ -61,7 +61,7 @@ def server_with_lora_modules_json(request, qwen3_lora_files):
     ]
 
     # Enable the /v1/load_lora_adapter endpoint
-    envs = {"APHRODITE_ALLOW_RUNTIME_LORA_UPDATING": "True"}
+    envs = {"SONAR_ALLOW_RUNTIME_LORA_UPDATING": "True"}
 
     with RemoteOpenAIServer(MODEL_NAME, args, env_dict=envs) as remote_server:
         yield remote_server

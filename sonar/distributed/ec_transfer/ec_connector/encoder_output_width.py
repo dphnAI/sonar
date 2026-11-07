@@ -13,10 +13,10 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
+    from sonar.config import SonarConfig
 
 logger = init_logger(__name__)
 
@@ -27,16 +27,16 @@ def _measure_on_worker(worker: Any) -> dict[str, int]:
 
     Returns {} on ranks that hold no encoder.
     """
-    from aphrodite.distributed.parallel_state import get_pp_group
-    from aphrodite.multimodal import MULTIMODAL_REGISTRY
-    from aphrodite.multimodal.encoder_budget import MultiModalBudget
-    from aphrodite.multimodal.utils import group_and_batch_mm_kwargs
-    from aphrodite.utils.torch_utils import PIN_MEMORY
+    from sonar.distributed.parallel_state import get_pp_group
+    from sonar.multimodal import MULTIMODAL_REGISTRY
+    from sonar.multimodal.encoder_budget import MultiModalBudget
+    from sonar.multimodal.utils import group_and_batch_mm_kwargs
+    from sonar.utils.torch_utils import PIN_MEMORY
 
     runner = worker.model_runner
     if not runner.supports_mm_inputs or not get_pp_group().is_first_rank:
         return {}
-    budget = MultiModalBudget(worker.aphrodite_config, MULTIMODAL_REGISTRY, enable_cache=False)
+    budget = MultiModalBudget(worker.sonar_config, MULTIMODAL_REGISTRY, enable_cache=False)
     model = runner.get_model()
     widths: dict[str, int] = {}
     for modality in budget.mm_max_toks_per_item:
@@ -50,9 +50,7 @@ def _measure_on_worker(worker: Any) -> dict[str, int]:
     return widths
 
 
-def measure_encoder_output_widths(
-    aphrodite_config: "AphroditeConfig", collective_rpc: Callable[..., list[Any]]
-) -> None:
+def measure_encoder_output_widths(sonar_config: "SonarConfig", collective_rpc: Callable[..., list[Any]]) -> None:
     """Record the encoder output widths on an EC producer's config.
 
     Call after the model is loaded and before the KV cache is allocated: the
@@ -63,7 +61,7 @@ def measure_encoder_output_widths(
         ValueError: No worker could encode a dummy item, or workers disagree.
 
     """
-    ec_config = aphrodite_config.ec_transfer_config
+    ec_config = sonar_config.ec_transfer_config
     if ec_config is None or not ec_config.is_ec_producer:
         return
     reports = [widths for widths in collective_rpc(_measure_on_worker) if widths]
@@ -77,7 +75,7 @@ def measure_encoder_output_widths(
     ec_config.mm_encoder_output_widths = reports[0]
 
 
-def get_encoder_output_width(aphrodite_config: "AphroditeConfig", modality: str) -> int:
+def get_encoder_output_width(sonar_config: "SonarConfig", modality: str) -> int:
     """Encoder output width for `modality`, as measured at producer startup.
 
     Raises:
@@ -85,8 +83,8 @@ def get_encoder_output_width(aphrodite_config: "AphroditeConfig", modality: str)
             cannot be sized.
 
     """
-    assert aphrodite_config.ec_transfer_config is not None
-    widths = aphrodite_config.ec_transfer_config.mm_encoder_output_widths
+    assert sonar_config.ec_transfer_config is not None
+    widths = sonar_config.ec_transfer_config.mm_encoder_output_widths
     if modality not in widths:
         raise ValueError(f"No encoder output width was measured for modality {modality!r}; measured: {sorted(widths)}")
     return widths[modality]

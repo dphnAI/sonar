@@ -14,7 +14,7 @@ from unittest.mock import patch
 
 import pytest
 
-from aphrodite.v1.structured_output.utils import compile_regex_with_timeout
+from sonar.v1.structured_output.utils import compile_regex_with_timeout
 
 
 class TestCompileRegexWithTimeout:
@@ -30,14 +30,14 @@ class TestCompileRegexWithTimeout:
             return "never"
 
         with (
-            patch("aphrodite.envs.APHRODITE_REGEX_COMPILATION_TIMEOUT_S", 1),
+            patch("sonar.envs.SONAR_REGEX_COMPILATION_TIMEOUT_S", 1),
             pytest.raises(ValueError, match="timed out"),
         ):
             compile_regex_with_timeout(slow_compile, r"(a+)+b")
 
     def test_timeout_disabled_when_zero(self):
         result = None
-        with patch("aphrodite.envs.APHRODITE_REGEX_COMPILATION_TIMEOUT_S", 0):
+        with patch("sonar.envs.SONAR_REGEX_COMPILATION_TIMEOUT_S", 0):
             result = compile_regex_with_timeout(lambda pat: "no_timeout", r"(a+)+b")
         assert result == "no_timeout"
 
@@ -55,7 +55,7 @@ class TestCompileRegexWithTimeout:
 
         pattern = r"(a+)+b"
         with (
-            patch("aphrodite.envs.APHRODITE_REGEX_COMPILATION_TIMEOUT_S", 1),
+            patch("sonar.envs.SONAR_REGEX_COMPILATION_TIMEOUT_S", 1),
             pytest.raises(ValueError, match=r"\(a\+\)\+b"),
         ):
             compile_regex_with_timeout(slow_compile, pattern)

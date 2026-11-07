@@ -21,26 +21,26 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 
-import aphrodite.v1.kv_offload.tiering.p2p.session.server as server_mod
-from aphrodite.v1.kv_offload.base import (
+import sonar.v1.kv_offload.tiering.p2p.session.server as server_mod
+from sonar.v1.kv_offload.base import (
     LookupResult,
     OffloadKey,
     ReqContext,
     RequestOffloadingContext,
 )
-from aphrodite.v1.kv_offload.tiering.base import TransferJob
-from aphrodite.v1.kv_offload.tiering.p2p.session import (
+from sonar.v1.kv_offload.tiering.base import TransferJob
+from sonar.v1.kv_offload.tiering.p2p.session import (
     LoadResult,
     P2PSession,
     StoreResult,
 )
-from aphrodite.v1.kv_offload.tiering.p2p.session.client import (
+from sonar.v1.kv_offload.tiering.p2p.session.client import (
     _ABORT_ACK_TIMEOUT_S,
     _LOOKUP_TIMEOUT_S,
     _P2P_LOAD_TIMEOUT_S,
     _PD_LOAD_TIMEOUT_S,
 )
-from aphrodite.v1.kv_offload.tiering.p2p.session.protocol import (
+from sonar.v1.kv_offload.tiering.p2p.session.protocol import (
     TYPE_KEY,
     AbortAckMsg,
     AbortFetchMsg,
@@ -52,12 +52,12 @@ from aphrodite.v1.kv_offload.tiering.p2p.session.protocol import (
     LookupRespMsg,
     TransferDoneMsg,
 )
-from aphrodite.v1.kv_offload.tiering.p2p.session.server import (
+from sonar.v1.kv_offload.tiering.p2p.session.server import (
     _CANCEL_DRAIN_TIMEOUT_S,
     _InflightXfer,
     _OutboundRequestState,
 )
-from aphrodite.v1.kv_offload.tiering.p2p.session.session import (
+from sonar.v1.kv_offload.tiering.p2p.session.session import (
     _MAX_CONSECUTIVE_DISPATCH_ERRORS,
     _PEER_FAULT_DRAIN_S,
 )
@@ -170,7 +170,7 @@ class FakeDataTransport:
         return tid
 
     def poll(self, peer_id=None):
-        from aphrodite.v1.kv_offload.tiering.p2p.data.base import PollResult
+        from sonar.v1.kv_offload.tiering.p2p.data.base import PollResult
 
         result = PollResult(
             done=list(self._poll_done),
@@ -3429,10 +3429,10 @@ class TestHandshakeDeadline:
     handshake timeout expires."""
 
     def test_marks_dead_after_timeout(self, monkeypatch):
-        monkeypatch.setenv("APHRODITE_P2P_HANDSHAKE_TIMEOUT_S", "1")
-        import aphrodite.envs
+        monkeypatch.setenv("SONAR_P2P_HANDSHAKE_TIMEOUT_S", "1")
+        import sonar.envs
 
-        aphrodite.envs.__dict__.pop("APHRODITE_P2P_HANDSHAKE_TIMEOUT_S", None)
+        sonar.envs.__dict__.pop("SONAR_P2P_HANDSHAKE_TIMEOUT_S", None)
 
         transport = FakeDataTransport()
         conn = FakeConnection(peer_id="stale:9999")
@@ -3455,10 +3455,10 @@ class TestHandshakeDeadline:
         assert not session.alive
 
     def test_no_timeout_when_ready(self, monkeypatch):
-        monkeypatch.setenv("APHRODITE_P2P_HANDSHAKE_TIMEOUT_S", "1")
-        import aphrodite.envs
+        monkeypatch.setenv("SONAR_P2P_HANDSHAKE_TIMEOUT_S", "1")
+        import sonar.envs
 
-        aphrodite.envs.__dict__.pop("APHRODITE_P2P_HANDSHAKE_TIMEOUT_S", None)
+        sonar.envs.__dict__.pop("SONAR_P2P_HANDSHAKE_TIMEOUT_S", None)
 
         transport = FakeDataTransport()
         conn = FakeConnection(peer_id="good:1234")
@@ -3495,10 +3495,10 @@ class TestHandshakeDeadline:
     def test_buffered_ack_at_deadline_completes_handshake(self, monkeypatch):
         """A ConnectAck already in the inbox at the deadline must complete
         the handshake instead of being discarded by mark_dead."""
-        monkeypatch.setenv("APHRODITE_P2P_HANDSHAKE_TIMEOUT_S", "1")
-        import aphrodite.envs
+        monkeypatch.setenv("SONAR_P2P_HANDSHAKE_TIMEOUT_S", "1")
+        import sonar.envs
 
-        aphrodite.envs.__dict__.pop("APHRODITE_P2P_HANDSHAKE_TIMEOUT_S", None)
+        sonar.envs.__dict__.pop("SONAR_P2P_HANDSHAKE_TIMEOUT_S", None)
 
         transport = FakeDataTransport()
         conn = FakeConnection(peer_id="late-ack:1")

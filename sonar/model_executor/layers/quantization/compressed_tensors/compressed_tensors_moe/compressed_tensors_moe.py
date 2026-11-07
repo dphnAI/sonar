@@ -9,16 +9,16 @@ from compressed_tensors.quantization import (
     QuantizationType,
 )
 
-from aphrodite.config import get_current_aphrodite_config
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.config import get_current_sonar_config
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe import (
     FusedMoEMethodBase,
     UnquantizedFusedMoEMethod,
 )
-from aphrodite.model_executor.layers.quantization.compressed_tensors.schemes.compressed_tensors_wNa16 import (  # noqa
+from sonar.model_executor.layers.quantization.compressed_tensors.schemes.compressed_tensors_wNa16 import (  # noqa
     WNA16_SUPPORTED_BITS,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 logger = init_logger(__name__)
 
@@ -97,11 +97,11 @@ class CompressedTensorsMoEMethod(FusedMoEMethodBase):
                 )
 
             if current_platform.is_rocm():
-                from aphrodite.platforms.rocm import on_gfx950
+                from sonar.platforms.rocm import on_gfx950
 
-                aphrodite_config = get_current_aphrodite_config()
-                is_lora_disabled = aphrodite_config.lora_config is None
-                moe_backend = aphrodite_config.kernel_config.moe_backend
+                sonar_config = get_current_sonar_config()
+                is_lora_disabled = sonar_config.lora_config is None
+                moe_backend = sonar_config.kernel_config.moe_backend
                 group_size = weight_quant.group_size or -1
                 if (
                     weight_quant.strategy == QuantizationStrategy.GROUP

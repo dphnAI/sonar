@@ -6,23 +6,23 @@ from typing import TYPE_CHECKING, TypeVar
 import numpy as np
 import torch
 
-from aphrodite import SamplingParams
-from aphrodite.utils.torch_utils import async_tensor_h2d
-from aphrodite.v1.sample.logits_processor.interface import (
+from sonar import SamplingParams
+from sonar.utils.torch_utils import async_tensor_h2d
+from sonar.v1.sample.logits_processor.interface import (
     BatchUpdate,
     LogitsProcessor,
     MoveDirectionality,
 )
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
+    from sonar.config import SonarConfig
 
 T = TypeVar("T")
 
 
 class MinPLogitsProcessor(LogitsProcessor):
-    def __init__(self, aphrodite_config: "AphroditeConfig", device: torch.device, is_pin_memory: bool):
-        max_num_reqs = aphrodite_config.scheduler_config.max_num_seqs
+    def __init__(self, sonar_config: "SonarConfig", device: torch.device, is_pin_memory: bool):
+        max_num_reqs = sonar_config.scheduler_config.max_num_seqs
         self.min_p_count: int = 0
 
         self.min_p_cpu_tensor = torch.zeros(
@@ -157,7 +157,7 @@ class LogitBiasLogitsProcessor(LogitsProcessor):
 
 
 class MinTokensLogitsProcessor(LogitsProcessor):
-    def __init__(self, aphrodite_config: "AphroditeConfig", device: torch.device, is_pin_memory: bool):
+    def __init__(self, sonar_config: "SonarConfig", device: torch.device, is_pin_memory: bool):
         # index -> (min_toks, output_token_ids, stop_token_ids, uses_structured_output)
         self.device = device
         self.min_toks: dict[int, tuple[int, Sequence[int], set[int], bool]] = {}

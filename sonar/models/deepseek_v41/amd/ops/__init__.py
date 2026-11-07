@@ -15,20 +15,20 @@ wvSplitK. All of them run only when ``enabled()`` is true, except
 
 import functools
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 # --monokernel (KernelConfig.monokernel) of this process's model. The helpers
-# run in forward passes, where Aphrodite's current config is not set, so the model
+# run in forward passes, where Sonar's current config is not set, so the model
 # records the flag when it is created (record_monokernel).
 _monokernel = False
 
 
-def record_monokernel(aphrodite_config) -> None:
+def record_monokernel(sonar_config) -> None:
     """Record whether this process's model runs with --monokernel. The mono
     decode layer calls this when the model is created, before any helper
     runs."""
     global _monokernel
-    _monokernel = bool(aphrodite_config.kernel_config.monokernel)
+    _monokernel = bool(sonar_config.kernel_config.monokernel)
     enabled.cache_clear()
     swa_decode_meta_enabled.cache_clear()
 
@@ -36,12 +36,12 @@ def record_monokernel(aphrodite_config) -> None:
 @functools.cache
 def enabled() -> bool:
     """True with --monokernel on a gfx942 GPU. Every helper keeps the result
-    of Aphrodite's op it replaces, so each one returns False for a call it cannot
-    take and Aphrodite then runs its own op. gfx950 keeps Aphrodite's ops here, except
+    of Sonar's op it replaces, so each one returns False for a call it cannot
+    take and Sonar then runs its own op. gfx950 keeps Sonar's ops here, except
     for swa_decode_meta (swa_decode_meta_enabled)."""
     if not _monokernel or not current_platform.is_rocm():
         return False
-    from aphrodite.platforms.rocm import on_gfx942
+    from sonar.platforms.rocm import on_gfx942
 
     return on_gfx942()
 
@@ -53,6 +53,6 @@ def swa_decode_meta_enabled() -> bool:
     of both reads."""
     if not _monokernel or not current_platform.is_rocm():
         return False
-    from aphrodite.platforms.rocm import get_cdna_version
+    from sonar.platforms.rocm import get_cdna_version
 
     return get_cdna_version() in (3, 4)

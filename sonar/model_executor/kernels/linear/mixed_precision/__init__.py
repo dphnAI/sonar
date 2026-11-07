@@ -1,48 +1,48 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-from aphrodite.model_executor.kernels.linear.mixed_precision.conch import (
+from sonar.model_executor.kernels.linear.mixed_precision.conch import (
     ConchLinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.mixed_precision.cpu import (
+from sonar.model_executor.kernels.linear.mixed_precision.cpu import (
     CPUWNA16LinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.mixed_precision.cutlass import (
+from sonar.model_executor.kernels.linear.mixed_precision.cutlass import (
     CutlassW4A8LinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.mixed_precision.dynamic_4bit import (
+from sonar.model_executor.kernels.linear.mixed_precision.dynamic_4bit import (
     Dynamic4bitLinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.mixed_precision.exllama import (
+from sonar.model_executor.kernels.linear.mixed_precision.exllama import (
     ExllamaLinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.mixed_precision.humming import (
+from sonar.model_executor.kernels.linear.mixed_precision.humming import (
     HummingLinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.mixed_precision.machete import (
+from sonar.model_executor.kernels.linear.mixed_precision.machete import (
     MacheteLinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.mixed_precision.marlin import (
+from sonar.model_executor.kernels.linear.mixed_precision.marlin import (
     MarlinLinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.mixed_precision.MPLinearKernel import (
+from sonar.model_executor.kernels.linear.mixed_precision.MPLinearKernel import (
     MPLinearKernel,
     MPLinearLayerConfig,
 )
-from aphrodite.model_executor.kernels.linear.mixed_precision.rdna3_w4a16 import (
+from sonar.model_executor.kernels.linear.mixed_precision.rdna3_w4a16 import (
     RDNA3W4A16LinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.mixed_precision.rdna_hybrid_w4a16 import (
+from sonar.model_executor.kernels.linear.mixed_precision.rdna_hybrid_w4a16 import (
     RDNAHybridW4A16LinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.mixed_precision.triton_w4a16 import (
+from sonar.model_executor.kernels.linear.mixed_precision.triton_w4a16 import (
     TritonW4A16LinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.mixed_precision.xpu import (
+from sonar.model_executor.kernels.linear.mixed_precision.xpu import (
     XPUW4A8IntLinearKernel,
     XPUwNa16LinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.mixed_precision.zentorch import (
+from sonar.model_executor.kernels.linear.mixed_precision.zentorch import (
     ZentorchWNA16LinearKernel,
 )
 

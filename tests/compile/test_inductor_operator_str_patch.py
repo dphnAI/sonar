@@ -6,8 +6,8 @@ import pytest
 import torch
 from torch._inductor.exc import OperatorIssue
 
-from aphrodite.env_override import _apply_inductor_operator_str_patch
-from aphrodite.utils.torch_utils import direct_register_custom_op
+from sonar.env_override import _apply_inductor_operator_str_patch
+from sonar.utils.torch_utils import direct_register_custom_op
 
 
 def _identity(x: torch.Tensor) -> torch.Tensor:
@@ -37,7 +37,7 @@ def patched_operator_str(monkeypatch):
     return OperatorIssue.operator_str
 
 
-def test_aphrodite_op_message_is_target_only(patched_operator_str):
-    op = torch.ops.aphrodite.test_operator_str_identity.default
+def test_sonar_op_message_is_target_only(patched_operator_str):
+    op = torch.ops.sonar.test_operator_str_identity.default
     msg = patched_operator_str(op, [_DeepIRNode()], {"x": _DeepIRNode()})
     assert msg == f"  target: {op}"

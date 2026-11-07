@@ -6,14 +6,14 @@ import unittest.mock
 import pytest
 import torch
 
-from aphrodite.distributed.parallel_state import (
+from sonar.distributed.parallel_state import (
     init_distributed_environment,
     initialize_model_parallel,
 )
-from aphrodite.model_executor.layers.mamba.mamba_mixer2 import Mixer2RMSNormGated
-from aphrodite.utils.system_utils import update_environment_variables
-from aphrodite.utils.torch_utils import set_random_seed
-from tests.utils import ensure_current_aphrodite_config, multi_gpu_test
+from sonar.model_executor.layers.mamba.mamba_mixer2 import Mixer2RMSNormGated
+from sonar.utils.system_utils import update_environment_variables
+from sonar.utils.torch_utils import set_random_seed
+from tests.utils import ensure_current_sonar_config, multi_gpu_test
 
 
 @multi_gpu_test(num_gpus=2)
@@ -87,7 +87,7 @@ def mixer2_gated_norm_tensor_parallel(
 
     # initialize distributed
     init_distributed_environment()
-    with ensure_current_aphrodite_config():
+    with ensure_current_sonar_config():
         initialize_model_parallel(tensor_model_parallel_size=world_size)
 
     # create random weights an inputs
@@ -96,7 +96,7 @@ def mixer2_gated_norm_tensor_parallel(
     gate_states = torch.randn(batch_size, seq_len, hidden_size)
 
     # create gated-norm with TP
-    with ensure_current_aphrodite_config():
+    with ensure_current_sonar_config():
         mixer = Mixer2RMSNormGated(
             full_hidden_size=hidden_size,
             full_n_groups=n_groups,
@@ -106,13 +106,13 @@ def mixer2_gated_norm_tensor_parallel(
     # create gated-norm without TP to compute reference
     # - utilize mock patching to disable TP when
     with (
-        ensure_current_aphrodite_config(),
+        ensure_current_sonar_config(),
         unittest.mock.patch(
-            "aphrodite.model_executor.layers.mamba.mamba_mixer2.get_tensor_model_parallel_world_size",
+            "sonar.model_executor.layers.mamba.mamba_mixer2.get_tensor_model_parallel_world_size",
             return_value=1,
         ),
         unittest.mock.patch(
-            "aphrodite.model_executor.layers.mamba.mamba_mixer2.get_tensor_model_parallel_rank",
+            "sonar.model_executor.layers.mamba.mamba_mixer2.get_tensor_model_parallel_rank",
             return_value=0,
         ),
     ):

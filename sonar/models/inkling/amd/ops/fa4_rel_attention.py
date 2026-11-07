@@ -15,12 +15,12 @@ from typing import cast
 
 import torch
 
-from aphrodite.models.inkling.amd.ops.rel_attention_decode import (
+from sonar.models.inkling.amd.ops.rel_attention_decode import (
     inkling_rel_attention_split_kv_decode,
     use_split_kv_decode,
 )
-from aphrodite.platforms.rocm import on_gfx950
-from aphrodite.triton_utils import tl, triton
+from sonar.platforms.rocm import on_gfx950
+from sonar.triton_utils import tl, triton
 
 
 def bucket_max_seqlen_q(max_seqlen_q: int) -> int:
@@ -321,7 +321,7 @@ def inkling_fa4_rel_attention(
     ):
         # Import only after the architecture guard. The implementation uses
         # gfx950-only CDNA4 Gluon layouts and async-copy operations.
-        from aphrodite.models.inkling.amd.ops.gluon.rel_mha_decode_gfx950 import (
+        from sonar.models.inkling.amd.ops.gluon.rel_mha_decode_gfx950 import (
             gluon_rel_mha_decode_gfx950,
         )
 
@@ -346,7 +346,7 @@ def inkling_fa4_rel_attention(
         head_dim=q.shape[2],
         window_left=window_size[0],
     ):
-        from aphrodite.models.inkling.amd.ops.gluon.rel_mha_extend_gfx950 import (
+        from sonar.models.inkling.amd.ops.gluon.rel_mha_extend_gfx950 import (
             gluon_rel_mha_extend_gfx950,
         )
 

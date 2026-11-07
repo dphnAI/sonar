@@ -2,27 +2,27 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import torch
 
-from aphrodite.v1.sample.metadata import SamplingMetadata
-from aphrodite.v1.sample.ops.bad_words import apply_bad_words
-from aphrodite.v1.sample.ops.dry import (
+from sonar.v1.sample.metadata import SamplingMetadata
+from sonar.v1.sample.ops.bad_words import apply_bad_words
+from sonar.v1.sample.ops.dry import (
     DRY_STATE_KEY,
     DryRequestState,
     _compute_dry_penalties,
     _get_or_rebuild_dry_state,
 )
-from aphrodite.v1.sample.ops.epsilon_cutoff import epsilon_cutoff
-from aphrodite.v1.sample.ops.eta_cutoff import eta_cutoff
-from aphrodite.v1.sample.ops.min_p import min_p
-from aphrodite.v1.sample.ops.mirostat import mirostat
-from aphrodite.v1.sample.ops.no_repeat_ngram import no_repeat_ngram
-from aphrodite.v1.sample.ops.penalties import apply_all_penalties
-from aphrodite.v1.sample.ops.quadratic import quadratic
-from aphrodite.v1.sample.ops.skew import skew
-from aphrodite.v1.sample.ops.tfs import tfs
-from aphrodite.v1.sample.ops.top_a import top_a
-from aphrodite.v1.sample.ops.top_nsigma import top_nsigma
-from aphrodite.v1.sample.ops.typical_p import typical_p
-from aphrodite.v1.sample.ops.xtc import xtc
+from sonar.v1.sample.ops.epsilon_cutoff import epsilon_cutoff
+from sonar.v1.sample.ops.eta_cutoff import eta_cutoff
+from sonar.v1.sample.ops.min_p import min_p
+from sonar.v1.sample.ops.mirostat import mirostat
+from sonar.v1.sample.ops.no_repeat_ngram import no_repeat_ngram
+from sonar.v1.sample.ops.penalties import apply_all_penalties
+from sonar.v1.sample.ops.quadratic import quadratic
+from sonar.v1.sample.ops.skew import skew
+from sonar.v1.sample.ops.tfs import tfs
+from sonar.v1.sample.ops.top_a import top_a
+from sonar.v1.sample.ops.top_nsigma import top_nsigma
+from sonar.v1.sample.ops.typical_p import typical_p
+from sonar.v1.sample.ops.xtc import xtc
 
 
 class SamplingOps:

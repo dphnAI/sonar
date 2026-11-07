@@ -11,12 +11,12 @@ import pytest
 from pytest import MarkDecorator
 from transformers import AutoModelForImageTextToText
 
-from aphrodite.assets.image import ImageAsset
-from aphrodite.multimodal.image import rescale_image_size
-from aphrodite.transformers_utils.repo_utils import hf_api
-from aphrodite.utils.torch_utils import set_default_torch_num_threads
+from sonar.assets.image import ImageAsset
+from sonar.multimodal.image import rescale_image_size
+from sonar.transformers_utils.repo_utils import hf_api
+from sonar.utils.torch_utils import set_default_torch_num_threads
 
-from ...conftest import IMAGE_ASSETS, AphroditeRunner, HfRunner
+from ...conftest import IMAGE_ASSETS, HfRunner, SonarRunner
 from ...models.utils import check_logprobs_close
 
 
@@ -83,7 +83,7 @@ MODELS_TO_TEST = [GEMMA3_CONFIG, GEMMA3_CONFIG_PAN_AND_SCAN]
 
 def run_multimodal_gguf_test(
     hf_runner: type[HfRunner],
-    aphrodite_runner: type[AphroditeRunner],
+    sonar_runner: type[SonarRunner],
     model: GGUFMMTestConfig,
     dtype: str,
     max_tokens: int,
@@ -100,11 +100,11 @@ def run_multimodal_gguf_test(
         for image, prompt in zip(images, model.prompt)
     ]
 
-    # NOTE: Run Aphrodite first to avoid CUDA init issues with multiprocessing fork.
-    # Run GGUF model via Aphrodite.
+    # NOTE: Run Sonar first to avoid CUDA init issues with multiprocessing fork.
+    # Run GGUF model via Sonar.
     with (
         set_default_torch_num_threads(1),
-        aphrodite_runner(
+        sonar_runner(
             model_name=model.gguf_model,
             enforce_eager=True,
             tokenizer_name=model.original_model,
@@ -154,10 +154,10 @@ def run_multimodal_gguf_test(
 @pytest.mark.parametrize("num_logprobs", [10])
 def test_gemma3_mm_gguf(
     hf_runner: type[HfRunner],
-    aphrodite_runner: type[AphroditeRunner],
+    sonar_runner: type[SonarRunner],
     model: GGUFMMTestConfig,
     dtype: str,
     max_tokens: int,
     num_logprobs: int,
 ) -> None:
-    run_multimodal_gguf_test(hf_runner, aphrodite_runner, model, dtype, max_tokens, num_logprobs)
+    run_multimodal_gguf_test(hf_runner, sonar_runner, model, dtype, max_tokens, num_logprobs)

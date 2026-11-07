@@ -7,7 +7,7 @@ from contextvars import ContextVar
 
 import torch
 
-from aphrodite.model_executor.layers.quantization.base_config import QuantizeMethodBase
+from sonar.model_executor.layers.quantization.base_config import QuantizeMethodBase
 
 _requantization_source: ContextVar[bool] = ContextVar("requantization_source", default=False)
 

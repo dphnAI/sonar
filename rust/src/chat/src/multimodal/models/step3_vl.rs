@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-//! Step3-VL vision model contract (also used by Step5-VL in Aphrodite).
+//! Step3-VL vision model contract (also used by Step5-VL in Sonar).
 //!
-//! Mirrors Aphrodite's `transformers_utils/processors/step3_vl.py`: each `<im_patch>`
+//! Mirrors Sonar's `transformers_utils/processors/step3_vl.py`: each `<im_patch>`
 //! placeholder expands to per-patch spans (`<patch_start>` + 81 embed tokens +
 //! `<patch_end>`, with `<patch_newline>` after row-final patches) followed by the
 //! global-view span (`<im_start>` + 169 embed tokens + `<im_end>`). The per-image

@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import json
 
-from aphrodite.tokenizers import TokenizerLike
+from sonar.tokenizers import TokenizerLike
 
 
 def _replace_none_with_empty(tokens: list[str | None]):
@@ -57,7 +57,7 @@ def _convert_tokens_to_string_with_added_encoders(
 INITIAL_INCREMENTAL_DETOKENIZATION_OFFSET = 5
 
 
-_CACHED_MARKER_KEY = "_aphrodite_space_marker_cache"
+_CACHED_MARKER_KEY = "_sonar_space_marker_cache"
 _NOT_CACHED = "__not_computed__"
 
 

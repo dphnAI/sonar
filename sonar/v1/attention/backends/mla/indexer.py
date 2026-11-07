@@ -6,52 +6,52 @@ from typing import Any
 import numpy as np
 import torch
 
-import aphrodite.envs as envs
-from aphrodite import _custom_ops as ops
-from aphrodite.config import AphroditeConfig, CUDAGraphMode, get_current_aphrodite_config
-from aphrodite.distributed import get_dcp_group, get_pcp_group
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.kernels.attention.dsa.fused_mqa_topk import (
+import sonar.envs as envs
+from sonar import _custom_ops as ops
+from sonar.config import CUDAGraphMode, SonarConfig, get_current_sonar_config
+from sonar.distributed import get_dcp_group, get_pcp_group
+from sonar.logger import init_logger
+from sonar.model_executor.kernels.attention.dsa.fused_mqa_topk import (
     FUSED_MQA_TOPK_MAX_KEYS,
     FUSED_MQA_TOPK_MAX_ROWS,
     use_fused_mqa_topk,
 )
-from aphrodite.model_executor.kernels.attention.dsa.sm120_indexer import use_sm120_dsa_indexer
-from aphrodite.model_executor.warmup.jit_warmup import kernel_launcher, zip_inputs
-from aphrodite.model_executor.warmup.jit_warmup_triton_helper import (
-    AphroditeTritonJitKernel,
+from sonar.model_executor.kernels.attention.dsa.sm120_indexer import use_sm120_dsa_indexer
+from sonar.model_executor.warmup.jit_warmup import kernel_launcher, zip_inputs
+from sonar.model_executor.warmup.jit_warmup_triton_helper import (
     LaunchSpec,
+    SonarTritonJitKernel,
     TritonPointerInputVariant,
     TritonWarmupTensor,
     triton_scalar_specialization_rep,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.transformers_utils.deepseek_v4_utils import get_compress_ratios
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.deep_gemm import (
+from sonar.platforms import current_platform
+from sonar.transformers_utils.deepseek_v4_utils import get_compress_ratios
+from sonar.triton_utils import tl, triton
+from sonar.utils.deep_gemm import (
     get_paged_mqa_logits_metadata,
     get_paged_mqa_page_sizes,
     has_deep_gemm,
     native_next_n_supported,
 )
-from aphrodite.utils.math_utils import round_down
-from aphrodite.utils.platform_utils import num_compute_units
-from aphrodite.utils.torch_utils import PIN_MEMORY, async_tensor_h2d, np_to_pinned_tensor
-from aphrodite.v1.attention.backend import (
+from sonar.utils.math_utils import round_down
+from sonar.utils.platform_utils import num_compute_units
+from sonar.utils.torch_utils import PIN_MEMORY, async_tensor_h2d, np_to_pinned_tensor
+from sonar.v1.attention.backend import (
     AttentionBackend,
     AttentionCGSupport,
     AttentionMetadataBuilder,
     CommonAttentionMetadata,
     MultipleOf,
 )
-from aphrodite.v1.attention.backends.mla.compressor_utils import get_compressed_slot_mapping
-from aphrodite.v1.attention.backends.mla.sm89_mla_sparse import use_sm89_dsa
-from aphrodite.v1.attention.backends.mla.sparse_utils import request_row_bounds
-from aphrodite.v1.attention.backends.utils import (
+from sonar.v1.attention.backends.mla.compressor_utils import get_compressed_slot_mapping
+from sonar.v1.attention.backends.mla.sm89_mla_sparse import use_sm89_dsa
+from sonar.v1.attention.backends.mla.sparse_utils import request_row_bounds
+from sonar.v1.attention.backends.utils import (
     get_dcp_local_seq_lens,
     split_decodes_and_prefills,
 )
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.kv_cache_interface import (
     AttentionSpec,
     KVCacheLayout,
     KVCacheSpec,
@@ -65,9 +65,9 @@ logger = init_logger(__name__)
 DSA_INDEXER_KV_DTYPES = ("fp8", "mxfp4")
 
 
-def dsa_indexer_uses_fp4(aphrodite_config: AphroditeConfig) -> bool:
+def dsa_indexer_uses_fp4(sonar_config: SonarConfig) -> bool:
     """Whether the DeepSeek sparse indexer should use the MXFP4 K cache."""
-    kv_dtype = aphrodite_config.attention_config.resolve_indexer_kv_dtype("fp8")
+    kv_dtype = sonar_config.attention_config.resolve_indexer_kv_dtype("fp8")
     if kv_dtype not in DSA_INDEXER_KV_DTYPES:
         raise ValueError(
             f"indexer_kv_dtype={kv_dtype!r} is not supported by the DeepSeek "
@@ -75,12 +75,12 @@ def dsa_indexer_uses_fp4(aphrodite_config: AphroditeConfig) -> bool:
         )
     use_fp4 = kv_dtype == "mxfp4"
     if use_fp4 and current_platform.is_rocm():
-        from aphrodite._aiter_ops import rocm_aiter_ops
-        from aphrodite.platforms.rocm import get_cdna_version
+        from sonar._aiter_ops import rocm_aiter_ops
+        from sonar.platforms.rocm import get_cdna_version
 
         # Only DeepSeek-V4 and V4.1 are wired to the ROCm MXFP4 cache; other
         # DSA models would silently keep their FP8 one.
-        model_config = aphrodite_config.model_config
+        model_config = sonar_config.model_config
         if model_config is None or model_config.hf_config.model_type not in (
             "deepseek_v4",
             "deepseek_v41",
@@ -90,8 +90,7 @@ def dsa_indexer_uses_fp4(aphrodite_config: AphroditeConfig) -> bool:
             raise ValueError("indexer_kv_dtype='mxfp4' on ROCm requires CDNA4 (MI350X/MI355X).")
         if not rocm_aiter_ops.is_enabled():
             raise ValueError(
-                "indexer_kv_dtype='mxfp4' on ROCm runs on aiter's kernels; enable "
-                "aiter with APHRODITE_ROCM_USE_AITER=1."
+                "indexer_kv_dtype='mxfp4' on ROCm runs on aiter's kernels; enable aiter with SONAR_ROCM_USE_AITER=1."
             )
         return True
     if use_fp4 and not current_platform.is_device_capability_family(100):
@@ -103,7 +102,7 @@ def dsa_indexer_uses_fp4(aphrodite_config: AphroditeConfig) -> bool:
     return use_fp4
 
 
-class PrepareUniformDecodeKernel(AphroditeTritonJitKernel["PrepareUniformDecodeKernel.CompileKey"]):
+class PrepareUniformDecodeKernel(SonarTritonJitKernel["PrepareUniformDecodeKernel.CompileKey"]):
     BLOCK_SIZE = 1024
 
     @dataclass(frozen=True)
@@ -243,21 +242,21 @@ def balanced_prefill_row_shard(
 
 
 def tp_prefill_row_sharding_supported(
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     dcp_world_size: int,
     use_pcp: bool,
     tp_size: int,
 ) -> bool:
     """Whether replicated prefill rows may be sharded across TP ranks."""
-    cudagraph_mode = aphrodite_config.compilation_config.cudagraph_mode or CUDAGraphMode.NONE
+    cudagraph_mode = sonar_config.compilation_config.cudagraph_mode or CUDAGraphMode.NONE
     return (
         current_platform.is_cuda()
         and dcp_world_size == 1
         and not use_pcp
         and tp_size > 1
-        and not envs.APHRODITE_DISABLE_PYNCCL
-        and not envs.APHRODITE_USE_NCCL_SYMM_MEM
-        and not envs.APHRODITE_BATCH_INVARIANT
+        and not envs.SONAR_DISABLE_PYNCCL
+        and not envs.SONAR_USE_NCCL_SYMM_MEM
+        and not envs.SONAR_BATCH_INVARIANT
         and cudagraph_mode.mixed_mode() != CUDAGraphMode.FULL
     )
 
@@ -304,7 +303,7 @@ class Glm5NextIndexerBackend(DeepseekV32IndexerBackend):
             index_kpool = int(kv_cache_spec.tokens_per_state)
         else:
             # Platform block-size selection: no spec yet, under the current config.
-            model_config = get_current_aphrodite_config().model_config
+            model_config = get_current_sonar_config().model_config
             index_kpool = model_config.hf_text_config.index_kpool
         return [index_kpool * n for n in get_paged_mqa_page_sizes()]
 
@@ -471,7 +470,7 @@ class DeepseekV32IndexerPrefillChunkMetadata:
     pcp_deinterleave_idx: torch.Tensor | None = None
 
 
-class BuildPrefillChunkMetadataKernel(AphroditeTritonJitKernel["BuildPrefillChunkMetadataKernel.CompileKey"]):
+class BuildPrefillChunkMetadataKernel(SonarTritonJitKernel["BuildPrefillChunkMetadataKernel.CompileKey"]):
     BLOCK_SIZE = 1024
 
     @dataclass(frozen=True)
@@ -579,10 +578,10 @@ class BuildPrefillChunkMetadataKernel(AphroditeTritonJitKernel["BuildPrefillChun
             input_variant=input_variant,
         )
 
-    def get_warmup_keys(self, aphrodite_config: AphroditeConfig) -> list[CompileKey]:
-        max_tokens = max(1, min(aphrodite_config.scheduler_config.max_num_batched_tokens, 8))
-        hf_text_config = aphrodite_config.model_config.hf_text_config
-        parallel_config = aphrodite_config.parallel_config
+    def get_warmup_keys(self, sonar_config: SonarConfig) -> list[CompileKey]:
+        max_tokens = max(1, min(sonar_config.scheduler_config.max_num_batched_tokens, 8))
+        hf_text_config = sonar_config.model_config.hf_text_config
+        parallel_config = sonar_config.parallel_config
         dcp_world = parallel_config.decode_context_parallel_size
         dcp_interleave = parallel_config.cp_kv_cache_interleave_size
         dcp_rank = get_dcp_group().rank_in_group if dcp_world > 1 else 0
@@ -841,12 +840,12 @@ class KpoolTailMetadataBuilder(AttentionMetadataBuilder):
         self,
         kv_cache_spec: AttentionSpec,
         layer_names: list[str],
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
     ):
-        super().__init__(kv_cache_spec, layer_names, aphrodite_config, device)
+        super().__init__(kv_cache_spec, layer_names, sonar_config, device)
         self.slot_mapping_buffer = torch.empty(
-            aphrodite_config.scheduler_config.max_num_batched_tokens,
+            sonar_config.scheduler_config.max_num_batched_tokens,
             dtype=torch.int64,
             device=device,
         )
@@ -896,9 +895,9 @@ class KpoolTailMetadataBuilder(AttentionMetadataBuilder):
         slot_mapping.add_(metadata.positions[: metadata.num_decode_tokens].remainder(self.kv_cache_spec.block_size))
 
 
-def get_max_prefill_buffer_size(aphrodite_config: AphroditeConfig):
-    max_model_len = aphrodite_config.model_config.max_model_len
-    factor = aphrodite_config.attention_config.sparse_mla_prefill_workspace_factor
+def get_max_prefill_buffer_size(sonar_config: SonarConfig):
+    max_model_len = sonar_config.model_config.max_model_len
+    factor = sonar_config.attention_config.sparse_mla_prefill_workspace_factor
     assert factor is not None
     # Each entry is 128 fp8 bytes and 4 scale bytes for a total of 132 bytes.
     # The flashmla_sparse backend uses a workspace size of factor * max_model_len.
@@ -912,14 +911,14 @@ def get_max_prefill_buffer_size(aphrodite_config: AphroditeConfig):
 
 def dense_logits_rows(max_seqlen_k: int, max_logits_bytes: int | None = None) -> int:
     """Query rows per dense MQA-logits call whose fp32 [rows, max_seqlen_k]
-    logits fit max_logits_bytes (default: APHRODITE_SPARSE_INDEXER_MAX_LOGITS_MB).
+    logits fit max_logits_bytes (default: SONAR_SPARSE_INDEXER_MAX_LOGITS_MB).
 
     The prefill chunk planner sub-chunks requests with it; the indexers split
     the rows of chunks planned for fused_mqa_topk (not bounded by the budget)
     that take the dense path.
     """
     if max_logits_bytes is None:
-        max_logits_bytes = envs.APHRODITE_SPARSE_INDEXER_MAX_LOGITS_MB * 1024 * 1024
+        max_logits_bytes = envs.SONAR_SPARSE_INDEXER_MAX_LOGITS_MB * 1024 * 1024
     return max(1, max_logits_bytes // (4 * max(1, max_seqlen_k)))
 
 
@@ -931,8 +930,8 @@ def _supports_flattened_device_query_lens() -> bool:
     return current_platform.is_cuda() and current_platform.is_device_capability_family(90) and has_deep_gemm()
 
 
-def _rocm_supports_flattened_device_query_lens(aphrodite_config: AphroditeConfig) -> bool:
-    model_config = aphrodite_config.model_config
+def _rocm_supports_flattened_device_query_lens(sonar_config: SonarConfig) -> bool:
+    model_config = sonar_config.model_config
     return (
         current_platform.is_rocm()
         and model_config is not None
@@ -959,13 +958,13 @@ def _supports_native_decode(next_n: int) -> bool:
     return next_n in (1, 2)
 
 
-def _use_flattening(aphrodite_config: AphroditeConfig) -> bool:
-    speculative_config = aphrodite_config.speculative_config
-    next_n = 1 + aphrodite_config.num_speculative_tokens
+def _use_flattening(sonar_config: SonarConfig) -> bool:
+    speculative_config = sonar_config.speculative_config
+    next_n = 1 + sonar_config.num_speculative_tokens
     return not _supports_native_decode(next_n) or (
         speculative_config is not None
         and speculative_config.enable_adaptive_verification
-        and (_supports_flattened_device_query_lens() or _rocm_supports_flattened_device_query_lens(aphrodite_config))
+        and (_supports_flattened_device_query_lens() or _rocm_supports_flattened_device_query_lens(sonar_config))
     )
 
 
@@ -978,17 +977,17 @@ class DeepseekV32IndexerMetadataBuilder(AttentionMetadataBuilder):
     @classmethod
     def get_cudagraph_support(
         cls,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         kv_cache_spec: KVCacheSpec,
     ) -> AttentionCGSupport:
-        if _supports_varlen_paged_mqa_logits() or _use_flattening(aphrodite_config):
+        if _supports_varlen_paged_mqa_logits() or _use_flattening(sonar_config):
             return AttentionCGSupport.ALWAYS
         return AttentionCGSupport.UNIFORM_BATCH
 
     def __init__(self, *args, block_table_width: int, **kwargs) -> None:
         super().__init__(*args, **kwargs)
-        scheduler_config = self.aphrodite_config.scheduler_config
-        parallel_config = self.aphrodite_config.parallel_config
+        scheduler_config = self.sonar_config.scheduler_config
+        parallel_config = self.sonar_config.parallel_config
         self.dcp_world_size = parallel_config.decode_context_parallel_size
         self.tp_size = parallel_config.tensor_parallel_size
         self.dcp_rank = get_dcp_group().rank_in_group if self.dcp_world_size > 1 else 0
@@ -1004,24 +1003,21 @@ class DeepseekV32IndexerMetadataBuilder(AttentionMetadataBuilder):
         # NOTE(Chen):an estimated max size of flattened_kv. Need to double check.
         # Counted in compressed rows, like the chunker's seq_lens and the
         # workspace.
-        self.max_prefill_buffer_size = get_max_prefill_buffer_size(self.aphrodite_config) // self.compress_ratio
+        self.max_prefill_buffer_size = get_max_prefill_buffer_size(self.sonar_config) // self.compress_ratio
         self.num_speculative_tokens = (
-            self.aphrodite_config.speculative_config.num_speculative_tokens
-            if self.aphrodite_config.speculative_config
-            else 0
+            self.sonar_config.speculative_config.num_speculative_tokens if self.sonar_config.speculative_config else 0
         )
         self.use_adaptive_verification = bool(
-            self.aphrodite_config.speculative_config
-            and self.aphrodite_config.speculative_config.enable_adaptive_verification
+            self.sonar_config.speculative_config and self.sonar_config.speculative_config.enable_adaptive_verification
         )
-        self.indexer_uses_fp4 = dsa_indexer_uses_fp4(self.aphrodite_config)
+        self.indexer_uses_fp4 = dsa_indexer_uses_fp4(self.sonar_config)
         # Plan prefill chunks for the fused MQA+top-k kernel (not bounded by
         # the logits budget). PCP + DCP has its own planner. v4.1 candidate
         # selection is not excluded: its pre-candidate indexers take
         # fused_mqa_topk and the others row-split their dense logits. Indexers
         # that pad their heads to 32 run fused_mqa_topk on budget-planned
         # chunks.
-        model_config = self.aphrodite_config.model_config
+        model_config = self.sonar_config.model_config
         cfg = model_config.hf_text_config if model_config is not None else None
         self.fused_mqa_topk_eligible = cfg is not None and use_fused_mqa_topk(
             query_shape=(
@@ -1037,7 +1033,7 @@ class DeepseekV32IndexerMetadataBuilder(AttentionMetadataBuilder):
         self.decode_threshold = next_n
         self.reorder_batch_threshold = None
         self.use_sm120_dsa = use_sm120_dsa_indexer()
-        self.use_flattening = _use_flattening(self.aphrodite_config) and not self.use_sm120_dsa
+        self.use_flattening = _use_flattening(self.sonar_config) and not self.use_sm120_dsa
         self.supports_varlen = _supports_varlen_paged_mqa_logits()
         logger.info_once(
             "DSA indexer decode path: use_flattening=%s supports_varlen=%s (next_n=%d, use_fp4_cache=%s)",
@@ -1169,7 +1165,7 @@ class DeepseekV32IndexerMetadataBuilder(AttentionMetadataBuilder):
         compile keys never include the token count, so one launch per variant
         covers every batch shape.
         """
-        from aphrodite.utils.import_utils import has_cutedsl
+        from sonar.utils.import_utils import has_cutedsl
 
         try:
             device = self.device
@@ -1197,9 +1193,9 @@ class DeepseekV32IndexerMetadataBuilder(AttentionMetadataBuilder):
             )
 
             # Cross-rank top-k merge (continuation-chunk prefill and decode).
-            index_topk = getattr(self.aphrodite_config.model_config.hf_config, "index_topk", None)
+            index_topk = getattr(self.sonar_config.model_config.hf_config, "index_topk", None)
             if has_cutedsl() and index_topk in (512, 1024, 2048):
-                from aphrodite.model_executor.kernels.attention.dsa.dcp_indexer_cutedsl import (
+                from sonar.model_executor.kernels.attention.dsa.dcp_indexer_cutedsl import (
                     StableTopKFromGatheredCandidatesKernel,
                     pack_dcp_topk_candidates_cutedsl,
                 )
@@ -1248,7 +1244,7 @@ class DeepseekV32IndexerMetadataBuilder(AttentionMetadataBuilder):
         collective participation stays aligned. Must mirror the gating in
         Sm89MLASparseMetadataBuilder._build_local_prefill.
         """
-        parallel_config = self.aphrodite_config.parallel_config
+        parallel_config = self.sonar_config.parallel_config
         if (
             not (self.use_sm89_dsa or self.use_sm120_dsa)
             or self.dcp_world_size <= 1
@@ -1331,7 +1327,7 @@ class DeepseekV32IndexerMetadataBuilder(AttentionMetadataBuilder):
         max_decode_len: int,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, int, bool]:
         """Prepare native or per-token flattened decode tensors."""
-        spec_config = self.aphrodite_config.speculative_config
+        spec_config = self.sonar_config.speculative_config
         adaptive = bool(spec_config and spec_config.enable_adaptive_verification)
         min_decode_len = int(decode_lens_cpu.min().item())
         if not use_native:
@@ -1647,7 +1643,7 @@ class DeepseekV32IndexerMetadataBuilder(AttentionMetadataBuilder):
             seq_lens_cpu = common_attn_metadata.seq_lens_cpu_upper_bound
             compressed_seq_lens_cpu = seq_lens_cpu // self.compress_ratio if self.compress_ratio > 1 else seq_lens_cpu
             prefill_query_lens_cpu = torch.diff(query_start_loc_cpu[num_decodes : num_decodes + num_prefills + 1])
-            max_logits_bytes = envs.APHRODITE_SPARSE_INDEXER_MAX_LOGITS_MB * 1024 * 1024
+            max_logits_bytes = envs.SONAR_SPARSE_INDEXER_MAX_LOGITS_MB * 1024 * 1024
             # Upper bound is exact for prefill rows (the `[num_decodes:]`
             # slice below).
             assert common_attn_metadata.seq_lens_cpu_upper_bound is not None
@@ -1741,15 +1737,13 @@ class DeepseekV32IndexerMetadataBuilder(AttentionMetadataBuilder):
                         ]
                     chunks.append(metadata)
             row_shard_sizes = None
-            if tp_prefill_row_sharding_supported(
-                self.aphrodite_config, self.dcp_world_size, self.use_pcp, self.tp_size
-            ):
+            if tp_prefill_row_sharding_supported(self.sonar_config, self.dcp_world_size, self.use_pcp, self.tp_size):
                 row_shard_sizes = balanced_prefill_row_shard(
                     seq_lens_cpu[num_decodes:],
                     prefill_query_lens_cpu,
                     self.compress_ratio,
                     self.tp_size,
-                    self.aphrodite_config.attention_config.indexer_tp_shard_min_rows,
+                    self.sonar_config.attention_config.indexer_tp_shard_min_rows,
                 )
             prefill_metadata = DeepseekV32IndexerPrefillMetadata(
                 chunks,
@@ -1821,7 +1815,7 @@ class DeepseekV32IndexerMetadataBuilder(AttentionMetadataBuilder):
 
             decode_indices = None
             if self.supports_varlen:
-                from aphrodite.v1.attention.ops.metadata import (
+                from sonar.v1.attention.ops.metadata import (
                     _indexer_decode_metadata_kernel,
                 )
 

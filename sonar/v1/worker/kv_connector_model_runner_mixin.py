@@ -6,28 +6,26 @@ from collections.abc import Generator
 from contextlib import AbstractContextManager, contextmanager, nullcontext
 from typing import TYPE_CHECKING
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed.kv_transfer import get_kv_transfer_group, has_kv_transfer_group
-from aphrodite.distributed.kv_transfer.kv_connector.base import KVConnectorBase
-from aphrodite.forward_context import get_forward_context, set_forward_context
-from aphrodite.v1.outputs import (
+from sonar.config import SonarConfig
+from sonar.distributed.kv_transfer import get_kv_transfer_group, has_kv_transfer_group
+from sonar.distributed.kv_transfer.kv_connector.base import KVConnectorBase
+from sonar.forward_context import get_forward_context, set_forward_context
+from sonar.v1.outputs import (
     KVConnectorOutput,
     ModelRunnerOutput,
 )
 
 if TYPE_CHECKING:
-    from aphrodite.v1.core.sched.output import SchedulerOutput
+    from sonar.v1.core.sched.output import SchedulerOutput
 
 
 # Defined as a kv connector functionality mixin for ModelRunner (GPU, TPU)
 class KVConnectorModelRunnerMixin:
     @staticmethod
-    def kv_connector_no_forward(
-        scheduler_output: "SchedulerOutput", aphrodite_config: AphroditeConfig
-    ) -> ModelRunnerOutput:
+    def kv_connector_no_forward(scheduler_output: "SchedulerOutput", sonar_config: SonarConfig) -> ModelRunnerOutput:
         # KV send/recv even if no work to do.
         with (
-            set_forward_context(None, aphrodite_config),
+            set_forward_context(None, sonar_config),
             KVConnectorModelRunnerMixin._get_kv_connector_output(scheduler_output) as kv_connector_output,
         ):
             pass

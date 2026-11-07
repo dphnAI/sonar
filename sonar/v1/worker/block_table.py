@@ -9,19 +9,19 @@ from typing import Any
 import numpy as np
 import torch
 
-from aphrodite.distributed import get_dcp_group, get_pcp_group
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.warmup.jit_warmup import kernel_launcher
-from aphrodite.model_executor.warmup.jit_warmup_triton_helper import (
-    AphroditeTritonJitKernel,
+from sonar.distributed import get_dcp_group, get_pcp_group
+from sonar.logger import init_logger
+from sonar.model_executor.warmup.jit_warmup import kernel_launcher
+from sonar.model_executor.warmup.jit_warmup_triton_helper import (
     LaunchSpec,
+    SonarTritonJitKernel,
     TritonWarmupTensor,
     triton_scalar_specialization_rep,
 )
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.v1.attention.backends.utils import PAD_SLOT_ID
-from aphrodite.v1.utils import CpuGpuBuffer
+from sonar.triton_utils import tl, triton
+from sonar.utils.math_utils import cdiv
+from sonar.v1.attention.backends.utils import PAD_SLOT_ID
+from sonar.v1.utils import CpuGpuBuffer
 
 logger = init_logger(__name__)
 
@@ -291,7 +291,7 @@ class MultiGroupBlockTable:
         return self.block_tables[idx]
 
 
-class ComputeSlotMappingKernel(AphroditeTritonJitKernel["ComputeSlotMappingKernel.CompileKey"]):
+class ComputeSlotMappingKernel(SonarTritonJitKernel["ComputeSlotMappingKernel.CompileKey"]):
     triton_block_size = 1024
 
     @dataclass(frozen=True)

@@ -5,12 +5,12 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from aphrodite.platforms import current_platform
-from aphrodite.third_party.flash_linear_attention.ops import (
+from sonar.platforms import current_platform
+from sonar.third_party.flash_linear_attention.ops import (
     fused_recurrent_gated_delta_rule,
     fused_sigmoid_gating_delta_rule_update,
 )
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.utils.torch_utils import set_random_seed
 
 DEVICE = current_platform.device_type
 

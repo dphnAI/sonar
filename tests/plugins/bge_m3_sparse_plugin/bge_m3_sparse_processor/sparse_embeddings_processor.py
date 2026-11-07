@@ -3,14 +3,14 @@
 
 from collections.abc import Sequence
 
-from aphrodite.config import AphroditeConfig, PoolerConfig
-from aphrodite.entrypoints.serve.engine.protocol import UsageInfo
-from aphrodite.inputs import PromptType
-from aphrodite.outputs import PoolingRequestOutput
-from aphrodite.plugins.io_processors.interface import IOProcessor
-from aphrodite.pooling_params import PoolingParams
-from aphrodite.renderers import BaseRenderer
-from aphrodite.tokenizers.detokenizer_utils import convert_ids_list_to_tokens
+from sonar.config import PoolerConfig, SonarConfig
+from sonar.entrypoints.serve.engine.protocol import UsageInfo
+from sonar.inputs import PromptType
+from sonar.outputs import PoolingRequestOutput
+from sonar.plugins.io_processors.interface import IOProcessor
+from sonar.pooling_params import PoolingParams
+from sonar.renderers import BaseRenderer
+from sonar.tokenizers.detokenizer_utils import convert_ids_list_to_tokens
 
 from .types import (
     SparseEmbeddingCompletionRequestMixin,
@@ -21,19 +21,19 @@ from .types import (
 
 
 class BgeM3SparseEmbeddingsProcessor(IOProcessor[SparseEmbeddingCompletionRequestMixin, SparseEmbeddingResponse]):
-    def __init__(self, aphrodite_config: AphroditeConfig, renderer: BaseRenderer):
-        super().__init__(aphrodite_config, renderer)
+    def __init__(self, sonar_config: SonarConfig, renderer: BaseRenderer):
+        super().__init__(sonar_config, renderer)
         self.offline_requests: list[SparseEmbeddingCompletionRequestMixin] = []
         self.online_requests: dict[str, SparseEmbeddingCompletionRequestMixin] = {}
         self.renderer: BaseRenderer = renderer
         self.default_pooling_params = {}
-        pooler_config: PoolerConfig | None = aphrodite_config.model_config.pooler_config
+        pooler_config: PoolerConfig | None = sonar_config.model_config.pooler_config
         if pooler_config is not None:
             for param in ["use_activation", "dimensions"]:
                 if getattr(pooler_config, param, None) is None:
                     continue
                 self.default_pooling_params[param] = getattr(pooler_config, param)
-        self.embed_dimensions = aphrodite_config.model_config.embedding_size
+        self.embed_dimensions = sonar_config.model_config.embedding_size
 
     def __repr__(self) -> str:
         return (
@@ -57,7 +57,7 @@ class BgeM3SparseEmbeddingsProcessor(IOProcessor[SparseEmbeddingCompletionReques
         return params
 
     def parse_data(self, data: object) -> SparseEmbeddingCompletionRequestMixin:
-        # for aphrodite.entrypoints.llm.LLM, offline mode, calls `encode` directly.
+        # for sonar.entrypoints.llm.LLM, offline mode, calls `encode` directly.
         if isinstance(data, dict):
             return SparseEmbeddingCompletionRequestMixin(**data)
         raise TypeError("data should be a dictionary")

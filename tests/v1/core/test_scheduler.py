@@ -9,9 +9,8 @@ import numpy as np
 import pytest
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.config import (
-    AphroditeConfig,
+import sonar.envs as envs
+from sonar.config import (
     CacheConfig,
     ECTransferConfig,
     KVTransferConfig,
@@ -19,59 +18,60 @@ from aphrodite.config import (
     ModelConfig,
     ParallelConfig,
     SchedulerConfig,
+    SonarConfig,
     SpeculativeConfig,
 )
-from aphrodite.distributed.aux_output_connector.connector import (
+from sonar.distributed.aux_output_connector.connector import (
     AuxOutputSchedulerConnector,
     AuxRequestOutput,
 )
-from aphrodite.distributed.ec_transfer.ec_connector.metrics import ECConnectorStats
-from aphrodite.distributed.kv_transfer.kv_connector.v1.hisparse.connector import (
+from sonar.distributed.ec_transfer.ec_connector.metrics import ECConnectorStats
+from sonar.distributed.kv_transfer.kv_connector.v1.hisparse.connector import (
     HiSparseConnector,
     HiSparseConnectorScheduler,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.metrics import KVConnectorStats
-from aphrodite.distributed.kv_transfer.kv_connector.v1.multi_connector import MultiConnector
-from aphrodite.lora.request import LoRARequest
-from aphrodite.multimodal.inputs import (
+from sonar.distributed.kv_transfer.kv_connector.v1.metrics import KVConnectorStats
+from sonar.distributed.kv_transfer.kv_connector.v1.multi_connector import MultiConnector
+from sonar.lora.request import LoRARequest
+from sonar.multimodal.inputs import (
     MultiModalBatchedField,
     MultiModalFeatureSpec,
     MultiModalFieldElem,
     MultiModalKwargsItem,
     PlaceholderRange,
 )
-from aphrodite.outputs import RequestError
-from aphrodite.pooling_params import PoolingParams
-from aphrodite.sampling_params import SamplingParams, StructuredOutputsParams
-from aphrodite.utils.hashing import sha256
-from aphrodite.v1.core.encoder_cache_manager import EncoderCacheManager
-from aphrodite.v1.core.kv_cache_coordinator import HybridKVCacheCoordinator
-from aphrodite.v1.core.kv_cache_manager import KVCacheManager
-from aphrodite.v1.core.kv_cache_utils import get_request_block_hasher, init_none_hash
-from aphrodite.v1.core.sched.diffusion_scheduler import (
+from sonar.outputs import RequestError
+from sonar.pooling_params import PoolingParams
+from sonar.sampling_params import SamplingParams, StructuredOutputsParams
+from sonar.utils.hashing import sha256
+from sonar.v1.core.encoder_cache_manager import EncoderCacheManager
+from sonar.v1.core.kv_cache_coordinator import HybridKVCacheCoordinator
+from sonar.v1.core.kv_cache_manager import KVCacheManager
+from sonar.v1.core.kv_cache_utils import get_request_block_hasher, init_none_hash
+from sonar.v1.core.sched.diffusion_scheduler import (
     DiffusionAsyncScheduler,
     DiffusionScheduler,
     diffusion_canvas_width,
 )
-from aphrodite.v1.core.sched.interface import PauseState
-from aphrodite.v1.core.sched.output import CachedRequestData, SchedulerOutput
-from aphrodite.v1.core.sched.scheduler import Scheduler
-from aphrodite.v1.core.single_type_kv_cache_manager import (
+from sonar.v1.core.sched.interface import PauseState
+from sonar.v1.core.sched.output import CachedRequestData, SchedulerOutput
+from sonar.v1.core.sched.scheduler import Scheduler
+from sonar.v1.core.single_type_kv_cache_manager import (
     register_all_kvcache_specs,
 )
-from aphrodite.v1.engine import FinishReason
-from aphrodite.v1.engine.core import EngineCore
-from aphrodite.v1.executor.uniproc_executor import UniProcExecutor
-from aphrodite.v1.hisparse.coordinator import get_hisparse_coordinator
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.engine import FinishReason
+from sonar.v1.engine.core import EngineCore
+from sonar.v1.executor.uniproc_executor import UniProcExecutor
+from sonar.v1.hisparse.coordinator import get_hisparse_coordinator
+from sonar.v1.kv_cache_interface import (
     FullAttentionSpec,
     KVCacheConfig,
     KVCacheGroupSpec,
     MambaSpec,
     SlidingWindowSpec,
 )
-from aphrodite.v1.metrics.cache_hit_source import CacheHitSource
-from aphrodite.v1.outputs import (
+from sonar.v1.metrics.cache_hit_source import CacheHitSource
+from sonar.v1.outputs import (
     DraftTokenIds,
     ECConnectorOutput,
     KVConnectorOutput,
@@ -79,8 +79,8 @@ from aphrodite.v1.outputs import (
     SamplingMaskLists,
     make_empty_encoder_model_runner_output,
 )
-from aphrodite.v1.request import Request, RequestStatus
-from aphrodite.v1.structured_output import StructuredOutputGrammar, StructuredOutputManager
+from sonar.v1.request import Request, RequestStatus
+from sonar.v1.structured_output import StructuredOutputGrammar, StructuredOutputManager
 
 from .utils import EOS_TOKEN_ID, create_requests, create_scheduler, mock_kv
 
@@ -790,7 +790,7 @@ def test_cached_request_data_resumed_all_token_ids_mrv1_only():
     """all_token_ids carries a resumed request's token ids to the connector
     for the V1 model runner, but is skipped entirely for the V2 model runner.
     """
-    from aphrodite.v1.core.kv_cache_manager import KVCacheBlocks
+    from sonar.v1.core.kv_cache_manager import KVCacheBlocks
 
     scheduler = create_scheduler(use_v2_model_runner=False)
     (req,) = create_requests(num_requests=1, num_tokens=8)
@@ -1891,7 +1891,7 @@ def test_stop_via_update_from_output():
 
 def test_check_stop_min_tokens():
     """Test that sampled stop tokens still finish under min_tokens."""
-    from aphrodite.v1.core.sched.utils import check_stop
+    from sonar.v1.core.sched.utils import check_stop
 
     # Test case 1: regular tokens below min_tokens should keep running.
     sampling_params = SamplingParams(
@@ -1989,7 +1989,7 @@ def test_check_stop_length_cap_below_min_tokens():
     still finish as FINISHED_LENGTH_CAPPED instead of spinning in the
     scheduler with zero new tokens to schedule.
     """
-    from aphrodite.v1.core.sched.utils import check_stop
+    from sonar.v1.core.sched.utils import check_stop
 
     # Reaching max_model_len below min_tokens must stop the request.
     sampling_params = SamplingParams(
@@ -2519,7 +2519,7 @@ def test_reset_connector_cache_no_connector_is_no_op_success():
 
 
 def test_draft_slots_budgeted_per_scheduled_request(tmp_path, monkeypatch):
-    monkeypatch.setenv("APHRODITE_USE_V2_MODEL_RUNNER", "0")
+    monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", "0")
     (tmp_path / "config.json").write_text('{"architectures": ["OPTForCausalLM"], "model_type": "opt"}')
     base = create_scheduler(
         model=str(tmp_path),
@@ -2531,8 +2531,8 @@ def test_draft_slots_budgeted_per_scheduled_request(tmp_path, monkeypatch):
     )
     # P-EAGLE needs a resolvable draft model, so switch the ngram config in place
     # and redo the config step.
-    aphrodite_config = base.aphrodite_config
-    speculative_config = aphrodite_config.speculative_config
+    sonar_config = base.sonar_config
+    speculative_config = sonar_config.speculative_config
     assert speculative_config is not None
     object.__setattr__(speculative_config, "method", "eagle3")
     object.__setattr__(
@@ -2540,9 +2540,9 @@ def test_draft_slots_budgeted_per_scheduled_request(tmp_path, monkeypatch):
         "draft_model_config",
         SimpleNamespace(hf_config=SimpleNamespace(), architectures=[]),
     )
-    aphrodite_config._set_max_num_scheduled_tokens()
+    sonar_config._set_max_num_scheduled_tokens()
     scheduler = Scheduler(
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         kv_cache_config=base.kv_cache_config,
         structured_output_manager=base.structured_output_manager,
         block_size=base.block_size,
@@ -2568,16 +2568,16 @@ def test_block_drafters_cap_requests_instead_of_draft_slots(tmp_path, method, ma
     )
     # DFlash/DSpark need a resolvable draft model, so switch the ngram config in
     # place and redo the config step. DSpark then has 4 lookahead tokens, not 5.
-    aphrodite_config = base.aphrodite_config
-    object.__setattr__(aphrodite_config.speculative_config, "method", method)
+    sonar_config = base.sonar_config
+    object.__setattr__(sonar_config.speculative_config, "method", method)
     object.__setattr__(
-        aphrodite_config.speculative_config,
+        sonar_config.speculative_config,
         "draft_model_config",
         SimpleNamespace(hf_config=SimpleNamespace(), architectures=[]),
     )
-    aphrodite_config._set_max_num_scheduled_tokens()
+    sonar_config._set_max_num_scheduled_tokens()
     scheduler = Scheduler(
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         kv_cache_config=base.kv_cache_config,
         structured_output_manager=base.structured_output_manager,
         block_size=base.block_size,
@@ -4120,7 +4120,7 @@ def create_scheduler_with_priority(
         else None
     )
 
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         scheduler_config=scheduler_config,
         model_config=model_config,
         cache_config=cache_config,
@@ -4145,15 +4145,15 @@ def create_scheduler_with_priority(
     )
     cache_config.num_gpu_blocks = num_blocks
     scheduler = Scheduler(
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         kv_cache_config=kv_cache_config,
         log_stats=True,
-        structured_output_manager=StructuredOutputManager(aphrodite_config),
+        structured_output_manager=StructuredOutputManager(sonar_config),
         block_size=block_size,
         hash_block_size=block_size,
     )
     if use_v2_model_runner is None:
-        use_v2_model_runner = bool(envs.APHRODITE_USE_V2_MODEL_RUNNER)
+        use_v2_model_runner = bool(envs.SONAR_USE_V2_MODEL_RUNNER)
     scheduler.use_v2_model_runner = use_v2_model_runner
     return scheduler
 
@@ -4840,7 +4840,7 @@ def test_abort_request_when_structured_output_fsm_cannot_advance():
     scheduler.aux_output_connector = None
     scheduler.grammar_compile_error_reqs = {}
     scheduler.encoder_cache_mismatch_reqs = set()
-    scheduler.aphrodite_config = Mock()
+    scheduler.sonar_config = Mock()
     scheduler.return_sampling_mask = False
     scheduler.recompute_kv_load_failures = False
     scheduler.defer_block_free = False
@@ -5052,10 +5052,10 @@ def test_chunked_prefill_disabled_for_encoder_decoder(
     assert "is_encoder_decoder" not in [f.name for f in dataclasses.fields(scheduler_config)]
     _validate_chunked_prefill_settings_for_encoder_decoder(scheduler_config, is_encoder_decoder, expect_enabled)
 
-    # Ensure it is retained in AphroditeConfig, even after its post-init.
-    aphrodite_config = AphroditeConfig(scheduler_config=scheduler_config)
+    # Ensure it is retained in SonarConfig, even after its post-init.
+    sonar_config = SonarConfig(scheduler_config=scheduler_config)
     _validate_chunked_prefill_settings_for_encoder_decoder(
-        aphrodite_config.scheduler_config, is_encoder_decoder, expect_enabled
+        sonar_config.scheduler_config, is_encoder_decoder, expect_enabled
     )
 
 
@@ -6463,8 +6463,8 @@ def _create_encoder_decoder_scheduler(
     CrossAttentionSpec (cross-attention) KV cache groups, then patches it
     to behave as an encoder-decoder model.
     """
-    from aphrodite.v1.core.encoder_cache_manager import EncoderDecoderCacheManager
-    from aphrodite.v1.kv_cache_interface import CrossAttentionSpec
+    from sonar.v1.core.encoder_cache_manager import EncoderDecoderCacheManager
+    from sonar.v1.kv_cache_interface import CrossAttentionSpec
 
     model_config = ModelConfig(
         model="facebook/opt-125m",
@@ -6487,7 +6487,7 @@ def _create_encoder_decoder_scheduler(
     )
     cache_config.num_gpu_blocks = num_blocks
 
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         scheduler_config=scheduler_config,
         model_config=model_config,
         cache_config=cache_config,
@@ -6524,11 +6524,11 @@ def _create_encoder_decoder_scheduler(
     # the __init__ won't set up encoder-decoder internals. We patch them
     # after construction.
     scheduler = Scheduler(
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         kv_cache_config=kv_cache_config,
         block_size=block_size,
         hash_block_size=block_size,
-        structured_output_manager=StructuredOutputManager(aphrodite_config),
+        structured_output_manager=StructuredOutputManager(sonar_config),
     )
 
     # Patch to enable encoder-decoder behavior in the scheduling loop.
@@ -6541,7 +6541,7 @@ def _create_encoder_decoder_scheduler(
 
 def _get_num_cross_attn_blocks(scheduler: Scheduler, request_id: str) -> int:
     """Get the number of cross-attention blocks allocated for a request."""
-    from aphrodite.v1.core.single_type_kv_cache_manager import CrossAttentionManager
+    from sonar.v1.core.single_type_kv_cache_manager import CrossAttentionManager
 
     coordinator = scheduler.kv_cache_manager.coordinator
     for manager in coordinator.single_type_managers:
@@ -6950,7 +6950,7 @@ def test_encoder_cache_accepts_matching_embed_count():
     assert compatible.request_id not in scheduler_output.scheduled_encoder_inputs
 
 
-def test_encoder_cache_rejects_mismatched_embed_count(caplog_aphrodite):
+def test_encoder_cache_rejects_mismatched_embed_count(caplog_sonar):
     """A completed request's freeable entry rejects an incompatible reuse."""
     scheduler = create_scheduler(model="llava-hf/llava-1.5-7b-hf")
     identifier = "reused-client-uuid"
@@ -6967,8 +6967,8 @@ def test_encoder_cache_rejects_mismatched_embed_count(caplog_aphrodite):
     assert not scheduler_output.num_scheduled_tokens
     assert mismatched.request_id in scheduler.encoder_cache_mismatch_reqs
     assert (
-        "multimodal identifier 'reused-client-uuid' holds 3 embeddings" in caplog_aphrodite.text
-        and "expects 4" in caplog_aphrodite.text
+        "multimodal identifier 'reused-client-uuid' holds 3 embeddings" in caplog_sonar.text
+        and "expects 4" in caplog_sonar.text
     )
 
     outputs = scheduler.update_from_output(
@@ -7648,7 +7648,7 @@ def _create_hybrid_mamba_connector_scheduler(
         seed=42,
         skip_tokenizer_init=True,
     )
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         scheduler_config=SchedulerConfig(
             max_num_seqs=4,
             max_num_batched_tokens=8192,
@@ -7673,7 +7673,7 @@ def _create_hybrid_mamba_connector_scheduler(
             },
         ),
     )
-    aphrodite_config.cache_config.num_gpu_blocks = num_blocks
+    sonar_config.cache_config.num_gpu_blocks = num_blocks
     kv_cache_config = KVCacheConfig(
         num_blocks=num_blocks,
         kv_cache_tensors=[],
@@ -7698,11 +7698,11 @@ def _create_hybrid_mamba_connector_scheduler(
             ),
         ],
     )
-    register_all_kvcache_specs(aphrodite_config)
+    register_all_kvcache_specs(sonar_config)
     return Scheduler(
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         kv_cache_config=kv_cache_config,
-        structured_output_manager=StructuredOutputManager(aphrodite_config),
+        structured_output_manager=StructuredOutputManager(sonar_config),
         block_size=block_size,
         hash_block_size=block_size,
         log_stats=True,
@@ -7992,8 +7992,8 @@ def _diffusion_request(req_id: str, extra_args: dict) -> Request:
 @pytest.fixture
 def diffusion_model_runner(monkeypatch):
     # These CPU tests only exercise scheduling, not Triton kernels.
-    monkeypatch.setattr("aphrodite.config.aphrodite.HAS_TRITON", True)
-    monkeypatch.setenv("APHRODITE_USE_V2_MODEL_RUNNER", "1")
+    monkeypatch.setattr("sonar.config.sonar.HAS_TRITON", True)
+    monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", "1")
 
 
 def _diffusion_scheduler(async_scheduling: bool = True, **kwargs) -> DiffusionScheduler:
@@ -8013,7 +8013,7 @@ def _diffusion_scheduler(async_scheduling: bool = True, **kwargs) -> DiffusionSc
 def test_diffusion_scheduler_is_selected_by_default(async_scheduling):
     config = create_scheduler(
         async_scheduling=async_scheduling, diffusion_canvas_length=8
-    ).aphrodite_config.scheduler_config
+    ).sonar_config.scheduler_config
     assert config.get_scheduler_cls() is (DiffusionAsyncScheduler if config.async_scheduling else DiffusionScheduler)
 
 

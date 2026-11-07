@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Model inspection utilities for Aphrodite."""
+"""Model inspection utilities for Sonar."""
 
 import torch.nn as nn
 

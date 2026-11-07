@@ -9,22 +9,22 @@ from typing import Any
 import torch
 import torch.distributed as dist
 
-import aphrodite.envs as envs
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.utils.network_utils import (
+import sonar.envs as envs
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.utils.network_utils import (
     aiter_requires_tcp_store,
     get_distributed_init_method,
     get_file_store_init_method,
     get_ip,
     get_open_port,
 )
-from aphrodite.v1.core.sched.output import GrammarOutput, SchedulerOutput
-from aphrodite.v1.executor.abstract import Executor
-from aphrodite.v1.executor.aphrodite_net_devices import set_worker_net_device
-from aphrodite.v1.outputs import AsyncModelRunnerOutput, DraftTokenIds, ModelRunnerOutput
-from aphrodite.v1.serial_utils import run_method
-from aphrodite.v1.worker.worker_base import WorkerWrapperBase
+from sonar.v1.core.sched.output import GrammarOutput, SchedulerOutput
+from sonar.v1.executor.abstract import Executor
+from sonar.v1.executor.sonar_net_devices import set_worker_net_device
+from sonar.v1.outputs import AsyncModelRunnerOutput, DraftTokenIds, ModelRunnerOutput
+from sonar.v1.serial_utils import run_method
+from sonar.v1.worker.worker_base import WorkerWrapperBase
 
 logger = init_logger(__name__)
 
@@ -54,7 +54,7 @@ class UniProcExecutor(Executor):
         self.driver_worker = WorkerWrapperBase(rpc_rank=0)
         distributed_init_method, rank, local_rank = self._distributed_args()
         kwargs = dict(
-            aphrodite_config=self.aphrodite_config,
+            sonar_config=self.sonar_config,
             local_rank=local_rank,
             rank=rank,
             distributed_init_method=distributed_init_method,
@@ -62,17 +62,17 @@ class UniProcExecutor(Executor):
             shared_worker_lock=Lock(),
         )
 
-        # Set net device env vars for the worker if APHRODITE_GPU_NIC_PCIE_MAPPING is set
-        set_worker_net_device(local_rank, self.aphrodite_config)
+        # Set net device env vars for the worker if SONAR_GPU_NIC_PCIE_MAPPING is set
+        set_worker_net_device(local_rank, self.sonar_config)
 
         self.driver_worker.init_worker(all_kwargs=[kwargs])
         self.driver_worker.init_device()
 
-        if envs.APHRODITE_ELASTIC_EP_SCALE_UP_LAUNCH:
+        if envs.SONAR_ELASTIC_EP_SCALE_UP_LAUNCH:
             self.driver_worker.elastic_ep_execute("load_model")
         else:
             self.driver_worker.load_model()
-        current_platform.update_block_size_for_backend(self.aphrodite_config)
+        current_platform.update_block_size_for_backend(self.sonar_config)
 
     def _distributed_args(self) -> tuple[str, int, int]:
         """Return (distributed_init_method, rank, local_rank)."""
@@ -81,7 +81,7 @@ class UniProcExecutor(Executor):
         else:
             distributed_init_method = get_file_store_init_method()
         # set local rank as the device index if specified
-        device_info = self.aphrodite_config.device_config.device.__str__().split(":")
+        device_info = self.sonar_config.device_config.device.__str__().split(":")
         local_rank = int(device_info[1]) if len(device_info) > 1 else 0
         return distributed_init_method, 0, local_rank
 
@@ -175,8 +175,8 @@ class ExecutorWithExternalLauncher(UniProcExecutor):
 
     def _init_executor(self) -> None:
         """Initialize the worker and load the model."""
-        assert not envs.APHRODITE_ENABLE_V1_MULTIPROCESSING, (
-            "To get deterministic execution, please set APHRODITE_ENABLE_V1_MULTIPROCESSING=0"
+        assert not envs.SONAR_ENABLE_V1_MULTIPROCESSING, (
+            "To get deterministic execution, please set SONAR_ENABLE_V1_MULTIPROCESSING=0"
         )
         super()._init_executor()
 
@@ -196,7 +196,7 @@ class ExecutorWithExternalLauncher(UniProcExecutor):
     def determine_available_memory(self) -> list[int]:  # in bytes
         # we need to get the min across all ranks.
         memory = super().determine_available_memory()
-        from aphrodite.distributed.parallel_state import get_world_group
+        from sonar.distributed.parallel_state import get_world_group
 
         cpu_group = get_world_group().cpu_group
         memory_tensor = torch.tensor([memory], device="cpu", dtype=torch.int64)
@@ -205,12 +205,12 @@ class ExecutorWithExternalLauncher(UniProcExecutor):
 
     def shutdown(self) -> None:
         super().shutdown()
-        # Release Aphrodite's communicators (TP/PP/DP/EP groups) now, as
+        # Release Sonar's communicators (TP/PP/DP/EP groups) now, as
         # MultiprocExecutor's workers do. Left alive, they are torn down by
         # static destructors at interpreter exit, where newer RCCL aborts the
         # process ("terminate called without an active exception"). The world
         # group and the default process group may belong to the launcher, so
         # they stay.
-        from aphrodite.distributed.parallel_state import destroy_model_parallel
+        from sonar.distributed.parallel_state import destroy_model_parallel
 
         destroy_model_parallel()

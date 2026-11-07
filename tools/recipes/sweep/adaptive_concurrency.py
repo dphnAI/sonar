@@ -12,9 +12,9 @@ from pathlib import Path
 from statistics import median
 from typing import Any
 
-from aphrodite.benchmarks.sweep.param_sweep import ParameterSweepItem
-from aphrodite.benchmarks.sweep.serve import run_server
-from aphrodite.benchmarks.sweep.serve_workload import run_comb_workload
+from sonar.benchmarks.sweep.param_sweep import ParameterSweepItem
+from sonar.benchmarks.sweep.serve import run_server
+from sonar.benchmarks.sweep.serve_workload import run_comb_workload
 
 DEFAULT_MINIMUM_COMPLIANCE = 0.99
 DEFAULT_MAX_CONCURRENCY_CAP = 1000

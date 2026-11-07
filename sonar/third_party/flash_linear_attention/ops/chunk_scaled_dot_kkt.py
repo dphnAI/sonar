@@ -10,8 +10,8 @@
 
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
 
 from .index import prepare_chunk_indices
 from .op import exp
@@ -23,7 +23,7 @@ from .utils import FLA_CHUNK_SIZE
 # storage dtype (bf16/fp16) so fast WMMA is used instead.
 _CAST_DOT_TO_K_DTYPE = False
 if current_platform.is_rocm():
-    from aphrodite.platforms.rocm import on_gfx1x
+    from sonar.platforms.rocm import on_gfx1x
 
     _CAST_DOT_TO_K_DTYPE = on_gfx1x()
 

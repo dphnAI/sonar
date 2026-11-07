@@ -12,7 +12,7 @@ use std::str::FromStr;
 
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 
-pub use aphrodite_parser::output_grammar::ToolStrictLevel;
+pub use sonar_parser::output_grammar::ToolStrictLevel;
 
 use self::reasoning::ReasoningParserFactory;
 use self::tool::ToolParserFactory;

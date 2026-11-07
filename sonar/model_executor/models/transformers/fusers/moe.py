@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 # SPDX-FileCopyrightText: Copyright contributors to the Aphrodite project
-"""MoE fuser: route an HF MoE block through `FusedMoEFactory` with Aphrodite's own routing."""
+"""MoE fuser: route an HF MoE block through `FusedMoEFactory` with Sonar's own routing."""
 
 import ast
 import functools
@@ -15,11 +15,11 @@ import torch
 from torch import fx, nn
 from typing_extensions import TypeIs
 
-from aphrodite.distributed import tensor_model_parallel_all_gather
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe import GateLinear
-from aphrodite.model_executor.layers.linear import ReplicatedLinear
-from aphrodite.model_executor.models.transformers.fx_utils import (
+from sonar.distributed import tensor_model_parallel_all_gather
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe import GateLinear
+from sonar.model_executor.layers.linear import ReplicatedLinear
+from sonar.model_executor.models.transformers.fx_utils import (
     find_node,
     is_complete,
     is_op,
@@ -27,8 +27,8 @@ from aphrodite.model_executor.models.transformers.fx_utils import (
     peel,
     trace,
 )
-from aphrodite.model_executor.models.transformers.utils import named_state
-from aphrodite.model_executor.models.utils import maybe_prefix, sequence_parallel_chunk
+from sonar.model_executor.models.transformers.utils import named_state
+from sonar.model_executor.models.utils import maybe_prefix, sequence_parallel_chunk
 
 logger = init_logger(__name__)
 
@@ -236,7 +236,7 @@ class MoEBlockFuser:
         if not any(is_op(n, "linear") for n in logits_cone):
             return None
         is_softmax = is_op(scorer, "softmax")
-        # Aphrodite always scores every expert, so matching a router that softmaxes
+        # Sonar always scores every expert, so matching a router that softmaxes
         # the selection alone takes renormalizing. Otherwise look for the
         # division, reading its absence as "no" only from a complete trace.
         renormalize: bool | None
@@ -309,12 +309,12 @@ class MoEBlockFuser:
         Args:
             moe_block: The MoE block.
             experts_name: The name of the experts in `moe_block`.
-            divides_shared_output: Whether Aphrodite routing would divide the shared
+            divides_shared_output: Whether Sonar routing would divide the shared
                 expert's output by `routed_scaling_factor` (fp16 overflow
                 protection), which Transformers decoder layers do not undo.
 
         Returns:
-            A fuser if more than the experts can run in Aphrodite, else `None`.
+            A fuser if more than the experts can run in Sonar, else `None`.
 
         """
         # Standard MoE block returns a single tensor.
@@ -359,7 +359,7 @@ class MoEBlockFuser:
                 return None
         if scoring_func is not None and shared_name and divides_shared_output:
             logger.warning_once(
-                "%s could be fused but routing it in Aphrodite would apply "
+                "%s could be fused but routing it in Sonar would apply "
                 "`routed_scaling_factor` by dividing the shared expert output, "
                 "which only fp16 overflow protection expects the decoder layer to "
                 "compensate for. Falling back to routing in Transformers; run in "
@@ -367,8 +367,8 @@ class MoEBlockFuser:
                 type(moe_block).__name__,
             )
             scoring_func = router_dtype = renormalize = None
-        # Without Aphrodite routing, only a shared expert can move to Aphrodite, and only
-        # if the block does not scale the experts' output (Aphrodite routing does).
+        # Without Sonar routing, only a shared expert can move to Sonar, and only
+        # if the block does not scale the experts' output (Sonar routing does).
         if scoring_func is None and (shared_name is None or routed is not experts):
             return None
         return cls(
@@ -381,7 +381,7 @@ class MoEBlockFuser:
         )
 
     def gate(self, moe_block: nn.Module, prefix: str, out_dtype: torch.dtype | None = None) -> GateLinear:
-        """Rebuild the HF gate as a `GateLinear` for Aphrodite's fused MoE."""
+        """Rebuild the HF gate as a `GateLinear` for Sonar's fused MoE."""
         hf_gate = getattr(moe_block, self.gate_name)
         num_experts, hidden_size = hf_gate.weight.shape
         gate = GateLinear(
@@ -398,7 +398,7 @@ class MoEBlockFuser:
 
     def shared_experts(self, moe_block: nn.Module, prefix: str) -> SharedExpertMLP | None:
         """Build the HF shared expert (and its optional gate)
-        as a `SharedExpertMLP` for Aphrodite's fused MoE."""
+        as a `SharedExpertMLP` for Sonar's fused MoE."""
         if self.shared_name is None:
             return None
         shared_experts = getattr(moe_block, self.shared_name)
@@ -415,5 +415,5 @@ class MoEBlockFuser:
         return SharedExpertMLP(shared_experts, gate)
 
     def rewrite_forward(self, moe_block: nn.Module) -> None:
-        """Rewrite `moe_block.forward` to route through Aphrodite's fused MoE."""
+        """Rewrite `moe_block.forward` to route through Sonar's fused MoE."""
         moe_block.forward = types.MethodType(_moe_block_forward, moe_block)

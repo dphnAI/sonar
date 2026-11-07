@@ -26,21 +26,21 @@ from typing import TYPE_CHECKING, Literal, TypeAlias, TypeVar
 import torch
 from torch import nn
 
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.conv import Conv2dLayer, Conv3dLayer
-from aphrodite.model_executor.layers.layernorm import LayerNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.conv import Conv2dLayer, Conv3dLayer
+from sonar.model_executor.layers.layernorm import LayerNorm
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     ReplicatedLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.vocab_parallel_embedding import VocabParallelEmbedding
-from aphrodite.model_executor.models.utils import maybe_prefix
-from aphrodite.transformers_utils.config import iter_rope_parameters
+from sonar.model_executor.layers.vocab_parallel_embedding import VocabParallelEmbedding
+from sonar.model_executor.models.utils import maybe_prefix
+from sonar.transformers_utils.config import iter_rope_parameters
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
-    from aphrodite.model_executor.layers.quantization import QuantizationConfig
+    from sonar.config import SonarConfig
+    from sonar.model_executor.layers.quantization import QuantizationConfig
 
 
 logger = init_logger(__name__)
@@ -111,7 +111,7 @@ def replace_linear_class(
     *,
     prefix: str = "",
 ) -> ColumnParallelLinear | RowParallelLinear | ReplicatedLinear:
-    """Replace nn.Linear with one of Aphrodite's tensor parallel linear classes.
+    """Replace nn.Linear with one of Sonar's tensor parallel linear classes.
 
     Args:
         linear: `nn.Linear` to be replaced.
@@ -126,7 +126,7 @@ def replace_linear_class(
     if not isinstance(style, str):
         raise ValueError(f"Unsupported parallel style type {type(style)}, expected str")
 
-    aphrodite_linear_cls, aphrodite_linear_kwargs = {
+    sonar_linear_cls, sonar_linear_kwargs = {
         "colwise": (ColumnParallelLinear, {}),
         "rowwise": (RowParallelLinear, {}),
         "replicate": (ReplicatedLinear, {}),
@@ -134,23 +134,23 @@ def replace_linear_class(
         "rowwise_split_input": (RowParallelLinear, {"input_is_parallel": False}),
     }.get(style, (ReplicatedLinear, {}))
 
-    return aphrodite_linear_cls(
+    return sonar_linear_cls(
         input_size=linear.in_features,
         output_size=linear.out_features,
         bias=linear.bias is not None,
         quant_config=quant_config,
         prefix=prefix,
         return_bias=False,
-        **aphrodite_linear_kwargs,
+        **sonar_linear_kwargs,
     )
 
 
 TorchConv: TypeAlias = nn.Conv2d | nn.Conv3d
-AphroditeConv: TypeAlias = Conv2dLayer | Conv3dLayer
+SonarConv: TypeAlias = Conv2dLayer | Conv3dLayer
 
 
-def replace_conv_class(conv: TorchConv) -> AphroditeConv | TorchConv:
-    """Replace a Transformers Conv2d/Conv3d with Aphrodite's Conv2d/Conv3d.
+def replace_conv_class(conv: TorchConv) -> SonarConv | TorchConv:
+    """Replace a Transformers Conv2d/Conv3d with Sonar's Conv2d/Conv3d.
 
     Args:
         conv: `nn.Conv2d` or `nn.Conv3d` to be replaced.
@@ -160,19 +160,19 @@ def replace_conv_class(conv: TorchConv) -> AphroditeConv | TorchConv:
         returns the original conv module.
 
     """
-    # Aphrodite does not handle non-zero padding modes
+    # Sonar does not handle non-zero padding modes
     if conv.padding_mode != "zeros":
         return conv
 
-    aphrodite_conv_cls = {
+    sonar_conv_cls = {
         nn.Conv2d: Conv2dLayer,
         nn.Conv3d: Conv3dLayer,
     }.get(type(conv))
 
-    if aphrodite_conv_cls is None:
+    if sonar_conv_cls is None:
         return conv
 
-    return aphrodite_conv_cls(
+    return sonar_conv_cls(
         in_channels=conv.in_channels,
         out_channels=conv.out_channels,
         kernel_size=conv.kernel_size,
@@ -187,7 +187,7 @@ def replace_conv_class(conv: TorchConv) -> AphroditeConv | TorchConv:
 
 
 def replace_layernorm_class(layernorm: nn.LayerNorm) -> nn.Module:
-    """Replace a standard (mean-centered) `nn.LayerNorm` with Aphrodite's
+    """Replace a standard (mean-centered) `nn.LayerNorm` with Sonar's
     `LayerNorm`.
 
     Args:
@@ -235,7 +235,7 @@ class _UninitializedEmbedding(nn.Embedding):
 
 class _VocabParallelEmbeddingBase(VocabParallelEmbedding, _UninitializedEmbedding):
     """Orders `VocabParallelEmbedding` ahead of `nn.Embedding` in the MRO, so that
-    `super().forward(...)` in an `nn.Embedding` subclass reaches Aphrodite's embedding."""
+    `super().forward(...)` in an `nn.Embedding` subclass reaches Sonar's embedding."""
 
 
 _rebased_embedding_classes: dict[type[nn.Embedding], type[VocabParallelEmbedding]] = {}
@@ -350,25 +350,25 @@ def get_feature_request_tip(
     prefix = f"Please open {url} to request support for this feature. "
     if Path(model).exists():
         prefix = ""
-    doc_url = "https://docs.aphrodite.ai/en/latest/models/supported_models.html#writing-custom-models"
+    doc_url = "https://sonar.dphn.ai/en/latest/models/supported_models.html#writing-custom-models"
     tip = f"See {doc_url} for instructions on how to add support yourself."
     return f"{prefix}{tip}"
 
 
-def dynamic_rope_update_is_noop(aphrodite_config: "AphroditeConfig") -> bool:
+def dynamic_rope_update_is_noop(sonar_config: "SonarConfig") -> bool:
     """Whether `max_model_len` keeps Transformers' dynamic rope from ever rescaling.
 
     `@dynamic_rope_update` only recomputes `inv_freq` once positions grow past
-    `max_position_embeddings`, which Aphrodite never feeds beyond `max_model_len`.
+    `max_position_embeddings`, which Sonar never feeds beyond `max_model_len`.
     """
-    text_config = aphrodite_config.model_config.hf_config.get_text_config()
+    text_config = sonar_config.model_config.hf_config.get_text_config()
     max_position_embeddings = getattr(text_config, "max_position_embeddings", None)
     if max_position_embeddings is None:
         return False
-    return aphrodite_config.model_config.max_model_len <= max_position_embeddings
+    return sonar_config.model_config.max_model_len <= max_position_embeddings
 
 
-def can_enable_torch_compile(aphrodite_config: "AphroditeConfig") -> bool:
+def can_enable_torch_compile(sonar_config: "SonarConfig") -> bool:
     """Callable to be passed to `@support_torch_compile`'s `enable_if` argument.
 
     Defaults to `True` but is disabled in the following situations:
@@ -376,22 +376,22 @@ def can_enable_torch_compile(aphrodite_config: "AphroditeConfig") -> bool:
     - The model uses dynamic rope scaling that can still rescale within
       `max_model_len` (otherwise `disable_noop_dynamic_rope` removes it).
     """
-    text_config = aphrodite_config.model_config.hf_config.get_text_config()
+    text_config = sonar_config.model_config.hf_config.get_text_config()
     rope_types = {rp["rope_type"] for rp in iter_rope_parameters(text_config)}
     if "dynamic" not in rope_types:
         return True
     # Layer types using longrope still sync, even once dynamic rope is disabled
-    return "longrope" not in rope_types and dynamic_rope_update_is_noop(aphrodite_config)
+    return "longrope" not in rope_types and dynamic_rope_update_is_noop(sonar_config)
 
 
-def disable_noop_dynamic_rope(model: nn.Module, aphrodite_config: "AphroditeConfig") -> None:
+def disable_noop_dynamic_rope(model: nn.Module, sonar_config: "SonarConfig") -> None:
     """Skip `@dynamic_rope_update` in rotary modules where it can never rescale.
 
     The update syncs on `torch.max(position_ids)` every forward, which breaks
     torch.compile and CUDA graph capture. Relabelling the module's `rope_type` as
     "default" skips it while keeping the `inv_freq` computed at init.
     """
-    if not dynamic_rope_update_is_noop(aphrodite_config):
+    if not dynamic_rope_update_is_noop(sonar_config):
         return
     for module in model.modules():
         rope_type = getattr(module, "rope_type", None)

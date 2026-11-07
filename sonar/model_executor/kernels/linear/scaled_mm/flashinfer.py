@@ -6,24 +6,24 @@ from typing import ClassVar
 
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
+import sonar.envs as envs
+from sonar.model_executor.layers.quantization.utils.fp8_utils import (
     per_token_group_quant_fp8,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     GroupShape,
     QuantKey,
     kFp8StaticTensorSym,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.flashinfer import (
+from sonar.platforms import current_platform
+from sonar.utils.flashinfer import (
     flashinfer_fp8_blockscale_gemm,
     flashinfer_scaled_fp8_mm,
     has_flashinfer,
     is_flashinfer_fp8_blockscale_gemm_supported,
     should_use_flashinfer_for_blockscale_fp8_gemm,
 )
-from aphrodite.utils.torch_utils import direct_register_custom_op
+from sonar.utils.torch_utils import direct_register_custom_op
 
 from .BlockScaledMMLinearKernel import (
     Fp8BlockScaledDynamicMMLinearKernel,
@@ -138,7 +138,7 @@ class FlashInferFp8BlockScaledMMKernel(Fp8BlockScaledMMLinearKernel):
     ) -> torch.Tensor:
         # A is BF16 — FlashInfer handles FP8 conversion internally.
         # As is a placeholder (apply_input_quant=False) and is not used here.
-        return torch.ops.aphrodite.flashinfer_fp8_blockscale_gemm(
+        return torch.ops.sonar.flashinfer_fp8_blockscale_gemm(
             A,  # BF16 input
             B,  # FP8 weight
             Bs,  # Weight scales
@@ -183,7 +183,7 @@ class FlashInferFp8DeepGEMMDynamicBlockScaledKernel(Fp8BlockScaledDynamicMMLinea
         group_size = self.weight_group_shape.col
         use_deep_gemm_e8m0 = self.fallback.use_deep_gemm_e8m0
 
-        return torch.ops.aphrodite.dynamic_flashinfer_deepgemm_blockscale_gemm(A, B, Bs, group_size, use_deep_gemm_e8m0)
+        return torch.ops.sonar.dynamic_flashinfer_deepgemm_blockscale_gemm(A, B, Bs, group_size, use_deep_gemm_e8m0)
 
 
 def _flashinfer_fp8_blockscale_gemm_impl(
@@ -284,7 +284,7 @@ def _dynamic_flashinfer_deepgemm_blockscale_gemm_impl(
         )
         return output
 
-    if envs.APHRODITE_BATCH_INVARIANT:
+    if envs.SONAR_BATCH_INVARIANT:
         return run_deepgemm(input, weight, weight_scale)
 
     condition = input.shape[0] < 32

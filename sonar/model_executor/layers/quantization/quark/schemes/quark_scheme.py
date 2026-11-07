@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 
 import torch
 
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import QuantKey
+from sonar.model_executor.layers.quantization.utils.quant_utils import QuantKey
 
 __all__ = ["QuarkScheme"]
 

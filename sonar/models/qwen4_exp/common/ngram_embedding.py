@@ -15,43 +15,43 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from aphrodite.compilation.breakable_cudagraph import eager_break_during_capture
-from aphrodite.distributed import get_dp_group, get_etp_group, get_tp_group
-from aphrodite.forward_context import DPMetadata, get_forward_context
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.quantization.base_config import (
+from sonar.compilation.breakable_cudagraph import eager_break_during_capture
+from sonar.distributed import get_dp_group, get_etp_group, get_tp_group
+from sonar.forward_context import DPMetadata, get_forward_context
+from sonar.logger import init_logger
+from sonar.model_executor.layers.quantization.base_config import (
     QuantizationConfig,
     QuantizeMethodBase,
 )
-from aphrodite.model_executor.layers.quantization.compressed_tensors.compressed_tensors import (  # noqa: E501
+from sonar.model_executor.layers.quantization.compressed_tensors.compressed_tensors import (  # noqa: E501
     CompressedTensorsConfig,
 )
-from aphrodite.model_executor.layers.quantization.fp8 import Fp8Config
-from aphrodite.model_executor.layers.quantization.inc import INCConfig
-from aphrodite.model_executor.layers.quantization.modelopt import (
+from sonar.model_executor.layers.quantization.fp8 import Fp8Config
+from sonar.model_executor.layers.quantization.inc import INCConfig
+from sonar.model_executor.layers.quantization.modelopt import (
     ModelOptMixedPrecisionConfig,
     ModelOptQuantConfigBase,
 )
-from aphrodite.model_executor.layers.quantization.quark.quark import QuarkConfig
-from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
+from sonar.model_executor.layers.quantization.quark.quark import QuarkConfig
+from sonar.model_executor.layers.quantization.utils.fp8_utils import (
     create_fp8_scale_parameter,
 )
-from aphrodite.model_executor.layers.quantization.utils.nvfp4_emulation_utils import (
+from sonar.model_executor.layers.quantization.utils.nvfp4_emulation_utils import (
     _e2m1_inline,
     _e4m3_inline,
     dequantize_to_dtype,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     is_layer_skipped,
 )
-from aphrodite.model_executor.parameter import (
+from sonar.model_executor.parameter import (
     ModelWeightParameter,
     PerTensorScaleParameter,
 )
-from aphrodite.model_executor.utils import set_weight_attrs
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.platform_utils import is_uva_available
-from aphrodite.utils.torch_utils import get_accelerator_view_from_cpu_tensor
+from sonar.model_executor.utils import set_weight_attrs
+from sonar.triton_utils import tl, triton
+from sonar.utils.platform_utils import is_uva_available
+from sonar.utils.torch_utils import get_accelerator_view_from_cpu_tensor
 
 from .ple import PLEVocabParallelEmbedding
 

@@ -3,10 +3,10 @@
 
 from typing import Any
 
-import aphrodite.envs as envs
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.v1.kv_cache_interface import is_quantized_kv_cache
+import sonar.envs as envs
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.v1.kv_cache_interface import is_quantized_kv_cache
 
 logger = init_logger(__name__)
 
@@ -20,23 +20,23 @@ FA4_HD256_PAGE_SIZE = 128
 _ROCM_FLASH_ATTN_AVAILABLE = False
 
 if current_platform.is_cuda():
-    from aphrodite._custom_ops import reshape_and_cache_flash
-    from aphrodite.vllm_flash_attn import (  # type: ignore[attr-defined]
+    from sonar._custom_ops import reshape_and_cache_flash
+    from sonar.vllm_flash_attn import (  # type: ignore[attr-defined]
         compile_flash_attn_varlen_func_from_specs,
         flash_attn_varlen_func,
         get_scheduler_metadata,
     )
 
 elif current_platform.is_xpu():
-    from aphrodite import _custom_ops as ops
-    from aphrodite._xpu_ops import xpu_ops
+    from sonar import _custom_ops as ops
+    from sonar._xpu_ops import xpu_ops
 
     reshape_and_cache_flash = ops.reshape_and_cache_flash
     flash_attn_varlen_func = xpu_ops.flash_attn_varlen_func  # type: ignore[assignment]
     compile_flash_attn_varlen_func_from_specs = None  # type: ignore[assignment]
     get_scheduler_metadata = xpu_ops.get_scheduler_metadata  # type: ignore[assignment]
 elif current_platform.is_rocm():
-    from aphrodite.platforms.rocm import on_gfx1250
+    from sonar.platforms.rocm import on_gfx1250
 
     compile_flash_attn_varlen_func_from_specs = None  # type: ignore[assignment]
     try:
@@ -59,7 +59,7 @@ elif current_platform.is_rocm():
         return None
 
     # ROCm uses the C++ custom op for reshape_and_cache
-    from aphrodite import _custom_ops as ops
+    from sonar import _custom_ops as ops
 
     reshape_and_cache_flash = ops.reshape_and_cache_flash
 
@@ -79,7 +79,7 @@ def get_flash_attn_version(
         # ROCm doesn't use vllm_flash_attn; return None to skip fa_version arg
         return None
     try:
-        from aphrodite.vllm_flash_attn.flash_attn_interface import (
+        from sonar.vllm_flash_attn.flash_attn_interface import (
             fa_version_unsupported_reason,
             is_fa_version_supported,
         )
@@ -100,11 +100,11 @@ def get_flash_attn_version(
             fa_version = 2
 
         # 2. override if passed by environment or config
-        from aphrodite.config import get_current_aphrodite_config_or_none
+        from sonar.config import get_current_sonar_config_or_none
 
-        aphrodite_config = get_current_aphrodite_config_or_none()
-        if aphrodite_config is not None and aphrodite_config.attention_config.flash_attn_version is not None:
-            fa_version = aphrodite_config.attention_config.flash_attn_version
+        sonar_config = get_current_sonar_config_or_none()
+        if sonar_config is not None and sonar_config.attention_config.flash_attn_version is not None:
+            fa_version = sonar_config.attention_config.flash_attn_version
 
         # 3. fallback for unsupported combinations
         if device_capability.major >= 10 and fa_version == 3:
@@ -129,9 +129,9 @@ def get_flash_attn_version(
             elif has_sinks and head_size is not None and head_size_v is not None and head_size != head_size_v:
                 upgrade_reason = "Diff-KV with sinks"
             elif (
-                aphrodite_config is not None
-                and aphrodite_config.model_config is not None
-                and aphrodite_config.model_config.is_diffusion
+                sonar_config is not None
+                and sonar_config.model_config is not None
+                and sonar_config.model_config.is_diffusion
             ):
                 upgrade_reason = "Per-sequence causal (dynamic_causal) requires FA4"
             if upgrade_reason:
@@ -144,7 +144,7 @@ def get_flash_attn_version(
 
         # FA4 currently uses batch-shape-dependent scheduling
         # heuristics on SM100+, which breaks batch invariance.
-        if envs.APHRODITE_BATCH_INVARIANT and fa_version == 4:
+        if envs.SONAR_BATCH_INVARIANT and fa_version == 4:
             logger.warning_once(
                 "Cannot use FA version 4 with batch invariance, defaulting to FA version 2.",
             )
@@ -154,7 +154,7 @@ def get_flash_attn_version(
             if not supports_fa4_hd256:
                 fa_version = 2
             elif (
-                reason := _fa4_hd256_fallback_reason(has_sinks, requires_softcap, kv_cache_block_size, aphrodite_config)
+                reason := _fa4_hd256_fallback_reason(has_sinks, requires_softcap, kv_cache_block_size, sonar_config)
             ) is not None:
                 logger.warning_once(
                     "FA4's Blackwell head_size=256 kernel does not support %s, defaulting to FA version 2.",
@@ -204,10 +204,10 @@ def _fa4_hd256_fallback_reason(
     has_sinks: bool,
     requires_softcap: bool,
     kv_cache_block_size: int | None,
-    aphrodite_config: Any,
+    sonar_config: Any,
 ) -> str | None:
-    model_config = aphrodite_config.model_config if aphrodite_config is not None else None
-    cache_config = aphrodite_config.cache_config if aphrodite_config is not None else None
+    model_config = sonar_config.model_config if sonar_config is not None else None
+    cache_config = sonar_config.cache_config if sonar_config is not None else None
     if has_sinks:
         return "attention sinks"
     if requires_softcap or (
@@ -225,7 +225,7 @@ def _fa4_hd256_fallback_reason(
             return "mm_prefix bidirectional attention"
         if model_config.rswa_window is not None:
             return "R-SWA"
-    if aphrodite_config is not None and aphrodite_config.parallel_config.decode_context_parallel_size > 1:
+    if sonar_config is not None and sonar_config.parallel_config.decode_context_parallel_size > 1:
         # DCP reuses an unsliced block table with a non-page-aligned length.
         return "decode context parallelism"
     return None
@@ -233,7 +233,7 @@ def _fa4_hd256_fallback_reason(
 
 def is_fa_version_supported(fa_version: int) -> bool:
     try:
-        from aphrodite.vllm_flash_attn.flash_attn_interface import (
+        from sonar.vllm_flash_attn.flash_attn_interface import (
             is_fa_version_supported as _is_fa_version_supported,
         )
 
@@ -284,11 +284,11 @@ def flash_attn_supports_sinks() -> bool:
 
 
 def flash_attn_supports_mla():
-    from aphrodite.platforms import current_platform
+    from sonar.platforms import current_platform
 
     if current_platform.is_cuda():
         try:
-            from aphrodite.vllm_flash_attn.flash_attn_interface import (
+            from sonar.vllm_flash_attn.flash_attn_interface import (
                 is_fa_version_supported,
             )
 
@@ -311,7 +311,7 @@ def is_flash_attn_varlen_func_available() -> bool:
     level is a working implementation or a stub.
 
     Platform-specific sources:
-    - CUDA: aphrodite.vllm_flash_attn.flash_attn_varlen_func
+    - CUDA: sonar.vllm_flash_attn.flash_attn_varlen_func
     - XPU: xpu_ops.flash_attn_varlen_func
     - ROCm: upstream flash_attn.flash_attn_varlen_func (if available)
 

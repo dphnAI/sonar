@@ -14,7 +14,7 @@ use the generic implementation by default.
 
 from typing import TYPE_CHECKING
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 if TYPE_CHECKING or current_platform.is_cuda():
     # GLM-5.2 (glm_moe_dsa) reuses the CUDA DSA module. Individual optimized
@@ -28,11 +28,11 @@ elif current_platform.is_rocm():
     from .amd.mtp import DeepseekV32MTP
 else:
     # XPU and CPU keep the generic implementation.
-    from aphrodite.model_executor.models.deepseek_mtp import DeepSeekMTP as DeepseekV32MTP
-    from aphrodite.model_executor.models.deepseek_v2 import (
+    from sonar.model_executor.models.deepseek_mtp import DeepSeekMTP as DeepseekV32MTP
+    from sonar.model_executor.models.deepseek_v2 import (
         DeepseekV3ForCausalLM as DeepseekV32ForCausalLM,
     )
-    from aphrodite.model_executor.models.deepseek_v2 import GlmMoeDsaForCausalLM
+    from sonar.model_executor.models.deepseek_v2 import GlmMoeDsaForCausalLM
 
 __all__ = [
     "DeepseekV32ForCausalLM",

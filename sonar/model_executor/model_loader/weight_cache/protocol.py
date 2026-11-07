@@ -27,21 +27,21 @@ import torch
 from torch.multiprocessing.reductions import rebuild_cuda_tensor, reduce_tensor
 from transformers.utils import SAFE_WEIGHTS_INDEX_NAME
 
-import aphrodite.version
-from aphrodite.config import CacheConfig, KernelConfig, ModelConfig
-from aphrodite.config.utils import normalize_value
-from aphrodite.model_executor.layers.quantization.base_config import QuantizeMethodBase
-from aphrodite.model_executor.model_loader.weight_cache.utils import (
+import sonar.version
+from sonar.config import CacheConfig, KernelConfig, ModelConfig
+from sonar.config.utils import normalize_value
+from sonar.model_executor.layers.quantization.base_config import QuantizeMethodBase
+from sonar.model_executor.model_loader.weight_cache.utils import (
     format_socket_role_suffix,
 )
-from aphrodite.model_executor.model_loader.weight_utils import (
+from sonar.model_executor.model_loader.weight_utils import (
     filter_duplicate_safetensors_files,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.hashing import safe_hash
+from sonar.platforms import current_platform
+from sonar.utils.hashing import safe_hash
 
-SOCKET_NAME_TEMPLATE = "aphrodite_weight_cache_{gpu_uuid}{role}.sock"
-SOCKET_DIR_TEMPLATE = "aphrodite_weight_cache_{uid}"
+SOCKET_NAME_TEMPLATE = "sonar_weight_cache_{gpu_uuid}{role}.sock"
+SOCKET_DIR_TEMPLATE = "sonar_weight_cache_{uid}"
 
 _LEN_STRUCT = struct.Struct("!Q")
 # Sanity bound for a single message. IPC handles are tiny; only small
@@ -304,7 +304,7 @@ class WeightCacheKey:
     kv_cache_dtype: str
     kv_cache_dtype_skip_layers: tuple[str, ...]
     revision: str | None
-    aphrodite_version: str
+    sonar_version: str
     pp_size: int = 1
     pp_rank: int = 0
     is_draft: bool = False
@@ -369,7 +369,7 @@ class WeightCacheKey:
             kv_cache_dtype=cache_config.cache_dtype,
             kv_cache_dtype_skip_layers=tuple(sorted(set(cache_config.kv_cache_dtype_skip_layers))),
             revision=model_config.revision,
-            aphrodite_version=aphrodite.version.__version__,
+            sonar_version=sonar.version.__version__,
             is_draft=is_draft,
             dp_size=dp_size,
             dp_rank=dp_rank,

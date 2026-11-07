@@ -5,29 +5,29 @@ from typing import Any
 import torch
 import torch.nn as nn
 
-from aphrodite.compilation.breakable_cudagraph import is_breakable_cudagraph_enabled
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.compilation import CUDAGraphMode
-from aphrodite.forward_context import BatchDescriptor, set_forward_context
-from aphrodite.logger import init_logger
-from aphrodite.triton_utils import tl, triton
-from aphrodite.v1.attention.backends.utils import PAD_SLOT_ID
-from aphrodite.v1.worker.gpu.attn_utils import build_slot_mappings_by_layer
-from aphrodite.v1.worker.gpu.dp_utils import DPSyncState, dispatch_cg_and_sync_dp
-from aphrodite.v1.worker.gpu.input_batch import InputBatch, InputBuffers
-from aphrodite.v1.worker.gpu.spec_decode.eagle.utils import load_eagle_model
-from aphrodite.v1.worker.gpu.spec_decode.speculator import DraftModelSpeculator
-from aphrodite.v1.worker.gpu.spec_decode.target_dependent_ar.cudagraph_utils import (
+from sonar.compilation.breakable_cudagraph import is_breakable_cudagraph_enabled
+from sonar.config import SonarConfig
+from sonar.config.compilation import CUDAGraphMode
+from sonar.forward_context import BatchDescriptor, set_forward_context
+from sonar.logger import init_logger
+from sonar.triton_utils import tl, triton
+from sonar.v1.attention.backends.utils import PAD_SLOT_ID
+from sonar.v1.worker.gpu.attn_utils import build_slot_mappings_by_layer
+from sonar.v1.worker.gpu.dp_utils import DPSyncState, dispatch_cg_and_sync_dp
+from sonar.v1.worker.gpu.input_batch import InputBatch, InputBuffers
+from sonar.v1.worker.gpu.spec_decode.eagle.utils import load_eagle_model
+from sonar.v1.worker.gpu.spec_decode.speculator import DraftModelSpeculator
+from sonar.v1.worker.gpu.spec_decode.target_dependent_ar.cudagraph_utils import (
     SpeculatorCudaGraphManager,
 )
-from aphrodite.v1.worker.utils import get_uniform_decode_token_count
+from sonar.v1.worker.utils import get_uniform_decode_token_count
 
 logger = init_logger(__name__)
 
 
 class MultiModuleMTPSpeculator(DraftModelSpeculator):
-    def __init__(self, aphrodite_config: AphroditeConfig, device: torch.device):
-        super().__init__(aphrodite_config, device)
+    def __init__(self, sonar_config: SonarConfig, device: torch.device):
+        super().__init__(sonar_config, device)
 
         self.hidden_states = torch.zeros(self.max_num_tokens, self.hidden_size, dtype=self.dtype, device=device)
         self.current_draft_step = torch.tensor(0, dtype=torch.int64, device=device)
@@ -71,7 +71,7 @@ class MultiModuleMTPSpeculator(DraftModelSpeculator):
         target_model: nn.Module,
         target_attn_layer_names: set[str],
     ) -> nn.Module:
-        return load_eagle_model(target_model, self.aphrodite_config)
+        return load_eagle_model(target_model, self.sonar_config)
 
     def load_model(self, target_model: nn.Module) -> None:
         super().load_model(target_model)
@@ -99,7 +99,7 @@ class MultiModuleMTPSpeculator(DraftModelSpeculator):
                 CUDAGraphMode.FULL_DECODE_ONLY if cudagraph_mode.has_full_cudagraphs() else CUDAGraphMode.NONE
             )
         self.cudagraph_manager = SpeculatorCudaGraphManager(
-            self.aphrodite_config,
+            self.sonar_config,
             self.device,
             cudagraph_mode,
             self.num_speculative_steps + 1,
@@ -203,7 +203,7 @@ class MultiModuleMTPSpeculator(DraftModelSpeculator):
             dp_rank=self.dp_rank,
             need_eager=is_profile,
             dp_sync_state=dp_sync_state,
-            parallel_config=self.aphrodite_config.parallel_config,
+            parallel_config=self.sonar_config.parallel_config,
         )
         num_tokens_across_dp = batch_sync.num_tokens_across_dp if batch_sync is not None else None
 
@@ -272,7 +272,7 @@ class MultiModuleMTPSpeculator(DraftModelSpeculator):
         batch_descriptor = BatchDescriptor(num_tokens=num_tokens)
         with set_forward_context(
             attn_metadata,
-            self.aphrodite_config,
+            self.sonar_config,
             num_tokens=num_tokens,
             cudagraph_runtime_mode=cudagraph_runtime_mode,
             num_tokens_across_dp=num_tokens_across_dp,

@@ -6,31 +6,31 @@ use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
 
-use aphrodite_chat::{
+use futures::StreamExt as _;
+use sonar_chat::{
     AssistantBlockKind, AssistantContentBlock, AssistantMessageExt as _, ChatBackend, ChatEvent,
     ChatLlm, ChatMessage, ChatRenderer, ChatRequest, ChatRequestProcessor, ChatRole,
     ChatTextBackend, ChatTool, ChatToolChoice, DefaultChatOutputProcessor, DynChatOutputProcessor,
     DynChatRenderer, FinishReason, GenerationPromptMode, NewChatOutputProcessorOptions,
     ParserSelection, RenderedPrompt, ResolvedToolContext, SamplingParams,
 };
-use aphrodite_engine_core_client::protocol::logprobs::{
+use sonar_engine_core_client::protocol::logprobs::{
     Logprobs, MaybeWireLogprobs, PositionLogprobs, TokenLogprob,
 };
-use aphrodite_engine_core_client::protocol::output::{
+use sonar_engine_core_client::protocol::output::{
     EngineCoreFinishReason, EngineCoreOutput, EngineCoreOutputs, RequestBatchOutputs, StopReason,
 };
-use aphrodite_engine_core_client::protocol::request::EngineCoreRequest;
-use aphrodite_engine_core_client::test_utils::{IpcNamespace, spawn_mock_engine_task};
-use aphrodite_engine_core_client::{EngineCoreClient, EngineCoreClientConfig};
-use aphrodite_llm::Llm;
-use aphrodite_text::tokenizer::DynTokenizer;
-use aphrodite_text::{
+use sonar_engine_core_client::protocol::request::EngineCoreRequest;
+use sonar_engine_core_client::test_utils::{IpcNamespace, spawn_mock_engine_task};
+use sonar_engine_core_client::{EngineCoreClient, EngineCoreClientConfig};
+use sonar_llm::Llm;
+use sonar_text::tokenizer::DynTokenizer;
+use sonar_text::{
     DecodedLogprobs, DecodedPositionLogprobs, DecodedPromptLogprobs, DecodedTokenLogprob, Prompt,
     TextBackend,
 };
-use aphrodite_tokenizer::Tokenizer as _;
-use aphrodite_tokenizer::test_utils::TestTokenizer;
-use futures::StreamExt as _;
+use sonar_tokenizer::Tokenizer as _;
+use sonar_tokenizer::test_utils::TestTokenizer;
 use tokio::time::timeout;
 use zeromq::prelude::{SocketRecv, SocketSend};
 use zeromq::{DealerSocket, PushSocket, ZmqMessage};
@@ -227,7 +227,7 @@ impl ChatBackend for FakeChatBackend {
         &self,
         request: &mut ChatRequest,
         options: NewChatOutputProcessorOptions<'_>,
-    ) -> aphrodite_chat::Result<DynChatOutputProcessor> {
+    ) -> sonar_chat::Result<DynChatOutputProcessor> {
         Ok(Box::new(DefaultChatOutputProcessor::new(
             request,
             &self.model_id,
@@ -240,9 +240,9 @@ impl ChatBackend for FakeChatBackend {
 }
 
 impl ChatRenderer for FakeChatBackend {
-    fn render(&self, request: &ChatRequest) -> aphrodite_chat::Result<RenderedPrompt> {
+    fn render(&self, request: &ChatRequest) -> sonar_chat::Result<RenderedPrompt> {
         if !self.has_template {
-            return Err(aphrodite_chat::Error::MissingChatTemplate);
+            return Err(sonar_chat::Error::MissingChatTemplate);
         }
 
         let mut prompt = String::new();
@@ -270,9 +270,9 @@ impl ChatRenderer for FakeChatBackend {
 
 /// Skip `LogprobsDelta` events that carry only token_ids (no logprobs),
 /// returning the next semantically interesting event.
-async fn next_semantic<S>(stream: &mut S) -> Option<Result<ChatEvent, aphrodite_chat::Error>>
+async fn next_semantic<S>(stream: &mut S) -> Option<Result<ChatEvent, sonar_chat::Error>>
 where
-    S: futures::Stream<Item = Result<ChatEvent, aphrodite_chat::Error>> + Unpin,
+    S: futures::Stream<Item = Result<ChatEvent, sonar_chat::Error>> + Unpin,
 {
     loop {
         match stream.next().await {
@@ -310,7 +310,7 @@ fn sample_tool_request(request_id: &str) -> ChatRequest {
         strict: None,
         defer_loading: None,
     }];
-    request.tool_context = aphrodite_chat::ResolvedToolContext::new(
+    request.tool_context = sonar_chat::ResolvedToolContext::new(
         &request.messages,
         tools,
         Some(ChatToolChoice::Auto),
@@ -643,7 +643,7 @@ fn chat_request_rejects_conflicting_generation_modes() {
 
     assert!(matches!(
         error,
-        aphrodite_chat::Error::ContinueFinalAssistantWithoutFinalAssistant
+        sonar_chat::Error::ContinueFinalAssistantWithoutFinalAssistant
     ));
 }
 
@@ -661,7 +661,7 @@ fn backend_requires_a_template() {
     let request = sample_request("chat-3");
     let backend = FakeChatBackend::without_template();
     let error = backend.chat_renderer().render(&request).unwrap_err();
-    assert!(matches!(error, aphrodite_chat::Error::MissingChatTemplate));
+    assert!(matches!(error, sonar_chat::Error::MissingChatTemplate));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -714,7 +714,7 @@ async fn chat_stream_reports_decode_failure_as_error_event() {
     ));
 
     match timeout(Duration::from_secs(2), stream.next()).await.unwrap() {
-        Some(Err(aphrodite_chat::Error::Text(aphrodite_text::Error::Tokenizer(message)))) => {
+        Some(Err(sonar_chat::Error::Text(sonar_text::Error::Tokenizer(message)))) => {
             assert_eq!(
                 message,
                 format!("test tokenizer cannot decode unknown token id {UNKNOWN_DECODE_TOKEN_ID}")
@@ -1541,7 +1541,7 @@ async fn chat_rejects_unknown_tool_parser_before_engine_request() {
 
     assert!(matches!(
         error,
-        aphrodite_chat::Error::ParserUnavailableByName { name, .. }
+        sonar_chat::Error::ParserUnavailableByName { name, .. }
         if name == "definitely_missing_tool_parser"
     ));
 
@@ -1582,7 +1582,7 @@ async fn chat_rejects_unknown_reasoning_parser_before_engine_request() {
 
     assert!(matches!(
         error,
-        aphrodite_chat::Error::ParserUnavailableByName { name, .. }
+        sonar_chat::Error::ParserUnavailableByName { name, .. }
         if name == "definitely_missing_reasoning_parser"
     ));
 
@@ -1621,7 +1621,7 @@ async fn chat_rejects_tool_requests_when_tool_parser_is_disabled() {
 
     assert!(matches!(
         error,
-        aphrodite_chat::Error::ParserDisabled { kind: "tool" }
+        sonar_chat::Error::ParserDisabled { kind: "tool" }
     ));
 
     let _ = shutdown_tx.send(());

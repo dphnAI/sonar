@@ -7,12 +7,12 @@ from dataclasses import dataclass
 import numpy as np
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.config.model import LogprobsMode
-from aphrodite.platforms import current_platform
-from aphrodite.sampling_params import MAX_LOGPROB_TOKEN_IDS, SamplingParams
-from aphrodite.v1.outputs import LogprobsTensors
-from aphrodite.v1.worker.cpu.input_batch import InputBatch
+from sonar import _custom_ops as ops
+from sonar.config.model import LogprobsMode
+from sonar.platforms import current_platform
+from sonar.sampling_params import MAX_LOGPROB_TOKEN_IDS, SamplingParams
+from sonar.v1.outputs import LogprobsTensors
+from sonar.v1.worker.cpu.input_batch import InputBatch
 
 CHUNK_SIZE = 1024
 

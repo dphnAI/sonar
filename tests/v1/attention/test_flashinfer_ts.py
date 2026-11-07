@@ -11,9 +11,9 @@ mask.
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.v1.attention.backend import AttentionType
-from aphrodite.v1.attention.backends.flashinfer_ts import (
+from sonar.platforms import current_platform
+from sonar.v1.attention.backend import AttentionType
+from sonar.v1.attention.backends.flashinfer_ts import (
     FlashInferTSMetadataBuilder,
 )
 
@@ -34,8 +34,8 @@ requires_kernel = pytest.mark.skipif(
 
 
 @pytest.mark.parametrize("num_kv_heads", [1, 4])
-def test_reads_aphrodites_existing_interleaved_page(num_kv_heads):
-    """No layout change: K/V are the halves of Aphrodite's [pages, Hkv, page, 2*D]
+def test_reads_sonars_existing_interleaved_page(num_kv_heads):
+    """No layout change: K/V are the halves of Sonar's [pages, Hkv, page, 2*D]
     page, whose token stride is 2*D. The kernel takes its TMA strides from the
     tensor, so this must stay a pure view with head_dim contiguous.
     """
@@ -87,7 +87,7 @@ def test_impl_accepts_the_arguments_the_attention_layer_passes():
     (``sinks`` among them); a signature that only matches AttentionImpl's
     abstract __init__ raises TypeError at engine init, not at import.
     """
-    from aphrodite.v1.attention.backends.flashinfer_ts import FlashInferTSImpl
+    from sonar.v1.attention.backends.flashinfer_ts import FlashInferTSImpl
 
     impl = FlashInferTSImpl(
         16,
@@ -125,7 +125,7 @@ def test_impl_accepts_the_arguments_the_attention_layer_passes():
 @requires_kernel
 def test_dense_plan_matches_flash_attention_non_causal():
     """A dense prims_ts plan is the non-causal draft block FA4 produces."""
-    from aphrodite.vllm_flash_attn.cute.interface import _flash_attn_fwd
+    from sonar.vllm_flash_attn.cute.interface import _flash_attn_fwd
 
     pytest.importorskip("flashinfer.attention.prims_ts")
     from flashinfer.attention.prims_ts import BatchDecodePagedTSWrapper

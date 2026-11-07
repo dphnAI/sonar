@@ -7,21 +7,21 @@ from dataclasses import replace
 import pytest
 import torch
 
-from aphrodite.config import AphroditeConfig, ParallelConfig, SchedulerConfig
-from aphrodite.forward_context import set_forward_context
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.all2all_utils import (
+from sonar.config import ParallelConfig, SchedulerConfig, SonarConfig
+from sonar.forward_context import set_forward_context
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.all2all_utils import (
     maybe_make_prepare_finalize,
 )
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEParallelConfig,
     FusedMoEQuantConfig,
 )
-from aphrodite.model_executor.layers.fused_moe.modular_kernel import FusedMoEKernel
-from aphrodite.platforms import current_platform
-from aphrodite.utils.import_utils import has_mori
-from aphrodite.utils.torch_utils import set_random_seed
-from aphrodite.v1.worker.workspace import init_workspace_manager
+from sonar.model_executor.layers.fused_moe.modular_kernel import FusedMoEKernel
+from sonar.platforms import current_platform
+from sonar.utils.import_utils import has_mori
+from sonar.utils.torch_utils import set_random_seed
+from sonar.v1.worker.workspace import init_workspace_manager
 from tests.kernels.moe.modular_kernel_tools.parallel_utils import (
     parallel_launch_with_config,
 )
@@ -44,7 +44,7 @@ def _mxfp4_aiter_weights(w1, w2, start, end):
     """MXFP4-quantize experts [start, end) into AITER's W4A4 kernel layout."""
     from aiter.ops.triton.quant import dynamic_mxfp4_quant
 
-    from aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 import (
+    from sonar.model_executor.layers.fused_moe.oracle.mxfp4 import (
         Mxfp4MoeBackend,
         convert_gpt_oss_weight_to_mxfp4_moe_kernel_format,
         make_mxfp4_moe_quant_config,
@@ -61,16 +61,16 @@ def _mxfp4_aiter_weights(w1, w2, start, end):
     return q1, q2, make_mxfp4_moe_quant_config(backend, s1, s2)
 
 
-def _mori_worker(pgi, aphrodite_config, cpu_group, m, n, k, scheme, graph):
-    from aphrodite._aiter_ops import rocm_aiter_ops
-    from aphrodite.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
+def _mori_worker(pgi, sonar_config, cpu_group, m, n, k, scheme, graph):
+    from sonar._aiter_ops import rocm_aiter_ops
+    from sonar.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
         AiterExperts,
         AiterFp8ChannelExperts,
         AiterMxfp4Experts,
         AiterUnquantizedExperts,
         rocm_aiter_fused_experts,
     )
-    from aphrodite.model_executor.layers.fused_moe.prepare_finalize.mori import (
+    from sonar.model_executor.layers.fused_moe.prepare_finalize.mori import (
         MoriPrepareAndFinalize,
     )
 
@@ -158,7 +158,7 @@ def _mori_worker(pgi, aphrodite_config, cpu_group, m, n, k, scheme, graph):
         )
 
     def run():
-        with set_forward_context(None, aphrodite_config):
+        with set_forward_context(None, sonar_config):
             return kernel.apply(
                 x,
                 local_w1,
@@ -213,11 +213,11 @@ def _mori_worker(pgi, aphrodite_config, cpu_group, m, n, k, scheme, graph):
 @multi_gpu_test(num_gpus=2)
 def test_mori_moe(m, n, k, scheme):
     if scheme == "mxfp4":
-        from aphrodite.platforms.rocm import on_gfx950
+        from sonar.platforms.rocm import on_gfx950
 
         if not on_gfx950():
             pytest.skip("AITER MXFP4 W4A4 MoE requires gfx950")
-    config = AphroditeConfig(
+    config = SonarConfig(
         parallel_config=ParallelConfig(
             data_parallel_size=2,
             enable_expert_parallel=True,
@@ -226,8 +226,8 @@ def test_mori_moe(m, n, k, scheme):
         scheduler_config=SchedulerConfig.default_factory(max_num_batched_tokens=256),
     )
     env = {
-        "APHRODITE_ROCM_USE_AITER": "1",
-        "APHRODITE_ROCM_USE_AITER_MOE": "1",
-        "APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS": "0",
+        "SONAR_ROCM_USE_AITER": "1",
+        "SONAR_ROCM_USE_AITER_MOE": "1",
+        "SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS": "0",
     }
     parallel_launch_with_config(2, _mori_worker, config, env, m, n, k, scheme, m == 32)

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-use aphrodite_engine_core_client::protocol::sampling::EngineCoreSamplingParams;
+use sonar_engine_core_client::protocol::sampling::EngineCoreSamplingParams;
 use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq)]
@@ -71,7 +71,7 @@ pub(crate) fn validate_resolved_sampling_params(
     validate_presence_penalty(params.presence_penalty)?;
     validate_repetition_penalty(params.repetition_penalty)?;
 
-    let extra = &params.aphrodite_sampling;
+    let extra = &params.sonar_sampling;
     for (parameter, value) in [
         ("dynatemp_min", extra.dynatemp_min),
         ("dynatemp_max", extra.dynatemp_max),

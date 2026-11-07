@@ -11,13 +11,13 @@ import itertools
 
 import torch
 
-import aphrodite._custom_ops as ops
+import sonar._custom_ops as ops
 
 HEAD_DIM = 64
 DEFAULT_TOKENS = [1, 8, 64, 256, 1024, 4096, 8192, 16384, 32768, 65536]
 
 try:
-    from aphrodite.models.muse_spark.nvidia.ops.cute_dsl.qk_norm import (
+    from sonar.models.muse_spark.nvidia.ops.cute_dsl.qk_norm import (
         qk_norm,
         supports_qk_norm,
     )

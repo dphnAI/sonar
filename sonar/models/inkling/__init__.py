@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 from typing import TYPE_CHECKING
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 if TYPE_CHECKING:
     from .nvidia.model import (

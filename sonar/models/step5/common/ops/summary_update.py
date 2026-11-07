@@ -12,7 +12,7 @@ reads; it is rewritten when the region closes again.
 
 import torch
 
-from aphrodite.triton_utils import tl, tldevice, triton
+from sonar.triton_utils import tl, tldevice, triton
 
 libdevice = tldevice
 

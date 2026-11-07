@@ -16,8 +16,8 @@ requires = [
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "aphrodite-engine"
-authors = [{name = "PygmalionAI"}]
+name = "sonar"
+authors = [{name = "dphnAI"}]
 license = { file = "LICENSE" }
 readme = "README.md"
 description = "Serving LLMs at Scale"
@@ -36,35 +36,36 @@ requires-python = ">=3.11,<3.15"
 dynamic = [ "version", "dependencies", "optional-dependencies"]
 
 [project.urls]
-Homepage="https://github.com/aphrodite-engine/aphrodite-engine"
-Documentation="https://aphrodite.pygmalion.chat"
+Homepage="https://github.com/dphnAI/sonar"
+Documentation="https://sonar.dphn.ai"
 
 [project.scripts]
-aphrodite = "aphrodite.entrypoints.cli.main:main"
+sonar = "sonar.entrypoints.cli.main:main"
+aphrodite = "sonar.entrypoints.cli.main:deprecated_main"
 
-[project.entry-points."aphrodite.general_plugins"]
-lora_filesystem_resolver = "aphrodite.plugins.lora_resolvers.filesystem_resolver:register_filesystem_resolver"
-lora_hf_hub_resolver = "aphrodite.plugins.lora_resolvers.hf_hub_resolver:register_hf_hub_resolver"
+[project.entry-points."sonar.general_plugins"]
+lora_filesystem_resolver = "sonar.plugins.lora_resolvers.filesystem_resolver:register_filesystem_resolver"
+lora_hf_hub_resolver = "sonar.plugins.lora_resolvers.hf_hub_resolver:register_hf_hub_resolver"
 
 [tool.setuptools_scm]
 # no extra settings needed, presence enables setuptools-scm
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["aphrodite*"]
+include = ["sonar*", "aphrodite"]
 
 [tool.ruff]
 line-length = 120
 exclude = [
-    "aphrodite/vllm_flash_attn/**",
-    "aphrodite/third_party/**",
+    "sonar/vllm_flash_attn/**",
+    "sonar/third_party/**",
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"aphrodite/third_party/**" = ["ALL"]
-"aphrodite/version.py" = ["F401"]
-"aphrodite/_version.py" = ["ALL"]
-"aphrodite/platforms/cuda.py" = ["E402"]
+"sonar/third_party/**" = ["ALL"]
+"sonar/version.py" = ["F401"]
+"sonar/_version.py" = ["ALL"]
+"sonar/platforms/cuda.py" = ["E402"]
 
 [tool.ruff.lint]
 select = [
@@ -139,17 +140,17 @@ extend-exclude = ["tests/models/fixtures/*", "tests/prompts/*", "tests/tokenizer
     "benchmarks/sonnet.txt", "rust/src/bench/src/datasets/sonnet.txt",
     "tests/lora/data/*", "build/*",
     "examples/pooling/token_embed/*", "tests/models/language/pooling/*",
-    "aphrodite/third_party/*", "aphrodite/entrypoints/serve/instrumentator/static/*", "tests/entrypoints/openai/speech_to_text/test_transcription_validation.py",
+    "sonar/third_party/*", "sonar/entrypoints/serve/instrumentator/static/*", "tests/entrypoints/openai/speech_to_text/test_transcription_validation.py",
     "tests/entrypoints/speech_to_text/transcription/test_transcription_validation.py",
     "tests/entrypoints/scale_out/token_in_token_out/test_protocol.py",
     "rust/src/chat/src/renderer/deepseek_v32/fixtures/*", "rust/src/parser/**",
-    "docs/governance/process.md", "docs/assets/contributing/aphrodite_bench_serve_timeline.html",
+    "docs/governance/process.md", "docs/assets/contributing/sonar_bench_serve_timeline.html",
     "tests/v1/engine/test_fast_incdec_prefix_err.py", ".git/*", "csrc/cpu/sgl-kernels/*",
     "rust/src/text/src/output/decoded.rs",
     "rust/src/tokenizer/src/incremental.rs",
     # Vendored NVIDIA CUTLASS reference kernel. Keep identifiers aligned with upstream.
-    "aphrodite/model_executor/kernels/linear/mxfp6/cutedsl_kernel.py",
-    "aphrodite/model_executor/kernels/linear/mxfp6/cutedsl_grouped_kernel.py",
+    "sonar/model_executor/kernels/linear/mxfp6/cutedsl_kernel.py",
+    "sonar/model_executor/kernels/linear/mxfp6/cutedsl_grouped_kernel.py",
     "recipes/models/*"]
 ignore-hidden = false
 
@@ -280,7 +281,7 @@ Weghts = "Weghts"
 
 [tool.uv]
 no-build-isolation-package = ["torch"]
-# Aphrodite depends on oss-harmony, a fork that ships the same `openai_harmony`
+# Sonar depends on oss-harmony, a fork that ships the same `openai_harmony`
 # module without downloading tiktoken vocabularies at runtime. Installing
 # openai-harmony alongside it silently overwrites those files, so keep it out
 # of every resolution; gpt-oss pulls it in transitively.

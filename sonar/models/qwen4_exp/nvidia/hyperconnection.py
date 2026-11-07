@@ -6,7 +6,7 @@ Implements the HyperConnection residual scheme proposed in
 "HyperConnections" (https://arxiv.org/abs/2409.19606). This NVIDIA variant
 delays each HC combine to the following HC mix boundary. HC glue kernels,
 including fused combine+RMSNorm, live in ``ops/hc.py``; projections remain
-standard Aphrodite Linear modules.
+standard Sonar Linear modules.
 
 Hidden states between layers have shape ``[..., HC*HS]`` with HS inner
 (HC outer, HS inner — checkpoint-native layout).
@@ -23,13 +23,13 @@ Typical usage inside a transformer decoder layer::
 import torch
 from torch import nn
 
-import aphrodite.envs as envs
-from aphrodite.model_executor.layers.linear import (
+import sonar.envs as envs
+from sonar.model_executor.layers.linear import (
     MergedColumnParallelLinear,
     ReplicatedLinear,
 )
-from aphrodite.model_executor.models.utils import maybe_prefix
-from aphrodite.platforms import current_platform
+from sonar.model_executor.models.utils import maybe_prefix
+from sonar.platforms import current_platform
 
 from ..common.hyperconnection import (
     GroupedGemmaRMSNorm,
@@ -59,7 +59,7 @@ class GatedResidual(nn.Module):
     injection.
 
     Weights: the norm owns the grouped GemmaRMSNorm affine; the projections
-    are Aphrodite Linear modules (merged replicated linear for down+inject).
+    are Sonar Linear modules (merged replicated linear for down+inject).
     Eligible down+inject projections use the fused SiLU GEMM; other projections
     use their Linear module's GEMM dispatch.
     """
@@ -88,7 +88,7 @@ class GatedResidual(nn.Module):
             dtype=config.params_dtype,
         )
 
-        # -- Aphrodite Linear weights --------------------------------------------
+        # -- Sonar Linear weights --------------------------------------------
         # The merged skinny-GEMM shape is physically padded to 16 rows to ensure
         # good alignment and performant implementation chosen by CuBLAS heuristics.
         self.pad_size = (-(self.hc_lowrank + self.hc_count)) % 16 if use_combine else 0
@@ -134,7 +134,7 @@ class GatedResidual(nn.Module):
         if not self.use_combine:
             return hc_silu(self.input_mix_weight_down(xn), self.hc_count), None
 
-        use_fused = self._use_hc_down_silu and not envs.APHRODITE_BATCH_INVARIANT and 1 <= xn.shape[0] <= MAX_FUSED_M
+        use_fused = self._use_hc_down_silu and not envs.SONAR_BATCH_INVARIANT and 1 <= xn.shape[0] <= MAX_FUSED_M
         if use_fused:
             return hc_down_silu(
                 xn,

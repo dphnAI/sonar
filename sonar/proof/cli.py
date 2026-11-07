@@ -12,7 +12,7 @@ from pathlib import Path
 
 
 def _keygen(args):
-    from aphrodite.proof.verifier import generate_x25519_keypair
+    from sonar.proof.verifier import generate_x25519_keypair
 
     private, public = generate_x25519_keypair()
     path = Path(args.private_key)
@@ -23,7 +23,7 @@ def _keygen(args):
 
 
 def _check(args):
-    from aphrodite.proof.bundle import RuntimeWeightVerifier
+    from sonar.proof.bundle import RuntimeWeightVerifier
 
     key_path = Path(args.private_key)
     if os.name == "posix" and key_path.stat().st_mode & 0o077:
@@ -40,9 +40,9 @@ def _check(args):
 
 
 async def _snapshot(args):
-    from aphrodite.engine.arg_utils import AsyncEngineArgs
-    from aphrodite.proof import PROOF_VERSION
-    from aphrodite.v1.engine.async_llm import AsyncLLM
+    from sonar.engine.arg_utils import AsyncEngineArgs
+    from sonar.proof import PROOF_VERSION
+    from sonar.v1.engine.async_llm import AsyncLLM
 
     directory = Path(args.output_dir).resolve()
     if directory.exists() and any(directory.iterdir()):
@@ -50,7 +50,7 @@ async def _snapshot(args):
     engine_args = AsyncEngineArgs.from_cli_args(args)
     engine = AsyncLLM.from_engine_args(engine_args)
     try:
-        config = engine.aphrodite_config.dphn_network_config
+        config = engine.sonar_config.dphn_network_config
         if config is None:
             raise ValueError("Runtime snapshots require --dphn-network configuration")
         workers = await engine.dphn_snapshot(str(directory))
@@ -73,14 +73,14 @@ async def _snapshot(args):
 
 
 def main(argv: list[str] | None = None):
-    from aphrodite.utils.argparse_utils import FlexibleArgumentParser
+    from sonar.utils.argparse_utils import FlexibleArgumentParser
 
     if argv is None:
         import sys
 
         argv = sys.argv[1:]
     parser = FlexibleArgumentParser(
-        prog="aphrodite verify", description="DPHN sampled-weight receipts; not proof of inference."
+        prog="sonar verify", description="DPHN sampled-weight receipts; not proof of inference."
     )
     actions: argparse._SubParsersAction = parser.add_subparsers(dest="action", required=True)
     keygen = actions.add_parser("keygen", help="Create an X25519 verifier key; print only the public key.")
@@ -99,7 +99,7 @@ def main(argv: list[str] | None = None):
     snapshot = actions.add_parser("snapshot", help="Export approved runtime shards on trusted model workers.")
     # Engine arguments pull in the serving stack; load them only when needed.
     if argv[:1] == ["snapshot"]:
-        from aphrodite.engine.arg_utils import AsyncEngineArgs
+        from sonar.engine.arg_utils import AsyncEngineArgs
 
         AsyncEngineArgs.add_cli_args(snapshot)
         snapshot.set_defaults(dphn_network=True)

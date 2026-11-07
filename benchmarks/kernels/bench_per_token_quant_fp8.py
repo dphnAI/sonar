@@ -7,18 +7,18 @@ from unittest.mock import patch
 import pandas as pd
 import torch
 
-from aphrodite.model_executor.layers.quantization.input_quant_fp8 import QuantFP8
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import GroupShape
-from aphrodite.triton_utils import triton
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
-from aphrodite.utils.torch_utils import STR_DTYPE_TO_TORCH_DTYPE
+from sonar.model_executor.layers.quantization.input_quant_fp8 import QuantFP8
+from sonar.model_executor.layers.quantization.utils.quant_utils import GroupShape
+from sonar.triton_utils import triton
+from sonar.utils.argparse_utils import FlexibleArgumentParser
+from sonar.utils.torch_utils import STR_DTYPE_TO_TORCH_DTYPE
 
 
 def with_triton_mode(fn):
     """Temporarily force the Triton fallback path"""
 
     def wrapped(*args, **kwargs):
-        with patch("aphrodite.platforms.current_platform.is_cuda", return_value=False):
+        with patch("sonar.platforms.current_platform.is_cuda", return_value=False):
             return fn(*args, **kwargs)
 
     return wrapped
@@ -37,7 +37,7 @@ def bench_compile(fn: Callable):
     # recompile for different shapes
     fwd = torch.compile(fn, fullgraph=True, dynamic=False)
 
-    # First dim is explicitly dynamic to simulate Aphrodite usage
+    # First dim is explicitly dynamic to simulate Sonar usage
     return with_dyn_arg(fwd, 0, 0)
 
 

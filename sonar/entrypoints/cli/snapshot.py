@@ -8,10 +8,10 @@ import platform
 import typing
 from pathlib import Path
 
-from aphrodite.entrypoints.cli.types import CLISubcommand
+from sonar.entrypoints.cli.types import CLISubcommand
 
 if typing.TYPE_CHECKING:
-    from aphrodite.utils.argparse_utils import FlexibleArgumentParser
+    from sonar.utils.argparse_utils import FlexibleArgumentParser
 else:
     FlexibleArgumentParser = argparse.ArgumentParser
 
@@ -39,7 +39,7 @@ def validate_create_args(args: argparse.Namespace) -> None:
         or args.grpc
         or args.headless
         or args.api_key
-        or os.environ.get("APHRODITE_API_KEY")
+        or os.environ.get("SONAR_API_KEY")
         or args.uds
         or args.middleware
     )
@@ -66,25 +66,25 @@ def validate_create_args(args: argparse.Namespace) -> None:
 
 def run_create(args: argparse.Namespace) -> None:
     validate_create_args(args)
-    from aphrodite.snapshot.controller import create_snapshot
+    from sonar.snapshot.controller import create_snapshot
 
     create_snapshot(args)
 
 
 def run_inspect(args: argparse.Namespace) -> None:
-    from aphrodite.snapshot.manifest import inspect_snapshot
+    from sonar.snapshot.manifest import inspect_snapshot
 
     print(json.dumps(inspect_snapshot(Path(args.snapshot_dir)), indent=2))
 
 
 def run_restore(args: argparse.Namespace) -> None:
-    from aphrodite.snapshot.controller import restore_snapshot
+    from sonar.snapshot.controller import restore_snapshot
 
     restore_snapshot(args)
 
 
 class SnapshotSubcommand(CLISubcommand):
-    """The `snapshot` subcommand for the Aphrodite CLI."""
+    """The `snapshot` subcommand for the Sonar CLI."""
 
     name = "snapshot"
 
@@ -98,14 +98,14 @@ class SnapshotSubcommand(CLISubcommand):
     def subparser_init(self, subparsers: argparse._SubParsersAction) -> FlexibleArgumentParser:
         parser = subparsers.add_parser(
             self.name,
-            help="Create, inspect, or restore an initialized Aphrodite snapshot.",
-            usage="aphrodite snapshot <create|inspect|restore> [options]",
+            help="Create, inspect, or restore an initialized Sonar snapshot.",
+            usage="sonar snapshot <create|inspect|restore> [options]",
         )
         actions = parser.add_subparsers(required=True, dest="snapshot_action")
 
         create_parser = actions.add_parser("create", help="Create a snapshot from an initialized TP1 engine.")
         if self.create_requested:
-            from aphrodite.entrypoints.common.cli_args import make_arg_parser
+            from sonar.entrypoints.common.cli_args import make_arg_parser
 
             create_parser = make_arg_parser(create_parser)
         else:

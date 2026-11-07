@@ -9,7 +9,7 @@
 
 import os
 
-from aphrodite.triton_utils import tl, tldevice, triton
+from sonar.triton_utils import tl, tldevice, triton
 
 from .utils import is_gather_supported
 

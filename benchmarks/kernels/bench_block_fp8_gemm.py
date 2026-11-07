@@ -2,14 +2,14 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import torch
 
-from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
+from sonar.model_executor.layers.quantization.utils.fp8_utils import (
     apply_w8a8_block_fp8_linear,
 )
-from aphrodite.model_executor.layers.quantization.utils.w8a8_utils import (
+from sonar.model_executor.layers.quantization.utils.w8a8_utils import (
     CUTLASS_BLOCK_FP8_SUPPORTED,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import triton as aphrodite_triton
+from sonar.platforms import current_platform
+from sonar.triton_utils import triton as sonar_triton
 
 assert current_platform.is_cuda(), "Only support benchmarking w8a8 block fp8 kernel on CUDA device."
 
@@ -70,8 +70,8 @@ if CUTLASS_BLOCK_FP8_SUPPORTED:
     available_providers.append("w8a8-block-fp8-cutlass")
 
 
-@aphrodite_triton.testing.perf_report(
-    aphrodite_triton.testing.Benchmark(
+@sonar_triton.testing.perf_report(
+    sonar_triton.testing.Benchmark(
         x_names=["batch_size"],
         x_vals=[1, 16, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384],
         x_log=False,
@@ -92,17 +92,15 @@ def benchmark_tflops(batch_size, provider, N, K, block_size=(128, 128)):
     if provider == "torch-bf16":
         a = torch.randn((M, K), device=device, dtype=torch.bfloat16)
         b = torch.randn((N, K), device=device, dtype=torch.bfloat16)
-        ms, min_ms, max_ms = aphrodite_triton.testing.do_bench_cudagraph(
+        ms, min_ms, max_ms = sonar_triton.testing.do_bench_cudagraph(
             lambda: torch.nn.functional.linear(a, b), quantiles=quantiles
         )
     elif provider == "w8a8-block-fp8-triton":
         run_w8a8_triton = build_w8a8_block_fp8_runner(M, N, K, block_size, device, use_cutlass=False)
-        ms, min_ms, max_ms = aphrodite_triton.testing.do_bench_cudagraph(lambda: run_w8a8_triton(), quantiles=quantiles)
+        ms, min_ms, max_ms = sonar_triton.testing.do_bench_cudagraph(lambda: run_w8a8_triton(), quantiles=quantiles)
     elif provider == "w8a8-block-fp8-cutlass":
         run_w8a8_cutlass = build_w8a8_block_fp8_runner(M, N, K, block_size, device, use_cutlass=True)
-        ms, min_ms, max_ms = aphrodite_triton.testing.do_bench_cudagraph(
-            lambda: run_w8a8_cutlass(), quantiles=quantiles
-        )
+        ms, min_ms, max_ms = sonar_triton.testing.do_bench_cudagraph(lambda: run_w8a8_cutlass(), quantiles=quantiles)
     else:
         raise ValueError(f"Unknown provider: {provider}")
 

@@ -5,23 +5,23 @@ from typing import TYPE_CHECKING
 
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe.activation import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe.activation import (
     ApplyMoEActivationConfig,
     apply_moe_activation,
 )
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEQuantConfig,
 )
-from aphrodite.model_executor.layers.quantization.auto_awq import AutoAWQConfig
-from aphrodite.model_executor.layers.quantization.auto_gptq import AutoGPTQConfig
-from aphrodite.model_executor.layers.quantization.moe_wna16 import (
+from sonar.model_executor.layers.quantization.auto_awq import AutoAWQConfig
+from sonar.model_executor.layers.quantization.auto_gptq import AutoGPTQConfig
+from sonar.model_executor.layers.quantization.moe_wna16 import (
     MoeWNA16Config,
     MoeWNA16Method,
 )
-from aphrodite.model_executor.utils import replace_parameter
-from aphrodite.platforms import current_platform
+from sonar.model_executor.utils import replace_parameter
+from sonar.platforms import current_platform
 
 if TYPE_CHECKING:
     from ..config_parser import INCLayerConfig
@@ -320,21 +320,21 @@ class INCWNA16MoEScheme:
         raise NotImplementedError(f"WNA16 MoE does not support config {self.layer_config}")
 
     def _build_cpu_method(self, layer: torch.nn.Module):
-        from aphrodite.model_executor.layers.fused_moe import (
+        from sonar.model_executor.layers.fused_moe import (
             UnquantizedFusedMoEMethod,
         )
 
         return UnquantizedFusedMoEMethod(layer.moe_config)
 
     def _build_gptq_method(self, layer: torch.nn.Module):
-        from aphrodite.model_executor.layers.quantization.auto_gptq import (
+        from sonar.model_executor.layers.quantization.auto_gptq import (
             AutoGPTQMoEMethod,
         )
-        from aphrodite.model_executor.layers.quantization.moe_wna16 import (
+        from sonar.model_executor.layers.quantization.moe_wna16 import (
             MoeWNA16Config,
             MoeWNA16Method,
         )
-        from aphrodite.model_executor.layers.quantization.utils.marlin_utils import (
+        from sonar.model_executor.layers.quantization.utils.marlin_utils import (
             check_moe_marlin_supports_layer,
         )
 
@@ -375,12 +375,12 @@ class INCWNA16MoEScheme:
         return MoeWNA16Method(moe_config, layer.moe_config)
 
     def _build_awq_method(self, layer: torch.nn.Module):
-        from aphrodite.model_executor.layers.quantization.auto_awq import AutoAWQMoEMethod
-        from aphrodite.model_executor.layers.quantization.moe_wna16 import (
+        from sonar.model_executor.layers.quantization.auto_awq import AutoAWQMoEMethod
+        from sonar.model_executor.layers.quantization.moe_wna16 import (
             MoeWNA16Config,
             MoeWNA16Method,
         )
-        from aphrodite.model_executor.layers.quantization.utils.marlin_utils import (
+        from sonar.model_executor.layers.quantization.utils.marlin_utils import (
             check_moe_marlin_supports_layer,
         )
 

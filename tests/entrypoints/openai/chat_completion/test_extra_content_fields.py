@@ -15,8 +15,8 @@ import openai
 import pytest
 import pytest_asyncio
 
-from aphrodite.assets.image import ImageAsset
-from aphrodite.multimodal.utils import encode_image_url
+from sonar.assets.image import ImageAsset
+from sonar.multimodal.utils import encode_image_url
 from tests.utils import RemoteOpenAIServer
 
 MODEL_NAME = "google/translategemma-4b-it"

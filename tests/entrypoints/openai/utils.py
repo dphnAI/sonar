@@ -4,13 +4,13 @@ import json
 from collections.abc import AsyncGenerator
 from typing import Any
 
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionResponse,
     ChatCompletionResponseChoice,
     ChatCompletionStreamResponse,
     ChatMessage,
 )
-from aphrodite.entrypoints.serve.engine.protocol import UsageInfo
+from sonar.entrypoints.serve.engine.protocol import UsageInfo
 
 
 async def accumulate_streaming_response(

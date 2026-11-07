@@ -5,20 +5,20 @@ from typing import cast
 
 import torch
 
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.compilation.breakable_cudagraph import eager_break_during_capture
-from aphrodite.forward_context import get_forward_context
-from aphrodite.model_executor.layers.attention.mla_attention import MLACommonMetadata
-from aphrodite.model_executor.layers.sparse_attn_indexer import SparseAttnIndexer
-from aphrodite.model_executor.models.deepseek_v2 import DeepseekV32IndexerCache
-from aphrodite.models.deepseek_v32.attention import DeepseekV32Attention, DeepseekV32Indexer
-from aphrodite.models.deepseek_v32.common.kernels import fused_norm_rope, fused_q
-from aphrodite.platforms import current_platform
-from aphrodite.v1.attention.backends.mla.indexer import DeepseekV32IndexerBackend
-from aphrodite.v1.attention.backends.mla.rocm_aiter_mla_sparse import (
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.compilation.breakable_cudagraph import eager_break_during_capture
+from sonar.forward_context import get_forward_context
+from sonar.model_executor.layers.attention.mla_attention import MLACommonMetadata
+from sonar.model_executor.layers.sparse_attn_indexer import SparseAttnIndexer
+from sonar.model_executor.models.deepseek_v2 import DeepseekV32IndexerCache
+from sonar.models.deepseek_v32.attention import DeepseekV32Attention, DeepseekV32Indexer
+from sonar.models.deepseek_v32.common.kernels import fused_norm_rope, fused_q
+from sonar.platforms import current_platform
+from sonar.v1.attention.backends.mla.indexer import DeepseekV32IndexerBackend
+from sonar.v1.attention.backends.mla.rocm_aiter_mla_sparse import (
     ROCMAiterMLASparseBackend,
 )
-from aphrodite.v1.kv_cache_interface import is_quantized_kv_cache
+from sonar.v1.kv_cache_interface import is_quantized_kv_cache
 
 
 class DeepseekV32ROCmIndexerCache(DeepseekV32IndexerCache):
@@ -39,9 +39,9 @@ class DeepseekV32ROCmIndexer(DeepseekV32Indexer):
 class DeepseekV32MLAAttention(DeepseekV32Attention):
     indexer_cls = DeepseekV32ROCmIndexer
 
-    def __init__(self, aphrodite_config, config, prefix, topk_indices_buffer=None):
+    def __init__(self, sonar_config, config, prefix, topk_indices_buffer=None):
         super().__init__(
-            aphrodite_config,
+            sonar_config,
             config,
             prefix,
             topk_indices_buffer,

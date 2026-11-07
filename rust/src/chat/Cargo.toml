@@ -1,5 +1,5 @@
 [package]
-name = "aphrodite-chat"
+name = "sonar-chat"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -33,12 +33,12 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 trait-set.workspace = true
 uuid.workspace = true
-aphrodite-engine-core-client.workspace = true
-aphrodite-llm.workspace = true
-aphrodite-parser.workspace = true
-aphrodite-text.workspace = true
-aphrodite-tokenizer.workspace = true
-aphrodite-tracing.workspace = true
+sonar-engine-core-client.workspace = true
+sonar-llm.workspace = true
+sonar-parser.workspace = true
+sonar-text.workspace = true
+sonar-tokenizer.workspace = true
+sonar-tracing.workspace = true
 xgrammar-structural-tag.workspace = true
 
 [dev-dependencies]
@@ -53,9 +53,9 @@ serial_test.workspace = true
 tempfile.workspace = true
 tokio.workspace = true
 uuid.workspace = true
-aphrodite-engine-core-client = { workspace = true, features = ["test-util"] }
-aphrodite-parser = { workspace = true, features = ["test-util"] }
-aphrodite-tokenizer = { workspace = true, features = ["test-utils"] }
+sonar-engine-core-client = { workspace = true, features = ["test-util"] }
+sonar-parser = { workspace = true, features = ["test-util"] }
+sonar-tokenizer = { workspace = true, features = ["test-utils"] }
 zeromq.workspace = true
 
 [lints]

@@ -15,7 +15,7 @@ import pytest
 import uvicorn
 import uvloop
 
-from aphrodite.entrypoints.launchers.launcher import NoSignalServer
+from sonar.entrypoints.launchers.launcher import NoSignalServer
 
 TIMEOUT_S = 30
 

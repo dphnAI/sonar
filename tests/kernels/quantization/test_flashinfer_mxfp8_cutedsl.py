@@ -4,13 +4,13 @@
 import pytest
 import torch
 
-from aphrodite.model_executor.kernels.linear import (
+from sonar.model_executor.kernels.linear import (
     FlashInferCutedslMxfp8LinearKernel,
     Mxfp8LinearLayerConfig,
 )
-from aphrodite.model_executor.layers.fusion.quant_activation import QuantizedActivation
-from aphrodite.model_executor.layers.quantization.utils.mxfp8_utils import mxfp8_e4m3_quantize
-from aphrodite.platforms import current_platform
+from sonar.model_executor.layers.fusion.quant_activation import QuantizedActivation
+from sonar.model_executor.layers.quantization.utils.mxfp8_utils import mxfp8_e4m3_quantize
+from sonar.platforms import current_platform
 
 if not FlashInferCutedslMxfp8LinearKernel.is_supported()[0]:
     pytest.skip(reason="FlashInfer MXFP8 CuTe-DSL is unavailable", allow_module_level=True)

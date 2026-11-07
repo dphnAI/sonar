@@ -10,8 +10,8 @@ import math
 
 import pytest
 
-from aphrodite import SamplingParams
-from aphrodite.exceptions import AphroditeValidationError
+from sonar import SamplingParams
+from sonar.exceptions import SonarValidationError
 
 
 class TestNonFiniteTemperature:
@@ -23,7 +23,7 @@ class TestNonFiniteTemperature:
         ids=["nan", "inf", "-inf", "math.nan", "math.inf"],
     )
     def test_non_finite_temperature_rejected(self, value: float):
-        with pytest.raises(AphroditeValidationError, match="temperature"):
+        with pytest.raises(SonarValidationError, match="temperature"):
             SamplingParams(temperature=value)
 
     def test_finite_temperature_accepted(self):

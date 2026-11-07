@@ -5,10 +5,10 @@ from dataclasses import dataclass, field
 import pytest
 import torch
 
-from aphrodite.model_executor.models.paddleocr_vl import (
+from sonar.model_executor.models.paddleocr_vl import (
     PaddleOCRVLForConditionalGeneration,
 )
-from aphrodite.multimodal.inputs import (
+from sonar.multimodal.inputs import (
     MultiModalFeatureSpec,
     MultiModalFieldElem,
     MultiModalKwargsItem,

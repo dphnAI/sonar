@@ -12,13 +12,13 @@ pytest.importorskip("triton")
 if not torch.cuda.is_available():
     pytest.skip("CUDA required for sampler flag tests", allow_module_level=True)
 
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.v1.worker.gpu.sample.logits_processor import (
+from sonar.sampling_params import SamplingParams
+from sonar.v1.worker.gpu.sample.logits_processor import (
     LogitsContext,
     LogitsProcessor,
 )
-from aphrodite.v1.worker.gpu.sample.sampler import Sampler
-from aphrodite.v1.worker.gpu.states import RequestState
+from sonar.v1.worker.gpu.sample.sampler import Sampler
+from sonar.v1.worker.gpu.states import RequestState
 
 DEVICE = torch.device("cuda")
 VOCAB_SIZE = 128
@@ -40,7 +40,7 @@ def _make_sampler(custom_logits_processors: Sequence[LogitsProcessor] = ()) -> S
         device=DEVICE,
     )
     return Sampler(
-        aphrodite_config=SimpleNamespace(reasoning_config=MockReasoningConfig()),
+        sonar_config=SimpleNamespace(reasoning_config=MockReasoningConfig()),
         max_num_reqs=4,
         vocab_size=VOCAB_SIZE,
         device=DEVICE,

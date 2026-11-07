@@ -15,26 +15,26 @@ import numpy as np
 import psutil
 import torch
 
-from aphrodite.config import AphroditeConfig, CUDAGraphMode
-from aphrodite.distributed import get_tp_group
-from aphrodite.forward_context import get_forward_context, in_piecewise_cudagraph
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.utils.math_utils import cdiv, round_up
-from aphrodite.utils.mem_utils import get_max_shared_memory_bytes
-from aphrodite.utils.torch_utils import async_tensor_h2d
-from aphrodite.v1.attention.backend import max_decode_query_len
-from aphrodite.v1.hisparse.backend import get_hisparse_backend
-from aphrodite.v1.hisparse.types import SparseKVResidencyUpdate
-from aphrodite.v1.kv_offload.cpu.shared_offload_region import SharedOffloadRegion
+from sonar.config import CUDAGraphMode, SonarConfig
+from sonar.distributed import get_tp_group
+from sonar.forward_context import get_forward_context, in_piecewise_cudagraph
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.utils.math_utils import cdiv, round_up
+from sonar.utils.mem_utils import get_max_shared_memory_bytes
+from sonar.utils.torch_utils import async_tensor_h2d
+from sonar.v1.attention.backend import max_decode_query_len
+from sonar.v1.hisparse.backend import get_hisparse_backend
+from sonar.v1.hisparse.types import SparseKVResidencyUpdate
+from sonar.v1.kv_offload.cpu.shared_offload_region import SharedOffloadRegion
 
 logger = init_logger(__name__)
 
 HOST_REGISTER_CHUNK_BYTES = 256 * 2**30
 
 if TYPE_CHECKING:
-    from aphrodite.v1.attention.backends.mla.index_group import HiSparseMLAIndexGroup
-    from aphrodite.v1.kv_cache_interface import KVCacheConfig
+    from sonar.v1.attention.backends.mla.index_group import HiSparseMLAIndexGroup
+    from sonar.v1.kv_cache_interface import KVCacheConfig
 
 HiSparseTopKResult: TypeAlias = torch.Tensor | tuple[torch.Tensor, torch.Tensor]
 # trtllm-gen sparse MLA reads up to ~250 rows from the start of its KV cache
@@ -51,9 +51,9 @@ def is_hisparse_decode_batch(attn_metadata: Any | None) -> bool:
     )
 
 
-def _get_max_swap_rows(aphrodite_config: AphroditeConfig) -> int:
-    max_query_len = max_decode_query_len(aphrodite_config)
-    scheduler_config = aphrodite_config.scheduler_config
+def _get_max_swap_rows(sonar_config: SonarConfig) -> int:
+    max_query_len = max_decode_query_len(sonar_config)
+    scheduler_config = sonar_config.scheduler_config
     return min(
         scheduler_config.max_num_batched_tokens,
         scheduler_config.max_num_seqs * max_query_len,
@@ -104,17 +104,17 @@ class ResolvedHiSparseConfig:
     eager_host_mirror: bool = True
 
     @classmethod
-    def from_aphrodite_config(
+    def from_sonar_config(
         cls,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         model_top_k: int,
         block_size: int | None = None,
     ) -> ResolvedHiSparseConfig | None:
-        config = aphrodite_config.attention_config.hisparse_config
+        config = sonar_config.attention_config.hisparse_config
         if config is None:
             return None
 
-        max_query_len = max_decode_query_len(aphrodite_config)
+        max_query_len = max_decode_query_len(sonar_config)
         min_device_buffer_size = max_query_len * model_top_k
         # Retain the worst-case union of every speculative step's top-k and
         # leave one additional top-k of LRU slack.
@@ -212,8 +212,8 @@ def pin_tensor(tensor: torch.Tensor) -> None:
 class HiSparseHostPool:
     """Keep the single host backing and its exact registration range."""
 
-    def __init__(self, aphrodite_config: AphroditeConfig, kv_cache_config: KVCacheConfig) -> None:
-        self.aphrodite_config = aphrodite_config
+    def __init__(self, sonar_config: SonarConfig, kv_cache_config: KVCacheConfig) -> None:
+        self.sonar_config = sonar_config
         self.kv_cache_config = kv_cache_config
         self.backing: torch.Tensor | None = None
         self.registered: torch.Tensor | None = None
@@ -238,7 +238,7 @@ class HiSparseHostPool:
             assert config.hisparse_host_num_blocks is not None
             assert config.hisparse_host_block_stride is not None
             _, self.pinned, self.shared_region = allocate_hisparse_host_pools(
-                self.aphrodite_config,
+                self.sonar_config,
                 tensor_sizes,
                 config.hisparse_host_num_blocks,
                 config.hisparse_host_block_stride,
@@ -257,21 +257,21 @@ class HiSparseHostPool:
 _host_pools: dict[str, HiSparseHostPool] = {}
 
 
-def get_hisparse_host_pool(aphrodite_config: AphroditeConfig, kv_cache_config: KVCacheConfig) -> HiSparseHostPool:
+def get_hisparse_host_pool(sonar_config: SonarConfig, kv_cache_config: KVCacheConfig) -> HiSparseHostPool:
     """Return the engine's host pool, which outlives the profiling KV cache."""
-    instance_id = aphrodite_config.instance_id
+    instance_id = sonar_config.instance_id
     if instance_id not in _host_pools:
-        _host_pools[instance_id] = HiSparseHostPool(aphrodite_config, kv_cache_config)
+        _host_pools[instance_id] = HiSparseHostPool(sonar_config, kv_cache_config)
     return _host_pools[instance_id]
 
 
-def drop_hisparse_host_pool(aphrodite_config: AphroditeConfig) -> None:
-    _host_pools.pop(aphrodite_config.instance_id, None)
+def drop_hisparse_host_pool(sonar_config: SonarConfig) -> None:
+    _host_pools.pop(sonar_config.instance_id, None)
 
 
-def use_shared_hisparse_host_pool(aphrodite_config: AphroditeConfig) -> bool:
+def use_shared_hisparse_host_pool(sonar_config: SonarConfig) -> bool:
     """Whether replicated MLA host KV can share one local mmap."""
-    parallel = aphrodite_config.parallel_config
+    parallel = sonar_config.parallel_config
     return (
         get_hisparse_backend().supports_shared_host_pool
         and parallel.tensor_parallel_size > 1
@@ -357,7 +357,7 @@ def _hisparse_registration_ranges(
 
 
 def allocate_hisparse_host_pools(
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     tensor_sizes: list[int],
     num_blocks: int,
     host_block_stride: int,
@@ -376,7 +376,7 @@ def allocate_hisparse_host_pools(
 
     tp_group = get_tp_group()
     region = SharedOffloadRegion(
-        engine_id=(f"hisparse_{aphrodite_config.instance_id}_dp{aphrodite_config.parallel_config.data_parallel_index}"),
+        engine_id=(f"hisparse_{sonar_config.instance_id}_dp{sonar_config.parallel_config.data_parallel_index}"),
         num_chunks=1,
         rank=0,
         kv_bytes_per_chunk=num_blocks * host_block_stride,
@@ -1223,7 +1223,7 @@ def initialize_hisparse_runtime_buffers(
 
 
 def create_hisparse_cache_handle(
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     model_top_k: int,
     *,
     is_index_group_leader: bool,
@@ -1232,12 +1232,12 @@ def create_hisparse_cache_handle(
     index_group: HiSparseMLAIndexGroup | None = None,
     device: torch.device | str | None = None,
 ) -> HiSparseCacheHandle | None:
-    config = ResolvedHiSparseConfig.from_aphrodite_config(aphrodite_config, model_top_k)
+    config = ResolvedHiSparseConfig.from_sonar_config(sonar_config, model_top_k)
     if config is None:
         return None
 
-    max_num_reqs = aphrodite_config.scheduler_config.max_num_seqs
-    max_swap_rows = _get_max_swap_rows(aphrodite_config)
+    max_num_reqs = sonar_config.scheduler_config.max_num_seqs
+    max_swap_rows = _get_max_swap_rows(sonar_config)
     if device is None:
         device = torch.device(current_platform.device_type, torch.accelerator.current_device_index())
 

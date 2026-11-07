@@ -11,43 +11,43 @@ import torch
 from torch import nn
 from transformers import Qwen4ExpTextConfig
 
-import aphrodite.envs as envs
-from aphrodite import _custom_ops as ops
-from aphrodite.compilation.breakable_cudagraph import eager_break_during_capture
-from aphrodite.config import AphroditeConfig, get_current_aphrodite_config_or_none
-from aphrodite.config.cache import CacheDType
-from aphrodite.distributed import get_tensor_model_parallel_world_size
-from aphrodite.forward_context import get_forward_context
-from aphrodite.model_executor.layers.attention.attention import (
+import sonar.envs as envs
+from sonar import _custom_ops as ops
+from sonar.compilation.breakable_cudagraph import eager_break_during_capture
+from sonar.config import SonarConfig, get_current_sonar_config_or_none
+from sonar.config.cache import CacheDType
+from sonar.distributed import get_tensor_model_parallel_world_size
+from sonar.forward_context import get_forward_context
+from sonar.model_executor.layers.attention.attention import (
     set_default_quant_scales,
 )
-from aphrodite.model_executor.layers.attention_layer_base import AttentionLayerBase
-from aphrodite.model_executor.layers.layernorm import GemmaRMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.attention_layer_base import AttentionLayerBase
+from sonar.model_executor.layers.layernorm import GemmaRMSNorm
+from sonar.model_executor.layers.linear import (
     MergedColumnParallelLinear,
     QKVParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.rotary_embedding import MRotaryEmbedding, get_rope
-from aphrodite.model_executor.models.qwen3_next import Qwen3NextAttention
-from aphrodite.model_executor.models.qwen3_vl import mrope_positions_factor
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.rotary_embedding import MRotaryEmbedding, get_rope
+from sonar.model_executor.models.qwen3_next import Qwen3NextAttention
+from sonar.model_executor.models.qwen3_vl import mrope_positions_factor
+from sonar.model_executor.models.utils import (
     AutoWeightsLoader,
     WeightsMapper,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.utils.torch_utils import (
+from sonar.platforms import current_platform
+from sonar.utils.math_utils import cdiv
+from sonar.utils.torch_utils import (
     kv_cache_dtype_str_to_dtype,
 )
-from aphrodite.v1.attention.backend import (
+from sonar.v1.attention.backend import (
     AttentionBackend,
     AttentionImplBase,
     AttentionType,
     MultipleOf,
 )
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.kv_cache_interface import (
     FullAttentionSpec,
     KVCacheSpec,
     get_kv_quant_mode,
@@ -276,7 +276,7 @@ class Qwen4ExpQSAAttention(Qwen3NextAttention, AttentionLayerBase):
     def __init__(
         self,
         *,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         config: Qwen4ExpTextConfig,
         layer_id: int,
         quant_config: QuantizationConfig | None = None,
@@ -284,8 +284,8 @@ class Qwen4ExpQSAAttention(Qwen3NextAttention, AttentionLayerBase):
         prefix: str = "",
     ) -> None:
         nn.Module.__init__(self)
-        cache_config = aphrodite_config.cache_config
-        model_config = aphrodite_config.model_config
+        cache_config = sonar_config.cache_config
+        model_config = sonar_config.model_config
         if cache_config is None:
             raise ValueError("Qwen4Exp QSA requires a paged KV cache")
         if model_config.dtype != torch.bfloat16:
@@ -299,7 +299,7 @@ class Qwen4ExpQSAAttention(Qwen3NextAttention, AttentionLayerBase):
             raise NotImplementedError("Qwen4Exp QSA requires a BF16 or FP8-e4m3 main KV cache")
         if getattr(quant_config, "kv_cache_scheme", None) is not None:
             raise NotImplementedError("Qwen4Exp QSA does not support KV quantization")
-        parallel_config = aphrodite_config.parallel_config
+        parallel_config = sonar_config.parallel_config
         if parallel_config.prefill_context_parallel_size > 1 or parallel_config.decode_context_parallel_size > 1:
             raise NotImplementedError("Qwen4Exp QSA does not support context parallelism")
         if not getattr(config, "is_causal", True):
@@ -316,7 +316,7 @@ class Qwen4ExpQSAAttention(Qwen3NextAttention, AttentionLayerBase):
         # request; use_prefill_config (max_query_len > this) steers the
         # config table. Shorter batches take the decode profile — harmless,
         # the difference is tile-shape tuning, not correctness.
-        self._max_decode_query_len = 1 + aphrodite_config.num_speculative_tokens
+        self._max_decode_query_len = 1 + sonar_config.num_speculative_tokens
         self.total_num_kv_heads = int(config.num_key_value_heads)
         if self.total_num_kv_heads >= tp_size:
             if self.total_num_kv_heads % tp_size:
@@ -356,7 +356,7 @@ class Qwen4ExpQSAAttention(Qwen3NextAttention, AttentionLayerBase):
             head_size=self.head_dim,
             max_position=config.max_position_embeddings,
             rope_parameters=config.rope_parameters,
-            mrope_positions_factor=mrope_positions_factor(aphrodite_config),
+            mrope_positions_factor=mrope_positions_factor(sonar_config),
         )
         self.q_norm = GemmaRMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = GemmaRMSNorm(self.head_dim, eps=config.rms_norm_eps)
@@ -402,7 +402,7 @@ class Qwen4ExpQSAAttention(Qwen3NextAttention, AttentionLayerBase):
             self.kv_cache_dtype,
         )
         self.indexer = QSAIndexer(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             config=config,
             layer_id=layer_id,
             rotary_emb=self.rotary_emb,
@@ -423,7 +423,7 @@ class Qwen4ExpQSAAttention(Qwen3NextAttention, AttentionLayerBase):
         # indexer shares the q/k/v GEMM only if it uses the same quant method.
         fused_quant_config = model.without_modelopt_fp4(quant_config)
         projection_method = type(self.qkv_proj.quant_method)
-        self.fuse_indexer_projection = aphrodite_config.lora_config is None and (
+        self.fuse_indexer_projection = sonar_config.lora_config is None and (
             fused_quant_config is None or projection_method is type(self.indexer.index_qk_proj.quant_method)
         )
         if self.fuse_indexer_projection:
@@ -435,7 +435,7 @@ class Qwen4ExpQSAAttention(Qwen3NextAttention, AttentionLayerBase):
             )
             del self.indexer.index_qk_proj
 
-        max_tokens = aphrodite_config.scheduler_config.max_num_batched_tokens
+        max_tokens = sonar_config.scheduler_config.max_num_batched_tokens
         # PACKED selection buffer: the trailing column holds each row's
         # valid-entry count (written by the expand kernel) — never a token
         # index; the sparse attention kernel reads it as its loop bound.
@@ -451,7 +451,7 @@ class Qwen4ExpQSAAttention(Qwen3NextAttention, AttentionLayerBase):
             persistent=False,
         )
 
-        static_context = aphrodite_config.compilation_config.static_forward_context
+        static_context = sonar_config.compilation_config.static_forward_context
         if self.layer_name in static_context:
             raise ValueError(f"Duplicate layer name: {self.layer_name}")
         static_context[self.layer_name] = self
@@ -469,9 +469,9 @@ class Qwen4ExpQSAAttention(Qwen3NextAttention, AttentionLayerBase):
     def get_attn_backend(self) -> type[AttentionBackend]:
         return self.attn_backend
 
-    def get_kv_cache_spec(self, aphrodite_config: AphroditeConfig) -> KVCacheSpec:
+    def get_kv_cache_spec(self, sonar_config: SonarConfig) -> KVCacheSpec:
         return FullAttentionSpec(
-            block_size=aphrodite_config.cache_config.block_size,
+            block_size=sonar_config.cache_config.block_size,
             num_kv_heads=self.num_kv_heads,
             head_size=self.head_dim,
             head_size_v=self.head_dim,
@@ -502,8 +502,8 @@ class Qwen4ExpQSAAttention(Qwen3NextAttention, AttentionLayerBase):
             # sparse_attn_indexer does): the prefill logits budget or the
             # worst-case decode logits [decode tokens, compressed columns],
             # plus the top-k workspace.
-            logits_bytes = envs.APHRODITE_SPARSE_INDEXER_MAX_LOGITS_MB * 1024 * 1024
-            cfg = get_current_aphrodite_config_or_none()
+            logits_bytes = envs.SONAR_SPARSE_INDEXER_MAX_LOGITS_MB * 1024 * 1024
+            cfg = get_current_sonar_config_or_none()
             if cfg is not None:
                 spec = cfg.speculative_config
                 num_spec = spec.num_speculative_tokens if spec is not None else 0

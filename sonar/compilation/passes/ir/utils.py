@@ -3,8 +3,8 @@
 from torch import fx
 from torch._ops import OpOverload, OpOverloadPacket
 
-from aphrodite.ir.op import IrOp
-from aphrodite.logger import init_logger
+from sonar.ir.op import IrOp
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 
@@ -24,14 +24,14 @@ def get_ir_op(node: fx.Node) -> IrOp | None:
         return None
 
     op_overload = overload_or_default(node.target)
-    if op_overload.namespace != "aphrodite_ir":
+    if op_overload.namespace != "sonar_ir":
         return None
 
     op_name = op_overload._opname
     if op_name not in IrOp.registry:
         logger.warning(
-            "Unknown Aphrodite IR op %s, there's likely an issue with torch registration, "
-            "or a torch custom op was registered in the aphrodite_ir namespace by mistake.",
+            "Unknown Sonar IR op %s, there's likely an issue with torch registration, "
+            "or a torch custom op was registered in the sonar_ir namespace by mistake.",
             op_name,
         )
         return None

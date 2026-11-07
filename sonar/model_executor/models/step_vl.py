@@ -10,21 +10,21 @@ from einops import rearrange, repeat
 from torch import nn
 from torch.nn import functional as F
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed import get_tensor_model_parallel_world_size
-from aphrodite.model_executor.layers.activation import get_act_fn
-from aphrodite.model_executor.layers.attention.mm_encoder_attention import MMEncoderAttention
-from aphrodite.model_executor.layers.conv import Conv2dLayer
-from aphrodite.model_executor.layers.linear import (
+from sonar.config import SonarConfig
+from sonar.distributed import get_tensor_model_parallel_world_size
+from sonar.model_executor.layers.activation import get_act_fn
+from sonar.model_executor.layers.attention.mm_encoder_attention import MMEncoderAttention
+from sonar.model_executor.layers.conv import Conv2dLayer
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     QKVParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.quantization import QuantizationConfig
 
 from .interfaces import supports_pp
 from .step3_vl import Step3VLForConditionalGeneration
-from .utils import WeightsMapper, init_aphrodite_registered_model, maybe_prefix
+from .utils import WeightsMapper, init_sonar_registered_model, maybe_prefix
 from .vision import is_vit_use_data_parallel, run_dp_sharded_vision_model
 
 _DEFAULT_NORM_LAYER = partial(nn.LayerNorm, eps=1e-5)
@@ -453,7 +453,7 @@ class PerceptionEncoder(nn.Module):
 
 
 class StepVLForConditionalGeneration(Step3VLForConditionalGeneration):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={
             "model.": "language_model.model.",
             "lm_head.": "language_model.lm_head.",
@@ -466,19 +466,19 @@ class StepVLForConditionalGeneration(Step3VLForConditionalGeneration):
         },
     )
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         super(Step3VLForConditionalGeneration, self).__init__()
 
-        config = aphrodite_config.model_config.hf_config
-        multimodal_config = aphrodite_config.model_config.get_multimodal_config()
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        multimodal_config = sonar_config.model_config.get_multimodal_config()
+        quant_config = sonar_config.quant_config
 
         self.config = config
-        self.model_config = aphrodite_config.model_config
+        self.model_config = sonar_config.model_config
         self.multimodal_config = multimodal_config
         self.use_data_parallel = multimodal_config.mm_encoder_tp_mode == "data"
 
-        with self._mark_tower_model(aphrodite_config, "image"):
+        with self._mark_tower_model(sonar_config, "image"):
             self.vision_model = PerceptionEncoder(
                 config.vision_config,
                 get_act_fn(config.vision_config.hidden_act),
@@ -495,9 +495,9 @@ class StepVLForConditionalGeneration(Step3VLForConditionalGeneration):
                 disable_tp=self.use_data_parallel,
             )
 
-        with self._mark_language_model(aphrodite_config):
-            language_model = init_aphrodite_registered_model(
-                aphrodite_config=aphrodite_config,
+        with self._mark_language_model(sonar_config):
+            language_model = init_sonar_registered_model(
+                sonar_config=sonar_config,
                 hf_config=config.text_config,
                 prefix=maybe_prefix(prefix, "language_model"),
             )

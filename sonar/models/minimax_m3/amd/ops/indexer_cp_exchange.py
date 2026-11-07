@@ -12,12 +12,12 @@ they cannot be dropped before the exchange.
 
 import torch
 
-from aphrodite.distributed.parallel_state import GroupCoordinator, get_tp_group
-from aphrodite.models.minimax_m3.amd.ops.sparse_pa import (
+from sonar.distributed.parallel_state import GroupCoordinator, get_tp_group
+from sonar.models.minimax_m3.amd.ops.sparse_pa import (
     PAGES_PER_SPARSE_BLOCK,
     _write_sparse_block_table_row_from_values,
 )
-from aphrodite.triton_utils import tl, triton
+from sonar.triton_utils import tl, triton
 
 DECODE_TOPK_TILE = 512
 DECODE_TOPK_NUM_WARPS = 8
@@ -243,7 +243,7 @@ def aiter_all_gather(x: torch.Tensor) -> torch.Tensor | None:
     bf16 index queries alike. Concatenates along dim 0,
     then views back to ``x``'s dtype.
     """
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     comm = rocm_aiter_ops.get_aiter_allreduce()
     if comm is None or comm.disabled:

@@ -8,8 +8,8 @@ from typing import TYPE_CHECKING, Any
 import regex as re
 import torch
 
-from aphrodite.model_executor.layers.linear import LinearBase, UnquantizedLinearMethod
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.linear import LinearBase, UnquantizedLinearMethod
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     UnquantizedEmbeddingMethod,
 )

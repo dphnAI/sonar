@@ -10,25 +10,25 @@ from collections.abc import Callable
 
 from prometheus_client import Counter, Gauge, Histogram
 
-import aphrodite.envs as envs
-from aphrodite.compilation.cuda_graph import CUDAGraphLogging
-from aphrodite.config import AphroditeConfig, SupportsMetricsInfo
-from aphrodite.distributed.ec_transfer.ec_connector.metrics import (
+import sonar.envs as envs
+from sonar.compilation.cuda_graph import CUDAGraphLogging
+from sonar.config import SonarConfig, SupportsMetricsInfo
+from sonar.distributed.ec_transfer.ec_connector.metrics import (
     ECConnectorLogging,
     ECConnectorProm,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.metrics import (
+from sonar.distributed.kv_transfer.kv_connector.v1.metrics import (
     KVConnectorLogging,
     KVConnectorProm,
 )
-from aphrodite.logger import init_logger
-from aphrodite.plugins import STAT_LOGGER_PLUGINS_GROUP, load_plugins_by_group
-from aphrodite.v1.engine import FinishReason
-from aphrodite.v1.metrics.buckets import histogram_buckets
-from aphrodite.v1.metrics.cache_hit_source import CacheHitSource
-from aphrodite.v1.metrics.perf import PerfMetricsLogging, PerfMetricsProm
-from aphrodite.v1.metrics.prometheus import unregister_aphrodite_metrics
-from aphrodite.v1.metrics.stats import (
+from sonar.logger import init_logger
+from sonar.plugins import STAT_LOGGER_PLUGINS_GROUP, load_plugins_by_group
+from sonar.v1.engine import FinishReason
+from sonar.v1.metrics.buckets import histogram_buckets
+from sonar.v1.metrics.cache_hit_source import CacheHitSource
+from sonar.v1.metrics.perf import PerfMetricsLogging, PerfMetricsProm
+from sonar.v1.metrics.prometheus import unregister_sonar_metrics
+from sonar.v1.metrics.stats import (
     KV_FETCH_STAGES,
     CachingMetrics,
     IterationStats,
@@ -36,8 +36,8 @@ from aphrodite.v1.metrics.stats import (
     PromptTokenStats,
     SchedulerStats,
 )
-from aphrodite.v1.metrics.utils import create_metric_per_engine
-from aphrodite.v1.spec_decode.metrics import SpecDecodingLogging, SpecDecodingProm
+from sonar.v1.metrics.utils import create_metric_per_engine
+from sonar.v1.spec_decode.metrics import SpecDecodingLogging, SpecDecodingProm
 
 logger = init_logger(__name__)
 
@@ -48,7 +48,7 @@ WAITING_REASON_DEFERRED = "deferred"
 # User-facing reason labels for frontend admission rejections.
 ADMISSION_REASONS = ("max_num_queued_reqs", "max_num_queued_tokens")
 
-PerEngineStatLoggerFactory = Callable[[AphroditeConfig, int], "StatLoggerBase"]
+PerEngineStatLoggerFactory = Callable[[SonarConfig, int], "StatLoggerBase"]
 AggregateStatLoggerFactory = type["AggregateStatLoggerBase"]
 StatLoggerFactory = AggregateStatLoggerFactory | PerEngineStatLoggerFactory
 
@@ -62,7 +62,7 @@ class StatLoggerBase(ABC):
     """
 
     @abstractmethod
-    def __init__(self, aphrodite_config: AphroditeConfig, engine_index: int = 0): ...
+    def __init__(self, sonar_config: SonarConfig, engine_index: int = 0): ...
 
     @abstractmethod
     def record(
@@ -100,17 +100,17 @@ class AggregateStatLoggerBase(StatLoggerBase):
     aggregate across multiple DP engines."""
 
     @abstractmethod
-    def __init__(self, aphrodite_config: AphroditeConfig, engine_indexes: list[int]): ...
+    def __init__(self, sonar_config: SonarConfig, engine_indexes: list[int]): ...
 
     def record_admission_rejection(self, reason: str) -> None:  # noqa
         """Record a frontend admission rejection. Optional for custom loggers."""
 
 
 class LoggingStatLogger(StatLoggerBase):
-    def __init__(self, aphrodite_config: AphroditeConfig, engine_index: int = 0):
+    def __init__(self, sonar_config: SonarConfig, engine_index: int = 0):
         self.engine_index = engine_index
-        self.aphrodite_config = aphrodite_config
-        device_type = aphrodite_config.device_config.device_type
+        self.sonar_config = sonar_config
+        device_type = sonar_config.device_config.device_type
         self.kv_cache_device = "GPU" if device_type == "cuda" else device_type.upper()
         self._reset(time.monotonic())
 
@@ -122,24 +122,24 @@ class LoggingStatLogger(StatLoggerBase):
         self.connector_prefix_caching_metrics = CachingMetrics()
         self.mm_caching_metrics = CachingMetrics()
 
-        model_config = self.aphrodite_config.model_config
+        model_config = self.sonar_config.model_config
         is_diffusion = model_config is not None and model_config.is_diffusion
         self.spec_decoding_logging = SpecDecodingLogging(is_diffusion=is_diffusion)
-        kv_transfer_config = self.aphrodite_config.kv_transfer_config
+        kv_transfer_config = self.sonar_config.kv_transfer_config
         self.kv_connector_logging = KVConnectorLogging(kv_transfer_config)
-        ec_transfer_config = self.aphrodite_config.ec_transfer_config
+        ec_transfer_config = self.sonar_config.ec_transfer_config
         self.ec_connector_logging = ECConnectorLogging(ec_transfer_config)
         self.cudagraph_logging = None
-        if self.aphrodite_config.observability_config.cudagraph_metrics:
+        if self.sonar_config.observability_config.cudagraph_metrics:
             self.cudagraph_logging = CUDAGraphLogging(
-                self.aphrodite_config.compilation_config.cudagraph_mode,
-                self.aphrodite_config.compilation_config.cudagraph_capture_sizes,
+                self.sonar_config.compilation_config.cudagraph_mode,
+                self.sonar_config.compilation_config.cudagraph_capture_sizes,
             )
         self.last_prompt_throughput: float = 0.0
         self.last_generation_throughput: float = 0.0
         self.engine_is_idle = False
         self.aggregated = False
-        self.request_level_metrics = envs.APHRODITE_REQUEST_LEVEL_METRICS
+        self.request_level_metrics = envs.SONAR_REQUEST_LEVEL_METRICS
 
         if self.request_level_metrics:
             self.log_queue: queue.Queue[str | None] = queue.Queue()
@@ -147,7 +147,7 @@ class LoggingStatLogger(StatLoggerBase):
             self.log_thread.start()
 
         if self._enable_perf_stats():
-            self.perf_metrics_logging = PerfMetricsLogging(aphrodite_config)
+            self.perf_metrics_logging = PerfMetricsLogging(sonar_config)
 
     def _reset(self, now):
         self.last_log_time = now
@@ -159,7 +159,7 @@ class LoggingStatLogger(StatLoggerBase):
         self.num_preemptions: int = 0
 
     def _enable_perf_stats(self) -> bool:
-        return self.aphrodite_config.observability_config.enable_mfu_metrics
+        return self.sonar_config.observability_config.enable_mfu_metrics
 
     def _track_iteration_stats(self, iteration_stats: IterationStats):
         # Save tracked stats for token counters.
@@ -367,7 +367,7 @@ class LoggingStatLogger(StatLoggerBase):
             log_parts.append("Prefix cache hit rate: %.1f%%")
             log_args.append(self.prefix_caching_metrics.hit_rate * 100)
 
-        if envs.APHRODITE_COMPUTE_NANS_IN_LOGITS:
+        if envs.SONAR_COMPUTE_NANS_IN_LOGITS:
             log_parts.append("Corrupted: %d reqs")
             log_args.append(self.num_corrupted_reqs)
         if not self.connector_prefix_caching_metrics.empty:
@@ -391,25 +391,25 @@ class LoggingStatLogger(StatLoggerBase):
             self.perf_metrics_logging.log(log_fn=log_fn, log_prefix=self.log_prefix)
 
     def log_engine_initialized(self):
-        if self.aphrodite_config.cache_config.num_gpu_blocks:
+        if self.sonar_config.cache_config.num_gpu_blocks:
             logger.debug(
-                "Engine %03d: aphrodite cache_config_info with initialization after num_gpu_blocks is: %d",
+                "Engine %03d: sonar cache_config_info with initialization after num_gpu_blocks is: %d",
                 self.engine_index,
-                self.aphrodite_config.cache_config.num_gpu_blocks,
+                self.sonar_config.cache_config.num_gpu_blocks,
             )
 
 
 class AggregatedLoggingStatLogger(LoggingStatLogger, AggregateStatLoggerBase):
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         engine_indexes: list[int],
     ):
         self.engine_indexes = engine_indexes
         self.last_scheduler_stats_dict: dict[int, SchedulerStats] = {
             idx: SchedulerStats() for idx in self.engine_indexes
         }
-        LoggingStatLogger.__init__(self, aphrodite_config, engine_index=-1)
+        LoggingStatLogger.__init__(self, sonar_config, engine_index=-1)
         self.aggregated = True
 
     @property
@@ -457,25 +457,25 @@ class AggregatedLoggingStatLogger(LoggingStatLogger, AggregateStatLoggerBase):
         LoggingStatLogger.log(self)
 
     def log_engine_initialized(self):
-        if self.aphrodite_config.cache_config.num_gpu_blocks:
+        if self.sonar_config.cache_config.num_gpu_blocks:
             logger.info(
-                "%d Engines: aphrodite cache_config_info with initialization after num_gpu_blocks is: %d",
+                "%d Engines: sonar cache_config_info with initialization after num_gpu_blocks is: %d",
                 len(self.engine_indexes),
-                self.aphrodite_config.cache_config.num_gpu_blocks,
+                self.sonar_config.cache_config.num_gpu_blocks,
             )
 
 
 class PerEngineStatLoggerAdapter(AggregateStatLoggerBase):
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         engine_indexes: list[int],
         per_engine_stat_logger_factory: PerEngineStatLoggerFactory,
     ) -> None:
         self.per_engine_stat_loggers = {}
         self.engine_indexes = engine_indexes
         for engine_index in engine_indexes:
-            self.per_engine_stat_loggers[engine_index] = per_engine_stat_logger_factory(aphrodite_config, engine_index)
+            self.per_engine_stat_loggers[engine_index] = per_engine_stat_logger_factory(sonar_config, engine_index)
 
     def record(
         self,
@@ -512,41 +512,41 @@ class PrometheusStatLogger(AggregateStatLoggerBase):
     _ec_connector_cls = ECConnectorProm
     _perf_metrics_cls = PerfMetricsProm
 
-    def __init__(self, aphrodite_config: AphroditeConfig, engine_indexes: list[int] | None = None):
+    def __init__(self, sonar_config: SonarConfig, engine_indexes: list[int] | None = None):
         if engine_indexes is None:
             engine_indexes = [0]
 
         self.engine_indexes = engine_indexes
 
-        unregister_aphrodite_metrics()
-        self.aphrodite_config = aphrodite_config
+        unregister_sonar_metrics()
+        self.sonar_config = sonar_config
         # Use this flag to hide metrics that were deprecated in
         # a previous release and which will be removed future
-        self.show_hidden_metrics = aphrodite_config.observability_config.show_hidden_metrics
-        self.kv_cache_metrics_enabled = aphrodite_config.observability_config.kv_cache_metrics
+        self.show_hidden_metrics = sonar_config.observability_config.show_hidden_metrics
+        self.kv_cache_metrics_enabled = sonar_config.observability_config.kv_cache_metrics
 
         labelnames = ["model_name", "engine"]
-        model_name = aphrodite_config.model_config.served_model_name
-        max_model_len = aphrodite_config.model_config.max_model_len
+        model_name = sonar_config.model_config.served_model_name
+        max_model_len = sonar_config.model_config.max_model_len
 
         self.per_engine_labelvalues: dict[int, list[object]] = {idx: [model_name, str(idx)] for idx in engine_indexes}
         per_engine_labelvalues = self.per_engine_labelvalues
 
         self.spec_decoding_prom = self._spec_decoding_cls(
-            aphrodite_config.speculative_config,
+            sonar_config.speculative_config,
             labelnames,
             per_engine_labelvalues,
-            is_diffusion=aphrodite_config.model_config.is_diffusion,
+            is_diffusion=sonar_config.model_config.is_diffusion,
         )
-        self.kv_connector_prom = self._kv_connector_cls(aphrodite_config, labelnames, per_engine_labelvalues)
-        self.ec_connector_prom = self._ec_connector_cls(aphrodite_config, labelnames, per_engine_labelvalues)
-        self.perf_metrics_prom = self._perf_metrics_cls(aphrodite_config, labelnames, per_engine_labelvalues)
+        self.kv_connector_prom = self._kv_connector_cls(sonar_config, labelnames, per_engine_labelvalues)
+        self.ec_connector_prom = self._ec_connector_cls(sonar_config, labelnames, per_engine_labelvalues)
+        self.perf_metrics_prom = self._perf_metrics_cls(sonar_config, labelnames, per_engine_labelvalues)
 
         #
         # Scheduler state
         #
         gauge_scheduler_running = self._gauge_cls(
-            name="aphrodite:num_requests_running",
+            name="sonar:num_requests_running",
             documentation="Number of requests in model execution batches.",
             multiprocess_mode="mostrecent",
             labelnames=labelnames,
@@ -554,7 +554,7 @@ class PrometheusStatLogger(AggregateStatLoggerBase):
         self.gauge_scheduler_running = create_metric_per_engine(gauge_scheduler_running, per_engine_labelvalues)
 
         gauge_scheduler_waiting = self._gauge_cls(
-            name="aphrodite:num_requests_waiting",
+            name="sonar:num_requests_waiting",
             documentation="Number of requests waiting to be processed.",
             multiprocess_mode="mostrecent",
             labelnames=labelnames,
@@ -562,13 +562,13 @@ class PrometheusStatLogger(AggregateStatLoggerBase):
         self.gauge_scheduler_waiting = create_metric_per_engine(gauge_scheduler_waiting, per_engine_labelvalues)
 
         gauge_waiting_by_reason = self._gauge_cls(
-            name="aphrodite:num_requests_waiting_by_reason",
+            name="sonar:num_requests_waiting_by_reason",
             documentation=(
                 "Number of waiting requests by reason. "
                 "Reason labels: 'capacity' = waiting for scheduling capacity; "
                 "'deferred' = deferred by transient constraints "
                 "(LoRA budget, KV transfer, blocked status). "
-                "Sum of all reasons equals aphrodite:num_requests_waiting."
+                "Sum of all reasons equals sonar:num_requests_waiting."
             ),
             multiprocess_mode="mostrecent",
             labelnames=labelnames + ["reason"],
@@ -583,10 +583,10 @@ class PrometheusStatLogger(AggregateStatLoggerBase):
             )
 
         self.gauge_kv_fetch_by_stage: dict[str, dict[int, Gauge]] = {}
-        kv_transfer_config = aphrodite_config.kv_transfer_config
+        kv_transfer_config = sonar_config.kv_transfer_config
         if kv_transfer_config is not None and kv_transfer_config.is_kv_consumer:
             gauge_kv_fetch_by_stage = self._gauge_cls(
-                name="aphrodite:num_requests_kv_fetch_by_stage",
+                name="sonar:num_requests_kv_fetch_by_stage",
                 documentation=(
                     "Number of waiting requests by async KV load stage. "
                     "Stage labels: 'waiting_to_start' = needs an async KV load "
@@ -606,7 +606,7 @@ class PrometheusStatLogger(AggregateStatLoggerBase):
                 )
 
         gauge_engine_sleep_state = self._gauge_cls(
-            name="aphrodite:engine_sleep_state",
+            name="sonar:engine_sleep_state",
             documentation=(
                 "Engine sleep state; awake = 0 means engine is sleeping; "
                 "awake = 1 means engine is awake; "
@@ -630,16 +630,16 @@ class PrometheusStatLogger(AggregateStatLoggerBase):
         self.record_sleep_state()
 
         gauge_kv_cache_usage = self._gauge_cls(
-            name="aphrodite:kv_cache_usage_perc",
+            name="sonar:kv_cache_usage_perc",
             documentation="KV-cache usage. 1 means 100 percent usage.",
             multiprocess_mode="mostrecent",
             labelnames=labelnames,
         )
         self.gauge_kv_cache_usage = create_metric_per_engine(gauge_kv_cache_usage, per_engine_labelvalues)
 
-        if envs.APHRODITE_COMPUTE_NANS_IN_LOGITS:
+        if envs.SONAR_COMPUTE_NANS_IN_LOGITS:
             counter_corrupted_requests = self._counter_cls(
-                name="aphrodite:corrupted_requests",
+                name="sonar:corrupted_requests",
                 documentation=("Corrupted requests, in terms of total number of requests with NaNs in logits."),
                 labelnames=labelnames,
             )
@@ -647,9 +647,9 @@ class PrometheusStatLogger(AggregateStatLoggerBase):
                 counter_corrupted_requests, per_engine_labelvalues
             )
 
-        if aphrodite_config.watermark_config is not None:
+        if sonar_config.watermark_config is not None:
             counter_watermark_requests = self._counter_cls(
-                name="aphrodite:watermark_requests",
+                name="sonar:watermark_requests",
                 documentation=("Finished requests by watermark status (only with watermark_config)."),
                 labelnames=labelnames + ["status"],
             )
@@ -663,7 +663,7 @@ class PrometheusStatLogger(AggregateStatLoggerBase):
                 )
 
         counter_prefix_cache_queries = self._counter_cls(
-            name="aphrodite:prefix_cache_queries",
+            name="sonar:prefix_cache_queries",
             documentation=("Prefix cache queries, in terms of number of queried tokens."),
             labelnames=labelnames,
         )
@@ -672,7 +672,7 @@ class PrometheusStatLogger(AggregateStatLoggerBase):
         )
 
         counter_prefix_cache_hits = self._counter_cls(
-            name="aphrodite:prefix_cache_hits",
+            name="sonar:prefix_cache_hits",
             documentation=("Prefix cache hits, in terms of number of cached tokens."),
             labelnames=labelnames,
         )
@@ -683,7 +683,7 @@ class PrometheusStatLogger(AggregateStatLoggerBase):
         #
 
         counter_connector_prefix_cache_queries = self._counter_cls(
-            name="aphrodite:external_prefix_cache_queries",
+            name="sonar:external_prefix_cache_queries",
             documentation=(
                 "External prefix cache queries from KV connector "
                 "cross-instance cache sharing, in terms of number of queried tokens."
@@ -695,7 +695,7 @@ class PrometheusStatLogger(AggregateStatLoggerBase):
         )
 
         counter_connector_prefix_cache_hits = self._counter_cls(
-            name="aphrodite:external_prefix_cache_hits",
+            name="sonar:external_prefix_cache_hits",
             documentation=(
                 "External prefix cache hits from KV connector "
                 "cross-instance cache sharing, in terms of number of cached tokens."
@@ -711,14 +711,14 @@ class PrometheusStatLogger(AggregateStatLoggerBase):
         #
 
         counter_mm_cache_queries = self._counter_cls(
-            name="aphrodite:mm_cache_queries",
+            name="sonar:mm_cache_queries",
             documentation=("Multi-modal cache queries, in terms of number of queried items."),
             labelnames=labelnames,
         )
         self.counter_mm_cache_queries = create_metric_per_engine(counter_mm_cache_queries, per_engine_labelvalues)
 
         counter_mm_cache_hits = self._counter_cls(
-            name="aphrodite:mm_cache_hits",
+            name="sonar:mm_cache_hits",
             documentation=("Multi-modal cache hits, in terms of number of cached items."),
             labelnames=labelnames,
         )
@@ -728,14 +728,14 @@ class PrometheusStatLogger(AggregateStatLoggerBase):
         # Counters
         #
         counter_num_preempted_reqs = self._counter_cls(
-            name="aphrodite:num_preemptions",
+            name="sonar:num_preemptions",
             documentation="Cumulative number of preemption from the engine.",
             labelnames=labelnames,
         )
         self.counter_num_preempted_reqs = create_metric_per_engine(counter_num_preempted_reqs, per_engine_labelvalues)
 
         counter_prompt_tokens = self._counter_cls(
-            name="aphrodite:prompt_tokens",
+            name="sonar:prompt_tokens",
             documentation="Number of prefill tokens processed.",
             labelnames=labelnames,
         )
@@ -743,7 +743,7 @@ class PrometheusStatLogger(AggregateStatLoggerBase):
 
         # Labeled prompt token counters by source
         counter_prompt_tokens_by_source = self._counter_cls(
-            name="aphrodite:prompt_tokens_by_source",
+            name="sonar:prompt_tokens_by_source",
             documentation="Number of prompt tokens by source.",
             labelnames=labelnames + ["source"],
         )
@@ -755,7 +755,7 @@ class PrometheusStatLogger(AggregateStatLoggerBase):
 
         # Cached prompt tokens counter
         counter_prompt_tokens_cached = self._counter_cls(
-            name="aphrodite:prompt_tokens_cached",
+            name="sonar:prompt_tokens_cached",
             documentation="Number of cached prompt tokens (local + external).",
             labelnames=labelnames,
         )
@@ -764,13 +764,13 @@ class PrometheusStatLogger(AggregateStatLoggerBase):
         )
 
         self.counter_prompt_tokens_cached_by_source = self._counter_cls(
-            name="aphrodite:prompt_tokens_cached_by_source",
+            name="sonar:prompt_tokens_cached_by_source",
             documentation=(
                 "Prefix-cache hit tokens by the cache tier that supplied them: "
                 "device (local HBM), host (offloaded to DRAM), disk, p2p "
-                "(transferred from another Aphrodite instance) or "
+                "(transferred from another Sonar instance) or "
                 "external_unspecified. Counted at admission; sums to "
-                "aphrodite:prefix_cache_hits + aphrodite:external_prefix_cache_hits."
+                "sonar:prefix_cache_hits + sonar:external_prefix_cache_hits."
             ),
             labelnames=labelnames + ["source"],
         )
@@ -779,7 +779,7 @@ class PrometheusStatLogger(AggregateStatLoggerBase):
                 self.counter_prompt_tokens_cached_by_source.labels(*labelvalues, source.value)
 
         counter_generation_tokens = self._counter_cls(
-            name="aphrodite:generation_tokens",
+            name="sonar:generation_tokens",
             documentation="Number of generation tokens processed.",
             labelnames=labelnames,
         )
@@ -787,7 +787,7 @@ class PrometheusStatLogger(AggregateStatLoggerBase):
 
         self.counter_request_success: dict[FinishReason, dict[int, Counter]] = {}
         counter_request_success_base = self._counter_cls(
-            name="aphrodite:request_success",
+            name="sonar:request_success",
             documentation="Count of successfully processed requests.",
             labelnames=labelnames + ["finished_reason"],
         )
@@ -796,7 +796,7 @@ class PrometheusStatLogger(AggregateStatLoggerBase):
                 idx: counter_request_success_base.labels(model_name, str(idx), str(reason)) for idx in engine_indexes
             }
 
-        custom_buckets = aphrodite_config.observability_config.custom_histogram_buckets
+        custom_buckets = sonar_config.observability_config.custom_histogram_buckets
         request_tokens_buckets = histogram_buckets(
             "request_tokens", max_model_len=max_model_len, overrides=custom_buckets
         )
@@ -811,7 +811,7 @@ class PrometheusStatLogger(AggregateStatLoggerBase):
         # Frontend admission
         #
         counter_admission_rejections = self._counter_cls(
-            name="aphrodite:admission_rejections",
+            name="sonar:admission_rejections",
             documentation=("Number of admission attempts rejected by a queue limit, by reason."),
             labelnames=["model_name", "reason"],
         )
@@ -824,7 +824,7 @@ class PrometheusStatLogger(AggregateStatLoggerBase):
         # Histograms of counts
         #
         histogram_num_prompt_tokens_request = self._histogram_cls(
-            name="aphrodite:request_prompt_tokens",
+            name="sonar:request_prompt_tokens",
             documentation="Number of prefill tokens processed.",
             buckets=request_tokens_buckets,
             labelnames=labelnames,
@@ -834,7 +834,7 @@ class PrometheusStatLogger(AggregateStatLoggerBase):
         )
 
         histogram_num_generation_tokens_request = self._histogram_cls(
-            name="aphrodite:request_generation_tokens",
+            name="sonar:request_generation_tokens",
             documentation="Number of generation tokens processed.",
             buckets=request_tokens_buckets,
             labelnames=labelnames,
@@ -847,7 +847,7 @@ class PrometheusStatLogger(AggregateStatLoggerBase):
         # api_server counts which uses prometheus mp.
         # See: https://github.com/vllm-project/vllm/pull/18053
         histogram_iteration_tokens = self._histogram_cls(
-            name="aphrodite:iteration_tokens_total",
+            name="sonar:iteration_tokens_total",
             documentation="Histogram of number of tokens per engine_step.",
             buckets=iteration_tokens_buckets,
             labelnames=labelnames,
@@ -855,7 +855,7 @@ class PrometheusStatLogger(AggregateStatLoggerBase):
         self.histogram_iteration_tokens = create_metric_per_engine(histogram_iteration_tokens, per_engine_labelvalues)
 
         histogram_max_num_generation_tokens_request = self._histogram_cls(
-            name="aphrodite:request_max_num_generation_tokens",
+            name="sonar:request_max_num_generation_tokens",
             documentation="Histogram of maximum number of requested generation tokens.",
             buckets=request_tokens_buckets,
             labelnames=labelnames,
@@ -865,7 +865,7 @@ class PrometheusStatLogger(AggregateStatLoggerBase):
         )
 
         histogram_n_request = self._histogram_cls(
-            name="aphrodite:request_params_n",
+            name="sonar:request_params_n",
             documentation="Histogram of the n request parameter.",
             buckets=request_params_n_buckets,
             labelnames=labelnames,
@@ -873,7 +873,7 @@ class PrometheusStatLogger(AggregateStatLoggerBase):
         self.histogram_n_request = create_metric_per_engine(histogram_n_request, per_engine_labelvalues)
 
         histogram_max_tokens_request = self._histogram_cls(
-            name="aphrodite:request_params_max_tokens",
+            name="sonar:request_params_max_tokens",
             documentation="Histogram of the max_tokens request parameter.",
             buckets=request_tokens_buckets,
             labelnames=labelnames,
@@ -886,7 +886,7 @@ class PrometheusStatLogger(AggregateStatLoggerBase):
         # Histogram of timing intervals
         #
         histogram_time_to_first_token = self._histogram_cls(
-            name="aphrodite:time_to_first_token_seconds",
+            name="sonar:time_to_first_token_seconds",
             documentation="Histogram of time to first token in seconds.",
             buckets=time_to_first_token_buckets,
             labelnames=labelnames,
@@ -896,7 +896,7 @@ class PrometheusStatLogger(AggregateStatLoggerBase):
         )
 
         histogram_inter_token_latency = self._histogram_cls(
-            name="aphrodite:inter_token_latency_seconds",
+            name="sonar:inter_token_latency_seconds",
             documentation="Histogram of inter-token latency in seconds.",
             buckets=inter_token_latency_buckets,
             labelnames=labelnames,
@@ -906,7 +906,7 @@ class PrometheusStatLogger(AggregateStatLoggerBase):
         )
 
         histogram_request_time_per_output_token = self._histogram_cls(
-            name="aphrodite:request_time_per_output_token_seconds",
+            name="sonar:request_time_per_output_token_seconds",
             documentation="Histogram of time_per_output_token_seconds per request.",
             buckets=inter_token_latency_buckets,
             labelnames=labelnames,
@@ -916,7 +916,7 @@ class PrometheusStatLogger(AggregateStatLoggerBase):
         )
 
         histogram_e2e_time_request = self._histogram_cls(
-            name="aphrodite:e2e_request_latency_seconds",
+            name="sonar:e2e_request_latency_seconds",
             documentation="Histogram of e2e request latency in seconds.",
             buckets=request_latency_buckets,
             labelnames=labelnames,
@@ -924,7 +924,7 @@ class PrometheusStatLogger(AggregateStatLoggerBase):
         self.histogram_e2e_time_request = create_metric_per_engine(histogram_e2e_time_request, per_engine_labelvalues)
 
         histogram_queue_time_request = self._histogram_cls(
-            name="aphrodite:request_queue_time_seconds",
+            name="sonar:request_queue_time_seconds",
             documentation="Histogram of time spent in WAITING phase for request.",
             buckets=request_latency_buckets,
             labelnames=labelnames,
@@ -934,7 +934,7 @@ class PrometheusStatLogger(AggregateStatLoggerBase):
         )
 
         histogram_inference_time_request = self._histogram_cls(
-            name="aphrodite:request_inference_time_seconds",
+            name="sonar:request_inference_time_seconds",
             documentation="Histogram of time spent in RUNNING phase for request.",
             buckets=request_latency_buckets,
             labelnames=labelnames,
@@ -944,7 +944,7 @@ class PrometheusStatLogger(AggregateStatLoggerBase):
         )
 
         histogram_prefill_time_request = self._histogram_cls(
-            name="aphrodite:request_prefill_time_seconds",
+            name="sonar:request_prefill_time_seconds",
             documentation="Histogram of time spent in PREFILL phase for request.",
             buckets=request_latency_buckets,
             labelnames=labelnames,
@@ -954,7 +954,7 @@ class PrometheusStatLogger(AggregateStatLoggerBase):
         )
 
         histogram_decode_time_request = self._histogram_cls(
-            name="aphrodite:request_decode_time_seconds",
+            name="sonar:request_decode_time_seconds",
             documentation="Histogram of time spent in DECODE phase for request.",
             buckets=request_latency_buckets,
             labelnames=labelnames,
@@ -964,7 +964,7 @@ class PrometheusStatLogger(AggregateStatLoggerBase):
         )
 
         histogram_request_num_preemptions = self._histogram_cls(
-            name="aphrodite:request_num_preemptions",
+            name="sonar:request_num_preemptions",
             documentation="Histogram of the number of times a request was preempted.",
             buckets=request_num_preemptions_buckets,
             labelnames=labelnames,
@@ -974,7 +974,7 @@ class PrometheusStatLogger(AggregateStatLoggerBase):
         )
 
         histogram_prefill_kv_computed_request = self._histogram_cls(
-            name="aphrodite:request_prefill_kv_computed_tokens",
+            name="sonar:request_prefill_kv_computed_tokens",
             documentation=("Histogram of new KV tokens computed during prefill (excluding cached tokens)."),
             buckets=request_tokens_buckets,
             labelnames=labelnames,
@@ -990,7 +990,7 @@ class PrometheusStatLogger(AggregateStatLoggerBase):
             kv_cache_residency_buckets = histogram_buckets("kv_cache_residency", overrides=custom_buckets)
 
             histogram_kv_block_lifetime = self._histogram_cls(
-                name="aphrodite:kv_block_lifetime_seconds",
+                name="sonar:kv_block_lifetime_seconds",
                 documentation=(
                     "Histogram of KV cache block lifetime from allocation to eviction. "
                     "Sampled metrics (controlled by --kv-cache-metrics-sample)."
@@ -1003,7 +1003,7 @@ class PrometheusStatLogger(AggregateStatLoggerBase):
             )
 
             histogram_kv_block_idle_before_evict = self._histogram_cls(
-                name="aphrodite:kv_block_idle_before_evict_seconds",
+                name="sonar:kv_block_idle_before_evict_seconds",
                 documentation=(
                     "Histogram of idle time before KV cache block eviction. "
                     "Sampled metrics (controlled by --kv-cache-metrics-sample)."
@@ -1016,7 +1016,7 @@ class PrometheusStatLogger(AggregateStatLoggerBase):
             )
 
             histogram_kv_block_reuse_gap = self._histogram_cls(
-                name="aphrodite:kv_block_reuse_gap_seconds",
+                name="sonar:kv_block_reuse_gap_seconds",
                 documentation=(
                     "Histogram of time gaps between consecutive KV cache block "
                     "accesses. Only the most recent accesses are recorded "
@@ -1041,18 +1041,18 @@ class PrometheusStatLogger(AggregateStatLoggerBase):
         # TODO: This metric might be incorrect in case of using multiple
         # api_server counts which uses prometheus mp.
         self.gauge_lora_info: Gauge | None = None
-        if aphrodite_config.lora_config is not None:
+        if sonar_config.lora_config is not None:
             if len(self.engine_indexes) > 1:
                 logger.warning(
-                    "aphrodite:lora_requests_info prometheus metrics may be "
+                    "sonar:lora_requests_info prometheus metrics may be "
                     "incorrect/misleading with data parallel deployments."
                 )
             self.labelname_max_lora = "max_lora"
             self.labelname_waiting_lora_adapters = "waiting_lora_adapters"
             self.labelname_running_lora_adapters = "running_lora_adapters"
-            self.max_lora = aphrodite_config.lora_config.max_loras
+            self.max_lora = sonar_config.lora_config.max_loras
             self.gauge_lora_info = self._gauge_cls(
-                name="aphrodite:lora_requests_info",
+                name="sonar:lora_requests_info",
                 documentation="Running stats on lora requests.",
                 multiprocess_mode="sum",
                 labelnames=[
@@ -1068,7 +1068,7 @@ class PrometheusStatLogger(AggregateStatLoggerBase):
 
         name, documentation = None, None
         if type == "cache_config":
-            name = "aphrodite:cache_config_info"
+            name = "sonar:cache_config_info"
             documentation = "Information of the LLMEngine CacheConfig"
         assert name is not None, f"Unknown metrics info type {type}"
 
@@ -1160,9 +1160,9 @@ class PrometheusStatLogger(AggregateStatLoggerBase):
 
         if iteration_stats is None:
             return
-        if envs.APHRODITE_COMPUTE_NANS_IN_LOGITS:
+        if envs.SONAR_COMPUTE_NANS_IN_LOGITS:
             self.counter_corrupted_requests[engine_idx].inc(iteration_stats.num_corrupted_reqs)
-        if self.aphrodite_config.watermark_config is not None:
+        if self.sonar_config.watermark_config is not None:
             counter_watermark = self.counter_watermark_requests
             counter_watermark["watermarked"][engine_idx].inc(iteration_stats.num_watermarked_reqs)
             counter_watermark["skipped"][engine_idx].inc(iteration_stats.num_watermark_skipped_reqs)
@@ -1228,7 +1228,7 @@ class PrometheusStatLogger(AggregateStatLoggerBase):
             self.gauge_engine_sleep_state["awake"][engine_idx].set(awake)
 
     def log_engine_initialized(self):
-        self.log_metrics_info("cache_config", self.aphrodite_config.cache_config)
+        self.log_metrics_info("cache_config", self.sonar_config.cache_config)
 
 
 class StatLoggerManager:
@@ -1245,7 +1245,7 @@ class StatLoggerManager:
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         engine_idxs: list[int] | None = None,
         custom_stat_loggers: list[StatLoggerFactory] | None = None,
         enable_default_loggers: bool = True,
@@ -1270,7 +1270,7 @@ class StatLoggerManager:
         for stat_logger_factory in stat_logger_factories:
             if isinstance(stat_logger_factory, type) and issubclass(stat_logger_factory, AggregateStatLoggerBase):
                 global_stat_logger = stat_logger_factory(
-                    aphrodite_config=aphrodite_config,
+                    sonar_config=sonar_config,
                     engine_indexes=self.engine_indexes,
                 )
                 if isinstance(global_stat_logger, PrometheusStatLogger):
@@ -1278,13 +1278,13 @@ class StatLoggerManager:
             else:
                 # per engine logger
                 global_stat_logger = PerEngineStatLoggerAdapter(
-                    aphrodite_config=aphrodite_config,
+                    sonar_config=sonar_config,
                     engine_indexes=self.engine_indexes,
                     per_engine_stat_logger_factory=stat_logger_factory,  # type: ignore[arg-type]
                 )
             self.stat_loggers.append(global_stat_logger)
         if not custom_prometheus_logger:
-            self.stat_loggers.append(PrometheusStatLogger(aphrodite_config, self.engine_indexes))
+            self.stat_loggers.append(PrometheusStatLogger(sonar_config, self.engine_indexes))
 
     def record(
         self,

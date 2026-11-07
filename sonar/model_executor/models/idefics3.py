@@ -28,22 +28,22 @@ from transformers import (
     Idefics3Processor,
 )
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.multimodal import MultiModalDummyOptions
-from aphrodite.inputs import MultiModalDataDict
-from aphrodite.model_executor.layers.linear import ReplicatedLinear
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
-from aphrodite.model_executor.models.module_mapping import MultiModelKeys
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import (
+from sonar.config import SonarConfig
+from sonar.config.multimodal import MultiModalDummyOptions
+from sonar.inputs import MultiModalDataDict
+from sonar.model_executor.layers.linear import ReplicatedLinear
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
+from sonar.model_executor.models.module_mapping import MultiModelKeys
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import (
     MultiModalFieldConfig,
     MultiModalKwargsItem,
     MultiModalKwargsItems,
 )
-from aphrodite.multimodal.parse import ImageProcessorItems, MultiModalDataItems
-from aphrodite.multimodal.processing import (
+from sonar.multimodal.parse import ImageProcessorItems, MultiModalDataItems
+from sonar.multimodal.processing import (
     BaseDummyInputsBuilder,
     BaseMultiModalProcessor,
     BaseProcessingInfo,
@@ -52,10 +52,10 @@ from aphrodite.multimodal.processing import (
     PromptUpdateDetails,
     cached_encode,
 )
-from aphrodite.multimodal.processing.processor import HFMultiModalInputs
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.utils.gpu_sync_debug import gpu_sync_allowed
-from aphrodite.utils.tensor_schema import TensorSchema, TensorShape
+from sonar.multimodal.processing.processor import HFMultiModalInputs
+from sonar.sequence import IntermediateTensors
+from sonar.utils.gpu_sync_debug import gpu_sync_allowed
+from sonar.utils.tensor_schema import TensorSchema, TensorShape
 
 from .idefics2_vision_model import (
     Idefics2VisionTransformer as Idefics3VisionTransformer,
@@ -398,11 +398,11 @@ class Idefics3Connector(nn.Module):
 
 
 class Idefics3Model(nn.Module):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
 
-        config: Idefics3Config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        config: Idefics3Config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
 
         self.config = config
         self.vocab_size = self.config.text_config.vocab_size
@@ -417,7 +417,7 @@ class Idefics3Model(nn.Module):
             prefix=maybe_prefix(prefix, "connector"),
         )
         self.text_model = LlamaModel(
-            aphrodite_config=aphrodite_config.with_hf_config(config.text_config),
+            sonar_config=sonar_config.with_hf_config(config.text_config),
             prefix=maybe_prefix(prefix, "text_model"),
         )
 
@@ -526,23 +526,23 @@ class Idefics3ForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsLo
 
         raise ValueError("Only image modality is supported")
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
-        multimodal_config = aphrodite_config.model_config.multimodal_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
+        multimodal_config = sonar_config.model_config.multimodal_config
 
         self.config = config
         self.multimodal_config = multimodal_config
 
         with self._mark_composite_model(
-            aphrodite_config,
+            sonar_config,
             language_targets=LlamaModel,
             tower_targets={"image": (Idefics3VisionTransformer, Idefics3Connector)},
         ):
             self.model = Idefics3Model(
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 prefix=maybe_prefix(prefix, "model"),
             )
 
@@ -612,7 +612,7 @@ class Idefics3ForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsLo
     # -- SupportsEncoderCudaGraph protocol methods --
 
     def get_encoder_cudagraph_config(self):
-        from aphrodite.v1.worker.encoder_cudagraph_defs import EncoderCudaGraphConfig
+        from sonar.v1.worker.encoder_cudagraph_defs import EncoderCudaGraphConfig
 
         return EncoderCudaGraphConfig(
             modalities=["image"],
@@ -622,12 +622,12 @@ class Idefics3ForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsLo
 
     def get_encoder_cudagraph_budget_range(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
     ) -> tuple[int, int]:
         min_budget = self.model.image_seq_len
         max_budget = min(
-            aphrodite_config.scheduler_config.max_num_batched_tokens,
-            aphrodite_config.model_config.max_model_len,
+            sonar_config.scheduler_config.max_num_batched_tokens,
+            sonar_config.model_config.max_model_len,
         )
         return (min_budget, max_budget)
 
@@ -641,7 +641,7 @@ class Idefics3ForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsLo
         self,
         mm_kwargs: dict[str, Any],
     ):
-        from aphrodite.v1.worker.encoder_cudagraph_defs import EncoderItemSpec
+        from sonar.v1.worker.encoder_cudagraph_defs import EncoderItemSpec
 
         return [
             EncoderItemSpec(
@@ -697,7 +697,7 @@ class Idefics3ForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsLo
         path: str = "default",
         axis_keys: tuple[Hashable, ...] | None = None,
     ):
-        from aphrodite.v1.worker.encoder_cudagraph_defs import (
+        from sonar.v1.worker.encoder_cudagraph_defs import (
             EncoderCudaGraphCaptureInputs,
         )
 
@@ -725,7 +725,7 @@ class Idefics3ForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsLo
         max_frames_per_batch: int,
         path: str = "default",
     ):
-        from aphrodite.v1.worker.encoder_cudagraph_defs import (
+        from sonar.v1.worker.encoder_cudagraph_defs import (
             EncoderCudaGraphReplayBuffers,
         )
 

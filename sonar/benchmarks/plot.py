@@ -5,7 +5,7 @@
 from pathlib import Path
 from typing import Any
 
-from aphrodite.utils.import_utils import PlaceholderModule
+from sonar.utils.import_utils import PlaceholderModule
 
 try:
     import plotly.express as px

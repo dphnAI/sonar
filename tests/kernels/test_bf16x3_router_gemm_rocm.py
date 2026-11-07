@@ -9,10 +9,10 @@ this runs device-free. Only the GEMM correctness tests need a gfx950 runner.
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.fused_moe.router import (
+from sonar.model_executor.layers.fused_moe.router import (
     bf16x3_router_gemm_rocm as rocm_bf16x3,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 pytestmark = pytest.mark.skipif(not current_platform.is_rocm(), reason="ROCm only")
 

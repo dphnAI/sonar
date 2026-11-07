@@ -4,13 +4,13 @@
 
 import torch
 
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     kFp8DynamicTokenSym,
     kInt8DynamicTokenSym,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.humming import create_humming_locks
-from aphrodite.utils.import_utils import has_humming
+from sonar.platforms import current_platform
+from sonar.utils.humming import create_humming_locks
+from sonar.utils.import_utils import has_humming
 
 from .MPLinearKernel import MPLinearKernel, MPLinearLayerConfig
 
@@ -37,7 +37,7 @@ class HummingLinearKernel(MPLinearKernel):
         return True, None
 
     def process_weights_after_loading(self, layer: torch.nn.Module) -> None:
-        from aphrodite.model_executor.layers.quantization.utils.humming import (
+        from sonar.model_executor.layers.quantization.utils.humming import (
             convert_linear_layer_to_humming_standard,
             get_humming_linear_compute_config,
             prepare_humming_linear_layer_config,
@@ -80,7 +80,7 @@ class HummingLinearKernel(MPLinearKernel):
         x: torch.Tensor,
         bias: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        from aphrodite.model_executor.layers.quantization.utils.humming import (
+        from sonar.model_executor.layers.quantization.utils.humming import (
             apply_humming_linear,
         )
 

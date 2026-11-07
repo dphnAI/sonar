@@ -11,12 +11,12 @@ from multiprocessing import Lock
 import torch
 
 # Assuming these are imported from your module
-from aphrodite.distributed.device_communicators.shm_object_storage import (
+from sonar.distributed.device_communicators.shm_object_storage import (
     MsgpackSerde,
     SingleWriterShmObjectStorage,
     SingleWriterShmRingBuffer,
 )
-from aphrodite.multimodal.inputs import (
+from sonar.multimodal.inputs import (
     MultiModalFieldElem,
     MultiModalKwargsItem,
     MultiModalSharedField,

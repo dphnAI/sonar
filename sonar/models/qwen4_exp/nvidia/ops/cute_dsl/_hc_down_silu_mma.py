@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Adapted from aphrodite/model_executor/kernels/linear/cute_dsl/_ll_bf16_splitk.py.
+"""Adapted from sonar/model_executor/kernels/linear/cute_dsl/_ll_bf16_splitk.py.
 
 Fuses the Qwen4Exp mHC SiLU epilogue (SiLU(x/HC) on columns < rank, passthrough
 elsewhere, with the production bf16 rounding boundary) into the split-K kernel,
@@ -57,7 +57,7 @@ class HcDownSiluMma:
     Output is bf16 [M, N].
 
     See the base class docstring in
-    aphrodite/model_executor/kernels/linear/cute_dsl/_ll_bf16_splitk.py for the
+    sonar/model_executor/kernels/linear/cute_dsl/_ll_bf16_splitk.py for the
     GEMM structure; only the epilogue differs. The compile key is
     ``(split_k, num_stages, tile_n, rank, hc)``.
     """

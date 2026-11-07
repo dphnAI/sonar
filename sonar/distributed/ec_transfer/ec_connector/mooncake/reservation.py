@@ -17,7 +17,7 @@ from enum import Enum, auto
 
 import torch
 
-from aphrodite.distributed.ec_transfer.ec_connector.mooncake.memory import (
+from sonar.distributed.ec_transfer.ec_connector.mooncake.memory import (
     ConsumerMemoryPool,
     MemoryAllocation,
     ResidentLease,

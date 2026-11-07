@@ -16,18 +16,18 @@ import pytest
 import torch
 import torch.distributed
 
-import aphrodite.envs as envs
-from aphrodite.distributed.parallel_state import (
+import sonar.envs as envs
+from sonar.distributed.parallel_state import (
     GroupCoordinator,
     init_distributed_environment,
 )
-from aphrodite.utils.system_utils import update_environment_variables
+from sonar.utils.system_utils import update_environment_variables
 
 # The whole module exercises the split_group code path, which is opt-in
-# behind APHRODITE_DISTRIBUTED_USE_SPLIT_GROUP=1.
+# behind SONAR_DISTRIBUTED_USE_SPLIT_GROUP=1.
 pytestmark = pytest.mark.skipif(
-    not envs.APHRODITE_DISTRIBUTED_USE_SPLIT_GROUP,
-    reason=("APHRODITE_DISTRIBUTED_USE_SPLIT_GROUP=1 not set; split_group path is opt-in."),
+    not envs.SONAR_DISTRIBUTED_USE_SPLIT_GROUP,
+    reason=("SONAR_DISTRIBUTED_USE_SPLIT_GROUP=1 not set; split_group path is opt-in."),
 )
 
 mp.set_start_method("spawn", force=True)
@@ -45,7 +45,7 @@ def distributed_run(fn, world_size):
         env["MASTER_ADDR"] = "localhost"
         env["MASTER_PORT"] = "12346"
         # propagate the opt-in flag to the spawned child workers
-        env["APHRODITE_DISTRIBUTED_USE_SPLIT_GROUP"] = "1"
+        env["SONAR_DISTRIBUTED_USE_SPLIT_GROUP"] = "1"
         p = mp.Process(target=fn, args=(env,))
         processes.append(p)
         p.start()

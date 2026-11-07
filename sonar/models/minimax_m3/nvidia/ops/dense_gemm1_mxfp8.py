@@ -39,14 +39,14 @@ from cutlass import (
 from cutlass.cute.nvgpu import cpasync, tcgen05
 from cutlass.cute.runtime import make_fake_stream, make_fake_tensor
 
-from aphrodite.cute_utils import _tcgen05, mbarrier, simple_tma_copy, to_cta0_smem
-from aphrodite.cute_utils.cvt import fp32x4_to_fp8x4
-from aphrodite.model_executor.layers.fusion.quant_activation import QuantizedActivation
-from aphrodite.model_executor.layers.quantization.utils.mxfp8_utils import (
+from sonar.cute_utils import _tcgen05, mbarrier, simple_tma_copy, to_cta0_smem
+from sonar.cute_utils.cvt import fp32x4_to_fp8x4
+from sonar.model_executor.layers.fusion.quant_activation import QuantizedActivation
+from sonar.model_executor.layers.quantization.utils.mxfp8_utils import (
     mxfp8_e4m3_quantize,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import kMxfp8Dynamic
-from aphrodite.platforms import current_platform
+from sonar.model_executor.layers.quantization.utils.quant_utils import kMxfp8Dynamic
+from sonar.platforms import current_platform
 
 
 class Sm100DenseGemm1Mxfp8:
@@ -532,11 +532,11 @@ def can_fuse_gemm1(gate_up_proj, down_proj, act_fn) -> bool:
     Called at init, before weight loading: kernels are selected at
     create_weights time, so the decision does not depend on the weights.
     """
-    from aphrodite.model_executor.kernels.linear.mxfp8.flashinfer import (
+    from sonar.model_executor.kernels.linear.mxfp8.flashinfer import (
         FlashInferCutedslMxfp8LinearKernel,
         FlashInferCutlassMxfp8LinearKernel,
     )
-    from aphrodite.model_executor.layers.activation import SiluAndMulWithClamp
+    from sonar.model_executor.layers.activation import SiluAndMulWithClamp
 
     if not (current_platform.is_cuda() and current_platform.is_device_capability_family(100)):
         return False
@@ -563,7 +563,7 @@ def fused_gemm1(x: torch.Tensor, gate_up_proj, act_fn) -> QuantizedActivation:
 
     Requires can_fuse_gemm1(gate_up_proj, down_proj, act_fn).
     """
-    from aphrodite.model_executor.kernels.linear.mxfp8.flashinfer import (
+    from sonar.model_executor.kernels.linear.mxfp8.flashinfer import (
         FlashInferCutedslMxfp8LinearKernel,
     )
 

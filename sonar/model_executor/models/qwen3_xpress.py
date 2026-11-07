@@ -7,12 +7,12 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor, _topk
-from aphrodite.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
-from aphrodite.v1.worker.gpu.spec_decode.xpress import kernels
-from aphrodite.v1.worker.gpu.spec_decode.xpress.config import XPressSpeculatorConfig
+from sonar.config import SonarConfig
+from sonar.logger import init_logger
+from sonar.model_executor.layers.logits_processor import LogitsProcessor, _topk
+from sonar.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
+from sonar.v1.worker.gpu.spec_decode.xpress import kernels
+from sonar.v1.worker.gpu.spec_decode.xpress.config import XPressSpeculatorConfig
 
 from .qwen3_dflash import DFlashQwen3ForCausalLM, DFlashQwen3Model
 from .utils import AutoWeightsLoader, maybe_prefix, process_eagle_weight
@@ -232,11 +232,11 @@ class Qwen3XPressModel(DFlashQwen3Model):
     def __init__(
         self,
         *,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         start_layer_id: int = 0,
         prefix: str = "",
     ) -> None:
-        super().__init__(aphrodite_config=aphrodite_config, start_layer_id=start_layer_id, prefix=prefix)
+        super().__init__(sonar_config=sonar_config, start_layer_id=start_layer_id, prefix=prefix)
         config = self.config
         draft_vocab_size = getattr(config, "draft_vocab_size", None) or config.vocab_size
         self.xpress_head = XPressRefinerHead(
@@ -245,7 +245,7 @@ class Qwen3XPressModel(DFlashQwen3Model):
             block_size=getattr(config, "xpress_block_size", None) or (getattr(config, "num_speculative_steps", 15) + 1),
             rank=getattr(config, "xpress_rank", 256),
             mlp_hidden=getattr(config, "xpress_mlp_hidden", 512),
-            max_num_reqs=aphrodite_config.scheduler_config.max_num_seqs,
+            max_num_reqs=sonar_config.scheduler_config.max_num_seqs,
             topc=getattr(config, "xpress_topc", 512),
         )
         self.draft_vocab_size = draft_vocab_size
@@ -260,16 +260,16 @@ class Qwen3XPressForCausalLM(DFlashQwen3ForCausalLM):
     # The speculator this is a draft model of (see SpeculativeDraftModel).
     speculator_config_class = XPressSpeculatorConfig
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         nn.Module.__init__(self)
-        assert aphrodite_config.speculative_config is not None
-        self.draft_model_config = aphrodite_config.speculative_config.draft_model_config
+        assert sonar_config.speculative_config is not None
+        self.draft_model_config = sonar_config.speculative_config.draft_model_config
         self.config = self.draft_model_config.hf_config
         if getattr(self.config, "draft_vocab_size", None) is None:
             self.config.draft_vocab_size = getattr(self.config, "vocab_size", None)
-        target_layer_num = aphrodite_config.model_config.get_num_layers(aphrodite_config.parallel_config)
+        target_layer_num = sonar_config.model_config.get_num_layers(sonar_config.parallel_config)
         self.model = Qwen3XPressModel(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             prefix=maybe_prefix(prefix, "model"),
             start_layer_id=target_layer_num,
         )
@@ -281,7 +281,7 @@ class Qwen3XPressForCausalLM(DFlashQwen3ForCausalLM):
             prefix=maybe_prefix(prefix, "lm_head"),
         )
         self.logits_processor = LogitsProcessor(self.config.draft_vocab_size, scale=logit_scale)
-        target_vocab_size = aphrodite_config.model_config.get_vocab_size()
+        target_vocab_size = sonar_config.model_config.get_vocab_size()
         if self.config.draft_vocab_size != target_vocab_size:
             raise NotImplementedError(
                 "XPress currently requires a full-vocab draft (the refiner bias is defined over the target vocabulary)."

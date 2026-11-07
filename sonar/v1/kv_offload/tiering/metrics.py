@@ -6,11 +6,11 @@ import time
 from dataclasses import dataclass, field
 from typing import Protocol
 
-from aphrodite.distributed.kv_transfer.kv_connector.v1.offloading.metrics import (
+from sonar.distributed.kv_transfer.kv_connector.v1.offloading.metrics import (
     OffloadingConnectorStats,
 )
-from aphrodite.v1.kv_offload.base import LookupResult, OffloadKey, ReqContext
-from aphrodite.v1.kv_offload.tiering.base import (
+from sonar.v1.kv_offload.base import LookupResult, OffloadKey, ReqContext
+from sonar.v1.kv_offload.tiering.base import (
     JobResult,
     SecondaryTierManager,
     TieringOffloadingMetrics,

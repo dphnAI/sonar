@@ -6,51 +6,51 @@ from typing import Any
 
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed.kv_events import KVCacheEventType
-from aphrodite.distributed.kv_transfer.kv_connector.v1 import (
+from sonar.config import SonarConfig
+from sonar.distributed.kv_events import KVCacheEventType
+from sonar.distributed.kv_transfer.kv_connector.v1 import (
     KVConnectorBase_V1,
     KVConnectorRole,
     SupportsHMA,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.base import (
+from sonar.distributed.kv_transfer.kv_connector.v1.base import (
     KVConnectorMetadata,
     KVConnectorTransferResults,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.metrics import (
+from sonar.distributed.kv_transfer.kv_connector.v1.metrics import (
     KVConnectorPromMetrics,
     KVConnectorStats,
     PromMetric,
     PromMetricT,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.offloading.common import (
+from sonar.distributed.kv_transfer.kv_connector.v1.offloading.common import (
     OffloadingConnectorMetadata,
     OffloadingWorkerMetadata,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.offloading.config import (
+from sonar.distributed.kv_transfer.kv_connector.v1.offloading.config import (
     build_offloading_config,
     get_offloading_group_ids,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.offloading.metrics import (
+from sonar.distributed.kv_transfer.kv_connector.v1.offloading.metrics import (
     OffloadingConnectorStats,
     OffloadPromMetrics,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.offloading.scheduler import (
+from sonar.distributed.kv_transfer.kv_connector.v1.offloading.scheduler import (
     OffloadingConnectorScheduler,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.offloading.worker import (
+from sonar.distributed.kv_transfer.kv_connector.v1.offloading.worker import (
     OffloadingConnectorWorker,
 )
-from aphrodite.forward_context import ForwardContext
-from aphrodite.v1.attention.backend import AttentionMetadata
-from aphrodite.v1.core.kv_cache_coordinator import HybridKVCacheCoordinator
-from aphrodite.v1.core.kv_cache_manager import KVCacheBlocks
-from aphrodite.v1.core.sched.output import SchedulerOutput
-from aphrodite.v1.kv_cache_interface import KVCacheConfig
-from aphrodite.v1.kv_offload.factory import OffloadingSpecFactory
-from aphrodite.v1.metrics.cache_hit_source import CacheHitSource
-from aphrodite.v1.outputs import KVConnectorOutput
-from aphrodite.v1.request import Request
+from sonar.forward_context import ForwardContext
+from sonar.v1.attention.backend import AttentionMetadata
+from sonar.v1.core.kv_cache_coordinator import HybridKVCacheCoordinator
+from sonar.v1.core.kv_cache_manager import KVCacheBlocks
+from sonar.v1.core.sched.output import SchedulerOutput
+from sonar.v1.kv_cache_interface import KVCacheConfig
+from sonar.v1.kv_offload.factory import OffloadingSpecFactory
+from sonar.v1.metrics.cache_hit_source import CacheHitSource
+from sonar.v1.outputs import KVConnectorOutput
+from sonar.v1.request import Request
 
 
 class OffloadingConnector(KVConnectorBase_V1, SupportsHMA):
@@ -81,22 +81,22 @@ class OffloadingConnector(KVConnectorBase_V1, SupportsHMA):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         role: KVConnectorRole,
         kv_cache_config: KVCacheConfig,
     ):
-        super().__init__(aphrodite_config, role, kv_cache_config)
+        super().__init__(sonar_config, role, kv_cache_config)
 
-        offloading_config = build_offloading_config(aphrodite_config, kv_cache_config)
+        offloading_config = build_offloading_config(sonar_config, kv_cache_config)
         self._canonical_layout = offloading_config.canonical_layout
         spec = OffloadingSpecFactory.create_spec(offloading_config)
 
         self.connector_scheduler: OffloadingConnectorScheduler | None = None
         self.connector_worker: OffloadingConnectorWorker | None = None
         if role == KVConnectorRole.SCHEDULER:
-            self.connector_scheduler = OffloadingConnectorScheduler(spec, aphrodite_config, kv_cache_config)
+            self.connector_scheduler = OffloadingConnectorScheduler(spec, sonar_config, kv_cache_config)
         elif role == KVConnectorRole.WORKER:
-            self.connector_worker = OffloadingConnectorWorker(spec, aphrodite_config, kv_cache_config)
+            self.connector_worker = OffloadingConnectorWorker(spec, sonar_config, kv_cache_config)
 
     def shutdown(self) -> None:
         if self.connector_worker is not None:
@@ -224,8 +224,8 @@ class OffloadingConnector(KVConnectorBase_V1, SupportsHMA):
         return self.connector_scheduler.take_events()
 
     @classmethod
-    def get_required_kvcache_layout(cls, aphrodite_config: AphroditeConfig) -> str | None:
-        if aphrodite_config.attention_config.hisparse_config is not None:
+    def get_required_kvcache_layout(cls, sonar_config: SonarConfig) -> str | None:
+        if sonar_config.attention_config.hisparse_config is not None:
             return "BLHNC"
         return "LBHNC"
 
@@ -246,9 +246,9 @@ class OffloadingConnector(KVConnectorBase_V1, SupportsHMA):
     @classmethod
     def build_prom_metrics(
         cls,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         metric_types: dict[type[PromMetric], type[PromMetricT]],
         labelnames: list[str],
         per_engine_labelvalues: dict[int, list[object]],
     ) -> KVConnectorPromMetrics:
-        return OffloadPromMetrics(aphrodite_config, metric_types, labelnames, per_engine_labelvalues)
+        return OffloadPromMetrics(sonar_config, metric_types, labelnames, per_engine_labelvalues)

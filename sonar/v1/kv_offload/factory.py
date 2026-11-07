@@ -4,9 +4,9 @@ import importlib
 from collections.abc import Callable, Mapping
 from typing import Any
 
-from aphrodite.logger import init_logger
-from aphrodite.v1.kv_offload.base import OffloadingSpec
-from aphrodite.v1.kv_offload.config import OffloadingConfig
+from sonar.logger import init_logger
+from sonar.v1.kv_offload.base import OffloadingSpec
+from sonar.v1.kv_offload.config import OffloadingConfig
 
 logger = init_logger(__name__)
 
@@ -59,9 +59,9 @@ class OffloadingSpecFactory:
 
 
 # Register various specs here.
-OffloadingSpecFactory.register_spec("CPUOffloadingSpec", "aphrodite.v1.kv_offload.cpu.spec", "CPUOffloadingSpec")
+OffloadingSpecFactory.register_spec("CPUOffloadingSpec", "sonar.v1.kv_offload.cpu.spec", "CPUOffloadingSpec")
 OffloadingSpecFactory.register_spec(
     "TieringOffloadingSpec",
-    "aphrodite.v1.kv_offload.tiering.spec",
+    "sonar.v1.kv_offload.tiering.spec",
     "TieringOffloadingSpec",
 )

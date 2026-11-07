@@ -1,5 +1,5 @@
 # default base image
-ARG REMOTE_APHRODITE="0"
+ARG REMOTE_SONAR="0"
 ARG COMMON_WORKDIR=/app
 ARG BASE_IMAGE=rocm/vllm-dev:base
 ARG CI_BASE_IMAGE=rocm/vllm-dev:ci_base
@@ -112,39 +112,39 @@ WORKDIR ${COMMON_WORKDIR}
 
 
 # -----------------------
-# Aphrodite fetch stages
-FROM base AS fetch_aphrodite_0
-ONBUILD COPY ./ aphrodite/
-FROM base AS fetch_aphrodite_1
-ARG APHRODITE_REPO="https://github.com/aphrodite-engine/aphrodite-engine.git"
-ARG APHRODITE_BRANCH="main"
-ENV APHRODITE_REPO=${APHRODITE_REPO}
-ENV APHRODITE_BRANCH=${APHRODITE_BRANCH}
-ONBUILD RUN git clone ${APHRODITE_REPO} aphrodite \
-	    && cd aphrodite \
-	    && git fetch -v --prune -- origin ${APHRODITE_BRANCH} \
+# Sonar fetch stages
+FROM base AS fetch_sonar_0
+ONBUILD COPY ./ sonar/
+FROM base AS fetch_sonar_1
+ARG SONAR_REPO="https://github.com/dphnAI/sonar.git"
+ARG SONAR_BRANCH="main"
+ENV SONAR_REPO=${SONAR_REPO}
+ENV SONAR_BRANCH=${SONAR_BRANCH}
+ONBUILD RUN git clone ${SONAR_REPO} sonar \
+	    && cd sonar \
+	    && git fetch -v --prune -- origin ${SONAR_BRANCH} \
 	    && git checkout FETCH_HEAD \
-        && if [ "${APHRODITE_REPO}" != "https://github.com/vllm-project/vllm.git" ] ; then \
+        && if [ "${SONAR_REPO}" != "https://github.com/vllm-project/vllm.git" ] ; then \
                git remote add upstream "https://github.com/vllm-project/vllm.git" \
                && git fetch upstream ; fi
-FROM fetch_aphrodite_${REMOTE_APHRODITE} AS fetch_aphrodite
+FROM fetch_sonar_${REMOTE_SONAR} AS fetch_sonar
 
 # Resolve the device-independent source version once for every downstream
 # artifact. setuptools-scm reads Git metadata from local and remote sources.
-FROM fetch_aphrodite AS aphrodite-version
+FROM fetch_sonar AS sonar-version
 ARG COMMON_WORKDIR
-RUN --mount=type=cache,id=aphrodite-rocm-uv,target=/root/.cache/uv \
-    cd ${COMMON_WORKDIR}/aphrodite \
+RUN --mount=type=cache,id=sonar-rocm-uv,target=/root/.cache/uv \
+    cd ${COMMON_WORKDIR}/sonar \
     && uv pip install --system -r requirements/build/rust.txt \
     && python3 -c \
         "from setuptools_scm import get_version; print(get_version(git_describe_command=['git', 'describe', '--dirty', '--tags', '--long', '--abbrev=40', '--match', 'v[0-9]*']))" \
-        > /aphrodite-version.txt
+        > /sonar-version.txt
 
 # -----------------------
 # Rust build stage
-# Builds the `aphrodite-rs` frontend in a dedicated stage so the wheel build stages
+# Builds the `sonar-rs` frontend in a dedicated stage so the wheel build stages
 # don't need the rust toolchain.
-FROM fetch_aphrodite AS rust-build
+FROM fetch_sonar AS rust-build
 ARG COMMON_WORKDIR
 
 # Cap cargo parallelism to avoid exhausting the AMD CI host's open-file limit
@@ -153,36 +153,36 @@ ENV CARGO_BUILD_JOBS=4
 ENV CARGO_NET_RETRY=10
 ENV RUSTUP_MAX_RETRIES=10
 
-RUN --mount=type=cache,id=aphrodite-rocm-uv,target=/root/.cache/uv \
-    cd ${COMMON_WORKDIR}/aphrodite \
+RUN --mount=type=cache,id=sonar-rocm-uv,target=/root/.cache/uv \
+    cd ${COMMON_WORKDIR}/sonar \
     && uv pip install --system -r requirements/build/rust.txt
 
-COPY --from=aphrodite-version /aphrodite-version.txt /tmp/aphrodite-version.txt
+COPY --from=sonar-version /sonar-version.txt /tmp/sonar-version.txt
 
 # Build the release binary. Cargo's registry/git caches can be written by
 # concurrent BuildKit jobs on shared workers, so lock those cache mounts while
 # keeping the cache benefit. Do not cache target/, because stale target metadata
 # can outlive source updates across BuildKit cache reuse.
-RUN --mount=type=cache,id=aphrodite-rocm-cargo-registry,target=/root/.cargo/registry,sharing=locked \
-    --mount=type=cache,id=aphrodite-rocm-cargo-git,target=/root/.cargo/git,sharing=locked \
-    cd ${COMMON_WORKDIR}/aphrodite \
-    && export SETUPTOOLS_SCM_PRETEND_VERSION="$(cat /tmp/aphrodite-version.txt)" \
+RUN --mount=type=cache,id=sonar-rocm-cargo-registry,target=/root/.cargo/registry,sharing=locked \
+    --mount=type=cache,id=sonar-rocm-cargo-git,target=/root/.cargo/git,sharing=locked \
+    cd ${COMMON_WORKDIR}/sonar \
+    && export SETUPTOOLS_SCM_PRETEND_VERSION="$(cat /tmp/sonar-version.txt)" \
     && bash tools/build_rust.sh \
-    && test -x aphrodite/aphrodite-rs
+    && test -x sonar/sonar-rs
 
 # -----------------------
-# Aphrodite native build stages
+# Sonar native build stages
 #
 # csrc-build intentionally copies only files that affect ROCm native extension
 # compilation. That keeps unrelated CI/test/docs edits from invalidating the
 # expensive HIP/C++ build layer.
 FROM base AS csrc-build
 ARG COMMON_WORKDIR
-WORKDIR ${COMMON_WORKDIR}/aphrodite
+WORKDIR ${COMMON_WORKDIR}/sonar
 
 COPY requirements/rocm.txt requirements/rocm.txt
 COPY requirements/common.txt requirements/common.txt
-RUN --mount=type=cache,id=aphrodite-rocm-uv,target=/root/.cache/uv \
+RUN --mount=type=cache,id=sonar-rocm-uv,target=/root/.cache/uv \
     uv pip install --system -r requirements/rocm.txt
 
 # pyproject.toml is bind-mounted in the RUN step so metadata-only changes do
@@ -191,15 +191,15 @@ COPY setup.py CMakeLists.txt ./
 COPY tools/build_rust.py tools/build_rust.py
 COPY cmake cmake/
 COPY csrc csrc/
-COPY aphrodite/envs.py aphrodite/envs.py
-COPY aphrodite/__init__.py aphrodite/__init__.py
+COPY sonar/envs.py sonar/envs.py
+COPY sonar/__init__.py sonar/__init__.py
 
-ENV APHRODITE_TARGET_DEVICE=rocm
+ENV SONAR_TARGET_DEVICE=rocm
 ENV SETUPTOOLS_SCM_PRETEND_VERSION="0.0.0+rocm.csrc.build"
-ENV APHRODITE_USE_PRECOMPILED_RUST=1
+ENV SONAR_USE_PRECOMPILED_RUST=1
 
-RUN --mount=type=bind,source=pyproject.toml,target=${COMMON_WORKDIR}/aphrodite/pyproject.toml \
-    --mount=type=cache,id=aphrodite-rocm-ccache,target=/root/.cache/ccache \
+RUN --mount=type=bind,source=pyproject.toml,target=${COMMON_WORKDIR}/sonar/pyproject.toml \
+    --mount=type=cache,id=sonar-rocm-ccache,target=/root/.cache/ccache \
     export CCACHE_BASEDIR="$PWD" \
     && echo "=== ccache stats before ROCm native build ===" \
     && (ccache --show-stats || true) \
@@ -212,45 +212,45 @@ RUN --mount=type=bind,source=pyproject.toml,target=${COMMON_WORKDIR}/aphrodite/p
     && echo "=== ccache stats after ROCm native build ===" \
     && (ccache --show-stats || true)
 
-# Build the full Aphrodite ROCm wheel by reusing the native extension wheel from
+# Build the full Sonar ROCm wheel by reusing the native extension wheel from
 # csrc-build. This stage still rebuilds for Python/package changes, but skips
 # the expensive HIP/C++ compile when native inputs are unchanged.
-FROM fetch_aphrodite AS build_aphrodite
+FROM fetch_sonar AS build_sonar
 ARG COMMON_WORKDIR
-ENV APHRODITE_TARGET_DEVICE=rocm
-ENV APHRODITE_USE_PRECOMPILED_RUST=1
+ENV SONAR_TARGET_DEVICE=rocm
+ENV SONAR_USE_PRECOMPILED_RUST=1
 
-COPY --from=csrc-build ${COMMON_WORKDIR}/aphrodite/dist /precompiled-wheels
-COPY --from=aphrodite-version /aphrodite-version.txt /tmp/aphrodite-version.txt
+COPY --from=csrc-build ${COMMON_WORKDIR}/sonar/dist /precompiled-wheels
+COPY --from=sonar-version /sonar-version.txt /tmp/sonar-version.txt
 
 # Drop the pre-built Rust artifacts into the source tree. setup.py detects
 # them and ships them as-is, skipping the local Rust build.
-COPY --from=rust-build ${COMMON_WORKDIR}/aphrodite/aphrodite/aphrodite-rs ${COMMON_WORKDIR}/aphrodite/aphrodite/aphrodite-rs
-COPY --from=rust-build ${COMMON_WORKDIR}/aphrodite/aphrodite/_rust_*.so ${COMMON_WORKDIR}/aphrodite/aphrodite/
+COPY --from=rust-build ${COMMON_WORKDIR}/sonar/sonar/sonar-rs ${COMMON_WORKDIR}/sonar/sonar/sonar-rs
+COPY --from=rust-build ${COMMON_WORKDIR}/sonar/sonar/_rust_*.so ${COMMON_WORKDIR}/sonar/sonar/
 
-RUN --mount=type=cache,id=aphrodite-rocm-uv,target=/root/.cache/uv \
-    cd aphrodite \
+RUN --mount=type=cache,id=sonar-rocm-uv,target=/root/.cache/uv \
+    cd sonar \
     && uv pip install --system -r requirements/rocm.txt \
-    && export SETUPTOOLS_SCM_PRETEND_VERSION="$(cat /tmp/aphrodite-version.txt)" \
-    && export APHRODITE_USE_PRECOMPILED=1 \
-    && export APHRODITE_PRECOMPILED_WHEEL_LOCATION="$(ls /precompiled-wheels/*.whl)" \
-    && export APHRODITE_DOCKER_BUILD_CONTEXT=1 \
-    && echo "Packaging Aphrodite ROCm wheel using precompiled extensions from ${APHRODITE_PRECOMPILED_WHEEL_LOCATION}" \
+    && export SETUPTOOLS_SCM_PRETEND_VERSION="$(cat /tmp/sonar-version.txt)" \
+    && export SONAR_USE_PRECOMPILED=1 \
+    && export SONAR_PRECOMPILED_WHEEL_LOCATION="$(ls /precompiled-wheels/*.whl)" \
+    && export SONAR_DOCKER_BUILD_CONTEXT=1 \
+    && echo "Packaging Sonar ROCm wheel using precompiled extensions from ${SONAR_PRECOMPILED_WHEEL_LOCATION}" \
     && python3 setup.py bdist_wheel --dist-dir=dist \
     && test -d dist \
     && ls dist/*.whl >/dev/null
-FROM scratch AS export_aphrodite
+FROM scratch AS export_sonar
 ARG COMMON_WORKDIR
-COPY --from=build_aphrodite ${COMMON_WORKDIR}/aphrodite/dist/*.whl /
-COPY --from=build_aphrodite ${COMMON_WORKDIR}/aphrodite/requirements /requirements
-COPY --from=build_aphrodite ${COMMON_WORKDIR}/aphrodite/benchmarks /benchmarks
-COPY --from=build_aphrodite ${COMMON_WORKDIR}/aphrodite/tests /tests
-COPY --from=build_aphrodite ${COMMON_WORKDIR}/aphrodite/examples /examples
-COPY --from=build_aphrodite ${COMMON_WORKDIR}/aphrodite/tools/install_torchcodec_rocm.sh /tools/install_torchcodec_rocm.sh
-COPY --from=build_aphrodite ${COMMON_WORKDIR}/aphrodite/docker/Dockerfile.rocm /docker/
-COPY --from=build_aphrodite ${COMMON_WORKDIR}/aphrodite/.buildkite /.buildkite
-COPY --from=build_aphrodite ${COMMON_WORKDIR}/aphrodite/pyproject.toml /pyproject.toml
-COPY --from=build_aphrodite ${COMMON_WORKDIR}/aphrodite/aphrodite/v1 /aphrodite_v1
+COPY --from=build_sonar ${COMMON_WORKDIR}/sonar/dist/*.whl /
+COPY --from=build_sonar ${COMMON_WORKDIR}/sonar/requirements /requirements
+COPY --from=build_sonar ${COMMON_WORKDIR}/sonar/benchmarks /benchmarks
+COPY --from=build_sonar ${COMMON_WORKDIR}/sonar/tests /tests
+COPY --from=build_sonar ${COMMON_WORKDIR}/sonar/examples /examples
+COPY --from=build_sonar ${COMMON_WORKDIR}/sonar/tools/install_torchcodec_rocm.sh /tools/install_torchcodec_rocm.sh
+COPY --from=build_sonar ${COMMON_WORKDIR}/sonar/docker/Dockerfile.rocm /docker/
+COPY --from=build_sonar ${COMMON_WORKDIR}/sonar/.buildkite /.buildkite
+COPY --from=build_sonar ${COMMON_WORKDIR}/sonar/pyproject.toml /pyproject.toml
+COPY --from=build_sonar ${COMMON_WORKDIR}/sonar/sonar/v1 /sonar_v1
 
 # RIXL/UCX build stages
 FROM base AS build_rixl
@@ -433,18 +433,18 @@ RUN /bin/bash -lc 'set -euo pipefail; \
  esac'
 
 # -----------------------
-# Aphrodite wheel release build stage (for building distributable wheels)
+# Sonar wheel release build stage (for building distributable wheels)
 # This stage pins dependencies to custom ROCm wheel versions and handles version detection
-FROM fetch_aphrodite AS build_aphrodite_wheel_release
-ENV APHRODITE_USE_PRECOMPILED_RUST=1
+FROM fetch_sonar AS build_sonar_wheel_release
+ENV SONAR_USE_PRECOMPILED_RUST=1
 
 ARG COMMON_WORKDIR
-COPY --from=aphrodite-version /aphrodite-version.txt /tmp/aphrodite-version.txt
+COPY --from=sonar-version /sonar-version.txt /tmp/sonar-version.txt
 
 # Drop the pre-built Rust artifacts into the source tree. setup.py detects
 # them and ships them as-is, skipping the local Rust build.
-COPY --from=rust-build ${COMMON_WORKDIR}/aphrodite/aphrodite/aphrodite-rs ${COMMON_WORKDIR}/aphrodite/aphrodite/aphrodite-rs
-COPY --from=rust-build ${COMMON_WORKDIR}/aphrodite/aphrodite/_rust_*.so ${COMMON_WORKDIR}/aphrodite/aphrodite/
+COPY --from=rust-build ${COMMON_WORKDIR}/sonar/sonar/sonar-rs ${COMMON_WORKDIR}/sonar/sonar/sonar-rs
+COPY --from=rust-build ${COMMON_WORKDIR}/sonar/sonar/_rust_*.so ${COMMON_WORKDIR}/sonar/sonar/
 
 # Create /install directory for custom wheels
 RUN mkdir -p /install
@@ -472,12 +472,12 @@ RUN if [ -n "$(ls /tmp/base-wheels/*.whl 2>/dev/null)" ]; then \
 ARG GIT_REPO_CHECK=0
 RUN if [ "$GIT_REPO_CHECK" != "0" ]; then \
         echo "Running repository checks..."; \
-        cd aphrodite && bash tools/check_repo.sh; \
+        cd sonar && bash tools/check_repo.sh; \
     fi
 
 # Install the packaging helpers before modifying requirements/rocm.txt.
 RUN --mount=type=cache,target=/root/.cache/uv \
-    cd aphrodite \
+    cd sonar \
     && uv pip install --system setuptools_scm regex
 
 # Fail if git-based package dependencies are found in requirements files
@@ -485,18 +485,18 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # Extra notes: pip install is able to handle git+ URLs, but uv doesn't.
 RUN echo "Checking for git-based packages in requirements files..." \
     && echo "Checking common.txt for git-based packages:" \
-    && if grep -q 'git+' ${COMMON_WORKDIR}/aphrodite/requirements/common.txt; then \
+    && if grep -q 'git+' ${COMMON_WORKDIR}/sonar/requirements/common.txt; then \
          echo "ERROR: Git-based packages found in common.txt:"; \
-         grep 'git+' ${COMMON_WORKDIR}/aphrodite/requirements/common.txt; \
+         grep 'git+' ${COMMON_WORKDIR}/sonar/requirements/common.txt; \
          echo "Please publish these packages to PyPI instead of using git dependencies."; \
          exit 1; \
        else \
          echo "  ✓ No git-based packages found in common.txt"; \
        fi \
     && echo "Checking rocm.txt for git-based packages:" \
-    && if grep -q 'git+' ${COMMON_WORKDIR}/aphrodite/requirements/rocm.txt; then \
+    && if grep -q 'git+' ${COMMON_WORKDIR}/sonar/requirements/rocm.txt; then \
          echo "ERROR: Git-based packages found in rocm.txt:"; \
-         grep 'git+' ${COMMON_WORKDIR}/aphrodite/requirements/rocm.txt; \
+         grep 'git+' ${COMMON_WORKDIR}/sonar/requirements/rocm.txt; \
          echo "Please publish these packages to PyPI instead of using git dependencies."; \
          exit 1; \
        else \
@@ -504,44 +504,44 @@ RUN echo "Checking for git-based packages in requirements files..." \
        fi \
     && echo "All requirements files are clean - no git-based packages found"
 
-# Pin Aphrodite dependencies to exact versions of custom ROCm wheels
-# This ensures 'pip install aphrodite' automatically installs correct torch/triton/torchvision/amdsmi
-COPY tools/aphrodite-rocm/pin_rocm_dependencies.py /tmp/pin_rocm_dependencies.py
-RUN echo "Pinning Aphrodite dependencies to custom wheel versions..." \
-    && python3 /tmp/pin_rocm_dependencies.py /install ${COMMON_WORKDIR}/aphrodite/requirements/rocm.txt
+# Pin Sonar dependencies to exact versions of custom ROCm wheels
+# Installing sonar also installs the matching torch/triton/torchvision/amdsmi.
+COPY tools/sonar-rocm/pin_rocm_dependencies.py /tmp/pin_rocm_dependencies.py
+RUN echo "Pinning Sonar dependencies to custom wheel versions..." \
+    && python3 /tmp/pin_rocm_dependencies.py /install ${COMMON_WORKDIR}/sonar/requirements/rocm.txt
 
 # Install dependencies using custom wheels from /install
 RUN --mount=type=cache,target=/root/.cache/uv \
-    cd aphrodite \
-    && echo "Building Aphrodite with custom wheels from /install" \
+    cd sonar \
+    && echo "Building Sonar with custom wheels from /install" \
     && uv pip install --system --find-links /install -r requirements/rocm.txt
 
 # Build wheel using the shared source version to avoid dirty state from modified requirements/rocm.txt
 # (setup.py auto-detects ccache/sccache in PATH)
-RUN --mount=type=cache,id=aphrodite-rocm-ccache,target=/root/.cache/ccache \
-    cd aphrodite \
+RUN --mount=type=cache,id=sonar-rocm-ccache,target=/root/.cache/ccache \
+    cd sonar \
     && export CCACHE_BASEDIR="$PWD" \
-    && export SETUPTOOLS_SCM_PRETEND_VERSION="$(cat /tmp/aphrodite-version.txt)" \
+    && export SETUPTOOLS_SCM_PRETEND_VERSION="$(cat /tmp/sonar-version.txt)" \
     && echo "Building wheel with version: ${SETUPTOOLS_SCM_PRETEND_VERSION}" \
     && MAX_JOBS="${MAX_JOBS:-$(nproc)}" python3 setup.py bdist_wheel --dist-dir=dist
 
-FROM scratch AS export_aphrodite_wheel_release
+FROM scratch AS export_sonar_wheel_release
 ARG COMMON_WORKDIR
-COPY --from=build_aphrodite_wheel_release ${COMMON_WORKDIR}/aphrodite/dist/*.whl /
-COPY --from=build_aphrodite_wheel_release ${COMMON_WORKDIR}/aphrodite/requirements /requirements
-COPY --from=build_aphrodite_wheel_release ${COMMON_WORKDIR}/aphrodite/benchmarks /benchmarks
-COPY --from=build_aphrodite_wheel_release ${COMMON_WORKDIR}/aphrodite/tests /tests
-COPY --from=build_aphrodite_wheel_release ${COMMON_WORKDIR}/aphrodite/examples /examples
-COPY --from=build_aphrodite_wheel_release ${COMMON_WORKDIR}/aphrodite/tools/install_torchcodec_rocm.sh /tools/install_torchcodec_rocm.sh
-COPY --from=build_aphrodite_wheel_release ${COMMON_WORKDIR}/aphrodite/docker/Dockerfile.rocm /docker/
-COPY --from=build_aphrodite_wheel_release ${COMMON_WORKDIR}/aphrodite/.buildkite /.buildkite
-COPY --from=build_aphrodite_wheel_release ${COMMON_WORKDIR}/aphrodite/pyproject.toml /pyproject.toml
-COPY --from=build_aphrodite_wheel_release ${COMMON_WORKDIR}/aphrodite/aphrodite/v1 /aphrodite_v1
+COPY --from=build_sonar_wheel_release ${COMMON_WORKDIR}/sonar/dist/*.whl /
+COPY --from=build_sonar_wheel_release ${COMMON_WORKDIR}/sonar/requirements /requirements
+COPY --from=build_sonar_wheel_release ${COMMON_WORKDIR}/sonar/benchmarks /benchmarks
+COPY --from=build_sonar_wheel_release ${COMMON_WORKDIR}/sonar/tests /tests
+COPY --from=build_sonar_wheel_release ${COMMON_WORKDIR}/sonar/examples /examples
+COPY --from=build_sonar_wheel_release ${COMMON_WORKDIR}/sonar/tools/install_torchcodec_rocm.sh /tools/install_torchcodec_rocm.sh
+COPY --from=build_sonar_wheel_release ${COMMON_WORKDIR}/sonar/docker/Dockerfile.rocm /docker/
+COPY --from=build_sonar_wheel_release ${COMMON_WORKDIR}/sonar/.buildkite /.buildkite
+COPY --from=build_sonar_wheel_release ${COMMON_WORKDIR}/sonar/pyproject.toml /pyproject.toml
+COPY --from=build_sonar_wheel_release ${COMMON_WORKDIR}/sonar/sonar/v1 /sonar_v1
 
 # -----------------------
 # CI base image (Tier 1) - stable, rarely changing CI dependencies.
 # Per-PR test builds pull this as CI_BASE_IMAGE so the test stage only layers
-# in the Aphrodite artifacts for the current commit.
+# in the Sonar artifacts for the current commit.
 FROM mori_base AS ci_base
 ARG COMMON_WORKDIR
 
@@ -600,7 +600,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 ENV HF_XET_HIGH_PERFORMANCE=1
 ENV HF_HUB_DOWNLOAD_TIMEOUT=60
 
-# Pre-install Aphrodite test dependencies.
+# Pre-install Sonar test dependencies.
 COPY requirements/test/rocm.txt /tmp/rocm-test-reqs.txt
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv pip install --system -r /tmp/rocm-test-reqs.txt
@@ -627,37 +627,37 @@ ENV HSA_ENABLE_IPC_MODE_LEGACY=1
 RUN echo "ROCTRACER_MAX_EVENTS=10000000" > ${COMMON_WORKDIR}/libkineto.conf
 ENV KINETO_CONFIG="${COMMON_WORKDIR}/libkineto.conf"
 
-# Install aphrodite_test_utils in ci_base for ci_base + wheel parity.
-COPY tests/aphrodite_test_utils /tmp/aphrodite_test_utils
+# Install sonar_test_utils in ci_base for ci_base + wheel parity.
+COPY tests/sonar_test_utils /tmp/sonar_test_utils
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv pip install --system /tmp/aphrodite_test_utils \
-    && rm -rf /tmp/aphrodite_test_utils
+    uv pip install --system /tmp/sonar_test_utils \
+    && rm -rf /tmp/sonar_test_utils
 
 # -----------------------
-# Test Aphrodite image (Tier 2) - Aphrodite-only layer on top of ci_base.
+# Test Sonar image (Tier 2) - Sonar-only layer on top of ci_base.
 FROM ${CI_BASE_IMAGE} AS test
 ARG COMMON_WORKDIR
 
-# Install the Aphrodite wheel (--no-deps: all deps already in ci_base).
-RUN --mount=type=bind,from=export_aphrodite,src=/,target=/install \
+# Install the Sonar wheel (--no-deps: all deps already in ci_base).
+RUN --mount=type=bind,from=export_sonar,src=/,target=/install \
     --mount=type=cache,target=/root/.cache/uv \
     cd /install \
     && uv pip install --system --no-deps *.whl
 
-# Store the Aphrodite wheel in the image for python-only install tests.
-COPY --from=export_aphrodite /*.whl /opt/aphrodite-wheels/
+# Store the Sonar wheel in the image for python-only install tests.
+COPY --from=export_sonar /*.whl /opt/sonar-wheels/
 
-WORKDIR /aphrodite-workspace
-COPY --from=build_aphrodite ${COMMON_WORKDIR}/aphrodite /aphrodite-workspace
+WORKDIR /sonar-workspace
+COPY --from=build_sonar ${COMMON_WORKDIR}/sonar /sonar-workspace
 
 # Copy in the v1 package (for python-only install test group).
-COPY --from=export_aphrodite /aphrodite_v1 /usr/local/lib/python${PYTHON_VERSION}/dist-packages/aphrodite/v1
+COPY --from=export_sonar /sonar_v1 /usr/local/lib/python${PYTHON_VERSION}/dist-packages/sonar/v1
 
 # Hide source under src/ so it won't shadow the installed package in tests.
-RUN mkdir src && mv aphrodite src/aphrodite
+RUN mkdir src && mv sonar src/sonar
 
 # -----------------------
-# Final Aphrodite image
+# Final Sonar image
 FROM mori_base AS final
 ENV UV_COMPILE_BYTECODE=1
 
@@ -686,13 +686,13 @@ RUN case "$(which python3)" in \
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv pip install --system --upgrade huggingface-hub
 
-# Install Aphrodite using uv (inherited from base stage)
+# Install Sonar using uv (inherited from base stage)
 # Note: No -U flag to avoid upgrading PyTorch ROCm to CUDA version
-RUN --mount=type=bind,from=export_aphrodite,src=/,target=/install \
+RUN --mount=type=bind,from=export_sonar,src=/,target=/install \
     --mount=type=cache,target=/root/.cache/uv \
     cd /install \
     && uv pip install --system -r requirements/rocm.txt \
-    && pip uninstall -y aphrodite-engine \
+    && pip uninstall -y sonar \
     && uv pip install --system *.whl
 
 # Install RIXL wheel
@@ -705,9 +705,9 @@ ARG NIC_BACKEND
 ARG AINIC_VERSION
 
 # Copy over the benchmark scripts as well
-COPY --from=export_aphrodite /benchmarks ${COMMON_WORKDIR}/aphrodite/benchmarks
-COPY --from=export_aphrodite /examples ${COMMON_WORKDIR}/aphrodite/examples
-COPY --from=export_aphrodite /docker ${COMMON_WORKDIR}/aphrodite/docker
+COPY --from=export_sonar /benchmarks ${COMMON_WORKDIR}/sonar/benchmarks
+COPY --from=export_sonar /examples ${COMMON_WORKDIR}/sonar/examples
+COPY --from=export_sonar /docker ${COMMON_WORKDIR}/sonar/docker
 
 # Use legacy IPC mode for HSA to avoid GPU memory pinning issues with UCX rocm_ipc
 # See: https://github.com/ROCm/rocm-libraries/issues/6266
@@ -724,7 +724,7 @@ ENV HIP_FORCE_DEV_KERNARG=1
 # Workaround for ROCm profiler limits
 RUN echo "ROCTRACER_MAX_EVENTS=10000000" > ${COMMON_WORKDIR}/libkineto.conf
 ENV KINETO_CONFIG="${COMMON_WORKDIR}/libkineto.conf"
-RUN echo "APHRODITE_BASE_IMAGE=${BASE_IMAGE}" >> ${COMMON_WORKDIR}/versions.txt \
+RUN echo "SONAR_BASE_IMAGE=${BASE_IMAGE}" >> ${COMMON_WORKDIR}/versions.txt \
     && echo "MORI_NIC_BACKEND=${NIC_BACKEND}" >> ${COMMON_WORKDIR}/versions.txt \
     && echo "AINIC_VERSION=${AINIC_VERSION}" >> ${COMMON_WORKDIR}/versions.txt
 
@@ -742,6 +742,6 @@ RUN pip3 uninstall -y triton && \
 
 CMD ["/bin/bash"]
 
-#Set entrypoint for aphrodite-openai official images
-FROM final AS aphrodite-openai
-ENTRYPOINT ["aphrodite", "run"]
+#Set entrypoint for sonar-openai official images
+FROM final AS sonar-openai
+ENTRYPOINT ["sonar", "run"]

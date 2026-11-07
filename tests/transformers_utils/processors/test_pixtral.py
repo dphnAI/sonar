@@ -4,7 +4,7 @@ import pytest
 import transformers.image_utils
 from PIL import Image
 
-from aphrodite.transformers_utils.processors.pixtral import MistralCommonImageProcessor
+from sonar.transformers_utils.processors.pixtral import MistralCommonImageProcessor
 
 
 @pytest.fixture(scope="module")

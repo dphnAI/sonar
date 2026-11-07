@@ -7,8 +7,8 @@ mod writer;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use aphrodite_text::tokenizer::DynTokenizer;
 use serde_json::Value;
+use sonar_text::tokenizer::DynTokenizer;
 
 use super::{ChatRenderer, RenderedPrompt};
 use crate::error::Result;

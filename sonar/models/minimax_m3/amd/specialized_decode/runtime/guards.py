@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 from .spec import DecodeConfig
 from .weights import MonoLayerWeights
@@ -36,7 +36,7 @@ def model_refusals(model, config: DecodeConfig) -> list[str]:
         import flydsl  # noqa: F401
         from aiter.ops.flydsl.kernels import buffer_ops  # noqa: F401
 
-        from aphrodite.platforms.rocm import get_cdna_version
+        from sonar.platforms.rocm import get_cdna_version
     except ImportError as err:
         reasons.append(f"requires FlyDSL and AITER FlyDSL helpers ({err})")
         return reasons

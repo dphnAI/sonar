@@ -41,35 +41,35 @@ import torch
 from torch import nn
 from transformers import LongcatFlashConfig
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, CacheConfig
-from aphrodite.distributed import get_pp_group
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.activation import SiluAndMul
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import CacheConfig, SonarConfig
+from sonar.distributed import get_pp_group
+from sonar.logger import init_logger
+from sonar.model_executor.layers.activation import SiluAndMul
+from sonar.model_executor.layers.fused_moe import (
     FusedMoEFactory,
     GateLinear,
     fused_moe_make_expert_params_mapping,
 )
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     MergedColumnParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.model_loader.weight_utils import (
+from sonar.model_executor.model_loader.weight_utils import (
     LoaderFunction,
     composed_weight_loader,
     default_weight_loader,
 )
-from aphrodite.model_executor.models.deepseek_v2 import DeepseekV2MLAAttention
-from aphrodite.model_executor.utils import set_weight_attrs
-from aphrodite.sequence import IntermediateTensors
+from sonar.model_executor.models.deepseek_v2 import DeepseekV2MLAAttention
+from sonar.model_executor.utils import set_weight_attrs
+from sonar.sequence import IntermediateTensors
 
 from .interfaces import SupportsLoRA, SupportsPP
 from .utils import (
@@ -245,7 +245,7 @@ class FlashDecoderLayer(nn.Module):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         config: LongcatFlashConfig,
         cache_config: CacheConfig | None = None,
         quant_config: QuantizationConfig | None = None,
@@ -261,7 +261,7 @@ class FlashDecoderLayer(nn.Module):
         self.self_attn = nn.ModuleList(
             [
                 DeepseekV2MLAAttention(
-                    aphrodite_config=aphrodite_config,
+                    sonar_config=sonar_config,
                     config=config,
                     hidden_size=self.hidden_size,
                     num_heads=config.num_attention_heads,
@@ -358,11 +358,11 @@ class FlashDecoderLayer(nn.Module):
 class FlashModel(nn.Module):
     """Flash model."""
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        cache_config = aphrodite_config.cache_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        cache_config = sonar_config.cache_config
+        quant_config = sonar_config.quant_config
         self.config = config
         self.quant_config = quant_config
 
@@ -379,7 +379,7 @@ class FlashModel(nn.Module):
         self.start_layer, self.end_layer, self.layers = make_layers(
             config.num_layers,
             lambda prefix: FlashDecoderLayer(
-                aphrodite_config,
+                sonar_config,
                 config,
                 cache_config=cache_config,
                 quant_config=quant_config,
@@ -537,16 +537,16 @@ class LongcatFlashForCausalLM(nn.Module, SupportsLoRA, SupportsPP):
         ],
     }
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
 
         self.config = config
 
         self.quant_config = quant_config
 
-        self.model = FlashModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = FlashModel(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
 
         if get_pp_group().is_last_rank:
             self.lm_head = ParallelLMHead(

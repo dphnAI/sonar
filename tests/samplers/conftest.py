@@ -4,8 +4,8 @@
 import pytest
 import torch
 
-from aphrodite import envs
-from aphrodite.platforms import current_platform
+from sonar import envs
+from sonar.platforms import current_platform
 
 
 @pytest.fixture(autouse=True)
@@ -13,8 +13,8 @@ def skip_unsupported_flashinfer_sampler():
     # CI runs this suite with FlashInfer both explicitly enabled and disabled.
     if (
         current_platform.is_cuda()
-        and envs.is_set("APHRODITE_USE_FLASHINFER_SAMPLER")
-        and envs.APHRODITE_USE_FLASHINFER_SAMPLER
+        and envs.is_set("SONAR_USE_FLASHINFER_SAMPLER")
+        and envs.SONAR_USE_FLASHINFER_SAMPLER
         and current_platform.num_compute_units(torch.accelerator.current_device_index()) <= 16
     ):
         pytest.skip("FlashInfer top-k masking requires more than 16 SMs")

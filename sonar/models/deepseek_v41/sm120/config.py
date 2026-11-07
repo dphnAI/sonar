@@ -4,15 +4,15 @@
 
 from typing import TYPE_CHECKING
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig, ModelConfig
+    from sonar.config import ModelConfig, SonarConfig
 
 
 def verify_and_update_model_config(model_config: "ModelConfig") -> None:
     if not current_platform.is_cuda() or not current_platform.is_device_capability_family(120):
-        raise ValueError("APHRODITE_DSV41_SM120_NATIVE requires an SM120-family CUDA GPU.")
+        raise ValueError("SONAR_DSV41_SM120_NATIVE requires an SM120-family CUDA GPU.")
 
     for config in (
         model_config.hf_config,
@@ -29,13 +29,13 @@ def verify_and_update_model_config(model_config: "ModelConfig") -> None:
         model_config.hf_config.head_dtype = "float32"
 
 
-def verify_and_update_config(aphrodite_config: "AphroditeConfig") -> None:
-    from aphrodite.config.compilation import CompilationMode, CUDAGraphMode
-    from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
+def verify_and_update_config(sonar_config: "SonarConfig") -> None:
+    from sonar.config.compilation import CompilationMode, CUDAGraphMode
+    from sonar.v1.attention.backends.registry import AttentionBackendEnum
 
     backend = AttentionBackendEnum.B12X_DSV41
-    attention_config = aphrodite_config.attention_config
-    parallel_config = aphrodite_config.parallel_config
+    attention_config = sonar_config.attention_config
+    parallel_config = sonar_config.parallel_config
     if (
         parallel_config.pipeline_parallel_size != 1
         or parallel_config.decode_context_parallel_size != 1
@@ -46,10 +46,10 @@ def verify_and_update_config(aphrodite_config: "AphroditeConfig") -> None:
     if attention_config.backend not in (None, backend):
         raise ValueError("Native SM120 DeepSeek-V4.1 requires the B12X_DSV41 attention backend.")
     attention_config.backend = backend
-    if not aphrodite_config.cache_config.user_specified_block_size:
-        aphrodite_config.cache_config.block_size = 256
-    compilation_config = aphrodite_config.compilation_config
+    if not sonar_config.cache_config.user_specified_block_size:
+        sonar_config.cache_config.block_size = 256
+    compilation_config = sonar_config.compilation_config
     if compilation_config.mode is None:
         compilation_config.mode = CompilationMode.NONE
-    if compilation_config.cudagraph_mode is None and not aphrodite_config.model_config.enforce_eager:
+    if compilation_config.cudagraph_mode is None and not sonar_config.model_config.enforce_eager:
         compilation_config.cudagraph_mode = CUDAGraphMode.FULL

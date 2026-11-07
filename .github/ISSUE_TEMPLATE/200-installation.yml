@@ -7,14 +7,14 @@ body:
 - type: markdown
   attributes:
     value: >
-      #### Before submitting an issue, please make sure the issue hasn't been already addressed by searching through [the existing and past issues](https://github.com/PygmalionAI/aphrodite-engine/issues?q=is%3Aissue+sort%3Acreated-desc+).
+      #### Before submitting an issue, please make sure the issue hasn't been already addressed by searching through [the existing and past issues](https://github.com/dphnAI/sonar/issues?q=is%3Aissue+sort%3Acreated-desc+).
 - type: textarea
   attributes:
     label: Your current environment
     description: |
       Please run the following and paste the output below.
       ```sh
-      wget https://raw.githubusercontent.com/PygmalionAI/aphrodite-engine/main/env.py
+      wget https://raw.githubusercontent.com/dphnAI/sonar/main/env.py
       # For security purposes, please check the contents of env.py before running it.
       python env.py
       ```
@@ -26,12 +26,12 @@ body:
     required: true
 - type: textarea
   attributes:
-    label: How did you install Aphrodite?
+    label: How did you install Sonar?
     description: |
       Paste the full command you are trying to execute.
     value: |
       ```sh
-      pip install aphrodite-engine
+      curl -LsSf https://sonar.dphn.ai/install.sh | sh
       ```
 - type: markdown
   attributes:

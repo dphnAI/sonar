@@ -9,10 +9,10 @@ from typing import Any
 
 import torch
 
-from aphrodite.config.attention import MiniMaxM3MSADecodeBackend
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
-from aphrodite.v1.kv_cache_interface import get_kv_quant_mode
+from sonar.config.attention import MiniMaxM3MSADecodeBackend
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
+from sonar.v1.kv_cache_interface import get_kv_quant_mode
 
 _MAX_NUM_Q_HEADS = 64
 _MAX_NUM_KV_HEADS = 4
@@ -54,7 +54,7 @@ def nvfp4_kv_cache_views(
     ``[page_size, 64]`` followed by its E4M3 block scales ``[page_size, 8]``,
     the one page layout ``fmha_sm100`` reads.
     """
-    from aphrodite.third_party.fmha_sm100.nvfp4_kv import nvfp4_head_slot_views
+    from sonar.third_party.fmha_sm100.nvfp4_kv import nvfp4_head_slot_views
 
     return nvfp4_head_slot_views(*nvfp4_kv_cache_slots(kv_cache))
 
@@ -137,7 +137,7 @@ class MSACutlassDecodePlanCache:
         topk_blocks: int,
         q8kv4: bool,
     ) -> Any:
-        from aphrodite.third_party.fmha_sm100.api import fmha_sm100_plan
+        from sonar.third_party.fmha_sm100.api import fmha_sm100_plan
 
         qo_lens_cpu = torch.full((batch,), decode_query_len, dtype=torch.int32)
         # Zero-length full-CUDA-graph padding requests would keep the Q8KV4
@@ -408,7 +408,7 @@ def msa_cutlass_sparse_decode(
         key, value = kv_cache.split(_HEAD_DIM, dim=-1)
         k_scale_arg, v_scale_arg = k_scale_float, v_scale_float
 
-    from aphrodite.third_party.fmha_sm100.api import fmha_sm100
+    from sonar.third_party.fmha_sm100.api import fmha_sm100
 
     fmha_sm100(
         query_fp8,

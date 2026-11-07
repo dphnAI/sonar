@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 import numpy as np
 
-from aphrodite.v1.kv_offload.base import (
+from sonar.v1.kv_offload.base import (
     ConfigInfoMapping,
     Locality,
     LookupResult,
@@ -23,16 +23,16 @@ from aphrodite.v1.kv_offload.base import (
     RequestOffloadingContext,
     ScheduleEndContext,
 )
-from aphrodite.v1.kv_offload.tiering.backpressure import (
+from sonar.v1.kv_offload.tiering.backpressure import (
     BackpressureDetector,
 )
-from aphrodite.v1.metrics.cache_hit_source import CacheHitSource
+from sonar.v1.metrics.cache_hit_source import CacheHitSource
 
 if TYPE_CHECKING:
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.offloading.metrics import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.offloading.metrics import (
         OffloadingConnectorStats,
     )
-    from aphrodite.v1.kv_offload.base import OffloadingSpec
+    from sonar.v1.kv_offload.base import OffloadingSpec
 
 
 # Type alias for job IDs used in async transfer tracking
@@ -44,27 +44,27 @@ TIER_LABEL = "tier"
 class TieringOffloadingMetrics:
     """Metric names for TieringOffloadingManager."""
 
-    LOOKUP_SYNC_DELAY = "aphrodite:kv_offload_tiering_lookup_sync_delay_seconds"
-    LOOKUP_ASYNC_DELAY = "aphrodite:kv_offload_tiering_lookup_async_delay_seconds"
-    READ_BYTES = "aphrodite:kv_offload_tiering_read_bytes"
-    READ_TIME = "aphrodite:kv_offload_tiering_read_time"
-    WRITE_BYTES = "aphrodite:kv_offload_tiering_write_bytes"
-    WRITE_TIME = "aphrodite:kv_offload_tiering_write_time"
-    PROMOTION_JOB_FAILURES = "aphrodite:kv_offload_tiering_promotion_job_failures"
-    CASCADE_JOB_FAILURES = "aphrodite:kv_offload_tiering_cascade_job_failures"
-    CHUNK_QUERIES = "aphrodite:kv_offload_tiering_chunk_queries"
-    CHUNK_HITS = "aphrodite:kv_offload_tiering_chunk_hits"
-    PRIMARY_WRITE_USAGE_PERC = "aphrodite:kv_offload_tiering_primary_write_usage_perc"
-    PRIMARY_READ_USAGE_PERC = "aphrodite:kv_offload_tiering_primary_read_usage_perc"
-    PROMOTION_ALLOCATION_FAILURES = "aphrodite:kv_offload_tiering_promotion_allocation_failures"
-    ACTIVE_PROMOTION_JOBS = "aphrodite:kv_offload_tiering_active_promotion_jobs"
-    ACTIVE_CASCADE_JOBS = "aphrodite:kv_offload_tiering_active_cascade_jobs"
-    BACKPRESSURE_STORE_LATENCY_EMA = "aphrodite:kv_offload_tiering_backpressure_store_latency_ema"
-    BACKPRESSURE_STORES_DROPPED = "aphrodite:kv_offload_tiering_backpressure_stores_dropped"
-    BACKPRESSURE_BLOCKS_DROPPED = "aphrodite:kv_offload_tiering_backpressure_blocks_dropped"
-    PROMOTION_LATENCY = "aphrodite:kv_offload_tiering_promotion_latency_seconds"
-    DEFERRED_RELEASE_CHUNKS = "aphrodite:kv_offload_tiering_deferred_release_chunks"
-    DEFERRED_RELEASE_HOLD = "aphrodite:kv_offload_tiering_deferred_release_hold_seconds"
+    LOOKUP_SYNC_DELAY = "sonar:kv_offload_tiering_lookup_sync_delay_seconds"
+    LOOKUP_ASYNC_DELAY = "sonar:kv_offload_tiering_lookup_async_delay_seconds"
+    READ_BYTES = "sonar:kv_offload_tiering_read_bytes"
+    READ_TIME = "sonar:kv_offload_tiering_read_time"
+    WRITE_BYTES = "sonar:kv_offload_tiering_write_bytes"
+    WRITE_TIME = "sonar:kv_offload_tiering_write_time"
+    PROMOTION_JOB_FAILURES = "sonar:kv_offload_tiering_promotion_job_failures"
+    CASCADE_JOB_FAILURES = "sonar:kv_offload_tiering_cascade_job_failures"
+    CHUNK_QUERIES = "sonar:kv_offload_tiering_chunk_queries"
+    CHUNK_HITS = "sonar:kv_offload_tiering_chunk_hits"
+    PRIMARY_WRITE_USAGE_PERC = "sonar:kv_offload_tiering_primary_write_usage_perc"
+    PRIMARY_READ_USAGE_PERC = "sonar:kv_offload_tiering_primary_read_usage_perc"
+    PROMOTION_ALLOCATION_FAILURES = "sonar:kv_offload_tiering_promotion_allocation_failures"
+    ACTIVE_PROMOTION_JOBS = "sonar:kv_offload_tiering_active_promotion_jobs"
+    ACTIVE_CASCADE_JOBS = "sonar:kv_offload_tiering_active_cascade_jobs"
+    BACKPRESSURE_STORE_LATENCY_EMA = "sonar:kv_offload_tiering_backpressure_store_latency_ema"
+    BACKPRESSURE_STORES_DROPPED = "sonar:kv_offload_tiering_backpressure_stores_dropped"
+    BACKPRESSURE_BLOCKS_DROPPED = "sonar:kv_offload_tiering_backpressure_blocks_dropped"
+    PROMOTION_LATENCY = "sonar:kv_offload_tiering_promotion_latency_seconds"
+    DEFERRED_RELEASE_CHUNKS = "sonar:kv_offload_tiering_deferred_release_chunks"
+    DEFERRED_RELEASE_HOLD = "sonar:kv_offload_tiering_deferred_release_hold_seconds"
 
 
 @dataclass

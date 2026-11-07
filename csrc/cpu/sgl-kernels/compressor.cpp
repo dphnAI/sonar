@@ -12,7 +12,7 @@
 // Differences from upstream:
 // - Upstream splits decode (`compress_decode_cpu`) from prefill/extend
 //   (eager `compress_extend_separate`); this port stays unified across
-//   decode/prefill/extend, one program per token, matching Aphrodite's own
+//   decode/prefill/extend, one program per token, matching Sonar's own
 //   GPU/Triton reference (`_fused_kv_compress_norm_rope_insert_sparse_attn`,
 //   common/ops/fused_compress_quant_cache.py).
 // - Window-gather indices arrive pre-resolved to flat state-cache row ids
@@ -37,7 +37,7 @@
 #if !defined(CPU_CAPABILITY_AVX512)
 static_assert(false,
               "compressor.cpp is only ever compiled into the AVX512+AMX-flagged "
-              "_C target (see cmake/cpu_extension.cmake's APHRODITE_EXT_SRC_SGL) and "
+              "_C target (see cmake/cpu_extension.cmake's SONAR_EXT_SRC_SGL) and "
               "relies on that unconditionally -- CPU_CAPABILITY_AVX512 must be "
               "defined here.");
 #endif
@@ -95,7 +95,7 @@ inline void apply_gptj_rope_inplace(float* __restrict__ x, const float* __restri
 // (`quant_to_nope_fp8_rope_bf16_pack_cpu`'s
 // `cvt_fp32x16_to_fp8x16`/`quantize_tile_avx512`) -- SGLang itself keeps
 // `compress_decode_cpu` fp32-output-only and calls this quant step as a
-// separate op; Aphrodite's compressor kernel stays fused (per this file's header
+// separate op; Sonar's compressor kernel stays fused (per this file's header
 // comment), so the same AVX512 tile-quant math is inlined here instead.
 #if defined(CPU_CAPABILITY_AVX512)
 
@@ -196,7 +196,7 @@ inline uint8_t quantize_tile_avx512(const at::BFloat16* __restrict__ src, uint8_
 
   // Patch subnormal-magnitude lanes: `cvt_fp32x16_to_fp8x16` flushes
   // anything below the smallest fp8_e4m3fn normal (2^-6) to zero, but
-  // Aphrodite's dequant path relies on `at::Float8_e4m3fn`'s real subnormal
+  // Sonar's dequant path relies on `at::Float8_e4m3fn`'s real subnormal
   // encoding -- redo just those rare lanes with the exact scalar
   // conversion to stay consistent with the read side.
   alignas(64) float scaled[kQuantBlock];
@@ -516,7 +516,7 @@ void compress_norm_rope_store_indexer_impl(
       // manipulation conversion (this single-shared-scale 128-wide block has
       // no direct SGLang equivalent -- see file header -- so only the fp8
       // conversion primitive is ported, the amax/scale formula is unchanged
-      // from Aphrodite's own reference).
+      // from Sonar's own reference).
       uint8_t* const out_fp8 = token_fp8_ptr;
       {
         const __m512 vinv = _mm512_set1_ps(inv_scale);

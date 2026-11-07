@@ -25,14 +25,14 @@ from transformers.models.auto.modeling_auto import (
 from transformers.models.auto.tokenization_auto import get_tokenizer_config
 from transformers.utils import CONFIG_NAME as HF_CONFIG_NAME
 
-from aphrodite import envs
-from aphrodite.logger import init_logger
-from aphrodite.transformers_utils.repo_utils import is_mistral_model_repo
-from aphrodite.transformers_utils.utils import (
+from sonar import envs
+from sonar.logger import init_logger
+from sonar.transformers_utils.repo_utils import is_mistral_model_repo
+from sonar.transformers_utils.utils import (
     parse_safetensors_file_metadata,
     without_trust_remote_code,
 )
-from aphrodite.utils.torch_utils import common_broadcastable_dtype
+from sonar.utils.torch_utils import common_broadcastable_dtype
 
 from .config_parser_base import ConfigParserBase
 from .repo_utils import (
@@ -44,7 +44,7 @@ from .repo_utils import (
     with_retry,
 )
 
-if envs.APHRODITE_USE_MODELSCOPE:
+if envs.SONAR_USE_MODELSCOPE:
     from modelscope import AutoConfig
 else:
     from transformers import AutoConfig
@@ -84,7 +84,7 @@ CONFIG_FIELD_ALIASES: dict[str, tuple[str, ...]] = {
         "moe_num_shared_experts",  # Aria, Ernie
     ),
 }
-"""HF config fields that models spell differently, keyed by the name Aphrodite uses.
+"""HF config fields that models spell differently, keyed by the name Sonar uses.
 
 `ModelArchConfigConvertorBase` reads a scalar from these; a caller that needs the
 raw value (a per-layer `list`, say) passes the aliases to `getattr_iter` itself."""
@@ -114,7 +114,7 @@ class LazyConfigDict(dict):
         if isinstance(value := super().__getitem__(key), type):
             return value
 
-        import aphrodite.transformers_utils.configs as configs
+        import sonar.transformers_utils.configs as configs
 
         return getattr(configs, value)
 
@@ -279,7 +279,7 @@ def _patch_hf_transformers_validate_rope():
     validate_rope() with the ignore_keys parameter work with newer versions of
     hf transformers (from v5 onwards)
     """
-    if hasattr(PreTrainedConfig.validate_rope, "__aphrodite_patched__"):
+    if hasattr(PreTrainedConfig.validate_rope, "__sonar_patched__"):
         return
 
     _original_validate_rope = PreTrainedConfig.validate_rope
@@ -297,7 +297,7 @@ def _patch_hf_transformers_validate_rope():
         result = _original_validate_rope(self, *args, **kwargs)
         return result
 
-    patched_validate_rope.__aphrodite_patched__ = True  # type: ignore[attr-defined]
+    patched_validate_rope.__sonar_patched__ = True  # type: ignore[attr-defined]
     _install_hf_config_validator("validate_rope", patched_validate_rope, _original_validate_rope)
 
 
@@ -309,7 +309,7 @@ def _patch_hf_transformers_nested_rope_validation() -> None:
     ``AttributeError``. The per-layer dicts already carry their own defaults by
     the time validation runs, so the shared entries can be dropped.
     """
-    if hasattr(PreTrainedConfig.validate_rope, "__aphrodite_nested_rope_patched__"):
+    if hasattr(PreTrainedConfig.validate_rope, "__sonar_nested_rope_patched__"):
         return
 
     _original_validate_rope = PreTrainedConfig.validate_rope
@@ -328,7 +328,7 @@ def _patch_hf_transformers_nested_rope_validation() -> None:
                 )
         return _original_validate_rope(self, *args, **kwargs)
 
-    patched_validate_rope.__aphrodite_nested_rope_patched__ = True  # type: ignore[attr-defined]
+    patched_validate_rope.__sonar_nested_rope_patched__ = True  # type: ignore[attr-defined]
     _install_hf_config_validator("validate_rope", patched_validate_rope, _original_validate_rope)
 
 
@@ -481,7 +481,7 @@ class MistralConfigParser(ConfigParserBase):
             max_position_embeddings = _maybe_retrieve_max_pos_from_hf(model, revision, **kwargs)
             config_dict["max_position_embeddings"] = max_position_embeddings
 
-        from aphrodite.transformers_utils.configs.mistral import adapt_config_dict
+        from sonar.transformers_utils.configs.mistral import adapt_config_dict
 
         # Get missing fields from HF config if available
         try:
@@ -534,17 +534,17 @@ def get_config_parser(config_format: str) -> ConfigParserBase:
 
 
 def register_config_parser(config_format: str):
-    """Register a customized aphrodite config parser.
-     When a config format is not supported by aphrodite, you can register a customized
+    """Register a customized sonar config parser.
+     When a config format is not supported by sonar, you can register a customized
     config parser to support it.
 
     Args:
          config_format (str): The config parser format name.
 
     Examples:
-         >>> from aphrodite.transformers_utils.config import (get_config_parser,
+         >>> from sonar.transformers_utils.config import (get_config_parser,
                                                          register_config_parser)
-         >>> from aphrodite.transformers_utils.config_parser_base import ConfigParserBase
+         >>> from sonar.transformers_utils.config_parser_base import ConfigParserBase
          >>>
          >>> @register_config_parser("custom_config_parser")
          ... class CustomConfigParser(ConfigParserBase):
@@ -650,7 +650,7 @@ def patch_legacy_rope_type(rope_parameters: dict[str, Any] | None) -> None:
 
 def patch_rope_parameters(config: PreTrainedConfig) -> None:
     """Provide backwards compatibility for RoPE."""
-    from aphrodite.config.utils import getattr_iter
+    from sonar.config.utils import getattr_iter
 
     # Older custom models may use non-standard field names which need patching.
     names = ["rope_theta", "rotary_emb_base"]
@@ -688,7 +688,7 @@ def _mrope_section(config: PreTrainedConfig) -> Sequence[int] | None:
     `xdrope_section` is the legacy name HunYuan-VL checkpoints use for the same
     field; upstream Transformers normalises it to `mrope_section`.
     """
-    from aphrodite.config.utils import getattr_iter
+    from sonar.config.utils import getattr_iter
 
     names = ("mrope_section", "xdrope_section")
 
@@ -780,7 +780,7 @@ def maybe_override_with_speculators(
     tokenizer: str | None,
     trust_remote_code: bool,
     revision: str | None = None,
-    aphrodite_speculative_config: dict[str, Any] | None = None,
+    sonar_speculative_config: dict[str, Any] | None = None,
     hf_token: bool | str | None = None,
     **kwargs,
 ) -> tuple[str, str | None, dict[str, Any] | None]:
@@ -794,7 +794,7 @@ def maybe_override_with_speculators(
         tokenizer: Tokenizer name or path
         trust_remote_code: Whether to trust remote code
         revision: Model revision
-        aphrodite_speculative_config: Existing Aphrodite speculative config
+        sonar_speculative_config: Existing Sonar speculative config
         hf_token: HuggingFace token for authenticated model access
 
     Returns:
@@ -803,7 +803,7 @@ def maybe_override_with_speculators(
     """
     # A single local file (e.g. a .gguf checkpoint) has no speculators config.
     if os.path.isfile(model):
-        return model, tokenizer, aphrodite_speculative_config
+        return model, tokenizer, sonar_speculative_config
 
     kwargs["local_files_only"] = huggingface_hub.constants.HF_HUB_OFFLINE
     config_dict, _ = PreTrainedConfig.get_config_dict(
@@ -816,20 +816,20 @@ def maybe_override_with_speculators(
 
     if speculators_config is None:
         # No speculators config found, return original values
-        return model, tokenizer, aphrodite_speculative_config
+        return model, tokenizer, sonar_speculative_config
 
     # Speculators format detected - process overrides
-    from aphrodite.transformers_utils.configs.speculators.base import SpeculatorsConfig
-    from aphrodite.v1.worker.gpu.spec_decode.speculator_config import (
+    from sonar.transformers_utils.configs.speculators.base import SpeculatorsConfig
+    from sonar.v1.worker.gpu.spec_decode.speculator_config import (
         get_custom_speculator_config_class,
     )
 
-    speculative_config = SpeculatorsConfig.extract_aphrodite_speculative_config(config_dict=config_dict)
+    speculative_config = SpeculatorsConfig.extract_sonar_speculative_config(config_dict=config_dict)
     speculators_method = speculative_config["method"]
 
     # Apply user --speculative-config overrides (e.g. attention_backend).
-    if isinstance(aphrodite_speculative_config, dict):
-        speculative_config.update(aphrodite_speculative_config)
+    if isinstance(sonar_speculative_config, dict):
+        speculative_config.update(sonar_speculative_config)
 
     # Lock fields dictated by the speculators format, except for a custom
     # method based on the checkpoint's.
@@ -948,18 +948,18 @@ def get_config(
         # auto-enable DeepGEMM UE8M0 if model config requests it
         scale_fmt = quantization_config.get("scale_fmt", None)
         if scale_fmt in ("ue8m0",):
-            if not envs.is_set("APHRODITE_USE_DEEP_GEMM_E8M0"):
-                os.environ["APHRODITE_USE_DEEP_GEMM_E8M0"] = "1"
+            if not envs.is_set("SONAR_USE_DEEP_GEMM_E8M0"):
+                os.environ["SONAR_USE_DEEP_GEMM_E8M0"] = "1"
                 logger.info_once(
                     ("Detected quantization_config.scale_fmt=%s; enabling UE8M0 for DeepGEMM."),
                     scale_fmt,
                 )
-            elif not envs.APHRODITE_USE_DEEP_GEMM_E8M0:
+            elif not envs.SONAR_USE_DEEP_GEMM_E8M0:
                 logger.warning_once(
                     (
                         "Model config requests UE8M0 "
                         "(quantization_config.scale_fmt=%s), but "
-                        "APHRODITE_USE_DEEP_GEMM_E8M0=0 is set; "
+                        "SONAR_USE_DEEP_GEMM_E8M0=0 is set; "
                         "UE8M0 for DeepGEMM disabled."
                     ),
                     scale_fmt,
@@ -1029,7 +1029,7 @@ def get_pooling_config(
     )
 
     if pooling:
-        from aphrodite.config.pooler import SEQ_POOLING_TYPES, TOK_POOLING_TYPES
+        from sonar.config.pooler import SEQ_POOLING_TYPES, TOK_POOLING_TYPES
 
         pooling_file_name = "{}/config.json".format(pooling["path"])
         pooling_dict = get_hf_file_to_dict(pooling_file_name, model, revision) or {}
@@ -1056,7 +1056,7 @@ def get_pooling_config(
         if not {"seq_pooling_type", "tok_pooling_type"} & config.keys():
             logger.warning(
                 "Unable to determine Sentence Transformers pooling type from %s; "
-                "unless configured explicitly, Aphrodite will fall back to the model "
+                "unless configured explicitly, Sonar will fall back to the model "
                 "architecture default.",
                 pooling_file_name,
             )
@@ -1180,22 +1180,22 @@ def maybe_register_config_serialize_by_value() -> None:
 
         import cloudpickle
 
-        from aphrodite.config import AphroditeConfig
+        from sonar.config import SonarConfig
 
         # Register multiprocessing reducers to handle cross-process
-        # serialization of AphroditeConfig objects that may contain custom configs
+        # serialization of SonarConfig objects that may contain custom configs
         # from transformers_modules
-        def _reduce_config(config: AphroditeConfig):
+        def _reduce_config(config: SonarConfig):
             return (pickle.loads, (cloudpickle.dumps(config),))
 
-        multiprocessing.reducer.register(AphroditeConfig, _reduce_config)
+        multiprocessing.reducer.register(SonarConfig, _reduce_config)
 
         # Register transformers_modules with cloudpickle if available
         if transformers_modules_available:
             cloudpickle.register_pickle_by_value(transformers_modules)
 
             # ray vendors its own version of cloudpickle
-            from aphrodite.v1.executor.ray_utils import ray
+            from sonar.v1.executor.ray_utils import ray
 
             if ray:
                 ray.cloudpickle.register_pickle_by_value(transformers_modules)
@@ -1217,7 +1217,7 @@ def get_hf_image_processor_config(
     **kwargs,
 ) -> dict[str, Any]:
     # ModelScope does not provide an interface for image_processor
-    if envs.APHRODITE_USE_MODELSCOPE:
+    if envs.SONAR_USE_MODELSCOPE:
         return dict()
     return get_image_processor_config(model, token=hf_token, revision=revision, **kwargs)
 
@@ -1232,8 +1232,8 @@ def get_hf_text_config(config: PreTrainedConfig):
         raise ValueError(
             "The text_config extracted from the model config does not have "
             "`num_attention_heads` attribute. This indicates a mismatch "
-            "between the model config and Aphrodite's expectations. Please "
-            "ensure that the model config is compatible with Aphrodite."
+            "between the model config and Sonar's expectations. Please "
+            "ensure that the model config is compatible with Sonar."
         )
 
     return text_config
@@ -1386,7 +1386,7 @@ def get_sentence_transformers_chat_template_kwargs(
     if not isinstance(chat_template_kwargs, dict):
         raise ValueError("The Sentence Transformers processing_kwargs.chat_template must be a JSON object.")
     chat_template_kwargs = dict(chat_template_kwargs)
-    # Aphrodite does not restore the template suffix after truncation.
+    # Sonar does not restore the template suffix after truncation.
     chat_template_kwargs.pop("restore_suffix", None)
     if not isinstance(chat_template_kwargs.get("chat_template", ""), str):
         raise ValueError("The Sentence Transformers chat template name must be a string.")

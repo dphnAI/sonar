@@ -23,15 +23,15 @@ import torch
 from torch import fx
 from torch._higher_order_ops.auto_functionalize import auto_functionalized
 
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
-from ..aphrodite_inductor_pass import AphroditeInductorPass
 from ..fx_utils import is_func
+from ..sonar_inductor_pass import SonarInductorPass
 
 logger = init_logger(__name__)
 
 
-class ScatterSplitReplacementPass(AphroditeInductorPass):
+class ScatterSplitReplacementPass(SonarInductorPass):
     """Replace getitem+slice_scatter+split nodes with a single getitem when
     the inplace subtensor written to by the slice_scatter has no other users.
 
@@ -55,13 +55,13 @@ class ScatterSplitReplacementPass(AphroditeInductorPass):
     v = operator.getitem(split_with_sizes_1, 2)
     """
 
-    @AphroditeInductorPass.time_and_log
+    @SonarInductorPass.time_and_log
     def __call__(self, graph: fx.Graph) -> None:
         count = 0
 
         target_ops = [torch.ops._C.rotary_embedding.default]
-        if hasattr(torch.ops.aphrodite, "rocm_aiter_triton_rotary_embedding"):
-            target_ops.append(torch.ops.aphrodite.rocm_aiter_triton_rotary_embedding.default)
+        if hasattr(torch.ops.sonar, "rocm_aiter_triton_rotary_embedding"):
+            target_ops.append(torch.ops.sonar.rocm_aiter_triton_rotary_embedding.default)
 
         for node in graph.nodes:
             if not is_func(node, auto_functionalized):

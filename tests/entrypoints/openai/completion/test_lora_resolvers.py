@@ -8,18 +8,18 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from aphrodite.config.multimodal import MultiModalConfig
-from aphrodite.entrypoints.openai.completion.protocol import CompletionRequest
-from aphrodite.entrypoints.openai.completion.serving import OpenAIServingCompletion
-from aphrodite.entrypoints.openai.models.protocol import BaseModelPath
-from aphrodite.entrypoints.openai.models.serving import OpenAIServingModels
-from aphrodite.entrypoints.serve.engine.protocol import ErrorResponse
-from aphrodite.lora.request import LoRARequest
-from aphrodite.lora.resolver import LoRAResolver, LoRAResolverRegistry
-from aphrodite.renderers.hf import HfRenderer
-from aphrodite.renderers.online_renderer import OnlineRenderer
-from aphrodite.tokenizers.registry import cached_tokenizer_from_config
-from aphrodite.v1.engine.async_llm import AsyncLLM
+from sonar.config.multimodal import MultiModalConfig
+from sonar.entrypoints.openai.completion.protocol import CompletionRequest
+from sonar.entrypoints.openai.completion.serving import OpenAIServingCompletion
+from sonar.entrypoints.openai.models.protocol import BaseModelPath
+from sonar.entrypoints.openai.models.serving import OpenAIServingModels
+from sonar.entrypoints.serve.engine.protocol import ErrorResponse
+from sonar.lora.request import LoRARequest
+from sonar.lora.resolver import LoRAResolver, LoRAResolverRegistry
+from sonar.renderers.hf import HfRenderer
+from sonar.renderers.online_renderer import OnlineRenderer
+from sonar.tokenizers.registry import cached_tokenizer_from_config
+from sonar.v1.engine.async_llm import AsyncLLM
 
 MODEL_NAME = "openai-community/gpt2"
 BASE_MODEL_PATHS = [BaseModelPath(name=MODEL_NAME, model_path=MODEL_NAME)]
@@ -67,7 +67,7 @@ class MockParallelConfig:
 
 
 @dataclass
-class MockAphroditeConfig:
+class MockSonarConfig:
     model_config: MockModelConfig
     parallel_config: MockParallelConfig
 
@@ -102,7 +102,7 @@ def register_mock_resolver():
 
 def _build_renderer(model_config: MockModelConfig):
     return HfRenderer(
-        MockAphroditeConfig(model_config, parallel_config=MockParallelConfig()),
+        MockSonarConfig(model_config, parallel_config=MockParallelConfig()),
         cached_tokenizer_from_config(model_config),
     )
 
@@ -159,7 +159,7 @@ def mock_serving_setup():
 
 @pytest.mark.asyncio
 async def test_serving_completion_with_lora_resolver(mock_serving_setup, monkeypatch):
-    monkeypatch.setenv("APHRODITE_ALLOW_RUNTIME_LORA_UPDATING", "true")
+    monkeypatch.setenv("SONAR_ALLOW_RUNTIME_LORA_UPDATING", "true")
 
     mock_engine, serving_completion = mock_serving_setup
 
@@ -187,7 +187,7 @@ async def test_serving_completion_with_lora_resolver(mock_serving_setup, monkeyp
 
 @pytest.mark.asyncio
 async def test_serving_completion_resolver_not_found(mock_serving_setup, monkeypatch):
-    monkeypatch.setenv("APHRODITE_ALLOW_RUNTIME_LORA_UPDATING", "true")
+    monkeypatch.setenv("SONAR_ALLOW_RUNTIME_LORA_UPDATING", "true")
 
     mock_engine, serving_completion = mock_serving_setup
 
@@ -209,7 +209,7 @@ async def test_serving_completion_resolver_not_found(mock_serving_setup, monkeyp
 
 @pytest.mark.asyncio
 async def test_serving_completion_resolver_add_lora_fails(mock_serving_setup, monkeypatch):
-    monkeypatch.setenv("APHRODITE_ALLOW_RUNTIME_LORA_UPDATING", "true")
+    monkeypatch.setenv("SONAR_ALLOW_RUNTIME_LORA_UPDATING", "true")
 
     mock_engine, serving_completion = mock_serving_setup
 

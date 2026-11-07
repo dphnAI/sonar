@@ -5,21 +5,21 @@ from typing import Any
 
 import torch
 
-from aphrodite.config.compilation import CUDAGraphMode
-from aphrodite.v1.kv_cache_interface import KVCacheConfig
-from aphrodite.v1.worker.gpu.attn_utils import (
+from sonar.config.compilation import CUDAGraphMode
+from sonar.v1.kv_cache_interface import KVCacheConfig
+from sonar.v1.worker.gpu.attn_utils import (
     build_attn_metadata,
     build_slot_mappings_by_layer,
 )
-from aphrodite.v1.worker.gpu.block_table import BlockTables
-from aphrodite.v1.worker.gpu.cp_utils import prepare_dcp_local_seq_lens
-from aphrodite.v1.worker.gpu.cudagraph_utils import (
+from sonar.v1.worker.gpu.block_table import BlockTables
+from sonar.v1.worker.gpu.cp_utils import prepare_dcp_local_seq_lens
+from sonar.v1.worker.gpu.cudagraph_utils import (
     AttentionState,
     BatchExecutionDescriptor,
     CudaGraphManager,
 )
-from aphrodite.v1.worker.gpu.input_batch import InputBatch, InputBuffers
-from aphrodite.v1.worker.utils import AttentionGroup
+from sonar.v1.worker.gpu.input_batch import InputBatch, InputBuffers
+from sonar.v1.worker.utils import AttentionGroup
 
 
 def _prepare_dflash_inputs_to_capture(

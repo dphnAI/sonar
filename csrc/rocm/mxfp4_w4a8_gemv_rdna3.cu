@@ -140,8 +140,7 @@ __global__ void mxfp4_w4a8_gemv_rdna3_kernel(
   for (int m = 0; m < M; ++m) {
     float v = acc[m];
   #pragma unroll
-    for (int o = 16; o > 0; o >>= 1)
-      v += APHRODITE_SHFL_XOR_SYNC_WIDTH(v, o, 32);
+    for (int o = 16; o > 0; o >>= 1) v += SONAR_SHFL_XOR_SYNC_WIDTH(v, o, 32);
     if (lane == 0) out[(int64_t)m * N + n] = from_float<T>(v);
   }
 }

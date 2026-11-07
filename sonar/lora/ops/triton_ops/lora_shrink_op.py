@@ -8,16 +8,16 @@ https://arxiv.org/abs/2310.18547
 
 import torch
 
-from aphrodite import envs
-from aphrodite.lora.ops.triton_ops.kernel_utils import do_shrink_kernel
-from aphrodite.lora.ops.triton_ops.utils import (
+from sonar import envs
+from sonar.lora.ops.triton_ops.kernel_utils import do_shrink_kernel
+from sonar.lora.ops.triton_ops.utils import (
     _get_lora_a_ptr,
     get_lora_op_configs,
     is_batch_invariant,
     supports_pdl,
 )
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.torch_utils import direct_register_custom_op
+from sonar.triton_utils import tl, triton
+from sonar.utils.torch_utils import direct_register_custom_op
 
 # Batch-invariant shrink splits K into this many fixed partials (no atomics).
 _BI_SPLIT_K = 8
@@ -329,7 +329,7 @@ def _lora_shrink(
     )
 
     # PDL only works when dual-stream is being used.
-    use_gdc = supports_pdl(inputs.device) and envs.APHRODITE_LORA_ENABLE_DUAL_STREAM and partials is None
+    use_gdc = supports_pdl(inputs.device) and envs.SONAR_LORA_ENABLE_DUAL_STREAM and partials is None
     first_out = output_tensor if partials is None else partials
     partial_args = {}
     if partials is not None:
@@ -403,7 +403,7 @@ try:
         op_func=_lora_shrink,
         mutates_args=["output_tensor"],
     )
-    lora_shrink = torch.ops.aphrodite.lora_shrink
+    lora_shrink = torch.ops.sonar.lora_shrink
 
 except AttributeError:
     lora_shrink = _lora_shrink

@@ -11,27 +11,27 @@ import regex as re
 import torch
 from torch import nn
 
-from aphrodite.compilation.backends import set_model_tag
-from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-from aphrodite.distributed import (
+from sonar.compilation.backends import set_model_tag
+from sonar.config import SonarConfig, set_current_sonar_config
+from sonar.distributed import (
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
     tensor_model_parallel_all_gather,
 )
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.linear import RowParallelLinear
-from aphrodite.model_executor.models.interfaces import MultiModalEmbeddings
-from aphrodite.model_executor.models.module_mapping import MultiModelKeys
-from aphrodite.model_executor.models.utils import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.linear import RowParallelLinear
+from sonar.model_executor.models.interfaces import MultiModalEmbeddings
+from sonar.model_executor.models.module_mapping import MultiModelKeys
+from sonar.model_executor.models.utils import (
     WeightsMapper,
     _merge_multimodal_embeddings,
     maybe_prefix,
 )
-from aphrodite.model_executor.models.vision import (
+from sonar.model_executor.models.vision import (
     get_load_balance_assignment,
     is_vit_use_data_parallel,
 )
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal import MULTIMODAL_REGISTRY
 
 from .audio import AutoEncoder
 from .layers import MuseSpark1xRMSNorm
@@ -136,7 +136,7 @@ class MuseSpark1xOmniMixin:
 
         def _mark_tower_model(
             self,
-            aphrodite_config: AphroditeConfig,
+            sonar_config: SonarConfig,
             modalities: set[str] | str,
             *,
             targets: type[nn.Module] | tuple[type[nn.Module], ...] | None = None,
@@ -151,21 +151,21 @@ class MuseSpark1xOmniMixin:
                 return f"<|{kind}|>"
         raise ValueError(f"Unsupported Muse Spark modality: {modality}")
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
-        hf_config = aphrodite_config.model_config.hf_config
-        text_aphrodite_config = copy(aphrodite_config)
-        text_aphrodite_config.model_config = copy(aphrodite_config.model_config)
-        text_aphrodite_config.model_config.hf_config = hf_config.text_config
-        super().__init__(aphrodite_config=text_aphrodite_config, prefix=prefix)  # type: ignore[call-arg]
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
+        hf_config = sonar_config.model_config.hf_config
+        text_sonar_config = copy(sonar_config)
+        text_sonar_config.model_config = copy(sonar_config.model_config)
+        text_sonar_config.model_config.hf_config = hf_config.text_config
+        super().__init__(sonar_config=text_sonar_config, prefix=prefix)  # type: ignore[call-arg]
 
         vision_config = hf_config.vision_config
         audio_config = hf_config.audio_config
-        self.aphrodite_config = aphrodite_config
+        self.sonar_config = sonar_config
         adapter_output_dim = hf_config.projector_hidden_size
         llm_hidden_size = hf_config.text_config.hidden_size
 
-        with set_current_aphrodite_config(aphrodite_config, prefix=prefix):
-            with self._mark_tower_model(aphrodite_config, {"image", "video"}):
+        with set_current_sonar_config(sonar_config, prefix=prefix):
+            with self._mark_tower_model(sonar_config, {"image", "video"}):
                 with set_model_tag("NaViTEncoder", is_encoder=True):
                     self.vision_model = NaViT(
                         vision_config,
@@ -182,7 +182,7 @@ class MuseSpark1xOmniMixin:
                 )
                 self.perception_emb_norm = MuseSpark1xRMSNorm(llm_hidden_size, eps=1e-5, has_weight=False)
 
-            with self._mark_tower_model(aphrodite_config, "audio"):
+            with self._mark_tower_model(sonar_config, "audio"):
                 with set_model_tag("AutoEncoder", is_encoder=True):
                     self.audio_encoder = AutoEncoder(
                         latent_channels=audio_config.out_hidden_size,
@@ -195,7 +195,7 @@ class MuseSpark1xOmniMixin:
                         norm_eps=audio_config.rms_norm_eps,
                         prefix=maybe_prefix(prefix, "audio_encoder"),
                     )
-                if aphrodite_config.compilation_config.compile_mm_encoder:
+                if sonar_config.compilation_config.compile_mm_encoder:
                     self.audio_encoder._encode_prefill = (  # type: ignore[method-assign]
                         torch.compile(
                             self.audio_encoder._encode_prefill,

@@ -6,8 +6,8 @@ import warnings
 import pytest
 import torch
 
-import aphrodite.utils.gpu_sync_debug as gsd
-from aphrodite.utils.gpu_sync_debug import (
+import sonar.utils.gpu_sync_debug as gsd
+from sonar.utils.gpu_sync_debug import (
     SYNC_ERROR_MESSAGE,
     gpu_sync_allowed,
     with_gpu_sync_check,

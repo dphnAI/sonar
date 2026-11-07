@@ -17,7 +17,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from aphrodite.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.layernorm import RMSNorm
 
 from ..configs import InklingAudioConfig, InklingVisionConfig
 
@@ -171,7 +171,7 @@ class HMLPPatchEncoder(nn.Module):
         # the generic path below; differs only by reduction order).
         fused = None
         if x.is_cuda and x.dtype == torch.bfloat16:
-            from aphrodite.models.inkling.nvidia.ops.mm_towers import rmsnorm_gelu
+            from sonar.models.inkling.nvidia.ops.mm_towers import rmsnorm_gelu
 
             fused = rmsnorm_gelu
 
@@ -286,7 +286,7 @@ class InklingAudio(nn.Module):
         if audio_features.is_cuda and weight.dtype == torch.bfloat16:
             # One kernel: per-bin offset + embedding gather + fp32 sum + norm.
             # Skips the [T, n_mel_bins, D] intermediate entirely (bit-exact).
-            from aphrodite.models.inkling.nvidia.ops.mm_towers import dmel_embed_sum_norm
+            from sonar.models.inkling.nvidia.ops.mm_towers import dmel_embed_sum_norm
 
             return dmel_embed_sum_norm(
                 audio_features.contiguous(),

@@ -8,18 +8,18 @@ import torch
 import torch.nn.functional as F
 from transformers import AutoModel
 
-from aphrodite.platforms import current_platform
-from aphrodite.utils.mem_constants import MiB_bytes
+from sonar.platforms import current_platform
+from sonar.utils.mem_constants import MiB_bytes
 
 from ....conftest import HfRunner
-from ....utils import APHRODITE_PATH
+from ....utils import SONAR_PATH
 from ...registry import HF_EXAMPLE_MODELS
 
 if TYPE_CHECKING:
     from _typeshed import StrPath
 
 
-FIXTURES_PATH = APHRODITE_PATH / "tests/models/fixtures"
+FIXTURES_PATH = SONAR_PATH / "tests/models/fixtures"
 assert FIXTURES_PATH.exists()
 FIXTURE_REWARD_RESULT = {
     "Qwen/Qwen2.5-Math-PRM-7B": FIXTURES_PATH / "qwen2_5_math_prm_reward_step.json",
@@ -94,7 +94,7 @@ def load_reward_outputs(filename: "StrPath") -> list[list[float]]:
 @pytest.mark.parametrize("dtype", ["half"])
 def test_prm_models(
     hf_runner,
-    aphrodite_runner,
+    sonar_runner,
     math_step_prompts,
     monkeypatch,
     model: str,
@@ -106,15 +106,15 @@ def test_prm_models(
     if current_platform.is_cpu():
         pytest.skip("CPU only supports V1")
 
-    monkeypatch.setenv("APHRODITE_USE_V2_MODEL_RUNNER", "1")
-    with aphrodite_runner(
+    monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", "1")
+    with sonar_runner(
         model,
         max_model_len=1024,
         dtype=dtype,
         kv_cache_memory_bytes=64 * MiB_bytes,
-    ) as aphrodite_model:
-        assert aphrodite_model.llm.llm_engine.aphrodite_config.use_v2_model_runner
-        aphrodite_outputs = aphrodite_model.token_classify(math_step_prompts)
+    ) as sonar_model:
+        assert sonar_model.llm.llm_engine.sonar_config.use_v2_model_runner
+        sonar_outputs = sonar_model.token_classify(math_step_prompts)
 
     with hf_runner(model, dtype=dtype, auto_cls=AutoModel) as hf_model:
         hf_model = step_reward_patch_hf_model(hf_model)
@@ -126,11 +126,11 @@ def test_prm_models(
     )
 
     # check logits difference
-    for hf_output, aphrodite_output in zip(hf_outputs, aphrodite_outputs):
+    for hf_output, sonar_output in zip(hf_outputs, sonar_outputs):
         hf_output = torch.tensor(hf_output).float()
-        aphrodite_output = torch.tensor(aphrodite_output).float()
+        sonar_output = torch.tensor(sonar_output).float()
 
-        assert torch.allclose(hf_output, aphrodite_output, 1.5e-2)
+        assert torch.allclose(hf_output, sonar_output, 1.5e-2)
 
 
 @pytest.mark.parametrize(
@@ -144,7 +144,7 @@ def test_prm_models(
 )
 @pytest.mark.parametrize("dtype", ["half"])
 def test_prm_models_with_golden_outputs(
-    aphrodite_runner,
+    sonar_runner,
     math_step_prompts,
     monkeypatch,
     model: str,
@@ -154,21 +154,21 @@ def test_prm_models_with_golden_outputs(
         pytest.skip(f"No available golden outputs for {model}.")
 
     use_v2_model_runner = not current_platform.is_cpu()
-    monkeypatch.setenv("APHRODITE_USE_V2_MODEL_RUNNER", "1" if use_v2_model_runner else "0")
-    with aphrodite_runner(
+    monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", "1" if use_v2_model_runner else "0")
+    with sonar_runner(
         model,
         max_model_len=1024,
         dtype=dtype,
         kv_cache_memory_bytes=64 * MiB_bytes,
-    ) as aphrodite_model:
-        assert aphrodite_model.llm.llm_engine.aphrodite_config.use_v2_model_runner is use_v2_model_runner
-        aphrodite_outputs = aphrodite_model.token_classify(math_step_prompts)
+    ) as sonar_model:
+        assert sonar_model.llm.llm_engine.sonar_config.use_v2_model_runner is use_v2_model_runner
+        sonar_outputs = sonar_model.token_classify(math_step_prompts)
 
     golden_outputs = load_reward_outputs(FIXTURE_REWARD_RESULT[model])
 
     # check logits difference
-    for golden_output, aphrodite_output in zip(golden_outputs, aphrodite_outputs):
+    for golden_output, sonar_output in zip(golden_outputs, sonar_outputs):
         golden_output = torch.tensor(golden_output).float()
-        aphrodite_output = torch.tensor(aphrodite_output).float()
+        sonar_output = torch.tensor(sonar_output).float()
 
-        assert torch.allclose(golden_output, aphrodite_output, 1.5e-2)
+        assert torch.allclose(golden_output, sonar_output, 1.5e-2)

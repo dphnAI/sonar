@@ -10,20 +10,20 @@ from collections.abc import Callable
 from contextlib import contextmanager
 from typing import TYPE_CHECKING
 
-import aphrodite.utils.cpu_resource_utils as cr_utils
-from aphrodite import envs
-from aphrodite.logger import init_logger
-from aphrodite.platforms import CpuArchEnum, current_platform
-from aphrodite.utils.cpu_resource_utils import LogicalCPUInfo
+import sonar.utils.cpu_resource_utils as cr_utils
+from sonar import envs
+from sonar.logger import init_logger
+from sonar.platforms import CpuArchEnum, current_platform
+from sonar.utils.cpu_resource_utils import LogicalCPUInfo
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
+    from sonar.config import SonarConfig
 
 logger = init_logger(__name__)
 
 
 class OMPProcessManager:
-    def __init__(self, config: "AphroditeConfig"):
+    def __init__(self, config: "SonarConfig"):
         if not current_platform.is_cpu():
             return
 
@@ -34,7 +34,7 @@ class OMPProcessManager:
         # is always 1 for non-MoE models
         self.internal_dp_size = config.parallel_config._api_process_count
 
-        self.simulate_multi_node = os.environ.get("APHRODITE_CPU_SIM_MULTI_NUMA", "0") != "0"
+        self.simulate_multi_node = os.environ.get("SONAR_CPU_SIM_MULTI_NUMA", "0") != "0"
         ld_preload_str = os.getenv("LD_PRELOAD", "")
         self.use_iomp = "libiomp" in ld_preload_str or "libomp" in ld_preload_str
         self.use_gomp = "libgomp" in ld_preload_str
@@ -53,15 +53,13 @@ class OMPProcessManager:
         if config.kv_transfer_config:
             self.reserve_cpu_num += self.local_world_size
 
-        if envs.APHRODITE_CPU_NUM_OF_RESERVED_CPU is not None:
-            if self.reserve_cpu_num > envs.APHRODITE_CPU_NUM_OF_RESERVED_CPU:
+        if envs.SONAR_CPU_NUM_OF_RESERVED_CPU is not None:
+            if self.reserve_cpu_num > envs.SONAR_CPU_NUM_OF_RESERVED_CPU:
                 msg = (
-                    f"APHRODITE_CPU_NUM_OF_RESERVED_CPU is less than "
-                    "the minimum requirement"
-                    f": {self.reserve_cpu_num} cores"
+                    f"SONAR_CPU_NUM_OF_RESERVED_CPU is less than the minimum requirement: {self.reserve_cpu_num} cores"
                 )
                 logger.warning(msg=msg)
-            self.reserve_cpu_num = envs.APHRODITE_CPU_NUM_OF_RESERVED_CPU
+            self.reserve_cpu_num = envs.SONAR_CPU_NUM_OF_RESERVED_CPU
 
         self._parse_omp_threads_bind_env()
 
@@ -118,9 +116,9 @@ class OMPProcessManager:
                     os.environ[k] = v
 
     def _parse_omp_threads_bind_env(self):
-        aphrodite_mask = envs.APHRODITE_CPU_OMP_THREADS_BIND
-        self.skip_setup = aphrodite_mask == "nobind"
-        self.auto_setup = aphrodite_mask == "auto"
+        sonar_mask = envs.SONAR_CPU_OMP_THREADS_BIND
+        self.skip_setup = sonar_mask == "nobind"
+        self.auto_setup = sonar_mask == "auto"
         self.reserved_cpu_list = []
         self.cpu_lists = []
 
@@ -147,7 +145,7 @@ class OMPProcessManager:
             self.reserved_cpu_list = [x.id for x in reserve_list]
         elif not self.skip_setup:
             # user defined CPU lists
-            omp_cpuids_list = aphrodite_mask.split("|")
+            omp_cpuids_list = sonar_mask.split("|")
             if self.local_dp_rank is not None:
                 local_dp_rank = self.local_dp_rank
                 world_size = self.local_world_size
@@ -166,7 +164,7 @@ class OMPProcessManager:
 
         msg = (
             "OpenMP thread binding info: \n"
-            f"\tAPHRODITE_CPU_OMP_THREADS_BIND={aphrodite_mask!r}, "
+            f"\tSONAR_CPU_OMP_THREADS_BIND={sonar_mask!r}, "
             f"auto_setup={self.auto_setup}, skip_setup={self.skip_setup}\n"
             f"\tlocal_world_size={self.local_world_size}, "
             f"reserve_cpu_num={self.reserve_cpu_num}\n"

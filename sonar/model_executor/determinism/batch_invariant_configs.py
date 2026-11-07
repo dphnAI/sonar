@@ -4,8 +4,8 @@ from typing import NamedTuple
 
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.platforms.interface import DeviceCapability
+from sonar.platforms import current_platform
+from sonar.platforms.interface import DeviceCapability
 
 
 class _MatmulMConfig(NamedTuple):
@@ -1241,7 +1241,7 @@ def resolve_tuned_matmul_configs() -> None:
     if _TUNED_MATMUL_CONFIGS_RESOLVED:
         return
 
-    # Normal Aphrodite initialization resolves this before torch.compile tracing.
+    # Normal Sonar initialization resolves this before torch.compile tracing.
     capability = current_platform.get_device_capability() if current_platform.is_cuda() else None
     arch_family = _get_tuned_matmul_arch_family(capability)
     if arch_family is None:

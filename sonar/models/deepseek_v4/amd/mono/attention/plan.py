@@ -4,7 +4,7 @@
 split attention's chunks and the scratch (mailbox) layout; the model's widths
 and a TP rank's share of them are in ``..dims``."""
 
-from aphrodite.models.deepseek_v4.amd.mono.dims import (
+from sonar.models.deepseek_v4.amd.mono.dims import (
     HEAD_DIM,
     HIDDEN,
     Q_RANK,

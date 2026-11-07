@@ -8,10 +8,10 @@ Run `pytest tests/kernels/moe/test_moe_fused_mul_sum.py`.
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.fused_moe.moe_fused_mul_sum import (
+from sonar.model_executor.layers.fused_moe.moe_fused_mul_sum import (
     moe_fused_mul_sum,
 )
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.utils.torch_utils import set_random_seed
 
 NUM_TOKENS = [1, 17, 256]
 TOP_KS = [2, 8]

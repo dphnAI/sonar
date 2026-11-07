@@ -7,16 +7,16 @@ import numpy as np
 import pytest
 import torch
 
-import aphrodite.v1.worker.cpu.kv_connector as kv_connector_module
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed.kv_transfer.kv_connector.v1.base import (
+import sonar.v1.worker.cpu.kv_connector as kv_connector_module
+from sonar.config import SonarConfig
+from sonar.distributed.kv_transfer.kv_connector.v1.base import (
     KVConnectorTransferResults,
 )
-from aphrodite.platforms import CpuArchEnum, current_platform
-from aphrodite.triton_utils import HAS_TRITON
-from aphrodite.v1.core.sched.output import SchedulerOutput
-from aphrodite.v1.worker.cpu.input_batch import InputBatch, InputBuffers
-from aphrodite.v1.worker.cpu.kv_connector import ActiveKVConnector
+from sonar.platforms import CpuArchEnum, current_platform
+from sonar.triton_utils import HAS_TRITON
+from sonar.v1.core.sched.output import SchedulerOutput
+from sonar.v1.worker.cpu.input_batch import InputBatch, InputBuffers
+from sonar.v1.worker.cpu.kv_connector import ActiveKVConnector
 
 pytestmark = pytest.mark.skipif(
     not current_platform.is_cpu() or HAS_TRITON or current_platform.get_cpu_architecture() == CpuArchEnum.X86,
@@ -83,7 +83,7 @@ def _make_connector(
     monkeypatch.setattr(kv_connector_module, "get_kv_transfer_group", lambda: backend)
     monkeypatch.setattr(kv_connector_module, "is_forward_context_available", lambda: True)
     monkeypatch.setattr(kv_connector_module, "get_forward_context", lambda: forward_context)
-    connector = ActiveKVConnector(AphroditeConfig(), {"layer": torch.empty(1)})
+    connector = ActiveKVConnector(SonarConfig(), {"layer": torch.empty(1)})
     return connector, backend, forward_context
 
 

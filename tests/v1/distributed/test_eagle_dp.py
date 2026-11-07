@@ -7,11 +7,11 @@ from dataclasses import replace
 
 import pytest
 
-from aphrodite import SamplingParams
-from aphrodite.engine.arg_utils import AsyncEngineArgs
-from aphrodite.platforms import current_platform
-from aphrodite.sampling_params import RequestOutputKind
-from aphrodite.v1.engine.async_llm import AsyncLLM
+from sonar import SamplingParams
+from sonar.engine.arg_utils import AsyncEngineArgs
+from sonar.platforms import current_platform
+from sonar.sampling_params import RequestOutputKind
+from sonar.v1.engine.async_llm import AsyncLLM
 
 DP_SIZE = int(os.getenv("DP_SIZE", 2))
 
@@ -47,7 +47,7 @@ async def test_run_eagle_dp(monkeypatch: pytest.MonkeyPatch, attn_backend: str):
         # Enable batch invariance for ROCm when possible. See:
         # https://github.com/vllm-project/vllm/issues/27433
 
-        monkeypatch.setenv("APHRODITE_BATCH_INVARIANT", "1")
+        monkeypatch.setenv("SONAR_BATCH_INVARIANT", "1")
 
     target_model = "meta-llama/Llama-3.1-8B-Instruct"
     draft_model = "yuhuili/EAGLE-LLaMA3.1-Instruct-8B"

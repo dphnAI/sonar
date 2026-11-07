@@ -7,8 +7,8 @@ import pytest
 import torch
 import torch.nn as nn
 
-from aphrodite.model_executor.layers.activation import GeluAndMul, SiluAndMul
-from aphrodite.platforms import CpuArchEnum, current_platform
+from sonar.model_executor.layers.activation import GeluAndMul, SiluAndMul
+from sonar.platforms import CpuArchEnum, current_platform
 
 
 @pytest.mark.skipif(
@@ -24,9 +24,9 @@ from aphrodite.platforms import CpuArchEnum, current_platform
     ],
     ids=["silu", "gelu", "gelu_tanh"],
 )
-def test_cpu_act_and_mul_without_compiled_ops(default_aphrodite_config, monkeypatch, activation_factory, reference):
+def test_cpu_act_and_mul_without_compiled_ops(default_sonar_config, monkeypatch, activation_factory, reference):
     """CPU activations must construct and run without compiled wheel operators."""
-    default_aphrodite_config.compilation_config.custom_ops = ["all"]
+    default_sonar_config.compilation_config.custom_ops = ["all"]
     monkeypatch.setattr(torch.ops, "_C", object())
     x = torch.tensor([[-2.0, -1.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0]], device="cpu")
 

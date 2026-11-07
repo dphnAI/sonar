@@ -13,16 +13,16 @@ from typing import Any
 import torch
 from torch import nn
 
-from aphrodite.config import ModelConfig
-from aphrodite.config.load import LoadConfig
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.model_loader.base_loader import BaseModelLoader
-from aphrodite.model_executor.model_loader.weight_utils import (
+from sonar.config import ModelConfig
+from sonar.config.load import LoadConfig
+from sonar.logger import init_logger
+from sonar.model_executor.model_loader.base_loader import BaseModelLoader
+from sonar.model_executor.model_loader.weight_utils import (
     download_weights_from_hf,
     runai_safetensors_weights_iterator,
 )
-from aphrodite.transformers_utils.s3_utils import glob as s3_glob
-from aphrodite.transformers_utils.utils import is_s3
+from sonar.transformers_utils.s3_utils import glob as s3_glob
+from sonar.transformers_utils.utils import is_s3
 
 logger = init_logger(__name__)
 
@@ -55,7 +55,7 @@ class ShardedStateLoader(BaseModelLoader):
 
     @staticmethod
     def _get_default_pattern() -> str:
-        from aphrodite.distributed import get_pp_group
+        from sonar.distributed import get_pp_group
 
         return (
             ShardedStateLoader.PP_AND_TP_PATTERN
@@ -65,7 +65,7 @@ class ShardedStateLoader(BaseModelLoader):
 
     @staticmethod
     def _render_default_pattern(pattern: str | None = None, *, part: int | str) -> str:
-        from aphrodite.distributed import (
+        from sonar.distributed import (
             get_pipeline_model_parallel_rank,
             get_pp_group,
             get_tensor_model_parallel_rank,

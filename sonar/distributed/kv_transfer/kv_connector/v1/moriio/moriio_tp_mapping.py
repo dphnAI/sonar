@@ -15,7 +15,7 @@ cache and recurrent state into the decode (consumer) ranks that need it:
   block. Copies that would be identical (MLA, replicated heads) are written by
   one producer only.
 
-Heads follow Aphrodite's sharding: with ``tp_size <= num_kv_heads`` rank ``i`` holds
+Heads follow Sonar's sharding: with ``tp_size <= num_kv_heads`` rank ``i`` holds
 heads ``[i * n, (i + 1) * n)`` with ``n = num_kv_heads // tp_size``; with more
 ranks than heads every rank holds the single head ``i * num_kv_heads //
 tp_size``.

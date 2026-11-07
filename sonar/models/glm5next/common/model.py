@@ -8,64 +8,64 @@ import torch
 from torch import nn
 from transformers import Glm5NextTextConfig
 
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.config import AphroditeConfig, ParallelConfig
-from aphrodite.distributed import (
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.config import ParallelConfig, SonarConfig
+from sonar.distributed import (
     get_ep_group,
     get_pp_group,
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
     tensor_model_parallel_all_gather,
 )
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.activation import SiluAndMul, SiluAndMulWithClamp
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.activation import SiluAndMul, SiluAndMulWithClamp
+from sonar.model_executor.layers.fused_moe import (
     FusedMoEFactory,
     GateLinear,
     fused_moe_make_expert_params_mapping,
 )
-from aphrodite.model_executor.layers.fused_moe.utils import (
+from sonar.model_executor.layers.fused_moe.utils import (
     resolve_layer_fused_shared_expert,
 )
-from aphrodite.model_executor.layers.fusion.mm_input_norm import build_mm_input_norm
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.fusion.mm_input_norm import build_mm_input_norm
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     MergedColumnParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.mamba.mamba_utils import (
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.mamba.mamba_utils import (
     MambaStateCopyFunc,
     MambaStateCopyFuncCalculator,
     MambaStateDtypeCalculator,
     MambaStateShapeCalculator,
 )
-from aphrodite.model_executor.layers.mhc import (
+from sonar.model_executor.layers.mhc import (
     MHCFusedPostPreOp,
     MHCPostOp,
     MHCPreOp,
     hc_contract,
     hc_expand,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     GroupShape,
     scaled_dequantize,
 )
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.model_loader.weight_utils import (
+from sonar.model_executor.model_loader.weight_utils import (
     default_weight_loader,
     maybe_remap_kv_scale_name,
 )
-from aphrodite.model_executor.models.deepseek_v2 import _get_moe_router_dtype
-from aphrodite.model_executor.models.glm4_1v import (
+from sonar.model_executor.models.deepseek_v2 import _get_moe_router_dtype
+from sonar.model_executor.models.glm4_1v import (
     Glm4vDummyInputsBuilder,
     Glm4vForConditionalGeneration,
 )
-from aphrodite.model_executor.models.interfaces import (
+from sonar.model_executor.models.interfaces import (
     EagleModelMixin,
     HasInnerState,
     IsHybrid,
@@ -73,26 +73,26 @@ from aphrodite.model_executor.models.interfaces import (
     SupportsEagle3,
     SupportsPP,
 )
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.models.utils import (
     AutoWeightsLoader,
     PPMissingLayer,
     extract_layer_index,
     get_fused_shared_expert_layers,
-    init_aphrodite_registered_model,
+    init_sonar_registered_model,
     is_pp_missing_parameter,
     make_layers,
     maybe_prefix,
     sequence_parallel_chunk,
 )
-from aphrodite.models.common.ops.sequence_parallel import (
+from sonar.models.common.ops.sequence_parallel import (
     sp_all_gather,
     sp_reduce_scatter,
     sp_shard,
 )
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.platforms import current_platform
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.utils.math_utils import round_up
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.platforms import current_platform
+from sonar.sequence import IntermediateTensors
+from sonar.utils.math_utils import round_up
 
 from .attention import Glm5NextMLAAttention
 from .kda import Glm5NextLinearAttention
@@ -337,7 +337,7 @@ class Glm5NextMoE(nn.Module):
 class Glm5NextDecoderLayer(nn.Module):
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         config: Glm5NextTextConfig,
         layer_idx: int,
         prefix: str = "",
@@ -347,9 +347,9 @@ class Glm5NextDecoderLayer(nn.Module):
     ) -> None:
         super().__init__()
 
-        cache_config = aphrodite_config.cache_config
-        quant_config = aphrodite_config.quant_config
-        parallel_config = aphrodite_config.parallel_config
+        cache_config = sonar_config.cache_config
+        quant_config = sonar_config.quant_config
+        parallel_config = sonar_config.parallel_config
 
         self.hidden_size = config.hidden_size
         self.layer_idx = layer_idx
@@ -366,7 +366,7 @@ class Glm5NextDecoderLayer(nn.Module):
         if is_kda_layer:
             self.self_attn = Glm5NextLinearAttention(
                 config=config,
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 prefix=f"{prefix}.self_attn",
             )
         else:
@@ -375,7 +375,7 @@ class Glm5NextDecoderLayer(nn.Module):
             assert config.v_head_dim is not None
             assert config.kv_lora_rank is not None
             self.self_attn = Glm5NextMLAAttention(
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 config=config,
                 hidden_size=self.hidden_size,
                 num_heads=config.num_attention_heads,
@@ -457,18 +457,18 @@ class Glm5NextDecoderLayer(nn.Module):
             self.mhc_post_op = MHCPostOp()
             self.mhc_fused_post_pre_op = MHCFusedPostPreOp()
 
-            if aphrodite_config.kernel_config.enable_jit_warmup:
-                from aphrodite.model_executor.kernels.mhc.tilelang_kernels import (
+            if sonar_config.kernel_config.enable_jit_warmup:
+                from sonar.model_executor.kernels.mhc.tilelang_kernels import (
                     _HC_PRENORM_GEMM_TILELANG_KERNEL,
                     _MHC_FUSED_TILELANG_KERNEL,
                     _MHC_POST_TILELANG_KERNEL,
                     _MHC_PRE_BIG_FUSE_TILELANG_KERNEL,
                 )
-                from aphrodite.utils.deep_gemm import is_deep_gemm_supported
+                from sonar.utils.deep_gemm import is_deep_gemm_supported
 
                 include_pre_gemm_splits = is_deep_gemm_supported()
                 _MHC_PRE_BIG_FUSE_TILELANG_KERNEL.register_warmup(
-                    aphrodite_config,
+                    sonar_config,
                     hidden_size=self.hidden_size,
                     hc_mult=self.n,
                     use_norm_weight=True,
@@ -486,7 +486,7 @@ class Glm5NextDecoderLayer(nn.Module):
                 )
                 if not include_pre_gemm_splits:
                     _HC_PRENORM_GEMM_TILELANG_KERNEL.register_warmup(
-                        aphrodite_config,
+                        sonar_config,
                         hidden_size=self.hidden_size,
                         hc_mult=self.n,
                         n_out=self.n * (2 + self.n),
@@ -496,7 +496,7 @@ class Glm5NextDecoderLayer(nn.Module):
                     hc_mult=self.n,
                 )
                 _MHC_FUSED_TILELANG_KERNEL.register_warmup(
-                    aphrodite_config,
+                    sonar_config,
                     hidden_size=self.hidden_size,
                     hc_mult=self.n,
                 )
@@ -672,10 +672,10 @@ class Glm5NextDecoderLayer(nn.Module):
 
 
 class Glm5NextModel(nn.Module, EagleModelMixin):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_text_config
+        config = sonar_config.model_config.hf_text_config
         _validate_supported_config(config)
         self.config = config
 
@@ -685,7 +685,7 @@ class Glm5NextModel(nn.Module, EagleModelMixin):
         self.is_v32 = config.index_topk is not None
         if self.is_v32:
             topk_indices_buffer = torch.empty(
-                aphrodite_config.scheduler_config.max_num_batched_tokens,
+                sonar_config.scheduler_config.max_num_batched_tokens,
                 get_sparse_topk_buffer_width(config),
                 dtype=torch.int32,
                 device=self.device,
@@ -706,7 +706,7 @@ class Glm5NextModel(nn.Module, EagleModelMixin):
         def get_layer(prefix: str):
             layer_idx = int(prefix.rsplit(".", 1)[1])
             return Glm5NextDecoderLayer(
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 config=config,
                 layer_idx=layer_idx,
                 prefix=prefix,
@@ -725,7 +725,7 @@ class Glm5NextModel(nn.Module, EagleModelMixin):
         self.fused_shared_expert_layers = get_fused_shared_expert_layers(
             self,
             Glm5NextMoE,
-            enable_eplb=aphrodite_config.parallel_config.enable_eplb,
+            enable_eplb=sonar_config.parallel_config.enable_eplb,
         )
 
         if get_pp_group().is_last_rank:
@@ -733,7 +733,7 @@ class Glm5NextModel(nn.Module, EagleModelMixin):
         else:
             self.norm = PPMissingLayer()
 
-        self.is_sequence_parallel = aphrodite_config.parallel_config.use_sequence_parallel_moe
+        self.is_sequence_parallel = sonar_config.parallel_config.use_sequence_parallel_moe
 
         world_size = get_tensor_model_parallel_world_size()
         assert config.num_attention_heads % world_size == 0, "num_attention_heads must be divisible by world_size"
@@ -1014,14 +1014,14 @@ class Glm5NextModel(nn.Module, EagleModelMixin):
 
 
 class Glm5NextForCausalLM(nn.Module, HasInnerState, SupportsPP, MixtureOfExperts, IsHybrid, SupportsEagle3):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        self.model_config = aphrodite_config.model_config
-        self.aphrodite_config = aphrodite_config
+        self.model_config = sonar_config.model_config
+        self.sonar_config = sonar_config
         self.config = self.model_config.hf_text_config
-        quant_config = aphrodite_config.quant_config
+        quant_config = sonar_config.quant_config
         self.quant_config = quant_config
-        self.model = Glm5NextModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = Glm5NextModel(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
         if get_pp_group().is_last_rank:
             self.lm_head = ParallelLMHead(
                 self.config.vocab_size,
@@ -1050,24 +1050,22 @@ class Glm5NextForCausalLM(nn.Module, HasInnerState, SupportsPP, MixtureOfExperts
     @classmethod
     def get_mamba_state_dtype_from_config(
         cls,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
     ) -> tuple[torch.dtype, torch.dtype]:
         return MambaStateDtypeCalculator.kda_state_dtype(
-            aphrodite_config.model_config.dtype,
-            aphrodite_config.cache_config.mamba_cache_dtype,
-            aphrodite_config.cache_config.mamba_ssm_cache_dtype,
+            sonar_config.model_config.dtype,
+            sonar_config.cache_config.mamba_cache_dtype,
+            sonar_config.cache_config.mamba_ssm_cache_dtype,
         )
 
     @classmethod
     def get_mamba_state_shape_from_config(
-        cls, aphrodite_config: "AphroditeConfig"
+        cls, sonar_config: "SonarConfig"
     ) -> tuple[tuple[int, int], tuple[int, int, int]]:
-        parallel_config = aphrodite_config.parallel_config
-        hf_config = aphrodite_config.model_config.hf_text_config
+        parallel_config = sonar_config.parallel_config
+        hf_config = sonar_config.model_config.hf_text_config
         tp_size = parallel_config.tensor_parallel_size
-        num_spec = (
-            aphrodite_config.speculative_config.num_speculative_tokens if aphrodite_config.speculative_config else 0
-        )
+        num_spec = sonar_config.speculative_config.num_speculative_tokens if sonar_config.speculative_config else 0
         return MambaStateShapeCalculator.kda_state_shape(
             tp_size,
             hf_config.linear_num_heads,
@@ -1107,7 +1105,7 @@ class Glm5NextForConditionalGeneration(
     SupportsEagle3,
 ):
     # The text model (KDA + dense-MLA + MoE) is a hybrid mamba model. The
-    # multimodal wrapper must declare the same interfaces so Aphrodite treats it as
+    # multimodal wrapper must declare the same interfaces so Sonar treats it as
     # hybrid (auto-aligns mamba/attention block sizes, sizes the mamba state
     # cache); the mamba-state classmethods delegate to the text model.
     has_inner_state: ClassVar[Literal[True]] = True
@@ -1129,19 +1127,19 @@ class Glm5NextForConditionalGeneration(
     # ``language_model.model.``, ``lm_head.`` -> ``language_model.lm_head.``),
     # matching the GLM-OCR / GLM-4V serialization convention. If the real
     # checkpoint's safetensors keys differ (e.g. ``language_model.model.`` with
-    # no outer ``model.``), override ``hf_to_aphrodite_mapper`` accordingly.
+    # no outer ``model.``), override ``hf_to_sonar_mapper`` accordingly.
 
     @classmethod
-    def get_mamba_state_dtype_from_config(cls, aphrodite_config: AphroditeConfig):
+    def get_mamba_state_dtype_from_config(cls, sonar_config: SonarConfig):
         from .model import Glm5NextForCausalLM
 
-        return Glm5NextForCausalLM.get_mamba_state_dtype_from_config(aphrodite_config)
+        return Glm5NextForCausalLM.get_mamba_state_dtype_from_config(sonar_config)
 
     @classmethod
-    def get_mamba_state_shape_from_config(cls, aphrodite_config: AphroditeConfig):
+    def get_mamba_state_shape_from_config(cls, sonar_config: SonarConfig):
         from .model import Glm5NextForCausalLM
 
-        return Glm5NextForCausalLM.get_mamba_state_shape_from_config(aphrodite_config)
+        return Glm5NextForCausalLM.get_mamba_state_shape_from_config(sonar_config)
 
     @classmethod
     def get_mamba_state_copy_func(cls):
@@ -1149,19 +1147,19 @@ class Glm5NextForConditionalGeneration(
 
         return Glm5NextForCausalLM.get_mamba_state_copy_func()
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super(Glm4vForConditionalGeneration, self).__init__()
-        config = aphrodite_config.model_config.hf_config
-        multimodal_config = aphrodite_config.model_config.multimodal_config
+        config = sonar_config.model_config.hf_config
+        multimodal_config = sonar_config.model_config.multimodal_config
         assert multimodal_config is not None
 
         self.config = config
-        self.model_config = aphrodite_config.model_config
+        self.model_config = sonar_config.model_config
         self.multimodal_config = multimodal_config
         self.use_data_parallel = multimodal_config.mm_encoder_tp_mode == "data"
         self.is_multimodal_pruning_enabled = multimodal_config.is_multimodal_pruning_enabled()
 
-        with self._mark_tower_model(aphrodite_config, {"image", "video"}):
+        with self._mark_tower_model(sonar_config, {"image", "video"}):
             self.visual = Glm5NextVisionTransformer(
                 config.text_config,
                 config.vision_config,
@@ -1177,9 +1175,9 @@ class Glm5NextForConditionalGeneration(
                 prefix=maybe_prefix(prefix, "visual"),
             )
 
-        with self._mark_language_model(aphrodite_config):
-            self.language_model = init_aphrodite_registered_model(
-                aphrodite_config=aphrodite_config,
+        with self._mark_language_model(sonar_config):
+            self.language_model = init_sonar_registered_model(
+                sonar_config=sonar_config,
                 hf_config=config.text_config,
                 prefix=maybe_prefix(prefix, "language_model"),
                 architectures=["Glm5NextForCausalLM"],
@@ -1250,7 +1248,7 @@ def _fused_shared_experts_tuned(parallel_config: ParallelConfig) -> bool:
     gfx950, with every expert on each rank and its weights split by TP4 or
     TP8. Data, prefill context and expert parallelism change that split, so
     any other GPU or parallel layout would run untuned fallback kernels."""
-    from aphrodite.platforms.rocm import on_gfx950
+    from sonar.platforms.rocm import on_gfx950
 
     reasons: list[str] = []
     if not on_gfx950():
@@ -1267,7 +1265,7 @@ def _fused_shared_experts_tuned(parallel_config: ParallelConfig) -> bool:
     if not reasons:
         return True
     logger.warning_once(
-        "APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS is ignored for GLM-5.3-Flash: "
+        "SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS is ignored for GLM-5.3-Flash: "
         "%s. AITER has tuned configs for its fused shared-expert MoE only on "
         "gfx950 at TP4 and TP8, without data, prefill context or expert "
         "parallelism. Running the shared experts as a separate MLP.",
@@ -1285,7 +1283,7 @@ def _num_fused_shared_experts(n_shared_experts: int | None, enabled: bool) -> in
         raise NotImplementedError(
             "Fused shared-expert loading supports only 1 shared expert per "
             f"layer, but config.n_shared_experts is {n_shared_experts}. Set "
-            "APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=0 to run the shared "
+            "SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=0 to run the shared "
             "experts as a separate MLP."
         )
     return n_shared_experts

@@ -11,12 +11,12 @@ from typing import TYPE_CHECKING, NamedTuple
 
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.v1.attention.backends.mla.prefill.base import MLADimensions
+from sonar.logger import init_logger
+from sonar.v1.attention.backends.mla.prefill.base import MLADimensions
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
-    from aphrodite.v1.attention.backends.mla.prefill.base import MLAPrefillBackend
+    from sonar.config import SonarConfig
+    from sonar.v1.attention.backends.mla.prefill.base import MLAPrefillBackend
 
 logger = init_logger(__name__)
 
@@ -26,7 +26,7 @@ class MLAPrefillSelectorConfig(NamedTuple):
 
     This is analogous to AttentionSelectorConfig and contains model-specific
     configuration needed to select an MLA prefill backend, extracted from
-    AphroditeConfig into a hashable form for caching.
+    SonarConfig into a hashable form for caching.
     """
 
     dtype: torch.dtype
@@ -41,7 +41,7 @@ class MLAPrefillSelectorConfig(NamedTuple):
 
 
 def get_mla_prefill_backend(
-    aphrodite_config: "AphroditeConfig | None",
+    sonar_config: "SonarConfig | None",
 ) -> "type[MLAPrefillBackend]":
     """Select the MLA prefill backend based on configuration and device.
 
@@ -50,16 +50,16 @@ def get_mla_prefill_backend(
     priority-based selection.
 
     Args:
-        aphrodite_config: The Aphrodite configuration. May be None before model
+        sonar_config: The Sonar configuration. May be None before model
             resolution, in which case defaults are used.
 
     Returns:
         The selected prefill backend class.
 
     """
-    from aphrodite.platforms import current_platform
+    from sonar.platforms import current_platform
 
-    model_config = aphrodite_config.model_config if aphrodite_config is not None else None
+    model_config = sonar_config.model_config if sonar_config is not None else None
     if model_config is None:
         selector_config = MLAPrefillSelectorConfig(dtype=torch.get_default_dtype())
     else:
@@ -78,7 +78,7 @@ def get_mla_prefill_backend(
         # configuration does not apply; always auto-select via the platform.
         return _auto_select_mla_prefill_backend(selector_config)
 
-    attention_config = aphrodite_config.attention_config if aphrodite_config is not None else None
+    attention_config = sonar_config.attention_config if sonar_config is not None else None
     if attention_config is not None and attention_config.mla_prefill_backend is not None:
         selected_backend = attention_config.mla_prefill_backend
         backend_cls: type[MLAPrefillBackend] | None = None
@@ -117,7 +117,7 @@ def _auto_select_mla_prefill_backend(
         ValueError: If the platform has no valid MLA prefill backend.
 
     """
-    from aphrodite.platforms import current_platform
+    from sonar.platforms import current_platform
 
     selected_backend = current_platform.get_mla_prefill_backend_cls(selector_config)
     logger.info_once("Using %s MLA prefill backend.", selected_backend.get_name())

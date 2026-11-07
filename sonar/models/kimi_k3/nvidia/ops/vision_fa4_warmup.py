@@ -11,11 +11,11 @@ from functools import partial
 
 import torch
 
-from aphrodite.model_executor.warmup.cutedsl_warmup import (
+from sonar.model_executor.warmup.cutedsl_warmup import (
     CuTeDSLCompileUnit,
     register_cutedsl_warmup_provider,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 _FA4_TILE_SIZE = 128
 _FA4_MAX_SPLITS = 128
@@ -138,7 +138,7 @@ def _compile(
     config: KimiK3VisionFA4WarmupConfig,
     probe: _FA4WarmupProbe,
 ) -> None:
-    from aphrodite.vllm_flash_attn import flash_attn_varlen_func
+    from sonar.vllm_flash_attn import flash_attn_varlen_func
 
     device = current_platform.current_device()
     total_tokens = probe.batch_size * probe.max_seqlen

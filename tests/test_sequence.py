@@ -3,7 +3,7 @@
 
 import torch
 
-from aphrodite.sequence import IntermediateTensors
+from sonar.sequence import IntermediateTensors
 
 
 def test_sequence_intermediate_tensors_equal():

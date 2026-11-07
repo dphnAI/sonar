@@ -9,18 +9,18 @@ from typing import Any, ClassVar, NamedTuple, cast
 import numpy as np
 import torch
 
-from aphrodite.config import get_current_aphrodite_config_or_none
-from aphrodite.config.cache import CacheDType
-from aphrodite.platforms import current_platform
-from aphrodite.platforms.interface import DeviceCapability
-from aphrodite.v1.attention.backend import AttentionCGSupport, AttentionType, MultipleOf
-from aphrodite.v1.attention.backends.flash_attn import (
+from sonar.config import get_current_sonar_config_or_none
+from sonar.config.cache import CacheDType
+from sonar.platforms import current_platform
+from sonar.platforms.interface import DeviceCapability
+from sonar.v1.attention.backend import AttentionCGSupport, AttentionType, MultipleOf
+from sonar.v1.attention.backends.flash_attn import (
     FlashAttentionBackend,
     FlashAttentionImpl,
     FlashAttentionMetadataBuilder,
 )
-from aphrodite.v1.kv_cache_interface import AttentionSpec, is_quantized_kv_cache
-from aphrodite.v1.kv_cache_layout import KVCacheLayout
+from sonar.v1.kv_cache_interface import AttentionSpec, is_quantized_kv_cache
+from sonar.v1.kv_cache_layout import KVCacheLayout
 
 from ..common.ops.summary_update import build_prefill_groups
 from .ops.attention_gate import headwise_sigmoid_gate
@@ -169,9 +169,9 @@ class Step5DSAMetadataBuilder(FlashAttentionMetadataBuilder):
     supports_update_block_table = False
 
     @classmethod
-    def get_cudagraph_support(cls, aphrodite_config, kv_cache_spec):
+    def get_cudagraph_support(cls, sonar_config, kv_cache_spec):
         # MTP verify batches take the multi-token decode path.
-        if aphrodite_config.speculative_config is not None:
+        if sonar_config.speculative_config is not None:
             return AttentionCGSupport.UNIFORM_BATCH
         return cls._cudagraph_support
 
@@ -187,7 +187,7 @@ class Step5DSAMetadataBuilder(FlashAttentionMetadataBuilder):
     def _layer(self):
         if not self.layer_names:
             return None
-        context = self.aphrodite_config.compilation_config.static_forward_context
+        context = self.sonar_config.compilation_config.static_forward_context
         return context.get(self.layer_names[0])
 
     def _plan_prefill(self, metadata, common) -> None:
@@ -224,7 +224,7 @@ class Step5DSAMetadataBuilder(FlashAttentionMetadataBuilder):
                 impl.num_heads // spec.num_kv_heads,
                 spec.head_size,
                 spec.num_kv_heads,
-                cast(torch.dtype, self.aphrodite_config.model_config.dtype),
+                cast(torch.dtype, self.sonar_config.model_config.dtype),
                 is_quantized_kv_cache(impl.kv_cache_dtype),
                 spec.block_size,
                 kv_page_stride(layer.kv_cache),
@@ -269,7 +269,7 @@ class Step5DSAAttentionImpl(Step5SplitKVFlashAttentionImpl):
             **kwargs,
         )
         self.kv_cache_dtype = kv_cache_dtype
-        config = get_current_aphrodite_config_or_none()
+        config = get_current_sonar_config_or_none()
         capability = current_platform.get_device_capability()
         if capability is None or not Step5DSAAttentionBackend.supports_compute_capability(capability):
             raise NotImplementedError("Step5 DSA requires SM90, SM100 or SM103")

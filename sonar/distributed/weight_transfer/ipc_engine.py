@@ -10,10 +10,10 @@ import pybase64 as base64
 import torch
 from torch.multiprocessing.reductions import rebuild_cuda_tensor, reduce_tensor
 
-from aphrodite import envs
-from aphrodite.config.weight_transfer import WeightTransferConfig
-from aphrodite.distributed.weight_transfer.base import (
-    AphroditeWeightSyncClient,
+from sonar import envs
+from sonar.config.weight_transfer import WeightTransferConfig
+from sonar.distributed.weight_transfer.base import (
+    SonarWeightSyncClient,
     TrainerInitInfo,
     TrainerWeightTransferEngine,
     WeightSource,
@@ -23,8 +23,8 @@ from aphrodite.distributed.weight_transfer.base import (
 )
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
-from aphrodite.distributed.weight_transfer.packed_tensor import (
+    from sonar.config import SonarConfig
+from sonar.distributed.weight_transfer.packed_tensor import (
     DEFAULT_PACKED_BUFFER_SIZE_BYTES,
     PackedBufferImporter,
     packed_ipc_consumer,
@@ -81,9 +81,9 @@ class IPCWeightTransferUpdateInfo(WeightTransferUpdateInfo):
             if self.ipc_handles is not None:
                 raise ValueError("Cannot specify both `ipc_handles` and `ipc_handles_pickled`")
 
-            if not envs.APHRODITE_ALLOW_INSECURE_SERIALIZATION:
+            if not envs.SONAR_ALLOW_INSECURE_SERIALIZATION:
                 raise ValueError(
-                    "Refusing to deserialize `ipc_handles_pickled` without APHRODITE_ALLOW_INSECURE_SERIALIZATION=1"
+                    "Refusing to deserialize `ipc_handles_pickled` without SONAR_ALLOW_INSECURE_SERIALIZATION=1"
                 )
 
             self.ipc_handles = pickle.loads(base64.b64decode(self.ipc_handles_pickled))
@@ -126,11 +126,11 @@ class IPCWeightTransferEngine(WeightTransferEngine[IPCWeightTransferInitInfo, IP
     def __init__(
         self,
         config: WeightTransferConfig,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
         device: torch.device,
         model: torch.nn.Module,
     ) -> None:
-        super().__init__(config, aphrodite_config, device, model)
+        super().__init__(config, sonar_config, device, model)
         # Set from the trainer-supplied init info at the handshake; defaults are
         # only for the (unreachable) receive-before-init case.
         self.packed = False
@@ -151,13 +151,13 @@ class IPCWeightTransferEngine(WeightTransferEngine[IPCWeightTransferInitInfo, IP
 
     def start_weight_update(self) -> None:
         """Begin reloading the incoming checkpoint weights."""
-        from aphrodite.model_executor.model_loader.reload import start_reload
+        from sonar.model_executor.model_loader.reload import start_reload
 
         start_reload(self.model)
 
     def finish_weight_update(self) -> None:
         """Finish reloading after all weights have been received."""
-        from aphrodite.model_executor.model_loader.reload import finish_reload
+        from sonar.model_executor.model_loader.reload import finish_reload
 
         finish_reload(self.model, self.model_config, self.device)
         # Every reduce_tensor call is a fresh export with its own refcount
@@ -225,7 +225,7 @@ class IPCWeightTransferEngine(WeightTransferEngine[IPCWeightTransferInitInfo, IP
                 weight = rebuild_cuda_tensor(*list_args)
                 weights.append((name, weight))
 
-        from aphrodite.model_executor.model_loader.mtp_validation import (
+        from sonar.model_executor.model_loader.mtp_validation import (
             disable_mtp_completeness_check,
         )
 
@@ -256,7 +256,7 @@ class IPCTrainerWeightTransferEngine(TrainerWeightTransferEngine[IPCTrainerInitI
     def __init__(
         self,
         *,
-        client: AphroditeWeightSyncClient,
+        client: SonarWeightSyncClient,
         source: WeightSource,
         is_sender: bool = True,
         packed: bool = False,
@@ -273,7 +273,7 @@ class IPCTrainerWeightTransferEngine(TrainerWeightTransferEngine[IPCTrainerInitI
         cls,
         init_info: IPCTrainerInitInfo,
         *,
-        client: AphroditeWeightSyncClient,
+        client: SonarWeightSyncClient,
         source: WeightSource | None = None,
     ) -> Self:
         if source is None:
@@ -434,7 +434,7 @@ class IPCTrainerWeightTransferEngine(TrainerWeightTransferEngine[IPCTrainerInitI
         ships (non-sender ranks already contributed to the handle all-gather).
 
         Emits raw `ipc_handles`; transports that cannot carry them natively
-        (HTTP/JSON) pickle them in their client (see `HTTPAphroditeWeightSyncClient`).
+        (HTTP/JSON) pickle them in their client (see `HTTPSonarWeightSyncClient`).
         """
         if not self.is_sender:
             return

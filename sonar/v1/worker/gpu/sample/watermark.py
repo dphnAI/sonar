@@ -3,29 +3,29 @@
 
 import torch
 
-from aphrodite.triton_utils import HAS_TRITON, tl, triton
-from aphrodite.v1.watermarking.prfs.philox import (
+from sonar.triton_utils import HAS_TRITON, tl, triton
+from sonar.v1.watermarking.prfs.philox import (
     _CONTEXT_DOMAIN as _CONTEXT_DOMAIN_VALUE,
 )
-from aphrodite.v1.watermarking.prfs.philox import (
+from sonar.v1.watermarking.prfs.philox import (
     _PHILOX_M0 as _PHILOX_M0_VALUE,
 )
-from aphrodite.v1.watermarking.prfs.philox import (
+from sonar.v1.watermarking.prfs.philox import (
     _PHILOX_M1 as _PHILOX_M1_VALUE,
 )
-from aphrodite.v1.watermarking.prfs.philox import (
+from sonar.v1.watermarking.prfs.philox import (
     _PHILOX_W0 as _PHILOX_W0_VALUE,
 )
-from aphrodite.v1.watermarking.prfs.philox import (
+from sonar.v1.watermarking.prfs.philox import (
     _PHILOX_W1 as _PHILOX_W1_VALUE,
 )
-from aphrodite.v1.watermarking.prfs.philox import (
+from sonar.v1.watermarking.prfs.philox import (
     _TOKEN_DOMAIN as _TOKEN_DOMAIN_VALUE,
 )
-from aphrodite.v1.watermarking.prfs.philox import (
+from sonar.v1.watermarking.prfs.philox import (
     _UINT32_MASK as _UINT32_MASK_VALUE,
 )
-from aphrodite.v1.worker.gpu.sample.gumbel import gumbel_noised_argmax, spec_step_seed
+from sonar.v1.worker.gpu.sample.gumbel import gumbel_noised_argmax, spec_step_seed
 
 _UINT32_MASK = tl.constexpr(_UINT32_MASK_VALUE) if HAS_TRITON else _UINT32_MASK_VALUE
 _PHILOX_M0 = tl.constexpr(_PHILOX_M0_VALUE) if HAS_TRITON else _PHILOX_M0_VALUE

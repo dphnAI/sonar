@@ -17,8 +17,8 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from aphrodite.logger import init_logger
-from aphrodite.vllm_flash_attn import flash_attn_varlen_func, is_fa_version_supported
+from sonar.logger import init_logger
+from sonar.vllm_flash_attn import flash_attn_varlen_func, is_fa_version_supported
 
 logger = init_logger(__name__)
 

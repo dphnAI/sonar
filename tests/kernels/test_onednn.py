@@ -4,8 +4,8 @@
 import pytest
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.platforms import current_platform
+from sonar import _custom_ops as ops
+from sonar.platforms import current_platform
 from tests.kernels.utils import to_int8
 
 if not current_platform.is_cpu():

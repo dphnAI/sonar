@@ -44,13 +44,13 @@ from transformers.models.qwen2_5_omni.processing_qwen2_5_omni import (
 from transformers.models.whisper import WhisperFeatureExtractor
 from typing_extensions import TypeVar
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.multimodal import MultiModalDummyOptions
-from aphrodite.forward_context import set_forward_context
-from aphrodite.inputs import ModalityData, MultiModalDataDict
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.models.module_mapping import MultiModelKeys
-from aphrodite.model_executor.models.qwen2_5_vl import (
+from sonar.config import SonarConfig
+from sonar.config.multimodal import MultiModalDummyOptions
+from sonar.forward_context import set_forward_context
+from sonar.inputs import ModalityData, MultiModalDataDict
+from sonar.logger import init_logger
+from sonar.model_executor.models.module_mapping import MultiModelKeys
+from sonar.model_executor.models.qwen2_5_vl import (
     Qwen2_5_VisionTransformer,
     Qwen2_5_VLImageEmbeddingInputs,
     Qwen2_5_VLImageInputs,
@@ -60,33 +60,33 @@ from aphrodite.model_executor.models.qwen2_5_vl import (
     Qwen2_5_VLVideoInputs,
     Qwen2_5_VLVideoPixelInputs,
 )
-from aphrodite.model_executor.models.qwen2_audio import (
+from sonar.model_executor.models.qwen2_audio import (
     Qwen2AudioProcessingInfo,
     _get_feat_extract_output_lengths,
 )
-from aphrodite.model_executor.models.qwen2_vl import (
+from sonar.model_executor.models.qwen2_vl import (
     Qwen2VLMultiModalDataParser,
     Qwen2VLProcessingInfo,
 )
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import (
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import (
     ImageItem,
     MultiModalFeatureSpec,
     MultiModalFieldConfig,
     MultiModalKwargsItems,
     VideoItem,
 )
-from aphrodite.multimodal.parse import (
+from sonar.multimodal.parse import (
     AudioProcessorItems,
     DictEmbeddingItems,
     ModalityDataItems,
     MultiModalDataItems,
 )
-from aphrodite.multimodal.processing import (
+from sonar.multimodal.processing import (
     BaseDummyInputsBuilder,
     BaseProcessingInfo,
 )
-from aphrodite.multimodal.processing.processor import (
+from sonar.multimodal.processing.processor import (
     BaseMultiModalProcessor,
     HFMultiModalInputs,
     MultiModalProcessingResult,
@@ -96,10 +96,10 @@ from aphrodite.multimodal.processing.processor import (
     PromptUpdate,
     PromptUpdateDetails,
 )
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.utils.gpu_sync_debug import gpu_sync_allowed
-from aphrodite.utils.tensor_schema import TensorSchema, TensorShape
-from aphrodite.utils.torch_utils import async_tensor_h2d
+from sonar.sequence import IntermediateTensors
+from sonar.utils.gpu_sync_debug import gpu_sync_allowed
+from sonar.utils.tensor_schema import TensorSchema, TensorShape
+from sonar.utils.torch_utils import async_tensor_h2d
 
 from .interfaces import (
     MultiModalEmbeddings,
@@ -111,7 +111,7 @@ from .interfaces import (
 from .utils import (
     AutoWeightsLoader,
     WeightsMapper,
-    init_aphrodite_registered_model,
+    init_sonar_registered_model,
     maybe_prefix,
     split_list_into_ranges,
 )
@@ -218,7 +218,7 @@ def merge_interleaved_embeddings(
         to their correct positions.
 
     """
-    from aphrodite.multimodal.utils import get_mm_embedding_modalities
+    from sonar.multimodal.utils import get_mm_embedding_modalities
 
     def _merge_embedding_group(
         mask: torch.Tensor,
@@ -854,7 +854,7 @@ class Qwen2_5OmniThinkerMultiModalProcessor(BaseMultiModalProcessor[_I]):
 class Qwen2_5OmniConditionalGenerationMixin:
     audio_tower: nn.Module
     visual: nn.Module
-    aphrodite_config: AphroditeConfig
+    sonar_config: SonarConfig
 
     def _parse_and_validate_audio_input(self, **kwargs: object) -> Qwen2_5OmniAudioFeatureInputs | None:
         input_audio_features = kwargs.pop("input_audio_features", None)
@@ -962,7 +962,7 @@ class Qwen2_5OmniConditionalGenerationMixin:
             image_embeds = image_input["image_embeds"].type(self.visual.dtype)
         else:
             pixel_values = image_input["pixel_values"].type(self.visual.dtype)
-            with set_forward_context(None, self.aphrodite_config):
+            with set_forward_context(None, self.sonar_config):
                 image_embeds = self.visual(pixel_values, grid_thw=grid_thw)
         # Split concatenated embeddings for each image item.
         merge_size = self.visual.spatial_merge_size
@@ -981,7 +981,7 @@ class Qwen2_5OmniConditionalGenerationMixin:
             video_embeds = video_input["video_embeds"].type(self.visual.dtype)
         else:
             pixel_values_videos = video_input["pixel_values_videos"].type(self.visual.dtype)
-            with set_forward_context(None, self.aphrodite_config):
+            with set_forward_context(None, self.sonar_config):
                 video_embeds = self.visual(pixel_values_videos, grid_thw=grid_thw)
         # Split concatenated embeddings for each video item.
         merge_size = self.visual.spatial_merge_size
@@ -1003,7 +1003,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(
     SupportsMRoPE,
     Qwen2_5OmniConditionalGenerationMixin,
 ):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={
             "thinker.lm_head.": "language_model.lm_head.",
             "thinker.model.": "language_model.model.",
@@ -1040,12 +1040,12 @@ class Qwen2_5OmniThinkerForConditionalGeneration(
 
         raise ValueError("Only image, video or audio modality is supported")
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        self.aphrodite_config = aphrodite_config
-        thinker_config: Qwen2_5OmniThinkerConfig = aphrodite_config.model_config.hf_config.thinker_config
-        quant_config = aphrodite_config.quant_config
-        multimodal_config = aphrodite_config.model_config.multimodal_config
+        self.sonar_config = sonar_config
+        thinker_config: Qwen2_5OmniThinkerConfig = sonar_config.model_config.hf_config.thinker_config
+        quant_config = sonar_config.quant_config
+        multimodal_config = sonar_config.model_config.multimodal_config
         self.config = thinker_config
         self.multimodal_config = multimodal_config
         self.quant_config = quant_config
@@ -1063,10 +1063,10 @@ class Qwen2_5OmniThinkerForConditionalGeneration(
                 "in the audio tower part."
             )
 
-        with self._mark_tower_model(aphrodite_config, "audio"):
+        with self._mark_tower_model(sonar_config, "audio"):
             self.audio_tower = Qwen2_5OmniAudioEncoder(thinker_config.audio_config)
 
-        with self._mark_tower_model(aphrodite_config, {"image", "video"}):
+        with self._mark_tower_model(sonar_config, {"image", "video"}):
             self.visual = Qwen2_5_VisionTransformer(
                 vision_config=thinker_config.vision_config,
                 norm_eps=getattr(thinker_config.text_config, "rms_norm_eps", 1e-6),
@@ -1074,9 +1074,9 @@ class Qwen2_5OmniThinkerForConditionalGeneration(
                 prefix=maybe_prefix(prefix, "visual"),
             )
 
-        with self._mark_language_model(aphrodite_config):
-            self.language_model = init_aphrodite_registered_model(
-                aphrodite_config=aphrodite_config,
+        with self._mark_language_model(sonar_config):
+            self.language_model = init_sonar_registered_model(
+                sonar_config=sonar_config,
                 prefix=maybe_prefix(prefix, "language_model"),
                 hf_config=thinker_config.text_config,
                 architectures=["Qwen2ForCausalLM"],
@@ -1434,7 +1434,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
     def get_mm_mapping(self) -> MultiModelKeys:
         """Get the module prefix in multimodal models"""

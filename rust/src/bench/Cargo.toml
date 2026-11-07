@@ -1,8 +1,8 @@
 [package]
-name = "aphrodite-bench"
+name = "sonar-bench"
 version.workspace = true
 edition.workspace = true
-description = "High-performance benchmark client for Aphrodite serving endpoints"
+description = "High-performance benchmark client for Sonar serving endpoints"
 license.workspace = true
 
 [dependencies]
@@ -35,13 +35,13 @@ tokio-stream.workspace = true
 tracing.workspace = true
 url.workspace = true
 uuid.workspace = true
-aphrodite-build-info.workspace = true
-aphrodite-chat.workspace = true
-aphrodite-engine-core-client.workspace = true
-aphrodite-llm.workspace = true
-aphrodite-managed-engine.workspace = true
-aphrodite-text.workspace = true
-aphrodite-tracing.workspace = true
+sonar-build-info.workspace = true
+sonar-chat.workspace = true
+sonar-engine-core-client.workspace = true
+sonar-llm.workspace = true
+sonar-managed-engine.workspace = true
+sonar-text.workspace = true
+sonar-tracing.workspace = true
 
 [lints]
 workspace = true

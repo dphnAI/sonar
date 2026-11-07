@@ -26,8 +26,8 @@ import torch
 from flydsl.expr import const_expr, range_constexpr
 from flydsl.expr.typing import Int32, Int64
 
-from aphrodite.models.kimi_k3.amd.specialized_decode.mono.attention import back as k2a
-from aphrodite.models.kimi_k3.amd.specialized_decode.mono.attention.kda import (
+from sonar.models.kimi_k3.amd.specialized_decode.mono.attention import back as k2a
+from sonar.models.kimi_k3.amd.specialized_decode.mono.attention.kda import (
     _SOURCES,
     COLS,
     HIDDEN,
@@ -37,16 +37,16 @@ from aphrodite.models.kimi_k3.amd.specialized_decode.mono.attention.kda import (
     stage_slice,
     step_tag,
 )
-from aphrodite.models.kimi_k3.amd.specialized_decode.mono.common.debug import (
+from sonar.models.kimi_k3.amd.specialized_decode.mono.common.debug import (
     region_ids,
 )
-from aphrodite.models.kimi_k3.amd.specialized_decode.mono.common.ops import (
+from sonar.models.kimi_k3.amd.specialized_decode.mono.common.ops import (
     ld_i32,
     load_ptr64,
     traced,
     uniform,
 )
-from aphrodite.models.kimi_k3.amd.specialized_decode.mono.common.plan import (
+from sonar.models.kimi_k3.amd.specialized_decode.mono.common.plan import (
     BLOCKS,
     THREADS,
     WAVES,
@@ -54,17 +54,17 @@ from aphrodite.models.kimi_k3.amd.specialized_decode.mono.common.plan import (
     key_tuple,
     pair_layout,
 )
-from aphrodite.models.kimi_k3.amd.specialized_decode.mono.common.ranks import peer_bases
-from aphrodite.models.kimi_k3.amd.specialized_decode.mono.common.sync import (
+from sonar.models.kimi_k3.amd.specialized_decode.mono.common.ranks import peer_bases
+from sonar.models.kimi_k3.amd.specialized_decode.mono.common.sync import (
     Mailbox,
     preg,
     shift,
     sreg,
     stall,
 )
-from aphrodite.models.kimi_k3.amd.specialized_decode.mono.stages import gemv as gemv
-from aphrodite.models.kimi_k3.amd.specialized_decode.mono.stages import moe as k2b
-from aphrodite.v1.attention.ops.flydsl_kernels import _run_compiled
+from sonar.models.kimi_k3.amd.specialized_decode.mono.stages import gemv as gemv
+from sonar.models.kimi_k3.amd.specialized_decode.mono.stages import moe as k2b
+from sonar.v1.attention.ops.flydsl_kernels import _run_compiled
 
 O0, O1 = NA, BLOCKS  # o_proj CTAs: every CTA past AttnRes's
 O_N = O1 - O0  # 200

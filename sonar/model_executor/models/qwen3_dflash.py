@@ -10,41 +10,41 @@ import torch.nn.functional as F
 from torch import nn
 from transformers import Qwen3Config
 
-from aphrodite import _custom_ops as ops
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, CacheConfig, get_current_aphrodite_config
-from aphrodite.distributed import (
+from sonar import _custom_ops as ops
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import CacheConfig, SonarConfig, get_current_sonar_config
+from sonar.distributed import (
     get_dcp_group,
     get_tensor_model_parallel_world_size,
 )
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.attention import Attention
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     QKVParallelLinear,
     ReplicatedLinear,
     RowParallelLinear,
     UnquantizedLinearMethod,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization.base_config import QuantizationConfig
-from aphrodite.model_executor.layers.quantization.modelopt import ModelOptMxFp8Config
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization.base_config import QuantizationConfig
+from sonar.model_executor.layers.quantization.modelopt import ModelOptMxFp8Config
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.model_loader.weight_utils import make_attention_sink
-from aphrodite.model_executor.utils import (
+from sonar.model_executor.model_loader.weight_utils import make_attention_sink
+from sonar.model_executor.utils import (
     weights_already_processed,
 )
-from aphrodite.multimodal.inputs import NestedTensors
-from aphrodite.platforms import current_platform
-from aphrodite.transformers_utils.config import set_default_rope_theta
-from aphrodite.transformers_utils.repo_utils import get_hf_file_bytes
-from aphrodite.v1.attention.backend import AttentionType
-from aphrodite.v1.worker.gpu.spec_decode.dflash.config import DFlashSpeculatorConfig
-from aphrodite.v1.worker.gpu.spec_decode.eagle.eagle3_utils import (
+from sonar.multimodal.inputs import NestedTensors
+from sonar.platforms import current_platform
+from sonar.transformers_utils.config import set_default_rope_theta
+from sonar.transformers_utils.repo_utils import get_hf_file_bytes
+from sonar.v1.attention.backend import AttentionType
+from sonar.v1.worker.gpu.spec_decode.dflash.config import DFlashSpeculatorConfig
+from sonar.v1.worker.gpu.spec_decode.eagle.eagle3_utils import (
     get_eagle3_aux_layers_from_config,
 )
 
@@ -105,8 +105,8 @@ def _reads_raw_weights(projs: list[nn.Module]) -> bool:
     return not current_platform.is_cpu() and all(isinstance(p.quant_method, UnquantizedLinearMethod) for p in projs)
 
 
-def _get_dflash_fc_input_size(aphrodite_config: AphroditeConfig) -> int:
-    spec_config = aphrodite_config.speculative_config
+def _get_dflash_fc_input_size(sonar_config: SonarConfig) -> int:
+    spec_config = sonar_config.speculative_config
     assert spec_config is not None
     config = spec_config.draft_model_config.hf_config
     aux_layers = get_eagle3_aux_layers_from_config(spec_config)
@@ -146,11 +146,11 @@ def _resolve_layer_attention(config: Qwen3Config, layer_idx: int) -> tuple[int |
         num_sliding = sum(lt == _SLIDING_ATTENTION for lt in layer_types)
         any_sliding = num_sliding > 0
         # Mixed sliding/full attention needs multiple KV groups (V2 runner only).
-        if 0 < num_sliding < len(layer_types) and not get_current_aphrodite_config().use_v2_model_runner:
+        if 0 < num_sliding < len(layer_types) and not get_current_sonar_config().use_v2_model_runner:
             raise NotImplementedError(
                 "DFlash drafters with mixed sliding/full attention require "
                 "the V2 model runner; relaunch with "
-                "APHRODITE_USE_V2_MODEL_RUNNER=1."
+                "SONAR_USE_V2_MODEL_RUNNER=1."
             )
 
     # ``use_swa`` forces SWA on every layer, even an all-full ``layer_types``.
@@ -173,7 +173,7 @@ def _resolve_layer_attention(config: Qwen3Config, layer_idx: int) -> tuple[int |
 
 def dcp_kv_head_replicas(total_num_kv_heads: int) -> int:
     """Return the draft-cache KV-head replication factor required by DCP."""
-    parallel_config = get_current_aphrodite_config().parallel_config
+    parallel_config = get_current_sonar_config().parallel_config
     dcp_size = parallel_config.decode_context_parallel_size
     tp_size = parallel_config.tensor_parallel_size
     if dcp_size > 1 and total_num_kv_heads >= tp_size:
@@ -272,8 +272,8 @@ class DFlashQwen3Attention(nn.Module):
         )
         self.causal = causal
         if current_platform.is_rocm():
-            from aphrodite.platforms.rocm import on_gfx1x
-            from aphrodite.v1.attention.backends.rocm_segmented_attn import (
+            from sonar.platforms.rocm import on_gfx1x
+            from sonar.v1.attention.backends.rocm_segmented_attn import (
                 RocmSegmentedAttentionImpl,
             )
 
@@ -281,7 +281,7 @@ class DFlashQwen3Attention(nn.Module):
                 # Startup segmented tuning needs the draft's actual attention mode.
                 # Causality is normally supplied later through attention metadata.
                 self.attn.segmented_causal = causal
-                speculative_config = get_current_aphrodite_config().speculative_config
+                speculative_config = get_current_sonar_config().speculative_config
                 if speculative_config is not None and speculative_config.num_speculative_tokens is not None:
                     self.attn.segmented_query_limit = speculative_config.num_speculative_tokens + 1
         self.q_norm = RMSNorm(self.head_dim, eps=rms_norm_eps)
@@ -316,7 +316,7 @@ class DFlashQwen3Attention(nn.Module):
 class DFlashQwen3DecoderLayer(nn.Module):
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         *,
         config: Qwen3Config,
         layer_idx: int,
@@ -403,7 +403,7 @@ class DFlashQwen3DecoderLayer(nn.Module):
 class DFlashQwen3Model(nn.Module):
     decoder_layer_cls = DFlashQwen3DecoderLayer
 
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_regex={
             # Match a complete module name, including bare names and trailing
             # wildcards in quantization configs, but not e.g. midlayer_extra.
@@ -429,21 +429,21 @@ class DFlashQwen3Model(nn.Module):
     def __init__(
         self,
         *,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         start_layer_id: int = 0,
         prefix: str = "",
     ) -> None:
         super().__init__()
-        speculative_config = aphrodite_config.speculative_config
+        speculative_config = sonar_config.speculative_config
         assert speculative_config is not None
         self.config = speculative_config.draft_model_config.hf_config
         self.vocab_size = self.config.vocab_size
-        self.quant_config = get_draft_quant_config(aphrodite_config)
+        self.quant_config = get_draft_quant_config(sonar_config)
         if self.quant_config is not None and self.quant_config_mapper is not None:
-            self.quant_config.apply_aphrodite_mapper(self.quant_config_mapper)
+            self.quant_config.apply_sonar_mapper(self.quant_config_mapper)
         map_draft_quant_config(
             self.quant_config,
-            self.hf_to_aphrodite_mapper,
+            self.hf_to_sonar_mapper,
             prefix,
             start_layer_id,
             self.config.num_hidden_layers,
@@ -457,7 +457,7 @@ class DFlashQwen3Model(nn.Module):
             getattr(self.config, "use_aux_hidden_state", True),
         )
 
-        current_aphrodite_config = get_current_aphrodite_config()
+        current_sonar_config = get_current_sonar_config()
 
         self.embed_tokens = VocabParallelEmbedding(
             self.config.vocab_size,
@@ -472,7 +472,7 @@ class DFlashQwen3Model(nn.Module):
         # and substitute it for embed_tokens[mask_token_id] when computing embeddings.
         self.mask_token_id = drafter_config.get("mask_token_id", getattr(self.config, "mask_token_id", None))
         self.mask_embedding = nn.Parameter(
-            torch.zeros(self.config.hidden_size, dtype=aphrodite_config.model_config.dtype),
+            torch.zeros(self.config.hidden_size, dtype=sonar_config.model_config.dtype),
             requires_grad=False,
         )
         self.has_separate_mask_embedding = False
@@ -480,10 +480,10 @@ class DFlashQwen3Model(nn.Module):
         self.layers = nn.ModuleList(
             [
                 self.decoder_layer_cls(
-                    current_aphrodite_config,
+                    current_sonar_config,
                     config=self.config,
                     layer_idx=layer_idx,
-                    cache_config=current_aphrodite_config.cache_config,
+                    cache_config=current_sonar_config.cache_config,
                     quant_config=self.quant_config,
                     prefix=maybe_prefix(prefix, f"layers.{layer_idx + start_layer_id}"),
                 )
@@ -493,11 +493,11 @@ class DFlashQwen3Model(nn.Module):
         if self.use_aux_hidden_state:
             self.fc = ReplicatedLinear(
                 input_size=_get_dflash_fc_input_size(
-                    aphrodite_config,
+                    sonar_config,
                 ),
                 output_size=self.config.hidden_size,
                 bias=False,
-                params_dtype=aphrodite_config.model_config.dtype,
+                params_dtype=sonar_config.model_config.dtype,
                 quant_config=self.quant_config,
                 prefix=maybe_prefix(prefix, "fc"),
                 return_bias=False,
@@ -712,7 +712,7 @@ class DFlashQwen3Model(nn.Module):
         Since the context shape is different than the query shape, we can't rely on the
         regular forward pass to apply torch.compile and CUDA graphs to this section.
         As such, this function is optimized to minimize the number of torch ops present:
-        we use fused Aphrodite kernels for RMSNorm and RoPE, fuse the GEMM into one
+        we use fused Sonar kernels for RMSNorm and RoPE, fuse the GEMM into one
         large projection, and avoid cloning buffers (with .contiguous()) where possible.
 
         When context_slot_mapping is None (e.g. during dummy_run) only
@@ -807,14 +807,14 @@ class DFlashQwen3Model(nn.Module):
         if proj is not None:
             weights = self._tee_context_kv(weights)
         loader = AutoWeightsLoader(self)
-        loaded = loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        loaded = loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
         if proj is not None:
             loaded |= {f"_context_kv_proj.{name}" for name, _ in proj.named_parameters()}
         return loaded
 
     def _tee_context_kv(self, weights: Iterable[tuple[str, torch.Tensor]]) -> Iterable[tuple[str, torch.Tensor]]:
         for name, weight in weights:
-            mapped = self.hf_to_aphrodite_mapper._map_name_with_shard(name)
+            mapped = self.hf_to_sonar_mapper._map_name_with_shard(name)
             if mapped is not None and mapped[1] in ("k", "v"):
                 match = _QKV_PARAM.match(mapped[0])
                 if match is not None:
@@ -828,17 +828,17 @@ class DFlashQwen3ForCausalLM(Qwen3ForCausalLM):
 
     model_cls = DFlashQwen3Model
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         nn.Module.__init__(self)
-        speculative_config = aphrodite_config.speculative_config
+        speculative_config = sonar_config.speculative_config
         assert speculative_config is not None
         self.draft_model_config = speculative_config.draft_model_config
         self.config = self.draft_model_config.hf_config
         if getattr(self.config, "draft_vocab_size", None) is None:
             self.config.draft_vocab_size = getattr(self.config, "vocab_size", None)
-        target_layer_num = aphrodite_config.model_config.get_total_num_hidden_layers()
+        target_layer_num = sonar_config.model_config.get_total_num_hidden_layers()
         self.model = self.model_cls(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             prefix=maybe_prefix(prefix, "model"),
             start_layer_id=target_layer_num,
         )
@@ -848,7 +848,7 @@ class DFlashQwen3ForCausalLM(Qwen3ForCausalLM):
             self.config.draft_vocab_size,
             self.config.hidden_size,
             quant_config=(
-                get_draft_quant_config(aphrodite_config) if getattr(self.config, "has_own_lm_head", False) else None
+                get_draft_quant_config(sonar_config) if getattr(self.config, "has_own_lm_head", False) else None
             ),
             prefix=maybe_prefix(prefix, "lm_head"),
         )
@@ -857,7 +857,7 @@ class DFlashQwen3ForCausalLM(Qwen3ForCausalLM):
             scale=logit_scale,
             soft_cap=getattr(self.config, "final_logit_softcapping", None),
         )
-        target_vocab_size = aphrodite_config.model_config.get_vocab_size()
+        target_vocab_size = sonar_config.model_config.get_vocab_size()
         if self.config.draft_vocab_size != target_vocab_size:
             self.draft_id_to_target_id = nn.Parameter(
                 torch.zeros(self.config.draft_vocab_size, dtype=torch.long),

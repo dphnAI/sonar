@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Numerics of the DeepSeek-V4.1 mono decode kernels at TP2 on CDNA4 against the
-ops Aphrodite runs for the same decode step: random weights in the checkpoint's
-formats, the step's KV caches as Aphrodite's insert writes them.
+ops Sonar runs for the same decode step: random weights in the checkpoint's
+formats, the step's KV caches as Sonar's insert writes them.
 
 - The whole layer (K1 + K2) against the mHC seams, the ROCm attention op chain,
   the TP all-reduce and ``DeepseekV4MoE``.
@@ -20,7 +20,7 @@ import pytest
 import ray
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 from ..utils import (
     ensure_model_parallel_initialized,
@@ -40,7 +40,7 @@ HC = 4
 def _on_cdna4() -> bool:
     if not current_platform.is_rocm():
         return False
-    from aphrodite.platforms.rocm import get_cdna_version
+    from sonar.platforms.rocm import get_cdna_version
 
     return get_cdna_version() == 4
 
@@ -48,7 +48,7 @@ def _on_cdna4() -> bool:
 def _on_gfx942() -> bool:
     if not current_platform.is_rocm():
         return False
-    from aphrodite.platforms.rocm import on_gfx942
+    from sonar.platforms.rocm import on_gfx942
 
     return on_gfx942()
 
@@ -70,7 +70,7 @@ def _rel(a: torch.Tensor, b: torch.Tensor) -> float:
 
 def _paged_cache(num_blocks: int, block: int, device) -> torch.Tensor:
     """[blocks, block, 584] u8 over pages of round_up(block * 584, 576) bytes,
-    the way Aphrodite binds a packed V4 cache."""
+    the way Sonar binds a packed V4 cache."""
     page = -(-block * RECORD // ALIGN) * ALIGN
     raw = torch.zeros(num_blocks * page, dtype=torch.uint8, device=device)
     return torch.as_strided(raw, (num_blocks, block, RECORD), (page, RECORD, 1))
@@ -89,8 +89,8 @@ def _rope(kv: torch.Tensor, positions: torch.Tensor, cos_sin: torch.Tensor):
 
 def _write_records(cache, block: int, slots, kv, fnuz: bool = False):
     """fp8_ds_mla records of roped bf16 kv rows at ``slots``: the 448 nope dims
-    in e4m3 with a UE8M0 per 64, the rope dims in bf16, as Aphrodite's insert.
-    ``fnuz``: the e4m3 bytes in FNUZ with a maximum of 224, as Aphrodite's gfx942
+    in e4m3 with a UE8M0 per 64, the rope dims in bf16, as Sonar's insert.
+    ``fnuz``: the e4m3 bytes in FNUZ with a maximum of 224, as Sonar's gfx942
     window cache holds them. In FNUZ the OCP -0 byte would be NaN."""
     fp8, fp8_max = torch.float8_e4m3fn, 448.0
     if fnuz:
@@ -128,9 +128,9 @@ def _normed_kv(n: int, kv_norm, g, device):
 
 def _decode_step(ratio: int, R: int, T: int, kv_norm, cos_sin, seed: int, fnuz: bool = False):
     """R requests x T tokens past random contexts: the step's metadata as
-    Aphrodite's builders lay it out, its window rows and (ratio > 0) the compressed
+    Sonar's builders lay it out, its window rows and (ratio > 0) the compressed
     cache filled, a random top-512 a token. ``fnuz``: the window records in
-    FNUZ, as on gfx942. The compressed records stay OCP, as Aphrodite's Triton
+    FNUZ, as on gfx942. The compressed records stay OCP, as Sonar's Triton
     compressor writes them on gfx942 too."""
     g = torch.Generator().manual_seed(seed)
     dev = kv_norm.device
@@ -260,15 +260,15 @@ def _random_moe(moe, gd, gr, inter: int) -> None:
 
 @ray.remote(num_gpus=1, max_calls=1)
 def _mono_numerics(monkeypatch, tp_size, pp_size, rank, distributed_init_port):
-    from aphrodite._aiter_ops import rocm_aiter_ops
-    from aphrodite.v1.worker.workspace import init_workspace_manager
+    from sonar._aiter_ops import rocm_aiter_ops
+    from sonar.v1.worker.workspace import init_workspace_manager
 
     with monkeypatch.context() as m:
         m.delenv("CUDA_VISIBLE_DEVICES", raising=False)
         # the checkpoint's MXFP4 experts run on AITER's MoE; its flags are read
         # at import, so refresh them
-        m.setenv("APHRODITE_ROCM_USE_AITER", "1")
-        m.setenv("APHRODITE_ROCM_USE_AITER_MOE", "1")
+        m.setenv("SONAR_ROCM_USE_AITER", "1")
+        m.setenv("SONAR_ROCM_USE_AITER_MOE", "1")
         rocm_aiter_ops.refresh_env_variables()
         device = torch.device(f"cuda:{rank}")
         torch.accelerator.set_device_index(device)
@@ -279,33 +279,33 @@ def _mono_numerics(monkeypatch, tp_size, pp_size, rank, distributed_init_port):
 
 
 def _check_layers(rank: int, tp: int, device) -> None:
-    from aphrodite._aiter_ops import rocm_aiter_ops
-    from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-    from aphrodite.distributed import get_tp_group, tensor_model_parallel_all_reduce
-    from aphrodite.engine.arg_utils import EngineArgs
-    from aphrodite.forward_context import set_forward_context
-    from aphrodite.model_executor.kernels.linear.mxfp8.rocm_block32_gemm import (
+    from sonar._aiter_ops import rocm_aiter_ops
+    from sonar.config import SonarConfig, set_current_sonar_config
+    from sonar.distributed import get_tp_group, tensor_model_parallel_all_reduce
+    from sonar.engine.arg_utils import EngineArgs
+    from sonar.forward_context import set_forward_context
+    from sonar.model_executor.kernels.linear.mxfp8.rocm_block32_gemm import (
         rocm_mxfp8_block32_gemm,
     )
-    from aphrodite.model_executor.layers.mhc import MHCPreDelayedOp
-    from aphrodite.model_executor.layers.quantization.utils.mxfp8_utils import (
+    from sonar.model_executor.layers.mhc import MHCPreDelayedOp
+    from sonar.model_executor.layers.quantization.utils.mxfp8_utils import (
         mxfp8_e4m3_quantize,
     )
-    from aphrodite.model_executor.model_loader.utils import process_weights_after_loading
-    from aphrodite.models.common.ops import fused_q_kv_rmsnorm
-    from aphrodite.models.deepseek_v41.amd.model import DeepseekV4MoE
-    from aphrodite.models.deepseek_v41.amd.mono.layer import scratch_layout
-    from aphrodite.models.deepseek_v41.amd.mono.runner import (
+    from sonar.model_executor.model_loader.utils import process_weights_after_loading
+    from sonar.models.common.ops import fused_q_kv_rmsnorm
+    from sonar.models.deepseek_v41.amd.model import DeepseekV4MoE
+    from sonar.models.deepseek_v41.amd.mono.layer import scratch_layout
+    from sonar.models.deepseek_v41.amd.mono.runner import (
         AttnWeights,
         DSV41MonoLayer,
         MonoLayerWeights,
     )
-    from aphrodite.models.deepseek_v41.amd.rocm import (
+    from sonar.models.deepseek_v41.amd.rocm import (
         compute_global_topk_ragged_indices_and_indptr,
     )
-    from aphrodite.models.deepseek_v41.common.rope import build_deepseek_v4_rope
-    from aphrodite.utils.torch_utils import set_default_torch_dtype
-    from aphrodite.v1.attention.ops.rocm_aiter_mla_sparse import (
+    from sonar.models.deepseek_v41.common.rope import build_deepseek_v4_rope
+    from sonar.utils.torch_utils import set_default_torch_dtype
+    from sonar.v1.attention.ops.rocm_aiter_mla_sparse import (
         build_ragged_indices_from_dense,
         rocm_inverse_rope_mxfp8_rows,
     )
@@ -327,7 +327,7 @@ def _check_layers(rank: int, tp: int, device) -> None:
     H, G = N_HEADS // tp, O_GROUPS // tp
     bf = torch.bfloat16
 
-    with set_current_aphrodite_config(vc), set_default_torch_dtype(bf), device:
+    with set_current_sonar_config(vc), set_default_torch_dtype(bf), device:
         moe = DeepseekV4MoE(vc, prefix="model.layers.21.ffn")
         mhc = MHCPreDelayedOp()
     _random_moe(
@@ -378,13 +378,13 @@ def _check_layers(rank: int, tp: int, device) -> None:
     gw, bias = moe.gate.weight.float(), moe.gate.e_score_correction_bias.float()
 
     def top6(x):
-        """The top-6 experts as Aphrodite routes: sqrt(softplus(logits)) + bias."""
+        """The top-6 experts as Sonar routes: sqrt(softplus(logits)) + bias."""
         sc = torch.nn.functional.softplus(x.float() @ gw.T).sqrt() + bias
         return sc.topk(6, dim=1).indices.sort(1).values
 
     steps = []  # each case's launches, on fixed buffers, for the replay stress
     for ratio, R, T in ((1, 1, 6), (2, 8, 6)):
-        with set_current_aphrodite_config(AphroditeConfig()):
+        with set_current_sonar_config(SonarConfig()):
             rope = build_deepseek_v4_rope(
                 cfg, head_dim=HEAD_DIM, rope_head_dim=ROPE,
                 max_position_embeddings=cfg.max_position_embeddings,
@@ -424,7 +424,7 @@ def _check_layers(rank: int, tp: int, device) -> None:
         post0 = (torch.sigmoid(torch.randn(M, HC, 1, generator=gi)) * 2).to(device)
         pre0 = (torch.sigmoid(torch.randn(M, HC, generator=gi)) + 1e-6).to(device)
 
-        # Aphrodite's decode chain
+        # Sonar's decode chain
         res, post, comb, xa, attn_pre = seam("attn", res0, x0, post0, comb0, pre0)
         swa_ind, swa_ptr = build_ragged_indices_from_dense(s["swa_indices"].reshape(M, -1), s["swa_lens"])
         top_ind = top_ptr = None
@@ -454,7 +454,7 @@ def _check_layers(rank: int, tp: int, device) -> None:
         a8 = torch.empty(M, H * HEAD_DIM, dtype=torch.float8_e4m3fn, device=device)
         a_s = torch.empty(M, H * HEAD_DIM // 32, dtype=torch.uint8, device=device)
         rocm_inverse_rope_mxfp8_rows(attn, s["positions"], cos_sin, ROPE, a8, a_s)
-        z = torch.ops.aphrodite.rocm_dsv41_mxfp8_wo_a_bmm(a8, a_s, wo_a, wo_a_s, G, O_RANK)
+        z = torch.ops.sonar.rocm_dsv41_mxfp8_wo_a_bmm(a8, a_s, wo_a, wo_a_s, G, O_RANK)
         z8, zs = mxfp8_e4m3_quantize(z)
         part = rocm_mxfp8_block32_gemm(z8, zs, wo_b, wo_b_s, bf).contiguous()
         a = tensor_model_parallel_all_reduce(part.clone())
@@ -538,7 +538,7 @@ def _check_layers(rank: int, tp: int, device) -> None:
 
 @pytest.mark.skipif(not _on_cdna4(), reason="the mono kernels target CDNA4")
 @pytest.mark.parametrize("tp", [2, 4, 8])
-def test_mono_decode_layer_matches_aphrodite(monkeypatch: pytest.MonkeyPatch, tp: int):
+def test_mono_decode_layer_matches_sonar(monkeypatch: pytest.MonkeyPatch, tp: int):
     if torch.accelerator.device_count() < tp:
         pytest.skip(f"needs {tp} GPUs")
     pytest.importorskip("flydsl")
@@ -550,13 +550,13 @@ def test_mono_decode_layer_matches_aphrodite(monkeypatch: pytest.MonkeyPatch, tp
 
 @ray.remote(num_gpus=1, max_calls=1)
 def _mono_replay_942(monkeypatch, tp_size, pp_size, rank, distributed_init_port):
-    from aphrodite._aiter_ops import rocm_aiter_ops
-    from aphrodite.v1.worker.workspace import init_workspace_manager
+    from sonar._aiter_ops import rocm_aiter_ops
+    from sonar.v1.worker.workspace import init_workspace_manager
 
     with monkeypatch.context() as m:
         m.delenv("CUDA_VISIBLE_DEVICES", raising=False)
-        m.setenv("APHRODITE_ROCM_USE_AITER", "1")
-        m.setenv("APHRODITE_ROCM_USE_AITER_MOE", "1")
+        m.setenv("SONAR_ROCM_USE_AITER", "1")
+        m.setenv("SONAR_ROCM_USE_AITER_MOE", "1")
         rocm_aiter_ops.refresh_env_variables()
         device = torch.device(f"cuda:{rank}")
         torch.accelerator.set_device_index(device)
@@ -573,21 +573,21 @@ def _replay_942(rank: int, tp: int, device) -> None:
     the gfx942 kernels take). The padded pass must leave the real rows alone,
     and the steps alternating in one CUDA graph must give the first run's
     outputs bit for bit at every replay."""
-    from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-    from aphrodite.distributed import get_tp_group
-    from aphrodite.engine.arg_utils import EngineArgs
-    from aphrodite.model_executor.model_loader.utils import process_weights_after_loading
-    from aphrodite.models.deepseek_v41.amd import mono_decode
-    from aphrodite.models.deepseek_v41.amd.model import DeepseekV4MoE
-    from aphrodite.models.deepseek_v41.amd.mono.attention.plan import Dims
-    from aphrodite.models.deepseek_v41.amd.mono.runner import (
+    from sonar.config import SonarConfig, set_current_sonar_config
+    from sonar.distributed import get_tp_group
+    from sonar.engine.arg_utils import EngineArgs
+    from sonar.model_executor.model_loader.utils import process_weights_after_loading
+    from sonar.models.deepseek_v41.amd import mono_decode
+    from sonar.models.deepseek_v41.amd.model import DeepseekV4MoE
+    from sonar.models.deepseek_v41.amd.mono.attention.plan import Dims
+    from sonar.models.deepseek_v41.amd.mono.runner import (
         AttnWeights,
         DSV41MonoLayer,
         MonoLayerWeights,
     )
-    from aphrodite.models.deepseek_v41.amd.mono.weights942 import linear_copy
-    from aphrodite.models.deepseek_v41.common.rope import build_deepseek_v4_rope
-    from aphrodite.utils.torch_utils import set_default_torch_dtype
+    from sonar.models.deepseek_v41.amd.mono.weights942 import linear_copy
+    from sonar.models.deepseek_v41.common.rope import build_deepseek_v4_rope
+    from sonar.utils.torch_utils import set_default_torch_dtype
 
     vc = EngineArgs(
         model=MODEL,
@@ -605,13 +605,13 @@ def _replay_942(rank: int, tp: int, device) -> None:
     H, G = N_HEADS // tp, O_GROUPS // tp
     bf = torch.bfloat16
 
-    with set_current_aphrodite_config(vc), set_default_torch_dtype(bf), device:
+    with set_current_sonar_config(vc), set_default_torch_dtype(bf), device:
         moe = DeepseekV4MoE(vc, prefix="model.layers.21.ffn")
     e, sh = moe.experts.routed_experts, moe.shared_experts
     # The hooks that the model sets at load (mono_decode._copy_942_at_load).
-    # The routed experts are copied from the plain tensors before Aphrodite's MoE
+    # The routed experts are copied from the plain tensors before Sonar's MoE
     # backend converts them, and the shared expert from the bf16 weights that
-    # Aphrodite dequantizes at load.
+    # Sonar dequantizes at load.
     mono_decode._capture_plain_experts(e)
     for lin in (sh.gate_up_proj, sh.down_proj):
         mono_decode._copy_linear_at_load(lin)
@@ -627,7 +627,7 @@ def _replay_942(rank: int, tp: int, device) -> None:
         return (torch.randn(*shape, generator=gen) * s).to(device)
 
     def attn_copy(n: int, k: int, gen):
-        """A random MXFP8 attention linear as Aphrodite keeps it on gfx942, bf16
+        """A random MXFP8 attention linear as Sonar keeps it on gfx942, bf16
         values with each 32 x 32 block's code repeated over the block's 32
         rows, and its copy for the kernels, as the load hook makes it."""
         w8, s = _mxfp8(n, k, gen, device)
@@ -685,7 +685,7 @@ def _replay_942(rank: int, tp: int, device) -> None:
 
     steps = []  # each case's launches, on fixed buffers, for the replay stress
     for ratio, R, T in ((1, 1, 6), (0, 8, 1), (2, 7, 6)):
-        with set_current_aphrodite_config(AphroditeConfig()):
+        with set_current_sonar_config(SonarConfig()):
             rope = build_deepseek_v4_rope(
                 cfg, head_dim=HEAD_DIM, rope_head_dim=ROPE,
                 max_position_embeddings=cfg.max_position_embeddings,

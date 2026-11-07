@@ -1,20 +1,20 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Aphrodite chat-protocol extensions for grounded (citation-carrying) models.
+"""Sonar chat-protocol extensions for grounded (citation-carrying) models.
 
 This module keeps the OpenAI chat completion protocol classes
 (:class:`ChatMessage` / :class:`DeltaMessage`) free of Cohere-specific fields.
 It provides two things:
 
-* :class:`Citation` / :class:`CitationSource`: the Aphrodite-internal citation
+* :class:`Citation` / :class:`CitationSource`: the Sonar-internal citation
   representation produced by the Cohere parser
-  (:mod:`aphrodite.parser.cohere_command`) and consumed by
-  :mod:`aphrodite.entrypoints.cohere.serving`. This is *not* the on-wire Cohere
+  (:mod:`sonar.parser.cohere_command`) and consumed by
+  :mod:`sonar.entrypoints.cohere.serving`. This is *not* the on-wire Cohere
   SDK shape -- that conversion happens in the serving layer.
 * :class:`CohereChatMessage` / :class:`CohereDeltaMessage`: :class:`ChatMessage`
   / :class:`DeltaMessage` subclasses that add a ``citations`` field. They
   are only instantiated by the citation-aware serving handler
-  (:class:`aphrodite.entrypoints.cohere.serving.CohereServingChatV2`) and by the
+  (:class:`sonar.entrypoints.cohere.serving.CohereServingChatV2`) and by the
   Cohere reasoning parser's streaming path. Non-Cohere code paths continue
   to construct plain :class:`ChatMessage` / :class:`DeltaMessage`.
 
@@ -29,9 +29,9 @@ from typing import Any, Literal
 
 from pydantic import Field, model_serializer
 
-from aphrodite.entrypoints.generate.base.protocol import DeltaMessage
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatMessage
-from aphrodite.entrypoints.serve.engine.protocol import OpenAIBaseModel
+from sonar.entrypoints.generate.base.protocol import DeltaMessage
+from sonar.entrypoints.openai.chat_completion.protocol import ChatMessage
+from sonar.entrypoints.serve.engine.protocol import OpenAIBaseModel
 
 
 class CitationSource(OpenAIBaseModel):
@@ -43,11 +43,11 @@ class CitationSource(OpenAIBaseModel):
     the original payload that produced the citation.
 
     Sources are fully resolved by the parser at emit time
-    (see :func:`_melody_sources_to_aphrodite` in
-    :mod:`aphrodite.parser.cohere_command`) using the
+    (see :func:`_melody_sources_to_sonar` in
+    :mod:`sonar.parser.cohere_command`) using the
     ``POSITION_TO_SOURCE_KEY`` map forwarded through
     ``chat_template_kwargs`` by
-    :meth:`aphrodite.entrypoints.cohere.serving.CohereServingChatV2._apply_cohere_template_kwargs`.
+    :meth:`sonar.entrypoints.cohere.serving.CohereServingChatV2._apply_cohere_template_kwargs`.
     That means every instance that reaches the serving / wire layer
     already has ``type`` / ``id`` populated; the serving layer only has
     to coerce to :class:`cohere.types.Citation` and rewrite
@@ -63,10 +63,10 @@ class CitationSource(OpenAIBaseModel):
 class Citation(OpenAIBaseModel):
     """A citation grounding a span of generated text in source material.
 
-    Aphrodite-internal representation used by the Cohere reasoning parser and
+    Sonar-internal representation used by the Cohere reasoning parser and
     the Cohere v2 serving layer. This is not the on-wire Cohere SDK shape:
     conversion to the SDK's ``cohere.types.Citation`` happens in
-    :mod:`aphrodite.entrypoints.cohere.serving`.
+    :mod:`sonar.entrypoints.cohere.serving`.
     """
 
     start: int | None = None
@@ -110,7 +110,7 @@ class CohereChatMessage(ChatMessage):
         # ``super()._serialize(handler)`` to preserve the parent's
         # cleanup (e.g. stripping empty ``tool_calls``). Then we drop an
         # unset ``citations`` field so the wire matches the OpenAI-style
-        # contract that optional Aphrodite extensions are omitted rather than
+        # contract that optional Sonar extensions are omitted rather than
         # serialized as ``null``.
         data = super()._serialize(handler)
         if not data.get("citations"):
@@ -121,7 +121,7 @@ class CohereChatMessage(ChatMessage):
 class CohereDeltaMessage(DeltaMessage):
     """:class:`DeltaMessage` extension carrying grounding citations for streaming.
 
-    Emitted by :class:`aphrodite.parser.cohere_command.CohereCommandParser`
+    Emitted by :class:`sonar.parser.cohere_command.CohereCommandParser`
     on delta events whose payload includes citations. Non-Cohere parsers
     return plain :class:`DeltaMessage`, so their streamed shape is
     unchanged.

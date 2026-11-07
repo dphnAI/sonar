@@ -18,12 +18,12 @@ import torch
 import torch.distributed as dist
 from packaging.version import Version
 
-import aphrodite.envs as envs
-from aphrodite.config import AphroditeConfig, CompilationMode, CUDAGraphMode
-from aphrodite.distributed import get_tp_group
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
+import sonar.envs as envs
+from sonar.config import CompilationMode, CUDAGraphMode, SonarConfig
+from sonar.distributed import get_tp_group
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
 
 from ..ops.mhc import supports_mhc_all_reduce, supports_mhc_overlap
 
@@ -73,16 +73,16 @@ def uses_checked_flashinfer(feature: str) -> bool:
     return False
 
 
-def unsupported(aphrodite_config: AphroditeConfig) -> list[str]:
+def unsupported(sonar_config: SonarConfig) -> list[str]:
     """Every requirement of the specialized decode this deployment misses."""
-    parallel = aphrodite_config.parallel_config
-    attention = aphrodite_config.attention_config
-    spec = aphrodite_config.speculative_config
-    compilation = aphrodite_config.compilation_config
+    parallel = sonar_config.parallel_config
+    attention = sonar_config.attention_config
+    spec = sonar_config.speculative_config
+    compilation = sonar_config.compilation_config
     cudagraph_mode = compilation.cudagraph_mode
     requirements = {
         "a GB300 (SM103) GPU": current_platform.is_device_capability(103),
-        "Model Runner V2": aphrodite_config.use_v2_model_runner,
+        "Model Runner V2": sonar_config.use_v2_model_runner,
         "tensor parallel size 4 without pipeline, data, expert or context parallelism or micro-batching": (
             parallel.tensor_parallel_size == 4
             and parallel.pipeline_parallel_size == 1
@@ -97,7 +97,7 @@ def unsupported(aphrodite_config: AphroditeConfig) -> list[str]:
         ),
         "the FLASHINFER_MLA_SPARSE_DSV41 attention backend, an fp8 KV cache and the MXFP4 indexer with sparse logits": (
             attention.backend == AttentionBackendEnum.FLASHINFER_MLA_SPARSE_DSV41
-            and aphrodite_config.cache_config.cache_dtype in ("fp8", "fp8_e4m3")
+            and sonar_config.cache_config.cache_dtype in ("fp8", "fp8_e4m3")
             and attention.indexer_kv_dtype == "mxfp4"
             and attention.indexer_sparse_logits
         ),
@@ -109,32 +109,32 @@ def unsupported(aphrodite_config: AphroditeConfig) -> list[str]:
         # The decode loop runs in forward; a compiled forward would trace it.
         "no torch.compile of the model": (compilation.mode != CompilationMode.STOCK_TORCH_COMPILE),
         # The routed-expert GEMMs and the publishing wo_b bind weight addresses.
-        "no sleep mode": not aphrodite_config.model_config.enable_sleep_mode,
+        "no sleep mode": not sonar_config.model_config.enable_sleep_mode,
         "no LoRA, KV transfer or batch invariance": (
-            aphrodite_config.lora_config is None
-            and aphrodite_config.kv_transfer_config is None
-            and not envs.APHRODITE_BATCH_INVARIANT
+            sonar_config.lora_config is None
+            and sonar_config.kv_transfer_config is None
+            and not envs.SONAR_BATCH_INVARIANT
         ),
         "DeepGEMM and NVLink multicast for the fused all-reduce + mHC": (
-            supports_mhc_overlap(aphrodite_config) and supports_mhc_all_reduce(aphrodite_config)
+            supports_mhc_overlap(sonar_config) and supports_mhc_all_reduce(sonar_config)
         ),
     }
     return [need for need, ok in requirements.items() if not ok]
 
 
-def specialized_decode_config(aphrodite_config: AphroditeConfig) -> DecodeConfig | None:
+def specialized_decode_config(sonar_config: SonarConfig) -> DecodeConfig | None:
     """The specialized decode settings, or None for the stock decode.
 
     Collective over the TP group when requested: every rank raises if any rank
     cannot run the specialized decode.
     """
-    extra = aphrodite_config.additional_config
+    extra = sonar_config.additional_config
     backend = extra.get("decode_backend", "auto") if isinstance(extra, dict) else "auto"
     if backend == "auto":
         return None
     if backend != "latency_specialized":
         raise ValueError("Supported decode_backend values are auto/latency_specialized")
-    missing = unsupported(aphrodite_config)
+    missing = unsupported(sonar_config)
     supported = torch.tensor([0 if missing else 1], dtype=torch.int32)
     # The NVLink multicast check is rank-local (the custom all-reduce catches a
     # failed setup on each rank), and ranks that disagree would hang.
@@ -146,7 +146,7 @@ def specialized_decode_config(aphrodite_config: AphroditeConfig) -> DecodeConfig
         "DeepSeek-V4.1 specialized decode on, for FULL-graph decode steps of up to %d rows.",
         FUSED_MHC_MAX_ROWS,
     )
-    kernel = aphrodite_config.kernel_config
+    kernel = sonar_config.kernel_config
     return DecodeConfig(
         autotune=kernel.enable_flashinfer_autotune is not False,
         jit_warmup=bool(kernel.enable_jit_warmup),

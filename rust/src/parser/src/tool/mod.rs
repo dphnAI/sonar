@@ -25,7 +25,6 @@ use crate::utils;
 use std::collections::{BTreeMap, btree_map};
 use std::sync::Once;
 
-use aphrodite_tokenizer::{DecodedText, DynTokenizer};
 pub use deepseek_dsml::{DeepSeekV4ToolParser, DeepSeekV32ToolParser, DeepSeekV41ToolParser};
 pub use deepseek_json::{DeepSeekV3ToolParser, DeepSeekV31ToolParser};
 pub use error::{Result, ToolParserError};
@@ -44,6 +43,7 @@ pub use qwen_coder::Qwen3CoderToolParser;
 pub use seed_oss::SeedOssToolParser;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use sonar_tokenizer::{DecodedText, DynTokenizer};
 pub use step5::Step5ToolParser;
 use tracing::warn;
 use xgrammar_structural_tag::ToolChoice;

@@ -6,16 +6,16 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-import aphrodite._custom_ops as ops
-from aphrodite.model_executor.layers.fused_moe.config import (
+import sonar._custom_ops as ops
+from sonar.model_executor.layers.fused_moe.config import (
     RoutingMethodType,
     get_routing_method_type,
 )
-from aphrodite.model_executor.layers.fused_moe.router.dsv4_topk import dsv4_topk
-from aphrodite.model_executor.layers.fused_moe.router.fused_topk_bias_router import (
+from sonar.model_executor.layers.fused_moe.router.dsv4_topk import dsv4_topk
+from sonar.model_executor.layers.fused_moe.router.fused_topk_bias_router import (
     fused_topk_bias,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 
 def _torch_topk_softplus_sqrt(
@@ -74,19 +74,19 @@ def _torch_topk_softplus_sqrt(
     return topk_weights.to(torch.float32), topk_ids.to(torch.int32)
 
 
-def _dsv4_moe_config(monkeypatch, default_aphrodite_config, has_hash_routing, backend):
+def _dsv4_moe_config(monkeypatch, default_sonar_config, has_hash_routing, backend):
     from dataclasses import replace
 
-    from aphrodite._aiter_ops import rocm_aiter_ops
-    from aphrodite.model_executor.layers.fused_moe.layer import FusedMoEFactory
-    from aphrodite.platforms import rocm
+    from sonar._aiter_ops import rocm_aiter_ops
+    from sonar.model_executor.layers.fused_moe.layer import FusedMoEFactory
+    from sonar.platforms import rocm
 
     # Exercise both native MX and monolithic AITER selection on any ROCm device.
     monkeypatch.setattr(rocm, "on_gfx950", lambda: True)
     monkeypatch.setattr(rocm, "on_gfx1250", lambda: False)
     monkeypatch.setattr(rocm_aiter_ops, "is_enabled", lambda: True)
     monkeypatch.setattr(rocm_aiter_ops, "is_fused_moe_enabled", lambda: True)
-    default_aphrodite_config.kernel_config.moe_backend = "triton"
+    default_sonar_config.kernel_config.moe_backend = "triton"
     layer = FusedMoEFactory(
         num_experts=8,
         top_k=2,
@@ -113,18 +113,18 @@ def _dsv4_moe_config(monkeypatch, default_aphrodite_config, has_hash_routing, ba
 )
 def test_hash_routing_backend_selection(
     dist_init,
-    default_aphrodite_config,
+    default_sonar_config,
     monkeypatch,
     has_hash_routing,
     backend,
     expected_experts,
 ):
     """Hash tables reach backend selection and hash-capable kernels."""
-    from aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 import (
+    from sonar.model_executor.layers.fused_moe.oracle.mxfp4 import (
         select_deepseek_v4_mxfp4_moe_backend,
     )
 
-    layer, config = _dsv4_moe_config(monkeypatch, default_aphrodite_config, has_hash_routing, backend)
+    layer, config = _dsv4_moe_config(monkeypatch, default_sonar_config, has_hash_routing, backend)
     _, experts_cls = select_deepseek_v4_mxfp4_moe_backend(config)
     assert experts_cls is not None
     assert experts_cls.__name__ == expected_experts
@@ -133,12 +133,12 @@ def test_hash_routing_backend_selection(
 
 
 @pytest.mark.skipif(not current_platform.is_rocm(), reason="ROCm backend selection")
-def test_hash_routing_rejects_monolithic_without_support(dist_init, default_aphrodite_config, monkeypatch):
+def test_hash_routing_rejects_monolithic_without_support(dist_init, default_sonar_config, monkeypatch):
     """A monolithic kernel that does not implement hash routing is rejected."""
-    from aphrodite.model_executor.layers.fused_moe.experts.aiter_mxfp4_w4a16_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.aiter_mxfp4_w4a16_moe import (
         AiterW4A16ExpertsMonolithic,
     )
-    from aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 import (
+    from sonar.model_executor.layers.fused_moe.oracle.mxfp4 import (
         select_deepseek_v4_mxfp4_moe_backend,
     )
 
@@ -147,7 +147,7 @@ def test_hash_routing_rejects_monolithic_without_support(dist_init, default_aphr
         "_supports_hash_routing",
         staticmethod(lambda: False),
     )
-    _, config = _dsv4_moe_config(monkeypatch, default_aphrodite_config, True, "aiter_triton_mxfp4_bf16")
+    _, config = _dsv4_moe_config(monkeypatch, default_sonar_config, True, "aiter_triton_mxfp4_bf16")
     with pytest.raises(ValueError, match="hash routing"):
         select_deepseek_v4_mxfp4_moe_backend(config)
 
@@ -162,16 +162,16 @@ def test_hash_routing_rejects_monolithic_without_support(dist_init, default_aphr
     ],
     ids=["naive_ep", "eplb", "all2all"],
 )
-def test_aiter_w4a16_expert_parallel_selection(dist_init, default_aphrodite_config, monkeypatch, ep_config, supported):
+def test_aiter_w4a16_expert_parallel_selection(dist_init, default_sonar_config, monkeypatch, ep_config, supported):
     """Naive EP (no all2all, no EPLB) selects the AITER W4A16 monolithic kernel,
     including on hash-routed layers."""
     from dataclasses import replace
 
-    from aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 import (
+    from sonar.model_executor.layers.fused_moe.oracle.mxfp4 import (
         select_deepseek_v4_mxfp4_moe_backend,
     )
 
-    _, config = _dsv4_moe_config(monkeypatch, default_aphrodite_config, True, "aiter_triton_mxfp4_bf16")
+    _, config = _dsv4_moe_config(monkeypatch, default_sonar_config, True, "aiter_triton_mxfp4_bf16")
     config = replace(config, moe_parallel_config=replace(config.moe_parallel_config, **ep_config))
     if supported:
         _, experts_cls = select_deepseek_v4_mxfp4_moe_backend(config)
@@ -367,7 +367,7 @@ def test_dsv4_fast_topk(
     is_padding = torch.arange(num_tokens, device="cuda") % 2 == 1
     if use_padding:
         monkeypatch.setattr(
-            "aphrodite.model_executor.layers.fused_moe.router.fused_topk_bias_router.get_moe_padding_mask",
+            "sonar.model_executor.layers.fused_moe.router.fused_topk_bias_router.get_moe_padding_mask",
             lambda _: is_padding,
         )
         gating_output[is_padding] = float("nan")

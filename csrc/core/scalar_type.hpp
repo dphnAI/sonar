@@ -9,7 +9,7 @@
 // For STD_TORCH_CHECK
 #include <torch/headeronly/util/Exception.h>
 
-namespace aphrodite {
+namespace sonar {
 
 //
 //  ScalarType can represent a wide range of floating point and integer types,
@@ -17,7 +17,7 @@ namespace aphrodite {
 //  that torch.dtype currently does not support).
 //
 //  The type definitions on the Python side can be found in:
-//  aphrodite/scalar_type.py these type definitions should be kept up to date
+//  sonar/scalar_type.py these type definitions should be kept up to date
 //  with any Python API changes here.
 //
 class ScalarType {
@@ -360,4 +360,4 @@ static inline constexpr auto kFloat16 = kHalf;
 static inline constexpr auto kBFloat16 = kFE8M7;
 
 static inline constexpr auto kFloat16Id = kFloat16.id();
-};  // namespace aphrodite
+};  // namespace sonar

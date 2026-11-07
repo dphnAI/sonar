@@ -4,9 +4,9 @@ import weakref
 
 import pytest
 
-from aphrodite import LLM, PoolingRequestOutput
-from aphrodite.config import PoolerConfig
-from aphrodite.tasks import PoolingTask
+from sonar import LLM, PoolingRequestOutput
+from sonar.config import PoolerConfig
+from sonar.tasks import PoolingTask
 
 MODEL_NAME = "jason9693/Qwen2.5-1.5B-apeach"
 
@@ -16,8 +16,8 @@ num_labels = 2
 
 
 @pytest.fixture(scope="module")
-def llm(aphrodite_runner):
-    with aphrodite_runner(
+def llm(sonar_runner):
+    with sonar_runner(
         MODEL_NAME,
         max_model_len=None,
         pooler_config=PoolerConfig(task="token_classify"),
@@ -29,7 +29,7 @@ def llm(aphrodite_runner):
         enable_chunked_prefill=None,
     ) as runner:
         # pytest caches yielded fixtures until after teardown, so use a proxy to
-        # avoid retaining the LLM while AphroditeRunner.__exit__ releases ROCm memory.
+        # avoid retaining the LLM while SonarRunner.__exit__ releases ROCm memory.
         yield weakref.proxy(runner.llm)
 
 
@@ -59,7 +59,7 @@ def test_score_api(llm: LLM):
 
 
 @pytest.mark.parametrize("task", ["classify", "embed", "token_embed", "plugin"])
-def test_unsupported_tasks(llm: LLM, task: PoolingTask, caplog_aphrodite):
+def test_unsupported_tasks(llm: LLM, task: PoolingTask, caplog_sonar):
     if task == "plugin":
         err_msg = "No IOProcessor plugin installed."
     elif task == "classify":

@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.multimodal.inputs import (
+from sonar.multimodal.inputs import (
     MultiModalBatchedField,
     MultiModalFieldElem,
     MultiModalFlatField,
@@ -17,7 +17,7 @@ from aphrodite.multimodal.inputs import (
     MultiModalSharedField,
     NestedTensors,
 )
-from aphrodite.v1.serial_utils import MsgpackDecoder, MsgpackEncoder
+from sonar.v1.serial_utils import MsgpackDecoder, MsgpackEncoder
 
 pytestmark = pytest.mark.cpu_test
 
@@ -45,7 +45,7 @@ class MyType:
 def test_encode_decode(monkeypatch: pytest.MonkeyPatch):
     """Test encode/decode loop with zero-copy tensors."""
     with monkeypatch.context() as m:
-        m.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
+        m.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")
 
         obj = MyType(
             tensor1=torch.randint(low=0, high=100, size=(1024,), dtype=torch.int32),
@@ -271,7 +271,7 @@ def test_custom_class_serialization_allowed_with_pickle(
 ):
     """Test that serializing a custom class succeeds when allow_pickle=True."""
     with monkeypatch.context() as m:
-        m.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
+        m.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")
         encoder = MsgpackEncoder()
         decoder = MsgpackDecoder(CustomClass)
 
@@ -315,7 +315,7 @@ def test_non_multimodal_tensor_with_ipc():
     """
     import torch.multiprocessing as torch_mp
 
-    from aphrodite.v1.engine.tensor_ipc import TensorIpcReceiver, TensorIpcSender
+    from sonar.v1.engine.tensor_ipc import TensorIpcReceiver, TensorIpcSender
 
     # Create tensor queues for IPC
     tensor_queues = [torch_mp.Queue()]
@@ -354,7 +354,7 @@ def test_non_multimodal_tensor_with_ipc_none_value():
     """Test that None values for tensor fields work correctly with IPC enabled."""
     import torch.multiprocessing as torch_mp
 
-    from aphrodite.v1.engine.tensor_ipc import TensorIpcReceiver, TensorIpcSender
+    from sonar.v1.engine.tensor_ipc import TensorIpcReceiver, TensorIpcSender
 
     # Create tensor queues for IPC
     tensor_queues = [torch_mp.Queue()]
@@ -383,14 +383,14 @@ def test_non_multimodal_tensor_with_ipc_none_value():
 def test_multiple_senders_single_receiver_ipc():
     """Test N senders sharing a queue with a single receiver via msgpack.
 
-    Simulates the real Aphrodite topology where multiple API server frontends
+    Simulates the real Sonar topology where multiple API server frontends
     each have their own MsgpackEncoder + TensorIpcSender, all putting
     tensors onto the same torch.mp queue, and a single engine core
     decodes them with one MsgpackDecoder + TensorIpcReceiver.
     """
     import torch.multiprocessing as torch_mp
 
-    from aphrodite.v1.engine.tensor_ipc import TensorIpcReceiver, TensorIpcSender
+    from sonar.v1.engine.tensor_ipc import TensorIpcReceiver, TensorIpcSender
 
     num_senders = 3
     num_messages_per_sender = 2
@@ -446,8 +446,8 @@ def _logprobs_outputs(num_reqs: int, num_prompt_tokens: int):
     it: many requests, each with per-token tensors small enough that pyzmq
     copies their frames, while the accumulated payload frame is large enough
     that pyzmq sends it zero-copy."""
-    from aphrodite.v1.engine import EngineCoreOutput, EngineCoreOutputs
-    from aphrodite.v1.outputs import LogprobsTensors
+    from sonar.v1.engine import EngineCoreOutput, EngineCoreOutputs
+    from sonar.v1.outputs import LogprobsTensors
 
     outputs = []
     for req in range(num_reqs):
@@ -478,8 +478,8 @@ def test_payload_buffer_reuse_does_not_corrupt_in_flight_messages():
     """
     import zmq
 
-    from aphrodite.v1.engine import EngineCoreOutputs
-    from aphrodite.v1.engine.core import EngineCoreProc
+    from sonar.v1.engine import EngineCoreOutputs
+    from sonar.v1.engine.core import EngineCoreProc
 
     num_msgs = 100
     encoder = MsgpackEncoder()
@@ -538,7 +538,7 @@ def test_zero_copy_frames_survive_without_caller_side_references():
 
     import zmq
 
-    from aphrodite.v1.utils import tensor_data
+    from sonar.v1.utils import tensor_data
 
     num_elems = 100_000  # comfortably over zmq.COPY_THRESHOLD
     expected = torch.arange(num_elems, dtype=torch.int64)

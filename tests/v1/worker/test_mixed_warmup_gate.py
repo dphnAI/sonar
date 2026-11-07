@@ -6,9 +6,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from aphrodite.v1.core.sched.output import SchedulerOutput
-from aphrodite.v1.worker.gpu import warmup
-from aphrodite.v1.worker.gpu.warmup import run_mixed_prefill_decode_warmup
+from sonar.v1.core.sched.output import SchedulerOutput
+from sonar.v1.worker.gpu import warmup
+from sonar.v1.worker.gpu.warmup import run_mixed_prefill_decode_warmup
 
 
 def _fail(*args, **kwargs):
@@ -41,7 +41,7 @@ def test_mixed_warmup_disables_watermarking():
             kv_cache_groups=[SimpleNamespace(kv_cache_spec=SimpleNamespace(block_size=16))],
             num_blocks=128,
         ),
-        aphrodite_config=SimpleNamespace(num_lookahead_tokens=0),
+        sonar_config=SimpleNamespace(num_lookahead_tokens=0),
         max_model_len=128,
         num_speculative_steps=0,
         model_state=SimpleNamespace(max_encoder_len=0),

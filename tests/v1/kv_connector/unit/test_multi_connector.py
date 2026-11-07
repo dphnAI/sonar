@@ -10,32 +10,32 @@ from unittest.mock import MagicMock
 import pytest
 import torch
 
-from aphrodite import LLM, SamplingParams
-from aphrodite.config import KVTransferConfig
-from aphrodite.distributed.kv_transfer.kv_connector.factory import KVConnectorFactory
-from aphrodite.distributed.kv_transfer.kv_connector.v1 import KVConnectorRole
-from aphrodite.distributed.kv_transfer.kv_connector.v1.base import (
+from sonar import LLM, SamplingParams
+from sonar.config import KVTransferConfig
+from sonar.distributed.kv_transfer.kv_connector.factory import KVConnectorFactory
+from sonar.distributed.kv_transfer.kv_connector.v1 import KVConnectorRole
+from sonar.distributed.kv_transfer.kv_connector.v1.base import (
     KVConnectorBase_V1,
     SupportsHMA,
     supports_hma,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.metrics import (
+from sonar.distributed.kv_transfer.kv_connector.v1.metrics import (
     KVConnectorLogging,
     KVConnectorStats,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.multi_connector import (
+from sonar.distributed.kv_transfer.kv_connector.v1.multi_connector import (
     MultiConnector,
     MultiKVConnectorPromMetrics,
     MultiKVConnectorStats,
     MultiKVConnectorWorkerMetadata,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl import (
+from sonar.distributed.kv_transfer.kv_connector.v1.nixl import (
     NixlKVConnectorStats,
 )
-from aphrodite.v1.kv_cache_interface import KVCacheConfig
-from aphrodite.v1.metrics.cache_hit_source import CacheHitSource
-from aphrodite.v1.outputs import KVConnectorOutput, KVConnectorWorkerMetadata
-from tests.v1.kv_connector.unit.utils import create_aphrodite_config, maybe_update_block_size
+from sonar.v1.kv_cache_interface import KVCacheConfig
+from sonar.v1.metrics.cache_hit_source import CacheHitSource
+from sonar.v1.outputs import KVConnectorOutput, KVConnectorWorkerMetadata
+from tests.v1.kv_connector.unit.utils import create_sonar_config, maybe_update_block_size
 
 MODEL_NAME = "meta-llama/Llama-3.2-1B-Instruct"
 
@@ -171,7 +171,7 @@ def mc() -> MultiConnector:
         "kv_connector_module_path": "tests.v1.kv_connector.unit.test_multi_connector",
     }
 
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         kv_connector="MultiConnector",
         kv_connector_extra_config={
             "connectors": [mock_connector_config, mock_connector_config],
@@ -181,7 +181,7 @@ def mc() -> MultiConnector:
     kv_cache_config = KVCacheConfig(num_blocks=0, kv_cache_tensors=[], kv_cache_groups=[])
 
     mc = MultiConnector(
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         role=KVConnectorRole.WORKER,
         kv_cache_config=kv_cache_config,
     )
@@ -486,8 +486,8 @@ def test_multi_connector_handle_preemptions_integration():
     TestExampleConnector sub-connectors and verifies the calls are logged.
     """
     from tests.v1.kv_connector.unit.utils import (
-        create_aphrodite_config,
         create_scheduler,
+        create_sonar_config,
     )
 
     storage_path = Path(tempfile.mkdtemp())
@@ -517,7 +517,7 @@ def test_multi_connector_handle_preemptions_integration():
             ]
         }
 
-        aphrodite_config = create_aphrodite_config(
+        sonar_config = create_sonar_config(
             block_size=16,
             max_num_batched_tokens=100,
             kv_connector="MultiConnector",
@@ -525,7 +525,7 @@ def test_multi_connector_handle_preemptions_integration():
         )
 
         # Create scheduler - this initializes the MultiConnector with SCHEDULER role
-        scheduler = create_scheduler(aphrodite_config, num_blocks=10)
+        scheduler = create_scheduler(sonar_config, num_blocks=10)
 
         # Clear any events from initialization
         get_connector_events()
@@ -823,7 +823,7 @@ class TestMultiConnectorStats:
 
     def test_aggregate_new_connector(self):
         """Test aggregating stats when a new connector type appears."""
-        from aphrodite.distributed.kv_transfer.kv_connector.v1.metrics import (
+        from sonar.distributed.kv_transfer.kv_connector.v1.metrics import (
             KVConnectorStats,
         )
 
@@ -1113,7 +1113,7 @@ def _make_multi_connector(connector_names: list[str]) -> MultiConnector:
         }
         for name in connector_names
     ]
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         kv_connector="MultiConnector",
         kv_connector_extra_config={"connectors": connectors},
     )
@@ -1123,7 +1123,7 @@ def _make_multi_connector(connector_names: list[str]) -> MultiConnector:
         kv_cache_groups=[],
     )
     return MultiConnector(
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         role=KVConnectorRole.WORKER,
         kv_cache_config=kv_cache_config,
     )
@@ -1174,13 +1174,13 @@ def test_multi_connector_mixed_hma_disables_hybrid_kv_cache(monkeypatch):
     """When MultiConnector wraps a mix of HMA (NixlConnector) and non-HMA
     (MockConnector) sub-connectors, verify that:
     1. The scheduler's MultiConnector has _all_support_hma == False.
-    2. Aphrodite auto-disables the hybrid KV cache manager (no preference expressed by user)
+    2. Sonar auto-disables the hybrid KV cache manager (no preference expressed by user)
     """
     from unittest.mock import patch
 
     from tests.v1.kv_connector.unit.test_nixl_connector import FakeNixlWrapper
 
-    monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
+    monkeypatch.setenv("SONAR_ENABLE_V1_MULTIPROCESSING", "0")
 
     kv_transfer_config = KVTransferConfig(
         kv_connector="MultiConnector",
@@ -1201,7 +1201,7 @@ def test_multi_connector_mixed_hma_disables_hybrid_kv_cache(monkeypatch):
     )
 
     with patch(
-        "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
+        "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
         FakeNixlWrapper,
     ):
         llm = LLM(
@@ -1215,7 +1215,7 @@ def test_multi_connector_mixed_hma_disables_hybrid_kv_cache(monkeypatch):
         )
         try:
             # HMA should be auto-disabled when user has not expressed a preference.
-            assert llm.llm_engine.aphrodite_config.scheduler_config.disable_hybrid_kv_cache_manager is True
+            assert llm.llm_engine.sonar_config.scheduler_config.disable_hybrid_kv_cache_manager is True
             # The scheduler-side MultiConnector should detect the mixed
             # HMA support among its sub-connectors.
             scheduler = llm.llm_engine.engine_core.engine_core.scheduler

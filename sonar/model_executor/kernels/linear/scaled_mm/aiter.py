@@ -4,22 +4,22 @@
 
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite._aiter_ops import (
+from sonar import _custom_ops as ops
+from sonar._aiter_ops import (
     rocm_aiter_ops,
 )
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.quantization.input_quant_fp8 import QuantFP8
-from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.quantization.input_quant_fp8 import QuantFP8
+from sonar.model_executor.layers.quantization.utils.fp8_utils import (
     _upcast_e8m0_to_fp32,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     GroupShape,
     QuantKey,
     kFp8DynamicTokenSym,
 )
-from aphrodite.model_executor.utils import replace_parameter
-from aphrodite.platforms import current_platform
+from sonar.model_executor.utils import replace_parameter
+from sonar.platforms import current_platform
 
 from .BlockScaledMMLinearKernel import (
     FP8BlockParams,
@@ -52,9 +52,9 @@ class AiterInt8ScaledMMLinearKernel(CutlassInt8ScaledMMLinearKernel):
         if not rocm_aiter_ops.is_linear_enabled():
             return (
                 False,
-                "requires setting `APHRODITE_ROCM_USE_AITER=1` "
-                "and `APHRODITE_ROCM_USE_AITER_LINEAR=1`. "
-                "`APHRODITE_ROCM_USE_AITER_LINEAR` default is True.",
+                "requires setting `SONAR_ROCM_USE_AITER=1` "
+                "and `SONAR_ROCM_USE_AITER_LINEAR=1`. "
+                "`SONAR_ROCM_USE_AITER_LINEAR` default is True.",
             )
         return True, None
 
@@ -127,9 +127,9 @@ class AiterPreshuffledPerTokenFp8ScaledMMLinearKernel(FP8ScaledMMLinearKernel):
         if not rocm_aiter_ops.is_linear_fp8_enabled():
             return (
                 False,
-                "requires setting `APHRODITE_ROCM_USE_AITER=1` "
-                "and `APHRODITE_ROCM_USE_AITER_LINEAR=1`. "
-                "`APHRODITE_ROCM_USE_AITER_LINEAR` default is True.",
+                "requires setting `SONAR_ROCM_USE_AITER=1` "
+                "and `SONAR_ROCM_USE_AITER_LINEAR=1`. "
+                "`SONAR_ROCM_USE_AITER_LINEAR` default is True.",
             )
         try:
             import aiter  # noqa: F401
@@ -215,9 +215,9 @@ class AiterHipbMMPerTokenFp8ScaledMMLinearKernel(FP8ScaledMMLinearKernel):
         if not rocm_aiter_ops.is_linear_hipbmm_enabled():
             return (
                 False,
-                "requires setting `APHRODITE_ROCM_USE_AITER=1`, "
-                "`APHRODITE_ROCM_USE_AITER_LINEAR=1`, "
-                "and `APHRODITE_ROCM_USE_AITER_LINEAR_HIPBMM=1`.",
+                "requires setting `SONAR_ROCM_USE_AITER=1`, "
+                "`SONAR_ROCM_USE_AITER_LINEAR=1`, "
+                "and `SONAR_ROCM_USE_AITER_LINEAR_HIPBMM=1`.",
             )
         try:
             import aiter  # noqa: F401
@@ -364,7 +364,7 @@ class AiterFp8BlockScaledMMKernel(Fp8BlockScaledMMLinearKernel):
 
         _on_gfx1250 = False
         if current_platform.is_rocm():
-            from aphrodite.platforms.rocm import on_gfx1250
+            from sonar.platforms.rocm import on_gfx1250
 
             _on_gfx1250 = on_gfx1250()
 

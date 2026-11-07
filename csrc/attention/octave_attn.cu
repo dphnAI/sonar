@@ -2,9 +2,9 @@
 // SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 //
 // Octave KV cache kernels, head_size 256 with 64 RoPE dims. Portable across
-// the AMD targets Aphrodite builds (octave_arch.cuh); the WMMA decode tier for
+// the AMD targets Sonar builds (octave_arch.cuh); the WMMA decode tier for
 // gfx11 lives in octave_decode_wmma_rdna3.cu.
-// Format: aphrodite/v1/attention/ops/rocm_octave.py (the PyTorch reference
+// Format: sonar/v1/attention/ops/rocm_octave.py (the PyTorch reference
 // there is the source of truth for the byte layout).
 //
 //   octave_cache_store   quantize + pack K/V into slots (one wave per slot).

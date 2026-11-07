@@ -18,7 +18,7 @@ covered explicitly rather than assumed away.
 import pytest
 import torch
 
-from aphrodite.v1.attention.backends.mla.rocm_aiter_mla import (
+from sonar.v1.attention.backends.mla.rocm_aiter_mla import (
     _expand_page_indices_kernel,
 )
 

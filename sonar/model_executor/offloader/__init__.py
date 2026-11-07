@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Model parameter offloading infrastructure."""
 
-from aphrodite.model_executor.offloader.base import (
+from sonar.model_executor.offloader.base import (
     BaseOffloader,
     NoopOffloader,
     create_offloader,
@@ -10,8 +10,8 @@ from aphrodite.model_executor.offloader.base import (
     set_offloader,
     should_pin_memory,
 )
-from aphrodite.model_executor.offloader.prefetch import PrefetchOffloader
-from aphrodite.model_executor.offloader.uva import UVAOffloader
+from sonar.model_executor.offloader.prefetch import PrefetchOffloader
+from sonar.model_executor.offloader.uva import UVAOffloader
 
 __all__ = [
     "BaseOffloader",

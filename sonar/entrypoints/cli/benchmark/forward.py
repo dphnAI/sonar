@@ -2,13 +2,13 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import argparse
 
-from aphrodite.benchmarks.forward.main import add_cli_args, main
-from aphrodite.entrypoints.cli.benchmark.base import BenchmarkSubcommandBase
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
+from sonar.benchmarks.forward.main import add_cli_args, main
+from sonar.entrypoints.cli.benchmark.base import BenchmarkSubcommandBase
+from sonar.utils.argparse_utils import FlexibleArgumentParser
 
 
 class BenchmarkForwardSubcommand(BenchmarkSubcommandBase):
-    """The `forward` subcommand for `aphrodite bench`."""
+    """The `forward` subcommand for `sonar bench`."""
 
     name = "forward"
     help = "Benchmark the model forward of exact batches as CUDA graphs."

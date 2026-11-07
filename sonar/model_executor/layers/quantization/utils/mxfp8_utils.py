@@ -3,7 +3,7 @@
 
 import torch
 
-from aphrodite.utils.torch_utils import direct_register_custom_op
+from sonar.utils.torch_utils import direct_register_custom_op
 
 # MXFP8 constants
 MXFP8_VALUE_DTYPE = torch.float8_e4m3fn
@@ -89,7 +89,7 @@ def _mxfp8_quant_triton_kernel():
     Fuses what ``_mxfp8_e4m3_quantize_torch`` does in several elementwise passes
     into one launch. Each program handles ``[BLOCK_M, 32]`` (one MX block).
     """
-    from aphrodite.triton_utils import tl, triton
+    from sonar.triton_utils import tl, triton
 
     @triton.jit
     def _kernel(
@@ -150,7 +150,7 @@ def _mxfp8_e4m3_quantize_triton(
     x: torch.Tensor,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Fused 2D MXFP8 quant (non-swizzled, row-major [M, K//32] scales)."""
-    from aphrodite.triton_utils import triton
+    from sonar.triton_utils import triton
 
     global _MXFP8_QUANT_KERNEL
     if _MXFP8_QUANT_KERNEL is None:
@@ -187,8 +187,8 @@ def _mxfp8_e4m3_quantize_impl(
     is_sf_swizzled_layout: bool = False,
     alignment: int = 0,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    from aphrodite.platforms import current_platform
-    from aphrodite.utils.flashinfer import has_flashinfer
+    from sonar.platforms import current_platform
+    from sonar.utils.flashinfer import has_flashinfer
 
     if current_platform.has_device_capability(100) and has_flashinfer():
         from flashinfer import mxfp8_quantize as flashinfer_mxfp8_quantize
@@ -217,7 +217,7 @@ def mxfp8_e4m3_quantize(
     is_sf_swizzled_layout: bool = False,
     alignment: int = 0,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    return torch.ops.aphrodite.mxfp8_quantize(x, is_sf_swizzled_layout, alignment)
+    return torch.ops.sonar.mxfp8_quantize(x, is_sf_swizzled_layout, alignment)
 
 
 def dequant_mxfp8_to_bf16(x: torch.Tensor, scales: torch.Tensor) -> torch.Tensor:
@@ -280,4 +280,4 @@ direct_register_custom_op(
 
 
 def xpu_mxfp8_quantize(x: torch.Tensor, dtype: torch.dtype | None = None) -> tuple[torch.Tensor, torch.Tensor]:
-    return torch.ops.aphrodite.xpu_mxfp8_quantize(x, dtype)
+    return torch.ops.sonar.xpu_mxfp8_quantize(x, dtype)

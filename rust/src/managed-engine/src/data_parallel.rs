@@ -6,7 +6,7 @@ use clap::Args;
 
 use crate::cli::ManagedEngineArgs;
 
-/// Data parallel ranks whose engines one `aphrodite-rs serve` process launches,
+/// Data parallel ranks whose engines one `sonar-rs serve` process launches,
 /// and which of them its frontend connects to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DataParallelTopology {
@@ -49,13 +49,13 @@ impl DataParallelTopology {
     }
 }
 
-/// Data parallel load-balancing arguments of `aphrodite-rs serve`: which ranks this
+/// Data parallel load-balancing arguments of `sonar-rs serve`: which ranks this
 /// node serves and whether its frontend serves only them.
 #[derive(Debug, Clone, Default, Args, PartialEq, Eq)]
 pub struct DataParallelLbArgs {
     /// Rank of the data parallel group served by this process. Implies
     /// `--data-parallel-external-lb`.
-    #[arg(long, env = "APHRODITE_DP_RANK")]
+    #[arg(long, env = "SONAR_DP_RANK")]
     pub data_parallel_rank: Option<u32>,
     /// First data parallel rank on this node. Implies
     /// `--data-parallel-hybrid-lb` unless `--headless` is set.
@@ -76,7 +76,7 @@ pub struct DataParallelLbArgs {
 
 impl DataParallelLbArgs {
     /// Resolve the data parallel ranks of this process from the DP LB flags,
-    /// which keep their `aphrodite serve` meaning.
+    /// which keep their `sonar serve` meaning.
     pub fn resolve(
         &self,
         engine: &ManagedEngineArgs,
@@ -161,7 +161,7 @@ mod tests {
     use super::DataParallelLbArgs;
     use crate::cli::ManagedEngineArgs;
 
-    /// The `aphrodite-rs serve` flags that the topology is resolved from.
+    /// The `sonar-rs serve` flags that the topology is resolved from.
     #[derive(Parser)]
     struct ServeFlags {
         #[command(flatten)]
@@ -173,7 +173,7 @@ mod tests {
     }
 
     #[test]
-    fn resolve_follows_aphrodite_serve_dp_lb_modes() {
+    fn resolve_follows_sonar_serve_dp_lb_modes() {
         let cases: &[&[&str]] = &[
             &["--data-parallel-size", "4"],
             &[
@@ -269,8 +269,7 @@ mod tests {
         let resolved = cases
             .iter()
             .map(|flags| {
-                let parsed =
-                    ServeFlags::try_parse_from(["aphrodite-rs"].iter().chain(*flags)).unwrap();
+                let parsed = ServeFlags::try_parse_from(["sonar-rs"].iter().chain(*flags)).unwrap();
                 let result = match parsed.data_parallel_lb.resolve(&parsed.engine, parsed.headless)
                 {
                     Ok(topology) => format!("{topology:?}"),

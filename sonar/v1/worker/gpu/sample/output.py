@@ -9,8 +9,8 @@ from typing import NamedTuple
 import numpy as np
 import torch
 
-from aphrodite.triton_utils import tl, triton
-from aphrodite.v1.outputs import LogprobsTensors, SamplingMaskLists
+from sonar.triton_utils import tl, triton
+from sonar.v1.outputs import LogprobsTensors, SamplingMaskLists
 
 
 @dataclass

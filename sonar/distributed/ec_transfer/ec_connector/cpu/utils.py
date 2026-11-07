@@ -4,7 +4,7 @@
 
 import msgspec
 
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 # (host, port) pair identifying a remote peer's ZMQ side-channel endpoint.
 PeerAddr = tuple[str, int]

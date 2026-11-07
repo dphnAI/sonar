@@ -4,7 +4,7 @@
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.quantization.utils.mxfp6_online_utils import (
+from sonar.model_executor.layers.quantization.utils.mxfp6_online_utils import (
     dequantize_mxfp6_reference,
     pack_mxfp6_codes,
     quantize_mxfp6_reference,

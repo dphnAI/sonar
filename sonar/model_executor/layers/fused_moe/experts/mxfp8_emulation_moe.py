@@ -9,17 +9,17 @@ for devices without a native MXFP8 MoE kernel (e.g. ROCm gfx942 / MI300).
 
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe.config import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEQuantConfig,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.triton_moe import TritonExperts
-from aphrodite.model_executor.layers.quantization.utils.mxfp8_utils import (
+from sonar.model_executor.layers.fused_moe.experts.triton_moe import TritonExperts
+from sonar.model_executor.layers.quantization.utils.mxfp8_utils import (
     dequant_mxfp8_to_bf16,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     kMxfp8Dynamic,
     kMxfp8Static,
@@ -51,7 +51,7 @@ class Mxfp8TritonExpertsBase(TritonExperts):
 
     @staticmethod
     def _supports_activation(activation) -> bool:
-        from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
+        from sonar.model_executor.layers.fused_moe.activation import MoEActivation
 
         if activation == MoEActivation.SWIGLUOAI_UNINTERLEAVE:
             return True
@@ -98,7 +98,7 @@ class Mxfp8EmulationTritonExperts(Mxfp8TritonExpertsBase):
         **kwargs,
     ):
         """Apply GEMM1 activation with quant-config alpha/beta/clamp."""
-        from aphrodite.model_executor.layers.fused_moe.activation import (
+        from sonar.model_executor.layers.fused_moe.activation import (
             MoEActivation,
             apply_moe_activation,
         )

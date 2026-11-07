@@ -10,27 +10,27 @@ from transformers import AriaConfig, AriaTextConfig, BatchFeature
 from transformers.models.aria.modeling_aria import AriaCrossAttention
 from transformers.models.aria.processing_aria import AriaProcessor
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.multimodal import MultiModalDummyOptions
-from aphrodite.inputs import MultiModalDataDict
-from aphrodite.model_executor.layers.activation import get_act_fn
-from aphrodite.model_executor.layers.fused_moe import FusedMoEFactory
-from aphrodite.model_executor.layers.linear import ColumnParallelLinear, RowParallelLinear
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import MultiModalFieldConfig, MultiModalKwargsItems
-from aphrodite.multimodal.parse import MultiModalDataItems
-from aphrodite.multimodal.processing import (
+from sonar.config import SonarConfig
+from sonar.config.multimodal import MultiModalDummyOptions
+from sonar.inputs import MultiModalDataDict
+from sonar.model_executor.layers.activation import get_act_fn
+from sonar.model_executor.layers.fused_moe import FusedMoEFactory
+from sonar.model_executor.layers.linear import ColumnParallelLinear, RowParallelLinear
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import MultiModalFieldConfig, MultiModalKwargsItems
+from sonar.multimodal.parse import MultiModalDataItems
+from sonar.multimodal.processing import (
     BaseDummyInputsBuilder,
     BaseMultiModalProcessor,
     BaseProcessingInfo,
     PromptReplacement,
     PromptUpdate,
 )
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.utils.tensor_schema import TensorSchema, TensorShape
+from sonar.sequence import IntermediateTensors
+from sonar.utils.tensor_schema import TensorSchema, TensorShape
 
 from .idefics2_vision_model import Idefics2VisionConfig
 from .idefics2_vision_model import (
@@ -78,7 +78,7 @@ class AriaVisionTransformer(Idefics3VisionTransformer, SupportsQuant):
         # Identity layer
         self.post_layernorm = nn.Identity()
 
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         # NOTE: post_layernorm is not used in Aria.
         orig_to_new_substr={"post_layernorm": None},
         orig_to_new_stacked={
@@ -90,7 +90,7 @@ class AriaVisionTransformer(Idefics3VisionTransformer, SupportsQuant):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
 
 class AriaProjectorMLP(nn.Module):
@@ -237,11 +237,11 @@ class AriaTextDecoderLayer(LlamaDecoderLayer):
     Experts (MoE) Layer.
     """
 
-    def __init__(self, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
-        super().__init__(aphrodite_config, prefix)
+    def __init__(self, sonar_config: SonarConfig, prefix: str = "") -> None:
+        super().__init__(sonar_config, prefix)
 
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
 
         self.mlp = AriaTextMoELayer(config, quant_config=quant_config, prefix=f"{prefix}.mlp")
 
@@ -257,7 +257,7 @@ class AriaTextModel(LlamaModel, SupportsQuant):
     }
 
     # The fused expert loader expects names without the .weight suffix.
-    hf_to_aphrodite_mapper = LlamaModel.hf_to_aphrodite_mapper | WeightsMapper(
+    hf_to_sonar_mapper = LlamaModel.hf_to_sonar_mapper | WeightsMapper(
         orig_to_new_regex={
             re.compile(r"experts\.fc1\.weight$"): "experts.gate_up_proj",
             re.compile(r"experts\.fc2\.weight$"): "experts.down_proj",
@@ -269,8 +269,8 @@ class AriaTextModel(LlamaModel, SupportsQuant):
         },
     )
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
-        super().__init__(aphrodite_config=aphrodite_config, prefix=prefix, layer_type=AriaTextDecoderLayer)
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
+        super().__init__(sonar_config=sonar_config, prefix=prefix, layer_type=AriaTextDecoderLayer)
 
 
 class AriaProcessingInfo(BaseProcessingInfo):
@@ -364,7 +364,7 @@ class AriaForConditionalGeneration(nn.Module, SupportsMultiModal):
     model to perform tasks that involve both image and text inputs.
     """
 
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={
             # mapping for new names in checkpoint saved after transformers v4.52
             "model.language_model.": "language_model.model.",
@@ -388,16 +388,16 @@ class AriaForConditionalGeneration(nn.Module, SupportsMultiModal):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
     ):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
 
         self.config = config
 
-        with self._mark_tower_model(aphrodite_config, "image"):
+        with self._mark_tower_model(sonar_config, "image"):
             self.vision_tower = AriaVisionTransformer(
                 config.vision_config,
                 quant_config=quant_config,
@@ -405,9 +405,9 @@ class AriaForConditionalGeneration(nn.Module, SupportsMultiModal):
             )
             self.multi_modal_projector = AriaProjector(config, prefix=maybe_prefix(prefix, "multi_modal_projector"))
 
-        with self._mark_language_model(aphrodite_config):
+        with self._mark_language_model(sonar_config):
             self.language_model = AriaTextModel(
-                aphrodite_config=aphrodite_config.with_hf_config(config.text_config),
+                sonar_config=sonar_config.with_hf_config(config.text_config),
                 prefix=maybe_prefix(prefix, "language_model.model"),
             )
 
@@ -508,4 +508,4 @@ class AriaForConditionalGeneration(nn.Module, SupportsMultiModal):
         weights: Iterable[tuple[str, torch.Tensor]],
     ) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)

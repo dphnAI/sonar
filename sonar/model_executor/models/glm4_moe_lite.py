@@ -34,38 +34,38 @@ from torch import nn
 if TYPE_CHECKING:
     from transformers.models.glm4_moe_lite import Glm4MoeLiteConfig
 
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed import (
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import SonarConfig
+from sonar.distributed import (
     get_pp_group,
 )
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe import (
     fused_moe_make_expert_params_mapping,
 )
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.model_loader.weight_utils import (
+from sonar.model_executor.model_loader.weight_utils import (
     default_weight_loader,
     maybe_remap_kv_scale_name,
 )
-from aphrodite.model_executor.models.deepseek_v2 import (
+from sonar.model_executor.models.deepseek_v2 import (
     DeepseekV2Attention,
     DeepseekV2MLAAttention,
 )
-from aphrodite.model_executor.models.glm4_moe import (
+from sonar.model_executor.models.glm4_moe import (
     Glm4MixtureOfExperts,
     Glm4MoE,
     Glm4MoeMLP,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.v1.attention.backends.mla.index_group import (
+from sonar.platforms import current_platform
+from sonar.sequence import IntermediateTensors
+from sonar.v1.attention.backends.mla.index_group import (
     SparseMLAIndexGroupBuilder,
     get_sparse_mla_index_group_max_rows,
 )
@@ -108,7 +108,7 @@ class Glm4MoeLiteMLAAttention(DeepseekV2MLAAttention):
 class Glm4MoeLiteDecoderLayer(nn.Module):
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str,
         config: "Glm4MoeLiteConfig | None" = None,
         topk_indices_buffer: torch.Tensor | None = None,
@@ -117,10 +117,10 @@ class Glm4MoeLiteDecoderLayer(nn.Module):
         super().__init__()
 
         if config is None:
-            config = aphrodite_config.model_config.hf_config
-        model_config = aphrodite_config.model_config
-        cache_config = aphrodite_config.cache_config
-        quant_config = aphrodite_config.quant_config
+            config = sonar_config.model_config.hf_config
+        model_config = sonar_config.model_config
+        cache_config = sonar_config.cache_config
+        quant_config = sonar_config.quant_config
 
         self.hidden_size = config.hidden_size
         max_position_embeddings = getattr(config, "max_position_embeddings", 8192)
@@ -146,7 +146,7 @@ class Glm4MoeLiteDecoderLayer(nn.Module):
         )
 
         self.self_attn = attn_cls(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             config=config,
             hidden_size=self.hidden_size,
             num_heads=config.num_attention_heads,
@@ -221,11 +221,11 @@ class Glm4MoeLiteDecoderLayer(nn.Module):
     }
 )
 class Glm4MoeLiteModel(nn.Module):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
         self.config = config
         self.device = current_platform.device_type
 
@@ -234,7 +234,7 @@ class Glm4MoeLiteModel(nn.Module):
         if self.is_v32:
             topk_tokens = config.index_topk
             topk_indices_buffer = torch.empty(
-                aphrodite_config.scheduler_config.max_num_batched_tokens,
+                sonar_config.scheduler_config.max_num_batched_tokens,
                 topk_tokens,
                 dtype=torch.int32,
                 device=self.device,
@@ -244,7 +244,7 @@ class Glm4MoeLiteModel(nn.Module):
         index_group_builder = (
             SparseMLAIndexGroupBuilder(
                 topk_indices_buffer,
-                get_sparse_mla_index_group_max_rows(aphrodite_config),
+                get_sparse_mla_index_group_max_rows(sonar_config),
             )
             if topk_indices_buffer is not None
             else None
@@ -263,7 +263,7 @@ class Glm4MoeLiteModel(nn.Module):
         self.start_layer, self.end_layer, self.layers = make_layers(
             config.num_hidden_layers,
             lambda prefix: Glm4MoeLiteDecoderLayer(
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 config=config,
                 prefix=prefix,
                 topk_indices_buffer=topk_indices_buffer,
@@ -275,7 +275,7 @@ class Glm4MoeLiteModel(nn.Module):
         self.fused_shared_expert_layers = get_fused_shared_expert_layers(
             self,
             Glm4MoeLite,
-            enable_eplb=aphrodite_config.parallel_config.enable_eplb,
+            enable_eplb=sonar_config.parallel_config.enable_eplb,
         )
 
         if get_pp_group().is_last_rank:
@@ -522,10 +522,10 @@ class Glm4MoeLiteForCausalLM(nn.Module, SupportsPP, SupportsLoRA, Glm4LiteMixtur
         "gate_up_proj": ["gate_proj", "up_proj"],
     }
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
         self.config = config
         self.quant_config = quant_config
 
@@ -547,7 +547,7 @@ class Glm4MoeLiteForCausalLM(nn.Module, SupportsPP, SupportsLoRA, Glm4LiteMixtur
                 "kv_a_proj_with_mqa",
             ]
 
-        self.model = Glm4MoeLiteModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = Glm4MoeLiteModel(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
         if get_pp_group().is_last_rank:
             self.lm_head = ParallelLMHead(
                 config.vocab_size,

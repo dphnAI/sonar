@@ -13,8 +13,8 @@ from pydantic import (
     model_validator,
 )
 
-from aphrodite.logger import init_logger
-from aphrodite.utils import random_uuid
+from sonar.logger import init_logger
+from sonar.utils import random_uuid
 
 logger = init_logger(__name__)
 
@@ -106,7 +106,7 @@ class ModelCard(OpenAIBaseModel):
     id: str
     object: str = "model"
     created: int = Field(default_factory=lambda: int(time.time()))
-    owned_by: str = "aphrodite"
+    owned_by: str = "sonar"
     root: str | None = None
     parent: str | None = None
     max_model_len: int | None = None

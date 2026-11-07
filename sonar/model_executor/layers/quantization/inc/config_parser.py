@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 import regex as re
 
-from aphrodite.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
+from sonar.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
 
 if TYPE_CHECKING:
     import torch

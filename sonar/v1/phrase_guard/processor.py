@@ -3,10 +3,10 @@
 
 import torch
 
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.v1.phrase_guard.matcher import validate_phrases
-from aphrodite.v1.sample.logits_processor import BatchUpdate, LogitsProcessor
-from aphrodite.v1.sample.logits_processor.builtin import process_dict_updates
+from sonar.sampling_params import SamplingParams
+from sonar.v1.phrase_guard.matcher import validate_phrases
+from sonar.v1.sample.logits_processor import BatchUpdate, LogitsProcessor
+from sonar.v1.sample.logits_processor.builtin import process_dict_updates
 
 RETRY_KEY = "_sonar_phrase_retry"
 
@@ -14,7 +14,7 @@ RETRY_KEY = "_sonar_phrase_retry"
 class PhraseRetryProcessor(LogitsProcessor):
     """Mask failed alternatives at their checkpoint, never at another position."""
 
-    def __init__(self, aphrodite_config, device, is_pin_memory):
+    def __init__(self, sonar_config, device, is_pin_memory):
         self.device = device
         self.states: dict[int, tuple[list[int], int, torch.Tensor]] = {}
 
@@ -42,7 +42,7 @@ class PhraseRetryProcessor(LogitsProcessor):
 
     @classmethod
     def validate_runtime(cls, config, tokenizer):
-        from aphrodite.v1.engine.detokenizer import uses_fast_detokenizer
+        from sonar.v1.engine.detokenizer import uses_fast_detokenizer
 
         if not uses_fast_detokenizer(tokenizer):
             raise ValueError("Experimental banned_strings requires a fast Hugging Face tokenizer")

@@ -31,37 +31,37 @@ import torch
 from torch import nn
 from transformers.models.glm4_moe import Glm4MoeConfig
 
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, CacheConfig, get_current_aphrodite_config
-from aphrodite.distributed import (
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import CacheConfig, SonarConfig, get_current_sonar_config
+from sonar.distributed import (
     get_ep_group,
     get_pp_group,
     get_tensor_model_parallel_world_size,
 )
-from aphrodite.model_executor.layers.activation import SiluAndMul
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.model_executor.layers.activation import SiluAndMul
+from sonar.model_executor.layers.attention import Attention
+from sonar.model_executor.layers.fused_moe import (
     FusedMoEFactory,
     GateLinear,
 )
-from aphrodite.model_executor.layers.fused_moe.utils import (
+from sonar.model_executor.layers.fused_moe.utils import (
     resolve_layer_fused_shared_expert,
 )
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     MergedColumnParallelLinear,
     QKVParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.sequence import IntermediateTensors
+from sonar.sequence import IntermediateTensors
 
 from .interfaces import MixtureOfExperts, SupportsLoRA, SupportsPP
 from .utils import (
@@ -143,8 +143,8 @@ class Glm4MoE(nn.Module):
         self.gate.e_score_correction_bias = nn.Parameter(torch.empty(config.n_routed_experts, dtype=torch.float32))
 
         # Load balancing settings.
-        aphrodite_config = get_current_aphrodite_config()
-        eplb_config = aphrodite_config.parallel_config.eplb_config
+        sonar_config = get_current_sonar_config()
+        eplb_config = sonar_config.parallel_config.eplb_config
         self.enable_eplb = enable_eplb
 
         self.n_redundant_experts = eplb_config.num_redundant_experts
@@ -379,7 +379,7 @@ class Glm4MoeDecoderLayer(nn.Module):
     }
 )
 class Glm4MoeModel(nn.Module):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_stacked={
             ".q_proj": (".qkv_proj", "q"),
             ".k_proj": (".qkv_proj", "k"),
@@ -391,13 +391,13 @@ class Glm4MoeModel(nn.Module):
         }
     )
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_config
-        cache_config = aphrodite_config.cache_config
-        quant_config = aphrodite_config.quant_config
-        enable_eplb = aphrodite_config.parallel_config.enable_eplb
+        config = sonar_config.model_config.hf_config
+        cache_config = sonar_config.cache_config
+        quant_config = sonar_config.quant_config
+        enable_eplb = sonar_config.parallel_config.enable_eplb
         self.config = config
 
         self.vocab_size = config.vocab_size
@@ -473,7 +473,7 @@ class Glm4MoeModel(nn.Module):
             fused_shared_expert_layers=self.fused_shared_expert_layers,
         )
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
 
 class Glm4MixtureOfExperts(MixtureOfExperts):
@@ -521,13 +521,13 @@ class Glm4MoeForCausalLM(nn.Module, SupportsPP, SupportsLoRA, Glm4MixtureOfExper
 
     fall_back_to_pt_during_load = False
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
         self.config = config
         self.quant_config = quant_config
-        self.model = Glm4MoeModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = Glm4MoeModel(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
         if get_pp_group().is_last_rank:
             self.lm_head = ParallelLMHead(
                 config.vocab_size,

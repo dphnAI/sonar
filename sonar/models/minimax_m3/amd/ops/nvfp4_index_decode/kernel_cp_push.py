@@ -15,7 +15,7 @@ from flydsl.expr import const_expr, range_constexpr
 from flydsl.expr.typing import T
 from flydsl.expr.typing import Vector as Vec
 
-from aphrodite.models.minimax_m3.amd.ops.flydsl_utils import (
+from sonar.models.minimax_m3.amd.ops.flydsl_utils import (
     NT,
     SC0,
     SC1,
@@ -29,7 +29,7 @@ from aphrodite.models.minimax_m3.amd.ops.flydsl_utils import (
     perm,
     xlane4,
 )
-from aphrodite.models.minimax_m3.amd.ops.nvfp4_index_decode.kernel import block_sentinels
+from sonar.models.minimax_m3.amd.ops.nvfp4_index_decode.kernel import block_sentinels
 
 WORLD = 4  # TP ranks = index heads, one per rank
 BLK = 128  # tokens per block

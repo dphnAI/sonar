@@ -21,12 +21,12 @@ from typing import TYPE_CHECKING
 import torch
 from filelock import FileLock
 
-import aphrodite.envs as envs
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import get_cache_invalidating_env_vars, triton
-from aphrodite.v1.attention.ops import segmented_attention
-from aphrodite.v1.attention.ops.segmented_attention import (
+import sonar.envs as envs
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.triton_utils import get_cache_invalidating_env_vars, triton
+from sonar.v1.attention.ops import segmented_attention
+from sonar.v1.attention.ops.segmented_attention import (
     MAX_QUERY_LEN,
     _segmented_attention_reduce,
     _segmented_attention_stage,
@@ -38,7 +38,7 @@ from aphrodite.v1.attention.ops.segmented_attention import (
 )
 
 if TYPE_CHECKING:
-    from aphrodite.v1.worker.gpu_worker import Worker
+    from sonar.v1.worker.gpu_worker import Worker
 
 logger = init_logger(__name__)
 
@@ -744,7 +744,7 @@ def _load_records(path, identity, heads, kv_heads, dim, fp8):
 
 def _tp_context():
     """Return the initialized TP coordinator, or local-only tuning state."""
-    from aphrodite.distributed.parallel_state import (
+    from sonar.distributed.parallel_state import (
         get_tp_group,
         model_parallel_is_initialized,
     )
@@ -916,7 +916,7 @@ def warmup_segmented_attention(
     if all(workload in warmed for workload in workloads):
         return
     digest = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
-    path = Path(envs.APHRODITE_CACHE_ROOT) / "rocm_segmented_attention" / f"{digest}.json"
+    path = Path(envs.SONAR_CACHE_ROOT) / "rocm_segmented_attention" / f"{digest}.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     group, tp_rank, tp_size = _tp_context()
     if group is not None:
@@ -1178,19 +1178,19 @@ def _warmup_segmented_attention(layer, device, **limits) -> None:
 
 def rocm_segmented_attn_autotune_warmup(worker: Worker) -> None:
     """Autotune RDNA segmented attention after KV allocation and before capture."""
-    if not current_platform.is_rocm() or not worker.aphrodite_config.kernel_config.enable_rocm_segmented_attn_autotune:
+    if not current_platform.is_rocm() or not worker.sonar_config.kernel_config.enable_rocm_segmented_attn_autotune:
         return
 
-    from aphrodite.platforms.rocm import on_gfx1x
-    from aphrodite.v1.attention.backends.rocm_segmented_attn import (
+    from sonar.platforms.rocm import on_gfx1x
+    from sonar.v1.attention.backends.rocm_segmented_attn import (
         RocmSegmentedAttentionImpl,
     )
-    from aphrodite.v1.kv_cache_interface import FullAttentionSpec
+    from sonar.v1.kv_cache_interface import FullAttentionSpec
 
     if not on_gfx1x():
         return
     layers = []
-    for layer in worker.aphrodite_config.compilation_config.static_forward_context.values():
+    for layer in worker.sonar_config.compilation_config.static_forward_context.values():
         impl = getattr(layer, "impl", None)
         if not isinstance(impl, RocmSegmentedAttentionImpl):
             continue
@@ -1211,7 +1211,7 @@ def rocm_segmented_attn_autotune_warmup(worker: Worker) -> None:
         (
             (spec.block_size, spec.page_size_bytes)
             if isinstance(spec, FullAttentionSpec)
-            else (0, spec.max_memory_usage_bytes(worker.aphrodite_config))
+            else (0, spec.max_memory_usage_bytes(worker.sonar_config))
         )
         for spec in specs.values()
     )

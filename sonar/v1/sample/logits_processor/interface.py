@@ -8,10 +8,10 @@ from typing import TYPE_CHECKING
 
 import torch
 
-from aphrodite import SamplingParams
+from sonar import SamplingParams
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
+    from sonar.config import SonarConfig
 
 
 class MoveDirectionality(Enum):
@@ -62,15 +62,15 @@ class LogitsProcessor(ABC):
     def validate_params(cls, sampling_params: SamplingParams):
         """Validate sampling params for this logits processor.
 
-        Raise ``AphroditeValidationError`` (preferred) / ``ValueError`` (backward
+        Raise ``SonarValidationError`` (preferred) / ``ValueError`` (backward
         compatible) for invalid params. Bare ``ValueError`` is converted to
-        ``AphroditeValidationError`` at the engine boundary so online serving
+        ``SonarValidationError`` at the engine boundary so online serving
         returns HTTP 400.
         """
         return None
 
     @abstractmethod
-    def __init__(self, aphrodite_config: "AphroditeConfig", device: torch.device, is_pin_memory: bool) -> None:
+    def __init__(self, sonar_config: "SonarConfig", device: torch.device, is_pin_memory: bool) -> None:
         raise NotImplementedError
 
     @abstractmethod

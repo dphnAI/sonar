@@ -8,11 +8,11 @@ from typing import TYPE_CHECKING
 
 import torch
 
-from aphrodite.model_executor.kernels.linear.zentorch_utils import has_zentorch_op
-from aphrodite.v1.attention.backend import AttentionType
+from sonar.model_executor.kernels.linear.zentorch_utils import has_zentorch_op
+from sonar.v1.attention.backend import AttentionType
 
 if TYPE_CHECKING:
-    from aphrodite.v1.attention.backends.cpu_attn import CPUAttentionMetadata
+    from sonar.v1.attention.backends.cpu_attn import CPUAttentionMetadata
 
 __all__ = ["should_use_zentorch_sdpa", "zentorch_sdpa_attn"]
 
@@ -94,7 +94,7 @@ def zentorch_sdpa_attn(
         output.copy_(out32.to(dtype=output.dtype))
         return output
 
-    # The op counts window tokens on each side of the diagonal; Aphrodite's window
+    # The op counts window tokens on each side of the diagonal; Sonar's window
     # includes the diagonal itself.
     window = -1 if sliding_window in (None, -1) else sliding_window - 1
 

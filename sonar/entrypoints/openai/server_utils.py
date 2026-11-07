@@ -18,17 +18,17 @@ from starlette.concurrency import iterate_in_threadpool
 from starlette.datastructures import URL, Headers, MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from aphrodite import envs
-from aphrodite.engine.protocol import EngineClient
-from aphrodite.entrypoints.launchers.launcher import terminate_if_errored
-from aphrodite.entrypoints.serve.engine.protocol import ErrorInfo, ErrorResponse
-from aphrodite.entrypoints.utils import create_error_response, sanitize_message
-from aphrodite.exceptions import AphroditeValidationError, GenerationError
-from aphrodite.logger import init_logger
-from aphrodite.utils.gc_utils import freeze_gc_heap
-from aphrodite.v1.engine.exceptions import EngineDeadError, EngineGenerateError
+from sonar import envs
+from sonar.engine.protocol import EngineClient
+from sonar.entrypoints.launchers.launcher import terminate_if_errored
+from sonar.entrypoints.serve.engine.protocol import ErrorInfo, ErrorResponse
+from sonar.entrypoints.utils import create_error_response, sanitize_message
+from sonar.exceptions import GenerationError, SonarValidationError
+from sonar.logger import init_logger
+from sonar.utils.gc_utils import freeze_gc_heap
+from sonar.v1.engine.exceptions import EngineDeadError, EngineGenerateError
 
-logger = init_logger("aphrodite.entrypoints.openai.server_utils")
+logger = init_logger("sonar.entrypoints.openai.server_utils")
 
 
 class AuthenticationMiddleware:
@@ -136,7 +136,7 @@ def get_uvicorn_log_config(args: Namespace) -> dict | None:
     if log_config is not None:
         return log_config
 
-    from aphrodite.logging_utils import create_uvicorn_log_config
+    from sonar.logging_utils import create_uvicorn_log_config
 
     excluded_paths = None
     if args.disable_access_log_for_endpoints:
@@ -151,10 +151,10 @@ def get_uvicorn_log_config(args: Namespace) -> dict | None:
 def _extract_content_from_chunk(chunk_data: dict) -> str:
     """Extract content from a streaming response chunk."""
     try:
-        from aphrodite.entrypoints.openai.chat_completion.protocol import (
+        from sonar.entrypoints.openai.chat_completion.protocol import (
             ChatCompletionStreamResponse,
         )
-        from aphrodite.entrypoints.openai.completion.protocol import (
+        from sonar.entrypoints.openai.completion.protocol import (
             CompletionStreamResponse,
         )
 
@@ -305,7 +305,7 @@ async def log_response(request: Request, call_next):
 
 async def engine_error_handler(req: Request, exc: EngineDeadError | EngineGenerateError):
     """
-    APHRODITE V1 AsyncLLM catches exceptions and returns
+    SONAR V1 AsyncLLM catches exceptions and returns
     only two types: EngineGenerateError and EngineDeadError.
 
     EngineGenerateError is raised by the per request generate()
@@ -392,7 +392,7 @@ async def validation_exception_handler(req: Request, exc: RequestValidationError
     for error in errors:
         if "ctx" in error and "error" in error["ctx"]:
             ctx_error = error["ctx"]["error"]
-            if isinstance(ctx_error, AphroditeValidationError):
+            if isinstance(ctx_error, SonarValidationError):
                 param = ctx_error.parameter
                 break
 
@@ -429,7 +429,7 @@ async def lifespan(app: FastAPI):
 
             async def _force_log():
                 while True:
-                    await asyncio.sleep(envs.APHRODITE_LOG_STATS_INTERVAL)
+                    await asyncio.sleep(envs.SONAR_LOG_STATS_INTERVAL)
                     await engine_client.do_log_stats()
 
             task = asyncio.create_task(_force_log())

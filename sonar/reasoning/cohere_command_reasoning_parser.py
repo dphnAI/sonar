@@ -6,16 +6,16 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, ClassVar
 
-from aphrodite.reasoning import ReasoningParser
+from sonar.reasoning import ReasoningParser
 
 if TYPE_CHECKING:
-    from aphrodite.tokenizers import TokenizerLike
+    from sonar.tokenizers import TokenizerLike
 
 
 class BaseCohereCommandReasoningParser(ReasoningParser):
     """Expose is_reasoning_end for the structured-output engine.
     Everything else runs in
-    :class:`aphrodite.parser.cohere_command.CohereCommandParser`.
+    :class:`sonar.parser.cohere_command.CohereCommandParser`.
     """
 
     melody_preset: ClassVar[str]

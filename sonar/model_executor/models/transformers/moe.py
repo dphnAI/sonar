@@ -24,26 +24,26 @@ from typing import TYPE_CHECKING, Any
 import torch
 import torch.nn as nn
 
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.config.utils import getattr_iter
-from aphrodite.distributed import get_dp_group, get_ep_group
-from aphrodite.forward_context import ForwardContext, get_forward_context
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.custom_op import PluggableLayer
-from aphrodite.model_executor.layers.fused_moe import FusedMoEFactory, MoERunner, RoutedExperts
-from aphrodite.model_executor.models.interfaces import MixtureOfExperts
-from aphrodite.model_executor.models.transformers.fuser import get_fuser
-from aphrodite.model_executor.models.transformers.fusers.glu import GLUFuser
-from aphrodite.model_executor.models.transformers.fusers.moe import MoEBlockFuser
-from aphrodite.model_executor.models.utils import extract_layer_index, maybe_prefix
-from aphrodite.transformers_utils.config import CONFIG_FIELD_ALIASES
-from aphrodite.utils.torch_utils import STR_DTYPE_TO_TORCH_DTYPE, direct_register_custom_op
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.config.utils import getattr_iter
+from sonar.distributed import get_dp_group, get_ep_group
+from sonar.forward_context import ForwardContext, get_forward_context
+from sonar.logger import init_logger
+from sonar.model_executor.custom_op import PluggableLayer
+from sonar.model_executor.layers.fused_moe import FusedMoEFactory, MoERunner, RoutedExperts
+from sonar.model_executor.models.interfaces import MixtureOfExperts
+from sonar.model_executor.models.transformers.fuser import get_fuser
+from sonar.model_executor.models.transformers.fusers.glu import GLUFuser
+from sonar.model_executor.models.transformers.fusers.moe import MoEBlockFuser
+from sonar.model_executor.models.utils import extract_layer_index, maybe_prefix
+from sonar.transformers_utils.config import CONFIG_FIELD_ALIASES
+from sonar.utils.torch_utils import STR_DTYPE_TO_TORCH_DTYPE, direct_register_custom_op
 
 from .base import Base
 from .utils import log_replacement, maybe_per_layer
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
+    from sonar.config import SonarConfig
 
 logger = init_logger(__name__)
 
@@ -78,7 +78,7 @@ class TransformersMoERunner(MoERunner):
         We discard any extra kwargs because we cannot use them here."""
         # Note: we need to forward through a custom op so the topk_ids
         # can be transferred without interfering with cudagraphs.
-        return torch.ops.aphrodite.transformers_moe_forward(
+        return torch.ops.sonar.transformers_moe_forward(
             hidden_states,
             topk_ids.to(torch.int32),
             topk_weights.to(torch.float32),
@@ -205,9 +205,9 @@ class MoEMixin(MixtureOfExperts, Base):
     # Redeclared because `recursive_replace` assigns it below the first read
     num_local_physical_experts: int
 
-    def __init__(self, *, aphrodite_config: "AphroditeConfig", prefix: str = ""):
+    def __init__(self, *, sonar_config: "SonarConfig", prefix: str = ""):
         # Skip MixtureOfExperts.__init__ and call the next class in MRO
-        super(MixtureOfExperts, self).__init__(aphrodite_config=aphrodite_config, prefix=prefix)
+        super(MixtureOfExperts, self).__init__(sonar_config=sonar_config, prefix=prefix)
 
     def update_physical_experts_metadata(
         self,

@@ -4,27 +4,27 @@
 import pytest
 import torch
 
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.config import (
     CompilationConfig,
+    SonarConfig,
     get_cached_compilation_config,
-    set_current_aphrodite_config,
+    set_current_sonar_config,
 )
-from aphrodite.model_executor.custom_op import CustomOp, op_registry
-from aphrodite.model_executor.layers.activation import (
+from sonar.model_executor.custom_op import CustomOp, op_registry
+from sonar.model_executor.layers.activation import (
     GeluAndMul,
     ReLUSquaredActivation,
     SiluAndMul,
 )
-from aphrodite.model_executor.layers.fused_moe.router.fused_topk_router import (
-    aphrodite_topk_sigmoid,
-    aphrodite_topk_softmax,
+from sonar.model_executor.layers.fused_moe.router.fused_topk_router import (
     dispatch_topk_sigmoid_func,
     dispatch_topk_softmax_func,
+    sonar_topk_sigmoid,
+    sonar_topk_softmax,
 )
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.platforms import current_platform
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.platforms import current_platform
 
 RMS_NORM_SUPPORTED_DTYPES = [torch.float16, torch.bfloat16]
 
@@ -83,11 +83,11 @@ def test_enabled_ops(
     default_on: bool,
 ):
     custom_ops = env.split(",") if env else []
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         compilation_config=CompilationConfig(backend=backend, mode=compilation_mode, custom_ops=custom_ops)
     )
     get_cached_compilation_config.cache_clear()
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         assert CustomOp.default_on() == default_on
 
         ops_enabled = [bool(x) for x in ops_enabled]
@@ -116,8 +116,8 @@ def test_enabled_ops(
 @pytest.mark.parametrize("env", ["all,none", "all,+rms_norm,all", "+rms_norm,-rms_norm"])
 def test_enabled_ops_invalid(env: str):
     with pytest.raises(Exception):  # noqa
-        aphrodite_config = AphroditeConfig(compilation_config=CompilationConfig(custom_ops=env.split(",")))
-        with set_current_aphrodite_config(aphrodite_config):
+        sonar_config = SonarConfig(compilation_config=CompilationConfig(custom_ops=env.split(",")))
+        with set_current_sonar_config(sonar_config):
             RMSNorm(1024).enabled()
 
 
@@ -128,7 +128,7 @@ def test_topk_softmax_dispatch(use_rocm_aiter: bool):
     if current_platform.is_rocm() and use_rocm_aiter:
         assert topk_func == rocm_aiter_ops.topk_softmax
     else:
-        assert topk_func == aphrodite_topk_softmax
+        assert topk_func == sonar_topk_softmax
 
 
 def _topk_gating_launch(
@@ -233,9 +233,9 @@ def test_topk_gating_enabled_by_cdna(
     expected: bool,
 ):
     """topk_gating is on for CDNA3 and CDNA4 with AITER MoE enabled, nowhere else."""
-    monkeypatch.setattr("aphrodite._aiter_ops.is_aiter_found_and_supported", lambda: True)
+    monkeypatch.setattr("sonar._aiter_ops.is_aiter_found_and_supported", lambda: True)
     monkeypatch.setattr(rocm_aiter_ops, "is_fused_moe_enabled", lambda: fused_moe_enabled)
-    monkeypatch.setattr("aphrodite.platforms.rocm.get_cdna_version", lambda: cdna)
+    monkeypatch.setattr("sonar.platforms.rocm.get_cdna_version", lambda: cdna)
     assert bool(rocm_aiter_ops.is_topk_gating_enabled()) is expected
 
 
@@ -246,4 +246,4 @@ def test_topk_sigmoid_dispatch(use_rocm_aiter: bool):
     if current_platform.is_rocm() and use_rocm_aiter:
         assert topk_func == rocm_aiter_ops.topk_sigmoid
     else:
-        assert topk_func == aphrodite_topk_sigmoid
+        assert topk_func == sonar_topk_sigmoid

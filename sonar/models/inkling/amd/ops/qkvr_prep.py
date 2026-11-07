@@ -3,8 +3,8 @@
 
 import torch
 
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.torch_utils import aux_stream
+from sonar.triton_utils import tl, triton
+from sonar.utils.torch_utils import aux_stream
 
 LOW_BLOCK_M = 32
 LOW_BLOCK_N = 64

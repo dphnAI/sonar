@@ -7,15 +7,15 @@ import pytest
 import requests
 from transformers import AutoProcessor
 
-from aphrodite.entrypoints.pooling.embed.protocol import EmbeddingResponse
-from aphrodite.multimodal.media import MediaWithBytes
-from aphrodite.multimodal.utils import encode_image_url, fetch_image
-from tests.utils import APHRODITE_PATH, RemoteOpenAIServer
+from sonar.entrypoints.pooling.embed.protocol import EmbeddingResponse
+from sonar.multimodal.media import MediaWithBytes
+from sonar.multimodal.utils import encode_image_url, fetch_image
+from tests.utils import SONAR_PATH, RemoteOpenAIServer
 
 MODEL_NAME = "TIGER-Lab/VLM2Vec-Full"
 MAXIMUM_IMAGES = 2
 
-vlm2vec_jinja_path = APHRODITE_PATH / "examples/pooling/embed/template/vlm2vec_phi3v.jinja"
+vlm2vec_jinja_path = SONAR_PATH / "examples/pooling/embed/template/vlm2vec_phi3v.jinja"
 assert vlm2vec_jinja_path.exists()
 
 # Test different image extensions (JPG/PNG) and formats (gray/RGB/RGBA)
@@ -26,7 +26,7 @@ TEST_IMAGE_ASSETS = [
     "RGBA_comp.png",  # "https://vllm-public-assets.s3.us-west-2.amazonaws.com/vision_model_images/RGBA_comp.png",
 ]
 
-input_text = "The best thing about Aphrodite is that it supports many different models"
+input_text = "The best thing about Sonar is that it supports many different models"
 image_url = "https://vllm-public-assets.s3.us-west-2.amazonaws.com/multimodal_asset/cat_snow.jpg"
 image_base64 = {"url": encode_image_url(fetch_image(image_url))}
 

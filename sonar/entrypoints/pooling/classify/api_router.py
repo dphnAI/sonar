@@ -4,7 +4,7 @@
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import Response
 
-from aphrodite.entrypoints.serve.utils.api_utils import (
+from sonar.entrypoints.serve.utils.api_utils import (
     load_aware_call,
     validate_json_request,
     with_cancellation,

@@ -68,13 +68,13 @@ def _complete(client: openai.OpenAI, prompt: str, max_tokens: int = 20):
 # ── Prometheus metrics helpers ────────────────────────────────────────────
 
 _METRIC_RE = re.compile(
-    r'aphrodite:prompt_tokens_by_source_total\{.*?source="([^"]+)".*?\}\s+'
+    r'sonar:prompt_tokens_by_source_total\{.*?source="([^"]+)".*?\}\s+'
     r"([\d.eE+\-]+)"
 )
 
 
 def _fetch_metrics(host: str, port: str) -> dict[str, float]:
-    """Scrape prompt_tokens_by_source counters from a Aphrodite server."""
+    """Scrape prompt_tokens_by_source counters from a Sonar server."""
     body = urllib.request.urlopen(f"http://{host}:{port}/metrics").read().decode()
     result = {
         "local_compute": 0.0,
@@ -96,11 +96,11 @@ def _fetch_prefill_metrics() -> dict[str, float]:
     return _fetch_metrics(PREFILL_HOST, PREFILL_PORT)
 
 
-_NIXL_BYTES_RE = re.compile(r"aphrodite:nixl_bytes_transferred_sum\b.*?\s+([\d.eE+\-]+)")
+_NIXL_BYTES_RE = re.compile(r"sonar:nixl_bytes_transferred_sum\b.*?\s+([\d.eE+\-]+)")
 
 
 def _fetch_nixl_bytes(host: str, port: str) -> float:
-    """Scrape total NIXL bytes transferred from a Aphrodite server."""
+    """Scrape total NIXL bytes transferred from a Sonar server."""
     body = urllib.request.urlopen(f"http://{host}:{port}/metrics").read().decode()
     total = 0.0
     for m in _NIXL_BYTES_RE.finditer(body):
@@ -109,7 +109,7 @@ def _fetch_nixl_bytes(host: str, port: str) -> float:
 
 
 _OFFLOAD_BYTES_RE = re.compile(
-    r'aphrodite:kv_offload_total_bytes_total\{.*?transfer_type="([^"]+)".*?\}\s+'
+    r'sonar:kv_offload_total_bytes_total\{.*?transfer_type="([^"]+)".*?\}\s+'
     r"([\d.eE+\-]+)"
 )
 
@@ -278,7 +278,7 @@ def test_multi_block_correctness():
 # ═══════════════════════════════════════════════════════════════════════════
 # Decode-side KV source validation via Prometheus metrics
 #
-# Scrape aphrodite:prompt_tokens_by_source_total from the DECODE server to
+# Scrape sonar:prompt_tokens_by_source_total from the DECODE server to
 # verify which code path (GPU prefix, NIXL, local compute) was exercised.
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -382,7 +382,7 @@ def test_decode_direct_all_local_compute():
 # ═══════════════════════════════════════════════════════════════════════════
 # Prefill-side CPU offload validation via Prometheus metrics
 #
-# Scrape aphrodite:prompt_tokens_by_source_total from the PREFILL server.
+# Scrape sonar:prompt_tokens_by_source_total from the PREFILL server.
 # Exercises the OffloadingConnector read path: after GPU cache eviction,
 # the OffloadingConnector restores KV from CPU (NixlConnector cannot help
 # for direct requests without kv_transfer_params).

@@ -1,15 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-from aphrodite.exceptions import AphroditeServerError
+from sonar.exceptions import SonarServerError
 
 
-class EngineGenerateError(AphroditeServerError):
+class EngineGenerateError(SonarServerError):
     """Raised when a AsyncLLM.generate() fails. Recoverable."""
 
     pass
 
 
-class EngineDeadError(AphroditeServerError):
+class EngineDeadError(SonarServerError):
     """Raised when the EngineCore dies. Unrecoverable.
 
     `str(exc)` is the log-oriented message for server logs and offline

@@ -7,9 +7,9 @@ from typing import Annotated
 from fastapi import APIRouter, FastAPI, Query, Request
 from fastapi.responses import JSONResponse
 
-from aphrodite.engine.protocol import EngineClient
-from aphrodite.logger import init_logger
-from aphrodite.v1.engine import PauseMode
+from sonar.engine.protocol import EngineClient
+from sonar.logger import init_logger
+from sonar.v1.engine import PauseMode
 
 from .metrics import sleep_mode_operation_metrics
 

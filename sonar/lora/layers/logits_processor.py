@@ -5,15 +5,15 @@ import torch
 import torch.nn as nn
 from transformers import PreTrainedConfig
 
-from aphrodite.config.lora import LoRAConfig
-from aphrodite.distributed import (
+from sonar.config.lora import LoRAConfig
+from sonar.distributed import (
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
     get_tp_group,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor, _topk
-from aphrodite.model_executor.layers.vocab_parallel_embedding import VocabParallelEmbedding
-from aphrodite.platforms import current_platform
+from sonar.model_executor.layers.logits_processor import LogitsProcessor, _topk
+from sonar.model_executor.layers.vocab_parallel_embedding import VocabParallelEmbedding
+from sonar.platforms import current_platform
 
 from .base import BaseLayerWithLoRA
 

@@ -10,4 +10,4 @@ server_args: >-
   --quantization humming
   --disable-flashinfer-autotune
 env:
-  APHRODITE_HUMMING_ONLINE_QUANT_CONFIG: '{"dtype":"int6","hadamard_block_size":-1}'
+  SONAR_HUMMING_ONLINE_QUANT_CONFIG: '{"dtype":"int6","hadamard_block_size":-1}'

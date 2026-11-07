@@ -6,7 +6,7 @@ For every incoming checkpoint parameter the worker needs a destination buffer
 plus its placement over the inference mesh. Two outcomes are possible:
 
 * **direct** — when the model is not quantized, the parameter maps 1:1 onto a
-  live Aphrodite parameter and its loader is a small, known-safe copy or tensor-
+  live Sonar parameter and its loader is a small, known-safe copy or tensor-
   parallel loader. The loader's declared input/output dimension determines the
   placement; shapes are validation, not an inference mechanism. The reshard
   writes straight into the live parameter, so each rank receives only its own
@@ -14,7 +14,7 @@ plus its placement over the inference mesh. Two outcomes are possible:
 * **fallback** — anything else. The reshard delivers the whole tensor to every
   rank and `load_weights` does the sharding, exactly as the broadcast NCCL
   backend does. Fused parameters (`qkv_proj`, `gate_up_proj`, MoE `w13`/`w2`)
-  take this path: the checkpoint name does not name a Aphrodite parameter, so there
+  take this path: the checkpoint name does not name a Sonar parameter, so there
   is nothing to resolve against.
 
 Correctness never depends on a parameter resolving — the fallback is always
@@ -30,7 +30,7 @@ from typing import cast
 
 import torch
 
-from aphrodite.distributed.weight_transfer.m2n_common import (
+from sonar.distributed.weight_transfer.m2n_common import (
     DESTINATION_REPLICA_AXIS,
     DESTINATION_SHARD_AXIS,
     MESH_NDIMS,
@@ -38,12 +38,12 @@ from aphrodite.distributed.weight_transfer.m2n_common import (
     REPLICATED,
     Placements,
 )
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 
 _DIRECT_WEIGHT_LOADING_BLOCKLIST = {
-    "aphrodite.model_executor.models.gpt2.GPT2Model",
+    "sonar.model_executor.models.gpt2.GPT2Model",
 }
 
 
@@ -96,13 +96,13 @@ def _base_loader_shard_dim(
     loader_fn = loader.__func__ if inspect.ismethod(loader) else loader
 
     # Lazy imports avoid making the weight-transfer registry import all model
-    # executor layers during normal Aphrodite startup.
-    from aphrodite.model_executor.layers.linear import (
+    # executor layers during normal Sonar startup.
+    from sonar.model_executor.layers.linear import (
         ColumnParallelLinear,
         ReplicatedLinear,
         RowParallelLinear,
     )
-    from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
+    from sonar.model_executor.model_loader.weight_utils import default_weight_loader
 
     replicated_loaders = {
         default_weight_loader,

@@ -7,7 +7,7 @@ from typing import Any
 from openai.types.chat import ChatCompletionMessageParam, ChatCompletionToolParam
 from typing_extensions import TypedDict
 
-from tests.utils import APHRODITE_PATH
+from tests.utils import SONAR_PATH
 
 
 class ServerConfig(TypedDict, total=False):
@@ -57,7 +57,7 @@ CONFIGS: dict[str, ServerConfig] = {
             "--tool-call-parser",
             "hermes",
             "--chat-template",
-            str(APHRODITE_PATH / "examples/tool_chat_template_hermes.jinja"),
+            str(SONAR_PATH / "examples/tool_chat_template_hermes.jinja"),
         ],
         "system_prompt": "You are a helpful assistant with access to tools. If a tool"
         " that you have would be helpful to answer a user query, "
@@ -73,7 +73,7 @@ CONFIGS: dict[str, ServerConfig] = {
             "--tool-call-parser",
             "llama3_json",
             "--chat-template",
-            str(APHRODITE_PATH / "examples/tool_chat_template_llama3.1_json.jinja"),
+            str(SONAR_PATH / "examples/tool_chat_template_llama3.1_json.jinja"),
         ],
         "supports_parallel": False,
     },
@@ -85,7 +85,7 @@ CONFIGS: dict[str, ServerConfig] = {
             "--tool-call-parser",
             "llama3_json",
             "--chat-template",
-            str(APHRODITE_PATH / "examples/tool_chat_template_llama3.2_json.jinja"),
+            str(SONAR_PATH / "examples/tool_chat_template_llama3.2_json.jinja"),
         ],
         "supports_parallel": False,
     },
@@ -97,7 +97,7 @@ CONFIGS: dict[str, ServerConfig] = {
             "--tool-call-parser",
             "llama4_pythonic",
             "--chat-template",
-            str(APHRODITE_PATH / "examples/tool_chat_template_llama4_pythonic.jinja"),
+            str(SONAR_PATH / "examples/tool_chat_template_llama4_pythonic.jinja"),
             "-tp",
             "4",
         ],
@@ -116,7 +116,7 @@ CONFIGS: dict[str, ServerConfig] = {
             "--tool-call-parser",
             "llama4_json",
             "--chat-template",
-            str(APHRODITE_PATH / "examples/tool_chat_template_llama4_json.jinja"),
+            str(SONAR_PATH / "examples/tool_chat_template_llama4_json.jinja"),
         ],
         "supports_parallel": True,
         "extended": True,
@@ -135,7 +135,7 @@ CONFIGS: dict[str, ServerConfig] = {
             "--tool-call-parser",
             "mistral",
             "--chat-template",
-            str(APHRODITE_PATH / "examples/tool_chat_template_mistral.jinja"),
+            str(SONAR_PATH / "examples/tool_chat_template_mistral.jinja"),
             '--ignore-patterns="consolidated.safetensors"',
         ],
         "system_prompt": "You are a helpful assistant with access to tools. If a tool"
@@ -177,7 +177,7 @@ CONFIGS: dict[str, ServerConfig] = {
     #         "--tool-call-parser",
     #         "granite-20b-fc",
     #         "--chat-template",
-    #         str(APHRODITE_PATH / "examples/tool_chat_template_granite_20b_fc.jinja"),
+    #         str(SONAR_PATH / "examples/tool_chat_template_granite_20b_fc.jinja"),
     #         "--max_num_seqs",
     #         "1",
     #         "--enforce-eager",
@@ -195,7 +195,7 @@ CONFIGS: dict[str, ServerConfig] = {
             "--tool-call-parser",
             "granite",
             "--chat-template",
-            str(APHRODITE_PATH / "examples/tool_chat_template_granite.jinja"),
+            str(SONAR_PATH / "examples/tool_chat_template_granite.jinja"),
         ],
         "system_prompt": "You are a helpful AI assistant with access to tools. "
         "Use two-letter US state abbreviations in weather tool arguments. "
@@ -220,7 +220,7 @@ CONFIGS: dict[str, ServerConfig] = {
             "--tool-call-parser",
             "internlm",
             "--chat-template",
-            str(APHRODITE_PATH / "examples/tool_chat_template_internlm2_tool.jinja"),
+            str(SONAR_PATH / "examples/tool_chat_template_internlm2_tool.jinja"),
             "--trust_remote_code",
         ],
         "supports_parallel": False,
@@ -233,7 +233,7 @@ CONFIGS: dict[str, ServerConfig] = {
             "--tool-call-parser",
             "pythonic",
             "--chat-template",
-            str(APHRODITE_PATH / "examples/tool_chat_template_toolace.jinja"),
+            str(SONAR_PATH / "examples/tool_chat_template_toolace.jinja"),
         ],
         "supports_parallel": True,
     },

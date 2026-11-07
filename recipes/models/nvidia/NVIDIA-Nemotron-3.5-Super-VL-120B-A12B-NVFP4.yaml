@@ -261,7 +261,7 @@ guide: |
 
   ## Prerequisites
 
-  - Pull the pinned Aphrodite image and make the selected checkpoint available from
+  - Pull the pinned Sonar image and make the selected checkpoint available from
     Hugging Face. LiLiCorr on DGX Spark also needs its separate draft checkpoint.
   - The NVFP4 checkpoint's safetensors index reports 75.01 GB; the recipe's 91 GB
     minimum includes the schema's 20% allowance. The BF16 index reports 248.91 GB,
@@ -294,7 +294,7 @@ guide: |
   A100 is not in the site's hardware taxonomy, so use its command directly:
 
   ```bash
-  aphrodite serve nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-NVFP4 \
+  sonar serve nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-NVFP4 \
     --served-model-name nemotron-3.5-super \
     --trust-remote-code \
     --tensor-parallel-size 2 \
@@ -312,7 +312,7 @@ guide: |
   Use `nemotron-3.5-super` as the client model name for this A100 command.
 
   The cookbook also provides 1M-token text-only commands. They use
-  `--language-model-only` and `APHRODITE_ALLOW_LONG_MAX_MODEL_LEN=1`; apply those
+  `--language-model-only` and `SONAR_ALLOW_LONG_MAX_MODEL_LEN=1`; apply those
   complete commands from the notebook when the full window is needed. The
   selectable configurations here retain shorter hardware-specific allocations.
 
@@ -325,7 +325,7 @@ guide: |
 
   ## References
 
-  - [NVIDIA Aphrodite cookbook](https://github.com/NVIDIA-NeMo/Nemotron/blob/main/usage-cookbook/Nemotron-3.5-Super-VL/vllm_cookbook.ipynb)
+  - [NVIDIA Sonar cookbook](https://github.com/NVIDIA-NeMo/Nemotron/blob/main/usage-cookbook/Nemotron-3.5-Super-VL/vllm_cookbook.ipynb)
   - [NVFP4 checkpoint](https://huggingface.co/nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-NVFP4)
   - [BF16 checkpoint](https://huggingface.co/nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-BF16)
   - [LiLiCorr draft checkpoint](https://huggingface.co/nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-NVFP4-LiLiCorr)

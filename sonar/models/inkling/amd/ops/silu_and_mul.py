@@ -9,7 +9,7 @@ variant with the per-expert dequant scale and per-token gamma fused in.
 
 import torch
 
-from aphrodite.triton_utils import tl, triton
+from sonar.triton_utils import tl, triton
 
 
 @triton.jit(do_not_specialize=["M"])

@@ -35,7 +35,7 @@ fn tokenize_request_id(headers: &HeaderMap) -> String {
 }
 
 /// Build the `token_strs` vector when requested, via the tokenizer vocab.
-fn token_strs(tokenizer: &aphrodite_text::tokenizer::DynTokenizer, ids: &[u32]) -> Vec<String> {
+fn token_strs(tokenizer: &sonar_text::tokenizer::DynTokenizer, ids: &[u32]) -> Vec<String> {
     // Unknown IDs yield "" — intentional; matches Python's convert_ids_to_tokens behaviour.
     ids.iter().map(|&id| tokenizer.id_to_token(id).unwrap_or_default()).collect()
 }

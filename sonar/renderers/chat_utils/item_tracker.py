@@ -16,13 +16,13 @@ from typing import (
     cast,
 )
 
-from aphrodite.config import ModelConfig
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.inputs import MultiModalDataDict, MultiModalUUIDDict
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.models import SupportsMultiModal
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import (
+from sonar.config import ModelConfig
+from sonar.exceptions import SonarValidationError
+from sonar.inputs import MultiModalDataDict, MultiModalUUIDDict
+from sonar.logger import init_logger
+from sonar.model_executor.models import SupportsMultiModal
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import (
     MultiModalBatchedField,
     MultiModalFlatField,
     MultiModalSharedField,
@@ -30,12 +30,12 @@ from aphrodite.multimodal.inputs import (
     VisionChunkImage,
     VisionChunkVideo,
 )
-from aphrodite.multimodal.media.base import MediaDecodedBudget
-from aphrodite.multimodal.processing import BaseMultiModalProcessor
-from aphrodite.transformers_utils.processor import get_video_processor_cls_name
-from aphrodite.utils import random_uuid
-from aphrodite.utils.collection_utils import is_list_of, is_list_of_numbers
-from aphrodite.utils.import_utils import LazyLoader
+from sonar.multimodal.media.base import MediaDecodedBudget
+from sonar.multimodal.processing import BaseMultiModalProcessor
+from sonar.transformers_utils.processor import get_video_processor_cls_name
+from sonar.utils import random_uuid
+from sonar.utils.collection_utils import is_list_of, is_list_of_numbers
+from sonar.utils.import_utils import LazyLoader
 
 from ...connections import MediaRequestDownloadBudget
 from .content_parser import (
@@ -101,7 +101,7 @@ def _merge_embeds(
 
     first_keys = set(data_items[0].keys())
     if any(set(item.keys()) != first_keys for item in data_items[1:]):
-        raise AphroditeValidationError("All dictionaries in the list of embeddings must have the same keys.")
+        raise SonarValidationError("All dictionaries in the list of embeddings must have the same keys.")
 
     fields = {key: _detect_field([item[key] for item in data_items], mm_processor) for key in first_keys}
     data_merged = {
@@ -131,14 +131,14 @@ def _merge_embeds(
 
 def _parse_metadata_array(key: str, value: list, metadata_fields: set[str]):
     if key not in metadata_fields:
-        raise AphroditeValidationError(f"JSON arrays are only supported for metadata: {key}")
+        raise SonarValidationError(f"JSON arrays are only supported for metadata: {key}")
     if not is_list_of_numbers(value):
-        raise AphroditeValidationError(f"Metadata {key} must be a finite numeric array.")
+        raise SonarValidationError(f"Metadata {key} must be a finite numeric array.")
     dtype = torch.float64 if any(isinstance(v, float) for v in value) else torch.int64
     try:
         return torch.tensor(value, dtype=dtype)
     except (ValueError, TypeError, OverflowError, RuntimeError) as error:
-        raise AphroditeValidationError(f"Invalid metadata array: {key}") from error
+        raise SonarValidationError(f"Invalid metadata array: {key}") from error
 
 
 def _get_embeds_data(
@@ -207,7 +207,7 @@ class BaseMultiModalItemTracker(ABC, Generic[_T]):
 
     @cached_property
     def model_cls(self) -> type[SupportsMultiModal]:
-        from aphrodite.model_executor.model_loader import get_model_cls
+        from sonar.model_executor.model_loader import get_model_cls
 
         model_cls = get_model_cls(self.model_config)
         return cast(type[SupportsMultiModal], model_cls)
@@ -379,17 +379,17 @@ def _resolve_items(
 
     """
     if "image" in items_by_modality and "image_embeds" in items_by_modality:
-        raise AphroditeValidationError(
+        raise SonarValidationError(
             "Mixing raw image and embedding inputs is not allowed",
             parameter="image_embeds",
         )
     if "audio" in items_by_modality and "audio_embeds" in items_by_modality:
-        raise AphroditeValidationError(
+        raise SonarValidationError(
             "Mixing raw audio and embedding inputs is not allowed",
             parameter="audio_embeds",
         )
     if "video" in items_by_modality and "video_embeds" in items_by_modality:
-        raise AphroditeValidationError(
+        raise SonarValidationError(
             "Mixing raw video and embedding inputs is not allowed",
             parameter="video_embeds",
         )

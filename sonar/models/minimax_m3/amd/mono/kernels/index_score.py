@@ -31,7 +31,7 @@ from aiter.ops.flydsl.kernels.kernels_common import LOG2E
 from flydsl.expr import const_expr, gpu, range_constexpr
 from flydsl.expr.typing import Int32, Int64, T
 
-from aphrodite.models.minimax_m3.amd.mono.config import (
+from sonar.models.minimax_m3.amd.mono.config import (
     BLOCKS,
     HEAD_DIM,
     INDEX_CP_FROM_BLOCKS,
@@ -45,7 +45,7 @@ from aphrodite.models.minimax_m3.amd.mono.config import (
     WAVES,
     IndexHeads,
 )
-from aphrodite.models.minimax_m3.amd.mono.kernels.common import (
+from sonar.models.minimax_m3.amd.mono.kernels.common import (
     Mailbox,
     butterfly,
     fp8x8_bf16_pk,

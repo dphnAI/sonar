@@ -5,14 +5,14 @@
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     get_fp8_min_max,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import HAS_TRITON
+from sonar.platforms import current_platform
+from sonar.triton_utils import HAS_TRITON
 
 if HAS_TRITON:
-    from aphrodite.kernels.triton.qkv_padded_fp8_quant import (
+    from sonar.kernels.triton.qkv_padded_fp8_quant import (
         quantize_fp8_pad_head_dim_triton,
     )
 

@@ -4,9 +4,9 @@ from typing import Any
 
 from typing_extensions import override
 
-from aphrodite.platforms import current_platform
-from aphrodite.utils.math_utils import round_up
-from aphrodite.v1.kv_offload.base import (
+from sonar.platforms import current_platform
+from sonar.utils.math_utils import round_up
+from sonar.v1.kv_offload.base import (
     CanonicalKVCaches,
     OffloadingCounterMetadata,
     OffloadingGaugeMetadata,
@@ -16,11 +16,11 @@ from aphrodite.v1.kv_offload.base import (
     OffloadingSpec,
     OffloadingWorker,
 )
-from aphrodite.v1.kv_offload.config import OffloadingConfig
-from aphrodite.v1.kv_offload.cpu.common import CPUOffloadingInfo, CPUOffloadingMetrics
-from aphrodite.v1.kv_offload.cpu.gpu_worker import CPUOffloadingWorker
-from aphrodite.v1.kv_offload.cpu.manager import CPUOffloadingManager
-from aphrodite.v1.kv_offload.cpu.shared_offload_region import SharedOffloadRegion
+from sonar.v1.kv_offload.config import OffloadingConfig
+from sonar.v1.kv_offload.cpu.common import CPUOffloadingInfo, CPUOffloadingMetrics
+from sonar.v1.kv_offload.cpu.gpu_worker import CPUOffloadingWorker
+from sonar.v1.kv_offload.cpu.manager import CPUOffloadingManager
+from sonar.v1.kv_offload.cpu.shared_offload_region import SharedOffloadRegion
 
 # Split the shared region into this many shm files so workers pre-fault them
 # in parallel (page-cache inserts are serialized per file).
@@ -32,7 +32,7 @@ def _all_workers_barrier() -> None:
 
     A superset of the node-local mmap openers suffices: once the barrier
     releases, every worker sharing the region file has mapped it."""
-    from aphrodite.distributed.parallel_state import (
+    from sonar.distributed.parallel_state import (
         get_inner_dp_world_group,
         get_world_group,
     )

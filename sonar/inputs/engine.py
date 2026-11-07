@@ -7,17 +7,17 @@ from typing import TYPE_CHECKING, Literal, NotRequired, TypeAlias, assert_never
 
 from typing_extensions import TypedDict
 
-from aphrodite.exceptions import AphroditeValidationError
+from sonar.exceptions import SonarValidationError
 
 if TYPE_CHECKING:
     import torch
 
-    from aphrodite.multimodal.inputs import MultiModalKwargsOptionalItems, PlaceholderRange
+    from sonar.multimodal.inputs import MultiModalKwargsOptionalItems, PlaceholderRange
 
 
 class _InputOptions(TypedDict):
     """Additional options available to all
-    [`SingletonInput`][aphrodite.inputs.engine.SingletonInput] types.
+    [`SingletonInput`][sonar.inputs.engine.SingletonInput] types.
     """
 
     arrival_time: NotRequired[float]
@@ -50,7 +50,7 @@ def tokens_input(
     prompt: str | None = None,
     cache_salt: str | None = None,
 ) -> TokensInput:
-    """Construct [`TokensInput`][aphrodite.inputs.engine.TokensInput]
+    """Construct [`TokensInput`][sonar.inputs.engine.TokensInput]
     from optional values.
     """
     inputs = TokensInput(type="token", prompt_token_ids=prompt_token_ids)
@@ -97,7 +97,7 @@ def embeds_input(
     prompt_token_ids: list[int] | None = None,
     is_token_ids: list[bool] | None = None,
 ) -> EmbedsInput:
-    """Construct [`EmbedsInput`][aphrodite.inputs.engine.EmbedsInput]
+    """Construct [`EmbedsInput`][sonar.inputs.engine.EmbedsInput]
     from optional values.
     """
     inputs = EmbedsInput(type="embeds", prompt_embeds=prompt_embeds)
@@ -220,27 +220,27 @@ def mm_enc_dec_input(
 
 DecoderOnlyEngineInput: TypeAlias = TokensInput | EmbedsInput | MultiModalInput
 """
-A rendered [`DecoderOnlyPrompt`][aphrodite.inputs.llm.DecoderOnlyPrompt]
+A rendered [`DecoderOnlyPrompt`][sonar.inputs.llm.DecoderOnlyPrompt]
 which can be passed to `LLMEngine.add_request` or `AsyncLLM.add_request`.
 """
 
 
 EncoderInput: TypeAlias = TokensInput | MultiModalEncDecInput
 """
-A rendered [`EncoderPrompt`][aphrodite.inputs.llm.EncoderPrompt]
+A rendered [`EncoderPrompt`][sonar.inputs.llm.EncoderPrompt]
 which can be passed to `LLMEngine.add_request` or `AsyncLLM.add_request`.
 """
 
 
 DecoderEngineInput: TypeAlias = TokensInput | MultiModalInput
 """
-A rendered [`DecoderPrompt`][aphrodite.inputs.llm.DecoderPrompt]
+A rendered [`DecoderPrompt`][sonar.inputs.llm.DecoderPrompt]
 which can be passed to `LLMEngine.add_request` or `AsyncLLM.add_request`.
 """
 
 
 class EncoderDecoderInput(TypedDict):
-    """A rendered [`EncoderDecoderPrompt`][aphrodite.inputs.llm.EncoderDecoderPrompt]
+    """A rendered [`EncoderDecoderPrompt`][sonar.inputs.llm.EncoderDecoderPrompt]
     which can be passed to `LLMEngine.add_request` or `AsyncLLM.add_request`.
     """
 
@@ -258,21 +258,21 @@ class EncoderDecoderInput(TypedDict):
 
 SingletonInput: TypeAlias = DecoderOnlyEngineInput | MultiModalEncDecInput
 """
-A rendered [`SingletonPrompt`][aphrodite.inputs.llm.SingletonPrompt]
+A rendered [`SingletonPrompt`][sonar.inputs.llm.SingletonPrompt]
 which can be passed to `LLMEngine.add_request` or `AsyncLLM.add_request`.
 """
 
 
 EngineInput: TypeAlias = DecoderOnlyEngineInput | EncoderDecoderInput
 """
-A rendered [`PromptType`][aphrodite.inputs.llm.PromptType]
+A rendered [`PromptType`][sonar.inputs.llm.PromptType]
 which can be passed to `LLMEngine.add_request` or `AsyncLLM.add_request`.
 """
 
 
 def _validate_enc_input(enc_input: SingletonInput) -> EncoderInput:
     if enc_input["type"] == "embeds":
-        raise AphroditeValidationError("Embedding inputs are not supported for encoder-decoder models")
+        raise SonarValidationError("Embedding inputs are not supported for encoder-decoder models")
 
     if enc_input["type"] == "multimodal" and "encoder_prompt_token_ids" not in enc_input:
         raise RuntimeError("You should register an encoder-decoder multi-modal processor for encoder-decoder models.")
@@ -282,7 +282,7 @@ def _validate_enc_input(enc_input: SingletonInput) -> EncoderInput:
 
 def _validate_dec_input(dec_input: SingletonInput) -> DecoderEngineInput:
     if dec_input["type"] == "embeds":
-        raise AphroditeValidationError("Embedding inputs are not supported for encoder-decoder models")
+        raise SonarValidationError("Embedding inputs are not supported for encoder-decoder models")
 
     return dec_input
 

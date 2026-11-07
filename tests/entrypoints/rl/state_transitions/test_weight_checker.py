@@ -9,13 +9,13 @@ import requests
 import torch
 from transformers import AutoModelForCausalLM
 
-from aphrodite.distributed.weight_transfer import (
-    HTTPAphroditeWeightSyncClient,
+from sonar.distributed.weight_transfer import (
+    HTTPSonarWeightSyncClient,
     ModuleSource,
     WeightTransferTrainerFactory,
 )
-from aphrodite.distributed.weight_transfer.ipc_engine import IPCTrainerInitInfo
-from aphrodite.platforms import current_platform
+from sonar.distributed.weight_transfer.ipc_engine import IPCTrainerInitInfo
+from sonar.platforms import current_platform
 from tests.entrypoints.rl.conftest import (
     MODEL_NAME,
     gen,
@@ -98,7 +98,7 @@ def test_ipc_weight_transfer_restores_reset_weights():
         pytest.skip("IPC weight transfer backend uses CUDA IPC handles")
     args = ["--weight-transfer-config", '{"backend": "ipc"}']
     with (
-        patch.dict(os.environ, {"APHRODITE_ALLOW_INSECURE_SERIALIZATION": "1"}),
+        patch.dict(os.environ, {"SONAR_ALLOW_INSECURE_SERIALIZATION": "1"}),
         server(extra_args=args, port=8772) as url,
     ):
         baseline = checksums(url)
@@ -106,7 +106,7 @@ def test_ipc_weight_transfer_restores_reset_weights():
         trainer_model = AutoModelForCausalLM.from_pretrained(MODEL_NAME, torch_dtype=torch.bfloat16).cuda()
         WeightTransferTrainerFactory.trainer_init(
             IPCTrainerInitInfo(rank=0),
-            client=HTTPAphroditeWeightSyncClient(url),
+            client=HTTPSonarWeightSyncClient(url),
             source=ModuleSource(trainer_model),
         ).send_weights()
         assert weight_checker(url, "compare", baseline).json() == {

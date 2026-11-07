@@ -8,37 +8,37 @@ import torch
 from torch import nn
 from transformers import RobertaConfig
 
-from aphrodite.config import AphroditeConfig, ModelConfig, PoolerConfig
-from aphrodite.model_executor.layers.pooler import (
+from sonar.config import ModelConfig, PoolerConfig, SonarConfig
+from sonar.model_executor.layers.pooler import (
     BgeM3Pooler,
     BOSEOSFilter,
     DispatchPooler,
     Pooler,
 )
-from aphrodite.model_executor.layers.pooler.seqwise import (
+from sonar.model_executor.layers.pooler.seqwise import (
     pooler_for_embed,
 )
-from aphrodite.model_executor.layers.pooler.tokwise import (
+from sonar.model_executor.layers.pooler.tokwise import (
     AllPool,
     pooler_for_token_classify,
     pooler_for_token_embed,
 )
-from aphrodite.model_executor.layers.vocab_parallel_embedding import VocabParallelEmbedding
-from aphrodite.model_executor.model_loader.default_loader import DefaultModelLoader
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
-from aphrodite.model_executor.models.bert import (
+from sonar.model_executor.layers.vocab_parallel_embedding import VocabParallelEmbedding
+from sonar.model_executor.model_loader.default_loader import DefaultModelLoader
+from sonar.model_executor.model_loader.weight_utils import default_weight_loader
+from sonar.model_executor.models.bert import (
     TOKEN_TYPE_SHIFT,
     BertEmbeddingModel,
     BertModel,
     _decode_token_type_ids,
     _encode_token_type_ids,
 )
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.models.utils import (
     AutoWeightsLoader,
     WeightsMapper,
     maybe_prefix,
 )
-from aphrodite.sequence import IntermediateTensors
+from sonar.sequence import IntermediateTensors
 
 from .bert_with_rope import BertWithRope, JinaRobertaModel
 from .interfaces import SupportsCrossEncoding, SupportsLoRA
@@ -109,9 +109,9 @@ class RobertaEmbeddingModel(BertEmbeddingModel):
 
     embedding_class: type[nn.Module] = RobertaEmbedding
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
-        super().__init__(aphrodite_config=aphrodite_config, prefix=prefix)
-        self.padding_idx: int = aphrodite_config.model_config.hf_config.pad_token_id
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
+        super().__init__(sonar_config=sonar_config, prefix=prefix)
+        self.padding_idx: int = sonar_config.model_config.hf_config.pad_token_id
 
     def forward(
         self,
@@ -127,16 +127,16 @@ class RobertaEmbeddingModel(BertEmbeddingModel):
             intermediate_tensors=intermediate_tensors,
         )
 
-    def _build_model(self, aphrodite_config: AphroditeConfig, prefix: str = "") -> BertModel | BertWithRope:
-        hf_config = aphrodite_config.model_config.hf_config
+    def _build_model(self, sonar_config: SonarConfig, prefix: str = "") -> BertModel | BertWithRope:
+        hf_config = sonar_config.model_config.hf_config
         if getattr(hf_config, "position_embedding_type", "absolute") == "absolute":
             return BertModel(
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 prefix=prefix,
                 embedding_class=self.embedding_class,
             )
         else:
-            return JinaRobertaModel(aphrodite_config=aphrodite_config, prefix=prefix)
+            return JinaRobertaModel(sonar_config=sonar_config, prefix=prefix)
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]):
         weights_list = list(weights)
@@ -175,22 +175,22 @@ class BgeM3EmbeddingModel(RobertaEmbeddingModel):
     to create sparse embeddings as described in https://arxiv.org/abs/2402.03216
     """
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
-        self.hidden_size = aphrodite_config.model_config.hf_config.hidden_size
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
+        self.hidden_size = sonar_config.model_config.hf_config.hidden_size
 
-        model_config = aphrodite_config.model_config
+        model_config = sonar_config.model_config
         self.head_dtype = model_config.head_dtype
         self.bos_token_id = model_config.hf_config.bos_token_id
         self.eos_token_id = model_config.hf_config.eos_token_id
 
-        super().__init__(aphrodite_config=aphrodite_config, prefix=prefix)
+        super().__init__(sonar_config=sonar_config, prefix=prefix)
         self.secondary_weight_prefixes = ["sparse_linear.", "colbert_linear."]
         self.secondary_weight_files = [prefix + "pt" for prefix in self.secondary_weight_prefixes]
 
         self.secondary_weights = [
             DefaultModelLoader.Source(
-                model_or_path=aphrodite_config.model_config.model,
-                revision=aphrodite_config.model_config.revision,
+                model_or_path=sonar_config.model_config.model,
+                revision=sonar_config.model_config.revision,
                 prefix=prefix,
                 allow_patterns_overrides=[filename],
             )
@@ -254,7 +254,7 @@ class RobertaForSequenceClassification(nn.Module, SupportsCrossEncoding, Support
 
     is_pooling_model = True
     packed_modules_mapping = {"qkv_proj": ["query", "key", "value"]}
-    jina_to_aphrodite_mapper = WeightsMapper(
+    jina_to_sonar_mapper = WeightsMapper(
         orig_to_new_substr={
             "emb_ln": "embeddings.LayerNorm",
             "layers": "layer",
@@ -269,21 +269,21 @@ class RobertaForSequenceClassification(nn.Module, SupportsCrossEncoding, Support
 
     embedding_class: type[nn.Module] = RobertaEmbedding
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
         self.config = config
         self.padding_idx: int = config.pad_token_id
 
         self.num_labels = config.num_labels
         self.roberta = BertModel(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             prefix=maybe_prefix(prefix, "bert"),
             embedding_class=self.embedding_class,
         )
-        self.classifier = RobertaClassificationHead(aphrodite_config.model_config)
+        self.classifier = RobertaClassificationHead(sonar_config.model_config)
 
-        pooler_config = aphrodite_config.model_config.pooler_config
+        pooler_config = sonar_config.model_config.pooler_config
         assert pooler_config is not None
 
         self.pooler = DispatchPooler.for_seq_cls(
@@ -293,7 +293,7 @@ class RobertaForSequenceClassification(nn.Module, SupportsCrossEncoding, Support
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]):
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.jina_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.jina_to_sonar_mapper)
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.roberta.embed_input_ids(input_ids)
@@ -333,19 +333,19 @@ class RobertaForTokenClassification(nn.Module):
     is_pooling_model = True
     embedding_class: type[nn.Module] = RobertaEmbedding
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        self.head_dtype = aphrodite_config.model_config.head_dtype
+        config = sonar_config.model_config.hf_config
+        self.head_dtype = sonar_config.model_config.head_dtype
         self.num_labels = config.num_labels
         self.roberta = BertModel(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             prefix=maybe_prefix(prefix, "roberta"),
             embedding_class=self.embedding_class,
         )
         self.classifier = nn.Linear(config.hidden_size, config.num_labels, dtype=self.head_dtype)
 
-        pooler_config = aphrodite_config.model_config.pooler_config
+        pooler_config = sonar_config.model_config.pooler_config
         assert pooler_config is not None
 
         self.pooler = pooler_for_token_classify(pooler_config)

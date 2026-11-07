@@ -8,12 +8,12 @@ from typing import Annotated
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from aphrodite.entrypoints.serve.utils.api_utils import (
+from sonar.entrypoints.serve.utils.api_utils import (
     load_aware_call,
     with_cancellation,
 )
-from aphrodite.entrypoints.speech_to_text.base.utils import read_upload_with_limit
-from aphrodite.logger import init_logger
+from sonar.entrypoints.speech_to_text.base.utils import read_upload_with_limit
+from sonar.logger import init_logger
 
 from ...serve.engine.protocol import ErrorResponse
 from .protocol import TranscriptionRequest, TranscriptionResponseVariant

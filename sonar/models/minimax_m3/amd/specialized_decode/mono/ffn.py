@@ -32,7 +32,7 @@ from flydsl.expr import const_expr, gpu, range_constexpr, rocdl
 from flydsl.expr import math as fmath
 from flydsl.expr.typing import Int32, Int64, T, as_ir_value
 
-from aphrodite.models.deepseek_v41.amd.mono.common.ops import (
+from sonar.models.deepseek_v41.amd.mono.common.ops import (
     CM_SYS,
     ballot,
     bf2_f32,
@@ -48,7 +48,7 @@ from aphrodite.models.deepseek_v41.amd.mono.common.ops import (
     rsrc,
     traced,
 )
-from aphrodite.models.deepseek_v41.amd.mono.common.plan import (
+from sonar.models.deepseek_v41.amd.mono.common.plan import (
     BLOCKS,
     THREADS,
     WAVES,
@@ -56,7 +56,7 @@ from aphrodite.models.deepseek_v41.amd.mono.common.plan import (
     key_tuple,
     pair_layout,
 )
-from aphrodite.models.deepseek_v41.amd.mono.common.sync import Space, preg, sreg
+from sonar.models.deepseek_v41.amd.mono.common.sync import Space, preg, sreg
 
 from .a16w4 import scale_f32, scale_loads, step_mfma, weight_loads
 from .sources import SOURCES

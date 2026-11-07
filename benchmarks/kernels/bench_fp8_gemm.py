@@ -7,9 +7,9 @@ import itertools
 import torch
 from weight_shapes import WEIGHT_SHAPES
 
-from aphrodite._custom_ops import cutlass_scaled_mm as aphrodite_scaled_mm
-from aphrodite._custom_ops import scaled_fp8_quant as aphrodite_scaled_fp8_quant
-from aphrodite.triton_utils import triton
+from sonar._custom_ops import cutlass_scaled_mm as sonar_scaled_mm
+from sonar._custom_ops import scaled_fp8_quant as sonar_scaled_fp8_quant
+from sonar.triton_utils import triton
 
 PROVIDER_CFGS = {
     "torch-bf16": dict(enabled=True),
@@ -29,9 +29,9 @@ _enabled = [k for k, v in PROVIDER_CFGS.items() if v["enabled"]]
 def _quant_weight_fp8(b: torch.Tensor, w_type: str, device: str):
     if w_type == "tensor":
         scale_b = torch.ones(1, device=device, dtype=torch.float32)
-        b_fp8, scale_b_fp8 = aphrodite_scaled_fp8_quant(b, scale_b)
+        b_fp8, scale_b_fp8 = sonar_scaled_fp8_quant(b, scale_b)
     else:
-        b_fp8, scale_b_fp8 = aphrodite_scaled_fp8_quant(b, use_per_token_if_dynamic=True)
+        b_fp8, scale_b_fp8 = sonar_scaled_fp8_quant(b, use_per_token_if_dynamic=True)
     return b_fp8.t(), scale_b_fp8
 
 
@@ -42,26 +42,26 @@ def build_fp8_runner(cfg, a, b, dtype, device):
 
     if cfg["no_a_quant"]:
         if cfg["a"] == "tensor":
-            a_fp8, scale_a_fp8 = aphrodite_scaled_fp8_quant(a, scale_a_const)
+            a_fp8, scale_a_fp8 = sonar_scaled_fp8_quant(a, scale_a_const)
         else:
-            a_fp8, scale_a_fp8 = aphrodite_scaled_fp8_quant(a, use_per_token_if_dynamic=True)
+            a_fp8, scale_a_fp8 = sonar_scaled_fp8_quant(a, use_per_token_if_dynamic=True)
 
         def run():
-            return aphrodite_scaled_mm(a_fp8, b_fp8, scale_a_fp8, scale_b_fp8, dtype)
+            return sonar_scaled_mm(a_fp8, b_fp8, scale_a_fp8, scale_b_fp8, dtype)
 
         return run
 
     if cfg["a"] == "tensor":
 
         def run():
-            a_fp8, scale_a_fp8 = aphrodite_scaled_fp8_quant(a, scale_a_const)
-            return aphrodite_scaled_mm(a_fp8, b_fp8, scale_a_fp8, scale_b_fp8, dtype)
+            a_fp8, scale_a_fp8 = sonar_scaled_fp8_quant(a, scale_a_const)
+            return sonar_scaled_mm(a_fp8, b_fp8, scale_a_fp8, scale_b_fp8, dtype)
 
     else:
 
         def run():
-            a_fp8, scale_a_fp8 = aphrodite_scaled_fp8_quant(a, use_per_token_if_dynamic=True)
-            return aphrodite_scaled_mm(a_fp8, b_fp8, scale_a_fp8, scale_b_fp8, dtype)
+            a_fp8, scale_a_fp8 = sonar_scaled_fp8_quant(a, use_per_token_if_dynamic=True)
+            return sonar_scaled_mm(a_fp8, b_fp8, scale_a_fp8, scale_b_fp8, dtype)
 
     return run
 

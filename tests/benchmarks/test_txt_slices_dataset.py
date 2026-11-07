@@ -6,8 +6,8 @@ from pathlib import Path
 import pytest
 from transformers import AutoTokenizer, PreTrainedTokenizerBase
 
-from aphrodite.benchmarks.datasets import CustomDataset
-from aphrodite.benchmarks.datasets.create_txt_slices_dataset import create_txt_slices_jsonl
+from sonar.benchmarks.datasets import CustomDataset
+from sonar.benchmarks.datasets.create_txt_slices_dataset import create_txt_slices_jsonl
 
 
 @pytest.fixture(scope="session")

@@ -14,7 +14,7 @@ const X_REQUEST_ID: HeaderName = HeaderName::from_static("x-request-id");
 /// `uuid4` hex if the request did not provide one.
 ///
 /// Original Python:
-/// `aphrodite.entrypoints.openai.server_utils.XRequestIdMiddleware`.
+/// `sonar.entrypoints.openai.server_utils.XRequestIdMiddleware`.
 pub async fn set_request_id_header(req: Request, next: Next) -> Response {
     let incoming = req.headers().get(&X_REQUEST_ID).cloned();
     let mut response = next.run(req).await;

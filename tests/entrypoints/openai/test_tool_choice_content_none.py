@@ -7,14 +7,14 @@ import pytest
 from openai.types.chat.chat_completion import ChatCompletion as OpenAIChatCompletion
 from openai.types.chat.chat_completion_chunk import ChatCompletionChunk
 
-from aphrodite.entrypoints.generate.base.protocol import (
+from sonar.entrypoints.generate.base.protocol import (
     DeltaFunctionCall,
     DeltaMessage,
     DeltaToolCall,
     FunctionCall,
     ToolCall,
 )
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionRequest,
     ChatCompletionResponse,
     ChatCompletionResponseChoice,
@@ -22,9 +22,9 @@ from aphrodite.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionStreamResponse,
     ChatMessage,
 )
-from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
-from aphrodite.entrypoints.serve.engine.protocol import PromptTokenUsageInfo, UsageInfo
-from aphrodite.parser.abstract_parser import DelegatingParser
+from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
+from sonar.entrypoints.serve.engine.protocol import PromptTokenUsageInfo, UsageInfo
+from sonar.parser.abstract_parser import DelegatingParser
 
 pytestmark = pytest.mark.skip_global_cleanup
 

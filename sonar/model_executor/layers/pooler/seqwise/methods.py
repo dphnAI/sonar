@@ -7,11 +7,11 @@ from typing import TypeAlias
 import torch
 import torch.nn as nn
 
-from aphrodite.config.pooler import SequencePoolingType
-from aphrodite.model_executor.layers.pooler import PoolingParamsUpdate
-from aphrodite.tasks import PoolingTask
-from aphrodite.utils.torch_utils import async_tensor_h2d
-from aphrodite.v1.pool.metadata import PoolingMetadata
+from sonar.config.pooler import SequencePoolingType
+from sonar.model_executor.layers.pooler import PoolingParamsUpdate
+from sonar.tasks import PoolingTask
+from sonar.utils.torch_utils import async_tensor_h2d
+from sonar.v1.pool.metadata import PoolingMetadata
 
 SequencePoolingMethodOutput: TypeAlias = torch.Tensor | list[torch.Tensor]
 

@@ -11,16 +11,16 @@ from typing import Any
 import pytest
 from prometheus_client import Counter, Gauge, Histogram
 
-from aphrodite.distributed.kv_transfer.kv_connector.v1.simple_cpu_offload_connector import (
+from sonar.distributed.kv_transfer.kv_connector.v1.simple_cpu_offload_connector import (
     SimpleCPUOffloadConnector,
 )
-from aphrodite.v1.outputs import KVConnectorOutput
-from aphrodite.v1.simple_kv_offload.manager import (
+from sonar.v1.outputs import KVConnectorOutput
+from sonar.v1.simple_kv_offload.manager import (
     BoundaryStoreStats,
     LoadRequestState,
     TransferMeta,
 )
-from aphrodite.v1.simple_kv_offload.metrics import (
+from sonar.v1.simple_kv_offload.metrics import (
     INFO_LABELS,
     OUTCOME_TO_FIELD,
     MetricName,
@@ -74,10 +74,10 @@ def _fake_metric_types() -> dict[type, type]:
 
 
 def _make_prom_metrics(per_engine: dict[int, list[object]] | None = None) -> Any:
-    from aphrodite.v1.simple_kv_offload.metrics import SimpleCPUOffloadPromMetrics
+    from sonar.v1.simple_kv_offload.metrics import SimpleCPUOffloadPromMetrics
 
     return SimpleCPUOffloadPromMetrics(
-        aphrodite_config=SimpleNamespace(kv_transfer_config=None),
+        sonar_config=SimpleNamespace(kv_transfer_config=None),
         metric_types=_fake_metric_types(),
         labelnames=["model_name", "engine"],
         per_engine_labelvalues=per_engine or {0: ["model", "0"]},
@@ -282,8 +282,8 @@ def test_prom_metrics_rejects_unknown_metric() -> None:
     with pytest.raises(AssertionError, match="Unknown"):
         prom.observe(
             _stats_payload(
-                types={"aphrodite:not_a_metric": _MetricType.COUNTER},
-                data={"aphrodite:not_a_metric": {(): 1}},
+                types={"sonar:not_a_metric": _MetricType.COUNTER},
+                data={"sonar:not_a_metric": {(): 1}},
             )
         )
 
@@ -310,10 +310,10 @@ def test_prom_metrics_routes_per_engine() -> None:
 
 
 def test_connector_build_prom_metrics() -> None:
-    from aphrodite.v1.simple_kv_offload.metrics import SimpleCPUOffloadPromMetrics
+    from sonar.v1.simple_kv_offload.metrics import SimpleCPUOffloadPromMetrics
 
     prom = SimpleCPUOffloadConnector.build_prom_metrics(
-        aphrodite_config=SimpleNamespace(kv_transfer_config=None),
+        sonar_config=SimpleNamespace(kv_transfer_config=None),
         metric_types=_fake_metric_types(),
         labelnames=["model_name", "engine"],
         per_engine_labelvalues={0: ["model", "0"]},

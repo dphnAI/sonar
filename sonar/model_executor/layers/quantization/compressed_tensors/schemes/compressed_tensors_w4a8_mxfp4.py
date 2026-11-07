@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.quantization.compressed_tensors.schemes.compressed_tensors_w4a4_mxfp4 import (  # noqa: E501
+from sonar.logger import init_logger
+from sonar.model_executor.layers.quantization.compressed_tensors.schemes.compressed_tensors_w4a4_mxfp4 import (  # noqa: E501
     CompressedTensorsW4A4Mxfp4,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import QuantKey
+from sonar.model_executor.layers.quantization.utils.quant_utils import QuantKey
 
 logger = init_logger(__name__)
 

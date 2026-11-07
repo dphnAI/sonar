@@ -7,15 +7,15 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from aphrodite.distributed.ec_transfer.ec_connector.cpu.protocol import (
+from sonar.distributed.ec_transfer.ec_connector.cpu.protocol import (
     XferAck,
     XferReq,
     XferStatus,
 )
-from aphrodite.distributed.ec_transfer.ec_connector.cpu.scheduler.embedding_cache import (
+from sonar.distributed.ec_transfer.ec_connector.cpu.scheduler.embedding_cache import (
     EmbeddingCache,
 )
-from aphrodite.distributed.ec_transfer.ec_connector.cpu.session import (
+from sonar.distributed.ec_transfer.ec_connector.cpu.session import (
     _CONSUMER_QUARANTINE_TIMEOUT_S,
     ConsumerSession,
     ConsumerXfer,

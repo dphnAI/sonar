@@ -9,8 +9,8 @@ from os import PathLike
 from pathlib import Path
 from typing import Any
 
-import aphrodite.envs as envs
-from aphrodite.logger import init_logger
+import sonar.envs as envs
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 
@@ -84,7 +84,7 @@ def maybe_model_redirect(model: str) -> str:
         maybe redirect to a local folder
 
     """
-    model_redirect_path = envs.APHRODITE_MODEL_REDIRECT_PATH
+    model_redirect_path = envs.SONAR_MODEL_REDIRECT_PATH
 
     if not model_redirect_path:
         return model
@@ -108,9 +108,9 @@ def parse_safetensors_file_metadata(path: str | PathLike) -> dict[str, Any]:
 
 
 def convert_model_repo_to_path(model_repo: str) -> str:
-    """When APHRODITE_USE_MODELSCOPE is True convert a model
+    """When SONAR_USE_MODELSCOPE is True convert a model
     repository string to a Path str."""
-    if not envs.APHRODITE_USE_MODELSCOPE or Path(model_repo).exists():
+    if not envs.SONAR_USE_MODELSCOPE or Path(model_repo).exists():
         return model_repo
     from modelscope.utils.file_utils import get_model_cache_root
 

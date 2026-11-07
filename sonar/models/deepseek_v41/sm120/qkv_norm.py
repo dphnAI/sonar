@@ -21,7 +21,7 @@ from b12x._lib.runtime_control import raise_if_kernel_resolution_frozen
 from b12x.norm.hyperconnection import _cute as provider
 from cutlass import BFloat16, Float32, Int32, Int64, Uint8, Uint32
 
-from aphrodite.utils.b12x import PreparationResourceUnavailableError
+from sonar.utils.b12x import PreparationResourceUnavailableError
 
 Q_WIDTH = 1280
 KV_WIDTH = 512
@@ -332,7 +332,7 @@ def prepare_qkv_norm_quant(device: torch.device) -> None:
                 Int32(1),
                 utils.current_cuda_stream(),
                 compile_spec=KernelCompileSpec.from_key(
-                    "aphrodite.dsv41.qkv_norm_quant",
+                    "sonar.dsv41.qkv_norm_quant",
                     1,
                     (Q_WIDTH, KV_WIDTH, ROW_STRIDE, ROPE_DIM, THREADS, subgroup, wide_rows, _KERNEL_SHA),
                 ),

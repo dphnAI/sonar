@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """The gfx942 parts of the DeepSeek-V4.1 mono decode kernels
-(aphrodite/models/deepseek_v41/amd/mono) on the GPU.
+(sonar/models/deepseek_v41/amd/mono) on the GPU.
 
   key lists  keylist.launch, which writes K2's key lists on an index layer,
              against a reference built in torch from its documented format.
   entry seam AITER's delayed seam on the expanded residual, which the first
-             layer uses with the mono layers on, against Aphrodite's torch seam
+             layer uses with the mono layers on, against Sonar's torch seam
              on the folded weight.
   GEMV       the attention GEMV core (attention/gemv.py) and the MoE side's
              FP8 GEMV (stages/gemv.py) on the gfx942 weight copy
@@ -24,13 +24,13 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 
 def _on_gfx942() -> bool:
     if not current_platform.is_rocm():
         return False
-    from aphrodite.platforms.rocm import on_gfx942
+    from sonar.platforms.rocm import on_gfx942
 
     return on_gfx942()
 
@@ -47,21 +47,21 @@ from aiter.ops.flydsl.kernels import buffer_ops as bo  # noqa: E402
 from flydsl.expr import const_expr, gpu, range_constexpr  # noqa: E402
 from flydsl.expr.typing import Int64, T  # noqa: E402
 
-from aphrodite.models.deepseek_v41.amd.mono.attention import gemv as G  # noqa: E402
-from aphrodite.models.deepseek_v41.amd.mono.attention.device import (  # noqa: E402
+from sonar.models.deepseek_v41.amd.mono.attention import gemv as G  # noqa: E402
+from sonar.models.deepseek_v41.amd.mono.attention.device import (  # noqa: E402
     THREADS,
     WAVES,
     fp8x8_bf16,
     rsrc,
 )
-from aphrodite.models.deepseek_v41.amd.mono.common.gfx942 import (  # noqa: E402
+from sonar.models.deepseek_v41.amd.mono.common.gfx942 import (  # noqa: E402
     fp4x8_fnuz,
     mfma_bf16_k32,
     ocp_to_fnuz,
 )
-from aphrodite.models.deepseek_v41.amd.mono.stages import gemv as SG  # noqa: E402
-from aphrodite.models.deepseek_v41.amd.mono.stages import moe as M  # noqa: E402
-from aphrodite.models.deepseek_v41.amd.mono.weights942 import (  # noqa: E402
+from sonar.models.deepseek_v41.amd.mono.stages import gemv as SG  # noqa: E402
+from sonar.models.deepseek_v41.amd.mono.stages import moe as M  # noqa: E402
+from sonar.models.deepseek_v41.amd.mono.weights942 import (  # noqa: E402
     EVEN_ODD,
     codes_tile_rounds,
     dense_copy,
@@ -93,7 +93,7 @@ def _rel_err(got: torch.Tensor, ref: torch.Tensor) -> float:
 
 
 def _keylist_reference(slot, pos, swa_idx, swa_lens, t2r, ratio, topk, bt, cb):
-    from aphrodite.models.deepseek_v41.amd.mono.attention.plan import KEYS, TOPK
+    from sonar.models.deepseek_v41.amd.mono.attention.plan import KEYS, TOPK
 
     S = slot.shape[0]
     kt = torch.full((S, KEYS), -1, dtype=torch.int64)
@@ -116,8 +116,8 @@ def _keylist_reference(slot, pos, swa_idx, swa_lens, t2r, ratio, topk, bt, cb):
 
 @pytest.mark.parametrize("ratio", [0, 1, 2, 4])
 def test_keylist_matches_torch_reference(ratio):
-    from aphrodite.models.deepseek_v41.amd.mono import keylist
-    from aphrodite.models.deepseek_v41.amd.mono.attention.plan import KEYS, TOPK, WINDOW
+    from sonar.models.deepseek_v41.amd.mono import keylist
+    from sonar.models.deepseek_v41.amd.mono.attention.plan import KEYS, TOPK, WINDOW
 
     g = torch.Generator().manual_seed(ratio)
     S, reqs, cb, blocks = 6, 2, 64, 3000
@@ -159,13 +159,13 @@ def test_keylist_matches_torch_reference(ratio):
 
 
 def test_entry_seam_matches_torch():
-    """APHRODITE projects the first layer's 2-D embedding x with the sum of
+    """SONAR projects the first layer's 2-D embedding x with the sum of
     hc_attn_fn over the hc copies. With the mono layers on, the seam projects
     the expanded residual (hc equal copies of x) with hc_attn_fn itself. The
     two are the same sum with the products added in another order, and the
     layer input is the same bit for bit."""
-    from aphrodite.model_executor.kernels.mhc.aiter import mhc_pre_delayed_aiter
-    from aphrodite.model_executor.kernels.mhc.torch import mhc_pre_delayed_torch
+    from sonar.model_executor.kernels.mhc.aiter import mhc_pre_delayed_aiter
+    from sonar.model_executor.kernels.mhc.torch import mhc_pre_delayed_torch
 
     hc, iters = 4, 20
     torch.manual_seed(0)
@@ -374,7 +374,7 @@ def test_gfx942_conversion_helpers():
 
 
 def _fp4_weights(rows, k, g):
-    """Random MXFP4 rows in Aphrodite's layout: bytes [rows, k / 2] with the low
+    """Random MXFP4 rows in Sonar's layout: bytes [rows, k / 2] with the low
     nibble the lower K and -0 removed, e8m0 codes [rows, k / 32], and the
     float64 values."""
     u8 = dict(device="cuda", dtype=torch.uint8, generator=g)
@@ -595,7 +595,7 @@ def test_contrib_942_is_bf16_of_product(routing):
     every pick of a 42-row step, with w the pick's route weight from the route
     table (RouteShape.pick_w). down_combine rounds this same f32 product on
     gfx950, so the gfx942 combine adds the same values."""
-    from aphrodite.models.deepseek_v41.amd.mono.stages.moe_shape import RouteShape
+    from sonar.models.deepseek_v41.amd.mono.stages.moe_shape import RouteShape
 
     experts, topk = routing
     rs = RouteShape(experts, topk, 42, 4)
@@ -619,7 +619,7 @@ def _build_nan_route(rs):
     The draft's all-NaN scores pick one expert twice. load_route counts picks
     with a token bitmap, so the order table is short and the unread entries stay
     at the sentinel. The flat load of that index is the gather that faults."""
-    from aphrodite.models.deepseek_v41.amd.mono.common.sync import Addr, Mailbox, Space
+    from sonar.models.deepseek_v41.amd.mono.common.sync import Addr, Mailbox, Space
 
     words = rs.tab_words
     tokens, topk = rs.tokens, rs.topk
@@ -686,7 +686,7 @@ def test_nan_draft_route_stays_in_range():
 
     This is the gfx942 multi-tile shape from the capture fault. Each token's
     three ids are unique and in range, and the ordered-pick load finishes."""
-    from aphrodite.models.deepseek_v41.amd.mono.stages.moe_shape import RouteShape
+    from sonar.models.deepseek_v41.amd.mono.stages.moe_shape import RouteShape
 
     tokens, experts, topk = 10, 128, 3
     rs = RouteShape(experts, topk, tokens, 4)

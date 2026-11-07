@@ -4,42 +4,42 @@ from collections.abc import Callable
 
 import torch
 
-import aphrodite._custom_ops as ops
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.all2all_utils import (
+import sonar._custom_ops as ops
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.all2all_utils import (
     maybe_make_prepare_finalize,
 )
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEParallelConfig,
     FusedMoEQuantConfig,
     RoutingMethodType,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.fused_batched_moe import (
+from sonar.model_executor.layers.fused_moe.experts.fused_batched_moe import (
     BatchedTritonExperts,
     NaiveBatchedExperts,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.triton_moe import (
+from sonar.model_executor.layers.fused_moe.experts.triton_moe import (
     TritonExperts,
 )
-from aphrodite.model_executor.layers.fused_moe.fused_moe import (
+from sonar.model_executor.layers.fused_moe.fused_moe import (
     fused_experts,
 )
-from aphrodite.model_executor.layers.fused_moe.modular_kernel import FusedMoEKernel
-from aphrodite.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
-from aphrodite.model_executor.layers.fused_moe.moe_permute_unpermute import moe_unpermute
-from aphrodite.model_executor.layers.fused_moe.prepare_finalize.batched import (
+from sonar.model_executor.layers.fused_moe.modular_kernel import FusedMoEKernel
+from sonar.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
+from sonar.model_executor.layers.fused_moe.moe_permute_unpermute import moe_unpermute
+from sonar.model_executor.layers.fused_moe.prepare_finalize.batched import (
     BatchedPrepareAndFinalize,
 )
-from aphrodite.model_executor.layers.fused_moe.router.fused_topk_router import fused_topk
-from aphrodite.model_executor.layers.fused_moe.utils import moe_kernel_quantize_input
-from aphrodite.model_executor.layers.quantization.utils.fp8_utils import is_fp8
-from aphrodite.model_executor.layers.quantization.utils.nvfp4_emulation_utils import (
+from sonar.model_executor.layers.fused_moe.router.fused_topk_router import fused_topk
+from sonar.model_executor.layers.fused_moe.utils import moe_kernel_quantize_input
+from sonar.model_executor.layers.quantization.utils.fp8_utils import is_fp8
+from sonar.model_executor.layers.quantization.utils.nvfp4_emulation_utils import (
     ref_nvfp4_quant,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.deep_gemm import per_block_cast_to_fp8
-from aphrodite.utils.math_utils import round_up
+from sonar.platforms import current_platform
+from sonar.utils.deep_gemm import per_block_cast_to_fp8
+from sonar.utils.math_utils import round_up
 from tests.kernels.quant_utils import per_block_cast_to_int8
 from tests.kernels.quantization.nvfp4_utils import FLOAT4_E2M1_MAX, FLOAT8_E4M3_MAX
 
@@ -632,7 +632,7 @@ def mxfp4_w_layouts(mx_axis: int, num_warps: int = 8):
     """
     from triton_kernels.tensor_details import layout
 
-    from aphrodite.utils.import_utils import get_triton_kernels_version
+    from sonar.utils.import_utils import get_triton_kernels_version
 
     if get_triton_kernels_version() == "3.8":
         w = layout.make_default_matmul_mxfp4_w_layout(mx_axis=mx_axis)

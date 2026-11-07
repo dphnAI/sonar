@@ -4,7 +4,7 @@
 import fnmatch
 from typing import TYPE_CHECKING
 
-from aphrodite.utils.import_utils import PlaceholderModule
+from sonar.utils.import_utils import PlaceholderModule
 
 if TYPE_CHECKING:
     from botocore.client import BaseClient

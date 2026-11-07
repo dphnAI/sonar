@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Unit tests for the `aphrodite launch` CLI subcommand."""
+"""Unit tests for the `sonar launch` CLI subcommand."""
 
 import argparse
 import hashlib
@@ -16,16 +16,16 @@ from unittest.mock import create_autospec, patch
 
 import pytest
 
-import aphrodite.snapshot.runtime as snapshot_runtime
-import aphrodite.snapshot.server as snapshot_server
-from aphrodite.entrypoints.cli import snapshot as snapshot_cli
-from aphrodite.entrypoints.cli.launch import (
+import sonar.snapshot.runtime as snapshot_runtime
+import sonar.snapshot.server as snapshot_server
+from sonar.entrypoints.cli import snapshot as snapshot_cli
+from sonar.entrypoints.cli.launch import (
     LaunchSubcommand,
     RenderSubcommand,
     cmd_init,
 )
-from aphrodite.entrypoints.common import startup
-from aphrodite.snapshot.controller import (
+from sonar.entrypoints.common import startup
+from sonar.snapshot.controller import (
     LocalSnapshotTools,
     SnapshotCreateError,
     SnapshotRestoreError,
@@ -33,7 +33,7 @@ from aphrodite.snapshot.controller import (
     create_snapshot,
     restore_snapshot,
 )
-from aphrodite.snapshot.manifest import (
+from sonar.snapshot.manifest import (
     SnapshotCompatibilityError,
     SnapshotManifest,
     SnapshotRuntimeIdentity,
@@ -43,10 +43,10 @@ from aphrodite.snapshot.manifest import (
     validate_identity,
     write_manifest_atomic,
 )
-from aphrodite.snapshot.runtime import ProcessInventory, _decode_endpoint, _TcpSocketRecord
-from aphrodite.snapshot.server import SnapshotCanaryError
-from aphrodite.snapshot.types import Oracle, oracles_match
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
+from sonar.snapshot.runtime import ProcessInventory, _decode_endpoint, _TcpSocketRecord
+from sonar.snapshot.server import SnapshotCanaryError
+from sonar.snapshot.types import Oracle, oracles_match
+from sonar.utils.argparse_utils import FlexibleArgumentParser
 
 
 @pytest.fixture
@@ -67,7 +67,7 @@ def test_cmd_init_returns_subcommand():
     assert isinstance(result[0], LaunchSubcommand)
 
 
-# -- Parsing: `aphrodite launch render` --
+# -- Parsing: `sonar launch render` --
 
 
 def test_parse_launch_render(launch_parser):
@@ -90,7 +90,7 @@ def test_parse_launch_invalid_component(launch_parser):
 
 def test_cmd_launch_render_calls_run():
     args = argparse.Namespace(model_tag=None, model="test-model")
-    with patch("aphrodite.entrypoints.cli.launch.uvloop.run") as mock_uvloop_run:
+    with patch("sonar.entrypoints.cli.launch.uvloop.run") as mock_uvloop_run:
         RenderSubcommand.cmd(args)
         mock_uvloop_run.assert_called_once()
 
@@ -138,7 +138,7 @@ def test_subparser_init_returns_parser():
 
 def test_launch_registered_in_main():
     """Verify that launch module is importable as a CLI module."""
-    import aphrodite.entrypoints.cli.launch as launch_module
+    import sonar.entrypoints.cli.launch as launch_module
 
     assert hasattr(launch_module, "cmd_init")
     subcmds = launch_module.cmd_init()
@@ -149,9 +149,9 @@ _MODEL_REVISION = "c1899de289a04d12100db370d81485cdf75e47ca"
 
 
 def _run_cli(argv: list[str]) -> None:
-    from aphrodite.entrypoints.cli import main as cli_main
+    from sonar.entrypoints.cli import main as cli_main
 
-    with patch.object(sys, "argv", ["aphrodite", *argv]):
+    with patch.object(sys, "argv", ["sonar", *argv]):
         cli_main.main()
 
 
@@ -162,25 +162,23 @@ def test_snapshot_environment_contract(
 ):
     monkeypatch.setattr(startup, "cli_env_setup", pytest.fail)
     secret = "snapshot-secret"
-    monkeypatch.setenv("APHRODITE_API_KEY", secret)
-    monkeypatch.setenv("APHRODITE_USER_SETTING", secret)
-    monkeypatch.setenv("APHRODITE_WORKER_MULTIPROC_METHOD", secret)
+    monkeypatch.setenv("SONAR_API_KEY", secret)
+    monkeypatch.setenv("SONAR_USER_SETTING", secret)
+    monkeypatch.setenv("SONAR_WORKER_MULTIPROC_METHOD", secret)
     environment = dict(LocalSnapshotTools()._environment_identity())
-    assert (
-        environment["APHRODITE_USER_SETTING"] == hashlib.sha256(b"APHRODITE_USER_SETTING\0snapshot-secret").hexdigest()
-    )
-    assert environment["APHRODITE_USER_SETTING"] != environment["APHRODITE_WORKER_MULTIPROC_METHOD"]
+    assert environment["SONAR_USER_SETTING"] == hashlib.sha256(b"SONAR_USER_SETTING\0snapshot-secret").hexdigest()
+    assert environment["SONAR_USER_SETTING"] != environment["SONAR_WORKER_MULTIPROC_METHOD"]
     assert secret not in str(environment)
-    assert "APHRODITE_API_KEY" not in environment
+    assert "SONAR_API_KEY" not in environment
 
-    monkeypatch.delenv("APHRODITE_WORKER_MULTIPROC_METHOD")
+    monkeypatch.delenv("SONAR_WORKER_MULTIPROC_METHOD")
     implicit_worker_default = dict(LocalSnapshotTools()._environment_identity())
-    monkeypatch.setenv("APHRODITE_WORKER_MULTIPROC_METHOD", "spawn")
+    monkeypatch.setenv("SONAR_WORKER_MULTIPROC_METHOD", "spawn")
     assert dict(LocalSnapshotTools()._environment_identity()) == implicit_worker_default
 
-    monkeypatch.setenv("APHRODITE_USER_SETTING", f"{secret}-changed")
+    monkeypatch.setenv("SONAR_USER_SETTING", f"{secret}-changed")
     changed_environment = dict(LocalSnapshotTools()._environment_identity())
-    assert changed_environment["APHRODITE_USER_SETTING"] != environment["APHRODITE_USER_SETTING"]
+    assert changed_environment["SONAR_USER_SETTING"] != environment["SONAR_USER_SETTING"]
 
     artifact = tmp_path / "snapshot"
     artifact.mkdir(mode=0o700)
@@ -295,7 +293,7 @@ def test_snapshot_manifest_redacts_accepted_secret_options(case):
     tools._artifact_bytes.return_value = 0
     manifest = LocalSnapshotTools.make_manifest(
         tools,
-        snapshot_server.parse_aphrodite_args(["model", *engine_argv]),
+        snapshot_server.parse_sonar_args(["model", *engine_argv]),
         engine_argv,
         ProcessInventory(100, (100, 101), (101,), "GPU-abc"),
         _oracle(),
@@ -321,9 +319,9 @@ def test_snapshot_create_forwards_only_engine_options(option, joined, monkeypatc
     directory = [f"{option}=/tmp/snapshot"] if joined else [option, "/tmp/snapshot"]
     argv = ["create", "Qwen/Qwen3-0.6B", "--revision", _MODEL_REVISION, *directory]
     args = parse_snapshot(*argv)
-    monkeypatch.setattr(sys, "argv", ["aphrodite", "snapshot", *argv])
+    monkeypatch.setattr(sys, "argv", ["sonar", "snapshot", *argv])
 
-    child = snapshot_server.parse_aphrodite_args(list(_child_engine_argv(args, None)))
+    child = snapshot_server.parse_sonar_args(list(_child_engine_argv(args, None)))
 
     assert child.model == "Qwen/Qwen3-0.6B"
     assert child.revision == _MODEL_REVISION
@@ -348,8 +346,8 @@ def test_snapshot_create_config_preserves_cli_precedence(tmp_path, monkeypatch, 
         "1024",
     ]
     args = parse_snapshot(*argv)
-    monkeypatch.setattr(sys, "argv", ["aphrodite", "snapshot", *argv])
-    child = snapshot_server.parse_aphrodite_args(list(_child_engine_argv(args, None)))
+    monkeypatch.setattr(sys, "argv", ["sonar", "snapshot", *argv])
+    child = snapshot_server.parse_sonar_args(list(_child_engine_argv(args, None)))
 
     assert (args.model_tag or args.model) == child.model == ("Qwen/Qwen3-0.6B" if model_in_cli else "config-model")
     assert args.max_model_len == child.max_model_len == 1024
@@ -481,7 +479,7 @@ def _manifest(**changes: object) -> SnapshotManifest:
         boundary="post-engine-init-reloadable-state-released",
         created_at="2026-08-06T00:00:00Z",
         artifact_bytes=8,
-        aphrodite_version="0.1.dev1+snapshot",
+        sonar_version="0.1.dev1+snapshot",
         python_version="3.12.3",
         torch_version="2.9.0",
         cuda_runtime="12.9",
@@ -497,7 +495,7 @@ def _manifest(**changes: object) -> SnapshotManifest:
         model_revision="model-sha",
         tokenizer_revision="tokenizer-sha",
         engine_argv=("Qwen/Qwen3-0.6B",),
-        environment=(("APHRODITE_USE_V1", "1"),),
+        environment=(("SONAR_USE_V1", "1"),),
         process_tree=(100, 101),
         cuda_holders=(101,),
         oracle_token_ids=(12095,),
@@ -527,7 +525,7 @@ def _fake_snapshot_tools() -> Any:
 
 @pytest.mark.parametrize("value", ["0", "-1", "nan", "inf"])
 def test_snapshot_timeout_must_be_positive_and_finite(value: str, monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setenv("APHRODITE_SNAPSHOT_TIMEOUT_S", value)
+    monkeypatch.setenv("SONAR_SNAPSHOT_TIMEOUT_S", value)
     with pytest.raises(ValueError, match="positive finite number"):
         LocalSnapshotTools()
 
@@ -608,7 +606,7 @@ def test_snapshot_create_abort_rejects_surviving_process_group(
 
 @pytest.mark.asyncio
 async def test_snapshot_child_rejects_mismatch_before_publication(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    from aphrodite.entrypoints.launchers.api_server import entry as api_server
+    from sonar.entrypoints.launchers.api_server import entry as api_server
 
     canaries = iter((_oracle(), _oracle((42,), " Lyon")))
 
@@ -638,7 +636,7 @@ async def test_snapshot_child_rejects_mismatch_before_publication(tmp_path: Path
         release_timeout_s=1,
     )
     with pytest.raises(SnapshotCanaryError, match="rehearsal changed"):
-        await snapshot_server.run_aphrodite_snapshot_child(control, argparse.Namespace())
+        await snapshot_server.run_sonar_snapshot_child(control, argparse.Namespace())
 
 
 def test_snapshot_release_marker_ignores_unknown_keys(tmp_path: Path):
@@ -789,10 +787,8 @@ def test_snapshot_restore_rejects_identity_mismatch(tmp_path: Path):
     args = _restore_fixture(tmp_path)
 
     identity_mismatch = _fake_snapshot_tools()
-    identity_mismatch.current_identity.side_effect = lambda _gpu_uuid: (
-        _runtime_identity(aphrodite_version="different")
-    )
-    with pytest.raises(SnapshotCompatibilityError, match="aphrodite_version"):
+    identity_mismatch.current_identity.side_effect = lambda _gpu_uuid: (_runtime_identity(sonar_version="different"))
+    with pytest.raises(SnapshotCompatibilityError, match="sonar_version"):
         restore_snapshot(args, tools=identity_mismatch)
     identity_mismatch.restore.assert_not_called()
 
@@ -801,10 +797,10 @@ def test_snapshot_identity_mismatch_names_every_differing_field():
     with pytest.raises(SnapshotCompatibilityError) as mismatch:
         validate_identity(
             _manifest(),
-            _runtime_identity(aphrodite_version="different", gpu_uuid="GPU-other"),
+            _runtime_identity(sonar_version="different", gpu_uuid="GPU-other"),
         )
 
-    assert str(mismatch.value) == "snapshot mismatch: aphrodite_version, gpu_uuid"
+    assert str(mismatch.value) == "snapshot mismatch: sonar_version, gpu_uuid"
 
 
 def test_snapshot_restore_cleans_oracle_mismatch(tmp_path: Path):
@@ -1167,7 +1163,7 @@ def test_snapshot_manifest_records_external_cache_files(tmp_path: Path):
 
 def _pin_generated_cache_roots(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Keep the resolver off whatever cache roots the host running this has."""
-    monkeypatch.setenv("APHRODITE_CACHE_ROOT", str(tmp_path / "aphrodite_cache"))
+    monkeypatch.setenv("SONAR_CACHE_ROOT", str(tmp_path / "sonar_cache"))
     monkeypatch.setenv("TRITON_CACHE_DIR", str(tmp_path / "triton_cache_default"))
     monkeypatch.setenv("TORCHINDUCTOR_CACHE_DIR", str(tmp_path / "inductor_cache"))
 
@@ -1260,7 +1256,7 @@ def test_snapshot_inventory_matches_resolved_cache_roots_not_siblings(tmp_path: 
     kernel.write_bytes(b"compiled kernel")
     linked_cache = base / "linked_cache"
     linked_cache.symlink_to(real_cache, target_is_directory=True)
-    sibling = base / "aphrodite_cache-backup"
+    sibling = base / "sonar_cache-backup"
     sibling.mkdir()
     stale = sibling / "stale.so"
     stale.write_bytes(b"stale kernel")

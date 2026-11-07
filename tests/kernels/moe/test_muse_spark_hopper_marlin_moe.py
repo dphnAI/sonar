@@ -5,16 +5,16 @@
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.fused_moe.experts.marlin_moe import MarlinExperts
-from aphrodite.model_executor.layers.fused_moe.experts.triton_moe import TritonExperts
-from aphrodite.model_executor.layers.quantization.utils.marlin_utils_fp4 import (
+from sonar.model_executor.layers.fused_moe.experts.marlin_moe import MarlinExperts
+from sonar.model_executor.layers.fused_moe.experts.triton_moe import TritonExperts
+from sonar.model_executor.layers.quantization.utils.marlin_utils_fp4 import (
     is_fp4_marlin_supported,
 )
-from aphrodite.model_executor.layers.quantization.utils.nvfp4_emulation_utils import (
+from sonar.model_executor.layers.quantization.utils.nvfp4_emulation_utils import (
     dequantize_to_dtype,
 )
-from aphrodite.models.muse_spark.common.layers import MuseSpark1xRMSNormWithInputScale
-from aphrodite.platforms import current_platform
+from sonar.models.muse_spark.common.layers import MuseSpark1xRMSNormWithInputScale
+from sonar.platforms import current_platform
 from tests.kernels.moe.muse_spark_utils import (
     assert_cudagraph_replays,
     make_runner,
@@ -39,7 +39,7 @@ def _build(checkpoint: dict[str, torch.Tensor], quant_config=None):
     ).cuda()
     norm.weight.copy_(torch.linspace(-0.2, 0.2, K, device="cuda"))
     expert_bias = torch.linspace(-0.5, 0.5, E, dtype=torch.float32, device="cuda")
-    router, runner, aphrodite_config = make_runner(
+    router, runner, sonar_config = make_runner(
         norm,
         expert_bias,
         checkpoint,
@@ -49,7 +49,7 @@ def _build(checkpoint: dict[str, torch.Tensor], quant_config=None):
         top_k=TOPK,
     )
     experts = runner.routed_experts.quant_method.moe_kernel.fused_experts
-    return router, norm, runner, aphrodite_config, experts
+    return router, norm, runner, sonar_config, experts
 
 
 def _nvfp4_checkpoint() -> dict[str, torch.Tensor]:
@@ -94,14 +94,14 @@ def _expected(router, norm, hidden_states, router_logits, w13, w2):
 def test_hopper_marlin_moe_runs_with_triton_finalize(dist_init, workspace_init, down_scale) -> None:
     checkpoint = _nvfp4_checkpoint()
     checkpoint["w2_weight_scale_2"].mul_(down_scale)
-    router, norm, runner, aphrodite_config, experts = _build(checkpoint, nvfp4_quant_config())
+    router, norm, runner, sonar_config, experts = _build(checkpoint, nvfp4_quant_config())
     assert type(experts) is MarlinExperts
     assert experts.g1_alphas is not None
     assert experts.g1_alphas.shape == (E,)
 
     hidden_states = torch.randn(M, K, dtype=torch.bfloat16, device="cuda") / 10
     router_logits = torch.randn(M, E, dtype=torch.float32, device="cuda")
-    output = run_moe(runner, aphrodite_config, hidden_states, router_logits)
+    output = run_moe(runner, sonar_config, hidden_states, router_logits)
     assert output.shape == hidden_states.shape
     assert output.dtype == hidden_states.dtype
     assert torch.isfinite(output).all()
@@ -124,7 +124,7 @@ def test_hopper_marlin_moe_runs_with_triton_finalize(dist_init, workspace_init, 
 
     assert_cudagraph_replays(
         runner,
-        aphrodite_config,
+        sonar_config,
         hidden_states,
         router_logits,
         torch.randn_like(hidden_states),
@@ -139,12 +139,12 @@ def test_hopper_bf16_boundary_layer_runs_with_triton_finalize(dist_init, workspa
         "w13_weight": torch.randn(E, 2 * N, K, dtype=torch.bfloat16, device="cuda", generator=g) / 10,
         "w2_weight": torch.randn(E, K, N, dtype=torch.bfloat16, device="cuda", generator=g) / 10,
     }
-    router, norm, runner, aphrodite_config, experts = _build(weights)
+    router, norm, runner, sonar_config, experts = _build(weights)
     assert type(experts) is TritonExperts
 
     hidden_states = torch.randn(M, K, dtype=torch.bfloat16, device="cuda") / 10
     router_logits = torch.randn(M, E, dtype=torch.float32, device="cuda")
-    output = run_moe(runner, aphrodite_config, hidden_states, router_logits)
+    output = run_moe(runner, sonar_config, hidden_states, router_logits)
     assert output.shape == hidden_states.shape
     assert output.dtype == hidden_states.dtype
     assert torch.isfinite(output).all()

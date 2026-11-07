@@ -5,11 +5,11 @@
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
-from aphrodite.utils.import_utils import resolve_obj_by_qualname
+from sonar.utils.import_utils import resolve_obj_by_qualname
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
-    from aphrodite.v1.kv_cache_interface import (
+    from sonar.config import SonarConfig
+    from sonar.v1.kv_cache_interface import (
         KVCacheConfig,
         KVCacheGroupSpec,
         KVCacheSpec,
@@ -25,11 +25,11 @@ class KVCacheConfigBuilder(ABC):
 
     Subclasses normally inherit from ``DefaultKVCacheConfigBuilder`` and
     override only the hooks they need. The cross-worker planning flow
-    (:func:`aphrodite.v1.core.kv_cache_planning.get_kv_cache_configs`) is Core-owned;
+    (:func:`sonar.v1.core.kv_cache_planning.get_kv_cache_configs`) is Core-owned;
     this builder supplies the placement decisions: how layers are split into
     groups and how a group list is materialized into tensors for a given block
     count. Grouping coordination lives in ``DefaultKVCacheConfigBuilder`` (a
-    model implementing :class:`~aphrodite.model_executor.models.interfaces.
+    model implementing :class:`~sonar.model_executor.models.interfaces.
     SupportsKVCacheGrouping` owns its grouping there); a platform that replaces
     the builder fully owns its own grouping.
     """
@@ -37,7 +37,7 @@ class KVCacheConfigBuilder(ABC):
     @abstractmethod
     def get_kv_cache_groups(
         self,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
         kv_cache_spec: dict[str, "KVCacheSpec"],
     ) -> list["KVCacheGroupSpec"]:
         """Split the given layers into KV cache groups.
@@ -46,7 +46,7 @@ class KVCacheConfigBuilder(ABC):
         Core rejects a result that does not put each layer in exactly one group.
 
         The default builder honors a model's
-        :class:`~aphrodite.model_executor.models.interfaces.SupportsKVCacheGrouping`
+        :class:`~sonar.model_executor.models.interfaces.SupportsKVCacheGrouping`
         declaration here before falling back to the default grouping; a
         platform-specific builder decides its own grouping.
         """
@@ -55,7 +55,7 @@ class KVCacheConfigBuilder(ABC):
     @abstractmethod
     def get_kv_cache_config_from_groups(
         self,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
         kv_cache_groups: list["KVCacheGroupSpec"],
         num_blocks: int,
     ) -> "KVCacheConfig":
@@ -71,7 +71,7 @@ class KVCacheConfigBuilder(ABC):
 
     def _get_pool_bytes_per_block(
         self,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
         kv_cache_groups: list["KVCacheGroupSpec"],
     ) -> int | None:
         """Return the device bytes one block ID consumes, or ``None``.
@@ -85,17 +85,17 @@ class KVCacheConfigBuilder(ABC):
 
 
 def get_kv_cache_config_builder(
-    aphrodite_config: "AphroditeConfig",
+    sonar_config: "SonarConfig",
 ) -> KVCacheConfigBuilder:
     """Resolve the builder selected by the current platform.
 
     Resolution priority is owned by the platform hook
-    (:meth:`aphrodite.platforms.interface.Platform.get_kv_cache_config_builder_cls`).
-    Builders are stateless (every method takes ``aphrodite_config``), so a fresh
+    (:meth:`sonar.platforms.interface.Platform.get_kv_cache_config_builder_cls`).
+    Builders are stateless (every method takes ``sonar_config``), so a fresh
     instance is returned per call and engines with different configs in the
     same process always get the correct builder.
     """
-    from aphrodite.platforms import current_platform
+    from sonar.platforms import current_platform
 
-    builder_cls = resolve_obj_by_qualname(current_platform.get_kv_cache_config_builder_cls(aphrodite_config))
+    builder_cls = resolve_obj_by_qualname(current_platform.get_kv_cache_config_builder_cls(sonar_config))
     return builder_cls()

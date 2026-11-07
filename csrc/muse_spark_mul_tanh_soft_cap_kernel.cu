@@ -12,7 +12,7 @@
 #include "quantization/vectorization_utils.cuh"
 #include "torch_utils.h"
 
-namespace aphrodite {
+namespace sonar {
 
 // 16 B of output per thread; low-precision inputs are widened in registers.
 static constexpr int kMuseSoftCapVecSize = 4;
@@ -42,7 +42,7 @@ __global__ void muse_spark_mul_tanh_soft_cap_kernel(
       });
 }
 
-}  // namespace aphrodite
+}  // namespace sonar
 
 // out = soft_cap_temp * tanh(input * multiplier / soft_cap_temp), fp32.
 void muse_spark_mul_tanh_soft_cap(torch::stable::Tensor& out,
@@ -76,7 +76,7 @@ void muse_spark_mul_tanh_soft_cap(torch::stable::Tensor& out,
 
   constexpr int kThreads = 128;
   const int64_t vecs_per_row =
-      (d + aphrodite::kMuseSoftCapVecSize - 1) / aphrodite::kMuseSoftCapVecSize;
+      (d + sonar::kMuseSoftCapVecSize - 1) / sonar::kMuseSoftCapVecSize;
   const int64_t blocks_to_cover = (vecs_per_row + kThreads - 1) / kThreads;
   constexpr int64_t kTargetBlocks = 32768;
   const int64_t blocks_per_row = std::clamp<int64_t>(
@@ -89,9 +89,9 @@ void muse_spark_mul_tanh_soft_cap(torch::stable::Tensor& out,
   const torch::stable::accelerator::DeviceGuard device_guard(
       input.get_device_index());
   const cudaStream_t stream = get_current_cuda_stream();
-  APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(
+  SONAR_STABLE_DISPATCH_FLOATING_TYPES(
       input.scalar_type(), "muse_spark_mul_tanh_soft_cap", [&] {
-        aphrodite::muse_spark_mul_tanh_soft_cap_kernel<scalar_t>
+        sonar::muse_spark_mul_tanh_soft_cap_kernel<scalar_t>
             <<<grid, block, 0, stream>>>(out.mutable_data_ptr<float>(),
                                          input.const_data_ptr<scalar_t>(), d,
                                          static_cast<float>(multiplier),

@@ -21,7 +21,7 @@ from collections.abc import Iterable
 from typing import TYPE_CHECKING, ClassVar
 
 try:
-    from aphrodite.fs_io_C import batch_lookup as batch_lookup_C
+    from sonar.fs_io_C import batch_lookup as batch_lookup_C
 
     _HAS_BATCH_LOOKUP_C = True
 except ImportError:
@@ -29,8 +29,8 @@ except ImportError:
 
 from typing_extensions import override
 
-from aphrodite.logger import init_logger
-from aphrodite.v1.kv_offload.base import (
+from sonar.logger import init_logger
+from sonar.v1.kv_offload.base import (
     Locality,
     LookupResult,
     Medium,
@@ -38,10 +38,10 @@ from aphrodite.v1.kv_offload.base import (
     OffloadKey,
     ReqContext,
 )
-from aphrodite.v1.kv_offload.file_mapper import FileMapper
-from aphrodite.v1.kv_offload.tiering.async_lookup import AsyncLookupManager
-from aphrodite.v1.kv_offload.tiering.backpressure import BackpressureDetector
-from aphrodite.v1.kv_offload.tiering.base import (
+from sonar.v1.kv_offload.file_mapper import FileMapper
+from sonar.v1.kv_offload.tiering.async_lookup import AsyncLookupManager
+from sonar.v1.kv_offload.tiering.backpressure import BackpressureDetector
+from sonar.v1.kv_offload.tiering.base import (
     JobId,
     JobResult,
     RequestOffloadingContext,
@@ -49,15 +49,15 @@ from aphrodite.v1.kv_offload.tiering.base import (
     SecondaryTierManager,
     TransferJob,
 )
-from aphrodite.v1.kv_offload.tiering.fs.io import (
+from sonar.v1.kv_offload.tiering.fs.io import (
     batch_load_block,
     batch_store_block,
     probe_o_direct,
 )
-from aphrodite.v1.kv_offload.tiering.fs.thread_pool import DualQueueThreadPool
+from sonar.v1.kv_offload.tiering.fs.thread_pool import DualQueueThreadPool
 
 if TYPE_CHECKING:
-    from aphrodite.v1.kv_offload.base import OffloadingSpec
+    from sonar.v1.kv_offload.base import OffloadingSpec
 
 logger = init_logger(__name__)
 
@@ -92,7 +92,7 @@ class FileSystemTierManager(SecondaryTierManager):
     get_finished_jobs() polls job completion and returns completed JobResults.
 
     Cross-process sharing:
-        KV cache sharing between multiple Aphrodite instances using the same
+        KV cache sharing between multiple Sonar instances using the same
         ``root_dir`` (e.g., via a shared PVC) works by default: ``NONE_HASH``
         (the chain-hash seed for block content hashes) is derived from a fixed
         default seed, so identical token content produces identical block
@@ -128,7 +128,7 @@ class FileSystemTierManager(SecondaryTierManager):
             successfully stored to this tier. Effective only when KV
             cache events are enabled globally (kv_events_config).
         locality: Whether this tier's storage is LOCAL or REMOTE relative
-            to the publishing Aphrodite instance.
+            to the publishing Sonar instance.
         backpressure_detector: Optional backpressure detector.
 
         """
@@ -193,7 +193,7 @@ class FileSystemTierManager(SecondaryTierManager):
         self._pool = DualQueueThreadPool(
             n_read_threads,
             n_write_threads,
-            thread_name_prefix="aphrodite_kv_py_fs",
+            thread_name_prefix="sonar_kv_py_fs",
         )
 
         self._lookup_manager = FsAsyncLookupManager(tier=self, tier_type=self.tier_type)

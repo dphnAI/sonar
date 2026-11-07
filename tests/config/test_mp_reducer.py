@@ -3,9 +3,9 @@
 import sys
 from unittest.mock import patch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.engine.arg_utils import AsyncEngineArgs
-from aphrodite.v1.engine.async_llm import AsyncLLM
+from sonar.config import SonarConfig
+from sonar.engine.arg_utils import AsyncEngineArgs
+from sonar.v1.engine.async_llm import AsyncLLM
 
 
 def test_mp_reducer():
@@ -32,16 +32,16 @@ def test_mp_reducer():
 
         assert mock_register.called, "multiprocessing.reducer.register should have been called"
 
-        aphrodite_config_registered = False
+        sonar_config_registered = False
         for call_args in mock_register.call_args_list:
-            # Verify that a reducer for AphroditeConfig was registered
-            if len(call_args[0]) >= 2 and call_args[0][0] == AphroditeConfig:
-                aphrodite_config_registered = True
+            # Verify that a reducer for SonarConfig was registered
+            if len(call_args[0]) >= 2 and call_args[0][0] == SonarConfig:
+                sonar_config_registered = True
 
                 reducer_func = call_args[0][1]
                 assert callable(reducer_func), "Reducer function should be callable"
                 break
 
-        assert aphrodite_config_registered, "AphroditeConfig should have been registered to multiprocessing.reducer"
+        assert sonar_config_registered, "SonarConfig should have been registered to multiprocessing.reducer"
 
         async_llm.shutdown()

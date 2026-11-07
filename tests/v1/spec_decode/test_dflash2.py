@@ -7,12 +7,12 @@ from unittest import mock
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
-from aphrodite.model_executor.models.qwen3_dflash2 import _grouped_conv, _score_edges
-from aphrodite.platforms import current_platform
-from aphrodite.v1.worker.gpu.spec_decode.dflash.speculator import DFlashSpeculator
-from aphrodite.v1.worker.gpu.spec_decode.dflash2.speculator import DFlash2Speculator
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
+from sonar.model_executor.models.qwen3_dflash2 import _grouped_conv, _score_edges
+from sonar.platforms import current_platform
+from sonar.v1.worker.gpu.spec_decode.dflash.speculator import DFlashSpeculator
+from sonar.v1.worker.gpu.spec_decode.dflash2.speculator import DFlash2Speculator
 
 
 @pytest.mark.parametrize("block_size", [5, 8])
@@ -49,8 +49,8 @@ def test_grouped_conv_matches_reference(block_size: int):
 @pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float16, torch.float32])
 def test_beam_conv_residual_norm(rows, width, query, group, taps, warps, dtype):
     """Dtype rounding and request boundaries survive residual/norm fusion."""
-    from aphrodite import _custom_ops as ops
-    from aphrodite.models.beam.nvidia.dflash2_conv_ops import conv_residual_norm
+    from sonar import _custom_ops as ops
+    from sonar.models.beam.nvidia.dflash2_conv_ops import conv_residual_norm
 
     torch.manual_seed(42)
     hidden = torch.randn(rows, width, device="cuda", dtype=dtype)
@@ -126,8 +126,8 @@ def test_grouped_conv_triton_matches_reference(
 @pytest.mark.parametrize("rows,heads", [(8, 1), (64, 2), (256, 1)])
 def test_beam_fused_context_kv(rows, heads):
     """All layer pointers and strided cache pages match the staged context path."""
-    from aphrodite import _custom_ops as ops
-    from aphrodite.models.beam.nvidia.dflash2_context_ops import store_context_kv
+    from sonar import _custom_ops as ops
+    from sonar.models.beam.nvidia.dflash2_context_ops import store_context_kv
 
     torch.manual_seed(42)
     layers, dim, page = 5, 128, 16
@@ -169,8 +169,8 @@ def test_beam_fused_context_kv(rows, heads):
 @pytest.mark.parametrize("cache_dtype", ["fp8_e4m3", "fp8_e5m2"])
 def test_beam_fp8_context_cache_matches_backend_and_replays(rows, cache_dtype):
     """Quantize rounded context K/V with each layer's live scales and slot mask."""
-    from aphrodite import _custom_ops as ops
-    from aphrodite.models.beam.nvidia.dflash2_context_ops import store_context_kv
+    from sonar import _custom_ops as ops
+    from sonar.models.beam.nvidia.dflash2_context_ops import store_context_kv
 
     torch.manual_seed(42)
     layers, heads, dim, page = 3, 2, 128, 16
@@ -274,7 +274,7 @@ def test_selector_edges_match_sequential_reference():
 @pytest.mark.parametrize("anchor_dtype", [torch.int32, torch.int64])
 def test_beam_fused_candidate_edges(batch, steps, top_k, rank, unary_dtype, anchor_dtype):
     """Keep the anchor, predecessor mapping, and BF16 intermediate rounding."""
-    from aphrodite.models.beam.nvidia.dflash2_ops import candidate_edges
+    from sonar.models.beam.nvidia.dflash2_ops import candidate_edges
 
     torch.manual_seed(1)
     vocab = 257
@@ -295,8 +295,8 @@ def test_beam_fused_candidate_edges(batch, steps, top_k, rank, unary_dtype, anch
 @pytest.mark.parametrize("rows", [8, 64, 256])
 def test_beam_draft_qk_norm_rope_cache(rows):
     """Fused query preparation preserves BF16 rounding and ignores padded slots."""
-    from aphrodite import _custom_ops as ops
-    from aphrodite.models.beam.nvidia.attention_ops import beam_qk_norm_rope
+    from sonar import _custom_ops as ops
+    from sonar.models.beam.nvidia.attention_ops import beam_qk_norm_rope
 
     torch.manual_seed(42)
     qkv = torch.randn(rows, 896, device="cuda", dtype=torch.bfloat16)
@@ -342,7 +342,7 @@ def _stub_base(monkeypatch, draft_logits):
     pass a tensor already in that state.
     """
 
-    def init_base(self, _aphrodite_config, device):
+    def init_base(self, _sonar_config, device):
         self.draft_model_config = SimpleNamespace(hf_config=SimpleNamespace(dflash_config={"selector_top_k": 3}))
         self.max_num_reqs = 2
         self.num_query_per_req = 5
@@ -381,8 +381,8 @@ def test_selector_asks_for_fp32_proposal_logits():
 
 
 def _mock_draft_configs(monkeypatch, hf_config, dtype=torch.float32):
-    """The current and draft Aphrodite configs for building a draft model on CPU."""
-    mock_current_aphrodite_config = SimpleNamespace(
+    """The current and draft Sonar configs for building a draft model on CPU."""
+    mock_current_sonar_config = SimpleNamespace(
         cache_config=SimpleNamespace(
             block_size=16,
             user_specified_block_size=False,
@@ -422,7 +422,7 @@ def _mock_draft_configs(monkeypatch, hf_config, dtype=torch.float32):
     monkeypatch.setattr(
         current_platform,
         "get_attn_backend_cls",
-        lambda *args, **kwargs: ("aphrodite.v1.attention.backends.cpu_attn.CPUAttentionBackend"),
+        lambda *args, **kwargs: ("sonar.v1.attention.backends.cpu_attn.CPUAttentionBackend"),
     )
 
     class MockGroup:
@@ -430,11 +430,11 @@ def _mock_draft_configs(monkeypatch, hf_config, dtype=torch.float32):
         world_size = 1
 
     monkeypatch.setattr(
-        "aphrodite.distributed.parallel_state._TP",
+        "sonar.distributed.parallel_state._TP",
         MockGroup(),
     )
 
-    aphrodite_config = SimpleNamespace(
+    sonar_config = SimpleNamespace(
         speculative_config=SimpleNamespace(
             draft_model_config=SimpleNamespace(
                 hf_config=hf_config,
@@ -454,18 +454,18 @@ def _mock_draft_configs(monkeypatch, hf_config, dtype=torch.float32):
             quantization_param_path=None,
         ),
     )
-    mock_current_aphrodite_config.speculative_config = aphrodite_config.speculative_config
-    aphrodite_config.compilation_config = mock_current_aphrodite_config.compilation_config
-    return mock_current_aphrodite_config, aphrodite_config
+    mock_current_sonar_config.speculative_config = sonar_config.speculative_config
+    sonar_config.compilation_config = mock_current_sonar_config.compilation_config
+    return mock_current_sonar_config, sonar_config
 
 
 @pytest.mark.skip_global_cleanup
 @pytest.mark.parametrize("variant", ["dflash2", "lilicorr", "lilicorr_plain"])
 def test_candidate_model_decoder_layer_cls(monkeypatch, variant):
-    from aphrodite.config import set_current_aphrodite_config
-    from aphrodite.model_executor.models.lilicorr import LiLiCorr
-    from aphrodite.model_executor.models.qwen3_dflash import DFlashQwen3DecoderLayer
-    from aphrodite.model_executor.models.qwen3_dflash2 import (
+    from sonar.config import set_current_sonar_config
+    from sonar.model_executor.models.lilicorr import LiLiCorr
+    from sonar.model_executor.models.qwen3_dflash import DFlashQwen3DecoderLayer
+    from sonar.model_executor.models.qwen3_dflash2 import (
         DFlash2Qwen3DecoderLayer,
         DFlash2Qwen3Model,
     )
@@ -498,12 +498,12 @@ def test_candidate_model_decoder_layer_cls(monkeypatch, variant):
             "use_aux_hidden_state": False,
         },
     )
-    current_config, aphrodite_config = _mock_draft_configs(monkeypatch, hf_config)
+    current_config, sonar_config = _mock_draft_configs(monkeypatch, hf_config)
 
     # Instantiate the model under meta device to avoid parameter allocation issues
-    with set_current_aphrodite_config(current_config), torch.device("meta"):
+    with set_current_sonar_config(current_config), torch.device("meta"):
         model_cls = DFlash2Qwen3Model if variant == "dflash2" else LiLiCorr
-        model = model_cls(aphrodite_config=aphrodite_config)
+        model = model_cls(sonar_config=sonar_config)
 
     assert len(model.layers) == 2
     expected = DFlashQwen3DecoderLayer if variant == "lilicorr_plain" else DFlash2Qwen3DecoderLayer
@@ -514,8 +514,8 @@ def test_candidate_model_decoder_layer_cls(monkeypatch, variant):
 def test_beam_dflash2_loads_every_checkpoint_tensor(monkeypatch):
     """The exported checkpoint's names load into every parameter but the
     embedding and LM head, which alias the target's."""
-    from aphrodite.config import set_current_aphrodite_config
-    from aphrodite.models.beam import DFlash2BeamForCausalLM
+    from sonar.config import set_current_sonar_config
+    from sonar.models.beam import DFlash2BeamForCausalLM
 
     hidden, heads, kv_heads, head_dim, ffn, vocab, rank = 64, 4, 2, 16, 128, 100, 8
     taps, groups = 2, 4
@@ -545,9 +545,9 @@ def test_beam_dflash2_loads_every_checkpoint_tensor(monkeypatch):
             "target_layer_ids": [0, 1],
         },
     )
-    current_config, aphrodite_config = _mock_draft_configs(monkeypatch, hf_config)
-    with set_current_aphrodite_config(current_config):
-        model = DFlash2BeamForCausalLM(aphrodite_config=aphrodite_config)
+    current_config, sonar_config = _mock_draft_configs(monkeypatch, hf_config)
+    with set_current_sonar_config(current_config):
+        model = DFlash2BeamForCausalLM(sonar_config=sonar_config)
 
     shapes = {
         "fc.weight": (hidden, 2 * hidden),
@@ -600,8 +600,8 @@ def test_beam_dflash2_loads_every_checkpoint_tensor(monkeypatch):
 def test_dflash_fc_runs_fp32_target_hidden_states_in_draft_dtype(monkeypatch):
     """A target with an FP32 residual stream (e.g. Muse Spark) hands FP32 aux
     hidden states to a bf16 drafter."""
-    from aphrodite.config import set_current_aphrodite_config
-    from aphrodite.model_executor.models.qwen3_dflash import DFlashQwen3ForCausalLM
+    from sonar.config import set_current_sonar_config
+    from sonar.model_executor.models.qwen3_dflash import DFlashQwen3ForCausalLM
 
     hidden = 64
     hf_config = SimpleNamespace(
@@ -618,9 +618,9 @@ def test_dflash_fc_runs_fp32_target_hidden_states_in_draft_dtype(monkeypatch):
         hidden_act="silu",
         dflash_config={"mask_token_id": 99, "target_layer_ids": [0, 1]},
     )
-    current_config, aphrodite_config = _mock_draft_configs(monkeypatch, hf_config, dtype=torch.bfloat16)
-    with set_current_aphrodite_config(current_config):
-        model = DFlashQwen3ForCausalLM(aphrodite_config=aphrodite_config)
+    current_config, sonar_config = _mock_draft_configs(monkeypatch, hf_config, dtype=torch.bfloat16)
+    with set_current_sonar_config(current_config):
+        model = DFlashQwen3ForCausalLM(sonar_config=sonar_config)
     fc = model.model.fc
     torch.manual_seed(0)
     torch.nn.init.normal_(fc.weight)
@@ -636,11 +636,11 @@ def test_dflash_fc_runs_fp32_target_hidden_states_in_draft_dtype(monkeypatch):
 def test_conv_projections_use_draft_quant_config(monkeypatch):
     from torch import nn
 
-    from aphrodite.distributed import parallel_state
-    from aphrodite.model_executor.layers.quantization import modelopt
-    from aphrodite.model_executor.models.qwen3_dflash import DFlashQwen3DecoderLayer
-    from aphrodite.model_executor.models.qwen3_dflash2 import DFlash2Qwen3DecoderLayer
-    from aphrodite.model_executor.models.utils import AutoWeightsLoader
+    from sonar.distributed import parallel_state
+    from sonar.model_executor.layers.quantization import modelopt
+    from sonar.model_executor.models.qwen3_dflash import DFlashQwen3DecoderLayer
+    from sonar.model_executor.models.qwen3_dflash2 import DFlash2Qwen3DecoderLayer
+    from sonar.model_executor.models.utils import AutoWeightsLoader
 
     monkeypatch.setattr(parallel_state, "_TP", SimpleNamespace(rank_in_group=0, world_size=1))
     monkeypatch.setattr(
@@ -682,7 +682,7 @@ def test_conv_projections_use_draft_quant_config(monkeypatch):
 def test_context_kv_uses_quantized_projection_fallback(monkeypatch):
     from torch import nn
 
-    from aphrodite.model_executor.models import qwen3_dflash
+    from sonar.model_executor.models import qwen3_dflash
 
     class Projection(nn.Module):
         def __init__(self, packed_weight):
@@ -793,10 +793,10 @@ def test_score_edges_keeps_out_of_vocabulary_anchors_in_range():
     torch.testing.assert_close(score([vocab_size, 2]), score([vocab_size - 1, 2]))
 
 
-_EMBEDDING = "aphrodite.model_executor.layers.vocab_parallel_embedding"
+_EMBEDDING = "sonar.model_executor.layers.vocab_parallel_embedding"
 
 
-def test_top_k_tokens_stay_in_the_processor_vocabulary(default_aphrodite_config):
+def test_top_k_tokens_stay_in_the_processor_vocabulary(default_sonar_config):
     """A DFlash2 drafter takes candidates from the target's head, which can have
     rows past the draft vocabulary (a padded multimodal vocabulary). The
     candidates index the draft's codebooks, so top-k must not return those rows.

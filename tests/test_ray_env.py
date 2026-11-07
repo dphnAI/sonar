@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Tests for aphrodite.ray.ray_env — env var propagation to Ray workers."""
+"""Tests for sonar.ray.ray_env — env var propagation to Ray workers."""
 
 import os
 from unittest.mock import patch
 
-from aphrodite.ray.ray_env import get_env_vars_to_copy
-from aphrodite.v1.executor.ray_utils import WORKER_SPECIFIC_ENV_VARS
+from sonar.ray.ray_env import get_env_vars_to_copy
+from sonar.v1.executor.ray_utils import WORKER_SPECIFIC_ENV_VARS
 
 # ---------------------------------------------------------------------------
 # Default prefix matching
@@ -14,7 +14,7 @@ from aphrodite.v1.executor.ray_utils import WORKER_SPECIFIC_ENV_VARS
 
 
 class TestDefaultPrefixes:
-    """Built-in prefixes (APHRODITE_, LMCACHE_, NCCL_, UCX_, HF_, HUGGING_FACE_)
+    """Built-in prefixes (SONAR_, LMCACHE_, NCCL_, UCX_, HF_, HUGGING_FACE_)
     should be forwarded without any extra configuration."""
 
     @patch.dict(os.environ, {"LMCACHE_LOCAL_CPU": "True"}, clear=False)
@@ -49,7 +49,7 @@ class TestDefaultPrefixes:
 
 
 class TestDefaultExtraVars:
-    """Individual vars listed in APHRODITE_RAY_EXTRA_ENV_VARS_TO_COPY's default."""
+    """Individual vars listed in SONAR_RAY_EXTRA_ENV_VARS_TO_COPY's default."""
 
     def test_pythonhashseed_in_result(self):
         """PYTHONHASHSEED should always be in the result set (as a name to
@@ -69,7 +69,7 @@ class TestUserExtensions:
     @patch.dict(
         os.environ,
         {
-            "APHRODITE_RAY_EXTRA_ENV_VAR_PREFIXES_TO_COPY": "MYLIB_",
+            "SONAR_RAY_EXTRA_ENV_VAR_PREFIXES_TO_COPY": "MYLIB_",
             "MYLIB_FOO": "bar",
         },
         clear=False,
@@ -82,7 +82,7 @@ class TestUserExtensions:
     @patch.dict(
         os.environ,
         {
-            "APHRODITE_RAY_EXTRA_ENV_VARS_TO_COPY": "MY_SECRET",
+            "SONAR_RAY_EXTRA_ENV_VARS_TO_COPY": "MY_SECRET",
             "MY_SECRET": "val",
         },
         clear=False,
@@ -110,19 +110,19 @@ class TestExclusion:
     @patch.dict(
         os.environ,
         {
-            "APHRODITE_HOST_IP": "10.0.0.1",
-            "APHRODITE_NIXL_SIDE_CHANNEL_HOST": "10.0.0.1",
+            "SONAR_HOST_IP": "10.0.0.1",
+            "SONAR_NIXL_SIDE_CHANNEL_HOST": "10.0.0.1",
         },
         clear=False,
     )
     def test_worker_specific_host_vars_are_excluded(self):
         result = get_env_vars_to_copy(exclude_vars=WORKER_SPECIFIC_ENV_VARS)
-        assert "APHRODITE_HOST_IP" not in result
-        assert "APHRODITE_NIXL_SIDE_CHANNEL_HOST" not in result
+        assert "SONAR_HOST_IP" not in result
+        assert "SONAR_NIXL_SIDE_CHANNEL_HOST" not in result
 
     @patch.dict(os.environ, {"LMCACHE_LOCAL_CPU": "True"}, clear=False)
     @patch(
-        "aphrodite.ray.ray_env.RAY_NON_CARRY_OVER_ENV_VARS",
+        "sonar.ray.ray_env.RAY_NON_CARRY_OVER_ENV_VARS",
         {"LMCACHE_LOCAL_CPU"},
     )
     def test_non_carry_over_blacklist(self):
@@ -161,7 +161,7 @@ class TestEdgeCases:
     @patch.dict(
         os.environ,
         {
-            "APHRODITE_RAY_EXTRA_ENV_VAR_PREFIXES_TO_COPY": " MYLIB_ , OTHER_ ",
+            "SONAR_RAY_EXTRA_ENV_VAR_PREFIXES_TO_COPY": " MYLIB_ , OTHER_ ",
         },
         clear=False,
     )
@@ -174,7 +174,7 @@ class TestEdgeCases:
     @patch.dict(
         os.environ,
         {
-            "APHRODITE_RAY_EXTRA_ENV_VAR_PREFIXES_TO_COPY": "MYLIB_",
+            "SONAR_RAY_EXTRA_ENV_VAR_PREFIXES_TO_COPY": "MYLIB_",
             "LMCACHE_BACKEND": "cpu",
             "NCCL_DEBUG": "INFO",
             "MYLIB_FOO": "bar",
@@ -182,7 +182,7 @@ class TestEdgeCases:
         clear=False,
     )
     def test_user_prefix_additive(self):
-        """Setting APHRODITE_RAY_EXTRA_ENV_VAR_PREFIXES_TO_COPY does NOT drop defaults."""
+        """Setting SONAR_RAY_EXTRA_ENV_VAR_PREFIXES_TO_COPY does NOT drop defaults."""
         result = get_env_vars_to_copy()
         # Built-in defaults still present
         assert "LMCACHE_BACKEND" in result
@@ -193,14 +193,14 @@ class TestEdgeCases:
     @patch.dict(
         os.environ,
         {
-            "APHRODITE_RAY_EXTRA_ENV_VARS_TO_COPY": "MY_FLAG",
+            "SONAR_RAY_EXTRA_ENV_VARS_TO_COPY": "MY_FLAG",
             "PYTHONHASHSEED": "42",
             "MY_FLAG": "1",
         },
         clear=False,
     )
     def test_user_extra_additive(self):
-        """Setting APHRODITE_RAY_EXTRA_ENV_VARS_TO_COPY does NOT drop defaults."""
+        """Setting SONAR_RAY_EXTRA_ENV_VARS_TO_COPY does NOT drop defaults."""
         result = get_env_vars_to_copy()
         # Built-in default still present
         assert "PYTHONHASHSEED" in result

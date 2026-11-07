@@ -54,20 +54,20 @@ import torch.nn.functional as F
 from transformers.activations import ACT2FN
 from transformers.modeling_utils import PreTrainedModel
 
-from aphrodite.distributed import divide, get_tensor_model_parallel_world_size
-from aphrodite.model_executor.layers.attention import MMEncoderAttention
-from aphrodite.model_executor.layers.conv import Conv2dLayer
-from aphrodite.model_executor.layers.linear import (
+from sonar.distributed import divide, get_tensor_model_parallel_world_size
+from sonar.model_executor.layers.attention import MMEncoderAttention
+from sonar.model_executor.layers.conv import Conv2dLayer
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     QKVParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.models.utils import maybe_prefix
-from aphrodite.model_executor.models.vision import is_vit_use_data_parallel
-from aphrodite.platforms import current_platform
-from aphrodite.transformers_utils.configs.moonvit import MoonViTConfig
-from aphrodite.utils.gpu_sync_debug import gpu_sync_allowed
-from aphrodite.utils.torch_utils import async_tensor_h2d
+from sonar.model_executor.models.utils import maybe_prefix
+from sonar.model_executor.models.vision import is_vit_use_data_parallel
+from sonar.platforms import current_platform
+from sonar.transformers_utils.configs.moonvit import MoonViTConfig
+from sonar.utils.gpu_sync_debug import gpu_sync_allowed
+from sonar.utils.torch_utils import async_tensor_h2d
 
 
 def _apply_rope_input_validation(x, freqs_cis):

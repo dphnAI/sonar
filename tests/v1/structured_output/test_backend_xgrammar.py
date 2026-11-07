@@ -9,15 +9,15 @@ from transformers import AutoTokenizer, PreTrainedTokenizerBase
 from xgrammar import Grammar
 from xgrammar.testing import _is_grammar_accept_string
 
-from aphrodite.config import AphroditeConfig, StructuredOutputsConfig
-from aphrodite.sampling_params import SamplingParams, StructuredOutputsParams
-from aphrodite.v1.structured_output.backend_types import StructuredOutputOptions
-from aphrodite.v1.structured_output.backend_xgrammar import (
+from sonar.config import SonarConfig, StructuredOutputsConfig
+from sonar.sampling_params import SamplingParams, StructuredOutputsParams
+from sonar.v1.structured_output.backend_types import StructuredOutputOptions
+from sonar.v1.structured_output.backend_xgrammar import (
     XgrammarBackend,
     has_xgrammar_unsupported_json_features,
     validate_xgrammar_grammar,
 )
-from aphrodite.v1.structured_output.utils import choice_as_grammar
+from sonar.v1.structured_output.utils import choice_as_grammar
 
 pytestmark = pytest.mark.cpu_test
 
@@ -222,8 +222,8 @@ def unsupported_multibranch_allof():
 
 
 @pytest.fixture
-def unsupported_aphrodite_issue_56556_schema():
-    """Bug repro from Aphrodite issue #56556"""
+def unsupported_sonar_issue_56556_schema():
+    """Bug repro from Sonar issue #56556"""
     return [
         {
             "$defs": {
@@ -309,7 +309,7 @@ def property_names_with_additional_properties_schema():
     https://github.com/mlc-ai/xgrammar/pull/836
     added support of propertyNames + additionalProperties
     This fix was released in xgrammar v0.2.7
-    which Aphrodite pins in PR #57272
+    which Sonar pins in PR #57272
     """
     return {
         "type": "object",
@@ -336,7 +336,7 @@ def supported_allof_anyof_and_oneof():
         # Corner cases: empty allOf, this is a valid schema
         {"allOf": []},
         # multi-branch allOf:
-        # is NOT supported yet, see Aphrodite issue #56556
+        # is NOT supported yet, see Sonar issue #56556
         # single-branch anyOf:
         {
             "anyOf": [],
@@ -381,9 +381,9 @@ class TestHasXGrammarUnsupportedJsonFeatures:
             "unsupported_array_schemas",
             "unsupported_propertyNames_combinations",
             "unsupported_patternProperties_combinations",
-            # Aphrodite issue #56556
+            # Sonar issue #56556
             "unsupported_multibranch_allof",
-            "unsupported_aphrodite_issue_56556_schema",
+            "unsupported_sonar_issue_56556_schema",
         ],
     )
     def test_unsupported_json_features(self, schema_type, request):
@@ -399,7 +399,7 @@ class TestHasXGrammarUnsupportedJsonFeatures:
             "property_names_schema",
             "property_names_with_additional_properties_schema",
             # Additional test cases implemented during work on
-            # Aphrodite issue #56556
+            # Sonar issue #56556
             "supported_allof_anyof_and_oneof",
         ],
     )
@@ -538,13 +538,13 @@ class TestXgrammarBackend:
 
         @classmethod
         def _backend(cls, *, disable_any_whitespace: bool) -> XgrammarBackend:
-            aphrodite_config = AphroditeConfig(
+            sonar_config = SonarConfig(
                 structured_outputs_config=StructuredOutputsConfig(
                     backend="xgrammar",
                     disable_any_whitespace=disable_any_whitespace,
                 )
             )
-            return XgrammarBackend(aphrodite_config, tokenizer=cls.tokenizer, vocab_size=cls._VOCAB_SIZE)
+            return XgrammarBackend(sonar_config, tokenizer=cls.tokenizer, vocab_size=cls._VOCAB_SIZE)
 
         @classmethod
         def _accepts_json(cls, backend: XgrammarBackend, json_text: str) -> bool:
@@ -586,7 +586,7 @@ class TestXgrammarBackend:
             # FIXME(arpera):
             # Comma + separators=(",", ":") is wrong on xgrammar <=0.2.8
             # Seehttps://github.com/mlc-ai/xgrammar/issues/945
-            # Re-enable both tests once Aphrodite pins xgrammar with the fix (>=0.2.9).
+            # Re-enable both tests once Sonar pins xgrammar with the fix (>=0.2.9).
             #
             # # Check that grammar accepts json with NO space after comma
             # assert self._accepts_json(

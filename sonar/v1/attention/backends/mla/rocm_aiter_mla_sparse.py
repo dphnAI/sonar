@@ -7,44 +7,44 @@ from typing import TYPE_CHECKING, ClassVar
 import numpy as np
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.config import AphroditeConfig, get_current_aphrodite_config
-from aphrodite.config.cache import CacheDType
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.attention.sparse_mla_attention import (
+from sonar import _custom_ops as ops
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.config import SonarConfig, get_current_sonar_config
+from sonar.config.cache import CacheDType
+from sonar.logger import init_logger
+from sonar.model_executor.layers.attention.sparse_mla_attention import (
     SparseMLACommonImpl,
     SparseMLACommonMetadata,
     SparseMLACommonMetadataBuilder,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.gpu_sync_debug import gpu_sync_allowed
-from aphrodite.utils.torch_utils import np_to_pinned_tensor
-from aphrodite.v1.attention.backend import (
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
+from sonar.utils.gpu_sync_debug import gpu_sync_allowed
+from sonar.utils.torch_utils import np_to_pinned_tensor
+from sonar.v1.attention.backend import (
     AttentionBackend,
     AttentionCGSupport,
     AttentionLayer,
     CommonAttentionMetadata,
     MultipleOf,
 )
-from aphrodite.v1.attention.backends.mla.rocm_aiter_mla import (
+from sonar.v1.attention.backends.mla.rocm_aiter_mla import (
     AiterMLAHelper,
 )
-from aphrodite.v1.attention.backends.mla.sparse_utils import (
+from sonar.v1.attention.backends.mla.sparse_utils import (
     align_blocks_to_rows,
     flat_kv_row_view,
 )
-from aphrodite.v1.attention.ops.rocm_aiter_mla_sparse import (
+from sonar.v1.attention.ops.rocm_aiter_mla_sparse import (
     rocm_sparse_attn_decode_bf16,
     rocm_sparse_attn_prefill,
     rocm_sparse_decode_bf16_num_splits,
 )
-from aphrodite.v1.kv_cache_interface import AttentionSpec, KVCacheLayout
-from aphrodite.v1.worker.workspace import current_workspace_manager
+from sonar.v1.kv_cache_interface import AttentionSpec, KVCacheLayout
+from sonar.v1.worker.workspace import current_workspace_manager
 
 if TYPE_CHECKING:
-    from aphrodite.model_executor.models.deepseek_v2 import Indexer
+    from sonar.model_executor.models.deepseek_v2 import Indexer
 logger = init_logger(__name__)
 
 
@@ -382,7 +382,7 @@ class ROCMAiterMLASparseBackend(AttentionBackend):
 
     @classmethod
     def supports_sink(cls) -> bool:
-        from aphrodite.platforms.rocm import on_mi3xx
+        from sonar.platforms.rocm import on_mi3xx
 
         return on_mi3xx()
 
@@ -430,19 +430,19 @@ class ROCMAiterMLASparseMetadataBuilder(SparseMLACommonMetadataBuilder[ROCMAiter
         self,
         kv_cache_spec: AttentionSpec,
         layer_names: list[str],
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
     ):
-        super().__init__(kv_cache_spec, layer_names, aphrodite_config, device)
-        self.model_dtype = aphrodite_config.model_config.dtype
-        self.kv_cache_dtype = aphrodite_config.cache_config.cache_dtype
-        parallel_config = aphrodite_config.parallel_config
-        max_num_batched_tokens = aphrodite_config.scheduler_config.max_num_batched_tokens
+        super().__init__(kv_cache_spec, layer_names, sonar_config, device)
+        self.model_dtype = sonar_config.model_config.dtype
+        self.kv_cache_dtype = sonar_config.cache_config.cache_dtype
+        parallel_config = sonar_config.parallel_config
+        max_num_batched_tokens = sonar_config.scheduler_config.max_num_batched_tokens
 
         self._init_reorder_batch_threshold(1, supports_spec_as_decode=True)
 
         self.num_heads = self.model_config.get_num_attention_heads(parallel_config)
-        attention_context = aphrodite_config.compilation_config.static_forward_context
+        attention_context = sonar_config.compilation_config.static_forward_context
         # Sink decode must use AITER's nonpersistent path. In particular,
         # gfx942 has no persistent+LSE kernel, and its metadata heuristic
         # terminates for HY-V4's TP1 H64 shape. The Triton sparse MLA kernel
@@ -459,7 +459,7 @@ class ROCMAiterMLASparseMetadataBuilder(SparseMLACommonMetadataBuilder[ROCMAiter
         self.dummy_block_table = torch.empty((1, 1), dtype=torch.int32, device=self.device)
 
         self.req_id_per_token_buffer = torch.zeros(
-            (aphrodite_config.scheduler_config.max_num_batched_tokens,),
+            (sonar_config.scheduler_config.max_num_batched_tokens,),
             dtype=torch.int32,
             device=device,
         )
@@ -491,7 +491,7 @@ class ROCMAiterMLASparseMetadataBuilder(SparseMLACommonMetadataBuilder[ROCMAiter
         self._num_attention_heads = AiterMLAHelper.get_actual_mla_num_heads(self.num_heads)
 
         q_dtype = self.model_dtype
-        kv_cache_dtype_str = getattr(aphrodite_config.cache_config, "cache_dtype", "auto")
+        kv_cache_dtype_str = getattr(sonar_config.cache_config, "cache_dtype", "auto")
         if kv_cache_dtype_str in ("fp8", "fp8_e4m3", "fp8_e5m2"):
             kv_cache_dtype_str = "fp8"
             q_dtype = dtypes.fp8
@@ -769,29 +769,28 @@ class ROCMAiterMLASparseImpl(SparseMLACommonImpl[ROCMAiterMLASparseMetadata]):
         self.supports_dense_mha_prefill = sinks is None  # type: ignore[misc]
         self.masked_mha_available = False
 
-        aphrodite_config = get_current_aphrodite_config()
+        sonar_config = get_current_sonar_config()
         self.owns_indexer: bool = indexer is not None
         self.index_epoch: int = _index_epoch(self.topk_indices_buffer, self.owns_indexer)
-        max_tokens = aphrodite_config.scheduler_config.max_num_batched_tokens
+        max_tokens = sonar_config.scheduler_config.max_num_batched_tokens
         q_concat_shape = (max_tokens, num_heads, head_size)
         (self.q_concat_buffer,) = current_workspace_manager().get_simultaneous(
-            (q_concat_shape, aphrodite_config.model_config.dtype),
+            (q_concat_shape, sonar_config.model_config.dtype),
         )
         self.qk_rope_head_dim: int = mla_args["qk_rope_head_dim"]
 
         if rocm_aiter_ops.is_triton_sparse_mla_enabled():
-            reason = self._aiter_sparse_mla_unsupported_reason(aphrodite_config)
+            reason = self._aiter_sparse_mla_unsupported_reason(sonar_config)
             if reason is None:
                 self.use_aiter_sparse_mla = True
             else:
                 logger.warning_once(
-                    "APHRODITE_ROCM_USE_AITER_TRITON_SPARSE_MLA is set, but %s; "
-                    "using the default sparse MLA path instead.",
+                    "SONAR_ROCM_USE_AITER_TRITON_SPARSE_MLA is set, but %s; using the default sparse MLA path instead.",
                     reason,
                 )
 
-    def _aiter_sparse_mla_unsupported_reason(self, aphrodite_config: AphroditeConfig) -> str | None:
-        model_dtype = aphrodite_config.model_config.dtype
+    def _aiter_sparse_mla_unsupported_reason(self, sonar_config: SonarConfig) -> str | None:
+        model_dtype = sonar_config.model_config.dtype
         if model_dtype != torch.bfloat16:
             return f"the model dtype is {model_dtype}, not bfloat16"
         cache_dtype = self.kv_cache_dtype
@@ -818,7 +817,7 @@ class ROCMAiterMLASparseImpl(SparseMLACommonImpl[ROCMAiterMLASparseMetadata]):
         base_mla_num_heads = AiterMLAHelper.get_actual_mla_num_heads(self.num_heads)
         mla_num_heads = base_mla_num_heads
         need_lse = self.sinks is not None
-        from aphrodite.platforms.rocm import on_gfx942
+        from sonar.platforms.rocm import on_gfx942
 
         # Keep sink attention available for dtypes/head shapes without an
         # AITER return-LSE kernel. Sink layers never need persistent metadata.
@@ -922,7 +921,7 @@ class ROCMAiterMLASparseImpl(SparseMLACommonImpl[ROCMAiterMLASparseMetadata]):
                 )
 
         if supported_head_buckets is not None:
-            from aphrodite.platforms.rocm import on_mi3xx
+            from sonar.platforms.rocm import on_mi3xx
 
             if on_mi3xx():
                 supported_heads = next(

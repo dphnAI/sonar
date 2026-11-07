@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Unit tests for aphrodite.v1.kv_offload.tiering.p2p.control.zmq."""
+"""Unit tests for sonar.v1.kv_offload.tiering.p2p.control.zmq."""
 
 from __future__ import annotations
 
@@ -11,8 +11,8 @@ import time
 import pytest
 import zmq
 
-from aphrodite.v1.kv_offload.tiering.p2p.control import zmq as zmq_module
-from aphrodite.v1.kv_offload.tiering.p2p.control.zmq import (
+from sonar.v1.kv_offload.tiering.p2p.control import zmq as zmq_module
+from sonar.v1.kv_offload.tiering.p2p.control.zmq import (
     ZmqConnection,
     ZmqTransport,
     _Sockets,
@@ -456,7 +456,7 @@ class TestExpandedMonitorEvents:
     both are treated as fatal."""
 
     def test_fatal_events_include_disconnected_and_closed(self):
-        from aphrodite.v1.kv_offload.tiering.p2p.control.zmq import (
+        from sonar.v1.kv_offload.tiering.p2p.control.zmq import (
             _FATAL_MONITOR_EVENTS,
         )
 
@@ -464,7 +464,7 @@ class TestExpandedMonitorEvents:
         assert zmq.EVENT_CLOSED in _FATAL_MONITOR_EVENTS
 
     def test_monitor_mask_covers_fatal_events(self):
-        from aphrodite.v1.kv_offload.tiering.p2p.control.zmq import (
+        from sonar.v1.kv_offload.tiering.p2p.control.zmq import (
             _FATAL_MONITOR_EVENTS,
             _MONITOR_EVENT_MASK,
         )

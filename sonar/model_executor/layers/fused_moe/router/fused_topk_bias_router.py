@@ -4,19 +4,19 @@ import functools
 
 import torch
 
-import aphrodite._custom_ops as ops
-import aphrodite.envs as envs
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.distributed.eplb.eplb_state import EplbLayerState
-from aphrodite.model_executor.layers.fused_moe.config import (
+import sonar._custom_ops as ops
+import sonar.envs as envs
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.distributed.eplb.eplb_state import EplbLayerState
+from sonar.model_executor.layers.fused_moe.config import (
     RoutingMethodType,
     get_routing_method_type,
 )
-from aphrodite.model_executor.layers.fused_moe.router.base_router import (
+from sonar.model_executor.layers.fused_moe.router.base_router import (
     BaseRouter,
     get_moe_padding_mask,
 )
-from aphrodite.model_executor.layers.fused_moe.router.dsv4_topk import (
+from sonar.model_executor.layers.fused_moe.router.dsv4_topk import (
     can_use_dsv4_topk,
     dsv4_topk,
 )
@@ -27,7 +27,7 @@ AITER_SUPPORTED_NUM_GRP = (1, 2, 4, 8)
 AITER_MAX_EXPERTS_PER_GROUP = 32
 
 
-def aphrodite_topk_softmax(
+def sonar_topk_softmax(
     topk_weights: torch.Tensor,
     topk_indices: torch.Tensor,
     token_expert_indices: torch.Tensor,
@@ -48,7 +48,7 @@ def aphrodite_topk_softmax(
     return topk_weights, topk_indices
 
 
-def aphrodite_topk_sigmoid(
+def sonar_topk_sigmoid(
     topk_weights: torch.Tensor,
     topk_indices: torch.Tensor,
     token_expert_indices: torch.Tensor,
@@ -71,7 +71,7 @@ def aphrodite_topk_sigmoid(
     return topk_weights, topk_indices
 
 
-def aphrodite_topk_softplus_sqrt(
+def sonar_topk_softplus_sqrt(
     topk_weights: torch.Tensor,
     topk_indices: torch.Tensor,
     token_expert_indices: torch.Tensor,
@@ -200,7 +200,7 @@ def fused_topk_bias(
         token_expert_indices = torch.empty(M, topk, dtype=torch.int32, device=hidden_states.device)
 
         if scoring_func == "softmax":
-            topk_weights, topk_ids = aphrodite_topk_softmax(
+            topk_weights, topk_ids = sonar_topk_softmax(
                 topk_weights,
                 topk_ids,
                 token_expert_indices,
@@ -212,7 +212,7 @@ def fused_topk_bias(
                 topk_weights *= routed_scaling_factor
             return topk_weights, topk_ids
         elif scoring_func == "sigmoid":
-            topk_weights, topk_ids = aphrodite_topk_sigmoid(
+            topk_weights, topk_ids = sonar_topk_sigmoid(
                 topk_weights,
                 topk_ids,
                 token_expert_indices,
@@ -223,7 +223,7 @@ def fused_topk_bias(
             )
             return topk_weights, topk_ids
         elif scoring_func == "sqrtsoftplus":
-            return aphrodite_topk_softplus_sqrt(
+            return sonar_topk_softplus_sqrt(
                 topk_weights,
                 topk_ids,
                 token_expert_indices,
@@ -274,7 +274,7 @@ def fused_topk_bias(
             device=hidden_states.device,
         )
         token_expert_indices = torch.empty(M, topk, dtype=torch.int32, device=hidden_states.device)
-        return aphrodite_topk_softplus_sqrt(
+        return sonar_topk_softplus_sqrt(
             topk_weights,
             topk_ids,
             token_expert_indices,
@@ -323,7 +323,7 @@ def fused_topk_bias(
             vl_indices = torch.topk(scores_for_choice, k=topk, dim=-1)[1]
             topk_indices = torch.where(image_mask, vl_indices.to(topk_indices.dtype), topk_indices)
     else:
-        use_sorted = envs.APHRODITE_BATCH_INVARIANT
+        use_sorted = envs.SONAR_BATCH_INVARIANT
         topk_indices = torch.topk(scores_for_choice, k=topk, dim=-1, sorted=use_sorted)[1]
     topk_weights = scores.gather(1, topk_indices)
     if renormalize:

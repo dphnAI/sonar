@@ -6,19 +6,19 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite import _custom_ops as ops
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.config import get_current_aphrodite_config
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar import _custom_ops as ops
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.config import get_current_sonar_config
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe import (
     FusedMoEConfig,
     FusedMoEMethodBase,
     FusedMoeWeightScaleSupported,
     RoutedExperts,
     SharedExperts,
 )
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEParallelConfig,
     FusedMoEQuantConfig,
     fp8_w8a8_moe_quant_config,
@@ -27,27 +27,27 @@ from aphrodite.model_executor.layers.fused_moe.config import (
     mxfp4_w4a16_moe_quant_config,
     ocp_mx_moe_quant_config,
 )
-from aphrodite.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
-from aphrodite.model_executor.layers.fused_moe.oracle.fp8 import (
+from sonar.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
+from sonar.model_executor.layers.fused_moe.oracle.fp8 import (
     convert_to_fp8_moe_kernel_format,
     make_fp8_moe_kernel,
     make_fp8_moe_quant_config,
     select_fp8_moe_backend,
 )
-from aphrodite.model_executor.layers.fused_moe.oracle.int8 import (
+from sonar.model_executor.layers.fused_moe.oracle.int8 import (
     Int8MoeBackend,
     convert_to_int8_moe_kernel_format,
     make_int8_moe_kernel,
     make_int8_moe_quant_config,
     select_int8_moe_backend,
 )
-from aphrodite.model_executor.layers.fused_moe.oracle.int_wna16 import (
+from sonar.model_executor.layers.fused_moe.oracle.int_wna16 import (
     convert_to_wna16_moe_kernel_format,
     make_wna16_moe_kernel,
     make_wna16_moe_quant_config,
     select_wna16_moe_backend,
 )
-from aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 import (
+from sonar.model_executor.layers.fused_moe.oracle.mxfp4 import (
     TRITON_BACKENDS,
     Mxfp4MoeBackend,
     backend_to_kernel_cls,
@@ -58,38 +58,38 @@ from aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 import (
     select_mxfp4_moe_backend,
     triton_weight,
 )
-from aphrodite.model_executor.layers.fused_moe.oracle.mxfp8 import (
+from sonar.model_executor.layers.fused_moe.oracle.mxfp8 import (
     select_mxfp8_moe_backend,
 )
-from aphrodite.model_executor.layers.fused_moe.oracle.nvfp4 import (
+from sonar.model_executor.layers.fused_moe.oracle.nvfp4 import (
     convert_to_nvfp4_moe_kernel_format,
     make_nvfp4_moe_kernel,
     make_nvfp4_moe_quant_config,
     select_nvfp4_moe_backend,
 )
-from aphrodite.model_executor.layers.quantization.quark.utils import (
+from sonar.model_executor.layers.quantization.quark.utils import (
     QuarkQTensorHint,
     parse_w4a16_int4_weight_config,
 )
-from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
+from sonar.model_executor.layers.quantization.utils.fp8_utils import (
     validate_fp8_block_shape_moe,
 )
-from aphrodite.model_executor.layers.quantization.utils.mxfp8_utils import (
+from sonar.model_executor.layers.quantization.utils.mxfp8_utils import (
     MXFP8_BLOCK_SIZE,
     MXFP8_SCALE_DTYPE,
     MXFP8_VALUE_DTYPE,
 )
-from aphrodite.model_executor.layers.quantization.utils.nvfp4_emulation_utils import (
+from sonar.model_executor.layers.quantization.utils.nvfp4_emulation_utils import (
     dequantize_nvfp4_moe_weights,
 )
-from aphrodite.model_executor.layers.quantization.utils.ocp_mx_utils import (
+from sonar.model_executor.layers.quantization.utils.ocp_mx_utils import (
     _ACTIVATION_QUANT_KEY_MAP,
     _WEIGHT_QUANT_KEY_MAP,
     OCP_MX_BLOCK_SIZE,
     OCP_MX_Scheme,
     ocp_mx_weight_dtype_and_rows,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     GroupShape,
     QuantKey,
     kFp8Dynamic128Sym,
@@ -121,20 +121,20 @@ from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
     kNvfp4Dynamic,
     kNvfp4Static,
 )
-from aphrodite.model_executor.layers.quantization.utils.w8a8_utils import (
+from sonar.model_executor.layers.quantization.utils.w8a8_utils import (
     all_close_1d,
     normalize_e4m3fn_to_e4m3fnuz,
     per_tensor_dequantize,
 )
-from aphrodite.model_executor.utils import (
+from sonar.model_executor.utils import (
     replace_parameter,
     retire_parameter,
     set_weight_attrs,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 if TYPE_CHECKING:
-    from aphrodite.model_executor.layers.quantization.quark.quark import QuarkConfig
+    from sonar.model_executor.layers.quantization.quark.quark import QuarkConfig
 
 logger = init_logger(__name__)
 
@@ -660,7 +660,7 @@ class QuarkW8A8Fp8MoEMethod(QuarkMoEMethod):
             activation_key=self.activation_quant_key,
         )
 
-        self.model_type = getattr(get_current_aphrodite_config().model_config.hf_config, "model_type", None)
+        self.model_type = getattr(get_current_sonar_config().model_config.hf_config, "model_type", None)
 
     def create_weights(
         self,
@@ -1295,7 +1295,7 @@ class QuarkW8A8Int8MoEMethod(QuarkMoEMethod):
                 shared_experts_input=shared_experts_input,
             )
 
-        from aphrodite.model_executor.layers.fused_moe import fused_experts
+        from sonar.model_executor.layers.fused_moe import fused_experts
 
         return fused_experts(
             hidden_states=x,
@@ -1438,7 +1438,7 @@ class QuarkW4A8Fp8MoEMethod(QuarkMoEMethod):
         shared_experts: SharedExperts | None,
         shared_experts_input: torch.Tensor | None,
     ) -> torch.Tensor:
-        from aphrodite.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
             rocm_aiter_fused_experts,
         )
 
@@ -1539,7 +1539,7 @@ class QuarkOCP_MX_MoEMethod(QuarkMoEMethod):
                 "Please open an issue."
             )
 
-        self.model_type = getattr(get_current_aphrodite_config().model_config.hf_config, "model_type", None)
+        self.model_type = getattr(get_current_sonar_config().model_config.hf_config, "model_type", None)
 
         # If no native backend available, use emulation.
         if self.mxfp4_backend is Mxfp4MoeBackend.NONE:
@@ -1789,7 +1789,7 @@ class QuarkOCP_MX_MoEMethod(QuarkMoEMethod):
         elif self.ocp_mx_scheme in ["w_mxfp6_e3m2_a_fp8", "w_mxfp6_e2m3_a_fp8"]:
             raise NotImplementedError(
                 "Currently there is no corresponding fused moe quant config configured "
-                f"in Aphrodite for OCP MX scheme {self.ocp_mx_scheme}. Please open an issue."
+                f"in Sonar for OCP MX scheme {self.ocp_mx_scheme}. Please open an issue."
             )
         else:
             assert self.input_dtype is not None

@@ -6,9 +6,9 @@ import json
 import pytest
 from transformers import AutoTokenizer, PreTrainedTokenizerBase
 
-from aphrodite.entrypoints.generate.base.protocol import FunctionCall
-from aphrodite.tokenizers import TokenizerLike
-from aphrodite.tool_parsers import ToolParser, ToolParserManager
+from sonar.entrypoints.generate.base.protocol import FunctionCall
+from sonar.tokenizers import TokenizerLike
+from sonar.tool_parsers import ToolParser, ToolParserManager
 from tests.tool_parsers.utils import (
     run_tool_extraction,
     run_tool_extraction_streaming,

@@ -5,11 +5,11 @@
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.third_party.flash_linear_attention.ops.chunk_delta_h import (
+from sonar.platforms import current_platform
+from sonar.third_party.flash_linear_attention.ops.chunk_delta_h import (
     chunk_gated_delta_rule_fwd_h,
 )
-from aphrodite.third_party.flash_linear_attention.ops.solve_tril import solve_tril
+from sonar.third_party.flash_linear_attention.ops.solve_tril import solve_tril
 
 pytestmark = pytest.mark.skipif(not current_platform.is_cuda_alike(), reason="needs a GPU")
 

@@ -20,9 +20,9 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from aphrodite import _custom_ops as ops
-from aphrodite.platforms import current_platform
-from aphrodite.utils.math_utils import cdiv
+from sonar import _custom_ops as ops
+from sonar.platforms import current_platform
+from sonar.utils.math_utils import cdiv
 
 PAGE = 64
 HEAD_DIM = 128

@@ -7,21 +7,21 @@ import itertools
 import pytest
 import torch
 
-import aphrodite._custom_ops as ops
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
+import sonar._custom_ops as ops
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.quantization.utils.fp8_utils import (
     per_token_group_quant_fp8,
 )
-from aphrodite.model_executor.layers.quantization.utils.int8_utils import (
+from sonar.model_executor.layers.quantization.utils.int8_utils import (
     per_token_group_quant_int8,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_random_seed
 from tests.kernels.utils import fp8_allclose, fp8_ulp_distance, opcheck
 
 ON_GFX950 = False
 if current_platform.is_rocm():
-    from aphrodite.platforms.rocm import on_gfx950
+    from sonar.platforms.rocm import on_gfx950
 
     ON_GFX950 = on_gfx950()
 
@@ -235,7 +235,7 @@ def ops_impl(
 @pytest.mark.parametrize("strided_input", [False, True])
 @torch.inference_mode()
 def test_rms_norm(
-    default_aphrodite_config,
+    default_sonar_config,
     num_tokens: int,
     hidden_size: int,
     add_residual: bool,

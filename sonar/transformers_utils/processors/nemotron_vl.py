@@ -5,8 +5,8 @@ import torch
 import torchvision.transforms as T
 from PIL import Image
 
-from aphrodite.multimodal.image import convert_image_mode
-from aphrodite.tokenizers.hf import HfTokenizer
+from sonar.multimodal.image import convert_image_mode
+from sonar.tokenizers.hf import HfTokenizer
 
 from .internvl import InternVLChatImageProcessor, InternVLChatProcessor
 

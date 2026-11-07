@@ -9,27 +9,27 @@ from typing import TYPE_CHECKING, ClassVar
 
 from torch import fx, nn
 
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.linear import QKVParallelLinear
-from aphrodite.model_executor.models.transformers.fusers.base import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.linear import QKVParallelLinear
+from sonar.model_executor.models.transformers.fusers.base import (
     StackedFuser,
     fused_head_size,
 )
-from aphrodite.model_executor.models.transformers.fx_utils import (
+from sonar.model_executor.models.transformers.fx_utils import (
     block_chain,
     compile_forward,
     is_linear,
     recover_forward,
     returned_linear,
 )
-from aphrodite.model_executor.models.transformers.utils import (
+from sonar.model_executor.models.transformers.utils import (
     log_replacement,
     replace_linear_class,
 )
-from aphrodite.model_executor.models.utils import ShardId, maybe_prefix
+from sonar.model_executor.models.utils import ShardId, maybe_prefix
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
+    from sonar.config import SonarConfig
 
 logger = init_logger(__name__)
 
@@ -143,12 +143,12 @@ class QKVFuser(StackedFuser):
         self._splice_merged_split(funcdef, calls, block, insert_index)
         self.fused_forward = compile_forward(funcdef, fn)
 
-    def validate(self, module: nn.Module, aphrodite_config: "AphroditeConfig") -> bool:
+    def validate(self, module: nn.Module, sonar_config: "SonarConfig") -> bool:
         """Shapes must be compatible for a single merged, head-sharded GEMM."""
         q = module.get_submodule(self.q_name)
         k = module.get_submodule(self.k_name)
         v = module.get_submodule(self.v_name)
-        head_size = fused_head_size(module, aphrodite_config)
+        head_size = fused_head_size(module, sonar_config)
         compatible = (
             q.in_features == k.in_features == v.in_features
             and len({proj.bias is None for proj in (q, k, v)}) == 1
@@ -160,9 +160,9 @@ class QKVFuser(StackedFuser):
             logger.debug("%s is not compatible with QKV fusion", type(module))
         return compatible
 
-    def update_attrs(self, module: nn.Module, prefix: str, aphrodite_config: "AphroditeConfig") -> None:
-        quant_config = aphrodite_config.quant_config
-        head_size = fused_head_size(module, aphrodite_config)
+    def update_attrs(self, module: nn.Module, prefix: str, sonar_config: "SonarConfig") -> None:
+        quant_config = sonar_config.quant_config
+        head_size = fused_head_size(module, sonar_config)
         q = module.get_submodule(self.q_name)
         k = module.get_submodule(self.k_name)
         merged = QKVParallelLinear(

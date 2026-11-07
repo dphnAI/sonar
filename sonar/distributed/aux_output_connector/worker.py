@@ -12,31 +12,31 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed.aux_output_connector.connector import (
+from sonar.config import SonarConfig
+from sonar.distributed.aux_output_connector.connector import (
     AuxOutputConnectorMetadata,
     AuxRequestOutput,
 )
-from aphrodite.distributed.aux_output_connector.routed_experts import (
+from sonar.distributed.aux_output_connector.routed_experts import (
     RoutedExpertsBuffer,
     materialize_routed_experts,
     publish_routed_experts,
     routed_experts_keys,
 )
-from aphrodite.distributed.aux_output_connector.store import (
+from sonar.distributed.aux_output_connector.store import (
     BackgroundBlockObjectStore,
     BlockObjectStore,
 )
-from aphrodite.distributed.parallel_state import get_tp_group
-from aphrodite.model_executor.layers.fused_moe.routed_experts_capturer import (
+from sonar.distributed.parallel_state import get_tp_group
+from sonar.model_executor.layers.fused_moe.routed_experts_capturer import (
     RoutedExpertsCapturer,
     bind_routed_experts_capturer,
 )
-from aphrodite.v1.core.kv_cache_utils import resolve_kv_cache_block_sizes
+from sonar.v1.core.kv_cache_utils import resolve_kv_cache_block_sizes
 
 if TYPE_CHECKING:
-    from aphrodite.v1.kv_cache_interface import KVCacheConfig
-    from aphrodite.v1.worker.gpu.input_batch import InputBatch
+    from sonar.v1.kv_cache_interface import KVCacheConfig
+    from sonar.v1.worker.gpu.input_batch import InputBatch
 
 
 @dataclass
@@ -82,16 +82,14 @@ class AuxOutputWorkerConnector:
     def __init__(
         self,
         *,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         model: torch.nn.Module,
     ) -> None:
-        max_num_batched_tokens = aphrodite_config.scheduler_config.max_num_batched_tokens
-        capturer = RoutedExpertsCapturer(
-            max_num_batched_tokens=max_num_batched_tokens, aphrodite_config=aphrodite_config
-        )
+        max_num_batched_tokens = sonar_config.scheduler_config.max_num_batched_tokens
+        capturer = RoutedExpertsCapturer(max_num_batched_tokens=max_num_batched_tokens, sonar_config=sonar_config)
         bind_routed_experts_capturer(model, capturer)
         self._capturer = capturer
-        self._aphrodite_config = aphrodite_config
+        self._sonar_config = sonar_config
         self._store: BackgroundBlockObjectStore | None = None
         self._buffer: RoutedExpertsBuffer | None = None
         self._requests: dict[str, _WorkerRequestState] = {}
@@ -102,7 +100,7 @@ class AuxOutputWorkerConnector:
         # are outstanding; guarded by _lock against the output thread.
         self._pending_outputs: list[PendingAuxOutput] = []
         self._lock = Lock()
-        self._max_concurrent_batches = aphrodite_config.max_concurrent_batches
+        self._max_concurrent_batches = sonar_config.max_concurrent_batches
 
     def initialize_output_storage(self, kv_cache_config: KVCacheConfig) -> None:
         """Create the output data plane once the KV cache layout is resolved."""
@@ -111,26 +109,26 @@ class AuxOutputWorkerConnector:
         if not get_tp_group().is_first_rank:
             return
 
-        aphrodite_config = self._aphrodite_config
+        sonar_config = self._sonar_config
         shape_per_token = self._capturer.shape_per_token
         dtype: np.dtype[Any] = np.dtype(self._capturer.output_dtype_name)
-        scheduler_block_size, hash_block_size = resolve_kv_cache_block_sizes(kv_cache_config, aphrodite_config)
+        scheduler_block_size, hash_block_size = resolve_kv_cache_block_sizes(kv_cache_config, sonar_config)
         hashes_per_kv_block = scheduler_block_size // hash_block_size
         block_nbytes = hash_block_size * int(np.prod(shape_per_token)) * dtype.itemsize
-        max_bytes = aphrodite_config.aux_output_config.max_bytes
+        max_bytes = sonar_config.aux_output_config.max_bytes
         if max_bytes is None:
             max_bytes = kv_cache_config.num_blocks * hashes_per_kv_block * block_nbytes
         self._store = BackgroundBlockObjectStore(
             BlockObjectStore(max_bytes=max_bytes, object_nbytes=block_nbytes),
-            max_pending_batches=2 * aphrodite_config.scheduler_config.max_num_seqs,
+            max_pending_batches=2 * sonar_config.scheduler_config.max_num_seqs,
         )
         self._buffer = RoutedExpertsBuffer(
             dtype,
             shape_per_token,
             hash_block_size,
-            aphrodite_config.scheduler_config.max_num_seqs,
-            aphrodite_config.scheduler_config.max_num_batched_tokens,
-            aphrodite_config.max_concurrent_batches,
+            sonar_config.scheduler_config.max_num_seqs,
+            sonar_config.scheduler_config.max_num_batched_tokens,
+            sonar_config.max_concurrent_batches,
         )
 
     def prepare_output(self, input_batch: InputBatch) -> PendingAuxOutput | None:
@@ -369,5 +367,5 @@ class AuxOutputWorkerConnector:
                     self._store = None
 
 
-def get_aux_output_connector(model: torch.nn.Module, aphrodite_config: AphroditeConfig) -> AuxOutputWorkerConnector:
-    return AuxOutputWorkerConnector(model=model, aphrodite_config=aphrodite_config)
+def get_aux_output_connector(model: torch.nn.Module, sonar_config: SonarConfig) -> AuxOutputWorkerConnector:
+    return AuxOutputWorkerConnector(model=model, sonar_config=sonar_config)

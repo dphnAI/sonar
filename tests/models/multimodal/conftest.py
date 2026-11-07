@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Pytest configuration for Aphrodite multimodal tests."""
+"""Pytest configuration for Sonar multimodal tests."""
 
 import torch.nn.functional as F
 

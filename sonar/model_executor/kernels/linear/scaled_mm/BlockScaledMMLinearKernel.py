@@ -7,11 +7,11 @@ from typing import ClassVar, Self
 
 import torch
 
-from aphrodite.model_executor.layers.quantization.input_quant_fp8 import QuantFP8
-from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
+from sonar.model_executor.layers.quantization.input_quant_fp8 import QuantFP8
+from sonar.model_executor.layers.quantization.utils.fp8_utils import (
     process_fp8_weight_block_strategy,
 )
-from aphrodite.model_executor.utils import replace_parameter
+from sonar.model_executor.utils import replace_parameter
 
 from ..base import (
     FP8Params,

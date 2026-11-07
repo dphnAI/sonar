@@ -5,20 +5,20 @@ from typing import cast
 
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.config import get_current_aphrodite_config
-from aphrodite.distributed import (
+import sonar.envs as envs
+from sonar.config import get_current_sonar_config
+from sonar.distributed import (
     get_tensor_model_parallel_rank,
     tensor_model_parallel_all_reduce,
 )
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
-from aphrodite.model_executor.layers.fused_moe.runner.moe_runner import MoERunner, _unpack
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import UnquantizedLinearMethod
-from aphrodite.platforms import current_platform
-from aphrodite.utils.multi_stream_utils import maybe_execute_in_parallel
-from aphrodite.utils.torch_utils import aux_stream
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
+from sonar.model_executor.layers.fused_moe.runner.moe_runner import MoERunner, _unpack
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import UnquantizedLinearMethod
+from sonar.platforms import current_platform
+from sonar.utils.multi_stream_utils import maybe_execute_in_parallel
+from sonar.utils.torch_utils import aux_stream
 
 logger = init_logger(__name__)
 
@@ -38,7 +38,7 @@ class LatentTailTier(IntEnum):
     TAIL_FUSION = 0
 
     # ``_overlap_allreduce_tail``. The portable default, up to
-    # APHRODITE_SHARED_EXPERTS_STREAM_TOKEN_THRESHOLD tokens: reduce the latent,
+    # SONAR_SHARED_EXPERTS_STREAM_TOKEN_THRESHOLD tokens: reduce the latent,
     # up-project the full hidden dim from the replicated weight, and add the
     # separately reduced shared output, hiding that shared all-reduce behind the
     # up-projection GEMM on the aux stream.
@@ -88,19 +88,19 @@ class LatentMoERunner(MoERunner):
             self.enable_k3_latent_moe_tail_fusion = False
 
         if self.enable_k3_latent_moe_tail_fusion and use_fused_path:
-            aphrodite_config = get_current_aphrodite_config()
-            if aphrodite_config.parallel_config.use_ubatching:
+            sonar_config = get_current_sonar_config()
+            if sonar_config.parallel_config.use_ubatching:
                 raise ValueError("K3 latent-MoE tail fusion does not support DBO or ubatching.")
-            if aphrodite_config.model_config.enable_sleep_mode:
+            if sonar_config.model_config.enable_sleep_mode:
                 raise ValueError("K3 latent-MoE tail fusion does not support sleep mode.")
             transform = self.routed_output_transform
             assert transform is not None
             norm = transform.norm
             assert norm is not None
-            from aphrodite.model_executor.layers.fused_moe.experts.trtllm_mxfp4_moe import (
+            from sonar.model_executor.layers.fused_moe.experts.trtllm_mxfp4_moe import (
                 TrtLlmMxfp4ExpertsMonolithic,
             )
-            from aphrodite.model_executor.layers.fused_moe.experts.trtllm_nvfp4_moe import (
+            from sonar.model_executor.layers.fused_moe.experts.trtllm_nvfp4_moe import (
                 TrtLlmNvFp4ExpertsMonolithic,
             )
 
@@ -111,7 +111,7 @@ class LatentMoERunner(MoERunner):
                 experts_cls is TrtLlmMxfp4ExpertsMonolithic or experts_cls is TrtLlmNvFp4ExpertsMonolithic
             ) and self.moe_config.hidden_dim == self.moe_config.hidden_dim_unpadded:
                 self.moe_config.defer_moe_finalize()
-            from aphrodite.models.kimi_k3.nvidia.ops.latent_moe_tail import (
+            from sonar.models.kimi_k3.nvidia.ops.latent_moe_tail import (
                 KimiK3LatentMoETailOp,
             )
 
@@ -191,8 +191,8 @@ class LatentMoERunner(MoERunner):
         assert transform is not None
         # tier 1
         if (
-            num_tokens <= envs.APHRODITE_SHARED_EXPERTS_STREAM_TOKEN_THRESHOLD
-            and not envs.APHRODITE_DISABLE_SHARED_EXPERTS_STREAM
+            num_tokens <= envs.SONAR_SHARED_EXPERTS_STREAM_TOKEN_THRESHOLD
+            and not envs.SONAR_DISABLE_SHARED_EXPERTS_STREAM
         ):
             return LatentTailTier.ALLREDUCE_OVERLAP
         # tier 2
@@ -233,7 +233,7 @@ class LatentMoERunner(MoERunner):
         """
         transform = self.routed_output_transform
         assert transform is not None
-        assert shared_output.size(0) <= envs.APHRODITE_SHARED_EXPERTS_STREAM_TOKEN_THRESHOLD
+        assert shared_output.size(0) <= envs.SONAR_SHARED_EXPERTS_STREAM_TOKEN_THRESHOLD
         if transform.norm is not None:
             fused_latent = self.allreduce_norm_latent_out(fused_output, transform.norm)
         else:
@@ -356,7 +356,7 @@ class LatentMoERunner(MoERunner):
         norm: RMSNorm,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """All-reduce + add residual + (standard) RMSNorm, fused via flashinfer."""
-        from aphrodite.model_executor.layers.fused_allreduce_gemma_rms_norm import (
+        from sonar.model_executor.layers.fused_allreduce_gemma_rms_norm import (
             _AR_RESIDUAL_RMS_NORM,
             _can_use_flashinfer,
             flashinfer_trtllm_fused_allreduce_norm,

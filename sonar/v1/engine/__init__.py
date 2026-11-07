@@ -11,20 +11,20 @@ import msgspec
 import numpy as np
 import torch
 
-from aphrodite.config.kv_events import KVEventsConfig
-from aphrodite.lora.request import LoRARequest
-from aphrodite.multimodal.inputs import MultiModalFeatureSpec
-from aphrodite.outputs import RequestError
-from aphrodite.pooling_params import PoolingParams
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.v1.kv_hints import KvHintsEnvelope
-from aphrodite.v1.metrics.stats import (
+from sonar.config.kv_events import KVEventsConfig
+from sonar.lora.request import LoRARequest
+from sonar.multimodal.inputs import MultiModalFeatureSpec
+from sonar.outputs import RequestError
+from sonar.pooling_params import PoolingParams
+from sonar.sampling_params import SamplingParams
+from sonar.v1.kv_hints import KvHintsEnvelope
+from sonar.v1.metrics.stats import (
     PrefillStats,
     RequestSpecDecodeMetrics,
     SchedulerStats,
 )
-from aphrodite.v1.outputs import LogprobsLists, LogprobsTensors, SamplingMaskLists
-from aphrodite.v1.serial_utils import UtilityResult
+from sonar.v1.outputs import LogprobsLists, LogprobsTensors, SamplingMaskLists
+from sonar.v1.serial_utils import UtilityResult
 
 # Type for pause_generation mode parameter.
 # - "abort": Abort all in-flight requests immediately (default).
@@ -119,7 +119,7 @@ class EngineCoreReadyResponse:
     block_size: int
     dp_stats_address: str | None
     dtype: str
-    aphrodite_version: str
+    sonar_version: str
     world_size: int
     data_parallel_size: int
     tensor_parallel_size: int
@@ -144,10 +144,10 @@ class EngineCoreReadyResponse:
     coord_store_port: int = 0
     coordinator_input_address: str | None = None
     coordinator_output_address: str | None = None
-    # JSON-mode dump of this engine's AphroditeConfig, for frontends that serve
+    # JSON-mode dump of this engine's SonarConfig, for frontends that serve
     # `/server_info` without holding the config themselves (the Rust frontend).
-    # Sent only with APHRODITE_SERVER_DEV_MODE, the same gate as `/server_info`.
-    aphrodite_config: dict[str, Any] | None = None
+    # Sent only with SONAR_SERVER_DEV_MODE, the same gate as `/server_info`.
+    sonar_config: dict[str, Any] | None = None
     # Set when the engine hashes request blocks (prefix caching or a KV
     # connector), so that a frontend can send prompt block hashes.
     prefix_hash_config: PrefixHashConfig | None = None

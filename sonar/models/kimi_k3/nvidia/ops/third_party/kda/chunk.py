@@ -11,16 +11,16 @@
 
 import torch
 
-from aphrodite.third_party.flash_linear_attention.ops.chunk_delta_h import (
+from sonar.third_party.flash_linear_attention.ops.chunk_delta_h import (
     chunk_gated_delta_rule_fwd_h,
 )
-from aphrodite.third_party.flash_linear_attention.ops.cumsum import chunk_local_cumsum
-from aphrodite.third_party.flash_linear_attention.ops.index import prepare_chunk_indices
-from aphrodite.third_party.flash_linear_attention.ops.l2norm import l2norm_fwd
-from aphrodite.third_party.flash_linear_attention.ops.op import exp2, log
-from aphrodite.third_party.flash_linear_attention.ops.utils import FLA_CHUNK_SIZE, is_amd
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.math_utils import RCP_LN2, cdiv, next_power_of_2
+from sonar.third_party.flash_linear_attention.ops.cumsum import chunk_local_cumsum
+from sonar.third_party.flash_linear_attention.ops.index import prepare_chunk_indices
+from sonar.third_party.flash_linear_attention.ops.l2norm import l2norm_fwd
+from sonar.third_party.flash_linear_attention.ops.op import exp2, log
+from sonar.third_party.flash_linear_attention.ops.utils import FLA_CHUNK_SIZE, is_amd
+from sonar.triton_utils import tl, triton
+from sonar.utils.math_utils import RCP_LN2, cdiv, next_power_of_2
 
 from .chunk_intra import chunk_kda_fwd_intra
 
@@ -322,11 +322,7 @@ def chunk_gla_fwd_o_gk(
     }
 )
 @triton.autotune(
-    configs=[
-        triton.Config({"BS": BS}, num_warps=num_warps)
-        for BS in [32, 64]
-        for num_warps in [2, 4, 8]
-    ],
+    configs=[triton.Config({"BS": BS}, num_warps=num_warps) for BS in [32, 64] for num_warps in [2, 4, 8]],
     key=["H", "S", "BT", "IS_VARLEN"],
 )
 @triton.jit(do_not_specialize=["T"])
@@ -374,17 +370,10 @@ def kda_gate_chunk_cumsum_vector_kernel(
         o_beta_t = tl.arange(0, BT)
         m_beta = i_t * BT + o_beta_t < T
         if IS_VARLEN:
-            p_beta = (
-                raw_beta
-                + (bos + i_t * BT + o_beta_t) * stride_beta_token
-                + i_h * stride_beta_head
-            )
+            p_beta = raw_beta + (bos + i_t * BT + o_beta_t) * stride_beta_token + i_h * stride_beta_head
         else:
             p_beta = (
-                raw_beta
-                + i_b * stride_beta_batch
-                + (i_t * BT + o_beta_t) * stride_beta_token
-                + i_h * stride_beta_head
+                raw_beta + i_b * stride_beta_batch + (i_t * BT + o_beta_t) * stride_beta_token + i_h * stride_beta_head
             )
         b_beta = tl.load(p_beta, mask=m_beta, other=0.0).to(tl.float32)
         p_beta_out = beta_out + (bos + i_t * BT + o_beta_t) * H + i_h
@@ -436,14 +425,10 @@ def fused_kda_gate_chunk_cumsum(
     output_dtype: torch.dtype | None = torch.float,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     if cu_seqlens is not None:
-        assert raw_g.shape[0] == 1, (
-            "Only batch size 1 is supported when cu_seqlens are provided"
-        )
+        assert raw_g.shape[0] == 1, "Only batch size 1 is supported when cu_seqlens are provided"
     B, T, H, D = raw_g.shape
     if raw_beta.shape != (B, T, H):
-        raise ValueError(
-            f"Expected raw_beta shape {(B, T, H)}, got {raw_beta.shape}"
-        )
+        raise ValueError(f"Expected raw_beta shape {(B, T, H)}, got {raw_beta.shape}")
     if chunk_indices is None and cu_seqlens is not None:
         chunk_indices = prepare_chunk_indices(cu_seqlens, chunk_size)
     NT = cdiv(T, chunk_size) if cu_seqlens is None else len(chunk_indices)
@@ -567,11 +552,7 @@ def chunk_kda_fwd(
     cu_seqlens: torch.Tensor | None = None,
 ):
     chunk_size = FLA_CHUNK_SIZE
-    chunk_indices = (
-        prepare_chunk_indices(cu_seqlens, chunk_size)
-        if cu_seqlens is not None
-        else None
-    )
+    chunk_indices = prepare_chunk_indices(cu_seqlens, chunk_size) if cu_seqlens is not None else None
     g = chunk_local_cumsum(
         g,
         chunk_size=chunk_size,
@@ -612,11 +593,7 @@ def chunk_kda_with_fused_gate_fwd(
     out: torch.Tensor | None = None,
 ):
     chunk_size = FLA_CHUNK_SIZE
-    chunk_indices = (
-        prepare_chunk_indices(cu_seqlens, chunk_size)
-        if cu_seqlens is not None
-        else None
-    )
+    chunk_indices = prepare_chunk_indices(cu_seqlens, chunk_size) if cu_seqlens is not None else None
     g, beta = fused_kda_gate_chunk_cumsum(
         raw_g,
         raw_beta=raw_beta,
@@ -764,9 +741,7 @@ def kda_gate_fwd_kernel(
     if HAS_BIAS:
         n_d = tl.arange(0, BD)
         bias_mask = n_d < D
-        b_bias = tl.load(g_bias + i_h * D + n_d, mask=bias_mask, other=0.0).to(
-            tl.float32
-        )
+        b_bias = tl.load(g_bias + i_h * D + n_d, mask=bias_mask, other=0.0).to(tl.float32)
         b_g = b_g + b_bias[None, :]
 
     if USE_LOWER_BOUND:

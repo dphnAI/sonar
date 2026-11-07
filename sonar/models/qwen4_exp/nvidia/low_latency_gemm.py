@@ -10,19 +10,19 @@ standard linear implementation.
 import torch
 from torch import nn
 
-import aphrodite.envs as envs
-from aphrodite.model_executor.kernels.linear.cute_dsl.skinny_gemm import (
+import sonar.envs as envs
+from sonar.model_executor.kernels.linear.cute_dsl.skinny_gemm import (
     SkinnyGemmConfig,
     row_stride_ok,
     shape_dynamic_skinny_gemm,
 )
-from aphrodite.model_executor.layers.linear import LinearBase, UnquantizedLinearMethod
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.linear import LinearBase, UnquantizedLinearMethod
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     UnquantizedEmbeddingMethod,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import direct_register_custom_op
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import direct_register_custom_op
 
 QWEN4_EXP_SM103_GEMM_PLANS: dict[tuple[int, int], dict[int, SkinnyGemmConfig]] = {
     # GDN fused QKVZ projection, TP=4.
@@ -367,7 +367,7 @@ def _is_packed_row_major(tensor: torch.Tensor) -> bool:
 
 def _runtime_ok(x: torch.Tensor, weight: torch.Tensor, config: SkinnyGemmConfig) -> bool:
     return (
-        not envs.APHRODITE_BATCH_INVARIANT
+        not envs.SONAR_BATCH_INVARIANT
         and x.dim() == 2
         and row_stride_ok(x, config)
         and _is_packed_row_major(weight)
@@ -387,8 +387,8 @@ class _Qwen4ExpLowLatencyApply:
         x: torch.Tensor,
         bias: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        if bias is None and not envs.APHRODITE_BATCH_INVARIANT:
-            return torch.ops.aphrodite.qwen4_exp_low_latency_gemm(x, layer.weight)
+        if bias is None and not envs.SONAR_BATCH_INVARIANT:
+            return torch.ops.sonar.qwen4_exp_low_latency_gemm(x, layer.weight)
         return super().apply(layer, x, bias)  # type: ignore[misc]
 
 

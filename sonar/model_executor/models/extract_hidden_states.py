@@ -15,24 +15,24 @@ from typing import ClassVar
 import torch
 import torch.nn as nn
 
-from aphrodite.config import AphroditeConfig, CacheConfig, get_current_aphrodite_config
-from aphrodite.config.cache import CacheDType
-from aphrodite.forward_context import get_forward_context
-from aphrodite.model_executor.layers.attention.attention import set_default_quant_scales
-from aphrodite.model_executor.layers.attention.kv_transfer_utils import (
+from sonar.config import CacheConfig, SonarConfig, get_current_sonar_config
+from sonar.config.cache import CacheDType
+from sonar.forward_context import get_forward_context
+from sonar.model_executor.layers.attention.attention import set_default_quant_scales
+from sonar.model_executor.layers.attention.kv_transfer_utils import (
     maybe_transfer_kv_layer,
 )
-from aphrodite.model_executor.layers.attention_layer_base import AttentionLayerBase
-from aphrodite.model_executor.models.utils import maybe_prefix
-from aphrodite.utils.torch_utils import kv_cache_dtype_str_to_dtype
-from aphrodite.v1.attention.backend import (
+from sonar.model_executor.layers.attention_layer_base import AttentionLayerBase
+from sonar.model_executor.models.utils import maybe_prefix
+from sonar.utils.torch_utils import kv_cache_dtype_str_to_dtype
+from sonar.v1.attention.backend import (
     AttentionBackend,
     AttentionImpl,
     AttentionMetadataBuilder,
     AttentionType,
     CommonAttentionMetadata,
 )
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.kv_cache_interface import (
     AttentionSpec,
     HiddenStateCacheSpec,
     KVCacheSpec,
@@ -140,10 +140,10 @@ class CacheOnlyAttentionMetadataBuilder(AttentionMetadataBuilder[CacheOnlyAttent
         self,
         kv_cache_spec: AttentionSpec,
         layer_names: list[str],
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
     ):
-        super().__init__(kv_cache_spec, layer_names, aphrodite_config, device)
+        super().__init__(kv_cache_spec, layer_names, sonar_config, device)
 
     def build(
         self,
@@ -224,10 +224,10 @@ class CacheOnlyAttentionLayer(nn.Module, AttentionLayerBase):
         self.head_size = head_size
         self.layer_name = prefix
 
-        aphrodite_config = get_current_aphrodite_config()
+        sonar_config = get_current_sonar_config()
 
         # KV cache configuration
-        cache_config = cache_config or aphrodite_config.cache_config
+        cache_config = cache_config or sonar_config.cache_config
         if cache_config is not None:
             kv_cache_dtype = cache_config.cache_dtype
             self.block_size = cache_config.block_size
@@ -239,7 +239,7 @@ class CacheOnlyAttentionLayer(nn.Module, AttentionLayerBase):
             "CacheOnlyAttentionLayer doesn't currently support quantized kv cache but"
             f"kv cache dtype was set to {kv_cache_dtype}"
         )
-        self.kv_cache_torch_dtype = kv_cache_dtype_str_to_dtype(kv_cache_dtype, aphrodite_config.model_config)
+        self.kv_cache_torch_dtype = kv_cache_dtype_str_to_dtype(kv_cache_dtype, sonar_config.model_config)
 
         # Initialize KV cache quantization attributes
         set_default_quant_scales(self, register_buffer=True)
@@ -263,7 +263,7 @@ class CacheOnlyAttentionLayer(nn.Module, AttentionLayerBase):
         self.kv_cache = torch.tensor([])
 
         # Register in compilation context
-        compilation_config = aphrodite_config.compilation_config
+        compilation_config = sonar_config.compilation_config
         if prefix in compilation_config.static_forward_context:
             raise ValueError(f"Duplicate layer name: {prefix}")
         compilation_config.static_forward_context[prefix] = self
@@ -295,10 +295,10 @@ class CacheOnlyAttentionLayer(nn.Module, AttentionLayerBase):
     def get_attn_backend(self) -> type[AttentionBackend]:
         return self.attn_backend
 
-    def get_kv_cache_spec(self, aphrodite_config: AphroditeConfig) -> KVCacheSpec:
+    def get_kv_cache_spec(self, sonar_config: SonarConfig) -> KVCacheSpec:
         # Re-read block_size: hybrid models may bump it after __init__.
         return HiddenStateCacheSpec(
-            block_size=aphrodite_config.cache_config.block_size,
+            block_size=sonar_config.cache_config.block_size,
             num_kv_heads=self.num_heads,
             head_size=self.head_size,
             dtype=self.kv_cache_torch_dtype,
@@ -309,18 +309,18 @@ class CacheOnlyAttentionLayer(nn.Module, AttentionLayerBase):
 
 
 class ExtractHiddenStatesModel(nn.Module):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
 
-        self.aphrodite_config = aphrodite_config
-        speculative_config = aphrodite_config.speculative_config
+        self.sonar_config = sonar_config
+        speculative_config = sonar_config.speculative_config
         assert speculative_config is not None
         self.hf_config = speculative_config.draft_model_config.hf_config
-        self.hidden_size = aphrodite_config.model_config.get_hidden_size()
-        self.target_num_hidden_layers = aphrodite_config.model_config.get_total_num_hidden_layers()
+        self.hidden_size = sonar_config.model_config.get_hidden_size()
+        self.target_num_hidden_layers = sonar_config.model_config.get_total_num_hidden_layers()
         self.num_hidden_states = len(getattr(self.hf_config, "eagle_aux_hidden_state_layer_ids", []))
 
-        cache_config = aphrodite_config.cache_config
+        cache_config = sonar_config.cache_config
 
         # Hidden states dtype should be independent of KV cache dtype.
         if cache_config is not None and is_quantized_kv_cache(cache_config.cache_dtype):

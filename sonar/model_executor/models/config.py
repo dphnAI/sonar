@@ -3,14 +3,14 @@
 import json
 from typing import TYPE_CHECKING
 
-from aphrodite.logger import init_logger
-from aphrodite.utils.math_utils import round_up
+from sonar.logger import init_logger
+from sonar.utils.math_utils import round_up
 
 if TYPE_CHECKING:
     from transformers import PreTrainedConfig
 
-    from aphrodite.config import AphroditeConfig, CacheConfig, ModelConfig
-    from aphrodite.config.cache import MambaDType
+    from sonar.config import CacheConfig, ModelConfig, SonarConfig
+    from sonar.config.cache import MambaDType
 
 
 logger = init_logger(__name__)
@@ -18,7 +18,7 @@ logger = init_logger(__name__)
 
 class VerifyAndUpdateConfig:
     @staticmethod
-    def verify_and_update_config(aphrodite_config: "AphroditeConfig") -> None:
+    def verify_and_update_config(sonar_config: "SonarConfig") -> None:
         return
 
     @staticmethod
@@ -46,13 +46,13 @@ class AliceAIForCausalLMConfig(VerifyAndUpdateConfig):
             )
 
     @staticmethod
-    def verify_and_update_config(aphrodite_config: "AphroditeConfig") -> None:
-        if aphrodite_config.parallel_config.pipeline_parallel_size != 1:
+    def verify_and_update_config(sonar_config: "SonarConfig") -> None:
+        if sonar_config.parallel_config.pipeline_parallel_size != 1:
             raise NotImplementedError(
                 "AliceAI does not support pipeline parallelism; pipeline_parallel_size=1 is required"
             )
 
-        speculative_config = aphrodite_config.speculative_config
+        speculative_config = sonar_config.speculative_config
         if speculative_config is not None and speculative_config.uses_aux_hidden_states:
             raise NotImplementedError(
                 "AliceAI does not support speculative method "
@@ -63,14 +63,14 @@ class AliceAIForCausalLMConfig(VerifyAndUpdateConfig):
 
 class DeepseekV32ForCausalLM(VerifyAndUpdateConfig):
     @classmethod
-    def verify_and_update_config(cls, aphrodite_config: "AphroditeConfig") -> None:
-        hf_config = aphrodite_config.model_config.hf_config
+    def verify_and_update_config(cls, sonar_config: "SonarConfig") -> None:
+        hf_config = sonar_config.model_config.hf_config
 
-        # Mirror the check in aphrodite/model_executor/models/deepseek_v2.py
+        # Mirror the check in sonar/model_executor/models/deepseek_v2.py
         is_v32 = hasattr(hf_config, "index_topk")
         assert is_v32
 
-        cache_config = aphrodite_config.cache_config
+        cache_config = sonar_config.cache_config
         if cache_config.cache_dtype == "bfloat16":
             cache_config.cache_dtype = "auto"
             logger.info("Using bfloat16 kv-cache for DeepSeekV3.2")
@@ -78,15 +78,15 @@ class DeepseekV32ForCausalLM(VerifyAndUpdateConfig):
 
 class MiniMaxM3SparseConfig(VerifyAndUpdateConfig):
     @staticmethod
-    def verify_and_update_config(aphrodite_config: "AphroditeConfig") -> None:
-        from aphrodite.v1.kv_cache_interface import get_kv_quant_mode
+    def verify_and_update_config(sonar_config: "SonarConfig") -> None:
+        from sonar.v1.kv_cache_interface import get_kv_quant_mode
 
-        if not get_kv_quant_mode(aphrodite_config.cache_config.cache_dtype).is_nvfp4:
+        if not get_kv_quant_mode(sonar_config.cache_config.cache_dtype).is_nvfp4:
             return
         # The NVFP4 KV attention kernels (MSA's CUTLASS Q8KV4 prefill) need 16
         # query heads per KV head on each rank; fail before the workers start.
-        text_config = aphrodite_config.model_config.hf_text_config
-        tp_size = aphrodite_config.parallel_config.tensor_parallel_size
+        text_config = sonar_config.model_config.hf_text_config
+        tp_size = sonar_config.parallel_config.tensor_parallel_size
         num_heads = text_config.num_attention_heads // tp_size
         num_kv_heads = max(1, text_config.num_key_value_heads // tp_size)
         if num_heads != 16 * num_kv_heads:
@@ -102,10 +102,10 @@ class MiniMaxM3SparseConfig(VerifyAndUpdateConfig):
 
 class GlmMoeDsaForCausalLM(VerifyAndUpdateConfig):
     @staticmethod
-    def verify_and_update_config(aphrodite_config: "AphroditeConfig") -> None:
-        from aphrodite.platforms import current_platform
+    def verify_and_update_config(sonar_config: "SonarConfig") -> None:
+        from sonar.platforms import current_platform
 
-        cache_config = aphrodite_config.cache_config
+        cache_config = sonar_config.cache_config
         if (
             cache_config.cache_dtype == "auto"
             and current_platform.is_cuda()
@@ -113,7 +113,7 @@ class GlmMoeDsaForCausalLM(VerifyAndUpdateConfig):
         ):
             cache_config.cache_dtype = "fp8_e4m3"
             logger.info_once("Using fp8 kv-cache for GlmMoeDsaForCausalLM on SM10x")
-            spec_config = aphrodite_config.speculative_config
+            spec_config = sonar_config.speculative_config
             if (
                 spec_config is not None
                 and spec_config.method not in ("mtp", "dspark", "dflash")
@@ -123,36 +123,36 @@ class GlmMoeDsaForCausalLM(VerifyAndUpdateConfig):
 
         # For Glm-Moe-DSA, qrep + a2a is better than the default all-gather + ag-rs
         # in most cases.
-        aphrodite_config.parallel_config.set_dcp_defaults(comm_backend="a2a", q_replicate=True)
+        sonar_config.parallel_config.set_dcp_defaults(comm_backend="a2a", q_replicate=True)
 
 
 class Glm5NextModelConfig(VerifyAndUpdateConfig):
     @staticmethod
-    def verify_and_update_config(aphrodite_config: "AphroditeConfig") -> None:
-        from aphrodite.platforms import current_platform
+    def verify_and_update_config(sonar_config: "SonarConfig") -> None:
+        from sonar.platforms import current_platform
 
-        cache_config = aphrodite_config.cache_config
+        cache_config = sonar_config.cache_config
         if (
             cache_config.cache_dtype != "auto"
             or not current_platform.is_cuda()
             or not current_platform.is_device_capability_family(100)
-            or getattr(aphrodite_config.model_config.hf_text_config, "index_topk", None) is None
+            or getattr(sonar_config.model_config.hf_text_config, "index_topk", None) is None
         ):
             return
 
         cache_config.cache_dtype = "fp8"
         logger.info_once("Using fp8 KV cache for GLM-5.3-Flash")
-        spec_config = aphrodite_config.speculative_config
+        spec_config = sonar_config.speculative_config
         if spec_config is not None and spec_config.method != "mtp" and spec_config.kv_cache_dtype is None:
             spec_config.kv_cache_dtype = "auto"
 
 
 class Ernie4_5_VLMoeForConditionalGenerationConfig(VerifyAndUpdateConfig):
     @staticmethod
-    def verify_and_update_config(aphrodite_config: "AphroditeConfig") -> None:
+    def verify_and_update_config(sonar_config: "SonarConfig") -> None:
         # Ernie4.5-VL conditionally executes text/vision MoE branches, so
         # fast_moe_cold_start can silently produce incorrect execution order.
-        aphrodite_config.compilation_config.fast_moe_cold_start = False
+        sonar_config.compilation_config.fast_moe_cold_start = False
 
 
 class Gemma3TextModelConfig(VerifyAndUpdateConfig):
@@ -164,7 +164,7 @@ class Gemma3TextModelConfig(VerifyAndUpdateConfig):
 
 class UnlimitedOCRForCausalLMConfig(VerifyAndUpdateConfig):
     @staticmethod
-    def verify_and_update_config(aphrodite_config: "AphroditeConfig") -> None:
+    def verify_and_update_config(sonar_config: "SonarConfig") -> None:
         """Configure Unlimited-OCR attention backends for R-SWA and vision.
 
         Backend selection — controlled by the standard ``--attention-config``
@@ -192,13 +192,13 @@ class UnlimitedOCRForCausalLMConfig(VerifyAndUpdateConfig):
 
         Example — force FlexAttention even on a machine with FA4::
 
-            aphrodite serve baidu/Unlimited-OCR \\
+            sonar serve baidu/Unlimited-OCR \\
                 --attention-config '{"backend": "FLEX_ATTENTION"}'
         """
-        from aphrodite.v1.attention.backends.fa_utils import is_fa_version_supported
-        from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
+        from sonar.v1.attention.backends.fa_utils import is_fa_version_supported
+        from sonar.v1.attention.backends.registry import AttentionBackendEnum
 
-        attn_config = aphrodite_config.attention_config
+        attn_config = sonar_config.attention_config
         fa4_available = is_fa_version_supported(4)
 
         # ── step 1: resolve backend ─────────────────────────────────────────
@@ -258,7 +258,7 @@ class UnlimitedOCRForCausalLMConfig(VerifyAndUpdateConfig):
         # but OCR is single-turn with image-led prompts that rarely share a
         # prefix, so prefix caching brings little benefit while complicating the
         # KV cache manager. Disable it for this model.
-        cache_config = aphrodite_config.cache_config
+        cache_config = sonar_config.cache_config
         if cache_config.enable_prefix_caching:
             cache_config.enable_prefix_caching = False
             logger.info(
@@ -267,7 +267,7 @@ class UnlimitedOCRForCausalLMConfig(VerifyAndUpdateConfig):
                 "prefix cache)."
             )
 
-        mm_config = getattr(aphrodite_config.model_config, "multimodal_config", None)
+        mm_config = getattr(sonar_config.model_config, "multimodal_config", None)
         if mm_config is not None:
             if mm_config.mm_encoder_attn_backend is None:
                 mm_config.mm_encoder_attn_backend = AttentionBackendEnum.FLASH_ATTN
@@ -286,15 +286,15 @@ class UnlimitedOCRForCausalLMConfig(VerifyAndUpdateConfig):
         if getattr(model_config.hf_config, "rswa_window", None) is None:
             model_config.hf_config.rswa_window = 128
         # Propagate rswa_window to text_config so that DeepseekAttention (which
-        # receives text_config as its aphrodite_config.model_config.hf_config via
-        # init_aphrodite_registered_model) can read it and create RSWAAttention.
+        # receives text_config as its sonar_config.model_config.hf_config via
+        # init_sonar_registered_model) can read it and create RSWAAttention.
         rswa_window = model_config.hf_config.rswa_window
         text_config.rswa_window = rswa_window
 
 
 class Gemma4Config(VerifyAndUpdateConfig):
     @staticmethod
-    def verify_and_update_config(aphrodite_config: "AphroditeConfig") -> None:
+    def verify_and_update_config(sonar_config: "SonarConfig") -> None:
         """Configure attention for heterogeneous head dimensions.
 
         Gemma4 uses different head dimensions for sliding window vs full attention
@@ -308,7 +308,7 @@ class Gemma4Config(VerifyAndUpdateConfig):
         FA3+FA4 penalty.
         When FA4 is not available, fall back to Triton.
         """
-        model_config = aphrodite_config.model_config
+        model_config = sonar_config.model_config
         arch_config = model_config.model_arch_config
         layer_types = getattr(model_config.hf_text_config, "layer_types", None) or []
         head_dims = {
@@ -319,20 +319,20 @@ class Gemma4Config(VerifyAndUpdateConfig):
         if len(set(head_dims.values())) <= 1:
             return
 
-        from aphrodite.platforms import current_platform
-        from aphrodite.v1.attention.backends.fa_utils import is_fa_version_supported
-        from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
+        from sonar.platforms import current_platform
+        from sonar.v1.attention.backends.fa_utils import is_fa_version_supported
+        from sonar.v1.attention.backends.registry import AttentionBackendEnum
 
         max_head_dim = max(head_dims.values())
 
         if is_fa_version_supported(4) and max_head_dim <= 512:
-            if (
-                aphrodite_config.attention_config.flash_attn_version is None
-                and aphrodite_config.attention_config.backend in (None, AttentionBackendEnum.FLASH_ATTN)
+            if sonar_config.attention_config.flash_attn_version is None and sonar_config.attention_config.backend in (
+                None,
+                AttentionBackendEnum.FLASH_ATTN,
             ):
                 use_per_layer_fa = current_platform.is_device_capability_family(
                     90
-                ) and aphrodite_config.cache_config.cache_dtype.startswith("fp8")
+                ) and sonar_config.cache_config.cache_dtype.startswith("fp8")
                 if use_per_layer_fa:
                     logger.info(
                         "Gemma4 model has heterogeneous head dimensions %s. Using "
@@ -340,7 +340,7 @@ class Gemma4Config(VerifyAndUpdateConfig):
                         head_dims,
                     )
                 else:
-                    aphrodite_config.attention_config.flash_attn_version = 4
+                    sonar_config.attention_config.flash_attn_version = 4
                     logger.info(
                         "Gemma4 model has heterogeneous head dimensions %s. Using FA4 "
                         "for all layers to avoid mixed FA3/FA4 penalty.",
@@ -352,8 +352,8 @@ class Gemma4Config(VerifyAndUpdateConfig):
                 "attention backend choice to the XPU platform.",
                 head_dims,
             )
-        elif aphrodite_config.attention_config.backend is None:
-            aphrodite_config.attention_config.backend = AttentionBackendEnum.TRITON_ATTN
+        elif sonar_config.attention_config.backend is None:
+            sonar_config.attention_config.backend = AttentionBackendEnum.TRITON_ATTN
             logger.info(
                 "Gemma4 model has heterogeneous head dimensions %s. FA4 not available, forcing TRITON_ATTN backend.",
                 head_dims,
@@ -362,11 +362,11 @@ class Gemma4Config(VerifyAndUpdateConfig):
 
 class EmbeddingGemma2ModelConfig(Gemma4Config):
     @staticmethod
-    def verify_and_update_config(aphrodite_config: "AphroditeConfig") -> None:
-        Gemma4Config.verify_and_update_config(aphrodite_config)
-        from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
+    def verify_and_update_config(sonar_config: "SonarConfig") -> None:
+        Gemma4Config.verify_and_update_config(sonar_config)
+        from sonar.v1.attention.backends.registry import AttentionBackendEnum
 
-        attn_config = aphrodite_config.attention_config
+        attn_config = sonar_config.attention_config
         if attn_config.backend is None:
             attn_config.backend = AttentionBackendEnum.TRITON_ATTN
             logger.info(
@@ -376,14 +376,14 @@ class EmbeddingGemma2ModelConfig(Gemma4Config):
         else:
             logger.info("EmbeddingGemma2: using attention backend %s", attn_config.backend)
 
-        model_config = aphrodite_config.model_config
+        model_config = sonar_config.model_config
         if model_config.max_model_len > 8192 and getattr(model_config, "original_max_model_len", None) in (None, -1):
             model_config.max_model_len = 8192
 
 
 class DiffusionGemmaModelForBlockDiffusionConfig(VerifyAndUpdateConfig):
     @classmethod
-    def verify_and_update_config(cls, aphrodite_config: "AphroditeConfig") -> None:
+    def verify_and_update_config(cls, sonar_config: "SonarConfig") -> None:
         """Set up the diffusion config and defaults for DiffusionGemma.
 
         Auto-creates DiffusionConfig from the HF config when the user
@@ -393,11 +393,11 @@ class DiffusionGemmaModelForBlockDiffusionConfig(VerifyAndUpdateConfig):
         """
         # Inherit Gemma4's attention backend selection (FA4 on Hopper,
         # TRITON_ATTN fallback for heterogeneous head dims).
-        Gemma4Config.verify_and_update_config(aphrodite_config)
+        Gemma4Config.verify_and_update_config(sonar_config)
 
-        from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
+        from sonar.v1.attention.backends.registry import AttentionBackendEnum
 
-        attention_config = aphrodite_config.attention_config
+        attention_config = sonar_config.attention_config
         if attention_config.backend == AttentionBackendEnum.FLASHINFER:
             raise ValueError(
                 "FlashInfer does not support DiffusionGemma's mixed "
@@ -416,12 +416,12 @@ class DiffusionGemmaModelForBlockDiffusionConfig(VerifyAndUpdateConfig):
             )
 
         # Auto-create DiffusionConfig from HF config if not provided.
-        if aphrodite_config.diffusion_config is None:
-            from aphrodite.config.diffusion import DiffusionConfig
+        if sonar_config.diffusion_config is None:
+            from sonar.config.diffusion import DiffusionConfig
 
-            hf_config = aphrodite_config.model_config.hf_config
+            hf_config = sonar_config.model_config.hf_config
             canvas_length = getattr(hf_config, "canvas_length", 256)
-            aphrodite_config.diffusion_config = DiffusionConfig(
+            sonar_config.diffusion_config = DiffusionConfig(
                 canvas_length=canvas_length,
             )
 
@@ -431,9 +431,9 @@ class DiffusionGemmaModelForBlockDiffusionConfig(VerifyAndUpdateConfig):
         # We can't see the original None here (the engine already filled a generic
         # default), so use >= DEFAULT_MAX_NUM_SEQS as a proxy, (the default is much
         # larger than any deliberate value for this model)
-        from aphrodite.config.scheduler import SchedulerConfig
+        from sonar.config.scheduler import SchedulerConfig
 
-        sc = aphrodite_config.scheduler_config
+        sc = sonar_config.scheduler_config
         if sc is not None and sc.max_num_seqs >= SchedulerConfig.DEFAULT_MAX_NUM_SEQS:
             sc.max_num_seqs = 8
 
@@ -442,7 +442,7 @@ class DiffusionGemmaModelForBlockDiffusionConfig(VerifyAndUpdateConfig):
         # server-wide limit, each request controls its own output length
         # via max_tokens.  Setting to None causes get_diff_sampling_param
         # to skip this key entirely.
-        model_config = aphrodite_config.model_config
+        model_config = sonar_config.model_config
         if "max_new_tokens" not in model_config.override_generation_config:
             model_config.override_generation_config["max_new_tokens"] = None
             logger.info(
@@ -452,17 +452,17 @@ class DiffusionGemmaModelForBlockDiffusionConfig(VerifyAndUpdateConfig):
             )
 
 
-def _indexer_sparse_logits_supported(aphrodite_config: "AphroditeConfig") -> bool:
+def _indexer_sparse_logits_supported(sonar_config: "SonarConfig") -> bool:
     """Whether the DeepSeek V4.1 sparse-logits indexer can run: a two-level
     (candidate block) model on SM100 with DeepGEMM's sparse MQA kernels and
     DeepSelect, no decode/prefill context parallelism, and a DeepSelect top-k
     backend. Mirrors DeepseekV41SparseIndexerMetadataBuilder's checks."""
-    from aphrodite.platforms import current_platform
+    from sonar.platforms import current_platform
 
-    hf_config = aphrodite_config.model_config.hf_text_config
+    hf_config = sonar_config.model_config.hf_text_config
     block = getattr(hf_config, "candidate_block_size", 0)
     topk_blocks = getattr(hf_config, "candidate_topk_blocks", 0)
-    parallel = aphrodite_config.parallel_config
+    parallel = sonar_config.parallel_config
     if (
         block <= 0
         or topk_blocks <= 0
@@ -470,15 +470,15 @@ def _indexer_sparse_logits_supported(aphrodite_config: "AphroditeConfig") -> boo
         or not current_platform.is_device_capability_family(100)
         or parallel.decode_context_parallel_size > 1
         or parallel.prefill_context_parallel_size > 1
-        or aphrodite_config.kernel_config.sparse_indexer_topk_backend not in ("auto", "deep_select")
+        or sonar_config.kernel_config.sparse_indexer_topk_backend not in ("auto", "deep_select")
     ):
         return False
-    from aphrodite.model_executor.kernels.attention.dsa.sparse_mqa_logits import (
+    from sonar.model_executor.kernels.attention.dsa.sparse_mqa_logits import (
         check_deep_select_layout,
         has_deep_select,
         pick_sparse_block_kv,
     )
-    from aphrodite.utils.deep_gemm import has_deep_gemm_sparse_mqa
+    from sonar.utils.deep_gemm import has_deep_gemm_sparse_mqa
 
     if not (has_deep_gemm_sparse_mqa() and has_deep_select()):
         return False
@@ -492,12 +492,12 @@ def _indexer_sparse_logits_supported(aphrodite_config: "AphroditeConfig") -> boo
 
 class DeepseekV4ForCausalLMConfig(VerifyAndUpdateConfig):
     @staticmethod
-    def verify_and_update_config(aphrodite_config: "AphroditeConfig") -> None:
+    def verify_and_update_config(sonar_config: "SonarConfig") -> None:
         # indexer_sparse_logits=None (default): enable the sparse-logits
         # indexer wherever it is supported; True / False are kept as given.
-        attention_config = aphrodite_config.attention_config
+        attention_config = sonar_config.attention_config
         if attention_config.indexer_sparse_logits is None:
-            attention_config.indexer_sparse_logits = _indexer_sparse_logits_supported(aphrodite_config)
+            attention_config.indexer_sparse_logits = _indexer_sparse_logits_supported(sonar_config)
 
     @staticmethod
     def verify_and_update_model_config(model_config: "ModelConfig") -> None:
@@ -517,29 +517,29 @@ class DeepseekV4ForCausalLMConfig(VerifyAndUpdateConfig):
 class DeepseekV41ForCausalLMConfig(DeepseekV4ForCausalLMConfig):
     @staticmethod
     def verify_and_update_model_config(model_config: "ModelConfig") -> None:
-        import aphrodite.envs as envs
+        import sonar.envs as envs
 
-        if not envs.APHRODITE_DSV41_SM120_NATIVE:
+        if not envs.SONAR_DSV41_SM120_NATIVE:
             DeepseekV4ForCausalLMConfig.verify_and_update_model_config(model_config)
             return
-        from aphrodite.models.deepseek_v41.sm120.config import verify_and_update_model_config
+        from sonar.models.deepseek_v41.sm120.config import verify_and_update_model_config
 
         verify_and_update_model_config(model_config)
 
     @staticmethod
-    def verify_and_update_config(aphrodite_config: "AphroditeConfig") -> None:
-        import aphrodite.envs as envs
-        from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
+    def verify_and_update_config(sonar_config: "SonarConfig") -> None:
+        import sonar.envs as envs
+        from sonar.v1.attention.backends.registry import AttentionBackendEnum
 
         backend = AttentionBackendEnum.B12X_DSV41
-        attention_config = aphrodite_config.attention_config
-        if not envs.APHRODITE_DSV41_SM120_NATIVE:
+        attention_config = sonar_config.attention_config
+        if not envs.SONAR_DSV41_SM120_NATIVE:
             if attention_config.backend is backend:
-                raise ValueError("B12X_DSV41 requires APHRODITE_DSV41_SM120_NATIVE=1.")
+                raise ValueError("B12X_DSV41 requires SONAR_DSV41_SM120_NATIVE=1.")
             return
-        from aphrodite.models.deepseek_v41.sm120.config import verify_and_update_config
+        from sonar.models.deepseek_v41.sm120.config import verify_and_update_config
 
-        verify_and_update_config(aphrodite_config)
+        verify_and_update_config(sonar_config)
 
 
 class KimiK3ForConditionalGenerationConfig(VerifyAndUpdateConfig):
@@ -587,15 +587,15 @@ class GptOssForCausalLMConfig(VerifyAndUpdateConfig):
             model_config.hf_text_config.quantization_config["quant_method"] = "gpt_oss_mxfp4"
 
     @staticmethod
-    def verify_and_update_config(aphrodite_config: "AphroditeConfig") -> None:
-        structured_outputs_config = aphrodite_config.structured_outputs_config
+    def verify_and_update_config(sonar_config: "SonarConfig") -> None:
+        structured_outputs_config = sonar_config.structured_outputs_config
         if structured_outputs_config.reasoning_parser == "":
             structured_outputs_config.reasoning_parser = "openai_gptoss"
 
         # Increase the max capture size from 512 to 1024 for performance.
         # NOTE(woosuk): This will increase the number of CUDA graphs
         # from 67 to 83.
-        compilation_config = aphrodite_config.compilation_config
+        compilation_config = sonar_config.compilation_config
         # Only override when the user has not set either of
         # cudagraph_capture_sizes or max_cudagraph_capture_size.
         if compilation_config.cudagraph_capture_sizes is None and compilation_config.max_cudagraph_capture_size is None:
@@ -625,7 +625,7 @@ class GteNewModelConfig(VerifyAndUpdateConfig):
 
 class HybridAttentionMambaModelConfig(VerifyAndUpdateConfig):
     @classmethod
-    def verify_and_update_config(cls, aphrodite_config: "AphroditeConfig") -> None:
+    def verify_and_update_config(cls, sonar_config: "SonarConfig") -> None:
         """Perform early validation and setup for hybrid attention/mamba models.
 
         Block size alignment with mamba page sizes is handled later by
@@ -633,11 +633,11 @@ class HybridAttentionMambaModelConfig(VerifyAndUpdateConfig):
         layers are constructed and the attention backend is known.
 
         Args:
-            aphrodite_config: Aphrodite Config
+            sonar_config: Sonar Config
 
         """
         # Enable FULL_AND_PIECEWISE by default
-        MambaModelConfig.verify_and_update_config(aphrodite_config)
+        MambaModelConfig.verify_and_update_config(sonar_config)
 
 
 class JambaForSequenceClassificationConfig(VerifyAndUpdateConfig):
@@ -720,7 +720,7 @@ class JinaVLForSequenceClassificationConfig(VerifyAndUpdateConfig):
 class LlamaBidirectionalConfig(VerifyAndUpdateConfig):
     @staticmethod
     def verify_and_update_model_config(model_config: "ModelConfig") -> None:
-        from aphrodite.config.pooler import SequencePoolingType
+        from sonar.config.pooler import SequencePoolingType
 
         hf_config = model_config.hf_config
         hf_config.is_causal = False
@@ -754,7 +754,7 @@ class LlamaNemotronVLConfig(VerifyAndUpdateConfig):
 
     @staticmethod
     def verify_and_update_model_config(model_config: "ModelConfig") -> None:
-        from aphrodite.config.pooler import SequencePoolingType
+        from sonar.config.pooler import SequencePoolingType
 
         hf_config = model_config.hf_config
 
@@ -790,16 +790,16 @@ class LlamaNemotronVLConfig(VerifyAndUpdateConfig):
 
 class MambaModelConfig(VerifyAndUpdateConfig):
     @classmethod
-    def verify_and_update_config(cls, aphrodite_config: "AphroditeConfig") -> None:
+    def verify_and_update_config(cls, sonar_config: "SonarConfig") -> None:
         """Enable FULL_AND_PIECEWISE cuda graph mode by default (required
         to get good performance for mamba layers in V1).
 
         Args:
-            aphrodite_config: Aphrodite Config
+            sonar_config: Sonar Config
 
         """
-        model_config = aphrodite_config.model_config
-        cache_config = aphrodite_config.cache_config
+        model_config = sonar_config.model_config
+        cache_config = sonar_config.cache_config
 
         if cache_config.enable_prefix_caching:
             if cache_config.mamba_cache_mode == "none":
@@ -809,7 +809,7 @@ class MambaModelConfig(VerifyAndUpdateConfig):
                     cache_config.mamba_cache_mode,
                     model_config.architecture,
                 )
-            assert aphrodite_config.scheduler_config.enable_chunked_prefill, (
+            assert sonar_config.scheduler_config.enable_chunked_prefill, (
                 "Chunked prefill is required for Mamba prefix caching."
             )
             # By default, mamba block size will be set to max_model_len (see
@@ -832,7 +832,7 @@ class MiniMaxM3SparseForConditionalGenerationConfig(MiniMaxM3SparseConfig):
     def verify_and_update_model_config(cls, model_config: "ModelConfig") -> None:
         """Reject IndexCache overrides set on the outer VL config, where the
         ROCm text model never reads them."""
-        from aphrodite.platforms import current_platform
+        from sonar.platforms import current_platform
 
         overrides = model_config.hf_overrides
         if not current_platform.is_rocm() or not isinstance(overrides, dict):
@@ -868,19 +868,19 @@ class NemotronHForCausalLMConfig(VerifyAndUpdateConfig):
             cache_config.mamba_ssm_cache_dtype = mamba_ssm_cache_dtype
 
     @classmethod
-    def verify_and_update_config(cls, aphrodite_config: "AphroditeConfig") -> None:
+    def verify_and_update_config(cls, sonar_config: "SonarConfig") -> None:
         cls.update_mamba_ssm_cache_dtype(
-            cache_config=aphrodite_config.cache_config,
-            hf_config=aphrodite_config.model_config.hf_config,
+            cache_config=sonar_config.cache_config,
+            hf_config=sonar_config.model_config.hf_config,
         )
 
 
 class NemotronHNanoVLV2Config(VerifyAndUpdateConfig):
     @classmethod
-    def verify_and_update_config(cls, aphrodite_config: "AphroditeConfig") -> None:
+    def verify_and_update_config(cls, sonar_config: "SonarConfig") -> None:
         NemotronHForCausalLMConfig.update_mamba_ssm_cache_dtype(
-            cache_config=aphrodite_config.cache_config,
-            hf_config=aphrodite_config.model_config.hf_config.text_config,
+            cache_config=sonar_config.cache_config,
+            hf_config=sonar_config.model_config.hf_config.text_config,
         )
 
     @staticmethod
@@ -893,10 +893,10 @@ class NemotronHNanoVLV2Config(VerifyAndUpdateConfig):
 
 class Nemotron3_5TranscribeForConditionalGenerationConfig(VerifyAndUpdateConfig):
     @classmethod
-    def verify_and_update_config(cls, aphrodite_config: "AphroditeConfig") -> None:
+    def verify_and_update_config(cls, sonar_config: "SonarConfig") -> None:
         NemotronHForCausalLMConfig.update_mamba_ssm_cache_dtype(
-            cache_config=aphrodite_config.cache_config,
-            hf_config=aphrodite_config.model_config.hf_config.text_config,
+            cache_config=sonar_config.cache_config,
+            hf_config=sonar_config.model_config.hf_config.text_config,
         )
 
 
@@ -989,14 +989,14 @@ class Qwen3VLForSequenceClassificationConfig(Qwen3ForSequenceClassificationConfi
 
 class Qwen3_5ForConditionalGenerationConfig(VerifyAndUpdateConfig):
     @staticmethod
-    def verify_and_update_config(aphrodite_config: "AphroditeConfig") -> None:
+    def verify_and_update_config(sonar_config: "SonarConfig") -> None:
         """Update mamba_ssm_cache_dtype for Qwen3.5 models when set to 'auto'
         (or not explicitly set), to the value specified in the HF config's
         mamba_ssm_dtype field. Warn if the user explicitly overrides it to a
         different value.
         """
-        cache_config = aphrodite_config.cache_config
-        hf_text_config = aphrodite_config.model_config.hf_text_config
+        cache_config = sonar_config.cache_config
+        hf_text_config = sonar_config.model_config.hf_text_config
         mamba_ssm_dtype = getattr(hf_text_config, "mamba_ssm_dtype", None)
         if cache_config.mamba_ssm_cache_dtype == "auto":
             if mamba_ssm_dtype is not None:
@@ -1013,12 +1013,12 @@ class Qwen3_5ForConditionalGenerationConfig(VerifyAndUpdateConfig):
 
 class Qwen3_5ForCausalLMConfig(Qwen3_5ForConditionalGenerationConfig):
     @staticmethod
-    def verify_and_update_config(aphrodite_config: "AphroditeConfig") -> None:
-        Qwen3_5ForConditionalGenerationConfig.verify_and_update_config(aphrodite_config)
+    def verify_and_update_config(sonar_config: "SonarConfig") -> None:
+        Qwen3_5ForConditionalGenerationConfig.verify_and_update_config(sonar_config)
 
         # Text-only Qwen3.5 models use one-dimensional positions. Remove the
         # M-RoPE fields inherited from the multimodal configuration.
-        hf_text_config = aphrodite_config.model_config.hf_text_config
+        hf_text_config = sonar_config.model_config.hf_text_config
         rope_parameters = getattr(hf_text_config, "rope_parameters", None)
         if rope_parameters is not None:
             rope_parameters.pop("mrope_section", None)
@@ -1045,14 +1045,14 @@ class Qwen4ExpForConditionalGenerationConfig(Qwen3_5ForConditionalGenerationConf
     """Apply the Qwen3.5 hybrid-cache contract to Qwen4Exp."""
 
     @staticmethod
-    def verify_and_update_config(aphrodite_config: "AphroditeConfig") -> None:
-        from aphrodite.platforms import current_platform
+    def verify_and_update_config(sonar_config: "SonarConfig") -> None:
+        from sonar.platforms import current_platform
 
-        Qwen3_5ForConditionalGenerationConfig.verify_and_update_config(aphrodite_config)
-        text_config = aphrodite_config.model_config.hf_text_config
+        Qwen3_5ForConditionalGenerationConfig.verify_and_update_config(sonar_config)
+        text_config = sonar_config.model_config.hf_text_config
         if text_config.hc_count <= 1:
             raise ValueError("Qwen4Exp requires hc_count > 1")
-        parallel_config = aphrodite_config.parallel_config
+        parallel_config = sonar_config.parallel_config
         # MoE SP also enables HC SP without the explicit HC flag.
         if (
             current_platform.is_cuda_alike()
@@ -1064,10 +1064,10 @@ class Qwen4ExpForConditionalGenerationConfig(Qwen3_5ForConditionalGenerationConf
         uses_ple_or_qsa = bool(text_config.ple_layer_ids) or (getattr(text_config, "indexer_n_heads", None) is not None)
         if uses_ple_or_qsa and (parallel_config.enable_dbo or parallel_config.ubatch_size > 1):
             raise NotImplementedError("Qwen4Exp PLE/QSA does not support dual-batch overlap or microbatching")
-        multimodal_config = aphrodite_config.model_config.multimodal_config
+        multimodal_config = sonar_config.model_config.multimodal_config
         if multimodal_config is not None and multimodal_config.language_model_only:
-            _strip_qwen4_exp_mrope(aphrodite_config.model_config)
-        spec_config = aphrodite_config.speculative_config
+            _strip_qwen4_exp_mrope(sonar_config.model_config)
+        spec_config = sonar_config.speculative_config
         if spec_config is not None and spec_config.method not in {
             "mtp",
             "ngram",
@@ -1080,21 +1080,21 @@ class Qwen4ExpForConditionalGenerationConfig(Qwen3_5ForConditionalGenerationConf
 
 class Qwen4ExpForCausalLMConfig(Qwen4ExpForConditionalGenerationConfig):
     @staticmethod
-    def verify_and_update_config(aphrodite_config: "AphroditeConfig") -> None:
-        Qwen4ExpForConditionalGenerationConfig.verify_and_update_config(aphrodite_config)
+    def verify_and_update_config(sonar_config: "SonarConfig") -> None:
+        Qwen4ExpForConditionalGenerationConfig.verify_and_update_config(sonar_config)
 
-        _strip_qwen4_exp_mrope(aphrodite_config.model_config)
+        _strip_qwen4_exp_mrope(sonar_config.model_config)
 
 
 class Qwen4ExpMTPConfig(Qwen4ExpForConditionalGenerationConfig):
     """Preserve MRoPE for a VL target and use 1D RoPE for a text target."""
 
     @staticmethod
-    def verify_and_update_config(aphrodite_config: "AphroditeConfig") -> None:
-        Qwen4ExpForConditionalGenerationConfig.verify_and_update_config(aphrodite_config)
-        if hasattr(aphrodite_config.model_config.hf_config, "vision_config"):
+    def verify_and_update_config(sonar_config: "SonarConfig") -> None:
+        Qwen4ExpForConditionalGenerationConfig.verify_and_update_config(sonar_config)
+        if hasattr(sonar_config.model_config.hf_config, "vision_config"):
             return
-        _strip_qwen4_exp_mrope(aphrodite_config.model_config)
+        _strip_qwen4_exp_mrope(sonar_config.model_config)
 
 
 class ColQwen3_5Config(Qwen3_5ForConditionalGenerationConfig):
@@ -1144,7 +1144,7 @@ class D3ForSequenceClassificationConfig(Qwen3_5ForConditionalGenerationConfig):
         if decision.get("format_version") != 1:
             raise ValueError(
                 "unsupported decision_config.json format_version "
-                f"{decision.get('format_version')!r}; Aphrodite reads version 1"
+                f"{decision.get('format_version')!r}; Sonar reads version 1"
             )
         if decision.get("pooling", "last") != "last":
             raise ValueError(f"unsupported decision_config.json pooling {decision['pooling']!r}")
@@ -1201,15 +1201,15 @@ class VoyageQwen3BidirectionalEmbedModelConfig(VerifyAndUpdateConfig):
 
 class LongcatFlashNgramForCausalLMConfig(VerifyAndUpdateConfig):
     @staticmethod
-    def verify_and_update_config(aphrodite_config: "AphroditeConfig") -> None:
+    def verify_and_update_config(sonar_config: "SonarConfig") -> None:
         # LongCat-Flash-Lite's zero-expert MoE trips a data-dependent assert
         # under torch.compile, and its n-gram inputs_embeds are only wired for
         # FULL cudagraph capture (PIECEWISE prefill drops them). Default to
         # no-compile + FULL cudagraph (prefill runs eager) unless the user
         # configured compilation explicitly.
-        from aphrodite.config.compilation import CompilationMode, CUDAGraphMode
+        from sonar.config.compilation import CompilationMode, CUDAGraphMode
 
-        compilation_config = aphrodite_config.compilation_config
+        compilation_config = sonar_config.compilation_config
         if compilation_config.mode is None:
             compilation_config.mode = CompilationMode.NONE
         if compilation_config.cudagraph_mode is None:

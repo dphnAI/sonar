@@ -6,13 +6,13 @@ from dataclasses import dataclass
 import numpy as np
 import torch
 
-from aphrodite.config.model import LogprobsMode
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.torch_utils import async_tensor_h2d
-from aphrodite.v1.outputs import LogprobsTensors
-from aphrodite.v1.worker.gpu.input_batch import InputBatch
-from aphrodite.v1.worker.gpu.sample.logprob import (
+from sonar.config.model import LogprobsMode
+from sonar.sampling_params import SamplingParams
+from sonar.triton_utils import tl, triton
+from sonar.utils.torch_utils import async_tensor_h2d
+from sonar.v1.outputs import LogprobsTensors
+from sonar.v1.worker.gpu.input_batch import InputBatch
+from sonar.v1.worker.gpu.sample.logprob import (
     compute_token_logprobs,
     compute_topk_scores,
 )

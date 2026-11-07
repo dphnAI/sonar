@@ -6,9 +6,9 @@ from enum import Enum
 
 import pytest
 
-from aphrodite.config.cache import CacheConfig
-from aphrodite.config.scheduler import SchedulerConfig
-from aphrodite.config.utils import (
+from sonar.config.cache import CacheConfig
+from sonar.config.scheduler import SchedulerConfig
+from sonar.config.utils import (
     get_attr_docs,
     get_hash_factors,
     hash_factors,
@@ -33,7 +33,7 @@ def expected_path(p_str: str = ".") -> str:
 
 
 # Minimal dataclass to test get_hash_factors.
-# Avoid importing heavy Aphrodite configs.
+# Avoid importing heavy Sonar configs.
 @dataclass
 class SimpleConfig:
     a: object
@@ -162,7 +162,7 @@ def test_enum_vs_int_disambiguation():
 
 
 def test_classes_are_types():
-    """Types normalize to FQNs; include real Aphrodite types."""
+    """Types normalize to FQNs; include real Sonar types."""
     # Only classes allowed; functions/lambdas are rejected.
     # Canonical form is the fully-qualified name.
     assert isinstance(normalize_value(str), str)
@@ -176,9 +176,9 @@ def test_classes_are_types():
 def test_ir_config_hash_initializes_provider_and_tracks_implementation(monkeypatch):
     from types import SimpleNamespace
 
-    from aphrodite.config.kernel import IrOpPriorityConfig
-    from aphrodite.ir.op import IrOp
-    from aphrodite.platforms import current_platform
+    from sonar.config.kernel import IrOpPriorityConfig
+    from sonar.ir.op import IrOp
+    from sonar.platforms import current_platform
 
     op = IrOp.registry["rms_norm"]
     implementation = SimpleNamespace(uuid=lambda: "first-implementation")
@@ -233,8 +233,8 @@ def test_envs_compile_factors_stable():
 import sys
 import logging
 logging.disable(logging.CRITICAL)
-from aphrodite import envs
-from aphrodite.config.utils import hash_factors
+from sonar import envs
+from sonar.config.utils import hash_factors
 print(hash_factors(envs.compile_factors()))
 """
 
@@ -244,7 +244,7 @@ print(hash_factors(envs.compile_factors()))
             capture_output=True,
             text=True,
             check=True,
-            env={**dict(__import__("os").environ), "APHRODITE_LOGGING_LEVEL": "ERROR"},
+            env={**dict(__import__("os").environ), "SONAR_LOGGING_LEVEL": "ERROR"},
         )
         return result.stdout.strip()
 
@@ -307,8 +307,8 @@ def test_envs_compile_factors_relocation_invariant(tmp_path):
     """Relocating HOME or the XDG roots must not change the compile-cache
     env hash.
 
-    Location-derived env vars (APHRODITE_XLA_CACHE_PATH from XDG_CACHE_HOME,
-    APHRODITE_CONFIG_ROOT from XDG_CONFIG_HOME/HOME) carry no information about
+    Location-derived env vars (SONAR_XLA_CACHE_PATH from XDG_CACHE_HOME,
+    SONAR_CONFIG_ROOT from XDG_CONFIG_HOME/HOME) carry no information about
     compiled artifacts, only about where directories live. When they leak into
     compile_factors(), a cache produced under one HOME/XDG layout silently
     misses under another - which defeats copying or pre-baking a compile cache
@@ -322,19 +322,19 @@ def test_envs_compile_factors_relocation_invariant(tmp_path):
 import sys
 import logging
 logging.disable(logging.CRITICAL)
-from aphrodite import envs
-from aphrodite.config.utils import hash_factors
+from sonar import envs
+from sonar.config.utils import hash_factors
 print(hash_factors(envs.compile_factors()))
 """
 
     def hash_with(extra_env):
-        env = {**dict(os.environ), "APHRODITE_LOGGING_LEVEL": "ERROR"}
+        env = {**dict(os.environ), "SONAR_LOGGING_LEVEL": "ERROR"}
         # Drop explicit overrides so the derived defaults are what is
         # exercised, then apply the relocation under test.
         for key in (
-            "APHRODITE_XLA_CACHE_PATH",
-            "APHRODITE_CONFIG_ROOT",
-            "APHRODITE_CACHE_ROOT",
+            "SONAR_XLA_CACHE_PATH",
+            "SONAR_CONFIG_ROOT",
+            "SONAR_CACHE_ROOT",
         ):
             env.pop(key, None)
         env.update(extra_env)

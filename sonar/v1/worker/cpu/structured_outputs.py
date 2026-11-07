@@ -4,7 +4,7 @@
 import numpy as np
 import torch
 
-from aphrodite.v1.worker.cpu.input_batch import InputBatch
+from sonar.v1.worker.cpu.input_batch import InputBatch
 
 
 class CPUStructuredOutputsWorker:

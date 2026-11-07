@@ -13,29 +13,29 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 
-from aphrodite.distributed.ec_transfer.ec_connector.cpu.common import (
+from sonar.distributed.ec_transfer.ec_connector.cpu.common import (
     ECCPUConnectorMetadata,
     ECCPUWorkerMetadata,
     create_ec_shared_region,
 )
-from aphrodite.distributed.ec_transfer.ec_connector.cpu.scheduler.embedding_cache import (
+from sonar.distributed.ec_transfer.ec_connector.cpu.scheduler.embedding_cache import (
     EmbeddingCache,
 )
-from aphrodite.distributed.ec_transfer.ec_connector.encoder_output_width import (
+from sonar.distributed.ec_transfer.ec_connector.encoder_output_width import (
     get_encoder_output_width,
 )
-from aphrodite.distributed.ec_transfer.ec_connector.utils import (
+from sonar.distributed.ec_transfer.ec_connector.utils import (
     PlaceholderMetadataResolver,
     collect_ec_item_metadata,
 )
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
-    from aphrodite.multimodal.inputs import MultiModalFeatureSpec
-    from aphrodite.v1.core.sched.output import SchedulerOutput
-    from aphrodite.v1.outputs import ECConnectorOutput
-    from aphrodite.v1.request import Request
+    from sonar.config import SonarConfig
+    from sonar.multimodal.inputs import MultiModalFeatureSpec
+    from sonar.v1.core.sched.output import SchedulerOutput
+    from sonar.v1.outputs import ECConnectorOutput
+    from sonar.v1.request import Request
 
 logger = init_logger(__name__)
 
@@ -50,17 +50,17 @@ class _RemoteUnavailable(Exception):
 class ECCPUScheduler:
     """Scheduler delegate for the ECCPUConnector."""
 
-    def __init__(self, aphrodite_config: "AphroditeConfig") -> None:
-        self._aphrodite_config = aphrodite_config
-        ec_config = aphrodite_config.ec_transfer_config
+    def __init__(self, sonar_config: "SonarConfig") -> None:
+        self._sonar_config = sonar_config
+        ec_config = sonar_config.ec_transfer_config
         assert ec_config is not None
         self._is_producer: bool = ec_config.is_ec_producer
         self._is_consumer: bool = ec_config.is_ec_consumer
 
-        self._region = create_ec_shared_region(aphrodite_config)
+        self._region = create_ec_shared_region(sonar_config)
         # Block allocator + LRU eviction policy for the shared region.
         self._cache = EmbeddingCache(self._region.num_blocks)
-        self._metadata_resolver = PlaceholderMetadataResolver(aphrodite_config.model_config)
+        self._metadata_resolver = PlaceholderMetadataResolver(sonar_config.model_config)
 
         # mm_hash → block IDs allocated this step for GPU→mmap saves.
         self._pending_saves: dict[str, list[int]] = {}
@@ -73,7 +73,7 @@ class ECCPUScheduler:
         self._load_acks: dict[int, tuple[str, int]] = {}
         self._next_transfer_id = 0
 
-        pc = aphrodite_config.parallel_config
+        pc = sonar_config.parallel_config
         # Reports to expect per load. Only pipeline stage 0 runs the EC
         # connector, so the participants are the tp × pcp ranks of that stage.
         # Other executors deliver a single rank's output, and expecting reports
@@ -107,36 +107,36 @@ class ECCPUScheduler:
         self._unrecoverable: set[str] = set()
         self._peer_host: str | None = None
         self._peer_port: int | None = None
-        dtype = aphrodite_config.model_config.dtype
+        dtype = sonar_config.model_config.dtype
         assert isinstance(dtype, torch.dtype)
         self._dtype = dtype
         self._ack_timeout_s: float = 0.0
         if self._nixl_enabled:
             try:
-                self._setup_nixl(aphrodite_config)
+                self._setup_nixl(sonar_config)
             except Exception:
                 self.shutdown()
                 raise
 
-    def _setup_nixl(self, aphrodite_config: "AphroditeConfig") -> None:
+    def _setup_nixl(self, sonar_config: "SonarConfig") -> None:
         # Lazy imports keep nixl/zmq off the gate-off path.
-        from aphrodite import envs
-        from aphrodite.distributed.ec_transfer.ec_connector.cpu.control.zmq import (
+        from sonar import envs
+        from sonar.distributed.ec_transfer.ec_connector.cpu.control.zmq import (
             ZmqClientTransport,
             ZmqServerTransport,
         )
-        from aphrodite.distributed.ec_transfer.ec_connector.cpu.data.nixl import (
+        from sonar.distributed.ec_transfer.ec_connector.cpu.data.nixl import (
             NixlDataTransport,
         )
-        from aphrodite.distributed.ec_transfer.ec_connector.cpu.protocol import (
+        from sonar.distributed.ec_transfer.ec_connector.cpu.protocol import (
             compute_ec_compatibility_hash,
         )
-        from aphrodite.distributed.ec_transfer.ec_connector.cpu.session import (
+        from sonar.distributed.ec_transfer.ec_connector.cpu.session import (
             PRODUCER_PIN_LEASE_S,
             ProducerSession,
         )
-        from aphrodite.distributed.nixl_utils import NixlWrapper, nixl_agent_config
-        from aphrodite.version import __version__ as APHRODITE_VERSION
+        from sonar.distributed.nixl_utils import NixlWrapper, nixl_agent_config
+        from sonar.version import __version__ as SONAR_VERSION
 
         if NixlWrapper is None or nixl_agent_config is None:
             raise RuntimeError(
@@ -152,14 +152,14 @@ class ECCPUScheduler:
             self._ec_config.get_from_extra_config("consumer_ack_timeout_s", PRODUCER_PIN_LEASE_S)
         )
         self._compat_hash = compute_ec_compatibility_hash(
-            aphrodite_version=APHRODITE_VERSION,
-            model=str(aphrodite_config.model_config.model),
+            sonar_version=SONAR_VERSION,
+            model=str(sonar_config.model_config.model),
             dtype=str(self._dtype),
             block_size_bytes=self._region.block_size_bytes,
         )
         if self._is_producer:
-            self._peer_host = envs.APHRODITE_EC_SIDE_CHANNEL_HOST
-            self._peer_port = envs.APHRODITE_EC_SIDE_CHANNEL_PORT
+            self._peer_host = envs.SONAR_EC_SIDE_CHANNEL_HOST
+            self._peer_port = envs.SONAR_EC_SIDE_CHANNEL_PORT
 
         self._data = NixlDataTransport(
             agent_name=engine_id,
@@ -369,7 +369,7 @@ class ECCPUScheduler:
         """
         from math import ceil
 
-        from aphrodite.distributed.ec_transfer.ec_connector.cpu.session import (
+        from sonar.distributed.ec_transfer.ec_connector.cpu.session import (
             ConsumerSession,
         )
 
@@ -484,7 +484,7 @@ class ECCPUScheduler:
         if self._is_producer and self._cache.get(mm_hash) is None:
             shape = (
                 feature.mm_position.get_num_embeds(),
-                get_encoder_output_width(self._aphrodite_config, feature.modality),
+                get_encoder_output_width(self._sonar_config, feature.modality),
             )
             entry = self._cache.alloc(mm_hash, self._num_blocks(shape), shape)
             if entry is not None:

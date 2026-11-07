@@ -5,8 +5,8 @@
 import torch
 from transformers import PreTrainedConfig
 
-from aphrodite.config.lora import LoRAConfig
-from aphrodite.platforms import current_platform
+from sonar.config.lora import LoRAConfig
+from sonar.platforms import current_platform
 
 from .replicated_linear import ReplicatedLinearWithLoRA
 

@@ -18,33 +18,33 @@ import pytest
 import torch
 from packaging import version
 
-from aphrodite._aiter_ops import is_aiter_found_and_supported, rocm_aiter_ops
-from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-from aphrodite.config.cache import CacheConfig, CacheDType
-from aphrodite.forward_context import set_forward_context
-from aphrodite.model_executor import parameter
-from aphrodite.model_executor.kernels.linear.scaled_mm.aiter import (
+from sonar._aiter_ops import is_aiter_found_and_supported, rocm_aiter_ops
+from sonar.config import SonarConfig, set_current_sonar_config
+from sonar.config.cache import CacheConfig, CacheDType
+from sonar.forward_context import set_forward_context
+from sonar.model_executor import parameter
+from sonar.model_executor.kernels.linear.scaled_mm.aiter import (
     AiterHipbMMPerTokenFp8ScaledMMLinearKernel,
     AiterPerTokenFp8ScaledMMLinearKernel,
     AiterPreshuffledPerTokenFp8ScaledMMLinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.scaled_mm.ScaledMMLinearKernel import (
+from sonar.model_executor.kernels.linear.scaled_mm.ScaledMMLinearKernel import (
     FP8ScaledMMLinearLayerConfig,
 )
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.model_executor.layers.attention import Attention
+from sonar.model_executor.layers.fused_moe import (
     FusedMoeWeightScaleSupported,
     RoutedExperts,
     UnquantizedFusedMoEMethod,
 )
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEParallelConfig,
     RoutingMethodType,
 )
-from aphrodite.model_executor.layers.linear import LinearBase, UnquantizedLinearMethod
-from aphrodite.model_executor.layers.quantization.quark.quark import (  # noqa: E501
+from sonar.model_executor.layers.linear import LinearBase, UnquantizedLinearMethod
+from sonar.model_executor.layers.quantization.quark.quark import (  # noqa: E501
     QuarkConfig,
     QuarkLinearMethod,
     QuarkNVFP4,
@@ -53,7 +53,7 @@ from aphrodite.model_executor.layers.quantization.quark.quark import (  # noqa: 
     QuarkW8A8Fp8PerBlock,
     QuarkW8A8Int8,
 )
-from aphrodite.model_executor.layers.quantization.quark.quark_moe import (  # noqa: E501
+from sonar.model_executor.layers.quantization.quark.quark_moe import (  # noqa: E501
     QuarkMoEMethod,
     QuarkOCP_MX_MoEMethod,
     QuarkW4A8Fp8MoEMethod,
@@ -62,19 +62,19 @@ from aphrodite.model_executor.layers.quantization.quark.quark_moe import (  # no
     QuarkW8A8Int8MoEMethod,
     QuarkW8A8Mxfp8MoEMethod,
 )
-from aphrodite.model_executor.layers.quantization.quark.schemes import (
+from sonar.model_executor.layers.quantization.quark.schemes import (
     QuarkScheme,
     QuarkW4A16Int4,
 )
-from aphrodite.model_executor.layers.quantization.quark.utils import (
+from sonar.model_executor.layers.quantization.quark.utils import (
     QuarkQTensorHint,
     canonicalize_quark_packed_int4,
     should_ignore_layer,
 )
-from aphrodite.model_executor.layers.quantization.utils.mxfp4_utils import (
+from sonar.model_executor.layers.quantization.utils.mxfp4_utils import (
     quant_dequant_mxfp4,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     is_layer_skipped,
     kFp8Dynamic128Sym,
@@ -103,14 +103,14 @@ from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
     kNvfp4Dynamic,
     kNvfp4Static,
 )
-from aphrodite.model_executor.models.llama import LlamaForCausalLM
-from aphrodite.model_executor.models.utils import WeightsMapper
-from aphrodite.platforms import current_platform
+from sonar.model_executor.models.llama import LlamaForCausalLM
+from sonar.model_executor.models.utils import WeightsMapper
+from sonar.platforms import current_platform
 from tests.quantization.lm_eval_utils import evaluate_sonar
-from tests.quantization.utils import load_model_without_aphrodite_runner
+from tests.quantization.utils import load_model_without_sonar_runner
 
 if current_platform.is_rocm():
-    from aphrodite.platforms.rocm import on_gfx942, on_gfx950
+    from sonar.platforms.rocm import on_gfx942, on_gfx950
 else:
 
     def on_gfx942() -> bool:
@@ -791,16 +791,16 @@ except huggingface_hub.errors.RepositoryNotFoundError:
 @pytest.fixture(scope="function", autouse=True)
 def enable_pickle(monkeypatch):
     """`LLM.apply_model` requires pickling a function."""
-    monkeypatch.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
+    monkeypatch.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")
 
 
 def test_quark_w8a8_fp8_per_block_registers_weight_scale(monkeypatch):
-    from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
+    from sonar.model_executor.layers.quantization.utils.fp8_utils import (
         get_fp8_block_weight_scale,
     )
 
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.quark.schemes.quark_w8a8_fp8.get_current_aphrodite_config",
+        "sonar.model_executor.layers.quantization.quark.schemes.quark_w8a8_fp8.get_current_sonar_config",
         lambda: SimpleNamespace(model_config=SimpleNamespace(dtype=torch.bfloat16)),
     )
     scheme = QuarkW8A8Fp8PerBlock(kFp8Static128BlockSym, kFp8Dynamic128Sym)
@@ -822,17 +822,17 @@ def test_quark_w8a8_fp8_per_block_registers_weight_scale(monkeypatch):
 
     dummy_param = torch.nn.Parameter(torch.empty(1), requires_grad=False)
     with (
-        patch("aphrodite.model_executor.layers.quantization.quark.schemes.quark_w8a8_fp8.validate_fp8_block_shape"),
+        patch("sonar.model_executor.layers.quantization.quark.schemes.quark_w8a8_fp8.validate_fp8_block_shape"),
         patch(
-            "aphrodite.model_executor.layers.quantization.quark.schemes.quark_w8a8_fp8.create_fp8_weight_parameter",
+            "sonar.model_executor.layers.quantization.quark.schemes.quark_w8a8_fp8.create_fp8_weight_parameter",
             return_value=dummy_param,
         ),
         patch(
-            "aphrodite.model_executor.layers.quantization.quark.schemes.quark_w8a8_fp8.create_fp8_scale_parameter",
+            "sonar.model_executor.layers.quantization.quark.schemes.quark_w8a8_fp8.create_fp8_scale_parameter",
             return_value=dummy_param,
         ),
         patch(
-            "aphrodite.model_executor.layers.quantization.quark.schemes.quark_w8a8_fp8.init_fp8_linear_kernel",
+            "sonar.model_executor.layers.quantization.quark.schemes.quark_w8a8_fp8.init_fp8_linear_kernel",
             return_value=MagicMock(),
         ),
     ):
@@ -865,7 +865,7 @@ def test_quark_config_preserves_existing_packed_modules_mapping():
     assert config.packed_modules_mapping["custom_proj"] == ["a", "b"]
 
 
-def test_quant_method_dispatch_ignored(default_aphrodite_config):
+def test_quant_method_dispatch_ignored(default_sonar_config):
     config = _make_qtensor_config(None, None, exclude=["linear", "experts"])
 
     class TestLinear(LinearBase):
@@ -952,16 +952,16 @@ def test_quant_method_dispatch_target(case):
     assert method_cls is (QuarkLinearMethod if is_linear else case.dispatch_cls)
 
 
-def test_quant_method_dispatch_mxfp8_2d_block(default_aphrodite_config):
+def test_quant_method_dispatch_mxfp8_2d_block(default_sonar_config):
     """Shape B (DeepSeek-V4.1): 32x32 per-block e8m0 routes to QuarkOCP_MX.
 
     Verifies that get_quant_method and get_quant_method_target agree (the
     short-circuit that previously caused them to diverge has been removed).
     """
-    from aphrodite.model_executor.layers.quantization.quark.schemes import QuarkOCP_MX
-    from aphrodite.model_executor.layers.quantization.utils.quant_utils import kMxfp8Static
+    from sonar.model_executor.layers.quantization.quark.schemes import QuarkOCP_MX
+    from sonar.model_executor.layers.quantization.utils.quant_utils import kMxfp8Static
 
-    default_aphrodite_config.model_config = SimpleNamespace(dtype=torch.bfloat16)
+    default_sonar_config.model_config = SimpleNamespace(dtype=torch.bfloat16)
     mxfp8_spec = {
         "weight": {
             "dtype": "fp8_e4m3",
@@ -1034,17 +1034,17 @@ def test_quant_method_dispatch_mxfp8_2d_block(default_aphrodite_config):
     assert isinstance(linear.scheme, QuarkW8A8Fp8PerBlock)
 
 
-def test_quant_method_dispatch_mxfp8_canonical(default_aphrodite_config):
+def test_quant_method_dispatch_mxfp8_canonical(default_sonar_config):
     """Shape A (canonical MX): per_group/group_size=32/e8m0 FP8 routes
     to QuarkOCP_MX with scale_block_rows == 1.
 
     This covers the canonical MXFP8 spelling (no 2-D block). Validated by
     synthetic dispatch test only — no canonical-MXFP8 checkpoint on hand.
     """
-    from aphrodite.model_executor.layers.quantization.quark.schemes import QuarkOCP_MX
-    from aphrodite.model_executor.layers.quantization.utils.quant_utils import kMxfp8Static
+    from sonar.model_executor.layers.quantization.quark.schemes import QuarkOCP_MX
+    from sonar.model_executor.layers.quantization.utils.quant_utils import kMxfp8Static
 
-    default_aphrodite_config.model_config = SimpleNamespace(dtype=torch.bfloat16)
+    default_sonar_config.model_config = SimpleNamespace(dtype=torch.bfloat16)
     mxfp8_canonical_spec = {
         "weight": {
             "dtype": "fp8_e4m3",
@@ -1127,7 +1127,7 @@ def _patch_mxfp8_moe_backend(monkeypatch) -> None:
     )
 
 
-def test_quant_method_dispatch_mixed_mxfp4_mxfp8_experts(monkeypatch, default_aphrodite_config):
+def test_quant_method_dispatch_mixed_mxfp4_mxfp8_experts(monkeypatch, default_sonar_config):
     """A per-layer ``<experts prefix>*`` entry selects MXFP8 for that layer's routed
     experts only; other layers keep the global MXFP4, and the glob does not reach
     the layer's shared experts (``shared_experts`` does not start with
@@ -1243,7 +1243,7 @@ def test_quant_method_dispatch_unsupported(weight, input_tensors):
     [case for case in QTENSOR_CONFIGS if case.expected_error is None],
     ids=lambda case: case.name,
 )
-def test_quant_method_dispatch_instantiation(case, monkeypatch, default_aphrodite_config):
+def test_quant_method_dispatch_instantiation(case, monkeypatch, default_sonar_config):
     config = _make_qtensor_config(case.weight, case.input_tensors)
     assert case.dispatch_cls is not None
     if issubclass(case.dispatch_cls, QuarkScheme):
@@ -1253,7 +1253,7 @@ def test_quant_method_dispatch_instantiation(case, monkeypatch, default_aphrodit
                 torch.nn.Module.__init__(self)
 
         monkeypatch.setattr(
-            "aphrodite.model_executor.layers.quantization.quark.schemes.quark_w8a8_fp8.get_current_aphrodite_config",
+            "sonar.model_executor.layers.quantization.quark.schemes.quark_w8a8_fp8.get_current_sonar_config",
             lambda: SimpleNamespace(model_config=SimpleNamespace(dtype=torch.bfloat16)),
         )
         layer = TestLinear()
@@ -1282,26 +1282,26 @@ def test_quant_method_dispatch_instantiation(case, monkeypatch, default_aphrodit
             "select_nvfp4_moe_backend",
         ):
             monkeypatch.setattr(
-                f"aphrodite.model_executor.layers.quantization.quark.quark_moe.{target}",
+                f"sonar.model_executor.layers.quantization.quark.quark_moe.{target}",
                 lambda *args, **kwargs: (object(), object()),
             )
 
         # The MXFP8 method logs the backend it selected, so give it a named one.
         monkeypatch.setattr(
-            "aphrodite.model_executor.layers.quantization.quark.quark_moe.select_mxfp8_moe_backend",
+            "sonar.model_executor.layers.quantization.quark.quark_moe.select_mxfp8_moe_backend",
             lambda *args, **kwargs: (SimpleNamespace(value="TEST_MXFP8"), object()),
         )
 
         # AssertionError: W4A8 FP8 MoE requires ROCm AITER fused MoE support
         monkeypatch.setattr(
-            "aphrodite.model_executor.layers.quantization.quark.quark_moe.rocm_aiter_ops.is_fused_moe_enabled",
+            "sonar.model_executor.layers.quantization.quark.quark_moe.rocm_aiter_ops.is_fused_moe_enabled",
             lambda: True,
         )
 
-        # default_aphrodite_config carries no model, but the FP8 and OCP MX methods
+        # default_sonar_config carries no model, but the FP8 and OCP MX methods
         # read the model type off the HF config.
         monkeypatch.setattr(
-            "aphrodite.model_executor.layers.quantization.quark.quark_moe.get_current_aphrodite_config",
+            "sonar.model_executor.layers.quantization.quark.quark_moe.get_current_sonar_config",
             lambda: SimpleNamespace(model_config=SimpleNamespace(hf_config=SimpleNamespace())),
         )
 
@@ -1311,10 +1311,10 @@ def test_quant_method_dispatch_instantiation(case, monkeypatch, default_aphrodit
         assert isinstance(method, case.dispatch_cls)
 
 
-QUARK_MOE_MODULE = "aphrodite.model_executor.layers.quantization.quark.quark_moe"
-# validate_fp8_block_shape_moe imports this from aphrodite.distributed when called,
+QUARK_MOE_MODULE = "sonar.model_executor.layers.quantization.quark.quark_moe"
+# validate_fp8_block_shape_moe imports this from sonar.distributed when called,
 # so the patch has to target the source module rather than a local binding.
-TP_WORLD_SIZE = "aphrodite.distributed.get_tensor_model_parallel_world_size"
+TP_WORLD_SIZE = "sonar.distributed.get_tensor_model_parallel_world_size"
 
 
 def _make_per_block_fp8_moe_method(
@@ -1333,7 +1333,7 @@ def test_quark_w8a8_fp8_moe_per_block_requires_dynamic_group_input():
             f"{QUARK_MOE_MODULE}.select_fp8_moe_backend",
             return_value=(Mock(), Mock()),
         ),
-        patch(f"{QUARK_MOE_MODULE}.get_current_aphrodite_config"),
+        patch(f"{QUARK_MOE_MODULE}.get_current_sonar_config"),
         pytest.raises(ValueError, match="per-block scales"),
     ):
         _make_per_block_fp8_moe_method(kFp8StaticTensorSym)
@@ -1345,7 +1345,7 @@ def test_quark_w8a8_fp8_moe_per_block_weight_shapes():
             f"{QUARK_MOE_MODULE}.select_fp8_moe_backend",
             return_value=(Mock(), Mock()),
         ),
-        patch(f"{QUARK_MOE_MODULE}.get_current_aphrodite_config"),
+        patch(f"{QUARK_MOE_MODULE}.get_current_sonar_config"),
         patch(TP_WORLD_SIZE, return_value=1),
     ):
         method = _make_per_block_fp8_moe_method()
@@ -1387,7 +1387,7 @@ def test_quark_w8a8_fp8_moe_per_block_rejects_misaligned_partition():
             f"{QUARK_MOE_MODULE}.select_fp8_moe_backend",
             return_value=(Mock(), Mock()),
         ),
-        patch(f"{QUARK_MOE_MODULE}.get_current_aphrodite_config"),
+        patch(f"{QUARK_MOE_MODULE}.get_current_sonar_config"),
         patch(TP_WORLD_SIZE, return_value=1),
         pytest.raises(ValueError, match="not divisible by"),
     ):
@@ -1431,7 +1431,7 @@ def test_quark_fp8_ptpc_exposes_kernel_input_quant_key(monkeypatch):
     scheme.input_dtype = dtype
 
     layer = torch.nn.Module()
-    with set_current_aphrodite_config(AphroditeConfig()):
+    with set_current_sonar_config(SonarConfig()):
         scheme.create_weights(
             layer,
             output_partition_sizes=[N],
@@ -1464,10 +1464,10 @@ def test_quark_fp8_w_per_tensor_a_per_tensor(kv_cache_dtype: CacheDType, monkeyp
         return original_load_weights(self, capture_scales())
 
     monkeypatch.setattr(LlamaForCausalLM, "load_weights", load_weights)
-    model, aphrodite_config = load_model_without_aphrodite_runner(
+    model, sonar_config = load_model_without_sonar_runner(
         model_path,
         model_config_kwargs={"hf_overrides": {"num_hidden_layers": 3}},
-        aphrodite_config_kwargs={"cache_config": CacheConfig(cache_dtype=kv_cache_dtype)},
+        sonar_config_kwargs={"cache_config": CacheConfig(cache_dtype=kv_cache_dtype)},
     )
 
     qkv_proj = model.model.layers[0].self_attn.qkv_proj
@@ -1495,8 +1495,8 @@ def test_quark_fp8_w_per_tensor_a_per_tensor(kv_cache_dtype: CacheDType, monkeyp
     input_ids = torch.tensor([1, 2, 3, 4], device=DEVICE_TYPE)
     positions = torch.arange(input_ids.numel(), device=DEVICE_TYPE)
     with (
-        set_current_aphrodite_config(aphrodite_config),
-        set_forward_context(None, aphrodite_config, num_tokens=input_ids.numel()),
+        set_current_sonar_config(sonar_config),
+        set_forward_context(None, sonar_config, num_tokens=input_ids.numel()),
     ):
         hidden_states = model(input_ids, positions, None)
         logits = model.compute_logits(hidden_states)
@@ -1505,7 +1505,7 @@ def test_quark_fp8_w_per_tensor_a_per_tensor(kv_cache_dtype: CacheDType, monkeyp
 
 def test_quark_fp8_w_per_channel_a_per_token(monkeypatch, dist_init, workspace_init):
     model_path = "amd/Qwen2.5-1.5B-Instruct-ptpc-Quark-ts"
-    model, aphrodite_config = load_model_without_aphrodite_runner(
+    model, sonar_config = load_model_without_sonar_runner(
         model_path,
         model_config_kwargs={"hf_overrides": {"num_hidden_layers": 3}},
     )
@@ -1521,8 +1521,8 @@ def test_quark_fp8_w_per_channel_a_per_token(monkeypatch, dist_init, workspace_i
     input_ids = torch.tensor([1, 2, 3, 4], device=DEVICE_TYPE)
     positions = torch.arange(input_ids.numel(), device=DEVICE_TYPE)
     with (
-        set_current_aphrodite_config(aphrodite_config),
-        set_forward_context(None, aphrodite_config, num_tokens=input_ids.numel()),
+        set_current_sonar_config(sonar_config),
+        set_forward_context(None, sonar_config, num_tokens=input_ids.numel()),
     ):
         hidden_states = model(input_ids, positions, None)
         logits = model.compute_logits(hidden_states)
@@ -1531,11 +1531,11 @@ def test_quark_fp8_w_per_channel_a_per_token(monkeypatch, dist_init, workspace_i
 
 def test_quark_int8_w_per_tensor_a_per_tensor(monkeypatch, dist_init, workspace_init):
     model_path = "amd/Llama-3.1-8B-Instruct-w-int8-a-int8-sym-test"
-    model, aphrodite_config = load_model_without_aphrodite_runner(
+    model, sonar_config = load_model_without_sonar_runner(
         model_path,
         model_config_kwargs={"hf_overrides": {"num_hidden_layers": 3}},
     )
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         qkv_proj = model.model.layers[0].self_attn.qkv_proj
         assert isinstance(qkv_proj.quant_method, QuarkLinearMethod)
         assert isinstance(qkv_proj.scheme, QuarkW8A8Int8)
@@ -1543,17 +1543,17 @@ def test_quark_int8_w_per_tensor_a_per_tensor(monkeypatch, dist_init, workspace_
         monkeypatch.setattr(Attention, "forward", lambda _, q, k, v: q.contiguous())
         input_ids = torch.tensor([1, 2, 3, 4], device=DEVICE_TYPE)
         positions = torch.arange(input_ids.numel(), device=DEVICE_TYPE)
-        with set_forward_context(None, aphrodite_config, num_tokens=input_ids.numel()):
+        with set_forward_context(None, sonar_config, num_tokens=input_ids.numel()):
             hidden_states = model(input_ids, positions, None)
             logits = model.compute_logits(hidden_states)
         assert torch.isfinite(logits).all()
 
 
 @pytest.mark.parametrize("tp", [1])
-def test_quark_int8_w8a8_moe(aphrodite_runner, tp):
+def test_quark_int8_w8a8_moe(sonar_runner, tp):
     """Test W8A8 INT8 MoE quantization with a tiny Qwen3 MoE model."""
     model_path = "amd/tiny-qwen3-moe-w8a8-int8"
-    with aphrodite_runner(
+    with sonar_runner(
         model_path,
         enforce_eager=True,
         tensor_parallel_size=tp,
@@ -1578,10 +1578,10 @@ def test_quark_int8_w8a8_moe(aphrodite_runner, tp):
 
 
 @pytest.mark.parametrize("tp", [1])
-def test_quark_fp8_w8a8_per_block_moe(aphrodite_runner, tp):
+def test_quark_fp8_w8a8_per_block_moe(sonar_runner, tp):
     """Test per-block (128x128) FP8 MoE quantization with a tiny Qwen3 MoE model."""
     model_path = "Adamji/tiny-qwen3-moe-fp8-per-block"
-    with aphrodite_runner(
+    with sonar_runner(
         model_path,
         enforce_eager=True,
         tensor_parallel_size=tp,
@@ -1620,15 +1620,15 @@ def test_quark_w4a8_fp8_moe(monkeypatch, dist_init, workspace_init):
 
     W4A8 dispatches through the AITER fused MoE kernel, so AITER must be on.
     """
-    monkeypatch.setenv("APHRODITE_ROCM_USE_AITER", "1")
-    monkeypatch.setenv("APHRODITE_ROCM_USE_AITER_MOE", "1")
+    monkeypatch.setenv("SONAR_ROCM_USE_AITER", "1")
+    monkeypatch.setenv("SONAR_ROCM_USE_AITER_MOE", "1")
     rocm_aiter_ops.refresh_env_variables()
 
     model_path = "amd/tiny-qwen3-moe-w4a8"
-    model, aphrodite_config = load_model_without_aphrodite_runner(
+    model, sonar_config = load_model_without_sonar_runner(
         model_path,
     )
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         moe = model.model.layers[0].mlp.experts
         assert isinstance(moe._quant_method, QuarkW4A8Fp8MoEMethod), (
             f"Expected QuarkW4A8Fp8MoEMethod, got {type(moe._quant_method)}"
@@ -1637,7 +1637,7 @@ def test_quark_w4a8_fp8_moe(monkeypatch, dist_init, workspace_init):
         monkeypatch.setattr(Attention, "forward", lambda _, q, k, v: q.contiguous())
         input_ids = torch.tensor([1, 2, 3, 4], device=DEVICE_TYPE)
         positions = torch.arange(input_ids.numel(), device=DEVICE_TYPE)
-        with set_forward_context(None, aphrodite_config, num_tokens=input_ids.numel()):
+        with set_forward_context(None, sonar_config, num_tokens=input_ids.numel()):
             hidden_states = model(input_ids, positions, None)
             logits = model.compute_logits(hidden_states)
         assert torch.isfinite(logits).all()
@@ -1648,7 +1648,7 @@ def test_quark_fp8_parity(dist_init, workspace_init):
     fp8_model_id = "amd-quark/llama-tiny-fp8-quant-method"
 
     def load_state_dict(model_id: str) -> dict[str, torch.Tensor]:
-        model, _ = load_model_without_aphrodite_runner(model_id)
+        model, _ = load_model_without_sonar_runner(model_id)
         return {k: v.cpu() for k, v in model.state_dict().items()}
 
     quark_state_dict = load_state_dict(quark_model_id)
@@ -2054,7 +2054,7 @@ def _glm5_block_fp8(out_dim: int, in_dim: int, block: int = 128):
 
 
 def test_glm5next_gate_up_proj_mapping_is_genuine_fusion():
-    from aphrodite.models.glm5next.common.model import Glm5NextForConditionalGeneration
+    from sonar.models.glm5next.common.model import Glm5NextForConditionalGeneration
 
     mapping = Glm5NextForConditionalGeneration.packed_modules_mapping
     assert mapping["gate_up_proj"] == ["gate_proj", "up_proj"]
@@ -2073,7 +2073,7 @@ def test_glm5next_attn_loader_accepts_quark_weight_scale():
     # Regression for KeyError on '...kv_a_proj_with_mqa.weight_scale': the fused
     # q_a/kv_a projection is kept BF16 and dequantized on load; the Quark scale
     # name must be recognized and routed to the correct fused shard.
-    from aphrodite.models.glm5next.common.model import (
+    from sonar.models.glm5next.common.model import (
         _dequant_fp8_block,
         _try_load_fp8_attn_proj,
     )
@@ -2109,7 +2109,7 @@ def test_glm5next_attn_loader_accepts_quark_weight_scale():
 
 def test_glm5next_attn_loader_accepts_deepseek_weight_scale_inv():
     # DeepSeek scale name keeps working unchanged.
-    from aphrodite.models.glm5next.common.model import (
+    from sonar.models.glm5next.common.model import (
         _dequant_fp8_block,
         _try_load_fp8_attn_proj,
     )
@@ -2258,7 +2258,7 @@ class TestQuarkInt4Format:
 
     @pytest.mark.parametrize("missing_field", ["group_size", "symmetric"])
     def test_quark_int4_scheme_requires_weight_config_fields(self, missing_field):
-        from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+        from sonar.model_executor.layers.quantization.utils.quant_utils import (
             kInt4Static,
         )
 
@@ -2288,7 +2288,7 @@ class TestQuarkInt4Format:
     def test_quark_int4_moe_uses_native_moe_method(self):
         from unittest.mock import MagicMock, patch
 
-        from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+        from sonar.model_executor.layers.quantization.utils.quant_utils import (
             kInt4StaticAsym,
         )
 
@@ -2299,7 +2299,7 @@ class TestQuarkInt4Format:
         mock_backend = MagicMock()
         mock_experts_cls = MagicMock()
         with patch(
-            "aphrodite.model_executor.layers.quantization.quark.quark_moe.select_wna16_moe_backend",
+            "sonar.model_executor.layers.quantization.quark.quark_moe.select_wna16_moe_backend",
             return_value=(mock_backend, mock_experts_cls),
         ):
             method = QuarkW4A16Int4MoEMethod(
@@ -2315,10 +2315,10 @@ class TestQuarkInt4Format:
         assert method.use_wna16_backend
 
     def test_triton_wna16_experts_supports_asymmetric_int4(self):
-        from aphrodite.model_executor.layers.fused_moe.experts.triton_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.triton_moe import (
             TritonWNA16Experts,
         )
-        from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+        from sonar.model_executor.layers.quantization.utils.quant_utils import (
             kInt4Static,
             kInt4Static32,
             kInt4Static32Asym,
@@ -2355,14 +2355,14 @@ class TestQuarkInt4Format:
         def load_w2_zero_point(raw_zp, tp_size, tp_rank):
             from unittest.mock import MagicMock, patch
 
-            from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+            from sonar.model_executor.layers.quantization.utils.quant_utils import (
                 kInt4StaticAsym,
             )
 
             quant_config = QuarkConfig.from_config(_quark_int4_config(symmetric=False))
             moe_config = _FakeMoEConfig(tp_size, tp_rank)
             with patch(
-                "aphrodite.model_executor.layers.quantization.quark.quark_moe.select_wna16_moe_backend",
+                "sonar.model_executor.layers.quantization.quark.quark_moe.select_wna16_moe_backend",
                 return_value=(MagicMock(), MagicMock()),
             ):
                 method = QuarkW4A16Int4MoEMethod(
@@ -2446,7 +2446,7 @@ class TestQuarkInt4Format:
                 },
             }
         )
-        quant_config.apply_aphrodite_mapper(
+        quant_config.apply_sonar_mapper(
             WeightsMapper(
                 orig_to_new_prefix={
                     "lm_head": "language_model.lm_head",
@@ -2469,7 +2469,7 @@ class TestQuarkInt4Format:
                 "algo_config": [{"name": "qronos", "inside_layer_modules": ["self_attn.q_proj"]}],
             }
         )
-        quant_config.apply_aphrodite_mapper(WeightsMapper())
+        quant_config.apply_sonar_mapper(WeightsMapper())
 
         assert quant_config.quant_config["algo_config"] == [
             {"name": "qronos", "inside_layer_modules": ["self_attn.q_proj"]}
@@ -2477,7 +2477,7 @@ class TestQuarkInt4Format:
 
     def test_quark_exclude_matches_via_mapper_prefix(self):
         quant_config = QuarkConfig.from_config(_quark_int4_config(exclude=["lm_head"]))
-        quant_config.apply_aphrodite_mapper(WeightsMapper(orig_to_new_prefix={"lm_head": "language_model.lm_head"}))
+        quant_config.apply_sonar_mapper(WeightsMapper(orig_to_new_prefix={"lm_head": "language_model.lm_head"}))
 
         exclude_layers = quant_config.quant_config["exclude"]
         assert should_ignore_layer("language_model.lm_head", ignore=exclude_layers)
@@ -2600,8 +2600,8 @@ def test_quark_override_delegates_to_quark_config(quant_config_cls, hf_quant_cfg
     if quant_config_cls == "deepseek_v41":
         # Module was renamed from deepseek_v4_1 to deepseek_v41 upstream.
         for mod_name in (
-            "aphrodite.models.deepseek_v41.quant_config",
-            "aphrodite.models.deepseek_v4_1.quant_config",
+            "sonar.models.deepseek_v41.quant_config",
+            "sonar.models.deepseek_v4_1.quant_config",
         ):
             try:
                 mod = importlib.import_module(mod_name)
@@ -2612,7 +2612,7 @@ def test_quark_override_delegates_to_quark_config(quant_config_cls, hf_quant_cfg
             pytest.skip("deepseek_v41 quant_config not found")
         model_type = "deepseek_v41"
     else:
-        mod = importlib.import_module("aphrodite.models.deepseek_v4.quant_config")
+        mod = importlib.import_module("sonar.models.deepseek_v4.quant_config")
         model_type = "deepseek_v4"
 
     config_cls = mod.DeepseekV4FP8Config

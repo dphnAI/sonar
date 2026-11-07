@@ -22,27 +22,27 @@ from typing import Annotated
 import torch
 from torch import nn
 
-from aphrodite.distributed import get_tensor_model_parallel_world_size
-from aphrodite.model_executor.models.interfaces import (
+from sonar.distributed import get_tensor_model_parallel_world_size
+from sonar.model_executor.models.interfaces import (
     MultiModalEmbeddings,
     SupportsEagle3,
     SupportsEncoderCudaGraph,
     SupportsMultiModal,
     SupportsPP,
 )
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.models.utils import (
     AutoWeightsLoader,
     WeightsMapper,
     maybe_prefix,
 )
-from aphrodite.model_executor.models.vision import is_vit_use_data_parallel
-from aphrodite.models.deepseek_v4.common.vision import (
+from sonar.model_executor.models.vision import is_vit_use_data_parallel
+from sonar.models.deepseek_v4.common.vision import (
     DeepseekV4Aligner,
     DeepseekV4ViT,
     run_dp_sharded_vision_tower,
 )
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.utils.tensor_schema import TensorSchema, TensorShape
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.utils.tensor_schema import TensorSchema, TensorShape
 
 from ..common.mm_preprocess import (
     IMAGE_PLACEHOLDER,
@@ -134,14 +134,14 @@ class DeepseekV41ForCausalLM(
     # ``configure_quant_config``/``SupportsQuant``, before ``__init__`` runs,
     # to translate a quantization config's checkpoint-style module names into
     # runtime prefixes. ``__init__`` later overwrites the instance
-    # ``hf_to_aphrodite_mapper`` with the full weight-loading mapper; only the
+    # ``hf_to_sonar_mapper`` with the full weight-loading mapper; only the
     # prefix rules matter here. Without the class attributes, per-layer specs
     # naming ``layers.N.attn.wq_a`` never match this wrapper's
     # ``language_model.model.layers.N.attn.wq_a`` and silently fall back to
     # the global spec.
     packed_modules_mapping = DeepseekV41LLMForCausalLM.packed_modules_mapping
 
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix=dict(_VL_PREFIX_MAPPING),
         orig_to_new_substr={".shared_experts.w2": ".shared_experts.down_proj"},
     )
@@ -157,9 +157,9 @@ class DeepseekV41ForCausalLM(
             return IMAGE_PLACEHOLDER
         raise ValueError(f"Unsupported modality: {modality!r}")
 
-    def __init__(self, *, aphrodite_config, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config, prefix: str = "") -> None:
         super().__init__()
-        model_config = aphrodite_config.model_config
+        model_config = sonar_config.model_config
         config = model_config.hf_config
         self.config = config
         self.multimodal_config = model_config.multimodal_config
@@ -167,7 +167,7 @@ class DeepseekV41ForCausalLM(
 
         # The tower is always built; _mark_tower_model stubs it out
         # (StageMissingLayer, weights skipped) when the image limit is 0.
-        with self._mark_tower_model(aphrodite_config, {"image"}):
+        with self._mark_tower_model(sonar_config, {"image"}):
             self.use_data_parallel = is_vit_use_data_parallel(config.vision_n_heads)
             self.vision = DeepseekV4ViT(config)
             self.aligner = DeepseekV4Aligner(config)
@@ -177,9 +177,9 @@ class DeepseekV41ForCausalLM(
             self.vision.to(dtype=model_config.dtype)
             self.aligner.to(dtype=model_config.dtype)
 
-        with self._mark_language_model(aphrodite_config):
+        with self._mark_language_model(sonar_config):
             self.language_model = DeepseekV41LLMForCausalLM(
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 prefix=maybe_prefix(prefix, "language_model"),
             )
         # The outer mapper (see load_weights) fully resolves HF names into
@@ -188,14 +188,14 @@ class DeepseekV41ForCausalLM(
         # so the child's own mapper must be a no-op. Its suffix rules are not
         # idempotent (e.g. "lm_head.weight".endswith("head.weight") would
         # re-fire "head.weight" -> "lm_head.weight").
-        self.language_model.hf_to_aphrodite_mapper = WeightsMapper()
+        self.language_model.hf_to_sonar_mapper = WeightsMapper()
         self.make_empty_intermediate_tensors = (  # type: ignore[method-assign]
             self.language_model.make_empty_intermediate_tensors
         )
 
         expert_dtype = getattr(config, "expert_dtype", "fp4")
-        self.hf_to_aphrodite_mapper = _make_deepseek_v4_vl_weights_mapper(
-            expert_dtype, _linear_scale_param_name(aphrodite_config, expert_dtype)
+        self.hf_to_sonar_mapper = _make_deepseek_v4_vl_weights_mapper(
+            expert_dtype, _linear_scale_param_name(sonar_config, expert_dtype)
         )
 
     def _parse_and_validate_image_input(self, **kwargs: object) -> DeepseekV4VLImagePixelInputs | None:
@@ -256,7 +256,7 @@ class DeepseekV41ForCausalLM(
         *,
         is_multimodal: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        from aphrodite.model_executor.models.utils import _merge_multimodal_embeddings
+        from sonar.model_executor.models.utils import _merge_multimodal_embeddings
 
         inputs_embeds = self.language_model.embed_input_ids(input_ids)
 
@@ -316,7 +316,7 @@ class DeepseekV41ForCausalLM(
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(self.hf_to_aphrodite_mapper.apply(weights))
+        return loader.load_weights(self.hf_to_sonar_mapper.apply(weights))
 
     def process_weights_after_loading(self) -> None:
         self.language_model.process_weights_after_loading()

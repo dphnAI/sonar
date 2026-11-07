@@ -2,8 +2,8 @@
 // SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
 use anyhow::{Context, Result};
-use aphrodite_mock_engine::Opt;
 use clap::Parser as _;
+use sonar_mock_engine::Opt;
 use tokio_util::sync::CancellationToken;
 use tracing::{Level, info};
 
@@ -36,6 +36,6 @@ fn main() -> Result<()> {
 
     runtime.block_on(async move {
         let shutdown = shutdown_signal();
-        aphrodite_mock_engine::run(opt, shutdown).await
+        sonar_mock_engine::run(opt, shutdown).await
     })
 }

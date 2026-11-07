@@ -3,7 +3,7 @@
 
 import numpy as np
 
-from aphrodite.lora.request import LoRARequest
+from sonar.lora.request import LoRARequest
 
 NO_LORA_ID = 0
 

@@ -2,24 +2,24 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 from typing import TYPE_CHECKING, Any
 
-from aphrodite.config.speculative import (
+from sonar.config.speculative import (
     _MINIMAX_M3_MODEL_TYPES,
     _QWEN3_OMNI_DSPARK_ARCHITECTURE,
     _get_minimax_m3_dspark_draft,
     _validate_qwen3_omni_dspark,
 )
-from aphrodite.v1.worker.gpu.spec_decode.dflash.config import DFlashSpeculatorConfig
-from aphrodite.v1.worker.gpu.spec_decode.eagle.config import (
+from sonar.v1.worker.gpu.spec_decode.dflash.config import DFlashSpeculatorConfig
+from sonar.v1.worker.gpu.spec_decode.eagle.config import (
     check_draft_lm_head_quantization,
 )
 
 if TYPE_CHECKING:
-    from aphrodite.config import ParallelConfig, SpeculativeConfig
+    from sonar.config import ParallelConfig, SpeculativeConfig
 
 
 class DSparkSpeculatorConfig(DFlashSpeculatorConfig):
     base_method = "dspark"
-    speculator_class = "aphrodite.v1.worker.gpu.spec_decode.dspark.speculator.DSparkSpeculator"
+    speculator_class = "sonar.v1.worker.gpu.spec_decode.dspark.speculator.DSparkSpeculator"
     supported_options = frozenset({"dspark_draft_topk", "draft_lm_head_quantization"})
     uses_separate_workspace_lane = True
     # DSpark predicts acceptance with its own confidence head.

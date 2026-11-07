@@ -5,14 +5,14 @@ from typing import Any
 
 from fastapi import Request
 
-from aphrodite.entrypoints.openai.decisions.question_types import (
+from sonar.entrypoints.openai.decisions.question_types import (
     Question,
     StructuredDecisionError,
     build_question,
 )
-from aphrodite.entrypoints.openai.decisions.serving import BaseServingDecisions
-from aphrodite.entrypoints.openai.decisions.strategies import DecisionLimits
-from aphrodite.entrypoints.serve.engine.protocol import ErrorResponse
+from sonar.entrypoints.openai.decisions.serving import BaseServingDecisions
+from sonar.entrypoints.openai.decisions.strategies import DecisionLimits
+from sonar.entrypoints.serve.engine.protocol import ErrorResponse
 
 from .protocol import (
     DecisionUsage,

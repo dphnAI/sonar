@@ -18,18 +18,18 @@ import torch
 from transformers import DeepseekV4Config
 from typing_extensions import TypedDict
 
-from aphrodite.models.deepseek_v4.common.ops.cache_utils import (
+from sonar.models.deepseek_v4.common.ops.cache_utils import (
     build_flashinfer_mixed_sparse_indices,
     combine_topk_swa_indices,
 )
-from aphrodite.v1.attention.backend import CommonAttentionMetadata
-from aphrodite.v1.attention.backends.mla.sparse_swa import (
+from sonar.v1.attention.backend import CommonAttentionMetadata
+from sonar.v1.attention.backends.mla.sparse_swa import (
     DeepseekSparseSWAMetadataBuilder,
     _compute_image_visibility_kernel,
     _compute_swa_indices_and_lens_kernel,
 )
-from aphrodite.v1.kv_cache_interface import SlidingWindowMLASpec
-from tests.v1.attention.utils import create_aphrodite_config
+from sonar.v1.kv_cache_interface import SlidingWindowMLASpec
+from tests.v1.attention.utils import create_sonar_config
 
 WINDOW = 8
 MAX_IMG = 6
@@ -400,7 +400,7 @@ def test_combine_topk_swa_with_image_spans(cfg):
 def test_v41_combine_topk_swa_stops_at_replay_start(cfg, query_len):
     """SWA bounded replay: the gathered buffer starts at replay_start, so the
     window never indexes below it."""
-    from aphrodite.models.deepseek_v41.common.ops.cache_utils import (
+    from sonar.models.deepseek_v41.common.ops.cache_utils import (
         combine_topk_swa_indices as combine_v41,
     )
 
@@ -500,7 +500,7 @@ def make_builder(
     bounded_replay: bool = False,
 ) -> DeepseekSparseSWAMetadataBuilder:
     vision_fields = dict(vision_n_layers=2, vision_max_n_token=max_image_tokens)
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         model_name=model_name,
         max_model_len=4096,
         max_num_batched_tokens=max_num_batched_tokens,
@@ -509,7 +509,7 @@ def make_builder(
     )
     if vision and deepseek_v4_config:
         # Only V4 configs widen the SWA window in-kernel over image spans
-        aphrodite_config.model_config.hf_config = DeepseekV4Config(
+        sonar_config.model_config.hf_config = DeepseekV4Config(
             num_hidden_layers=1,
             layer_types=["sliding_attention"],
             sliding_window=window,
@@ -528,7 +528,7 @@ def make_builder(
     return builder_cls(
         kv_cache_spec=spec,
         layer_names=["layer0"],
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         device=torch.device("cuda"),
     )
 
@@ -624,10 +624,10 @@ def test_builder_text_model_unchanged():
 @pytest.mark.parametrize("query_len", [100, 4000])
 def test_v41_image_prefill_uses_causal_swa(compress_ratio, query_len):
     """V4.1 image tokens use the same causal SWA as text, including in chunks."""
-    from aphrodite.models.deepseek_v41.common.ops.cache_utils import (
+    from sonar.models.deepseek_v41.common.ops.cache_utils import (
         combine_topk_swa_indices as combine_v41,
     )
-    from aphrodite.models.deepseek_v41.sparse_mla import DeepseekV41SparseSWAMetadataBuilder
+    from sonar.models.deepseek_v41.sparse_mla import DeepseekV41SparseSWAMetadataBuilder
 
     seq_len, window, max_image_tokens = 4000, 128, 2048
     spans = [(1900, 3947)]
@@ -726,7 +726,7 @@ def test_builder_replaying_group_builds_without_replay_start():
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
 def test_v41_flashinfer_mixed_sparse_indices_respect_replay_start():
-    from aphrodite.models.deepseek_v41.common.ops.cache_utils import (
+    from sonar.models.deepseek_v41.common.ops.cache_utils import (
         build_flashinfer_mixed_sparse_indices as build_v41,
     )
 
@@ -779,7 +779,7 @@ def test_v41_flashinfer_mixed_sparse_indices_respect_replay_start():
 def test_dspark_noncausal_draft_decode_update_matches_build():
     """A DSpark draft graph refreshes its non-causal SWA metadata in place
     instead of rebuilding it, so the refresh must match a fresh build."""
-    from aphrodite.v1.attention.backends.mla.compressor_utils import (
+    from sonar.v1.attention.backends.mla.compressor_utils import (
         get_dspark_swa_index_width,
     )
 
@@ -836,7 +836,7 @@ class _StubLinear(torch.nn.Module):
 
 
 def _prefix_replay_attention_cls():
-    from aphrodite.models.deepseek_v41.attention import DeepseekV4Attention
+    from sonar.models.deepseek_v41.attention import DeepseekV4Attention
 
     class _Backend:
         @staticmethod
@@ -885,11 +885,11 @@ def test_prefix_cache_replays_the_swa_window(monkeypatch, is_rocm, cdna, flag, r
     The replay_start clamp used by the gather kernels is covered by
     test_builder_replay_start_bounds_prefill_window_and_gather.
     """
-    from aphrodite.config import set_current_aphrodite_config
-    from aphrodite.models.deepseek_v41 import attention as attn
-    from aphrodite.platforms import current_platform
+    from sonar.config import set_current_sonar_config
+    from sonar.models.deepseek_v41 import attention as attn
+    from sonar.platforms import current_platform
 
-    monkeypatch.setenv("APHRODITE_USE_V2_MODEL_RUNNER", "1")
+    monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", "1")
     monkeypatch.setattr(attn, "MergedColumnParallelLinear", _StubLinear)
     monkeypatch.setattr(attn, "ColumnParallelLinear", _StubLinear)
     monkeypatch.setattr(attn, "RowParallelLinear", _StubLinear)
@@ -899,15 +899,15 @@ def test_prefix_cache_replays_the_swa_window(monkeypatch, is_rocm, cdna, flag, r
     monkeypatch.setattr(torch.cuda, "Event", lambda *a, **k: object())
     monkeypatch.setattr(current_platform, "is_rocm", lambda: is_rocm)
     if is_rocm:
-        import aphrodite.platforms.rocm as rocm_platform
+        import sonar.platforms.rocm as rocm_platform
 
         monkeypatch.setattr(rocm_platform, "get_cdna_version", lambda: cdna)
 
     window = 128
-    aphrodite_config = create_aphrodite_config(max_model_len=256, max_num_seqs=4, max_num_batched_tokens=64)
-    aphrodite_config.cache_config.swa_bounded_replay = flag
-    assert aphrodite_config.cache_config.enable_prefix_caching
-    aphrodite_config.model_config.hf_config = DeepseekV4Config(
+    sonar_config = create_sonar_config(max_model_len=256, max_num_seqs=4, max_num_batched_tokens=64)
+    sonar_config.cache_config.swa_bounded_replay = flag
+    assert sonar_config.cache_config.enable_prefix_caching
+    sonar_config.model_config.hf_config = DeepseekV4Config(
         num_hidden_layers=1,
         hidden_size=128,
         num_attention_heads=8,
@@ -920,9 +920,9 @@ def test_prefix_cache_replays_the_swa_window(monkeypatch, is_rocm, cdna, flag, r
         compress_ratios=[0],
     )
     layer_cls = _prefix_replay_attention_cls()
-    with set_current_aphrodite_config(aphrodite_config):
-        layer = layer_cls(aphrodite_config, prefix="model.layers.0.self_attn")
-    spec = layer.swa_cache_layer.get_kv_cache_spec(aphrodite_config)
+    with set_current_sonar_config(sonar_config):
+        layer = layer_cls(sonar_config, prefix="model.layers.0.self_attn")
+    spec = layer.swa_cache_layer.get_kv_cache_spec(sonar_config)
     assert spec.bounded_replay is replays_window
     assert spec.prefix_cacheable is not replays_window
     assert spec.prefix_replay_tokens == (window if replays_window else 0)

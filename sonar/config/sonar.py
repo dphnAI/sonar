@@ -20,13 +20,13 @@ from typing import TYPE_CHECKING, Any, Literal, TypeVar, get_args
 import torch
 from pydantic import ConfigDict, Field, model_validator
 
-import aphrodite.envs as envs
-from aphrodite.logger import enable_trace_function_call, init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.transformers_utils.runai_utils import is_runai_obj_uri
-from aphrodite.triton_utils import HAS_TRITON
-from aphrodite.utils import random_uuid
-from aphrodite.utils.hashing import safe_hash
+import sonar.envs as envs
+from sonar.logger import enable_trace_function_call, init_logger
+from sonar.platforms import current_platform
+from sonar.transformers_utils.runai_utils import is_runai_obj_uri
+from sonar.triton_utils import HAS_TRITON
+from sonar.utils import random_uuid
+from sonar.utils.hashing import safe_hash
 
 from .attention import AttentionConfig, HiSparseConfig
 from .aux_output import AuxOutputConfig
@@ -62,9 +62,9 @@ from .weight_transfer import WeightTransferConfig
 if TYPE_CHECKING:
     from transformers import PreTrainedConfig
 
-    from aphrodite.model_executor.layers.quantization.base_config import QuantizationConfig
-    from aphrodite.sampling_params import BeamSearchParams, SamplingParams
-    from aphrodite.v1.kv_cache_interface import KVCacheGroupSpec
+    from sonar.model_executor.layers.quantization.base_config import QuantizationConfig
+    from sonar.sampling_params import BeamSearchParams, SamplingParams
+    from sonar.v1.kv_cache_interface import KVCacheGroupSpec
 else:
     PreTrainedConfig = Any
 
@@ -128,13 +128,13 @@ DEFAULT_BREAKABLE_CUDAGRAPH_ARCHITECTURES = frozenset(
 @lru_cache
 def default_breakable_cudagraph_architectures() -> frozenset[str]:
     """Architectures defaulting to breakable CUDA graphs on this platform."""
-    from aphrodite.platforms import current_platform
+    from sonar.platforms import current_platform
 
     if current_platform.is_rocm():
         # Breakable CUDA graphs currently regress performance on ROCm for
         # models that can use torch.compile piecewise graphs instead. Do not
         # opt those in by default. Users can still force them with
-        # APHRODITE_USE_BREAKABLE_CUDAGRAPH=1.
+        # SONAR_USE_BREAKABLE_CUDAGRAPH=1.
         #
         # DeepseekV41ForCausalLM cannot torch.compile, and the ROCm sparse
         # SWA backend only reports AttentionCGSupport.UNIFORM_BATCH. Default
@@ -174,7 +174,7 @@ IS_QUANTIZED = False
 # See https://github.com/vllm-project/vllm/issues/25689.
 
 
-def enable_norm_fusion(cfg: "AphroditeConfig") -> bool:
+def enable_norm_fusion(cfg: "SonarConfig") -> bool:
     """Enable if either RMS norm or quant FP8 custom op is active;
     otherwise Inductor handles fusion."""
     return (
@@ -184,7 +184,7 @@ def enable_norm_fusion(cfg: "AphroditeConfig") -> bool:
     )
 
 
-def enable_act_fusion(cfg: "AphroditeConfig") -> bool:
+def enable_act_fusion(cfg: "SonarConfig") -> bool:
     """Enable if either SiLU+Mul or quant FP8 custom op is active;
     otherwise Inductor handles fusion.
     Also enable for FP4 models as FP4 quant is always custom so Inductor cannot fuse it.
@@ -196,17 +196,17 @@ def enable_act_fusion(cfg: "AphroditeConfig") -> bool:
     )
 
 
-def enable_allreduce_rms_fusion(cfg: "AphroditeConfig") -> bool:
+def enable_allreduce_rms_fusion(cfg: "SonarConfig") -> bool:
     """Enable if TP > 1 and Hopper/Blackwell and flashinfer installed."""
-    from aphrodite.platforms import current_platform
-    from aphrodite.utils.flashinfer import has_flashinfer
+    from sonar.platforms import current_platform
+    from sonar.utils.flashinfer import has_flashinfer
 
     # The fused all-reduce + RMSNorm path is not batch-invariant
-    if envs.APHRODITE_BATCH_INVARIANT:
+    if envs.SONAR_BATCH_INVARIANT:
         return False
 
     if current_platform.is_rocm():
-        from aphrodite._aiter_ops import rocm_aiter_ops
+        from sonar._aiter_ops import rocm_aiter_ops
 
         return rocm_aiter_ops.is_enabled() and cfg.parallel_config.tensor_parallel_size > 1
 
@@ -218,11 +218,11 @@ def enable_allreduce_rms_fusion(cfg: "AphroditeConfig") -> bool:
     )
 
 
-def enable_rope_kvcache_fusion(cfg: "AphroditeConfig") -> bool:
+def enable_rope_kvcache_fusion(cfg: "SonarConfig") -> bool:
     """Enable if rotary embedding custom op is active and
     use_inductor_graph_partition is enabled.
     """
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     return (
         rocm_aiter_ops.is_enabled()
@@ -234,7 +234,7 @@ def enable_rope_kvcache_fusion(cfg: "AphroditeConfig") -> bool:
     )
 
 
-def enable_rope_kvcache_mla_fusion(cfg: "AphroditeConfig") -> bool:
+def enable_rope_kvcache_mla_fusion(cfg: "SonarConfig") -> bool:
     """Enable if use_inductor_graph_partition is enabled."""
     return (
         cfg.compilation_config.use_inductor_graph_partition
@@ -242,7 +242,7 @@ def enable_rope_kvcache_mla_fusion(cfg: "AphroditeConfig") -> bool:
     )
 
 
-def enable_norm_pad_fusion(cfg: "AphroditeConfig") -> bool:
+def enable_norm_pad_fusion(cfg: "SonarConfig") -> bool:
     """Enable if using AITER RMSNorm and hidden size is 2880 i.e. gpt-oss."""
     return (
         cfg.kernel_config.ir_op_priority.fused_add_rms_norm[0] == "aiter"
@@ -251,16 +251,16 @@ def enable_norm_pad_fusion(cfg: "AphroditeConfig") -> bool:
     )
 
 
-def enable_mla_dual_rms_norm_fusion(cfg: "AphroditeConfig") -> bool:
+def enable_mla_dual_rms_norm_fusion(cfg: "SonarConfig") -> bool:
     """Enable MLA dual RMS norm fusion on ROCm with AITER."""
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     return rocm_aiter_ops.is_enabled()
 
 
-def enable_qk_norm_rope_kvcache(cfg: "AphroditeConfig") -> bool:
+def enable_qk_norm_rope_kvcache(cfg: "SonarConfig") -> bool:
     """Enable fused QK-norm + RoPE/MRoPE + KV cache update with AITER."""
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     if not rocm_aiter_ops.is_enabled():
         return False
@@ -361,8 +361,8 @@ OPTIMIZATION_LEVEL_TO_CONFIG = {
 
 
 @config(config=ConfigDict(arbitrary_types_allowed=True))
-class AphroditeConfig:
-    """Dataclass which contains all aphrodite-related configuration. This
+class SonarConfig:
+    """Dataclass which contains all sonar-related configuration. This
     simplifies passing around the distinct configurations in the codebase.
     """
 
@@ -442,7 +442,7 @@ class AphroditeConfig:
     support different configs. Make sure the configs are valid for the platform
     you are using. Contents must be hashable."""
     instance_id: str = ""
-    """The ID of the Aphrodite instance."""
+    """The ID of the Sonar instance."""
     optimization_level: OptimizationLevel = OptimizationLevel.O2
     """The optimization level. These levels trade startup time cost for
     performance, with -O0 having the best startup time and -O3 having the best
@@ -480,90 +480,90 @@ class AphroditeConfig:
         the final hidden states.
 
         Args:
-            include_version: Include the Aphrodite version in the hash.
+            include_version: Include the Sonar version in the hash.
 
         """
         factors: list[Any] = []
 
-        # summarize aphrodite config
-        aphrodite_factors: list[Any] = []
+        # summarize sonar config
+        sonar_factors: list[Any] = []
         if include_version:
-            from aphrodite import __version__
+            from sonar import __version__
 
-            aphrodite_factors.append(__version__)
+            sonar_factors.append(__version__)
         if self.model_config:
-            aphrodite_factors.append(self.model_config.compute_hash())
+            sonar_factors.append(self.model_config.compute_hash())
             if (
                 self.compilation_config
                 and getattr(self.compilation_config, "compile_mm_encoder", False)
                 and self.model_config.multimodal_config
             ):
-                aphrodite_factors.append(self.model_config.multimodal_config.compute_hash())
+                sonar_factors.append(self.model_config.multimodal_config.compute_hash())
         else:
-            aphrodite_factors.append("None")
+            sonar_factors.append("None")
         if self.cache_config:
-            aphrodite_factors.append(self.cache_config.compute_hash())
+            sonar_factors.append(self.cache_config.compute_hash())
         else:
-            aphrodite_factors.append("None")
+            sonar_factors.append("None")
         if self.parallel_config:
-            aphrodite_factors.append(self.parallel_config.compute_hash())
+            sonar_factors.append(self.parallel_config.compute_hash())
         else:
-            aphrodite_factors.append("None")
+            sonar_factors.append("None")
         if self.scheduler_config:
-            aphrodite_factors.append(self.scheduler_config.compute_hash())
+            sonar_factors.append(self.scheduler_config.compute_hash())
         else:
-            aphrodite_factors.append("None")
+            sonar_factors.append("None")
         if self.device_config:
-            aphrodite_factors.append(self.device_config.compute_hash())
+            sonar_factors.append(self.device_config.compute_hash())
         else:
-            aphrodite_factors.append("None")
+            sonar_factors.append("None")
         if self.load_config:
-            aphrodite_factors.append(self.load_config.compute_hash())
+            sonar_factors.append(self.load_config.compute_hash())
         else:
-            aphrodite_factors.append("None")
+            sonar_factors.append("None")
         if self.offload_config:
-            aphrodite_factors.append(self.offload_config.compute_hash())
+            sonar_factors.append(self.offload_config.compute_hash())
         else:
-            aphrodite_factors.append("None")
+            sonar_factors.append("None")
         if self.attention_config:
-            aphrodite_factors.append(self.attention_config.compute_hash())
+            sonar_factors.append(self.attention_config.compute_hash())
         else:
-            aphrodite_factors.append("None")
-        aphrodite_factors.append(self.engram_config.compute_hash() if self.engram_config is not None else "None")
+            sonar_factors.append("None")
+        sonar_factors.append(self.engram_config.compute_hash() if self.engram_config is not None else "None")
         if self.lora_config:
-            aphrodite_factors.append(self.lora_config.compute_hash())
+            sonar_factors.append(self.lora_config.compute_hash())
         else:
-            aphrodite_factors.append("None")
+            sonar_factors.append("None")
         if self.speculative_config:
-            aphrodite_factors.append(self.speculative_config.compute_hash())
+            sonar_factors.append(self.speculative_config.compute_hash())
         else:
-            aphrodite_factors.append("None")
+            sonar_factors.append("None")
         if self.structured_outputs_config:
-            aphrodite_factors.append(self.structured_outputs_config.compute_hash())
+            sonar_factors.append(self.structured_outputs_config.compute_hash())
         if self.profiler_config:
-            aphrodite_factors.append(self.profiler_config.compute_hash())
+            sonar_factors.append(self.profiler_config.compute_hash())
         else:
-            aphrodite_factors.append("None")
-        aphrodite_factors.append(self.observability_config.compute_hash())
+            sonar_factors.append("None")
+        sonar_factors.append(self.observability_config.compute_hash())
         if self.quant_config:
             pass  # should be captured by model_config.quantization
         if self.compilation_config:
-            aphrodite_factors.append(self.compilation_config.compute_hash())
+            sonar_factors.append(self.compilation_config.compute_hash())
         else:
-            aphrodite_factors.append("None")
+            sonar_factors.append("None")
         if self.kernel_config:
-            aphrodite_factors.append(self.kernel_config.compute_hash())
+            sonar_factors.append(self.kernel_config.compute_hash())
         else:
-            aphrodite_factors.append(None)
+            sonar_factors.append(None)
         if self.kv_transfer_config:
-            aphrodite_factors.append(self.kv_transfer_config.compute_hash())
+            sonar_factors.append(self.kv_transfer_config.compute_hash())
         else:
-            aphrodite_factors.append("None")
+            sonar_factors.append("None")
         if self.ec_transfer_config:
-            aphrodite_factors.append(self.ec_transfer_config.compute_hash())
+            sonar_factors.append(self.ec_transfer_config.compute_hash())
         else:
-            aphrodite_factors.append("None")
-        aphrodite_factors.append(self.aux_output_config.compute_hash())
+            sonar_factors.append("None")
+        sonar_factors.append(self.aux_output_config.compute_hash())
         if self.additional_config:
             if isinstance(additional_config := self.additional_config, dict):
                 additional_config_hash = safe_hash(
@@ -572,10 +572,10 @@ class AphroditeConfig:
                 ).hexdigest()
             else:
                 additional_config_hash = additional_config.compute_hash()
-            aphrodite_factors.append(additional_config_hash)
+            sonar_factors.append(additional_config_hash)
         else:
-            aphrodite_factors.append("None")
-        factors.append(aphrodite_factors)
+            sonar_factors.append("None")
+        factors.append(sonar_factors)
 
         hash_str = safe_hash(str(factors).encode(), usedforsecurity=False).hexdigest()[:10]
         return hash_str
@@ -689,7 +689,7 @@ class AphroditeConfig:
     @property
     def use_cumem_cudagraph_pool(self) -> bool:
         """Whether CUDA graphs go to the cuMem pool that sleep offloads."""
-        from aphrodite.platforms import current_platform
+        from sonar.platforms import current_platform
 
         model_config = self.model_config
         return (
@@ -703,7 +703,7 @@ class AphroditeConfig:
 
     @property
     def use_v2_model_runner(self) -> bool:
-        use_v2_model_runner = envs.APHRODITE_USE_V2_MODEL_RUNNER
+        use_v2_model_runner = envs.SONAR_USE_V2_MODEL_RUNNER
         if use_v2_model_runner is not None:
             return use_v2_model_runner
 
@@ -775,12 +775,12 @@ class AphroditeConfig:
         """Avoid freezing runtime-M tile lookup in compiled forward (#54243).
         Breakable graphs look up tuned bf16, unquantized qkv/o/gate_up/down tiles
         at capture; lm_head runs outside compiled forward and does not benefit."""
-        from aphrodite.model_executor.determinism import batch_invariant_configs as bi
-        from aphrodite.platforms import current_platform
+        from sonar.model_executor.determinism import batch_invariant_configs as bi
+        from sonar.platforms import current_platform
 
         model = self.model_config
         if (
-            not envs.APHRODITE_BATCH_INVARIANT
+            not envs.SONAR_BATCH_INVARIANT
             or model is None
             or model.enforce_eager
             or model.dtype != torch.bfloat16
@@ -806,23 +806,23 @@ class AphroditeConfig:
         return any(shape in table for shape in shapes)
 
     def _maybe_enable_breakable_cudagraph(self) -> bool:
-        if "APHRODITE_USE_BREAKABLE_CUDAGRAPH" not in os.environ and self._uses_breakable_cudagraph_by_default():
-            os.environ["APHRODITE_USE_BREAKABLE_CUDAGRAPH"] = "1"
+        if "SONAR_USE_BREAKABLE_CUDAGRAPH" not in os.environ and self._uses_breakable_cudagraph_by_default():
+            os.environ["SONAR_USE_BREAKABLE_CUDAGRAPH"] = "1"
             logger.info_once(
-                "Auto-enabling APHRODITE_USE_BREAKABLE_CUDAGRAPH=1. Set APHRODITE_USE_BREAKABLE_CUDAGRAPH=0 to opt out."
+                "Auto-enabling SONAR_USE_BREAKABLE_CUDAGRAPH=1. Set SONAR_USE_BREAKABLE_CUDAGRAPH=0 to opt out."
             )
         elif (
-            "APHRODITE_USE_BREAKABLE_CUDAGRAPH" not in os.environ
-            and envs.APHRODITE_BATCH_INVARIANT
+            "SONAR_USE_BREAKABLE_CUDAGRAPH" not in os.environ
+            and envs.SONAR_BATCH_INVARIANT
             and self._uses_breakable_cudagraph_for_batch_invariance()
         ):
-            os.environ["APHRODITE_USE_BREAKABLE_CUDAGRAPH"] = "1"
+            os.environ["SONAR_USE_BREAKABLE_CUDAGRAPH"] = "1"
             logger.info_once(
-                "APHRODITE_BATCH_INVARIANT=1: auto-enabling APHRODITE_USE_BREAKABLE_CUDAGRAPH=1. "
-                "Set APHRODITE_USE_BREAKABLE_CUDAGRAPH=0 to opt out."
+                "SONAR_BATCH_INVARIANT=1: auto-enabling SONAR_USE_BREAKABLE_CUDAGRAPH=1. "
+                "Set SONAR_USE_BREAKABLE_CUDAGRAPH=0 to opt out."
             )
 
-        from aphrodite.compilation.breakable_cudagraph import (
+        from sonar.compilation.breakable_cudagraph import (
             is_breakable_cudagraph_enabled,
         )
 
@@ -853,20 +853,19 @@ class AphroditeConfig:
 
     def enable_trace_function_call_for_thread(self) -> None:
         """Set up function tracing for the current thread,
-        if enabled via the `APHRODITE_TRACE_FUNCTION` environment variable.
+        if enabled via the `SONAR_TRACE_FUNCTION` environment variable.
         """
-        if envs.APHRODITE_TRACE_FUNCTION:
+        if envs.SONAR_TRACE_FUNCTION:
             tmp_dir = tempfile.gettempdir()
             # add username to tmp_dir to avoid permission issues
             tmp_dir = os.path.join(tmp_dir, getpass.getuser())
             filename = (
-                f"APHRODITE_TRACE_FUNCTION_for_process_{os.getpid()}"
-                f"_thread_{threading.get_ident()}_at_{datetime.now()}.log"
+                f"SONAR_TRACE_FUNCTION_for_process_{os.getpid()}_thread_{threading.get_ident()}_at_{datetime.now()}.log"
             ).replace(" ", "_")
             log_path = os.path.join(
                 tmp_dir,
-                "aphrodite",
-                f"aphrodite-instance-{self.instance_id}",
+                "sonar",
+                f"sonar-instance-{self.instance_id}",
                 filename,
             )
             os.makedirs(os.path.dirname(log_path), exist_ok=True)
@@ -875,10 +874,10 @@ class AphroditeConfig:
     @staticmethod
     def _get_quantization_config(model_config: ModelConfig, load_config: LoadConfig) -> QuantizationConfig | None:
         """Get the quantization config."""
-        from aphrodite.platforms import current_platform
+        from sonar.platforms import current_platform
 
         if model_config.quantization is not None:
-            from aphrodite.model_executor.model_loader.weight_utils import get_quant_config
+            from sonar.model_executor.model_loader.weight_utils import get_quant_config
 
             quant_config = get_quant_config(model_config, load_config)
             capability_tuple = current_platform.get_device_capability()
@@ -913,13 +912,13 @@ class AphroditeConfig:
 
         # For some reason, the _ version of this modifies the model_config
         # object, so using deepcopy to avoid this problem.
-        return AphroditeConfig._get_quantization_config(copy.deepcopy(model_config), load_config)
+        return SonarConfig._get_quantization_config(copy.deepcopy(model_config), load_config)
 
     def with_hf_config(
         self,
         hf_config: PreTrainedConfig,
         architectures: list[str] | None = None,
-    ) -> "AphroditeConfig":
+    ) -> "SonarConfig":
         if architectures is not None:
             hf_config = copy.deepcopy(hf_config)
             hf_config.architectures = architectures
@@ -946,7 +945,7 @@ class AphroditeConfig:
         #   self.lm_head = nn.Linear()
         #
         # Therefore, tie_word_embeddings is defined in SomeVLConfig and is not present
-        # in SomeVLTextConfig*. In Aphrodite, the lm_head belongs to the language_model, so
+        # in SomeVLTextConfig*. In Sonar, the lm_head belongs to the language_model, so
         # we must ensure that tie_word_embeddings is set in the language_model's config.
         #
         # *For some models, SomeVLTextConfig may also have a tie_word_embeddings field.
@@ -1029,7 +1028,7 @@ class AphroditeConfig:
         logger.warning_once(
             "Dynamic speculative decoding changes the target verification "
             "length at runtime. Overriding cudagraph_mode from %s to "
-            "PIECEWISE for reliability. Use APHRODITE_USE_V2_MODEL_RUNNER=1 "
+            "PIECEWISE for reliability. Use SONAR_USE_V2_MODEL_RUNNER=1 "
             "if you want to use full CUDA graphs.",
             self.compilation_config.cudagraph_mode.name,
         )
@@ -1079,7 +1078,7 @@ class AphroditeConfig:
         compilation_config = self.compilation_config
         if (
             compilation_config.cudagraph_mode.requires_piecewise_compilation()
-            and compilation_config.mode != CompilationMode.APHRODITE_COMPILE
+            and compilation_config.mode != CompilationMode.SONAR_COMPILE
             and not breakable_cudagraph_enabled
         ):
             fallback_mode = compilation_config.cudagraph_mode.without_piecewise()
@@ -1095,7 +1094,7 @@ class AphroditeConfig:
                 compilation_config.cudagraph_capture_sizes = []
 
     def _post_init_kv_transfer_config(self) -> None:
-        """Update KVTransferConfig based on top-level configs in AphroditeConfig.
+        """Update KVTransferConfig based on top-level configs in SonarConfig.
 
         Right now, this function reads the offloading settings from
         CacheConfig and configures the KVTransferConfig accordingly.
@@ -1111,7 +1110,7 @@ class AphroditeConfig:
             self.kv_transfer_config = KVTransferConfig()
 
         if kv_offloading_backend == "native":
-            if envs.APHRODITE_USE_SIMPLE_KV_OFFLOAD:
+            if envs.SONAR_USE_SIMPLE_KV_OFFLOAD:
                 config_connector = "SimpleCPUOffloadConnector"
             else:
                 config_connector = "OffloadingConnector"
@@ -1134,13 +1133,13 @@ class AphroditeConfig:
         """Reject configurations unsupported by enabled auxiliary outputs."""
         if not self.aux_output_config.enabled:
             return
-        from aphrodite.platforms import current_platform
+        from sonar.platforms import current_platform
 
         # In-tree platforms only wire AuxOutput to MRV2. TPU and out-of-tree
         # platforms bring their own model runners and validate AuxOutput
         # support themselves.
         if not self.use_v2_model_runner and not (current_platform.is_tpu() or current_platform.is_out_of_tree()):
-            raise ValueError("AuxOutput Connector requires Model Runner V2; set APHRODITE_USE_V2_MODEL_RUNNER=1.")
+            raise ValueError("AuxOutput Connector requires Model Runner V2; set SONAR_USE_V2_MODEL_RUNNER=1.")
         if self.model_config.runner_type != "generate":
             raise ValueError("AuxOutput Connector only supports generate runners.")
         if not self.model_config.is_moe:
@@ -1176,9 +1175,9 @@ class AphroditeConfig:
         """Reject configurations that direct weight reload cannot support."""
         # not `direct_reload_enabled()`: importing it would load the model
         # loaders into every process that builds a config
-        if envs.APHRODITE_RELOAD_MODE != "direct":
+        if envs.SONAR_RELOAD_MODE != "direct":
             return
-        from aphrodite.model_executor.layers.quantization.online.base import (
+        from sonar.model_executor.layers.quantization.online.base import (
             OnlineQuantizationConfig,
         )
 
@@ -1216,7 +1215,7 @@ class AphroditeConfig:
             # its replay plan is baked by a layerwise (meta) dry run
             raise ValueError(
                 "Direct reload does not support the sharded_rdt weight-transfer "
-                "backend. Use APHRODITE_RELOAD_MODE=layerwise or another backend."
+                "backend. Use SONAR_RELOAD_MODE=layerwise or another backend."
             )
 
     def _verify_kv_transfer_compat(self) -> None:
@@ -1226,7 +1225,7 @@ class AphroditeConfig:
 
         if self.model_config is not None and self.model_config.enable_sleep_mode:
             # Lazy import to avoid circular dependencies
-            from aphrodite.distributed.kv_transfer.kv_connector.factory import (
+            from sonar.distributed.kv_transfer.kv_connector.factory import (
                 KVConnectorFactory,
             )
 
@@ -1362,7 +1361,7 @@ class AphroditeConfig:
         if config.watermarking is False:
             return False
 
-        from aphrodite.sampling_params import BeamSearchParams, SamplingParams
+        from sonar.sampling_params import BeamSearchParams, SamplingParams
 
         if isinstance(config, BeamSearchParams):
             logger.warning_once(
@@ -1439,7 +1438,7 @@ class AphroditeConfig:
         self.instance_id = f"{time.time_ns()}"
 
         if self.dphn_network_config is not None:
-            from aphrodite.proof import ensure_native_available
+            from sonar.proof import ensure_native_available
 
             ensure_native_available()
 
@@ -1530,10 +1529,10 @@ class AphroditeConfig:
             )
 
         if self.quant_config is None and self.model_config is not None:
-            self.quant_config = AphroditeConfig._get_quantization_config(self.model_config, self.load_config)
+            self.quant_config = SonarConfig._get_quantization_config(self.model_config, self.load_config)
         self._verify_direct_reload_compat()
 
-        # "dummy" reads no weights at all, and the sharded formats read a Aphrodite
+        # "dummy" reads no weights at all, and the sharded formats read a Sonar
         # state dict, which stores tied word embeddings under the lm_head only.
         # Neither can tell us what the original checkpoint contained.
         if self.model_config is not None and self.load_config.load_format not in (
@@ -1549,19 +1548,19 @@ class AphroditeConfig:
             and hasattr(self.quant_config, "use_deep_gemm")
             and self.quant_config.use_deep_gemm is None
         ):
-            from aphrodite.utils.deep_gemm import should_auto_disable_deep_gemm
+            from sonar.utils.deep_gemm import should_auto_disable_deep_gemm
 
             model_type = getattr(self.model_config.hf_text_config, "model_type", None)
             if should_auto_disable_deep_gemm(model_type):
                 self.quant_config.use_deep_gemm = False
                 logger.warning_once(
                     "Auto-disabled DeepGemm for model_type=%s on Blackwell. "
-                    "To disable DeepGemm globally, set APHRODITE_USE_DEEP_GEMM=0.",
+                    "To disable DeepGemm globally, set SONAR_USE_DEEP_GEMM=0.",
                     model_type,
                 )
 
-        from aphrodite.platforms import current_platform
-        from aphrodite.v1.executor.abstract import Executor
+        from sonar.platforms import current_platform
+        from sonar.v1.executor.abstract import Executor
 
         executor_backend = self.parallel_config.distributed_executor_backend
         executor_class = Executor.get_class(self)
@@ -1662,9 +1661,9 @@ class AphroditeConfig:
             self.model_config is not None
             and self.model_config.multimodal_config is not None
             and self.model_config.multimodal_config.mm_tensor_ipc == "torch_shm"
-            and os.environ.get("APHRODITE_WORKER_MULTIPROC_METHOD") != "spawn"
+            and os.environ.get("SONAR_WORKER_MULTIPROC_METHOD") != "spawn"
         ):
-            raise ValueError("torch_shm is known to fail without APHRODITE_WORKER_MULTIPROC_METHOD set to spawn")
+            raise ValueError("torch_shm is known to fail without SONAR_WORKER_MULTIPROC_METHOD set to spawn")
 
         if (
             self.model_config is not None
@@ -1674,7 +1673,7 @@ class AphroditeConfig:
         ):
             logger.warning_once(
                 "Turing devices tensor cores do not support float32 matmul. "
-                "To workaround this limitation, Aphrodite will set 'ieee' input "
+                "To workaround this limitation, Sonar will set 'ieee' input "
                 "precision for chunked prefill triton kernels."
             )
 
@@ -1710,7 +1709,7 @@ class AphroditeConfig:
             self.compilation_config.backend == "eager"
             or (
                 self.compilation_config.mode is not None
-                and self.compilation_config.mode != CompilationMode.APHRODITE_COMPILE
+                and self.compilation_config.mode != CompilationMode.SONAR_COMPILE
             )
         ):
             logger.warning_once(
@@ -1740,14 +1739,14 @@ class AphroditeConfig:
 
         if self.compilation_config.mode is None:
             if self.optimization_level > OptimizationLevel.O0:
-                self.compilation_config.mode = CompilationMode.APHRODITE_COMPILE
+                self.compilation_config.mode = CompilationMode.SONAR_COMPILE
             else:
                 self.compilation_config.mode = CompilationMode.NONE
 
         # By default, enable torch wrapping only when using custom Inductor lowering
         if self.compilation_config.ir_enable_torch_wrap is None:
             self.compilation_config.ir_enable_torch_wrap = (
-                self.compilation_config.mode == CompilationMode.APHRODITE_COMPILE
+                self.compilation_config.mode == CompilationMode.SONAR_COMPILE
                 and self.compilation_config.backend == "inductor"
             )
 
@@ -1829,7 +1828,7 @@ class AphroditeConfig:
 
         self._normalize_piecewise_cudagraph_mode(breakable_cudagraph_enabled=breakable_cudagraph_enabled)
 
-        from aphrodite.utils.torch_utils import HAS_OPAQUE_TYPE
+        from sonar.utils.torch_utils import HAS_OPAQUE_TYPE
 
         if HAS_OPAQUE_TYPE:
             # On torch >= 2.11 the hoisted OpaqueObject approach supersedes
@@ -1871,7 +1870,7 @@ class AphroditeConfig:
                 and self.compilation_config.cudagraph_mode.has_full_cudagraphs()
             ):
                 # Lazy import to avoid circular dependencies
-                from aphrodite.distributed.kv_transfer.kv_connector.factory import (
+                from sonar.distributed.kv_transfer.kv_connector.factory import (
                     KVConnectorFactory,
                 )
 
@@ -1919,12 +1918,12 @@ class AphroditeConfig:
         if (
             self.model_config
             and self.model_config.architecture == "WhisperForConditionalGeneration"
-            and os.environ.get("APHRODITE_WORKER_MULTIPROC_METHOD") != "spawn"
+            and os.environ.get("SONAR_WORKER_MULTIPROC_METHOD") != "spawn"
         ):
             logger.warning_once(
                 "Whisper is known to have issues with "
                 "forked workers. If startup is hanging, "
-                "try setting 'APHRODITE_WORKER_MULTIPROC_METHOD' "
+                "try setting 'SONAR_WORKER_MULTIPROC_METHOD' "
                 "to 'spawn'."
             )
 
@@ -1954,7 +1953,7 @@ class AphroditeConfig:
             scheduler_name = (
                 "DiffusionAsyncScheduler" if self.scheduler_config.async_scheduling else "DiffusionScheduler"
             )
-            self.scheduler_config.scheduler_cls = f"aphrodite.v1.core.sched.diffusion_scheduler.{scheduler_name}"
+            self.scheduler_config.scheduler_cls = f"sonar.v1.core.sched.diffusion_scheduler.{scheduler_name}"
 
         self._normalize_piecewise_cudagraph_mode(breakable_cudagraph_enabled=breakable_cudagraph_enabled)
 
@@ -2026,10 +2025,9 @@ class AphroditeConfig:
         # final check of cudagraph mode after all possible updates
         if current_platform.is_cuda_alike() and self.compilation_config.cudagraph_mode.requires_piecewise_compilation():
             assert (
-                self.compilation_config.mode == CompilationMode.APHRODITE_COMPILE
-                or envs.APHRODITE_USE_BREAKABLE_CUDAGRAPH
+                self.compilation_config.mode == CompilationMode.SONAR_COMPILE or envs.SONAR_USE_BREAKABLE_CUDAGRAPH
             ), (
-                "Compilation mode should be CompilationMode.APHRODITE_COMPILE "
+                "Compilation mode should be CompilationMode.SONAR_COMPILE "
                 "when cudagraph_mode piecewise cudagraphs is used, "
                 f"cudagraph_mode={self.compilation_config.cudagraph_mode}"
             )
@@ -2096,12 +2094,12 @@ class AphroditeConfig:
                 # Hybrid KV cache manager is not yet supported with chunked
                 # local attention + eagle.
                 need_disable_hybrid_kv_cache_manager = True
-            elif not envs.APHRODITE_ALLOW_CHUNKED_LOCAL_ATTN_WITH_HYBRID_KV_CACHE:
+            elif not envs.SONAR_ALLOW_CHUNKED_LOCAL_ATTN_WITH_HYBRID_KV_CACHE:
                 logger.warning(
                     "There is a latency regression when using chunked local"
                     " attention with the hybrid KV cache manager. Disabling"
                     " it, by default. To enable it, set the environment "
-                    "APHRODITE_ALLOW_CHUNKED_LOCAL_ATTN_WITH_HYBRID_KV_CACHE=1."
+                    "SONAR_ALLOW_CHUNKED_LOCAL_ATTN_WITH_HYBRID_KV_CACHE=1."
                 )
                 # Hybrid KV cache manager is not yet supported with chunked
                 # local attention.
@@ -2110,7 +2108,7 @@ class AphroditeConfig:
         if self.scheduler_config.disable_hybrid_kv_cache_manager is None:
             # Auto-disable HMA only when the connector config does not support it.
             if self.kv_transfer_config is not None:
-                from aphrodite.distributed.kv_transfer.kv_connector.factory import (
+                from sonar.distributed.kv_transfer.kv_connector.factory import (
                     KVConnectorFactory,
                 )
 
@@ -2133,7 +2131,7 @@ class AphroditeConfig:
             raise ValueError(
                 "Hybrid KV cache manager was explicitly enabled but is not "
                 "supported in this configuration. Consider omitting the "
-                "--enable-hybrid-kv-cache-manager flag to let Aphrodite decide"
+                "--enable-hybrid-kv-cache-manager flag to let Sonar decide"
                 " automatically."
             )
 
@@ -2150,11 +2148,11 @@ class AphroditeConfig:
 
         if self.compilation_config.debug_dump_path:
             self.compilation_config.debug_dump_path = self.compilation_config.debug_dump_path.absolute().expanduser()
-        if envs.APHRODITE_DEBUG_DUMP_PATH is not None:
-            env_path = Path(envs.APHRODITE_DEBUG_DUMP_PATH).absolute().expanduser()
+        if envs.SONAR_DEBUG_DUMP_PATH is not None:
+            env_path = Path(envs.SONAR_DEBUG_DUMP_PATH).absolute().expanduser()
             if self.compilation_config.debug_dump_path:
                 logger.warning(
-                    "Config-specified debug dump path is overridden by APHRODITE_DEBUG_DUMP_PATH to %s",
+                    "Config-specified debug dump path is overridden by SONAR_DEBUG_DUMP_PATH to %s",
                     env_path,
                 )
             self.compilation_config.debug_dump_path = env_path
@@ -2212,7 +2210,7 @@ class AphroditeConfig:
             # slots, and covers the DFlash/DSpark draft pass's query rows.
             if max_num_batched_tokens <= self.num_lookahead_tokens:
                 raise ValueError(
-                    "AphroditeConfig does not have enough slots to schedule a token and"
+                    "SonarConfig does not have enough slots to schedule a token and"
                     " support the speculative decoding settings."
                     f" Got {max_num_batched_tokens=} and"
                     f" num_lookahead_tokens={self.num_lookahead_tokens}."
@@ -2235,7 +2233,7 @@ class AphroditeConfig:
                     self.scheduler_config.max_num_active_seqs = max_draft_seqs
 
     def _set_cudagraph_sizes(self):
-        """APHRODITE defines the default candidate list of batch sizes for CUDA graph
+        """SONAR defines the default candidate list of batch sizes for CUDA graph
         capture as:
 
         ```python
@@ -2255,7 +2253,7 @@ class AphroditeConfig:
         within the platform's default capture ceiling, since they need not land
         on an 8- or 16-token stride.
 
-        In the end, `aphrodite_config.compilation_config.cudagraph_capture_sizes`
+        In the end, `sonar_config.compilation_config.cudagraph_capture_sizes`
         will be the final sizes to capture cudagraph (in ascending order).
 
         These sizes are used to capture and reuse CUDA graphs for
@@ -2295,7 +2293,7 @@ class AphroditeConfig:
             # configured.
             uniform_decode_sizes: list[int] = []
             if max_cudagraph_capture_size is None:
-                from aphrodite.platforms import current_platform
+                from sonar.platforms import current_platform
 
                 default_max_graph_size = 1024 if current_platform.is_device_capability_family(100) else 512
                 decode_query_len = self.uniform_decode_query_len
@@ -2337,7 +2335,7 @@ class AphroditeConfig:
                     decode_tiers = [(decode_query_len, max_num_seqs)]
                     speculative_config = self.speculative_config
                     if speculative_config is not None and speculative_config.uses_dynamic_speculative_decoding():
-                        from aphrodite.v1.spec_decode.dynamic.utils import (
+                        from sonar.v1.spec_decode.dynamic.utils import (
                             build_dynamic_sd_schedule_lookup,
                         )
 
@@ -2351,8 +2349,8 @@ class AphroditeConfig:
                         try:
                             dense_schedule = build_dynamic_sd_schedule_lookup(
                                 schedule,
-                                aphrodite_max_batch_size=max_num_seqs,
-                                aphrodite_num_speculative_tokens=self.num_speculative_tokens,
+                                sonar_max_batch_size=max_num_seqs,
+                                sonar_num_speculative_tokens=self.num_speculative_tokens,
                             )
                         except ValueError:
                             pass
@@ -2474,11 +2472,11 @@ class AphroditeConfig:
         # Add the compile ranges for flashinfer/aiter.
         if compilation_config.pass_config.fuse_allreduce_rms:
             tp_size = self.parallel_config.tensor_parallel_size
-            from aphrodite._aiter_ops import rocm_aiter_ops
+            from sonar._aiter_ops import rocm_aiter_ops
 
             max_size: int | None = None
             if rocm_aiter_ops.is_custom_all_reduce_enabled():
-                from aphrodite.distributed.device_communicators.aiter_custom_all_reduce import (
+                from sonar.distributed.device_communicators.aiter_custom_all_reduce import (
                     AiterCustomAllreduce,
                 )
 
@@ -2541,8 +2539,8 @@ class AphroditeConfig:
         if architecture is None:
             return
 
-        from aphrodite.model_executor.models import ModelRegistry
-        from aphrodite.model_executor.models.config import (
+        from sonar.model_executor.models import ModelRegistry
+        from sonar.model_executor.models.config import (
             MODELS_CONFIG_MAP,
             HybridAttentionMambaModelConfig,
         )
@@ -2562,7 +2560,7 @@ class AphroditeConfig:
 
         if self.model_config.convert_type == "classify":
             # Maybe convert ForCausalLM into ForSequenceClassification model.
-            from aphrodite.model_executor.models.adapters import SequenceClassificationConfig
+            from sonar.model_executor.models.adapters import SequenceClassificationConfig
 
             SequenceClassificationConfig.verify_and_update_config(self)
 
@@ -2703,7 +2701,7 @@ class AphroditeConfig:
         if mm_config.get_mm_processor_device_type() is not None:
             return
 
-        from aphrodite.platforms import current_platform
+        from sonar.platforms import current_platform
 
         device_type = current_platform.device_type
         if device_type in ("", "cpu"):
@@ -2758,7 +2756,7 @@ class AphroditeConfig:
         if ec_config is None or not ec_config.is_encode_only:
             return
 
-        from aphrodite.platforms import current_platform
+        from sonar.platforms import current_platform
 
         device_type = current_platform.device_type
         if device_type != "cuda" or mm_config.get_mm_processor_device_type() != device_type:
@@ -2769,7 +2767,7 @@ class AphroditeConfig:
         if "backend" in video_kwargs or "device" in video_kwargs:
             return
 
-        from aphrodite.utils.import_utils import check_torchcodec_available
+        from sonar.utils.import_utils import check_torchcodec_available
 
         try:
             check_torchcodec_available()
@@ -2910,7 +2908,7 @@ class AphroditeConfig:
 
         # Note(arpera):
         # MRV1 + PP>1 + async sched + structured output
-        # does not work in Aphrodite. For more info see:
+        # does not work in Sonar. For more info see:
         # https://github.com/vllm-project/vllm/issues/45014
         # Since recently MRV1 has been deprecated then
         # there was decided not to fix the issue but instead
@@ -2921,8 +2919,8 @@ class AphroditeConfig:
 
         # DSpark is implemented only by the V2 GPU model runner.
         if self.speculative_config:
-            # Imported here since it imports aphrodite.config.
-            from aphrodite.v1.worker.gpu.spec_decode.xpress.config import (
+            # Imported here since it imports sonar.config.
+            from sonar.v1.worker.gpu.spec_decode.xpress.config import (
                 XPressSpeculatorConfig,
             )
 
@@ -3057,9 +3055,9 @@ class AphroditeConfig:
         not handled yet.
         """
         # TODO: DBO with model runner V2 is under development.
-        # It should be enabled with explicit APHRODITE_USE_V2_MODEL_RUNNER environ.
+        # It should be enabled with explicit SONAR_USE_V2_MODEL_RUNNER environ.
         # Remove it when stable.
-        if envs.APHRODITE_USE_V2_MODEL_RUNNER is None:
+        if envs.SONAR_USE_V2_MODEL_RUNNER is None:
             return ["dual batch overlap"]
 
         unsupported: list[str] = []
@@ -3088,7 +3086,7 @@ class AphroditeConfig:
         if self.profiler_config.profiler != "proton":
             return
 
-        from aphrodite.platforms import current_platform
+        from sonar.platforms import current_platform
 
         if not current_platform.is_cuda():
             raise ValueError("The Proton profiler currently supports NVIDIA CUDA only")
@@ -3222,7 +3220,7 @@ class AphroditeConfig:
             )
 
     @model_validator(mode="after")
-    def validate_nvfp4_kv_cache_with_mla(self) -> "AphroditeConfig":
+    def validate_nvfp4_kv_cache_with_mla(self) -> "SonarConfig":
         if self.cache_config.cache_dtype == "nvfp4_ds_mla" and self.parallel_config.decode_context_parallel_size > 1:
             raise ValueError(
                 "nvfp4_ds_mla KV cache is not supported with decode context "
@@ -3248,7 +3246,7 @@ class AphroditeConfig:
         return self
 
     @model_validator(mode="after")
-    def validate_mamba_block_size(self) -> "AphroditeConfig":
+    def validate_mamba_block_size(self) -> "SonarConfig":
         if self.model_config is None:
             return self
         mamba_block_size_is_set = (
@@ -3260,7 +3258,7 @@ class AphroditeConfig:
         return self
 
     @model_validator(mode="after")
-    def validate_mamba_cached_kernel(self) -> "AphroditeConfig":
+    def validate_mamba_cached_kernel(self) -> "SonarConfig":
         if not self.cache_config.use_replayssm:
             self.cache_config.use_kda_recoverssm = False
             return self
@@ -3285,7 +3283,7 @@ class AphroditeConfig:
                     "rounding, which requires an explicit float16 cache"
                 )
             if self.cache_config.mamba_cache_mode == "align" and not self.use_v2_model_runner:
-                raise ValueError("RecoverSSM with prefix caching requires APHRODITE_USE_V2_MODEL_RUNNER=1")
+                raise ValueError("RecoverSSM with prefix caching requires SONAR_USE_V2_MODEL_RUNNER=1")
             if self.parallel_config.pipeline_parallel_size > 1:
                 raise ValueError("RecoverSSM currently requires pipeline_parallel_size=1")
             if self.mamba_config.backend != MambaBackendEnum.TRITON:
@@ -3331,22 +3329,22 @@ class AphroditeConfig:
         return self
 
 
-_current_aphrodite_config: AphroditeConfig | None = None
+_current_sonar_config: SonarConfig | None = None
 _current_prefix: str | None = None
 
 
 @contextmanager
-def set_current_aphrodite_config(aphrodite_config: AphroditeConfig, check_compile=False, prefix: str | None = None):
-    """Temporarily set the current Aphrodite config.
+def set_current_sonar_config(sonar_config: SonarConfig, check_compile=False, prefix: str | None = None):
+    """Temporarily set the current Sonar config.
     Used during model initialization.
-    We save the current Aphrodite config in a global variable,
+    We save the current Sonar config in a global variable,
     so that all modules can access it, e.g. custom ops
-    can access the Aphrodite config to determine how to dispatch.
+    can access the Sonar config to determine how to dispatch.
     """
-    global _current_aphrodite_config, _current_prefix
-    old_aphrodite_config = _current_aphrodite_config
+    global _current_sonar_config, _current_prefix
+    old_sonar_config = _current_sonar_config
     old_prefix = _current_prefix
-    from aphrodite.compilation.counter import compilation_counter
+    from sonar.compilation.counter import compilation_counter
 
     num_models_seen = compilation_counter.num_models_seen
     try:
@@ -3355,18 +3353,18 @@ def set_current_aphrodite_config(aphrodite_config: AphroditeConfig, check_compil
         # and cached before the new config is set.
         get_cached_compilation_config.cache_clear()
 
-        _current_aphrodite_config = aphrodite_config
+        _current_sonar_config = sonar_config
         _current_prefix = prefix
         yield
     except Exception:
         raise
     else:
         if check_compile:
-            aphrodite_config.compilation_config.custom_op_log_check()
+            sonar_config.compilation_config.custom_op_log_check()
 
         if (
             check_compile
-            and aphrodite_config.compilation_config.mode == CompilationMode.APHRODITE_COMPILE
+            and sonar_config.compilation_config.mode == CompilationMode.SONAR_COMPILE
             and compilation_counter.num_models_seen == num_models_seen
         ):
             # If the model supports compilation,
@@ -3378,10 +3376,10 @@ def set_current_aphrodite_config(aphrodite_config: AphroditeConfig, check_compil
                 "`torch.compile` is turned on, but the model %s"
                 " does not support it. Please open an issue on GitHub"
                 " if you want it to be supported.",
-                aphrodite_config.model_config.model,
+                sonar_config.model_config.model,
             )
     finally:
-        _current_aphrodite_config = old_aphrodite_config
+        _current_sonar_config = old_sonar_config
         _current_prefix = old_prefix
         # Clear the compilation config cache when context changes
         get_cached_compilation_config.cache_clear()
@@ -3389,44 +3387,44 @@ def set_current_aphrodite_config(aphrodite_config: AphroditeConfig, check_compil
 
 @lru_cache(maxsize=1)
 def get_cached_compilation_config():
-    """Cache config to avoid repeated calls to get_current_aphrodite_config()"""
-    return get_current_aphrodite_config().compilation_config
+    """Cache config to avoid repeated calls to get_current_sonar_config()"""
+    return get_current_sonar_config().compilation_config
 
 
-def get_current_aphrodite_config() -> AphroditeConfig:
-    if _current_aphrodite_config is None:
+def get_current_sonar_config() -> SonarConfig:
+    if _current_sonar_config is None:
         raise AssertionError(
-            "Current Aphrodite config is not set. This typically means "
-            "get_current_aphrodite_config() was called outside of a "
-            "set_current_aphrodite_config() context, or a CustomOp was instantiated "
+            "Current Sonar config is not set. This typically means "
+            "get_current_sonar_config() was called outside of a "
+            "set_current_sonar_config() context, or a CustomOp was instantiated "
             "at module import time or model forward time when config is not set. "
             "For tests that directly test custom ops/modules, use the "
-            "'default_aphrodite_config' pytest fixture from tests/conftest.py."
+            "'default_sonar_config' pytest fixture from tests/conftest.py."
         )
-    return _current_aphrodite_config
+    return _current_sonar_config
 
 
-def get_current_aphrodite_config_or_none() -> AphroditeConfig | None:
-    return _current_aphrodite_config
+def get_current_sonar_config_or_none() -> SonarConfig | None:
+    return _current_sonar_config
 
 
 T = TypeVar("T")
 
 
-def get_layers_from_aphrodite_config(
-    aphrodite_config: AphroditeConfig,
+def get_layers_from_sonar_config(
+    sonar_config: SonarConfig,
     layer_type: type[T],
     layer_names: Iterable[str] | None = None,
 ) -> dict[str, T]:
-    """Get layers from the Aphrodite config.
+    """Get layers from the Sonar config.
 
     Args:
-        aphrodite_config: The Aphrodite config.
+        sonar_config: The Sonar config.
         layer_type: The type of the layer to get.
         layer_names: The names of the layers to get. If None, return all layers.
 
     """
-    forward_context = aphrodite_config.compilation_config.static_forward_context
+    forward_context = sonar_config.compilation_config.static_forward_context
     if layer_names is None:
         layer_names = forward_context.keys()
 

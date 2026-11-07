@@ -5,10 +5,10 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from aphrodite.entrypoints.pooling.scoring.serving import ServingScores
-from aphrodite.entrypoints.pooling.typing import PoolingEngineInput, PoolingServeContext
-from aphrodite.inputs import tokens_input
-from aphrodite.pooling_params import PoolingParams
+from sonar.entrypoints.pooling.scoring.serving import ServingScores
+from sonar.entrypoints.pooling.typing import PoolingEngineInput, PoolingServeContext
+from sonar.inputs import tokens_input
+from sonar.pooling_params import PoolingParams
 
 
 def _make_context() -> PoolingServeContext:

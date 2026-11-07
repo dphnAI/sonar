@@ -6,10 +6,10 @@ import functools
 
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.utils.flashinfer import has_flashinfer_trtllm_fused_moe
+import sonar.envs as envs
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.utils.flashinfer import has_flashinfer_trtllm_fused_moe
 
 __all__ = [
     "prepare_static_weights_for_trtllm_mxint4_moe",
@@ -24,7 +24,7 @@ logger = init_logger(__name__)
 def is_flashinfer_mxint4_moe_available() -> bool:
     """Return `True` when FlashInfer MxInt4 kernels can be used."""
     return (
-        envs.APHRODITE_USE_FLASHINFER_MOE_INT4
+        envs.SONAR_USE_FLASHINFER_MOE_INT4
         and has_flashinfer_trtllm_fused_moe()
         and current_platform.is_cuda()
         and current_platform.is_device_capability_family(100)
@@ -61,10 +61,10 @@ def prepare_static_weights_for_trtllm_mxint4_moe(
         get_w2_permute_indices_with_cache,
     )
 
-    from aphrodite.model_executor.layers.quantization.utils.flashinfer_fp4_moe import (
+    from sonar.model_executor.layers.quantization.utils.flashinfer_fp4_moe import (
         reorder_w1w3_to_w3w1,
     )
-    from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+    from sonar.model_executor.layers.quantization.utils.quant_utils import (
         convert_packed_uint4b8_to_signed_int4_inplace,
     )
 

@@ -24,9 +24,9 @@ from mlx_lm.models.cache import (
     make_prompt_cache,
 )
 
-import aphrodite.metal.envs as envs
-from aphrodite.logger import init_logger
-from aphrodite.metal.v1.model_adapter import DefaultModelAdapter, ModelAdapter
+import sonar.metal.envs as envs
+from sonar.logger import init_logger
+from sonar.metal.v1.model_adapter import DefaultModelAdapter, ModelAdapter
 
 logger = init_logger(__name__)
 
@@ -43,14 +43,14 @@ AnyCache: TypeAlias = KVCache | RotatingKVCache | ArraysCache
 
 
 # ---------------------------------------------------------------------------
-# Prefix cache configuration — enabled by setting APHRODITE_METAL_PREFIX_CACHE
+# Prefix cache configuration — enabled by setting SONAR_METAL_PREFIX_CACHE
 # in the environment (any value; unset to disable).
 # ---------------------------------------------------------------------------
 
 
 def _prefix_cache_enabled() -> bool:
     """Check whether prefix caching is enabled via environment variable."""
-    return envs.APHRODITE_METAL_PREFIX_CACHE
+    return envs.SONAR_METAL_PREFIX_CACHE
 
 
 _PREFIX_CACHE_ENABLED = _prefix_cache_enabled()
@@ -59,20 +59,20 @@ _PREFIX_CACHE_DEFAULT_FRACTION = 0.05  # 5% of MLX working set
 
 def _get_prefix_cache_max_bytes() -> int:
     """Get prefix cache memory limit based on MLX recommended working set."""
-    fraction_str = envs.APHRODITE_METAL_PREFIX_CACHE_FRACTION
+    fraction_str = envs.SONAR_METAL_PREFIX_CACHE_FRACTION
     if fraction_str:
         try:
             fraction = float(fraction_str)
             if not math.isfinite(fraction) or fraction <= 0 or fraction > 1:
                 logger.warning(
-                    "APHRODITE_METAL_PREFIX_CACHE_FRACTION=%r out of range (0, 1], using default %.2f",
+                    "SONAR_METAL_PREFIX_CACHE_FRACTION=%r out of range (0, 1], using default %.2f",
                     fraction_str,
                     _PREFIX_CACHE_DEFAULT_FRACTION,
                 )
                 fraction = _PREFIX_CACHE_DEFAULT_FRACTION
         except ValueError:
             logger.warning(
-                "Invalid APHRODITE_METAL_PREFIX_CACHE_FRACTION=%r, using default %.2f",
+                "Invalid SONAR_METAL_PREFIX_CACHE_FRACTION=%r, using default %.2f",
                 fraction_str,
                 _PREFIX_CACHE_DEFAULT_FRACTION,
             )
@@ -317,7 +317,7 @@ def _merge_rotating_kv_caches(
     mlx-lm <= 0.29.1 uses ``c.offset`` which can exceed the underlying array size
     after the cache has rotated, causing a broadcast shape error.
 
-    This workaround can be removed once aphrodite metal can depend on an mlx-lm version
+    This workaround can be removed once sonar metal can depend on an mlx-lm version
     that includes the upstream fix (ml-explore/mlx-lm#738) and has been verified
     to work with gpt-oss models end-to-end.
     """

@@ -32,12 +32,12 @@ from transformers.feature_extraction_utils import BatchFeature
 from transformers.models.qwen3_asr import Qwen3ASRFeatureExtractor, Qwen3ASRProcessor
 from transformers.models.whisper import WhisperFeatureExtractor
 
-from aphrodite.config import AphroditeConfig, ModelConfig, SpeechToTextConfig
-from aphrodite.config.multimodal import MultiModalDummyOptions
-from aphrodite.config.speech_to_text import SpeechToTextParams
-from aphrodite.inputs import ModalityData, MultiModalDataDict, PromptType, TokensPrompt
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.models.interfaces import (
+from sonar.config import ModelConfig, SonarConfig, SpeechToTextConfig
+from sonar.config.multimodal import MultiModalDummyOptions
+from sonar.config.speech_to_text import SpeechToTextParams
+from sonar.inputs import ModalityData, MultiModalDataDict, PromptType, TokensPrompt
+from sonar.logger import init_logger
+from sonar.model_executor.models.interfaces import (
     MultiModalEmbeddings,
     StreamingTranscriptionPostProcessor,
     SupportsEagle3,
@@ -47,36 +47,36 @@ from aphrodite.model_executor.models.interfaces import (
     SupportsPP,
     SupportsTranscription,
 )
-from aphrodite.model_executor.models.module_mapping import MultiModelKeys
-from aphrodite.model_executor.models.qwen2_5_omni_thinker import unpad_and_flat_audio_features
-from aphrodite.model_executor.models.qwen3 import Qwen3ForCausalLM
-from aphrodite.model_executor.models.qwen3_omni_moe_thinker import (
+from sonar.model_executor.models.module_mapping import MultiModelKeys
+from sonar.model_executor.models.qwen2_5_omni_thinker import unpad_and_flat_audio_features
+from sonar.model_executor.models.qwen3 import Qwen3ForCausalLM
+from sonar.model_executor.models.qwen3_omni_moe_thinker import (
     Qwen2_5OmniAudioFeatureInputs,
     Qwen3OmniMoeAudioEncoder,
 )
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.models.utils import (
     AutoWeightsLoader,
     WeightsMapper,
     _merge_multimodal_embeddings,
     maybe_prefix,
 )
-from aphrodite.model_executor.models.whisper import ISO639_1_SUPPORTED_LANGS
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import (
+from sonar.model_executor.models.whisper import ISO639_1_SUPPORTED_LANGS
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import (
     AudioItem,
     MultiModalFeatureSpec,
     MultiModalFieldConfig,
     MultiModalKwargsItem,
     MultiModalKwargsItems,
 )
-from aphrodite.multimodal.parse import (
+from sonar.multimodal.parse import (
     AudioProcessorItems,
     DictEmbeddingItems,
     ModalityDataItems,
     MultiModalDataItems,
     MultiModalDataParser,
 )
-from aphrodite.multimodal.processing import (
+from sonar.multimodal.processing import (
     BaseDummyInputsBuilder,
     BaseMultiModalProcessor,
     BaseProcessingInfo,
@@ -84,15 +84,15 @@ from aphrodite.multimodal.processing import (
     PromptUpdate,
     cached_encode,
 )
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.tokenizers import cached_tokenizer_from_config
-from aphrodite.transformers_utils.configs.qwen3_asr import (
+from sonar.sequence import IntermediateTensors
+from sonar.tokenizers import cached_tokenizer_from_config
+from sonar.transformers_utils.configs.qwen3_asr import (
     Qwen3ASRConfig,
     Qwen3ASRThinkerConfig,
 )
-from aphrodite.transformers_utils.processor import cached_processor_from_config
-from aphrodite.utils.gpu_sync_debug import gpu_sync_allowed
-from aphrodite.utils.torch_utils import async_tensor_h2d
+from sonar.transformers_utils.processor import cached_processor_from_config
+from sonar.utils.gpu_sync_debug import gpu_sync_allowed
+from sonar.utils.torch_utils import async_tensor_h2d
 
 logger = init_logger(__name__)
 _ASR_TEXT_TAG = "<asr_text>"
@@ -394,7 +394,7 @@ class Qwen3ASRForConditionalGeneration(
     supported_languages = ISO639_1_SUPPORTED_LANGS
     supports_tower_connector_lora = True
 
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={
             "thinker.lm_head.": "language_model.lm_head.",
             "thinker.model.": "language_model.model.",
@@ -416,25 +416,25 @@ class Qwen3ASRForConditionalGeneration(
 
         raise ValueError("Only audio modality is supported")
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        self.aphrodite_config = aphrodite_config  # needed for torch compile forward context
-        thinker_config: Qwen3ASRThinkerConfig = aphrodite_config.model_config.hf_config.thinker_config
-        quant_config = aphrodite_config.quant_config
-        multimodal_config = aphrodite_config.model_config.multimodal_config
+        self.sonar_config = sonar_config  # needed for torch compile forward context
+        thinker_config: Qwen3ASRThinkerConfig = sonar_config.model_config.hf_config.thinker_config
+        quant_config = sonar_config.quant_config
+        multimodal_config = sonar_config.model_config.multimodal_config
         self.config = thinker_config
         self.multimodal_config = multimodal_config
         self.quant_config = quant_config
 
-        with self._mark_tower_model(aphrodite_config, "audio"):
+        with self._mark_tower_model(sonar_config, "audio"):
             self.audio_tower = Qwen3OmniMoeAudioEncoder(
                 thinker_config.audio_config,
                 prefix=maybe_prefix(prefix, "audio_tower"),
             )
 
-        with self._mark_language_model(aphrodite_config):
+        with self._mark_language_model(sonar_config):
             self.language_model = Qwen3ForCausalLM(
-                aphrodite_config=aphrodite_config.with_hf_config(
+                sonar_config=sonar_config.with_hf_config(
                     thinker_config.text_config, architectures=["Qwen3ForCausalLM"]
                 ),
                 prefix=maybe_prefix(prefix, "language_model"),
@@ -565,7 +565,7 @@ class Qwen3ASRForConditionalGeneration(
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        loaded_weights = loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        loaded_weights = loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
         return loaded_weights
 

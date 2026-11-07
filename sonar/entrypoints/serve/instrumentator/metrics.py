@@ -11,7 +11,7 @@ from prometheus_fastapi_instrumentator import routing as _pfi_routing
 from starlette.routing import Match, Mount
 from starlette.types import Scope
 
-from aphrodite.v1.metrics.prometheus import get_prometheus_registry
+from sonar.v1.metrics.prometheus import get_prometheus_registry
 
 
 def _patch_instrumentator_route_walk() -> None:

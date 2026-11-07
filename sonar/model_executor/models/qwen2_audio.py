@@ -36,36 +36,36 @@ from transformers.models.qwen2_audio import (
 )
 from transformers.models.whisper import WhisperFeatureExtractor
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.multimodal import MultiModalDummyOptions
-from aphrodite.inputs import ModalityData, MultiModalDataDict
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import (
+from sonar.config import SonarConfig
+from sonar.config.multimodal import MultiModalDummyOptions
+from sonar.inputs import ModalityData, MultiModalDataDict
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import (
     AudioItem,
     MultiModalFieldConfig,
     MultiModalKwargsItems,
 )
-from aphrodite.multimodal.parse import (
+from sonar.multimodal.parse import (
     AudioProcessorItems,
     DictEmbeddingItems,
     ModalityDataItems,
     MultiModalDataItems,
     MultiModalDataParser,
 )
-from aphrodite.multimodal.processing import (
+from sonar.multimodal.processing import (
     BaseDummyInputsBuilder,
     BaseMultiModalProcessor,
     BaseProcessingInfo,
     PromptReplacement,
     PromptUpdate,
 )
-from aphrodite.multimodal.processing.processor import HFMultiModalInputs
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.utils.gpu_sync_debug import gpu_sync_allowed
-from aphrodite.utils.tensor_schema import TensorSchema, TensorShape
+from sonar.multimodal.processing.processor import HFMultiModalInputs
+from sonar.sequence import IntermediateTensors
+from sonar.utils.gpu_sync_debug import gpu_sync_allowed
+from sonar.utils.tensor_schema import TensorSchema, TensorShape
 
 from .interfaces import MultiModalEmbeddings, SupportsMultiModal, SupportsPP
-from .utils import AutoWeightsLoader, init_aphrodite_registered_model, maybe_prefix
+from .utils import AutoWeightsLoader, init_sonar_registered_model, maybe_prefix
 
 
 # # === Audio Inputs === #
@@ -325,24 +325,24 @@ class Qwen2AudioForConditionalGeneration(nn.Module, SupportsMultiModal, Supports
 
         raise ValueError("Only audio modality is supported")
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
-        multimodal_config = aphrodite_config.model_config.multimodal_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
+        multimodal_config = sonar_config.model_config.multimodal_config
         self.config = config
         self.multimodal_config = multimodal_config
         self.quant_config = quant_config
 
-        with self._mark_tower_model(aphrodite_config, "audio"):
+        with self._mark_tower_model(sonar_config, "audio"):
             self.audio_tower = Qwen2AudioEncoder(config.audio_config)
             self.multi_modal_projector = Qwen2AudioMultiModalProjector(
                 config.audio_config.d_model, config.text_config.hidden_size
             )
 
-        with self._mark_language_model(aphrodite_config):
-            self.language_model = init_aphrodite_registered_model(
-                aphrodite_config=aphrodite_config,
+        with self._mark_language_model(sonar_config):
+            self.language_model = init_sonar_registered_model(
+                sonar_config=sonar_config,
                 hf_config=config.text_config,
                 prefix=maybe_prefix(prefix, "language_model"),
                 architectures=["Qwen2ForCausalLM"],

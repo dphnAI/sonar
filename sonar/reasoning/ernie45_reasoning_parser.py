@@ -6,12 +6,12 @@ from typing import TYPE_CHECKING
 
 from transformers import PreTrainedTokenizerBase
 
-from aphrodite.entrypoints.generate.base.protocol import DeltaMessage
-from aphrodite.reasoning.basic_parsers import BaseThinkingReasoningParser
+from sonar.entrypoints.generate.base.protocol import DeltaMessage
+from sonar.reasoning.basic_parsers import BaseThinkingReasoningParser
 
 if TYPE_CHECKING:
-    from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-    from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
+    from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+    from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
 
 
 class Ernie45ReasoningParser(BaseThinkingReasoningParser):

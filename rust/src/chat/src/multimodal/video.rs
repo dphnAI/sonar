@@ -6,14 +6,14 @@
 
 use std::sync::Arc;
 
-use aphrodite_engine_core_client::protocol::dtype::ModelDtype;
-use aphrodite_engine_core_client::protocol::multimodal::{
-    MmBatchedField, MmField, MmFieldElem, MmFlatField, MmKwargsItem, MmSharedField, MmSlice,
-    SliceSpec,
-};
 use itertools::izip;
 use llm_multimodal::{
     FieldLayout, MediaItemInfo, Modality, PreprocessedEncoderInputs, VideoClip, VideoClipOptions,
+};
+use sonar_engine_core_client::protocol::dtype::ModelDtype;
+use sonar_engine_core_client::protocol::multimodal::{
+    MmBatchedField, MmField, MmFieldElem, MmFlatField, MmKwargsItem, MmSharedField, MmSlice,
+    SliceSpec,
 };
 use thiserror_ext::AsReport as _;
 use tracing::warn;
@@ -204,9 +204,9 @@ mod tests {
     use std::collections::HashMap;
     use std::sync::Arc;
 
-    use aphrodite_engine_core_client::protocol::multimodal::MmKwargValue;
     use llm_multimodal::ModelSpecificValue;
     use ndarray::ArrayD;
+    use sonar_engine_core_client::protocol::multimodal::MmKwargValue;
 
     use super::super::tests::{
         QWEN3_IMAGE_PAD_ID, QWEN3_VIDEO_PAD_ID, qwen3_vl_info, qwen3_vl_tokenizer,

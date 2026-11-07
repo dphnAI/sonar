@@ -2,11 +2,11 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Startup checks for the ROCm Step5 sparse attention layers."""
 
-from aphrodite.config import AphroditeConfig, KVTransferConfig
+from sonar.config import KVTransferConfig, SonarConfig
 
 
-def verify_kv_transfer_compatibility(aphrodite_config: AphroditeConfig) -> None:
-    config = aphrodite_config.kv_transfer_config
+def verify_kv_transfer_compatibility(sonar_config: SonarConfig) -> None:
+    config = sonar_config.kv_transfer_config
     if config is None or not config.is_kv_transfer_instance:
         return
     configs = [config]

@@ -16,9 +16,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from aphrodite.utils.hashing import sha256
-from aphrodite.v1.core.kv_cache_utils import init_none_hash
-from aphrodite.v1.core.sched.scheduler import Scheduler
+from sonar.utils.hashing import sha256
+from sonar.v1.core.kv_cache_utils import init_none_hash
+from sonar.v1.core.sched.scheduler import Scheduler
 from tests.v1.core.test_prefix_caching import (
     _make_hybrid_kv_cache_config,
     make_kv_cache_manager,
@@ -268,7 +268,7 @@ def test_a_junction_past_the_prompt_falls_back_and_registers_nothing():
     The manager writes nothing there -- during decode the target is the running
     state block, mutated in place, which equals what its key promises only after
     that step's forward. So the scheduler must not stop AT it, but it must still
-    take the block-floored stop stock Aphrodite would have made: dropping the stop
+    take the block-floored stop stock Sonar would have made: dropping the stop
     entirely loses a check-point a sibling could have resumed from.
     """
     block_size, hash_block_size = 512, 32

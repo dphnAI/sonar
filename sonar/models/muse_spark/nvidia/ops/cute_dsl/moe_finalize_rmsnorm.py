@@ -7,7 +7,7 @@ from typing import Any
 
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 try:
     import cuda.bindings.driver as cuda

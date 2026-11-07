@@ -7,26 +7,26 @@ names so that :class:`ReasoningParserManager` and
 :class:`ToolParserManager` can load them lazily.
 """
 
-from aphrodite.parser.deepseek_v4 import DeepSeekV4Parser
-from aphrodite.parser.deepseek_v32 import DeepSeekV32Parser
-from aphrodite.parser.deepseek_v41 import DeepSeekV41Parser
-from aphrodite.parser.engine.adapters import make_adapters
-from aphrodite.parser.gemma4 import Gemma4Parser
-from aphrodite.parser.glm47_moe import Glm47MoeParser
-from aphrodite.parser.granite import GraniteParser
-from aphrodite.parser.granite_thinking import GraniteThinkingParser
-from aphrodite.parser.inkling import InklingParser
-from aphrodite.parser.kimi_k2 import KimiK2Parser
-from aphrodite.parser.llama_json import LlamaJsonParser
-from aphrodite.parser.mimo import MiMoParser
-from aphrodite.parser.minimax_m2 import MinimaxM2Parser
-from aphrodite.parser.minimax_m3 import MinimaxM3Parser
-from aphrodite.parser.mistral import MistralParser
-from aphrodite.parser.nemotron_v3 import NemotronV3Parser
-from aphrodite.parser.plamo3 import Plamo3Parser
-from aphrodite.parser.qwen3 import Qwen3Parser
-from aphrodite.parser.seed_oss import SeedOssParser
-from aphrodite.parser.step3p5 import Step3p5Parser
+from sonar.parser.deepseek_v4 import DeepSeekV4Parser
+from sonar.parser.deepseek_v32 import DeepSeekV32Parser
+from sonar.parser.deepseek_v41 import DeepSeekV41Parser
+from sonar.parser.engine.adapters import make_adapters
+from sonar.parser.gemma4 import Gemma4Parser
+from sonar.parser.glm47_moe import Glm47MoeParser
+from sonar.parser.granite import GraniteParser
+from sonar.parser.granite_thinking import GraniteThinkingParser
+from sonar.parser.inkling import InklingParser
+from sonar.parser.kimi_k2 import KimiK2Parser
+from sonar.parser.llama_json import LlamaJsonParser
+from sonar.parser.mimo import MiMoParser
+from sonar.parser.minimax_m2 import MinimaxM2Parser
+from sonar.parser.minimax_m3 import MinimaxM3Parser
+from sonar.parser.mistral import MistralParser
+from sonar.parser.nemotron_v3 import NemotronV3Parser
+from sonar.parser.plamo3 import Plamo3Parser
+from sonar.parser.qwen3 import Qwen3Parser
+from sonar.parser.seed_oss import SeedOssParser
+from sonar.parser.step3p5 import Step3p5Parser
 
 (
     DeepSeekV32ParserReasoningAdapter,

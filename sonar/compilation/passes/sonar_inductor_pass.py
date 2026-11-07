@@ -16,9 +16,9 @@ from torch import fx
 from torch._dynamo.utils import lazy_format_graph_code
 from torch._inductor.pattern_matcher import PatternMatcherPass, PatternPrettyPrinter
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
+from sonar.config import SonarConfig
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
 
 from .fx_utils import is_func
 from .inductor_pass import InductorPass, enable_fake_mode
@@ -34,15 +34,15 @@ class InductorCompilationConfig:
     use_inductor_graph_partition: bool = False
 
 
-class AphroditeInductorPass(InductorPass):
-    """An inductor pass with access to Aphrodite PassConfig.
+class SonarInductorPass(InductorPass):
+    """An inductor pass with access to Sonar PassConfig.
     It provides timing, logging, and dumping utilities.
     """
 
     dump_prefix: ClassVar[int | None] = None
     """Keep track of pass index for debug dump ordering."""
 
-    def __init__(self, config: AphroditeConfig):
+    def __init__(self, config: SonarConfig):
         # Get only the necessary CompilationConfig for the inductor pass, since
         # full `CompilationConfig` contains pointer to model which is unsafe.
         self.compilation_config = InductorCompilationConfig(
@@ -56,10 +56,10 @@ class AphroditeInductorPass(InductorPass):
 
     @staticmethod
     def time_and_log(
-        call_fn: Callable[["AphroditeInductorPass", torch.fx.Graph], None],
-    ) -> Callable[["AphroditeInductorPass", torch.fx.Graph], None]:
+        call_fn: Callable[["SonarInductorPass", torch.fx.Graph], None],
+    ) -> Callable[["SonarInductorPass", torch.fx.Graph], None]:
         @functools.wraps(call_fn)
-        def wrapped(self: AphroditeInductorPass, graph: torch.fx.Graph) -> None:
+        def wrapped(self: SonarInductorPass, graph: torch.fx.Graph) -> None:
             self.begin()
             self.dump_graph(graph, "before")
             call_fn(self, graph)
@@ -69,7 +69,7 @@ class AphroditeInductorPass(InductorPass):
         return wrapped
 
     def dump_graph(self, graph: torch.fx.Graph, stage: str) -> None:
-        i = AphroditeInductorPass.dump_prefix
+        i = SonarInductorPass.dump_prefix
         i_str = "" if i is None else f".{i}"
         lazy_format_graph_code(f"post_grad{i_str}.{self.pass_name}.{stage}", graph.owning_module)
 
@@ -84,11 +84,11 @@ class AphroditeInductorPass(InductorPass):
 
 def get_match_table() -> dict[str, int]:
     """Return a snapshot of the match table."""
-    return dict(AphroditePatternMatcherPass.match_table)
+    return dict(SonarPatternMatcherPass.match_table)
 
 
-class AphroditePatternMatcherPass(AphroditeInductorPass):
-    """A AphroditeInductorPass that uses the Inductor pattern matcher.
+class SonarPatternMatcherPass(SonarInductorPass):
+    """A SonarInductorPass that uses the Inductor pattern matcher.
     Provides pattern registration with match counting, debug dumping, and logging.
     """
 
@@ -114,7 +114,7 @@ class AphroditePatternMatcherPass(AphroditeInductorPass):
         if cls.match_table:
             logger.debug("fusion pass matches: %s", dict(cls.match_table))
 
-    def dump_patterns(self, config: AphroditeConfig, pm_pass: PatternMatcherPass) -> None:
+    def dump_patterns(self, config: SonarConfig, pm_pass: PatternMatcherPass) -> None:
         """If debug dumping is enabled, dump the Inductor pattern-matcher patterns
         into the debug_dump_path folder next to the dumped fx graphs.
 
@@ -130,21 +130,21 @@ class AphroditePatternMatcherPass(AphroditeInductorPass):
 
         debug_dump_path.mkdir(parents=True, exist_ok=True)
 
-        from aphrodite.utils.system_utils import unique_filepath
+        from sonar.utils.system_utils import unique_filepath
 
         file_path = unique_filepath(lambda i: debug_dump_path / f"patterns.{self.pass_name}.{i}.py")
 
         with file_path.open("w") as f:
             print(
-                f"# This file was produced by AphroditePatternMatcherPass."
+                f"# This file was produced by SonarPatternMatcherPass."
                 f"dump_patterns for {self.pass_name}.\n"
                 f"# It does its best to produce valid-Python-looking code but"
                 f" please add to dump_patterns if there are any errors.\n\n"
                 f"from torch._higher_order_ops.auto_functionalize import "
                 f"auto_functionalized as auto_functionalized\n"
                 f"from torch._inductor.pattern_matcher import *\n"
-                f"aphrodite = torch.ops.aphrodite",
-                "aphrodite_ir = torch.ops.aphrodite_ir",
+                f"sonar = torch.ops.sonar",
+                "sonar_ir = torch.ops.sonar_ir",
                 file=f,
             )
 
@@ -182,17 +182,17 @@ P = ParamSpec("P")
 R = TypeVar("R")
 
 
-class AphroditePatternReplacement(ABC, Generic[P, R]):
+class SonarPatternReplacement(ABC, Generic[P, R]):
     """A pattern/replacement pair for FX graph fusion.
 
     Implement the three abstract members below, then pass
-    instances to AphroditeFusionPatternMatcherPass.register(). The pass will
+    instances to SonarFusionPatternMatcherPass.register(). The pass will
     find every occurrence of `pattern` in the graph and substitute it
     with `replacement`.
     """
 
     # TODO(Badr): bound methods work for pattern registration since
-    # PyTorch 2.10. Once Aphrodite requires torch>=2.11, replace these properties
+    # PyTorch 2.10. Once Sonar requires torch>=2.11, replace these properties
     # with plain methods and drop the closure indirection.
     @property
     @abstractmethod
@@ -300,19 +300,19 @@ def _remove_noop_permutes(gm: fx.GraphModule) -> None:
         gm.graph.erase_node(node)
 
 
-class AphroditeFusionPatternMatcherPass(AphroditePatternMatcherPass):
-    """A AphroditePatternMatcherPass for passes that use AphroditePatternReplacement objects.
+class SonarFusionPatternMatcherPass(SonarPatternMatcherPass):
+    """A SonarPatternMatcherPass for passes that use SonarPatternReplacement objects.
     Subclasses register patterns via self.register() in their own __init__.
     """
 
-    def __init__(self, config: AphroditeConfig, pass_name: str) -> None:
+    def __init__(self, config: SonarConfig, pass_name: str) -> None:
         super().__init__(config)
         self.pass_name = pass_name
         self.pm_pass = PatternMatcherPass(pass_name=pass_name)
-        self._pattern_replacements: list[AphroditePatternReplacement] = []
+        self._pattern_replacements: list[SonarPatternReplacement] = []
 
     @enable_fake_mode
-    def register(self, pr: AphroditePatternReplacement) -> None:
+    def register(self, pr: SonarPatternReplacement) -> None:
         pm.register_replacement(
             pr.pattern,
             pr.replacement,
@@ -323,7 +323,7 @@ class AphroditeFusionPatternMatcherPass(AphroditePatternMatcherPass):
         self._pattern_replacements.append(pr)
 
     def uuid(self) -> str:
-        return AphroditeInductorPass.hash_source(
+        return SonarInductorPass.hash_source(
             type(self),
             *[type(pr) for pr in self._pattern_replacements],
         )
@@ -335,7 +335,7 @@ class AphroditeFusionPatternMatcherPass(AphroditePatternMatcherPass):
         _remove_noop_permutes(gm)
         return gm
 
-    @AphroditeInductorPass.time_and_log
+    @SonarInductorPass.time_and_log
     def __call__(self, graph: torch.fx.Graph) -> None:
         self.matched_count = self.pm_pass.apply(graph)
-        AphroditePatternMatcherPass.match_table[self.pass_name] += self.matched_count
+        SonarPatternMatcherPass.match_table[self.pass_name] += self.matched_count

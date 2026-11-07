@@ -3,7 +3,7 @@
 
 """Compatibility entry point for the Muse Glimmer tool parser."""
 
-from aphrodite.tool_parsers.muse_tool_parser import MuseToolParser
+from sonar.tool_parsers.muse_tool_parser import MuseToolParser
 
 
 class MuseGlimmerToolParser(MuseToolParser):

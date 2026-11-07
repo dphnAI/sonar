@@ -5,18 +5,18 @@ import uuid
 
 import pytest
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.multimodal.inputs import (
+from sonar.config import SonarConfig
+from sonar.multimodal.inputs import (
     MultiModalFeatureSpec,
     MultiModalKwargsItem,
     PlaceholderRange,
 )
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.utils.hashing import get_hash_fn_by_name
-from aphrodite.v1.core.kv_cache_utils import get_request_block_hasher, init_none_hash
-from aphrodite.v1.core.sched.output import SchedulerOutput
-from aphrodite.v1.outputs import DraftTokenIds, ModelRunnerOutput
-from aphrodite.v1.request import Request
+from sonar.sampling_params import SamplingParams
+from sonar.utils.hashing import get_hash_fn_by_name
+from sonar.v1.core.kv_cache_utils import get_request_block_hasher, init_none_hash
+from sonar.v1.core.sched.output import SchedulerOutput
+from sonar.v1.outputs import DraftTokenIds, ModelRunnerOutput
+from sonar.v1.request import Request
 
 from .test_scheduler import create_scheduler_with_priority
 from .utils import EOS_TOKEN_ID
@@ -30,7 +30,7 @@ def _create_random_request(
     arrival_time_range: tuple[float, float],
     priority_range: tuple[int, int],
     num_mm_item_range: tuple[int, int],
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
 ):
     max_tokens = random.randint(*max_tokens_range)
     num_tokens = random.randint(*num_tokens_range)
@@ -62,9 +62,9 @@ def _create_random_request(
 
     prompt_token_ids = random.choices(range(100), k=num_tokens)
 
-    caching_hash_fn = get_hash_fn_by_name(aphrodite_config.cache_config.prefix_caching_hash_algo)
+    caching_hash_fn = get_hash_fn_by_name(sonar_config.cache_config.prefix_caching_hash_algo)
     init_none_hash(caching_hash_fn)
-    block_hasher = get_request_block_hasher(aphrodite_config.cache_config.block_size, caching_hash_fn)
+    block_hasher = get_request_block_hasher(sonar_config.cache_config.block_size, caching_hash_fn)
 
     request = Request(
         request_id=request_id,
@@ -196,7 +196,7 @@ def test_priority_scheduling_blast(
             arrival_time_range=(0, 1),
             priority_range=(-3, 3),
             num_mm_item_range=(0, 2),
-            aphrodite_config=scheduler.aphrodite_config,
+            sonar_config=scheduler.sonar_config,
         )
         scheduler.add_request(req)
     num_initial_requests = 2
@@ -207,7 +207,7 @@ def test_priority_scheduling_blast(
             arrival_time_range=(0, 0),
             priority_range=(4, 4),
             num_mm_item_range=(0, 2),
-            aphrodite_config=scheduler.aphrodite_config,
+            sonar_config=scheduler.sonar_config,
         )
         scheduler.add_request(req)
     for _ in range(20000):
@@ -220,7 +220,7 @@ def test_priority_scheduling_blast(
                     arrival_time_range=(0, 1),
                     priority_range=(-3, 3),
                     num_mm_item_range=(0, 2),
-                    aphrodite_config=scheduler.aphrodite_config,
+                    sonar_config=scheduler.sonar_config,
                 )
                 scheduler.add_request(req)
         scheduler_output = scheduler.schedule()

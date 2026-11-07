@@ -3,9 +3,9 @@
 # SPDX-FileCopyrightText: Copyright 2023-2024 SGLang Team
 # Adapted from smg-grpc-servicer 0.5.2; the external VllmEngine wire identity is retained.
 """
-Aphrodite gRPC Servicer
+Sonar gRPC Servicer
 
-Implements the VllmEngine gRPC service on top of Aphrodite's EngineClient.
+Implements the VllmEngine gRPC service on top of Sonar's EngineClient.
 """
 
 import itertools
@@ -17,21 +17,21 @@ import torch
 from smg_grpc_proto import vllm_engine_pb2, vllm_engine_pb2_grpc
 from transformers import BatchFeature
 
-from aphrodite import PoolingParams, SamplingParams, TokensPrompt
-from aphrodite.config.model import get_served_model_name
-from aphrodite.engine.protocol import EngineClient
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.inputs.engine import MultiModalInput as AphroditeMultiModalInput
-from aphrodite.inputs.engine import mm_input, tokens_input
-from aphrodite.logger import init_logger
-from aphrodite.logprobs import Logprob, PromptLogprobs, SampleLogprobs
-from aphrodite.multimodal.inputs import (
+from sonar import PoolingParams, SamplingParams, TokensPrompt
+from sonar.config.model import get_served_model_name
+from sonar.engine.protocol import EngineClient
+from sonar.exceptions import SonarValidationError
+from sonar.inputs.engine import MultiModalInput as SonarMultiModalInput
+from sonar.inputs.engine import mm_input, tokens_input
+from sonar.logger import init_logger
+from sonar.logprobs import Logprob, PromptLogprobs, SampleLogprobs
+from sonar.multimodal.inputs import (
     MultiModalFieldConfig,
     MultiModalKwargsItems,
     PlaceholderRange,
 )
-from aphrodite.outputs import CompletionOutput, RequestOutput
-from aphrodite.sampling_params import RequestOutputKind, StructuredOutputsParams
+from sonar.outputs import CompletionOutput, RequestOutput
+from sonar.sampling_params import RequestOutputKind, StructuredOutputsParams
 
 logger = init_logger(__name__)
 
@@ -51,7 +51,7 @@ def _tensor_from_proto(td: vllm_engine_pb2.TensorData) -> torch.Tensor:
     return torch.frombuffer(bytearray(td.data), dtype=torch_dtype).reshape(*td.shape)
 
 
-class AphroditeEngineServicer(vllm_engine_pb2_grpc.VllmEngineServicer):
+class SonarEngineServicer(vllm_engine_pb2_grpc.VllmEngineServicer):
     """
     gRPC servicer implementing the VllmEngine service.
 
@@ -74,7 +74,7 @@ class AphroditeEngineServicer(vllm_engine_pb2_grpc.VllmEngineServicer):
         """
         self.engine = async_llm
         self.start_time = start_time
-        logger.info("AphroditeEngineServicer initialized")
+        logger.info("SonarEngineServicer initialized")
 
     async def Generate(
         self,
@@ -107,7 +107,7 @@ class AphroditeEngineServicer(vllm_engine_pb2_grpc.VllmEngineServicer):
 
         try:
             arrival_time = time.time()
-            prompt: AphroditeMultiModalInput | TokensPrompt | str
+            prompt: SonarMultiModalInput | TokensPrompt | str
 
             if has_preprocessed_mm and input_type == "tokenized":
                 # Preprocessed multimodal from Rust router.
@@ -152,7 +152,7 @@ class AphroditeEngineServicer(vllm_engine_pb2_grpc.VllmEngineServicer):
                         is_first = idx not in seen_indices
                         seen_indices.add(idx)
 
-                        # Send chunk with delta data (Rust accumulates for Aphrodite)
+                        # Send chunk with delta data (Rust accumulates for Sonar)
                         yield self._chunk_response(
                             output,
                             completion=completion,
@@ -180,7 +180,7 @@ class AphroditeEngineServicer(vllm_engine_pb2_grpc.VllmEngineServicer):
                             num_prompt_logprobs=num_prompt_logprobs,
                         )
 
-        except (ValueError, AphroditeValidationError) as e:
+        except (ValueError, SonarValidationError) as e:
             # Invalid request error (equiv to 400).
             await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(e))
         except Exception as e:
@@ -195,7 +195,7 @@ class AphroditeEngineServicer(vllm_engine_pb2_grpc.VllmEngineServicer):
         """
         Handle embedding requests.
 
-        Calls Aphrodite's encode() API with PoolingParams and returns the embedding vector.
+        Calls Sonar's encode() API with PoolingParams and returns the embedding vector.
 
         Args:
             request: The EmbedRequest protobuf
@@ -241,7 +241,7 @@ class AphroditeEngineServicer(vllm_engine_pb2_grpc.VllmEngineServicer):
 
         except grpc.aio.AbortError:
             raise
-        except (ValueError, AphroditeValidationError) as e:
+        except (ValueError, SonarValidationError) as e:
             logger.warning("Embed invalid request %s: %s", request_id, e)
             await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(e))
         except Exception as e:
@@ -351,7 +351,7 @@ class AphroditeEngineServicer(vllm_engine_pb2_grpc.VllmEngineServicer):
         """
         kv_connector = ""
         kv_role = ""
-        kv_transfer_config = self.engine.aphrodite_config.kv_transfer_config
+        kv_transfer_config = self.engine.sonar_config.kv_transfer_config
         if kv_transfer_config is not None:
             kv_connector = kv_transfer_config.kv_connector or ""
             kv_role = kv_transfer_config.kv_role or ""
@@ -367,8 +367,8 @@ class AphroditeEngineServicer(vllm_engine_pb2_grpc.VllmEngineServicer):
         self,
         tokenized: vllm_engine_pb2.TokenizedInput,
         mm_proto: vllm_engine_pb2.MultimodalInputs,
-    ) -> AphroditeMultiModalInput:
-        """Build Aphrodite MultiModalInput from preprocessed proto data.
+    ) -> SonarMultiModalInput:
+        """Build Sonar MultiModalInput from preprocessed proto data.
 
         Bypasses HF processor entirely — pixel values and model-specific
         tensors were already computed by the Rust router.  Field layouts
@@ -424,7 +424,7 @@ class AphroditeEngineServicer(vllm_engine_pb2_grpc.VllmEngineServicer):
 
         # Build mm_placeholders: dict[str, list[PlaceholderRange]]
         # When structural tokens (e.g. <|image_start|>, separators) are present
-        # in the placeholder range, we must set is_embed so Aphrodite only scatters
+        # in the placeholder range, we must set is_embed so Sonar only scatters
         # encoder embeddings into patch-token positions (im_token_id).
         mm_placeholders: dict[str, list[PlaceholderRange]] = {}
         if mm_proto.mm_placeholders:
@@ -459,7 +459,7 @@ class AphroditeEngineServicer(vllm_engine_pb2_grpc.VllmEngineServicer):
         kv_transfer_params: vllm_engine_pb2.KvTransferParams | None = None,
     ) -> SamplingParams:
         """
-        Convert protobuf SamplingParams to Aphrodite SamplingParams.
+        Convert protobuf SamplingParams to Sonar SamplingParams.
 
         Args:
             params: Protobuf SamplingParams message
@@ -467,7 +467,7 @@ class AphroditeEngineServicer(vllm_engine_pb2_grpc.VllmEngineServicer):
             kv_transfer_params: KV transfer params proto for Mooncake PD
 
         Returns:
-            Aphrodite SamplingParams with detokenize=False and structured_outputs
+            Sonar SamplingParams with detokenize=False and structured_outputs
         """
         # Build stop sequences
         stop = list(params.stop) if params.stop else None
@@ -562,10 +562,10 @@ class AphroditeEngineServicer(vllm_engine_pb2_grpc.VllmEngineServicer):
         num_top_logprobs: int | None,
     ) -> vllm_engine_pb2.OutputLogProbs | None:
         """
-        Convert Aphrodite SampleLogprobs to proto OutputLogProbs.
+        Convert Sonar SampleLogprobs to proto OutputLogProbs.
 
         Args:
-            logprobs: Aphrodite logprobs (list of dict[int, Logprob])
+            logprobs: Sonar logprobs (list of dict[int, Logprob])
             token_ids: Token IDs for each position
             num_top_logprobs: Number of top logprobs to include
 
@@ -583,9 +583,7 @@ class AphroditeEngineServicer(vllm_engine_pb2_grpc.VllmEngineServicer):
                 proto.token_ids.append(token_id)
 
                 if num_top_logprobs:
-                    proto.top_logprobs.append(
-                        AphroditeEngineServicer._build_top_logprobs(logprob_entry, num_top_logprobs)
-                    )
+                    proto.top_logprobs.append(SonarEngineServicer._build_top_logprobs(logprob_entry, num_top_logprobs))
 
         return proto if proto.token_ids else None
 
@@ -596,10 +594,10 @@ class AphroditeEngineServicer(vllm_engine_pb2_grpc.VllmEngineServicer):
         num_top_logprobs: int | None,
     ) -> vllm_engine_pb2.InputLogProbs | None:
         """
-        Convert Aphrodite PromptLogprobs to proto InputLogProbs.
+        Convert Sonar PromptLogprobs to proto InputLogProbs.
 
         Args:
-            prompt_logprobs: Aphrodite prompt logprobs (list of dict[int, Logprob] | None)
+            prompt_logprobs: Sonar prompt logprobs (list of dict[int, Logprob] | None)
             prompt_token_ids: Prompt token IDs
             num_top_logprobs: Number of top logprobs to include
 
@@ -621,7 +619,7 @@ class AphroditeEngineServicer(vllm_engine_pb2_grpc.VllmEngineServicer):
             proto.token_logprobs.append(token_logprob)
             proto.token_ids.append(token_id)
             if num_top_logprobs:
-                proto.top_logprobs.append(AphroditeEngineServicer._build_top_logprobs(logprob_entry, num_top_logprobs))
+                proto.top_logprobs.append(SonarEngineServicer._build_top_logprobs(logprob_entry, num_top_logprobs))
 
         return proto if proto.token_ids else None
 
@@ -642,14 +640,14 @@ class AphroditeEngineServicer(vllm_engine_pb2_grpc.VllmEngineServicer):
         is_first_chunk: bool = False,
     ) -> vllm_engine_pb2.GenerateResponse:
         """
-        Build a streaming chunk response from Aphrodite output.
-        When output_kind=DELTA, Aphrodite returns only new tokens automatically.
+        Build a streaming chunk response from Sonar output.
+        When output_kind=DELTA, Sonar returns only new tokens automatically.
 
         Note: This sends DELTA logprobs (only for new tokens in this chunk).
         The Rust side is responsible for accumulating if needed.
 
         Args:
-            output: Aphrodite RequestOutput (with delta tokens when output_kind=DELTA)
+            output: Sonar RequestOutput (with delta tokens when output_kind=DELTA)
             completion: Specific CompletionOutput to use (for n>1 support).
                        If None, uses output.outputs[0] for backwards compatibility.
             num_logprobs: Number of top logprobs for output tokens
@@ -677,21 +675,21 @@ class AphroditeEngineServicer(vllm_engine_pb2_grpc.VllmEngineServicer):
             )
 
         # Build output logprobs for this chunk's tokens (delta, not cumulative)
-        output_logprobs = AphroditeEngineServicer._build_output_logprobs(
+        output_logprobs = SonarEngineServicer._build_output_logprobs(
             completion.logprobs, completion.token_ids, num_logprobs
         )
 
         # Build input logprobs only on first chunk for this index
         input_logprobs = None
         if is_first_chunk:
-            input_logprobs = AphroditeEngineServicer._build_input_logprobs(
+            input_logprobs = SonarEngineServicer._build_input_logprobs(
                 output.prompt_logprobs,
                 output.prompt_token_ids,
                 num_prompt_logprobs,
             )
 
         # When output_kind=DELTA, completion.token_ids contains only new tokens
-        # Aphrodite handles the delta logic internally
+        # Sonar handles the delta logic internally
         # completion_tokens = delta count (client will accumulate)
         return vllm_engine_pb2.GenerateResponse(
             chunk=vllm_engine_pb2.GenerateStreamChunk(
@@ -713,13 +711,13 @@ class AphroditeEngineServicer(vllm_engine_pb2_grpc.VllmEngineServicer):
         num_prompt_logprobs: int | None = None,
     ) -> vllm_engine_pb2.GenerateResponse:
         """
-        Build a final completion response from Aphrodite output.
+        Build a final completion response from Sonar output.
 
         For non-streaming (FINAL_ONLY): completion has all tokens and logprobs.
         For streaming (DELTA): completion has last delta; Rust accumulates.
 
         Args:
-            output: Aphrodite RequestOutput (finished=True)
+            output: Sonar RequestOutput (finished=True)
             completion: Specific CompletionOutput to use (for n>1 support).
                        If None, uses output.outputs[0] for backwards compatibility.
             num_logprobs: Number of top logprobs for output tokens
@@ -748,12 +746,12 @@ class AphroditeEngineServicer(vllm_engine_pb2_grpc.VllmEngineServicer):
         # Build output logprobs from completion's data
         # For non-streaming: this has all logprobs
         # For streaming: this has only last delta (Rust accumulates from chunks)
-        output_logprobs = AphroditeEngineServicer._build_output_logprobs(
+        output_logprobs = SonarEngineServicer._build_output_logprobs(
             completion.logprobs, completion.token_ids, num_logprobs
         )
 
         # Build input logprobs
-        input_logprobs = AphroditeEngineServicer._build_input_logprobs(
+        input_logprobs = SonarEngineServicer._build_input_logprobs(
             output.prompt_logprobs,
             output.prompt_token_ids,
             num_prompt_logprobs,

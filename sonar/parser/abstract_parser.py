@@ -21,44 +21,44 @@ from xgrammar.structural_tag import (
     TriggeredTagsFormat,
 )
 
-from aphrodite.entrypoints.generate.base.protocol import (
+from sonar.entrypoints.generate.base.protocol import (
     DeltaMessage,
     ExtractedToolCallInformation,
     FunctionCall,
     FunctionDefinition,
 )
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionNamedToolChoiceParam,
     ChatCompletionRequest,
 )
-from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.logger import init_logger
-from aphrodite.parser.engine.adapters import ParserEngineToolAdapter
-from aphrodite.parser.metrics import record_tool_parser_invocation
-from aphrodite.parser.utils import count_history_tool_calls
-from aphrodite.reasoning.abs_reasoning_parsers import ReasoningParser
-from aphrodite.renderers.chat_utils import (
+from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
+from sonar.exceptions import SonarValidationError
+from sonar.logger import init_logger
+from sonar.parser.engine.adapters import ParserEngineToolAdapter
+from sonar.parser.metrics import record_tool_parser_invocation
+from sonar.parser.utils import count_history_tool_calls
+from sonar.reasoning.abs_reasoning_parsers import ReasoningParser
+from sonar.renderers.chat_utils import (
     get_tool_call_id_type,
     make_tool_call_id,
 )
-from aphrodite.sampling_params import (
+from sonar.sampling_params import (
     SamplingParams,
     StructuredOutputsParams,
     check_json_nesting,
 )
-from aphrodite.tokenizers import TokenizerLike
-from aphrodite.tool_parsers.abstract_tool_parser import Tool, ToolParser
-from aphrodite.tool_parsers.streaming import (
+from sonar.tokenizers import TokenizerLike
+from sonar.tool_parsers.abstract_tool_parser import Tool, ToolParser
+from sonar.tool_parsers.streaming import (
     extract_named_tool_call_streaming,
     extract_required_tool_call_streaming,
 )
-from aphrodite.tool_parsers.structural_tag_registry import (
+from sonar.tool_parsers.structural_tag_registry import (
     get_structural_tag_tools,
     limit_to_single_tool_call,
     resolve_tool_strictness,
 )
-from aphrodite.tool_parsers.tool_strict_level import ToolStrictLevel
+from sonar.tool_parsers.tool_strict_level import ToolStrictLevel
 
 logger = init_logger(__name__)
 
@@ -288,7 +288,7 @@ def structured_outputs_to_format(params: StructuredOutputsParams) -> Format | No
     if params.choice is not None:
         return OrFormat(elements=[ConstStringFormat(value=choice) for choice in params.choice])
     if params.grammar is not None:
-        from aphrodite.v1.structured_output.utils import grammar_is_likely_lark
+        from sonar.v1.structured_output.utils import grammar_is_likely_lark
 
         grammar = params.grammar
         # IMPORTANT(arpera):
@@ -297,7 +297,7 @@ def structured_outputs_to_format(params: StructuredOutputsParams) -> Format | No
             try:
                 grammar = str(Grammar.from_lark(grammar))
             except Exception as e:
-                raise AphroditeValidationError("Invalid grammar specification.") from e
+                raise SonarValidationError("Invalid grammar specification.") from e
         return GrammarFormat(grammar=grammar)
     if params.structural_tag is not None:
         check_json_nesting(params.structural_tag, structural_tag=True)
@@ -322,12 +322,12 @@ def structured_outputs_to_format(params: StructuredOutputsParams) -> Format | No
 
 def _xgrammar_supports(structured_outputs: StructuredOutputsParams) -> bool:
     """Whether the constraint passes xgrammar validation on its own."""
-    from aphrodite.v1.structured_output.backend_xgrammar import validate_xgrammar_grammar
+    from sonar.v1.structured_output.backend_xgrammar import validate_xgrammar_grammar
 
     try:
         # validate_xgrammar_grammar rewrites `choice` into `grammar` in place.
         validate_xgrammar_grammar(SamplingParams(structured_outputs=replace(structured_outputs)))
-    except (TypeError, ValueError, AphroditeValidationError):
+    except (TypeError, ValueError, SonarValidationError):
         return False
     return True
 

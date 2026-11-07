@@ -7,16 +7,16 @@ from dataclasses import dataclass, replace
 import torch
 import torch.distributed as dist
 
-from aphrodite.config import ParallelConfig
-from aphrodite.config.compilation import CUDAGraphMode
-from aphrodite.config.fault_tolerance import ft_tp_barrier_required
-from aphrodite.distributed.parallel_state import get_dp_group, get_tp_group
-from aphrodite.v1.worker.dp_utils import should_skip_dp_coordination
-from aphrodite.v1.worker.gpu.cudagraph_utils import (
+from sonar.config import ParallelConfig
+from sonar.config.compilation import CUDAGraphMode
+from sonar.config.fault_tolerance import ft_tp_barrier_required
+from sonar.distributed.parallel_state import get_dp_group, get_tp_group
+from sonar.v1.worker.dp_utils import should_skip_dp_coordination
+from sonar.v1.worker.gpu.cudagraph_utils import (
     BatchExecutionDescriptor,
     CudaGraphManager,
 )
-from aphrodite.v1.worker.ubatch_utils import check_ubatch_thresholds, get_num_ubatches
+from sonar.v1.worker.ubatch_utils import check_ubatch_thresholds, get_num_ubatches
 
 
 @dataclass(frozen=True)

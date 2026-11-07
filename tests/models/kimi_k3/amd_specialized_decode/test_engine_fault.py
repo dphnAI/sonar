@@ -26,13 +26,13 @@ EXIT_TIMEOUT = 300
 # Builds every rank's K2 with the fault hook (``K2Build.fault_*``): CTA 0 of
 # rank STALLED stalls past every in-kernel wait's bound in the step at
 # FAULT_EPOCH. Patched into ``MonoRunner.fault`` as the runner module loads, in
-# every Aphrodite process.
+# every Sonar process.
 _SITECUSTOMIZE = """\
 import importlib.abc
 import importlib.machinery
 import sys
 
-_MODULE = "aphrodite.models.kimi_k3.amd.specialized_decode.runtime.runner"
+_MODULE = "sonar.models.kimi_k3.amd.specialized_decode.runtime.runner"
 
 
 def _patch(module):
@@ -105,7 +105,7 @@ SERVER_ARGS = [
 @needs_gfx950
 @multi_gpu_test(num_gpus=8)
 def test_a_stalled_rank_stops_the_engine(tmp_path):
-    from aphrodite.models.kimi_k3.amd.specialized_decode.mono.common.sync import WAIT_TICKS
+    from sonar.models.kimi_k3.amd.specialized_decode.mono.common.sync import WAIT_TICKS
 
     site = tmp_path / "mono_fault"
     site.mkdir()
@@ -114,9 +114,9 @@ def test_a_stalled_rank_stops_the_engine(tmp_path):
     )
     env = {
         "PYTHONPATH": os.pathsep.join(filter(None, [str(site), os.getenv("PYTHONPATH")])),
-        "APHRODITE_USE_V2_MODEL_RUNNER": "1",
-        "APHRODITE_ROCM_USE_AITER": "1",
-        "APHRODITE_ROCM_AITER_MLA_ASM_PADDING": "asm",
+        "SONAR_USE_V2_MODEL_RUNNER": "1",
+        "SONAR_ROCM_USE_AITER": "1",
+        "SONAR_ROCM_AITER_MLA_ASM_PADDING": "asm",
     }
     body = {
         "model": MODEL,

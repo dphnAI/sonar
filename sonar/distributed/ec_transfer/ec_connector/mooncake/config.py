@@ -6,10 +6,10 @@ import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from aphrodite.utils.network_utils import make_zmq_path
+from sonar.utils.network_utils import make_zmq_path
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
+    from sonar.config import SonarConfig
 
 # Scheduler and Worker must agree on when a remote reservation becomes stale.
 _RESERVATION_TTL_SECONDS = 300
@@ -75,9 +75,9 @@ class MooncakeECConfig:
     store_read_buffer_bytes: int = 128 * 1024**2
 
     @classmethod
-    def from_aphrodite_config(cls, aphrodite_config: AphroditeConfig) -> MooncakeECConfig:
-        parallel_config = aphrodite_config.parallel_config
-        ec_config = aphrodite_config.ec_transfer_config
+    def from_sonar_config(cls, sonar_config: SonarConfig) -> MooncakeECConfig:
+        parallel_config = sonar_config.parallel_config
+        ec_config = sonar_config.ec_transfer_config
         assert ec_config is not None
 
         if ec_config.is_ec_producer:
@@ -96,11 +96,11 @@ class MooncakeECConfig:
         if shared_reuse:
             if not ec_config.is_encode_only:
                 raise ValueError("cross_encoder_cache requires an Encoder-only producer")
-            if not aphrodite_config.use_v2_model_runner:
+            if not sonar_config.use_v2_model_runner:
                 raise ValueError("cross_encoder_cache requires Model Runner V2")
-            if aphrodite_config.lora_config is not None:
+            if sonar_config.lora_config is not None:
                 raise ValueError("cross_encoder_cache does not support LoRA")
-            mm_config = aphrodite_config.model_config.multimodal_config
+            mm_config = sonar_config.model_config.multimodal_config
             if mm_config is not None and mm_config.mm_processor_cache_gb == 0:
                 raise ValueError(
                     "cross_encoder_cache requires mm_processor_cache_gb > 0 "

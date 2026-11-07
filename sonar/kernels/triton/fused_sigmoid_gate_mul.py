@@ -4,8 +4,8 @@
 
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
 
 
 @triton.jit
@@ -71,7 +71,7 @@ def fused_sigmoid_gate_mul(x: torch.Tensor, gate: torch.Tensor, scale: torch.Ten
             return out
         # Strided gate view (num_heads == 1 per TP rank): quantize the eager
         # result, matching the unfused chain.
-        from aphrodite import _custom_ops as ops
+        from sonar import _custom_ops as ops
 
         return ops.scaled_fp8_quant(out, scale, group_shape=(-1, -1))[0]
 

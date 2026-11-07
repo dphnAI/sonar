@@ -18,33 +18,33 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from aphrodite import _custom_ops as ops
-from aphrodite.config import AphroditeConfig, CacheConfig, get_current_aphrodite_config
-from aphrodite.distributed import get_tensor_model_parallel_world_size
-from aphrodite.forward_context import get_forward_context
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.activation import SiluAndMul
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar import _custom_ops as ops
+from sonar.config import CacheConfig, SonarConfig, get_current_sonar_config
+from sonar.distributed import get_tensor_model_parallel_world_size
+from sonar.forward_context import get_forward_context
+from sonar.logger import init_logger
+from sonar.model_executor.layers.activation import SiluAndMul
+from sonar.model_executor.layers.attention import Attention
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     MergedColumnParallelLinear,
     QKVParallelLinear,
     ReplicatedLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.models.qwen3_dflash2 import DFlashGroupedConv
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.models.qwen3_dflash2 import DFlashGroupedConv
+from sonar.model_executor.models.utils import (
     AutoWeightsLoader,
     WeightsMapper,
     maybe_prefix,
 )
-from aphrodite.v1.worker.gpu.spec_decode.dflash2.config import DFlash2SpeculatorConfig
+from sonar.v1.worker.gpu.spec_decode.dflash2.config import DFlash2SpeculatorConfig
 
 from .dflash2_ops import candidate_edges
 
@@ -179,25 +179,25 @@ class DFlash2BeamDecoderLayer(nn.Module):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         config,
         layer_idx: int,
         prefix: str,
     ) -> None:
         super().__init__()
-        self.self_attn = DFlash2BeamAttention(config, layer_idx, aphrodite_config.cache_config, f"{prefix}.self_attn")
+        self.self_attn = DFlash2BeamAttention(config, layer_idx, sonar_config.cache_config, f"{prefix}.self_attn")
         self.mlp = DFlash2BeamMLP(config.hidden_size, config.intermediate_size, f"{prefix}.mlp")
         self.input_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         draft_config = config.dflash_config
-        assert aphrodite_config.speculative_config is not None
+        assert sonar_config.speculative_config is not None
         conv_args = dict(
             hidden_size=config.hidden_size,
             taps=int(draft_config["conv_kernel_size"]),
             group_size=int(draft_config["conv_group_size"]),
             # Query tokens per request: the bonus token plus the mask tokens.
-            block_size=1 + aphrodite_config.speculative_config.num_speculative_tokens,
-            params_dtype=aphrodite_config.model_config.dtype,
+            block_size=1 + sonar_config.speculative_config.num_speculative_tokens,
+            params_dtype=sonar_config.model_config.dtype,
         )
         self.attention_conv = DFlashGroupedConv(**conv_args, prefix=maybe_prefix(prefix, "attention_conv"))
         self.mlp_conv = DFlashGroupedConv(**conv_args, prefix=maybe_prefix(prefix, "mlp_conv"))
@@ -292,7 +292,7 @@ class DFlash2BeamCandidateSelector(nn.Module):
 
 
 class DFlash2BeamModel(nn.Module):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_stacked={
             ".q_proj": (".qkv_proj", "q"),
             ".k_proj": (".qkv_proj", "k"),
@@ -305,16 +305,16 @@ class DFlash2BeamModel(nn.Module):
     def __init__(
         self,
         *,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         start_layer_id: int = 0,
         prefix: str = "",
     ) -> None:
         super().__init__()
-        assert aphrodite_config.speculative_config is not None
-        config = aphrodite_config.speculative_config.draft_model_config.hf_config
+        assert sonar_config.speculative_config is not None
+        config = sonar_config.speculative_config.draft_model_config.hf_config
         self.config = config
         draft_config = config.dflash_config
-        params_dtype = aphrodite_config.model_config.dtype
+        params_dtype = sonar_config.model_config.dtype
 
         # Replaced by the target's embedding when the speculator loads the draft.
         self.embed_tokens = VocabParallelEmbedding(
@@ -325,11 +325,11 @@ class DFlash2BeamModel(nn.Module):
 
         # Numbered after the target's layers so the attention layer names, which
         # key the KV cache, do not collide with the target's.
-        current_aphrodite_config = get_current_aphrodite_config()
+        current_sonar_config = get_current_sonar_config()
         self.layers = nn.ModuleList(
             [
                 DFlash2BeamDecoderLayer(
-                    current_aphrodite_config,
+                    current_sonar_config,
                     config,
                     layer_idx,
                     prefix=maybe_prefix(prefix, f"layers.{layer_idx + start_layer_id}"),
@@ -502,7 +502,7 @@ class DFlash2BeamModel(nn.Module):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
 
 class DFlash2BeamForCausalLM(nn.Module):
@@ -515,13 +515,13 @@ class DFlash2BeamForCausalLM(nn.Module):
     # Full vocabulary: draft ids are target ids.
     draft_id_to_target_id = None
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__()
-        assert aphrodite_config.speculative_config is not None
-        self.config = aphrodite_config.speculative_config.draft_model_config.hf_config
+        assert sonar_config.speculative_config is not None
+        self.config = sonar_config.speculative_config.draft_model_config.hf_config
         self.model = DFlash2BeamModel(
-            aphrodite_config=aphrodite_config,
-            start_layer_id=aphrodite_config.model_config.get_total_num_hidden_layers(),
+            sonar_config=sonar_config,
+            start_layer_id=sonar_config.model_config.get_total_num_hidden_layers(),
             prefix=maybe_prefix(prefix, "model"),
         )
         self.lm_head = ParallelLMHead(

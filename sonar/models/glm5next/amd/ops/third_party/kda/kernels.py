@@ -12,17 +12,17 @@
 
 import torch
 
-from aphrodite.third_party.flash_linear_attention.ops.chunk_delta_h import (
+from sonar.third_party.flash_linear_attention.ops.chunk_delta_h import (
     chunk_gated_delta_rule_fwd_h,
 )
-from aphrodite.third_party.flash_linear_attention.ops.cumsum import chunk_local_cumsum
-from aphrodite.third_party.flash_linear_attention.ops.index import prepare_chunk_indices
-from aphrodite.third_party.flash_linear_attention.ops.l2norm import l2norm_fwd
-from aphrodite.third_party.flash_linear_attention.ops.op import exp2, log
-from aphrodite.third_party.flash_linear_attention.ops.solve_tril import solve_tril
-from aphrodite.third_party.flash_linear_attention.ops.utils import FLA_CHUNK_SIZE, is_amd
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.math_utils import RCP_LN2, cdiv, next_power_of_2
+from sonar.third_party.flash_linear_attention.ops.cumsum import chunk_local_cumsum
+from sonar.third_party.flash_linear_attention.ops.index import prepare_chunk_indices
+from sonar.third_party.flash_linear_attention.ops.l2norm import l2norm_fwd
+from sonar.third_party.flash_linear_attention.ops.op import exp2, log
+from sonar.third_party.flash_linear_attention.ops.solve_tril import solve_tril
+from sonar.third_party.flash_linear_attention.ops.utils import FLA_CHUNK_SIZE, is_amd
+from sonar.triton_utils import tl, triton
+from sonar.utils.math_utils import RCP_LN2, cdiv, next_power_of_2
 
 from .fused_recurrent import (
     fused_recurrent_gated_delta_rule_fwd_kernel,

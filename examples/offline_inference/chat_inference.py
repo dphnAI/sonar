@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-from aphrodite import LLM, SamplingParams
+from sonar import LLM, SamplingParams
 
 llm = LLM(model="NousResearch/Meta-Llama-3.1-8B-Instruct")
 sampling_params = SamplingParams(temperature=0.5)

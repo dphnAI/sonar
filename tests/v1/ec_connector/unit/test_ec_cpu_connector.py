@@ -14,10 +14,10 @@ import time
 import pytest
 from tqdm import tqdm
 
-from aphrodite import LLM, SamplingParams
-from aphrodite.assets.image import ImageAsset
-from aphrodite.config import ECTransferConfig
-from aphrodite.platforms import current_platform
+from sonar import LLM, SamplingParams
+from sonar.assets.image import ImageAsset
+from sonar.config import ECTransferConfig
+from sonar.platforms import current_platform
 
 MODEL = "Qwen/Qwen2-VL-2B-Instruct"
 EC_CPU_BYTES = 500 << 20  # 500 MiB

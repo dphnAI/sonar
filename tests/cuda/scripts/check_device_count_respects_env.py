@@ -11,7 +11,7 @@ for key in ["CUDA_VISIBLE_DEVICES", "HIP_VISIBLE_DEVICES", "ROCR_VISIBLE_DEVICES
 
 import torch  # noqa: E402
 
-from aphrodite.platforms import current_platform  # noqa: F401, E402
+from sonar.platforms import current_platform  # noqa: F401, E402
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 count = torch.accelerator.device_count()

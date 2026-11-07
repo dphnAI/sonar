@@ -5,9 +5,9 @@
 import numpy as np
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.torch_utils import direct_register_custom_op
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
+from sonar.utils.torch_utils import direct_register_custom_op
 
 from .base import RotaryEmbeddingBase
 from .yarn_scaling_rope import YaRNScalingRotaryEmbedding, yarn_get_mscale
@@ -37,7 +37,7 @@ def _triton_mrope_forward(
 ):
     # Adapted from
     # https://github.com/linkedin/Liger-Kernel/blob/main/src/liger_kernel/ops/qwen2vl_mrope.py
-    # This version supports flatten input tensors from aphrodite
+    # This version supports flatten input tensors from sonar
     # and supports cos and sin cache with shape (3, num_tokens, rotary_dim // 2)
     # instead of (3, bsz, seq_len, head_dim), also supports interleaved rotary
     pid = tl.program_id(0)
@@ -496,7 +496,7 @@ class MRotaryEmbedding(RotaryEmbeddingBase):
             query_shape = query.shape
             key_shape = key.shape
             cos_sin_cache = self._match_cos_sin_cache_dtype(query)
-            torch.ops.aphrodite.mrope(
+            torch.ops.sonar.mrope(
                 positions,
                 query,
                 key,
@@ -532,7 +532,7 @@ class MRotaryEmbedding(RotaryEmbeddingBase):
         if positions.ndim == 2:
             assert key is not None
             assert self.mrope_section is not None
-            import aphrodite._xpu_ops  # noqa: F401
+            import sonar._xpu_ops  # noqa: F401
 
             cos_sin_cache = self._match_cos_sin_cache_dtype(query)
             torch.ops._xpu_C.multimodal_rotary_embedding(

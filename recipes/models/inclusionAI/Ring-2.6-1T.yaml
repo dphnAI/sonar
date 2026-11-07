@@ -45,7 +45,7 @@ compatible_strategies:
 hardware_overrides:
   amd:
     extra_env:
-      APHRODITE_ROCM_USE_AITER: "1"
+      SONAR_ROCM_USE_AITER: "1"
 
 strategy_overrides:
   single_node_tp:
@@ -61,7 +61,7 @@ guide: |
   in the Ring 2.6 series and emits explicit `<think>...</think>` traces; the
   chat template accepts a `reasoning_effort` field (default `high`).
 
-  Aphrodite 0.20.1 shipped the BailingMoeV2.5 MLA RoPE fix (vllm-project/vllm#41185)
+  Sonar 0.20.1 shipped the BailingMoeV2.5 MLA RoPE fix (vllm-project/vllm#41185)
   that is load-bearing for this architecture — pin v0.20.2 or newer.
 
   ## Deployment Configurations
@@ -81,7 +81,7 @@ guide: |
     --device=/dev/kfd \
     --device=/dev/dri \
     --group-add video \
-    -e APHRODITE_ROCM_USE_AITER=1 \
+    -e SONAR_ROCM_USE_AITER=1 \
     vllm/vllm-openai-rocm:v0.28.0 \
       inclusionAI/Ring-2.6-1T \
       --tensor-parallel-size 8 \
@@ -92,9 +92,9 @@ guide: |
 
   ```bash
   uv venv && source .venv/bin/activate
-  uv pip install -U aphrodite-engine --torch-backend auto
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
 
-  aphrodite serve inclusionAI/Ring-2.6-1T \
+  sonar serve inclusionAI/Ring-2.6-1T \
     --trust-remote-code \
     --tensor-parallel-size 8
   ```
@@ -123,5 +123,5 @@ guide: |
   ## References
 
   - [Ring-2.6-1T on Hugging Face](https://huggingface.co/inclusionAI/Ring-2.6-1T)
-  - [Aphrodite PR #41185 — BailingMoeV2.5 MLA RoPE fix](https://github.com/vllm-project/vllm/pull/41185)
-  - [Aphrodite ROCm GPU install docs](https://docs.vllm.ai/en/latest/getting_started/installation/gpu/?device=rocm)
+  - [Sonar PR #41185 — BailingMoeV2.5 MLA RoPE fix](https://github.com/vllm-project/vllm/pull/41185)
+  - [Sonar ROCm GPU install docs](https://docs.vllm.ai/en/latest/getting_started/installation/gpu/?device=rocm)

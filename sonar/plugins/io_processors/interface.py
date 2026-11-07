@@ -4,12 +4,12 @@ from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator, Sequence
 from typing import Generic, TypeVar
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.inputs import PromptType
-from aphrodite.outputs import PoolingRequestOutput
-from aphrodite.pooling_params import PoolingParams
-from aphrodite.renderers import BaseRenderer
-from aphrodite.sampling_params import SamplingParams
+from sonar.config import SonarConfig
+from sonar.inputs import PromptType
+from sonar.outputs import PoolingRequestOutput
+from sonar.pooling_params import PoolingParams
+from sonar.renderers import BaseRenderer
+from sonar.sampling_params import SamplingParams
 
 IOProcessorInput = TypeVar("IOProcessorInput")
 IOProcessorOutput = TypeVar("IOProcessorOutput")
@@ -18,10 +18,10 @@ IOProcessorOutput = TypeVar("IOProcessorOutput")
 class IOProcessor(ABC, Generic[IOProcessorInput, IOProcessorOutput]):
     """Abstract interface for pre/post-processing of engine I/O."""
 
-    def __init__(self, aphrodite_config: AphroditeConfig, renderer: BaseRenderer):
+    def __init__(self, sonar_config: SonarConfig, renderer: BaseRenderer):
         super().__init__()
 
-        self.aphrodite_config = aphrodite_config
+        self.sonar_config = sonar_config
 
     def parse_data(self, data: object) -> IOProcessorInput:
         raise NotImplementedError
@@ -71,7 +71,7 @@ class IOProcessor(ABC, Generic[IOProcessorInput, IOProcessorOutput]):
         **kwargs,
     ) -> IOProcessorOutput:
         # We cannot guarantee outputs are returned in the same order they were
-        # fed to Aphrodite.
+        # fed to Sonar.
         # Let's sort them by id before post_processing
         sorted_output = sorted([(i, item) async for i, item in model_output], key=lambda output: output[0])
         collected_output = [output[1] for output in sorted_output]

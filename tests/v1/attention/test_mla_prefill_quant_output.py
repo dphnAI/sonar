@@ -16,18 +16,18 @@ from unittest.mock import patch
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     kFp8Dynamic128Sym,
     kFp8StaticTensorSym,
     kNvfp4Dynamic,
 )
-from aphrodite.platforms.interface import DeviceCapability
-from aphrodite.v1.attention.backends.mla.prefill.base import MLAPrefillBackend
-from aphrodite.v1.attention.backends.mla.prefill.flash_attn import (
+from sonar.platforms.interface import DeviceCapability
+from sonar.v1.attention.backends.mla.prefill.base import MLAPrefillBackend
+from sonar.v1.attention.backends.mla.prefill.flash_attn import (
     FlashAttnPrefillBackend,
 )
 
-_FA_MODULE = "aphrodite.v1.attention.backends.mla.prefill.flash_attn"
+_FA_MODULE = "sonar.v1.attention.backends.mla.prefill.flash_attn"
 
 
 class _DummyPrefillBackend(MLAPrefillBackend):
@@ -51,18 +51,18 @@ def test_base_backend_never_supports_quant_output(quant_key):
     assert backend.supports_quant_output(quant_key) is False
 
 
-def _make_fa_backend(version: int | None, is_aphrodite_fa: bool):
+def _make_fa_backend(version: int | None, is_sonar_fa: bool):
     """Build a FlashAttnPrefillBackend without running its heavy __init__."""
     backend = object.__new__(FlashAttnPrefillBackend)
     backend.flash_attn_version = version
-    backend._is_aphrodite_fa = is_aphrodite_fa
+    backend._is_sonar_fa = is_sonar_fa
     return backend
 
 
 @pytest.mark.parametrize(
-    ("version", "is_aphrodite_fa", "dc_major", "quant_key", "expected"),
+    ("version", "is_sonar_fa", "dc_major", "quant_key", "expected"),
     [
-        # FA4 + Aphrodite-FA + Blackwell SM100/SM110 + static FP8 -> fused.
+        # FA4 + Sonar-FA + Blackwell SM100/SM110 + static FP8 -> fused.
         (4, True, 10, kFp8StaticTensorSym, True),
         (4, True, 11, kFp8StaticTensorSym, True),
         # Wrong compute capability (SM90 / SM120) -> not supported (#135).
@@ -72,15 +72,15 @@ def _make_fa_backend(version: int | None, is_aphrodite_fa: bool):
         (3, True, 10, kFp8StaticTensorSym, False),
         (2, True, 10, kFp8StaticTensorSym, False),
         (None, True, 10, kFp8StaticTensorSym, False),
-        # Upstream (ROCm) flash-attn, not Aphrodite-FA.
+        # Upstream (ROCm) flash-attn, not Sonar-FA.
         (4, False, 10, kFp8StaticTensorSym, False),
         # Quant keys not wired through FA4 yet.
         (4, True, 10, kFp8Dynamic128Sym, False),
         (4, True, 10, kNvfp4Dynamic, False),
     ],
 )
-def test_flash_attn_supports_quant_output(version, is_aphrodite_fa, dc_major, quant_key, expected):
-    backend = _make_fa_backend(version, is_aphrodite_fa)
+def test_flash_attn_supports_quant_output(version, is_sonar_fa, dc_major, quant_key, expected):
+    backend = _make_fa_backend(version, is_sonar_fa)
     with patch(f"{_FA_MODULE}.current_platform") as plat:
         plat.get_device_capability.return_value = DeviceCapability(major=dc_major, minor=0)
         assert backend.supports_quant_output(quant_key) is expected
@@ -88,7 +88,7 @@ def test_flash_attn_supports_quant_output(version, is_aphrodite_fa, dc_major, qu
 
 def test_flash_attn_supports_quant_output_unknown_device():
     """A None device capability (e.g. capability probe failed) is safe."""
-    backend = _make_fa_backend(version=4, is_aphrodite_fa=True)
+    backend = _make_fa_backend(version=4, is_sonar_fa=True)
     with patch(f"{_FA_MODULE}.current_platform") as plat:
         plat.get_device_capability.return_value = None
         assert backend.supports_quant_output(kFp8StaticTensorSym) is False
@@ -103,7 +103,7 @@ def test_flash_attn_registers_warmup_only_for_fa4(
     enable_jit_warmup: bool,
     expected_calls: int,
 ):
-    aphrodite_config = SimpleNamespace(kernel_config=SimpleNamespace(enable_jit_warmup=enable_jit_warmup))
+    sonar_config = SimpleNamespace(kernel_config=SimpleNamespace(enable_jit_warmup=enable_jit_warmup))
     with (
         patch(f"{_FA_MODULE}.flash_attn_varlen_func"),
         patch(f"{_FA_MODULE}.get_flash_attn_version", return_value=version),
@@ -118,7 +118,7 @@ def test_flash_attn_registers_warmup_only_for_fa4(
             qk_nope_head_dim=128,
             qk_rope_head_dim=64,
             v_head_dim=128,
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
         )
 
     assert register.call_count == expected_calls
@@ -143,7 +143,7 @@ def test_mla_impl_forward_mha_accepts_output_scale():
     override (and the unconditional forward_impl call) stays compatible."""
     import inspect
 
-    from aphrodite.v1.attention.backend import MLAAttentionImpl
+    from sonar.v1.attention.backend import MLAAttentionImpl
 
     params = inspect.signature(MLAAttentionImpl.forward_mha).parameters
     assert "output_scale" in params
@@ -164,14 +164,14 @@ _FUSED_FP8_SKIP = _fused_fp8_skip_reason()
 
 
 @pytest.mark.skipif(_FUSED_FP8_SKIP is not None, reason=_FUSED_FP8_SKIP or "")
-def test_fa4_fused_fp8_output_matches_post_quant(default_aphrodite_config):
+def test_fa4_fused_fp8_output_matches_post_quant(default_sonar_config):
     """FA4's fused FP8 write (output_scale, flash-attention#135) must match the
     bf16-attention + standalone static-FP8-quant path it replaces, since
     production uses the same output_scale for both."""
-    from aphrodite.model_executor.layers.quantization.input_quant_fp8 import QuantFP8
-    from aphrodite.model_executor.layers.quantization.utils.quant_utils import GroupShape
-    from aphrodite.platforms import current_platform
-    from aphrodite.vllm_flash_attn import flash_attn_varlen_func
+    from sonar.model_executor.layers.quantization.input_quant_fp8 import QuantFP8
+    from sonar.model_executor.layers.quantization.utils.quant_utils import GroupShape
+    from sonar.platforms import current_platform
+    from sonar.vllm_flash_attn import flash_attn_varlen_func
 
     torch.manual_seed(0)
     device = torch.device("cuda")

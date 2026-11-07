@@ -13,8 +13,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from aphrodite.model_executor.models.transformers.fuser import Fusers, get_fuser, get_fusers
-from aphrodite.model_executor.models.transformers.fusers import (
+from sonar.model_executor.models.transformers.fuser import Fusers, get_fuser, get_fusers
+from sonar.model_executor.models.transformers.fusers import (
     GLUFuser,
     MergedColumnParallelFuser,
     PackedQKVFuser,
@@ -22,14 +22,14 @@ from aphrodite.model_executor.models.transformers.fusers import (
     packed_qkv,
     qkv,
 )
-from aphrodite.model_executor.models.transformers.fx_utils import (
+from sonar.model_executor.models.transformers.fx_utils import (
     bypass_existence_guard,
     trace,
 )
 
 
 class SiluAndMulStub(nn.Module):
-    """Stand-in for Aphrodite's `SiluAndMul` (no Aphrodite config required)."""
+    """Stand-in for Sonar's `SiluAndMul` (no Sonar config required)."""
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         d = x.shape[-1] // 2
@@ -141,7 +141,7 @@ class FakeAttention(nn.Module):
         layer_idx: int = 0,
     ):
         super().__init__()
-        self.config = SimpleNamespace(_attn_implementation="aphrodite")
+        self.config = SimpleNamespace(_attn_implementation="sonar")
         self.layer_idx = layer_idx
         self.head_dim = head_dim
         self.scaling = head_dim**-0.5
@@ -561,7 +561,7 @@ class PackedQKVAttention(nn.Module):
         layer_idx: int = 0,
     ):
         super().__init__()
-        self.config = SimpleNamespace(_attn_implementation="aphrodite")
+        self.config = SimpleNamespace(_attn_implementation="sonar")
         self.layer_idx = layer_idx
         self.head_dim = head_dim
         self.scaling = head_dim**-0.5
@@ -607,7 +607,7 @@ class PerHeadSplitAttention(nn.Module):
 
 
 class FakeSelfAttn(nn.Module):
-    """Stand-in for the Aphrodite `Attention` attached to the dispatching module."""
+    """Stand-in for the Sonar `Attention` attached to the dispatching module."""
 
     def __init__(self):
         super().__init__()
@@ -1038,12 +1038,12 @@ def test_merged_column_fuser_rejects_input_mutation(cls):
 
 
 @pytest.mark.parametrize("cls", [FourParallelLinears, GuardedParallelLinears])
-def test_merged_column_fuser_supports_any_number_of_linears(cls, default_aphrodite_config, monkeypatch):
-    from aphrodite.model_executor import parameter
-    from aphrodite.model_executor.layers import linear
-    from aphrodite.model_executor.layers.linear import MergedColumnParallelLinear
-    from aphrodite.model_executor.layers.utils import default_unquantized_gemm
-    from aphrodite.model_executor.models.utils import AutoWeightsLoader, WeightsMapper
+def test_merged_column_fuser_supports_any_number_of_linears(cls, default_sonar_config, monkeypatch):
+    from sonar.model_executor import parameter
+    from sonar.model_executor.layers import linear
+    from sonar.model_executor.layers.linear import MergedColumnParallelLinear
+    from sonar.model_executor.layers.utils import default_unquantized_gemm
+    from sonar.model_executor.models.utils import AutoWeightsLoader, WeightsMapper
 
     monkeypatch.setattr(linear, "get_tensor_model_parallel_rank", lambda: 0)
     monkeypatch.setattr(linear, "get_tensor_model_parallel_world_size", lambda: 1)
@@ -1066,7 +1066,7 @@ def test_merged_column_fuser_supports_any_number_of_linears(cls, default_aphrodi
     x = torch.randn(2, 8)
     expected = real(x)
     weights = [(name, weight.detach().clone()) for name, weight in real.named_parameters()]
-    fused = fuser.fuse(real, "parallel", default_aphrodite_config)
+    fused = fuser.fuse(real, "parallel", default_sonar_config)
     root = nn.Module()
     root.parallel = fused
     mapper = WeightsMapper(orig_to_new_stacked=fuser.orig_to_new_stacked("parallel"))
@@ -1090,7 +1090,7 @@ def test_merged_name_is_unique_per_linear_names():
 
 
 def test_heterogeneous_instances_fall_back_to_merged_column_fuser(
-    default_aphrodite_config,
+    default_sonar_config,
 ):
     """Same class and structure -> both fusers are cached as candidates. A
     layer whose out_features aren't a multiple of its own head_dim (as a
@@ -1107,7 +1107,7 @@ def test_heterogeneous_instances_fall_back_to_merged_column_fuser(
     assert any(isinstance(f, QKVFuser) for f in candidates)
     assert any(isinstance(f, MergedColumnParallelFuser) for f in candidates)
 
-    fusers = Fusers(container, default_aphrodite_config)
+    fusers = Fusers(container, default_sonar_config)
     assert isinstance(fusers[container.compatible][0], QKVFuser)
     assert isinstance(fusers[container.incompatible][0], MergedColumnParallelFuser)
 
@@ -1176,7 +1176,7 @@ def test_untraceable_tail_still_fuses():
 
 
 def test_weight_mappings_are_scoped_to_fused_prefixes():
-    from aphrodite.model_executor.models.utils import WeightsMapper
+    from sonar.model_executor.models.utils import WeightsMapper
 
     with torch.device("meta"):
         glu_fuser = get_fuser(GLUMLP(), GLUFuser)
@@ -1230,19 +1230,19 @@ def test_weight_mappings_are_scoped_to_fused_prefixes():
 
 
 @pytest.mark.parametrize("cls", [NotAnMLP, NotAnActGLUMLP, BroadcastGLU])
-def test_unfusable_modules_are_not_fused(cls, default_aphrodite_config):
+def test_unfusable_modules_are_not_fused(cls, default_sonar_config):
     with torch.device("meta"):
         module = cls()
     fuser = get_fuser(module, GLUFuser)
     # Either no pattern matches the class, or this instance fails validation
     # (`recursive_replace` gates fusion and its weight mappings on `validate`)
-    assert fuser is None or not fuser.validate(module, default_aphrodite_config)
+    assert fuser is None or not fuser.validate(module, default_sonar_config)
 
 
-def test_act_and_mul_derived_from_module(default_aphrodite_config):
+def test_act_and_mul_derived_from_module(default_sonar_config):
     from transformers.activations import GELUTanh, SiLUActivation
 
-    from aphrodite.model_executor.layers.activation import GeluAndMul, SiluAndMul
+    from sonar.model_executor.layers.activation import GeluAndMul, SiluAndMul
 
     assert isinstance(GLUFuser._get_act_and_mul(nn.SiLU()), SiluAndMul)
     assert isinstance(GLUFuser._get_act_and_mul(SiLUActivation()), SiluAndMul)
@@ -1282,7 +1282,7 @@ def test_head_counts_come_from_the_module_not_the_model(cls, fuser_module, fuser
     add up, so nothing raises below TP=4: the layer is just sharded wrong.
     """
     head_dim, heads, kv_heads = 8, 8, 4
-    aphrodite_config = _wider_model_config(head_dim)
+    sonar_config = _wider_model_config(head_dim)
     with torch.device("meta"):
         module = cls(hidden=32, head_dim=head_dim, heads=heads, kv_heads=kv_heads)
 
@@ -1296,8 +1296,8 @@ def test_head_counts_come_from_the_module_not_the_model(cls, fuser_module, fuser
     )
     monkeypatch.setattr(fuser_module, "replace_linear_class", lambda *a, **kw: nn.Identity())
     fuser = get_fuser(module, fuser_cls)
-    assert fuser is not None and fuser.validate(module, aphrodite_config)
-    fuser.update_attrs(module, "model.layers.0.self_attn", aphrodite_config)
+    assert fuser is not None and fuser.validate(module, sonar_config)
+    fuser.update_attrs(module, "model.layers.0.self_attn", sonar_config)
 
     assert captured["head_size"] == head_dim
     assert captured["total_num_heads"] == heads
@@ -1307,11 +1307,11 @@ def test_head_counts_come_from_the_module_not_the_model(cls, fuser_module, fuser
 def test_validate_accepts_a_layer_the_model_wide_head_size_would_reject():
     """`validate` gates fusion, so a wrong head size silently disables it."""
     head_dim, heads, kv_heads = 8, 8, 3
-    aphrodite_config = _wider_model_config(head_dim)
+    sonar_config = _wider_model_config(head_dim)
     with torch.device("meta"):
         module = FakeAttention(hidden=32, head_dim=head_dim, heads=heads, kv_heads=kv_heads)
 
     # kv width is 24, not a multiple of the model-wide 16, but is of this
     # layer's 8.
     fuser = get_fuser(module, QKVFuser)
-    assert fuser is not None and fuser.validate(module, aphrodite_config)
+    assert fuser is not None and fuser.validate(module, sonar_config)

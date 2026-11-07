@@ -2,11 +2,11 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import torch
 
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.torch_utils import async_tensor_h2d
-from aphrodite.v1.core.sched.output import NewRequestData
-from aphrodite.v1.worker.gpu.buffer_utils import UvaBackedTensor
-from aphrodite.v1.worker.gpu.input_batch import InputBatch
+from sonar.triton_utils import tl, triton
+from sonar.utils.torch_utils import async_tensor_h2d
+from sonar.v1.core.sched.output import NewRequestData
+from sonar.v1.worker.gpu.buffer_utils import UvaBackedTensor
+from sonar.v1.worker.gpu.input_batch import InputBatch
 
 TOKEN_BLOCK = 16
 

@@ -1695,18 +1695,18 @@ template <typename T, int HEAD_SIZE, int NUM_THREADS, int NUM_SIMD_LANES,
                                          256, num_simd_lanes, 0);
 
 // TODO: tune num_threads = 256
-// NOTE: partition_size = APHRODITE_METAL_PARTITION_SIZE
+// NOTE: partition_size = SONAR_METAL_PARTITION_SIZE
 #define instantiate_paged_attention_v2(type, k_cache_type, v_cache_type,       \
                                        num_simd_lanes)                         \
   instantiate_paged_attention_block_size(type, k_cache_type, v_cache_type,     \
                                          256, num_simd_lanes,                  \
-                                         APHRODITE_METAL_PARTITION_SIZE);
+                                         SONAR_METAL_PARTITION_SIZE);
 
 // TODO: tune num_threads = 256
-// NOTE: partition_size = APHRODITE_METAL_PARTITION_SIZE
+// NOTE: partition_size = SONAR_METAL_PARTITION_SIZE
 #define instantiate_paged_attention_v2_reduce(type, num_simd_lanes)            \
   instantiate_paged_attention_v2_reduce_heads(                                  \
-      type, 256, num_simd_lanes, APHRODITE_METAL_PARTITION_SIZE);
+      type, 256, num_simd_lanes, SONAR_METAL_PARTITION_SIZE);
 
 // Non-TQ: same K/V cache type (kernel name: paged_attention_<T>_cache_<CT>_<CT>_hs...)
 instantiate_paged_attention_v1(float, float, float, 32);

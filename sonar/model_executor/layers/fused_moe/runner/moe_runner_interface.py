@@ -5,13 +5,13 @@ from collections.abc import Iterable
 
 import torch
 
-from aphrodite.config.parallel import ExpertPlacementStrategy
-from aphrodite.model_executor.custom_op import PluggableLayer
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.fused_moe_method_base import (
+from sonar.config.parallel import ExpertPlacementStrategy
+from sonar.model_executor.custom_op import PluggableLayer
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.fused_moe_method_base import (
     FusedMoEMethodBase,
 )
-from aphrodite.model_executor.layers.fused_moe.runner.shared_experts import (
+from sonar.model_executor.layers.fused_moe.runner.shared_experts import (
     SharedExperts,
 )
 

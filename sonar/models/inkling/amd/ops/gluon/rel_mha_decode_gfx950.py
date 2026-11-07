@@ -28,14 +28,14 @@ from typing import NamedTuple
 
 import torch
 
-from aphrodite.models.inkling.amd.ops.gluon.utils import (
+from sonar.models.inkling.amd.ops.gluon.utils import (
     _INV_LN2_VALUE,
     InputStrides,
     PagedKVStrides,
     max,
     maximum,
 )
-from aphrodite.triton_utils import aggregate, gl, gluon
+from sonar.triton_utils import aggregate, gl, gluon
 
 cdna4 = gl.amd.cdna4
 async_copy = cdna4.async_copy

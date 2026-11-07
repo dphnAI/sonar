@@ -3,25 +3,25 @@
 
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.config import get_current_aphrodite_config
-from aphrodite.model_executor.layers.quantization.input_quant_fp8 import QuantFP8
-from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
+import sonar.envs as envs
+from sonar.config import get_current_sonar_config
+from sonar.model_executor.layers.quantization.input_quant_fp8 import QuantFP8
+from sonar.model_executor.layers.quantization.utils.fp8_utils import (
     deepgemm_post_process_fp8_weight_block,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     GroupShape,
 )
-from aphrodite.model_executor.utils import replace_parameter
-from aphrodite.platforms import current_platform
-from aphrodite.utils.deep_gemm import (
+from sonar.model_executor.utils import replace_parameter
+from sonar.platforms import current_platform
+from sonar.utils.deep_gemm import (
     fp8_gemm_nt,
     is_deep_gemm_e8m0_used,
     is_deep_gemm_supported,
     should_auto_disable_deep_gemm,
     should_use_deepgemm_for_fp8_linear,
 )
-from aphrodite.utils.torch_utils import direct_register_custom_op
+from sonar.utils.torch_utils import direct_register_custom_op
 
 from .BlockScaledMMLinearKernel import (
     Fp8BlockScaledMMLinearKernel,
@@ -39,7 +39,7 @@ class DeepGemmFp8BlockScaledMMKernel(Fp8BlockScaledMMLinearKernel):
             static=False,
             group_shape=act_scale_descriptor.group_shape,
             use_ue8m0=self.use_deep_gemm_e8m0,
-            tma_aligned_scales=envs.APHRODITE_USE_DEEP_GEMM_TMA_ALIGNED_SCALES,
+            tma_aligned_scales=envs.SONAR_USE_DEEP_GEMM_TMA_ALIGNED_SCALES,
             column_major_scales=True,
         )
 
@@ -65,7 +65,7 @@ class DeepGemmFp8BlockScaledMMKernel(Fp8BlockScaledMMLinearKernel):
                 False,
                 "Supports only dynamic per token group activation quantization with group_shape=(1,128).",
             )
-        model_config = get_current_aphrodite_config().model_config
+        model_config = get_current_sonar_config().model_config
 
         if model_config is None:
             return False, "Model configuration is required."
@@ -117,7 +117,7 @@ class DeepGemmFp8BlockScaledMMKernel(Fp8BlockScaledMMLinearKernel):
             dtype=out_dtype,
             device=A.device,
         )
-        torch.ops.aphrodite.fp8_gemm_nt_op(A, As, B, Bs, output, self.use_deep_gemm_e8m0)
+        torch.ops.sonar.fp8_gemm_nt_op(A, As, B, Bs, output, self.use_deep_gemm_e8m0)
         return output
 
 

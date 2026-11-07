@@ -11,14 +11,14 @@ import pybase64
 import pytest
 import torch
 
-from aphrodite.config import ModelConfig
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.inputs import SingletonPrompt
-from aphrodite.renderers import TokenizeParams
-from aphrodite.renderers.hf import HfRenderer
-from aphrodite.renderers.inputs.preprocess import parse_model_prompt, prompt_to_seq
+from sonar.config import ModelConfig
+from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
+from sonar.exceptions import SonarValidationError
+from sonar.inputs import SingletonPrompt
+from sonar.renderers import TokenizeParams
+from sonar.renderers.hf import HfRenderer
+from sonar.renderers.inputs.preprocess import parse_model_prompt, prompt_to_seq
 
 MODEL_NAME = "openai-community/gpt2"
 
@@ -59,7 +59,7 @@ class MockParallelConfig:
 
 
 @dataclass
-class MockAphroditeConfig:
+class MockSonarConfig:
     model_config: MockModelConfig
     parallel_config: MockParallelConfig
 
@@ -104,7 +104,7 @@ def _build_renderer(
     max_chars_per_token: int = 1,
 ):
     renderer = HfRenderer(
-        MockAphroditeConfig(model_config, parallel_config=MockParallelConfig()),
+        MockSonarConfig(model_config, parallel_config=MockParallelConfig()),
         tokenizer=(
             None
             if model_config.skip_tokenizer_init
@@ -132,7 +132,7 @@ class TestValidatePrompt:
     def test_empty_input(self):
         renderer = _build_renderer(MockModelConfig())
 
-        with pytest.raises(AphroditeValidationError, match="at least one prompt"):
+        with pytest.raises(SonarValidationError, match="at least one prompt"):
             renderer.render_prompts(_preprocess_prompt(renderer.model_config, []))
 
     def test_invalid_type(self):
@@ -267,7 +267,7 @@ class TestRenderPrompt:
     def test_text_max_length_exceeded_obvious(self):
         renderer = _build_renderer(MockModelConfig(), max_chars_per_token=1)
 
-        # Exceeds max_total_tokens and max_total_tokens * APHRODITE_MAX_CHARS_PER_TOKEN
+        # Exceeds max_total_tokens and max_total_tokens * SONAR_MAX_CHARS_PER_TOKEN
         long_tokens = "x" * 150
         prompts = renderer.render_prompts(_preprocess_prompt(renderer.model_config, long_tokens))
 
@@ -286,7 +286,7 @@ class TestRenderPrompt:
     def test_text_max_length_exceeded_nonobvious(self):
         renderer = _build_renderer(MockModelConfig(), max_chars_per_token=2)
 
-        # Exceeds max_total_tokens but not max_total_tokens * APHRODITE_MAX_CHARS_PER_TOKEN
+        # Exceeds max_total_tokens but not max_total_tokens * SONAR_MAX_CHARS_PER_TOKEN
         long_tokens = "x" * 150
         prompts = renderer.render_prompts(_preprocess_prompt(renderer.model_config, long_tokens))
 
@@ -518,7 +518,7 @@ class TestMaxTokensNotReservation:
 
         # 150-token prompt with 100-token context → should still fail.
         prompts = renderer.render_prompts(_preprocess_prompt(renderer.model_config, "x" * 150))
-        with pytest.raises(AphroditeValidationError, match="maximum context length"):
+        with pytest.raises(SonarValidationError, match="maximum context length"):
             renderer.tokenize_prompts(
                 prompts,
                 TokenizeParams(max_total_tokens=100, max_output_tokens=0),

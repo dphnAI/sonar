@@ -6,7 +6,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 
-from aphrodite import LLM, SamplingParams
+from sonar import LLM, SamplingParams
 
 
 @dataclass(frozen=True)

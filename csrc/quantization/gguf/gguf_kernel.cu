@@ -38,8 +38,8 @@ static __global__ void quantize_q8_1(const scalar_t* __restrict__ x,
 
 #pragma unroll
   for (int mask = 16; mask > 0; mask >>= 1) {
-    amax = fmaxf(amax, APHRODITE_SHFL_XOR_SYNC_WIDTH(amax, mask, 32));
-    sum += APHRODITE_SHFL_XOR_SYNC_WIDTH(sum, mask, 32);
+    amax = fmaxf(amax, SONAR_SHFL_XOR_SYNC_WIDTH(amax, mask, 32));
+    sum += SONAR_SHFL_XOR_SYNC_WIDTH(sum, mask, 32);
   }
 
   const float d = amax / 127;

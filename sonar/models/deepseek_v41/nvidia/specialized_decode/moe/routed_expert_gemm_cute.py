@@ -5,7 +5,7 @@
 # FlashInfer (flashinfer/gemm/kernels/cute_dsl/low_latency_blockscaled_gemm.py,
 # flashinfer-python 0.7.1), which carries the notice below: its operand and
 # scale-factor layouts, TMA partitioning, load warps, MMA warp and accumulator
-# load. Modified by the Aphrodite contributors: the kernel is persistent over the
+# load. Modified by the Sonar contributors: the kernel is persistent over the
 # token tiles of a routing record, A and its scales are loaded at each tile's
 # expert, the accumulator is double-buffered in tensor memory, and the
 # epilogue is each GEMM's own.
@@ -68,7 +68,7 @@ only its B load warp waits for GEMM1, and it reads the record without waiting
 dependents only after its own wait for that kernel). GEMM1 needs the record to
 pick its experts, so all its warps wait first.
 
-The weights are those Aphrodite prepares for the TRT-LLM-gen backend, whose rows are
+The weights are those Sonar prepares for the TRT-LLM-gen backend, whose rows are
 shuffled for 128-row epilogue tiles: in each block of 32, shuffled row
 ``s0 + 8 * s1`` (``s0 < 8``, ``s1 < 4``) holds row ``4 * s0 + s1``. Their
 scales are in the 128x4 layout the kernel reads for A.

@@ -5,14 +5,14 @@ import math
 
 import torch
 
-from aphrodite.config import CompilationMode, get_current_aphrodite_config
-from aphrodite.model_executor.layers.quantization.input_quant_fp8 import QuantFP8
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.config import CompilationMode, get_current_sonar_config
+from sonar.model_executor.layers.quantization.input_quant_fp8 import QuantFP8
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     GroupShape,
     QuantKey,
     kFp8StaticTensorSym,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 from .BlockScaledMMLinearKernel import Fp8BlockScaledMMLinearKernel
 from .ScaledMMLinearKernel import (
@@ -29,7 +29,7 @@ def _get_num_tokens(output_shape: list) -> int:
 
 
 def _rocm_torch_fp8_scaled_mm_supported() -> bool:
-    from aphrodite.platforms.rocm import on_gfx12x, on_gfx942, on_gfx950, on_gfx1250
+    from sonar.platforms.rocm import on_gfx12x, on_gfx942, on_gfx950, on_gfx1250
 
     return on_gfx942() or on_gfx950() or on_gfx12x() or on_gfx1250()
 
@@ -72,8 +72,8 @@ class TorchFP8ScaledMMLinearKernel(FP8ScaledMMLinearKernel):
         # The perf gain is still relevant as of 16/1/2026
         # torch version == 2.9.0. More details in the link below:
         # https://github.com/vllm-project/vllm/issues/32269
-        aphrodite_config = get_current_aphrodite_config().compilation_config
-        pad_output = aphrodite_config.mode < CompilationMode.APHRODITE_COMPILE
+        sonar_config = get_current_sonar_config().compilation_config
+        pad_output = sonar_config.mode < CompilationMode.SONAR_COMPILE
         return 17 if pad_output else None
 
 

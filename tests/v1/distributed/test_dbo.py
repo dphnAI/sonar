@@ -10,8 +10,8 @@ correctly with the DeepSeek-V2-Lite model using GSM8K evaluation.
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.utils.import_utils import has_deep_ep
+from sonar.platforms import current_platform
+from sonar.utils.import_utils import has_deep_ep
 from tests.utils import RemoteOpenAIServer
 
 # Detect Blackwell / B200 (compute capability 10.x)
@@ -32,7 +32,7 @@ DP_SIZE = 2
 NUM_QUESTIONS = 256  # Fast eval for CI; but must be large enough to hit dbo thresholds
 NUM_SHOTS = 5  # Few-shot examples
 
-# Expected 0.64 with 2% buffer (based on Aphrodite test data)
+# Expected 0.64 with 2% buffer (based on Sonar test data)
 # On ROCm, widened to 0.61 after observing 0.617 amd-ci nightly flake twice.
 MIN_ACCURACY = 0.61 if current_platform.is_rocm() else 0.62
 
@@ -83,7 +83,7 @@ def test_dbo_v2_features_gsm8k(feature: str, num_gpus_available):
         num_gpus_available,
         extra_args=extra_args,
         tp_size=tp_size,
-        env_dict={"APHRODITE_USE_V2_MODEL_RUNNER": "1"},
+        env_dict={"SONAR_USE_V2_MODEL_RUNNER": "1"},
     )
 
 

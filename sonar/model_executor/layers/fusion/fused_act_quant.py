@@ -17,23 +17,23 @@ from collections.abc import Callable
 
 import torch
 
-from aphrodite.model_executor.layers.activation import ReLUSquaredActivation, SiluAndMul
-from aphrodite.model_executor.layers.fusion.quant_activation import (
+from sonar.model_executor.layers.activation import ReLUSquaredActivation, SiluAndMul
+from sonar.model_executor.layers.fusion.quant_activation import (
     QuantizedActivation,
     get_input_quant_key,
 )
-from aphrodite.model_executor.layers.fusion.relu2_fp8_quant import (
+from sonar.model_executor.layers.fusion.relu2_fp8_quant import (
     relu_squared_static_fp8_quant,
 )
-from aphrodite.model_executor.layers.linear import LinearBase
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.linear import LinearBase
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     kFp8Dynamic128Sym,
     kFp8StaticTensorSym,
     kNvfp4Dynamic,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.math_utils import round_up
+from sonar.platforms import current_platform
+from sonar.utils.math_utils import round_up
 
 FP8_DTYPE = current_platform.fp8_dtype()
 FP4_DTYPE = torch.uint8

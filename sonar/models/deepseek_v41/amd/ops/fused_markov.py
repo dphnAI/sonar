@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """DSpark's sequential Markov sampling with one launch a draft step.
 
-Aphrodite's ``DSparkSpeculator._sample_sequential`` runs about 9 kernels for each
+Sonar's ``DSparkSpeculator._sample_sequential`` runs about 9 kernels for each
 of the 5 draft steps: the Markov embedding of the previous token, the bias
 GEMV over the whole vocabulary (66 MB of markov_w2 at 129280 x 256 bf16),
 the add to the base logits, the Gumbel sample (its kernel, the argmax over
@@ -12,15 +12,15 @@ that is about 220 us a decode step.
 Here each step is one launch over the vocabulary in blocks of BLOCK tokens.
 For each row, a program computes its block's bias from markov_w2, adds the
 base logits, stores the step's logits into the draft logits cache and takes
-the Gumbel-max of its block with Aphrodite's own ``gumbel_noised_argmax``. The
+the Gumbel-max of its block with Sonar's own ``gumbel_noised_argmax``. The
 next step's programs first take the argmax over the previous step's block
 maxima themselves, which gives the previous token, and the last step's
 tokens get one small launch. The noise depends only on the request's seed,
 the draft step, the position and the token id, and both paths keep the first
 of equal maxima, so the sampled token does not depend on the block size.
 
-The bias is an fp32 sum of 256 products rounded to bf16, as Aphrodite's GEMV
-output. The products are added in another order than in Aphrodite's GEMV, so a
+The bias is an fp32 sum of 256 products rounded to bf16, as Sonar's GEMV
+output. The products are added in another order than in Sonar's GEMV, so a
 bias value can differ in its last bf16 bit. That changes only which tokens
 the draft proposes, not the target's output, because the rejection sampler
 verifies every draft token against the target's own distribution.
@@ -28,15 +28,15 @@ verifies every draft token against the target's own distribution.
 It runs on gfx942 with --monokernel (``ops.enabled()``). The speculator asks
 the draft model's ``sample_sequential`` (dspark.py) before its loop, and that
 calls ``sample_sequential`` here.
-tests/kernels/models/amd/test_dsv41_gfx942_fused_markov.py compares it with Aphrodite's loop.
+tests/kernels/models/amd/test_dsv41_gfx942_fused_markov.py compares it with Sonar's loop.
 """
 
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.models.deepseek_v41.amd.ops import enabled
-from aphrodite.triton_utils import tl, triton
-from aphrodite.v1.worker.gpu.sample.gumbel import gumbel_noised_argmax, spec_step_seed
+from sonar.logger import init_logger
+from sonar.models.deepseek_v41.amd.ops import enabled
+from sonar.triton_utils import tl, triton
+from sonar.v1.worker.gpu.sample.gumbel import gumbel_noised_argmax, spec_step_seed
 
 logger = init_logger(__name__)
 
@@ -48,7 +48,7 @@ K_CHUNK = 64
 # Warps of a step program.
 NUM_WARPS = 4
 # The step launch unrolls its loop over the rows (requests) of a step, so it
-# is built for at most this many. A larger step takes Aphrodite's loop.
+# is built for at most this many. A larger step takes Sonar's loop.
 MAX_ROWS = 8
 
 
@@ -92,7 +92,7 @@ def _markov_step_kernel(
     for r in tl.static_range(ROWS):
         # The row's previous token. Step 0 takes the request's anchor token.
         # A later step takes the first of the largest block maxima of the
-        # previous step, as Aphrodite's argmax over its block maxima does, and
+        # previous step, as Sonar's argmax over its block maxima does, and
         # program 0 also writes that token into draft_tokens.
         if STEP == 0:
             prev = tl.load(input_ids_ptr + tl.load(anchor_idx_ptr + r)).to(tl.int64)
@@ -118,7 +118,7 @@ def _markov_step_kernel(
             ).to(tl.float32)
             e = tl.load(w1_ptr + prev * RANK + k).to(tl.float32)
             acc += tl.sum(w * e[None, :], axis=1)
-        # Aphrodite rounds the GEMV's bias to bf16 and adds the bf16 base logits
+        # Sonar rounds the GEMV's bias to bf16 and adds the bf16 base logits
         # in fp32 with one rounding to bf16, as a bf16 tensor add does.
         bias = acc.to(tl.bfloat16).to(tl.float32)
         base = tl.load(base_ptr + r * base_stride + v, mask=vmask, other=0.0)
@@ -135,7 +135,7 @@ def _markov_step_kernel(
         temp = tl.load(temp_ptr + req, mask=valid, other=0.0).to(tl.float32)
         # When gumbel_sample fills the draft logits cache, it mixes the cache
         # column, which is the draft step, into the request's seed. The
-        # draws here have to be the same as Aphrodite's.
+        # draws here have to be the same as Sonar's.
         seed = spec_step_seed(tl.load(seeds_ptr + req, mask=valid, other=0), STEP)
         # gumbel_sample keys a draw by the position before the sampled token.
         pos = tl.load(pos_ptr + r * pos_stride + STEP) - 1
@@ -199,7 +199,7 @@ def _scratch(device, vocab, use_fp64):
 
 
 def _why_not(spec, num_reqs: int) -> str | None:
-    """Why this speculator's step takes Aphrodite's loop, or None when the fused
+    """Why this speculator's step takes Sonar's loop, or None when the fused
     launches compute the same sampling."""
     model = spec.model
     head = getattr(getattr(model, "model", None), "markov_head", None)
@@ -232,7 +232,7 @@ def _why_not(spec, num_reqs: int) -> str | None:
 
 def sample_sequential(spec, num_reqs: int, head_hidden: torch.Tensor) -> bool:
     """DSparkSpeculator._sample_sequential with the fused launches. Returns
-    False, having done nothing, when this step takes Aphrodite's loop."""
+    False, having done nothing, when this step takes Sonar's loop."""
     if not enabled():
         return False
     why = _why_not(spec, num_reqs)
@@ -245,7 +245,7 @@ def sample_sequential(spec, num_reqs: int, head_hidden: torch.Tensor) -> bool:
     base_logits = spec.model.compute_draft_logits(sample_hidden)
     if base_logits.dtype != torch.bfloat16 or base_logits.stride(-1) != 1:
         # The base logits come from the lm_head, which may differ from the
-        # Markov head. Aphrodite's loop then adds them in their own dtype.
+        # Markov head. Sonar's loop then adds them in their own dtype.
         logger.debug_once("DSpark fused Markov sampling off: %s base logits", base_logits.dtype)
         return _loop_rest(spec, num_reqs, base_logits, sample_hidden)
     vocab = base_logits.shape[-1]
@@ -316,7 +316,7 @@ def sample_sequential(spec, num_reqs: int, head_hidden: torch.Tensor) -> bool:
 
 
 def _loop_rest(spec, num_reqs, base_logits, sample_hidden) -> bool:
-    """APHRODITE's loop from its base logits on, for a step whose base logits the
+    """SONAR's loop from its base logits on, for a step whose base logits the
     fused launch does not take. It is the loop of _sample_sequential after
     compute_draft_logits, so the step computes them only once."""
     n_spec = spec.num_speculative_steps

@@ -6,15 +6,15 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, cast
 
-from aphrodite.config import get_current_aphrodite_config
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.config import get_current_sonar_config
+from sonar.model_executor.layers.fused_moe import (
     RoutedExperts,
     UnquantizedFusedMoEMethod,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationMethods
-from aphrodite.model_executor.layers.quantization.fp8 import Fp8Config
-from aphrodite.model_executor.layers.quantization.mxfp4 import Mxfp4MoEMethod
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization import QuantizationMethods
+from sonar.model_executor.layers.quantization.fp8 import Fp8Config
+from sonar.model_executor.layers.quantization.mxfp4 import Mxfp4MoEMethod
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     is_layer_skipped,
     kMxfp8Dynamic,
 )
@@ -24,8 +24,8 @@ _DEEPSEEK_V4_EXPERT_DTYPES = ("fp4", "fp8")
 if TYPE_CHECKING:
     from transformers import PreTrainedConfig
 
-    from aphrodite.model_executor.layers.quantization import QuantizationConfig
-    from aphrodite.model_executor.layers.quantization.modelopt import (
+    from sonar.model_executor.layers.quantization import QuantizationConfig
+    from sonar.model_executor.layers.quantization.modelopt import (
         ModelOptNvFp4Config,
     )
 
@@ -41,11 +41,11 @@ def align_mtp_quant_config(quant_config: QuantizationConfig | None, config: PreT
     that builds NVFP4 parameters for FP8 weights and the load then fails a
     shape assertion.
     """
-    from aphrodite.model_executor.models.utils import WeightsMapper
+    from sonar.model_executor.models.utils import WeightsMapper
 
     if quant_config is None:
         return
-    quant_config.apply_aphrodite_mapper(
+    quant_config.apply_sonar_mapper(
         WeightsMapper(
             orig_to_new_prefix={
                 f"model.mtp.{i}.": f"model.layers.{config.num_hidden_layers + i}."
@@ -70,7 +70,7 @@ class DeepseekV4FP8Config(Fp8Config):
     to ``"fp4"`` so existing FP4 checkpoints stay unchanged.
 
     NOTE: ``expert_dtype`` is resolved lazily because this config is
-    constructed during AphroditeConfig setup, before ``set_current_aphrodite_config``
+    constructed during SonarConfig setup, before ``set_current_sonar_config``
     is active. Reading hf_config eagerly in ``__init__`` would always see
     the default ``"fp4"`` and silently misroute Flash-Base checkpoints.
     """
@@ -81,16 +81,16 @@ class DeepseekV4FP8Config(Fp8Config):
         self._resolved_moe_quant_algo: str | None = None
         self._nvfp4_config: ModelOptNvFp4Config | None = None
         # ``is_scale_e8m0`` is a property that resolves on first read,
-        # by which time the current aphrodite_config has been set.
+        # by which time the current sonar_config has been set.
 
     @property
     def expert_dtype(self) -> str:
         if self._resolved_expert_dtype is None:
             try:
-                hf_config = get_current_aphrodite_config().model_config.hf_config
+                hf_config = get_current_sonar_config().model_config.hf_config
             except Exception:
-                # aphrodite_config not yet set; defer the decision until a
-                # later call lands inside set_current_aphrodite_config.
+                # sonar_config not yet set; defer the decision until a
+                # later call lands inside set_current_sonar_config.
                 return "fp4"
             expert_dtype = getattr(hf_config, "expert_dtype", "fp4")
             if expert_dtype not in _DEEPSEEK_V4_EXPERT_DTYPES:
@@ -99,7 +99,7 @@ class DeepseekV4FP8Config(Fp8Config):
                     f"expected one of {_DEEPSEEK_V4_EXPERT_DTYPES}."
                 )
             self._resolved_expert_dtype = expert_dtype
-            from aphrodite.logger import init_logger
+            from sonar.logger import init_logger
 
             init_logger(__name__).info_once("DeepSeek V4 expert_dtype resolved to %r", expert_dtype)
         return self._resolved_expert_dtype
@@ -114,7 +114,7 @@ class DeepseekV4FP8Config(Fp8Config):
         if self._resolved_moe_quant_algo is not None:
             return
         try:
-            hf_config = get_current_aphrodite_config().model_config.hf_config
+            hf_config = get_current_sonar_config().model_config.hf_config
         except Exception:
             return
         quant_cfg = getattr(hf_config, "quantization_config", None) or {}
@@ -128,7 +128,7 @@ class DeepseekV4FP8Config(Fp8Config):
 
     def _get_nvfp4_config(self) -> ModelOptNvFp4Config:
         if self._nvfp4_config is None:
-            from aphrodite.model_executor.layers.quantization.modelopt import (
+            from sonar.model_executor.layers.quantization.modelopt import (
                 ModelOptNvFp4Config,
             )
 
@@ -193,7 +193,7 @@ class DeepseekV4FP8Config(Fp8Config):
                 return UnquantizedFusedMoEMethod(layer.moe_config)
             if self.expert_dtype == "fp4":
                 if self.moe_quant_algo == "NVFP4":
-                    from aphrodite.model_executor.layers.quantization.modelopt import (
+                    from sonar.model_executor.layers.quantization.modelopt import (
                         ModelOptNvFp4FusedMoE,
                     )
 

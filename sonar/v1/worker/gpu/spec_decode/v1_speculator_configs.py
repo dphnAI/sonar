@@ -8,11 +8,11 @@ They will be removed together with the V1 model runner.
 
 from typing import TYPE_CHECKING
 
-from aphrodite.logger import init_logger
-from aphrodite.v1.worker.gpu.spec_decode.speculator_config import SpeculatorConfig
+from sonar.logger import init_logger
+from sonar.v1.worker.gpu.spec_decode.speculator_config import SpeculatorConfig
 
 if TYPE_CHECKING:
-    from aphrodite.config import SpeculativeConfig
+    from sonar.config import SpeculativeConfig
 
 logger = init_logger(__name__)
 
@@ -46,6 +46,6 @@ class V1CustomProposerConfig(UnsupportedSpeculatorConfig):
         logger.warning_once(
             "Using a custom class-based proposer backend. This is an "
             "experimental feature and the proposer interface is subject to "
-            "breaking changes in future Aphrodite releases."
+            "breaking changes in future Sonar releases."
         )
         super().configure(spec)

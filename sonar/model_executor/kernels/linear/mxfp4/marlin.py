@@ -3,8 +3,8 @@
 
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import kMxfp4Dynamic
+from sonar.logger import init_logger
+from sonar.model_executor.layers.quantization.utils.quant_utils import kMxfp4Dynamic
 
 from .base import MxFp4LinearKernel, MxFp4LinearLayerConfig
 
@@ -14,7 +14,7 @@ logger = init_logger(__name__)
 class MarlinMxFp4LinearKernel(MxFp4LinearKernel):
     @classmethod
     def is_supported(cls, compute_capability: int | None = None) -> tuple[bool, str | None]:
-        from aphrodite.model_executor.layers.quantization.utils.marlin_utils_fp4 import (
+        from sonar.model_executor.layers.quantization.utils.marlin_utils_fp4 import (
             is_fp4_marlin_supported,
         )
 
@@ -35,7 +35,7 @@ class MarlinMxFp4LinearKernel(MxFp4LinearKernel):
         return True, None
 
     def process_weights_after_loading(self, layer: torch.nn.Module) -> None:
-        from aphrodite.model_executor.layers.quantization.utils.marlin_utils_fp4 import (
+        from sonar.model_executor.layers.quantization.utils.marlin_utils_fp4 import (
             prepare_fp4_layer_for_marlin,
         )
 
@@ -47,7 +47,7 @@ class MarlinMxFp4LinearKernel(MxFp4LinearKernel):
         x: torch.Tensor,
         bias: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        from aphrodite.model_executor.layers.quantization.utils.marlin_utils_fp4 import (
+        from sonar.model_executor.layers.quantization.utils.marlin_utils_fp4 import (
             apply_fp4_marlin_linear,
         )
 

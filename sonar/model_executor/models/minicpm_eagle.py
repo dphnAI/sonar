@@ -32,17 +32,17 @@ import torch
 from torch import nn
 from transformers import PreTrainedConfig
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, CacheConfig
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import CacheConfig, SonarConfig
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
-from aphrodite.sequence import IntermediateTensors
+from sonar.model_executor.model_loader.weight_utils import default_weight_loader
+from sonar.sequence import IntermediateTensors
 
 from .interfaces import SupportsEagle, SupportsLoRA, SupportsPP
 from .minicpm import MiniCPMAttention as EagleMiniCPMAttention
@@ -143,14 +143,14 @@ class EagleMiniCPMDecoderLayer(nn.Module):
 
 @support_torch_compile
 class EagleMiniCPMModel(nn.Module):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "", start_layer: int = 0):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "", start_layer: int = 0):
         super().__init__()
 
-        speculative_config = aphrodite_config.speculative_config
+        speculative_config = sonar_config.speculative_config
         assert speculative_config is not None
         config = speculative_config.draft_model_config.hf_config
-        cache_config = aphrodite_config.cache_config
-        quant_config = aphrodite_config.quant_config
+        cache_config = sonar_config.cache_config
+        quant_config = sonar_config.quant_config
 
         self.config = config
         self.cache_config = cache_config
@@ -303,25 +303,25 @@ class EagleMiniCPMForCausalLM(nn.Module, SupportsLoRA, _EagleMiniCPMSupportsPP, 
         "lm_head": "output_embeddings",
     }
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        speculative_config = aphrodite_config.speculative_config
+        speculative_config = sonar_config.speculative_config
         assert speculative_config is not None
         config = speculative_config.draft_model_config.hf_config
-        cache_config = aphrodite_config.cache_config
-        quant_config = aphrodite_config.quant_config
+        cache_config = sonar_config.cache_config
+        quant_config = sonar_config.quant_config
 
         self.prefix = prefix
-        self.aphrodite_config = aphrodite_config
+        self.sonar_config = sonar_config
         self.config = config
 
         self.cache_config = cache_config
         self.quant_config = quant_config
 
-        target_layer_num = aphrodite_config.model_config.get_num_layers(aphrodite_config.parallel_config)
+        target_layer_num = sonar_config.model_config.get_num_layers(sonar_config.parallel_config)
 
         self.model = self._init_model(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             prefix=maybe_prefix(prefix, "model"),
             start_layer=target_layer_num,
         )
@@ -339,8 +339,8 @@ class EagleMiniCPMForCausalLM(nn.Module, SupportsLoRA, _EagleMiniCPMSupportsPP, 
         self.logits_processor = LogitsProcessor(config.vocab_size)
         self.make_empty_intermediate_tensors = self.model.make_empty_intermediate_tensors
 
-    def _init_model(self, *, aphrodite_config: AphroditeConfig, prefix: str = "", start_layer: int = 0):
-        return EagleMiniCPMModel(aphrodite_config=aphrodite_config, prefix=prefix, start_layer=start_layer)
+    def _init_model(self, *, sonar_config: SonarConfig, prefix: str = "", start_layer: int = 0):
+        return EagleMiniCPMModel(sonar_config=sonar_config, prefix=prefix, start_layer=start_layer)
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.model.embed_input_ids(input_ids)

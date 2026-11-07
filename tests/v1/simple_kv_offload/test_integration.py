@@ -8,12 +8,12 @@ import pytest
 import torch
 from transformers import Llama4ForCausalLM, Llama4TextConfig
 
-from aphrodite import LLM, SamplingParams, TokensPrompt, envs
-from aphrodite.config import KVTransferConfig, ParallelConfig
-from aphrodite.platforms import current_platform
-from aphrodite.utils import numa_utils
-from aphrodite.v1.metrics.reader import Counter
-from aphrodite.v1.simple_kv_offload.metrics import MetricName
+from sonar import LLM, SamplingParams, TokensPrompt, envs
+from sonar.config import KVTransferConfig, ParallelConfig
+from sonar.platforms import current_platform
+from sonar.utils import numa_utils
+from sonar.v1.metrics.reader import Counter
+from sonar.v1.simple_kv_offload.metrics import MetricName
 from tests.models.utils import check_logprobs_close
 
 if not current_platform.is_cuda_alike():
@@ -32,9 +32,9 @@ PERF_MODELS = [
 ]
 
 
-def test_chunked_local_partial_gpu_hit(aphrodite_runner, tmp_path, monkeypatch):
+def test_chunked_local_partial_gpu_hit(sonar_runner, tmp_path, monkeypatch):
     """A CPU suffix after a short GPU hit must preserve the cold prediction."""
-    monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
+    monkeypatch.setenv("SONAR_ENABLE_V1_MULTIPROCESSING", "0")
     envs.disable_envs_cache()
     config = Llama4TextConfig(
         vocab_size=512,
@@ -59,7 +59,7 @@ def test_chunked_local_partial_gpu_hit(aphrodite_runner, tmp_path, monkeypatch):
         model.save_pretrained(tmp_path)
         del model
 
-    with aphrodite_runner(
+    with sonar_runner(
         str(tmp_path),
         skip_tokenizer_init=True,
         dtype="float16",
@@ -142,7 +142,7 @@ def _flush_gpu_cache(llm: LLM, sampling_params: SamplingParams, seed: int = 0):
     This pushes all prior blocks through the free queue so that the lazy
     cursor offloads them to CPU before they are evicted.
     """
-    cache_config = llm.llm_engine.aphrodite_config.cache_config
+    cache_config = llm.llm_engine.sonar_config.cache_config
     num_gpu_blocks = cache_config.num_gpu_blocks
     block_size = cache_config.block_size
     # Use 1.2x GPU capacity to give the lazy cursor enough scheduling steps
@@ -238,7 +238,7 @@ def _assert_worker_auto_numa(worker):
 
     import psutil
 
-    from aphrodite.utils.cpu_resource_utils import parse_id_list
+    from sonar.utils.cpu_resource_utils import parse_id_list
 
     parallel_config = worker.parallel_config
     assert parallel_config.numa_bind and parallel_config._numa_bind_auto
@@ -259,8 +259,8 @@ def test_simple_cpu_offload_with_auto_numa(monkeypatch, enable_pickle):
     """Soft-bound NVIDIA workers must store and restore KV, not silently recompute."""
     if not current_platform.is_cuda():
         pytest.skip("Automatic NUMA KV-offload smoke test requires NVIDIA")
-    monkeypatch.setenv("APHRODITE_WORKER_MULTIPROC_METHOD", "spawn")
-    monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "1")
+    monkeypatch.setenv("SONAR_WORKER_MULTIPROC_METHOD", "spawn")
+    monkeypatch.setenv("SONAR_ENABLE_V1_MULTIPROCESSING", "1")
     preflight = ParallelConfig(distributed_executor_backend="mp")
     preflight._numa_bind_auto = True
     if not numa_utils._can_auto_bind(preflight, local_rank=0) or not (

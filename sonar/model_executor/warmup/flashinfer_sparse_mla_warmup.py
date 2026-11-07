@@ -6,22 +6,22 @@ from typing import TYPE_CHECKING, cast
 
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.warmup.flashinfer_autotune_cache import (
+from sonar.logger import init_logger
+from sonar.model_executor.warmup.flashinfer_autotune_cache import (
     resolve_flashinfer_autotune_file,
     resolve_flashinfer_autotune_v2_root,
     use_flashinfer_autotune_v2,
     write_flashinfer_autotune_cache,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.flashinfer import autotune as flashinfer_autotune
-from aphrodite.utils.flashinfer import has_flashinfer
-from aphrodite.v1.worker.gpu.warmup import run_mixed_prefill_decode_warmup
+from sonar.platforms import current_platform
+from sonar.utils.flashinfer import autotune as flashinfer_autotune
+from sonar.utils.flashinfer import has_flashinfer
+from sonar.v1.worker.gpu.warmup import run_mixed_prefill_decode_warmup
 
 if TYPE_CHECKING:
-    from aphrodite.v1.worker.gpu.model_runner import GPUModelRunner as V2GPUModelRunner
-    from aphrodite.v1.worker.gpu_model_runner import GPUModelRunner
-    from aphrodite.v1.worker.gpu_worker import Worker
+    from sonar.v1.worker.gpu.model_runner import GPUModelRunner as V2GPUModelRunner
+    from sonar.v1.worker.gpu_model_runner import GPUModelRunner
+    from sonar.v1.worker.gpu_worker import Worker
 
 logger = init_logger(__name__)
 
@@ -50,12 +50,12 @@ _SPARSE_MLA_MIXED_WARMUP_TOKENS = 16
 
 def autotune_hisparse_flashinfer_attention(runner: "GPUModelRunner") -> None:
     """Autotune each HiSparse FlashInfer sparse-MLA configuration."""
-    from aphrodite.v1.attention.backends.mla.flashinfer_mla_sparse import (
+    from sonar.v1.attention.backends.mla.flashinfer_mla_sparse import (
         FlashInferMLASparseImpl,
     )
 
     tuned: set[tuple[object, ...]] = set()
-    for layer in runner.aphrodite_config.compilation_config.static_forward_context.values():
+    for layer in runner.sonar_config.compilation_config.static_forward_context.values():
         impl = getattr(layer, "impl", None)
         if not isinstance(impl, FlashInferMLASparseImpl):
             continue
@@ -113,8 +113,8 @@ def _clamp_warmup_tokens(num_tokens: int, max_tokens: int) -> int:
 
 
 def _uses_v2_model_runner(runner: "GPUModelRunner") -> bool:
-    aphrodite_config = getattr(runner, "aphrodite_config", None)
-    return bool(getattr(aphrodite_config, "use_v2_model_runner", False))
+    sonar_config = getattr(runner, "sonar_config", None)
+    return bool(getattr(sonar_config, "use_v2_model_runner", False))
 
 
 def _run_flashinfer_sparse_mla_decode_autotune(
@@ -127,7 +127,7 @@ def _run_flashinfer_sparse_mla_decode_autotune(
     log_label = _flashinfer_sparse_mla_decode_label(runner, allowed_backends)
     if log_label is None:
         return False
-    if worker.aphrodite_config.kernel_config.enable_flashinfer_autotune is not True:
+    if worker.sonar_config.kernel_config.enable_flashinfer_autotune is not True:
         return False
     if not has_flashinfer() or not current_platform.is_device_capability_family(120):
         return False
@@ -140,7 +140,7 @@ def _run_flashinfer_sparse_mla_decode_autotune(
         )
         return False
 
-    from aphrodite.distributed.parallel_state import get_world_group
+    from sonar.distributed.parallel_state import get_world_group
 
     world = get_world_group()
     is_leader = world.rank_in_group == 0
@@ -238,7 +238,7 @@ def _run_sparse_mla_decode_autotune_v2(
     """
     from flashinfer import autotune_v2, autotune_v2_reload
 
-    from aphrodite.distributed.parallel_state import get_world_group
+    from sonar.distributed.parallel_state import get_world_group
 
     runner = worker.model_runner
     world = get_world_group()

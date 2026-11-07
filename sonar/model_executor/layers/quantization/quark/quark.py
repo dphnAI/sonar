@@ -6,27 +6,27 @@ from typing import TYPE_CHECKING, Any, NamedTuple, cast
 
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.attention import Attention
+from sonar.model_executor.layers.fused_moe import (
     RoutedExperts,
     UnquantizedFusedMoEMethod,
 )
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.linear import (
     LinearBase,
     LinearMethodBase,
     UnquantizedLinearMethod,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationMethods
-from aphrodite.model_executor.layers.quantization.base_config import (  # noqa: E501
+from sonar.model_executor.layers.quantization import QuantizationMethods
+from sonar.model_executor.layers.quantization.base_config import (  # noqa: E501
     QuantizationConfig,
     QuantizeMethodBase,
 )
-from aphrodite.model_executor.layers.quantization.kv_cache import BaseKVCacheMethod
-from aphrodite.model_executor.layers.quantization.quark.quark_moe import (  # noqa: E501
+from sonar.model_executor.layers.quantization.kv_cache import BaseKVCacheMethod
+from sonar.model_executor.layers.quantization.quark.quark_moe import (  # noqa: E501
     QuarkMoEMethod,
 )
-from aphrodite.model_executor.layers.quantization.quark.schemes import (
+from sonar.model_executor.layers.quantization.quark.schemes import (
     QuarkNVFP4,
     QuarkOCP_MX,
     QuarkScheme,
@@ -36,19 +36,19 @@ from aphrodite.model_executor.layers.quantization.quark.schemes import (
     QuarkW8A8Fp8PerBlock,
     QuarkW8A8Int8,
 )
-from aphrodite.model_executor.layers.quantization.quark.utils import (
+from sonar.model_executor.layers.quantization.quark.utils import (
     QuarkQTensorHint,
     deep_compare,
     parse_w4a16_int4_weight_config,
     should_ignore_layer,
 )
-from aphrodite.model_executor.layers.quantization.utils.ocp_mx_utils import (
+from sonar.model_executor.layers.quantization.utils.ocp_mx_utils import (
     _ACTIVATION_QUANT_KEY_MAP,
     _WEIGHT_QUANT_KEY_MAP,
     OCP_MX_BLOCK_SIZE,
     ocp_mx_weight_dtype_and_rows,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     kFp8Dynamic128Sym,
     kFp8DynamicTensorSym,
@@ -73,11 +73,11 @@ from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
     kNvfp4Dynamic,
     kNvfp4Static,
 )
-from aphrodite.model_executor.models.utils import WeightsMapper
-from aphrodite.platforms import current_platform
+from sonar.model_executor.models.utils import WeightsMapper
+from sonar.platforms import current_platform
 
 if TYPE_CHECKING:
-    from aphrodite.model_executor.models.utils import WeightsMapper
+    from sonar.model_executor.models.utils import WeightsMapper
 
 __all__ = ["QuarkLinearMethod"]
 
@@ -128,35 +128,35 @@ class QuarkConfig(QuantizationConfig):
     def get_name(self) -> QuantizationMethods:
         return "quark"
 
-    def apply_aphrodite_mapper(  # noqa: B027
-        self, hf_to_aphrodite_mapper: "WeightsMapper"
+    def apply_sonar_mapper(  # noqa: B027
+        self, hf_to_sonar_mapper: "WeightsMapper"
     ):
         """Interface for models to update module names referenced in
-        quantization configs in order to reflect the aphrodite model structure
+        quantization configs in order to reflect the sonar model structure
 
         Args:
-            hf_to_aphrodite_mapper: maps from hf model structure (the assumed
-                structure of the qconfig) to aphrodite model structure
+            hf_to_sonar_mapper: maps from hf model structure (the assumed
+                structure of the qconfig) to sonar model structure
 
         """
-        quant_config_with_hf_to_aphrodite_mapper: dict[str, Any] = {}
+        quant_config_with_hf_to_sonar_mapper: dict[str, Any] = {}
 
         for k, v in self.quant_config.items():
             if isinstance(v, list) and all(isinstance(item, str) for item in v):
-                quant_config_with_hf_to_aphrodite_mapper[k] = hf_to_aphrodite_mapper.apply_list(v)
+                quant_config_with_hf_to_sonar_mapper[k] = hf_to_sonar_mapper.apply_list(v)
             elif isinstance(v, list):
-                quant_config_with_hf_to_aphrodite_mapper[k] = v
+                quant_config_with_hf_to_sonar_mapper[k] = v
             elif isinstance(v, dict):
-                quant_config_with_hf_to_aphrodite_mapper[k] = hf_to_aphrodite_mapper.apply_dict(v)
+                quant_config_with_hf_to_sonar_mapper[k] = hf_to_sonar_mapper.apply_dict(v)
             else:
                 if isinstance(v, str):
-                    mapped_v_list = hf_to_aphrodite_mapper.apply_list([v])
+                    mapped_v_list = hf_to_sonar_mapper.apply_list([v])
                     if mapped_v_list:
-                        quant_config_with_hf_to_aphrodite_mapper[k] = mapped_v_list[0]
+                        quant_config_with_hf_to_sonar_mapper[k] = mapped_v_list[0]
                 else:
-                    quant_config_with_hf_to_aphrodite_mapper[k] = v
+                    quant_config_with_hf_to_sonar_mapper[k] = v
 
-        self.quant_config = quant_config_with_hf_to_aphrodite_mapper
+        self.quant_config = quant_config_with_hf_to_sonar_mapper
 
     def _scale_block_rows(self, prefix: str, layer_type: type[torch.nn.Module]) -> int:
         """How many weight rows one checkpoint scale row covers.
@@ -640,7 +640,7 @@ class QuarkConfig(QuantizationConfig):
             input_dtype = input_quant["dtype"].replace("fp", "mxfp")
             if input_dtype not in _ACTIVATION_QUANT_KEY_MAP:
                 raise ValueError(
-                    f"Unsupported input_dtype={input_dtype} in Quark's Aphrodite "
+                    f"Unsupported input_dtype={input_dtype} in Quark's Sonar "
                     "integration. Supported activation dtypes are "
                     f"{_ACTIVATION_QUANT_KEY_MAP.keys()}, or None for "
                     "weight-only quantization."
@@ -674,7 +674,7 @@ class QuarkConfig(QuantizationConfig):
             if matched_configs and not all(deep_compare(config, matched_configs[0]) for config in matched_configs):
                 raise ValueError(
                     f"Found a different quantization configuration for "
-                    f"{shard_proj_names} in {layer_name}. Aphrodite "
+                    f"{shard_proj_names} in {layer_name}. Sonar "
                     "requires all to use the same scheme."
                 )
             if matched_configs:
@@ -719,7 +719,7 @@ class QuarkConfig(QuantizationConfig):
             if not all(deep_compare(config, shard_configs[0]) for config in shard_configs):
                 raise ValueError(
                     f"Found a different quantization configuration for "
-                    f"{shard_proj_names} in {layer_name}. Aphrodite requires all "
+                    f"{shard_proj_names} in {layer_name}. Sonar requires all "
                     "to use the same scheme."
                 )
             return shard_configs[0]
@@ -865,7 +865,7 @@ class QuarkConfig(QuantizationConfig):
 
     @staticmethod
     def get_cache_scale_mapper() -> "WeightsMapper":
-        """Map Quark KV-cache scale names to Aphrodite names."""
+        """Map Quark KV-cache scale names to Sonar names."""
         orig_to_new_suffix = {
             ".k_proj.output_scale": ".attn.k_scale",
             ".v_proj.output_scale": ".attn.v_scale",
@@ -885,10 +885,10 @@ class QuarkLinearMethod(LinearMethodBase):
 
     def dequantize_weight(self, layer: torch.nn.Module) -> torch.Tensor:
         """Reconstruct serialized weights for online requantization."""
-        from aphrodite.model_executor.layers.quantization.utils.mxfp8_utils import (
+        from sonar.model_executor.layers.quantization.utils.mxfp8_utils import (
             dequant_mxfp8_to_bf16,
         )
-        from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+        from sonar.model_executor.layers.quantization.utils.quant_utils import (
             kMxfp8Static,
         )
 
@@ -949,7 +949,7 @@ class QuarkKVCacheMethod(BaseKVCacheMethod):
     @staticmethod
     def validate_kv_cache_config(kv_cache_config: dict[str, Any] | None):
         """Validator for the kv cache configuration. Useful for controlling the
-        kv cache quantization schemes, that are being supported in Aphrodite
+        kv cache quantization schemes, that are being supported in Sonar
 
         Args:
             kv_cache_config: the quark kv cache scheme

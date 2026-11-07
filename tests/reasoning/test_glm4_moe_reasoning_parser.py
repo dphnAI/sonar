@@ -6,9 +6,9 @@ import copy
 import pytest
 from transformers import AutoTokenizer, PreTrainedTokenizerBase
 
-from aphrodite.parser.engine.adapters import ParserEngineReasoningAdapter
-from aphrodite.parser.glm47_moe import Glm47MoeParser
-from aphrodite.reasoning import ReasoningParser, ReasoningParserManager
+from sonar.parser.engine.adapters import ParserEngineReasoningAdapter
+from sonar.parser.glm47_moe import Glm47MoeParser
+from sonar.reasoning import ReasoningParser, ReasoningParserManager
 from tests.reasoning.utils import run_reasoning_extraction
 
 parser_name = "glm45"

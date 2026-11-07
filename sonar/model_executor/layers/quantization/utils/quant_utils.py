@@ -11,12 +11,12 @@ import numpy
 import torch
 from torch import fx
 
-from aphrodite.distributed.parallel_state import get_ep_group, get_tp_group
-from aphrodite.platforms import current_platform
-from aphrodite.scalar_type import ScalarType, scalar_types
+from sonar.distributed.parallel_state import get_ep_group, get_tp_group
+from sonar.platforms import current_platform
+from sonar.scalar_type import ScalarType, scalar_types
 
 if TYPE_CHECKING:
-    from aphrodite.model_executor.layers.linear import LinearBase
+    from sonar.model_executor.layers.linear import LinearBase
 
 FP8_DTYPE = current_platform.fp8_dtype()
 FP4_DTYPE = torch.uint8
@@ -82,7 +82,7 @@ def amax_for_moe_activation_quant(a_scale: torch.Tensor, enable_eplb: bool) -> t
     """
     a_max = a_scale.max().to(torch.float32)
     if enable_eplb:
-        from aphrodite.distributed.parallel_state import get_ep_group
+        from sonar.distributed.parallel_state import get_ep_group
 
         torch.distributed.all_reduce(
             a_max,
@@ -482,9 +482,9 @@ def get_attribute_fallback(obj, attributes: list[str]):
 
 def get_and_maybe_dequant_weights(layer: "LinearBase", out_dtype: torch.dtype = torch.float32):
     """Return layer's unquantized weights in [out, in] layout."""
-    from aphrodite.model_executor.layers.linear import UnquantizedLinearMethod
-    from aphrodite.model_executor.layers.quantization.fp8 import Fp8LinearMethod
-    from aphrodite.model_executor.layers.quantization.online.fp8 import (
+    from sonar.model_executor.layers.linear import UnquantizedLinearMethod
+    from sonar.model_executor.layers.quantization.fp8 import Fp8LinearMethod
+    from sonar.model_executor.layers.quantization.online.fp8 import (
         Fp8PerTensorOnlineLinearMethod,
     )
 

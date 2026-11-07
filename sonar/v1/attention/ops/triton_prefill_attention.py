@@ -29,17 +29,17 @@ from functools import cache
 
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.math_utils import RCP_LN2
-from aphrodite.utils.mem_utils import get_max_shared_memory_bytes
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
+from sonar.utils.math_utils import RCP_LN2
+from sonar.utils.mem_utils import get_max_shared_memory_bytes
 
 
 def _prefer_narrow_kv_tile() -> bool:
     """RDNA3/RDNA4 prefer a narrower KV tile than the shared default."""
     if not current_platform.is_rocm():
         return False
-    from aphrodite.platforms.rocm import on_gfx1x
+    from sonar.platforms.rocm import on_gfx1x
 
     # RDNA3/RDNA4 only: on_gfx1x() excludes gfx10xx and gfx1250.
     return on_gfx1x()

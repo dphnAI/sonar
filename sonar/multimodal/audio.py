@@ -10,8 +10,8 @@ import numpy as np
 import numpy.typing as npt
 import torch
 
-from aphrodite.utils.import_utils import PlaceholderModule
-from aphrodite.utils.torch_utils import set_default_torch_num_threads
+from sonar.utils.import_utils import PlaceholderModule
+from sonar.utils.torch_utils import set_default_torch_num_threads
 
 try:
     import av as av

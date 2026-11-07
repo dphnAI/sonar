@@ -10,7 +10,7 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from aphrodite.model_executor.layers.fused_moe.deep_gemm_mega_moe import (
+from sonar.model_executor.layers.fused_moe.deep_gemm_mega_moe import (
     MEGA_MOE_BF16,
     MEGA_MOE_MXFP4,
     MEGA_MOE_NVFP4,
@@ -19,19 +19,19 @@ from aphrodite.model_executor.layers.fused_moe.deep_gemm_mega_moe import (
     MegaMoEActivation,
     MegaMoEWeightSpec,
 )
-from aphrodite.model_executor.layers.fused_moe.prepare_megamoe import (
+from sonar.model_executor.layers.fused_moe.prepare_megamoe import (
     prepare_megamoe_inputs,
     prepare_megamoe_nvfp4_inputs,
 )
-from aphrodite.model_executor.layers.fused_moe.routed_experts_capturer import (
+from sonar.model_executor.layers.fused_moe.routed_experts_capturer import (
     bind_routed_experts_capturer,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     kMxfp8Dynamic,
     kNvfp4DynamicToken,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.deep_gemm import is_deep_gemm_supported
+from sonar.platforms import current_platform
+from sonar.utils.deep_gemm import is_deep_gemm_supported
 
 pytestmark = pytest.mark.skipif(not current_platform.is_cuda(), reason="DeepGEMM MegaMoE requires CUDA")
 requires_sm100 = pytest.mark.skipif(
@@ -44,19 +44,19 @@ requires_sm100 = pytest.mark.skipif(
 def sm100_mega_moe_layout(monkeypatch):
     """Build the SM100 kernel layout on any GPU; kernels are gated per test."""
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.fused_moe.deep_gemm_mega_moe.check_deep_gemm_mega_moe_supported",
+        "sonar.model_executor.layers.fused_moe.deep_gemm_mega_moe.check_deep_gemm_mega_moe_supported",
         lambda *args: None,
     )
 
 
 def _make_experts(**kwargs) -> DeepGemmMegaMoEExperts:
-    aphrodite_config = SimpleNamespace(
+    sonar_config = SimpleNamespace(
         scheduler_config=SimpleNamespace(max_num_batched_tokens=4),
         compilation_config=SimpleNamespace(static_forward_context={}),
     )
     kwargs.setdefault("activation", MegaMoEActivation())
     kwargs.setdefault("weight_format", MEGA_MOE_MXFP4)
-    return DeepGemmMegaMoEExperts(aphrodite_config, **kwargs)
+    return DeepGemmMegaMoEExperts(sonar_config, **kwargs)
 
 
 def test_deep_gemm_mega_moe_capture_precedes_eplb(monkeypatch):
@@ -253,7 +253,7 @@ def _expected_mega_moe_layout(ckpt, num_local_experts, num_logical_experts):
     ckpt = {name: ckpt[name][physical] for name in names}
     expected = _reference_mega_moe_layout(*ckpt.values())
     if is_deep_gemm_supported():
-        from aphrodite.utils.deep_gemm import _import_deep_gemm
+        from sonar.utils.deep_gemm import _import_deep_gemm
 
         deep_gemm = _import_deep_gemm()
         w13, s13, w2, s2 = (t.cuda() for t in ckpt.values())
@@ -584,7 +584,7 @@ def test_deep_gemm_mega_moe_decides_shared_fusion_at_construction(
 ):
     """Fuse only shared experts in the format's shared precision, shaped as whole
     routed experts, and only when the installed kernel takes them."""
-    monkeypatch.setattr("aphrodite.utils.deep_gemm._import_deep_gemm", lambda: _fake_deep_gemm(api))
+    monkeypatch.setattr("sonar.utils.deep_gemm._import_deep_gemm", lambda: _fake_deep_gemm(api))
     experts = _make_experts(
         num_experts=2,
         num_local_experts=2,
@@ -631,10 +631,10 @@ def test_deep_gemm_mega_moe_adds_unfused_shared_expert_once(monkeypatch, fused):
         y.fill_(1)
 
     monkeypatch.setattr(
-        "aphrodite.utils.deep_gemm._import_deep_gemm",
+        "sonar.utils.deep_gemm._import_deep_gemm",
         lambda: SimpleNamespace(fp8_fp4_mega_moe=kernel, get_block_m_for_mega_moe=lambda *args: 8),
     )
-    module = "aphrodite.model_executor.layers.fused_moe.deep_gemm_mega_moe"
+    module = "sonar.model_executor.layers.fused_moe.deep_gemm_mega_moe"
     monkeypatch.setattr(f"{module}.prepare_megamoe_inputs", lambda *a, **k: None)
     monkeypatch.setattr(f"{module}.get_ep_group", lambda: SimpleNamespace(world_size=1))
     shared = _shared_mlp(128, 128 if fused else 64)
@@ -679,7 +679,7 @@ def test_deep_gemm_mega_moe_adds_unfused_shared_expert_once(monkeypatch, fused):
 @pytest.mark.parametrize("num_tokens", [7, 63, 64, 65, 127, 128, 135, 434, 1025, 16384])
 @pytest.mark.parametrize("hidden_size", [256, 5120])
 def test_prepare_megamoe_inputs_is_bitwise_exact(num_tokens, hidden_size):
-    from aphrodite.third_party.deep_gemm.utils import per_token_cast_to_fp8
+    from sonar.third_party.deep_gemm.utils import per_token_cast_to_fp8
 
     device = torch.device("cuda")
     top_k = 8
@@ -757,7 +757,7 @@ def test_prepare_megamoe_eplb_maps_and_records_under_graph_replay(monkeypatch, n
     """Fused EPLB staging maps each routed id to a replica of its logical expert
     and records unpadded load, and a replayed graph sees map and record-flag
     updates."""
-    from aphrodite.distributed.eplb.eplb_state import EplbLayerState, compute_logical_maps
+    from sonar.distributed.eplb.eplb_state import EplbLayerState, compute_logical_maps
 
     device = torch.device("cuda")
     hidden_size, top_k = 256, 6
@@ -785,7 +785,7 @@ def test_prepare_megamoe_eplb_maps_and_records_under_graph_replay(monkeypatch, n
     )
     # Staging must read this ubatch's count; ubatch 0 would record nothing.
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.fused_moe.prepare_megamoe.dbo_current_ubatch_id",
+        "sonar.model_executor.layers.fused_moe.prepare_megamoe.dbo_current_ubatch_id",
         lambda: 1,
     )
     topk_idx = torch.empty(num_tokens, top_k, dtype=torch.int64, device=device)
@@ -868,7 +868,7 @@ def _shared_sf_tma_layout(sf: torch.Tensor, block_m: int) -> torch.Tensor:
 @requires_sm100
 @pytest.mark.parametrize("shared_block_m", [8, 32, 96, 128, 192])
 def test_prepare_megamoe_inputs_stages_shared_scale_tma_layout(shared_block_m):
-    from aphrodite.third_party.deep_gemm.utils import per_token_cast_to_fp8
+    from sonar.third_party.deep_gemm.utils import per_token_cast_to_fp8
 
     device = torch.device("cuda")
     num_tokens = shared_block_m + 7
@@ -946,7 +946,7 @@ def test_prepare_megamoe_inputs_stages_shared_scale_tma_layout(shared_block_m):
 @pytest.mark.parametrize("num_tokens", [7, 65, 135])
 def test_prepare_megamoe_inputs_masks_padding(nonfinite_padding, num_tokens, quantize):
     """Padded tokens are unrouted; BF16 dispatch copies the hidden states."""
-    from aphrodite.third_party.deep_gemm.utils import per_token_cast_to_fp8
+    from sonar.third_party.deep_gemm.utils import per_token_cast_to_fp8
 
     device = torch.device("cuda")
     hidden_size = 256
@@ -1030,8 +1030,8 @@ def test_prepare_megamoe_inputs_masks_padding(nonfinite_padding, num_tokens, qua
 def test_prepare_megamoe_nvfp4_inputs_is_bitwise_exact(num_tokens, shared):
     """Per-token NVFP4 dispatch, shared-expert inputs, unrouted padding and the
     L2 alphas match DeepGEMM's reference quantizers bit for bit."""
-    from aphrodite.third_party.deep_gemm.utils import per_token_cast_to_fp8
-    from aphrodite.third_party.deep_gemm.utils.nvfp4 import per_token_cast_to_nvfp4
+    from sonar.third_party.deep_gemm.utils import per_token_cast_to_fp8
+    from sonar.third_party.deep_gemm.utils.nvfp4 import per_token_cast_to_nvfp4
 
     device = torch.device("cuda")
     hidden_size, top_k, shared_block_m = 5120, 8, 32
@@ -1119,13 +1119,13 @@ ACTIVATIONS = {
 def _quantize(w: torch.Tensor, spec: MegaMoEWeightSpec):
     """Return checkpoint ``(weight, scale, global_scale)`` and the dequantized
     weight; NVFP4 takes ``global_scale`` as ``weight_scale_2``."""
-    from aphrodite.third_party.deep_gemm.utils.math import (
+    from sonar.third_party.deep_gemm.utils.math import (
         cast_back_from_fp4,
         cast_back_from_fp8,
         per_token_cast_to_fp4,
         per_token_cast_to_fp8,
     )
-    from aphrodite.third_party.deep_gemm.utils.nvfp4 import (
+    from sonar.third_party.deep_gemm.utils.nvfp4 import (
         cast_back_from_nvfp4,
         per_token_cast_to_nvfp4,
     )
@@ -1148,11 +1148,11 @@ def _quantize(w: torch.Tensor, spec: MegaMoEWeightSpec):
 
 def _round_trip(x: torch.Tensor, quant, nvfp4_scale: float | None = None):
     """What the kernel computes on: x after ``quant`` (None keeps BF16)."""
-    from aphrodite.third_party.deep_gemm.utils.math import (
+    from sonar.third_party.deep_gemm.utils.math import (
         cast_back_from_fp8,
         per_token_cast_to_fp8,
     )
-    from aphrodite.third_party.deep_gemm.utils.nvfp4 import (
+    from sonar.third_party.deep_gemm.utils.nvfp4 import (
         cast_back_from_nvfp4,
         per_token_cast_to_nvfp4,
     )
@@ -1233,7 +1233,7 @@ def test_deep_gemm_mega_moe_matches_reference(dist_init, fmt_name, shared, act_n
     fuse_shared = shared is not None
     torch.manual_seed(0)
     device = torch.device("cuda")
-    aphrodite_config = SimpleNamespace(
+    sonar_config = SimpleNamespace(
         scheduler_config=SimpleNamespace(max_num_batched_tokens=NUM_TOKENS),
         compilation_config=SimpleNamespace(static_forward_context={}),
     )
@@ -1255,7 +1255,7 @@ def test_deep_gemm_mega_moe_matches_reference(dist_init, fmt_name, shared, act_n
 
     with torch.device(device):
         experts = DeepGemmMegaMoEExperts(
-            aphrodite_config,
+            sonar_config,
             num_experts=NUM_EXPERTS,
             num_local_experts=NUM_EXPERTS,
             experts_start_idx=0,

@@ -15,22 +15,22 @@ reimplementation of the same per-token block-table-resolution math.
 
 import torch
 
-from aphrodite.models.deepseek_v4.sparse_mla import (
+from sonar.models.deepseek_v4.sparse_mla import (
     DeepseekV4SparseMLABackend,
     DeepseekV4SparseMLAMetadataBuilder,
 )
-from aphrodite.v1.attention.backend import CommonAttentionMetadata
-from aphrodite.v1.attention.backends.mla.indexer import (
+from sonar.v1.attention.backend import CommonAttentionMetadata
+from sonar.v1.attention.backends.mla.indexer import (
     DeepseekV4IndexerBackend,
     DeepseekV32IndexerMetadataBuilder,
 )
-from aphrodite.v1.attention.backends.mla.sparse_swa import (
+from sonar.v1.attention.backends.mla.sparse_swa import (
     _LAYER_TYPE_C4A,
     _LAYER_TYPE_C128A,
     _LAYER_TYPE_SWAONLY,
     DeepseekSparseSWAMetadataBuilder,
 )
-from aphrodite.v1.attention.ops.flashmla import FlashMLASchedMeta
+from sonar.v1.attention.ops.flashmla import FlashMLASchedMeta
 
 
 class DeepseekV4CPUFlashMLAMetadataBuilder(DeepseekV4SparseMLAMetadataBuilder):

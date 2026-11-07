@@ -5,14 +5,14 @@ from collections.abc import Iterable
 from dataclasses import asdict, dataclass
 from typing import Any
 
-from aphrodite.model_executor.kernels.mhc.tilelang_kernels import (
+from sonar.model_executor.kernels.mhc.tilelang_kernels import (
     compute_num_split,
     mhc_pre_big_fuse_with_norm_tilelang,
 )
-from aphrodite.model_executor.warmup.jit_warmup import AphroditeJitKernel
-from aphrodite.platforms import current_platform
-from aphrodite.utils.deep_gemm import is_deep_gemm_supported
-from aphrodite.utils.math_utils import cdiv
+from sonar.model_executor.warmup.jit_warmup import SonarJitKernel
+from sonar.platforms import current_platform
+from sonar.utils.deep_gemm import is_deep_gemm_supported
+from sonar.utils.math_utils import cdiv
 
 
 def compute_mhc_pre_num_splits(input_size: int, num_tokens: int) -> int:
@@ -21,7 +21,7 @@ def compute_mhc_pre_num_splits(input_size: int, num_tokens: int) -> int:
     return 1 if splits == 1 else 4 if splits <= 4 else 16
 
 
-class MHCPreNormKernel(AphroditeJitKernel["MHCPreNormKernel.CompileKey"]):
+class MHCPreNormKernel(SonarJitKernel["MHCPreNormKernel.CompileKey"]):
     @dataclass(frozen=True)
     class CompileKey:
         hidden_size: int

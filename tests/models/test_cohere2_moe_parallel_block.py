@@ -15,10 +15,10 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.config import CUDAGraphMode
-from aphrodite.model_executor.layers.fused_moe.config import FusedMoEParallelConfig
-from aphrodite.model_executor.models import cohere2_moe
-from aphrodite.platforms import current_platform
+from sonar.config import CUDAGraphMode
+from sonar.model_executor.layers.fused_moe.config import FusedMoEParallelConfig
+from sonar.model_executor.models import cohere2_moe
+from sonar.platforms import current_platform
 
 _NO_MOE_PARALLEL = FusedMoEParallelConfig.make_no_parallel()
 _UNUSED_STREAM = object()
@@ -43,7 +43,7 @@ class _PassthroughNorm(torch.nn.Module):
 
 
 class _FusedAddNorm(torch.nn.Module):
-    """Aphrodite RMSNorm interface with an identity normalization: like the fused
+    """Sonar RMSNorm interface with an identity normalization: like the fused
     kernel, it adds into ``residual`` in place."""
 
     def forward(
@@ -296,19 +296,19 @@ def test_no_dual_stream_when_disabled_or_unsupported(
     """A token threshold of 0 disables the dual stream. Non-CUDA platforms and
     microbatching (DBO) run single-stream: each layer holds a single fork/join
     state, which microbatches would share."""
-    monkeypatch.setenv("APHRODITE_COHERE2_ATTN_MOE_DUAL_STREAM_TOKEN_THRESHOLD", str(token_threshold))
+    monkeypatch.setenv("SONAR_COHERE2_ATTN_MOE_DUAL_STREAM_TOKEN_THRESHOLD", str(token_threshold))
     monkeypatch.setattr(cohere2_moe, "current_platform", SimpleNamespace(is_cuda=lambda: is_cuda))
-    aphrodite_config = SimpleNamespace(parallel_config=SimpleNamespace(use_ubatching=use_ubatching))
+    sonar_config = SimpleNamespace(parallel_config=SimpleNamespace(use_ubatching=use_ubatching))
 
-    assert cohere2_moe._make_dual_stream(aphrodite_config) is None
+    assert cohere2_moe._make_dual_stream(sonar_config) is None
 
 
 @pytest.mark.skipif(not current_platform.is_cuda(), reason="needs CUDA streams")
 def test_dual_stream_on_by_default_on_cuda(monkeypatch) -> None:
-    monkeypatch.delenv("APHRODITE_COHERE2_ATTN_MOE_DUAL_STREAM_TOKEN_THRESHOLD", raising=False)
-    aphrodite_config = SimpleNamespace(parallel_config=SimpleNamespace(use_ubatching=False))
+    monkeypatch.delenv("SONAR_COHERE2_ATTN_MOE_DUAL_STREAM_TOKEN_THRESHOLD", raising=False)
+    sonar_config = SimpleNamespace(parallel_config=SimpleNamespace(use_ubatching=False))
 
-    assert isinstance(cohere2_moe._make_dual_stream(aphrodite_config), torch.cuda.Stream)
+    assert isinstance(cohere2_moe._make_dual_stream(sonar_config), torch.cuda.Stream)
 
 
 @pytest.mark.parametrize(

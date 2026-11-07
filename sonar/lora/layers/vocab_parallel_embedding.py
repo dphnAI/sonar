@@ -6,13 +6,13 @@ import torch.nn as nn
 import torch.nn.functional as F
 from transformers import PreTrainedConfig
 
-from aphrodite.config.lora import LoRAConfig
-from aphrodite.model_executor.custom_op import maybe_get_oot_by_class
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.config.lora import LoRAConfig
+from sonar.model_executor.custom_op import maybe_get_oot_by_class
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 from .base import BaseLayerWithLoRA
 

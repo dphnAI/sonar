@@ -3,8 +3,8 @@
 import importlib
 from collections.abc import Callable
 
-from aphrodite.logger import init_logger
-from aphrodite.v1.kv_offload.cpu.policies.base import CachePolicy
+from sonar.logger import init_logger
+from sonar.v1.kv_offload.cpu.policies.base import CachePolicy
 
 logger = init_logger(__name__)
 
@@ -14,7 +14,7 @@ class CachePolicyFactory:
 
     Built-in policies are pre-registered below. External policies can either
     register a friendly short name up front or pass a module path at lookup
-    time without modifying Aphrodite.
+    time without modifying Sonar.
     """
 
     _registry: dict[str, Callable[[], type[CachePolicy]]] = {}
@@ -57,5 +57,5 @@ class CachePolicyFactory:
         return policy_cls
 
 
-CachePolicyFactory.register_cache_policy("lru", "aphrodite.v1.kv_offload.cpu.policies.lru", "LRUCachePolicy")
-CachePolicyFactory.register_cache_policy("arc", "aphrodite.v1.kv_offload.cpu.policies.arc", "ARCCachePolicy")
+CachePolicyFactory.register_cache_policy("lru", "sonar.v1.kv_offload.cpu.policies.lru", "LRUCachePolicy")
+CachePolicyFactory.register_cache_policy("arc", "sonar.v1.kv_offload.cpu.policies.arc", "ARCCachePolicy")

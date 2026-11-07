@@ -15,27 +15,27 @@ import torch.nn as nn
 import torch.nn.functional as F
 from transformers import PreTrainedConfig
 
-from aphrodite.compilation.decorators import (
+from sonar.compilation.decorators import (
     should_torch_compile_mm_encoder,
     support_torch_compile,
 )
-from aphrodite.distributed import (
+from sonar.distributed import (
     divide,
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
     split_tensor_along_last_dim,
     tensor_model_parallel_all_gather,
 )
-from aphrodite.model_executor.layers.activation import get_act_fn
-from aphrodite.model_executor.layers.attention import MMEncoderAttention
-from aphrodite.model_executor.layers.conv import Conv2dLayer
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.activation import get_act_fn
+from sonar.model_executor.layers.attention import MMEncoderAttention
+from sonar.model_executor.layers.conv import Conv2dLayer
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     QKVParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.quantization import QuantizationConfig
 
 from .utils import AutoWeightsLoader
 from .vision import is_vit_use_data_parallel, run_dp_sharded_vision_model

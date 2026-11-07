@@ -10,20 +10,20 @@ from typing import Any, ClassVar
 import numpy as np
 import torch
 
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.warmup.jit_warmup import AphroditeJitKernel, WarmupChoices
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import (
+from sonar.model_executor.layers.attention import Attention
+from sonar.model_executor.warmup.jit_warmup import SonarJitKernel, WarmupChoices
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import (
     PIN_MEMORY,
     canonicalize_singleton_dim_strides,
 )
-from aphrodite.v1.attention.backend import (
+from sonar.v1.attention.backend import (
     AttentionBackend,
     AttentionImpl,
     AttentionType,
     MultipleOf,
 )
-from aphrodite.v1.attention.backends.fa_utils import (
+from sonar.v1.attention.backends.fa_utils import (
     FA4_HD256_PAGE_SIZE,
     flash_attn_supports_kv_cache_dtype,
     flash_attn_supports_quant_query_input,
@@ -32,46 +32,46 @@ from aphrodite.v1.attention.backends.fa_utils import (
     is_flash_attn_varlen_func_available,
     uses_fa4_hd256_kernel,
 )
-from aphrodite.v1.attention.backends.utils import (
+from sonar.v1.attention.backends.utils import (
     fill_mm_prefix_query_ranges,
     get_dcp_local_seq_lens,
     get_num_attention_heads_from_layers,
 )
-from aphrodite.v1.attention.ops.dcp import (
+from sonar.v1.attention.ops.dcp import (
     cp_lse_ag_out_rs,
     dcp_a2a_lse_reduce,
 )
-from aphrodite.v1.attention.ops.merge_attn_states import merge_attn_states
-from aphrodite.v1.worker.workspace import current_workspace_manager
+from sonar.v1.attention.ops.merge_attn_states import merge_attn_states
+from sonar.v1.worker.workspace import current_workspace_manager
 
 if is_flash_attn_varlen_func_available():
-    from aphrodite.v1.attention.backends.fa_utils import (
+    from sonar.v1.attention.backends.fa_utils import (
         compile_flash_attn_varlen_func_from_specs,
         flash_attn_supports_sinks,
         flash_attn_varlen_func,
         get_scheduler_metadata,
         reshape_and_cache_flash,
     )
-import aphrodite.envs as envs
-from aphrodite.config import (
-    AphroditeConfig,
-    get_current_aphrodite_config_or_none,
-    get_layers_from_aphrodite_config,
+import sonar.envs as envs
+from sonar.config import (
+    SonarConfig,
+    get_current_sonar_config_or_none,
+    get_layers_from_sonar_config,
 )
-from aphrodite.config.cache import CacheDType
-from aphrodite.distributed.parallel_state import (
+from sonar.config.cache import CacheDType
+from sonar.distributed.parallel_state import (
     get_dcp_group,
     get_dcp_world_size_and_rank,
 )
-from aphrodite.logger import init_logger
-from aphrodite.platforms.interface import DeviceCapability
-from aphrodite.utils.math_utils import cdiv, round_up
-from aphrodite.v1.attention.backend import (
+from sonar.logger import init_logger
+from sonar.platforms.interface import DeviceCapability
+from sonar.utils.math_utils import cdiv, round_up
+from sonar.v1.attention.backend import (
     AttentionCGSupport,
     AttentionMetadataBuilder,
     CommonAttentionMetadata,
 )
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.kv_cache_interface import (
     AttentionSpec,
     FullAttentionSpec,
     KVCacheSpec,
@@ -79,7 +79,7 @@ from aphrodite.v1.kv_cache_interface import (
     SlidingWindowSpec,
     is_quantized_kv_cache,
 )
-from aphrodite.v1.worker.cp_utils import (
+from sonar.v1.worker.cp_utils import (
     run_split_fa2_dcp_context_attention,
     should_skip_dcp_context_attention,
     should_split_fa2_dcp_context_attention,
@@ -94,7 +94,7 @@ FA4_DENSE_NUM_BLOCKS = 256
 FA4_DENSE_MAX_SEQLEN_K = 8192
 
 
-class FA4DenseAttentionKernel(AphroditeJitKernel["FA4DenseAttentionKernel.CompileKey"]):
+class FA4DenseAttentionKernel(SonarJitKernel["FA4DenseAttentionKernel.CompileKey"]):
     """Warm paged, causal FA4 on Blackwell and Hopper."""
 
     @dataclass(frozen=True)
@@ -145,15 +145,15 @@ class FA4DenseAttentionKernel(AphroditeJitKernel["FA4DenseAttentionKernel.Compil
     def get_warmup_keys(
         self,
         *,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         kv_cache_spec: AttentionSpec,
         num_qo_heads: int,
     ) -> list[CompileKey]:
         capability = current_platform.get_device_capability()
         major = capability.major if capability is not None else None
         if (
-            aphrodite_config.parallel_config.decode_context_parallel_size != 1
-            or aphrodite_config.model_config.rswa_window is not None
+            sonar_config.parallel_config.decode_context_parallel_size != 1
+            or sonar_config.model_config.rswa_window is not None
             or kv_cache_spec.kv_quant_mode != KVQuantMode.NONE
             or kv_cache_spec.dtype not in FA4_DENSE_FLOAT_DTYPES
             or not isinstance(kv_cache_spec, (FullAttentionSpec, SlidingWindowSpec))
@@ -163,7 +163,7 @@ class FA4DenseAttentionKernel(AphroditeJitKernel["FA4DenseAttentionKernel.Compil
         page_size = kv_cache_spec.block_size
         sliding_window = kv_cache_spec.sliding_window
         window_size = (sliding_window - 1, 0) if sliding_window is not None else (-1, -1)
-        softcap = float(getattr(aphrodite_config.model_config.hf_text_config, "attn_logit_softcapping", 0) or 0)
+        softcap = float(getattr(sonar_config.model_config.hf_text_config, "attn_logit_softcapping", 0) or 0)
         if major in (10, 11) and uses_fa4_hd256_kernel(head_dim) and page_size == FA4_HD256_PAGE_SIZE:
             q_stages = WarmupChoices(1, 2)
             single_batches = WarmupChoices(True, False)
@@ -181,7 +181,7 @@ class FA4DenseAttentionKernel(AphroditeJitKernel["FA4DenseAttentionKernel.Compil
             q_stage=q_stages,
             is_single_batch=single_batches,
             num_splits=split_counts,
-            dtype=aphrodite_config.model_config.dtype,
+            dtype=sonar_config.model_config.dtype,
             num_qo_heads=num_qo_heads,
             num_kv_heads=kv_cache_spec.num_kv_heads,
             head_dim=head_dim,
@@ -238,7 +238,7 @@ class FA4DenseAttentionKernel(AphroditeJitKernel["FA4DenseAttentionKernel.Compil
         if compile_key.head_dim == 512 and compile_key.num_splits > 1:
             from torch._subclasses.fake_tensor import FakeTensorMode
 
-            from aphrodite.vllm_flash_attn.cute.interface import _flash_attn_fwd_combine
+            from sonar.vllm_flash_attn.cute.interface import _flash_attn_fwd_combine
 
             # FA4's forward compile-only entry returns before its transitive
             # SplitKV combine. Call the native combine entry in FakeTensorMode:
@@ -288,11 +288,11 @@ class FlashAttentionBackend(AttentionBackend):
         kv_cache_spec: KVCacheSpec | None = None,
     ) -> int | None:
         if kv_cache_spec is None:
-            aphrodite_config = get_current_aphrodite_config_or_none()
-            if aphrodite_config is None or aphrodite_config.model_config is None:
+            sonar_config = get_current_sonar_config_or_none()
+            if sonar_config is None or sonar_config.model_config is None:
                 return None
-            head_size = aphrodite_config.model_config.get_head_size()
-            uses_fp8_kv = aphrodite_config.cache_config.cache_dtype in (
+            head_size = sonar_config.model_config.get_head_size()
+            uses_fp8_kv = sonar_config.cache_config.cache_dtype in (
                 "fp8",
                 "fp8_e4m3",
             )
@@ -315,10 +315,10 @@ class FlashAttentionBackend(AttentionBackend):
     @classmethod
     def _get_fa4_hd256_block_size(cls, kv_cache_spec: KVCacheSpec | None = None) -> int | None:
         if kv_cache_spec is None:
-            aphrodite_config = get_current_aphrodite_config_or_none()
-            if aphrodite_config is None or aphrodite_config.model_config is None:
+            sonar_config = get_current_sonar_config_or_none()
+            if sonar_config is None or sonar_config.model_config is None:
                 return None
-            head_size = aphrodite_config.model_config.get_head_size()
+            head_size = sonar_config.model_config.get_head_size()
             head_size_v = cls.head_size_v
         else:
             if not isinstance(kv_cache_spec, AttentionSpec):
@@ -546,7 +546,7 @@ class FlashAttentionMetadata:
 
 
 def _get_sliding_window_configs(
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
 ) -> set[tuple[int, int] | None]:
     """Get the set of all sliding window configs used in the model.
 
@@ -555,7 +555,7 @@ def _get_sliding_window_configs(
     metadata builders and are skipped.
     """
     sliding_window_configs: set[tuple[int, int] | None] = set()
-    layers = get_layers_from_aphrodite_config(aphrodite_config, Attention)
+    layers = get_layers_from_sonar_config(sonar_config, Attention)
     for layer in layers.values():
         for impl in layer.impl.get_impl_variants():
             if isinstance(impl, FlashAttentionImpl):
@@ -606,7 +606,7 @@ class FlashAttentionMetadataBuilder(AttentionMetadataBuilder[FlashAttentionMetad
     @classmethod
     def get_cudagraph_support(
         cls,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
         kv_cache_spec: "KVCacheSpec",
     ) -> AttentionCGSupport:
         return cls._cudagraph_support
@@ -664,18 +664,18 @@ class FlashAttentionMetadataBuilder(AttentionMetadataBuilder[FlashAttentionMetad
         self,
         kv_cache_spec: AttentionSpec,
         layer_names: list[str],
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
     ):
-        super().__init__(kv_cache_spec, layer_names, aphrodite_config, device)
-        self.model_config = aphrodite_config.model_config
-        self.parallel_config = aphrodite_config.parallel_config
-        self.cache_config = aphrodite_config.cache_config
-        self.compilation_config = aphrodite_config.compilation_config
-        self.attention_config = aphrodite_config.attention_config
+        super().__init__(kv_cache_spec, layer_names, sonar_config, device)
+        self.model_config = sonar_config.model_config
+        self.parallel_config = sonar_config.parallel_config
+        self.cache_config = sonar_config.cache_config
+        self.compilation_config = sonar_config.compilation_config
+        self.attention_config = sonar_config.attention_config
 
         self.num_heads_q = get_num_attention_heads_from_layers(
-            aphrodite_config, layer_names
+            sonar_config, layer_names
         ) or self.model_config.get_num_attention_heads(self.parallel_config)
         self.num_heads_kv = kv_cache_spec.num_kv_heads
         self.kv_cache_dtype = kv_cache_spec.dtype
@@ -694,12 +694,12 @@ class FlashAttentionMetadataBuilder(AttentionMetadataBuilder[FlashAttentionMetad
         self.fa4_hd256 = fa_version == 4 and uses_fa4_hd256_kernel(self.headdim, head_size_v)
 
         if (
-            aphrodite_config.kernel_config.enable_jit_warmup
+            sonar_config.kernel_config.enable_jit_warmup
             and self.model_config.hf_config.model_type in ("gemma4", "gemma4_unified")
             and fa_version == 4
         ):
             _FA4_DENSE_ATTENTION_KERNEL.register_warmup(
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 kv_cache_spec=kv_cache_spec,
                 num_qo_heads=self.num_heads_q,
             )
@@ -726,7 +726,7 @@ class FlashAttentionMetadataBuilder(AttentionMetadataBuilder[FlashAttentionMetad
             #   prepare_varlen + dynamic_split + sort_batches + head_swizzle
             # See: https://github.com/vllm-project/flash-attention/blob/5824e6e/hopper/flash_api.cpp#L664-L671  # noqa: E501
             max_batch_size = max(
-                aphrodite_config.scheduler_config.max_num_seqs,
+                sonar_config.scheduler_config.max_num_seqs,
                 self.max_cudagraph_size or 0,
             )
             self.scheduler_metadata = torch.zeros(
@@ -740,7 +740,7 @@ class FlashAttentionMetadataBuilder(AttentionMetadataBuilder[FlashAttentionMetad
             self.max_num_splits = self.attention_config.flash_attn_max_num_splits_for_cuda_graph
 
         if self.dcp_world_size > 1:
-            max_num_reqs = aphrodite_config.scheduler_config.max_num_seqs
+            max_num_reqs = sonar_config.scheduler_config.max_num_seqs
             self._dcp_context_kv_lens = torch.zeros(
                 max_num_reqs,
                 dtype=torch.int32,
@@ -756,7 +756,7 @@ class FlashAttentionMetadataBuilder(AttentionMetadataBuilder[FlashAttentionMetad
         self.persistent_rswa_prefix_lens: torch.Tensor | None = None
         self.persistent_rswa_window_tensor: torch.Tensor | None = None
         if self.rswa_window is not None:
-            max_num_reqs = aphrodite_config.scheduler_config.max_num_seqs
+            max_num_reqs = sonar_config.scheduler_config.max_num_seqs
             self.persistent_rswa_prefix_lens = torch.zeros(max_num_reqs, dtype=torch.int32, device=self.device)
             self.persistent_rswa_window_tensor = torch.tensor([self.rswa_window], dtype=torch.int32, device=self.device)
 
@@ -766,7 +766,7 @@ class FlashAttentionMetadataBuilder(AttentionMetadataBuilder[FlashAttentionMetad
         self.mm_prefix_query_ranges_np: np.ndarray | None = None
         self.mm_prefix_query_ranges_gpu: torch.Tensor | None = None
         if self.model_config.is_mm_prefix_lm:
-            max_num_tokens = aphrodite_config.scheduler_config.max_num_batched_tokens
+            max_num_tokens = sonar_config.scheduler_config.max_num_batched_tokens
             self.mm_prefix_query_ranges_cpu = torch.empty((max_num_tokens, 2), dtype=torch.int32, pin_memory=PIN_MEMORY)
             self.mm_prefix_query_ranges_np = self.mm_prefix_query_ranges_cpu.numpy()
             self.mm_prefix_query_ranges_gpu = torch.empty((max_num_tokens, 2), dtype=torch.int32, device=self.device)
@@ -792,7 +792,7 @@ class FlashAttentionMetadataBuilder(AttentionMetadataBuilder[FlashAttentionMetad
 
         # Disable AOT schedule for spec-decode proposer (not worth the overhead)
         # and for batch invariance (schedule varies with max_seqlen_q/k).
-        aot_schedule = self.aot_schedule and not fast_build and not envs.APHRODITE_BATCH_INVARIANT
+        aot_schedule = self.aot_schedule and not fast_build and not envs.SONAR_BATCH_INVARIANT
 
         if self.aot_sliding_window is None:
             self.aot_sliding_window = (-1, -1)
@@ -801,7 +801,7 @@ class FlashAttentionMetadataBuilder(AttentionMetadataBuilder[FlashAttentionMetad
             # build() call so the layers are constructed (cannot populate)
             # in __init__.
             if aot_schedule:
-                sliding_window_configs = _get_sliding_window_configs(self.aphrodite_config)
+                sliding_window_configs = _get_sliding_window_configs(self.sonar_config)
                 if len(sliding_window_configs) == 1:
                     sliding_window_config = sliding_window_configs.pop()
                     if sliding_window_config is not None:
@@ -822,7 +822,7 @@ class FlashAttentionMetadataBuilder(AttentionMetadataBuilder[FlashAttentionMetad
             # we only set num_splits when using cuda graphs.
             max_num_splits = self.max_num_splits
 
-        if envs.APHRODITE_BATCH_INVARIANT:
+        if envs.SONAR_BATCH_INVARIANT:
             max_num_splits = 1
 
         max_dcp_context_kv_len = 0
@@ -1045,7 +1045,7 @@ class FlashAttentionImpl(AttentionImpl):
         self.num_queries_per_kv = self.num_heads // self.num_kv_heads
 
         self.attn_type = attn_type
-        aphrodite_config = get_current_aphrodite_config_or_none()
+        sonar_config = get_current_sonar_config_or_none()
         uses_kv_cache = attn_type not in (
             AttentionType.ENCODER,
             AttentionType.ENCODER_ONLY,
@@ -1072,7 +1072,7 @@ class FlashAttentionImpl(AttentionImpl):
             self.flash_attn_version,
         )
         # Cache the batch invariant result for use in forward passes
-        self.batch_invariant_enabled = envs.APHRODITE_BATCH_INVARIANT
+        self.batch_invariant_enabled = envs.SONAR_BATCH_INVARIANT
 
         if is_quantized_kv_cache(self.kv_cache_dtype) and not flash_attn_supports_kv_cache_dtype(
             self.kv_cache_dtype,
@@ -1103,17 +1103,17 @@ class FlashAttentionImpl(AttentionImpl):
         self.supports_quant_query_input = flash_attn_supports_quant_query_input() and (not uses_sm90_fa4_fp8_kv_dequant)
 
         dcp_a2a = (
-            aphrodite_config is not None
-            and aphrodite_config.parallel_config.decode_context_parallel_size > 1
-            and aphrodite_config.parallel_config.dcp_comm_backend == "a2a"
+            sonar_config is not None
+            and sonar_config.parallel_config.decode_context_parallel_size > 1
+            and sonar_config.parallel_config.dcp_comm_backend == "a2a"
         )
         self.dcp_combine = dcp_a2a_lse_reduce if dcp_a2a else cp_lse_ag_out_rs
 
         self._dcp_dtype: torch.dtype | None = None
         self._dcp_max_num_tokens: int = 0
-        if aphrodite_config is not None and self.dcp_world_size > 1:
-            self._dcp_dtype = aphrodite_config.model_config.dtype
-            self._dcp_max_num_tokens = aphrodite_config.scheduler_config.max_num_batched_tokens
+        if sonar_config is not None and self.dcp_world_size > 1:
+            self._dcp_dtype = sonar_config.model_config.dtype
+            self._dcp_max_num_tokens = sonar_config.scheduler_config.max_num_batched_tokens
 
     def forward(
         self,
@@ -1189,7 +1189,7 @@ class FlashAttentionImpl(AttentionImpl):
         key_cache, value_cache = kv_cache.transpose(1, 2).split(self.head_size, dim=-1)
         # Fix degenerate strides on size-1 dims (e.g. num_kv_heads=1 with TP).
         # FA3/4 on H100+ uses TMA, which requires ≥16-byte stride alignment.
-        # See aphrodite.utils.torch_utils.canonicalize_singleton_dim_strides.
+        # See sonar.utils.torch_utils.canonicalize_singleton_dim_strides.
         fixed_k = canonicalize_singleton_dim_strides(key_cache)
         fixed_v = canonicalize_singleton_dim_strides(value_cache)
         if fixed_k is not key_cache or fixed_v is not value_cache:
@@ -1656,7 +1656,7 @@ def _make_mm_prefix_mask_mod(
     import cutlass.cute as cute
     from cutlass import Int32  # type: ignore[attr-defined]
 
-    from aphrodite.vllm_flash_attn.cute.utils import (  # type: ignore[import-untyped]
+    from sonar.vllm_flash_attn.cute.utils import (  # type: ignore[import-untyped]
         scalar_to_ssa,
         ssa_to_scalar,
     )
@@ -1751,7 +1751,7 @@ def _make_rswa_mask_mod():
     import cutlass.cute as cute
     from cutlass import Int32  # type: ignore[attr-defined]
 
-    from aphrodite.vllm_flash_attn.cute.utils import (  # type: ignore[import-untyped]
+    from sonar.vllm_flash_attn.cute.utils import (  # type: ignore[import-untyped]
         scalar_to_ssa,
     )
 

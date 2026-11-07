@@ -5,9 +5,9 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor
 
-import aphrodite._custom_ops as ops
-from aphrodite.platforms import current_platform
-from aphrodite.utils.math_utils import cdiv
+import sonar._custom_ops as ops
+from sonar.platforms import current_platform
+from sonar.utils.math_utils import cdiv
 
 
 def ref_mla(

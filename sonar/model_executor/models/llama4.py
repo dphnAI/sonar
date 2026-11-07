@@ -24,39 +24,39 @@ import torch
 from torch import nn
 from transformers import Llama4TextConfig
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, CacheConfig
-from aphrodite.distributed import (
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import CacheConfig, SonarConfig
+from sonar.distributed import (
     get_ep_group,
     get_tensor_model_parallel_world_size,
     tensor_model_parallel_all_gather,
 )
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.attention import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.attention import (
     Attention,
     ChunkedLocalAttention,
 )
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.model_executor.layers.fused_moe import (
     FusedMoEFactory,
     GateLinear,
     fused_moe_make_expert_params_mapping,
 )
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     QKVParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.model_loader.weight_utils import (
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.model_loader.weight_utils import (
     default_weight_loader,
     maybe_remap_kv_scale_name,
     maybe_remap_moe_expert_param_name,
 )
-from aphrodite.model_executor.models.interfaces import MixtureOfExperts
-from aphrodite.model_executor.models.utils import sequence_parallel_chunk
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import is_torch_equal_or_newer
+from sonar.model_executor.models.interfaces import MixtureOfExperts
+from sonar.model_executor.models.utils import sequence_parallel_chunk
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import is_torch_equal_or_newer
 
 from .llama import LlamaForCausalLM, LlamaMLP, LlamaModel
 from .utils import (
@@ -83,12 +83,12 @@ class Llama4MoE(nn.Module):
         router_scores = torch.sigmoid(router_scores.float())
         return (router_scores, router_indices.to(torch.int32))
 
-    def __init__(self, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_config
-        parallel_config = aphrodite_config.parallel_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        parallel_config = sonar_config.parallel_config
+        quant_config = sonar_config.quant_config
 
         self.tp_size = get_tensor_model_parallel_world_size()
         self.top_k = config.num_experts_per_tok
@@ -304,15 +304,15 @@ class Llama4Attention(nn.Module):
 class Llama4DecoderLayer(nn.Module):
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
         config: Llama4TextConfig | None = None,
     ) -> None:
         super().__init__()
 
-        config = config or aphrodite_config.model_config.hf_config
-        cache_config = aphrodite_config.cache_config
-        quant_config = aphrodite_config.quant_config
+        config = config or sonar_config.model_config.hf_config
+        cache_config = sonar_config.cache_config
+        quant_config = sonar_config.quant_config
 
         self.layer_idx = extract_layer_index(prefix)
         self.global_layer = config.no_rope_layers[self.layer_idx] == 0
@@ -336,7 +336,7 @@ class Llama4DecoderLayer(nn.Module):
         )
         if is_moe_layer:
             self.feed_forward = Llama4MoE(
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 prefix=f"{prefix}.feed_forward",
             )
         else:
@@ -376,13 +376,13 @@ class Llama4Model(LlamaModel):
     def __init__(
         self,
         *,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
         layer_type: type[Llama4DecoderLayer] = Llama4DecoderLayer,
     ):
-        self.num_experts = aphrodite_config.model_config.hf_config.num_local_experts
-        self.n_redundant_experts = aphrodite_config.parallel_config.eplb_config.num_redundant_experts
-        super().__init__(aphrodite_config=aphrodite_config, prefix=prefix, layer_type=layer_type)
+        self.num_experts = sonar_config.model_config.hf_config.num_local_experts
+        self.n_redundant_experts = sonar_config.parallel_config.eplb_config.num_redundant_experts
+        super().__init__(sonar_config=sonar_config, prefix=prefix, layer_type=layer_type)
 
     def load_moe_expert_weights(
         self,
@@ -682,17 +682,17 @@ class Llama4ForCausalLM(LlamaForCausalLM, MixtureOfExperts):
         "gate_up_proj": ["gate_proj", "up_proj"],
     }
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         # update temperature tuning config from generation config
-        gen_config = aphrodite_config.model_config.try_get_generation_config()
-        gen_config.update(aphrodite_config.model_config.override_generation_config)
+        gen_config = sonar_config.model_config.try_get_generation_config()
+        gen_config.update(sonar_config.model_config.override_generation_config)
         # enable temperature tuning by default when max_model_len > 32K
-        default_attn_temperature_tuning = aphrodite_config.model_config.max_model_len > 32768
-        aphrodite_config.model_config.hf_config.attn_temperature_tuning = gen_config.get(
+        default_attn_temperature_tuning = sonar_config.model_config.max_model_len > 32768
+        sonar_config.model_config.hf_config.attn_temperature_tuning = gen_config.get(
             "attn_temperature_tuning", default_attn_temperature_tuning
         )
 
-        super().__init__(aphrodite_config=aphrodite_config, prefix=prefix, layer_type=Llama4DecoderLayer)
+        super().__init__(sonar_config=sonar_config, prefix=prefix, layer_type=Llama4DecoderLayer)
         # Set MoE hyperparameters
         self.set_moe_parameters()
 
@@ -751,11 +751,11 @@ class Llama4ForCausalLM(LlamaForCausalLM, MixtureOfExperts):
 
     def _init_model(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
         layer_type: type[Llama4DecoderLayer] = Llama4DecoderLayer,
     ):
-        return Llama4Model(aphrodite_config=aphrodite_config, prefix=prefix, layer_type=layer_type)
+        return Llama4Model(sonar_config=sonar_config, prefix=prefix, layer_type=layer_type)
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)

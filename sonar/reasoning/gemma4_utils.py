@@ -7,16 +7,16 @@
 Standalone functions that parse decoded model text to extract structured
 thinking content from Gemma4 models. These are pure-Python utilities with
 zero heavy dependencies — they work on raw decoded strings from any
-inference backend (Aphrodite, HuggingFace, TGI, etc.).
+inference backend (Sonar, HuggingFace, TGI, etc.).
 
 For the OpenAI-compatible API reasoning parser (streaming +
-non-streaming), see ``aphrodite.reasoning.gemma4_reasoning_parser``.
-For tool call parsing, see ``aphrodite.tool_parsers.gemma4_utils``.
+non-streaming), see ``sonar.reasoning.gemma4_reasoning_parser``.
+For tool call parsing, see ``sonar.tool_parsers.gemma4_utils``.
 
-Usage with Aphrodite offline inference::
+Usage with Sonar offline inference::
 
-    from aphrodite import LLM, SamplingParams
-    from aphrodite.reasoning.gemma4_utils import parse_thinking_output
+    from sonar import LLM, SamplingParams
+    from sonar.reasoning.gemma4_utils import parse_thinking_output
 
     llm = LLM(model="google/gemma-4-it")
     outputs = llm.generate(prompt, SamplingParams(...))
@@ -27,7 +27,7 @@ Usage with Aphrodite offline inference::
     print(result["thinking"])  # chain-of-thought or None
     print(result["answer"])  # final answer
 
-Ported from ``transformers.models.gemma4.utils_gemma4`` so that Aphrodite users
+Ported from ``transformers.models.gemma4.utils_gemma4`` so that Sonar users
 do not need a transformers dependency for output parsing.
 """
 
@@ -70,7 +70,7 @@ def parse_thinking_output(text: str) -> dict[str, str | None]:
 
     Example::
 
-        >>> from aphrodite.reasoning.gemma4_utils import parse_thinking_output
+        >>> from sonar.reasoning.gemma4_utils import parse_thinking_output
         >>> output_text = tokenizer.decode(outputs[0], skip_special_tokens=False)
         >>> result = parse_thinking_output(output_text)
         >>> print(result["thinking"])  # chain-of-thought reasoning or None

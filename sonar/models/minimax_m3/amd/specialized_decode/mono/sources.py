@@ -6,7 +6,7 @@ every build's JIT cache key: an edit to either rebuilds."""
 import hashlib
 from pathlib import Path
 
-import aphrodite.models.deepseek_v41.amd.mono.common as ds_common
+import sonar.models.deepseek_v41.amd.mono.common as ds_common
 
 
 def _digest() -> str:

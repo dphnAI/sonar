@@ -8,9 +8,9 @@ from typing import ClassVar
 import torch
 import torch.distributed as dist
 
-from aphrodite.distributed import get_tp_group
-from aphrodite.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
-from aphrodite.model_executor.warmup.cutedsl_warmup import (
+from sonar.distributed import get_tp_group
+from sonar.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
+from sonar.model_executor.warmup.cutedsl_warmup import (
     CuTeDSLCompileUnit,
     register_cutedsl_warmup_provider,
 )

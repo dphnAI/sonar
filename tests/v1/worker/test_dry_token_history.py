@@ -8,11 +8,11 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.v1.sample.ops import SamplingOps
-from aphrodite.v1.worker.gpu_input_batch import CachedRequestState, InputBatch
-from aphrodite.v1.worker.gpu_model_runner import GPUModelRunner
+from sonar.platforms import current_platform
+from sonar.sampling_params import SamplingParams
+from sonar.v1.sample.ops import SamplingOps
+from sonar.v1.worker.gpu_input_batch import CachedRequestState, InputBatch
+from sonar.v1.worker.gpu_model_runner import GPUModelRunner
 
 
 def make_batch(prompts, outputs):
@@ -63,7 +63,7 @@ def assert_native_matches_reference(batch):
     metadata = batch.sampling_metadata
     logits = torch.zeros((batch.num_reqs, 16))
     # Fail if the native path accidentally falls back to Python.
-    with patch("aphrodite.v1.sample.ops._compute_dry_penalties", side_effect=AssertionError("Python fallback")):
+    with patch("sonar.v1.sample.ops._compute_dry_penalties", side_effect=AssertionError("Python fallback")):
         native = SamplingOps().apply_dry(logits.clone(), metadata)
     with patch.object(metadata, "token_history_ids_cpu", None):
         reference = SamplingOps().apply_dry(logits.clone(), metadata)

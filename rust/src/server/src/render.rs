@@ -5,13 +5,13 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use anyhow::{Context as _, Result, bail};
-use aphrodite_chat::{
+use serde_json::Value;
+use sonar_chat::{
     ChatRequestProcessor, ChatTemplateContentFormatOption, LoadModelBackendsOptions,
     ParserSelection, RendererSelection, ToolStrictLevel, load_model_backends,
 };
-use aphrodite_text::TextRequestProcessor;
-use aphrodite_text::backend::hf::{HfOverrides, ModelSource};
-use serde_json::Value;
+use sonar_text::TextRequestProcessor;
+use sonar_text::backend::hf::{HfOverrides, ModelSource};
 use tokio_util::sync::CancellationToken;
 use tracing::info;
 
@@ -33,7 +33,7 @@ pub struct RenderConfig {
     pub hf_config: Option<ModelSource>,
     pub hf_overrides: HfOverrides,
     pub served_model_name: Vec<String>,
-    /// Accept any requested model name (`APHRODITE_SKIP_MODEL_NAME_VALIDATION`).
+    /// Accept any requested model name (`SONAR_SKIP_MODEL_NAME_VALIDATION`).
     pub skip_model_name_validation: bool,
     pub host: String,
     pub port: u16,
@@ -56,7 +56,7 @@ impl RenderConfig {
     /// Validate configuration before initializing renderer/tokenizer backends
     /// or binding a listener.
     pub fn validate(&self) -> Result<()> {
-        aphrodite_chat::validate_parser_overrides(&self.tool_call_parser, &self.reasoning_parser)?;
+        sonar_chat::validate_parser_overrides(&self.tool_call_parser, &self.reasoning_parser)?;
         if self.max_logprobs.is_some_and(|value| value < -1) {
             bail!("max_logprobs must be non-negative or -1");
         }

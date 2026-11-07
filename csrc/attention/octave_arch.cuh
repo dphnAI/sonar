@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 //
-// Per-architecture primitives of the Octave kernels. Every AMD target Aphrodite
+// Per-architecture primitives of the Octave kernels. Every AMD target Sonar
 // builds compiles the portable tier; faster tiers are selected at runtime by
 // the host code (see docs/design/rocm_octave.md, "Architecture contract").
 //

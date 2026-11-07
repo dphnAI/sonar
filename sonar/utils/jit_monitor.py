@@ -29,9 +29,9 @@ from collections.abc import Iterator, Mapping
 from contextlib import suppress
 from typing import Any, Literal, cast
 
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils.importing import HAS_TRITON
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.triton_utils.importing import HAS_TRITON
 
 logger = init_logger(__name__)
 JitMonitorMode = Literal["warn", "error"]
@@ -231,7 +231,7 @@ def _setup_triton_jit_hook() -> None:
     """Register a jit_post_compile_hook that warns on compilation."""
     if not HAS_TRITON:
         return
-    from aphrodite.triton_utils import triton
+    from sonar.triton_utils import triton
 
     knobs = triton.knobs
     _triton_jit = triton.runtime.jit
@@ -239,7 +239,7 @@ def _setup_triton_jit_hook() -> None:
     # kernels pass non-JSON-serializable constexprs
     # make that serialization non-fatal
     _orig = _triton_jit.serialize_specialization_data
-    if not getattr(_orig, "_aphrodite_guarded", False):
+    if not getattr(_orig, "_sonar_guarded", False):
 
         @functools.wraps(_orig)
         def _guarded(*args, **kwargs):
@@ -248,7 +248,7 @@ def _setup_triton_jit_hook() -> None:
             except (TypeError, ValueError):
                 return None  # best-effort metadata; monitor ignores it
 
-        cast(Any, _guarded)._aphrodite_guarded = True
+        cast(Any, _guarded)._sonar_guarded = True
         _triton_jit.serialize_specialization_data = _guarded
 
     existing_hook = knobs.runtime.jit_post_compile_hook
@@ -583,7 +583,7 @@ def numba_workqueue_threading_layer() -> Iterator[None]:
     """Force numba's fork-safe `workqueue` threading layer for this block.
 
     GNU OpenMP (numba's default `omp` threading layer) aborts the process
-    if a forked child re-enters an OpenMP-active runtime. Aphrodite forks the
+    if a forked child re-enters an OpenMP-active runtime. Sonar forks the
     EngineCore subprocess from a process that may already have launched
     numba's parallel accelerator, so the first call to any
     `@njit(parallel=True)` function must happen under `workqueue` instead.

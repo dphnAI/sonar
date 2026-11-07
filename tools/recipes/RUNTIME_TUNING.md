@@ -1,6 +1,6 @@
 # Runtime Tuning
 
-The Recipes JSON remains the baseline. Aphrodite Recipes already provide validated
+The Recipes JSON remains the baseline. Sonar Recipes already provide validated
 model, hardware, strategy, environment variables, and serving arguments.
 Runtime tuning is optional and is intended for parameters whose best value can
 depend on the actual deployment resources or expected request workload.
@@ -9,7 +9,7 @@ depend on the actual deployment resources or expected request workload.
 
 Runtime tuning combines up to three inputs:
 
-- **Aphrodite Recipe** — the required baseline from the Recipes JSON API or a direct
+- **Sonar Recipe** — the required baseline from the Recipes JSON API or a direct
   recipe JSON file.
 - **Hardware information (optional)** — detected with `--detect-hardware`,
   including effective CPU/NUMA topology and memory availability.
@@ -30,7 +30,7 @@ topology and memory information. The current policy can use those values to
 refine `tensor-parallel-size` and `gpu-memory-utilization`.
 
 ```bash
-python3 tools/recipes/recipe_json_to_aphrodite_config.py \
+python3 tools/recipes/recipe_json_to_sonar_config.py \
   --model meta-llama/Llama-3.1-8B-Instruct \
   --hardware xeon6 \
   --detect-hardware
@@ -42,7 +42,7 @@ hardware detection provides resource information to that policy.
 ## Workload Information
 
 Workload information is supplied explicitly because the converter runs before a
-Aphrodite server exists. Supported hints include:
+Sonar server exists. Supported hints include:
 
 - `--input-tokens`
 - `--output-tokens`
@@ -54,7 +54,7 @@ Aphrodite server exists. Supported hints include:
 Example:
 
 ```bash
-python3 tools/recipes/recipe_json_to_aphrodite_config.py \
+python3 tools/recipes/recipe_json_to_sonar_config.py \
   --model meta-llama/Llama-3.1-8B-Instruct \
   --hardware xeon6 \
   --input-tokens 128 \
@@ -78,16 +78,16 @@ on a validation environment that differs from the user's target deployment.
 | Runtime parameter | Why it may need deployment-time refinement | Main decision input | Current policy |
 | --- | --- | --- | --- |
 | `tensor-parallel-size` | Available topology and model head counts constrain TP. | Hardware topology + model configuration | Use the largest head-compatible power-of-two TP within the effective NUMA-node count, for DP=1 and PP=1. |
-| `gpu-memory-utilization` | Available memory can differ by machine size, container limits, and other memory use. The Aphrodite option name is also used by the CPU backend. | Hardware memory + recipe baseline | Calculate a conservative fraction from the most constrained NUMA node. |
-| `max-num-seqs` | The useful scheduler concurrency depends on the number of requests expected to be active on each DP replica. | Workload concurrency + DP | Keep the recipe/Aphrodite value in `config.yml`; use `ceil(--concurrency / data-parallel-size)` as an explicit sweep seed. |
-| `max-num-batched-tokens` | Each scheduler iteration must share its token budget between active decodes and incoming prefills. | Input/output token shape, concurrency, and optional QPS/TPOT | Keep the recipe/Aphrodite value in `config.yml`; use decode budget + expected prefill demand as an explicit sweep seed. |
+| `gpu-memory-utilization` | Available memory can differ by machine size, container limits, and other memory use. The Sonar option name is also used by the CPU backend. | Hardware memory + recipe baseline | Calculate a conservative fraction from the most constrained NUMA node. |
+| `max-num-seqs` | The useful scheduler concurrency depends on the number of requests expected to be active on each DP replica. | Workload concurrency + DP | Keep the recipe/Sonar value in `config.yml`; use `ceil(--concurrency / data-parallel-size)` as an explicit sweep seed. |
+| `max-num-batched-tokens` | Each scheduler iteration must share its token budget between active decodes and incoming prefills. | Input/output token shape, concurrency, and optional QPS/TPOT | Keep the recipe/Sonar value in `config.yml`; use decode budget + expected prefill demand as an explicit sweep seed. |
 | `data-parallel-size` | The required replica count depends on the requested throughput and the capacity of one replica. | Capacity target | Keep the recipe value today because per-replica SLA capacity is not known. |
 
 For `max-num-seqs` and `max-num-batched-tokens`, workload formulas now create
 benchmark-only seeds instead of overriding the directly deployable
 `config.yml`. The optional benchmark sweep measures those explicit seeds
-against Aphrodite's normal serving defaults. Default-reference runs leave the
-selected scheduler option unset at engine-configuration time so Aphrodite can
+against Sonar's normal serving defaults. Default-reference runs leave the
+selected scheduler option unset at engine-configuration time so Sonar can
 resolve its platform-, world-size-, model-, and usage-context-aware default
 rather than assuming a fixed numeric value. See
 [SWEEP_TUNING.md](SWEEP_TUNING.md).
@@ -116,7 +116,7 @@ For example, 2 effective NUMA nodes produce TP=2, while 6 nodes currently
 produce TP=4. This is a topology-based starting point and avoids automatically
 selecting unusual non-power-of-two TP sizes before they are validated.
 
-The policy then reads the model configuration through Aphrodite's config loader,
+The policy then reads the model configuration through Sonar's config loader,
 without loading weights. It honors the model path/ID, revision, code revision,
 `trust-remote-code`, config format and JSON `hf-overrides`. No model-specific
 numeric head-count table is maintained.
@@ -134,7 +134,7 @@ KV heads reduce the initial TP=4 suggestion to TP=2. The printed tuning notes
 show the detected counts and the reduction; `config.yml` receives TP=2.
 
 If configuration loading or head extraction fails, the tool keeps the recipe
-TP (Aphrodite's default TP=1 when absent) and prints why detection failed. That
+TP (Sonar's default TP=1 when absent) and prints why detection failed. That
 fallback does not certify an existing recipe TP as compatible. Plain conversion
 without hardware detection does not fetch the model configuration.
 
@@ -142,8 +142,8 @@ Automatic TP selection currently requires recipe DP=1 and PP=1; otherwise the
 recipe's parallelism is retained. Automatic DP tuning remains disabled pending
 CPU DP binding and capacity validation. No unused NUMA nodes are converted into
 DP replicas. These checks establish head compatibility, not memory fit or
-complete model/backend support. Explicit `aphrodite serve` CLI overrides still take
-precedence over the generated YAML and are validated by Aphrodite at startup.
+complete model/backend support. Explicit `sonar serve` CLI overrides still take
+precedence over the generated YAML and are validated by Sonar at startup.
 
 ### `gpu-memory-utilization`
 
@@ -154,7 +154,7 @@ node_safe_fraction = available_memory / total_memory - 0.10
 safe_fraction = min(0.90, minimum node_safe_fraction)
 ```
 
-The 10% reserve leaves memory for model/runtime overhead outside the Aphrodite cache
+The 10% reserve leaves memory for model/runtime overhead outside the Sonar cache
 budget. If the recipe already contains a smaller value, the policy preserves the
 smaller value. If it is absent, `0.80` is used as the initial ceiling:
 
@@ -190,7 +190,7 @@ First, the policy determines the active sequence count:
 active_sequences =
     ceil(--concurrency / data_parallel_size)
     or recipe max-num-seqs
-    or Aphrodite default max_num_seqs (128)
+    or Sonar default max_num_seqs (128)
 ```
 
 Decode requests consume approximately one token per active sequence in a
@@ -220,7 +220,7 @@ The final explicit scheduler sweep seed is:
 
 ```text
 max-num-batched-tokens = max(
-    Aphrodite default max_num_batched_tokens (2048),
+    Sonar default max_num_batched_tokens (2048),
     active_sequences,
     decode_budget + prefill_budget
 )
@@ -265,8 +265,8 @@ with a measured layout before concurrency and scheduler tuning.
 ## Precedence
 
 ```text
-Aphrodite defaults
-    -> Aphrodite Recipes baseline
+Sonar defaults
+    -> Sonar Recipes baseline
         -> hardware refinement (optional)
             -> config.yml + env.sh
 
@@ -293,13 +293,13 @@ Currently supported: xeon6.
 Plain recipe conversion remains available for all recipe hardware. The gate only
 applies when optional runtime-tuning inputs are requested.
 
-## Aphrodite CPU Docker Shell
+## Sonar CPU Docker Shell
 
-Run hardware detection and runtime tuning inside the target Aphrodite CPU container
+Run hardware detection and runtime tuning inside the target Sonar CPU container
 so detected CPU, NUMA, memory, and cgroup limits match the deployment
 environment.
 
-From the Aphrodite source tree:
+From the Sonar source tree:
 
 ```bash
 mkdir -p recipe-output
@@ -314,7 +314,7 @@ docker run --rm -it \
   -v "$PWD/recipe-output:/output" \
   -v "$HOME/.cache/huggingface:/root/.cache/huggingface" \
   -w /output \
-  aphrodite/aphrodite-openai-cpu:latest-x86_64
+  sonar/sonar-openai-cpu:latest-x86_64
 ```
 
 `/output` is writable; `/recipes` remains read-only.
@@ -322,7 +322,7 @@ docker run --rm -it \
 Inside the container, generate one runtime-tuned initial configuration:
 
 ```bash
-python3 /recipes/recipe_json_to_aphrodite_config.py \
+python3 /recipes/recipe_json_to_sonar_config.py \
   --model meta-llama/Llama-3.1-8B-Instruct \
   --hardware xeon6 \
   --detect-hardware \
@@ -339,7 +339,7 @@ Deploy the generated initial configuration:
 
 ```bash
 source /output/env.sh
-aphrodite serve --config /output/config.yml
+sonar serve --config /output/config.yml
 ```
 
 For optional benchmark-backed validation of the scheduler settings, continue
@@ -350,7 +350,7 @@ with [SWEEP_TUNING.md](SWEEP_TUNING.md).
 - `hardware_detection.py` collects effective CPU/NUMA/memory information.
 - `sweep/runtime_tuning.py` owns hardware-policy selection and independent parameter
   tuning functions.
-- `recipe_json_to_aphrodite_config.py` resolves the recipe, collects optional inputs,
+- `recipe_json_to_sonar_config.py` resolves the recipe, collects optional inputs,
   applies the selected policy, and generates `config.yml` and `env.sh`.
 
 For benchmark-backed validation of the explicit scheduler seed, see

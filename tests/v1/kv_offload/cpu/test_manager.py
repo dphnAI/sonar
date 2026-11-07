@@ -7,7 +7,7 @@ from dataclasses import dataclass
 import numpy as np
 import pytest
 
-from aphrodite.v1.kv_offload.base import (
+from sonar.v1.kv_offload.base import (
     LoadStoreSpec,
     LookupResult,
     Medium,
@@ -17,11 +17,11 @@ from aphrodite.v1.kv_offload.base import (
     ReqContext,
     make_offload_key,
 )
-from aphrodite.v1.kv_offload.cpu.common import CPULoadStoreSpec, CPUOffloadingMetrics
-from aphrodite.v1.kv_offload.cpu.manager import CPUOffloadingManager
-from aphrodite.v1.kv_offload.cpu.policies.arc import ARCCachePolicy
-from aphrodite.v1.kv_offload.cpu.policies.base import ChunkStatus
-from aphrodite.v1.kv_offload.cpu.policies.lru import LRUCachePolicy
+from sonar.v1.kv_offload.cpu.common import CPULoadStoreSpec, CPUOffloadingMetrics
+from sonar.v1.kv_offload.cpu.manager import CPUOffloadingManager
+from sonar.v1.kv_offload.cpu.policies.arc import ARCCachePolicy
+from sonar.v1.kv_offload.cpu.policies.base import ChunkStatus
+from sonar.v1.kv_offload.cpu.policies.lru import LRUCachePolicy
 
 
 def make_req_context(req_id: str = "", kv_transfer_params: dict | None = None) -> ReqContext:

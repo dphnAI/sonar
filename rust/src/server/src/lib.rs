@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-//! Minimal OpenAI-compatible HTTP server above [`aphrodite_chat`].
+//! Minimal OpenAI-compatible HTTP server above [`sonar_chat`].
 
 mod config;
 mod dphn;
@@ -26,15 +26,6 @@ use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use anyhow::{Context as _, Result};
-use aphrodite_chat::{ChatLlm, LoadModelBackendsOptions, load_model_backends};
-pub use aphrodite_chat::{
-    ChatTemplateContentFormatOption, GenerationConfigMode, ParserSelection, RendererSelection,
-};
-use aphrodite_engine_core_client::{EngineCoreClient, EngineCoreClientConfig};
-use aphrodite_llm::Llm;
-pub use aphrodite_metrics::CustomHistogramBuckets;
-use aphrodite_metrics::METRICS;
-use aphrodite_text::TextLlm;
 use axum::Router;
 use axum::body::Body;
 use axum::extract::ConnectInfo;
@@ -52,6 +43,15 @@ use hyper_util::server::graceful::GracefulShutdown;
 use hyper_util::service::TowerToHyperService;
 pub use render::{RenderConfig, serve_render};
 pub use routes::openai::utils::types::ReasoningEffort;
+use sonar_chat::{ChatLlm, LoadModelBackendsOptions, load_model_backends};
+pub use sonar_chat::{
+    ChatTemplateContentFormatOption, GenerationConfigMode, ParserSelection, RendererSelection,
+};
+use sonar_engine_core_client::{EngineCoreClient, EngineCoreClientConfig};
+use sonar_llm::Llm;
+pub use sonar_metrics::CustomHistogramBuckets;
+use sonar_metrics::METRICS;
+use sonar_text::TextLlm;
 use tokio::time::{Instant, sleep_until};
 use tokio_util::sync::CancellationToken;
 use tonic::transport::Server as TonicServer;
@@ -211,15 +211,15 @@ async fn load_static_loras(state: &AppState, modules: &[LoraModulePath]) -> Resu
 /// Run the OpenAI-compatible HTTP server until the supplied shutdown token is
 /// cancelled.
 ///
-/// The server owns one `aphrodite-chat` facade, which in turn owns the lower
-/// `aphrodite-text` and `aphrodite-llm` layers, and shuts them down before returning.
+/// The server owns one `sonar-chat` facade, which in turn owns the lower
+/// `sonar-text` and `sonar-llm` layers, and shuts them down before returning.
 pub async fn serve(config: Config, shutdown: CancellationToken) -> Result<()> {
     serve_with_router_extension(config, shutdown, |router| router).await
 }
 
 /// Run the OpenAI-compatible HTTP server with an opt-in router extension.
 ///
-/// The extension receives the finalized Aphrodite router and can merge additional
+/// The extension receives the finalized Sonar router and can merge additional
 /// routes before the server starts accepting requests.
 pub async fn serve_with_router_extension<F>(
     config: Config,
@@ -252,7 +252,7 @@ where
         app = routes::with_root_path(app, root_path);
     }
 
-    info!(model, "starting Aphrodite server");
+    info!(model, "starting Sonar server");
 
     let listener = Listener::bind(&config.listener_mode)
         .await

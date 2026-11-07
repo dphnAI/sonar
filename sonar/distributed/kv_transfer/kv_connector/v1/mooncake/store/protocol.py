@@ -30,10 +30,10 @@ self-describing and extensible: adding new admin commands requires
 only a new tag and a new dispatch branch.
 
 Mirrors the named-tag convention used by the NIXL connector (see
-``aphrodite/distributed/kv_transfer/kv_connector/v1/nixl/metadata.py``).
+``sonar/distributed/kv_transfer/kv_connector/v1/nixl/metadata.py``).
 """
 
-from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.data import (
+from sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.data import (
     MooncakeLookupResult,
     TailKeyBoundary,
 )

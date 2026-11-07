@@ -10,16 +10,16 @@ in token-level parity. Image blocks emit the bare ``<|content_image|>`` marker;
 
 import pytest
 
-from aphrodite.renderers.inkling import (
+from sonar.renderers.inkling import (
     InklingRenderer,
     _HfBackedTmlTokenizer,
     _resolve_reasoning_effort,
 )
-from aphrodite.renderers.inkling_encoding import (
+from sonar.renderers.inkling_encoding import (
     SPECIAL_TOKEN_SPELLINGS,
     render_inkling_messages,
 )
-from aphrodite.renderers.params import ChatParams
+from sonar.renderers.params import ChatParams
 
 
 @pytest.fixture()

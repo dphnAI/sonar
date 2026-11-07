@@ -3,9 +3,9 @@
 import json
 import os
 
-import aphrodite.envs as envs
-from aphrodite.lora.request import LoRARequest
-from aphrodite.lora.resolver import LoRAResolver, LoRAResolverRegistry
+import sonar.envs as envs
+from sonar.lora.request import LoRARequest
+from sonar.lora.resolver import LoRAResolver, LoRAResolverRegistry
 
 
 class FilesystemResolver(LoRAResolver):
@@ -41,12 +41,12 @@ class FilesystemResolver(LoRAResolver):
 
 
 def register_filesystem_resolver():
-    """Register the filesystem LoRA Resolver with Aphrodite."""
-    lora_cache_dir = envs.APHRODITE_LORA_RESOLVER_CACHE_DIR
+    """Register the filesystem LoRA Resolver with Sonar."""
+    lora_cache_dir = envs.SONAR_LORA_RESOLVER_CACHE_DIR
     if lora_cache_dir:
         if not os.path.exists(lora_cache_dir) or not os.path.isdir(lora_cache_dir):
             raise ValueError(
-                "APHRODITE_LORA_RESOLVER_CACHE_DIR must be set to a valid directory \
+                "SONAR_LORA_RESOLVER_CACHE_DIR must be set to a valid directory \
                 for Filesystem Resolver plugin to function"
             )
         fs_resolver = FilesystemResolver(lora_cache_dir)

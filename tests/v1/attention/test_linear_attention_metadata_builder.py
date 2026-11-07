@@ -3,18 +3,18 @@
 
 import torch
 
-from aphrodite.config import CUDAGraphMode, SpeculativeConfig
-from aphrodite.v1.attention.backend import AttentionCGSupport
-from aphrodite.v1.attention.backends.linear_attn import (
+from sonar.config import CUDAGraphMode, SpeculativeConfig
+from sonar.v1.attention.backend import AttentionCGSupport
+from sonar.v1.attention.backends.linear_attn import (
     BailingLinearAttentionMetadataBuilder,
     LinearAttentionMetadataBuilder,
 )
-from aphrodite.v1.attention.backends.utils import PAD_SLOT_ID
-from aphrodite.v1.kv_cache_interface import MambaSpec
+from sonar.v1.attention.backends.utils import PAD_SLOT_ID
+from sonar.v1.kv_cache_interface import MambaSpec
 from tests.v1.attention.utils import (
     BatchSpec,
-    create_aphrodite_config,
     create_common_attn_metadata,
+    create_sonar_config,
 )
 
 BLOCK_SIZE = 16
@@ -31,48 +31,48 @@ def _create_mamba_spec(num_speculative_blocks: int = 1) -> MambaSpec:
 
 
 def test_bailing_linear_attention_reports_uniform_batch_cudagraph_support():
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         hf_config_override={
             "architectures": ["BailingMoeV2_5ForCausalLM"],
             "model_type": "bailing_hybrid",
         }
     )
 
-    support = BailingLinearAttentionMetadataBuilder.get_cudagraph_support(aphrodite_config, _create_mamba_spec())
+    support = BailingLinearAttentionMetadataBuilder.get_cudagraph_support(sonar_config, _create_mamba_spec())
 
     assert support == AttentionCGSupport.UNIFORM_BATCH
 
 
 def test_non_bailing_linear_attention_keeps_single_token_cudagraph_support():
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         hf_config_override={
             "architectures": ["MiniMaxText01ForCausalLM"],
             "model_type": "minimax_text_01",
         }
     )
 
-    support = LinearAttentionMetadataBuilder.get_cudagraph_support(aphrodite_config, _create_mamba_spec())
+    support = LinearAttentionMetadataBuilder.get_cudagraph_support(sonar_config, _create_mamba_spec())
 
     assert support == AttentionCGSupport.UNIFORM_SINGLE_TOKEN_DECODE
 
 
 def test_linear_attention_spec_decode_full_graph_metadata_pads_cache_slots():
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         hf_config_override={
             "architectures": ["BailingMoeV2_5ForCausalLM"],
             "model_type": "bailing_hybrid",
         }
     )
-    aphrodite_config.speculative_config = SpeculativeConfig(
+    sonar_config.speculative_config = SpeculativeConfig(
         method="ngram",
         num_speculative_tokens=1,
     )
-    aphrodite_config.compilation_config.cudagraph_mode = CUDAGraphMode.FULL_DECODE_ONLY
+    sonar_config.compilation_config.cudagraph_mode = CUDAGraphMode.FULL_DECODE_ONLY
 
     builder = BailingLinearAttentionMetadataBuilder(
         kv_cache_spec=_create_mamba_spec(),
         layer_names=["model.layers.0.self_attn"],
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         device=DEVICE,
     )
 
@@ -109,22 +109,22 @@ def test_linear_attention_spec_decode_full_graph_metadata_pads_cache_slots():
 
 
 def test_linear_attention_full_graph_metadata_uses_stable_decode_buffers():
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         hf_config_override={
             "architectures": ["BailingMoeV2_5ForCausalLM"],
             "model_type": "bailing_hybrid",
         }
     )
-    aphrodite_config.speculative_config = SpeculativeConfig(
+    sonar_config.speculative_config = SpeculativeConfig(
         method="ngram",
         num_speculative_tokens=1,
     )
-    aphrodite_config.compilation_config.cudagraph_mode = CUDAGraphMode.FULL_DECODE_ONLY
+    sonar_config.compilation_config.cudagraph_mode = CUDAGraphMode.FULL_DECODE_ONLY
 
     builder = BailingLinearAttentionMetadataBuilder(
         kv_cache_spec=_create_mamba_spec(),
         layer_names=["model.layers.0.self_attn"],
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         device=DEVICE,
     )
 

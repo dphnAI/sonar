@@ -9,27 +9,27 @@ from typing import TYPE_CHECKING, Any, cast
 
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite import envs
-from aphrodite.forward_context import get_forward_context
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe.activation import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar import envs
+from sonar.forward_context import get_forward_context
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe.activation import (
     MoEActivation,
     apply_moe_activation_supported,
 )
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEParallelConfig,
     FusedMoEQuantConfig,
 )
-from aphrodite.model_executor.layers.fused_moe.fused_globalize_align_block_size import (
+from sonar.model_executor.layers.fused_moe.fused_globalize_align_block_size import (
     fused_globalize_align_block_size,
 )
-from aphrodite.model_executor.layers.fused_moe.moe_align_block_size import (
+from sonar.model_executor.layers.fused_moe.moe_align_block_size import (
     moe_align_block_size,
 )
-from aphrodite.model_executor.layers.fused_moe.moe_fused_mul_sum import moe_fused_mul_sum
-from aphrodite.model_executor.layers.fused_moe.moe_permute_unpermute import (
+from sonar.model_executor.layers.fused_moe.moe_fused_mul_sum import moe_fused_mul_sum
+from sonar.model_executor.layers.fused_moe.moe_permute_unpermute import (
     MoEPermuteScratch,
     get_moe_permute_scratch,
     moe_permute,
@@ -37,12 +37,12 @@ from aphrodite.model_executor.layers.fused_moe.moe_permute_unpermute import (
     moe_prepare_scatter,
     moe_unpermute,
 )
-from aphrodite.model_executor.layers.fused_moe.topk_weight_and_reduce import (
+from sonar.model_executor.layers.fused_moe.topk_weight_and_reduce import (
     TopKWeightAndReduceDelegate,
     TopKWeightAndReduceNoOP,
 )
-from aphrodite.model_executor.layers.fused_moe.utils import _resize_cache
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.fused_moe.utils import _resize_cache
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     INT4_DTYPE,
     INT8_DTYPE,
     GroupShape,
@@ -64,21 +64,21 @@ from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
     kNvfp4Static,
     kStaticTensorScale,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.scalar_type import ScalarType
-from aphrodite.utils.humming import create_humming_locks
-from aphrodite.utils.import_utils import has_humming
-from aphrodite.utils.platform_utils import num_compute_units
-from aphrodite.v1.worker.workspace import current_workspace_manager
+from sonar.platforms import current_platform
+from sonar.scalar_type import ScalarType
+from sonar.utils.humming import create_humming_locks
+from sonar.utils.import_utils import has_humming
+from sonar.utils.platform_utils import num_compute_units
+from sonar.v1.worker.workspace import current_workspace_manager
 
 if TYPE_CHECKING:
-    from aphrodite.model_executor.layers.quantization.utils.humming import (
+    from sonar.model_executor.layers.quantization.utils.humming import (
         HummingMoEQuantConfig,
     )
-    from aphrodite.utils.humming import (
+    from sonar.utils.humming import (
         GemmType as HummingGemmType,
     )
-    from aphrodite.utils.humming import (
+    from sonar.utils.humming import (
         LayerConfig as HummingLayerConfig,
     )
 
@@ -102,7 +102,7 @@ def _is_supported_wna16_weight_key(weight_key: QuantKey | None) -> bool:
 
 
 def get_humming_moe_gemm_type(moe_config: FusedMoEConfig | None = None) -> str:
-    env_gemm_type: str | None = envs.APHRODITE_HUMMING_MOE_GEMM_TYPE
+    env_gemm_type: str | None = envs.SONAR_HUMMING_MOE_GEMM_TYPE
     if env_gemm_type is not None and env_gemm_type.lower() != "auto":
         env_gemm_type = env_gemm_type.lower()
         if env_gemm_type == "grouped":
@@ -167,23 +167,23 @@ class HummingExpertsBase(mk.FusedMoEExpertsModular):
         )
 
     def init_humming_moe(self):
-        from aphrodite.utils.humming import get_heuristics_config
+        from sonar.utils.humming import get_heuristics_config
 
         self.compute_config = {
-            "use_batch_invariant": envs.APHRODITE_BATCH_INVARIANT,
-            "use_f16_accum": envs.APHRODITE_HUMMING_USE_F16_ACCUM,
+            "use_batch_invariant": envs.SONAR_BATCH_INVARIANT,
+            "use_f16_accum": envs.SONAR_HUMMING_USE_F16_ACCUM,
             "gemm_type": self.humming_gemm_type().value,
         }
         self.w13_tuning_config = get_heuristics_config(
             layer_config=self.humming_configs["w13"],
-            use_f16_accum=envs.APHRODITE_HUMMING_USE_F16_ACCUM,
-            use_batch_invariant=envs.APHRODITE_BATCH_INVARIANT,
+            use_f16_accum=envs.SONAR_HUMMING_USE_F16_ACCUM,
+            use_batch_invariant=envs.SONAR_BATCH_INVARIANT,
             gemm_type=self.humming_gemm_type(),
         )
         self.w2_tuning_config = get_heuristics_config(
             layer_config=self.humming_configs["w2"],
-            use_f16_accum=envs.APHRODITE_HUMMING_USE_F16_ACCUM,
-            use_batch_invariant=envs.APHRODITE_BATCH_INVARIANT,
+            use_f16_accum=envs.SONAR_HUMMING_USE_F16_ACCUM,
+            use_batch_invariant=envs.SONAR_BATCH_INVARIANT,
             gemm_type=self.humming_gemm_type(),
         )
         _fixup_moe_tuning_config(self.w13_tuning_config)
@@ -203,10 +203,10 @@ class HummingExpertsBase(mk.FusedMoEExpertsModular):
         scatter_idx: torch.Tensor | None = None,
         num_valid_tokens: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor | None]:
-        from aphrodite.model_executor.layers.quantization.utils.humming.activation import (
+        from sonar.model_executor.layers.quantization.utils.humming.activation import (
             get_humming_activation,
         )
-        from aphrodite.utils.humming import may_process_input
+        from sonar.utils.humming import may_process_input
 
         quant_config = self.quant_config
         config = self.humming_configs[sublayer_name]
@@ -263,7 +263,7 @@ class HummingExpertsBase(mk.FusedMoEExpertsModular):
         input_scale_2: torch.Tensor | None = None,
         **kwargs: Any,
     ) -> torch.Tensor:
-        from aphrodite.utils.humming import humming_forward
+        from sonar.utils.humming import humming_forward
 
         index = 1 if sublayer_name == "w13" else 2
         return humming_forward(
@@ -384,7 +384,7 @@ class HummingExpertsBase(mk.FusedMoEExpertsModular):
         the apply() methods, which forward the dispatch scale into
         HummingExpertsBase.process_input, which is a
         no-op when an input scale is already supplied). The scale layout
-        produced by Aphrodite's block-FP8 quantization ([M, K // 128] float32,
+        produced by Sonar's block-FP8 quantization ([M, K // 128] float32,
         row-major) matches what the Humming WGMMA grouped GEMM expects.
         """
         quant_config = self.quant_config
@@ -458,8 +458,8 @@ class HummingExpertsBase(mk.FusedMoEExpertsModular):
         return meta1.num_experts, num_tokens, intermediate_dim, hidden_dim, top_k
 
     def get_buffer_metas(self, M: int, topk: int, activation: MoEActivation):
-        from aphrodite.utils.humming import GemmType as HummingGemmType
-        from aphrodite.utils.humming import dtypes
+        from sonar.utils.humming import GemmType as HummingGemmType
+        from sonar.utils.humming import dtypes
 
         num_experts = self.num_experts
         w13_config = self.humming_configs["w13"]
@@ -684,7 +684,7 @@ class HummingIndexedExperts(HummingExpertsBase):
 
     @staticmethod
     def humming_gemm_type() -> "HummingGemmType":
-        from aphrodite.utils.humming import GemmType as HummingGemmType
+        from sonar.utils.humming import GemmType as HummingGemmType
 
         return HummingGemmType.INDEXED
 
@@ -884,7 +884,7 @@ class HummingGroupedExperts(HummingExpertsBase):
 
     @staticmethod
     def humming_gemm_type() -> "HummingGemmType":
-        from aphrodite.utils.humming import GemmType as HummingGemmType
+        from sonar.utils.humming import GemmType as HummingGemmType
 
         return HummingGemmType.GROUPED_CONTIGUOUS
 
@@ -1019,7 +1019,7 @@ class BatchedHummingGroupedExperts(HummingExpertsBase):
 
     @staticmethod
     def humming_gemm_type() -> "HummingGemmType":
-        from aphrodite.utils.humming import GemmType as HummingGemmType
+        from sonar.utils.humming import GemmType as HummingGemmType
 
         return HummingGemmType.GROUPED_MASKED
 

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Checks whether the repo is clean and whether tags are available (necessary to correctly produce aphrodite version at build time)
+# Checks whether the repo is clean and whether tags are available (necessary to correctly produce sonar version at build time)
 
 if ! git diff --quiet; then
 	echo "Repo is dirty" >&2

@@ -3,7 +3,7 @@
 import torch
 from torch._inductor.runtime.triton_helpers import libdevice
 
-from aphrodite.triton_utils import tl, triton
+from sonar.triton_utils import tl, triton
 
 
 @triton.jit

@@ -18,12 +18,12 @@ import torch.nn as nn
 import torch.nn.functional as F
 from transformers import CLIPVisionConfig
 
-from aphrodite.model_executor.custom_op import PluggableLayer
-from aphrodite.model_executor.layers.attention import MMEncoderAttention
-from aphrodite.model_executor.layers.conv import Conv2dLayer
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import LOG2E, tl, triton
+from sonar.model_executor.custom_op import PluggableLayer
+from sonar.model_executor.layers.attention import MMEncoderAttention
+from sonar.model_executor.layers.conv import Conv2dLayer
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.platforms import current_platform
+from sonar.triton_utils import LOG2E, tl, triton
 
 from .clip import CLIPEncoder, CLIPVisionEmbeddings
 from .utils import AutoWeightsLoader

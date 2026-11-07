@@ -7,8 +7,8 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.models.flint import gguf_nvfp4
-from aphrodite.models.flint.gguf_nvfp4 import (
+from sonar.models.flint import gguf_nvfp4
+from sonar.models.flint.gguf_nvfp4 import (
     _repack_nvfp4,
     dequantize_nvfp4,
     find_gguf_file,
@@ -95,7 +95,7 @@ def test_iterator_maps_names_and_scales(tmp_path):
 
 
 def test_find_gguf_file_resolves_hub_repo_ids(tmp_path, monkeypatch):
-    """`aphrodite serve <org>/<repo>` must detect a GGUF-only repo, not just local paths."""
+    """`sonar serve <org>/<repo>` must detect a GGUF-only repo, not just local paths."""
     (tmp_path / "flint.gguf").touch()
     monkeypatch.setattr(
         gguf_nvfp4,

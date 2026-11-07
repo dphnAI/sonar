@@ -5,17 +5,17 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from aphrodite.utils.import_utils import has_helion
+from sonar.utils.import_utils import has_helion
 
 if not has_helion():
     pytest.skip(
-        "Helion is not installed. Install with: pip install aphrodite[helion]",
+        "Helion is not installed. Install sonar[helion] from the Sonar wheel index.",
         allow_module_level=True,
     )
 
-from aphrodite.kernels.helion.case_key import CaseKey
-from aphrodite.kernels.helion.config_manager import ConfigManager
-from aphrodite.kernels.helion.ops.silu_mul_fp8 import (
+from sonar.kernels.helion.case_key import CaseKey
+from sonar.kernels.helion.config_manager import ConfigManager
+from sonar.kernels.helion.ops.silu_mul_fp8 import (
     _pick_cache,
     pick_silu_mul_fp8_config,
     silu_mul_fp8,
@@ -25,7 +25,7 @@ from aphrodite.kernels.helion.ops.silu_mul_fp8 import (
 
 def skip_if_platform_unsupported():
     try:
-        from aphrodite.kernels.helion.utils import get_canonical_gpu_name
+        from sonar.kernels.helion.utils import get_canonical_gpu_name
 
         if not torch.cuda.is_available():
             pytest.skip("CUDA not available")
@@ -248,7 +248,7 @@ class TestSiluMulFp8Correctness:
 def silu_mul_fp8_pytorch(input: torch.Tensor, scale: torch.Tensor) -> torch.Tensor:
     """Pure PyTorch reference using F.silu.
 
-    This matches Aphrodite's SiluAndMul.forward_native exactly:
+    This matches Sonar's SiluAndMul.forward_native exactly:
     F.silu(x[..., :d]) * x[..., d:]
     """
     d = input.shape[-1] // 2
@@ -260,7 +260,7 @@ class TestSiluMulFp8PytorchReference:
     """Tests comparing Helion kernel against pure PyTorch implementation.
 
     Uses tighter tolerance since both use PyTorch's FP8 conversion
-    (same rounding mode), unlike the Aphrodite C++ baseline which uses
+    (same rounding mode), unlike the Sonar C++ baseline which uses
     NVIDIA's hardware FP8 conversion with different rounding.
     """
 
@@ -324,7 +324,7 @@ class TestSiluMulFp8PytorchReference:
 
 class TestSiluMulFp8Integration:
     def test_kernel_registration_integration(self):
-        from aphrodite.kernels.helion.register import get_registered_kernels
+        from sonar.kernels.helion.register import get_registered_kernels
 
         registered_kernels = get_registered_kernels()
         assert "silu_mul_fp8" in registered_kernels
@@ -335,7 +335,7 @@ class TestSiluMulFp8Integration:
 
     def test_fake_impl_functionality(self):
         skip_if_platform_unsupported()
-        from aphrodite.kernels.helion.register import get_registered_kernels
+        from sonar.kernels.helion.register import get_registered_kernels
 
         input_tensor = torch.randn(32, 4096, dtype=torch.bfloat16, device="cuda")
         scale = torch.tensor([0.5], dtype=torch.float32, device="cuda")

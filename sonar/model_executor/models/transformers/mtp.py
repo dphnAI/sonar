@@ -23,8 +23,8 @@ import torch
 from transformers import AutoModelForCausalLM
 from transformers.conversion_mapping import WeightTransform
 
-from aphrodite.model_executor.models.transformers.causal import CausalMixin
-from aphrodite.sequence import IntermediateTensors
+from sonar.model_executor.models.transformers.causal import CausalMixin
+from sonar.sequence import IntermediateTensors
 
 if TYPE_CHECKING:
     from transformers import PreTrainedModel
@@ -39,9 +39,9 @@ class MTPMixin(CausalMixin):
     """
 
     def _patch_config(self):
-        # `aphrodite_config.model_config` is the target's, which must not be patched
-        assert self.aphrodite_config.speculative_config is not None
-        self.model_config = self.aphrodite_config.speculative_config.draft_model_config
+        # `sonar_config.model_config` is the target's, which must not be patched
+        assert self.sonar_config.speculative_config is not None
+        self.model_config = self.sonar_config.speculative_config.draft_model_config
         self.config = self.model_config.hf_config
         self.text_config = self.config.get_text_config()
         super()._patch_config()
@@ -94,7 +94,7 @@ class MTPMixin(CausalMixin):
                 return True
             if embed_prefix is None:
                 return False
-            mapped = self.hf_to_aphrodite_mapper.map_name(name)
+            mapped = self.hf_to_sonar_mapper.map_name(name)
             return mapped is not None and mapped.startswith(embed_prefix)
 
         loaded = super().load_weights(w for w in weights if is_draft_weight(w[0]))

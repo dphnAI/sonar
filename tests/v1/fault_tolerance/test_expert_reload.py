@@ -3,7 +3,7 @@
 
 import torch
 
-from aphrodite.v1.worker.sentinel.expert_reload import _placement_weight_loader
+from sonar.v1.worker.sentinel.expert_reload import _placement_weight_loader
 
 
 def test_reload_every_local_replica_before_deferred_processing():

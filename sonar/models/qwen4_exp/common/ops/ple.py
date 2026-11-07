@@ -14,9 +14,9 @@ from typing import Literal
 
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
-from aphrodite.v1.attention.backends.utils import NULL_BLOCK_ID
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
+from sonar.v1.attention.backends.utils import NULL_BLOCK_ID
 
 
 # N-gram ID generation

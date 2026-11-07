@@ -4,8 +4,8 @@
 
 from transformers.configuration_utils import PreTrainedConfig
 
-from aphrodite.logger import init_logger
-from aphrodite.transformers_utils.configs.kimi_linear import KimiLinearConfig
+from sonar.logger import init_logger
+from sonar.transformers_utils.configs.kimi_linear import KimiLinearConfig
 
 logger = init_logger(__name__)
 

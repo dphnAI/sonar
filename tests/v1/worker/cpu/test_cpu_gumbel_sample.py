@@ -6,13 +6,13 @@ import math
 import pytest
 import torch
 
-from aphrodite.platforms import CpuArchEnum, current_platform
-from aphrodite.triton_utils import HAS_TRITON
-from aphrodite.v1.worker.cpu.gumbel import gumbel_sample
-from aphrodite.v1.worker.cpu.sampler import CPUSamplingStates
+from sonar.platforms import CpuArchEnum, current_platform
+from sonar.triton_utils import HAS_TRITON
+from sonar.v1.worker.cpu.gumbel import gumbel_sample
+from sonar.v1.worker.cpu.sampler import CPUSamplingStates
 
 if current_platform.is_cpu():
-    import aphrodite._C  # noqa: F401
+    import sonar._C  # noqa: F401
 
 pytestmark = pytest.mark.skipif(
     not current_platform.is_cpu() or HAS_TRITON or current_platform.get_cpu_architecture() == CpuArchEnum.X86,

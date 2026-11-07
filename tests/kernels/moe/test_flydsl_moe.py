@@ -8,14 +8,14 @@ import importlib.util
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.fused_moe import fused_experts
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe import fused_experts
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.config import (
     int4_w4a16_moe_quant_config,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.platforms.rocm import on_gfx950
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.platforms import current_platform
+from sonar.platforms.rocm import on_gfx950
+from sonar.utils.torch_utils import set_random_seed
 
 if not (current_platform.is_rocm() and on_gfx950()):
     pytest.skip("This test can only run on ROCm and gfx950.", allow_module_level=True)
@@ -25,10 +25,10 @@ aiter_available = importlib.util.find_spec("aiter") is not None
 if not aiter_available:
     pytest.skip("These tests require AITER to run.", allow_module_level=True)
 
-from aphrodite.model_executor.layers.fused_moe.fused_flydsl_moe import (  # noqa: E402
+from sonar.model_executor.layers.fused_moe.fused_flydsl_moe import (  # noqa: E402
     fused_flydsl_moe,
 )
-from aphrodite.model_executor.layers.quantization.compressed_tensors.compressed_tensors_moe import (  # noqa: E402, E501
+from sonar.model_executor.layers.quantization.compressed_tensors.compressed_tensors_moe import (  # noqa: E402, E501
     compressed_tensors_moe_w4a16_flydsl,
 )
 

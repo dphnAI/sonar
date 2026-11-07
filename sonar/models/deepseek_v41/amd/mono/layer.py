@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """The mono decode layer's two launches (README): K1 = the attention seam
-(``stages.seam``: slice, gate, the norm into Aphrodite's MXFP8) + the attention front
+(``stages.seam``: slice, gate, the norm into Sonar's MXFP8) + the attention front
 (``attention.front``); K2 = the attention back (``attention.back``, wo_b pushed
 to every rank) + the FFN seam (the TP sum folded in) + the MoE (``stages.moe``,
-its all-reduce in-kernel too). A layer whose attention Aphrodite runs takes the FFN
-launch instead: K2 with the attention back replaced by a push of Aphrodite's
+its all-reduce in-kernel too). A layer whose attention Sonar runs takes the FFN
+launch instead: K2 with the attention back replaced by a push of Sonar's
 unreduced wo_b output (``seam.stage_push``).
 
 Tags: K1's hand-offs carry 2 e + 1, K2's 2 e + 2 (e: the launch pair's epoch,
@@ -79,7 +79,7 @@ class MonoBuild:
     # residual that arrives settled (the first layer, after an Engram)
     fold: bool = True
     # the layer selects its own top-k (an index source): K1 hands its normed
-    # input and qr out for Aphrodite's indexer, K2 builds the key table
+    # input and qr out for Sonar's indexer, K2 builds the key table
     index: bool = False
     # a layer of the DSpark draft: its routed experts and top-k, the FP4 groups
     # of an ug task, and the width of its (non-causal) SWA index rows. On
@@ -193,12 +193,12 @@ def _epoch(epoch):
 @traced
 def store_x8(c, t, col, ys, live):
     """The attention seam's norm output (``seam.stage_norm``'s 8 columns at
-    ``col``) -> Aphrodite's MXFP8 of each 32 (the attention's input quant) -> the
+    ``col``) -> Sonar's MXFP8 of each 32 (the attention's input quant) -> the
     front's X8 / X8S, plain at device scope."""
     amax = abs(ys[0])
     for y in ys[1:]:
         amax = fx.max(amax, abs(y))
-    code = moe.aphrodite_mx_code(butterfly(amax, (1, 2), fx.max))
+    code = moe.sonar_mx_code(butterfly(amax, (1, 2), fx.max))
     mul = ((254 - code) << 23).bitcast(fx.Float32)
     w0 = fp8_pack4(*[clamp_fp8(ys[i] * mul) for i in range(4)])
     w1 = fp8_pack4(*[clamp_fp8(ys[4 + i] * mul) for i in range(4)])
@@ -788,7 +788,7 @@ def build_mono_k2(key: MonoBuild):
             c["tl"], c["tl_points"] = tl, K2_POINTS
         mb_back.epoch_begin(c, epoch, ep)
         if const_expr(key.index):
-            # the key table, from the top-k Aphrodite's indexer selected after K1,
+            # the key table, from the top-k Sonar's indexer selected after K1,
             # on the last CTAs: each split task waits on its token's
             ckt = {
                 "S": s,
@@ -969,7 +969,7 @@ def build_mono_k2(key: MonoBuild):
 
 
 def build_mono_ffn(key: MonoBuild):
-    """The FFN launch of a layer whose attention Aphrodite ran (``part``: this rank's
+    """The FFN launch of a layer whose attention Sonar ran (``part``: this rank's
     unreduced wo_b output, bf16 [S, HIDDEN]): K2's FFN half, the partial pushed
     to every rank first. It takes a launch pair's epoch, as K2 does."""
     s, tp = key.tokens, key.tp

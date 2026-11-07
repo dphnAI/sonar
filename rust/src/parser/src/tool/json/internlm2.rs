@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-use aphrodite_tokenizer::{DecodedText, DynTokenizer};
+use sonar_tokenizer::{DecodedText, DynTokenizer};
 
 use super::{JsonToolCallConfig, JsonToolCallParser, JsonToolCallWhitespace};
 use crate::tool::{Result, Tool, ToolParser, ToolParserOutput};
@@ -38,7 +38,7 @@ const INTERNLM2_CONFIG: JsonToolCallConfig = JsonToolCallConfig {
 /// # Divergences from the Python reference
 ///
 /// This Rust port intentionally diverges from
-/// `aphrodite/tool_parsers/internlm2_tool_parser.py` in two user-visible ways:
+/// `sonar/tool_parsers/internlm2_tool_parser.py` in two user-visible ways:
 ///
 /// - **Parallel tool calls are supported.** Python silently drops every `<|action_start|>` block
 ///   after the first (`current_tool_id > 0` returns an empty delta); this parser emits every

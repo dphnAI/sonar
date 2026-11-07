@@ -6,17 +6,17 @@ from typing import TYPE_CHECKING, ClassVar
 
 import torch
 
-from aphrodite.v1.attention.backends.mla.prefill.base import (
+from sonar.v1.attention.backends.mla.prefill.base import (
     MLADimensions,
     MLAPrefillBackend,
 )
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
-    from aphrodite.model_executor.layers.attention.mla_attention import (
+    from sonar.config import SonarConfig
+    from sonar.model_executor.layers.attention.mla_attention import (
         MLACommonPrefillMetadata,
     )
-    from aphrodite.platforms.interface import DeviceCapability
+    from sonar.platforms.interface import DeviceCapability
 
 
 class TokenspeedMLAPrefillBackend(MLAPrefillBackend):
@@ -75,7 +75,7 @@ class TokenspeedMLAPrefillBackend(MLAPrefillBackend):
         qk_nope_head_dim: int,
         qk_rope_head_dim: int,
         v_head_dim: int,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
     ) -> None:
         super().__init__(
             num_heads=num_heads,
@@ -84,7 +84,7 @@ class TokenspeedMLAPrefillBackend(MLAPrefillBackend):
             qk_nope_head_dim=qk_nope_head_dim,
             qk_rope_head_dim=qk_rope_head_dim,
             v_head_dim=v_head_dim,
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
         )
 
         # Pre-JIT BF16 and FP8 prefill kernels. Idempotent — also called from

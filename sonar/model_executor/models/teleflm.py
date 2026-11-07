@@ -24,16 +24,16 @@
 # limitations under the License.
 
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.models.llama import (
+from sonar.config import SonarConfig
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.models.llama import (
     LlamaForCausalLM,
 )
 
 
 class TeleFLMForCausalLM(LlamaForCausalLM):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
-        super().__init__(aphrodite_config=aphrodite_config, prefix=prefix)
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
+        super().__init__(sonar_config=sonar_config, prefix=prefix)
         # mup
         self.use_mup = self.config.use_mup
         if self.use_mup:

@@ -8,19 +8,19 @@ but use different quantization strategies and backends.
 import nvtx
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite import _custom_ops as ops
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.all2all_utils import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar import _custom_ops as ops
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.all2all_utils import (
     maybe_make_prepare_finalize,
 )
-from aphrodite.model_executor.layers.fused_moe.config import fp8_w8a8_moe_quant_config
-from aphrodite.model_executor.layers.fused_moe.experts.cutlass_moe import CutlassExpertsFp8
-from aphrodite.model_executor.layers.fused_moe.fused_moe import fused_experts
-from aphrodite.model_executor.layers.fused_moe.router.fused_topk_router import fused_topk
-from aphrodite.platforms import current_platform
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
-from aphrodite.v1.worker.workspace import init_workspace_manager
+from sonar.model_executor.layers.fused_moe.config import fp8_w8a8_moe_quant_config
+from sonar.model_executor.layers.fused_moe.experts.cutlass_moe import CutlassExpertsFp8
+from sonar.model_executor.layers.fused_moe.fused_moe import fused_experts
+from sonar.model_executor.layers.fused_moe.router.fused_topk_router import fused_topk
+from sonar.platforms import current_platform
+from sonar.utils.argparse_utils import FlexibleArgumentParser
+from sonar.v1.worker.workspace import init_workspace_manager
 from tests.kernels.moe.utils import make_dummy_moe_config
 
 # Weight shapes for different models: [num_experts, topk, hidden_size,

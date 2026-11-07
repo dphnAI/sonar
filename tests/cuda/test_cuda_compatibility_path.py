@@ -14,18 +14,18 @@ import pytest
 # Import the functions directly (they're module-level in env_override)
 # We must import them without triggering the module-level side effects,
 # so we import the functions by name after the module is already loaded.
-from aphrodite.env_override import (
+from sonar.env_override import (
     _get_torch_cuda_version,
     _maybe_set_cuda_compatibility_path,
 )
 
 
 class TestCudaCompatibilityEnvParsing:
-    """Test APHRODITE_ENABLE_CUDA_COMPATIBILITY env var parsing."""
+    """Test SONAR_ENABLE_CUDA_COMPATIBILITY env var parsing."""
 
     def test_disabled_by_default(self, monkeypatch):
         """Compat path is NOT set when env var is absent."""
-        monkeypatch.delenv("APHRODITE_ENABLE_CUDA_COMPATIBILITY", raising=False)
+        monkeypatch.delenv("SONAR_ENABLE_CUDA_COMPATIBILITY", raising=False)
         monkeypatch.delenv("LD_LIBRARY_PATH", raising=False)
         _maybe_set_cuda_compatibility_path()
         assert "LD_LIBRARY_PATH" not in os.environ or os.environ.get("LD_LIBRARY_PATH", "") == ""
@@ -33,7 +33,7 @@ class TestCudaCompatibilityEnvParsing:
     @pytest.mark.parametrize("value", ["0", "false", "False", "no", ""])
     def test_disabled_values(self, monkeypatch, value):
         """Various falsy values should not activate compat path."""
-        monkeypatch.setenv("APHRODITE_ENABLE_CUDA_COMPATIBILITY", value)
+        monkeypatch.setenv("SONAR_ENABLE_CUDA_COMPATIBILITY", value)
         monkeypatch.delenv("LD_LIBRARY_PATH", raising=False)
         _maybe_set_cuda_compatibility_path()
         # LD_LIBRARY_PATH should not be set (or remain empty)
@@ -45,8 +45,8 @@ class TestCudaCompatibilityEnvParsing:
         """Truthy values activate compat path when a valid path exists."""
         compat_dir = tmp_path / "compat"
         compat_dir.mkdir()
-        monkeypatch.setenv("APHRODITE_ENABLE_CUDA_COMPATIBILITY", value)
-        monkeypatch.setenv("APHRODITE_CUDA_COMPATIBILITY_PATH", str(compat_dir))
+        monkeypatch.setenv("SONAR_ENABLE_CUDA_COMPATIBILITY", value)
+        monkeypatch.setenv("SONAR_CUDA_COMPATIBILITY_PATH", str(compat_dir))
         monkeypatch.delenv("LD_LIBRARY_PATH", raising=False)
         _maybe_set_cuda_compatibility_path()
         ld_path = os.environ.get("LD_LIBRARY_PATH", "")
@@ -57,11 +57,11 @@ class TestCudaCompatibilityPathDetection:
     """Test path detection: custom override, conda, default."""
 
     def test_custom_path_override(self, monkeypatch, tmp_path):
-        """APHRODITE_CUDA_COMPATIBILITY_PATH takes highest priority."""
+        """SONAR_CUDA_COMPATIBILITY_PATH takes highest priority."""
         custom_dir = tmp_path / "my-compat"
         custom_dir.mkdir()
-        monkeypatch.setenv("APHRODITE_ENABLE_CUDA_COMPATIBILITY", "1")
-        monkeypatch.setenv("APHRODITE_CUDA_COMPATIBILITY_PATH", str(custom_dir))
+        monkeypatch.setenv("SONAR_ENABLE_CUDA_COMPATIBILITY", "1")
+        monkeypatch.setenv("SONAR_CUDA_COMPATIBILITY_PATH", str(custom_dir))
         monkeypatch.delenv("LD_LIBRARY_PATH", raising=False)
         _maybe_set_cuda_compatibility_path()
         ld_path = os.environ.get("LD_LIBRARY_PATH", "")
@@ -72,8 +72,8 @@ class TestCudaCompatibilityPathDetection:
         conda_dir = tmp_path / "conda-env"
         compat_dir = conda_dir / "cuda-compat"
         compat_dir.mkdir(parents=True)
-        monkeypatch.setenv("APHRODITE_ENABLE_CUDA_COMPATIBILITY", "1")
-        monkeypatch.delenv("APHRODITE_CUDA_COMPATIBILITY_PATH", raising=False)
+        monkeypatch.setenv("SONAR_ENABLE_CUDA_COMPATIBILITY", "1")
+        monkeypatch.delenv("SONAR_CUDA_COMPATIBILITY_PATH", raising=False)
         monkeypatch.setenv("CONDA_PREFIX", str(conda_dir))
         monkeypatch.delenv("LD_LIBRARY_PATH", raising=False)
         _maybe_set_cuda_compatibility_path()
@@ -82,11 +82,11 @@ class TestCudaCompatibilityPathDetection:
 
     def test_no_valid_path_does_nothing(self, monkeypatch):
         """When enabled but no valid path exists, LD_LIBRARY_PATH unchanged."""
-        monkeypatch.setenv("APHRODITE_ENABLE_CUDA_COMPATIBILITY", "1")
-        monkeypatch.setenv("APHRODITE_CUDA_COMPATIBILITY_PATH", "/nonexistent/path")
+        monkeypatch.setenv("SONAR_ENABLE_CUDA_COMPATIBILITY", "1")
+        monkeypatch.setenv("SONAR_CUDA_COMPATIBILITY_PATH", "/nonexistent/path")
         monkeypatch.delenv("CONDA_PREFIX", raising=False)
         monkeypatch.delenv("LD_LIBRARY_PATH", raising=False)
-        with patch("aphrodite.env_override._get_torch_cuda_version", return_value=None):
+        with patch("sonar.env_override._get_torch_cuda_version", return_value=None):
             _maybe_set_cuda_compatibility_path()
         assert os.environ.get("LD_LIBRARY_PATH", "") == ""
 
@@ -94,14 +94,14 @@ class TestCudaCompatibilityPathDetection:
         """Falls back to /usr/local/cuda-{ver}/compat via torch version."""
         fake_cuda = tmp_path / "cuda-12.8" / "compat"
         fake_cuda.mkdir(parents=True)
-        monkeypatch.setenv("APHRODITE_ENABLE_CUDA_COMPATIBILITY", "1")
-        monkeypatch.delenv("APHRODITE_CUDA_COMPATIBILITY_PATH", raising=False)
+        monkeypatch.setenv("SONAR_ENABLE_CUDA_COMPATIBILITY", "1")
+        monkeypatch.delenv("SONAR_CUDA_COMPATIBILITY_PATH", raising=False)
         monkeypatch.delenv("CONDA_PREFIX", raising=False)
         monkeypatch.delenv("LD_LIBRARY_PATH", raising=False)
         with (
-            patch("aphrodite.env_override._get_torch_cuda_version", return_value="12.8"),
+            patch("sonar.env_override._get_torch_cuda_version", return_value="12.8"),
             patch(
-                "aphrodite.env_override.os.path.isdir",
+                "sonar.env_override.os.path.isdir",
                 side_effect=lambda p: p == "/usr/local/cuda-12.8/compat" or os.path.isdir(p),
             ),
         ):
@@ -117,8 +117,8 @@ class TestCudaCompatibilityLdPathManipulation:
         """Compat path is set when LD_LIBRARY_PATH is empty."""
         compat_dir = tmp_path / "compat"
         compat_dir.mkdir()
-        monkeypatch.setenv("APHRODITE_ENABLE_CUDA_COMPATIBILITY", "1")
-        monkeypatch.setenv("APHRODITE_CUDA_COMPATIBILITY_PATH", str(compat_dir))
+        monkeypatch.setenv("SONAR_ENABLE_CUDA_COMPATIBILITY", "1")
+        monkeypatch.setenv("SONAR_CUDA_COMPATIBILITY_PATH", str(compat_dir))
         monkeypatch.delenv("LD_LIBRARY_PATH", raising=False)
         _maybe_set_cuda_compatibility_path()
         assert os.environ["LD_LIBRARY_PATH"] == str(compat_dir)
@@ -127,8 +127,8 @@ class TestCudaCompatibilityLdPathManipulation:
         """Compat path is prepended before existing entries."""
         compat_dir = tmp_path / "compat"
         compat_dir.mkdir()
-        monkeypatch.setenv("APHRODITE_ENABLE_CUDA_COMPATIBILITY", "1")
-        monkeypatch.setenv("APHRODITE_CUDA_COMPATIBILITY_PATH", str(compat_dir))
+        monkeypatch.setenv("SONAR_ENABLE_CUDA_COMPATIBILITY", "1")
+        monkeypatch.setenv("SONAR_CUDA_COMPATIBILITY_PATH", str(compat_dir))
         monkeypatch.setenv("LD_LIBRARY_PATH", "/usr/lib:/other/lib")
         _maybe_set_cuda_compatibility_path()
         ld_path = os.environ["LD_LIBRARY_PATH"]
@@ -141,8 +141,8 @@ class TestCudaCompatibilityLdPathManipulation:
         """If compat path already in LD_LIBRARY_PATH, move to front."""
         compat_dir = tmp_path / "compat"
         compat_dir.mkdir()
-        monkeypatch.setenv("APHRODITE_ENABLE_CUDA_COMPATIBILITY", "1")
-        monkeypatch.setenv("APHRODITE_CUDA_COMPATIBILITY_PATH", str(compat_dir))
+        monkeypatch.setenv("SONAR_ENABLE_CUDA_COMPATIBILITY", "1")
+        monkeypatch.setenv("SONAR_CUDA_COMPATIBILITY_PATH", str(compat_dir))
         monkeypatch.setenv(
             "LD_LIBRARY_PATH",
             f"/usr/lib:{compat_dir}:/other/lib",
@@ -158,8 +158,8 @@ class TestCudaCompatibilityLdPathManipulation:
         compat_dir = tmp_path / "compat"
         compat_dir.mkdir()
         original = f"{compat_dir}:/usr/lib"
-        monkeypatch.setenv("APHRODITE_ENABLE_CUDA_COMPATIBILITY", "1")
-        monkeypatch.setenv("APHRODITE_CUDA_COMPATIBILITY_PATH", str(compat_dir))
+        monkeypatch.setenv("SONAR_ENABLE_CUDA_COMPATIBILITY", "1")
+        monkeypatch.setenv("SONAR_CUDA_COMPATIBILITY_PATH", str(compat_dir))
         monkeypatch.setenv("LD_LIBRARY_PATH", original)
         _maybe_set_cuda_compatibility_path()
         assert os.environ["LD_LIBRARY_PATH"] == original
@@ -171,13 +171,13 @@ class TestGetTorchCudaVersion:
     def test_returns_string_when_torch_available(self):
         """Should return a CUDA version string like '12.8'."""
         version = _get_torch_cuda_version()
-        # torch is installed in aphrodite's environment
+        # torch is installed in sonar's environment
         assert version is None or isinstance(version, str)
 
     def test_returns_none_when_torch_missing(self):
         """Should return None when torch is not importable."""
         with patch(
-            "aphrodite.env_override.importlib.util.find_spec",
+            "sonar.env_override.importlib.util.find_spec",
             return_value=None,
         ):
             assert _get_torch_cuda_version() is None

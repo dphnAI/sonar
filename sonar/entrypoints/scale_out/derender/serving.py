@@ -2,25 +2,25 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import time
 
-import aphrodite.envs as envs
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+import sonar.envs as envs
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionResponse,
     ChatCompletionStreamResponse,
 )
-from aphrodite.entrypoints.openai.completion.protocol import (
+from sonar.entrypoints.openai.completion.protocol import (
     CompletionResponse,
     CompletionStreamResponse,
 )
-from aphrodite.entrypoints.openai.models.serving import (
+from sonar.entrypoints.openai.models.serving import (
     OpenAIModelRegistry,
     OpenAIServingModels,
 )
-from aphrodite.entrypoints.serve.engine.protocol import ErrorResponse, UsageInfo
-from aphrodite.entrypoints.serve.engine.serving import BaseServing
-from aphrodite.entrypoints.serve.utils.request_logger import RequestLogger
-from aphrodite.inputs import EngineInput
-from aphrodite.logger import init_logger
-from aphrodite.renderers.online_derenderer import OnlineDerenderer
+from sonar.entrypoints.serve.engine.protocol import ErrorResponse, UsageInfo
+from sonar.entrypoints.serve.engine.serving import BaseServing
+from sonar.entrypoints.serve.utils.request_logger import RequestLogger
+from sonar.inputs import EngineInput
+from sonar.logger import init_logger
+from sonar.renderers.online_derenderer import OnlineDerenderer
 
 from ..token_in_token_out.mm_features import extract_mm_features
 from ..token_in_token_out.protocol import (
@@ -69,7 +69,7 @@ class ServingDerender(BaseServing):
         Runs before any tokenizer.decode() or parser invocation to prevent
         CPU/memory exhaustion from oversized caller-supplied token structures.
         """
-        max_n = envs.APHRODITE_MAX_N_SEQUENCES
+        max_n = envs.SONAR_MAX_N_SEQUENCES
         max_model_len = self.model_config.max_model_len
         # See ModelConfig.max_logprobs for semantics and default value.
         max_logprobs = self.model_config.max_logprobs
@@ -78,7 +78,7 @@ class ServingDerender(BaseServing):
             return self.create_error_response(
                 f"generate_responses count ({len(generate_responses)}) "
                 f"exceeds server maximum ({max_n}). "
-                f"Set APHRODITE_MAX_N_SEQUENCES to increase this limit."
+                f"Set SONAR_MAX_N_SEQUENCES to increase this limit."
             )
 
         for gen in generate_responses:

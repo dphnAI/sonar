@@ -8,9 +8,9 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
-from aphrodite.utils.collection_utils import full_groupby
-from aphrodite.utils.import_utils import PlaceholderModule
+from sonar.utils.argparse_utils import FlexibleArgumentParser
+from sonar.utils.collection_utils import full_groupby
+from sonar.utils.import_utils import PlaceholderModule
 
 from .plot import DummyExecutor, _json_load_bytes
 from .utils import sanitize_filename

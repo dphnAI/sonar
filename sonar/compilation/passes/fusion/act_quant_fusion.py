@@ -8,18 +8,18 @@ import torch
 from torch._higher_order_ops.auto_functionalize import auto_functionalized
 from torch._ops import OpOverload
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.config import SonarConfig
+from sonar.logger import init_logger
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     kFp8Dynamic64Sym,
     kFp8Dynamic128Sym,
     kFp8StaticTensorSym,
     kNvfp4Dynamic,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
-from ..aphrodite_inductor_pass import AphroditeFusionPatternMatcherPass, AphroditePatternReplacement
+from ..sonar_inductor_pass import SonarFusionPatternMatcherPass, SonarPatternReplacement
 from .matcher_utils import MatcherQuantFP8, MatcherSiluAndMul
 from .rms_quant_fusion import QUANT_OPS, empty_bf16, empty_fp32, empty_i32
 
@@ -42,7 +42,7 @@ if current_platform.is_cuda_alike():
     FUSED_OPS[kFp8Dynamic64Sym] = torch.ops._C.silu_and_mul_per_block_quant.default
 
 
-class ActivationQuantPattern(AphroditePatternReplacement):
+class ActivationQuantPattern(SonarPatternReplacement):
     """Base class for Activation+Quant fusions.
     Should not be used directly.
     """
@@ -262,7 +262,7 @@ class SiluMulBlockQuantPattern(ActivationQuantPattern):
         return _replacement
 
 
-class ActivationQuantFusionPass(AphroditeFusionPatternMatcherPass):
+class ActivationQuantFusionPass(SonarFusionPatternMatcherPass):
     """This pass fuses a pre-defined set of custom ops into fused ops.
     It uses the torch pattern matcher to find the patterns and replace them.
 
@@ -271,7 +271,7 @@ class ActivationQuantFusionPass(AphroditeFusionPatternMatcherPass):
     https://github.com/pytorch/pytorch/pull/139321#issuecomment-2452354980
     """
 
-    def __init__(self, config: AphroditeConfig) -> None:
+    def __init__(self, config: SonarConfig) -> None:
         super().__init__(config, "activation_quant_fusion_pass")
 
         self.register(SiluMulFp8StaticQuantPattern())

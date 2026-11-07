@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""DiffusionGemma model, ModelState, and Sampler for Aphrodite.
+"""DiffusionGemma model, ModelState, and Sampler for Sonar.
 
 Single Gemma4 backbone run in two modes (like YOCO):
 - encoder mode: causal attention, writes KV cache
@@ -27,48 +27,48 @@ from torch import nn
 from torch.nn import functional as F
 from transformers import AutoModel, DiffusionGemmaConfig
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.compilation import CUDAGraphMode
-from aphrodite.distributed.parallel_state import get_tp_group
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.config import SonarConfig
+from sonar.config.compilation import CUDAGraphMode
+from sonar.distributed.parallel_state import get_tp_group
+from sonar.logger import init_logger
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
 )
-from aphrodite.model_executor.models.diffusion_gemma_sampler import (
+from sonar.model_executor.models.diffusion_gemma_sampler import (
     sample_row_stats,
     sample_row_stats_reference,
 )
-from aphrodite.model_executor.models.gemma4 import Gemma4Model
-from aphrodite.model_executor.models.gemma4_mm import (
+from sonar.model_executor.models.gemma4 import Gemma4Model
+from sonar.model_executor.models.gemma4_mm import (
     Gemma4DummyInputsBuilder,
     Gemma4ForConditionalGeneration,
     Gemma4MultimodalEmbedder,
     Gemma4MultiModalProcessor,
     Gemma4ProcessingInfo,
 )
-from aphrodite.model_executor.models.module_mapping import MultiModelKeys
-from aphrodite.model_executor.models.transformers.utils import recursive_replace_linear
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.models.module_mapping import MultiModelKeys
+from sonar.model_executor.models.transformers.utils import recursive_replace_linear
+from sonar.model_executor.models.utils import (
     AutoWeightsLoader,
     WeightsMapper,
     maybe_prefix,
 )
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import async_tensor_h2d
-from aphrodite.v1.outputs import LogprobsTensors
-from aphrodite.v1.sample.ops.topk_topp_sampler import apply_top_k_top_p
-from aphrodite.v1.worker.gpu.attn_utils import build_attn_metadata
-from aphrodite.v1.worker.gpu.buffer_utils import UvaBackedTensor
-from aphrodite.v1.worker.gpu.input_batch import InputBatch
-from aphrodite.v1.worker.gpu.model_states.interface import ModelState
-from aphrodite.v1.worker.gpu.sample.logprob import compute_topk_scores
-from aphrodite.v1.worker.gpu.sample.output import SamplerOutput
-from aphrodite.v1.worker.gpu.sample.penalties import use_penalty
-from aphrodite.v1.worker.gpu.states import RequestState
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import async_tensor_h2d
+from sonar.v1.outputs import LogprobsTensors
+from sonar.v1.sample.ops.topk_topp_sampler import apply_top_k_top_p
+from sonar.v1.worker.gpu.attn_utils import build_attn_metadata
+from sonar.v1.worker.gpu.buffer_utils import UvaBackedTensor
+from sonar.v1.worker.gpu.input_batch import InputBatch
+from sonar.v1.worker.gpu.model_states.interface import ModelState
+from sonar.v1.worker.gpu.sample.logprob import compute_topk_scores
+from sonar.v1.worker.gpu.sample.output import SamplerOutput
+from sonar.v1.worker.gpu.sample.penalties import use_penalty
+from sonar.v1.worker.gpu.states import RequestState
 
 from .interfaces import (
     SupportsMultiModal,
@@ -137,7 +137,7 @@ class DiffusionGemmaForConditionalGeneration(
     SupportsMultiModal,
     SupportsQuant,
 ):
-    """DiffusionGemma for Aphrodite.
+    """DiffusionGemma for Sonar.
 
     Single Gemma4 backbone that switches between encoder and decoder mode.
     The encoder path uses standard Gemma4 layers (causal attention, KV write).
@@ -150,7 +150,7 @@ class DiffusionGemmaForConditionalGeneration(
     set by DiffusionGemmaModelState.prepare_inputs().
     """
 
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={
             "model.decoder.self_conditioning.": "self_conditioning.",
             "model.decoder.": "model.",
@@ -169,12 +169,12 @@ class DiffusionGemmaForConditionalGeneration(
     def get_model_state_cls():
         return DiffusionGemmaModelState
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        text_config = aphrodite_config.model_config.hf_text_config
+        config = sonar_config.model_config.hf_config
+        text_config = sonar_config.model_config.hf_text_config
         self.config = config
-        self.model_dtype = aphrodite_config.model_config.dtype
+        self.model_dtype = sonar_config.model_config.dtype
 
         # DiffusionGemma's full-attention layers have NO v_proj — V is
         # computed from k_proj's output (`value_states = key_states` before
@@ -186,12 +186,12 @@ class DiffusionGemmaForConditionalGeneration(
 
         # ---- Vision tower ----
         # Gemma4's image path, borrowed below, reads this flag.
-        lora_config = aphrodite_config.lora_config
+        lora_config = sonar_config.lora_config
         self._enable_mm_lora = bool(lora_config is not None and lora_config.enable_tower_connector_lora)
         vision_config = getattr(config, "vision_config", None)
         self.embed_vision: Gemma4MultimodalEmbedder | None
         if vision_config is not None:
-            quant_config = aphrodite_config.quant_config
+            quant_config = sonar_config.quant_config
             tower_quant: QuantizationConfig | None
             if quant_config and quant_config.get_name() in [
                 "bitsandbytes",
@@ -203,7 +203,7 @@ class DiffusionGemmaForConditionalGeneration(
                 quantizable = vision_config.hidden_size % 64 == 0 and vision_config.intermediate_size % 64 == 0
                 tower_quant = quant_config if quantizable else None
 
-            with self._mark_tower_model(aphrodite_config, {"image", "video"}):
+            with self._mark_tower_model(sonar_config, {"image", "video"}):
                 self.vision_tower = AutoModel.from_config(config=vision_config)
                 self.embed_vision = Gemma4MultimodalEmbedder(
                     vision_config,
@@ -222,17 +222,17 @@ class DiffusionGemmaForConditionalGeneration(
 
         # ---- Language backbone (Gemma4Model) ----
         # Use maybe_prefix to ensure correct weight name prefixes for
-        # quantization. The quantization config uses hf_to_aphrodite_mapper to
+        # quantization. The quantization config uses hf_to_sonar_mapper to
         # match checkpoint weight names to model parameter names.
         self.model = Gemma4Model(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             prefix=maybe_prefix(prefix, "model"),
         )
 
         self.lm_head = ParallelLMHead(
             num_embeddings=text_config.vocab_size,
             embedding_dim=text_config.hidden_size,
-            quant_config=aphrodite_config.quant_config,
+            quant_config=sonar_config.quant_config,
             prefix=maybe_prefix(prefix, "lm_head"),
         )
 
@@ -319,7 +319,7 @@ class DiffusionGemmaForConditionalGeneration(
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         # Some checkpoints carry a vestigial Gemma3n-style embedding table.
         loader = AutoWeightsLoader(self, ignore_unexpected_prefixes=["embed_vision.embedding."])
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
     @classmethod
     def get_placeholder_str(cls, modality: str, i: int) -> str | None:
@@ -563,7 +563,7 @@ def _compiled_sample_step(
         local_probs = probs[..., sc_vocab_start:sc_vocab_end].to(embed_weight.dtype)
         soft_embeds = torch.matmul(local_probs, embed_weight[: sc_vocab_end - sc_vocab_start])
         if tp_size > 1:
-            soft_embeds = torch.ops.aphrodite.all_reduce(soft_embeds, group_name=tp_group_name)
+            soft_embeds = torch.ops.sonar.all_reduce(soft_embeds, group_name=tp_group_name)
         soft_embeds = soft_embeds * normalizer
         # A pinned position holds its seed token as input. Zero its soft embed
         # too, or the model's own prediction there reaches the next step
@@ -784,12 +784,12 @@ class DiffusionGemmaModelState(ModelState):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         model: nn.Module,
         encoder_cache: Any,
         device: torch.device,
     ) -> None:
-        super().__init__(aphrodite_config, model, encoder_cache, device)
+        super().__init__(sonar_config, model, encoder_cache, device)
 
         # Per-step MM data produced by prepare_inputs_embeds and consumed by
         # prepare_inputs.  Stored as raw (mm_embeds, is_mm_embed) so that
@@ -798,7 +798,7 @@ class DiffusionGemmaModelState(ModelState):
         # through encoder_runner.inputs_embeds.
         self._pending_mm_embeds: tuple[list[torch.Tensor], torch.Tensor] | None = None
 
-        diffusion_config = aphrodite_config.diffusion_config
+        diffusion_config = sonar_config.diffusion_config
         canvas_length = diffusion_config.canvas_length if diffusion_config else 32
 
         text_config = self.model_config.hf_text_config
@@ -814,7 +814,7 @@ class DiffusionGemmaModelState(ModelState):
             device=device,
             hidden_size=text_config.hidden_size,
             # In Transformers, `stability_threshold=1` (the default) means
-            # the current step must match the previous step. In Aphrodite, the
+            # the current step must match the previous step. In Sonar, the
             # history buffer includes the current step, so we add 1 to match
             # the same behavior.
             stability_threshold=self.gen_config["stability_threshold"] + 1,
@@ -852,7 +852,7 @@ class DiffusionGemmaModelState(ModelState):
         return True
 
     def custom_sampler(self, sampler: Any) -> tuple[Any, Any] | None:
-        diffusion_config = self.aphrodite_config.diffusion_config
+        diffusion_config = self.sonar_config.diffusion_config
         gen = self.gen_config
         sampler_cfg = gen.get("sampler_config") or {}
         if "EntropyBound" not in sampler_cfg.get("_cls_name", ""):
@@ -1062,7 +1062,7 @@ _NO_PENALTIES_STATE = SimpleNamespace(output_bin_counts=None)
 class DiffusionSampler:
     """Batched accept/renoise sampler for DiffusionGemma.
 
-    Follows the same structure as ``aphrodite.v1.worker.gpu.sample.sampler.Sampler``:
+    Follows the same structure as ``sonar.v1.worker.gpu.sample.sampler.Sampler``:
     decomposed into named methods, all GPU state in pre-allocated buffers,
     no GPU→CPU syncs on the hot path.
     """

@@ -52,7 +52,7 @@ target_include_directories(_paged_ops PRIVATE
 target_compile_definitions(_paged_ops PRIVATE
   _METAL_
   ACCELERATE_NEW_LAPACK
-  APHRODITE_METAL_PARTITION_SIZE=512)
+  SONAR_METAL_PARTITION_SIZE=512)
 
 target_compile_options(_paged_ops PRIVATE
   -fvisibility=default)
@@ -68,10 +68,10 @@ target_link_options(_paged_ops PRIVATE
 
 set_target_properties(_paged_ops PROPERTIES
   BUILD_RPATH "${MLX_LIB_DIR}"
-  # The wheel installs this module at aphrodite/metal/metal and MLX at
+  # The wheel installs this module at sonar/metal/metal and MLX at
   # site-packages/mlx. Do not retain the temporary build-isolation path.
   INSTALL_RPATH "@loader_path/../../../mlx/lib")
 
 install(TARGETS _paged_ops
-  LIBRARY DESTINATION aphrodite/metal/metal
+  LIBRARY DESTINATION sonar/metal/metal
   COMPONENT _paged_ops)

@@ -8,7 +8,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from aphrodite.model_executor.models.transformers.fusers import MoEBlockFuser
+from sonar.model_executor.models.transformers.fusers import MoEBlockFuser
 
 from .test_linear import GLUMLP
 
@@ -450,7 +450,7 @@ def test_moe_fuser_matches_scaled_router():
     ],
 )
 def test_moe_fuser_reads_renormalize_from_the_gate(router_cls, expected):
-    """The router's graph, not the config, decides whether Aphrodite renormalizes: it
+    """The router's graph, not the config, decides whether Sonar renormalizes: it
     is the code being replaced, and it already bakes in `norm_topk_prob` because
     the flag is a Python bool that fx resolves at trace time. Absence of the
     division only means "no" on a complete trace."""
@@ -558,7 +558,7 @@ def test_moe_fuser_router_requires_connected_dataflow():
 
 
 def test_moe_fuser_unrecognized_router_moves_shared_expert():
-    """Without Aphrodite routing, the shared expert still moves to Aphrodite."""
+    """Without Sonar routing, the shared expert still moves to Sonar."""
     with torch.device("meta"):
         block = MoEBlockSharedBiasedRouter()
     fuser = MoEBlockFuser.match(block, "experts")
@@ -581,8 +581,8 @@ def test_moe_fuser_divided_shared_output(block_cls, scoring_func):
     assert fuser.scoring_func == scoring_func
 
 
-def test_moe_fuser_scaled_output_needs_aphrodite_routing():
-    """Only Aphrodite routing applies the routed scale, so nothing else moves without it."""
+def test_moe_fuser_scaled_output_needs_sonar_routing():
+    """Only Sonar routing applies the routed scale, so nothing else moves without it."""
     with torch.device("meta"):
         block = MoEBlockScaledBiasedRouter()
     assert MoEBlockFuser.match(block, "experts") is None
@@ -594,8 +594,8 @@ def test_moe_fuser_matches_experts_called_by_keyword():
     assert isinstance(MoEBlockFuser.match(block, "experts"), MoEBlockFuser)
 
 
-def test_moe_fuser_scaled_output_with_aphrodite_routing():
-    """A scaled block fuses because Aphrodite routing applies `routed_scaling_factor`."""
+def test_moe_fuser_scaled_output_with_sonar_routing():
+    """A scaled block fuses because Sonar routing applies `routed_scaling_factor`."""
     with torch.device("meta"):
         fuser = MoEBlockFuser.match(MoEBlockScaled(), "experts")
     assert fuser is not None

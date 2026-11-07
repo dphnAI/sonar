@@ -6,7 +6,7 @@ Modeled after prometheus-fastapi-instrumentator, this middleware
 transparently instruments WebSocket endpoints with standard metrics
 without requiring changes to handler code.
 
-NOTE: This module intentionally has zero aphrodite imports so that it can
+NOTE: This module intentionally has zero sonar imports so that it can
 be extracted into a standalone package (similar to
 prometheus-fastapi-instrumentator) in the future. Please keep it that way.
 """
@@ -17,21 +17,21 @@ from collections.abc import Awaitable
 from prometheus_client import Counter, Gauge, Histogram
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-# Standard WebSocket metric names (not aphrodite-specific, following
+# Standard WebSocket metric names (not sonar-specific, following
 # the same convention as prometheus-fastapi-instrumentator).
 _active_sessions = Gauge(
-    name="aphrodite:websocket_connections_active",
+    name="sonar:websocket_connections_active",
     documentation="Number of currently active WebSocket connections.",
     multiprocess_mode="livesum",
 )
 
 _total_sessions = Counter(
-    name="aphrodite:websocket_connections_total",
+    name="sonar:websocket_connections_total",
     documentation="Total number of WebSocket connections.",
 )
 
 _session_duration = Histogram(
-    name="aphrodite:websocket_connection_duration_seconds",
+    name="sonar:websocket_connection_duration_seconds",
     documentation="Duration of WebSocket connections in seconds.",
     buckets=[0.5, 1, 2.5, 5, 10, 30, 60, 120, 300, 600, 1800],
 )

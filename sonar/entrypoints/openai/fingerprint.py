@@ -3,11 +3,11 @@
 """Build the ``system_fingerprint`` string returned by the OpenAI-compatible
 server.
 Four modes, configured via ``--fingerprint-mode``:
-* ``full`` (default): ``aphrodite-<version>[-<parallelism>]-<hash8>`` — encodes
+* ``full`` (default): ``sonar-<version>[-<parallelism>]-<hash8>`` — encodes
   server version, any non-trivial parallelism degree (tp/pp/dp/ep), and an
-  8-char prefix of ``aphrodite_config.compute_hash()`` (covers model identity,
+  8-char prefix of ``sonar_config.compute_hash()`` (covers model identity,
   quant config, speculative, attention backend, etc.).
-* ``hash``: ``aphrodite-<version>-<hash8>`` — parallelism stripped.
+* ``hash``: ``sonar-<version>-<hash8>`` — parallelism stripped.
 * ``custom``: user-provided literal via ``--fingerprint-value``.
 * ``none``: the field is omitted (serialized as ``null``).
 ``get_system_fingerprint`` is only called at serving-class init (a handful
@@ -36,14 +36,14 @@ def set_default_fingerprint_mode(
     _CUSTOM_VALUE = custom_value
 
 
-def get_system_fingerprint(aphrodite_config: Any) -> str | None:
-    """Return the fingerprint for ``aphrodite_config`` using the mode configured by
+def get_system_fingerprint(sonar_config: Any) -> str | None:
+    """Return the fingerprint for ``sonar_config`` using the mode configured by
     ``set_default_fingerprint_mode``."""
-    return build_system_fingerprint(aphrodite_config, _DEFAULT_MODE, _CUSTOM_VALUE)
+    return build_system_fingerprint(sonar_config, _DEFAULT_MODE, _CUSTOM_VALUE)
 
 
 def build_system_fingerprint(
-    aphrodite_config: Any,
+    sonar_config: Any,
     mode: FingerprintMode = "full",
     custom_value: str | None = None,
 ) -> str | None:
@@ -52,19 +52,19 @@ def build_system_fingerprint(
     if mode == "custom":
         return custom_value
 
-    from aphrodite import __version__ as aphrodite_version
+    from sonar import __version__ as sonar_version
 
     try:
-        hash8 = aphrodite_config.compute_hash()[:8]
+        hash8 = sonar_config.compute_hash()[:8]
     except Exception:
         hash8 = "nohash"
 
     if mode == "hash":
-        return f"aphrodite-{aphrodite_version}-{hash8}"
+        return f"sonar-{sonar_version}-{hash8}"
 
     # mode == "full"
-    parts: list[str] = [f"aphrodite-{aphrodite_version}"]
-    pc = getattr(aphrodite_config, "parallel_config", None)
+    parts: list[str] = [f"sonar-{sonar_version}"]
+    pc = getattr(sonar_config, "parallel_config", None)
     if pc is not None:
         tp = getattr(pc, "tensor_parallel_size", 1)
         if tp > 1:

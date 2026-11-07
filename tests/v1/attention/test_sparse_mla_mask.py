@@ -6,7 +6,7 @@ import torch
 
 pytest.importorskip("cutlass")
 
-from aphrodite.model_executor.layers.attention.sparse_mla_attention import (
+from sonar.model_executor.layers.attention.sparse_mla_attention import (
     _build_topk_mask,
     _topk_mask_shape,
 )

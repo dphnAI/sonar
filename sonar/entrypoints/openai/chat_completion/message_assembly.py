@@ -2,17 +2,17 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 from typing import NamedTuple
 
-from aphrodite.entrypoints.generate.base.protocol import FunctionCall, ToolCall
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.generate.base.protocol import FunctionCall, ToolCall
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionNamedToolChoiceParam,
     ChatCompletionRequest,
 )
-from aphrodite.entrypoints.serve.utils.tool_calls_utils import (
+from sonar.entrypoints.serve.utils.tool_calls_utils import (
     maybe_filter_parallel_tool_calls,
 )
-from aphrodite.logger import init_logger
-from aphrodite.parser.abstract_parser import Parser
-from aphrodite.renderers.chat_utils import make_tool_call_id
+from sonar.logger import init_logger
+from sonar.parser.abstract_parser import Parser
+from sonar.renderers.chat_utils import make_tool_call_id
 
 logger = init_logger(__name__)
 

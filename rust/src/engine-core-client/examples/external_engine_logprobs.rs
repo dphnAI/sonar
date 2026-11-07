@@ -4,21 +4,21 @@
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
-use aphrodite_engine_core_client::protocol::output::EngineCoreFinishReason;
-use aphrodite_engine_core_client::protocol::request::EngineCoreRequest;
-use aphrodite_engine_core_client::protocol::sampling::EngineCoreSamplingParams;
-use aphrodite_engine_core_client::{
-    EngineCoreClient, EngineCoreClientConfig, EngineCoreStreamOutput, TransportMode,
-};
 use clap::Parser;
 use futures::StreamExt as _;
+use sonar_engine_core_client::protocol::output::EngineCoreFinishReason;
+use sonar_engine_core_client::protocol::request::EngineCoreRequest;
+use sonar_engine_core_client::protocol::sampling::EngineCoreSamplingParams;
+use sonar_engine_core_client::{
+    EngineCoreClient, EngineCoreClientConfig, EngineCoreStreamOutput, TransportMode,
+};
 use tokio::time::timeout;
 use tracing_subscriber::EnvFilter;
 
 const BASE_PROMPT_TOKEN_IDS: &[u32] = &[20841, 448, 6896, 25, 23811];
 
 #[derive(Debug, Parser)]
-#[command(about = "Smoke-test engine-core sample logprobs against an external Aphrodite engine.")]
+#[command(about = "Smoke-test engine-core sample logprobs against an external Sonar engine.")]
 struct Args {
     #[arg(long)]
     handshake_address: String,
@@ -46,7 +46,7 @@ struct Args {
 
 fn init_tracing() {
     let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("aphrodite_engine_core_client=debug"));
+        .unwrap_or_else(|_| EnvFilter::new("sonar_engine_core_client=debug"));
     let _ = tracing_subscriber::fmt().with_env_filter(filter).try_init();
 }
 
@@ -87,7 +87,7 @@ fn build_request(
 }
 
 async fn wait_for_final_output(
-    stream: aphrodite_engine_core_client::EngineCoreOutputStream,
+    stream: sonar_engine_core_client::EngineCoreOutputStream,
 ) -> Result<EngineCoreStreamOutput> {
     let mut stream = stream.into_outputs();
     while let Some(output) = stream.next().await {
@@ -124,7 +124,7 @@ async fn main() -> Result<()> {
         engine_stats_enabled: true,
     })
     .await
-    .context("failed to connect to external Aphrodite engine")?;
+    .context("failed to connect to external Sonar engine")?;
 
     println!("model={}", args.model);
     println!("handshake_address={}", args.handshake_address);

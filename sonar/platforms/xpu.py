@@ -12,18 +12,18 @@ import vllm_xpu_kernels._C  # noqa
 import vllm_xpu_kernels._moe_C  # noqa
 import vllm_xpu_kernels._xpu_C  # noqa
 
-import aphrodite.envs as envs
-from aphrodite.logger import init_logger
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
+import sonar.envs as envs
+from sonar.logger import init_logger
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
 
 from .interface import DeviceCapability, Platform, PlatformEnum
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
-    from aphrodite.config.kernel import IrOpPriorityConfig
-    from aphrodite.v1.attention.selector import AttentionSelectorConfig
+    from sonar.config import SonarConfig
+    from sonar.config.kernel import IrOpPriorityConfig
+    from sonar.v1.attention.selector import AttentionSelectorConfig
 else:
-    AphroditeConfig = None
+    SonarConfig = None
 
 logger = init_logger(__name__)
 
@@ -124,9 +124,9 @@ class XPUPlatform(Platform):
 
     @classmethod
     def import_kernels(cls) -> None:
-        # Do not import aphrodite._C
+        # Do not import sonar._C
         with contextlib.suppress(ImportError):
-            import aphrodite._moe_C  # noqa: F401
+            import sonar._moe_C  # noqa: F401
 
     @classmethod
     def check_runner_kv_caches_multi_layer(cls) -> None:
@@ -157,7 +157,7 @@ class XPUPlatform(Platform):
                 raise ValueError(
                     f"Invalid attention backend for {cls.device_name}, with use_mla: {attn_selector_config.use_mla}"
                 )
-            from aphrodite.v1.attention.backends.mla.flashattn_mla import (
+            from sonar.v1.attention.backends.mla.flashattn_mla import (
                 XPUFlashAttnMLABackend,
             )
 
@@ -174,7 +174,7 @@ class XPUPlatform(Platform):
                 )
                 return AttentionBackendEnum.TRITON_MLA.get_path()
             logger.info_once("Using Flash Attention MLA backend on XPU.")
-            return "aphrodite.v1.attention.backends.mla.flashattn_mla.XPUFlashAttnMLABackend"
+            return "sonar.v1.attention.backends.mla.flashattn_mla.XPUFlashAttnMLABackend"
         if selected_backend == AttentionBackendEnum.TRITON_ATTN:
             logger.info_once("Using Triton backend.")
             return AttentionBackendEnum.TRITON_ATTN.get_path()
@@ -193,7 +193,7 @@ class XPUPlatform(Platform):
                 )
                 return AttentionBackendEnum.FLASH_ATTN.get_path()
             logger.info_once(
-                "APHRODITE_BATCH_INVARIANT is enabled. Using Triton Attention "
+                "SONAR_BATCH_INVARIANT is enabled. Using Triton Attention "
                 "backend on XPU, which implements batch-invariant kernels."
             )
             return AttentionBackendEnum.TRITON_ATTN.get_path()
@@ -212,7 +212,7 @@ class XPUPlatform(Platform):
                 )
                 return AttentionBackendEnum.FLASH_ATTN.get_path()
             if selected_backend in (None, AttentionBackendEnum.TRITON_FLASH_ATTN) and dtype != torch.float32:
-                from aphrodite.v1.attention.backends.triton_flash_attn import (
+                from sonar.v1.attention.backends.triton_flash_attn import (
                     TritonFlashAttentionBackend,
                 )
 
@@ -310,9 +310,9 @@ class XPUPlatform(Platform):
     def get_punica_wrapper(cls) -> str:
         xpu_use_triton_kernel = os.getenv("XPU_USE_TRITON_KERNEL", "0") == "1"
         if not xpu_use_triton_kernel:
-            return "aphrodite.lora.punica_wrapper.punica_xpu.PunicaWrapperXPU"
+            return "sonar.lora.punica_wrapper.punica_xpu.PunicaWrapperXPU"
         else:
-            return "aphrodite.lora.punica_wrapper.punica_gpu.PunicaWrapperGPU"
+            return "sonar.lora.punica_wrapper.punica_gpu.PunicaWrapperGPU"
 
     @classmethod
     def get_device_total_memory(cls, device_id: int = 0) -> int:
@@ -325,54 +325,54 @@ class XPUPlatform(Platform):
 
     @classmethod
     def get_static_graph_wrapper_cls(cls) -> str:
-        return "aphrodite.compilation.cuda_graph.CUDAGraphWrapper"
+        return "sonar.compilation.cuda_graph.CUDAGraphWrapper"
 
     @classmethod
-    def check_and_update_config(cls, aphrodite_config: AphroditeConfig) -> None:
+    def check_and_update_config(cls, sonar_config: SonarConfig) -> None:
         # lazy import to avoid circular import
-        from aphrodite.config import CUDAGraphMode
+        from sonar.config import CUDAGraphMode
 
-        if envs.APHRODITE_BATCH_INVARIANT:
-            model_config = aphrodite_config.model_config
+        if envs.SONAR_BATCH_INVARIANT:
+            model_config = sonar_config.model_config
             if model_config is not None and (
-                model_config.quantization is not None or aphrodite_config.quant_config is not None
+                model_config.quantization is not None or sonar_config.quant_config is not None
             ):
                 raise ValueError(
                     "XPU batch invariance currently supports only unquantized "
                     f"models; got quantization={model_config.quantization!r}. "
-                    "Use an unquantized model or disable APHRODITE_BATCH_INVARIANT."
+                    "Use an unquantized model or disable SONAR_BATCH_INVARIANT."
                 )
 
-            cache_dtype = aphrodite_config.cache_config.cache_dtype
+            cache_dtype = sonar_config.cache_config.cache_dtype
             if cache_dtype not in ("auto", "float16", "bfloat16"):
                 raise ValueError(
                     "XPU batch invariance currently does not support quantized "
                     f"KV caches; got kv_cache_dtype={cache_dtype!r}. "
                     "Use an unquantized KV cache dtype or disable "
-                    "APHRODITE_BATCH_INVARIANT."
+                    "SONAR_BATCH_INVARIANT."
                 )
 
-        compilation_config = aphrodite_config.compilation_config
+        compilation_config = sonar_config.compilation_config
         if compilation_config.compile_sizes is None:
             compilation_config.compile_sizes = []
 
         # lazy import to avoid circular import
-        from aphrodite.utils.torch_utils import supports_xpu_graph
+        from sonar.utils.torch_utils import supports_xpu_graph
 
         if not supports_xpu_graph():
             compilation_config.cudagraph_mode = CUDAGraphMode.NONE
             logger.warning_once("XPU Graph is not supported in the current PyTorch version, disabling cudagraph_mode.")
 
         if (
-            aphrodite_config.model_config is not None
-            and aphrodite_config.model_config.enable_sleep_mode
+            sonar_config.model_config is not None
+            and sonar_config.model_config.enable_sleep_mode
             and compilation_config.cudagraph_mode != CUDAGraphMode.NONE
         ):
             compilation_config.cudagraph_mode = CUDAGraphMode.NONE
             logger.warning_once("XPU Graph is not compatible with sleep mode, disabling cudagraph_mode.")
 
         # Disable fusion passes not yet supported on XPU.
-        from aphrodite.config.compilation import CompilationMode
+        from sonar.config.compilation import CompilationMode
 
         pass_config = compilation_config.pass_config
         fusion_passes_to_disable = {
@@ -396,7 +396,7 @@ class XPUPlatform(Platform):
         # XPU device memory"). Fall back to Triton's own launcher. Remove once
         # the released torch contains pytorch/pytorch#188240, which relaxes
         # that check to any memory type known by the driver.
-        offload_config = aphrodite_config.offload_config
+        offload_config = sonar_config.offload_config
         uva_offloading = offload_config.offload_backend == "uva" or (
             offload_config.offload_backend == "auto"
             and offload_config.prefetch.offload_group_size == 0
@@ -404,20 +404,20 @@ class XPUPlatform(Platform):
         )
         if (
             uva_offloading
-            and not envs.APHRODITE_WEIGHT_OFFLOADING_DISABLE_UVA
+            and not envs.SONAR_WEIGHT_OFFLOADING_DISABLE_UVA
             and compilation_config.mode != CompilationMode.NONE
         ):
             compilation_config.inductor_compile_config.setdefault("use_static_cuda_launcher", False)
             logger.info_once("Disabling Inductor's static Triton launcher because UVA weight offloading is enabled.")
 
         # check and update parallel config
-        parallel_config = aphrodite_config.parallel_config
+        parallel_config = sonar_config.parallel_config
         # Only override worker_cls if it's still the default "auto"
-        # This allows custom workers (like aphrodite-omni workers) to be used on XPU
+        # This allows custom workers (like sonar-omni workers) to be used on XPU
         if parallel_config.worker_cls == "auto":
-            parallel_config.worker_cls = "aphrodite.v1.worker.xpu_worker.XPUWorker"
-        if aphrodite_config.kv_transfer_config is not None:
-            aphrodite_config.kv_transfer_config.enable_permute_local_kv = True
+            parallel_config.worker_cls = "sonar.v1.worker.xpu_worker.XPUWorker"
+        if sonar_config.kv_transfer_config is not None:
+            sonar_config.kv_transfer_config.enable_permute_local_kv = True
 
         # In some cases, the internal memory type cache can misdetect GPU
         # memory as host memory, also leading to invalid memory access.
@@ -426,32 +426,32 @@ class XPUPlatform(Platform):
         os.environ["UCX_MEMTYPE_CACHE"] = "n"
 
         # spawn is the only supported multiprocessing method on XPU
-        if "APHRODITE_WORKER_MULTIPROC_METHOD" not in os.environ:
-            os.environ["APHRODITE_WORKER_MULTIPROC_METHOD"] = "spawn"
+        if "SONAR_WORKER_MULTIPROC_METHOD" not in os.environ:
+            os.environ["SONAR_WORKER_MULTIPROC_METHOD"] = "spawn"
 
         # XPU requires graceful shutdown to allow oneCCL/Level Zero resources
         # to be properly released. Without this, subsequent server startups on
         # the same devices may hang during CCL initialization.
-        if aphrodite_config.shutdown_timeout == 0:
-            aphrodite_config.shutdown_timeout = 5
+        if sonar_config.shutdown_timeout == 0:
+            sonar_config.shutdown_timeout = 5
             logger.info(
                 "XPU platform: set server shutdown_timeout=%d.",
-                aphrodite_config.shutdown_timeout,
+                sonar_config.shutdown_timeout,
             )
 
     @classmethod
-    def update_block_size_for_backend(cls, aphrodite_config: "AphroditeConfig") -> None:
-        super().update_block_size_for_backend(aphrodite_config)
-        from aphrodite.config.aphrodite import get_layers_from_aphrodite_config
-        from aphrodite.model_executor.layers.attention_layer_base import (
+    def update_block_size_for_backend(cls, sonar_config: "SonarConfig") -> None:
+        super().update_block_size_for_backend(sonar_config)
+        from sonar.config.sonar import get_layers_from_sonar_config
+        from sonar.model_executor.layers.attention_layer_base import (
             AttentionLayerBase,
         )
-        from aphrodite.utils.math_utils import cdiv
+        from sonar.utils.math_utils import cdiv
 
-        cache_config = aphrodite_config.cache_config
+        cache_config = sonar_config.cache_config
         # special fix for GDN since kernel only supports block size dividable by 64
-        attn_layers = get_layers_from_aphrodite_config(
-            aphrodite_config,
+        attn_layers = get_layers_from_sonar_config(
+            sonar_config,
             AttentionLayerBase,  # type: ignore[type-abstract]
         )
 
@@ -488,7 +488,7 @@ class XPUPlatform(Platform):
                 cache_config.mamba_page_size_padded,
             )
         # This rounding runs after super()'s check, so check its result too.
-        cls._check_aligned_block_size(aphrodite_config, cls._find_non_ssm_backends(aphrodite_config), pre_block_size)
+        cls._check_aligned_block_size(sonar_config, cls._find_non_ssm_backends(sonar_config), pre_block_size)
 
     @classmethod
     def support_hybrid_kv_cache(cls) -> bool:
@@ -522,22 +522,22 @@ class XPUPlatform(Platform):
         if not torch.distributed.is_xccl_available():
             # Supports xccl with PyTorch versions >= 2.8.0.dev for XPU platform
             logger.warning("xccl is not enabled in this torch build, communication is not available.")
-        return "aphrodite.distributed.device_communicators.xpu_communicator.XpuCommunicator"  # noqa
+        return "sonar.distributed.device_communicators.xpu_communicator.XpuCommunicator"  # noqa
 
     @classmethod
     def supports_fp8(cls) -> bool:
         return True
 
     @classmethod
-    def get_default_ir_op_priority(cls, aphrodite_config: "AphroditeConfig") -> "IrOpPriorityConfig":
-        from aphrodite.config.compilation import CompilationMode
-        from aphrodite.config.kernel import IrOpPriorityConfig
+    def get_default_ir_op_priority(cls, sonar_config: "SonarConfig") -> "IrOpPriorityConfig":
+        from sonar.config.compilation import CompilationMode
+        from sonar.config.kernel import IrOpPriorityConfig
 
         # Native used by default when compiling,
         # use fused kernels where available when no codegen
-        cc = aphrodite_config.compilation_config
+        cc = sonar_config.compilation_config
         using_inductor = cc.backend == "inductor" and cc.mode != CompilationMode.NONE
-        default = ["native"] if using_inductor else ["aphrodite_c", "native"]
+        default = ["native"] if using_inductor else ["sonar_c", "native"]
 
         return IrOpPriorityConfig.with_default(default, gelu_and_mul_sparse=["native"])
 

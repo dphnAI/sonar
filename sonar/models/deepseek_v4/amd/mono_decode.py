@@ -6,7 +6,7 @@ A decode step's backbone layer -- the attention seam, the attention, its TP
 all-reduce, the FFN seam, the MoE and its all-reduce -- runs as two persistent
 FlyDSL launches (``mono``, this directory) on the layer's loaded weights, the
 TP reductions inside the kernels. Every layer takes the whole layer: between
-its two launches Aphrodite's compressor runs on K1's normed input (and on a CSA
+its two launches Sonar's compressor runs on K1's normed input (and on a CSA
 layer its indexer, from K1's qr, selects the top-k), then K2 builds the key
 table -- the CSA layer's top-k through the block table, the HCA layer's every
 compressed row (its metadata's slots). The first three layers route by hash:
@@ -24,17 +24,17 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.config import CUDAGraphMode
-from aphrodite.distributed import (
+import sonar.envs as envs
+from sonar.config import CUDAGraphMode
+from sonar.distributed import (
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
     get_tp_group,
 )
-from aphrodite.forward_context import get_forward_context, is_forward_context_available
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.models.utils import extract_layer_index
-from aphrodite.models.deepseek_v4.amd.mono.dims import (
+from sonar.forward_context import get_forward_context, is_forward_context_available
+from sonar.logger import init_logger
+from sonar.model_executor.models.utils import extract_layer_index
+from sonar.models.deepseek_v4.amd.mono.dims import (
     EXPERTS,
     MAX_TOKENS,
     ROUTED_SCALE,
@@ -43,10 +43,10 @@ from aphrodite.models.deepseek_v4.amd.mono.dims import (
     WINDOW,
     Dims,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 if TYPE_CHECKING:
-    from aphrodite.models.deepseek_v4.amd.model import DeepseekV4DecoderLayer
+    from sonar.models.deepseek_v4.amd.model import DeepseekV4DecoderLayer
 
 logger = init_logger(__name__)
 
@@ -68,12 +68,12 @@ def _mono_runner(device: torch.device, max_topk: int):
     global _runner
     if _runner is None:
         if torch.cuda.is_current_stream_capturing():
-            # its peer memory is allocated and exchanged eagerly; Aphrodite warms
+            # its peer memory is allocated and exchanged eagerly; Sonar warms
             # every graph up eagerly before capturing it
             raise RuntimeError(
                 "--monokernel was first reached inside a CUDA graph capture, before an eager decode step."
             )
-        from aphrodite.models.deepseek_v4.amd.mono.runner import MonoRunner
+        from sonar.models.deepseek_v4.amd.mono.runner import MonoRunner
 
         _runner = MonoRunner(
             get_tensor_model_parallel_world_size(),
@@ -95,7 +95,7 @@ def _record_view(kv: torch.Tensor, block: int) -> torch.Tensor:
 
 def _scale_bytes(scale: torch.Tensor) -> torch.Tensor:
     """E8M0 scales as their bytes: a float8_e8m0fnu / uint8 tensor's own, or the
-    exponents of a power-of-two fp32 one (Aphrodite's aiter linears upcast them)."""
+    exponents of a power-of-two fp32 one (Sonar's aiter linears upcast them)."""
     if scale.dtype == torch.float32:
         bits = scale.contiguous().view(torch.int32)
         code = (bits >> 23).to(torch.uint8)
@@ -113,7 +113,7 @@ def _mx_scales(scale: torch.Tensor) -> torch.Tensor:
 
 
 def _block_scale(lin) -> torch.Tensor:
-    from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
+    from sonar.model_executor.layers.quantization.utils.fp8_utils import (
         get_fp8_block_weight_scale,
     )
 
@@ -122,12 +122,12 @@ def _block_scale(lin) -> torch.Tensor:
     return _mx_scales(scale)
 
 
-def _hca_width(aphrodite_config) -> int:
-    """The HCA layers' key table width: Aphrodite's c128a table's, every compressed
+def _hca_width(sonar_config) -> int:
+    """The HCA layers' key table width: Sonar's c128a table's, every compressed
     row of the longest context (``sparse_mla``)."""
-    from aphrodite.models.deepseek_v4.sparse_mla import _C128A_TOPK_ALIGNMENT
+    from sonar.models.deepseek_v4.sparse_mla import _C128A_TOPK_ALIGNMENT
 
-    n = -(-aphrodite_config.model_config.max_model_len // HCA)
+    n = -(-sonar_config.model_config.max_model_len // HCA)
     return -(-n // _C128A_TOPK_ALIGNMENT) * _C128A_TOPK_ALIGNMENT
 
 
@@ -135,35 +135,35 @@ def _compute_units() -> int:
     return current_platform.num_compute_units(torch.accelerator.current_device_index())
 
 
-def _deployment_error(layer: "DeepseekV4DecoderLayer", aphrodite_config) -> str | None:
+def _deployment_error(layer: "DeepseekV4DecoderLayer", sonar_config) -> str | None:
     """Why this deployment cannot run the kernels at all, or None (an explicit
     opt-in that cannot run is an error). They read every routed expert on each
-    rank, TP-sharded, in AITER's A8W4 MXFP4 layout, and Aphrodite's preshuffled FP8
+    rank, TP-sharded, in AITER's A8W4 MXFP4 layout, and Sonar's preshuffled FP8
     linears with padded rows."""
-    from aphrodite._aiter_ops import rocm_aiter_ops
-    from aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 import Mxfp4MoeBackend
-    from aphrodite.platforms.rocm import get_cdna_version
+    from sonar._aiter_ops import rocm_aiter_ops
+    from sonar.model_executor.layers.fused_moe.oracle.mxfp4 import Mxfp4MoeBackend
+    from sonar.platforms.rocm import get_cdna_version
 
     if get_cdna_version() != CDNA_VERSION:
         return f"needs CDNA{CDNA_VERSION}"
     if get_tensor_model_parallel_world_size() != TP_SIZE:
         return f"needs tensor parallel size {TP_SIZE}"
-    pc = aphrodite_config.parallel_config
+    pc = sonar_config.parallel_config
     if pc.enable_expert_parallel or pc.enable_eplb or pc.data_parallel_size > 1:
         return "needs tensor parallelism only: no expert or data parallelism"
-    if envs.APHRODITE_ROCM_USE_AITER_MOE_A4W4_DSV4:
-        return "needs AITER's A8W4 MoE (APHRODITE_ROCM_USE_AITER_MOE_A4W4_DSV4 unset)"
+    if envs.SONAR_ROCM_USE_AITER_MOE_A4W4_DSV4:
+        return "needs AITER's A8W4 MoE (SONAR_ROCM_USE_AITER_MOE_A4W4_DSV4 unset)"
     experts = getattr(getattr(layer.ffn, "experts", None), "routed_experts", None)
     if experts is not None:  # else not a routed MoE: the layer checks decline it
         backend = getattr(experts.quant_method, "mxfp4_backend", None)
         if backend != Mxfp4MoeBackend.AITER_MXFP4_BF16:
             return f"needs the AITER_MXFP4_BF16 MoE backend, not {backend}"
     if not rocm_aiter_ops.is_linear_fp8_enabled():
-        return "needs AITER's FP8 linears (APHRODITE_ROCM_USE_AITER_LINEAR)"
-    if not envs.APHRODITE_ROCM_FP8_PADDING:
-        return "needs Aphrodite's padded FP8 weight rows (APHRODITE_ROCM_FP8_PADDING)"
+        return "needs AITER's FP8 linears (SONAR_ROCM_USE_AITER_LINEAR)"
+    if not envs.SONAR_ROCM_FP8_PADDING:
+        return "needs Sonar's padded FP8 weight rows (SONAR_ROCM_FP8_PADDING)"
     try:
-        from aphrodite.models.deepseek_v4.amd.mono.runner import BLOCKS
+        from sonar.models.deepseek_v4.amd.mono.runner import BLOCKS
     except ImportError as err:
         return f"needs FlyDSL and AITER's FlyDSL helpers ({err})"
     # every CTA of a launch stays resident: a partitioned GPU deadlocks
@@ -195,21 +195,21 @@ def _select(layer: "DeepseekV4DecoderLayer", positions, normed, qr) -> None:
 class MonoDecodeLayer:
     """One DeepSeek-V4-Pro decoder layer's mono path (``create``: None when the
     layer is not eligible). Its weights are taken from the layer at the first
-    call, after loading and Aphrodite's preshuffle."""
+    call, after loading and Sonar's preshuffle."""
 
     def __init__(self, hca_width: int) -> None:
         self.hca_width = hca_width
         self._weights: Any = None
 
     @classmethod
-    def create(cls, layer: "DeepseekV4DecoderLayer", aphrodite_config) -> "MonoDecodeLayer | None":
-        if not aphrodite_config.kernel_config.monokernel:
+    def create(cls, layer: "DeepseekV4DecoderLayer", sonar_config) -> "MonoDecodeLayer | None":
+        if not sonar_config.kernel_config.monokernel:
             return None
-        why = _deployment_error(layer, aphrodite_config)
+        why = _deployment_error(layer, sonar_config)
         if why is not None:
             raise ValueError(f"--monokernel {why}.")
         ffn, attn = layer.ffn, layer.attn
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
         if extract_layer_index(attn.prefix) >= config.num_hidden_layers:
             why = "draft layer"
         elif not (layer.use_fused_mhc and layer.fuse_mhc_rmsnorm):
@@ -239,19 +239,19 @@ class MonoDecodeLayer:
             logger.info_once("DSv4 mono decode off for some layers: %s", why)
             return None
         logger.info_once("DSv4 mono decode: the whole backbone layers")
-        return cls(_hca_width(aphrodite_config))
+        return cls(_hca_width(sonar_config))
 
     def weights(self, layer: "DeepseekV4DecoderLayer"):
         if self._weights is not None:
             return self._weights
-        from aphrodite.models.deepseek_v4.amd.mono.runner import (
+        from sonar.models.deepseek_v4.amd.mono.runner import (
             AttnWeights,
             MonoLayerWeights,
         )
 
         a, f = layer.attn, layer.ffn
         e, sh = f.experts.routed_experts, f.shared_experts
-        # the kernels read Aphrodite's preshuffled wqkv / wo_b / shared gate_up
+        # the kernels read Sonar's preshuffled wqkv / wo_b / shared gate_up
         assert a._wqa_wkv_scale is not None and a._wo_b_scale is not None
         assert sh is not None and sh._gateup_scale is not None
         d = Dims(get_tensor_model_parallel_world_size())

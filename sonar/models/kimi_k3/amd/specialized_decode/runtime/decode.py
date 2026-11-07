@@ -6,9 +6,9 @@ step, then the layer kernels inside the stock layer loop.
 Built by the model state once the weights are loaded (``KimiK3ModelState``): checks
 the loaded weights, builds the per-rank launch state (``runner``) and the layer
 kernels of every width, and compiles every build, before memory profiling and graph
-capture. ``prepare_kv`` binds it to every KV cache Aphrodite allocates. Each step
+capture. ``prepare_kv`` binds it to every KV cache Sonar allocates. Each step
 ``plan`` returns a ``Step`` or None; ``Step.layer(i)`` is the kernel replacing
-decoder layer i (None for Aphrodite's layers). Weight reloads are not supported."""
+decoder layer i (None for Sonar's layers). Weight reloads are not supported."""
 
 from collections.abc import Callable, Mapping
 from functools import partial
@@ -16,28 +16,28 @@ from typing import Any, NamedTuple
 
 import torch
 
-from aphrodite.config import CUDAGraphMode
-from aphrodite.distributed import get_tp_group
-from aphrodite.forward_context import get_forward_context, is_forward_context_available
-from aphrodite.logger import init_logger
-from aphrodite.models.kimi_k3.amd.specialized_decode.mono.abi import FAILED
-from aphrodite.models.kimi_k3.amd.specialized_decode.runtime import (
+from sonar.config import CUDAGraphMode
+from sonar.distributed import get_tp_group
+from sonar.forward_context import get_forward_context, is_forward_context_available
+from sonar.logger import init_logger
+from sonar.models.kimi_k3.amd.specialized_decode.mono.abi import FAILED
+from sonar.models.kimi_k3.amd.specialized_decode.runtime import (
     WHOLE,
     DecodeConfig,
     layer_kinds,
 )
-from aphrodite.models.kimi_k3.amd.specialized_decode.runtime.guards import (
+from sonar.models.kimi_k3.amd.specialized_decode.runtime.guards import (
     FailStop,
     cache_reasons,
     weight_reasons,
 )
-from aphrodite.models.kimi_k3.amd.specialized_decode.runtime.layers import (
+from sonar.models.kimi_k3.amd.specialized_decode.runtime.layers import (
     FfnLayer,
     WholeLayer,
     compile_build,
 )
-from aphrodite.models.kimi_k3.amd.specialized_decode.runtime.peer import tp_agree
-from aphrodite.models.kimi_k3.amd.specialized_decode.runtime.runner import MonoRunner
+from sonar.models.kimi_k3.amd.specialized_decode.runtime.peer import tp_agree
+from sonar.models.kimi_k3.amd.specialized_decode.runtime.runner import MonoRunner
 
 logger = init_logger(__name__)
 
@@ -52,7 +52,7 @@ class Step(NamedTuple):
     kernels: Mapping[int, Kernel]  # by decoder layer, at this width
 
     def layer(self, idx: int) -> Callable | None:
-        """The kernel replacing decoder layer idx in this step, or None (Aphrodite's)."""
+        """The kernel replacing decoder layer idx in this step, or None (Sonar's)."""
         kernel = self.kernels.get(idx)
         return None if kernel is None else partial(kernel.launch, self)
 
@@ -80,7 +80,7 @@ def agree(reasons: list[str], group, what: str) -> None:
     if not tp_agree(not reasons, group):
         why = "; ".join(reasons) if reasons else "another TP rank refused"
         raise ValueError(
-            f"Kimi-K3 specialized decode does not support {what}: {why} (decode_backend=auto runs Aphrodite's decode)"
+            f"Kimi-K3 specialized decode does not support {what}: {why} (decode_backend=auto runs Sonar's decode)"
         )
 
 
@@ -120,7 +120,7 @@ class SpecializedDecode:
         # (data_ptr, numel) of the first KDA layer's state prepare_kv bound
         self._kv: tuple[int, int] | None = None
         logger.info(
-            "Kimi-K3 specialized decode: %d layers, widths %s, %d builds; other steps run Aphrodite's decode",
+            "Kimi-K3 specialized decode: %d layers, widths %s, %d builds; other steps run Sonar's decode",
             len(kinds),
             list(config.widths),
             len(builds),
@@ -135,7 +135,7 @@ class SpecializedDecode:
         return state[1].data_ptr(), state[1].numel()
 
     def prepare_kv(self) -> None:
-        """Checks and binds the KDA states Aphrodite just bound (the CUDA-graph memory
+        """Checks and binds the KDA states Sonar just bound (the CUDA-graph memory
         profiling cache, then the real one)."""
         self._kv = None
         if self._kv_key() is None:
@@ -145,9 +145,9 @@ class SpecializedDecode:
         self._kv = self._kv_key()
 
     def plan(self, positions: torch.Tensor, intermediate_tensors) -> Step | None:
-        """This step's plan, or None to run Aphrodite's layers.
+        """This step's plan, or None to run Sonar's layers.
 
-        Steps that run Aphrodite's layers:
+        Steps that run Sonar's layers:
         - pipeline-parallel stage inputs, and steps before a KV cache is bound
           (profiling, dummy runs);
         - PIECEWISE steps (captured without attention metadata);

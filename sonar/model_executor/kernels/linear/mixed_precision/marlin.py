@@ -4,8 +4,8 @@
 
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.model_executor.layers.quantization.utils.marlin_utils import (
+from sonar import _custom_ops as ops
+from sonar.model_executor.layers.quantization.utils.marlin_utils import (
     MARLIN_SUPPORTED_GROUP_SIZES,
     apply_gptq_marlin_linear,
     marlin_act_int8_process_scales,
@@ -20,10 +20,10 @@ from aphrodite.model_executor.layers.quantization.utils.marlin_utils import (
     query_marlin_supported_quant_types,
     unpack_cols,
 )
-from aphrodite.model_executor.parameter import BaseAphroditeParameter, permute_param_layout_
-from aphrodite.model_executor.utils import replace_parameter
-from aphrodite.platforms import current_platform
-from aphrodite.scalar_type import scalar_types
+from sonar.model_executor.parameter import BaseSonarParameter, permute_param_layout_
+from sonar.model_executor.utils import replace_parameter
+from sonar.platforms import current_platform
+from sonar.scalar_type import scalar_types
 
 from .MPLinearKernel import MPLinearKernel, MPLinearLayerConfig
 
@@ -92,7 +92,7 @@ class MarlinLinearKernel(MPLinearKernel):
         self.w_zp_name = w_zp_name
 
         def transform_w_q(x):
-            assert isinstance(x, BaseAphroditeParameter)
+            assert isinstance(x, BaseSonarParameter)
             permute_param_layout_(x, input_dim=0, output_dim=1, packed_dim=0)
             x.data = ops.gptq_marlin_repack(
                 marlin_pad_qweight(x.data.contiguous(), size_n, size_k, padded_n, padded_k),
@@ -104,7 +104,7 @@ class MarlinLinearKernel(MPLinearKernel):
             return x
 
         def transform_w_s(x):
-            assert isinstance(x, BaseAphroditeParameter)
+            assert isinstance(x, BaseSonarParameter)
             permute_param_layout_(x, input_dim=0, output_dim=1)
             x.data = marlin_permute_scales(
                 marlin_pad_scales(

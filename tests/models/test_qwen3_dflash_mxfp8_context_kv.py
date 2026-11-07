@@ -6,17 +6,17 @@ import pytest
 import torch
 from torch import nn
 
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     QKVParallelLinear,
     UnquantizedLinearMethod,
 )
-from aphrodite.model_executor.layers.quantization.modelopt import ModelOptMxFp8Config
-from aphrodite.model_executor.layers.quantization.utils.mxfp8_utils import (
+from sonar.model_executor.layers.quantization.modelopt import ModelOptMxFp8Config
+from sonar.model_executor.layers.quantization.utils.mxfp8_utils import (
     _mxfp8_e4m3_quantize_torch,
 )
-from aphrodite.model_executor.models.qwen3_dflash import DFlashQwen3Model
-from aphrodite.platforms import current_platform
+from sonar.model_executor.models.qwen3_dflash import DFlashQwen3Model
+from sonar.platforms import current_platform
 
 pytestmark = pytest.mark.skipif(
     not current_platform.is_cuda() or not current_platform.is_device_capability_family(100),
@@ -28,7 +28,7 @@ Q_SIZE, KV_SIZE = NUM_HEADS * HEAD_DIM, HEAD_DIM  # one KV head
 
 
 @pytest.fixture
-def bf16_on_cuda(default_aphrodite_config, dist_init):
+def bf16_on_cuda(default_sonar_config, dist_init):
     old_dtype = torch.get_default_dtype()
     torch.set_default_dtype(torch.bfloat16)
     with torch.device("cuda"):

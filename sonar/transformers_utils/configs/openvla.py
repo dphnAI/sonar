@@ -3,7 +3,7 @@
 """OpenVLA configuration support.
 
 OpenVLA checkpoints use a custom ``model_type`` and nest the language model
-configuration under ``text_config``. This shim lets Aphrodite load the checkpoint
+configuration under ``text_config``. This shim lets Sonar load the checkpoint
 configuration without executing Hugging Face remote code.
 """
 

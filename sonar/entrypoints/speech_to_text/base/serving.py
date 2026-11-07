@@ -14,31 +14,31 @@ import numpy as np
 from fastapi import Request
 from transformers import PreTrainedTokenizerBase
 
-import aphrodite.envs as envs
-from aphrodite.engine.protocol import EngineClient
-from aphrodite.entrypoints.generate.base.protocol import (
+import sonar.envs as envs
+from sonar.engine.protocol import EngineClient
+from sonar.entrypoints.generate.base.protocol import (
     DeltaMessage,
     RequestResponseMetadata,
 )
-from aphrodite.entrypoints.generate.base.serving import GenerateBaseServing
-from aphrodite.entrypoints.openai.models.serving import OpenAIServingModels
-from aphrodite.entrypoints.serve.engine.protocol import ErrorResponse, UsageInfo
-from aphrodite.entrypoints.serve.engine.typing import SpeechToTextRequest
-from aphrodite.entrypoints.serve.utils.api_utils import get_max_tokens
-from aphrodite.entrypoints.serve.utils.request_logger import RequestLogger
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.inputs import EncoderDecoderInput, EngineInput
-from aphrodite.logger import init_logger
-from aphrodite.logprobs import FlatLogprobs, Logprob
-from aphrodite.model_executor.models import SupportsTranscription
-from aphrodite.multimodal.audio import AudioResampler, get_audio_duration, split_audio
-from aphrodite.multimodal.media.audio import load_audio
-from aphrodite.outputs import RequestOutput
-from aphrodite.renderers.inputs import DictPrompt, EncoderDecoderDictPrompt
-from aphrodite.renderers.inputs.preprocess import parse_enc_dec_prompt, parse_model_prompt
-from aphrodite.sampling_params import BeamSearchParams, SamplingParams
-from aphrodite.tokenizers import get_tokenizer
-from aphrodite.utils.async_utils import make_async_with_semaphore, merge_async_iterators
+from sonar.entrypoints.generate.base.serving import GenerateBaseServing
+from sonar.entrypoints.openai.models.serving import OpenAIServingModels
+from sonar.entrypoints.serve.engine.protocol import ErrorResponse, UsageInfo
+from sonar.entrypoints.serve.engine.typing import SpeechToTextRequest
+from sonar.entrypoints.serve.utils.api_utils import get_max_tokens
+from sonar.entrypoints.serve.utils.request_logger import RequestLogger
+from sonar.exceptions import SonarValidationError
+from sonar.inputs import EncoderDecoderInput, EngineInput
+from sonar.logger import init_logger
+from sonar.logprobs import FlatLogprobs, Logprob
+from sonar.model_executor.models import SupportsTranscription
+from sonar.multimodal.audio import AudioResampler, get_audio_duration, split_audio
+from sonar.multimodal.media.audio import load_audio
+from sonar.outputs import RequestOutput
+from sonar.renderers.inputs import DictPrompt, EncoderDecoderDictPrompt
+from sonar.renderers.inputs.preprocess import parse_enc_dec_prompt, parse_model_prompt
+from sonar.sampling_params import BeamSearchParams, SamplingParams
+from sonar.tokenizers import get_tokenizer
+from sonar.utils.async_utils import make_async_with_semaphore, merge_async_iterators
 
 from ..transcription.protocol import (
     TranscriptionResponse,
@@ -113,8 +113,8 @@ class SpeechToTextBaseServing(GenerateBaseServing):
 
         self.enable_force_include_usage = enable_force_include_usage
 
-        self.max_audio_decode_duration_s: int = envs.APHRODITE_MAX_AUDIO_DECODE_DURATION_S
-        self.max_audio_decode_bytes: int = envs.APHRODITE_MAX_AUDIO_DECODE_BYTES
+        self.max_audio_decode_duration_s: int = envs.SONAR_MAX_AUDIO_DECODE_DURATION_S
+        self.max_audio_decode_bytes: int = envs.SONAR_MAX_AUDIO_DECODE_BYTES
         if self.model_cls.supports_segment_timestamp:
             self.tokenizer = cast(
                 PreTrainedTokenizerBase,
@@ -134,7 +134,7 @@ class SpeechToTextBaseServing(GenerateBaseServing):
         # we keep separate thread pool for frontend preprocessing instead
         # of reusing the one from Renderer which showed lower throughput
         # https://github.com/vllm-project/vllm/pull/44612#issuecomment-4662757781
-        num_audio_preprocess_workers = envs.APHRODITE_MAX_AUDIO_PREPROCESS_WORKERS
+        num_audio_preprocess_workers = envs.SONAR_MAX_AUDIO_PREPROCESS_WORKERS
         self._preprocess_executor = ThreadPoolExecutor(
             max_workers=num_audio_preprocess_workers,
             thread_name_prefix="stt-preprocess",
@@ -145,7 +145,7 @@ class SpeechToTextBaseServing(GenerateBaseServing):
 
     @cached_property
     def model_cls(self) -> type[SupportsTranscription]:
-        from aphrodite.model_executor.model_loader import get_model_cls
+        from sonar.model_executor.model_loader import get_model_cls
 
         model_cls = get_model_cls(self.model_config)
         return cast(type[SupportsTranscription], model_cls)
@@ -302,7 +302,7 @@ class SpeechToTextBaseServing(GenerateBaseServing):
         dec_prompt = prompt["decoder_prompt"]
 
         if not (isinstance(dec_prompt, dict) and "prompt" in dec_prompt):
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 "Expected decoder_prompt to contain text",
                 parameter="decoder_prompt",
                 value=type(dec_prompt).__name__,

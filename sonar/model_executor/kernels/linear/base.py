@@ -7,7 +7,7 @@ from typing import Any, ClassVar, Generic, Self, TypeVar
 
 import torch
 
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import QuantKey
+from sonar.model_executor.layers.quantization.utils.quant_utils import QuantKey
 
 
 @dataclass
@@ -97,7 +97,7 @@ class MMLinearKernel(ABC, Generic[_ConfigT, _ParamsT]):
     """Abstract base class for quantized matrix multiplication kernels.
 
     This class provides the interface for implementing custom quantized linear layer
-    kernels in Aphrodite. Subclasses should implement specific quantization strategies
+    kernels in Sonar. Subclasses should implement specific quantization strategies
     (e.g., FP8, INT8) and their corresponding compute kernels.
 
     Generic Type Parameters:

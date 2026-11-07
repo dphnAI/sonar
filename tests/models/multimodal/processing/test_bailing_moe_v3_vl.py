@@ -10,13 +10,13 @@ from PIL import Image
 from tokenizers import Tokenizer, decoders, models, pre_tokenizers
 from transformers import TokenizersBackend
 
-from aphrodite.model_executor.models.bailing_moe_v3_vl import (
+from sonar.model_executor.models.bailing_moe_v3_vl import (
     IMAGE_PLACEHOLDER,
     IMAGE_TOKEN,
     BailingMoeV3VLMultiModalProcessor,
 )
-from aphrodite.multimodal.inputs import MultiModalFieldConfig, MultiModalKwargsItems
-from aphrodite.multimodal.parse import ImageProcessorItems, MultiModalDataItems
+from sonar.multimodal.inputs import MultiModalFieldConfig, MultiModalKwargsItems
+from sonar.multimodal.parse import ImageProcessorItems, MultiModalDataItems
 
 pytestmark = pytest.mark.cpu_test
 

@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""An example showing how to use Aphrodite to serve VLMs.
+"""An example showing how to use Sonar to serve VLMs.
 
-Launch the Aphrodite server with the following command:
-aphrodite run llava-hf/llava-1.5-7b-hf \
+Launch the Sonar server with the following command:
+sonar run llava-hf/llava-1.5-7b-hf \
     --chat-template template_llava.jinja
 """
 
@@ -12,7 +12,7 @@ import os
 import pybase64 as base64
 from openai import OpenAI
 
-# Modify OpenAI's API key and API base to use Aphrodite's API server.
+# Modify OpenAI's API key and API base to use Sonar's API server.
 openai_api_key = "EMPTY"
 openai_api_base = "http://localhost:2242/v1"
 

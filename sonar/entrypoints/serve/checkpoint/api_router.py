@@ -7,8 +7,8 @@ from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from aphrodite.engine.protocol import EngineClient
-from aphrodite.v1.engine import CheckpointState, PauseMode
+from sonar.engine.protocol import EngineClient
+from sonar.v1.engine import CheckpointState, PauseMode
 
 
 def engine_client(request: Request) -> EngineClient:

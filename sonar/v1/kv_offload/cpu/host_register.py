@@ -13,9 +13,9 @@ import functools
 
 import torch
 
-from aphrodite.distributed.device_communicators.cuda_wrapper import CudaRTLibrary
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
+from sonar.distributed.device_communicators.cuda_wrapper import CudaRTLibrary
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
 
 logger = init_logger(__name__)
 

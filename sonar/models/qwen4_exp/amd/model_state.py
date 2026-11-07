@@ -7,11 +7,11 @@ from typing import Any
 import torch
 import torch.nn as nn
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.v1.worker.gpu.input_batch import InputBatch
-from aphrodite.v1.worker.gpu.mm.encoder_cache import EncoderCache
-from aphrodite.v1.worker.gpu.model_states.mamba_hybrid import MambaHybridModelState
-from aphrodite.v1.worker.gpu.states import RequestState
+from sonar.config import SonarConfig
+from sonar.v1.worker.gpu.input_batch import InputBatch
+from sonar.v1.worker.gpu.mm.encoder_cache import EncoderCache
+from sonar.v1.worker.gpu.model_states.mamba_hybrid import MambaHybridModelState
+from sonar.v1.worker.gpu.states import RequestState
 
 
 class Qwen4ExpModelState(MambaHybridModelState):
@@ -19,12 +19,12 @@ class Qwen4ExpModelState(MambaHybridModelState):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         model: nn.Module,
         encoder_cache: EncoderCache | None,
         device: torch.device,
     ) -> None:
-        super().__init__(aphrodite_config, model, encoder_cache, device)
+        super().__init__(sonar_config, model, encoder_cache, device)
         config = self.model_config.hf_text_config
         self.uses_ngram_embedding = bool(config.ple_layer_ids)
         if not self.uses_ngram_embedding:

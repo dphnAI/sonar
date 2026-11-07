@@ -10,17 +10,17 @@ from typing import TYPE_CHECKING
 
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
 
 if TYPE_CHECKING:
-    from aphrodite.models.kimi_k3.nvidia.kda import KimiK3DeltaAttention
-    from aphrodite.v1.worker.gpu_worker import Worker
+    from sonar.models.kimi_k3.nvidia.kda import KimiK3DeltaAttention
+    from sonar.v1.worker.gpu_worker import Worker
 
 logger = init_logger(__name__)
 
 
-def _get_kda_layer(worker: Worker, module: str = "aphrodite.models.kimi_k3.nvidia.kda") -> KimiK3DeltaAttention | None:
+def _get_kda_layer(worker: Worker, module: str = "sonar.models.kimi_k3.nvidia.kda") -> KimiK3DeltaAttention | None:
     # Kimi model construction already imports kda. Avoid importing it here.
     kda = sys.modules.get(module)
     if kda is None:
@@ -41,7 +41,7 @@ def _get_kda_layer(worker: Worker, module: str = "aphrodite.models.kimi_k3.nvidi
 
 
 def _warm_attn_res(worker: Worker) -> None:
-    from aphrodite.models.kimi_k3.nvidia.ops.attn_res import (
+    from sonar.models.kimi_k3.nvidia.ops.attn_res import (
         attn_res,
         get_attn_res_triton_warmup_profiles,
     )
@@ -94,7 +94,7 @@ def _warm_recurrent_kda(
     layer: KimiK3DeltaAttention,
     input_dtype: torch.dtype,
 ) -> None:
-    from aphrodite.models.kimi_k3.nvidia.ops.third_party.kda.fused_recurrent import (
+    from sonar.models.kimi_k3.nvidia.ops.third_party.kda.fused_recurrent import (
         fused_recurrent_kda,
         get_fused_recurrent_kda_fwd_warmup_profiles,
     )
@@ -167,7 +167,7 @@ def _warm_recurrent_kda(
 
 
 def _warm_gluon_chunk_kda(layer, input_dtype: torch.dtype) -> None:
-    from aphrodite.models.kimi_k3.amd.ops.kda_prefill import (
+    from sonar.models.kimi_k3.amd.ops.kda_prefill import (
         chunk_kda_prefill,
         get_gluon_chunk_kda_warmup_profiles,
     )
@@ -209,7 +209,7 @@ def _warm_gluon_chunk_kda(layer, input_dtype: torch.dtype) -> None:
 def kimi_k3_triton_warmup(worker: Worker) -> None:
     """Warm Kimi-K3 Triton kernels reachable by this server."""
     if current_platform.is_rocm():
-        layer = _get_kda_layer(worker, "aphrodite.models.kimi_k3.amd.kda")
+        layer = _get_kda_layer(worker, "sonar.models.kimi_k3.amd.kda")
         if layer is not None:
             _warm_gluon_chunk_kda(layer, worker.model_config.dtype)
         return

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Metal Platform implementation for Aphrodite."""
+"""Metal Platform implementation for Sonar."""
 
 import logging
 import platform as py_platform
@@ -9,18 +9,18 @@ from typing import TYPE_CHECKING
 import psutil
 import torch
 
-from aphrodite.metal.config import (
+from sonar.metal.config import (
     enable_contiguous_kv_fast_path,
     get_config,
     should_use_contiguous_kv_fast_path,
 )
-from aphrodite.platforms.interface import DeviceCapability, Platform, PlatformEnum
+from sonar.platforms.interface import DeviceCapability, Platform, PlatformEnum
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
-    from aphrodite.v1.attention.backend import AttentionBackend
-    from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
-    from aphrodite.v1.attention.selector import AttentionSelectorConfig
+    from sonar.config import SonarConfig
+    from sonar.v1.attention.backend import AttentionBackend
+    from sonar.v1.attention.backends.registry import AttentionBackendEnum
+    from sonar.v1.attention.selector import AttentionSelectorConfig
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 class MetalPlatform(Platform):
     """Platform implementation for Apple Silicon Metal/MLX.
 
-    This class provides Aphrodite with information about the Metal platform
+    This class provides Sonar with information about the Metal platform
     capabilities and handles device management.
     """
 
@@ -193,7 +193,7 @@ class MetalPlatform(Platform):
     def manual_seed_all(cls, seed: int) -> None:
         """Seed the Metal-side RNG (MLX) for this platform.
 
-        Called from ``aphrodite.utils.torch_utils.set_random_seed`` after Python
+        Called from ``sonar.utils.torch_utils.set_random_seed`` after Python
         ``random``, NumPy, and PyTorch (which reaches MPS via its default
         generator) have all been seeded.  MLX maintains its own global PRNG
         that does not auto-seed and is not reached by ``torch.manual_seed``,
@@ -218,21 +218,21 @@ class MetalPlatform(Platform):
         return torch.device("cpu")
 
     @classmethod
-    def check_and_update_config(cls, aphrodite_config: "AphroditeConfig") -> None:
-        """Check and update Aphrodite configuration for Metal compatibility.
+    def check_and_update_config(cls, sonar_config: "SonarConfig") -> None:
+        """Check and update Sonar configuration for Metal compatibility.
 
         Args:
-            aphrodite_config: Aphrodite configuration object
+            sonar_config: Sonar configuration object
         """
         config = get_config()
-        parallel_config = aphrodite_config.parallel_config
-        model_config = aphrodite_config.model_config
-        compilation_config = aphrodite_config.compilation_config
+        parallel_config = sonar_config.parallel_config
+        model_config = sonar_config.model_config
+        compilation_config = sonar_config.compilation_config
 
-        if model_config is not None and model_config.is_hybrid and aphrodite_config.cache_config.enable_prefix_caching:
-            aphrodite_config.cache_config.enable_prefix_caching = False
-            aphrodite_config.cache_config.mamba_cache_mode = "none"
-            aphrodite_config.cache_config.mamba_block_size = None
+        if model_config is not None and model_config.is_hybrid and sonar_config.cache_config.enable_prefix_caching:
+            sonar_config.cache_config.enable_prefix_caching = False
+            sonar_config.cache_config.mamba_cache_mode = "none"
+            sonar_config.cache_config.mamba_block_size = None
             logger.warning(
                 "Metal hybrid models do not support prefix caching of recurrent state; disabling prefix caching."
             )
@@ -240,7 +240,7 @@ class MetalPlatform(Platform):
         # Metal execution is MLX-backed. Torch Inductor/CUDAGraph settings do
         # not apply to the actual model path, so disable those compilation
         # surfaces without overriding the user's eager-mode flag here.
-        from aphrodite.config.compilation import CompilationMode, CUDAGraphMode
+        from sonar.config.compilation import CompilationMode, CUDAGraphMode
 
         compilation_config.mode = CompilationMode.NONE
         compilation_config.cudagraph_mode = CUDAGraphMode.NONE
@@ -250,7 +250,7 @@ class MetalPlatform(Platform):
 
         # Apply TurboQuant config from --additional-config
         # Example: --additional-config '{"turboquant": true, "k_quant": "q4_0"}'
-        add = getattr(aphrodite_config, "additional_config", None) or {}
+        add = getattr(sonar_config, "additional_config", None) or {}
         if add.get("turboquant"):
             config.turboquant = True
             config.k_quant = add.get("k_quant", "q8_0")
@@ -262,7 +262,7 @@ class MetalPlatform(Platform):
                 config.v_quant,
             )
 
-        scheduler_config = aphrodite_config.scheduler_config
+        scheduler_config = sonar_config.scheduler_config
         if should_use_contiguous_kv_fast_path(
             config,
             model_config=model_config,
@@ -272,7 +272,7 @@ class MetalPlatform(Platform):
             logger.info(
                 "Metal: using contiguous MLX KV cache for low-concurrency "
                 "dense serving (max_num_seqs=%d). Set "
-                "APHRODITE_METAL_USE_PAGED_ATTENTION=1 to force paged attention.",
+                "SONAR_METAL_USE_PAGED_ATTENTION=1 to force paged attention.",
                 scheduler_config.max_num_seqs,
             )
 
@@ -281,7 +281,7 @@ class MetalPlatform(Platform):
 
         # Set worker class for Metal
         if parallel_config.worker_cls == "auto":
-            parallel_config.worker_cls = "aphrodite.v1.worker.metal_worker.MetalWorker"
+            parallel_config.worker_cls = "sonar.v1.worker.metal_worker.MetalWorker"
 
         # Set executor backend (use uniproc for single device)
         if parallel_config.distributed_executor_backend in ("auto", None):
@@ -332,16 +332,16 @@ class MetalPlatform(Platform):
         # backbone — see ``DefaultModelAdapter.normalize_model_config``).
         if model_config is not None:
             model_config.disable_cascade_attn = True
-            from aphrodite.metal.v1.model_adapter import DefaultModelAdapter
+            from sonar.metal.v1.model_adapter import DefaultModelAdapter
 
             DefaultModelAdapter().normalize_model_config(model_config)
 
         # STT model detection — set tokenizer fallback if not already configured.
         # Lazy imports to avoid circular import: platform.py is loaded during
-        # aphrodite.config init, and stt.detection imports from aphrodite.config.
-        from aphrodite.metal.stt.detection import is_stt_model
-        from aphrodite.metal.stt.policy import apply_stt_scheduler_policy
-        from aphrodite.metal.utils import get_model_download_path
+        # sonar.config init, and stt.detection imports from sonar.config.
+        from sonar.metal.stt.detection import is_stt_model
+        from sonar.metal.stt.policy import apply_stt_scheduler_policy
+        from sonar.metal.utils import get_model_download_path
 
         resolved_model = get_model_download_path(model_config.model) if model_config is not None else None
         if resolved_model is not None and is_stt_model(resolved_model):
@@ -366,33 +366,33 @@ class MetalPlatform(Platform):
         return True
 
     @classmethod
-    def _find_non_ssm_backends(cls, aphrodite_config: "AphroditeConfig") -> "list[type[AttentionBackend]]":
+    def _find_non_ssm_backends(cls, sonar_config: "SonarConfig") -> "list[type[AttentionBackend]]":
         """Return the Metal-specific backend for block_size calculation.
 
         Since MLX models don't populate static_forward_context, the default
         Platform._find_non_ssm_backends (which walks attention layers via
-        get_layers_from_aphrodite_config) returns nothing. We override to return
+        get_layers_from_sonar_config) returns nothing. We override to return
         the synthetic MetalBackend, which advertises Metal's MultipleOf(16)
         kernel alignment to the framework's hybrid-block-size math.
         """
-        from aphrodite.metal.metal_backend import MetalBackend
+        from sonar.metal.metal_backend import MetalBackend
 
         return [MetalBackend]
 
     @classmethod
-    def update_block_size_for_backend(cls, aphrodite_config: "AphroditeConfig") -> None:
+    def update_block_size_for_backend(cls, sonar_config: "SonarConfig") -> None:
         """Update block_size for Metal platform.
 
-        Delegates to Aphrodite's base implementation, which reads the Metal kernel
+        Delegates to Sonar's base implementation, which reads the Metal kernel
         alignment (MultipleOf(16)) from our :meth:`_find_non_ssm_backends`
         override. Adds a one-time warning when paged attention is enabled for
         a hybrid model, explaining the cache-block-size translation mechanism
         (PR #235).
         """
-        from aphrodite.metal.config import get_config
+        from sonar.metal.config import get_config
 
         metal_config = get_config()
-        model_config = aphrodite_config.model_config
+        model_config = sonar_config.model_config
 
         if not model_config:
             return
@@ -401,16 +401,16 @@ class MetalPlatform(Platform):
         # block-size translation mechanism.
         #
         # Background:
-        # - Aphrodite requires block_size=160 (or larger) for hybrid models to satisfy
+        # - Sonar requires block_size=160 (or larger) for hybrid models to satisfy
         #   page size divisibility validation between SDPA and Mamba layers.
         #
         # Solution:
-        # - Aphrodite sees a large block_size (e.g., 144 = 16 * 9) for its scheduler
+        # - Sonar sees a large block_size (e.g., 144 = 16 * 9) for its scheduler
         #   validation.
         # - The Metal kernel uses a translated block_size (16, the kernel sweet
         #   spot) that it supports.
-        # - Each Aphrodite block is split into ratio = cache_block_size / kernel_block_size
-        #   kernel blocks. For example, one Aphrodite block of 144 tokens becomes 9 kernel
+        # - Each Sonar block is split into ratio = cache_block_size / kernel_block_size
+        #   kernel blocks. For example, one Sonar block of 144 tokens becomes 9 kernel
         #   blocks of 16 tokens each.
         # - The KV cache is reshaped (zero-copy) to match: [num_blocks, 144, ...] →
         #   [num_blocks*9, 16, ...]. The physical memory layout is unchanged.
@@ -421,22 +421,22 @@ class MetalPlatform(Platform):
         if model_config.is_hybrid and metal_config.use_paged_attention:
             logger.warning(
                 "Hybrid model (e.g., Qwen3.5) with paged attention enabled. "
-                "Using block-size translation (PR #235) to convert Aphrodite's large "
+                "Using block-size translation (PR #235) to convert Sonar's large "
                 "block_size to a Metal kernel-compatible size.\n"
-                "  Mechanism: Each Aphrodite block is split into multiple kernel blocks.\n"
-                "  Example: Aphrodite block_size=144 → kernel block_size=16 (ratio=9).\n"
+                "  Mechanism: Each Sonar block is split into multiple kernel blocks.\n"
+                "  Example: Sonar block_size=144 → kernel block_size=16 (ratio=9).\n"
                 "  The KV cache is reshaped (zero-copy) and block tables are expanded.\n"
                 "  This is a logical transformation — physical memory is unchanged."
             )
 
         # Delegate the rest to upstream. With our ``_find_non_ssm_backends``
         # returning :class:`MetalBackend` (which advertises ``MultipleOf(16)``),
-        # Aphrodite's Phase 1 picks a kernel-aligned default of 16 for non-hybrid
+        # Sonar's Phase 1 picks a kernel-aligned default of 16 for non-hybrid
         # models (matching the kernel sweet spot), and Phase 2
         # (``_align_hybrid_block_size``) handles hybrid alignment. The kernel
         # layer (``_pick_kernel_block_size``) validates the final
         # ``block_size`` at request time.
-        super().update_block_size_for_backend(aphrodite_config)
+        super().update_block_size_for_backend(sonar_config)
 
     @classmethod
     def get_attn_backend_cls(
@@ -446,14 +446,14 @@ class MetalPlatform(Platform):
         num_heads: int | None = None,
     ) -> str:
         """Get the attention backend class for Metal."""
-        from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
+        from sonar.v1.attention.backends.registry import AttentionBackendEnum
 
         if selected_backend and selected_backend != AttentionBackendEnum.CPU_ATTN:
             logger.info("Cannot use %s backend on Metal/MLX.", selected_backend)
         if attn_selector_config.use_mla:
-            # MLA attention is handled by the aphrodite metal model runner (MLAPagedAttentionWrapper),
-            # not by Aphrodite's attention backend selector. Continue to return CPU_ATTN below.
-            logger.info("MLA model detected; attention handled by aphrodite metal model runner")
+            # MLA attention is handled by the sonar metal model runner (MLAPagedAttentionWrapper),
+            # not by Sonar's attention backend selector. Continue to return CPU_ATTN below.
+            logger.info("MLA model detected; attention handled by sonar metal model runner")
         if attn_selector_config.use_sparse:
             raise NotImplementedError("Sparse Attention is not supported on Metal/MLX.")
         return AttentionBackendEnum.CPU_ATTN.get_path()

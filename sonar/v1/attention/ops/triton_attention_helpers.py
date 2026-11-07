@@ -11,7 +11,7 @@ kernel (and any future consumer) share a single implementation.
 
 from __future__ import annotations
 
-from aphrodite.triton_utils import tl, triton
+from sonar.triton_utils import tl, triton
 
 # ===========================================================================
 # Scalar helpers (reused by every kernel + reduce_segments)

@@ -7,46 +7,46 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed.kv_events import KVCacheEventType
-from aphrodite.distributed.kv_transfer.kv_connector.v1.base import (
+from sonar.config import SonarConfig
+from sonar.distributed.kv_events import KVCacheEventType
+from sonar.distributed.kv_transfer.kv_connector.v1.base import (
     KVConnectorBase_V1,
     KVConnectorMetadata,
     KVConnectorRole,
     SupportsHMA,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.metrics import (
+from sonar.distributed.kv_transfer.kv_connector.v1.metrics import (
     KVConnectorPromMetrics,
     KVConnectorStats,
     PromMetric,
     PromMetricT,
 )
-from aphrodite.logger import init_logger
-from aphrodite.v1.core.sched.output import SchedulerOutput
-from aphrodite.v1.metrics.cache_hit_source import CacheHitSource
-from aphrodite.v1.outputs import KVConnectorOutput
-from aphrodite.v1.simple_kv_offload.manager import (
+from sonar.logger import init_logger
+from sonar.v1.core.sched.output import SchedulerOutput
+from sonar.v1.metrics.cache_hit_source import CacheHitSource
+from sonar.v1.outputs import KVConnectorOutput
+from sonar.v1.simple_kv_offload.manager import (
     BoundaryStoreStats,
     SimpleCPUOffloadScheduler,
 )
-from aphrodite.v1.simple_kv_offload.metadata import (
+from sonar.v1.simple_kv_offload.metadata import (
     SimpleCPUOffloadMetadata,
 )
-from aphrodite.v1.simple_kv_offload.metrics import (
+from sonar.v1.simple_kv_offload.metrics import (
     SimpleCPUOffloadPromMetrics,
     SimpleCPUOffloadStats,
 )
-from aphrodite.v1.simple_kv_offload.worker import (
+from sonar.v1.simple_kv_offload.worker import (
     SimpleCPUOffloadWorker,
 )
 
 if TYPE_CHECKING:
-    from aphrodite.forward_context import ForwardContext
-    from aphrodite.v1.attention.backend import AttentionMetadata
-    from aphrodite.v1.core.block_pool import BlockPool
-    from aphrodite.v1.core.kv_cache_manager import KVCacheBlocks
-    from aphrodite.v1.kv_cache_interface import KVCacheConfig
-    from aphrodite.v1.request import Request
+    from sonar.forward_context import ForwardContext
+    from sonar.v1.attention.backend import AttentionMetadata
+    from sonar.v1.core.block_pool import BlockPool
+    from sonar.v1.core.kv_cache_manager import KVCacheBlocks
+    from sonar.v1.kv_cache_interface import KVCacheConfig
+    from sonar.v1.request import Request
 
 logger = init_logger(__name__)
 
@@ -88,19 +88,19 @@ class SimpleCPUOffloadConnector(KVConnectorBase_V1, SupportsHMA):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         role: KVConnectorRole,
         kv_cache_config: "KVCacheConfig",
     ):
-        super().__init__(aphrodite_config, role, kv_cache_config)
+        super().__init__(sonar_config, role, kv_cache_config)
 
-        enable_prefix_caching = aphrodite_config.cache_config.enable_prefix_caching
+        enable_prefix_caching = sonar_config.cache_config.enable_prefix_caching
         extra_config = self._kv_transfer_config.kv_connector_extra_config or {}
 
         cpu_capacity_bytes = int(extra_config.get("cpu_bytes_to_use", DEFAULT_CPU_CAPACITY_BYTES))
         # cpu_bytes_to_use is server-wide for compatibility;
         # cpu_bytes_to_use_per_rank overrides for per-rank capacity.
-        world_size = aphrodite_config.parallel_config.world_size
+        world_size = sonar_config.parallel_config.world_size
         cpu_capacity_per_rank = cpu_capacity_bytes // world_size
         if "cpu_bytes_to_use_per_rank" in extra_config:
             explicit = int(extra_config["cpu_bytes_to_use_per_rank"])
@@ -175,13 +175,13 @@ class SimpleCPUOffloadConnector(KVConnectorBase_V1, SupportsHMA):
             )
 
         if role == KVConnectorRole.SCHEDULER:
-            from aphrodite.v1.core.kv_cache_utils import resolve_kv_cache_block_sizes
+            from sonar.v1.core.kv_cache_utils import resolve_kv_cache_block_sizes
 
             assert kv_cache_config is not None
-            scheduler_block_size, hash_block_size = resolve_kv_cache_block_sizes(kv_cache_config, aphrodite_config)
-            aligned_num_cpu_blocks = aphrodite_config.cache_config.simple_cpu_offload_num_blocks
+            scheduler_block_size, hash_block_size = resolve_kv_cache_block_sizes(kv_cache_config, sonar_config)
+            aligned_num_cpu_blocks = sonar_config.cache_config.simple_cpu_offload_num_blocks
             self.scheduler_manager = SimpleCPUOffloadScheduler(
-                aphrodite_config,
+                sonar_config,
                 kv_cache_config,
                 cpu_capacity_per_rank,
                 scheduler_block_size=scheduler_block_size,
@@ -194,7 +194,7 @@ class SimpleCPUOffloadConnector(KVConnectorBase_V1, SupportsHMA):
             )
         elif role == KVConnectorRole.WORKER:
             self.worker_handler = SimpleCPUOffloadWorker(
-                aphrodite_config,
+                sonar_config,
                 kv_cache_config,
                 cpu_capacity_per_rank,
                 kv_offload_backend=kv_offload_backend,
@@ -352,12 +352,12 @@ class SimpleCPUOffloadConnector(KVConnectorBase_V1, SupportsHMA):
     @classmethod
     def build_prom_metrics(
         cls,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         metric_types: dict[type[PromMetric], type[PromMetricT]],
         labelnames: list[str],
         per_engine_labelvalues: dict[int, list[object]],
     ) -> KVConnectorPromMetrics:
-        return SimpleCPUOffloadPromMetrics(aphrodite_config, metric_types, labelnames, per_engine_labelvalues)
+        return SimpleCPUOffloadPromMetrics(sonar_config, metric_types, labelnames, per_engine_labelvalues)
 
     def take_events(self) -> Iterable[KVCacheEventType]:
         if self.scheduler_manager is not None:

@@ -6,24 +6,24 @@ from typing import Any
 
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite.config.kernel import MoEBackend
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe.all2all_utils import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar.config.kernel import MoEBackend
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe.all2all_utils import (
     maybe_make_prepare_finalize,
 )
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEQuantConfig,
     int8_w8a8_moe_quant_config,
     int8_w8a16_moe_quant_config,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     kInt8DynamicTokenSym,
     kInt8StaticChannelSym,
 )
-from aphrodite.model_executor.utils import replace_parameter
+from sonar.model_executor.utils import replace_parameter
 
 logger = init_logger(__name__)
 
@@ -49,14 +49,14 @@ def backend_to_kernel_cls(
     backend: Int8MoeBackend,
 ) -> list[type[mk.FusedMoEExperts]]:
     if backend == Int8MoeBackend.TRITON:
-        from aphrodite.model_executor.layers.fused_moe.experts.triton_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.triton_moe import (
             TritonExperts,
         )
 
         return [TritonExperts]
 
     elif backend == Int8MoeBackend.HUMMING:
-        from aphrodite.model_executor.layers.fused_moe.experts.fused_humming_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.fused_humming_moe import (
             BatchedHummingGroupedExperts,
             HummingGroupedExperts,
             HummingIndexedExperts,
@@ -68,7 +68,7 @@ def backend_to_kernel_cls(
             HummingIndexedExperts,
         ]
     elif backend == Int8MoeBackend.CPU:
-        from aphrodite.model_executor.layers.fused_moe.experts.cpu_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.cpu_moe import (
             ArmCPUExpertsInt8,
             CPUExpertsInt8,
             PowerCPUExpertsInt8,
@@ -159,7 +159,7 @@ def select_int8_moe_backend(
     raise NotImplementedError(
         "No Int8 MoE backend supports the deployment configuration "
         f"(weight_key={weight_key}, activation_key={activation_key}). "
-        "Set `APHRODITE_LOGGING_LEVEL=DEBUG` to see per-backend unsupported reasons."
+        "Set `SONAR_LOGGING_LEVEL=DEBUG` to see per-backend unsupported reasons."
     )
 
 
@@ -180,8 +180,8 @@ def make_int8_moe_quant_config(
     scales_absent = a1_scale is None and a2_scale is None
 
     if int8_backend == Int8MoeBackend.HUMMING:
-        from aphrodite.model_executor.layers.fused_moe import RoutedExperts
-        from aphrodite.model_executor.layers.quantization.utils.humming import (
+        from sonar.model_executor.layers.fused_moe import RoutedExperts
+        from sonar.model_executor.layers.quantization.utils.humming import (
             get_humming_moe_quant_config,
         )
 
@@ -240,7 +240,7 @@ def convert_to_int8_moe_kernel_format(
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Convert INT8 MoE weights to backend-specific kernel format."""
     if int8_backend == Int8MoeBackend.HUMMING:
-        from aphrodite.model_executor.layers.quantization.utils.humming import (
+        from sonar.model_executor.layers.quantization.utils.humming import (
             convert_to_humming_moe_kernel_format,
         )
 

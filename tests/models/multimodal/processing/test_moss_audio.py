@@ -8,8 +8,8 @@ import pytest
 import torch
 from transformers import Qwen3Config
 
-from aphrodite.model_executor.models.interfaces import SupportsLoRA, supports_lora
-from aphrodite.model_executor.models.moss_audio import (
+from sonar.model_executor.models.interfaces import SupportsLoRA, supports_lora
+from sonar.model_executor.models.moss_audio import (
     MOSS_AUDIO_BOS_TOKEN,
     MOSS_AUDIO_BOS_TOKEN_ID,
     MOSS_AUDIO_EOS_TOKEN,
@@ -28,10 +28,10 @@ from aphrodite.model_executor.models.moss_audio import (
     MossQwen3ForCausalLM,
     MossQwen3Model,
 )
-from aphrodite.model_executor.models.utils import AutoWeightsLoader
-from aphrodite.multimodal.cache import MultiModalProcessorOnlyCache
-from aphrodite.multimodal.inputs import batched_tensors_equal
-from aphrodite.sequence import IntermediateTensors
+from sonar.model_executor.models.utils import AutoWeightsLoader
+from sonar.multimodal.cache import MultiModalProcessorOnlyCache
+from sonar.multimodal.inputs import batched_tensors_equal
+from sonar.sequence import IntermediateTensors
 
 
 def _uninitialized_model() -> MossAudioModel:
@@ -108,7 +108,7 @@ class _TestMossAudioProcessingInfo(MossAudioProcessingInfo):
         return {}
 
 
-def _aphrodite_config(tensor_parallel_size=1, pipeline_parallel_size=1, hf_config=None):
+def _sonar_config(tensor_parallel_size=1, pipeline_parallel_size=1, hf_config=None):
     if hf_config is None:
         hf_config = MossAudioConfig(language_config=Qwen3Config())
     return SimpleNamespace(
@@ -145,9 +145,9 @@ class _FakeAudioEncoder:
 
 
 def _patch_tensor_parallel_for_linear_layers(monkeypatch, tp_size=1, tp_rank=0):
-    import aphrodite.model_executor.layers.linear as linear_layers
-    import aphrodite.model_executor.models.moss_audio as moss_audio_module
-    import aphrodite.model_executor.parameter as parameter_module
+    import sonar.model_executor.layers.linear as linear_layers
+    import sonar.model_executor.models.moss_audio as moss_audio_module
+    import sonar.model_executor.parameter as parameter_module
 
     for module in (moss_audio_module, linear_layers, parameter_module):
         monkeypatch.setattr(module, "get_tensor_model_parallel_world_size", lambda: tp_size)
@@ -308,17 +308,17 @@ def test_moss_audio_error_paths():
 
 
 def test_moss_audio_validates_tp_config():
-    aphrodite_config = _aphrodite_config(tensor_parallel_size=2)
-    aphrodite_config.model_config.hf_config.adapter_hidden_size = 7
+    sonar_config = _sonar_config(tensor_parallel_size=2)
+    sonar_config.model_config.hf_config.adapter_hidden_size = 7
 
     with pytest.raises(ValueError, match="adapter_hidden_size"):
-        MossAudioModel(aphrodite_config=aphrodite_config)
+        MossAudioModel(sonar_config=sonar_config)
 
-    aphrodite_config = _aphrodite_config(tensor_parallel_size=2)
-    aphrodite_config.model_config.hf_config.audio_config.d_model = 6
-    aphrodite_config.model_config.hf_config.audio_config.encoder_attention_heads = 3
+    sonar_config = _sonar_config(tensor_parallel_size=2)
+    sonar_config.model_config.hf_config.audio_config.d_model = 6
+    sonar_config.model_config.hf_config.audio_config.encoder_attention_heads = 3
     with pytest.raises(ValueError, match="encoder_attention_heads"):
-        MossAudioModel(aphrodite_config=aphrodite_config)
+        MossAudioModel(sonar_config=sonar_config)
 
 
 def test_moss_audio_rejects_audio_data_list_seqlen_count_mismatch():
@@ -404,7 +404,7 @@ def test_moss_audio_embed_input_ids_caches_packed_deepstack():
 
 
 def _patch_pp_group(monkeypatch, *, first=True, last=True):
-    import aphrodite.model_executor.models.moss_audio as moss_audio_module
+    import sonar.model_executor.models.moss_audio as moss_audio_module
 
     monkeypatch.setattr(
         moss_audio_module,
@@ -595,8 +595,8 @@ def test_moss_audio_encoder_initialization(dist_init: None, device: str, num_mel
 
 
 def test_moss_audio_encoder_loads_realistic_attention_weight_names(monkeypatch):
-    from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-    from aphrodite.config.device import DeviceConfig
+    from sonar.config import SonarConfig, set_current_sonar_config
+    from sonar.config.device import DeviceConfig
 
     _patch_tensor_parallel_for_linear_layers(monkeypatch, tp_size=2)
     config = MossAudioEncoderConfig(
@@ -609,7 +609,7 @@ def test_moss_audio_encoder_loads_realistic_attention_weight_names(monkeypatch):
         downsample_hidden_size=2,
         deepstack_encoder_layer_indexes=[],
     )
-    with set_current_aphrodite_config(AphroditeConfig(device_config=DeviceConfig(device="cpu"))):
+    with set_current_sonar_config(SonarConfig(device_config=DeviceConfig(device="cpu"))):
         encoder = MossAudioEncoder(config)
 
     attention = encoder.layers[0].self_attn

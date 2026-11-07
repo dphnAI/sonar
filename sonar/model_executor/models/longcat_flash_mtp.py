@@ -9,17 +9,17 @@ import torch
 import torch.nn as nn
 from transformers import PreTrainedConfig
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import ReplicatedLinear
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.config import SonarConfig
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import ReplicatedLinear
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
-from aphrodite.sequence import IntermediateTensors
+from sonar.model_executor.model_loader.weight_utils import default_weight_loader
+from sonar.sequence import IntermediateTensors
 
 from .deepseek_v2 import DeepseekV2DecoderLayer
 from .longcat_flash import scale_mla_lora_norms_on_load
@@ -31,7 +31,7 @@ class LongCatMultiTokenPredictorLayer(nn.Module):
         self,
         config: PreTrainedConfig,
         prefix: str,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         quant_config: QuantizationConfig | None = None,
     ) -> None:
         super().__init__()
@@ -44,7 +44,7 @@ class LongCatMultiTokenPredictorLayer(nn.Module):
             quant_config=quant_config,
             prefix="eh_proj",
         )
-        self.mtp_block = DeepseekV2DecoderLayer(aphrodite_config, prefix)
+        self.mtp_block = DeepseekV2DecoderLayer(sonar_config, prefix)
         scale_mla_lora_norms_on_load(self.mtp_block.self_attn, config)
         self.final_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
@@ -71,12 +71,12 @@ class LongCatMultiTokenPredictor(nn.Module):
     def __init__(
         self,
         *,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         quant_config: QuantizationConfig | None = None,
         prefix: str = "",
     ):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
         # TODO: Use `num_hidden_layers` once Transformers 5.18.0 is the minimum
         self.mtp_start_layer_idx = config.num_layers * 2
         self.num_mtp_layers = 1
@@ -85,7 +85,7 @@ class LongCatMultiTokenPredictor(nn.Module):
                 str(idx): LongCatMultiTokenPredictorLayer(
                     config,
                     prefix=f"{prefix}.layers.{idx}",
-                    aphrodite_config=aphrodite_config,
+                    sonar_config=sonar_config,
                     quant_config=quant_config,
                 )
                 for idx in range(
@@ -120,19 +120,19 @@ class LongCatMultiTokenPredictor(nn.Module):
 
 
 class LongCatFlashMTP(nn.Module):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
         # LongCat MTP has no MoE layers: clear n_routed_experts so the predictor
         # builds a dense MLP. object.__setattr__ bypasses the ngram remote
         # config's strict validation (it rejects setting the int field to None).
-        object.__setattr__(aphrodite_config.model_config.hf_config, "n_routed_experts", None)
-        self.config = aphrodite_config.model_config.hf_config
+        object.__setattr__(sonar_config.model_config.hf_config, "n_routed_experts", None)
+        self.config = sonar_config.model_config.hf_config
         self.quant_config = (
-            None if "mtp" in getattr(self.config, "disable_quant_module", []) else aphrodite_config.quant_config
+            None if "mtp" in getattr(self.config, "disable_quant_module", []) else sonar_config.quant_config
         )
 
         self.model = LongCatMultiTokenPredictor(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             quant_config=self.quant_config,
             prefix=maybe_prefix(prefix, "model"),
         )

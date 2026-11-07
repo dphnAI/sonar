@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Which MiniMax-M3 forwards take the mono path (``APHRODITE_ROCM_MINIMAX_M3_MONO=1``).
+"""Which MiniMax-M3 forwards take the mono path (``SONAR_ROCM_MINIMAX_M3_MONO=1``).
 
 The deployment is checked once (``_config_refusal``); a step is routed to the
 kernels only when it is a pure decode of 1..MAX_TOKENS tokens whose tables the
@@ -10,7 +10,7 @@ would wait on each other forever.
 
 The runner is built on the first eligible step, which under cudagraphs is the
 warmup run before the first capture (its allocations and IPC handshake cannot be
-captured), and rebuilt when Aphrodite re-binds the KV cache after its memory-profiling
+captured), and rebuilt when Sonar re-binds the KV cache after its memory-profiling
 capture round.
 """
 
@@ -18,19 +18,19 @@ from typing import Any, cast
 
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.forward_context import ForwardContext, get_forward_context
-from aphrodite.logger import init_logger
-from aphrodite.models.minimax_m3.amd.mono.check import forward_checked
-from aphrodite.models.minimax_m3.amd.mono.config import (
+from sonar.config import SonarConfig
+from sonar.forward_context import ForwardContext, get_forward_context
+from sonar.logger import init_logger
+from sonar.models.minimax_m3.amd.mono.check import forward_checked
+from sonar.models.minimax_m3.amd.mono.config import (
     MAX_CONTEXT,
     MAX_TOKENS,
     SPARSE_BLOCK,
     TP,
     MonoUnsupported,
 )
-from aphrodite.models.minimax_m3.amd.mono.envs import envs
-from aphrodite.models.minimax_m3.amd.mono.runner import MonoDecodeRunner, dense_prefix
+from sonar.models.minimax_m3.amd.mono.envs import envs
+from sonar.models.minimax_m3.amd.mono.runner import MonoDecodeRunner, dense_prefix
 
 logger = init_logger(__name__)
 
@@ -52,13 +52,13 @@ def _separate_shared_ok(layers) -> bool:
     )
 
 
-def _config_refusal(aphrodite_config: AphroditeConfig, model) -> str | None:
+def _config_refusal(sonar_config: SonarConfig, model) -> str | None:
     """Why this deployment cannot use the kernels at all, or None."""
-    pc = aphrodite_config.parallel_config
-    cc = aphrodite_config.cache_config
-    cg = aphrodite_config.compilation_config.cudagraph_mode
-    max_len = aphrodite_config.model_config.max_model_len
-    index_dtype = aphrodite_config.attention_config.resolve_indexer_kv_dtype("bf16")
+    pc = sonar_config.parallel_config
+    cc = sonar_config.cache_config
+    cg = sonar_config.compilation_config.cudagraph_mode
+    max_len = sonar_config.model_config.max_model_len
+    index_dtype = sonar_config.attention_config.resolve_indexer_kv_dtype("bf16")
     checks = (
         (pc.tensor_parallel_size == TP, f"TP {pc.tensor_parallel_size} != {TP}"),
         (pc.data_parallel_size == 1, "DP > 1"),
@@ -115,15 +115,15 @@ def _step_refusal(fwd: ForwardContext, layer_name: str, n: int, positions) -> st
 class MonoDecode:
     """Routes supported decode steps of one ``MiniMaxM3Model`` to the kernels."""
 
-    def __init__(self, model, aphrodite_config: AphroditeConfig) -> None:
+    def __init__(self, model, sonar_config: SonarConfig) -> None:
         self._model = model
-        self._config = aphrodite_config.model_config.hf_text_config
+        self._config = sonar_config.model_config.hf_text_config
         self._runner: MonoDecodeRunner | None = None
         self._enabled = False
         self._slots_verified = False
         if not envs.MONO_ENABLE:
             return
-        why = _config_refusal(aphrodite_config, model)
+        why = _config_refusal(sonar_config, model)
         if why is not None:
             logger.info("MiniMax-M3 mono decode off: %s", why)
             return

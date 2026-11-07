@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-from aphrodite.config.aphrodite import AphroditeConfig
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.v1.kv_cache_interface import KVCacheSpec, RSWASpec, get_kv_quant_mode
+from sonar.config.sonar import SonarConfig
+from sonar.model_executor.layers.attention import Attention
+from sonar.v1.kv_cache_interface import KVCacheSpec, RSWASpec, get_kv_quant_mode
 
 
 class RSWAAttention(Attention):
@@ -22,12 +22,12 @@ class RSWAAttention(Attention):
         super().__init__(*args, **kwargs)
         self._rswa_window = rswa_window
 
-    def get_kv_cache_spec(self, aphrodite_config: AphroditeConfig) -> KVCacheSpec | None:
-        spec = super().get_kv_cache_spec(aphrodite_config)
+    def get_kv_cache_spec(self, sonar_config: SonarConfig) -> KVCacheSpec | None:
+        spec = super().get_kv_cache_spec(sonar_config)
         if spec is None:
             return None
         return RSWASpec(
-            block_size=aphrodite_config.cache_config.block_size,
+            block_size=sonar_config.cache_config.block_size,
             num_kv_heads=self.num_kv_heads,
             head_size=self.head_size,
             head_size_v=self.head_size_v,

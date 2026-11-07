@@ -43,30 +43,30 @@ from transformers.dynamic_module_utils import (
 )
 from typing_extensions import TypedDict, TypeVar
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.multimodal import (
+from sonar.config import SonarConfig
+from sonar.config.multimodal import (
     ImageDummyOptions,
     MultiModalDummyOptions,
 )
-from aphrodite.inputs import ModalityData, MultiModalDataDict
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.resampler import (
+from sonar.inputs import ModalityData, MultiModalDataDict
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.resampler import (
     BaseResampler,
     Resampler2,
     get_2d_sincos_pos_embed,
 )
-from aphrodite.model_executor.models.llama import LlamaForCausalLM
-from aphrodite.model_executor.models.minicpm import MiniCPMForCausalLM
-from aphrodite.model_executor.models.module_mapping import MultiModelKeys
-from aphrodite.model_executor.models.qwen2 import Qwen2ForCausalLM
-from aphrodite.model_executor.models.qwen3 import Qwen3ForCausalLM
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import (
+from sonar.model_executor.models.llama import LlamaForCausalLM
+from sonar.model_executor.models.minicpm import MiniCPMForCausalLM
+from sonar.model_executor.models.module_mapping import MultiModelKeys
+from sonar.model_executor.models.qwen2 import Qwen2ForCausalLM
+from sonar.model_executor.models.qwen3 import Qwen3ForCausalLM
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import (
     MultiModalFieldConfig,
     MultiModalKwargsItems,
     NestedTensors,
 )
-from aphrodite.multimodal.parse import (
+from sonar.multimodal.parse import (
     DictEmbeddingItems,
     ImageItem,
     ImageProcessorItems,
@@ -77,8 +77,8 @@ from aphrodite.multimodal.parse import (
     VideoItem,
     VideoProcessorItems,
 )
-from aphrodite.multimodal.processing import BaseDummyInputsBuilder
-from aphrodite.multimodal.processing.processor import (
+from sonar.multimodal.processing import BaseDummyInputsBuilder
+from sonar.multimodal.processing.processor import (
     BaseMultiModalProcessor,
     BaseProcessingInfo,
     MultiModalPromptUpdates,
@@ -89,18 +89,18 @@ from aphrodite.multimodal.processing.processor import (
     ResolvedPromptUpdate,
     cached_encode,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.transformers_utils.processor import (
+from sonar.platforms import current_platform
+from sonar.sequence import IntermediateTensors
+from sonar.transformers_utils.processor import (
     _merge_mm_kwargs,
     cached_get_image_processor,
 )
-from aphrodite.transformers_utils.utils import convert_model_repo_to_path
-from aphrodite.utils.collection_utils import flatten_2d_lists, is_list_of
-from aphrodite.utils.gpu_sync_debug import gpu_sync_allowed
-from aphrodite.utils.tensor_schema import TensorSchema, TensorShape
-from aphrodite.utils.torch_utils import async_tensor_h2d, set_default_torch_dtype
-from aphrodite.v1.worker.encoder_cudagraph_defs import (
+from sonar.transformers_utils.utils import convert_model_repo_to_path
+from sonar.utils.collection_utils import flatten_2d_lists, is_list_of
+from sonar.utils.gpu_sync_debug import gpu_sync_allowed
+from sonar.utils.tensor_schema import TensorSchema, TensorShape
+from sonar.utils.torch_utils import async_tensor_h2d, set_default_torch_dtype
+from sonar.v1.worker.encoder_cudagraph_defs import (
     ENCODER_CUDAGRAPH_AXIS_KEYS_KWARG,
     EncoderCudaGraphCaptureInputs,
     EncoderCudaGraphConfig,
@@ -628,7 +628,7 @@ class MiniCPMVProcessingInfo(BaseProcessingInfo):
         hf_processor = self.ctx.get_hf_processor(**kwargs)
         image_processor = self._get_checkpoint_image_processor(**kwargs)
 
-        from aphrodite.transformers_utils.processors.minicpmv import MiniCPMVProcessor
+        from sonar.transformers_utils.processors.minicpmv import MiniCPMVProcessor
 
         vendored_processor = MiniCPMVProcessor(
             image_processor=image_processor,
@@ -1162,27 +1162,27 @@ class MiniCPMVBaseModel(nn.Module, SupportsMultiModal, SupportsPP):
 
         raise ValueError("Only image or video modality is supported")
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
-        config = aphrodite_config.model_config.hf_config
-        multimodal_config = aphrodite_config.model_config.multimodal_config
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
+        config = sonar_config.model_config.hf_config
+        multimodal_config = sonar_config.model_config.multimodal_config
         assert multimodal_config is not None
-        quant_config = aphrodite_config.quant_config
+        quant_config = sonar_config.quant_config
         self.use_data_parallel = multimodal_config.mm_encoder_tp_mode == "data"
         super().__init__()
         # All MiniCPM-V models disable `tie_word_embeddings` but
         # `PreTrainedConfig.tie_word_embeddings` defaults to True; we cannot
-        # check `tie_word_embeddings` until Aphrodite integrate MiniCPM-V model
+        # check `tie_word_embeddings` until Sonar integrate MiniCPM-V model
         # and config class
         self.config = config
         self.multimodal_config = multimodal_config
-        self.aphrodite_config = aphrodite_config
+        self.sonar_config = sonar_config
 
         self.version = get_version_by_config(self.config)
 
-        with self._mark_language_model(aphrodite_config):
-            self.llm = self.init_llm(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "llm"))
+        with self._mark_language_model(sonar_config):
+            self.llm = self.init_llm(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "llm"))
 
-        with self._mark_tower_model(aphrodite_config, {"image", "video"}):
+        with self._mark_tower_model(sonar_config, {"image", "video"}):
             self.vpm = self.init_vision_module(config, quant_config, prefix=maybe_prefix(prefix, "vpm"))
             self.vision_dim = self.vpm.embed_dim if self.version == (2, 0) else self.vpm.embeddings.embed_dim
             self.embed_dim = self.config.hidden_size
@@ -1334,7 +1334,7 @@ class MiniCPMVBaseModel(nn.Module, SupportsMultiModal, SupportsPP):
 
     def init_llm(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
     ) -> nn.Module:
         raise NotImplementedError
@@ -1565,23 +1565,23 @@ class _MiniCPMVEncoderCudaGraphMixin(MiniCPMVBaseModel, SupportsEncoderCudaGraph
         return "image"
 
     def get_max_frames_per_video(self) -> int:
-        info = MULTIMODAL_REGISTRY.get_processing_info(self.aphrodite_config.model_config)
+        info = MULTIMODAL_REGISTRY.get_processing_info(self.sonar_config.model_config)
         assert isinstance(info, MiniCPMVProcessingInfo)
         return int(
             info.get_num_frames_with_most_features(
-                seq_len=self.aphrodite_config.model_config.max_model_len,
+                seq_len=self.sonar_config.model_config.max_model_len,
                 mm_counts={"video": self.multimodal_config.get_limit_per_prompt("video")},
             )
         )
 
-    def get_encoder_cudagraph_budget_range(self, aphrodite_config: AphroditeConfig) -> tuple[int, int]:
+    def get_encoder_cudagraph_budget_range(self, sonar_config: SonarConfig) -> tuple[int, int]:
         # Each slice produces exactly query_num resampler output tokens.
         # A thumbnail-only image has 1 slice, so query_num is the smallest
         # possible encoder output and the natural minimum budget.
         min_budget = int(self.config.query_num)
         max_budget = min(
-            aphrodite_config.scheduler_config.max_num_batched_tokens,
-            aphrodite_config.model_config.max_model_len,
+            sonar_config.scheduler_config.max_num_batched_tokens,
+            sonar_config.model_config.max_model_len,
         )
         return (min_budget, max_budget)
 
@@ -1748,7 +1748,7 @@ class _MiniCPMVEncoderCudaGraphMixin(MiniCPMVBaseModel, SupportsEncoderCudaGraph
         if isinstance(tgt_sizes_raw, list):
             tgt_sizes_raw = torch.cat(tgt_sizes_raw, dim=0)
         # tgt_sizes arrives from CPU-side mm_kwargs; use a pinned async copy
-        # to stay clean under APHRODITE_GPU_SYNC_CHECK.
+        # to stay clean under SONAR_GPU_SYNC_CHECK.
         tgt_sizes = async_tensor_h2d(tgt_sizes_raw, device, dtype=torch.long)
 
         patches_per_slice = tgt_sizes.prod(-1).clamp(max=max_patches)
@@ -1817,16 +1817,16 @@ class _MiniCPMVEncoderCudaGraphMixin(MiniCPMVBaseModel, SupportsEncoderCudaGraph
 class MiniCPMV2_0(MiniCPMVBaseModel):
     supports_encoder_tp_data = False
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
-        super().__init__(aphrodite_config=aphrodite_config, prefix=prefix)
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
+        super().__init__(sonar_config=sonar_config, prefix=prefix)
         assert self.version == (2, 0)
 
     def init_llm(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
     ) -> nn.Module:
-        return MiniCPMForCausalLM(aphrodite_config=aphrodite_config, prefix=prefix)
+        return MiniCPMForCausalLM(sonar_config=sonar_config, prefix=prefix)
 
     def init_vision_module(
         self,
@@ -1913,16 +1913,16 @@ class MiniCPMV2_5(_MiniCPMVEncoderCudaGraphMixin, SupportsLoRA):
         ],
     }
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
-        super().__init__(aphrodite_config=aphrodite_config, prefix=prefix)
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
+        super().__init__(sonar_config=sonar_config, prefix=prefix)
         assert self.version == (2, 5)
 
     def init_llm(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
     ) -> nn.Module:
-        return LlamaForCausalLM(aphrodite_config=aphrodite_config, prefix=prefix)
+        return LlamaForCausalLM(sonar_config=sonar_config, prefix=prefix)
 
     def init_vision_module(
         self,
@@ -1993,7 +1993,7 @@ class MiniCPMV2_5(_MiniCPMVEncoderCudaGraphMixin, SupportsLoRA):
 
 
 class MiniCPMV2_6(_MiniCPMVEncoderCudaGraphMixin, SupportsLoRA):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         # The vision-only models have no audio tower or TTS head to load weights into.
         orig_to_new_prefix={"apm.": None, "audio": None, "tts": None}
     )
@@ -2009,16 +2009,16 @@ class MiniCPMV2_6(_MiniCPMVEncoderCudaGraphMixin, SupportsLoRA):
         ],
     }
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
-        super().__init__(aphrodite_config=aphrodite_config, prefix=prefix)
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
+        super().__init__(sonar_config=sonar_config, prefix=prefix)
         assert self.version == (2, 6)
 
     def init_llm(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
     ) -> nn.Module:
-        return Qwen2ForCausalLM(aphrodite_config=aphrodite_config, prefix=prefix)
+        return Qwen2ForCausalLM(sonar_config=sonar_config, prefix=prefix)
 
     def init_vision_module(
         self,
@@ -2091,13 +2091,13 @@ class MiniCPMV2_6(_MiniCPMVEncoderCudaGraphMixin, SupportsLoRA):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        loaded = loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        loaded = loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
         self._ensure_resampler_device()
         return loaded
 
 
 class MiniCPMV4_0(_MiniCPMVEncoderCudaGraphMixin, SupportsLoRA):
-    hf_to_aphrodite_mapper = MiniCPMV2_6.hf_to_aphrodite_mapper
+    hf_to_sonar_mapper = MiniCPMV2_6.hf_to_sonar_mapper
     packed_modules_mapping = {
         "qkv_proj": [
             "q_proj",
@@ -2110,16 +2110,16 @@ class MiniCPMV4_0(_MiniCPMVEncoderCudaGraphMixin, SupportsLoRA):
         ],
     }
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
-        super().__init__(aphrodite_config=aphrodite_config, prefix=prefix)
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
+        super().__init__(sonar_config=sonar_config, prefix=prefix)
         assert self.version == (4, 0)
 
     def init_llm(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
     ) -> nn.Module:
-        return LlamaForCausalLM(aphrodite_config=aphrodite_config, prefix=prefix)
+        return LlamaForCausalLM(sonar_config=sonar_config, prefix=prefix)
 
     def init_vision_module(
         self,
@@ -2190,13 +2190,13 @@ class MiniCPMV4_0(_MiniCPMVEncoderCudaGraphMixin, SupportsLoRA):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        loaded = loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        loaded = loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
         self._ensure_resampler_device()
         return loaded
 
 
 class MiniCPMV4_5(MiniCPMVBaseModel, SupportsLoRA):
-    hf_to_aphrodite_mapper = MiniCPMV2_6.hf_to_aphrodite_mapper
+    hf_to_sonar_mapper = MiniCPMV2_6.hf_to_sonar_mapper
     packed_modules_mapping = {
         "qkv_proj": [
             "q_proj",
@@ -2209,16 +2209,16 @@ class MiniCPMV4_5(MiniCPMVBaseModel, SupportsLoRA):
         ],
     }
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
-        super().__init__(aphrodite_config=aphrodite_config, prefix=prefix)
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
+        super().__init__(sonar_config=sonar_config, prefix=prefix)
         assert self.version == (4, 5)
 
     def init_llm(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
     ) -> nn.Module:
-        return Qwen3ForCausalLM(aphrodite_config=aphrodite_config, prefix=prefix)
+        return Qwen3ForCausalLM(sonar_config=sonar_config, prefix=prefix)
 
     def init_vision_module(
         self,
@@ -2292,7 +2292,7 @@ class MiniCPMV4_5(MiniCPMVBaseModel, SupportsLoRA):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        loaded = loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        loaded = loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
         self._ensure_resampler_device()
         return loaded
 
@@ -2314,11 +2314,11 @@ _SUPPORT_VERSION = {
 class MiniCPMV(MiniCPMVBaseModel, SupportsMultiModal, SupportsLoRA):
     """Different versions of MiniCPMV use different visual encoders and LLMs,
     which is not conducive to the current integration logic of LoRA and
-    bitsandbytes in Aphrodite. Therefore, it is necessary to separate them.
+    bitsandbytes in Sonar. Therefore, it is necessary to separate them.
     """
 
-    def __new__(cls, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
-        config = aphrodite_config.model_config.hf_config
+    def __new__(cls, *, sonar_config: SonarConfig, prefix: str = ""):
+        config = sonar_config.model_config.hf_config
         version_values: tuple[int, ...]
         if not hasattr(config, "version"):
             if config.hidden_size == 2304 and config.query_num == 64:
@@ -2343,4 +2343,4 @@ class MiniCPMV(MiniCPMVBaseModel, SupportsMultiModal, SupportsLoRA):
         # so update values before init is called
         cls.packed_modules_mapping.update(instance_cls.packed_modules_mapping)
         cls.embedding_modules.update(instance_cls.embedding_modules)
-        return instance_cls(aphrodite_config=aphrodite_config, prefix=prefix)
+        return instance_cls(sonar_config=sonar_config, prefix=prefix)

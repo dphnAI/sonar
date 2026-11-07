@@ -8,8 +8,8 @@ import numpy as np
 import numpy.typing as npt
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.multimodal.video_decoders import (
+from sonar.logger import init_logger
+from sonar.multimodal.video_decoders import (
     PYNVVIDEOCODEC_VIDEO_BACKEND,
     VideoDecoderBackend,
     VideoSourceMetadata,
@@ -17,8 +17,8 @@ from aphrodite.multimodal.video_decoders import (
     decode_video,
     resolve_video_backend_kwargs,
 )
-from aphrodite.utils.import_utils import PlaceholderModule
-from aphrodite.utils.registry import ExtensionManager
+from sonar.utils.import_utils import PlaceholderModule
+from sonar.utils.registry import ExtensionManager
 
 try:
     import cv2
@@ -150,7 +150,7 @@ class VideoLoader:
         *,
         frame_recovery: bool = False,
     ) -> tuple[npt.NDArray, list[int]]:
-        from aphrodite.multimodal.video_decoders.opencv import OpenCVVideoBackendMixin
+        from sonar.multimodal.video_decoders.opencv import OpenCVVideoBackendMixin
 
         return OpenCVVideoBackendMixin.read_frames(
             cap,
@@ -388,7 +388,7 @@ class Qwen3VLVideoBackend(VideoBackend):
 
     @classmethod
     def _prepare_source(cls, source: VideoSourceMetadata) -> VideoSourceMetadata:
-        # Aphrodite reports an unknown source fps as 0. HF's Qwen3VLVideoProcessor
+        # Sonar reports an unknown source fps as 0. HF's Qwen3VLVideoProcessor
         # assumes a 24 fps source then, and keeps it in the metadata for the
         # frame timestamps.
         if source.original_fps > 0:
@@ -642,7 +642,7 @@ class Qwen2VLVideoBackend(VideoBackend):
         min_frames = kwargs.get("min_frames", 4)
         max_frames = min(kwargs.get("max_frames", cls._MAX_FRAMES), cls._MAX_FRAMES)
 
-        # Aphrodite reports original_fps == 0 for clips with unknown/variable fps
+        # Sonar reports original_fps == 0 for clips with unknown/variable fps
         # (VFR, malformed, streaming); fail loudly instead of dividing by zero.
         if original_fps <= 0:
             raise ValueError(

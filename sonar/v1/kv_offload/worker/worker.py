@@ -3,10 +3,10 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
-from aphrodite.distributed.kv_events import MEDIUM_CPU, MEDIUM_GPU
-from aphrodite.logger import init_logger
-from aphrodite.v1.kv_offload.base import GPULoadStoreSpec, LoadStoreSpec
-from aphrodite.v1.kv_offload.cpu.common import CPULoadStoreSpec
+from sonar.distributed.kv_events import MEDIUM_CPU, MEDIUM_GPU
+from sonar.logger import init_logger
+from sonar.v1.kv_offload.base import GPULoadStoreSpec, LoadStoreSpec
+from sonar.v1.kv_offload.cpu.common import CPULoadStoreSpec
 
 # a single transfer spec (src_blocks_spec, dst_blocks_spec)
 TransferSpec = tuple[LoadStoreSpec, LoadStoreSpec]

@@ -8,13 +8,13 @@ Run `pytest tests/kernels/quantization/test_awq_triton.py`.
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.quantization.awq_triton import (
+from sonar.model_executor.layers.quantization.awq_triton import (
     AWQ_TRITON_SUPPORTED_GROUP_SIZES,
     awq_dequantize_triton,
     awq_gemm_triton,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_random_seed
 
 pytestmark = pytest.mark.skipif(
     not (current_platform.is_cuda_alike() or current_platform.is_xpu()),

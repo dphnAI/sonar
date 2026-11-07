@@ -8,12 +8,12 @@ from typing import Any, NamedTuple
 
 import torch
 
-from aphrodite.config import CUDAGraphMode
-from aphrodite.distributed import get_tp_group
-from aphrodite.distributed import tensor_model_parallel_all_reduce as all_reduce
-from aphrodite.forward_context import get_forward_context, is_forward_context_available
-from aphrodite.platforms import current_platform
-from aphrodite.utils.math_utils import round_up
+from sonar.config import CUDAGraphMode
+from sonar.distributed import get_tp_group
+from sonar.distributed import tensor_model_parallel_all_reduce as all_reduce
+from sonar.forward_context import get_forward_context, is_forward_context_available
+from sonar.platforms import current_platform
+from sonar.utils.math_utils import round_up
 
 from ..cutedsl.attn_res.prepared import PreparedAttnRes
 from ..cutedsl.common.embedding import PreparedEmbedding

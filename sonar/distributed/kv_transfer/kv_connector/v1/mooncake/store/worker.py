@@ -26,25 +26,25 @@ from typing import Any, Literal, TypeVar, cast
 import torch
 import zmq
 
-import aphrodite.envs as envs
-from aphrodite.config import AphroditeConfig, ModelConfig
-from aphrodite.distributed import (
+import sonar.envs as envs
+from sonar.config import ModelConfig, SonarConfig
+from sonar.distributed import (
     get_dcp_group,
     get_pcp_group,
     get_pp_group,
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
 )
-from aphrodite.distributed.kv_events import BlockStored
-from aphrodite.distributed.kv_transfer.kv_connector.v1.base import (
+from sonar.distributed.kv_events import BlockStored
+from sonar.distributed.kv_transfer.kv_connector.v1.base import (
     KVConnectorTransferResults,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake import rdma_utils
-from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.coordinator import (  # noqa: E501
+from sonar.distributed.kv_transfer.kv_connector.v1.mooncake import rdma_utils
+from sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.coordinator import (  # noqa: E501
     ExternalCachedBlockPool,
     MooncakeStoreCoordinator,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.data import (  # noqa: E501
+from sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.data import (  # noqa: E501
     BlobBlockHashes,
     ChunkedTokenDatabase,
     MooncakeLookupResult,
@@ -53,7 +53,7 @@ from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.data impor
     ReqMeta,
     TailKeyBoundary,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.layout import (  # noqa: E501
+from sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.layout import (  # noqa: E501
     ATTENTION_STORE_LAYOUTS,
     AttentionStoreLayout,
     KeyMetadata,
@@ -63,7 +63,7 @@ from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.layout imp
     StoreShardId,
     TokenMajorStoreLayout,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.protocol import (  # noqa: E501
+from sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.protocol import (  # noqa: E501
     LOOKUP_MSG,
     RESET_MSG,
     RESP_ERR,
@@ -71,18 +71,18 @@ from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.protocol i
     decode_lookup_response,
     encode_lookup_response,
 )
-from aphrodite.distributed.mooncake_store import MooncakeStoreConfig, setup_mooncake_store
-from aphrodite.logger import init_logger
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.utils.network_utils import get_ip, make_zmq_socket
-from aphrodite.utils.torch_utils import is_non_overlapping_and_dense
-from aphrodite.v1.attention.backends.utils import NULL_BLOCK_ID
-from aphrodite.v1.core.kv_cache_utils import (
+from sonar.distributed.mooncake_store import MooncakeStoreConfig, setup_mooncake_store
+from sonar.logger import init_logger
+from sonar.utils.math_utils import cdiv
+from sonar.utils.network_utils import get_ip, make_zmq_socket
+from sonar.utils.torch_utils import is_non_overlapping_and_dense
+from sonar.v1.attention.backends.utils import NULL_BLOCK_ID
+from sonar.v1.core.kv_cache_utils import (
     BlockHash,
     maybe_convert_block_hash,
     resolve_kv_cache_block_sizes,
 )
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.kv_cache_interface import (
     AttentionSpec,
     KVCacheConfig,
     KVCacheGroupSpec,
@@ -204,10 +204,10 @@ def _replicate_config_supports_group_ids(
 
 
 def _make_mooncake_group_id(metadata: KeyMetadata, chunk_hash: str) -> str:
-    # Mooncake group ids describe the lifecycle unit. For Aphrodite, that unit is
+    # Mooncake group ids describe the lifecycle unit. For Sonar, that unit is
     # a prefix chunk, so shard dimensions stay only in the object key.
     prefix = f"{metadata.cache_prefix}@" if metadata.cache_prefix else ""
-    return f"aphrodite-mooncake-store:{prefix}{metadata.model_name}{metadata.store_namespace}@{chunk_hash}"
+    return f"sonar-mooncake-store:{prefix}{metadata.model_name}{metadata.store_namespace}@{chunk_hash}"
 
 
 # Mirrors FileStorageConfig::local_buffer_size in Mooncake C++.
@@ -232,7 +232,7 @@ def _sum_batch_bytes(sizes: list[list[int]]) -> int:
 
 
 def _get_usable_disk_offload_buffer_budget_bytes(raw_budget_bytes: int) -> int:
-    return max(1, int(raw_budget_bytes * envs.APHRODITE_MOONCAKE_DISK_STAGING_USABLE_RATIO))
+    return max(1, int(raw_budget_bytes * envs.SONAR_MOONCAKE_DISK_STAGING_USABLE_RATIO))
 
 
 def _split_disk_offload_load_batches(
@@ -1158,7 +1158,7 @@ class KVCacheStoreRecvingThread(KVTransferThread):
         token_len = req_meta.load_spec.token_len  # type: ignore[union-attr]
         req_id = req_meta.req_id
         mask_num = (
-            req_meta.load_spec.aphrodite_cached_tokens  # type: ignore[union-attr]
+            req_meta.load_spec.sonar_cached_tokens  # type: ignore[union-attr]
             // self.block_size
             * self.block_size
         )
@@ -1285,7 +1285,7 @@ class KVCacheStoreRecvingThread(KVTransferThread):
                 current_batch_block_ids = batch_block_ids
                 batch_bytes = _sum_batch_bytes(batch_sizes)
                 tiers_by_key: dict[str, str] | None = None
-                if envs.APHRODITE_MOONCAKE_STORE_TIER_LOG:
+                if envs.SONAR_MOONCAKE_STORE_TIER_LOG:
                     tiers_by_key = _get_replica_tiers_by_key(self.store, batch_keys)
                 # Reset so the recorded RPC duration excludes tier lookup.
                 load_get_start = time.perf_counter()
@@ -1373,7 +1373,7 @@ class MooncakeStoreWorker:
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         kv_cache_config: KVCacheConfig,
     ):
         try:
@@ -1385,11 +1385,11 @@ class MooncakeStoreWorker:
             raise ImportError(
                 "Please install mooncake by following the instructions at "
                 "https://github.com/kvcache-ai/Mooncake/blob/main/doc/"
-                "en/build.md to run Aphrodite with MooncakeStoreConnector."
+                "en/build.md to run Sonar with MooncakeStoreConnector."
             ) from e
 
-        model_config = aphrodite_config.model_config
-        parallel_config = aphrodite_config.parallel_config
+        model_config = sonar_config.model_config
+        parallel_config = sonar_config.parallel_config
 
         self.dp_rank = parallel_config.data_parallel_index
         self.tp_rank = get_tensor_model_parallel_rank()
@@ -1402,11 +1402,11 @@ class MooncakeStoreWorker:
         self.dcp_size = get_dcp_group().world_size
         self.dcp_rank = get_dcp_group().rank_in_group if self.dcp_size > 1 else 0
 
-        assert aphrodite_config.kv_transfer_config is not None
-        kv_role = aphrodite_config.kv_transfer_config.kv_role
+        assert sonar_config.kv_transfer_config is not None
+        kv_role = sonar_config.kv_transfer_config.kv_role
         assert kv_role is not None
         self.kv_role = kv_role
-        extra_config = aphrodite_config.kv_transfer_config.kv_connector_extra_config
+        extra_config = sonar_config.kv_transfer_config.kv_connector_extra_config
         self.save_decode_cache = extra_config.get("save_decode_cache", False)
         self.can_put = self.kv_role in ("kv_producer", "kv_both") or self.save_decode_cache
         self.load_async = extra_config.get("load_async", True)
@@ -1414,9 +1414,9 @@ class MooncakeStoreWorker:
         self._capacity_only = (
             self.kv_role == "kv_consumer" and not extra_config.get("enable_lookup", True) and not self.can_put
         )
-        self.cache_config = aphrodite_config.cache_config
+        self.cache_config = sonar_config.cache_config
         self._is_hma_required = len(kv_cache_config.kv_cache_groups) > 1
-        self.block_size, self.hash_block_size = resolve_kv_cache_block_sizes(kv_cache_config, aphrodite_config)
+        self.block_size, self.hash_block_size = resolve_kv_cache_block_sizes(kv_cache_config, sonar_config)
         self.num_layers = model_config.get_num_layers(parallel_config)
 
         self.num_kv_head = model_config.get_total_num_kv_heads()
@@ -1479,10 +1479,10 @@ class MooncakeStoreWorker:
 
         # Start lookup server on rank 0 for scheduler-side prefix queries
         self.lookup_server: LookupKeyServer | None = None
-        if aphrodite_config.parallel_config.rank == 0:
-            self.lookup_server = LookupKeyServer(self, aphrodite_config)
+        if sonar_config.parallel_config.rank == 0:
+            self.lookup_server = LookupKeyServer(self, sonar_config)
 
-        kv_event_config = aphrodite_config.kv_events_config
+        kv_event_config = sonar_config.kv_events_config
         self.enable_kv_events = False
         if kv_event_config and kv_event_config.enable_kv_cache_events:
             self.enable_kv_events = True
@@ -1490,7 +1490,7 @@ class MooncakeStoreWorker:
         self.kv_send_thread: KVCacheStoreSendingThread | None = None
         # Pool of load-receive threads
         self.kv_recv_threads: list[KVCacheStoreRecvingThread] = []
-        self.num_recv_threads = max(1, envs.APHRODITE_MOONCAKE_LOAD_RECV_THREADS)
+        self.num_recv_threads = max(1, envs.SONAR_MOONCAKE_LOAD_RECV_THREADS)
         self.recv_request_queue: queue.Queue[ReqMeta] = queue.Queue()
         # Device KV regions (addr -> len) registered with the store.
         self._device_regions: dict[int, int] = {}
@@ -1518,7 +1518,7 @@ class MooncakeStoreWorker:
         ):
             kv_cache_config.prefix_cache_retention_interval = self.block_size
         self.coord = MooncakeStoreCoordinator.from_kv_cache_config(
-            kv_cache_config, aphrodite_config, self.block_size, self.hash_block_size
+            kv_cache_config, sonar_config, self.block_size, self.hash_block_size
         )
         self._kv_cache_groups = self.coord.kv_cache_groups
         self._group_tp_replication_factors = self._compute_group_tp_replication_factors()
@@ -1529,7 +1529,7 @@ class MooncakeStoreWorker:
             pcp_rank=self.pcp_rank,
             dcp_rank=self.dcp_rank,
             pp_rank=self.pp_rank,
-            cache_prefix=str(aphrodite_config.kv_transfer_config.kv_connector_extra_config.get("cache_prefix", "")),
+            cache_prefix=str(sonar_config.kv_transfer_config.kv_connector_extra_config.get("cache_prefix", "")),
             store_namespace=store_namespace,
         )
         self.token_dbs = self._build_token_databases(metadata, store_group_plans)
@@ -2387,10 +2387,10 @@ class LookupKeyServer:
     def __init__(
         self,
         store_worker: MooncakeStoreWorker,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
     ):
         self.ctx = zmq.Context()  # type: ignore[attr-defined]
-        socket_path = get_zmq_rpc_path_lookup(aphrodite_config)
+        socket_path = get_zmq_rpc_path_lookup(sonar_config)
         self._ipc_path = socket_path.removeprefix("ipc://")
         if os.path.exists(self._ipc_path):
             os.unlink(self._ipc_path)
@@ -2461,9 +2461,9 @@ class LookupKeyClient:
     of every request is a named tag from ``protocol.py``.
     """
 
-    def __init__(self, aphrodite_config: AphroditeConfig):
+    def __init__(self, sonar_config: SonarConfig):
         self.ctx = zmq.Context()  # type: ignore[attr-defined]
-        socket_path = get_zmq_rpc_path_lookup(aphrodite_config)
+        socket_path = get_zmq_rpc_path_lookup(sonar_config)
         self.socket = make_zmq_socket(
             self.ctx,
             socket_path,
@@ -2536,14 +2536,14 @@ class LookupKeyClient:
         self.socket.close(linger=0)
 
 
-def get_zmq_rpc_path_lookup(aphrodite_config: AphroditeConfig) -> str:
+def get_zmq_rpc_path_lookup(sonar_config: SonarConfig) -> str:
     """Construct IPC path for ZMQ lookup socket."""
-    assert aphrodite_config.kv_transfer_config is not None
-    dp_rank = aphrodite_config.parallel_config.data_parallel_index
-    base_url = envs.APHRODITE_RPC_BASE_PATH
+    assert sonar_config.kv_transfer_config is not None
+    dp_rank = sonar_config.parallel_config.data_parallel_index
+    base_url = envs.SONAR_RPC_BASE_PATH
     rpc_port = 0
     hostname = socket.gethostname()
-    extra_config = aphrodite_config.kv_transfer_config.kv_connector_extra_config
+    extra_config = sonar_config.kv_transfer_config.kv_connector_extra_config
     if "lookup_rpc_port" in extra_config:
         rpc_port = extra_config["lookup_rpc_port"]
     logger.debug("Base URL: %s, RPC Port: %s", base_url, rpc_port)

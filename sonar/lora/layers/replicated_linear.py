@@ -6,9 +6,9 @@ import torch
 import torch.nn as nn
 from transformers import PreTrainedConfig
 
-from aphrodite.config.lora import LoRAConfig
-from aphrodite.model_executor.custom_op import maybe_get_oot_by_class
-from aphrodite.model_executor.layers.linear import ReplicatedLinear
+from sonar.config.lora import LoRAConfig
+from sonar.model_executor.custom_op import maybe_get_oot_by_class
+from sonar.model_executor.layers.linear import ReplicatedLinear
 
 from .base_linear import BaseLinearLayerWithLoRA
 

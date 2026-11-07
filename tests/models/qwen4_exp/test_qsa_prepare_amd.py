@@ -5,20 +5,20 @@
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.layernorm import GemmaRMSNorm
-from aphrodite.models.qwen4_exp.amd.ops.qsa import (
+from sonar.model_executor.layers.layernorm import GemmaRMSNorm
+from sonar.models.qwen4_exp.amd.ops.qsa import (
     qsa_compress_groups_with_ratio,
     qsa_store_cache_rows,
 )
-from aphrodite.models.qwen4_exp.amd.ops.qsa_prepare import qsa_prepare
-from aphrodite.models.qwen4_exp.amd.qsa_indexer import apply_qsa_rope
-from aphrodite.models.qwen4_exp.common.qsa_indexer import (
+from sonar.models.qwen4_exp.amd.ops.qsa_prepare import qsa_prepare
+from sonar.models.qwen4_exp.amd.qsa_indexer import apply_qsa_rope
+from sonar.models.qwen4_exp.common.qsa_indexer import (
     canonical_qsa_rope_positions,
     circular_qsa_slot_mapping,
     compressed_qsa_slot_mapping,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import HAS_TRITON
+from sonar.platforms import current_platform
+from sonar.triton_utils import HAS_TRITON
 
 requires_qsa_kernels = pytest.mark.skipif(
     not current_platform.is_rocm() or not HAS_TRITON,
@@ -74,7 +74,7 @@ def assert_fp8_within_one_ulp(actual: torch.Tensor, expected: torch.Tensor) -> N
 
 
 def _make_main_inputs(num_tokens: int, main_fp8: bool = False) -> dict:
-    """Random main-attention arguments with a paged cache in Aphrodite's layout."""
+    """Random main-attention arguments with a paged cache in Sonar's layout."""
     num_blocks = num_tokens // MAIN_PAGE + 2
     # FP8 configs store e4m3 codes in the platform's native flavor
     # (FNUZ on MI300/MI325, OCP elsewhere), matching the production views.
@@ -110,7 +110,7 @@ def _make_main_inputs(num_tokens: int, main_fp8: bool = False) -> dict:
 
 def _check_main_outputs(main: dict, q_out, gate_out, rope, positions) -> None:
     """Compare with the AMD layer's unfused split, QK-norm, RoPE and cache write."""
-    from aphrodite._custom_ops import reshape_and_cache_flash
+    from sonar._custom_ops import reshape_and_cache_flash
 
     num_tokens = main["main_qkv"].shape[0]
     q_gate, k, v = main["main_qkv"].split([2 * MAIN_HQ * MAIN_D, MAIN_HK * MAIN_D, MAIN_HK * MAIN_D], dim=-1)
@@ -204,7 +204,7 @@ def _check_main_outputs(main: dict, q_out, gate_out, rope, positions) -> None:
 
 
 @requires_qsa_kernels
-@pytest.mark.usefixtures("default_aphrodite_config")
+@pytest.mark.usefixtures("default_sonar_config")
 @pytest.mark.parametrize("main_fp8", [False, True])
 @pytest.mark.parametrize("indexer_dtype", [torch.bfloat16, pytest.param(None, id="fp8_platform")])
 @pytest.mark.parametrize(
@@ -238,7 +238,7 @@ def test_qsa_fused_prepare_matches_unfused(
     query_lens,
     history_lens,
 ) -> None:
-    from aphrodite.model_executor.layers.rotary_embedding import get_rope
+    from sonar.model_executor.layers.rotary_embedding import get_rope
 
     if indexer_dtype is None:
         indexer_dtype = current_platform.fp8_dtype()
@@ -329,7 +329,7 @@ def test_qsa_fused_prepare_matches_unfused(
     k_work_metadata[: work_requests.numel()] = torch.stack((work_requests, local_work), dim=1)
 
     raw_width = D + 12 if cache_rope_positions else D
-    # Match Aphrodite's padded-page cache layout: rows are contiguous, while physical
+    # Match Sonar's padded-page cache layout: rows are contiguous, while physical
     # blocks have a larger stride than their logical contents.
     raw_page_elements = state_size * raw_width
     fused_raw_storage = torch.zeros(

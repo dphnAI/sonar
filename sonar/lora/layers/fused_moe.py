@@ -6,23 +6,23 @@ import torch.nn as nn
 import torch.nn.functional as F
 from transformers import PreTrainedConfig
 
-from aphrodite import envs
-from aphrodite.config.lora import LoRAConfig
-from aphrodite.distributed.utils import divide
-from aphrodite.lora.layers.base import BaseLayerWithLoRA
-from aphrodite.model_executor.custom_op import maybe_get_oot_by_class
-from aphrodite.model_executor.layers.fused_moe import MoERunner
-from aphrodite.model_executor.layers.fused_moe.experts.lora_context import MoELoRAContext
-from aphrodite.model_executor.layers.fused_moe.experts.lora_experts_mixin import (
+from sonar import envs
+from sonar.config.lora import LoRAConfig
+from sonar.distributed.utils import divide
+from sonar.lora.layers.base import BaseLayerWithLoRA
+from sonar.model_executor.custom_op import maybe_get_oot_by_class
+from sonar.model_executor.layers.fused_moe import MoERunner
+from sonar.model_executor.layers.fused_moe.experts.lora_context import MoELoRAContext
+from sonar.model_executor.layers.fused_moe.experts.lora_experts_mixin import (
     LoRAExpertsMixin,
 )
-from aphrodite.model_executor.layers.fused_moe.fused_moe_modular_method import (
+from sonar.model_executor.layers.fused_moe.fused_moe_modular_method import (
     FusedMoEModularMethod,
 )
-from aphrodite.model_executor.layers.fused_moe.modular_kernel import (
+from sonar.model_executor.layers.fused_moe.modular_kernel import (
     FusedMoEKernelModularImpl,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 from .utils import _get_lora_aux_cuda_stream, _get_lora_device
 
@@ -47,7 +47,7 @@ class FusedMoEWithLoRA(BaseLayerWithLoRA):
         self.tp_rank = moe_parallel_config.tp_rank
         self.device = _get_lora_device(base_layer)
 
-        self._enable_aux_cuda_stream = envs.APHRODITE_LORA_ENABLE_DUAL_STREAM
+        self._enable_aux_cuda_stream = envs.SONAR_LORA_ENABLE_DUAL_STREAM
         self._init_lora_stream_context()
         # For non-gated MoE (is_act_and_mul=False), only 1 slice is needed
         # since there's only up_proj (w1), not gate_proj + up_proj (w1 + w3)
@@ -143,7 +143,7 @@ class FusedMoEWithLoRA(BaseLayerWithLoRA):
             tp_size=self.tp_size,
             local_num_experts=self.local_num_experts,
             punica_wrapper=self.punica_wrapper,
-            use_tuned_config=bool(envs.APHRODITE_TUNED_CONFIG_FOLDER),
+            use_tuned_config=bool(envs.SONAR_TUNED_CONFIG_FOLDER),
             enable_moe_shared_loras=self.enable_moe_shared_loras,
             aux_stream=self._lora_stream if use_dual_stream else None,
             events=self._events if use_dual_stream else None,

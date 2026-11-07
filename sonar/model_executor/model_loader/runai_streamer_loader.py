@@ -12,19 +12,19 @@ import torch
 from torch import nn
 from transformers.utils import SAFE_WEIGHTS_INDEX_NAME
 
-from aphrodite.config import ModelConfig
-from aphrodite.config.load import LoadConfig
-from aphrodite.distributed import get_pp_group, get_world_group
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.model_loader.base_loader import BaseModelLoader
-from aphrodite.model_executor.model_loader.weight_utils import (
+from sonar.config import ModelConfig
+from sonar.config.load import LoadConfig
+from sonar.distributed import get_pp_group, get_world_group
+from sonar.logger import init_logger
+from sonar.model_executor.model_loader.base_loader import BaseModelLoader
+from sonar.model_executor.model_loader.weight_utils import (
     download_safetensors_index_file_from_hf,
     download_weights_from_hf,
     filter_safetensors_files_by_weight_name,
     runai_safetensors_weights_iterator,
 )
-from aphrodite.transformers_utils.repo_utils import resolve_revision
-from aphrodite.transformers_utils.runai_utils import (
+from sonar.transformers_utils.repo_utils import resolve_revision
+from sonar.transformers_utils.runai_utils import (
     is_runai_obj_uri,
     list_safetensors,
     runai_pull_files,

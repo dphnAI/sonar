@@ -10,23 +10,23 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.config import set_current_aphrodite_config
-from aphrodite.forward_context import set_forward_context
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.layers.fused_moe import RoutedExperts
-from aphrodite.model_executor.layers.quantization.auto_gptq import (
+from sonar.config import set_current_sonar_config
+from sonar.forward_context import set_forward_context
+from sonar.model_executor.layers.attention import Attention
+from sonar.model_executor.layers.fused_moe import RoutedExperts
+from sonar.model_executor.layers.quantization.auto_gptq import (
     AutoGPTQConfig,
     AutoGPTQLinearMethod,
     AutoGPTQMoEMethod,
 )
-from aphrodite.model_executor.layers.quantization.utils.gptq_utils import (
+from sonar.model_executor.layers.quantization.utils.gptq_utils import (
     is_layer_gptq_quantized,
     override_config,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 from tests.quantization.utils import (
     is_quant_method_supported,
-    load_model_without_aphrodite_runner,
+    load_model_without_sonar_runner,
 )
 
 PROMPT = "On the surface of Mars, we found"
@@ -43,8 +43,8 @@ MODELS = [
 @pytest.mark.parametrize("model_id", MODELS)
 def test_auto_gptq_quantization_method(model_id: str, monkeypatch, dist_init, workspace_init):
     """Test that quantization='auto_gptq' loads and runs correctly."""
-    monkeypatch.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
-    model, aphrodite_config = load_model_without_aphrodite_runner(
+    monkeypatch.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")
+    model, sonar_config = load_model_without_sonar_runner(
         model_id,
         dtype=torch.float16,
         quantization="auto_gptq",
@@ -59,8 +59,8 @@ def test_auto_gptq_quantization_method(model_id: str, monkeypatch, dist_init, wo
     input_ids = torch.tensor([1, 2, 3, 4], device=target_device)
     positions = torch.arange(input_ids.numel(), device=target_device)
     with (
-        set_current_aphrodite_config(aphrodite_config),
-        set_forward_context(None, aphrodite_config, num_tokens=input_ids.numel()),
+        set_current_sonar_config(sonar_config),
+        set_forward_context(None, sonar_config, num_tokens=input_ids.numel()),
     ):
         hidden_states = model(input_ids, positions, None)
         logits = model.compute_logits(hidden_states)

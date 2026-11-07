@@ -20,27 +20,27 @@ QDQ fp32 reference, and bit-identical fallbacks for ineligible inputs.
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.quantization.utils.mxfp8_utils import (
+from sonar.model_executor.layers.quantization.utils.mxfp8_utils import (
     _mxfp8_e4m3_quantize_torch,
     _mxfp8_e4m3_quantize_triton,
     dequant_mxfp8_to_bf16,
     mxfp8_e4m3_quantize,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 pytestmark = pytest.mark.skipif(
     not current_platform.is_rocm() or not current_platform.supports_mx(),
     reason="native MX linear requires CDNA4 (gfx95x)",
 )
 
-from aphrodite.model_executor.kernels.linear.mxfp8.Mxfp8LinearKernel import (  # noqa: E402
+from sonar.model_executor.kernels.linear.mxfp8.Mxfp8LinearKernel import (  # noqa: E402
     Mxfp8LinearLayerConfig,
 )
-from aphrodite.model_executor.kernels.linear.mxfp8.rocm_block32_gemm import (  # noqa: E402
+from sonar.model_executor.kernels.linear.mxfp8.rocm_block32_gemm import (  # noqa: E402
     rocm_mxfp8_block32_gemm,
     rocm_mxfp8_block32_gemm_quant,
 )
-from aphrodite.model_executor.kernels.linear.mxfp8.rocm_native import (  # noqa: E402
+from sonar.model_executor.kernels.linear.mxfp8.rocm_native import (  # noqa: E402
     RocmDotScaledMxfp8LinearKernel,
 )
 
@@ -81,8 +81,8 @@ def _make_layer(n: int, k: int, device: str) -> torch.nn.Module:
 )
 def test_rocm_mxfp8_linear_selects_m31_tp4_tiles(n, k, selected, fallback):
     """The gfx950 small-M tuning is shape-scoped and ends after M=16."""
-    from aphrodite.model_executor.kernels.linear.mxfp8 import rocm_native
-    from aphrodite.platforms.rocm import on_gfx950
+    from sonar.model_executor.kernels.linear.mxfp8 import rocm_native
+    from sonar.platforms.rocm import on_gfx950
 
     if not on_gfx950():
         pytest.skip("MiniMax-M3.1 small-M tuning requires gfx950")
@@ -100,7 +100,7 @@ def test_rocm_mxfp8_linear_selects_m31_tp4_tiles(n, k, selected, fallback):
     ],
 )
 def test_rocm_mxfp8_linear_preserves_non_gfx950_tiles(monkeypatch, n, k, fallback):
-    from aphrodite.model_executor.kernels.linear.mxfp8 import rocm_native
+    from sonar.model_executor.kernels.linear.mxfp8 import rocm_native
 
     monkeypatch.setattr(rocm_native, "_ON_GFX950", False)
     for num_tokens in (1, 8, 16, 17):
@@ -117,10 +117,10 @@ def test_rocm_mxfp8_linear_matches_dequant_reference(name, n, k, num_tokens):
     contracts in FP32, so the tolerance covers only kernel/accumulation error,
     not the MXFP8 quantization error both sides share.
     """
-    from aphrodite.model_executor.kernels.linear.mxfp8.Mxfp8LinearKernel import (
+    from sonar.model_executor.kernels.linear.mxfp8.Mxfp8LinearKernel import (
         Mxfp8LinearLayerConfig,
     )
-    from aphrodite.model_executor.kernels.linear.mxfp8.rocm_native import (
+    from sonar.model_executor.kernels.linear.mxfp8.rocm_native import (
         RocmDotScaledMxfp8LinearKernel,
     )
 
@@ -152,10 +152,10 @@ def test_rocm_mxfp8_linear_handles_extreme_magnitudes():
     E8M0 scale; a zero row makes it pick the tiny-clamped one. Both feed
     ``tl.dot_scaled`` directly.
     """
-    from aphrodite.model_executor.kernels.linear.mxfp8.Mxfp8LinearKernel import (
+    from sonar.model_executor.kernels.linear.mxfp8.Mxfp8LinearKernel import (
         Mxfp8LinearLayerConfig,
     )
-    from aphrodite.model_executor.kernels.linear.mxfp8.rocm_native import (
+    from sonar.model_executor.kernels.linear.mxfp8.rocm_native import (
         RocmDotScaledMxfp8LinearKernel,
     )
 
@@ -211,10 +211,10 @@ def test_rocm_mxfp8_linear_block32_matches_dequant_reference(name, n, k, num_tok
 
     The token counts cover the packed, tiled and split-K configurations.
     """
-    from aphrodite.model_executor.kernels.linear.mxfp8.Mxfp8LinearKernel import (
+    from sonar.model_executor.kernels.linear.mxfp8.Mxfp8LinearKernel import (
         Mxfp8LinearLayerConfig,
     )
-    from aphrodite.model_executor.kernels.linear.mxfp8.rocm_native import (
+    from sonar.model_executor.kernels.linear.mxfp8.rocm_native import (
         RocmDotScaledMxfp8LinearKernel,
     )
 
@@ -240,10 +240,10 @@ def test_rocm_mxfp8_linear_block32_matches_dequant_reference(name, n, k, num_tok
 @torch.inference_mode()
 def test_rocm_mxfp8_linear_keeps_per_row_scales():
     """Scales that differ within a 32-row block are not compacted."""
-    from aphrodite.model_executor.kernels.linear.mxfp8.Mxfp8LinearKernel import (
+    from sonar.model_executor.kernels.linear.mxfp8.Mxfp8LinearKernel import (
         Mxfp8LinearLayerConfig,
     )
-    from aphrodite.model_executor.kernels.linear.mxfp8.rocm_native import (
+    from sonar.model_executor.kernels.linear.mxfp8.rocm_native import (
         RocmDotScaledMxfp8LinearKernel,
     )
 
@@ -257,7 +257,7 @@ def test_rocm_mxfp8_linear_keeps_per_row_scales():
 
 def _split_k_case(packed: bool):
     """A 3-way in-launch split-K on shared_down TP4, with K and M tails."""
-    from aphrodite.model_executor.kernels.linear.mxfp8 import rocm_block32_gemm as g
+    from sonar.model_executor.kernels.linear.mxfp8 import rocm_block32_gemm as g
 
     n, k, m = 5120, 576, 19
     layer = _make_block32_layer(n, k, "cuda")
@@ -318,7 +318,7 @@ FUSED_QUANT_CASES = [(n, k, m) for n, k in FUSED_QUANT_SHAPES for m in FUSED_QUA
 
 def _spy_launch(monkeypatch) -> list[bool]:
     """Record, per ``_launch``, whether the activation quant ran in-kernel."""
-    from aphrodite.model_executor.kernels.linear.mxfp8 import rocm_native
+    from sonar.model_executor.kernels.linear.mxfp8 import rocm_native
 
     fused: list[bool] = []
     real_launch = rocm_native._launch
@@ -341,7 +341,7 @@ def _mxfp8_weight(n: int, k: int):
 def test_rocm_mxfp8_fused_act_quant_bitwise_eq_unfused(monkeypatch, n, k, num_tokens):
     """Small-M bf16 GEMMs quantize the activation in-kernel, bit-exact with
     the unfused path: ``mxfp8_e4m3_quantize`` and the ``_select_cfg`` tile."""
-    from aphrodite.model_executor.kernels.linear.mxfp8 import rocm_native
+    from sonar.model_executor.kernels.linear.mxfp8 import rocm_native
 
     torch.manual_seed(num_tokens)
     w, w_scale = _mxfp8_weight(n, k)
@@ -426,7 +426,7 @@ def _stock(x, weight, weight_scale, out_dtype=torch.bfloat16):
 
 
 def _fused_quant_hit(m, n, k) -> bool:
-    from aphrodite.model_executor.kernels.linear.mxfp8 import rocm_block32_gemm as g
+    from sonar.model_executor.kernels.linear.mxfp8 import rocm_block32_gemm as g
 
     return (m, n, k) in g._FUSED_QUANT_HIT_SHAPES
 

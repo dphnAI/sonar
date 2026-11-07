@@ -6,10 +6,10 @@ import pytest
 import torch
 from utils import skip_if_not_cuda_alike, skip_unsupported
 
-from aphrodite.model_executor.determinism.batch_invariant import (
+from sonar.model_executor.determinism.batch_invariant import (
     rms_norm_batch_invariant,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 DEVICE_TYPE = current_platform.device_type
 
@@ -32,7 +32,7 @@ def _rms_norm_reference(
 @pytest.mark.parametrize("eps", [1e-6, 1e-5])
 @pytest.mark.parametrize("seed", list(range(4)))
 def test_rms_norm_batch_invariant_vs_reference(
-    default_aphrodite_config,
+    default_sonar_config,
     batch_size: int,
     hidden_size: int,
     dtype: torch.dtype,
@@ -107,7 +107,7 @@ def test_fused_add_rms_norm_batch_invariant_residual_path(
     )
 
     def fused_add_rms_norm(x, residual, w, e) -> tuple[torch.Tensor, torch.Tensor]:
-        import aphrodite._custom_ops as ops
+        import sonar._custom_ops as ops
 
         ops.fused_add_rms_norm(x, residual, w, e)
         return x, residual
@@ -188,10 +188,10 @@ def _assert_rows_bit_identical(small, large, msg):
 @pytest.mark.parametrize("seed", list(range(4)))
 def test_rms_norm_batch_invariant_nonresidual_kernel(hidden_size: int, dtype: torch.dtype, seed: int):
     """C++ ``rms_norm`` (no residual) must be batch invariant across the block
-    threshold. Reached in compiled mode with ``ir_op_priority.rms_norm=["aphrodite_c"]``
+    threshold. Reached in compiled mode with ``ir_op_priority.rms_norm=["sonar_c"]``
     (default priority is ``native``/inductor codegen when compiling).
     """
-    import aphrodite._custom_ops as ops
+    import sonar._custom_ops as ops
 
     device = torch.device(DEVICE_TYPE)
     torch.manual_seed(seed)
@@ -257,7 +257,7 @@ def test_rms_norm_static_fp8_quant_batch_invariant(hidden_size: int, dtype: torc
 def test_rms_norm_per_block_quant_batch_invariant(hidden_size: int, dtype: torch.dtype, seed: int):
     """C++ ``rms_norm_per_block_quant`` must be batch invariant across the
     block threshold (compiled fp8 block-quant path; block pinned to 512)."""
-    import aphrodite._custom_ops as ops
+    import sonar._custom_ops as ops
 
     device = torch.device(DEVICE_TYPE)
     torch.manual_seed(seed)
@@ -288,7 +288,7 @@ def test_rms_norm_per_block_quant_batch_invariant(hidden_size: int, dtype: torch
 @pytest.mark.parametrize("batch_size", [1, 16, 128])
 @pytest.mark.parametrize("seq_len", [1, 32, 512])
 @pytest.mark.parametrize("hidden_size", [2048, 4096])
-def test_rms_norm_3d_input(default_aphrodite_config, batch_size: int, seq_len: int, hidden_size: int):
+def test_rms_norm_3d_input(default_sonar_config, batch_size: int, seq_len: int, hidden_size: int):
     """Test RMS norm with 3D input tensors (batch, seq_len, hidden_size).
 
     Ensures that the batch-invariant RMS norm correctly handles multi-dimensional
@@ -321,7 +321,7 @@ def test_rms_norm_3d_input(default_aphrodite_config, batch_size: int, seq_len: i
 
 
 @skip_if_not_cuda_alike
-def test_rms_norm_numerical_stability(default_aphrodite_config):
+def test_rms_norm_numerical_stability(default_sonar_config):
     """Test RMS norm numerical stability with extreme values.
 
     Ensures that both implementations handle edge cases like very small or large
@@ -369,7 +369,7 @@ def test_rms_norm_numerical_stability(default_aphrodite_config):
 
 
 @skip_unsupported
-def test_rms_norm_formula(default_aphrodite_config):
+def test_rms_norm_formula(default_sonar_config):
     """Test that RMS norm follows the correct mathematical formula.
 
     Verifies: output = input / sqrt(mean(input^2) + eps) * weight
@@ -402,7 +402,7 @@ def test_rms_norm_formula(default_aphrodite_config):
 
 @skip_if_not_cuda_alike
 @pytest.mark.parametrize("hidden_size", [128, 1024, 4096, 16384])
-def test_rms_norm_different_hidden_sizes(default_aphrodite_config, hidden_size: int):
+def test_rms_norm_different_hidden_sizes(default_sonar_config, hidden_size: int):
     """Test RMS norm with various hidden sizes to ensure block size handling.
 
     The Triton kernel uses a fixed BLOCK_SIZE=1024, so this tests that it
@@ -435,7 +435,7 @@ def test_rms_norm_different_hidden_sizes(default_aphrodite_config, hidden_size: 
 
 
 @skip_unsupported
-def test_rms_norm_determinism(default_aphrodite_config):
+def test_rms_norm_determinism(default_sonar_config):
     """Test that batch-invariant RMS norm produces deterministic results.
 
     Runs the same input through the kernel multiple times and verifies

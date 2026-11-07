@@ -4,18 +4,18 @@
 import numpy as np
 import pytest
 
-from aphrodite.config.compilation import CompilationConfig, CUDAGraphMode
-from aphrodite.models.inkling.common.mm_preprocess import InklingMultiModalDataParser
-from aphrodite.models.inkling.common.towers import plan_out_scales
-from aphrodite.models.inkling.configs import (
+from sonar.config.compilation import CompilationConfig, CUDAGraphMode
+from sonar.models.inkling.common.mm_preprocess import InklingMultiModalDataParser
+from sonar.models.inkling.common.towers import plan_out_scales
+from sonar.models.inkling.configs import (
     InklingAudioConfig,
     InklingModelConfig,
     InklingVisionConfig,
 )
-from aphrodite.models.inkling.nvidia.sconv_swa_attn import (
+from sonar.models.inkling.nvidia.sconv_swa_attn import (
     InklingSconvMetadataBuilder,
 )
-from aphrodite.v1.attention.backend import AttentionCGSupport
+from sonar.v1.attention.backend import AttentionCGSupport
 
 
 def test_vision_scale_plan_matches_released_config():

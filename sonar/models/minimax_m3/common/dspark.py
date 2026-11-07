@@ -13,34 +13,34 @@ from collections.abc import Iterable
 import torch
 from torch import nn
 
-from aphrodite import _custom_ops as ops
-from aphrodite.config import AphroditeConfig, CacheConfig
-from aphrodite.model_executor.layers.activation import SiluAndMulWithClamp
-from aphrodite.model_executor.layers.attention.attention import get_attention_context
-from aphrodite.model_executor.layers.fusion.quant_activation import get_input_quant_key
-from aphrodite.model_executor.layers.linear import (
+from sonar import _custom_ops as ops
+from sonar.config import CacheConfig, SonarConfig
+from sonar.model_executor.layers.activation import SiluAndMulWithClamp
+from sonar.model_executor.layers.attention.attention import get_attention_context
+from sonar.model_executor.layers.fusion.quant_activation import get_input_quant_key
+from sonar.model_executor.layers.linear import (
     MergedColumnParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import kMxfp8Dynamic
-from aphrodite.model_executor.models.qwen3_dflash import (
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.quantization.utils.quant_utils import kMxfp8Dynamic
+from sonar.model_executor.models.qwen3_dflash import (
     DFlashQwen3Attention,
     DFlashQwen3DecoderLayer,
     _resolve_layer_attention,
 )
-from aphrodite.model_executor.models.qwen3_dspark import (
+from sonar.model_executor.models.qwen3_dspark import (
     Qwen3DSparkForCausalLM,
     Qwen3DSparkModel,
 )
-from aphrodite.model_executor.models.utils import WeightsMapper
-from aphrodite.models.minimax_m3.common.ops.dspark_context_kv import (
+from sonar.model_executor.models.utils import WeightsMapper
+from sonar.models.minimax_m3.common.ops.dspark_context_kv import (
     DSparkContextKVWriter,
     rotary_dims_supported,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.transformers_utils.configs.minimax_m3 import MiniMaxM3TextConfig
-from aphrodite.utils.torch_utils import (
+from sonar.platforms import current_platform
+from sonar.transformers_utils.configs.minimax_m3 import MiniMaxM3TextConfig
+from sonar.utils.torch_utils import (
     LayerNameType,
     _encode_layer_name,
     _resolve_layer_name,
@@ -66,14 +66,14 @@ def _shared_slot_mapping(
 def _gemma_rms_norm(hidden_size: int, eps: float) -> nn.Module:
     """The target's Gemma RMSNorm (fused FlashInfer kernels on CUDA).
 
-    Aphrodite's GemmaRMSNorm hands the IR op an fp32 ``1 + w`` weight, which the
-    aphrodite_c kernel rejects for bf16 inputs, so every call ran the unfused native
+    Sonar's GemmaRMSNorm hands the IR op an fp32 ``1 + w`` weight, which the
+    sonar_c kernel rejects for bf16 inputs, so every call ran the unfused native
     path (about ten kernels).
     """
     if current_platform.is_rocm():
-        from aphrodite.models.minimax_m3.amd.model import MiniMAXGemmaRMSNorm
+        from sonar.models.minimax_m3.amd.model import MiniMAXGemmaRMSNorm
     else:
-        from aphrodite.models.minimax_m3.nvidia.model import MiniMAXGemmaRMSNorm
+        from sonar.models.minimax_m3.nvidia.model import MiniMAXGemmaRMSNorm
     return MiniMAXGemmaRMSNorm(hidden_size, eps=eps)
 
 
@@ -205,7 +205,7 @@ class MiniMaxM3DSparkAttention(DFlashQwen3Attention):
             else None
         )
         # Also stores the draft tokens' k/v, so the attention layer gets q alone.
-        torch.ops.aphrodite.minimax_m3_dspark_qknorm_rope_kv_insert(
+        torch.ops.sonar.minimax_m3_dspark_qknorm_rope_kv_insert(
             qkv,
             self.q_norm.weight,
             self.k_norm.weight,
@@ -270,7 +270,7 @@ class MiniMaxM3DSparkMLP(nn.Module):
 class MiniMaxM3DSparkDecoderLayer(DFlashQwen3DecoderLayer):
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         *,
         config: MiniMaxM3TextConfig,
         layer_idx: int,
@@ -308,11 +308,11 @@ class MiniMaxM3DSparkModel(Qwen3DSparkModel):
     def __init__(
         self,
         *,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         start_layer_id: int = 0,
         prefix: str = "",
     ) -> None:
-        super().__init__(aphrodite_config=aphrodite_config, start_layer_id=start_layer_id, prefix=prefix)
+        super().__init__(sonar_config=sonar_config, start_layer_id=start_layer_id, prefix=prefix)
         hidden_size, eps = self.config.hidden_size, self.config.rms_norm_eps
         self.hidden_norm = _gemma_rms_norm(hidden_size, eps=eps)
         self.norm = _gemma_rms_norm(hidden_size, eps=eps)

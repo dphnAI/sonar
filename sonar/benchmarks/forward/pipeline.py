@@ -12,15 +12,15 @@ import numpy as np
 import torch
 import torch.distributed as dist
 
-from aphrodite.benchmarks.forward.capture import ForwardBench, _compare, write_input_ids
-from aphrodite.distributed.parallel_state import (
+from sonar.benchmarks.forward.capture import ForwardBench, _compare, write_input_ids
+from sonar.distributed.parallel_state import (
     get_pp_group,
     get_tp_group,
     get_world_group,
     graph_capture,
 )
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.v1.executor.uniproc_executor import ExecutorWithExternalLauncher
+from sonar.sequence import IntermediateTensors
+from sonar.v1.executor.uniproc_executor import ExecutorWithExternalLauncher
 
 
 class ForwardPipelineExecutor(ExecutorWithExternalLauncher):
@@ -252,7 +252,7 @@ class PipelineBench(ForwardBench):
             torch.cuda.profiler.stop()
             return
         if profile:
-            from aphrodite.benchmarks.forward.profile import summarize
+            from sonar.benchmarks.forward.profile import summarize
 
             assert prof is not None
             trace = f"{self.profile_prefix}.trace.json.gz"

@@ -10,8 +10,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import ClassVar
 
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
-from aphrodite.utils.import_utils import PlaceholderModule
+from sonar.utils.argparse_utils import FlexibleArgumentParser
+from sonar.utils.import_utils import PlaceholderModule
 
 from .param_sweep import ParameterSweep, ParameterSweepItem
 from .server import ServerProcess
@@ -395,7 +395,7 @@ class SweepServeArgs:
     resume: bool
 
     parser_name: ClassVar[str] = "serve"
-    parser_help: ClassVar[str] = "Run Aphrodite server benchmark under multiple settings."
+    parser_help: ClassVar[str] = "Run Sonar server benchmark under multiple settings."
 
     @classmethod
     def from_cli_args(cls, args: argparse.Namespace):
@@ -453,13 +453,13 @@ class SweepServeArgs:
             "--serve-cmd",
             type=str,
             required=True,
-            help="The command used to run the server: `aphrodite serve ...`",
+            help="The command used to run the server: `sonar serve ...`",
         )
         parser.add_argument(
             "--bench-cmd",
             type=str,
             required=True,
-            help="The command used to run the benchmark: `aphrodite bench serve ...`",
+            help="The command used to run the benchmark: `sonar bench serve ...`",
         )
         parser.add_argument(
             "--after-bench-cmd",
@@ -485,7 +485,7 @@ class SweepServeArgs:
             type=str,
             default=None,
             help="Path to JSON file containing parameter combinations "
-            "for the `aphrodite serve` command. Can be either a list of dicts or a dict "
+            "for the `sonar serve` command. Can be either a list of dicts or a dict "
             "where keys are benchmark names. "
             "If both `serve_params` and `bench_params` are given, "
             "this script will iterate over their Cartesian product.",
@@ -505,7 +505,7 @@ class SweepServeArgs:
             type=str,
             default=None,
             help="Path to JSON file containing parameter combinations "
-            "for the `aphrodite bench serve` command. Can be either a list of dicts or "
+            "for the `sonar bench serve` command. Can be either a list of dicts or "
             "a dict where keys are benchmark names. "
             "If both `serve_params` and `bench_params` are given, "
             "this script will iterate over their Cartesian product.",

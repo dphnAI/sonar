@@ -21,7 +21,7 @@ try:
         register_fd,
     )
 
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.hf3fs.hf3fs_client import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.hf3fs.hf3fs_client import (
         Hf3fsClient,
     )
 except Exception:
@@ -73,7 +73,7 @@ class _FakeShm:
 class TestHf3fsClientResourceManagement:
     """Tests for constructor failure cleanup and idempotent close()."""
 
-    _MOD = "aphrodite.distributed.kv_transfer.kv_connector.v1.hf3fs.hf3fs_client"
+    _MOD = "sonar.distributed.kv_transfer.kv_connector.v1.hf3fs.hf3fs_client"
 
     # ------------------------------------------------------------------
     # Helper: build a minimal Hf3fsClient bypassing all real I/O so that

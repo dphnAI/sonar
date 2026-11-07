@@ -11,24 +11,24 @@ import torch
 from starlette.datastructures import UploadFile
 from transformers import AutoProcessor
 
-from aphrodite.config import ModelConfig
-from aphrodite.entrypoints.speech_to_text.transcription.protocol import TranscriptionRequest
-from aphrodite.model_executor.models.ming_audio import (
+from sonar.config import ModelConfig
+from sonar.entrypoints.speech_to_text.transcription.protocol import TranscriptionRequest
+from sonar.model_executor.models.ming_audio import (
     MingAudioProjector,
     get_audio_token_count,
 )
-from aphrodite.model_executor.models.ming_v3_asr import (
+from sonar.model_executor.models.ming_v3_asr import (
     ASR_INSTRUCTION,
     MingASRStreamingPostProcessor,
     MingV3ASRForConditionalGeneration,
 )
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.cache import MultiModalProcessorOnlyCache
-from aphrodite.transformers_utils.configs.ming_v3_asr import MingAudioConfig
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.cache import MultiModalProcessorOnlyCache
+from sonar.transformers_utils.configs.ming_v3_asr import MingAudioConfig
 
 from .test_common import _assert_inputs_equal
 
-MODEL = os.environ.get("APHRODITE_TEST_MING_ASR_MODEL", "inclusionAI/Ming-3.0-asr-tiny")
+MODEL = os.environ.get("SONAR_TEST_MING_ASR_MODEL", "inclusionAI/Ming-3.0-asr-tiny")
 
 
 @pytest.fixture(scope="module")
@@ -62,7 +62,7 @@ def test_transcription_request_matches_native(asr_processors, samples, language,
         file=UploadFile(BytesIO()),
         prompt=prompt,
         language=language,
-        aphrodite_xargs={"audio_chunk_frames": frames},
+        sonar_xargs={"audio_chunk_frames": frames},
     )
     stt_params = request.build_stt_params(
         audio,

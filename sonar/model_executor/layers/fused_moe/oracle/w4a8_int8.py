@@ -5,22 +5,22 @@ from enum import Enum
 
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite.config.kernel import MoEBackend
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe.all2all_utils import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar.config.kernel import MoEBackend
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe.all2all_utils import (
     maybe_make_prepare_finalize,
 )
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEQuantConfig,
     FusedMoEQuantDesc,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     GroupShape,
     QuantKey,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 logger = init_logger(__name__)
 
@@ -46,7 +46,7 @@ def backend_to_kernel_cls(
 ) -> list[type[mk.FusedMoEExperts]]:
     """Map W4A8Int8MoeBackend to kernel class."""
     if backend == W4A8Int8MoeBackend.CPU_INT4:
-        from aphrodite.model_executor.layers.fused_moe.experts.cpu_int4_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.cpu_int4_moe import (
             CPUExpertsInt4,
         )
 

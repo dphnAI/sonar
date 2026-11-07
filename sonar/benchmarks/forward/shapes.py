@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Exact batch shapes for `aphrodite bench forward`."""
+"""Exact batch shapes for `sonar bench forward`."""
 
 import json
 import zlib

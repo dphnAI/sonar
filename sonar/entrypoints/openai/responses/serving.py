@@ -20,27 +20,27 @@ from openai.types.responses import (
 from openai.types.responses.response_output_text import Logprob, LogprobTopLogprob
 from pydantic import TypeAdapter
 
-from aphrodite import envs
-from aphrodite.config.utils import replace
-from aphrodite.engine.protocol import EngineClient
-from aphrodite.entrypoints.generate.base.protocol import (
+from sonar import envs
+from sonar.config.utils import replace
+from sonar.engine.protocol import EngineClient
+from sonar.entrypoints.generate.base.protocol import (
     DeltaMessage,
     RequestResponseMetadata,
 )
-from aphrodite.entrypoints.generate.base.serving import (
+from sonar.entrypoints.generate.base.serving import (
     GenerateBaseServing,
     build_per_request_timing_metrics,
 )
-from aphrodite.entrypoints.mcp.tool_server import ToolServer
-from aphrodite.entrypoints.openai.models.serving import OpenAIServingModels
-from aphrodite.entrypoints.openai.responses.context import (
+from sonar.entrypoints.mcp.tool_server import ToolServer
+from sonar.entrypoints.openai.models.serving import OpenAIServingModels
+from sonar.entrypoints.openai.responses.context import (
     ConversationContext,
     HarmonyContext,
     ParsableContext,
     SimpleContext,
 )
-from aphrodite.entrypoints.openai.responses.harmony import harmony_to_response_output
-from aphrodite.entrypoints.openai.responses.protocol import (
+from sonar.entrypoints.openai.responses.harmony import harmony_to_response_output
+from sonar.entrypoints.openai.responses.protocol import (
     InputTokensDetails,
     OutputTokensDetails,
     ResponseCompletedEvent,
@@ -54,7 +54,7 @@ from aphrodite.entrypoints.openai.responses.protocol import (
     ResponseUsage,
     StreamingResponsesResponse,
 )
-from aphrodite.entrypoints.openai.responses.streaming_events import (
+from sonar.entrypoints.openai.responses.streaming_events import (
     SimpleStreamingEventProcessor,
     StreamingState,
     _StateType,
@@ -63,40 +63,40 @@ from aphrodite.entrypoints.openai.responses.streaming_events import (
     emit_tool_action_events,
     split_delta,
 )
-from aphrodite.entrypoints.openai.responses.utils import (
+from sonar.entrypoints.openai.responses.utils import (
     build_response_output_items,
     extract_function_tool_names,
     extract_tool_types,
     response_item_status,
     reuse_streamed_item_ids,
 )
-from aphrodite.entrypoints.serve.engine.protocol import ErrorResponse
-from aphrodite.entrypoints.serve.utils.api_utils import get_max_tokens
-from aphrodite.entrypoints.serve.utils.request_logger import RequestLogger
-from aphrodite.entrypoints.serve.utils.tool_calls_utils import (
+from sonar.entrypoints.serve.engine.protocol import ErrorResponse
+from sonar.entrypoints.serve.utils.api_utils import get_max_tokens
+from sonar.entrypoints.serve.utils.request_logger import RequestLogger
+from sonar.entrypoints.serve.utils.tool_calls_utils import (
     maybe_filter_parallel_tool_calls,
 )
-from aphrodite.exceptions import AphroditeValidationError, GenerationError
-from aphrodite.inputs import EngineInput
-from aphrodite.logger import init_logger
-from aphrodite.logprobs import Logprob as SampleLogprob
-from aphrodite.logprobs import SampleLogprobs
-from aphrodite.lora.request import LoRARequest
-from aphrodite.outputs import CompletionOutput
-from aphrodite.parser import Parser, ParserManager
-from aphrodite.renderers import TokenizeParams
-from aphrodite.renderers.chat_utils import (
+from sonar.exceptions import GenerationError, SonarValidationError
+from sonar.inputs import EngineInput
+from sonar.logger import init_logger
+from sonar.logprobs import Logprob as SampleLogprob
+from sonar.logprobs import SampleLogprobs
+from sonar.lora.request import LoRARequest
+from sonar.outputs import CompletionOutput
+from sonar.parser import Parser, ParserManager
+from sonar.renderers import TokenizeParams
+from sonar.renderers.chat_utils import (
     ChatTemplateContentFormatOption,
 )
-from aphrodite.renderers.online_renderer import (
+from sonar.renderers.online_renderer import (
     OnlineRenderer,
     ResponsesPreviousMessages,
     ResponsesRenderResult,
 )
-from aphrodite.sampling_params import SamplingParams, StructuredOutputsParams
-from aphrodite.tokenizers import TokenizerLike
-from aphrodite.utils import random_uuid
-from aphrodite.utils.collection_utils import as_list
+from sonar.sampling_params import SamplingParams, StructuredOutputsParams
+from sonar.tokenizers import TokenizerLike
+from sonar.utils import random_uuid
+from sonar.utils.collection_utils import as_list
 
 logger = init_logger(__name__)
 
@@ -155,7 +155,7 @@ class OpenAIServingResponses(GenerateBaseServing):
         mc = self.model_config
         self.override_max_tokens = (
             self.default_sampling_params.get("max_tokens")
-            if mc.generation_config not in ("auto", "aphrodite")
+            if mc.generation_config not in ("auto", "sonar")
             else getattr(mc, "override_generation_config", {}).get("max_new_tokens")
         )
 
@@ -163,11 +163,11 @@ class OpenAIServingResponses(GenerateBaseServing):
         # response is not stored. If True, the response is stored in memory.
         # NOTE(woosuk): This may not be intuitive for users, as the default
         # behavior in OpenAI's Responses API is to store the response, but
-        # Aphrodite's default behavior is not.
-        self.enable_store = envs.APHRODITE_ENABLE_RESPONSES_API_STORE
+        # Sonar's default behavior is not.
+        self.enable_store = envs.SONAR_ENABLE_RESPONSES_API_STORE
         if self.enable_store:
             logger.warning_once(
-                "`APHRODITE_ENABLE_RESPONSES_API_STORE` is enabled. This may "
+                "`SONAR_ENABLE_RESPONSES_API_STORE` is enabled. This may "
                 "cause a memory leak since we never remove responses from "
                 "the store."
             )
@@ -257,11 +257,11 @@ class OpenAIServingResponses(GenerateBaseServing):
             return self.create_error_response(
                 err_type="invalid_request_error",
                 message=(
-                    "This Aphrodite engine does not support `store=True` and "
+                    "This Sonar engine does not support `store=True` and "
                     "therefore does not support the background mode. To "
                     "enable these features, set the environment variable "
-                    "`APHRODITE_ENABLE_RESPONSES_API_STORE=1` when launching "
-                    "the Aphrodite server."
+                    "`SONAR_ENABLE_RESPONSES_API_STORE=1` when launching "
+                    "the Sonar server."
                 ),
                 status_code=HTTPStatus.BAD_REQUEST,
                 param="background",
@@ -428,7 +428,7 @@ class OpenAIServingResponses(GenerateBaseServing):
                     request=request,
                 )
             else:
-                if envs.APHRODITE_USE_EXPERIMENTAL_PARSER_CONTEXT:
+                if envs.SONAR_USE_EXPERIMENTAL_PARSER_CONTEXT:
                     # This is a feature in development for parsing
                     # tokens during generation instead of at the end
                     context = ParsableContext(
@@ -587,7 +587,7 @@ class OpenAIServingResponses(GenerateBaseServing):
             tool_server=self.tool_server,
         )
         if isinstance(render_result, ErrorResponse):
-            raise AphroditeValidationError(render_result.error.message)
+            raise SonarValidationError(render_result.error.message)
         return [render_result.engine_input]
 
     async def _generate_with_builtin_tools(
@@ -1044,7 +1044,7 @@ class OpenAIServingResponses(GenerateBaseServing):
         starting_after: int | None = None,
     ) -> AsyncGenerator[StreamingResponsesResponse, None]:
         if response_id not in self.event_store:
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 f"Unknown response_id: {response_id}",
                 parameter="response_id",
                 value=response_id,

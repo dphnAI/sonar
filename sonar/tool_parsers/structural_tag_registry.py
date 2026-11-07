@@ -34,12 +34,12 @@ from xgrammar.structural_tag import (
     TriggeredTagsFormat,
 )
 
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionNamedToolChoiceParam,
     ChatCompletionToolsParam,
 )
-from aphrodite.tool_parsers.tool_strict_level import ToolStrictLevel
-from aphrodite.tool_parsers.utils import (
+from sonar.tool_parsers.tool_strict_level import ToolStrictLevel
+from sonar.tool_parsers.utils import (
     custom_tool_parameters,
     get_function_tools,
     require_function_tools,
@@ -62,7 +62,7 @@ StructuralTagBuilder: TypeAlias = Callable[
 ]
 
 # Keep this list in sync with xgrammar.builtin_structural_tag. It is used for
-# Aphrodite-side validation and for documenting the xgrammar builtin surface that
+# Sonar-side validation and for documenting the xgrammar builtin surface that
 # can be requested by tool parsers through ``structural_tag_model``.
 XGRAMMAR_BUILTIN_STRUCTURAL_TAG_MODELS = frozenset(
     {
@@ -79,19 +79,19 @@ XGRAMMAR_BUILTIN_STRUCTURAL_TAG_MODELS = frozenset(
         "deepseek_v4_1",
     }
 )
-APHRODITE_BUILTIN_STRUCTURAL_TAG_MODELS = frozenset({"glm_4_7", "hermes", "hy_v4", "kimi_k3", "longcat", "plamo3"})
-SUPPORTED_STRUCTURAL_TAG_MODELS = XGRAMMAR_BUILTIN_STRUCTURAL_TAG_MODELS | APHRODITE_BUILTIN_STRUCTURAL_TAG_MODELS
+SONAR_BUILTIN_STRUCTURAL_TAG_MODELS = frozenset({"glm_4_7", "hermes", "hy_v4", "kimi_k3", "longcat", "plamo3"})
+SUPPORTED_STRUCTURAL_TAG_MODELS = XGRAMMAR_BUILTIN_STRUCTURAL_TAG_MODELS | SONAR_BUILTIN_STRUCTURAL_TAG_MODELS
 
-_APHRODITE_STRUCTURAL_TAG_REGISTRY: dict[str, StructuralTagBuilder] = {}
+_SONAR_STRUCTURAL_TAG_REGISTRY: dict[str, StructuralTagBuilder] = {}
 _BUILTIN_TOOL_STRUCTURAL_TAG_MODELS: set[str] = set()
 
 
-def register_aphrodite_structural_tag(
+def register_sonar_structural_tag(
     model: str,
     *,
     builtin_tools: bool = False,
 ) -> Callable[[StructuralTagBuilder], StructuralTagBuilder]:
-    """Register a Aphrodite-owned structural tag builder.
+    """Register a Sonar-owned structural tag builder.
 
     Args:
         model: Structural tag model key.
@@ -102,7 +102,7 @@ def register_aphrodite_structural_tag(
     """
 
     def decorator(func: StructuralTagBuilder) -> StructuralTagBuilder:
-        _APHRODITE_STRUCTURAL_TAG_REGISTRY[model] = func
+        _SONAR_STRUCTURAL_TAG_REGISTRY[model] = func
         if builtin_tools:
             _BUILTIN_TOOL_STRUCTURAL_TAG_MODELS.add(model)
         return func
@@ -122,7 +122,7 @@ def get_structural_tag_tools(
     missing from the grammar is shown but blocked.
 
     Raises:
-        AphroditeValidationError: ``tool_choice`` requires a call, but the model
+        SonarValidationError: ``tool_choice`` requires a call, but the model
             has no tool it can call.
 
     """
@@ -199,12 +199,12 @@ def get_model_structural_tag(
     dumped_tools = [_dump_tool_for_xgrammar(tool) for tool in tools]
     dumped_tool_choice = _dump_tool_choice_for_xgrammar(tool_choice)
 
-    if model in _APHRODITE_STRUCTURAL_TAG_REGISTRY:
+    if model in _SONAR_STRUCTURAL_TAG_REGISTRY:
         function_tools, builtin_tools, simplified_tool_choice = normalize_tool_choice(
             dumped_tools,
             dumped_tool_choice,
         )
-        return _APHRODITE_STRUCTURAL_TAG_REGISTRY[model](
+        return _SONAR_STRUCTURAL_TAG_REGISTRY[model](
             function_tools,
             builtin_tools,
             simplified_tool_choice,
@@ -380,7 +380,7 @@ def _hermes_style_structural_tag(
     return StructuralTag(format=suffix_tag)
 
 
-@register_aphrodite_structural_tag("hermes")
+@register_sonar_structural_tag("hermes")
 def get_hermes_structural_tag(
     tools: list[FunctionToolParam],
     builtin_tools: list[BuiltinToolParam],
@@ -392,7 +392,7 @@ def get_hermes_structural_tag(
     return _hermes_style_structural_tag(tools, tool_choice, "<tool_call>", "</tool_call>")
 
 
-@register_aphrodite_structural_tag("longcat")
+@register_sonar_structural_tag("longcat")
 def get_longcat_structural_tag(
     tools: list[FunctionToolParam],
     builtin_tools: list[BuiltinToolParam],
@@ -418,7 +418,7 @@ def _minimax_tool_tags(tools: list[FunctionToolParam]) -> list[TagFormat]:
     ]
 
 
-@register_aphrodite_structural_tag("minimax")
+@register_sonar_structural_tag("minimax")
 def get_minimax_structural_tag(
     tools: list[FunctionToolParam],
     builtin_tools: list[BuiltinToolParam],
@@ -494,7 +494,7 @@ _PLAMO3_END_TOOL_ARGUMENTS = "<|plamo:end_tool_arguments:plamo|>"
 _PLAMO3_EOT = "<|plamo:tag|>"
 
 
-@register_aphrodite_structural_tag("plamo3")
+@register_sonar_structural_tag("plamo3")
 def get_plamo3_structural_tag(
     tools: list[FunctionToolParam],
     builtin_tools: list[BuiltinToolParam],
@@ -769,7 +769,7 @@ def _k3_tools_channel(tools: list[FunctionToolParam]) -> TagFormat:
     )
 
 
-@register_aphrodite_structural_tag("kimi_k3")
+@register_sonar_structural_tag("kimi_k3")
 def get_kimi_k3_structural_tag(
     tools: list[FunctionToolParam],
     builtin_tools: list[BuiltinToolParam],
@@ -826,7 +826,7 @@ def _hy_v4_argument_keys(parameters: dict[str, Any]) -> tuple[list[str], list[st
     return required_keys, optional_keys
 
 
-@register_aphrodite_structural_tag("hy_v4")
+@register_sonar_structural_tag("hy_v4")
 def get_hy_v4_structural_tag(
     tools: list[FunctionToolParam],
     builtin_tools: list[BuiltinToolParam],
@@ -1026,7 +1026,7 @@ def _glm_4_7_strict_tool_tag(tool: FunctionToolParam) -> TagFormat:
     )
 
 
-@register_aphrodite_structural_tag("glm_4_7")
+@register_sonar_structural_tag("glm_4_7")
 def get_glm_4_7_structural_tag(
     function_tools: list[FunctionToolParam],
     builtin_tools: list[BuiltinToolParam],

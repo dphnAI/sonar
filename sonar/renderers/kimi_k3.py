@@ -3,17 +3,17 @@
 # SPDX-FileCopyrightText: Copyright contributors to the Aphrodite project
 from typing import Any, cast
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.multimodal.media.connector import merge_media_io_kwargs
-from aphrodite.renderers.chat_utils import (
+from sonar.config import SonarConfig
+from sonar.exceptions import SonarValidationError
+from sonar.multimodal.media.connector import merge_media_io_kwargs
+from sonar.renderers.chat_utils import (
     ChatCompletionMessageParam,
     ConversationMessage,
     parse_chat_messages,
     parse_chat_messages_async,
 )
-from aphrodite.tokenizers.hf import HfTokenizer
-from aphrodite.utils.async_utils import make_async
+from sonar.tokenizers.hf import HfTokenizer
+from sonar.utils.async_utils import make_async
 
 from .base import BaseRenderer
 from .inputs import DictPrompt
@@ -58,7 +58,7 @@ def _apply_k3_thinking_kwargs(kwargs: dict[str, Any]) -> None:
     thinking_effort = kwargs.get("thinking_effort")
     if thinking_effort is not None and thinking_effort not in _K3_THINKING_EFFORTS:
         supported = ", ".join(_K3_THINKING_EFFORTS)
-        raise AphroditeValidationError(
+        raise SonarValidationError(
             f"Kimi K3 supports thinking_effort values: {supported}",
             parameter="thinking_effort",
             value=thinking_effort,
@@ -145,7 +145,7 @@ class KimiK3Renderer(BaseRenderer[HfTokenizer]):
     their special-token ids while user- and tool-supplied text stays ordinary.
     """
 
-    def __init__(self, config: AphroditeConfig, tokenizer: HfTokenizer | None) -> None:
+    def __init__(self, config: SonarConfig, tokenizer: HfTokenizer | None) -> None:
         super().__init__(config, tokenizer)
 
         self._apply_chat_template_async = make_async(self._apply_chat_template, executor=self._executor)

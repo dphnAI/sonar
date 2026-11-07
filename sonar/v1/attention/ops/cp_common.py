@@ -9,14 +9,14 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 
-from aphrodite.distributed.parallel_state import in_the_same_node_as
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
+from sonar.distributed.parallel_state import in_the_same_node_as
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
 
 if TYPE_CHECKING:
     from torch.distributed import ProcessGroup
 
-    from aphrodite.distributed.parallel_state import GroupCoordinator
+    from sonar.distributed.parallel_state import GroupCoordinator
 
 logger = init_logger(__name__)
 

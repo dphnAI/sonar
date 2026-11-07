@@ -17,16 +17,16 @@ from typing import TYPE_CHECKING, Any, ClassVar
 import numpy as np
 import torch
 
-import aphrodite.envs as envs
-from aphrodite import _custom_ops as ops
-from aphrodite.config import AphroditeConfig, get_current_aphrodite_config
-from aphrodite.config.cache import CacheDType
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.platforms.interface import DeviceCapability
-from aphrodite.utils.math_utils import cdiv, round_up
-from aphrodite.utils.torch_utils import np_to_pinned_tensor
-from aphrodite.v1.attention.backend import (
+import sonar.envs as envs
+from sonar import _custom_ops as ops
+from sonar.config import SonarConfig, get_current_sonar_config
+from sonar.config.cache import CacheDType
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.platforms.interface import DeviceCapability
+from sonar.utils.math_utils import cdiv, round_up
+from sonar.utils.torch_utils import np_to_pinned_tensor
+from sonar.v1.attention.backend import (
     AttentionBackend,
     AttentionCGSupport,
     AttentionLayer,
@@ -36,18 +36,18 @@ from aphrodite.v1.attention.backend import (
     MultipleOf,
     SparseMLAAttentionImpl,
 )
-from aphrodite.v1.attention.backends.mla.sparse_utils import (
+from sonar.v1.attention.backends.mla.sparse_utils import (
     align_blocks_to_rows,
     flat_kv_row_view,
     triton_convert_req_index_to_global_index,
     triton_filter_and_convert_dcp_index,
 )
-from aphrodite.v1.attention.backends.utils import split_decodes_and_prefills
-from aphrodite.v1.kv_cache_interface import AttentionSpec, KVCacheLayout
-from aphrodite.v1.worker.workspace import current_workspace_manager
+from sonar.v1.attention.backends.utils import split_decodes_and_prefills
+from sonar.v1.kv_cache_interface import AttentionSpec, KVCacheLayout
+from sonar.v1.worker.workspace import current_workspace_manager
 
 if TYPE_CHECKING:
-    from aphrodite.model_executor.models.deepseek_v2 import Indexer
+    from sonar.model_executor.models.deepseek_v2 import Indexer
 
 logger = init_logger(__name__)
 
@@ -63,7 +63,7 @@ def use_sm89_dsa() -> bool:
         current_platform.is_cuda()
         and current_platform.is_device_capability((8, 9))
         and ops.supports_sm89_dsa()
-        and not envs.APHRODITE_DISABLE_SM89_DSA
+        and not envs.SONAR_DISABLE_SM89_DSA
     )
 
 
@@ -131,17 +131,17 @@ class Sm89MLASparseBackend(AttentionBackend):
         use_mm_prefix: bool,
         device_capability: DeviceCapability,
     ) -> str | None:
-        if envs.APHRODITE_DISABLE_SM89_DSA:
-            return "SM89 MLA Sparse is disabled via APHRODITE_DISABLE_SM89_DSA"
+        if envs.SONAR_DISABLE_SM89_DSA:
+            return "SM89 MLA Sparse is disabled via SONAR_DISABLE_SM89_DSA"
 
         if not ops.supports_sm89_dsa():
             return "sm89 DSA kernels are not compiled into this build"
 
-        from aphrodite.config import get_current_aphrodite_config_or_none
+        from sonar.config import get_current_sonar_config_or_none
 
-        aphrodite_config = get_current_aphrodite_config_or_none()
-        if aphrodite_config is not None and aphrodite_config.model_config is not None:
-            hf_config = aphrodite_config.model_config.hf_config
+        sonar_config = get_current_sonar_config_or_none()
+        if sonar_config is not None and sonar_config.model_config is not None:
+            hf_config = sonar_config.model_config.hf_config
             if not hasattr(hf_config, "index_topk"):
                 return "SM89 MLA Sparse requires model with index_topk"
         return None
@@ -199,32 +199,30 @@ class Sm89MLASparseMetadataBuilder(AttentionMetadataBuilder[Sm89MLASparseMetadat
         self,
         kv_cache_spec: AttentionSpec,
         layer_names: list[str],
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
     ) -> None:
-        self.aphrodite_config = aphrodite_config
+        self.sonar_config = sonar_config
         self.layer_names = layer_names
         self.kv_cache_spec = kv_cache_spec
-        self.model_config = aphrodite_config.model_config
+        self.model_config = sonar_config.model_config
         self.device = device
 
         self._init_reorder_batch_threshold(1, supports_spec_as_decode=True)
 
-        self.topk_tokens = aphrodite_config.model_config.hf_config.index_topk
+        self.topk_tokens = sonar_config.model_config.hf_config.index_topk
         self.req_id_per_token_buffer = torch.empty(
-            (aphrodite_config.scheduler_config.max_num_batched_tokens,),
+            (sonar_config.scheduler_config.max_num_batched_tokens,),
             dtype=torch.int32,
             device=device,
         )
-        parallel_config = aphrodite_config.parallel_config
+        parallel_config = sonar_config.parallel_config
         # Local-prefill eligibility (static part). PCP shards prefill tokens
         # across ranks, breaking the premise that each rank holds the whole
         # prompt's activations; speculative decode changes the decode/prefill
         # split rules, so keep the gate simple and fall back.
         num_speculative_tokens = (
-            aphrodite_config.speculative_config.num_speculative_tokens
-            if aphrodite_config.speculative_config is not None
-            else 0
+            sonar_config.speculative_config.num_speculative_tokens if sonar_config.speculative_config is not None else 0
         )
         self.allow_local_prefill = (
             parallel_config.decode_context_parallel_size > 1
@@ -235,7 +233,7 @@ class Sm89MLASparseMetadataBuilder(AttentionMetadataBuilder[Sm89MLASparseMetadat
             # Identity slot mapping for the local-prefill shadow pool; prefill
             # token i (in batch order) lands in shadow row i.
             self.local_prefill_slot_buffer = torch.arange(
-                aphrodite_config.scheduler_config.max_num_batched_tokens,
+                sonar_config.scheduler_config.max_num_batched_tokens,
                 dtype=torch.int64,
                 device=device,
             )
@@ -253,12 +251,12 @@ class Sm89MLASparseMetadataBuilder(AttentionMetadataBuilder[Sm89MLASparseMetadat
         covers every batch shape. All dummy indices are -1 (invalid), so the
         kernels write only -1 sentinels into throwaway buffers.
         """
-        from aphrodite.distributed import get_dcp_group
-        from aphrodite.v1.worker.cp_utils import get_total_cp_world_size
+        from sonar.distributed import get_dcp_group
+        from sonar.v1.worker.cp_utils import get_total_cp_world_size
 
         try:
             device = self.device
-            parallel_config = self.aphrodite_config.parallel_config
+            parallel_config = self.sonar_config.parallel_config
             block_size = self.kv_cache_spec.block_size
             num_topk = self.topk_tokens
             # Mirror the runner's persistent block-table width, which is part
@@ -394,7 +392,7 @@ class Sm89MLASparseMetadataBuilder(AttentionMetadataBuilder[Sm89MLASparseMetadat
             req_id_per_token=self.req_id_per_token_buffer[:num_tokens],
             block_size=self.kv_cache_spec.block_size,
             topk_tokens=self.topk_tokens,
-            cp_kv_cache_interleave_size=(self.aphrodite_config.parallel_config.cp_kv_cache_interleave_size),
+            cp_kv_cache_interleave_size=(self.sonar_config.parallel_config.cp_kv_cache_interleave_size),
             num_decode_tokens=num_decode_tokens,
             prefill_local=prefill_local,
         )
@@ -448,9 +446,9 @@ class Sm89MLASparseImpl(SparseMLAAttentionImpl[Sm89MLASparseMetadata]):
         # The kernel takes a bf16 query and dequantizes KV internally.
         self.supports_quant_query_input = False
 
-        aphrodite_config = get_current_aphrodite_config()
-        max_tokens = aphrodite_config.scheduler_config.max_num_batched_tokens
-        dcp_world_size = aphrodite_config.parallel_config.decode_context_parallel_size
+        sonar_config = get_current_sonar_config()
+        max_tokens = sonar_config.scheduler_config.max_num_batched_tokens
+        dcp_world_size = sonar_config.parallel_config.decode_context_parallel_size
         self.prefill_local_pool: torch.Tensor | None = None
         self.prefill_local_pool_paged: torch.Tensor | None = None
         if dcp_world_size > 1:

@@ -5,7 +5,7 @@
 # Adapted from
 # https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/core/parallel_state.py
 # Copyright (c) 2022, NVIDIA CORPORATION. All rights reserved.
-"""Aphrodite distributed state.
+"""Sonar distributed state.
 It takes over the control of the distributed environment from PyTorch.
 The typical workflow is:
 
@@ -44,26 +44,26 @@ import torch.distributed._symmetric_memory
 from torch.distributed import Backend, ProcessGroup, Store
 from torch.distributed.constants import default_pg_timeout
 
-import aphrodite.envs as envs
-from aphrodite.distributed.device_communicators.base_device_communicator import (
+import sonar.envs as envs
+from sonar.distributed.device_communicators.base_device_communicator import (
     DeviceCommunicatorBase,
 )
-from aphrodite.distributed.utils import (
+from sonar.distributed.utils import (
     StatelessProcessGroup,
     cpu_all_reduce_,
     create_tcp_store,
     get_cached_tcp_store_client,
 )
-from aphrodite.logger import init_logger
-from aphrodite.utils.import_utils import resolve_obj_by_qualname
-from aphrodite.utils.network_utils import get_distributed_init_method
-from aphrodite.utils.system_utils import suppress_stdout
-from aphrodite.utils.torch_utils import (
+from sonar.logger import init_logger
+from sonar.utils.import_utils import resolve_obj_by_qualname
+from sonar.utils.network_utils import get_distributed_init_method
+from sonar.utils.system_utils import suppress_stdout
+from sonar.utils.torch_utils import (
     direct_register_custom_op,
 )
 
 if TYPE_CHECKING:
-    from aphrodite.distributed.stateless_coordinator import StatelessGroupCoordinator
+    from sonar.distributed.stateless_coordinator import StatelessGroupCoordinator
 
 
 @dataclass
@@ -288,7 +288,7 @@ def _platform_device_type() -> str:
     for the current platform, in the form expected by
     ``torch.distributed.init_process_group(backend=...)``.
     """
-    from aphrodite.platforms import current_platform
+    from sonar.platforms import current_platform
 
     if current_platform.is_cuda_alike():
         return "cuda"
@@ -325,7 +325,7 @@ def _create_subgroups_split_group(
     must enter with the same ``split_ranks`` definition. Each rank receives
     the subgroup it belongs to.
     """
-    from aphrodite.distributed.utils import (
+    from sonar.distributed.utils import (
         get_cpu_distributed_timeout_or_none,
         get_distributed_timeout_or_none,
     )
@@ -462,16 +462,16 @@ class GroupCoordinator:
         self_device_group = None
         self_cpu_group = None
 
-        from aphrodite.distributed.utils import (
+        from sonar.distributed.utils import (
             get_cpu_distributed_timeout_or_none,
             get_distributed_timeout_or_none,
         )
 
         self.cpu_timeout = get_cpu_distributed_timeout_or_none()
 
-        # APHRODITE_DISTRIBUTED_USE_SPLIT_GROUP gates the new ``split_group``
+        # SONAR_DISTRIBUTED_USE_SPLIT_GROUP gates the new ``split_group``
         # codepath. Default (False) preserves the legacy ``new_group`` path.
-        if envs.APHRODITE_DISTRIBUTED_USE_SPLIT_GROUP:
+        if envs.SONAR_DISTRIBUTED_USE_SPLIT_GROUP:
             self_device_group, self_cpu_group = _create_subgroups_split_group(
                 group_ranks, group_name, torch_distributed_backend
             )
@@ -514,7 +514,7 @@ class GroupCoordinator:
         # off); read by the DP allreduce to neutralize dead columns.
         self.dead_dp_ranks: set[int] = set()
 
-        from aphrodite.platforms import current_platform
+        from sonar.platforms import current_platform
 
         if current_platform.is_cuda_alike():
             visible_device_index = current_platform.logical_device_id_to_visible_device_id(self.device_index)
@@ -538,7 +538,7 @@ class GroupCoordinator:
                 use_all2all=use_all2all,
             )
 
-        from aphrodite.distributed.device_communicators.shm_broadcast import MessageQueue
+        from sonar.distributed.device_communicators.shm_broadcast import MessageQueue
 
         self.mq_broadcaster: MessageQueue | None = None
         if use_message_queue_broadcaster and self.world_size > 1:
@@ -569,7 +569,7 @@ class GroupCoordinator:
         This is a collective call: every world rank must invoke it. Used where we
         want to issue ops that can run concurrently with ops on `device_group`.
         """
-        from aphrodite.distributed.utils import get_distributed_timeout_or_none
+        from sonar.distributed.utils import get_distributed_timeout_or_none
 
         device_timeout = get_distributed_timeout_or_none()
         sibling: ProcessGroup | None = None
@@ -586,7 +586,7 @@ class GroupCoordinator:
         return sibling
 
     def create_mq_broadcaster(self, writer_rank=0, external_writer_handle=None, blocking=True):
-        from aphrodite.distributed.device_communicators.shm_broadcast import MessageQueue
+        from sonar.distributed.device_communicators.shm_broadcast import MessageQueue
 
         return MessageQueue.create_from_process_group(
             self.cpu_group,
@@ -598,7 +598,7 @@ class GroupCoordinator:
         )
 
     def create_single_reader_mq_broadcasters(self, reader_rank_in_group=0, blocking=False):
-        from aphrodite.distributed.device_communicators.shm_broadcast import MessageQueue
+        from sonar.distributed.device_communicators.shm_broadcast import MessageQueue
 
         return MessageQueue.create_from_process_group_single_reader(
             self.cpu_group,
@@ -656,10 +656,10 @@ class GroupCoordinator:
         maybe_fi_pcie_ipc_context: AbstractContextManager[Any] = nullcontext()
         maybe_pcie_pull_context: AbstractContextManager[Any] = nullcontext()
         maybe_aiter_ar_context = nullcontext()
-        from aphrodite.distributed.device_communicators.cuda_communicator import (
+        from sonar.distributed.device_communicators.cuda_communicator import (
             CudaCommunicator,
         )
-        from aphrodite.distributed.device_communicators.xpu_communicator import (
+        from sonar.distributed.device_communicators.xpu_communicator import (
             XpuCommunicator,
         )
 
@@ -718,7 +718,7 @@ class GroupCoordinator:
             return input_
 
         if self.use_custom_op_call:
-            return torch.ops.aphrodite.all_reduce(input_, group_name=self.unique_name)
+            return torch.ops.sonar.all_reduce(input_, group_name=self.unique_name)
         else:
             return self._all_reduce_out_place(input_)
 
@@ -735,7 +735,7 @@ class GroupCoordinator:
         assert -input_.dim() <= dim < input_.dim(), f"Invalid dim ({dim}) for input tensor with shape {input_.size()}"
 
         if self.use_custom_op_call:
-            return torch.ops.aphrodite.all_gather(input_, dim, world_size, group_name=self.unique_name)
+            return torch.ops.sonar.all_gather(input_, dim, world_size, group_name=self.unique_name)
         else:
             return self._all_gather_out_place(input_, dim)
 
@@ -762,7 +762,7 @@ class GroupCoordinator:
         assert -input_.dim() <= dim < input_.dim(), f"Invalid dim ({dim}) for input tensor with shape {input_.size()}"
 
         if self.use_custom_op_call:
-            return torch.ops.aphrodite.reduce_scatter(input_, dim, world_size, group_name=self.unique_name)
+            return torch.ops.sonar.reduce_scatter(input_, dim, world_size, group_name=self.unique_name)
         else:
             return self._reduce_scatter_out_place(input_, dim)
 
@@ -1438,7 +1438,7 @@ def _init_stateless_group(
     use_all2all: bool = False,
 ) -> "StatelessGroupCoordinator":
     """Create a StatelessGroupCoordinator with the given parameters."""
-    from aphrodite.distributed.stateless_coordinator import StatelessGroupCoordinator
+    from sonar.distributed.stateless_coordinator import StatelessGroupCoordinator
 
     world = get_world_group()
     return StatelessGroupCoordinator(
@@ -1598,8 +1598,8 @@ def graph_capture(device: torch.device, stream: torch.cuda.Stream | None = None)
     A given ``stream`` is reused instead, so graphs captured on it share the
     caching allocator's free blocks of the graph pool.
     """
-    from aphrodite.device_allocator.alloc_conf import non_expandable_allocations
-    from aphrodite.platforms import current_platform
+    from sonar.device_allocator.alloc_conf import non_expandable_allocations
+    from sonar.platforms import current_platform
 
     tp, pp, dp = get_tp_group(), get_pp_group(), get_dp_group()
     context = GraphCaptureContext(stream or torch.cuda.Stream(device=device))
@@ -1644,7 +1644,7 @@ def _init_process_group_for_split_group(
     """
     if torch.accelerator.is_available() and backend != "gloo":
         init_backend = "cpu:gloo,cuda:nccl"
-        from aphrodite.platforms import current_platform
+        from sonar.platforms import current_platform
 
         visible_device_index = current_platform.logical_device_id_to_visible_device_id(local_rank)
         device_id: torch.device | None = torch.device(f"cuda:{visible_device_index}")
@@ -1673,7 +1673,7 @@ def _validate_default_pg_for_split_group() -> None:
     default_pg = torch.distributed.distributed_c10d._get_default_group()
     assert default_pg.bound_device_id is not None, (
         "External launcher initialized the default process group "
-        "without device_id. Aphrodite requires the default PG to be device-"
+        "without device_id. Sonar requires the default PG to be device-"
         "bound for split_group. Pass device_id=torch.device(f'cuda:"
         "{local_rank}') to torch.distributed.init_process_group()."
     )
@@ -1682,14 +1682,14 @@ def _validate_default_pg_for_split_group() -> None:
     except RuntimeError as e:
         raise RuntimeError(
             "External launcher initialized the default process group "
-            "without a CPU (gloo) backend. Aphrodite requires both CPU and "
+            "without a CPU (gloo) backend. Sonar requires both CPU and "
             "device backends. Pass backend='cpu:gloo,cuda:nccl' to "
             "torch.distributed.init_process_group()."
         ) from e
 
 
 def _init_elastic_ep_world(config, local_rank: int, backend: str, rank: int, world_size: int) -> None:
-    from aphrodite.distributed.stateless_coordinator import StatelessGroupCoordinator
+    from sonar.distributed.stateless_coordinator import StatelessGroupCoordinator
 
     global _WORLD, _NODE_COUNT
     assert _WORLD is None, "world group already initialized"
@@ -1735,9 +1735,9 @@ def init_distributed_environment(
         distributed_init_method,
         backend,
     )
-    from aphrodite.config import get_current_aphrodite_config_or_none
+    from sonar.config import get_current_sonar_config_or_none
 
-    config = get_current_aphrodite_config_or_none()
+    config = get_current_sonar_config_or_none()
     enable_elastic_ep = config is not None and config.parallel_config.enable_elastic_ep
     world_pg_store: Store | None = None
     if (
@@ -1826,7 +1826,7 @@ def init_distributed_environment(
         store = world_pg_store
         if store is None and distributed_init_method.startswith("file://"):
             store = torch.distributed.FileStore(distributed_init_method.removeprefix("file://"), world_size)
-        if envs.APHRODITE_DISTRIBUTED_USE_SPLIT_GROUP:
+        if envs.SONAR_DISTRIBUTED_USE_SPLIT_GROUP:
             # split_group needs local_rank early to compute device_id for
             # the eager init. local_rank is not available in torch
             # ProcessGroup, see https://github.com/pytorch/pytorch/issues/122816
@@ -1859,7 +1859,7 @@ def init_distributed_environment(
                 # must reside on the same node
                 raise RuntimeError("Elastic EP is not yet supported with multi-node TP/PP")
 
-    if envs.APHRODITE_DISTRIBUTED_USE_SPLIT_GROUP and torch.accelerator.is_available():
+    if envs.SONAR_DISTRIBUTED_USE_SPLIT_GROUP and torch.accelerator.is_available():
         _validate_default_pg_for_split_group()
 
     # set the local rank
@@ -1912,9 +1912,9 @@ def _elastic_join_warmup_ctx() -> AbstractContextManager[Any]:
     so a joining worker must too or the warm-up collective has no peers. Both
     sides warm up at commit.
     """
-    from aphrodite.distributed.device_communicators.pynccl import defer_comm_warmup_on_rocm
+    from sonar.distributed.device_communicators.pynccl import defer_comm_warmup_on_rocm
 
-    if envs.APHRODITE_ELASTIC_EP_SCALE_UP_LAUNCH:
+    if envs.SONAR_ELASTIC_EP_SCALE_UP_LAUNCH:
         return defer_comm_warmup_on_rocm()
     return nullcontext()
 
@@ -1979,9 +1979,9 @@ def initialize_model_parallel(
     # Get world size and rank. Ensure some consistencies.
     assert torch.distributed.is_initialized()
 
-    from aphrodite.config import get_current_aphrodite_config
+    from sonar.config import get_current_sonar_config
 
-    config = get_current_aphrodite_config()
+    config = get_current_sonar_config()
     data_parallel_size = config.parallel_config.data_parallel_size
     enable_elastic_ep = config.parallel_config.enable_elastic_ep
     parallel_config = config.parallel_config
@@ -2383,10 +2383,10 @@ def cleanup_dist_env_and_memory(shutdown_ray: bool = False):
     # Reset rocm_aiter_ops class variables to match current os.environ.
     # These are class-level attributes that persist across tests and are
     # NOT restored by monkeypatch (which only restores os.environ).
-    from aphrodite.platforms import current_platform
+    from sonar.platforms import current_platform
 
     if current_platform.is_rocm():
-        from aphrodite._aiter_ops import rocm_aiter_ops
+        from sonar._aiter_ops import rocm_aiter_ops
 
         rocm_aiter_ops.refresh_env_variables()
 
@@ -2400,7 +2400,7 @@ def cleanup_dist_env_and_memory(shutdown_ray: bool = False):
 
         ray.shutdown()
     gc.collect()
-    from aphrodite.platforms import current_platform
+    from sonar.platforms import current_platform
 
     if current_platform.is_metal():
         import mlx.core as mx
@@ -2409,10 +2409,10 @@ def cleanup_dist_env_and_memory(shutdown_ray: bool = False):
         if torch.backends.mps.is_available():
             torch.mps.empty_cache()
     elif not current_platform.is_cpu():
-        from aphrodite.triton_utils import HAS_TRITON
+        from sonar.triton_utils import HAS_TRITON
 
         if HAS_TRITON:
-            from aphrodite.v1.sample.ops.topk_topp_triton import reset_buffer_cache
+            from sonar.v1.sample.ops.topk_topp_triton import reset_buffer_cache
 
             reset_buffer_cache()
         torch.accelerator.empty_cache()

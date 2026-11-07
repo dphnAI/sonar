@@ -9,18 +9,18 @@ import torch
 import torch.distributed as dist
 import torch.nn.functional as F
 
-from aphrodite.distributed import get_tp_group
-from aphrodite.model_executor.layers.fused_moe.config import FusedMoEConfig
-from aphrodite.model_executor.layers.fused_moe.experts.trtllm_mxfp4_moe import (
+from sonar.distributed import get_tp_group
+from sonar.model_executor.layers.fused_moe.config import FusedMoEConfig
+from sonar.model_executor.layers.fused_moe.experts.trtllm_mxfp4_moe import (
     TrtLlmMxfp4ExpertsMonolithic,
 )
-from aphrodite.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
-from aphrodite.model_executor.layers.fused_moe.runner.moe_runner import MoERunner
-from aphrodite.model_executor.layers.linear import UnquantizedLinearMethod
-from aphrodite.model_executor.warmup.cutedsl_warmup import cutedsl_warmup
-from aphrodite.models.kimi_k3.nvidia import latent_moe_runner
-from aphrodite.models.kimi_k3.nvidia.ops.latent_moe_tail import KimiK3LatentMoETailOp
-from aphrodite.platforms import current_platform
+from sonar.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
+from sonar.model_executor.layers.fused_moe.runner.moe_runner import MoERunner
+from sonar.model_executor.layers.linear import UnquantizedLinearMethod
+from sonar.model_executor.warmup.cutedsl_warmup import cutedsl_warmup
+from sonar.models.kimi_k3.nvidia import latent_moe_runner
+from sonar.models.kimi_k3.nvidia.ops.latent_moe_tail import KimiK3LatentMoETailOp
+from sonar.platforms import current_platform
 from tests.utils import (
     init_test_distributed_environment,
     multi_gpu_test,
@@ -91,7 +91,7 @@ def test_deferred_finalize_enabled_before_moe_kernel_setup(
     )
     monkeypatch.setattr(
         latent_moe_runner,
-        "get_current_aphrodite_config",
+        "get_current_sonar_config",
         lambda: SimpleNamespace(
             parallel_config=SimpleNamespace(use_ubatching=False),
             model_config=SimpleNamespace(enable_sleep_mode=False),

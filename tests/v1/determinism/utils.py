@@ -7,13 +7,13 @@ from typing import NamedTuple
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.transformers_utils.config import get_config
-from aphrodite.transformers_utils.model_arch_config_convertor import (
+from sonar.platforms import current_platform
+from sonar.transformers_utils.config import get_config
+from sonar.transformers_utils.model_arch_config_convertor import (
     ModelArchConfigConvertorBase,
 )
-from aphrodite.triton_utils import HAS_TRITON
-from aphrodite.v1.attention.backends.fa_utils import flash_attn_supports_mla
+from sonar.triton_utils import HAS_TRITON
+from sonar.v1.attention.backends.fa_utils import flash_attn_supports_mla
 
 
 class DeviceConfig(NamedTuple):
@@ -40,10 +40,10 @@ DEVICE_BACKENDS: dict[str, DeviceConfig] = {
 }
 
 DEFAULT_MODEL = "Qwen/Qwen3-1.7B"
-TEST_MODEL = os.getenv("APHRODITE_TEST_MODEL", DEFAULT_MODEL)
+TEST_MODEL = os.getenv("SONAR_TEST_MODEL", DEFAULT_MODEL)
 
 # Override backends for MLA models.
-if os.getenv("APHRODITE_TEST_MODEL"):
+if os.getenv("SONAR_TEST_MODEL"):
     config = get_config(TEST_MODEL, trust_remote_code=False)
     if ModelArchConfigConvertorBase(config, config.get_text_config()).is_deepseek_mla():
         DEVICE_BACKENDS["cuda"] = DeviceConfig(

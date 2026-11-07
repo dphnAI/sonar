@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-from aphrodite.logger import init_logger
-from aphrodite.v1.worker.gpu.model_runner import GPUModelRunner
+from sonar.logger import init_logger
+from sonar.v1.worker.gpu.model_runner import GPUModelRunner
 
 logger = init_logger(__name__)
 

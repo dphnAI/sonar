@@ -4,7 +4,7 @@
 
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 
 @torch.compile(backend=current_platform.simple_compile_backend)

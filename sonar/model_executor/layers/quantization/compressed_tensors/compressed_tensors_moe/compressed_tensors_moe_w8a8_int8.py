@@ -7,30 +7,30 @@ from compressed_tensors.quantization import (
     QuantizationStrategy,
 )
 
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe import (
     FusedMoeWeightScaleSupported,
     RoutedExperts,
     SharedExperts,
 )
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEQuantConfig,
 )
-from aphrodite.model_executor.layers.fused_moe.oracle.int8 import (
+from sonar.model_executor.layers.fused_moe.oracle.int8 import (
     convert_to_int8_moe_kernel_format,
     make_int8_moe_kernel,
     make_int8_moe_quant_config,
     select_int8_moe_backend,
 )
-from aphrodite.model_executor.layers.quantization.compressed_tensors.compressed_tensors_moe import (  # noqa E501
+from sonar.model_executor.layers.quantization.compressed_tensors.compressed_tensors_moe import (  # noqa E501
     CompressedTensorsMoEMethod,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     kInt8DynamicTokenSym,
     kInt8StaticChannelSym,
 )
-from aphrodite.model_executor.utils import replace_parameter, set_weight_attrs
+from sonar.model_executor.utils import replace_parameter, set_weight_attrs
 
 logger = init_logger(__name__)
 
@@ -163,7 +163,7 @@ class CompressedTensorsW8A8Int8MoEMethod(CompressedTensorsMoEMethod):
     def process_weights_after_loading(self, layer: RoutedExperts) -> None:
         # ZenDNN's swiglu_oai_mul reads gate/up interleaved (stride 2), not the
         # half-split layout _load_w13 leaves; reorder before the conversion below.
-        from aphrodite.model_executor.layers.fused_moe.experts.cpu_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.cpu_moe import (
             ZenCPUExpertsInt8,
         )
 

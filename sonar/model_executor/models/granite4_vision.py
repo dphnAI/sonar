@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Aphrodite implementation of Granite 4 Vision.
+"""Sonar implementation of Granite 4 Vision.
 
 Uses GraniteForCausalLM as the language backbone with SigLIP vision encoder
 and deepstack feature injection via WindowQFormer projectors.
@@ -23,39 +23,39 @@ from transformers.models.llava_next.modeling_llava_next import (
     unpad_image,
 )
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, CacheConfig
-from aphrodite.distributed.parallel_state import get_pp_group
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
-from aphrodite.model_executor.models.granite import GraniteForCausalLM, GraniteModel
-from aphrodite.model_executor.models.interfaces import (
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import CacheConfig, SonarConfig
+from sonar.distributed.parallel_state import get_pp_group
+from sonar.logger import init_logger
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
+from sonar.model_executor.models.granite import GraniteForCausalLM, GraniteModel
+from sonar.model_executor.models.interfaces import (
     MultiModalEmbeddings,
     SupportsLoRA,
     SupportsMultiModal,
     SupportsPP,
 )
-from aphrodite.model_executor.models.llava import LlavaDummyInputsBuilder
-from aphrodite.model_executor.models.llava_next import (
+from sonar.model_executor.models.llava import LlavaDummyInputsBuilder
+from sonar.model_executor.models.llava_next import (
     BaseLlavaNextMultiModalProcessor,
     LlavaNextImageEmbeddingInputs,
     LlavaNextImageInputs,
     LlavaNextImagePixelInputs,
     LlavaNextProcessingInfo,
 )
-from aphrodite.model_executor.models.module_mapping import MultiModelKeys
-from aphrodite.model_executor.models.siglip import SiglipVisionModel
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.models.module_mapping import MultiModelKeys
+from sonar.model_executor.models.siglip import SiglipVisionModel
+from sonar.model_executor.models.utils import (
     AutoWeightsLoader,
     PPMissingLayer,
     WeightsMapper,
     maybe_prefix,
 )
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import MultiModalFieldConfig
-from aphrodite.sequence import IntermediateTensors
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import MultiModalFieldConfig
+from sonar.sequence import IntermediateTensors
 
 from .blip2 import Blip2QFormerModel
 
@@ -266,13 +266,13 @@ class Granite4VisionLLMModel(GraniteModel):
 class Granite4VisionLLMForCausalLM(GraniteForCausalLM):
     """GraniteForCausalLM backed by Granite4VisionLLMModel."""
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         nn.Module.__init__(self)
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
         self.config = config
         self.quant_config = quant_config
-        self.model = Granite4VisionLLMModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = Granite4VisionLLMModel(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
         if get_pp_group().is_last_rank:
             self.lm_head = ParallelLMHead(
                 config.vocab_size,
@@ -374,7 +374,7 @@ class Granite4VisionMultiModalProcessor(BaseLlavaNextMultiModalProcessor[Granite
     dummy_inputs=LlavaDummyInputsBuilder,
 )
 class Granite4VisionForConditionalGeneration(nn.Module, SupportsLoRA, SupportsMultiModal, SupportsPP):
-    """Aphrodite implementation of Granite 4 Vision.
+    """Sonar implementation of Granite 4 Vision.
 
     Architecture:
     - SigLIP vision tower -> WindowQFormerDownsampler projectors
@@ -391,7 +391,7 @@ class Granite4VisionForConditionalGeneration(nn.Module, SupportsLoRA, SupportsMu
     - Full merge: --hf-overrides '{"adapter_path": "path/to/lora"}' merges
       LM-only LoRA deltas at load time (W += scaling * B @ A).
     - Native LoRA: --enable-lora --default-mm-loras '{"image": "path/to/lora"}'
-      lets Aphrodite runtime serve LM LoRA per-request.
+      lets Sonar runtime serve LM LoRA per-request.
     Both modes expect a LM-only adapter (no modules_to_save).
     """
 
@@ -402,11 +402,11 @@ class Granite4VisionForConditionalGeneration(nn.Module, SupportsLoRA, SupportsMu
     }
     embedding_modules = {}
 
-    # Weight mapping: HF checkpoint -> Aphrodite parameter names
+    # Weight mapping: HF checkpoint -> Sonar parameter names
     # HF: model.language_model.layers.0...
-    # Aphrodite: language_model.model.layers.0...
+    # Sonar: language_model.model.layers.0...
     # (because GraniteForCausalLM.model = GraniteModel)
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={
             "model.language_model.": "language_model.model.",
             "model.layerwise_projectors.": "layerwise_projectors.",
@@ -430,16 +430,16 @@ class Granite4VisionForConditionalGeneration(nn.Module, SupportsLoRA, SupportsMu
             tower_model="vision_tower",
         )
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
         self.config = config
-        self.aphrodite_config = aphrodite_config
+        self.sonar_config = sonar_config
 
         # ----- Vision tower + projectors (marked as tower) -----
-        with self._mark_tower_model(aphrodite_config, "image"):
+        with self._mark_tower_model(sonar_config, "image"):
             # Do NOT use init_vision_tower_for_llava here — it truncates the
             # encoder to vision_feature_layer depth. Deepstack needs ALL hidden
             # states (deepstack_layer_map uses negative indices into the full
@@ -453,7 +453,7 @@ class Granite4VisionForConditionalGeneration(nn.Module, SupportsLoRA, SupportsMu
 
             self.image_newline = nn.Parameter(torch.empty(config.text_config.hidden_size))
 
-            cache_config = aphrodite_config.cache_config
+            cache_config = sonar_config.cache_config
 
             # Deepstack projectors: one per (vision_layer, llm_layer) pair
             self.layerwise_projectors = nn.ModuleList(
@@ -483,9 +483,9 @@ class Granite4VisionForConditionalGeneration(nn.Module, SupportsLoRA, SupportsMu
             )
 
         # ----- Language model (marked as LM) -----
-        with self._mark_language_model(aphrodite_config):
+        with self._mark_language_model(sonar_config):
             self.language_model = Granite4VisionLLMForCausalLM(
-                aphrodite_config=aphrodite_config.with_hf_config(config.text_config),
+                sonar_config=sonar_config.with_hf_config(config.text_config),
                 prefix=maybe_prefix(prefix, "language_model"),
             )
 
@@ -519,7 +519,7 @@ class Granite4VisionForConditionalGeneration(nn.Module, SupportsLoRA, SupportsMu
         n_spatial = len(config.spatial_target_layers)
         num_ds_levels = n_layerwise + n_spatial
         lm_hidden = config.text_config.hidden_size
-        max_tokens = aphrodite_config.scheduler_config.max_num_batched_tokens
+        max_tokens = sonar_config.scheduler_config.max_num_batched_tokens
         # Allocated on CPU first; moved to GPU in embed_input_ids on first use.
         self._ds_buffers: list[torch.Tensor] = [torch.zeros(max_tokens, lm_hidden) for _ in range(num_ds_levels)]
         self._ds_num_tokens: int = 0  # tokens written in last embed_input_ids call
@@ -841,4 +841,4 @@ class Granite4VisionForConditionalGeneration(nn.Module, SupportsLoRA, SupportsMu
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)

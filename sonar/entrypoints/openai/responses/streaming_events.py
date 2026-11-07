@@ -65,16 +65,16 @@ from openai.types.responses.response_reasoning_item import (
 from openai.types.responses.tool import Tool
 from openai_harmony import Message as HarmonyMessage
 
-from aphrodite.entrypoints.generate.base.protocol import DeltaMessage, DeltaToolCall
-from aphrodite.entrypoints.mcp.tool_server import ToolServer
-from aphrodite.entrypoints.openai.parser.harmony_utils import (
+from sonar.entrypoints.generate.base.protocol import DeltaMessage, DeltaToolCall
+from sonar.entrypoints.mcp.tool_server import ToolServer
+from sonar.entrypoints.openai.parser.harmony_utils import (
     extract_function_from_recipient,
     is_function_recipient,
 )
-from aphrodite.entrypoints.openai.responses.protocol import (
+from sonar.entrypoints.openai.responses.protocol import (
     StreamingResponsesResponse,
 )
-from aphrodite.entrypoints.openai.responses.utils import (
+from sonar.entrypoints.openai.responses.utils import (
     build_responses_tool_call_name_map,
     custom_tool_names,
     decode_custom_tool_input,
@@ -82,10 +82,10 @@ from aphrodite.entrypoints.openai.responses.utils import (
     extend_custom_tool_input_prefix,
     resolve_responses_tool_call_name,
 )
-from aphrodite.outputs import CompletionOutput
-from aphrodite.parser.harmony import Segment
-from aphrodite.renderers.chat_utils import make_tool_call_id
-from aphrodite.utils import random_uuid
+from sonar.outputs import CompletionOutput
+from sonar.parser.harmony import Segment
+from sonar.renderers.chat_utils import make_tool_call_id
+from sonar.utils import random_uuid
 
 TOOL_NAME_TO_MCP_SERVER_LABEL: Final[dict[str, str]] = {
     "python": "code_interpreter",

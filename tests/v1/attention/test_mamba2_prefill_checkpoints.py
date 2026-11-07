@@ -4,16 +4,16 @@
 
 import torch
 
-from aphrodite.v1.attention.backends.mamba2_attn import (
+from sonar.v1.attention.backends.mamba2_attn import (
     Mamba2AttentionMetadataBuilder,
 )
-from aphrodite.v1.attention.backends.mamba_attn import BaseMambaAttentionMetadataBuilder
-from aphrodite.v1.attention.backends.utils import NULL_BLOCK_ID
-from aphrodite.v1.kv_cache_interface import MambaSpec
+from sonar.v1.attention.backends.mamba_attn import BaseMambaAttentionMetadataBuilder
+from sonar.v1.attention.backends.utils import NULL_BLOCK_ID
+from sonar.v1.kv_cache_interface import MambaSpec
 from tests.v1.attention.utils import (
     BatchSpec,
-    create_aphrodite_config,
     create_common_attn_metadata,
+    create_sonar_config,
 )
 
 compute_chunk_metadata = BaseMambaAttentionMetadataBuilder._compute_chunk_metadata
@@ -73,10 +73,10 @@ def _create_mamba2_builder(
     num_prefill_checkpoint_blocks: int = 1,
     prefill_checkpoint_alignment: int | None = 1,
 ) -> Mamba2AttentionMetadataBuilder:
-    aphrodite_config = create_aphrodite_config(model_name="Qwen/Qwen3.5-0.8B", block_size=MAMBA_BLOCK_SIZE)
-    aphrodite_config.cache_config.mamba_cache_mode = mamba_cache_mode
+    sonar_config = create_sonar_config(model_name="Qwen/Qwen3.5-0.8B", block_size=MAMBA_BLOCK_SIZE)
+    sonar_config.cache_config.mamba_cache_mode = mamba_cache_mode
     # get_mamba_chunk_size() reads `mamba_chunk_size` then `chunk_size`.
-    aphrodite_config.model_config.hf_text_config.mamba_chunk_size = CHUNK_SIZE
+    sonar_config.model_config.hf_text_config.mamba_chunk_size = CHUNK_SIZE
     spec = MambaSpec(
         block_size=MAMBA_BLOCK_SIZE,
         shapes=((16, 64),),
@@ -88,11 +88,11 @@ def _create_mamba2_builder(
     builder = Mamba2AttentionMetadataBuilder(
         kv_cache_spec=spec,
         layer_names=["layer.0"],
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         device=DEVICE,
     )
-    aphrodite_config.cache_config.hash_block_size = MAMBA_BLOCK_SIZE
-    aphrodite_config.cache_config.cache_hit_alignment_tokens = MAMBA_BLOCK_SIZE
+    sonar_config.cache_config.hash_block_size = MAMBA_BLOCK_SIZE
+    sonar_config.cache_config.cache_hit_alignment_tokens = MAMBA_BLOCK_SIZE
     return builder
 
 

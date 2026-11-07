@@ -18,26 +18,26 @@ from typing import Any
 
 import torch
 
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     get_fp8_min_max,
 )
-from aphrodite.model_executor.warmup.jit_warmup import (
+from sonar.model_executor.warmup.jit_warmup import (
     WarmupIntRange,
     kernel_launcher,
     zip_inputs,
 )
-from aphrodite.model_executor.warmup.jit_warmup_triton_helper import (
-    AphroditeTritonJitKernel,
+from sonar.model_executor.warmup.jit_warmup_triton_helper import (
     LaunchSpec,
+    SonarTritonJitKernel,
     TritonPointerInputVariant,
     TritonWarmupTensor,
     triton_scalar_specialization_rep,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.transformers_utils.deepseek_v4_utils import get_compress_ratios
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.import_utils import has_cutedsl
-from aphrodite.utils.math_utils import next_power_of_2
+from sonar.platforms import current_platform
+from sonar.transformers_utils.deepseek_v4_utils import get_compress_ratios
+from sonar.triton_utils import tl, triton
+from sonar.utils.import_utils import has_cutedsl
+from sonar.utils.math_utils import next_power_of_2
 
 
 @triton.jit
@@ -226,7 +226,7 @@ def quantize_and_insert_k_cache(
     )
 
 
-class DequantizeAndGatherKCacheKernel(AphroditeTritonJitKernel["DequantizeAndGatherKCacheKernel.CompileKey"]):
+class DequantizeAndGatherKCacheKernel(SonarTritonJitKernel["DequantizeAndGatherKCacheKernel.CompileKey"]):
     NUM_WORKERS = 128
 
     @dataclass(frozen=True)
@@ -369,15 +369,14 @@ class DequantizeAndGatherKCacheKernel(AphroditeTritonJitKernel["DequantizeAndGat
             offset=triton_scalar_specialization_rep(offset),
         )
 
-    def get_warmup_keys(self, aphrodite_config: Any) -> list[CompileKey]:
-        max_model_len = aphrodite_config.model_config.max_model_len
-        block_size = aphrodite_config.cache_config.block_size
+    def get_warmup_keys(self, sonar_config: Any) -> list[CompileKey]:
+        max_model_len = sonar_config.model_config.max_model_len
+        block_size = sonar_config.cache_config.block_size
         if max_model_len <= 0 or block_size <= 0:
             return []
 
         compress_ratios = frozenset(
-            max(1, int(compress_ratio))
-            for compress_ratio in get_compress_ratios(aphrodite_config.model_config.hf_config)
+            max(1, int(compress_ratio)) for compress_ratio in get_compress_ratios(sonar_config.model_config.hf_config)
         )
         return self._trace_dispatch(self.dispatch)(
             zip_inputs(
@@ -501,7 +500,7 @@ def dequantize_and_gather_k_cache(
     """
     if has_cutedsl() and current_platform.has_device_capability(90):
         # lazily import, otherwise some tests fail due to CUDA driver init failure.
-        from aphrodite.models.deepseek_v4.nvidia.ops.dequant_gather_k_cutedsl import (
+        from sonar.models.deepseek_v4.nvidia.ops.dequant_gather_k_cutedsl import (
             _DEQUANT_GATHER_K_CACHE_CUTEDSL_KERNEL,
         )
 
@@ -563,9 +562,7 @@ def compute_global_topk_indices_and_lens(
     return global_topk_indices, topk_lens
 
 
-class ComputeGlobalTopkIndicesAndLensKernel(
-    AphroditeTritonJitKernel["ComputeGlobalTopkIndicesAndLensKernel.CompileKey"]
-):
+class ComputeGlobalTopkIndicesAndLensKernel(SonarTritonJitKernel["ComputeGlobalTopkIndicesAndLensKernel.CompileKey"]):
     TRITON_BLOCK_SIZE = 1024
 
     @dataclass(frozen=True)
@@ -643,14 +640,14 @@ class ComputeGlobalTopkIndicesAndLensKernel(
             block_size=block_size,
         )
 
-    def get_warmup_keys(self, aphrodite_config: Any) -> list[CompileKey]:
-        index_topk = aphrodite_config.model_config.hf_config.index_topk
-        compress_ratios = get_compress_ratios(aphrodite_config.model_config.hf_config)
-        cache_block_size = aphrodite_config.cache_config.block_size
+    def get_warmup_keys(self, sonar_config: Any) -> list[CompileKey]:
+        index_topk = sonar_config.model_config.hf_config.index_topk
+        compress_ratios = get_compress_ratios(sonar_config.model_config.hf_config)
+        cache_block_size = sonar_config.cache_config.block_size
         if index_topk <= 0 or cache_block_size <= 0:
             return []
 
-        max_c128a_topk = ((aphrodite_config.model_config.max_model_len + 127) // 128 + 127) // 128 * 128
+        max_c128a_topk = ((sonar_config.model_config.max_model_len + 127) // 128 + 127) // 128 * 128
         active_c128a_topk_widths = WarmupIntRange(
             128,
             max_c128a_topk + 1,
@@ -661,13 +658,13 @@ class ComputeGlobalTopkIndicesAndLensKernel(
             topk_width=index_topk if 4 in compress_ratios else (),
             block_size=max(1, cache_block_size // 4),
             block_table_block_size=cache_block_size,
-            max_model_len=aphrodite_config.model_config.max_model_len,
+            max_model_len=sonar_config.model_config.max_model_len,
         )
         c128a_keys = trace_dispatch(
             topk_width=active_c128a_topk_widths if 128 in compress_ratios else (),
             block_size=max(1, cache_block_size // 128),
             block_table_block_size=cache_block_size,
-            max_model_len=aphrodite_config.model_config.max_model_len,
+            max_model_len=sonar_config.model_config.max_model_len,
         )
         return list(dict.fromkeys((*c4_keys, *c128a_keys)))
 
@@ -782,18 +779,18 @@ def combine_topk_swa_indices(
     return combined_indices, combined_lens
 
 
-def _hf_config_int(aphrodite_config: Any, name: str, default: int) -> int:
-    model_config = getattr(aphrodite_config, "model_config", None)
+def _hf_config_int(sonar_config: Any, name: str, default: int) -> int:
+    model_config = getattr(sonar_config, "model_config", None)
     hf_config = getattr(model_config, "hf_config", None)
     return int(getattr(hf_config, name, default) or default)
 
 
-def _scheduler_config_int(aphrodite_config: Any, name: str, default: int) -> int:
-    scheduler_config = getattr(aphrodite_config, "scheduler_config", None)
+def _scheduler_config_int(sonar_config: Any, name: str, default: int) -> int:
+    scheduler_config = getattr(sonar_config, "scheduler_config", None)
     return int(getattr(scheduler_config, name, default) or default)
 
 
-class CombineTopkSwaIndicesKernel(AphroditeTritonJitKernel["CombineTopkSwaIndicesKernel.CompileKey"]):
+class CombineTopkSwaIndicesKernel(SonarTritonJitKernel["CombineTopkSwaIndicesKernel.CompileKey"]):
     NUM_WORKERS = 256
 
     @dataclass(frozen=True)
@@ -921,23 +918,23 @@ class CombineTopkSwaIndicesKernel(AphroditeTritonJitKernel["CombineTopkSwaIndice
             input_variant=input_variant,
         )
 
-    def get_warmup_keys(self, aphrodite_config: Any) -> list[CompileKey]:
-        if _scheduler_config_int(aphrodite_config, "max_num_batched_tokens", 0) <= 0:
+    def get_warmup_keys(self, sonar_config: Any) -> list[CompileKey]:
+        if _scheduler_config_int(sonar_config, "max_num_batched_tokens", 0) <= 0:
             return []
 
-        window_size = _hf_config_int(aphrodite_config, "sliding_window", 128)
-        hf_config = aphrodite_config.model_config.hf_config
+        window_size = _hf_config_int(sonar_config, "sliding_window", 128)
+        hf_config = sonar_config.model_config.hf_config
         index_topk = int(getattr(hf_config, "index_topk", 0) or 0)
         compress_ratios = tuple(sorted({max(1, int(ratio)) for ratio in get_compress_ratios(hf_config)}))
-        max_c128a_topk = ((aphrodite_config.model_config.max_model_len + 127) // 128 + 127) // 128 * 128
+        max_c128a_topk = ((sonar_config.model_config.max_model_len + 127) // 128 + 127) // 128 * 128
         active_topk_widths = WarmupIntRange(
             128,
             max_c128a_topk + 1,
             advance=lambda width: (min(width * 2, max_c128a_topk) if width < max_c128a_topk else max_c128a_topk + 1),
         )
         image_width = (
-            _hf_config_int(aphrodite_config, "vision_max_n_token", 0)
-            if _hf_config_int(aphrodite_config, "vision_n_layers", 0) > 0
+            _hf_config_int(sonar_config, "vision_max_n_token", 0)
+            if _hf_config_int(sonar_config, "vision_n_layers", 0) > 0
             else 0
         )
         # Warm both the plain-window variant (batches without image spans)
@@ -1199,7 +1196,7 @@ def _remap_flashinfer_index(values, block_size, block_span):
 
 
 class BuildFlashinferMixedSparseIndicesKernel(
-    AphroditeTritonJitKernel["BuildFlashinferMixedSparseIndicesKernel.CompileKey"]
+    SonarTritonJitKernel["BuildFlashinferMixedSparseIndicesKernel.CompileKey"]
 ):
     @dataclass(frozen=True)
     class CompileKey:
@@ -1487,12 +1484,12 @@ class BuildFlashinferMixedSparseIndicesKernel(
             topk_block_size=next_power_of_2(max(padded_top_k, 1)),
         )
 
-    def get_warmup_keys(self, aphrodite_config: Any) -> list[CompileKey]:
-        hf_config = aphrodite_config.model_config.hf_config
+    def get_warmup_keys(self, sonar_config: Any) -> list[CompileKey]:
+        hf_config = sonar_config.model_config.hf_config
         window_size = int(getattr(hf_config, "sliding_window", 128) or 128)
-        speculative_config = aphrodite_config.speculative_config
+        speculative_config = sonar_config.speculative_config
         if speculative_config is not None and speculative_config.use_dspark():
-            from aphrodite.v1.attention.backends.mla.compressor_utils import (
+            from sonar.v1.attention.backends.mla.compressor_utils import (
                 get_dspark_swa_index_width,
             )
 
@@ -1513,7 +1510,7 @@ class BuildFlashinferMixedSparseIndicesKernel(
         image_widths = (0, max_image_tokens) if max_image_tokens > 0 else 0
         index_topk = int(getattr(hf_config, "index_topk", 0) or 0)
         compress_ratios = tuple(sorted({max(1, int(ratio)) for ratio in get_compress_ratios(hf_config)}))
-        max_c128a_topk = ((aphrodite_config.model_config.max_model_len + 127) // 128 + 127) // 128 * 128
+        max_c128a_topk = ((sonar_config.model_config.max_model_len + 127) // 128 + 127) // 128 * 128
         active_topk_widths = WarmupIntRange(
             128,
             max_c128a_topk + 1,

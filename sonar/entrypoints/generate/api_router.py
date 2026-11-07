@@ -4,52 +4,52 @@ from typing import TYPE_CHECKING, Any
 
 from fastapi import FastAPI
 
-import aphrodite.envs as envs
+import sonar.envs as envs
 
 if TYPE_CHECKING:
     from argparse import Namespace
 
     from starlette.datastructures import State
 
-    from aphrodite.engine.protocol import EngineClient
-    from aphrodite.entrypoints.serve.utils.request_logger import RequestLogger
-    from aphrodite.tasks import SupportedTask
+    from sonar.engine.protocol import EngineClient
+    from sonar.entrypoints.serve.utils.request_logger import RequestLogger
+    from sonar.tasks import SupportedTask
 else:
     RequestLogger = object
 
 
 def register_generate_api_routers(app: FastAPI):
-    from aphrodite.entrypoints.openai.chat_completion.api_router import (
+    from sonar.entrypoints.openai.chat_completion.api_router import (
         attach_router as register_chat_api_router,
     )
 
     register_chat_api_router(app)
 
-    from aphrodite.entrypoints.openai.responses.api_router import (
+    from sonar.entrypoints.openai.responses.api_router import (
         attach_router as register_responses_api_router,
     )
 
     register_responses_api_router(app)
 
-    from aphrodite.entrypoints.openai.completion.api_router import (
+    from sonar.entrypoints.openai.completion.api_router import (
         attach_router as register_completion_api_router,
     )
 
     register_completion_api_router(app)
 
-    from aphrodite.entrypoints.openai.kobold.api_router import (
+    from sonar.entrypoints.openai.kobold.api_router import (
         attach_router as register_kobold_api_router,
     )
 
     register_kobold_api_router(app)
 
-    from aphrodite.entrypoints.anthropic.api_router import (
+    from sonar.entrypoints.anthropic.api_router import (
         attach_router as register_anthropic_api_router,
     )
 
     register_anthropic_api_router(app)
 
-    from aphrodite.entrypoints.cohere.api_router import (
+    from sonar.entrypoints.cohere.api_router import (
         attach_router as register_cohere_api_router,
     )
 
@@ -68,31 +68,31 @@ async def init_generate_state(
     supported_tasks: tuple["SupportedTask", ...],
     default_chat_template_kwargs: dict[str, Any],
 ):
-    from aphrodite.entrypoints.anthropic.serving import AnthropicServingMessages
-    from aphrodite.renderers.chat_utils import load_chat_template
+    from sonar.entrypoints.anthropic.serving import AnthropicServingMessages
+    from sonar.renderers.chat_utils import load_chat_template
 
     # The Cohere serving handler depends on the optional `cohere` SDK for
     # its wire-format protocol models, and is additionally gated on the
-    # `APHRODITE_ENABLE_COHERE_API` env flag (see
-    # `aphrodite.entrypoints.cohere.api_router.attach_router`). Skip the import
+    # `SONAR_ENABLE_COHERE_API` env flag (see
+    # `sonar.entrypoints.cohere.api_router.attach_router`). Skip the import
     # entirely when the endpoint isn't going to be exposed, both because
     # the SDK may not be installed and because the serving object holds
     # nontrivial state (chat handler, warmup) that would otherwise be
     # unused.
-    if envs.APHRODITE_ENABLE_COHERE_API:
+    if envs.SONAR_ENABLE_COHERE_API:
         try:
-            from aphrodite.entrypoints.cohere.serving import CohereServingChatV2
+            from sonar.entrypoints.cohere.serving import CohereServingChatV2
         except ImportError:
             CohereServingChatV2 = None  # type: ignore[assignment,misc]
     else:
         CohereServingChatV2 = None  # type: ignore[assignment,misc]
-    from aphrodite.entrypoints.openai.chat_completion.batch_serving import (
+    from sonar.entrypoints.openai.chat_completion.batch_serving import (
         OpenAIServingChatBatch,
     )
-    from aphrodite.entrypoints.openai.chat_completion.serving import OpenAIServingChat
-    from aphrodite.entrypoints.openai.completion.serving import OpenAIServingCompletion
-    from aphrodite.entrypoints.openai.responses.serving import OpenAIServingResponses
-    from aphrodite.entrypoints.serve.utils.fingerprint import set_default_fingerprint_mode
+    from sonar.entrypoints.openai.chat_completion.serving import OpenAIServingChat
+    from sonar.entrypoints.openai.completion.serving import OpenAIServingCompletion
+    from sonar.entrypoints.openai.responses.serving import OpenAIServingResponses
+    from sonar.entrypoints.serve.utils.fingerprint import set_default_fingerprint_mode
 
     # Applied before any serving class is constructed so that each one picks
     # up the chosen mode on its first cache miss.
@@ -170,7 +170,7 @@ async def init_generate_state(
         if "generate" in supported_tasks
         else None
     )
-    from aphrodite.entrypoints.openai.kobold.serving import OpenAIServingKobold
+    from sonar.entrypoints.openai.kobold.serving import OpenAIServingKobold
 
     state.openai_serving_kobold = (
         OpenAIServingKobold(

@@ -28,20 +28,20 @@ from openai.types.responses.response_reasoning_item import (
 )
 from openai_harmony import Author, Message, Role, TextContent
 
-from aphrodite.entrypoints.openai.parser.harmony_utils import (
+from sonar.entrypoints.openai.parser.harmony_utils import (
     BUILTIN_TOOL_TO_MCP_SERVER_LABEL,
     extract_function_from_recipient,
     flatten_input_text_content,
     get_system_or_developer_message,
     is_function_recipient,
 )
-from aphrodite.entrypoints.openai.responses.protocol import (
+from sonar.entrypoints.openai.responses.protocol import (
     ResponseInputOutputItem,
     ResponsesRequest,
 )
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.logger import init_logger
-from aphrodite.utils import random_uuid
+from sonar.exceptions import SonarValidationError
+from sonar.logger import init_logger
+from sonar.utils import random_uuid
 
 logger = init_logger(__name__)
 
@@ -88,7 +88,7 @@ def _parse_chat_format_message(chat_msg: dict) -> list[Message]:
     """Parse an OpenAI chat-format dict into Harmony messages."""
     role = chat_msg.get("role")
     if role is None:
-        raise AphroditeValidationError(
+        raise SonarValidationError(
             f"Message has no 'role' key: {chat_msg}",
             parameter="input",
         )
@@ -184,7 +184,7 @@ def response_input_to_harmony(
                 call_response = prev_response
                 break
         if call_response is None:
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 f"No call message found for {call_id}",
                 parameter="input",
             )
@@ -208,7 +208,7 @@ def response_input_to_harmony(
         msg = msg.with_recipient(f"functions.{response_msg['name']}")
         msg = msg.with_content_type("json")
     else:
-        raise AphroditeValidationError(
+        raise SonarValidationError(
             f"Unknown input type: {response_msg['type']}",
             parameter="input",
         )
@@ -416,7 +416,7 @@ def _parse_message_no_recipient(
         # See: https://cookbook.openai.com/articles/openai-harmony
         return [_parse_final_message(message, incomplete=incomplete)]
 
-    raise AphroditeValidationError(f"Unknown channel: {message.channel}")
+    raise SonarValidationError(f"Unknown channel: {message.channel}")
 
 
 # ---------------------------------------------------------------------------

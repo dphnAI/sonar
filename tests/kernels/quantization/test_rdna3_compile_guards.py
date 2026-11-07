@@ -28,20 +28,20 @@ import pytest
 import regex as re
 import torch
 
-import aphrodite
-from aphrodite.platforms import current_platform
+import sonar
+from sonar.platforms import current_platform
 
 if not current_platform.is_rocm():
     pytest.skip("RDNA3 compile-guard tests are ROCm-only", allow_module_level=True)
 
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (  # noqa: E402
+from sonar.model_executor.layers.quantization.utils.quant_utils import (  # noqa: E402
     kInt4Static,
     kInt4Static32,
     kInt4Static32Asym,
     kInt4StaticAsym,
     kInt8Static,
 )
-from aphrodite.platforms.rocm import on_gfx1100  # noqa: E402
+from sonar.platforms.rocm import on_gfx1100  # noqa: E402
 
 gfx1100_only = pytest.mark.skipif(
     not on_gfx1100(),
@@ -77,11 +77,11 @@ def _find_repo_root() -> Path | None:
 
 REPO_ROOT = _find_repo_root()
 
-# Directory of the *installed* aphrodite python package. The .py guard checks read
+# Directory of the *installed* sonar python package. The .py guard checks read
 # from here so they verify the code that is actually imported at runtime — this
 # works even on CI images that ship the wheel instead of the python source tree
 # (where only csrc/ + CMakeLists.txt are checked out for building).
-APHRODITE_PKG_DIR: Path | None = Path(aphrodite.__file__).parent if getattr(aphrodite, "__file__", None) else None
+SONAR_PKG_DIR: Path | None = Path(sonar.__file__).parent if getattr(sonar, "__file__", None) else None
 
 needs_source = pytest.mark.skipif(
     REPO_ROOT is None,
@@ -103,18 +103,18 @@ def _read_source_or_skip(*relparts: str) -> str:
 
 
 def _read_pkg_source_or_skip(*relparts: str) -> str:
-    """Read a python source file from the installed aphrodite package.
+    """Read a python source file from the installed sonar package.
 
     Reflects the code actually loaded at runtime, so these guard checks run in
     CI against the wheel — no source checkout required. Only skips for an
     exotic install layout (namespace/zipimport) where __file__ is unavailable.
     """
-    if APHRODITE_PKG_DIR is None:
-        pytest.skip("aphrodite package directory not resolvable (zip/namespace?)")
-    assert APHRODITE_PKG_DIR is not None  # narrow for mypy (skip above is NoReturn)
-    path = APHRODITE_PKG_DIR.joinpath(*relparts)
+    if SONAR_PKG_DIR is None:
+        pytest.skip("sonar package directory not resolvable (zip/namespace?)")
+    assert SONAR_PKG_DIR is not None  # narrow for mypy (skip above is NoReturn)
+    path = SONAR_PKG_DIR.joinpath(*relparts)
     if not path.exists():
-        pytest.skip(f"{path} not present in installed aphrodite package")
+        pytest.skip(f"{path} not present in installed sonar package")
     return path.read_text()
 
 
@@ -130,8 +130,8 @@ def test_op_registered_on_gfx1100(op_name):
     assert hasattr(torch.ops, "_rocm_C"), "_rocm_C module not loaded"
     assert hasattr(torch.ops._rocm_C, op_name), (
         f"_rocm_C.{op_name} not registered — "
-        "check CMakeLists.txt APHRODITE_ROCM_HAS_GFX1100 "
-        "and torch_bindings.cpp #ifdef APHRODITE_ROCM_GFX1100"
+        "check CMakeLists.txt SONAR_ROCM_HAS_GFX1100 "
+        "and torch_bindings.cpp #ifdef SONAR_ROCM_GFX1100"
     )
 
 
@@ -149,7 +149,7 @@ def test_all_ops_present_or_all_absent():
     values = set(present.values())
     assert len(values) == 1, (
         f"Guard inconsistency — some RDNA3 ops registered, others not: "
-        f"{present}. Check torch_bindings.cpp #ifdef APHRODITE_ROCM_GFX1100 block."
+        f"{present}. Check torch_bindings.cpp #ifdef SONAR_ROCM_GFX1100 block."
     )
 
 
@@ -171,14 +171,14 @@ def test_op_absent_on_non_gfx1100(op_name):
     assert not hasattr(torch.ops._rocm_C, op_name), (
         f"_rocm_C.{op_name} is registered on non-gfx1100 hardware — "
         "compile guard is broken: check CMakeLists.txt "
-        "APHRODITE_ROCM_HAS_GFX1100 and torch_bindings.cpp #ifdef"
+        "SONAR_ROCM_HAS_GFX1100 and torch_bindings.cpp #ifdef"
     )
 
 
 @not_gfx1100
 def test_rocm_moe_not_supported_on_non_gfx1100():
     """The RDNA3 MoE experts must not be selectable on non-gfx1100 hardware."""
-    from aphrodite.model_executor.layers.fused_moe.experts.rdna3_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.rdna3_moe import (
         Rdna3WNA16Experts,
     )
 
@@ -190,13 +190,13 @@ def test_rocm_moe_not_supported_on_non_gfx1100():
 @not_gfx1100
 def test_dense_kernel_rejects_on_non_gfx1100():
     """RDNA3W4A16LinearKernel.can_implement must reject on non-gfx1100."""
-    from aphrodite.model_executor.kernels.linear.mixed_precision.MPLinearKernel import (  # noqa: E501
+    from sonar.model_executor.kernels.linear.mixed_precision.MPLinearKernel import (  # noqa: E501
         MPLinearLayerConfig,
     )
-    from aphrodite.model_executor.kernels.linear.mixed_precision.rdna3_w4a16 import (  # noqa: E501
+    from sonar.model_executor.kernels.linear.mixed_precision.rdna3_w4a16 import (  # noqa: E501
         RDNA3W4A16LinearKernel,
     )
-    from aphrodite.scalar_type import scalar_types
+    from sonar.scalar_type import scalar_types
 
     config = MPLinearLayerConfig(
         full_weight_shape=(1024, 256),
@@ -225,7 +225,7 @@ class TestCMakeGuards:
 
     def test_rdna3_cu_files_inside_gfx1100_conditional(self):
         """All RDNA3 .cu files must be listed inside the
-        ``if(APHRODITE_GPU_ARCHES MATCHES "gfx1100")`` block, not unconditionally.
+        ``if(SONAR_GPU_ARCHES MATCHES "gfx1100")`` block, not unconditionally.
         """
         cmake = self._read_cmake()
         for cu_file in RDNA3_CU_FILES:
@@ -234,7 +234,7 @@ class TestCMakeGuards:
             lines = cmake.splitlines()
             in_gfx1100_block = False
             for line in lines:
-                if 'APHRODITE_GPU_ARCHES MATCHES "gfx1100"' in line:
+                if 'SONAR_GPU_ARCHES MATCHES "gfx1100"' in line:
                     in_gfx1100_block = True
                 if in_gfx1100_block and "endif()" in line:
                     in_gfx1100_block = False
@@ -246,19 +246,19 @@ class TestCMakeGuards:
                     )
 
     def test_compile_definition_only_for_gfx1100(self):
-        """APHRODITE_ROCM_GFX1100 compile definition must be conditional."""
+        """SONAR_ROCM_GFX1100 compile definition must be conditional."""
         cmake = self._read_cmake()
         lines = cmake.splitlines()
         in_gfx1100_block = False
         for line in lines:
-            if "APHRODITE_ROCM_HAS_GFX1100)" in line:
+            if "SONAR_ROCM_HAS_GFX1100)" in line:
                 in_gfx1100_block = True
             if in_gfx1100_block and "endif()" in line:
                 in_gfx1100_block = False
-            if "APHRODITE_ROCM_GFX1100" in line and "target_compile_definitions" in line:
+            if "SONAR_ROCM_GFX1100" in line and "target_compile_definitions" in line:
                 assert in_gfx1100_block, (
-                    "APHRODITE_ROCM_GFX1100 compile definition is set outside "
-                    "the APHRODITE_ROCM_HAS_GFX1100 conditional — CDNA builds "
+                    "SONAR_ROCM_GFX1100 compile definition is set outside "
+                    "the SONAR_ROCM_HAS_GFX1100 conditional — CDNA builds "
                     f"would define it. Line: {line.strip()}"
                 )
 
@@ -272,7 +272,7 @@ class TestTorchBindingsGuards:
         return _read_source_or_skip("csrc", "rocm", "torch_bindings.cpp")
 
     def test_all_rdna3_ops_inside_ifdef(self):
-        """Every rdna3 op def/impl must be between #ifdef APHRODITE_ROCM_GFX1100
+        """Every rdna3 op def/impl must be between #ifdef SONAR_ROCM_GFX1100
         and #endif. If any is outside, a CDNA build would try to register
         the op and link a symbol that doesn't exist.
         """
@@ -283,7 +283,7 @@ class TestTorchBindingsGuards:
         rdna3_lines_outside = []
 
         for i, line in enumerate(lines, 1):
-            if "#ifdef APHRODITE_ROCM_GFX1100" in line:
+            if "#ifdef SONAR_ROCM_GFX1100" in line:
                 inside_guard = True
             elif line.strip() == "#endif" and inside_guard:
                 inside_guard = False
@@ -292,7 +292,7 @@ class TestTorchBindingsGuards:
                 rdna3_lines_outside.append((i, line.strip()))
 
         assert not rdna3_lines_outside, (
-            "RDNA3 op references found OUTSIDE #ifdef APHRODITE_ROCM_GFX1100 "
+            "RDNA3 op references found OUTSIDE #ifdef SONAR_ROCM_GFX1100 "
             "in torch_bindings.cpp — these would break CDNA builds:\n"
             + "\n".join(f"  L{n}: {s}" for n, s in rdna3_lines_outside)
         )
@@ -304,7 +304,7 @@ class TestTorchBindingsGuards:
 
         inside_guard = False
         for i, line in enumerate(lines, 1):
-            if "#ifdef APHRODITE_ROCM_GFX1100" in line:
+            if "#ifdef SONAR_ROCM_GFX1100" in line:
                 inside_guard = True
             elif line.strip() == "#endif" and inside_guard:
                 inside_guard = False
@@ -345,13 +345,13 @@ class TestCustomOpsGuards:
             )
 
     def test_no_toplevel_rocm_c_import(self):
-        """No top-level ``from aphrodite._rocm_C import`` — would crash on CDNA."""
+        """No top-level ``from sonar._rocm_C import`` — would crash on CDNA."""
         src = self._read_custom_ops()
         for line in src.splitlines():
             stripped = line.strip()
             if stripped.startswith("#") or stripped.startswith("//"):
                 continue
-            assert "from aphrodite._rocm_C import" not in stripped, (
+            assert "from sonar._rocm_C import" not in stripped, (
                 f"Top-level import of _rocm_C in _custom_ops.py would crash on CDNA: {stripped}"
             )
 
@@ -366,11 +366,11 @@ class TestMoEDispatchMocked:
 
     def test_kernel_unavailable_when_mocked_cdna(self):
         """The device gate must reject when not on gfx1100."""
-        from aphrodite.model_executor.layers.fused_moe.experts.rdna3_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.rdna3_moe import (
             rdna3_moe_kernel_available,
         )
 
-        with patch("aphrodite.platforms.rocm.on_gfx1100", return_value=False):
+        with patch("sonar.platforms.rocm.on_gfx1100", return_value=False):
             assert rdna3_moe_kernel_available() is False
 
     @pytest.mark.parametrize(
@@ -379,7 +379,7 @@ class TestMoEDispatchMocked:
     )
     def test_quant_scheme_rejects_non_symmetric_int4(self, weight_key):
         """Only symmetric int4 weight-only schemes reach the kernel."""
-        from aphrodite.model_executor.layers.fused_moe.experts.rdna3_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.rdna3_moe import (
             Rdna3WNA16Experts,
         )
 
@@ -387,7 +387,7 @@ class TestMoEDispatchMocked:
 
     @pytest.mark.parametrize("weight_key", [kInt4Static, kInt4Static32])
     def test_quant_scheme_accepts_symmetric_int4(self, weight_key):
-        from aphrodite.model_executor.layers.fused_moe.experts.rdna3_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.rdna3_moe import (
             Rdna3WNA16Experts,
         )
 
@@ -395,7 +395,7 @@ class TestMoEDispatchMocked:
 
     def test_kernel_unavailable_when_op_missing(self):
         """The device gate returns False when the C++ op doesn't exist."""
-        from aphrodite.model_executor.layers.fused_moe.experts.rdna3_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.rdna3_moe import (
             rdna3_moe_kernel_available,
         )
 
@@ -406,7 +406,7 @@ class TestMoEDispatchMocked:
 
     def test_kernel_unavailable_when_rocm_c_absent(self):
         """The device gate returns False when _rocm_C doesn't exist at all."""
-        from aphrodite.model_executor.layers.fused_moe.experts.rdna3_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.rdna3_moe import (
             rdna3_moe_kernel_available,
         )
 
@@ -421,13 +421,13 @@ class TestDenseKernelSelectionMocked:
     @gfx1100_only
     def test_can_implement_rejects_when_mocked_cdna(self):
         """RDNA3W4A16LinearKernel.can_implement must reject on mocked CDNA."""
-        from aphrodite.model_executor.kernels.linear.mixed_precision.MPLinearKernel import (  # noqa: E501
+        from sonar.model_executor.kernels.linear.mixed_precision.MPLinearKernel import (  # noqa: E501
             MPLinearLayerConfig,
         )
-        from aphrodite.model_executor.kernels.linear.mixed_precision.rdna3_w4a16 import (  # noqa: E501
+        from sonar.model_executor.kernels.linear.mixed_precision.rdna3_w4a16 import (  # noqa: E501
             RDNA3W4A16LinearKernel,
         )
-        from aphrodite.scalar_type import scalar_types
+        from sonar.scalar_type import scalar_types
 
         config = MPLinearLayerConfig(
             full_weight_shape=(1024, 256),
@@ -441,8 +441,8 @@ class TestDenseKernelSelectionMocked:
         assert ok is True
 
         with (
-            patch("aphrodite.platforms.rocm.on_gfx1100", return_value=False),
-            patch("aphrodite.platforms.rocm._ON_GFX1100", False),
+            patch("sonar.platforms.rocm.on_gfx1100", return_value=False),
+            patch("sonar.platforms.rocm._ON_GFX1100", False),
         ):
             ok, reason = RDNA3W4A16LinearKernel.can_implement(config)
             assert ok is False, f"RDNA3 kernel accepted on simulated CDNA: {reason}"
@@ -450,13 +450,13 @@ class TestDenseKernelSelectionMocked:
     @gfx1100_only
     def test_chooser_skips_rdna3_when_mocked_cdna(self):
         """choose_mp_linear_kernel must NOT return RDNA3 on mocked CDNA."""
-        from aphrodite.model_executor.kernels.linear import (
+        from sonar.model_executor.kernels.linear import (
             choose_mp_linear_kernel,
         )
-        from aphrodite.model_executor.kernels.linear.mixed_precision.MPLinearKernel import (  # noqa: E501
+        from sonar.model_executor.kernels.linear.mixed_precision.MPLinearKernel import (  # noqa: E501
             MPLinearLayerConfig,
         )
-        from aphrodite.scalar_type import scalar_types
+        from sonar.scalar_type import scalar_types
 
         config = MPLinearLayerConfig(
             full_weight_shape=(1024, 256),
@@ -467,8 +467,8 @@ class TestDenseKernelSelectionMocked:
             zero_points=False,
         )
         with (
-            patch("aphrodite.platforms.rocm.on_gfx1100", return_value=False),
-            patch("aphrodite.platforms.rocm._ON_GFX1100", False),
+            patch("sonar.platforms.rocm.on_gfx1100", return_value=False),
+            patch("sonar.platforms.rocm._ON_GFX1100", False),
         ):
             chosen = choose_mp_linear_kernel(config)
             assert chosen.__name__ != "RDNA3W4A16LinearKernel", (
@@ -480,10 +480,10 @@ class TestWNA16OracleWiring:
     """The RDNA3 backend must reach the kernel only through the oracle."""
 
     def test_backend_maps_to_rdna3_experts(self):
-        from aphrodite.model_executor.layers.fused_moe.experts.rdna3_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.rdna3_moe import (
             Rdna3WNA16Experts,
         )
-        from aphrodite.model_executor.layers.fused_moe.oracle.int_wna16 import (
+        from sonar.model_executor.layers.fused_moe.oracle.int_wna16 import (
             WNA16MoEBackend,
             backend_to_kernel_cls,
             map_wna16_backend,
@@ -494,7 +494,7 @@ class TestWNA16OracleWiring:
 
     def test_backend_is_offered_before_the_triton_fallback(self):
         """Priority order: the native kernel outranks Triton when supported."""
-        from aphrodite.model_executor.layers.fused_moe.oracle.int_wna16 import (
+        from sonar.model_executor.layers.fused_moe.oracle.int_wna16 import (
             WNA16MoEBackend,
             _get_priority_backends,
         )

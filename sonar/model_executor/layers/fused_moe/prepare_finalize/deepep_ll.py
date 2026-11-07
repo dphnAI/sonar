@@ -5,18 +5,18 @@ from collections.abc import Callable
 import deep_ep
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite import envs
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe.config import FusedMoEQuantConfig
-from aphrodite.model_executor.layers.fused_moe.topk_weight_and_reduce import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar import envs
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe.config import FusedMoEQuantConfig
+from sonar.model_executor.layers.fused_moe.topk_weight_and_reduce import (
     TopKWeightAndReduceDelegate,
 )
-from aphrodite.model_executor.layers.fused_moe.utils import (
+from sonar.model_executor.layers.fused_moe.utils import (
     moe_kernel_quantize_input,
     normalize_batched_scales_shape,
 )
-from aphrodite.v1.worker.ubatching import (
+from sonar.v1.worker.ubatching import (
     dbo_current_ubatch_id,
     dbo_enabled,
     dbo_maybe_run_recv_hook,
@@ -161,9 +161,9 @@ class DeepEPLLPrepareAndFinalize(mk.FusedMoEPrepareAndFinalizeModular):
         assert isinstance(x, (torch.Tensor, tuple))
         q_dtype = quant_config.quant_dtype
 
-        if q_dtype == "nvfp4" and envs.APHRODITE_DEEPEPLL_NVFP4_DISPATCH:
+        if q_dtype == "nvfp4" and envs.SONAR_DEEPEPLL_NVFP4_DISPATCH:
             logger.info_once(
-                "Since APHRODITE_DEEPEPLL_NVFP4_DISPATCH==1, make sure "
+                "Since SONAR_DEEPEPLL_NVFP4_DISPATCH==1, make sure "
                 "using the hybrid-ep branch of DeepEP"
                 "(https://github.com/deepseek-ai/DeepEP/tree/hybrid-ep)"
             )
@@ -174,13 +174,13 @@ class DeepEPLLPrepareAndFinalize(mk.FusedMoEPrepareAndFinalizeModular):
             hidden_dim = hidden_dim_by_2 * 2
             logger.info_once(
                 "Quantization is fused with DeepEP nvfp4 dispatch for "
-                "FlashInfer CUTEDSL as APHRODITE_DEEPEPLL_NVFP4_DISPATCH==1"
+                "FlashInfer CUTEDSL as SONAR_DEEPEPLL_NVFP4_DISPATCH==1"
             )
         else:
             if q_dtype == "nvfp4":
                 q_dtype = None
                 logger.info_once(
-                    "Using DeepEP bfloat16 dispatch for FlashInfer CUTEDSL as APHRODITE_DEEPEPLL_NVFP4_DISPATCH==0"
+                    "Using DeepEP bfloat16 dispatch for FlashInfer CUTEDSL as SONAR_DEEPEPLL_NVFP4_DISPATCH==0"
                 )
             assert isinstance(x, torch.Tensor)
             num_experts, max_tokens, hidden_dim = x.size()
@@ -233,7 +233,7 @@ class DeepEPLLPrepareAndFinalize(mk.FusedMoEPrepareAndFinalizeModular):
             assert hidden_size % 128 == 0, "DeepEP kernels quantize the inputs in blocks of shape 128"
 
         use_nvfp4 = False
-        nvfp4_dispatch = quant_config.quant_dtype == "nvfp4" and envs.APHRODITE_DEEPEPLL_NVFP4_DISPATCH
+        nvfp4_dispatch = quant_config.quant_dtype == "nvfp4" and envs.SONAR_DEEPEPLL_NVFP4_DISPATCH
         if nvfp4_dispatch:
             use_nvfp4 = True
         qc_a1_gscale_or_scale = quant_config.a1_gscale if nvfp4_dispatch else quant_config.a1_scale

@@ -14,7 +14,7 @@ One launch a layer and rank, ``BLOCKS`` x ``THREADS``, S rows:
             chunk's raw rows (wave w: dims 64 w ..) -> the chunk's partial
             (bf16) and its (max, sum) per head, published
     combine (S x H): a (token, head)'s chunks merged with the sink folded in,
-            bf16, inverse GPT-J RoPE of dims 448.., Aphrodite's MXFP8 of each 32
+            bf16, inverse GPT-J RoPE of dims 448.., Sonar's MXFP8 of each 32
             -> XO (published)
     wo_a    (G x 1024 / 32, two 16-row tiles): the group's XO rows times wo_a
             -> bf16 -> MXFP8 of the 32 rows -> X8B (published)
@@ -187,7 +187,7 @@ def key_rec(c, t, k):
 
 
 def records_to_fnuz(nope, scw, is_c):
-    """gfx942: a key's loaded record as FNUZ. Aphrodite's gfx942 window cache holds
+    """gfx942: a key's loaded record as FNUZ. Sonar's gfx942 window cache holds
     FNUZ records (maximum 224), its compressed cache OCP records (Triton's
     compressor). An OCP record becomes FNUZ by turning -0 bytes (0x80, the
     FNUZ NaN) into 0 and raising each scale code by one (FNUZ bytes stand for
@@ -562,7 +562,7 @@ def stage_combine(c, unit):
 
 @traced
 def stage_woa(c, task, ops, t0, n):
-    """Rows 32 task .. of wo_a -> bf16 -> Aphrodite's MXFP8 of the 32 -> X8B."""
+    """Rows 32 task .. of wo_a -> bf16 -> Sonar's MXFP8 of the 32 -> X8B."""
     tid, red, d, lane = c["tid"], c["red"], c["d"], c["lane"]
     split = WOA_SPLIT_K
     gemv_mfmas(c, d.group_k, c["xl"], c["xsl"], red, ops, split, tiled=True, rows=n)

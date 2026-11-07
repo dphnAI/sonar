@@ -8,20 +8,20 @@ from compressed_tensors.quantization import (
     QuantizationArgs,
 )
 
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe import (
     RoutedExperts,
     SharedExperts,
 )
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEQuantConfig,
     int4_w4a16_moe_quant_config,
 )
-from aphrodite.model_executor.layers.quantization.compressed_tensors.compressed_tensors_moe import (  # noqa E501
+from sonar.model_executor.layers.quantization.compressed_tensors.compressed_tensors_moe import (  # noqa E501
     CompressedTensorsMoEMethod,
 )
-from aphrodite.model_executor.utils import replace_parameter, set_weight_attrs
+from sonar.model_executor.utils import replace_parameter, set_weight_attrs
 
 logger = init_logger(__name__)
 
@@ -244,7 +244,7 @@ class CompressedTensorsW4A16FlydslMoEMethod(CompressedTensorsMoEMethod):
         shared_experts: SharedExperts | None,
         shared_experts_input: torch.Tensor | None,
     ) -> torch.Tensor:
-        from aphrodite.model_executor.layers.fused_moe.fused_flydsl_moe import (
+        from sonar.model_executor.layers.fused_moe.fused_flydsl_moe import (
             fused_flydsl_moe,
         )
 

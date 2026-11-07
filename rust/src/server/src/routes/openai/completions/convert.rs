@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-use aphrodite_text::tokenizer::Tokenizer;
-use aphrodite_text::{Prompt, SamplingParams, TextDecodeOptions, TextRequest};
+use sonar_text::tokenizer::Tokenizer;
+use sonar_text::{Prompt, SamplingParams, TextDecodeOptions, TextRequest};
 use thiserror_ext::AsReport as _;
 
 use super::types::CompletionRequest;
@@ -26,7 +26,7 @@ pub(crate) struct PreparedRequest {
     pub response_model: String,
     /// Public response rendering options for route-layer helpers.
     pub options: ResponseOptions,
-    /// Lowered text request for the shared `aphrodite-text` facade.
+    /// Lowered text request for the shared `sonar-text` facade.
     pub text_request: TextRequest,
 }
 
@@ -106,7 +106,7 @@ pub(crate) fn prepare_completion_request(
     let session_id = resolve_session_id(
         &ctx,
         request.session_id.as_deref(),
-        request.aphrodite_xargs.as_ref(),
+        request.sonar_xargs.as_ref(),
     );
 
     let text_request = TextRequest {
@@ -114,7 +114,7 @@ pub(crate) fn prepare_completion_request(
         prompt: request.prompt,
         mm_features: None,
         sampling_params: SamplingParams {
-            aphrodite_sampling: request.aphrodite_sampling,
+            sonar_sampling: request.sonar_sampling,
             temperature: request.temperature,
             watermarking: request.watermarking,
             top_p: request.top_p,
@@ -142,11 +142,8 @@ pub(crate) fn prepare_completion_request(
             structured_outputs,
             skip_reading_prefix_cache: None,
             routed_experts_prompt_start: None,
-            aphrodite_xargs: merge_kv_transfer_params(
-                merge_ec_transfer_params(
-                    request.aphrodite_xargs,
-                    request.ec_transfer_params.as_ref(),
-                ),
+            sonar_xargs: merge_kv_transfer_params(
+                merge_ec_transfer_params(request.sonar_xargs, request.ec_transfer_params.as_ref()),
                 request.kv_transfer_params.as_ref(),
             ),
             stream_interval: request.stream_interval,
@@ -221,10 +218,10 @@ fn completion_echo_text(
 mod tests {
     use std::num::NonZeroU32;
 
-    use aphrodite_text::{Prompt, PromptTruncation, PromptTruncationLimit, TruncationSide};
-    use aphrodite_tokenizer::test_utils::TestTokenizer;
     use axum::http::HeaderMap;
     use serde_json::json;
+    use sonar_text::{Prompt, PromptTruncation, PromptTruncationLimit, TruncationSide};
+    use sonar_tokenizer::test_utils::TestTokenizer;
     use validator::Validate;
 
     use super::prepare_completion_request;
@@ -381,7 +378,7 @@ mod tests {
         assert_eq!(absent.max_tokens, Some(16));
 
         // An explicit `null` deserializes to `None`, bypassing the default;
-        // `normalize` must coerce it back to match Python Aphrodite.
+        // `normalize` must coerce it back to match Python Sonar.
         let mut request: CompletionRequest = serde_json::from_value(json!({
             "model": "Qwen/Qwen1.5-0.5B-Chat",
             "prompt": "hello",
@@ -397,11 +394,11 @@ mod tests {
 
     #[test]
     fn prepare_completion_request_preserves_flattened_sonar_samplers() {
-        use aphrodite_engine_core_client::protocol::sampling::AphroditeSamplingParams;
+        use sonar_engine_core_client::protocol::sampling::SonarSamplingParams;
 
         for expected in [
-            AphroditeSamplingParams::default(),
-            AphroditeSamplingParams {
+            SonarSamplingParams::default(),
+            SonarSamplingParams {
                 no_repeat_ngram_size: 3,
                 temperature_last: true,
                 top_a: 0.2,
@@ -424,7 +421,7 @@ mod tests {
             )
             .expect("prepare Sonar samplers");
             assert_eq!(
-                prepared.text_request.sampling_params.aphrodite_sampling,
+                prepared.text_request.sampling_params.sonar_sampling,
                 expected
             );
         }
@@ -517,7 +514,7 @@ mod tests {
 
         // The convert layer forwards the raw value verbatim (including the `-1`
         // "unlimited" sentinel); normalization/validation happens during
-        // lowering (see `aphrodite_text::lower`).
+        // lowering (see `sonar_text::lower`).
         assert_eq!(prepare(json!(64)), Some(64));
         assert_eq!(prepare(json!(-1)), Some(-1));
         assert_eq!(prepare(json!(null)), None);
@@ -798,7 +795,7 @@ mod tests {
             "prompt": "hello",
             "stream": false,
             "session_id": "body-session",
-            "aphrodite_xargs": {"session_id": "xargs-session"},
+            "sonar_xargs": {"session_id": "xargs-session"},
         }))
         .expect("parse request");
 
@@ -827,7 +824,7 @@ mod tests {
         .expect("parse request");
 
         let mut headers = HeaderMap::new();
-        headers.insert("X-Aphrodite-Priority", "-5".parse().unwrap());
+        headers.insert("X-Sonar-Priority", "-5".parse().unwrap());
         let prepared = prepare_completion_request(
             request,
             &served(&["Qwen/Qwen1.5-0.5B-Chat"]),
@@ -839,12 +836,12 @@ mod tests {
     }
 
     #[test]
-    fn prepare_completion_request_uses_aphrodite_xargs_session_id_fallback() {
+    fn prepare_completion_request_uses_sonar_xargs_session_id_fallback() {
         let request: CompletionRequest = serde_json::from_value(json!({
             "model": "Qwen/Qwen1.5-0.5B-Chat",
             "prompt": "hello",
             "stream": false,
-            "aphrodite_xargs": {"session_id": "xargs-session"},
+            "sonar_xargs": {"session_id": "xargs-session"},
         }))
         .expect("parse request");
 
@@ -868,7 +865,7 @@ mod tests {
             "prompt": "hello",
             "stream": false,
             "session_id": "",
-            "aphrodite_xargs": {"session_id": 7},
+            "sonar_xargs": {"session_id": 7},
         }))
         .expect("parse request");
 

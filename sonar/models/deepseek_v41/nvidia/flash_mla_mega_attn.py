@@ -21,37 +21,37 @@ from typing import TYPE_CHECKING, cast
 
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.cache import CacheDType
-from aphrodite.forward_context import get_forward_context
-from aphrodite.model_executor.layers.fusion.quant_activation import QuantizedActivation
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import kMxfp8Dynamic
-from aphrodite.models.deepseek_v41.common.ops import (
+from sonar.config import SonarConfig
+from sonar.config.cache import CacheDType
+from sonar.forward_context import get_forward_context
+from sonar.model_executor.layers.fusion.quant_activation import QuantizedActivation
+from sonar.model_executor.layers.quantization.utils.quant_utils import kMxfp8Dynamic
+from sonar.models.deepseek_v41.common.ops import (
     combine_topk_swa_indices,
     compute_global_topk_indices_and_lens,
     dequantize_and_gather_k_cache,
 )
-from aphrodite.models.deepseek_v41.common.ops.fused_layout import (
+from sonar.models.deepseek_v41.common.ops.fused_layout import (
     WV_GROUP_SIZE,
     o_fused_chunk_permutation,
     o_fused_permutation,
     permute_on_load,
     q_fused_permutation,
 )
-from aphrodite.models.deepseek_v41.common.ops.query_quant import can_fuse_query_quant
-from aphrodite.models.deepseek_v41.nvidia.flashmla import DeepseekV4FlashMLAAttention
-from aphrodite.models.deepseek_v41.sparse_mla import (
+from sonar.models.deepseek_v41.common.ops.query_quant import can_fuse_query_quant
+from sonar.models.deepseek_v41.nvidia.flashmla import DeepseekV4FlashMLAAttention
+from sonar.models.deepseek_v41.sparse_mla import (
     DeepseekV4FlashMLAMetadata,
     FlashMLAMegaAttnBackend,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.deep_gemm import fp8_einsum, get_tma_aligned_size
-from aphrodite.utils.math_utils import cdiv, round_up
-from aphrodite.v1.attention.ops.flashmla import is_flashmla_sparse_supported
-from aphrodite.v1.worker.workspace import current_workspace_manager
+from sonar.platforms import current_platform
+from sonar.utils.deep_gemm import fp8_einsum, get_tma_aligned_size
+from sonar.utils.math_utils import cdiv, round_up
+from sonar.v1.attention.ops.flashmla import is_flashmla_sparse_supported
+from sonar.v1.worker.workspace import current_workspace_manager
 
 if TYPE_CHECKING:
-    from aphrodite.v1.attention.backends.mla.sparse_swa import DeepseekSparseSWAMetadata
+    from sonar.v1.attention.backends.mla.sparse_swa import DeepseekSparseSWAMetadata
 
 _HEAD_DIM_V = 512
 _ROPE_DIM = 64
@@ -98,9 +98,9 @@ def is_flashmla_mega_attn_supported() -> tuple[bool, str | None]:
     if not current_platform.is_device_capability_family(100):
         return False, "FlashMLA mega attention requires sm_10x GPUs."
     if not hasattr(torch.ops._flashmla_C, "fused_norm_rope_attn_rope_cast_decode"):
-        return False, "aphrodite._flashmla_C was built without the mega attention ops."
+        return False, "sonar._flashmla_C was built without the mega attention ops."
     if not hasattr(torch.ops._flashmla_C, "permute_q_b_proj"):
-        return False, "aphrodite._flashmla_C predates the mega attention weight permutes."
+        return False, "sonar._flashmla_C predates the mega attention weight permutes."
     return True, None
 
 
@@ -148,7 +148,7 @@ class DeepseekV4MegaAttnAttention(DeepseekV4FlashMLAAttention):
     backend_cls = FlashMLAMegaAttnBackend
 
     @classmethod
-    def is_available_for(cls, aphrodite_config: AphroditeConfig) -> bool:
+    def is_available_for(cls, sonar_config: SonarConfig) -> bool:
         """Whether this layer can serve the configured model on this device.
 
         The kernel is SM100-only and wants ``WV_GROUP_SIZE`` heads per ``wo_a``
@@ -159,11 +159,11 @@ class DeepseekV4MegaAttnAttention(DeepseekV4FlashMLAAttention):
         """
         if not is_flashmla_mega_attn_supported()[0]:
             return False
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
         config = getattr(config, "text_config", config)
         n_heads = getattr(config, "num_attention_heads", 0) or 0
         n_groups = getattr(config, "o_groups", 0) or 0
-        tp_size = aphrodite_config.parallel_config.tensor_parallel_size
+        tp_size = sonar_config.parallel_config.tensor_parallel_size
         if n_heads % tp_size or n_groups % tp_size:
             return False
         n_local_heads, n_local_groups = n_heads // tp_size, n_groups // tp_size
@@ -171,8 +171,8 @@ class DeepseekV4MegaAttnAttention(DeepseekV4FlashMLAAttention):
             return False
         return n_local_heads // n_local_groups == WV_GROUP_SIZE
 
-    def __init__(self, aphrodite_config: AphroditeConfig, *args, **kwargs) -> None:
-        super().__init__(aphrodite_config, *args, **kwargs)
+    def __init__(self, sonar_config: SonarConfig, *args, **kwargs) -> None:
+        super().__init__(sonar_config, *args, **kwargs)
         if self.n_local_heads % WV_GROUP_SIZE:
             raise ValueError(
                 f"{self.prefix}: mega attention needs the local head count "

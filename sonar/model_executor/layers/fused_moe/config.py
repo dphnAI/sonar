@@ -6,23 +6,23 @@ from typing import Union
 
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.config import ParallelConfig, SchedulerConfig
-from aphrodite.config.kernel import MoEBackend
-from aphrodite.distributed import get_dp_group, get_pcp_group, get_tensor_model_parallel_rank
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.quantization.utils.ocp_mx_utils import (
+import sonar.envs as envs
+from sonar.config import ParallelConfig, SchedulerConfig
+from sonar.config.kernel import MoEBackend
+from sonar.distributed import get_dp_group, get_pcp_group, get_tensor_model_parallel_rank
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.quantization.utils.ocp_mx_utils import (
     OCP_MX_DTYPES,
     OCP_MX_Scheme,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     GroupShape,
     QuantKey,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.import_utils import get_triton_kernels_version
-from aphrodite.utils.math_utils import cdiv
+from sonar.platforms import current_platform
+from sonar.utils.import_utils import get_triton_kernels_version
+from sonar.utils.math_utils import cdiv
 
 logger = init_logger(__name__)
 
@@ -659,7 +659,7 @@ def gptq_marlin_moe_quant_config(
     w2_bias: torch.Tensor | None = None,
 ):
     """Construct a quant config for gptq marlin quantization."""
-    from aphrodite.model_executor.layers.quantization.utils.quant_utils import GroupShape
+    from sonar.model_executor.layers.quantization.utils.quant_utils import GroupShape
 
     w_shape = None if group_size == -1 else GroupShape(row=1, col=group_size)
 
@@ -1106,10 +1106,10 @@ class FusedMoEParallelConfig:
         pcp_size_: int,
         dp_size_: int,
         sp_size_: int,
-        aphrodite_parallel_config: ParallelConfig,
+        sonar_parallel_config: ParallelConfig,
     ) -> "FusedMoEParallelConfig":
         """Determine MoE parallel configuration. Based on the input `tp_size_`,
-        `dp_size_` and aphrodite's parallel config, determine what
+        `dp_size_` and sonar's parallel config, determine what
         level's of parallelism to use in the fused moe layer.
 
         Args:
@@ -1117,7 +1117,7 @@ class FusedMoEParallelConfig:
             pcp_size_ (int): `pcp_size` passed into the FusedMoEFactory constructor.
             dp_size_ (int): `dp_size` passed into the FusedMoEFactory constructor.
             sp_size_ (int): `sp_size` passed into the FusedMoEFactory constructor.
-            aphrodite_parallel_config (ParallelConfig): Aphrodite's parallel config
+            sonar_parallel_config (ParallelConfig): Sonar's parallel config
                 object which contains the `enable_expert_parallel` flag.
 
         Examples:
@@ -1182,7 +1182,7 @@ class FusedMoEParallelConfig:
                 between the 4 devices.
 
         """
-        use_ep = dp_size_ * pcp_size_ * tp_size_ > 1 and aphrodite_parallel_config.enable_expert_parallel
+        use_ep = dp_size_ * pcp_size_ * tp_size_ > 1 and sonar_parallel_config.enable_expert_parallel
 
         dp_size = dp_size_
         dp_rank = get_dp_group().rank_in_group if dp_size > 1 else 0
@@ -1204,9 +1204,9 @@ class FusedMoEParallelConfig:
                 ep_rank=0,
                 sp_size=sp_size_,
                 use_ep=False,
-                all2all_backend=aphrodite_parallel_config.all2all_backend,
-                enable_eplb=aphrodite_parallel_config.enable_eplb,
-                mori_ep_v2=bool(aphrodite_parallel_config.mori_ep_v2),
+                all2all_backend=sonar_parallel_config.all2all_backend,
+                enable_eplb=sonar_parallel_config.enable_eplb,
+                mori_ep_v2=bool(sonar_parallel_config.mori_ep_v2),
             )
         # DP + EP / TP + EP / DP + TP + EP
         assert use_ep
@@ -1225,9 +1225,9 @@ class FusedMoEParallelConfig:
             ep_rank=ep_rank,
             sp_size=sp_size_,
             use_ep=True,
-            all2all_backend=aphrodite_parallel_config.all2all_backend,
-            enable_eplb=aphrodite_parallel_config.enable_eplb,
-            mori_ep_v2=bool(aphrodite_parallel_config.mori_ep_v2),
+            all2all_backend=sonar_parallel_config.all2all_backend,
+            enable_eplb=sonar_parallel_config.enable_eplb,
+            mori_ep_v2=bool(sonar_parallel_config.mori_ep_v2),
         )
 
     @classmethod
@@ -1249,7 +1249,7 @@ class FusedMoEParallelConfig:
         )
 
 
-# Model types validated for APHRODITE_ROCM_USE_AITER_MOE_A4W4_DSV4=1. This flag
+# Model types validated for SONAR_ROCM_USE_AITER_MOE_A4W4_DSV4=1. This flag
 # also changes the MXFP4 weight shuffle layout, so using it on other models
 # can produce garbled output.
 _AITER_MOE_A4W4_DSV4_VALIDATED_MODEL_TYPES = ("deepseek_v41", "deepseek_v41_text")
@@ -1332,13 +1332,13 @@ class FusedMoEConfig:
     # calibrated per-tensor scale of 1.0.
     qat_activation_key: QuantKey | None = None
     # Whether to force MXFP4 (a4w4) MoE activations for DeepSeek V4.1 on
-    # ROCm/AITER. Opt-in via APHRODITE_ROCM_USE_AITER_MOE_A4W4_DSV4=1; rejected
+    # ROCm/AITER. Opt-in via SONAR_ROCM_USE_AITER_MOE_A4W4_DSV4=1; rejected
     # for any other model type. Resolved here, not in the forward path,
-    # because get_current_aphrodite_config() isn't set there.
+    # because get_current_sonar_config() isn't set there.
     use_mxfp4_w4a4_dsv4: bool = False
 
     def __post_init__(self):
-        from aphrodite._aiter_ops import rocm_aiter_ops
+        from sonar._aiter_ops import rocm_aiter_ops
 
         tp_size = self.moe_parallel_config.tp_size
         assert self.intermediate_size % tp_size == 0
@@ -1361,24 +1361,22 @@ class FusedMoEConfig:
             self.rocm_aiter_fmoe_enabled = rocm_aiter_ops.is_fused_moe_enabled()
             self.is_fused_shared_expert_requested = bool(rocm_aiter_ops.is_fusion_moe_shared_experts_enabled())
 
-        if self.rocm_aiter_fmoe_enabled and envs.APHRODITE_ROCM_USE_AITER_MOE_A4W4_DSV4:
-            from aphrodite.config import get_current_aphrodite_config_or_none
+        if self.rocm_aiter_fmoe_enabled and envs.SONAR_ROCM_USE_AITER_MOE_A4W4_DSV4:
+            from sonar.config import get_current_sonar_config_or_none
 
-            aphrodite_config = get_current_aphrodite_config_or_none()
+            sonar_config = get_current_sonar_config_or_none()
             model_type = (
-                getattr(aphrodite_config.model_config.hf_config, "model_type", None)
-                if aphrodite_config is not None
-                else None
+                getattr(sonar_config.model_config.hf_config, "model_type", None) if sonar_config is not None else None
             )
             if model_type not in _AITER_MOE_A4W4_DSV4_VALIDATED_MODEL_TYPES:
                 raise ValueError(
-                    f"APHRODITE_ROCM_USE_AITER_MOE_A4W4_DSV4=1 only supports "
+                    f"SONAR_ROCM_USE_AITER_MOE_A4W4_DSV4=1 only supports "
                     f"model_type in {_AITER_MOE_A4W4_DSV4_VALIDATED_MODEL_TYPES}, "
                     f"got {model_type!r}. Unset this env var for this model."
                 )
             if not rocm_aiter_ops.fused_moe_supports_quant_dtype_a():
                 raise ValueError(
-                    "APHRODITE_ROCM_USE_AITER_MOE_A4W4_DSV4=1 needs an AITER build "
+                    "SONAR_ROCM_USE_AITER_MOE_A4W4_DSV4=1 needs an AITER build "
                     "with fused_moe(quant_dtype_a=...) support "
                     "(ROCm/aiter#5439+). Upgrade AITER or unset this env var."
                 )
@@ -1389,7 +1387,7 @@ class FusedMoEConfig:
         if self.use_mori_epv1_kernels or self.use_mori_epv2_kernels:
             assert not self.is_fused_shared_expert_requested, (
                 "Mori does not support fusion shared expert now. "
-                "Turn it off by setting APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=0"
+                "Turn it off by setting SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=0"
             )
 
         if not self.is_act_and_mul and not (current_platform.is_cuda_alike() or current_platform.is_xpu()):

@@ -7,16 +7,16 @@ from collections.abc import Callable
 import torch
 from torch import nn
 
-from aphrodite.model_executor.kernels.linear.mxfp8.flashinfer import (
+from sonar.model_executor.kernels.linear.mxfp8.flashinfer import (
     FlashInferCutedslMxfp8LinearKernel,
 )
-from aphrodite.model_executor.layers.fusion.quant_activation import (
+from sonar.model_executor.layers.fusion.quant_activation import (
     QuantizedActivation,
     get_input_quant_key,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import kMxfp8Dynamic
-from aphrodite.models.deepseek_v4.nvidia.ops.o_proj import deep_gemm_fp8_o_proj
-from aphrodite.platforms import current_platform
+from sonar.model_executor.layers.quantization.utils.quant_utils import kMxfp8Dynamic
+from sonar.models.deepseek_v4.nvidia.ops.o_proj import deep_gemm_fp8_o_proj
+from sonar.platforms import current_platform
 
 
 def _fused_wo_a_max_tokens(layer: nn.Module) -> int:

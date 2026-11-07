@@ -3,7 +3,7 @@
 import numpy as np
 import torch
 
-from aphrodite.v1.worker.gpu.buffer_utils import StagedWriteTensor, UvaBackedTensor
+from sonar.v1.worker.gpu.buffer_utils import StagedWriteTensor, UvaBackedTensor
 
 
 class RequestState:

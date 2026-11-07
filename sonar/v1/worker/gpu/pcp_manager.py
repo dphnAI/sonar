@@ -7,20 +7,20 @@ from typing import TYPE_CHECKING
 import numpy as np
 import torch
 
-from aphrodite.config import AphroditeConfig, CUDAGraphMode
-from aphrodite.distributed.parallel_state import get_dcp_group, get_pcp_group
-from aphrodite.logger import init_logger
-from aphrodite.utils.torch_utils import async_tensor_h2d
-from aphrodite.v1.attention.backends.utils import PAD_SLOT_ID, get_dcp_local_seq_lens
-from aphrodite.v1.worker.gpu.block_table import BlockTables
-from aphrodite.v1.worker.gpu.input_batch import (
+from sonar.config import CUDAGraphMode, SonarConfig
+from sonar.distributed.parallel_state import get_dcp_group, get_pcp_group
+from sonar.logger import init_logger
+from sonar.utils.torch_utils import async_tensor_h2d
+from sonar.v1.attention.backends.utils import PAD_SLOT_ID, get_dcp_local_seq_lens
+from sonar.v1.worker.gpu.block_table import BlockTables
+from sonar.v1.worker.gpu.input_batch import (
     InputBatch,
     InputBuffers,
 )
 
 if TYPE_CHECKING:
-    from aphrodite.v1.worker.gpu.cudagraph_utils import BatchExecutionDescriptor
-    from aphrodite.v1.worker.gpu.spec_decode.draft_logits import DraftLogitsCache
+    from sonar.v1.worker.gpu.cudagraph_utils import BatchExecutionDescriptor
+    from sonar.v1.worker.gpu.spec_decode.draft_logits import DraftLogitsCache
 
 logger = init_logger(__name__)
 
@@ -152,11 +152,11 @@ class PCPManager:
 
     @staticmethod
     def validate_config(
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         supports_mm_inputs: bool,
     ) -> None:
-        parallel_config = aphrodite_config.parallel_config
-        model_config = aphrodite_config.model_config
+        parallel_config = sonar_config.parallel_config
+        model_config = sonar_config.model_config
         pcp_size = parallel_config.prefill_context_parallel_size
         if pcp_size <= 1:
             return
@@ -167,14 +167,14 @@ class PCPManager:
             raise NotImplementedError("MRV2 PCP does not support encoder-decoder models yet.")
         if supports_mm_inputs:
             raise NotImplementedError("MRV2 PCP does not support MM inputs yet.")
-        if aphrodite_config.lora_config is not None:
+        if sonar_config.lora_config is not None:
             raise NotImplementedError("MRV2 PCP does not support LoRA yet.")
-        speculative_config = aphrodite_config.speculative_config
+        speculative_config = sonar_config.speculative_config
         if speculative_config is not None and (
             reason := speculative_config.speculator_config.pcp_unsupported_reason(parallel_config)
         ):
             raise NotImplementedError(reason)
-        cudagraph_mode = aphrodite_config.compilation_config.cudagraph_mode
+        cudagraph_mode = sonar_config.compilation_config.cudagraph_mode
         is_sparse_mla = hasattr(model_config.hf_text_config, "index_topk")
         if parallel_config.decode_context_parallel_size > 1 and not is_sparse_mla:
             # Dense MLA prefill sizes its DCP KV gather from each rank's own
@@ -794,18 +794,18 @@ class PCPManager:
 
 
 def maybe_build_pcp_manager(
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     device: torch.device,
     supports_mm_inputs: bool,
     block_tables: BlockTables | None = None,
     cls: type[PCPManager] = PCPManager,
 ) -> PCPManager | None:
-    parallel_config = aphrodite_config.parallel_config
+    parallel_config = sonar_config.parallel_config
     pcp_size = parallel_config.prefill_context_parallel_size
     if pcp_size <= 1:
         return None
 
-    cls.validate_config(aphrodite_config, supports_mm_inputs)
+    cls.validate_config(sonar_config, supports_mm_inputs)
 
     pcp_rank = get_pcp_group().rank_in_group
     dcp_size = parallel_config.decode_context_parallel_size
@@ -816,8 +816,8 @@ def maybe_build_pcp_manager(
         pcp_rank=pcp_rank,
         device=device,
         shard_decode_requests=parallel_config.pcp_shard_decode_requests,
-        max_num_reqs=aphrodite_config.scheduler_config.max_num_seqs,
-        max_num_tokens=aphrodite_config.scheduler_config.max_num_batched_tokens,
+        max_num_reqs=sonar_config.scheduler_config.max_num_seqs,
+        max_num_tokens=sonar_config.scheduler_config.max_num_batched_tokens,
         block_tables=block_tables,
         dcp_world_size=dcp_size,
         dcp_rank=dcp_rank,

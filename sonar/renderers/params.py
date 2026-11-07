@@ -3,17 +3,17 @@
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal, TypeVar, cast, overload
 
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.inputs import EmbedsPrompt, TextPrompt, TokensPrompt
-from aphrodite.logger import init_logger
-from aphrodite.multimodal.media.connector import merge_media_io_kwargs
-from aphrodite.tokenizers import TokenizerLike
-from aphrodite.utils.import_utils import LazyLoader
+from sonar.exceptions import SonarValidationError
+from sonar.inputs import EmbedsPrompt, TextPrompt, TokensPrompt
+from sonar.logger import init_logger
+from sonar.multimodal.media.connector import merge_media_io_kwargs
+from sonar.tokenizers import TokenizerLike
+from sonar.utils.import_utils import LazyLoader
 
 if TYPE_CHECKING:
     import torch
 
-    from aphrodite.renderers.chat_utils import ChatTemplateContentFormatOption
+    from sonar.renderers.chat_utils import ChatTemplateContentFormatOption
 else:
     torch = LazyLoader("torch", globals(), "torch")
 
@@ -257,14 +257,14 @@ class TokenizeParams:
         truncate_prompt_tokens = self.truncate_prompt_tokens
 
         if self.truncation_side not in (None, "left", "right"):
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 "`truncation_side` must be either 'left' or 'right'.",
                 parameter="truncation_side",
                 value=self.truncation_side,
             )
 
         if max_output_tokens is not None and max_total_tokens is not None and max_output_tokens > max_total_tokens:
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 f"{self.max_output_tokens_param}={max_output_tokens} "
                 f"cannot be greater than "
                 f"{self.max_total_tokens_param}={max_total_tokens}. "
@@ -278,7 +278,7 @@ class TokenizeParams:
             and truncate_prompt_tokens is not None
             and truncate_prompt_tokens > max_input_tokens
         ):
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 f"{self.truncate_prompt_tokens_param}={truncate_prompt_tokens} "
                 f"cannot be greater than {self.max_total_tokens_param} "
                 f"= {max_input_tokens}. "
@@ -318,7 +318,7 @@ class TokenizeParams:
 
         if tokenization_kwargs:
             logger.warning(
-                "The following tokenization arguments are not supported by Aphrodite Renderer and will be ignored: %s",
+                "The following tokenization arguments are not supported by Sonar Renderer and will be ignored: %s",
                 tokenization_kwargs,
             )
 
@@ -380,7 +380,7 @@ class TokenizeParams:
 
         if self.truncate_prompt_tokens is None:
             if len(text) > max_input_chars:
-                raise AphroditeValidationError(
+                raise SonarValidationError(
                     f"This model's maximum context length is "
                     f"{self.max_total_tokens} tokens. However, your prompt "
                     f"contains {len(text)} characters (more than "
@@ -441,7 +441,7 @@ class TokenizeParams:
         prompt: TextPrompt,
     ) -> TextPrompt:
         """Ensure that the prompt meets the requirements set out by this config.
-        If that is not possible, raise a `AphroditeValidationError`.
+        If that is not possible, raise a `SonarValidationError`.
 
         This method is run before tokenization occurs.
         """
@@ -459,12 +459,12 @@ class TokenizeParams:
             return tokens
 
         if tokenizer is None:
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 "Cannot pad tokens when `skip_tokenizer_init=True`",
                 parameter="pad_prompt_tokens",
             )
         if not isinstance(tokens, list):
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 "Cannot pad tokens for embedding inputs",
                 parameter="pad_prompt_tokens",
             )
@@ -513,7 +513,7 @@ class TokenizeParams:
             # max_input_tokens + 1 (see get_encode_kwargs), so the
             # actual prompt length could be larger.
             qualifier = "at least " if token_count == max_input_tokens + 1 else ""
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 f"This model's maximum context length is "
                 f"{self.max_total_tokens} tokens. However, your prompt "
                 f"contains {qualifier}{token_count} input tokens, which "
@@ -560,7 +560,7 @@ class TokenizeParams:
         prompt: TokensPrompt | EmbedsPrompt,
     ) -> TokensPrompt | EmbedsPrompt:
         """Ensure that the prompt meets the requirements set out by this config.
-        If that is not possible, raise a `AphroditeValidationError`.
+        If that is not possible, raise a `SonarValidationError`.
 
         This method is run after tokenization occurs.
         """

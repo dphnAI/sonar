@@ -23,19 +23,19 @@
 #include <cuda_fp16.h>
 #include <type_traits>
 
-namespace aphrodite {
+namespace sonar {
 namespace autoquant {
 
 #if (defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 750))
-  #define APHRODITE_ARCH_SM75 1
+  #define SONAR_ARCH_SM75 1
 #else
-  #define APHRODITE_ARCH_SM75 0
+  #define SONAR_ARCH_SM75 0
 #endif
 
 #if (defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 800))
-  #define APHRODITE_ARCH_SM80 1
+  #define SONAR_ARCH_SM80 1
 #else
-  #define APHRODITE_ARCH_SM80 0
+  #define SONAR_ARCH_SM80 0
 #endif
 
 constexpr int WARP_SIZE = 32;
@@ -236,23 +236,23 @@ __inline__ __device__ uint32_t cast_smem_ptr_to_uint(void const* const ptr) {
 __inline__ __device__ void ldmatrix_m8n8_x4_b16(uint& d0, uint& d1, uint& d2,
                                                 uint& d3,
                                                 uint32_t smem_int_ptr) {
-#if APHRODITE_ARCH_SM75
+#if SONAR_ARCH_SM75
   asm("ldmatrix.sync.aligned.m8n8.x4.shared.b16 {%0,%1,%2,%3}, [%4];\n"
       : "=r"(d0), "=r"(d1), "=r"(d2), "=r"(d3)
       : "r"(smem_int_ptr));
 #else
-  assert(APHRODITE_ARCH_SM75);
+  assert(SONAR_ARCH_SM75);
 #endif
 }
 
 __inline__ __device__ void ldmatrix_m8n8_x2_b16(uint& d0, uint& d1,
                                                 uint32_t smem_int_ptr) {
-#if APHRODITE_ARCH_SM75
+#if SONAR_ARCH_SM75
   asm("ldmatrix.sync.aligned.m8n8.x2.shared.b16 {%0,%1}, [%2];\n"
       : "=r"(d0), "=r"(d1)
       : "r"(smem_int_ptr));
 #else
-  assert(APHRODITE_ARCH_SM75);
+  assert(SONAR_ARCH_SM75);
 #endif
 }
 
@@ -404,4 +404,4 @@ struct Shape {
 };
 
 }  // namespace autoquant
-}  // namespace aphrodite
+}  // namespace sonar

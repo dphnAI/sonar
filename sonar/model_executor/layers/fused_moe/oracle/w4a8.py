@@ -6,24 +6,24 @@ from typing import TYPE_CHECKING
 
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe.all2all_utils import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe.all2all_utils import (
     maybe_make_prepare_finalize,
 )
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEQuantConfig,
     int4_w4afp8_moe_quant_config,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     kFp8DynamicTokenSym,
     kInt4Static,
 )
 
 if TYPE_CHECKING:
-    from aphrodite.model_executor.layers.fused_moe import RoutedExperts
+    from sonar.model_executor.layers.fused_moe import RoutedExperts
 
 logger = init_logger(__name__)
 
@@ -37,13 +37,13 @@ def backend_to_kernel_cls(
     backend: W4A8MoeBackend,
 ) -> list[type[mk.FusedMoEExperts]]:
     if backend == W4A8MoeBackend.CUTLASS:
-        from aphrodite.model_executor.layers.fused_moe.experts.cutlass_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.cutlass_moe import (
             CutlassExpertsW4A8Fp8,
         )
 
         return [CutlassExpertsW4A8Fp8]
     elif backend == W4A8MoeBackend.HUMMING:
-        from aphrodite.model_executor.layers.fused_moe.experts.fused_humming_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.fused_humming_moe import (
             BatchedHummingGroupedExperts,
             HummingGroupedExperts,
             HummingIndexedExperts,
@@ -119,10 +119,10 @@ def convert_to_w4a8_moe_kernel_format(
     torch.Tensor | None,
 ]:
     if backend == W4A8MoeBackend.HUMMING:
-        from aphrodite.model_executor.layers.quantization.utils.humming import (
+        from sonar.model_executor.layers.quantization.utils.humming import (
             convert_to_humming_moe_kernel_format,
         )
-        from aphrodite.utils.humming import (
+        from sonar.utils.humming import (
             HummingInputSchema,
             HummingWeightSchema,
             dtypes,
@@ -145,9 +145,9 @@ def convert_to_w4a8_moe_kernel_format(
             None,
         )
 
-    from aphrodite import _custom_ops as ops
-    from aphrodite.model_executor.layers.quantization.input_quant_fp8 import QuantFP8
-    from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+    from sonar import _custom_ops as ops
+    from sonar.model_executor.layers.quantization.input_quant_fp8 import QuantFP8
+    from sonar.model_executor.layers.quantization.utils.quant_utils import (
         GroupShape,
         convert_bf16_scales_to_fp8,
         convert_packed_uint4b8_to_signed_int4_inplace,
@@ -194,8 +194,8 @@ def make_w4a8_moe_quant_config(
     layer: torch.nn.Module | None = None,
 ) -> FusedMoEQuantConfig:
     if backend == W4A8MoeBackend.HUMMING:
-        from aphrodite.model_executor.layers.fused_moe import RoutedExperts
-        from aphrodite.model_executor.layers.quantization.utils.humming import (
+        from sonar.model_executor.layers.fused_moe import RoutedExperts
+        from sonar.model_executor.layers.quantization.utils.humming import (
             get_humming_moe_quant_config,
         )
 
@@ -224,13 +224,13 @@ def make_w4a8_moe_kernel(
     routing_tables: tuple[torch.Tensor, torch.Tensor, torch.Tensor] | None = None,
 ) -> mk.FusedMoEKernel:
     if backend == W4A8MoeBackend.HUMMING:
-        from aphrodite.model_executor.layers.quantization.utils.humming import (
+        from sonar.model_executor.layers.quantization.utils.humming import (
             make_humming_moe_kernel,
         )
 
         return make_humming_moe_kernel(moe_quant_config, moe_config, experts_cls, routing_tables=routing_tables)
 
-    from aphrodite.model_executor.layers.fused_moe.experts.cutlass_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.cutlass_moe import (
         CutlassExpertsW4A8Fp8,
     )
 

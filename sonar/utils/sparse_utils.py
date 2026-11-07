@@ -22,9 +22,9 @@ from collections.abc import Iterator
 
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.utils.mem_constants import MiB_bytes
+import sonar.envs as envs
+from sonar.exceptions import SonarValidationError
+from sonar.utils.mem_constants import MiB_bytes
 
 _SPARSE_LOAD_LOCK = threading.Lock()
 
@@ -52,21 +52,21 @@ def safe_to_dense(tensor: object, *, parameter: str) -> torch.Tensor:
     `to_dense()` allocates anything.
     """
     if not isinstance(tensor, torch.Tensor):
-        raise AphroditeValidationError(
+        raise SonarValidationError(
             f"`{parameter}` payload did not deserialize to a torch.Tensor.",
             parameter=parameter,
         )
 
-    max_bytes = envs.APHRODITE_MAX_EMBED_DECODE_BYTES
+    max_bytes = envs.SONAR_MAX_EMBED_DECODE_BYTES
     if max_bytes > 0:
         dense_bytes = tensor.numel() * tensor.element_size()
         if dense_bytes > max_bytes:
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 f"`{parameter}` declares shape {tuple(tensor.shape)}, which "
                 f"would allocate {dense_bytes} bytes "
                 f"({dense_bytes / MiB_bytes:.0f} MiB) once densified, "
                 f"exceeding the {max_bytes} byte limit. Set "
-                f"APHRODITE_MAX_EMBED_DECODE_BYTES to increase this limit.",
+                f"SONAR_MAX_EMBED_DECODE_BYTES to increase this limit.",
                 parameter=parameter,
                 value=dense_bytes,
             )

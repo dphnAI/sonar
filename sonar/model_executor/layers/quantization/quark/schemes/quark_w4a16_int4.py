@@ -7,33 +7,33 @@ from typing import Any
 
 import torch
 
-from aphrodite.model_executor.kernels.linear import (
+from sonar.model_executor.kernels.linear import (
     MPLinearKernel,
     MPLinearLayerConfig,
     choose_mp_linear_kernel,
 )
-from aphrodite.model_executor.layers.quantization.auto_awq import (
+from sonar.model_executor.layers.quantization.auto_awq import (
     _convert_awq_to_standard_format,
 )
-from aphrodite.model_executor.layers.quantization.quark.schemes.quark_scheme import (
+from sonar.model_executor.layers.quantization.quark.schemes.quark_scheme import (
     QuarkScheme,
 )
-from aphrodite.model_executor.layers.quantization.quark.utils import (
+from sonar.model_executor.layers.quantization.quark.utils import (
     canonicalize_quark_packed_int4,
     parse_w4a16_int4_weight_config,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     kInt4Static,
     kInt4Static32,
     kInt4Static32Asym,
     kInt4StaticAsym,
 )
-from aphrodite.model_executor.parameter import (
+from sonar.model_executor.parameter import (
     GroupQuantScaleParameter,
-    PackedAphroditeParameter,
+    PackedSonarParameter,
 )
-from aphrodite.scalar_type import scalar_types
+from sonar.scalar_type import scalar_types
 
 
 class QuarkW4A16Int4(QuarkScheme):
@@ -121,7 +121,7 @@ class QuarkW4A16Int4(QuarkScheme):
                 loaded_weight = padded_weight
             weight_loader(param, loaded_weight, *args, **loader_kwargs)
 
-        weight = PackedAphroditeParameter(
+        weight = PackedSonarParameter(
             data=torch.empty(
                 input_size_per_partition,
                 packed_output_size_per_partition,
@@ -134,7 +134,7 @@ class QuarkW4A16Int4(QuarkScheme):
             weight_loader=weight_loader,
         )
         num_groups = input_size_per_partition // group_size
-        weight_zero_point = PackedAphroditeParameter(
+        weight_zero_point = PackedSonarParameter(
             data=torch.zeros(
                 num_groups,
                 packed_output_size_per_partition,

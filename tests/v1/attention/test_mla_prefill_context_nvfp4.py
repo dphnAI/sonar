@@ -19,13 +19,13 @@ from typing import cast
 import pytest
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.model_executor.layers.attention.mla_attention import (
+from sonar import _custom_ops as ops
+from sonar.model_executor.layers.attention.mla_attention import (
     MLACommonBaseImpl,
     MLACommonPrefillMetadata,
     build_mla_chunked_context_metadata,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 pytestmark = pytest.mark.skipif(
     not current_platform.is_device_capability_family(100),

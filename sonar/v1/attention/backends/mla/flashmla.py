@@ -6,11 +6,11 @@ from typing import ClassVar
 
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.cache import CacheDType
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.attention.mla_attention import (
+import sonar.envs as envs
+from sonar.config import SonarConfig
+from sonar.config.cache import CacheDType
+from sonar.logger import init_logger
+from sonar.model_executor.layers.attention.mla_attention import (
     MLACommonBackend,
     MLACommonDecodeMetadata,
     MLACommonImpl,
@@ -18,19 +18,19 @@ from aphrodite.model_executor.layers.attention.mla_attention import (
     MLACommonMetadataBuilder,
     QueryLenSupport,
 )
-from aphrodite.platforms.interface import DeviceCapability
-from aphrodite.utils.platform_utils import num_compute_units
-from aphrodite.v1.attention.backend import (
+from sonar.platforms.interface import DeviceCapability
+from sonar.utils.platform_utils import num_compute_units
+from sonar.v1.attention.backend import (
     AttentionCGSupport,
     AttentionLayer,
     AttentionType,
     MultipleOf,
 )
-from aphrodite.v1.attention.backends.utils import (
+from sonar.v1.attention.backends.utils import (
     reshape_attn_output_for_spec_decode,
     reshape_query_for_spec_decode,
 )
-from aphrodite.v1.attention.ops.flashmla import (
+from sonar.v1.attention.ops.flashmla import (
     FlashMLASchedMeta,
     flash_mla_with_kvcache,
     flash_mla_with_kvcache_fp8,
@@ -38,7 +38,7 @@ from aphrodite.v1.attention.ops.flashmla import (
     get_mla_metadata_dense_fp8,
     is_flashmla_dense_supported,
 )
-from aphrodite.v1.kv_cache_interface import AttentionSpec, is_quantized_kv_cache
+from sonar.v1.kv_cache_interface import AttentionSpec, is_quantized_kv_cache
 
 logger = init_logger(__name__)
 
@@ -87,11 +87,11 @@ class FlashMLABackend(MLACommonBackend):
         device_capability: DeviceCapability,
     ) -> str | None:
         if use_sparse:
-            from aphrodite.v1.attention.ops.flashmla import is_flashmla_sparse_supported
+            from sonar.v1.attention.ops.flashmla import is_flashmla_sparse_supported
 
             return is_flashmla_sparse_supported()[1]
         else:
-            from aphrodite.v1.attention.ops.flashmla import is_flashmla_dense_supported
+            from sonar.v1.attention.ops.flashmla import is_flashmla_dense_supported
 
             return is_flashmla_dense_supported()[1]
 
@@ -116,16 +116,16 @@ class FlashMLAMetadataBuilder(MLACommonMetadataBuilder[FlashMLAMetadata]):
         self,
         kv_cache_spec: AttentionSpec,
         layer_names: list[str],
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
     ):
-        super().__init__(kv_cache_spec, layer_names, aphrodite_config, device, FlashMLAMetadata)
+        super().__init__(kv_cache_spec, layer_names, sonar_config, device, FlashMLAMetadata)
 
-        self.num_q_heads = aphrodite_config.model_config.get_num_attention_heads(aphrodite_config.parallel_config)
+        self.num_q_heads = sonar_config.model_config.get_num_attention_heads(sonar_config.parallel_config)
 
         self.cg_buf_tile_scheduler_metadata = None
         self.cg_buf_num_splits = None
-        self.is_fp8_kvcache = is_quantized_kv_cache(aphrodite_config.cache_config.cache_dtype)
+        self.is_fp8_kvcache = is_quantized_kv_cache(sonar_config.cache_config.cache_dtype)
 
         num_sms = num_compute_units(self.device.index)
 
@@ -138,7 +138,7 @@ class FlashMLAMetadataBuilder(MLACommonMetadataBuilder[FlashMLAMetadata]):
                 dtype=torch.int32,
             )
             self.cg_buf_num_splits = torch.empty(
-                (aphrodite_config.scheduler_config.max_num_seqs + 1),
+                (sonar_config.scheduler_config.max_num_seqs + 1),
                 device=self.device,
                 dtype=torch.int32,
             )
@@ -267,7 +267,7 @@ class FlashMLAImpl(MLACommonImpl[FlashMLAMetadata]):
         q = reshape_query_for_spec_decode(q, num_decodes)
 
         scheduler_metadata = attn_metadata.decode.scheduler_metadata
-        if envs.APHRODITE_BATCH_INVARIANT and not is_quantized_kv_cache(self.kv_cache_dtype):
+        if envs.SONAR_BATCH_INVARIANT and not is_quantized_kv_cache(self.kv_cache_dtype):
             device = q.device
             dtype = torch.int32
 

@@ -3,7 +3,7 @@
 import torch
 import torch.nn.functional as F
 
-from aphrodite.model_executor.hw_agnostic.custom_op import CustomOp
+from sonar.model_executor.hw_agnostic.custom_op import CustomOp
 
 
 @CustomOp.register("silu_and_mul")

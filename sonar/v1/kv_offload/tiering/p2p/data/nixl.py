@@ -43,10 +43,10 @@ from typing import Any, NamedTuple
 
 import numpy as np
 
-from aphrodite.distributed.nixl_utils import NixlWrapper as _NixlAgent
-from aphrodite.distributed.nixl_utils import nixl_agent_config as _NixlAgentConfig
-from aphrodite.logger import init_logger
-from aphrodite.v1.kv_offload.tiering.p2p.data.base import (
+from sonar.distributed.nixl_utils import NixlWrapper as _NixlAgent
+from sonar.distributed.nixl_utils import nixl_agent_config as _NixlAgentConfig
+from sonar.logger import init_logger
+from sonar.v1.kv_offload.tiering.p2p.data.base import (
     CancelMode,
     DataTransport,
     PollResult,
@@ -159,7 +159,7 @@ class NixlTransport(DataTransport):
         # _handshake_initiation_executor. One worker only: NIXL is not
         # guaranteed to be thread-safe, so registrations stay serialized
         # against each other.
-        self._reg_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="aphrodite-p2p-nixl-reg")
+        self._reg_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="sonar-p2p-nixl-reg")
         # peer_id → registration generation, bumped on every add and remove.
         # A worker that finishes building handles under a stale generation
         # releases them instead of publishing, so a late completion cannot

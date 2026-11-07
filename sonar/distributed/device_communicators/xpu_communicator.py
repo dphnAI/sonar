@@ -6,8 +6,8 @@ import torch
 import torch.distributed as dist
 from torch.distributed import ProcessGroup
 
-import aphrodite.envs as envs
-from aphrodite.logger import init_logger
+import sonar.envs as envs
+from sonar.logger import init_logger
 
 from .base_device_communicator import DeviceCommunicatorBase
 
@@ -58,7 +58,7 @@ class XpuCommunicator(DeviceCommunicatorBase):
         return output.view(input_.shape)
 
     def all_reduce(self, input_: torch.Tensor) -> torch.Tensor:
-        if envs.APHRODITE_BATCH_INVARIANT:
+        if envs.SONAR_BATCH_INVARIANT:
             # XCCL changes its reduction order with message size. Gather first
             # and accumulate in rank order, independent of the token batch.
             return self._fixed_rank_sum(input_)
@@ -84,7 +84,7 @@ class XpuCommunicator(DeviceCommunicatorBase):
 
         output = torch.empty(output_shape, dtype=input_tensor.dtype, device=input_tensor.device)
 
-        if envs.APHRODITE_BATCH_INVARIANT:
+        if envs.SONAR_BATCH_INVARIANT:
             reduced = self._fixed_rank_sum(input_tensor)
             start = self.rank_in_group * chunk_size
             output.copy_(reduced.narrow(0, start, chunk_size))
@@ -115,7 +115,7 @@ class XpuCommunicator(DeviceCommunicatorBase):
         output_shape = (chunk_size,) + input_tensor.shape[1:]
 
         output = torch.empty(output_shape, dtype=input_tensor.dtype, device=input_tensor.device)
-        if envs.APHRODITE_BATCH_INVARIANT:
+        if envs.SONAR_BATCH_INVARIANT:
             reduced = self._fixed_rank_sum(input_tensor)
             start = self.rank_in_group * chunk_size if sizes is None else sum(sizes[: self.rank_in_group])
             output.copy_(reduced.narrow(0, start, chunk_size))

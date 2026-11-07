@@ -54,7 +54,7 @@ hardware_overrides:
   amd:
     extra_args: []
     extra_env:
-      APHRODITE_ROCM_USE_AITER: "1"
+      SONAR_ROCM_USE_AITER: "1"
 strategy_overrides: {}
 
 guide: |
@@ -67,22 +67,22 @@ guide: |
   ## Prerequisites
 
   - Hardware: 8x GPU recommended (TP=8); also runs on consumer hardware like RTX 3090
-  - Aphrodite >= 0.11.0 (support may require main branch)
+  - Sonar >= 0.11.0 (support may require main branch)
   - Latest transformers for compatibility
 
-  ### Install Aphrodite (NVIDIA)
+  ### Install Sonar (NVIDIA)
 
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U aphrodite-engine --torch-backend auto
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   uv pip install git+https://github.com/huggingface/transformers.git@56d68c6706ee052b445e1e476056ed92ac5eb383
   ```
 
-  ### Install Aphrodite (AMD ROCm)
+  ### Install Sonar (AMD ROCm)
 
   ```bash
-  uv pip install aphrodite-engine --extra-index-url https://wheels.vllm.ai/rocm/
+  uv pip install sonar --index-strategy first-index --extra-index-url https://sonar.dphn.ai/whl/release/rocm/x86_64/simple
   ```
 
   ## Launch commands
@@ -90,7 +90,7 @@ guide: |
   NVIDIA:
 
   ```bash
-  aphrodite serve ByteDance-Seed/Seed-OSS-36B-Instruct \
+  sonar serve ByteDance-Seed/Seed-OSS-36B-Instruct \
     --host localhost --port 8000 \
     --tensor-parallel-size 8 \
     --enable-auto-tool-choice \
@@ -100,8 +100,8 @@ guide: |
   AMD:
 
   ```bash
-  export APHRODITE_ROCM_USE_AITER=1
-  aphrodite serve ByteDance-Seed/Seed-OSS-36B-Instruct \
+  export SONAR_ROCM_USE_AITER=1
+  sonar serve ByteDance-Seed/Seed-OSS-36B-Instruct \
     --tensor-parallel-size 8 \
     --enable-auto-tool-choice --tool-call-parser seed_oss \
     --trust-remote-code
@@ -152,8 +152,8 @@ guide: |
   ## Benchmarking
 
   ```bash
-  aphrodite bench serve \
-    --backend aphrodite --model ByteDance-Seed/Seed-OSS-36B-Instruct \
+  sonar bench serve \
+    --backend sonar --model ByteDance-Seed/Seed-OSS-36B-Instruct \
     --endpoint /v1/completions --host localhost --port 8000 \
     --dataset-name random --random-input 800 --random-output 100 \
     --request-rate 2 --num-prompt 100

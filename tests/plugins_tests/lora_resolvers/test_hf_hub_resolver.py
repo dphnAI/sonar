@@ -5,7 +5,7 @@ import os
 import pytest
 from huggingface_hub.constants import HF_HUB_CACHE
 
-from aphrodite.plugins.lora_resolvers.hf_hub_resolver import HfHubResolver
+from sonar.plugins.lora_resolvers.hf_hub_resolver import HfHubResolver
 
 LORA_LIB_MODEL_NAME = "ibm-granite/granite-3.3-8b-instruct"
 # Repo with multiple LoRAs contained in it

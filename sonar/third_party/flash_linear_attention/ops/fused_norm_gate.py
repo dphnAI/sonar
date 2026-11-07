@@ -9,9 +9,9 @@
 
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.math_utils import cdiv, next_power_of_2
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
+from sonar.utils.math_utils import cdiv, next_power_of_2
 
 from .kda import FusedRMSNormGated as FusedRMSNormGated
 

@@ -35,7 +35,7 @@ import cutlass.cute as cute
 from cutlass import Float32, Int32, Int64, Uint32, Uint64
 from cutlass.cute.nvgpu import cpasync
 
-from aphrodite.models.kimi_k3.nvidia.specialized_decode.cutedsl.common.primitives import (
+from sonar.models.kimi_k3.nvidia.specialized_decode.cutedsl.common.primitives import (
     alloc,
     asm,
     at,
@@ -184,7 +184,7 @@ class KdaTcVerify:
 
     @cute.jit
     def __call__(self, *args):
-        # The state as ((V, H, slots), K) rows with its head and slot strides (Aphrodite
+        # The state as ((V, H, slots), K) rows with its head and slot strides (Sonar
         # pads the slot stride to the cache page; V = K rows of a head are
         # contiguous); one TMA box per (slot, head): all V rows
         # into the no-swizzle K-major UMMA layout (row 16 bytes after row, K groups

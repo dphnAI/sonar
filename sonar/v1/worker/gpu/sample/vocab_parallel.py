@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 import torch
 
-from aphrodite.distributed import get_tp_group
+from sonar.distributed import get_tp_group
 
 
 @dataclass(frozen=True)

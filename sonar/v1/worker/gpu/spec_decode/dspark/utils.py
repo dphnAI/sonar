@@ -3,18 +3,18 @@
 
 import torch.nn as nn
 
-from aphrodite.config import AphroditeConfig, ModelConfig, ParallelConfig, replace
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.model_loader import get_model
-from aphrodite.model_executor.model_loader.utils import get_draft_load_config
-from aphrodite.models.deepseek_v4.common.eplb_util import dspark_draft_supports_eplb
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
-from aphrodite.v1.worker.gpu.spec_decode.dflash.utils import (
+from sonar.config import ModelConfig, ParallelConfig, SonarConfig, replace
+from sonar.logger import init_logger
+from sonar.model_executor.model_loader import get_model
+from sonar.model_executor.model_loader.utils import get_draft_load_config
+from sonar.models.deepseek_v4.common.eplb_util import dspark_draft_supports_eplb
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
+from sonar.v1.worker.gpu.spec_decode.dflash.utils import (
     resolve_dflash_attention_backend,
     resolve_dflash_cache_dtype,
 )
-from aphrodite.v1.worker.gpu.spec_decode.eagle.utils import get_target_lm_head
-from aphrodite.v1.worker.gpu.spec_decode.utils import get_pp_safe_draft_load_config
+from sonar.v1.worker.gpu.spec_decode.eagle.utils import get_target_lm_head
+from sonar.v1.worker.gpu.spec_decode.utils import get_pp_safe_draft_load_config
 
 logger = init_logger(__name__)
 
@@ -71,15 +71,15 @@ def _get_dspark_parallel_config(
     )
 
 
-def load_dspark_model(target_model: nn.Module, aphrodite_config: AphroditeConfig) -> nn.Module:
-    speculative_config = aphrodite_config.speculative_config
+def load_dspark_model(target_model: nn.Module, sonar_config: SonarConfig) -> nn.Module:
+    speculative_config = sonar_config.speculative_config
     assert speculative_config is not None
     draft_model_config = speculative_config.draft_model_config
 
-    from aphrodite.compilation.backends import set_model_tag
-    from aphrodite.model_executor.models.qwen3_dflash import dflash_has_any_non_causal
-    from aphrodite.model_executor.models.utils import get_draft_quant_config
-    from aphrodite.v1.worker.gpu.spec_decode.eagle.utils import (
+    from sonar.compilation.backends import set_model_tag
+    from sonar.model_executor.models.qwen3_dflash import dflash_has_any_non_causal
+    from sonar.model_executor.models.utils import get_draft_quant_config
+    from sonar.v1.worker.gpu.spec_decode.eagle.utils import (
         maybe_share_target_embed,
         share_target_lm_head,
     )
@@ -87,40 +87,40 @@ def load_dspark_model(target_model: nn.Module, aphrodite_config: AphroditeConfig
     draft_attention_backend = _resolve_dspark_attention_backend(
         draft_model_config,
         speculative_config.attention_backend,
-        aphrodite_config.attention_config.backend,
+        sonar_config.attention_config.backend,
     )
 
-    draft_aphrodite_config = replace(
-        aphrodite_config,
+    draft_sonar_config = replace(
+        sonar_config,
         parallel_config=_get_dspark_parallel_config(
-            aphrodite_config.parallel_config,
+            sonar_config.parallel_config,
             speculative_config.draft_parallel_config.tensor_parallel_size,
             draft_model_config,
         ),
         attention_config=replace(
-            aphrodite_config.attention_config,
+            sonar_config.attention_config,
             use_non_causal=dflash_has_any_non_causal(draft_model_config.hf_config),
-            backend=resolve_dflash_attention_backend(aphrodite_config) or draft_attention_backend,
+            backend=resolve_dflash_attention_backend(sonar_config) or draft_attention_backend,
         ),
         cache_config=replace(
-            aphrodite_config.cache_config,
-            cache_dtype=resolve_dflash_cache_dtype(aphrodite_config),
+            sonar_config.cache_config,
+            cache_dtype=resolve_dflash_cache_dtype(sonar_config),
         ),
-        load_config=get_pp_safe_draft_load_config(get_draft_load_config(aphrodite_config)),
+        load_config=get_pp_safe_draft_load_config(get_draft_load_config(sonar_config)),
     )
-    # AphroditeConfig post-init restores the target's quant config because the target
+    # SonarConfig post-init restores the target's quant config because the target
     # config is retained for DSpark's target-layer metadata, so we must override it.
-    draft_aphrodite_config.quant_config = get_draft_quant_config(aphrodite_config)
+    draft_sonar_config.quant_config = get_draft_quant_config(sonar_config)
 
     with set_model_tag("dspark_head"):
-        draft_model = get_model(aphrodite_config=draft_aphrodite_config, model_config=draft_model_config)
+        draft_model = get_model(sonar_config=draft_sonar_config, model_config=draft_model_config)
 
     target_language_model = (
         target_model.get_language_model() if hasattr(target_model, "get_language_model") else target_model
     )
     target_inner = target_language_model.model
     draft_inner = draft_model.model
-    target_vocab_size = aphrodite_config.model_config.get_vocab_size()
+    target_vocab_size = sonar_config.model_config.get_vocab_size()
 
     if draft_model_config.get_vocab_size() <= target_vocab_size:
         maybe_share_target_embed(draft_model, draft_inner, target_inner)

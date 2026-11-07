@@ -4,7 +4,7 @@
 
 from typing import Any
 
-from aphrodite.v1.kv_offload.config import (
+from sonar.v1.kv_offload.config import (
     OffloadingCacheConfig,
     OffloadingConfig,
     OffloadingGroupConfig,

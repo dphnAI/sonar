@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
 //! Bucket boundaries of the core request and KV-cache histograms, grouped into
-//! the families of Python's `aphrodite/v1/metrics/buckets.py` so that
+//! the families of Python's `sonar/v1/metrics/buckets.py` so that
 //! `--custom-histogram-buckets` can replace a family's defaults. Histograms
 //! owned by other subsystems, such as the KV connector metrics, keep their own
 //! boundaries.
@@ -216,11 +216,11 @@ mod tests {
 
         let output = metrics.render().unwrap();
         let bounds = [
-            "aphrodite:time_to_first_token_seconds",
-            "aphrodite:request_time_per_output_token_seconds",
-            "aphrodite:request_prompt_tokens",
-            "aphrodite:request_params_n",
-            "aphrodite:kv_block_lifetime_seconds",
+            "sonar:time_to_first_token_seconds",
+            "sonar:request_time_per_output_token_seconds",
+            "sonar:request_prompt_tokens",
+            "sonar:request_params_n",
+            "sonar:kv_block_lifetime_seconds",
         ]
         .map(|name| {
             let bounds = output
@@ -233,11 +233,11 @@ mod tests {
         })
         .join("\n");
         expect![[r#"
-            aphrodite:time_to_first_token_seconds: 0.5 1.0 +Inf
-            aphrodite:request_time_per_output_token_seconds: 0.2 +Inf
-            aphrodite:request_prompt_tokens: 10.0 100.0 +Inf
-            aphrodite:request_params_n: 1.0 2.0 5.0 10.0 20.0 +Inf
-            aphrodite:kv_block_lifetime_seconds: 60.0 +Inf"#]]
+            sonar:time_to_first_token_seconds: 0.5 1.0 +Inf
+            sonar:request_time_per_output_token_seconds: 0.2 +Inf
+            sonar:request_prompt_tokens: 10.0 100.0 +Inf
+            sonar:request_params_n: 1.0 2.0 5.0 10.0 20.0 +Inf
+            sonar:kv_block_lifetime_seconds: 60.0 +Inf"#]]
         .assert_eq(&bounds);
     }
 

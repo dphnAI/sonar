@@ -7,36 +7,36 @@ from typing import TYPE_CHECKING, Any, ClassVar, cast
 import torch
 from torch import nn
 
-from aphrodite.config import AphroditeConfig, get_current_aphrodite_config
-from aphrodite.forward_context import get_forward_context
-from aphrodite.model_executor.layers.attention_layer_base import AttentionLayerBase
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import MergedColumnParallelLinear
-from aphrodite.models.deepseek_v4.common.ops.fused_compress_quant_cache import (
+from sonar.config import SonarConfig, get_current_sonar_config
+from sonar.forward_context import get_forward_context
+from sonar.model_executor.layers.attention_layer_base import AttentionLayerBase
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import MergedColumnParallelLinear
+from sonar.models.deepseek_v4.common.ops.fused_compress_quant_cache import (
     compress_norm_rope_store_triton,
     compress_norm_rope_store_two_stage_triton,
 )
-from aphrodite.models.deepseek_v4.common.ops.fused_indexer_q import MXFP4_BLOCK_SIZE
-from aphrodite.models.deepseek_v4.common.ops.save_partial_states import (
+from sonar.models.deepseek_v4.common.ops.fused_indexer_q import MXFP4_BLOCK_SIZE
+from sonar.models.deepseek_v4.common.ops.save_partial_states import (
     _SAVE_PARTIAL_STATES_KERNEL,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.v1.attention.backend import (
+from sonar.platforms import current_platform
+from sonar.v1.attention.backend import (
     AttentionBackend,
     AttentionCGSupport,
     AttentionMetadataBuilder,
     CommonAttentionMetadata,
     MultipleOf,
 )
-from aphrodite.v1.attention.backends.utils import split_decodes_and_prefills
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.attention.backends.utils import split_decodes_and_prefills
+from sonar.v1.kv_cache_interface import (
     KVCacheSpec,
     MLAAttentionSpec,
     SlidingWindowMLASpec,
 )
 
 if TYPE_CHECKING:
-    from aphrodite.models.deepseek_v4.eager_scratch import DeepseekV4EagerScratchPool
+    from sonar.models.deepseek_v4.eager_scratch import DeepseekV4EagerScratchPool
 
 
 def _prefer_two_stage_compressor() -> bool:
@@ -99,7 +99,7 @@ class CompressorMetadataBuilder(AttentionMetadataBuilder):
         self.block_size = mla_spec.block_size
 
         self.token_to_req_indices = torch.zeros(
-            self.aphrodite_config.scheduler_config.max_num_batched_tokens,
+            self.sonar_config.scheduler_config.max_num_batched_tokens,
             dtype=torch.int32,
             device=self.device,
         )
@@ -115,8 +115,7 @@ class CompressorMetadataBuilder(AttentionMetadataBuilder):
         if _prefer_two_stage_compressor():
             _, _, num_decode_tokens, _ = split_decodes_and_prefills(common_attn_metadata, decode_threshold=1)
         async_spec_decode = (
-            self.aphrodite_config.scheduler_config.async_scheduling
-            and self.aphrodite_config.speculative_config is not None
+            self.sonar_config.scheduler_config.async_scheduling and self.sonar_config.speculative_config is not None
         )
         return CompressorMetadata(
             block_table=common_attn_metadata.block_table_tensor.clamp_(min=0),
@@ -143,7 +142,7 @@ class CompressorStateCache(torch.nn.Module, AttentionLayerBase):
         self.dtype = dtype
         self.prefix = prefix
         self.kv_cache = torch.tensor([])
-        compilation_config = get_current_aphrodite_config().compilation_config
+        compilation_config = get_current_sonar_config().compilation_config
         if prefix in compilation_config.static_forward_context:
             raise ValueError(f"Duplicate layer name: {prefix}")
         compilation_config.static_forward_context[prefix] = self
@@ -170,11 +169,11 @@ class CompressorStateCache(torch.nn.Module, AttentionLayerBase):
         # [B, H=1, N, C] -> [B, N, C]
         self.kv_cache = kv_cache.squeeze(1)
 
-    def get_kv_cache_spec(self, aphrodite_config: AphroditeConfig) -> KVCacheSpec:
+    def get_kv_cache_spec(self, sonar_config: SonarConfig) -> KVCacheSpec:
         # fp8_ds_mla is the UE8M0 paged layout and needs 576B alignment. Plain
         # full-cache rows share state pages with contiguous KV pages, so padding
         # would break page matching.
-        uses_fp8_ds_mla_layout = aphrodite_config.cache_config.cache_dtype == "fp8_ds_mla"
+        uses_fp8_ds_mla_layout = sonar_config.cache_config.cache_dtype == "fp8_ds_mla"
         return SlidingWindowMLASpec(  # only has one vector instead of K + V
             block_size=self.block_size,
             num_kv_heads=1,
@@ -204,7 +203,7 @@ class DeepseekCompressor(nn.Module):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         compress_ratio: int,
         hidden_size: int,
         head_dim: int,
@@ -224,13 +223,13 @@ class DeepseekCompressor(nn.Module):
         self.use_fp4_cache = use_fp4_cache
         self.eager_scratch_pool = eager_scratch_pool
 
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
         self.rope_head_dim = config.qk_rope_head_dim
         self.nope_head_dim = self.head_dim - self.rope_head_dim
         self.rms_norm_eps = config.rms_norm_eps
         self.device = current_platform.device_type
-        self.max_num_reqs = aphrodite_config.scheduler_config.max_num_seqs
-        self.max_model_len = aphrodite_config.model_config.max_model_len
+        self.max_num_reqs = sonar_config.scheduler_config.max_num_seqs
+        self.max_model_len = sonar_config.model_config.max_model_len
 
         self.overlap = compress_ratio == 4
         self.coff = 1 + self.overlap
@@ -240,7 +239,7 @@ class DeepseekCompressor(nn.Module):
         # the intermediate compressed_kv.
         # Currently only tested on ROCm
         self._use_two_stage_fused_compressor = _prefer_two_stage_compressor() and head_dim == 512 and not self.overlap
-        self.max_num_batched_tokens = aphrodite_config.scheduler_config.max_num_batched_tokens
+        self.max_num_batched_tokens = sonar_config.scheduler_config.max_num_batched_tokens
         self._compress_scratch: torch.Tensor | None = None
         if self._use_two_stage_fused_compressor:
             self._compress_scratch = torch.empty(
@@ -279,8 +278,8 @@ class DeepseekCompressor(nn.Module):
         )
 
         # Save reference to static_forward_context for forward-time KV cache lookup.
-        # get_current_aphrodite_config() is only available during __init__, not forward.
-        self._static_forward_context = aphrodite_config.compilation_config.static_forward_context
+        # get_current_sonar_config() is only available during __init__, not forward.
+        self._static_forward_context = sonar_config.compilation_config.static_forward_context
 
         if self.head_dim == 512:
             assert not use_fp4_cache, "MXFP4 cache is only supported for indexer (head=128)"
@@ -299,13 +298,13 @@ class DeepseekCompressor(nn.Module):
         else:
             raise ValueError(f"Unsupported head_dim for fused quant+cache: {self.head_dim}")
 
-        if aphrodite_config.kernel_config.enable_jit_warmup:
+        if sonar_config.kernel_config.enable_jit_warmup:
             _SAVE_PARTIAL_STATES_KERNEL.register_warmup(
                 head_dim=self.head_dim,
                 compress_ratio=self.compress_ratio,
             )
             if current_platform.is_cuda() and self.head_dim == 512:
-                from aphrodite.models.deepseek_v4.nvidia.ops.sparse_attn_compress_cutedsl import (  # noqa: E501
+                from sonar.models.deepseek_v4.nvidia.ops.sparse_attn_compress_cutedsl import (  # noqa: E501
                     _SPARSE_ATTN_COMPRESS_C128_BLOCK8_KERNEL,
                     _SPARSE_ATTN_COMPRESS_NORM_ROPE_STORE_C4_KERNEL,
                     _SPARSE_ATTN_COMPRESS_NORM_ROPE_STORE_FULL_C4_KERNEL,
@@ -313,7 +312,7 @@ class DeepseekCompressor(nn.Module):
                     _SPARSE_ATTN_NORM_ROPE_STORE_KERNEL,
                 )
 
-                store_full_kv = aphrodite_config.cache_config.cache_dtype != "fp8_ds_mla"
+                store_full_kv = sonar_config.cache_config.cache_dtype != "fp8_ds_mla"
                 if self.compress_ratio == 4:
                     (
                         _SPARSE_ATTN_COMPRESS_NORM_ROPE_STORE_FULL_C4_KERNEL
@@ -326,12 +325,12 @@ class DeepseekCompressor(nn.Module):
                         _SPARSE_ATTN_NORM_ROPE_STORE_FULL_KERNEL.register_warmup()
                     else:
                         _SPARSE_ATTN_NORM_ROPE_STORE_KERNEL.register_warmup(
-                            aphrodite_config,
+                            sonar_config,
                             k_cache_prefix=self.k_cache_prefix,
                             compress_ratio=self.compress_ratio,
                         )
             else:
-                from aphrodite.models.deepseek_v4.common.ops.fused_compress_quant_cache import (  # noqa: E501
+                from sonar.models.deepseek_v4.common.ops.fused_compress_quant_cache import (  # noqa: E501
                     _FUSED_KV_COMPRESS_NORM_ROPE_INSERT_INDEXER_TRITON_KERNEL,
                 )
 

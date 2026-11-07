@@ -72,7 +72,7 @@ guide: |
 
   [Glyph](https://github.com/thu-coai/Glyph) is a framework from Zhipu AI for scaling
   context length via visual-text compression. It renders long textual sequences into
-  images and processes them with a vision-language model. This recipe covers the Aphrodite
+  images and processes them with a vision-language model. This recipe covers the Sonar
   deployment of the `zai-org/Glyph` VLM as a component in that framework.
 
   Glyph is a reasoning multimodal model, so `--reasoning-parser glm45` is recommended
@@ -80,21 +80,21 @@ guide: |
 
   ## Prerequisites
 
-  - **Aphrodite version:** latest stable
+  - **Sonar version:** latest stable
   - **Hardware:** 1x H100 or 1x MI300X/MI325X
 
-  ### Install Aphrodite (NVIDIA)
+  ### Install Sonar (NVIDIA)
 
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U aphrodite-engine --torch-backend auto
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   ```
 
-  ### Install Aphrodite (AMD ROCm)
+  ### Install Sonar (AMD ROCm)
 
   ```bash
-  uv pip install aphrodite-engine --extra-index-url https://wheels.vllm.ai/rocm
+  uv pip install sonar --index-strategy first-index --extra-index-url https://sonar.dphn.ai/whl/release/rocm/x86_64/simple
   ```
 
   ROCm wheel requires Python 3.12, ROCm 7.0, glibc >= 2.35.
@@ -104,7 +104,7 @@ guide: |
   ### Single H100 GPU
 
   ```bash
-  aphrodite serve zai-org/Glyph \
+  sonar serve zai-org/Glyph \
       --no-enable-prefix-caching \
       --mm-processor-cache-gb 0 \
       --reasoning-parser glm45 \
@@ -114,9 +114,9 @@ guide: |
   ### Single MI300X / MI325X
 
   ```bash
-  APHRODITE_ROCM_USE_AITER=1 \
+  SONAR_ROCM_USE_AITER=1 \
   SAFETENSORS_FAST_GPU=1 \
-  aphrodite serve zai-org/Glyph \
+  sonar serve zai-org/Glyph \
       --no-enable-prefix-caching \
       --mm-processor-cache-gb 0 \
       --reasoning-parser glm45 \
@@ -133,7 +133,7 @@ guide: |
   ## Benchmarking
 
   ```bash
-  aphrodite bench serve \
+  sonar bench serve \
     --model zai-org/Glyph \
     --dataset-name random \
     --random-input-len 8192 \
@@ -153,4 +153,4 @@ guide: |
 
   - [Model card](https://huggingface.co/zai-org/Glyph)
   - [Glyph framework on GitHub](https://github.com/thu-coai/Glyph)
-  - [Aphrodite deployment section of Glyph docs](https://github.com/thu-coai/Glyph?tab=readme-ov-file#model-deployment-vllm-acceleration)
+  - [Sonar deployment section of Glyph docs](https://github.com/thu-coai/Glyph?tab=readme-ov-file#model-deployment-vllm-acceleration)

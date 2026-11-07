@@ -7,12 +7,12 @@ per-request params, so nothing here may pull in model-runner side modules
 (torch, triton, worker state) at import time.
 """
 
-from aphrodite.v1.worker.gpu.sample.logits_processor.interface import (
+from sonar.v1.worker.gpu.sample.logits_processor.interface import (
     LogitsContext,
     LogitsProcessor,
     LogitsProcRequestState,
 )
-from aphrodite.v1.worker.gpu.sample.logits_processor.loader import (
+from sonar.v1.worker.gpu.sample.logits_processor.loader import (
     build_custom_logits_processors,
     build_custom_logits_processors_params_validator,
 )

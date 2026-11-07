@@ -22,19 +22,19 @@ from typing import TYPE_CHECKING
 import torch
 import torch.nn as nn
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.quantization.torchao import TorchAOConfig
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import SonarConfig
+from sonar.logger import init_logger
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.quantization.torchao import TorchAOConfig
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.models.llama4 import Llama4DecoderLayer, Llama4ForCausalLM
-from aphrodite.model_executor.models.utils import extract_layer_index
+from sonar.model_executor.models.llama4 import Llama4DecoderLayer, Llama4ForCausalLM
+from sonar.model_executor.models.utils import extract_layer_index
 
 from .interfaces import (
     MultiModalEmbeddings,
@@ -65,7 +65,7 @@ else:
 
 @support_torch_compile
 class LlamaModel(nn.Module):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={"model.": ""},
         orig_to_new_stacked={
             ".q_proj": (".qkv_proj", "q"),
@@ -79,13 +79,13 @@ class LlamaModel(nn.Module):
     def __init__(
         self,
         *,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
         start_layer_id: int = 0,
         quant_config: QuantizationConfig | None = None,
     ) -> None:
         super().__init__()
-        speculative_config = aphrodite_config.speculative_config
+        speculative_config = sonar_config.speculative_config
         assert speculative_config is not None
         self.config = speculative_config.draft_model_config.hf_config
         self.validate_and_update_config(start_layer_id, quant_config)
@@ -96,14 +96,14 @@ class LlamaModel(nn.Module):
             prefix=maybe_prefix(prefix, "embed_tokens"),
         )
 
-        # Temporarily modify aphrodite_config.quant_config for draft model layers
-        original_quant_config = aphrodite_config.quant_config
-        aphrodite_config.quant_config = quant_config
+        # Temporarily modify sonar_config.quant_config for draft model layers
+        original_quant_config = sonar_config.quant_config
+        sonar_config.quant_config = quant_config
         try:
             self.layers = nn.ModuleList(
                 [
                     Llama4DecoderLayer(
-                        aphrodite_config=aphrodite_config,
+                        sonar_config=sonar_config,
                         prefix=maybe_prefix(prefix, f"layers.{i + start_layer_id}"),
                         config=self.config,
                     )
@@ -112,7 +112,7 @@ class LlamaModel(nn.Module):
             )
         finally:
             # Restore original quant_config
-            aphrodite_config.quant_config = original_quant_config
+            sonar_config.quant_config = original_quant_config
         self.fc = torch.nn.Linear(self.config.hidden_size * 2, self.config.hidden_size, bias=False)
         self.norm = RMSNorm(self.config.hidden_size, eps=self.config.rms_norm_eps)
 
@@ -141,7 +141,7 @@ class LlamaModel(nn.Module):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
     def validate_and_update_config(self, start_layer_id: int, quant_config: QuantizationConfig | None = None) -> None:
         # yoco and moe is not supported by draft model yet
@@ -166,18 +166,18 @@ class LlamaModel(nn.Module):
 
 
 class EagleLlama4ForCausalLM(_EagleLlama4ForCausalLMBase, SupportsMultiModalEmbeddings):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         nn.Module.__init__(self)
-        speculative_config = aphrodite_config.speculative_config
+        speculative_config = sonar_config.speculative_config
         assert speculative_config is not None
         self.config = speculative_config.draft_model_config.hf_config
-        target_layer_num = aphrodite_config.model_config.get_num_layers(aphrodite_config.parallel_config)
+        target_layer_num = sonar_config.model_config.get_num_layers(sonar_config.parallel_config)
         # draft model quantization config may differ from target model
-        quant_config = AphroditeConfig.get_quantization_config(
-            speculative_config.draft_model_config, aphrodite_config.load_config
+        quant_config = SonarConfig.get_quantization_config(
+            speculative_config.draft_model_config, sonar_config.load_config
         )
         self.model = LlamaModel(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             prefix=maybe_prefix(prefix, "model"),
             start_layer_id=target_layer_num,
             quant_config=quant_config,

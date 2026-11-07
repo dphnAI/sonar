@@ -11,11 +11,11 @@ from typing import Any
 
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
-from aphrodite.v1.attention.ops.triton_attention_helpers import (
+import sonar.envs as envs
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
+from sonar.v1.attention.ops.triton_attention_helpers import (
     apply_alibi_to_score,
     apply_softcap,
     cdiv_fn,
@@ -28,10 +28,10 @@ from aphrodite.v1.attention.ops.triton_attention_helpers import (
     softmax_step,
     store_segm_reduce_scalars,
 )
-from aphrodite.v1.kv_cache_interface import KVQuantMode
+from sonar.v1.kv_cache_interface import KVQuantMode
 
 logger = init_logger(__name__)
-is_batch_invariant = envs.APHRODITE_BATCH_INVARIANT
+is_batch_invariant = envs.SONAR_BATCH_INVARIANT
 float8_info = torch.finfo(current_platform.fp8_dtype())
 # Longest per-request query (e.g. 1 + num_speculative_tokens) run by split-K.
 MAX_3D_QUERY_LEN = 8
@@ -88,7 +88,7 @@ def _load_q_td(
       * ``num_queries_per_kv`` is a power of 2,
       * the ``num_queries_per_kv`` heads of the current KV group are
         contiguous in memory (``query_stride_1 == HEAD_SIZE``, which is
-        the default Aphrodite query layout).
+        the default Sonar query layout).
 
     Under those preconditions the inner two axes are flattened into one
     row of size ``num_queries_per_kv * HEAD_SIZE`` with stride 1, which
@@ -839,7 +839,7 @@ def unified_attention(
     # sub-byte unpack); everything else goes through the core kernel below.
     if kv_quant_mode == KVQuantMode.INT4_PER_TOKEN_HEAD:
         assert use_causal and not use_per_seq_causal, "INT4_PER_TOKEN_HEAD only supports causal attention"
-        from aphrodite.v1.attention.ops.int4_per_token_head import (
+        from sonar.v1.attention.ops.int4_per_token_head import (
             unified_attention_int4,
         )
 
@@ -991,14 +991,14 @@ def unified_attention(
     # equivalent to the pointer path when the ``num_queries_per_kv`` heads
     # for this KV group start at ``kv_head_idx * num_queries_per_kv`` and
     # lie exactly HEAD_SIZE apart — i.e. ``query_stride_1 == HEAD_SIZE``
-    # and ``output_stride_1 == head_size``.  This is the default Aphrodite
+    # and ``output_stride_1 == head_size``.  This is the default Sonar
     # query/output layout; assert it explicitly so we fail fast if a
     # future caller passes a non-contiguous query tensor.
     if use_td_qo:
         assert q.stride(1) == head_size, (
             f"USE_TD_QO requires contiguous query heads "
             f"(q.stride(1) = {q.stride(1)} != head_size = {head_size}); "
-            f"set APHRODITE_TRITON_USE_TD=0 or pad the query layout."
+            f"set SONAR_TRITON_USE_TD=0 or pad the query layout."
         )
         assert out.stride(1) == head_size, (
             f"USE_TD_QO requires contiguous output heads (out.stride(1) = {out.stride(1)} != head_size = {head_size})."

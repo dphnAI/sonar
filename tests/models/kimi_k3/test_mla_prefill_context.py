@@ -13,15 +13,15 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-import aphrodite.model_executor.layers.attention.mla_attention as mla_attention
-from aphrodite.model_executor.layers.attention.mla_attention import (
+import sonar.model_executor.layers.attention.mla_attention as mla_attention
+from sonar.model_executor.layers.attention.mla_attention import (
     MLACommonBaseImpl,
     MLACommonImpl,
     MLACommonPrefillMetadata,
     build_mla_chunked_context_metadata,
 )
-from aphrodite.models.kimi_k3.nvidia.mla import MultiHeadLatentAttention
-from aphrodite.platforms import current_platform
+from sonar.models.kimi_k3.nvidia.mla import MultiHeadLatentAttention
+from sonar.platforms import current_platform
 
 pytestmark = pytest.mark.skipif(not current_platform.is_cuda(), reason="Kimi-K3 fused MLA requires CUDA")
 

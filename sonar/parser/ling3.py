@@ -12,11 +12,11 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
-from aphrodite.parser.engine.adapters import make_adapters
-from aphrodite.parser.engine.parser_engine import ParserEngine
-from aphrodite.parser.glm47_moe import (
+from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
+from sonar.parser.engine.adapters import make_adapters
+from sonar.parser.engine.parser_engine import ParserEngine
+from sonar.parser.glm47_moe import (
     THINK_END,
     THINK_START,
     Glm47MoeParser,
@@ -24,8 +24,8 @@ from aphrodite.parser.glm47_moe import (
 )
 
 if TYPE_CHECKING:
-    from aphrodite.tokenizers import TokenizerLike
-    from aphrodite.tool_parsers.abstract_tool_parser import Tool
+    from sonar.tokenizers import TokenizerLike
+    from sonar.tool_parsers.abstract_tool_parser import Tool
 
 
 class Ling3Parser(Glm47MoeParser):

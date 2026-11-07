@@ -6,8 +6,8 @@ from io import BytesIO
 import numpy as np
 import numpy.typing as npt
 
-from aphrodite.logger import init_logger
-from aphrodite.utils.import_utils import PlaceholderModule
+from sonar.logger import init_logger
+from sonar.utils.import_utils import PlaceholderModule
 
 from .base import (
     VideoSourceMetadata,

@@ -13,16 +13,16 @@ import torch
 from torch import nn
 from transformers.utils import SAFE_WEIGHTS_INDEX_NAME
 
-from aphrodite.config import ModelConfig, get_current_aphrodite_config_or_none
-from aphrodite.config.load import LoadConfig
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.quantization.kv_cache import BaseKVCacheMethod
-from aphrodite.model_executor.layers.quantization.torchao import torchao_version_at_least
-from aphrodite.model_executor.model_loader.base_loader import BaseModelLoader
-from aphrodite.model_executor.model_loader.ep_weight_filter import (
+from sonar.config import ModelConfig, get_current_sonar_config_or_none
+from sonar.config.load import LoadConfig
+from sonar.logger import init_logger
+from sonar.model_executor.layers.quantization.kv_cache import BaseKVCacheMethod
+from sonar.model_executor.layers.quantization.torchao import torchao_version_at_least
+from sonar.model_executor.model_loader.base_loader import BaseModelLoader
+from sonar.model_executor.model_loader.ep_weight_filter import (
     compute_local_expert_ids,
 )
-from aphrodite.model_executor.model_loader.weight_utils import (
+from sonar.model_executor.model_loader.weight_utils import (
     _get_checkpoints_size_bytes,
     download_safetensors_index_file_from_hf,
     download_weights_from_hf,
@@ -41,11 +41,11 @@ from aphrodite.model_executor.model_loader.weight_utils import (
     resolve_mm_encoder_only_lm_prefixes,
     safetensors_weights_iterator,
 )
-from aphrodite.tracing import instrument
-from aphrodite.transformers_utils.repo_utils import list_filtered_repo_files
+from sonar.tracing import instrument
+from sonar.transformers_utils.repo_utils import list_filtered_repo_files
 
 if TYPE_CHECKING:
-    from aphrodite.model_executor.models.utils import WeightsMapper
+    from sonar.model_executor.models.utils import WeightsMapper
 
 logger = init_logger(__name__)
 
@@ -289,8 +289,8 @@ class DefaultModelLoader(BaseModelLoader):
                     self.load_config.use_tqdm_on_load,
                 )
             elif self.load_config.load_format == "instanttensor":
-                aphrodite_config = get_current_aphrodite_config_or_none()
-                engram_config = aphrodite_config.engram_config if aphrodite_config else None
+                sonar_config = get_current_sonar_config_or_none()
+                engram_config = sonar_config.engram_config if sonar_config else None
                 weights_iterator = instanttensor_weights_iterator(
                     hf_weights_files,
                     self.load_config.use_tqdm_on_load,
@@ -402,7 +402,7 @@ class DefaultModelLoader(BaseModelLoader):
 
         # Derive from _language_model_names; fail-closed on shared HF roots
         # (Molmo/Phi-4-MM/Muse). Qwen nested/flat keys classified via mapper.
-        weights_mapper = cast("WeightsMapper | None", getattr(model, "hf_to_aphrodite_mapper", None))
+        weights_mapper = cast("WeightsMapper | None", getattr(model, "hf_to_sonar_mapper", None))
         self._encoder_only_lm_prefixes = resolve_mm_encoder_only_lm_prefixes(
             getattr(model, "_language_model_names", None),
             weights_mapper=weights_mapper,
@@ -416,10 +416,10 @@ class DefaultModelLoader(BaseModelLoader):
         expert weights.  By computing the set upfront we can skip non-local
         expert tensors *before* reading them from disk.
         """
-        from aphrodite.config import get_current_aphrodite_config
+        from sonar.config import get_current_sonar_config
 
-        aphrodite_config = get_current_aphrodite_config()
-        parallel_config = aphrodite_config.parallel_config
+        sonar_config = get_current_sonar_config()
+        parallel_config = sonar_config.parallel_config
 
         if not (
             model_config.is_moe and parallel_config.enable_expert_parallel and parallel_config.enable_ep_weight_filter
@@ -440,7 +440,7 @@ class DefaultModelLoader(BaseModelLoader):
         # EP size/rank computation mirrors FusedMoEParallelConfig.make():
         #   ep_size = dp_size * pcp_size * tp_size (flattened)
         #   ep_rank = dp_rank * pcp_size * tp_size + pcp_rank * tp_size + tp_rank
-        from aphrodite.distributed import (
+        from sonar.distributed import (
             get_dp_group,
             get_pcp_group,
             get_tensor_model_parallel_rank,
@@ -472,7 +472,7 @@ class DefaultModelLoader(BaseModelLoader):
 
     @instrument(span_name="Load weights")
     def load_weights(self, model: nn.Module, model_config: ModelConfig) -> None:
-        from aphrodite.utils import tensor_progress_bar
+        from sonar.utils import tensor_progress_bar
 
         if model_config.quantization == "torchao":
             quant_config = get_quant_config(model_config, self.load_config)

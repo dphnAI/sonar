@@ -6,8 +6,8 @@ with the eager ``mask_dcp_empty_shards_`` pass it replaces."""
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.v1.attention.ops.dcp import (
+from sonar.platforms import current_platform
+from sonar.v1.attention.ops.dcp import (
     _dcp_a2a_lse_pack_dim,
     _dcp_a2a_pack_send,
     mask_dcp_empty_shards_,

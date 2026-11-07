@@ -8,8 +8,8 @@ import threading
 
 import torch
 
-from aphrodite.config import ParallelConfig
-from aphrodite.logger import init_logger
+from sonar.config import ParallelConfig
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 

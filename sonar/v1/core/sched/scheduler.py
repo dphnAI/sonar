@@ -7,41 +7,41 @@ from collections.abc import Iterable
 from dataclasses import replace
 from typing import Any
 
-from aphrodite.compilation.cuda_graph import CUDAGraphStat
-from aphrodite.config import AphroditeConfig, KVEventsConfig
-from aphrodite.distributed.aux_output_connector.connector import AuxOutputSchedulerConnector
-from aphrodite.distributed.ec_transfer.ec_connector.base import (
+from sonar.compilation.cuda_graph import CUDAGraphStat
+from sonar.config import KVEventsConfig, SonarConfig
+from sonar.distributed.aux_output_connector.connector import AuxOutputSchedulerConnector
+from sonar.distributed.ec_transfer.ec_connector.base import (
     ECConnectorBase,
     ECConnectorMetadata,
     ECConnectorRole,
 )
-from aphrodite.distributed.ec_transfer.ec_connector.factory import ECConnectorFactory
-from aphrodite.distributed.ec_transfer.ec_connector.metrics import ECConnectorStats
-from aphrodite.distributed.kv_events import EventPublisherFactory, KVEventBatch
-from aphrodite.distributed.kv_transfer.kv_connector.factory import KVConnectorFactory
-from aphrodite.distributed.kv_transfer.kv_connector.v1 import (
+from sonar.distributed.ec_transfer.ec_connector.factory import ECConnectorFactory
+from sonar.distributed.ec_transfer.ec_connector.metrics import ECConnectorStats
+from sonar.distributed.kv_events import EventPublisherFactory, KVEventBatch
+from sonar.distributed.kv_transfer.kv_connector.factory import KVConnectorFactory
+from sonar.distributed.kv_transfer.kv_connector.v1 import (
     KVConnectorBase_V1,
     KVConnectorRole,
     SupportsHMA,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.base import KVConnectorMetadata
-from aphrodite.distributed.kv_transfer.kv_connector.v1.metrics import KVConnectorStats
-from aphrodite.logger import init_logger
-from aphrodite.multimodal import MULTIMODAL_REGISTRY, MultiModalRegistry
-from aphrodite.multimodal.encoder_budget import MultiModalBudget
-from aphrodite.multimodal.inputs import MultiModalKwargsItem
-from aphrodite.multimodal.utils import get_mm_features_in_window
-from aphrodite.outputs import RequestError
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.v1.core.encoder_cache_manager import (
+from sonar.distributed.kv_transfer.kv_connector.v1.base import KVConnectorMetadata
+from sonar.distributed.kv_transfer.kv_connector.v1.metrics import KVConnectorStats
+from sonar.logger import init_logger
+from sonar.multimodal import MULTIMODAL_REGISTRY, MultiModalRegistry
+from sonar.multimodal.encoder_budget import MultiModalBudget
+from sonar.multimodal.inputs import MultiModalKwargsItem
+from sonar.multimodal.utils import get_mm_features_in_window
+from sonar.outputs import RequestError
+from sonar.utils.math_utils import cdiv
+from sonar.v1.core.encoder_cache_manager import (
     EncoderCacheManager,
     EncoderDecoderCacheManager,
 )
-from aphrodite.v1.core.kv_cache_manager import KVCacheBlocks, KVCacheManager
-from aphrodite.v1.core.kv_cache_metrics import KVCacheMetricsCollector
-from aphrodite.v1.core.kv_cache_utils import KVCacheBlock
-from aphrodite.v1.core.sched.interface import PauseState, SchedulerInterface
-from aphrodite.v1.core.sched.output import (
+from sonar.v1.core.kv_cache_manager import KVCacheBlocks, KVCacheManager
+from sonar.v1.core.kv_cache_metrics import KVCacheMetricsCollector
+from sonar.v1.core.kv_cache_utils import KVCacheBlock
+from sonar.v1.core.sched.interface import PauseState, SchedulerInterface
+from sonar.v1.core.sched.output import (
     CachedRequestData,
     GrammarOutput,
     KVConnectorBlockState,
@@ -49,21 +49,21 @@ from aphrodite.v1.core.sched.output import (
     ScheduledEncoderInputStats,
     SchedulerOutput,
 )
-from aphrodite.v1.core.sched.request_queue import (
+from sonar.v1.core.sched.request_queue import (
     RequestQueue,
     SchedulingPolicy,
     create_request_queue,
 )
-from aphrodite.v1.core.sched.utils import check_stop, remove_all
-from aphrodite.v1.engine import EngineCoreEventType, EngineCoreOutput, EngineCoreOutputs
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.core.sched.utils import check_stop, remove_all
+from sonar.v1.engine import EngineCoreEventType, EngineCoreOutput, EngineCoreOutputs
+from sonar.v1.kv_cache_interface import (
     KVCacheConfig,
     MambaSpec,
     get_mamba_prefill_checkpoint_position,
     is_mamba_prefill_checkpoint_valid,
 )
-from aphrodite.v1.metrics.perf import ModelMetrics, PerfStats
-from aphrodite.v1.metrics.stats import (
+from sonar.v1.metrics.perf import ModelMetrics, PerfStats
+from sonar.v1.metrics.stats import (
     KV_FETCH_COMPLETED_WAITING,
     KV_FETCH_IN_PROGRESS,
     KV_FETCH_STAGES,
@@ -72,12 +72,12 @@ from aphrodite.v1.metrics.stats import (
     RequestSpecDecodeMetrics,
     SchedulerStats,
 )
-from aphrodite.v1.outputs import DraftTokenIds, KVConnectorOutput, ModelRunnerOutput
-from aphrodite.v1.request import Request, RequestStatus, StreamingUpdate
-from aphrodite.v1.spec_decode.dynamic.utils import build_dynamic_sd_schedule_lookup
-from aphrodite.v1.spec_decode.metrics import SpecDecodingStats
-from aphrodite.v1.structured_output import StructuredOutputManager
-from aphrodite.v1.utils import record_function_or_nullcontext
+from sonar.v1.outputs import DraftTokenIds, KVConnectorOutput, ModelRunnerOutput
+from sonar.v1.request import Request, RequestStatus, StreamingUpdate
+from sonar.v1.spec_decode.dynamic.utils import build_dynamic_sd_schedule_lookup
+from sonar.v1.spec_decode.metrics import SpecDecodingStats
+from sonar.v1.structured_output import StructuredOutputManager
+from sonar.v1.utils import record_function_or_nullcontext
 
 logger = init_logger(__name__)
 
@@ -85,7 +85,7 @@ logger = init_logger(__name__)
 class Scheduler(SchedulerInterface):
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         kv_cache_config: KVCacheConfig,
         structured_output_manager: StructuredOutputManager,
         block_size: int,
@@ -94,16 +94,16 @@ class Scheduler(SchedulerInterface):
         include_finished_set: bool = False,
         log_stats: bool = False,
     ) -> None:
-        self.aphrodite_config = aphrodite_config
-        self.scheduler_config = aphrodite_config.scheduler_config
-        self.cache_config = aphrodite_config.cache_config
-        self.lora_config = aphrodite_config.lora_config
-        self.model_uses_mrope = aphrodite_config.model_config.uses_mrope
+        self.sonar_config = sonar_config
+        self.scheduler_config = sonar_config.scheduler_config
+        self.cache_config = sonar_config.cache_config
+        self.lora_config = sonar_config.lora_config
+        self.model_uses_mrope = sonar_config.model_config.uses_mrope
         self.kv_cache_config = kv_cache_config
-        self.kv_events_config = aphrodite_config.kv_events_config
-        self.parallel_config = aphrodite_config.parallel_config
+        self.kv_events_config = sonar_config.kv_events_config
+        self.parallel_config = sonar_config.parallel_config
         self.log_stats = log_stats
-        self.observability_config = aphrodite_config.observability_config
+        self.observability_config = sonar_config.observability_config
         self.spec_decode_metrics_level = self.observability_config.per_request_spec_decode_metrics
         self.kv_metrics_collector: KVCacheMetricsCollector | None = None
         if self.observability_config.kv_cache_metrics:
@@ -111,8 +111,8 @@ class Scheduler(SchedulerInterface):
                 self.observability_config.kv_cache_metrics_sample,
             )
         self.structured_output_manager = structured_output_manager
-        self.is_encoder_decoder = aphrodite_config.model_config.is_encoder_decoder
-        self.is_mm_encoder_only = aphrodite_config.is_mm_encoder_only
+        self.is_encoder_decoder = sonar_config.model_config.is_encoder_decoder
+        self.is_mm_encoder_only = sonar_config.is_mm_encoder_only
 
         # include_finished_set controls whether a separate set of finished
         # request ids should be included in the EngineCoreOutputs returned
@@ -137,14 +137,12 @@ class Scheduler(SchedulerInterface):
             else self.scheduler_config.max_num_batched_tokens
         )
         self.adaptive_long_prefill_threshold = self.scheduler_config.long_prefill_token_threshold_adaptive
-        self.max_model_len = aphrodite_config.model_config.max_model_len
+        self.max_model_len = sonar_config.model_config.max_model_len
         self.enable_kv_cache_events = self.kv_events_config is not None and self.kv_events_config.enable_kv_cache_events
         # Pooling and diffusion models do not append a sampled token after
         # prefill, so they should not reserve one context slot while scheduling.
         self.num_sampled_tokens_per_step = (
-            0
-            if (aphrodite_config.model_config.runner_type == "pooling" or aphrodite_config.model_config.is_diffusion)
-            else 1
+            0 if (sonar_config.model_config.runner_type == "pooling" or sonar_config.model_config.is_diffusion) else 1
         )
 
         # Create KVConnector for the Scheduler. Note that each Worker
@@ -158,11 +156,11 @@ class Scheduler(SchedulerInterface):
         # Whether a preempted request's in-flight output must be dropped; see
         # KVConnectorBase_V1.requires_kv_delivery.
         self.requires_kv_delivery = False
-        kv_transfer_config = self.aphrodite_config.kv_transfer_config
+        kv_transfer_config = self.sonar_config.kv_transfer_config
         if kv_transfer_config is not None:
             assert not self.is_encoder_decoder, "Encoder-decoder models are not currently supported with KV connectors"
             self.connector = KVConnectorFactory.create_connector(
-                config=self.aphrodite_config,
+                config=self.sonar_config,
                 role=KVConnectorRole.SCHEDULER,
                 kv_cache_config=self.kv_cache_config,
             )
@@ -175,7 +173,7 @@ class Scheduler(SchedulerInterface):
             # still be writing a freed request's KV blocks. A consumer KV
             # Connector can reallocate and fill those blocks via a load that
             # isn't ordered against that write, so defer freeing them.
-            multiple_inflight_batches = self.aphrodite_config.max_concurrent_batches > 1
+            multiple_inflight_batches = self.sonar_config.max_concurrent_batches > 1
             if multiple_inflight_batches and kv_transfer_config.is_kv_consumer:
                 self.defer_block_free = True
             # HiSparse keeps reading a released page until the pool reuses it,
@@ -189,17 +187,17 @@ class Scheduler(SchedulerInterface):
             self.parallel_config.data_parallel_index,
         )
         self.ec_connector = None
-        if self.aphrodite_config.ec_transfer_config is not None:
+        if self.sonar_config.ec_transfer_config is not None:
             self.ec_connector = ECConnectorFactory.create_connector(
-                config=self.aphrodite_config, role=ECConnectorRole.SCHEDULER
+                config=self.sonar_config, role=ECConnectorRole.SCHEDULER
             )
 
         num_gpu_blocks = self.cache_config.num_gpu_blocks
         assert num_gpu_blocks is not None and num_gpu_blocks > 0
 
         self.block_size = block_size
-        self.dcp_world_size = aphrodite_config.parallel_config.decode_context_parallel_size
-        self.pcp_world_size = aphrodite_config.parallel_config.prefill_context_parallel_size
+        self.dcp_world_size = sonar_config.parallel_config.decode_context_parallel_size
+        self.pcp_world_size = sonar_config.parallel_config.prefill_context_parallel_size
 
         # req_id -> Request
         self.requests: dict[str, Request] = {}
@@ -243,8 +241,8 @@ class Scheduler(SchedulerInterface):
 
         # Encoder-related.
         # Calculate encoder cache size if applicable
-        supports_mm_inputs = aphrodite_config.model_config.supports_multimodal_inputs
-        mm_budget = MultiModalBudget(aphrodite_config, mm_registry) if supports_mm_inputs else None
+        supports_mm_inputs = sonar_config.model_config.supports_multimodal_inputs
+        mm_budget = MultiModalBudget(sonar_config, mm_registry) if supports_mm_inputs else None
 
         # NOTE: Text-only encoder-decoder models are implemented as
         # multi-modal models for convenience
@@ -256,17 +254,17 @@ class Scheduler(SchedulerInterface):
 
         self.max_num_encoder_input_tokens = mm_budget.encoder_compute_budget if mm_budget else 0
         encoder_cache_size = mm_budget.encoder_cache_size if mm_budget else 0
-        manager_cls_obj = aphrodite_config.ec_manager_config.get_encoder_cache_manager_obj()
+        manager_cls_obj = sonar_config.ec_manager_config.get_encoder_cache_manager_obj()
         if manager_cls_obj is None:
             manager_cls_obj = EncoderDecoderCacheManager if self.is_encoder_decoder else EncoderCacheManager
         self.encoder_cache_manager = manager_cls_obj.create_manager(
-            cache_size=encoder_cache_size, aphrodite_config=aphrodite_config
+            cache_size=encoder_cache_size, sonar_config=sonar_config
         )
-        speculative_config = aphrodite_config.speculative_config
+        speculative_config = sonar_config.speculative_config
         self.use_eagle = False
         self.use_eagle_block_drop = False
-        self.num_spec_tokens = aphrodite_config.num_speculative_tokens
-        self.num_lookahead_tokens = aphrodite_config.num_lookahead_tokens
+        self.num_spec_tokens = sonar_config.num_speculative_tokens
+        self.num_lookahead_tokens = sonar_config.num_lookahead_tokens
         # DSV41 SWA bounded replay: groups that declare a replay window are rebuilt
         # after a prefix hit by recomputing its trailing tokens. One window
         # for all such groups, so the rewind matches every group's allocation.
@@ -281,18 +279,18 @@ class Scheduler(SchedulerInterface):
         }
         assert len(replay_windows) <= 1, f"Prefix replay windows should agree: {sorted(replay_windows)}"
         self.prefix_replay_tokens = replay_windows.pop() if replay_windows else 0
-        self.num_prefill_lookahead = aphrodite_config.num_prefill_lookahead_tokens
+        self.num_prefill_lookahead = sonar_config.num_prefill_lookahead_tokens
         # The V2 model runner skips drafting in steps where no scheduled request
         # can use the drafts. Only drafters with their own forward pass reserve
         # lookahead slots.
-        self.can_skip_drafts = self.num_lookahead_tokens > 0 and aphrodite_config.use_v2_model_runner
+        self.can_skip_drafts = self.num_lookahead_tokens > 0 and sonar_config.use_v2_model_runner
         self.dynamic_sd_lookup: list[int] | None = None
         if speculative_config is not None:
             if speculative_config.num_speculative_tokens_per_batch_size:
                 self.dynamic_sd_lookup = build_dynamic_sd_schedule_lookup(
                     speculative_config.num_speculative_tokens_per_batch_size,
-                    aphrodite_max_batch_size=self.scheduler_config.max_num_seqs,
-                    aphrodite_num_speculative_tokens=self.num_spec_tokens,
+                    sonar_max_batch_size=self.scheduler_config.max_num_seqs,
+                    sonar_num_speculative_tokens=self.num_spec_tokens,
                 )
             self.use_eagle = speculative_config.uses_target_hidden_states
             self.use_eagle_block_drop = speculative_config.use_eagle_block_drop()
@@ -303,7 +301,7 @@ class Scheduler(SchedulerInterface):
                     "acceptance rates."
                 )
 
-        self.num_hash_lookahead_tokens = aphrodite_config.num_hash_lookahead_tokens
+        self.num_hash_lookahead_tokens = sonar_config.num_hash_lookahead_tokens
         if self.num_hash_lookahead_tokens:
             # Lookahead hashes prove the boundary token, so EAGLE needs no drop.
             self.use_eagle_block_drop = False
@@ -315,7 +313,7 @@ class Scheduler(SchedulerInterface):
         self.kv_cache_manager = KVCacheManager(
             kv_cache_config=kv_cache_config,
             max_model_len=self.max_model_len,
-            max_in_flight_tokens=aphrodite_config.max_in_flight_tokens,
+            max_in_flight_tokens=sonar_config.max_in_flight_tokens,
             enable_caching=self.cache_config.enable_prefix_caching,
             use_eagle=self.use_eagle_block_drop,
             num_hash_lookahead_tokens=self.num_hash_lookahead_tokens,
@@ -342,7 +340,7 @@ class Scheduler(SchedulerInterface):
             self.connector.bind_kv_cache_manager(self.kv_cache_manager)
 
         self.use_pp = self.parallel_config.pipeline_parallel_size > 1
-        self.use_v2_model_runner = aphrodite_config.use_v2_model_runner
+        self.use_v2_model_runner = sonar_config.use_v2_model_runner
         self._pending_encoder_input_ids: dict[str, set[int]] = {}
         # Scheduler iteration counter. Drives the V2+PP+async decode-throttle
         # cadence (`next_decode_eligible_step`).
@@ -426,15 +424,15 @@ class Scheduler(SchedulerInterface):
         self.deferred_loads: dict[str, tuple[int, int, int, int]] = {}
 
         self.perf_metrics: ModelMetrics | None = None
-        if self.log_stats and aphrodite_config.observability_config.enable_mfu_metrics:
-            self.perf_metrics = ModelMetrics(aphrodite_config)
+        if self.log_stats and sonar_config.observability_config.enable_mfu_metrics:
+            self.perf_metrics = ModelMetrics(sonar_config)
 
         self.aux_output_connector = (
             AuxOutputSchedulerConnector(self.kv_cache_manager, self.connector)
-            if aphrodite_config.aux_output_config.enabled
+            if sonar_config.aux_output_config.enabled
             else None
         )
-        self.return_sampling_mask = aphrodite_config.model_config.return_sampling_mask
+        self.return_sampling_mask = sonar_config.model_config.return_sampling_mask
 
         self._pause_state: PauseState = PauseState.UNPAUSED
 
@@ -644,7 +642,7 @@ class Scheduler(SchedulerInterface):
         req_to_new_blocks: dict[str, KVCacheBlocks] = {}
         num_scheduled_tokens: dict[str, int] = {}
         token_budget = self.max_num_scheduled_tokens
-        spec = self.aphrodite_config.speculative_config
+        spec = self.sonar_config.speculative_config
         draft_slots = spec.max_num_new_slots_for_drafting if spec is not None else 0
         input_budget = self.scheduler_config.max_num_batched_tokens
         if self._pause_state == PauseState.PAUSED_ALL:
@@ -3021,7 +3019,7 @@ class Scheduler(SchedulerInterface):
             return False, None
 
         finished_partial_tails: list[tuple[int, int, int]] = []
-        kv_transfer_config = self.aphrodite_config.kv_transfer_config
+        kv_transfer_config = self.sonar_config.kv_transfer_config
         if kv_transfer_config is not None and kv_transfer_config.is_kv_producer:
             finished_partial_tails = self.kv_cache_manager.finalize_partial_tail_offloads(request)
 

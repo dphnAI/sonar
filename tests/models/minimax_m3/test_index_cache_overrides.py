@@ -5,10 +5,10 @@
 import pytest
 import regex as re
 
-from aphrodite.config import ModelConfig
-from aphrodite.models.minimax_m3.amd.model import _should_skip_index_topk
-from aphrodite.platforms import current_platform
-from aphrodite.transformers_utils.configs.minimax_m3 import MiniMaxM3Config
+from sonar.config import ModelConfig
+from sonar.models.minimax_m3.amd.model import _should_skip_index_topk
+from sonar.platforms import current_platform
+from sonar.transformers_utils.configs.minimax_m3 import MiniMaxM3Config
 
 pytestmark = pytest.mark.skipif(not current_platform.is_rocm(), reason="MiniMax-M3 AMD model")
 

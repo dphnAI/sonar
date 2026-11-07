@@ -13,7 +13,7 @@ from typing import Any, TypeVar
 
 from typing_extensions import ParamSpec
 
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 

@@ -8,15 +8,15 @@ from typing import Generic, TypeVar
 
 import torch
 
-from aphrodite.model_executor.layers.fusion.quant_activation import (
+from sonar.model_executor.layers.fusion.quant_activation import (
     QuantizedActivation,
     as_quantized_activation,
 )
-from aphrodite.model_executor.layers.quantization.input_quant_fp8 import QuantFP8
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.input_quant_fp8 import QuantFP8
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 from ..base import MMLinearLayerConfig
 

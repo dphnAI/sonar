@@ -10,8 +10,8 @@ from multiprocessing.queues import Queue
 import pytest
 import torch
 
-from aphrodite.distributed.utils import create_tcp_store
-from aphrodite.utils.network_utils import get_open_port
+from sonar.distributed.utils import create_tcp_store
+from sonar.utils.network_utils import get_open_port
 
 RESULT_TIMEOUT_S = 240
 
@@ -21,16 +21,16 @@ def _join_dp_world_group(dp_rank: int, coord_store_port: int, dp_master_port: in
     try:
         import torch.distributed as dist
 
-        from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-        from aphrodite.config.parallel import ParallelConfig
-        from aphrodite.distributed.parallel_state import init_distributed_environment
+        from sonar.config import SonarConfig, set_current_sonar_config
+        from sonar.config.parallel import ParallelConfig
+        from sonar.distributed.parallel_state import init_distributed_environment
 
         parallel_config = ParallelConfig(data_parallel_size=2, data_parallel_rank=dp_rank)
         parallel_config.data_parallel_master_ip = "127.0.0.1"
         parallel_config._data_parallel_master_port_list = [dp_master_port]
         parallel_config._coord_store_port = coord_store_port
 
-        with set_current_aphrodite_config(AphroditeConfig(parallel_config=parallel_config)):
+        with set_current_sonar_config(SonarConfig(parallel_config=parallel_config)):
             init_distributed_environment(world_size=1, rank=0, local_rank=0, backend="gloo")
 
         reduced = torch.tensor([dp_rank + 1])

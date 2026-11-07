@@ -30,12 +30,12 @@ import flydsl.expr as fx
 from flydsl.expr import arith, const_expr, gpu, range_constexpr, rocdl
 from flydsl.expr.typing import T
 
-from aphrodite.v1.attention.ops.flydsl_kernels.buffer_utils import (
+from sonar.v1.attention.ops.flydsl_kernels.buffer_utils import (
     buffer_view,
     load_vec,
     store_vec,
 )
-from aphrodite.v1.attention.ops.flydsl_kernels.mma_utils import mma
+from sonar.v1.attention.ops.flydsl_kernels.mma_utils import mma
 
 # === Constants (TQ decode profile) ==========================================
 HEAD_SIZE = 128
@@ -101,7 +101,7 @@ def build_tq_decode_module(
     of all global-memory writes by ``mfma_row < QG``. Q load iterates
     ``(QG + 3) // 4`` chunks (= 2 for QG=6/8, 4 for QG=16).
 
-    ``kv_block_size`` is the number of tokens per Aphrodite cache block. Must
+    ``kv_block_size`` is the number of tokens per Sonar cache block. Must
     be a multiple of TILE_SIZE (=16). Supported values: 16 and 32. With
     block_size=32, two MFMA K-tiles fit in each block; the kernel walks
     block-table entries every ``kv_block_size // TILE_SIZE`` tiles and

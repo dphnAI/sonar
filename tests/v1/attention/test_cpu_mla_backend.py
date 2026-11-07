@@ -18,14 +18,14 @@ Two levels of coverage are provided:
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.v1.attention.backends.mla.prefill.cpu_sdpa import (
+from sonar.platforms import current_platform
+from sonar.v1.attention.backends.mla.prefill.cpu_sdpa import (
     CPUSDPAMLAPrefillBackend,
 )
-from aphrodite.v1.attention.backends.mla.prefill.selector import (
+from sonar.v1.attention.backends.mla.prefill.selector import (
     get_mla_prefill_backend,
 )
-from aphrodite.v1.attention.backends.mla.prefill.zen_cpu_sdpa import (
+from sonar.v1.attention.backends.mla.prefill.zen_cpu_sdpa import (
     ZenCPUSDPAMLAPrefillBackend,
 )
 
@@ -108,7 +108,7 @@ def test_kv_cache_cpu_write() -> None:
 @pytest.mark.skipif(not current_platform.is_cpu(), reason="CPU only")
 def test_cpu_mla_backend_smoke(tmp_path) -> None:
     # Shrink the architecture aggressively so the test is CI-friendly.
-    from aphrodite import LLM, SamplingParams
+    from sonar import LLM, SamplingParams
 
     hf_overrides = {
         "num_hidden_layers": 2,
@@ -177,7 +177,7 @@ def test_cpu_mla_prefill_new_tokens() -> None:
         qk_nope_head_dim=16,
         qk_rope_head_dim=0,
         v_head_dim=16,
-        aphrodite_config=None,
+        sonar_config=None,
     )
 
     class _PrefillMeta:
@@ -225,7 +225,7 @@ def test_cpu_mla_prefill_context_chunk() -> None:
         qk_nope_head_dim=16,
         qk_rope_head_dim=0,
         v_head_dim=16,
-        aphrodite_config=None,
+        sonar_config=None,
     )
 
     class _PrefillMeta:
@@ -275,7 +275,7 @@ def test_zen_cpu_mla_prefill_new_tokens() -> None:
         qk_nope_head_dim=16,
         qk_rope_head_dim=8,
         v_head_dim=v_head_dim,
-        aphrodite_config=None,
+        sonar_config=None,
     )
 
     class _PrefillMeta:
@@ -309,7 +309,7 @@ def test_zen_cpu_mla_prefill_new_tokens() -> None:
         qk_nope_head_dim=16,
         qk_rope_head_dim=8,
         v_head_dim=v_head_dim,
-        aphrodite_config=None,
+        sonar_config=None,
     )
     generic.prepare_metadata(_PrefillMeta())
     zen_out, zen_lse = backend.run_prefill_new_tokens(q, k, v, return_softmax_lse=True)

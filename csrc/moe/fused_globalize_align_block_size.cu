@@ -21,7 +21,7 @@
 
 namespace cg = cooperative_groups;
 
-namespace aphrodite {
+namespace sonar {
 namespace moe {
 
 static constexpr int FGAS_THREADS = 256;
@@ -206,7 +206,7 @@ static void fgas_launch(long* p_topk, const int* p_psum, int* p_sorted,
 }
 
 }  // namespace moe
-}  // namespace aphrodite
+}  // namespace sonar
 
 // recv_topk_idx (int64, [N, topk]) is globalized in place and the align/sort
 // outputs (int32) are filled. counts is an internal write-cursor allocated
@@ -260,7 +260,7 @@ void fused_globalize_align_block_size(
     p_scatter = reinterpret_cast<int*>(scatter_idx->mutable_data_ptr());
   }
 
-  aphrodite::moe::fgas_launch(p_topk, p_psum, p_sorted, p_expert, p_num,
-                              p_counts, p_scatter, P, reo, gne, numel, mntp,
-                              mnmb, local_e, topk, (int)block_size, stream);
+  sonar::moe::fgas_launch(p_topk, p_psum, p_sorted, p_expert, p_num, p_counts,
+                          p_scatter, P, reo, gne, numel, mntp, mnmb, local_e,
+                          topk, (int)block_size, stream);
 }

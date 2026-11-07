@@ -20,22 +20,22 @@ from unittest.mock import patch
 
 import pytest
 
-from aphrodite import SamplingParams
-from aphrodite.config import AphroditeConfig, KVTransferConfig
-from aphrodite.distributed.kv_transfer.kv_connector.factory import KVConnectorFactory
-from aphrodite.distributed.kv_transfer.kv_connector.v1.base import (
+from sonar import SamplingParams
+from sonar.config import KVTransferConfig, SonarConfig
+from sonar.distributed.kv_transfer.kv_connector.factory import KVConnectorFactory
+from sonar.distributed.kv_transfer.kv_connector.v1.base import (
     KVConnectorBase_V1,
     KVConnectorMetadata,
     KVConnectorRole,
 )
-from aphrodite.engine.arg_utils import AsyncEngineArgs
-from aphrodite.platforms import current_platform
-from aphrodite.sampling_params import RequestOutputKind
-from aphrodite.utils.torch_utils import set_default_torch_num_threads
-from aphrodite.v1.core.sched.output import SchedulerOutput
-from aphrodite.v1.engine.async_llm import AsyncLLM
-from aphrodite.v1.kv_cache_interface import KVCacheConfig
-from aphrodite.v1.request import Request
+from sonar.engine.arg_utils import AsyncEngineArgs
+from sonar.platforms import current_platform
+from sonar.sampling_params import RequestOutputKind
+from sonar.utils.torch_utils import set_default_torch_num_threads
+from sonar.v1.core.sched.output import SchedulerOutput
+from sonar.v1.engine.async_llm import AsyncLLM
+from sonar.v1.kv_cache_interface import KVCacheConfig
+from sonar.v1.request import Request
 
 if not current_platform.is_cuda():
     pytest.skip(reason="V1 currently only supported on CUDA.", allow_module_level=True)
@@ -62,13 +62,13 @@ class DummyKVConnector(KVConnectorBase_V1):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         role: KVConnectorRole,
         kv_cache_config: KVCacheConfig,
     ):
-        super().__init__(aphrodite_config, role, kv_cache_config)
+        super().__init__(sonar_config, role, kv_cache_config)
         # Get the status file path from extra config
-        extra_config = aphrodite_config.kv_transfer_config.kv_connector_extra_config or {}
+        extra_config = sonar_config.kv_transfer_config.kv_connector_extra_config or {}
         self.status_file = extra_config.get("status_file")
         # Log that we were initialized
         if self.status_file:
@@ -171,7 +171,7 @@ async def test_abort_during_final_step(async_scheduling: bool):
 
     try:
         # Get the original execute_model method
-        from aphrodite.v1.worker.gpu_worker import Worker
+        from sonar.v1.worker.gpu_worker import Worker
 
         original_execute_model = Worker.execute_model
 

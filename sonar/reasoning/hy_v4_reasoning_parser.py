@@ -8,14 +8,14 @@ from typing import TYPE_CHECKING, TypedDict
 
 import regex as re
 
-from aphrodite.entrypoints.generate.base.protocol import DeltaMessage
-from aphrodite.logger import init_logger
-from aphrodite.reasoning import ReasoningParser
-from aphrodite.tokenizers import TokenizerLike
+from sonar.entrypoints.generate.base.protocol import DeltaMessage
+from sonar.logger import init_logger
+from sonar.reasoning import ReasoningParser
+from sonar.tokenizers import TokenizerLike
 
 if TYPE_CHECKING:
-    from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-    from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
+    from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+    from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
 
 logger = init_logger(__name__)
 
@@ -30,7 +30,7 @@ class ReasoningDelta(TypedDict):
     content: str | None
 
 
-# NOTE: mirrored in ``aphrodite.tool_parsers.hy_v4_tool_parser`` (same pattern as
+# NOTE: mirrored in ``sonar.tool_parsers.hy_v4_tool_parser`` (same pattern as
 # ``gemma4_utils``) so neither package depends on the other.
 def detect_token_suffix(tokenizer: TokenizerLike) -> str:
     """Detect the per-checkpoint suffix used by Hunyuan structural tokens.
@@ -176,7 +176,7 @@ class HYV4ReasoningExtractor:
     ) -> ReasoningDelta | None:
         """Classify a streaming delta as reasoning and/or content.
 
-        In no_think mode every delta is content. Otherwise: same logic as Aphrodite's
+        In no_think mode every delta is content. Otherwise: same logic as Sonar's
         generic thinking parser, except the final branch (no start token seen
         anywhere) treats output as reasoning-then-content, because HYV4 injects
         ``<think>`` in the prompt (absent from the output).
@@ -232,7 +232,7 @@ def build_reasoning_extractor(tokenizer: TokenizerLike, *, thinking: bool = True
 
 
 class HYV4ReasoningParser(ReasoningParser):
-    """Aphrodite adapter around :class:`HYV4ReasoningExtractor`.
+    """Sonar adapter around :class:`HYV4ReasoningExtractor`.
 
     Decides ``thinking`` from the request's ``reasoning_effort`` and converts
     the extractor's ``ReasoningDelta`` to ``DeltaMessage``.

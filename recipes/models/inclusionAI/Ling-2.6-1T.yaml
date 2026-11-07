@@ -47,7 +47,7 @@ compatible_strategies:
 hardware_overrides:
   amd:
     extra_env:
-      APHRODITE_ROCM_USE_AITER: "1"
+      SONAR_ROCM_USE_AITER: "1"
 
 strategy_overrides:
   single_node_tp:
@@ -77,7 +77,7 @@ guide: |
     --device=/dev/kfd \
     --device=/dev/dri \
     --group-add video \
-    -e APHRODITE_ROCM_USE_AITER=1 \
+    -e SONAR_ROCM_USE_AITER=1 \
     vllm/vllm-openai-rocm:v0.28.0 \
       inclusionAI/Ling-2.6-1T \
       --tensor-parallel-size 8 \
@@ -101,5 +101,5 @@ guide: |
   ## References
 
   - [Ling-2.6-1T on Hugging Face](https://huggingface.co/inclusionAI/Ling-2.6-1T)
-  - [Aphrodite ROCm GPU install docs](https://docs.vllm.ai/en/latest/getting_started/installation/gpu/?device=rocm)
-  - [ROCm Aphrodite optimization guide](https://rocm.docs.amd.com/en/latest/how-to/rocm-for-ai/inference-optimization/vllm-optimization.html)
+  - [Sonar ROCm GPU install docs](https://docs.vllm.ai/en/latest/getting_started/installation/gpu/?device=rocm)
+  - [ROCm Sonar optimization guide](https://rocm.docs.amd.com/en/latest/how-to/rocm-for-ai/inference-optimization/vllm-optimization.html)

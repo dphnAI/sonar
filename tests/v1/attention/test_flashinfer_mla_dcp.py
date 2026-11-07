@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 requires_flashinfer_mla = pytest.mark.skipif(
     not current_platform.has_device_capability(100),
@@ -16,7 +16,7 @@ requires_flashinfer_mla = pytest.mark.skipif(
 
 
 def test_mla_dcp_gathered_query_reserves_backend_head_storage():
-    from aphrodite.v1.attention.ops.dcp import reserve_query_head_storage
+    from sonar.v1.attention.ops.dcp import reserve_query_head_storage
 
     query = torch.randn(3, 24, 576, dtype=torch.bfloat16)
 
@@ -30,7 +30,7 @@ def test_mla_dcp_gathered_query_reserves_backend_head_storage():
 
 @requires_flashinfer_mla
 def test_flashinfer_mla_selects_backend_for_gathered_heads():
-    from aphrodite.v1.attention.backends.mla.flashinfer_mla import (
+    from sonar.v1.attention.backends.mla.flashinfer_mla import (
         _select_mla_decode_backend,
     )
 
@@ -40,7 +40,7 @@ def test_flashinfer_mla_selects_backend_for_gathered_heads():
 
 @requires_flashinfer_mla
 def test_flashinfer_mla_forward_uses_gathered_head_count(monkeypatch):
-    import aphrodite.v1.attention.backends.mla.flashinfer_mla as flashinfer_mla
+    import sonar.v1.attention.backends.mla.flashinfer_mla as flashinfer_mla
 
     impl = MagicMock()
     impl.bmm1_scale = 1.0
@@ -87,7 +87,7 @@ def test_flashinfer_mla_forward_uses_gathered_head_count(monkeypatch):
 @pytest.mark.parametrize("causal", [True, False], ids=["causal", "noncausal"])
 @pytest.mark.parametrize("query_lens", [(3, 3), (3, 1)], ids=["uniform", "ragged"])
 def test_flashinfer_mla_forward_uses_native_dcp_api(monkeypatch, causal, query_lens):
-    import aphrodite.v1.attention.backends.mla.flashinfer_mla as flashinfer_mla
+    import sonar.v1.attention.backends.mla.flashinfer_mla as flashinfer_mla
 
     impl = MagicMock()
     impl.bmm1_scale = 1.0

@@ -10,7 +10,7 @@ from typing_extensions import TypedDict
 if TYPE_CHECKING:
     import torch
 
-    from aphrodite.multimodal.inputs import AudioItem, ImageItem, VideoItem, VisionChunk
+    from sonar.multimodal.inputs import AudioItem, ImageItem, VideoItem, VisionChunk
 
 
 _T = TypeVar("_T")
@@ -27,7 +27,7 @@ The number of data items allowed per modality is restricted by
 
 @final
 class MultiModalDataBuiltins(TypedDict, total=False):
-    """Type annotations for modality types predefined by Aphrodite."""
+    """Type annotations for modality types predefined by Sonar."""
 
     image: ModalityData["ImageItem"]
     """The input image(s)."""
@@ -47,7 +47,7 @@ MultiModalDataDict: TypeAlias = Mapping[str, ModalityData[Any]]
 A dictionary containing an entry for each modality type to input.
 
 The built-in modalities are defined by
-[`MultiModalDataBuiltins`][aphrodite.inputs.llm.MultiModalDataBuiltins].
+[`MultiModalDataBuiltins`][sonar.inputs.llm.MultiModalDataBuiltins].
 """
 
 MultiModalUUIDDict: TypeAlias = Mapping[str, Sequence[str | None] | str]
@@ -63,7 +63,7 @@ The UUID will be used to identify the item for all caching purposes
 
 class _PromptOptions(TypedDict):
     """Additional options available to all
-    [`SingletonPrompt`][aphrodite.inputs.llm.SingletonPrompt] types.
+    [`SingletonPrompt`][sonar.inputs.llm.SingletonPrompt] types.
     """
 
     multi_modal_data: NotRequired[MultiModalDataDict | None]
@@ -152,10 +152,10 @@ DecoderOnlyPrompt: TypeAlias = str | TextPrompt | list[int] | TokensPrompt | Emb
 """
 Schema of a prompt for a decoder-only model:
 
-- A text prompt (string or [`TextPrompt`][aphrodite.inputs.llm.TextPrompt])
+- A text prompt (string or [`TextPrompt`][sonar.inputs.llm.TextPrompt])
 - A tokenized prompt (list of token IDs, or
-  [`TokensPrompt`][aphrodite.inputs.llm.TokensPrompt])
-- An embeddings prompt ([`EmbedsPrompt`][aphrodite.inputs.llm.EmbedsPrompt])
+  [`TokensPrompt`][sonar.inputs.llm.TokensPrompt])
+- An embeddings prompt ([`EmbedsPrompt`][sonar.inputs.llm.EmbedsPrompt])
 
 For encoder-decoder models, passing a singleton prompt is shorthand for passing
 `ExplicitEncoderDecoderPrompt(encoder_prompt=prompt, decoder_prompt=None)`.
@@ -166,9 +166,9 @@ EncoderPrompt: TypeAlias = str | TextPrompt | list[int] | TokensPrompt
 """
 Schema of a prompt for the encoder part of a encoder-decoder model:
 
-- A text prompt (string or [`TextPrompt`][aphrodite.inputs.llm.TextPrompt])
+- A text prompt (string or [`TextPrompt`][sonar.inputs.llm.TextPrompt])
 - A tokenized prompt (list of token IDs, or
-  [`TokensPrompt`][aphrodite.inputs.llm.TokensPrompt])
+  [`TokensPrompt`][sonar.inputs.llm.TokensPrompt])
 """
 
 
@@ -176,9 +176,9 @@ DecoderPrompt: TypeAlias = str | TextPrompt | list[int] | TokensPrompt
 """
 Schema of a prompt for the decoder part of an encoder-decoder model:
 
-- A text prompt (string or [`TextPrompt`][aphrodite.inputs.llm.TextPrompt])
+- A text prompt (string or [`TextPrompt`][sonar.inputs.llm.TextPrompt])
 - A tokenized prompt (list of token IDs, or
-  [`TokensPrompt`][aphrodite.inputs.llm.TokensPrompt])
+  [`TokensPrompt`][sonar.inputs.llm.TokensPrompt])
 
 Note:
     Multi-modal inputs are not supported for decoder prompts.
@@ -217,7 +217,7 @@ SingletonPrompt: TypeAlias = DecoderOnlyPrompt | EncoderPrompt | DecoderPrompt
 """
 Schema for a single prompt. This is as opposed to a data structure
 which encapsulates multiple prompts, such as
-[`ExplicitEncoderDecoderPrompt`][aphrodite.inputs.llm.ExplicitEncoderDecoderPrompt].
+[`ExplicitEncoderDecoderPrompt`][sonar.inputs.llm.ExplicitEncoderDecoderPrompt].
 """
 
 
@@ -225,13 +225,13 @@ PromptType: TypeAlias = DecoderOnlyPrompt | EncoderDecoderPrompt
 """
 Schema for any prompt, regardless of model type.
 
-This is the input format accepted by most [`LLM`][aphrodite.entrypoints.llm.LLM] APIs.
+This is the input format accepted by most [`LLM`][sonar.entrypoints.llm.LLM] APIs.
 """
 
 
 class DataPrompt(_PromptOptions):
     """Represents generic inputs that are converted to
-    [`PromptType`][aphrodite.inputs.llm.PromptType] by IO processor plugins.
+    [`PromptType`][sonar.inputs.llm.PromptType] by IO processor plugins.
     """
 
     data: Any

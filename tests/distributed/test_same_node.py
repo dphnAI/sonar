@@ -6,15 +6,15 @@ import os
 import torch
 import torch.distributed as dist
 
-from aphrodite.distributed.parallel_state import in_the_same_node_as
-from aphrodite.distributed.utils import StatelessProcessGroup
-from aphrodite.utils.network_utils import get_ip, get_open_port
+from sonar.distributed.parallel_state import in_the_same_node_as
+from sonar.distributed.utils import StatelessProcessGroup
+from sonar.utils.network_utils import get_ip, get_open_port
 
 
 def _run_test(pg):
     test_result = all(in_the_same_node_as(pg, source_rank=0))
 
-    expected = os.environ.get("APHRODITE_TEST_SAME_HOST", "1") == "1"
+    expected = os.environ.get("SONAR_TEST_SAME_HOST", "1") == "1"
     assert test_result == expected, f"Expected {expected}, got {test_result}"
     if pg == dist.group.WORLD:
         print("Same node test passed! when using torch distributed!")
@@ -38,7 +38,7 @@ if __name__ == "__main__":
     stateless_pg = StatelessProcessGroup.create(ip, port, rank, dist.get_world_size())
 
     for pg in [dist.group.WORLD, stateless_pg]:
-        if os.environ.get("APHRODITE_TEST_WITH_DEFAULT_DEVICE_SET", "0") == "1":
+        if os.environ.get("SONAR_TEST_WITH_DEFAULT_DEVICE_SET", "0") == "1":
             default_devices = ["cpu"]
             if torch.cuda.is_available():
                 default_devices.append("cuda")

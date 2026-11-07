@@ -5,8 +5,8 @@ import json
 
 import pytest
 
-from aphrodite.reasoning import ReasoningParserManager
-from aphrodite.tool_parsers import ToolParserManager
+from sonar.reasoning import ReasoningParserManager
+from sonar.tool_parsers import ToolParserManager
 from tests.parser.engine.replay_harness import MockTokenizer, _test_request
 
 

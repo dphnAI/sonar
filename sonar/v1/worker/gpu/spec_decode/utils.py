@@ -5,13 +5,13 @@ from collections.abc import Iterable
 import numpy as np
 import torch
 
-from aphrodite.config import LoadConfig, replace
-from aphrodite.distributed import get_pp_group
-from aphrodite.logger import init_logger
-from aphrodite.v1.core.sched.output import SchedulerOutput
-from aphrodite.v1.outputs import DraftTokenIds
-from aphrodite.v1.worker.gpu.async_utils import async_copy_to_np
-from aphrodite.v1.worker.gpu.input_batch import InputBatch
+from sonar.config import LoadConfig, replace
+from sonar.distributed import get_pp_group
+from sonar.logger import init_logger
+from sonar.v1.core.sched.output import SchedulerOutput
+from sonar.v1.outputs import DraftTokenIds
+from sonar.v1.worker.gpu.async_utils import async_copy_to_np
+from sonar.v1.worker.gpu.input_batch import InputBatch
 
 logger = init_logger(__name__)
 

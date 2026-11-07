@@ -3,33 +3,33 @@
 
 import torch
 
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.model_executor.layers.fused_moe import (
     FusedMoeWeightScaleSupported,
     RoutedExperts,
     SharedExperts,
 )
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEQuantConfig,
 )
-from aphrodite.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
-from aphrodite.model_executor.layers.fused_moe.oracle.fp8 import (
+from sonar.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
+from sonar.model_executor.layers.fused_moe.oracle.fp8 import (
     convert_to_fp8_moe_kernel_format,
     make_fp8_moe_kernel,
     make_fp8_moe_quant_config,
 )
-from aphrodite.model_executor.layers.fused_moe.oracle.mxfp8 import (
+from sonar.model_executor.layers.fused_moe.oracle.mxfp8 import (
     select_mxfp8_moe_backend,
 )
-from aphrodite.model_executor.layers.quantization.compressed_tensors.compressed_tensors_moe.compressed_tensors_moe import (  # noqa: E501
+from sonar.model_executor.layers.quantization.compressed_tensors.compressed_tensors_moe.compressed_tensors_moe import (  # noqa: E501
     CompressedTensorsMoEMethod,
 )
-from aphrodite.model_executor.layers.quantization.utils.mxfp8_utils import (
+from sonar.model_executor.layers.quantization.utils.mxfp8_utils import (
     MXFP8_BLOCK_SIZE,
     MXFP8_SCALE_DTYPE,
     MXFP8_VALUE_DTYPE,
 )
-from aphrodite.model_executor.utils import replace_parameter, set_weight_attrs
+from sonar.model_executor.utils import replace_parameter, set_weight_attrs
 
 
 class CompressedTensorsW8A8Mxfp8MoEMethod(CompressedTensorsMoEMethod):

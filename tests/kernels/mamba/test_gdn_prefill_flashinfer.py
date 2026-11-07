@@ -4,7 +4,7 @@
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 if current_platform.is_rocm():
     pytest.skip(
@@ -15,17 +15,17 @@ if current_platform.is_rocm():
 import flashinfer.gdn_prefill  # noqa: E402
 import torch.nn.functional as F  # noqa: E402
 
-from aphrodite.model_executor.layers.mamba.checkpoint import (  # noqa: E402
+from sonar.model_executor.layers.mamba.checkpoint import (  # noqa: E402
     MambaPrefillCheckpointExporter,
     MambaPrefillCheckpointMetadata,
 )
-from aphrodite.model_executor.layers.mamba.gdn.qwen_gdn_linear_attn import (
+from sonar.model_executor.layers.mamba.gdn.qwen_gdn_linear_attn import (
     fi_chunk_gated_delta_rule,
 )  # noqa: E402
-from aphrodite.v1.attention.backends.gdn_attn import (  # noqa: E402
+from sonar.v1.attention.backends.gdn_attn import (  # noqa: E402
     plan_flashinfer_checkpoints,
 )
-from aphrodite.v1.attention.backends.utils import NULL_BLOCK_ID  # noqa: E402
+from sonar.v1.attention.backends.utils import NULL_BLOCK_ID  # noqa: E402
 
 
 def test_flashinfer_gdn_prefill_passes_cu_seqlens_through(monkeypatch):

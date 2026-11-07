@@ -15,43 +15,43 @@ from torch import nn
 from torch.nn import LayerNorm
 from transformers import BatchFeature
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.multimodal import MultiModalDummyOptions
-from aphrodite.distributed import get_tensor_model_parallel_world_size
-from aphrodite.inputs import MultiModalDataDict
-from aphrodite.model_executor.layers.activation import SiluAndMul, get_act_fn
-from aphrodite.model_executor.layers.attention import MMEncoderAttention
-from aphrodite.model_executor.layers.conv import Conv2dLayer
-from aphrodite.model_executor.layers.linear import (
+from sonar.config import SonarConfig
+from sonar.config.multimodal import MultiModalDummyOptions
+from sonar.distributed import get_tensor_model_parallel_world_size
+from sonar.inputs import MultiModalDataDict
+from sonar.model_executor.layers.activation import SiluAndMul, get_act_fn
+from sonar.model_executor.layers.attention import MMEncoderAttention
+from sonar.model_executor.layers.conv import Conv2dLayer
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     MergedColumnParallelLinear,
     QKVParallelLinear,
     ReplicatedLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.models.module_mapping import MultiModelKeys
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import (
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.models.module_mapping import MultiModelKeys
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import (
     MultiModalFeatureSpec,
     MultiModalFieldConfig,
     MultiModalKwargsItems,
 )
-from aphrodite.multimodal.parse import MultiModalDataItems
-from aphrodite.multimodal.processing import (
+from sonar.multimodal.parse import MultiModalDataItems
+from sonar.multimodal.processing import (
     BaseDummyInputsBuilder,
     BaseMultiModalProcessor,
     BaseProcessingInfo,
     PromptReplacement,
     PromptUpdate,
 )
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.transformers_utils.configs.chatglm import ChatGLMConfig
-from aphrodite.transformers_utils.processors.glm4v import (
+from sonar.sequence import IntermediateTensors
+from sonar.transformers_utils.configs.chatglm import ChatGLMConfig
+from sonar.transformers_utils.processors.glm4v import (
     GLM4VImageProcessorFast,
     GLM4VProcessor,
 )
-from aphrodite.utils.tensor_schema import TensorSchema, TensorShape
+from sonar.utils.tensor_schema import TensorSchema, TensorShape
 
 from .chatglm import ChatGLMBaseModel, ChatGLMModel, GLMTransformer
 from .interfaces import (
@@ -369,7 +369,7 @@ class EVA2CLIPModel(nn.Module):
 
 
 class GLM4VModel(ChatGLMModel):
-    hf_to_aphrodite_mapper = ChatGLMModel.hf_to_aphrodite_mapper | WeightsMapper(
+    hf_to_sonar_mapper = ChatGLMModel.hf_to_sonar_mapper | WeightsMapper(
         orig_to_new_stacked={
             # weight_name: (param_name, shard_id)
             # Vision GLU projections
@@ -378,10 +378,10 @@ class GLM4VModel(ChatGLMModel):
         }
     )
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
-        super().__init__(aphrodite_config=aphrodite_config, prefix=prefix)
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
+        super().__init__(sonar_config=sonar_config, prefix=prefix)
 
-        quant_config = aphrodite_config.quant_config
+        quant_config = sonar_config.quant_config
 
         self.vision = EVA2CLIPModel(self.config, quant_config, prefix=f"{prefix}.vision")
 
@@ -493,9 +493,9 @@ class GLM4VMultiModalProcessor(BaseMultiModalProcessor[GLM4VProcessingInfo]):
     dummy_inputs=GLM4VDummyInputsBuilder,
 )
 class GLM4VForCausalLM(ChatGLMBaseModel, SupportsMultiModal, SupportsLoRA, SupportsPP, SupportsMRoPE):
-    # NOTE: we must bring this to the surface because GLM4VModel.hf_to_aphrodite_mapper
+    # NOTE: we must bring this to the surface because GLM4VModel.hf_to_sonar_mapper
     # contains non-stacking related mappings which LoRA/BnB needs to know about
-    hf_to_aphrodite_mapper = GLM4VModel.hf_to_aphrodite_mapper
+    hf_to_sonar_mapper = GLM4VModel.hf_to_sonar_mapper
     packed_modules_mapping = {
         "query_key_value": ["query_key_value"],
         "dense_h_to_4h": ["dense_h_to_4h"],
@@ -520,17 +520,17 @@ class GLM4VForCausalLM(ChatGLMBaseModel, SupportsMultiModal, SupportsLoRA, Suppo
     def __init__(
         self,
         *,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
         transformer_type: type[GLM4VModel] = GLM4VModel,
     ) -> None:
         with self._mark_composite_model(
-            aphrodite_config,
+            sonar_config,
             language_targets=GLMTransformer,
             tower_targets={"image": EVA2CLIPModel},
         ):
             super().__init__(
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 prefix=prefix,
                 transformer_type=transformer_type,
             )

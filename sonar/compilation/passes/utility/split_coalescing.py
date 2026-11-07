@@ -8,7 +8,7 @@ to ``split_with_sizes`` and coalesces equivalent split nodes so downstream
 pattern-matching passes see one canonical split with all users attached.
 
 See Also:
-  - Aphrodite  #33295  (original duplicate-split issue)
+  - Sonar  #33295  (original duplicate-split issue)
   - PyTorch #174472 (upstream CSE gap)
   - PyTorch #194037 (multi-output views replayed as individual slices)
 
@@ -23,10 +23,10 @@ from typing import Any
 import torch
 from torch import fx
 
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
-from ..aphrodite_inductor_pass import AphroditeInductorPass
 from ..fx_utils import is_func
+from ..sonar_inductor_pass import SonarInductorPass
 
 logger = init_logger(__name__)
 
@@ -39,7 +39,7 @@ class _SliceInfo:
     end: int
 
 
-class SplitCoalescingPass(AphroditeInductorPass):
+class SplitCoalescingPass(SonarInductorPass):
     """Canonicalize tensor partitions to one shared ``split_with_sizes``.
 
     A complete contiguous slice partition is rewritten from::
@@ -204,7 +204,7 @@ class SplitCoalescingPass(AphroditeInductorPass):
 
         return count
 
-    @AphroditeInductorPass.time_and_log
+    @SonarInductorPass.time_and_log
     def __call__(self, graph: fx.Graph) -> None:
         canonicalized = self._canonicalize_slices(graph)
         coalesced = self._coalesce_splits(graph)

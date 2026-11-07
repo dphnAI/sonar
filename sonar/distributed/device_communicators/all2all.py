@@ -10,25 +10,25 @@ from typing import TYPE_CHECKING, Any
 import torch
 import torch.distributed as dist
 
-import aphrodite.envs as envs
-from aphrodite.config import get_current_aphrodite_config
-from aphrodite.distributed import get_dp_group, get_ep_group, get_pcp_group
-from aphrodite.distributed.device_communicators.cuda_wrapper import CudaRTLibrary
-from aphrodite.distributed.utils import StatelessProcessGroup
-from aphrodite.forward_context import get_forward_context
-from aphrodite.logger import init_logger
-from aphrodite.utils.flashinfer import (
+import sonar.envs as envs
+from sonar.config import get_current_sonar_config
+from sonar.distributed import get_dp_group, get_ep_group, get_pcp_group
+from sonar.distributed.device_communicators.cuda_wrapper import CudaRTLibrary
+from sonar.distributed.utils import StatelessProcessGroup
+from sonar.forward_context import get_forward_context
+from sonar.logger import init_logger
+from sonar.utils.flashinfer import (
     has_flashinfer_nvlink_one_sided,
     has_flashinfer_nvlink_two_sided,
 )
-from aphrodite.utils.import_utils import (
+from sonar.utils.import_utils import (
     check_moonep_system_support,
     deep_ep_v2_unavailable_reason,
     has_deep_ep,
     has_deep_ep_v2,
     has_mori,
 )
-from aphrodite.utils.math_utils import round_up
+from sonar.utils.math_utils import round_up
 
 from .base_device_communicator import All2AllManagerBase, Cache
 
@@ -58,7 +58,7 @@ class AgRsAll2AllManager(All2AllManagerBase):
 
     def __init__(self, cpu_group, tcp_store_group=None):
         super().__init__(cpu_group, tcp_store_group)
-        self.use_ep = get_current_aphrodite_config().parallel_config.enable_expert_parallel
+        self.use_ep = get_current_sonar_config().parallel_config.enable_expert_parallel
 
     def _get_comm_group(self, is_sequence_parallel: bool) -> Any:
         if is_sequence_parallel:
@@ -248,12 +248,12 @@ class DeepEPHTAll2AllManager(DeepEPAll2AllManagerBase):
 
     def _make_all2all_kwargs(self) -> dict[Any, Any]:
         # Defaults for internode and intranode are taken from DeepEP tests.
-        num_nvl_bytes = envs.APHRODITE_DEEPEP_BUFFER_SIZE_MB * 1024 * 1024
+        num_nvl_bytes = envs.SONAR_DEEPEP_BUFFER_SIZE_MB * 1024 * 1024
         num_rdma_bytes = None
         num_qps_per_rank = None
 
-        if self.internode and not envs.APHRODITE_DEEPEP_HIGH_THROUGHPUT_FORCE_INTRA_NODE:
-            num_rdma_bytes = envs.APHRODITE_DEEPEP_BUFFER_SIZE_MB * 1024 * 1024
+        if self.internode and not envs.SONAR_DEEPEP_HIGH_THROUGHPUT_FORCE_INTRA_NODE:
+            num_rdma_bytes = envs.SONAR_DEEPEP_BUFFER_SIZE_MB * 1024 * 1024
             num_qps_per_rank = self.num_sms // 2
         else:
             num_rdma_bytes = 0
@@ -305,7 +305,7 @@ class DeepEPLLAll2AllManager(DeepEPAll2AllManagerBase):
 
     def __init__(self, cpu_group, tcp_store_group=None):
         super().__init__(cpu_group, tcp_store_group)
-        self.support_fault_tolerance = get_current_aphrodite_config().parallel_config.enable_fault_tolerance
+        self.support_fault_tolerance = get_current_sonar_config().parallel_config.enable_fault_tolerance
 
     def _make_all2all_kwargs(
         self,
@@ -325,7 +325,7 @@ class DeepEPLLAll2AllManager(DeepEPAll2AllManagerBase):
         import deep_ep  # type: ignore[import-not-found]
 
         # Defaults for internode and intranode are taken from DeepEP tests.
-        num_nvl_bytes = envs.APHRODITE_DEEPEP_BUFFER_SIZE_MB * 1024 * 1024
+        num_nvl_bytes = envs.SONAR_DEEPEP_BUFFER_SIZE_MB * 1024 * 1024
         num_qps_per_rank = num_local_experts
         num_rdma_bytes = deep_ep.Buffer.get_low_latency_rdma_size_hint(
             num_max_dispatch_tokens_per_rank=max_num_tokens_per_dp_rank,
@@ -344,7 +344,7 @@ class DeepEPLLAll2AllManager(DeepEPAll2AllManagerBase):
             low_latency_mode=True,
             num_qps_per_rank=num_qps_per_rank,
             allow_nvlink_for_low_latency_mode=True,
-            allow_mnnvl=envs.APHRODITE_DEEPEP_LOW_LATENCY_USE_MNNVL,
+            allow_mnnvl=envs.SONAR_DEEPEP_LOW_LATENCY_USE_MNNVL,
             explicitly_destroy=True,
             enable_shrink=self.support_fault_tolerance,
         )
@@ -442,7 +442,7 @@ class NixlEPAll2AllManager(All2AllManagerBase):
     ) -> None:
         from nixl_ep import Buffer  # type: ignore[import-not-found]
 
-        parallel_config = get_current_aphrodite_config().parallel_config
+        parallel_config = get_current_sonar_config().parallel_config
         max_num_ep_ranks = (
             self.world_size * parallel_config.elastic_ep_max_dp_size // parallel_config.data_parallel_size
             if parallel_config.enable_elastic_ep
@@ -678,7 +678,7 @@ class FlashInferNVLinkTwoSidedManager(All2AllManagerBase):
             tp_size=world_size,
         )
 
-        from aphrodite.distributed.device_communicators.mnnvl_compat import (
+        from sonar.distributed.device_communicators.mnnvl_compat import (
             CustomCommunicator,
         )
 
@@ -808,7 +808,7 @@ class FlashInferNVLinkOneSidedManager(All2AllManagerBase):
             params = replace(params, max_tokens_per_rank=max(max_num_tokens, previous_max))
             extra_payload_bytes_per_token = max(dispatch_bytes, previous_bytes) - params.dispatch_bytes_per_token
 
-        from aphrodite.distributed.device_communicators.mnnvl_compat import (
+        from sonar.distributed.device_communicators.mnnvl_compat import (
             CustomCommunicator,
         )
 
@@ -821,7 +821,7 @@ class FlashInferNVLinkOneSidedManager(All2AllManagerBase):
         )
         config = NVLinkOneSidedConfig(
             extra_payload_bytes_per_token=extra_payload_bytes_per_token,
-            use_low_precision_combine=envs.APHRODITE_FLASHINFER_MOE_A2A_LOW_PRECISION_COMBINE,
+            use_low_precision_combine=envs.SONAR_FLASHINFER_MOE_A2A_LOW_PRECISION_COMBINE,
             comm_backend=CustomCommunicator(self.cpu_group),
         )
         if communication is not None:
@@ -876,7 +876,7 @@ class FlashInferNVLinkOneSidedManager(All2AllManagerBase):
 
     def checkpoint_restore(self) -> None:
         if self.initialized:
-            from aphrodite.distributed.device_communicators.mnnvl_compat import (
+            from sonar.distributed.device_communicators.mnnvl_compat import (
                 CustomCommunicator,
             )
 
@@ -906,14 +906,14 @@ class MoriAll2AllManager(All2AllManagerBase):
         self.handle_cache = Cache()
 
         torch._C._distributed_c10d._register_process_group("mori", cpu_group)
-        aphrodite_config = get_current_aphrodite_config()
-        if aphrodite_config.kernel_config.moe_backend == "aiter_mega_moe":
+        sonar_config = get_current_sonar_config()
+        if sonar_config.kernel_config.moe_backend == "aiter_mega_moe":
             # MegaMoEV2 places its dispatch/combine workspaces on the MoRI
             # symmetric heap, which defaults to 2 GB. MegaMoEV2 requires > 4GB
             # (> 8GB with a fused shared expert, which needs an mxfp4 target).
-            online_targets = getattr(aphrodite_config.model_config.quantization_config, "targets", None)
+            online_targets = getattr(sonar_config.model_config.quantization_config, "targets", None)
             may_fuse_shared_expert = (
-                envs.APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS and "mxfp4" in (online_targets or {}).values()
+                envs.SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS and "mxfp4" in (online_targets or {}).values()
             )
             heap_size = os.environ.setdefault("MORI_SHMEM_HEAP_SIZE", "16G" if may_fuse_shared_expert else "8G")
             logger.info_once("AITER MegaMoE: MORI_SHMEM_HEAP_SIZE=%s", heap_size)
@@ -934,7 +934,7 @@ class MoriAll2AllManager(All2AllManagerBase):
     ):
         import mori  # type: ignore[import-not-found]
 
-        from aphrodite.platforms.rocm import on_gfx942, on_gfx950
+        from sonar.platforms.rocm import on_gfx942, on_gfx950
 
         assert on_gfx942() or on_gfx950(), "mori currently only support arch gfx942 and gfx950"
 
@@ -948,7 +948,7 @@ class MoriAll2AllManager(All2AllManagerBase):
             # Multi-node: mori_low_latency → InterNodeV1LL; mori_high_throughput
             # → V1; mori → V1LL for small per-rank token budgets, else V1.
             if self._all2all_backend == "mori":
-                use_ll = max_num_tokens_per_dp_rank <= envs.APHRODITE_MORI_DISPATCH_INTER_KERNEL_SWITCH_THRESHOLD
+                use_ll = max_num_tokens_per_dp_rank <= envs.SONAR_MORI_DISPATCH_INTER_KERNEL_SWITCH_THRESHOLD
             else:
                 use_ll = self._all2all_backend == "mori_low_latency"
             if use_ll:
@@ -1151,14 +1151,14 @@ class DeepEPV2All2AllManager(All2AllManagerBase):
             hidden=hidden,
             num_topk=num_topk,
             use_fp8_dispatch=use_fp8_dispatch,
-            allow_hybrid_mode=envs.APHRODITE_DEEPEP_V2_ALLOW_HYBRID_MODE,
-            prefer_overlap_with_compute=envs.APHRODITE_DEEPEP_V2_PREFER_OVERLAP,
-            allow_multiple_reduction=(envs.APHRODITE_DEEPEP_V2_ALLOW_MULTIPLE_REDUCTION),
+            allow_hybrid_mode=envs.SONAR_DEEPEP_V2_ALLOW_HYBRID_MODE,
+            prefer_overlap_with_compute=envs.SONAR_DEEPEP_V2_PREFER_OVERLAP,
+            allow_multiple_reduction=(envs.SONAR_DEEPEP_V2_ALLOW_MULTIPLE_REDUCTION),
             explicitly_destroy=True,
         )
 
     def _check_gin_support(self, group) -> None:
-        from aphrodite.utils.nccl import query_nccl_gin_type
+        from sonar.utils.nccl import query_nccl_gin_type
 
         probe = torch.zeros(1, device="cuda")
         torch.distributed.all_reduce(probe, group=group)
@@ -1166,7 +1166,7 @@ class DeepEPV2All2AllManager(All2AllManagerBase):
         if os.environ.get("EP_DISABLE_GIN", "0") != "0":
             return
 
-        gin_type = query_nccl_gin_type(group, railed=envs.APHRODITE_DEEPEP_V2_ALLOW_HYBRID_MODE)
+        gin_type = query_nccl_gin_type(group, railed=envs.SONAR_DEEPEP_V2_ALLOW_HYBRID_MODE)
         if gin_type is None:
             raise RuntimeError(
                 "DeepEPv2 communicator properties query failed; networking capability could not be determined."
@@ -1249,7 +1249,7 @@ class MoonEPAll2AllManager(All2AllManagerBase):
         )
 
     def get_handle(self, kwargs):
-        from aphrodite.model_executor.layers.fused_moe.prepare_finalize.moonep import (
+        from sonar.model_executor.layers.fused_moe.prepare_finalize.moonep import (
             MoonEPBufferPool,
         )
 

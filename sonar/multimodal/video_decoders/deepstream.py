@@ -6,7 +6,7 @@ from typing import Any, ClassVar
 
 import numpy.typing as npt
 
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 from .base import VideoSourceMetadata, VideoTargetMetadata, check_frame_pixel_limit
 
@@ -64,7 +64,7 @@ class DeepStreamVideoBackendMixin:
 
         ``pool_size`` (number of decode worker threads) comes from
         ``--media-io-kwargs`` (``{"video": {"pool_size": N}}``); when unset it
-        defaults to the existing ``APHRODITE_MEDIA_LOADING_THREAD_COUNT`` so no
+        defaults to the existing ``SONAR_MEDIA_LOADING_THREAD_COUNT`` so no
         DeepStream-specific env var is needed. The pool is a process-wide
         singleton, so the first decode's value wins.
         """
@@ -80,7 +80,7 @@ class DeepStreamVideoBackendMixin:
             from nvidia.deepstream_videodecode import DecodePool
 
             if pool_size is None:
-                pool_size = int(os.environ.get("APHRODITE_MEDIA_LOADING_THREAD_COUNT", 8))
+                pool_size = int(os.environ.get("SONAR_MEDIA_LOADING_THREAD_COUNT", 8))
             pool_size = max(1, min(int(pool_size), 16))
             logger.info(
                 "[DeepStream] initializing decode pool with %d workers",

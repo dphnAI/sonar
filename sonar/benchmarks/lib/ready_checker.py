@@ -8,7 +8,7 @@ import time
 import aiohttp
 from tqdm.asyncio import tqdm
 
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 from .endpoint_request_func import RequestFunc, RequestFuncInput, RequestFuncOutput
 

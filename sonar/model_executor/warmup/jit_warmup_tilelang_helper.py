@@ -14,7 +14,7 @@ from typing import Any, ClassVar, Generic, TypeAlias, TypeVar, cast
 
 import torch
 
-from aphrodite.model_executor.warmup.jit_warmup import AphroditeJitKernel
+from sonar.model_executor.warmup.jit_warmup import SonarJitKernel
 
 CompileKeyT = TypeVar("CompileKeyT")
 # (kernel_args, launch_args), optionally followed by keywords and a result.
@@ -111,7 +111,7 @@ def compile_tilelang(jit_impl: Any, *args: Any, **kwargs: Any) -> None:
     cache[key] = compiled
 
 
-class AphroditeTileLangJitKernel(AphroditeJitKernel[CompileKeyT], Generic[CompileKeyT]):
+class SonarTileLangJitKernel(SonarJitKernel[CompileKeyT], Generic[CompileKeyT]):
     """TileLang owner whose runtime launch specification is reused for warmup."""
 
     kernel: ClassVar[Any]
@@ -148,7 +148,7 @@ def kernel_launcher(
 
     @wraps(call_fn)
     def wrapper(
-        self: AphroditeTileLangJitKernel[Any],
+        self: SonarTileLangJitKernel[Any],
         *args: Any,
         **kwargs: Any,
     ) -> Any:

@@ -8,33 +8,33 @@ import torch
 import torch.distributed as dist
 import torch.nn as nn
 
-from aphrodite.compilation.breakable_cudagraph import is_breakable_cudagraph_enabled
-from aphrodite.config import AphroditeConfig, CUDAGraphMode
-from aphrodite.distributed.parallel_state import get_dp_group, get_pcp_group, get_pp_group
-from aphrodite.forward_context import BatchDescriptor, DPMetadata, create_forward_context
-from aphrodite.models.deepseek_v41.decoder_replay_layers import (
+from sonar.compilation.breakable_cudagraph import is_breakable_cudagraph_enabled
+from sonar.config import CUDAGraphMode, SonarConfig
+from sonar.distributed.parallel_state import get_dp_group, get_pcp_group, get_pp_group
+from sonar.forward_context import BatchDescriptor, DPMetadata, create_forward_context
+from sonar.models.deepseek_v41.decoder_replay_layers import (
     DecoderReplayLayers,
     ReplayBatch,
 )
-from aphrodite.models.deepseek_v41.nvidia.decoder_replay_cudagraph import (
+from sonar.models.deepseek_v41.nvidia.decoder_replay_cudagraph import (
     DecoderReplayCudaGraphManager,
 )
-from aphrodite.triton_utils import tl, triton
-from aphrodite.v1.attention.backends.mla.sparse_swa import DeepseekSparseSWAMetadataBuilder
-from aphrodite.v1.attention.backends.utils import PAD_SLOT_ID
-from aphrodite.v1.core.sched.output import NewRequestData
-from aphrodite.v1.kv_cache_interface import KVCacheConfig
-from aphrodite.v1.worker.dp_utils import should_skip_dp_coordination
-from aphrodite.v1.worker.gpu.attn_utils import build_slot_mappings_by_layer
-from aphrodite.v1.worker.gpu.block_table import BlockTables
-from aphrodite.v1.worker.gpu.buffer_utils import UvaBufferPool
-from aphrodite.v1.worker.gpu.cudagraph_utils import BatchExecutionDescriptor
-from aphrodite.v1.worker.gpu.input_batch import InputBatch, InputBuffers
-from aphrodite.v1.worker.gpu.mm.encoder_cache import EncoderCache
-from aphrodite.v1.worker.gpu.model_states.default import DefaultModelState
-from aphrodite.v1.worker.gpu.model_states.interface import ModelSpecificAttnMetadata
-from aphrodite.v1.worker.gpu.states import RequestState
-from aphrodite.v1.worker.utils import AttentionGroup
+from sonar.triton_utils import tl, triton
+from sonar.v1.attention.backends.mla.sparse_swa import DeepseekSparseSWAMetadataBuilder
+from sonar.v1.attention.backends.utils import PAD_SLOT_ID
+from sonar.v1.core.sched.output import NewRequestData
+from sonar.v1.kv_cache_interface import KVCacheConfig
+from sonar.v1.worker.dp_utils import should_skip_dp_coordination
+from sonar.v1.worker.gpu.attn_utils import build_slot_mappings_by_layer
+from sonar.v1.worker.gpu.block_table import BlockTables
+from sonar.v1.worker.gpu.buffer_utils import UvaBufferPool
+from sonar.v1.worker.gpu.cudagraph_utils import BatchExecutionDescriptor
+from sonar.v1.worker.gpu.input_batch import InputBatch, InputBuffers
+from sonar.v1.worker.gpu.mm.encoder_cache import EncoderCache
+from sonar.v1.worker.gpu.model_states.default import DefaultModelState
+from sonar.v1.worker.gpu.model_states.interface import ModelSpecificAttnMetadata
+from sonar.v1.worker.gpu.states import RequestState
+from sonar.v1.worker.utils import AttentionGroup
 
 
 @triton.jit
@@ -192,13 +192,13 @@ class DeepseekV41ModelState(DefaultModelState):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         model: nn.Module,
         encoder_cache: EncoderCache | None,
         device: torch.device,
     ):
-        super().__init__(aphrodite_config, model, encoder_cache, device)
-        self.pcp_size = aphrodite_config.parallel_config.prefill_context_parallel_size
+        super().__init__(sonar_config, model, encoder_cache, device)
+        self.pcp_size = sonar_config.parallel_config.prefill_context_parallel_size
         max_local_reqs = self.max_num_reqs * (2 if self.pcp_size > 1 else 1)
         depth = model.token_lookback_depth
         self.lookback_token_ids: torch.Tensor | None = None
@@ -237,7 +237,7 @@ class DeepseekV41ModelState(DefaultModelState):
             # The replay layers' and the first one's SWA attention groups.
             self._replay_attn_groups: tuple[list[list[AttentionGroup]], list[list[AttentionGroup]]] | None = None
         layers = self.decoder_replay_layers
-        compilation_config = aphrodite_config.compilation_config
+        compilation_config = sonar_config.compilation_config
         self.replay_cudagraphs: DecoderReplayCudaGraphManager | None = None
         if (
             layers is not None
@@ -246,8 +246,8 @@ class DeepseekV41ModelState(DefaultModelState):
             and is_breakable_cudagraph_enabled()
             and get_pp_group().is_first_rank
             # The graphs' fixed inputs hold no LoRA mapping and no None input ids.
-            and aphrodite_config.lora_config is None
-            and not aphrodite_config.model_config.enable_prompt_embeds
+            and sonar_config.lora_config is None
+            and not sonar_config.model_config.enable_prompt_embeds
         ):
             threshold = compilation_config.decoder_replay_trim_threshold
             if threshold <= layers.window:
@@ -255,7 +255,7 @@ class DeepseekV41ModelState(DefaultModelState):
                     "decoder_replay_trim_threshold must exceed the replay window "
                     f"of {layers.window} tokens: smaller graphs have nothing to trim"
                 )
-            self.replay_cudagraphs = DecoderReplayCudaGraphManager(aphrodite_config, device, layers)
+            self.replay_cudagraphs = DecoderReplayCudaGraphManager(sonar_config, device, layers)
             layers.trim_threshold = threshold
 
     def add_request(self, req_index: int, new_req_data: NewRequestData) -> None:
@@ -266,7 +266,7 @@ class DeepseekV41ModelState(DefaultModelState):
             self._keeps_rows_np[req_index] = (
                 params is not None
                 and (params.prompt_logprobs is not None or params.prompt_logprob_token_ids is not None)
-            ) or self.aphrodite_config.aux_output_config.enable_return_routed_experts
+            ) or self.sonar_config.aux_output_config.enable_return_routed_experts
 
     def prepare_inputs(self, input_batch: InputBatch, req_states: RequestState) -> dict[str, torch.Tensor | None]:
         model_inputs = super().prepare_inputs(input_batch, req_states)
@@ -508,7 +508,7 @@ class DeepseekV41ModelState(DefaultModelState):
         if num_padded is None:
             num_padded = num_tokens
         dp_tokens = None
-        if self.aphrodite_config.parallel_config.data_parallel_size > 1:
+        if self.sonar_config.parallel_config.data_parallel_size > 1:
             needs_replay_batch, dp_tokens = self._agree_across_dp(needs_replay_batch, num_padded)
         if not needs_replay_batch:
             return
@@ -530,7 +530,7 @@ class DeepseekV41ModelState(DefaultModelState):
                     dp_tokens.fill_(num_padded)
         dp_metadata = None
         if dp_tokens is not None:
-            dp_metadata = DPMetadata.make(self.aphrodite_config.parallel_config, num_padded, dp_tokens)
+            dp_metadata = DPMetadata.make(self.sonar_config.parallel_config, num_padded, dp_tokens)
         kept_batch, kept_slot_mappings = self._kept_input_batch(
             input_batch, slot_mappings, kept_replay_start, kept_lens, num_padded
         )
@@ -574,7 +574,7 @@ class DeepseekV41ModelState(DefaultModelState):
             self._kept_rows[:num_tokens],
             create_forward_context(
                 attn_metadata,
-                self.aphrodite_config,
+                self.sonar_config,
                 dp_metadata=dp_metadata,
                 is_padding=is_padding,
                 cudagraph_runtime_mode=cg_mode,
@@ -667,7 +667,7 @@ class DeepseekV41ModelState(DefaultModelState):
             self._kept_positions[num_tokens:num_padded].zero_()
             is_padding = torch.arange(num_padded, device=self.device) >= num_tokens
             kept_slot_mappings = get_pcp_group().all_gather(kept_slot_mappings.contiguous(), dim=1)
-            if not self.aphrodite_config.parallel_config.enable_expert_parallel:
+            if not self.sonar_config.parallel_config.enable_expert_parallel:
                 is_padding = get_pcp_group().all_gather(is_padding.to(torch.uint8), dim=0).bool()
         kept_batch = replace(
             input_batch,
@@ -684,7 +684,7 @@ class DeepseekV41ModelState(DefaultModelState):
 
     def _agree_across_dp(self, needs_replay_batch: bool, num_tokens: int) -> tuple[bool, torch.Tensor | None]:
         """Whether any rank needs a replay batch and, if so, each rank's token count."""
-        parallel_config = self.aphrodite_config.parallel_config
+        parallel_config = self.sonar_config.parallel_config
         agreed = torch.zeros(2, parallel_config.data_parallel_size, dtype=torch.int32)
         agreed[:, parallel_config.data_parallel_rank] = torch.tensor([needs_replay_batch, num_tokens])
         if not should_skip_dp_coordination():
@@ -706,7 +706,7 @@ class DeepseekV41ModelState(DefaultModelState):
                     continue
                 copy = replace(group, metadata_builders=[])
                 copy.create_metadata_builders(
-                    self.aphrodite_config,
+                    self.sonar_config,
                     self.device,
                     group.kernel_block_size,
                 )

@@ -4,9 +4,9 @@
 import pytest
 import torch
 
-from aphrodite.kernels.triton.fused_sigmoid_gate_mul import fused_sigmoid_gate_mul
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.kernels.triton.fused_sigmoid_gate_mul import fused_sigmoid_gate_mul
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_random_seed
 
 DTYPES = [torch.bfloat16, torch.float16, torch.float32]
 # Odd token counts, non-power-of-2 and large hidden, plus an empty batch.
@@ -92,7 +92,7 @@ def _fp8_codes(q: torch.Tensor) -> torch.Tensor:
 def test_fused_sigmoid_gate_mul_fp8_matches_chain(shape: tuple[int, int]):
     """The FP8 output (fused o_proj input quant) equals the bf16 kernel
     followed by static scaled_fp8_quant."""
-    from aphrodite import _custom_ops as ops
+    from sonar import _custom_ops as ops
 
     g = torch.Generator(device="cuda").manual_seed(shape[0])
     x = torch.randn(shape, generator=g, dtype=torch.bfloat16, device="cuda") * 8
@@ -121,7 +121,7 @@ def test_fused_sigmoid_gate_mul_fp8_strided_gate_falls_back():
     """A strided gate view (num_heads == 1 per TP rank keeps the packed qkv
     row stride through reshape) cannot run the fused kernel; the FP8 path
     must quantize the eager result instead of asserting."""
-    from aphrodite import _custom_ops as ops
+    from sonar import _custom_ops as ops
 
     x = torch.randn(5, 128, dtype=torch.bfloat16, device="cuda")
     packed = torch.randn(5, 256, dtype=torch.bfloat16, device="cuda")

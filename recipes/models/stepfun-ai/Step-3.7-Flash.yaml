@@ -21,7 +21,7 @@ model:
   docker_image: "vllm/vllm-openai:stepfun37"
   install:
     docker:
-      note: "Dedicated Step-3.7 image — preferred over the nightly pip wheel until support lands in aphrodite:latest."
+      note: "Dedicated Step-3.7 image — preferred over the nightly pip wheel until support lands in sonar:latest."
   architecture: moe
   parameter_count: "198B"
   active_parameters: "11B"
@@ -115,16 +115,16 @@ guide: |
 
   ## Prerequisites
 
-  - **Aphrodite version:** nightly (the model registry hasn't shipped in a stable release yet)
+  - **Sonar version:** nightly (the model registry hasn't shipped in a stable release yet)
   - **Hardware:** 8xH200/B200 for BF16 and FP8; 4xB200 for NVFP4
 
-  ### Install Aphrodite (nightly)
+  ### Install Sonar (nightly)
 
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U aphrodite-engine --pre \
-      --extra-index-url https://wheels.vllm.ai/nightly
+  uv pip install -U sonar --index-strategy first-index --torch-backend cu130 --pre \
+      --extra-index-url https://sonar.dphn.ai/whl/nightly/cuda/x86_64/simple
   ```
 
   Or via Docker:
@@ -138,7 +138,7 @@ guide: |
   ### BF16
 
   ```bash
-  aphrodite serve stepfun-ai/Step-3.7-Flash \
+  sonar serve stepfun-ai/Step-3.7-Flash \
       --served-model-name step3p7-flash \
       --tensor-parallel-size 8 \
       --enable-expert-parallel \
@@ -153,7 +153,7 @@ guide: |
   ### FP8
 
   ```bash
-  aphrodite serve stepfun-ai/Step-3.7-Flash-FP8 \
+  sonar serve stepfun-ai/Step-3.7-Flash-FP8 \
       --served-model-name step3p7-flash \
       --tensor-parallel-size 8 \
       --enable-expert-parallel \
@@ -170,7 +170,7 @@ guide: |
   Requires modelopt quantization and FP8 KV cache alignment.
 
   ```bash
-  aphrodite serve stepfun-ai/Step-3.7-Flash-NVFP4 \
+  sonar serve stepfun-ai/Step-3.7-Flash-NVFP4 \
       --served-model-name step3p7 \
       --tensor-parallel-size 4 \
       --gpu-memory-utilization 0.9 \
@@ -192,7 +192,7 @@ guide: |
   not). Use the dedicated `vllm/vllm-openai:stepfun37` image and serve on a single GPU:
 
   ```bash
-  aphrodite serve stepfun-ai/Step-3.7-Flash-FP8 \
+  sonar serve stepfun-ai/Step-3.7-Flash-FP8 \
       --served-model-name step3p7-flash \
       --tensor-parallel-size 1 \
       --gpu-memory-utilization 0.95 \
@@ -207,7 +207,7 @@ guide: |
   launch the prebuilt container directly:
 
   ```bash
-  docker run -d --name aphrodite-server \
+  docker run -d --name sonar-server \
       --gpus all --ipc host \
       --ulimit memlock=-1 --ulimit stack=67108864 \
       -p 8000:8000 \
@@ -229,8 +229,8 @@ guide: |
   ## Benchmarking
 
   ```bash
-  aphrodite bench serve \
-      --backend aphrodite \
+  sonar bench serve \
+      --backend sonar \
       --model stepfun-ai/Step-3.7-Flash \
       --endpoint /v1/completions \
       --dataset-name random \
@@ -244,7 +244,7 @@ guide: |
 
   - **MoE kernel tuning:** See [tune-moe-kernel](https://github.com/vllm-project/recipes/blob/main/Qwen/Qwen3-Next.md#tune-moe-kernel) to tune Triton kernels for your hardware.
   - **NVFP4 + TP > 4:** The author recommends TP4+EP for NVFP4. Higher TP isn't validated.
-  - **Cascade attention:** Always pass `--disable-cascade-attn` — the hybrid SWA/GA schedule is not compatible with cascade attention in Aphrodite.
+  - **Cascade attention:** Always pass `--disable-cascade-attn` — the hybrid SWA/GA schedule is not compatible with cascade attention in Sonar.
 
   ## References
 

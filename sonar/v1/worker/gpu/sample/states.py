@@ -3,11 +3,11 @@
 import numpy as np
 import torch
 
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.v1.sample.ops.topk_topp_sampler import apply_top_k_top_p
-from aphrodite.v1.worker.gpu.buffer_utils import UvaBackedTensor
-from aphrodite.v1.worker.gpu.sample.gumbel import apply_temperature
-from aphrodite.v1.worker.gpu.sample.min_p import apply_min_p
+from sonar.sampling_params import SamplingParams
+from sonar.v1.sample.ops.topk_topp_sampler import apply_top_k_top_p
+from sonar.v1.worker.gpu.buffer_utils import UvaBackedTensor
+from sonar.v1.worker.gpu.sample.gumbel import apply_temperature
+from sonar.v1.worker.gpu.sample.min_p import apply_min_p
 
 NO_LOGPROBS = -1
 _NP_INT64_MIN = np.iinfo(np.int64).min

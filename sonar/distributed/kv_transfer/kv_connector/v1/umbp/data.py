@@ -3,7 +3,7 @@
 """Shared data types for the UMBP KV connector.
 
 The types in this module deliberately do not depend on a UMBP client.  They
-describe Aphrodite's logical KV objects and the physical ranges a runtime adapter
+describe Sonar's logical KV objects and the physical ranges a runtime adapter
 will transfer.
 """
 
@@ -19,12 +19,12 @@ from typing import Any, NamedTuple, overload
 
 import torch
 
-from aphrodite.distributed.kv_transfer.kv_connector.v1.base import (
+from sonar.distributed.kv_transfer.kv_connector.v1.base import (
     KVConnectorHandshakeMetadata,
     KVConnectorMetadata,
     KVConnectorWorkerMetadata,
 )
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.kv_cache_interface import (
     KVCacheConfig,
     KVCacheGroupSpec,
     KVCacheSpec,
@@ -75,8 +75,8 @@ class RankTopology:
                 raise ValueError(f"{name}={rank} is outside [0, {size})")
 
     @classmethod
-    def from_aphrodite_config(cls, aphrodite_config: Any) -> RankTopology:
-        parallel = aphrodite_config.parallel_config
+    def from_sonar_config(cls, sonar_config: Any) -> RankTopology:
+        parallel = sonar_config.parallel_config
         tp_size = getattr(parallel, "tensor_parallel_size", 1)
         pp_size = getattr(parallel, "pipeline_parallel_size", 1)
         pcp_size = getattr(parallel, "prefill_context_parallel_size", 1)
@@ -133,9 +133,9 @@ class UMBPNamespace:
     value: str
 
     @classmethod
-    def configured(cls, aphrodite_config: Any) -> UMBPNamespace | None:
+    def configured(cls, sonar_config: Any) -> UMBPNamespace | None:
         """Return the explicit ``key_namespace``, or None when it is derived."""
-        extra = aphrodite_config.kv_transfer_config.kv_connector_extra_config
+        extra = sonar_config.kv_transfer_config.kv_connector_extra_config
         configured = extra.get("key_namespace", "auto")
         if configured == "auto":
             return None
@@ -144,9 +144,9 @@ class UMBPNamespace:
         return cls(configured)
 
     @classmethod
-    def from_aphrodite_config(
+    def from_sonar_config(
         cls,
-        aphrodite_config: Any,
+        sonar_config: Any,
         kv_cache_config: KVCacheConfig,
     ) -> UMBPNamespace:
         """Derive the namespace from a worker's per-layer KV cache config.
@@ -154,14 +154,14 @@ class UMBPNamespace:
         The scheduler's config flattens UniformTypeKVCacheSpecs groups, so the
         scheduler adopts the namespace its workers report instead.
         """
-        if (configured := cls.configured(aphrodite_config)) is not None:
+        if (configured := cls.configured(sonar_config)) is not None:
             return configured
 
-        model_config = aphrodite_config.model_config
-        parallel_config = aphrodite_config.parallel_config
+        model_config = sonar_config.model_config
+        parallel_config = sonar_config.parallel_config
         # Draft-model KV (e.g. DSpark/EAGLE layers) is stored alongside the
         # target's, so a different drafter must not reuse it.
-        speculative_config = getattr(aphrodite_config, "speculative_config", None)
+        speculative_config = getattr(sonar_config, "speculative_config", None)
         draft_model_config = getattr(speculative_config, "draft_model_config", None)
         speculative = (
             None
@@ -175,7 +175,7 @@ class UMBPNamespace:
         fields = {
             "model": getattr(model_config, "model", ""),
             "revision": getattr(model_config, "revision", None),
-            "block_size": aphrodite_config.cache_config.block_size,
+            "block_size": sonar_config.cache_config.block_size,
             "cache_layout": getattr(kv_cache_config, "kv_cache_layout", None),
             "groups": [
                 {
@@ -207,7 +207,7 @@ class UMBPHandshakeMetadata(KVConnectorHandshakeMetadata):
 
 @dataclass(frozen=True)
 class BlockIdentityCodec:
-    """Build stable rank-local keys from Aphrodite block hashes."""
+    """Build stable rank-local keys from Sonar block hashes."""
 
     namespace: UMBPNamespace
     tp_rank: int = 0
@@ -234,7 +234,7 @@ class BlockIdentityCodec:
             raise ValueError("group_id must be non-negative")
         tp_rank, pcp_rank, dcp_rank, pp_rank = namespace
         return (
-            f"umbp:aphrodite:v1:{self.namespace.value}:"
+            f"umbp:sonar:v1:{self.namespace.value}:"
             f"tp{tp_rank}:pcp{pcp_rank}:dcp{dcp_rank}:"
             f"pp{pp_rank}:g{group_id}:"
             f"{block_hash.hex()}"

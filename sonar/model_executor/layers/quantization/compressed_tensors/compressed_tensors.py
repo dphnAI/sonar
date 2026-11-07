@@ -14,31 +14,31 @@ from compressed_tensors.quantization import (
 )
 from compressed_tensors.transform import TransformConfig
 
-from aphrodite.config import get_current_aphrodite_config_or_none
-from aphrodite.distributed import (
+from sonar.config import get_current_sonar_config_or_none
+from sonar.distributed import (
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
 )
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.layers.fused_moe import RoutedExperts
-from aphrodite.model_executor.layers.linear import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.attention import Attention
+from sonar.model_executor.layers.fused_moe import RoutedExperts
+from sonar.model_executor.layers.linear import (
     LinearBase,
     LinearMethodBase,
     UnquantizedLinearMethod,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationMethods
-from aphrodite.model_executor.layers.quantization.base_config import (
+from sonar.model_executor.layers.quantization import QuantizationMethods
+from sonar.model_executor.layers.quantization.base_config import (
     QuantizationConfig,
     QuantizeMethodBase,
 )
-from aphrodite.model_executor.layers.quantization.compressed_tensors.compressed_tensors_embedding import (  # noqa: E501
+from sonar.model_executor.layers.quantization.compressed_tensors.compressed_tensors_embedding import (  # noqa: E501
     CompressedTensorsEmbeddingWNA16Int,
 )
-from aphrodite.model_executor.layers.quantization.compressed_tensors.compressed_tensors_moe import (  # noqa: E501
+from sonar.model_executor.layers.quantization.compressed_tensors.compressed_tensors_moe import (  # noqa: E501
     CompressedTensorsMoEMethod,
 )
-from aphrodite.model_executor.layers.quantization.compressed_tensors.schemes import (
+from sonar.model_executor.layers.quantization.compressed_tensors.schemes import (
     CompressedTensorsScheme,
     CompressedTensorsW4A4Fp4,
     CompressedTensorsW4A4Mxfp4,
@@ -54,29 +54,29 @@ from aphrodite.model_executor.layers.quantization.compressed_tensors.schemes imp
     CompressedTensorsWNA8O8Int,
     CompressedTensorsWNA16,
 )
-from aphrodite.model_executor.layers.quantization.compressed_tensors.transform.linear import (  # noqa: E501
+from sonar.model_executor.layers.quantization.compressed_tensors.transform.linear import (  # noqa: E501
     CompressedTensorsLinearTransformMethod,
     get_linear_transform_schemes,
 )
-from aphrodite.model_executor.layers.quantization.compressed_tensors.utils import (
+from sonar.model_executor.layers.quantization.compressed_tensors.utils import (
     find_matched_target,
     is_activation_quantization_format,
     should_ignore_layer,
 )
-from aphrodite.model_executor.layers.quantization.kv_cache import BaseKVCacheMethod
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.kv_cache import BaseKVCacheMethod
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     GroupShape,
     QuantKey,
     create_fp8_quant_key,
 )
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 if TYPE_CHECKING:
-    from aphrodite.model_executor.models.utils import WeightsMapper
+    from sonar.model_executor.models.utils import WeightsMapper
 
 logger = init_logger(__name__)
 
@@ -126,8 +126,8 @@ class CompressedTensorsConfig(QuantizationConfig):
     def get_name(self) -> QuantizationMethods:
         return "compressed-tensors"
 
-    def apply_aphrodite_mapper(self, hf_to_aphrodite_mapper: "WeightsMapper"):
-        """Transform layer paths in config targets to match Aphrodite's naming.
+    def apply_sonar_mapper(self, hf_to_sonar_mapper: "WeightsMapper"):
+        """Transform layer paths in config targets to match Sonar's naming.
 
         The WeightsMapper is designed for weight paths, but some backends
         (e.g. transformers) use broad prefix mappings like "" -> "model."
@@ -142,7 +142,7 @@ class CompressedTensorsConfig(QuantizationConfig):
         def _map_target(target: str) -> str | None:
             is_layer_path = "." in target and not target.startswith("re:")
             if is_layer_path:
-                return hf_to_aphrodite_mapper._map_name(target)
+                return hf_to_sonar_mapper._map_name(target)
             return target
 
         def _apply_dict(d: dict) -> dict:
@@ -229,7 +229,7 @@ class CompressedTensorsConfig(QuantizationConfig):
     @classmethod
     def from_config(cls, config: dict[str, Any]) -> "CompressedTensorsConfig":
         # We keep only config groups which are not doing Attention quantization
-        # because Attention quantization on its own is not supported by Aphrodite.
+        # because Attention quantization on its own is not supported by Sonar.
         # It is coupled with KV-cache quantization, and if scales are present in the
         # checkpoint, they will be used properly.
         if "config_groups" in config:
@@ -239,7 +239,7 @@ class CompressedTensorsConfig(QuantizationConfig):
                 if len(v["targets"]) == 1 and v["targets"][0].endswith("Attention"):
                     logger.warning(
                         "Skipping CompressedTensors config group for %s. Attention "
-                        "quant is coupled with KV-cache quantization in Aphrodite.",
+                        "quant is coupled with KV-cache quantization in Sonar.",
                         v["targets"][0],
                     )
                     continue
@@ -773,7 +773,7 @@ class CompressedTensorsConfig(QuantizationConfig):
                 if current_platform.is_xpu():
                     # On XPU, --linear-backend xpu or torch opts into W8A8 FP8
                     # linear kernel; otherwise default to W8A16.
-                    config = get_current_aphrodite_config_or_none()
+                    config = get_current_sonar_config_or_none()
                     is_fp8_w8a8_supported = config is not None and (
                         config.kernel_config.linear_backend in ("xpu", "torch")
                     )
@@ -986,7 +986,7 @@ class CompressedTensorsKVCacheMethod(BaseKVCacheMethod):
     @staticmethod
     def validate_kv_cache_scheme(kv_cache_scheme: dict[str, Any] | None):
         """Validator for the kv cache scheme. Useful for controlling the
-        kv cache quantization schemes, that are being supported in Aphrodite
+        kv cache quantization schemes, that are being supported in Sonar
 
         Args:
             kv_cache_scheme: the compressed-tensors kv cache scheme
@@ -1039,7 +1039,7 @@ class CompressedTensorsKVCacheMethod(BaseKVCacheMethod):
         layer.v_scale = torch.nn.Parameter(torch.ones(n_scales, requires_grad=False, dtype=torch.float32))
         layer.q_scale = torch.nn.Parameter(torch.ones(n_scales, requires_grad=False, dtype=torch.float32))
 
-        # Zero points are not used in Aphrodite as currently only symmetric quantization is
+        # Zero points are not used in Sonar as currently only symmetric quantization is
         # supported. We need to create them here to enable loading of llm-compressor
         # checkpoints which contain them irrespective of the symmetric/asymmetric
         # scheme used during quantization.
@@ -1059,7 +1059,7 @@ class CompressedTensorsKVCacheMethod(BaseKVCacheMethod):
                 kind: Literal["q", "k", "v"],
                 param_type: Literal["scale", "zero_point"],
             ):
-                # Zero-points are not used as Aphrodite only supports symmetric quantization
+                # Zero-points are not used as Sonar only supports symmetric quantization
                 if param_type == "zero_point":
                     return
 
@@ -1099,7 +1099,7 @@ class CompressedTensorsKVCacheMethod(BaseKVCacheMethod):
             layer.v_zero_point.weight_loader = partial(_tp_aware_loader, kind="v", param_type="zero_point")
 
     def process_weights_after_loading(self, layer: torch.nn.Module) -> None:
-        """Override the default Aphrodite placeholder scales with the llm-compressor loaded
+        """Override the default Sonar placeholder scales with the llm-compressor loaded
         scales. Zero points are not used as only symmetric quantization is supported.
         """
         # Buffers (not Parameters) so sleep snapshots them; ATTN_HEAD changes shape.

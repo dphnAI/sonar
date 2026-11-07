@@ -18,7 +18,7 @@ from dataclasses import dataclass
 
 import torch
 
-from aphrodite.v1.attention.ops.ultraquant.format import (
+from sonar.v1.attention.ops.ultraquant.format import (
     FP4_LEVELS_SORTED,
     GROUP_SIZE,
     MIDPOINTS_SORTED,

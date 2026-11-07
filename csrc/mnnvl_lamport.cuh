@@ -32,7 +32,7 @@
 #include <type_traits>
 #include <utility>
 
-namespace aphrodite {
+namespace sonar {
 namespace mnnvl {
 
 template <typename T>
@@ -775,4 +775,4 @@ __global__ __launch_bounds__(128) void twoshotAllreduceKernel(
 }
 
 }  // namespace mnnvl
-}  // namespace aphrodite
+}  // namespace sonar

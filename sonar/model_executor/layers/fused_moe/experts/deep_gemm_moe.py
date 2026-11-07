@@ -3,32 +3,32 @@
 
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.config import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEParallelConfig,
     FusedMoEQuantConfig,
 )
-from aphrodite.model_executor.layers.fused_moe.deep_gemm_utils import (
+from sonar.model_executor.layers.fused_moe.deep_gemm_utils import (
     compute_aligned_M_and_alignment,
     deepgemm_moe_permute,
     deepgemm_unpermute_and_reduce,
 )
-from aphrodite.model_executor.layers.fused_moe.topk_weight_and_reduce import (
+from sonar.model_executor.layers.fused_moe.topk_weight_and_reduce import (
     TopKWeightAndReduceNoOP,
 )
-from aphrodite.model_executor.layers.fused_moe.utils import _resize_cache
-from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
+from sonar.model_executor.layers.fused_moe.utils import _resize_cache
+from sonar.model_executor.layers.quantization.utils.fp8_utils import (
     per_token_group_quant_fp8,
     per_token_group_quant_fp8_packed_for_deepgemm,
     silu_mul_per_token_group_quant_fp8_colmajor,
 )
-from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
+from sonar.model_executor.layers.quantization.utils.fp8_utils import (
     silu_mul_quant_fp8_packed_triton as fused_silu_mul_fp8_quant_packed,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     kFp8Dynamic128Sym,
     kFp8Static128BlockSym,
@@ -36,8 +36,8 @@ from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
     kMxfp8Dynamic,
     kMxfp8Static,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.deep_gemm import (
+from sonar.platforms import current_platform
+from sonar.utils.deep_gemm import (
     DeepGemmQuantScaleFMT,
     get_mk_alignment_for_contiguous_layout,
     is_deep_gemm_supported,
@@ -45,7 +45,7 @@ from aphrodite.utils.deep_gemm import (
     m_grouped_fp8_gemm_nt_contiguous,
     mk_alignment_scope,
 )
-from aphrodite.utils.import_utils import has_deep_gemm
+from sonar.utils.import_utils import has_deep_gemm
 
 logger = init_logger(__name__)
 
@@ -451,7 +451,7 @@ class DeepGemmFP4Experts(mk.FusedMoEExpertsModular):
 
     @staticmethod
     def _supports_current_device() -> bool:
-        from aphrodite.platforms import current_platform
+        from sonar.platforms import current_platform
 
         return is_deep_gemm_supported() and (
             current_platform.is_device_capability_family(100) or current_platform.is_device_capability_family(120)

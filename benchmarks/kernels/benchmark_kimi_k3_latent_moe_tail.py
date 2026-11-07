@@ -49,16 +49,16 @@ import torch.distributed as dist
 import torch.nn.functional as F
 from cuda.bindings import driver as cuda
 
-from aphrodite.distributed import get_tp_group
-from aphrodite.distributed.parallel_state import (
+from sonar.distributed import get_tp_group
+from sonar.distributed.parallel_state import (
     init_distributed_environment,
     initialize_model_parallel,
     set_custom_all_reduce,
 )
-from aphrodite.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
-from aphrodite.model_executor.warmup.cutedsl_warmup import cutedsl_warmup
-from aphrodite.models.kimi_k3.nvidia.ops import latent_moe_tail
-from aphrodite.models.kimi_k3.nvidia.ops.cute_dsl.latent_moe_tail import (
+from sonar.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
+from sonar.model_executor.warmup.cutedsl_warmup import cutedsl_warmup
+from sonar.models.kimi_k3.nvidia.ops import latent_moe_tail
+from sonar.models.kimi_k3.nvidia.ops.cute_dsl.latent_moe_tail import (
     fused_add_multicast_gemm,
     fused_add_multicast_skinny_gemm,
 )
@@ -839,9 +839,9 @@ def main() -> None:
         benchmark_up_projection(args)
         return
 
-    from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
+    from sonar.config import SonarConfig, set_current_sonar_config
 
-    with set_current_aphrodite_config(AphroditeConfig()):
+    with set_current_sonar_config(SonarConfig()):
         benchmark_whole_tail(args)
 
 

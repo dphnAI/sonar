@@ -7,10 +7,10 @@ import importlib
 
 from torch import nn
 
-from aphrodite.config import AphroditeConfig, ModelConfig
-from aphrodite.config.load import LoadConfig
-from aphrodite.model_executor.model_loader.base_loader import BaseModelLoader
-from aphrodite.tracing import instrument
+from sonar.config import ModelConfig, SonarConfig
+from sonar.config.load import LoadConfig
+from sonar.model_executor.model_loader.base_loader import BaseModelLoader
+from sonar.tracing import instrument
 
 _MODELEXPRESS_LOADER_MODULE = "modelexpress.engines.aphrodite.loader"
 _MISSING_MODELEXPRESS_MODULES = frozenset(
@@ -31,7 +31,7 @@ def _missing_modelexpress_error() -> ImportError:
 
 
 class ModelExpressModelLoader(BaseModelLoader):
-    """Thin Aphrodite loader wrapper for ModelExpress."""
+    """Thin Sonar loader wrapper for ModelExpress."""
 
     def __init__(self, load_config: LoadConfig):
         super().__init__(load_config)
@@ -46,8 +46,8 @@ class ModelExpressModelLoader(BaseModelLoader):
                 raise
             raise _missing_modelexpress_error() from exc
 
-        ModelExpressAphroditeLoader = module.MxModelLoader
-        return ModelExpressAphroditeLoader(load_config)
+        ModelExpressSonarLoader = module.MxModelLoader
+        return ModelExpressSonarLoader(load_config)
 
     def download_model(self, model_config: ModelConfig) -> None:
         self._loader.download_model(model_config)
@@ -58,12 +58,12 @@ class ModelExpressModelLoader(BaseModelLoader):
     @instrument(span_name="Load model")
     def load_model(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         model_config: ModelConfig,
         prefix: str = "",
     ) -> nn.Module:
         model = self._loader.load_model(
-            aphrodite_config=aphrodite_config,
+            aphrodite_config=sonar_config,
             model_config=model_config,
             prefix=prefix,
         )

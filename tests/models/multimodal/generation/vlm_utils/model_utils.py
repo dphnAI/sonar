@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Common utility functions relating to different models that are useful
-for manipulating the input / output of HF & Aphrodite test runners, which are
+for manipulating the input / output of HF & Sonar test runners, which are
 typically specific to a small subset of models.
 """
 
@@ -25,18 +25,18 @@ from transformers.masking_utils import create_causal_mask
 from transformers.utils import ModelOutput
 from transformers.video_utils import VideoMetadata
 
-from aphrodite.logprobs import SampleLogprobs
-from aphrodite.platforms import current_platform
-from aphrodite.utils.collection_utils import is_list_of
+from sonar.logprobs import SampleLogprobs
+from sonar.platforms import current_platform
+from sonar.utils.collection_utils import is_list_of
 
 from .....conftest import HfRunner, ImageTestAssets
 from .types import RunnerOutput
 
 
-####### Aphrodite output processors functions
-def blip2_aphrodite_to_hf_output(aphrodite_output: RunnerOutput, model: str) -> RunnerOutput:
-    """Sanitize aphrodite output [blip2 models] to be comparable with hf output."""
-    _, output_str, out_logprobs = aphrodite_output
+####### Sonar output processors functions
+def blip2_sonar_to_hf_output(sonar_output: RunnerOutput, model: str) -> RunnerOutput:
+    """Sanitize sonar output [blip2 models] to be comparable with hf output."""
+    _, output_str, out_logprobs = sonar_output
 
     hf_output_str = output_str + "\n"
 
@@ -48,45 +48,41 @@ def blip2_aphrodite_to_hf_output(aphrodite_output: RunnerOutput, model: str) -> 
     return hf_output_ids, hf_output_str, out_logprobs
 
 
-def qwen2_aphrodite_to_hf_output(
-    aphrodite_output: RunnerOutput, model: str
-) -> tuple[list[int], str, SampleLogprobs | None]:
-    """Sanitize aphrodite output [qwen2 models] to be comparable with hf output."""
-    output_ids, output_str, out_logprobs = aphrodite_output
+def qwen2_sonar_to_hf_output(sonar_output: RunnerOutput, model: str) -> tuple[list[int], str, SampleLogprobs | None]:
+    """Sanitize sonar output [qwen2 models] to be comparable with hf output."""
+    output_ids, output_str, out_logprobs = sonar_output
 
     hf_output_str = output_str + "<|im_end|>"
 
     return output_ids, hf_output_str, out_logprobs
 
 
-def kimiv_vl_aphrodite_to_hf_output(
-    aphrodite_output: RunnerOutput, model: str
-) -> tuple[list[int], str, SampleLogprobs | None]:
-    """Sanitize aphrodite output [kimi_vl models] to be comparable with hf output."""
-    output_ids, output_str, out_logprobs = aphrodite_output
+def kimiv_vl_sonar_to_hf_output(sonar_output: RunnerOutput, model: str) -> tuple[list[int], str, SampleLogprobs | None]:
+    """Sanitize sonar output [kimi_vl models] to be comparable with hf output."""
+    output_ids, output_str, out_logprobs = sonar_output
 
     hf_output_str = output_str + "<|im_end|>[EOS]"
 
     return output_ids, hf_output_str, out_logprobs
 
 
-def llava_image_aphrodite_to_hf_output(aphrodite_output: RunnerOutput, model: str) -> RunnerOutput:
+def llava_image_sonar_to_hf_output(sonar_output: RunnerOutput, model: str) -> RunnerOutput:
     config = AutoConfig.from_pretrained(model)
     mm_token_id = config.image_token_index
-    return _llava_aphrodite_to_hf_output(aphrodite_output, model, mm_token_id)
+    return _llava_sonar_to_hf_output(sonar_output, model, mm_token_id)
 
 
-def llava_video_aphrodite_to_hf_output(
-    aphrodite_output: RunnerOutput, model: str
+def llava_video_sonar_to_hf_output(
+    sonar_output: RunnerOutput, model: str
 ) -> tuple[list[int], str, SampleLogprobs | None]:
     config = AutoConfig.from_pretrained(model)
     mm_token_id = config.video_token_index
-    return _llava_aphrodite_to_hf_output(aphrodite_output, model, mm_token_id)
+    return _llava_sonar_to_hf_output(sonar_output, model, mm_token_id)
 
 
-def _llava_aphrodite_to_hf_output(aphrodite_output: RunnerOutput, model: str, mm_token_id: int) -> RunnerOutput:
-    """Sanitize aphrodite output [Llava models] to be comparable with hf output."""
-    output_ids, output_str, out_logprobs = aphrodite_output
+def _llava_sonar_to_hf_output(sonar_output: RunnerOutput, model: str, mm_token_id: int) -> RunnerOutput:
+    """Sanitize sonar output [Llava models] to be comparable with hf output."""
+    output_ids, output_str, out_logprobs = sonar_output
 
     tokenizer = AutoTokenizer.from_pretrained(model)
     eos_token_id = tokenizer.eos_token_id
@@ -116,9 +112,9 @@ def llava_onevision_hf_model_kwargs(model: str) -> dict:
     return config.to_dict()
 
 
-def llava_onevision_aphrodite_to_hf_output(aphrodite_output: RunnerOutput, model: str) -> RunnerOutput:
-    """Sanitize aphrodite output [llava-onevision] to compare with hf output."""
-    output_ids, output_str, out_logprobs = aphrodite_output
+def llava_onevision_sonar_to_hf_output(sonar_output: RunnerOutput, model: str) -> RunnerOutput:
+    """Sanitize sonar output [llava-onevision] to compare with hf output."""
+    output_ids, output_str, out_logprobs = sonar_output
 
     config = AutoConfig.from_pretrained(model)
     video_token_id = config.video_token_index
@@ -141,9 +137,9 @@ def llava_onevision_aphrodite_to_hf_output(aphrodite_output: RunnerOutput, model
     return hf_output_ids, hf_output_str, out_logprobs
 
 
-def phi3v_aphrodite_to_hf_output(aphrodite_output: RunnerOutput, model: str) -> RunnerOutput:
-    """Sanitize aphrodite output [phi3v] to be comparable with hf output."""
-    _, output_str, out_logprobs = aphrodite_output
+def phi3v_sonar_to_hf_output(sonar_output: RunnerOutput, model: str) -> RunnerOutput:
+    """Sanitize sonar output [phi3v] to be comparable with hf output."""
+    _, output_str, out_logprobs = sonar_output
 
     output_str_without_image = re.sub(r"(<\|image_\d+\|>)+", "", output_str)
     assert output_str_without_image[0] == " "
@@ -159,9 +155,9 @@ def phi3v_aphrodite_to_hf_output(aphrodite_output: RunnerOutput, model: str) -> 
     return hf_output_ids, hf_output_str, out_logprobs
 
 
-def paligemma_aphrodite_to_hf_output(aphrodite_output: RunnerOutput, model: str) -> RunnerOutput:
-    """Sanitize aphrodite output to be comparable with hf output."""
-    output_ids, output_str, out_logprobs = aphrodite_output
+def paligemma_sonar_to_hf_output(sonar_output: RunnerOutput, model: str) -> RunnerOutput:
+    """Sanitize sonar output to be comparable with hf output."""
+    output_ids, output_str, out_logprobs = sonar_output
 
     config = AutoConfig.from_pretrained(model)
     image_token_id = config.image_token_index
@@ -267,9 +263,9 @@ def gemma3_patch_hf_runner(hf_model: HfRunner) -> HfRunner:
     return hf_model
 
 
-def gemma3_aphrodite_to_hf_output(aphrodite_output: RunnerOutput, model: str) -> RunnerOutput:
-    """Sanitize aphrodite output [gemma-3] to compare with hf output."""
-    output_ids, output_str, out_logprobs = aphrodite_output
+def gemma3_sonar_to_hf_output(sonar_output: RunnerOutput, model: str) -> RunnerOutput:
+    """Sanitize sonar output [gemma-3] to compare with hf output."""
+    output_ids, output_str, out_logprobs = sonar_output
 
     config = AutoConfig.from_pretrained(model)
     image_token_id = config.image_token_id
@@ -388,7 +384,7 @@ def h2ovl_patch_hf_runner(hf_model: HfRunner) -> HfRunner:
             self.image_size = self.vision_config.image_size
 
         def __call__(self, text: str, images: Image | list[Image], **kwargs):
-            from aphrodite.transformers_utils.processors.h2ovl import (
+            from sonar.transformers_utils.processors.h2ovl import (
                 image_to_pixel_values_h2ovl,
             )
 
@@ -608,7 +604,7 @@ def skyworkr1v_patch_hf_runner(hf_model: HfRunner) -> HfRunner:
             self.image_size = self.vision_config.image_size
 
         def __call__(self, text: str, images: Image | list[Image], **kwargs):
-            from aphrodite.transformers_utils.processors.internvl import (
+            from sonar.transformers_utils.processors.internvl import (
                 image_to_pixel_values_internvl,
             )
 
@@ -669,7 +665,7 @@ def internvl_patch_hf_runner(hf_model: HfRunner) -> HfRunner:
             videos: npt.NDArray | list[npt.NDArray] = None,
             **kwargs,
         ):
-            from aphrodite.transformers_utils.processors.internvl import (
+            from sonar.transformers_utils.processors.internvl import (
                 image_to_pixel_values_internvl,
                 video_to_pixel_values_internvl,
             )
@@ -1131,7 +1127,7 @@ def voxtral_patch_hf_runner(hf_model: "HfRunner") -> "HfRunner":
 
 
 def moondream3_processor(model: str):
-    from aphrodite.transformers_utils.processors.moondream3 import Moondream3Processor
+    from sonar.transformers_utils.processors.moondream3 import Moondream3Processor
 
     return Moondream3Processor.from_pretrained(model, trust_remote_code=True)
 
@@ -1156,7 +1152,7 @@ def moondream3_patch_hf_runner(hf_model: HfRunner) -> HfRunner:
 
     from torch.nn import functional as F
 
-    from aphrodite.model_executor.models.moondream3 import reconstruct_from_crops
+    from sonar.model_executor.models.moondream3 import reconstruct_from_crops
 
     # Resolve the placeholder tokens from the tokenizer instead of hard-coding.
     image_placeholder_ids = moondream_processor.tokenizer.encode("<image>", add_special_tokens=False)

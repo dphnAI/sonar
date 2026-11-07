@@ -1,19 +1,19 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Provides lazy import of the aphrodite.tokenizers.mistral module."""
+"""Provides lazy import of the sonar.tokenizers.mistral module."""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, TypeGuard
 
-from aphrodite.tokenizers import TokenizerLike
-from aphrodite.utils.import_utils import LazyLoader
+from sonar.tokenizers import TokenizerLike
+from sonar.utils.import_utils import LazyLoader
 
 if TYPE_CHECKING:
     # if type checking, eagerly import the module
-    import aphrodite.tokenizers.mistral as mt
+    import sonar.tokenizers.mistral as mt
 else:
-    mt = LazyLoader("mt", globals(), "aphrodite.tokenizers.mistral")
+    mt = LazyLoader("mt", globals(), "sonar.tokenizers.mistral")
 
 
 def is_mistral_tokenizer(obj: TokenizerLike | None) -> TypeGuard[mt.MistralTokenizer]:

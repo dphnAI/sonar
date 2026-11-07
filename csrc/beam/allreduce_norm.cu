@@ -8,10 +8,10 @@
 
 #include <torch/headeronly/core/ScalarType.h>
 
-namespace aphrodite {
+namespace sonar {
 namespace beam {
 
-namespace ar = aphrodite::mnnvl;
+namespace ar = sonar::mnnvl;
 namespace cg = cooperative_groups;
 using T = __nv_bfloat16;
 using Vec = ar::utils::PackedVec<float4, T>;
@@ -317,7 +317,7 @@ ar::AllReduceKernelParams<T> workspaceParams(torch::stable::Tensor const& input,
 }
 
 }  // namespace beam
-}  // namespace aphrodite
+}  // namespace sonar
 
 void beam_allreduce_norm(
     torch::stable::Tensor const& input, torch::stable::Tensor const& residual,
@@ -332,7 +332,7 @@ void beam_allreduce_norm(
     std::optional<torch::stable::Tensor> experts,
     std::optional<torch::stable::Tensor> expert_weights,
     std::optional<torch::stable::Tensor> permutation, double routed_scale) {
-  using namespace aphrodite::beam;
+  using namespace sonar::beam;
   int const device = input.get_device_index();
   torch::stable::accelerator::DeviceGuard const device_guard(device);
   cudaStream_t stream = get_current_cuda_stream(device);
@@ -439,7 +439,7 @@ void beam_allreduce(torch::stable::Tensor const& input,
                     torch::stable::Tensor& output, int64_t buffer_ptrs,
                     torch::stable::Tensor& flags, int64_t multicast_ptr,
                     int64_t world, int64_t rank) {
-  using namespace aphrodite::beam;
+  using namespace sonar::beam;
   int const device = input.get_device_index();
   torch::stable::accelerator::DeviceGuard const device_guard(device);
   auto p =

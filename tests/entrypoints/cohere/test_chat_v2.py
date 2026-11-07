@@ -3,7 +3,7 @@
 """End-to-end integration tests for the Cohere Chat v2 endpoints
 (``POST /cohere/v2/chat`` and ``POST /cohere/v2/chat/render``).
 
-These tests spin up a real ``aphrodite serve`` process via
+These tests spin up a real ``sonar serve`` process via
 :class:`tests.utils.RemoteOpenAIServer` and exercise the Cohere Chat v2
 contract over HTTP. They mirror the pattern used by
 :mod:`tests.entrypoints.anthropic.test_messages`.
@@ -61,18 +61,18 @@ def server():
         "--enable-scale-out",
     ]
 
-    # Cap the CPU KV-cache pool the Aphrodite CPU backend reserves at
+    # Cap the CPU KV-cache pool the Sonar CPU backend reserves at
     # startup. The default (4 GB) trips Mac's RAM check on smaller
     # machines; 1 GB is more than enough for max_model_len=1024 and
     # max_num_seqs=4.
-    # ``APHRODITE_ENABLE_COHERE_API=1`` flips the opt-in gate that
-    # ``aphrodite.entrypoints.cohere.api_router.attach_router`` reads to
+    # ``SONAR_ENABLE_COHERE_API=1`` flips the opt-in gate that
+    # ``sonar.entrypoints.cohere.api_router.attach_router`` reads to
     # decide whether to register ``POST /cohere/v2/chat`` at server
     # startup. Without it the fixture would boot a server that returns
     # 404 for every request the tests below make.
     env_dict = {
-        "APHRODITE_CPU_KVCACHE_SPACE": "1",
-        "APHRODITE_ENABLE_COHERE_API": "1",
+        "SONAR_CPU_KVCACHE_SPACE": "1",
+        "SONAR_ENABLE_COHERE_API": "1",
     }
 
     with RemoteOpenAIServer(MODEL_NAME, args, env_dict=env_dict) as remote_server:
@@ -247,7 +247,7 @@ async def test_cohere_v2_chat_render_token_ids_decode_to_the_prompt(
 async def test_cohere_v2_chat_render_validation_error_returns_400(
     httpx_client: httpx.AsyncClient,
 ):
-    """Bad bodies get the Cohere error envelope, not Aphrodite's."""
+    """Bad bodies get the Cohere error envelope, not Sonar's."""
     resp = await httpx_client.post("/cohere/v2/chat/render", json={"messages": []})
     assert resp.status_code == 400
     body = resp.json()
@@ -285,7 +285,7 @@ async def test_cohere_v2_chat_documents_field_accepted(
 @pytest_asyncio.fixture
 async def cohere_async_client(server):
     cohere = pytest.importorskip("cohere")
-    # The Aphrodite endpoint is mounted at ``/cohere/v2/chat`` while the
+    # The Sonar endpoint is mounted at ``/cohere/v2/chat`` while the
     # cohere SDK targets ``${base_url}/v2/chat``; point base_url at the
     # ``/cohere`` prefix so paths line up.
     client = cohere.AsyncClientV2(

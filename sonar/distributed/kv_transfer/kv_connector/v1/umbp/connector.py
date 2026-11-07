@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Aphrodite-facing shared UMBP connector."""
+"""Sonar-facing shared UMBP connector."""
 
 from __future__ import annotations
 
@@ -9,9 +9,9 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed.kv_events import KVCacheEventType, KVConnectorKVEvents
-from aphrodite.distributed.kv_transfer.kv_connector.v1.base import (
+from sonar.config import SonarConfig
+from sonar.distributed.kv_events import KVCacheEventType, KVConnectorKVEvents
+from sonar.distributed.kv_transfer.kv_connector.v1.base import (
     KVConnectorBase_V1,
     KVConnectorHandshakeMetadata,
     KVConnectorMetadata,
@@ -19,13 +19,13 @@ from aphrodite.distributed.kv_transfer.kv_connector.v1.base import (
     KVConnectorTransferResults,
     SupportsHMA,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.metrics import (
+from sonar.distributed.kv_transfer.kv_connector.v1.metrics import (
     PromMetric,
     PromMetricT,
 )
-from aphrodite.forward_context import ForwardContext
-from aphrodite.v1.attention.backend import AttentionMetadata
-from aphrodite.v1.core.sched.output import SchedulerOutput
+from sonar.forward_context import ForwardContext
+from sonar.v1.attention.backend import AttentionMetadata
+from sonar.v1.core.sched.output import SchedulerOutput
 
 from .data import (
     BlockIdentityCodec,
@@ -43,9 +43,9 @@ from .stats import UMBPStoreConnectorStats, UMBPStorePromMetrics
 from .worker import UMBPStoreConnectorWorker
 
 if TYPE_CHECKING:
-    from aphrodite.v1.core.kv_cache_manager import KVCacheBlocks
-    from aphrodite.v1.kv_cache_interface import KVCacheConfig
-    from aphrodite.v1.request import Request
+    from sonar.v1.core.kv_cache_manager import KVCacheBlocks
+    from sonar.v1.kv_cache_interface import KVCacheConfig
+    from sonar.v1.request import Request
 
 
 class UMBPStoreKVEvents(KVConnectorKVEvents):
@@ -97,17 +97,17 @@ class UMBPStoreKVEvents(KVConnectorKVEvents):
 
 
 class UMBPStoreConnector(KVConnectorBase_V1, SupportsHMA):
-    """Aphrodite connector lifecycle shared by every UMBP runtime mode."""
+    """Sonar connector lifecycle shared by every UMBP runtime mode."""
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         role: KVConnectorRole,
         kv_cache_config: KVCacheConfig,
     ) -> None:
-        super().__init__(aphrodite_config, role, kv_cache_config)
-        topology = RankTopology.from_aphrodite_config(aphrodite_config)
-        runtime_config = UMBPRuntimeConfig.from_aphrodite(aphrodite_config).resolve_for_rank_count(topology.rank_count)
+        super().__init__(sonar_config, role, kv_cache_config)
+        topology = RankTopology.from_sonar_config(sonar_config)
+        runtime_config = UMBPRuntimeConfig.from_sonar(sonar_config).resolve_for_rank_count(topology.rank_count)
         if topology.pp_size > 1:
             raise NotImplementedError(f"{runtime_config.mode} UMBP does not support pipeline parallelism")
         # A restored prefix skips the draft model's prefill too, so its KV must
@@ -132,14 +132,12 @@ class UMBPStoreConnector(KVConnectorBase_V1, SupportsHMA):
         self.connector_scheduler: UMBPStoreConnectorScheduler | None = None
         self.connector_worker: UMBPStoreConnectorWorker | None = None
         if role == KVConnectorRole.SCHEDULER:
-            self.connector_scheduler = UMBPStoreConnectorScheduler(
-                aphrodite_config, kv_cache_config, None, None, topology
-            )
-            namespace = UMBPNamespace.configured(aphrodite_config)
+            self.connector_scheduler = UMBPStoreConnectorScheduler(sonar_config, kv_cache_config, None, None, topology)
+            namespace = UMBPNamespace.configured(sonar_config)
             if namespace is not None:
                 self._bind_scheduler_namespace(namespace)
         else:
-            self._namespace = UMBPNamespace.from_aphrodite_config(aphrodite_config, kv_cache_config)
+            self._namespace = UMBPNamespace.from_sonar_config(sonar_config, kv_cache_config)
             layout = KVLayoutPlanner.from_kv_cache_config(kv_cache_config)
             self.connector_worker = UMBPStoreConnectorWorker(
                 runtime.create_worker_handle(self._namespace.value, topology, layout.describe(topology)),
@@ -147,7 +145,7 @@ class UMBPStoreConnector(KVConnectorBase_V1, SupportsHMA):
                 codec=self._codec(self._namespace),
                 report_failed_requests=len(kv_cache_config.kv_cache_groups) > 1,
                 enable_kv_cache_events=bool(
-                    aphrodite_config.kv_events_config and aphrodite_config.kv_events_config.enable_kv_cache_events
+                    sonar_config.kv_events_config and sonar_config.kv_events_config.enable_kv_cache_events
                 ),
             )
 
@@ -357,13 +355,13 @@ class UMBPStoreConnector(KVConnectorBase_V1, SupportsHMA):
     @classmethod
     def build_prom_metrics(
         cls,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         metric_types: dict[type[PromMetric], type[PromMetricT]],
         labelnames: list[str],
         per_engine_labelvalues: dict[int, list[object]],
     ) -> UMBPStorePromMetrics:
         return UMBPStorePromMetrics(
-            aphrodite_config,
+            sonar_config,
             metric_types,
             labelnames,
             per_engine_labelvalues,

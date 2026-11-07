@@ -6,11 +6,11 @@ from http import HTTPStatus
 from fastapi import APIRouter, BackgroundTasks, Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from aphrodite.engine.protocol import EngineClient
-from aphrodite.entrypoints.serve.engine.protocol import ErrorResponse
-from aphrodite.entrypoints.serve.utils.api_utils import validate_json_request
-from aphrodite.logger import init_logger
-from aphrodite.v1.fault_tolerance.utils import ALLOWED_FT_INSTRUCTIONS, FaultToleranceRequest
+from sonar.engine.protocol import EngineClient
+from sonar.entrypoints.serve.engine.protocol import ErrorResponse
+from sonar.entrypoints.serve.utils.api_utils import validate_json_request
+from sonar.logger import init_logger
+from sonar.v1.fault_tolerance.utils import ALLOWED_FT_INSTRUCTIONS, FaultToleranceRequest
 
 logger = init_logger(__name__)
 

@@ -4,10 +4,10 @@
 
 These modules import ``cutlass``/``cutedsl`` at module top level, so they must
 not be imported on non-CUDA platforms. Callers should gate on
-``aphrodite.utils.import_utils.has_cutedsl()`` before importing from here.
+``sonar.utils.import_utils.has_cutedsl()`` before importing from here.
 
 This ``__init__`` deliberately imports nothing: re-exporting the cutedsl
 modules here would eagerly ``import cutlass`` (initializing the CUDA driver) for
-anyone who imports ``aphrodite.models.deepseek_v4``, breaking forked subprocesses.
+anyone who imports ``sonar.models.deepseek_v4``, breaking forked subprocesses.
 Import the leaf modules directly under a ``has_cutedsl()``/``is_cuda()`` gate.
 """

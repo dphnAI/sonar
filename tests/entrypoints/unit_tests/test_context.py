@@ -6,13 +6,13 @@ from unittest.mock import patch
 import pytest
 from openai_harmony import Author, Message, Role, TextContent
 
-from aphrodite.entrypoints.openai.responses.context import (
+from sonar.entrypoints.openai.responses.context import (
     HarmonyContext,
     SimpleContext,
     TurnMetrics,
 )
-from aphrodite.outputs import CompletionOutput, RequestOutput
-from aphrodite.parser.harmony import ChunkResult, HarmonyParser, Segment
+from sonar.outputs import CompletionOutput, RequestOutput
+from sonar.parser.harmony import ChunkResult, HarmonyParser, Segment
 
 
 def create_mock_request_output(
@@ -349,7 +349,7 @@ async def test_negative_tool_tokens_edge_case():
     """Test edge case where calculation could result in negative tool
     tokens. We should log an error and clamp the value to 0."""
     # Use patch to check if logger.error was called
-    with patch("aphrodite.entrypoints.openai.responses.context.logger.error") as mock_log:
+    with patch("sonar.entrypoints.openai.responses.context.logger.error") as mock_log:
         context, _ = make_harmony_context(available_tools=["browser"])
 
         # First turn

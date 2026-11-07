@@ -3,10 +3,10 @@
 import pytest
 import torch
 
-from aphrodite.platforms import CpuArchEnum, current_platform
-from aphrodite.triton_utils import HAS_TRITON
-from aphrodite.v1.attention.backends.utils import PAD_SLOT_ID
-from aphrodite.v1.worker.cpu.block_table import CPUBlockTables
+from sonar.platforms import CpuArchEnum, current_platform
+from sonar.triton_utils import HAS_TRITON
+from sonar.v1.attention.backends.utils import PAD_SLOT_ID
+from sonar.v1.worker.cpu.block_table import CPUBlockTables
 
 pytestmark = pytest.mark.skipif(
     not current_platform.is_cpu() or HAS_TRITON or current_platform.get_cpu_architecture() == CpuArchEnum.X86,

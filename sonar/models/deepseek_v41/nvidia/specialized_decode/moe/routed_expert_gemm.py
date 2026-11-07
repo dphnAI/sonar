@@ -30,7 +30,7 @@ tensors with CuTe DSL kernels sized for at most eight rows::
   outputs are bitwise those of the three; it is built for the target's 384
   experts and top-6.
 
-The kernels read the tensors Aphrodite prepares for the TRT-LLM-gen MXFP4 backend:
+The kernels read the tensors Sonar prepares for the TRT-LLM-gen MXFP4 backend:
 ``w13`` [E, 1280, 2560] u8 (interleaved up/gate rows shuffled for 128-row
 epilogue tiles) with [E, 1280, 160] scales in the 128x4 layout, ``w2``
 [E, 5120, 320] u8 with [E, 5120, 20] scales, and the per-expert SwiGLU clamp.
@@ -53,9 +53,9 @@ import torch
 from cutlass import Float32, Int32
 from cutlass.cute.runtime import make_fake_stream, make_ptr
 
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
-from aphrodite.models.common.ops.moe_tail_fusion.primitives import current_cu_stream
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
+from sonar.models.common.ops.moe_tail_fusion.primitives import current_cu_stream
 
 from .routed_expert_front_cute import RoutedExpertFront
 from .routed_expert_gemm_cute import (
@@ -66,8 +66,8 @@ from .routed_expert_gemm_cute import (
 from .routed_expert_route_cute import RoutedExpertRoute
 
 if TYPE_CHECKING:
-    from aphrodite.model_executor.layers.fused_moe.config import FusedMoEQuantConfig
-    from aphrodite.model_executor.layers.fused_moe.modular_kernel import (
+    from sonar.model_executor.layers.fused_moe.config import FusedMoEQuantConfig
+    from sonar.model_executor.layers.fused_moe.modular_kernel import (
         FusedMoEPrepareAndFinalizeModular,
     )
 
@@ -451,8 +451,8 @@ def check_weights(
 
 def _unsupported_reason(runner: torch.nn.Module) -> str | None:
     """Why the MoE runner's routed experts cannot take the GEMM pair."""
-    from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-    from aphrodite.model_executor.layers.fused_moe.experts.trtllm_mxfp4_moe import (
+    from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+    from sonar.model_executor.layers.fused_moe.experts.trtllm_mxfp4_moe import (
         TrtLlmMxfp4ExpertsModular,
     )
 
@@ -480,7 +480,7 @@ def _unsupported_reason(runner: torch.nn.Module) -> str | None:
 def _front_config(runner: torch.nn.Module) -> FrontConfig | str:
     """The fused front's configuration for the runner's router, or why its
     routing is not the plain DSv4 top-k the front computes."""
-    from aphrodite.model_executor.layers.fused_moe.router.fused_topk_bias_router import (
+    from sonar.model_executor.layers.fused_moe.router.fused_topk_bias_router import (
         FusedTopKBiasRouter,
     )
 

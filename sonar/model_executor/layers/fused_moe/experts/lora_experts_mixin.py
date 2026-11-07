@@ -3,9 +3,9 @@
 
 import torch
 
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.config import FusedMoEConfig
-from aphrodite.model_executor.layers.fused_moe.experts.lora_context import MoELoRAContext
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.config import FusedMoEConfig
+from sonar.model_executor.layers.fused_moe.experts.lora_context import MoELoRAContext
 
 
 class LoRAExpertsMixin:

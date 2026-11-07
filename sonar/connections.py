@@ -13,11 +13,11 @@ import aiohttp
 import requests
 from urllib3.util import parse_url
 
-import aphrodite.envs as envs
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.logger import init_logger
-from aphrodite.utils.mem_constants import KiB_bytes, MiB_bytes
-from aphrodite.version import __version__ as APHRODITE_VERSION
+import sonar.envs as envs
+from sonar.exceptions import SonarValidationError
+from sonar.logger import init_logger
+from sonar.utils.mem_constants import KiB_bytes, MiB_bytes
+from sonar.version import __version__ as SONAR_VERSION
 
 logger = init_logger(__name__)
 
@@ -31,7 +31,7 @@ _RETRY_BACKOFF_FACTOR = 4
 _RESPONSE_READ_CHUNK_SIZE = 64 * KiB_bytes
 
 
-class HTTPResponseSizeExceededError(AphroditeValidationError):
+class HTTPResponseSizeExceededError(SonarValidationError):
     """Raised when an HTTP response exceeds a caller-supplied byte ceiling."""
 
     def __init__(self, max_bytes: int, received_bytes: int) -> None:
@@ -52,7 +52,7 @@ class MediaDownloadSizeExceededError(ValueError):
         self.max_bytes = max_bytes
         self.received_bytes = received_bytes
         max_size_mb = max_bytes / MiB_bytes
-        message = f"Remote media download exceeds APHRODITE_MAX_MEDIA_DOWNLOAD_SIZE_MB={max_size_mb:g}"
+        message = f"Remote media download exceeds SONAR_MAX_MEDIA_DOWNLOAD_SIZE_MB={max_size_mb:g}"
         if received_bytes is not None:
             message += f" (received at least {received_bytes} bytes)"
         super().__init__(message)
@@ -70,7 +70,7 @@ class MediaRequestDownloadBudget:
         self._lock = threading.Lock()
 
     def charge(self, size: int) -> None:
-        limit_mb = envs.APHRODITE_MAX_MEDIA_REQUEST_DOWNLOAD_SIZE_MB
+        limit_mb = envs.SONAR_MAX_MEDIA_REQUEST_DOWNLOAD_SIZE_MB
         if limit_mb <= 0:
             return
         limit = limit_mb * MiB_bytes
@@ -79,14 +79,14 @@ class MediaRequestDownloadBudget:
             if received > limit:
                 raise MediaRequestDownloadSizeExceededError(
                     "Request media downloads exceed "
-                    f"APHRODITE_MAX_MEDIA_REQUEST_DOWNLOAD_SIZE_MB={limit_mb:g} "
+                    f"SONAR_MAX_MEDIA_REQUEST_DOWNLOAD_SIZE_MB={limit_mb:g} "
                     f"({received} bytes received, including retried attempts)."
                 )
             self.used = received
 
 
 def _get_media_download_limit_bytes() -> int | None:
-    max_size_mb = envs.APHRODITE_MAX_MEDIA_DOWNLOAD_SIZE_MB
+    max_size_mb = envs.SONAR_MAX_MEDIA_DOWNLOAD_SIZE_MB
     if max_size_mb <= 0:
         return None
     return max_size_mb * MiB_bytes
@@ -284,7 +284,7 @@ def _sync_retry(
     @functools.wraps(fn)
     def wrapper(*args: Any, **kwargs: Any) -> _T:
         base_timeout: float | None = kwargs.get("timeout")
-        max_retries = max(envs.APHRODITE_MEDIA_FETCH_MAX_RETRIES, 1)
+        max_retries = max(envs.SONAR_MEDIA_FETCH_MAX_RETRIES, 1)
 
         for attempt in range(max_retries):
             attempt_timeout = base_timeout * (_RETRY_BACKOFF_FACTOR**attempt) if base_timeout is not None else None
@@ -326,7 +326,7 @@ def _async_retry(
     @functools.wraps(fn)
     async def wrapper(*args: Any, **kwargs: Any) -> _T:
         base_timeout: float | None = kwargs.get("timeout")
-        max_retries = max(envs.APHRODITE_MEDIA_FETCH_MAX_RETRIES, 1)
+        max_retries = max(envs.SONAR_MEDIA_FETCH_MAX_RETRIES, 1)
 
         for attempt in range(max_retries):
             attempt_timeout = base_timeout * (_RETRY_BACKOFF_FACTOR**attempt) if base_timeout is not None else None
@@ -386,7 +386,7 @@ class HTTPConnection:
             raise ValueError("Invalid HTTP URL: A valid HTTP URL must have scheme 'http' or 'https'.")
 
     def _headers(self, **extras: str) -> MutableMapping[str, str]:
-        return {"User-Agent": f"Aphrodite/{APHRODITE_VERSION}", **extras}
+        return {"User-Agent": f"Sonar/{SONAR_VERSION}", **extras}
 
     def get_response(
         self,
@@ -557,6 +557,6 @@ class HTTPConnection:
 
 global_http_connection = HTTPConnection()
 """
-The global [`HTTPConnection`][aphrodite.connections.HTTPConnection] instance used
-by Aphrodite.
+The global [`HTTPConnection`][sonar.connections.HTTPConnection] instance used
+by Sonar.
 """

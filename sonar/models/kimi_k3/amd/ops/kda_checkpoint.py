@@ -6,10 +6,10 @@ from dataclasses import dataclass
 
 import torch
 
-from aphrodite.model_executor.layers.mamba.checkpoint import (
+from sonar.model_executor.layers.mamba.checkpoint import (
     MambaPrefillCheckpointMetadata,
 )
-from aphrodite.model_executor.layers.mamba.kda_checkpoint import (
+from sonar.model_executor.layers.mamba.kda_checkpoint import (
     FlashKDAPrefillCheckpointExporter,
 )
 

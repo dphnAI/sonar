@@ -3,7 +3,7 @@
 import pytest
 import torch
 
-from aphrodite.model_executor.models.gemma4 import (
+from sonar.model_executor.models.gemma4 import (
     gemma4_fused_routing_kernel_triton,
     gemma4_routing_function_torch,
 )

@@ -11,7 +11,7 @@ from pathlib import Path
 import mlx.core as mx
 import mlx.nn as nn
 
-from aphrodite.metal.stt.registry import get_stt_model_constructor
+from sonar.metal.stt.registry import get_stt_model_constructor
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +71,7 @@ def _resolve_model_path(model_path: str | Path) -> Path:
         return model_path
 
     try:
-        from aphrodite.transformers_utils.repo_utils import hf_api
+        from sonar.transformers_utils.repo_utils import hf_api
     except ImportError as e:  # pragma: no cover
         raise ValueError(f"Could not download model {model_path}: huggingface_hub is not installed") from e
 

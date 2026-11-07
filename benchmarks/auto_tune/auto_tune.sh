@@ -5,7 +5,7 @@
 
 TAG=$(date +"%Y_%m_%d_%H_%M")
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
-APHRODITE_LOGGING_LEVEL=${APHRODITE_LOGGING_LEVEL:-INFO}
+SONAR_LOGGING_LEVEL=${SONAR_LOGGING_LEVEL:-INFO}
 BASE=${BASE:-"$SCRIPT_DIR/../../.."}
 MODEL=${MODEL:-"meta-llama/Llama-3.1-8B-Instruct"}
 SYSTEM=${SYSTEM:-"TPU"}
@@ -37,7 +37,7 @@ echo "MIN_CACHE_HIT_PCT=$MIN_CACHE_HIT_PCT"
 echo "MAX_LATENCY_ALLOWED_MS=$MAX_LATENCY_ALLOWED_MS"
 echo "NUM_SEQS_LIST=$NUM_SEQS_LIST"
 echo "NUM_BATCHED_TOKENS_LIST=$NUM_BATCHED_TOKENS_LIST"
-echo "APHRODITE_LOGGING_LEVEL=$APHRODITE_LOGGING_LEVEL"
+echo "SONAR_LOGGING_LEVEL=$SONAR_LOGGING_LEVEL"
 echo "RESULT_FILE=$RESULT"
 echo "====================== AUTO TUNEPARAMETERS ===================="
 
@@ -46,7 +46,7 @@ rm -rf "$PROFILE_PATH"
 mkdir -p "$LOG_FOLDER"
 mkdir -p "$PROFILE_PATH"
 
-cd "$BASE/aphrodite"
+cd "$BASE/sonar"
 
 pip install -q datasets
 
@@ -71,10 +71,10 @@ start_server() {
     local gpu_memory_utilization=$1
     local max_num_seqs=$2
     local max_num_batched_tokens=$3
-    local aphrodite_log=$4
+    local sonar_log=$4
     local profile_dir=$5
 
-    pkill -if "aphrodite run" || true
+    pkill -if "sonar run" || true
 
     # Define the common arguments as a bash array.
     # Each argument and its value are separate elements.
@@ -96,12 +96,12 @@ start_server() {
     # This correctly passes each element as a separate argument.
     if [[ -n "$profile_dir" ]]; then
         # Start server with profiling enabled
-        APHRODITE_SERVER_DEV_MODE=1 APHRODITE_TORCH_PROFILER_DIR=$profile_dir \
-            aphrodite run "${common_args_array[@]}" > "$aphrodite_log" 2>&1 &
+        SONAR_SERVER_DEV_MODE=1 SONAR_TORCH_PROFILER_DIR=$profile_dir \
+            sonar run "${common_args_array[@]}" > "$sonar_log" 2>&1 &
     else
         # Start server without profiling
-        APHRODITE_SERVER_DEV_MODE=1 \
-            aphrodite run "${common_args_array[@]}" > "$aphrodite_log" 2>&1 &
+        SONAR_SERVER_DEV_MODE=1 \
+            sonar run "${common_args_array[@]}" > "$sonar_log" 2>&1 &
     fi
     local server_pid=$!
 
@@ -123,7 +123,7 @@ start_server() {
     done
 
     if (( ! server_started )); then
-        echo "server did not start within 10 minutes or crashed. Please check server log at $aphrodite_log".
+        echo "server did not start within 10 minutes or crashed. Please check server log at $sonar_log".
         return 1
     else
         return 0
@@ -135,15 +135,15 @@ run_benchmark() {
     local max_num_batched_tokens=$2
     local gpu_memory_utilization=$3
     echo "max_num_seq: $max_num_seqs, max_num_batched_tokens: $max_num_batched_tokens"
-    local aphrodite_log="$LOG_FOLDER/aphrodite_log_${max_num_seqs}_${max_num_batched_tokens}.txt"
-    echo "aphrodite_log: $aphrodite_log"
+    local sonar_log="$LOG_FOLDER/sonar_log_${max_num_seqs}_${max_num_batched_tokens}.txt"
+    echo "sonar_log: $sonar_log"
     echo
-    rm -f "$aphrodite_log"
-    pkill -if "aphrodite run" || true
+    rm -f "$sonar_log"
+    pkill -if "sonar run" || true
 
     echo "starting server..."
     # Call start_server without a profile_dir to avoid profiling overhead
-    start_server "$gpu_memory_utilization" "$max_num_seqs" "$max_num_batched_tokens" "$aphrodite_log" ""
+    start_server "$gpu_memory_utilization" "$max_num_seqs" "$max_num_batched_tokens" "$sonar_log" ""
     result=$?
     if [[ "$result" -eq 1 ]]; then
         echo "server failed to start. gpu_memory_utilization:$gpu_memory_utilization, max_num_seqs:$max_num_seqs, max_num_batched_tokens: $max_num_batched_tokens"
@@ -159,8 +159,8 @@ run_benchmark() {
     prefix_len=$(( INPUT_LEN * MIN_CACHE_HIT_PCT / 100 ))
     adjusted_input_len=$(( INPUT_LEN - prefix_len ))
     # --profile flag is removed from this call
-    aphrodite bench run \
-        --backend aphrodite \
+    sonar bench run \
+        --backend sonar \
         --model "$MODEL"  \
         --dataset-name random \
         --random-input-len $adjusted_input_len \
@@ -190,8 +190,8 @@ run_benchmark() {
             curl -X POST http://0.0.0.0:8004/reset_prefix_cache
             sleep 5
             bm_log="$LOG_FOLDER/bm_log_${max_num_seqs}_${max_num_batched_tokens}_requestrate_${request_rate}.txt"
-            aphrodite bench run \
-                --backend aphrodite \
+            sonar bench run \
+                --backend sonar \
                 --model "$MODEL"  \
                 --dataset-name random \
                 --random-input-len $adjusted_input_len \
@@ -232,7 +232,7 @@ run_benchmark() {
 
     echo "best_max_num_seqs: $best_max_num_seqs, best_num_batched_tokens: $best_num_batched_tokens, best_throughput: $best_throughput"
 
-    pkill -if "aphrodite run" || true
+    pkill -if "sonar run" || true
     sleep 10
     echo "===================="
     return 0
@@ -246,7 +246,7 @@ gpu_memory_utilization=0.98
 find_gpu_memory_utilization=0
 while (( $(echo "$gpu_memory_utilization >= 0.9" | bc -l) )); do
     # Pass empty string for profile_dir argument
-    start_server "$gpu_memory_utilization" "${num_seqs_list[-1]}" "${num_batched_tokens_list[-1]}" "$LOG_FOLDER/aphrodite_log_gpu_memory_utilization_$gpu_memory_utilization.log" ""
+    start_server "$gpu_memory_utilization" "${num_seqs_list[-1]}" "${num_batched_tokens_list[-1]}" "$LOG_FOLDER/sonar_log_gpu_memory_utilization_$gpu_memory_utilization.log" ""
     result=$?
     if [[ "$result" -eq 0 ]]; then
         find_gpu_memory_utilization=1
@@ -279,20 +279,20 @@ if (( $(echo "$best_throughput > 0" | bc -l) )); then
     echo "Best config: max_num_seqs: $best_max_num_seqs, max_num_batched_tokens: $best_num_batched_tokens, throughput: $best_throughput"
     echo
 
-    aphrodite_log="$LOG_FOLDER/aphrodite_log_BEST_PROFILE.txt"
+    sonar_log="$LOG_FOLDER/sonar_log_BEST_PROFILE.txt"
     bm_log="$LOG_FOLDER/bm_log_BEST_PROFILE.txt"
     echo "Best config: max_num_seqs: $best_max_num_seqs, max_num_batched_tokens: $best_num_batched_tokens, goodput: $best_goodput"
 
     # Start server with the best params and profiling ENABLED
     echo "Starting server for profiling..."
-    start_server "$gpu_memory_utilization" "$best_max_num_seqs" "$best_num_batched_tokens" "$aphrodite_log" "$PROFILE_PATH"
+    start_server "$gpu_memory_utilization" "$best_max_num_seqs" "$best_num_batched_tokens" "$sonar_log" "$PROFILE_PATH"
 
     # Run benchmark with the best params and the --profile flag
     echo "Running benchmark with profiling..."
     prefix_len=$(( INPUT_LEN * MIN_CACHE_HIT_PCT / 100 ))
     adjusted_input_len=$(( INPUT_LEN - prefix_len ))
-    aphrodite bench run \
-        --backend aphrodite \
+    sonar bench run \
+        --backend sonar \
         --model "$MODEL" \
         --dataset-name random \
         --random-input-len $adjusted_input_len \
@@ -309,6 +309,6 @@ if (( $(echo "$best_throughput > 0" | bc -l) )); then
 else
     echo "No configuration met the latency requirements. Skipping final profiling run."
 fi
-pkill -if "aphrodite run" || true
+pkill -if "sonar run" || true
 echo "best_max_num_seqs: $best_max_num_seqs, best_num_batched_tokens: $best_num_batched_tokens, best_throughput: $best_throughput, profile saved in: $PROFILE_PATH"
 echo "best_max_num_seqs: $best_max_num_seqs, best_num_batched_tokens: $best_num_batched_tokens, best_throughput: $best_throughput, profile saved in: $PROFILE_PATH" >> "$RESULT"

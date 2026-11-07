@@ -7,22 +7,22 @@ from typing import Any, ClassVar, TypeVar
 
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.mamba import MambaBackendEnum
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.utils.torch_utils import async_tensor_h2d
-from aphrodite.v1.attention.backend import (
+from sonar.config import SonarConfig
+from sonar.config.mamba import MambaBackendEnum
+from sonar.utils.math_utils import cdiv
+from sonar.utils.torch_utils import async_tensor_h2d
+from sonar.v1.attention.backend import (
     AttentionCGSupport,
     AttentionMetadataBuilder,
     CommonAttentionMetadata,
 )
-from aphrodite.v1.attention.backends.utils import (
+from sonar.v1.attention.backends.utils import (
     NULL_BLOCK_ID,
     compute_causal_conv1d_metadata,
     mamba_get_block_table_tensor,
     split_decodes_and_prefills,
 )
-from aphrodite.v1.kv_cache_interface import MambaSpec
+from sonar.v1.kv_cache_interface import MambaSpec
 
 M = TypeVar("M", bound="BaseMambaAttentionMetadata")
 
@@ -94,23 +94,23 @@ class BaseMambaAttentionMetadataBuilder(AttentionMetadataBuilder[M], abc.ABC):
         self,
         kv_cache_spec: MambaSpec,
         layer_names: list[str],
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
     ):
-        super().__init__(kv_cache_spec, layer_names, aphrodite_config, device)
+        super().__init__(kv_cache_spec, layer_names, sonar_config, device)
 
         # Enable speculative decoding support
-        self.speculative_config = aphrodite_config.speculative_config
-        self.compilation_config = aphrodite_config.compilation_config
-        self.num_spec_tokens: int = aphrodite_config.num_speculative_tokens
+        self.speculative_config = sonar_config.speculative_config
+        self.compilation_config = sonar_config.compilation_config
+        self.num_spec_tokens: int = sonar_config.num_speculative_tokens
         self.use_spec_decode = self.num_spec_tokens > 0
-        self.use_replayssm = aphrodite_config.cache_config.use_replayssm
-        self.replayssm_buffer_len = aphrodite_config.cache_config.replayssm_buffer_len
+        self.use_replayssm = sonar_config.cache_config.use_replayssm
+        self.replayssm_buffer_len = sonar_config.cache_config.replayssm_buffer_len
         self.use_flashinfer_replayssm = (
-            self.use_replayssm and aphrodite_config.mamba_config.backend == MambaBackendEnum.FLASHINFER
+            self.use_replayssm and sonar_config.mamba_config.backend == MambaBackendEnum.FLASHINFER
         )
 
-        scheduler_config = aphrodite_config.scheduler_config
+        scheduler_config = sonar_config.scheduler_config
         self.decode_cudagraph_max_bs: int = scheduler_config.max_num_seqs
         if self.compilation_config.max_cudagraph_capture_size is not None:
             self.decode_cudagraph_max_bs = min(
@@ -171,7 +171,7 @@ class BaseMambaAttentionMetadataBuilder(AttentionMetadataBuilder[M], abc.ABC):
                 num_heads=nheads,
                 num_predicted_tokens=1 + self.num_spec_tokens,
                 max_window=self.replayssm_buffer_len,
-                dtype=aphrodite_config.model_config.dtype,
+                dtype=sonar_config.model_config.dtype,
                 device=device,
             )
             # Full CUDA graphs retain capture-time tensor addresses. Keep the
@@ -434,7 +434,7 @@ class BaseMambaAttentionMetadataBuilder(AttentionMetadataBuilder[M], abc.ABC):
             common_attn_metadata.block_table_tensor,
             common_attn_metadata.seq_lens,
             self.kv_cache_spec,
-            self.aphrodite_config.cache_config.mamba_cache_mode,
+            self.sonar_config.cache_config.mamba_cache_mode,
         )
 
         if state_indices_tensor.dim() == 1:
@@ -478,8 +478,7 @@ class BaseMambaAttentionMetadataBuilder(AttentionMetadataBuilder[M], abc.ABC):
             decode_base_cpu = common_attn_metadata.replayssm_decode_base_cpu
             seq_lens_cpu = common_attn_metadata.seq_lens_cpu_upper_bound
             async_spec_decode = (
-                self.aphrodite_config.scheduler_config.async_scheduling
-                and self.aphrodite_config.speculative_config is not None
+                self.sonar_config.scheduler_config.async_scheduling and self.sonar_config.speculative_config is not None
             )
             if decode_base_cpu is None or seq_lens_cpu is None or async_spec_decode:
                 raise ValueError(
@@ -492,7 +491,7 @@ class BaseMambaAttentionMetadataBuilder(AttentionMetadataBuilder[M], abc.ABC):
             )
             num_computed_d = seq_lens_cpu[:num_decodes] - query_lens_cpu
             decode_base_d = decode_base_cpu[:num_decodes]
-            align_mode = self.aphrodite_config.cache_config.mamba_cache_mode == "align"
+            align_mode = self.sonar_config.cache_config.mamba_cache_mode == "align"
             block_size = self.kv_cache_spec.block_size
             effective_base = (
                 torch.maximum(decode_base_d, (num_computed_d // block_size) * block_size)
@@ -643,7 +642,7 @@ class BaseMambaAttentionMetadataBuilder(AttentionMetadataBuilder[M], abc.ABC):
             blk_table,
             metadata.seq_lens,
             self.kv_cache_spec,
-            self.aphrodite_config.cache_config.mamba_cache_mode,
+            self.sonar_config.cache_config.mamba_cache_mode,
         )
         if state_indices_tensor.dim() == 1:
             state_indices_tensor = state_indices_tensor.unsqueeze(-1)

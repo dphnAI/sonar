@@ -13,15 +13,15 @@ from typing import TYPE_CHECKING, ClassVar
 import torch
 from torch import fx, nn
 
-from aphrodite.model_executor.model_loader.weight_utils import sharded_weight_loader
-from aphrodite.model_executor.models.transformers.fusers.base import BaseFuser
-from aphrodite.model_executor.utils import set_weight_attrs
+from sonar.model_executor.model_loader.weight_utils import sharded_weight_loader
+from sonar.model_executor.models.transformers.fusers.base import BaseFuser
+from sonar.model_executor.utils import set_weight_attrs
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
+    from sonar.config import SonarConfig
 
-APHRODITE_ATTN_IMPL = "aphrodite"
-APHRODITE_MLA_ATTN_IMPL = "aphrodite_mla"
+SONAR_ATTN_IMPL = "sonar"
+SONAR_MLA_ATTN_IMPL = "sonar_mla"
 
 
 def _is_interface_lookup(node: ast.expr | None) -> bool:
@@ -100,18 +100,18 @@ class AttentionFuser(BaseFuser):
             s_aux_expr=s_aux_expr,
         )
 
-    def validate(self, module: nn.Module, aphrodite_config: "AphroditeConfig") -> bool:
-        """Whether `module` will actually dispatch to Aphrodite."""
+    def validate(self, module: nn.Module, sonar_config: "SonarConfig") -> bool:
+        """Whether `module` will actually dispatch to Sonar."""
         config = getattr(module, "config", None)
         # Only patched in the text config, this excludes attention based mm encoders
-        aphrodite_attn_impls = {APHRODITE_ATTN_IMPL, APHRODITE_MLA_ATTN_IMPL}
-        return getattr(config, "_attn_implementation", None) in aphrodite_attn_impls
+        sonar_attn_impls = {SONAR_ATTN_IMPL, SONAR_MLA_ATTN_IMPL}
+        return getattr(config, "_attn_implementation", None) in sonar_attn_impls
 
-    def fuse(self, module: nn.Module, prefix: str, aphrodite_config: "AphroditeConfig") -> nn.Module:
+    def fuse(self, module: nn.Module, prefix: str, sonar_config: "SonarConfig") -> nn.Module:
         if (sinks := self.sinks(module)) is not None:
             assert isinstance(self.s_aux_expr, ast.Attribute)
-            size = sinks.numel() // aphrodite_config.parallel_config.tensor_parallel_size
-            device = aphrodite_config.device_config.device
+            size = sinks.numel() // sonar_config.parallel_config.tensor_parallel_size
+            device = sonar_config.device_config.device
             data = torch.empty(size, dtype=sinks.dtype, device=device)
             sinks_param = nn.Parameter(data, requires_grad=False)
             set_weight_attrs(sinks_param, {"weight_loader": sharded_weight_loader(0)})

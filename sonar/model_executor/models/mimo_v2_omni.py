@@ -14,27 +14,27 @@ from transformers import BatchFeature, PreTrainedConfig
 from transformers.models.qwen2_vl.image_processing_qwen2_vl import smart_resize
 from typing_extensions import TypedDict
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.multimodal import MultiModalDummyOptions
-from aphrodite.distributed import parallel_state
-from aphrodite.distributed import utils as dist_utils
-from aphrodite.inputs import MultiModalDataDict
-from aphrodite.model_executor.layers.activation import get_act_and_mul_fn
-from aphrodite.model_executor.layers.attention import MMEncoderAttention
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.config import SonarConfig
+from sonar.config.multimodal import MultiModalDummyOptions
+from sonar.distributed import parallel_state
+from sonar.distributed import utils as dist_utils
+from sonar.inputs import MultiModalDataDict
+from sonar.model_executor.layers.activation import get_act_and_mul_fn
+from sonar.model_executor.layers.attention import MMEncoderAttention
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     QKVParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.layers.rotary_embedding.common import ApplyRotaryEmb
-from aphrodite.model_executor.models.vision import is_vit_use_data_parallel
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import MultiModalFieldConfig, MultiModalKwargsItems
-from aphrodite.multimodal.parse import ImageSize, MultiModalDataItems
-from aphrodite.multimodal.processing import (
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.layers.rotary_embedding.common import ApplyRotaryEmb
+from sonar.model_executor.models.vision import is_vit_use_data_parallel
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import MultiModalFieldConfig, MultiModalKwargsItems
+from sonar.multimodal.parse import ImageSize, MultiModalDataItems
+from sonar.multimodal.processing import (
     BaseDummyInputsBuilder,
     BaseMultiModalProcessor,
     BaseProcessingInfo,
@@ -42,9 +42,9 @@ from aphrodite.multimodal.processing import (
     PromptUpdate,
     PromptUpdateDetails,
 )
-from aphrodite.multimodal.processing.processor import HFMultiModalInputs
-from aphrodite.transformers_utils.configs.mimo_v2_omni import Mimo_VLVisionConfig
-from aphrodite.transformers_utils.processors.mimo_v2_omni import (
+from sonar.multimodal.processing.processor import HFMultiModalInputs
+from sonar.transformers_utils.configs.mimo_v2_omni import Mimo_VLVisionConfig
+from sonar.transformers_utils.processors.mimo_v2_omni import (
     MiMoOmniProcessor,
     VideoAudioInput,
     _format_timestamp,
@@ -234,7 +234,7 @@ class MiMoVisionAttention(nn.Module):
         key, which the Triton prefill kernel supports directly, so the softmax
         normalizes over the biased scores in one pass.
         """
-        from aphrodite.v1.attention.ops.triton_prefill_attention import (
+        from sonar.v1.attention.ops.triton_prefill_attention import (
             context_attention_fwd,
         )
 
@@ -392,7 +392,7 @@ class MiMoVisionBlock(nn.Module):
 
 
 class MiMoVisionTransformer(nn.Module):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_stacked={
             "mlp.gate_proj": ("mlp.gate_up_proj", 0),
             "mlp.up_proj": ("mlp.gate_up_proj", 1),
@@ -633,7 +633,7 @@ class MiMoVisionTransformer(nn.Module):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
 
 class MiMoV2OmniMultiModalDataParser(Qwen2VLMultiModalDataParser):
@@ -861,7 +861,7 @@ class MiMoV2OmniProcessingInfo(BaseProcessingInfo):
 
 
 class MiMoV2OmniMultiModalProcessor(BaseMultiModalProcessor[MiMoV2OmniProcessingInfo]):
-    """Aphrodite multimodal processor for MiMo-Omni (image + video).
+    """Sonar multimodal processor for MiMo-Omni (image + video).
 
     Key differences from Qwen2.5-VL:
     - Videos use timestamp tokens between temporal grid positions.
@@ -871,7 +871,7 @@ class MiMoV2OmniMultiModalProcessor(BaseMultiModalProcessor[MiMoV2OmniProcessing
       regenerate the exact same timestamp token IDs.
     """
 
-    # fps assumed for aphrodite-decoded video (numpy T,H,W,C arrays).
+    # fps assumed for sonar-decoded video (numpy T,H,W,C arrays).
     # The video loader samples ~32 frames; treat each frame as 1 s apart so
     # MiMoVLProcessor sees 1 fps input and resamples internally.
     _INPUT_FPS: float = 1.0
@@ -1181,7 +1181,7 @@ class MiMoV2OmniDummyInputsBuilder(BaseDummyInputsBuilder[MiMoV2OmniProcessingIn
 )
 class MiMoV2OmniForCausalLM(nn.Module, SupportsMultiModal, SupportsPP, SupportsQuant, SupportsEagle3):
     # To ensure correct weight loading and mapping.
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={
             # audio encoder
             "speech_embeddings.": "audio_encoder.speech_embeddings.",
@@ -1206,9 +1206,9 @@ class MiMoV2OmniForCausalLM(nn.Module, SupportsMultiModal, SupportsPP, SupportsQ
 
         raise ValueError(f"Unsupported modality: {modality}")
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
         self.config = config
         # Omni ViT/Audio Encoder BF16
         vision_config = (
@@ -1216,24 +1216,24 @@ class MiMoV2OmniForCausalLM(nn.Module, SupportsMultiModal, SupportsPP, SupportsQ
             if isinstance(config.vision_config, dict)
             else config.vision_config
         )
-        with self._mark_tower_model(aphrodite_config, {"image", "video"}):
+        with self._mark_tower_model(sonar_config, {"image", "video"}):
             self.visual = MiMoVisionTransformer(
                 vision_config,
-                norm_eps=getattr(aphrodite_config, "rms_norm_eps", 1e-6),
+                norm_eps=getattr(sonar_config, "rms_norm_eps", 1e-6),
                 quant_config=None,
                 prefix=maybe_prefix(prefix, "visual"),
             )
         audio_config = getattr(config, "audio_config", None)
-        model_path = aphrodite_config.model_config.model
+        model_path = sonar_config.model_config.model
         self.audio_encoder: MimoAudioEncoder | None
         if audio_config is not None:
-            with self._mark_tower_model(aphrodite_config, "audio"):
+            with self._mark_tower_model(sonar_config, "audio"):
                 self.audio_encoder = MimoAudioEncoder(audio_config, model_path=model_path)
         else:
             self.audio_encoder = None
-        with self._mark_language_model(aphrodite_config):
+        with self._mark_language_model(sonar_config):
             self.language_model = MiMoV2FlashForCausalLM(
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 prefix=maybe_prefix(prefix, "language_model"),
             )
 
@@ -1485,5 +1485,5 @@ class MiMoV2OmniForCausalLM(nn.Module, SupportsMultiModal, SupportsPP, SupportsQ
         audio_loaded: set[str] = set()
 
         loader = AutoWeightsLoader(self)
-        auto_loaded = loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        auto_loaded = loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
         return audio_loaded | auto_loaded

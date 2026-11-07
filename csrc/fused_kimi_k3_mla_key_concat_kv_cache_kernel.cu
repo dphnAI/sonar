@@ -82,7 +82,7 @@ __device__ __forceinline__ uint8_t rocm_cvt_float_to_fp8_e4m3(float val) {
 }
 #endif
 
-namespace aphrodite {
+namespace sonar {
 namespace kimi_k3_fused_ops {
 
 namespace {
@@ -126,7 +126,7 @@ __device__ __forceinline__ void copyChunk8(void* dst, const scalar_t* src,
                                            int rope_elem_base = 0) {
   uint4 const v = *reinterpret_cast<const uint4*>(src);
   if constexpr (FP8 || APPLY_ROPE) {
-    using Converter = aphrodite::_typeConvert<scalar_t>;
+    using Converter = sonar::_typeConvert<scalar_t>;
     if constexpr (!Converter::exists) {
       return;
     } else {
@@ -194,7 +194,7 @@ __device__ __forceinline__ void copyChunk8(void* dst, const scalar_t* src,
 template <typename scalar_t>
 __device__ __forceinline__ void copyChunk8UnitFp8(uint8_t* dst,
                                                   const scalar_t* src) {
-  using Converter = aphrodite::_typeConvert<scalar_t>;
+  using Converter = sonar::_typeConvert<scalar_t>;
   if constexpr (!Converter::exists) {
     return;
   } else {
@@ -347,7 +347,7 @@ __device__ __forceinline__ void writeDsMlaCache(
   }
 #pragma unroll
   for (int offset = 4; offset > 0; offset /= 2) {
-    max_abs = fmaxf(max_abs, APHRODITE_SHFL_XOR_SYNC_WIDTH(max_abs, offset, 8));
+    max_abs = fmaxf(max_abs, SONAR_SHFL_XOR_SYNC_WIDTH(max_abs, offset, 8));
   }
   float tile_scale = fmaxf(max_abs / kFp8ScaleDivisor, 1e-4f);
   tile_scale = exp2f(ceilf(log2f(tile_scale)));
@@ -366,7 +366,7 @@ __device__ __forceinline__ void writeDsMlaCache(
   scalar_t* row16 = reinterpret_cast<scalar_t*>(row);
   scalar_t* rope_dst = row16 + kKvLoraRank / 2 + 8 + laneId * 2;
   if constexpr (APPLY_ROPE) {
-    using Converter = aphrodite::_typeConvert<scalar_t>;
+    using Converter = sonar::_typeConvert<scalar_t>;
     if constexpr (!Converter::exists) {
       return;
     } else {
@@ -864,7 +864,7 @@ void checkBfloat16Support(torch::headeronly::ScalarType dtype) {
 }
 
 }  // namespace kimi_k3_fused_ops
-}  // namespace aphrodite
+}  // namespace sonar
 
 // ────────────────────────────────────────────────────────────────────────────
 // Torch op wrappers
@@ -905,7 +905,7 @@ void fused_kimi_k3_mla_key_concat_kv_cache_insert(
     int64_t cache_block_size, std::optional<torch::stable::Tensor> position_ids,
     std::optional<torch::stable::Tensor> cos_sin_cache) {
   using torch::headeronly::ScalarType;
-  namespace kk3 = aphrodite::kimi_k3_fused_ops;
+  namespace kk3 = sonar::kimi_k3_fused_ops;
   STD_TORCH_CHECK(
       k_nope.device().is_cuda() && k_nope.dim() == 3 && k_nope.size(2) == 128,
       "k_nope shape [Tp, H, 128] CUDA");
@@ -953,7 +953,7 @@ void fused_kimi_k3_mla_key_concat_kv_cache_insert(
   const cudaStream_t stream =
       get_current_cuda_stream(k_nope.get_device_index());
 
-  APHRODITE_STABLE_DISPATCH_HALF_TYPES(
+  SONAR_STABLE_DISPATCH_HALF_TYPES(
       dt, "fused_kimi_k3_mla_key_concat_kv_cache_insert", [&] {
         auto launch = [&](auto kernel) {
           kk3::launchPdl(
@@ -999,7 +999,7 @@ void fused_kimi_k3_mla_key_concat_ds_mla_insert(
     int64_t cache_block_size, std::optional<torch::stable::Tensor> position_ids,
     std::optional<torch::stable::Tensor> cos_sin_cache) {
   using torch::headeronly::ScalarType;
-  namespace kk3 = aphrodite::kimi_k3_fused_ops;
+  namespace kk3 = sonar::kimi_k3_fused_ops;
   ScalarType const dt = k_nope.scalar_type();
   STD_TORCH_CHECK(
       k_nope.device().is_cuda() && k_nope.dim() == 3 && k_nope.size(2) == 128,
@@ -1046,7 +1046,7 @@ void fused_kimi_k3_mla_key_concat_ds_mla_insert(
   const cudaStream_t stream =
       get_current_cuda_stream(k_nope.get_device_index());
 
-  APHRODITE_STABLE_DISPATCH_HALF_TYPES(
+  SONAR_STABLE_DISPATCH_HALF_TYPES(
       dt, "fused_kimi_k3_mla_key_concat_ds_mla_insert", [&] {
         auto launch = [&](auto kernel) {
           kk3::launchPdl(
@@ -1110,7 +1110,7 @@ bool check_kv_concat_inputs(torch::stable::Tensor const& k_nope,
                       k_pe.size(0) == k_nope.size(0),
                   "k_out must be a contiguous CUDA [T, H, 192] tensor of the "
                   "output dtype matching k_nope's token and head dimensions");
-  aphrodite::kimi_k3_fused_ops::checkBfloat16Support(dt);
+  sonar::kimi_k3_fused_ops::checkBfloat16Support(dt);
   return k_pe_is_fp8;
 }
 }  // namespace
@@ -1119,7 +1119,7 @@ void fused_kimi_k3_mla_kv_concat(
     torch::stable::Tensor const& k_nope,  // [T, H, 128] bf16/fp16
     torch::stable::Tensor const& k_pe,    // [T, 64] same dtype as k_nope
     torch::stable::Tensor& k_out) {       // [T, H, 192] same dtype, written
-  namespace kk3 = aphrodite::kimi_k3_fused_ops;
+  namespace kk3 = sonar::kimi_k3_fused_ops;
   torch::headeronly::ScalarType const dt = k_nope.scalar_type();
   check_kv_concat_inputs(k_nope, k_pe, k_out, dt);
 
@@ -1132,7 +1132,7 @@ void fused_kimi_k3_mla_kv_concat(
   const cudaStream_t stream =
       get_current_cuda_stream(k_nope.get_device_index());
 
-  APHRODITE_STABLE_DISPATCH_HALF_TYPES(dt, "fused_kimi_k3_mla_kv_concat", [&] {
+  SONAR_STABLE_DISPATCH_HALF_TYPES(dt, "fused_kimi_k3_mla_kv_concat", [&] {
     kk3::launchPdlSlots(
         kk3::fusedKimiK3MLAKVConcatPackKernel<scalar_t, false, false>,
         num_tokens, num_heads, 2, get_device_prop()->multiProcessorCount * 8,
@@ -1152,7 +1152,7 @@ void fused_kimi_k3_mla_kv_concat_quant_fp8(
     torch::stable::Tensor& k_fp8,         // [T, H, 192] fp8, written
     torch::stable::Tensor& v_fp8) {       // [T, H, 128] fp8, written
   using torch::headeronly::ScalarType;
-  namespace kk3 = aphrodite::kimi_k3_fused_ops;
+  namespace kk3 = sonar::kimi_k3_fused_ops;
   ScalarType const dt = k_nope.scalar_type();
   bool const k_pe_is_fp8 =
       check_kv_concat_inputs(k_nope, k_pe, k_fp8, ScalarType::Float8_e4m3fn);
@@ -1179,7 +1179,7 @@ void fused_kimi_k3_mla_kv_concat_quant_fp8(
   const cudaStream_t stream =
       get_current_cuda_stream(k_nope.get_device_index());
 
-  APHRODITE_STABLE_DISPATCH_HALF_TYPES(
+  SONAR_STABLE_DISPATCH_HALF_TYPES(
       dt, "fused_kimi_k3_mla_kv_concat_quant_fp8", [&] {
         auto launch = [&](auto kernel) {
           kk3::launchPdlSlots(
@@ -1220,7 +1220,7 @@ void fused_kimi_k3_mla_qkv_quant_kv_cache_fp8_insert(
     int64_t cache_block_size, std::optional<torch::stable::Tensor> position_ids,
     std::optional<torch::stable::Tensor> cos_sin_cache) {
   using torch::headeronly::ScalarType;
-  namespace kk3 = aphrodite::kimi_k3_fused_ops;
+  namespace kk3 = sonar::kimi_k3_fused_ops;
   ScalarType const dt = k_nope.scalar_type();
   auto check_in = [&](torch::stable::Tensor const& t, int d2, char const* n) {
     STD_TORCH_CHECK(t.device().is_cuda() && t.scalar_type() == dt &&
@@ -1278,7 +1278,7 @@ void fused_kimi_k3_mla_qkv_quant_kv_cache_fp8_insert(
   const cudaStream_t stream =
       get_current_cuda_stream(k_nope.get_device_index());
 
-  APHRODITE_STABLE_DISPATCH_HALF_TYPES(
+  SONAR_STABLE_DISPATCH_HALF_TYPES(
       dt, "fused_kimi_k3_mla_qkv_quant_kv_cache_fp8_insert", [&] {
         auto launch = [&](auto kernel) {
           kk3::launchPdl(
@@ -1370,7 +1370,7 @@ void fused_kimi_k3_mla_decode_q_concat_kv_cache_insert(
     int64_t cache_block_size, std::optional<torch::stable::Tensor> position_ids,
     std::optional<torch::stable::Tensor> cos_sin_cache) {
   using torch::headeronly::ScalarType;
-  namespace kk3 = aphrodite::kimi_k3_fused_ops;
+  namespace kk3 = sonar::kimi_k3_fused_ops;
   ScalarType const dt = ql_nope.scalar_type();
   check_decode_inputs(ql_nope, q_pe, kv_c_normed, k_pe, mqa_q, slot_mapping);
   STD_TORCH_CHECK(mqa_q.scalar_type() == dt && k_cache.scalar_type() == dt,
@@ -1391,7 +1391,7 @@ void fused_kimi_k3_mla_decode_q_concat_kv_cache_insert(
   const cudaStream_t stream =
       get_current_cuda_stream(ql_nope.get_device_index());
 
-  APHRODITE_STABLE_DISPATCH_HALF_TYPES(
+  SONAR_STABLE_DISPATCH_HALF_TYPES(
       dt, "fused_kimi_k3_mla_decode_q_concat_kv_cache_insert", [&] {
         auto launch = [&](auto kernel, int row_split) {
           kk3::launchPdlSlots(
@@ -1457,7 +1457,7 @@ void fused_kimi_k3_mla_decode_q_concat_kv_cache_fp8_insert(
     int64_t cache_block_size, std::optional<torch::stable::Tensor> position_ids,
     std::optional<torch::stable::Tensor> cos_sin_cache) {
   using torch::headeronly::ScalarType;
-  namespace kk3 = aphrodite::kimi_k3_fused_ops;
+  namespace kk3 = sonar::kimi_k3_fused_ops;
   ScalarType const dt = ql_nope.scalar_type();
   check_decode_inputs(ql_nope, q_pe, kv_c_normed, k_pe, mqa_q, slot_mapping);
   STD_TORCH_CHECK(mqa_q.scalar_type() == ScalarType::Float8_e4m3fn,
@@ -1486,7 +1486,7 @@ void fused_kimi_k3_mla_decode_q_concat_kv_cache_fp8_insert(
   const cudaStream_t stream =
       get_current_cuda_stream(ql_nope.get_device_index());
 
-  APHRODITE_STABLE_DISPATCH_HALF_TYPES(
+  SONAR_STABLE_DISPATCH_HALF_TYPES(
       dt, "fused_kimi_k3_mla_decode_q_concat_kv_cache_fp8_insert", [&] {
         auto launch = [&](auto kernel, int row_split) {
           kk3::launchPdlSlots(
@@ -1548,7 +1548,7 @@ void fused_kimi_k3_mla_decode_q_concat_ds_mla_insert(
     int64_t cache_block_size, std::optional<torch::stable::Tensor> position_ids,
     std::optional<torch::stable::Tensor> cos_sin_cache) {
   using torch::headeronly::ScalarType;
-  namespace kk3 = aphrodite::kimi_k3_fused_ops;
+  namespace kk3 = sonar::kimi_k3_fused_ops;
   ScalarType const dt = ql_nope.scalar_type();
   check_decode_inputs(ql_nope, q_pe, kv_c_normed, k_pe, mqa_q, slot_mapping);
   STD_TORCH_CHECK(mqa_q.scalar_type() == dt, "mqa_q must be bf16 for ds_mla");
@@ -1569,7 +1569,7 @@ void fused_kimi_k3_mla_decode_q_concat_ds_mla_insert(
   const cudaStream_t stream =
       get_current_cuda_stream(ql_nope.get_device_index());
 
-  APHRODITE_STABLE_DISPATCH_HALF_TYPES(
+  SONAR_STABLE_DISPATCH_HALF_TYPES(
       dt, "fused_kimi_k3_mla_decode_q_concat_ds_mla_insert", [&] {
         auto launch = [&](auto kernel) {
           kk3::launchPdl(

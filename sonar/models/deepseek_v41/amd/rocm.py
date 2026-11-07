@@ -7,50 +7,50 @@ from typing import Any, cast
 
 import torch
 
-from aphrodite.config import AphroditeConfig, get_current_aphrodite_config
-from aphrodite.distributed import (
+from sonar.config import SonarConfig, get_current_sonar_config
+from sonar.distributed import (
     get_tensor_model_parallel_world_size,
     tensor_model_parallel_all_reduce,
 )
-from aphrodite.forward_context import get_forward_context
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fusion.quant_activation import QuantizedActivation
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import kMxfp8Dynamic
-from aphrodite.model_executor.layers.rocm_paged_mxfp4_indexer import (
+from sonar.forward_context import get_forward_context
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fusion.quant_activation import QuantizedActivation
+from sonar.model_executor.layers.quantization.utils.quant_utils import kMxfp8Dynamic
+from sonar.model_executor.layers.rocm_paged_mxfp4_indexer import (
     RocmSparseAttnIndexer,
     RocmSparseMQAIndexer,
 )
-from aphrodite.models.deepseek_v41.amd.ops.sparse_indexer import Gfx942SparseAttnIndexer
-from aphrodite.models.deepseek_v41.attention import (
+from sonar.models.deepseek_v41.amd.ops.sparse_indexer import Gfx942SparseAttnIndexer
+from sonar.models.deepseek_v41.attention import (
     DeepseekV4Attention,
     DeepseekV4Indexer,
     DeepseekV4IndexerCache,
     _replace_layer_index,
 )
-from aphrodite.models.deepseek_v41.common.ops import (
+from sonar.models.deepseek_v41.common.ops import (
     combine_topk_swa_indices,
     dequantize_and_gather_k_cache,
 )
-from aphrodite.models.deepseek_v41.sparse_mla import (
+from sonar.models.deepseek_v41.sparse_mla import (
     DeepseekV4FlashMLAMetadata,
     DeepseekV4SparseMLABackend,
     DeepseekV4SparseMLAMetadataBuilder,
     DeepseekV41SparseSWAMetadataBuilder,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.platforms.rocm import _ON_GFX950
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.multi_stream_utils import execute_in_parallel
-from aphrodite.v1.attention.backend import (
+from sonar.platforms import current_platform
+from sonar.platforms.rocm import _ON_GFX950
+from sonar.triton_utils import tl, triton
+from sonar.utils.multi_stream_utils import execute_in_parallel
+from sonar.v1.attention.backend import (
     AttentionCGSupport,
     CommonAttentionMetadata,
     MultipleOf,
 )
-from aphrodite.v1.attention.backends.mla.sparse_swa import (
+from sonar.v1.attention.backends.mla.sparse_swa import (
     DeepseekSparseSWABackend,
     DeepseekSparseSWAMetadata,
 )
-from aphrodite.v1.attention.ops.rocm_aiter_mla_sparse import (
+from sonar.v1.attention.ops.rocm_aiter_mla_sparse import (
     build_prefill_topk_ragged_indices,
     build_ragged_indices_from_dense,
     rocm_inv_rope_einsum,
@@ -60,12 +60,12 @@ from aphrodite.v1.attention.ops.rocm_aiter_mla_sparse import (
     rocm_sparse_attn_decode,
     rocm_sparse_attn_prefill,
 )
-from aphrodite.v1.attention.ops.rocm_paged_mxfp4_indexer import (
+from sonar.v1.attention.ops.rocm_paged_mxfp4_indexer import (
     rocm_mxfp4_indexer_k_store,
     rocm_mxfp4_indexer_q_quant,
 )
-from aphrodite.v1.kv_cache_interface import KVCacheSpec
-from aphrodite.v1.worker.workspace import current_workspace_manager
+from sonar.v1.kv_cache_interface import KVCacheSpec
+from sonar.v1.worker.workspace import current_workspace_manager
 
 logger = init_logger(__name__)
 
@@ -79,7 +79,7 @@ def _trust_dsv4_extra_cache_nan_free(
 
 
 def _aiter_sparse_mla_enabled(has_kv_transfer: bool) -> bool:
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     if not rocm_aiter_ops.is_triton_sparse_mla_enabled():
         return False
@@ -87,7 +87,7 @@ def _aiter_sparse_mla_enabled(has_kv_transfer: bool) -> bool:
     # needs a cache only the canonical writer has touched.
     if has_kv_transfer:
         logger.warning_once(
-            "APHRODITE_ROCM_USE_AITER_TRITON_SPARSE_MLA is ignored with a KV "
+            "SONAR_ROCM_USE_AITER_TRITON_SPARSE_MLA is ignored with a KV "
             "connector; DeepSeek V4 keeps the Triton sparse attention."
         )
         return False
@@ -114,7 +114,7 @@ def apply_pre_quantized_block_scaled_mm(
     the wq_b-style column/replicated linears: their output is the local
     TP shard, so no all-reduce is needed.
     """
-    from aphrodite.model_executor.kernels.linear.scaled_mm.BlockScaledMMLinearKernel import (
+    from sonar.model_executor.kernels.linear.scaled_mm.BlockScaledMMLinearKernel import (
         FP8BlockParams,
     )
 
@@ -203,7 +203,7 @@ def compute_global_topk_ragged_indices_and_indptr(
     # On gfx942 with --monokernel, a decode batch of up to 16
     # rows is packed with one launch instead of 4 (topk_pack.py). Other
     # batches return None there and take the function below.
-    from aphrodite.models.deepseek_v41.amd.ops import topk_pack
+    from sonar.models.deepseek_v41.amd.ops import topk_pack
 
     fused = topk_pack.pack(
         topk_indices,
@@ -312,30 +312,30 @@ class DeepseekV41ROCMAiterMLASparseMetadataBuilder(DeepseekV4SparseMLAMetadataBu
     @classmethod
     def get_cudagraph_support(
         cls,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         kv_cache_spec: KVCacheSpec,
     ) -> AttentionCGSupport:
-        spec_config = aphrodite_config.speculative_config
+        spec_config = sonar_config.speculative_config
         if spec_config is not None and spec_config.enable_adaptive_verification:
             # Per-token request ownership and compressed slot mappings are built
             # from device query boundaries into persistent buffers.
             return AttentionCGSupport.ALWAYS
-        return super().get_cudagraph_support(aphrodite_config, kv_cache_spec)
+        return super().get_cudagraph_support(sonar_config, kv_cache_spec)
 
 
 class DeepseekV41ROCMAiterSparseSWAMetadataBuilder(DeepseekV41SparseSWAMetadataBuilder):
     @classmethod
     def get_cudagraph_support(
         cls,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         kv_cache_spec: KVCacheSpec,
     ) -> AttentionCGSupport:
-        spec_config = aphrodite_config.speculative_config
+        spec_config = sonar_config.speculative_config
         if spec_config is not None and spec_config.enable_adaptive_verification:
             # SWA indices, lengths, and request ownership are built from device
             # query boundaries and copied into persistent ragged buffers.
             return AttentionCGSupport.ALWAYS
-        return super().get_cudagraph_support(aphrodite_config, kv_cache_spec)
+        return super().get_cudagraph_support(sonar_config, kv_cache_spec)
 
     # Keep fused multi-step decode disabled until update_draft_decode_metadata()
     # also refreshes the ROCm-specific ragged SWA indices and indptrs.
@@ -343,7 +343,7 @@ class DeepseekV41ROCMAiterSparseSWAMetadataBuilder(DeepseekV41SparseSWAMetadataB
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        max_tokens = self.aphrodite_config.scheduler_config.max_num_batched_tokens
+        max_tokens = self.sonar_config.scheduler_config.max_num_batched_tokens
         # The non-causal (DSpark draft) path widens each token's SWA index list
         # to ``noncausal_index_width`` (>= window_size), so size the persistent
         # ragged buffer to the wider bound to cover both causal and non-causal.
@@ -358,7 +358,7 @@ class DeepseekV41ROCMAiterSparseSWAMetadataBuilder(DeepseekV41SparseSWAMetadataB
             dtype=torch.int32,
             device=self.device,
         )
-        self._use_aiter_sparse_mla = _aiter_sparse_mla_enabled(self.aphrodite_config.kv_transfer_config is not None)
+        self._use_aiter_sparse_mla = _aiter_sparse_mla_enabled(self.sonar_config.kv_transfer_config is not None)
 
     def build(
         self,
@@ -371,7 +371,7 @@ class DeepseekV41ROCMAiterSparseSWAMetadataBuilder(DeepseekV41SparseSWAMetadataB
         # metadata from one launch instead of 8 launches per SWA group
         # (swa_decode_meta.py). Other batches return None there and take
         # the build below.
-        from aphrodite.models.deepseek_v41.amd.ops import swa_decode_meta
+        from sonar.models.deepseek_v41.amd.ops import swa_decode_meta
 
         fused = swa_decode_meta.build(
             self,
@@ -486,7 +486,7 @@ class DeepseekV41RocmMxfp4Indexer(DeepseekV4Indexer):
 
 
 class DeepseekV41Gfx942Indexer(DeepseekV4Indexer):
-    """Aphrodite's FP8 indexer, whose layers run the gfx942 top-512 launches of
+    """Sonar's FP8 indexer, whose layers run the gfx942 top-512 launches of
     ops/topk.py on decode steps (ops/sparse_indexer.py). The attention below
     takes it only with --monokernel on gfx942."""
 
@@ -497,9 +497,9 @@ def _gfx942_monokernel() -> bool:
     """True with --monokernel on a gfx942 GPU, read from the config of the
     model that is being built. ops.enabled() cannot answer here, because the
     mono decode layers record the flag only after their attention is built."""
-    from aphrodite.platforms.rocm import on_gfx942
+    from sonar.platforms.rocm import on_gfx942
 
-    return bool(get_current_aphrodite_config().kernel_config.monokernel) and on_gfx942()
+    return bool(get_current_sonar_config().kernel_config.monokernel) and on_gfx942()
 
 
 class DeepseekV41ROCMAiterMLASparseBackend(DeepseekV4SparseMLABackend):
@@ -536,14 +536,14 @@ class DeepseekV41ROCMAiterMLAAttention(DeepseekV4Attention):
         return super()._indexer_cls(k_cache)
 
     def __init__(self, *args, **kwargs):
-        aphrodite_config = args[0] if args else kwargs["aphrodite_config"]
+        sonar_config = args[0] if args else kwargs["sonar_config"]
         super().__init__(*args, **kwargs)
         # CUDA executes WO_A with a quantized grouped-BMM kernel.  ROCm's
         # correctness path below dequantizes WO_A once and uses torch.einsum,
         # so retain the ordinary MXFP8 linear kernel for post-load processing
         # instead of asking for the CUDA-only BMM kernel.
         self.wo_a.is_bmm = False
-        self._has_kv_transfer = aphrodite_config.kv_transfer_config is not None
+        self._has_kv_transfer = sonar_config.kv_transfer_config is not None
         # Block scale for the preshuffled weight; None = not preshuffled.
         self._wqa_wkv_scale: torch.Tensor | None = None
         self._wo_b_scale: torch.Tensor | None = None
@@ -576,14 +576,14 @@ class DeepseekV41ROCMAiterMLAAttention(DeepseekV4Attention):
         return num_heads
 
     def prepare_attn_preshuffle(self) -> None:
-        from aphrodite._aiter_ops import rocm_aiter_ops
+        from sonar._aiter_ops import rocm_aiter_ops
 
         if not rocm_aiter_ops.is_enabled():
             return
-        from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
+        from sonar.model_executor.layers.quantization.utils.fp8_utils import (
             _upcast_e8m0_to_fp32,
         )
-        from aphrodite.model_executor.utils import replace_parameter
+        from sonar.model_executor.utils import replace_parameter
 
         def _prep(linear) -> torch.Tensor | None:
             w = getattr(linear, "weight", None)
@@ -621,7 +621,7 @@ class DeepseekV41ROCMAiterMLAAttention(DeepseekV4Attention):
         x: torch.Tensor,
         reduce_tp: bool,
     ) -> torch.Tensor:
-        from aphrodite._aiter_ops import rocm_aiter_ops
+        from sonar._aiter_ops import rocm_aiter_ops
 
         x_fp8, x_scale = rocm_aiter_ops.group_fp8_quant(x, transpose_scale=True)
         out = rocm_aiter_ops.gemm_a8w8_blockscale_bpreshuffle(x_fp8, weight, x_scale, scale, output_dtype=x.dtype)
@@ -811,8 +811,8 @@ class DeepseekV41ROCMAiterMLAAttention(DeepseekV4Attention):
         replaces are exactly the aiter ones; otherwise fall back to the
         shared path.
         """
-        from aphrodite._aiter_ops import rocm_aiter_ops
-        from aphrodite.model_executor.kernels.linear.scaled_mm import (
+        from sonar._aiter_ops import rocm_aiter_ops
+        from sonar.model_executor.kernels.linear.scaled_mm import (
             Fp8BlockScaledMMLinearKernel,
         )
 
@@ -846,7 +846,7 @@ class DeepseekV41ROCMAiterMLAAttention(DeepseekV4Attention):
         ):
             return super()._split_qkv_and_norm(qr_kv)
 
-        from aphrodite._aiter_ops import rocm_aiter_ops
+        from sonar._aiter_ops import rocm_aiter_ops
 
         return rocm_aiter_ops.fused_qk_rmsnorm_group_quant(
             q=qr,
@@ -1394,7 +1394,7 @@ class DeepseekV41ROCMAiterMLAAttention(DeepseekV4Attention):
         positions: torch.Tensor | None = None,
         output_mxfp8: tuple[torch.Tensor, torch.Tensor] | None = None,
     ) -> None:
-        from aphrodite._aiter_ops import rocm_aiter_ops
+        from sonar._aiter_ops import rocm_aiter_ops
 
         assert (output is None) != (output_mxfp8 is None)
         # Both fp8 caches are read in place: the SWA window as the main segment,

@@ -37,7 +37,7 @@ _OracleTokenId = Annotated[int, Field(ge=0)]
 class SnapshotRuntimeIdentity(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
-    aphrodite_version: str
+    sonar_version: str
     python_version: str
     torch_version: str
     cuda_runtime: str

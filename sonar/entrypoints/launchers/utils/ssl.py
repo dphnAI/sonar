@@ -7,7 +7,7 @@ from ssl import SSLContext
 
 from watchfiles import Change, awatch
 
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 

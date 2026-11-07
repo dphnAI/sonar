@@ -19,41 +19,41 @@ from transformers import (
     PreTrainedConfig,
 )
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, CacheConfig
-from aphrodite.config.multimodal import MultiModalDummyOptions
-from aphrodite.distributed import (
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import CacheConfig, SonarConfig
+from sonar.config.multimodal import MultiModalDummyOptions
+from sonar.distributed import (
     get_pp_group,
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
     split_tensor_along_last_dim,
     tensor_model_parallel_all_gather,
 )
-from aphrodite.inputs import MultiModalDataDict
-from aphrodite.model_executor.layers.activation import MulAndSilu, QuickGELU, SiluAndMul
-from aphrodite.model_executor.layers.attention import Attention, MMEncoderAttention
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.inputs import MultiModalDataDict
+from sonar.model_executor.layers.activation import MulAndSilu, QuickGELU, SiluAndMul
+from sonar.model_executor.layers.attention import Attention, MMEncoderAttention
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     MergedColumnParallelLinear,
     QKVParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.models.module_mapping import MultiModelKeys
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import (
+from sonar.model_executor.models.module_mapping import MultiModelKeys
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import (
     MultiModalFieldConfig,
     MultiModalKwargsItems,
 )
-from aphrodite.multimodal.parse import ImageProcessorItems, ImageSize, MultiModalDataItems
-from aphrodite.multimodal.processing import (
+from sonar.multimodal.parse import ImageProcessorItems, ImageSize, MultiModalDataItems
+from sonar.multimodal.processing import (
     BaseDummyInputsBuilder,
     BaseMultiModalProcessor,
     BaseProcessingInfo,
@@ -63,8 +63,8 @@ from aphrodite.multimodal.processing import (
     PromptUpdateDetails,
     cached_encode,
 )
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.utils.tensor_schema import TensorSchema, TensorShape
+from sonar.sequence import IntermediateTensors
+from sonar.utils.tensor_schema import TensorSchema, TensorShape
 
 from .interfaces import (
     MultiModalEmbeddings,
@@ -645,7 +645,7 @@ class MolmoDecoderNormAfterLayer(MolmoDecoderLayer):
 class MolmoVisionBackbone(nn.Module, SupportsQuant):
     packed_modules_mapping = {"merged_linear": ["gate_proj", "up_proj"]}
 
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_stacked={
             # image_projector gate_up merge
             "gate_proj": ("merged_linear", 0),
@@ -772,17 +772,17 @@ class MolmoVisionBackbone(nn.Module, SupportsQuant):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
 
 @support_torch_compile
 class MolmoModel(nn.Module, SupportsQuant):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_config
-        cache_config = aphrodite_config.cache_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        cache_config = sonar_config.cache_config
+        quant_config = sonar_config.quant_config
 
         self.config = config
 
@@ -1221,7 +1221,7 @@ class MolmoMultiModalProcessor(BaseMultiModalProcessor[MolmoProcessingInfo]):
     dummy_inputs=MolmoDummyInputsBuilder,
 )
 class MolmoForCausalLM(nn.Module, SupportsMultiModal, SupportsPP, SupportsLoRA, SupportsQuant):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_substr={
             # vision backbone mapping
             "image_projector.w1.": "image_projector.gate_proj.",
@@ -1262,18 +1262,18 @@ class MolmoForCausalLM(nn.Module, SupportsMultiModal, SupportsPP, SupportsLoRA, 
 
         raise ValueError("Only image modality is supported")
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
-        multimodal_config = aphrodite_config.model_config.multimodal_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
+        multimodal_config = sonar_config.model_config.multimodal_config
 
         self.config = config
         self.multimodal_config = multimodal_config
 
         vision_config = VisionBackboneConfig()
 
-        with self._mark_tower_model(aphrodite_config, "image"):
+        with self._mark_tower_model(sonar_config, "image"):
             self.vision_backbone = MolmoVisionBackbone(
                 config,
                 vision_config,
@@ -1281,8 +1281,8 @@ class MolmoForCausalLM(nn.Module, SupportsMultiModal, SupportsPP, SupportsLoRA, 
                 prefix=maybe_prefix(prefix, "vision_backbone"),
             )
 
-        with self._mark_language_model(aphrodite_config):
-            self.model = MolmoModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        with self._mark_language_model(sonar_config):
+            self.model = MolmoModel(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
 
         self.img_patch_id: int | None = None
 
@@ -1383,7 +1383,7 @@ class MolmoForCausalLM(nn.Module, SupportsMultiModal, SupportsPP, SupportsLoRA, 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]):
         loader = AutoWeightsLoader(self)
         weights = _get_weights_with_merged_embedding(weights)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
     def get_mm_mapping(self) -> MultiModelKeys:
         """Get the module prefix in multimodal models."""

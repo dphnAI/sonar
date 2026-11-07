@@ -11,5 +11,5 @@ server_args: >-
   --quantization mxfp4
   --quantization-config '{"linear":{"activation":null,"weight":null}}'
 env:
-  APHRODITE_ROCM_USE_AITER: "1"
+  SONAR_ROCM_USE_AITER: "1"
   ENABLE_CK: "0"  # Avoid AITER CK-based MHA JIT compilation to save time

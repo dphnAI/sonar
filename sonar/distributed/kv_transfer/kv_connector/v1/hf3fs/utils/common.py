@@ -4,8 +4,8 @@ import threading
 from dataclasses import dataclass, field
 from typing import Optional
 
-from aphrodite.distributed.kv_transfer.kv_connector.v1.base import KVConnectorMetadata
-from aphrodite.v1.request import Request
+from sonar.distributed.kv_transfer.kv_connector.v1.base import KVConnectorMetadata
+from sonar.v1.request import Request
 
 
 class AtomicCounter:

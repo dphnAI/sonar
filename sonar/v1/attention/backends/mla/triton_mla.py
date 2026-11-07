@@ -5,30 +5,30 @@ from typing import ClassVar
 
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.config import AphroditeConfig, get_current_aphrodite_config
-from aphrodite.config.cache import CacheDType
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.attention.mla_attention import (
+import sonar.envs as envs
+from sonar.config import SonarConfig, get_current_sonar_config
+from sonar.config.cache import CacheDType
+from sonar.logger import init_logger
+from sonar.model_executor.layers.attention.mla_attention import (
     MLACommonBackend,
     MLACommonImpl,
     MLACommonMetadata,
     MLACommonMetadataBuilder,
     QueryLenSupport,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.platforms.interface import DeviceCapability
-from aphrodite.triton_utils import triton
-from aphrodite.v1.attention.backend import (
+from sonar.platforms import current_platform
+from sonar.platforms.interface import DeviceCapability
+from sonar.triton_utils import triton
+from sonar.v1.attention.backend import (
     AttentionCGSupport,
     AttentionLayer,
     AttentionType,
     MultipleOf,
     max_decode_query_len,
 )
-from aphrodite.v1.attention.ops.triton_decode_attention import decode_attention_fwd
-from aphrodite.v1.kv_cache_interface import is_quantized_kv_cache
-from aphrodite.v1.worker.workspace import (
+from sonar.v1.attention.ops.triton_decode_attention import decode_attention_fwd
+from sonar.v1.kv_cache_interface import is_quantized_kv_cache
+from sonar.v1.worker.workspace import (
     current_workspace_manager,
     is_workspace_manager_initialized,
 )
@@ -51,7 +51,7 @@ def _compute_num_kv_splits(max_seq_len: int, sm_count: int) -> int:
 
 
 def _reserve_attn_logits_workspace(
-    aphrodite_config: AphroditeConfig, max_decode_rows: int, q_num_heads: int, kv_lora_rank: int
+    sonar_config: SonarConfig, max_decode_rows: int, q_num_heads: int, kv_lora_rank: int
 ) -> None:
     """Pre-size the shared workspace for the decode split-KV attn logits.
 
@@ -63,7 +63,7 @@ def _reserve_attn_logits_workspace(
     if not is_workspace_manager_initialized():
         return
     max_splits = _compute_num_kv_splits(
-        aphrodite_config.model_config.max_model_len,
+        sonar_config.model_config.max_model_len,
         current_platform.num_compute_units(),
     )
     current_workspace_manager().get_simultaneous(
@@ -78,16 +78,16 @@ class TritonMLAMetadataBuilder(MLACommonMetadataBuilder[MLACommonMetadata]):
     query_len_support: ClassVar[QueryLenSupport] = QueryLenSupport.UNIFORM
     supports_non_causal_multi_token_decode: ClassVar[bool] = True
 
-    def __init__(self, kv_cache_spec, layer_names, aphrodite_config, device):
-        super().__init__(kv_cache_spec, layer_names, aphrodite_config, device)
+    def __init__(self, kv_cache_spec, layer_names, sonar_config, device):
+        super().__init__(kv_cache_spec, layer_names, sonar_config, device)
         # DCP local sequence lengths are not advanced between draft steps.
         self.supports_draft_decode_metadata_update = self.dcp_world_size == 1
         # forward_mqa flattens each request's block to query_len decode rows,
         # and query_len is bounded by the reorder threshold. DCP all-gathers
         # the query heads before forward_mqa.
         _reserve_attn_logits_workspace(
-            aphrodite_config,
-            aphrodite_config.scheduler_config.max_num_seqs * self.reorder_batch_threshold,
+            sonar_config,
+            sonar_config.scheduler_config.max_num_seqs * self.reorder_batch_threshold,
             self.num_heads * self.dcp_world_size,
             self.mla_dims.kv_lora_rank,
         )
@@ -219,15 +219,15 @@ class TritonMLAImpl(MLACommonImpl[MLACommonMetadata]):
             self.supports_quant_query_input = False
 
         self._sm_count = current_platform.num_compute_units()
-        self._aphrodite_config = get_current_aphrodite_config()
+        self._sonar_config = get_current_sonar_config()
 
     def reserve_workspace(self) -> None:
         # The builder reserves after memory profiling; reserve its upper bound
         # here so the KV cache is sized around it.
-        aphrodite_config = self._aphrodite_config
+        sonar_config = self._sonar_config
         _reserve_attn_logits_workspace(
-            aphrodite_config,
-            aphrodite_config.scheduler_config.max_num_seqs * max_decode_query_len(aphrodite_config),
+            sonar_config,
+            sonar_config.scheduler_config.max_num_seqs * max_decode_query_len(sonar_config),
             self.num_heads * self.dcp_world_size,
             self.kv_lora_rank,
         )
@@ -252,7 +252,7 @@ class TritonMLAImpl(MLACommonImpl[MLACommonMetadata]):
         lse = torch.zeros(B, q_num_heads, dtype=q.dtype, device=q.device)
 
         # For batch invariance, use only 1 split to ensure deterministic reduction
-        if envs.APHRODITE_BATCH_INVARIANT:
+        if envs.SONAR_BATCH_INVARIANT:
             num_kv_splits = 1
         else:
             num_kv_splits = _compute_num_kv_splits(attn_metadata.max_seq_len, self._sm_count)

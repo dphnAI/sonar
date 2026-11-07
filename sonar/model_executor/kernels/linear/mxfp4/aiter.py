@@ -4,14 +4,14 @@
 
 import torch
 
-import aphrodite.envs as envs
-from aphrodite._aiter_ops import is_aiter_found_and_supported, rocm_aiter_ops
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+import sonar.envs as envs
+from sonar._aiter_ops import is_aiter_found_and_supported, rocm_aiter_ops
+from sonar.logger import init_logger
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     kMxfp4Dynamic,
 )
-from aphrodite.model_executor.utils import replace_parameter
-from aphrodite.platforms import current_platform
+from sonar.model_executor.utils import replace_parameter
+from sonar.platforms import current_platform
 
 from .base import MxFp4LinearKernel, MxFp4LinearLayerConfig
 
@@ -38,7 +38,7 @@ def _asm_fp4_scale_swizzle_supported(weight_scale: torch.Tensor) -> bool:
 # Actual aiter imports are deferred to the functions/methods that need them,
 # where HIP initialization is expected.
 if is_aiter_found_and_supported():
-    from aphrodite.utils.torch_utils import direct_register_custom_op
+    from sonar.utils.torch_utils import direct_register_custom_op
 
     def gemm_with_dynamic_quant(
         x: torch.Tensor,
@@ -64,7 +64,7 @@ if is_aiter_found_and_supported():
             # The preshuffle kernel's tuned configs split K in some M buckets.
             if (
                 M <= 64
-                and not envs.APHRODITE_BATCH_INVARIANT
+                and not envs.SONAR_BATCH_INVARIANT
                 and rocm_aiter_ops.is_triton_gemm_afp4wfp4_presh_ws_tuned(N, K)
             ):
                 if x_scales is None:
@@ -117,7 +117,7 @@ if is_aiter_found_and_supported():
             y = torch.empty(x_q.shape[0], weight.shape[0], device=x_q.device, dtype=out_dtype)
 
             config = None
-            if envs.APHRODITE_BATCH_INVARIANT:
+            if envs.SONAR_BATCH_INVARIANT:
                 # The configs split K in some M buckets (up to M <= 256 for
                 # tuned shapes). Keep the tile, drop the split.
                 from aiter.ops.triton.gemm_afp4wfp4 import _get_config
@@ -161,15 +161,15 @@ class AiterMxfp4LinearKernel(MxFp4LinearKernel):
         if not current_platform.supports_mx():
             return False, "current platform does not support native MXFP4 computation"
 
-        from aphrodite._aiter_ops import is_aiter_found_and_supported
-        from aphrodite.model_executor.kernels.linear import _get_linear_backend
+        from sonar._aiter_ops import is_aiter_found_and_supported
+        from sonar.model_executor.kernels.linear import _get_linear_backend
 
         linear_backend = _get_linear_backend(quantization="mxfp4")
 
         if (
             current_platform.is_rocm()
             and current_platform.supports_mx()
-            and "AiterMxfp4LinearKernel" not in envs.APHRODITE_DISABLED_KERNELS
+            and "AiterMxfp4LinearKernel" not in envs.SONAR_DISABLED_KERNELS
             and linear_backend == "auto"
             and not is_aiter_found_and_supported()
         ):
@@ -229,7 +229,7 @@ class AiterMxfp4LinearKernel(MxFp4LinearKernel):
         x: torch.Tensor,
         bias: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        y = torch.ops.aphrodite.gemm_with_dynamic_quant(
+        y = torch.ops.sonar.gemm_with_dynamic_quant(
             x,
             layer.weight,
             layer.weight_scale,

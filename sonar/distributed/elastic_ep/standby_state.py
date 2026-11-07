@@ -2,8 +2,8 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import torch
 
-from aphrodite.distributed.device_communicators.pynccl import defer_comm_warmup_on_rocm
-from aphrodite.distributed.parallel_state import (
+from sonar.distributed.device_communicators.pynccl import defer_comm_warmup_on_rocm
+from sonar.distributed.parallel_state import (
     _init_stateless_group,
     _node_count,
     get_pcp_group,
@@ -11,7 +11,7 @@ from aphrodite.distributed.parallel_state import (
     get_tp_group,
     get_world_group,
 )
-from aphrodite.distributed.stateless_coordinator import StatelessGroupCoordinator
+from sonar.distributed.stateless_coordinator import StatelessGroupCoordinator
 
 _STANDBY_WORLD: StatelessGroupCoordinator | None = None
 _STANDBY_WORLD_NODE_COUNT: int | None = None
@@ -47,7 +47,7 @@ def create_standby_groups(
 ) -> None:
     global _STANDBY_WORLD, _STANDBY_WORLD_NODE_COUNT, _STANDBY_DP, _STANDBY_EP, _STANDBY_EPLB
 
-    from aphrodite.distributed.utils import get_cached_tcp_store_client
+    from sonar.distributed.utils import get_cached_tcp_store_client
 
     assert new_world_size_across_dp == torch.distributed.get_world_size() * new_dp_size
     world_group = get_world_group()

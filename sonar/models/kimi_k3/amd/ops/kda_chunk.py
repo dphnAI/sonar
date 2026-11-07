@@ -12,11 +12,11 @@ from functools import cache
 
 import torch
 
-from aphrodite.third_party.flash_linear_attention.ops.index import (
+from sonar.third_party.flash_linear_attention.ops.index import (
     prepare_chunk_indices,
     prepare_chunk_offsets,
 )
-from aphrodite.v1.attention.backends.utils import NULL_BLOCK_ID
+from sonar.v1.attention.backends.utils import NULL_BLOCK_ID
 
 CHUNK_SIZE = 64
 HEAD_DIM = 128
@@ -36,7 +36,7 @@ def _hip_checkpoint_state_indices(state_indices: torch.Tensor) -> torch.Tensor:
 
 @cache
 def is_fused_kda_chunk_supported() -> bool:
-    from aphrodite.platforms.rocm import on_gfx950
+    from sonar.platforms.rocm import on_gfx950
 
     if not hasattr(torch.ops._C, "fused_kda_chunk"):
         return False
@@ -136,7 +136,7 @@ def fused_kda_prologue(
 
 @cache
 def _num_cus(device: int) -> int:
-    from aphrodite.platforms import current_platform
+    from sonar.platforms import current_platform
 
     return current_platform.get_device_properties(device).multi_processor_count
 
@@ -177,7 +177,7 @@ def _kda_group_workspace(groups: int, nh: int, device: torch.device) -> torch.Te
     """One fp32 buffer the kernel carves into bg / sin_ / ag / mgT.
 
     Kept caller-owned so the memory stays inside the caching allocator and
-    Aphrodite's memory profiling accounts for it; the kernel's carve order must
+    Sonar's memory profiling accounts for it; the kernel's carve order must
     match the layout here.
     """
     if groups <= 1:

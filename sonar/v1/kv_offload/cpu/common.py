@@ -4,17 +4,17 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.v1.kv_offload.base import BlockIDsLoadStoreSpec, ConfigInfo
-from aphrodite.v1.kv_offload.config import OffloadingConfig
+from sonar.utils.math_utils import cdiv
+from sonar.v1.kv_offload.base import BlockIDsLoadStoreSpec, ConfigInfo
+from sonar.v1.kv_offload.config import OffloadingConfig
 
 
 class CPUOffloadingMetrics:
-    STORES_SKIPPED = "aphrodite:kv_offload_stores_skipped"
-    CPU_CACHE_USAGE_PERC = "aphrodite:kv_offload_cpu_cache_usage_perc"
-    CPU_ALLOCATION_SIZE = "aphrodite:kv_offload_cpu_allocation_size"
-    CPU_CACHE_WRITE_USAGE_PERC = "aphrodite:kv_offload_cpu_cache_write_usage_perc"
-    CPU_CACHE_READ_USAGE_PERC = "aphrodite:kv_offload_cpu_cache_read_usage_perc"
+    STORES_SKIPPED = "sonar:kv_offload_stores_skipped"
+    CPU_CACHE_USAGE_PERC = "sonar:kv_offload_cpu_cache_usage_perc"
+    CPU_ALLOCATION_SIZE = "sonar:kv_offload_cpu_allocation_size"
+    CPU_CACHE_WRITE_USAGE_PERC = "sonar:kv_offload_cpu_cache_write_usage_perc"
+    CPU_CACHE_READ_USAGE_PERC = "sonar:kv_offload_cpu_cache_read_usage_perc"
 
 
 class CPULoadStoreSpec(BlockIDsLoadStoreSpec):

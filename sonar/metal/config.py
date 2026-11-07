@@ -1,20 +1,20 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Configuration for Aphrodite Metal plugin via environment variables."""
+"""Configuration for Sonar Metal plugin via environment variables."""
 
 import os
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
-import aphrodite.metal.envs as envs
+import sonar.metal.envs as envs
 
 if TYPE_CHECKING:
-    from aphrodite.config import SchedulerConfig
+    from sonar.config import SchedulerConfig
 
 # Sentinel value indicating auto memory calculation
 AUTO_MEMORY_FRACTION = -1.0
 
-# Default memory fraction when user leaves APHRODITE_METAL_MEMORY_FRACTION as "auto"
+# Default memory fraction when user leaves SONAR_METAL_MEMORY_FRACTION as "auto"
 # but enables paged attention (auto is for the MLX path).
 PAGED_ATTENTION_DEFAULT_MEMORY_FRACTION = 0.9
 
@@ -37,7 +37,7 @@ VALID_MULTIMODAL_MODES: frozenset[MultimodalMode] = frozenset({"auto", "text-onl
 
 @dataclass
 class MetalConfig:
-    """Configuration for Aphrodite Metal plugin."""
+    """Configuration for Sonar Metal plugin."""
 
     memory_fraction: float  # -1.0 means "auto" (calculate minimal needed)
     use_mlx: bool
@@ -53,29 +53,29 @@ class MetalConfig:
     def __post_init__(self) -> None:
         if not self.use_paged_attention and not self.is_auto_memory:
             raise ValueError(
-                f"APHRODITE_METAL_MEMORY_FRACTION={self.memory_fraction} is only "
+                f"SONAR_METAL_MEMORY_FRACTION={self.memory_fraction} is only "
                 "supported with paged attention (the default). "
-                "The MLX KV cache path (APHRODITE_METAL_USE_PAGED_ATTENTION=0) "
-                "requires APHRODITE_METAL_MEMORY_FRACTION=auto."
+                "The MLX KV cache path (SONAR_METAL_USE_PAGED_ATTENTION=0) "
+                "requires SONAR_METAL_MEMORY_FRACTION=auto."
             )
 
         if self.kv_sharing_fast_prefill and not self.use_paged_attention:
             raise ValueError(
-                "APHRODITE_METAL_KV_SHARING_FAST_PREFILL requires paged attention. "
-                "Enable APHRODITE_METAL_USE_PAGED_ATTENTION=1 or set "
-                "APHRODITE_METAL_KV_SHARING_FAST_PREFILL=0."
+                "SONAR_METAL_KV_SHARING_FAST_PREFILL requires paged attention. "
+                "Enable SONAR_METAL_USE_PAGED_ATTENTION=1 or set "
+                "SONAR_METAL_KV_SHARING_FAST_PREFILL=0."
             )
 
         if self.use_paged_attention and not self.is_auto_memory and not (0 < self.memory_fraction <= 1):
             raise ValueError(
-                f"Invalid APHRODITE_METAL_MEMORY_FRACTION={self.memory_fraction}. "
+                f"Invalid SONAR_METAL_MEMORY_FRACTION={self.memory_fraction}. "
                 "Must be a finite value in (0, 1] when paged attention is enabled."
             )
 
         if self.multimodal_mode not in VALID_MULTIMODAL_MODES:
             available = ", ".join(sorted(VALID_MULTIMODAL_MODES))
             raise ValueError(
-                f"Invalid APHRODITE_METAL_MULTIMODAL_MODE={self.multimodal_mode!r}. Available modes: {available}."
+                f"Invalid SONAR_METAL_MULTIMODAL_MODE={self.multimodal_mode!r}. Available modes: {available}."
             )
 
         self._validate_turboquant()
@@ -103,7 +103,7 @@ class MetalConfig:
     @classmethod
     def from_env(cls) -> "MetalConfig":
         """Load configuration from environment variables."""
-        memory_fraction_str = envs.APHRODITE_METAL_MEMORY_FRACTION
+        memory_fraction_str = envs.SONAR_METAL_MEMORY_FRACTION
         if memory_fraction_str.lower() == "auto":
             memory_fraction = AUTO_MEMORY_FRACTION
         else:
@@ -111,25 +111,25 @@ class MetalConfig:
                 memory_fraction = float(memory_fraction_str)
             except ValueError as e:
                 raise ValueError(
-                    f"Invalid APHRODITE_METAL_MEMORY_FRACTION={memory_fraction_str!r}. "
+                    f"Invalid SONAR_METAL_MEMORY_FRACTION={memory_fraction_str!r}. "
                     "Must be 'auto' or a numeric value in (0, 1]."
                 ) from e
 
-        use_paged_attention = envs.APHRODITE_METAL_USE_PAGED_ATTENTION
-        kv_sharing_fast_prefill = envs.APHRODITE_METAL_KV_SHARING_FAST_PREFILL
-        if not use_paged_attention and "APHRODITE_METAL_KV_SHARING_FAST_PREFILL" not in os.environ:
+        use_paged_attention = envs.SONAR_METAL_USE_PAGED_ATTENTION
+        kv_sharing_fast_prefill = envs.SONAR_METAL_KV_SHARING_FAST_PREFILL
+        if not use_paged_attention and "SONAR_METAL_KV_SHARING_FAST_PREFILL" not in os.environ:
             kv_sharing_fast_prefill = False
 
         # TurboQuant config is set via --additional-config, not env vars.
         # See MetalPlatform.check_and_update_config() for how it's applied.
         return cls(
             memory_fraction=memory_fraction,
-            use_mlx=envs.APHRODITE_METAL_USE_MLX,
-            mlx_device=envs.APHRODITE_MLX_DEVICE,  # type: ignore[arg-type]
-            debug=envs.APHRODITE_METAL_DEBUG,
+            use_mlx=envs.SONAR_METAL_USE_MLX,
+            mlx_device=envs.SONAR_MLX_DEVICE,  # type: ignore[arg-type]
+            debug=envs.SONAR_METAL_DEBUG,
             use_paged_attention=use_paged_attention,
             kv_sharing_fast_prefill=kv_sharing_fast_prefill,
-            multimodal_mode=envs.APHRODITE_METAL_MULTIMODAL_MODE,  # type: ignore[arg-type]
+            multimodal_mode=envs.SONAR_METAL_MULTIMODAL_MODE,  # type: ignore[arg-type]
         )
 
 
@@ -165,7 +165,7 @@ def should_use_contiguous_kv_fast_path(
     require an environment variable from the user.
     """
     return (
-        "APHRODITE_METAL_USE_PAGED_ATTENTION" not in os.environ
+        "SONAR_METAL_USE_PAGED_ATTENTION" not in os.environ
         and config.use_paged_attention
         and config.is_auto_memory
         and not config.turboquant

@@ -5,9 +5,9 @@ import os
 import time
 from collections import defaultdict
 
-from aphrodite.config import ParallelConfig
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
+from sonar.config import ParallelConfig
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
 
 logger = init_logger(__name__)
 PG_WAIT_TIMEOUT = 1800
@@ -15,9 +15,9 @@ PG_WAIT_TIMEOUT = 1800
 # Env vars that are worker-specific and must NOT be copied from the
 # driver to Ray workers — they are set per-worker after GPU discovery.
 WORKER_SPECIFIC_ENV_VARS: set[str] = {
-    "APHRODITE_HOST_IP",
-    "APHRODITE_HOST_PORT",
-    "APHRODITE_NIXL_SIDE_CHANNEL_HOST",
+    "SONAR_HOST_IP",
+    "SONAR_HOST_PORT",
+    "SONAR_NIXL_SIDE_CHANNEL_HOST",
     "LOCAL_RANK",
     "CUDA_VISIBLE_DEVICES",
     "HIP_VISIBLE_DEVICES",
@@ -94,7 +94,7 @@ def build_actor_name(
     pcp_size: int,
 ) -> str:
     """Build a descriptive Ray actor name for dashboard visibility."""
-    name = f"aphrodite_Worker_{instance_id}"
+    name = f"sonar_Worker_{instance_id}"
     if tp_size > 1:
         name += f"_TP{rank % tp_size}"
     if pp_size > 1:
@@ -110,15 +110,15 @@ def get_bundles_for_indices(
     world_size: int,
 ) -> list[tuple[int, str, str]]:
     """Return GPU bundle indices paired with node IDs and node IPs for
-    explicit bundle indices specified via APHRODITE_RAY_BUNDLE_INDICES.
+    explicit bundle indices specified via SONAR_RAY_BUNDLE_INDICES.
     """
     assert len(bundle_indices) == world_size, (
-        "APHRODITE_RAY_BUNDLE_INDICES must have the same size"
+        "SONAR_RAY_BUNDLE_INDICES must have the same size"
         f" as the world size, but got {bundle_indices=} "
         f"and {world_size=}"
     )
     assert len(set(bundle_indices)) == len(bundle_indices), (
-        f"APHRODITE_RAY_BUNDLE_INDICES cannot have duplicate values, but got {bundle_indices=}"
+        f"SONAR_RAY_BUNDLE_INDICES cannot have duplicate values, but got {bundle_indices=}"
     )
 
     pg_data = placement_group_table(placement_group)
@@ -210,7 +210,7 @@ def _wait_until_pg_ready(current_placement_group: "PlacementGroup"):
             "%d seconds. specs=%s. Check `ray status` and "
             "`ray list nodes` to see if you have enough resources,"
             " and make sure the IP addresses used by ray cluster"
-            " are the same as APHRODITE_HOST_IP environment variable"
+            " are the same as SONAR_HOST_IP environment variable"
             " specified in each node if you are running on a multi-node.",
             int(time.time() - s),
             placement_group_specs,
@@ -265,7 +265,7 @@ def initialize_ray_cluster(
 
     """
     assert_ray_available()
-    from aphrodite.platforms import current_platform
+    from sonar.platforms import current_platform
 
     # Disable Ray usage stats collection
     if os.environ.get("RAY_USAGE_STATS_ENABLED", "0") != "1":

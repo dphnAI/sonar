@@ -12,9 +12,9 @@ from typing import TYPE_CHECKING, ClassVar, Self
 
 from typing_extensions import override
 
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
-from aphrodite.utils.collection_utils import full_groupby
-from aphrodite.utils.import_utils import PlaceholderModule
+from sonar.utils.argparse_utils import FlexibleArgumentParser
+from sonar.utils.collection_utils import full_groupby
+from sonar.utils.import_utils import PlaceholderModule
 
 from .utils import sanitize_filename
 

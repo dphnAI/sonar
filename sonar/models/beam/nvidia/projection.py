@@ -7,7 +7,7 @@ import functools
 import torch
 import torch.nn.functional as F
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 
 @functools.cache
@@ -18,7 +18,7 @@ def _tinygemm():
 
 
 def use_low_latency_gemm(weight: torch.Tensor) -> bool:
-    from aphrodite.model_executor.kernels.linear.cute_dsl.ll_bf16 import is_available
+    from sonar.model_executor.kernels.linear.cute_dsl.ll_bf16 import is_available
 
     return (
         weight.dtype == torch.bfloat16
@@ -30,7 +30,7 @@ def use_low_latency_gemm(weight: torch.Tensor) -> bool:
 
 
 def warmup_packed_projection(weight: torch.Tensor) -> None:
-    from aphrodite.model_executor.kernels.linear.cute_dsl.ll_bf16 import (
+    from sonar.model_executor.kernels.linear.cute_dsl.ll_bf16 import (
         ll_bf16_gemm_c1_pdl_kernel,
         ll_bf16_gemm_kernel,
     )
@@ -50,6 +50,6 @@ def packed_projection(x: torch.Tensor, weight: torch.Tensor, low_latency: bool) 
         output = x.new_empty((rows, weight.shape[0]))
         _tinygemm().tinygemm2_nobias_op(x, weight, output, False)
         return output
-    from aphrodite.model_executor.kernels.linear.cute_dsl.ll_bf16 import ll_bf16_gemm
+    from sonar.model_executor.kernels.linear.cute_dsl.ll_bf16 import ll_bf16_gemm
 
     return ll_bf16_gemm(x, weight, output_dtype=torch.bfloat16)

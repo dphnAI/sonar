@@ -7,12 +7,12 @@ from typing import TYPE_CHECKING
 
 import torch
 
-from aphrodite import envs
-from aphrodite.model_executor.layers.linear import LinearBase
-from aphrodite.model_executor.layers.quantization.utils.humming.schema import (
+from sonar import envs
+from sonar.model_executor.layers.linear import LinearBase
+from sonar.model_executor.layers.quantization.utils.humming.schema import (
     check_and_fallback_input_schema,
 )
-from aphrodite.model_executor.utils import (
+from sonar.model_executor.utils import (
     get_live_param,
     kernel_parameters,
     move_parameter,
@@ -22,7 +22,7 @@ from aphrodite.model_executor.utils import (
 )
 
 if TYPE_CHECKING:
-    from aphrodite.utils.humming import BaseInputSchema, LayerConfig
+    from sonar.utils.humming import BaseInputSchema, LayerConfig
 
 # A param the conversion leaves unused keeps its loaded data, retired, when it is
 # at most this fraction of the largest converted tensor (scalars, per-tensor and
@@ -127,7 +127,7 @@ def prepare_humming_linear_layer_config(
     input_schema: "BaseInputSchema | None" = None,
     allow_input_schema_fallback: bool = True,
 ) -> "LayerConfig":
-    from aphrodite.utils.humming import (
+    from sonar.utils.humming import (
         BaseInputSchema,
         BaseWeightSchema,
         HummingInputSchema,
@@ -218,8 +218,8 @@ def prepare_humming_linear_layer_config(
 def get_humming_linear_compute_config() -> str:
     return json.dumps(
         {
-            "use_batch_invariant": envs.APHRODITE_BATCH_INVARIANT,
-            "use_f16_accum": envs.APHRODITE_HUMMING_USE_F16_ACCUM,
+            "use_batch_invariant": envs.SONAR_BATCH_INVARIANT,
+            "use_f16_accum": envs.SONAR_HUMMING_USE_F16_ACCUM,
             "gemm_type": "dense",
         }
     )
@@ -234,7 +234,7 @@ def apply_humming_linear(
     compute_config: str,
     locks: torch.Tensor,
 ) -> torch.Tensor:
-    from aphrodite.utils.humming import humming_forward
+    from sonar.utils.humming import humming_forward
 
     mode = layer_config.input_quant_mode
     input_scale = get_live_param(layer, "input_scale") if mode.should_quantize else None

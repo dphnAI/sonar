@@ -76,7 +76,7 @@ class XferAck(  # type: ignore[call-arg]
 
 
 def compute_ec_compatibility_hash(
-    aphrodite_version: str,
+    sonar_version: str,
     model: str,
     dtype: str,
     block_size_bytes: int,
@@ -85,7 +85,7 @@ def compute_ec_compatibility_hash(
     byte-layout compatibility. Producer NACKs any XferReq whose hash differs.
     """
     factors = json.dumps(
-        [aphrodite_version, model, dtype, block_size_bytes],
+        [sonar_version, model, dtype, block_size_bytes],
         separators=(",", ":"),
     )
     return hashlib.sha256(factors.encode("utf-8")).hexdigest()

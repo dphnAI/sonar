@@ -16,26 +16,26 @@ import torch.nn.functional as F
 from einops import rearrange, repeat
 from transformers import BatchFeature
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.multimodal import MultiModalDummyOptions
-from aphrodite.distributed import get_tensor_model_parallel_world_size
-from aphrodite.inputs import MultiModalDataDict, MultiModalHashes
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.models.transformers.utils import replace_linear_class
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.hasher import MultiModalHasher
-from aphrodite.multimodal.inputs import (
+from sonar.config import SonarConfig
+from sonar.config.multimodal import MultiModalDummyOptions
+from sonar.distributed import get_tensor_model_parallel_world_size
+from sonar.inputs import MultiModalDataDict, MultiModalHashes
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.models.transformers.utils import replace_linear_class
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.hasher import MultiModalHasher
+from sonar.multimodal.inputs import (
     MultiModalFieldConfig,
     MultiModalKwargsItems,
 )
-from aphrodite.multimodal.parse import (
+from sonar.multimodal.parse import (
     ImageEmbeddingItems,
     ImageProcessorItems,
     ImageSize,
     MultiModalDataItems,
 )
-from aphrodite.multimodal.processing import BaseDummyInputsBuilder
-from aphrodite.multimodal.processing.processor import (
+from sonar.multimodal.processing import BaseDummyInputsBuilder
+from sonar.multimodal.processing.processor import (
     BaseMultiModalProcessor,
     BaseProcessingInfo,
     MultiModalProcessingResult,
@@ -44,15 +44,15 @@ from aphrodite.multimodal.processing.processor import (
     PromptUpdate,
     TimingContext,
 )
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.tokenizers import cached_tokenizer_from_config
-from aphrodite.transformers_utils.configs.deepseek_vl2 import (
+from sonar.sequence import IntermediateTensors
+from sonar.tokenizers import cached_tokenizer_from_config
+from sonar.transformers_utils.configs.deepseek_vl2 import (
     DeepseekVLV2Config,
     MlpProjectorConfig,
     VisionEncoderConfig,
 )
-from aphrodite.utils.tensor_schema import TensorSchema, TensorShape
-from aphrodite.utils.torch_utils import set_default_torch_dtype
+from sonar.utils.tensor_schema import TensorSchema, TensorShape
+from sonar.utils.torch_utils import set_default_torch_dtype
 
 from .interfaces import (
     MultiModalEmbeddings,
@@ -63,7 +63,7 @@ from .interfaces import (
 from .utils import (
     AutoWeightsLoader,
     WeightsMapper,
-    init_aphrodite_registered_model,
+    init_sonar_registered_model,
     maybe_prefix,
 )
 
@@ -321,7 +321,7 @@ class DeepseekVL2MultiModalProcessor(BaseMultiModalProcessor[DeepseekVL2Processi
     dummy_inputs=DeepseekVL2DummyInputsBuilder,
 )
 class DeepseekVLV2ForCausalLM(nn.Module, SupportsMultiModal, SupportsPP, SupportsEncoderCudaGraph):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={
             "language.": "language_model.",
         }
@@ -334,25 +334,25 @@ class DeepseekVLV2ForCausalLM(nn.Module, SupportsMultiModal, SupportsPP, Support
 
         raise ValueError("Only image modality is supported")
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config: DeepseekVLV2Config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
-        multimodal_config = aphrodite_config.model_config.multimodal_config
+        config: DeepseekVLV2Config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
+        multimodal_config = sonar_config.model_config.multimodal_config
 
         self.config = config
-        self.model_config = aphrodite_config.model_config
+        self.model_config = sonar_config.model_config
         self.multimodal_config = multimodal_config
 
         self.vision_config = config.vision_config
         self.projector_config = config.projector_config
         self.text_config = config.text_config
 
-        model_config = aphrodite_config.model_config
+        model_config = sonar_config.model_config
         tokenizer = cached_tokenizer_from_config(model_config)
         self.image_token_id: int = tokenizer.vocab[_IMAGE_TOKEN]
 
-        with self._mark_tower_model(aphrodite_config, "image"):
+        with self._mark_tower_model(sonar_config, "image"):
             self.vision = self._init_vision_module(self.vision_config, quant_config, maybe_prefix(prefix, "vision"))
 
             self.projector = MlpProjector(self.projector_config)
@@ -369,9 +369,9 @@ class DeepseekVLV2ForCausalLM(nn.Module, SupportsMultiModal, SupportsPP, Support
             else:
                 raise ValueError(f"Only 2D tile_tag is supported currently, got: {self.tile_tag}")
 
-        with self._mark_language_model(aphrodite_config):
-            self.language_model = init_aphrodite_registered_model(
-                aphrodite_config=aphrodite_config,
+        with self._mark_language_model(sonar_config):
+            self.language_model = init_sonar_registered_model(
+                sonar_config=sonar_config,
                 hf_config=self.text_config,
                 prefix=maybe_prefix(prefix, "language"),
             )
@@ -576,7 +576,7 @@ class DeepseekVLV2ForCausalLM(nn.Module, SupportsMultiModal, SupportsPP, Support
         return h, w
 
     def get_encoder_cudagraph_config(self):
-        from aphrodite.v1.worker.encoder_cudagraph_defs import EncoderCudaGraphConfig
+        from sonar.v1.worker.encoder_cudagraph_defs import EncoderCudaGraphConfig
 
         return EncoderCudaGraphConfig(
             modalities=["image"],
@@ -584,18 +584,18 @@ class DeepseekVLV2ForCausalLM(nn.Module, SupportsMultiModal, SupportsPP, Support
             out_hidden_size=self.projector_config.n_embed,
         )
 
-    def get_encoder_cudagraph_budget_range(self, aphrodite_config: "AphroditeConfig") -> tuple[int, int]:
+    def get_encoder_cudagraph_budget_range(self, sonar_config: "SonarConfig") -> tuple[int, int]:
         h, w = self._proj_hw
         # Smallest valid image: 1 global + 1×1 local tile → 2 tiles total.
         min_budget = h * (w + 1) * 2 + 1
         max_budget = min(
-            aphrodite_config.scheduler_config.max_num_batched_tokens,
+            sonar_config.scheduler_config.max_num_batched_tokens,
             self.model_config.max_model_len,
         )
         return min_budget, max_budget
 
     def get_encoder_cudagraph_item_specs(self, mm_kwargs: dict[str, Any]):
-        from aphrodite.v1.worker.encoder_cudagraph_defs import EncoderItemSpec
+        from sonar.v1.worker.encoder_cudagraph_defs import EncoderItemSpec
 
         h, w = self._proj_hw
         specs = []
@@ -646,7 +646,7 @@ class DeepseekVLV2ForCausalLM(nn.Module, SupportsMultiModal, SupportsPP, Support
         path: str = "default",
         axis_keys: tuple[Hashable, ...] | None = None,
     ):
-        from aphrodite.v1.worker.encoder_cudagraph_defs import EncoderCudaGraphCaptureInputs
+        from sonar.v1.worker.encoder_cudagraph_defs import EncoderCudaGraphCaptureInputs
 
         h, w = self._proj_hw
         # Each tile contributes at least h*w output tokens (before newlines).
@@ -669,7 +669,7 @@ class DeepseekVLV2ForCausalLM(nn.Module, SupportsMultiModal, SupportsPP, Support
         max_frames_per_batch: int,
         path: str = "default",
     ):
-        from aphrodite.v1.worker.encoder_cudagraph_defs import EncoderCudaGraphReplayBuffers
+        from sonar.v1.worker.encoder_cudagraph_defs import EncoderCudaGraphReplayBuffers
 
         return EncoderCudaGraphReplayBuffers(values={"pixel_values": mm_kwargs["pixel_values"]})
 
@@ -760,5 +760,5 @@ class DeepseekVLV2ForCausalLM(nn.Module, SupportsMultiModal, SupportsPP, Support
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        autoloaded_weights = loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        autoloaded_weights = loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
         return autoloaded_weights

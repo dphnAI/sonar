@@ -11,8 +11,8 @@ from __future__ import annotations
 import pytest
 import torch
 
-from aphrodite.utils.torch_utils import set_random_seed
-from aphrodite.v1.attention.ops.ultraquant.format import (
+from sonar.utils.torch_utils import set_random_seed
+from sonar.v1.attention.ops.ultraquant.format import (
     k_codes_offset,
     k_scales_offset,
     n_groups,
@@ -20,8 +20,8 @@ from aphrodite.v1.attention.ops.ultraquant.format import (
     v_codes_offset,
     v_scales_offset,
 )
-from aphrodite.v1.attention.ops.ultraquant.reference import ultraquant_encode
-from aphrodite.v1.attention.ops.ultraquant.triton_store import ultraquant_store
+from sonar.v1.attention.ops.ultraquant.reference import ultraquant_encode
+from sonar.v1.attention.ops.ultraquant.triton_store import ultraquant_store
 
 pytestmark = pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA/HIP device")
 

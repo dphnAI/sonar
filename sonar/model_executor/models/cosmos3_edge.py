@@ -18,21 +18,21 @@ from transformers.models.cosmos3_edge.image_processing_cosmos3_edge import (
     smart_resize,
 )
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.config import SonarConfig
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
-from aphrodite.model_executor.models.module_mapping import MultiModelKeys
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import MultiModalFeatureSpec
-from aphrodite.multimodal.parse import ImageSize
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.utils.torch_utils import async_tensor_h2d
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
+from sonar.model_executor.models.module_mapping import MultiModelKeys
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import MultiModalFeatureSpec
+from sonar.multimodal.parse import ImageSize
+from sonar.sequence import IntermediateTensors
+from sonar.utils.torch_utils import async_tensor_h2d
 
 from .interfaces import (
     MultiModalEmbeddings,
@@ -72,7 +72,7 @@ from .vision import (
 
 
 class Cosmos3EdgeVisionEncoder(Siglip2VisionTransformer):
-    """Adapts Cosmos (T, H, W) metadata to Aphrodite packed SigLIP2."""
+    """Adapts Cosmos (T, H, W) metadata to Sonar packed SigLIP2."""
 
     @property
     def dtype(self) -> torch.dtype:
@@ -455,14 +455,14 @@ def _to_nemotron_h_config(text_config: Cosmos3EdgeTextConfig) -> NemotronHConfig
 class Cosmos3EdgeForCausalLM(nn.Module):
     """Minimal CausalLM wrapper for the Cosmos3 Edge dense text model."""
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        text_config = _to_nemotron_h_config(aphrodite_config.model_config.hf_config)
-        aphrodite_config = aphrodite_config.with_hf_config(text_config, architectures=["NemotronHForCausalLM"])
+        text_config = _to_nemotron_h_config(sonar_config.model_config.hf_config)
+        sonar_config = sonar_config.with_hf_config(text_config, architectures=["NemotronHForCausalLM"])
 
-        self.aphrodite_config = aphrodite_config
-        self.model_config = aphrodite_config.model_config
-        self.quant_config = aphrodite_config.quant_config
+        self.sonar_config = sonar_config
+        self.model_config = sonar_config.model_config
+        self.quant_config = sonar_config.quant_config
         self.config = text_config
         pattern = text_config.hybrid_override_pattern
         unsupported = set(pattern) - {"*", "-"}
@@ -478,7 +478,7 @@ class Cosmos3EdgeForCausalLM(nn.Module):
             )
 
         self.model = Cosmos3EdgeTextModel(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             prefix=maybe_prefix(prefix, "model"),
             decoder_layer_types={
                 "*": Cosmos3EdgeAttentionDecoderLayer,
@@ -564,7 +564,7 @@ class Cosmos3EdgeForConditionalGeneration(
         - self.language_model: Cosmos3EdgeForCausalLM (pure attention + RoPE)
     """
 
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_stacked={
             ".self_attn.q_proj": (".self_attn.qkv_proj", "q"),
             ".self_attn.k_proj": (".self_attn.qkv_proj", "k"),
@@ -598,7 +598,7 @@ class Cosmos3EdgeForConditionalGeneration(
             ".self_attn.to_v.": ".self_attn.v_proj.",
             ".self_attn.to_out.": ".self_attn.o_proj.",
             "language_model.embeddings": "language_model.embed_tokens",
-            # ModelOpt-native dialect (diffusers/transformers read these; Aphrodite reads
+            # ModelOpt-native dialect (diffusers/transformers read these; Sonar reads
             # weight_scale/input_scale instead), drop so AutoWeightsLoader passes
             ".input_quantizer.": None,
             ".weight_quantizer.": None,
@@ -624,28 +624,28 @@ class Cosmos3EdgeForConditionalGeneration(
             return "<|vision_start|><|video_pad|><|vision_end|>"
         raise ValueError(f"Unsupported modality: {modality}")
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "model"):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "model"):
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
-        multimodal_config = aphrodite_config.model_config.multimodal_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
+        multimodal_config = sonar_config.model_config.multimodal_config
         assert multimodal_config is not None
 
         self.config = config
         self.multimodal_config = multimodal_config
         self.use_data_parallel = multimodal_config.mm_encoder_tp_mode == "data"
 
-        with self._mark_tower_model(aphrodite_config, {"image", "video"}):
+        with self._mark_tower_model(sonar_config, {"image", "video"}):
             self.visual = Cosmos3EdgeVisionModel(
                 config,
                 quant_config=quant_config,
                 prefix=maybe_prefix(prefix, "visual"),
             )
 
-        with self._mark_language_model(aphrodite_config):
+        with self._mark_language_model(sonar_config):
             self.language_model = Cosmos3EdgeForCausalLM(
-                aphrodite_config=aphrodite_config.with_hf_config(config.text_config),
+                sonar_config=sonar_config.with_hf_config(config.text_config),
                 prefix=maybe_prefix(prefix, "language_model"),
             )
 
@@ -797,7 +797,7 @@ class Cosmos3EdgeForConditionalGeneration(
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
     def get_mm_mapping(self) -> MultiModelKeys:
         return MultiModelKeys.from_string_field(

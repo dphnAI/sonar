@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-from aphrodite.config import SpeculativeConfig
+from sonar.config import SpeculativeConfig
 
 
 def needs_mtp_hidden_buffer(spec_config: SpeculativeConfig | None) -> bool:

@@ -50,12 +50,12 @@ from typing import NamedTuple
 
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.quantization.utils.mxfp8_utils import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.quantization.utils.mxfp8_utils import (
     mxfp8_e4m3_quantize,
 )
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.torch_utils import direct_register_custom_op
+from sonar.triton_utils import tl, triton
+from sonar.utils.torch_utils import direct_register_custom_op
 
 logger = init_logger(__name__)
 
@@ -709,7 +709,7 @@ def _split_counters(device: torch.device) -> torch.Tensor | None:
 
     None when a stream first needs them inside a CUDA graph capture: that
     allocation would come from the graph's pool, where it can take the address
-    of an intermediate that every replay overwrites. Aphrodite warms up on its
+    of an intermediate that every replay overwrites. Sonar warms up on its
     capture streams first, so this only affects captures without a warmup.
     """
     key = (device.index, torch.accelerator.current_stream(device).stream_id)
@@ -894,7 +894,7 @@ def rocm_mxfp8_block32_gemm(
         The [M, N] product.
 
     """
-    return torch.ops.aphrodite.rocm_mxfp8_block32_gemm(x, x_scale, weight, weight_scale, out_dtype)
+    return torch.ops.sonar.rocm_mxfp8_block32_gemm(x, x_scale, weight, weight_scale, out_dtype)
 
 
 # --- tiny-M fused quant+GEMM ------------------------------------------------
@@ -997,4 +997,4 @@ def rocm_mxfp8_block32_gemm_quant(
     [N / 32, K / 32]. Tiny-M batches quantize inside the packed GEMM (see
     ``_rocm_mxfp8_block32_gemm_quant_impl``).
     """
-    return torch.ops.aphrodite.rocm_mxfp8_block32_gemm_quant(x, weight, weight_scale, out_dtype)
+    return torch.ops.sonar.rocm_mxfp8_block32_gemm_quant(x, weight, weight_scale, out_dtype)

@@ -3,7 +3,7 @@
 from dataclasses import dataclass, fields
 from typing import Any
 
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 

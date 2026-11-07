@@ -21,31 +21,31 @@ import torch
 from torch import nn
 from transformers.models.gemma3n.configuration_gemma3n import Gemma3nTextConfig
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, CacheConfig
-from aphrodite.distributed import get_tensor_model_parallel_world_size
-from aphrodite.forward_context import get_forward_context
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.activation import (
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import CacheConfig, SonarConfig
+from sonar.distributed import get_tensor_model_parallel_world_size
+from sonar.forward_context import get_forward_context
+from sonar.logger import init_logger
+from sonar.model_executor.layers.activation import (
     _ACTIVATION_REGISTRY,
     GeluAndMul,
     GeluAndMulSparse,
 )
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.attention import Attention
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     MergedColumnParallelLinear,
     QKVParallelLinear,
     ReplicatedLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.layers.vocab_parallel_embedding import VocabParallelEmbedding
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.v1.attention.backends.utils import KVSharingFastPrefillMetadata
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.layers.vocab_parallel_embedding import VocabParallelEmbedding
+from sonar.sequence import IntermediateTensors
+from sonar.v1.attention.backends.utils import KVSharingFastPrefillMetadata
 
 from .interfaces import SupportsQuant
 from .utils import (
@@ -565,14 +565,14 @@ class Gemma3nDecoderLayer(nn.Module):
 
 
 # This enables torch.compile if --kv-sharing-fast-prefill passed
-@support_torch_compile(enable_if=lambda aphrodite_config: aphrodite_config.cache_config.kv_sharing_fast_prefill)
+@support_torch_compile(enable_if=lambda sonar_config: sonar_config.cache_config.kv_sharing_fast_prefill)
 class Gemma3nSelfDecoder(nn.Module):
     """Includes altup embedding and self decoder layers."""
 
     def __init__(
         self,
         *,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
         decoder_layers: list[Gemma3nDecoderLayer],
         layer_idx_start: int,
@@ -581,9 +581,9 @@ class Gemma3nSelfDecoder(nn.Module):
         self.decoder_layers = decoder_layers
         self.layer_idx_start = layer_idx_start
 
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
         self.config = config
-        quant_config = aphrodite_config.quant_config
+        quant_config = sonar_config.quant_config
 
         self.embed_tokens = VocabParallelEmbedding(
             config.vocab_size,
@@ -733,14 +733,14 @@ class Gemma3nSelfDecoder(nn.Module):
 
 
 # This enables torch.compile if --kv-sharing-fast-prefill passed
-@support_torch_compile(enable_if=lambda aphrodite_config: aphrodite_config.cache_config.kv_sharing_fast_prefill)
+@support_torch_compile(enable_if=lambda sonar_config: sonar_config.cache_config.kv_sharing_fast_prefill)
 class Gemma3nCrossDecoder(nn.Module):
     """Cross-decoder layers."""
 
     def __init__(
         self,
         *,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
         decoder_layers: list[Gemma3nDecoderLayer],
         layer_idx_start: int,
@@ -795,9 +795,9 @@ def _kv_sharing_weights_mapper(config: Gemma3nTextConfig) -> WeightsMapper:
 
 
 # This disables torch.compile if --kv-sharing-fast-prefill passed
-@support_torch_compile(enable_if=lambda aphrodite_config: not aphrodite_config.cache_config.kv_sharing_fast_prefill)
+@support_torch_compile(enable_if=lambda sonar_config: not sonar_config.cache_config.kv_sharing_fast_prefill)
 class Gemma3nTextModel(nn.Module, SupportsQuant):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={
             "embed_tokens.": "self_decoder.embed_tokens.",
             "embed_tokens_per_layer.": "self_decoder.embed_tokens_per_layer.",
@@ -811,14 +811,14 @@ class Gemma3nTextModel(nn.Module, SupportsQuant):
         },
     )
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        cache_config = aphrodite_config.cache_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        cache_config = sonar_config.cache_config
+        quant_config = sonar_config.quant_config
         self.config = config
         self.quant_config = quant_config
-        self.hf_to_aphrodite_mapper = self.hf_to_aphrodite_mapper | _kv_sharing_weights_mapper(config)
+        self.hf_to_sonar_mapper = self.hf_to_sonar_mapper | _kv_sharing_weights_mapper(config)
 
         self.altup_unembed_projections = nn.ModuleList(
             [
@@ -846,12 +846,12 @@ class Gemma3nTextModel(nn.Module, SupportsQuant):
 
         # NOTE(sarckk): importing this top level seems to cause issues
         # during running of tests.
-        from aphrodite.compilation.backends import set_model_tag
+        from sonar.compilation.backends import set_model_tag
 
         # Layer idx 0-19 are self-decoder layers in You Only Cache Once (YOCO)
         with set_model_tag("self_decoder"):
             self.self_decoder = Gemma3nSelfDecoder(
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 prefix=f"{prefix}.self_decoder",
                 decoder_layers=self.layers[:first_kv_shared_layer_idx],
                 layer_idx_start=0,
@@ -859,7 +859,7 @@ class Gemma3nTextModel(nn.Module, SupportsQuant):
         # Layer idx 20-30 are cross-decoder layers in YOCO
         with set_model_tag("cross_decoder"):
             self.cross_decoder = Gemma3nCrossDecoder(
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 prefix=f"{prefix}.cross_decoder",
                 decoder_layers=self.layers[first_kv_shared_layer_idx:],
                 layer_idx_start=first_kv_shared_layer_idx,
@@ -875,7 +875,7 @@ class Gemma3nTextModel(nn.Module, SupportsQuant):
         if self.fast_prefill_enabled:
             # Allocate static buffers for CUDAGraph
             # TODO(sarckk): Extract this functionality to interface
-            max_num_tokens = aphrodite_config.scheduler_config.max_num_batched_tokens
+            max_num_tokens = sonar_config.scheduler_config.max_num_batched_tokens
             device = next(self.parameters()).device
             self.positions = torch.zeros(max_num_tokens, dtype=torch.int64, device=device)
             self.hidden_states = torch.zeros(
@@ -942,7 +942,7 @@ class Gemma3nTextModel(nn.Module, SupportsQuant):
             )
 
         # NOTE(sarckk): There is currently a bug caused by
-        # Aphrodite converting output of last piecewise CUDA graph
+        # Sonar converting output of last piecewise CUDA graph
         # to weakref, causing memory to be prematurely freed
         # when there are multiple compilation units
         # Keep .clone() until fix in
@@ -1037,11 +1037,11 @@ class Gemma3nTextModel(nn.Module, SupportsQuant):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
 
 class Gemma3nForCausalLM(nn.Module):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_substr={
             "embed_audio.": None,
             "embed_vision.": None,
@@ -1061,13 +1061,13 @@ class Gemma3nForCausalLM(nn.Module):
         ],
     }
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
-        config = aphrodite_config.model_config.hf_config
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
+        config = sonar_config.model_config.hf_config
 
         super().__init__()
         self.config = config
-        self.cache_config = aphrodite_config.cache_config
-        self.model = Gemma3nTextModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.cache_config = sonar_config.cache_config
+        self.model = Gemma3nTextModel(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
         self.logits_processor = LogitsProcessor(config.vocab_size, soft_cap=config.final_logit_softcapping)
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
@@ -1102,4 +1102,4 @@ class Gemma3nForCausalLM(nn.Module):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)

@@ -4,10 +4,10 @@
 
 Index queries score each 128-token block of index keys (max over the block),
 then the top-k blocks (plus forced init/local blocks) are selected per query
-token. Adapted to Aphrodite's paged KV cache: the KV page size is forced to equal the
+token. Adapted to Sonar's paged KV cache: the KV page size is forced to equal the
 sparse block size (128), so one sparse block maps to exactly one page.
 
-Index-K cache layout (Aphrodite): ``(num_blocks, 128, idx_head_dim)`` (one shared
+Index-K cache layout (Sonar): ``(num_blocks, 128, idx_head_dim)`` (one shared
 key vector per token).
 
 Only the paths MiniMax M3 uses are implemented: score_type="max", index value
@@ -18,13 +18,13 @@ head selects its own block ids for the block-sparse attention kernels in
 
 import torch
 
-from aphrodite.models.minimax_m3.amd.ops.sparse_pa import (
+from sonar.models.minimax_m3.amd.ops.sparse_pa import (
     PAGES_PER_SPARSE_BLOCK,
     _write_sparse_block_table_row_from_values,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.math_utils import round_up
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
+from sonar.utils.math_utils import round_up
 
 # One sparse block == one KV page.
 SPARSE_BLOCK_SIZE = 128
@@ -1334,7 +1334,7 @@ def minimax_m3_index_decode(
         pdl_kwargs.update({"launch_pdl": True})
     is_gfx950 = False
     if current_platform.is_rocm():
-        from aphrodite.platforms.rocm import on_gfx950
+        from sonar.platforms.rocm import on_gfx950
 
         is_gfx950 = on_gfx950()
     # Multi-head spec decode scores a wider head-position tile per K block;

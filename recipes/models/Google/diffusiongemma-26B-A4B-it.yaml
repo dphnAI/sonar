@@ -139,14 +139,14 @@ guide: |
   | Flag | Why |
   |------|-----|
   | `--max-num-seqs 4` | The diffusion state buffers (`self_conditioning_probs`) pre-allocate `max_seqs × canvas_length × vocab_size` tensors. With Gemma's 262K vocab and canvas_length=256, higher values cause OOM. |
-  | `--generation-config aphrodite` | The checkpoint's `generation_config.json` sets `max_tokens: 256`, which would override per-request limits. This flag ignores it. |
+  | `--generation-config sonar` | The checkpoint's `generation_config.json` sets `max_tokens: 256`, which would override per-request limits. This flag ignores it. |
   | `--gpu-memory-utilization 0.85` | Leaves headroom for activation memory during denoising. |
   | `--hf-overrides '{"diffusion_sampler":"entropy_bound","diffusion_entropy_bound":0.1}'` | Configures the entropy-bound denoising sampler. |
   | `--diffusion-config '{"canvas_length": 256}'` | Sets the canvas block size for generation. |
 
   ## Prerequisites
 
-  DiffusionGemma requires a Aphrodite build with diffusion model support, available in the
+  DiffusionGemma requires a Sonar build with diffusion model support, available in the
   Gemma docker image:
 
   ```bash
@@ -171,7 +171,7 @@ guide: |
 
   ### Intel Xeon 6 (CPU, BF16)
 
-  DiffusionGemma runs on Intel Xeon 6 CPUs using Aphrodite's CPU backend with AMX BF16 acceleration.
+  DiffusionGemma runs on Intel Xeon 6 CPUs using Sonar's CPU backend with AMX BF16 acceleration.
   The generated example uses TP=1. Adjust `--tensor-parallel-size` based on the
   detected NUMA topology and deployment requirements.
 
@@ -192,7 +192,7 @@ guide: |
   ### Intel XPU (B60 / B70, BF16)
 
   Validated on 4x Intel Arc Pro B60 / B70 (B60 24 GB, B70 32 GB per card)
-  with the official Aphrodite XPU image `vllm/vllm-openai-xpu:latest`. `--enforce-eager`
+  with the official Sonar XPU image `vllm/vllm-openai-xpu:latest`. `--enforce-eager`
   and `--attention-backend TRITON_ATTN` are required on this backend. Select Arc Pro
   B60/B70 in the hardware picker above for the exact command.
 
@@ -217,11 +217,11 @@ guide: |
 
   ### Jev-Style Structured Decisions (Nightly)
 
-  Aphrodite's structured-read support for DiffusionGemma can answer yes/no, multiple-choice,
+  Sonar's structured-read support for DiffusionGemma can answer yes/no, multiple-choice,
   and scored questions with a confidence value. The example server seeds a canvas with
   the response template, leaves only the answer slots noisy, and reads a probability
   distribution from every slot after one denoising step. It exposes the Jev-compatible
-  `/v1/systemone` endpoint; this is an example server rather than a standard Aphrodite endpoint.
+  `/v1/systemone` endpoint; this is an example server rather than a standard Sonar endpoint.
 
   Use the pinned nightly image that contains the merged structured-read support:
 
@@ -240,14 +240,14 @@ guide: |
       --enable-prefix-caching
   ```
 
-  Wait for the Aphrodite server to become healthy, then start the example server in the same
+  Wait for the Sonar server to become healthy, then start the example server in the same
   container:
 
   ```bash
   until curl -fsS localhost:8000/health >/dev/null; do sleep 2; done
 
   docker exec -d dgemma \
-      python /aphrodite-workspace/examples/features/structured_diffusion/structured_server.py \
+      python /sonar-workspace/examples/features/structured_diffusion/structured_server.py \
       --upstream http://127.0.0.1:8000 \
       --tokenizer google/diffusiongemma-26B-A4B-it \
       --canvas 64
@@ -292,7 +292,7 @@ guide: |
   ### Offline Inference
 
   ```python
-  from aphrodite import LLM, SamplingParams
+  from sonar import LLM, SamplingParams
   from transformers import AutoTokenizer
 
   model_path = "google/diffusiongemma-26B-A4B-it"
@@ -352,7 +352,7 @@ guide: |
   ## References
 
   - [Model card](https://huggingface.co/google/diffusiongemma-26B-A4B-it)
-  - [Aphrodite structured-read support for DiffusionGemma](https://github.com/vllm-project/vllm/pull/57250)
+  - [Sonar structured-read support for DiffusionGemma](https://github.com/vllm-project/vllm/pull/57250)
   - [djev-run Cloud Run deployment](https://github.com/taeold/djev-run)
   - [Gemma 4 26B-A4B (autoregressive baseline)](https://huggingface.co/google/gemma-4-26B-A4B-it)
   - [Gemma docs](https://ai.google.dev/gemma/docs)

@@ -10,16 +10,16 @@ from typing import Any
 
 import torch
 
-from aphrodite.model_executor.warmup.jit_warmup import WarmupIntRange, zip_inputs
-from aphrodite.model_executor.warmup.jit_warmup_tilelang_helper import (
-    AphroditeTileLangJitKernel,
+from sonar.model_executor.warmup.jit_warmup import WarmupIntRange, zip_inputs
+from sonar.model_executor.warmup.jit_warmup_tilelang_helper import (
+    SonarTileLangJitKernel,
     TileLangLaunchSpec,
     kernel_launcher,
     make_tilelang_warmup_tensor,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.tilelang_utils import T, tilelang, tilelang_jit
-from aphrodite.utils.math_utils import cdiv
+from sonar.platforms import current_platform
+from sonar.tilelang_utils import T, tilelang, tilelang_jit
+from sonar.utils.math_utils import cdiv
 
 ENABLE_PDL = current_platform.is_arch_support_pdl() and current_platform.is_cuda()
 
@@ -1095,7 +1095,7 @@ def hc_head_fuse_tilelang(
             T.pdl_trigger()
 
 
-class HcPrenormGemmTileLangKernel(AphroditeTileLangJitKernel["HcPrenormGemmTileLangKernel.CompileKey"]):
+class HcPrenormGemmTileLangKernel(SonarTileLangJitKernel["HcPrenormGemmTileLangKernel.CompileKey"]):
     @dataclass(frozen=True)
     class CompileKey:
         hidden_size: int
@@ -1139,13 +1139,13 @@ class HcPrenormGemmTileLangKernel(AphroditeTileLangJitKernel["HcPrenormGemmTileL
 
     def get_warmup_keys(
         self,
-        aphrodite_config: Any,
+        sonar_config: Any,
         *,
         hidden_size: int,
         hc_mult: int,
         n_out: int,
     ) -> list[CompileKey]:
-        max_tokens = aphrodite_config.scheduler_config.max_num_batched_tokens
+        max_tokens = sonar_config.scheduler_config.max_num_batched_tokens
         if max_tokens <= 0:
             return []
         return self._trace_dispatch(self.dispatch)(
@@ -1227,7 +1227,7 @@ class HcPrenormGemmTileLangKernel(AphroditeTileLangJitKernel["HcPrenormGemmTileL
         )
 
 
-class MhcPreBigFuseTileLangKernel(AphroditeTileLangJitKernel["MhcPreBigFuseTileLangKernel.CompileKey"]):
+class MhcPreBigFuseTileLangKernel(SonarTileLangJitKernel["MhcPreBigFuseTileLangKernel.CompileKey"]):
     @dataclass(frozen=True)
     class CompileKey:
         hidden_size: int
@@ -1348,7 +1348,7 @@ class MhcPreBigFuseTileLangKernel(AphroditeTileLangJitKernel["MhcPreBigFuseTileL
 
     def get_warmup_keys(
         self,
-        aphrodite_config: Any,
+        sonar_config: Any,
         *,
         hidden_size: int,
         hc_mult: int,
@@ -1363,7 +1363,7 @@ class MhcPreBigFuseTileLangKernel(AphroditeTileLangJitKernel["MhcPreBigFuseTileL
         include_pre_gemm_splits: bool = False,
         include_broadcast_splits: bool = False,
     ) -> list[CompileKey]:
-        max_tokens = aphrodite_config.scheduler_config.max_num_batched_tokens
+        max_tokens = sonar_config.scheduler_config.max_num_batched_tokens
         if max_tokens <= 0:
             return []
 
@@ -1521,7 +1521,7 @@ class MhcPreBigFuseTileLangKernel(AphroditeTileLangJitKernel["MhcPreBigFuseTileL
         )
 
 
-class MhcPostTileLangKernel(AphroditeTileLangJitKernel["MhcPostTileLangKernel.CompileKey"]):
+class MhcPostTileLangKernel(SonarTileLangJitKernel["MhcPostTileLangKernel.CompileKey"]):
     @dataclass(frozen=True)
     class CompileKey:
         hidden_size: int
@@ -1589,7 +1589,7 @@ class MhcPostTileLangKernel(AphroditeTileLangJitKernel["MhcPostTileLangKernel.Co
         )
 
 
-class MhcFusedTileLangKernel(AphroditeTileLangJitKernel["MhcFusedTileLangKernel.CompileKey"]):
+class MhcFusedTileLangKernel(SonarTileLangJitKernel["MhcFusedTileLangKernel.CompileKey"]):
     @dataclass(frozen=True)
     class CompileKey:
         hidden_size: int
@@ -1622,12 +1622,12 @@ class MhcFusedTileLangKernel(AphroditeTileLangJitKernel["MhcFusedTileLangKernel.
 
     def get_warmup_keys(
         self,
-        aphrodite_config: Any,
+        sonar_config: Any,
         *,
         hidden_size: int,
         hc_mult: int,
     ) -> list[CompileKey]:
-        max_tokens = aphrodite_config.scheduler_config.max_num_batched_tokens
+        max_tokens = sonar_config.scheduler_config.max_num_batched_tokens
         return self._trace_dispatch(self.dispatch)(
             num_tokens=WarmupIntRange(1, max_tokens + 1),
             hidden_size=hidden_size,
@@ -1700,7 +1700,7 @@ class MhcFusedTileLangKernel(AphroditeTileLangJitKernel["MhcFusedTileLangKernel.
         )
 
 
-class HcHeadFusedTileLangKernel(AphroditeTileLangJitKernel["HcHeadFusedTileLangKernel.CompileKey"]):
+class HcHeadFusedTileLangKernel(SonarTileLangJitKernel["HcHeadFusedTileLangKernel.CompileKey"]):
     @dataclass(frozen=True)
     class CompileKey:
         hidden_size: int

@@ -8,25 +8,25 @@ from concurrent.futures import Future
 from functools import cached_property
 from typing import TYPE_CHECKING, Any, Literal, TypeVar, overload
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed.ec_transfer.ec_connector.utils import ECOutputAggregator
-from aphrodite.distributed.kv_transfer.kv_connector.utils import KVOutputAggregator
-from aphrodite.distributed.kv_transfer.kv_connector.v1.base import (
+from sonar.config import SonarConfig
+from sonar.distributed.ec_transfer.ec_connector.utils import ECOutputAggregator
+from sonar.distributed.kv_transfer.kv_connector.utils import KVOutputAggregator
+from sonar.distributed.kv_transfer.kv_connector.v1.base import (
     KVConnectorHandshakeMetadata,
 )
-from aphrodite.logger import init_logger
-from aphrodite.lora.request import LoRARequest
-from aphrodite.tasks import SupportedTask
-from aphrodite.tracing import instrument
-from aphrodite.utils.import_utils import resolve_obj_by_qualname
-from aphrodite.v1.core.sched.output import GrammarOutput, SchedulerOutput
-from aphrodite.v1.engine import ReconfigureDistributedRequest
-from aphrodite.v1.kv_cache_interface import KVCacheConfig, KVCacheSpec
-from aphrodite.v1.outputs import DraftTokenIds, ModelRunnerOutput
-from aphrodite.v1.worker.worker_base import CompilationTimes, WorkerBase
+from sonar.logger import init_logger
+from sonar.lora.request import LoRARequest
+from sonar.tasks import SupportedTask
+from sonar.tracing import instrument
+from sonar.utils.import_utils import resolve_obj_by_qualname
+from sonar.v1.core.sched.output import GrammarOutput, SchedulerOutput
+from sonar.v1.engine import ReconfigureDistributedRequest
+from sonar.v1.kv_cache_interface import KVCacheConfig, KVCacheSpec
+from sonar.v1.outputs import DraftTokenIds, ModelRunnerOutput
+from sonar.v1.worker.worker_base import CompilationTimes, WorkerBase
 
 if TYPE_CHECKING:
-    from aphrodite.distributed.kv_transfer.kv_connector.base import KVConnectorBase
+    from sonar.distributed.kv_transfer.kv_connector.base import KVConnectorBase
 
 logger = init_logger(__name__)
 
@@ -50,7 +50,7 @@ def _check_worker_profile_kwargs(worker_cls: str, kwargs: dict[str, int]) -> Non
 
 
 class Executor(ABC):
-    """Abstract base class for Aphrodite executors.
+    """Abstract base class for Sonar executors.
 
     An executor is responsible for executing the model on one device,
     or it can be a distributed executor that can execute the model on multiple devices.
@@ -60,11 +60,11 @@ class Executor(ABC):
     supports_pp: bool = False  # whether the executor supports PP
 
     @staticmethod
-    def get_class(aphrodite_config: AphroditeConfig) -> type["Executor"]:
+    def get_class(sonar_config: SonarConfig) -> type["Executor"]:
         executor_class: type[Executor]
-        parallel_config = aphrodite_config.parallel_config
+        parallel_config = sonar_config.parallel_config
         distributed_executor_backend = parallel_config.distributed_executor_backend
-        # distributed_executor_backend must be set in AphroditeConfig.__post_init__
+        # distributed_executor_backend must be set in SonarConfig.__post_init__
         if isinstance(distributed_executor_backend, type):
             if not issubclass(distributed_executor_backend, Executor):
                 raise TypeError(
@@ -72,15 +72,15 @@ class Executor(ABC):
                 )
             executor_class = distributed_executor_backend
         elif distributed_executor_backend == "ray":
-            from aphrodite.v1.executor.ray_executor_v2 import RayExecutorV2
+            from sonar.v1.executor.ray_executor_v2 import RayExecutorV2
 
             executor_class = RayExecutorV2
         elif distributed_executor_backend == "mp":
-            from aphrodite.v1.executor.multiproc_executor import MultiprocExecutor
+            from sonar.v1.executor.multiproc_executor import MultiprocExecutor
 
             executor_class = MultiprocExecutor
         elif distributed_executor_backend == "uni":
-            from aphrodite.v1.executor.uniproc_executor import UniProcExecutor
+            from sonar.v1.executor.uniproc_executor import UniProcExecutor
 
             executor_class = UniProcExecutor
         elif distributed_executor_backend == "external_launcher":
@@ -98,18 +98,18 @@ class Executor(ABC):
     @instrument(span_name="Executor init")
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
     ) -> None:
-        self.aphrodite_config = aphrodite_config
-        self.model_config = aphrodite_config.model_config
-        self.cache_config = aphrodite_config.cache_config
-        self.lora_config = aphrodite_config.lora_config
-        self.load_config = aphrodite_config.load_config
-        self.parallel_config = aphrodite_config.parallel_config
-        self.scheduler_config = aphrodite_config.scheduler_config
-        self.device_config = aphrodite_config.device_config
-        self.speculative_config = aphrodite_config.speculative_config
-        self.observability_config = aphrodite_config.observability_config
+        self.sonar_config = sonar_config
+        self.model_config = sonar_config.model_config
+        self.cache_config = sonar_config.cache_config
+        self.lora_config = sonar_config.lora_config
+        self.load_config = sonar_config.load_config
+        self.parallel_config = sonar_config.parallel_config
+        self.scheduler_config = sonar_config.scheduler_config
+        self.device_config = sonar_config.device_config
+        self.speculative_config = sonar_config.speculative_config
+        self.observability_config = sonar_config.observability_config
         self._init_executor()
         self.sleeping_tags: set[str] = set()
         self.kv_output_aggregator: KVOutputAggregator | None = None
@@ -131,10 +131,8 @@ class Executor(ABC):
         # process config is never updated. Use max across workers since they
         # compile in parallel.
         if compilation_times:
-            self.aphrodite_config.compilation_config.compilation_time = max(t.language_model for t in compilation_times)
-            self.aphrodite_config.compilation_config.encoder_compilation_time = max(
-                t.encoder for t in compilation_times
-            )
+            self.sonar_config.compilation_config.compilation_time = max(t.language_model for t in compilation_times)
+            self.sonar_config.compilation_config.encoder_compilation_time = max(t.encoder for t in compilation_times)
 
     def register_failure_callback(self, callback: FailureCallback):  # noqa: B027
         """Register a function to be called if the executor enters a permanent
@@ -298,7 +296,7 @@ class Executor(ABC):
         if kwargs:
             # Reject before dispatch: a failing collective_rpc may leave
             # unread worker replies queued.
-            _check_worker_profile_kwargs(self.aphrodite_config.parallel_config.worker_cls, kwargs)
+            _check_worker_profile_kwargs(self.sonar_config.parallel_config.worker_cls, kwargs)
         self.collective_rpc(
             "profile",
             args=(is_start, profile_prefix),
@@ -432,10 +430,10 @@ class Executor(ABC):
         return False
 
 
-from aphrodite.v1.executor.uniproc_executor import (  # noqa: E402
+from sonar.v1.executor.uniproc_executor import (  # noqa: E402
     ExecutorWithExternalLauncher as _ExecutorWithExternalLauncher,
 )
-from aphrodite.v1.executor.uniproc_executor import (  # noqa: E402
+from sonar.v1.executor.uniproc_executor import (  # noqa: E402
     UniProcExecutor as _UniProcExecutor,
 )
 

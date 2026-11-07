@@ -7,12 +7,12 @@ body:
 - type: markdown
   attributes:
     value: >
-        #### Before submitting an issue, please make sure the issue hasn't been already addressed by searching through [the existing and past issues](https://github.com/PygmalionAI/aphrodite-engine/issues?q=is%3Aissue+sort%3Acreated-desc+).
+        #### Before submitting an issue, please make sure the issue hasn't been already addressed by searching through [the existing and past issues](https://github.com/dphnAI/sonar/issues?q=is%3Aissue+sort%3Acreated-desc+).
 - type: textarea
   attributes:
-    label: Anything you want to discuss about Aphrodite.
+    label: Anything you want to discuss about Sonar.
     description: >
-      Anything you want to discuss about Aphrodite.
+      Anything you want to discuss about Sonar.
   validations:
     required: true
 - type: markdown

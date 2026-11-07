@@ -9,12 +9,12 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionRequest,
 )
-from aphrodite.outputs import CompletionOutput, RequestOutput
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.v1.request import Request, RequestStatus
+from sonar.outputs import CompletionOutput, RequestOutput
+from sonar.sampling_params import SamplingParams
+from sonar.v1.request import Request, RequestStatus
 
 # tests.v1.core.utils transitively imports the example KV connector, which
 # requires the compiled CUDA flash-attention extensions; skip cleanly rather

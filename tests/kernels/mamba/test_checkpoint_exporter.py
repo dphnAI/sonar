@@ -11,18 +11,18 @@ from dataclasses import dataclass
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.mamba.checkpoint import (
+from sonar.model_executor.layers.mamba.checkpoint import (
     MambaPrefillCheckpointExporter,
     MambaPrefillCheckpointMetadata,
 )
-from aphrodite.model_executor.layers.mamba.kda_checkpoint import (
+from sonar.model_executor.layers.mamba.kda_checkpoint import (
     FlashKDAPrefillCheckpointExporter,
 )
-from aphrodite.models.kimi_k3.amd.ops.kda_checkpoint import (
+from sonar.models.kimi_k3.amd.ops.kda_checkpoint import (
     KimiK3ROCmKDAPrefillCheckpointExporter,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.v1.attention.backends.utils import NULL_BLOCK_ID
+from sonar.platforms import current_platform
+from sonar.v1.attention.backends.utils import NULL_BLOCK_ID
 
 QUERY_LENS = [1, 160, 96, 200]
 # A decode row, two checkpoints, and one whose block was not allocated.

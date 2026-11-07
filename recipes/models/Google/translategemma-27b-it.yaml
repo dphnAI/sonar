@@ -2,12 +2,12 @@ meta:
   title: "TranslateGemma 27B IT"
   slug: "translategemma-27b-it"
   provider: "Google"
-  description: "Lightweight open translation model from Google (based on Gemma 3) supporting 55 languages. Served via the Aphrodite-optimized Infomaniak-AI checkpoint."
+  description: "Lightweight open translation model from Google (based on Gemma 3) supporting 55 languages. Served via the Sonar-optimized Infomaniak-AI checkpoint."
   date_added: 2026-03-06
   date_updated: 2026-04-17
   tasks:
     - text
-  performance_headline: "Deployable on laptops/desktops and cloud GPUs; Aphrodite-optimized checkpoint removes custom JSON inputs"
+  performance_headline: "Deployable on laptops/desktops and cloud GPUs; Sonar-optimized checkpoint removes custom JSON inputs"
   related_recipes: []
 
 model:
@@ -28,12 +28,12 @@ variants:
   default:
     precision: bf16
     vram_minimum_gb: 65
-    description: "Original Google checkpoint in BF16 (has Aphrodite compatibility issues — prefer aphrodite-optimized variant)"
-  aphrodite_optimized:
+    description: "Original Google checkpoint in BF16 (has Sonar compatibility issues — prefer sonar-optimized variant)"
+  sonar_optimized:
     model_id: "Infomaniak-AI/vllm-translategemma-27b-it"
     precision: bf16
     vram_minimum_gb: 65
-    description: "Infomaniak-AI Aphrodite-optimized checkpoint — recommended. Fixes RoPE config, EOS token, and replaces custom JSON inputs with string delimiters."
+    description: "Infomaniak-AI Sonar-optimized checkpoint — recommended. Fixes RoPE config, EOS token, and replaces custom JSON inputs with string delimiters."
   small_4b:
     model_id: "google/translategemma-4b-it"
     precision: bf16
@@ -57,15 +57,15 @@ guide: |
   - [google/translategemma-27b-it](https://huggingface.co/google/translategemma-27b-it)
   - [google/translategemma-4b-it](https://huggingface.co/google/translategemma-4b-it)
 
-  ### Optimized Aphrodite Models
+  ### Optimized Sonar Models
   - [Infomaniak-AI/vllm-translategemma-27b-it](https://huggingface.co/Infomaniak-AI/vllm-translategemma-27b-it)
   - [Infomaniak-AI/vllm-translategemma-4b-it](https://huggingface.co/Infomaniak-AI/vllm-translategemma-4b-it)
 
-  ### Why use the Aphrodite-optimized models?
+  ### Why use the Sonar-optimized models?
 
-  The original Google models have compatibility issues with standard inference engines like Aphrodite. The optimized versions from Infomaniak-AI ([detailed changes](https://huggingface.co/Infomaniak-AI/vllm-translategemma-27b-it#changes-from-original-model)):
+  The original Google models have compatibility issues with standard inference engines like Sonar. The optimized versions from Infomaniak-AI ([detailed changes](https://huggingface.co/Infomaniak-AI/vllm-translategemma-27b-it#changes-from-original-model)):
 
-  - **Aphrodite Compatibility**: Originals require custom JSON parameters (`source_lang_code`/`target_lang_code`). The optimized version uses string delimiters.
+  - **Sonar Compatibility**: Originals require custom JSON parameters (`source_lang_code`/`target_lang_code`). The optimized version uses string delimiters.
   - **RoPE Simplification**: Originals use a complex RoPE configuration for sliding attention. Optimized uses a standard linear RoPE format (`factor: 8.0`).
   - **EOS Token Fix**: Corrects the EOS token from `<end_of_turn>` to `<eos>`.
 

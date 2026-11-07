@@ -7,17 +7,17 @@ from dataclasses import replace
 import pytest
 import torch
 
-from aphrodite.multimodal.inputs import (
+from sonar.multimodal.inputs import (
     MultiModalFeatureSpec,
     MultiModalFieldElem,
     MultiModalKwargsItem,
     MultiModalSharedField,
     PlaceholderRange,
 )
-from aphrodite.platforms import CpuArchEnum, current_platform
-from aphrodite.triton_utils import HAS_TRITON
-from aphrodite.v1.worker.cpu.encoder_cache import EncoderCache
-from aphrodite.v1.worker.cpu.encoder_runner import EncoderRunner
+from sonar.platforms import CpuArchEnum, current_platform
+from sonar.triton_utils import HAS_TRITON
+from sonar.v1.worker.cpu.encoder_cache import EncoderCache
+from sonar.v1.worker.cpu.encoder_runner import EncoderRunner
 
 pytestmark = pytest.mark.skipif(
     not current_platform.is_cpu() or HAS_TRITON or current_platform.get_cpu_architecture() == CpuArchEnum.X86,

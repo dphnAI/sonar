@@ -6,23 +6,23 @@ from typing import Any, ClassVar, cast
 import torch
 import torch.nn as nn
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.compilation import CUDAGraphMode
-from aphrodite.model_executor.models.interfaces import (
+from sonar.config import SonarConfig
+from sonar.config.compilation import CUDAGraphMode
+from sonar.model_executor.models.interfaces import (
     SupportsEncoderCudaGraph,
     supports_encoder_cudagraph,
 )
-from aphrodite.tasks import GenerationTask
-from aphrodite.v1.attention.backend import AttentionCGSupport
-from aphrodite.v1.core.sched.output import NewRequestData
-from aphrodite.v1.kv_cache_interface import KVCacheConfig
-from aphrodite.v1.worker.encoder_cudagraph import EncoderCudaGraphManager
-from aphrodite.v1.worker.gpu.block_table import BlockTables
-from aphrodite.v1.worker.gpu.input_batch import InputBatch, InputBuffers
-from aphrodite.v1.worker.gpu.mm.encoder_cache import EncoderCache
-from aphrodite.v1.worker.gpu.mm.encoder_runner import EncoderRunner
-from aphrodite.v1.worker.gpu.states import RequestState
-from aphrodite.v1.worker.utils import AttentionGroup
+from sonar.tasks import GenerationTask
+from sonar.v1.attention.backend import AttentionCGSupport
+from sonar.v1.core.sched.output import NewRequestData
+from sonar.v1.kv_cache_interface import KVCacheConfig
+from sonar.v1.worker.encoder_cudagraph import EncoderCudaGraphManager
+from sonar.v1.worker.gpu.block_table import BlockTables
+from sonar.v1.worker.gpu.input_batch import InputBatch, InputBuffers
+from sonar.v1.worker.gpu.mm.encoder_cache import EncoderCache
+from sonar.v1.worker.gpu.mm.encoder_runner import EncoderRunner
+from sonar.v1.worker.gpu.states import RequestState
+from sonar.v1.worker.utils import AttentionGroup
 
 
 class ModelSpecificAttnMetadata:
@@ -41,14 +41,14 @@ class ModelState(ABC):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         model: nn.Module,
         encoder_cache: EncoderCache | None,
         device: torch.device,
     ) -> None:
-        self.aphrodite_config = aphrodite_config
-        self.model_config = aphrodite_config.model_config
-        self.scheduler_config = aphrodite_config.scheduler_config
+        self.sonar_config = sonar_config
+        self.model_config = sonar_config.model_config
+        self.scheduler_config = sonar_config.scheduler_config
         self.model = model
         self.device = device
 
@@ -61,12 +61,12 @@ class ModelState(ABC):
         if encoder_cache is not None:
             enable_encoder_cuda_graph = (
                 not self.model_config.enforce_eager
-                and aphrodite_config.compilation_config.cudagraph_mm_encoder
+                and sonar_config.compilation_config.cudagraph_mm_encoder
                 and supports_encoder_cudagraph(model)
             )
             cudagraph_manager = (
                 EncoderCudaGraphManager(
-                    aphrodite_config=aphrodite_config,
+                    sonar_config=sonar_config,
                     device=device,
                     dtype=self.dtype,
                     model=cast(SupportsEncoderCudaGraph, model),
@@ -76,7 +76,7 @@ class ModelState(ABC):
             )
 
             self.encoder_cache = encoder_cache
-            observability_config = aphrodite_config.observability_config
+            observability_config = sonar_config.observability_config
             self.encoder_runner = EncoderRunner(
                 model=self.model,
                 max_num_tokens=self.max_num_tokens,
@@ -94,11 +94,11 @@ class ModelState(ABC):
         return self.model_config.max_model_len
 
     def get_supported_generation_tasks(self) -> tuple[GenerationTask, ...]:
-        from aphrodite.model_executor.models.interfaces import (
+        from sonar.model_executor.models.interfaces import (
             supports_realtime,
             supports_transcription,
         )
-        from aphrodite.model_executor.models.interfaces_base import is_text_generation_model
+        from sonar.model_executor.models.interfaces_base import is_text_generation_model
 
         supported_tasks = list[GenerationTask]()
         if is_text_generation_model(self.model):

@@ -1,15 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe.config import FusedMoEConfig
-from aphrodite.model_executor.layers.fused_moe.oracle.fp8 import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe.config import FusedMoEConfig
+from sonar.model_executor.layers.fused_moe.oracle.fp8 import (
     Fp8MoeBackend,
     backend_to_kernel_cls,
 )
-from aphrodite.model_executor.layers.quantization.utils.humming import prioritize_humming
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.humming import prioritize_humming
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     kMxfp8Dynamic,
     kMxfp8Static,
 )
@@ -52,25 +52,25 @@ def _mxfp8_backend_to_kernel_cls(
     MXFP8 1x32 scheme); all other backends defer to the FP8 resolver.
     """
     if backend == Fp8MoeBackend.DEEPGEMM:
-        from aphrodite.model_executor.layers.fused_moe.experts.deep_gemm_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.deep_gemm_moe import (
             DeepGemmExperts,
         )
 
         return [DeepGemmExperts]
     if backend == Fp8MoeBackend.AITER_MXFP8:
-        from aphrodite.model_executor.layers.fused_moe.experts.aiter_mxfp8_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.aiter_mxfp8_moe import (
             AiterMxfp8Experts,
         )
 
         return [AiterMxfp8Experts]
     if backend == Fp8MoeBackend.TRITON_MXFP8:
-        from aphrodite.model_executor.layers.fused_moe.experts.mxfp8_native_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.mxfp8_native_moe import (
             Mxfp8NativeTritonExperts,
         )
 
         return [Mxfp8NativeTritonExperts]
     if backend == Fp8MoeBackend.EMULATION:
-        from aphrodite.model_executor.layers.fused_moe.experts.mxfp8_emulation_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.mxfp8_emulation_moe import (
             Mxfp8EmulationTritonExperts,
         )
 

@@ -6,20 +6,20 @@ from typing import TYPE_CHECKING, NamedTuple, cast
 
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.config.cache import (
+import sonar.envs as envs
+from sonar.config.cache import (
     KV_CACHE_DTYPES,
     CacheDType,
     is_known_kv_cache_dtype,
 )
-from aphrodite.utils.import_utils import resolve_obj_by_qualname
-from aphrodite.v1.attention.backend import AttentionBackend, AttentionType
-from aphrodite.v1.attention.backends.registry import (
+from sonar.utils.import_utils import resolve_obj_by_qualname
+from sonar.v1.attention.backend import AttentionBackend, AttentionType
+from sonar.v1.attention.backends.registry import (
     MambaAttentionBackendEnum,
 )
 
 if TYPE_CHECKING:
-    from aphrodite.v1.kv_cache_interface import KVCacheSpecKind
+    from sonar.v1.kv_cache_interface import KVCacheSpecKind
 
 
 class AttentionSelectorConfig(NamedTuple):
@@ -91,7 +91,7 @@ def get_attn_spec_kind(
         The ``KVCacheSpecKind`` the layer maps to.
 
     """
-    from aphrodite.v1.kv_cache_interface import KVCacheSpecKind
+    from sonar.v1.kv_cache_interface import KVCacheSpecKind
 
     if attn_type == AttentionType.ENCODER_ONLY:
         return KVCacheSpecKind.ENCODER_ONLY_ATTENTION
@@ -125,24 +125,24 @@ def get_attn_backend(
             f"Invalid kv_cache_dtype: {kv_cache_dtype}. Valid values are: {KV_CACHE_DTYPES}"
         )
 
-    from aphrodite.config import get_current_aphrodite_config
+    from sonar.config import get_current_sonar_config
 
-    aphrodite_config = get_current_aphrodite_config()
+    sonar_config = get_current_sonar_config()
 
-    cache_config = aphrodite_config.cache_config
+    cache_config = sonar_config.cache_config
     block_size: int | None
     if cache_config is not None and cache_config.user_specified_block_size:
         block_size = cache_config.block_size
     else:
         block_size = None
 
-    kv_transfer_config = aphrodite_config.kv_transfer_config
+    kv_transfer_config = sonar_config.kv_transfer_config
     use_kv_connector = kv_transfer_config is not None and kv_transfer_config.is_kv_transfer_instance
 
-    speculative_config = aphrodite_config.speculative_config
+    speculative_config = sonar_config.speculative_config
     use_adaptive_verification = speculative_config is not None and speculative_config.enable_adaptive_verification
     if use_adaptive_verification:
-        from aphrodite.compilation.backends import model_tag
+        from sonar.compilation.backends import model_tag
 
         # The drafter always runs full-length blocks; only the verifier sees
         # the trimmed, device-decided query lengths.
@@ -161,16 +161,16 @@ def get_attn_backend(
         use_per_head_quant_scales=use_per_head_quant_scales,
         attn_type=attn_type,
         has_sliding_window=has_sliding_window,
-        use_non_causal=aphrodite_config.attention_config.use_non_causal,
-        use_batch_invariant=envs.APHRODITE_BATCH_INVARIANT,
+        use_non_causal=sonar_config.attention_config.use_non_causal,
+        use_batch_invariant=envs.SONAR_BATCH_INVARIANT,
         use_kv_connector=use_kv_connector,
-        use_pcp=aphrodite_config.parallel_config.prefill_context_parallel_size > 1,
+        use_pcp=sonar_config.parallel_config.prefill_context_parallel_size > 1,
         use_adaptive_verification=use_adaptive_verification,
-        use_dcp=aphrodite_config.parallel_config.decode_context_parallel_size > 1,
-        use_rswa=(aphrodite_config.model_config is not None and aphrodite_config.model_config.rswa_window is not None),
+        use_dcp=sonar_config.parallel_config.decode_context_parallel_size > 1,
+        use_rswa=(sonar_config.model_config is not None and sonar_config.model_config.rswa_window is not None),
     )
 
-    attention_config = aphrodite_config.attention_config
+    attention_config = sonar_config.attention_config
     backend = attention_config.backend
     if attention_config.backend_per_kind:
         kind = get_attn_spec_kind(
@@ -200,7 +200,7 @@ def _cached_get_attn_backend(
 ) -> type[AttentionBackend]:
     # Some platform selectors inspect the run-wide cache dtype. Keep it in the
     # cache key even though they read the value from the current config.
-    from aphrodite.platforms import current_platform
+    from sonar.platforms import current_platform
 
     attention_cls = current_platform.get_attn_backend_cls(
         backend,
@@ -227,6 +227,6 @@ def _cached_get_mamba_attn_backend(
     assert mamba_type and isinstance(mamba_type, MambaAttentionBackendEnum)
 
     mamba_attn_backend = mamba_type.get_class()
-    if envs.APHRODITE_BATCH_INVARIANT and not mamba_attn_backend.supports_batch_invariance():
-        raise RuntimeError(f"APHRODITE batch_invariant mode is not supported for {mamba_attn_backend.get_name()}.")
+    if envs.SONAR_BATCH_INVARIANT and not mamba_attn_backend.supports_batch_invariance():
+        raise RuntimeError(f"SONAR batch_invariant mode is not supported for {mamba_attn_backend.get_name()}.")
     return mamba_attn_backend

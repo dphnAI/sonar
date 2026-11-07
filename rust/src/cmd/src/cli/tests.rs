@@ -4,28 +4,26 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use aphrodite_engine_core_client::protocol::structured_outputs::StructuredOutputBackend;
-use aphrodite_engine_core_client::{CoordinatorMode as EngineCoreCoordinatorMode, TransportMode};
-use aphrodite_server::{
+use expect_test::expect;
+use sonar_engine_core_client::protocol::structured_outputs::StructuredOutputBackend;
+use sonar_engine_core_client::{CoordinatorMode as EngineCoreCoordinatorMode, TransportMode};
+use sonar_server::{
     Config, GenerationConfigMode, HttpListenerMode, LoraModulePath, OutputLogConfig, OutputLogging,
     ParserSelection, ReasoningEffort, RendererSelection,
 };
-use aphrodite_text::backend::hf::ModelSource;
-use expect_test::expect;
+use sonar_text::backend::hf::ModelSource;
 
 use super::{BenchCommand, Cli, Command, LogStatsInterval, SharedRuntimeArgs, parse_int_flag};
 
-/// Resolve the data parallel topology the way `aphrodite-rs serve` does at startup.
-fn topology(
-    args: &super::ServeArgs,
-) -> aphrodite_managed_engine::data_parallel::DataParallelTopology {
+/// Resolve the data parallel topology the way `sonar-rs serve` does at startup.
+fn topology(args: &super::ServeArgs) -> sonar_managed_engine::data_parallel::DataParallelTopology {
     args.data_parallel_lb.resolve(&args.managed_engine, args.headless).unwrap()
 }
 
 #[test]
 fn bench_serve_args_parse_without_managed_engine_repartition() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "bench",
         "serve",
         "--backend",
@@ -38,14 +36,14 @@ fn bench_serve_args_parse_without_managed_engine_repartition() {
     let Command::Bench(BenchCommand::Serve(args)) = cli.command else {
         panic!("expected bench serve args");
     };
-    assert_eq!(args.backend, aphrodite_bench::BackendKind::OpenaiChat);
+    assert_eq!(args.backend, sonar_bench::BackendKind::OpenaiChat);
     assert!(args.request_rate.is_infinite());
 }
 
 #[test]
 fn render_args_build_config_without_tls() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "render",
         "Qwen/Qwen2.5-0.5B-Instruct",
         "--revision",
@@ -62,7 +60,7 @@ fn render_args_build_config_without_tls() {
         "deepseek_v32",
         "--max-logprobs",
         "-1",
-        // Set through `APHRODITE_SKIP_MODEL_NAME_VALIDATION`, which binds this
+        // Set through `SONAR_SKIP_MODEL_NAME_VALIDATION`, which binds this
         // hidden flag.
         "--skip-model-name-validation",
         "True",
@@ -98,8 +96,7 @@ fn render_args_build_config_without_tls() {
 
 #[test]
 fn render_args_allow_omitted_max_model_len() {
-    let cli =
-        Cli::try_parse_from(["aphrodite-rs", "render", "Qwen/Qwen2.5-0.5B-Instruct"]).unwrap();
+    let cli = Cli::try_parse_from(["sonar-rs", "render", "Qwen/Qwen2.5-0.5B-Instruct"]).unwrap();
 
     let Command::Render(args) = cli.command else {
         panic!("expected render args");
@@ -113,7 +110,7 @@ fn render_args_allow_omitted_max_model_len() {
 #[test]
 fn render_args_select_native_glm5_next() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "render",
         "local-glm5_next",
         "--tokenizer-mode",
@@ -129,7 +126,7 @@ fn render_args_select_native_glm5_next() {
 #[test]
 fn render_args_build_config_with_tls() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "render",
         "Qwen/Qwen2.5-0.5B-Instruct",
         "--max-model-len",
@@ -154,7 +151,7 @@ fn render_args_build_config_with_tls() {
 #[test]
 fn render_args_reject_tls_without_certificate() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "render",
         "Qwen/Qwen2.5-0.5B-Instruct",
         "--max-model-len",
@@ -175,7 +172,7 @@ fn render_args_reject_tls_without_certificate() {
 #[test]
 fn render_args_reject_client_cert_verification_without_ca() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "render",
         "Qwen/Qwen2.5-0.5B-Instruct",
         "--max-model-len",
@@ -198,11 +195,11 @@ fn render_args_reject_client_cert_verification_without_ca() {
 #[test]
 fn serve_args_forward_python_flags_with_separator() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "serve",
         "Qwen/Qwen3-0.6B",
         "--python",
-        "../aphrodite/.venv/bin/python",
+        "../sonar/.venv/bin/python",
         "--max-model-len",
         "512",
         "--",
@@ -298,7 +295,7 @@ fn serve_args_forward_python_flags_with_separator() {
                         profiler_config: None,
                     },
                     managed_engine: ManagedEngineArgs {
-                        python: "../aphrodite/.venv/bin/python",
+                        python: "../sonar/.venv/bin/python",
                         handshake_host: "127.0.0.1",
                         handshake_port: None,
                         data_parallel_size: 1,
@@ -327,7 +324,7 @@ fn serve_args_forward_python_flags_with_separator() {
 #[test]
 fn serve_args_auto_forward_python_flags_without_separator() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "serve",
         "Qwen/Qwen3-0.6B",
         "--python",
@@ -352,7 +349,7 @@ fn serve_args_auto_forward_python_flags_without_separator() {
 #[test]
 fn serve_args_auto_forward_enable_lora_to_python() {
     let cli =
-        Cli::try_parse_from(["aphrodite-rs", "serve", "Qwen/Qwen3-0.6B", "--enable-lora"]).unwrap();
+        Cli::try_parse_from(["sonar-rs", "serve", "Qwen/Qwen3-0.6B", "--enable-lora"]).unwrap();
 
     let Command::Serve(args) = cli.command else {
         panic!("expected serve args");
@@ -368,7 +365,7 @@ fn serve_args_auto_forward_enable_lora_to_python() {
 #[test]
 fn serve_args_forward_shutdown_timeout_to_managed_engine() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "serve",
         "Qwen/Qwen3-0.6B",
         "--shutdown-timeout",
@@ -396,7 +393,7 @@ fn serve_args_forward_shutdown_timeout_to_managed_engine() {
 #[test]
 fn serve_args_forward_disable_log_stats_to_managed_engine() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "serve",
         "Qwen/Qwen3-0.6B",
         "--disable-log-stats",
@@ -422,7 +419,7 @@ fn serve_args_forward_disable_log_stats_to_managed_engine() {
 #[test]
 fn serve_args_forward_profiler_config_to_managed_engine() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "serve",
         "Qwen/Qwen3-0.6B",
         "--profiler-config",
@@ -456,9 +453,8 @@ fn serve_args_forward_profiler_config_to_managed_engine() {
 #[test]
 fn serve_args_select_structured_outputs_backend_and_forward_config() {
     let serve = |extra: &[&str]| {
-        let cli =
-            Cli::try_parse_from(["aphrodite-rs", "serve", "Qwen/Qwen3-0.6B"].iter().chain(extra))
-                .unwrap();
+        let cli = Cli::try_parse_from(["sonar-rs", "serve", "Qwen/Qwen3-0.6B"].iter().chain(extra))
+            .unwrap();
         let Command::Serve(args) = cli.command else {
             panic!("expected serve args");
         };
@@ -492,7 +488,7 @@ fn serve_args_select_structured_outputs_backend_and_forward_config() {
     );
 
     let error = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "serve",
         "Qwen/Qwen3-0.6B",
         "--structured-outputs-config",
@@ -527,7 +523,7 @@ fn frontend_args_json_reads_python_structured_outputs_config() {
             },
         });
         let cli = Cli::try_parse_from([
-            "aphrodite-rs",
+            "sonar-rs",
             "frontend",
             "--listen-fd",
             "3",
@@ -551,7 +547,7 @@ fn frontend_args_json_reads_python_structured_outputs_config() {
 fn serve_args_tool_strict_level_requires_xgrammar() {
     let validate = |strict_level: &str, backend: &str| {
         let cli = Cli::try_parse_from([
-            "aphrodite-rs",
+            "sonar-rs",
             "serve",
             "Qwen/Qwen3-0.6B",
             "--tool-strict-level",
@@ -578,7 +574,7 @@ fn serve_args_tool_strict_level_requires_xgrammar() {
 #[test]
 fn serve_args_forward_stream_interval_to_frontend_config() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "serve",
         "Qwen/Qwen3-0.6B",
         "--stream-interval",
@@ -594,7 +590,7 @@ fn serve_args_forward_stream_interval_to_frontend_config() {
     assert_eq!(frontend_config.stream_interval.get(), 4);
 
     let error = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "serve",
         "Qwen/Qwen3-0.6B",
         "--stream-interval",
@@ -607,10 +603,9 @@ fn serve_args_forward_stream_interval_to_frontend_config() {
 #[test]
 fn serve_args_forward_env_only_settings_to_frontend_config() {
     let parse = |extra_args: &[&str]| {
-        let cli = Cli::try_parse_from(
-            ["aphrodite-rs", "serve", "Qwen/Qwen3-0.6B"].iter().chain(extra_args),
-        )
-        .unwrap();
+        let cli =
+            Cli::try_parse_from(["sonar-rs", "serve", "Qwen/Qwen3-0.6B"].iter().chain(extra_args))
+                .unwrap();
         let Command::Serve(args) = cli.command else {
             panic!("expected serve args");
         };
@@ -626,10 +621,10 @@ fn serve_args_forward_env_only_settings_to_frontend_config() {
         Some(32 * 1024 * 1024)
     );
 
-    // Set through `APHRODITE_LOG_STATS_INTERVAL`,
-    // `APHRODITE_DISABLE_REQUEST_ID_RANDOMIZATION`,
-    // `APHRODITE_HTTP_MAX_REQUEST_BODY_SIZE`, and
-    // `APHRODITE_SKIP_MODEL_NAME_VALIDATION`, which bind these hidden flags.
+    // Set through `SONAR_LOG_STATS_INTERVAL`,
+    // `SONAR_DISABLE_REQUEST_ID_RANDOMIZATION`,
+    // `SONAR_HTTP_MAX_REQUEST_BODY_SIZE`, and
+    // `SONAR_SKIP_MODEL_NAME_VALIDATION`, which bind these hidden flags.
     let config = parse(&[
         "--log-stats-interval",
         "2.5",
@@ -654,7 +649,7 @@ fn serve_args_forward_env_only_settings_to_frontend_config() {
     assert_eq!(config.api_server_options.request_body_limit_bytes, None);
 
     let error = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "serve",
         "Qwen/Qwen3-0.6B",
         "--http-max-request-body-size",
@@ -684,10 +679,10 @@ fn args_json_reads_env_only_settings_from_env() {
     );
 
     let args = apply(&[
-        ("APHRODITE_LOG_STATS_INTERVAL", "0.5"),
-        ("APHRODITE_DISABLE_REQUEST_ID_RANDOMIZATION", "1"),
-        ("APHRODITE_HTTP_MAX_REQUEST_BODY_SIZE", "1048576"),
-        ("APHRODITE_SKIP_MODEL_NAME_VALIDATION", " TRUE "),
+        ("SONAR_LOG_STATS_INTERVAL", "0.5"),
+        ("SONAR_DISABLE_REQUEST_ID_RANDOMIZATION", "1"),
+        ("SONAR_HTTP_MAX_REQUEST_BODY_SIZE", "1048576"),
+        ("SONAR_SKIP_MODEL_NAME_VALIDATION", " TRUE "),
     ])
     .unwrap();
     assert_eq!(args.log_stats_interval(), Some(Duration::from_millis(500)));
@@ -697,24 +692,24 @@ fn args_json_reads_env_only_settings_from_env() {
         args.api_server_options().request_body_limit_bytes,
         Some(1024 * 1024)
     );
-    let args = apply(&[("APHRODITE_HTTP_MAX_REQUEST_BODY_SIZE", "0")]).unwrap();
+    let args = apply(&[("SONAR_HTTP_MAX_REQUEST_BODY_SIZE", "0")]).unwrap();
     assert_eq!(args.api_server_options().request_body_limit_bytes, None);
 
-    let args = apply(&[("APHRODITE_LOG_STATS_INTERVAL", "inf")]).unwrap();
+    let args = apply(&[("SONAR_LOG_STATS_INTERVAL", "inf")]).unwrap();
     assert_eq!(args.log_stats_interval(), None);
 
     let errors = [
-        apply(&[("APHRODITE_LOG_STATS_INTERVAL", "ten")]).unwrap_err(),
-        apply(&[("APHRODITE_DISABLE_REQUEST_ID_RANDOMIZATION", "true")]).unwrap_err(),
-        apply(&[("APHRODITE_HTTP_MAX_REQUEST_BODY_SIZE", "32MiB")]).unwrap_err(),
-        apply(&[("APHRODITE_HTTP_MAX_REQUEST_BODY_SIZE", "-1")]).unwrap_err(),
+        apply(&[("SONAR_LOG_STATS_INTERVAL", "ten")]).unwrap_err(),
+        apply(&[("SONAR_DISABLE_REQUEST_ID_RANDOMIZATION", "true")]).unwrap_err(),
+        apply(&[("SONAR_HTTP_MAX_REQUEST_BODY_SIZE", "32MiB")]).unwrap_err(),
+        apply(&[("SONAR_HTTP_MAX_REQUEST_BODY_SIZE", "-1")]).unwrap_err(),
     ];
     expect![[r#"
         [
-            "invalid APHRODITE_LOG_STATS_INTERVAL: `ten` is not a number of seconds",
-            "invalid APHRODITE_DISABLE_REQUEST_ID_RANDOMIZATION: `true` is not an integer",
-            "invalid APHRODITE_HTTP_MAX_REQUEST_BODY_SIZE: `32MiB` is not a number of bytes",
-            "invalid APHRODITE_HTTP_MAX_REQUEST_BODY_SIZE: `-1` is not a number of bytes",
+            "invalid SONAR_LOG_STATS_INTERVAL: `ten` is not a number of seconds",
+            "invalid SONAR_DISABLE_REQUEST_ID_RANDOMIZATION: `true` is not an integer",
+            "invalid SONAR_HTTP_MAX_REQUEST_BODY_SIZE: `32MiB` is not a number of bytes",
+            "invalid SONAR_HTTP_MAX_REQUEST_BODY_SIZE: `-1` is not a number of bytes",
         ]
     "#]]
     .assert_debug_eq(&errors);
@@ -758,7 +753,7 @@ fn int_flag_parses_like_python_bool_int() {
 #[test]
 fn serve_args_forward_max_logprobs_to_frontend_and_managed_engine() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "serve",
         "Qwen/Qwen3-0.6B",
         "--max-logprobs",
@@ -789,7 +784,7 @@ fn serve_args_forward_max_logprobs_to_frontend_and_managed_engine() {
 
 #[test]
 fn serve_args_resolve_auto_reasoning_parser_for_managed_engine() {
-    let cli = Cli::try_parse_from(["aphrodite-rs", "serve", "Qwen/Qwen3-0.6B"]).unwrap();
+    let cli = Cli::try_parse_from(["sonar-rs", "serve", "Qwen/Qwen3-0.6B"]).unwrap();
 
     let Command::Serve(args) = cli.command else {
         panic!("expected serve args");
@@ -808,7 +803,7 @@ fn serve_args_resolve_auto_reasoning_parser_for_managed_engine() {
 
 #[test]
 fn serve_args_resolve_unified_reasoning_parser_for_managed_engine() {
-    let cli = Cli::try_parse_from(["aphrodite-rs", "serve", "moonshotai/Kimi-K3"]).unwrap();
+    let cli = Cli::try_parse_from(["sonar-rs", "serve", "moonshotai/Kimi-K3"]).unwrap();
     let Command::Serve(args) = cli.command else {
         panic!("expected serve args");
     };
@@ -824,7 +819,7 @@ fn serve_args_resolve_unified_reasoning_parser_for_managed_engine() {
 #[test]
 fn serve_args_forward_explicit_reasoning_parser_to_managed_engine() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "serve",
         "Unknown/Model",
         "--reasoning-parser",
@@ -849,7 +844,7 @@ fn serve_args_forward_explicit_reasoning_parser_to_managed_engine() {
 #[test]
 fn serve_args_do_not_forward_disabled_reasoning_parser_to_managed_engine() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "serve",
         "Qwen/Qwen3-0.6B",
         "--reasoning-parser",
@@ -868,7 +863,7 @@ fn serve_args_do_not_forward_disabled_reasoning_parser_to_managed_engine() {
 #[test]
 fn serve_args_forward_reasoning_parser_even_with_passthrough_reasoning_parser() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "serve",
         "Qwen/Qwen3-0.6B",
         "--",
@@ -895,8 +890,7 @@ fn serve_args_forward_reasoning_parser_even_with_passthrough_reasoning_parser() 
 
 #[test]
 fn serve_args_auto_forward_python_multi_char_alias_without_separator() {
-    let cli =
-        Cli::try_parse_from(["aphrodite-rs", "serve", "Qwen/Qwen3-0.6B", "-tp", "2"]).unwrap();
+    let cli = Cli::try_parse_from(["sonar-rs", "serve", "Qwen/Qwen3-0.6B", "-tp", "2"]).unwrap();
 
     let Command::Serve(args) = cli.command else {
         panic!("expected serve args");
@@ -913,7 +907,7 @@ fn serve_args_auto_forward_python_multi_char_alias_without_separator() {
 #[test]
 fn serve_args_accept_explicit_deepseek_v32_renderer() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "serve",
         "Qwen/Qwen3-0.6B",
         "--tokenizer-mode",
@@ -930,7 +924,7 @@ fn serve_args_accept_explicit_deepseek_v32_renderer() {
 #[test]
 fn serve_passes_enable_request_id_headers_into_config() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "serve",
         "Qwen/Qwen3-0.6B",
         "--enable-request-id-headers",
@@ -947,7 +941,7 @@ fn serve_passes_enable_request_id_headers_into_config() {
 #[test]
 fn serve_passes_enable_prompt_tokens_details_into_config() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "serve",
         "Qwen/Qwen3-0.6B",
         "--enable-prompt-tokens-details",
@@ -964,7 +958,7 @@ fn serve_passes_enable_prompt_tokens_details_into_config() {
 #[test]
 fn serve_passes_return_tokens_as_token_ids_into_config() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "serve",
         "Qwen/Qwen3-0.6B",
         "--return-tokens-as-token-ids",
@@ -981,9 +975,8 @@ fn serve_passes_return_tokens_as_token_ids_into_config() {
 #[test]
 fn serve_rejects_log_outputs_without_log_requests() {
     let config = |flags: &[&str]| {
-        let cli =
-            Cli::try_parse_from(["aphrodite-rs", "serve", "Qwen/Qwen3-0.6B"].iter().chain(flags))
-                .unwrap();
+        let cli = Cli::try_parse_from(["sonar-rs", "serve", "Qwen/Qwen3-0.6B"].iter().chain(flags))
+            .unwrap();
         let Command::Serve(args) = cli.command else {
             panic!("expected serve args");
         };
@@ -998,9 +991,8 @@ fn serve_rejects_log_outputs_without_log_requests() {
 #[test]
 fn serve_resolves_output_logging_from_log_flags() {
     let log_outputs = |flags: &[&str]| {
-        let cli =
-            Cli::try_parse_from(["aphrodite-rs", "serve", "Qwen/Qwen3-0.6B"].iter().chain(flags))
-                .unwrap();
+        let cli = Cli::try_parse_from(["sonar-rs", "serve", "Qwen/Qwen3-0.6B"].iter().chain(flags))
+            .unwrap();
         let Command::Serve(args) = cli.command else {
             panic!("expected serve args");
         };
@@ -1027,7 +1019,7 @@ fn serve_resolves_output_logging_from_log_flags() {
 #[test]
 fn frontend_args_json_passes_output_logging_into_config() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "frontend",
         "--listen-fd",
         "3",
@@ -1057,7 +1049,7 @@ fn frontend_args_json_passes_output_logging_into_config() {
 fn frontend_args_json_passes_access_log_flags_into_config() {
     let config_for = |args_json: &str| {
         let cli = Cli::try_parse_from([
-            "aphrodite-rs",
+            "sonar-rs",
             "frontend",
             "--listen-fd",
             "3",
@@ -1100,7 +1092,7 @@ fn frontend_args_json_passes_access_log_flags_into_config() {
 #[test]
 fn serve_disable_access_log_accepts_python_flag_name() {
     let enabled_for = |flag: &str| {
-        let cli = Cli::try_parse_from(["aphrodite-rs", "serve", "Qwen/Qwen3-0.6B", flag]).unwrap();
+        let cli = Cli::try_parse_from(["sonar-rs", "serve", "Qwen/Qwen3-0.6B", flag]).unwrap();
         let Command::Serve(args) = cli.command else {
             panic!("expected serve args");
         };
@@ -1116,7 +1108,7 @@ fn serve_disable_access_log_accepts_python_flag_name() {
 #[test]
 fn serve_passes_tls_into_config() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "serve",
         "Qwen/Qwen3-0.6B",
         "--ssl-certfile",
@@ -1143,7 +1135,7 @@ fn serve_passes_tls_into_config() {
 
 #[test]
 fn serve_without_ssl_flags_has_no_tls() {
-    let cli = Cli::try_parse_from(["aphrodite-rs", "serve", "Qwen/Qwen3-0.6B"]).unwrap();
+    let cli = Cli::try_parse_from(["sonar-rs", "serve", "Qwen/Qwen3-0.6B"]).unwrap();
 
     let Command::Serve(args) = cli.command else {
         panic!("expected serve args");
@@ -1155,7 +1147,7 @@ fn serve_without_ssl_flags_has_no_tls() {
 #[test]
 fn serve_ssl_keyfile_without_certfile_fails_validation() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "serve",
         "Qwen/Qwen3-0.6B",
         "--ssl-keyfile",
@@ -1177,7 +1169,7 @@ fn serve_ssl_keyfile_without_certfile_fails_validation() {
 #[test]
 fn serve_mtls_without_ca_certs_fails_validation() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "serve",
         "Qwen/Qwen3-0.6B",
         "--ssl-certfile",
@@ -1200,7 +1192,7 @@ fn serve_mtls_without_ca_certs_fails_validation() {
 #[test]
 fn frontend_args_json_passes_tls_into_config() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "frontend",
         "--listen-fd",
         "3",
@@ -1225,7 +1217,7 @@ fn frontend_args_json_passes_tls_into_config() {
 #[test]
 fn frontend_args_json_rejects_out_of_range_cert_reqs() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "frontend",
         "--listen-fd",
         "3",
@@ -1250,7 +1242,7 @@ fn frontend_args_json_rejects_out_of_range_cert_reqs() {
 #[test]
 fn frontend_args_json_passes_enable_request_id_headers_into_config() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "frontend",
         "--listen-fd",
         "3",
@@ -1273,7 +1265,7 @@ fn frontend_args_json_passes_enable_request_id_headers_into_config() {
 #[test]
 fn serve_args_parse_lora_modules_in_both_forms() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "serve",
         "Qwen/Qwen3-0.6B",
         "--enable-lora",
@@ -1321,7 +1313,7 @@ fn serve_args_parse_lora_modules_in_both_forms() {
 #[test]
 fn serve_args_reject_malformed_lora_module() {
     let error = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "serve",
         "Qwen/Qwen3-0.6B",
         "--lora-modules",
@@ -1339,7 +1331,7 @@ fn serve_args_reject_malformed_lora_module() {
 #[test]
 fn frontend_args_json_passes_lora_modules_into_config() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "frontend",
         "--listen-fd",
         "3",
@@ -1370,7 +1362,7 @@ fn frontend_args_json_passes_lora_modules_into_config() {
 #[test]
 fn frontend_args_json_passes_reasoning_effort_map_into_config() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "frontend",
         "--listen-fd",
         "3",
@@ -1399,7 +1391,7 @@ fn frontend_args_json_passes_reasoning_effort_map_into_config() {
 #[test]
 fn serve_rejects_unknown_reasoning_effort_map_key() {
     let error = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "serve",
         "Qwen/Qwen3-0.6B",
         "--reasoning-effort-map",
@@ -1412,7 +1404,7 @@ fn serve_rejects_unknown_reasoning_effort_map_key() {
 #[test]
 fn serve_passes_api_keys_into_config() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "serve",
         "Qwen/Qwen3-0.6B",
         "--api-key",
@@ -1436,7 +1428,7 @@ fn serve_passes_api_keys_into_config() {
 #[test]
 fn frontend_args_json_accepts_api_key_string() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "frontend",
         "--listen-fd",
         "3",
@@ -1459,7 +1451,7 @@ fn frontend_args_json_accepts_api_key_string() {
 #[test]
 fn frontend_args_json_accepts_api_key_list() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "frontend",
         "--listen-fd",
         "3",
@@ -1482,7 +1474,7 @@ fn frontend_args_json_accepts_api_key_list() {
 #[test]
 fn serve_args_reject_unknown_renderer_value() {
     let error = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "serve",
         "Qwen/Qwen3-0.6B",
         "--tokenizer-mode",
@@ -1501,7 +1493,7 @@ fn serve_args_reject_unknown_renderer_value() {
 #[test]
 fn serve_args_reject_unsupported_flag_arg() {
     let error = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "serve",
         "Qwen/Qwen3-0.6B",
         "--uvicorn-log-level",
@@ -1524,7 +1516,7 @@ fn serve_args_reject_unsupported_flag_arg() {
 #[test]
 fn serve_args_enable_per_request_metrics_requires_engine_stats() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "serve",
         "Qwen/Qwen3-0.6B",
         "--enable-per-request-metrics",
@@ -1538,7 +1530,7 @@ fn serve_args_enable_per_request_metrics_requires_engine_stats() {
     assert!(config.validate().is_ok());
 
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "serve",
         "Qwen/Qwen3-0.6B",
         "--enable-per-request-metrics",
@@ -1561,7 +1553,7 @@ fn serve_args_enable_per_request_metrics_requires_engine_stats() {
 #[test]
 fn serve_args_reject_custom_generation_config_source() {
     let error = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "serve",
         "Qwen/Qwen3-0.6B",
         "--generation-config",
@@ -1570,7 +1562,7 @@ fn serve_args_reject_custom_generation_config_source() {
     .unwrap_err();
 
     expect![[r#"
-        error: invalid value '/tmp/custom-config' for '--generation-config <GENERATION_CONFIG>': generation config source `/tmp/custom-config` is not implemented yet (expected one of: auto, aphrodite)
+        error: invalid value '/tmp/custom-config' for '--generation-config <GENERATION_CONFIG>': generation config source `/tmp/custom-config` is not implemented yet (expected one of: auto, sonar)
 
         For more information, try '--help'.
     "#]].assert_eq(&error.to_string());
@@ -1579,7 +1571,7 @@ fn serve_args_reject_custom_generation_config_source() {
 #[test]
 fn serve_args_reject_unsupported_no_flag_alias() {
     let error = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "serve",
         "Qwen/Qwen3-0.6B",
         "--no-enable-force-include-usage",
@@ -1602,7 +1594,7 @@ fn serve_args_reject_unsupported_no_flag_alias() {
 #[test]
 fn frontend_args_accept_json() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "frontend",
         "--listen-fd",
         "3",
@@ -1718,7 +1710,7 @@ fn frontend_args_accept_json() {
 #[test]
 fn frontend_args_json_applies_defaults() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "frontend",
         "--listen-fd",
         "3",
@@ -1750,7 +1742,7 @@ fn frontend_args_json_applies_defaults() {
 #[test]
 fn frontend_args_json_ignores_engine_owned_max_model_len() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "frontend",
         "--listen-fd",
         "3",
@@ -1772,7 +1764,7 @@ fn frontend_args_json_ignores_engine_owned_max_model_len() {
 #[test]
 fn serve_args_resolve_model_sources_and_forward_them_to_managed_engine() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "serve",
         "org/weights",
         "--revision",
@@ -1826,7 +1818,7 @@ fn serve_args_resolve_model_sources_and_forward_them_to_managed_engine() {
 fn frontend_args_json_resolve_tokenizer_revision_against_model() {
     let payload = r#"{"model_tag":"org/weights","revision":"release","tokenizer_revision":"tokenizer-fix","hf_config_path":"org/config"}"#;
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "frontend",
         "--listen-fd",
         "3",
@@ -1870,7 +1862,7 @@ fn frontend_args_json_resolve_tokenizer_revision_against_model() {
 fn hf_overrides_preserve_merge_patch_in_cli_and_python_bootstrap() {
     let patch = r#"{"text_config":{"rope_parameters":{"factor":4}},"sliding_window":null}"#;
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "serve",
         "Qwen/Qwen3-0.6B",
         "--hf-overrides",
@@ -1897,7 +1889,7 @@ fn hf_overrides_preserve_merge_patch_in_cli_and_python_bootstrap() {
 
     let payload = serde_json::json!({"model_tag":"Qwen/Qwen3-0.6B", "hf_overrides":expected});
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "frontend",
         "--listen-fd",
         "3",
@@ -1922,7 +1914,7 @@ fn hf_overrides_preserve_merge_patch_in_cli_and_python_bootstrap() {
 fn hf_overrides_reject_non_object_inputs() {
     for patch in ["null", "[]", "1", r#""callable""#] {
         let error = Cli::try_parse_from([
-            "aphrodite-rs",
+            "sonar-rs",
             "serve",
             "Qwen/Qwen3-0.6B",
             "--hf-overrides",
@@ -1936,7 +1928,7 @@ fn hf_overrides_reject_non_object_inputs() {
 #[test]
 fn frontend_args_json_accepts_supported_non_default_fields() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "frontend",
         "--listen-fd",
         "3",
@@ -1945,7 +1937,7 @@ fn frontend_args_json_accepts_supported_non_default_fields() {
         "--output-listener-fd",
         "999998",
         "--args-json",
-        r#"{"model_tag":"Qwen/Qwen3-0.6B","generation_config":"aphrodite","revision":"release","engine_ready_timeout_secs":42,"tool_call_parser":"hermes","reasoning_parser":"qwen3_thinking","tokenizer_mode":"deepseek_v32","language_model_only":true,"max_logprobs":-1,"shutdown_timeout":3}"#,
+        r#"{"model_tag":"Qwen/Qwen3-0.6B","generation_config":"sonar","revision":"release","engine_ready_timeout_secs":42,"tool_call_parser":"hermes","reasoning_parser":"qwen3_thinking","tokenizer_mode":"deepseek_v32","language_model_only":true,"max_logprobs":-1,"shutdown_timeout":3}"#,
     ])
     .unwrap();
 
@@ -1954,10 +1946,7 @@ fn frontend_args_json_accepts_supported_non_default_fields() {
     };
     assert_eq!(args.runtime.engine_ready_timeout_secs, 42);
     assert_eq!(args.runtime.model.revision.as_deref(), Some("release"));
-    assert_eq!(
-        args.runtime.generation_config,
-        GenerationConfigMode::Aphrodite
-    );
+    assert_eq!(args.runtime.generation_config, GenerationConfigMode::Sonar);
     assert_eq!(
         args.runtime.tool_call_parser,
         ParserSelection::Explicit("hermes".to_string())
@@ -1975,7 +1964,7 @@ fn frontend_args_json_accepts_supported_non_default_fields() {
 #[test]
 fn serve_args_forward_auto_max_model_len_to_managed_engine() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "serve",
         "Qwen/Qwen3-0.6B",
         "--max-model-len",
@@ -2003,7 +1992,7 @@ fn serve_args_forward_auto_max_model_len_to_managed_engine() {
 #[test]
 fn serve_args_accept_none_reasoning_parser() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "serve",
         "Qwen/Qwen3-0.6B",
         "--reasoning-parser",
@@ -2021,7 +2010,7 @@ fn serve_args_accept_none_reasoning_parser() {
 #[test]
 fn frontend_args_json_ignores_unknown_fields() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "frontend",
         "--listen-fd",
         "3",
@@ -2030,7 +2019,7 @@ fn frontend_args_json_ignores_unknown_fields() {
         "--output-listener-fd",
         "999998",
         "--args-json",
-        r#"{"model_tag":"Qwen/Qwen3-0.6B","uds":"/tmp/aphrodite.sock","nested_unknown":{"x":1}}"#,
+        r#"{"model_tag":"Qwen/Qwen3-0.6B","uds":"/tmp/sonar.sock","nested_unknown":{"x":1}}"#,
     ])
     .unwrap();
 
@@ -2043,7 +2032,7 @@ fn frontend_args_json_ignores_unknown_fields() {
 #[test]
 fn frontend_args_json_sets_prompt_tokens_details_flag() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "frontend",
         "--listen-fd",
         "3",
@@ -2066,7 +2055,7 @@ fn frontend_args_json_sets_prompt_tokens_details_flag() {
 #[test]
 fn serve_args_parse_cors_flags() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "serve",
         "Qwen/Qwen3-0.6B",
         "--allowed-origins",
@@ -2092,7 +2081,7 @@ fn serve_args_parse_cors_flags() {
 
 #[test]
 fn serve_args_cors_defaults_restrict_origins() {
-    let cli = Cli::try_parse_from(["aphrodite-rs", "serve", "Qwen/Qwen3-0.6B"]).unwrap();
+    let cli = Cli::try_parse_from(["sonar-rs", "serve", "Qwen/Qwen3-0.6B"]).unwrap();
 
     let Command::Serve(serve) = cli.command else {
         panic!("expected serve args");
@@ -2106,7 +2095,7 @@ fn serve_args_cors_defaults_restrict_origins() {
 #[test]
 fn frontend_args_json_parses_cors_fields() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "frontend",
         "--listen-fd",
         "3",
@@ -2131,7 +2120,7 @@ fn frontend_args_json_parses_cors_fields() {
 #[test]
 fn frontend_args_json_rejects_unsupported_fields() {
     let error = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "frontend",
         "--listen-fd",
         "3",
@@ -2158,7 +2147,7 @@ fn frontend_args_json_rejects_unsupported_fields() {
 #[test]
 fn frontend_args_json_aggregates_multiple_unsupported_fields() {
     let error = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "frontend",
         "--listen-fd",
         "3",
@@ -2185,11 +2174,11 @@ fn frontend_args_json_aggregates_multiple_unsupported_fields() {
 }
 
 /// Python args that have no meaningful Rust equivalent are accepted on both the
-/// `aphrodite-rs serve` and the `--args-json` paths.
+/// `sonar-rs serve` and the `--args-json` paths.
 #[test]
 fn noop_args_are_accepted() {
     Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "serve",
         "Qwen/Qwen3-0.6B",
         "--disable-fastapi-docs",
@@ -2197,7 +2186,7 @@ fn noop_args_are_accepted() {
     .expect("--disable-fastapi-docs is accepted");
 
     Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "frontend",
         "--listen-fd",
         "3",
@@ -2212,12 +2201,12 @@ fn noop_args_are_accepted() {
 }
 
 /// `--custom-histogram-buckets` reaches the frontend config on both the
-/// `aphrodite-rs serve` and the `--args-json` paths, and invalid bounds fail startup.
+/// `sonar-rs serve` and the `--args-json` paths, and invalid bounds fail startup.
 #[test]
 fn custom_histogram_buckets_reach_frontend_config() {
     let buckets = r#"{"time_to_first_token":[0.5,1.0]}"#;
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "serve",
         "Qwen/Qwen3-0.6B",
         "--custom-histogram-buckets",
@@ -2233,7 +2222,7 @@ fn custom_histogram_buckets_reach_frontend_config() {
     let args_json =
         format!(r#"{{"model_tag":"Qwen/Qwen3-0.6B","custom_histogram_buckets":{buckets}}}"#);
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "frontend",
         "--listen-fd",
         "3",
@@ -2267,7 +2256,7 @@ fn custom_histogram_buckets_reach_frontend_config() {
     .assert_debug_eq(&serve_config.custom_histogram_buckets);
 
     let error = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "serve",
         "Qwen/Qwen3-0.6B",
         "--custom-histogram-buckets",
@@ -2278,7 +2267,7 @@ fn custom_histogram_buckets_reach_frontend_config() {
 }
 
 /// Frontend-read Python args that Rust recognizes but does not support yet must
-/// fail startup on both the `aphrodite-rs serve` and the `--args-json` paths.
+/// fail startup on both the `sonar-rs serve` and the `--args-json` paths.
 #[test]
 fn unsupported_args_fail_startup() {
     let cases = [
@@ -2290,7 +2279,7 @@ fn unsupported_args_fail_startup() {
         ("--enable-elastic-ep", "true", "enable_elastic_ep"),
     ];
     for (flag, value, key) in cases {
-        let error = Cli::try_parse_from(["aphrodite-rs", "serve", "Qwen/Qwen3-0.6B", flag, value])
+        let error = Cli::try_parse_from(["sonar-rs", "serve", "Qwen/Qwen3-0.6B", flag, value])
             .unwrap_err()
             .to_string();
         assert!(
@@ -2301,7 +2290,7 @@ fn unsupported_args_fail_startup() {
         let args_json =
             serde_json::json!({ "model_tag": "Qwen/Qwen3-0.6B", key: value }).to_string();
         let error = Cli::try_parse_from([
-            "aphrodite-rs",
+            "sonar-rs",
             "frontend",
             "--listen-fd",
             "3",
@@ -2321,7 +2310,7 @@ fn unsupported_args_fail_startup() {
 #[test]
 fn frontend_args_json_rejects_malformed_json() {
     let error = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "frontend",
         "--listen-fd",
         "3",
@@ -2344,7 +2333,7 @@ fn frontend_args_json_rejects_malformed_json() {
 #[test]
 fn serve_args_reject_unsupported_modality_in_limit_mm_per_prompt() {
     let error = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "serve",
         "Qwen/Qwen3-0.6B",
         "--limit-mm-per-prompt",
@@ -2362,7 +2351,7 @@ fn serve_args_reject_unsupported_modality_in_limit_mm_per_prompt() {
 #[test]
 fn serve_args_reject_flags_before_model() {
     let error = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "serve",
         "--python",
         "python3",
@@ -2373,7 +2362,7 @@ fn serve_args_reject_flags_before_model() {
     expect![[r#"
             error: the model must appear immediately after the command
 
-            Usage: aphrodite-rs serve <MODEL> [OPTIONS] [-- <PYTHON_ARGS>...]
+            Usage: sonar-rs serve <MODEL> [OPTIONS] [-- <PYTHON_ARGS>...]
 
             For more information, try '--help'.
         "#]]
@@ -2382,8 +2371,7 @@ fn serve_args_reject_flags_before_model() {
 
 #[test]
 fn serve_args_accept_headless_mode() {
-    let cli =
-        Cli::try_parse_from(["aphrodite-rs", "serve", "Qwen/Qwen3-0.6B", "--headless"]).unwrap();
+    let cli = Cli::try_parse_from(["sonar-rs", "serve", "Qwen/Qwen3-0.6B", "--headless"]).unwrap();
 
     let Command::Serve(args) = cli.command else {
         panic!("expected serve args");
@@ -2394,7 +2382,7 @@ fn serve_args_accept_headless_mode() {
 #[test]
 fn serve_args_keep_python_passthrough_flags_after_separator() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "serve",
         "Qwen/Qwen3-0.6B",
         "--python",
@@ -2424,7 +2412,7 @@ fn serve_args_keep_python_passthrough_flags_after_separator() {
 #[test]
 fn serve_args_keep_python_multi_char_alias_after_separator() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "serve",
         "Qwen/Qwen3-0.6B",
         "--python",
@@ -2454,12 +2442,12 @@ fn serve_args_keep_python_multi_char_alias_after_separator() {
 #[test]
 fn serve_args_keep_frontend_arg_after_separator() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "serve",
         "Qwen/Qwen3-0.6B",
         "--",
         "--uds",
-        "/tmp/aphrodite.sock",
+        "/tmp/sonar.sock",
     ])
     .unwrap();
 
@@ -2469,7 +2457,7 @@ fn serve_args_keep_frontend_arg_after_separator() {
     expect![[r#"
         [
             "--uds",
-            "/tmp/aphrodite.sock",
+            "/tmp/sonar.sock",
         ]
     "#]]
     .assert_debug_eq(&args.managed_engine.python_args);
@@ -2478,7 +2466,7 @@ fn serve_args_keep_frontend_arg_after_separator() {
 #[test]
 fn serve_args_keep_python_multi_char_engine_aliases_after_separator() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "serve",
         "Qwen/Qwen3-0.6B",
         "--",
@@ -2506,7 +2494,7 @@ fn serve_args_keep_python_multi_char_engine_aliases_after_separator() {
 #[test]
 fn serve_args_auto_forward_unknown_flags_without_separator() {
     let cli =
-        Cli::try_parse_from(["aphrodite-rs", "serve", "Qwen/Qwen3-0.6B", "--foo", "bar"]).unwrap();
+        Cli::try_parse_from(["sonar-rs", "serve", "Qwen/Qwen3-0.6B", "--foo", "bar"]).unwrap();
 
     let Command::Serve(args) = cli.command else {
         panic!("expected serve args");
@@ -2523,7 +2511,7 @@ fn serve_args_auto_forward_unknown_flags_without_separator() {
 #[test]
 fn serve_args_auto_forward_negative_value_without_separator() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "serve",
         "Qwen/Qwen3-0.6B",
         "--num-gpu-blocks-override",
@@ -2546,7 +2534,7 @@ fn serve_args_auto_forward_negative_value_without_separator() {
 #[test]
 fn serve_args_accept_handshake_aliases() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "serve",
         "Qwen/Qwen3-0.6B",
         "--python",
@@ -2673,7 +2661,7 @@ fn serve_args_accept_handshake_aliases() {
 #[test]
 fn serve_args_accept_data_parallel_primary_flags() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "serve",
         "Qwen/Qwen3-0.6B",
         "--data-parallel-address",
@@ -2697,7 +2685,7 @@ fn serve_args_accept_data_parallel_primary_flags() {
 #[test]
 fn serve_rank_zero_frontend_hosts_the_coordinator_for_its_single_rank() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "serve",
         "Qwen/Qwen3-0.6B",
         "--data-parallel-rpc-port",
@@ -2725,7 +2713,7 @@ fn serve_rank_zero_frontend_hosts_the_coordinator_for_its_single_rank() {
 #[test]
 fn serve_hybrid_lb_frontend_connects_only_its_ranks() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "serve",
         "Qwen/Qwen3-0.6B",
         "--data-parallel-address",
@@ -2747,7 +2735,7 @@ fn serve_hybrid_lb_frontend_connects_only_its_ranks() {
 
     // A non-zero rank's frontend serves only its own engines' second handshake,
     // over local IPC, and runs no coordinator.
-    let config = args.to_frontend_config("ipc:///tmp/aphrodite-rs-h".to_string(), &topology);
+    let config = args.to_frontend_config("ipc:///tmp/sonar-rs-h".to_string(), &topology);
     let TransportMode::HandshakeOwner {
         handshake_address,
         engine_start_index,
@@ -2759,7 +2747,7 @@ fn serve_hybrid_lb_frontend_connects_only_its_ranks() {
     else {
         panic!("expected handshake-owned transport");
     };
-    assert_eq!(handshake_address, "ipc:///tmp/aphrodite-rs-h");
+    assert_eq!(handshake_address, "ipc:///tmp/sonar-rs-h");
     assert_eq!(
         (*engine_start_index, *engine_count, *data_parallel_size),
         (2, 2, 4)
@@ -2772,16 +2760,13 @@ fn serve_hybrid_lb_frontend_connects_only_its_ranks() {
     assert_eq!(config.effective_coordinator_mode(true), None);
 
     // The engines dial the rank-0 handshake and this frontend's local one.
-    let engine = args.to_managed_engine_config(
-        13345,
-        &topology,
-        Some("ipc:///tmp/aphrodite-rs-h".to_string()),
-    );
+    let engine =
+        args.to_managed_engine_config(13345, &topology, Some("ipc:///tmp/sonar-rs-h".to_string()));
     let command = engine.to_command();
     expect![[r#"
         [
             "-m",
-            "aphrodite.entrypoints.cli.main",
+            "sonar.entrypoints.cli.main",
             "serve",
             "Qwen/Qwen3-0.6B",
             "--headless",
@@ -2792,7 +2777,7 @@ fn serve_hybrid_lb_frontend_connects_only_its_ranks() {
             "--data-parallel-size",
             "4",
             "--headless-client-handshake-address",
-            "ipc:///tmp/aphrodite-rs-h",
+            "ipc:///tmp/sonar-rs-h",
             "--reasoning-parser",
             "qwen3",
             "--data-parallel-size-local",
@@ -2807,7 +2792,7 @@ fn serve_hybrid_lb_frontend_connects_only_its_ranks() {
 #[test]
 fn serve_frontend_config_uses_dp_address_as_advertised_host() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "serve",
         "Qwen/Qwen3-0.6B",
         "--handshake-host",
@@ -2967,7 +2952,7 @@ fn serve_frontend_config_uses_dp_address_as_advertised_host() {
 #[test]
 fn serve_frontend_config_keeps_tcp_transport_for_non_local_only_topology() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "serve",
         "Qwen/Qwen3-0.6B",
         "--data-parallel-address",
@@ -3082,7 +3067,7 @@ fn serve_frontend_config_keeps_tcp_transport_for_non_local_only_topology() {
 #[test]
 fn frontend_args_reject_legacy_handshake_flags() {
     let error = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "frontend",
         "--listen-fd",
         "3",
@@ -3103,7 +3088,7 @@ fn frontend_args_reject_legacy_handshake_flags() {
 #[test]
 fn serve_frontend_config_does_not_manage_engine_without_local_engines() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "serve",
         "Qwen/Qwen3-0.6B",
         "--data-parallel-address",
@@ -3126,7 +3111,7 @@ fn serve_frontend_config_does_not_manage_engine_without_local_engines() {
 #[test]
 fn frontend_config_trusts_request_chat_template_from_args_json() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "frontend",
         "--listen-fd",
         "3",
@@ -3148,7 +3133,7 @@ fn frontend_config_trusts_request_chat_template_from_args_json() {
 #[test]
 fn root_path_reaches_config_from_serve_args_and_args_json() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "serve",
         "Qwen/Qwen3-0.6B",
         "--root-path",
@@ -3162,7 +3147,7 @@ fn root_path_reaches_config_from_serve_args_and_args_json() {
     assert_eq!(config.root_path.as_deref(), Some("/llm"));
 
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "frontend",
         "--listen-fd",
         "3",
@@ -3183,7 +3168,7 @@ fn root_path_reaches_config_from_serve_args_and_args_json() {
 #[test]
 fn frontend_config_excludes_tools_when_tool_choice_none_from_args_json() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "frontend",
         "--listen-fd",
         "3",
@@ -3205,7 +3190,7 @@ fn frontend_config_excludes_tools_when_tool_choice_none_from_args_json() {
 #[test]
 fn frontend_config_uses_external_coordinator_when_coordinator_address_is_present() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "frontend",
         "--listen-fd",
         "3",
@@ -3328,11 +3313,11 @@ fn frontend_config_uses_external_coordinator_when_coordinator_address_is_present
 #[test]
 fn serve_frontend_config_uses_unix_listener_when_uds_is_present() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "serve",
         "Qwen/Qwen3-0.6B",
         "--uds",
-        "/tmp/aphrodite.sock",
+        "/tmp/sonar.sock",
         "--grpc-port",
         "50051",
     ])
@@ -3346,7 +3331,7 @@ fn serve_frontend_config_uses_unix_listener_when_uds_is_present() {
     assert_eq!(
         config.listener_mode,
         HttpListenerMode::BindUnix {
-            path: "/tmp/aphrodite.sock".to_string(),
+            path: "/tmp/sonar.sock".to_string(),
         }
     );
     assert_eq!(
@@ -3361,7 +3346,7 @@ fn serve_frontend_config_uses_unix_listener_when_uds_is_present() {
 #[test]
 fn serve_frontend_config_binds_grpc_on_http_host() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "serve",
         "Qwen/Qwen3-0.6B",
         "--host",
@@ -3388,7 +3373,7 @@ fn serve_frontend_config_binds_grpc_on_http_host() {
 #[test]
 fn frontend_config_adopts_inherited_grpc_listener() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "frontend",
         "--listen-fd",
         "3",
@@ -3417,7 +3402,7 @@ fn frontend_config_adopts_inherited_grpc_listener() {
 #[test]
 fn frontend_args_json_enables_profiling_when_profiler_config_set() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "frontend",
         "--listen-fd",
         "3",
@@ -3441,7 +3426,7 @@ fn frontend_args_json_enables_profiling_when_profiler_config_set() {
 #[test]
 fn frontend_args_json_disables_profiling_when_profiler_config_absent() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "frontend",
         "--listen-fd",
         "3",
@@ -3465,7 +3450,7 @@ fn frontend_args_json_disables_profiling_when_profiler_config_absent() {
 #[test]
 fn frontend_args_json_disables_profiling_when_profiler_type_is_null() {
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "frontend",
         "--listen-fd",
         "3",
@@ -3488,14 +3473,8 @@ fn frontend_args_json_disables_profiling_when_profiler_type_is_null() {
 
 #[test]
 fn serve_revision_reaches_frontend_and_managed_engine() {
-    let cli = Cli::try_parse_from([
-        "aphrodite-rs",
-        "serve",
-        "test/model",
-        "--revision",
-        "release",
-    ])
-    .unwrap();
+    let cli =
+        Cli::try_parse_from(["sonar-rs", "serve", "test/model", "--revision", "release"]).unwrap();
     let Command::Serve(args) = cli.command else {
         panic!("expected serve args");
     };
@@ -3513,7 +3492,7 @@ fn serve_revision_reaches_frontend_and_managed_engine() {
 fn dphn_requires_explicit_opt_in_and_forwards_public_config() {
     let config = r#"{"public_key":"public-key","worker_id":"worker-a","model_manifest_id":"manifest-a","key_id":"key-a","num_raw_terms":4,"raw_term_bytes":128}"#;
     let cli = Cli::try_parse_from([
-        "aphrodite-rs",
+        "sonar-rs",
         "serve",
         "Qwen/Qwen3-0.6B",
         "--dphn-network",
@@ -3543,7 +3522,7 @@ fn dphn_requires_explicit_opt_in_and_forwards_public_config() {
 
     assert!(
         Cli::try_parse_from([
-            "aphrodite-rs",
+            "sonar-rs",
             "serve",
             "Qwen/Qwen3-0.6B",
             "--dphn-network-config",
@@ -3553,7 +3532,7 @@ fn dphn_requires_explicit_opt_in_and_forwards_public_config() {
     );
     assert!(
         Cli::try_parse_from([
-            "aphrodite-rs",
+            "sonar-rs",
             "serve",
             "Qwen/Qwen3-0.6B",
             "--",
@@ -3563,7 +3542,7 @@ fn dphn_requires_explicit_opt_in_and_forwards_public_config() {
     );
     assert!(
         Cli::try_parse_from([
-            "aphrodite-rs",
+            "sonar-rs",
             "serve",
             "Qwen/Qwen3-0.6B",
             "--dphn-network",
@@ -3578,7 +3557,7 @@ fn dphn_requires_explicit_opt_in_and_forwards_public_config() {
 fn frontend_dphn_capability_requires_enabled_runtime() {
     let parse = |json| {
         Cli::try_parse_from([
-            "aphrodite-rs",
+            "sonar-rs",
             "frontend",
             "--listen-fd",
             "3",

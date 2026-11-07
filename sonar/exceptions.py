@@ -1,26 +1,26 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-"""Custom exceptions for Aphrodite."""
+"""Custom exceptions for Sonar."""
 
 from http import HTTPStatus
 from typing import Any
 
 
-class AphroditeError(Exception):
-    """Base class for all Aphrodite-specific errors."""
+class SonarError(Exception):
+    """Base class for all Sonar-specific errors."""
 
 
-class AphroditeClientError(AphroditeError):
+class SonarClientError(SonarError):
     """Base class for errors caused by the client request (4xx)."""
 
 
-class AphroditeServerError(AphroditeError):
+class SonarServerError(SonarError):
     """Base class for errors caused by the server (5xx)."""
 
 
-class AphroditeValidationError(AphroditeClientError):
-    """Aphrodite-specific validation error for request validation failures.
+class SonarValidationError(SonarClientError):
+    """Sonar-specific validation error for request validation failures.
 
     Args:
         message: The error message describing the validation failure.
@@ -50,19 +50,19 @@ class AphroditeValidationError(AphroditeClientError):
         return f"{base} ({', '.join(extras)})" if extras else base
 
 
-class AphroditeNotFoundError(AphroditeClientError):
-    """Aphrodite-specific NotFoundError."""
+class SonarNotFoundError(SonarClientError):
+    """Sonar-specific NotFoundError."""
 
     pass
 
 
-class ChatTemplateResolutionError(AphroditeClientError):
+class ChatTemplateResolutionError(SonarClientError):
     """Raised when chat template resolution fails."""
 
     pass
 
 
-class LoRAAdapterNotFoundError(AphroditeNotFoundError):
+class LoRAAdapterNotFoundError(SonarNotFoundError):
     """Exception raised when a LoRA adapter is not found.
 
     This exception is thrown when a requested LoRA adapter does not exist
@@ -87,8 +87,8 @@ class LoRAAdapterNotFoundError(AphroditeNotFoundError):
         return self.message
 
 
-class AphroditeUnprocessableEntityError(AphroditeClientError):
-    """Aphrodite-specific error for unprocessable entity requests.
+class SonarUnprocessableEntityError(SonarClientError):
+    """Sonar-specific error for unprocessable entity requests.
 
     Args:
         message: The error message describing the unprocessable entity.
@@ -118,7 +118,7 @@ class AphroditeUnprocessableEntityError(AphroditeClientError):
         return f"{base} ({', '.join(extras)})" if extras else base
 
 
-class GenerationError(AphroditeServerError):
+class GenerationError(SonarServerError):
     """raised when finish_reason indicates internal server error (500)"""
 
     def __init__(self, message: str = "Internal server error"):
@@ -134,7 +134,7 @@ class RetryableRequestError(GenerationError):
         self.status_code = HTTPStatus.SERVICE_UNAVAILABLE
 
 
-class GracefulHTTPError(AphroditeError):
+class GracefulHTTPError(SonarError):
     """Exception that should be translated into an HTTP error response.
 
     These are expected to occur during normal operation (e.g. admission

@@ -28,18 +28,18 @@ from collections.abc import Iterable
 import torch
 import torch.nn as nn
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.config import SonarConfig
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.model_loader.weight_utils import (
+from sonar.model_executor.model_loader.weight_utils import (
     default_weight_loader,
     maybe_remap_kv_scale_name,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.sequence import IntermediateTensors
+from sonar.platforms import current_platform
+from sonar.sequence import IntermediateTensors
 
 from .glm4 import Glm4DecoderLayer
 from .glm4_moe_lite_mtp import (
@@ -55,14 +55,14 @@ from .utils import (
 
 
 class GlmOcrMultiTokenPredictorLayer(nn.Module):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         nn.Module.__init__(self)
 
-        speculative_config = aphrodite_config.speculative_config
+        speculative_config = sonar_config.speculative_config
         assert speculative_config is not None
         config = speculative_config.draft_model_config.hf_config.text_config
         self.config = config
-        quant_config = aphrodite_config.quant_config
+        quant_config = sonar_config.quant_config
 
         self.enorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.hnorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -70,7 +70,7 @@ class GlmOcrMultiTokenPredictorLayer(nn.Module):
 
         self.device = current_platform.device_type
         self.shared_head = SharedHead(config=config, prefix=prefix, quant_config=quant_config)
-        self.mtp_block = Glm4DecoderLayer(aphrodite_config=aphrodite_config, prefix=prefix, config=self.config)
+        self.mtp_block = Glm4DecoderLayer(sonar_config=sonar_config, prefix=prefix, config=self.config)
 
     def forward(
         self,
@@ -96,15 +96,15 @@ class GlmOcrMultiTokenPredictorLayer(nn.Module):
 
 
 class GlmOcrMultiTokenPredictor(Glm4MoeLiteMultiTokenPredictor):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         nn.Module.__init__(self)
-        config = aphrodite_config.model_config.hf_config.text_config
+        config = sonar_config.model_config.hf_config.text_config
         self.mtp_start_layer_idx = config.num_hidden_layers
         self.num_mtp_layers = config.num_nextn_predict_layers
         self.layers = torch.nn.ModuleDict(
             {
                 str(idx): GlmOcrMultiTokenPredictorLayer(
-                    aphrodite_config=aphrodite_config,
+                    sonar_config=sonar_config,
                     prefix=f"{prefix}.layers.{idx}",
                 )
                 for idx in range(
@@ -121,12 +121,12 @@ class GlmOcrMultiTokenPredictor(Glm4MoeLiteMultiTokenPredictor):
 
 
 class GlmOcrMTP(nn.Module, SupportsPP):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        self.config = aphrodite_config.model_config.hf_config.text_config
-        quant_config = aphrodite_config.quant_config
+        self.config = sonar_config.model_config.hf_config.text_config
+        quant_config = sonar_config.quant_config
         self.quant_config = quant_config
-        self.model = GlmOcrMultiTokenPredictor(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = GlmOcrMultiTokenPredictor(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
 
         self.num_layers = self.config.num_nextn_predict_layers
         for layer in self.model.layers.values():

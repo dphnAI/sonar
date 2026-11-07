@@ -19,7 +19,7 @@ beyond it, which is what these tests assert rather than comparing whole rows.
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 pytestmark = pytest.mark.skipif(not current_platform.is_rocm(), reason="ROCm-specific tests")
 
@@ -68,10 +68,10 @@ def _inputs(
 
 
 def _run_both(logits, row_ks, row_ke, candidates, block_size, row_repeat):
-    from aphrodite.model_executor.kernels.attention.dsa.candidate_blocks import (
+    from sonar.model_executor.kernels.attention.dsa.candidate_blocks import (
         apply_candidate_mask,
     )
-    from aphrodite.v1.attention.ops.rocm_aiter_mla_sparse import (
+    from sonar.v1.attention.ops.rocm_aiter_mla_sparse import (
         _apply_candidate_mask_strided,
     )
 
@@ -216,7 +216,7 @@ def test_leaves_columns_past_end_untouched():
     ``end`` itself; elsewhere work stops at the tile boundary containing
     ``end``, so that is the bound asserted.
     """
-    from aphrodite.v1.attention.ops.rocm_aiter_mla_sparse import (
+    from sonar.v1.attention.ops.rocm_aiter_mla_sparse import (
         _MASK_TILE,
         _ON_GFX942,
         _ON_GFX950,
@@ -255,10 +255,10 @@ def test_cudagraph_replay_tracks_changing_ends():
     whatever lengths were resident at capture. Replaying against longer and
     shorter contexts than the captured ones is the property that matters.
     """
-    from aphrodite.model_executor.kernels.attention.dsa.candidate_blocks import (
+    from sonar.model_executor.kernels.attention.dsa.candidate_blocks import (
         apply_candidate_mask,
     )
-    from aphrodite.v1.attention.ops.rocm_aiter_mla_sparse import (
+    from sonar.v1.attention.ops.rocm_aiter_mla_sparse import (
         _apply_candidate_mask_strided,
     )
 

@@ -5,8 +5,8 @@ import functools
 
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.utils.deep_gemm import (
+from sonar.platforms import current_platform
+from sonar.utils.deep_gemm import (
     _import_deep_gemm,
     is_deep_gemm_supported,
     mega_mhc,

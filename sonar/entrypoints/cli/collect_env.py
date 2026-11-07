@@ -4,17 +4,17 @@
 import argparse
 import typing
 
-from aphrodite.collect_env import main as collect_env_main
-from aphrodite.entrypoints.cli.types import CLISubcommand
+from sonar.collect_env import main as collect_env_main
+from sonar.entrypoints.cli.types import CLISubcommand
 
 if typing.TYPE_CHECKING:
-    from aphrodite.utils.argparse_utils import FlexibleArgumentParser
+    from sonar.utils.argparse_utils import FlexibleArgumentParser
 else:
     FlexibleArgumentParser = argparse.ArgumentParser
 
 
 class CollectEnvSubcommand(CLISubcommand):
-    """The `collect-env` subcommand for the Aphrodite CLI."""
+    """The `collect-env` subcommand for the Sonar CLI."""
 
     name = "collect-env"
 
@@ -28,7 +28,7 @@ class CollectEnvSubcommand(CLISubcommand):
             "collect-env",
             help="Start collecting environment information.",
             description="Start collecting environment information.",
-            usage="aphrodite collect-env",
+            usage="sonar collect-env",
         )
 
 

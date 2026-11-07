@@ -12,15 +12,15 @@ from typing import Any
 import pytest
 import torch
 
-import aphrodite.envs as envs
-from aphrodite import SamplingParams
-from aphrodite.logprobs import Logprob
-from aphrodite.outputs import CompletionOutput, RequestOutput
-from aphrodite.platforms import current_platform
-from aphrodite.sampling_params import StructuredOutputsParams
-from aphrodite.utils.torch_utils import set_default_torch_num_threads
-from aphrodite.v1.metrics.reader import Counter, Metric
-from tests.conftest import AphroditeRunner, HfRunner
+import sonar.envs as envs
+from sonar import SamplingParams
+from sonar.logprobs import Logprob
+from sonar.outputs import CompletionOutput, RequestOutput
+from sonar.platforms import current_platform
+from sonar.sampling_params import StructuredOutputsParams
+from sonar.utils.torch_utils import set_default_torch_num_threads
+from sonar.v1.metrics.reader import Counter, Metric
+from tests.conftest import HfRunner, SonarRunner
 from tests.utils import (
     large_gpu_mark,
     single_gpu_only,
@@ -55,7 +55,7 @@ default_params = dict(
 
 @single_gpu_only
 def test_without_spec_decoding(
-    aphrodite_runner: type[AphroditeRunner],
+    sonar_runner: type[SonarRunner],
     hf_runner: type[HfRunner],
     sample_json_schema,
 ):
@@ -100,21 +100,21 @@ def test_without_spec_decoding(
         (True, "uni", True, None, True),
     ]
 
-    run_tests(aphrodite_runner, hf_runner, MODEL, test_configs, test_sampling_params)
+    run_tests(sonar_runner, hf_runner, MODEL, test_configs, test_sampling_params)
 
 
 def _enable_rocm_batch_invariance(monkeypatch: pytest.MonkeyPatch) -> None:
     if current_platform.is_rocm():
         # hipBLASLt picks GEMM solutions by batch shape, so sync and async runs
         # can flip near-tie greedy tokens and shift spec-decode acceptance.
-        monkeypatch.setenv("APHRODITE_BATCH_INVARIANT", "1")
-        monkeypatch.setattr(envs, "APHRODITE_BATCH_INVARIANT", True)
+        monkeypatch.setenv("SONAR_BATCH_INVARIANT", "1")
+        monkeypatch.setattr(envs, "SONAR_BATCH_INVARIANT", True)
 
 
 @single_gpu_only
 @large_gpu_mark(min_gb=16)
 def test_with_eagle3_spec_decoding(
-    aphrodite_runner: type[AphroditeRunner],
+    sonar_runner: type[SonarRunner],
     hf_runner: type[HfRunner],
     sample_json_schema,
     monkeypatch: pytest.MonkeyPatch,
@@ -164,7 +164,7 @@ def test_with_eagle3_spec_decoding(
         (True, "uni", True, spec_config_short, True),
     ]
 
-    run_tests(aphrodite_runner, hf_runner, EAGLE3_TARGET_MODEL, test_configs, test_sampling_params)
+    run_tests(sonar_runner, hf_runner, EAGLE3_TARGET_MODEL, test_configs, test_sampling_params)
 
 
 @single_gpu_only
@@ -173,7 +173,7 @@ def test_with_eagle3_spec_decoding(
     reason=("XPU matmul/attention kernels are not batch-invariant"),
 )
 def test_with_ngram_gpu_spec_decoding(
-    aphrodite_runner: type[AphroditeRunner],
+    sonar_runner: type[SonarRunner],
     hf_runner: type[HfRunner],
     monkeypatch: pytest.MonkeyPatch,
 ):
@@ -198,11 +198,11 @@ def test_with_ngram_gpu_spec_decoding(
         (True, "mp", True, ngram_gpu_config, True),
     ]
 
-    run_tests(aphrodite_runner, hf_runner, MODEL, test_configs, [{}, dict(logprobs=2)])
+    run_tests(sonar_runner, hf_runner, MODEL, test_configs, [{}, dict(logprobs=2)])
 
 
 def run_tests(
-    aphrodite_runner: type[AphroditeRunner],
+    sonar_runner: type[SonarRunner],
     hf_runner: type[HfRunner],
     model: str,
     test_configs: list[tuple],
@@ -216,7 +216,7 @@ def run_tests(
     for n, config in enumerate(test_configs, 1):
         outputs.append(
             run_test(
-                aphrodite_runner,
+                sonar_runner,
                 model,
                 f"{n}/{len(test_configs)}",
                 test_sampling_params,
@@ -225,7 +225,7 @@ def run_tests(
         )
 
     baseline_config, baseline_batches, _ = outputs[0]
-    # Compare Aphrodite's own decisions at the first divergence, where histories
+    # Compare Sonar's own decisions at the first divergence, where histories
     # still match. HF then scores each continuation, including after divergence.
     # Neither engine forces an attention backend, dtype, or matmul precision.
     # Qwen/Llama BF16 controls and Qwen holdouts measured max score error <0.38,
@@ -284,7 +284,7 @@ def run_tests(
 
 
 def run_test(
-    aphrodite_runner: type[AphroditeRunner],
+    sonar_runner: type[SonarRunner],
     model: str,
     test_str: str,
     sampling_param_tests: list[dict[str, Any]],
@@ -320,7 +320,7 @@ def run_test(
     print(f"---- TESTING {test_str}: {test_config}")
     print("-" * 80)
 
-    with aphrodite_runner(
+    with sonar_runner(
         model,
         enable_chunked_prefill=test_prefill_chunking,
         # Force prefill chunking
@@ -332,26 +332,26 @@ def run_test(
         disable_log_stats=False,
         enable_prefix_caching=False if current_platform.is_rocm() else None,
         **cache_arg,
-    ) as aphrodite_model:
+    ) as sonar_model:
         results = []
         acceptance_lengths: list[float] | None = [] if spec_decoding else None
         for override_params in sampling_param_tests:
-            metrics_before = aphrodite_model.llm.get_metrics()
+            metrics_before = sonar_model.llm.get_metrics()
             print(f"----------- RUNNING PARAMS: {override_params}")
             results.append(
-                aphrodite_model.llm.generate(
-                    aphrodite_model.get_inputs(example_prompts),
+                sonar_model.llm.generate(
+                    sonar_model.get_inputs(example_prompts),
                     sampling_params=SamplingParams(**default_params, **override_params),
                 )
             )
-            metrics_after = aphrodite_model.llm.get_metrics()
+            metrics_after = sonar_model.llm.get_metrics()
             if acceptance_lengths is not None:
                 acceptance_length = _get_acceptance_length(metrics_before, metrics_after)
                 acceptance_lengths.append(acceptance_length)
                 print(f"ACCEPTANCE RATE {acceptance_length}")
 
             if test_preemption:
-                preemptions = _get_count(metrics_before, metrics_after, "aphrodite:num_preemptions")
+                preemptions = _get_count(metrics_before, metrics_after, "sonar:num_preemptions")
                 assert preemptions > 0, "preemption test had no preemptions"
 
     # Preserve the original parameter-effect checks across repeated batches.
@@ -389,8 +389,8 @@ def _result_signature(requests):
 
 
 def _get_acceptance_length(before: list[Metric], after: list[Metric]) -> float:
-    draft = _get_count(before, after, "aphrodite:spec_decode_num_drafts")
-    accept = _get_count(before, after, "aphrodite:spec_decode_num_accepted_tokens")
+    draft = _get_count(before, after, "sonar:spec_decode_num_drafts")
+    accept = _get_count(before, after, "sonar:spec_decode_num_accepted_tokens")
     assert draft > 0, "speculative test did not draft any tokens"
     return 1 + accept / draft
 

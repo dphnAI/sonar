@@ -3,13 +3,13 @@
 import pytest
 import torch
 
-from aphrodite.platforms import CpuArchEnum, current_platform
+from sonar.platforms import CpuArchEnum, current_platform
 
 if not current_platform.is_cpu():
     pytest.skip("skipping CPU-only tests", allow_module_level=True)
 
-from aphrodite._custom_ops import cpu_gemm_wna16  # noqa: E402
-from aphrodite.model_executor.kernels.linear.mixed_precision.cpu import (  # noqa: E402
+from sonar._custom_ops import cpu_gemm_wna16  # noqa: E402
+from sonar.model_executor.kernels.linear.mixed_precision.cpu import (  # noqa: E402
     _get_isa_hint,
 )
 
@@ -79,8 +79,8 @@ def test_cpu_wna16_power_bf16_uses_vsx():
 
 @pytest.mark.parametrize("model", MODELS)
 @pytest.mark.parametrize("dtype", DTYPE)
-def test_cpu_quant(aphrodite_runner, model, dtype):
-    with aphrodite_runner(model, dtype=dtype) as llm:
+def test_cpu_quant(sonar_runner, model, dtype):
+    with sonar_runner(model, dtype=dtype) as llm:
         output = llm.generate_greedy(["The capital of France is"], max_tokens=32)
     assert output
     print(output)

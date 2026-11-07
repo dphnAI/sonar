@@ -13,49 +13,49 @@ from typing import Any
 import msgspec
 from fastapi import Request
 
-from aphrodite.engine.protocol import EngineClient
-from aphrodite.entrypoints.generate.base.protocol import (
+from sonar.engine.protocol import EngineClient
+from sonar.entrypoints.generate.base.protocol import (
     PerRequestMetrics,
     RequestResponseMetadata,
 )
-from aphrodite.entrypoints.generate.base.serving import (
+from sonar.entrypoints.generate.base.serving import (
     GenerateBaseServing,
     build_spec_decoding_metrics,
     chat_top_logprobs_limit,
     clamp_prompt_logprobs,
     format_token_id_placeholder,
 )
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionLogProb,
     ChatCompletionLogProbs,
     ChatCompletionLogProbsContent,
     ChatCompletionRequest,
 )
-from aphrodite.entrypoints.openai.models.serving import OpenAIServingModels
-from aphrodite.entrypoints.serve.engine.protocol import (
+from sonar.entrypoints.openai.models.serving import OpenAIServingModels
+from sonar.entrypoints.serve.engine.protocol import (
     ErrorResponse,
     PromptTokenUsageInfo,
     UsageInfo,
 )
-from aphrodite.entrypoints.serve.utils.api_utils import get_max_tokens, should_include_usage
-from aphrodite.entrypoints.serve.utils.request_logger import RequestLogger
-from aphrodite.exceptions import AphroditeValidationError, GenerationError
-from aphrodite.inputs import EngineInput, TokensPrompt, mm_input
-from aphrodite.logger import init_logger
-from aphrodite.logprobs import Logprob
-from aphrodite.multimodal.inputs import (
+from sonar.entrypoints.serve.utils.api_utils import get_max_tokens, should_include_usage
+from sonar.entrypoints.serve.utils.request_logger import RequestLogger
+from sonar.exceptions import GenerationError, SonarValidationError
+from sonar.inputs import EngineInput, TokensPrompt, mm_input
+from sonar.logger import init_logger
+from sonar.logprobs import Logprob
+from sonar.multimodal.inputs import (
     MultiModalKwargsItem,
     MultiModalKwargsItems,
     PlaceholderRange,
 )
-from aphrodite.outputs import RequestOutput
-from aphrodite.renderers.chat_utils import AsyncMultiModalItemTracker
-from aphrodite.renderers.online_derenderer import OnlineDerenderer
-from aphrodite.renderers.online_renderer import OnlineRenderer
-from aphrodite.sampling_params import RequestOutputKind, SamplingParams
-from aphrodite.tokenizers import TokenizerLike
-from aphrodite.utils.collection_utils import as_list
-from aphrodite.utils.serial_utils import numpy2base64
+from sonar.outputs import RequestOutput
+from sonar.renderers.chat_utils import AsyncMultiModalItemTracker
+from sonar.renderers.online_derenderer import OnlineDerenderer
+from sonar.renderers.online_renderer import OnlineRenderer
+from sonar.sampling_params import RequestOutputKind, SamplingParams
+from sonar.tokenizers import TokenizerLike
+from sonar.utils.collection_utils import as_list
+from sonar.utils.serial_utils import numpy2base64
 
 from .mm_features import (
     mm_kwargs_from_features,
@@ -114,7 +114,7 @@ def _top_logprob(token_id: int, logprob: Logprob, tokenizer: TokenizerLike | Non
 
 
 class ServingTokens(GenerateBaseServing):
-    """Provides Tokens IN <> Tokens OUT functionality to Aphrodite API."""
+    """Provides Tokens IN <> Tokens OUT functionality to Sonar API."""
 
     def __init__(
         self,
@@ -152,7 +152,7 @@ class ServingTokens(GenerateBaseServing):
         mc = self.model_config
         self.override_max_tokens = (
             self.default_sampling_params.get("max_tokens")
-            if mc.generation_config not in ("auto", "aphrodite")
+            if mc.generation_config not in ("auto", "sonar")
             else getattr(mc, "override_generation_config", {}).get("max_new_tokens")
         )
 
@@ -197,7 +197,7 @@ class ServingTokens(GenerateBaseServing):
             raw_request.state.request_metadata = request_metadata
 
         sampling_params = request.sampling_params
-        max_num_seqs = self.engine_client.aphrodite_config.scheduler_config.max_num_seqs
+        max_num_seqs = self.engine_client.sonar_config.scheduler_config.max_num_seqs
         if sampling_params.n > max_num_seqs:
             return self.create_error_response(
                 f"sampling_params.n must be at most the server's max_num_seqs "
@@ -241,7 +241,7 @@ class ServingTokens(GenerateBaseServing):
                     )
                 try:
                     derender_request = request.parse_context.to_chat_request()
-                except (ValueError, AphroditeValidationError) as e:
+                except (ValueError, SonarValidationError) as e:
                     return self.create_error_response(e)
         try:
             msgspec.msgpack.encode(
@@ -488,7 +488,7 @@ class ServingTokens(GenerateBaseServing):
                     history_tool_call_cnt,
                     final_res.prompt_token_ids,
                 )
-            except (ValueError, AphroditeValidationError) as e:
+            except (ValueError, SonarValidationError) as e:
                 return self.create_error_response(e)
             # Like coupled chat, hide per-token metadata when a parser hides
             # the reasoning: logprobs, token IDs or sampling masks would leak it.

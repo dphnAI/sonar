@@ -5,14 +5,14 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-import aphrodite.distributed as distributed
-from aphrodite.model_executor.layers.fused_moe import (
+import sonar.distributed as distributed
+from sonar.model_executor.layers.fused_moe import (
     unquantized_fused_moe_method as unquantized_module,
 )
-from aphrodite.model_executor.layers.fused_moe.config import RoutingMethodType
-from aphrodite.model_executor.layers.fused_moe.routed_experts import RoutedExperts
-from aphrodite.model_executor.layers.quantization import fp8 as fp8_module
-from aphrodite.model_executor.layers.quantization.fp8 import Fp8Config
+from sonar.model_executor.layers.fused_moe.config import RoutingMethodType
+from sonar.model_executor.layers.fused_moe.routed_experts import RoutedExperts
+from sonar.model_executor.layers.quantization import fp8 as fp8_module
+from sonar.model_executor.layers.quantization.fp8 import Fp8Config
 from tests.kernels.moe.utils import make_dummy_moe_config
 
 
@@ -38,7 +38,7 @@ def _make_fp8_tp_experts(
             lambda **kwargs: (None, None),
         )
     monkeypatch.setattr(fp8_module, "get_tensor_model_parallel_world_size", lambda: tp_size)
-    # The block-shape validator imports this function from aphrodite.distributed.
+    # The block-shape validator imports this function from sonar.distributed.
     monkeypatch.setattr(distributed, "get_tensor_model_parallel_world_size", lambda: tp_size)
     config = make_dummy_moe_config(
         num_experts=num_experts,
@@ -167,7 +167,7 @@ def test_fp8_aligned_tp_keeps_original_layout(monkeypatch, tp_size):
     assert layer.quant_method.weight_scale_refine is None
 
 
-def test_fp8_skipped_layer_keeps_original_tp_layout(monkeypatch, default_aphrodite_config):
+def test_fp8_skipped_layer_keeps_original_tp_layout(monkeypatch, default_sonar_config):
     layer = _make_fp8_tp_experts(
         monkeypatch,
         4,
@@ -210,16 +210,16 @@ def test_fp8_block_aligned_tp_flashinfer_matches_unsharded(
     """Compare sharded FI with unsharded FI, reporting the cross-backend
     difference separately because activation quantization can differ.
     """
-    from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-    from aphrodite.model_executor.layers.fused_moe.config import fp8_w8a8_moe_quant_config
-    from aphrodite.model_executor.layers.fused_moe.fused_moe import fused_experts
-    from aphrodite.platforms import current_platform
+    from sonar.config import SonarConfig, set_current_sonar_config
+    from sonar.model_executor.layers.fused_moe.config import fp8_w8a8_moe_quant_config
+    from sonar.model_executor.layers.fused_moe.fused_moe import fused_experts
+    from sonar.platforms import current_platform
 
     if not current_platform.is_device_capability_family(100):
         pytest.skip("Requires datacenter Blackwell and FlashInfer TRTLLM")
     torch.manual_seed(42)
     e, h, n, topk = 16, 2560, 640, 10
-    with torch.device("cuda"), set_current_aphrodite_config(AphroditeConfig()):
+    with torch.device("cuda"), set_current_sonar_config(SonarConfig()):
         x = torch.randn(num_tokens, h, dtype=torch.bfloat16) / 10
         logits = torch.randn(num_tokens, e, dtype=torch.float32)
         probabilities = logits.softmax(dim=-1)

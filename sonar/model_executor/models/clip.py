@@ -14,33 +14,33 @@ from transformers import (
     CLIPVisionConfig,
 )
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.multimodal import MultiModalDummyOptions
-from aphrodite.distributed import divide, get_tensor_model_parallel_world_size
-from aphrodite.inputs import MultiModalDataDict, MultiModalInput
-from aphrodite.model_executor.layers.activation import get_act_fn
-from aphrodite.model_executor.layers.attention import Attention, MMEncoderAttention
-from aphrodite.model_executor.layers.conv import Conv2dLayer
-from aphrodite.model_executor.layers.linear import (
+from sonar.config import SonarConfig
+from sonar.config.multimodal import MultiModalDummyOptions
+from sonar.distributed import divide, get_tensor_model_parallel_world_size
+from sonar.inputs import MultiModalDataDict, MultiModalInput
+from sonar.model_executor.layers.activation import get_act_fn
+from sonar.model_executor.layers.attention import Attention, MMEncoderAttention
+from sonar.model_executor.layers.conv import Conv2dLayer
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     QKVParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.pooler import DispatchPooler
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.vocab_parallel_embedding import VocabParallelEmbedding
-from aphrodite.model_executor.models.interfaces import SupportsQuant
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import (
+from sonar.model_executor.layers.pooler import DispatchPooler
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.vocab_parallel_embedding import VocabParallelEmbedding
+from sonar.model_executor.models.interfaces import SupportsQuant
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import (
     MultiModalFieldConfig,
     MultiModalKwargsItems,
 )
-from aphrodite.multimodal.parse import (
+from sonar.multimodal.parse import (
     ImageProcessorItems,
     ImageSize,
     MultiModalDataItems,
 )
-from aphrodite.multimodal.processing import (
+from sonar.multimodal.processing import (
     BaseDummyInputsBuilder,
     BaseMultiModalProcessor,
     BaseProcessingInfo,
@@ -50,8 +50,8 @@ from aphrodite.multimodal.processing import (
     PromptUpdate,
     TimingContext,
 )
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.utils.tensor_schema import TensorSchema, TensorShape
+from sonar.sequence import IntermediateTensors
+from sonar.utils.tensor_schema import TensorSchema, TensorShape
 
 from .interfaces import MultiModalEmbeddings, SupportsMultiModal
 from .interfaces_base import default_pooling_type
@@ -547,7 +547,7 @@ class CLIPEncoder(nn.Module):
 
 
 class CLIPTextTransformer(nn.Module):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_stacked={
             ".q_proj": (".qkv_proj", "q"),
             ".k_proj": (".qkv_proj", "k"),
@@ -606,11 +606,11 @@ class CLIPTextTransformer(nn.Module):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
 
 class CLIPVisionTransformer(nn.Module):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_stacked={
             ".q_proj": (".qkv_proj", "q"),
             ".k_proj": (".qkv_proj", "k"),
@@ -661,7 +661,7 @@ class CLIPVisionTransformer(nn.Module):
             self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         else:
             self.post_layernorm = None
-            self.hf_to_aphrodite_mapper = self.hf_to_aphrodite_mapper | WeightsMapper(
+            self.hf_to_sonar_mapper = self.hf_to_sonar_mapper | WeightsMapper(
                 orig_to_new_prefix={"post_layernorm.": None}
             )
 
@@ -711,7 +711,7 @@ class CLIPVisionTransformer(nn.Module):
                     continue
                 yield name, w
 
-        return loader.load_weights(_filter(weights), mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(_filter(weights), mapper=self.hf_to_sonar_mapper)
 
 
 class CLIPVisionModel(nn.Module):
@@ -765,7 +765,7 @@ class CLIPVisionModel(nn.Module):
 class CLIPEmbeddingModel(nn.Module, SupportsMultiModal, SupportsQuant):
     is_pooling_model = True
 
-    hf_to_aphrodite_mapper = WeightsMapper(orig_to_new_substr={".position_ids": None})
+    hf_to_sonar_mapper = WeightsMapper(orig_to_new_substr={".position_ids": None})
 
     packed_modules_mapping = {"qkv_proj": ["q_proj", "k_proj", "v_proj"]}
 
@@ -776,12 +776,12 @@ class CLIPEmbeddingModel(nn.Module, SupportsMultiModal, SupportsQuant):
 
         raise ValueError("Only image modality is supported")
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
 
-        config: CLIPConfig = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
-        multimodal_config = aphrodite_config.model_config.multimodal_config
+        config: CLIPConfig = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
+        multimodal_config = sonar_config.model_config.multimodal_config
         self.config = config
         self.multimodal_config = multimodal_config
 
@@ -792,7 +792,7 @@ class CLIPEmbeddingModel(nn.Module, SupportsMultiModal, SupportsQuant):
         self.text_embed_dim = text_config.hidden_size
         self.vision_embed_dim = vision_config.hidden_size
 
-        with self._mark_language_model(aphrodite_config):
+        with self._mark_language_model(sonar_config):
             self.text_model = CLIPTextTransformer(
                 text_config,
                 quant_config=quant_config,
@@ -804,7 +804,7 @@ class CLIPEmbeddingModel(nn.Module, SupportsMultiModal, SupportsQuant):
                 bias=False,
             )
 
-        with self._mark_tower_model(aphrodite_config, "image"):
+        with self._mark_tower_model(sonar_config, "image"):
             self.vision_model = CLIPVisionTransformer(
                 vision_config,
                 quant_config=quant_config,
@@ -816,7 +816,7 @@ class CLIPEmbeddingModel(nn.Module, SupportsMultiModal, SupportsQuant):
                 bias=False,
             )
 
-        pooler_config = aphrodite_config.model_config.pooler_config
+        pooler_config = sonar_config.model_config.pooler_config
         assert pooler_config is not None
         self.pooler_config = pooler_config
 
@@ -975,4 +975,4 @@ class CLIPEmbeddingModel(nn.Module, SupportsMultiModal, SupportsQuant):
             ignore_unexpected_prefixes=["logit_scale."],
         )
 
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)

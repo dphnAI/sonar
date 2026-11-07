@@ -6,32 +6,32 @@ import copy
 import pytest
 import torch
 
-from aphrodite.compilation.passes.fusion.act_quant_fusion import (
+from sonar.compilation.passes.fusion.act_quant_fusion import (
     ActivationQuantFusionPass,
 )
-from aphrodite.compilation.passes.fusion.rms_quant_fusion import RMSNormQuantFusionPass
-from aphrodite.compilation.passes.fx_utils import find_auto_fn, find_auto_fn_maybe, is_func
-from aphrodite.compilation.passes.utility.fix_functionalization import (
+from sonar.compilation.passes.fusion.rms_quant_fusion import RMSNormQuantFusionPass
+from sonar.compilation.passes.fx_utils import find_auto_fn, find_auto_fn_maybe, is_func
+from sonar.compilation.passes.utility.fix_functionalization import (
     FixFunctionalizationPass,
 )
-from aphrodite.compilation.passes.utility.noop_elimination import NoOpEliminationPass
-from aphrodite.compilation.passes.utility.post_cleanup import PostCleanupPass
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.compilation.passes.utility.noop_elimination import NoOpEliminationPass
+from sonar.compilation.passes.utility.post_cleanup import PostCleanupPass
+from sonar.config import (
     CompilationConfig,
     ModelConfig,
     PassConfig,
-    get_current_aphrodite_config,
-    set_current_aphrodite_config,
+    SonarConfig,
+    get_current_sonar_config,
+    set_current_sonar_config,
 )
-from aphrodite.model_executor.layers.activation import SiluAndMul
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.activation import SiluAndMul
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     kFp8StaticTensorSym,
 )
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import direct_register_custom_op
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import direct_register_custom_op
 from tests.compile.backend import TestBackend
 from tests.utils import TestFP8Layer
 
@@ -50,7 +50,7 @@ class TestSiluMul(torch.nn.Module):
                 weight_shape=(hidden_size, hidden_size),
                 activation_quant_key=self.quant_key,
                 weight_quant_key=self.quant_key,
-                input_dtype=get_current_aphrodite_config().model_config.dtype,
+                input_dtype=get_current_sonar_config().model_config.dtype,
             )
 
     def forward(self, x):
@@ -92,7 +92,7 @@ class TestFusedAddRMSNorm(torch.nn.Module):
                 weight_shape=(hidden_size, intermediate_size),
                 activation_quant_key=self.quant_key,
                 weight_quant_key=self.quant_key,
-                input_dtype=get_current_aphrodite_config().model_config.dtype,
+                input_dtype=get_current_sonar_config().model_config.dtype,
             )
 
     def forward(self, hidden_states, residual):
@@ -233,7 +233,7 @@ class TestFunctionWithMutatedArgsAndReturn(torch.nn.Module):
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         # Clone x to avoid mutating the original tensor
-        ret = torch.ops.aphrodite.function_with_mutated_args_and_return(x)
+        ret = torch.ops.sonar.function_with_mutated_args_and_return(x)
         return x, ret
 
     def example_inputs(self, num_tokens=32):
@@ -241,7 +241,7 @@ class TestFunctionWithMutatedArgsAndReturn(torch.nn.Module):
         return (hidden_states,)
 
     def ops_in_model(self, do_fusion):
-        return [torch.ops.aphrodite.function_with_mutated_args_and_return.default]
+        return [torch.ops.sonar.function_with_mutated_args_and_return.default]
 
     def ops_not_in_model(self):
         return []
@@ -270,7 +270,7 @@ def test_fix_functionalization(model_class: torch.nn.Module, do_fusion: bool, dt
     torch.set_default_dtype(dtype)
     torch.manual_seed(0)
 
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         model_config=ModelConfig(dtype=dtype),
         compilation_config=CompilationConfig(
             custom_ops=["all"],
@@ -282,17 +282,17 @@ def test_fix_functionalization(model_class: torch.nn.Module, do_fusion: bool, dt
         ),
     )
 
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         assert RMSNorm.enabled()
-        noop_pass = NoOpEliminationPass(aphrodite_config)
-        fusion_pass = RMSNormQuantFusionPass(aphrodite_config)
-        cleanup_pass = PostCleanupPass(aphrodite_config)
-        act_quant_fusion_pass = ActivationQuantFusionPass(aphrodite_config)
+        noop_pass = NoOpEliminationPass(sonar_config)
+        fusion_pass = RMSNormQuantFusionPass(sonar_config)
+        cleanup_pass = PostCleanupPass(sonar_config)
+        act_quant_fusion_pass = ActivationQuantFusionPass(sonar_config)
 
         passes = (
             [noop_pass, fusion_pass, act_quant_fusion_pass, cleanup_pass] if do_fusion else [noop_pass, cleanup_pass]
         )
-        func_pass = FixFunctionalizationPass(aphrodite_config)
+        func_pass = FixFunctionalizationPass(sonar_config)
 
         backend_func = TestBackend(*passes, func_pass)
         backend_no_func = TestBackend(*passes)

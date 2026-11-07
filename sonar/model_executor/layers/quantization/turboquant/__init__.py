@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""TurboQuant: KV-cache quantization for Aphrodite.
+"""TurboQuant: KV-cache quantization for Sonar.
 
 Hadamard rotation + per-coordinate Lloyd-Max scalar quantization for
 keys, uniform quantization for values.
@@ -21,6 +21,6 @@ foundational and application references pre-date the TurboQuant paper
 (Zandieh et al., ICLR 2026).
 """
 
-from aphrodite.model_executor.layers.quantization.turboquant.config import TurboQuantConfig
+from sonar.model_executor.layers.quantization.turboquant.config import TurboQuantConfig
 
 __all__ = ["TurboQuantConfig"]

@@ -7,11 +7,11 @@ from unittest.mock import Mock
 import pytest
 import torch
 
-from aphrodite.distributed.device_communicators import cuda_communicator
-from aphrodite.distributed.device_communicators import (
+from sonar.distributed.device_communicators import cuda_communicator
+from sonar.distributed.device_communicators import (
     flashinfer_pcie_ipc_all_reduce as pcie_ipc,
 )
-from aphrodite.distributed.parallel_state import GroupCoordinator
+from sonar.distributed.parallel_state import GroupCoordinator
 
 
 def _uninitialized_comm() -> pcie_ipc.FlashInferPcieIpcAllReduce:

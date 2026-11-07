@@ -17,7 +17,7 @@ import torch.nn as nn
 import transformers
 from transformers.models.qwen2.modeling_qwen2 import Qwen2Model
 
-from aphrodite.model_executor.custom_op import PluggableLayer
+from sonar.model_executor.custom_op import PluggableLayer
 
 
 # --8<-- [start:qwen2_decoder]

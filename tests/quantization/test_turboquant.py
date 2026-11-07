@@ -11,16 +11,16 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.quantization.turboquant.centroids import (
+from sonar.model_executor.layers.quantization.turboquant.centroids import (
     get_centroids,
     solve_lloyd_max,
 )
-from aphrodite.model_executor.layers.quantization.turboquant.config import (
+from sonar.model_executor.layers.quantization.turboquant.config import (
     TQ_PRESETS,
     TurboQuantConfig,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.math_utils import next_power_of_2
+from sonar.platforms import current_platform
+from sonar.utils.math_utils import next_power_of_2
 
 # ============================================================================
 # Helpers
@@ -230,7 +230,7 @@ class TestHybridAttentionIndices:
         )
 
     def test_layer_types_full_attention(self):
-        from aphrodite.model_executor.layers.quantization.turboquant.config import (
+        from sonar.model_executor.layers.quantization.turboquant.config import (
             _get_full_attention_layer_indices,
         )
 
@@ -247,7 +247,7 @@ class TestHybridAttentionIndices:
         assert _get_full_attention_layer_indices(mc) == [2, 4, 5]
 
     def test_layers_block_type_jamba(self):
-        from aphrodite.model_executor.layers.quantization.turboquant.config import (
+        from sonar.model_executor.layers.quantization.turboquant.config import (
             _get_full_attention_layer_indices,
         )
 
@@ -257,7 +257,7 @@ class TestHybridAttentionIndices:
         assert _get_full_attention_layer_indices(mc) == [1, 3]
 
     def test_attn_type_list_minimax(self):
-        from aphrodite.model_executor.layers.quantization.turboquant.config import (
+        from sonar.model_executor.layers.quantization.turboquant.config import (
             _get_full_attention_layer_indices,
         )
 
@@ -267,7 +267,7 @@ class TestHybridAttentionIndices:
         assert _get_full_attention_layer_indices(mc) == [1, 3, 4]
 
     def test_no_hybrid_hints_returns_empty(self):
-        from aphrodite.model_executor.layers.quantization.turboquant.config import (
+        from sonar.model_executor.layers.quantization.turboquant.config import (
             _get_full_attention_layer_indices,
         )
 
@@ -278,11 +278,11 @@ class TestHybridAttentionIndices:
 class TestTurboQuantKVCacheSpec:
     @pytest.mark.parametrize("preset", ALL_PRESETS)
     def test_kv_cache_spec_sets_kv_quant_mode(self, preset):
-        from aphrodite.model_executor.layers.attention.attention import Attention
-        from aphrodite.v1.attention.backends.turboquant_attn import (
+        from sonar.model_executor.layers.attention.attention import Attention
+        from sonar.v1.attention.backends.turboquant_attn import (
             TurboQuantAttentionBackend,
         )
-        from aphrodite.v1.kv_cache_interface import FullAttentionSpec
+        from sonar.v1.kv_cache_interface import FullAttentionSpec
 
         layer = SimpleNamespace(
             attn_type="decoder",
@@ -294,11 +294,11 @@ class TestTurboQuantKVCacheSpec:
             sliding_window=None,
             get_attn_backend=lambda: TurboQuantAttentionBackend,
         )
-        aphrodite_config = SimpleNamespace(cache_config=SimpleNamespace(block_size=32))
+        sonar_config = SimpleNamespace(cache_config=SimpleNamespace(block_size=32))
 
         # The layer builds an unpacked spec; the worker's spec-collection
         # loop applies TQ slot packing via the backend's customize_spec hook.
-        spec = Attention.get_kv_cache_spec(layer, aphrodite_config)
+        spec = Attention.get_kv_cache_spec(layer, sonar_config)
         assert isinstance(spec, FullAttentionSpec)
         assert spec.kv_quant_mode.is_turboquant
         assert spec.state_content_bytes is None
@@ -310,7 +310,7 @@ class TestTurboQuantKVCacheSpec:
 
 class TestTurboQuantWorkspaceReservation:
     @staticmethod
-    def _fake_aphrodite_config(
+    def _fake_sonar_config(
         *,
         max_num_seqs: int = 16,
         max_num_batched_tokens: int = 4096,
@@ -339,7 +339,7 @@ class TestTurboQuantWorkspaceReservation:
 
     @staticmethod
     def _fake_kv_cache_spec():
-        from aphrodite.v1.kv_cache_interface import FullAttentionSpec
+        from sonar.v1.kv_cache_interface import FullAttentionSpec
 
         return FullAttentionSpec(
             block_size=32,
@@ -351,7 +351,7 @@ class TestTurboQuantWorkspaceReservation:
         )
 
     def test_metadata_builder_reserves_decode_and_continuation_prefill_workspace(self, monkeypatch):
-        from aphrodite.v1.attention.backends import turboquant_attn
+        from sonar.v1.attention.backends import turboquant_attn
 
         calls = []
 
@@ -373,7 +373,7 @@ class TestTurboQuantWorkspaceReservation:
         turboquant_attn.TurboQuantMetadataBuilder(
             kv_cache_spec=self._fake_kv_cache_spec(),
             layer_names=["layers.0.self_attn.attn"],
-            aphrodite_config=self._fake_aphrodite_config(),
+            sonar_config=self._fake_sonar_config(),
             device=torch.device("cuda"),
         )
 
@@ -390,7 +390,7 @@ class TestTurboQuantWorkspaceReservation:
         ]
 
     def test_metadata_builder_skips_continuation_prefill_when_disabled(self, monkeypatch):
-        from aphrodite.v1.attention.backends import turboquant_attn
+        from sonar.v1.attention.backends import turboquant_attn
 
         calls = []
 
@@ -412,7 +412,7 @@ class TestTurboQuantWorkspaceReservation:
         turboquant_attn.TurboQuantMetadataBuilder(
             kv_cache_spec=self._fake_kv_cache_spec(),
             layer_names=["layers.0.self_attn.attn"],
-            aphrodite_config=self._fake_aphrodite_config(enable_chunked_prefill=False),
+            sonar_config=self._fake_sonar_config(enable_chunked_prefill=False),
             device=torch.device("cuda"),
         )
 
@@ -658,13 +658,13 @@ class TestStoreDecodeRoundTrip:
         the value (softmax over single key = 1.0). Quantization error
         means we check cosine similarity rather than exact equality.
         """
-        from aphrodite.model_executor.layers.quantization.turboquant.centroids import (
+        from sonar.model_executor.layers.quantization.turboquant.centroids import (
             solve_lloyd_max,
         )
-        from aphrodite.v1.attention.ops.triton_turboquant_decode import (
+        from sonar.v1.attention.ops.triton_turboquant_decode import (
             triton_turboquant_decode_attention,
         )
-        from aphrodite.v1.attention.ops.triton_turboquant_store import (
+        from sonar.v1.attention.ops.triton_turboquant_store import (
             triton_turboquant_store,
         )
 

@@ -4,7 +4,7 @@
 //! MuseSpark1x Omni model spec: NaViT vision (image + video) and raw-waveform
 //! audio on the MuseSpark1x stack.
 //!
-//! Mirrors Aphrodite `models/muse_spark/common/processor.py`
+//! Mirrors Sonar `models/muse_spark/common/processor.py`
 //! (`MuseSpark1xOmniMultiModalProcessor`):
 //!
 //! - Placeholders are the vocabulary tokens `<|patch|>`, `<|video|>`, `<|audio|>`;
@@ -252,7 +252,7 @@ impl ModelProcessorSpec for MuseSparkSpec {
         &self,
         metadata: &ModelMetadata,
     ) -> RegistryResult<HashMap<Modality, usize>> {
-        // Aphrodite `get_supported_mm_limits`: unlimited image/video, audio only
+        // Sonar `get_supported_mm_limits`: unlimited image/video, audio only
         // when an audio encoder is configured.
         let mut limits =
             HashMap::from([(Modality::Image, usize::MAX), (Modality::Video, usize::MAX)]);

@@ -23,59 +23,59 @@ from transformers.image_utils import ImageInput
 from transformers.video_utils import VideoMetadata
 from typing_extensions import TypedDict
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, CacheConfig
-from aphrodite.config.multimodal import MultiModalDummyOptions, VideoDummyOptions
-from aphrodite.distributed import (
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import CacheConfig, SonarConfig
+from sonar.config.multimodal import MultiModalDummyOptions, VideoDummyOptions
+from sonar.distributed import (
     get_pp_group,
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
     split_tensor_along_last_dim,
     tensor_model_parallel_all_gather,
 )
-from aphrodite.inputs import MultiModalDataDict
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.activation import MulAndSilu, SiluAndMul, get_act_fn
-from aphrodite.model_executor.layers.attention import Attention, MMEncoderAttention
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.inputs import MultiModalDataDict
+from sonar.logger import init_logger
+from sonar.model_executor.layers.activation import MulAndSilu, SiluAndMul, get_act_fn
+from sonar.model_executor.layers.attention import Attention, MMEncoderAttention
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     MergedColumnParallelLinear,
     QKVParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.models.module_mapping import MultiModelKeys
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.image import normalize_image
-from aphrodite.multimodal.inputs import (
+from sonar.model_executor.models.module_mapping import MultiModelKeys
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.image import normalize_image
+from sonar.multimodal.inputs import (
     MultiModalFieldConfig,
     MultiModalKwargsItems,
     VideoItem,
 )
-from aphrodite.multimodal.parse import (
+from sonar.multimodal.parse import (
     ImageProcessorItems,
     ImageSize,
     MultiModalDataItems,
     MultiModalDataParser,
 )
-from aphrodite.multimodal.processing import (
+from sonar.multimodal.processing import (
     BaseMultiModalProcessor,
     BaseProcessingInfo,
     PromptReplacement,
     PromptUpdate,
     PromptUpdateDetails,
 )
-from aphrodite.multimodal.processing.dummy_inputs import BaseDummyInputsBuilder
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.utils.math_utils import round_down
-from aphrodite.utils.tensor_schema import TensorSchema, TensorShape
+from sonar.multimodal.processing.dummy_inputs import BaseDummyInputsBuilder
+from sonar.sequence import IntermediateTensors
+from sonar.utils.math_utils import round_down
+from sonar.utils.tensor_schema import TensorSchema, TensorShape
 
 from .interfaces import (
     MultiModalEmbeddings,
@@ -753,7 +753,7 @@ class Molmo2VisionBackbone(nn.Module, SupportsQuant):
 
     # Runs after the top-level mapper, so image_pooling_2d/image_projector
     # source names are already renamed to q/k/v_proj and gate/up_proj.
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_stacked={
             "wq": ("merged_qkv", "q"),
             "wk": ("merged_qkv", "k"),
@@ -865,7 +865,7 @@ class Molmo2VisionBackbone(nn.Module, SupportsQuant):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
 
 class Molmo2Attention(nn.Module):
@@ -1128,12 +1128,12 @@ class Molmo2DecoderNormAfterLayer(Molmo2DecoderLayer):
 
 @support_torch_compile
 class Molmo2TextModel(nn.Module, SupportsQuant):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_config
-        cache_config = aphrodite_config.cache_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        cache_config = sonar_config.cache_config
+        quant_config = sonar_config.quant_config
 
         self.config = config
 
@@ -1767,7 +1767,7 @@ class Molmo2ProcessingInfo(BaseProcessingInfo):
                 sampling_fps,
             )
         else:
-            # Time-based sampling is done in aphrodite molmo2 video loader or molmo_utils
+            # Time-based sampling is done in sonar molmo2 video loader or molmo_utils
             assert frames_indices is not None
         timestamps = [frame_idx / video_fps for frame_idx in frames_indices]
         return timestamps
@@ -2207,7 +2207,7 @@ class Molmo2MultiModalProcessor(BaseMultiModalProcessor[Molmo2ProcessingInfo]):
     dummy_inputs=Molmo2DummyInputsBuilder,
 )
 class Molmo2ForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsPP, SupportsLoRA, SupportsQuant):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_substr={
             # vision backbone mapping
             "image_pooling_2d.wq": "image_pooling_2d.q_proj",
@@ -2253,11 +2253,11 @@ class Molmo2ForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsPP, 
 
         raise ValueError("Only image or video modality is supported")
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
-        multimodal_config = aphrodite_config.model_config.multimodal_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
+        multimodal_config = sonar_config.model_config.multimodal_config
         self.config = config
         self.multimodal_config = multimodal_config
 
@@ -2271,7 +2271,7 @@ class Molmo2ForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsPP, 
             kwargs[field.name] = getattr(config.adapter_config, field.name)
         adapter_config = AdapterConfig(**kwargs)
 
-        with self._mark_tower_model(aphrodite_config, {"image", "video"}):
+        with self._mark_tower_model(sonar_config, {"image", "video"}):
             self.vision_backbone = Molmo2VisionBackbone(
                 vit_config,
                 adapter_config,
@@ -2279,9 +2279,9 @@ class Molmo2ForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsPP, 
                 prefix=maybe_prefix(prefix, "vision_backbone"),
             )
 
-        with self._mark_language_model(aphrodite_config):
+        with self._mark_language_model(sonar_config):
             self.model = Molmo2TextModel(
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 prefix=maybe_prefix(prefix, "model"),
             )
 
@@ -2530,7 +2530,7 @@ class Molmo2ForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsPP, 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]):
         loader = AutoWeightsLoader(self)
         weights = _get_weights_with_merged_embedding(weights)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
     def get_mm_mapping(self) -> MultiModelKeys:
         """Get the module prefix in multimodal models."""

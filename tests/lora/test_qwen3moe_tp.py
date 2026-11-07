@@ -7,8 +7,8 @@
 
 import pytest
 
-import aphrodite
-from aphrodite.lora.request import LoRARequest
+import sonar
+from sonar.lora.request import LoRARequest
 
 from ..utils import multi_gpu_test
 
@@ -37,7 +37,7 @@ EXPECTED_LORA_OUTPUT = [
 ]
 
 
-def generate_and_test(llm: aphrodite.LLM, lora_path: str, lora_id: int) -> None:
+def generate_and_test(llm: sonar.LLM, lora_path: str, lora_id: int) -> None:
     prompts = [
         PROMPT_TEMPLATE.format(context="How many candidates are there?"),
         PROMPT_TEMPLATE.format(context="Count the number of candidates."),
@@ -46,7 +46,7 @@ def generate_and_test(llm: aphrodite.LLM, lora_path: str, lora_id: int) -> None:
         ),
         PROMPT_TEMPLATE.format(context="Return the poll resource associated with the most candidates."),
     ]
-    sampling_params = aphrodite.SamplingParams(temperature=0, max_tokens=64)
+    sampling_params = sonar.SamplingParams(temperature=0, max_tokens=64)
     outputs = llm.generate(
         prompts,
         sampling_params,
@@ -67,7 +67,7 @@ def generate_and_test(llm: aphrodite.LLM, lora_path: str, lora_id: int) -> None:
 def test_qwen3moe_lora(qwen3moe_lora_files):
     # We enable enforce_eager=True here to reduce VRAM usage for lora-test CI,
     # Otherwise, the lora-test will fail due to CUDA OOM.
-    llm = aphrodite.LLM(
+    llm = sonar.LLM(
         MODEL_PATH,
         max_model_len=1024,
         enable_lora=True,
@@ -86,7 +86,7 @@ def test_qwen3moe_lora(qwen3moe_lora_files):
 @pytest.mark.parametrize("ep", [False, True])
 @pytest.mark.parametrize("enable_mixed_moe_lora_format", [False, True])
 def test_qwen3moe_lora_tp2(ep, qwen3moe_lora_files, enable_mixed_moe_lora_format):
-    llm = aphrodite.LLM(
+    llm = sonar.LLM(
         MODEL_PATH,
         max_model_len=1024,
         enable_lora=True,
@@ -105,7 +105,7 @@ def test_qwen3moe_lora_tp2(ep, qwen3moe_lora_files, enable_mixed_moe_lora_format
 @pytest.mark.parametrize("ep", [False, True])
 @pytest.mark.parametrize("enable_mixed_moe_lora_format", [False, True])
 def test_qwen3moe_lora_tp4(ep, qwen3moe_lora_files, enable_mixed_moe_lora_format):
-    llm = aphrodite.LLM(
+    llm = sonar.LLM(
         MODEL_PATH,
         max_model_len=1024,
         enable_lora=True,

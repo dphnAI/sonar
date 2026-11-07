@@ -3,24 +3,24 @@
 
 import torch
 
-from aphrodite._custom_ops import (
+from sonar._custom_ops import (
     cutlass_scaled_fp4_mm,
     scaled_fp4_quant,
 )
-from aphrodite.model_executor.layers.quantization.utils.nvfp4_utils import (
+from sonar.model_executor.layers.quantization.utils.nvfp4_utils import (
     cutlass_fp4_supported,
     nvfp4_weight_padding_bytes,
     pad_nvfp4_weight_for_cutlass,
     slice_nvfp4_output,
     swizzle_blockscale,
 )
-from aphrodite.model_executor.utils import replace_parameter
+from sonar.model_executor.utils import replace_parameter
 
 from .base import NvFp4LinearKernel, NvFp4LinearLayerConfig
 
 
 class CutlassNvFp4LinearKernel(NvFp4LinearKernel):
-    """NVFP4 GEMM via the Aphrodite CUTLASS kernel."""
+    """NVFP4 GEMM via the Sonar CUTLASS kernel."""
 
     @classmethod
     def is_supported(cls, compute_capability: int | None = None) -> tuple[bool, str | None]:

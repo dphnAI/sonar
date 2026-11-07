@@ -8,18 +8,18 @@ from typing import Any
 import regex as re
 from transformers import PreTrainedTokenizerBase
 
-from aphrodite.entrypoints.generate.base.protocol import (
+from sonar.entrypoints.generate.base.protocol import (
     DeltaMessage,
     ExtractedToolCallInformation,
     FunctionCall,
     ToolCall,
 )
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionRequest,
 )
-from aphrodite.logger import init_logger
-from aphrodite.renderers.chat_utils import make_tool_call_id
-from aphrodite.tool_parsers.abstract_tool_parser import (
+from sonar.logger import init_logger
+from sonar.renderers.chat_utils import make_tool_call_id
+from sonar.tool_parsers.abstract_tool_parser import (
     Tool,
     ToolParser,
 )

@@ -23,23 +23,23 @@ import torch
 from torch import nn
 from transformers import Gemma2Config
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, CacheConfig
-from aphrodite.distributed import get_pp_group, get_tensor_model_parallel_world_size
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.activation import GeluAndMul
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.layers.layernorm import GemmaRMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import CacheConfig, SonarConfig
+from sonar.distributed import get_pp_group, get_tensor_model_parallel_world_size
+from sonar.logger import init_logger
+from sonar.model_executor.layers.activation import GeluAndMul
+from sonar.model_executor.layers.attention import Attention
+from sonar.model_executor.layers.layernorm import GemmaRMSNorm
+from sonar.model_executor.layers.linear import (
     MergedColumnParallelLinear,
     QKVParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.layers.vocab_parallel_embedding import VocabParallelEmbedding
-from aphrodite.sequence import IntermediateTensors
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.layers.vocab_parallel_embedding import VocabParallelEmbedding
+from sonar.sequence import IntermediateTensors
 
 from .interfaces import SupportsLoRA, SupportsPP
 from .utils import (
@@ -240,11 +240,11 @@ class Gemma2DecoderLayer(nn.Module):
 
 @support_torch_compile
 class Gemma2Model(nn.Module):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        cache_config = aphrodite_config.cache_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        cache_config = sonar_config.cache_config
+        quant_config = sonar_config.quant_config
         self.config = config
         self.quant_config = quant_config
 
@@ -302,7 +302,7 @@ class Gemma2Model(nn.Module):
 
 
 class Gemma2ForCausalLM(nn.Module, SupportsLoRA, SupportsPP):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_stacked={
             # weight_name: (param_name, shard_id)
             ".q_proj": (".qkv_proj", "q"),
@@ -317,14 +317,14 @@ class Gemma2ForCausalLM(nn.Module, SupportsLoRA, SupportsPP):
         "gate_up_proj": ["gate_proj", "up_proj"],
     }
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
 
         super().__init__()
         self.config = config
         self.quant_config = quant_config
-        self.model = Gemma2Model(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = Gemma2Model(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
         self.logits_processor = LogitsProcessor(config.vocab_size, soft_cap=config.final_logit_softcapping)
         self.make_empty_intermediate_tensors = self.model.make_empty_intermediate_tensors
 
@@ -350,4 +350,4 @@ class Gemma2ForCausalLM(nn.Module, SupportsLoRA, SupportsPP):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)

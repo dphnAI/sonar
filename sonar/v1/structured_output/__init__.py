@@ -8,27 +8,27 @@ from typing import TYPE_CHECKING, NamedTuple
 
 import numpy as np
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.logger import init_logger
-from aphrodite.parser.engine.adapters import ParserEngineReasoningAdapter
-from aphrodite.reasoning import ReasoningParserManager
-from aphrodite.tokenizers import cached_tokenizer_from_config
-from aphrodite.utils.import_utils import LazyLoader
-from aphrodite.v1.structured_output.backend_guidance import GuidanceBackend
-from aphrodite.v1.structured_output.backend_types import (
+from sonar.config import SonarConfig
+from sonar.exceptions import SonarValidationError
+from sonar.logger import init_logger
+from sonar.parser.engine.adapters import ParserEngineReasoningAdapter
+from sonar.reasoning import ReasoningParserManager
+from sonar.tokenizers import cached_tokenizer_from_config
+from sonar.utils.import_utils import LazyLoader
+from sonar.v1.structured_output.backend_guidance import GuidanceBackend
+from sonar.v1.structured_output.backend_types import (
     StructuredOutputBackend,
     StructuredOutputGrammar,
 )
-from aphrodite.v1.structured_output.backend_xgrammar import XgrammarBackend
-from aphrodite.v1.structured_output.utils import strip_speculative_padding
+from sonar.v1.structured_output.backend_xgrammar import XgrammarBackend
+from sonar.v1.structured_output.utils import strip_speculative_padding
 
 if TYPE_CHECKING:
     import numpy.typing as npt
     import torch
 
-    from aphrodite.reasoning import ReasoningParser
-    from aphrodite.v1.request import Request
+    from sonar.reasoning import ReasoningParser
+    from sonar.v1.request import Request
 else:
     torch = LazyLoader("torch", globals(), "torch")
 
@@ -50,7 +50,7 @@ _NO_SPEC_TOKENS = ConstraintBounds(1, 1)
 class StructuredOutputManager:
     """Engine-level manager for structured output requests."""
 
-    def __init__(self, aphrodite_config: AphroditeConfig):
+    def __init__(self, sonar_config: SonarConfig):
         self.backend: StructuredOutputBackend | None = None
         # FIXME(arpera):
         # We store backend_name because
@@ -61,7 +61,7 @@ class StructuredOutputManager:
         # The parser instance is request-scoped because some reasoning parsers
         # depend on per-request chat-template kwargs.
         self.reasoner_cls: type[ReasoningParser] | None = None
-        self.aphrodite_config = aphrodite_config
+        self.sonar_config = sonar_config
 
         # When in external_launcher mode, async grammar compilation causes deadlocks
         # due to external_launcher mode having a scheduler for each TP rank.
@@ -70,13 +70,13 @@ class StructuredOutputManager:
         # happen at different times on different TP ranks,
         # breaking the determinism assumption that external_launcher relies on.
         self._use_async_grammar_compilation = (
-            aphrodite_config.parallel_config.distributed_executor_backend != "external_launcher"
+            sonar_config.parallel_config.distributed_executor_backend != "external_launcher"
         )
 
         self._grammar_bitmask: torch.Tensor | None = None
         self._full_mask = torch.tensor(-1, dtype=torch.int32)
 
-        max_batch_size = self.aphrodite_config.scheduler_config.max_num_seqs
+        max_batch_size = self.sonar_config.scheduler_config.max_num_seqs
         self.fill_bitmask_parallel_threshold = 128
         if self.fill_bitmask_parallel_threshold < max_batch_size:
             self.fill_bitmask_parallel_batch_size = 16
@@ -86,7 +86,7 @@ class StructuredOutputManager:
             max_workers = max(1, min(multiprocessing.cpu_count() // 2, 8))
             self.executor_for_fillmask = ThreadPoolExecutor(max_workers=max_workers)
 
-        if not self.aphrodite_config.model_config.skip_tokenizer_init:
+        if not self.sonar_config.model_config.skip_tokenizer_init:
             # The default max_workers if not specified is the number of
             # CPUs * 5, which is way too high since these tasks are CPU-bound,
             # not I/O bound. We also know we would never dominate CPU usage
@@ -94,16 +94,16 @@ class StructuredOutputManager:
             # of CPUs.
             max_workers = max(1, (multiprocessing.cpu_count() + 1) // 2)
             self.executor = ThreadPoolExecutor(max_workers=max_workers)
-            self.tokenizer = cached_tokenizer_from_config(model_config=self.aphrodite_config.model_config)
-            reasoning_parser_plugin = self.aphrodite_config.structured_outputs_config.reasoning_parser_plugin
+            self.tokenizer = cached_tokenizer_from_config(model_config=self.sonar_config.model_config)
+            reasoning_parser_plugin = self.sonar_config.structured_outputs_config.reasoning_parser_plugin
             if reasoning_parser_plugin and len(reasoning_parser_plugin) > 3:
                 ReasoningParserManager.import_reasoning_parser(reasoning_parser_plugin)
 
-            reasoning_parser = self.aphrodite_config.structured_outputs_config.reasoning_parser
+            reasoning_parser = self.sonar_config.structured_outputs_config.reasoning_parser
             if reasoning_parser:
                 self.reasoner_cls = ReasoningParserManager.get_reasoning_parser(reasoning_parser)
 
-        self.enable_in_reasoning = self.aphrodite_config.structured_outputs_config.enable_in_reasoning
+        self.enable_in_reasoning = self.sonar_config.structured_outputs_config.enable_in_reasoning
 
     def _get_reasoner(self, request: "Request") -> "ReasoningParser | None":
         structured_req = request.structured_output_request
@@ -131,7 +131,7 @@ class StructuredOutputManager:
         request_backend = structured_outputs._backend
         assert request_backend is not None
         if self.backend_name is not None and request_backend != self.backend_name:
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 "Structured output processing only supports one backend per engine. "
                 f"The engine is already using '{self.backend_name}', but this "
                 f"request resolved to '{request_backend}'. Configure "
@@ -145,34 +145,34 @@ class StructuredOutputManager:
         # backends on a per-request basis in V1 (for now, anyway...).
         # _backend is set in Processor._validate_structured_output
         if self.backend is None:
-            vocab_size = self.aphrodite_config.model_config.get_vocab_size()
+            vocab_size = self.sonar_config.model_config.get_vocab_size()
             if request_backend == "xgrammar":
                 self.backend = XgrammarBackend(
-                    self.aphrodite_config,
+                    self.sonar_config,
                     tokenizer=self.tokenizer,
                     vocab_size=vocab_size,
                 )
             elif request_backend == "guidance":
                 self.backend = GuidanceBackend(
-                    self.aphrodite_config,
+                    self.sonar_config,
                     tokenizer=self.tokenizer,
                     vocab_size=vocab_size,
                 )
             elif request_backend == "outlines":
-                from aphrodite.v1.structured_output.backend_outlines import OutlinesBackend
+                from sonar.v1.structured_output.backend_outlines import OutlinesBackend
 
                 self.backend = OutlinesBackend(
-                    self.aphrodite_config,
+                    self.sonar_config,
                     tokenizer=self.tokenizer,
                     vocab_size=vocab_size,
                 )
             elif request_backend == "lm-format-enforcer":
-                from aphrodite.v1.structured_output.backend_lm_format_enforcer import (  # noqa: E501
+                from sonar.v1.structured_output.backend_lm_format_enforcer import (  # noqa: E501
                     LMFormatEnforcerBackend,
                 )
 
                 self.backend = LMFormatEnforcerBackend(
-                    self.aphrodite_config,
+                    self.sonar_config,
                     tokenizer=self.tokenizer,
                     vocab_size=vocab_size,
                 )
@@ -370,13 +370,13 @@ class StructuredOutputManager:
             return None
 
         # Covers both speculative decoding and diffusion LLMs (canvas_length).
-        max_num_spec_tokens = self.aphrodite_config.num_speculative_tokens
-        is_diffusion = self.aphrodite_config.model_config.is_diffusion
+        max_num_spec_tokens = self.sonar_config.num_speculative_tokens
+        is_diffusion = self.sonar_config.model_config.is_diffusion
         mask_stride = max_num_spec_tokens + (0 if is_diffusion else 1)
 
         if self._grammar_bitmask is None:
             assert self.backend is not None
-            max_batch_size = self.aphrodite_config.scheduler_config.max_num_seqs
+            max_batch_size = self.sonar_config.scheduler_config.max_num_seqs
 
             # Allocate a bitmask for each token needing to be checked:
             # one for each speculative position, and one more for the
@@ -492,9 +492,9 @@ class StructuredOutputManager:
 
     def clear_backend(self) -> None:
         # Finish tasks that can still use the backend before releasing it.
-        if not self.aphrodite_config.model_config.skip_tokenizer_init:
+        if not self.sonar_config.model_config.skip_tokenizer_init:
             self.executor.shutdown(wait=True, cancel_futures=True)
-        if self.fill_bitmask_parallel_threshold < self.aphrodite_config.scheduler_config.max_num_seqs:
+        if self.fill_bitmask_parallel_threshold < self.sonar_config.scheduler_config.max_num_seqs:
             self.executor_for_fillmask.shutdown(wait=True, cancel_futures=True)
         if self.backend is not None:
             self.backend.destroy()

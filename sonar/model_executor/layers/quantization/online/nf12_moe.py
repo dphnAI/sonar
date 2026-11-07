@@ -3,12 +3,12 @@
 
 import torch
 
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.routed_experts import RoutedExperts
-from aphrodite.model_executor.layers.fused_moe.runner.shared_experts import SharedExperts
-from aphrodite.model_executor.layers.quantization.online.moe_base import OnlineMoEMethodBase
-from aphrodite.model_executor.utils import replace_parameter
-from aphrodite.platforms import current_platform
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.routed_experts import RoutedExperts
+from sonar.model_executor.layers.fused_moe.runner.shared_experts import SharedExperts
+from sonar.model_executor.layers.quantization.online.moe_base import OnlineMoEMethodBase
+from sonar.model_executor.utils import replace_parameter
+from sonar.platforms import current_platform
 
 
 class Nf12OnlineMoEMethod(OnlineMoEMethodBase):

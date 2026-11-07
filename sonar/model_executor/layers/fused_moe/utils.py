@@ -8,44 +8,44 @@ import regex as re
 import torch
 import torch.nn.functional as F
 
-import aphrodite.envs as envs
-from aphrodite import _custom_ops as ops
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.quantization.utils.config_utils import (
+import sonar.envs as envs
+from sonar import _custom_ops as ops
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.logger import init_logger
+from sonar.model_executor.layers.quantization.utils.config_utils import (
     is_shared_expert_quant_fse_compatible,
 )
-from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
+from sonar.model_executor.layers.quantization.utils.fp8_utils import (
     per_token_group_quant_fp8,
 )
-from aphrodite.model_executor.layers.quantization.utils.int8_utils import (
+from sonar.model_executor.layers.quantization.utils.int8_utils import (
     per_token_group_quant_int8,
     per_token_quant_int8,
 )
-from aphrodite.model_executor.layers.quantization.utils.mxfp4_utils import (
+from sonar.model_executor.layers.quantization.utils.mxfp4_utils import (
     quant_dequant_mxfp4,
     xpu_mxfp4_quantize,
 )
-from aphrodite.model_executor.layers.quantization.utils.mxfp6_utils import (
+from sonar.model_executor.layers.quantization.utils.mxfp6_utils import (
     quant_dequant_mxfp6,
 )
-from aphrodite.model_executor.layers.quantization.utils.mxfp8_utils import (
+from sonar.model_executor.layers.quantization.utils.mxfp8_utils import (
     mxfp8_e4m3_quantize,
     xpu_mxfp8_quantize,
 )
-from aphrodite.model_executor.layers.quantization.utils.nvfp4_emulation_utils import (
+from sonar.model_executor.layers.quantization.utils.nvfp4_emulation_utils import (
     ref_nvfp4_quant_dequant,
 )
-from aphrodite.model_executor.layers.quantization.utils.w8a8_utils import (
+from sonar.model_executor.layers.quantization.utils.w8a8_utils import (
     per_tensor_dequantize,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.math_utils import cdiv
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
+from sonar.utils.math_utils import cdiv
 
 if TYPE_CHECKING:
-    from aphrodite.model_executor.layers.fused_moe.config import FusedMoEConfig
-    from aphrodite.model_executor.layers.quantization import QuantizationConfig
+    from sonar.model_executor.layers.fused_moe.config import FusedMoEConfig
+    from sonar.model_executor.layers.quantization import QuantizationConfig
 
 logger = init_logger(__name__)
 
@@ -93,10 +93,10 @@ def resolve_layer_fused_shared_expert(
     # TODO: should it be disabled for all models?
     skip_reason: str | None = None
     if fse_requested and disable_under_ep:
-        from aphrodite.config import get_current_aphrodite_config_or_none
+        from sonar.config import get_current_sonar_config_or_none
 
-        aphrodite_config = get_current_aphrodite_config_or_none()
-        parallel_config = aphrodite_config.parallel_config if aphrodite_config is not None else None
+        sonar_config = get_current_sonar_config_or_none()
+        parallel_config = sonar_config.parallel_config if sonar_config is not None else None
         if parallel_config is not None and parallel_config.enable_expert_parallel:
             fse_requested = False
             skip_reason = "expert parallelism is enabled"
@@ -119,7 +119,7 @@ def resolve_layer_fused_shared_expert(
     if is_fused_shared_expert_enabled and quant_config is not None:
         online_quantization_config = quant_config.online_quantization_config
         if online_quantization_config is not None:
-            from aphrodite.model_executor.layers.linear import (
+            from sonar.model_executor.layers.linear import (
                 LinearBase,
                 UnquantizedLinearMethod,
             )
@@ -148,7 +148,7 @@ def resolve_layer_fused_shared_expert(
         # deduplicated by cause so a long model logs it once.
         logger.debug("Skipping shared-expert fusion at %s: %s", prefix, skip_reason)
         logger.warning_once(
-            "APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS is enabled but "
+            "SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS is enabled but "
             "cannot be enabled - skipping shared-expert fusion: %s.",
             _normalize_skip_reason(skip_reason),
         )
@@ -372,7 +372,7 @@ def _mxfp4_quantize(
     if current_platform.is_xpu():
         return xpu_mxfp4_quantize(A)
     assert block_shape is None
-    # TODO: native mxfp4 is currently not integrated in aphrodite,
+    # TODO: native mxfp4 is currently not integrated in sonar,
     # so simulating even on devices supporting this data type natively.
     # Once integrated, `current_platform.supports_mx()` should be used to
     # control quantize+dequantize, or simply quantize here down to mxfp4.
@@ -415,7 +415,7 @@ def _mxfp6_e3m2_quantize(
 ) -> tuple[torch.Tensor, None]:
     assert block_shape is None
 
-    # TODO: native mxfp6 is currently not integrated in aphrodite,
+    # TODO: native mxfp6 is currently not integrated in sonar,
     # so simulating even on devices supporting this data type natively.
     # Eventually, there should be a check based on
     # `current_platform.supports_mx()` here.
@@ -432,7 +432,7 @@ def _mxfp6_e2m3_quantize(
 ) -> tuple[torch.Tensor, None]:
     assert block_shape is None
 
-    # TODO: native mxfp6 is currently not integrated in aphrodite,
+    # TODO: native mxfp6 is currently not integrated in sonar,
     # so simulating even on devices supporting this data type natively.
     # Eventually, there should be a check based on
     # `current_platform.supports_mx()` here.
@@ -690,8 +690,8 @@ def moe_use_td_hw_supported() -> bool:
 
 
 def resolve_moe_use_td() -> bool:
-    """Resolve the tri-state ``APHRODITE_TRITON_USE_TD`` setting for MoE."""
-    override = envs.APHRODITE_TRITON_USE_TD
+    """Resolve the tri-state ``SONAR_TRITON_USE_TD`` setting for MoE."""
+    override = envs.SONAR_TRITON_USE_TD
     if override is None:
         return current_platform.is_xpu()
     return override
@@ -705,7 +705,7 @@ def warn_if_moe_use_td_ineffective(active_backend: str, is_quantized: bool = Fal
     global _warned_moe_use_td_ineffective
     if _warned_moe_use_td_ineffective:
         return
-    if envs.APHRODITE_TRITON_USE_TD is None:
+    if envs.SONAR_TRITON_USE_TD is None:
         return
     is_triton = active_backend.upper() == "TRITON"
     if is_triton and not is_quantized:
@@ -722,8 +722,8 @@ def warn_if_moe_use_td_ineffective(active_backend: str, is_quantized: bool = Fal
             "back to the pointer path"
         )
     logger.warning(
-        "APHRODITE_TRITON_USE_TD is set to %s but %s.",
-        envs.APHRODITE_TRITON_USE_TD,
+        "SONAR_TRITON_USE_TD is set to %s but %s.",
+        envs.SONAR_TRITON_USE_TD,
         reason,
     )
     _warned_moe_use_td_ineffective = True

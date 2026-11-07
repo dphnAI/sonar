@@ -16,12 +16,12 @@ import flydsl.expr as fx
 from flydsl.expr import arith, const_expr, gpu, range_constexpr, rocdl
 from flydsl.expr.typing import T
 
-from aphrodite.v1.attention.ops.flydsl_kernels.buffer_utils import (
+from sonar.v1.attention.ops.flydsl_kernels.buffer_utils import (
     buffer_view,
     load_vec,
     store_vec,
 )
-from aphrodite.v1.attention.ops.flydsl_kernels.mma_utils import mma
+from sonar.v1.attention.ops.flydsl_kernels.mma_utils import mma
 
 # === Constants (256-wide-head ultraquant decode profile) =======================
 HEAD_SIZE = 256

@@ -5,11 +5,11 @@ from typing import Any
 
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.logger import init_logger
-from aphrodite.v1.cudagraph_dispatcher import CUDAGraphMode
-from aphrodite.v1.worker.gpu.spec_decode.dflash.speculator import DFlashSpeculator
-from aphrodite.v1.worker.gpu.spec_decode.dspark.utils import load_dspark_model
+from sonar.config import SonarConfig
+from sonar.logger import init_logger
+from sonar.v1.cudagraph_dispatcher import CUDAGraphMode
+from sonar.v1.worker.gpu.spec_decode.dflash.speculator import DFlashSpeculator
+from sonar.v1.worker.gpu.spec_decode.dspark.utils import load_dspark_model
 
 logger = init_logger(__name__)
 
@@ -17,8 +17,8 @@ logger = init_logger(__name__)
 class XPressSpeculator(DFlashSpeculator):
     _speculator_name = "XPress"
 
-    def __init__(self, aphrodite_config: AphroditeConfig, device: torch.device):
-        super().__init__(aphrodite_config, device)
+    def __init__(self, sonar_config: SonarConfig, device: torch.device):
+        super().__init__(sonar_config, device)
         hf = self.draft_model_config.hf_config
 
         # Same convention as DFlash and DSpark; the parent already rejects the
@@ -53,7 +53,7 @@ class XPressSpeculator(DFlashSpeculator):
     ) -> torch.nn.Module:
         # The DSpark loader body is architecture-agnostic (embed/lm_head sharing,
         # non-causal attention config, KV setup), so it is reused as-is.
-        return load_dspark_model(target_model, self.aphrodite_config)
+        return load_dspark_model(target_model, self.sonar_config)
 
     def _generate_draft(
         self,

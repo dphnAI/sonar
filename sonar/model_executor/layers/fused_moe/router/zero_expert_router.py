@@ -3,13 +3,13 @@
 
 import torch
 
-from aphrodite.distributed.eplb.eplb_state import EplbLayerState
-from aphrodite.model_executor.layers.fused_moe.config import RoutingMethodType
-from aphrodite.model_executor.layers.fused_moe.fused_moe import (
+from sonar.distributed.eplb.eplb_state import EplbLayerState
+from sonar.model_executor.layers.fused_moe.config import RoutingMethodType
+from sonar.model_executor.layers.fused_moe.fused_moe import (
     zero_experts_compute_triton,
 )
-from aphrodite.model_executor.layers.fused_moe.router.base_router import BaseRouter
-from aphrodite.model_executor.layers.fused_moe.router.fused_topk_bias_router import (
+from sonar.model_executor.layers.fused_moe.router.base_router import BaseRouter
+from sonar.model_executor.layers.fused_moe.router.fused_topk_bias_router import (
     fused_topk_bias,
 )
 

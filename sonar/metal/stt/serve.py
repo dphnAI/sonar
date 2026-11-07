@@ -17,15 +17,15 @@ class STTRequestInput:
     input_features: Any
 
 
-class AphroditeSTTRequestAdapter:
-    """Boundary adapter that normalizes raw Aphrodite STT requests."""
+class SonarSTTRequestAdapter:
+    """Boundary adapter that normalizes raw Sonar STT requests."""
 
     @classmethod
-    def from_aphrodite_request(cls, request: Any) -> STTRequestInput:
-        """Normalize an Aphrodite request object for the STT runtime path.
+    def from_sonar_request(cls, request: Any) -> STTRequestInput:
+        """Normalize an Sonar request object for the STT runtime path.
 
-        Note: This adapter is used on the v1 runner path where Aphrodite already
-        provides a typed request shape (e.g. NewRequestData). We trust Aphrodite's
+        Note: This adapter is used on the v1 runner path where Sonar already
+        provides a typed request shape (e.g. NewRequestData). We trust Sonar's
         field-level contracts (req_id/prompt_token_ids/mm_features) and only
         validate STT-specific invariants (e.g. presence of input_features).
         """
@@ -38,9 +38,9 @@ class AphroditeSTTRequestAdapter:
 
     @staticmethod
     def _extract_input_features(req_id: str, mm_features: Any) -> Any:
-        """Extract STT input features from Aphrodite multimodal feature wrappers.
+        """Extract STT input features from Sonar multimodal feature wrappers.
 
-        Aphrodite v1 provides multimodal inputs as a list of `MultiModalFeatureSpec`.
+        Sonar v1 provides multimodal inputs as a list of `MultiModalFeatureSpec`.
         For STT, we currently assume one audio feature per request and unwrap:
 
         - `mm_features[0].data["input_features"].data`

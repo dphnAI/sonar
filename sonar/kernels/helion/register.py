@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Aphrodite Helion kernel registration with pre-tuned config selection.
+"""Sonar Helion kernel registration with pre-tuned config selection.
 
 This module leverages Helion's internal config selection infrastructure to use
 pre-tuned configs instead of runtime autotuning.
@@ -44,10 +44,10 @@ from typing import Any
 import torch
 from torch.library import Library
 
-from aphrodite.kernels.helion.case_key import CaseKey
-from aphrodite.logger import init_logger
-from aphrodite.utils.import_utils import has_helion
-from aphrodite.utils.torch_utils import direct_register_custom_op
+from sonar.kernels.helion.case_key import CaseKey
+from sonar.logger import init_logger
+from sonar.utils.import_utils import has_helion
+from sonar.utils.torch_utils import direct_register_custom_op
 
 if not has_helion():
     raise ImportError("register module requires helion to be installed. Install it with: pip install helion")
@@ -58,7 +58,7 @@ from helion.runtime.config import Config
 from helion.runtime.settings import default_autotuner_fn
 
 # TODO(gmagogsfm): Remove CustomOp fallback path (_get_or_register_custom_op,
-# aphrodite_helion_lib, direct_register_custom_op) once Aphrodite requires PyTorch >= 2.11.
+# sonar_helion_lib, direct_register_custom_op) once Sonar requires PyTorch >= 2.11.
 # FIXME(gmagogsfm): Re-enable HOP path once performance regression is fixed.
 # _HOP_AVAILABLE = requires_torch_version("2.11")
 _HOP_AVAILABLE = False
@@ -74,7 +74,7 @@ if _HOP_AVAILABLE:
 
 logger = init_logger(__name__)
 
-aphrodite_helion_lib = Library("aphrodite_helion", "FRAGMENT")  # noqa
+sonar_helion_lib = Library("sonar_helion", "FRAGMENT")  # noqa
 
 ConfigPicker = Callable[[tuple[Any, ...], list[CaseKey]], CaseKey | None]
 
@@ -99,7 +99,7 @@ def validate_helion_settings(helion_settings: helion.Settings | None, op_name: s
     if settings_dict.get("static_shapes") is True:
         logger.warning(
             "Kernel '%s' has static_shapes=True in helion_settings, "
-            "which will be overridden to False. Aphrodite requires dynamic "
+            "which will be overridden to False. Sonar requires dynamic "
             "shapes for variable batch sizes and sequence lengths.",
             op_name,
         )
@@ -114,7 +114,7 @@ def create_helion_decorated_kernel(
     if helion_settings:
         kernel_kwargs.update(helion_settings.to_dict())
 
-    # Aphrodite requires dynamic shapes for variable batch sizes and sequence lengths
+    # Sonar requires dynamic shapes for variable batch sizes and sequence lengths
     kernel_kwargs["static_shapes"] = False
 
     if extra_kwargs:
@@ -211,8 +211,8 @@ class ConfiguredHelionKernel:
         return config_selector
 
     def _load_platform_configs(self) -> None:
-        from aphrodite.kernels.helion.config_manager import ConfigManager
-        from aphrodite.kernels.helion.utils import get_canonical_gpu_name
+        from sonar.kernels.helion.config_manager import ConfigManager
+        from sonar.kernels.helion.utils import get_canonical_gpu_name
 
         self.platform = get_canonical_gpu_name()
         config_manager = ConfigManager()
@@ -264,7 +264,7 @@ class HelionKernelWrapper:
         self._input_generator = input_generator
         self._mutates_args = mutates_args
         self._configured_kernel: ConfiguredHelionKernel | None = None
-        # TODO(@gmagogsfm): Remove this disable flag once integrated with Aphrodite IR,
+        # TODO(@gmagogsfm): Remove this disable flag once integrated with Sonar IR,
         # which handles op enablement/disablement.
         self._disabled = False
         self._disabled_reason: str | None = None
@@ -287,7 +287,7 @@ class HelionKernelWrapper:
         if self._disabled:
             raise RuntimeError(f"Helion kernel '{self.op_name}' is disabled: {self._disabled_reason}")
         if not _HOP_AVAILABLE:
-            op = getattr(torch.ops.aphrodite_helion, self.op_name)
+            op = getattr(torch.ops.sonar_helion, self.op_name)
             return op(*args, **kwargs)
         assert self._configured_kernel is not None, (
             f"Kernel '{self.op_name}' was not initialized. Please open an issue on GitHub."
@@ -332,20 +332,20 @@ class HelionKernelWrapper:
         return self._configured_kernel
 
     def _get_or_register_custom_op(self) -> Any:
-        if hasattr(torch.ops.aphrodite_helion, self.op_name):
-            return getattr(torch.ops.aphrodite_helion, self.op_name)
+        if hasattr(torch.ops.sonar_helion, self.op_name):
+            return getattr(torch.ops.sonar_helion, self.op_name)
 
         configured_kernel = self.get_configured_op()
 
-        logger.info("Registering op: aphrodite_helion::%s", self.op_name)
+        logger.info("Registering op: sonar_helion::%s", self.op_name)
         direct_register_custom_op(
             op_name=self.op_name,
             op_func=configured_kernel._decorated_kernel,
             mutates_args=self._mutates_args,
             fake_impl=self._fake_impl,
-            target_lib=aphrodite_helion_lib,
+            target_lib=sonar_helion_lib,
         )
-        return getattr(torch.ops.aphrodite_helion, self.op_name)
+        return getattr(torch.ops.sonar_helion, self.op_name)
 
 
 # Global registry for tracking all registered HelionKernelWrapper instances
@@ -469,7 +469,7 @@ def register_kernel(
 # Register HelionKernelWrapper with Dynamo's variable tracker system
 if _HOP_AVAILABLE:
 
-    def _register_aphrodite_helion_dynamo_variable():
+    def _register_sonar_helion_dynamo_variable():
         """Register HelionKernelWrapper with Dynamo's VariableBuilder.
 
         When Dynamo encounters a HelionKernelWrapper during tracing, this
@@ -491,4 +491,4 @@ if _HOP_AVAILABLE:
         dispatch[HelionKernelWrapper] = wrap_helion_kernel_wrapper
 
     # Register immediately when the module is imported
-    _register_aphrodite_helion_dynamo_variable()
+    _register_sonar_helion_dynamo_variable()

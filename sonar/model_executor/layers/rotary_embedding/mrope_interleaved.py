@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 #
 # Copyright (c) 2025 Huawei Technologies Co., Ltd. All Rights Reserved.
-# Adapted from aphrodite/model_executor/layers/rotary_embedding/__init__.py
+# Adapted from sonar/model_executor/layers/rotary_embedding/__init__.py
 # Copyright 2023 The vLLM team.
 #
 # This file is a part of the vllm-ascend project.

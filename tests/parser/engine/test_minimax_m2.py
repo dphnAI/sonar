@@ -6,12 +6,12 @@ import json
 
 import pytest
 
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionToolsParam,
     FunctionDefinition,
 )
-from aphrodite.parser.engine.parser_engine import ParserEngine
-from aphrodite.parser.minimax_m2 import (
+from sonar.parser.engine.parser_engine import ParserEngine
+from sonar.parser.minimax_m2 import (
     THINK_END,
     TOOL_CALL_END,
     TOOL_CALL_START,
@@ -87,7 +87,7 @@ class TestNonStreaming:
         result = parser.extract_tool_calls(
             "<minimax:tool_call>"
             '<invoke name="search"><parameter name="q">OpenAI</parameter></invoke>'
-            '<invoke name="search"><parameter name="q">Aphrodite</parameter></invoke>'
+            '<invoke name="search"><parameter name="q">Sonar</parameter></invoke>'
             "</minimax:tool_call>",
             mock_request,
         )
@@ -95,7 +95,7 @@ class TestNonStreaming:
         assert result.tools_called is True
         assert [tc.function.name for tc in result.tool_calls] == ["search", "search"]
         assert json.loads(result.tool_calls[0].function.arguments) == {"q": "OpenAI"}
-        assert json.loads(result.tool_calls[1].function.arguments) == {"q": "Aphrodite"}
+        assert json.loads(result.tool_calls[1].function.arguments) == {"q": "Sonar"}
 
     def test_schema_type_coercion(self, mock_tokenizer, mock_request):
         tools = [

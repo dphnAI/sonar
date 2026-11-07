@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-from aphrodite.v1.worker.block_table import get_block_table_width
+from sonar.v1.worker.block_table import get_block_table_width
 
 
 def test_block_table_width_matches_dcp_alignment() -> None:

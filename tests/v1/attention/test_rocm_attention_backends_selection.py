@@ -8,19 +8,19 @@ from unittest.mock import MagicMock, patch
 import pytest
 import torch
 
-from aphrodite.config.attention import AttentionConfig
-from aphrodite.config.parallel import ParallelConfig
-from aphrodite.platforms import current_platform
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
-from aphrodite.v1.attention.selector import AttentionSelectorConfig
+from sonar.config.attention import AttentionConfig
+from sonar.config.parallel import ParallelConfig
+from sonar.platforms import current_platform
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
+from sonar.v1.attention.selector import AttentionSelectorConfig
 
 # ROCm-specific attention backend selection tests
 pytestmark = pytest.mark.skipif(not current_platform.is_rocm(), reason="ROCm-specific tests")
 
 
 @pytest.fixture
-def mock_aphrodite_config():
-    """Create a mock AphroditeConfig for testing."""
+def mock_sonar_config():
+    """Create a mock SonarConfig for testing."""
     config = MagicMock()
     config.model_config.dtype = torch.float16
     config.model_config.hf_config.architectures = ["LlamaForCausalLM"]
@@ -31,13 +31,13 @@ def mock_aphrodite_config():
 @pytest.fixture
 def mock_get_cdna_version():
     """Mock cdna version arch detection to return True."""
-    with patch("aphrodite.platforms.rocm.get_cdna_version", return_value=3):
+    with patch("sonar.platforms.rocm.get_cdna_version", return_value=3):
         yield
 
 
 @pytest.fixture
 def cleared_attention_selector_cache():
-    from aphrodite.v1.attention.selector import _cached_get_attn_backend
+    from sonar.v1.attention.selector import _cached_get_attn_backend
 
     _cached_get_attn_backend.cache_clear()
     yield
@@ -46,10 +46,10 @@ def cleared_attention_selector_cache():
 
 def test_deepseek_rocm_backend_registry_paths_are_model_specific():
     assert AttentionBackendEnum.ROCM_FLASHMLA_SPARSE_DSV4.get_path() == (
-        "aphrodite.models.deepseek_v4.amd.rocm.DeepseekV4ROCMAiterMLASparseBackend"
+        "sonar.models.deepseek_v4.amd.rocm.DeepseekV4ROCMAiterMLASparseBackend"
     )
     assert AttentionBackendEnum.ROCM_FLASHMLA_SPARSE_DSV41.get_path() == (
-        "aphrodite.models.deepseek_v41.amd.rocm.DeepseekV41ROCMAiterMLASparseBackend"
+        "sonar.models.deepseek_v41.amd.rocm.DeepseekV41ROCMAiterMLASparseBackend"
     )
 
 
@@ -62,8 +62,8 @@ def test_deepseek_rocm_backend_registry_paths_are_model_specific():
     ids=["legacy", "canonical"],
 )
 def test_deepseek_v41_rocm_accepts_legacy_backend_alias(backend_name, expect_warning):
-    from aphrodite.models.deepseek_v41.amd import model as dsv41_model
-    from aphrodite.models.deepseek_v41.amd.rocm import (
+    from sonar.models.deepseek_v41.amd import model as dsv41_model
+    from sonar.models.deepseek_v41.amd.rocm import (
         DeepseekV41ROCMAiterMLAAttention,
         DeepseekV41ROCMAiterMLASparseBackend,
     )
@@ -85,11 +85,11 @@ def test_deepseek_v41_rocm_accepts_legacy_backend_alias(backend_name, expect_war
 
 
 def test_aiter_unified_attention_uses_dedicated_metadata_builder():
-    from aphrodite.v1.attention.backends.rocm_aiter_unified_attn import (
+    from sonar.v1.attention.backends.rocm_aiter_unified_attn import (
         RocmAiterUnifiedAttentionBackend,
         RocmAiterUnifiedAttentionMetadataBuilder,
     )
-    from aphrodite.v1.attention.backends.rocm_attn import (
+    from sonar.v1.attention.backends.rocm_attn import (
         RocmAttentionBackend,
         RocmAttentionMetadataBuilder,
     )
@@ -106,10 +106,10 @@ def test_rocm_backends_do_not_support_mm_prefix():
     via the ROCm backend instead of falling back to Triton, producing
     incorrect results. Remove this test only if support is properly added.
     """
-    from aphrodite.v1.attention.backends.rocm_aiter_unified_attn import (
+    from sonar.v1.attention.backends.rocm_aiter_unified_attn import (
         RocmAiterUnifiedAttentionBackend,
     )
-    from aphrodite.v1.attention.backends.rocm_attn import RocmAttentionBackend
+    from sonar.v1.attention.backends.rocm_attn import RocmAttentionBackend
 
     assert not RocmAttentionBackend.supports_mm_prefix(), (
         "RocmAttentionBackend does not support mm_prefix — "
@@ -124,7 +124,7 @@ def test_rocm_backends_do_not_support_mm_prefix():
 
 
 def test_segmented_attention_uses_dedicated_backend_components():
-    from aphrodite.v1.attention.backends.rocm_segmented_attn import (
+    from sonar.v1.attention.backends.rocm_segmented_attn import (
         RocmSegmentedAttentionBackend,
         RocmSegmentedAttentionImpl,
         RocmSegmentedAttentionMetadataBuilder,
@@ -144,9 +144,9 @@ def test_segmented_attention_uses_dedicated_backend_components():
     [(4096, None, False), (None, 50.0, False), (None, None, True)],
 )
 def test_segmented_attention_admits_unified_fallback_features(monkeypatch, sliding_window, logits_soft_cap, has_sinks):
-    from aphrodite.platforms import rocm
-    from aphrodite.v1.attention.backend import AttentionType
-    from aphrodite.v1.attention.backends.rocm_segmented_attn import (
+    from sonar.platforms import rocm
+    from sonar.v1.attention.backend import AttentionType
+    from sonar.v1.attention.backends.rocm_segmented_attn import (
         RocmSegmentedAttentionImpl,
     )
 
@@ -176,9 +176,9 @@ def test_segmented_attention_admits_unified_fallback_features(monkeypatch, slidi
 )
 def test_segmented_attention_requires_rocm_rdna(monkeypatch, platform, rdna):
     """Reject unsupported platforms before probing ROCm or constructing kernels."""
-    from aphrodite.platforms import rocm
-    from aphrodite.platforms.interface import DeviceCapability
-    from aphrodite.v1.attention.backends import rocm_segmented_attn as segmented
+    from sonar.platforms import rocm
+    from sonar.platforms.interface import DeviceCapability
+    from sonar.v1.attention.backends import rocm_segmented_attn as segmented
 
     monkeypatch.setattr(
         segmented,
@@ -216,14 +216,14 @@ def test_segmented_triton_cache_survives_standalone_compilation(monkeypatch, tmp
     """Backend initialization preserves one cache across model compilations."""
     import os
 
-    from aphrodite.compilation.compiler_interface import InductorStandaloneAdaptor
-    from aphrodite.platforms import rocm
-    from aphrodite.v1.attention.backends.rocm_segmented_attn import (
+    from sonar.compilation.compiler_interface import InductorStandaloneAdaptor
+    from sonar.platforms import rocm
+    from sonar.v1.attention.backends.rocm_segmented_attn import (
         RocmSegmentedAttentionImpl,
     )
 
     monkeypatch.setattr(rocm, "on_gfx1x", lambda: True)
-    monkeypatch.setenv("APHRODITE_CACHE_ROOT", str(tmp_path))
+    monkeypatch.setenv("SONAR_CACHE_ROOT", str(tmp_path))
     monkeypatch.delenv("TRITON_CACHE_DIR", raising=False)
     monkeypatch.delenv("TORCHINDUCTOR_CACHE_DIR", raising=False)
     expected = tmp_path / "rocm_segmented_attention" / "triton"
@@ -239,8 +239,8 @@ def test_segmented_triton_cache_survives_standalone_compilation(monkeypatch, tmp
 
 
 def test_segmented_attention_is_opt_in(monkeypatch):
-    from aphrodite.platforms import rocm
-    from aphrodite.platforms.rocm import RocmPlatform, _get_backend_priorities
+    from sonar.platforms import rocm
+    from sonar.platforms.rocm import RocmPlatform, _get_backend_priorities
 
     assert AttentionBackendEnum.ROCM_SEGMENTED_ATTN not in _get_backend_priorities(use_mla=False, use_sparse=False)
 
@@ -262,8 +262,8 @@ def test_segmented_attention_is_opt_in(monkeypatch):
 
 
 def test_segmented_attention_rejects_mm_prefix_at_selection(monkeypatch):
-    from aphrodite.platforms import rocm
-    from aphrodite.platforms.rocm import RocmPlatform
+    from sonar.platforms import rocm
+    from sonar.platforms.rocm import RocmPlatform
 
     monkeypatch.setattr(rocm, "on_gfx1x", lambda: True)
     config = AttentionSelectorConfig(
@@ -282,9 +282,9 @@ def test_segmented_attention_rejects_mm_prefix_at_selection(monkeypatch):
 
 
 def test_segmented_attention_forward_uses_dedicated_dispatch(monkeypatch):
-    from aphrodite.config import KernelConfig
-    from aphrodite.platforms import rocm
-    from aphrodite.v1.attention.backends.rocm_segmented_attn import (
+    from sonar.config import KernelConfig
+    from sonar.platforms import rocm
+    from sonar.v1.attention.backends.rocm_segmented_attn import (
         RocmSegmentedAttentionImpl,
     )
 
@@ -311,7 +311,7 @@ def test_segmented_attention_forward_uses_dedicated_dispatch(monkeypatch):
     )
     layer = SimpleNamespace(_k_scale=torch.ones(()), _v_scale=torch.ones(()))
 
-    with patch("aphrodite.v1.attention.backends.rocm_segmented_attn.segmented_attention") as dispatch:
+    with patch("sonar.v1.attention.backends.rocm_segmented_attn.segmented_attention") as dispatch:
         result = impl.forward(layer, query, key, value, kv_cache, metadata, output)
 
     assert result is output
@@ -322,7 +322,7 @@ def test_segmented_attention_forward_uses_dedicated_dispatch(monkeypatch):
 def test_aiter_unified_attention_capture_preserves_query_start_locations(
     monkeypatch: pytest.MonkeyPatch,
 ):
-    from aphrodite.v1.attention.backends.rocm_aiter_unified_attn import (
+    from sonar.v1.attention.backends.rocm_aiter_unified_attn import (
         RocmAiterUnifiedAttentionMetadataBuilder,
     )
 
@@ -385,27 +385,27 @@ def test_aiter_unified_attention_capture_preserves_query_start_locations(
             "ROCM_AITER_UNIFIED_ATTN",
             AttentionBackendEnum.ROCM_AITER_UNIFIED_ATTN.get_path(),
         ),
-        # Test Case 6: APHRODITE_ROCM_USE_AITER=1
+        # Test Case 6: SONAR_ROCM_USE_AITER=1
         (
-            {"APHRODITE_ROCM_USE_AITER": "1"},
+            {"SONAR_ROCM_USE_AITER": "1"},
             None,
             AttentionBackendEnum.ROCM_ATTN.get_path(),
         ),
-        # Test Case 7: APHRODITE_ROCM_USE_AITER=1 + explicit TRITON_ATTN
+        # Test Case 7: SONAR_ROCM_USE_AITER=1 + explicit TRITON_ATTN
         (
-            {"APHRODITE_ROCM_USE_AITER": "1"},
+            {"SONAR_ROCM_USE_AITER": "1"},
             "TRITON_ATTN",
             AttentionBackendEnum.TRITON_ATTN.get_path(),
         ),
-        # Test Case 8: APHRODITE_ROCM_USE_AITER=1 + APHRODITE_ROCM_USE_AITER_MHA=0
+        # Test Case 8: SONAR_ROCM_USE_AITER=1 + SONAR_ROCM_USE_AITER_MHA=0
         (
-            {"APHRODITE_ROCM_USE_AITER": "1", "APHRODITE_ROCM_USE_AITER_MHA": "0"},
+            {"SONAR_ROCM_USE_AITER": "1", "SONAR_ROCM_USE_AITER_MHA": "0"},
             None,
             AttentionBackendEnum.ROCM_ATTN.get_path(),
         ),
-        # Test Case 9: APHRODITE_ROCM_USE_AITER=1 + explicit ROCM_ATTN
+        # Test Case 9: SONAR_ROCM_USE_AITER=1 + explicit ROCM_ATTN
         (
-            {"APHRODITE_ROCM_USE_AITER": "1"},
+            {"SONAR_ROCM_USE_AITER": "1"},
             "ROCM_ATTN",
             AttentionBackendEnum.ROCM_ATTN.get_path(),
         ),
@@ -416,7 +416,7 @@ def test_standard_attention_backend_selection(
     selected_backend,
     expected_backend_path,
     use_dcp,
-    mock_aphrodite_config,
+    mock_sonar_config,
     mock_get_cdna_version,
     monkeypatch,
 ):
@@ -429,7 +429,7 @@ def test_standard_attention_backend_selection(
     # Reload envs to pick up new environment variables
     import importlib
 
-    import aphrodite.envs as envs
+    import sonar.envs as envs
 
     importlib.reload(envs)
 
@@ -439,7 +439,7 @@ def test_standard_attention_backend_selection(
         backend_enum = getattr(AttentionBackendEnum, selected_backend)
 
     # Get the backend class path
-    from aphrodite.platforms.rocm import RocmPlatform
+    from sonar.platforms.rocm import RocmPlatform
 
     attn_selector_config = AttentionSelectorConfig(
         head_size=128,
@@ -500,26 +500,26 @@ def test_standard_attention_backend_selection(
             AttentionBackendEnum.ROCM_AITER_MLA.get_path(),
             False,
         ),
-        # Test Case 5: APHRODITE_ROCM_USE_AITER=1 with block_size == 1
+        # Test Case 5: SONAR_ROCM_USE_AITER=1 with block_size == 1
         (
-            {"APHRODITE_ROCM_USE_AITER": "1"},
+            {"SONAR_ROCM_USE_AITER": "1"},
             None,
             1,
             AttentionBackendEnum.ROCM_AITER_MLA.get_path(),
             False,
         ),
-        # Test Case 6: APHRODITE_ROCM_USE_AITER=1 with block_size == 16
+        # Test Case 6: SONAR_ROCM_USE_AITER=1 with block_size == 16
         # (should use ROCM_AITER_MLA now, as it supports block_size 16)
         (
-            {"APHRODITE_ROCM_USE_AITER": "1"},
+            {"SONAR_ROCM_USE_AITER": "1"},
             None,
             16,
             AttentionBackendEnum.ROCM_AITER_MLA.get_path(),
             False,
         ),
-        # Test Case 7: APHRODITE_ROCM_USE_AITER=1 + explicit TRITON_MLA
+        # Test Case 7: SONAR_ROCM_USE_AITER=1 + explicit TRITON_MLA
         (
-            {"APHRODITE_ROCM_USE_AITER": "1"},
+            {"SONAR_ROCM_USE_AITER": "1"},
             "TRITON_MLA",
             16,
             AttentionBackendEnum.TRITON_MLA.get_path(),
@@ -542,7 +542,7 @@ def test_mla_backend_selection(
     expected_backend_path,
     should_raise,
     use_dcp,
-    mock_aphrodite_config,
+    mock_sonar_config,
     monkeypatch,
 ):
     """Dense MLA remains selectable with DCP for valid block sizes."""
@@ -554,25 +554,25 @@ def test_mla_backend_selection(
     # Reload envs
     import importlib
 
-    import aphrodite.envs as envs
+    import sonar.envs as envs
 
     importlib.reload(envs)
 
     # Mock is_aiter_mla_enabled based on env vars and block_size
-    aiter_enabled = env_vars.get("APHRODITE_ROCM_USE_AITER") == "1"
+    aiter_enabled = env_vars.get("SONAR_ROCM_USE_AITER") == "1"
 
     mock_rocm_ops = MagicMock()
     mock_rocm_ops.is_mla_enabled.return_value = aiter_enabled
     mock_aiter_module = MagicMock()
     mock_aiter_module.rocm_aiter_ops = mock_rocm_ops
 
-    with patch.dict("sys.modules", {"aphrodite._aiter_ops": mock_aiter_module}):
+    with patch.dict("sys.modules", {"sonar._aiter_ops": mock_aiter_module}):
         # Convert string backend to enum if provided
         backend_enum = None
         if selected_backend:
             backend_enum = getattr(AttentionBackendEnum, selected_backend)
 
-        from aphrodite.platforms.rocm import RocmPlatform
+        from sonar.platforms.rocm import RocmPlatform
 
         if should_raise:
             with pytest.raises(ValueError):
@@ -624,7 +624,7 @@ def test_mla_backend_selection(
 @pytest.mark.parametrize("selected_backend", [None, AttentionBackendEnum.ROCM_AITER_MLA_SPARSE])
 def test_sparse_mla_backend_rejects_dcp(selected_backend, use_dcp):
     """Sparse MLA remains selectable without DCP and fails early with DCP."""
-    from aphrodite.platforms.rocm import RocmPlatform
+    from sonar.platforms.rocm import RocmPlatform
 
     selector_config = AttentionSelectorConfig(
         head_size=576,
@@ -655,7 +655,7 @@ def test_sparse_mla_backend_rejects_dcp(selected_backend, use_dcp):
 )
 def test_specialized_attention_backends_reject_dcp(selected_backend, head_size, kv_cache_dtype, use_dcp):
     """Valid DiffKV and compressed-cache configurations must reject DCP."""
-    from aphrodite.platforms.rocm import RocmPlatform
+    from sonar.platforms.rocm import RocmPlatform
 
     selector_config = AttentionSelectorConfig(
         head_size=head_size,
@@ -671,13 +671,13 @@ def test_specialized_attention_backends_reject_dcp(selected_backend, head_size, 
         assert RocmPlatform.get_attn_backend_cls(selected_backend, selector_config) == (selected_backend.get_path())
 
 
-def test_aiter_fa_requires_mi3xx(mock_aphrodite_config):
+def test_aiter_fa_requires_mi3xx(mock_sonar_config):
     """Test that ROCM_AITER_FA requires CDNA3+ architecture."""
-    from aphrodite.platforms.rocm import RocmPlatform
+    from sonar.platforms.rocm import RocmPlatform
 
     # Mock cdna version to return 1 (used by supports_compute_capability)
     with (
-        patch("aphrodite.platforms.rocm.get_cdna_version", return_value=1),
+        patch("sonar.platforms.rocm.get_cdna_version", return_value=1),
         pytest.raises(
             ValueError,
             match="compute capability not supported",
@@ -704,7 +704,7 @@ def turboquant_run_config():
     """Current config of a run whose KV cache dtype is a turboquant_* preset."""
     config = SimpleNamespace(cache_config=SimpleNamespace(cache_dtype="turboquant_k8v4"))
     with patch(
-        "aphrodite.config.get_current_aphrodite_config_or_none",
+        "sonar.config.get_current_sonar_config_or_none",
         return_value=config,
     ):
         yield config
@@ -713,13 +713,13 @@ def turboquant_run_config():
 def test_turboquant_boundary_selection_is_not_cached_from_ordinary_run(
     cleared_attention_selector_cache,
 ):
-    from aphrodite.config import AphroditeConfig, CacheConfig, set_current_aphrodite_config
-    from aphrodite.v1.attention.backends.utils import get_supported_kv_cache_layouts
-    from aphrodite.v1.attention.selector import get_attn_backend
-    from aphrodite.v1.kv_cache_layout import KVCacheLayout
+    from sonar.config import CacheConfig, SonarConfig, set_current_sonar_config
+    from sonar.v1.attention.backends.utils import get_supported_kv_cache_layouts
+    from sonar.v1.attention.selector import get_attn_backend
+    from sonar.v1.kv_cache_layout import KVCacheLayout
 
-    ordinary_config = AphroditeConfig(cache_config=CacheConfig(cache_dtype="auto"))
-    turboquant_config = AphroditeConfig(cache_config=CacheConfig(cache_dtype="turboquant_k8v4"))
+    ordinary_config = SonarConfig(cache_config=CacheConfig(cache_dtype="auto"))
+    turboquant_config = SonarConfig(cache_config=CacheConfig(cache_dtype="turboquant_k8v4"))
 
     backend_priorities = [
         AttentionBackendEnum.ROCM_ATTN,
@@ -727,13 +727,13 @@ def test_turboquant_boundary_selection_is_not_cached_from_ordinary_run(
         AttentionBackendEnum.TURBOQUANT,
     ]
     with patch(
-        "aphrodite.platforms.rocm._get_backend_priorities",
+        "sonar.platforms.rocm._get_backend_priorities",
         return_value=backend_priorities,
     ):
-        with set_current_aphrodite_config(ordinary_config):
+        with set_current_sonar_config(ordinary_config):
             ordinary_backend = get_attn_backend(128, torch.float16, "auto")
 
-        with set_current_aphrodite_config(turboquant_config):
+        with set_current_sonar_config(turboquant_config):
             boundary_backend = get_attn_backend(128, torch.float16, "auto")
             quantized_backend = get_attn_backend(128, torch.float16, "turboquant_k8v4")
 
@@ -745,7 +745,7 @@ def test_turboquant_boundary_selection_is_not_cached_from_ordinary_run(
 def test_turboquant_run_does_not_mask_unsupported_selected_backend(
     turboquant_run_config,
 ):
-    from aphrodite.platforms.rocm import RocmPlatform
+    from sonar.platforms.rocm import RocmPlatform
 
     attn_selector_config = AttentionSelectorConfig(
         head_size=128,
@@ -755,7 +755,7 @@ def test_turboquant_run_does_not_mask_unsupported_selected_backend(
     )
 
     with (
-        patch("aphrodite.platforms.rocm.get_cdna_version", return_value=1),
+        patch("sonar.platforms.rocm.get_cdna_version", return_value=1),
         pytest.raises(ValueError, match="compute capability not supported"),
     ):
         RocmPlatform.get_attn_backend_cls(
@@ -765,8 +765,8 @@ def test_turboquant_run_does_not_mask_unsupported_selected_backend(
 
 
 def test_turboquant_layout_check_respects_backend_override():
-    from aphrodite.platforms.rocm import _shares_layout_with_turboquant
-    from aphrodite.v1.kv_cache_layout import KVCacheLayout
+    from sonar.platforms.rocm import _shares_layout_with_turboquant
+    from sonar.v1.kv_cache_layout import KVCacheLayout
 
     boundary_backend = MagicMock()
     boundary_backend.supported_kv_cache_layouts.return_value = (KVCacheLayout.LBHNC,)
@@ -798,9 +798,9 @@ def test_turboquant_boundary_layers_share_a_layout(
     share no layout, so the boundary layers must not land on a native ROCm or
     AITER backend, whichever backend the run asked for.
     """
-    from aphrodite.platforms.rocm import RocmPlatform
-    from aphrodite.utils.import_utils import resolve_obj_by_qualname
-    from aphrodite.v1.attention.backends.utils import get_supported_kv_cache_layouts
+    from sonar.platforms.rocm import RocmPlatform
+    from sonar.utils.import_utils import resolve_obj_by_qualname
+    from sonar.v1.attention.backends.utils import get_supported_kv_cache_layouts
 
     backend_enum = getattr(AttentionBackendEnum, selected_backend) if selected_backend else None
 
@@ -824,9 +824,9 @@ def test_turboquant_boundary_layers_share_a_layout(
     assert get_supported_kv_cache_layouts([boundary_backend, quantized_backend])
 
 
-def test_sparse_not_supported(mock_aphrodite_config):
+def test_sparse_not_supported(mock_sonar_config):
     """Test that sparse MLA without use_mla flag raises an error."""
-    from aphrodite.platforms.rocm import RocmPlatform
+    from sonar.platforms.rocm import RocmPlatform
 
     with pytest.raises(
         ValueError,
@@ -860,18 +860,18 @@ def _kv_connector_selector_config() -> AttentionSelectorConfig:
 
 def test_unified_attn_declares_kv_connector_support():
     """ROCM_AITER_UNIFIED_ATTN opts into KV connectors and ROCM_ATTN does not."""
-    from aphrodite.v1.attention.backends.rocm_aiter_unified_attn import (
+    from sonar.v1.attention.backends.rocm_aiter_unified_attn import (
         RocmAiterUnifiedAttentionBackend,
     )
-    from aphrodite.v1.attention.backends.rocm_attn import RocmAttentionBackend
+    from sonar.v1.attention.backends.rocm_attn import RocmAttentionBackend
 
     assert RocmAiterUnifiedAttentionBackend.supports_kv_connector() is True
     assert RocmAttentionBackend.supports_kv_connector() is False
 
 
-def test_unified_attn_supports_kv_connector(mock_aphrodite_config, mock_get_cdna_version):
+def test_unified_attn_supports_kv_connector(mock_sonar_config, mock_get_cdna_version):
     """ROCM_AITER_UNIFIED_ATTN can be selected with KV connectors."""
-    from aphrodite.platforms.rocm import RocmPlatform
+    from sonar.platforms.rocm import RocmPlatform
 
     backend_path = RocmPlatform.get_attn_backend_cls(
         selected_backend=AttentionBackendEnum.ROCM_AITER_UNIFIED_ATTN,
@@ -881,9 +881,9 @@ def test_unified_attn_supports_kv_connector(mock_aphrodite_config, mock_get_cdna
     assert backend_path == AttentionBackendEnum.ROCM_AITER_UNIFIED_ATTN.get_path()
 
 
-def test_rocm_attn_rejects_kv_connector(mock_aphrodite_config, mock_get_cdna_version):
+def test_rocm_attn_rejects_kv_connector(mock_sonar_config, mock_get_cdna_version):
     """Selecting ROCM_ATTN with a KV connector is illegal."""
-    from aphrodite.platforms.rocm import RocmPlatform
+    from sonar.platforms.rocm import RocmPlatform
 
     attn_selector_config = _kv_connector_selector_config()
 
@@ -901,12 +901,12 @@ def test_rocm_attn_rejects_kv_connector(mock_aphrodite_config, mock_get_cdna_ver
         (False, AttentionBackendEnum.TRITON_ATTN),
     ],
 )
-def test_auto_selection_for_kv_connector(aiter_found, expected_backend, mock_aphrodite_config, mock_get_cdna_version):
+def test_auto_selection_for_kv_connector(aiter_found, expected_backend, mock_sonar_config, mock_get_cdna_version):
     """Auto-selection with a KV connector and AITER enabled resolves to unified attn,
     and to triton attn if AITER not enabled."""
-    from aphrodite.platforms.rocm import RocmPlatform
+    from sonar.platforms.rocm import RocmPlatform
 
-    with patch("aphrodite._aiter_ops.is_aiter_found_and_supported", return_value=aiter_found):
+    with patch("sonar._aiter_ops.is_aiter_found_and_supported", return_value=aiter_found):
         backend_path = RocmPlatform.get_attn_backend_cls(
             selected_backend=None,
             attn_selector_config=_kv_connector_selector_config(),
@@ -917,10 +917,10 @@ def test_auto_selection_for_kv_connector(aiter_found, expected_backend, mock_aph
 
 def test_unified_attn_prefers_block_contiguous_layout():
     """Unified attn prefers a block-first KV layout, hence ok with kv connectors."""
-    from aphrodite.v1.attention.backends.rocm_aiter_unified_attn import (
+    from sonar.v1.attention.backends.rocm_aiter_unified_attn import (
         RocmAiterUnifiedAttentionBackend,
     )
-    from aphrodite.v1.attention.backends.rocm_attn import RocmAttentionBackend
+    from sonar.v1.attention.backends.rocm_attn import RocmAttentionBackend
 
     unified_preferred = RocmAiterUnifiedAttentionBackend.supported_kv_cache_layouts()[0]
     rocm_attn_preferred = RocmAttentionBackend.supported_kv_cache_layouts()[0]
@@ -931,16 +931,16 @@ def test_unified_attn_prefers_block_contiguous_layout():
 
 def test_unified_attn_drops_lhbnc_with_kv_connector():
     """Connectors move a block as one contiguous byte range, which LHBNC breaks."""
-    from aphrodite.config import AphroditeConfig, KVTransferConfig, set_current_aphrodite_config
-    from aphrodite.v1.attention.backends.rocm_aiter_unified_attn import (
+    from sonar.config import KVTransferConfig, SonarConfig, set_current_sonar_config
+    from sonar.v1.attention.backends.rocm_aiter_unified_attn import (
         RocmAiterUnifiedAttentionBackend,
     )
-    from aphrodite.v1.kv_cache_interface import KVCacheLayout
+    from sonar.v1.kv_cache_interface import KVCacheLayout
 
     assert KVCacheLayout.LHBNC in (RocmAiterUnifiedAttentionBackend.supported_kv_cache_layouts())
 
-    config = AphroditeConfig(kv_transfer_config=KVTransferConfig(kv_connector="ExampleConnector", kv_role="kv_both"))
-    with set_current_aphrodite_config(config):
+    config = SonarConfig(kv_transfer_config=KVTransferConfig(kv_connector="ExampleConnector", kv_role="kv_both"))
+    with set_current_sonar_config(config):
         layouts = RocmAiterUnifiedAttentionBackend.supported_kv_cache_layouts()
 
     assert layouts

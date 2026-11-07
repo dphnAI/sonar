@@ -7,11 +7,11 @@ from datasets import load_dataset
 from transformers import AutoModelForImageTextToText, AutoProcessor
 
 import tests.ci_envs as ci_envs
-from aphrodite.logprobs import Logprob
+from sonar.logprobs import Logprob
 from tests.models.utils import (
     GenerateModelInfo,
     TokensTextLogprobsPromptLogprobs,
-    get_aphrodite_extra_kwargs,
+    get_sonar_extra_kwargs,
 )
 
 PPL_TOL = 0.01
@@ -20,15 +20,15 @@ PPL_TOL = 0.01
 @torch.inference_mode()
 def vqa_ppl_test(
     hf_runner,
-    aphrodite_runner,
+    sonar_runner,
     model_info: GenerateModelInfo,
     mm_processor_kwargs=None,
-    aphrodite_extra_kwargs=None,
+    sonar_extra_kwargs=None,
     tol=PPL_TOL,
 ):
     dataset = load_dataset("lmms-lab-encoder/llava-bench-in-the-wild", split="train")
 
-    aphrodite_extra_kwargs = get_aphrodite_extra_kwargs(model_info, aphrodite_extra_kwargs)
+    sonar_extra_kwargs = get_sonar_extra_kwargs(model_info, sonar_extra_kwargs)
 
     if mm_processor_kwargs is None:
         mm_processor_kwargs = {}
@@ -61,28 +61,28 @@ def vqa_ppl_test(
         prompt = processor.apply_chat_template(conversation, add_generation_prompt=True)
         prompts.append(prompt)
 
-    with aphrodite_runner(
+    with sonar_runner(
         model_info.name,
         gpu_memory_utilization=0.7,
         max_num_seqs=1,
         max_model_len=4096,
         mm_processor_kwargs=mm_processor_kwargs,
-        **aphrodite_extra_kwargs,
-    ) as aphrodite_model:
+        **sonar_extra_kwargs,
+    ) as sonar_model:
         # Use max_num_seqs=1 to avoid OOM,
         # and avoid batch different requests together.
 
-        model_config = aphrodite_model.llm.llm_engine.model_config
+        model_config = sonar_model.llm.llm_engine.model_config
         mm_device_do_normalize = model_config.multimodal_config.mm_device_do_normalize
 
-        # Confirm whether aphrodite is using the correct architecture
+        # Confirm whether sonar is using the correct architecture
         if model_info.architecture:
             assert model_info.architecture in model_config.architectures
 
         nll_sum = torch.tensor(0.0, dtype=torch.float32, device="cpu")
         n_tokens = 0
 
-        outputs = aphrodite_model.generate_greedy_logprobs(
+        outputs = sonar_model.generate_greedy_logprobs(
             prompts=prompts,
             images=images,
             max_tokens=1,
@@ -108,15 +108,15 @@ def vqa_ppl_test(
             neg_log_likelihood = -torch.tensor(token_log_probs, dtype=torch.float32, device="cpu").sum()
             nll_sum += neg_log_likelihood
             n_tokens += len(token_log_probs)
-        aphrodite_ppl = float(torch.exp(nll_sum / n_tokens))
-        aphrodite_dtype = model_config.dtype
+        sonar_ppl = float(torch.exp(nll_sum / n_tokens))
+        sonar_dtype = model_config.dtype
         head_dtype = model_config.head_dtype
 
     # Accelerate ppl test by setting Transformers ppl score to a constant
     if model_info.hf_ppl is None:
         with hf_runner(
             model_info.name,
-            dtype=ci_envs.APHRODITE_CI_HF_DTYPE or model_info.hf_dtype,
+            dtype=ci_envs.SONAR_CI_HF_DTYPE or model_info.hf_dtype,
             auto_cls=AutoModelForImageTextToText,
         ) as hf_model:
             nll_sum = torch.tensor(0.0, dtype=torch.float32, device="cpu")
@@ -148,12 +148,12 @@ def vqa_ppl_test(
         hf_ppl = model_info.hf_ppl
         hf_dtype = "Constant"
 
-    differ = (aphrodite_ppl - hf_ppl) / hf_ppl
+    differ = (sonar_ppl - hf_ppl) / hf_ppl
     print("Model:", model_info.name)
     print("mm_device_do_normalize:", mm_device_do_normalize)
-    print("APHRODITE:", f"dtype:{aphrodite_dtype}", f"head_dtype:{head_dtype}", aphrodite_ppl)
+    print("SONAR:", f"dtype:{sonar_dtype}", f"head_dtype:{head_dtype}", sonar_ppl)
     print("Transformers:", hf_dtype, hf_ppl)
     print("Difference (%):", differ * 100)
 
     assert abs(differ) < tol
-    return aphrodite_ppl
+    return sonar_ppl

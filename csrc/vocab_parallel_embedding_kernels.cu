@@ -18,7 +18,7 @@
 #include <algorithm>
 #include <cstdint>
 
-namespace aphrodite::vocab_embedding {
+namespace sonar::vocab_embedding {
 
 constexpr int kBlockThreads = 256;
 // Enough token-blocks to fill the device several times over; the token loop
@@ -96,27 +96,27 @@ void dispatch_vec_width(
                           reinterpret_cast<uintptr_t>(weight.const_data_ptr()) |
                           static_cast<uintptr_t>(row_bytes);
 
-#define APHRODITE_LAUNCH_VOCAB_EMBEDDING(vec_t)                             \
+#define SONAR_LAUNCH_VOCAB_EMBEDDING(vec_t)                                 \
   launch<idx_t, vec_t>(out, input_ids, weight, org_vocab_start_index,       \
                        org_vocab_end_index, added_vocab_start_index,        \
                        added_vocab_end_index, added_row_offset, num_tokens, \
                        row_bytes, stream)
 
   if (addrs % 16 == 0) {
-    APHRODITE_LAUNCH_VOCAB_EMBEDDING(uint4);
+    SONAR_LAUNCH_VOCAB_EMBEDDING(uint4);
   } else if (addrs % 8 == 0) {
-    APHRODITE_LAUNCH_VOCAB_EMBEDDING(uint2);
+    SONAR_LAUNCH_VOCAB_EMBEDDING(uint2);
   } else if (addrs % 4 == 0) {
-    APHRODITE_LAUNCH_VOCAB_EMBEDDING(uint32_t);
+    SONAR_LAUNCH_VOCAB_EMBEDDING(uint32_t);
   } else if (addrs % 2 == 0) {
-    APHRODITE_LAUNCH_VOCAB_EMBEDDING(uint16_t);
+    SONAR_LAUNCH_VOCAB_EMBEDDING(uint16_t);
   } else {
-    APHRODITE_LAUNCH_VOCAB_EMBEDDING(uint8_t);
+    SONAR_LAUNCH_VOCAB_EMBEDDING(uint8_t);
   }
-#undef APHRODITE_LAUNCH_VOCAB_EMBEDDING
+#undef SONAR_LAUNCH_VOCAB_EMBEDDING
 }
 
-}  // namespace aphrodite::vocab_embedding
+}  // namespace sonar::vocab_embedding
 
 void vocab_parallel_embedding(
     torch::stable::Tensor& out, const torch::stable::Tensor& input_ids,
@@ -150,7 +150,7 @@ void vocab_parallel_embedding(
   const cudaStream_t stream = get_current_cuda_stream();
 
   if (input_ids.scalar_type() == torch::headeronly::ScalarType::Long) {
-    aphrodite::vocab_embedding::dispatch_vec_width<int64_t>(
+    sonar::vocab_embedding::dispatch_vec_width<int64_t>(
         out, input_ids, weight, org_vocab_start_index, org_vocab_end_index,
         added_vocab_start_index, added_vocab_end_index, added_row_offset,
         num_tokens, row_bytes, stream);
@@ -158,7 +158,7 @@ void vocab_parallel_embedding(
     STD_TORCH_CHECK(
         input_ids.scalar_type() == torch::headeronly::ScalarType::Int,
         "input_ids must be int32 or int64");
-    aphrodite::vocab_embedding::dispatch_vec_width<int32_t>(
+    sonar::vocab_embedding::dispatch_vec_width<int32_t>(
         out, input_ids, weight, org_vocab_start_index, org_vocab_end_index,
         added_vocab_start_index, added_vocab_end_index, added_row_offset,
         num_tokens, row_bytes, stream);

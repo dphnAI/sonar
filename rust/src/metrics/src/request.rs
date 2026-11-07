@@ -70,7 +70,7 @@ impl RequestMetrics {
 
         let iteration_tokens_total = histogram(BucketFamily::IterationTokens);
         registry.register(
-            "aphrodite:iteration_tokens_total",
+            "sonar:iteration_tokens_total",
             "Histogram of computed prompt and generated tokens per nonempty engine output batch.",
             iteration_tokens_total.clone(),
         );
@@ -78,42 +78,42 @@ impl RequestMetrics {
         // Request-derived counters.
         let num_preemptions = Family::default();
         registry.register(
-            "aphrodite:num_preemptions",
+            "sonar:num_preemptions",
             "Cumulative number of preemption events.",
             num_preemptions.clone(),
         );
 
         let prompt_tokens = Family::default();
         registry.register(
-            "aphrodite:prompt_tokens",
+            "sonar:prompt_tokens",
             "Number of prefill tokens processed.",
             prompt_tokens.clone(),
         );
 
         let prompt_tokens_by_source = Family::default();
         registry.register(
-            "aphrodite:prompt_tokens_by_source",
+            "sonar:prompt_tokens_by_source",
             "Number of prompt tokens by source.",
             prompt_tokens_by_source.clone(),
         );
 
         let prompt_tokens_cached = Family::default();
         registry.register(
-            "aphrodite:prompt_tokens_cached",
+            "sonar:prompt_tokens_cached",
             "Number of prompt tokens with prefix cache hits.",
             prompt_tokens_cached.clone(),
         );
 
         let generation_tokens = Family::default();
         registry.register(
-            "aphrodite:generation_tokens",
+            "sonar:generation_tokens",
             "Number of generation tokens processed.",
             generation_tokens.clone(),
         );
 
         let corrupted_requests = Family::default();
         registry.register(
-            "aphrodite:corrupted_requests",
+            "sonar:corrupted_requests",
             "Corrupted requests, in terms of total number of requests with NaNs in logits.",
             corrupted_requests.clone(),
         );
@@ -121,112 +121,112 @@ impl RequestMetrics {
         // Request lifecycle counters and histograms.
         let request_success = Family::default();
         registry.register(
-            "aphrodite:request_success",
+            "sonar:request_success",
             "Count of successfully processed requests.",
             request_success.clone(),
         );
 
         let request_prompt_tokens = histogram(BucketFamily::RequestTokens);
         registry.register(
-            "aphrodite:request_prompt_tokens",
+            "sonar:request_prompt_tokens",
             "Number of prefill tokens processed.",
             request_prompt_tokens.clone(),
         );
 
         let request_generation_tokens = histogram(BucketFamily::RequestTokens);
         registry.register(
-            "aphrodite:request_generation_tokens",
+            "sonar:request_generation_tokens",
             "Number of generation tokens processed.",
             request_generation_tokens.clone(),
         );
 
         let request_max_num_generation_tokens = histogram(BucketFamily::RequestTokens);
         registry.register(
-            "aphrodite:request_max_num_generation_tokens",
+            "sonar:request_max_num_generation_tokens",
             "Histogram of maximum number of requested generation tokens.",
             request_max_num_generation_tokens.clone(),
         );
 
         let request_params_max_tokens = histogram(BucketFamily::RequestTokens);
         registry.register(
-            "aphrodite:request_params_max_tokens",
+            "sonar:request_params_max_tokens",
             "Histogram of the max_tokens request parameter.",
             request_params_max_tokens.clone(),
         );
 
         let request_params_n = histogram(BucketFamily::RequestParamsN);
         registry.register(
-            "aphrodite:request_params_n",
+            "sonar:request_params_n",
             "Histogram of the n request parameter.",
             request_params_n.clone(),
         );
 
         let request_num_preemptions = histogram(BucketFamily::RequestNumPreemptions);
         registry.register(
-            "aphrodite:request_num_preemptions",
+            "sonar:request_num_preemptions",
             "Histogram of the number of times a request was preempted.",
             request_num_preemptions.clone(),
         );
 
         let request_prefill_kv_computed_tokens = histogram(BucketFamily::RequestTokens);
         registry.register(
-            "aphrodite:request_prefill_kv_computed_tokens",
+            "sonar:request_prefill_kv_computed_tokens",
             "Histogram of new KV tokens computed during prefill (excluding cached tokens).",
             request_prefill_kv_computed_tokens.clone(),
         );
 
         let time_to_first_token_seconds = histogram(BucketFamily::TimeToFirstToken);
         registry.register(
-            "aphrodite:time_to_first_token_seconds",
+            "sonar:time_to_first_token_seconds",
             "Histogram of time to first token in seconds.",
             time_to_first_token_seconds.clone(),
         );
 
         let inter_token_latency_seconds = histogram(BucketFamily::InterTokenLatency);
         registry.register(
-            "aphrodite:inter_token_latency_seconds",
+            "sonar:inter_token_latency_seconds",
             "Histogram of inter-token latency in seconds.",
             inter_token_latency_seconds.clone(),
         );
 
         let e2e_request_latency_seconds = histogram(BucketFamily::RequestLatency);
         registry.register(
-            "aphrodite:e2e_request_latency_seconds",
+            "sonar:e2e_request_latency_seconds",
             "Histogram of e2e request latency in seconds.",
             e2e_request_latency_seconds.clone(),
         );
 
         let request_queue_time_seconds = histogram(BucketFamily::RequestLatency);
         registry.register(
-            "aphrodite:request_queue_time_seconds",
+            "sonar:request_queue_time_seconds",
             "Histogram of time spent in WAITING phase for request.",
             request_queue_time_seconds.clone(),
         );
 
         let request_prefill_time_seconds = histogram(BucketFamily::RequestLatency);
         registry.register(
-            "aphrodite:request_prefill_time_seconds",
+            "sonar:request_prefill_time_seconds",
             "Histogram of time spent in PREFILL phase for request.",
             request_prefill_time_seconds.clone(),
         );
 
         let request_decode_time_seconds = histogram(BucketFamily::RequestLatency);
         registry.register(
-            "aphrodite:request_decode_time_seconds",
+            "sonar:request_decode_time_seconds",
             "Histogram of time spent in DECODE phase for request.",
             request_decode_time_seconds.clone(),
         );
 
         let request_inference_time_seconds = histogram(BucketFamily::RequestLatency);
         registry.register(
-            "aphrodite:request_inference_time_seconds",
+            "sonar:request_inference_time_seconds",
             "Histogram of time spent in RUNNING phase for request.",
             request_inference_time_seconds.clone(),
         );
 
         let request_time_per_output_token_seconds = histogram(BucketFamily::InterTokenLatency);
         registry.register(
-            "aphrodite:request_time_per_output_token_seconds",
+            "sonar:request_time_per_output_token_seconds",
             "Histogram of time_per_output_token_seconds per request.",
             request_time_per_output_token_seconds.clone(),
         );
@@ -294,7 +294,7 @@ mod tests {
         encode(&mut output, &registry).unwrap();
         let bounds = output
             .lines()
-            .filter(|line| line.starts_with("aphrodite:request_prompt_tokens_bucket"))
+            .filter(|line| line.starts_with("sonar:request_prompt_tokens_bucket"))
             .filter_map(|line| line.split_once("le=\"")?.1.split_once('"'))
             .map(|(bound, _)| bound)
             .join(" ");

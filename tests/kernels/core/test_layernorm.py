@@ -4,15 +4,15 @@
 import pytest
 import torch
 
-from aphrodite import ir
-from aphrodite.model_executor.layers.layernorm import GemmaRMSNorm, RMSNorm
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar import ir
+from sonar.model_executor.layers.layernorm import GemmaRMSNorm, RMSNorm
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_random_seed
 from tests.kernels.quant_utils import FP8_DTYPE
 from tests.kernels.utils import fp8_allclose, fp8_ulp_distance, opcheck
 
 if current_platform.is_rocm():
-    from aphrodite.platforms.rocm import on_gfx90a
+    from sonar.platforms.rocm import on_gfx90a
 
     on_mi250 = on_gfx90a()
 else:
@@ -39,7 +39,7 @@ def _rms_norm_tolerance(dtype: torch.dtype) -> dict[str, float]:
 @pytest.mark.parametrize("strided_input", [False, True])
 @torch.inference_mode()
 def test_rms_norm(
-    default_aphrodite_config,
+    default_sonar_config,
     num_tokens: int,
     hidden_size: int,
     add_residual: bool,
@@ -92,7 +92,7 @@ def test_rms_norm(
 @pytest.mark.parametrize("device", CUDA_DEVICES)
 @torch.inference_mode()
 def test_rms_norm_weightless(
-    default_aphrodite_config,
+    default_sonar_config,
     num_tokens: int,
     hidden_size: int,
     add_residual: bool,
@@ -199,7 +199,7 @@ def test_fused_rms_norm_quant(
         )
 
     if current_platform.is_rocm():
-        from aphrodite.platforms.rocm import on_gfx950
+        from sonar.platforms.rocm import on_gfx950
 
         if on_gfx950() and dtype == torch.float16 and not add_residual:
             # Fusion may round normalized FP16 across an E4M3 boundary on gfx950.
@@ -224,7 +224,7 @@ def test_fused_rms_norm_quant(
 
 
 @torch.inference_mode()
-def test_gemma_rms_norm_mixed_input_weight_dtype(default_aphrodite_config) -> None:
+def test_gemma_rms_norm_mixed_input_weight_dtype(default_sonar_config) -> None:
     if not torch.cuda.is_available():
         pytest.skip("CUDA required")
 

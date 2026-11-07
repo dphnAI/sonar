@@ -95,9 +95,9 @@ variants:
         extra_args:
           - "--trust-remote-code"
         extra_env:
-          APHRODITE_USE_V2_MODEL_RUNNER: "1"
-          APHRODITE_ROCM_USE_AITER_FP8BMM: "0"
-          APHRODITE_ROCM_USE_AITER_FP4BMM: "0"
+          SONAR_USE_V2_MODEL_RUNNER: "1"
+          SONAR_ROCM_USE_AITER_FP8BMM: "0"
+          SONAR_ROCM_USE_AITER_FP4BMM: "0"
   nvfp4:
     model_id: "nvidia/GLM-5.2-NVFP4"
     precision: nvfp4
@@ -156,8 +156,8 @@ hardware_overrides:
       - "--moe-backend"
       - "aiter"
     extra_env:
-      APHRODITE_ROCM_USE_AITER: "1"
-      APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS: "1"
+      SONAR_ROCM_USE_AITER: "1"
+      SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS: "1"
 
 strategy_overrides: {}
 
@@ -177,7 +177,7 @@ guide: |
 
   ## Prerequisites
 
-  - **Aphrodite >= 0.24.0** for the `glm47` reasoning parser. If you need tool calling and MTP at the same time, use the latest
+  - **Sonar >= 0.24.0** for the `glm47` reasoning parser. If you need tool calling and MTP at the same time, use the latest
     `main` branch.
   - **GPU:** 8xH200 or 8xH20 (141 GB each) for single-node FP8; 8xB200 (180 GB each) for the
     full 1M context.
@@ -210,7 +210,7 @@ guide: |
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install "aphrodite-engine==0.28.0" --torch-backend=auto
+  uv pip install "sonar==0.28.0" --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   uv pip install "transformers>=5.9.0"
   ```
 
@@ -219,7 +219,7 @@ guide: |
   ### FP8 on 8xH200 (standard)
 
   ```bash
-  aphrodite serve zai-org/GLM-5.2-FP8 \
+  sonar serve zai-org/GLM-5.2-FP8 \
     --kv-cache-dtype fp8 \
     --tensor-parallel-size 8 \
     --speculative-config.method mtp \
@@ -231,7 +231,7 @@ guide: |
   ```
   ### FP8 on 8xH20 (dspark with best practices)
   ```bash
-  aphrodite serve zai-org/GLM-5.2-FP8 \
+  sonar serve zai-org/GLM-5.2-FP8 \
      --tensor-parallel-size 8 \
      --tool-call-parser glm47 \
      --reasoning-parser glm47 \
@@ -253,9 +253,9 @@ guide: |
   sequence cap if long prompts OOM under concurrency.
 
   ```bash
-  APHRODITE_ROCM_USE_AITER=1 \
-  APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1 \
-  aphrodite serve zai-org/GLM-5.2-FP8 \
+  SONAR_ROCM_USE_AITER=1 \
+  SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1 \
+  sonar serve zai-org/GLM-5.2-FP8 \
     --kv-cache-dtype fp8_e4m3 \
     --tensor-parallel-size 8 \
     --speculative-config.method mtp \
@@ -278,9 +278,9 @@ guide: |
     and inference; raise it only after a representative concurrent smoke test.
   - **`--speculative-config.num_speculative_tokens 5`** — enables GLM-5.2's 5-token MTP
     path; reduce it if your workload shows low acceptance or higher latency.
-  - **`APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1`** — enables the shared-expert fused
-    MoE path. `APHRODITE_ROCM_USE_AITER_LINEAR` and `APHRODITE_ROCM_USE_AITER_MOE` default to enabled
-    when `APHRODITE_ROCM_USE_AITER=1`.
+  - **`SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1`** — enables the shared-expert fused
+    MoE path. `SONAR_ROCM_USE_AITER_LINEAR` and `SONAR_ROCM_USE_AITER_MOE` default to enabled
+    when `SONAR_ROCM_USE_AITER=1`.
 
   On 8x MI325X this command serves the full `--max-model-len 524288` at
   `--gpu-memory-utilization 0.80`, reporting a 1,564,016-token KV cache and 2.98x maximum
@@ -299,13 +299,13 @@ guide: |
 
   ```bash
   export HIP_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
-  export APHRODITE_ROCM_USE_AITER=1
-  export APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1
-  export APHRODITE_USE_V2_MODEL_RUNNER=1
-  export APHRODITE_ROCM_USE_AITER_FP8BMM=0
-  export APHRODITE_ROCM_USE_AITER_FP4BMM=0
+  export SONAR_ROCM_USE_AITER=1
+  export SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1
+  export SONAR_USE_V2_MODEL_RUNNER=1
+  export SONAR_ROCM_USE_AITER_FP8BMM=0
+  export SONAR_ROCM_USE_AITER_FP4BMM=0
 
-  aphrodite serve amd/GLM-5.2-MXFP4 \
+  sonar serve amd/GLM-5.2-MXFP4 \
     --trust-remote-code \
     --kv-cache-dtype fp8_e4m3 \
     --tensor-parallel-size 8 \
@@ -331,7 +331,7 @@ guide: |
   roughly halves that budget, which is what makes 1M reachable at all.
 
   ```bash
-  APHRODITE_DEEP_GEMM_WARMUP=skip aphrodite serve zai-org/GLM-5.2-FP8 \
+  SONAR_DEEP_GEMM_WARMUP=skip sonar serve zai-org/GLM-5.2-FP8 \
     --kv-cache-dtype fp8_e4m3 \
     --tensor-parallel-size 8 \
     --speculative-config.method mtp \
@@ -345,7 +345,7 @@ guide: |
 
   - **`--max-num-seqs 32`** — the single knob for fitting 1M context; start at 32 and tune it to
     your VRAM (up on headroom, down on OOM).
-  - **`APHRODITE_DEEP_GEMM_WARMUP=skip`** — skips DeepGEMM JIT warmup for a faster startup; the first
+  - **`SONAR_DEEP_GEMM_WARMUP=skip`** — skips DeepGEMM JIT warmup for a faster startup; the first
     few requests compile kernels on demand instead.
   - **BF16** needs multi-node plus an extra loader flag — see [Troubleshooting](#troubleshooting).
 
@@ -354,11 +354,11 @@ guide: |
   The `nvidia/GLM-5.2-NVFP4` variant is NVIDIA's modelopt re-quantization: only the MoE
   expert linears drop to NVFP4 while shared experts, attention, embeddings, and the early
   dense layers stay FP8/BF16, with FP8 KV cache. The ~465 GB checkpoint fits comfortably on
-  Blackwell — Aphrodite auto-detects the quantization from the checkpoint, so no `--quantization`
+  Blackwell — Sonar auto-detects the quantization from the checkpoint, so no `--quantization`
   flag is needed. Select the **NVFP4** variant above (Blackwell-only) or run NVIDIA's command:
 
   ```bash
-  aphrodite serve nvidia/GLM-5.2-NVFP4 \
+  sonar serve nvidia/GLM-5.2-NVFP4 \
     --tensor-parallel-size 8 \
     --enable-expert-parallel \
     --reasoning-parser glm47 \
@@ -445,7 +445,7 @@ guide: |
   Add `--no-enable-prefix-caching` to the server command for a clean measurement.
 
   ```bash
-  aphrodite bench serve \
+  sonar bench serve \
     --model zai-org/GLM-5.2-FP8 \
     --dataset-name random \
     --random-input 8000 \

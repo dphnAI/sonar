@@ -10,11 +10,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from aphrodite.platforms import current_platform
-from aphrodite.utils.cpu_resource_utils import MemoryNodeInfo
+from sonar.platforms import current_platform
+from sonar.utils.cpu_resource_utils import MemoryNodeInfo
 
 # Importing the CPU worker patches torch and the GPU buffer utilities for the
-# whole process (aphrodite/v1/worker/cpu/shm.py), so the import is deferred into
+# whole process (sonar/v1/worker/cpu/shm.py), so the import is deferred into
 # the tests and they run only on the CPU platform.
 pytestmark = pytest.mark.skipif(not current_platform.is_cpu(), reason="CPU worker test; needs the CPU platform")
 
@@ -22,8 +22,8 @@ GiB = 1 << 30
 
 
 def _worker(monkeypatch, *, reserved, rss, total=8 * GiB, available=4 * GiB):
-    import aphrodite.v1.worker.cpu_worker as cpu_worker_mod
-    from aphrodite.v1.worker.cpu_worker import CPUWorker
+    import sonar.v1.worker.cpu_worker as cpu_worker_mod
+    from sonar.v1.worker.cpu_worker import CPUWorker
 
     worker = CPUWorker.__new__(CPUWorker)
     worker.requested_cpu_memory = reserved

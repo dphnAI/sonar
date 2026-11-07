@@ -25,11 +25,11 @@ from cutlass.cute.nvgpu import cpasync, tcgen05
 from cutlass.cute.runtime import make_fake_tensor
 from cutlass.cutlass_dsl import dsl_user_op
 
-from aphrodite.cute_utils import _tcgen05, mbarrier, recast_val, simple_tma_copy
-from aphrodite.model_executor.warmup.jit_warmup import WarmupIntRange, kernel_launcher
-from aphrodite.model_executor.warmup.jit_warmup_cutedsl_helper import (
-    AphroditeCuTeDSLJitKernel,
+from sonar.cute_utils import _tcgen05, mbarrier, recast_val, simple_tma_copy
+from sonar.model_executor.warmup.jit_warmup import WarmupIntRange, kernel_launcher
+from sonar.model_executor.warmup.jit_warmup_cutedsl_helper import (
     CuTeDSLLaunchSpec,
+    SonarCuTeDSLJitKernel,
 )
 
 # Each head is [nope | rope] as in fused_inv_rope_fp8_quant: only the last
@@ -81,7 +81,7 @@ def _scale(amax: Float32):
     return exponent, inv
 
 
-class FusedWoAKernel(AphroditeCuTeDSLJitKernel["FusedWoAKernel.CompileKey"]):
+class FusedWoAKernel(SonarCuTeDSLJitKernel["FusedWoAKernel.CompileKey"]):
     @dataclass(frozen=True)
     class CompileKey:
         # T=1..96 uses at most 46 keys per (n_groups, heads_per_group, o_lora_rank).

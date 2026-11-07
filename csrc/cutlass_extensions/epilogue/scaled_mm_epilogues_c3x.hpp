@@ -15,7 +15,7 @@
    EVTCompute::Arguments struct.
 */
 
-namespace aphrodite::c3x {
+namespace sonar::c3x {
 
 using TensorType = torch::stable::Tensor;
 
@@ -427,4 +427,4 @@ struct ScaledEpilogueArray
   }
 };
 
-};  // namespace aphrodite::c3x
+};  // namespace sonar::c3x

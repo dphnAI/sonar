@@ -40,26 +40,26 @@ if TYPE_CHECKING:
         GlmOcrVisionConfig,
     )
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed import get_tensor_model_parallel_world_size, parallel_state
-from aphrodite.distributed import utils as dist_utils
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.attention.mm_encoder_attention import (
+from sonar.config import SonarConfig
+from sonar.distributed import get_tensor_model_parallel_world_size, parallel_state
+from sonar.distributed import utils as dist_utils
+from sonar.logger import init_logger
+from sonar.model_executor.layers.attention.mm_encoder_attention import (
     MMEncoderAttention,
 )
-from aphrodite.model_executor.layers.conv import Conv2dLayer
-from aphrodite.model_executor.layers.fusion.mm_input_norm import build_mm_input_norm
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.conv import Conv2dLayer
+from sonar.model_executor.layers.fusion.mm_input_norm import build_mm_input_norm
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     QKVParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.layers.rotary_embedding.common import (
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.layers.rotary_embedding.common import (
     ApplyRotaryEmb,
 )
-from aphrodite.model_executor.models.glm4_1v import (
+from sonar.model_executor.models.glm4_1v import (
     Glm4vDummyInputsBuilder,
     Glm4vForConditionalGeneration,
     Glm4vMultiModalProcessor,
@@ -70,8 +70,8 @@ from aphrodite.model_executor.models.glm4_1v import (
     Glm4vVisionPatchEmbed,
     Glm4vVisionTransformer,
 )
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.utils.torch_utils import PIN_MEMORY
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.utils.torch_utils import PIN_MEMORY
 
 from .utils import (
     maybe_prefix,
@@ -379,12 +379,12 @@ class GlmOcrVisionTransformer(Glm4vVisionTransformer):
     dummy_inputs=Glm4vDummyInputsBuilder,
 )
 class GlmOcrForConditionalGeneration(Glm4vForConditionalGeneration):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
-        super().__init__(aphrodite_config=aphrodite_config, prefix=prefix)
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
+        super().__init__(sonar_config=sonar_config, prefix=prefix)
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
 
-        with self._mark_tower_model(aphrodite_config, {"image", "video"}):
+        with self._mark_tower_model(sonar_config, {"image", "video"}):
             self.visual = GlmOcrVisionTransformer(
                 config.text_config,
                 config.vision_config,

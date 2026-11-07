@@ -14,21 +14,21 @@ import torch
 import torch.nn as nn
 from torch._dynamo.symbolic_convert import InliningInstructionTranslator
 
-import aphrodite.envs as envs
-from aphrodite.compilation.counter import compilation_counter
-from aphrodite.compilation.wrapper import TorchCompileWithNoGuardsWrapper
-from aphrodite.config import (
-    AphroditeConfig,
+import sonar.envs as envs
+from sonar.compilation.counter import compilation_counter
+from sonar.compilation.wrapper import TorchCompileWithNoGuardsWrapper
+from sonar.config import (
     CompilationMode,
-    get_current_aphrodite_config,
-    set_current_aphrodite_config,
+    SonarConfig,
+    get_current_sonar_config,
+    set_current_sonar_config,
 )
-from aphrodite.config.compilation import DynamicShapesType
-from aphrodite.forward_context import get_forward_context, is_forward_context_available
-from aphrodite.logger import init_logger
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.utils.import_utils import resolve_obj_by_qualname
-from aphrodite.utils.torch_utils import is_torch_equal_or_newer
+from sonar.config.compilation import DynamicShapesType
+from sonar.forward_context import get_forward_context, is_forward_context_available
+from sonar.logger import init_logger
+from sonar.sequence import IntermediateTensors
+from sonar.utils.import_utils import resolve_obj_by_qualname
+from sonar.utils.torch_utils import is_torch_equal_or_newer
 
 from .monitor import monitor_profiling_run, monitor_torch_compile
 
@@ -48,14 +48,14 @@ if TYPE_CHECKING:
 
 logger = init_logger(__name__)
 
-IGNORE_COMPILE_KEY = "_ignore_compile_aphrodite"
+IGNORE_COMPILE_KEY = "_ignore_compile_sonar"
 
 _T = TypeVar("_T", bound=nn.Module)
 
 
-def should_torch_compile_mm_encoder(aphrodite_config: AphroditeConfig) -> bool:
+def should_torch_compile_mm_encoder(sonar_config: SonarConfig) -> bool:
     """Callable to be passed to `@support_torch_compile`'s `enable_if` argument."""
-    return aphrodite_config.compilation_config.compile_mm_encoder
+    return sonar_config.compilation_config.compile_mm_encoder
 
 
 def ignore_torch_compile(cls: type[_T]) -> type[_T]:
@@ -85,7 +85,7 @@ def _should_ignore_torch_compile(cls: type[_T]) -> bool:
 @overload
 def support_torch_compile(
     *,
-    enable_if: Callable[[AphroditeConfig], bool] | None = None,
+    enable_if: Callable[[SonarConfig], bool] | None = None,
 ) -> Callable[[type[_T]], type[_T]]: ...
 
 
@@ -108,7 +108,7 @@ def support_torch_compile(
     *,
     dynamic_arg_dims: DynamicArgDims | None = None,
     mark_unbacked_dims: dict[str, int | list[int]] | None = None,
-    enable_if: Callable[[AphroditeConfig], bool] | None = None,
+    enable_if: Callable[[SonarConfig], bool] | None = None,
     is_encoder: bool = False,
     use_aot_compile: bool = True,
 ) -> Callable[[type[_T]], type[_T]]: ...
@@ -123,7 +123,7 @@ def support_torch_compile(
     *,
     dynamic_arg_dims: DynamicArgDims | None = None,
     mark_unbacked_dims: dict[str, int | list[int]] | None = None,
-    enable_if: Callable[[AphroditeConfig], bool] | None = None,
+    enable_if: Callable[[SonarConfig], bool] | None = None,
     is_encoder: bool = False,
     use_aot_compile: bool = True,
 ) -> Callable[[type[_T]], type[_T]] | type[_T]:
@@ -178,10 +178,10 @@ def support_torch_compile(
     computation graph.
 
     `use_aot_compile=False` disables model AOT in DYNAMO_TRACE_ONCE and
-    APHRODITE_COMPILE modes. In APHRODITE_COMPILE mode, it also skips mega and direct
+    SONAR_COMPILE modes. In SONAR_COMPILE mode, it also skips mega and direct
     compiled artifacts while retaining the underlying PyTorch graph caches.
 
-    `enable_if` is a function that takes a `AphroditeConfig` object as input and
+    `enable_if` is a function that takes a `SonarConfig` object as input and
     returns a boolean value indicating whether to compile the model or not.
     This is useful if you want to compile the model only when certain
     conditions are met.
@@ -259,23 +259,23 @@ def support_torch_compile(
 
 
 def _model_hash_key(fn: Callable[..., Any]) -> str:
-    import aphrodite
+    import sonar
 
     sha256_hash = hashlib.sha256()
-    sha256_hash.update(aphrodite.__version__.encode())
+    sha256_hash.update(sonar.__version__.encode())
     sha256_hash.update(fn.__qualname__.encode())
     sha256_hash.update(str(fn.__code__.co_firstlineno).encode())
     return sha256_hash.hexdigest()
 
 
-def _verify_source_unchanged(source_info: "SourceInfo", aphrodite_config: AphroditeConfig) -> None:
+def _verify_source_unchanged(source_info: "SourceInfo", sonar_config: SonarConfig) -> None:
     from .caching import _compute_code_hash, _compute_code_hash_with_content
 
     file_contents = {}
     for source in source_info.inlined_sources:
         module = sys.modules[source.module]
         file = inspect.getfile(module)
-        aphrodite_config.compilation_config.traced_files.add(file)
+        sonar_config.compilation_config.traced_files.add(file)
         file_contents[file] = source.content
     expected_checksum = _compute_code_hash_with_content(file_contents)
     actual_checksum = _compute_code_hash(set(file_contents.keys()))
@@ -290,28 +290,28 @@ def _try_load_aot_compiled_fn(
     """Try to load an AOT-compiled function from disk.
 
     Returns the loaded callable on success, or None on failure.
-    Re-raises on failure when ``APHRODITE_FORCE_AOT_LOAD`` is set.
+    Re-raises on failure when ``SONAR_FORCE_AOT_LOAD`` is set.
     """
     try:
         with monitor_torch_compile(
-            model.aphrodite_config,
+            model.sonar_config,
             is_encoder=model._is_encoder,
             tag=getattr(model, "_compile_tag", ""),
             announce_start=False,
         ):
             with (
-                set_current_aphrodite_config(model.aphrodite_config),
+                set_current_sonar_config(model.sonar_config),
                 open(aot_compilation_path, "rb") as f,
             ):
                 loaded_fn = torch.compiler.load_compiled_function(f, f_globals=model.forward.__globals__)
-            _verify_source_unchanged(loaded_fn.source_info(), model.aphrodite_config)
+            _verify_source_unchanged(loaded_fn.source_info(), model.sonar_config)
             ds_config = model.compilation_config.dynamic_shapes_config
             if not ds_config.evaluate_guards:
                 loaded_fn.disable_guard_check()
             # Eagerly load compiled artifacts now that traced_files
             # is populated by _verify_source_unchanged.
-            with maybe_use_cudagraph_partition_wrapper(model.aphrodite_config):
-                loaded_fn._artifacts.compiled_fn.finalize_loading(model.aphrodite_config)
+            with maybe_use_cudagraph_partition_wrapper(model.sonar_config):
+                loaded_fn._artifacts.compiled_fn.finalize_loading(model.sonar_config)
             compilation_counter.num_aot_artifacts_loaded += 1
             tag = getattr(model, "_compile_tag", "")
             log_prefix = f"[{tag}] " if tag else ""
@@ -335,7 +335,7 @@ def _try_load_aot_compiled_fn(
                 aot_compilation_path,
                 message,
             )
-        if envs.APHRODITE_FORCE_AOT_LOAD:
+        if envs.SONAR_FORCE_AOT_LOAD:
             raise e
         return None
 
@@ -344,7 +344,7 @@ def _support_torch_compile(
     cls: type[_T],
     dynamic_arg_dims: DynamicArgDims,
     mark_unbacked_dims: dict[str, int | list[int]] | None = None,
-    enable_if: Callable[[AphroditeConfig], bool] | None = None,
+    enable_if: Callable[[SonarConfig], bool] | None = None,
     is_encoder: bool = False,
     use_aot_compile: bool = True,
 ) -> type[_T]:
@@ -365,15 +365,15 @@ def _support_torch_compile(
     def __init__(
         self: _T,
         *args,
-        aphrodite_config: AphroditeConfig | None = None,
+        sonar_config: SonarConfig | None = None,
         prefix: str = "",
         **kwargs: Any,
     ) -> None:
-        if aphrodite_config is None:
-            aphrodite_config = get_current_aphrodite_config()
+        if sonar_config is None:
+            sonar_config = get_current_sonar_config()
 
         # NOTE: to support multimodal models (such as encoder),
-        # we may not have aphrodite_config so we may need to patch it
+        # we may not have sonar_config so we may need to patch it
         sig = inspect.signature(old_init)
         # Check that any positional arguments match the old_init method signature
         annotations = [p.annotation for p in sig.parameters.values()]
@@ -388,16 +388,16 @@ def _support_torch_compile(
                     "but no parameter of that type was found in the method signature. "
                     f"Please either annotate {init} or pass it as a keyword argument."
                 )
-        if "aphrodite_config" in sig.parameters:
-            kwargs["aphrodite_config"] = aphrodite_config
+        if "sonar_config" in sig.parameters:
+            kwargs["sonar_config"] = sonar_config
         if "prefix" in sig.parameters:
             kwargs["prefix"] = prefix
         old_init(self, *args, **kwargs)
 
-        self.aphrodite_config = aphrodite_config
-        self.compilation_config = self.aphrodite_config.compilation_config
+        self.sonar_config = sonar_config
+        self.compilation_config = self.sonar_config.compilation_config
         self._allow_aot_compile = use_aot_compile
-        enable_compile = enable_if is None or enable_if(aphrodite_config)
+        enable_compile = enable_if is None or enable_if(sonar_config)
         # for CompilationMode.STOCK_TORCH_COMPILE , the upper level model runner
         # will handle the compilation, so we don't need to do anything here.
         self.do_not_compile = (
@@ -416,11 +416,11 @@ def _support_torch_compile(
 
         # Capture the active model tag (e.g. "backbone", "eagle_head") so
         # later compilation/warmup log lines can identify which component
-        # they belong to. Mirror AphroditeBackend's precedence rule
+        # they belong to. Mirror SonarBackend's precedence rule
         # (`compile_prefix or model_tag`) so log tags line up with the
         # cache-dir tag: encoders use the class name, everything else
         # falls through to `model_tag`.
-        from aphrodite.compilation.backends import model_tag as _current_model_tag
+        from sonar.compilation.backends import model_tag as _current_model_tag
 
         self._compile_tag = (cls.__name__ if is_encoder else "") or _current_model_tag
 
@@ -521,16 +521,16 @@ def _support_torch_compile(
         # The partition wrapper must be active at runtime for CUDA graph
         # capture to work correctly with inductor graph partitioning.
         if getattr(self, "aot_compiled_fn", None) is not None:
-            with maybe_use_cudagraph_partition_wrapper(self.aphrodite_config):
+            with maybe_use_cudagraph_partition_wrapper(self.sonar_config):
                 return self.aot_compiled_fn(self, *args, **kwargs)
 
         ds_type = self.compilation_config.dynamic_shapes_config.type
         cache_dir = None
         aot_compilation_path = None
-        if self._allow_aot_compile and envs.APHRODITE_USE_AOT_COMPILE:
+        if self._allow_aot_compile and envs.SONAR_USE_AOT_COMPILE:
             """
             When using torch.compile in AOT mode, we store the cache artifacts
-            under APHRODITE_CACHE_ROOT/torch_compile_cache/torch_aot_compile/{hash}
+            under SONAR_CACHE_ROOT/torch_compile_cache/torch_aot_compile/{hash}
             The {hash} contains all of the factors except for the source files
             being traced through, because we don't actually know which source
             files to check at this point (before dynamo runs).
@@ -541,12 +541,12 @@ def _support_torch_compile(
             """
             from .caching import aot_compile_hash_factors
 
-            factors: list[str] = aot_compile_hash_factors(self.aphrodite_config)
+            factors: list[str] = aot_compile_hash_factors(self.sonar_config)
 
             factors.append(_model_hash_key(self.forward))
             hash_key = hashlib.sha256(str(factors).encode()).hexdigest()
             cache_dir = os.path.join(
-                envs.APHRODITE_CACHE_ROOT,
+                envs.SONAR_CACHE_ROOT,
                 "torch_compile_cache",
                 "torch_aot_compile",
                 hash_key,
@@ -562,26 +562,26 @@ def _support_torch_compile(
             # /tmp default during import, making setdefault a no-op.
             os.environ["TORCHINDUCTOR_CACHE_DIR"] = inductor_cache
 
-            rank = self.aphrodite_config.parallel_config.rank
-            dp_rank = self.aphrodite_config.parallel_config.data_parallel_index
+            rank = self.sonar_config.parallel_config.rank
+            dp_rank = self.sonar_config.parallel_config.data_parallel_index
             cache_dir = os.path.join(cache_dir, f"rank_{rank}_{dp_rank}")
             aot_compilation_path = os.path.join(cache_dir, "model")
-            if not envs.APHRODITE_DISABLE_COMPILE_CACHE:
+            if not envs.SONAR_DISABLE_COMPILE_CACHE:
                 loaded_fn = _try_load_aot_compiled_fn(self, aot_compilation_path)
                 if loaded_fn is not None:
                     self.aot_compiled_fn = loaded_fn
                     self.was_aot_compile_fn_loaded_from_disk = True
                     with (
                         monitor_profiling_run(tag=self._compile_tag),
-                        maybe_use_cudagraph_partition_wrapper(self.aphrodite_config),
+                        maybe_use_cudagraph_partition_wrapper(self.sonar_config),
                     ):
                         output = self.aot_compiled_fn(self, *args, **kwargs)
                     return output
 
         if self.compiled:
             assert (
-                not (self._allow_aot_compile and envs.APHRODITE_USE_AOT_COMPILE)
-                or self.aphrodite_config.compilation_config.backend == "eager"
+                not (self._allow_aot_compile and envs.SONAR_USE_AOT_COMPILE)
+                or self.sonar_config.compilation_config.backend == "eager"
             )
             return TorchCompileWithNoGuardsWrapper.__call__(self, *args, **kwargs)  # type: ignore[arg-type]
 
@@ -630,7 +630,7 @@ def _support_torch_compile(
 
         # Disable the C++ compilation of symbolic shape guards. C++-fication
         # of symbolic shape guards can improve guard overhead. But, since
-        # aphrodite skip guards anyways, setting this flag to False can improve
+        # sonar skip guards anyways, setting this flag to False can improve
         # compile time.
         dynamo_config_patches = {}
         try:
@@ -657,12 +657,12 @@ def _support_torch_compile(
         with (
             patch.object(InliningInstructionTranslator, "inline_call_", patched_inline_call),
             torch._dynamo.config.patch(**dynamo_config_patches),
-            maybe_use_cudagraph_partition_wrapper(self.aphrodite_config),
+            maybe_use_cudagraph_partition_wrapper(self.sonar_config),
             torch.fx.experimental._config.patch(**fx_config_patches),
             torch._inductor.config.patch(**inductor_config_patches),
         ):
-            use_aot_compile = self._allow_aot_compile and envs.APHRODITE_USE_AOT_COMPILE
-            if self.aphrodite_config.compilation_config.backend == "eager":
+            use_aot_compile = self._allow_aot_compile and envs.SONAR_USE_AOT_COMPILE
+            if self.sonar_config.compilation_config.backend == "eager":
                 logger.warning("Detected eager backend, disabling AOT compile.")
                 use_aot_compile = False
             if use_aot_compile:
@@ -670,7 +670,7 @@ def _support_torch_compile(
                 self._aot_compilation_path = aot_compilation_path
                 self._aot_cache_dir = cache_dir
                 with monitor_torch_compile(
-                    self.aphrodite_config,
+                    self.sonar_config,
                     is_encoder=self._is_encoder,
                     tag=self._compile_tag,
                 ):
@@ -684,7 +684,7 @@ def _support_torch_compile(
                     output = self.aot_compiled_fn(self, *args, **kwargs)
             else:
                 with monitor_torch_compile(
-                    self.aphrodite_config,
+                    self.sonar_config,
                     "%storch.compile and initial profiling/warmup run together took %.2f s in total",
                     is_encoder=self._is_encoder,
                     tag=self._compile_tag,
@@ -698,9 +698,9 @@ def _support_torch_compile(
         self.compiled = True
         return output
 
-    # triggers AphroditeSerializableFunction.serialize()
+    # triggers SonarSerializableFunction.serialize()
     def save_aot_compiled_function(self: type[_T]) -> None:
-        if envs.APHRODITE_DISABLE_COMPILE_CACHE:
+        if envs.SONAR_DISABLE_COMPILE_CACHE:
             return
 
         if self.was_aot_compile_fn_loaded_from_disk:
@@ -738,7 +738,7 @@ def _support_torch_compile(
 
 @contextlib.contextmanager
 def maybe_use_cudagraph_partition_wrapper(
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
 ) -> Generator[None, None, None]:
     """Context manager to set/unset customized cudagraph partition wrappers.
 
@@ -749,14 +749,14 @@ def maybe_use_cudagraph_partition_wrapper(
     graph wrapper class to maintain more control over static graph
     capture and replay.
     """
-    from aphrodite.config import CUDAGraphMode
+    from sonar.config import CUDAGraphMode
 
-    compilation_config = aphrodite_config.compilation_config
+    compilation_config = sonar_config.compilation_config
     if compilation_config.cudagraph_mode.has_piecewise_cudagraphs() and compilation_config.use_inductor_graph_partition:
         from torch._inductor.utils import CUDAGraphWrapperMetadata
 
-        from aphrodite.compilation.cuda_graph import CUDAGraphOptions
-        from aphrodite.platforms import current_platform
+        from sonar.compilation.cuda_graph import CUDAGraphOptions
+        from sonar.platforms import current_platform
 
         static_graph_wrapper_class = resolve_obj_by_qualname(current_platform.get_static_graph_wrapper_cls())
 
@@ -765,7 +765,7 @@ def maybe_use_cudagraph_partition_wrapper(
             num_partitions = metadata.num_partitions
             return static_graph_wrapper_class(
                 runnable=f,
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 runtime_mode=CUDAGraphMode.PIECEWISE,
                 cudagraph_options=CUDAGraphOptions(
                     debug_log_enable=partition_id == 0,

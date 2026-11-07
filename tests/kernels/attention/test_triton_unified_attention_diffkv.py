@@ -7,18 +7,18 @@ from unittest.mock import patch
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.utils.math_utils import next_power_of_2
-from aphrodite.utils.torch_utils import (
+from sonar.platforms import current_platform
+from sonar.utils.math_utils import next_power_of_2
+from sonar.utils.torch_utils import (
     canonicalize_singleton_dim_strides,
     set_random_seed,
 )
-from aphrodite.v1.attention.backends.fa_utils import (
+from sonar.v1.attention.backends.fa_utils import (
     get_flash_attn_version,
     is_flash_attn_varlen_func_available,
 )
-from aphrodite.v1.attention.ops import triton_unified_attention_diffkv as diffkv_module
-from aphrodite.v1.attention.ops.triton_unified_attention_diffkv import (
+from sonar.v1.attention.ops import triton_unified_attention_diffkv as diffkv_module
+from sonar.v1.attention.ops.triton_unified_attention_diffkv import (
     unified_attention_diffkv,
 )
 from tests.kernels.attention.test_triton_unified_attention import ref_paged_attn
@@ -175,7 +175,7 @@ def test_triton_unified_attn_diffkv_vs_reference(
             soft_cap=soft_cap,
         ).to(dtype)
     else:
-        from aphrodite.v1.attention.backends.fa_utils import flash_attn_varlen_func
+        from sonar.v1.attention.backends.fa_utils import flash_attn_varlen_func
 
         assert fa_version is not None
         # FA's TMA path needs aligned singleton strides (num_kv_heads == 1).

@@ -8,13 +8,13 @@ from typing import Any, TypeVar
 import torch
 from torch import nn
 
-from aphrodite.model_executor.layers.fused_moe.expert_substitution import (
+from sonar.model_executor.layers.fused_moe.expert_substitution import (
     APPROX_VALUE_SUFFIX,
     ConstantExpertSubstitution,
     decoder_layer_index,
     get_expert_substitution_spec,
 )
-from aphrodite.model_executor.model_loader.reload import finalize_layerwise_processing
+from sonar.model_executor.model_loader.reload import finalize_layerwise_processing
 
 _T = TypeVar("_T", bound=nn.Module)
 

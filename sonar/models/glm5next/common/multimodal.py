@@ -13,41 +13,41 @@ import torch.nn as nn
 from einops import rearrange
 from transformers.video_utils import VideoMetadata
 
-from aphrodite.distributed import (
+from sonar.distributed import (
     get_tensor_model_parallel_world_size,
     parallel_state,
 )
-from aphrodite.distributed import utils as dist_utils
-from aphrodite.model_executor.layers.activation import SiluAndMulWithClamp
-from aphrodite.model_executor.layers.attention import MMEncoderAttention
-from aphrodite.model_executor.layers.conv import Conv2dLayer, Conv3dLayer
-from aphrodite.model_executor.layers.fusion.mm_input_norm import IdentityInputNorm
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.distributed import utils as dist_utils
+from sonar.model_executor.layers.activation import SiluAndMulWithClamp
+from sonar.model_executor.layers.attention import MMEncoderAttention
+from sonar.model_executor.layers.conv import Conv2dLayer, Conv3dLayer
+from sonar.model_executor.layers.fusion.mm_input_norm import IdentityInputNorm
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     MergedColumnParallelLinear,
     QKVParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.layers.rotary_embedding.common import ApplyRotaryEmb
-from aphrodite.model_executor.models.glm4_1v import (
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.layers.rotary_embedding.common import ApplyRotaryEmb
+from sonar.model_executor.models.glm4_1v import (
     Glm4vMultiModalProcessor,
     Glm4vProcessingInfo,
 )
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.models.utils import (
     AutoWeightsLoader,
     WeightsMapper,
 )
-from aphrodite.model_executor.models.vision import (
+from sonar.model_executor.models.vision import (
     get_vit_attn_backend,
     is_vit_use_data_parallel,
 )
-from aphrodite.models.common.ops import fused_q_kv_rmsnorm
-from aphrodite.multimodal.parse import ImageSize, MultiModalDataItems
-from aphrodite.utils.torch_utils import async_tensor_h2d
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
+from sonar.models.common.ops import fused_q_kv_rmsnorm
+from sonar.multimodal.parse import ImageSize, MultiModalDataItems
+from sonar.utils.torch_utils import async_tensor_h2d
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
 
 
 class Glm5NextVisionPatchEmbed(nn.Module):
@@ -332,7 +332,7 @@ class Glm5NextPatchMerger(nn.Module):
 
 class Glm5NextVisionTransformer(nn.Module):
     # Stacked-weight remap for the GLM-OCR/GLM-4V vision checkpoint layout.
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_stacked={
             ".attn.q.": (".attn.qkv.", "q"),
             ".attn.k.": (".attn.qkv.", "k"),
@@ -591,7 +591,7 @@ class Glm5NextVisionTransformer(nn.Module):
 
     def load_weights(self, weights) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
 
 _MAX_VIDEO_TOKENS = 30000

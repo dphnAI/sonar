@@ -9,60 +9,60 @@ from typing import TYPE_CHECKING, Any, cast
 import torch
 from torch import nn
 
-import aphrodite.envs as envs
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed import (
+import sonar.envs as envs
+from sonar.config import SonarConfig
+from sonar.distributed import (
     get_ep_group,
     get_pp_group,
     get_tensor_model_parallel_world_size,
 )
-from aphrodite.forward_context import get_forward_context, is_forward_context_available
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.activation import SiluAndMul, SituAndMul
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.forward_context import get_forward_context, is_forward_context_available
+from sonar.logger import init_logger
+from sonar.model_executor.layers.activation import SiluAndMul, SituAndMul
+from sonar.model_executor.layers.fused_moe import (
     FusedMoEFactory,
     fused_moe_make_expert_params_mapping,
 )
-from aphrodite.model_executor.layers.fused_moe.deep_gemm_mega_moe import (
+from sonar.model_executor.layers.fused_moe.deep_gemm_mega_moe import (
     MEGA_MOE_MXFP4,
     DeepGemmMegaMoEExperts,
     MegaMoEActivation,
 )
-from aphrodite.model_executor.layers.fused_moe.router.gate_linear import GateLinear
-from aphrodite.model_executor.layers.fused_moe.router.grouped_topk_router import (
+from sonar.model_executor.layers.fused_moe.router.gate_linear import GateLinear
+from sonar.model_executor.layers.fused_moe.router.grouped_topk_router import (
     fused_grouped_topk,
 )
-from aphrodite.model_executor.layers.fusion.mm_input_norm import build_mm_input_norm
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.fusion.mm_input_norm import build_mm_input_norm
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     MergedColumnParallelLinear,
     ReplicatedLinear,
     RowParallelLinear,
     UnquantizedLinearMethod,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.mamba.gdn.kimi_gdn_linear_attn import (
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.mamba.gdn.kimi_gdn_linear_attn import (
     KimiGatedDeltaNetAttention as KimiLinearGatedDeltaNetAttention,
 )
-from aphrodite.model_executor.layers.mamba.mamba_utils import (
+from sonar.model_executor.layers.mamba.mamba_utils import (
     MambaStateCopyFunc,
     MambaStateCopyFuncCalculator,
     MambaStateDtypeCalculator,
     MambaStateShapeCalculator,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.quantization.compressed_tensors import (
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.quantization.compressed_tensors import (
     compressed_tensors,
 )
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.model_loader.weight_utils import (
+from sonar.model_executor.model_loader.weight_utils import (
     default_weight_loader,
     maybe_remap_kv_scale_name,
 )
-from aphrodite.model_executor.models.interfaces import (
+from sonar.model_executor.models.interfaces import (
     EagleModelMixin,
     HasInnerState,
     IsHybrid,
@@ -75,47 +75,47 @@ from aphrodite.model_executor.models.interfaces import (
     SupportsQuant,
     SupportsReplaySSM,
 )
-from aphrodite.model_executor.models.kimi_k25 import KimiK25MediaPixelInputs
-from aphrodite.model_executor.models.kimi_k25_vit import (
+from sonar.model_executor.models.kimi_k25 import KimiK25MediaPixelInputs
+from sonar.model_executor.models.kimi_k25_vit import (
     KimiK25MultiModalProjector,
     MoonViT3dPretrainedModel,
     vision_tower_forward,
 )
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.models.utils import (
     AutoWeightsLoader,
     PPMissingLayer,
     WeightsMapper,
-    init_aphrodite_registered_model,
+    init_sonar_registered_model,
     is_pp_missing_parameter,
     make_layers,
     maybe_prefix,
     spec_decode_needs_target_embed,
 )
-from aphrodite.model_executor.models.vision import is_vit_use_data_parallel
-from aphrodite.models.common.ops.sequence_parallel import (
+from sonar.model_executor.models.vision import is_vit_use_data_parallel
+from sonar.models.common.ops.sequence_parallel import (
     sp_all_gather,
     sp_padding_mask,
     sp_reduce_scatter,
     sp_shard,
 )
-from aphrodite.models.kimi_k3.nvidia.kda import KimiK3DeltaAttention
-from aphrodite.models.kimi_k3.nvidia.latent_moe_runner import (
+from sonar.models.kimi_k3.nvidia.kda import KimiK3DeltaAttention
+from sonar.models.kimi_k3.nvidia.latent_moe_runner import (
     LatentMoERunner,
 )
-from aphrodite.models.kimi_k3.nvidia.low_latency_gemm import (
+from sonar.models.kimi_k3.nvidia.low_latency_gemm import (
     enable_kimi_k3_low_latency_gemm,
 )
-from aphrodite.models.kimi_k3.nvidia.mla import MultiHeadLatentAttention
-from aphrodite.models.kimi_k3.nvidia.ops.attn_res import attn_res
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import NestedTensors
-from aphrodite.platforms import current_platform
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.transformers_utils.configs.kimi_k3 import KimiK3Config
-from aphrodite.transformers_utils.configs.kimi_linear import KimiLinearConfig
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.utils.multi_stream_utils import maybe_execute_in_parallel
-from aphrodite.utils.torch_utils import aux_stream, is_meta_module
+from sonar.models.kimi_k3.nvidia.mla import MultiHeadLatentAttention
+from sonar.models.kimi_k3.nvidia.ops.attn_res import attn_res
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import NestedTensors
+from sonar.platforms import current_platform
+from sonar.sequence import IntermediateTensors
+from sonar.transformers_utils.configs.kimi_k3 import KimiK3Config
+from sonar.transformers_utils.configs.kimi_linear import KimiLinearConfig
+from sonar.utils.math_utils import cdiv
+from sonar.utils.multi_stream_utils import maybe_execute_in_parallel
+from sonar.utils.torch_utils import aux_stream, is_meta_module
 
 from ..common.mm_preprocess import (
     KimiK3DummyInputsBuilder,
@@ -125,7 +125,7 @@ from ..common.mm_preprocess import (
 from .specialized_decode.runtime import specialized_decode_config
 
 if TYPE_CHECKING:
-    from aphrodite.v1.worker.gpu.model_states.interface import ModelState
+    from sonar.v1.worker.gpu.model_states.interface import ModelState
 
     from .specialized_decode.runtime.decode import SpecializedDecode
 
@@ -147,17 +147,17 @@ def shard_sequence_parallel_mlp(
 ) -> bool:
     """Whether to TP-shard a sequence-parallel MLP instead of replicating it.
 
-    Opt-in via ``APHRODITE_KIMI_K3_SHARD_SP_SHARED_EXPERT``; see :class:`KimiMLP` for
-    the trade-off and :mod:`aphrodite.envs` for when it is worth enabling.
+    Opt-in via ``SONAR_KIMI_K3_SHARD_SP_SHARED_EXPERT``; see :class:`KimiMLP` for
+    the trade-off and :mod:`sonar.envs` for when it is worth enabling.
     """
-    enabled = envs.APHRODITE_KIMI_K3_SHARD_SP_SHARED_EXPERT
+    enabled = envs.SONAR_KIMI_K3_SHARD_SP_SHARED_EXPERT
     if not (use_sequence_parallel and eligible and enabled):
         return False
     tp_size = get_tensor_model_parallel_world_size()
     return tp_size > 1 and intermediate_size % tp_size == 0 and hidden_size % tp_size == 0
 
 
-def can_shard_sequence_parallel_shared_expert(aphrodite_config: AphroditeConfig) -> bool:
+def can_shard_sequence_parallel_shared_expert(sonar_config: SonarConfig) -> bool:
     """Whether the active MoE backend preserves the SP shared-expert contract.
 
     MegaMoE invokes the shared expert directly. DeepEP v2 invokes it through
@@ -166,30 +166,30 @@ def can_shard_sequence_parallel_shared_expert(aphrodite_config: AphroditeConfig)
     all-gather/partial-GEMM/reduce-scatter implementation.
     """
     return (
-        aphrodite_config.kernel_config.moe_backend == "deep_gemm_mega_moe"
-        or aphrodite_config.parallel_config.all2all_backend == "deepep_v2"
+        sonar_config.kernel_config.moe_backend == "deep_gemm_mega_moe"
+        or sonar_config.parallel_config.all2all_backend == "deepep_v2"
     )
 
 
-def maybe_init_gemm_rs_ar(aphrodite_config: AphroditeConfig, use_sequence_parallel: bool) -> bool:
+def maybe_init_gemm_rs_ar(sonar_config: SonarConfig, use_sequence_parallel: bool) -> bool:
     # Both feature flags may be enabled; the worker's static SP topology binds
     # its singleton to exactly one mode.
     all_reduce = not use_sequence_parallel
     mode = "GEMM-AR" if all_reduce else "GEMM-RS"
-    enabled = envs.APHRODITE_KIMI_K3_GEMM_AR if all_reduce else envs.APHRODITE_ENABLE_GEMM_RS
+    enabled = envs.SONAR_KIMI_K3_GEMM_AR if all_reduce else envs.SONAR_ENABLE_GEMM_RS
     if not enabled:
         return False
 
     # The kernel module pulls in cute_dsl, so import it only once the flag
     # asks for it.
-    from aphrodite.model_executor.kernels.linear.cute_dsl.gemm_rs_ar import (
+    from sonar.model_executor.kernels.linear.cute_dsl.gemm_rs_ar import (
         maybe_init_gemm_rs_ar as maybe_init_shared_gemm_rs_ar,
     )
 
-    config = aphrodite_config.model_config.hf_text_config
-    if not maybe_init_shared_gemm_rs_ar(aphrodite_config, N=config.hidden_size, all_reduce=all_reduce):
+    config = sonar_config.model_config.hf_text_config
+    if not maybe_init_shared_gemm_rs_ar(sonar_config, N=config.hidden_size, all_reduce=all_reduce):
         return False
-    flag = "APHRODITE_KIMI_K3_GEMM_AR" if all_reduce else "APHRODITE_ENABLE_GEMM_RS"
+    flag = "SONAR_KIMI_K3_GEMM_AR" if all_reduce else "SONAR_ENABLE_GEMM_RS"
     logger.info_once("To disable %s, set %s=0.", mode, flag)
     return True
 
@@ -202,7 +202,7 @@ class KimiMLP(nn.Module):
     needs no collective. That makes every rank stream the entire weight to serve
     its own token shard.
 
-    With ``APHRODITE_KIMI_K3_SHARD_SP_SHARED_EXPERT`` the weights are TP-sharded
+    With ``SONAR_KIMI_K3_SHARD_SP_SHARED_EXPERT`` the weights are TP-sharded
     instead. A rank then holds only a slice of the intermediate dim, so it
     cannot finish its own tokens alone: ``forward`` all-gathers the full token
     set, computes this rank's partial, and reduce-scatters. The reduce-scatter
@@ -257,7 +257,7 @@ class KimiMLP(nn.Module):
         # RS requires sequence sharding; AR operates on replicated tokens.
         use_gemm_rs_ar = self.shard_sequence_parallel or (not use_sequence_parallel and reduce_results)
         if use_gemm_rs_ar and run_gemm_rs_ar:
-            from aphrodite.model_executor.kernels.linear.cute_dsl.gemm_rs_ar import (
+            from sonar.model_executor.kernels.linear.cute_dsl.gemm_rs_ar import (
                 get_gemm_rs_ar,
             )
 
@@ -353,7 +353,7 @@ class KimiMoE(nn.Module):
     def __init__(
         self,
         config: KimiLinearConfig,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         quant_config: QuantizationConfig | None = None,
         prefix: str = "",
         layer_idx: int = 0,
@@ -383,8 +383,8 @@ class KimiMoE(nn.Module):
         self.moe_router_activation_func = config.moe_router_activation_func
         self.num_shared_experts = config.num_shared_experts
         self.layer_idx = layer_idx
-        self.use_mega_moe = aphrodite_config.kernel_config.moe_backend == "deep_gemm_mega_moe"
-        if self.use_mega_moe and not aphrodite_config.parallel_config.enable_expert_parallel:
+        self.use_mega_moe = sonar_config.kernel_config.moe_backend == "deep_gemm_mega_moe"
+        if self.use_mega_moe and not sonar_config.parallel_config.enable_expert_parallel:
             raise NotImplementedError(
                 "Kimi K3 MegaMoE requires expert parallel. Enable it with --enable-expert-parallel."
             )
@@ -398,7 +398,7 @@ class KimiMoE(nn.Module):
             raise NotImplementedError("Kimi K3 MegaMoE currently requires one expert group.")
         self.padded_moe_intermediate_size = moe_intermediate_size
         min_moe_intermediate_per_partition = getattr(config, "min_moe_intermediate_per_partition", 256)
-        if self.tp_size > 1 and not aphrodite_config.parallel_config.enable_expert_parallel:
+        if self.tp_size > 1 and not sonar_config.parallel_config.enable_expert_parallel:
             moe_intermediate_per_partition = moe_intermediate_size // self.tp_size
             if moe_intermediate_per_partition < min_moe_intermediate_per_partition:
                 self.padded_moe_intermediate_size = min_moe_intermediate_per_partition * self.tp_size
@@ -429,7 +429,7 @@ class KimiMoE(nn.Module):
                 # MegaMoE calls the shared expert directly. DeepEP v2 hands it
                 # to MoERunner, but preserves the local SP output layout needed
                 # by the sharded shared-expert path.
-                can_shard_sequence_parallel=can_shard_sequence_parallel_shared_expert(aphrodite_config),
+                can_shard_sequence_parallel=can_shard_sequence_parallel_shared_expert(sonar_config),
                 run_gemm_rs_ar=run_gemm_rs_ar,
                 prefix=f"{prefix}.shared_experts",
                 activation_situ_beta=activation_situ_beta,
@@ -487,12 +487,12 @@ class KimiMoE(nn.Module):
             if num_experts % ep_size != 0:
                 raise ValueError(f"Kimi K3 num_experts={num_experts} must be divisible by EP size {ep_size}.")
             num_local_experts = num_experts // ep_size
-            max_num_tokens = aphrodite_config.scheduler_config.max_num_batched_tokens
+            max_num_tokens = sonar_config.scheduler_config.max_num_batched_tokens
             if use_sequence_parallel:
                 # The layer only sees this rank's shard of the batch.
                 max_num_tokens = cdiv(max_num_tokens, self.tp_size)
             self.experts = DeepGemmMegaMoEExperts(
-                aphrodite_config,
+                sonar_config,
                 max_num_tokens=max_num_tokens,
                 num_experts=num_experts,
                 num_local_experts=num_local_experts,
@@ -637,7 +637,7 @@ class KimiDecoderLayer(nn.Module):
     def __init__(
         self,
         config: KimiLinearConfig,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
         aux_stream: torch.cuda.Stream | None = None,
         run_gemm_rs_ar: bool = False,
@@ -648,9 +648,9 @@ class KimiDecoderLayer(nn.Module):
 
         self.is_moe = config.is_moe
         layer_idx = self.layer_idx
-        cache_config = aphrodite_config.cache_config
-        quant_config = aphrodite_config.quant_config
-        parallel_config = aphrodite_config.parallel_config
+        cache_config = sonar_config.cache_config
+        quant_config = sonar_config.quant_config
+        parallel_config = sonar_config.parallel_config
         self.is_moe_layer = (
             self.is_moe
             and config.num_experts is not None
@@ -658,7 +658,7 @@ class KimiDecoderLayer(nn.Module):
             and layer_idx % config.moe_layer_freq == 0
         )
 
-        use_mega_moe = aphrodite_config.kernel_config.moe_backend == "deep_gemm_mega_moe"
+        use_mega_moe = sonar_config.kernel_config.moe_backend == "deep_gemm_mega_moe"
         self.use_sequence_parallel = (
             parallel_config.pipeline_parallel_size == 1
             and parallel_config.enable_expert_parallel
@@ -673,7 +673,7 @@ class KimiDecoderLayer(nn.Module):
             if kda_config.get("use_full_rank_gate", False):
                 self.self_attn = KimiK3DeltaAttention(
                     config,
-                    aphrodite_config,
+                    sonar_config,
                     prefix=f"{prefix}.self_attn",
                     aux_stream=aux_stream,
                     run_gemm_rs_ar=run_gemm_rs_ar,
@@ -681,7 +681,7 @@ class KimiDecoderLayer(nn.Module):
             else:
                 self.self_attn = KimiLinearGatedDeltaNetAttention(
                     config,
-                    aphrodite_config,
+                    sonar_config,
                     prefix=f"{prefix}.self_attn",
                 )
         else:
@@ -720,7 +720,7 @@ class KimiDecoderLayer(nn.Module):
         if self.is_moe_layer:
             self.block_sparse_moe = KimiMoE(
                 config=config,
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 quant_config=quant_config,
                 prefix=f"{prefix}.block_sparse_moe",
                 layer_idx=layer_idx,
@@ -885,15 +885,15 @@ class KimiLinearModel(nn.Module, EagleModelMixin, SupportsQuant):
 
     supports_aux_hidden_states_over_pp = True
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_text_config
+        config = sonar_config.model_config.hf_text_config
         self.config = config
         self.attn_res_block_size: int | None = config.attn_res_block_size
         self.use_attn_res = self.attn_res_block_size is not None
-        parallel_config = aphrodite_config.parallel_config
-        use_mega_moe = aphrodite_config.kernel_config.moe_backend == "deep_gemm_mega_moe"
+        parallel_config = sonar_config.parallel_config
+        use_mega_moe = sonar_config.kernel_config.moe_backend == "deep_gemm_mega_moe"
         self.use_sequence_parallel = (
             parallel_config.pipeline_parallel_size == 1
             and parallel_config.enable_expert_parallel
@@ -905,9 +905,9 @@ class KimiLinearModel(nn.Module, EagleModelMixin, SupportsQuant):
 
         # GEMM-RS/AR uses NCCL symmetric-memory multicast, which requires all
         # TP ranks to belong to one NVLink domain.
-        self.run_gemm_rs_ar = maybe_init_gemm_rs_ar(aphrodite_config, self.use_sequence_parallel)
+        self.run_gemm_rs_ar = maybe_init_gemm_rs_ar(sonar_config, self.use_sequence_parallel)
 
-        if get_pp_group().is_first_rank or spec_decode_needs_target_embed(aphrodite_config):
+        if get_pp_group().is_first_rank or spec_decode_needs_target_embed(sonar_config):
             self.embed_tokens = VocabParallelEmbedding(
                 config.vocab_size,
                 config.hidden_size,
@@ -924,7 +924,7 @@ class KimiLinearModel(nn.Module, EagleModelMixin, SupportsQuant):
         def get_layer(prefix: str):
             return KimiDecoderLayer(
                 config,
-                aphrodite_config,
+                sonar_config,
                 prefix,
                 aux_stream=aux_stream,
                 run_gemm_rs_ar=self.run_gemm_rs_ar,
@@ -987,11 +987,11 @@ class KimiLinearModel(nn.Module, EagleModelMixin, SupportsQuant):
             if not pp.is_last_rank and self.end_layer in self.aux_hidden_state_layers:
                 raise ValueError(
                     f"Auxiliary layer {self.end_layer} cannot end a non-final PP "
-                    "stage when APHRODITE_KIMI_K3_AUX_ATTN_RES_STREAM=1"
+                    "stage when SONAR_KIMI_K3_AUX_ATTN_RES_STREAM=1"
                 )
         if self.use_attn_res:
             logger.info_once(
-                "Kimi-K3 aux hidden capture: layers=%s mode=%s (APHRODITE_KIMI_K3_AUX_ATTN_RES_STREAM=%d)",
+                "Kimi-K3 aux hidden capture: layers=%s mode=%s (SONAR_KIMI_K3_AUX_ATTN_RES_STREAM=%d)",
                 self.aux_hidden_state_layers,
                 "attn_res_stream" if self._aux_attn_res_stream else "prefix_only",
                 int(self._aux_attn_res_stream),
@@ -999,7 +999,7 @@ class KimiLinearModel(nn.Module, EagleModelMixin, SupportsQuant):
 
     @property
     def _aux_attn_res_stream(self) -> bool:
-        return envs.APHRODITE_KIMI_K3_AUX_ATTN_RES_STREAM
+        return envs.SONAR_KIMI_K3_AUX_ATTN_RES_STREAM
 
     def _capture_aux_hidden_stream(
         self,
@@ -1063,7 +1063,7 @@ class KimiLinearModel(nn.Module, EagleModelMixin, SupportsQuant):
 
         full_num_tokens = positions.shape[0]
         if self.use_sequence_parallel:
-            if envs.APHRODITE_MOE_SKIP_PADDING and is_forward_context_available():
+            if envs.SONAR_MOE_SKIP_PADDING and is_forward_context_available():
                 forward_context = get_forward_context()
                 forward_context.is_padding = sp_padding_mask(forward_context.is_padding, hidden_states)
             hidden_states = sp_shard(hidden_states)
@@ -1309,14 +1309,14 @@ class KimiLinearForCausalLM(
     SupportsEagle3,
     SupportsReplaySSM,
 ):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        self.model_config = aphrodite_config.model_config
-        self.aphrodite_config = aphrodite_config
+        self.model_config = sonar_config.model_config
+        self.sonar_config = sonar_config
         self.config = self.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        quant_config = sonar_config.quant_config
         self.quant_config = quant_config
-        self.model = KimiLinearModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = KimiLinearModel(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
         if get_pp_group().is_last_rank:
             self.lm_head = ParallelLMHead(
                 self.config.vocab_size,
@@ -1331,7 +1331,7 @@ class KimiLinearForCausalLM(
         self.logits_processor = LogitsProcessor(self.config.vocab_size, scale=logit_scale)
         # decode_backend=latency_specialized: a specialized decode executor over
         # self.model, built by the model state once the weights are loaded.
-        self.specialized_decode_config = specialized_decode_config(aphrodite_config)
+        self.specialized_decode_config = specialized_decode_config(sonar_config)
         self.specialized_decode: SpecializedDecode | None = None
         # The final norm is applied in compute_logits unless the specialized decode
         # applies it in forward.
@@ -1387,22 +1387,20 @@ class KimiLinearForCausalLM(
     @classmethod
     def get_mamba_state_dtype_from_config(
         cls,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
     ) -> tuple[torch.dtype, ...]:
         return MambaStateDtypeCalculator.kda_state_dtype(
-            aphrodite_config.model_config.dtype,
-            aphrodite_config.cache_config.mamba_cache_dtype,
-            aphrodite_config.cache_config.mamba_ssm_cache_dtype,
+            sonar_config.model_config.dtype,
+            sonar_config.cache_config.mamba_cache_dtype,
+            sonar_config.cache_config.mamba_ssm_cache_dtype,
         )
 
     @classmethod
-    def get_mamba_state_shape_from_config(cls, aphrodite_config: "AphroditeConfig") -> MambaStateShapes:
-        parallel_config = aphrodite_config.parallel_config
-        hf_config = aphrodite_config.model_config.hf_config
+    def get_mamba_state_shape_from_config(cls, sonar_config: "SonarConfig") -> MambaStateShapes:
+        parallel_config = sonar_config.parallel_config
+        hf_config = sonar_config.model_config.hf_config
         tp_size = parallel_config.tensor_parallel_size
-        num_spec = (
-            aphrodite_config.speculative_config.num_speculative_tokens if aphrodite_config.speculative_config else 0
-        )
+        num_spec = sonar_config.speculative_config.num_speculative_tokens if sonar_config.speculative_config else 0
         return MambaStateShapeCalculator.kda_state_shape(
             tp_size,
             hf_config.linear_attn_config["num_heads"],
@@ -1466,7 +1464,7 @@ class KimiK3ForConditionalGeneration(
     supports_encoder_tp_data = True
     supports_mm_device_do_normalize = True
 
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={
             "language_model.layers.": "language_model.model.layers.",
             "mm_projector.proj.0": "mm_projector.linear_1",
@@ -1482,15 +1480,15 @@ class KimiK3ForConditionalGeneration(
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
     ) -> None:
         super().__init__()
-        model_config = aphrodite_config.model_config
+        model_config = sonar_config.model_config
         config: KimiK3Config = model_config.hf_config
         self.config = config
         self.model_config = model_config
-        quant_config = aphrodite_config.quant_config
+        quant_config = sonar_config.quant_config
 
         multimodal_config = model_config.multimodal_config
         assert multimodal_config is not None
@@ -1498,11 +1496,11 @@ class KimiK3ForConditionalGeneration(
         self.hidden_size = config.text_config.hidden_size
         self.device = current_platform.current_device()
 
-        with self._mark_tower_model(aphrodite_config, "image"):
+        with self._mark_tower_model(sonar_config, "image"):
             self.vision_tower = MoonViT3dPretrainedModel(
                 config.vision_config,
                 quant_config=self._maybe_ignore_quant_config(quant_config),
-                input_norm=build_mm_input_norm(aphrodite_config.model_config),
+                input_norm=build_mm_input_norm(sonar_config.model_config),
                 prefix=maybe_prefix(prefix, "vision_tower"),
             )
             if is_meta_module(self.vision_tower):
@@ -1514,7 +1512,7 @@ class KimiK3ForConditionalGeneration(
 
             vision_attn = self.vision_tower.encoder.blocks[0].attn
             if vision_attn.is_flash_attn_backend and vision_attn._fa_version == 4:
-                from aphrodite.models.kimi_k3.nvidia.ops.vision_fa4_warmup import (
+                from sonar.models.kimi_k3.nvidia.ops.vision_fa4_warmup import (
                     KimiK3VisionFA4WarmupConfig,
                     register_kimi_k3_vision_fa4_warmup,
                 )
@@ -1528,10 +1526,10 @@ class KimiK3ForConditionalGeneration(
                         head_dim=vision_attn.head_size,
                         dtype=vision_attn.dtype,
                         max_batch_size=(
-                            aphrodite_config.scheduler_config.max_num_seqs * mm_config.get_limit_per_prompt("image")
+                            sonar_config.scheduler_config.max_num_seqs * mm_config.get_limit_per_prompt("image")
                         ),
                         max_seqlen=(
-                            aphrodite_config.scheduler_config.max_num_encoder_input_tokens * merge_height * merge_width
+                            sonar_config.scheduler_config.max_num_encoder_input_tokens * merge_height * merge_width
                         ),
                     )
                 )
@@ -1547,9 +1545,9 @@ class KimiK3ForConditionalGeneration(
                 self.mm_projector = self.mm_projector.to(device=self.device, dtype=model_config.dtype)
 
         self.quant_config = quant_config
-        with self._mark_language_model(aphrodite_config):
-            self.language_model = init_aphrodite_registered_model(
-                aphrodite_config=aphrodite_config,
+        with self._mark_language_model(sonar_config):
+            self.language_model = init_sonar_registered_model(
+                sonar_config=sonar_config,
                 hf_config=config.text_config,
                 prefix=maybe_prefix(prefix, "language_model"),
                 architectures=["KimiLinearForCausalLM"],
@@ -1562,7 +1560,7 @@ class KimiK3ForConditionalGeneration(
     # -- SupportsEncoderCudaGraph protocol methods --
 
     def get_encoder_cudagraph_config(self):
-        from aphrodite.v1.worker.encoder_cudagraph_defs import EncoderCudaGraphConfig
+        from sonar.v1.worker.encoder_cudagraph_defs import EncoderCudaGraphConfig
 
         return EncoderCudaGraphConfig(
             modalities=["image"],
@@ -1578,10 +1576,10 @@ class KimiK3ForConditionalGeneration(
             out_hidden_size=self.hidden_size,
         )
 
-    def get_encoder_cudagraph_budget_range(self, aphrodite_config: AphroditeConfig) -> tuple[int, int]:
+    def get_encoder_cudagraph_budget_range(self, sonar_config: SonarConfig) -> tuple[int, int]:
         min_budget = 64
         max_budget = min(
-            aphrodite_config.scheduler_config.max_num_batched_tokens,
+            sonar_config.scheduler_config.max_num_batched_tokens,
             self.model_config.max_model_len,
         )
         return min_budget, max_budget
@@ -1606,7 +1604,7 @@ class KimiK3ForConditionalGeneration(
         return pixel_values
 
     def get_encoder_cudagraph_item_specs(self, mm_kwargs: dict[str, Any]):
-        from aphrodite.v1.worker.encoder_cudagraph_defs import EncoderItemSpec
+        from sonar.v1.worker.encoder_cudagraph_defs import EncoderItemSpec
 
         kh, kw = self.config.vision_config.merge_kernel_size
         return [
@@ -1649,7 +1647,7 @@ class KimiK3ForConditionalGeneration(
         path: str = "default",
         axis_keys: tuple[Hashable, ...] | None = None,
     ):
-        from aphrodite.v1.worker.encoder_cudagraph_defs import (
+        from sonar.v1.worker.encoder_cudagraph_defs import (
             EncoderCudaGraphCaptureInputs,
         )
 
@@ -1699,7 +1697,7 @@ class KimiK3ForConditionalGeneration(
         max_frames_per_batch: int,
         path: str = "default",
     ):
-        from aphrodite.v1.worker.encoder_cudagraph_defs import (
+        from sonar.v1.worker.encoder_cudagraph_defs import (
             EncoderCudaGraphReplayBuffers,
         )
 
@@ -1813,16 +1811,16 @@ class KimiK3ForConditionalGeneration(
         return self.language_model.mamba_cache.get_seqlen_agnostic_capture_inputs(batch_size)
 
     @classmethod
-    def get_mamba_state_dtype_from_config(cls, aphrodite_config: AphroditeConfig):
-        text_config = aphrodite_config.model_config.hf_config.text_config
-        temp_aphrodite_config = aphrodite_config.with_hf_config(text_config)
-        return KimiLinearForCausalLM.get_mamba_state_dtype_from_config(temp_aphrodite_config)
+    def get_mamba_state_dtype_from_config(cls, sonar_config: SonarConfig):
+        text_config = sonar_config.model_config.hf_config.text_config
+        temp_sonar_config = sonar_config.with_hf_config(text_config)
+        return KimiLinearForCausalLM.get_mamba_state_dtype_from_config(temp_sonar_config)
 
     @classmethod
-    def get_mamba_state_shape_from_config(cls, aphrodite_config: AphroditeConfig):
-        text_config = aphrodite_config.model_config.hf_config.text_config
-        temp_aphrodite_config = aphrodite_config.with_hf_config(text_config)
-        return KimiLinearForCausalLM.get_mamba_state_shape_from_config(temp_aphrodite_config)
+    def get_mamba_state_shape_from_config(cls, sonar_config: SonarConfig):
+        text_config = sonar_config.model_config.hf_config.text_config
+        temp_sonar_config = sonar_config.with_hf_config(text_config)
+        return KimiLinearForCausalLM.get_mamba_state_shape_from_config(temp_sonar_config)
 
     @classmethod
     def get_mamba_state_copy_func(cls):
@@ -1830,4 +1828,4 @@ class KimiK3ForConditionalGeneration(
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]):
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)

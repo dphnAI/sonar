@@ -5,15 +5,15 @@ from typing import TYPE_CHECKING
 import numpy as np
 import torch
 
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.torch_utils import async_tensor_h2d
-from aphrodite.v1.worker.gpu.buffer_utils import UvaBackedTensor
-from aphrodite.v1.worker.gpu.sample.logits_processor import LogitsContext
-from aphrodite.v1.worker.gpu.states import RequestState
+from sonar.sampling_params import SamplingParams
+from sonar.triton_utils import tl, triton
+from sonar.utils.torch_utils import async_tensor_h2d
+from sonar.v1.worker.gpu.buffer_utils import UvaBackedTensor
+from sonar.v1.worker.gpu.sample.logits_processor import LogitsContext
+from sonar.v1.worker.gpu.states import RequestState
 
 if TYPE_CHECKING:
-    from aphrodite.config.reasoning import ReasoningConfig
+    from sonar.config.reasoning import ReasoningConfig
 
 _INT32_MAX = np.iinfo(np.int32).max
 _COLD_SCAN_BLOCK = 1024

@@ -5,7 +5,7 @@
 
 #include "topk_histogram_4096.cuh"
 
-namespace aphrodite {
+namespace sonar {
 namespace topk_histogram_4096 {
 
 // Visit a row with vectorized loads and a scalar tail.
@@ -453,6 +453,6 @@ __device__ __forceinline__ bool exact_topk_refine_registers(
 }
 
 }  // namespace topk_histogram_4096
-}  // namespace aphrodite
+}  // namespace sonar
 
 #endif  // TOPK_HISTOGRAM_4096_OVERFLOW_CUH_

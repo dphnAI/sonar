@@ -155,7 +155,7 @@ def b12x_unit_providers() -> list[object]:
 
 def scope_b12x_unit_calls(unit: B12xPreparationUnit, lane: int) -> B12xPreparationUnit:
     """Scope construction, execution and cleanup callbacks to the model lane."""
-    from aphrodite.v1.worker.workspace import use_workspace_lane
+    from sonar.v1.worker.workspace import use_workspace_lane
 
     def wrap_factory(factory):
         def wrapped(state):
@@ -284,7 +284,7 @@ def b12x_warmup_token_counts(
 ) -> tuple[int, ...]:
     # B12X deduplicates shapes that select the same internal kernel policy.
     # Keep the complete serving shape set here rather than duplicating its
-    # policy-selection heuristics in Aphrodite.
+    # policy-selection heuristics in Sonar.
     counts = {1}
     counts.update(int(size) for size in cudagraph_capture_sizes if int(size) > 0)
     if int(max_tokens) > 0:

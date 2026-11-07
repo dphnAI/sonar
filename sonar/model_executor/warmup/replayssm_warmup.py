@@ -7,14 +7,14 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 
-from aphrodite.config.mamba import MambaBackendEnum
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.mamba.ops.ssu_dispatch import (
+from sonar.config.mamba import MambaBackendEnum
+from sonar.logger import init_logger
+from sonar.model_executor.layers.mamba.ops.ssu_dispatch import (
     flashinfer_replayssm_autotune_supported,
 )
 
 if TYPE_CHECKING:
-    from aphrodite.v1.worker.gpu_model_runner import GPUModelRunner
+    from sonar.v1.worker.gpu_model_runner import GPUModelRunner
 
 logger = init_logger(__name__)
 
@@ -23,7 +23,7 @@ def _replayssm_autotune_kwargs(
     runner: "GPUModelRunner",
     max_token_prefill_kwargs: dict[str, Any],
 ) -> tuple[int, dict[str, Any]] | None:
-    config = runner.aphrodite_config
+    config = runner.sonar_config
     if not (config.cache_config.use_replayssm and config.mamba_config.backend == MambaBackendEnum.FLASHINFER):
         return None
     if not flashinfer_replayssm_autotune_supported():
@@ -62,8 +62,8 @@ def _replayssm_autotune_kwargs(
 
 @contextmanager
 def _temporary_replayssm_autotune_state(runner: "GPUModelRunner", max_num_reqs: int) -> Iterator[None]:
-    from aphrodite.model_executor.layers.mamba.mamba_mixer2 import MambaMixer2
-    from aphrodite.model_executor.layers.mamba.ops.ssu_dispatch import (
+    from sonar.model_executor.layers.mamba.mamba_mixer2 import MambaMixer2
+    from sonar.model_executor.layers.mamba.ops.ssu_dispatch import (
         reset_replayssm_ring_trackers,
         update_replayssm_ring_trackers,
     )
@@ -99,7 +99,7 @@ def _temporary_replayssm_autotune_state(runner: "GPUModelRunner", max_num_reqs: 
 
     v2_runner: Any = runner
     block_tables = saved_block_ids = None
-    if not runner.aphrodite_config.use_v2_model_runner:
+    if not runner.sonar_config.use_v2_model_runner:
         block_tables = runner.input_batch.block_table.block_tables
         saved_block_ids = tuple(block_table.block_table.np[:max_num_reqs, 0].copy() for block_table in block_tables)
         dummy_block_ids = range(1, max_num_reqs + 1)
@@ -133,7 +133,7 @@ def _temporary_replayssm_autotune_state(runner: "GPUModelRunner", max_num_reqs: 
     try:
         yield
     finally:
-        if runner.aphrodite_config.use_v2_model_runner:
+        if runner.sonar_config.use_v2_model_runner:
             v2_runner.block_tables.get_dummy_block_tables(max_num_reqs)
         else:
             assert block_tables is not None and saved_block_ids is not None

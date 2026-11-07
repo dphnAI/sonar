@@ -7,25 +7,25 @@ from typing import TYPE_CHECKING, Any, Literal, TypeAlias
 
 import torch.distributed
 
-from aphrodite.config import ParallelConfig
-from aphrodite.distributed import (
+from sonar.config import ParallelConfig
+from sonar.distributed import (
     stateless_destroy_torch_distributed_process_group,
 )
-from aphrodite.distributed.elastic_ep.external_elastic_ep import (
+from sonar.distributed.elastic_ep.external_elastic_ep import (
     ExternalElasticEPScaleCoordinator,
 )
-from aphrodite.distributed.utils import get_cached_tcp_store_client
-from aphrodite.logger import init_logger
-from aphrodite.v1.engine import (
+from sonar.distributed.utils import get_cached_tcp_store_client
+from sonar.logger import init_logger
+from sonar.v1.engine import (
     EEPNotificationType,
     ReconfigureDistributedRequest,
     ReconfigureRankType,
 )
-from aphrodite.v1.engine.core import DPEngineCoreProc
+from sonar.v1.engine.core import DPEngineCoreProc
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
-    from aphrodite.v1.executor.abstract import Executor
+    from sonar.config import SonarConfig
+    from sonar.v1.executor.abstract import Executor
 
 logger = init_logger(__name__)
 
@@ -66,7 +66,7 @@ class ElasticEPScalingState:
         self,
         model_executor: "Executor",
         engine_core: "DPEngineCoreProc",
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
         new_parallel_config: ParallelConfig,
         worker_type: WorkerType,
         scale_type: Literal["scale_up", "scale_down"],
@@ -74,7 +74,7 @@ class ElasticEPScalingState:
     ):
         self.model_executor_ref = weakref.ref(model_executor)
         self.engine_core_ref = weakref.ref(engine_core)
-        self.aphrodite_config = aphrodite_config
+        self.sonar_config = sonar_config
         self.old_dp_group = self.engine_core.dp_group if worker_type != "new" else None
         self.new_parallel_config: ParallelConfig = new_parallel_config
         self.new_dp_group = self.engine_core.dp_group if worker_type == "new" else None
@@ -242,7 +242,7 @@ class ElasticEPScalingState:
         if state == ScaleDownRemovingEngineState.PREPARE:
             assert self.old_dp_group.rank() > 0
             self._commit_scale_down(removing=True)
-            external_lb = self.aphrodite_config.parallel_config.data_parallel_external_lb
+            external_lb = self.sonar_config.parallel_config.data_parallel_external_lb
             if external_lb:
                 # Preserve completion delivery: client cleanup on exit must not
                 # cancel the receiver before it records the notification.
@@ -377,7 +377,7 @@ class ElasticEPScalingState:
 
     def _send_reconfigure_finished(self):
         assert self.new_dp_group is not None
-        if self.new_dp_group.rank() == 0 or self.aphrodite_config.parallel_config.data_parallel_external_lb:
+        if self.new_dp_group.rank() == 0 or self.sonar_config.parallel_config.data_parallel_external_lb:
             self.engine_core._eep_send_engine_core_notification(EEPNotificationType.RECONFIGURE_FINISHED)
 
     def _commit_scale_down(self, removing: bool):
@@ -396,7 +396,7 @@ class ElasticEPScalingState:
     def _update_parallel_config(self):
         assert self.reconfig_request is not None
         reconfig_request = self.reconfig_request
-        parallel_config = self.aphrodite_config.parallel_config
+        parallel_config = self.sonar_config.parallel_config
         parallel_config.data_parallel_size = reconfig_request.new_data_parallel_size
         if reconfig_request.new_data_parallel_rank != ReconfigureRankType.KEEP_CURRENT_RANK:
             parallel_config.data_parallel_rank = reconfig_request.new_data_parallel_rank

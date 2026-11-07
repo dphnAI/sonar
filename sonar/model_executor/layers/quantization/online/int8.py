@@ -7,28 +7,28 @@ import torch
 from torch.nn import Module
 
 if TYPE_CHECKING:
-    from aphrodite.model_executor.layers.fused_moe.config import (
+    from sonar.model_executor.layers.fused_moe.config import (
         FusedMoEQuantConfig,
     )
 
-from aphrodite.model_executor.layers.fused_moe import RoutedExperts
-from aphrodite.model_executor.layers.fused_moe.config import FusedMoEConfig
-from aphrodite.model_executor.layers.fused_moe.oracle.int8 import (
+from sonar.model_executor.layers.fused_moe import RoutedExperts
+from sonar.model_executor.layers.fused_moe.config import FusedMoEConfig
+from sonar.model_executor.layers.fused_moe.oracle.int8 import (
     convert_to_int8_moe_kernel_format,
     make_int8_moe_kernel,
     make_int8_moe_quant_config,
     select_int8_moe_backend,
 )
-from aphrodite.model_executor.layers.quantization.online.moe_base import (
+from sonar.model_executor.layers.quantization.online.moe_base import (
     OnlineMoEMethodBase,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     amax_for_moe_weight_quant,
     kInt8DynamicTokenSym,
     kInt8StaticChannelSym,
     weight_amax,
 )
-from aphrodite.model_executor.utils import replace_parameter
+from sonar.model_executor.utils import replace_parameter
 
 
 class Int8OnlineMoEMethod(OnlineMoEMethodBase):

@@ -6,16 +6,16 @@ import functools
 
 import torch
 
-from aphrodite.distributed import get_tensor_model_parallel_world_size
-from aphrodite.model_executor.layers.fused_moe.moe_output import (
+from sonar.distributed import get_tensor_model_parallel_world_size
+from sonar.model_executor.layers.fused_moe.moe_output import (
     UnfinalizedMoEOutput,
     convert_flashinfer_moe_output,
 )
-from aphrodite.models.muse_spark.nvidia.mega_moe import MuseSparkMegaMoEExperts
-from aphrodite.models.muse_spark.nvidia.ops.mnnvl_fusions import (
+from sonar.models.muse_spark.nvidia.mega_moe import MuseSparkMegaMoEExperts
+from sonar.models.muse_spark.nvidia.ops.mnnvl_fusions import (
     maybe_create_moe_finalize_all_reduce,
 )
-from aphrodite.models.muse_spark.nvidia.ops.prepare_trtllm_nvfp4 import (
+from sonar.models.muse_spark.nvidia.ops.prepare_trtllm_nvfp4 import (
     norm_quant_trtllm_nvfp4,
 )
 

@@ -17,13 +17,13 @@ import numpy as np
 import torch
 from typing_extensions import runtime_checkable
 
-from aphrodite.config import AphroditeConfig, CacheConfig, get_layers_from_aphrodite_config
-from aphrodite.config.cache import _layout_from_name
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.gpu_sync_debug import gpu_sync_allowed
-from aphrodite.utils.math_utils import cdiv, round_down
-from aphrodite.utils.torch_utils import PIN_MEMORY, async_tensor_h2d, np_to_pinned_tensor
-from aphrodite.v1.kv_cache_interface import (
+from sonar.config import CacheConfig, SonarConfig, get_layers_from_sonar_config
+from sonar.config.cache import _layout_from_name
+from sonar.triton_utils import tl, triton
+from sonar.utils.gpu_sync_debug import gpu_sync_allowed
+from sonar.utils.math_utils import cdiv, round_down
+from sonar.utils.torch_utils import PIN_MEMORY, async_tensor_h2d, np_to_pinned_tensor
+from sonar.v1.kv_cache_interface import (
     AttentionSpec,
     KVCacheLayout,
     KVCacheSpec,
@@ -32,17 +32,17 @@ from aphrodite.v1.kv_cache_interface import (
 )
 
 if TYPE_CHECKING:
-    from aphrodite.v1.core.sched.output import SchedulerOutput
-    from aphrodite.v1.worker.gpu_input_batch import InputBatch
+    from sonar.v1.core.sched.output import SchedulerOutput
+    from sonar.v1.worker.gpu_input_batch import InputBatch
 
-import aphrodite.envs as envs
-from aphrodite.distributed.kv_transfer.kv_connector.utils import (
+import sonar.envs as envs
+from sonar.distributed.kv_transfer.kv_connector.utils import (
     get_kv_connector_cache_layout,
 )
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.attention_layer_base import AttentionLayerBase
-from aphrodite.multimodal.inputs import MultiModalFeatureSpec
-from aphrodite.v1.attention.backend import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.attention_layer_base import AttentionLayerBase
+from sonar.multimodal.inputs import MultiModalFeatureSpec
+from sonar.v1.attention.backend import (
     AttentionBackend,
     AttentionImpl,
     AttentionMetadata,
@@ -285,7 +285,7 @@ def record_kv_cache_layout(cache_config: CacheConfig, layout_name: str) -> None:
 
 
 def resolve_kv_cache_layout(
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     supported_layouts: list[list[str]],
     kv_cache_specs: Iterable[KVCacheSpec] | None = None,
 ) -> KVCacheLayout:
@@ -297,7 +297,7 @@ def resolve_kv_cache_layout(
     the layouts every worker supports, and the layout the most workers put first
     wins. Workers whose backends declare nothing do not vote. Specs mixing HNC
     shapes narrow the candidates to block-compact layouts. An explicit
-    ``APHRODITE_KV_CACHE_LAYOUT`` must be one of the candidates or resolution fails,
+    ``SONAR_KV_CACHE_LAYOUT`` must be one of the candidates or resolution fails,
     with the legacy ``NHD``/``HND`` names as aliases for ``LBNHC``/``LBHNC``; the
     connector's preference is used when compatible and dropped with a warning
     otherwise. A layout already present on ``cache_config`` wins outright, and
@@ -305,7 +305,7 @@ def resolve_kv_cache_layout(
     reaches workers through the ``set_kv_cache_layout`` RPC and
     ``KVCacheConfig.kv_cache_layout``.
     """
-    cache_config = aphrodite_config.cache_config
+    cache_config = sonar_config.cache_config
     if cache_config.kv_cache_layout is not None:
         return cache_config.get_resolved_kv_cache_layout()
 
@@ -348,14 +348,14 @@ def resolve_kv_cache_layout(
                 f"a block-outer KV cache layout; supported sets: {supported_layouts}."
             )
 
-    if (requested := envs.APHRODITE_KV_CACHE_LAYOUT) is not None:
+    if (requested := envs.SONAR_KV_CACHE_LAYOUT) is not None:
         layout = _layout_from_name(requested)
         if layout not in candidates:
             raise ValueError(
-                f"APHRODITE_KV_CACHE_LAYOUT={requested} does not satisfy every "
+                f"SONAR_KV_CACHE_LAYOUT={requested} does not satisfy every "
                 f"supported set; valid layouts: {_layout_names(candidates)}."
             )
-    elif (connector := get_kv_connector_cache_layout(aphrodite_config)) is not None:
+    elif (connector := get_kv_connector_cache_layout(sonar_config)) is not None:
         layout = _layout_from_name(connector)
         if layout not in candidates:
             logger.warning_once(
@@ -390,13 +390,13 @@ class PerLayerParameters:
 
 
 def get_per_layer_parameters(
-    aphrodite_config: AphroditeConfig, layer_names: list[str], cls_: type["AttentionImpl"]
+    sonar_config: SonarConfig, layer_names: list[str], cls_: type["AttentionImpl"]
 ) -> dict[str, PerLayerParameters]:
     """Scan layers in `layer_names` and determine some hyperparameters
     to use during `plan`.
     """
-    layers = get_layers_from_aphrodite_config(
-        aphrodite_config,
+    layers = get_layers_from_sonar_config(
+        sonar_config,
         AttentionLayerBase,  # type: ignore[type-abstract]
         layer_names,
     )
@@ -427,15 +427,15 @@ def _kv_cache_read_encoding(cache_dtype: str | None) -> str | None:
     return cache_dtype
 
 
-def get_kv_cache_dtype_from_layers(aphrodite_config: AphroditeConfig, layer_names: list[str]) -> str | None:
+def get_kv_cache_dtype_from_layers(sonar_config: SonarConfig, layer_names: list[str]) -> str | None:
     """Resolve the KV read encoding shared by an attention group.
 
     Attention groups are split by spec, which separates quantization modes but
     not encodings that share a storage layout (e.g. fp8_e4m3 vs fp8_e5m2).
     Those must not be mixed within one group.
     """
-    layers = get_layers_from_aphrodite_config(
-        aphrodite_config,
+    layers = get_layers_from_sonar_config(
+        sonar_config,
         AttentionLayerBase,  # type: ignore[type-abstract]
         layer_names,
     )
@@ -450,7 +450,7 @@ def get_kv_cache_dtype_from_layers(aphrodite_config: AphroditeConfig, layer_name
     return cache_dtypes.pop()
 
 
-def get_num_attention_heads_from_layers(aphrodite_config: AphroditeConfig, layer_names: list[str]) -> int | None:
+def get_num_attention_heads_from_layers(sonar_config: SonarConfig, layer_names: list[str]) -> int | None:
     """Per-TP-rank ``num_heads`` shared by the named Attention layers.
 
     Use in metadata builders whose plan-time allocations depend on the
@@ -459,8 +459,8 @@ def get_num_attention_heads_from_layers(aphrodite_config: AphroditeConfig, layer
     one attention group must agree on ``num_heads``; this is asserted.
     Returns ``None`` when no matching Attention layer is found.
     """
-    attn_layers = get_layers_from_aphrodite_config(
-        aphrodite_config,
+    attn_layers = get_layers_from_sonar_config(
+        sonar_config,
         AttentionLayerBase,  # type: ignore[type-abstract]
         layer_names,
     )

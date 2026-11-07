@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-from aphrodite.distributed.kv_events import KVCacheEventType
-from aphrodite.v1.core.block_pool import BlockPool
+from sonar.distributed.kv_events import KVCacheEventType
+from sonar.v1.core.block_pool import BlockPool
 
 
 class SharedEventQueueBlockPool(BlockPool):

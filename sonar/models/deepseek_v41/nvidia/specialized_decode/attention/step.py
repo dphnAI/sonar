@@ -30,10 +30,10 @@ from typing import TYPE_CHECKING, Any, cast
 
 import torch
 
-from aphrodite.forward_context import get_forward_context
-from aphrodite.model_executor.layers.fusion.quant_activation import QuantizedActivation
-from aphrodite.model_executor.layers.sparse_attn_indexer import SparseAttnIndexer
-from aphrodite.models.deepseek_v41.attention import DeepseekV4Indexer
+from sonar.forward_context import get_forward_context
+from sonar.model_executor.layers.fusion.quant_activation import QuantizedActivation
+from sonar.model_executor.layers.sparse_attn_indexer import SparseAttnIndexer
+from sonar.models.deepseek_v41.attention import DeepseekV4Indexer
 
 from ...flashinfer_sparse import DeepseekV4FlashInferMLAAttention
 from ...ops.o_proj import dsv41_o_proj

@@ -6,20 +6,20 @@ from types import SimpleNamespace
 
 import torch
 
-from aphrodite.config import set_current_aphrodite_config
-from aphrodite.models.deepseek_v4.nvidia.flashinfer_sparse import (
+from sonar.config import set_current_sonar_config
+from sonar.models.deepseek_v4.nvidia.flashinfer_sparse import (
     _required_sm120_sparse_topk,
 )
-from aphrodite.platforms.interface import DeviceCapability
-from aphrodite.utils import flashinfer as fi_utils
-from aphrodite.v1.attention.backends.mla.flashinfer_mla_sparse import (
+from sonar.platforms.interface import DeviceCapability
+from sonar.utils import flashinfer as fi_utils
+from sonar.v1.attention.backends.mla.flashinfer_mla_sparse import (
     FlashInferMLASparseSM120Backend,
 )
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
-from aphrodite.v1.kv_cache_layout import KVCacheLayout
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
+from sonar.v1.kv_cache_layout import KVCacheLayout
 
 
-def _fake_aphrodite_config(model_type: str) -> SimpleNamespace:
+def _fake_sonar_config(model_type: str) -> SimpleNamespace:
     return SimpleNamespace(
         model_config=SimpleNamespace(
             hf_text_config=SimpleNamespace(model_type=model_type, index_topk=2048),
@@ -48,7 +48,7 @@ def test_v32_glm_sm120_backend_accepts_glm_block_size(
 ) -> None:
     monkeypatch.setattr(fi_utils, "has_flashinfer_sparse_mla_sm120", lambda: True)
 
-    with set_current_aphrodite_config(_fake_aphrodite_config("glm4_moe")):
+    with set_current_sonar_config(_fake_sonar_config("glm4_moe")):
         invalid_reasons = FlashInferMLASparseSM120Backend.validate_configuration(
             head_size=576,
             dtype=torch.bfloat16,

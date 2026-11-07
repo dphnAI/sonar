@@ -6,20 +6,20 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from aphrodite.platforms import Platform
-from aphrodite.v1.core.kv_cache_config_builder import (
+from sonar.platforms import Platform
+from sonar.v1.core.kv_cache_config_builder import (
     KVCacheConfigBuilder,
     get_kv_cache_config_builder,
 )
-from aphrodite.v1.core.kv_cache_planning import (
+from sonar.v1.core.kv_cache_planning import (
     DefaultKVCacheConfigBuilder,
     get_kv_cache_groups_from_builder,
 )
-from aphrodite.v1.kv_cache_interface import FullAttentionSpec, KVCacheGroupSpec
+from sonar.v1.kv_cache_interface import FullAttentionSpec, KVCacheGroupSpec
 
 
-def _make_aphrodite_config(supports_grouping: bool = False) -> MagicMock:
-    """Create a minimal mock AphroditeConfig for builder resolution tests.
+def _make_sonar_config(supports_grouping: bool = False) -> MagicMock:
+    """Create a minimal mock SonarConfig for builder resolution tests.
 
     ``supports_grouping`` selects whether the resolved model class declares
     ``SupportsKVCacheGrouping`` (exposing a ``get_kv_cache_groups`` classmethod).
@@ -36,7 +36,7 @@ def _make_aphrodite_config(supports_grouping: bool = False) -> MagicMock:
 
 
 CUSTOM_PATH = "tests.v1.core.test_kv_cache_config_builder.CustomBuilder"
-DEFAULT_PATH = "aphrodite.v1.core.kv_cache_planning.DefaultKVCacheConfigBuilder"
+DEFAULT_PATH = "sonar.v1.core.kv_cache_planning.DefaultKVCacheConfigBuilder"
 
 
 class CustomBuilder(DefaultKVCacheConfigBuilder):
@@ -49,7 +49,7 @@ class _GroupedModel:
     """A test model class with a ``get_kv_cache_groups`` classmethod."""
 
     @classmethod
-    def get_kv_cache_groups(cls, aphrodite_config, kv_cache_spec):
+    def get_kv_cache_groups(cls, sonar_config, kv_cache_spec):
         return []
 
 
@@ -57,8 +57,8 @@ class _PartialGroupedModel:
     """A test model class whose grouping omits layers."""
 
     @classmethod
-    def get_kv_cache_groups(cls, aphrodite_config, kv_cache_spec):
-        from aphrodite.v1.kv_cache_interface import KVCacheGroupSpec
+    def get_kv_cache_groups(cls, sonar_config, kv_cache_spec):
+        from sonar.v1.kv_cache_interface import KVCacheGroupSpec
 
         return [KVCacheGroupSpec(["a"], kv_cache_spec["a"])]
 
@@ -67,12 +67,12 @@ class TestPlatformHookResolution:
     """The platform hook selects only the placement builder."""
 
     def test_default_hook_returns_default_builder(self):
-        cfg = _make_aphrodite_config()
+        cfg = _make_sonar_config()
         assert Platform.get_kv_cache_config_builder_cls(cfg) == DEFAULT_PATH
 
 
 class TestBuilderResolution:
-    @patch("aphrodite.platforms.current_platform")
+    @patch("sonar.platforms.current_platform")
     @pytest.mark.parametrize(
         ("builder_cls_path", "expected_cls"),
         [
@@ -82,13 +82,13 @@ class TestBuilderResolution:
     )
     def test_resolves_hook_selected_builder(self, mock_platform, builder_cls_path, expected_cls):
         mock_platform.get_kv_cache_config_builder_cls.return_value = builder_cls_path or DEFAULT_PATH
-        cfg = _make_aphrodite_config()
+        cfg = _make_sonar_config()
         assert type(get_kv_cache_config_builder(cfg)) is expected_cls
 
-    @patch("aphrodite.platforms.current_platform")
+    @patch("sonar.platforms.current_platform")
     def test_resolves_fresh_instance_per_call(self, mock_platform):
         mock_platform.get_kv_cache_config_builder_cls.return_value = CUSTOM_PATH
-        cfg = _make_aphrodite_config()
+        cfg = _make_sonar_config()
         assert get_kv_cache_config_builder(cfg) is not get_kv_cache_config_builder(cfg)
 
     def test_public_interface_declares_two_placement_hooks(self):
@@ -107,11 +107,11 @@ class TestModelGroupingPriority:
     """A model class with a get_kv_cache_groups classmethod owns grouping."""
 
     def test_model_classmethod_owns_grouping(self):
-        cfg = _make_aphrodite_config(supports_grouping=True)
+        cfg = _make_sonar_config(supports_grouping=True)
         assert DefaultKVCacheConfigBuilder().get_kv_cache_groups(cfg, {}) == []
 
     def test_model_grouping_rejects_hisparse(self):
-        cfg = _make_aphrodite_config(supports_grouping=True)
+        cfg = _make_sonar_config(supports_grouping=True)
         cfg.attention_config.hisparse_config = object()
         with pytest.raises(ValueError, match="HiSparse"):
             DefaultKVCacheConfigBuilder().get_kv_cache_groups(cfg, {})
@@ -123,7 +123,7 @@ class TestCoreChecksGrouping:
     _SPEC = FullAttentionSpec(block_size=16, num_kv_heads=1, head_size=128, dtype="float16")
 
     def test_model_grouping_is_checked(self):
-        cfg = _make_aphrodite_config(supports_grouping=True)
+        cfg = _make_sonar_config(supports_grouping=True)
         cfg.model_config.registry.resolve_model_cls.return_value = (
             _PartialGroupedModel,
             "arch",
@@ -143,13 +143,13 @@ class TestCoreChecksGrouping:
     )
     def test_platform_grouping_is_checked(self, groups, match):
         class FixedGroupsBuilder(DefaultKVCacheConfigBuilder):
-            def get_kv_cache_groups(self, aphrodite_config, kv_cache_spec):
+            def get_kv_cache_groups(self, sonar_config, kv_cache_spec):
                 return groups
 
         with pytest.raises(AssertionError, match=match):
             get_kv_cache_groups_from_builder(
                 FixedGroupsBuilder(),
-                _make_aphrodite_config(),
+                _make_sonar_config(),
                 {"a": self._SPEC, "b": self._SPEC},
             )
 
@@ -160,12 +160,12 @@ class TestPlatformCustomPriority:
     def test_platform_builder_wins_over_model_declaration(self):
         class PlatformFirstPlatform(Platform):
             @classmethod
-            def get_kv_cache_config_builder_cls(cls, aphrodite_config):
+            def get_kv_cache_config_builder_cls(cls, sonar_config):
                 return CUSTOM_PATH
 
-        cfg = _make_aphrodite_config()
+        cfg = _make_sonar_config()
         assert PlatformFirstPlatform.get_kv_cache_config_builder_cls(cfg) == CUSTOM_PATH
-        with patch("aphrodite.platforms.current_platform", PlatformFirstPlatform):
+        with patch("sonar.platforms.current_platform", PlatformFirstPlatform):
             assert isinstance(get_kv_cache_config_builder(cfg), CustomBuilder)
 
 
@@ -173,8 +173,8 @@ class TestProjectionPreservesGroupMetadata:
     """PP projection must carry host_resident/role/enable_kv_transfer."""
 
     def test_partial_projection_preserves_metadata(self):
-        from aphrodite.v1.core.kv_cache_planning import _project_kv_cache_groups_to_worker
-        from aphrodite.v1.kv_cache_interface import (
+        from sonar.v1.core.kv_cache_planning import _project_kv_cache_groups_to_worker
+        from sonar.v1.kv_cache_interface import (
             FullAttentionSpec,
             KVCacheGroupRole,
         )
@@ -203,20 +203,20 @@ class TestBytesPerBlockProbe:
     def test_probe_suppresses_override(self):
         import torch
 
-        from aphrodite.config import AphroditeConfig, CacheConfig, ModelConfig
-        from aphrodite.v1.attention.backends.utils import resolve_kv_cache_layout
-        from aphrodite.v1.core.kv_cache_planning import (
+        from sonar.config import CacheConfig, ModelConfig, SonarConfig
+        from sonar.v1.attention.backends.utils import resolve_kv_cache_layout
+        from sonar.v1.core.kv_cache_planning import (
             DefaultKVCacheConfigBuilder,
             _pool_bytes_per_block,
             _pool_bytes_per_block_from_builder,
         )
-        from aphrodite.v1.kv_cache_interface import (
+        from sonar.v1.kv_cache_interface import (
             FullAttentionSpec,
             KVCacheGroupSpec,
         )
 
         spec = FullAttentionSpec(block_size=16, num_kv_heads=1, head_size=128, dtype=torch.float16)
-        vc = AphroditeConfig(
+        vc = SonarConfig(
             model_config=ModelConfig(max_model_len=100),
             cache_config=CacheConfig(block_size=16),
         )
@@ -236,15 +236,15 @@ class TestBytesPerBlockProbe:
     def test_several_device_allocations_need_declared_pool_bytes(self, declares_pool_bytes):
         """A placement with one allocation per group cannot be sized from one
         backing; the builder must declare its per-block bytes."""
-        from aphrodite.v1.core.kv_cache_planning import _pool_bytes_per_block_from_builder
-        from aphrodite.v1.kv_cache_interface import (
+        from sonar.v1.core.kv_cache_planning import _pool_bytes_per_block_from_builder
+        from sonar.v1.kv_cache_interface import (
             KVCacheConfig,
             KVCacheGroupSpec,
             KVCacheTensor,
         )
 
         class PerGroupAllocationBuilder(DefaultKVCacheConfigBuilder):
-            def get_kv_cache_config_from_groups(self, aphrodite_config, groups, num_blocks):
+            def get_kv_cache_config_from_groups(self, sonar_config, groups, num_blocks):
                 tensors = [
                     KVCacheTensor(
                         size=page * num_blocks,
@@ -256,10 +256,10 @@ class TestBytesPerBlockProbe:
                 ]
                 return KVCacheConfig(num_blocks, tensors, groups)
 
-            def _get_pool_bytes_per_block(self, aphrodite_config, groups):
+            def _get_pool_bytes_per_block(self, sonar_config, groups):
                 return 64 + 32 if declares_pool_bytes else None
 
-        vc = _make_aphrodite_config()
+        vc = _make_sonar_config()
         vc.cache_config.num_gpu_blocks_override = None
         groups = [KVCacheGroupSpec([name], MagicMock()) for name in "ab"]
         builder = PerGroupAllocationBuilder()

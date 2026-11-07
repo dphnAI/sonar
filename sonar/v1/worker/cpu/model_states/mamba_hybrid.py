@@ -5,20 +5,20 @@ import ctypes
 import torch
 import torch.nn as nn
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.model_executor.layers.mamba.mamba_utils import MambaStateCopyFuncsByType
-from aphrodite.v1.core.sched.output import NewRequestData
-from aphrodite.v1.kv_cache_interface import (
+from sonar.config import SonarConfig
+from sonar.model_executor.layers.mamba.mamba_utils import MambaStateCopyFuncsByType
+from sonar.v1.core.sched.output import NewRequestData
+from sonar.v1.kv_cache_interface import (
     KVCacheConfig,
     KVCacheGroupSpec,
     MambaSpec,
     UniformTypeKVCacheSpecs,
 )
-from aphrodite.v1.worker.cpu.block_table import CPUBlockTables
-from aphrodite.v1.worker.cpu.encoder_cache import EncoderCache
-from aphrodite.v1.worker.cpu.input_batch import InputBatch
-from aphrodite.v1.worker.cpu.model_states.default import DefaultModelState
-from aphrodite.v1.worker.mamba_utils import (
+from sonar.v1.worker.cpu.block_table import CPUBlockTables
+from sonar.v1.worker.cpu.encoder_cache import EncoderCache
+from sonar.v1.worker.cpu.input_batch import InputBatch
+from sonar.v1.worker.cpu.model_states.default import DefaultModelState
+from sonar.v1.worker.mamba_utils import (
     get_mamba_group_ids,
     get_mamba_groups,
     validate_mamba_state_copy_funcs,
@@ -38,13 +38,13 @@ class MambaHybridModelState(DefaultModelState):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         model: nn.Module,
         encoder_cache: EncoderCache | None,
         device: torch.device,
     ) -> None:
-        super().__init__(aphrodite_config, model, encoder_cache, device)
-        self.cache_config = aphrodite_config.cache_config
+        super().__init__(sonar_config, model, encoder_cache, device)
+        self.cache_config = sonar_config.cache_config
         self._align_mode = self.cache_config.mamba_cache_mode == "align"
         if self._align_mode:
             self._mamba_state_idx = torch.zeros(self.max_num_reqs, dtype=torch.int32, device=self.device)
@@ -110,7 +110,7 @@ class MambaHybridModelState(DefaultModelState):
 
         copy_funcs_by_type = self._mamba_state_copy_funcs
         assert copy_funcs_by_type is not None
-        forward_context = self.aphrodite_config.compilation_config.static_forward_context
+        forward_context = self.sonar_config.compilation_config.static_forward_context
         for batch_idx in crossed_rows.tolist():
             src_col = int(previous_state_indices[batch_idx])
             dst_col = int(current_state_indices[batch_idx])

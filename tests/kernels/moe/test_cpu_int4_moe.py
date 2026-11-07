@@ -8,15 +8,15 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.experts.cpu_int4_moe import (
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.experts.cpu_int4_moe import (
     CPUExpertsInt4,
 )
-from aphrodite.model_executor.layers.fused_moe.oracle.w4a8_int8 import (
+from sonar.model_executor.layers.fused_moe.oracle.w4a8_int8 import (
     convert_to_w4a8_int8_moe_format,
 )
-from aphrodite.platforms import CpuArchEnum, current_platform
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.platforms import CpuArchEnum, current_platform
+from sonar.utils.torch_utils import set_random_seed
 
 if not current_platform.is_cpu() or current_platform.get_cpu_architecture() != CpuArchEnum.ARM:
     pytest.skip("skipping Arm CPU-only tests", allow_module_level=True)

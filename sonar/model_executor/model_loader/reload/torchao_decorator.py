@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Concatenate, ParamSpec, TypeVar
 
 import torch
 
-from aphrodite.config import ModelConfig
+from sonar.config import ModelConfig
 
 from .layerwise import (
     finalize_layerwise_processing,
@@ -15,7 +15,7 @@ from .layerwise import (
 )
 
 if TYPE_CHECKING:
-    from aphrodite.model_executor.models.utils import AutoWeightsLoader
+    from sonar.model_executor.models.utils import AutoWeightsLoader
 
 __all__ = ["set_torchao_reload_attrs", "support_quantized_model_reload_from_hp_weights"]
 

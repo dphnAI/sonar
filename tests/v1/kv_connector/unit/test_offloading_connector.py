@@ -11,15 +11,15 @@ import pytest
 import zmq
 from tqdm import tqdm
 
-from aphrodite import LLM, SamplingParams, TokensPrompt
-from aphrodite.config import KVEventsConfig, KVTransferConfig
-from aphrodite.distributed.kv_events import BlockStored, KVEventBatch
-from aphrodite.distributed.kv_transfer.kv_connector.v1.offloading.worker import (
+from sonar import LLM, SamplingParams, TokensPrompt
+from sonar.config import KVEventsConfig, KVTransferConfig
+from sonar.distributed.kv_events import BlockStored, KVEventBatch
+from sonar.distributed.kv_transfer.kv_connector.v1.offloading.worker import (
     OffloadingConnectorWorker,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.v1.kv_offload.tiering.manager import TieringOffloadingManager
+from sonar.platforms import current_platform
+from sonar.utils.math_utils import cdiv
+from sonar.v1.kv_offload.tiering.manager import TieringOffloadingManager
 
 # The offloaded block size must stay a whole number of GPU blocks.
 CPU_BLOCK_SIZES: int
@@ -36,7 +36,7 @@ _ATTN_BACKENDS: list[str] = []
 if current_platform.is_cuda():
     _ATTN_BACKENDS = ["FLASH_ATTN", "FLASHINFER", "TRITON_ATTN"]
 elif current_platform.is_rocm():
-    from aphrodite._aiter_ops import is_aiter_found_and_supported
+    from sonar._aiter_ops import is_aiter_found_and_supported
 
     _ATTN_BACKENDS = ["TRITON_ATTN"]
     if is_aiter_found_and_supported():
@@ -167,7 +167,7 @@ def _latency_test(llm: LLM, subscriber: MockSubscriber | None):
     total_cold_time = 0.0
     total_gpu_hit_time = 0.0
     total_cpu_hit_time = 0.0
-    max_model_len = llm.llm_engine.aphrodite_config.model_config.max_model_len
+    max_model_len = llm.llm_engine.sonar_config.model_config.max_model_len
     # Use a long prompt that fits within the model's context window.
     prompt_len = min(10001, max_model_len - 1)
     prompt_token_ids = [0] * prompt_len
@@ -217,12 +217,12 @@ def _latency_test(llm: LLM, subscriber: MockSubscriber | None):
 
 def _accuracy_test(llm: LLM, subscriber: MockSubscriber | None):
     sampling_params = SamplingParams(max_tokens=1)
-    extra_config = llm.llm_engine.aphrodite_config.kv_transfer_config.kv_connector_extra_config
+    extra_config = llm.llm_engine.sonar_config.kv_transfer_config.kv_connector_extra_config
     cpu_block_size = extra_config.get("block_size")
     if cpu_block_size is None:
         # No custom offloaded block_size: offloaded blocks match GPU blocks.
         # Use the hash block_size (cache_config.block_size) for alignment.
-        cpu_block_size = llm.llm_engine.aphrodite_config.cache_config.block_size
+        cpu_block_size = llm.llm_engine.sonar_config.cache_config.block_size
 
     if subscriber is not None:
         subscriber.get_new_cpu_stored_events()
@@ -320,12 +320,12 @@ def test_cpu_offloading(
 
 
 def _sliding_window_partial_chunk_test(llm: LLM) -> None:
-    aphrodite_config = llm.llm_engine.aphrodite_config
-    extra_config = aphrodite_config.kv_transfer_config.kv_connector_extra_config
+    sonar_config = llm.llm_engine.sonar_config
+    extra_config = sonar_config.kv_transfer_config.kv_connector_extra_config
     assert extra_config["store_threshold"] == 2
     blocks_per_chunk = extra_config["blocks_per_chunk"]
-    block_size = aphrodite_config.cache_config.block_size
-    model_config = aphrodite_config.model_config
+    block_size = sonar_config.cache_config.block_size
+    model_config = sonar_config.model_config
     window = model_config.get_sliding_window()
     assert window is not None
     window_blocks = cdiv(window - 1, block_size)
@@ -465,36 +465,36 @@ def test_cpu_offloading_metrics() -> None:
             return total
 
         # New flat counter metrics
-        store_bytes = _get_counter_value("aphrodite:kv_offload_store_bytes")
+        store_bytes = _get_counter_value("sonar:kv_offload_store_bytes")
         assert store_bytes > 0, f"Expected store_bytes > 0, got {store_bytes}"
-        load_bytes = _get_counter_value("aphrodite:kv_offload_load_bytes")
+        load_bytes = _get_counter_value("sonar:kv_offload_load_bytes")
         assert load_bytes > 0, f"Expected load_bytes > 0, got {load_bytes}"
-        store_time = _get_counter_value("aphrodite:kv_offload_store_time")
+        store_time = _get_counter_value("sonar:kv_offload_store_time")
         assert store_time > 0, f"Expected store_time > 0, got {store_time}"
-        load_time = _get_counter_value("aphrodite:kv_offload_load_time")
+        load_time = _get_counter_value("sonar:kv_offload_load_time")
         assert load_time > 0, f"Expected load_time > 0, got {load_time}"
 
         # New flat histogram metrics
-        store_size_count = _get_histogram_count("aphrodite:kv_offload_store_size")
+        store_size_count = _get_histogram_count("sonar:kv_offload_store_size")
         assert store_size_count > 0, f"Expected store_size histogram observations > 0, got {store_size_count}"
-        load_size_count = _get_histogram_count("aphrodite:kv_offload_load_size")
+        load_size_count = _get_histogram_count("sonar:kv_offload_load_size")
         assert load_size_count > 0, f"Expected load_size histogram observations > 0, got {load_size_count}"
 
         # Deprecated labeled metrics — verify per transfer_type label.
         load_label = {"transfer_type": "CPU_to_GPU"}
         store_label = {"transfer_type": "GPU_to_CPU"}
 
-        dep_load_bytes = _get_counter_value("aphrodite:kv_offload_total_bytes", load_label)
+        dep_load_bytes = _get_counter_value("sonar:kv_offload_total_bytes", load_label)
         assert dep_load_bytes > 0, f"Expected deprecated load bytes > 0, got {dep_load_bytes}"
-        dep_store_bytes = _get_counter_value("aphrodite:kv_offload_total_bytes", store_label)
+        dep_store_bytes = _get_counter_value("sonar:kv_offload_total_bytes", store_label)
         assert dep_store_bytes > 0, f"Expected deprecated store bytes > 0, got {dep_store_bytes}"
-        dep_load_time = _get_counter_value("aphrodite:kv_offload_total_time", load_label)
+        dep_load_time = _get_counter_value("sonar:kv_offload_total_time", load_label)
         assert dep_load_time > 0, f"Expected deprecated load time > 0, got {dep_load_time}"
-        dep_store_time = _get_counter_value("aphrodite:kv_offload_total_time", store_label)
+        dep_store_time = _get_counter_value("sonar:kv_offload_total_time", store_label)
         assert dep_store_time > 0, f"Expected deprecated store time > 0, got {dep_store_time}"
-        dep_load_size = _get_histogram_count("aphrodite:kv_offload_size", load_label)
+        dep_load_size = _get_histogram_count("sonar:kv_offload_size", load_label)
         assert dep_load_size > 0, f"Expected deprecated load size observations > 0, got {dep_load_size}"
-        dep_store_size = _get_histogram_count("aphrodite:kv_offload_size", store_label)
+        dep_store_size = _get_histogram_count("sonar:kv_offload_size", store_label)
         assert dep_store_size > 0, f"Expected deprecated store size observations > 0, got {dep_store_size}"
 
         # Flat and deprecated metrics must be consistent (dual-write).
@@ -713,7 +713,7 @@ def test_tiering_cache_reset_resumes_promotions_on_idle_engine(tmp_path, monkeyp
     reports even with no request left, or secondary-tier hits stay misses."""
     # The engine core and its worker run in this process, so the test can
     # withhold the worker's reports and step the engine itself.
-    monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
+    monkeypatch.setenv("SONAR_ENABLE_V1_MULTIPROCESSING", "0")
     reports_open = threading.Event()
     reports_open.set()
     build_worker_meta = OffloadingConnectorWorker.build_connector_worker_meta

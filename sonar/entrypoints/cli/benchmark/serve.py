@@ -2,13 +2,13 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import argparse
 
-from aphrodite.benchmarks.serve import add_cli_args, main
-from aphrodite.entrypoints.cli.benchmark.base import BenchmarkSubcommandBase
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
+from sonar.benchmarks.serve import add_cli_args, main
+from sonar.entrypoints.cli.benchmark.base import BenchmarkSubcommandBase
+from sonar.utils.argparse_utils import FlexibleArgumentParser
 
 
 class BenchmarkServingSubcommand(BenchmarkSubcommandBase):
-    """The `serve` subcommand for `aphrodite bench`."""
+    """The `serve` subcommand for `sonar bench`."""
 
     name = "serve"
     help = "Benchmark the online serving throughput."

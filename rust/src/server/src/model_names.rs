@@ -10,7 +10,7 @@ pub(crate) struct ServedModelNames {
     /// entry is the primary name.
     names: Vec<String>,
     /// Accept any other name too, served by the base model, like Python with
-    /// `APHRODITE_SKIP_MODEL_NAME_VALIDATION` (for proxies and gateways that
+    /// `SONAR_SKIP_MODEL_NAME_VALIDATION` (for proxies and gateways that
     /// rewrite or ignore model names).
     accept_any: bool,
 }
@@ -26,7 +26,7 @@ impl ServedModelNames {
     }
 
     /// Also accept any other name, served by the base model
-    /// (`APHRODITE_SKIP_MODEL_NAME_VALIDATION`).
+    /// (`SONAR_SKIP_MODEL_NAME_VALIDATION`).
     pub fn with_accept_any(mut self, accept_any: bool) -> Self {
         self.accept_any = accept_any;
         self

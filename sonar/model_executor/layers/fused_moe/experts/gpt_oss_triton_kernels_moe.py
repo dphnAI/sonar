@@ -5,33 +5,33 @@ import functools
 
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.config import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.config import (
     FUSED_MOE_UNQUANTIZED_CONFIG,
     FusedMoEConfig,
     FusedMoEParallelConfig,
     FusedMoEQuantConfig,
     RoutingMethodType,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.lora_experts_mixin import (
+from sonar.model_executor.layers.fused_moe.experts.lora_experts_mixin import (
     LoRAExpertsMixin,
 )
-from aphrodite.model_executor.layers.fused_moe.topk_weight_and_reduce import (
+from sonar.model_executor.layers.fused_moe.topk_weight_and_reduce import (
     TopKWeightAndReduceNoOP,
 )
-from aphrodite.model_executor.layers.fused_moe.utils import (
+from sonar.model_executor.layers.fused_moe.utils import (
     _resize_cache,
     remap_topk_to_local,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     kMxfp4Static,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.import_utils import get_triton_kernels_version, has_triton_kernels
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
+from sonar.utils.import_utils import get_triton_kernels_version, has_triton_kernels
 
 from ..utils import swiglu_limit_func
 
@@ -53,7 +53,7 @@ def _triton_kernel_moe_supports_current_device() -> bool:
         # are still ordered after MARLIN by the selector.
         return cap is not None and (9, 0) <= (cap.major, cap.minor) < (13, 0)
     if p.is_rocm():
-        from aphrodite.platforms.rocm import on_gfx1x, on_gfx9
+        from sonar.platforms.rocm import on_gfx1x, on_gfx9
 
         # gfx9 family: gfx90a (MI200), gfx942/gfx950 (MI3xx);
         # on_gfx9() already excludes gfx906/gfx908.
@@ -224,7 +224,7 @@ def _patch_make_bitmatrix_metadata() -> None:
     # make_bitmatrix_metadata via its own __globals__ dict (the tensor.py
     # module dict).  Patching through __globals__ works regardless of how
     # sys.modules maps "triton_kernels.tensor" vs
-    # "aphrodite.third_party.triton_kernels.tensor".
+    # "sonar.third_party.triton_kernels.tensor".
     from triton_kernels.tensor import SparseMatrix as _SparseMatrix
 
     _SparseMatrix.__post_init__.__globals__["make_bitmatrix_metadata"] = _make_bitmatrix_metadata_pow2_safe
@@ -252,7 +252,7 @@ def _patch_legacy_routing_for_nonpow2_topk() -> None:
 
     # Import via the `triton_kernels` alias (set up by has_triton_kernels) so
     # we patch the SAME module object that `make_routing_data` consumes. The
-    # `aphrodite.third_party.triton_kernels.routing` path is a *different* module
+    # `sonar.third_party.triton_kernels.routing` path is a *different* module
     # object under the import alias, so patching it would have no effect.
     try:
         import triton_kernels.routing as _routing
@@ -480,7 +480,7 @@ if triton_kernels_version is not None:
             )
             from triton_kernels.tensor import make_ragged_tensor_metadata
 
-            from aphrodite.platforms.rocm import on_gfx950
+            from sonar.platforms.rocm import on_gfx950
 
             if on_gfx950():
                 # block_n=64/block_k=256 fit gfx950's 160KB LDS + the CDNA4

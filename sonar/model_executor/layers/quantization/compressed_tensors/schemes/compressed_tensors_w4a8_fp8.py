@@ -5,25 +5,25 @@ from collections.abc import Callable
 
 import torch
 
-from aphrodite.distributed.utils import verify_group_size_divides_partition
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.kernels.linear import (
+from sonar.distributed.utils import verify_group_size_divides_partition
+from sonar.logger import init_logger
+from sonar.model_executor.kernels.linear import (
     MPLinearLayerConfig,
     choose_mp_linear_kernel,
 )
-from aphrodite.model_executor.layers.quantization.compressed_tensors.schemes import (
+from sonar.model_executor.layers.quantization.compressed_tensors.schemes import (
     CompressedTensorsScheme,
 )
-from aphrodite.model_executor.layers.quantization.utils.marlin_utils import (
+from sonar.model_executor.layers.quantization.utils.marlin_utils import (
     marlin_repeat_scales_on_all_ranks,
 )
-from aphrodite.model_executor.parameter import (
-    BaseAphroditeParameter,
+from sonar.model_executor.parameter import (
+    BaseSonarParameter,
     ChannelQuantScaleParameter,
     GroupQuantScaleParameter,
-    PackedAphroditeParameter,
+    PackedSonarParameter,
 )
-from aphrodite.scalar_type import scalar_types
+from sonar.scalar_type import scalar_types
 
 logger = init_logger(__name__)
 
@@ -106,7 +106,7 @@ class CompressedTensorsW4A8Fp8(CompressedTensorsScheme):
             verify_group_size_divides_partition(input_size_per_partition, group_size)
             scales_and_zp_size = input_size_per_partition // group_size
 
-        weight = PackedAphroditeParameter(
+        weight = PackedSonarParameter(
             input_dim=1,
             output_dim=0,
             weight_loader=weight_loader,
@@ -138,7 +138,7 @@ class CompressedTensorsW4A8Fp8(CompressedTensorsScheme):
 
         # A 2D array defining the original shape of the weights
         # before packing
-        weight_shape = BaseAphroditeParameter(data=torch.empty(2, dtype=torch.int64), weight_loader=weight_loader)
+        weight_shape = BaseSonarParameter(data=torch.empty(2, dtype=torch.int64), weight_loader=weight_loader)
 
         layer.register_parameter("weight_packed", weight)
         layer.register_parameter("weight_scale", weight_scale)

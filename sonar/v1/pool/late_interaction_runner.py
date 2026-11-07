@@ -4,10 +4,10 @@ from collections.abc import Iterable
 
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.pooling_params import PoolingParams
-from aphrodite.v1.outputs import PoolerOutput
-from aphrodite.v1.pool.late_interaction import (
+from sonar.logger import init_logger
+from sonar.pooling_params import PoolingParams
+from sonar.v1.outputs import PoolerOutput
+from sonar.v1.pool.late_interaction import (
     LATE_INTERACTION_MODE_CACHE_QUERY,
     LATE_INTERACTION_MODE_SCORE_DOC,
     compute_maxsim_score_batched,
@@ -30,7 +30,7 @@ class LateInteractionRunner:
         # gates it; a runtime kernel failure disables it for the process).
         if enable_flash:
             try:
-                from aphrodite.v1.pool.flash_maxsim import (  # noqa: F401
+                from sonar.v1.pool.flash_maxsim import (  # noqa: F401
                     flash_maxsim_rerank_direct,
                 )
             except ImportError:
@@ -173,7 +173,7 @@ class LateInteractionRunner:
         docs pack into one [total_tokens, d] tensor (single cat, no padding)
         and the kernel reads each by (offset, length) — the [B, Lq, Ld]
         similarity tensor is never materialised."""
-        from aphrodite.v1.pool.flash_maxsim import flash_maxsim_rerank_direct
+        from sonar.v1.pool.flash_maxsim import flash_maxsim_rerank_direct
 
         device = docs[0].device
         lengths = [int(d.shape[0]) for d in docs]

@@ -11,7 +11,7 @@ Usage
 -----
 ::
 
-    python -m aphrodite.benchmarks.datasets.create_txt_slices_dataset \\
+    python -m sonar.benchmarks.datasets.create_txt_slices_dataset \\
         --input  corpus.txt \\
         --output dataset.jsonl \\
         --tokenizer gpt2 \\
@@ -21,7 +21,7 @@ Usage
 
 The resulting JSONL file can then be used with the serving benchmark::
 
-    python -m aphrodite.benchmarks.serve \\
+    python -m sonar.benchmarks.serve \\
         --dataset-name custom \\
         --dataset-path dataset.jsonl \\
         ...
@@ -37,8 +37,8 @@ import urllib.request
 import numpy as np
 from transformers import AutoTokenizer
 
-from aphrodite.benchmarks.datasets.utils import RangeRatio, get_sampling_params
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
+from sonar.benchmarks.datasets.utils import RangeRatio, get_sampling_params
+from sonar.utils.argparse_utils import FlexibleArgumentParser
 
 logger = logging.getLogger(__name__)
 

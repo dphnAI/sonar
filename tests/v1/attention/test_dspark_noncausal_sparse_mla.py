@@ -31,9 +31,9 @@ from types import MethodType, SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.config import set_current_aphrodite_config
-from aphrodite.model_executor.layers.linear import ColumnParallelLinear
-from aphrodite.platforms import current_platform
+from sonar.config import set_current_sonar_config
+from sonar.model_executor.layers.linear import ColumnParallelLinear
+from sonar.platforms import current_platform
 from tests.v1.attention.test_mla_backends import (
     BatchSpec,
     MockSparseMLAAttentionLayer,
@@ -43,8 +43,8 @@ from tests.v1.attention.test_sparse_mla_backends import (
     _quantize_dequantize_fp8_ds_mla,
 )
 from tests.v1.attention.utils import (
-    create_aphrodite_config,
     create_common_attn_metadata,
+    create_sonar_config,
     create_standard_kv_cache_spec,
 )
 
@@ -54,12 +54,12 @@ if not current_platform.is_cuda():
         allow_module_level=True,
     )
 
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.v1.attention.backends.mla.flashinfer_mla_sparse import (
+from sonar.utils.math_utils import cdiv
+from sonar.v1.attention.backends.mla.flashinfer_mla_sparse import (
     FlashInferMLASparseTRTLLMBackend,
 )
-from aphrodite.v1.attention.backends.mla.flashmla_sparse import FlashMLASparseBackend
-from aphrodite.v1.attention.ops import flashmla
+from sonar.v1.attention.backends.mla.flashmla_sparse import FlashMLASparseBackend
+from sonar.v1.attention.ops import flashmla
 
 DEVICE_TYPE = current_platform.device_type
 
@@ -152,7 +152,7 @@ def _run_sparse_backend_vs_sdpa(
     max_seqlen = max(seq_lens)
     total_cache_tokens = sum(seq_lens)
 
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         model_name="deepseek-ai/DeepSeek-V2-Lite-Chat",
         tensor_parallel_size=1,
         max_model_len=max_seqlen,
@@ -163,7 +163,7 @@ def _run_sparse_backend_vs_sdpa(
             "attn_module_list_cfg": [{"topk_tokens": topk_tokens}],
         },
     )
-    model_config = aphrodite_config.model_config
+    model_config = sonar_config.model_config
     model_config.hf_text_config = SimpleNamespace(
         index_topk=topk_tokens,
         q_lora_rank=None,
@@ -188,7 +188,7 @@ def _run_sparse_backend_vs_sdpa(
     monkeypatch.setattr(model_config, "get_head_size", MethodType(lambda self: head_size, model_config))
     monkeypatch.setattr(model_config, "get_sliding_window", MethodType(lambda self: None, model_config))
 
-    kv_cache_spec = create_standard_kv_cache_spec(aphrodite_config)
+    kv_cache_spec = create_standard_kv_cache_spec(sonar_config)
 
     torch.manual_seed(0)
     scale = 1.0 / math.sqrt(head_size)
@@ -197,7 +197,7 @@ def _run_sparse_backend_vs_sdpa(
     W_UK = torch.rand(kv_lora_rank, num_heads, qk_nope_head_dim, dtype=dtype, device=device)
     W_UV = torch.rand(kv_lora_rank, num_heads, v_head_dim, dtype=dtype, device=device)
 
-    all_q_aphrodite, all_kv_c_aphrodite, all_k_pe_aphrodite = [], [], []
+    all_q_sonar, all_kv_c_sonar, all_k_pe_sonar = [], [], []
     kv_c_contexts, k_pe_contexts = [], []
     reference_outputs = []
     # Causal counterpart of the reference: same index lists, but each query is
@@ -275,20 +275,20 @@ def _run_sparse_backend_vs_sdpa(
             causal_reference_outputs.append(_sparse_sdpa(causal_indices, q_tok))
             global_token_idx += 1
 
-        all_q_aphrodite.append(q_c)
-        all_kv_c_aphrodite.append(kv_c_full[ctx_len:])
-        all_k_pe_aphrodite.append(k_pe_full[ctx_len:])
+        all_q_sonar.append(q_c)
+        all_kv_c_sonar.append(kv_c_full[ctx_len:])
+        all_k_pe_sonar.append(k_pe_full[ctx_len:])
         kv_c_contexts.append(kv_c_full[: ctx_len + 1])
         k_pe_contexts.append(k_pe_full[: ctx_len + 1])
 
-    query_aphrodite = torch.cat(all_q_aphrodite, dim=0)
-    kv_c_aphrodite = torch.cat(all_kv_c_aphrodite, dim=0)
-    k_pe_aphrodite = torch.cat(all_k_pe_aphrodite, dim=0)
+    query_sonar = torch.cat(all_q_sonar, dim=0)
+    kv_c_sonar = torch.cat(all_kv_c_sonar, dim=0)
+    k_pe_sonar = torch.cat(all_k_pe_sonar, dim=0)
     sdpa_reference = torch.cat(reference_outputs, dim=0)
     causal_reference = torch.cat(causal_reference_outputs, dim=0)
 
-    aphrodite_config.cache_config.cache_dtype = kv_cache_dtype
-    aphrodite_config.model_config.hf_text_config.index_topk = topk_tokens
+    sonar_config.cache_config.cache_dtype = kv_cache_dtype
+    sonar_config.model_config.hf_text_config.index_topk = topk_tokens
 
     common_attn_metadata = create_common_attn_metadata(batch_spec, block_size, device, arange_block_indices=True)
     if stale_cpu_query_lens is not None:
@@ -306,7 +306,7 @@ def _run_sparse_backend_vs_sdpa(
         head_size=head_size,
         dtype=dtype,
         device=device,
-        num_blocks=aphrodite_config.cache_config.num_gpu_blocks,
+        num_blocks=sonar_config.cache_config.num_gpu_blocks,
         common_attn_metadata=common_attn_metadata,
         randomize_blocks=False,
         kv_cache_dtype=kv_cache_dtype,
@@ -315,22 +315,22 @@ def _run_sparse_backend_vs_sdpa(
 
     # The sparse builder clones the layer's dense-MHA prefill backend from
     # static_forward_context; register a mock layer carrying one.
-    from aphrodite.v1.attention.backends.mla.prefill import get_mla_prefill_backend
+    from sonar.v1.attention.backends.mla.prefill import get_mla_prefill_backend
 
-    prefill_backend = get_mla_prefill_backend(aphrodite_config)(
+    prefill_backend = get_mla_prefill_backend(sonar_config)(
         num_heads=num_heads,
         scale=scale,
         kv_lora_rank=kv_lora_rank,
         qk_nope_head_dim=qk_nope_head_dim,
         qk_rope_head_dim=qk_rope_head_dim,
         v_head_dim=v_head_dim,
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
     )
-    aphrodite_config.compilation_config.static_forward_context["placeholder"] = SimpleNamespace(
+    sonar_config.compilation_config.static_forward_context["placeholder"] = SimpleNamespace(
         prefill_backend=prefill_backend
     )
 
-    builder = backend_cls.get_builder_cls()(kv_cache_spec, ["placeholder"], aphrodite_config, device)
+    builder = backend_cls.get_builder_cls()(kv_cache_spec, ["placeholder"], sonar_config, device)
     metadata = builder.build(common_prefix_len=0, common_attn_metadata=common_attn_metadata)
 
     mock_indexer = SimpleNamespace(topk_indices_buffer=sparse_indices)
@@ -343,7 +343,7 @@ def _run_sparse_backend_vs_sdpa(
     ).to(device=device, dtype=dtype)
     mock_kv_b_proj.weight = torch.nn.Parameter(kv_b_proj_weight.T.contiguous())
 
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         impl = backend_cls.get_impl_cls()(
             num_heads=num_heads,
             head_size=head_size,
@@ -351,7 +351,7 @@ def _run_sparse_backend_vs_sdpa(
             num_kv_heads=1,
             alibi_slopes=None,
             sliding_window=None,
-            kv_cache_dtype=aphrodite_config.cache_config.cache_dtype,
+            kv_cache_dtype=sonar_config.cache_config.cache_dtype,
             logits_soft_cap=None,
             attn_type="decoder",
             kv_sharing_target_layer_name=None,
@@ -382,9 +382,7 @@ def _run_sparse_backend_vs_sdpa(
     out_buffer = torch.empty(metadata.num_actual_tokens, num_heads * v_head_dim, dtype=dtype, device=device)
     with torch.inference_mode():
         impl.record_logical_topk_ready()
-        backend_output = mock_layer.forward_impl(
-            query_aphrodite, kv_c_aphrodite, k_pe_aphrodite, kv_cache, metadata, out_buffer
-        )
+        backend_output = mock_layer.forward_impl(query_sonar, kv_c_sonar, k_pe_sonar, kv_cache, metadata, out_buffer)
         if capture_graph:
             device_boundaries = common_attn_metadata.query_start_loc.clone()
             common_attn_metadata.query_start_loc.copy_(common_attn_metadata.query_start_loc_cpu)
@@ -393,7 +391,7 @@ def _run_sparse_backend_vs_sdpa(
             with torch.cuda.graph(graph):
                 impl.record_logical_topk_ready()
                 backend_output = mock_layer.forward_impl(
-                    query_aphrodite, kv_c_aphrodite, k_pe_aphrodite, kv_cache, metadata, out_buffer
+                    query_sonar, kv_c_sonar, k_pe_sonar, kv_cache, metadata, out_buffer
                 )
             common_attn_metadata.query_start_loc.copy_(device_boundaries)
             builder.build(0, common_attn_metadata)
@@ -420,7 +418,7 @@ def _skip_if_backend_unavailable(backend_cls, kv_cache_dtype: str, block_size: i
 
 @pytest.mark.parametrize("query_lens", [[1, 7, 3, 5], [1, 7, 8, 0]])
 def test_flashinfer_sparse_mla_adaptive_varlen_graph_matches_sdpa(
-    default_aphrodite_config,
+    default_sonar_config,
     dist_init,
     workspace_init,
     query_lens,
@@ -480,7 +478,7 @@ def test_flashinfer_sparse_mla_adaptive_varlen_graph_matches_sdpa(
 # SM100 alignment assert specifically guards). Aligned widths (128/256) satisfy both.
 @pytest.mark.parametrize("num_heads", [128, 64], ids=["h128", "h64"])
 def test_dspark_noncausal_sparse_mla_matches_sdpa(
-    default_aphrodite_config,
+    default_sonar_config,
     dist_init,
     workspace_init,
     backend_cls,
@@ -542,7 +540,7 @@ def test_dspark_noncausal_sparse_mla_matches_sdpa(
 @pytest.mark.parametrize("config_name", list(_DSPARK_CONFIGS.keys()))
 @pytest.mark.parametrize("block_size", [64])
 def test_dspark_noncausal_differs_from_causal(
-    default_aphrodite_config,
+    default_sonar_config,
     dist_init,
     workspace_init,
     backend_cls,
@@ -608,11 +606,11 @@ def test_dsv41_flashinfer_dspark_window_matches_reference(context_len, dtype, nu
     """Draft queries see the full block without treating padded slots as keys."""
     if not current_platform.is_device_capability_family(100):
         pytest.skip("DSV4 TRTLLM sparse attention requires SM100")
-    from aphrodite.models.deepseek_v41.nvidia.flashinfer_sparse import (
+    from sonar.models.deepseek_v41.nvidia.flashinfer_sparse import (
         DeepseekSparseSWAFlashInferMetadataBuilder,
         DeepseekV4FlashInferMLAAttention,
     )
-    from aphrodite.models.deepseek_v41.sparse_mla import (
+    from sonar.models.deepseek_v41.sparse_mla import (
         DeepseekV41SparseSWAMetadataBuilder,
     )
 

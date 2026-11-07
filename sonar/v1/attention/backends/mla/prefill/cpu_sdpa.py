@@ -11,10 +11,10 @@ from typing import TYPE_CHECKING
 
 import torch
 
-from aphrodite.v1.attention.backends.mla.prefill.base import MLAPrefillBackend
+from sonar.v1.attention.backends.mla.prefill.base import MLAPrefillBackend
 
 if TYPE_CHECKING:
-    from aphrodite.model_executor.layers.attention.mla_attention import (
+    from sonar.model_executor.layers.attention.mla_attention import (
         MLACommonPrefillMetadata,
     )
 

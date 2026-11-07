@@ -15,26 +15,26 @@ from torch.nn import functional as F
 from transformers import BatchFeature, ProcessorMixin
 from transformers.models.whisper import WhisperFeatureExtractor
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.multimodal import MultiModalDummyOptions
-from aphrodite.distributed import get_tensor_model_parallel_world_size
-from aphrodite.inputs import MultiModalDataDict
-from aphrodite.model_executor.layers.activation import MulAndSilu, get_act_fn
-from aphrodite.model_executor.layers.attention import MMEncoderAttention
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import ReplicatedLinear
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.model_loader import DefaultModelLoader
-from aphrodite.model_executor.models.module_mapping import MultiModelKeys
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import (
+from sonar.config import SonarConfig
+from sonar.config.multimodal import MultiModalDummyOptions
+from sonar.distributed import get_tensor_model_parallel_world_size
+from sonar.inputs import MultiModalDataDict
+from sonar.model_executor.layers.activation import MulAndSilu, get_act_fn
+from sonar.model_executor.layers.attention import MMEncoderAttention
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import ReplicatedLinear
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.model_loader import DefaultModelLoader
+from sonar.model_executor.models.module_mapping import MultiModelKeys
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import (
     MultiModalFieldConfig,
     MultiModalKwargsItem,
     MultiModalKwargsItems,
     NestedTensors,
 )
-from aphrodite.multimodal.parse import MultiModalDataItems, MultiModalDataParser
-from aphrodite.multimodal.processing import (
+from sonar.multimodal.parse import MultiModalDataItems, MultiModalDataParser
+from sonar.multimodal.processing import (
     BaseDummyInputsBuilder,
     BaseMultiModalProcessor,
     BaseProcessingInfo,
@@ -42,12 +42,12 @@ from aphrodite.multimodal.processing import (
     PromptUpdate,
     cached_encode,
 )
-from aphrodite.multimodal.processing.processor import HFMultiModalInputs
-from aphrodite.renderers import TokenizeParams
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.transformers_utils.configs.ultravox import UltravoxConfig
-from aphrodite.utils.gpu_sync_debug import gpu_sync_allowed
-from aphrodite.utils.tensor_schema import TensorSchema, TensorShape
+from sonar.multimodal.processing.processor import HFMultiModalInputs
+from sonar.renderers import TokenizeParams
+from sonar.sequence import IntermediateTensors
+from sonar.transformers_utils.configs.ultravox import UltravoxConfig
+from sonar.utils.gpu_sync_debug import gpu_sync_allowed
+from sonar.utils.tensor_schema import TensorSchema, TensorShape
 
 from .interfaces import (
     MultiModalEmbeddings,
@@ -59,7 +59,7 @@ from .utils import (
     AutoWeightsLoader,
     WeightsMapper,
     flatten_bn,
-    init_aphrodite_registered_model,
+    init_sonar_registered_model,
     maybe_prefix,
 )
 from .whisper import (
@@ -361,7 +361,7 @@ def _build_chunk_attn_metadata(
     }
 
 
-# Maps HF whisper encoder layer names to Aphrodite's fused qkv_proj and nested
+# Maps HF whisper encoder layer names to Sonar's fused qkv_proj and nested
 # mlp; `_create_fake_bias_for_k_proj` supplies the fused bias' k-slice
 # (HF whisper k_proj has no bias).
 _WHISPER_ENCODER_MAPPER = WeightsMapper(
@@ -393,7 +393,7 @@ class UltravoxFeedForwardProjector(nn.Module):
         self._pad_and_stack = StackAudioFrames(config.stack_factor)
         dim_in = config.audio_config.hidden_size * config.stack_factor
         self.ln_pre = RMSNorm(dim_in)
-        # ReplicatedLinear (a Aphrodite-native linear) so the connector can be
+        # ReplicatedLinear (a Sonar-native linear) so the connector can be
         # wrapped for LoRA; a plain nn.Linear is left unwrapped by from_layer.
         self.linear_1 = ReplicatedLinear(
             dim_in,
@@ -442,13 +442,13 @@ class UltravoxFeedForwardProjector(nn.Module):
 class UltravoxTransformerProjector(nn.Module):
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         *,
         prefix: str = "",
     ):
         super().__init__()
-        config: UltravoxConfig = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        config: UltravoxConfig = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
         audio_config = config.audio_config
 
         self._pad_and_stack = StackAudioFrames(config.stack_factor)
@@ -468,11 +468,11 @@ class UltravoxTransformerProjector(nn.Module):
             audio_config.d_model,
         )
 
-        audio_aphrodite_config = aphrodite_config.with_hf_config(audio_config, architectures=["UltravoxModel"])
+        audio_sonar_config = sonar_config.with_hf_config(audio_config, architectures=["UltravoxModel"])
         self.layers = nn.ModuleList(
             [
                 WhisperEncoderLayer(
-                    aphrodite_config=audio_aphrodite_config,
+                    sonar_config=audio_sonar_config,
                     prefix=f"{prefix}.layers.{idx}",
                 )
                 for idx in range(config.num_projector_layers)
@@ -520,7 +520,7 @@ class UltravoxTransformerProjector(nn.Module):
 
 
 class UltravoxWhisperEncoder(WhisperEncoder):
-    """Ultravox's `ModifiedWhisperEncoder` on top of Aphrodite's `WhisperEncoder`.
+    """Ultravox's `ModifiedWhisperEncoder` on top of Sonar's `WhisperEncoder`.
 
     Like the original (a modified HF whisper encoder,
     see https://github.com/huggingface/transformers/issues/25744), it accepts
@@ -528,7 +528,7 @@ class UltravoxWhisperEncoder(WhisperEncoder):
     confines attention to each chunk's valid frames based on `audio_lens`
     (via segmented `cu_seqlens` instead of a dense key-padding mask), so its
     outputs match the HF implementation for valid positions. The linears are
-    Aphrodite-native so the tower can be wrapped for LoRA.
+    Sonar-native so the tower can be wrapped for LoRA.
     """
 
     @property
@@ -596,7 +596,7 @@ class UltravoxModel(nn.Module, SupportsMultiModal, SupportsPP, SupportsLoRA):
         "gate_up_proj": ["gate_proj", "up_proj"],
     }
 
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={
             "audio_tower.model.encoder.": "audio_tower.",
             # A whisper checkpoint loaded via `audio_model_id` also carries
@@ -615,12 +615,12 @@ class UltravoxModel(nn.Module, SupportsMultiModal, SupportsPP, SupportsLoRA):
 
         raise ValueError("Only audio modality is supported")
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config: UltravoxConfig = aphrodite_config.model_config.hf_config
-        multimodal_config = aphrodite_config.model_config.multimodal_config
-        quant_config = aphrodite_config.quant_config
-        lora_config = aphrodite_config.lora_config
+        config: UltravoxConfig = sonar_config.model_config.hf_config
+        multimodal_config = sonar_config.model_config.multimodal_config
+        quant_config = sonar_config.quant_config
+        lora_config = sonar_config.lora_config
         self.config = config
         self.multi_modal_config = multimodal_config
         assert self.multi_modal_config
@@ -660,15 +660,15 @@ class UltravoxModel(nn.Module, SupportsMultiModal, SupportsPP, SupportsLoRA):
                 )
             )
 
-        with self._mark_tower_model(aphrodite_config, "audio"):
+        with self._mark_tower_model(sonar_config, "audio"):
             self.audio_tower = UltravoxWhisperEncoder(
-                aphrodite_config=aphrodite_config.with_hf_config(config.audio_config, architectures=["UltravoxModel"]),
+                sonar_config=sonar_config.with_hf_config(config.audio_config, architectures=["UltravoxModel"]),
                 prefix=maybe_prefix(prefix, "audio_tower"),
                 enable_pp=False,
             )
             if config.num_projector_layers > 0:
                 self.multi_modal_projector = UltravoxTransformerProjector(
-                    aphrodite_config,
+                    sonar_config,
                     prefix=maybe_prefix(prefix, "multi_modal_projector"),
                 )
             else:
@@ -678,9 +678,9 @@ class UltravoxModel(nn.Module, SupportsMultiModal, SupportsPP, SupportsLoRA):
                     prefix=maybe_prefix(prefix, "multi_modal_projector"),
                 )
 
-        with self._mark_language_model(aphrodite_config):
-            self.language_model = init_aphrodite_registered_model(
-                aphrodite_config=aphrodite_config,
+        with self._mark_language_model(sonar_config):
+            self.language_model = init_sonar_registered_model(
+                sonar_config=sonar_config,
                 hf_config=config.wrapped_model_config,
                 prefix=maybe_prefix(prefix, "language_model"),
             )
@@ -890,7 +890,7 @@ class UltravoxModel(nn.Module, SupportsMultiModal, SupportsPP, SupportsLoRA):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
 
 def pad_and_concat_to_dim3(

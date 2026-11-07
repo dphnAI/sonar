@@ -18,14 +18,14 @@ from dataclasses import dataclass
 
 import torch
 
-from aphrodite.compilation.breakable_cudagraph import eager_break_during_capture
-from aphrodite.forward_context import (
+from sonar.compilation.breakable_cudagraph import eager_break_during_capture
+from sonar.forward_context import (
     ForwardContext,
     get_forward_context,
     in_piecewise_cudagraph,
     override_forward_context,
 )
-from aphrodite.model_executor.layers.fused_moe.moe_output import MoEOutput
+from sonar.model_executor.layers.fused_moe.moe_output import MoEOutput
 
 
 @dataclass

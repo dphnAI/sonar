@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-from aphrodite.model_executor.kernels.mhc.tilelang_kernels import ENABLE_PDL
-from aphrodite.tilelang_utils import T, tilelang_jit
+from sonar.model_executor.kernels.mhc.tilelang_kernels import ENABLE_PDL
+from sonar.tilelang_utils import T, tilelang_jit
 
 
 @tilelang_jit

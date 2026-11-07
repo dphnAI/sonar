@@ -5,7 +5,7 @@ from collections.abc import Iterable
 import torch
 from transformers import AutoProcessor
 
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal import MULTIMODAL_REGISTRY
 
 from .qwen3_5 import Qwen3_5MoeForConditionalGeneration
 from .qwen3_vl import (
@@ -31,10 +31,10 @@ class InternS2PreviewProcessingInfo(Qwen3VLProcessingInfo):
 )
 class InternS2PreviewForConditionalGeneration(Qwen3_5MoeForConditionalGeneration):
     # `mtp.` is already dropped by `Qwen3_5ForConditionalGeneration`.
-    hf_to_aphrodite_mapper = Qwen3_5MoeForConditionalGeneration.hf_to_aphrodite_mapper | (
+    hf_to_sonar_mapper = Qwen3_5MoeForConditionalGeneration.hf_to_sonar_mapper | (
         WeightsMapper(orig_to_new_prefix={"model.time_series.": None, "time_series.": None})
     )
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)

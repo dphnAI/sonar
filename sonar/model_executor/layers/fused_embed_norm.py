@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Replicated input embedding + its fused gather/norm kernels.
 
-Groups the ``APHRODITE_REPLICATE_EMBED`` path in one place: the embedding factory,
+Groups the ``SONAR_REPLICATE_EMBED`` path in one place: the embedding factory,
 the predicate that says whether the fusions apply, and the two Triton fusions
 the full on-rank table unlocks --
 
@@ -18,13 +18,13 @@ Self-contained (no model-local imports) so it can live under ``layers/``.
 
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.distributed import get_tensor_model_parallel_world_size
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+import sonar.envs as envs
+from sonar.distributed import get_tensor_model_parallel_world_size
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     UnquantizedEmbeddingMethod,
     VocabParallelEmbedding,
 )
-from aphrodite.triton_utils import tl, triton
+from sonar.triton_utils import tl, triton
 
 
 @triton.jit
@@ -47,7 +47,7 @@ def make_input_embedding(
 ) -> VocabParallelEmbedding:
     """Input token embedding with an optional replicated escape hatch.
 
-    ``APHRODITE_REPLICATE_EMBED=1`` builds the embedding with ``disable_tp``: the full
+    ``SONAR_REPLICATE_EMBED=1`` builds the embedding with ``disable_tp``: the full
     table lives on every rank and the lookup is a local gather with no mask and
     no all-reduce, which unlocks the fused gather+norm path. The cost is a full
     table per rank at TP>1 (no extra memory at TP=1, where vocab-parallel is
@@ -55,10 +55,10 @@ def make_input_embedding(
     vocab-parallel ``ParallelLMHead``, so tied word embeddings are rejected at
     TP>1 (at TP=1 ``disable_tp`` is a no-op and tying still works).
     """
-    disable_tp = envs.APHRODITE_REPLICATE_EMBED
+    disable_tp = envs.SONAR_REPLICATE_EMBED
     if disable_tp and tie_word_embeddings:
         assert get_tensor_model_parallel_world_size() == 1, (
-            "APHRODITE_REPLICATE_EMBED is unsupported with tied word embeddings "
+            "SONAR_REPLICATE_EMBED is unsupported with tied word embeddings "
             "(the replicated table cannot tie to a vocab-parallel lm_head)"
         )
     return VocabParallelEmbedding(

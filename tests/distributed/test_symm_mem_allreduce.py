@@ -10,20 +10,20 @@ import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
 
-import aphrodite.envs as envs
-from aphrodite.config import AphroditeConfig, ParallelConfig, set_current_aphrodite_config
-from aphrodite.distributed import cleanup_dist_env_and_memory
-from aphrodite.distributed.communication_op import tensor_model_parallel_all_reduce
-from aphrodite.distributed.device_communicators.cuda_communicator import CudaCommunicator
-from aphrodite.distributed.parallel_state import (
+import sonar.envs as envs
+from sonar.config import ParallelConfig, SonarConfig, set_current_sonar_config
+from sonar.distributed import cleanup_dist_env_and_memory
+from sonar.distributed.communication_op import tensor_model_parallel_all_reduce
+from sonar.distributed.device_communicators.cuda_communicator import CudaCommunicator
+from sonar.distributed.parallel_state import (
     get_tp_group,
     init_distributed_environment,
     initialize_model_parallel,
 )
-from aphrodite.engine.arg_utils import EngineArgs
-from aphrodite.engine.llm_engine import LLMEngine
-from aphrodite.platforms import current_platform
-from aphrodite.utils.system_utils import update_environment_variables
+from sonar.engine.arg_utils import EngineArgs
+from sonar.engine.llm_engine import LLMEngine
+from sonar.platforms import current_platform
+from sonar.utils.system_utils import update_environment_variables
 
 torch.manual_seed(42)
 random.seed(44)
@@ -33,9 +33,9 @@ test_size_elements = 1024 * 1024
 
 def symm_mem_allreduce_worker(local_rank: int, world_size: int, q: mp.Queue):
     monkeypatch = pytest.MonkeyPatch()
-    config = AphroditeConfig(parallel_config=ParallelConfig(tensor_parallel_size=world_size))
+    config = SonarConfig(parallel_config=ParallelConfig(tensor_parallel_size=world_size))
 
-    with monkeypatch.context() as m, set_current_aphrodite_config(config):
+    with monkeypatch.context() as m, set_current_sonar_config(config):
         m.delenv("CUDA_VISIBLE_DEVICES", raising=False)
         dtype = torch.bfloat16
         device = torch.device(f"cuda:{local_rank}")
@@ -90,7 +90,7 @@ def symm_mem_allreduce_worker(local_rank: int, world_size: int, q: mp.Queue):
 )
 @pytest.mark.parametrize("tp_size", [2])
 @pytest.mark.parametrize("pipeline_parallel_size", [1])
-@pytest.mark.skipif(envs.APHRODITE_TARGET_DEVICE not in ["cuda"], reason="Only test on CUDA")
+@pytest.mark.skipif(envs.SONAR_TARGET_DEVICE not in ["cuda"], reason="Only test on CUDA")
 def test_symm_mem_allreduce(monkeypatch: pytest.MonkeyPatch, tp_size, pipeline_parallel_size):
     world_size = tp_size * pipeline_parallel_size
     if world_size > torch.accelerator.device_count():
@@ -111,7 +111,7 @@ def test_symm_mem_allreduce(monkeypatch: pytest.MonkeyPatch, tp_size, pipeline_p
     not current_platform.is_cuda(),
     reason="SymmMemAllreduce is only available for CUDA platforms.",
 )
-@pytest.mark.skipif(envs.APHRODITE_TARGET_DEVICE not in ["cuda"], reason="Only test on CUDA")
+@pytest.mark.skipif(envs.SONAR_TARGET_DEVICE not in ["cuda"], reason="Only test on CUDA")
 def test_dp_with_symm_mem_allreduce(monkeypatch: pytest.MonkeyPatch):
     world_size = 4
     if world_size > torch.accelerator.device_count():

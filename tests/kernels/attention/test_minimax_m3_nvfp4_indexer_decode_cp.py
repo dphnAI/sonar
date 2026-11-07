@@ -9,7 +9,7 @@ import pytest
 import torch
 import torch.multiprocessing as mp
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 if not current_platform.is_cuda():
     pytest.skip("MiniMax M3 NVFP4 indexer requires CUDA.", allow_module_level=True)
@@ -44,11 +44,11 @@ def _reference(scores, seq_lens, query_len, head) -> torch.Tensor:
 
 
 def _run(rank: int, port: int, query_len: int, seq_lens_list: list[int]) -> None:
-    from aphrodite.distributed import (
+    from sonar.distributed import (
         init_distributed_environment,
         initialize_model_parallel,
     )
-    from aphrodite.models.minimax_m3.nvidia.indexer_nvfp4_decode_cp import (
+    from sonar.models.minimax_m3.nvidia.indexer_nvfp4_decode_cp import (
         Nvfp4IndexerDecodeCP,
     )
 
@@ -66,7 +66,7 @@ def _run(rank: int, port: int, query_len: int, seq_lens_list: list[int]) -> None
     num_reqs = seq_lens.shape[0]
     pages = (int(seq_lens.max()) + PAGE - 1) // PAGE
     kv = _cache(num_reqs * pages + 8, gen)
-    # Sized to the longest context, as Aphrodite's block table is: the longest
+    # Sized to the longest context, as Sonar's block table is: the longest
     # request then owns the last page of its rank's compact table.
     block_table = torch.randperm(num_reqs * pages, device="cuda", generator=gen).to(torch.int32).view(num_reqs, pages)
     rows = num_reqs * query_len
@@ -75,7 +75,7 @@ def _run(rank: int, port: int, query_len: int, seq_lens_list: list[int]) -> None
     layers = [cp.new_layer() for _ in range(2)]
     plan = cp.plan(block_table, seq_lens)
 
-    from aphrodite.third_party.fmha_sm100.sparse import BatchDecodeIndexerQ8KV4Wrapper
+    from sonar.third_party.fmha_sm100.sparse import BatchDecodeIndexerQ8KV4Wrapper
 
     full = BatchDecodeIndexerQ8KV4Wrapper(num_heads=H)
     full.plan(block_table, seq_lens)
@@ -95,10 +95,10 @@ def _run(rank: int, port: int, query_len: int, seq_lens_list: list[int]) -> None
 
 
 def _worker(rank: int, port: int, query_len: int, seq_lens_list: list[int]) -> None:
-    from aphrodite.config import AphroditeConfig, ParallelConfig, set_current_aphrodite_config
+    from sonar.config import ParallelConfig, SonarConfig, set_current_sonar_config
 
-    config = AphroditeConfig(parallel_config=ParallelConfig(tensor_parallel_size=4))
-    with set_current_aphrodite_config(config):
+    config = SonarConfig(parallel_config=ParallelConfig(tensor_parallel_size=4))
+    with set_current_sonar_config(config):
         _run(rank, port, query_len, seq_lens_list)
 
 

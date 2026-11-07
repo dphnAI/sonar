@@ -6,20 +6,20 @@ from collections.abc import Sequence
 
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.model_executor.layers.quantization.input_quant_fp8 import QuantFP8
-from aphrodite.model_executor.layers.quantization.utils import replace_parameter
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar import _custom_ops as ops
+from sonar.model_executor.layers.quantization.input_quant_fp8 import QuantFP8
+from sonar.model_executor.layers.quantization.utils import replace_parameter
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     GroupShape,
     QuantKey,
     kFp8StaticTensorSym,
 )
-from aphrodite.model_executor.layers.quantization.utils.w8a8_utils import (
+from sonar.model_executor.layers.quantization.utils.w8a8_utils import (
     CUTLASS_BLOCK_FP8_SUPPORTED,
     convert_to_channelwise,
     cutlass_fp8_supported,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 from .BlockScaledMMLinearKernel import Fp8BlockScaledMMLinearKernel
 from .ScaledMMLinearKernel import (

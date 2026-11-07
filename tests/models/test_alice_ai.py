@@ -6,16 +6,16 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.mamba.mamba_utils import is_conv_state_dim_first
-from aphrodite.model_executor.models import alice_ai as alice_ai_module
-from aphrodite.model_executor.models.alice_ai import (
+from sonar.model_executor.layers.mamba.mamba_utils import is_conv_state_dim_first
+from sonar.model_executor.models import alice_ai as alice_ai_module
+from sonar.model_executor.models.alice_ai import (
     AliceAIDecoderBlock,
     AliceAIForCausalLM,
     AliceAIModel,
     _AttentionResidualFinal,
     _load_split_kda_conv_weights,
 )
-from aphrodite.model_executor.offloader import PrefetchOffloader, UVAOffloader
+from sonar.model_executor.offloader import PrefetchOffloader, UVAOffloader
 
 
 @pytest.mark.parametrize(
@@ -26,10 +26,10 @@ from aphrodite.model_executor.offloader import PrefetchOffloader, UVAOffloader
     ],
 )
 def test_unsupported_offloading_is_rejected(monkeypatch, backend, error):
-    from aphrodite.model_executor.offloader import uva
+    from sonar.model_executor.offloader import uva
 
     monkeypatch.setattr(uva, "is_uva_available", lambda: False)
-    monkeypatch.setenv("APHRODITE_WEIGHT_OFFLOADING_DISABLE_UVA", "0")
+    monkeypatch.setenv("SONAR_WEIGHT_OFFLOADING_DISABLE_UVA", "0")
     if backend == "uva":
         offloader = UVAOffloader(cpu_offload_max_bytes=1024)
     else:
@@ -38,7 +38,7 @@ def test_unsupported_offloading_is_rejected(monkeypatch, backend, error):
     config = SimpleNamespace(lora_config=None)
 
     with pytest.raises(NotImplementedError, match=error):
-        AliceAIForCausalLM(aphrodite_config=config, prefix="target")
+        AliceAIForCausalLM(sonar_config=config, prefix="target")
 
 
 @pytest.mark.parametrize(
@@ -55,7 +55,7 @@ def test_unsupported_offloading_is_rejected(monkeypatch, backend, error):
 )
 def test_weight_mapping_preserves_shard_ids(source, target, shard_id):
     tensor = torch.empty(1)
-    [(mapped, mapped_tensor)] = list(AliceAIModel.hf_to_aphrodite_mapper.apply([(f"model.layers.0.{source}", tensor)]))
+    [(mapped, mapped_tensor)] = list(AliceAIModel.hf_to_sonar_mapper.apply([(f"model.layers.0.{source}", tensor)]))
     assert mapped == f"model.layers.0.{target}"
     assert getattr(mapped_tensor, "shard_id", None) == shard_id
 
@@ -91,7 +91,7 @@ def test_split_kda_conv_weights_use_fused_loader_shard_ids() -> None:
 
 
 def test_kda_cache_contract_is_fp32_recurrent() -> None:
-    aphrodite_config = SimpleNamespace(
+    sonar_config = SimpleNamespace(
         model_config=SimpleNamespace(
             dtype=torch.bfloat16,
             hf_text_config=SimpleNamespace(
@@ -105,12 +105,12 @@ def test_kda_cache_contract_is_fp32_recurrent() -> None:
         speculative_config=None,
     )
 
-    assert AliceAIForCausalLM.get_mamba_state_dtype_from_config(aphrodite_config) == (
+    assert AliceAIForCausalLM.get_mamba_state_dtype_from_config(sonar_config) == (
         torch.bfloat16,
         torch.float32,
     )
     conv_shape = (12288, 3) if is_conv_state_dim_first() else (3, 12288)
-    assert AliceAIForCausalLM.get_mamba_state_shape_from_config(aphrodite_config) == (
+    assert AliceAIForCausalLM.get_mamba_state_shape_from_config(sonar_config) == (
         conv_shape,
         (32, 128, 128),
     )

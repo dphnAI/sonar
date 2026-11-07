@@ -7,18 +7,18 @@ from collections.abc import Iterable
 import torch
 import torch.nn as nn
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.model_executor.layers.pooler.tokwise import pooler_for_token_classify
-from aphrodite.model_executor.models.interfaces_base import default_pooling_type
-from aphrodite.model_executor.models.qwen3_asr import (
+from sonar.config import SonarConfig
+from sonar.model_executor.layers.pooler.tokwise import pooler_for_token_classify
+from sonar.model_executor.models.interfaces_base import default_pooling_type
+from sonar.model_executor.models.qwen3_asr import (
     Qwen3ASRDummyInputsBuilder,
     Qwen3ASRForConditionalGeneration,
     Qwen3ASRMultiModalProcessor,
     Qwen3ASRProcessingInfo,
 )
-from aphrodite.model_executor.models.utils import AutoWeightsLoader, WeightsMapper
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.sequence import IntermediateTensors
+from sonar.model_executor.models.utils import AutoWeightsLoader, WeightsMapper
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.sequence import IntermediateTensors
 
 
 @default_pooling_type(tok_pooling_type="ALL")
@@ -51,7 +51,7 @@ class Qwen3ASRForcedAlignerForTokenClassification(
     is_pooling_model = True
 
     # Map thinker.lm_head -> classifier (not language_model.lm_head)
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={
             "thinker.lm_head.": "classifier.",
             "thinker.model.": "language_model.model.",
@@ -61,10 +61,10 @@ class Qwen3ASRForcedAlignerForTokenClassification(
         }
     )
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
-        super().__init__(aphrodite_config=aphrodite_config, prefix=prefix)
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
+        super().__init__(sonar_config=sonar_config, prefix=prefix)
 
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
         thinker_config = config.thinker_config
 
         # Remove the unused generation head created by the base class;
@@ -82,11 +82,11 @@ class Qwen3ASRForcedAlignerForTokenClassification(
             thinker_config.text_config.hidden_size,
             self.classify_num,
             bias=False,
-            dtype=aphrodite_config.model_config.dtype,
+            dtype=sonar_config.model_config.dtype,
         )
 
         # Token-level pooler to split per-token logits per request
-        pooler_config = aphrodite_config.model_config.pooler_config
+        pooler_config = sonar_config.model_config.pooler_config
         assert pooler_config is not None
         self.pooler = pooler_for_token_classify(pooler_config)
 
@@ -114,4 +114,4 @@ class Qwen3ASRForcedAlignerForTokenClassification(
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)

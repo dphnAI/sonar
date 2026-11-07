@@ -16,9 +16,9 @@ try:
 except ImportError:  # Python 3.10
     import sre_parse as _parser
 
-from aphrodite.parser.chat_parsing.content_parsers import parse_content
-from aphrodite.parser.chat_parsing.response_parser import _schema_types
-from aphrodite.parser.chat_parsing.response_templates import (
+from sonar.parser.chat_parsing.content_parsers import parse_content
+from sonar.parser.chat_parsing.response_parser import _schema_types
+from sonar.parser.chat_parsing.response_templates import (
     ResponseTemplate,
     ResponseTemplateField,
 )

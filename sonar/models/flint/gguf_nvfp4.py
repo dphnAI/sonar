@@ -21,8 +21,8 @@ import numpy as np
 import regex as re
 import torch
 
-from aphrodite.model_executor.model_loader.weight_utils import download_weights_from_hf
-from aphrodite.transformers_utils.repo_utils import any_pattern_in_repo_files
+from sonar.model_executor.model_loader.weight_utils import download_weights_from_hf
+from sonar.transformers_utils.repo_utils import any_pattern_in_repo_files
 
 _GGUF_NVFP4 = 40
 _QK = 64

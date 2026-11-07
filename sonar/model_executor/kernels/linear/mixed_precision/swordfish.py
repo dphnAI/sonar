@@ -5,18 +5,18 @@
 
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import unpack_cols
-from aphrodite.model_executor.layers.quantization.utils.swordfish_utils import (
+from sonar import _custom_ops as ops
+from sonar.model_executor.layers.quantization.utils.quant_utils import unpack_cols
+from sonar.model_executor.layers.quantization.utils.swordfish_utils import (
     check_swordfish_supports_shape,
     query_swordfish_supported_group_sizes,
     query_swordfish_supported_quant_types,
 )
-from aphrodite.model_executor.parameter import (
-    BaseAphroditeParameter,
+from sonar.model_executor.parameter import (
+    BaseSonarParameter,
     permute_param_layout_,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 from .MPLinearKernel import MPLinearKernel, MPLinearLayerConfig
 
@@ -62,7 +62,7 @@ class SwordfishLinearKernel(MPLinearKernel):
         size_k, size_n = c.partition_weight_shape
 
         def transform_w_q(x):
-            assert isinstance(x, BaseAphroditeParameter)
+            assert isinstance(x, BaseSonarParameter)
             permute_param_layout_(x, input_dim=0, output_dim=1, packed_dim=0)
             x.data = ops.swordfish_prepack_B(
                 x.data.contiguous(),
@@ -73,7 +73,7 @@ class SwordfishLinearKernel(MPLinearKernel):
             return x
 
         def transform_w_s(x):
-            assert isinstance(x, BaseAphroditeParameter)
+            assert isinstance(x, BaseSonarParameter)
             permute_param_layout_(x, input_dim=0, output_dim=1)
             x.data = x.data.contiguous()
             # Channelwise checkpoints replicate their single scale row to

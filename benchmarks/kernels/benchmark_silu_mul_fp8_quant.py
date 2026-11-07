@@ -19,12 +19,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
-from aphrodite.model_executor.layers.fused_moe.experts.batched_deep_gemm_moe import (
+from sonar.model_executor.layers.fused_moe.experts.batched_deep_gemm_moe import (
     persistent_masked_m_silu_mul_quant,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.deep_gemm import is_deep_gemm_e8m0_used
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
+from sonar.utils.deep_gemm import is_deep_gemm_e8m0_used
 
 
 @triton.jit

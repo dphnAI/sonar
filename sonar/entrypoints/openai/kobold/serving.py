@@ -6,15 +6,15 @@ from collections.abc import AsyncGenerator
 
 from fastapi import Request
 
-from aphrodite.engine.protocol import EngineClient
-from aphrodite.entrypoints.generate.base.serving import GenerateBaseServing
-from aphrodite.entrypoints.openai.kobold.protocol import KAIGenerationInputSchema
-from aphrodite.entrypoints.openai.models.serving import OpenAIServingModels
-from aphrodite.entrypoints.serve.utils.request_logger import RequestLogger
-from aphrodite.logger import init_logger
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.tokenizers import TokenizerLike
-from aphrodite.utils import random_uuid
+from sonar.engine.protocol import EngineClient
+from sonar.entrypoints.generate.base.serving import GenerateBaseServing
+from sonar.entrypoints.openai.kobold.protocol import KAIGenerationInputSchema
+from sonar.entrypoints.openai.models.serving import OpenAIServingModels
+from sonar.entrypoints.serve.utils.request_logger import RequestLogger
+from sonar.logger import init_logger
+from sonar.sampling_params import SamplingParams
+from sonar.tokenizers import TokenizerLike
+from sonar.utils import random_uuid
 
 logger = init_logger(__name__)
 

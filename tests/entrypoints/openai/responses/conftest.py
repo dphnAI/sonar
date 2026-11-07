@@ -15,8 +15,8 @@ from tests.utils import RemoteOpenAIServer
 logger = logging.getLogger(__name__)
 
 BASE_TEST_ENV = {
-    # The day Aphrodite said "hello world" on arxiv 🚀
-    "APHRODITE_SYSTEM_START_DATE": "2023-09-12",
+    # The day Sonar said "hello world" on arxiv 🚀
+    "SONAR_SYSTEM_START_DATE": "2023-09-12",
 }
 DEFAULT_MAX_RETRIES = 3
 
@@ -366,8 +366,8 @@ def server_with_store(default_server_args):
         "Qwen/Qwen3-1.7B",
         default_server_args,
         env_dict={
-            "APHRODITE_ENABLE_RESPONSES_API_STORE": "1",
-            "APHRODITE_SERVER_DEV_MODE": "1",
+            "SONAR_ENABLE_RESPONSES_API_STORE": "1",
+            "SONAR_SERVER_DEV_MODE": "1",
         },
     ) as remote_server:
         yield remote_server

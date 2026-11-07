@@ -7,10 +7,10 @@ from types import ModuleType, SimpleNamespace
 import pytest
 from torch import nn
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.load import LoadConfig
-from aphrodite.model_executor.model_loader import get_model_loader
-from aphrodite.model_executor.model_loader.modelexpress_loader import (
+from sonar.config import SonarConfig
+from sonar.config.load import LoadConfig
+from sonar.model_executor.model_loader import get_model_loader
+from sonar.model_executor.model_loader.modelexpress_loader import (
     ModelExpressModelLoader,
 )
 
@@ -62,13 +62,13 @@ def test_modelexpress_loader_delegates_to_modelexpress(monkeypatch):
     loader = ModelExpressModelLoader(LoadConfig(load_format="modelexpress"))
     model = nn.Module()
     model_config = SimpleNamespace()
-    aphrodite_config = SimpleNamespace()
+    sonar_config = SimpleNamespace()
 
     loader.download_model(model_config)
     loader.load_weights(model, model_config)
     FakeModelexpressLoader.loaded_model.train()
     result = loader.load_model(
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         model_config=model_config,
         prefix="model",
     )
@@ -82,7 +82,7 @@ def test_modelexpress_loader_delegates_to_modelexpress(monkeypatch):
             "load_model",
             (),
             {
-                "aphrodite_config": aphrodite_config,
+                "aphrodite_config": sonar_config,
                 "model_config": model_config,
                 "prefix": "model",
             },
@@ -124,10 +124,10 @@ def test_modelexpress_load_format_allows_object_storage_model_weights():
         model="test-model",
         model_weights="s3://bucket/model",
     )
-    aphrodite_config = object.__new__(AphroditeConfig)
-    aphrodite_config.model_config = model_config
-    aphrodite_config.load_config = LoadConfig(load_format="modelexpress")
+    sonar_config = object.__new__(SonarConfig)
+    sonar_config.model_config = model_config
+    sonar_config.load_config = LoadConfig(load_format="modelexpress")
 
-    aphrodite_config.try_verify_and_update_config()
+    sonar_config.try_verify_and_update_config()
 
-    assert aphrodite_config.load_config.load_format == "modelexpress"
+    assert sonar_config.load_config.load_format == "modelexpress"

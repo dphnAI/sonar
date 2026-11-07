@@ -4,7 +4,7 @@
 
 Usage::
 
-    from aphrodite.metal.metal import get_ops
+    from sonar.metal.metal import get_ops
 
     ops = get_ops()
     ops.reshape_and_cache(key, value, key_cache, value_cache, slot_mapping)
@@ -22,7 +22,7 @@ from types import ModuleType
 
 import regex as re
 
-from aphrodite.metal.metal.constants import PARTITION_SIZE, PARTITION_THRESHOLD
+from sonar.metal.metal.constants import PARTITION_SIZE, PARTITION_THRESHOLD
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ _REPO_ROOT = _THIS_DIR.parents[2]
 _PACKAGED_SOURCE_DIR = _THIS_DIR
 _REPOSITORY_SOURCE_DIR = _REPO_ROOT / "csrc" / "metal"
 _DEFAULT_SOURCE_DIR = _PACKAGED_SOURCE_DIR if (_PACKAGED_SOURCE_DIR / "kernels_v1").is_dir() else _REPOSITORY_SOURCE_DIR
-_SOURCE_DIR = Path(os.getenv("APHRODITE_METAL_SOURCE_DIR", str(_DEFAULT_SOURCE_DIR))).expanduser()
+_SOURCE_DIR = Path(os.getenv("SONAR_METAL_SOURCE_DIR", str(_DEFAULT_SOURCE_DIR))).expanduser()
 _KERNELS_DIR = _SOURCE_DIR / "kernels_v1"
 _KERNELS_V2_DIR = _SOURCE_DIR / "kernels_v2"
 
@@ -64,7 +64,7 @@ def _build_reshape_cache_source() -> str:
 def _build_paged_attention_source() -> str:
     """Concatenate float8 + utils + paged_attention into a single source."""
     parts = [
-        f"#define APHRODITE_METAL_PARTITION_SIZE {PARTITION_SIZE}",
+        f"#define SONAR_METAL_PARTITION_SIZE {PARTITION_SIZE}",
         _read_metal_source(_KERNELS_DIR / "float8.metal"),
         _read_metal_source(_KERNELS_DIR / "utils.metal"),
         _read_metal_source(_KERNELS_DIR / "pagedattention.metal"),
@@ -75,7 +75,7 @@ def _build_paged_attention_source() -> str:
 def _build_v2_paged_attention_source() -> str:
     """Concatenate float8 + utils + turboquant + v2 paged_attention (online softmax)."""
     parts = [
-        f"#define APHRODITE_METAL_PARTITION_SIZE {PARTITION_SIZE}",
+        f"#define SONAR_METAL_PARTITION_SIZE {PARTITION_SIZE}",
         _read_metal_source(_KERNELS_V2_DIR / "float8.metal"),
         _read_metal_source(_KERNELS_V2_DIR / "utils.metal"),
         _read_metal_source(_KERNELS_V2_DIR / "turboquant.metal"),
@@ -209,7 +209,7 @@ def get_ops() -> ModuleType:
     importlib.import_module("mlx.core")
 
     try:
-        from aphrodite.metal.metal import (  # type: ignore[attr-defined]
+        from sonar.metal.metal import (  # type: ignore[attr-defined]
             _paged_ops as packaged_ops,
         )
 
@@ -225,7 +225,7 @@ def get_ops() -> ModuleType:
         pass
 
     # 1. JIT-build the C++ extension if needed
-    from aphrodite.metal.metal.build import build
+    from sonar.metal.metal.build import build
 
     so_path = build()
 

@@ -3,8 +3,8 @@
 
 import torch
 
-import aphrodite.model_executor.offloader as offloader
-from aphrodite.models.deepseek_v4.amd.rocm import (
+import sonar.model_executor.offloader as offloader
+from sonar.models.deepseek_v4.amd.rocm import (
     DeepseekV4ROCMAiterMLAAttention,
 )
 

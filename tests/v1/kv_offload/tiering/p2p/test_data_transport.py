@@ -12,9 +12,9 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from aphrodite.v1.kv_offload.tiering.p2p.data import nixl as nixl_module
-from aphrodite.v1.kv_offload.tiering.p2p.data.base import PollResult
-from aphrodite.v1.kv_offload.tiering.p2p.data.nixl import NixlTransport
+from sonar.v1.kv_offload.tiering.p2p.data import nixl as nixl_module
+from sonar.v1.kv_offload.tiering.p2p.data.base import PollResult
+from sonar.v1.kv_offload.tiering.p2p.data.nixl import NixlTransport
 
 
 class nixlRemoteDisconnectError(Exception):  # noqa: N801
@@ -168,7 +168,7 @@ class TestDataTransportBase:
         view = self._make_view(num_blocks=4, block_len=2048)
 
         # Use NixlTransport (concrete) with NIXL mocked away
-        with patch("aphrodite.v1.kv_offload.tiering.p2p.data.nixl._NixlAgent", None):
+        with patch("sonar.v1.kv_offload.tiering.p2p.data.nixl._NixlAgent", None):
             transport = NixlTransport("test:1", view)
 
         assert transport.num_blocks == 4
@@ -178,7 +178,7 @@ class TestDataTransportBase:
     def test_config_fingerprint_empty_when_no_fields(self):
         """No config fields → empty fingerprint."""
         view = self._make_view()
-        with patch("aphrodite.v1.kv_offload.tiering.p2p.data.nixl._NixlAgent", None):
+        with patch("sonar.v1.kv_offload.tiering.p2p.data.nixl._NixlAgent", None):
             transport = NixlTransport("test:1", view, config_fields=None)
         assert transport.config_fingerprint == ""
 
@@ -186,7 +186,7 @@ class TestDataTransportBase:
         """Same config fields → same fingerprint."""
         view = self._make_view()
         fields = {"model": "llama", "dtype": "float16", "blocks_per_chunk": 1}
-        with patch("aphrodite.v1.kv_offload.tiering.p2p.data.nixl._NixlAgent", None):
+        with patch("sonar.v1.kv_offload.tiering.p2p.data.nixl._NixlAgent", None):
             t1 = NixlTransport("test:1", view, config_fields=fields)
             t2 = NixlTransport("test:2", view, config_fields=fields)
         assert t1.config_fingerprint == t2.config_fingerprint
@@ -195,7 +195,7 @@ class TestDataTransportBase:
     def test_config_fingerprint_differs_for_different_fields(self):
         """Different config fields → different fingerprint."""
         view = self._make_view()
-        with patch("aphrodite.v1.kv_offload.tiering.p2p.data.nixl._NixlAgent", None):
+        with patch("sonar.v1.kv_offload.tiering.p2p.data.nixl._NixlAgent", None):
             t1 = NixlTransport("test:1", view, config_fields={"model": "a"})
             t2 = NixlTransport("test:2", view, config_fields={"model": "b"})
         assert t1.config_fingerprint != t2.config_fingerprint
@@ -213,7 +213,7 @@ class TestNixlTransportWithMockedAgent:
         """Create a NixlTransport with mocked NIXL internals."""
         view = memoryview(np.zeros((8, 1024), dtype=np.uint8))
 
-        with patch("aphrodite.v1.kv_offload.tiering.p2p.data.nixl._NixlAgent", None):
+        with patch("sonar.v1.kv_offload.tiering.p2p.data.nixl._NixlAgent", None):
             transport = NixlTransport("test:1", view)
 
         # Manually set up a mock agent after construction
@@ -233,7 +233,7 @@ class TestNixlTransportWithMockedAgent:
     def test_available_false_without_nixl(self):
         """Without NIXL installed, available is False."""
         view = memoryview(np.zeros((4, 512), dtype=np.uint8))
-        with patch("aphrodite.v1.kv_offload.tiering.p2p.data.nixl._NixlAgent", None):
+        with patch("sonar.v1.kv_offload.tiering.p2p.data.nixl._NixlAgent", None):
             transport = NixlTransport("test:1", view)
         assert transport.available is False
 
@@ -942,7 +942,7 @@ class TestNixlAgentConfigSelection:
     """Tests that backends/num_threads pick the right nixl_agent_config call.
 
     Mirrors the conditional in
-    aphrodite/distributed/kv_transfer/kv_connector/v1/nixl/base_worker.py:325-329.
+    sonar/distributed/kv_transfer/kv_connector/v1/nixl/base_worker.py:325-329.
     """
 
     def _make_view(self) -> memoryview:
@@ -953,8 +953,8 @@ class TestNixlAgentConfigSelection:
         agent_cls = MagicMock()
         config_fn = MagicMock(return_value=MagicMock(name="cfg"))
         with (
-            patch("aphrodite.v1.kv_offload.tiering.p2p.data.nixl._NixlAgent", agent_cls),
-            patch("aphrodite.v1.kv_offload.tiering.p2p.data.nixl._NixlAgentConfig", config_fn),
+            patch("sonar.v1.kv_offload.tiering.p2p.data.nixl._NixlAgent", agent_cls),
+            patch("sonar.v1.kv_offload.tiering.p2p.data.nixl._NixlAgentConfig", config_fn),
         ):
             NixlTransport("test:1", self._make_view(), backends=["MOONCAKE"])
 
@@ -968,8 +968,8 @@ class TestNixlAgentConfigSelection:
         agent_cls = MagicMock()
         config_fn = MagicMock(return_value=MagicMock(name="cfg"))
         with (
-            patch("aphrodite.v1.kv_offload.tiering.p2p.data.nixl._NixlAgent", agent_cls),
-            patch("aphrodite.v1.kv_offload.tiering.p2p.data.nixl._NixlAgentConfig", config_fn),
+            patch("sonar.v1.kv_offload.tiering.p2p.data.nixl._NixlAgent", agent_cls),
+            patch("sonar.v1.kv_offload.tiering.p2p.data.nixl._NixlAgentConfig", config_fn),
         ):
             NixlTransport("test:1", self._make_view(), num_threads=8)
 
@@ -983,8 +983,8 @@ class TestNixlAgentConfigSelection:
         agent_cls = MagicMock()
         config_fn = MagicMock(return_value=MagicMock(name="cfg"))
         with (
-            patch("aphrodite.v1.kv_offload.tiering.p2p.data.nixl._NixlAgent", agent_cls),
-            patch("aphrodite.v1.kv_offload.tiering.p2p.data.nixl._NixlAgentConfig", config_fn),
+            patch("sonar.v1.kv_offload.tiering.p2p.data.nixl._NixlAgent", agent_cls),
+            patch("sonar.v1.kv_offload.tiering.p2p.data.nixl._NixlAgentConfig", config_fn),
         ):
             NixlTransport("test:1", self._make_view())
 

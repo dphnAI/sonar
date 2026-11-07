@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-from aphrodite.config import SpeculativeConfig
-from aphrodite.transformers_utils.configs.eagle import EAGLEConfig
-from aphrodite.transformers_utils.configs.speculators import SpeculatorsConfig
-from aphrodite.v1.worker.gpu.spec_decode.speculator_config import (
+from sonar.config import SpeculativeConfig
+from sonar.transformers_utils.configs.eagle import EAGLEConfig
+from sonar.transformers_utils.configs.speculators import SpeculatorsConfig
+from sonar.v1.worker.gpu.spec_decode.speculator_config import (
     DraftModelSpeculatorConfig,
 )
 
@@ -29,7 +29,7 @@ def check_draft_lm_head_quantization(spec: SpeculativeConfig) -> None:
 
 class EagleSpeculatorConfig(DraftModelSpeculatorConfig):
     base_method = "eagle"
-    speculator_class = "aphrodite.v1.worker.gpu.spec_decode.eagle.speculator.EagleSpeculator"
+    speculator_class = "sonar.v1.worker.gpu.spec_decode.eagle.speculator.EagleSpeculator"
     supported_options = frozenset({"draft_lm_head_quantization"})
     uses_target_hidden_states = True
     supports_watermarking = True

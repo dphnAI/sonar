@@ -32,11 +32,11 @@ from mistral_common.tokens.tokenizers.tekken import Tekkenizer
 from pydantic import ValidationError
 from transformers.tokenization_mistral_common import MistralCommonBackend
 
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.logger import init_logger
-from aphrodite.renderers.chat_utils import ChatCompletionMessageParam
-from aphrodite.tokenizers.protocol import TokenizerLike
+from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+from sonar.exceptions import SonarValidationError
+from sonar.logger import init_logger
+from sonar.renderers.chat_utils import ChatCompletionMessageParam
+from sonar.tokenizers.protocol import TokenizerLike
 
 if TYPE_CHECKING:
     import llguidance
@@ -139,13 +139,13 @@ def _validate_apply_chat_template_args(
 
 def validate_request_params(request: "ChatCompletionRequest"):
     if request.chat_template is not None or request.chat_template_kwargs is not None:
-        raise AphroditeValidationError(
+        raise SonarValidationError(
             "chat_template is not supported for Mistral tokenizers.",
             parameter="chat_template",
         )
 
     if request.reasoning_effort and request.reasoning_effort not in list(ReasoningEffort):
-        raise AphroditeValidationError(
+        raise SonarValidationError(
             f"reasoning_effort={request.reasoning_effort} is not supported by "
             "Mistral models. Supported values are: "
             f"{[e.value for e in ReasoningEffort]}.",
@@ -190,7 +190,7 @@ def tekken_convert_tokens_to_string(tokenizer: "Tekkenizer", tokens: Sequence[st
 
 
 class MistralTokenizer(TokenizerLike):
-    IS_MISTRAL_TOKENIZER = True  # used by aphrodite.utils.mistral
+    IS_MISTRAL_TOKENIZER = True  # used by sonar.utils.mistral
 
     @classmethod
     def from_pretrained(
@@ -264,7 +264,7 @@ class MistralTokenizer(TokenizerLike):
     def num_special_tokens_to_add(self) -> int:
         return len(self.encode(""))
 
-    # the following attributes are set to fit Aphrodite's design and are used
+    # the following attributes are set to fit Sonar's design and are used
     # by the structured output backends.
     @property
     def all_special_tokens(self) -> list[str]:
@@ -353,7 +353,7 @@ class MistralTokenizer(TokenizerLike):
         add_special_tokens: bool = True,
     ) -> list[int]:
         # NOTE: transformers guards truncation with `if max_length and ...`, so
-        # `max_length=0` returns the full sequence instead of an empty one. Aphrodite
+        # `max_length=0` returns the full sequence instead of an empty one. Sonar
         # treats `truncate_prompt_tokens=0` as an empty prompt, so keep slicing
         # here until that is fixed upstream.
         encoded = self.tokenizer.encode(text, bos=add_special_tokens, eos=False)

@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from aphrodite.entrypoints.serve.utils import fingerprint as fp
+from sonar.entrypoints.serve.utils import fingerprint as fp
 
 
 def _cfg(tp=1, pp=1, dp=1, ep=False, digest="a3b21f94deadbeef"):
@@ -30,25 +30,23 @@ def _reset():
 
 
 def test_four_modes_produce_expected_shapes():
-    from aphrodite import __version__ as v
+    from sonar import __version__ as v
 
     cfg = _cfg(tp=8, ep=True)
 
-    assert fp.build_system_fingerprint(cfg, "full") == (f"aphrodite-{v}-tp8-ep-a3b21f94")
-    assert fp.build_system_fingerprint(cfg, "hash") == f"aphrodite-{v}-a3b21f94"
+    assert fp.build_system_fingerprint(cfg, "full") == (f"sonar-{v}-tp8-ep-a3b21f94")
+    assert fp.build_system_fingerprint(cfg, "hash") == f"sonar-{v}-a3b21f94"
     assert fp.build_system_fingerprint(cfg, "custom", "my-fp") == "my-fp"
     assert fp.build_system_fingerprint(cfg, "none") is None
 
 
 def test_full_mode_emits_only_non_trivial_parallelism():
-    from aphrodite import __version__ as v
+    from sonar import __version__ as v
 
     # Single-GPU: nothing between version and hash.
-    assert fp.build_system_fingerprint(_cfg(), "full") == f"aphrodite-{v}-a3b21f94"
+    assert fp.build_system_fingerprint(_cfg(), "full") == f"sonar-{v}-a3b21f94"
     # All parallelism axes.
-    assert (
-        fp.build_system_fingerprint(_cfg(tp=8, pp=2, dp=4, ep=True), "full") == f"aphrodite-{v}-tp8-pp2-dp4-ep-a3b21f94"
-    )
+    assert fp.build_system_fingerprint(_cfg(tp=8, pp=2, dp=4, ep=True), "full") == f"sonar-{v}-tp8-pp2-dp4-ep-a3b21f94"
 
 
 def test_get_respects_set_default():

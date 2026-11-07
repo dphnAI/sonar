@@ -15,11 +15,11 @@ import regex as re
 import torch
 from cachetools import LRUCache
 
-import aphrodite.envs as envs
-from aphrodite.logger import init_logger
-from aphrodite.utils.import_utils import LazyLoader
-from aphrodite.utils.torch_utils import PIN_MEMORY, async_tensor_h2d
-from aphrodite.v1.core.sched.output import GrammarOutput, SchedulerOutput
+import sonar.envs as envs
+from sonar.logger import init_logger
+from sonar.utils.import_utils import LazyLoader
+from sonar.utils.torch_utils import PIN_MEMORY, async_tensor_h2d
+from sonar.v1.core.sched.output import GrammarOutput, SchedulerOutput
 
 if TYPE_CHECKING:
     import outlines_core as oc
@@ -27,8 +27,8 @@ if TYPE_CHECKING:
     import transformers.file_utils as file_utils
     import xgrammar as xgr
 
-    from aphrodite.tokenizers import TokenizerLike
-    from aphrodite.v1.worker.gpu_input_batch import InputBatch
+    from sonar.tokenizers import TokenizerLike
+    from sonar.v1.worker.gpu_input_batch import InputBatch
 else:
     xgr = LazyLoader("xgr", globals(), "xgrammar")
     oc = LazyLoader("oc", globals(), "outlines_core")
@@ -74,7 +74,7 @@ def compile_regex_with_timeout(fn: Callable[[str], _T], pattern: str) -> _T:
         ValueError: If compilation exceeds the configured timeout.
 
     """
-    timeout = envs.APHRODITE_REGEX_COMPILATION_TIMEOUT_S
+    timeout = envs.SONAR_REGEX_COMPILATION_TIMEOUT_S
     if timeout <= 0:
         return fn(pattern)
 
@@ -291,7 +291,7 @@ class OutlinesDiskCache:
 def get_outlines_cache():
     """Get the Cache instance to be used for index caching."""
     cache_dir = get_outlines_cache_path()
-    if envs.APHRODITE_V1_USE_OUTLINES_CACHE:
+    if envs.SONAR_V1_USE_OUTLINES_CACHE:
         logger.warning(
             "Enabling outlines cache. This is an unbounded on-disk "
             "cache. It may consume a lot of disk space and should "

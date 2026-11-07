@@ -6,5 +6,5 @@ num_fewshot: 5
 startup_max_wait_seconds: 2400
 server_args: "--enforce-eager --max-model-len 8192 --data-parallel-size 2 --enable-expert-parallel --all2all-backend deepep_low_latency --disable-uvicorn-access-log"
 env:
-  APHRODITE_USE_DEEP_GEMM: "1"
-  APHRODITE_USE_DEEP_GEMM_MOE: "1"
+  SONAR_USE_DEEP_GEMM: "1"
+  SONAR_USE_DEEP_GEMM_MOE: "1"

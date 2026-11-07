@@ -3,7 +3,7 @@
 
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 
 def _merge_attn_states_torch(
@@ -139,13 +139,13 @@ def merge_attn_states(
         if current_platform.is_cuda():
             return True
         if current_platform.is_rocm():
-            from aphrodite.platforms.rocm import get_cdna_version
+            from sonar.platforms.rocm import get_cdna_version
 
             return get_cdna_version() >= 3
         return False
 
     if supported_platform() and supported_dtypes(prefix_output) and supported_headdim(prefix_output):
-        from aphrodite._custom_ops import merge_attn_states as _merge_attn_states_cuda
+        from sonar._custom_ops import merge_attn_states as _merge_attn_states_cuda
 
         return _merge_attn_states_cuda(
             output,
@@ -169,7 +169,7 @@ def merge_attn_states(
             output_scale,
         )
     else:
-        from aphrodite.v1.attention.ops.triton_merge_attn_states import (
+        from sonar.v1.attention.ops.triton_merge_attn_states import (
             merge_attn_states as _merge_attn_states_triton,
         )
 

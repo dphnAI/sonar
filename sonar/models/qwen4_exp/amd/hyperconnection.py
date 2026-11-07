@@ -6,7 +6,7 @@ Implements the HyperConnection residual scheme proposed in
 "HyperConnections" (https://arxiv.org/abs/2409.19606). This AMD variant
 delays each HC combine to the following HC mix boundary. HC glue kernels,
 including fused combine+RMSNorm, live in ``ops/hc.py``; projections remain
-standard Aphrodite Linear modules.
+standard Sonar Linear modules.
 
 Hidden states between layers have shape ``[..., HC*HS]`` with HS inner
 (HC outer, HS inner — checkpoint-native layout).
@@ -23,11 +23,11 @@ Typical usage inside a transformer decoder layer::
 import torch
 from torch import nn
 
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.linear import (
     MergedColumnParallelLinear,
     ReplicatedLinear,
 )
-from aphrodite.model_executor.models.utils import maybe_prefix
+from sonar.model_executor.models.utils import maybe_prefix
 
 from ..common.hyperconnection import (
     GroupedGemmaRMSNorm,
@@ -55,7 +55,7 @@ class GatedResidual(nn.Module):
     ``use_combine=False`` and do not produce a new injection.
 
     Weights: the norm owns the grouped GemmaRMSNorm affine; the projections
-    are Aphrodite Linear modules (merged replicated linear for down+inject), so
+    are Sonar Linear modules (merged replicated linear for down+inject), so
     GEMM dispatch (e.g. the low-latency skinny GEMM) applies through the
     standard quant_method mechanism.
     """
@@ -84,7 +84,7 @@ class GatedResidual(nn.Module):
             dtype=config.params_dtype,
         )
 
-        # -- Aphrodite Linear weights --------------------------------------------
+        # -- Sonar Linear weights --------------------------------------------
         # The merged skinny-GEMM shape is physically padded to 16 rows for
         # alignment and efficient backend dispatch.
         self.pad_size = (-(self.hc_lowrank + self.hc_count)) % 16 if use_combine else 0

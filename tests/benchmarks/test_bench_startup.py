@@ -8,7 +8,7 @@ import pytest
 @pytest.mark.benchmark
 def test_bench_startup():
     command = [
-        "aphrodite",
+        "sonar",
         "bench",
         "startup",
     ]

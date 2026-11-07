@@ -4,7 +4,7 @@
 import pytest
 from pydantic import ValidationError
 
-from aphrodite.entrypoints.openai.responses.protocol import (
+from sonar.entrypoints.openai.responses.protocol import (
     ResponsesRequest,
     ResponsesResponse,
 )

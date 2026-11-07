@@ -9,21 +9,21 @@ from typing import TYPE_CHECKING, Any, TypeVar
 import torch
 import torch.nn as nn
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.activation import get_act_fn
-from aphrodite.model_executor.models.config import VerifyAndUpdateConfig
-from aphrodite.transformers_utils.config import (
+from sonar.config import SonarConfig
+from sonar.logger import init_logger
+from sonar.model_executor.layers.activation import get_act_fn
+from sonar.model_executor.models.config import VerifyAndUpdateConfig
+from sonar.transformers_utils.config import (
     try_get_dense_modules,
 )
-from aphrodite.transformers_utils.repo_utils import get_hf_file_bytes
+from sonar.transformers_utils.repo_utils import get_hf_file_bytes
 
 from .interfaces import supports_multimodal
-from .interfaces_base import AphroditeModelForPooling, is_pooling_model
+from .interfaces_base import SonarModelForPooling, is_pooling_model
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig, ModelConfig
-    from aphrodite.model_executor.layers.pooler import Pooler
+    from sonar.config import ModelConfig, SonarConfig
+    from sonar.model_executor.layers.pooler import Pooler
 
 _T = TypeVar("_T", bound=nn.Module)
 
@@ -85,8 +85,8 @@ def _load_st_projector(model_config: "ModelConfig") -> nn.Module | None:
 
 
 def _load_dense_weights(linear: nn.Linear, folder: str, model_config: "ModelConfig") -> bool:
-    """Load weights using Aphrodite's weight_loader pattern."""
-    from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
+    """Load weights using Sonar's weight_loader pattern."""
+    from sonar.model_executor.model_loader.weight_utils import default_weight_loader
 
     for filename in ["model.safetensors", "pytorch_model.bin"]:
         file_path = f"{folder}/{filename}" if folder else filename
@@ -133,18 +133,18 @@ def _get_pooling_model_name(orig_model_name: str, pooling_suffix: str) -> str:
 
 def _create_pooling_model_cls(orig_cls: type[_T]) -> type[_T]:
     # Lazy import
-    from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-    from aphrodite.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
+    from sonar.model_executor.layers.logits_processor import LogitsProcessor
+    from sonar.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
 
     from .utils import AutoWeightsLoader, StageMissingLayer, no_init_weights
 
-    class ModelForPooling(orig_cls, AphroditeModelForPooling):  # type: ignore[valid-type,misc]
+    class ModelForPooling(orig_cls, SonarModelForPooling):  # type: ignore[valid-type,misc]
         is_pooling_model = True
 
         def __init__(
             self,
             *,
-            aphrodite_config: "AphroditeConfig",
+            sonar_config: "SonarConfig",
             prefix: str = "",
             **kwargs: Any,
         ) -> None:
@@ -154,11 +154,11 @@ def _create_pooling_model_cls(orig_cls: type[_T]) -> type[_T]:
                 targets=(LogitsProcessor, ParallelLMHead),
             ):
                 super().__init__(  # type: ignore[safe-super]
-                    aphrodite_config=aphrodite_config, prefix=prefix, **kwargs
+                    sonar_config=sonar_config, prefix=prefix, **kwargs
                 )
 
             # Used by SEQ_CLS_LOAD_METHODS
-            self.aphrodite_config = aphrodite_config
+            self.sonar_config = sonar_config
 
             # If the model already defines a pooler instance, don't overwrite it
             pooler = getattr(self, "pooler", None)
@@ -170,13 +170,13 @@ def _create_pooling_model_cls(orig_cls: type[_T]) -> type[_T]:
                     pooler = language_model.pooler
 
             if not pooler:
-                pooler = self._init_pooler(aphrodite_config, prefix=prefix)
+                pooler = self._init_pooler(sonar_config, prefix=prefix)
 
             self.pooler = pooler
 
         def _init_pooler(
             self,
-            aphrodite_config: "AphroditeConfig",
+            sonar_config: "SonarConfig",
             prefix: str = "",
         ) -> "Pooler":
             raise NotImplementedError
@@ -187,21 +187,21 @@ def _create_pooling_model_cls(orig_cls: type[_T]) -> type[_T]:
             # (e.g. Gemma4 model.language_model.* -> language_model.model.*)
             # so the "" / "model." scan can early-exit. Forwarded names stay
             # unmapped to avoid double-applying the mapper in the parent loader.
-            hf_to_aphrodite_mapper = getattr(self, "hf_to_aphrodite_mapper", None)
+            hf_to_sonar_mapper = getattr(self, "hf_to_sonar_mapper", None)
 
             # We support loading from both `*ForCausalLM` and `*Model`
             candidate_prefixes = ["", "model."]
             target_prefix = ""
 
             seen_weights = list[tuple[str, torch.Tensor]]()
-            owned = self.aphrodite_config.load_config.load_format in _OWNED_TENSOR_LOAD_FORMATS
+            owned = self.sonar_config.load_config.load_format in _OWNED_TENSOR_LOAD_FORMATS
             for name, loaded_weight in weights:
                 # Clone because the iterator may reuse the tensor buffer
                 seen_weights.append((name, loaded_weight if owned else loaded_weight.clone()))
 
                 lookup_name = name
-                if hf_to_aphrodite_mapper is not None:
-                    mapped = hf_to_aphrodite_mapper._map_name(name)
+                if hf_to_sonar_mapper is not None:
+                    mapped = hf_to_sonar_mapper._map_name(name)
                     if mapped is None:
                         continue
                     lookup_name = mapped
@@ -232,7 +232,7 @@ def _create_pooling_model_cls(orig_cls: type[_T]) -> type[_T]:
 
             def default_load_weights(weights):
                 loader = AutoWeightsLoader(self)
-                mapper = getattr(self, "hf_to_aphrodite_mapper", None)
+                mapper = getattr(self, "hf_to_sonar_mapper", None)
                 return loader.load_weights(weights, mapper=mapper)
 
             load_weights = getattr(super(), "load_weights", default_load_weights)
@@ -245,7 +245,7 @@ def _create_pooling_model_cls(orig_cls: type[_T]) -> type[_T]:
 
 
 def as_embedding_model(cls: type[_T]) -> type[_T]:
-    """Subclass an existing Aphrodite model to support embeddings.
+    """Subclass an existing Sonar model to support embeddings.
 
     By default, the embeddings of the whole prompt are extracted from the
     normalized hidden state corresponding to the last token.
@@ -260,15 +260,15 @@ def as_embedding_model(cls: type[_T]) -> type[_T]:
         return cls
 
     # Lazy import
-    from aphrodite.model_executor.layers.pooler import DispatchPooler
+    from sonar.model_executor.layers.pooler import DispatchPooler
 
     class ModelForEmbedding(_create_pooling_model_cls(cls)):  # type: ignore[misc]
         def _init_pooler(
             self,
-            aphrodite_config: "AphroditeConfig",
+            sonar_config: "SonarConfig",
             prefix: str = "",
         ) -> "Pooler":
-            pooler_config = aphrodite_config.model_config.pooler_config
+            pooler_config = sonar_config.model_config.pooler_config
             assert pooler_config is not None
 
             return DispatchPooler.for_embedding(pooler_config)
@@ -302,7 +302,7 @@ def _resolve_num_labels(hf_config: Any, text_config: Any) -> int:
 
 
 def as_seq_cls_model(cls: type[_T]) -> type[_T]:
-    """Subclass an existing Aphrodite model to support classify and score tasks.
+    """Subclass an existing Sonar model to support classify and score tasks.
 
     By default, the class probabilities are extracted from the softmaxed
     hidden state corresponding to the last token.
@@ -318,9 +318,9 @@ def as_seq_cls_model(cls: type[_T]) -> type[_T]:
         return cls
 
     # Lazy import
-    from aphrodite.model_executor.layers.linear import ReplicatedLinear
-    from aphrodite.model_executor.layers.pooler import DispatchPooler
-    from aphrodite.model_executor.models.interfaces import SupportsCrossEncoding
+    from sonar.model_executor.layers.linear import ReplicatedLinear
+    from sonar.model_executor.layers.pooler import DispatchPooler
+    from sonar.model_executor.models.interfaces import SupportsCrossEncoding
 
     from .utils import maybe_prefix
 
@@ -330,12 +330,12 @@ def as_seq_cls_model(cls: type[_T]) -> type[_T]:
     ):
         def _init_pooler(
             self,
-            aphrodite_config: "AphroditeConfig",
+            sonar_config: "SonarConfig",
             prefix: str = "",
         ) -> "Pooler":
-            hf_config = aphrodite_config.model_config.hf_config
+            hf_config = sonar_config.model_config.hf_config
             text_config = hf_config.get_text_config()
-            model_config = aphrodite_config.model_config
+            model_config = sonar_config.model_config
 
             # Check if score weights are derived online from LM head
             # (same condition as load_weights branch)
@@ -353,7 +353,7 @@ def as_seq_cls_model(cls: type[_T]) -> type[_T]:
             # Online conversion: no score weights in checkpoint, don't
             # quantize (small output_dim breaks FP8/Marlin tile alignment).
             # Checkpoint-based: respect the model's quant_config.
-            quant_config = None if (tokens is not None or method is not None) else aphrodite_config.quant_config
+            quant_config = None if (tokens is not None or method is not None) else sonar_config.quant_config
 
             self.score = ReplicatedLinear(
                 model_config.get_hidden_size(),
@@ -365,7 +365,7 @@ def as_seq_cls_model(cls: type[_T]) -> type[_T]:
                 prefix=maybe_prefix(prefix, "score"),
             )
 
-            pooler_config = aphrodite_config.model_config.pooler_config
+            pooler_config = sonar_config.model_config.pooler_config
             assert pooler_config is not None
 
             return DispatchPooler.for_seq_cls(pooler_config, classifier=self.score)
@@ -406,8 +406,8 @@ def as_seq_cls_model(cls: type[_T]) -> type[_T]:
 
 class SequenceClassificationConfig(VerifyAndUpdateConfig):
     @staticmethod
-    def verify_and_update_config(aphrodite_config: "AphroditeConfig") -> None:
-        hf_config = aphrodite_config.model_config.hf_config
+    def verify_and_update_config(sonar_config: "SonarConfig") -> None:
+        hf_config = sonar_config.model_config.hf_config
         text_config = hf_config.get_text_config()
         method = getattr(hf_config, "method", getattr(text_config, "method", None))
         tokens = getattr(
@@ -500,10 +500,10 @@ def _disable_seq_cls_loading_on_inner_model(language_model, is_vlm: bool):
 
 def load_weights_using_from_2_way_softmax(model, weights: Iterable[tuple[str, torch.Tensor]]):
     # refer to https://huggingface.co/Qwen/Qwen3-Reranker-0.6B/discussions/3
-    from aphrodite.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
-    from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
+    from sonar.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
+    from sonar.model_executor.model_loader.weight_utils import default_weight_loader
 
-    model_config = model.aphrodite_config.model_config
+    model_config = model.sonar_config.model_config
     hf_config = model.config
     text_config = hf_config.get_text_config()
 
@@ -537,7 +537,7 @@ def load_weights_using_from_2_way_softmax(model, weights: Iterable[tuple[str, to
     with _disable_seq_cls_loading_on_inner_model(language_model, is_vlm):
         loaded_weights = model._load_pooling_model_weights(weights)
 
-    from aphrodite.tokenizers import get_tokenizer
+    from sonar.tokenizers import get_tokenizer
 
     tokenizer = get_tokenizer(
         model_config.tokenizer,
@@ -562,18 +562,18 @@ def load_weights_using_from_2_way_softmax(model, weights: Iterable[tuple[str, to
     loaded_weights.add(score_weight_name)
 
     lm_head_name: str | None = "lm_head.weight"
-    if hf_to_aphrodite_mapper := getattr(model, "hf_to_aphrodite_mapper", None):
-        lm_head_name = hf_to_aphrodite_mapper._map_name(lm_head_name)
+    if hf_to_sonar_mapper := getattr(model, "hf_to_sonar_mapper", None):
+        lm_head_name = hf_to_sonar_mapper._map_name(lm_head_name)
     if lm_head_name is not None:
         loaded_weights.discard(lm_head_name)
     return loaded_weights
 
 
 def load_weights_no_post_processing(model, weights: Iterable[tuple[str, torch.Tensor]]):
-    from aphrodite.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
-    from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
+    from sonar.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
+    from sonar.model_executor.model_loader.weight_utils import default_weight_loader
 
-    model_config = model.aphrodite_config.model_config
+    model_config = model.sonar_config.model_config
     text_config = model.config.get_text_config()
 
     tokens: list[str] = getattr(text_config, "classifier_from_token", [])
@@ -603,7 +603,7 @@ def load_weights_no_post_processing(model, weights: Iterable[tuple[str, torch.Te
         # Bypass ModelForSequenceClassification to avoid infinite recursion
         loaded_weights = model._load_pooling_model_weights(weights)
 
-    from aphrodite.tokenizers import get_tokenizer
+    from sonar.tokenizers import get_tokenizer
 
     tokenizer = get_tokenizer(
         model_config.tokenizer,
@@ -626,8 +626,8 @@ def load_weights_no_post_processing(model, weights: Iterable[tuple[str, torch.Te
     loaded_weights.add(score_weight_name)
 
     lm_head_name: str | None = "lm_head.weight"
-    if hf_to_aphrodite_mapper := getattr(model, "hf_to_aphrodite_mapper", None):
-        lm_head_name = hf_to_aphrodite_mapper._map_name(lm_head_name)
+    if hf_to_sonar_mapper := getattr(model, "hf_to_sonar_mapper", None):
+        lm_head_name = hf_to_sonar_mapper._map_name(lm_head_name)
     if lm_head_name is not None:
         loaded_weights.discard(lm_head_name)
     return loaded_weights
@@ -650,7 +650,7 @@ def seq_cls_model_loader(model, weights: Iterable[tuple[str, torch.Tensor]]):
     #   - GemmaForCausalLM
     #     - bge-reranker-v2-gemma
 
-    hf_config = model.aphrodite_config.model_config.hf_config
+    hf_config = model.sonar_config.model_config.hf_config
     text_config = hf_config.get_text_config()
     method = getattr(hf_config, "method", getattr(text_config, "method", None))
     assert method in SEQ_CLS_LOAD_METHODS, f"method {method} not supported"

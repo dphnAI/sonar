@@ -8,47 +8,47 @@ from typing import TYPE_CHECKING
 import numpy as np
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.model import PROCESSED_LOGPROBS_MODES, LogprobsMode
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.v1.sample.ops.topk_topp_sampler import (
+import sonar.envs as envs
+from sonar.config import SonarConfig
+from sonar.config.model import PROCESSED_LOGPROBS_MODES, LogprobsMode
+from sonar.sampling_params import SamplingParams
+from sonar.v1.sample.ops.topk_topp_sampler import (
     apply_top_k_top_p,
     flashinfer_sample,
     flashinfer_sampler_supported,
     xpu_sample,
     xpu_sampler_supported,
 )
-from aphrodite.v1.worker.gpu.input_batch import InputBatch, get_num_sampled_and_rejected
-from aphrodite.v1.worker.gpu.metrics.logits import get_num_nans
-from aphrodite.v1.worker.gpu.sample.bad_words import BadWordsState
-from aphrodite.v1.worker.gpu.sample.fork import GPUForkSamplingState, needs_fork_sampling
-from aphrodite.v1.worker.gpu.sample.gumbel import gumbel_sample
-from aphrodite.v1.worker.gpu.sample.logit_bias import LogitBiasState
-from aphrodite.v1.worker.gpu.sample.logits_processor.interface import (
+from sonar.v1.worker.gpu.input_batch import InputBatch, get_num_sampled_and_rejected
+from sonar.v1.worker.gpu.metrics.logits import get_num_nans
+from sonar.v1.worker.gpu.sample.bad_words import BadWordsState
+from sonar.v1.worker.gpu.sample.fork import GPUForkSamplingState, needs_fork_sampling
+from sonar.v1.worker.gpu.sample.gumbel import gumbel_sample
+from sonar.v1.worker.gpu.sample.logit_bias import LogitBiasState
+from sonar.v1.worker.gpu.sample.logits_processor.interface import (
     LogitsContext,
     LogitsProcessor,
     LogitsProcRequestState,
 )
-from aphrodite.v1.worker.gpu.sample.logprob import (
+from sonar.v1.worker.gpu.sample.logprob import (
     LogprobTokenIdsState,
     compute_topk_scores,
 )
-from aphrodite.v1.worker.gpu.sample.output import SamplerOutput, SamplingMaskTensors
-from aphrodite.v1.worker.gpu.sample.penalties import PenaltiesState
-from aphrodite.v1.worker.gpu.sample.states import NO_LOGPROBS, SamplingStates
-from aphrodite.v1.worker.gpu.sample.thinking_budget import ThinkingBudgetState
-from aphrodite.v1.worker.gpu.sample.trace_replay import TraceReplayState
-from aphrodite.v1.worker.gpu.states import RequestState
+from sonar.v1.worker.gpu.sample.output import SamplerOutput, SamplingMaskTensors
+from sonar.v1.worker.gpu.sample.penalties import PenaltiesState
+from sonar.v1.worker.gpu.sample.states import NO_LOGPROBS, SamplingStates
+from sonar.v1.worker.gpu.sample.thinking_budget import ThinkingBudgetState
+from sonar.v1.worker.gpu.sample.trace_replay import TraceReplayState
+from sonar.v1.worker.gpu.states import RequestState
 
 if TYPE_CHECKING:
-    from aphrodite.v1.phrase_guard.v2 import RetryMask
+    from sonar.v1.phrase_guard.v2 import RetryMask
 
 
 class Sampler:
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         max_num_reqs: int,
         vocab_size: int,
         device: torch.device,
@@ -61,16 +61,16 @@ class Sampler:
         custom_logits_processors: Sequence[LogitsProcessor] = (),
     ):
         self.logprobs_mode = logprobs_mode
-        self.compute_nans = envs.APHRODITE_COMPUTE_NANS_IN_LOGITS  # False by default.
+        self.compute_nans = envs.SONAR_COMPUTE_NANS_IN_LOGITS  # False by default.
         self.use_fp64_gumbel = use_fp64_gumbel
 
         self.req_states = req_states
         self.sampling_states = SamplingStates(max_num_reqs, vocab_size)
 
         lp_req_state = LogitsProcRequestState.from_request_state(req_states)
-        self.penalties_state = PenaltiesState(aphrodite_config, lp_req_state)
-        logit_bias_state = LogitBiasState(aphrodite_config, lp_req_state)
-        bad_words_state = BadWordsState(aphrodite_config, lp_req_state)
+        self.penalties_state = PenaltiesState(sonar_config, lp_req_state)
+        logit_bias_state = LogitBiasState(sonar_config, lp_req_state)
+        bad_words_state = BadWordsState(sonar_config, lp_req_state)
 
         # List order is pipeline order: bias adds, penalties scale, so the
         # two do not commute.
@@ -82,7 +82,7 @@ class Sampler:
         ]
 
         self.logprob_token_ids_state = LogprobTokenIdsState(max_num_reqs, device)
-        self.thinking_budget_state = ThinkingBudgetState(req_states, aphrodite_config.reasoning_config)
+        self.thinking_budget_state = ThinkingBudgetState(req_states, sonar_config.reasoning_config)
         self.trace_replay_state = TraceReplayState(req_states) if enable_trace_replay else None
         self.phrase_retry_mask: RetryMask | None = None
         self.needs_logits_processing = np.zeros(max_num_reqs, dtype=bool)
@@ -125,7 +125,7 @@ class Sampler:
 
         retry = (sampling_params.extra_args or {}).get("_sonar_phrase_retry")
         if retry is not None and self.phrase_retry_mask is None:
-            from aphrodite.v1.phrase_guard.v2 import RetryMask
+            from sonar.v1.phrase_guard.v2 import RetryMask
 
             self.phrase_retry_mask = RetryMask(self.req_states.max_num_reqs, self.req_states.device)
         if self.phrase_retry_mask is not None:

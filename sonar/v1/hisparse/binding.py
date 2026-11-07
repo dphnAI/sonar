@@ -8,14 +8,14 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.v1.hisparse.backend import get_hisparse_backend
-from aphrodite.v1.hisparse.layout import (
+from sonar.config import SonarConfig
+from sonar.v1.hisparse.backend import get_hisparse_backend
+from sonar.v1.hisparse.layout import (
     HISPARSE_HOT_SUFFIX,
     HISPARSE_RESIDENT_SUFFIX,
     get_hisparse_kv_cache_groups,
 )
-from aphrodite.v1.hisparse.runtime import (
+from sonar.v1.hisparse.runtime import (
     HiSparseCacheHandle,
     HiSparseHostPool,
     drop_hisparse_host_pool,
@@ -23,7 +23,7 @@ from aphrodite.v1.hisparse.runtime import (
     initialize_hisparse_runtime_buffers,
     release_pinned_state,
 )
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.kv_cache_interface import (
     HiSparseHotSpec,
     HiSparseResidentSpec,
     KVCacheConfig,
@@ -33,15 +33,15 @@ from aphrodite.v1.kv_cache_interface import (
     UniformTypeKVCacheSpecs,
     create_kv_cache_views,
 )
-from aphrodite.v1.worker.utils import allocate_kv_cache, select_common_block_size
+from sonar.v1.worker.utils import allocate_kv_cache, select_common_block_size
 
 if TYPE_CHECKING:
-    from aphrodite.model_executor.layers.attention_layer_base import AttentionLayerBase
-    from aphrodite.v1.worker.gpu.block_table import BlockTables
+    from sonar.model_executor.layers.attention_layer_base import AttentionLayerBase
+    from sonar.v1.worker.gpu.block_table import BlockTables
 
 
 def resolve_hisparse_specs(
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     kv_cache_spec: dict[str, KVCacheSpec],
     attn_layers: Mapping[str, "AttentionLayerBase"],
 ) -> dict[str, KVCacheSpec]:
@@ -64,7 +64,7 @@ def resolve_hisparse_specs(
     kv_cache_spec = kv_cache_spec | {
         name: spec.copy_with_new_block_size(block_size) for name, spec in mla_specs.items()
     }
-    groups = get_hisparse_kv_cache_groups(aphrodite_config, kv_cache_spec)
+    groups = get_hisparse_kv_cache_groups(sonar_config, kv_cache_spec)
     assert groups is not None
     return kv_cache_spec | {
         layer_name: group.kv_cache_spec
@@ -110,19 +110,19 @@ def init_hisparse_kv_cache(
     kv_cache_config: KVCacheConfig,
     device: torch.device,
     kernel_block_sizes: list[int],
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     forward_context: dict[str, Any],
     block_tables: "BlockTables",
 ) -> dict[str, Any]:
     """Allocate and bind HiSparse caches within the caller's allocation context."""
     backend = get_hisparse_backend()
     backend.validate_kv_cache_config(kv_cache_config)
-    host_pool = get_hisparse_host_pool(aphrodite_config, kv_cache_config)
+    host_pool = get_hisparse_host_pool(sonar_config, kv_cache_config)
     try:
         kv_caches = allocate_hisparse_kv_caches(
             kv_cache_config,
             device,
-            aphrodite_config.cache_config.get_resolved_kv_cache_layout(),
+            sonar_config.cache_config.get_resolved_kv_cache_layout(),
             kernel_block_sizes,
             host_pool,
         )
@@ -136,12 +136,12 @@ def init_hisparse_kv_cache(
         )
         initialize_hisparse_runtime_buffers(
             cache_handles,
-            max_num_reqs=aphrodite_config.scheduler_config.max_num_seqs,
+            max_num_reqs=sonar_config.scheduler_config.max_num_seqs,
         )
         return kv_caches
     except Exception:
         release_pinned_state([], host_pool.pinned, host_pool.shared_region)
-        drop_hisparse_host_pool(aphrodite_config)
+        drop_hisparse_host_pool(sonar_config)
         raise
 
 

@@ -7,22 +7,22 @@ import math
 import numpy
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.distributed.utils import verify_group_size_divides_partition
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe import RoutedExperts
-from aphrodite.model_executor.layers.fused_moe.config import FusedMoEConfig
-from aphrodite.model_executor.layers.linear import LinearBase
-from aphrodite.model_executor.layers.quantization.input_quant_fp8 import QuantFP8
-from aphrodite.model_executor.layers.quantization.utils.int8_utils import (
+import sonar.envs as envs
+from sonar.distributed.utils import verify_group_size_divides_partition
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe import RoutedExperts
+from sonar.model_executor.layers.fused_moe.config import FusedMoEConfig
+from sonar.model_executor.layers.linear import LinearBase
+from sonar.model_executor.layers.quantization.input_quant_fp8 import QuantFP8
+from sonar.model_executor.layers.quantization.utils.int8_utils import (
     per_token_quant_int8,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import GroupShape
-from aphrodite.platforms import current_platform
-from aphrodite.scalar_type import ScalarType, scalar_types
-from aphrodite.utils.math_utils import round_up
-from aphrodite.utils.platform_utils import num_compute_units
-from aphrodite.utils.torch_utils import direct_register_custom_op
+from sonar.model_executor.layers.quantization.utils.quant_utils import GroupShape
+from sonar.platforms import current_platform
+from sonar.scalar_type import ScalarType, scalar_types
+from sonar.utils.math_utils import round_up
+from sonar.utils.platform_utils import num_compute_units
+from sonar.utils.torch_utils import direct_register_custom_op
 
 from .quant_utils import pack_cols, unpack_cols
 
@@ -385,8 +385,8 @@ def get_marlin_workspace(device: torch.device) -> torch.Tensor:
 
     Marlin resets its locks after each call, so ordered calls can reuse them.
     """
-    from aphrodite.utils.torch_utils import current_stream
-    from aphrodite.v1.worker.workspace import (
+    from sonar.utils.torch_utils import current_stream
+    from sonar.v1.worker.workspace import (
         current_workspace_manager,
         is_workspace_manager_initialized,
     )
@@ -633,13 +633,13 @@ def moe_packed_to_marlin_zero_points(
 def maybe_warn_marlin_atomic_add_env():
     if torch.compiler.is_dynamo_compiling():
         return
-    if envs.APHRODITE_MARLIN_USE_ATOMIC_ADD:
+    if envs.SONAR_MARLIN_USE_ATOMIC_ADD:
         return
     logger.info_once(
         "Marlin kernel can achieve better performance for small size_n "
         "with experimental use_atomic_add feature. "
         "You can consider set environment variable "
-        "APHRODITE_MARLIN_USE_ATOMIC_ADD to 1 if possible."
+        "SONAR_MARLIN_USE_ATOMIC_ADD to 1 if possible."
     )
 
 
@@ -650,8 +650,8 @@ def should_use_atomic_add_reduce(m: int, n: int, k: int, device: torch.device, d
         return False
 
     # disable atomicAdd reduce by default,
-    # one can enable it with APHRODITE_MARLIN_USE_ATOMIC_ADD=1
-    if not envs.APHRODITE_MARLIN_USE_ATOMIC_ADD:
+    # one can enable it with SONAR_MARLIN_USE_ATOMIC_ADD=1
+    if not envs.SONAR_MARLIN_USE_ATOMIC_ADD:
         maybe_warn_marlin_atomic_add_env()
         return False
 
@@ -675,17 +675,17 @@ def get__quant_fp8_method() -> QuantFP8:
 
 
 def get_marlin_input_dtype(prefix: str | None = None):
-    if envs.APHRODITE_MARLIN_INPUT_DTYPE is None:
+    if envs.SONAR_MARLIN_INPUT_DTYPE is None:
         return
-    elif envs.APHRODITE_MARLIN_INPUT_DTYPE.lower() == "int8":
+    elif envs.SONAR_MARLIN_INPUT_DTYPE.lower() == "int8":
         return torch.int8
-    elif envs.APHRODITE_MARLIN_INPUT_DTYPE.lower() == "fp8":
+    elif envs.SONAR_MARLIN_INPUT_DTYPE.lower() == "fp8":
         if not current_platform.is_device_capability(89) and not current_platform.is_device_capability_family(120):
             raise ValueError(
                 "Marlin W4A8-FP8 only support SM89 or SM12x device "
                 "(It is slower than Marlin W4A16 on other devices). "
                 "You can consider using W4A8-INT8 instead"
-                "(set APHRODITE_MARLIN_INPUT_DTYPE=int8)."
+                "(set SONAR_MARLIN_INPUT_DTYPE=int8)."
             )
 
         _ = get__quant_fp8_method()
@@ -742,7 +742,7 @@ def apply_gptq_marlin_linear(
 
         reshaped_x, a_scales = marlin_quant_input(reshaped_x, input_dtype)
 
-    output = torch.ops.aphrodite.marlin_gemm(
+    output = torch.ops.sonar.marlin_gemm(
         reshaped_x,
         weight,
         bias,

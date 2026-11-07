@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-use aphrodite_engine_core_client::Error as EngineCoreError;
-use aphrodite_llm::Error as LlmError;
+use sonar_engine_core_client::Error as EngineCoreError;
+use sonar_llm::Error as LlmError;
 use thiserror::Error;
 
 pub use crate::lower::logprobs::LogprobsError;
@@ -113,8 +113,8 @@ impl Error {
     }
 }
 
-impl From<aphrodite_tokenizer::TokenizerError> for Error {
-    fn from(error: aphrodite_tokenizer::TokenizerError) -> Self {
+impl From<sonar_tokenizer::TokenizerError> for Error {
+    fn from(error: sonar_tokenizer::TokenizerError) -> Self {
         Self::Tokenizer(error.0)
     }
 }

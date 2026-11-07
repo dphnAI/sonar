@@ -31,34 +31,34 @@ import torch
 from torch import nn
 from transformers.configuration_utils import PreTrainedConfig
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, CacheConfig
-from aphrodite.distributed import (
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import CacheConfig, SonarConfig
+from sonar.distributed import (
     get_pp_group,
     get_tensor_model_parallel_world_size,
     tensor_model_parallel_all_gather,
 )
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.model_executor.layers.attention import Attention
+from sonar.model_executor.layers.fused_moe import (
     FusedMoEFactory,
     GateLinear,
 )
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     QKVParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.model_loader.weight_utils import sharded_weight_loader
-from aphrodite.model_executor.models.utils import sequence_parallel_chunk
-from aphrodite.model_executor.utils import set_weight_attrs
-from aphrodite.sequence import IntermediateTensors
+from sonar.model_executor.model_loader.weight_utils import sharded_weight_loader
+from sonar.model_executor.models.utils import sequence_parallel_chunk
+from sonar.model_executor.utils import set_weight_attrs
+from sonar.sequence import IntermediateTensors
 
 from .granite import granite_layer_attn_params
 from .interfaces import EagleModelMixin, SupportsEagle3, SupportsLoRA, SupportsPP
@@ -232,15 +232,15 @@ class GraniteMoeAttention(nn.Module):
 class GraniteMoeDecoderLayer(nn.Module):
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
     ) -> None:
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_config
-        cache_config = aphrodite_config.cache_config
-        quant_config = aphrodite_config.quant_config
-        parallel_config = aphrodite_config.parallel_config
+        config = sonar_config.model_config.hf_config
+        cache_config = sonar_config.cache_config
+        quant_config = sonar_config.quant_config
+        parallel_config = sonar_config.parallel_config
 
         self.hidden_size = config.hidden_size
         self.self_attn = GraniteMoeAttention(
@@ -292,13 +292,13 @@ class GraniteMoeDecoderLayer(nn.Module):
 
 @support_torch_compile
 class GraniteMoeModel(nn.Module, EagleModelMixin):
-    hf_to_aphrodite_mapper: WeightsMapper = WeightsMapper(
+    hf_to_sonar_mapper: WeightsMapper = WeightsMapper(
         orig_to_new_suffix={
             # Legacy names to new names
             "moe.input_linear.weight": "moe.experts.gate_up_proj",
             "moe.output_linear.weight": "moe.experts.down_proj",
             ".router.layer.weight": ".gate.weight",
-            # Checkpoint name to Aphrodite name
+            # Checkpoint name to Sonar name
             ".router.weight": ".gate.weight",
         },
         orig_to_new_stacked={
@@ -309,11 +309,11 @@ class GraniteMoeModel(nn.Module, EagleModelMixin):
         },
     )
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
 
         self.config = config
         self.quant_config = quant_config  # Required by MixtralModel
@@ -328,7 +328,7 @@ class GraniteMoeModel(nn.Module, EagleModelMixin):
 
         self.start_layer, self.end_layer, self.layers = make_layers(
             config.num_hidden_layers,
-            lambda prefix: GraniteMoeDecoderLayer(aphrodite_config, prefix=prefix),
+            lambda prefix: GraniteMoeDecoderLayer(sonar_config, prefix=prefix),
             prefix=f"{prefix}.layers",
         )
 
@@ -371,7 +371,7 @@ class GraniteMoeModel(nn.Module, EagleModelMixin):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
 
 class GraniteMoeForCausalLM(nn.Module, SupportsLoRA, SupportsPP, SupportsEagle3):
@@ -391,14 +391,14 @@ class GraniteMoeForCausalLM(nn.Module, SupportsLoRA, SupportsPP, SupportsEagle3)
         "lm_head": "output_embeddings",
     }
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
 
         self.config = config
 
-        self.model = GraniteMoeModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = GraniteMoeModel(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
 
         self.lm_head = ParallelLMHead(
             config.vocab_size,

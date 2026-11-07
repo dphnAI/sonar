@@ -12,20 +12,20 @@ from compressed_tensors.transform import (
 )
 from compressed_tensors.utils import is_match
 
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.linear import (
     WEIGHT_LOADER_V2_SUPPORTED,
     LinearMethodBase,
 )
-from aphrodite.model_executor.layers.quantization.compressed_tensors.compressed_tensors import (  # noqa: E501
+from sonar.model_executor.layers.quantization.compressed_tensors.compressed_tensors import (  # noqa: E501
     CompressedTensorsScheme,
 )
-from aphrodite.model_executor.layers.quantization.compressed_tensors.transform.module import (  # noqa: E501
+from sonar.model_executor.layers.quantization.compressed_tensors.transform.module import (  # noqa: E501
     HadamardTransform,
 )
-from aphrodite.model_executor.layers.quantization.compressed_tensors.transform.utils import (  # noqa: E501
+from sonar.model_executor.layers.quantization.compressed_tensors.transform.utils import (  # noqa: E501
     TransformTuple,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 
 class CompressedTensorsLinearTransformMethod(LinearMethodBase):
@@ -41,7 +41,7 @@ class CompressedTensorsLinearTransformMethod(LinearMethodBase):
         input_tfms: dict[int, TransformTuple],
         output_tfms: dict[int, TransformTuple],
     ) -> "CompressedTensorsLinearTransformMethod":
-        from aphrodite.model_executor.layers.quantization.compressed_tensors.transform.schemes.linear_qutlass_nvfp4 import (  # noqa: E501
+        from sonar.model_executor.layers.quantization.compressed_tensors.transform.schemes.linear_qutlass_nvfp4 import (  # noqa: E501
             QutlassNvFP4LinearMethod,
             is_qutlass_fp4_scheme,
         )

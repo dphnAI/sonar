@@ -7,8 +7,8 @@ from typing import Protocol, runtime_checkable
 
 import torch
 
-from aphrodite.config.watermarking import WatermarkContextScope
-from aphrodite.v1.worker.gpu.sample.gumbel import gumbel_sample
+from sonar.config.watermarking import WatermarkContextScope
+from sonar.v1.worker.gpu.sample.gumbel import gumbel_sample
 
 
 @dataclass(frozen=True)

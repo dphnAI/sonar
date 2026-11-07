@@ -13,7 +13,7 @@ The eager path issues 20 / 5 / 15 kernels for pre / post / head; each HPC op is
 a single kernel.
 
 Constraints:
-  - Requires APHRODITE_ENABLE_HPC_OPS=1
+  - Requires SONAR_ENABLE_HPC_OPS=1
   - Requires the hpc package (.so) built for the current arch
   - Only sm100 / sm103 (compute capability 100, 103)
   - Only hc_mult == 4 and hidden_size in {4096, 6144}
@@ -31,10 +31,10 @@ here. TODO: add it once the decoder dataflow is restructured for it.
 
 import torch
 
-from aphrodite import envs
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.hpc.hpc_module import HpcModule
-from aphrodite.utils.hpc import has_hpc
+from sonar import envs
+from sonar.logger import init_logger
+from sonar.model_executor.layers.hpc.hpc_module import HpcModule
+from sonar.utils.hpc import has_hpc
 
 logger = init_logger(__name__)
 
@@ -47,7 +47,7 @@ _SUPPORTED_CAPABILITIES: frozenset[int] = frozenset({100, 103})
 
 def _ihc_supported(hc_mult: int, hidden_size: int) -> bool:
     """Shared gate for all three iHC ops."""
-    if not envs.APHRODITE_ENABLE_HPC_OPS:
+    if not envs.SONAR_ENABLE_HPC_OPS:
         return False
 
     if not has_hpc():
@@ -57,7 +57,7 @@ def _ihc_supported(hc_mult: int, hidden_size: int) -> bool:
         )
         return False
 
-    from aphrodite.platforms import current_platform
+    from sonar.platforms import current_platform
 
     if not current_platform.is_cuda():
         logger.warning_once("HPC iHC disabled: only CUDA is supported.")
@@ -84,14 +84,14 @@ def _ihc_supported(hc_mult: int, hidden_size: int) -> bool:
         )
         return False
 
-    if envs.APHRODITE_BATCH_INVARIANT:
+    if envs.SONAR_BATCH_INVARIANT:
         # Batch-invariant mode relies on torch's deterministic reductions; the
         # HPC kernel reduces in a different order, so keep the two regimes
         # apart.
-        logger.warning_once("HPC iHC disabled: not supported under APHRODITE_BATCH_INVARIANT.")
+        logger.warning_once("HPC iHC disabled: not supported under SONAR_BATCH_INVARIANT.")
         return False
 
-    logger.info_once("HPC iHC enabled by set APHRODITE_ENABLE_HPC_OPS.")
+    logger.info_once("HPC iHC enabled by set SONAR_ENABLE_HPC_OPS.")
     return True
 
 

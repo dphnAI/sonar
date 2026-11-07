@@ -4,6 +4,6 @@
 #include "attention_kernels.cuh"
 
 ATTN_ENTRY(paged_attention_h64_f16_auto) {
-  ATTN_LAUNCH(_Float16, _Float16, aphrodite::Fp8KVCacheDataType::kAuto, 64,
+  ATTN_LAUNCH(_Float16, _Float16, sonar::Fp8KVCacheDataType::kAuto, 64,
               MFMAType::F16);
 }

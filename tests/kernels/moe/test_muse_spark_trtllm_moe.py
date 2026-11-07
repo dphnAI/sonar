@@ -8,24 +8,24 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from aphrodite import _custom_ops as ops
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar import _custom_ops as ops
+from sonar.config import (
     KernelConfig,
     ParallelConfig,
-    set_current_aphrodite_config,
+    SonarConfig,
+    set_current_sonar_config,
 )
-from aphrodite.distributed import get_tp_group
-from aphrodite.model_executor.layers.fused_moe.config import RoutingMethodType
-from aphrodite.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
-from aphrodite.models.muse_spark.common.layers import (
+from sonar.distributed import get_tp_group
+from sonar.model_executor.layers.fused_moe.config import RoutingMethodType
+from sonar.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
+from sonar.models.muse_spark.common.layers import (
     MuseSpark1xRMSNorm,
     MuseSpark1xRMSNormWithInputScale,
 )
-from aphrodite.models.muse_spark.nvidia.mega_moe import MuseSparkMegaMoEExperts
-from aphrodite.models.muse_spark.nvidia.muse_moe_runner import MuseSparkTrtLlmNvFp4Experts
-from aphrodite.platforms import current_platform
-from aphrodite.utils.flashinfer import has_flashinfer_trtllm_fused_moe
+from sonar.models.muse_spark.nvidia.mega_moe import MuseSparkMegaMoEExperts
+from sonar.models.muse_spark.nvidia.muse_moe_runner import MuseSparkTrtLlmNvFp4Experts
+from sonar.platforms import current_platform
+from sonar.utils.flashinfer import has_flashinfer_trtllm_fused_moe
 from tests.kernels.moe.muse_spark_utils import (
     DIVISION_EPS,
     assert_cudagraph_replays,
@@ -64,7 +64,7 @@ def build_moe(norm_cls, ckpt: dict[str, torch.Tensor], quant_config=None):
     ).cuda()
     with torch.no_grad():
         norm.weight.copy_(torch.randn(K, device="cuda", dtype=torch.float32) * 0.1 - 0.2)
-    router, runner, aphrodite_config = make_runner(
+    router, runner, sonar_config = make_runner(
         norm,
         expert_bias,
         ckpt,
@@ -76,7 +76,7 @@ def build_moe(norm_cls, ckpt: dict[str, torch.Tensor], quant_config=None):
     assert router.routing_method_type == RoutingMethodType.MiniMax2
     routed = runner.routed_experts
     assert routed.quant_method.is_monolithic
-    return router, routed, norm, aphrodite_config, runner
+    return router, routed, norm, sonar_config, runner
 
 
 def _inputs(seed: int):
@@ -185,11 +185,11 @@ def _rel(actual: torch.Tensor, expected: torch.Tensor) -> float:
 
 @pytest.mark.parametrize("tokens", [0, 17])
 @torch.inference_mode()
-def test_megamoe_bf16_nvfp4_shared_buffer(tokens, default_aphrodite_config, dist_init, workspace_init, monkeypatch):
+def test_megamoe_bf16_nvfp4_shared_buffer(tokens, default_sonar_config, dist_init, workspace_init, monkeypatch):
     """Alternating formats must preserve BF16 results, also in CUDA graphs."""
     pytest.importorskip("deep_gemm")
-    config = AphroditeConfig(parallel_config=ParallelConfig())
-    monkeypatch.setattr("aphrodite.models.muse_spark.nvidia.mega_moe.get_ep_group", get_tp_group)
+    config = SonarConfig(parallel_config=ParallelConfig())
+    monkeypatch.setattr("sonar.models.muse_spark.nvidia.mega_moe.get_ep_group", get_tp_group)
     torch.manual_seed(42)
     experts, hidden, intermediate, topk = 8, 4096, 1024, 4
     norm = MuseSpark1xRMSNormWithInputScale(
@@ -201,7 +201,7 @@ def test_megamoe_bf16_nvfp4_shared_buffer(tokens, default_aphrodite_config, dist
     ).cuda()
     norm.weight.copy_(torch.linspace(-0.5, 0.5, hidden, device="cuda"))
     layers = []
-    with set_current_aphrodite_config(config):
+    with set_current_sonar_config(config):
         for nvfp4 in (False, True):
             layer = MuseSparkMegaMoEExperts(
                 config,
@@ -263,7 +263,7 @@ def test_megamoe_bf16_nvfp4_shared_buffer(tokens, default_aphrodite_config, dist
 # 512 reach all three.
 @pytest.mark.parametrize("num_tokens", [1, 128, 129, 512])
 def test_megamoe_staging_preserves_quantization_and_padding(num_tokens):
-    from aphrodite.models.muse_spark.nvidia.ops.prepare_megamoe_nvfp4 import (
+    from sonar.models.muse_spark.nvidia.ops.prepare_megamoe_nvfp4 import (
         prepare_megamoe_nvfp4_inputs,
     )
 
@@ -303,15 +303,15 @@ def test_megamoe_staging_preserves_quantization_and_padding(num_tokens):
 def test_muse_spark_bf16_moe_numeric(dist_init, workspace_init):
     """The norm sits between GEMM2 and the reduce, matching the fp32 reference."""
     ckpt = _bf16_checkpoint()
-    router, _, norm, aphrodite_config, runner = build_moe(MuseSpark1xRMSNorm, ckpt)
+    router, _, norm, sonar_config, runner = build_moe(MuseSpark1xRMSNorm, ckpt)
 
     x, logits = _inputs(1)
-    out = run_moe(runner, aphrodite_config, x, logits)
+    out = run_moe(runner, sonar_config, x, logits)
     assert out.shape == (M, K) and out.dtype == torch.bfloat16
 
     topk_weights, topk_ids = router._compute_routing(x, logits, None)
     w13, w2 = ckpt["w13_weight"], ckpt["w2_weight"]
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         ref = swiglu_moe_ref(x, w13, w2, topk_weights, topk_ids, norm.forward_native)
         unnormed = swiglu_moe_ref(x, w13, w2, topk_weights, topk_ids, lambda y: y)
         post_reduce = norm.forward_native(unnormed.to(torch.bfloat16)).float()
@@ -325,9 +325,7 @@ def test_muse_spark_bf16_moe_numeric(dist_init, workspace_init):
 def test_muse_spark_nvfp4_moe_numeric(dist_init, workspace_init):
     torch.manual_seed(0)
     ckpt = _nvfp4_checkpoint()
-    router, routed, norm, aphrodite_config, runner = build_moe(
-        MuseSpark1xRMSNormWithInputScale, ckpt, nvfp4_quant_config()
-    )
+    router, routed, norm, sonar_config, runner = build_moe(MuseSpark1xRMSNormWithInputScale, ckpt, nvfp4_quant_config())
 
     # Gate scalar from the w1 column, g1_scale_c from the w3 column.
     a13 = ckpt["w13_input_scale"].max()
@@ -345,7 +343,7 @@ def test_muse_spark_nvfp4_moe_numeric(dist_init, workspace_init):
     topk_weights, topk_ids = router._compute_routing(x, logits, None)
     assert topk_weights.dtype == torch.float32
 
-    out = run_moe(runner, aphrodite_config, x, logits)
+    out = run_moe(runner, sonar_config, x, logits)
     assert out.shape == (M, K) and out.dtype == torch.bfloat16
 
     w13, w2 = _dequant_nvfp4_weights(ckpt)
@@ -357,7 +355,7 @@ def test_muse_spark_nvfp4_moe_numeric(dist_init, workspace_init):
         return _dequant(iq, isf, 1.0 / a2)
 
     norm_fn = functools.partial(norm.forward_native, out_dtype=torch.float32)
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         ref_full = swiglu_moe_ref(x_dq, w13, w2, topk_weights, topk_ids, norm_fn)
         ref_q2 = swiglu_moe_ref(x_dq, w13, w2, topk_weights, topk_ids, norm_fn, quant_gemm2_input)
     # The kernel's internal GEMM2-input NVFP4 quantizer is only approximated by
@@ -370,7 +368,7 @@ def test_muse_spark_nvfp4_moe_numeric(dist_init, workspace_init):
 def test_muse_spark_bf16_moe_kernel_router_matches_reference(dist_init, workspace_init):
     """The fused router must select on biased scores but weight by unbiased ones."""
     ckpt = _bf16_checkpoint(seed=3)
-    router, routed, _, aphrodite_config, runner = build_moe(MuseSpark1xRMSNorm, ckpt)
+    router, routed, _, sonar_config, runner = build_moe(MuseSpark1xRMSNorm, ckpt)
 
     captured: list[UnfinalizedMoEOutput] = []
     experts = routed.quant_method.moe_kernel.fused_experts
@@ -383,7 +381,7 @@ def test_muse_spark_bf16_moe_kernel_router_matches_reference(dist_init, workspac
     experts.post_gemm2_hook = _spy
     try:
         x, logits = _inputs(3)
-        run_moe(runner, aphrodite_config, x, logits)
+        run_moe(runner, sonar_config, x, logits)
     finally:
         experts.post_gemm2_hook = inner
 
@@ -416,15 +414,15 @@ def test_muse_spark_moe_cudagraph(nvfp4, dist_init, workspace_init):
         ckpt, quant_config = _nvfp4_checkpoint(), nvfp4_quant_config()
     else:
         ckpt, quant_config = _bf16_checkpoint(), None
-    _, _, _, aphrodite_config, runner = build_moe(MuseSpark1xRMSNorm, ckpt, quant_config)
-    assert_cudagraph_replays(runner, aphrodite_config, *_inputs(5), *_inputs(6))
+    _, _, _, sonar_config, runner = build_moe(MuseSpark1xRMSNorm, ckpt, quant_config)
+    assert_cudagraph_replays(runner, sonar_config, *_inputs(5), *_inputs(6))
 
 
 @torch.inference_mode()
 def test_megamoe_trtllm_weight_layout_matches_native(dist_init, workspace_init):
     """Shared TRT storage must preserve native MegaMoE outputs and graph replay."""
-    from aphrodite.models.muse_spark.nvidia.mega_moe import _get_deep_gemm
-    from aphrodite.models.muse_spark.nvidia.ops.prepare_megamoe_nvfp4 import (
+    from sonar.models.muse_spark.nvidia.mega_moe import _get_deep_gemm
+    from sonar.models.muse_spark.nvidia.ops.prepare_megamoe_nvfp4 import (
         prepare_megamoe_nvfp4_inputs,
     )
 
@@ -440,7 +438,7 @@ def test_megamoe_trtllm_weight_layout_matches_native(dist_init, workspace_init):
     norm.weight.copy_(torch.linspace(-0.5, 0.5, K, device="cuda"))
     layers = []
     for layout, tp_size in (("native", 1), ("trtllm", 4)):
-        config = AphroditeConfig(
+        config = SonarConfig(
             kernel_config=KernelConfig(moe_backend="deep_gemm_mega_moe"),
             quant_config=nvfp4_quant_config(),
             parallel_config=ParallelConfig(
@@ -449,7 +447,7 @@ def test_megamoe_trtllm_weight_layout_matches_native(dist_init, workspace_init):
                 distributed_executor_backend="mp",
             ),
         )
-        with set_current_aphrodite_config(config):
+        with set_current_sonar_config(config):
             layer = MuseSparkMegaMoEExperts(
                 config,
                 num_experts=E,

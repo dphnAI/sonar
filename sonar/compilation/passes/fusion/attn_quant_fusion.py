@@ -7,20 +7,20 @@ from collections.abc import Callable
 import torch
 from torch._higher_order_ops.auto_functionalize import auto_functionalized
 
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.config import AphroditeConfig, get_layers_from_aphrodite_config
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.config import SonarConfig, get_layers_from_sonar_config
+from sonar.logger import init_logger
+from sonar.model_executor.layers.attention import Attention
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     kNvfp4Dynamic,
     kStaticTensorScale,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.math_utils import round_up
-from aphrodite.utils.torch_utils import _USE_LAYERNAME, _encode_layer_name
+from sonar.platforms import current_platform
+from sonar.utils.math_utils import round_up
+from sonar.utils.torch_utils import _USE_LAYERNAME, _encode_layer_name
 
-from ..aphrodite_inductor_pass import AphroditeFusionPatternMatcherPass, AphroditePatternReplacement
+from ..sonar_inductor_pass import SonarFusionPatternMatcherPass, SonarPatternReplacement
 from .matcher_utils import MatcherQuantFP8
 from .rms_quant_fusion import QUANT_OPS
 
@@ -29,14 +29,14 @@ logger = init_logger(__name__)
 FP8_DTYPE = current_platform.fp8_dtype()
 FP4_DTYPE = torch.uint8
 
-ATTN_OP = torch.ops.aphrodite.unified_attention_with_output.default
+ATTN_OP = torch.ops.sonar.unified_attention_with_output.default
 RESHAPE_OP = torch.ops.aten.reshape.default
 
 
 _FP8_QUANT_KEY = QuantKey(dtype=FP8_DTYPE, scale=kStaticTensorScale, symmetric=True)
 
 
-class AttnFp8StaticQuantPattern(AphroditePatternReplacement[..., torch.Tensor | tuple[torch.Tensor, torch.Tensor]]):
+class AttnFp8StaticQuantPattern(SonarPatternReplacement[..., torch.Tensor | tuple[torch.Tensor, torch.Tensor]]):
     """Fusion for Attention+Fp8StaticQuant.
 
     Only triggers when the attention implementation returns True in
@@ -181,7 +181,7 @@ class RocmAttnFp8StaticQuantPattern(AttnFp8StaticQuantPattern):
     def _quantize(self, value: torch.Tensor, scale: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         out = torch.empty_like(value, dtype=FP8_DTYPE)
         _, out, scale = auto_functionalized(
-            torch.ops.aphrodite.rocm_aiter_per_tensor_quant.default,
+            torch.ops.sonar.rocm_aiter_per_tensor_quant.default,
             out=out,
             x=value,
             scale=scale,
@@ -195,7 +195,7 @@ class RocmAttnFp8StaticQuantPattern(AttnFp8StaticQuantPattern):
         return value, scale
 
 
-class AttnNvfp4QuantPattern(AphroditePatternReplacement[..., tuple[torch.Tensor, torch.Tensor]]):
+class AttnNvfp4QuantPattern(SonarPatternReplacement[..., tuple[torch.Tensor, torch.Tensor]]):
     """Fusion for Attention+Nvfp4Quant.
 
     Only triggers when the attention implementation returns True in
@@ -374,7 +374,7 @@ class AttnNvfp4QuantPattern(AphroditePatternReplacement[..., tuple[torch.Tensor,
         return inputs
 
 
-class AttnQuantFusionPass(AphroditeFusionPatternMatcherPass):
+class AttnQuantFusionPass(SonarFusionPatternMatcherPass):
     """This pass fuses post-attention quantization onto attention if supported.
 
     It uses the pattern matcher and matches each layer manually, as strings
@@ -386,11 +386,11 @@ class AttnQuantFusionPass(AphroditeFusionPatternMatcherPass):
     support are attention kernels, which need to support fusing output quant.
     """
 
-    def __init__(self, config: AphroditeConfig) -> None:
+    def __init__(self, config: SonarConfig) -> None:
         super().__init__(config, "attn_quant_fusion")
 
         dtype = config.model_config.dtype
-        layers = list(get_layers_from_aphrodite_config(config, Attention).values())
+        layers = list(get_layers_from_sonar_config(config, Attention).values())
 
         if len(layers) == 0:
             logger.warning(

@@ -6,35 +6,35 @@ import torch
 import torch.nn.functional as F
 from transformers.configuration_utils import PreTrainedConfig
 
-from aphrodite.config import (
-    AphroditeConfig,
-    get_current_aphrodite_config,
+from sonar.config import (
+    SonarConfig,
+    get_current_sonar_config,
 )
-from aphrodite.distributed import (
+from sonar.distributed import (
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
 )
-from aphrodite.forward_context import get_forward_context
-from aphrodite.model_executor.custom_op import PluggableLayer
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.forward_context import get_forward_context
+from sonar.model_executor.custom_op import PluggableLayer
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     QKVParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.mamba.linear.base import LinearAttention
-from aphrodite.model_executor.layers.mamba.linear.minimax_linear_attn import (
+from sonar.model_executor.layers.mamba.linear.base import LinearAttention
+from sonar.model_executor.layers.mamba.linear.minimax_linear_attn import (
     MiniMaxText01LinearAttention,
     MiniMaxText01LinearKernel,
     linear_attention_decode,
 )
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.third_party.flash_linear_attention.ops.layernorm_guard import (
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.third_party.flash_linear_attention.ops.layernorm_guard import (
     RMSNormGated,
     layernorm_fn,
 )
-from aphrodite.triton_utils import tl, triton
-from aphrodite.v1.attention.backends.linear_attn import LinearAttentionMetadata
+from sonar.triton_utils import tl, triton
+from sonar.v1.attention.backends.linear_attn import LinearAttentionMetadata
 
 
 def _build_rope_parameters(config: PreTrainedConfig) -> dict | None:
@@ -352,17 +352,17 @@ class BailingMoELinearAttention(LinearAttention):
     to add custom implementations.
 
     This implements the linear attention mechanism from sglang, adapted for
-    Aphrodite's v1 engine with MambaBase interface support.
+    Sonar's v1 engine with MambaBase interface support.
     """
 
     # --8<-- [end:bailing_moe_linear_attention]
     def __init__(
         self,
         config: PreTrainedConfig,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "linear_attn",
     ):
-        super().__init__(config, aphrodite_config, prefix)
+        super().__init__(config, sonar_config, prefix)
 
         self.scaling = self.head_dim**-0.5
 
@@ -451,13 +451,13 @@ class BailingMoELinearAttention(LinearAttention):
         self.tp_slope = self.slope_rate[self.tp_rank * self.tp_heads : (self.tp_rank + 1) * self.tp_heads].contiguous()
 
         # Register for compilation
-        compilation_config = get_current_aphrodite_config().compilation_config
+        compilation_config = get_current_sonar_config().compilation_config
         if prefix in compilation_config.static_forward_context:
             raise ValueError(f"Duplicate layer name: {prefix}")
         compilation_config.static_forward_context[prefix] = self
 
     def get_attn_backend(self):
-        from aphrodite.v1.attention.backends.linear_attn import (
+        from sonar.v1.attention.backends.linear_attn import (
             BailingLinearAttentionBackend,
         )
 
@@ -470,7 +470,7 @@ class BailingMoELinearAttention(LinearAttention):
         For FP8 quantized parameters, we need to use the weight_loader if available,
         as it handles special cases like tensor parallelism sharding.
         """
-        # Check if param has a weight_loader (for Aphrodite ModelWeightParameter)
+        # Check if param has a weight_loader (for Sonar ModelWeightParameter)
         weight_loader = getattr(param, "weight_loader", None)
         if weight_loader is not None:
             # Use the weight_loader which handles TP sharding and quantization
@@ -486,8 +486,8 @@ class BailingMoELinearAttention(LinearAttention):
         output: torch.Tensor,
         positions: torch.Tensor,
     ) -> None:
-        """Forward method called by torch.ops.aphrodite.linear_attention."""
-        torch.ops.aphrodite.linear_attention(
+        """Forward method called by torch.ops.sonar.linear_attention."""
+        torch.ops.sonar.linear_attention(
             hidden_states,
             output,
             positions,

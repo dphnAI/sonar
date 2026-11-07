@@ -13,9 +13,9 @@ import json
 
 import torch
 
-import aphrodite._custom_ops  # noqa: F401
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.triton_utils import triton
+import sonar._custom_ops  # noqa: F401
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.triton_utils import triton
 
 DISTRIBUTIONS = ("indexer", "fp8", "randn")
 

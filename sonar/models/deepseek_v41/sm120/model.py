@@ -7,50 +7,50 @@ from itertools import islice
 import torch
 import torch.nn as nn
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed import (
+from sonar.config import SonarConfig
+from sonar.distributed import (
     get_pp_group,
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
     tensor_model_parallel_all_reduce,
 )
-from aphrodite.forward_context import get_forward_context, is_forward_context_available
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.forward_context import get_forward_context, is_forward_context_available
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe import (
     fused_moe_make_expert_params_mapping,
 )
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
-from aphrodite.model_executor.models.interfaces import (
+from sonar.model_executor.model_loader.weight_utils import default_weight_loader
+from sonar.model_executor.models.interfaces import (
     EagleModelMixin,
 )
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.models.utils import (
     AutoWeightsLoader,
     PPMissingLayer,
     extract_layer_index,
     is_pp_missing_parameter,
     make_layers,
 )
-from aphrodite.models.deepseek_v41.common.mm_preprocess import image_sentinel_mask
-from aphrodite.models.deepseek_v41.nvidia.model import (
+from sonar.models.deepseek_v41.common.mm_preprocess import image_sentinel_mask
+from sonar.models.deepseek_v41.nvidia.model import (
     DeepseekV4MoE,
     MegaGateRoutingMetadata,
     _make_deepseek_v4_weights_mapper,
     make_deepseek_v4_expert_params_mapping,
     prepare_mega_gate_routing_metadata,
 )
-from aphrodite.models.deepseek_v41.nvidia.model import (
+from sonar.models.deepseek_v41.nvidia.model import (
     DeepseekV41LLMForCausalLM as UpstreamDeepseekV41LLMForCausalLM,
 )
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.utils.b12x import (
+from sonar.sequence import IntermediateTensors
+from sonar.utils.b12x import (
     b12x_layer_prefix,
     register_b12x_layer,
     set_b12x_preparation_provider,
 )
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
 
 from . import l2_prefetch
 from .attention import DeepseekV41B12xAttention
@@ -65,8 +65,8 @@ from .sparse_mla import DeepseekV41B12xMetadata
 logger = init_logger(__name__)
 
 
-def _select_dsv4_attn_cls(aphrodite_config):
-    backend = aphrodite_config.attention_config.backend
+def _select_dsv4_attn_cls(sonar_config):
+    backend = sonar_config.attention_config.backend
     if backend not in (None, AttentionBackendEnum.B12X_DSV41):
         raise ValueError("Native DeepSeek V4.1 accepts only B12X_DSV41 attention")
     return DeepseekV41B12xAttention
@@ -75,14 +75,14 @@ def _select_dsv4_attn_cls(aphrodite_config):
 class DeepseekV4DecoderLayer(nn.Module):
     def __init__(
         self,
-        aphrodite_config,
+        sonar_config,
         prefix,
         topk_indices_buffer: torch.Tensor,
         engram_layout: EngramLayout | None = None,
     ):
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
         self.hidden_size = config.hidden_size
 
         self.engram: Engram | None = None
@@ -91,15 +91,15 @@ class DeepseekV4DecoderLayer(nn.Module):
             if layer_id in engram_layout.layer_ids:
                 self.engram = Engram(
                     config,
-                    aphrodite_config.quant_config,
+                    sonar_config.quant_config,
                     engram_layout,
                     engram_layout.layer_ids.index(layer_id),
                     prefix=f"{prefix}.engram",
                 )
 
         self.rms_norm_eps = config.rms_norm_eps
-        self.attn = _select_dsv4_attn_cls(aphrodite_config)(
-            aphrodite_config,
+        self.attn = _select_dsv4_attn_cls(sonar_config)(
+            sonar_config,
             prefix=f"{prefix}.attn",
             topk_indices_buffer=topk_indices_buffer,
         )
@@ -110,7 +110,7 @@ class DeepseekV4DecoderLayer(nn.Module):
         # The layer all-reduces the MoE output itself so the next layer's
         # attention weights can be read into L2 while the all-reduce waits.
         self.ffn = DeepseekV4MoE(
-            aphrodite_config,
+            sonar_config,
             prefix=f"{prefix}.ffn",
             use_sequence_parallel=False,
             reduce_results=False,
@@ -259,24 +259,24 @@ class DeepseekV4DecoderLayer(nn.Module):
 
 
 class DeepseekV4Model(nn.Module, EagleModelMixin):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
         install_identity_argument_check()
 
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
         self.config = config
-        self.aphrodite_config = aphrodite_config
+        self.sonar_config = sonar_config
         self.ced_decoder_start = ced_decoder_start(config)
         self.quant_config = quant_config
-        parallel = aphrodite_config.parallel_config
+        parallel = sonar_config.parallel_config
         if parallel.decode_context_parallel_size != 1:
             raise NotImplementedError("Native DeepSeek V4.1 does not support DCP")
         if parallel.prefill_context_parallel_size != 1:
             raise NotImplementedError("Native DeepSeek V4.1 does not support PCP")
-        if aphrodite_config.parallel_config.use_ubatching:
+        if sonar_config.parallel_config.use_ubatching:
             raise ValueError("V4.1 fixed native layer buffers require ubatching/DBO disabled")
-        if aphrodite_config.lora_config is not None:
+        if sonar_config.lora_config is not None:
             raise ValueError("V4.1 native kernels do not support LoRA adapters")
         if quant_config is None or quant_config.get_name() != "deepseek_v41_fp8":
             raise ValueError("V4.1 requires its native block32 quantization config")
@@ -287,7 +287,7 @@ class DeepseekV4Model(nn.Module, EagleModelMixin):
 
         # Reserved topk indices buffer for all Indexer layers to reuse.
         self.topk_indices_buffer = torch.empty(
-            aphrodite_config.scheduler_config.max_num_batched_tokens,
+            sonar_config.scheduler_config.max_num_batched_tokens,
             config.index_topk,
             dtype=torch.int32,
         )
@@ -307,7 +307,7 @@ class DeepseekV4Model(nn.Module, EagleModelMixin):
         self.start_layer, self.end_layer, self.layers = make_layers(
             config.num_hidden_layers,
             lambda prefix: DeepseekV4DecoderLayer(
-                aphrodite_config,
+                sonar_config,
                 prefix=prefix,
                 topk_indices_buffer=self.topk_indices_buffer,
                 engram_layout=self.engram_layout,
@@ -333,15 +333,15 @@ class DeepseekV4Model(nn.Module, EagleModelMixin):
         else:
             self.norm = PPMissingLayer()
 
-        spec_config = aphrodite_config.speculative_config
+        spec_config = sonar_config.speculative_config
         needs_mtp_hidden_states = spec_config is not None and (
             spec_config.use_eagle() or spec_config.uses_draft_model()
         )
         if get_pp_group().is_last_rank and needs_mtp_hidden_states:
             self._mtp_hidden_buffer = torch.empty(
-                aphrodite_config.scheduler_config.max_num_batched_tokens,
+                sonar_config.scheduler_config.max_num_batched_tokens,
                 self.hc_dim,
-                dtype=aphrodite_config.model_config.dtype,
+                dtype=sonar_config.model_config.dtype,
             )
         else:
             self._mtp_hidden_buffer = None
@@ -648,9 +648,9 @@ class DeepseekV4Model(nn.Module, EagleModelMixin):
 class DeepseekV41LLMForCausalLM(UpstreamDeepseekV41LLMForCausalLM):
     model_cls = DeepseekV4Model
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
-        super().__init__(aphrodite_config=aphrodite_config, prefix=prefix)
-        self.hf_to_aphrodite_mapper = _make_deepseek_v4_weights_mapper(
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
+        super().__init__(sonar_config=sonar_config, prefix=prefix)
+        self.hf_to_sonar_mapper = _make_deepseek_v4_weights_mapper(
             getattr(self.config, "expert_dtype", "fp4"), "weight_scale_inv"
         )
 
@@ -708,7 +708,7 @@ class DeepseekV41LLMForCausalLM(UpstreamDeepseekV41LLMForCausalLM):
         loader = AutoWeightsLoader(self)
         # AutoWeightsLoader may revisit this child for another contiguous
         # prefix group. Finalize only in the root model's post-load hook.
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
     def process_weights_after_loading(self) -> None:
         self.model.finalize_mhc_broadcast_weights()

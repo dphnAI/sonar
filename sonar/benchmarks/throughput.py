@@ -15,7 +15,7 @@ import uvloop
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, PreTrainedTokenizerBase
 
-from aphrodite.benchmarks.datasets import (
+from sonar.benchmarks.datasets import (
     BenchmarkDataset,
     RandomDataset,
     SampleRequest,
@@ -23,19 +23,19 @@ from aphrodite.benchmarks.datasets import (
     add_random_multimodal_dataset_args,
     get_samples,
 )
-from aphrodite.benchmarks.lib.utils import convert_to_pytorch_benchmark_format, write_to_json
-from aphrodite.engine.arg_utils import AsyncEngineArgs, EngineArgs
-from aphrodite.inputs import TextPrompt, TokensPrompt
-from aphrodite.lora.request import LoRARequest
-from aphrodite.outputs import RequestOutput
-from aphrodite.platforms import current_platform
-from aphrodite.sampling_params import BeamSearchParams
-from aphrodite.tokenizers import TokenizerLike, get_tokenizer
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
-from aphrodite.utils.async_utils import merge_async_iterators
+from sonar.benchmarks.lib.utils import convert_to_pytorch_benchmark_format, write_to_json
+from sonar.engine.arg_utils import AsyncEngineArgs, EngineArgs
+from sonar.inputs import TextPrompt, TokensPrompt
+from sonar.lora.request import LoRARequest
+from sonar.outputs import RequestOutput
+from sonar.platforms import current_platform
+from sonar.sampling_params import BeamSearchParams
+from sonar.tokenizers import TokenizerLike, get_tokenizer
+from sonar.utils.argparse_utils import FlexibleArgumentParser
+from sonar.utils.async_utils import merge_async_iterators
 
 
-def run_aphrodite(
+def run_sonar(
     requests: list[SampleRequest],
     n: int,
     engine_args: EngineArgs,
@@ -44,7 +44,7 @@ def run_aphrodite(
     warmup_requests: list[SampleRequest] | None = None,
     prequeue_requests: bool = False,
 ) -> tuple[float, list[RequestOutput] | None]:
-    from aphrodite import LLM
+    from sonar import LLM
 
     llm = LLM.from_engine_args(engine_args)
     all_requests = list(warmup_requests or []) + requests
@@ -58,7 +58,7 @@ def run_aphrodite(
 
     if warmup_requests:
         print(f"Warming up with {len(warmup_requests)} requests...")
-        _run_aphrodite_requests(
+        _run_sonar_requests(
             llm,
             warmup_requests,
             n,
@@ -68,7 +68,7 @@ def run_aphrodite(
             enable_lora=engine_args.enable_lora,
         )
 
-    return _run_aphrodite_requests(
+    return _run_sonar_requests(
         llm,
         requests,
         n,
@@ -79,7 +79,7 @@ def run_aphrodite(
     )
 
 
-def _run_aphrodite_requests(
+def _run_sonar_requests(
     llm: Any,
     requests: list[SampleRequest],
     n: int,
@@ -88,7 +88,7 @@ def _run_aphrodite_requests(
     prequeue_requests: bool,
     enable_lora: bool,
 ) -> tuple[float, list[RequestOutput] | None]:
-    from aphrodite import SamplingParams
+    from sonar import SamplingParams
 
     prompts: list[TextPrompt | TokensPrompt] = []
     sampling_params: list[SamplingParams] = []
@@ -182,7 +182,7 @@ def _run_aphrodite_requests(
     return end - start, outputs
 
 
-def run_aphrodite_chat(
+def run_sonar_chat(
     requests: list[SampleRequest],
     n: int,
     engine_args: EngineArgs,
@@ -191,11 +191,11 @@ def run_aphrodite_chat(
     warmup_requests: list[SampleRequest] | None = None,
     prequeue_requests: bool = False,
 ) -> tuple[float, list[RequestOutput]]:
-    """Run Aphrodite chat benchmark. This function is recommended ONLY for benchmarking
+    """Run Sonar chat benchmark. This function is recommended ONLY for benchmarking
     multimodal models as it properly handles multimodal inputs and chat
-    formatting. For non-multimodal models, use run_aphrodite() instead.
+    formatting. For non-multimodal models, use run_sonar() instead.
     """
-    from aphrodite import LLM
+    from sonar import LLM
 
     llm = LLM.from_engine_args(engine_args)
 
@@ -210,7 +210,7 @@ def run_aphrodite_chat(
 
     if warmup_requests:
         print(f"Warming up with {len(warmup_requests)} requests...")
-        _run_aphrodite_chat_requests(
+        _run_sonar_chat_requests(
             llm,
             warmup_requests,
             n,
@@ -219,7 +219,7 @@ def run_aphrodite_chat(
             prequeue_requests=prequeue_requests,
         )
 
-    return _run_aphrodite_chat_requests(
+    return _run_sonar_chat_requests(
         llm,
         requests,
         n,
@@ -229,7 +229,7 @@ def run_aphrodite_chat(
     )
 
 
-def _run_aphrodite_chat_requests(
+def _run_sonar_chat_requests(
     llm: Any,
     requests: list[SampleRequest],
     n: int,
@@ -237,7 +237,7 @@ def _run_aphrodite_chat_requests(
     do_profile: bool,
     prequeue_requests: bool,
 ) -> tuple[float, list[RequestOutput]]:
-    from aphrodite import SamplingParams
+    from sonar import SamplingParams
 
     prompts = []
     sampling_params: list[SamplingParams] = []
@@ -288,7 +288,7 @@ def _run_aphrodite_chat_requests(
     return end - start, outputs
 
 
-async def run_aphrodite_async(
+async def run_sonar_async(
     requests: list[SampleRequest],
     n: int,
     engine_args: AsyncEngineArgs,
@@ -296,7 +296,7 @@ async def run_aphrodite_async(
     disable_detokenize: bool = False,
     warmup_requests: list[SampleRequest] | None = None,
 ) -> float:
-    from aphrodite.entrypoints.launchers.api_server.entry import (
+    from sonar.entrypoints.launchers.api_server.entry import (
         build_async_engine_client_from_engine_args,
     )
 
@@ -314,7 +314,7 @@ async def run_aphrodite_async(
 
         if warmup_requests:
             print(f"Warming up with {len(warmup_requests)} requests...")
-            await _run_aphrodite_async_requests(
+            await _run_sonar_async_requests(
                 llm,
                 warmup_requests,
                 n,
@@ -323,7 +323,7 @@ async def run_aphrodite_async(
                 request_id_prefix="warmup",
             )
 
-        elapsed_time, _ = await _run_aphrodite_async_requests(
+        elapsed_time, _ = await _run_sonar_async_requests(
             llm,
             requests,
             n,
@@ -334,7 +334,7 @@ async def run_aphrodite_async(
         return elapsed_time
 
 
-async def _run_aphrodite_async_requests(
+async def _run_sonar_async_requests(
     llm: Any,
     requests: list[SampleRequest],
     n: int,
@@ -342,7 +342,7 @@ async def _run_aphrodite_async_requests(
     do_profile: bool,
     request_id_prefix: str,
 ) -> tuple[float, None]:
-    from aphrodite import SamplingParams
+    from sonar import SamplingParams
 
     prompts: list[TextPrompt | TokensPrompt] = []
     sampling_params: list[SamplingParams] = []
@@ -535,12 +535,12 @@ def _to_serve_args(args: argparse.Namespace) -> argparse.Namespace:
     d["hf_output_len"] = output_len
     d["sharegpt_output_len"] = output_len
     # Explicit --enable-multimodal-chat wins; otherwise auto-enable for the
-    # multimodal chat backend (preserves today's aphrodite-chat handling). Callers
+    # multimodal chat backend (preserves today's sonar-chat handling). Callers
     # without a --backend flag (e.g. bench mm-processor) drive every request
-    # through llm.chat, so default to the aphrodite-chat behaviour.
-    backend = getattr(args, "backend", "aphrodite-chat")
+    # through llm.chat, so default to the sonar-chat behaviour.
+    backend = getattr(args, "backend", "sonar-chat")
     d["backend"] = backend
-    d["enable_multimodal_chat"] = bool(getattr(args, "enable_multimodal_chat", False) or backend == "aphrodite-chat")
+    d["enable_multimodal_chat"] = bool(getattr(args, "enable_multimodal_chat", False) or backend == "sonar-chat")
     # serve-only attrs throughput never exposed; keep serve's defaults.
     d.setdefault("disable_shuffle", False)
     d.setdefault("skip_chat_template", False)
@@ -553,9 +553,9 @@ def _to_serve_args(args: argparse.Namespace) -> argparse.Namespace:
 
 def get_requests(args, tokenizer):
     serve_args = _to_serve_args(args)
-    # Both offline Aphrodite backends forward multi_modal_data to the engine;
+    # Both offline Sonar backends forward multi_modal_data to the engine;
     # "hf" and "mii" are text-only and get rejected inside get_samples.
-    mm_backends = ("aphrodite", "aphrodite-chat")
+    mm_backends = ("sonar", "sonar-chat")
     requests = get_samples(serve_args, tokenizer, multimodal_backends=mm_backends)
     requests = assign_loras(requests, args)
     requests = filter_requests_for_dp(requests, args.data_parallel_size)
@@ -565,7 +565,7 @@ def get_requests(args, tokenizer):
 def filter_requests_for_dp(requests, data_parallel_size):
     # Note(zhuohan): The way we get data_parallel_rank is hacky and only
     # works for external launcher mode. Should be cleaned up and deprecated
-    # in the future with a better Aphrodite distributed process design.
+    # in the future with a better Sonar distributed process design.
     if data_parallel_size == 1:
         return requests
 
@@ -604,11 +604,11 @@ def validate_args(args):
         args.tokenizer = args.model
 
     # === Backend Validation ===
-    valid_backends = {"aphrodite", "hf", "mii", "aphrodite-chat"}
+    valid_backends = {"sonar", "hf", "mii", "sonar-chat"}
     if args.backend not in valid_backends:
         raise ValueError(f"Unsupported backend: {args.backend}")
-    if args.prequeue_requests and args.backend not in {"aphrodite", "aphrodite-chat"}:
-        raise ValueError("--prequeue-requests requires --backend aphrodite or aphrodite-chat")
+    if args.prequeue_requests and args.backend not in {"sonar", "sonar-chat"}:
+        raise ValueError("--prequeue-requests requires --backend sonar or sonar-chat")
     if args.prequeue_requests and args.async_engine:
         raise ValueError("--prequeue-requests is not supported with --async-engine")
 
@@ -696,8 +696,8 @@ def validate_args(args):
             )
 
     # === LoRA Settings ===
-    if getattr(args, "enable_lora", False) and args.backend != "aphrodite":
-        raise ValueError("LoRA benchmarking is only supported for Aphrodite backend")
+    if getattr(args, "enable_lora", False) and args.backend != "sonar":
+        raise ValueError("LoRA benchmarking is only supported for Sonar backend")
     if getattr(args, "enable_lora", False) and args.lora_path is None:
         raise ValueError("LoRA path must be provided when enable_lora is True")
 
@@ -708,7 +708,7 @@ def validate_args(args):
         raise ValueError("HF max batch size is only for HF backend.")
 
     if args.backend in {"hf", "mii"} and getattr(args, "quantization", None) is not None:
-        raise ValueError("Quantization is only for Aphrodite backend.")
+        raise ValueError("Quantization is only for Sonar backend.")
 
     if args.backend == "mii" and args.dtype != "auto":
         raise ValueError("dtype must be auto for MII backend.")
@@ -733,8 +733,8 @@ def add_cli_args(parser: FlexibleArgumentParser):
     parser.add_argument(
         "--backend",
         type=str,
-        choices=["aphrodite", "hf", "mii", "aphrodite-chat"],
-        default="aphrodite",
+        choices=["sonar", "hf", "mii", "sonar-chat"],
+        default="sonar",
     )
     parser.add_argument(
         "--dataset-name",
@@ -816,14 +816,14 @@ def add_cli_args(parser: FlexibleArgumentParser):
         "--async-engine",
         action="store_true",
         default=False,
-        help="Use Aphrodite async engine rather than LLM class.",
+        help="Use Sonar async engine rather than LLM class.",
     )
     parser.add_argument(
         "--prequeue-requests",
         action="store_true",
         default=False,
         help=(
-            "For the Aphrodite backends, enqueue all requests before allowing the "
+            "For the Sonar backends, enqueue all requests before allowing the "
             "scheduler to process them. This can improve benchmark "
             "reproducibility by removing overlap between request rendering "
             "and engine scheduling, but may reduce measured throughput. "
@@ -891,7 +891,7 @@ def add_cli_args(parser: FlexibleArgumentParser):
         "--profile",
         action="store_true",
         default=False,
-        help="Use Aphrodite Profiling. --profiler-config must be provided on the server.",
+        help="Use Sonar Profiling. --profiler-config must be provided on the server.",
     )
 
     # prefix repetition dataset
@@ -959,7 +959,7 @@ def main(args: argparse.Namespace):
     random.seed(args.seed)
     # Sample the requests.
     if (args.backend == "hf" or args.backend == "mii") and args.tokenizer_mode == "auto":
-        # mistral_common tokenizer is only supported on aphrodite and aphrodite-chat backends;
+        # mistral_common tokenizer is only supported on sonar and sonar-chat backends;
         # for hf and mii backends, we use hf tokenizer
         args.tokenizer_mode = "hf"
     tokenizer = get_tokenizer(
@@ -978,10 +978,10 @@ def main(args: argparse.Namespace):
     requests = get_requests(args, tokenizer)
     is_multi_modal = any(request.multi_modal_data is not None for request in requests)
     request_outputs: list[RequestOutput] | None = None
-    if args.backend == "aphrodite":
+    if args.backend == "sonar":
         if args.async_engine:
             elapsed_time = uvloop.run(
-                run_aphrodite_async(
+                run_sonar_async(
                     requests,
                     args.n,
                     AsyncEngineArgs.from_cli_args(args),
@@ -991,7 +991,7 @@ def main(args: argparse.Namespace):
                 )
             )
         else:
-            elapsed_time, request_outputs = run_aphrodite(
+            elapsed_time, request_outputs = run_sonar(
                 requests,
                 args.n,
                 EngineArgs.from_cli_args(args),
@@ -1016,8 +1016,8 @@ def main(args: argparse.Namespace):
             enable_torch_compile=args.hf_enable_torch_compile,
             warmup_requests=warmup_requests,
         )
-    elif args.backend == "aphrodite-chat":
-        elapsed_time, request_outputs = run_aphrodite_chat(
+    elif args.backend == "sonar-chat":
+        elapsed_time, request_outputs = run_sonar_chat(
             requests,
             args.n,
             EngineArgs.from_cli_args(args),
@@ -1030,7 +1030,7 @@ def main(args: argparse.Namespace):
         raise ValueError(f"Unknown backend: {args.backend}")
 
     if request_outputs:
-        # Note: with the aphrodite and aphrodite-chat backends,
+        # Note: with the sonar and sonar-chat backends,
         # we have request_outputs, which we use to count tokens.
         total_prompt_tokens = 0
         total_output_tokens = 0
@@ -1047,7 +1047,7 @@ def main(args: argparse.Namespace):
         total_output_tokens = sum(r.expected_output_len for r in requests)
         total_prompt_tokens = total_num_tokens - total_output_tokens
 
-    if is_multi_modal and args.backend != "aphrodite-chat":
+    if is_multi_modal and args.backend != "sonar-chat":
         print(
             "\033[91mWARNING\033[0m: Multi-modal request with "
             f"{args.backend} backend detected. The "
@@ -1055,7 +1055,7 @@ def main(args: argparse.Namespace):
             " counted. See https://github.com/vllm-project/vllm/issues/9778 for details."
         )
         # TODO(https://github.com/vllm-project/vllm/issues/9778): Count multi-modal token length.
-        # aphrodite-chat backend counts the image tokens now
+        # sonar-chat backend counts the image tokens now
 
     print(
         f"Throughput: {len(requests) / elapsed_time:.2f} requests/s, "

@@ -4,11 +4,11 @@
 
 import torch
 
-import aphrodite.envs as envs
-from aphrodite import _custom_ops as ops
-from aphrodite.platforms import current_platform
-from aphrodite.utils.platform_utils import num_compute_units
-from aphrodite.utils.torch_utils import direct_register_custom_op
+import sonar.envs as envs
+from sonar import _custom_ops as ops
+from sonar.platforms import current_platform
+from sonar.utils.platform_utils import num_compute_units
+from sonar.utils.torch_utils import direct_register_custom_op
 
 from .ScaledMMLinearKernel import (
     FP8ScaledMMLinearKernel,
@@ -77,7 +77,7 @@ class ROCmFP8ScaledMMLinearKernel(FP8ScaledMMLinearKernel):
         if not current_platform.is_rocm():
             return False, "requires ROCm."
 
-        from aphrodite.platforms.rocm import get_cdna_version, on_gfx12x, on_gfx1250
+        from sonar.platforms.rocm import get_cdna_version, on_gfx12x, on_gfx1250
 
         # wvSplitKQ (skinny GEMM) is excluded from the gfx1250 build.
         if on_gfx1250():
@@ -87,8 +87,8 @@ class ROCmFP8ScaledMMLinearKernel(FP8ScaledMMLinearKernel):
         if get_cdna_version() <= 2 and not on_gfx12x():
             return False, "requires CDNA3+ (gfx942/gfx950) or RDNA4 (gfx12x)"
 
-        if not envs.APHRODITE_ROCM_USE_SKINNY_GEMM:
-            return False, "requires APHRODITE_ROCM_USE_SKINNY_GEMM to be enabled."
+        if not envs.SONAR_ROCM_USE_SKINNY_GEMM:
+            return False, "requires SONAR_ROCM_USE_SKINNY_GEMM to be enabled."
 
         return True, None
 
@@ -113,5 +113,5 @@ class ROCmFP8ScaledMMLinearKernel(FP8ScaledMMLinearKernel):
         bias: torch.Tensor | None,
         output_shape: list,
     ) -> torch.Tensor:
-        output = torch.ops.aphrodite.rocm_per_tensor_float_w8a8_scaled_mm_impl(A, B, out_dtype, As, Bs, bias)
+        output = torch.ops.sonar.rocm_per_tensor_float_w8a8_scaled_mm_impl(A, B, out_dtype, As, Bs, bias)
         return torch.narrow(output, 0, 0, A.shape[0]).view(*output_shape)

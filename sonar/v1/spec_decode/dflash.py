@@ -7,12 +7,12 @@ from typing import Any
 import torch
 from typing_extensions import override
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.forward_context import set_forward_context
-from aphrodite.logger import init_logger
-from aphrodite.v1.attention.backend import CommonAttentionMetadata
-from aphrodite.v1.spec_decode.llm_base_proposer import SpecDecodeBaseProposer
-from aphrodite.v1.spec_decode.utils import (
+from sonar.config import SonarConfig
+from sonar.forward_context import set_forward_context
+from sonar.logger import init_logger
+from sonar.v1.attention.backend import CommonAttentionMetadata
+from sonar.v1.spec_decode.llm_base_proposer import SpecDecodeBaseProposer
+from sonar.v1.spec_decode.utils import (
     _copy_and_expand_dflash_inputs,
     next_power_of_2,
 )
@@ -23,14 +23,14 @@ logger = init_logger(__name__)
 class DFlashProposer(SpecDecodeBaseProposer):
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
         runner=None,
     ):
-        assert aphrodite_config.speculative_config is not None
-        assert aphrodite_config.speculative_config.method == "dflash"
+        assert sonar_config.speculative_config is not None
+        assert sonar_config.speculative_config.method == "dflash"
         super().__init__(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             device=device,
             pass_hidden_states_to_model=True,
             runner=runner,
@@ -40,7 +40,7 @@ class DFlashProposer(SpecDecodeBaseProposer):
         self.max_query_tokens = self.max_batch_size * (1 + self.num_speculative_tokens)
         self.max_padded_query_tokens = max(
             self.max_query_tokens,
-            aphrodite_config.compilation_config.max_cudagraph_capture_size or 0,
+            sonar_config.compilation_config.max_cudagraph_capture_size or 0,
         )
         # Positions covers both context states + query states
         self.max_positions = self.max_num_tokens + self.max_padded_query_tokens
@@ -72,7 +72,7 @@ class DFlashProposer(SpecDecodeBaseProposer):
         # For DFlash we use the input embeddings to embed the mask token
         self.parallel_drafting_hidden_state_tensor = None
 
-        from aphrodite.model_executor.models.qwen3_dflash import dflash_has_any_non_causal
+        from sonar.model_executor.models.qwen3_dflash import dflash_has_any_non_causal
 
         self.dflash_causal = not dflash_has_any_non_causal(self.draft_model_config.hf_config)
         _copy_and_expand_dflash_inputs.register_warmup(
@@ -83,8 +83,8 @@ class DFlashProposer(SpecDecodeBaseProposer):
         )
 
     @override
-    def _create_draft_aphrodite_config(self) -> AphroditeConfig:
-        base = super()._create_draft_aphrodite_config()
+    def _create_draft_sonar_config(self) -> SonarConfig:
+        base = super()._create_draft_sonar_config()
         # The draft model is text-only — clear the target's multimodal
         # flag so flash_attn is not rejected for mm_prefix support.
         arch = base.model_config.model_arch_config
@@ -242,7 +242,7 @@ class DFlashProposer(SpecDecodeBaseProposer):
         self.model.precompute_and_store_context_kv(context_states, context_positions)
         with set_forward_context(
             None,
-            self.aphrodite_config,
+            self.sonar_config,
             num_tokens=num_input_tokens,
             num_tokens_across_dp=num_tokens_across_dp,
             cudagraph_runtime_mode=cudagraph_runtime_mode,

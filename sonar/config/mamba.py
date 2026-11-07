@@ -6,7 +6,7 @@ from typing import Any, Literal, get_args
 
 from pydantic import field_validator
 
-from aphrodite.config.utils import config
+from sonar.config.utils import config
 
 
 class _MambaBackendEnumMeta(EnumMeta):
@@ -78,7 +78,7 @@ class MambaConfig:
     def __post_init__(self):
         self.validate_ssu_algorithm()
         if self.enable_stochastic_rounding:
-            from aphrodite.platforms import current_platform
+            from sonar.platforms import current_platform
 
             if not current_platform.is_cuda():
                 raise ValueError(

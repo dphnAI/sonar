@@ -8,7 +8,7 @@ from unittest.mock import Mock
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 if not current_platform.is_rocm():
     pytest.skip(
@@ -16,7 +16,7 @@ if not current_platform.is_rocm():
         allow_module_level=True,
     )
 
-from aphrodite._aiter_ops import is_aiter_found_and_supported
+from sonar._aiter_ops import is_aiter_found_and_supported
 
 if not is_aiter_found_and_supported():
     pytest.skip(
@@ -24,8 +24,8 @@ if not is_aiter_found_and_supported():
         allow_module_level=True,
     )
 
-from aphrodite.v1.attention.backend import CommonAttentionMetadata
-from aphrodite.v1.attention.backends.mla import rocm_aiter_mla_sparse as sparse_mod
+from sonar.v1.attention.backend import CommonAttentionMetadata
+from sonar.v1.attention.backends.mla import rocm_aiter_mla_sparse as sparse_mod
 
 
 class _FakeAiter(ModuleType):
@@ -331,7 +331,7 @@ def test_dense_prefill_builds_sparse_metadata_for_decode_subset(monkeypatch):
     tokens would mismatch the query passed to ``forward_mqa``.
     """
     builder = _make_builder()
-    builder.aphrodite_config = SimpleNamespace(attention_config=SimpleNamespace(sparse_mla_force_mqa=False))
+    builder.sonar_config = SimpleNamespace(attention_config=SimpleNamespace(sparse_mla_force_mqa=False))
 
     query_start_loc = torch.tensor([0, 1, 5], dtype=torch.int32)
     seq_lens = torch.tensor([16, 4], dtype=torch.int32)
@@ -409,7 +409,7 @@ def test_long_prefill_shares_full_sparse_metadata_with_decode(monkeypatch):
     same sparse paging metadata.
     """
     builder = _make_builder()
-    builder.aphrodite_config = SimpleNamespace(attention_config=SimpleNamespace(sparse_mla_force_mqa=False))
+    builder.sonar_config = SimpleNamespace(attention_config=SimpleNamespace(sparse_mla_force_mqa=False))
 
     # One decode token followed by a five-token prefill.  topk_tokens is four,
     # so the prefill must not be split onto the dense-MHA path.
@@ -597,7 +597,7 @@ def test_sparse_metadata_workload_length_dtype_matrix(monkeypatch, workload, len
     workloads with sequence lengths below/above top-k and BF16/FP8 KV cache.
     """
     builder = _make_builder()
-    builder.aphrodite_config = SimpleNamespace(attention_config=SimpleNamespace(sparse_mla_force_mqa=False))
+    builder.sonar_config = SimpleNamespace(attention_config=SimpleNamespace(sparse_mla_force_mqa=False))
     if kv_cache_dtype == "fp8":
         builder._mla_q_dtype = current_platform.fp8_dtype()
         builder._mla_kv_dtype = current_platform.fp8_dtype()

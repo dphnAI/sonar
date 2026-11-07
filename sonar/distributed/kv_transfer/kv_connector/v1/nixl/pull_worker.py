@@ -7,24 +7,24 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from aphrodite.distributed.kv_transfer.kv_connector.utils import BlockIds, EngineId
-from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker import (
+from sonar.distributed.kv_transfer.kv_connector.utils import BlockIds, EngineId
+from sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker import (
     NixlBaseConnectorWorker,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.metadata import (
+from sonar.distributed.kv_transfer.kv_connector.v1.nixl.metadata import (
     NixlConnectorMetadata,
     ReqMeta,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.tp_mapping import (
+from sonar.distributed.kv_transfer.kv_connector.v1.nixl.tp_mapping import (
     ReadSpec,
     _is_attention_spec,
 )
-from aphrodite.logger import init_logger
-from aphrodite.utils.math_utils import cdiv
+from sonar.logger import init_logger
+from sonar.utils.math_utils import cdiv
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
-    from aphrodite.v1.kv_cache_interface import KVCacheConfig
+    from sonar.config import SonarConfig
+    from sonar.v1.kv_cache_interface import KVCacheConfig
 
 logger = init_logger(__name__)
 
@@ -38,11 +38,11 @@ class NixlPullConnectorWorker(NixlBaseConnectorWorker):
 
     def __init__(
         self,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
         engine_id: str,
         kv_cache_config: "KVCacheConfig",
     ):
-        super().__init__(aphrodite_config, engine_id, kv_cache_config)
+        super().__init__(sonar_config, engine_id, kv_cache_config)
         # Registration generation of each remote engine's loaded agent.
         self._remote_registration_generations: dict[EngineId, int] = {}
 

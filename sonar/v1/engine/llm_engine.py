@@ -10,41 +10,41 @@ from typing import Any
 import torch.nn as nn
 from typing_extensions import TypeVar
 
-import aphrodite.envs as envs
-from aphrodite.config import AphroditeConfig, ParallelConfig
-from aphrodite.config.profiler import (
+import sonar.envs as envs
+from sonar.config import ParallelConfig, SonarConfig
+from sonar.config.profiler import (
     validate_profile_iteration_bounds,
     validate_profile_prefix,
 )
-from aphrodite.distributed import stateless_destroy_torch_distributed_process_group
-from aphrodite.distributed.parallel_state import get_dp_group
-from aphrodite.engine.arg_utils import EngineArgs
-from aphrodite.exceptions import ProfilerAlreadyActiveError
-from aphrodite.inputs import EngineInput, PromptType
-from aphrodite.logger import configure_logging_if_needed, init_logger
-from aphrodite.lora.request import LoRARequest
-from aphrodite.multimodal import MULTIMODAL_REGISTRY, MultiModalRegistry
-from aphrodite.outputs import PoolingRequestOutput, RequestOutput
-from aphrodite.pooling_params import PoolingParams
-from aphrodite.renderers import renderer_from_config
-from aphrodite.renderers.inputs.preprocess import extract_prompt_components
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.tasks import SupportedTask
-from aphrodite.tokenizers import TokenizerLike
-from aphrodite.tracing import init_tracer
-from aphrodite.usage.usage_lib import UsageContext
-from aphrodite.v1.engine import EngineCoreRequest, PauseMode
-from aphrodite.v1.engine.core_client import EngineCoreClient
-from aphrodite.v1.engine.input_processor import InputProcessor
-from aphrodite.v1.engine.output_processor import OutputProcessor
-from aphrodite.v1.engine.parallel_sampling import ParentRequest
-from aphrodite.v1.executor import Executor
-from aphrodite.v1.kv_hints import KvHintsEnvelope
-from aphrodite.v1.metrics.loggers import StatLoggerFactory, StatLoggerManager
-from aphrodite.v1.metrics.reader import Metric, get_metrics_snapshot
-from aphrodite.v1.metrics.stats import IterationStats
-from aphrodite.v1.utils import record_function_or_nullcontext
-from aphrodite.v1.worker.worker_base import WorkerBase
+from sonar.distributed import stateless_destroy_torch_distributed_process_group
+from sonar.distributed.parallel_state import get_dp_group
+from sonar.engine.arg_utils import EngineArgs
+from sonar.exceptions import ProfilerAlreadyActiveError
+from sonar.inputs import EngineInput, PromptType
+from sonar.logger import configure_logging_if_needed, init_logger
+from sonar.lora.request import LoRARequest
+from sonar.multimodal import MULTIMODAL_REGISTRY, MultiModalRegistry
+from sonar.outputs import PoolingRequestOutput, RequestOutput
+from sonar.pooling_params import PoolingParams
+from sonar.renderers import renderer_from_config
+from sonar.renderers.inputs.preprocess import extract_prompt_components
+from sonar.sampling_params import SamplingParams
+from sonar.tasks import SupportedTask
+from sonar.tokenizers import TokenizerLike
+from sonar.tracing import init_tracer
+from sonar.usage.usage_lib import UsageContext
+from sonar.v1.engine import EngineCoreRequest, PauseMode
+from sonar.v1.engine.core_client import EngineCoreClient
+from sonar.v1.engine.input_processor import InputProcessor
+from sonar.v1.engine.output_processor import OutputProcessor
+from sonar.v1.engine.parallel_sampling import ParentRequest
+from sonar.v1.executor import Executor
+from sonar.v1.kv_hints import KvHintsEnvelope
+from sonar.v1.metrics.loggers import StatLoggerFactory, StatLoggerManager
+from sonar.v1.metrics.reader import Metric, get_metrics_snapshot
+from sonar.v1.metrics.stats import IterationStats
+from sonar.v1.utils import record_function_or_nullcontext
+from sonar.v1.worker.worker_base import WorkerBase
 
 logger = init_logger(__name__)
 
@@ -56,7 +56,7 @@ class LLMEngine:
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         executor_class: type[Executor],
         log_stats: bool,
         aggregate_engine_logging: bool = False,
@@ -65,18 +65,18 @@ class LLMEngine:
         mm_registry: MultiModalRegistry = MULTIMODAL_REGISTRY,
         multiprocess_mode: bool = False,
     ) -> None:
-        configure_logging_if_needed(aphrodite_config.logging_config)
-        self.aphrodite_config = aphrodite_config
-        self.model_config = aphrodite_config.model_config
-        self.observability_config = aphrodite_config.observability_config
+        configure_logging_if_needed(sonar_config.logging_config)
+        self.sonar_config = sonar_config
+        self.model_config = sonar_config.model_config
+        self.observability_config = sonar_config.observability_config
 
         tracing_endpoint = self.observability_config.otlp_traces_endpoint
         if tracing_endpoint is not None:
-            init_tracer("aphrodite.llm_engine", tracing_endpoint)
+            init_tracer("sonar.llm_engine", tracing_endpoint)
 
         self.log_stats = log_stats
 
-        parallel_config = aphrodite_config.parallel_config
+        parallel_config = sonar_config.parallel_config
         executor_backend = parallel_config.distributed_executor_backend
 
         self.external_launcher_dp = parallel_config.data_parallel_size > 1 and executor_backend == "external_launcher"
@@ -88,16 +88,16 @@ class LLMEngine:
             self.dp_group = None
         self.should_execute_dummy_batch = False
 
-        self.renderer = renderer = renderer_from_config(self.aphrodite_config)
+        self.renderer = renderer = renderer_from_config(self.sonar_config)
 
         # Convert EngineInput --> EngineCoreRequest.
-        self.input_processor = InputProcessor(self.aphrodite_config, renderer)
+        self.input_processor = InputProcessor(self.sonar_config, renderer)
 
         # Converts EngineCoreOutputs --> RequestOutput.
         self.output_processor = OutputProcessor(
             renderer.tokenizer,
             log_stats=self.log_stats,
-            stream_interval=self.aphrodite_config.scheduler_config.stream_interval,
+            stream_interval=self.sonar_config.scheduler_config.stream_interval,
             tracing_enabled=tracing_endpoint is not None,
         )
 
@@ -109,7 +109,7 @@ class LLMEngine:
         self.engine_core = EngineCoreClient.make_client(
             multiprocess_mode=multiprocess_mode,
             asyncio_mode=False,
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             executor_class=executor_class,
             log_stats=self.log_stats,
             renderer=renderer,
@@ -119,7 +119,7 @@ class LLMEngine:
         self.logger_manager: StatLoggerManager | None = None
         if self.log_stats:
             self.logger_manager = StatLoggerManager(
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 custom_stat_loggers=stat_loggers,
                 enable_default_loggers=log_stats,
                 aggregate_engine_logging=aggregate_engine_logging,
@@ -145,20 +145,20 @@ class LLMEngine:
         self.reset_mm_cache()
 
     @classmethod
-    def from_aphrodite_config(
+    def from_sonar_config(
         cls,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         usage_context: UsageContext = UsageContext.ENGINE_CONTEXT,
         stat_loggers: list[StatLoggerFactory] | None = None,
         disable_log_stats: bool = False,
     ) -> "LLMEngine":
         return cls(
-            aphrodite_config=aphrodite_config,
-            executor_class=Executor.get_class(aphrodite_config),
+            sonar_config=sonar_config,
+            executor_class=Executor.get_class(sonar_config),
             log_stats=(not disable_log_stats),
             usage_context=usage_context,
             stat_loggers=stat_loggers,
-            multiprocess_mode=envs.APHRODITE_ENABLE_V1_MULTIPROCESSING,
+            multiprocess_mode=envs.SONAR_ENABLE_V1_MULTIPROCESSING,
         )
 
     @classmethod
@@ -171,16 +171,16 @@ class LLMEngine:
     ) -> "LLMEngine":
         """Creates an LLM engine from the engine arguments."""
         # Create the engine configs.
-        aphrodite_config = engine_args.create_engine_config(usage_context)
-        executor_class = Executor.get_class(aphrodite_config)
+        sonar_config = engine_args.create_engine_config(usage_context)
+        executor_class = Executor.get_class(sonar_config)
 
-        if envs.APHRODITE_ENABLE_V1_MULTIPROCESSING:
+        if envs.SONAR_ENABLE_V1_MULTIPROCESSING:
             logger.debug("Enabling multiprocessing for LLMEngine.")
             enable_multiprocessing = True
 
         # Create the LLMEngine.
         return cls(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             executor_class=executor_class,
             log_stats=not engine_args.disable_log_stats,
             usage_context=usage_context,
@@ -449,7 +449,7 @@ class LLMEngine:
         now = time.time()
         if not hasattr(self, "_last_log_time"):
             self._last_log_time = now
-        if now - self._last_log_time >= envs.APHRODITE_LOG_STATS_INTERVAL:
+        if now - self._last_log_time >= envs.SONAR_LOG_STATS_INTERVAL:
             self.do_log_stats()
             self._last_log_time = now
 
@@ -496,7 +496,7 @@ class LLMEngine:
     @staticmethod
     def _cleanup_instance_caches(model_ref: "weakref.ref[nn.Module]") -> None:
         """Remove the bytecode hooks that pin the compiled model."""
-        from aphrodite.compilation.wrapper import TorchCompileWithNoGuardsWrapper
+        from sonar.compilation.wrapper import TorchCompileWithNoGuardsWrapper
 
         model = model_ref()
         if model is None:

@@ -5,9 +5,9 @@ from typing import Any
 
 import pytest
 
-from aphrodite import SamplingParams
-from aphrodite.config import CompilationConfig
-from aphrodite.platforms import current_platform
+from sonar import SamplingParams
+from sonar.config import CompilationConfig
+from sonar.platforms import current_platform
 
 from ..utils import (
     _skip_if_insufficient_gpus_for_tp,
@@ -23,7 +23,7 @@ def check_mtp_correctness(
     model_setup: tuple[str, str, int, str | None],
     mm_enabled: bool,
     expected_accuracy_threshold: float,
-    aphrodite_runner,
+    sonar_runner,
 ):
     """Compare the outputs of a original LLM and a speculative LLM
     which should be the same when using MTP speculative decoding. Due to some variance
@@ -37,7 +37,7 @@ def check_mtp_correctness(
     # Generate test prompts inside the function instead of using fixture
     test_prompts = get_test_prompts(mm_enabled)
     with monkeypatch.context() as m:
-        m.setenv("APHRODITE_MLA_DISABLE", "1")
+        m.setenv("SONAR_MLA_DISABLE", "1")
 
         attn_backend = "TRITON_ATTN" if current_platform.is_rocm() else "auto"
 
@@ -48,7 +48,7 @@ def check_mtp_correctness(
         elif "gemma-4" in model_name:
             extra_kwargs["limit_mm_per_prompt"] = {"image": 0, "audio": 0}
 
-        with aphrodite_runner(
+        with sonar_runner(
             model_name,
             block_size=None,
             max_model_len=2048,
@@ -74,7 +74,7 @@ def check_mtp_correctness(
             speculative_config["model"] = draft_model
             speculative_config["num_speculative_tokens"] = 2
 
-        with aphrodite_runner(
+        with sonar_runner(
             model_name,
             block_size=None,
             trust_remote_code=True,
@@ -87,7 +87,7 @@ def check_mtp_correctness(
             **extra_kwargs,
         ) as spec_runner:
             # MTP supports async scheduling by default.
-            has_async = spec_runner.llm.llm_engine.aphrodite_config.scheduler_config.async_scheduling
+            has_async = spec_runner.llm.llm_engine.sonar_config.scheduler_config.async_scheduling
             assert has_async, (
                 f"Expected async scheduling for {method}: target={model_name}, draft={draft_model}; got {has_async}"
             )

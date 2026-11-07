@@ -55,7 +55,7 @@ hardware_overrides:
       - "--gpu-memory-utilization"
       - "0.9"
     extra_env:
-      APHRODITE_ROCM_USE_AITER: "1"
+      SONAR_ROCM_USE_AITER: "1"
       NCCL_MIN_NCHANNELS: "112"
 strategy_overrides:
   single_node_tep:
@@ -83,7 +83,7 @@ guide: |
   ## Launch Commands
 
   ```bash
-  aphrodite serve IFM/Jais-3-375B-A23B \
+  sonar serve IFM/Jais-3-375B-A23B \
     --tensor-parallel-size 8 \
     --trust-remote-code \
     --chat-template-content-format string \
@@ -100,10 +100,10 @@ guide: |
   the unified attention backend:
 
   ```bash
-  export APHRODITE_ROCM_USE_AITER=1
+  export SONAR_ROCM_USE_AITER=1
   export NCCL_MIN_NCHANNELS=112
 
-  aphrodite serve IFM/Jais-3-375B-A23B \
+  sonar serve IFM/Jais-3-375B-A23B \
     --tensor-parallel-size 8 \
     --trust-remote-code \
     --chat-template-content-format string \

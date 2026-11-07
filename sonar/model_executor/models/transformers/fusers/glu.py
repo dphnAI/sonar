@@ -11,12 +11,12 @@ from typing import TYPE_CHECKING, ClassVar
 from torch import fx, nn
 from transformers.activations import ACT2CLS
 
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.activation import _ACTIVATION_AND_MUL_REGISTRY
-from aphrodite.model_executor.models.transformers.fusers.merged_column import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.activation import _ACTIVATION_AND_MUL_REGISTRY
+from sonar.model_executor.models.transformers.fusers.merged_column import (
     MergedColumnParallelFuser,
 )
-from aphrodite.model_executor.models.transformers.fx_utils import (
+from sonar.model_executor.models.transformers.fx_utils import (
     compile_forward,
     find_node,
     is_linear,
@@ -25,15 +25,15 @@ from aphrodite.model_executor.models.transformers.fx_utils import (
     replace_expr,
     single_self_call,
 )
-from aphrodite.model_executor.models.transformers.layers import get_act_and_mul_fn
-from aphrodite.model_executor.models.transformers.utils import (
+from sonar.model_executor.models.transformers.layers import get_act_and_mul_fn
+from sonar.model_executor.models.transformers.utils import (
     log_replacement,
     replace_linear_class,
 )
-from aphrodite.model_executor.models.utils import maybe_prefix
+from sonar.model_executor.models.utils import maybe_prefix
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
+    from sonar.config import SonarConfig
 
 logger = init_logger(__name__)
 
@@ -158,8 +158,8 @@ class GLUFuser(MergedColumnParallelFuser):
         replace_expr(funcdef, muls[0], act_call)
         self.fused_forward = compile_forward(funcdef, fn)
 
-    def validate(self, module: nn.Module, aphrodite_config: "AphroditeConfig") -> bool:
-        if not super().validate(module, aphrodite_config):
+    def validate(self, module: nn.Module, sonar_config: "SonarConfig") -> bool:
+        if not super().validate(module, sonar_config):
             return False
         # An AndMul kernel splits its input in half, so gate and up must match.
         gate = module.get_submodule(self.gate_name)
@@ -173,14 +173,14 @@ class GLUFuser(MergedColumnParallelFuser):
             return False
         return True
 
-    def update_attrs(self, module: nn.Module, prefix: str, aphrodite_config: "AphroditeConfig") -> None:
-        super().update_attrs(module, prefix, aphrodite_config)
+    def update_attrs(self, module: nn.Module, prefix: str, sonar_config: "SonarConfig") -> None:
+        super().update_attrs(module, prefix, sonar_config)
         act_fn = self._get_act_and_mul(module.get_submodule(self.act_name))
         setattr(module, self.act_name, act_fn)
         # If there is a down projection, we know it must be rowwise.
         if self.down_name is not None:
             down_prefix = maybe_prefix(prefix, self.down_name)
             down = module.get_submodule(self.down_name)
-            new_down = replace_linear_class(down, "rowwise", aphrodite_config.quant_config, prefix=down_prefix)
+            new_down = replace_linear_class(down, "rowwise", sonar_config.quant_config, prefix=down_prefix)
             setattr(module, self.down_name, new_down)
             log_replacement(down_prefix, down, new_down)

@@ -36,41 +36,41 @@ except ImportError:
         PluginLauncher as RuntimePluginLauncher,
     )
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed.kv_transfer.kv_connector.v1.base import (
+from sonar.config import SonarConfig
+from sonar.distributed.kv_transfer.kv_connector.v1.base import (
     KVConnectorBase_V1,
     KVConnectorMetadata,
     KVConnectorRole,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.lmcache_integration.utils import (
+from sonar.distributed.kv_transfer.kv_connector.v1.lmcache_integration.utils import (
     ENGINE_NAME,
     apply_mm_hashes_to_token_ids,
     extract_mm_features,
     lmcache_get_or_create_config,
     mla_enabled,
 )
-from aphrodite.distributed.parallel_state import get_tensor_model_parallel_rank, get_tp_group
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.utils.torch_utils import get_kv_cache_torch_dtype
-from aphrodite.v1.attention.backend import AttentionMetadata
-from aphrodite.v1.core.sched.output import SchedulerOutput
-from aphrodite.version import __version__ as APHRODITE_VERSION
+from sonar.distributed.parallel_state import get_tensor_model_parallel_rank, get_tp_group
+from sonar.sampling_params import SamplingParams
+from sonar.utils.math_utils import cdiv
+from sonar.utils.torch_utils import get_kv_cache_torch_dtype
+from sonar.v1.attention.backend import AttentionMetadata
+from sonar.v1.core.sched.output import SchedulerOutput
+from sonar.version import __version__ as SONAR_VERSION
 
 if TYPE_CHECKING:
-    from aphrodite.forward_context import ForwardContext
-    from aphrodite.multimodal.inputs import PlaceholderRange
-    from aphrodite.v1.core.kv_cache_manager import KVCacheManager
-    from aphrodite.v1.core.sched.output import NewRequestData
-    from aphrodite.v1.request import Request
+    from sonar.forward_context import ForwardContext
+    from sonar.multimodal.inputs import PlaceholderRange
+    from sonar.v1.core.kv_cache_manager import KVCacheManager
+    from sonar.v1.core.sched.output import NewRequestData
+    from sonar.v1.request import Request
 
 logger = init_logger(__name__)
 
 
 @dataclass
 class LoadSpec:
-    # Number of tokens cached in Aphrodite
-    aphrodite_cached_tokens: int
+    # Number of tokens cached in Sonar
+    sonar_cached_tokens: int
     # Number of tokens that are cached in LMCache
     lmcache_cached_tokens: int
     # Whether the scheduler allow us to load the tokens
@@ -163,14 +163,14 @@ class RequestTracker:
             lmcache_config (LMCacheEngineConfig): the LMCache engine config.
             new_request (NewRequestData): the new request data.
             num_tokens_to_compute (int): the number of tokens that will
-                be 'computed', including the `num_computed_tokens` (Aphrodite's
+                be 'computed', including the `num_computed_tokens` (Sonar's
                 local cache hit) and new tokens that will be scheduled.
             lmcache_cached_tokens (int): the number of tokens that are
                 cached in LMCache.
             skip_save (bool): whether the request cache should be saved
 
         """
-        # Aphrodite 0.9.0 update: request.block_ids changed from list[int] to
+        # Sonar 0.9.0 update: request.block_ids changed from list[int] to
         # list[list[int]]
         # Need to check the type of request.block_ids
 
@@ -179,7 +179,7 @@ class RequestTracker:
         if not isinstance(new_request.block_ids[0], list):
             unfolded_block_ids = new_request.block_ids.copy()
         else:
-            # According to the Aphrodite code
+            # According to the Sonar code
             # (https://github.com/vllm-project/vllm/blob/main/vllm/v1/core/
             # sched/scheduler.py#L943),
             # only one KVCacheGroup is supported in connector for now.
@@ -276,7 +276,7 @@ class ReqMeta:
 
         Args:
             tracker (RequestTracker): the request tracker.
-            block_size (int): the block size in Aphrodite.
+            block_size (int): the block size in Sonar.
             lmcache_chunk_size (int): the chunk size for LMCache.
             load_spec (Optional[LoadSpec]): the load spec for KV cache loading.
             discard_partial_chunks (bool): whether to discard partial chunks.
@@ -390,18 +390,18 @@ def need_gpu_interim_buffer(lmcache_config: LMCacheEngineConfig):
     return not lmcache_config.enable_pd
 
 
-def _calculate_mtp_layers(aphrodite_config, model_config):
+def _calculate_mtp_layers(sonar_config, model_config):
     num_mtp_layers = 0
-    if aphrodite_config is not None and aphrodite_config.speculative_config is not None:
-        logger.info("aphrodite_config.speculative_config: %s", aphrodite_config.speculative_config)
+    if sonar_config is not None and sonar_config.speculative_config is not None:
+        logger.info("sonar_config.speculative_config: %s", sonar_config.speculative_config)
         # TODO(baoloongmao): Support other MTP methods
-        if aphrodite_config.speculative_config.method == "deepseek_mtp":
+        if sonar_config.speculative_config.method == "deepseek_mtp":
             num_mtp_layers = getattr(model_config.hf_config, "num_nextn_predict_layers", 0)
 
-        elif aphrodite_config.speculative_config.uses_target_hidden_states:
+        elif sonar_config.speculative_config.uses_target_hidden_states:
             try:
-                draft_model_config = aphrodite_config.speculative_config.draft_model_config
-                num_mtp_layers = draft_model_config.get_num_layers(aphrodite_config.parallel_config)
+                draft_model_config = sonar_config.speculative_config.draft_model_config
+                num_mtp_layers = draft_model_config.get_num_layers(sonar_config.parallel_config)
                 logger.info("EAGLE detected %d extra layer(s)", num_mtp_layers)
             except Exception:
                 logger.info("EAGLE detected, but failed to get the number of extra layersfalling back to 1")
@@ -411,7 +411,7 @@ def _calculate_mtp_layers(aphrodite_config, model_config):
 
 def _init_lmcache_engine(
     lmcache_config: LMCacheEngineConfig,
-    aphrodite_config: "AphroditeConfig",
+    sonar_config: "SonarConfig",
 ) -> LMCacheEngine:
     """Initialize the LMCache engine by the given model config and parallel
     config. This function will check the environment variable
@@ -420,7 +420,7 @@ def _init_lmcache_engine(
 
     Args:
         lmcache_config: The LMCache configuration.
-        aphrodite_config: The Aphrodite configuration.
+        sonar_config: The Sonar configuration.
 
     Returns:
         The initialized LMCache engine
@@ -429,9 +429,9 @@ def _init_lmcache_engine(
     if curr_engine := LMCacheEngineBuilder.get(ENGINE_NAME):
         return curr_engine
 
-    model_config = aphrodite_config.model_config
-    parallel_config = aphrodite_config.parallel_config
-    cache_config = aphrodite_config.cache_config
+    model_config = sonar_config.model_config
+    parallel_config = sonar_config.parallel_config
+    cache_config = sonar_config.cache_config
 
     assert isinstance(lmcache_config, LMCacheEngineConfig), "LMCache v1 configuration is should be passed."
 
@@ -443,7 +443,7 @@ def _init_lmcache_engine(
 
     # construct kv shape (for mem pool)
     num_layer = model_config.get_num_layers(parallel_config)
-    num_mtp_layers = _calculate_mtp_layers(aphrodite_config, model_config)
+    num_mtp_layers = _calculate_mtp_layers(sonar_config, model_config)
     num_layer += num_mtp_layers
     chunk_size = lmcache_config.chunk_size
     num_kv_head = model_config.get_num_kv_heads(parallel_config)
@@ -457,7 +457,7 @@ def _init_lmcache_engine(
     )
 
     # Change current device.
-    from aphrodite.distributed.parallel_state import get_world_group
+    from sonar.distributed.parallel_state import get_world_group
 
     device_index = get_world_group().device_index
     torch.accelerator.set_device_index(device_index)
@@ -473,7 +473,7 @@ def _init_lmcache_engine(
     )
 
     use_gpu = need_gpu_interim_buffer(lmcache_config)
-    aphrodite_gpu_connector: (
+    sonar_gpu_connector: (
         VLLMBufferLayerwiseGPUConnector | VLLMPagedMemGPUConnectorV2 | VLLMPagedMemLayerwiseGPUConnector
     )
 
@@ -485,7 +485,7 @@ def _init_lmcache_engine(
     if lmcache_config.use_layerwise:
         if lmcache_config.enable_blending:
             # Use layerwise connector for blending
-            aphrodite_gpu_connector = VLLMBufferLayerwiseGPUConnector(
+            sonar_gpu_connector = VLLMBufferLayerwiseGPUConnector(
                 hidden_dim_size,
                 num_layer,
                 use_gpu=use_gpu,
@@ -494,7 +494,7 @@ def _init_lmcache_engine(
                 device=device,
             )
         else:
-            aphrodite_gpu_connector = VLLMPagedMemLayerwiseGPUConnector(
+            sonar_gpu_connector = VLLMPagedMemLayerwiseGPUConnector(
                 hidden_dim_size,
                 num_layer,
                 use_gpu=use_gpu,
@@ -503,7 +503,7 @@ def _init_lmcache_engine(
                 device=device,
             )
     else:
-        aphrodite_gpu_connector = VLLMPagedMemGPUConnectorV2(
+        sonar_gpu_connector = VLLMPagedMemGPUConnectorV2(
             hidden_dim_size,
             num_layer,
             use_gpu=use_gpu,
@@ -517,7 +517,7 @@ def _init_lmcache_engine(
         ENGINE_NAME,
         lmcache_config,
         metadata,
-        aphrodite_gpu_connector,
+        sonar_gpu_connector,
         tpg.broadcast,
         tpg.broadcast_object,
     )
@@ -544,27 +544,27 @@ class LMCacheConnectorMetadata(KVConnectorMetadata):
 class LMCacheConnectorV1Impl:
     def __init__(
         self,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
         role: KVConnectorRole,
         parent: KVConnectorBase_V1,
     ):
-        assert aphrodite_config.kv_transfer_config is not None
+        assert sonar_config.kv_transfer_config is not None
         self._parent = parent
-        self._aphrodite_config = aphrodite_config
-        self.kv_role = aphrodite_config.kv_transfer_config.kv_role
-        self.worker_count = aphrodite_config.parallel_config.tensor_parallel_size
+        self._sonar_config = sonar_config
+        self.kv_role = sonar_config.kv_transfer_config.kv_role
+        self.worker_count = sonar_config.parallel_config.tensor_parallel_size
         config = lmcache_get_or_create_config()
-        assert isinstance(config, LMCacheEngineConfig), "LMCache v1 configuration is should be passed for Aphrodite v1."
+        assert isinstance(config, LMCacheEngineConfig), "LMCache v1 configuration is should be passed for Sonar v1."
         # Put the leading with "lmcache." and matched configs from
-        # aphrodite extra_config to the config
-        kv_connector_extra_config = aphrodite_config.kv_transfer_config.kv_connector_extra_config
+        # sonar extra_config to the config
+        kv_connector_extra_config = sonar_config.kv_transfer_config.kv_connector_extra_config
         if kv_connector_extra_config:
             for key, value in kv_connector_extra_config.items():
                 if key.startswith("lmcache."):
                     config_key = key[8:]  # Remove "lmcache." prefix
                     if _validate_and_set_config_value(config, config_key, value):
                         logger.info(
-                            "Updated config %s from Aphrodite extra config: %s",
+                            "Updated config %s from Sonar extra config: %s",
                             config_key,
                             value,
                         )
@@ -577,14 +577,14 @@ class LMCacheConnectorV1Impl:
         self._stats_monitor = LMCStatsMonitor.GetOrCreate()
         if role == KVConnectorRole.SCHEDULER:
             # Create lookup client using factory
-            self.lookup_client = LookupClientFactory.create_lookup_client(aphrodite_config, config)
+            self.lookup_client = LookupClientFactory.create_lookup_client(sonar_config, config)
             self._unfinished_requests: dict[str, Request] = {}
             self._lookup_requests_in_step: list[str] = []
             self.lmcache_engine = None
         else:
             self.lmcache_engine = _init_lmcache_engine(
                 config,
-                aphrodite_config,
+                sonar_config,
             )
 
             self.use_layerwise = config.use_layerwise
@@ -600,11 +600,11 @@ class LMCacheConnectorV1Impl:
 
             # Create lookup server using factory
             assert self.lmcache_engine is not None
-            self.lookup_server = LookupClientFactory.create_lookup_server(self.lmcache_engine, aphrodite_config)
+            self.lookup_server = LookupClientFactory.create_lookup_server(self.lmcache_engine, sonar_config)
 
             self.offload_server = ZMQOffloadServer(
                 self.lmcache_engine,
-                aphrodite_config,
+                sonar_config,
                 get_tensor_model_parallel_rank(),
             )
 
@@ -615,9 +615,9 @@ class LMCacheConnectorV1Impl:
 
         self.kv_caches: dict[str, torch.Tensor] = {}
 
-        self._block_size = aphrodite_config.cache_config.block_size
+        self._block_size = sonar_config.cache_config.block_size
 
-        # request_id -> (aphrodite cached tokens, lmcache cached tokens)
+        # request_id -> (sonar cached tokens, lmcache cached tokens)
         self.load_specs: dict[str, LoadSpec] = {}
 
         self.kv_cache_manager: KVCacheManager | None = None
@@ -627,16 +627,16 @@ class LMCacheConnectorV1Impl:
 
         # Whether to discard partial chunks
         self._discard_partial_chunks = (
-            aphrodite_config.kv_transfer_config.get_from_extra_config("discard_partial_chunks", False)
+            sonar_config.kv_transfer_config.get_from_extra_config("discard_partial_chunks", False)
             or not config.save_unfull_chunk
         )
 
         self._lmcache_chunk_size = config.chunk_size
         self._save_decode_cache = config.save_decode_cache
 
-        self.skip_last_n_tokens = aphrodite_config.kv_transfer_config.get_from_extra_config("skip_last_n_tokens", 0)
+        self.skip_last_n_tokens = sonar_config.kv_transfer_config.get_from_extra_config("skip_last_n_tokens", 0)
 
-        self.num_layers = aphrodite_config.model_config.get_num_layers(aphrodite_config.parallel_config)
+        self.num_layers = sonar_config.model_config.get_num_layers(sonar_config.parallel_config)
         self.current_layer = 0
 
         self.force_skip_save = bool(os.environ.get("LMCACHE_FORCE_SKIP_SAVE", False))
@@ -646,8 +646,8 @@ class LMCacheConnectorV1Impl:
         # TODO(baoloongmao): Internal api server & plugin framework support
         # dp > 1
         if (
-            aphrodite_config.parallel_config.data_parallel_size_local == 1
-            or aphrodite_config.parallel_config.data_parallel_rank_local == 0
+            sonar_config.parallel_config.data_parallel_size_local == 1
+            or sonar_config.parallel_config.data_parallel_rank_local == 0
         ):
             # Start internal API server if enabled
             # The enabled check is in the InternalAPIServer constructor
@@ -667,61 +667,61 @@ class LMCacheConnectorV1Impl:
             self.api_server = None  # type: ignore[assignment]
             self.plugin_launcher = None  # type: ignore[assignment]
         logger.info(
-            "LMCache initialized for role %s with version %s, aphrodite version %s, lmcache cache_engine metadata: %s",
+            "LMCache initialized for role %s with version %s, sonar version %s, lmcache cache_engine metadata: %s",
             role,
             utils.get_version(),
-            APHRODITE_VERSION,
+            SONAR_VERSION,
             getattr(self.lmcache_engine, "metadata", None),
         )
 
     def get_inference_info(self) -> dict:
-        """Get inference information including Aphrodite config and related details.
+        """Get inference information including Sonar config and related details.
 
         Returns:
             dict: Dictionary containing inference information
 
         """
-        # Get Aphrodite config information
-        aphrodite_config = self._aphrodite_config
+        # Get Sonar config information
+        sonar_config = self._sonar_config
 
-        # Use Aphrodite config's string representation and add specific configs
+        # Use Sonar config's string representation and add specific configs
         inference_info = {
-            "aphrodite_version": APHRODITE_VERSION,
+            "sonar_version": SONAR_VERSION,
             "lmcache_version": utils.get_version(),
-            "aphrodite_config": str(aphrodite_config),
+            "sonar_config": str(sonar_config),
             "model_config": {
-                "model": getattr(aphrodite_config.model_config, "model", None),
-                "dtype": str(getattr(aphrodite_config.model_config, "dtype", None)),
-                "max_model_len": getattr(aphrodite_config.model_config, "max_model_len", None),
-                "vocab_size": aphrodite_config.model_config.get_vocab_size(),
-                "num_layers": getattr(aphrodite_config.model_config, "get_num_layers", lambda _: None)(
-                    aphrodite_config.parallel_config
+                "model": getattr(sonar_config.model_config, "model", None),
+                "dtype": str(getattr(sonar_config.model_config, "dtype", None)),
+                "max_model_len": getattr(sonar_config.model_config, "max_model_len", None),
+                "vocab_size": sonar_config.model_config.get_vocab_size(),
+                "num_layers": getattr(sonar_config.model_config, "get_num_layers", lambda _: None)(
+                    sonar_config.parallel_config
                 ),
-                "num_attention_heads": getattr(
-                    aphrodite_config.model_config, "get_num_attention_heads", lambda _: None
-                )(aphrodite_config.parallel_config),
-                "num_kv_heads": getattr(aphrodite_config.model_config, "get_num_kv_heads", lambda _: None)(
-                    aphrodite_config.parallel_config
+                "num_attention_heads": getattr(sonar_config.model_config, "get_num_attention_heads", lambda _: None)(
+                    sonar_config.parallel_config
                 ),
-                "head_size": getattr(aphrodite_config.model_config, "get_head_size", lambda: None)(),
+                "num_kv_heads": getattr(sonar_config.model_config, "get_num_kv_heads", lambda _: None)(
+                    sonar_config.parallel_config
+                ),
+                "head_size": getattr(sonar_config.model_config, "get_head_size", lambda: None)(),
             },
             "cache_config": {
-                "block_size": getattr(aphrodite_config.cache_config, "block_size", None),
-                "cache_dtype": str(getattr(aphrodite_config.cache_config, "cache_dtype", None)),
-                "gpu_memory_utilization": getattr(aphrodite_config.cache_config, "gpu_memory_utilization", None),
+                "block_size": getattr(sonar_config.cache_config, "block_size", None),
+                "cache_dtype": str(getattr(sonar_config.cache_config, "cache_dtype", None)),
+                "gpu_memory_utilization": getattr(sonar_config.cache_config, "gpu_memory_utilization", None),
             },
         }
 
         return inference_info
 
     def get_inference_version(self) -> str:
-        """Get Aphrodite version information.
+        """Get Sonar version information.
 
         Returns:
-            str: Aphrodite version string
+            str: Sonar version string
 
         """
-        return APHRODITE_VERSION
+        return SONAR_VERSION
 
     @_lmcache_nvtx_annotate
     def _init_kv_caches_from_forward_context(self, forward_context: "ForwardContext"):
@@ -762,7 +762,7 @@ class LMCacheConnectorV1Impl:
 
     @_lmcache_nvtx_annotate
     def start_load_kv(self, forward_context: "ForwardContext", **kwargs) -> None:
-        """Start loading the KV cache from the connector buffer to Aphrodite's
+        """Start loading the KV cache from the connector buffer to Sonar's
         paged KV buffer.
 
         Args:
@@ -805,10 +805,10 @@ class LMCacheConnectorV1Impl:
             slot_mapping = request.slot_mapping.cuda()
             assert len(tokens) == len(slot_mapping)
 
-            self._stats_monitor.update_interval_aphrodite_hit_tokens(request.load_spec.aphrodite_cached_tokens)
+            self._stats_monitor.update_interval_sonar_hit_tokens(request.load_spec.sonar_cached_tokens)
             token_mask = torch.ones(len(tokens), dtype=torch.bool)
             masked_token_count = (
-                request.load_spec.aphrodite_cached_tokens // self._lmcache_chunk_size * self._lmcache_chunk_size
+                request.load_spec.sonar_cached_tokens // self._lmcache_chunk_size * self._lmcache_chunk_size
             )
             token_mask[:masked_token_count] = False
 
@@ -849,7 +849,7 @@ class LMCacheConnectorV1Impl:
 
                 # Check the result
                 num_retrieved_tokens = ret_token_mask.sum().item()
-                num_expected_tokens = lmcache_cached_tokens - request.load_spec.aphrodite_cached_tokens
+                num_expected_tokens = lmcache_cached_tokens - request.load_spec.sonar_cached_tokens
                 if num_retrieved_tokens < num_expected_tokens:
                     logger.error(
                         "The number of retrieved tokens is less than the "
@@ -863,7 +863,7 @@ class LMCacheConnectorV1Impl:
 
     @_lmcache_nvtx_annotate
     def wait_for_layer_load(self, layer_name: str) -> None:
-        """Blocking until the KV for a specific layer is loaded into Aphrodite's
+        """Blocking until the KV for a specific layer is loaded into Sonar's
         paged buffer.
 
         This interface will be useful for layer-by-layer pipelining.
@@ -894,13 +894,13 @@ class LMCacheConnectorV1Impl:
         attn_metadata: AttentionMetadata,
         **kwargs,
     ) -> None:
-        """Start saving the a layer of KV cache from Aphrodite's paged buffer
+        """Start saving the a layer of KV cache from Sonar's paged buffer
         to the connector.
 
         Args:
             layer_name (str): the name of the layer.
             kv_layer (torch.Tensor): the paged KV buffer of the current
-                layer in Aphrodite.
+                layer in Sonar.
             attn_metadata (AttentionMetadata): the attention metadata.
 
         """
@@ -1136,7 +1136,7 @@ class LMCacheConnectorV1Impl:
 
         # When prompt length is divisible by the block size and all
         # blocks are cached, we need to recompute the last token.
-        # This will be removed in the future if Aphrodite's scheduler provides
+        # This will be removed in the future if Sonar's scheduler provides
         # a better support for this case.
         need_to_allocate = num_external_hit_tokens - num_computed_tokens
 
@@ -1153,7 +1153,7 @@ class LMCacheConnectorV1Impl:
         )
 
         self.load_specs[request.request_id] = LoadSpec(
-            aphrodite_cached_tokens=num_computed_tokens,
+            sonar_cached_tokens=num_computed_tokens,
             lmcache_cached_tokens=num_external_hit_tokens,
             can_load=False,
         )
@@ -1207,11 +1207,11 @@ class LMCacheConnectorV1Impl:
                 num_external_tokens > 0
                 and num_external_tokens
                 == self.load_specs[request.request_id].lmcache_cached_tokens
-                - self.load_specs[request.request_id].aphrodite_cached_tokens
+                - self.load_specs[request.request_id].sonar_cached_tokens
             ), (
                 f"Mismatch in number of tokens: {num_external_tokens} vs "
                 f"{self.load_specs[request.request_id].lmcache_cached_tokens} -"
-                f" {self.load_specs[request.request_id].aphrodite_cached_tokens}"
+                f" {self.load_specs[request.request_id].sonar_cached_tokens}"
                 f" for request {request.request_id}"
             )
 
@@ -1276,8 +1276,8 @@ class LMCacheConnectorV1Impl:
 
         cached_reqs = scheduler_output.scheduled_cached_reqs
 
-        # NOTE: For backward compatibility with aphrodite version < 0.9.2,
-        # In the latest aphrodite version, the type of scheduled_cached_reqs has
+        # NOTE: For backward compatibility with sonar version < 0.9.2,
+        # In the latest sonar version, the type of scheduled_cached_reqs has
         # changed from list to object `CachedRequestData`
         if isinstance(cached_reqs, list):
             for i, req in enumerate(cached_reqs):

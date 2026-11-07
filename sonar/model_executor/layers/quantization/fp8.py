@@ -5,45 +5,45 @@ from typing import TYPE_CHECKING, Any, Literal
 
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.config import get_current_aphrodite_config
-from aphrodite.distributed import get_tensor_model_parallel_world_size
-from aphrodite.model_executor.kernels.linear import (
+import sonar.envs as envs
+from sonar.config import get_current_sonar_config
+from sonar.distributed import get_tensor_model_parallel_world_size
+from sonar.model_executor.kernels.linear import (
     fp8_scaled_mm_is_batch_invariant,
     init_fp8_linear_kernel,
 )
-from aphrodite.model_executor.kernels.linear.scaled_mm import (
+from sonar.model_executor.kernels.linear.scaled_mm import (
     MarlinFP8ScaledMMLinearKernel,
 )
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.model_executor.layers.attention import Attention
+from sonar.model_executor.layers.fused_moe import (
     FusedMoEMethodBase,
     FusedMoeWeightScaleSupported,
     RoutedExperts,
     SharedExperts,
     UnquantizedFusedMoEMethod,
 )
-from aphrodite.model_executor.layers.fused_moe.config import FusedMoEQuantConfig
-from aphrodite.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
-from aphrodite.model_executor.layers.fused_moe.oracle.fp8 import (
+from sonar.model_executor.layers.fused_moe.config import FusedMoEQuantConfig
+from sonar.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
+from sonar.model_executor.layers.fused_moe.oracle.fp8 import (
     convert_to_fp8_moe_kernel_format,
     make_fp8_moe_kernel,
     make_fp8_moe_quant_config,
     resolve_fp8_moe_weight_block_shape,
     select_fp8_moe_backend,
 )
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.linear import (
     LinearBase,
     LinearMethodBase,
     UnquantizedLinearMethod,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationMethods
-from aphrodite.model_executor.layers.quantization.base_config import (
+from sonar.model_executor.layers.quantization import QuantizationMethods
+from sonar.model_executor.layers.quantization.base_config import (
     QuantizationConfig,
     QuantizeMethodBase,
 )
-from aphrodite.model_executor.layers.quantization.kv_cache import BaseKVCacheMethod
-from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
+from sonar.model_executor.layers.quantization.kv_cache import BaseKVCacheMethod
+from sonar.model_executor.layers.quantization.utils.fp8_utils import (
     create_fp8_input_scale,
     create_fp8_scale_parameter,
     create_fp8_weight_parameter,
@@ -53,10 +53,10 @@ from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
     validate_fp8_block_shape,
     validate_fp8_block_shape_moe,
 )
-from aphrodite.model_executor.layers.quantization.utils.marlin_utils import (
+from sonar.model_executor.layers.quantization.utils.marlin_utils import (
     get_marlin_input_dtype,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     GroupShape,
     create_fp8_quant_key,
     is_layer_skipped,
@@ -65,26 +65,26 @@ from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
     kFp8DynamicTokenSym,
     kFp8StaticTensorSym,
 )
-from aphrodite.model_executor.layers.quantization.utils.w8a8_utils import (
+from sonar.model_executor.layers.quantization.utils.w8a8_utils import (
     cutlass_fp8_supported,
     normalize_e4m3fn_to_e4m3fnuz,
 )
-from aphrodite.model_executor.parameter import (
+from sonar.model_executor.parameter import (
     BlockQuantScaleParameter,
     PerTensorScaleParameter,
 )
-from aphrodite.model_executor.utils import (
+from sonar.model_executor.utils import (
     is_weights_pre_processed,
     replace_parameter,
     set_weight_attrs,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.deep_gemm import (
+from sonar.platforms import current_platform
+from sonar.utils.deep_gemm import (
     is_deep_gemm_supported,
 )
 
 if TYPE_CHECKING:
-    from aphrodite.model_executor.models.utils import WeightsMapper
+    from sonar.model_executor.models.utils import WeightsMapper
 
 ACTIVATION_SCHEMES = ["static", "dynamic"]
 
@@ -148,9 +148,9 @@ class Fp8Config(QuantizationConfig):
     def get_config_filenames(cls) -> list[str]:
         return []
 
-    def apply_aphrodite_mapper(self, hf_to_aphrodite_mapper: "WeightsMapper"):
+    def apply_sonar_mapper(self, hf_to_sonar_mapper: "WeightsMapper"):
         if self.ignored_layers is not None:
-            self.ignored_layers = hf_to_aphrodite_mapper.apply_list(self.ignored_layers)
+            self.ignored_layers = hf_to_sonar_mapper.apply_list(self.ignored_layers)
 
     @classmethod
     def from_config(cls, config: dict[str, Any]) -> "Fp8Config":
@@ -191,7 +191,7 @@ class Fp8Config(QuantizationConfig):
             ):
                 return UnquantizedFusedMoEMethod(layer.moe_config)
             if self.store_dtype == "mxfp4":
-                from aphrodite.model_executor.layers.quantization.mxfp4 import (
+                from sonar.model_executor.layers.quantization.mxfp4 import (
                     Mxfp4MoEMethod,
                 )
 
@@ -203,8 +203,8 @@ class Fp8Config(QuantizationConfig):
 
     @staticmethod
     def get_cache_scale_mapper() -> "WeightsMapper":
-        """Map compressed-tensors KV-cache scale names to Aphrodite names."""
-        from aphrodite.model_executor.models.utils import WeightsMapper
+        """Map compressed-tensors KV-cache scale names to Sonar names."""
+        from sonar.model_executor.models.utils import WeightsMapper
 
         orig_to_new_suffix = {
             ".k_proj.output_scale": ".attn.k_scale",
@@ -236,7 +236,7 @@ class Fp8LinearMethod(LinearMethodBase):
         self.quant_config = quant_config
         self.is_scale_e8m0 = getattr(quant_config, "is_scale_e8m0", False)
         self.out_dtype = torch.get_default_dtype()
-        self.input_dtype = get_current_aphrodite_config().model_config.dtype
+        self.input_dtype = get_current_sonar_config().model_config.dtype
 
         # For GPUs that lack FP8 hardware support, we can leverage the Marlin
         # kernel for fast weight-only FP8 quantization
@@ -415,7 +415,7 @@ class Fp8LinearMethod(LinearMethodBase):
     ) -> torch.Tensor:
         # if batch invariant mode is enabled, prefer direct FP8 path
         # we will use BF16 dequant when direct FP8 is not supported.
-        if envs.APHRODITE_BATCH_INVARIANT:
+        if envs.SONAR_BATCH_INVARIANT:
             if self.block_quant:
                 assert self.weight_block_size is not None
                 return self.fp8_linear.apply_weights(
@@ -493,7 +493,7 @@ class Fp8MoEMethod(FusedMoEMethodBase):
             weight_key = kFp8StaticTensorSym
             if self.quant_config.activation_scheme == "static":
                 activation_key = kFp8StaticTensorSym
-            elif envs.APHRODITE_BATCH_INVARIANT:
+            elif envs.SONAR_BATCH_INVARIANT:
                 # A per-tensor dynamic scale is the max over every token in
                 # the batch, so a request's quantized activations would depend
                 # on the requests it is batched with.
@@ -507,7 +507,7 @@ class Fp8MoEMethod(FusedMoEMethodBase):
             config=self.moe,
             weight_key=weight_key,
             activation_key=activation_key,
-            allow_aphrodite_cutlass=False,
+            allow_sonar_cutlass=False,
         )
 
     def create_weights(

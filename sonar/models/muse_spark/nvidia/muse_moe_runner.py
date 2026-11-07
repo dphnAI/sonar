@@ -10,73 +10,73 @@ from typing import Any, cast
 
 import torch
 
-from aphrodite.distributed import get_tp_group, tensor_model_parallel_all_reduce
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.distributed import get_tp_group, tensor_model_parallel_all_reduce
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEQuantConfig,
     RoutingMethodType,
     nvfp4_moe_quant_config,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.marlin_moe import MarlinExperts
-from aphrodite.model_executor.layers.fused_moe.experts.triton_moe import TritonExperts
-from aphrodite.model_executor.layers.fused_moe.experts.trtllm_bf16_moe import (
+from sonar.model_executor.layers.fused_moe.experts.marlin_moe import MarlinExperts
+from sonar.model_executor.layers.fused_moe.experts.triton_moe import TritonExperts
+from sonar.model_executor.layers.fused_moe.experts.trtllm_bf16_moe import (
     TrtLlmBf16ExpertsModular,
     TrtLlmBf16ExpertsMonolithic,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.trtllm_nvfp4_moe import (
+from sonar.model_executor.layers.fused_moe.experts.trtllm_nvfp4_moe import (
     TrtLlmNvFp4ExpertsModular,
     TrtLlmNvFp4ExpertsMonolithic,
 )
-from aphrodite.model_executor.layers.fused_moe.fused_moe_method_base import (
+from sonar.model_executor.layers.fused_moe.fused_moe_method_base import (
     FusedMoEMethodBase,
 )
-from aphrodite.model_executor.layers.fused_moe.moe_output import (
+from sonar.model_executor.layers.fused_moe.moe_output import (
     UnfinalizedMoEOutput,
     convert_flashinfer_moe_output,
 )
-from aphrodite.model_executor.layers.fused_moe.oracle.nvfp4 import (
+from sonar.model_executor.layers.fused_moe.oracle.nvfp4 import (
     NvFp4MoeBackend,
     convert_to_nvfp4_moe_kernel_format,
     make_nvfp4_moe_kernel,
     make_nvfp4_moe_quant_config,
 )
-from aphrodite.model_executor.layers.fused_moe.oracle.unquantized import (
+from sonar.model_executor.layers.fused_moe.oracle.unquantized import (
     UnquantizedMoeBackend,
 )
-from aphrodite.model_executor.layers.fused_moe.runner.moe_runner import MoERunner
-from aphrodite.model_executor.layers.fused_moe.unquantized_fused_moe_method import (
+from sonar.model_executor.layers.fused_moe.runner.moe_runner import MoERunner
+from sonar.model_executor.layers.fused_moe.unquantized_fused_moe_method import (
     UnquantizedFusedMoEMethod,
 )
-from aphrodite.model_executor.layers.fused_moe.utils import fi_moe_largest_bucket
-from aphrodite.model_executor.layers.quantization.base_config import QuantizationConfig
-from aphrodite.model_executor.layers.quantization.modelopt import (
+from sonar.model_executor.layers.fused_moe.utils import fi_moe_largest_bucket
+from sonar.model_executor.layers.quantization.base_config import QuantizationConfig
+from sonar.model_executor.layers.quantization.modelopt import (
     ModelOptNvFp4Config,
     ModelOptNvFp4FusedMoE,
 )
-from aphrodite.model_executor.layers.quantization.utils.flashinfer_utils import (
+from sonar.model_executor.layers.quantization.utils.flashinfer_utils import (
     activation_to_flashinfer_int,
 )
-from aphrodite.model_executor.utils import replace_parameter
-from aphrodite.models.muse_spark.common.moe import (  # noqa: F401 re-exported
+from sonar.model_executor.utils import replace_parameter
+from sonar.models.muse_spark.common.moe import (  # noqa: F401 re-exported
     MuseSpark1xRouter,
     MuseSparkConsolidatedRoutedExperts,
     needs_pre_norm_all_reduce,
 )
-from aphrodite.models.muse_spark.common.moe import (
+from sonar.models.muse_spark.common.moe import (
     MuseSparkMoEConfig as CommonMuseSparkMoEConfig,
 )
-from aphrodite.models.muse_spark.common.ops.fused_finalize import fused_post_expert_finalize
-from aphrodite.models.muse_spark.nvidia.ops.cute_dsl.moe_finalize_rmsnorm import (
+from sonar.models.muse_spark.common.ops.fused_finalize import fused_post_expert_finalize
+from sonar.models.muse_spark.nvidia.ops.cute_dsl.moe_finalize_rmsnorm import (
     moe_finalize_with_rmsnorm,
     supports_moe_finalize,
 )
-from aphrodite.models.muse_spark.nvidia.ops.mnnvl_fusions import (
+from sonar.models.muse_spark.nvidia.ops.mnnvl_fusions import (
     maybe_create_moe_finalize_all_reduce,
     tp_group_spans_nodes,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 logger = init_logger(__name__)
 

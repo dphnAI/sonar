@@ -10,5 +10,5 @@ def enable_qwen4_exp_low_latency_gemm(
     module: nn.Module,
     dtype: torch.dtype,
 ) -> None:
-    """Keep the standard Aphrodite linear methods on AMD ROCm."""
+    """Keep the standard Sonar linear methods on AMD ROCm."""
     del module, dtype

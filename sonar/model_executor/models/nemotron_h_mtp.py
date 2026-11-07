@@ -9,31 +9,31 @@ import torch
 import torch.nn as nn
 from transformers import NemotronHConfig
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, CacheConfig, ModelConfig
-from aphrodite.config.parallel import ParallelConfig
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import CacheConfig, ModelConfig, SonarConfig
+from sonar.config.parallel import ParallelConfig
+from sonar.model_executor.layers.fused_moe import (
     fused_moe_make_expert_params_mapping,
 )
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import ColumnParallelLinear
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import ColumnParallelLinear
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.model_loader.weight_utils import (
+from sonar.model_executor.model_loader.weight_utils import (
     default_weight_loader,
     maybe_remap_kv_scale_name,
 )
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.models.utils import (
     WeightsMapper,
     get_draft_quant_config,
     make_empty_intermediate_tensors_factory,
     maybe_prefix,
 )
-from aphrodite.sequence import IntermediateTensors
+from sonar.sequence import IntermediateTensors
 
 from .interfaces import SupportsPP, SupportsQuant
 from .nemotron_h import (
@@ -216,19 +216,19 @@ class NemotronHMultiTokenPredictor(nn.Module):
     def __init__(
         self,
         *,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         quant_config: QuantizationConfig | None = None,
         prefix: str = "",
     ):
         super().__init__()
 
-        speculative_config = aphrodite_config.speculative_config
+        speculative_config = sonar_config.speculative_config
         assert speculative_config is not None
         draft_model_config = speculative_config.draft_model_config
         assert draft_model_config is not None
         config = draft_model_config.hf_config.get_text_config()
         if quant_config is None:
-            quant_config = get_draft_quant_config(aphrodite_config)
+            quant_config = get_draft_quant_config(sonar_config)
 
         self.config = config
         self.vocab_size = config.vocab_size
@@ -264,9 +264,9 @@ class NemotronHMultiTokenPredictor(nn.Module):
                 config=config,
                 layer_idx=self.mtp_start_layer_idx + i,
                 model_config=draft_model_config,
-                cache_config=aphrodite_config.cache_config,
+                cache_config=sonar_config.cache_config,
                 quant_config=quant_config,
-                parallel_config=aphrodite_config.parallel_config,
+                parallel_config=sonar_config.parallel_config,
                 prefix=layer_prefix,
                 has_start_projections=is_start_of_step,
                 has_end_norm=is_end_of_step,
@@ -317,7 +317,7 @@ class NemotronHMTP(nn.Module, SupportsPP, SupportsQuant):
     has_own_embed_tokens = False
     has_own_lm_head = False
 
-    hf_to_aphrodite_mapper = WeightsMapper(orig_to_new_prefix={"language_model.": ""})
+    hf_to_sonar_mapper = WeightsMapper(orig_to_new_prefix={"language_model.": ""})
 
     packed_modules_mapping = {
         "qkv_proj": [
@@ -327,26 +327,26 @@ class NemotronHMTP(nn.Module, SupportsPP, SupportsQuant):
         ],
     }
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        speculative_config = aphrodite_config.speculative_config
+        speculative_config = sonar_config.speculative_config
         assert speculative_config is not None
         draft_model_config = speculative_config.draft_model_config
         assert draft_model_config is not None
         config = draft_model_config.hf_config.get_text_config()
-        self.aphrodite_config = aphrodite_config
+        self.sonar_config = sonar_config
         self.config = config
         # Needed for load_weights mapping
         self.mtp_start_layer_idx = config.num_hidden_layers
 
         # EPLB config for experts
         self.num_redundant_experts = 0
-        if aphrodite_config.parallel_config and aphrodite_config.parallel_config.eplb_config:
-            self.num_redundant_experts = aphrodite_config.parallel_config.eplb_config.num_redundant_experts
+        if sonar_config.parallel_config and sonar_config.parallel_config.eplb_config:
+            self.num_redundant_experts = sonar_config.parallel_config.eplb_config.num_redundant_experts
 
         # MTP predictor
         self.model = NemotronHMultiTokenPredictor(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             quant_config=self.quant_config,
             prefix=maybe_prefix(prefix, "mtp"),
         )
@@ -359,9 +359,9 @@ class NemotronHMTP(nn.Module, SupportsPP, SupportsQuant):
 
     @staticmethod
     def _find_quant_config(*args, **kwargs) -> QuantizationConfig | None:
-        aphrodite_config = kwargs.get("aphrodite_config")
-        assert isinstance(aphrodite_config, AphroditeConfig)
-        return get_draft_quant_config(aphrodite_config)
+        sonar_config = kwargs.get("sonar_config")
+        assert isinstance(sonar_config, SonarConfig)
+        return get_draft_quant_config(sonar_config)
 
     def get_input_embeddings(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.model.get_input_embeddings(input_ids)

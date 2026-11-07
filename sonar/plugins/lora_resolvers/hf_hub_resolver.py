@@ -3,12 +3,12 @@
 import asyncio
 import os
 
-import aphrodite.envs as envs
-from aphrodite.logger import init_logger
-from aphrodite.lora.request import LoRARequest
-from aphrodite.lora.resolver import LoRAResolverRegistry
-from aphrodite.plugins.lora_resolvers.filesystem_resolver import FilesystemResolver
-from aphrodite.transformers_utils.repo_utils import hf_api
+import sonar.envs as envs
+from sonar.logger import init_logger
+from sonar.lora.request import LoRARequest
+from sonar.lora.resolver import LoRAResolverRegistry
+from sonar.plugins.lora_resolvers.filesystem_resolver import FilesystemResolver
+from sonar.transformers_utils.repo_utils import hf_api
 
 logger = init_logger(__name__)
 
@@ -114,15 +114,15 @@ class HfHubResolver(FilesystemResolver):
 
 
 def register_hf_hub_resolver():
-    """Register the Hf hub LoRA Resolver with Aphrodite."""
-    hf_repo_list = envs.APHRODITE_LORA_RESOLVER_HF_REPO_LIST
-    is_enabled = envs.APHRODITE_PLUGINS is not None and "lora_hf_hub_resolver" in envs.APHRODITE_PLUGINS
+    """Register the Hf hub LoRA Resolver with Sonar."""
+    hf_repo_list = envs.SONAR_LORA_RESOLVER_HF_REPO_LIST
+    is_enabled = envs.SONAR_PLUGINS is not None and "lora_hf_hub_resolver" in envs.SONAR_PLUGINS
     if hf_repo_list:
         if not is_enabled:
             logger.warning(
-                "It appears that APHRODITE_LORA_RESOLVER_HF_REPO_LIST is set, but "
-                "lora_hf_hub_resolver is not enabled in APHRODITE_PLUGINS; you must"
-                " enable this resolver directly in APHRODITE_PLUGINS to use it "
+                "It appears that SONAR_LORA_RESOLVER_HF_REPO_LIST is set, but "
+                "lora_hf_hub_resolver is not enabled in SONAR_PLUGINS; you must"
+                " enable this resolver directly in SONAR_PLUGINS to use it "
                 " because it allows remote downloads."
             )
         else:

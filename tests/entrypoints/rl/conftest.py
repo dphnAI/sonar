@@ -26,7 +26,7 @@ import requests
 # ---------------------------------------------------------------------------
 
 
-MODEL_NAME = os.environ.get("APHRODITE_TEST_MODEL", "Qwen/Qwen3-0.6B")
+MODEL_NAME = os.environ.get("SONAR_TEST_MODEL", "Qwen/Qwen3-0.6B")
 
 
 _BASE_ARGS = [
@@ -83,7 +83,7 @@ def server(
     timeout: float = 180.0,
     dummy_weights: bool = False,
 ):
-    """Launch a Aphrodite server with the dev router; yield its base URL.
+    """Launch a Sonar server with the dev router; yield its base URL.
 
     Args:
         extra_args:      Additional CLI flags appended after the base args.
@@ -92,12 +92,12 @@ def server(
         dummy_weights:   If True, use --load-format dummy (fast, no real weights).
 
     """
-    env = {**os.environ, "APHRODITE_SERVER_DEV_MODE": "1"}
+    env = {**os.environ, "SONAR_SERVER_DEV_MODE": "1"}
     base = _DUMMY_ARGS if dummy_weights else _BASE_ARGS
     cmd = [
         sys.executable,
         "-m",
-        "aphrodite.entrypoints.openai.api_server",
+        "sonar.entrypoints.openai.api_server",
         "--model",
         MODEL_NAME,
         "--port",
@@ -113,14 +113,14 @@ def server(
         while time.time() < deadline:
             if proc.poll() is not None:
                 err = proc.stderr.read(4000).decode(errors="replace") if proc.stderr else ""
-                raise RuntimeError(f"aphrodite server exited during startup:\n{err}")
+                raise RuntimeError(f"sonar server exited during startup:\n{err}")
             with contextlib.suppress(Exception):
                 if requests.get(f"{url}/health", timeout=3).status_code == 200:
                     break
             time.sleep(1)
         else:
             proc.terminate()
-            raise RuntimeError("aphrodite server did not start in time")
+            raise RuntimeError("sonar server did not start in time")
         _warm_up(url)
         yield url
     finally:

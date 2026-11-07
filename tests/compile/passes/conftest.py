@@ -4,8 +4,8 @@
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.v1.worker.workspace import init_workspace_manager, reset_workspace_manager
+from sonar.platforms import current_platform
+from sonar.v1.worker.workspace import init_workspace_manager, reset_workspace_manager
 
 
 @pytest.fixture(autouse=True)

@@ -80,13 +80,13 @@ guide: |
 
   ## Prerequisites
 
-  - **Aphrodite:** 0.20.0 or newer. `Param2MoEForCausalLM` was registered upstream in
+  - **Sonar:** 0.20.0 or newer. `Param2MoEForCausalLM` was registered upstream in
     [PR #38000](https://github.com/vllm-project/vllm/pull/38000) and the
     tensor-parallel attention-head fix landed in
     [PR #39707](https://github.com/vllm-project/vllm/pull/39707); both ship in
     v0.20.0. Nothing extra needs to be installed.
-  - **`--trust-remote-code` is required.** Aphrodite implements the model natively
-    (`aphrodite/model_executor/models/param2moe.py`), but `model_type: param2moe` is
+  - **`--trust-remote-code` is required.** Sonar implements the model natively
+    (`sonar/model_executor/models/param2moe.py`), but `model_type: param2moe` is
     not registered with Transformers, so the config still loads from the repo's
     `configuration_param2moe.py`.
   - **Hardware:** one GPU is enough. The BF16 weights are ~34.3 GB, so an H100
@@ -104,7 +104,7 @@ guide: |
   This is the exact configuration verified on both H100 and L40S:
 
   ```bash
-  aphrodite serve bharatgenai/Param2-17B-A2.4B-Thinking \
+  sonar serve bharatgenai/Param2-17B-A2.4B-Thinking \
     --trust-remote-code \
     --async-scheduling \
     --tensor-parallel-size 1 \
@@ -196,7 +196,7 @@ guide: |
   ## Benchmarking
 
   ```bash
-  aphrodite bench serve \
+  sonar bench serve \
     --model bharatgenai/Param2-17B-A2.4B-Thinking \
     --dataset-name random \
     --random-input-len 2048 \
@@ -230,6 +230,6 @@ guide: |
 
   - [Param2-17B-A2.4B-Thinking on Hugging Face](https://huggingface.co/bharatgenai/Param2-17B-A2.4B-Thinking)
   - [BharatGen on Hugging Face](https://huggingface.co/bharatgenai)
-  - [Aphrodite support PR #38000 — Add support for BharatGen's Param2MoE model](https://github.com/vllm-project/vllm/pull/38000)
-  - [Aphrodite PR #39707 — Fix attention-head mismatch under tensor parallelism for param2moe](https://github.com/vllm-project/vllm/pull/39707)
-  - [Aphrodite supported models — `Param2MoEForCausalLM`](https://docs.vllm.ai/en/latest/models/supported_models.html)
+  - [Sonar support PR #38000 — Add support for BharatGen's Param2MoE model](https://github.com/vllm-project/vllm/pull/38000)
+  - [Sonar PR #39707 — Fix attention-head mismatch under tensor parallelism for param2moe](https://github.com/vllm-project/vllm/pull/39707)
+  - [Sonar supported models — `Param2MoEForCausalLM`](https://docs.vllm.ai/en/latest/models/supported_models.html)

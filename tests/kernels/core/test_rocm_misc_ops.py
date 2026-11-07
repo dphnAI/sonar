@@ -27,7 +27,7 @@ import importlib
 
 import pytest
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 pytestmark = pytest.mark.skipif(not current_platform.is_rocm(), reason="ROCm-specific tests")
 
@@ -43,7 +43,7 @@ def test_rocm_extension_imports():
     Catches build/linking issues before runtime. If this fails, the ROCm
     build is broken and nothing else will work.
     """
-    import aphrodite._rocm_C  # noqa: F401
+    import sonar._rocm_C  # noqa: F401
 
 
 def test_aiter_ops_module_imports():
@@ -53,7 +53,7 @@ def test_aiter_ops_module_imports():
     Import failures here indicate missing dependencies or incompatible
     AITER versions.
     """
-    import aphrodite._aiter_ops  # noqa: F401
+    import sonar._aiter_ops  # noqa: F401
 
 
 def test_rocm_platform_module_imports():
@@ -62,7 +62,7 @@ def test_rocm_platform_module_imports():
     The platform module queries hardware via amdsmi and sets up arch flags.
     Import failures indicate missing amdsmi or HIP runtime issues.
     """
-    import aphrodite.platforms.rocm  # noqa: F401
+    import sonar.platforms.rocm  # noqa: F401
 
 
 # ---------------------------------------------------------------------------
@@ -92,7 +92,7 @@ def test_capability_from_gcn_arch_known_gpus(gcn_arch, expected_major, expected_
     - MX format support incorrectly enabled/disabled
     - Custom allreduce used on unsupported hardware
     """
-    from aphrodite.platforms.rocm import _capability_from_gcn_arch
+    from sonar.platforms.rocm import _capability_from_gcn_arch
 
     result = _capability_from_gcn_arch(gcn_arch)
     assert result is not None, f"Failed to parse {gcn_arch}"
@@ -115,7 +115,7 @@ def test_capability_from_gcn_arch_returns_none_for_non_gfx(gcn_arch):
     Non-GFX strings should return None so the caller can fall back to
     torch.cuda.get_device_capability.
     """
-    from aphrodite.platforms.rocm import _capability_from_gcn_arch
+    from sonar.platforms.rocm import _capability_from_gcn_arch
 
     result = _capability_from_gcn_arch(gcn_arch)
     assert result is None
@@ -136,7 +136,7 @@ def test_capability_from_gcn_arch_raises_for_malformed(gcn_arch):
     Malformed strings that look like GFX but can't be parsed should raise
     so the user gets a clear error message asking them to file an issue.
     """
-    from aphrodite.platforms.rocm import _capability_from_gcn_arch
+    from sonar.platforms.rocm import _capability_from_gcn_arch
 
     with pytest.raises(ValueError, match="GCN arch"):
         _capability_from_gcn_arch(gcn_arch)
@@ -153,7 +153,7 @@ def test_rocm_aiter_ops_accessor_methods_dont_crash():
     These methods gate kernel selection. Even if AITER isn't available,
     they should return False gracefully rather than crashing.
     """
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     # These should all return bool without crashing
     assert isinstance(rocm_aiter_ops.is_enabled(), (bool, type(None)))
@@ -165,7 +165,7 @@ def test_rocm_aiter_ops_accessor_methods_dont_crash():
 
 def test_rocm_aiter_ops_is_aiter_found():
     """is_aiter_found returns consistent results."""
-    from aphrodite._aiter_ops import IS_AITER_FOUND, is_aiter_found
+    from sonar._aiter_ops import IS_AITER_FOUND, is_aiter_found
 
     # The cached global should match the function result
     assert is_aiter_found() == IS_AITER_FOUND
@@ -177,7 +177,7 @@ def test_rocm_aiter_ops_refresh_env_variables_doesnt_crash():
     This is called after monkeypatching env vars in tests. It should
     never crash, even with unusual env var combinations.
     """
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     # Should not raise
     rocm_aiter_ops.refresh_env_variables()
@@ -190,29 +190,29 @@ def test_rocm_aiter_ops_refresh_env_variables_doesnt_crash():
 
 @pytest.mark.parametrize("enabled", [True, False])
 def test_shuffle_kv_cache_env_propagates_to_rocm_aiter_ops(enabled, monkeypatch):
-    """APHRODITE_ROCM_SHUFFLE_KV_CACHE_LAYOUT propagates to AITER state."""
-    import aphrodite.envs as envs
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    """SONAR_ROCM_SHUFFLE_KV_CACHE_LAYOUT propagates to AITER state."""
+    import sonar.envs as envs
+    from sonar._aiter_ops import rocm_aiter_ops
 
-    monkeypatch.setenv("APHRODITE_ROCM_SHUFFLE_KV_CACHE_LAYOUT", "1" if enabled else "0")
+    monkeypatch.setenv("SONAR_ROCM_SHUFFLE_KV_CACHE_LAYOUT", "1" if enabled else "0")
     importlib.reload(envs)
     rocm_aiter_ops.refresh_env_variables()
 
-    assert envs.APHRODITE_ROCM_SHUFFLE_KV_CACHE_LAYOUT is enabled
+    assert envs.SONAR_ROCM_SHUFFLE_KV_CACHE_LAYOUT is enabled
     assert rocm_aiter_ops.is_shuffle_kv_cache_enabled() is enabled
 
 
 @pytest.mark.parametrize("enabled", [True, False])
 def test_skinny_gemm_env_controls_rocm_fp8_scaled_mm_support(enabled, monkeypatch):
-    """APHRODITE_ROCM_USE_SKINNY_GEMM gates ROCm FP8 scaled-mm kernel eligibility."""
-    import aphrodite.envs as envs
-    from aphrodite.model_executor.kernels.linear.scaled_mm.rocm import (
+    """SONAR_ROCM_USE_SKINNY_GEMM gates ROCm FP8 scaled-mm kernel eligibility."""
+    import sonar.envs as envs
+    from sonar.model_executor.kernels.linear.scaled_mm.rocm import (
         ROCmFP8ScaledMMLinearKernel,
     )
 
-    monkeypatch.setenv("APHRODITE_ROCM_USE_SKINNY_GEMM", "1" if enabled else "0")
+    monkeypatch.setenv("SONAR_ROCM_USE_SKINNY_GEMM", "1" if enabled else "0")
     importlib.reload(envs)
-    monkeypatch.setattr("aphrodite.platforms.rocm.on_mi3xx", lambda: True)
+    monkeypatch.setattr("sonar.platforms.rocm.on_mi3xx", lambda: True)
 
     supported, reason = ROCmFP8ScaledMMLinearKernel.is_supported()
 
@@ -220,4 +220,4 @@ def test_skinny_gemm_env_controls_rocm_fp8_scaled_mm_support(enabled, monkeypatc
     if enabled:
         assert reason is None
     else:
-        assert reason == "requires APHRODITE_ROCM_USE_SKINNY_GEMM to be enabled."
+        assert reason == "requires SONAR_ROCM_USE_SKINNY_GEMM to be enabled."

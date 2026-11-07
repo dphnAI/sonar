@@ -7,8 +7,8 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_random_seed
 
 pytestmark = pytest.mark.skipif(not current_platform.is_rocm(), reason="Only used by ROCm")
 
@@ -17,7 +17,7 @@ def _on_split_decode_arch() -> bool:
     if not current_platform.is_rocm():
         return False
     try:
-        from aphrodite.platforms.rocm import _ON_GFX942, _ON_GFX950
+        from sonar.platforms.rocm import _ON_GFX942, _ON_GFX950
 
         return bool(_ON_GFX942 or _ON_GFX950)
     except Exception:
@@ -28,7 +28,7 @@ def _on_gfx950() -> bool:
     if not current_platform.is_rocm():
         return False
     try:
-        from aphrodite.platforms.rocm import _ON_GFX950
+        from sonar.platforms.rocm import _ON_GFX950
 
         return _ON_GFX950
     except ImportError:
@@ -53,10 +53,10 @@ HEAD_DIM = NOPE_HEAD_DIM + ROPE_HEAD_DIM
 
 @pytest.fixture
 def enable_aiter_mqa(monkeypatch):
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     with monkeypatch.context() as context:
-        context.setenv("APHRODITE_ROCM_USE_AITER", "1")
+        context.setenv("SONAR_ROCM_USE_AITER", "1")
         rocm_aiter_ops.refresh_env_variables()
         yield
     rocm_aiter_ops.refresh_env_variables()
@@ -66,9 +66,9 @@ def enable_aiter_mqa(monkeypatch):
 @pytest.mark.parametrize("column_scales", [False, True], ids=["vector", "column"])
 @torch.inference_mode()
 def test_unpaged_mqa_logits_preserves_intervals_and_scale_layout(column_scales, monkeypatch, enable_aiter_mqa) -> None:
-    """The Aphrodite AITER dispatch honors ragged intervals and per-token scales."""
-    from aphrodite._aiter_ops import rocm_aiter_ops
-    from aphrodite.v1.attention.ops import rocm_aiter_mla_sparse as mod
+    """The Sonar AITER dispatch honors ragged intervals and per-token scales."""
+    from sonar._aiter_ops import rocm_aiter_ops
+    from sonar.v1.attention.ops import rocm_aiter_mla_sparse as mod
 
     assert rocm_aiter_ops.is_enabled(), "AITER is required on gfx950"
     assert mod.mqa_logits_module() is not None, "AITER MQA logits are required"
@@ -160,7 +160,7 @@ def _ref_sparse_prefill_ragged(
 
 def _pack_fp8_ds_mla_cache(kv: torch.Tensor, block_size: int, use_fnuz: bool) -> torch.Tensor:
     assert kv.shape[-1] == HEAD_DIM
-    from aphrodite.models.deepseek_v4.common.ops.cache_utils import (
+    from sonar.models.deepseek_v4.common.ops.cache_utils import (
         quantize_and_insert_k_cache,
     )
 
@@ -299,7 +299,7 @@ def _launch_sparse_decode_reduce(
 
     Passing ``out_scale`` selects the MXFP8 epilogue (``out_dtype`` e4m3).
     """
-    from aphrodite.v1.attention.ops import rocm_aiter_mla_sparse as mod
+    from sonar.v1.attention.ops import rocm_aiter_mla_sparse as mod
 
     num_queries, num_splits, num_heads = part_m.shape
     out = torch.empty(
@@ -345,7 +345,7 @@ def _launch_sparse_decode_reduce(
 
 @torch.inference_mode()
 def test_compute_global_topk_ragged_indices_and_indptr() -> None:
-    from aphrodite.models.deepseek_v4.amd.rocm import (
+    from sonar.models.deepseek_v4.amd.rocm import (
         compute_global_topk_ragged_indices_and_indptr,
     )
 
@@ -395,7 +395,7 @@ def test_compute_global_topk_ragged_indices_and_indptr() -> None:
 @pytest.mark.parametrize("num_queries", [1, 70, 1000])
 @torch.inference_mode()
 def test_build_ragged_indices_from_dense_drops_invalid_entries(width: int, num_queries: int) -> None:
-    from aphrodite.v1.attention.ops.rocm_aiter_mla_sparse import (
+    from sonar.v1.attention.ops.rocm_aiter_mla_sparse import (
         build_ragged_indices_from_dense,
     )
 
@@ -419,7 +419,7 @@ def test_build_ragged_indices_from_dense_drops_invalid_entries(width: int, num_q
 
 @torch.inference_mode()
 def test_combine_topk_swa_indices_adds_image_visibility() -> None:
-    from aphrodite.models.deepseek_v4.amd.rocm import combine_topk_swa_indices
+    from sonar.models.deepseek_v4.amd.rocm import combine_topk_swa_indices
 
     device = torch.device("cuda")
     num_tokens = 8
@@ -462,7 +462,7 @@ def test_combine_topk_swa_indices_adds_image_visibility() -> None:
 
 @torch.inference_mode()
 def test_combine_topk_swa_indices_apc_hit_inside_image() -> None:
-    from aphrodite.models.deepseek_v4.amd.rocm import combine_topk_swa_indices
+    from sonar.models.deepseek_v4.amd.rocm import combine_topk_swa_indices
 
     device = torch.device("cuda")
     indices, lens = combine_topk_swa_indices(
@@ -488,7 +488,7 @@ def test_combine_topk_swa_indices_apc_hit_inside_image() -> None:
 
 @torch.inference_mode()
 def test_combine_topk_swa_indices_keeps_vision_row_width_without_images() -> None:
-    from aphrodite.models.deepseek_v4.amd.rocm import combine_topk_swa_indices
+    from sonar.models.deepseek_v4.amd.rocm import combine_topk_swa_indices
 
     device = torch.device("cuda")
     indices, lens = combine_topk_swa_indices(
@@ -509,7 +509,7 @@ def test_combine_topk_swa_indices_keeps_vision_row_width_without_images() -> Non
 
 
 def test_extra_cache_nan_free_provenance_gate(monkeypatch) -> None:
-    from aphrodite.models.deepseek_v4.amd import rocm as mod
+    from sonar.models.deepseek_v4.amd import rocm as mod
 
     monkeypatch.setattr(mod, "_ON_GFX950", True)
     assert mod._trust_dsv4_extra_cache_nan_free("fp8_ds_mla", False, True)
@@ -523,7 +523,7 @@ def test_extra_cache_nan_free_provenance_gate(monkeypatch) -> None:
 
 @torch.inference_mode()
 def test_sparse_attn_prefill_ragged_kernel() -> None:
-    from aphrodite.v1.attention.ops.rocm_aiter_mla_sparse import (
+    from sonar.v1.attention.ops.rocm_aiter_mla_sparse import (
         _rocm_sparse_attn_prefill_ragged_triton,
     )
 
@@ -588,7 +588,7 @@ _NOPE_ONLY_KV_LENS = [0, 1, 3, 37, 129, 2048]
 @torch.inference_mode()
 def test_sparse_attn_decode_bf16_split_k_matches_ragged(num_splits: int, with_sink: bool) -> None:
     """Split-K decode must reproduce the single-workgroup ragged kernel."""
-    from aphrodite.v1.attention.ops.rocm_aiter_mla_sparse import (
+    from sonar.v1.attention.ops.rocm_aiter_mla_sparse import (
         _rocm_sparse_attn_decode_ragged_bf16_triton,
         _rocm_sparse_attn_prefill_ragged_triton,
     )
@@ -648,7 +648,7 @@ SPARSE_PREFILL_DIMS = [(NOPE_HEAD_DIM, ROPE_HEAD_DIM), (512, 64), (256, 0)]
 @pytest.mark.parametrize(("nope_dim", "rope_dim"), SPARSE_PREFILL_DIMS)
 @torch.inference_mode()
 def test_sparse_attn_prefill_ragged_out_matches_allocated(nope_dim: int, rope_dim: int) -> None:
-    from aphrodite.v1.attention.ops.rocm_aiter_mla_sparse import (
+    from sonar.v1.attention.ops.rocm_aiter_mla_sparse import (
         _rocm_sparse_attn_prefill_ragged_triton,
     )
 
@@ -666,7 +666,7 @@ def test_sparse_attn_prefill_ragged_out_matches_allocated(nope_dim: int, rope_di
 @pytest.mark.parametrize(("nope_dim", "rope_dim"), SPARSE_PREFILL_DIMS)
 @torch.inference_mode()
 def test_sparse_attn_prefill_ragged_out_view_leaves_neighbors_untouched(nope_dim: int, rope_dim: int) -> None:
-    from aphrodite.v1.attention.ops.rocm_aiter_mla_sparse import (
+    from sonar.v1.attention.ops.rocm_aiter_mla_sparse import (
         _rocm_sparse_attn_prefill_ragged_triton,
     )
 
@@ -697,7 +697,7 @@ def test_sparse_attn_prefill_ragged_out_view_leaves_neighbors_untouched(nope_dim
 def test_sparse_attn_prefill_ragged_out_casts_to_dest_dtype(
     out_dtype: torch.dtype,
 ) -> None:
-    from aphrodite.v1.attention.ops.rocm_aiter_mla_sparse import (
+    from sonar.v1.attention.ops.rocm_aiter_mla_sparse import (
         _rocm_sparse_attn_prefill_ragged_triton,
     )
 
@@ -713,7 +713,7 @@ def test_sparse_attn_prefill_ragged_out_casts_to_dest_dtype(
 
 @torch.inference_mode()
 def test_sparse_attn_prefill_head_dim_wide_out_keeps_rope_rows() -> None:
-    from aphrodite.v1.attention.ops.rocm_aiter_mla_sparse import (
+    from sonar.v1.attention.ops.rocm_aiter_mla_sparse import (
         _rocm_sparse_attn_prefill_ragged_triton,
     )
 
@@ -733,7 +733,7 @@ def test_sparse_attn_prefill_head_dim_wide_out_keeps_rope_rows() -> None:
     [(1023, True, False), (1024, True, True), (1024, False, False)],
 )
 def test_aiter_sparse_prefill_opus_selection(num_queries: int, on_gfx950: bool, expected: bool) -> None:
-    from aphrodite.v1.attention.ops.rocm_aiter_mla_sparse import (
+    from sonar.v1.attention.ops.rocm_aiter_mla_sparse import (
         _can_use_aiter_sparse_prefill_opus,
     )
 
@@ -747,7 +747,7 @@ def test_aiter_sparse_prefill_opus_selection(num_queries: int, on_gfx950: bool, 
 
 
 def test_aiter_sparse_prefill_opus_selection_rejects_incompatible_inputs() -> None:
-    from aphrodite.v1.attention.ops.rocm_aiter_mla_sparse import (
+    from sonar.v1.attention.ops.rocm_aiter_mla_sparse import (
         _can_use_aiter_sparse_prefill_opus,
     )
 
@@ -770,7 +770,7 @@ def test_aiter_sparse_prefill_opus_selection_rejects_incompatible_inputs() -> No
 
 
 def test_sparse_attn_prefill_aiter_opus_routing(monkeypatch) -> None:
-    from aphrodite.v1.attention.ops import rocm_aiter_mla_sparse as mod
+    from sonar.v1.attention.ops import rocm_aiter_mla_sparse as mod
 
     q = torch.empty(2, 1, HEAD_DIM, dtype=torch.bfloat16)
     kv = torch.empty(2, 1, HEAD_DIM, dtype=torch.bfloat16)
@@ -829,7 +829,7 @@ def test_sparse_attn_prefill_aiter_opus_routing(monkeypatch) -> None:
 
 
 def test_sparse_attn_prefill_preserves_dense_triton_fallback(monkeypatch) -> None:
-    from aphrodite.v1.attention.ops import rocm_aiter_mla_sparse as mod
+    from sonar.v1.attention.ops import rocm_aiter_mla_sparse as mod
 
     q = torch.empty(2, 1, HEAD_DIM, dtype=torch.bfloat16)
     kv = torch.empty(2, 1, HEAD_DIM, dtype=torch.bfloat16)
@@ -875,7 +875,7 @@ def test_sparse_attn_prefill_preserves_dense_triton_fallback(monkeypatch) -> Non
 @torch.inference_mode()
 def test_sparse_attn_prefill_ragged_aiter_opus(monkeypatch) -> None:
     opus_mod = pytest.importorskip("aiter.ops.pa_sparse_prefill_opus")
-    from aphrodite.v1.attention.ops import rocm_aiter_mla_sparse as mod
+    from sonar.v1.attention.ops import rocm_aiter_mla_sparse as mod
 
     monkeypatch.setattr(mod, "_get_aiter_sparse_prefill_opus", lambda: opus_mod.pa_sparse_prefill_opus)
 
@@ -921,7 +921,7 @@ def test_sparse_attn_prefill_ragged_aiter_opus(monkeypatch) -> None:
 
 @torch.inference_mode()
 def test_sparse_attn_decode_ragged_kernel() -> None:
-    from aphrodite.v1.attention.ops.rocm_aiter_mla_sparse import (
+    from sonar.v1.attention.ops.rocm_aiter_mla_sparse import (
         _rocm_sparse_attn_decode_ragged_triton,
     )
 
@@ -975,7 +975,7 @@ def test_sparse_attn_decode_ragged_kernel() -> None:
 @requires_gfx950
 @torch.inference_mode()
 def test_sparse_attn_decode_scrubs_untrusted_cache_by_default() -> None:
-    from aphrodite.v1.attention.ops.rocm_aiter_mla_sparse import (
+    from sonar.v1.attention.ops.rocm_aiter_mla_sparse import (
         _rocm_sparse_attn_decode_ragged_triton,
     )
 
@@ -1009,7 +1009,7 @@ def test_sparse_attn_decode_scrubs_untrusted_cache_by_default() -> None:
 @pytest.mark.parametrize("on_gfx950", [False, True])
 @torch.inference_mode()
 def test_rocm_ragged_graph_buffer_view_tracks_source_width(monkeypatch, on_gfx950: bool) -> None:
-    from aphrodite.models.deepseek_v4.amd import rocm as rocm_mod
+    from sonar.models.deepseek_v4.amd import rocm as rocm_mod
 
     monkeypatch.setattr(rocm_mod, "_ON_GFX950", on_gfx950)
 
@@ -1048,8 +1048,8 @@ def test_rocm_ragged_graph_buffer_view_tracks_source_width(monkeypatch, on_gfx95
 
 
 def test_rocm_capture_metadata_sets_adaptive_marker(monkeypatch) -> None:
-    from aphrodite.models.deepseek_v4.amd import rocm as rocm_mod
-    from aphrodite.models.deepseek_v4.sparse_mla import (
+    from sonar.models.deepseek_v4.amd import rocm as rocm_mod
+    from sonar.models.deepseek_v4.sparse_mla import (
         DeepseekV4SparseMLAMetadataBuilder,
     )
 
@@ -1071,7 +1071,7 @@ def test_rocm_capture_metadata_sets_adaptive_marker(monkeypatch) -> None:
 @torch.inference_mode()
 def test_decode_num_splits_heuristic(monkeypatch) -> None:
     """Split-count heuristic added with the flash-decode split-K decode path."""
-    from aphrodite.v1.attention.ops import rocm_aiter_mla_sparse as mod
+    from sonar.v1.attention.ops import rocm_aiter_mla_sparse as mod
 
     # Pin the CU count so the heuristic is deterministic off-device.
     monkeypatch.setattr(mod, "_decode_cu_count", lambda: 256)
@@ -1094,7 +1094,7 @@ def test_decode_num_splits_heuristic(monkeypatch) -> None:
 
 @torch.inference_mode()
 def test_decode_num_splits_gfx950(monkeypatch) -> None:
-    from aphrodite.v1.attention.ops import rocm_aiter_mla_sparse as mod
+    from sonar.v1.attention.ops import rocm_aiter_mla_sparse as mod
 
     monkeypatch.setattr(mod, "_decode_cu_count", lambda: 256)
     assert mod._decode_gfx950_num_splits(1, 1, 128, 8192) == 32
@@ -1105,7 +1105,7 @@ def test_decode_num_splits_gfx950(monkeypatch) -> None:
 
 def test_sparse_decode_bf16_num_splits_floor_and_tile_clamp(monkeypatch) -> None:
     """Short rows skip splitting, and splits never exceed the tiles they walk."""
-    from aphrodite.v1.attention.ops import rocm_aiter_mla_sparse as mod
+    from sonar.v1.attention.ops import rocm_aiter_mla_sparse as mod
 
     monkeypatch.setattr(mod, "_decode_num_splits", lambda *args: 32)
     monkeypatch.setattr(mod, "_decode_gfx950_num_splits", lambda *args: 32)
@@ -1131,7 +1131,7 @@ def test_sparse_attn_decode_split_k_kernel(monkeypatch, num_splits: int, with_ex
     shortest segment length, covering the empty-split edge case handled by the
     reduce kernel.
     """
-    from aphrodite.v1.attention.ops import rocm_aiter_mla_sparse as mod
+    from sonar.v1.attention.ops import rocm_aiter_mla_sparse as mod
 
     device = torch.device("cuda")
     torch.manual_seed(7)
@@ -1233,7 +1233,7 @@ def test_sparse_attn_decode_reduce_inverse_rope_epilogue(adaptive_splits: bool) 
     lands on ``nope_head_dim // 2``; the NoPE lanes therefore have to come
     back untouched, not merely close.
     """
-    from aphrodite.v1.attention.ops.rocm_aiter_mla_sparse import _fused_inverse_rope_gptj
+    from sonar.v1.attention.ops.rocm_aiter_mla_sparse import _fused_inverse_rope_gptj
 
     device = torch.device("cuda")
     torch.manual_seed(7)
@@ -1270,7 +1270,7 @@ def _random_cos_sin_cache(max_pos: int, device: torch.device) -> torch.Tensor:
 @torch.inference_mode()
 def test_sparse_attn_decode_reduce_mxfp8_epilogue() -> None:
     """QUANT_OUT must equal MXFP8-quantizing the reduce's fp32 output."""
-    from aphrodite.model_executor.layers.quantization.utils.mxfp8_utils import (
+    from sonar.model_executor.layers.quantization.utils.mxfp8_utils import (
         _mxfp8_e4m3_quantize_torch,
     )
 
@@ -1298,10 +1298,10 @@ def test_sparse_attn_decode_reduce_mxfp8_epilogue() -> None:
 @torch.inference_mode()
 def test_inverse_rope_mxfp8_rows() -> None:
     """Prefill rows get the same inverse RoPE + MXFP8 as the decode epilogue."""
-    from aphrodite.model_executor.layers.quantization.utils.mxfp8_utils import (
+    from sonar.model_executor.layers.quantization.utils.mxfp8_utils import (
         _mxfp8_e4m3_quantize_torch,
     )
-    from aphrodite.v1.attention.ops.rocm_aiter_mla_sparse import (
+    from sonar.v1.attention.ops.rocm_aiter_mla_sparse import (
         rocm_inverse_rope_mxfp8_rows,
     )
 
@@ -1334,7 +1334,7 @@ def test_inverse_rope_mxfp8_rows() -> None:
 @torch.inference_mode()
 def test_sparse_attn_decode_mxfp8_output() -> None:
     """``out_mxfp8`` routes the real decode through the MXFP8 epilogue."""
-    from aphrodite.v1.attention.ops.rocm_aiter_mla_sparse import (
+    from sonar.v1.attention.ops.rocm_aiter_mla_sparse import (
         _rocm_sparse_attn_decode_ragged_triton,
     )
 
@@ -1384,13 +1384,13 @@ def test_sparse_attn_decode_mxfp8_output() -> None:
 @pytest.mark.parametrize("block_scales", [False, True])
 @torch.inference_mode()
 def test_rocm_mxfp8_wo_a_bmm(num_tokens: int, n_groups: int, block_scales: bool) -> None:
-    from aphrodite.model_executor.kernels.linear.mxfp8.rocm_native import (
+    from sonar.model_executor.kernels.linear.mxfp8.rocm_native import (
         _as_block32_scale,
     )
-    from aphrodite.model_executor.layers.quantization.utils.mxfp8_utils import (
+    from sonar.model_executor.layers.quantization.utils.mxfp8_utils import (
         _mxfp8_e4m3_quantize_torch,
     )
-    from aphrodite.v1.attention.ops.rocm_aiter_mla_sparse import rocm_mxfp8_wo_a_bmm
+    from sonar.v1.attention.ops.rocm_aiter_mla_sparse import rocm_mxfp8_wo_a_bmm
 
     device = torch.device("cuda")
     torch.manual_seed(3)
@@ -1420,7 +1420,7 @@ def test_rocm_mxfp8_wo_a_bmm(num_tokens: int, n_groups: int, block_scales: bool)
 @pytest.mark.parametrize("extra_len", [0, 1, 31, 32, 33, 63, 64, 65])
 @torch.inference_mode()
 def test_sparse_attn_decode_gfx950_outer64_boundaries(monkeypatch, extra_len: int) -> None:
-    from aphrodite.v1.attention.ops import rocm_aiter_mla_sparse as mod
+    from sonar.v1.attention.ops import rocm_aiter_mla_sparse as mod
 
     device = torch.device("cuda")
     torch.manual_seed(13)
@@ -1482,7 +1482,7 @@ def test_sparse_attn_decode_gfx950_outer64_boundaries(monkeypatch, extra_len: in
 @requires_gfx950
 @torch.inference_mode()
 def test_sparse_attn_decode_gfx950_graph_replay(monkeypatch) -> None:
-    from aphrodite.v1.attention.ops import rocm_aiter_mla_sparse as mod
+    from sonar.v1.attention.ops import rocm_aiter_mla_sparse as mod
 
     device = torch.device("cuda")
     torch.manual_seed(17)
@@ -1610,14 +1610,14 @@ def test_sparse_attn_decode_gfx950_graph_replay(monkeypatch) -> None:
 @torch.inference_mode()
 def test_dsv4_adaptive_mla_swa_metadata_graph_replay(monkeypatch) -> None:
     """Replay the production ROCm decode path after device-only reallocation."""
-    from aphrodite.models.deepseek_v4.amd.rocm import (
+    from sonar.models.deepseek_v4.amd.rocm import (
         DeepseekV4ROCMAiterMLASparseMetadataBuilder,
         DeepseekV4ROCMAiterSparseSWAMetadataBuilder,
     )
-    from aphrodite.v1.attention.backend import AttentionCGSupport, CommonAttentionMetadata
-    from aphrodite.v1.attention.ops import rocm_aiter_mla_sparse as mod
-    from aphrodite.v1.kv_cache_interface import MLAAttentionSpec, SlidingWindowMLASpec
-    from tests.v1.attention.utils import create_aphrodite_config
+    from sonar.v1.attention.backend import AttentionCGSupport, CommonAttentionMetadata
+    from sonar.v1.attention.ops import rocm_aiter_mla_sparse as mod
+    from sonar.v1.kv_cache_interface import MLAAttentionSpec, SlidingWindowMLASpec
+    from tests.v1.attention.utils import create_sonar_config
 
     device = torch.device("cuda")
     num_reqs = 3
@@ -1627,7 +1627,7 @@ def test_dsv4_adaptive_mla_swa_metadata_graph_replay(monkeypatch) -> None:
     compressed_block_size = block_size // 128
     window_size = 32
 
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         model_name="facebook/opt-125m",
         max_model_len=1024,
         block_size=block_size,
@@ -1639,7 +1639,7 @@ def test_dsv4_adaptive_mla_swa_metadata_graph_replay(monkeypatch) -> None:
             "sliding_window": window_size,
         },
     )
-    aphrodite_config.speculative_config = SimpleNamespace(
+    sonar_config.speculative_config = SimpleNamespace(
         num_speculative_tokens=upper_query_len - 1,
         parallel_drafting=False,
         enable_adaptive_verification=True,
@@ -1663,10 +1663,10 @@ def test_dsv4_adaptive_mla_swa_metadata_graph_replay(monkeypatch) -> None:
         cache_dtype_str="fp8_ds_mla",
         model_version="deepseek_v4",
     )
-    mla_builder = DeepseekV4ROCMAiterMLASparseMetadataBuilder(mla_spec, ["c128a"], aphrodite_config, device)
-    swa_builder = DeepseekV4ROCMAiterSparseSWAMetadataBuilder(swa_spec, ["c128a"], aphrodite_config, device)
-    assert mla_builder.get_cudagraph_support(aphrodite_config, mla_spec) == AttentionCGSupport.ALWAYS
-    assert swa_builder.get_cudagraph_support(aphrodite_config, swa_spec) == AttentionCGSupport.ALWAYS
+    mla_builder = DeepseekV4ROCMAiterMLASparseMetadataBuilder(mla_spec, ["c128a"], sonar_config, device)
+    swa_builder = DeepseekV4ROCMAiterSparseSWAMetadataBuilder(swa_spec, ["c128a"], sonar_config, device)
+    assert mla_builder.get_cudagraph_support(sonar_config, mla_spec) == AttentionCGSupport.ALWAYS
+    assert swa_builder.get_cudagraph_support(sonar_config, swa_spec) == AttentionCGSupport.ALWAYS
 
     seq_lens = torch.tensor([520, 528, 536], dtype=torch.int32, device=device)
     seq_lens_cpu = seq_lens.cpu()
@@ -1844,15 +1844,15 @@ def test_dsv4_adaptive_mla_swa_metadata_graph_replay(monkeypatch) -> None:
 @torch.inference_mode()
 def test_dsv41_adaptive_mla_swa_metadata_graph_replay(monkeypatch) -> None:
     """Replay V4.1 ROCm decode after device-only query reallocation."""
-    from aphrodite.models.deepseek_v41.amd.rocm import (
+    from sonar.models.deepseek_v41.amd.rocm import (
         DeepseekV41ROCMAiterMLASparseMetadataBuilder,
         DeepseekV41ROCMAiterSparseSWAMetadataBuilder,
         compute_global_topk_ragged_indices_and_indptr,
     )
-    from aphrodite.v1.attention.backend import AttentionCGSupport, CommonAttentionMetadata
-    from aphrodite.v1.attention.ops import rocm_aiter_mla_sparse as mod
-    from aphrodite.v1.kv_cache_interface import MLAAttentionSpec, SlidingWindowMLASpec
-    from tests.v1.attention.utils import create_aphrodite_config
+    from sonar.v1.attention.backend import AttentionCGSupport, CommonAttentionMetadata
+    from sonar.v1.attention.ops import rocm_aiter_mla_sparse as mod
+    from sonar.v1.kv_cache_interface import MLAAttentionSpec, SlidingWindowMLASpec
+    from tests.v1.attention.utils import create_sonar_config
 
     device = torch.device("cuda")
     num_reqs = 3
@@ -1862,7 +1862,7 @@ def test_dsv41_adaptive_mla_swa_metadata_graph_replay(monkeypatch) -> None:
     compress_ratio = 2
     compressed_block_size = block_size // compress_ratio
 
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         model_name="facebook/opt-125m",
         max_model_len=1024,
         block_size=block_size,
@@ -1874,7 +1874,7 @@ def test_dsv41_adaptive_mla_swa_metadata_graph_replay(monkeypatch) -> None:
             "sliding_window": 32,
         },
     )
-    aphrodite_config.speculative_config = SimpleNamespace(
+    sonar_config.speculative_config = SimpleNamespace(
         num_speculative_tokens=upper_query_len - 1,
         parallel_drafting=False,
         enable_adaptive_verification=True,
@@ -1898,10 +1898,10 @@ def test_dsv41_adaptive_mla_swa_metadata_graph_replay(monkeypatch) -> None:
         cache_dtype_str="fp8_ds_mla",
         model_version="deepseek_v4",
     )
-    mla_builder = DeepseekV41ROCMAiterMLASparseMetadataBuilder(mla_spec, ["c2a"], aphrodite_config, device)
-    swa_builder = DeepseekV41ROCMAiterSparseSWAMetadataBuilder(swa_spec, ["c2a"], aphrodite_config, device)
-    assert mla_builder.get_cudagraph_support(aphrodite_config, mla_spec) == AttentionCGSupport.ALWAYS
-    assert swa_builder.get_cudagraph_support(aphrodite_config, swa_spec) == AttentionCGSupport.ALWAYS
+    mla_builder = DeepseekV41ROCMAiterMLASparseMetadataBuilder(mla_spec, ["c2a"], sonar_config, device)
+    swa_builder = DeepseekV41ROCMAiterSparseSWAMetadataBuilder(swa_spec, ["c2a"], sonar_config, device)
+    assert mla_builder.get_cudagraph_support(sonar_config, mla_spec) == AttentionCGSupport.ALWAYS
+    assert swa_builder.get_cudagraph_support(sonar_config, swa_spec) == AttentionCGSupport.ALWAYS
 
     seq_lens = torch.tensor([100, 110, 120], dtype=torch.int32, device=device)
     seq_lens_cpu = seq_lens.cpu()
@@ -2095,7 +2095,7 @@ _ROTARY_CACHE_LEN = int(_ROTARY_MAX_POS * _ROTARY_SCALING_FACTOR)
 
 def _make_dsv4_rotary(device: torch.device):
     """The official DSv4 rotary embedding, sized down for unit tests."""
-    from aphrodite.model_executor.layers.rotary_embedding.deepseek_scaling_rope import (
+    from sonar.model_executor.layers.rotary_embedding.deepseek_scaling_rope import (
         DeepseekV4ScalingRotaryEmbedding,
     )
 
@@ -2143,9 +2143,9 @@ class _FakeWoA(torch.nn.Module):
 @pytest.mark.parametrize("pos_dtype", [torch.int32, torch.int64])
 @torch.inference_mode()
 def test_fused_inverse_rope_gptj_matches_rotary_native(
-    num_tokens: int, num_heads: int, pos_dtype: torch.dtype, default_aphrodite_config
+    num_tokens: int, num_heads: int, pos_dtype: torch.dtype, default_sonar_config
 ) -> None:
-    from aphrodite.v1.attention.ops.rocm_aiter_mla_sparse import _fused_inverse_rope_gptj
+    from sonar.v1.attention.ops.rocm_aiter_mla_sparse import _fused_inverse_rope_gptj
 
     device = torch.device("cuda")
     torch.manual_seed(0)
@@ -2165,8 +2165,8 @@ def test_fused_inverse_rope_gptj_matches_rotary_native(
 
 
 @torch.inference_mode()
-def test_fused_inverse_rope_gptj_empty(default_aphrodite_config) -> None:
-    from aphrodite.v1.attention.ops.rocm_aiter_mla_sparse import _fused_inverse_rope_gptj
+def test_fused_inverse_rope_gptj_empty(default_sonar_config) -> None:
+    from sonar.v1.attention.ops.rocm_aiter_mla_sparse import _fused_inverse_rope_gptj
 
     device = torch.device("cuda")
     rotary_emb = _make_dsv4_rotary(device)
@@ -2179,8 +2179,8 @@ def test_fused_inverse_rope_gptj_empty(default_aphrodite_config) -> None:
 
 
 @torch.inference_mode()
-def test_rocm_inv_rope_einsum_matches_rotary_native(default_aphrodite_config) -> None:
-    from aphrodite.v1.attention.ops.rocm_aiter_mla_sparse import rocm_inv_rope_einsum
+def test_rocm_inv_rope_einsum_matches_rotary_native(default_sonar_config) -> None:
+    from sonar.v1.attention.ops.rocm_aiter_mla_sparse import rocm_inv_rope_einsum
 
     device = torch.device("cuda")
     torch.manual_seed(2)
@@ -2208,7 +2208,7 @@ def test_rocm_inv_rope_einsum_matches_rotary_native(default_aphrodite_config) ->
 
 @torch.inference_mode()
 def test_get_cached_wo_a_bf16_plain_caches() -> None:
-    from aphrodite.v1.attention.ops.rocm_aiter_mla_sparse import _get_cached_wo_a_bf16
+    from sonar.v1.attention.ops.rocm_aiter_mla_sparse import _get_cached_wo_a_bf16
 
     device = torch.device("cuda")
     torch.manual_seed(4)
@@ -2235,7 +2235,7 @@ def test_get_cached_wo_a_bf16_plain_caches() -> None:
 def test_get_cached_wo_a_bf16_dequantized_ignores_retained_scale(
     scale_attr: str,
 ) -> None:
-    from aphrodite.v1.attention.ops.rocm_aiter_mla_sparse import _get_cached_wo_a_bf16
+    from sonar.v1.attention.ops.rocm_aiter_mla_sparse import _get_cached_wo_a_bf16
 
     device = torch.device("cuda")
     torch.manual_seed(6)
@@ -2253,7 +2253,7 @@ def test_get_cached_wo_a_bf16_dequantized_ignores_retained_scale(
 
 @torch.inference_mode()
 def test_get_cached_wo_a_bf16_fp8_blockscale_caches() -> None:
-    from aphrodite.v1.attention.ops.rocm_aiter_mla_sparse import _get_cached_wo_a_bf16
+    from sonar.v1.attention.ops.rocm_aiter_mla_sparse import _get_cached_wo_a_bf16
 
     device = torch.device("cuda")
     torch.manual_seed(5)
@@ -2290,8 +2290,8 @@ def test_fp8_paged_mqa_logits_triton_matches_torch_ref() -> None:
     Compare only valid key positions: the kernel skips the -inf pad that
     the torch ref writes past seq_len.
     """
-    from aphrodite.v1.attention.ops import rocm_aiter_mla_sparse as mod
-    from aphrodite.v1.worker.workspace import init_workspace_manager
+    from sonar.v1.attention.ops import rocm_aiter_mla_sparse as mod
+    from sonar.v1.worker.workspace import init_workspace_manager
 
     device = torch.device("cuda")
     init_workspace_manager(device)
@@ -2332,7 +2332,7 @@ def test_fp8_paged_mqa_logits_triton_matches_torch_ref() -> None:
 
 
 def test_indexer_k_is_c4a_block_flat_gate() -> None:
-    from aphrodite.v1.attention.ops.rocm_aiter_mla_sparse import (
+    from sonar.v1.attention.ops.rocm_aiter_mla_sparse import (
         _indexer_k_is_c4a_block_flat,
     )
 
@@ -2346,13 +2346,13 @@ def test_indexer_k_is_c4a_block_flat_gate() -> None:
 @torch.inference_mode()
 def test_paged_mqa_logits_gate_v41_shuffle_vs_c4a_flat() -> None:
     """Ratio 1/2 stay on AITER; ratio 4 takes Triton."""
-    from aphrodite.v1.attention.ops.rocm_aiter_mla_sparse import (
+    from sonar.v1.attention.ops.rocm_aiter_mla_sparse import (
         fp8_paged_mqa_logits_torch,
         indexer_k_quant_and_cache_triton,
         rocm_fp8_paged_mqa_logits,
         rocm_fp8_paged_mqa_logits_triton,
     )
-    from aphrodite.v1.worker.workspace import init_workspace_manager
+    from sonar.v1.worker.workspace import init_workspace_manager
 
     device = torch.device("cuda")
     init_workspace_manager(device)
@@ -2443,7 +2443,7 @@ def _combine_topk_swa_indices_torch(
 
     Kept verbatim so the reference cannot drift toward the kernel.
     """
-    from aphrodite.models.deepseek_v41.common.ops.cache_utils import (
+    from sonar.models.deepseek_v41.common.ops.cache_utils import (
         _SPARSE_PREFILL_TOPK_ALIGNMENT,
     )
 
@@ -2557,7 +2557,7 @@ def _v41_combine_case(case, window):
     ],
 )
 def test_v41_combine_topk_swa_indices_matches_torch(case, window) -> None:
-    from aphrodite.models.deepseek_v41.amd.rocm import combine_topk_swa_indices
+    from sonar.models.deepseek_v41.amd.rocm import combine_topk_swa_indices
 
     args = _v41_combine_case(case, window)
     got_indices, got_lens = combine_topk_swa_indices(*args)
@@ -2568,7 +2568,7 @@ def test_v41_combine_topk_swa_indices_matches_torch(case, window) -> None:
 
 def test_v41_rocm_combine_uses_shared_kernel() -> None:
     """ROCm prefill takes the shared combine, so it inherits the replay bound."""
-    from aphrodite.models.deepseek_v41.amd import rocm
-    from aphrodite.models.deepseek_v41.common.ops import cache_utils
+    from sonar.models.deepseek_v41.amd import rocm
+    from sonar.models.deepseek_v41.common.ops import cache_utils
 
     assert rocm.combine_topk_swa_indices is cache_utils.combine_topk_swa_indices

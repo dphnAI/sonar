@@ -22,18 +22,18 @@ from openai.types.responses import (
 from openai.types.responses.tool import Tool as ResponsesTool
 from partial_json_parser.core.options import Allow
 
-from aphrodite.entrypoints.generate.base.protocol import (
+from sonar.entrypoints.generate.base.protocol import (
     DeltaFunctionCall,
     DeltaToolCall,
     FunctionCall,
     ToolCall,
 )
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionNamedToolChoiceParam,
     ChatCompletionToolsParam,
 )
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.logger import init_logger
+from sonar.exceptions import SonarValidationError
+from sonar.logger import init_logger
 
 Tool: TypeAlias = ChatCompletionToolsParam | ResponsesTool
 
@@ -246,13 +246,13 @@ def require_function_tools(
     """Return ``get_function_tools(tools)``, rejecting a request that has none.
 
     Raises:
-        AphroditeValidationError: ``tools`` has no tool the model can call, so a
+        SonarValidationError: ``tools`` has no tool the model can call, so a
             tool choice that requires a call can never be satisfied.
 
     """
     function_tools = get_function_tools(tools)
     if not function_tools:
-        raise AphroditeValidationError(
+        raise SonarValidationError(
             "tool_choice requires a function call, but tools contains no function tool the model can call.",
             parameter="tool_choice",
         )
@@ -395,13 +395,13 @@ def _get_tool_schema_defs(
             continue
         defs = params.pop("$defs", {})
         if not isinstance(defs, dict):
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 f"`$defs` in the parameters of tool '{name}' must be an object, got {type(defs).__name__}.",
                 parameter="tools",
             )
         for def_name, def_schema in defs.items():
             if def_name in all_defs and all_defs[def_name] != def_schema:
-                raise AphroditeValidationError(
+                raise SonarValidationError(
                     f"Tool definition '{def_name}' has multiple schemas, which is not supported.",
                     parameter="tools",
                 )

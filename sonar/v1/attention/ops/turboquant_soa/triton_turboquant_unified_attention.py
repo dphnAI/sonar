@@ -2,8 +2,8 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Unified (prefill + decode) Triton attention kernel for TurboQuant.
 
-Structure is ported from ``aphrodite/v1/attention/ops/triton_unified_attention.py``
-(the AITER unified attention kernel already upstreamed into Aphrodite). Only the K
+Structure is ported from ``sonar/v1/attention/ops/triton_unified_attention.py``
+(the AITER unified attention kernel already upstreamed into Sonar). Only the K
 and V load sites are replaced: instead of reading raw fp16 keys/values from
 two contiguous caches, this kernel reads TurboQuant-packed bytes from a single
 combined cache and dequantizes on the fly inside the tile loop.
@@ -19,7 +19,7 @@ Benefits over the v1/v2 decode-only kernels:
    (causal, GQA). Sinks / softcap / ALiBi / sliding-window / qq-bias /
    mm-prefix are deferred to follow-ups.
 
-This is an opt-in v3 path behind ``APHRODITE_TQ_DECODE_V3``.
+This is an opt-in v3 path behind ``SONAR_TQ_DECODE_V3``.
 """
 
 from __future__ import annotations
@@ -29,13 +29,13 @@ from typing import Any
 
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
 
 # reduce_segments is KV-format-agnostic: by the time it runs, K/V have been
 # consumed and only (max, expsum, partial_output) triples remain. Reuse the
 # baseline's implementation verbatim to avoid code duplication.
-from aphrodite.v1.attention.ops.triton_unified_attention import reduce_segments
+from sonar.v1.attention.ops.triton_unified_attention import reduce_segments
 
 from .triton_turboquant_decode import _use_fp8_e4b15
 from .triton_turboquant_decode_v2 import build_pair_lut

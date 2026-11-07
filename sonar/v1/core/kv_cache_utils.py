@@ -19,13 +19,13 @@ from typing import (
     overload,
 )
 
-from aphrodite import envs
-from aphrodite.config import AphroditeConfig
-from aphrodite.logger import init_logger
-from aphrodite.multimodal.utils import get_mm_features_in_window
-from aphrodite.utils.hashing import xxhash, xxhash_cbor
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.v1.kv_cache_interface import (
+from sonar import envs
+from sonar.config import SonarConfig
+from sonar.logger import init_logger
+from sonar.multimodal.utils import get_mm_features_in_window
+from sonar.utils.hashing import xxhash, xxhash_cbor
+from sonar.utils.math_utils import cdiv
+from sonar.v1.kv_cache_interface import (
     KVCacheConfig,
     KVCacheGroupSpec,
     KVCacheSpec,
@@ -33,14 +33,14 @@ from aphrodite.v1.kv_cache_interface import (
     UniformTypeKVCacheSpecs,
     iter_layer_specs,
 )
-from aphrodite.v1.kv_cache_spec_registry import KVCacheSpecRegistry
-from aphrodite.v1.request import Request
-from aphrodite.v1.utils import tensor_data
+from sonar.v1.kv_cache_spec_registry import KVCacheSpecRegistry
+from sonar.v1.request import Request
+from sonar.v1.utils import tensor_data
 
 if TYPE_CHECKING:
-    from aphrodite.v1.core.block_pool import BlockPool
-    from aphrodite.v1.core.single_type_kv_cache_manager import SingleTypeKVCacheManager
-    from aphrodite.v1.engine import EngineCoreRequest, PrefixHashConfig
+    from sonar.v1.core.block_pool import BlockPool
+    from sonar.v1.core.single_type_kv_cache_manager import SingleTypeKVCacheManager
+    from sonar.v1.engine import EngineCoreRequest, PrefixHashConfig
 
 
 # BlockHash represents the hash of a single KV-cache block used for
@@ -80,7 +80,7 @@ def get_group_id(key: BlockHashWithGroupId) -> int:
 
 
 def maybe_convert_block_hash(hash_bytes: BlockHash) -> ExternalBlockHash:
-    if not envs.APHRODITE_KV_EVENTS_USE_INT_BLOCK_HASHES:
+    if not envs.SONAR_KV_EVENTS_USE_INT_BLOCK_HASHES:
         return hash_bytes
     return int.from_bytes(hash_bytes, byteorder="big") & ((1 << 64) - 1)
 
@@ -90,7 +90,7 @@ logger = init_logger(__name__)
 # The hash seed for the first block of any prefix block sequence.
 #
 # For cryptographic hash algorithms it is derived deterministically from a fixed
-# default seed, so independent Aphrodite processes compute identical block hashes for
+# default seed, so independent Sonar processes compute identical block hashes for
 # identical content and can share a prefix cache (e.g. KV cache reuse across
 # nodes) without extra configuration. This does not weaken collision resistance,
 # which for SHA-256 does not depend on keeping the seed secret; ``cache_salt``
@@ -105,7 +105,7 @@ NONE_HASH: BlockHash
 
 # Fixed seed used when the PYTHONHASHSEED environment variable is not set and
 # the hash algorithm is cryptographic.
-DEFAULT_NONE_HASH_SEED = "aphrodite-none-hash"
+DEFAULT_NONE_HASH_SEED = "sonar-none-hash"
 
 # Algorithms that are not collision resistant, so the seed must stay secret.
 _NON_CRYPTO_HASH_FUNCTIONS = frozenset({xxhash, xxhash_cbor})
@@ -785,7 +785,7 @@ def eagle_proof_margin(block_size: int, hash_block_size: int, fine_grained_looku
 
 def resolve_kv_cache_block_sizes(
     kv_cache_config: KVCacheConfig,
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
 ) -> tuple[int, int]:
     """Resolve (scheduler_block_size, hash_block_size).
 
@@ -803,8 +803,8 @@ def resolve_kv_cache_block_sizes(
       Returns the scheduler block size (i.e. disables finer hashing) if block
       hashing is inactive or a mamba group is not using cache mode "align".
     """
-    cache_config = aphrodite_config.cache_config
-    dcp = aphrodite_config.parallel_config.decode_context_parallel_size
+    cache_config = sonar_config.cache_config
+    dcp = sonar_config.parallel_config.decode_context_parallel_size
     groups = kv_cache_config.kv_cache_groups
 
     if len(groups) <= 1:
@@ -815,7 +815,7 @@ def resolve_kv_cache_block_sizes(
         if (
             cache_config.prefix_match_unit not in (None, bs)
             and len(groups) == 1
-            and (cache_config.enable_prefix_caching or aphrodite_config.kv_transfer_config is not None)
+            and (cache_config.enable_prefix_caching or sonar_config.kv_transfer_config is not None)
         ):
             raise ValueError(
                 f"Invalid prefix_match_unit={cache_config.prefix_match_unit}; "
@@ -833,7 +833,7 @@ def resolve_kv_cache_block_sizes(
     # Block hashes are only consumed by prefix caching and KV connectors
     # (P/D, offloading); when neither is active, keep hash_block_size equal
     # to the scheduler block size.
-    connector_enabled = aphrodite_config.kv_transfer_config is not None
+    connector_enabled = sonar_config.kv_transfer_config is not None
     if not (cache_config.enable_prefix_caching or connector_enabled):
         return scheduler_block_size, scheduler_block_size
 
@@ -879,7 +879,7 @@ def resolve_kv_cache_block_sizes(
 
 def resolve_cache_hit_alignment_tokens(
     kv_cache_config: KVCacheConfig,
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     scheduler_block_size: int,
     hash_block_size: int,
 ) -> int:
@@ -890,7 +890,7 @@ def resolve_cache_hit_alignment_tokens(
     ``scheduler_block_size``.
     """
     groups = kv_cache_config.kv_cache_groups
-    if not aphrodite_config.cache_config.enable_prefix_caching or len(groups) <= 1:
+    if not sonar_config.cache_config.enable_prefix_caching or len(groups) <= 1:
         return scheduler_block_size
     manager_classes = []
     for group in groups:
@@ -900,7 +900,7 @@ def resolve_cache_hit_alignment_tokens(
     if partial_hash_hits_enabled(
         groups,
         hash_block_size,
-        aphrodite_config.parallel_config.decode_context_parallel_size,
+        sonar_config.parallel_config.decode_context_parallel_size,
         manager_classes,
     ):
         return hash_block_size
@@ -1030,7 +1030,7 @@ def generate_lookahead_block_hash_extra_keys(
     return extra_keys, mm_idx
 
 
-def get_max_concurrency_for_kv_cache_config(aphrodite_config: AphroditeConfig, kv_cache_config: KVCacheConfig) -> float:
+def get_max_concurrency_for_kv_cache_config(sonar_config: SonarConfig, kv_cache_config: KVCacheConfig) -> float:
     """Get the maximum concurrency for the given KV cache configuration.
 
     A request at max_model_len consumes whole blocks from each group's block
@@ -1047,7 +1047,7 @@ def get_max_concurrency_for_kv_cache_config(aphrodite_config: AphroditeConfig, k
     host_blocks_per_request = 0
     for group in kv_cache_config.kv_cache_groups:
         required = cdiv(
-            group.kv_cache_spec.max_memory_usage_bytes(aphrodite_config),
+            group.kv_cache_spec.max_memory_usage_bytes(sonar_config),
             group.kv_cache_spec.page_size_bytes,
         )
         if group.host_resident:
@@ -1078,26 +1078,26 @@ def generate_scheduler_kv_cache_config(
     return cfg
 
 
-def get_kv_cache_capacity(aphrodite_config: AphroditeConfig, kv_cache_config: KVCacheConfig) -> tuple[int, float]:
+def get_kv_cache_capacity(sonar_config: SonarConfig, kv_cache_config: KVCacheConfig) -> tuple[int, float]:
     """Get the group-aware KV cache token capacity and max concurrency."""
-    max_model_len = aphrodite_config.model_config.max_model_len
-    max_concurrency = get_max_concurrency_for_kv_cache_config(aphrodite_config, kv_cache_config)
+    max_model_len = sonar_config.model_config.max_model_len
+    max_concurrency = get_max_concurrency_for_kv_cache_config(sonar_config, kv_cache_config)
     return int(max_concurrency * max_model_len), max_concurrency
 
 
-def _kv_cache_device_name(aphrodite_config: AphroditeConfig) -> str:
-    device_type = aphrodite_config.device_config.device_type
+def _kv_cache_device_name(sonar_config: SonarConfig) -> str:
+    device_type = sonar_config.device_config.device_type
     return "GPU" if device_type == "cuda" else device_type.upper()
 
 
-def update_kv_cache_capacity(aphrodite_config: AphroditeConfig, kv_cache_config: KVCacheConfig) -> None:
+def update_kv_cache_capacity(sonar_config: SonarConfig, kv_cache_config: KVCacheConfig) -> None:
     """Store and log the resolved KV cache capacity."""
-    num_tokens, max_concurrency = get_kv_cache_capacity(aphrodite_config, kv_cache_config)
-    aphrodite_config.cache_config.kv_cache_size_tokens = num_tokens
-    aphrodite_config.cache_config.kv_cache_max_concurrency = max_concurrency
-    max_model_len = aphrodite_config.model_config.max_model_len
-    pools = _kv_cache_device_name(aphrodite_config)
-    if aphrodite_config.attention_config.hisparse_config is not None:
+    num_tokens, max_concurrency = get_kv_cache_capacity(sonar_config, kv_cache_config)
+    sonar_config.cache_config.kv_cache_size_tokens = num_tokens
+    sonar_config.cache_config.kv_cache_max_concurrency = max_concurrency
+    max_model_len = sonar_config.model_config.max_model_len
+    pools = _kv_cache_device_name(sonar_config)
+    if sonar_config.attention_config.hisparse_config is not None:
         pools += " + host"
     logger.info_once(
         "%s KV cache size: %s tokens, Maximum concurrency for %s tokens per request: %.2fx",

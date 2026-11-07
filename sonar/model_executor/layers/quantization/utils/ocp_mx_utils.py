@@ -3,8 +3,8 @@
 from enum import Enum
 from typing import Any
 
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     kMxfp4Dynamic,
     kMxfp4Static,

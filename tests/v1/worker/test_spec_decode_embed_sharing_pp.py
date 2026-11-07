@@ -7,16 +7,16 @@ import pytest
 import torch
 import torch.nn as nn
 
-from aphrodite.config import ParallelConfig
-from aphrodite.model_executor.model_loader.mtp_validation import (
+from sonar.config import ParallelConfig
+from sonar.model_executor.model_loader.mtp_validation import (
     disable_mtp_completeness_check,
 )
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.models.utils import (
     PPMissingLayer,
     spec_decode_needs_target_embed,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.v1.worker.gpu.spec_decode.eagle import utils as eagle_utils
+from sonar.platforms import current_platform
+from sonar.v1.worker.gpu.spec_decode.eagle import utils as eagle_utils
 from tests.v1.spec_decode.utils import fake_speculative_config
 
 VOCAB, HIDDEN = 32, 8
@@ -108,7 +108,7 @@ def test_mtp_style_drafter_is_left_alone_under_pp(monkeypatch):
 )
 def test_target_embedding_provisioning(monkeypatch, method, may_use_target_embed, pp_size, is_last_rank, expected):
     monkeypatch.setattr(
-        "aphrodite.distributed.parallel_state.get_pp_group",
+        "sonar.distributed.parallel_state.get_pp_group",
         _fake_pp(pp_size, is_last_rank),
         raising=True,
     )
@@ -129,7 +129,7 @@ def m3_modules():
     if not current_platform.is_cuda_alike():
         pytest.skip("M3 model imports require CUDA or ROCm dependencies")
     backend = "amd" if current_platform.is_rocm() else "nvidia"
-    root = f"aphrodite.models.minimax_m3.{backend}"
+    root = f"sonar.models.minimax_m3.{backend}"
     return importlib.import_module(f"{root}.mtp"), importlib.import_module(f"{root}.model")
 
 
@@ -169,7 +169,7 @@ def make_m3_draft(monkeypatch, m3_modules, m3_config):
     monkeypatch.setattr(mtp, "fused_moe_make_expert_params_mapping", lambda *_, **kw: [])
     monkeypatch.setattr(mtp, "get_pp_group", _fake_pp(2))
     monkeypatch.setattr(eagle_utils, "get_pp_group", _fake_pp(2))
-    return lambda: mtp.MiniMaxM3MTP(aphrodite_config=m3_config)
+    return lambda: mtp.MiniMaxM3MTP(sonar_config=m3_config)
 
 
 @pytest.mark.parametrize(
@@ -245,9 +245,9 @@ def test_m3_target_allocates_embedding_on_required_stage(monkeypatch, m3_modules
     _, model = m3_modules
     pp = lambda: SimpleNamespace(world_size=3, is_first_rank=rank == 0, is_last_rank=rank == 2)
     monkeypatch.setattr(model, "get_pp_group", pp)
-    monkeypatch.setattr("aphrodite.distributed.parallel_state.get_pp_group", pp)
+    monkeypatch.setattr("sonar.distributed.parallel_state.get_pp_group", pp)
     monkeypatch.setattr(
-        "aphrodite.distributed.parallel_state.get_tp_group",
+        "sonar.distributed.parallel_state.get_tp_group",
         lambda: SimpleNamespace(world_size=1),
     )
     monkeypatch.setattr(model, "VocabParallelEmbedding", lambda *_, **kw: _embed())
@@ -255,7 +255,7 @@ def test_m3_target_allocates_embedding_on_required_stage(monkeypatch, m3_modules
     monkeypatch.setattr(model, "MiniMAXGemmaRMSNorm", lambda *_, **kw: nn.Identity())
     if method is None:
         m3_config.speculative_config = None
-    target = model.MiniMaxM3Model(aphrodite_config=m3_config)
+    target = model.MiniMaxM3Model(sonar_config=m3_config)
     assert isinstance(target.embed_tokens, nn.Embedding) is expected
 
 
@@ -280,8 +280,8 @@ def test_m3_weight_transfer_updates_embedding_ownership(make_m3_draft, initial_e
 
 
 @pytest.fixture
-def nemotron_draft(monkeypatch, default_aphrodite_config):
-    from aphrodite.model_executor.models import nemotron_h_mtp as mtp
+def nemotron_draft(monkeypatch, default_sonar_config):
+    from sonar.model_executor.models import nemotron_h_mtp as mtp
 
     hf_config = SimpleNamespace(
         vocab_size=VOCAB,
@@ -307,7 +307,7 @@ def nemotron_draft(monkeypatch, default_aphrodite_config):
         "NemotronHMTPAttentionDecoderLayer",
         lambda **_: nn.Linear(1, 1, bias=False),
     )
-    return mtp.NemotronHMTP(aphrodite_config=config)
+    return mtp.NemotronHMTP(sonar_config=config)
 
 
 @pytest.mark.parametrize("prefix", ["", "language_model."])

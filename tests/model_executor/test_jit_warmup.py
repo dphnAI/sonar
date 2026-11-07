@@ -9,14 +9,14 @@ from typing import Any, cast
 
 import pytest
 
-from aphrodite.model_executor.warmup.jit_warmup import (
-    AphroditeJitKernel,
+from sonar.model_executor.warmup.jit_warmup import (
     JitWarmupRegistry,
+    SonarJitKernel,
     WarmupIntRange,
     get_ast_full_name,
     zip_inputs,
 )
-from aphrodite.model_executor.warmup.jit_warmup_triton_helper import (
+from sonar.model_executor.warmup.jit_warmup_triton_helper import (
     triton_scalar_specialization_rep,
 )
 
@@ -44,7 +44,7 @@ def _config(
     )
 
 
-class ToyKernel(AphroditeJitKernel["ToyKernel.CompileKey"]):
+class ToyKernel(SonarJitKernel["ToyKernel.CompileKey"]):
     @dataclass(frozen=True)
     class CompileKey:
         block_size: int
@@ -284,7 +284,7 @@ def test_trace_dispatch_rejects_bad_positional_groups_and_duplicates() -> None:
 
 
 def test_helper_calls_support_keywords_and_reject_star_kwargs() -> None:
-    class HelperKernel(AphroditeJitKernel["HelperKernel.CompileKey"]):
+    class HelperKernel(SonarJitKernel["HelperKernel.CompileKey"]):
         @dataclass(frozen=True)
         class CompileKey:
             value: int
@@ -303,7 +303,7 @@ def test_helper_calls_support_keywords_and_reject_star_kwargs() -> None:
         def compile(self, compile_key: CompileKey) -> None:
             pass
 
-    class StarKwargsKernel(AphroditeJitKernel["StarKwargsKernel.CompileKey"]):
+    class StarKwargsKernel(SonarJitKernel["StarKwargsKernel.CompileKey"]):
         @dataclass(frozen=True)
         class CompileKey:
             value: int
@@ -333,7 +333,7 @@ def test_helper_calls_support_keywords_and_reject_star_kwargs() -> None:
 
 
 def test_dispatch_helper_calls_resolve_python_builtins() -> None:
-    class BuiltinKernel(AphroditeJitKernel["BuiltinKernel.CompileKey"]):
+    class BuiltinKernel(SonarJitKernel["BuiltinKernel.CompileKey"]):
         @dataclass(frozen=True)
         class CompileKey:
             value: int
@@ -356,7 +356,7 @@ def test_dispatch_helper_calls_resolve_python_builtins() -> None:
 
 
 def test_dispatch_body_must_be_local_assignments_then_compile_key_return() -> None:
-    class BranchKernel(AphroditeJitKernel["BranchKernel.CompileKey"]):
+    class BranchKernel(SonarJitKernel["BranchKernel.CompileKey"]):
         @dataclass(frozen=True)
         class CompileKey:
             value: int
@@ -372,7 +372,7 @@ def test_dispatch_body_must_be_local_assignments_then_compile_key_return() -> No
         def compile(self, compile_key: CompileKey) -> None:
             pass
 
-    class KwargsReturnKernel(AphroditeJitKernel["KwargsReturnKernel.CompileKey"]):
+    class KwargsReturnKernel(SonarJitKernel["KwargsReturnKernel.CompileKey"]):
         @dataclass(frozen=True)
         class CompileKey:
             value: int
@@ -396,7 +396,7 @@ def test_dispatch_body_must_be_local_assignments_then_compile_key_return() -> No
 
 
 def test_dispatch_can_forward_compile_key_fields() -> None:
-    class ForwardingKernel(AphroditeJitKernel["ForwardingKernel.CompileKey"]):
+    class ForwardingKernel(SonarJitKernel["ForwardingKernel.CompileKey"]):
         @dataclass(frozen=True)
         class CompileKey:
             mode: int
@@ -442,7 +442,7 @@ def test_dispatch_can_forward_compile_key_fields() -> None:
 
 
 def test_forwarded_compile_key_fields_exclude_predicate_only_inputs() -> None:
-    class ForwardingKernel(AphroditeJitKernel["ForwardingKernel.CompileKey"]):
+    class ForwardingKernel(SonarJitKernel["ForwardingKernel.CompileKey"]):
         @dataclass(frozen=True)
         class CompileKey:
             mode: int
@@ -474,7 +474,7 @@ def test_forwarded_compile_key_fields_exclude_predicate_only_inputs() -> None:
 
 
 def test_dispatch_supports_tuple_and_mapping_subscriptions() -> None:
-    class SubscriptKernel(AphroditeJitKernel["SubscriptKernel.CompileKey"]):
+    class SubscriptKernel(SonarJitKernel["SubscriptKernel.CompileKey"]):
         @dataclass(frozen=True)
         class CompileKey:
             first: int
@@ -500,7 +500,7 @@ def test_dispatch_supports_tuple_and_mapping_subscriptions() -> None:
 
 
 def test_dispatch_reports_unsupported_expression_with_context() -> None:
-    class UnsupportedKernel(AphroditeJitKernel["UnsupportedKernel.CompileKey"]):
+    class UnsupportedKernel(SonarJitKernel["UnsupportedKernel.CompileKey"]):
         @dataclass(frozen=True)
         class CompileKey:
             value: object
@@ -537,7 +537,7 @@ def test_warmup_compiles_all_returned_keys_in_order() -> None:
 
 
 def test_runtime_cache_miss_compiles_and_caches_executor() -> None:
-    class CachedKernel(AphroditeJitKernel["CachedKernel.CompileKey"]):
+    class CachedKernel(SonarJitKernel["CachedKernel.CompileKey"]):
         @dataclass(frozen=True)
         class CompileKey:
             value: int
@@ -590,10 +590,10 @@ def test_registry_capture() -> None:
         @JitWarmupRegistry.capture
         def __init__(
             self,
-            aphrodite_config: Any,
+            sonar_config: Any,
             kernel: RecordingToyKernel,
         ) -> None:
-            kernel.register_warmup(3, aphrodite_config)
+            kernel.register_warmup(3, sonar_config)
 
     kernel = RecordingToyKernel()
     config = _config()
@@ -622,8 +622,8 @@ def test_registry_expands_requests_and_deduplicates_owner_keys() -> None:
     ]
 
 
-def test_registry_passes_aphrodite_config_to_default_requests() -> None:
-    class ConfigKernel(AphroditeJitKernel["ConfigKernel.CompileKey"]):
+def test_registry_passes_sonar_config_to_default_requests() -> None:
+    class ConfigKernel(SonarJitKernel["ConfigKernel.CompileKey"]):
         @dataclass(frozen=True)
         class CompileKey:
             value: int
@@ -635,8 +635,8 @@ def test_registry_passes_aphrodite_config_to_default_requests() -> None:
         def dispatch(self, *, value: int) -> CompileKey:  # type: ignore[override]
             return self.CompileKey(value=value)
 
-        def get_warmup_keys(self, aphrodite_config: Any) -> list[CompileKey]:
-            return [self.dispatch(value=aphrodite_config.bias)]
+        def get_warmup_keys(self, sonar_config: Any) -> list[CompileKey]:
+            return [self.dispatch(value=sonar_config.bias)]
 
         def compile(self, compile_key: CompileKey) -> None:
             self.compiled.append(compile_key)
@@ -654,7 +654,7 @@ def test_registry_passes_aphrodite_config_to_default_requests() -> None:
 
 
 def test_registry_default_request_supports_config_free_kernel() -> None:
-    class ConfigFreeKernel(AphroditeJitKernel["ConfigFreeKernel.CompileKey"]):
+    class ConfigFreeKernel(SonarJitKernel["ConfigFreeKernel.CompileKey"]):
         @dataclass(frozen=True)
         class CompileKey:
             value: int

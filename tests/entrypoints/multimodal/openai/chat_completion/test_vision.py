@@ -10,12 +10,12 @@ import pytest_asyncio
 from PIL import Image
 from transformers import AutoProcessor
 
-from aphrodite.config import ModelConfig
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.cache.base import MultiModalCache
-from aphrodite.multimodal.media import MediaWithBytes
-from aphrodite.multimodal.utils import encode_image_url, fetch_image
-from aphrodite.platforms import current_platform
+from sonar.config import ModelConfig
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.cache.base import MultiModalCache
+from sonar.multimodal.media import MediaWithBytes
+from sonar.multimodal.utils import encode_image_url, fetch_image
+from sonar.platforms import current_platform
 from tests.entrypoints.multimodal.conftest import TEST_IMAGE_ASSETS
 from tests.utils import ROCM_EXTRA_ARGS, RemoteOpenAIServer
 
@@ -156,7 +156,7 @@ def server():
     env_overrides = {
         **(
             {
-                "APHRODITE_VIDEO_FETCH_TIMEOUT": "120",
+                "SONAR_VIDEO_FETCH_TIMEOUT": "120",
             }
             if current_platform.is_rocm()
             else {}

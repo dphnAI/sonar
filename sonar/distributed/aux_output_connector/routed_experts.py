@@ -10,7 +10,7 @@ from typing import Any
 
 import numpy as np
 
-from aphrodite.distributed.aux_output_connector.store import (
+from sonar.distributed.aux_output_connector.store import (
     BackgroundBlockObjectStore,
     BlockObject,
     BlockObjectStore,
@@ -144,7 +144,7 @@ class RoutedExpertsBuffer:
 
 
 def routed_experts_keys(block_hashes: Iterable[bytes], aux_output_namespace: str) -> list[str]:
-    prefix = f"aphrodite-artifact/{aux_output_namespace}/"
+    prefix = f"sonar-artifact/{aux_output_namespace}/"
     return [prefix + block_hash.hex() for block_hash in block_hashes]
 
 

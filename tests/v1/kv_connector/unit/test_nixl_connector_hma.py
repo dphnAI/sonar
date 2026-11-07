@@ -14,20 +14,20 @@ import msgspec
 import pytest
 import torch
 
-from aphrodite import LLM, SamplingParams
-from aphrodite.config import KVTransferConfig, set_current_aphrodite_config
-from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl import base_worker as bw
-from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.metadata import (
+from sonar import LLM, SamplingParams
+from sonar.config import KVTransferConfig, set_current_sonar_config
+from sonar.distributed.kv_transfer.kv_connector.v1.nixl import base_worker as bw
+from sonar.distributed.kv_transfer.kv_connector.v1.nixl.metadata import (
     NixlAgentMetadata,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.worker import (
+from sonar.distributed.kv_transfer.kv_connector.v1.nixl.worker import (
     NixlConnectorWorker,
 )
-from aphrodite.v1.core.single_type_kv_cache_manager import (
+from sonar.v1.core.single_type_kv_cache_manager import (
     FullAttentionManager,
     SlidingWindowManager,
 )
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.kv_cache_interface import (
     FullAttentionSpec,
     KVCacheConfig,
     KVCacheGroupSpec,
@@ -37,8 +37,8 @@ from aphrodite.v1.kv_cache_interface import (
 from tests.v1.attention.utils import MockMambaBuilder
 
 from .utils import (
-    create_aphrodite_config,
     create_request,
+    create_sonar_config,
     expand_strided_descs,
     make_kv_cache_config,
     make_nixl_scheduler,
@@ -50,7 +50,7 @@ from .utils import (
 @pytest.fixture
 def region_pull_worker():
     """Real page mapping and descriptors, with only the transport mocked."""
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.tp_mapping import TPMapping
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.tp_mapping import TPMapping
 
     worker = object.__new__(NixlConnectorWorker)
     worker.engine_id = "D"
@@ -115,10 +115,10 @@ def region_pull_worker():
 @pytest.mark.parametrize("cached", [0, 1])
 def test_region_pull_ignores_allocation_padding(region_pull_worker, local_ratio, remote_ratio, num_tokens, cached):
     """Padded capacity must not shift either the host or indexer token range."""
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.metadata import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.metadata import (
         NixlConnectorMetadata,
     )
-    from aphrodite.utils.math_utils import cdiv
+    from sonar.utils.math_utils import cdiv
 
     worker = region_pull_worker
     worker._physical_blocks_per_logical_kv_block = local_ratio
@@ -174,11 +174,11 @@ def test_region_pull_ignores_allocation_padding(region_pull_worker, local_ratio,
 @pytest.mark.parametrize("region_groups", [(0, 1), (1, 0, 1)])
 def test_dcp_region_pull(region_pull_worker, num_pages, region_groups):
     """Read each uncached page from its DCP rank; notify ranks with no pages."""
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.metadata import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.metadata import (
         RemoteMeta,
         ReqMeta,
     )
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.tp_mapping import TPMapping
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.tp_mapping import TPMapping
 
     worker = region_pull_worker
     worker.region_group_ids = list(region_groups)
@@ -237,7 +237,7 @@ def test_dcp_region_pull(region_pull_worker, num_pages, region_groups):
 @pytest.mark.cpu_test
 def test_region_pull_completion_zeros_only_own_padding(region_pull_worker):
     """Completion must preserve neighboring layers and already imported pages."""
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.metadata import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.metadata import (
         RemoteMeta,
         ReqMeta,
     )
@@ -289,22 +289,22 @@ def test_region_pull_completion_zeros_only_own_padding(region_pull_worker):
         (False, [0]),
     ],
 )
-@patch("aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_scheduler.current_platform")
+@patch("sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_scheduler.current_platform")
 def test_sw_sizes(mock_platform, swa_enabled, expected_sw_sizes):
     """Test sw_sizes is correctly computed based on SWA enabled/disabled."""
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.scheduler import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.scheduler import (
         NixlConnectorScheduler,
     )
 
     mock_platform.device_type = "cpu"
 
     block_size = 16
-    aphrodite_config = create_aphrodite_config(block_size=block_size)
+    sonar_config = create_sonar_config(block_size=block_size)
     # SW 2048 tokens=>128 blocks
     kv_cache_config = make_kv_cache_config(block_size=block_size, swa_enabled=swa_enabled, sw_size=2048)
 
     scheduler = NixlConnectorScheduler(
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         engine_id="test-engine",
         kv_cache_config=kv_cache_config,
     )
@@ -331,7 +331,7 @@ def test_needs_split_local_xfer_handles(use_mla, source_ranks, tp_ratio, expecte
     the TP mapping has one replicated attention source. Those workers own
     disjoint blocks, so every read uses the whole local-region handle.
     """
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.worker import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.worker import (
         NixlConnectorWorker,
     )
 
@@ -349,11 +349,11 @@ def test_update_state_after_alloc_tracks_cached_blocks_per_group():
     KV cache group. Each group's count must be tracked independently rather
     than collapsed to a single scalar, or DCP read-phase alignment
     (local_num_computed_blocks) would misalign one of the groups."""
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.pull_scheduler import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.pull_scheduler import (
         NixlPullConnectorScheduler,
     )
-    from aphrodite.v1.core.kv_cache_manager import KVCacheBlocks
-    from aphrodite.v1.core.kv_cache_utils import KVCacheBlock
+    from sonar.v1.core.kv_cache_manager import KVCacheBlocks
+    from sonar.v1.core.kv_cache_utils import KVCacheBlock
 
     scheduler = object.__new__(NixlPullConnectorScheduler)
     scheduler._reqs_in_batch = set()
@@ -399,11 +399,11 @@ def test_full_local_hit_is_not_awaited_by_the_scheduler():
     finished_recving. Doing so trips `assert RequestStatus.is_finished` in
     _update_from_kv_xfer_finished, which only tolerates a finished recv for a
     request that is parked or already done."""
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.pull_scheduler import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.pull_scheduler import (
         NixlPullConnectorScheduler,
     )
-    from aphrodite.v1.core.kv_cache_manager import KVCacheBlocks
-    from aphrodite.v1.core.kv_cache_utils import KVCacheBlock
+    from sonar.v1.core.kv_cache_manager import KVCacheBlocks
+    from sonar.v1.core.kv_cache_utils import KVCacheBlock
 
     scheduler = object.__new__(NixlPullConnectorScheduler)
     scheduler._reqs_in_batch = set()
@@ -502,7 +502,7 @@ def test_apply_dcp_prefix_caching_matches_global_logical_positions(
     interleaves at logical-block granularity) and always return equal-length
     local/remote slices, so a later, unconditional _apply_prefix_caching
     trim is a guaranteed no-op rather than double-processing the read."""
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.worker import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.worker import (
         NixlConnectorWorker,
     )
 
@@ -530,7 +530,7 @@ def test_logical_to_kernel_block_ids_with_hma():
     When HMA is enabled, the logical block size may differ from the kernel
     block size. Each logical block maps to multiple kernel blocks.
     """
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.worker import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.worker import (
         NixlConnectorWorker,
     )
 
@@ -577,8 +577,8 @@ def test_sync_device_after_direct_recv_gates(
     expected_syncs,
 ):
     """Only backends requiring visibility fences synchronize direct receives."""
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl import base_worker
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.worker import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl import base_worker
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.worker import (
         NixlConnectorWorker,
     )
 
@@ -645,16 +645,16 @@ def test_read_blocks_for_req_expands_remote_ids(
     """
     from unittest.mock import MagicMock
 
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.metadata import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.metadata import (
         NixlConnectorMetadata,
     )
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.tp_mapping import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.tp_mapping import (
         TPMapping,
     )
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.worker import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.worker import (
         NixlConnectorWorker,
     )
-    from aphrodite.v1.kv_cache_interface import (
+    from sonar.v1.kv_cache_interface import (
         FullAttentionSpec,
         MambaSpec,
         SlidingWindowSpec,
@@ -772,10 +772,10 @@ def test_apply_prefix_caching_mamba_hybrid(
     """_apply_prefix_caching front-trims FA groups to
     min(local, remote) for Mamba hybrid models with heterogeneous TP.
     """
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.worker import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.worker import (
         NixlConnectorWorker,
     )
-    from aphrodite.v1.kv_cache_interface import FullAttentionSpec, MambaSpec
+    from sonar.v1.kv_cache_interface import FullAttentionSpec, MambaSpec
 
     worker = object.__new__(NixlConnectorWorker)
     worker._has_mamba = True
@@ -848,10 +848,10 @@ def test_apply_prefix_caching_ssm_prefix_cache_hit(
     local block (placeholders dropped) and end-trims FA remote blocks on
     partial prefix cache hits when physical_per_logical matches.
     """
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.worker import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.worker import (
         NixlConnectorWorker,
     )
-    from aphrodite.v1.kv_cache_interface import FullAttentionSpec, MambaSpec
+    from sonar.v1.kv_cache_interface import FullAttentionSpec, MambaSpec
 
     worker = object.__new__(NixlConnectorWorker)
     worker._has_mamba = True
@@ -875,10 +875,10 @@ def test_apply_prefix_caching_ssm_unpairable_slots_rejected():
     """Local SSM slots can only exceed the remote ones by the position D
     recomputes itself. A larger excess means the lists aren't
     position-aligned: fail loudly rather than transfer into wrong slots."""
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.worker import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.worker import (
         NixlConnectorWorker,
     )
-    from aphrodite.v1.kv_cache_interface import FullAttentionSpec, MambaSpec
+    from sonar.v1.kv_cache_interface import FullAttentionSpec, MambaSpec
 
     worker = object.__new__(NixlConnectorWorker)
     worker._has_mamba = True
@@ -950,7 +950,7 @@ def test_mismatched_physical_per_logical_fails_with_prefix_caching(
     for the uncached suffix. The front-trim pairs remote prefix blocks
     with local suffix slots — a silent data corruption.
     """
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.worker import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.worker import (
         NixlConnectorWorker,
     )
 
@@ -1003,7 +1003,7 @@ def test_fewer_blocks_with_hma(monkeypatch, model_name, sw_size):
         "block_size": block_size,
     }
 
-    monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
+    monkeypatch.setenv("SONAR_ENABLE_V1_MULTIPROCESSING", "0")
 
     def run_hma_test(llm: LLM):
         remote_prefill_opts = {
@@ -1060,7 +1060,7 @@ def test_nixl_metadata_hma_block_ids_structure():
     """Test that NixlConnectorMetadata correctly stores block IDs for multiple
     KV cache groups when HMA is enabled.
     """
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.metadata import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.metadata import (
         NixlConnectorMetadata,
     )
 
@@ -1107,7 +1107,7 @@ def _make_mock_worker_for_desc_ids(
     """Build a mock NixlConnectorWorker with attrs needed by _compute_desc_ids."""
     from unittest.mock import MagicMock
 
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.worker import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.worker import (
         NixlConnectorWorker,
     )
 
@@ -1123,7 +1123,7 @@ def _make_mock_worker_for_desc_ids(
     worker._ple_group_index = None
     worker._ple_region_index = None
     if has_mamba:
-        from aphrodite.distributed.kv_transfer.kv_connector.v1.ssm_conv_transfer_utils import (  # noqa: E501
+        from sonar.distributed.kv_transfer.kv_connector.v1.ssm_conv_transfer_utils import (  # noqa: E501
             MambaConvSplitInfo,
         )
 
@@ -1180,7 +1180,7 @@ def test_nixl_region_sort_preserves_pipeline_layer_order():
 def test_get_block_descs_ids_hybrid_ssm():
     """Test _compute_desc_ids uses per-group strides for hybrid
     FA+SSM when ratio=1 (no kernel block size mismatch)."""
-    from aphrodite.v1.kv_cache_interface import FullAttentionSpec, MambaSpec
+    from sonar.v1.kv_cache_interface import FullAttentionSpec, MambaSpec
 
     worker = _make_mock_worker_for_desc_ids(
         num_regions=2,
@@ -1207,7 +1207,7 @@ def test_get_block_descs_ids_hybrid_ssm():
 @pytest.mark.cpu_test
 def test_get_block_descs_ids_selects_attention_regions_by_group():
     """Each attention group's blocks address only that group's regions."""
-    from aphrodite.v1.kv_cache_interface import FullAttentionSpec
+    from sonar.v1.kv_cache_interface import FullAttentionSpec
 
     worker = _make_mock_worker_for_desc_ids(
         num_regions=3,
@@ -1238,7 +1238,7 @@ def test_get_block_descs_ids_selects_attention_regions_by_group():
 @pytest.mark.cpu_test
 def test_get_block_descs_ids_uses_per_region_pool_capacity():
     """Independent host and device pools use cumulative descriptor offsets."""
-    from aphrodite.v1.kv_cache_interface import FullAttentionSpec
+    from sonar.v1.kv_cache_interface import FullAttentionSpec
 
     worker = _make_mock_worker_for_desc_ids(
         num_regions=2,
@@ -1262,7 +1262,7 @@ def test_get_block_descs_ids_uses_per_region_pool_capacity():
 def test_get_block_descs_ids_kernel_block_mismatch():
     """Test _compute_desc_ids uses different strides for FA
     (kernel blocks) vs SSM (logical blocks) when ratio > 1."""
-    from aphrodite.v1.kv_cache_interface import FullAttentionSpec, MambaSpec
+    from sonar.v1.kv_cache_interface import FullAttentionSpec, MambaSpec
 
     ratio = 4
     logical_blocks = 100
@@ -1295,7 +1295,7 @@ def test_get_block_descs_ids_hetero_block_size_hybrid():
     """With a block-size ratio, FA desc ids are ratio-expanded while SSM
     desc ids keep the unexpanded logical stride (state blocks are never
     sub-split)."""
-    from aphrodite.v1.kv_cache_interface import FullAttentionSpec, MambaSpec
+    from sonar.v1.kv_cache_interface import FullAttentionSpec, MambaSpec
 
     worker = _make_mock_worker_for_desc_ids(
         num_regions=2,
@@ -1324,7 +1324,7 @@ def test_get_block_descs_ids_hetero_block_size_hybrid():
 
 
 def _bind_worker_method(worker, name):
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.worker import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.worker import (
         NixlConnectorWorker,
     )
 
@@ -1338,10 +1338,10 @@ def test_map_block_ids_for_block_size_ratio_hybrid():
     coverage; mamba state blocks pass through 1:1."""
     from unittest.mock import MagicMock
 
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.worker import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.worker import (
         NixlConnectorWorker,
     )
-    from aphrodite.v1.kv_cache_interface import FullAttentionSpec, MambaSpec
+    from sonar.v1.kv_cache_interface import FullAttentionSpec, MambaSpec
 
     worker = MagicMock(spec=NixlConnectorWorker)
     worker._group_spec_types = (FullAttentionSpec, MambaSpec)
@@ -1374,7 +1374,7 @@ def test_post_process_zeroes_untransferred_tail(kv_cache_layout, enable_permute_
     although two attention groups alias the tensor."""
     from unittest.mock import MagicMock
 
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.worker import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.worker import (
         NixlConnectorWorker,
     )
 
@@ -1421,7 +1421,7 @@ def test_post_process_zeroes_untransferred_tail(kv_cache_layout, enable_permute_
 def test_nixl_metadata_hybrid_ssm_block_ids():
     """Test NixlConnectorMetadata correctly stores block IDs for FA + SSM
     groups with different block counts (kernel mismatch active)."""
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.metadata import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.metadata import (
         NixlConnectorMetadata,
     )
 
@@ -1480,7 +1480,7 @@ class _FakeSingleTypeManager:
 
 
 def _make_fake_kv_cache_manager():
-    from aphrodite.v1.core.kv_cache_manager import KVCacheManager
+    from sonar.v1.core.kv_cache_manager import KVCacheManager
 
     manager = object.__new__(KVCacheManager)
     manager.coordinator = MagicMock()
@@ -1500,7 +1500,7 @@ def _make_fake_kv_cache_manager():
 def test_failed_load_rezeroes_unwritten_skipped_blocks():
     """A failed async load leaves zeroing-skipped blocks unwritten beyond
     the valid prefix; they must be zeroed before local recompute."""
-    from aphrodite.v1.core.sched.scheduler import Scheduler
+    from sonar.v1.core.sched.scheduler import Scheduler
 
     scheduler = object.__new__(Scheduler)
     scheduler.connector = MagicMock()
@@ -1561,9 +1561,9 @@ def test_mamba_n1_d_side_builds_decode_metadata():
     assert num_computed_tokens == req.num_prompt_tokens - 1
     assert is_async is True
 
-    aphrodite_config = create_aphrodite_config()
+    sonar_config = create_sonar_config()
     metadata = MockMambaBuilder.build_mamba_metadata(
-        aphrodite_config,
+        sonar_config,
         seq_lens=[req.num_prompt_tokens],
         query_lens=[1],
         is_prefilling=[True],
@@ -1638,7 +1638,7 @@ def test_mamba_n1_p_side_truncation():
     ],
     ids=["fa_swa_mamba", "fa_swa_only", "fa_only"],
 )
-@patch("aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_scheduler.current_platform")
+@patch("sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_scheduler.current_platform")
 def test_has_mamba_init(
     mock_platform,
     swa_enabled,
@@ -1647,16 +1647,16 @@ def test_has_mamba_init(
     expected_is_hma,
 ):
     """Test _has_mamba / _is_hma_required derived from kv_cache_groups."""
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.scheduler import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.scheduler import (
         NixlConnectorScheduler,
     )
 
     mock_platform.device_type = "cpu"
 
     block_size = 16
-    aphrodite_config = create_aphrodite_config(block_size=block_size)
+    sonar_config = create_sonar_config(block_size=block_size)
     # Explicitly enable HMA so we can test the scheduler's own derivation.
-    aphrodite_config.scheduler_config.disable_hybrid_kv_cache_manager = False
+    sonar_config.scheduler_config.disable_hybrid_kv_cache_manager = False
     kv_cache_config = make_kv_cache_config(
         block_size=block_size,
         swa_enabled=swa_enabled,
@@ -1664,7 +1664,7 @@ def test_has_mamba_init(
     )
 
     scheduler = NixlConnectorScheduler(
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         engine_id="test-engine",
         kv_cache_config=kv_cache_config,
     )
@@ -1691,7 +1691,7 @@ def test_compute_physical_blocks_per_logical(ssm_sizes, block_len, expected_rati
     (e.g. TP=1 → 261, TP=4 → 131 for Nemotron 30B). This is why
     _physical_blocks_per_logical must be stored per-engine.
     """
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.ssm_conv_transfer_utils import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.ssm_conv_transfer_utils import (
         compute_physical_blocks_per_logical,
     )
 
@@ -1829,13 +1829,13 @@ def test_derive_mamba_conv_split(
     """Parametrized test for derive_mamba_conv_split with real model configs.
 
     Values generated by verify_conv_split.py which loads HuggingFace configs
-    and calls Aphrodite's derive_mamba_conv_split directly.
+    and calls Sonar's derive_mamba_conv_split directly.
     """
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.ssm_conv_transfer_utils import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.ssm_conv_transfer_utils import (
         derive_mamba_conv_split,
     )
-    from aphrodite.v1.attention.backends.registry import MambaAttentionBackendEnum
-    from aphrodite.v1.kv_cache_interface import MambaSpec
+    from sonar.v1.attention.backends.registry import MambaAttentionBackendEnum
+    from sonar.v1.kv_cache_interface import MambaSpec
 
     _TYPE_MAP = {
         "mamba1": MambaAttentionBackendEnum.MAMBA1,
@@ -1844,7 +1844,7 @@ def test_derive_mamba_conv_split(
     }
     mamba_type_enum = _TYPE_MAP[mamba_type]
 
-    monkeypatch.setenv("APHRODITE_SSM_CONV_STATE_LAYOUT", "DS")
+    monkeypatch.setenv("SONAR_SSM_CONV_STATE_LAYOUT", "DS")
     spec = MambaSpec(
         block_size=64,
         shapes=((conv_dim_local, conv_rows), temporal_shape),
@@ -1951,7 +1951,7 @@ def test_logical_to_kernel_block_ids_with_remote_ratio(
 
     Qwen3.5-0.8B values verified by verify_conv_split.py (issue #13).
     """
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.worker import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.worker import (
         NixlConnectorWorker,
     )
 
@@ -2011,8 +2011,8 @@ def test_exchange_clipped_blocks_ssm_single_state():
 
 def _make_hybrid_mla_kv_cache_config(num_blocks: int = 4):
     """Build a KimiLinear-shaped config with one MLA and two KDA groups."""
-    from aphrodite.v1.attention.backends.registry import MambaAttentionBackendEnum
-    from aphrodite.v1.kv_cache_interface import (
+    from sonar.v1.attention.backends.registry import MambaAttentionBackendEnum
+    from sonar.v1.kv_cache_interface import (
         KVCacheConfig,
         KVCacheGroupSpec,
         KVCacheTensor,
@@ -2090,9 +2090,9 @@ def test_nixl_keeps_device_block_count_with_hisparse_host_pool(kernel_block_size
             KVCacheGroupSpec(["mla.device"], spec),
         ],
     )
-    aphrodite_config = create_aphrodite_config(block_size=16)
-    assert aphrodite_config.kv_transfer_config is not None
-    aphrodite_config.kv_transfer_config.kv_buffer_device = "cuda"
+    sonar_config = create_sonar_config(block_size=16)
+    assert sonar_config.kv_transfer_config is not None
+    sonar_config.kv_transfer_config.kv_buffer_device = "cuda"
     fake_backend = MagicMock()
     fake_backend.get_supported_kernel_block_sizes.return_value = [kernel_block_size]
     fake_backend.get_name.return_value = "FLASHMLA"
@@ -2112,9 +2112,9 @@ def test_nixl_keeps_device_block_count_with_hisparse_host_pool(kernel_block_size
         patch.object(bw, "get_tensor_model_parallel_world_size", return_value=1),
         patch.object(bw, "get_current_attn_backends", return_value=[fake_backend]),
         patch.object(bw, "current_platform", fake_platform),
-        set_current_aphrodite_config(aphrodite_config),
+        set_current_sonar_config(sonar_config),
     ):
-        worker = NixlConnectorWorker(aphrodite_config, "test-engine", kv_cache_config)
+        worker = NixlConnectorWorker(sonar_config, "test-engine", kv_cache_config)
         worker.use_mla = True
         worker.nixl_wrapper.get_agent_metadata.return_value = b"metadata"
         worker.register_kv_caches({"mla.host": host_cache, "mla.device": device_cache})
@@ -2147,24 +2147,24 @@ def test_register_kv_caches_hybrid_mla_dual_purpose_regions():
     FA + mamba descriptors for every region."""
     from unittest.mock import MagicMock
 
-    from aphrodite.config import set_current_aphrodite_config
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl import base_worker as bw
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.worker import (
+    from sonar.config import set_current_sonar_config
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl import base_worker as bw
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.worker import (
         NixlConnectorWorker,
     )
 
     kv_cache_config = _make_hybrid_mla_kv_cache_config()
     unified_page = kv_cache_config.kv_cache_groups[0].kv_cache_spec.page_size_bytes
-    aphrodite_config = create_aphrodite_config(block_size=12)
+    sonar_config = create_sonar_config(block_size=12)
     # The engine rewrites this global value to the smallest scheduler-group
     # block size. NIXL must retain the transferable groups' 12-token geometry.
-    aphrodite_config.cache_config.block_size = 4
+    sonar_config.cache_config.block_size = 4
     # kv_buffer_device defaults to the *real* platform's device type, which on
     # a CPU-only test host would make this a host-buffer worker: host xfer
     # buffers are per-layer, so the HMA shared tensors would not be
     # deduplicated. Pin it to the faked device type.
-    assert aphrodite_config.kv_transfer_config is not None
-    aphrodite_config.kv_transfer_config.kv_buffer_device = "cuda"
+    assert sonar_config.kv_transfer_config is not None
+    sonar_config.kv_transfer_config.kv_buffer_device = "cuda"
 
     fake_backend = MagicMock()
     fake_backend.get_supported_kernel_block_sizes.return_value = [4]
@@ -2181,12 +2181,12 @@ def test_register_kv_caches_hybrid_mla_dual_purpose_regions():
         patch.object(bw, "get_current_attn_backends", return_value=[fake_backend]),
         patch.object(bw, "current_platform", fake_platform),
         patch(
-            "aphrodite.model_executor.layers.mamba.mamba_utils.get_conv_state_layout",
+            "sonar.model_executor.layers.mamba.mamba_utils.get_conv_state_layout",
             return_value="DS",
         ),
-        set_current_aphrodite_config(aphrodite_config),
+        set_current_sonar_config(sonar_config),
     ):
-        worker = NixlConnectorWorker(aphrodite_config, "test-engine", kv_cache_config)
+        worker = NixlConnectorWorker(sonar_config, "test-engine", kv_cache_config)
         worker.use_mla = True  # opt-125m test config is not MLA; force the flag
         worker.nixl_wrapper.get_agent_metadata.return_value = b"fake-agent-metadata"
 
@@ -2247,13 +2247,13 @@ def test_push_write_hybrid_mla_replicates_attention():
     import threading
     from collections import defaultdict
 
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.push_worker import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.push_worker import (
         NixlPushConnectorWorker,
     )
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.tp_mapping import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.tp_mapping import (
         TPMapping,
     )
-    from aphrodite.v1.kv_cache_interface import MambaSpec, MLAAttentionSpec
+    from sonar.v1.kv_cache_interface import MambaSpec, MLAAttentionSpec
 
     worker = object.__new__(NixlPushConnectorWorker)
     worker.shutdown = lambda: None
@@ -2308,7 +2308,7 @@ def test_push_write_hybrid_mla_replicates_attention():
 
 def _make_host_buffer_worker(copy_op):
     """A worker stripped down to what the host-buffer copy paths touch."""
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.worker import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.worker import (
         NixlConnectorWorker,
     )
 
@@ -2332,7 +2332,7 @@ def _make_host_buffer_worker(copy_op):
 )
 def test_sync_recved_kv_issues_one_copy_per_request(group_block_ids, expected_ids):
     """h2d copies are issued once per request, not once per KV cache group."""
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.metadata import ReqMeta
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.metadata import ReqMeta
 
     calls = []
     worker = _make_host_buffer_worker(

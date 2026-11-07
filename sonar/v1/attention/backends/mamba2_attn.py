@@ -6,22 +6,22 @@ from typing import Any
 
 import torch
 
-from aphrodite.config import AphroditeConfig, get_current_aphrodite_config_or_none
-from aphrodite.model_executor.layers.mamba.checkpoint import (
+from sonar.config import SonarConfig, get_current_sonar_config_or_none
+from sonar.model_executor.layers.mamba.checkpoint import (
     MambaPrefillCheckpointBuilder,
     MambaPrefillCheckpointMetadata,
 )
-from aphrodite.utils.torch_utils import async_tensor_h2d
-from aphrodite.v1.attention.backend import (
+from sonar.utils.torch_utils import async_tensor_h2d
+from sonar.v1.attention.backend import (
     AttentionBackend,
     CommonAttentionMetadata,
     max_decode_query_len,
 )
-from aphrodite.v1.attention.backends.mamba_attn import (
+from sonar.v1.attention.backends.mamba_attn import (
     BaseMambaAttentionMetadata,
     BaseMambaAttentionMetadataBuilder,
 )
-from aphrodite.v1.kv_cache_interface import KVCacheSpec, MambaSpec
+from sonar.v1.kv_cache_interface import KVCacheSpec, MambaSpec
 
 
 def compute_varlen_chunk_metadata(
@@ -102,10 +102,10 @@ class Mamba2AttentionBackend(AttentionBackend):
     @classmethod
     def supports_device_cpu_query_lens_mismatch(cls) -> bool:
         # Decode kernels take device offsets; ReplaySSM plans off CPU counts.
-        aphrodite_config = get_current_aphrodite_config_or_none()
-        if aphrodite_config is None:
+        sonar_config = get_current_sonar_config_or_none()
+        if sonar_config is None:
             return True
-        return not aphrodite_config.cache_config.use_replayssm
+        return not sonar_config.cache_config.use_replayssm
 
 
 @dataclass
@@ -128,23 +128,23 @@ class Mamba2AttentionMetadataBuilder(BaseMambaAttentionMetadataBuilder[Mamba2Att
     @classmethod
     def get_varlen_cudagraph_max_query_len(
         cls,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         kv_cache_spec: KVCacheSpec,
     ) -> int | None:
-        return max_decode_query_len(aphrodite_config)
+        return max_decode_query_len(sonar_config)
 
     def __init__(
         self,
         kv_cache_spec: MambaSpec,
         layer_names: list[str],
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
     ):
-        super().__init__(kv_cache_spec, layer_names, aphrodite_config, device)
-        chunk_size = aphrodite_config.model_config.get_mamba_chunk_size()
+        super().__init__(kv_cache_spec, layer_names, sonar_config, device)
+        chunk_size = sonar_config.model_config.get_mamba_chunk_size()
         assert chunk_size is not None, "chunk_size needs to be set in the model config for Mamba2 models"
         self.chunk_size: int = chunk_size
-        self.checkpoint_builder = MambaPrefillCheckpointBuilder(aphrodite_config, kv_cache_spec)
+        self.checkpoint_builder = MambaPrefillCheckpointBuilder(sonar_config, kv_cache_spec)
 
     def build(
         self,

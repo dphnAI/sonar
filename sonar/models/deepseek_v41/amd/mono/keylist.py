@@ -3,7 +3,7 @@
 """K2's key lists without K1's ``stage_kt``: the KT and KLEN that it writes.
 
 On an index layer (2, 8, 14, 20, 24, 28, 32 and 36 of DeepSeek-V4.1-Flash)
-Aphrodite's compressor and indexer run between K1 and K2, and the indexer writes
+Sonar's compressor and indexer run between K1 and K2, and the indexer writes
 the layer's top-512, which the keys need. So K1 writes no keys there
 (``FrontBuild.index``), but K2 reads each token's keys from KT and KLEN,
 which ``stage_kt`` writes on the other layers. ``launch`` writes them with
@@ -22,7 +22,7 @@ compares the result with a reference built in torch.
 
 import torch
 
-from aphrodite.triton_utils import tl, triton
+from sonar.triton_utils import tl, triton
 
 from .attention.plan import KEYS, TOPK, WINDOW
 

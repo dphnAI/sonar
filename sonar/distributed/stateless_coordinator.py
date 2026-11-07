@@ -5,15 +5,15 @@ from typing import Any, Optional
 import torch
 from torch.distributed import Backend, ProcessGroup, Store
 
-from aphrodite.distributed.device_communicators.cuda_communicator import CudaCommunicator
-from aphrodite.distributed.parallel_state import (
+from sonar.distributed.device_communicators.cuda_communicator import CudaCommunicator
+from sonar.distributed.parallel_state import (
     GroupCoordinator,
     TensorMetadata,
     _get_unique_name,
     _register_group,
     _split_tensor_dict,
 )
-from aphrodite.distributed.utils import (
+from sonar.distributed.utils import (
     StatelessProcessGroup,
     allocate_group_ports,
     fetch_group_ports,
@@ -22,8 +22,8 @@ from aphrodite.distributed.utils import (
     stateless_destroy_torch_distributed_process_group,
     stateless_init_torch_distributed_process_group,
 )
-from aphrodite.logger import init_logger
-from aphrodite.utils.import_utils import resolve_obj_by_qualname
+from sonar.logger import init_logger
+from sonar.utils.import_utils import resolve_obj_by_qualname
 
 logger = init_logger(__name__)
 
@@ -59,7 +59,7 @@ class StatelessGroupCoordinator(GroupCoordinator):
 
         self.rank = global_rank
         self.local_rank = local_rank
-        from aphrodite.distributed.parallel_state import _WORLD
+        from sonar.distributed.parallel_state import _WORLD
 
         if _WORLD is not None:
             self.device_index = _WORLD.device_index
@@ -71,7 +71,7 @@ class StatelessGroupCoordinator(GroupCoordinator):
         self_cpu_group = None
         self_tcp_store_group = None
 
-        from aphrodite.platforms import current_platform
+        from sonar.platforms import current_platform
 
         backend = str(torch_distributed_backend)
         self.backend = backend

@@ -11,21 +11,21 @@ from openai.types.responses import FunctionTool, ToolChoiceFunction
 from xgrammar import Grammar
 from xgrammar.testing import _is_grammar_accept_string
 
-from aphrodite.config.reasoning import ReasoningConfig
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.config.reasoning import ReasoningConfig
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionRequest,
     ChatCompletionToolsParam,
 )
-from aphrodite.entrypoints.openai.responses.protocol import (
+from sonar.entrypoints.openai.responses.protocol import (
     ResponsesRequest,
     ResponsesResponse,
 )
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.parser.beam import BeamParser, BeamReasoningParser, BeamToolParser
-from aphrodite.parser.parser_manager import ParserManager
-from aphrodite.parser.response_template import ResponseTemplateParser
-from aphrodite.reasoning import ReasoningParserManager
-from aphrodite.tool_parsers import ToolParserManager
+from sonar.exceptions import SonarValidationError
+from sonar.parser.beam import BeamParser, BeamReasoningParser, BeamToolParser
+from sonar.parser.parser_manager import ParserManager
+from sonar.parser.response_template import ResponseTemplateParser
+from sonar.reasoning import ReasoningParserManager
+from sonar.tool_parsers import ToolParserManager
 
 # The `response_template` of the Beam checkpoints.
 BEAM_RESPONSE_TEMPLATE: dict[str, Any] = {
@@ -426,7 +426,7 @@ def test_forced_calls_in_prefilled_reasoning_start_after_it():
 
 
 def test_forced_calls_cannot_follow_a_prefilled_answer():
-    with pytest.raises(AphroditeValidationError, match="required tool choice"):
+    with pytest.raises(SonarValidationError, match="required tool choice"):
         adjust(chat_request(tool_choice="required"), PROMPT_TOKEN_IDS + [201, 102, 202])
 
 
@@ -440,7 +440,7 @@ def test_prefilled_answer_can_only_be_finished():
 def test_forced_call_with_unencodable_tool_name_is_rejected():
     tools = [_tool("get weather", {"city": {"type": "string"}})]
 
-    with pytest.raises(AphroditeValidationError, match="tool name"):
+    with pytest.raises(SonarValidationError, match="tool name"):
         adjust(chat_request(tools, tool_choice="required"))
 
 
@@ -472,7 +472,7 @@ def test_string_formats_and_patterns_are_held_in_raw_text():
     assert not accepts(req, contact_call("a.b@x.co", "ABC"))
     # Line breaks could end the value.
     dotted = _tool("set_code", {"code": {"type": "string", "pattern": "^a.b$"}}, strict=True)
-    with pytest.raises(AphroditeValidationError, match="required tool choice"):
+    with pytest.raises(SonarValidationError, match="required tool choice"):
         adjust(chat_request([dotted], tool_choice="required"))
 
 
@@ -569,7 +569,7 @@ def test_value_ends_before_an_opener_on_the_next_line():
 
 
 def test_always_constrained_output_can_be_disabled(monkeypatch):
-    monkeypatch.setenv("APHRODITE_BEAM_ALWAYS_CONSTRAIN_OUTPUT", "0")
+    monkeypatch.setenv("SONAR_BEAM_ALWAYS_CONSTRAIN_OUTPUT", "0")
 
     assert adjust(chat_request(TOOLS)).structured_outputs is None
 
@@ -584,7 +584,7 @@ def test_generic_parser_does_not_derive_the_template_grammar():
     req = chat_request(TOOLS, tool_choice="required")
     parser = ResponseTemplateParser(BeamTokenizer(), req.tools, enable_auto_tools=True)
 
-    with pytest.raises(AphroditeValidationError, match="required tool choice"):
+    with pytest.raises(SonarValidationError, match="required tool choice"):
         parser.adjust_request(req)
 
 
@@ -680,7 +680,7 @@ def test_reasoning_budget_initializes_from_checkpoint_pattern(monkeypatch, rever
         "content": "text",
     }
     tokenizer = BeamTokenizer(template)
-    monkeypatch.setattr("aphrodite.config.reasoning.cached_tokenizer_from_config", lambda **_: tokenizer)
+    monkeypatch.setattr("sonar.config.reasoning.cached_tokenizer_from_config", lambda **_: tokenizer)
     config = ReasoningConfig(reasoning_parser="beam")
     config.initialize_token_ids(SimpleNamespace())
 

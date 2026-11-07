@@ -3,12 +3,12 @@
 
 from typing import Literal, get_args
 
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.quantization.base_config import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.quantization.base_config import (
     QuantizationConfig,
     resolve_quant_method,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 logger = init_logger(__name__)
 
@@ -40,7 +40,7 @@ QuantizationMethods = Literal[
     "deepseek_v4_fp8",
     "deepseek_v41_fp8",
     "online",
-    # Below are online quant shorthand names (see aphrodite.config.quantization).
+    # Below are online quant shorthand names (see sonar.config.quantization).
     # Listed here as strings to avoid a circular import; kept in sync with
     # _ONLINE_SHORTHANDS by the assertion in get_quantization_config().
     "fp8_per_tensor",
@@ -64,20 +64,20 @@ _CUSTOMIZED_METHOD_TO_QUANT_CONFIG = {}
 
 
 def register_quantization_config(quantization: str):
-    """Register a customized aphrodite quantization config.
+    """Register a customized sonar quantization config.
 
-    When a quantization method is not supported by aphrodite, you can register a customized
+    When a quantization method is not supported by sonar, you can register a customized
     quantization config to support it.
 
     Args:
         quantization (str): The quantization method name.
 
     Examples:
-        >>> from aphrodite.model_executor.layers.quantization import (
+        >>> from sonar.model_executor.layers.quantization import (
         ...     register_quantization_config,
         ... )
-        >>> from aphrodite.model_executor.layers.quantization import get_quantization_config
-        >>> from aphrodite.model_executor.layers.quantization.base_config import (
+        >>> from sonar.model_executor.layers.quantization import get_quantization_config
+        >>> from sonar.model_executor.layers.quantization.base_config import (
         ...     QuantizationConfig,
         ... )
         >>>
@@ -118,25 +118,25 @@ def get_quantization_config(quantization: str) -> type[QuantizationConfig]:
     if quantization == "deepseek_v41_fp8":
         if quantization in _CUSTOMIZED_METHOD_TO_QUANT_CONFIG:
             return _CUSTOMIZED_METHOD_TO_QUANT_CONFIG[quantization]
-        from aphrodite.models.deepseek_v41.sm120.quant_config import DeepseekV41FP8Config as NativeDeepseekV41FP8Config
+        from sonar.models.deepseek_v41.sm120.quant_config import DeepseekV41FP8Config as NativeDeepseekV41FP8Config
 
         return NativeDeepseekV41FP8Config
 
     # lazy import to avoid triggering `torch.compile` too early
-    from aphrodite.config.quantization import _ONLINE_SHORTHANDS
-    from aphrodite.model_executor.layers.quantization.quark.quark import QuarkConfig
+    from sonar.config.quantization import _ONLINE_SHORTHANDS
+    from sonar.model_executor.layers.quantization.quark.quark import QuarkConfig
 
     if current_platform.is_cuda() or current_platform.is_rocm():
         # The v4.1 class is the v4 one extended to accept model_type
         # "deepseek_v41" and its 32x32 MXFP8 linear layout. V4.1 has
         # platform-specific implementations for both CUDA and ROCm.
-        from aphrodite.models.deepseek_v41 import (
+        from sonar.models.deepseek_v41 import (
             DeepseekV4FP8Config as DeepseekV41FP8Config,
         )
 
         deepseek_config: type[QuantizationConfig] = DeepseekV41FP8Config
     else:
-        from aphrodite.models.deepseek_v4 import DeepseekV4FP8Config
+        from sonar.models.deepseek_v4 import DeepseekV4FP8Config
 
         deepseek_config = DeepseekV4FP8Config
 

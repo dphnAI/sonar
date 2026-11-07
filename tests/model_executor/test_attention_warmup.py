@@ -8,11 +8,11 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.distributed import parallel_state
-from aphrodite.model_executor.warmup import attention_warmup, kernel_warmup
-from aphrodite.model_executor.warmup.attention_warmup import mixed_batch_attention_warmup
-from aphrodite.v1.kv_cache_interface import FullAttentionSpec
-from aphrodite.v1.worker.utils import AttentionGroup
+from sonar.distributed import parallel_state
+from sonar.model_executor.warmup import attention_warmup, kernel_warmup
+from sonar.model_executor.warmup.attention_warmup import mixed_batch_attention_warmup
+from sonar.v1.kv_cache_interface import FullAttentionSpec
+from sonar.v1.worker.utils import AttentionGroup
 
 
 def _worker(*, use_v2: bool, max_num_batched_tokens: int, max_model_len: int = 4096):

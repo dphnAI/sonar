@@ -6,23 +6,23 @@ from collections.abc import Callable
 import torch
 from compressed_tensors.quantization import QuantizationArgs, QuantizationStrategy
 
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.config import get_current_aphrodite_config
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.kernels.linear import (
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.config import get_current_sonar_config
+from sonar.logger import init_logger
+from sonar.model_executor.kernels.linear import (
     init_fp8_linear_kernel,
 )
-from aphrodite.model_executor.layers.fusion.quant_activation import (
+from sonar.model_executor.layers.fusion.quant_activation import (
     QuantizedActivation,
     expose_input_quant_key,
 )
-from aphrodite.model_executor.layers.quantization.compressed_tensors.schemes import (
+from sonar.model_executor.layers.quantization.compressed_tensors.schemes import (
     CompressedTensorsScheme,
 )
-from aphrodite.model_executor.layers.quantization.compressed_tensors.utils import (
+from sonar.model_executor.layers.quantization.compressed_tensors.utils import (
     STRATEGY_TO_PARAMETER_TYPE,
 )
-from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
+from sonar.model_executor.layers.quantization.utils.fp8_utils import (
     create_fp8_input_scale,
     create_fp8_scale_parameter,
     create_fp8_weight_parameter,
@@ -30,14 +30,14 @@ from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
     process_fp8_weight_tensor_strategy,
     validate_fp8_block_shape,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     GroupShape,
     create_fp8_quant_key,
     kFp8DynamicTokenSym,
     kFp8StaticChannelSym,
     kFp8StaticTensorSym,
 )
-from aphrodite.model_executor.utils import replace_parameter
+from sonar.model_executor.utils import replace_parameter
 
 __all__ = ["CompressedTensorsW8A8Fp8"]
 
@@ -59,7 +59,7 @@ class CompressedTensorsW8A8Fp8(CompressedTensorsScheme):
         self.weight_quant = weight_quant
         self.strategy = weight_quant.strategy
         self.out_dtype = torch.get_default_dtype()
-        self.input_dtype = get_current_aphrodite_config().model_config.dtype
+        self.input_dtype = get_current_sonar_config().model_config.dtype
         self.is_static_input_scheme = is_static_input_scheme
         self.weight_block_size = self.weight_quant.block_structure
 

@@ -7,10 +7,10 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.model_executor.kernels.linear.scaled_mm.deep_gemm import (
+from sonar.model_executor.kernels.linear.scaled_mm.deep_gemm import (
     DeepGemmFp8BlockScaledMMKernel,
 )
-from aphrodite.model_executor.warmup import deep_gemm_warmup
+from sonar.model_executor.warmup import deep_gemm_warmup
 
 
 def _block_fp8_layer(n: int, k: int, scale_name: str = "weight_scale"):
@@ -90,8 +90,8 @@ def test_kernel_registers_itself_as_warmup_provider(is_bmm) -> None:
 def test_mega_moe_predicate_matches_only_native_mega_moe_layers(monkeypatch) -> None:
     """Without the MegaMoE model modules loaded, nothing matches and nothing is
     imported; with them loaded, only DeepSeek-V4 and Kimi K3 MegaMoE layers match."""
-    name = "aphrodite.models.deepseek_v4.nvidia.model"
-    kimi_name = "aphrodite.models.kimi_k3.nvidia.model"
+    name = "sonar.models.deepseek_v4.nvidia.model"
+    kimi_name = "sonar.models.kimi_k3.nvidia.model"
     monkeypatch.delitem(sys.modules, name, raising=False)
     monkeypatch.delitem(sys.modules, kimi_name, raising=False)
     other = SimpleNamespace(use_native_mega_moe=True, use_mega_moe=True)

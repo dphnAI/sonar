@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-import aphrodite.utils.deep_gemm as dg
+import sonar.utils.deep_gemm as dg
 
 
 def _make_exe(path: Path) -> None:
@@ -34,7 +34,7 @@ def deep_gemm_installed(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     """Pretend DeepGEMM is importable on a GPU it supports."""
     monkeypatch.setattr(dg.current_platform, "support_deep_gemm", lambda: True)
     monkeypatch.setattr(dg, "has_deep_gemm", lambda: True)
-    monkeypatch.setenv("APHRODITE_USE_DEEP_GEMM", "1")
+    monkeypatch.setenv("SONAR_USE_DEEP_GEMM", "1")
     dg.is_deep_gemm_supported.cache_clear()
     yield
     dg.is_deep_gemm_supported.cache_clear()

@@ -2,11 +2,11 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 from typing import TYPE_CHECKING
 
-from aphrodite.config import ModelConfig
-from aphrodite.tasks import SupportedTask
+from sonar.config import ModelConfig
+from sonar.tasks import SupportedTask
 
 if TYPE_CHECKING:
-    from aphrodite.entrypoints.serve.sagemaker.api_router import (
+    from sonar.entrypoints.serve.sagemaker.api_router import (
         EndpointFn,
         GetHandlerFn,
         RequestType,
@@ -21,18 +21,18 @@ def get_generate_invocation_types(
     invocation_types: list[tuple[RequestType, tuple[GetHandlerFn, EndpointFn]]] = []
 
     if "generate" in supported_tasks:
-        from aphrodite.entrypoints.openai.chat_completion.api_router import (
+        from sonar.entrypoints.openai.chat_completion.api_router import (
             chat,
             create_chat_completion,
         )
-        from aphrodite.entrypoints.openai.chat_completion.protocol import (
+        from sonar.entrypoints.openai.chat_completion.protocol import (
             ChatCompletionRequest,
         )
-        from aphrodite.entrypoints.openai.completion.api_router import (
+        from sonar.entrypoints.openai.completion.api_router import (
             completion,
             create_completion,
         )
-        from aphrodite.entrypoints.openai.completion.protocol import CompletionRequest
+        from sonar.entrypoints.openai.completion.protocol import CompletionRequest
 
         invocation_types += [
             (ChatCompletionRequest, (chat, create_chat_completion)),

@@ -23,31 +23,31 @@ from xgrammar.structural_tag import (
     TagFormat,
 )
 
-from aphrodite.entrypoints.generate.base.protocol import (
+from sonar.entrypoints.generate.base.protocol import (
     DeltaFunctionCall,
     DeltaMessage,
     DeltaToolCall,
     FunctionCall,
 )
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionRequest,
 )
-from aphrodite.entrypoints.openai.parser.harmony_utils import (
+from sonar.entrypoints.openai.parser.harmony_utils import (
     extract_function_from_recipient,
     get_encoding,
     get_streamable_parser_for_assistant,
     is_function_recipient,
 )
-from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
-from aphrodite.logger import init_logger
-from aphrodite.parser.abstract_parser import DelegatingParser, structured_outputs_to_format
-from aphrodite.reasoning.gptoss_reasoning_parser import GptOssReasoningParser
-from aphrodite.renderers.chat_utils import make_tool_call_id
-from aphrodite.tool_parsers.gptoss_tool_parser import GptOssToolParser
-from aphrodite.tool_parsers.structural_tag_registry import (
+from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
+from sonar.logger import init_logger
+from sonar.parser.abstract_parser import DelegatingParser, structured_outputs_to_format
+from sonar.reasoning.gptoss_reasoning_parser import GptOssReasoningParser
+from sonar.renderers.chat_utils import make_tool_call_id
+from sonar.tool_parsers.gptoss_tool_parser import GptOssToolParser
+from sonar.tool_parsers.structural_tag_registry import (
     SimplifiedToolChoice,
     get_function_parameters,
-    register_aphrodite_structural_tag,
+    register_sonar_structural_tag,
 )
 
 if TYPE_CHECKING:
@@ -443,7 +443,7 @@ def _assemble_tag(allow_analysis: bool, allow_commentary: bool, content: Format)
     return StructuralTag(format=SequenceFormat(elements=tags))
 
 
-@register_aphrodite_structural_tag("harmony", builtin_tools=True)
+@register_sonar_structural_tag("harmony", builtin_tools=True)
 def get_harmony_structural_tag(
     tools: list[FunctionToolParam],
     builtin_tools: list[BuiltinToolParam],

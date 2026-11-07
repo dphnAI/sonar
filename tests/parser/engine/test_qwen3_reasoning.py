@@ -13,13 +13,13 @@ import dataclasses
 
 import pytest
 
-from aphrodite.parser.abstract_parser import DelegatingParser
-from aphrodite.parser.engine.parser_engine_config import ParserState
-from aphrodite.parser.engine.registered_adapters import (
+from sonar.parser.abstract_parser import DelegatingParser
+from sonar.parser.engine.parser_engine_config import ParserState
+from sonar.parser.engine.registered_adapters import (
     Qwen3ParserReasoningAdapter,
     Qwen3ParserToolAdapter,
 )
-from aphrodite.parser.qwen3 import Qwen3Parser, qwen3_config
+from sonar.parser.qwen3 import Qwen3Parser, qwen3_config
 from tests.parser.engine.conftest import make_mock_tokenizer
 from tests.parser.engine.streaming_helpers import simulate_reasoning_streaming
 

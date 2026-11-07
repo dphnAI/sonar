@@ -8,56 +8,56 @@ import torch
 import torch.distributed as dist
 import torch.nn.functional as F
 
-from aphrodite import _custom_ops as ops
-from aphrodite.config import AphroditeConfig, get_current_aphrodite_config
-from aphrodite.config.cache import CacheDType
-from aphrodite.distributed.parallel_state import get_dcp_group
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.attention.sparse_mla_attention import (
+from sonar import _custom_ops as ops
+from sonar.config import SonarConfig, get_current_sonar_config
+from sonar.config.cache import CacheDType
+from sonar.distributed.parallel_state import get_dcp_group
+from sonar.logger import init_logger
+from sonar.model_executor.layers.attention.sparse_mla_attention import (
     SparseMLACommonImpl,
     SparseMLACommonMetadata,
     SparseMLACommonMetadataBuilder,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.platforms.interface import DeviceCapability
-from aphrodite.utils.math_utils import round_up
-from aphrodite.utils.platform_utils import num_compute_units
-from aphrodite.utils.torch_utils import (
+from sonar.platforms import current_platform
+from sonar.platforms.interface import DeviceCapability
+from sonar.utils.math_utils import round_up
+from sonar.utils.platform_utils import num_compute_units
+from sonar.utils.torch_utils import (
     async_tensor_h2d,
     current_stream,
 )
-from aphrodite.v1.attention.backend import (
+from sonar.v1.attention.backend import (
     AttentionBackend,
     AttentionCGSupport,
     AttentionLayer,
     CommonAttentionMetadata,
     MultipleOf,
 )
-from aphrodite.v1.attention.backends.mla.index_group import HiSparseMLAIndexGroup
-from aphrodite.v1.attention.backends.mla.sparse_utils import (
+from sonar.v1.attention.backends.mla.index_group import HiSparseMLAIndexGroup
+from sonar.v1.attention.backends.mla.sparse_utils import (
     align_blocks_to_rows,
     flat_kv_row_view,
     request_row_bounds,
     triton_convert_req_index_to_global_index,
     triton_filter_and_convert_dcp_index,
 )
-from aphrodite.v1.attention.backends.utils import (
+from sonar.v1.attention.backends.utils import (
     get_dcp_local_seq_lens,
     reshape_attn_output_for_spec_decode,
     reshape_query_for_spec_decode,
     split_prefill_chunks,
 )
-from aphrodite.v1.attention.ops.flashmla import (
+from sonar.v1.attention.ops.flashmla import (
     FlashMLASchedMeta,
     flash_mla_sparse_fwd,
     flash_mla_with_kvcache,
     get_mla_metadata,
 )
-from aphrodite.v1.kv_cache_interface import AttentionSpec, KVQuantMode, is_quantized_kv_cache
-from aphrodite.v1.worker.workspace import current_workspace_manager
+from sonar.v1.kv_cache_interface import AttentionSpec, KVQuantMode, is_quantized_kv_cache
+from sonar.v1.worker.workspace import current_workspace_manager
 
 if TYPE_CHECKING:
-    from aphrodite.model_executor.models.deepseek_v2 import Indexer
+    from sonar.model_executor.models.deepseek_v2 import Indexer
 
 logger = init_logger(__name__)
 
@@ -221,11 +221,11 @@ class FlashMLASparseBackend(AttentionBackend):
                 # NoPE-512 is only correct for rope-free models.
                 # Precedent for reading hf_text_config in supports_combination:
                 # flashinfer_mla_sparse.py.
-                from aphrodite.config import get_current_aphrodite_config
+                from sonar.config import get_current_sonar_config
 
-                aphrodite_config = get_current_aphrodite_config()
-                if aphrodite_config.model_config is not None:
-                    hf_text_config = aphrodite_config.model_config.hf_text_config
+                sonar_config = get_current_sonar_config()
+                if sonar_config.model_config is not None:
+                    hf_text_config = sonar_config.model_config.hf_text_config
                     if getattr(hf_text_config, "qk_rope_head_dim", 64) != 0:
                         return "FLASHMLA_SPARSE supports head_size 512 only for rope-free (NoPE) models"
             else:
@@ -315,14 +315,14 @@ class FlashMLASparseMetadata(SparseMLACommonMetadata):
     fp8_use_mixed_batch: bool = False
 
 
-def get_prefill_workspace_size(aphrodite_config: AphroditeConfig) -> int:
+def get_prefill_workspace_size(sonar_config: SonarConfig) -> int:
     # Memory usage: factor * max_model_len * 576 * 2 bytes
     #   Example: DeepSeek-V3.2 with max_model_len=163840 and the default factor ->
     #            5 * 163840 * 576 * 2 = ~900 MB
     # This fits nicely below the typical MoE workspace size of >2GB so this is "free"
-    factor = aphrodite_config.attention_config.sparse_mla_prefill_workspace_factor
+    factor = sonar_config.attention_config.sparse_mla_prefill_workspace_factor
     assert factor is not None
-    return aphrodite_config.model_config.max_model_len * factor
+    return sonar_config.model_config.max_model_len * factor
 
 
 class FlashMLASparseMetadataBuilder(SparseMLACommonMetadataBuilder[FlashMLASparseMetadata]):
@@ -334,19 +334,19 @@ class FlashMLASparseMetadataBuilder(SparseMLACommonMetadataBuilder[FlashMLASpars
         self,
         kv_cache_spec: AttentionSpec,
         layer_names: list[str],
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
     ) -> None:
-        super().__init__(kv_cache_spec, layer_names, aphrodite_config, device)
-        cache_config = aphrodite_config.cache_config
-        parallel_config = aphrodite_config.parallel_config
+        super().__init__(kv_cache_spec, layer_names, sonar_config, device)
+        cache_config = sonar_config.cache_config
+        parallel_config = sonar_config.parallel_config
 
         num_q_heads = self.model_config.get_num_attention_heads(parallel_config)
         if current_platform.is_device_capability_family(100):
             threshold = {8: 128, 16: 128, 32: 128, 64: 256, 128: 1024}.get(num_q_heads, 1024)
         else:
             threshold = {16: 128, 32: 128, 64: 256, 128: 256}.get(num_q_heads, 256)
-        self.use_hisparse = aphrodite_config.attention_config.hisparse_config is not None
+        self.use_hisparse = sonar_config.attention_config.hisparse_config is not None
         if self.use_hisparse:
             threshold = 1
         # Varlen decodes are safe under DCP: causality comes from the
@@ -364,7 +364,7 @@ class FlashMLASparseMetadataBuilder(SparseMLACommonMetadataBuilder[FlashMLASpars
         self.fp8_decode_padded_heads = FlashMLASparseImpl._compute_fp8_decode_padded_heads(self.num_heads)
 
         self.use_fp8_kv_cache = cache_config.cache_dtype in QUANTIZED_DS_MLA_CACHE_FORMATS
-        max_num_seqs = aphrodite_config.scheduler_config.max_num_seqs
+        max_num_seqs = sonar_config.scheduler_config.max_num_seqs
         # Shape: [max_num_seqs], all elements = topk_tokens (constant for full-CG)
         self.topk_tokens_tensor = torch.full((max_num_seqs,), self.topk_tokens, device=device, dtype=torch.int32)
         # Shape: [max_num_seqs], all elements = max_model_len
@@ -519,7 +519,7 @@ class FlashMLASparseMetadataBuilder(SparseMLACommonMetadataBuilder[FlashMLASpars
 
             prefill_seq_lens_cpu = seq_lens_cpu[num_decodes:]
             # Chunk prefill requests to fit within workspace size
-            max_prefill_buffer_size = get_prefill_workspace_size(self.aphrodite_config)
+            max_prefill_buffer_size = get_prefill_workspace_size(self.sonar_config)
             # Workspace rows per entry, and the prefill rows each entry covers.
             workspace_rows = prefill_seq_lens_cpu
             row_bounds = np.arange(num_prefills + 1)
@@ -709,8 +709,8 @@ class FlashMLASparseImpl(SparseMLACommonImpl[FlashMLASparseMetadata]):
             # kv_lora_rank-wide workspace, too narrow for the 576 rows.
             self.supports_dense_mha_prefill = False
 
-        aphrodite_config = get_current_aphrodite_config()
-        max_tokens = aphrodite_config.scheduler_config.max_num_batched_tokens
+        sonar_config = get_current_sonar_config()
+        max_tokens = sonar_config.scheduler_config.max_num_batched_tokens
         q_concat_heads = num_heads
         if not is_quantized_kv_cache(kv_cache_dtype):
             q_concat_heads = (num_heads + self.prefill_padding - 1) // self.prefill_padding * self.prefill_padding
@@ -732,9 +732,9 @@ class FlashMLASparseImpl(SparseMLACommonImpl[FlashMLASparseMetadata]):
         self.workspace_specs: list[tuple[tuple[int, ...], torch.dtype]] = [(q_concat_shape, torch.bfloat16)]
         if kv_cache_dtype in QUANTIZED_DS_MLA_CACHE_FORMATS:
             # Reserve workspace during initialization
-            assert aphrodite_config is not None and aphrodite_config.model_config is not None
-            prefill_workspace_size = get_prefill_workspace_size(aphrodite_config)
-            parallel_config = aphrodite_config.parallel_config
+            assert sonar_config is not None and sonar_config.model_config is not None
+            prefill_workspace_size = get_prefill_workspace_size(sonar_config)
+            parallel_config = sonar_config.parallel_config
             self.pcp_dcp_kv_gather = (
                 parallel_config.prefill_context_parallel_size > 1 and parallel_config.decode_context_parallel_size > 1
             )

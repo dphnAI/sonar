@@ -4,9 +4,9 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use aphrodite_text::tokenizer::Tokenizer;
 use expect_test::{ExpectFile, expect_file};
 use serde_json::json;
+use sonar_text::tokenizer::Tokenizer;
 use thiserror_ext::AsReport;
 
 use crate::EffortValue;
@@ -28,11 +28,11 @@ impl Tokenizer for FixtureTokenizer {
         &self,
         text: &str,
         _add_special_tokens: bool,
-    ) -> aphrodite_text::tokenizer::Result<Vec<u32>> {
+    ) -> sonar_text::tokenizer::Result<Vec<u32>> {
         Ok(text.bytes().map(u32::from).collect())
     }
 
-    fn encode_ordinary(&self, text: &str) -> aphrodite_tokenizer::Result<Vec<u32>> {
+    fn encode_ordinary(&self, text: &str) -> sonar_tokenizer::Result<Vec<u32>> {
         self.encode(text, false)
     }
 
@@ -40,7 +40,7 @@ impl Tokenizer for FixtureTokenizer {
         &self,
         token_ids: &[u32],
         _skip_special_tokens: bool,
-    ) -> aphrodite_text::tokenizer::Result<String> {
+    ) -> sonar_text::tokenizer::Result<String> {
         Ok(token_ids
             .iter()
             .map(|token_id| char::from_u32(*token_id).unwrap_or('\u{FFFD}'))

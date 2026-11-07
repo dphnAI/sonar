@@ -3,7 +3,7 @@
 //
 // Shapes and workspace layout shared by the fused MQA-logits + top-k kernel
 // and its host wrapper. The Python side mirrors the workspace sizes in
-// aphrodite/model_executor/kernels/attention/dsa/fused_mqa_topk.py (the host
+// sonar/model_executor/kernels/attention/dsa/fused_mqa_topk.py (the host
 // wrapper checks them).
 #pragma once
 

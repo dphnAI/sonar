@@ -7,8 +7,8 @@ from __future__ import annotations
 
 import pybase64
 
-from aphrodite.multimodal.inputs import MultiModalKwargsItem
-from aphrodite.v1.serial_utils import MsgpackDecoder, MsgpackEncoder
+from sonar.multimodal.inputs import MultiModalKwargsItem
+from sonar.v1.serial_utils import MsgpackDecoder, MsgpackEncoder
 
 _encoder = MsgpackEncoder(size_threshold=2**62)  # force all tensors inline
 _decoder = MsgpackDecoder(t=MultiModalKwargsItem)

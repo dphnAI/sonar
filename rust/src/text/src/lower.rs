@@ -8,14 +8,14 @@ pub(crate) mod logprobs;
 pub(crate) mod sampling;
 pub(crate) mod token_ids;
 
-use aphrodite_engine_core_client::protocol::sampling::{
+use sonar_engine_core_client::protocol::sampling::{
     EngineCoreSamplingParams, RepetitionDetectionParams,
 };
-use aphrodite_engine_core_client::protocol::structured_outputs::{
+use sonar_engine_core_client::protocol::structured_outputs::{
     EngineCoreStructuredOutputsParams, StructuredOutputBackend,
 };
-use aphrodite_llm::GenerateRequest;
-use aphrodite_tokenizer::Tokenizer;
+use sonar_llm::GenerateRequest;
+use sonar_tokenizer::Tokenizer;
 
 use crate::backend::{SamplingHints, SamplingLimits};
 use crate::error::{Error, Result};
@@ -32,7 +32,7 @@ pub struct PreparedTextRequest {
     /// The high-level request fields still needed for response-side metadata
     /// and decoding options.
     pub text_request: TextRequest,
-    /// The southbound request ready to be sent to `aphrodite-llm`.
+    /// The southbound request ready to be sent to `sonar-llm`.
     pub generate_request: GenerateRequest,
 }
 
@@ -60,7 +60,7 @@ pub fn lower_text_request(
             SamplingParams {
                 // Move the candidate table rather than cloning it; only lowering reads it.
                 prompt_logprob_token_ids: request.sampling_params.prompt_logprob_token_ids.take(),
-                aphrodite_sampling: std::mem::take(&mut request.sampling_params.aphrodite_sampling),
+                sonar_sampling: std::mem::take(&mut request.sampling_params.sonar_sampling),
                 ..request.sampling_params.clone()
             },
             sampling_hints,
@@ -136,9 +136,9 @@ pub fn lower_sampling_params(
         structured_outputs,
         skip_reading_prefix_cache,
         routed_experts_prompt_start,
-        aphrodite_xargs,
+        sonar_xargs,
         stream_interval,
-        mut aphrodite_sampling,
+        mut sonar_sampling,
     } = sampling_params;
 
     validate_logprobs(
@@ -167,10 +167,10 @@ pub fn lower_sampling_params(
         .map(|params| EngineCoreStructuredOutputsParams::new(params, structured_outputs_backend))
         .transpose()?;
 
-    // Mirrors the model-generation-config inheritance used by Aphrodite's OpenAI chat
+    // Mirrors the model-generation-config inheritance used by Sonar's OpenAI chat
     // path: https://github.com/vllm-project/vllm/blob/bc2c0c86efb28e77677a3cfb8687e976914a313a/vllm/entrypoints/openai/chat_completion/protocol.py#L424-L450
     // If neither the caller nor the model provides a value, fall back to 1.0 — the
-    // default used by the Python Aphrodite OpenAI-compatible API (via
+    // default used by the Python Sonar OpenAI-compatible API (via
     // `_DEFAULT_SAMPLING_PARAMS`).
     let temperature = temperature.or(default_temperature).unwrap_or(1.0);
     let top_p = top_p.or(default_top_p).unwrap_or(1.0);
@@ -210,14 +210,14 @@ pub fn lower_sampling_params(
         bad_words_token_ids.extend(tokenized);
     }
 
-    if aphrodite_sampling.dry_sequence_breaker_ids.is_empty()
-        && let Some(breakers) = &aphrodite_sampling.dry_sequence_breakers
+    if sonar_sampling.dry_sequence_breaker_ids.is_empty()
+        && let Some(breakers) = &sonar_sampling.dry_sequence_breakers
     {
         for breaker in breakers {
             // Match SamplingParams.update_from_tokenizer(): the final token of
             // "a{breaker}" identifies the repetition-window separator.
             if let Some(&token_id) = tokenizer.encode(&format!("a{breaker}"), false)?.last() {
-                aphrodite_sampling.dry_sequence_breaker_ids.push(token_id);
+                sonar_sampling.dry_sequence_breaker_ids.push(token_id);
             }
         }
     }
@@ -262,10 +262,10 @@ pub fn lower_sampling_params(
         structured_outputs,
         logprob_token_ids,
         skip_reading_prefix_cache,
-        extra_args: aphrodite_xargs,
+        extra_args: sonar_xargs,
         routed_experts_prompt_start,
         stream_interval,
-        aphrodite_sampling,
+        sonar_sampling,
     };
     validate_resolved_sampling_params(&params)?;
     validate_vocab_range(&params, &sampling_limits)?;
@@ -314,7 +314,7 @@ fn validate_repetition_detection(params: Option<&RepetitionDetectionParams>) -> 
     Ok(())
 }
 
-/// Convert bad-word strings into token-ID sequences, following the Python Aphrodite
+/// Convert bad-word strings into token-ID sequences, following the Python Sonar
 /// logic in `SamplingParams.update_from_tokenizer()`.
 ///
 /// Each word is encoded both with and without a leading space so that the ban
@@ -374,8 +374,8 @@ fn tokenize_bad_words(
     Ok((!all_token_ids.is_empty()).then_some(all_token_ids))
 }
 
-/// Resolve the effective `max_tokens` for generation, mirroring Aphrodite Python's
-/// `get_max_tokens()` in `aphrodite/entrypoints/utils.py`.
+/// Resolve the effective `max_tokens` for generation, mirroring Sonar Python's
+/// `get_max_tokens()` in `sonar/entrypoints/utils.py`.
 ///
 /// Takes the minimum of all available limits: user-specified, generation-config
 /// default, and `max_model_len - prompt_len`.
@@ -421,14 +421,14 @@ mod tests {
     use std::collections::{BTreeSet, HashMap};
     use std::num::NonZeroU32;
 
-    use aphrodite_engine_core_client::protocol::kv_hints::{KvHintAction, KvHintsEnvelope};
-    use aphrodite_engine_core_client::protocol::multimodal::{
+    use serial_test::file_serial;
+    use sonar_engine_core_client::protocol::kv_hints::{KvHintAction, KvHintsEnvelope};
+    use sonar_engine_core_client::protocol::multimodal::{
         MmFeatureSpec, MmModality, PlaceholderRange,
     };
-    use aphrodite_engine_core_client::protocol::structured_outputs::StructuredOutputsParams;
-    use aphrodite_engine_core_client::protocol::tensor::WireNdArray;
-    use aphrodite_tokenizer::test_utils::TestTokenizer;
-    use serial_test::file_serial;
+    use sonar_engine_core_client::protocol::structured_outputs::StructuredOutputsParams;
+    use sonar_engine_core_client::protocol::tensor::WireNdArray;
+    use sonar_tokenizer::test_utils::TestTokenizer;
     use thiserror_ext::AsReport as _;
 
     use super::*;
@@ -504,16 +504,13 @@ mod tests {
             "dry_multiplier": 0.8,
             "dry_sequence_breakers": ["\n", ":"],
             "xtc_probability": 0.2,
-            "aphrodite_xargs": {"_sonar_phrase_retry": true}
+            "sonar_xargs": {"_sonar_phrase_retry": true}
         }))
         .unwrap();
         let params =
             lower_sampling_params_with_limits(sampling_params, sample_sampling_limits()).unwrap();
-        assert_eq!(
-            params.aphrodite_sampling.dry_sequence_breaker_ids,
-            vec![10, 58]
-        );
-        assert_eq!(params.aphrodite_sampling.xtc_probability, 0.2);
+        assert_eq!(params.sonar_sampling.dry_sequence_breaker_ids, vec![10, 58]);
+        assert_eq!(params.sonar_sampling.xtc_probability, 0.2);
         assert_eq!(params.extra_args.unwrap()["_sonar_phrase_retry"], true);
     }
 
@@ -867,7 +864,7 @@ mod tests {
                 extra_args: None,
                 routed_experts_prompt_start: 0,
                 stream_interval: None,
-                aphrodite_sampling: AphroditeSamplingParams {
+                sonar_sampling: SonarSamplingParams {
                     no_repeat_ngram_size: 0,
                     dynatemp_min: 0.0,
                     dynatemp_max: 0.0,
@@ -952,7 +949,7 @@ mod tests {
                 extra_args: None,
                 routed_experts_prompt_start: 0,
                 stream_interval: None,
-                aphrodite_sampling: AphroditeSamplingParams {
+                sonar_sampling: SonarSamplingParams {
                     no_repeat_ngram_size: 0,
                     dynatemp_min: 0.0,
                     dynatemp_max: 0.0,
@@ -1165,7 +1162,7 @@ mod tests {
                 extra_args: None,
                 routed_experts_prompt_start: 0,
                 stream_interval: None,
-                aphrodite_sampling: AphroditeSamplingParams {
+                sonar_sampling: SonarSamplingParams {
                     no_repeat_ngram_size: 0,
                     dynatemp_min: 0.0,
                     dynatemp_max: 0.0,
@@ -1270,7 +1267,7 @@ mod tests {
                 extra_args: None,
                 routed_experts_prompt_start: 0,
                 stream_interval: None,
-                aphrodite_sampling: AphroditeSamplingParams {
+                sonar_sampling: SonarSamplingParams {
                     no_repeat_ngram_size: 0,
                     dynatemp_min: 0.0,
                     dynatemp_max: 0.0,
@@ -1370,7 +1367,7 @@ mod tests {
                 extra_args: None,
                 routed_experts_prompt_start: 0,
                 stream_interval: None,
-                aphrodite_sampling: AphroditeSamplingParams {
+                sonar_sampling: SonarSamplingParams {
                     no_repeat_ngram_size: 0,
                     dynatemp_min: 0.0,
                     dynatemp_max: 0.0,
@@ -1866,7 +1863,7 @@ mod tests {
                 extra_args: None,
                 routed_experts_prompt_start: 0,
                 stream_interval: None,
-                aphrodite_sampling: AphroditeSamplingParams {
+                sonar_sampling: SonarSamplingParams {
                     no_repeat_ngram_size: 0,
                     dynatemp_min: 0.0,
                     dynatemp_max: 0.0,

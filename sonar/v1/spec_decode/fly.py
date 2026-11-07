@@ -10,7 +10,7 @@ inside its rejection kernel.
 
 import torch
 
-from aphrodite.triton_utils import tl, triton
+from sonar.triton_utils import tl, triton
 
 
 def compute_fly_entropy(values: torch.Tensor, entropy_top_k: int, *, from_logits: bool = False) -> torch.Tensor:

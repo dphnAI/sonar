@@ -3,8 +3,8 @@
 
 import pytest
 
-from aphrodite.reasoning import ReasoningParserManager
-from aphrodite.tokenizers import get_tokenizer
+from sonar.reasoning import ReasoningParserManager
+from sonar.tokenizers import get_tokenizer
 
 pytestmark = pytest.mark.skip_global_cleanup
 

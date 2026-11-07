@@ -3,7 +3,7 @@
 
 import pytest
 
-from aphrodite.distributed.kv_transfer.kv_connector.utils import (
+from sonar.distributed.kv_transfer.kv_connector.utils import (
     EngineTransferInfo,
     TransferTopology,
 )

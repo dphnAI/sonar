@@ -15,10 +15,10 @@ group-boundary tokens ``(position + 1) % compress_ratio == 0`` produce a key.
 
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.deep_gemm import mqa_logits_use_mx_scales
-from aphrodite.v1.attention.ops.common import pack_ue8m0_x4
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
+from sonar.utils.deep_gemm import mqa_logits_use_mx_scales
+from sonar.v1.attention.ops.common import pack_ue8m0_x4
 
 from . import MXFP4_BLOCK_SIZE, _fp32x2_to_fp4x2
 

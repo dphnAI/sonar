@@ -8,43 +8,43 @@ from compressed_tensors.quantization import (
     QuantizationStrategy,
 )
 
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe import (
     FusedMoeWeightScaleSupported,
     RoutedExperts,
     SharedExperts,
 )
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEQuantConfig,
 )
-from aphrodite.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
-from aphrodite.model_executor.layers.fused_moe.oracle.fp8 import (
+from sonar.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
+from sonar.model_executor.layers.fused_moe.oracle.fp8 import (
     convert_to_fp8_moe_kernel_format,
     make_fp8_moe_kernel,
     make_fp8_moe_quant_config,
     select_fp8_moe_backend,
 )
-from aphrodite.model_executor.layers.quantization.compressed_tensors.compressed_tensors_moe import (  # noqa E501
+from sonar.model_executor.layers.quantization.compressed_tensors.compressed_tensors_moe import (  # noqa E501
     CompressedTensorsMoEMethod,
 )
-from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
+from sonar.model_executor.layers.quantization.utils.fp8_utils import (
     process_fp8_input_tensor_strategy_moe,
     process_fp8_weight_tensor_strategy_moe,
     validate_fp8_block_shape_moe,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     kFp8Dynamic128Sym,
     kFp8DynamicTokenSym,
     kFp8Static128BlockSym,
     kFp8StaticChannelSym,
     kFp8StaticTensorSym,
 )
-from aphrodite.model_executor.layers.quantization.utils.w8a8_utils import (
+from sonar.model_executor.layers.quantization.utils.w8a8_utils import (
     normalize_e4m3fn_to_e4m3fnuz,
 )
-from aphrodite.model_executor.utils import replace_parameter, set_weight_attrs
-from aphrodite.platforms import current_platform
+from sonar.model_executor.utils import replace_parameter, set_weight_attrs
+from sonar.platforms import current_platform
 
 logger = init_logger(__name__)
 
@@ -85,27 +85,27 @@ class CompressedTensorsW8A8Fp8MoEMethod(CompressedTensorsMoEMethod):
                 "For FP8 Fused MoE layer, we require either per tensor or channelwise, dynamic per token quantization."
             )
 
-        ct2aphrodite_weight = {
+        ct2sonar_weight = {
             QuantizationStrategy.CHANNEL: kFp8StaticChannelSym,
             QuantizationStrategy.TENSOR: kFp8StaticTensorSym,
             QuantizationStrategy.BLOCK: kFp8Static128BlockSym,
         }
-        ct2aphrodite_act = {
+        ct2sonar_act = {
             QuantizationStrategy.TOKEN: kFp8DynamicTokenSym,
             QuantizationStrategy.TENSOR: (kFp8StaticTensorSym if self.static_input_scales else kFp8Dynamic128Sym),
         }
-        weight_key = ct2aphrodite_weight[self.weight_quant.strategy]
+        weight_key = ct2sonar_weight[self.weight_quant.strategy]
         if weight_key == kFp8Static128BlockSym:
             activation_key = kFp8Dynamic128Sym
         else:
-            activation_key = ct2aphrodite_act[self.input_quant.strategy]
+            activation_key = ct2sonar_act[self.input_quant.strategy]
 
         # Select Fp8 MoE backend
         self.fp8_backend, self.experts_cls = select_fp8_moe_backend(
             config=self.moe,
             weight_key=weight_key,
             activation_key=activation_key,
-            allow_aphrodite_cutlass=True,
+            allow_sonar_cutlass=True,
         )
 
     def create_weights(

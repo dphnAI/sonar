@@ -5,25 +5,25 @@ from collections.abc import Callable
 
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.kernels.linear import init_nvfp4_linear_kernel
-from aphrodite.model_executor.kernels.linear.nvfp4.emulation import (
+from sonar.logger import init_logger
+from sonar.model_executor.kernels.linear import init_nvfp4_linear_kernel
+from sonar.model_executor.kernels.linear.nvfp4.emulation import (
     EmulationNvFp4LinearKernel,
 )
-from aphrodite.model_executor.layers.quantization.quark.schemes.quark_scheme import (
+from sonar.model_executor.layers.quantization.quark.schemes.quark_scheme import (
     QuarkScheme,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     kNvfp4Dynamic,
     kNvfp4Static,
 )
-from aphrodite.model_executor.parameter import (
+from sonar.model_executor.parameter import (
     GroupQuantScaleParameter,
     ModelWeightParameter,
     PerTensorScaleParameter,
 )
-from aphrodite.model_executor.utils import replace_parameter, retire_parameter
+from sonar.model_executor.utils import replace_parameter, retire_parameter
 
 __all__ = ["QuarkNVFP4"]
 

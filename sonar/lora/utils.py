@@ -8,12 +8,12 @@ from huggingface_hub.utils import HfHubHTTPError, HFValidationError
 from torch import nn
 from transformers import PreTrainedConfig
 
-from aphrodite import envs
-from aphrodite.config.lora import LoRAConfig
-from aphrodite.logger import init_logger
+from sonar import envs
+from sonar.config.lora import LoRAConfig
+from sonar.logger import init_logger
 
 # being imported for _all_lora_classes below
-from aphrodite.lora.layers import (
+from sonar.lora.layers import (
     BaseClassificationHeadWithLoRA,
     BaseLayerWithLoRA,
     ClassificationHeadWithLoRA,
@@ -37,17 +37,17 @@ from aphrodite.lora.layers import (
     TokenClassificationHeadWithLoRA,
     VocabParallelEmbeddingWithLoRA,
 )
-from aphrodite.model_executor.custom_op import maybe_get_oot_by_class
-from aphrodite.model_executor.layers.fused_moe import MoERunner
-from aphrodite.model_executor.layers.linear import LinearBase
-from aphrodite.model_executor.layers.vocab_parallel_embedding import VocabParallelEmbedding
-from aphrodite.model_executor.utils import get_moe_expert_mapping, get_packed_modules_mapping
-from aphrodite.transformers_utils.repo_utils import hf_api
+from sonar.model_executor.custom_op import maybe_get_oot_by_class
+from sonar.model_executor.layers.fused_moe import MoERunner
+from sonar.model_executor.layers.linear import LinearBase
+from sonar.model_executor.layers.vocab_parallel_embedding import VocabParallelEmbedding
+from sonar.model_executor.utils import get_moe_expert_mapping, get_packed_modules_mapping
+from sonar.transformers_utils.repo_utils import hf_api
 
 if TYPE_CHECKING:
-    from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-    from aphrodite.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
-    from aphrodite.model_executor.models.utils import WeightsMapper
+    from sonar.model_executor.layers.logits_processor import LogitsProcessor
+    from sonar.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
+    from sonar.model_executor.models.utils import WeightsMapper
 
 logger = init_logger(__name__)
 
@@ -233,7 +233,7 @@ def is_base_embedding_weights(name: str) -> bool:
 
 
 def get_supported_lora_modules(model: nn.Module) -> list[str]:
-    """In Aphrodite, all linear layers support LoRA."""
+    """In Sonar, all linear layers support LoRA."""
     supported_lora_modules: set[str] = set()
     for name, module in model.named_modules():
         # get the embedding modules if the module's embedding_modules
@@ -358,7 +358,7 @@ def get_adapter_absolute_path(lora_path: str) -> str:
         return os.path.abspath(lora_path)
 
     # If the path does not exist locally.
-    if envs.APHRODITE_USE_MODELSCOPE:
+    if envs.SONAR_USE_MODELSCOPE:
         # If using ModelScope, we assume the path is a ModelScope repo.
         from modelscope.hub.snapshot_download import InvalidParameter, snapshot_download
         from requests import HTTPError

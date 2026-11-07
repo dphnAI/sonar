@@ -33,14 +33,14 @@ from unittest.mock import Mock
 import pytest
 import torch
 
-import aphrodite.distributed.weight_transfer.sharded_rdt_trainer as trainer_mod
-from aphrodite.distributed.nixl_utils import alias_nixl_for_ray
-from aphrodite.distributed.weight_transfer import ParamMeta, WeightSource
-from aphrodite.distributed.weight_transfer.sharded_rdt_common import (
+import sonar.distributed.weight_transfer.sharded_rdt_trainer as trainer_mod
+from sonar.distributed.nixl_utils import alias_nixl_for_ray
+from sonar.distributed.weight_transfer import ParamMeta, WeightSource
+from sonar.distributed.weight_transfer.sharded_rdt_common import (
     buffer_alloc_bytes,
     register_nixl_memory,
 )
-from aphrodite.distributed.weight_transfer.sharded_rdt_trainer import (
+from sonar.distributed.weight_transfer.sharded_rdt_trainer import (
     DEFAULT_GATHER_LOOKAHEAD,
     ShardedRDTTrainerInitInfo,
     ShardedRDTTrainerWeightTransferEngine,
@@ -59,8 +59,8 @@ def ray_nixl_transport(monkeypatch):
     from ray.experimental.rdt import util
     from ray.experimental.rdt.nixl_tensor_transport import NixlTensorTransport
 
-    from aphrodite.distributed import nixl_utils
-    from aphrodite.platforms import current_platform
+    from sonar.distributed import nixl_utils
+    from sonar.platforms import current_platform
 
     transport = NixlTensorTransport()
     package = ModuleType("nixl_rocm")
@@ -124,7 +124,7 @@ def test_ray_nixl_sets_ucx_limit_before_import(monkeypatch, ray_nixl_transport, 
 
 @pytest.mark.parametrize("existing_api", [False, True])
 def test_ray_nixl_preserves_non_rocm_or_existing_imports(monkeypatch, ray_nixl_transport, existing_api):
-    from aphrodite.platforms import current_platform
+    from sonar.platforms import current_platform
 
     _, _, importer, _ = ray_nixl_transport
     if existing_api:
@@ -142,7 +142,7 @@ def test_ray_nixl_preserves_non_rocm_or_existing_imports(monkeypatch, ray_nixl_t
 
 
 def test_ray_nixl_alias_reports_missing_rocm_package(monkeypatch, ray_nixl_transport):
-    from aphrodite.distributed import nixl_utils
+    from sonar.distributed import nixl_utils
 
     transport, api, importer, _ = ray_nixl_transport
     monkeypatch.setattr(nixl_utils, "is_nixl_available", lambda: False)

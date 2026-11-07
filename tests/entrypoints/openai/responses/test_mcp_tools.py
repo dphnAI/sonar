@@ -12,8 +12,8 @@ import pytest_asyncio
 from openai import OpenAI
 from openai_harmony import Message, ToolDescription, ToolNamespaceConfig
 
-import aphrodite.entrypoints.mcp.tool_server as tool_server_module
-from aphrodite.entrypoints.mcp.tool_server import (
+import sonar.entrypoints.mcp.tool_server as tool_server_module
+from sonar.entrypoints.mcp.tool_server import (
     MCPToolServer,
     init_tool_server,
     post_process_tools_description,
@@ -125,7 +125,7 @@ class TestMCPToolServerUnit:
         trimmed_schema = {"type": "object", "properties": {}}
 
         monkeypatch.setattr(
-            "aphrodite.entrypoints.mcp.tool_server.trim_schema",
+            "sonar.entrypoints.mcp.tool_server.trim_schema",
             lambda _schema: trimmed_schema,
         )
 
@@ -152,7 +152,7 @@ class TestMCPToolServerUnit:
 
     def test_builtin_tools_consistency(self):
         """MCP_BUILTIN_TOOLS must match BUILTIN_TOOL_TO_MCP_SERVER_LABEL values."""
-        from aphrodite.entrypoints.openai.parser.harmony_utils import (
+        from sonar.entrypoints.openai.parser.harmony_utils import (
             BUILTIN_TOOL_TO_MCP_SERVER_LABEL,
             MCP_BUILTIN_TOOLS,
         )
@@ -171,10 +171,10 @@ class TestMCPEnabled:
     def mcp_enabled_server(self):
         env_dict = {
             **BASE_TEST_ENV,
-            "APHRODITE_ENABLE_RESPONSES_API_STORE": "1",
+            "SONAR_ENABLE_RESPONSES_API_STORE": "1",
             "PYTHON_EXECUTION_BACKEND": "dangerously_use_uv",
-            "APHRODITE_GPT_OSS_SYSTEM_TOOL_MCP_LABELS": ("code_interpreter,container"),
-            "APHRODITE_GPT_OSS_HARMONY_SYSTEM_INSTRUCTIONS": "1",
+            "SONAR_GPT_OSS_SYSTEM_TOOL_MCP_LABELS": ("code_interpreter,container"),
+            "SONAR_GPT_OSS_HARMONY_SYSTEM_INSTRUCTIONS": "1",
         }
         with RemoteOpenAIServer(MODEL_NAME, list(_BASE_SERVER_ARGS), env_dict=env_dict) as remote_server:
             yield remote_server

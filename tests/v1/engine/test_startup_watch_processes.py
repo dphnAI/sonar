@@ -11,20 +11,20 @@ import pytest
 import torch
 import zmq
 
-import aphrodite.platforms as platforms
-from aphrodite.config import WatchdogConfig
-from aphrodite.utils import torch_utils
-from aphrodite.v1.engine import core as core_module
-from aphrodite.v1.engine import utils as engine_utils
-from aphrodite.v1.engine.core import EngineCoreProc, EngineShutdownState
-from aphrodite.v1.engine.utils import (
+import sonar.platforms as platforms
+from sonar.config import WatchdogConfig
+from sonar.utils import torch_utils
+from sonar.v1.engine import core as core_module
+from sonar.v1.engine import utils as engine_utils
+from sonar.v1.engine.core import EngineCoreProc, EngineShutdownState
+from sonar.v1.engine.utils import (
     CoreEngine,
     CoreEngineLaunch,
     CoreEngineProcManager,
     EngineZmqAddresses,
     wait_for_engine_startup,
 )
-from aphrodite.v1.executor import UniProcExecutor, multiproc_executor
+from sonar.v1.executor import UniProcExecutor, multiproc_executor
 
 pytestmark = pytest.mark.skip_global_cleanup
 
@@ -65,7 +65,7 @@ def test_engine_core_startup_threads_are_scoped_to_launch(
     expected: tuple[int, str | None, str | None],
 ):
     """UniProc workers inherit their CPU share and restore the parent."""
-    marker = torch_utils.OMP_NUM_THREADS_SET_BY_APHRODITE
+    marker = torch_utils.OMP_NUM_THREADS_SET_BY_SONAR
     monkeypatch.delenv(marker, raising=False)
     monkeypatch.delenv("OMP_NUM_THREADS", raising=False)
     if user_threads is not None:
@@ -118,7 +118,7 @@ def test_engine_core_startup_threads_are_scoped_to_launch(
             local_engine_count=local_engine_count,
             start_index=0,
             local_start_index=0,
-            aphrodite_config=SimpleNamespace(
+            sonar_config=SimpleNamespace(
                 shutdown_timeout=0,
                 parallel_config=SimpleNamespace(
                     data_parallel_size=local_engine_count,
@@ -166,9 +166,9 @@ def test_engine_core_process_shutdown_timeout(
     process_timeout: float | None,
 ):
     if worker_timeout is None:
-        monkeypatch.delenv("APHRODITE_WORKER_SHUTDOWN_TIMEOUT_SECONDS", raising=False)
+        monkeypatch.delenv("SONAR_WORKER_SHUTDOWN_TIMEOUT_SECONDS", raising=False)
     else:
-        monkeypatch.setenv("APHRODITE_WORKER_SHUTDOWN_TIMEOUT_SECONDS", worker_timeout)
+        monkeypatch.setenv("SONAR_WORKER_SHUTDOWN_TIMEOUT_SECONDS", worker_timeout)
     manager = object.__new__(CoreEngineProcManager)
     manager._request_shutdown_timeout = request_timeout
     manager.manager_stopped = Event()
@@ -230,7 +230,7 @@ def test_freeze_gc_after_clean_rocm_engine_core_shutdown(
     expected_calls: list[str],
 ):
     calls: list[str] = []
-    aphrodite_config = SimpleNamespace(
+    sonar_config = SimpleNamespace(
         shutdown_timeout=shutdown_timeout,
         # run_engine_core starts the watchdog from this field. The default
         # config has no dump_dir, so start_watch_dog returns immediately.
@@ -239,7 +239,7 @@ def test_freeze_gc_after_clean_rocm_engine_core_shutdown(
     proc = SimpleNamespace(
         shutdown_state=EngineShutdownState.RUNNING,
         has_work=lambda: has_work,
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         # Mirrors EngineCore._send_engine_dead, which run_engine_core calls
         # from its fatal-error handler.
         _send_engine_dead=lambda: None,
@@ -256,7 +256,7 @@ def test_freeze_gc_after_clean_rocm_engine_core_shutdown(
         numa_bind=False,
         reconfigure_for_independent_dp_rank=lambda: None,
     )
-    aphrodite_config.parallel_config = parallel_config
+    sonar_config.parallel_config = parallel_config
 
     for name in (
         "maybe_register_config_serialize_by_value",
@@ -276,7 +276,7 @@ def test_freeze_gc_after_clean_rocm_engine_core_shutdown(
     monkeypatch.setattr(core_module.gc, "freeze", lambda: calls.append("freeze"))
 
     with pytest.raises(SystemExit):
-        EngineCoreProc.run_engine_core(aphrodite_config=aphrodite_config)
+        EngineCoreProc.run_engine_core(sonar_config=sonar_config)
 
     assert calls == expected_calls
 

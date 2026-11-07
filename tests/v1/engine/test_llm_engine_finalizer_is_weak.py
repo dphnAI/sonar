@@ -15,7 +15,7 @@ import weakref
 import pytest
 import torch.nn as nn
 
-from aphrodite.v1.engine.llm_engine import LLMEngine
+from sonar.v1.engine.llm_engine import LLMEngine
 
 pytestmark = pytest.mark.cpu_test
 
@@ -54,7 +54,7 @@ def test_cleanup_tolerates_a_dead_model():
 
 
 def test_cleanup_still_walks_a_live_model(monkeypatch):
-    from aphrodite.compilation import wrapper
+    from sonar.compilation import wrapper
 
     cleaned = []
 

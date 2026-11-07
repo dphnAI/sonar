@@ -31,53 +31,53 @@ import torch
 from torch import nn
 from transformers import AXK1Config
 
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, CacheConfig, ParallelConfig
-from aphrodite.distributed import (
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import CacheConfig, ParallelConfig, SonarConfig
+from sonar.distributed import (
     get_ep_group,
     get_pp_group,
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
     tensor_model_parallel_all_gather,
 )
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.attention import Attention
+from sonar.model_executor.layers.fused_moe import (
     FusedMoEFactory,
     GateLinear,
     fused_moe_make_expert_params_mapping,
 )
-from aphrodite.model_executor.layers.fused_moe.utils import (
+from sonar.model_executor.layers.fused_moe.utils import (
     resolve_layer_fused_shared_expert,
 )
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     MergedColumnParallelLinear,
     ReplicatedLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.mla import MLAModules, MultiHeadLatentAttentionWrapper
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.mla import MLAModules, MultiHeadLatentAttentionWrapper
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.model_loader.weight_utils import (
+from sonar.model_executor.model_loader.weight_utils import (
     default_weight_loader,
     maybe_remap_kv_scale_name,
 )
-from aphrodite.model_executor.models.deepseek_v2 import (
+from sonar.model_executor.models.deepseek_v2 import (
     DeepseekAttention,
     DeepseekV2MLP,
     yarn_get_mscale,
 )
-from aphrodite.model_executor.models.utils import sequence_parallel_chunk
-from aphrodite.platforms import current_platform
-from aphrodite.sequence import IntermediateTensors
+from sonar.model_executor.models.utils import sequence_parallel_chunk
+from sonar.platforms import current_platform
+from sonar.sequence import IntermediateTensors
 
 from .interfaces import MixtureOfExperts, SupportsEagle, SupportsLoRA, SupportsPP
 from .utils import (
@@ -236,7 +236,7 @@ def _get_llama_4_scaling(
 class AXK1Attention(nn.Module):
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         config: AXK1Config,
         hidden_size: int,
         num_heads: int,
@@ -397,12 +397,12 @@ class AXK1MLAAttention(nn.Module):
     (https://arxiv.org/abs/2405.04434 and https://github.com/flashinfer-ai/flashinfer/pull/551).
 
         For more info see MLACommonImpl in:
-        aphrodite/v1/attention/backends/mla/utils.py
+        sonar/v1/attention/backends/mla/utils.py
     """
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         config: AXK1Config,
         hidden_size: int,
         num_heads: int,
@@ -548,18 +548,18 @@ class AXK1MLAAttention(nn.Module):
 class AXK1DecoderLayer(nn.Module):
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str,
         config: AXK1Config | None = None,
     ) -> None:
         super().__init__()
 
         if config is None:
-            config = aphrodite_config.model_config.hf_config
-        model_config = aphrodite_config.model_config
-        cache_config = aphrodite_config.cache_config
-        quant_config = aphrodite_config.quant_config
-        parallel_config = aphrodite_config.parallel_config
+            config = sonar_config.model_config.hf_config
+        model_config = sonar_config.model_config
+        cache_config = sonar_config.cache_config
+        quant_config = sonar_config.quant_config
+        parallel_config = sonar_config.parallel_config
         self.config = config
 
         assert config.max_position_embeddings is not None
@@ -592,7 +592,7 @@ class AXK1DecoderLayer(nn.Module):
         else:
             attn_cls = AXK1Attention
         self.self_attn = attn_cls(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             config=config,
             hidden_size=self.hidden_size,
             num_heads=config.num_attention_heads,
@@ -688,11 +688,11 @@ class AXK1DecoderLayer(nn.Module):
 class AXK1Model(nn.Module):
     fall_back_to_pt_during_load = False
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
 
-        config: AXK1Config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        config: AXK1Config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
         self.config = config
         self.device = current_platform.device_type
         self.vocab_size = config.vocab_size
@@ -708,14 +708,14 @@ class AXK1Model(nn.Module):
             self.embed_tokens = PPMissingLayer()
         self.start_layer, self.end_layer, self.layers = make_layers(
             config.num_hidden_layers,
-            lambda prefix: AXK1DecoderLayer(aphrodite_config, prefix),
+            lambda prefix: AXK1DecoderLayer(sonar_config, prefix),
             prefix=f"{prefix}.layers",
         )
 
         self.fused_shared_expert_layers = get_fused_shared_expert_layers(
             self,
             AXK1MoE,
-            enable_eplb=aphrodite_config.parallel_config.enable_eplb,
+            enable_eplb=sonar_config.parallel_config.enable_eplb,
         )
 
         if get_pp_group().is_last_rank:
@@ -727,7 +727,7 @@ class AXK1Model(nn.Module):
         )
         self.use_mha = all(dim == 0 for dim in (config.qk_nope_head_dim, config.qk_rope_head_dim))
         self.fuse_qkv_a_proj = config.q_lora_rank is not None
-        self.num_redundant_experts = aphrodite_config.parallel_config.eplb_config.num_redundant_experts
+        self.num_redundant_experts = sonar_config.parallel_config.eplb_config.num_redundant_experts
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.embed_tokens(input_ids)
@@ -1013,10 +1013,10 @@ class AXK1ForCausalLM(nn.Module, SupportsPP, AXK1MixtureOfExperts, SupportsLoRA,
     }
     model_cls = AXK1Model
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config: AXK1Config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        config: AXK1Config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
         self.config = config
         self.quant_config = quant_config
 
@@ -1038,7 +1038,7 @@ class AXK1ForCausalLM(nn.Module, SupportsPP, AXK1MixtureOfExperts, SupportsLoRA,
                 "kv_a_proj_with_mqa",
             ]
 
-        self.model = self.model_cls(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = self.model_cls(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
         if get_pp_group().is_last_rank:
             self.lm_head = ParallelLMHead(
                 config.vocab_size,

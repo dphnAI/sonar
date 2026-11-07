@@ -6,17 +6,17 @@ exactly dequantized K / V, and bitwise stable across runs and call splits."""
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 if not current_platform.is_rocm():
     pytest.skip("ROCm (gfx950) FlyDSL kernel", allow_module_level=True)
 
-from aphrodite.platforms.rocm import on_gfx950  # noqa: E402
+from sonar.platforms.rocm import on_gfx950  # noqa: E402
 
 if not on_gfx950():
     pytest.skip("gfx950 instructions", allow_module_level=True)
 
-from aphrodite.models.minimax_m3.amd.ops.nvfp4_prefill.host import (  # noqa: E402
+from sonar.models.minimax_m3.amd.ops.nvfp4_prefill.host import (  # noqa: E402
     minimax_m3_nvfp4_sparse_prefill,
     supports_nvfp4_sparse_prefill,
 )

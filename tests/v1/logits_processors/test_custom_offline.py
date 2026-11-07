@@ -6,8 +6,8 @@ from typing import Any
 import pytest
 
 import tests.v1.logits_processors.utils as logitproc_test_utils
-from aphrodite import LLM, SamplingParams
-from aphrodite.v1.sample.logits_processor import (
+from sonar import LLM, SamplingParams
+from sonar.v1.sample.logits_processor import (
     STR_POOLING_REJECTS_LOGITSPROCS,
     STR_SPEC_DEC_REJECTS_LOGITSPROCS,
     LogitsProcessor,
@@ -79,14 +79,14 @@ def _run_test(kwargs: dict, logitproc_loaded: bool) -> None:
       logitproc_loaded: server has loaded dummy logitproc if True
 
     """
-    # Create a Aphrodite instance and load custom logitproc
+    # Create a Sonar instance and load custom logitproc
     llm_logitproc = LLM(
         model=MODEL_NAME,
         gpu_memory_utilization=0.1,
         **kwargs,
     )
 
-    # Create a reference Aphrodite instance without custom logitproc
+    # Create a reference Sonar instance without custom logitproc
     llm_ref = LLM(model=MODEL_NAME, gpu_memory_utilization=0.1)
 
     # Run inference with logitproc loaded
@@ -146,10 +146,10 @@ def test_custom_logitsprocs(monkeypatch, logitproc_source: CustomLogitprocSource
 
     """
     # Test that logitproc info is passed to workers
-    monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "1")
+    monkeypatch.setenv("SONAR_ENABLE_V1_MULTIPROCESSING", "1")
     # These tests exercise the V1-interface logits processor; Model Runner V2
     # rejects V1-interface processors at load time by design.
-    monkeypatch.setenv("APHRODITE_USE_V2_MODEL_RUNNER", "0")
+    monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", "0")
     set_random_seed(40)
 
     # Choose LLM args based on logitproc source
@@ -160,7 +160,7 @@ def test_custom_logitsprocs(monkeypatch, logitproc_source: CustomLogitprocSource
         return
 
     if logitproc_source == CustomLogitprocSource.LOGITPROC_SOURCE_ENTRYPOINT:
-        # Scenario: Aphrodite loads a logitproc from a preconfigured entrypoint
+        # Scenario: Sonar loads a logitproc from a preconfigured entrypoint
         # To that end, register a real dist-info package so spawned
         # workers can discover the entrypoint via PYTHONPATH
         setup_fake_entrypoint(monkeypatch)
@@ -204,10 +204,10 @@ def test_custom_logitsprocs_req(monkeypatch):
 
     """
     # Test that logitproc info is passed to workers
-    monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "1")
+    monkeypatch.setenv("SONAR_ENABLE_V1_MULTIPROCESSING", "1")
     # These tests exercise the V1-interface logits processor; Model Runner V2
     # rejects V1-interface processors at load time by design.
-    monkeypatch.setenv("APHRODITE_USE_V2_MODEL_RUNNER", "0")
+    monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", "0")
     set_random_seed(40)
     _run_test({"logits_processors": [WrappedPerReqLogitsProcessor]}, logitproc_loaded=True)
 
@@ -223,7 +223,7 @@ def test_custom_logitsprocs_req(monkeypatch):
     ],
 )
 def test_rejects_custom_logitsprocs(monkeypatch, model_scenario: str, logitproc_source: CustomLogitprocSource):
-    """Validate that Aphrodite engine initialization properly rejects custom
+    """Validate that Sonar engine initialization properly rejects custom
     logitsprocs when the model is a pooling model or speculative decoding
     enabled.
 
@@ -247,10 +247,10 @@ def test_rejects_custom_logitsprocs(monkeypatch, model_scenario: str, logitproc_
                         logitproc from
 
     """
-    monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
+    monkeypatch.setenv("SONAR_ENABLE_V1_MULTIPROCESSING", "0")
     # These tests exercise V1-interface rejection and V1 runner internals;
     # Model Runner V2 rejects V1-interface processors at load time by design.
-    monkeypatch.setenv("APHRODITE_USE_V2_MODEL_RUNNER", "0")
+    monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", "0")
     set_random_seed(40)
 
     test_params: dict[str, dict[str, Any]] = {
@@ -278,7 +278,7 @@ def test_rejects_custom_logitsprocs(monkeypatch, model_scenario: str, logitproc_
     }
 
     if logitproc_source == CustomLogitprocSource.LOGITPROC_SOURCE_ENTRYPOINT:
-        # Scenario: Aphrodite loads a model and ignores a logitproc that is
+        # Scenario: Sonar loads a model and ignores a logitproc that is
         # available at a preconfigured entrypoint
 
         # Register real dist-info package so spawned workers can

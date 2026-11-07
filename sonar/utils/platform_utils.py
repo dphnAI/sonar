@@ -40,7 +40,7 @@ def cuda_get_device_properties(device, names: Sequence[str], init_cuda=False) ->
 
 @cache
 def is_pin_memory_available() -> bool:
-    from aphrodite.platforms import current_platform
+    from sonar.platforms import current_platform
 
     return current_platform.is_pin_memory_available()
 
@@ -49,7 +49,7 @@ def is_pin_memory_available() -> bool:
 def is_uva_available() -> bool:
     """Check if Unified Virtual Addressing (UVA) is available."""
     # UVA requires pinned memory.
-    from aphrodite.platforms import current_platform
+    from sonar.platforms import current_platform
 
     # TODO: Add more requirements for UVA if needed.
     return is_pin_memory_available() or current_platform.is_cpu()
@@ -58,14 +58,14 @@ def is_uva_available() -> bool:
 @cache
 def num_compute_units(device_id: int = 0) -> int:
     """Get the number of compute units of the current device."""
-    from aphrodite.platforms import current_platform
+    from sonar.platforms import current_platform
 
     return current_platform.num_compute_units(device_id)
 
 
 @cache
 def get_device_name_as_file_name(device_id: int = 0) -> str:
-    from aphrodite.platforms import current_platform
+    from sonar.platforms import current_platform
 
     name = current_platform.get_device_name(device_id)
     name = re.sub(r"[\s/]+", "_", name)

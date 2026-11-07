@@ -6,11 +6,11 @@ import functools
 
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.config import get_current_aphrodite_config
-from aphrodite.platforms import current_platform
-from aphrodite.utils.flashinfer import has_flashinfer
-from aphrodite.v1.worker.workspace import current_workspace_manager
+from sonar import _custom_ops as ops
+from sonar.config import get_current_sonar_config
+from sonar.platforms import current_platform
+from sonar.utils.flashinfer import has_flashinfer
+from sonar.v1.worker.workspace import current_workspace_manager
 
 RADIX_TOPK_WORKSPACE_SIZE = 1024 * 1024
 
@@ -21,14 +21,14 @@ RADIX_TOPK_WORKSPACE_SIZE = 1024 * 1024
 AUTO_COOPERATIVE_MAX_ROWS = 64
 
 # ---------------------------------------------------------------------------
-# DeepSelect (aphrodite._deepselect_C)
+# DeepSelect (sonar._deepselect_C)
 # ---------------------------------------------------------------------------
 
 # Matches the -1 fill convention used for topk_indices_buffer elsewhere.
 IDX_OOB_FILL_VALUE = -1
 
 try:
-    import aphrodite._deepselect_C  # noqa: F401  (registers torch.ops.deep_select)
+    import sonar._deepselect_C  # noqa: F401  (registers torch.ops.deep_select)
 
     _HAS_DEEP_SELECT_C = True
 except ImportError:
@@ -134,7 +134,7 @@ class SparseIndexerTopk(torch.nn.Module):
     def __init__(self, backend: str | None = None) -> None:
         super().__init__()
         if backend is None:
-            backend = get_current_aphrodite_config().kernel_config.sparse_indexer_topk_backend
+            backend = get_current_sonar_config().kernel_config.sparse_indexer_topk_backend
         self._backend = backend
         self._is_cuda = current_platform.is_cuda()
         self._has_deep_select = self._is_cuda and (current_platform.is_device_capability_family(100))
@@ -146,7 +146,7 @@ class SparseIndexerTopk(torch.nn.Module):
         self._aiter_enabled = False
         self._aiter_capable = False
         if self._is_rocm:
-            from aphrodite._aiter_ops import rocm_aiter_ops
+            from sonar._aiter_ops import rocm_aiter_ops
 
             self._aiter_enabled = bool(rocm_aiter_ops.is_enabled())
             self._aiter_capable = bool(rocm_aiter_ops.is_indexer_top_k_enabled())
@@ -172,7 +172,7 @@ class SparseIndexerTopk(torch.nn.Module):
             elif not self._has_deep_select:
                 failures.append("requires SM100a/SM103a (10.x device family)")
             elif not _HAS_DEEP_SELECT_C:
-                failures.append("aphrodite._deepselect_C could not be imported")
+                failures.append("sonar._deepselect_C could not be imported")
             elif not is_deep_select_supported(logits, topk_tokens):
                 failures.append(
                     f"inputs violate DeepSelect's constraints: dtype={logits.dtype},"
@@ -182,7 +182,7 @@ class SparseIndexerTopk(torch.nn.Module):
             if not self._is_rocm:
                 failures.append("requires a ROCm platform")
             elif not self._aiter_enabled:
-                failures.append("requires AITER (APHRODITE_ROCM_USE_AITER=1)")
+                failures.append("requires AITER (SONAR_ROCM_USE_AITER=1)")
             elif not self._aiter_capable:
                 failures.append("AITER has no tuned indexer top-k kernels for this GPU arch")
             if topk_tokens not in (512, 1024, 2048, 4096):
@@ -332,7 +332,7 @@ class SparseIndexerTopk(torch.nn.Module):
             indices = torch.where(in_range, indices, -1)
             topk_indices.copy_(indices)
         elif backend == "aiter":
-            from aphrodite._aiter_ops import rocm_aiter_ops
+            from sonar._aiter_ops import rocm_aiter_ops
 
             # AITER's decode kernel only implements the 1D/next_n == 1 form,
             # which is equivalent once the ragged ends are expanded.

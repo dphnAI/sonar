@@ -11,21 +11,21 @@ from compressed_tensors.quantization import (
     QuantizationType,
 )
 
-from aphrodite.model_executor.layers.fused_moe.oracle.int_wna16 import (
+from sonar.model_executor.layers.fused_moe.oracle.int_wna16 import (
     WNA16MoEBackend,
     _backend_incompatibility_reason,
     _convert_moe_wna16_humming_tensors,
     convert_to_wna16_moe_kernel_format,
     map_wna16_backend,
 )
-from aphrodite.model_executor.layers.quantization import moe_wna16
-from aphrodite.model_executor.layers.quantization.auto_awq import AutoAWQConfig
-from aphrodite.model_executor.layers.quantization.auto_gptq import AutoGPTQConfig
-from aphrodite.model_executor.layers.quantization.moe_wna16 import (
+from sonar.model_executor.layers.quantization import moe_wna16
+from sonar.model_executor.layers.quantization.auto_awq import AutoAWQConfig
+from sonar.model_executor.layers.quantization.auto_gptq import AutoGPTQConfig
+from sonar.model_executor.layers.quantization.moe_wna16 import (
     MoeWNA16Config,
     MoeWNA16Method,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 
 def test_map_wna16_backend_supports_triton():
@@ -258,7 +258,7 @@ def test_moe_wna16_humming_adapter_repacks_uint8_tensors():
 
 
 def test_moe_wna16_uses_humming_quant_config(monkeypatch):
-    from aphrodite.model_executor.layers.quantization.utils import humming as humming_utils
+    from sonar.model_executor.layers.quantization.utils import humming as humming_utils
 
     method = object.__new__(MoeWNA16Method)
     method.wna16_backend = WNA16MoEBackend.HUMMING
@@ -283,7 +283,7 @@ def test_compressed_tensors_wna16_moe_create_weights_uses_ceil_packed_shapes(
 ):
     pytest.importorskip("humming")
 
-    from aphrodite.model_executor.layers.quantization.compressed_tensors.compressed_tensors_moe.compressed_tensors_moe_wna16 import (  # noqa: E501
+    from sonar.model_executor.layers.quantization.compressed_tensors.compressed_tensors_moe.compressed_tensors_moe_wna16 import (  # noqa: E501
         CompressedTensorsWNA16MoEMethod,
     )
     from tests.kernels.moe.utils import make_dummy_moe_config
@@ -331,7 +331,7 @@ def test_compressed_tensors_wna16_moe_create_weights_uses_ceil_packed_shapes(
 def test_compressed_tensors_wna16_moe_converts_and_sets_up_humming_kernel():
     pytest.importorskip("humming")
 
-    from aphrodite.model_executor.layers.quantization.compressed_tensors.compressed_tensors_moe.compressed_tensors_moe_wna16 import (  # noqa: E501
+    from sonar.model_executor.layers.quantization.compressed_tensors.compressed_tensors_moe.compressed_tensors_moe_wna16 import (  # noqa: E501
         CompressedTensorsWNA16MoEMethod,
     )
     from tests.kernels.moe.utils import make_dummy_moe_config
@@ -388,8 +388,8 @@ def test_moe_wna16_forwards_packed_modules_mapping_to_linear_delegate(monkeypatc
     never fused ones, so without the mapping a fused layer resolves to
     `UnquantizedLinearMethod` and the checkpoint's qweight has nowhere to load.
     """
-    from aphrodite.model_executor.layers.linear import ColumnParallelLinear
-    from aphrodite.model_executor.layers.quantization.auto_gptq import AutoGPTQConfig
+    from sonar.model_executor.layers.linear import ColumnParallelLinear
+    from sonar.model_executor.layers.quantization.auto_gptq import AutoGPTQConfig
 
     config = MoeWNA16Config(
         linear_quant_method="gptq",
@@ -425,9 +425,9 @@ def test_moe_wna16_forwards_packed_modules_mapping_to_linear_delegate(monkeypatc
 def test_xpu_platform_supports_moe_wna16():
     """Regression guard for the XPU quantization allowlist."""
     try:
-        from aphrodite.platforms.xpu import XPUPlatform
+        from sonar.platforms.xpu import XPUPlatform
     except ImportError:
-        pytest.skip("aphrodite_xpu_kernels not importable outside an XPU stack")
+        pytest.skip("sonar_xpu_kernels not importable outside an XPU stack")
 
     assert "moe_wna16" in XPUPlatform.supported_quantization
 
@@ -486,7 +486,7 @@ def test_compressed_tensors_wna16_moe_marlin_prep_with_unset_group_size():
     both have to normalise the unset value. The post-repack shapes prove prep
     ran with the Marlin K/N rather than merely returning something.
     """
-    from aphrodite.model_executor.layers.quantization.compressed_tensors.compressed_tensors_moe.compressed_tensors_moe_wna16 import (  # noqa: E501
+    from sonar.model_executor.layers.quantization.compressed_tensors.compressed_tensors_moe.compressed_tensors_moe_wna16 import (  # noqa: E501
         CompressedTensorsWNA16MoEMethod,
     )
     from tests.kernels.moe.utils import make_dummy_moe_config

@@ -38,31 +38,31 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from aphrodite import _custom_ops as ops
-from aphrodite.compilation.breakable_cudagraph import eager_break_during_capture
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar import _custom_ops as ops
+from sonar.compilation.breakable_cudagraph import eager_break_during_capture
+from sonar.config import (
     CacheConfig,
-    get_current_aphrodite_config,
+    SonarConfig,
+    get_current_sonar_config,
 )
-from aphrodite.distributed import get_tensor_model_parallel_world_size
-from aphrodite.forward_context import get_forward_context
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.attention.attention import (
+from sonar.distributed import get_tensor_model_parallel_world_size
+from sonar.forward_context import get_forward_context
+from sonar.logger import init_logger
+from sonar.model_executor.layers.attention.attention import (
     _init_kv_cache_quant,
     set_default_quant_scales,
     should_load_quant_weights,
 )
-from aphrodite.model_executor.layers.attention.mla_attention import (
+from sonar.model_executor.layers.attention.mla_attention import (
     _get_kv_b_proj_input_dtype,
     accumulate_mla_context_chunk,
     init_mla_context_partial,
     neutralize_empty_context_partials,
     split_kv_b_proj,
 )
-from aphrodite.model_executor.layers.attention_layer_base import AttentionLayerBase
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.attention_layer_base import AttentionLayerBase
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     KimiK3MergedQKVGateLinear,
     MergedColumnParallelLinear,
@@ -70,15 +70,15 @@ from aphrodite.model_executor.layers.linear import (
     RowParallelLinear,
     UnquantizedLinearMethod,
 )
-from aphrodite.model_executor.layers.quantization import (
+from sonar.model_executor.layers.quantization import (
     QuantizationConfig,
     resolve_quant_method,
 )
-from aphrodite.model_executor.layers.rotary_embedding import RotaryEmbedding, get_rope
-from aphrodite.model_executor.utils import is_weights_pre_processed, replace_parameter
-from aphrodite.models.common.ops import fused_q_kv_rmsnorm
-from aphrodite.models.kimi_k3.nvidia.low_latency_gemm import try_low_latency_gemm
-from aphrodite.models.kimi_k3.nvidia.ops.fused_mla_key_concat_kv_cache import (
+from sonar.model_executor.layers.rotary_embedding import RotaryEmbedding, get_rope
+from sonar.model_executor.utils import is_weights_pre_processed, replace_parameter
+from sonar.models.common.ops import fused_q_kv_rmsnorm
+from sonar.models.kimi_k3.nvidia.low_latency_gemm import try_low_latency_gemm
+from sonar.models.kimi_k3.nvidia.ops.fused_mla_key_concat_kv_cache import (
     fused_mla_decode_q_concat_kv_cache_insert,
     fused_mla_key_concat_ds_mla_insert,
     fused_mla_key_concat_kv_cache_insert,
@@ -86,22 +86,22 @@ from aphrodite.models.kimi_k3.nvidia.ops.fused_mla_key_concat_kv_cache import (
     fused_mla_kv_pack_quant_fp8,
     fused_mla_qkv_quant_kv_cache_fp8_insert,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.transformers_utils.configs.kimi_linear import KimiLinearConfig
-from aphrodite.utils.multi_stream_utils import maybe_execute_in_parallel
-from aphrodite.utils.torch_utils import (
+from sonar.platforms import current_platform
+from sonar.transformers_utils.configs.kimi_linear import KimiLinearConfig
+from sonar.utils.multi_stream_utils import maybe_execute_in_parallel
+from sonar.utils.torch_utils import (
     kv_cache_dtype_str_to_dtype,
 )
-from aphrodite.v1.attention.backend import (
+from sonar.v1.attention.backend import (
     AttentionBackend,
     AttentionType,
     MLAAttentionImpl,
 )
-from aphrodite.v1.attention.backends.mla.prefill import get_mla_prefill_backend
-from aphrodite.v1.attention.ops.dcp import MLADCPManager
-from aphrodite.v1.attention.ops.merge_attn_states import merge_attn_states
-from aphrodite.v1.attention.selector import get_attn_backend
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.attention.backends.mla.prefill import get_mla_prefill_backend
+from sonar.v1.attention.ops.dcp import MLADCPManager
+from sonar.v1.attention.ops.merge_attn_states import merge_attn_states
+from sonar.v1.attention.selector import get_attn_backend
+from sonar.v1.kv_cache_interface import (
     KVCacheSpec,
     MLAAttentionSpec,
     get_kv_quant_mode,
@@ -109,7 +109,7 @@ from aphrodite.v1.kv_cache_interface import (
 )
 
 if TYPE_CHECKING:
-    from aphrodite.model_executor.layers.attention.mla_attention import MLACommonMetadata
+    from sonar.model_executor.layers.attention.mla_attention import MLACommonMetadata
 
 logger = init_logger(__name__)
 
@@ -294,7 +294,7 @@ class MultiHeadLatentAttention(nn.Module, AttentionLayerBase):
         )
         self.gemm_rs_ar = None
         if run_gemm_rs_ar:
-            from aphrodite.model_executor.kernels.linear.cute_dsl.gemm_rs_ar import (
+            from sonar.model_executor.kernels.linear.cute_dsl.gemm_rs_ar import (
                 get_gemm_rs_ar,
             )
 
@@ -354,8 +354,8 @@ class MultiHeadLatentAttention(nn.Module, AttentionLayerBase):
             self.impl.dcp_rank = 0
         self.q_pad_num_heads = getattr(self.impl, "q_pad_num_heads", None)
 
-        aphrodite_config = get_current_aphrodite_config()
-        parallel_config = aphrodite_config.parallel_config
+        sonar_config = get_current_sonar_config()
+        parallel_config = sonar_config.parallel_config
         assert parallel_config.prefill_context_parallel_size == 1, (
             "Kimi-K3 MultiHeadLatentAttention does not support prefill context parallelism."
         )
@@ -368,7 +368,7 @@ class MultiHeadLatentAttention(nn.Module, AttentionLayerBase):
                 else dtype
             )
             self.dcp_manager = MLADCPManager(
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 device=next(self.kv_b_proj.parameters()).device,
                 num_heads=self.num_local_heads,
                 query_head_dim=self.head_size,
@@ -379,17 +379,17 @@ class MultiHeadLatentAttention(nn.Module, AttentionLayerBase):
                 is_lse_base_on_e=self.impl.lse_base_on_e,
                 use_pcp=False,
             )
-        self.prefill_backend = get_mla_prefill_backend(aphrodite_config)(
+        self.prefill_backend = get_mla_prefill_backend(sonar_config)(
             num_heads=self.num_local_heads,
             scale=self.scale,
             kv_lora_rank=self.kv_lora_rank,
             qk_nope_head_dim=self.qk_nope_head_dim,
             qk_rope_head_dim=self.qk_rope_head_dim,
             v_head_dim=self.v_head_dim,
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
         )
 
-        compilation_config = aphrodite_config.compilation_config
+        compilation_config = sonar_config.compilation_config
         if prefix in compilation_config.static_forward_context:
             raise ValueError(f"Duplicate layer name: {prefix}")
         compilation_config.static_forward_context[prefix] = self
@@ -405,11 +405,11 @@ class MultiHeadLatentAttention(nn.Module, AttentionLayerBase):
     def get_attn_backend(self) -> type[AttentionBackend]:
         return self.attn_backend
 
-    def get_kv_cache_spec(self, aphrodite_config: AphroditeConfig) -> KVCacheSpec:
-        kv_cache_dtype = kv_cache_dtype_str_to_dtype(self.kv_cache_dtype, aphrodite_config.model_config)
+    def get_kv_cache_spec(self, sonar_config: SonarConfig) -> KVCacheSpec:
+        kv_cache_dtype = kv_cache_dtype_str_to_dtype(self.kv_cache_dtype, sonar_config.model_config)
         # TODO: Remove this mypy workaround once the K3 PR is fully merged.
         return MLAAttentionSpec(  # type: ignore[call-arg]
-            block_size=aphrodite_config.cache_config.block_size,
+            block_size=sonar_config.cache_config.block_size,
             num_kv_heads=1,
             max_tp_shards=1,
             head_size=self.head_size,

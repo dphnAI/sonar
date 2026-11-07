@@ -8,17 +8,17 @@ import pytest
 import torch
 from torch import nn
 
-from aphrodite.compilation.counter import compilation_counter
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.compilation.counter import compilation_counter
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import (
     CompilationConfig,
     CompilationMode,
     CUDAGraphMode,
-    set_current_aphrodite_config,
+    SonarConfig,
+    set_current_sonar_config,
 )
-from aphrodite.forward_context import BatchDescriptor, set_forward_context
-from aphrodite.utils.torch_utils import is_torch_equal_or_newer
+from sonar.forward_context import BatchDescriptor, set_forward_context
+from sonar.utils.torch_utils import is_torch_equal_or_newer
 
 from ...utils import create_new_process_for_each_test
 
@@ -42,7 +42,7 @@ class SillyModel(nn.Module):
     def __init__(
         self,
         *,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
         intermediate_unbacked=False,
         **kwargs,
@@ -88,9 +88,9 @@ def _run_simple_model(
     *,
     intermediate_unbacked=False,
 ):
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         compilation_config=CompilationConfig(
-            mode=CompilationMode.APHRODITE_COMPILE,
+            mode=CompilationMode.SONAR_COMPILE,
             backend=backend,
             splitting_ops=splitting_ops,
             use_inductor_graph_partition=use_inductor_graph_partition,
@@ -98,9 +98,9 @@ def _run_simple_model(
             cudagraph_capture_sizes=[1, 2],
         )
     )
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         model = SillyModel(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             prefix="",
             intermediate_unbacked=intermediate_unbacked,
         )
@@ -115,7 +115,7 @@ def _run_simple_model(
             num_backend_compilations=expected_num_backend_compilations,
             num_cudagraph_captured=expected_num_cudagraph_captured,
         ),
-        set_forward_context(None, aphrodite_config=aphrodite_config),
+        set_forward_context(None, sonar_config=sonar_config),
     ):  # background context
         # warm up with background context
         model(inputs)
@@ -123,7 +123,7 @@ def _run_simple_model(
         # capturing/replaying should under context of cudagraph dispatching
         with set_forward_context(
             None,
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             cudagraph_runtime_mode=CUDAGraphMode.PIECEWISE,
             batch_descriptor=BatchDescriptor(
                 num_tokens=2,
@@ -132,7 +132,7 @@ def _run_simple_model(
             model(torch.randn(2).cuda())
         with set_forward_context(
             None,
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             cudagraph_runtime_mode=CUDAGraphMode.PIECEWISE,
             batch_descriptor=BatchDescriptor(
                 num_tokens=1,
@@ -144,7 +144,7 @@ def _run_simple_model(
         reset_global_counter()
         with set_forward_context(
             None,
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             cudagraph_runtime_mode=CUDAGraphMode.PIECEWISE,
             batch_descriptor=BatchDescriptor(
                 num_tokens=2,
@@ -166,7 +166,7 @@ def test_simple_piecewise_compile(backend, intermediate_unbacked, monkeypatch):
     # share the same cache slot. Disabling the cache forces each variant to
     # compile fresh; otherwise the second-running variant loads the first's
     # artifact and segfaults with an illegal memory access.
-    monkeypatch.setenv("APHRODITE_DISABLE_COMPILE_CACHE", "1")
+    monkeypatch.setenv("SONAR_DISABLE_COMPILE_CACHE", "1")
     _run_simple_model(
         splitting_ops=["silly::attention"],
         use_inductor_graph_partition=False,
@@ -190,7 +190,7 @@ def test_simple_inductor_graph_partition(monkeypatch):
 
     # disable compile cache so that we run separately for different splitting_ops
     # and get the expected number of cudagraphs captured.
-    monkeypatch.setenv("APHRODITE_DISABLE_COMPILE_CACHE", "1")
+    monkeypatch.setenv("SONAR_DISABLE_COMPILE_CACHE", "1")
 
     _run_simple_model(
         splitting_ops=["silly::attention"],

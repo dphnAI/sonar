@@ -13,18 +13,18 @@ import msgspec
 import msgspec.msgpack
 import zmq
 
-from aphrodite.logger import init_logger
-from aphrodite.utils.network_utils import make_zmq_socket
-from aphrodite.v1.engine import (
+from sonar.logger import init_logger
+from sonar.utils.network_utils import make_zmq_socket
+from sonar.v1.engine import (
     EEPNotificationType,
     ReconfigureDistributedRequest,
     ReconfigureRankType,
 )
-from aphrodite.v1.engine.utils import EngineHandshakeMetadata, EngineZmqAddresses
-from aphrodite.v1.utils import get_engine_client_zmq_addr
+from sonar.v1.engine.utils import EngineHandshakeMetadata, EngineZmqAddresses
+from sonar.v1.utils import get_engine_client_zmq_addr
 
 if TYPE_CHECKING:
-    from aphrodite.v1.engine.core_client import DPAsyncMPClient
+    from sonar.v1.engine.core_client import DPAsyncMPClient
 
 logger = init_logger(__name__)
 POLL_BACKOFF_STEPS_S = (0.1, 0.2, 0.4, 0.8)
@@ -218,7 +218,7 @@ class ExternalElasticEPScaleCoordinator:
         bootstrap: ReconfigureDistributedRequest,
         num_redundant_experts: int,
     ) -> None:
-        parallel_config = self.client.aphrodite_config.parallel_config
+        parallel_config = self.client.sonar_config.parallel_config
         parallel_config.data_parallel_size = bootstrap.new_data_parallel_size
         parallel_config.data_parallel_master_ip = bootstrap.new_data_parallel_master_ip
         parallel_config.data_parallel_master_port = bootstrap.new_data_parallel_master_port
@@ -231,8 +231,8 @@ class ExternalElasticEPScaleCoordinator:
         cur_data_parallel_size: int,
         new_data_parallel_size: int,
     ) -> int:
-        parallel_config = self.client.aphrodite_config.parallel_config
-        num_experts = self.client.aphrodite_config.model_config.get_num_experts()
+        parallel_config = self.client.sonar_config.parallel_config
+        num_experts = self.client.sonar_config.model_config.get_num_experts()
         num_redundant_experts = (
             num_experts + parallel_config.eplb_config.num_redundant_experts
         ) * new_data_parallel_size // cur_data_parallel_size - num_experts
@@ -245,12 +245,12 @@ class ExternalElasticEPScaleCoordinator:
         return num_redundant_experts
 
     def _get_reconfig_store(self):
-        from aphrodite.distributed.utils import get_cached_tcp_store_client
+        from sonar.distributed.utils import get_cached_tcp_store_client
 
         if self.active_reconfig_store is not None:
             store_addr = self.active_reconfig_store
         else:
-            parallel_config = self.client.aphrodite_config.parallel_config
+            parallel_config = self.client.sonar_config.parallel_config
             if not parallel_config._coord_store_port:
                 raise RuntimeError("External Elastic EP requires an active reconfiguration coordination store.")
             store_addr = (
@@ -275,10 +275,10 @@ class ExternalElasticEPScaleCoordinator:
         )
 
     def _setup_reconfig_bootstrap(self) -> tuple[str, int]:
-        from aphrodite.distributed.utils import create_tcp_store
+        from sonar.distributed.utils import create_tcp_store
 
         self.control_store_ref = getattr(self.client, "_coord_store", None)
-        ip = self.client.aphrodite_config.parallel_config.data_parallel_master_ip
+        ip = self.client.sonar_config.parallel_config.data_parallel_master_ip
         # Keep the serving configuration on the old store until commit succeeds.
         self.reconfig_store_ref = create_tcp_store(ip, 0, is_master=True, world_size=-1, wait_for_workers=False)
         return ip, self.reconfig_store_ref.port
@@ -380,7 +380,7 @@ class ExternalElasticEPScaleCoordinator:
         cur_data_parallel_size: int,
         new_data_parallel_size: int,
     ) -> tuple[str, ReconfigureDistributedRequest]:
-        from aphrodite.utils.network_utils import get_open_ports_list
+        from sonar.utils.network_utils import get_open_ports_list
 
         current_epoch_key = self.key("current_epoch")
         if store.check([current_epoch_key]):
@@ -425,7 +425,7 @@ class ExternalElasticEPScaleCoordinator:
             handshake_address=get_engine_client_zmq_addr(
                 False,
                 bootstrap.new_data_parallel_master_ip,
-                self.client.aphrodite_config.parallel_config.data_parallel_rpc_port,
+                self.client.sonar_config.parallel_config.data_parallel_rpc_port,
             ),
             expected_new_ranks=list(
                 range(
@@ -592,14 +592,14 @@ class ExternalElasticEPScaleCoordinator:
             backoff_step = await self._sleep_with_backoff(backoff_step)
 
     async def prepare(self, cur_data_parallel_size: int, new_data_parallel_size: int) -> None:
-        from aphrodite.distributed.utils import get_cached_tcp_store_client
+        from sonar.distributed.utils import get_cached_tcp_store_client
 
         if self.prepared_scale is not None:
             if self.prepared_scale.bootstrap.new_data_parallel_size == new_data_parallel_size:
                 return
             raise RuntimeError("External Elastic EP scaling is already prepared.")
 
-        parallel_config = self.client.aphrodite_config.parallel_config
+        parallel_config = self.client.sonar_config.parallel_config
         dp_rank = parallel_config.data_parallel_rank
         scale_up = new_data_parallel_size > cur_data_parallel_size
         if new_data_parallel_size > parallel_config.elastic_ep_max_dp_size:
@@ -761,7 +761,7 @@ class ExternalElasticEPScaleCoordinator:
     async def process_engine_core_notification(self, notification_data: tuple[str, int]) -> None:
         """Record scale notifications emitted by EngineCore processes.
         The stored keys are later polled by the external scale coordinator."""
-        parallel_config = self.client.aphrodite_config.parallel_config
+        parallel_config = self.client.sonar_config.parallel_config
         if not (parallel_config.enable_elastic_ep and parallel_config.data_parallel_external_lb):
             return
 

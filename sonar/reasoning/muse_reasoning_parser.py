@@ -20,10 +20,10 @@ from collections.abc import Iterable, Iterator, Sequence
 
 import regex as re
 
-from aphrodite.entrypoints.generate.base.protocol import DeltaMessage
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
-from aphrodite.reasoning.abs_reasoning_parsers import ReasoningParser
+from sonar.entrypoints.generate.base.protocol import DeltaMessage
+from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
+from sonar.reasoning.abs_reasoning_parsers import ReasoningParser
 
 _EOM = "<|eom|>"
 _EOT = "<|eot|>"
@@ -156,7 +156,7 @@ class MuseReasoningParser(ReasoningParser):
         self, request: ChatCompletionRequest | ResponsesRequest
     ) -> ChatCompletionRequest | ResponsesRequest:
         """Preserve Muse's ATEM framing tokens in the decoded output.
-        Aphrodite's serving default is ``skip_special_tokens=True``, which strips
+        Sonar's serving default is ``skip_special_tokens=True``, which strips
         ``<|start|>`` / ``<|message|>`` / ``<|eom|>`` / ``<|eot|>`` before the
         parsers run, collapsing reasoning into content and breaking channel
         scoping. Unlike the base tool-parser hook we do NOT touch

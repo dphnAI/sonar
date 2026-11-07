@@ -2,15 +2,15 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 from typing import TYPE_CHECKING
 
-from aphrodite.v1.worker.gpu.spec_decode.speculator_config import SpeculatorConfig
+from sonar.v1.worker.gpu.spec_decode.speculator_config import SpeculatorConfig
 
 if TYPE_CHECKING:
-    from aphrodite.config import SpeculativeConfig
+    from sonar.config import SpeculativeConfig
 
 
 class NgramSpeculatorConfig(SpeculatorConfig):
     base_method = "ngram"
-    speculator_class = "aphrodite.v1.worker.gpu.spec_decode.ngram.speculator.NgramGPUSpeculator"
+    speculator_class = "sonar.v1.worker.gpu.spec_decode.ngram.speculator.NgramGPUSpeculator"
     prefer_dense_token_history = True
 
     @classmethod

@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, call, patch
 import pytest
 from huggingface_hub import _CACHED_NO_EXIST
 
-from aphrodite.transformers_utils.repo_utils import (
+from sonar.transformers_utils.repo_utils import (
     any_pattern_in_repo_files,
     get_hf_file_to_dict,
     is_mistral_model_repo,
@@ -45,7 +45,7 @@ def test_list_filtered_repo_files(allow_patterns: list[str], expected_relative_f
 
         # Patch list_repo_files called by fn
         with patch(
-            "aphrodite.transformers_utils.repo_utils.list_repo_files",
+            "sonar.transformers_utils.repo_utils.list_repo_files",
             MagicMock(return_value=_glob_path()),
         ) as mock_list_repo_files:
             out_files = sorted(list_filtered_repo_files(tmp_dir, allow_patterns, "revision", "model", "token"))
@@ -87,7 +87,7 @@ def test_one_filtered_repo_files(allow_patterns: list[str], expected_bool: bool)
 
         # Patch list_repo_files called by fn
         with patch(
-            "aphrodite.transformers_utils.repo_utils.list_repo_files",
+            "sonar.transformers_utils.repo_utils.list_repo_files",
             MagicMock(return_value=_glob_path()),
         ) as mock_list_repo_files:
             assert (any_pattern_in_repo_files(tmp_dir, allow_patterns, "revision", "model", "token")) is expected_bool
@@ -112,11 +112,11 @@ def test_one_filtered_repo_files(allow_patterns: list[str], expected_bool: bool)
 def test_get_hf_file_to_dict_honors_no_exist_marker(cache_result: object, should_download: bool):
     with (
         patch(
-            "aphrodite.transformers_utils.repo_utils.try_to_load_from_cache",
+            "sonar.transformers_utils.repo_utils.try_to_load_from_cache",
             MagicMock(return_value=cache_result),
         ),
         patch(
-            "aphrodite.transformers_utils.repo_utils._try_download_from_hf_hub",
+            "sonar.transformers_utils.repo_utils._try_download_from_hf_hub",
             MagicMock(return_value=None),
         ) as mock_download,
     ):
@@ -148,7 +148,7 @@ def test_is_mistral_model_repo(files: list[str], expected_bool: bool):
 
         # Patch list_repo_files called by fn
         with patch(
-            "aphrodite.transformers_utils.repo_utils.list_repo_files",
+            "sonar.transformers_utils.repo_utils.list_repo_files",
             MagicMock(return_value=_glob_path()),
         ) as mock_list_repo_files:
             assert is_mistral_model_repo(tmp_dir, "revision", "model", "token") is expected_bool

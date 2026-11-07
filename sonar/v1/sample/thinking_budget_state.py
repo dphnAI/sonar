@@ -6,15 +6,15 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import async_tensor_h2d
-from aphrodite.v1.sample.logits_processor.interface import (
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import async_tensor_h2d
+from sonar.v1.sample.logits_processor.interface import (
     BatchUpdate,
     MoveDirectionality,
 )
 
 if TYPE_CHECKING:
-    from aphrodite.config.reasoning import ReasoningConfig
+    from sonar.config.reasoning import ReasoningConfig
 
 
 def maybe_create_thinking_budget_state_holder(

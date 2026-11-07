@@ -31,7 +31,7 @@ build_with_current_rust_helper() (
   # Packaging fixes must also apply to commits awaiting their first wheel.
   trap 'git restore --source="$commit" -- tools/build_rust.py' EXIT
   git show "${target_commit}:tools/build_rust.py" > tools/build_rust.py
-  APHRODITE_VERSION_OVERRIDE="$version" ./docker/export_wheels.sh
+  SONAR_VERSION_OVERRIDE="$version" ./docker/export_wheels.sh
 )
 
 upload_wheel() {
@@ -72,8 +72,8 @@ write_commit_index() {
   local output
 
   encoded_name="$(encode_path "$wheel_name")"
-  entries="$(mktemp "${RUNNER_TEMP}/aphrodite-commit-entries.XXXXXX")"
-  output="$(mktemp "${RUNNER_TEMP}/aphrodite-commit-index.XXXXXX")"
+  entries="$(mktemp "${RUNNER_TEMP}/sonar-commit-entries.XXXXXX")"
+  output="$(mktemp "${RUNNER_TEMP}/sonar-commit-index.XXXXXX")"
   if [[ -n "$digest" ]]; then
     printf '%s\t%s\t%s\n' \
       "$wheel_name" \
@@ -88,10 +88,13 @@ write_commit_index() {
   python3 .github/scripts/generate_nightly_index.py \
     --entry-file "$entries" \
     --commit "$commit" \
+    --title "Sonar CUDA wheel for ${commit:0:12}" \
+    --install-command \
+      "uv pip install sonar --extra-index-url ${public_base}/commits/${commit} --index-strategy first-index --torch-backend cu130" \
     --output "$output"
   "$rclone" copyto \
     "$output" \
-    "${bucket}/commits/${commit}/aphrodite-engine/index.html"
+    "${bucket}/commits/${commit}/sonar/index.html"
   rm -f "$entries" "$output"
 }
 
@@ -100,7 +103,7 @@ find_commit_wheel() {
   "$rclone" lsf \
     "${bucket}/commits/${commit}" \
     --files-only \
-    --include '*.whl' 2>/dev/null |
+    --include 'sonar-*.whl' 2>/dev/null |
     head -n 1 || true
 }
 
@@ -147,6 +150,12 @@ echo "Last contiguous build: ${last_built:-none}"
 echo "Commits requiring reconciliation: ${#commits[@]}"
 
 for commit in "${commits[@]}"; do
+  # Historical commits before the cutover cannot produce the Sonar distribution.
+  if ! git show "${commit}:pyproject.toml" | grep -E '^name *= *"sonar"$' >/dev/null; then
+    echo "Skipping pre-Sonar commit ${commit}"
+    printf '%s\n' "$commit" | "$rclone" rcat "$state_remote"
+    continue
+  fi
   git checkout --detach "$commit"
   wheel_name="$(find_commit_wheel "$commit")"
 
@@ -195,7 +204,7 @@ done
 
 git checkout --detach "$target_commit"
 
-entries="${RUNNER_TEMP}/aphrodite-wheel-index.tsv"
+entries="${RUNNER_TEMP}/sonar-wheel-index.tsv"
 : >"$entries"
 while IFS= read -r stored_path; do
   [[ -n "$stored_path" ]] || continue
@@ -209,21 +218,21 @@ done < <(
     "$rclone" lsf \
       "${bucket}/wheels" \
       --files-only \
-      --include '*.whl' 2>/dev/null |
+      --include 'sonar-*.whl' 2>/dev/null |
       sed 's#^#wheels/#'
     "$rclone" lsf \
       "${bucket}/commits" \
       --recursive \
       --files-only \
-      --include '*.whl' 2>/dev/null |
+      --include 'sonar-*.whl' 2>/dev/null |
       sed 's#^#commits/#'
   } | sort -r
 )
 
 index_dir="${index_root}/whl/nightly/cuda/x86_64"
-package_dir="${index_dir}/simple/aphrodite-engine"
-legacy_nightly_dir="${index_root}/nightly/aphrodite-engine"
-legacy_simple_dir="${index_root}/simple/aphrodite-engine"
+package_dir="${index_dir}/simple/sonar"
+legacy_nightly_dir="${index_root}/nightly/sonar"
+legacy_simple_dir="${index_root}/simple/sonar"
 nightly_cuda_dir="${index_root}/nightly/cuda/x86_64"
 mkdir -p \
   "$package_dir" \
@@ -237,7 +246,7 @@ python3 .github/scripts/generate_nightly_index.py \
   --title "Sonar nightly CUDA wheels" \
   --description "Precompiled CUDA 13.0 wheels for x86_64 from every commit on main." \
   --install-command \
-  "uv pip install aphrodite-engine --extra-index-url https://sonar.dphn.ai/whl/nightly/cuda/x86_64/simple --index-strategy first-index" \
+  "uv pip install sonar --extra-index-url https://sonar.dphn.ai/whl/nightly/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130" \
   --output "${index_dir}/index.html"
 cp "${index_dir}/index.html" "${package_dir}/index.html"
 cp "${index_dir}/index.html" "${legacy_nightly_dir}/index.html"
@@ -255,5 +264,5 @@ if [[ -z "$tip_wheel" ]]; then
   exit 1
 fi
 "$rclone" copyto \
-  "${bucket}/commits/${target_commit}/aphrodite-engine/index.html" \
-  "${bucket}/nightly/aphrodite-engine/index.html"
+  "${bucket}/commits/${target_commit}/sonar/index.html" \
+  "${bucket}/nightly/sonar/index.html"

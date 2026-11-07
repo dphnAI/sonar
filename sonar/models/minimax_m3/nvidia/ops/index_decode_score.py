@@ -20,7 +20,7 @@ from cutlass import Float8E4M3FN, Float16, Float32, Int32, Int64, Uint32, cute
 from cutlass.cute.nvgpu import cpasync, warp
 from quack.compile_utils import make_fake_tensor
 
-from aphrodite.cute_utils import (
+from sonar.cute_utils import (
     _TORCH_TO_CUTE_DTYPE,
     EVICT_FIRST,
     cvt,

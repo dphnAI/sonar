@@ -1,5 +1,5 @@
 name: 🚀 Feature request
-description: Submit a proposal/request for a new Aphrodite feature
+description: Submit a proposal/request for a new Sonar feature
 title: "[Feature]: "
 labels: ["feature"]
 
@@ -7,7 +7,7 @@ body:
 - type: markdown
   attributes:
     value: >
-        #### Before submitting an issue, please make sure the issue hasn't been already addressed by searching through [the existing and past issues](https://github.com/PygmalionAI/aphrodite-engine/issues?q=is%3Aissue+sort%3Acreated-desc+).
+        #### Before submitting an issue, please make sure the issue hasn't been already addressed by searching through [the existing and past issues](https://github.com/dphnAI/sonar/issues?q=is%3Aissue+sort%3Acreated-desc+).
 - type: textarea
   attributes:
     label: 🚀 The feature, motivation and pitch

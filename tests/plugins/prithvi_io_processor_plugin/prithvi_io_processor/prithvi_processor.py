@@ -17,12 +17,12 @@ import torch
 from einops import rearrange
 from terratorch.datamodules import Sen1Floods11NonGeoDataModule
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.inputs import PromptType
-from aphrodite.logger import init_logger
-from aphrodite.outputs import PoolingRequestOutput
-from aphrodite.plugins.io_processors.interface import IOProcessor
-from aphrodite.renderers import BaseRenderer
+from sonar.config import SonarConfig
+from sonar.inputs import PromptType
+from sonar.logger import init_logger
+from sonar.outputs import PoolingRequestOutput
+from sonar.plugins.io_processors.interface import IOProcessor
+from sonar.renderers import BaseRenderer
 
 from .types import DataModuleConfig, ImagePrompt, ImageRequestOutput
 
@@ -216,8 +216,8 @@ def load_image(
 class PrithviMultimodalDataProcessor(IOProcessor[ImagePrompt, ImageRequestOutput]):
     indices = [0, 1, 2, 3, 4, 5]
 
-    def __init__(self, aphrodite_config: AphroditeConfig, renderer: BaseRenderer):
-        super().__init__(aphrodite_config, renderer)
+    def __init__(self, sonar_config: SonarConfig, renderer: BaseRenderer):
+        super().__init__(sonar_config, renderer)
 
         self.datamodule = Sen1Floods11NonGeoDataModule(
             data_root=datamodule_config["data_root"],

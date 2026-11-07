@@ -8,7 +8,7 @@ from shutil import which
 
 try:
     # Try to get CUDA_HOME from PyTorch installation, which is the
-    # most reliable source of truth for Aphrodite's build.
+    # most reliable source of truth for Sonar's build.
     from torch.utils.cpp_extension import CUDA_HOME
 except ImportError:
     print("Warning: PyTorch not found. Falling back to CUDA_HOME environment variable.")
@@ -57,9 +57,9 @@ def generate_presets(output_path="CMakeUserPresets.json"):
     else:
         python_executable_prompt = (
             "Could not automatically find Python executable. Please provide "
-            "the full path to your Python executable for Aphrodite development "
+            "the full path to your Python executable for Sonar development "
             "(typically from your virtual environment, e.g., "
-            "/home/user/venvs/aphrodite/bin/python): "
+            "/home/user/venvs/sonar/bin/python): "
         )
         python_executable = input(python_executable_prompt).strip()
         if not python_executable:
@@ -74,7 +74,6 @@ def generate_presets(output_path="CMakeUserPresets.json"):
     print(f"Detected {cpu_cores} CPU cores. Setting NVCC_THREADS={nvcc_threads} and CMake jobs={cmake_jobs}.")
 
     # Get the Sonar project root.
-    # (assuming this script is in aphrodite-engine/tools/)
     project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     print(f"Sonar project root detected as: {project_root}")
 
@@ -90,7 +89,7 @@ def generate_presets(output_path="CMakeUserPresets.json"):
     cache_variables = {
         "CMAKE_CUDA_COMPILER": nvcc_path,
         "CMAKE_BUILD_TYPE": "Release",
-        "APHRODITE_PYTHON_EXECUTABLE": python_executable,
+        "SONAR_PYTHON_EXECUTABLE": python_executable,
         "CMAKE_INSTALL_PREFIX": "${sourceDir}",
         "CMAKE_CUDA_FLAGS": "",
         "NVCC_THREADS": str(nvcc_threads),
@@ -147,7 +146,7 @@ def generate_presets(output_path="CMakeUserPresets.json"):
             json.dump(presets, f, indent=4)
         print(f"Successfully generated '{output_file_path}'")
         print("\nTo use this preset:")
-        print(f"1. Ensure you are in the Aphrodite root directory: cd {project_root}")
+        print(f"1. Ensure you are in the Sonar root directory: cd {project_root}")
         print("2. Initialize CMake: cmake --preset release")
         print("3. Build+install: cmake --build --preset release --target install")
 

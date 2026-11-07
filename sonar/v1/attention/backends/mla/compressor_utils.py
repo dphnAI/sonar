@@ -5,16 +5,16 @@ from typing import Any
 
 import torch
 
-from aphrodite.model_executor.warmup.jit_warmup import kernel_launcher, zip_inputs
-from aphrodite.model_executor.warmup.jit_warmup_triton_helper import (
-    AphroditeTritonJitKernel,
+from sonar.model_executor.warmup.jit_warmup import kernel_launcher, zip_inputs
+from sonar.model_executor.warmup.jit_warmup_triton_helper import (
     LaunchSpec,
+    SonarTritonJitKernel,
     TritonWarmupTensor,
     triton_scalar_specialization_rep,
 )
-from aphrodite.transformers_utils.deepseek_v4_utils import get_compress_ratios
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.math_utils import cdiv
+from sonar.transformers_utils.deepseek_v4_utils import get_compress_ratios
+from sonar.triton_utils import tl, triton
+from sonar.utils.math_utils import cdiv
 
 _DSPARK_SWA_INDEX_ALIGNMENT = 64
 
@@ -28,7 +28,7 @@ def get_dspark_swa_index_width(
     return cdiv(width, _DSPARK_SWA_INDEX_ALIGNMENT) * _DSPARK_SWA_INDEX_ALIGNMENT
 
 
-class CompressedSlotMappingKernel(AphroditeTritonJitKernel["CompressedSlotMappingKernel.CompileKey"]):
+class CompressedSlotMappingKernel(SonarTritonJitKernel["CompressedSlotMappingKernel.CompileKey"]):
     TRITON_BLOCK_SIZE = 1024
 
     @dataclass(frozen=True)
@@ -111,8 +111,8 @@ class CompressedSlotMappingKernel(AphroditeTritonJitKernel["CompressedSlotMappin
             cp_interleave=triton_scalar_specialization_rep(cp_interleave),
         )
 
-    def get_warmup_keys(self, aphrodite_config: Any) -> list[CompileKey]:
-        hf_text_config = aphrodite_config.model_config.hf_text_config
+    def get_warmup_keys(self, sonar_config: Any) -> list[CompileKey]:
+        hf_text_config = sonar_config.model_config.hf_text_config
         configured_ratios = (
             *get_compress_ratios(hf_text_config),
             getattr(hf_text_config, "index_kpool", 1) or 1,
@@ -120,13 +120,13 @@ class CompressedSlotMappingKernel(AphroditeTritonJitKernel["CompressedSlotMappin
         compress_ratios = tuple(dict.fromkeys(int(ratio) for ratio in configured_ratios if int(ratio) > 1))
         if not compress_ratios:
             return []
-        parallel_config = aphrodite_config.parallel_config
+        parallel_config = sonar_config.parallel_config
         return self._trace_dispatch(self.dispatch)(
             zip_inputs(
                 *(
                     dict(
                         compress_ratio=ratio,
-                        block_size=aphrodite_config.cache_config.block_size // ratio,
+                        block_size=sonar_config.cache_config.block_size // ratio,
                         dcp_world_size=parallel_config.decode_context_parallel_size,
                         cp_interleave=parallel_config.cp_kv_cache_interleave_size,
                     )

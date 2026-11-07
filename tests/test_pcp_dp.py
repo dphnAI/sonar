@@ -5,10 +5,10 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.config import ParallelConfig
-from aphrodite.distributed.device_communicators.all2all import AgRsAll2AllManager
-from aphrodite.forward_context import DPMetadata
-from aphrodite.v1.attention.ops.pcp import maybe_gather_mla_latent_cache_inputs
+from sonar.config import ParallelConfig
+from sonar.distributed.device_communicators.all2all import AgRsAll2AllManager
+from sonar.forward_context import DPMetadata
+from sonar.v1.attention.ops.pcp import maybe_gather_mla_latent_cache_inputs
 
 
 @pytest.mark.parametrize(
@@ -55,7 +55,7 @@ def test_dispatch_reuses_existing_groups(dp_size, pcp_size, tp_size, use_ep, is_
     }
     for name, group in groups.items():
         monkeypatch.setattr(
-            f"aphrodite.distributed.device_communicators.all2all.get_{name}_group",
+            f"sonar.distributed.device_communicators.all2all.get_{name}_group",
             lambda group=group: group,
         )
     manager = AgRsAll2AllManager.__new__(AgRsAll2AllManager)
@@ -101,15 +101,15 @@ def test_ag_rs_dispatch_and_combine_use_dp_pcp_sizes(monkeypatch, enable_ep):
     manager.tp_group = SimpleNamespace(world_size=1)
     for name in ("dp", "ep"):
         monkeypatch.setattr(
-            f"aphrodite.distributed.device_communicators.all2all.get_{name}_group",
+            f"sonar.distributed.device_communicators.all2all.get_{name}_group",
             FakeGroup,
         )
     monkeypatch.setattr(
-        "aphrodite.distributed.device_communicators.all2all.get_pcp_group",
+        "sonar.distributed.device_communicators.all2all.get_pcp_group",
         lambda: SimpleNamespace(world_size=2),
     )
     monkeypatch.setattr(
-        "aphrodite.distributed.device_communicators.all2all.get_forward_context",
+        "sonar.distributed.device_communicators.all2all.get_forward_context",
         lambda: SimpleNamespace(dp_metadata=metadata),
     )
     with metadata.sp_local_sizes(1, pcp_size=2, use_ep=enable_ep):
@@ -145,7 +145,7 @@ def test_expanded_slot_mapping_keeps_pcp_prefill_padding(monkeypatch):
         return torch.cat((tensor, tensor), dim=dim)
 
     monkeypatch.setattr(
-        "aphrodite.v1.attention.ops.pcp.get_pcp_group",
+        "sonar.v1.attention.ops.pcp.get_pcp_group",
         lambda: SimpleNamespace(world_size=2, all_gather=all_gather),
     )
     kv = torch.zeros(3, 2)  # Two decodes followed by one PCP padding row.

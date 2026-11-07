@@ -8,10 +8,10 @@ from typing import TypeVar
 import torch
 from torch import nn
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.lora import LoRAConfig
-from aphrodite.logger import init_logger
-from aphrodite.lora.layers import (
+from sonar.config import SonarConfig
+from sonar.config.lora import LoRAConfig
+from sonar.logger import init_logger
+from sonar.lora.layers import (
     BaseClassificationHeadWithLoRA,
     BaseLayerWithLoRA,
     ClassificationHeadWithLoRA,
@@ -21,14 +21,14 @@ from aphrodite.lora.layers import (
     LoRAMappingType,
     TokenClassificationHeadWithLoRA,
 )
-from aphrodite.lora.lora_model import LoRAModel, MoEEPLoadSpec
-from aphrodite.lora.lora_weights import (
+from sonar.lora.lora_model import LoRAModel, MoEEPLoadSpec
+from sonar.lora.lora_weights import (
     LoRAFullModuleWeights,
     LoRALayerWeights,
     PackedLoRALayerWeights,
 )
-from aphrodite.lora.punica_wrapper import PunicaWrapperBase, get_punica_wrapper
-from aphrodite.lora.utils import (
+from sonar.lora.punica_wrapper import PunicaWrapperBase, get_punica_wrapper
+from sonar.lora.utils import (
     from_layer,
     from_layer_classification,
     from_layer_logits_processor,
@@ -39,19 +39,19 @@ from aphrodite.lora.utils import (
     process_packed_modules_mapping,
     replace_submodule,
 )
-from aphrodite.model_executor.layers.fused_moe import MoERunner
-from aphrodite.model_executor.layers.pooler.tokwise import TokenPooler
-from aphrodite.model_executor.models import (
+from sonar.model_executor.layers.fused_moe import MoERunner
+from sonar.model_executor.layers.pooler.tokwise import TokenPooler
+from sonar.model_executor.models import (
     SupportsLoRA,
     is_pooling_model,
     supports_multimodal,
 )
-from aphrodite.model_executor.models.module_mapping import MultiModelKeys
-from aphrodite.model_executor.models.utils import PPMissingLayer
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.encoder_budget import MultiModalBudget
-from aphrodite.utils.cache import LRUCache
-from aphrodite.utils.torch_utils import PIN_MEMORY
+from sonar.model_executor.models.module_mapping import MultiModelKeys
+from sonar.model_executor.models.utils import PPMissingLayer
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.encoder_budget import MultiModalBudget
+from sonar.utils.cache import LRUCache
+from sonar.utils.torch_utils import PIN_MEMORY
 
 logger = init_logger(__name__)
 
@@ -84,7 +84,7 @@ class LoRAModelManager:
         vocab_size: int,
         lora_config: LoRAConfig,
         device: torch.device,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
     ):
         """Create a LoRAModelManager and adapter for a given model.
 
@@ -97,7 +97,7 @@ class LoRAModelManager:
             vocab_size: the vocab size of the model.
             lora_config: the LoRA configuration.
             device: the device the LoRA tensors are placed on.
-            aphrodite_config: the Aphrodite config for this engine.
+            sonar_config: the Sonar config for this engine.
 
         """
         self.model: SupportsLoRAModel = model
@@ -117,7 +117,7 @@ class LoRAModelManager:
 
         self.is_pooling_model = is_pooling_model(self.model)
         self._pooling_task = (
-            aphrodite_config.model_config.get_pooling_task(tuple(self.model.pooler.get_supported_tasks()))
+            sonar_config.model_config.get_pooling_task(tuple(self.model.pooler.get_supported_tasks()))
             if self.is_pooling_model
             else None
         )
@@ -148,8 +148,8 @@ class LoRAModelManager:
             enable_moe_shared_loras=self._enable_moe_shared_loras,
         )
         self._is_non_gated_moe = is_moe and self.model.is_non_gated_moe
-        self._use_ep = bool(aphrodite_config and aphrodite_config.parallel_config.enable_expert_parallel)
-        self._init_punica_wrapper(max_num_batched_tokens, aphrodite_config)
+        self._use_ep = bool(sonar_config and sonar_config.parallel_config.enable_expert_parallel)
+        self._init_punica_wrapper(max_num_batched_tokens, sonar_config)
         self._create_lora_modules()
 
         self._classification_head: tuple[str, BaseClassificationHeadWithLoRA] | None = None
@@ -172,7 +172,7 @@ class LoRAModelManager:
 
         self.model.lora_manager = self
 
-    def _init_punica_wrapper(self, max_num_batched_tokens: int, aphrodite_config: AphroditeConfig) -> None:
+    def _init_punica_wrapper(self, max_num_batched_tokens: int, sonar_config: SonarConfig) -> None:
         # Used to indicate whether the model is a multimodal model
         self.supports_mm: bool = (
             supports_multimodal(self.model)
@@ -182,7 +182,7 @@ class LoRAModelManager:
         )
         self.punica_wrapper_mapping: dict[str, PunicaWrapperBase] = {}
         if self.supports_mm:
-            self._maybe_init_mm(aphrodite_config, max_num_batched_tokens)
+            self._maybe_init_mm(sonar_config, max_num_batched_tokens)
         else:
             llm_punica_wrapper = get_punica_wrapper(
                 max_num_batched_tokens,
@@ -195,7 +195,7 @@ class LoRAModelManager:
 
     def _maybe_init_mm(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         max_num_batched_tokens: int,
     ) -> None:
         mm_registry = MULTIMODAL_REGISTRY
@@ -243,8 +243,8 @@ class LoRAModelManager:
 
         # Check if initialize the language model only.
         if (
-            aphrodite_config.model_config.multimodal_config
-            and aphrodite_config.model_config.multimodal_config.language_model_only
+            sonar_config.model_config.multimodal_config
+            and sonar_config.model_config.multimodal_config.language_model_only
         ):
             logger.warning(
                 "Disabling `enable_tower_connector_lora` because the multimodal "
@@ -259,7 +259,7 @@ class LoRAModelManager:
             "GitHub if you encounter them."
         )
 
-        mm_budget = MultiModalBudget(aphrodite_config, mm_registry)
+        mm_budget = MultiModalBudget(sonar_config, mm_registry)
         limit_per_prompt = max(mm_budget.mm_max_items_per_prompt.values())
         max_lora_tokens = mm_budget.get_encoder_budget()
         lora_token_counts_by_modality = [
@@ -1380,7 +1380,7 @@ def create_lora_manager(
     max_num_batched_tokens: int,
     vocab_size: int,
     lora_config: LoRAConfig,
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     device: torch.device,
     lora_manager_cls: type[LoRAModelManager] = LoRAModelManager,
     **kwargs,
@@ -1394,7 +1394,7 @@ def create_lora_manager(
         max_num_batched_tokens=max_num_batched_tokens,
         vocab_size=vocab_size,
         lora_config=lora_config,
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         device=device,
         **kwargs,
     )

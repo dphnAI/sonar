@@ -22,7 +22,7 @@ from schemathesis.config import (
     SchemathesisConfig,
 )
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 from ...utils import RemoteOpenAIServer
 
@@ -40,12 +40,12 @@ def test_openapi_exposes_completion_response_schemas() -> None:
     Uses the production app: FastAPI renames models used as both input and
     output (-Input/-Output), which a router-only app cannot show.
     """
-    from aphrodite.entrypoints.launchers.app import build_app
-    from aphrodite.entrypoints.openai.chat_completion.protocol import (
+    from sonar.entrypoints.launchers.app import build_app
+    from sonar.entrypoints.openai.chat_completion.protocol import (
         ChatCompletionResponse,
         ChatCompletionStreamResponse,
     )
-    from aphrodite.entrypoints.openai.completion.protocol import (
+    from sonar.entrypoints.openai.completion.protocol import (
         CompletionResponse,
         CompletionStreamResponse,
     )
@@ -197,7 +197,7 @@ def before_generate_case(context: schemathesis.HookContext, strategy):
     # suppress the health check rather than drop the filter — dropping it
     # exposes pre-existing server bugs out of scope here.
     # The same nested schema can also trip Hypothesis' entropy budget while
-    # generating large-but-valid request bodies before Aphrodite is called.
+    # generating large-but-valid request bodies before Sonar is called.
     suppress_health_check=[HealthCheck.filter_too_much, HealthCheck.data_too_large],
 )
 def test_openapi_stateless(case: schemathesis.Case):

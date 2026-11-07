@@ -8,12 +8,12 @@
 
 from packaging import version
 
-from aphrodite.model_executor.layers.mamba.ops.triton_helpers import (
+from sonar.model_executor.layers.mamba.ops.triton_helpers import (
     fast_exp,
     launch_autotuned,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
 
 TRITON_22 = version.parse(triton.__version__) >= version.parse("2.2.0")
 

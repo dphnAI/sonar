@@ -5,7 +5,7 @@
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 if not (current_platform.is_cuda() or current_platform.is_rocm()):
     pytest.skip(
@@ -13,10 +13,10 @@ if not (current_platform.is_cuda() or current_platform.is_rocm()):
         allow_module_level=True,
     )
 
-from aphrodite.models.minimax_m3.amd.ops.indexer_context_parallel import (  # noqa: E402
+from sonar.models.minimax_m3.amd.ops.indexer_context_parallel import (  # noqa: E402
     indexer_context_scores,
 )
-from aphrodite.models.minimax_m3.amd.ops.indexer_cp_exchange import (  # noqa: E402
+from sonar.models.minimax_m3.amd.ops.indexer_cp_exchange import (  # noqa: E402
     local_topk_keys,
     merge_topk_keys,
 )
@@ -304,7 +304,7 @@ def test_local_topk_merge_matches_full_topk():
 @pytest.mark.parametrize("indexer_kv_dtype", ["auto", "bf16", "fp8", "fp8_e4m3"])
 def test_indexer_cp_config_accepts_bf16_and_fp8(indexer_kv_dtype):
     """bf16 enables this CP indexer, fp8 the AITER MSA one; both are valid."""
-    from aphrodite.config.attention import AttentionConfig
+    from sonar.config.attention import AttentionConfig
 
     config = AttentionConfig(minimax_m3_indexer_cp=True, indexer_kv_dtype=indexer_kv_dtype)
     assert config.minimax_m3_indexer_cp
@@ -313,7 +313,7 @@ def test_indexer_cp_config_accepts_bf16_and_fp8(indexer_kv_dtype):
 @pytest.mark.parametrize("indexer_kv_dtype", ["mxfp4", "nvfp4"])
 def test_indexer_cp_config_rejects_dtypes_with_no_cp_indexer(indexer_kv_dtype):
     """Neither CP score kernel reads a block-scaled cache."""
-    from aphrodite.config.attention import AttentionConfig
+    from sonar.config.attention import AttentionConfig
 
     with pytest.raises(ValueError, match="minimax_m3_indexer_cp requires a bf16"):
         AttentionConfig(minimax_m3_indexer_cp=True, indexer_kv_dtype=indexer_kv_dtype)

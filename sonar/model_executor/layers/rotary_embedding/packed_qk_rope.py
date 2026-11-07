@@ -4,7 +4,7 @@
 
 import torch
 
-from aphrodite.triton_utils import tl, triton
+from sonar.triton_utils import tl, triton
 
 
 # seqlen is not specialized: image sizes vary per request.

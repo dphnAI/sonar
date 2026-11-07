@@ -7,8 +7,8 @@ from collections import Counter
 from contextlib import contextmanager, suppress
 from typing import Any
 
-import aphrodite.envs as envs
-from aphrodite.logger import init_logger
+import sonar.envs as envs
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 
@@ -35,7 +35,7 @@ class GCDebugConfig:
                 self.top_objects = json_conf.get("top_objects", -1)
             except Exception:
                 self.enabled = False
-                logger.error("Failed to parse APHRODITE_GC_DEBUG(%s)", envs.APHRODITE_GC_DEBUG)
+                logger.error("Failed to parse SONAR_GC_DEBUG(%s)", envs.SONAR_GC_DEBUG)
         logger.debug("GC Debug Config. %s", str(self))
 
     def __repr__(self) -> str:
@@ -88,11 +88,11 @@ def freeze_gc_for_cudagraph_capture():
 
     A gc cycle during stream capture can invalidate the captured graph, e.g.
     a finalized Triton kernel unloads its module. Opt out with
-    APHRODITE_ENABLE_CUDAGRAPH_GC=1.
+    SONAR_ENABLE_CUDAGRAPH_GC=1.
     """
     gc_was_enabled = gc.isenabled()
     gc.collect()
-    should_freeze = not envs.APHRODITE_ENABLE_CUDAGRAPH_GC
+    should_freeze = not envs.SONAR_ENABLE_CUDAGRAPH_GC
     if should_freeze:
         gc.freeze()
         gc.disable()
@@ -125,8 +125,8 @@ def freeze_gc_heap() -> None:
 
 
 def maybe_attach_gc_debug_callback() -> None:
-    """Attached a callback for GC debug when APHRODITE_GC_DEBUG is enabled."""
-    config = GCDebugConfig(envs.APHRODITE_GC_DEBUG)
+    """Attached a callback for GC debug when SONAR_GC_DEBUG is enabled."""
+    config = GCDebugConfig(envs.SONAR_GC_DEBUG)
     if config.enabled:
         debugger: GCDebugger = GCDebugger(config)
 

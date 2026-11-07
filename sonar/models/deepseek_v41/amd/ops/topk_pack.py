@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """One-launch packing of the DeepSeek V4.1 decode top-k into global slots.
 
-compute_global_topk_ragged_indices_and_indptr in Aphrodite's V4.1 ROCm model runs
+compute_global_topk_ragged_indices_and_indptr in Sonar's V4.1 ROCm model runs
 once a step for each index source layer, 8 times a step for
 DeepSeek-V4.1-Flash. For a batch that this file does not take, it calls
 _compute_global_topk_ragged_indices_and_indptr_old, which launches 4 kernels:
@@ -24,8 +24,8 @@ compares it with _compute_global_topk_ragged_indices_and_indptr_old.
 
 import torch
 
-from aphrodite.models.deepseek_v41.amd.ops import enabled
-from aphrodite.triton_utils import tl, triton
+from sonar.models.deepseek_v41.amd.ops import enabled
+from sonar.triton_utils import tl, triton
 
 # One program holds a ROWS x topk tile of int32. 16 rows of top-512 are 16
 # values per thread with 8 warps.

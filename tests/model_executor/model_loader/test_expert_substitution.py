@@ -10,22 +10,22 @@ import torch
 from safetensors.torch import save_file
 from transformers import DeepseekV2Config, DeepseekV2ForCausalLM
 
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.config import (
     AttentionConfig,
     DeviceConfig,
     KernelConfig,
     LoadConfig,
     ModelConfig,
+    SonarConfig,
 )
-from aphrodite.model_executor.layers.fused_moe.expert_substitution import (
+from sonar.model_executor.layers.fused_moe.expert_substitution import (
     ConstantExpertSubstitution,
 )
-from aphrodite.model_executor.model_loader import get_model_loader
-from aphrodite.model_executor.models.expert_substitution import as_expert_substitution_model
-from aphrodite.model_executor.models.utils import AutoWeightsLoader, PPMissingLayer
-from aphrodite.platforms import current_platform
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
+from sonar.model_executor.model_loader import get_model_loader
+from sonar.model_executor.models.expert_substitution import as_expert_substitution_model
+from sonar.model_executor.models.utils import AutoWeightsLoader, PPMissingLayer
+from sonar.platforms import current_platform
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
 
 MODEL_CONFIG = SimpleNamespace(hf_config=SimpleNamespace(approximate_experts={"0": [1, 2], "1": [1, 2]}))
 
@@ -160,7 +160,7 @@ def test_direct_reload_updates_values_incrementally():
 
 
 def test_layerwise_reload_is_rejected_and_keeps_weights():
-    from aphrodite.model_executor.model_loader.reload import (
+    from sonar.model_executor.model_loader.reload import (
         initialize_layerwise_reload,
         record_metadata_for_reloading,
     )
@@ -190,7 +190,7 @@ def test_layerwise_reload_is_rejected_and_keeps_weights():
 @pytest.mark.parametrize("missing_value", [False, True])
 def test_tensorizer_finalizes_local_substitution_values(monkeypatch, missing_value):
     """Raw Tensorizer loading must reject an unloaded local constant row."""
-    from aphrodite.model_executor.model_loader import base_loader, tensorizer_loader
+    from sonar.model_executor.model_loader import base_loader, tensorizer_loader
 
     model = _cpu_model(local_layers=(0,))
     weights = [(_approx_value(0, 1), torch.zeros(2))]
@@ -199,7 +199,7 @@ def test_tensorizer_finalizes_local_substitution_values(monkeypatch, missing_val
     finalize = Mock(wraps=model.process_weights_after_loading)
     monkeypatch.setattr(model, "process_weights_after_loading", finalize)
     monkeypatch.setattr(base_loader, "initialize_model", lambda **kwargs: model)
-    monkeypatch.setattr(tensorizer_loader, "is_aphrodite_tensorized", lambda _: False)
+    monkeypatch.setattr(tensorizer_loader, "is_sonar_tensorized", lambda _: False)
     load_config = LoadConfig(
         load_format="tensorizer",
         model_loader_extra_config={"tensorizer_config": {"tensorizer_uri": "raw"}},
@@ -296,14 +296,14 @@ def test_loads_substitution_checkpoint_into_compact_experts(tmp_path: Path, expl
         enforce_eager=True,
     )
     load_config = LoadConfig(load_format="safetensors", use_tqdm_on_load=False)
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         model_config=model_config,
         device_config=DeviceConfig(device="cuda"),
         load_config=load_config,
         attention_config=AttentionConfig(backend=AttentionBackendEnum.TRITON_MLA),
         kernel_config=KernelConfig(moe_backend="triton"),
     )
-    model = get_model_loader(load_config).load_model(aphrodite_config, model_config)
+    model = get_model_loader(load_config).load_model(sonar_config, model_config)
 
     experts = "model.layers.0.mlp.experts"
     routed_experts = model.model.layers[0].mlp.experts.routed_experts

@@ -30,7 +30,7 @@ def server():
 
 @pytest_asyncio.fixture
 async def client(server):
-    """Async fixture providing an OpenAI-compatible Aphrodite client."""
+    """Async fixture providing an OpenAI-compatible Sonar client."""
     async with server.get_async_client() as async_client:
         yield async_client
 

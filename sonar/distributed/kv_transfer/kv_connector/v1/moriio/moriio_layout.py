@@ -6,10 +6,10 @@ from typing import NamedTuple, cast
 
 import torch
 
-from aphrodite.distributed.kv_transfer.kv_connector.v1.ssm_conv_transfer_utils import (
+from sonar.distributed.kv_transfer.kv_connector.v1.ssm_conv_transfer_utils import (
     MambaConvSplitInfo,
 )
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.kv_cache_interface import (
     AttentionSpec,
     KVCacheConfig,
     KVCacheSpec,
@@ -296,7 +296,7 @@ def kda_conv_ssm(
     """Return zero-copy conv and SSM views over a packed two-state page."""
     from math import prod
 
-    from aphrodite.utils.torch_utils import get_dtype_size
+    from sonar.utils.torch_utils import get_dtype_size
 
     if len(spec.shapes) != 2 or len(spec.dtypes) != 2:
         raise ValueError("MoRIIO KDA transfer requires exactly two states (conv and SSM)")

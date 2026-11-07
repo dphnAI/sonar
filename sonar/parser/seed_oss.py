@@ -19,7 +19,7 @@ entire transition table and ``_qwen3_arg_converter`` are inherited from
 
 from __future__ import annotations
 
-from aphrodite.parser.qwen3 import Qwen3Parser
+from sonar.parser.qwen3 import Qwen3Parser
 
 
 class SeedOssParser(Qwen3Parser):

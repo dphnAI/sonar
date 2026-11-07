@@ -16,7 +16,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 mori_available = importlib.util.find_spec("mori") is not None
 
@@ -26,8 +26,8 @@ if not (current_platform.is_rocm() and mori_available):
         allow_module_level=True,
     )
 
-moriio_common = importlib.import_module("aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_common")
-moriio_engine = importlib.import_module("aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_engine")
+moriio_common = importlib.import_module("sonar.distributed.kv_transfer.kv_connector.v1.moriio.moriio_common")
+moriio_engine = importlib.import_module("sonar.distributed.kv_transfer.kv_connector.v1.moriio.moriio_engine")
 
 MoRIIOWrapper = moriio_engine.MoRIIOWrapper
 TransferBatchState = moriio_common.TransferBatchState

@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-from aphrodite.config.watermarking import WatermarkConfig
-from aphrodite.v1.watermarking.gumbel import (
+from sonar.config.watermarking import WatermarkConfig
+from sonar.v1.watermarking.gumbel import (
     DualKeyGumbelWatermarker,
     GumbelWatermarker,
 )
-from aphrodite.v1.watermarking.watermarker import Watermarker
+from sonar.v1.watermarking.watermarker import Watermarker
 
 
 def create_watermarker(config: WatermarkConfig) -> Watermarker:

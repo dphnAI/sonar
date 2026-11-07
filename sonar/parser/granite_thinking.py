@@ -18,19 +18,19 @@ import dataclasses
 import functools
 from typing import TYPE_CHECKING
 
-from aphrodite.parser.nemotron_v3 import NemotronV3Parser, nemotron_v3_config
-from aphrodite.parser.qwen3 import Qwen3Parser
+from sonar.parser.nemotron_v3 import NemotronV3Parser, nemotron_v3_config
+from sonar.parser.qwen3 import Qwen3Parser
 
 if TYPE_CHECKING:
-    from aphrodite.entrypoints.generate.base.protocol import DeltaMessage
-    from aphrodite.entrypoints.openai.chat_completion.protocol import (
+    from sonar.entrypoints.generate.base.protocol import DeltaMessage
+    from sonar.entrypoints.openai.chat_completion.protocol import (
         ChatCompletionRequest,
     )
-    from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
-    from aphrodite.parser.engine.parser_engine import SemanticEvent
-    from aphrodite.parser.engine.parser_engine_config import ParserEngineConfig
-    from aphrodite.tokenizers import TokenizerLike
-    from aphrodite.tool_parsers.abstract_tool_parser import Tool
+    from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
+    from sonar.parser.engine.parser_engine import SemanticEvent
+    from sonar.parser.engine.parser_engine_config import ParserEngineConfig
+    from sonar.tokenizers import TokenizerLike
+    from sonar.tool_parsers.abstract_tool_parser import Tool
 
 
 @functools.cache
@@ -47,7 +47,7 @@ class GraniteThinkingParser(NemotronV3Parser):
 
     The ``reasoning_ended`` property is overridden to delay the
     reasoning-to-content transition reported to
-    :class:`~aphrodite.parser.abstract_parser.DelegatingParser` until the
+    :class:`~sonar.parser.abstract_parser.DelegatingParser` until the
     template's leading newline has been consumed.  Without this delay,
     ``DelegatingParser.parse_delta`` passes newline tokens through a
     raw pass-through path that bypasses the engine's

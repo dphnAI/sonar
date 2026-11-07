@@ -11,8 +11,8 @@ import psutil
 import torch
 import torch.types
 
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
 
 from .mem_constants import GiB_bytes, KiB_bytes, MiB_bytes
 
@@ -34,7 +34,7 @@ def format_gib(b: int) -> str:
 @cache
 def get_max_shared_memory_bytes(gpu: int = 0) -> int:
     """Returns the maximum shared memory per thread block in bytes."""
-    from aphrodite import _custom_ops as ops
+    from sonar import _custom_ops as ops
 
     max_shared_mem = ops.get_max_shared_memory_per_block_device_attribute(gpu)
     # value 0 will cause MAX_SEQ_LEN become negative and test_attention.py
@@ -230,25 +230,25 @@ def memory_profiling(
 ) -> Generator[MemoryProfilingResult, None, None]:
     """Memory profiling context manager.
 
-    baseline_snapshot: the memory snapshot before the current Aphrodite instance.
+    baseline_snapshot: the memory snapshot before the current Sonar instance.
     weights_memory: memory used by PyTorch when loading the model weights.
         Note that, before loading the model weights, we also initialize the device
         and distributed environment, which may consume some memory. This part is not
         included in the weights_memory because PyTorch does not control it.
 
     The memory in one GPU can be classified into 3 categories:
-    1. memory used by anything other than the current Aphrodite instance.
-    2. memory used by torch in the current Aphrodite instance.
-    3. memory used in the current Aphrodite instance, but not by torch.
+    1. memory used by anything other than the current Sonar instance.
+    2. memory used by torch in the current Sonar instance.
+    3. memory used in the current Sonar instance, but not by torch.
 
     A quantitive example:
 
-    Before creating the current Aphrodite instance:
+    Before creating the current Sonar instance:
         category 1: 1 GiB
         category 2: 0 GiB
         category 3: 0 GiB
 
-    After creating the current Aphrodite instance and loading the model,
+    After creating the current Sonar instance and loading the model,
     (i.e. before profiling):
         category 1: 1 GiB
         category 2: 2 GiB (model weights take 2 GiB)
@@ -275,7 +275,7 @@ def memory_profiling(
     The increase of `torch.accelerator.memory_stats()["allocated_bytes.all.peak"]`
     during profiling gives (b.).
 
-    The increase of `non_torch_memory` from creating the current Aphrodite instance
+    The increase of `non_torch_memory` from creating the current Sonar instance
     until after profiling to get (c.).
     """
     gc.collect()

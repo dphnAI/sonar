@@ -24,12 +24,12 @@ from typing import Any
 import pytest
 import regex as re
 
-import aphrodite.v1.core.kv_cache_utils as kv_cache_utils
-from aphrodite.lora.request import LoRARequest
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.utils.hashing import sha256, sha256_cbor
-from aphrodite.v1.core.kv_cache_utils import get_request_block_hasher, init_none_hash
-from aphrodite.v1.request import Request
+import sonar.v1.core.kv_cache_utils as kv_cache_utils
+from sonar.lora.request import LoRARequest
+from sonar.sampling_params import SamplingParams
+from sonar.utils.hashing import sha256, sha256_cbor
+from sonar.v1.core.kv_cache_utils import get_request_block_hasher, init_none_hash
+from sonar.v1.request import Request
 
 pytestmark = pytest.mark.cpu_test
 

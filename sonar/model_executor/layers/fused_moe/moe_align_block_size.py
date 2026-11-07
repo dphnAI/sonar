@@ -5,9 +5,9 @@ from typing import Literal, overload
 
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.triton_utils import triton
-from aphrodite.utils.math_utils import round_up
+from sonar import _custom_ops as ops
+from sonar.triton_utils import triton
+from sonar.utils.math_utils import round_up
 
 
 @overload

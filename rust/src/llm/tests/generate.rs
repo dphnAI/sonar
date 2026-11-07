@@ -6,32 +6,32 @@ use std::num::NonZeroU32;
 use std::sync::{Arc, Once};
 use std::time::Duration;
 
-use aphrodite_engine_core_client::mock_engine::default_ready_response;
-use aphrodite_engine_core_client::protocol::dtype::TensorDtype;
-use aphrodite_engine_core_client::protocol::handshake::EngineCoreReadyResponse;
-use aphrodite_engine_core_client::protocol::logprobs::{
+use futures::StreamExt as _;
+use sonar_engine_core_client::mock_engine::default_ready_response;
+use sonar_engine_core_client::protocol::dtype::TensorDtype;
+use sonar_engine_core_client::protocol::handshake::EngineCoreReadyResponse;
+use sonar_engine_core_client::protocol::logprobs::{
     Logprobs, MaybeWireLogprobs, PositionLogprobs, TokenLogprob,
 };
-use aphrodite_engine_core_client::protocol::lora::LoraRequest;
-use aphrodite_engine_core_client::protocol::output::{
+use sonar_engine_core_client::protocol::lora::LoraRequest;
+use sonar_engine_core_client::protocol::output::{
     EngineCoreEvent, EngineCoreEventType, EngineCoreFinishReason, EngineCoreOutput,
     EngineCoreOutputs, RequestBatchOutputs,
 };
-use aphrodite_engine_core_client::protocol::request::EngineCoreRequest;
-use aphrodite_engine_core_client::protocol::sampling::EngineCoreSamplingParams;
-use aphrodite_engine_core_client::protocol::sampling_mask::{MaybeWireSamplingMask, SamplingMask};
-use aphrodite_engine_core_client::protocol::stats::PrefillStats;
-use aphrodite_engine_core_client::protocol::tensor::WireNdArray;
-use aphrodite_engine_core_client::test_utils::{
+use sonar_engine_core_client::protocol::request::EngineCoreRequest;
+use sonar_engine_core_client::protocol::sampling::EngineCoreSamplingParams;
+use sonar_engine_core_client::protocol::sampling_mask::{MaybeWireSamplingMask, SamplingMask};
+use sonar_engine_core_client::protocol::stats::PrefillStats;
+use sonar_engine_core_client::protocol::tensor::WireNdArray;
+use sonar_engine_core_client::test_utils::{
     IpcNamespace, spawn_mock_engine_task, spawn_mock_engine_task_with_ready,
 };
-use aphrodite_engine_core_client::{EngineCoreClient, EngineCoreClientConfig, EngineId};
-use aphrodite_llm::{
+use sonar_engine_core_client::{EngineCoreClient, EngineCoreClientConfig, EngineId};
+use sonar_llm::{
     Error, FinishReason, GenerateOutputStreamExt as _, GeneratePromptInfo, GenerateRequest, Llm,
     WeightVersionSpan,
 };
-use aphrodite_metrics::METRICS;
-use futures::StreamExt as _;
+use sonar_metrics::METRICS;
 use tokio::sync::oneshot;
 use tokio::time::timeout;
 use tracing_subscriber::EnvFilter;
@@ -221,7 +221,7 @@ fn request_metrics_model_name(prefix: &str) -> String {
 fn init_tracing() {
     TRACING.call_once(|| {
         let filter = EnvFilter::try_from_default_env()
-            .unwrap_or_else(|_| EnvFilter::new("aphrodite_engine_core_client=debug"));
+            .unwrap_or_else(|_| EnvFilter::new("sonar_engine_core_client=debug"));
         let _ = tracing_subscriber::fmt().with_test_writer().with_env_filter(filter).try_init();
     });
 }
@@ -566,7 +566,7 @@ async fn collect_output_aggregates_raw_tokens_logprobs_and_terminal_metadata() {
 
 #[tokio::test]
 async fn collect_output_rejects_partial_sampling_mask() {
-    let output = aphrodite_llm::GenerateOutput {
+    let output = sonar_llm::GenerateOutput {
         request_id: "req-partial-mask".to_string(),
         prompt_info: Some(Box::new(GeneratePromptInfo {
             prompt_token_ids: Arc::from([11_u32, 22]),
@@ -691,13 +691,13 @@ async fn remote_prefill_cache_usage_preserves_decoder_metrics() {
         // Decoder metrics keep counting the transferred KV as cached.
         let rendered = METRICS.render().unwrap();
         assert!(rendered.contains(&format!(
-            "aphrodite:prompt_tokens_cached_total{{model_name=\"{model_name}\",engine=\"0\"}} 7"
+            "sonar:prompt_tokens_cached_total{{model_name=\"{model_name}\",engine=\"0\"}} 7"
         )));
         assert!(rendered.contains(&format!(
-            "aphrodite:prompt_tokens_by_source_total{{model_name=\"{model_name}\",engine=\"0\",source=\"external_kv_transfer\"}} 7"
+            "sonar:prompt_tokens_by_source_total{{model_name=\"{model_name}\",engine=\"0\",source=\"external_kv_transfer\"}} 7"
         )));
         assert!(rendered.contains(&format!(
-            "aphrodite:request_prefill_kv_computed_tokens_sum{{model_name=\"{model_name}\",engine=\"0\"}} 1.0"
+            "sonar:request_prefill_kv_computed_tokens_sum{{model_name=\"{model_name}\",engine=\"0\"}} 1.0"
         )));
         let _ = shutdown_tx.send(());
         engine_task.await.unwrap();
@@ -741,7 +741,7 @@ async fn generate_propagates_unexpected_close_errors() {
     let error = stream.next().await.unwrap().unwrap_err();
     assert!(matches!(
         error,
-        Error::EngineCoreClient(aphrodite_engine_core_client::Error::RequestStreamClosed {
+        Error::EngineCoreClient(sonar_engine_core_client::Error::RequestStreamClosed {
             request_id
         }) if request_id == internal_id
     ));
@@ -1038,23 +1038,23 @@ async fn connecting_exports_zero_valued_request_metrics_before_any_request() {
         .lines()
         .filter(|line| line.contains(&model_name))
         .filter(|line| {
-            line.starts_with("aphrodite:request_success_total")
-                || line.starts_with("aphrodite:prompt_tokens_total")
-                || line.starts_with("aphrodite:generation_tokens_total")
-                || line.starts_with("aphrodite:e2e_request_latency_seconds_count")
+            line.starts_with("sonar:request_success_total")
+                || line.starts_with("sonar:prompt_tokens_total")
+                || line.starts_with("sonar:generation_tokens_total")
+                || line.starts_with("sonar:e2e_request_latency_seconds_count")
         })
         .map(|line| line.replace(&model_name, "<model>"))
         .collect();
     series.sort();
     expect_test::expect![[r#"
-        aphrodite:e2e_request_latency_seconds_count{model_name="<model>",engine="3"} 0
-        aphrodite:generation_tokens_total{model_name="<model>",engine="3"} 0
-        aphrodite:prompt_tokens_total{model_name="<model>",engine="3"} 0
-        aphrodite:request_success_total{model_name="<model>",engine="3",finished_reason="abort"} 0
-        aphrodite:request_success_total{model_name="<model>",engine="3",finished_reason="error"} 0
-        aphrodite:request_success_total{model_name="<model>",engine="3",finished_reason="length"} 0
-        aphrodite:request_success_total{model_name="<model>",engine="3",finished_reason="repetition"} 0
-        aphrodite:request_success_total{model_name="<model>",engine="3",finished_reason="stop"} 0"#]]
+        sonar:e2e_request_latency_seconds_count{model_name="<model>",engine="3"} 0
+        sonar:generation_tokens_total{model_name="<model>",engine="3"} 0
+        sonar:prompt_tokens_total{model_name="<model>",engine="3"} 0
+        sonar:request_success_total{model_name="<model>",engine="3",finished_reason="abort"} 0
+        sonar:request_success_total{model_name="<model>",engine="3",finished_reason="error"} 0
+        sonar:request_success_total{model_name="<model>",engine="3",finished_reason="length"} 0
+        sonar:request_success_total{model_name="<model>",engine="3",finished_reason="repetition"} 0
+        sonar:request_success_total{model_name="<model>",engine="3",finished_reason="stop"} 0"#]]
     .assert_eq(&series.join("\n"));
 
     let _ = shutdown_tx.send(());
@@ -1149,58 +1149,58 @@ async fn generate_records_request_metrics_in_prometheus_output() {
 
     let rendered = METRICS.render().unwrap();
     assert!(rendered.contains(&format!(
-        "aphrodite:request_success_total{{model_name=\"{model_name}\",engine=\"4\",finished_reason=\"length\"}} 1"
+        "sonar:request_success_total{{model_name=\"{model_name}\",engine=\"4\",finished_reason=\"length\"}} 1"
     )));
     assert!(rendered.contains(&format!(
-        "aphrodite:prompt_tokens_total{{model_name=\"{model_name}\",engine=\"4\"}} 2"
+        "sonar:prompt_tokens_total{{model_name=\"{model_name}\",engine=\"4\"}} 2"
     )));
     assert!(rendered.contains(&format!(
-        "aphrodite:prompt_tokens_by_source_total{{model_name=\"{model_name}\",engine=\"4\",source=\"local_compute\"}} 2"
+        "sonar:prompt_tokens_by_source_total{{model_name=\"{model_name}\",engine=\"4\",source=\"local_compute\"}} 2"
     )));
     assert!(rendered.contains(&format!(
-        "aphrodite:prompt_tokens_by_source_total{{model_name=\"{model_name}\",engine=\"4\",source=\"local_cache_hit\"}} 0"
+        "sonar:prompt_tokens_by_source_total{{model_name=\"{model_name}\",engine=\"4\",source=\"local_cache_hit\"}} 0"
     )));
     assert!(rendered.contains(&format!(
-        "aphrodite:prompt_tokens_by_source_total{{model_name=\"{model_name}\",engine=\"4\",source=\"external_kv_transfer\"}} 0"
+        "sonar:prompt_tokens_by_source_total{{model_name=\"{model_name}\",engine=\"4\",source=\"external_kv_transfer\"}} 0"
     )));
     assert!(rendered.contains(&format!(
-        "aphrodite:prompt_tokens_cached_total{{model_name=\"{model_name}\",engine=\"4\"}} 0"
+        "sonar:prompt_tokens_cached_total{{model_name=\"{model_name}\",engine=\"4\"}} 0"
     )));
     assert!(rendered.contains(&format!(
-        "aphrodite:generation_tokens_total{{model_name=\"{model_name}\",engine=\"4\"}} 3"
+        "sonar:generation_tokens_total{{model_name=\"{model_name}\",engine=\"4\"}} 3"
     )));
     assert!(rendered.contains(&format!(
-        "aphrodite:corrupted_requests_total{{model_name=\"{model_name}\",engine=\"4\"}} 1"
+        "sonar:corrupted_requests_total{{model_name=\"{model_name}\",engine=\"4\"}} 1"
     )));
     assert!(rendered.contains(&format!(
-        "aphrodite:num_preemptions_total{{model_name=\"{model_name}\",engine=\"4\"}} 1"
+        "sonar:num_preemptions_total{{model_name=\"{model_name}\",engine=\"4\"}} 1"
     )));
     assert!(rendered.contains(&format!(
-        "aphrodite:request_num_preemptions_sum{{model_name=\"{model_name}\",engine=\"4\"}} 1.0"
+        "sonar:request_num_preemptions_sum{{model_name=\"{model_name}\",engine=\"4\"}} 1.0"
     )));
     assert!(rendered.contains(&format!(
-        "aphrodite:request_num_preemptions_count{{model_name=\"{model_name}\",engine=\"4\"}} 1"
+        "sonar:request_num_preemptions_count{{model_name=\"{model_name}\",engine=\"4\"}} 1"
     )));
     assert!(rendered.contains(&format!(
-        "aphrodite:time_to_first_token_seconds_count{{model_name=\"{model_name}\",engine=\"4\"}} 1"
+        "sonar:time_to_first_token_seconds_count{{model_name=\"{model_name}\",engine=\"4\"}} 1"
     )));
     assert!(rendered.contains(&format!(
-        "aphrodite:inter_token_latency_seconds_count{{model_name=\"{model_name}\",engine=\"4\"}} 1"
+        "sonar:inter_token_latency_seconds_count{{model_name=\"{model_name}\",engine=\"4\"}} 1"
     )));
     assert!(rendered.contains(&format!(
-        "aphrodite:e2e_request_latency_seconds_count{{model_name=\"{model_name}\",engine=\"4\"}} 1"
+        "sonar:e2e_request_latency_seconds_count{{model_name=\"{model_name}\",engine=\"4\"}} 1"
     )));
     assert!(rendered.contains(&format!(
-        "aphrodite:request_prompt_tokens_count{{model_name=\"{model_name}\",engine=\"4\"}} 1"
+        "sonar:request_prompt_tokens_count{{model_name=\"{model_name}\",engine=\"4\"}} 1"
     )));
     assert!(rendered.contains(&format!(
-        "aphrodite:request_generation_tokens_count{{model_name=\"{model_name}\",engine=\"4\"}} 1"
+        "sonar:request_generation_tokens_count{{model_name=\"{model_name}\",engine=\"4\"}} 1"
     )));
     assert!(rendered.contains(&format!(
-        "aphrodite:request_prefill_kv_computed_tokens_count{{model_name=\"{model_name}\",engine=\"4\"}} 1"
+        "sonar:request_prefill_kv_computed_tokens_count{{model_name=\"{model_name}\",engine=\"4\"}} 1"
     )));
     assert!(rendered.contains(&format!(
-        "aphrodite:request_queue_time_seconds_sum{{model_name=\"{model_name}\",engine=\"4\"}} 1.0"
+        "sonar:request_queue_time_seconds_sum{{model_name=\"{model_name}\",engine=\"4\"}} 1.0"
     )));
 
     let _ = shutdown_tx.send(());
@@ -1305,9 +1305,9 @@ async fn generate_without_engine_stats_exports_only_frontend_observed_metrics() 
 
     let rendered = METRICS.render().unwrap();
     for metric in [
-        "aphrodite:time_to_first_token_seconds_count",
-        "aphrodite:e2e_request_latency_seconds_count",
-        "aphrodite:request_decode_time_seconds_count",
+        "sonar:time_to_first_token_seconds_count",
+        "sonar:e2e_request_latency_seconds_count",
+        "sonar:request_decode_time_seconds_count",
     ] {
         assert!(
             rendered.contains(&format!(
@@ -1317,13 +1317,13 @@ async fn generate_without_engine_stats_exports_only_frontend_observed_metrics() 
         );
     }
     for metric in [
-        "aphrodite:num_requests_running",
-        "aphrodite:kv_cache_usage_perc",
-        "aphrodite:num_preemptions_total",
-        "aphrodite:request_num_preemptions_count",
-        "aphrodite:request_queue_time_seconds_count",
-        "aphrodite:request_prefill_time_seconds_count",
-        "aphrodite:request_inference_time_seconds_count",
+        "sonar:num_requests_running",
+        "sonar:kv_cache_usage_perc",
+        "sonar:num_preemptions_total",
+        "sonar:request_num_preemptions_count",
+        "sonar:request_queue_time_seconds_count",
+        "sonar:request_prefill_time_seconds_count",
+        "sonar:request_inference_time_seconds_count",
     ] {
         assert!(
             !rendered.contains(&format!("{metric}{{model_name=\"{model_name}\"")),
@@ -1400,16 +1400,16 @@ async fn dropping_stream_records_abort_terminal_request_metrics() {
     engine_task.await.unwrap();
     let rendered = METRICS.render().unwrap();
     assert!(rendered.contains(&format!(
-        "aphrodite:request_success_total{{model_name=\"{model_name}\",engine=\"5\",finished_reason=\"abort\"}} 1"
+        "sonar:request_success_total{{model_name=\"{model_name}\",engine=\"5\",finished_reason=\"abort\"}} 1"
     )));
     assert!(rendered.contains(&format!(
-        "aphrodite:e2e_request_latency_seconds_count{{model_name=\"{model_name}\",engine=\"5\"}} 1"
+        "sonar:e2e_request_latency_seconds_count{{model_name=\"{model_name}\",engine=\"5\"}} 1"
     )));
     assert!(rendered.contains(&format!(
-        "aphrodite:request_num_preemptions_sum{{model_name=\"{model_name}\",engine=\"5\"}} 0.0"
+        "sonar:request_num_preemptions_sum{{model_name=\"{model_name}\",engine=\"5\"}} 0.0"
     )));
     assert!(rendered.contains(&format!(
-        "aphrodite:request_num_preemptions_count{{model_name=\"{model_name}\",engine=\"5\"}} 1"
+        "sonar:request_num_preemptions_count{{model_name=\"{model_name}\",engine=\"5\"}} 1"
     )));
 
     llm.shutdown().await.unwrap();

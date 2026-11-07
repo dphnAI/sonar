@@ -3,10 +3,10 @@
 
 from dataclasses import replace
 
-from aphrodite.parser.qwen3 import qwen3_config
-from aphrodite.tokenizers import TokenizerLike
-from aphrodite.tool_parsers.qwen3_engine_tool_parser import Qwen3EngineToolParser
-from aphrodite.tool_parsers.utils import Tool
+from sonar.parser.qwen3 import qwen3_config
+from sonar.tokenizers import TokenizerLike
+from sonar.tool_parsers.qwen3_engine_tool_parser import Qwen3EngineToolParser
+from sonar.tool_parsers.utils import Tool
 
 
 class Step5ToolParser(Qwen3EngineToolParser):

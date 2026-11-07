@@ -3,7 +3,7 @@
 
 import torch
 
-from aphrodite.model_executor.layers.quantization.utils.mxfp8_utils import (
+from sonar.model_executor.layers.quantization.utils.mxfp8_utils import (
     MXFP8_BLOCK_SIZE,
 )
 
@@ -15,7 +15,7 @@ class MarlinMxfp8LinearKernel(Mxfp8LinearKernel):
 
     @classmethod
     def is_supported(cls, compute_capability: int | None = None) -> tuple[bool, str | None]:
-        from aphrodite.model_executor.layers.quantization.utils.marlin_utils_fp8 import (
+        from sonar.model_executor.layers.quantization.utils.marlin_utils_fp8 import (
             is_fp8_marlin_supported,
         )
 
@@ -37,7 +37,7 @@ class MarlinMxfp8LinearKernel(Mxfp8LinearKernel):
         return True, None
 
     def process_weights_after_loading(self, layer: torch.nn.Module) -> None:
-        from aphrodite.model_executor.layers.quantization.utils.marlin_utils_fp8 import (
+        from sonar.model_executor.layers.quantization.utils.marlin_utils_fp8 import (
             prepare_mxfp8_layer_for_marlin,
         )
 
@@ -49,7 +49,7 @@ class MarlinMxfp8LinearKernel(Mxfp8LinearKernel):
         x: torch.Tensor,
         bias: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        from aphrodite.model_executor.layers.quantization.utils.marlin_utils_fp8 import (
+        from sonar.model_executor.layers.quantization.utils.marlin_utils_fp8 import (
             apply_mxfp8_marlin_linear,
         )
 

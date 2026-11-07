@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """CUTLASS batch-invariance tests.
 
-The NVFP4 CUTLASS tests in this file must run with ``APHRODITE_BATCH_INVARIANT=1``
+The NVFP4 CUTLASS tests in this file must run with ``SONAR_BATCH_INVARIANT=1``
 before the first relevant native kernel call. Do not run them in the same pytest
 process after tests that intentionally exercise non-batch-invariant NVFP4
 scaled-mm kernels.
@@ -13,31 +13,31 @@ from typing import Any
 import pytest
 import torch
 
-import aphrodite.envs as envs
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite import _custom_ops as ops
-from aphrodite.model_executor.kernels.linear import fp8_scaled_mm_is_batch_invariant
-from aphrodite.model_executor.kernels.linear.scaled_mm import (
+import sonar.envs as envs
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar import _custom_ops as ops
+from sonar.model_executor.kernels.linear import fp8_scaled_mm_is_batch_invariant
+from sonar.model_executor.kernels.linear.scaled_mm import (
     CutlassFP8ScaledMMLinearKernel,
     TritonFP8ScaledMMLinearKernel,
 )
-from aphrodite.model_executor.layers.fused_moe import fused_topk
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.all2all_utils import (
+from sonar.model_executor.layers.fused_moe import fused_topk
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.all2all_utils import (
     maybe_make_prepare_finalize,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.cutlass_moe import (
+from sonar.model_executor.layers.fused_moe.experts.cutlass_moe import (
     CutlassExpertsFp4,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     kFp8DynamicTensorSym,
     kFp8DynamicTokenSym,
     kFp8StaticChannelSym,
     kFp8StaticTensorSym,
     kFp8StaticTokenSym,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_random_seed
 from tests.kernels.moe.utils import make_dummy_moe_config, make_test_quant_config
 from tests.kernels.quantization.nvfp4_utils import get_nvfp4_global_scale
 from tests.utils import TestFP8Layer, requires_fp8
@@ -128,11 +128,11 @@ def test_fp8_scaled_mm_batch_invariant_fixed_config(
     weight_key,
     weight_shape: tuple[int, int],
     batch_size: int,
-    default_aphrodite_config,
+    default_sonar_config,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    monkeypatch.setenv("APHRODITE_BATCH_INVARIANT", "1")
-    monkeypatch.setattr(envs, "APHRODITE_BATCH_INVARIANT", True)
+    monkeypatch.setenv("SONAR_BATCH_INVARIANT", "1")
+    monkeypatch.setattr(envs, "SONAR_BATCH_INVARIANT", True)
 
     torch.manual_seed(0)
     layer = TestFP8Layer(
@@ -173,17 +173,17 @@ def test_fp8_scaled_mm_batch_invariant_fixed_config(
 @requires_fp8
 @pytest.mark.parametrize("scheme", ["fp8_per_tensor", "fp8_per_channel"])
 @torch.inference_mode()
-def test_online_fp8_linear_batch_invariant(scheme, monkeypatch, default_aphrodite_config, dist_init):
-    from aphrodite.config.model import ModelConfig
-    from aphrodite.config.quantization import resolve_quantization_config
-    from aphrodite.model_executor.layers.linear import ReplicatedLinear
-    from aphrodite.model_executor.layers.quantization.online.base import (
+def test_online_fp8_linear_batch_invariant(scheme, monkeypatch, default_sonar_config, dist_init):
+    from sonar.config.model import ModelConfig
+    from sonar.config.quantization import resolve_quantization_config
+    from sonar.model_executor.layers.linear import ReplicatedLinear
+    from sonar.model_executor.layers.quantization.online.base import (
         OnlineQuantizationConfig,
     )
-    from aphrodite.utils.torch_utils import set_default_torch_dtype
+    from sonar.utils.torch_utils import set_default_torch_dtype
 
-    monkeypatch.setattr(envs, "APHRODITE_BATCH_INVARIANT", True)
-    default_aphrodite_config.model_config = ModelConfig(dtype="bfloat16")
+    monkeypatch.setattr(envs, "SONAR_BATCH_INVARIANT", True)
+    default_sonar_config.model_config = ModelConfig(dtype="bfloat16")
     quant_config = OnlineQuantizationConfig(resolve_quantization_config(scheme, None))
     set_random_seed(0)
     with set_default_torch_dtype(torch.bfloat16), torch.device("cuda"):
@@ -202,11 +202,11 @@ def test_online_fp8_linear_batch_invariant(scheme, monkeypatch, default_aphrodit
 @torch.inference_mode()
 def test_flashinfer_fp8_mm_batch_invariant_after_autotune(monkeypatch):
     """Under "auto", autotune may pick a different bmm_fp8 backend per M bucket."""
-    from aphrodite.utils import flashinfer as fi
+    from sonar.utils import flashinfer as fi
 
     if not fi.has_flashinfer():
         pytest.skip("FlashInfer is not installed.")
-    monkeypatch.setattr(envs, "APHRODITE_BATCH_INVARIANT", True)
+    monkeypatch.setattr(envs, "SONAR_BATCH_INVARIANT", True)
     set_random_seed(0)
     fp8 = current_platform.fp8_dtype()
     x = (0.5 * torch.randn(2048, 4096)).to(fp8)
@@ -229,12 +229,12 @@ def test_flashinfer_fp8_mm_batch_invariant_after_autotune(monkeypatch):
 def test_block_fp8_batch_invariant_across_tuned_block_size_k(monkeypatch):
     """The block-FP8 kernel applies the block scales once per K tile, so a tuned
     BLOCK_SIZE_K below the scale group size reorders the sum."""
-    from aphrodite.model_executor.layers.quantization.utils import fp8_utils
+    from sonar.model_executor.layers.quantization.utils import fp8_utils
 
     base = dict(BLOCK_SIZE_M=64, BLOCK_SIZE_N=128, GROUP_SIZE_M=1, num_warps=4, num_stages=2)
     table = {256: {**base, "BLOCK_SIZE_K": 128}, 512: {**base, "BLOCK_SIZE_K": 64}}
     monkeypatch.setattr(fp8_utils, "get_w8a8_block_fp8_configs", lambda *_: table)
-    monkeypatch.setattr(envs, "APHRODITE_BATCH_INVARIANT", True)
+    monkeypatch.setattr(envs, "SONAR_BATCH_INVARIANT", True)
     N, K, block = 12288, 2048, [128, 128]
 
     set_random_seed(0)
@@ -248,7 +248,7 @@ def test_block_fp8_batch_invariant_across_tuned_block_size_k(monkeypatch):
         return fp8_utils.w8a8_triton_block_scaled_mm(A[:m], B, As[:m], Bs, block, torch.bfloat16)[:256]
 
     assert torch.equal(run(256), run(512))
-    monkeypatch.setattr(envs, "APHRODITE_BATCH_INVARIANT", False)
+    monkeypatch.setattr(envs, "SONAR_BATCH_INVARIANT", False)
     assert not torch.equal(run(256), run(512))
 
 
@@ -297,7 +297,7 @@ def test_cutlass_nvfp4_scaled_mm_batch_invariant(
         )
 
         assert torch.equal(out_full[i], out_row[0]), (
-            f"APHRODITE_BATCH_INVARIANT: row {i} differs between M={m} and M=1: "
+            f"SONAR_BATCH_INVARIANT: row {i} differs between M={m} and M=1: "
             f"max_abs_diff={(out_full[i] - out_row[0]).abs().max().item()}"
         )
 
@@ -396,7 +396,7 @@ def test_cutlass_nvfp4_moe_batch_invariant(
     e: int,
     topk: int,
     dtype: torch.dtype,
-    default_aphrodite_config,
+    default_sonar_config,
     workspace_init,
 ) -> None:
     case = _make_cutlass_fp4_moe_batch_invariant_case(case_config, activation, e, topk, dtype)

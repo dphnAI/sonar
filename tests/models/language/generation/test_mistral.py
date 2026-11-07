@@ -5,10 +5,10 @@ import json
 
 import pytest
 
-from aphrodite.parser.mistral import MistralToolCall
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.tokenizers.mistral import MistralTokenizer
-from aphrodite.tool_parsers.mistral_tool_parser import MistralToolParser
+from sonar.parser.mistral import MistralToolCall
+from sonar.sampling_params import SamplingParams
+from sonar.tokenizers.mistral import MistralTokenizer
+from sonar.tool_parsers.mistral_tool_parser import MistralToolParser
 
 from ...utils import check_logprobs_close
 
@@ -148,7 +148,7 @@ SAMPLE_JSON_SCHEMA = {
 @pytest.mark.parametrize("num_logprobs", [5])
 def test_models(
     hf_runner,
-    aphrodite_runner,
+    sonar_runner,
     example_prompts,
     model: str,
     dtype: str,
@@ -159,14 +159,14 @@ def test_models(
     with hf_runner(model, dtype=dtype) as hf_model:
         hf_outputs = hf_model.generate_greedy_logprobs_limit(example_prompts, max_tokens, num_logprobs)
 
-    with aphrodite_runner(model, dtype=dtype, tokenizer_mode="mistral") as aphrodite_model:
-        aphrodite_outputs = aphrodite_model.generate_greedy_logprobs(example_prompts, max_tokens, num_logprobs)
+    with sonar_runner(model, dtype=dtype, tokenizer_mode="mistral") as sonar_model:
+        sonar_outputs = sonar_model.generate_greedy_logprobs(example_prompts, max_tokens, num_logprobs)
 
     check_logprobs_close(
         outputs_0_lst=hf_outputs,
-        outputs_1_lst=aphrodite_outputs,
+        outputs_1_lst=sonar_outputs,
         name_0="hf",
-        name_1="aphrodite",
+        name_1="sonar",
     )
 
 
@@ -175,14 +175,14 @@ def test_models(
 @pytest.mark.parametrize("max_tokens", [64])
 @pytest.mark.parametrize("num_logprobs", [5])
 def test_mistral_format(
-    aphrodite_runner,
+    sonar_runner,
     example_prompts,
     model: str,
     dtype: str,
     max_tokens: int,
     num_logprobs: int,
 ) -> None:
-    with aphrodite_runner(
+    with sonar_runner(
         model,
         dtype=dtype,
         tokenizer_mode="mistral",
@@ -193,7 +193,7 @@ def test_mistral_format(
             example_prompts, max_tokens, num_logprobs
         )
 
-    with aphrodite_runner(
+    with sonar_runner(
         model,
         dtype=dtype,
         tokenizer_mode="hf",
@@ -212,35 +212,35 @@ def test_mistral_format(
 
 @pytest.mark.parametrize("model", MISTRAL_FORMAT_MODELS)
 @pytest.mark.parametrize("dtype", ["bfloat16"])
-def test_mistral_symbolic_languages(aphrodite_runner, model: str, dtype: str) -> None:
-    with aphrodite_runner(
+def test_mistral_symbolic_languages(sonar_runner, model: str, dtype: str) -> None:
+    with sonar_runner(
         model,
         dtype=dtype,
         max_model_len=8192,
         tokenizer_mode="mistral",
         config_format="mistral",
         load_format="mistral",
-    ) as aphrodite_model:
+    ) as sonar_model:
         for prompt in SYMBOLIC_LANG_PROMPTS:
             msg = {"role": "user", "content": prompt}
-            outputs = aphrodite_model.llm.chat([msg], sampling_params=SAMPLING_PARAMS)
+            outputs = sonar_model.llm.chat([msg], sampling_params=SAMPLING_PARAMS)
             assert "�" not in outputs[0].outputs[0].text.strip()
 
 
 @pytest.mark.parametrize("model", MISTRAL_FORMAT_MODELS)
 @pytest.mark.parametrize("dtype", ["bfloat16"])
-def test_mistral_function_calling(aphrodite_runner, model: str, dtype: str) -> None:
-    with aphrodite_runner(
+def test_mistral_function_calling(sonar_runner, model: str, dtype: str) -> None:
+    with sonar_runner(
         model,
         dtype=dtype,
         tokenizer_mode="mistral",
         config_format="mistral",
         load_format="mistral",
-    ) as aphrodite_model:
+    ) as sonar_model:
         msgs = copy.deepcopy(MSGS)
-        outputs = aphrodite_model.llm.chat(msgs, tools=TOOLS, sampling_params=SAMPLING_PARAMS)
+        outputs = sonar_model.llm.chat(msgs, tools=TOOLS, sampling_params=SAMPLING_PARAMS)
 
-        tokenizer = aphrodite_model.llm.get_tokenizer()
+        tokenizer = sonar_model.llm.get_tokenizer()
         tool_parser = MistralToolParser(tokenizer)
 
         model_output = outputs[0].outputs[0].text.strip()

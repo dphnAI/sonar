@@ -13,12 +13,12 @@ from ctypes import c_int, c_long, c_size_t, c_void_p
 import numpy as np
 import torch
 
-from aphrodite.distributed.device_communicators.shm_broadcast import (
+from sonar.distributed.device_communicators.shm_broadcast import (
     check_shm_free_space,
 )
-from aphrodite.logger import init_logger
-from aphrodite.utils.math_utils import cdiv, round_up
-from aphrodite.v1.kv_offload.cpu.host_register import host_unregister
+from sonar.logger import init_logger
+from sonar.utils.math_utils import cdiv, round_up
+from sonar.v1.kv_offload.cpu.host_register import host_unregister
 
 logger = init_logger(__name__)
 
@@ -82,12 +82,12 @@ def _get_populate_write_fn(
 
 class SharedOffloadRegion:
     """Single mmap-backed memory region shared across all workers for a
-    Aphrodite instance.  Workers coordinate via the filesystem: the first worker
+    Sonar instance.  Workers coordinate via the filesystem: the first worker
     to open the file with O_EXCL becomes the creator and calls ftruncate;
     the rest open the existing file and wait until it reaches the expected
     size.  Each worker then mmap()s the full file.
 
-    File path: /dev/shm/aphrodite_offload_{engine_id}.mmap.  When a barrier is
+    File path: /dev/shm/sonar_offload_{engine_id}.mmap.  When a barrier is
     given, the path is unlinked once every worker has mapped the file, so
     the kernel reclaims the memory when the last worker exits, no matter
     how it exits; mappings taken before the unlink stay valid.
@@ -121,7 +121,7 @@ class SharedOffloadRegion:
         self.total_size_bytes = self.num_chunks * self._row_stride
         self.cpu_page_size = cpu_page_size
 
-        self.mmap_path = f"/dev/shm/aphrodite_offload_{engine_id}.mmap"
+        self.mmap_path = f"/dev/shm/sonar_offload_{engine_id}.mmap"
         num_segments = min(num_segments, self.total_size_bytes // _MIN_SEGMENT_BYTES)
         rows = max(1, cdiv(num_chunks, max(1, num_segments)))
         # (path, offset, length) per file.

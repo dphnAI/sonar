@@ -8,13 +8,13 @@ from typing import Any, Generic, NotRequired, TypeAlias, TypedDict, TypeVar
 from fastapi import Request
 from pydantic import ConfigDict
 
-from aphrodite import PoolingParams, PoolingRequestOutput, PromptType
-from aphrodite.inputs import DataPrompt, EngineInput
-from aphrodite.lora.request import LoRARequest
-from aphrodite.outputs import LateChunkingMetadata
-from aphrodite.renderers import ChatParams, TokenizeParams
-from aphrodite.renderers.chat_utils import ChatCompletionMessageParam
-from aphrodite.renderers.inputs import DictPrompt
+from sonar import PoolingParams, PoolingRequestOutput, PromptType
+from sonar.inputs import DataPrompt, EngineInput
+from sonar.lora.request import LoRARequest
+from sonar.outputs import LateChunkingMetadata
+from sonar.renderers import ChatParams, TokenizeParams
+from sonar.renderers.chat_utils import ChatCompletionMessageParam
+from sonar.renderers.inputs import DictPrompt
 
 from ...tasks import PoolingTask
 from .classify.protocol import (

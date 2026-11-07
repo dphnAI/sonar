@@ -5,16 +5,16 @@
 import numpy as np
 import torch
 
-from aphrodite.v1.worker.gpu.dp_utils import DPSyncState
-from aphrodite.v1.worker.gpu.spec_decode.utils import get_drafter_hidden_states
-from aphrodite.v1.worker.workspace import use_workspace_lane
+from sonar.v1.worker.gpu.dp_utils import DPSyncState
+from sonar.v1.worker.gpu.spec_decode.utils import get_drafter_hidden_states
+from sonar.v1.worker.workspace import use_workspace_lane
 
 
 class DraftBench:
     def __init__(self, runner):
         self.runner = runner
         self.speculator = runner.speculator
-        self.method = runner.aphrodite_config.speculative_config.method
+        self.method = runner.sonar_config.speculative_config.method
         if self.method not in ("mtp", "eagle", "eagle3", "dspark", "dflash"):
             raise ValueError(
                 f"Drafter timing does not support {self.method!r}; use --exclude-drafter for target-only timing."

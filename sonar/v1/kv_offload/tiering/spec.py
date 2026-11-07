@@ -60,8 +60,8 @@ from typing import Any
 
 from typing_extensions import override
 
-from aphrodite.logger import init_logger
-from aphrodite.v1.kv_offload.base import (
+from sonar.logger import init_logger
+from sonar.v1.kv_offload.base import (
     CanonicalKVCaches,
     OffloadingCounterMetadata,
     OffloadingGaugeMetadata,
@@ -69,17 +69,17 @@ from aphrodite.v1.kv_offload.base import (
     OffloadingManager,
     OffloadingMetricMetadata,
 )
-from aphrodite.v1.kv_offload.config import OffloadingConfig
-from aphrodite.v1.kv_offload.cpu.gpu_worker import CPUOffloadingWorker
-from aphrodite.v1.kv_offload.cpu.shared_offload_region import SharedOffloadRegion
-from aphrodite.v1.kv_offload.cpu.spec import CPUOffloadingSpec
-from aphrodite.v1.kv_offload.tiering.base import (
+from sonar.v1.kv_offload.config import OffloadingConfig
+from sonar.v1.kv_offload.cpu.gpu_worker import CPUOffloadingWorker
+from sonar.v1.kv_offload.cpu.shared_offload_region import SharedOffloadRegion
+from sonar.v1.kv_offload.cpu.spec import CPUOffloadingSpec
+from sonar.v1.kv_offload.tiering.base import (
     TIER_LABEL,
     SecondaryTierManager,
     TieringOffloadingMetrics,
 )
-from aphrodite.v1.kv_offload.tiering.factory import SecondaryTierFactory
-from aphrodite.v1.kv_offload.tiering.manager import (
+from sonar.v1.kv_offload.tiering.factory import SecondaryTierFactory
+from sonar.v1.kv_offload.tiering.manager import (
     DEFAULT_TIER_POLL_INTERVAL_S,
     CPUPrimaryTierOffloadingManager,
     TieringOffloadingManager,
@@ -156,7 +156,7 @@ class TieringOffloadingSpec(CPUOffloadingSpec):
                 "Total time spent reading from secondary tiers into the primary "
                 "tier, in seconds, labeled by tier. Tiers that do not report "
                 "per-job transfer time have no series here. Use "
-                "aphrodite:kv_offload_tiering_promotion_latency_seconds for "
+                "sonar:kv_offload_tiering_promotion_latency_seconds for "
                 "tier-independent promotion timing."
             ),
             labelnames=(TIER_LABEL,),
@@ -531,7 +531,7 @@ def _reject_workers_across_nodes() -> None:
     engine's workers form a grid of TP, PP and PCP groups, so they share one
     node if every such group does. Collective over each group.
     """
-    from aphrodite.distributed.parallel_state import (
+    from sonar.distributed.parallel_state import (
         get_pcp_group,
         get_pp_group,
         get_tp_group,

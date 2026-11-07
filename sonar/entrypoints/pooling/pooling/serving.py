@@ -4,12 +4,12 @@ from typing import assert_never, cast
 
 from fastapi.responses import Response, StreamingResponse
 
-from aphrodite.entrypoints.serve.utils.api_utils import create_json_response
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.logger import init_logger
-from aphrodite.outputs import PoolingRequestOutput
-from aphrodite.tasks import SupportedTask
-from aphrodite.utils.serial_utils import EmbedDType, Endianness
+from sonar.entrypoints.serve.utils.api_utils import create_json_response
+from sonar.exceptions import SonarValidationError
+from sonar.logger import init_logger
+from sonar.outputs import PoolingRequestOutput
+from sonar.tasks import SupportedTask
+from sonar.utils.serial_utils import EmbedDType, Endianness
 
 from ..base.io_processor import PoolingIOProcessor
 from ..base.serving import PoolingBaseServing
@@ -47,7 +47,7 @@ class ServingPooling(PoolingBaseServing):
         self.pooling_task = self.model_config.get_pooling_task(supported_tasks)
         self.io_processors = init_pooling_io_processors(
             supported_tasks=supported_tasks,
-            aphrodite_config=self.aphrodite_config,
+            sonar_config=self.sonar_config,
             renderer=self.renderer,
             chat_template_config=self.chat_template_config,
         )
@@ -59,7 +59,7 @@ class ServingPooling(PoolingBaseServing):
 
     def _verify_pooling_task(self, request: PoolingRequest) -> str:
         if getattr(request, "dimensions", None) is not None:
-            raise AphroditeValidationError("dimensions is currently not supported", parameter="dimensions")
+            raise SonarValidationError("dimensions is currently not supported", parameter="dimensions")
 
         if request.task is None:
             request.task = self.pooling_task
@@ -73,18 +73,18 @@ class ServingPooling(PoolingBaseServing):
         # plugin task uses io_processor.parse_data to verify inputs
         if pooling_task != "plugin" and pooling_task != self.pooling_task:
             if pooling_task not in self.supported_tasks:
-                raise AphroditeValidationError(
+                raise SonarValidationError(
                     f"Unsupported task: {pooling_task!r} Supported tasks: {self.supported_tasks}",
                     parameter="task",
                 )
             else:
-                raise AphroditeValidationError(
+                raise SonarValidationError(
                     f"Try switching the model's pooling_task via --pooler-config.task {request.task}.",
                     parameter="task",
                 )
 
         if pooling_task == "plugin" and "plugin" not in self.io_processors:
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 "No IOProcessor plugin installed. Please refer "
                 "to the documentation and to the "
                 "'prithvi_geospatial_mae_io_processor' "

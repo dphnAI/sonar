@@ -17,18 +17,18 @@ from typing import Any
 
 import torch
 
-from aphrodite.device_allocator import DEFERRABLE_TAGS, AllocationData, HandleType
-from aphrodite.device_allocator.alloc_conf import (
+from sonar.device_allocator import DEFERRABLE_TAGS, AllocationData, HandleType
+from sonar.device_allocator.alloc_conf import (
     EXPANDABLE_SEGMENTS,
     conf_flag_enabled,
     current_alloc_conf,
     set_alloc_conf,
     with_conf_flag,
 )
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.utils.system_utils import find_loaded_library
-from aphrodite.utils.torch_utils import PIN_MEMORY
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.utils.system_utils import find_loaded_library
+from sonar.utils.torch_utils import PIN_MEMORY
 
 logger = init_logger(__name__)
 
@@ -36,12 +36,12 @@ logger = init_logger(__name__)
 cumem_available = False
 libcudart: Any = None
 try:
-    from aphrodite.cumem_allocator import (
+    from sonar.cumem_allocator import (
         init_module,
         python_create_and_map,
         python_unmap_and_release,
     )
-    from aphrodite.distributed.device_communicators.cuda_wrapper import CudaRTLibrary
+    from sonar.distributed.device_communicators.cuda_wrapper import CudaRTLibrary
 
     lib_name = find_loaded_library("cumem_allocator")
     libcudart = CudaRTLibrary()

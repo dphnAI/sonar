@@ -5,14 +5,14 @@ import os
 
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.profiler.wrapper import TorchProfilerWrapper
-from aphrodite.utils.mem_utils import MemorySnapshot, format_gib
-from aphrodite.utils.torch_utils import set_random_seed
-from aphrodite.v1.worker.gpu_worker import Worker, init_worker_distributed_environment
-from aphrodite.v1.worker.xpu_model_runner import (
+from sonar.config import SonarConfig
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.profiler.wrapper import TorchProfilerWrapper
+from sonar.utils.mem_utils import MemorySnapshot, format_gib
+from sonar.utils.torch_utils import set_random_seed
+from sonar.v1.worker.gpu_worker import Worker, init_worker_distributed_environment
+from sonar.v1.worker.xpu_model_runner import (
     XPUMMEncoderModelRunner,
     XPUModelRunner,
     XPUModelRunnerV2,
@@ -30,13 +30,13 @@ class XPUWorker(Worker):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         local_rank: int,
         rank: int,
         distributed_init_method: str,
         is_driver_worker: bool = False,
     ):
-        super().__init__(aphrodite_config, local_rank, rank, distributed_init_method, is_driver_worker)
+        super().__init__(sonar_config, local_rank, rank, distributed_init_method, is_driver_worker)
         device_config = self.device_config
         assert device_config.device_type == "xpu"
         assert current_platform.is_xpu()
@@ -117,7 +117,7 @@ class XPUWorker(Worker):
         if isinstance(device, torch.device) and device.type == "xpu" and current_platform.is_xpu():
             assigned_physical_gpu_ids = self.parallel_config.assigned_physical_gpu_ids
             if assigned_physical_gpu_ids is not None:
-                from aphrodite.platforms.interface import set_assigned_physical_gpu_ids
+                from sonar.platforms.interface import set_assigned_physical_gpu_ids
 
                 set_assigned_physical_gpu_ids(assigned_physical_gpu_ids)
                 assert self.local_rank < len(assigned_physical_gpu_ids), (
@@ -163,7 +163,7 @@ class XPUWorker(Worker):
         os.environ["LOCAL_RANK"] = str(self.local_rank)
 
         init_worker_distributed_environment(
-            self.aphrodite_config,
+            self.sonar_config,
             self.rank,
             self.distributed_init_method,
             self.local_rank,
@@ -196,10 +196,10 @@ class XPUWorker(Worker):
 
     def _make_model_runner(self):
         if self.use_v2_model_runner:
-            model_runner = XPUMMEncoderModelRunner if self.aphrodite_config.is_mm_encoder_only else XPUModelRunnerV2
+            model_runner = XPUMMEncoderModelRunner if self.sonar_config.is_mm_encoder_only else XPUModelRunnerV2
         else:
             model_runner = XPUModelRunner  # type: ignore[assignment]
-        return model_runner(self.aphrodite_config, self.device)  # type: ignore
+        return model_runner(self.sonar_config, self.device)  # type: ignore
 
     def shutdown(self) -> None:
         logger.info(
@@ -208,7 +208,7 @@ class XPUWorker(Worker):
             self.local_rank,
         )
         super().shutdown()
-        from aphrodite.device_allocator.xpumem import XpuMemAllocator
+        from sonar.device_allocator.xpumem import XpuMemAllocator
 
         if XpuMemAllocator.instance is not None:
             XpuMemAllocator.instance.release_pools()

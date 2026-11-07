@@ -12,8 +12,8 @@
 
 import torch
 
-from aphrodite.third_party.flash_linear_attention.ops.op import exp2, make_tensor_descriptor
-from aphrodite.triton_utils import tl, triton
+from sonar.third_party.flash_linear_attention.ops.op import exp2, make_tensor_descriptor
+from sonar.triton_utils import tl, triton
 
 
 @triton.heuristics(
@@ -22,11 +22,7 @@ from aphrodite.triton_utils import tl, triton
     }
 )
 @triton.autotune(
-    configs=[
-        triton.Config({"BH": BH}, num_warps=num_warps)
-        for BH in [1, 2, 4, 8]
-        for num_warps in [1, 2, 4, 8]
-    ],
+    configs=[triton.Config({"BH": BH}, num_warps=num_warps) for BH in [1, 2, 4, 8] for num_warps in [1, 2, 4, 8]],
     key=["K", "H", "HV"],
 )
 @triton.jit(do_not_specialize=["T", "N"])

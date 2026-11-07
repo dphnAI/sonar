@@ -17,15 +17,15 @@ from types import SimpleNamespace
 
 import torch
 
-from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-from aphrodite.config.multimodal import MultiModalConfig
-from aphrodite.model_executor.layers.attention.mm_encoder_attention import (
+from sonar.config import SonarConfig, set_current_sonar_config
+from sonar.config.multimodal import MultiModalConfig
+from sonar.model_executor.layers.attention.mm_encoder_attention import (
     MMEncoderAttention,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import triton
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
+from sonar.platforms import current_platform
+from sonar.triton_utils import triton
+from sonar.utils.argparse_utils import FlexibleArgumentParser
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
 
 
 def make_attention(num_heads: int, head_dim: int, fp8: bool) -> MMEncoderAttention:
@@ -33,9 +33,9 @@ def make_attention(num_heads: int, head_dim: int, fp8: bool) -> MMEncoderAttenti
         mm_encoder_attn_backend=AttentionBackendEnum.ROCM_AITER_FA,
         mm_encoder_attn_dtype="fp8" if fp8 else None,
     )
-    aphrodite_config = AphroditeConfig()
-    aphrodite_config.model_config = SimpleNamespace(multimodal_config=mm_config)
-    with set_current_aphrodite_config(aphrodite_config):
+    sonar_config = SonarConfig()
+    sonar_config.model_config = SimpleNamespace(multimodal_config=mm_config)
+    with set_current_sonar_config(sonar_config):
         return MMEncoderAttention(num_heads, head_dim).to("cuda")
 
 

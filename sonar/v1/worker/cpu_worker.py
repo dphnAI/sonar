@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
 # Must be imported firstly
-import aphrodite.v1.worker.cpu.shm  # noqa # isort: skip
+import sonar.v1.worker.cpu.shm  # noqa # isort: skip
 
 import math
 import os
@@ -11,20 +11,20 @@ import sys
 import psutil
 import torch
 
-from aphrodite import envs
-from aphrodite.config import AphroditeConfig, CompilationMode
-from aphrodite.logger import init_logger
-from aphrodite.platforms import CpuArchEnum, current_platform
-from aphrodite.utils.cpu_resource_utils import (
+from sonar import envs
+from sonar.config import CompilationMode, SonarConfig
+from sonar.logger import init_logger
+from sonar.platforms import CpuArchEnum, current_platform
+from sonar.utils.cpu_resource_utils import (
     get_allowed_cpu_list,
     get_memory_node_info,
     get_visible_memory_node,
 )
-from aphrodite.utils.mem_utils import format_gib
-from aphrodite.utils.torch_utils import set_random_seed
-from aphrodite.v1.worker.cpu_model_runner import CPUModelRunner
-from aphrodite.v1.worker.gpu_worker import Worker, init_worker_distributed_environment
-from aphrodite.v1.worker.worker_base import CompilationTimes
+from sonar.utils.mem_utils import format_gib
+from sonar.utils.torch_utils import set_random_seed
+from sonar.v1.worker.cpu_model_runner import CPUModelRunner
+from sonar.v1.worker.gpu_worker import Worker, init_worker_distributed_environment
+from sonar.v1.worker.worker_base import CompilationTimes
 
 logger = init_logger(__name__)
 
@@ -32,7 +32,7 @@ logger = init_logger(__name__)
 class CPUWorker(Worker):
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         local_rank: int,
         rank: int,
         distributed_init_method: str,
@@ -41,7 +41,7 @@ class CPUWorker(Worker):
         # TODO: use numactl for process setup
         # TODO: optimize for `interleaved` policy
         # Bind memory node
-        allowed_memory_nodes = get_visible_memory_node(aphrodite_config.parallel_config.assigned_physical_gpu_ids)
+        allowed_memory_nodes = get_visible_memory_node(sonar_config.parallel_config.assigned_physical_gpu_ids)
         allowed_cpu_list = get_allowed_cpu_list()
         cpu_core = allowed_cpu_list[0]
 
@@ -69,11 +69,11 @@ class CPUWorker(Worker):
         torch.ops._C.init_cpu_memory_env([memory_node])
 
         memory_status = get_memory_node_info(memory_node)
-        memory_fraction = aphrodite_config.cache_config.gpu_memory_utilization
+        memory_fraction = sonar_config.cache_config.gpu_memory_utilization
         self.requested_cpu_memory = math.ceil(memory_status.total_memory * memory_fraction)
 
         super().__init__(
-            aphrodite_config,
+            sonar_config,
             local_rank,
             rank,
             distributed_init_method,
@@ -93,7 +93,7 @@ class CPUWorker(Worker):
                     "%s is not found in LD_PRELOAD. "
                     "For best performance, please follow the section "
                     "`set LD_PRELOAD` in "
-                    "https://docs.aphrodite.ai/en/latest/getting_started/installation/cpu/ "
+                    "https://sonar.dphn.ai/en/latest/getting_started/installation/cpu/ "
                     "to setup required pre-loaded libraries.",
                     name,
                 )
@@ -104,12 +104,12 @@ class CPUWorker(Worker):
             check_preloaded_libs("libtcmalloc")
             if current_platform.get_cpu_architecture() == CpuArchEnum.X86:
                 iomp_loaded = check_preloaded_libs("libiomp")
-                if not iomp_loaded and self.aphrodite_config.speculative_config is not None:
+                if not iomp_loaded and self.sonar_config.speculative_config is not None:
                     logger.warning(
                         "Speculative decoding on CPU without Intel OpenMP in "
                         "LD_PRELOAD will cause significant performance loss. "
                         "Please follow the section `set LD_PRELOAD` in "
-                        "https://docs.aphrodite.ai/en/latest/getting_started/"
+                        "https://sonar.dphn.ai/en/latest/getting_started/"
                         "installation/cpu/ "
                         "to setup libiomp5.",
                     )
@@ -122,14 +122,14 @@ class CPUWorker(Worker):
         torch.set_num_threads = skip_set_num_threads
 
         init_method = self.distributed_init_method
-        os.environ["APHRODITE_DIST_IDENT"] = (
+        os.environ["SONAR_DIST_IDENT"] = (
             os.path.basename(init_method.removeprefix("file://"))
             if init_method.startswith("file://")
             else init_method.split(":")[-1]
         )
         # Initialize the distributed environment.
         init_worker_distributed_environment(
-            self.aphrodite_config,
+            self.sonar_config,
             self.rank,
             self.distributed_init_method,
             self.local_rank,
@@ -144,23 +144,23 @@ class CPUWorker(Worker):
         # Construct the model runner
         if self.use_v2_model_runner:
             if current_platform.uses_standalone_cpu_model_runner():
-                from aphrodite.v1.worker.cpu.standalone_model_runner import (
+                from sonar.v1.worker.cpu.standalone_model_runner import (
                     StandaloneCPUModelRunner,
                 )
 
                 self.model_runner: CPUModelRunner = StandaloneCPUModelRunner(  # type: ignore
-                    self.aphrodite_config, self.device
+                    self.sonar_config, self.device
                 )
             else:
-                from aphrodite.v1.worker.cpu.model_runner import (
+                from sonar.v1.worker.cpu.model_runner import (
                     CPUModelRunner as CPUModelRunnerV2,
                 )
 
                 self.model_runner = CPUModelRunnerV2(  # type: ignore
-                    self.aphrodite_config, self.device
+                    self.sonar_config, self.device
                 )
         else:
-            self.model_runner = CPUModelRunner(self.aphrodite_config, torch.device("cpu"))
+            self.model_runner = CPUModelRunner(self.sonar_config, torch.device("cpu"))
 
     def sleep(self, level: int = 1) -> None:
         logger.warning("sleep mode is not supported on CPU, ignore it.")
@@ -174,8 +174,8 @@ class CPUWorker(Worker):
         raise RuntimeError("Selective discard is not supported on CPU.")
 
     def _should_warm_up_model(self) -> bool:
-        # APHRODITE_CPU_CI_ENV always skips warmup to save CI time.
-        if envs.APHRODITE_CPU_CI_ENV:
+        # SONAR_CPU_CI_ENV always skips warmup to save CI time.
+        if envs.SONAR_CPU_CI_ENV:
             return False
         # With eager (CompilationMode.NONE) execution and an explicit KV
         # cache size, warmup serves no purpose: there's no compiled graph to
@@ -207,7 +207,7 @@ class CPUWorker(Worker):
                     f"{format_gib(memory_status.total_memory)} GiB) on kv cache"
                     f" allocation is less than requested memory for kv "
                     f"({format_gib(explicit_kv_cache_size)} GiB). "
-                    "Decrease --kv-cache-memory-bytes, APHRODITE_CPU_KVCACHE_SPACE, "
+                    "Decrease --kv-cache-memory-bytes, SONAR_CPU_KVCACHE_SPACE, "
                     "or reduce CPU memory used by other processes."
                 )
             kv_cache_size = explicit_kv_cache_size
@@ -234,7 +234,7 @@ class CPUWorker(Worker):
                     "memory reserved (despite its name). To resolve: increase "
                     f"`--gpu-memory-utilization` to more than {in_use / 100:.2f}, "
                     "or set the KV cache size explicitly with "
-                    "`--kv-cache-memory-bytes` or APHRODITE_CPU_KVCACHE_SPACE."
+                    "`--kv-cache-memory-bytes` or SONAR_CPU_KVCACHE_SPACE."
                 )
             if requested_memory_for_kv > available_memory:
                 raise ValueError(
@@ -267,12 +267,12 @@ class CPUWorker(Worker):
             self.model_runner.warming_up_model()
         # profile_run skips the MRV2 scheduler-driven kernels, so without this
         # their Triton JIT lands in the first request's TTFT.
-        kernel_config = self.aphrodite_config.kernel_config
+        kernel_config = self.sonar_config.kernel_config
         if self.use_v2_model_runner and kernel_config.enable_jit_warmup:
             if current_platform.uses_standalone_cpu_model_runner():
-                from aphrodite.v1.worker.cpu.warmup import warmup_kernels
+                from sonar.v1.worker.cpu.warmup import warmup_kernels
             else:
-                from aphrodite.v1.worker.gpu.warmup import warmup_kernels
+                from sonar.v1.worker.gpu.warmup import warmup_kernels
 
             warmup_kernels(
                 self.model_runner,

@@ -20,31 +20,31 @@ from typing import Any, ClassVar, TypeVar
 import numpy as np
 from PIL import Image
 
-import aphrodite.envs as envs
-from aphrodite.config import ModelConfig
-from aphrodite.engine.protocol import EngineClient
-from aphrodite.entrypoints.generate.label_reads import next_token_label_reads
-from aphrodite.entrypoints.serve.engine.protocol import OpenAIBaseModel
-from aphrodite.inputs import EngineInput, MultiModalInput, TokensPrompt, tokens_input
-from aphrodite.logger import init_logger
-from aphrodite.lora.request import LoRARequest
-from aphrodite.multimodal.media import (
+import sonar.envs as envs
+from sonar.config import ModelConfig
+from sonar.engine.protocol import EngineClient
+from sonar.entrypoints.generate.label_reads import next_token_label_reads
+from sonar.entrypoints.serve.engine.protocol import OpenAIBaseModel
+from sonar.inputs import EngineInput, MultiModalInput, TokensPrompt, tokens_input
+from sonar.logger import init_logger
+from sonar.lora.request import LoRARequest
+from sonar.multimodal.media import (
     MEDIA_CONNECTOR_REGISTRY,
     ImageMediaIO,
     MediaConnector,
     MediaIO,
     VideoMediaIO,
 )
-from aphrodite.outputs import RequestOutput
-from aphrodite.pooling_params import PoolingParams
-from aphrodite.renderers import ChatParams, TokenizeParams, merge_kwargs
-from aphrodite.renderers.chat_utils import ChatTemplateContentFormatOption
-from aphrodite.renderers.inputs.preprocess import extract_prompt_components
-from aphrodite.renderers.online_renderer import OnlineRenderer
-from aphrodite.sampling_params import MAX_LOGPROB_TOKEN_IDS, SamplingParams
-from aphrodite.tasks import SupportedTask
-from aphrodite.tokenizers import TokenizerLike
-from aphrodite.utils.math_utils import round_up
+from sonar.outputs import RequestOutput
+from sonar.pooling_params import PoolingParams
+from sonar.renderers import ChatParams, TokenizeParams, merge_kwargs
+from sonar.renderers.chat_utils import ChatTemplateContentFormatOption
+from sonar.renderers.inputs.preprocess import extract_prompt_components
+from sonar.renderers.online_renderer import OnlineRenderer
+from sonar.sampling_params import MAX_LOGPROB_TOKEN_IDS, SamplingParams
+from sonar.tasks import SupportedTask
+from sonar.tokenizers import TokenizerLike
+from sonar.utils.math_utils import round_up
 
 from .question_types import (
     LABELS,
@@ -157,7 +157,7 @@ class ReadStrategy(ABC):
     def _connector(self) -> MediaConnector:
         model_config = self.context.engine_client.model_config
         return MEDIA_CONNECTOR_REGISTRY.load(
-            envs.APHRODITE_MEDIA_CONNECTOR,
+            envs.SONAR_MEDIA_CONNECTOR,
             media_io_kwargs=model_config.get_multimodal_config().media_io_kwargs,
             allowed_local_media_path=model_config.allowed_local_media_path,
             allowed_media_domains=model_config.allowed_media_domains,
@@ -372,7 +372,7 @@ class NextTokenStrategy(ReadStrategy):
         if (
             len(prompts) < 2
             or not engine_client.model_config.is_hybrid
-            or not engine_client.aphrodite_config.cache_config.enable_prefix_caching
+            or not engine_client.sonar_config.cache_config.enable_prefix_caching
         ):
             return
         shared = common_prefix_len(prompts)
@@ -506,17 +506,17 @@ class DiffusionGemmaCanvasStrategy(NextTokenStrategy):
         if self.pad is None or len(end) != 1:
             raise ValueError(f"Structured decisions need the model's {self.END_OF_TURN!r} and pad tokens")
         self.end = end[0]
-        aphrodite_config = context.engine_client.aphrodite_config
+        sonar_config = context.engine_client.sonar_config
         served = (
-            aphrodite_config.diffusion_config.canvas_length
-            if aphrodite_config.diffusion_config and aphrodite_config.diffusion_config.canvas_length
-            else aphrodite_config.model_config.hf_config.canvas_length
+            sonar_config.diffusion_config.canvas_length
+            if sonar_config.diffusion_config and sonar_config.diffusion_config.canvas_length
+            else sonar_config.model_config.hf_config.canvas_length
         )
         self.width = self.CANVAS_STEP
         if self.width > served:
             raise ValueError(f"Structured decisions need a canvas of {self.width}, and the served canvas is {served}")
-        self.vocab_size = aphrodite_config.model_config.get_vocab_size()
-        self.max_model_len = aphrodite_config.model_config.max_model_len
+        self.vocab_size = sonar_config.model_config.get_vocab_size()
+        self.max_model_len = sonar_config.model_config.max_model_len
         self.served = served
         self.joint_reads = self._init_joint_lines(tokenizer)
 
@@ -855,7 +855,7 @@ class JointSchemaStrategy(ReadStrategy):
             images, audio, videos, tracks = await asyncio.gather(
                 asyncio.gather(*map(connector.fetch_image_async, media.get("image", ()))),
                 asyncio.gather(*map(connector.fetch_audio_async, media.get("audio", ()))),
-                self._fetch(media.get("video", ()), video_io, envs.APHRODITE_VIDEO_FETCH_TIMEOUT),
+                self._fetch(media.get("video", ()), video_io, envs.SONAR_VIDEO_FETCH_TIMEOUT),
                 asyncio.gather(*map(self._soundtrack, media.get("video", ()))),
             )
         except ValueError as e:
@@ -1040,7 +1040,7 @@ class ClefFlashStrategy(JointSchemaStrategy):
         try:
             images, videos = await asyncio.gather(
                 asyncio.gather(*map(connector.fetch_image_async, media.get("image", ()))),
-                self._fetch(media.get("video", ()), video_io, envs.APHRODITE_VIDEO_FETCH_TIMEOUT),
+                self._fetch(media.get("video", ()), video_io, envs.SONAR_VIDEO_FETCH_TIMEOUT),
             )
         except ValueError as e:
             raise StructuredDecisionError(f"media: {e}") from e
@@ -1183,7 +1183,7 @@ class D3Strategy(ReadStrategy):
                 asyncio.gather(*map(connector.fetch_image_async, media.get("image", ()))),
                 asyncio.gather(
                     *(
-                        connector.load_from_url_async(url, video_io, fetch_timeout=envs.APHRODITE_VIDEO_FETCH_TIMEOUT)
+                        connector.load_from_url_async(url, video_io, fetch_timeout=envs.SONAR_VIDEO_FETCH_TIMEOUT)
                         for url in media.get("video", ())
                     )
                 ),

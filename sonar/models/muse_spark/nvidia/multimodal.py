@@ -2,8 +2,8 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """MuseSpark1x Omni for NVIDIA GPUs: the shared Omni towers over the CUDA text stack."""
 
-from aphrodite.model_executor.models.interfaces import SupportsMultiModal
-from aphrodite.models.muse_spark.common.omni import (
+from sonar.model_executor.models.interfaces import SupportsMultiModal
+from sonar.models.muse_spark.common.omni import (
     OMNI_WEIGHTS_MAPPER,
     MuseSpark1xOmniMixin,
     register_omni_processor,
@@ -16,7 +16,7 @@ from .model import MuseSpark1xForCausalLM
 class MuseSparkForConditionalGeneration(MuseSpark1xOmniMixin, MuseSpark1xForCausalLM, SupportsMultiModal):
     """MuseSpark1x Omni: text stack plus NaViT vision and waveform audio."""
 
-    hf_to_aphrodite_mapper = MuseSpark1xForCausalLM.hf_to_aphrodite_mapper | OMNI_WEIGHTS_MAPPER
+    hf_to_sonar_mapper = MuseSpark1xForCausalLM.hf_to_sonar_mapper | OMNI_WEIGHTS_MAPPER
 
 
 __all__ = ["MuseSparkForConditionalGeneration"]

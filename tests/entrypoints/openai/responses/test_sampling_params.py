@@ -10,12 +10,12 @@ from openai.types.responses.response_format_text_json_schema_config import (
 )
 from pydantic import ValidationError
 
-from aphrodite.entrypoints.openai.responses.protocol import (
+from sonar.entrypoints.openai.responses.protocol import (
     ResponsesRequest,
     ResponseTextConfig,
 )
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.sampling_params import StructuredOutputsParams
+from sonar.exceptions import SonarValidationError
+from sonar.sampling_params import StructuredOutputsParams
 
 
 class TestResponsesRequestSamplingParams:
@@ -64,7 +64,7 @@ class TestResponsesRequestSamplingParams:
             ignore_eos=True,
             spaces_between_special_tokens=False,
             thinking_token_budget=128,
-            aphrodite_xargs={"custom": "value"},
+            sonar_xargs={"custom": "value"},
         )
 
         sampling_params = request.to_sampling_params(default_max_tokens=1000)
@@ -198,7 +198,7 @@ class TestResponsesRequestSamplingParams:
             text=text_config,
         )
 
-        with pytest.raises(AphroditeValidationError) as exc_info:
+        with pytest.raises(SonarValidationError) as exc_info:
             request.to_sampling_params(default_max_tokens=1000)
 
         assert "Cannot specify both structured_outputs and text.format" in str(exc_info.value)

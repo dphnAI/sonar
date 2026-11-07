@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.model_executor.models.diffusion_gemma import (
+from sonar.model_executor.models.diffusion_gemma import (
     _MASKED_LOGIT,
     DiffusionGemmaRequestStates,
     _compiled_sample_step,
@@ -16,8 +16,8 @@ from aphrodite.model_executor.models.diffusion_gemma import (
     _mask_rows_to_allowed,
     sample_row_stats_reference,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.v1.outputs import LogprobsTensors
+from sonar.platforms import current_platform
+from sonar.v1.outputs import LogprobsTensors
 
 pytestmark = pytest.mark.skipif(not current_platform.is_cuda(), reason="the sampler state lives on the GPU")
 

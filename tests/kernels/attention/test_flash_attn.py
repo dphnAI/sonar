@@ -5,11 +5,11 @@
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_random_seed
 
 try:
-    from aphrodite.vllm_flash_attn import (
+    from sonar.vllm_flash_attn import (
         fa_version_unsupported_reason,
         flash_attn_varlen_func,
         is_fa_version_supported,
@@ -17,7 +17,7 @@ try:
 except ImportError:
     if current_platform.is_rocm():
         pytest.skip(
-            "vllm_flash_attn is not supported for Aphrodite on ROCm.",
+            "vllm_flash_attn is not supported for Sonar on ROCm.",
             allow_module_level=True,
         )
 
@@ -215,7 +215,7 @@ def test_fa4_hd256_paged_call_shape(
     sliding_window: int | None,
 ) -> None:
     """Handles excess block-table columns with page-aligned ``max_seqlen_k``."""
-    from aphrodite.v1.attention.backends.fa_utils import FA4_HD256_PAGE_SIZE
+    from sonar.v1.attention.backends.fa_utils import FA4_HD256_PAGE_SIZE
 
     if not is_fa_version_supported(4):
         pytest.skip(f'FA4 unsupported: "{fa_version_unsupported_reason(4)}"')

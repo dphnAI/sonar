@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Qwen3-ASR configuration (MLX-free).
 
-Keep this module free of MLX imports so Aphrodite compat code can import config and
+Keep this module free of MLX imports so Sonar compat code can import config and
 shape helpers during planning/registration without pulling in the model stack.
 """
 
@@ -10,8 +10,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from aphrodite.transformers_utils.configs.qwen3_asr import (
-    Qwen3ASRConfig as AphroditeQwen3ASRConfig,
+from sonar.transformers_utils.configs.qwen3_asr import (
+    Qwen3ASRConfig as SonarQwen3ASRConfig,
 )
 
 # Maximum decode tokens for Qwen3-ASR decode loop.
@@ -81,8 +81,8 @@ class Qwen3ASRConfig:
     n_audio_ctx: int = 1500
 
     @classmethod
-    def _from_aphrodite_config(cls, config: AphroditeQwen3ASRConfig) -> Qwen3ASRConfig:
-        """Adapt the upstream Aphrodite/HF config into the local MLX model config."""
+    def _from_sonar_config(cls, config: SonarQwen3ASRConfig) -> Qwen3ASRConfig:
+        """Adapt the upstream Sonar/HF config into the local MLX model config."""
         thinker = config.thinker_config
         audio = thinker.audio_config
         text = thinker.text_config
@@ -130,4 +130,4 @@ class Qwen3ASRConfig:
     @classmethod
     def from_dict(cls, d: dict) -> Qwen3ASRConfig:
         """Create config from config.json using the upstream schema owner."""
-        return cls._from_aphrodite_config(AphroditeQwen3ASRConfig.from_dict(d))
+        return cls._from_sonar_config(SonarQwen3ASRConfig.from_dict(d))

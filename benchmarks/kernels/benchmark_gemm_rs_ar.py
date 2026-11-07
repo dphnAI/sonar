@@ -3,9 +3,9 @@
 """Benchmark the SM100 GEMM-RS/AR kernel against the model's unfused path.
 
 The baseline is what a model runs without the fusion: the projection's own
-linear kernel followed by Aphrodite's collective (``sp_reduce_scatter`` for RS,
+linear kernel followed by Sonar's collective (``sp_reduce_scatter`` for RS,
 ``tensor_model_parallel_all_reduce`` for AR), with the collective backend
-chosen by Aphrodite's dispatch exactly as in serving. The same two kernels are also
+chosen by Sonar's dispatch exactly as in serving. The same two kernels are also
 timed bare (the GEMM alone, the collective alone on a precomputed partial);
 their max is the floor a perfectly overlapped fused kernel could reach.
 
@@ -29,19 +29,19 @@ from collections.abc import Callable
 import torch
 import torch.distributed as dist
 
-from aphrodite.config import AphroditeConfig, ModelConfig, set_current_aphrodite_config
-from aphrodite.distributed import (
+from sonar.config import ModelConfig, SonarConfig, set_current_sonar_config
+from sonar.distributed import (
     cleanup_dist_env_and_memory,
     tensor_model_parallel_all_reduce,
 )
-from aphrodite.distributed.parallel_state import (
+from sonar.distributed.parallel_state import (
     get_tp_group,
     init_distributed_environment,
     initialize_model_parallel,
 )
-from aphrodite.model_executor.kernels.linear.cute_dsl.gemm_rs_ar import GemmRsAr
-from aphrodite.model_executor.layers.linear import RowParallelLinear
-from aphrodite.models.common.ops.sequence_parallel import sp_reduce_scatter
+from sonar.model_executor.kernels.linear.cute_dsl.gemm_rs_ar import GemmRsAr
+from sonar.model_executor.layers.linear import RowParallelLinear
+from sonar.models.common.ops.sequence_parallel import sp_reduce_scatter
 
 # Per model: (hidden size N, global input widths K). Kimi-K3 lists the
 # shared-expert down-proj and attention O-proj; DeepSeek-V4.1 lists the
@@ -120,8 +120,8 @@ def make_projection(
     N, K = weight.shape
     quant_config = None
     if backend != "bf16":
-        from aphrodite.config.quantization import QuantizationConfigArgs
-        from aphrodite.model_executor.layers.quantization.online.base import (
+        from sonar.config.quantization import QuantizationConfigArgs
+        from sonar.model_executor.layers.quantization.online.base import (
             OnlineQuantizationConfig,
         )
 
@@ -265,7 +265,7 @@ def benchmark_shape(
     candidates: dict[str, list[Callable[[], torch.Tensor]]] = {
         "gemm": [lambda x=x, w=w: gemm(x, w) for x, w in zip(inputs, projections)],
         "collective": [lambda p=p: collective(p) for p in partials],
-        "aphrodite": [lambda x=x, w=w: unfused(x, w) for x, w in zip(inputs, projections)],
+        "sonar": [lambda x=x, w=w: unfused(x, w) for x, w in zip(inputs, projections)],
         "gemm_rs_ar": [lambda x=x, w=w: fused(x, w) for x, w in zip(inputs, projections)],
     }
 
@@ -287,9 +287,9 @@ def benchmark_shape(
         "gemm_us": times["gemm"],
         "collective_us": times["collective"],
         "floor_us": floor,
-        "aphrodite_us": times["aphrodite"],
+        "sonar_us": times["sonar"],
         "gemm_rs_ar_us": times["gemm_rs_ar"],
-        "latency_change": (times["gemm_rs_ar"] - times["aphrodite"]) / times["aphrodite"],
+        "latency_change": (times["gemm_rs_ar"] - times["sonar"]) / times["sonar"],
         "floor_gap": (times["gemm_rs_ar"] - floor) / floor,
     }
 
@@ -297,16 +297,16 @@ def benchmark_shape(
 def print_results(results: list[dict[str, float | int | str]]) -> None:
     collective = results[0]["mode"]
     backend = results[0]["backend"]
-    print(f"### GEMM-{collective} vs Aphrodite unfused path ({backend} weights)")
+    print(f"### GEMM-{collective} vs Sonar unfused path ({backend} weights)")
     print(
-        f"| M | N | K | GEMM (us) | {collective} (us) | floor (us) | Aphrodite (us) | "
-        f"GEMM-{collective} (us) | vs Aphrodite | vs floor |"
+        f"| M | N | K | GEMM (us) | {collective} (us) | floor (us) | Sonar (us) | "
+        f"GEMM-{collective} (us) | vs Sonar | vs floor |"
     )
     print("|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|")
     for r in results:
         print(
             f"| {r['M']} | {r['N']} | {r['K']} | {r['gemm_us']:.1f} | "
-            f"{r['collective_us']:.1f} | {r['floor_us']:.1f} | {r['aphrodite_us']:.1f} | "
+            f"{r['collective_us']:.1f} | {r['floor_us']:.1f} | {r['sonar_us']:.1f} | "
             f"{r['gemm_rs_ar_us']:.1f} | {r['latency_change']:+.1%} | "
             f"{r['floor_gap']:+.1%} |"
         )
@@ -335,13 +335,13 @@ def main() -> None:
     k_alignment = 64 if args.backend == "bf16" else 128
     assert all(K % k_alignment == 0 for K in K_values)
 
-    config = AphroditeConfig()
+    config = SonarConfig()
     config.model_config = ModelConfig(dtype="bfloat16")
     # Pin the online-MXFP8 kernel the projections quantize through.
     config.kernel_config.linear_backend = "auto" if args.backend == "bf16" else args.backend
-    with set_current_aphrodite_config(config):
+    with set_current_sonar_config(config):
         # Builds the TP communicator as in serving, so the baseline's
-        # collective is whatever Aphrodite's dispatch selects (FlashInfer all-reduce
+        # collective is whatever Sonar's dispatch selects (FlashInfer all-reduce
         # first, then NCCL symmetric memory, custom all-reduce, pynccl).
         initialize_model_parallel(tensor_model_parallel_size=world_size)
 
@@ -361,7 +361,7 @@ def main() -> None:
         N=args.n,
         all_reduce=args.mode == "ar",
     )
-    with set_current_aphrodite_config(config):
+    with set_current_sonar_config(config):
         results = [
             benchmark_shape(
                 gemm_rs_ar,

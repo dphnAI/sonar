@@ -6,15 +6,15 @@ from typing import TYPE_CHECKING, Final
 import pybase64
 import torch
 
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.utils.async_utils import make_async
-from aphrodite.utils.sparse_utils import (
+from sonar.exceptions import SonarValidationError
+from sonar.utils.async_utils import make_async
+from sonar.utils.sparse_utils import (
     check_sparse_tensor_invariants_threadsafe,
     safe_to_dense,
 )
 
 if TYPE_CHECKING:
-    from aphrodite.config import ModelConfig
+    from sonar.config import ModelConfig
 
 
 # How much of torch's own reason is repeated back to the caller. The reason is
@@ -40,7 +40,7 @@ def safe_load_prompt_embeds(
     embed: bytes,
 ) -> torch.Tensor:
     if not model_config.enable_prompt_embeds:
-        raise AphroditeValidationError(
+        raise SonarValidationError(
             "You must set `--enable-prompt-embeds` to input `prompt_embeds`.",
             parameter="prompt_embeds",
         )
@@ -72,7 +72,7 @@ def safe_load_prompt_embeds(
             # torch's reason is worth keeping -- for a malformed sparse tensor
             # it names the offending index -- but it is built from the caller's
             # own bytes, so it is truncated rather than echoed whole.
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 f"`prompt_embeds` could not be deserialized as a torch tensor: {_truncated_reason(exc)}",
                 parameter="prompt_embeds",
             ) from exc
@@ -81,7 +81,7 @@ def safe_load_prompt_embeds(
     if tensor.dim() > 2:
         tensor = tensor.squeeze(0)
     if tensor.dim() != 2:
-        raise AphroditeValidationError(
+        raise SonarValidationError(
             f"`prompt_embeds` must be a 2D tensor of shape (num_tokens, hidden_size); got shape {tuple(tensor.shape)}.",
             parameter="prompt_embeds",
         )
@@ -98,7 +98,7 @@ def safe_load_prompt_embeds(
         model_config.get_hidden_size(),
     )
     if tensor.shape[1] != expected_hidden_size:
-        raise AphroditeValidationError(
+        raise SonarValidationError(
             f"`prompt_embeds` hidden_size {tensor.shape[1]} does not match "
             f"the model's hidden_size {expected_hidden_size}.",
             parameter="prompt_embeds",
@@ -112,7 +112,7 @@ def safe_load_prompt_embeds(
     expected_dtype = model_config.dtype
     if tensor.dtype != expected_dtype:
         if not tensor.is_floating_point():
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 f"`prompt_embeds` dtype {tensor.dtype} is not a floating-point "
                 f"type, cannot safely cast to the model's dtype {expected_dtype}.",
                 parameter="prompt_embeds",

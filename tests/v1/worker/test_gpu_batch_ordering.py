@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Batch ordering and classification in Model Runner V2 (aphrodite.v1.worker.gpu).
+"""Batch ordering and classification in Model Runner V2 (sonar.v1.worker.gpu).
 
 split_decodes_and_prefills assumes decode -> short_extend -> prefill request
 ordering. With spec decode (decode_query_len > 1), a shorter chunked-prefill
@@ -19,10 +19,10 @@ from typing import Any
 import numpy as np
 import torch
 
-from aphrodite.v1.attention.backend import CommonAttentionMetadata
-from aphrodite.v1.attention.backends.utils import split_decodes_and_prefills
-from aphrodite.v1.worker.gpu.model_runner import GPUModelRunner, sort_batch_req_ids
-from aphrodite.v1.worker.utils import get_uniform_decode_token_count
+from sonar.v1.attention.backend import CommonAttentionMetadata
+from sonar.v1.attention.backends.utils import split_decodes_and_prefills
+from sonar.v1.worker.gpu.model_runner import GPUModelRunner, sort_batch_req_ids
+from sonar.v1.worker.utils import get_uniform_decode_token_count
 
 
 def _make_common_attn_metadata(query_lens: list[int]) -> CommonAttentionMetadata:
@@ -279,7 +279,7 @@ def test_no_speculator_dispatches_on_query_length_alone():
     existing one: the shape-only call already reappeared verbatim in a
     speculator added after the original call sites were fixed.
     """
-    import aphrodite.v1.worker.gpu.spec_decode as spec_decode
+    import sonar.v1.worker.gpu.spec_decode as spec_decode
 
     shape_only = {"get_uniform_token_count", "is_uniform_query_len"}
     root = Path(spec_decode.__file__).parent

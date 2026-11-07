@@ -7,17 +7,17 @@
 Standalone functions that parse decoded model text to extract tool calls
 from Gemma4 models. These are pure-Python utilities with zero heavy
 dependencies — they work on raw decoded strings from any inference
-backend (Aphrodite, HuggingFace, TGI, etc.).
+backend (Sonar, HuggingFace, TGI, etc.).
 
 For the OpenAI-compatible API server tool parser (streaming +
-non-streaming), see ``aphrodite.tool_parsers.gemma4_tool_parser``.
+non-streaming), see ``sonar.tool_parsers.gemma4_tool_parser``.
 For thinking/reasoning output parsing, see
-``aphrodite.reasoning.gemma4_utils``.
+``sonar.reasoning.gemma4_utils``.
 
-Usage with Aphrodite offline inference::
+Usage with Sonar offline inference::
 
-    from aphrodite import LLM, SamplingParams
-    from aphrodite.tool_parsers.gemma4_utils import (
+    from sonar import LLM, SamplingParams
+    from sonar.tool_parsers.gemma4_utils import (
         parse_tool_calls,
         has_tool_response_tag,
     )
@@ -31,7 +31,7 @@ Usage with Aphrodite offline inference::
     for tc in tool_calls:
         print(f"{tc['name']}({tc['arguments']})")
 
-Ported from ``transformers.models.gemma4.utils_gemma4`` so that Aphrodite users
+Ported from ``transformers.models.gemma4.utils_gemma4`` so that Sonar users
 do not need a transformers dependency for output parsing.
 """
 
@@ -44,7 +44,7 @@ def _parse_tool_arguments(args_str: str) -> dict[str, str]:
     """Parse tool call arguments from the Gemma4 compact format.
 
     Delegates to the native ``<|"|>``-aware parser from
-    ``aphrodite.parser.gemma4``, which handles internal quotes, nested
+    ``sonar.parser.gemma4``, which handles internal quotes, nested
     objects, arrays, and all Gemma4 value types correctly.
 
     Args:
@@ -57,7 +57,7 @@ def _parse_tool_arguments(args_str: str) -> dict[str, str]:
     if not args_str or not args_str.strip():
         return {}
 
-    from aphrodite.parser.gemma4 import _parse_gemma4_args
+    from sonar.parser.gemma4 import _parse_gemma4_args
 
     parsed = _parse_gemma4_args(args_str)
     return {k: str(v) if not isinstance(v, str) else v for k, v in parsed.items()}
@@ -91,7 +91,7 @@ def parse_tool_calls(text: str, *, strict: bool = False) -> list[dict]:
 
     Example::
 
-        >>> from aphrodite.tool_parsers.gemma4_utils import parse_tool_calls
+        >>> from sonar.tool_parsers.gemma4_utils import parse_tool_calls
         >>> output = tokenizer.decode(outputs[0], skip_special_tokens=False)
         >>> tool_calls = parse_tool_calls(output)
         >>> for tc in tool_calls:
@@ -148,7 +148,7 @@ def has_tool_response_tag(text: str) -> bool:
 
     Example::
 
-        >>> from aphrodite.tool_parsers.gemma4_utils import has_tool_response_tag
+        >>> from sonar.tool_parsers.gemma4_utils import has_tool_response_tag
         >>> if not has_tool_response_tag(model_output):
         ...     # Model used <eos> instead — inject <|tool_response> manually
         ...     next_prompt = "<|tool_response>" + tool_result

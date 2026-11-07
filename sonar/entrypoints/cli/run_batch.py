@@ -6,12 +6,12 @@ import asyncio
 import importlib.metadata
 import typing
 
-from aphrodite.entrypoints.cli.types import CLISubcommand
-from aphrodite.entrypoints.common.startup import APHRODITE_SUBCMD_PARSER_EPILOG
-from aphrodite.logger import init_logger
+from sonar.entrypoints.cli.types import CLISubcommand
+from sonar.entrypoints.common.startup import SONAR_SUBCMD_PARSER_EPILOG
+from sonar.logger import init_logger
 
 if typing.TYPE_CHECKING:
-    from aphrodite.utils.argparse_utils import FlexibleArgumentParser
+    from sonar.utils.argparse_utils import FlexibleArgumentParser
 else:
     FlexibleArgumentParser = argparse.ArgumentParser
 
@@ -19,17 +19,17 @@ logger = init_logger(__name__)
 
 
 class RunBatchSubcommand(CLISubcommand):
-    """The `run-batch` subcommand for Aphrodite CLI."""
+    """The `run-batch` subcommand for Sonar CLI."""
 
     name = "run-batch"
 
     @staticmethod
     def cmd(args: argparse.Namespace) -> None:
-        from aphrodite.entrypoints.launchers.run_batch import main as run_batch_main
+        from sonar.entrypoints.launchers.run_batch import main as run_batch_main
 
         logger.info(
-            "Aphrodite batch processing API version %s",
-            importlib.metadata.version("aphrodite-engine"),
+            "Sonar batch processing API version %s",
+            importlib.metadata.version("sonar"),
         )
         logger.info("args: %s", args)
 
@@ -47,18 +47,18 @@ class RunBatchSubcommand(CLISubcommand):
         asyncio.run(run_batch_main(args))
 
     def subparser_init(self, subparsers: argparse._SubParsersAction) -> FlexibleArgumentParser:
-        from aphrodite.entrypoints.launchers.run_batch import make_arg_parser
+        from sonar.entrypoints.launchers.run_batch import make_arg_parser
 
         run_batch_parser = subparsers.add_parser(
             self.name,
             help="Run batch prompts and write results to file.",
             description=(
-                "Run batch prompts using Aphrodite's OpenAI-compatible API.\nSupports local or HTTP input/output files."
+                "Run batch prompts using Sonar's OpenAI-compatible API.\nSupports local or HTTP input/output files."
             ),
-            usage="aphrodite run-batch -i INPUT.jsonl -o OUTPUT.jsonl --model <model>",
+            usage="sonar run-batch -i INPUT.jsonl -o OUTPUT.jsonl --model <model>",
         )
         run_batch_parser = make_arg_parser(run_batch_parser)
-        run_batch_parser.epilog = APHRODITE_SUBCMD_PARSER_EPILOG.format(subcmd=self.name)
+        run_batch_parser.epilog = SONAR_SUBCMD_PARSER_EPILOG.format(subcmd=self.name)
         return run_batch_parser
 
 

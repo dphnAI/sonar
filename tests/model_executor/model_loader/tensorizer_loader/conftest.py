@@ -4,13 +4,13 @@ from collections.abc import Callable
 
 import pytest
 
-from aphrodite import LLM, EngineArgs
-from aphrodite.distributed import cleanup_dist_env_and_memory
-from aphrodite.model_executor.model_loader import tensorizer as tensorizer_mod
-from aphrodite.model_executor.model_loader.tensorizer import TensorizerConfig
-from aphrodite.utils.network_utils import get_file_store_init_method
-from aphrodite.v1.executor import UniProcExecutor
-from aphrodite.v1.worker.worker_base import WorkerWrapperBase
+from sonar import LLM, EngineArgs
+from sonar.distributed import cleanup_dist_env_and_memory
+from sonar.model_executor.model_loader import tensorizer as tensorizer_mod
+from sonar.model_executor.model_loader.tensorizer import TensorizerConfig
+from sonar.utils.network_utils import get_file_store_init_method
+from sonar.v1.executor import UniProcExecutor
+from sonar.v1.worker.worker_base import WorkerWrapperBase
 
 MODEL_REF = "facebook/opt-125m"
 
@@ -22,7 +22,7 @@ def model_ref():
 
 @pytest.fixture(autouse=True)
 def allow_insecure_serialization(monkeypatch):
-    monkeypatch.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
+    monkeypatch.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")
 
 
 @pytest.fixture(autouse=True)
@@ -40,13 +40,13 @@ def just_serialize_model_tensors(model_ref, monkeypatch, tmp_path):
 
     monkeypatch.setattr(tensorizer_mod, "serialize_extra_artifacts", noop)
 
-    tensorizer_mod.tensorize_aphrodite_model(args, tc)
+    tensorizer_mod.tensorize_sonar_model(args, tc)
     yield tmp_path
 
 
 @pytest.fixture(autouse=True)
 def tensorizer_config():
-    config = TensorizerConfig(tensorizer_uri="aphrodite")
+    config = TensorizerConfig(tensorizer_uri="sonar")
     return config
 
 
@@ -71,13 +71,13 @@ class DummyExecutor(UniProcExecutor):
         distributed_init_method = get_file_store_init_method()
         local_rank = 0
         # set local rank as the device index if specified
-        device_info = self.aphrodite_config.device_config.device.__str__().split(":")
+        device_info = self.sonar_config.device_config.device.__str__().split(":")
         if len(device_info) > 1:
             local_rank = int(device_info[1])
         rank = 0
         is_driver_worker = True
         kwargs = dict(
-            aphrodite_config=self.aphrodite_config,
+            sonar_config=self.sonar_config,
             local_rank=local_rank,
             rank=rank,
             distributed_init_method=distributed_init_method,

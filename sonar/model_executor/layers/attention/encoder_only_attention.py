@@ -5,18 +5,18 @@ from copy import copy
 
 import torch
 
-from aphrodite.config import CacheConfig
-from aphrodite.config.aphrodite import AphroditeConfig
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.v1.attention.backend import (
+from sonar.config import CacheConfig
+from sonar.config.sonar import SonarConfig
+from sonar.model_executor.layers.attention import Attention
+from sonar.v1.attention.backend import (
     AttentionBackend,
     AttentionMetadata,
     AttentionType,
     CommonAttentionMetadata,
     subclass_attention_backend,
 )
-from aphrodite.v1.attention.selector import get_attn_backend
-from aphrodite.v1.kv_cache_interface import KVCacheSpec
+from sonar.v1.attention.selector import get_attn_backend
+from sonar.v1.kv_cache_interface import KVCacheSpec
 
 
 @functools.lru_cache
@@ -89,6 +89,6 @@ class EncoderOnlyAttention(Attention):
             **kwargs,
         )
 
-    def get_kv_cache_spec(self, aphrodite_config: AphroditeConfig) -> KVCacheSpec | None:
+    def get_kv_cache_spec(self, sonar_config: SonarConfig) -> KVCacheSpec | None:
         # Does not need KV cache
         return None

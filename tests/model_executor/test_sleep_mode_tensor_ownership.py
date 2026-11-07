@@ -9,9 +9,9 @@ import pytest
 import torch
 from transformers import Gemma3nTextConfig
 
-from aphrodite import LLM, SamplingParams
-from aphrodite.inputs import TokensPrompt
-from aphrodite.platforms import current_platform
+from sonar import LLM, SamplingParams
+from sonar.inputs import TokensPrompt
+from sonar.platforms import current_platform
 
 from ..models.utils import dummy_hf_overrides
 from ..utils import create_new_process_for_each_test
@@ -130,13 +130,13 @@ def _get_sleep_tensor_targets(
     model_name: str,
 ) -> tuple[tuple[type[torch.nn.Module], tuple[str, ...]], ...]:
     if model_name == "fireredasr2":
-        from aphrodite.model_executor.models.conformer_encoder import (
+        from sonar.model_executor.models.conformer_encoder import (
             RelPositionalEncoding,
         )
 
         return ((RelPositionalEncoding, ("pe",)),)
     if model_name == "gemma3n":
-        from aphrodite.model_executor.models.gemma3n import (
+        from sonar.model_executor.models.gemma3n import (
             Gemma3nAltUp,
             Gemma3nSelfDecoder,
         )
@@ -154,11 +154,11 @@ def _get_sleep_tensor_targets(
             ),
         )
     if model_name == "voxtral":
-        from aphrodite.model_executor.models.voxtral import VoxtralEncoderModel
+        from sonar.model_executor.models.voxtral import VoxtralEncoderModel
 
         return ((VoxtralEncoderModel, ("mel_filters",)),)
     if model_name == "ernie45_vl":
-        from aphrodite.model_executor.models.ernie45_vl import (
+        from sonar.model_executor.models.ernie45_vl import (
             Ernie4_5_VisionRotaryEmbedding,
             Ernie4_5_VLMoeForConditionalGeneration,
         )
@@ -255,15 +255,15 @@ def test_static_model_tensors_survive_level2_restore(
     tmp_path: Path,
     case: SleepModelCase,
 ) -> None:
-    monkeypatch.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
-    monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
+    monkeypatch.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")
+    monkeypatch.setenv("SONAR_ENABLE_V1_MULTIPROCESSING", "0")
 
     if case.name == "fireredasr2":
         # FireRedASR2 has a regular decoder and compute_logits implementation,
         # but advertises only the transcription task. Enable its text path so
         # this ownership test can exercise the common LLM.generate lifecycle
         # without constructing an unrelated audio fixture.
-        from aphrodite.model_executor.models.fireredasr2 import (
+        from sonar.model_executor.models.fireredasr2 import (
             FireRedASR2ForConditionalGeneration,
         )
 

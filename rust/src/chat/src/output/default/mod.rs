@@ -7,10 +7,10 @@ mod unified;
 
 use std::sync::{Arc, Once};
 
-use aphrodite_parser::output_grammar::{BuiltOutputGrammar, OutputGrammarContext};
-use aphrodite_parser::unified::{CombinedParser, UnifiedParser};
-use aphrodite_text::tokenizer::DynTokenizer;
 use futures::StreamExt as _;
+use sonar_parser::output_grammar::{BuiltOutputGrammar, OutputGrammarContext};
+use sonar_parser::unified::{CombinedParser, UnifiedParser};
+use sonar_text::tokenizer::DynTokenizer;
 use tracing::info;
 use xgrammar_structural_tag::ToolChoice;
 use xgrammar_structural_tag::format::Format;
@@ -299,12 +299,12 @@ impl ChatOutputProcessor for DefaultChatOutputProcessor {
 mod tests {
     use std::sync::Arc;
 
-    use aphrodite_engine_core_client::protocol::structured_outputs::StructuredOutputsParams;
-    use aphrodite_parser::output_grammar::BuiltOutputGrammar;
-    use aphrodite_text::output::{DecodedTextEvent, Finished};
-    use aphrodite_text::{DecodedText, SampledDelta};
-    use aphrodite_tokenizer::test_utils::TestTokenizer;
     use futures::{StreamExt as _, stream};
+    use sonar_engine_core_client::protocol::structured_outputs::StructuredOutputsParams;
+    use sonar_parser::output_grammar::BuiltOutputGrammar;
+    use sonar_text::output::{DecodedTextEvent, Finished};
+    use sonar_text::{DecodedText, SampledDelta};
+    use sonar_tokenizer::test_utils::TestTokenizer;
     use thiserror_ext::AsReport as _;
     use xgrammar_structural_tag::format::Format;
 
@@ -400,11 +400,11 @@ mod tests {
             processor.initialize(&[]).unwrap();
             let decoded = stream::iter([Ok(DecodedTextEvent::TextDelta {
                 decoded: DecodedText::unattributed(
-                    "Sure.<|tool_call>call:search{query:<|\"|>aphrodite<|\"|>}<tool_call|>",
+                    "Sure.<|tool_call>call:search{query:<|\"|>sonar<|\"|>}<tool_call|>",
                 ),
                 sampled: SampledDelta::default(),
                 finished: Some(Box::new(Finished {
-                    usage: aphrodite_llm::TokenUsage::default(),
+                    usage: sonar_llm::TokenUsage::default(),
                     finish_reason: crate::FinishReason::Stop(None),
                     kv_transfer_params: None,
                     ec_transfer_params: None,

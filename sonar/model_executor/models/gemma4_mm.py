@@ -5,7 +5,7 @@
 Adds vision tower, audio tower, and multimodal embedders on top of the
 text-only Gemma4ForCausalLM.  The vision/audio encoders are loaded via
 AutoModel.from_config and run in eager mode while the language model uses
-the Aphrodite-optimized path.
+the Sonar-optimized path.
 
 Video support:  Gemma4 does **not** have a native video tower.  Videos are
 decomposed into timestamped image frames (up to 32 frames at 70 soft tokens
@@ -34,42 +34,42 @@ from transformers.models.gemma4.configuration_gemma4 import (
     Gemma4TextConfig,
 )
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.model import get_served_model_name
-from aphrodite.config.multimodal import MultiModalDummyOptions, VideoDummyOptions
-from aphrodite.inputs import MultiModalDataDict
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import ReplicatedLinear
-from aphrodite.model_executor.models.gemma3n_mm import batch_audio_features
-from aphrodite.model_executor.models.gemma4 import Gemma4ForCausalLM
-from aphrodite.model_executor.models.module_mapping import MultiModelKeys
-from aphrodite.model_executor.models.transformers.utils import recursive_replace_linear
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import (
+from sonar.config import SonarConfig
+from sonar.config.model import get_served_model_name
+from sonar.config.multimodal import MultiModalDummyOptions, VideoDummyOptions
+from sonar.inputs import MultiModalDataDict
+from sonar.logger import init_logger
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import ReplicatedLinear
+from sonar.model_executor.models.gemma3n_mm import batch_audio_features
+from sonar.model_executor.models.gemma4 import Gemma4ForCausalLM
+from sonar.model_executor.models.module_mapping import MultiModelKeys
+from sonar.model_executor.models.transformers.utils import recursive_replace_linear
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import (
     MultiModalFieldConfig,
     MultiModalKwargsItem,
     MultiModalKwargsItems,
     VideoItem,
 )
-from aphrodite.multimodal.parse import (
+from sonar.multimodal.parse import (
     AudioProcessorItems,
     ImageProcessorItems,
     MultiModalDataItems,
     MultiModalDataParser,
 )
-from aphrodite.multimodal.processing import BaseDummyInputsBuilder
-from aphrodite.multimodal.processing.processor import (
+from sonar.multimodal.processing import BaseDummyInputsBuilder
+from sonar.multimodal.processing.processor import (
     BaseMultiModalProcessor,
     BaseProcessingInfo,
     PromptReplacement,
     PromptUpdate,
     PromptUpdateDetails,
 )
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.utils.gpu_sync_debug import gpu_sync_allowed
-from aphrodite.utils.tensor_schema import TensorSchema, TensorShape
-from aphrodite.utils.torch_utils import async_tensor_h2d
+from sonar.sequence import IntermediateTensors
+from sonar.utils.gpu_sync_debug import gpu_sync_allowed
+from sonar.utils.tensor_schema import TensorSchema, TensorShape
+from sonar.utils.torch_utils import async_tensor_h2d
 
 from .interfaces import (
     MultiModalEmbeddings,
@@ -83,13 +83,13 @@ from .interfaces import (
 from .utils import (
     AutoWeightsLoader,
     WeightsMapper,
-    init_aphrodite_registered_model,
+    init_sonar_registered_model,
     maybe_prefix,
 )
 
 if TYPE_CHECKING:
-    from aphrodite.model_executor.layers.quantization import QuantizationConfig
-    from aphrodite.v1.worker.encoder_cudagraph_defs import (
+    from sonar.model_executor.layers.quantization import QuantizationConfig
+    from sonar.v1.worker.encoder_cudagraph_defs import (
         EncoderCudaGraphCaptureInputs,
         EncoderCudaGraphConfig,
         EncoderCudaGraphReplayBuffers,
@@ -265,7 +265,7 @@ class Gemma4ProcessingInfo(BaseProcessingInfo):
         config = self.get_hf_config()
         # Upper bound: the pooler outputs max_soft_tokens slots per image.
         # After padding is stripped the actual count is ≤ this value, but
-        # Aphrodite needs the max for memory planning.
+        # Sonar needs the max for memory planning.
         tokens_per_image = config.vision_config.default_output_length
         merged_kwargs = self.ctx.get_merged_mm_kwargs({})
         val, _ = _get_max_soft_tokens(merged_kwargs)
@@ -716,7 +716,7 @@ class Gemma4MultiModalProcessor(BaseMultiModalProcessor[Gemma4ProcessingInfo]):
                         duration_s,
                         max_duration_s,
                     )
-        # Aphrodite's call_hf_processor (context.py) re-merges
+        # Sonar's call_hf_processor (context.py) re-merges
         # mm_processor_kwargs from the model config on every call via:
         #   config_kwargs | incoming_kwargs  (right side wins)
         #
@@ -738,7 +738,7 @@ class Gemma4MultiModalProcessor(BaseMultiModalProcessor[Gemma4ProcessingInfo]):
             patched_mm_kwargs,
         )
 
-        # HF uses 'image_position_ids'; Aphrodite uses 'pixel_position_ids'.
+        # HF uses 'image_position_ids'; Sonar uses 'pixel_position_ids'.
         # Remap here to keep a single translation point.
         if "image_position_ids" in processed_data:
             processed_data["pixel_position_ids"] = processed_data.pop("image_position_ids")
@@ -807,7 +807,7 @@ class Gemma4MultiModalProcessor(BaseMultiModalProcessor[Gemma4ProcessingInfo]):
         if "image" in mm_items:
             # Target image_token (<|image|>) — the single placeholder the
             # Gemma4 chat template inserts once per image in the prompt.
-            # Aphrodite tokenizes the prompt without token expansion, so only
+            # Sonar tokenizes the prompt without token expansion, so only
             # one image_token exists per image in the token stream.
             # The replacement expands it to the full image sequence
             # (boi + N×image_token + eoi, where N = max_soft_tokens).
@@ -1007,8 +1007,8 @@ class Gemma4ForConditionalGeneration(
         ],
     }
 
-    # Maps checkpoint prefixes to Aphrodite module paths.
-    hf_to_aphrodite_mapper = WeightsMapper(
+    # Maps checkpoint prefixes to Sonar module paths.
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={
             # vision tower
             "model.vision_tower": "vision_tower",
@@ -1023,17 +1023,17 @@ class Gemma4ForConditionalGeneration(
         },
     )
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
-        multimodal_config = aphrodite_config.model_config.multimodal_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
+        multimodal_config = sonar_config.model_config.multimodal_config
         self.config = config
         self.quant_config = quant_config
         self.multimodal_config = multimodal_config
-        self.model_dtype = aphrodite_config.model_config.dtype
-        self.aphrodite_config = aphrodite_config
-        lora_config = aphrodite_config.lora_config
+        self.model_dtype = sonar_config.model_config.dtype
+        self.sonar_config = sonar_config
+        lora_config = sonar_config.lora_config
         self._enable_mm_lora = bool(lora_config is not None and lora_config.enable_tower_connector_lora)
 
         # Apply the dimension check independently because the vision and audio
@@ -1041,7 +1041,7 @@ class Gemma4ForConditionalGeneration(
         vision_tower_quant = _get_tower_quant_config(config.vision_config, quant_config)
 
         # ---- Vision tower (shared by image and video) ----
-        with self._mark_tower_model(aphrodite_config, {"image", "video"}):
+        with self._mark_tower_model(sonar_config, {"image", "video"}):
             self.vision_tower = AutoModel.from_config(config=config.vision_config)
             self.embed_vision = Gemma4MultimodalEmbedder(
                 config.vision_config,
@@ -1059,7 +1059,7 @@ class Gemma4ForConditionalGeneration(
         self.embed_audio: Gemma4MultimodalEmbedder | None
         if config.audio_config is not None:
             audio_tower_quant = _get_tower_quant_config(config.audio_config, quant_config)
-            with self._mark_tower_model(aphrodite_config, "audio"):
+            with self._mark_tower_model(sonar_config, "audio"):
                 self.audio_tower = AutoModel.from_config(config=config.audio_config)
                 # AutoModel.from_config does NOT call post_init(),
                 # which is needed to initialize buffers that are absent
@@ -1081,10 +1081,10 @@ class Gemma4ForConditionalGeneration(
             self.audio_tower = None
             self.embed_audio = None
 
-        # ---- Language model (Aphrodite optimised) ----
-        with self._mark_language_model(aphrodite_config):
-            self.language_model: Gemma4ForCausalLM = init_aphrodite_registered_model(
-                aphrodite_config=aphrodite_config,
+        # ---- Language model (Sonar optimised) ----
+        with self._mark_language_model(sonar_config):
+            self.language_model: Gemma4ForCausalLM = init_sonar_registered_model(
+                sonar_config=sonar_config,
                 hf_config=config.text_config,
                 prefix=maybe_prefix(prefix, "language_model"),
                 architectures=["Gemma4ForCausalLM"],
@@ -1096,11 +1096,11 @@ class Gemma4ForConditionalGeneration(
             if ple_dim is not None and ple_dim > 0:
                 embed = self.language_model.model.embed_tokens
                 self.per_layer_embeddings = torch.zeros(
-                    aphrodite_config.scheduler_config.max_num_batched_tokens,
+                    sonar_config.scheduler_config.max_num_batched_tokens,
                     config.text_config.num_hidden_layers,
                     ple_dim,
                     device=next(embed.parameters()).device,
-                    dtype=aphrodite_config.model_config.dtype,
+                    dtype=sonar_config.model_config.dtype,
                 )
             else:
                 self.per_layer_embeddings = None
@@ -1128,7 +1128,7 @@ class Gemma4ForConditionalGeneration(
         self.num_shared_experts = self.language_model.num_shared_experts
         self.num_redundant_experts = self.language_model.num_redundant_experts
 
-        gen_cfg = aphrodite_config.model_config.try_get_generation_config()
+        gen_cfg = sonar_config.model_config.try_get_generation_config()
         self._suppress_token_ids = gen_cfg.get("suppress_tokens") if gen_cfg else None
 
     # ------------------------------------------------------------------ #
@@ -1387,7 +1387,7 @@ class Gemma4ForConditionalGeneration(
         and projected in a single batched call.
 
         Returns one concatenated embedding tensor per video (not per
-        frame), matching the flat_from_sizes grouping that Aphrodite expects
+        frame), matching the flat_from_sizes grouping that Sonar expects
         for embed_multimodal.
         """
         pixel_values = video_input["pixel_values_videos"]
@@ -1548,7 +1548,7 @@ class Gemma4ForConditionalGeneration(
     # ------------------------------------------------------------------ #
 
     def get_encoder_cudagraph_config(self) -> "EncoderCudaGraphConfig":
-        from aphrodite.v1.worker.encoder_cudagraph_defs import EncoderCudaGraphConfig
+        from sonar.v1.worker.encoder_cudagraph_defs import EncoderCudaGraphConfig
 
         def pad_pixel_values(dst: torch.Tensor, src: torch.Tensor) -> None:
             dst.zero_()
@@ -1583,12 +1583,12 @@ class Gemma4ForConditionalGeneration(
 
     def get_encoder_cudagraph_budget_range(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
     ) -> tuple[int, int]:
         min_budget = _SUPPORTED_SOFT_TOKENS[0]
         max_budget = min(
-            aphrodite_config.scheduler_config.max_num_batched_tokens,
-            aphrodite_config.model_config.max_model_len,
+            sonar_config.scheduler_config.max_num_batched_tokens,
+            sonar_config.model_config.max_model_len,
         )
         return (min_budget, max_budget)
 
@@ -1606,7 +1606,7 @@ class Gemma4ForConditionalGeneration(
         self,
         mm_kwargs: dict[str, Any],
     ) -> list["EncoderItemSpec"]:
-        from aphrodite.v1.worker.encoder_cudagraph_defs import EncoderItemSpec
+        from sonar.v1.worker.encoder_cudagraph_defs import EncoderItemSpec
 
         vision_cfg = self.vision_tower.config
         pool_ratio = getattr(vision_cfg, "pooling_kernel_size", 2) ** 2
@@ -1656,7 +1656,7 @@ class Gemma4ForConditionalGeneration(
         mm_kwargs: dict[str, Any],
         indices: list[int],
     ) -> dict[str, Any]:
-        from aphrodite.v1.worker.encoder_cudagraph_defs import (
+        from sonar.v1.worker.encoder_cudagraph_defs import (
             ENCODER_CUDAGRAPH_AXIS_KEYS_KWARG,
         )
 
@@ -1748,7 +1748,7 @@ class Gemma4ForConditionalGeneration(
         axis_keys: tuple[Hashable, ...] | None = None,
         **kwargs: Any,
     ) -> "EncoderCudaGraphCaptureInputs":
-        from aphrodite.v1.worker.encoder_cudagraph_defs import (
+        from sonar.v1.worker.encoder_cudagraph_defs import (
             EncoderCudaGraphCaptureInputs,
         )
 
@@ -1809,7 +1809,7 @@ class Gemma4ForConditionalGeneration(
         path: str = "default",
         **kwargs: Any,
     ) -> "EncoderCudaGraphReplayBuffers":
-        from aphrodite.v1.worker.encoder_cudagraph_defs import (
+        from sonar.v1.worker.encoder_cudagraph_defs import (
             EncoderCudaGraphReplayBuffers,
         )
 
@@ -2087,7 +2087,7 @@ class Gemma4ForConditionalGeneration(
         if not self._full_attn_layer_idxs:
             return
 
-        from aphrodite.forward_context import get_forward_context
+        from sonar.forward_context import get_forward_context
 
         attn_metadata = get_forward_context().attn_metadata
         if attn_metadata is None:
@@ -2140,7 +2140,7 @@ class Gemma4ForConditionalGeneration(
             self,
             ignore_unexpected_prefixes=ignore_prefixes,
         )
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
     # ------------------------------------------------------------------ #
     # LoRA / multimodal mapping

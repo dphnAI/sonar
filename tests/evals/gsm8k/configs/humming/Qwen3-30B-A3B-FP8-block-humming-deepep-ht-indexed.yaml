@@ -11,4 +11,4 @@ server_args: >-
   --enable-expert-parallel
   --all2all-backend deepep_high_throughput
 env:
-  APHRODITE_HUMMING_MOE_GEMM_TYPE: "indexed"
+  SONAR_HUMMING_MOE_GEMM_TYPE: "indexed"

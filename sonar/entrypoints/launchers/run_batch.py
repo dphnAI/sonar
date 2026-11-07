@@ -30,52 +30,52 @@ from starlette.responses import JSONResponse
 from tqdm import tqdm
 from urllib3.util import parse_url
 
-import aphrodite.envs as envs
-from aphrodite.config import config
-from aphrodite.connections import HTTPResponseSizeExceededError, global_http_connection
-from aphrodite.engine.arg_utils import AsyncEngineArgs
-from aphrodite.engine.protocol import EngineClient
-from aphrodite.entrypoints.common.cli_args import BaseFrontendArgs
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+import sonar.envs as envs
+from sonar.config import config
+from sonar.connections import HTTPResponseSizeExceededError, global_http_connection
+from sonar.engine.arg_utils import AsyncEngineArgs
+from sonar.engine.protocol import EngineClient
+from sonar.entrypoints.common.cli_args import BaseFrontendArgs
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionRequest,
     ChatCompletionResponse,
 )
-from aphrodite.entrypoints.openai.completion.protocol import (
+from sonar.entrypoints.openai.completion.protocol import (
     CompletionRequest,
     CompletionResponse,
 )
-from aphrodite.entrypoints.pooling.embed.protocol import (
+from sonar.entrypoints.pooling.embed.protocol import (
     EmbeddingRequest,
     EmbeddingResponse,
 )
-from aphrodite.entrypoints.pooling.scoring.protocol import (
+from sonar.entrypoints.pooling.scoring.protocol import (
     RerankRequest,
     RerankResponse,
     ScoreRequest,
     ScoreResponse,
 )
-from aphrodite.entrypoints.serve import create_error_response
-from aphrodite.entrypoints.serve.engine.protocol import (
+from sonar.entrypoints.serve import create_error_response
+from sonar.entrypoints.serve.engine.protocol import (
     ErrorInfo,
     ErrorResponse,
     OpenAIBaseModel,
 )
-from aphrodite.entrypoints.speech_to_text.transcription.protocol import (
+from sonar.entrypoints.speech_to_text.transcription.protocol import (
     TranscriptionRequest,
     TranscriptionResponseVariant,
 )
-from aphrodite.entrypoints.speech_to_text.translation.protocol import (
+from sonar.entrypoints.speech_to_text.translation.protocol import (
     TranslationRequest,
     TranslationResponse,
     TranslationResponseVerbose,
 )
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.logger import configure_logging_from_args, init_logger
-from aphrodite.reasoning import ReasoningParserManager
-from aphrodite.utils import random_uuid
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
-from aphrodite.utils.mem_constants import MiB_bytes
-from aphrodite.version import __version__ as APHRODITE_VERSION
+from sonar.exceptions import SonarValidationError
+from sonar.logger import configure_logging_from_args, init_logger
+from sonar.reasoning import ReasoningParserManager
+from sonar.utils import random_uuid
+from sonar.utils.argparse_utils import FlexibleArgumentParser
+from sonar.utils.mem_constants import MiB_bytes
+from sonar.version import __version__ as SONAR_VERSION
 
 from .api_server.entry import init_app_state
 
@@ -83,11 +83,11 @@ logger = init_logger(__name__)
 
 
 def _get_audio_download_limit_bytes() -> int:
-    return int(envs.APHRODITE_MAX_AUDIO_CLIP_FILESIZE_MB * MiB_bytes)
+    return int(envs.SONAR_MAX_AUDIO_CLIP_FILESIZE_MB * MiB_bytes)
 
 
 def _raise_audio_filesize_limit(size_bytes: int) -> NoReturn:
-    raise AphroditeValidationError(
+    raise SonarValidationError(
         "Maximum file size exceeded",
         parameter="audio_filesize_mb",
         value=size_bytes / MiB_bytes,
@@ -114,7 +114,7 @@ class BatchTranscriptionRequest(TranscriptionRequest):
     def validate_no_file(cls, data: Any):
         """Ensure file field is not provided in batch requests."""
         if isinstance(data, dict) and "file" in data:
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 "The 'file' field is not supported in batch requests. Use 'file_url' instead.",
                 parameter="file",
             )
@@ -141,7 +141,7 @@ class BatchTranslationRequest(TranslationRequest):
     def validate_no_file(cls, data: Any):
         """Ensure file field is not provided in batch requests."""
         if isinstance(data, dict) and "file" in data:
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 "The 'file' field is not supported in batch requests. Use 'file_url' instead.",
                 parameter="file",
             )
@@ -183,7 +183,7 @@ class BatchRequestInput(OpenAIBaseModel):
 
     # The parameters of the request. CompletionRequest is kept out of
     # BatchRequestInputBody, which an unknown URL is parsed against: its
-    # validator raises AphroditeValidationError, which pydantic does not catch.
+    # validator raises SonarValidationError, which pydantic does not catch.
     body: BatchRequestInputBody | CompletionRequest
 
     @field_validator("body", mode="plain")
@@ -308,7 +308,7 @@ def make_arg_parser(parser: FlexibleArgumentParser):
 
 
 def parse_args():
-    parser = FlexibleArgumentParser(description="Aphrodite OpenAI-Compatible batch runner.")
+    parser = FlexibleArgumentParser(description="Sonar OpenAI-Compatible batch runner.")
     args = make_arg_parser(parser).parse_args()
     configure_logging_from_args(args)
 
@@ -529,12 +529,12 @@ async def download_bytes_from_url(
                     _raise_audio_filesize_limit(decoded_size_bytes)
                 return base64.b64decode(data)
             else:
-                raise AphroditeValidationError(
+                raise SonarValidationError(
                     f"Unsupported data URL encoding: {header}",
                     parameter="url",
                 )
         else:
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 f"Invalid data URL format: {url}",
                 parameter="url",
             )
@@ -544,7 +544,7 @@ async def download_bytes_from_url(
         if allowed_media_domains is not None:
             url_spec = parse_url(url)
             if url_spec.hostname not in allowed_media_domains:
-                raise AphroditeValidationError(
+                raise SonarValidationError(
                     f"The URL must be from one of the allowed domains: "
                     f"{allowed_media_domains}. Input URL domain: "
                     f"{url_spec.hostname}",
@@ -558,14 +558,14 @@ async def download_bytes_from_url(
         try:
             return await global_http_connection.async_get_bytes(
                 url,
-                allow_redirects=envs.APHRODITE_MEDIA_URL_ALLOW_REDIRECTS,
+                allow_redirects=envs.SONAR_MEDIA_URL_ALLOW_REDIRECTS,
                 max_bytes=_get_audio_download_limit_bytes(),
             )
         except HTTPResponseSizeExceededError as exc:
             _raise_audio_filesize_limit(exc.received_bytes)
 
     else:
-        raise AphroditeValidationError(
+        raise SonarValidationError(
             f"Unsupported URL scheme: {parsed.scheme}. Supported schemes: http, https, data",
             parameter="url",
             value=parsed.scheme,
@@ -574,11 +574,11 @@ async def download_bytes_from_url(
 
 def make_error_request_output(request: BatchRequestInput, error_msg: str) -> BatchRequestOutput:
     batch_output = BatchRequestOutput(
-        id=f"aphrodite-{random_uuid()}",
+        id=f"sonar-{random_uuid()}",
         custom_id=request.custom_id,
         response=BatchResponseData(
             status_code=HTTPStatus.BAD_REQUEST,
-            request_id=f"aphrodite-batch-{random_uuid()}",
+            request_id=f"sonar-batch-{random_uuid()}",
         ),
         error=error_msg,
     )
@@ -604,18 +604,18 @@ async def run_request(
 
     if isinstance(response, AllResponse):
         batch_output = BatchRequestOutput(
-            id=f"aphrodite-{random_uuid()}",
+            id=f"sonar-{random_uuid()}",
             custom_id=request.custom_id,
-            response=BatchResponseData(body=response, request_id=f"aphrodite-batch-{random_uuid()}"),
+            response=BatchResponseData(body=response, request_id=f"sonar-batch-{random_uuid()}"),
             error=None,
         )
     elif isinstance(response, ErrorResponse):
         batch_output = BatchRequestOutput(
-            id=f"aphrodite-{random_uuid()}",
+            id=f"sonar-{random_uuid()}",
             custom_id=request.custom_id,
             response=BatchResponseData(
                 status_code=response.error.code,
-                request_id=f"aphrodite-batch-{random_uuid()}",
+                request_id=f"sonar-batch-{random_uuid()}",
             ),
             error=response,
         )
@@ -1015,7 +1015,7 @@ async def run_batch(
         engine_client=engine_client,
         args=args,
     )
-    config = engine_client.aphrodite_config
+    config = engine_client.sonar_config
     max_inflight = args.max_inflight or max(
         1024,
         2 * config.scheduler_config.max_num_seqs * config.parallel_config.data_parallel_size,
@@ -1040,8 +1040,8 @@ async def run_batch(
 
 
 async def main(args: Namespace):
-    from aphrodite.entrypoints.launchers.api_server.entry import build_async_engine_client
-    from aphrodite.usage.usage_lib import UsageContext
+    from sonar.entrypoints.launchers.api_server.entry import build_async_engine_client
+    from sonar.usage.usage_lib import UsageContext
 
     validate_run_batch_args(args)
     ignore_admission_limits(args)
@@ -1062,7 +1062,7 @@ async def main(args: Namespace):
 if __name__ == "__main__":
     args = parse_args()
 
-    logger.info("Aphrodite batch processing API version %s", APHRODITE_VERSION)
+    logger.info("Sonar batch processing API version %s", SONAR_VERSION)
     logger.info("args: %s", args)
 
     # Start the Prometheus metrics server. LLMEngine uses the Prometheus client

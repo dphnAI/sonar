@@ -6,47 +6,47 @@ from typing import TYPE_CHECKING, Any, cast
 import torch
 import torch.nn as nn
 
-import aphrodite.envs as envs
-from aphrodite.compilation.breakable_cudagraph import eager_break_during_capture
-from aphrodite.config import (
+import sonar.envs as envs
+from sonar.compilation.breakable_cudagraph import eager_break_during_capture
+from sonar.config import (
     CacheConfig,
-    get_current_aphrodite_config,
+    get_current_sonar_config,
 )
-from aphrodite.config.aphrodite import AphroditeConfig
-from aphrodite.forward_context import ForwardContext, get_forward_context
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.attention.kv_transfer_utils import (
+from sonar.config.sonar import SonarConfig
+from sonar.forward_context import ForwardContext, get_forward_context
+from sonar.logger import init_logger
+from sonar.model_executor.layers.attention.kv_transfer_utils import (
     maybe_transfer_kv_layer,
 )
-from aphrodite.model_executor.layers.attention_layer_base import AttentionLayerBase
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.attention_layer_base import AttentionLayerBase
+from sonar.model_executor.layers.linear import (
     UnquantizedLinearMethod,
 )
-from aphrodite.model_executor.layers.quantization import (
+from sonar.model_executor.layers.quantization import (
     QuantizationConfig,
     resolve_quant_method,
 )
-from aphrodite.model_executor.layers.quantization.base_config import QuantizeMethodBase
-from aphrodite.model_executor.layers.quantization.input_quant_fp8 import QuantFP8
-from aphrodite.model_executor.layers.quantization.kv_cache import BaseKVCacheMethod
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import GroupShape
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import (
+from sonar.model_executor.layers.quantization.base_config import QuantizeMethodBase
+from sonar.model_executor.layers.quantization.input_quant_fp8 import QuantFP8
+from sonar.model_executor.layers.quantization.kv_cache import BaseKVCacheMethod
+from sonar.model_executor.layers.quantization.utils.quant_utils import GroupShape
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import (
     LayerNameType,
     _encode_layer_name,
     _resolve_layer_name,
     direct_register_custom_op,
     kv_cache_dtype_str_to_dtype,
 )
-from aphrodite.v1.attention.backend import (
+from sonar.v1.attention.backend import (
     AttentionBackend,
     AttentionImpl,
     AttentionMetadata,
     AttentionType,
 )
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
-from aphrodite.v1.attention.selector import get_attn_backend
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
+from sonar.v1.attention.selector import get_attn_backend
+from sonar.v1.kv_cache_interface import (
     FullAttentionSpec,
     KVCacheSpec,
     SlidingWindowSpec,
@@ -54,7 +54,7 @@ from aphrodite.v1.kv_cache_interface import (
 )
 
 if TYPE_CHECKING:
-    from aphrodite.model_executor.layers.attention import MLAAttention
+    from sonar.model_executor.layers.attention import MLAAttention
 
 logger = init_logger(__name__)
 
@@ -68,7 +68,7 @@ def validate_kv_sharing_target(current_layer_name, target_layer_name, static_for
         raise ValueError(error_msg + "cannot be the same as the current layer.")
 
     if target_layer_name not in static_forward_context:
-        from aphrodite.model_executor.models.utils import extract_layer_index
+        from sonar.model_executor.models.utils import extract_layer_index
 
         # If target layer name is not in the static fwd context, it means either
         # a) the target layer does not come BEFORE the current layer, or
@@ -107,7 +107,7 @@ def _largest_kernel_block_within(
     ``MultipleOf`` declarations are expanded to the largest aligned block that fits.
     Falls back to the smallest supported block when nothing fits.
     """
-    from aphrodite.v1.attention.backend import MultipleOf
+    from sonar.v1.attention.backend import MultipleOf
 
     sizes = attn_backend.get_supported_kernel_block_sizes(kv_cache_spec)
     max_block_size = page_budget // per_token_bytes
@@ -192,7 +192,7 @@ def _init_kv_cache_quant(
             # A compressed-tensors checkpoint stores fp8 KV scales only when it
             # declares a kv_cache_scheme; weight-only ones declare none and must
             # keep fp8_e5m2, the only fp8 KV dtype usable on Ampere.
-            from aphrodite.model_executor.layers.quantization.compressed_tensors.compressed_tensors import (  # noqa: E501
+            from sonar.model_executor.layers.quantization.compressed_tensors.compressed_tensors import (  # noqa: E501
                 CompressedTensorsConfig,
                 CompressedTensorsKVCacheMethod,
             )
@@ -262,7 +262,7 @@ class Attention(nn.Module, AttentionLayerBase):
         else:
             sliding_window = None
 
-        aphrodite_config = get_current_aphrodite_config()
+        sonar_config = get_current_sonar_config()
         if cache_config is not None:
             kv_cache_dtype = cache_config.cache_dtype
         else:
@@ -290,7 +290,7 @@ class Attention(nn.Module, AttentionLayerBase):
 
         # Skip quantization for specified layers
         if cache_config is not None and cache_config.kv_cache_dtype_skip_layers:
-            from aphrodite.model_executor.models.utils import extract_layer_index
+            from sonar.model_executor.models.utils import extract_layer_index
 
             skip = False
             # Check attention type
@@ -309,7 +309,7 @@ class Attention(nn.Module, AttentionLayerBase):
                 sliding_window,
             )
 
-        self.kv_cache_torch_dtype = kv_cache_dtype_str_to_dtype(kv_cache_dtype, aphrodite_config.model_config)
+        self.kv_cache_torch_dtype = kv_cache_dtype_str_to_dtype(kv_cache_dtype, sonar_config.model_config)
         self.kv_cache_dtype = kv_cache_dtype
         if num_kv_heads is None:
             num_kv_heads = num_heads
@@ -331,7 +331,7 @@ class Attention(nn.Module, AttentionLayerBase):
         self.has_sink = extra_impl_args.get("sinks") is not None
 
         # NOTE: model_config may be None during certain tests
-        model_config = aphrodite_config.model_config
+        model_config = sonar_config.model_config
         self.use_mm_prefix = model_config is not None and model_config.is_mm_prefix_lm
 
         # During model initialization, the default dtype is set as the model
@@ -363,7 +363,7 @@ class Attention(nn.Module, AttentionLayerBase):
         if (
             cache_config is not None
             and cache_config.enable_prefix_caching
-            and envs.APHRODITE_BATCH_INVARIANT
+            and envs.SONAR_BATCH_INVARIANT
             and (self.attn_backend.get_name() == "FLASHINFER" or self.attn_backend.get_name() == "TRITON_MLA")
         ):
             logger.warning_once(
@@ -377,10 +377,10 @@ class Attention(nn.Module, AttentionLayerBase):
             )
 
         if self.attn_backend.get_name() == "FLEX_ATTENTION":
-            block_m = aphrodite_config.attention_config.flex_attn_block_m
-            block_n = aphrodite_config.attention_config.flex_attn_block_n
+            block_m = sonar_config.attention_config.flex_attn_block_m
+            block_n = sonar_config.attention_config.flex_attn_block_n
 
-            if envs.APHRODITE_BATCH_INVARIANT and cache_config is not None:
+            if envs.SONAR_BATCH_INVARIANT and cache_config is not None:
                 if block_m is not None and block_m > cache_config.block_size:
                     raise ValueError(
                         f"flex_attn_block_m ({block_m}) must be "
@@ -422,7 +422,7 @@ class Attention(nn.Module, AttentionLayerBase):
         # and let torch.compile handle them.
         self.use_direct_call = not current_platform.opaque_attention_op()
 
-        compilation_config = aphrodite_config.compilation_config
+        compilation_config = sonar_config.compilation_config
         if prefix in compilation_config.static_forward_context:
             raise ValueError(f"Duplicate layer name: {prefix}")
         compilation_config.static_forward_context[prefix] = self
@@ -484,7 +484,7 @@ class Attention(nn.Module, AttentionLayerBase):
         Attention metadata (`attn_metadata`) is set using a context manager in
         the model runner's `execute_model` method. It is accessed via forward
         context using
-        `aphrodite.forward_context.get_forward_context().attn_metadata`.
+        `sonar.forward_context.get_forward_context().attn_metadata`.
         """
         if output_dtype is None:
             output_dtype = query.dtype
@@ -543,8 +543,8 @@ class Attention(nn.Module, AttentionLayerBase):
                 and key is not None
                 and value is not None
             ):
-                kv_cache_dummy_dep = torch.ops.aphrodite.unified_kv_cache_update(key, value, encoded)
-            torch.ops.aphrodite.unified_attention_with_output(
+                kv_cache_dummy_dep = torch.ops.sonar.unified_kv_cache_update(key, value, encoded)
+            torch.ops.sonar.unified_attention_with_output(
                 query,
                 key,
                 value,
@@ -577,9 +577,9 @@ class Attention(nn.Module, AttentionLayerBase):
     def get_attn_backend(self) -> type[AttentionBackend]:
         return self.attn_backend
 
-    def get_kv_cache_spec(self, aphrodite_config: AphroditeConfig) -> KVCacheSpec | None:
+    def get_kv_cache_spec(self, sonar_config: SonarConfig) -> KVCacheSpec | None:
         # Block size may get updated after model loading, refresh it
-        block_size = aphrodite_config.cache_config.block_size
+        block_size = sonar_config.cache_config.block_size
         # Encoder-only attention is prefill-only and keeps no autoregressive KV
         # cache. In hybrid models (e.g. Qwen3.5 / ColQwen3.5: GatedDeltaNet
         # linear_attention interleaved with full_attention) the runner iterates
@@ -594,7 +594,7 @@ class Attention(nn.Module, AttentionLayerBase):
             assert not self.attn_backend.is_mla(), "MLA is not supported for sliding window"
             # Choose the largest supported SW block within the shared page (or
             # primary block budget), avoiding coprime scheduler block-size LCMs.
-            shared_page = aphrodite_config.cache_config.skip_page_size_padded
+            shared_page = sonar_config.cache_config.skip_page_size_padded
             # The backend owns its packing
             kv_cache_spec = self.attn_backend.customize_spec(
                 SlidingWindowSpec(

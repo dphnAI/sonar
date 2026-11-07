@@ -10,8 +10,8 @@ from types import SimpleNamespace
 import pytest
 import regex as re
 
-import aphrodite.utils.flashinfer as fi
-from aphrodite.entrypoints.cli import download_kernels
+import sonar.utils.flashinfer as fi
+from sonar.entrypoints.cli import download_kernels
 
 
 @pytest.mark.skipif(find_spec("flashinfer") is None, reason="requires FlashInfer")
@@ -19,13 +19,13 @@ def test_download_kernels_resolves_kernel_warning(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     capfd: pytest.CaptureFixture[str],
-    caplog_aphrodite: pytest.LogCaptureFixture,
+    caplog_sonar: pytest.LogCaptureFixture,
     disable_log_dedup,
 ):
     """Runs the installed FlashInfer CLI, so a FlashInfer release that renames
     its kernel packages, CLI or version check fails here instead of leaving
     users with a warning that its own fix cannot clear."""
-    # A Aphrodite upgrade leaves kernels from the previous FlashInfer behind, which
+    # A Sonar upgrade leaves kernels from the previous FlashInfer behind, which
     # FlashInfer rejects on import. The command must work in that state.
     stale_cubin = tmp_path / "flashinfer_cubin"
     stale_cubin.mkdir()
@@ -44,11 +44,11 @@ def test_download_kernels_resolves_kernel_warning(
         return installed[name]
 
     def warns() -> bool:
-        caplog_aphrodite.clear()
+        caplog_sonar.clear()
         fi.warn_if_flashinfer_kernels_missing()
-        return "Run `aphrodite download-kernels`" in caplog_aphrodite.text
+        return "Run `sonar download-kernels`" in caplog_sonar.text
 
-    monkeypatch.delenv("APHRODITE_HAS_FLASHINFER_CUBIN", raising=False)
+    monkeypatch.delenv("SONAR_HAS_FLASHINFER_CUBIN", raising=False)
     monkeypatch.setattr(importlib.metadata, "version", version)
     monkeypatch.setattr(fi, "has_flashinfer", lambda: True)
     monkeypatch.setattr(
@@ -66,7 +66,7 @@ def test_download_kernels_resolves_kernel_warning(
 
 def test_cuda_without_jit_cache_wheels_needs_only_cubin(
     monkeypatch: pytest.MonkeyPatch,
-    caplog_aphrodite: pytest.LogCaptureFixture,
+    caplog_sonar: pytest.LogCaptureFixture,
     disable_log_dedup,
 ):
     """FlashInfer publishes no flashinfer-jit-cache below CUDA 12.9, so the
@@ -83,7 +83,7 @@ def test_cuda_without_jit_cache_wheels_needs_only_cubin(
         commands.append(cmd)
         return SimpleNamespace(returncode=0)
 
-    monkeypatch.delenv("APHRODITE_HAS_FLASHINFER_CUBIN", raising=False)
+    monkeypatch.delenv("SONAR_HAS_FLASHINFER_CUBIN", raising=False)
     monkeypatch.setattr(fi.torch.version, "cuda", "12.8")
     monkeypatch.setattr(download_kernels, "find_spec", lambda name: object())
     monkeypatch.setattr(subprocess, "run", run)
@@ -98,7 +98,7 @@ def test_cuda_without_jit_cache_wheels_needs_only_cubin(
     assert download_kernels._download_flashinfer_kernels(dry_run=False) == 0
     assert commands[0][-1] == "install-cubin-wheel"
     fi.warn_if_flashinfer_kernels_missing()
-    assert "aphrodite download-kernels" not in caplog_aphrodite.text
+    assert "sonar download-kernels" not in caplog_sonar.text
 
 
 def test_download_kernels_skips_without_flashinfer(monkeypatch: pytest.MonkeyPatch):

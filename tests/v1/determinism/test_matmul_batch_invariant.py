@@ -10,16 +10,16 @@ import pytest
 import torch
 from utils import skip_unsupported
 
-import aphrodite.model_executor.determinism.batch_invariant as bi
-from aphrodite.model_executor.determinism.batch_invariant import (
+import sonar.model_executor.determinism.batch_invariant as bi
+from sonar.model_executor.determinism.batch_invariant import (
     enable_batch_invariant_mode,
     matmul_batch_invariant,
 )
-from aphrodite.model_executor.determinism.batch_invariant_configs import (
+from sonar.model_executor.determinism.batch_invariant_configs import (
     _BATCH_INVARIANT_MATMUL_TUNED_CONFIGS,
     _get_tuned_matmul_arch_family,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 DEVICE_TYPE = current_platform.device_type
 

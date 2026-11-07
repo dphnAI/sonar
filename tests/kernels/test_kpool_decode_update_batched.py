@@ -28,17 +28,17 @@ import math
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.utils.deep_gemm import mqa_logits_use_mx_scales
+from sonar.platforms import current_platform
+from sonar.utils.deep_gemm import mqa_logits_use_mx_scales
 
 if current_platform.is_rocm():
-    from aphrodite.models.glm5next.amd.ops.kpool_compress import (
+    from sonar.models.glm5next.amd.ops.kpool_compress import (
         kpool_compress_and_write_cache,
         kpool_decode_update_and_maybe_write_cache_batched,
         kpool_seed_tail_cache,
     )
 else:
-    from aphrodite.models.glm5next.nvidia.ops.kpool_compress import (
+    from sonar.models.glm5next.nvidia.ops.kpool_compress import (
         kpool_compress_and_write_cache,
         kpool_decode_update_and_maybe_write_cache_batched,
         kpool_seed_tail_cache,
@@ -254,7 +254,7 @@ def _cache_pool_bytes(kv_cache: torch.Tensor, pool_slot: int) -> torch.Tensor:
 
 @pytest.mark.skipif(not current_platform.is_rocm(), reason="ROCm required")
 def test_amd_prefill_writer_uses_preshuffled_cache_layout():
-    from aphrodite.models.glm5next.amd.ops.kpool_compress import (
+    from sonar.models.glm5next.amd.ops.kpool_compress import (
         kpool_compress_and_write_cache as amd_kpool_compress,
     )
 

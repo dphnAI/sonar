@@ -5,11 +5,11 @@ import time
 
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
-from aphrodite.utils.torch_utils import (
+from sonar import _custom_ops as ops
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.utils.argparse_utils import FlexibleArgumentParser
+from sonar.utils.torch_utils import (
     STR_DTYPE_TO_TORCH_DTYPE,
     create_kv_caches_with_random,
 )
@@ -138,8 +138,7 @@ def main(
 
 if __name__ == "__main__":
     logger.warning(
-        "This script benchmarks the ROCm paged attention kernel. "
-        "By default this is no longer used in Aphrodite inference."
+        "This script benchmarks the ROCm paged attention kernel. By default this is no longer used in Sonar inference."
     )
     if not current_platform.is_rocm():
         raise RuntimeError("This benchmark requires the ROCm platform.")

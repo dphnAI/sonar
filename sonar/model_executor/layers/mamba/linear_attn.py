@@ -11,31 +11,31 @@ import torch.nn.functional as F
 from einops import rearrange
 from torch import nn
 
-from aphrodite.config import CacheConfig, ModelConfig, get_current_aphrodite_config
-from aphrodite.distributed.communication_op import tensor_model_parallel_all_reduce
-from aphrodite.distributed.parallel_state import (
+from sonar.config import CacheConfig, ModelConfig, get_current_sonar_config
+from sonar.distributed.communication_op import tensor_model_parallel_all_reduce
+from sonar.distributed.parallel_state import (
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
 )
-from aphrodite.forward_context import ForwardContext, get_forward_context
-from aphrodite.model_executor.custom_op import CustomOp
-from aphrodite.model_executor.layers.lightning_attn import (
+from sonar.forward_context import ForwardContext, get_forward_context
+from sonar.model_executor.custom_op import CustomOp
+from sonar.model_executor.layers.lightning_attn import (
     lightning_attention,
     linear_decode_forward_triton,
 )
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.mamba.abstract import MambaBase
-from aphrodite.model_executor.layers.mamba.mamba_utils import (
+from sonar.model_executor.layers.mamba.abstract import MambaBase
+from sonar.model_executor.layers.mamba.mamba_utils import (
     MambaStateDtypeCalculator,
     MambaStateShapeCalculator,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.utils.torch_utils import direct_register_custom_op
-from aphrodite.v1.attention.backends.linear_attn import LinearAttentionMetadata
-from aphrodite.v1.attention.backends.registry import MambaAttentionBackendEnum
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.utils.torch_utils import direct_register_custom_op
+from sonar.v1.attention.backends.linear_attn import LinearAttentionMetadata
+from sonar.v1.attention.backends.registry import MambaAttentionBackendEnum
 
 
 @CustomOp.register("minimax_text01_rmsnorm_tp")
@@ -325,7 +325,7 @@ class MiniMaxText01LinearAttention(nn.Module, MambaBase):
             self.slope_rate = slope_rate * (1 - layer_idx / (num_hidden_layer - 1) + 1e-5)
         self.tp_slope = self.slope_rate[self.tp_rank * self.tp_heads : (self.tp_rank + 1) * self.tp_heads].contiguous()
 
-        compilation_config = get_current_aphrodite_config().compilation_config
+        compilation_config = get_current_sonar_config().compilation_config
         if prefix in compilation_config.static_forward_context:
             raise ValueError(f"Duplicate layer name: {prefix}")
         compilation_config.static_forward_context[prefix] = self
@@ -388,7 +388,7 @@ class MiniMaxText01LinearAttention(nn.Module, MambaBase):
         return hidden
 
     def forward(self, hidden_states: torch.Tensor, output: torch.Tensor, positions: torch.Tensor) -> None:
-        torch.ops.aphrodite.linear_attention(
+        torch.ops.sonar.linear_attention(
             hidden_states,
             output,
             positions,

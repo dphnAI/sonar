@@ -11,11 +11,11 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.lora.layers.fused_moe import FusedMoEWithLoRA
-from aphrodite.lora.lora_model import LoRAModel, MoEEPLoadSpec
-from aphrodite.lora.peft_helper import PEFTHelper
-from aphrodite.model_executor.layers.fused_moe.config import FusedMoEParallelConfig
-from aphrodite.model_executor.layers.fused_moe.expert_map_manager import ExpertMapManager
+from sonar.lora.layers.fused_moe import FusedMoEWithLoRA
+from sonar.lora.lora_model import LoRAModel, MoEEPLoadSpec
+from sonar.lora.peft_helper import PEFTHelper
+from sonar.model_executor.layers.fused_moe.config import FusedMoEParallelConfig
+from sonar.model_executor.layers.fused_moe.expert_map_manager import ExpertMapManager
 
 NUM_LAYERS = 48
 GLOBAL_NUM_EXPERTS = 128

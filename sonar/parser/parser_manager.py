@@ -5,14 +5,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from aphrodite.logger import init_logger
-from aphrodite.tool_parsers.tool_strict_level import ToolStrictLevel
+from sonar.logger import init_logger
+from sonar.tool_parsers.tool_strict_level import ToolStrictLevel
 
 if TYPE_CHECKING:
-    from aphrodite.parser.abstract_parser import Parser
-    from aphrodite.reasoning import ReasoningParser
-    from aphrodite.tokenizers import TokenizerLike
-    from aphrodite.tool_parsers import ToolParser
+    from sonar.parser.abstract_parser import Parser
+    from sonar.reasoning import ReasoningParser
+    from sonar.tokenizers import TokenizerLike
+    from sonar.tool_parsers import ToolParser
 
 logger = init_logger(__name__)
 
@@ -28,7 +28,7 @@ class ParserManager:
         model_name: str | None = None,
     ) -> type[ToolParser] | None:
         """Get the tool parser based on the name."""
-        from aphrodite.tool_parsers import ToolParserManager
+        from sonar.tool_parsers import ToolParserManager
 
         parser: type[ToolParser] | None = None
         if not enable_auto_tools or tool_parser_name is None:
@@ -53,7 +53,7 @@ class ParserManager:
         reasoning_parser_name: str | None,
     ) -> type[ReasoningParser] | None:
         """Get the reasoning parser based on the name."""
-        from aphrodite.reasoning import ReasoningParserManager
+        from sonar.reasoning import ReasoningParserManager
 
         parser: type[ReasoningParser] | None = None
         if not reasoning_parser_name:
@@ -162,14 +162,14 @@ class ParserManager:
         strict_level = None if tool_strict_level is None else ToolStrictLevel.from_name(tool_strict_level)
 
         if is_harmony:
-            from aphrodite.parser.harmony import HarmonyParser
+            from sonar.parser.harmony import HarmonyParser
 
             HarmonyParser.reasoning_parser_cls = reasoning_parser_cls
             HarmonyParser.tool_parser_cls = tool_parser_cls
             HarmonyParser.tool_strict_level = strict_level
             return HarmonyParser
 
-        from aphrodite.parser.response_template import (
+        from sonar.parser.response_template import (
             response_template_parser_cls,
             validate_tokenizer_response_template,
         )
@@ -205,7 +205,7 @@ class ParserManager:
             )
 
         if reasoning_parser_name == "kimi_k3" or tool_parser_name == "kimi_k3":
-            from aphrodite.parser.kimi_k3 import KimiK3Parser
+            from sonar.parser.kimi_k3 import KimiK3Parser
 
             r_cls = reasoning_parser_cls
             t_cls = tool_parser_cls
@@ -221,7 +221,7 @@ class ParserManager:
             "cohere_command3",
             "cohere_command4",
         }:
-            from aphrodite.parser.cohere_command import CohereCommandParser
+            from sonar.parser.cohere_command import CohereCommandParser
 
             r_cls = reasoning_parser_cls
             t_cls = tool_parser_cls
@@ -234,7 +234,7 @@ class ParserManager:
             return _CohereCommandParser
 
         if "minicpmv" in {reasoning_parser_name, tool_parser_name}:
-            from aphrodite.parser.minicpmv import MiniCPMVUnifiedParser
+            from sonar.parser.minicpmv import MiniCPMVUnifiedParser
 
             r_cls = reasoning_parser_cls
             t_cls = tool_parser_cls
@@ -246,7 +246,7 @@ class ParserManager:
 
             return _MiniCPMVParser
 
-        from aphrodite.parser.abstract_parser import DelegatingParser
+        from sonar.parser.abstract_parser import DelegatingParser
 
         r_cls = reasoning_parser_cls
         t_cls = tool_parser_cls

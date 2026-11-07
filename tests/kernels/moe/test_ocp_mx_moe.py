@@ -8,18 +8,18 @@ from typing import NotRequired, TypedDict
 import pytest
 import torch
 
-from aphrodite._aiter_ops import (
+from sonar._aiter_ops import (
     is_aiter_found,
     is_aiter_found_and_supported,
     rocm_aiter_ops,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.ocp_mx_emulation_moe import (
+from sonar.model_executor.layers.fused_moe.experts.ocp_mx_emulation_moe import (
     activation_quant_dtype,
 )
-from aphrodite.model_executor.layers.fused_moe.utils import moe_kernel_quantize_input
-from aphrodite.model_executor.layers.quantization.utils.ocp_mx_utils import OCP_MX_Scheme
-from aphrodite.platforms import current_platform
-from aphrodite.utils.flashinfer import has_flashinfer
+from sonar.model_executor.layers.fused_moe.utils import moe_kernel_quantize_input
+from sonar.model_executor.layers.quantization.utils.ocp_mx_utils import OCP_MX_Scheme
+from sonar.platforms import current_platform
+from sonar.utils.flashinfer import has_flashinfer
 from tests.kernels.moe.utils import (
     check_accuracy,
     check_deferred_moe_finalize,
@@ -42,8 +42,8 @@ ROCM_GFX950 = False
 ROCM_GFX1250 = False
 
 if ROCM_AVAILABLE:
-    from aphrodite.platforms.rocm import on_gfx950, on_gfx1250
-    from aphrodite.utils.import_utils import has_triton_kernels
+    from sonar.platforms.rocm import on_gfx950, on_gfx1250
+    from sonar.utils.import_utils import has_triton_kernels
 
     ROCM_TRITON_KERNELS_AVAILABLE = has_triton_kernels()
     ROCM_GFX950 = on_gfx950()
@@ -80,7 +80,7 @@ class ModelCase:
 @pytest.fixture(scope="function", autouse=True)
 def enable_pickle(monkeypatch):
     """`LLM.apply_model` requires pickling a function."""
-    monkeypatch.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
+    monkeypatch.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")
 
 
 @pytest.mark.parametrize(
@@ -97,12 +97,12 @@ def enable_pickle(monkeypatch):
     not ROCM_AVAILABLE,
     reason="This test is only enabled on platforms that support amd-quark",
 )
-def test_mxfp4_loading_and_execution_moe(aphrodite_runner, model_case: ModelCase):
+def test_mxfp4_loading_and_execution_moe(sonar_runner, model_case: ModelCase):
     if torch.accelerator.device_count() < model_case.tp:
         pytest.skip(f"This test requires >={model_case.tp} gpus, got only {torch.accelerator.device_count()}")
 
     # `cudagraph_capture_sizes=[16]` to reduce load time.
-    with aphrodite_runner(
+    with sonar_runner(
         model_case.model_id,
         tensor_parallel_size=model_case.tp,
         load_format="dummy",
@@ -111,10 +111,10 @@ def test_mxfp4_loading_and_execution_moe(aphrodite_runner, model_case: ModelCase
     ) as llm:
         # Disabled as check_model is broken: https://github.com/vllm-project/vllm/pull/18465#issuecomment-3329880562
         # def check_model(model):
-        #     from aphrodite.model_executor.layers.quantization.quark.quark import (  # noqa: E501
+        #     from sonar.model_executor.layers.quantization.quark.quark import (  # noqa: E501
         #         QuarkLinearMethod)
-        #     from aphrodite.model_executor.layers.quantization.quark.schemes.quark_ocp_mx import QuarkOCP_MX  # noqa: E501
-        #     from aphrodite.model_executor.layers.quantization.quark.quark_moe import (  # noqa: E501
+        #     from sonar.model_executor.layers.quantization.quark.schemes.quark_ocp_mx import QuarkOCP_MX  # noqa: E501
+        #     from sonar.model_executor.layers.quantization.quark.quark_moe import (  # noqa: E501
         #         QuarkOCP_MX_MoEMethod)
 
         #     layer = model.model.layers[0]
@@ -604,17 +604,17 @@ def test_trtllm_mxfp4_deferred_finalize(
     workspace_init,
 ):
     """TRTLLM-Gen MXFP4 experts can leave the top-k finalize to the caller."""
-    from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-    from aphrodite.model_executor.layers.fused_moe.config import (
+    from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+    from sonar.model_executor.layers.fused_moe.config import (
         FusedMoEConfig,
         FusedMoEParallelConfig,
         RoutingMethodType,
     )
-    from aphrodite.model_executor.layers.fused_moe.experts.trtllm_mxfp4_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.trtllm_mxfp4_moe import (
         TrtLlmMxfp4ExpertsModular,
         TrtLlmMxfp4ExpertsMonolithic,
     )
-    from aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 import (
+    from sonar.model_executor.layers.fused_moe.oracle.mxfp4 import (
         Mxfp4MoeBackend,
         convert_weight_to_mxfp4_moe_kernel_format,
         make_mxfp4_moe_kernel,
@@ -813,7 +813,7 @@ def test_flashinfer_cutlass_mxfp4_fused_moe(
         use_interleaved_layout=False,
     )
 
-    from aphrodite.utils.flashinfer import flashinfer_cutlass_fused_moe
+    from sonar.utils.flashinfer import flashinfer_cutlass_fused_moe
 
     # Swap halves to arrange as [w3; w1] (kernel expectation)
     w1_w, w3_w = torch.chunk(w13_q, 2, dim=1)
@@ -981,7 +981,7 @@ def test_flashinfer_cutlass_mxfp4_mxfp8_fused_moe(
     )
 
     # Prepare inputs for FlashInfer CUTLASS fused MoE
-    from aphrodite.utils.flashinfer import flashinfer_cutlass_fused_moe
+    from sonar.utils.flashinfer import flashinfer_cutlass_fused_moe
 
     # Swap halves to arrange as [w3; w1] (kernel expectation)
     w1_w, w3_w = torch.chunk(w13_q, 2, dim=1)
@@ -1058,7 +1058,7 @@ def test_flashinfer_cutlass_mxfp4_mxfp8_fused_moe(
 )
 @pytest.mark.skipif(not has_flashinfer(), reason="flashinfer is required")
 def test_convert_standard_mxfp4_weights_for_flashinfer_cutlass(monkeypatch, backend_name, interleaves_weights):
-    from aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 import (
+    from sonar.model_executor.layers.fused_moe.oracle.mxfp4 import (
         Mxfp4MoeBackend,
         convert_weight_to_mxfp4_moe_kernel_format,
     )
@@ -1123,8 +1123,8 @@ def test_convert_standard_mxfp4_weights_for_flashinfer_cutlass(monkeypatch, back
 
 
 def test_gpt_oss_quant_config_supplies_clamped_swiglu_params():
-    from aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 import Mxfp4MoeBackend
-    from aphrodite.model_executor.layers.quantization.mxfp4 import GptOssMxfp4MoEMethod
+    from sonar.model_executor.layers.fused_moe.oracle.mxfp4 import Mxfp4MoeBackend
+    from sonar.model_executor.layers.quantization.mxfp4 import GptOssMxfp4MoEMethod
 
     fake_method = types.SimpleNamespace(
         mxfp4_backend=Mxfp4MoeBackend.FLASHINFER_CUTLASS_MXFP4_MXFP8,
@@ -1150,14 +1150,14 @@ def test_gpt_oss_quant_config_supplies_clamped_swiglu_params():
 )
 @pytest.mark.parametrize("supplied", [False, True])
 def test_flashinfer_experts_swiglu_params_follow_quant_config(supplied: bool):
-    from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-    from aphrodite.model_executor.layers.fused_moe.config import (
+    from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+    from sonar.model_executor.layers.fused_moe.config import (
         FusedMoEConfig,
         FusedMoEParallelConfig,
         RoutingMethodType,
         mxfp4_w4a16_moe_quant_config,
     )
-    from aphrodite.model_executor.layers.fused_moe.experts.flashinfer_cutlass_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.flashinfer_cutlass_moe import (
         FlashInferExperts,
     )
 
@@ -1473,17 +1473,17 @@ def test_rocm_mxfp4_moe_oracle(
     if config.get("requires_gfx1250") and not ROCM_GFX1250:
         pytest.skip(f"Backend {backend_name} requires GFX1250")
 
-    import aphrodite.distributed.parallel_state as ps
-    from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-    from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-    from aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 import (
+    import sonar.distributed.parallel_state as ps
+    from sonar.config import SonarConfig, set_current_sonar_config
+    from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+    from sonar.model_executor.layers.fused_moe.oracle.mxfp4 import (
         Mxfp4MoeBackend,
         backend_to_kernel_cls,
         convert_gpt_oss_weight_to_mxfp4_moe_kernel_format,
         make_mxfp4_moe_kernel,
         make_mxfp4_moe_quant_config,
     )
-    from aphrodite.v1.worker.workspace import init_workspace_manager
+    from sonar.v1.worker.workspace import init_workspace_manager
 
     # Initialize workspace manager (needed for modular kernels)
     init_workspace_manager(torch.accelerator.current_device_index())
@@ -1510,8 +1510,8 @@ def test_rocm_mxfp4_moe_oracle(
     device = "cuda:0"
 
     # Create MoE config with Renormalize routing (required by monolithic kernels)
-    from aphrodite.model_executor.layers.fused_moe import FusedMoEConfig
-    from aphrodite.model_executor.layers.fused_moe.config import (
+    from sonar.model_executor.layers.fused_moe import FusedMoEConfig
+    from sonar.model_executor.layers.fused_moe.config import (
         FusedMoEParallelConfig,
         RoutingMethodType,
     )
@@ -1615,7 +1615,7 @@ def test_rocm_mxfp4_moe_oracle(
 
     # Build kernel using oracle
     assert quant_config is not None, "Failed to create quant config"
-    with set_current_aphrodite_config(AphroditeConfig()):
+    with set_current_sonar_config(SonarConfig()):
         kernel = make_mxfp4_moe_kernel(
             moe_quant_config=quant_config,
             moe_config=moe_config,
@@ -1728,27 +1728,27 @@ def test_aiter_mxfp4_w4a4_moe_pad_masks_only_padding(
 
     The experts are stored 768 wide with zeros past the real width, so the
     layer computes the same function whether the kernel is told that the tail
-    is padding or not. A pad that is doubled twice (once by Aphrodite, once inside
+    is padding or not. A pad that is doubled twice (once by Sonar, once inside
     AITER for the fused gate/up weight) masks live intermediate rows as well.
     640 stored at 768 is Qwen3.8 Flash Next's shape at TP1 and under expert
     parallelism before the W4A4 intermediate was aligned to 128.
     """
-    import aphrodite.distributed.parallel_state as ps
-    from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-    from aphrodite.model_executor.layers.fused_moe import FusedMoEConfig
-    from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-    from aphrodite.model_executor.layers.fused_moe.config import (
+    import sonar.distributed.parallel_state as ps
+    from sonar.config import SonarConfig, set_current_sonar_config
+    from sonar.model_executor.layers.fused_moe import FusedMoEConfig
+    from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+    from sonar.model_executor.layers.fused_moe.config import (
         FusedMoEParallelConfig,
         RoutingMethodType,
     )
-    from aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 import (
+    from sonar.model_executor.layers.fused_moe.oracle.mxfp4 import (
         Mxfp4MoeBackend,
         backend_to_kernel_cls,
         convert_gpt_oss_weight_to_mxfp4_moe_kernel_format,
         make_mxfp4_moe_kernel,
         make_mxfp4_moe_quant_config,
     )
-    from aphrodite.v1.worker.workspace import init_workspace_manager
+    from sonar.v1.worker.workspace import init_workspace_manager
 
     init_workspace_manager(torch.accelerator.current_device_index())
     monkeypatch.setattr(ps, "_TP", types.SimpleNamespace(world_size=1))
@@ -1811,7 +1811,7 @@ def test_aiter_mxfp4_w4a4_moe_pad_masks_only_padding(
             intermediate_size_per_partition_unpadded=unpadded,
         )
         quant_config = make_mxfp4_moe_quant_config(mxfp4_backend=backend, w1_scale=w13_scale, w2_scale=w2_scale)
-        with set_current_aphrodite_config(AphroditeConfig()):
+        with set_current_sonar_config(SonarConfig()):
             kernel = make_mxfp4_moe_kernel(
                 moe_quant_config=quant_config,
                 moe_config=moe_config,
@@ -1848,16 +1848,16 @@ def test_aiter_mxfp4_w4a4_moe_pad_masks_only_padding(
 @pytest.mark.skipif(not is_aiter_found_and_supported(), reason="AITER is not installed or supported")
 def test_aiter_mxfp4_bf16_silu_preserves_native_tp_shard():
     """Keep 128-aligned SiLU shards at their native widths."""
-    from aphrodite.model_executor.layers.fused_moe import FusedMoEConfig
-    from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-    from aphrodite.model_executor.layers.fused_moe.config import (
+    from sonar.model_executor.layers.fused_moe import FusedMoEConfig
+    from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+    from sonar.model_executor.layers.fused_moe.config import (
         FusedMoEParallelConfig,
         RoutingMethodType,
     )
-    from aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 import (
+    from sonar.model_executor.layers.fused_moe.oracle.mxfp4 import (
         Mxfp4MoeBackend,
     )
-    from aphrodite.model_executor.layers.quantization.mxfp4 import Mxfp4MoEMethod
+    from sonar.model_executor.layers.quantization.mxfp4 import Mxfp4MoEMethod
 
     moe_parallel_config = replace(
         FusedMoEParallelConfig.make_no_parallel(),
@@ -1912,11 +1912,11 @@ def test_mxfp4_emulation_rounds_up_to_block_size(
     expected_intermediate: int,
 ):
     """Emulation must block-align per-partition dims to OCP_MX_BLOCK_SIZE."""
-    from aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 import (
+    from sonar.model_executor.layers.fused_moe.oracle.mxfp4 import (
         Mxfp4MoeBackend,
         mxfp4_round_up_hidden_size_and_intermediate_size,
     )
-    from aphrodite.model_executor.layers.quantization.utils.ocp_mx_utils import (
+    from sonar.model_executor.layers.quantization.utils.ocp_mx_utils import (
         OCP_MX_BLOCK_SIZE,
     )
 
@@ -1938,10 +1938,10 @@ def test_select_mxfp4_moe_backend_raises_with_unsupported_reasons(
     collected per-backend unsupported reasons in the message, when no
     backend supports the requested deployment configuration.
     """
-    import aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 as mxfp4_oracle
-    from aphrodite.model_executor.layers.fused_moe import FusedMoEConfig
-    from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-    from aphrodite.model_executor.layers.fused_moe.config import (
+    import sonar.model_executor.layers.fused_moe.oracle.mxfp4 as mxfp4_oracle
+    from sonar.model_executor.layers.fused_moe import FusedMoEConfig
+    from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+    from sonar.model_executor.layers.fused_moe.config import (
         FusedMoEParallelConfig,
         RoutingMethodType,
     )
@@ -1995,8 +1995,8 @@ def test_select_mxfp4_moe_backend_respects_checkpoint_activation(
 ):
     """Activations run at the checkpoint's precision when a backend supports
     it and fall back to BF16 otherwise, never to a lower precision."""
-    import aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 as mxfp4_oracle
-    from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+    import sonar.model_executor.layers.fused_moe.oracle.mxfp4 as mxfp4_oracle
+    from sonar.model_executor.layers.quantization.utils.quant_utils import (
         kMxfp4Dynamic,
     )
 
@@ -2025,16 +2025,16 @@ def test_aiter_mxfp4_monolithic_expert_parallel_support(
 ):
     """Naive EP (no all-to-all) is supported by W4A16, which takes an expert_map;
     W4A8's global routing cannot index local expert weights."""
-    from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-    from aphrodite.model_executor.layers.fused_moe.config import RoutingMethodType
-    from aphrodite.model_executor.layers.fused_moe.modular_kernel import (
+    from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+    from sonar.model_executor.layers.fused_moe.config import RoutingMethodType
+    from sonar.model_executor.layers.fused_moe.modular_kernel import (
         FusedMoEActivationFormat,
     )
-    from aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 import (
+    from sonar.model_executor.layers.fused_moe.oracle.mxfp4 import (
         Mxfp4MoeBackend,
         backend_to_kernel_cls,
     )
-    from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+    from sonar.model_executor.layers.quantization.utils.quant_utils import (
         kFp8StaticTensorSym,
         kMxfp4Static,
     )
@@ -2089,14 +2089,14 @@ def test_make_mxfp4_moe_kernel_rejects_cutlass_unsupported_expert_parallel(
     all2all_backend: str,
 ):
     """Compressed-tensors CUTLASS W4A4 bypasses the oracle; guard at assembly."""
-    from aphrodite.model_executor.layers.fused_moe.config import (
+    from sonar.model_executor.layers.fused_moe.config import (
         FusedMoEParallelConfig,
         mxfp4_moe_quant_config,
     )
-    from aphrodite.model_executor.layers.fused_moe.experts.cutlass_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.cutlass_moe import (
         CutlassExpertsMxfp4,
     )
-    from aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 import (
+    from sonar.model_executor.layers.fused_moe.oracle.mxfp4 import (
         Mxfp4MoeBackend,
         make_mxfp4_moe_kernel,
     )
@@ -2143,11 +2143,11 @@ def test_make_mxfp4_moe_kernel_validates_cutlass_expert_parallel(
     monkeypatch: pytest.MonkeyPatch,
 ):
     """CUTLASS MXFP4 supports EP with allgather_reducescatter after expert_map."""
-    from aphrodite.model_executor.layers.fused_moe.config import FusedMoEParallelConfig
-    from aphrodite.model_executor.layers.fused_moe.experts.cutlass_moe import (
+    from sonar.model_executor.layers.fused_moe.config import FusedMoEParallelConfig
+    from sonar.model_executor.layers.fused_moe.experts.cutlass_moe import (
         CutlassExpertsMxfp4,
     )
-    from aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 import (
+    from sonar.model_executor.layers.fused_moe.oracle.mxfp4 import (
         Mxfp4MoeBackend,
         _validate_mxfp4_experts_config,
     )
@@ -2214,26 +2214,26 @@ def test_emulation_a_mxfp6_moe_forward_quantizes_activations():
     `quant_dtype` `moe_kernel_quantize_input` does not dispatch on, the QDQ is
     skipped and the two outputs come out bit-identical.
     """
-    from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-    from aphrodite.model_executor.layers.fused_moe import FusedMoEConfig
-    from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-    from aphrodite.model_executor.layers.fused_moe.config import (
+    from sonar.config import SonarConfig, set_current_sonar_config
+    from sonar.model_executor.layers.fused_moe import FusedMoEConfig
+    from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+    from sonar.model_executor.layers.fused_moe.config import (
         FusedMoEParallelConfig,
         RoutingMethodType,
         mxfp4_w4a16_moe_quant_config,
         ocp_mx_moe_quant_config,
     )
-    from aphrodite.model_executor.layers.fused_moe.experts.ocp_mx_emulation_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.ocp_mx_emulation_moe import (
         OCP_MXQuantizationEmulationTritonExperts,
     )
-    from aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 import (
+    from sonar.model_executor.layers.fused_moe.oracle.mxfp4 import (
         Mxfp4MoeBackend,
         make_mxfp4_moe_kernel,
     )
-    from aphrodite.model_executor.layers.quantization.utils.mxfp4_utils import (
+    from sonar.model_executor.layers.quantization.utils.mxfp4_utils import (
         mxfp4_quantize,
     )
-    from aphrodite.v1.worker.workspace import init_workspace_manager
+    from sonar.v1.worker.workspace import init_workspace_manager
 
     init_workspace_manager(torch.accelerator.current_device_index())
 
@@ -2275,7 +2275,7 @@ def test_emulation_a_mxfp6_moe_forward_quantizes_activations():
             device=device,
             routing_method=RoutingMethodType.Renormalize,
         )
-        with set_current_aphrodite_config(AphroditeConfig()):
+        with set_current_sonar_config(SonarConfig()):
             kernel = make_mxfp4_moe_kernel(
                 moe_quant_config=quant_config,
                 moe_config=moe_config,
@@ -2372,8 +2372,8 @@ def test_rocm_mxfp4_round_up_hidden_and_intermediate(
     invisible locally and expensive everywhere else. Asserting the table keeps
     each backend on the alignment its kernels actually require.
     """
-    from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-    from aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 import (
+    from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+    from sonar.model_executor.layers.fused_moe.oracle.mxfp4 import (
         Mxfp4MoeBackend,
         mxfp4_round_up_hidden_size_and_intermediate_size,
     )

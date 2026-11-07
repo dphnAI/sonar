@@ -5,16 +5,16 @@ from __future__ import annotations
 
 import torch
 
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     kMxfp4Dynamic,
 )
-from aphrodite.model_executor.utils import replace_parameter
-from aphrodite.platforms import current_platform
-from aphrodite.utils.b12x import B12xWarmupUnit
-from aphrodite.utils.b12x import (
+from sonar.model_executor.utils import replace_parameter
+from sonar.platforms import current_platform
+from sonar.utils.b12x import B12xWarmupUnit
+from sonar.utils.b12x import (
     get_b12x_blockscaled as _import_b12x_blockscaled,
 )
-from aphrodite.utils.b12x import get_b12x_intrinsics as _import_b12x_intrinsics
+from sonar.utils.b12x import get_b12x_intrinsics as _import_b12x_intrinsics
 
 from .base import MxFp4LinearKernel, MxFp4LinearLayerConfig
 
@@ -25,7 +25,7 @@ def _apply_b12x_mxfp4_linear(
     weight_scale_storage: torch.Tensor,
     bias: torch.Tensor | None,
 ) -> torch.Tensor:
-    from aphrodite.utils.flashinfer import flashinfer_mxfp4_quantize
+    from sonar.utils.flashinfer import flashinfer_mxfp4_quantize
 
     blockscaled = _import_b12x_blockscaled()
     assert blockscaled is not None
@@ -58,7 +58,7 @@ class B12xMxFp4LinearKernel(MxFp4LinearKernel):
             return False, "B12X MXFP4 kernels require a Blackwell 12x device"
         blockscaled = _import_b12x_blockscaled()
         if blockscaled is None or _import_b12x_intrinsics() is None:
-            return False, "Install the B12X backend with `pip install aphrodite[b12x]`"
+            return False, "Install sonar[b12x] from the Sonar wheel index"
         if not blockscaled.is_supported():
             return False, "b12x native MXFP4 GEMM is not supported"
         return True, None

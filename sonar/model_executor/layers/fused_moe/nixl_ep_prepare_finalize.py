@@ -5,18 +5,18 @@ from collections.abc import Callable
 import nixl_ep
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite import envs
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe.config import FusedMoEQuantConfig
-from aphrodite.model_executor.layers.fused_moe.topk_weight_and_reduce import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar import envs
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe.config import FusedMoEQuantConfig
+from sonar.model_executor.layers.fused_moe.topk_weight_and_reduce import (
     TopKWeightAndReduceDelegate,
 )
-from aphrodite.model_executor.layers.fused_moe.utils import (
+from sonar.model_executor.layers.fused_moe.utils import (
     moe_kernel_quantize_input,
     normalize_batched_scales_shape,
 )
-from aphrodite.v1.worker.ubatching import (
+from sonar.v1.worker.ubatching import (
     dbo_current_ubatch_id,
     dbo_enabled,
     dbo_maybe_run_recv_hook,
@@ -169,7 +169,7 @@ class NixlEPPrepareAndFinalize(mk.FusedMoEPrepareAndFinalizeModular):
         x = x.view((-1, hidden_dim))
         q_dtype = quant_config.quant_dtype
 
-        if envs.APHRODITE_FLASHINFER_MOE_BACKEND == "masked_gemm":
+        if envs.SONAR_FLASHINFER_MOE_BACKEND == "masked_gemm":
             logger.info_once("Skip quantization when using FlashInfer CUTEDSL(masked_gemm) for ModelOptNvFp4FusedMoE.")
             q_dtype = None
 

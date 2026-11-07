@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
 
-from . import aphrodite_v1_adapter, multi_process_adapter
+from . import multi_process_adapter, sonar_v1_adapter
 from .multi_process_adapter import (
     LMCacheMPSchedulerAdapter,
     LMCacheMPWorkerAdapter,
@@ -11,7 +11,7 @@ from .multi_process_adapter import (
 )
 
 __all__ = [
-    "aphrodite_v1_adapter",
+    "sonar_v1_adapter",
     "multi_process_adapter",
     "LMCacheMPSchedulerAdapter",
     "LMCacheMPWorkerAdapter",

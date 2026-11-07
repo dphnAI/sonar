@@ -9,12 +9,12 @@ from typing import TYPE_CHECKING, Generic, TypeAlias, TypeVar
 import torch
 from typing_extensions import override
 
-from aphrodite.config import ModelConfig
-from aphrodite.logger import init_logger
-from aphrodite.utils.cache import CacheInfo, LRUCache
-from aphrodite.utils.jsontree import json_count_leaves, json_map_leaves, json_reduce_leaves
-from aphrodite.utils.mem_constants import GiB_bytes
-from aphrodite.utils.mem_utils import format_gib
+from sonar.config import ModelConfig
+from sonar.logger import init_logger
+from sonar.utils.cache import CacheInfo, LRUCache
+from sonar.utils.jsontree import json_count_leaves, json_map_leaves, json_reduce_leaves
+from sonar.utils.mem_constants import GiB_bytes
+from sonar.utils.mem_utils import format_gib
 
 from ..inputs import (
     MultiModalFeatureSpec,

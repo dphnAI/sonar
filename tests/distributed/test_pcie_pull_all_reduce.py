@@ -13,14 +13,14 @@ from unittest.mock import Mock
 import pytest
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.distributed.device_communicators import cuda_communicator
-from aphrodite.distributed.device_communicators import pcie_pull_all_reduce as pcie
-from aphrodite.utils import import_utils
+import sonar.envs as envs
+from sonar.distributed.device_communicators import cuda_communicator
+from sonar.distributed.device_communicators import pcie_pull_all_reduce as pcie
+from sonar.utils import import_utils
 
 
 def _comm(monkeypatch, transport="host", rank=0):
-    monkeypatch.setenv("APHRODITE_ALLREDUCE_PCIE_TRANSPORT", transport)
+    monkeypatch.setenv("SONAR_ALLREDUCE_PCIE_TRANSPORT", transport)
     monkeypatch.setattr(pcie.dist, "get_rank", lambda group: rank)
     monkeypatch.setattr(pcie.dist, "get_world_size", lambda group: 4)
     monkeypatch.setattr(pcie, "_UNRETIRED_WORKSPACES", [])
@@ -30,7 +30,7 @@ def _comm(monkeypatch, transport="host", rank=0):
 @pytest.mark.parametrize(
     ("transports", "selectors", "message"),
     [
-        (["paired", "host", "paired", "host"], [True] * 4, "must agree on APHRODITE_ALLREDUCE_PCIE_TRANSPORT"),
+        (["paired", "host", "paired", "host"], [True] * 4, "must agree on SONAR_ALLREDUCE_PCIE_TRANSPORT"),
         (["host", "automatic", "host", "host"], [True] * 4, "transport configuration failed: rank 1:"),
         (["host"] * 4, [True, False, True, True], "must agree on PCIe all-reduce backend selectors"),
     ],
@@ -38,11 +38,11 @@ def _comm(monkeypatch, transport="host", rank=0):
 def test_transport_disagreement_fails_every_rank_before_setup(monkeypatch, transports, selectors, message):
     selections = []
     for transport, enabled in zip(transports, selectors):
-        monkeypatch.setenv("APHRODITE_ALLREDUCE_PCIE_TRANSPORT", transport)
+        monkeypatch.setenv("SONAR_ALLREDUCE_PCIE_TRANSPORT", transport)
         value, error = None, None
         if enabled:
             try:
-                value = envs.APHRODITE_ALLREDUCE_PCIE_TRANSPORT
+                value = envs.SONAR_ALLREDUCE_PCIE_TRANSPORT
             except ValueError as exc:
                 error = str(exc)
         selections.append((enabled, False, value, error))
@@ -59,13 +59,13 @@ def test_transport_disagreement_fails_every_rank_before_setup(monkeypatch, trans
     # Any successful departure from consensus would attempt backend setup.
     monkeypatch.setattr(pcie.PciePullAllReduce, "__init__", Mock(side_effect=AssertionError("setup began")))
     monkeypatch.setattr(
-        "aphrodite.distributed.device_communicators.pynccl.PyNcclCommunicator",
+        "sonar.distributed.device_communicators.pynccl.PyNcclCommunicator",
         Mock(side_effect=AssertionError("setup began")),
     )
     for transport, enabled in zip(transports, selectors):
-        monkeypatch.setenv("APHRODITE_ALLREDUCE_PCIE_TRANSPORT", transport)
-        monkeypatch.setattr(envs, "APHRODITE_ALLREDUCE_USE_PCIE_PULL", enabled)
-        monkeypatch.setattr(envs, "APHRODITE_ALLREDUCE_USE_FLASHINFER_PCIE_IPC", False)
+        monkeypatch.setenv("SONAR_ALLREDUCE_PCIE_TRANSPORT", transport)
+        monkeypatch.setattr(envs, "SONAR_ALLREDUCE_USE_PCIE_PULL", enabled)
+        monkeypatch.setattr(envs, "SONAR_ALLREDUCE_USE_FLASHINFER_PCIE_IPC", False)
         with pytest.raises(ValueError, match=message):
             cuda_communicator.CudaCommunicator(object(), unique_name="tp:0")
 
@@ -80,7 +80,7 @@ def _dispatcher(monkeypatch, comm):
     dispatcher.pynccl_comm = Mock(disabled=False, world_size=4)
     monkeypatch.setattr(cuda_communicator, "should_nccl_symm_mem_allreduce", lambda *args: False)
     monkeypatch.setattr(cuda_communicator, "should_nccl_symm_mem_ag_rs", lambda: False)
-    monkeypatch.setattr(envs, "APHRODITE_BATCH_INVARIANT", False)
+    monkeypatch.setattr(envs, "SONAR_BATCH_INVARIANT", False)
     return dispatcher
 
 
@@ -297,8 +297,8 @@ def _run(comms, operation):
 def host_cluster(monkeypatch, tmp_path):
     collective = _CpuCollective()
     native = _ColdNative()
-    monkeypatch.setenv("APHRODITE_ALLREDUCE_PCIE_TRANSPORT", "host")
-    monkeypatch.setattr(envs, "APHRODITE_ALLREDUCE_USE_FLASHINFER_PCIE_IPC", False)
+    monkeypatch.setenv("SONAR_ALLREDUCE_PCIE_TRANSPORT", "host")
+    monkeypatch.setattr(envs, "SONAR_ALLREDUCE_USE_FLASHINFER_PCIE_IPC", False)
     monkeypatch.setattr(pcie, "_UNRETIRED_WORKSPACES", [])
     monkeypatch.setattr(pcie.dist, "get_rank", lambda group: group.rank)
     monkeypatch.setattr(pcie.dist, "get_world_size", lambda group: 4)

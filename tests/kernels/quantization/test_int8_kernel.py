@@ -7,13 +7,13 @@ import itertools
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.activation import SiluAndMul
-from aphrodite.model_executor.layers.fused_moe import fused_experts
-from aphrodite.model_executor.layers.fused_moe.config import FusedMoEQuantConfig
-from aphrodite.model_executor.layers.quantization.utils.int8_utils import (
+from sonar.model_executor.layers.activation import SiluAndMul
+from sonar.model_executor.layers.fused_moe import fused_experts
+from sonar.model_executor.layers.fused_moe.config import FusedMoEQuantConfig
+from sonar.model_executor.layers.quantization.utils.int8_utils import (
     per_token_quant_int8,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 from tests.kernels.quant_utils import native_per_token_group_quant_int8
 
 if not (current_platform.is_cuda_alike() or current_platform.is_xpu()):
@@ -96,7 +96,7 @@ SEEDS = [0]
     itertools.product(M, N, K, E, TOP_KS, DTYPES, SEEDS),
 )
 @torch.inference_mode()
-def test_w8a8_fp8_fused_moe(default_aphrodite_config, M, N, K, E, topk, dtype, seed):
+def test_w8a8_fp8_fused_moe(default_sonar_config, M, N, K, E, topk, dtype, seed):
     torch.manual_seed(seed)
     device = current_platform.device_type
     # Initialize int8 quantization parameters

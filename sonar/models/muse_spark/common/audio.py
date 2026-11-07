@@ -9,12 +9,12 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.models.utils import maybe_prefix
+from sonar.model_executor.models.utils import maybe_prefix
 
 
 def patchify(x: torch.Tensor, patch_size: int) -> torch.Tensor:

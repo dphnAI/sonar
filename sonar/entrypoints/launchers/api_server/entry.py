@@ -12,13 +12,13 @@ from collections.abc import AsyncIterator, MutableSequence
 from contextlib import asynccontextmanager
 from typing import Any
 
-import aphrodite.envs as envs
-from aphrodite.engine.arg_utils import AsyncEngineArgs
-from aphrodite.engine.protocol import EngineClient
-from aphrodite.entrypoints.common.cli_args import init_parser_plugin
-from aphrodite.logger import configure_logging_from_args, init_logger
-from aphrodite.usage.usage_lib import UsageContext
-from aphrodite.utils.system_utils import decorate_logs
+import sonar.envs as envs
+from sonar.engine.arg_utils import AsyncEngineArgs
+from sonar.engine.protocol import EngineClient
+from sonar.entrypoints.common.cli_args import init_parser_plugin
+from sonar.logger import configure_logging_from_args, init_logger
+from sonar.usage.usage_lib import UsageContext
+from sonar.utils.system_utils import decorate_logs
 
 from ..app import build_app
 from ..launcher import serve_http, setup_server
@@ -28,7 +28,7 @@ from .app_state import init_app_state
 prometheus_multiproc_dir: tempfile.TemporaryDirectory
 
 # Cannot use __name__ (https://github.com/vllm-project/vllm/pull/4765)
-logger = init_logger("aphrodite.entrypoints.launchers.api_server.entry")
+logger = init_logger("sonar.entrypoints.launchers.api_server.entry")
 
 
 @asynccontextmanager
@@ -38,19 +38,19 @@ async def build_async_engine_client(
     usage_context: UsageContext = UsageContext.OPENAI_API_SERVER,
     client_config: dict[str, Any] | None = None,
 ) -> AsyncIterator[EngineClient]:
-    if os.getenv("APHRODITE_WORKER_MULTIPROC_METHOD") == "forkserver":
+    if os.getenv("SONAR_WORKER_MULTIPROC_METHOD") == "forkserver":
         # The executor is expected to be mp.
         # Pre-import heavy modules in the forkserver process
         logger.debug("Setup forkserver with pre-imports")
         multiprocessing.set_start_method("forkserver")
-        multiprocessing.set_forkserver_preload(["aphrodite.v1.engine.async_llm"])
+        multiprocessing.set_forkserver_preload(["sonar.v1.engine.async_llm"])
         forkserver.ensure_running()
         logger.debug("Forkserver setup complete!")
 
     # Context manager to handle engine_client lifecycle
     # Ensures everything is shutdown and cleaned up on error/exit
     engine_args = AsyncEngineArgs.from_cli_args(args)
-    from aphrodite.entrypoints.common.cli_args import propagate_flash_late_interaction
+    from sonar.entrypoints.common.cli_args import propagate_flash_late_interaction
 
     propagate_flash_late_interaction(args, engine_args)
     if client_config:
@@ -79,9 +79,9 @@ async def build_async_engine_client_from_engine_args(
     Returns the Client or None if the creation failed.
     """
     # Create the EngineConfig (determines if we can use V1).
-    aphrodite_config = engine_args.create_engine_config(usage_context=usage_context)
+    sonar_config = engine_args.create_engine_config(usage_context=usage_context)
 
-    from aphrodite.v1.engine.async_llm import AsyncLLM
+    from sonar.v1.engine.async_llm import AsyncLLM
 
     async_llm: AsyncLLM | None = None
 
@@ -91,8 +91,8 @@ async def build_async_engine_client_from_engine_args(
     client_index = client_config.pop("client_index", 0)
 
     try:
-        async_llm = AsyncLLM.from_aphrodite_config(
-            aphrodite_config=aphrodite_config,
+        async_llm = AsyncLLM.from_sonar_config(
+            sonar_config=sonar_config,
             usage_context=usage_context,
             enable_log_requests=engine_args.enable_log_requests,
             aggregate_engine_logging=engine_args.aggregate_engine_logging,
@@ -109,7 +109,7 @@ async def build_async_engine_client_from_engine_args(
         yield async_llm
     finally:
         if async_llm:
-            async_llm.shutdown(timeout=aphrodite_config.shutdown_timeout)
+            async_llm.shutdown(timeout=sonar_config.shutdown_timeout)
 
 
 async def build_and_serve(
@@ -136,7 +136,7 @@ async def build_and_serve(
     app = build_app(args, supported_tasks, model_config)
     await init_app_state(engine_client, app.state, args, supported_tasks)
 
-    logger.info("Starting Aphrodite server on %s", listen_address)
+    logger.info("Starting Sonar server on %s", listen_address)
 
     return await serve_http(
         app,
@@ -149,7 +149,7 @@ async def build_and_serve(
         # NOTE: When the 'disable_uvicorn_access_log' value is True,
         # no access log will be output.
         access_log=not args.disable_uvicorn_access_log,
-        timeout_keep_alive=envs.APHRODITE_HTTP_TIMEOUT_KEEP_ALIVE,
+        timeout_keep_alive=envs.SONAR_HTTP_TIMEOUT_KEEP_ALIVE,
         ssl_keyfile=args.ssl_keyfile,
         ssl_certfile=args.ssl_certfile,
         ssl_ca_certs=args.ssl_ca_certs,
@@ -200,18 +200,18 @@ async def run_server_worker(listen_address, sock, args, client_config=None, **uv
 def main():
     import uvloop
 
-    from aphrodite.entrypoints.common.cli_args import (
+    from sonar.entrypoints.common.cli_args import (
         make_arg_parser,
         validate_parsed_serve_args,
     )
-    from aphrodite.entrypoints.common.startup import cli_env_setup
-    from aphrodite.utils.argparse_utils import FlexibleArgumentParser
+    from sonar.entrypoints.common.startup import cli_env_setup
+    from sonar.utils.argparse_utils import FlexibleArgumentParser
 
     # NOTE(simon):
-    # This section should be in sync with aphrodite/entrypoints/cli/main.py for CLI
+    # This section should be in sync with sonar/entrypoints/cli/main.py for CLI
     # entrypoints.
     cli_env_setup()
-    parser = FlexibleArgumentParser(description="Aphrodite OpenAI-Compatible RESTful API server.")
+    parser = FlexibleArgumentParser(description="Sonar OpenAI-Compatible RESTful API server.")
     parser = make_arg_parser(parser)
     args = parser.parse_args()
     configure_logging_from_args(args)

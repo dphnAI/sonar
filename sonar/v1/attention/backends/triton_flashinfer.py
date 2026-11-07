@@ -2,12 +2,12 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Triton image-mask and FlashInfer causal attention composite."""
 
-from aphrodite.v1.attention.backends.composite import (
+from sonar.v1.attention.backends.composite import (
     MMPrefixAttentionRouting,
     create_composite_attention_backend,
 )
-from aphrodite.v1.attention.backends.flashinfer import FlashInferBackend
-from aphrodite.v1.attention.backends.triton_attn import TritonAttentionBackend
+from sonar.v1.attention.backends.flashinfer import FlashInferBackend
+from sonar.v1.attention.backends.triton_attn import TritonAttentionBackend
 
 TritonFlashInferBackend = create_composite_attention_backend(
     TritonAttentionBackend,

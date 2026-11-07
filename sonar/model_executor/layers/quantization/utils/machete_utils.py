@@ -4,7 +4,7 @@
 
 import torch
 
-from aphrodite.scalar_type import ScalarType, scalar_types
+from sonar.scalar_type import ScalarType, scalar_types
 
 MACHETE_PREPACKED_BLOCK_SHAPE = [64, 128]
 

@@ -21,22 +21,22 @@ from contextlib import AbstractContextManager, nullcontext
 
 import torch
 
-from aphrodite.config import get_current_aphrodite_config
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.linear import UnquantizedLinearMethod
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.config import get_current_sonar_config
+from sonar.logger import init_logger
+from sonar.model_executor.layers.linear import UnquantizedLinearMethod
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     unpack_quantized_values_into_int32,
 )
-from aphrodite.model_executor.layers.utils import rocm_unquantized_gemm_impl
-from aphrodite.model_executor.parameter import (
+from sonar.model_executor.layers.utils import rocm_unquantized_gemm_impl
+from sonar.model_executor.parameter import (
     permute_param_layout_,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.scalar_type import scalar_types
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.mem_constants import GiB_bytes
-from aphrodite.utils.mem_utils import MemorySnapshot
-from aphrodite.utils.torch_utils import direct_register_custom_op
+from sonar.platforms import current_platform
+from sonar.scalar_type import scalar_types
+from sonar.triton_utils import tl, triton
+from sonar.utils.mem_constants import GiB_bytes
+from sonar.utils.mem_utils import MemorySnapshot
+from sonar.utils.torch_utils import direct_register_custom_op
 
 from .MPLinearKernel import MPLinearKernel, MPLinearLayerConfig
 
@@ -48,7 +48,7 @@ logger = init_logger(__name__)
 def _on_gfx12x() -> bool:
     if not current_platform.is_rocm():
         return False
-    from aphrodite.platforms.rocm import on_gfx12x
+    from sonar.platforms.rocm import on_gfx12x
 
     return on_gfx12x()
 
@@ -56,7 +56,7 @@ def _on_gfx12x() -> bool:
 def _on_gfx1x() -> bool:
     if not current_platform.is_rocm():
         return False
-    from aphrodite.platforms.rocm import on_gfx1x
+    from sonar.platforms.rocm import on_gfx1x
 
     return on_gfx1x()
 
@@ -64,7 +64,7 @@ def _on_gfx1x() -> bool:
 def _on_gfx1151() -> bool:
     if not current_platform.is_rocm():
         return False
-    from aphrodite.platforms.rocm import on_gfx1151
+    from sonar.platforms.rocm import on_gfx1151
 
     return on_gfx1151()
 
@@ -72,7 +72,7 @@ def _on_gfx1151() -> bool:
 def _on_gfx115x() -> bool:
     if not current_platform.is_rocm():
         return False
-    from aphrodite.platforms.rocm import on_gfx115x
+    from sonar.platforms.rocm import on_gfx115x
 
     return on_gfx115x()
 
@@ -81,12 +81,12 @@ def _fits_in_memory_budget(nbytes: int, device: torch.device) -> bool:
     # Same budget the KV cache is later sized from. Keep room for the
     # activation peak and for KV of one max_model_len request (the floor the
     # engine enforces), else startup fails later with a generic KV-cache error.
-    from aphrodite.v1.core.kv_cache_planning import max_memory_usage_bytes
-    from aphrodite.v1.worker.gpu.attn_utils import get_kv_cache_spec
+    from sonar.v1.core.kv_cache_planning import max_memory_usage_bytes
+    from sonar.v1.worker.gpu.attn_utils import get_kv_cache_spec
 
-    aphrodite_config = get_current_aphrodite_config()
-    util = aphrodite_config.cache_config.gpu_memory_utilization
-    min_kv_bytes = max_memory_usage_bytes(aphrodite_config, get_kv_cache_spec(aphrodite_config).values())
+    sonar_config = get_current_sonar_config()
+    util = sonar_config.cache_config.gpu_memory_utilization
+    min_kv_bytes = max_memory_usage_bytes(sonar_config, get_kv_cache_spec(sonar_config).values())
     # Peak activation + CUDA graph pool measured on gfx1151 at max_model_len
     # 4096: 0.85 GiB (Qwen3-4B) to 3.27 GiB (Gemma-4-31B, MTP-3).
     activation_headroom_bytes = 4 * GiB_bytes
@@ -641,7 +641,7 @@ def _rdna_hybrid_w4a16_apply_impl(
     ``w_zp`` is [N//8, K//G] int32 for asymmetric layers, None for symmetric.
     ``w_dequant`` is the optional dense [N, K] copy used for prefill.
     """
-    import aphrodite._custom_ops as ops
+    import sonar._custom_ops as ops
 
     M = x_2d.shape[0]
     K = x_2d.shape[1]
@@ -818,7 +818,7 @@ class RDNAHybridW4A16LinearKernel(MPLinearKernel):
             lambda x: permute_param_layout_(x, input_dim=1, output_dim=0).data.contiguous(),
         )
 
-        kernel_config = get_current_aphrodite_config().kernel_config
+        kernel_config = get_current_sonar_config().kernel_config
         if kernel_config.rdna_hybrid_w4a16_prefill_dequant == "enable":
             _, w_s, w_zp = self._get_weight_params(layer)
             self._cache_dequant_weight(layer, unpacked, w_s.data, w_zp.data if w_zp is not None else None)
@@ -829,7 +829,7 @@ class RDNAHybridW4A16LinearKernel(MPLinearKernel):
         x: torch.Tensor,
         bias: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        from aphrodite.utils.platform_utils import num_compute_units
+        from sonar.utils.platform_utils import num_compute_units
 
         c = self.config
         w_q, w_s, w_zp = self._get_weight_params(layer)
@@ -839,7 +839,7 @@ class RDNAHybridW4A16LinearKernel(MPLinearKernel):
         out_shape = x.shape[:-1] + (N,)
 
         cu_count = num_compute_units()
-        output = torch.ops.aphrodite.rdna_hybrid_w4a16_apply(
+        output = torch.ops.sonar.rdna_hybrid_w4a16_apply(
             x_2d,
             w_q,
             w_s,

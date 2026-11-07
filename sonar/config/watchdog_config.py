@@ -3,7 +3,7 @@
 
 from pydantic import Field
 
-from aphrodite.config.utils import config
+from sonar.config.utils import config
 
 _DEFAULT_TIMEOUT = 300
 _DEFAULT_CHECK_INTERVAL = 10

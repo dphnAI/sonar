@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Qwen3-VL multimodal adapter for Aphrodite Metal."""
+"""Qwen3-VL multimodal adapter for Sonar Metal."""
 
 from __future__ import annotations
 
@@ -10,8 +10,8 @@ from typing import Any
 
 import mlx.core as mx
 
-from aphrodite.metal.multimodal.feature_spec import MultiModalFeatureSpec
-from aphrodite.multimodal.inputs import MultiModalKwargsItem
+from sonar.metal.multimodal.feature_spec import MultiModalFeatureSpec
+from sonar.multimodal.inputs import MultiModalKwargsItem
 
 
 class Qwen3VLMultimodalAdapter:
@@ -29,10 +29,10 @@ class Qwen3VLMultimodalAdapter:
     ) -> tuple[mx.array, int]:
         """Return ``((3, seq_len) int32 positions, mrope_position_delta)``.
 
-        Calls upstream Aphrodite's mm_features-driven Qwen3-VL M-RoPE helper with a
+        Calls upstream Sonar's mm_features-driven Qwen3-VL M-RoPE helper with a
         minimal image-only config shim, then converts the returned torch tensor
         to an MLX array.  This keeps the position-building policy upstream-owned
-        while the aphrodite metal runner can consume MLX arrays.
+        while the sonar metal runner can consume MLX arrays.
         """
         if not input_tokens:
             return mx.zeros((3, 0), dtype=mx.int32), 0
@@ -96,7 +96,7 @@ class Qwen3VLMultimodalAdapter:
     @staticmethod
     @cache
     def _qwen3_vl_cls():
-        from aphrodite.model_executor.models.qwen3_vl import (
+        from sonar.model_executor.models.qwen3_vl import (
             Qwen3VLForConditionalGeneration,
         )
 

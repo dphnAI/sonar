@@ -30,15 +30,15 @@ from typing import ClassVar
 
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.config.cache import CacheDType
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.attention.mla_attention import (
+from sonar import _custom_ops as ops
+from sonar.config.cache import CacheDType
+from sonar.logger import init_logger
+from sonar.model_executor.layers.attention.mla_attention import (
     MLACommonBackend,
     MLACommonImpl,
     MLACommonMetadata,
 )
-from aphrodite.v1.attention.backend import (
+from sonar.v1.attention.backend import (
     AttentionLayer,
     AttentionType,
     MultipleOf,

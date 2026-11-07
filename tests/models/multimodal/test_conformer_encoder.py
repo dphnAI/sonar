@@ -4,13 +4,13 @@
 import pytest
 import torch
 
-from aphrodite.distributed.parallel_state import (
+from sonar.distributed.parallel_state import (
     destroy_distributed_environment,
     destroy_model_parallel,
     init_distributed_environment,
     initialize_model_parallel,
 )
-from aphrodite.model_executor.models.conformer_encoder import RelPosMultiHeadAttention
+from sonar.model_executor.models.conformer_encoder import RelPosMultiHeadAttention
 
 pytestmark = pytest.mark.cpu_test
 
@@ -60,7 +60,7 @@ class _ReferenceRelPosMultiHeadAttention(RelPosMultiHeadAttention):
 
 
 @pytest.fixture
-def tp1_cpu(tmp_path, default_aphrodite_config):
+def tp1_cpu(tmp_path, default_sonar_config):
     """Initialize a temporary single-rank CPU tensor-parallel group."""
     try:
         init_distributed_environment(

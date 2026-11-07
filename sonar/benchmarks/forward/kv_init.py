@@ -13,11 +13,11 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 
-from aphrodite.benchmarks.forward.batch import BenchBatch, kv_block_size
-from aphrodite.v1.kv_cache_interface import MambaSpec
+from sonar.benchmarks.forward.batch import BenchBatch, kv_block_size
+from sonar.v1.kv_cache_interface import MambaSpec
 
 if TYPE_CHECKING:
-    from aphrodite.v1.worker.utils import AttentionGroup
+    from sonar.v1.worker.utils import AttentionGroup
 
 
 def _tensors(kv_cache) -> Iterator[torch.Tensor]:

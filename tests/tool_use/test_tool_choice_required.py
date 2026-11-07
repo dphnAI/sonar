@@ -14,15 +14,15 @@ from openai.types.responses import (
 )
 from pydantic import TypeAdapter
 
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionNamedFunction,
     ChatCompletionNamedToolChoiceParam,
     ChatCompletionToolsParam,
 )
-from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.tool_parsers.streaming import extract_required_tool_call_streaming
-from aphrodite.tool_parsers.utils import (
+from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
+from sonar.exceptions import SonarValidationError
+from sonar.tool_parsers.streaming import extract_required_tool_call_streaming
+from sonar.tool_parsers.utils import (
     custom_tool_parameters,
     find_tool_properties,
     get_json_schema_from_tools,
@@ -462,7 +462,7 @@ class TestNonFunctionToolsSkipped:
 
     def test_get_json_schema_rejects_only_non_function_tools(self):
         # An empty anyOf would compile to a grammar no output can satisfy.
-        with pytest.raises(AphroditeValidationError, match="no function tool"):
+        with pytest.raises(SonarValidationError, match="no function tool"):
             get_json_schema_from_tools(tools=[WEB_SEARCH_TOOL], tool_choice="required")
 
 
@@ -528,7 +528,7 @@ class TestMalformedToolSchemaDefs:
             )
         ]
 
-        with pytest.raises(AphroditeValidationError) as exc_info:
+        with pytest.raises(SonarValidationError) as exc_info:
             get_json_schema_from_tools(tools=tools, tool_choice="required")
 
         assert exc_info.value.parameter == "tools"
@@ -554,7 +554,7 @@ class TestMalformedToolSchemaDefs:
             ),
         ]
 
-        with pytest.raises(AphroditeValidationError) as exc_info:
+        with pytest.raises(SonarValidationError) as exc_info:
             get_json_schema_from_tools(tools=tools, tool_choice="required")
 
         assert exc_info.value.parameter == "tools"

@@ -15,13 +15,13 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.model_executor.models.minicpm_ocr import (
+from sonar.model_executor.models.minicpm_ocr import (
     _OCR_IMAGE_UPSIZE_KWARGS,
     MiniCPMOcrMultiModalProcessor,
     MiniCPMOcrProcessingInfo,
 )
-from aphrodite.model_executor.models.minicpmv4_6 import MiniCPMV4_6MultiModalProcessor
-from aphrodite.multimodal.parse import ImageSize
+from sonar.model_executor.models.minicpmv4_6 import MiniCPMV4_6MultiModalProcessor
+from sonar.multimodal.parse import ImageSize
 
 pytestmark = pytest.mark.skip_global_cleanup
 
@@ -583,7 +583,7 @@ def test_upsize_kwargs_are_kept_out_of_the_video_path():
 def test_declared_upsize_kwargs_match_the_transformers_schema():
     """The promoted/stripped set must track `MiniCPMOcrImageProcessorKwargs`.
 
-    Aphrodite routes a flat kwarg into a scope only when the HF processor declares
+    Sonar routes a flat kwarg into a scope only when the HF processor declares
     it, so this list is what decides whether a request option is honoured.
     """
     assert set(_OCR_IMAGE_UPSIZE_KWARGS) == {
@@ -611,7 +611,7 @@ def test_vision_last_layer_is_kept():
 
     Reading it off the config would raise, and OCR keeps every encoder layer.
     """
-    from aphrodite.model_executor.models.minicpm_ocr import (
+    from sonar.model_executor.models.minicpm_ocr import (
         MiniCPMOcrForConditionalGeneration,
     )
 
@@ -626,15 +626,14 @@ def test_vision_last_layer_is_kept():
 
 def test_weight_mapper_and_loader_are_inherited_from_4_6():
     """The converter emits 4.6-shaped keys, so the mapper must be reused."""
-    from aphrodite.model_executor.models.minicpm_ocr import (
+    from sonar.model_executor.models.minicpm_ocr import (
         MiniCPMOcrForConditionalGeneration,
     )
-    from aphrodite.model_executor.models.minicpmv4_6 import (
+    from sonar.model_executor.models.minicpmv4_6 import (
         MiniCPMV4_6ForConditionalGeneration,
     )
 
     assert (
-        MiniCPMOcrForConditionalGeneration.hf_to_aphrodite_mapper
-        is MiniCPMV4_6ForConditionalGeneration.hf_to_aphrodite_mapper
+        MiniCPMOcrForConditionalGeneration.hf_to_sonar_mapper is MiniCPMV4_6ForConditionalGeneration.hf_to_sonar_mapper
     )
     assert MiniCPMOcrForConditionalGeneration.load_weights is MiniCPMV4_6ForConditionalGeneration.load_weights

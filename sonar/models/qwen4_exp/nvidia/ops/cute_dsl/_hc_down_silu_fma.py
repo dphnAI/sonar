@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Adapted from aphrodite/model_executor/kernels/linear/cute_dsl/_ll_bf16_dotprod.py.
+"""Adapted from sonar/model_executor/kernels/linear/cute_dsl/_ll_bf16_dotprod.py.
 
 Fuses the Qwen4Exp mHC SiLU epilogue (SiLU(x/HC) on columns < rank, passthrough
 elsewhere, with the production bf16 rounding boundary) into the FMA kernel.
@@ -27,7 +27,7 @@ class HcDownSiluFma:
     Output is bf16 [M, N].
 
     See the base class docstring in
-    aphrodite/model_executor/kernels/linear/cute_dsl/_ll_bf16_dotprod.py for the
+    sonar/model_executor/kernels/linear/cute_dsl/_ll_bf16_dotprod.py for the
     GEMM structure; only the epilogue differs. The compile key is
     ``(M, K, threadblock_size, rank, hc)``.
     """

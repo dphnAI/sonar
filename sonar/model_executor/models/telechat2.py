@@ -25,15 +25,15 @@ from collections.abc import Iterable
 import torch
 import torch.nn as nn
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.model_executor.models.llama import LlamaForCausalLM, LlamaModel
+from sonar.config import SonarConfig
+from sonar.model_executor.models.llama import LlamaForCausalLM, LlamaModel
 
 from .llama import LlamaAttention, LlamaDecoderLayer, LlamaMLP
 from .utils import AutoWeightsLoader, PPMissingLayer, WeightsMapper
 
 
 class TeleChat2Model(LlamaModel):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_stacked={
             ".query": (".qkv_proj", "q"),
             ".key": (".qkv_proj", "k"),
@@ -43,22 +43,22 @@ class TeleChat2Model(LlamaModel):
         }
     )
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
-        hf_config = aphrodite_config.model_config.hf_config
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
+        hf_config = sonar_config.model_config.hf_config
 
-        aphrodite_config.model_config.hf_config.attribute_map = {  # type: ignore[misc]
+        sonar_config.model_config.hf_config.attribute_map = {  # type: ignore[misc]
             "num_hidden_layers": "n_layer",
             "num_attention_heads": "n_head",
             "intermediate_size": "ffn_hidden_size",
             "rms_norm_eps": "layer_norm_epsilon",
         }
-        aphrodite_config.model_config.hf_config.hidden_act = "silu"
+        sonar_config.model_config.hf_config.hidden_act = "silu"
 
         # 1. Initialize the LlamaModel with bias
         hf_config.bias = True
         hf_config.mlp_bias = True
 
-        super().__init__(aphrodite_config=aphrodite_config, prefix=prefix)
+        super().__init__(sonar_config=sonar_config, prefix=prefix)
         # 2. Remove the bias from the qkv_proj and gate_up_proj based on config
         # Telechat2's gate_up_proj and qkv_proj don't have bias
         # see: https://github.com/vllm-project/vllm/pull/10311#issuecomment-2490297566
@@ -95,11 +95,11 @@ class TeleChat2Model(LlamaModel):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(self._split_key_value(weights), mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(self._split_key_value(weights), mapper=self.hf_to_sonar_mapper)
 
 
 class TeleChat2ForCausalLM(LlamaForCausalLM):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={
             "transformer.": "model.",
         },
@@ -114,12 +114,12 @@ class TeleChat2ForCausalLM(LlamaForCausalLM):
 
     def _init_model(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
         layer_type: type[nn.Module] = LlamaDecoderLayer,
     ):
-        return TeleChat2Model(aphrodite_config=aphrodite_config, prefix=prefix)
+        return TeleChat2Model(sonar_config=sonar_config, prefix=prefix)
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)

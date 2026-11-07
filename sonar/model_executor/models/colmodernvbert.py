@@ -14,17 +14,17 @@ import torch
 from torch import nn
 from transformers import BatchFeature, ModernVBertConfig
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.multimodal import MultiModalDummyOptions
-from aphrodite.inputs import MultiModalDataDict
-from aphrodite.model_executor.layers.pooler.tokwise import pooler_for_token_embed
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import (
+from sonar.config import SonarConfig
+from sonar.config.multimodal import MultiModalDummyOptions
+from sonar.inputs import MultiModalDataDict
+from sonar.model_executor.layers.pooler.tokwise import pooler_for_token_embed
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import (
     MultiModalFieldConfig,
     MultiModalKwargsItems,
 )
-from aphrodite.multimodal.parse import ImageSize, MultiModalDataItems
-from aphrodite.multimodal.processing import (
+from sonar.multimodal.parse import ImageSize, MultiModalDataItems
+from sonar.multimodal.processing import (
     BaseDummyInputsBuilder,
     BaseMultiModalProcessor,
     BaseProcessingInfo,
@@ -32,8 +32,8 @@ from aphrodite.multimodal.processing import (
     PromptReplacement,
     PromptUpdate,
 )
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.tokenizers.hf import HfTokenizer
+from sonar.sequence import IntermediateTensors
+from sonar.tokenizers.hf import HfTokenizer
 
 from .interfaces import (
     MultiModalEmbeddings,
@@ -247,12 +247,12 @@ class ColModernVBertForRetrieval(nn.Module, SupportsMultiModal, SupportsLateInte
 
     is_pooling_model = True
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config: ModernVBertConfig = aphrodite_config.model_config.hf_config
+        config: ModernVBertConfig = sonar_config.model_config.hf_config
         self.config = config
         text_config = config.text_config
-        quant_config = aphrodite_config.quant_config
+        quant_config = sonar_config.quant_config
 
         # --- Vision encoder (reuses SiglipVisionModel from siglip.py) ---
         self.vision_model = SiglipVisionModel(
@@ -267,7 +267,7 @@ class ColModernVBertForRetrieval(nn.Module, SupportsMultiModal, SupportsLateInte
         # --- Text encoder (built from ModernBERT components directly) ---
         # We build the components individually rather than wrapping
         # ``ModernBertModel`` because ``ModernBertEncoderLayer`` reads
-        # ``aphrodite_config.model_config.hf_config`` which would be
+        # ``sonar_config.model_config.hf_config`` which would be
         # ``ModernVBertConfig``, not ``ModernBertConfig``.
         self.text_embeddings = ModernBertEmbeddings(text_config)
         self.text_layers = nn.ModuleList(
@@ -291,11 +291,11 @@ class ColModernVBertForRetrieval(nn.Module, SupportsMultiModal, SupportsLateInte
             text_config.hidden_size,
             getattr(config, "embedding_dim", 128),
             bias=True,
-            dtype=aphrodite_config.model_config.head_dtype,
+            dtype=sonar_config.model_config.head_dtype,
         )
 
         # --- Pooler (applies projection + L2 normalize) ---
-        pooler_config = aphrodite_config.model_config.pooler_config
+        pooler_config = sonar_config.model_config.pooler_config
         assert pooler_config is not None
         self.pooler = pooler_for_token_embed(
             pooler_config,
@@ -344,9 +344,9 @@ class ColModernVBertForRetrieval(nn.Module, SupportsMultiModal, SupportsLateInte
 
     # ---- weight loading -----------------------------------------------------
 
-    # Checkpoint prefix → Aphrodite param prefix.
+    # Checkpoint prefix → Sonar param prefix.
     # More-specific prefixes must appear before shorter ones.
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={
             "model.text_model.layers.": "text_layers.",
             "model.text_model.embeddings.": "text_embeddings.",
@@ -365,7 +365,7 @@ class ColModernVBertForRetrieval(nn.Module, SupportsMultiModal, SupportsLateInte
         loader = AutoWeightsLoader(self)
         loaded_params = loader.load_weights(
             weights,
-            mapper=self.hf_to_aphrodite_mapper,
+            mapper=self.hf_to_sonar_mapper,
         )
 
         # The pooler wraps ``custom_text_proj`` as its head projector.

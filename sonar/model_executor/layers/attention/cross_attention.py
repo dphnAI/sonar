@@ -6,19 +6,19 @@ from copy import copy
 import numpy as np
 import torch
 
-from aphrodite.config import AphroditeConfig, CacheConfig
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.v1.attention.backend import (
+from sonar.config import CacheConfig, SonarConfig
+from sonar.logger import init_logger
+from sonar.model_executor.layers.attention import Attention
+from sonar.utils.math_utils import cdiv
+from sonar.v1.attention.backend import (
     AttentionBackend,
     AttentionMetadata,
     AttentionType,
     CommonAttentionMetadata,
     subclass_attention_backend_with_overrides,
 )
-from aphrodite.v1.attention.selector import get_attn_backend
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.attention.selector import get_attn_backend
+from sonar.v1.kv_cache_interface import (
     CrossAttentionSpec,
     KVCacheSpec,
     get_kv_quant_mode,
@@ -222,9 +222,9 @@ class CrossAttention(Attention):
             **kwargs,
         )
 
-    def get_kv_cache_spec(self, aphrodite_config: AphroditeConfig) -> KVCacheSpec:
+    def get_kv_cache_spec(self, sonar_config: SonarConfig) -> KVCacheSpec:
         return CrossAttentionSpec(
-            block_size=aphrodite_config.cache_config.block_size,
+            block_size=sonar_config.cache_config.block_size,
             num_kv_heads=self.num_kv_heads,
             head_size=self.head_size,
             dtype=self.kv_cache_torch_dtype,

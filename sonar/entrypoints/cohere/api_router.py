@@ -10,13 +10,13 @@ Exposes two routes:
 
 The Cohere v2 protocol models are sourced from the official ``cohere``
 Python SDK (``pip install cohere``). To keep that an *optional*
-dependency for Aphrodite, the SDK-dependent imports - and the route handlers
+dependency for Sonar, the SDK-dependent imports - and the route handlers
 themselves - are gated on a one-shot probe at module load. If the SDK
 isn't installed, :func:`attach_router` becomes a no-op (with an info
-log) and Aphrodite continues to boot normally.
+log) and Sonar continues to boot normally.
 
 Even when the SDK is installed, :func:`attach_router` also requires
-``APHRODITE_ENABLE_COHERE_API=1`` in the environment before it will expose
+``SONAR_ENABLE_COHERE_API=1`` in the environment before it will expose
 the chat route. The render route additionally requires scale-out
 endpoints to be enabled, i.e. ``--enable-scale-out`` or
 ``--tokens-only``. These gates keep unrelated deployments from
@@ -38,18 +38,18 @@ from fastapi import APIRouter, Depends, FastAPI, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
-import aphrodite.envs as envs
-from aphrodite.entrypoints.serve.engine.protocol import ErrorResponse
-from aphrodite.entrypoints.serve.exception_handling.error_response import (
+import sonar.envs as envs
+from sonar.entrypoints.serve.engine.protocol import ErrorResponse
+from sonar.entrypoints.serve.exception_handling.error_response import (
     create_error_response,
 )
-from aphrodite.entrypoints.serve.exception_handling.utils import sanitize_message
-from aphrodite.entrypoints.serve.utils.api_utils import (
+from sonar.entrypoints.serve.exception_handling.utils import sanitize_message
+from sonar.entrypoints.serve.utils.api_utils import (
     load_aware_call,
     validate_json_request,
     with_cancellation,
 )
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 _COHERE_PATH_PREFIX = "/cohere/"
 
@@ -65,14 +65,14 @@ else:
 
 
 if _SDK_AVAILABLE:
-    from aphrodite.entrypoints.cohere.protocol import (
+    from sonar.entrypoints.cohere.protocol import (
         CohereChatV2Request,
         CohereChatV2Response,
         CohereError,
     )
-    from aphrodite.entrypoints.cohere.serving import CohereServingChatV2
-    from aphrodite.entrypoints.scale_out.render.serving import ServingRender
-    from aphrodite.entrypoints.scale_out.token_in_token_out.protocol import GenerateRequest
+    from sonar.entrypoints.cohere.serving import CohereServingChatV2
+    from sonar.entrypoints.scale_out.render.serving import ServingRender
+    from sonar.entrypoints.scale_out.token_in_token_out.protocol import GenerateRequest
 
     router = APIRouter()
     render_router = APIRouter()
@@ -105,7 +105,7 @@ if _SDK_AVAILABLE:
         *,
         fallback_status: int = HTTPStatus.BAD_REQUEST,
     ) -> JSONResponse:
-        """Translate Aphrodite's internal error envelope into Cohere's shape."""
+        """Translate Sonar's internal error envelope into Cohere's shape."""
         info = error.error
         status = info.code or fallback_status
         return JSONResponse(
@@ -207,13 +207,13 @@ if _SDK_AVAILABLE:
         return JSONResponse(content=result.model_dump())
 
     class CohereErrorEnvelopeMiddleware(BaseHTTPMiddleware):
-        """Rewrite Aphrodite error bodies into the Cohere ``{message, id}`` shape.
+        """Rewrite Sonar error bodies into the Cohere ``{message, id}`` shape.
 
         The endpoint handler above already returns :class:`CohereError` for
         errors it owns, but globally-registered exception handlers (e.g.
         :func:`validation_exception_handler` for pydantic body errors,
         :func:`http_exception_handler`, engine error handlers) fire *before*
-        the handler runs and produce Aphrodite's internal
+        the handler runs and produce Sonar's internal
         ``ErrorResponse`` shape (``{"error": {"message": ...}}``). That
         shape doesn't match the ``CohereError`` schema advertised on the
         route's OpenAPI ``responses``, so clients (and schema-conformance
@@ -233,7 +233,7 @@ if _SDK_AVAILABLE:
                 return response
 
             body = b"".join([chunk async for chunk in response.body_iterator])
-            translated = _translate_aphrodite_error_body(body, request)
+            translated = _translate_sonar_error_body(body, request)
             if translated is not None:
                 return translated
             passthrough_headers = {k: v for k, v in response.headers.items() if k.lower() != "content-length"}
@@ -244,10 +244,10 @@ if _SDK_AVAILABLE:
                 media_type=content_type,
             )
 
-    def _translate_aphrodite_error_body(raw: bytes, request: Request) -> JSONResponse | None:
-        """Translate a Aphrodite ``ErrorResponse`` body to a ``CohereError`` body.
+    def _translate_sonar_error_body(raw: bytes, request: Request) -> JSONResponse | None:
+        """Translate a Sonar ``ErrorResponse`` body to a ``CohereError`` body.
 
-        Returns ``None`` if ``raw`` does not match the Aphrodite error envelope
+        Returns ``None`` if ``raw`` does not match the Sonar error envelope
         (which signals the middleware to pass the body through unchanged).
         """
         try:
@@ -268,7 +268,7 @@ def attach_router(app: FastAPI) -> None:
 
     No-op when either:
 
-    * the ``APHRODITE_ENABLE_COHERE_API`` env var isn't set to ``1``. The
+    * the ``SONAR_ENABLE_COHERE_API`` env var isn't set to ``1``. The
       Cohere v2 endpoints are opt-in because they carry Cohere-specific
       request/response semantics (grounding citations, tool_plan,
       PLAN/THINKING_CONTENT blocks) that are only meaningful when
@@ -277,20 +277,20 @@ def attach_router(app: FastAPI) -> None:
       models live there)
 
     The two skip paths log at different levels: an operator who set
-    ``APHRODITE_ENABLE_COHERE_API=1`` but forgot to install ``cohere`` sees
+    ``SONAR_ENABLE_COHERE_API=1`` but forgot to install ``cohere`` sees
     a WARNING (they explicitly asked for the endpoints and they're
     silently absent), whereas the default-off skip logs at debug.
     """
-    enabled = envs.APHRODITE_ENABLE_COHERE_API
+    enabled = envs.SONAR_ENABLE_COHERE_API
     if not enabled:
         logger.debug(
-            "APHRODITE_ENABLE_COHERE_API is not set; /cohere/v2/chat endpoints "
-            "disabled. Set APHRODITE_ENABLE_COHERE_API=1 to enable them."
+            "SONAR_ENABLE_COHERE_API is not set; /cohere/v2/chat endpoints "
+            "disabled. Set SONAR_ENABLE_COHERE_API=1 to enable them."
         )
         return
     if not _SDK_AVAILABLE:
         logger.warning(
-            "APHRODITE_ENABLE_COHERE_API=1 but the `cohere` SDK is not "
+            "SONAR_ENABLE_COHERE_API=1 but the `cohere` SDK is not "
             "installed; /cohere/v2/chat will not be exposed. Install "
             "with `pip install cohere` to enable the endpoints."
         )

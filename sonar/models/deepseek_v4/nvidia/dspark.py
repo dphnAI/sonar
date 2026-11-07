@@ -15,44 +15,44 @@ import regex as re
 import torch
 import torch.nn as nn
 
-import aphrodite.envs as envs
-from aphrodite.config import AphroditeConfig, get_current_aphrodite_config
-from aphrodite.config.kernel import NATIVE_MEGA_MOE_BACKENDS
-from aphrodite.forward_context import get_forward_context, is_forward_context_available
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.kernels.mhc.tilelang import (
+import sonar.envs as envs
+from sonar.config import SonarConfig, get_current_sonar_config
+from sonar.config.kernel import NATIVE_MEGA_MOE_BACKENDS
+from sonar.forward_context import get_forward_context, is_forward_context_available
+from sonar.logger import init_logger
+from sonar.model_executor.kernels.mhc.tilelang import (
     hc_head_fused_kernel_tilelang,
     mhc_post_tilelang,
 )
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.model_executor.layers.fused_moe import (
     fused_moe_make_expert_params_mapping,
 )
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     MergedColumnParallelLinear,
     ReplicatedLinear,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.model_loader.mtp_validation import (
+from sonar.model_executor.model_loader.mtp_validation import (
     is_mtp_completeness_check_enabled,
 )
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
-from aphrodite.model_executor.models.qwen3_dspark import (
+from sonar.model_executor.model_loader.weight_utils import default_weight_loader
+from sonar.model_executor.models.qwen3_dspark import (
     DSparkConfidenceHead,
     DSparkMarkovHead,
 )
-from aphrodite.model_executor.models.utils import extract_layer_index, maybe_prefix
-from aphrodite.models.common.ops.sequence_parallel import (
+from sonar.model_executor.models.utils import extract_layer_index, maybe_prefix
+from sonar.models.common.ops.sequence_parallel import (
     sp_all_gather,
     sp_padding_mask,
     sp_shard,
 )
-from aphrodite.models.deepseek_v4.common.eplb_util import collect_moe_layers
-from aphrodite.models.deepseek_v4.common.mm_preprocess import IMAGE_SENTINEL_BASE_ID
+from sonar.models.deepseek_v4.common.eplb_util import collect_moe_layers
+from sonar.models.deepseek_v4.common.mm_preprocess import IMAGE_SENTINEL_BASE_ID
 
 from .model import (
     DeepseekV4DecoderLayer,
@@ -90,10 +90,10 @@ def _duplicate_context_wkv_weights(
 
 
 class DSparkDeepseekV4Model(nn.Module):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__()
-        assert aphrodite_config.speculative_config is not None
-        config = aphrodite_config.speculative_config.draft_model_config.hf_config
+        assert sonar_config.speculative_config is not None
+        config = sonar_config.speculative_config.draft_model_config.hf_config
         self.config = config
         self.hidden_size = config.hidden_size
         self.hc_mult = config.hc_mult
@@ -101,8 +101,8 @@ class DSparkDeepseekV4Model(nn.Module):
         self.rms_norm_eps = config.rms_norm_eps
         self.num_hidden_layers = config.num_hidden_layers
         self.target_layer_ids = tuple(config.dspark_target_layer_ids)
-        self.use_native_mega_moe = aphrodite_config.kernel_config.moe_backend in NATIVE_MEGA_MOE_BACKENDS
-        self.use_sequence_parallel = _use_sequence_parallel(aphrodite_config)
+        self.use_native_mega_moe = sonar_config.kernel_config.moe_backend in NATIVE_MEGA_MOE_BACKENDS
+        self.use_sequence_parallel = _use_sequence_parallel(sonar_config)
 
         self.num_dspark_layers = getattr(config, "n_mtp_layers", None) or 3
 
@@ -118,22 +118,22 @@ class DSparkDeepseekV4Model(nn.Module):
             config.hidden_size,
             bias=False,
             return_bias=False,
-            quant_config=aphrodite_config.quant_config,
+            quant_config=sonar_config.quant_config,
             prefix=maybe_prefix(prefix, "main_proj"),
         )
         self.main_norm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.topk_indices_buffer = torch.empty(
-            aphrodite_config.scheduler_config.max_num_batched_tokens,
+            sonar_config.scheduler_config.max_num_batched_tokens,
             config.index_topk,
             dtype=torch.int32,
         )
 
-        current_aphrodite_config = get_current_aphrodite_config()
+        current_sonar_config = get_current_sonar_config()
         self.layers = nn.ModuleList(
             [
                 DeepseekV4DecoderLayer(
-                    current_aphrodite_config,
+                    current_sonar_config,
                     prefix=maybe_prefix(prefix, f"layers.{self.num_hidden_layers + i}"),
                     topk_indices_buffer=self.topk_indices_buffer,
                 )
@@ -145,7 +145,7 @@ class DSparkDeepseekV4Model(nn.Module):
             [config.head_dim] * self.num_dspark_layers,
             bias=False,
             return_bias=False,
-            quant_config=aphrodite_config.quant_config,
+            quant_config=sonar_config.quant_config,
             prefix=maybe_prefix(prefix, "context_wkv_proj"),
             disable_tp=True,
         )
@@ -222,7 +222,7 @@ class DSparkDeepseekV4Model(nn.Module):
             inputs_embeds = self.embed_input_ids(input_ids)
         full_num_tokens = positions.shape[0]
         if self.use_sequence_parallel:
-            if envs.APHRODITE_MOE_SKIP_PADDING and is_forward_context_available():
+            if envs.SONAR_MOE_SKIP_PADDING and is_forward_context_available():
                 forward_context = get_forward_context()
                 forward_context.is_padding = sp_padding_mask(forward_context.is_padding, inputs_embeds)
             inputs_embeds = sp_shard(inputs_embeds)
@@ -345,16 +345,16 @@ class DSparkDeepseekV4ForCausalLM(nn.Module, DeepseekV4MixtureOfExperts):
     # Full-vocab draft: draft ids are target ids, no remapping needed.
     draft_id_to_target_id = None
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__()
-        assert aphrodite_config.speculative_config is not None
-        self.draft_model_config = aphrodite_config.speculative_config.draft_model_config
+        assert sonar_config.speculative_config is not None
+        self.draft_model_config = sonar_config.speculative_config.draft_model_config
         self.config = self.draft_model_config.hf_config
-        self.quant_config = aphrodite_config.quant_config
+        self.quant_config = sonar_config.quant_config
         self.pad_shared_expert = getattr(
             self.quant_config, "weight_block_size", None
-        ) is not None and not _use_sequence_parallel(aphrodite_config)
-        self.model = DSparkDeepseekV4Model(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        ) is not None and not _use_sequence_parallel(sonar_config)
+        self.model = DSparkDeepseekV4Model(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
         # Shared with the target (aliased by the speculator's load utility).
         self.lm_head = ParallelLMHead(
             self.config.vocab_size,

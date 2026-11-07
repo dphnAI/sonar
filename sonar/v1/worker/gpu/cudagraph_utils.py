@@ -13,53 +13,53 @@ import torch
 import torch.nn as nn
 from tqdm import tqdm
 
-from aphrodite.compilation.breakable_cudagraph import (
+from sonar.compilation.breakable_cudagraph import (
     BreakableCUDAGraphWrapper,
     is_breakable_cudagraph_enabled,
 )
-from aphrodite.compilation.counter import compilation_counter
-from aphrodite.compilation.cuda_graph import CUDAGraphStat, CUDAGraphWrapper
-from aphrodite.compilation.cudagraph_pool import (
+from sonar.compilation.counter import compilation_counter
+from sonar.compilation.cuda_graph import CUDAGraphStat, CUDAGraphWrapper
+from sonar.compilation.cudagraph_pool import (
     capture_outside_cumem_pool,
     capture_pool,
 )
-from aphrodite.compilation.wrapper import TorchCompileWithNoGuardsWrapper
-from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-from aphrodite.config.compilation import CUDAGraphMode
-from aphrodite.distributed.parallel_state import (
+from sonar.compilation.wrapper import TorchCompileWithNoGuardsWrapper
+from sonar.config import SonarConfig, set_current_sonar_config
+from sonar.config.compilation import CUDAGraphMode
+from sonar.distributed.parallel_state import (
     get_pp_group,
     graph_capture,
     is_global_first_rank,
 )
-from aphrodite.forward_context import BatchDescriptor, set_forward_context
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.models.interfaces import requires_raw_input_tokens
-from aphrodite.model_executor.offloader.base import get_offloader
-from aphrodite.platforms import current_platform
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.utils.math_utils import round_up
-from aphrodite.utils.torch_utils import current_stream
-from aphrodite.v1.hisparse.binding import release_hisparse_profiling_cache
-from aphrodite.v1.kv_cache_interface import KVCacheConfig
-from aphrodite.v1.spec_decode.dynamic.utils import build_dynamic_sd_schedule_lookup
-from aphrodite.v1.worker.gpu.attn_utils import build_slot_mappings_by_layer
-from aphrodite.v1.worker.gpu.block_table import BlockTables
-from aphrodite.v1.worker.gpu.cp_utils import prepare_dcp_local_seq_lens
-from aphrodite.v1.worker.gpu.input_batch import (
+from sonar.forward_context import BatchDescriptor, set_forward_context
+from sonar.logger import init_logger
+from sonar.model_executor.models.interfaces import requires_raw_input_tokens
+from sonar.model_executor.offloader.base import get_offloader
+from sonar.platforms import current_platform
+from sonar.sequence import IntermediateTensors
+from sonar.utils.math_utils import round_up
+from sonar.utils.torch_utils import current_stream
+from sonar.v1.hisparse.binding import release_hisparse_profiling_cache
+from sonar.v1.kv_cache_interface import KVCacheConfig
+from sonar.v1.spec_decode.dynamic.utils import build_dynamic_sd_schedule_lookup
+from sonar.v1.worker.gpu.attn_utils import build_slot_mappings_by_layer
+from sonar.v1.worker.gpu.block_table import BlockTables
+from sonar.v1.worker.gpu.cp_utils import prepare_dcp_local_seq_lens
+from sonar.v1.worker.gpu.input_batch import (
     InputBatch,
     InputBuffers,
     set_dummy_context,
 )
-from aphrodite.v1.worker.gpu.model_states.interface import ModelState
-from aphrodite.v1.worker.ubatch_utils import check_ubatch_thresholds, get_num_ubatches
-from aphrodite.v1.worker.utils import AttentionGroup, clear_layer_kv_caches
-from aphrodite.v1.worker.workspace import collect_cuda_graph_capture_resources
+from sonar.v1.worker.gpu.model_states.interface import ModelState
+from sonar.v1.worker.ubatch_utils import check_ubatch_thresholds, get_num_ubatches
+from sonar.v1.worker.utils import AttentionGroup, clear_layer_kv_caches
+from sonar.v1.worker.workspace import collect_cuda_graph_capture_resources
 
 if TYPE_CHECKING:
-    from aphrodite.v1.worker.gpu.model_runner import GPUModelRunner
-    from aphrodite.v1.worker.gpu.pcp_manager import PCPManager
-    from aphrodite.v1.worker.gpu.spec_decode.speculator import BaseSpeculator
-    from aphrodite.v1.worker.gpu.ubatch_utils import UBatchRunner
+    from sonar.v1.worker.gpu.model_runner import GPUModelRunner
+    from sonar.v1.worker.gpu.pcp_manager import PCPManager
+    from sonar.v1.worker.gpu.spec_decode.speculator import BaseSpeculator
+    from sonar.v1.worker.gpu.ubatch_utils import UBatchRunner
 
 logger = init_logger(__name__)
 
@@ -143,7 +143,7 @@ def has_compiled_submodule(model: nn.Module) -> bool:
 class CudaGraphManager:
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
         cudagraph_mode: CUDAGraphMode,
         decode_query_len: int,
@@ -151,10 +151,10 @@ class CudaGraphManager:
         varlen_decode: bool = False,
         ubatch_runner: "UBatchRunner | None" = None,
     ):
-        self.aphrodite_config = aphrodite_config
+        self.sonar_config = sonar_config
         self.device = device
-        self.max_num_reqs = aphrodite_config.scheduler_config.max_num_seqs
-        self.compilation_config = aphrodite_config.compilation_config
+        self.max_num_reqs = sonar_config.scheduler_config.max_num_seqs
+        self.compilation_config = sonar_config.compilation_config
         assert self.compilation_config is not None
         self.cudagraph_mode = cudagraph_mode
         self.decode_query_len = decode_query_len
@@ -162,7 +162,7 @@ class CudaGraphManager:
         # DBO supports FULL CUDA graphs only.
         self.ubatch_runner = ubatch_runner
 
-        self.tp_size = aphrodite_config.parallel_config.tensor_parallel_size
+        self.tp_size = sonar_config.parallel_config.tensor_parallel_size
         self.is_first_pp_rank = get_pp_group().is_first_rank
         self.is_last_pp_rank = get_pp_group().is_last_rank
         self.lora_capture_cases = lora_capture_cases or [0]
@@ -234,7 +234,7 @@ class CudaGraphManager:
         uniform_token_count, remainder = divmod(desc.num_tokens, desc.num_reqs)
         if remainder or desc.uniform_token_count not in (None, uniform_token_count):
             return None
-        parallel_config = self.aphrodite_config.parallel_config
+        parallel_config = self.sonar_config.parallel_config
         num_ubatches = get_num_ubatches(parallel_config)
         if desc.num_tokens < num_ubatches:
             return None
@@ -261,20 +261,20 @@ class CudaGraphManager:
         # When using Dynamic SD, num_speculative_tokens is the max number of
         # draft tokens. The scheduler might use a smaller number so we need
         # to capture graphs for all possible values during decode.
-        speculative_config = self.aphrodite_config.speculative_config
+        speculative_config = self.sonar_config.speculative_config
         if (
             speculative_config
             and speculative_config.uses_dynamic_speculative_decoding()
-            and self.decode_query_len > self.aphrodite_config.num_speculative_tokens
+            and self.decode_query_len > self.sonar_config.num_speculative_tokens
         ):
             # decode_query_len = num_speculative_steps + num_new_sampled_tokens
             # _per_step. Recover num_new_sampled_tokens_per_step
             # from the values the manager already has.
-            num_new_sampled_tokens_per_step = self.decode_query_len - self.aphrodite_config.num_speculative_tokens
+            num_new_sampled_tokens_per_step = self.decode_query_len - self.sonar_config.num_speculative_tokens
             dense_schedule = build_dynamic_sd_schedule_lookup(
                 speculative_config.num_speculative_tokens_per_batch_size,
-                aphrodite_max_batch_size=self.max_num_reqs,
-                aphrodite_num_speculative_tokens=self.aphrodite_config.num_speculative_tokens,
+                sonar_max_batch_size=self.max_num_reqs,
+                sonar_num_speculative_tokens=self.sonar_config.num_speculative_tokens,
             )
             decode_query_lens = sorted({num_spec + num_new_sampled_tokens_per_step for num_spec in dense_schedule[1:]})
         else:
@@ -325,7 +325,7 @@ class CudaGraphManager:
 
             # recoverSSM cannot capture a dummy query wider than its workspace.
             if mixed_mode and (
-                not self.aphrodite_config.cache_config.use_kda_recoverssm or num_tokens <= max_decode_tokens
+                not self.sonar_config.cache_config.use_kda_recoverssm or num_tokens <= max_decode_tokens
             ):
                 # for PIECEWISE graphs there is no limit on requests when replaying
                 # i.e. no request padding is needed, so we leave it as None.
@@ -368,7 +368,7 @@ class CudaGraphManager:
     @property
     def dp_size(self) -> int:
         # Not cached: elastic EP rewrites parallel_config in place on scale.
-        return self.aphrodite_config.parallel_config.data_parallel_size
+        return self.sonar_config.parallel_config.data_parallel_size
 
     def release_graphs(self) -> None:
         """Drop the captured graphs so a later capture() can refill them.
@@ -469,7 +469,7 @@ class CudaGraphManager:
                                 torch.accelerator.synchronize()
                                 free_before = torch.accelerator.get_memory_info()[0]
                             with (
-                                capture_pool(self.pool, self.aphrodite_config) as pool,
+                                capture_pool(self.pool, self.sonar_config) as pool,
                                 torch.cuda.graph(graph, pool, stream=self._capture_stream(desc)),
                             ):
                                 forward_fn(CUDAGraphMode.NONE)
@@ -559,7 +559,7 @@ class CudaGraphManager:
 
     def init_breakable_cg_runner(self, model: nn.Module, key_fn: Callable[..., Hashable] | None = None) -> None:
         if self.breakable_cg_runner is None:
-            self.breakable_cg_runner = BreakableCUDAGraphWrapper(model, self.aphrodite_config, key_fn=key_fn)
+            self.breakable_cg_runner = BreakableCUDAGraphWrapper(model, self.sonar_config, key_fn=key_fn)
 
     def run_pw_graph(self, model: nn.Module, model_inputs: dict[str, Any]) -> Any:
         if not self.use_breakable_cg:
@@ -574,7 +574,7 @@ class ModelCudaGraphManager(CudaGraphManager):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
         cudagraph_mode: CUDAGraphMode,
         decode_query_len: int,
@@ -583,7 +583,7 @@ class ModelCudaGraphManager(CudaGraphManager):
         ubatch_runner: "UBatchRunner | None" = None,
     ):
         super().__init__(
-            aphrodite_config,
+            sonar_config,
             device,
             cudagraph_mode,
             decode_query_len,
@@ -623,7 +623,7 @@ class ModelCudaGraphManager(CudaGraphManager):
                 f"{type(model).__name__}: piecewise CUDA graphs "
                 f"(cudagraph_mode={self.cudagraph_mode.name}) unavailable, "
                 "model is not torch-compiled and breakable CUDA graph is off. "
-                "Set APHRODITE_USE_BREAKABLE_CUDAGRAPH=1 or cudagraph_mode=NONE/FULL."
+                "Set SONAR_USE_BREAKABLE_CUDAGRAPH=1 or cudagraph_mode=NONE/FULL."
             )
 
         def store_capture_output(num_tokens: int, model_output: Any) -> None:
@@ -738,7 +738,7 @@ class ModelCudaGraphManager(CudaGraphManager):
                     )
                 with set_forward_context(
                     attn_metadata,
-                    self.aphrodite_config,
+                    self.sonar_config,
                     num_tokens=num_tokens,
                     cudagraph_runtime_mode=cg_mode,
                     num_tokens_across_dp=num_tokens_across_dp,
@@ -936,7 +936,7 @@ def profile_cudagraph_memory(runner: "GPUModelRunner", prepare_profile_state: Ca
     platform_cls._global_graph_pool = throwaway_pool
 
     try:
-        with set_current_aphrodite_config(runner.aphrodite_config):
+        with set_current_sonar_config(runner.sonar_config):
             _init_minimal_kv_cache_for_profiling(runner)
             if prepare_profile_state is not None:
                 prepare_profile_state()
@@ -1016,16 +1016,16 @@ def _extrapolate_full_graph_memory(mem_samples: list[int], total_graphs: int) ->
 
 def _init_minimal_kv_cache_for_profiling(runner: "GPUModelRunner", *, num_blocks: int | None = None) -> None:
     """Allocate the smallest KV cache that still lets every graph be captured."""
-    from aphrodite.v1.core.kv_cache_config_builder import get_kv_cache_config_builder
-    from aphrodite.v1.core.kv_cache_planning import get_kv_cache_groups_from_builder
+    from sonar.v1.core.kv_cache_config_builder import get_kv_cache_config_builder
+    from sonar.v1.core.kv_cache_planning import get_kv_cache_groups_from_builder
 
     kv_cache_spec = runner.get_kv_cache_spec()
-    builder = get_kv_cache_config_builder(runner.aphrodite_config)
-    kv_cache_groups = get_kv_cache_groups_from_builder(builder, runner.aphrodite_config, kv_cache_spec)
+    builder = get_kv_cache_config_builder(runner.sonar_config)
+    kv_cache_groups = get_kv_cache_groups_from_builder(builder, runner.sonar_config, kv_cache_spec)
     # At least one block per sequence is required to capture the graphs.
     min_blocks = num_blocks or min(runner.max_num_reqs, runner.compilation_config.max_cudagraph_capture_size) or 1
     minimal_config = builder.get_kv_cache_config_from_groups(
-        runner.aphrodite_config, kv_cache_groups, num_blocks=min_blocks
+        runner.sonar_config, kv_cache_groups, num_blocks=min_blocks
     )
 
     runner.initialize_kv_cache(minimal_config, is_profiling=True)

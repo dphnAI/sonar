@@ -25,9 +25,9 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from aphrodite.model_executor.layers.linear import ReplicatedLinear
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.utils.torch_utils import async_tensor_h2d
+from sonar.model_executor.layers.linear import ReplicatedLinear
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.utils.torch_utils import async_tensor_h2d
 
 from .utils import maybe_prefix
 
@@ -44,7 +44,7 @@ _UNUSED_CHECKPOINT_PREFIXES = (
 class _TowerLinear(ReplicatedLinear):
     """A replicated linear layer over the last dimension of any input shape.
 
-    Aphrodite's quantized kernels take ``(tokens, features)``; the tower's activations
+    Sonar's quantized kernels take ``(tokens, features)``; the tower's activations
     are ``(batch, frames, features)``.
     """
 
@@ -848,7 +848,7 @@ class Nemotron3_5TranscribeAudioTower(nn.Module):
                 raise ValueError(f"Unexpected audio tower weight {name!r}.")
             weight_loader = getattr(target, "weight_loader", None)
             if weight_loader is not None:
-                # Aphrodite's linear layers: quantized parameters and scalar scales.
+                # Sonar's linear layers: quantized parameters and scalar scales.
                 weight_loader(target, tensor)
             elif target.shape != tensor.shape:
                 raise ValueError(f"Shape mismatch for {name!r}: {tuple(tensor.shape)} vs {tuple(target.shape)}.")

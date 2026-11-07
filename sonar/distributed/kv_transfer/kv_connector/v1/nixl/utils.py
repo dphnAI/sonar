@@ -9,9 +9,9 @@ from typing import Any
 import regex as re
 import zmq
 
-from aphrodite.platforms import current_platform
-from aphrodite.utils.network_utils import make_zmq_socket
-from aphrodite.v1.kv_cache_interface import KVCacheSpec, UniformTypeKVCacheSpecs
+from sonar.platforms import current_platform
+from sonar.utils.network_utils import make_zmq_socket
+from sonar.v1.kv_cache_interface import KVCacheSpec, UniformTypeKVCacheSpecs
 
 # Supported platforms and types of kv transfer buffer.
 # {device: tuple of supported kv buffer types}
@@ -31,7 +31,7 @@ _NIXL_SUPPORTED_DEVICE = {
 _NIXL_SUPPORTED_DEVICE.update(current_platform.get_nixl_supported_devices())
 
 
-# TODO: merge with aphrodite.utils.network_utils.zmq_socket_ctx
+# TODO: merge with sonar.utils.network_utils.zmq_socket_ctx
 @contextlib.contextmanager
 def zmq_ctx(socket_type: Any, addr: str) -> Iterator[zmq.Socket]:
     """Context manager for a ZMQ socket."""

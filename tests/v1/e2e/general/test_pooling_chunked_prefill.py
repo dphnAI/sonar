@@ -3,7 +3,7 @@
 import pytest
 import torch.nn as nn
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 prompt = """
 Generals gathered in their masses
@@ -69,17 +69,17 @@ def retrieve_chunks(self):
 
 
 @pytest.mark.skipif(not current_platform.is_cuda(), reason="CUDA not available")
-def test_pooling_chunked_prefill(aphrodite_runner, monkeypatch):
+def test_pooling_chunked_prefill(sonar_runner, monkeypatch):
     """Test chunked prefill for pooling models with LastPool."""
     with monkeypatch.context() as m:
-        m.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
+        m.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")
         model_id = "Qwen/Qwen3-Embedding-0.6B"
 
         chunk_size = 10
 
         # Cap the token budget to force chunked prefill; the
         # long_prefill_token_threshold is not applied to a lone request.
-        with aphrodite_runner(
+        with sonar_runner(
             model_id,
             runner="pooling",
             max_num_batched_tokens=chunk_size,
@@ -105,7 +105,7 @@ def test_pooling_chunked_prefill(aphrodite_runner, monkeypatch):
         assert chunks == expected_chunks
 
         # Disable chunked prefill
-        with aphrodite_runner(
+        with sonar_runner(
             model_id,
             runner="pooling",
             tensor_parallel_size=1,
@@ -121,15 +121,15 @@ def test_pooling_chunked_prefill(aphrodite_runner, monkeypatch):
 
 
 @pytest.mark.skipif(not current_platform.is_cuda(), reason="CUDA not available")
-def test_pooling_prefix_cache(aphrodite_runner, monkeypatch):
+def test_pooling_prefix_cache(sonar_runner, monkeypatch):
     """Test chunked prefill for pooling models with LastPool."""
     verses = prompt.split("\n\n")
 
     with monkeypatch.context() as m:
-        m.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
+        m.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")
         model_id = "Qwen/Qwen3-Embedding-0.6B"
 
-        with aphrodite_runner(
+        with sonar_runner(
             model_id,
             runner="pooling",
             enable_prefix_caching=True,
@@ -159,8 +159,8 @@ def test_pooling_prefix_cache(aphrodite_runner, monkeypatch):
             assert chunks[0] <= prompt1_len
             assert chunks[0] < prompt2_len
 
-            aphrodite_config = llm.get_llm().llm_engine.aphrodite_config
-            cache_config = aphrodite_config.cache_config
+            sonar_config = llm.get_llm().llm_engine.sonar_config
+            cache_config = sonar_config.cache_config
             print(f"{cache_config=}")
             # Prefixes are cached in blocks
             assert (prompt2_len - chunks[0]) % cache_config.block_size == 0

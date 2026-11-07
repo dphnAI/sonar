@@ -3,8 +3,8 @@
 import contextlib
 from collections.abc import Sequence
 
-from aphrodite.sampling_params import RepetitionDetectionParams
-from aphrodite.v1.request import Request, RequestStatus
+from sonar.sampling_params import RepetitionDetectionParams
+from sonar.v1.request import Request, RequestStatus
 
 
 def _has_repeating_pattern(

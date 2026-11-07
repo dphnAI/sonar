@@ -5,7 +5,7 @@
 Importing this package does NOT register any kernels. Runtime code imports the
 specific op module it needs, e.g.::
 
-    from aphrodite.kernels.helion.ops import silu_mul_fp8  # noqa: F401
+    from sonar.kernels.helion.ops import silu_mul_fp8  # noqa: F401
 
 which triggers that op's ``@register_kernel`` as an import side effect.
 

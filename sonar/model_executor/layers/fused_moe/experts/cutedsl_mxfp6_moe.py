@@ -4,26 +4,26 @@
 
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite.model_executor.kernels.linear.mxfp6.cutedsl_grouped import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar.model_executor.kernels.linear.mxfp6.cutedsl_grouped import (
     cutedsl_grouped_mxfp6_gemm,
 )
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEParallelConfig,
 )
-from aphrodite.model_executor.layers.fused_moe.moe_permute_unpermute import (
+from sonar.model_executor.layers.fused_moe.moe_permute_unpermute import (
     MoEPermuteScratch,
     get_moe_permute_scratch,
     moe_permute,
     moe_permute_unpermute_supported,
     moe_unpermute,
 )
-from aphrodite.model_executor.layers.fused_moe.topk_weight_and_reduce import (
+from sonar.model_executor.layers.fused_moe.topk_weight_and_reduce import (
     TopKWeightAndReduceNoOP,
 )
-from aphrodite.model_executor.layers.fused_moe.utils import _resize_cache
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.fused_moe.utils import _resize_cache
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     kMxfp6E2M3Dynamic,
     kMxfp6E2M3Static,
@@ -31,7 +31,7 @@ from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
     kMxfp6E3M2Static,
     kMxfp8Dynamic,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 
 class CutedslMxfp6Experts(mk.FusedMoEExpertsModular):

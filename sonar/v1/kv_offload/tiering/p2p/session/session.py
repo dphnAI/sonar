@@ -26,12 +26,12 @@ from collections.abc import Sequence
 from concurrent.futures import Future
 from typing import TYPE_CHECKING, NamedTuple
 
-import aphrodite.envs as envs
-from aphrodite.logger import init_logger
-from aphrodite.v1.kv_offload.base import OffloadKey
-from aphrodite.v1.kv_offload.tiering.p2p.control.base import ControlConnection
-from aphrodite.v1.kv_offload.tiering.p2p.session.client import ClientRole, LoadResult
-from aphrodite.v1.kv_offload.tiering.p2p.session.protocol import (
+import sonar.envs as envs
+from sonar.logger import init_logger
+from sonar.v1.kv_offload.base import OffloadKey
+from sonar.v1.kv_offload.tiering.p2p.control.base import ControlConnection
+from sonar.v1.kv_offload.tiering.p2p.session.client import ClientRole, LoadResult
+from sonar.v1.kv_offload.tiering.p2p.session.protocol import (
     TYPE_KEY,
     AbortAckMsg,
     AbortFetchMsg,
@@ -43,15 +43,15 @@ from aphrodite.v1.kv_offload.tiering.p2p.session.protocol import (
     LookupRespMsg,
     TransferDoneMsg,
 )
-from aphrodite.v1.kv_offload.tiering.p2p.session.server import (
+from sonar.v1.kv_offload.tiering.p2p.session.server import (
     ServerRole,
     StoreResult,
 )
 
 if TYPE_CHECKING:
-    from aphrodite.v1.kv_offload.base import ReqContext
-    from aphrodite.v1.kv_offload.tiering.base import JobId, ParentManager
-    from aphrodite.v1.kv_offload.tiering.p2p.data import DataTransport
+    from sonar.v1.kv_offload.base import ReqContext
+    from sonar.v1.kv_offload.tiering.base import JobId, ParentManager
+    from sonar.v1.kv_offload.tiering.p2p.data import DataTransport
 
 logger = init_logger(__name__)
 
@@ -346,12 +346,12 @@ class P2PSession:
             not self._send_ready
             and self._conn.alive
             and self._connected_at is not None
-            and time.monotonic() - self._connected_at > envs.APHRODITE_P2P_HANDSHAKE_TIMEOUT_S
+            and time.monotonic() - self._connected_at > envs.SONAR_P2P_HANDSHAKE_TIMEOUT_S
         ):
             logger.warning(
                 "P2PSession %s: handshake timed out after %ds — marking connection dead",
                 self.peer_id,
-                envs.APHRODITE_P2P_HANDSHAKE_TIMEOUT_S,
+                envs.SONAR_P2P_HANDSHAKE_TIMEOUT_S,
             )
             self._mark_dead("handshake timed out")
 

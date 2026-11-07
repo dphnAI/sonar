@@ -21,24 +21,24 @@ from typing import TYPE_CHECKING
 
 import torch
 
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.models.interfaces_base import AphroditeModelForTextGeneration
-from aphrodite.model_executor.models.utils import PPMissingLayer, maybe_prefix
+from sonar.model_executor.models.interfaces_base import SonarModelForTextGeneration
+from sonar.model_executor.models.utils import PPMissingLayer, maybe_prefix
 
 from .base import Base
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
+    from sonar.config import SonarConfig
 
 
-class CausalMixin(AphroditeModelForTextGeneration, Base):
-    def __init__(self, *, aphrodite_config: "AphroditeConfig", prefix: str = ""):
-        # Skip AphroditeModelForTextGeneration.__init__ and call the next class in MRO
-        super(AphroditeModelForTextGeneration, self).__init__(aphrodite_config=aphrodite_config, prefix=prefix)
+class CausalMixin(SonarModelForTextGeneration, Base):
+    def __init__(self, *, sonar_config: "SonarConfig", prefix: str = ""):
+        # Skip SonarModelForTextGeneration.__init__ and call the next class in MRO
+        super(SonarModelForTextGeneration, self).__init__(sonar_config=sonar_config, prefix=prefix)
 
         tie_word_embeddings = self._get_tie_word_embeddings()
 
@@ -66,12 +66,12 @@ class CausalMixin(AphroditeModelForTextGeneration, Base):
     def load_weights(self, weights: Iterable[tuple[str, "torch.Tensor"]]) -> set[str]:
         """A thin wrapper around `Base.load_weights` to handle the lm_head bias."""
         lm_head_bias = set()
-        load_device = self.aphrodite_config.load_config.device or self.device_config.device
+        load_device = self.sonar_config.load_config.device or self.device_config.device
 
         def auto_load_lm_head_bias(weights):
             for name, weight in weights:
                 if name.endswith("lm_head.bias") and self.pp_group.is_last_rank:
-                    # load_weights is called outside Aphrodite's device context,
+                    # load_weights is called outside Sonar's device context,
                     # so we must enter it again when registering the bias.
                     with torch.device(load_device):
                         self.lm_head._register_bias()

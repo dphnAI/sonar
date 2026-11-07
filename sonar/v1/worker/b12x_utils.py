@@ -8,12 +8,12 @@ from typing import TYPE_CHECKING, cast
 import torch
 
 if TYPE_CHECKING:
-    from aphrodite.v1.worker.gpu.model_runner import GPUModelRunner
-    from aphrodite.v1.worker.gpu_worker import Worker
+    from sonar.v1.worker.gpu.model_runner import GPUModelRunner
+    from sonar.v1.worker.gpu_worker import Worker
 
 
 def prepare_b12x_weights(worker: "Worker") -> None:
-    from aphrodite.model_executor.warmup.b12x_prepare import (
+    from sonar.model_executor.warmup.b12x_prepare import (
         b12x_native_supported,
         run_b12x_preparation,
     )
@@ -27,7 +27,7 @@ def prepare_b12x_weights(worker: "Worker") -> None:
 
 
 def profile_b12x_memory(worker: "Worker", *, cudagraphs: bool = False):
-    from aphrodite.model_executor.warmup.b12x_prepare import (
+    from sonar.model_executor.warmup.b12x_prepare import (
         b12x_native_supported,
         run_b12x_preparation,
     )
@@ -66,8 +66,8 @@ def capture_b12x_model(worker: "Worker") -> int:
 
 
 def warmup_b12x_cudagraphs(runner: "GPUModelRunner", *, capture_decoder: bool) -> None:
-    from aphrodite.model_executor.warmup.b12x_warmup import warmup_b12x_model
-    from aphrodite.v1.worker.gpu.cudagraph_utils import get_speculator_cudagraph_managers
+    from sonar.model_executor.warmup.b12x_warmup import warmup_b12x_model
+    from sonar.v1.worker.gpu.cudagraph_utils import get_speculator_cudagraph_managers
 
     manager = runner.cudagraph_manager
     assert manager is not None

@@ -92,7 +92,7 @@ guide: |
 
   ## Prerequisites
 
-  - **Aphrodite:** 0.28.0 or newer, which includes Ling 3.0 / Bailing V3
+  - **Sonar:** 0.28.0 or newer, which includes Ling 3.0 / Bailing V3
     hybrid-attention support;
   - **Parallelism:** TP1 is recommended for all three checkpoints;
   - **Thinking mode:** enabled per request by the chat template.
@@ -102,7 +102,7 @@ guide: |
   BF16 on one GPU:
 
   ```bash
-  aphrodite serve inclusionAI/Ling-3.0-tiny \
+  sonar serve inclusionAI/Ling-3.0-tiny \
     --trust-remote-code \
     --dtype bfloat16 \
     --tensor-parallel-size 1 \
@@ -117,13 +117,13 @@ guide: |
 
   ```bash
   # Serialized block FP8
-  aphrodite serve inclusionAI/Ling-3.0-tiny-fp8 \
+  sonar serve inclusionAI/Ling-3.0-tiny-fp8 \
     --trust-remote-code --dtype bfloat16 --tensor-parallel-size 1 \
     --gpu-memory-utilization 0.85 --enable-prefix-caching --enable-auto-tool-choice \
     --tool-call-parser ling3 --reasoning-parser ling3
 
   # Compressed-tensors INT4
-  aphrodite serve inclusionAI/Ling-3.0-tiny-int4 \
+  sonar serve inclusionAI/Ling-3.0-tiny-int4 \
     --trust-remote-code --dtype bfloat16 --tensor-parallel-size 1 \
     --gpu-memory-utilization 0.85 --enable-prefix-caching --enable-auto-tool-choice \
     --tool-call-parser ling3 --reasoning-parser ling3

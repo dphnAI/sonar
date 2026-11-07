@@ -12,14 +12,14 @@ from dataclasses import dataclass, field
 from functools import cache, cached_property, update_wrapper
 from typing import Any, Generic, ParamSpec, Protocol, TypeVar, cast, overload
 
-from aphrodite import envs
-from aphrodite.model_executor.warmup.jit_warmup import (
-    AphroditeJitKernel,
+from sonar import envs
+from sonar.model_executor.warmup.jit_warmup import (
+    SonarJitKernel,
     get_ast_full_name,
     get_function_source_node,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import HAS_TRITON, triton
+from sonar.platforms import current_platform
+from sonar.triton_utils import HAS_TRITON, triton
 
 CompileKeyT = TypeVar("CompileKeyT")
 P = ParamSpec("P")
@@ -207,7 +207,7 @@ _shared_compile_pool: ContextVar[bool] = ContextVar("shared_triton_warmup_compil
 
 def compile_triton_warmup(compile_all: Callable[[], None], num_keys: int) -> None:
     """Share one compiler pool across all eligible warmup kernels."""
-    num_threads = min(envs.APHRODITE_TRITON_JIT_WARMUP_NUM_THREADS, num_keys)
+    num_threads = min(envs.SONAR_TRITON_JIT_WARMUP_NUM_THREADS, num_keys)
     if num_threads <= 1:
         compile_all()
         return
@@ -225,7 +225,7 @@ def compile_triton_warmup(compile_all: Callable[[], None], num_keys: int) -> Non
     copy_context().run(compile_in_context)
 
 
-class AphroditeTritonJitKernel(AphroditeJitKernel[CompileKeyT], Generic[CompileKeyT]):
+class SonarTritonJitKernel(SonarJitKernel[CompileKeyT], Generic[CompileKeyT]):
     """Triton owner whose runtime launch specification is reused for warmup."""
 
     kernel: Any
@@ -255,7 +255,7 @@ class AphroditeTritonJitKernel(AphroditeJitKernel[CompileKeyT], Generic[CompileK
             current_platform.is_cuda()
             and not self._run_autotune
             and getattr(triton, "AsyncCompileMode", None) is not None
-            and envs.APHRODITE_TRITON_JIT_WARMUP_NUM_THREADS > 1
+            and envs.SONAR_TRITON_JIT_WARMUP_NUM_THREADS > 1
         )
 
     def compile_many(self, compile_keys: Iterable[CompileKeyT]) -> None:
@@ -264,7 +264,7 @@ class AphroditeTritonJitKernel(AphroditeJitKernel[CompileKeyT], Generic[CompileK
         if not self.supports_parallel_compile or _shared_compile_pool.get():
             return super().compile_many(keys)
 
-        compile_triton_warmup(lambda: super(AphroditeTritonJitKernel, self).compile_many(keys), len(keys))
+        compile_triton_warmup(lambda: super(SonarTritonJitKernel, self).compile_many(keys), len(keys))
 
     @cached_property
     def _kernel_arg_names(self) -> tuple[str, ...]:
@@ -431,7 +431,7 @@ def _triton_key_deriver(
 WarmupCases = Mapping[str, Any] | Iterable[Mapping[str, Any]]
 
 
-class _AutomaticTritonJitKernel(AphroditeTritonJitKernel[TritonCompileKey]):
+class _AutomaticTritonJitKernel(SonarTritonJitKernel[TritonCompileKey]):
     def warmup_inputs(self, compile_key: TritonCompileKey) -> dict[str, Any]:
         return dict(compile_key.inputs)
 
@@ -471,7 +471,7 @@ def _triton_metadata_arg(value: Any) -> Any:
         return value
     return TritonWarmupTensor(
         value.dtype,
-        aligned=getattr(value, "_aphrodite_warmup_aligned", True),
+        aligned=getattr(value, "_sonar_warmup_aligned", True),
         shape=tuple(value.shape),
         strides=tuple(value.stride()),
     )
@@ -512,7 +512,7 @@ def _materialize_warmup_case(
             else:
                 tensor.fill_(value.init)
         else:
-            tensor._aphrodite_warmup_aligned = value.aligned
+            tensor._sonar_warmup_aligned = value.aligned
             with suppress(TypeError):
                 cache[value] = tensor
         return tensor
@@ -573,11 +573,11 @@ class _DecoratedTritonJitKernel(_AutomaticTritonJitKernel):
     def __getattr__(self, name: str) -> Any:
         return getattr(self.kernel, name)
 
-    def get_warmup_keys(self, *, aphrodite_config: Any | None = None, **kwargs: Any) -> list[TritonCompileKey]:
+    def get_warmup_keys(self, *, sonar_config: Any | None = None, **kwargs: Any) -> list[TritonCompileKey]:
         keys: list[TritonCompileKey] = []
         seen_jit_keys: set[frozenset[TritonJitKey]] = set()
-        if "aphrodite_config" in inspect.signature(self._warmup_inputs_fn).parameters:
-            kwargs.setdefault("aphrodite_config", aphrodite_config)
+        if "sonar_config" in inspect.signature(self._warmup_inputs_fn).parameters:
+            kwargs.setdefault("sonar_config", sonar_config)
         cases = self._provider_cases(self._warmup_inputs_fn, **kwargs)
         derive_keys = _triton_key_deriver(self.kernel)
         materialize = self._run_autotune
@@ -639,7 +639,7 @@ class TritonKernelDispatcher(Protocol[P]):
 
     def register_warmup(self, *args: Any, **kwargs: Any) -> None: ...
 
-    def get_warmup_keys(self, *, aphrodite_config: Any | None = None, **kwargs: Any) -> list[TritonCompileKey]: ...
+    def get_warmup_keys(self, *, sonar_config: Any | None = None, **kwargs: Any) -> list[TritonCompileKey]: ...
 
     def compile(self, compile_key: TritonCompileKey) -> None: ...
 

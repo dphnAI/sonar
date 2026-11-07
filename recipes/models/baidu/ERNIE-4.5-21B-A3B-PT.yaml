@@ -65,7 +65,7 @@ hardware_overrides:
       - "--gpu-memory-utilization"
       - "0.9"
     extra_env:
-      APHRODITE_ROCM_USE_AITER: "1"
+      SONAR_ROCM_USE_AITER: "1"
       SAFETENSORS_FAST_GPU: "1"
 strategy_overrides: {}
 
@@ -83,15 +83,15 @@ guide: |
   ## Prerequisites
 
   - transformers >= 4.54.0
-  - Aphrodite >= 0.10.1
+  - Sonar >= 0.10.1
   - Hardware depends on variant (see above)
 
-  ### Install Aphrodite
+  ### Install Sonar
 
   ```bash
   uv venv --python 3.12 --seed
   source .venv/bin/activate
-  uv pip install aphrodite-engine --torch-backend=auto
+  uv pip install sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   ```
 
   ## Launch commands
@@ -99,13 +99,13 @@ guide: |
   21B on 1x80GB GPU:
 
   ```bash
-  aphrodite serve baidu/ERNIE-4.5-21B-A3B-PT
+  sonar serve baidu/ERNIE-4.5-21B-A3B-PT
   ```
 
-  300B on 8x80GB with Aphrodite FP8 online quantization:
+  300B on 8x80GB with Sonar FP8 online quantization:
 
   ```bash
-  aphrodite serve baidu/ERNIE-4.5-300B-A47B-PT \
+  sonar serve baidu/ERNIE-4.5-300B-A47B-PT \
     --tensor-parallel-size 8 \
     --gpu-memory-utilization 0.95 \
     --quantization fp8
@@ -114,13 +114,13 @@ guide: |
   300B on 16x80GB native BF16 (multi-node via Ray):
 
   ```bash
-  aphrodite serve baidu/ERNIE-4.5-300B-A47B-PT --tensor-parallel-size 16
+  sonar serve baidu/ERNIE-4.5-300B-A47B-PT --tensor-parallel-size 16
   ```
 
   ERNIE-MTP speculative decoding (21B example):
 
   ```bash
-  aphrodite serve baidu/ERNIE-4.5-21B-A3B-PT \
+  sonar serve baidu/ERNIE-4.5-21B-A3B-PT \
     --speculative-config '{"method":"ernie_mtp","model":"baidu/ERNIE-4.5-21B-A3B-PT","num_speculative_tokens":1}'
   ```
 
@@ -131,7 +131,7 @@ guide: |
   ## Benchmarking
 
   ```bash
-  aphrodite bench serve \
+  sonar bench serve \
     --model baidu/ERNIE-4.5-21B-A3B-PT \
     --dataset-name random \
     --random-input-len 8000 --random-output-len 1000 \
@@ -145,4 +145,4 @@ guide: |
 
   - [ERNIE-4.5-21B-A3B-PT](https://huggingface.co/baidu/ERNIE-4.5-21B-A3B-PT)
   - [ERNIE-4.5-300B-A47B-PT](https://huggingface.co/baidu/ERNIE-4.5-300B-A47B-PT)
-  - [Aphrodite multi-node deployment](https://docs.vllm.ai/en/latest/serving/parallelism_scaling.html)
+  - [Sonar multi-node deployment](https://docs.vllm.ai/en/latest/serving/parallelism_scaling.html)

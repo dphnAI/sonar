@@ -4,23 +4,23 @@
 
 import pytest
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 if not current_platform.is_cuda():
     pytest.skip("FlashInfer backend requires a CUDA platform.", allow_module_level=True)
 
 import torch
 
-from aphrodite.config import SpeculativeConfig, set_current_aphrodite_config
-from aphrodite.v1.attention.backend import AttentionCGSupport
-from aphrodite.v1.attention.backends import flashinfer as flashinfer_backend
-from aphrodite.v1.attention.backends.flashinfer import (
+from sonar.config import SpeculativeConfig, set_current_sonar_config
+from sonar.v1.attention.backend import AttentionCGSupport
+from sonar.v1.attention.backends import flashinfer as flashinfer_backend
+from sonar.v1.attention.backends.flashinfer import (
     FlashInferDecodeKernel,
     FlashInferMetadataBuilder,
 )
-from aphrodite.v1.attention.backends.utils import PerLayerParameters
-from aphrodite.v1.kv_cache_interface import FullAttentionSpec
-from tests.v1.attention.utils import create_aphrodite_config
+from sonar.v1.attention.backends.utils import PerLayerParameters
+from sonar.v1.kv_cache_interface import FullAttentionSpec
+from tests.v1.attention.utils import create_sonar_config
 
 
 def test_flashinfer_gqa_dcp_spec_decode_clamps_reorder_threshold(monkeypatch):
@@ -29,9 +29,9 @@ def test_flashinfer_gqa_dcp_spec_decode_clamps_reorder_threshold(monkeypatch):
     local KV shard. The builder must keep reorder_batch_threshold at 1 under
     DCP so spec queries take the (DCP-aware) prefill path instead.
     """
-    aphrodite_config = create_aphrodite_config(max_model_len=1024)
-    aphrodite_config.parallel_config.decode_context_parallel_size = 2
-    aphrodite_config.speculative_config = SpeculativeConfig(
+    sonar_config = create_sonar_config(max_model_len=1024)
+    sonar_config.parallel_config.decode_context_parallel_size = 2
+    sonar_config.speculative_config = SpeculativeConfig(
         method="ngram",
         num_speculative_tokens=3,
     )
@@ -61,21 +61,21 @@ def test_flashinfer_gqa_dcp_spec_decode_clamps_reorder_threshold(monkeypatch):
 
     kv_cache_spec = FullAttentionSpec(
         block_size=16,
-        num_kv_heads=aphrodite_config.model_config.get_num_kv_heads(aphrodite_config.parallel_config),
-        head_size=aphrodite_config.model_config.get_head_size(),
-        dtype=aphrodite_config.model_config.dtype,
+        num_kv_heads=sonar_config.model_config.get_num_kv_heads(sonar_config.parallel_config),
+        head_size=sonar_config.model_config.get_head_size(),
+        dtype=sonar_config.model_config.dtype,
     )
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         builder = FlashInferMetadataBuilder(
             kv_cache_spec,
             ["layer.0"],
-            aphrodite_config,
+            sonar_config,
             torch.device("cpu"),
         )
 
     assert builder.flashinfer_trtllm_api_decode_kernel == FlashInferDecodeKernel.TRTLLM_GEN
     assert builder.reorder_batch_threshold == 1
     assert (
-        FlashInferMetadataBuilder.get_cudagraph_support(aphrodite_config, kv_cache_spec)
+        FlashInferMetadataBuilder.get_cudagraph_support(sonar_config, kv_cache_spec)
         == AttentionCGSupport.UNIFORM_SINGLE_TOKEN_DECODE
     )

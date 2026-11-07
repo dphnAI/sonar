@@ -16,7 +16,7 @@
 #include "dispatch_utils.h"
 #include "torch_utils.h"
 
-namespace aphrodite {
+namespace sonar {
 
 // `alpha` and `beta` are applied to opposite operands:
 //   - alpha lives INSIDE the activation (the activated half): the gated
@@ -149,8 +149,8 @@ __global__ void act_and_mul_kernel(
   } else {
     // Scalar fallback for unaligned data or small d
     for (int64_t idx = threadIdx.x; idx < d; idx += blockDim.x) {
-      const scalar_t x = APHRODITE_LDG(&x_ptr[idx]);
-      const scalar_t y = APHRODITE_LDG(&y_ptr[idx]);
+      const scalar_t x = SONAR_LDG(&x_ptr[idx]);
+      const scalar_t y = SONAR_LDG(&y_ptr[idx]);
       out_ptr[idx] = compute<scalar_t, ACT_FN, act_first, HAS_CLAMP>(
           x, y, limit, alpha, beta);
     }
@@ -234,84 +234,75 @@ packed_gelu_tanh_kernel(const packed_t& val, const float /*alpha*/) {
   return cast_to_packed<packed_t>(fval);
 }
 
-}  // namespace aphrodite
+}  // namespace sonar
 
 // Launch activation and gating kernel.
 // Use ACT_FIRST (bool) indicating whether to apply the activation function
 // first. HAS_CLAMP (bool) enables pre-activation clamping: gate input is
 // clamped (max only) and up input is clamped (both sides) before the
 // activation function is applied.
-#define LAUNCH_ACTIVATION_GATE_KERNEL(KERNEL, PACKED_KERNEL, ACT_FIRST,        \
-                                      HAS_CLAMP, LIMIT, ALPHA, BETA)           \
-  auto dtype = input.scalar_type();                                            \
-  int d = input.size(-1) / 2;                                                  \
-  int64_t num_tokens = input.numel() / input.size(-1);                         \
-  if (num_tokens == 0) {                                                       \
-    return;                                                                    \
-  }                                                                            \
-  dim3 grid(num_tokens);                                                       \
-  int cc_major = get_device_prop()->major;                                     \
-  int support_vec =                                                            \
-      (CUDA_VERSION >= 12090 && cc_major >= 10 && num_tokens > 128)            \
-          ? aphrodite::VecTraits<true>::ARCH_MAX_VEC_SIZE                      \
-          : aphrodite::VecTraits<false>::ARCH_MAX_VEC_SIZE;                    \
-  int vec_size = support_vec / input.element_size();                           \
-  const bool use_vec = (d % vec_size == 0);                                    \
-  const torch::stable::accelerator::DeviceGuard device_guard(                  \
-      input.get_device_index());                                               \
-  const cudaStream_t stream = get_current_cuda_stream();                       \
-  if (use_vec) {                                                               \
-    dim3 block(std::min(d / vec_size, 1024));                                  \
-    if (CUDA_VERSION >= 12090 && cc_major >= 10 && num_tokens > 128) {         \
-      APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(                                \
-          dtype, "act_and_mul_kernel", [&] {                                   \
-            aphrodite::act_and_mul_kernel<                                     \
-                scalar_t,                                                      \
-                typename aphrodite::PackedTypeConverter<scalar_t>::Type,       \
-                KERNEL<scalar_t>,                                              \
-                PACKED_KERNEL<                                                 \
-                    typename aphrodite::PackedTypeConverter<scalar_t>::Type>,  \
-                ACT_FIRST, true, HAS_CLAMP, true><<<grid, block, 0, stream>>>( \
-                out.mutable_data_ptr<scalar_t>(),                              \
-                input.const_data_ptr<scalar_t>(), d, LIMIT, ALPHA, BETA);      \
-          });                                                                  \
-    } else {                                                                   \
-      APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(                                \
-          dtype, "act_and_mul_kernel", [&] {                                   \
-            aphrodite::act_and_mul_kernel<                                     \
-                scalar_t,                                                      \
-                typename aphrodite::PackedTypeConverter<scalar_t>::Type,       \
-                KERNEL<scalar_t>,                                              \
-                PACKED_KERNEL<                                                 \
-                    typename aphrodite::PackedTypeConverter<scalar_t>::Type>,  \
-                ACT_FIRST, true, HAS_CLAMP, false>                             \
-                <<<grid, block, 0, stream>>>(out.mutable_data_ptr<scalar_t>(), \
-                                             input.const_data_ptr<scalar_t>(), \
-                                             d, LIMIT, ALPHA, BETA);           \
-          });                                                                  \
-    }                                                                          \
-  } else {                                                                     \
-    dim3 block(std::min(d, 1024));                                             \
-    APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(                                  \
-        dtype, "act_and_mul_kernel", [&] {                                     \
-          aphrodite::act_and_mul_kernel<                                       \
-              scalar_t,                                                        \
-              typename aphrodite::PackedTypeConverter<scalar_t>::Type,         \
-              KERNEL<scalar_t>,                                                \
-              PACKED_KERNEL<                                                   \
-                  typename aphrodite::PackedTypeConverter<scalar_t>::Type>,    \
-              ACT_FIRST, false, HAS_CLAMP><<<grid, block, 0, stream>>>(        \
-              out.mutable_data_ptr<scalar_t>(),                                \
-              input.const_data_ptr<scalar_t>(), d, LIMIT, ALPHA, BETA);        \
-        });                                                                    \
+#define LAUNCH_ACTIVATION_GATE_KERNEL(KERNEL, PACKED_KERNEL, ACT_FIRST,       \
+                                      HAS_CLAMP, LIMIT, ALPHA, BETA)          \
+  auto dtype = input.scalar_type();                                           \
+  int d = input.size(-1) / 2;                                                 \
+  int64_t num_tokens = input.numel() / input.size(-1);                        \
+  if (num_tokens == 0) {                                                      \
+    return;                                                                   \
+  }                                                                           \
+  dim3 grid(num_tokens);                                                      \
+  int cc_major = get_device_prop()->major;                                    \
+  int support_vec =                                                           \
+      (CUDA_VERSION >= 12090 && cc_major >= 10 && num_tokens > 128)           \
+          ? sonar::VecTraits<true>::ARCH_MAX_VEC_SIZE                         \
+          : sonar::VecTraits<false>::ARCH_MAX_VEC_SIZE;                       \
+  int vec_size = support_vec / input.element_size();                          \
+  const bool use_vec = (d % vec_size == 0);                                   \
+  const torch::stable::accelerator::DeviceGuard device_guard(                 \
+      input.get_device_index());                                              \
+  const cudaStream_t stream = get_current_cuda_stream();                      \
+  if (use_vec) {                                                              \
+    dim3 block(std::min(d / vec_size, 1024));                                 \
+    if (CUDA_VERSION >= 12090 && cc_major >= 10 && num_tokens > 128) {        \
+      SONAR_STABLE_DISPATCH_FLOATING_TYPES(dtype, "act_and_mul_kernel", [&] { \
+        sonar::act_and_mul_kernel<                                            \
+            scalar_t, typename sonar::PackedTypeConverter<scalar_t>::Type,    \
+            KERNEL<scalar_t>,                                                 \
+            PACKED_KERNEL<                                                    \
+                typename sonar::PackedTypeConverter<scalar_t>::Type>,         \
+            ACT_FIRST, true, HAS_CLAMP, true><<<grid, block, 0, stream>>>(    \
+            out.mutable_data_ptr<scalar_t>(),                                 \
+            input.const_data_ptr<scalar_t>(), d, LIMIT, ALPHA, BETA);         \
+      });                                                                     \
+    } else {                                                                  \
+      SONAR_STABLE_DISPATCH_FLOATING_TYPES(dtype, "act_and_mul_kernel", [&] { \
+        sonar::act_and_mul_kernel<                                            \
+            scalar_t, typename sonar::PackedTypeConverter<scalar_t>::Type,    \
+            KERNEL<scalar_t>,                                                 \
+            PACKED_KERNEL<                                                    \
+                typename sonar::PackedTypeConverter<scalar_t>::Type>,         \
+            ACT_FIRST, true, HAS_CLAMP, false><<<grid, block, 0, stream>>>(   \
+            out.mutable_data_ptr<scalar_t>(),                                 \
+            input.const_data_ptr<scalar_t>(), d, LIMIT, ALPHA, BETA);         \
+      });                                                                     \
+    }                                                                         \
+  } else {                                                                    \
+    dim3 block(std::min(d, 1024));                                            \
+    SONAR_STABLE_DISPATCH_FLOATING_TYPES(dtype, "act_and_mul_kernel", [&] {   \
+      sonar::act_and_mul_kernel<                                              \
+          scalar_t, typename sonar::PackedTypeConverter<scalar_t>::Type,      \
+          KERNEL<scalar_t>,                                                   \
+          PACKED_KERNEL<typename sonar::PackedTypeConverter<scalar_t>::Type>, \
+          ACT_FIRST, false, HAS_CLAMP><<<grid, block, 0, stream>>>(           \
+          out.mutable_data_ptr<scalar_t>(), input.const_data_ptr<scalar_t>(), \
+          d, LIMIT, ALPHA, BETA);                                             \
+    });                                                                       \
   }
 
 void silu_and_mul(torch::stable::Tensor& out,    // [..., d]
                   torch::stable::Tensor& input)  // [..., 2 * d]
 {
-  LAUNCH_ACTIVATION_GATE_KERNEL(aphrodite::silu_kernel,
-                                aphrodite::packed_silu_kernel, true, false,
-                                0.0f, 1.0f, 0.0f);
+  LAUNCH_ACTIVATION_GATE_KERNEL(sonar::silu_kernel, sonar::packed_silu_kernel,
+                                true, false, 0.0f, 1.0f, 0.0f);
 }
 
 void silu_and_mul_clamp(torch::stable::Tensor& out,    // [..., d]
@@ -320,9 +311,9 @@ void silu_and_mul_clamp(torch::stable::Tensor& out,    // [..., d]
   // out = (gate.clamp(max=limit) * sigmoid(alpha * gate.clamp(max=limit)))
   //       * (up.clamp(+-limit) + beta)
   // alpha=1.0, beta=0.0 reduce this to silu(gate) * up.
-  LAUNCH_ACTIVATION_GATE_KERNEL(aphrodite::silu_kernel,
-                                aphrodite::packed_silu_kernel, true, true,
-                                (float)limit, (float)alpha, (float)beta);
+  LAUNCH_ACTIVATION_GATE_KERNEL(sonar::silu_kernel, sonar::packed_silu_kernel,
+                                true, true, (float)limit, (float)alpha,
+                                (float)beta);
 }
 
 void mul_and_silu(torch::stable::Tensor& out,    // [..., d]
@@ -330,28 +321,26 @@ void mul_and_silu(torch::stable::Tensor& out,    // [..., d]
 {
   // The difference between mul_and_silu and silu_and_mul is that mul_and_silu
   // applies the silu to the latter half of the input.
-  LAUNCH_ACTIVATION_GATE_KERNEL(aphrodite::silu_kernel,
-                                aphrodite::packed_silu_kernel, false, false,
-                                0.0f, 1.0f, 0.0f);
+  LAUNCH_ACTIVATION_GATE_KERNEL(sonar::silu_kernel, sonar::packed_silu_kernel,
+                                false, false, 0.0f, 1.0f, 0.0f);
 }
 
 void gelu_and_mul(torch::stable::Tensor& out,    // [..., d]
                   torch::stable::Tensor& input)  // [..., 2 * d]
 {
-  LAUNCH_ACTIVATION_GATE_KERNEL(aphrodite::gelu_kernel,
-                                aphrodite::packed_gelu_kernel, true, false,
-                                0.0f, 1.0f, 0.0f);
+  LAUNCH_ACTIVATION_GATE_KERNEL(sonar::gelu_kernel, sonar::packed_gelu_kernel,
+                                true, false, 0.0f, 1.0f, 0.0f);
 }
 
 void gelu_tanh_and_mul(torch::stable::Tensor& out,    // [..., d]
                        torch::stable::Tensor& input)  // [..., 2 * d]
 {
-  LAUNCH_ACTIVATION_GATE_KERNEL(aphrodite::gelu_tanh_kernel,
-                                aphrodite::packed_gelu_tanh_kernel, true, false,
+  LAUNCH_ACTIVATION_GATE_KERNEL(sonar::gelu_tanh_kernel,
+                                sonar::packed_gelu_tanh_kernel, true, false,
                                 0.0f, 1.0f, 0.0f);
 }
 
-namespace aphrodite {
+namespace sonar {
 
 template <typename T>
 __device__ __forceinline__ T fatrelu_kernel(const T& x, const float threshold) {
@@ -411,8 +400,8 @@ __global__ void act_and_mul_kernel_with_param(
   } else {
     // Scalar fallback for unaligned data or small d
     for (int64_t idx = threadIdx.x; idx < d; idx += blockDim.x) {
-      const scalar_t x = APHRODITE_LDG(&x_ptr[idx]);
-      const scalar_t y = APHRODITE_LDG(&y_ptr[idx]);
+      const scalar_t x = SONAR_LDG(&x_ptr[idx]);
+      const scalar_t y = SONAR_LDG(&y_ptr[idx]);
       out_ptr[idx] = ACT_FN(x, param) * y;
     }
   }
@@ -460,7 +449,7 @@ __global__ void swigluoai_and_mul_kernel(
     const int vec_end = num_vecs * PAIRS;
 
     for (int i = threadIdx.x; i < num_vecs; i += blockDim.x) {
-      int4 v = APHRODITE_LDG(&in_vec[i]);
+      int4 v = SONAR_LDG(&in_vec[i]);
       int2 r;
       auto* vp = reinterpret_cast<scalar_t*>(&v);
       auto* rp = reinterpret_cast<scalar_t*>(&r);
@@ -472,16 +461,16 @@ __global__ void swigluoai_and_mul_kernel(
     }
     // Scalar cleanup for remaining elements
     for (int i = vec_end + threadIdx.x; i < d; i += blockDim.x) {
-      out_ptr[i] = ACT_FN(APHRODITE_LDG(&in_ptr[2 * i]),
-                          APHRODITE_LDG(&in_ptr[2 * i + 1]), alpha, limit);
+      out_ptr[i] = ACT_FN(SONAR_LDG(&in_ptr[2 * i]),
+                          SONAR_LDG(&in_ptr[2 * i + 1]), alpha, limit);
     }
   } else {
     // Scalar fallback for unaligned data or small d
     for (int64_t idx = threadIdx.x; idx < d; idx += blockDim.x) {
       // gate = x[..., ::2]  (even indices)
-      const scalar_t gate = APHRODITE_LDG(&in_ptr[2 * idx]);
+      const scalar_t gate = SONAR_LDG(&in_ptr[2 * idx]);
       // up = x[..., 1::2]   (odd indices)
-      const scalar_t up = APHRODITE_LDG(&in_ptr[2 * idx + 1]);
+      const scalar_t up = SONAR_LDG(&in_ptr[2 * idx + 1]);
       out_ptr[idx] = ACT_FN(gate, up, alpha, limit);
     }
   }
@@ -522,8 +511,8 @@ __global__ void situ_and_mul_kernel(
   const float inv_beta = 1.0f / beta;
   const float inv_linear_beta = clamp_up ? 1.0f / linear_beta : 0.0f;
   for (int64_t idx = threadIdx.x; idx < d; idx += blockDim.x) {
-    const float g = (float)APHRODITE_LDG(&gate_ptr[idx]);
-    const float u = (float)APHRODITE_LDG(&up_ptr[idx]);
+    const float g = (float)SONAR_LDG(&gate_ptr[idx]);
+    const float u = (float)SONAR_LDG(&up_ptr[idx]);
     out_ptr[idx] = (scalar_t)situ_activation(g, u, beta, linear_beta, clamp_up,
                                              inv_beta, inv_linear_beta);
   }
@@ -555,7 +544,7 @@ __device__ __forceinline__ fp8_type quant_to_fp8(float val, float inv_scale,
 __device__ __forceinline__ float warp_reduce_max(float v) {
 #pragma unroll
   for (int offset = WARP_SIZE / 2; offset > 0; offset >>= 1) {
-    v = fmaxf(v, APHRODITE_SHFL_XOR_SYNC(v, offset));
+    v = fmaxf(v, SONAR_SHFL_XOR_SYNC(v, offset));
   }
   return v;
 }
@@ -754,8 +743,8 @@ __global__ void situ_and_mul_quant_group_scalar_kernel(
 #pragma unroll
       for (int e = 0; e < ELTS_PER_LANE; e++) {
         const int idx = base + e * WARP_SIZE + lane_id;
-        const float gv = (float)APHRODITE_LDG(&gate_ptr[idx]);
-        const float uv = (float)APHRODITE_LDG(&up_ptr[idx]);
+        const float gv = (float)SONAR_LDG(&gate_ptr[idx]);
+        const float uv = (float)SONAR_LDG(&up_ptr[idx]);
         acts[e] = (float)(scalar_t)situ_activation(
             gv, uv, beta, linear_beta, clamp_up, inv_beta, inv_linear_beta);
         thread_max = fmaxf(thread_max, fabsf(acts[e]));
@@ -839,8 +828,8 @@ __global__ void masked_situ_and_mul_kernel(
     const scalar_t* gate_ptr = input + row * 2 * d;
     const scalar_t* up_ptr = gate_ptr + d;
     scalar_t* out_ptr = out + row * d;
-    const float g = (float)APHRODITE_LDG(&gate_ptr[idx]);
-    const float u = (float)APHRODITE_LDG(&up_ptr[idx]);
+    const float g = (float)SONAR_LDG(&gate_ptr[idx]);
+    const float u = (float)SONAR_LDG(&up_ptr[idx]);
     out_ptr[idx] = (scalar_t)situ_activation(g, u, beta, linear_beta, clamp_up,
                                              inv_beta, inv_linear_beta);
   }
@@ -864,8 +853,8 @@ __global__ void masked_act_and_mul_kernel(
     const scalar_t* x_ptr = input + row * 2 * d;
     const scalar_t* y_ptr = x_ptr + d;
     scalar_t* out_ptr = out + row * d;
-    const scalar_t x = APHRODITE_LDG(&x_ptr[idx]);
-    const scalar_t y = APHRODITE_LDG(&y_ptr[idx]);
+    const scalar_t x = SONAR_LDG(&x_ptr[idx]);
+    const scalar_t y = SONAR_LDG(&y_ptr[idx]);
     out_ptr[idx] = compute<scalar_t, ACT_FN, act_first, HAS_CLAMP>(x, y, limit,
                                                                    alpha, beta);
   }
@@ -909,8 +898,8 @@ __global__ void masked_swiglustep_and_mul_kernel(
     const scalar_t* gate_ptr = input + row * 2 * d;
     const scalar_t* up_ptr = gate_ptr + d;
     scalar_t* out_ptr = out + row * d;
-    const float gate = (float)APHRODITE_LDG(&gate_ptr[idx]);
-    const float up = (float)APHRODITE_LDG(&up_ptr[idx]);
+    const float gate = (float)SONAR_LDG(&gate_ptr[idx]);
+    const float up = (float)SONAR_LDG(&up_ptr[idx]);
     const float gate_silu = gate / (1.0f + expf(-gate));
     const float gate_clamped = fminf(gate_silu, limit);
     const float up_clamped = fmaxf(fminf(up, limit), -limit);
@@ -955,11 +944,11 @@ __global__ void masked_activation_kernel(
 
   for (int64_t row = first_row; row < end_row; row += row_stride) {
     const int64_t offset = row * d + idx;
-    out[offset] = ACT_FN(APHRODITE_LDG(&input[offset]));
+    out[offset] = ACT_FN(SONAR_LDG(&input[offset]));
   }
 }
 
-}  // namespace aphrodite
+}  // namespace sonar
 
 #define LAUNCH_ACTIVATION_GATE_KERNEL_WITH_PARAM(KERNEL, PACKED_KERNEL, PARAM) \
   auto dtype = input.scalar_type();                                            \
@@ -972,8 +961,8 @@ __global__ void masked_activation_kernel(
   int cc_major = get_device_prop()->major;                                     \
   int support_vec =                                                            \
       (CUDA_VERSION >= 12090 && cc_major >= 10 && num_tokens > 128)            \
-          ? aphrodite::VecTraits<true>::ARCH_MAX_VEC_SIZE                      \
-          : aphrodite::VecTraits<false>::ARCH_MAX_VEC_SIZE;                    \
+          ? sonar::VecTraits<true>::ARCH_MAX_VEC_SIZE                          \
+          : sonar::VecTraits<false>::ARCH_MAX_VEC_SIZE;                        \
   int vec_size = support_vec / input.element_size();                           \
   const bool use_vec = (d % vec_size == 0);                                    \
   const torch::stable::accelerator::DeviceGuard device_guard(                  \
@@ -982,27 +971,25 @@ __global__ void masked_activation_kernel(
   if (use_vec) {                                                               \
     dim3 block(std::min(d / vec_size, 1024));                                  \
     if (CUDA_VERSION >= 12090 && cc_major >= 10 && num_tokens > 128) {         \
-      APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(                                \
+      SONAR_STABLE_DISPATCH_FLOATING_TYPES(                                    \
           dtype, "act_and_mul_kernel_with_param", [&] {                        \
-            aphrodite::act_and_mul_kernel_with_param<                          \
-                scalar_t,                                                      \
-                typename aphrodite::PackedTypeConverter<scalar_t>::Type,       \
+            sonar::act_and_mul_kernel_with_param<                              \
+                scalar_t, typename sonar::PackedTypeConverter<scalar_t>::Type, \
                 KERNEL<scalar_t>,                                              \
                 PACKED_KERNEL<                                                 \
-                    typename aphrodite::PackedTypeConverter<scalar_t>::Type>,  \
+                    typename sonar::PackedTypeConverter<scalar_t>::Type>,      \
                 true, true><<<grid, block, 0, stream>>>(                       \
                 out.mutable_data_ptr<scalar_t>(),                              \
                 input.const_data_ptr<scalar_t>(), d, PARAM);                   \
           });                                                                  \
     } else {                                                                   \
-      APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(                                \
+      SONAR_STABLE_DISPATCH_FLOATING_TYPES(                                    \
           dtype, "act_and_mul_kernel_with_param", [&] {                        \
-            aphrodite::act_and_mul_kernel_with_param<                          \
-                scalar_t,                                                      \
-                typename aphrodite::PackedTypeConverter<scalar_t>::Type,       \
+            sonar::act_and_mul_kernel_with_param<                              \
+                scalar_t, typename sonar::PackedTypeConverter<scalar_t>::Type, \
                 KERNEL<scalar_t>,                                              \
                 PACKED_KERNEL<                                                 \
-                    typename aphrodite::PackedTypeConverter<scalar_t>::Type>,  \
+                    typename sonar::PackedTypeConverter<scalar_t>::Type>,      \
                 true, false><<<grid, block, 0, stream>>>(                      \
                 out.mutable_data_ptr<scalar_t>(),                              \
                 input.const_data_ptr<scalar_t>(), d, PARAM);                   \
@@ -1010,14 +997,13 @@ __global__ void masked_activation_kernel(
     }                                                                          \
   } else {                                                                     \
     dim3 block(std::min(d, 1024));                                             \
-    APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(                                  \
+    SONAR_STABLE_DISPATCH_FLOATING_TYPES(                                      \
         dtype, "act_and_mul_kernel_with_param", [&] {                          \
-          aphrodite::act_and_mul_kernel_with_param<                            \
-              scalar_t,                                                        \
-              typename aphrodite::PackedTypeConverter<scalar_t>::Type,         \
+          sonar::act_and_mul_kernel_with_param<                                \
+              scalar_t, typename sonar::PackedTypeConverter<scalar_t>::Type,   \
               KERNEL<scalar_t>,                                                \
               PACKED_KERNEL<                                                   \
-                  typename aphrodite::PackedTypeConverter<scalar_t>::Type>,    \
+                  typename sonar::PackedTypeConverter<scalar_t>::Type>,        \
               false><<<grid, block, 0, stream>>>(                              \
               out.mutable_data_ptr<scalar_t>(),                                \
               input.const_data_ptr<scalar_t>(), d, PARAM);                     \
@@ -1032,9 +1018,9 @@ __global__ void masked_activation_kernel(
   const torch::stable::accelerator::DeviceGuard device_guard(                 \
       input.get_device_index());                                              \
   const cudaStream_t stream = get_current_cuda_stream();                      \
-  APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(                                   \
+  SONAR_STABLE_DISPATCH_FLOATING_TYPES(                                       \
       input.scalar_type(), "clamp_swiglu_kernel_with_params", [&] {           \
-        aphrodite::swigluoai_and_mul_kernel<scalar_t, KERNEL<scalar_t>>       \
+        sonar::swigluoai_and_mul_kernel<scalar_t, KERNEL<scalar_t>>           \
             <<<grid, block, 0, stream>>>(out.mutable_data_ptr<scalar_t>(),    \
                                          input.const_data_ptr<scalar_t>(), d, \
                                          ALPHA, LIMIT);                       \
@@ -1044,12 +1030,12 @@ void fatrelu_and_mul(torch::stable::Tensor& out,    // [..., d],
                      torch::stable::Tensor& input,  // [..., 2 * d]
                      double threshold) {
   LAUNCH_ACTIVATION_GATE_KERNEL_WITH_PARAM(
-      aphrodite::fatrelu_kernel, aphrodite::packed_fatrelu_kernel, threshold);
+      sonar::fatrelu_kernel, sonar::packed_fatrelu_kernel, threshold);
 }
 void swigluoai_and_mul(torch::stable::Tensor& out,    // [..., d]
                        torch::stable::Tensor& input,  // [..., 2 * d]
                        double alpha, double limit) {
-  LAUNCH_SIGLUOAI_AND_MUL(aphrodite::swigluoai_and_mul, alpha, limit);
+  LAUNCH_SIGLUOAI_AND_MUL(sonar::swigluoai_and_mul, alpha, limit);
 }
 
 // Kimi SITU gated activation. `linear_beta <= 0` means "unset" (up passed
@@ -1067,9 +1053,9 @@ void situ_and_mul(torch::stable::Tensor& out,    // [..., d]
   const torch::stable::accelerator::DeviceGuard device_guard(
       input.get_device_index());
   const cudaStream_t stream = get_current_cuda_stream();
-  APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(
+  SONAR_STABLE_DISPATCH_FLOATING_TYPES(
       input.scalar_type(), "situ_and_mul_kernel", [&] {
-        aphrodite::situ_and_mul_kernel<scalar_t><<<grid, block, 0, stream>>>(
+        sonar::situ_and_mul_kernel<scalar_t><<<grid, block, 0, stream>>>(
             out.mutable_data_ptr<scalar_t>(), input.const_data_ptr<scalar_t>(),
             d, (float)beta, (float)linear_beta);
       });
@@ -1077,18 +1063,17 @@ void situ_and_mul(torch::stable::Tensor& out,    // [..., d]
 
 #define LAUNCH_MASKED_ACT_AND_MUL(KERNEL, ACT_FIRST, HAS_CLAMP, LIMIT, ALPHA, \
                                   BETA)                                       \
-  aphrodite::masked_act_and_mul_kernel<scalar_t, KERNEL<scalar_t>, ACT_FIRST, \
-                                       HAS_CLAMP, BATCHED_EXPERTS>            \
+  sonar::masked_act_and_mul_kernel<scalar_t, KERNEL<scalar_t>, ACT_FIRST,     \
+                                   HAS_CLAMP, BATCHED_EXPERTS>                \
       <<<grid, block, 0, stream>>>(out.mutable_data_ptr<scalar_t>(),          \
                                    input.const_data_ptr<scalar_t>(),          \
                                    valid_token_counts.const_data_ptr<int>(),  \
                                    max_num_tokens, d, LIMIT, ALPHA, BETA)
 
-#define LAUNCH_MASKED_ACTIVATION(KERNEL)                                      \
-  aphrodite::masked_activation_kernel<scalar_t, KERNEL<scalar_t>,             \
-                                      BATCHED_EXPERTS>                        \
-      <<<grid, block, 0, stream>>>(                                           \
-          out.mutable_data_ptr<scalar_t>(), input.const_data_ptr<scalar_t>(), \
+#define LAUNCH_MASKED_ACTIVATION(KERNEL)                                       \
+  sonar::masked_activation_kernel<scalar_t, KERNEL<scalar_t>, BATCHED_EXPERTS> \
+      <<<grid, block, 0, stream>>>(                                            \
+          out.mutable_data_ptr<scalar_t>(), input.const_data_ptr<scalar_t>(),  \
           valid_token_counts.const_data_ptr<int>(), max_num_tokens, d)
 
 void masked_moe_activation(
@@ -1108,7 +1093,7 @@ void masked_moe_activation(
   constexpr int block_size = 256;
   const int feature_blocks = (d + block_size - 1) / block_size;
   const int token_blocks =
-      std::min(max_num_tokens, aphrodite::kMaxMaskedTokenBlocks);
+      std::min(max_num_tokens, sonar::kMaxMaskedTokenBlocks);
   // Batched grid: (feature tile, expert, token lane); flat grid: (feature
   // tile, token lane). Token lanes grid-stride each valid prefix.
   dim3 grid = batched_experts ? dim3(feature_blocks, num_experts, token_blocks)
@@ -1118,56 +1103,54 @@ void masked_moe_activation(
       input.get_device_index());
   const cudaStream_t stream = get_current_cuda_stream();
   auto launch = [&]<bool BATCHED_EXPERTS>() {
-    APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(
+    SONAR_STABLE_DISPATCH_FLOATING_TYPES(
         input.scalar_type(), "masked_moe_activation", [&] {
           if (activation == "silu") {
-            LAUNCH_MASKED_ACT_AND_MUL(aphrodite::silu_kernel, true, false, 0.0f,
+            LAUNCH_MASKED_ACT_AND_MUL(sonar::silu_kernel, true, false, 0.0f,
                                       1.0f, 0.0f);
           } else if (activation == "silu_with_clamp") {
-            LAUNCH_MASKED_ACT_AND_MUL(aphrodite::silu_kernel, true, true,
+            LAUNCH_MASKED_ACT_AND_MUL(sonar::silu_kernel, true, true,
                                       (float)clamp_limit, (float)alpha,
                                       (float)beta);
           } else if (activation == "gelu") {
-            LAUNCH_MASKED_ACT_AND_MUL(aphrodite::gelu_kernel, true, false, 0.0f,
+            LAUNCH_MASKED_ACT_AND_MUL(sonar::gelu_kernel, true, false, 0.0f,
                                       1.0f, 0.0f);
           } else if (activation == "gelu_tanh") {
-            LAUNCH_MASKED_ACT_AND_MUL(aphrodite::gelu_tanh_kernel, true, false,
+            LAUNCH_MASKED_ACT_AND_MUL(sonar::gelu_tanh_kernel, true, false,
                                       0.0f, 1.0f, 0.0f);
           } else if (activation == "situ") {
-            aphrodite::masked_situ_and_mul_kernel<scalar_t, BATCHED_EXPERTS>
+            sonar::masked_situ_and_mul_kernel<scalar_t, BATCHED_EXPERTS>
                 <<<grid, block, 0, stream>>>(
                     out.mutable_data_ptr<scalar_t>(),
                     input.const_data_ptr<scalar_t>(),
                     valid_token_counts.const_data_ptr<int>(), max_num_tokens, d,
                     (float)situ_beta, (float)situ_linear_beta);
           } else if (activation == "swigluoai") {
-            aphrodite::masked_swigluoai_and_mul_kernel<scalar_t,
-                                                       BATCHED_EXPERTS>
+            sonar::masked_swigluoai_and_mul_kernel<scalar_t, BATCHED_EXPERTS>
                 <<<grid, block, 0, stream>>>(
                     out.mutable_data_ptr<scalar_t>(),
                     input.const_data_ptr<scalar_t>(),
                     valid_token_counts.const_data_ptr<int>(), max_num_tokens, d,
                     (float)alpha, (float)clamp_limit);
           } else if (activation == "swigluoai_uninterleave") {
-            LAUNCH_MASKED_ACT_AND_MUL(aphrodite::silu_kernel, true, true,
+            LAUNCH_MASKED_ACT_AND_MUL(sonar::silu_kernel, true, true,
                                       (float)clamp_limit, (float)alpha,
                                       (float)beta);
           } else if (activation == "swiglustep") {
-            aphrodite::masked_swiglustep_and_mul_kernel<scalar_t,
-                                                        BATCHED_EXPERTS>
+            sonar::masked_swiglustep_and_mul_kernel<scalar_t, BATCHED_EXPERTS>
                 <<<grid, block, 0, stream>>>(
                     out.mutable_data_ptr<scalar_t>(),
                     input.const_data_ptr<scalar_t>(),
                     valid_token_counts.const_data_ptr<int>(), max_num_tokens, d,
                     (float)clamp_limit);
           } else if (activation == "silu_no_mul") {
-            LAUNCH_MASKED_ACTIVATION(aphrodite::silu_no_mul_kernel);
+            LAUNCH_MASKED_ACTIVATION(sonar::silu_no_mul_kernel);
           } else if (activation == "gelu_no_mul") {
-            LAUNCH_MASKED_ACTIVATION(aphrodite::gelu_no_mul_kernel);
+            LAUNCH_MASKED_ACTIVATION(sonar::gelu_no_mul_kernel);
           } else if (activation == "gelu_tanh_no_mul") {
-            LAUNCH_MASKED_ACTIVATION(aphrodite::gelu_tanh_no_mul_kernel);
+            LAUNCH_MASKED_ACTIVATION(sonar::gelu_tanh_no_mul_kernel);
           } else if (activation == "relu2_no_mul") {
-            LAUNCH_MASKED_ACTIVATION(aphrodite::relu2_no_mul_kernel);
+            LAUNCH_MASKED_ACTIVATION(sonar::relu2_no_mul_kernel);
           } else {
             STD_TORCH_CHECK(false,
                             "Unsupported masked MoE activation: ", activation);
@@ -1246,9 +1229,9 @@ void situ_and_mul_quant(torch::stable::Tensor& out,    // [..., d]  (fp8)
                     "situ_and_mul_quant: scale shape must be "
                     "[num_tokens, d/group_size]");
     dim3 grid(GRID_DIM);
-    APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(
+    SONAR_STABLE_DISPATCH_FLOATING_TYPES(
         input.scalar_type(), "situ_and_mul_quant_group_kernel", [&] {
-          APHRODITE_STABLE_DISPATCH_FP8_TYPES(
+          SONAR_STABLE_DISPATCH_FP8_TYPES(
               out.scalar_type(), "situ_and_mul_quant_group_kernel_fp8", [&] {
 #ifndef USE_ROCM
                 // The pipelined kernel's float2-per-lane geometry assumes a
@@ -1257,8 +1240,8 @@ void situ_and_mul_quant(torch::stable::Tensor& out,    // [..., d]  (fp8)
                 constexpr int THREADS = 256;
                 constexpr int SITU_D = 3072;  // Kimi-K3 fused w2 input dim
                 if constexpr (sizeof(scalar_t) == 2) {
-                  if (d == SITU_D && (float)beta == aphrodite::SITU_BETA &&
-                      (float)linear_beta == aphrodite::SITU_LINEAR_BETA) {
+                  if (d == SITU_D && (float)beta == sonar::SITU_BETA &&
+                      (float)linear_beta == sonar::SITU_LINEAR_BETA) {
                     constexpr int D = SITU_D;
                     constexpr int GROUP_STAGES = 4;
                     constexpr int NUM_WARPS = THREADS / 32;
@@ -1266,7 +1249,7 @@ void situ_and_mul_quant(torch::stable::Tensor& out,    // [..., d]  (fp8)
                     dim3 block(THREADS);
                     size_t smem_bytes = (size_t)NUM_WARPS * GROUP_STAGES *
                                         STAGE_ELTS * sizeof(scalar_t);
-                    aphrodite::situ_and_mul_quant_group_pipelined_kernel<
+                    sonar::situ_and_mul_quant_group_pipelined_kernel<
                         scalar_t, fp8_t, THREADS, GROUP_STAGES, 128, GRID_DIM,
                         D><<<grid, block, smem_bytes, stream>>>(
                         out.mutable_data_ptr<fp8_t>(),
@@ -1279,8 +1262,8 @@ void situ_and_mul_quant(torch::stable::Tensor& out,    // [..., d]  (fp8)
 #endif
                 const int num_warps = std::min(num_groups, 1024 / WARP_SIZE);
                 dim3 block(num_warps * WARP_SIZE);
-                aphrodite::situ_and_mul_quant_group_scalar_kernel<scalar_t,
-                                                                  fp8_t, 128>
+                sonar::situ_and_mul_quant_group_scalar_kernel<scalar_t, fp8_t,
+                                                              128>
                     <<<grid, block, 0, stream>>>(
                         out.mutable_data_ptr<fp8_t>(),
                         scale.mutable_data_ptr<float>(),
@@ -1291,7 +1274,7 @@ void situ_and_mul_quant(torch::stable::Tensor& out,    // [..., d]  (fp8)
         });
   }
 }
-namespace aphrodite {
+namespace sonar {
 
 // Element-wise activation kernel template.
 template <typename scalar_t, scalar_t (*ACT_FN)(const scalar_t&), bool use_vec,
@@ -1318,7 +1301,7 @@ __global__ void activation_kernel(
       if constexpr (use_256b) {
         ld256(v, &in_vec[i]);
       } else {
-        v = APHRODITE_LDG(&in_vec[i]);
+        v = SONAR_LDG(&in_vec[i]);
       }
       auto* vp = reinterpret_cast<scalar_t*>(&v);
 #pragma unroll
@@ -1334,13 +1317,13 @@ __global__ void activation_kernel(
   } else {
     // Scalar fallback for unaligned data or small d
     for (int64_t idx = threadIdx.x; idx < d; idx += blockDim.x) {
-      const scalar_t x = APHRODITE_LDG(&in_ptr[idx]);
+      const scalar_t x = SONAR_LDG(&in_ptr[idx]);
       out_ptr[idx] = ACT_FN(x);
     }
   }
 }
 
-}  // namespace aphrodite
+}  // namespace sonar
 
 // Launch element-wise activation kernel.
 #define LAUNCH_ACTIVATION_KERNEL(KERNEL)                                       \
@@ -1354,8 +1337,8 @@ __global__ void activation_kernel(
   int cc_major = get_device_prop()->major;                                     \
   int support_vec =                                                            \
       (CUDA_VERSION >= 12090 && cc_major >= 10 && num_tokens > 128)            \
-          ? aphrodite::VecTraits<true>::ARCH_MAX_VEC_SIZE                      \
-          : aphrodite::VecTraits<false>::ARCH_MAX_VEC_SIZE;                    \
+          ? sonar::VecTraits<true>::ARCH_MAX_VEC_SIZE                          \
+          : sonar::VecTraits<false>::ARCH_MAX_VEC_SIZE;                        \
   int vec_size = support_vec / input.element_size();                           \
   const bool use_vec = (d % vec_size == 0);                                    \
   const torch::stable::accelerator::DeviceGuard device_guard(                  \
@@ -1364,32 +1347,28 @@ __global__ void activation_kernel(
   if (use_vec) {                                                               \
     dim3 block(std::min(d / vec_size, 1024));                                  \
     if (CUDA_VERSION >= 12090 && cc_major >= 10 && num_tokens > 128) {         \
-      APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(                                \
-          dtype, "activation_kernel", [&] {                                    \
-            aphrodite::activation_kernel<scalar_t, KERNEL<scalar_t>, true,     \
-                                         true><<<grid, block, 0, stream>>>(    \
-                out.mutable_data_ptr<scalar_t>(),                              \
-                input.const_data_ptr<scalar_t>(), d);                          \
-          });                                                                  \
+      SONAR_STABLE_DISPATCH_FLOATING_TYPES(dtype, "activation_kernel", [&] {   \
+        sonar::activation_kernel<scalar_t, KERNEL<scalar_t>, true, true>       \
+            <<<grid, block, 0, stream>>>(out.mutable_data_ptr<scalar_t>(),     \
+                                         input.const_data_ptr<scalar_t>(), d); \
+      });                                                                      \
     } else {                                                                   \
-      APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(                                \
-          dtype, "activation_kernel", [&] {                                    \
-            aphrodite::activation_kernel<scalar_t, KERNEL<scalar_t>, true,     \
-                                         false><<<grid, block, 0, stream>>>(   \
-                out.mutable_data_ptr<scalar_t>(),                              \
-                input.const_data_ptr<scalar_t>(), d);                          \
-          });                                                                  \
+      SONAR_STABLE_DISPATCH_FLOATING_TYPES(dtype, "activation_kernel", [&] {   \
+        sonar::activation_kernel<scalar_t, KERNEL<scalar_t>, true, false>      \
+            <<<grid, block, 0, stream>>>(out.mutable_data_ptr<scalar_t>(),     \
+                                         input.const_data_ptr<scalar_t>(), d); \
+      });                                                                      \
     }                                                                          \
   } else {                                                                     \
     dim3 block(std::min(d, 1024));                                             \
-    APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(dtype, "activation_kernel", [&] { \
-      aphrodite::activation_kernel<scalar_t, KERNEL<scalar_t>, false>          \
+    SONAR_STABLE_DISPATCH_FLOATING_TYPES(dtype, "activation_kernel", [&] {     \
+      sonar::activation_kernel<scalar_t, KERNEL<scalar_t>, false>              \
           <<<grid, block, 0, stream>>>(out.mutable_data_ptr<scalar_t>(),       \
                                        input.const_data_ptr<scalar_t>(), d);   \
     });                                                                        \
   }
 
-namespace aphrodite {
+namespace sonar {
 
 template <typename T>
 __device__ __forceinline__ T gelu_new_kernel(const T& x) {
@@ -1420,28 +1399,28 @@ __device__ __forceinline__ T relu_squared_kernel(const T& x) {
   return (T)(val * val);
 }
 
-}  // namespace aphrodite
+}  // namespace sonar
 
 void gelu_new(torch::stable::Tensor& out,    // [..., d]
               torch::stable::Tensor& input)  // [..., d]
 {
-  LAUNCH_ACTIVATION_KERNEL(aphrodite::gelu_new_kernel);
+  LAUNCH_ACTIVATION_KERNEL(sonar::gelu_new_kernel);
 }
 
 void gelu_fast(torch::stable::Tensor& out,    // [..., d]
                torch::stable::Tensor& input)  // [..., d]
 {
-  LAUNCH_ACTIVATION_KERNEL(aphrodite::gelu_fast_kernel);
+  LAUNCH_ACTIVATION_KERNEL(sonar::gelu_fast_kernel);
 }
 
 void gelu_quick(torch::stable::Tensor& out,    // [..., d]
                 torch::stable::Tensor& input)  // [..., d]
 {
-  LAUNCH_ACTIVATION_KERNEL(aphrodite::gelu_quick_kernel);
+  LAUNCH_ACTIVATION_KERNEL(sonar::gelu_quick_kernel);
 }
 
 void relu_squared(torch::stable::Tensor& out,    // [..., d]
                   torch::stable::Tensor& input)  // [..., d]
 {
-  LAUNCH_ACTIVATION_KERNEL(aphrodite::relu_squared_kernel);
+  LAUNCH_ACTIVATION_KERNEL(sonar::relu_squared_kernel);
 }

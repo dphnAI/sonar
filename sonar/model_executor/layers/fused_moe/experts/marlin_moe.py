@@ -7,40 +7,40 @@ from collections.abc import Callable
 
 import torch
 
-import aphrodite._custom_ops as ops
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite.model_executor.layers.fused_moe.activation import (
+import sonar._custom_ops as ops
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar.model_executor.layers.fused_moe.activation import (
     ApplyMoEActivationConfig,
     MoEActivation,
     apply_moe_activation,
     apply_moe_activation_masked_supported,
     apply_moe_activation_supported,
 )
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEParallelConfig,
     FusedMoEQuantConfig,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.lora_experts_mixin import (
+from sonar.model_executor.layers.fused_moe.experts.lora_experts_mixin import (
     LoRAExpertsMixin,
 )
-from aphrodite.model_executor.layers.fused_moe.moe_align_block_size import (
+from sonar.model_executor.layers.fused_moe.moe_align_block_size import (
     batched_moe_align_block_size,
     moe_align_block_size,
 )
-from aphrodite.model_executor.layers.fused_moe.moe_output import route_major_moe_output
-from aphrodite.model_executor.layers.fused_moe.topk_weight_and_reduce import (
+from sonar.model_executor.layers.fused_moe.moe_output import route_major_moe_output
+from sonar.model_executor.layers.fused_moe.topk_weight_and_reduce import (
     TopKWeightAndReduceDelegate,
     TopKWeightAndReduceNoOP,
 )
-from aphrodite.model_executor.layers.fused_moe.utils import _resize_cache
-from aphrodite.model_executor.layers.quantization.utils.marlin_utils import (
+from sonar.model_executor.layers.fused_moe.utils import _resize_cache
+from sonar.model_executor.layers.quantization.utils.marlin_utils import (
     get_marlin_input_dtype,
     get_marlin_workspace,
     marlin_moe_intermediate_size,
     marlin_quant_input,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     kFp8Static128BlockSym,
     kFp8StaticChannelSym,
@@ -54,8 +54,8 @@ from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
     kMxfp8Static,
     kNvfp4Static,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.scalar_type import ScalarType, scalar_types
+from sonar.platforms import current_platform
+from sonar.scalar_type import ScalarType, scalar_types
 
 
 def _fused_marlin_moe(

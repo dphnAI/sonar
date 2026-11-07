@@ -11,8 +11,8 @@ from typing import Any, ClassVar, NamedTuple
 import numpy as np
 import numpy.typing as npt
 
-from aphrodite.logger import init_logger
-from aphrodite.utils.mem_constants import MiB_bytes
+from sonar.logger import init_logger
+from sonar.utils.mem_constants import MiB_bytes
 
 from .base import (
     PYNVVIDEOCODEC_DEFAULT_HW_DECODERS,
@@ -532,7 +532,7 @@ class PyNvVideoCodecVideoBackendMixin:
     ) -> tuple[npt.NDArray, VideoSourceMetadata, list[int], list[int]]:
         import PyNvVideoCodec as nvc
 
-        from aphrodite.multimodal.gpu_ipc_memory import get_mm_gpu_ipc_pool
+        from sonar.multimodal.gpu_ipc_memory import get_mm_gpu_ipc_pool
 
         temp_fd, temp_path = tempfile.mkstemp(suffix=".mp4")
         try:

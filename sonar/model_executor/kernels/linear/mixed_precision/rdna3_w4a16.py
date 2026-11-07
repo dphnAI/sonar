@@ -12,14 +12,14 @@ through to the Triton kernel on non-RDNA3 ROCm devices (e.g. CDNA/MI300).
 
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar import _custom_ops as ops
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     pack_quantized_values_into_int32,
 )
-from aphrodite.model_executor.parameter import BaseAphroditeParameter, permute_param_layout_
-from aphrodite.model_executor.utils import replace_parameter
-from aphrodite.platforms import current_platform
-from aphrodite.scalar_type import scalar_types
+from sonar.model_executor.parameter import BaseSonarParameter, permute_param_layout_
+from sonar.model_executor.utils import replace_parameter
+from sonar.platforms import current_platform
+from sonar.scalar_type import scalar_types
 
 from .MPLinearKernel import MPLinearKernel, MPLinearLayerConfig
 
@@ -37,13 +37,13 @@ class RDNA3W4A16LinearKernel(MPLinearKernel):
         if not current_platform.is_rocm():
             return False, "RDNA3 W4A16 kernel is ROCm-only"
 
-        from aphrodite.platforms.rocm import on_gfx1100
+        from sonar.platforms.rocm import on_gfx1100
 
         if not on_gfx1100():
             return False, "RDNA3 W4A16 kernel requires gfx1100"
 
         # The HIP op is registered by the C++ extension; if a user is running
-        # against a Aphrodite build that doesn't include it (e.g. partial rebuild),
+        # against a Sonar build that doesn't include it (e.g. partial rebuild),
         # fall through gracefully to the next kernel in the registry.
         if not (hasattr(torch.ops, "_rocm_C") and hasattr(torch.ops._rocm_C, "gptq_gemm_rdna3")):
             return (
@@ -114,7 +114,7 @@ class RDNA3W4A16LinearKernel(MPLinearKernel):
             replace_parameter(layer, self.w_zp_name, zeros)
 
         def transform_w_q(x):
-            assert isinstance(x, BaseAphroditeParameter)
+            assert isinstance(x, BaseSonarParameter)
             permute_param_layout_(x, input_dim=0, output_dim=1, packed_dim=0)
             x_cont = x.data.contiguous()
             # Same 4-bit shuffle as exllama. The RDNA3 kernel reads weights in
@@ -124,7 +124,7 @@ class RDNA3W4A16LinearKernel(MPLinearKernel):
             return x_cont
 
         def transform_w_s(x):
-            assert isinstance(x, BaseAphroditeParameter)
+            assert isinstance(x, BaseSonarParameter)
             permute_param_layout_(x, input_dim=0, output_dim=1)
             x.data = x.data.contiguous()
             # Keep scales in the activation dtype (fp16 OR bf16) — the kernel

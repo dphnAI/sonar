@@ -15,32 +15,32 @@ import ray
 import torch
 from ray.experimental.tqdm_ray import tqdm
 
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe import fused_topk
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.all2all_utils import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe import fused_topk
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.all2all_utils import (
     maybe_make_prepare_finalize,
 )
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEParallelConfig,
     FusedMoEQuantConfig,
     RoutingMethodType,
     _get_config_dtype_str,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.triton_deep_gemm_moe import (
+from sonar.model_executor.layers.fused_moe.experts.triton_deep_gemm_moe import (
     TritonOrDeepGemmExperts,
 )
-from aphrodite.model_executor.layers.fused_moe.fused_moe import *
-from aphrodite.transformers_utils.config import get_config
-from aphrodite.triton_utils import triton
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.model_executor.layers.fused_moe.fused_moe import *
+from sonar.transformers_utils.config import get_config
+from sonar.triton_utils import triton
+from sonar.utils.argparse_utils import FlexibleArgumentParser
+from sonar.utils.torch_utils import set_random_seed
 
 logger = init_logger(__name__)
 
 if current_platform.is_rocm():
-    from aphrodite.platforms.rocm import on_cdna, on_rdna
+    from sonar.platforms.rocm import on_cdna, on_rdna
 
     # AMD RDNA doesn't have MFMA but WMMA
     WMMA_TILE = 16
@@ -49,7 +49,7 @@ FP8_DTYPE = current_platform.fp8_dtype()
 
 # Default interval for clearing Triton JIT cache during tuning
 # Set to 0 to disable automatic cache clearing
-_CACHE_CLEAR_INTERVAL_ENV = "APHRODITE_MOE_TUNE_CACHE_CLEAR_INTERVAL"
+_CACHE_CLEAR_INTERVAL_ENV = "SONAR_MOE_TUNE_CACHE_CLEAR_INTERVAL"
 TRITON_CACHE_CLEAR_INTERVAL = int(os.environ.get(_CACHE_CLEAR_INTERVAL_ENV, "50"))
 
 
@@ -228,7 +228,7 @@ def benchmark_config(
         input_gating.copy_(gating_output[i])
 
     def run():
-        from aphrodite.model_executor.layers.fused_moe import override_config
+        from sonar.model_executor.layers.fused_moe import override_config
 
         if use_fp8_w8a8:
             quant_dtype = torch.float8_e4m3fn
@@ -638,7 +638,7 @@ class BenchmarkWorker:
         per_act_token_quant: bool = False,
     ) -> dict[str, int]:
         # local import to allow serialization by ray
-        from aphrodite.platforms import current_platform
+        from sonar.platforms import current_platform
 
         best_config = None
         best_time = float("inf")
@@ -777,7 +777,7 @@ def get_weight_block_size_safety(config, default_value=None):
 def uses_per_token_act_quant(config) -> bool:
     """Whether a compressed-tensors checkpoint quantizes activations per token.
 
-    Aphrodite then runs the fused MoE with per-token activation and per-channel
+    Sonar then runs the fused MoE with per-token activation and per-channel
     weight scales, which is a different kernel specialization from per-tensor
     FP8 but reads the same config file.
     """
@@ -913,7 +913,7 @@ def get_quantization_group_size(config) -> int | None:
     """Extract the quantization group size from the HF model config.
 
     This reads directly from the HuggingFace config object (as returned by
-    ``get_config()``), not from Aphrodite's quantization config classes.
+    ``get_config()``), not from Sonar's quantization config classes.
 
     Supports AWQ/GPTQ-style configs (direct 'group_size' key) and
     compressed-tensors configs (nested inside 'config_groups').

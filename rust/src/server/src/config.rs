@@ -8,19 +8,19 @@ use std::str::FromStr;
 use std::time::Duration;
 
 use anyhow::{Result, bail};
-use aphrodite_chat::multimodal::MmLimitPerPrompt;
-use aphrodite_chat::{
-    ChatTemplateContentFormatOption, GenerationConfigMode, ParserSelection, RendererSelection,
-    ToolStrictLevel,
-};
-use aphrodite_engine_core_client::protocol::structured_outputs::StructuredOutputBackend;
-use aphrodite_engine_core_client::{CoordinatorMode as EngineCoreCoordinatorMode, TransportMode};
-use aphrodite_metrics::CustomHistogramBuckets;
-use aphrodite_text::backend::hf::{HfOverrides, ModelSource};
 use axum::http::{HeaderName, HeaderValue, Method};
 use educe::Educe;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use sonar_chat::multimodal::MmLimitPerPrompt;
+use sonar_chat::{
+    ChatTemplateContentFormatOption, GenerationConfigMode, ParserSelection, RendererSelection,
+    ToolStrictLevel,
+};
+use sonar_engine_core_client::protocol::structured_outputs::StructuredOutputBackend;
+use sonar_engine_core_client::{CoordinatorMode as EngineCoreCoordinatorMode, TransportMode};
+use sonar_metrics::CustomHistogramBuckets;
+use sonar_text::backend::hf::{HfOverrides, ModelSource};
 
 use crate::routes::openai::utils::types::ReasoningEffort;
 
@@ -82,13 +82,13 @@ pub struct ApiServerOptions {
     /// When `true`, register `/tokenizer_info`.
     pub enable_tokenizer_info_endpoint: bool,
     /// Accept any requested model name, served by the base model unless it
-    /// names a loaded LoRA adapter (`APHRODITE_SKIP_MODEL_NAME_VALIDATION`).
+    /// names a loaded LoRA adapter (`SONAR_SKIP_MODEL_NAME_VALIDATION`).
     pub skip_model_name_validation: bool,
     /// Idle interval after which streaming SSE responses send a keep-alive
     /// comment. `None` disables keep-alive comments.
     pub sse_keep_alive_interval: Option<Duration>,
     /// Maximum HTTP request body size in bytes
-    /// (`APHRODITE_HTTP_MAX_REQUEST_BODY_SIZE`, default 32 MiB). `None` removes the
+    /// (`SONAR_HTTP_MAX_REQUEST_BODY_SIZE`, default 32 MiB). `None` removes the
     /// limit.
     #[educe(Default(expression = Some(DEFAULT_REQUEST_BODY_LIMIT_BYTES)))]
     pub request_body_limit_bytes: Option<usize>,
@@ -265,7 +265,7 @@ impl TlsConfig {
 
 /// One LoRA adapter to load before the server accepts traffic.
 ///
-/// Mirrors `LoRAModulePath` in aphrodite/entrypoints/openai/models/protocol.py,
+/// Mirrors `LoRAModulePath` in sonar/entrypoints/openai/models/protocol.py,
 /// which is also the JSON shape the Python supervisor forwards in
 /// `--args-json`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -400,11 +400,11 @@ pub struct Config {
     /// Replacement bucket bounds for the core histogram families
     /// (`--custom-histogram-buckets`); empty keeps the defaults.
     pub custom_histogram_buckets: CustomHistogramBuckets,
-    /// Interval between periodic stats logs (`APHRODITE_LOG_STATS_INTERVAL`,
+    /// Interval between periodic stats logs (`SONAR_LOG_STATS_INTERVAL`,
     /// default 10s), or `None` to never log while still recording stats.
     pub log_stats_interval: Option<Duration>,
     /// Keep external request IDs as engine-core request IDs instead of adding
-    /// a random suffix (`APHRODITE_DISABLE_REQUEST_ID_RANDOMIZATION`).
+    /// a random suffix (`SONAR_DISABLE_REQUEST_ID_RANDOMIZATION`).
     pub disable_request_id_randomization: bool,
     /// Maximum time to wait for active HTTP/gRPC requests to drain on shutdown.
     pub shutdown_timeout: Duration,
@@ -412,7 +412,7 @@ pub struct Config {
     /// the shutdown token is cancelled. Enables the gRPC `Control.Shutdown` RPC.
     pub manages_engine: bool,
     /// Maximum idle time on a keep-alive HTTP connection before the server
-    /// closes it (`APHRODITE_HTTP_TIMEOUT_KEEP_ALIVE`, default 5s).
+    /// closes it (`SONAR_HTTP_TIMEOUT_KEEP_ALIVE`, default 5s).
     pub keep_alive_timeout: Duration,
     /// Profiler mode that registers `/start_profile` and `/stop_profile`
     /// routes when present.
@@ -450,7 +450,7 @@ impl Config {
         {
             bail!("--enable-log-outputs requires --enable-log-requests");
         }
-        aphrodite_chat::validate_parser_overrides(&self.tool_call_parser, &self.reasoning_parser)?;
+        sonar_chat::validate_parser_overrides(&self.tool_call_parser, &self.reasoning_parser)?;
         if matches!(
             self.tool_strict_level,
             Some(ToolStrictLevel::Function | ToolStrictLevel::Parameter)

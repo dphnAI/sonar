@@ -5,8 +5,8 @@ import math
 
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.utils.flashinfer import has_flashinfer
+from sonar.platforms import current_platform
+from sonar.utils.flashinfer import has_flashinfer
 
 from .base import RotaryEmbeddingBase
 from .common import (
@@ -174,7 +174,7 @@ class DeepseekScalingRotaryEmbedding(RotaryEmbeddingBase):
         key: torch.Tensor | None = None,
         offsets: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        return torch.ops.aphrodite.xpu_ops_deepseek_scaling_rope(
+        return torch.ops.sonar.xpu_ops_deepseek_scaling_rope(
             positions,
             query,
             key,
@@ -201,7 +201,7 @@ class DeepseekScalingRotaryEmbedding(RotaryEmbeddingBase):
         offsets: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         if self.use_flashinfer:
-            torch.ops.aphrodite.flashinfer_rotary_embedding(
+            torch.ops.sonar.flashinfer_rotary_embedding(
                 torch.add(positions, offsets) if offsets is not None else positions,
                 query,
                 key,
@@ -307,7 +307,7 @@ class DeepseekV4ScalingRotaryEmbedding(DeepseekScalingRotaryEmbedding):
         offsets: torch.Tensor | None = None,
         inverse: bool = False,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        from aphrodite import _custom_ops as ops
+        from sonar import _custom_ops as ops
 
         # The indexer and attention have different head_dim,
         # we obtain the corresponding head_dim via the query.

@@ -11,9 +11,9 @@ from functools import lru_cache
 from pathlib import Path
 from typing import ClassVar
 
-from aphrodite.benchmarks.startup import add_cli_args as add_startup_cli_args
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
-from aphrodite.utils.import_utils import PlaceholderModule
+from sonar.benchmarks.startup import add_cli_args as add_startup_cli_args
+from sonar.utils.argparse_utils import FlexibleArgumentParser
+from sonar.utils.import_utils import PlaceholderModule
 
 from .param_sweep import ParameterSweep, ParameterSweepItem
 from .utils import sanitize_filename
@@ -261,7 +261,7 @@ class SweepStartupArgs:
     resume: bool
 
     parser_name: ClassVar[str] = "startup"
-    parser_help: ClassVar[str] = "Benchmark Aphrodite startup time over parameter combinations."
+    parser_help: ClassVar[str] = "Benchmark Sonar startup time over parameter combinations."
 
     @classmethod
     def from_cli_args(cls, args: argparse.Namespace):
@@ -307,7 +307,7 @@ class SweepStartupArgs:
         parser.add_argument(
             "--startup-cmd",
             type=str,
-            default="aphrodite bench startup",
+            default="sonar bench startup",
             help="The command used to run the startup benchmark.",
         )
 
@@ -316,14 +316,14 @@ class SweepStartupArgs:
             type=str,
             default=None,
             help="Path to JSON file containing parameter combinations "
-            "for the `aphrodite serve` command. Only parameters supported by "
-            "`aphrodite bench startup` will be applied.",
+            "for the `sonar serve` command. Only parameters supported by "
+            "`sonar bench startup` will be applied.",
         )
         parser.add_argument(
             "--startup-params",
             type=str,
             default=None,
-            help="Path to JSON file containing parameter combinations for the `aphrodite bench startup` command.",
+            help="Path to JSON file containing parameter combinations for the `sonar bench startup` command.",
         )
         parser.add_argument(
             "--strict-params",

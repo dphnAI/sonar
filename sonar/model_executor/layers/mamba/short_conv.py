@@ -4,32 +4,32 @@
 
 import torch
 
-from aphrodite.compilation.breakable_cudagraph import eager_break_during_capture
-from aphrodite.config import CacheConfig, ModelConfig, get_current_aphrodite_config
-from aphrodite.distributed import get_tensor_model_parallel_world_size
-from aphrodite.forward_context import ForwardContext, get_forward_context
-from aphrodite.model_executor.custom_op import PluggableLayer
-from aphrodite.model_executor.layers.linear import (
+from sonar.compilation.breakable_cudagraph import eager_break_during_capture
+from sonar.config import CacheConfig, ModelConfig, get_current_sonar_config
+from sonar.distributed import get_tensor_model_parallel_world_size
+from sonar.forward_context import ForwardContext, get_forward_context
+from sonar.model_executor.custom_op import PluggableLayer
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     MergedColumnParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.mamba.abstract import MambaBase
-from aphrodite.model_executor.layers.mamba.mamba_utils import (
+from sonar.model_executor.layers.mamba.abstract import MambaBase
+from sonar.model_executor.layers.mamba.mamba_utils import (
     MambaStateDtypeCalculator,
     MambaStateShapeCalculator,
     is_conv_state_dim_first,
 )
-from aphrodite.model_executor.layers.mamba.ops.causal_conv1d import (
+from sonar.model_executor.layers.mamba.ops.causal_conv1d import (
     causal_conv1d_fn,
     causal_conv1d_update,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import direct_register_custom_op
-from aphrodite.v1.attention.backend import AttentionMetadata
-from aphrodite.v1.attention.backends.registry import MambaAttentionBackendEnum
-from aphrodite.v1.attention.backends.short_conv_attn import ShortConvAttentionMetadata
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import direct_register_custom_op
+from sonar.v1.attention.backend import AttentionMetadata
+from sonar.v1.attention.backends.registry import MambaAttentionBackendEnum
+from sonar.v1.attention.backends.short_conv_attn import ShortConvAttentionMetadata
 
 
 # --8<-- [start:short_conv]
@@ -81,9 +81,9 @@ class ShortConv(MambaBase, PluggableLayer):
             prefix=f"{prefix}.out_proj",
         )
 
-        aphrodite_config = get_current_aphrodite_config()
-        self.num_spec = aphrodite_config.num_speculative_tokens
-        compilation_config = aphrodite_config.compilation_config
+        sonar_config = get_current_sonar_config()
+        self.num_spec = sonar_config.num_speculative_tokens
+        compilation_config = sonar_config.compilation_config
         if prefix in compilation_config.static_forward_context:
             raise ValueError(f"Duplicate layer name: {prefix}")
         compilation_config.static_forward_context[prefix] = self
@@ -100,14 +100,14 @@ class ShortConv(MambaBase, PluggableLayer):
     ):
         # Reference torch causal conv1d; runs on all CPU platforms. AMX kernels
         # for causal conv can be plugged in here later.
-        from aphrodite.model_executor.layers.mamba.ops.cpu.causal_conv1d import (
+        from sonar.model_executor.layers.mamba.ops.cpu.causal_conv1d import (
             causal_conv1d_fn_cpu as causal_conv1d_torch,
         )
-        from aphrodite.model_executor.layers.mamba.ops.cpu.causal_conv1d import (
+        from sonar.model_executor.layers.mamba.ops.cpu.causal_conv1d import (
             causal_conv1d_update_cpu,
             causal_conv1d_update_torch,
         )
-        from aphrodite.platforms import CpuArchEnum, current_platform
+        from sonar.platforms import CpuArchEnum, current_platform
 
         forward_context = get_forward_context()
         attn_metadata_raw = forward_context.attn_metadata
@@ -196,7 +196,7 @@ class ShortConv(MambaBase, PluggableLayer):
         hidden_states: torch.Tensor,
         output: torch.Tensor,
     ):
-        torch.ops.aphrodite.short_conv(
+        torch.ops.sonar.short_conv(
             hidden_states,
             output,
             self.prefix,

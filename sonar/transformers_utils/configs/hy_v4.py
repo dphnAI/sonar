@@ -12,7 +12,7 @@ class HYV4Config(PreTrainedConfig):
     Kept field-for-field in sync with
     `transformers.models.hy_v4.configuration_hy_v4.HYV4Config` so that a
     checkpoint resolves to the same values through either class. Registering it
-    in Aphrodite's `_CONFIG_REGISTRY` lets the architecture load without
+    in Sonar's `_CONFIG_REGISTRY` lets the architecture load without
     `trust_remote_code` and without an `auto_map` module next to the weights.
 
     HYV4 is a mixture-of-experts causal language model using Multi-head Latent
@@ -20,8 +20,8 @@ class HYV4Config(PreTrainedConfig):
     learnable attention sinks, and independent Hyper-Connections (iHC).
 
     The `layer_types`, `num_nextn_predict_layers` and `mtp_loss_factor` fields
-    below are Aphrodite-only additions: upstream leaves them to `**kwargs`, but
-    Aphrodite reads them directly (sparse-attention selection and MTP speculative
+    below are Sonar-only additions: upstream leaves them to `**kwargs`, but
+    Sonar reads them directly (sparse-attention selection and MTP speculative
     decoding), so they are declared to give checkpoints that omit them a
     working default instead of a `None`.
 

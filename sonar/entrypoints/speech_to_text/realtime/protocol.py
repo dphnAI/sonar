@@ -6,8 +6,8 @@ from typing import Literal
 
 from pydantic import Field
 
-from aphrodite.entrypoints.serve.engine.protocol import OpenAIBaseModel, UsageInfo
-from aphrodite.utils import random_uuid
+from sonar.entrypoints.serve.engine.protocol import OpenAIBaseModel, UsageInfo
+from sonar.utils import random_uuid
 
 # Client -> Server Events
 

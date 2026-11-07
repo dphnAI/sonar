@@ -7,8 +7,8 @@ from transformers.dynamic_module_utils import (
     resolve_trust_remote_code,
 )
 
-import aphrodite.envs as envs
-from aphrodite.logger import init_logger
+import sonar.envs as envs
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 
@@ -55,7 +55,7 @@ def try_get_class_from_dynamic_module(
             **kwargs,
         )
     except Exception:
-        location = "ModelScope" if envs.APHRODITE_USE_MODELSCOPE else "HF Hub"
+        location = "ModelScope" if envs.SONAR_USE_MODELSCOPE else "HF Hub"
 
         if warn_on_fail:
             logger.warning(

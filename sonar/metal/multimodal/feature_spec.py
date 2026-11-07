@@ -4,6 +4,6 @@
 
 from __future__ import annotations
 
-from aphrodite.multimodal.inputs import MultiModalFeatureSpec, PlaceholderRange
+from sonar.multimodal.inputs import MultiModalFeatureSpec, PlaceholderRange
 
 __all__ = ["MultiModalFeatureSpec", "PlaceholderRange"]

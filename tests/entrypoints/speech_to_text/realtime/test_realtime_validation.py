@@ -11,9 +11,9 @@ import pybase64 as base64
 import pytest
 import websockets
 
-from aphrodite.assets.audio import AudioAsset
-from aphrodite.entrypoints.speech_to_text.realtime.connection import RealtimeConnection
-from aphrodite.multimodal.media.audio import load_audio
+from sonar.assets.audio import AudioAsset
+from sonar.entrypoints.speech_to_text.realtime.connection import RealtimeConnection
+from sonar.multimodal.media.audio import load_audio
 from tests.utils import ROCM_EXTRA_ARGS, RemoteOpenAIServer
 
 MISTRAL_FORMAT_ARGS = [

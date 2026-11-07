@@ -12,9 +12,9 @@
 import torch
 import torch.nn as nn
 
-from aphrodite.model_executor.custom_op import CustomOp
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.math_utils import RCP_LN2, cdiv, next_power_of_2
+from sonar.model_executor.custom_op import CustomOp
+from sonar.triton_utils import tl, triton
+from sonar.utils.math_utils import RCP_LN2, cdiv, next_power_of_2
 
 from .chunk_delta_h import chunk_gated_delta_rule_fwd_h
 from .cumsum import chunk_local_cumsum

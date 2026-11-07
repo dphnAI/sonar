@@ -28,17 +28,17 @@ from transformers.models.idefics2.configuration_idefics2 import (
     Idefics2VisionConfig,
 )
 
-from aphrodite.distributed import get_tensor_model_parallel_world_size
-from aphrodite.model_executor.layers.activation import get_act_fn
-from aphrodite.model_executor.layers.attention import MMEncoderAttention
-from aphrodite.model_executor.layers.conv import Conv2dLayer
-from aphrodite.model_executor.layers.linear import (
+from sonar.distributed import get_tensor_model_parallel_world_size
+from sonar.model_executor.layers.activation import get_act_fn
+from sonar.model_executor.layers.attention import MMEncoderAttention
+from sonar.model_executor.layers.conv import Conv2dLayer
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     QKVParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.utils.torch_utils import async_tensor_h2d
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.utils.torch_utils import async_tensor_h2d
 
 from .utils import AutoWeightsLoader, WeightsMapper
 from .vision import is_vit_use_data_parallel, run_dp_sharded_vision_model
@@ -93,7 +93,7 @@ class Idefics2VisionEmbeddings(nn.Module):
 
         if tgt_sizes is not None:
             # tgt_sizes may come from CPU-side mm_kwargs; use a pinned async
-            # copy to stay clean under APHRODITE_GPU_SYNC_CHECK.
+            # copy to stay clean under SONAR_GPU_SYNC_CHECK.
             if tgt_sizes.device != device:
                 tgt_sizes = async_tensor_h2d(tgt_sizes, device)
             nb_patches_h = tgt_sizes[:, 0]
@@ -375,7 +375,7 @@ class Idefics2Encoder(nn.Module):
 
 
 class Idefics2VisionTransformer(nn.Module):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_stacked={
             ".q_proj": (".qkv_proj", "q"),
             ".k_proj": (".qkv_proj", "k"),
@@ -427,7 +427,7 @@ class Idefics2VisionTransformer(nn.Module):
         orig_to_new_prefix: dict[str, str | None] = {"head.": None}
         if not require_post_norm:
             orig_to_new_prefix["post_layernorm."] = None
-        self.hf_to_aphrodite_mapper = self.hf_to_aphrodite_mapper | WeightsMapper(orig_to_new_prefix=orig_to_new_prefix)
+        self.hf_to_sonar_mapper = self.hf_to_sonar_mapper | WeightsMapper(orig_to_new_prefix=orig_to_new_prefix)
 
     def get_input_embeddings(self):
         return self.embeddings
@@ -496,4 +496,4 @@ class Idefics2VisionTransformer(nn.Module):
                     continue
                 yield name, w
 
-        return loader.load_weights(_filter(weights), mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(_filter(weights), mapper=self.hf_to_sonar_mapper)

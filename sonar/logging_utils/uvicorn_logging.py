@@ -6,8 +6,8 @@ import logging
 from typing import Literal
 from urllib.parse import urlparse
 
-from aphrodite import envs
-from aphrodite.logging_utils.formatter import JSON_FORMAT
+from sonar import envs
+from sonar.logging_utils.formatter import JSON_FORMAT
 
 
 class UvicornAccessLogFilter(logging.Filter):
@@ -90,14 +90,12 @@ def create_uvicorn_log_config(
         >>> uvicorn.run(app, log_config=config)
 
     """
-    if envs.APHRODITE_LOGGING_VERBOSE:
+    if envs.SONAR_LOGGING_VERBOSE:
         date_format = "%m-%d %H:%M:%S"
-        default_format = (
-            f"{envs.APHRODITE_LOGGING_PREFIX}%(levelname)s %(asctime)s [%(name)-15s:%(lineno)4d] %(message)s"
-        )
+        default_format = f"{envs.SONAR_LOGGING_PREFIX}%(levelname)s %(asctime)s [%(name)-15s:%(lineno)4d] %(message)s"
     else:
         date_format = "%H:%M:%S"
-        default_format = f"{envs.APHRODITE_LOGGING_PREFIX}%(levelname)s %(asctime)s %(message)s"
+        default_format = f"{envs.SONAR_LOGGING_PREFIX}%(levelname)s %(asctime)s %(message)s"
 
     config = {
         "version": 1,
@@ -110,12 +108,12 @@ def create_uvicorn_log_config(
         },
         "formatters": {
             "default": {
-                "()": "aphrodite.logging_utils.formatter.UvicornFormatter",
+                "()": "sonar.logging_utils.formatter.UvicornFormatter",
                 "datefmt": date_format,
                 "format": default_format,
             },
             "access": {
-                "()": "aphrodite.logging_utils.formatter.UvicornFormatter",
+                "()": "sonar.logging_utils.formatter.UvicornFormatter",
                 "datefmt": date_format,
                 "format": default_format,
             },
@@ -124,12 +122,12 @@ def create_uvicorn_log_config(
             "default": {
                 "formatter": "default",
                 "class": "logging.StreamHandler",
-                "stream": envs.APHRODITE_LOGGING_STREAM,
+                "stream": envs.SONAR_LOGGING_STREAM,
             },
             "access": {
                 "formatter": "access",
                 "class": "logging.StreamHandler",
-                "stream": envs.APHRODITE_LOGGING_STREAM,
+                "stream": envs.SONAR_LOGGING_STREAM,
                 "filters": ["access_log_filter"],
             },
         },

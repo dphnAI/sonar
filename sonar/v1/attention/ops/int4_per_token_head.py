@@ -16,10 +16,10 @@ from typing import Any
 
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.math_utils import largest_power_of_2_divisor
-from aphrodite.v1.attention.ops.triton_attention_helpers import (
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
+from sonar.utils.math_utils import largest_power_of_2_divisor
+from sonar.v1.attention.ops.triton_attention_helpers import (
     apply_alibi_to_score,
     apply_softcap,
     cdiv_fn,
@@ -31,7 +31,7 @@ from aphrodite.v1.attention.ops.triton_attention_helpers import (
     softmax_step,
     store_segm_reduce_scalars,
 )
-from aphrodite.v1.attention.ops.triton_unified_attention import reduce_segments
+from sonar.v1.attention.ops.triton_unified_attention import reduce_segments
 
 float8_info = torch.finfo(current_platform.fp8_dtype())
 
@@ -647,10 +647,10 @@ def _launch_packed_attn(
     of that split, and the trailing ``reduce_segments`` pass.  Writes
     into ``out`` (directly for 2D; via the segm buffers for 3D).
     """
-    import aphrodite.envs as envs
-    from aphrodite.v1.attention.ops.triton_unified_attention import _get_tile_size
+    import sonar.envs as envs
+    from sonar.v1.attention.ops.triton_unified_attention import _get_tile_size
 
-    is_batch_invariant = envs.APHRODITE_BATCH_INVARIANT
+    is_batch_invariant = envs.SONAR_BATCH_INVARIANT
 
     use_mm_prefix = False
     max_mm_ranges = 0
@@ -1024,7 +1024,7 @@ def fast_hadamard_transform(x: torch.Tensor) -> torch.Tensor:
 
     # Tier 1 — hadacore on CUDA.
     if _hadacore_available() and 0 < d <= (1 << 15):
-        from aphrodite import _custom_ops as ops
+        from sonar import _custom_ops as ops
 
         # hadacore returns x @ (H/√d); rescale to the unnormalized H × x
         # convention the INT4 scale math is calibrated to.

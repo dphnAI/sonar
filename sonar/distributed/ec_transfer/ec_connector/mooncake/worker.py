@@ -19,48 +19,48 @@ from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 import torch
 
-from aphrodite.distributed.ec_transfer.ec_connector.mooncake.config import (
+from sonar.distributed.ec_transfer.ec_connector.mooncake.config import (
     _RESERVATION_TTL_SECONDS,
     MooncakeECConfig,
 )
-from aphrodite.distributed.ec_transfer.ec_connector.mooncake.control import (
+from sonar.distributed.ec_transfer.ec_connector.mooncake.control import (
     ConsumerControlServer,
     ControlClient,
     make_cancel_request,
 )
-from aphrodite.distributed.ec_transfer.ec_connector.mooncake.memory import (
+from sonar.distributed.ec_transfer.ec_connector.mooncake.memory import (
     ConsumerMemoryPool,
     ProducerMemoryPool,
 )
-from aphrodite.distributed.ec_transfer.ec_connector.mooncake.metadata import (
+from sonar.distributed.ec_transfer.ec_connector.mooncake.metadata import (
     ECMooncakeConnectorMetadata,
     ECMooncakePushSpec,
     ECMooncakeWorkerMetadata,
 )
-from aphrodite.distributed.ec_transfer.ec_connector.mooncake.producer import (
+from sonar.distributed.ec_transfer.ec_connector.mooncake.producer import (
     ProducerPushManager,
     ProducerPushRecord,
 )
-from aphrodite.distributed.ec_transfer.ec_connector.mooncake.reservation import (
+from sonar.distributed.ec_transfer.ec_connector.mooncake.reservation import (
     ConsumerReservationManager,
     ConsumerReservationState,
 )
-from aphrodite.distributed.ec_transfer.ec_connector.mooncake.transfer import (
+from sonar.distributed.ec_transfer.ec_connector.mooncake.transfer import (
     MooncakeTransfer,
     ensure_mooncake_available,
 )
-from aphrodite.distributed.ec_transfer.ec_connector.mooncake_store_embedding.data import (
+from sonar.distributed.ec_transfer.ec_connector.mooncake_store_embedding.data import (
     build_embedding_namespace,
 )
-from aphrodite.logger import init_logger
-from aphrodite.utils.network_utils import get_ip
+from sonar.logger import init_logger
+from sonar.utils.network_utils import get_ip
 
 logger = init_logger(__name__)
 
 _T = TypeVar("_T")
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
+    from sonar.config import SonarConfig
 
     from ..mooncake_store_embedding.backend import (
         MooncakeEmbeddingStoreBackend,
@@ -91,12 +91,12 @@ class ECMooncakeWorker:
     and pass that replica's control address to the producer.
     """
 
-    def __init__(self, aphrodite_config: AphroditeConfig) -> None:
+    def __init__(self, sonar_config: SonarConfig) -> None:
         ensure_mooncake_available()
-        config = MooncakeECConfig.from_aphrodite_config(aphrodite_config)
+        config = MooncakeECConfig.from_sonar_config(sonar_config)
         self._store_config = (
             (
-                build_embedding_namespace(aphrodite_config),
+                build_embedding_namespace(sonar_config),
                 config.store_max_pending_items,
                 config.store_max_pending_bytes,
                 config.store_read_buffer_bytes,
@@ -173,7 +173,7 @@ class ECMooncakeWorker:
             return
         self._consumer_rank_resolved = True
         try:
-            from aphrodite.distributed.parallel_state import get_pp_group, get_tp_group
+            from sonar.distributed.parallel_state import get_pp_group, get_tp_group
 
             tp_group = get_tp_group()
             self._tp_rank = tp_group.rank_in_group

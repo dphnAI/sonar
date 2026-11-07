@@ -3,13 +3,13 @@
 import torch
 from torch._higher_order_ops.auto_functionalize import auto_functionalized
 
-import aphrodite._custom_ops as ops
-from aphrodite.config import AphroditeConfig, get_layers_from_aphrodite_config
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.attention import MLAAttention
-from aphrodite.model_executor.layers.attention.attention import get_attention_context
-from aphrodite.model_executor.layers.rotary_embedding import RotaryEmbedding
-from aphrodite.utils.torch_utils import (
+import sonar._custom_ops as ops
+from sonar.config import SonarConfig, get_layers_from_sonar_config
+from sonar.logger import init_logger
+from sonar.model_executor.layers.attention import MLAAttention
+from sonar.model_executor.layers.attention.attention import get_attention_context
+from sonar.model_executor.layers.rotary_embedding import RotaryEmbedding
+from sonar.utils.torch_utils import (
     _USE_LAYERNAME,
     LayerNameType,
     _encode_layer_name,
@@ -17,7 +17,7 @@ from aphrodite.utils.torch_utils import (
     direct_register_custom_op,
 )
 
-from ..aphrodite_inductor_pass import AphroditeFusionPatternMatcherPass, AphroditePatternReplacement
+from ..sonar_inductor_pass import SonarFusionPatternMatcherPass, SonarPatternReplacement
 from .matcher_utils import MatcherDeepseekScalingRotaryEmbedding, MatcherRotaryEmbedding
 
 logger = init_logger(__name__)
@@ -75,8 +75,8 @@ direct_register_custom_op(
 )
 
 
-class MLARoPEKVCacheCatPattern(AphroditePatternReplacement):
-    FUSED_OP = torch.ops.aphrodite.fused_rope_unified_mla_kv_cache_update.default
+class MLARoPEKVCacheCatPattern(SonarPatternReplacement):
+    FUSED_OP = torch.ops.sonar.fused_rope_unified_mla_kv_cache_update.default
 
     def __init__(
         self,
@@ -150,7 +150,7 @@ class MLARoPEKVCacheCatPattern(AphroditePatternReplacement):
             ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
                 k_pe_unsqueezed = k_pe.unsqueeze(1)
                 q_pe, k_pe = self.rope_matcher(positions, q_pe, k_pe_unsqueezed, cos_sin_cache)
-                dummy = torch.ops.aphrodite.unified_mla_kv_cache_update(
+                dummy = torch.ops.sonar.unified_mla_kv_cache_update(
                     kv_c_normed, k_pe, layer_name, self.kv_cache_dtype, k_scale
                 )
                 return dummy, q_pe, k_pe
@@ -167,9 +167,7 @@ class MLARoPEKVCacheCatPattern(AphroditePatternReplacement):
         ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
             k_pe_unsqueezed = k_pe.unsqueeze(1)
             q_pe, k_pe = self.rope_matcher(positions, q_pe, k_pe_unsqueezed, cos_sin_cache)
-            dummy = torch.ops.aphrodite.unified_mla_kv_cache_update(
-                kv_c_normed, k_pe, _ln, self.kv_cache_dtype, k_scale
-            )
+            dummy = torch.ops.sonar.unified_mla_kv_cache_update(kv_c_normed, k_pe, _ln, self.kv_cache_dtype, k_scale)
             return dummy, q_pe, k_pe
 
         return _pattern
@@ -234,11 +232,11 @@ class MLARoPEKVCacheCatPattern(AphroditePatternReplacement):
         return _replacement
 
 
-class MLARoPEKVCacheCatFusionPass(AphroditeFusionPatternMatcherPass):
-    def __init__(self, config: AphroditeConfig) -> None:
+class MLARoPEKVCacheCatFusionPass(SonarFusionPatternMatcherPass):
+    def __init__(self, config: SonarConfig) -> None:
         super().__init__(config, "mla_rope_kv_cache_fusion_pass")
 
-        attn_layers = get_layers_from_aphrodite_config(config, MLAAttention)
+        attn_layers = get_layers_from_sonar_config(config, MLAAttention)
 
         for _, layer in attn_layers.items():
             for is_neox in [False, True]:

@@ -14,17 +14,17 @@ import types
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.layernorm import RMSNormGated
-from aphrodite.model_executor.layers.mamba.gdn.qwen_gdn_linear_attn import (
+from sonar.model_executor.layers.layernorm import RMSNormGated
+from sonar.model_executor.layers.mamba.gdn.qwen_gdn_linear_attn import (
     QwenGatedDeltaNetAttention,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 
 @pytest.mark.parametrize("dtype", [torch.float32])
 @torch.inference_mode()
 def test_output_projection_norms_per_head_and_flattens(
-    default_aphrodite_config,
+    default_sonar_config,
     dtype: torch.dtype,
 ) -> None:
     num_tokens, num_heads, head_dim = 3, 4, 8
@@ -64,10 +64,10 @@ def test_fused_gated_rms_norm_strided_z_bitwise(num_tokens: int, norm_before_gat
     """The Qwen3.5 fused gated RMS norm reads z from its packed strided view
     of the qkvz projection and matches ``rmsnorm_fn`` on the copied/reshaped
     z bitwise."""
-    from aphrodite.models.qwen3_5.nvidia.ops.fused_gdn_gated_norm import (
+    from sonar.models.qwen3_5.nvidia.ops.fused_gdn_gated_norm import (
         fused_gdn_gated_rms_norm,
     )
-    from aphrodite.third_party.flash_linear_attention.ops.layernorm_guard import (
+    from sonar.third_party.flash_linear_attention.ops.layernorm_guard import (
         rmsnorm_fn,
     )
 
@@ -119,8 +119,8 @@ def test_fused_gated_rms_norm_strided_z_bitwise(num_tokens: int, norm_before_gat
 def test_fused_gated_rms_norm_fp8_matches_chain(num_tokens: int, num_heads: int) -> None:
     """The FP8 output (fused out_proj input quant) equals the bf16 kernel
     followed by static scaled_fp8_quant."""
-    from aphrodite import _custom_ops as ops
-    from aphrodite.models.qwen3_5.nvidia.ops.fused_gdn_gated_norm import (
+    from sonar import _custom_ops as ops
+    from sonar.models.qwen3_5.nvidia.ops.fused_gdn_gated_norm import (
         fused_gdn_gated_rms_norm,
     )
 

@@ -7,7 +7,7 @@ from PIL import Image
 from transformers import BatchFeature, ImageProcessingMixin, ProcessorMixin, TensorType
 from transformers.image_utils import ImageInput
 
-from aphrodite.tokenizers.mistral import MistralTokenizer
+from sonar.tokenizers.mistral import MistralTokenizer
 
 
 class MistralCommonImageProcessor(ImageProcessingMixin):

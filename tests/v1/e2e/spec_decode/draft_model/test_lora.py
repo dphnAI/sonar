@@ -7,12 +7,12 @@
 import pytest
 import torch
 
-import aphrodite.envs as envs
-from aphrodite import SamplingParams
-from aphrodite.config import CompilationConfig
-from aphrodite.lora.request import LoRARequest
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
+import sonar.envs as envs
+from sonar import SamplingParams
+from sonar.config import CompilationConfig
+from sonar.lora.request import LoRARequest
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_random_seed
 
 from ..utils import assert_request_outputs_match
 
@@ -54,15 +54,15 @@ SEED = 42
 def test_batch_inference_correctness(
     monkeypatch: pytest.MonkeyPatch,
     model_setup: tuple[str, str, str, str, int],
-    aphrodite_runner,
+    sonar_runner,
 ):
     """Compare the outputs of a LLM with only Lora and a LLM with both SD and Lora.
     Should be the same and no failure when doing batch inference.
     model_setup: (method, model_name, spec_model_name, lora_path, tp_size)
     """
     with monkeypatch.context() as m:
-        m.setenv("APHRODITE_BATCH_INVARIANT", "1")
-        m.setattr(envs, "APHRODITE_BATCH_INVARIANT", True)
+        m.setenv("SONAR_BATCH_INVARIANT", "1")
+        m.setattr(envs, "SONAR_BATCH_INVARIANT", True)
         set_random_seed(SEED)
         m.setattr(torch.backends.cudnn, "benchmark", False)
         m.setattr(torch.backends.cudnn, "deterministic", True)
@@ -74,7 +74,7 @@ def test_batch_inference_correctness(
         sampling_params = SamplingParams(temperature=0.0, top_p=1.0, top_k=-1, seed=SEED, max_tokens=128)
 
         # without speculative decoding
-        with aphrodite_runner(
+        with sonar_runner(
             model_name,
             block_size=None,
             trust_remote_code=True,
@@ -90,7 +90,7 @@ def test_batch_inference_correctness(
         ) as ref_runner:
             ref_outputs = ref_runner.llm.generate(prompts, sampling_params, lora_request=lora_request)
 
-        with aphrodite_runner(
+        with sonar_runner(
             model_name,
             block_size=None,
             trust_remote_code=True,

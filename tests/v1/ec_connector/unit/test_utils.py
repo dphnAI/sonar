@@ -5,7 +5,7 @@
 import msgspec
 import pytest
 
-from aphrodite.distributed.ec_transfer.ec_connector.cpu.utils import (
+from sonar.distributed.ec_transfer.ec_connector.cpu.utils import (
     build_block_descs,
     deserialize_mem_descriptor,
     serialize_mem_descriptor,

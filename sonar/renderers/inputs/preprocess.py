@@ -5,7 +5,7 @@
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, NamedTuple, TypeAlias, TypedDict, overload
 
-from aphrodite.inputs import (
+from sonar.inputs import (
     EmbedsPrompt,
     EngineInput,
     ExplicitEncoderDecoderPrompt,
@@ -14,14 +14,14 @@ from aphrodite.inputs import (
     TextPrompt,
     TokensPrompt,
 )
-from aphrodite.utils import length_from_prompt_token_ids_or_embeds
-from aphrodite.utils.collection_utils import is_list_of
+from sonar.utils import length_from_prompt_token_ids_or_embeds
+from sonar.utils.collection_utils import is_list_of
 
 if TYPE_CHECKING:
     import torch
 
-    from aphrodite.config import ModelConfig
-    from aphrodite.renderers.chat_utils import ChatCompletionMessageParam
+    from sonar.config import ModelConfig
+    from sonar.renderers.chat_utils import ChatCompletionMessageParam
 
 
 @overload
@@ -64,27 +64,27 @@ def conversation_to_seq(
 
 DecoderOnlyDictPrompt: TypeAlias = TextPrompt | TokensPrompt | EmbedsPrompt
 """
-A [`DecoderOnlyPrompt`][aphrodite.inputs.llm.DecoderOnlyPrompt]
+A [`DecoderOnlyPrompt`][sonar.inputs.llm.DecoderOnlyPrompt]
 that has been standardized into a dictionary.
 """
 
 
 EncoderDictPrompt: TypeAlias = TextPrompt | TokensPrompt
 """
-A [`EncoderPrompt`][aphrodite.inputs.llm.EncoderPrompt]
+A [`EncoderPrompt`][sonar.inputs.llm.EncoderPrompt]
 that has been standardized into a dictionary.
 """
 
 
 DecoderDictPrompt: TypeAlias = TextPrompt | TokensPrompt
 """
-A [`DecoderPrompt`][aphrodite.inputs.llm.DecoderPrompt]
+A [`DecoderPrompt`][sonar.inputs.llm.DecoderPrompt]
 that has been standardized into a dictionary.
 """
 
 
 class EncoderDecoderDictPrompt(TypedDict):
-    """A [`EncoderDecoderPrompt`][aphrodite.inputs.llm.EncoderDecoderPrompt]
+    """A [`EncoderDecoderPrompt`][sonar.inputs.llm.EncoderDecoderPrompt]
     that has been standardized into a dictionary.
     """
 
@@ -95,14 +95,14 @@ class EncoderDecoderDictPrompt(TypedDict):
 
 SingletonDictPrompt: TypeAlias = DecoderOnlyDictPrompt | EncoderDictPrompt | DecoderDictPrompt
 """
-A [`SingletonPrompt`][aphrodite.inputs.llm.SingletonPrompt]
+A [`SingletonPrompt`][sonar.inputs.llm.SingletonPrompt]
 that has been standardized into a dictionary.
 """
 
 
 DictPrompt: TypeAlias = DecoderOnlyDictPrompt | EncoderDecoderDictPrompt
 """
-A [`PromptType`][aphrodite.inputs.llm.PromptType]
+A [`PromptType`][sonar.inputs.llm.PromptType]
 that has been standardized into a dictionary.
 """
 

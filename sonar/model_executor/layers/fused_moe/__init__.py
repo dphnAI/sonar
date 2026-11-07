@@ -4,48 +4,48 @@
 from contextlib import contextmanager
 from typing import Any
 
-from aphrodite.model_executor.layers.fused_moe.activation import (
+from sonar.model_executor.layers.fused_moe.activation import (
     ApplyMoEActivationConfig,
     MoEActivation,
     activation_without_mul,
     apply_moe_activation,
 )
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEParallelConfig,
     FusedMoEQuantConfig,
     RoutingMethodType,
 )
-from aphrodite.model_executor.layers.fused_moe.fused_moe_method_base import (
+from sonar.model_executor.layers.fused_moe.fused_moe_method_base import (
     FusedMoEMethodBase,
 )
-from aphrodite.model_executor.layers.fused_moe.layer import (
+from sonar.model_executor.layers.fused_moe.layer import (
     FusedMoEFactory,
     fused_moe_make_expert_params_mapping,
 )
-from aphrodite.model_executor.layers.fused_moe.modular_kernel import (
+from sonar.model_executor.layers.fused_moe.modular_kernel import (
     FusedMoEActivationFormat,
     FusedMoEExpertsModular,
     FusedMoEPrepareAndFinalizeModular,
 )
-from aphrodite.model_executor.layers.fused_moe.routed_experts import (
+from sonar.model_executor.layers.fused_moe.routed_experts import (
     FusedMoeWeightScaleSupported,
     RoutedExperts,
 )
-from aphrodite.model_executor.layers.fused_moe.router.fused_moe_router import (
+from sonar.model_executor.layers.fused_moe.router.fused_moe_router import (
     FusedMoERouter,
 )
-from aphrodite.model_executor.layers.fused_moe.router.gate_linear import GateLinear
-from aphrodite.model_executor.layers.fused_moe.runner.moe_runner import (
+from sonar.model_executor.layers.fused_moe.router.gate_linear import GateLinear
+from sonar.model_executor.layers.fused_moe.runner.moe_runner import (
     MoERunner,
 )
-from aphrodite.model_executor.layers.fused_moe.runner.shared_experts import (
+from sonar.model_executor.layers.fused_moe.runner.shared_experts import (
     SharedExperts,
 )
-from aphrodite.model_executor.layers.fused_moe.unquantized_fused_moe_method import (
+from sonar.model_executor.layers.fused_moe.unquantized_fused_moe_method import (
     UnquantizedFusedMoEMethod,
 )
-from aphrodite.triton_utils import HAS_TRITON
+from sonar.triton_utils import HAS_TRITON
 
 _config: dict[str, Any] | None = None
 
@@ -91,49 +91,49 @@ __all__ = [
 
 if HAS_TRITON:
     # import to register the custom ops
-    from aphrodite.model_executor.layers.fused_moe.experts.batched_deep_gemm_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.batched_deep_gemm_moe import (
         BatchedDeepGemmExperts,
     )
-    from aphrodite.model_executor.layers.fused_moe.experts.cutlass_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.cutlass_moe import (
         CutlassBatchedExpertsFp8,
         CutlassExpertsFp8,
         CutlassExpertsW4A8Fp8,
     )
-    from aphrodite.model_executor.layers.fused_moe.experts.deep_gemm_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.deep_gemm_moe import (
         DeepGemmExperts,
     )
-    from aphrodite.model_executor.layers.fused_moe.experts.fused_batched_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.fused_batched_moe import (
         BatchedTritonExperts,
     )
-    from aphrodite.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
         AiterFp8BlockExperts,
         AiterFp8ChannelExperts,
         AiterFp8TensorExperts,
         AiterMxfp4Experts,
         AiterUnquantizedExperts,
     )
-    from aphrodite.model_executor.layers.fused_moe.experts.triton_deep_gemm_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.triton_deep_gemm_moe import (
         TritonOrDeepGemmExperts,
     )
-    from aphrodite.model_executor.layers.fused_moe.experts.triton_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.triton_moe import (
         TritonExperts,
         TritonWNA16Experts,
     )
-    from aphrodite.model_executor.layers.fused_moe.experts.xpu_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.xpu_moe import (
         XPUExperts,
         XPUExpertsBlockFp8,
         XPUExpertsFp8,
         XPUExpertsMxFp4,
         XPUExpertsMxFp8,
     )
-    from aphrodite.model_executor.layers.fused_moe.fused_moe import (
+    from sonar.model_executor.layers.fused_moe.fused_moe import (
         fused_experts,
         get_config_file_name,
     )
-    from aphrodite.model_executor.layers.fused_moe.router.fused_topk_router import (
+    from sonar.model_executor.layers.fused_moe.router.fused_topk_router import (
         fused_topk,
     )
-    from aphrodite.model_executor.layers.fused_moe.router.grouped_topk_router import (
+    from sonar.model_executor.layers.fused_moe.router.grouped_topk_router import (
         GroupedTopk,
     )
 

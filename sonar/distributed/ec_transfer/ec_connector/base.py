@@ -29,19 +29,19 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.v1.core.sched.output import SchedulerOutput
-from aphrodite.v1.outputs import ECConnectorOutput
+from sonar.logger import init_logger
+from sonar.v1.core.sched.output import SchedulerOutput
+from sonar.v1.outputs import ECConnectorOutput
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
-    from aphrodite.distributed.ec_transfer.ec_connector.metrics import (
+    from sonar.config import SonarConfig
+    from sonar.distributed.ec_transfer.ec_connector.metrics import (
         ECConnectorPromMetrics,
         ECConnectorStats,
         PromMetric,
         PromMetricT,
     )
-    from aphrodite.v1.request import Request
+    from sonar.v1.request import Request
 
 logger = init_logger(__name__)
 
@@ -79,13 +79,13 @@ class ECConnectorWorkerMetadata(ABC):
 
 
 class ECConnectorBase(ABC):
-    def __init__(self, aphrodite_config: "AphroditeConfig", role: ECConnectorRole):
+    def __init__(self, sonar_config: "SonarConfig", role: ECConnectorRole):
         self._connector_metadata: ECConnectorMetadata | None = None
-        self._aphrodite_config = aphrodite_config
+        self._sonar_config = sonar_config
         self._role = role
-        if aphrodite_config.ec_transfer_config is not None:
-            self._is_producer = aphrodite_config.ec_transfer_config.is_ec_producer
-            self._is_consumer = aphrodite_config.ec_transfer_config.is_ec_consumer
+        if sonar_config.ec_transfer_config is not None:
+            self._is_producer = sonar_config.ec_transfer_config.is_ec_producer
+            self._is_consumer = sonar_config.ec_transfer_config.is_ec_consumer
         else:
             raise ValueError("ec_transfer_config must be set for ECConnectorBase")
 
@@ -161,7 +161,7 @@ class ECConnectorBase(ABC):
 
     @abstractmethod
     def start_load_caches(self, encoder_cache: dict[str, torch.Tensor], **kwargs) -> None:
-        """Start loading the cache from the connector into Aphrodite's encoder cache.
+        """Start loading the cache from the connector into Sonar's encoder cache.
 
         This method loads the encoder cache based on metadata provided by the scheduler.
         It is called before `_gather_mm_embeddings` for the EC Connector. For EC,
@@ -350,7 +350,7 @@ class ECConnectorBase(ABC):
     @classmethod
     def build_prom_metrics(
         cls,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
         metric_types: dict[type["PromMetric"], type["PromMetricT"]],
         labelnames: list[str],
         per_engine_labelvalues: dict[int, list[object]],

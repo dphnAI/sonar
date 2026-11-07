@@ -9,11 +9,11 @@ from typing import TYPE_CHECKING, NamedTuple
 import numpy as np
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.utils import random_uuid
+from sonar import _custom_ops as ops
+from sonar.utils import random_uuid
 
 if TYPE_CHECKING:
-    from aphrodite.v1.worker.cpu.attn_utils import FastPrefillBatchMetadata
+    from sonar.v1.worker.cpu.attn_utils import FastPrefillBatchMetadata
 
 
 class InputBuffers:

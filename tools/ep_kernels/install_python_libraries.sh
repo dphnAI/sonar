@@ -189,14 +189,14 @@ do_build() {
 
     # DeepEPv2 requires Linux 5.6+ at runtime for pidfd_getfd (pidfd_open was
     # added in Linux 5.3), but manylinux headers predate both definitions.
-    # DeepEP is built as a separate wheel for the Aphrodite container image and
-    # is not included in the Aphrodite wheel, so this does not change its
+    # DeepEP is built as a separate wheel for the Sonar container image and
+    # is not included in the Sonar wheel, so this does not change its
     # manylinux ABI.
     if [[ "$name" == "DeepEP" ]] && \
-        ! grep -q "Aphrodite manylinux syscall compatibility" \
+        ! grep -q "Sonar manylinux syscall compatibility" \
             csrc/kernels/backend/symmetric.hpp; then
         sed -i '1i\
-// Aphrodite manylinux syscall compatibility\
+// Sonar manylinux syscall compatibility\
 #if defined(__x86_64__) || defined(__aarch64__)\
 #ifndef SYS_pidfd_open\
 #ifdef __NR_pidfd_open\

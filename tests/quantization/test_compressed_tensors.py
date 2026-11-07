@@ -16,19 +16,19 @@ from compressed_tensors.quantization import (
     QuantizationType,
 )
 
-from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-from aphrodite.config.kernel import KernelConfig
-from aphrodite.forward_context import set_forward_context
-from aphrodite.model_executor.kernels.linear import (
+from sonar.config import SonarConfig, set_current_sonar_config
+from sonar.config.kernel import KernelConfig
+from sonar.forward_context import set_forward_context
+from sonar.model_executor.kernels.linear import (
     Fp8BlockScaledMMLinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.scaled_mm import (
+from sonar.model_executor.kernels.linear.scaled_mm import (
     MarlinFP8ScaledMMLinearKernel,
 )
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.layers.fused_moe import UnquantizedFusedMoEMethod
-from aphrodite.model_executor.layers.fused_moe.oracle.fp8 import Fp8MoeBackend
-from aphrodite.model_executor.layers.quantization.compressed_tensors.compressed_tensors import (  # noqa: E501
+from sonar.model_executor.layers.attention import Attention
+from sonar.model_executor.layers.fused_moe import UnquantizedFusedMoEMethod
+from sonar.model_executor.layers.fused_moe.oracle.fp8 import Fp8MoeBackend
+from sonar.model_executor.layers.quantization.compressed_tensors.compressed_tensors import (  # noqa: E501
     CompressedTensorsConfig,
     CompressedTensorsLinearMethod,
     CompressedTensorsW4A4Fp4,
@@ -41,25 +41,25 @@ from aphrodite.model_executor.layers.quantization.compressed_tensors.compressed_
     CompressedTensorsWNA8O8Int,
     CompressedTensorsWNA16,
 )
-from aphrodite.model_executor.layers.quantization.compressed_tensors.compressed_tensors_moe.compressed_tensors_moe_w8a8_fp8 import (  # noqa: E501
+from sonar.model_executor.layers.quantization.compressed_tensors.compressed_tensors_moe.compressed_tensors_moe_w8a8_fp8 import (  # noqa: E501
     CompressedTensorsW8A8Fp8MoEMethod,
 )
-from aphrodite.model_executor.layers.quantization.compressed_tensors.utils import (
+from sonar.model_executor.layers.quantization.compressed_tensors.utils import (
     find_matched_target,
 )
-from aphrodite.model_executor.layers.quantization.input_quant_fp8 import QuantFP8
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.input_quant_fp8 import QuantFP8
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     GroupShape,
     QuantKey,
     ScaleDesc,
     kFp8Dynamic128Sym,
 )
-from aphrodite.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
-from aphrodite.platforms import current_platform
-from aphrodite.scalar_type import scalar_types
-from aphrodite.v1.attention.backends.fa_utils import get_flash_attn_version
+from sonar.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
+from sonar.platforms import current_platform
+from sonar.scalar_type import scalar_types
+from sonar.v1.attention.backends.fa_utils import get_flash_attn_version
 from tests.models.utils import check_logprobs_close
-from tests.quantization.utils import load_model_without_aphrodite_runner
+from tests.quantization.utils import load_model_without_sonar_runner
 
 # AITER only supports per-channel-per-channel INT8 gemm
 # and per-tensor-per-tensor INT8 GEMM.
@@ -82,7 +82,7 @@ ROCM_TRITON_SCALED_MM_SUPPORTED_INT8_MODEL = [
 @pytest.fixture(scope="function", autouse=True)
 def enable_pickle(monkeypatch):
     """`LLM.apply_model` requires pickling a function."""
-    monkeypatch.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
+    monkeypatch.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")
 
 
 def _compressed_tensors_actorder_config(actorder):
@@ -144,7 +144,7 @@ def test_compressed_tensors_w8a8_static_setup(model_args, dist_init, workspace_i
     if current_platform.is_rocm() and model_path not in ROCM_TRITON_SCALED_MM_SUPPORTED_INT8_MODEL:
         pytest.skip(f"Skip model {model_path} as it is not supported on ROCm.")
 
-    model, _ = load_model_without_aphrodite_runner(model_path)
+    model, _ = load_model_without_sonar_runner(model_path)
     layer = model.model.layers[0]
 
     qkv_proj = layer.self_attn.qkv_proj
@@ -196,7 +196,7 @@ def test_compressed_tensors_w8a8_static_setup(model_args, dist_init, workspace_i
 @pytest.mark.parametrize("use_aiter", [True, False] if current_platform.is_rocm() else [False])
 def test_compressed_tensors_w8a8_logprobs(
     hf_runner,
-    aphrodite_runner,
+    sonar_runner,
     example_prompts,
     model_path,
     max_tokens,
@@ -210,8 +210,8 @@ def test_compressed_tensors_w8a8_logprobs(
     if use_aiter:
         if model_path not in ROCM_AITER_SUPPORTED_INT8_MODEL:
             pytest.skip(f"Skip model {model_path} as it is not support by aiter.")
-        # this will enable APHRODITE_ROCM_USE_AITER_LINEAR
-        monkeypatch.setenv("APHRODITE_ROCM_USE_AITER", "1")
+        # this will enable SONAR_ROCM_USE_AITER_LINEAR
+        monkeypatch.setenv("SONAR_ROCM_USE_AITER", "1")
 
     dtype = "bfloat16"
 
@@ -225,23 +225,23 @@ def test_compressed_tensors_w8a8_logprobs(
     with hf_runner(model_path, dtype=dtype) as hf_model:
         hf_outputs = hf_model.generate_greedy_logprobs_limit(example_prompts, max_tokens, num_logprobs)
 
-    with aphrodite_runner(model_path, dtype=dtype, enforce_eager=True) as aphrodite_model:
-        aphrodite_outputs = aphrodite_model.generate_greedy_logprobs(example_prompts, max_tokens, num_logprobs)
+    with sonar_runner(model_path, dtype=dtype, enforce_eager=True) as sonar_model:
+        sonar_outputs = sonar_model.generate_greedy_logprobs(example_prompts, max_tokens, num_logprobs)
 
     check_logprobs_close(
         outputs_0_lst=hf_outputs,
-        outputs_1_lst=aphrodite_outputs,
+        outputs_1_lst=sonar_outputs,
         name_0="hf",
-        name_1="aphrodite",
+        name_1="sonar",
     )
 
     if current_platform.is_rocm():
         torch.accelerator.synchronize()
 
 
-def test_compressed_tensors_no_enforce_eager(aphrodite_runner):
+def test_compressed_tensors_no_enforce_eager(sonar_runner):
     model_path = "nm-testing/tinyllama-oneshot-w8w8-test-static-shape-change"
-    with aphrodite_runner(model_path) as llm:
+    with sonar_runner(model_path) as llm:
         output = llm.generate_greedy("Hello my name is", max_tokens=4)
         assert output
 
@@ -266,10 +266,10 @@ def test_compressed_tensors_w8a8_dynamic_per_token(model_args, use_aiter, monkey
     if use_aiter:
         if model_path not in ROCM_AITER_SUPPORTED_INT8_MODEL:
             pytest.skip(f"Skip model {model_path} as it is not support by aiter.")
-        # this will enable APHRODITE_ROCM_USE_AITER_LINEAR
-        monkeypatch.setenv("APHRODITE_ROCM_USE_AITER", "1")
+        # this will enable SONAR_ROCM_USE_AITER_LINEAR
+        monkeypatch.setenv("SONAR_ROCM_USE_AITER", "1")
 
-    model, _ = load_model_without_aphrodite_runner(model_path, dtype=torch.float16)
+    model, _ = load_model_without_sonar_runner(model_path, dtype=torch.float16)
     qkv_proj = model.model.layers[0].self_attn.qkv_proj
     assert isinstance(qkv_proj.quant_method, CompressedTensorsLinearMethod)
     assert isinstance(qkv_proj.scheme, CompressedTensorsW8A8Int8)
@@ -291,9 +291,9 @@ def test_compressed_tensors_w8a8_dynamic_per_token(model_args, use_aiter, monkey
     ],
 )
 @pytest.mark.skipif(not current_platform.is_cuda(), reason="The tests are skipped on non-CUDA platform.")
-def test_compressed_tensors_wNa16(aphrodite_runner, wNa16_args):
+def test_compressed_tensors_wNa16(sonar_runner, wNa16_args):
     model, strategy, group, pack_factor, symmetric = wNa16_args
-    with aphrodite_runner(model, enforce_eager=True) as llm:
+    with sonar_runner(model, enforce_eager=True) as llm:
 
         def check_model(model):
             layer = model.model.layers[0]
@@ -316,7 +316,7 @@ def test_compressed_tensors_wNa16(aphrodite_runner, wNa16_args):
 
 def test_compressed_tensors_fp8(monkeypatch, dist_init, workspace_init):
     model_path = "nm-testing/Meta-Llama-3-8B-FP8-compressed-tensors-test"
-    model, aphrodite_config = load_model_without_aphrodite_runner(model_path)
+    model, sonar_config = load_model_without_sonar_runner(model_path)
     target_device = torch.device(current_platform.device_type)
 
     layer = model.model.layers[0]
@@ -338,8 +338,8 @@ def test_compressed_tensors_fp8(monkeypatch, dist_init, workspace_init):
     input_ids = torch.tensor([1, 2, 3, 4], device=target_device)
     positions = torch.arange(input_ids.numel(), device=target_device)
     with (
-        set_current_aphrodite_config(aphrodite_config),
-        set_forward_context(None, aphrodite_config, num_tokens=input_ids.numel()),
+        set_current_sonar_config(sonar_config),
+        set_forward_context(None, sonar_config, num_tokens=input_ids.numel()),
     ):
         hidden_states = model(input_ids, positions, None)
         logits = model.compute_logits(hidden_states)
@@ -375,15 +375,15 @@ def test_compressed_tensors_w8a8_fp8_moe_forwards_swiglu_params():
 
 
 @pytest.mark.skipif(not current_platform.is_cuda(), reason="This test is skipped on non-CUDA platform.")
-def test_compressed_tensors_kv_cache_fp8_per_tensor(aphrodite_runner):
+def test_compressed_tensors_kv_cache_fp8_per_tensor(sonar_runner):
     model_path = "nm-testing/TinyLlama-1.1B-Chat-v1.0-kvcache-fp8-tensor"
-    with aphrodite_runner(model_path) as llm:
+    with sonar_runner(model_path) as llm:
         output = llm.generate_greedy("Hello world!", max_tokens=4)
         assert output
 
 
 @pytest.mark.skipif(not current_platform.is_cuda(), reason="This test is skipped on non-CUDA platform.")
-def test_compressed_tensors_kv_cache_fp8_per_attn_head(aphrodite_runner):
+def test_compressed_tensors_kv_cache_fp8_per_attn_head(sonar_runner):
     model_path = "nm-testing/TinyLlama-1.1B-Chat-v1.0-kvcache-fp8-attn_head"
     try:
         fa_version = get_flash_attn_version()
@@ -392,7 +392,7 @@ def test_compressed_tensors_kv_cache_fp8_per_attn_head(aphrodite_runner):
     if fa_version is None or fa_version < 3:
         pytest.skip("This test requires FlashAttention version >= 3.")
 
-    with aphrodite_runner(model_path, attention_config={"backend": "FLASH_ATTN"}) as llm:
+    with sonar_runner(model_path, attention_config={"backend": "FLASH_ATTN"}) as llm:
         output = llm.generate_greedy("Hello world!", max_tokens=4)
         assert output
 
@@ -414,11 +414,11 @@ def test_compressed_tensors_nvfp4(args, dist_init, workspace_init):
             ValueError,
             match="Forced NVFP4 kernel MarlinNvFp4LinearKernel is not supported",
         ):
-            load_model_without_aphrodite_runner(model_path)
+            load_model_without_sonar_runner(model_path)
         return
 
     try:
-        model, _ = load_model_without_aphrodite_runner(model_path)
+        model, _ = load_model_without_sonar_runner(model_path)
     except ValueError as exc:
         pytest.fail(f"Unexpected NVFP4 loading failure: {exc}")
 
@@ -437,9 +437,9 @@ def test_compressed_tensors_nvfp4(args, dist_init, workspace_init):
     "args",
     [("czhu-cohere/TinyLlama-1.1B-Chat-v1.0-W4A8-e2e", CompressedTensorsW4A8Fp8)],
 )
-def test_compressed_tensors_w4a8_fp8(aphrodite_runner, args):
+def test_compressed_tensors_w4a8_fp8(sonar_runner, args):
     model, scheme = args
-    with aphrodite_runner(model, enforce_eager=True) as llm:
+    with sonar_runner(model, enforce_eager=True) as llm:
 
         def check_model(model):
             layer = model.model.layers[0]
@@ -485,8 +485,8 @@ def test_compressed_tensors_w4a8_fp8(aphrodite_runner, args):
         ),
     ],
 )
-def test_compressed_tensors_transforms_perplexity(aphrodite_runner, model, prompt, exp_perplexity):
-    with aphrodite_runner(model, enforce_eager=True) as llm:
+def test_compressed_tensors_transforms_perplexity(sonar_runner, model, prompt, exp_perplexity):
+    with sonar_runner(model, enforce_eager=True) as llm:
         perplexity = llm.generate_prompt_perplexity([prompt])[0]
         print(perplexity)
         assert perplexity <= exp_perplexity
@@ -495,9 +495,9 @@ def test_compressed_tensors_transforms_perplexity(aphrodite_runner, model, promp
 @pytest.mark.parametrize("linear_backend", ["auto", "marlin"] if current_platform.is_cuda() else ["auto"])
 def test_compressed_tensors_fp8_block_enabled(linear_backend, dist_init, workspace_init):
     model_path = "RedHatAI/Qwen3-0.6B-FP8-BLOCK"
-    model, _ = load_model_without_aphrodite_runner(
+    model, _ = load_model_without_sonar_runner(
         model_path,
-        aphrodite_config_kwargs={"kernel_config": KernelConfig(linear_backend=linear_backend)},
+        sonar_config_kwargs={"kernel_config": KernelConfig(linear_backend=linear_backend)},
     )
     fp8_dtype = current_platform.fp8_dtype()
     layer = model.model.layers[0]
@@ -530,7 +530,7 @@ def test_compressed_tensors_fp8_block_enabled(linear_backend, dist_init, workspa
     not current_platform.is_cuda(),
     reason="This test is not for non-CUDA platforms",
 )
-def test_compressed_tensors_moe_ignore_with_model(aphrodite_runner):
+def test_compressed_tensors_moe_ignore_with_model(sonar_runner):
     """Integration test for MoE layer ignore functionality with a real model.
 
     This test would verify that when loading a compressed-tensors quantized
@@ -546,11 +546,11 @@ def test_compressed_tensors_moe_ignore_with_model(aphrodite_runner):
     # model_path = "nm-testing/tinysmokeqwen3moe-W4A16-first-only" # CT 12.3
     model_path = "nm-testing/tinysmokeqwen3moe-W4A16-first-only-CTstable"  # CT 12.2
 
-    with aphrodite_runner(model_path, enforce_eager=True) as llm:
+    with sonar_runner(model_path, enforce_eager=True) as llm:
 
         def check_model(model):
-            from aphrodite.model_executor.layers.fused_moe import MoERunner
-            from aphrodite.model_executor.layers.quantization.compressed_tensors.compressed_tensors_moe import (  # noqa: E501
+            from sonar.model_executor.layers.fused_moe import MoERunner
+            from sonar.model_executor.layers.quantization.compressed_tensors.compressed_tensors_moe import (  # noqa: E501
                 CompressedTensorsMoEMethod,
             )
 
@@ -571,7 +571,7 @@ def test_compressed_tensors_moe_ignore_with_model(aphrodite_runner):
         assert output
 
 
-def test_w4a16_moe_torch_compile(aphrodite_runner):
+def test_w4a16_moe_torch_compile(sonar_runner):
     """Regression test: MoE quant_config must be initialized inside the
     moe_forward custom op, not just in forward_native which is compiled by
     Dynamo (attribute mutations are not replayed at runtime).
@@ -582,7 +582,7 @@ def test_w4a16_moe_torch_compile(aphrodite_runner):
     """
     model_path = "nm-testing/tinysmokeqwen3moe-W4A16-first-only-CTstable"
 
-    with aphrodite_runner(
+    with sonar_runner(
         model_path,
         enforce_eager=False,
         max_model_len=256,
@@ -872,10 +872,10 @@ def test_scheme_selection(weight_bits, weight_strategy, input_act, output_act, f
     not current_platform.is_cuda() or not current_platform.has_device_capability(75),
     reason="MXFP8 requires Turing (sm_75+) or newer.",
 )
-def test_compressed_tensors_mxfp8_moe_setup(aphrodite_runner):
+def test_compressed_tensors_mxfp8_moe_setup(sonar_runner):
     """Verify MXFP8 scheme, dtypes, and generation for a MoE model."""
     model_path = "AliEdalati97/Qwen3-30B-A3B-MXFP8"
-    with aphrodite_runner(
+    with sonar_runner(
         model_path,
         enforce_eager=True,
         load_format="dummy",
@@ -883,8 +883,8 @@ def test_compressed_tensors_mxfp8_moe_setup(aphrodite_runner):
     ) as llm:
 
         def check_model(model):
-            from aphrodite.model_executor.layers.fused_moe import MoERunner
-            from aphrodite.model_executor.layers.quantization.compressed_tensors.compressed_tensors_moe.compressed_tensors_moe_w8a8_mxfp8 import (  # noqa: E501
+            from sonar.model_executor.layers.fused_moe import MoERunner
+            from sonar.model_executor.layers.quantization.compressed_tensors.compressed_tensors_moe.compressed_tensors_moe_w8a8_mxfp8 import (  # noqa: E501
                 CompressedTensorsW8A8Mxfp8MoEMethod,
             )
 
@@ -905,10 +905,10 @@ def test_compressed_tensors_mxfp8_moe_setup(aphrodite_runner):
 
 @pytest.mark.parametrize("num_bits", range(2, 9))
 def test_humming_supports_compressed_tensors_wna16_quant_key(num_bits):
-    from aphrodite.model_executor.layers.fused_moe.experts.fused_humming_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.fused_humming_moe import (
         HummingExpertsBase,
     )
-    from aphrodite.model_executor.layers.quantization.compressed_tensors.schemes.compressed_tensors_wNa16 import (  # noqa: E501
+    from sonar.model_executor.layers.quantization.compressed_tensors.schemes.compressed_tensors_wNa16 import (  # noqa: E501
         WNA16_SUPPORTED_TYPES_MAP,
     )
 
@@ -943,9 +943,9 @@ def test_quant_key_str_supports_scalar_type_dtypes():
     not current_platform.is_cuda() or not current_platform.has_device_capability(80),
     reason="MXFP4 requires ampere or newer",
 )
-def test_compressed_tensors_mxfp4(aphrodite_runner):
+def test_compressed_tensors_mxfp4(sonar_runner):
     model_path = "nm-testing/TinyLlama-1.1B-Chat-v1.0-MXFP4"
-    with aphrodite_runner(model_path, enforce_eager=True) as llm:
+    with sonar_runner(model_path, enforce_eager=True) as llm:
 
         def check_model(model):
             layer = model.model.layers[0]
@@ -970,9 +970,9 @@ def test_compressed_tensors_mxfp4(aphrodite_runner):
 def _mxfp4_moe_layer(monkeypatch, input_activations):
     from types import SimpleNamespace
 
-    from aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 import Mxfp4MoeBackend
-    from aphrodite.model_executor.layers.fused_moe.routed_experts import RoutedExperts
-    from aphrodite.model_executor.layers.quantization import mxfp4
+    from sonar.model_executor.layers.fused_moe.oracle.mxfp4 import Mxfp4MoeBackend
+    from sonar.model_executor.layers.fused_moe.routed_experts import RoutedExperts
+    from sonar.model_executor.layers.quantization import mxfp4
     from tests.kernels.moe.utils import make_dummy_moe_config
 
     # Exercise scheme routing and allocation without selecting a GPU kernel.
@@ -1026,7 +1026,7 @@ def test_mxfp4_moe_with_fp8_inputs_shares_native_mxfp4_method(monkeypatch):
     """MXFP4 weights with dynamic FP8 inputs load compressed-tensors names but
     otherwise behave as the native MXFP4 method, so its backends, padding and
     monolithic support are not reimplemented."""
-    from aphrodite.model_executor.layers.quantization.mxfp4 import Mxfp4MoEMethod
+    from sonar.model_executor.layers.quantization.mxfp4 import Mxfp4MoEMethod
 
     layer = _mxfp4_moe_layer(
         monkeypatch,
@@ -1058,7 +1058,7 @@ def test_mxfp4_moe_with_fp8_inputs_shares_native_mxfp4_method(monkeypatch):
 def test_mxfp4_linear_with_fp8_inputs_requests_fp8_activations():
     """Dense MXFP4 layers with dynamic FP8 inputs (e.g. GLM-5.3 dense MLPs)
     must not be routed as W4A4."""
-    from aphrodite.model_executor.layers.quantization.compressed_tensors.schemes import (
+    from sonar.model_executor.layers.quantization.compressed_tensors.schemes import (
         CompressedTensorsW4A8Mxfp4,
     )
 
@@ -1072,7 +1072,7 @@ def test_mxfp4_linear_with_fp8_inputs_requests_fp8_activations():
         dynamic=True,
     )
     config = CompressedTensorsConfig.from_config({"format": "mxfp4-pack-quantized", "config_groups": {}})
-    with set_current_aphrodite_config(AphroditeConfig()):
+    with set_current_sonar_config(SonarConfig()):
         scheme = config._get_scheme_from_parts(weights, inputs)
 
     assert isinstance(scheme, CompressedTensorsW4A8Mxfp4)
@@ -1081,7 +1081,7 @@ def test_mxfp4_linear_with_fp8_inputs_requests_fp8_activations():
 
 def test_mxfp4_moe_with_mxfp4_inputs_keeps_w4a4_method(monkeypatch):
     """Only FP8 inputs take the shared path; W4A4 keeps its own kernels."""
-    from aphrodite.model_executor.layers.quantization.compressed_tensors.compressed_tensors_moe.compressed_tensors_moe_w4a4_mxfp4 import (  # noqa: E501
+    from sonar.model_executor.layers.quantization.compressed_tensors.compressed_tensors_moe.compressed_tensors_moe_w4a4_mxfp4 import (  # noqa: E501
         CompressedTensorsW4A4Mxfp4MoEMethod,
     )
 

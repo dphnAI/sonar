@@ -18,7 +18,7 @@ from transformers.modeling_utils import PreTrainedModel
 from transformers.models.whisper.configuration_whisper import WhisperConfig
 from transformers.utils import logging
 
-from aphrodite.vllm_flash_attn import flash_attn_varlen_func, is_fa_version_supported
+from sonar.vllm_flash_attn import flash_attn_varlen_func, is_fa_version_supported
 
 _FLASH_ATTN_VERSION = 3 if is_fa_version_supported(3) else 2
 

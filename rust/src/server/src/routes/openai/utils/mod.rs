@@ -8,7 +8,7 @@ pub mod types;
 pub mod usage;
 pub mod validated_json;
 
-use aphrodite_text::{PromptTruncation, TruncationSide};
+use sonar_text::{PromptTruncation, TruncationSide};
 
 use crate::error::{ApiError, bail_invalid_request};
 
@@ -57,7 +57,7 @@ pub(crate) fn validate_max_output_tokens(
 pub(crate) fn resolve_generation_prompt_truncation(
     limit: Option<i64>,
     side: Option<TruncationSide>,
-) -> aphrodite_text::Result<Option<PromptTruncation>> {
+) -> sonar_text::Result<Option<PromptTruncation>> {
     limit
         .map(|limit| PromptTruncation::from_wire(limit, side.unwrap_or(TruncationSide::Left)))
         .transpose()

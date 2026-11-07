@@ -21,7 +21,7 @@ from typing import Any, Generic, TypeVar, cast
 
 __all__ = [
     "JitWarmupRegistry",
-    "AphroditeJitKernel",
+    "SonarJitKernel",
     "WarmupChoices",
     "WarmupIntRange",
     "get_ast_full_name",
@@ -601,7 +601,7 @@ def _trace_warmup_predicate(
     )
 
 
-class AphroditeJitKernel(Generic[CompileKeyT], ABC):
+class SonarJitKernel(Generic[CompileKeyT], ABC):
     """Kernel wrapper that owns dispatch, warmup keys, and compilation."""
 
     CompileKey: type[CompileKeyT]
@@ -610,7 +610,7 @@ class AphroditeJitKernel(Generic[CompileKeyT], ABC):
     def __init__(self) -> None:
         dispatch = type(self).dispatch
         self._dispatch_trace = (
-            None if dispatch is AphroditeJitKernel.dispatch else _trace_compile_key_dispatch(self.dispatch)
+            None if dispatch is SonarJitKernel.dispatch else _trace_compile_key_dispatch(self.dispatch)
         )
         self._compiled_cache: dict[Any, Any] = {}
 
@@ -822,7 +822,7 @@ class AphroditeJitKernel(Generic[CompileKeyT], ABC):
         # FunctionDef fields vary across the supported Python versions, so no
         # single constructor overload matches every mypy target.
         case_function = ast.FunctionDef(  # type: ignore[call-overload]
-            name="__aphrodite_warmup_case",
+            name="__sonar_warmup_case",
             args=ast.arguments(
                 posonlyargs=[],
                 args=[ast.arg(arg=name) for name in domain_names],
@@ -889,7 +889,7 @@ class AphroditeJitKernel(Generic[CompileKeyT], ABC):
 def _same_value(left: Any, right: Any) -> bool:
     """True if two registration values are the same object or compare equal.
 
-    Identity is checked first so shared singletons (e.g. ``aphrodite_config``, torch
+    Identity is checked first so shared singletons (e.g. ``sonar_config``, torch
     dtypes) short-circuit before any potentially deep or non-boolean ``__eq__``.
     """
     if left is right:
@@ -922,10 +922,10 @@ class JitWarmupRegistry:
         default=None,
     )
 
-    def __init__(self, aphrodite_config: Any) -> None:
-        self.aphrodite_config = aphrodite_config
+    def __init__(self, sonar_config: Any) -> None:
+        self.sonar_config = sonar_config
         self._registrations: dict[
-            AphroditeJitKernel[Any],
+            SonarJitKernel[Any],
             list[tuple[tuple[Any, ...], dict[str, Any]]],
         ] = {}
 
@@ -934,11 +934,11 @@ class JitWarmupRegistry:
         """Collect warmup registrations made while the decorated callable runs."""
 
         @wraps(init_fn)
-        def wrapped(instance: Any, aphrodite_config: Any, *args: Any, **kwargs: Any) -> None:
-            registry = cls(aphrodite_config)
+        def wrapped(instance: Any, sonar_config: Any, *args: Any, **kwargs: Any) -> None:
+            registry = cls(sonar_config)
             instance.jit_warmup_registry = registry
             with registry.activate():
-                init_fn(instance, aphrodite_config, *args, **kwargs)
+                init_fn(instance, sonar_config, *args, **kwargs)
 
         return wrapped
 
@@ -954,7 +954,7 @@ class JitWarmupRegistry:
     @classmethod
     def register(
         cls,
-        kernel: AphroditeJitKernel[Any],
+        kernel: SonarJitKernel[Any],
         *args: Any,
         **kwargs: Any,
     ) -> None:
@@ -965,7 +965,7 @@ class JitWarmupRegistry:
 
     def _add(
         self,
-        kernel: AphroditeJitKernel[Any],
+        kernel: SonarJitKernel[Any],
         args: tuple[Any, ...],
         kwargs: dict[str, Any],
     ) -> None:
@@ -975,7 +975,7 @@ class JitWarmupRegistry:
         # 61 times); each expands to the same compile keys, so tracing
         # get_warmup_keys once per distinct registration is sufficient. Dedup on
         # identity-or-equality -- identity short-circuits shared singletons like
-        # aphrodite_config before any deep __eq__.
+        # sonar_config before any deep __eq__.
         if any(_same_registration(registered, (args, kwargs)) for registered in registrations):
             return
         registrations.append((args, kwargs))
@@ -987,22 +987,18 @@ class JitWarmupRegistry:
         """Expand registrations and compile each wrapper/key pair once."""
         from tqdm import tqdm
 
-        from aphrodite.distributed import is_global_first_rank
-        from aphrodite.model_executor.warmup.jit_warmup_triton_helper import (
-            AphroditeTritonJitKernel,
+        from sonar.distributed import is_global_first_rank
+        from sonar.model_executor.warmup.jit_warmup_triton_helper import (
+            SonarTritonJitKernel,
             compile_triton_warmup,
         )
 
-        kernel_items: list[tuple[AphroditeJitKernel[Any], dict[Any, None]]] = []
+        kernel_items: list[tuple[SonarJitKernel[Any], dict[Any, None]]] = []
         for kernel, registrations in self._registrations.items():
             compile_keys: dict[Any, None] = {}
             for args, kwargs in registrations:
-                if (
-                    not args
-                    and not kwargs
-                    and "aphrodite_config" in inspect.signature(kernel.get_warmup_keys).parameters
-                ):
-                    kwargs = {"aphrodite_config": self.aphrodite_config}
+                if not args and not kwargs and "sonar_config" in inspect.signature(kernel.get_warmup_keys).parameters:
+                    kwargs = {"sonar_config": self.sonar_config}
                 for compile_key in kernel.get_warmup_keys(*args, **kwargs):
                     compile_keys[compile_key] = None
             if compile_keys:
@@ -1011,10 +1007,10 @@ class JitWarmupRegistry:
         if not kernel_items:
             return
 
-        parallel_items: list[tuple[AphroditeJitKernel[Any], dict[Any, None]]] = []
+        parallel_items: list[tuple[SonarJitKernel[Any], dict[Any, None]]] = []
         serial_items = []
         for kernel, compile_keys in kernel_items:
-            if isinstance(kernel, AphroditeTritonJitKernel) and kernel.supports_parallel_compile:
+            if isinstance(kernel, SonarTritonJitKernel) and kernel.supports_parallel_compile:
                 parallel_items.append((kernel, compile_keys))
             else:
                 serial_items.append((kernel, compile_keys))
@@ -1029,7 +1025,7 @@ class JitWarmupRegistry:
         ) as progress:
 
             def compile_kernels(
-                items: list[tuple[AphroditeJitKernel[Any], dict[Any, None]]],
+                items: list[tuple[SonarJitKernel[Any], dict[Any, None]]],
             ) -> None:
                 for kernel, compile_keys in items:
                     progress.set_postfix_str(

@@ -8,11 +8,11 @@ Run `pytest tests/kernels/moe/test_fused_topk.py`.
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.fused_moe.router.fused_topk_bias_router import (
+from sonar.model_executor.layers.fused_moe.router.fused_topk_bias_router import (
     fused_topk_bias,
 )
-from aphrodite.model_executor.layers.fused_moe.router.fused_topk_router import fused_topk
-from aphrodite.platforms import current_platform
+from sonar.model_executor.layers.fused_moe.router.fused_topk_router import fused_topk
+from sonar.platforms import current_platform
 
 
 def torch_topk(

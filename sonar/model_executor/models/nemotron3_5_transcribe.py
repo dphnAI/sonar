@@ -23,15 +23,15 @@ import torch
 from torch import nn
 from transformers import BatchFeature
 
-from aphrodite.config import AphroditeConfig, ModelConfig, SpeechToTextConfig
-from aphrodite.config.multimodal import MultiModalDummyOptions
-from aphrodite.config.speech_to_text import SpeechToTextParams
-from aphrodite.inputs import MultiModalDataDict, PromptType, TokensPrompt
-from aphrodite.logger import init_logger
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import MultiModalFieldConfig, MultiModalKwargsItems
-from aphrodite.multimodal.parse import MultiModalDataItems, MultiModalDataParser
-from aphrodite.multimodal.processing import (
+from sonar.config import ModelConfig, SonarConfig, SpeechToTextConfig
+from sonar.config.multimodal import MultiModalDummyOptions
+from sonar.config.speech_to_text import SpeechToTextParams
+from sonar.inputs import MultiModalDataDict, PromptType, TokensPrompt
+from sonar.logger import init_logger
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import MultiModalFieldConfig, MultiModalKwargsItems
+from sonar.multimodal.parse import MultiModalDataItems, MultiModalDataParser
+from sonar.multimodal.processing import (
     BaseDummyInputsBuilder,
     BaseMultiModalProcessor,
     BaseProcessingInfo,
@@ -39,12 +39,12 @@ from aphrodite.multimodal.processing import (
     PromptUpdate,
     PromptUpdateDetails,
 )
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.tokenizers import cached_tokenizer_from_config
-from aphrodite.transformers_utils.configs.nemotron3_5_transcribe import (
+from sonar.sequence import IntermediateTensors
+from sonar.tokenizers import cached_tokenizer_from_config
+from sonar.transformers_utils.configs.nemotron3_5_transcribe import (
     Nemotron3_5TranscribeConfig,
 )
-from aphrodite.utils.tensor_schema import TensorSchema, TensorShape
+from sonar.utils.tensor_schema import TensorSchema, TensorShape
 
 from .interfaces import (
     IsHybrid,
@@ -63,7 +63,7 @@ from .nemotron_h_mtp import NemotronHMTP
 from .utils import (
     WeightsMapper,
     _merge_multimodal_embeddings,
-    init_aphrodite_registered_model,
+    init_sonar_registered_model,
     maybe_prefix,
 )
 
@@ -84,7 +84,7 @@ _TRANSCRIPTION_PROMPT = (
     "Formatting: punctuation and capitalization. Output: transcript only."
 )
 # Training audio was at most one hour, so transcription sends pieces of at most an
-# hour; Aphrodite splits longer audio at quiet points.
+# hour; Sonar splits longer audio at quiet points.
 _MAX_TRANSCRIPTION_CLIP_S = 60 * 60
 # Context kept free for the transcript of each second of audio: a fast speaker,
 # with speaker tags.
@@ -222,7 +222,7 @@ class Nemotron3_5TranscribeProcessingInfo(BaseProcessingInfo):
 
     def get_mm_max_tokens_per_item(self, seq_len: int, mm_counts: Mapping[str, int]) -> Mapping[str, int]:
         # The same longest clip as the dummy inputs, so the encoder cache that
-        # Aphrodite sizes from this number admits every clip the limits allow.
+        # Sonar sizes from this number admits every clip the limits allow.
         samples = self.get_max_audio_samples(seq_len, self.get_audio_length_override())
         return {"audio": self.get_num_audio_tokens(samples)}
 
@@ -312,7 +312,7 @@ class Nemotron3_5TranscribeMultiModalProcessor(BaseMultiModalProcessor[Nemotron3
 
 def _unpack_experts(name: str, tensor: torch.Tensor) -> Iterator[tuple[str, torch.Tensor]]:
     """NeMo packs the routed experts of a MoE layer into one rank-3 tensor per
-    projection; Aphrodite loads one transposed matrix per expert."""
+    projection; Sonar loads one transposed matrix per expert."""
     for suffix, projection in (
         (".experts.down_projs", "down_proj"),
         (".experts.gate_and_up_projs", "up_proj"),
@@ -384,7 +384,7 @@ class Nemotron3_5TranscribeForConditionalGeneration(
     # The BF16 checkpoint names the decoder in NeMo's layout (``llm.*``; Mamba
     # ``A_log``/``D``/``dt_bias`` in a float32 holder; final norm ``norm``). The FP8
     # and NVFP4 checkpoints, and their quantization configs, use Hugging Face names.
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_substr={".mixer._fp32_params.": ".mixer."},
         orig_to_new_prefix={
             "llm.model.norm.": "language_model.model.norm_f.",
@@ -454,21 +454,21 @@ class Nemotron3_5TranscribeForConditionalGeneration(
         )
         return _num_audio_embeddings(audio_config, num_samples)
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config: Nemotron3_5TranscribeConfig = aphrodite_config.model_config.hf_config
+        config: Nemotron3_5TranscribeConfig = sonar_config.model_config.hf_config
         self.config = config
 
-        with self._mark_language_model(aphrodite_config):
-            self.language_model = init_aphrodite_registered_model(
-                aphrodite_config=aphrodite_config,
+        with self._mark_language_model(sonar_config):
+            self.language_model = init_sonar_registered_model(
+                sonar_config=sonar_config,
                 hf_config=config.text_config,
                 prefix=maybe_prefix(prefix, "language_model"),
             )
-        with self._mark_tower_model(aphrodite_config, "audio"):
+        with self._mark_tower_model(sonar_config, "audio"):
             self.audio_tower = Nemotron3_5TranscribeAudioTower(
                 config.audio_config,
-                quant_config=aphrodite_config.quant_config,
+                quant_config=sonar_config.quant_config,
                 prefix=maybe_prefix(prefix, "audio_tower"),
             )
 
@@ -530,7 +530,7 @@ class Nemotron3_5TranscribeForConditionalGeneration(
         audio_weights: list[tuple[str, torch.Tensor]] = []
 
         def decoder_source() -> Iterator[tuple[str, torch.Tensor]]:
-            for name, tensor in self.hf_to_aphrodite_mapper.apply(weights):
+            for name, tensor in self.hf_to_sonar_mapper.apply(weights):
                 if name.endswith("._extra_state"):
                     continue
                 if name.startswith("audio_tower."):
@@ -553,14 +553,14 @@ class Nemotron3_5TranscribeForConditionalGeneration(
         return loaded
 
     @classmethod
-    def get_mamba_state_shape_from_config(cls, aphrodite_config: AphroditeConfig):
-        text_config = aphrodite_config.model_config.hf_config.text_config
-        return NemotronHForCausalLM.get_mamba_state_shape_from_config(aphrodite_config.with_hf_config(text_config))
+    def get_mamba_state_shape_from_config(cls, sonar_config: SonarConfig):
+        text_config = sonar_config.model_config.hf_config.text_config
+        return NemotronHForCausalLM.get_mamba_state_shape_from_config(sonar_config.with_hf_config(text_config))
 
     @classmethod
-    def get_mamba_state_dtype_from_config(cls, aphrodite_config: AphroditeConfig):
-        text_config = aphrodite_config.model_config.hf_config.text_config
-        return NemotronHForCausalLM.get_mamba_state_dtype_from_config(aphrodite_config.with_hf_config(text_config))
+    def get_mamba_state_dtype_from_config(cls, sonar_config: SonarConfig):
+        text_config = sonar_config.model_config.hf_config.text_config
+        return NemotronHForCausalLM.get_mamba_state_dtype_from_config(sonar_config.with_hf_config(text_config))
 
     @classmethod
     def get_mamba_state_copy_func(cls):

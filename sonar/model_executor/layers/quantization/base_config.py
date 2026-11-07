@@ -13,12 +13,12 @@ from torch import nn
 from transformers import PreTrainedConfig
 
 if TYPE_CHECKING:
-    from aphrodite.config.cache import CacheDType
-    from aphrodite.model_executor.layers.quantization import QuantizationMethods
-    from aphrodite.model_executor.layers.quantization.online.base import (
+    from sonar.config.cache import CacheDType
+    from sonar.model_executor.layers.quantization import QuantizationMethods
+    from sonar.model_executor.layers.quantization.online.base import (
         OnlineQuantizationConfig,
     )
-    from aphrodite.model_executor.models.utils import WeightsMapper
+    from sonar.model_executor.models.utils import WeightsMapper
 else:
     QuantizationMethods = str
 
@@ -127,7 +127,7 @@ class QuantizationConfig(ABC):
     )
     """Suffixes of quantization parameters that may be present in the checkpoint but
     not in the model, and should be ignored if unexpected during loading. These are used
-    after remapping, so should be in Aphrodite format (e.g. .q_scale, not .q.scale)."""
+    after remapping, so should be in Sonar format (e.g. .q_scale, not .q.scale)."""
     online_quantization_config: "OnlineQuantizationConfig | None" = None
 
     def __init__(self):
@@ -222,13 +222,13 @@ class QuantizationConfig(ABC):
 
     @staticmethod
     def get_cache_scale_mapper() -> "WeightsMapper":
-        """Mapping from checkpoint KV-cache scale names to Aphrodite scale names.
+        """Mapping from checkpoint KV-cache scale names to Sonar scale names.
 
         Returning a mapper here causes `AutoWeightsLoader` to apply it to the
         weight stream automatically; individual model `load_weights` methods
         do not need to know about KV-cache scales.
         """
-        from aphrodite.model_executor.models.utils import WeightsMapper
+        from sonar.model_executor.models.utils import WeightsMapper
 
         orig_to_new_regex = {
             # Deprecated fused kv_scale -> attn.k_scale
@@ -252,7 +252,7 @@ class QuantizationConfig(ABC):
     @staticmethod
     def get_checkpoint_weight_mapper() -> "WeightsMapper":
         """Discard activation-order metadata unused by supported kernels."""
-        from aphrodite.model_executor.models.utils import WeightsMapper
+        from sonar.model_executor.models.utils import WeightsMapper
 
         return WeightsMapper(orig_to_new_suffix={".g_idx": None})
 
@@ -260,15 +260,15 @@ class QuantizationConfig(ABC):
         """Return a checkpoint-selected KV-cache dtype for one layer."""
         return None
 
-    def apply_aphrodite_mapper(  # noqa: B027
-        self, hf_to_aphrodite_mapper: "WeightsMapper"
+    def apply_sonar_mapper(  # noqa: B027
+        self, hf_to_sonar_mapper: "WeightsMapper"
     ):
         """Interface for models to update module names referenced in
-        quantization configs in order to reflect the aphrodite model structure
+        quantization configs in order to reflect the sonar model structure
 
         Args:
-            hf_to_aphrodite_mapper: maps from hf model structure (the assumed
-                structure of the qconfig) to aphrodite model structure
+            hf_to_sonar_mapper: maps from hf model structure (the assumed
+                structure of the qconfig) to sonar model structure
 
         """
         # TODO (@kylesayrs): add implementations for all subclasses
@@ -289,7 +289,7 @@ class QuantizationConfig(ABC):
         Returns:
 
         """
-        # TODO: revision is never passed currently in aphrodite.py,
+        # TODO: revision is never passed currently in sonar.py,
         # but is used in subclasses, should we remove this parameter?
         pass
 
@@ -298,19 +298,19 @@ def resolve_quant_method(
     quant_config: QuantizationConfig, layer: torch.nn.Module, prefix: str
 ) -> QuantizeMethodBase | None:
     """Return the checkpoint method with configured online quantization."""
-    from aphrodite.model_executor.layers.fused_moe import RoutedExperts
-    from aphrodite.model_executor.layers.fused_moe.unquantized_fused_moe_method import (
+    from sonar.model_executor.layers.fused_moe import RoutedExperts
+    from sonar.model_executor.layers.fused_moe.unquantized_fused_moe_method import (
         UnquantizedFusedMoEMethod,
     )
-    from aphrodite.model_executor.layers.linear import (
+    from sonar.model_executor.layers.linear import (
         LinearBase,
         UnquantizedLinearMethod,
     )
-    from aphrodite.model_executor.layers.quantization.online.fp8 import OnlineLinearBase
-    from aphrodite.model_executor.layers.quantization.online.moe_base import (
+    from sonar.model_executor.layers.quantization.online.fp8 import OnlineLinearBase
+    from sonar.model_executor.layers.quantization.online.moe_base import (
         OnlineMoEMethodBase,
     )
-    from aphrodite.model_executor.layers.quantization.online.requantization import (
+    from sonar.model_executor.layers.quantization.online.requantization import (
         requantization_source_scope,
     )
 

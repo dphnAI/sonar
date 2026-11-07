@@ -3,12 +3,12 @@
 
 use std::sync::Arc;
 
-use aphrodite_engine_core_client::Error as EngineCoreClientError;
 use axum::Json;
 use axum::body::Bytes;
 use axum::extract::State;
 use axum::http::StatusCode;
 use serde::Deserialize;
+use sonar_engine_core_client::Error as EngineCoreClientError;
 use tracing::info;
 
 use crate::error::ApiError;

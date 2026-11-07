@@ -8,10 +8,10 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.platforms import current_platform
-from aphrodite.v1.attention.backends.utils import PAD_SLOT_ID
-from aphrodite.v1.worker.gpu.spec_decode.dflash.speculator import (
+from sonar.config import SonarConfig
+from sonar.platforms import current_platform
+from sonar.v1.attention.backends.utils import PAD_SLOT_ID
+from sonar.v1.worker.gpu.spec_decode.dflash.speculator import (
     DFlashSpeculator,
     _prepare_dflash_inputs_kernel,
 )
@@ -76,7 +76,7 @@ def _run_prepare(
         pass
 
     draft = SimpleNamespace(
-        aphrodite_config=AphroditeConfig(),
+        sonar_config=SonarConfig(),
         input_buffers=input_buffers,
         context_positions=context_positions,
         _context_slot_mappings=context_slot_mapping.unsqueeze(0),
@@ -114,7 +114,7 @@ def _run_prepare(
     )
     with (
         patch(
-            "aphrodite.v1.worker.gpu.spec_decode.dflash.speculator.dispatch_cg_and_sync_dp",
+            "sonar.v1.worker.gpu.spec_decode.dflash.speculator.dispatch_cg_and_sync_dp",
             side_effect=InputsPrepared,
         ),
         pytest.raises(InputsPrepared),

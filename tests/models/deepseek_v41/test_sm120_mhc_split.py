@@ -13,7 +13,7 @@ b12x_mhc = pytest.importorskip("b12x.norm.mhc._kernels")
 
 from b12x._lib.compile_plan import compile_only_launches  # noqa: E402
 
-from aphrodite.models.deepseek_v41.sm120.mhc_split import (  # noqa: E402
+from sonar.models.deepseek_v41.sm120.mhc_split import (  # noqa: E402
     PARTIALS,
     PARTIALS_PER_CTA,
     join_mhc_split,
@@ -131,7 +131,7 @@ def test_split_matches_fused_lagged_post_pre(rows):
 
 
 def test_broadcast_projection_refit_preserves_captured_buffer():
-    from aphrodite.models.deepseek_v41.sm120.model import DeepseekV4DecoderLayer
+    from sonar.models.deepseek_v41.sm120.model import DeepseekV4DecoderLayer
 
     layer = DeepseekV4DecoderLayer.__new__(DeepseekV4DecoderLayer)
     torch.nn.Module.__init__(layer)

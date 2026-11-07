@@ -8,7 +8,7 @@ Every CTA issues its weight loads (its wqkv part and its wq_b tasks) at the
 kernel start, before it waits on anything; the stages:
 
     xq     (S > 16: S x 2 K halves, on the 32 CTAs without a wqkv part): the
-           bf16 input's half -> Aphrodite's MXFP8 -> X8 (published, a flag each)
+           bf16 input's half -> Sonar's MXFP8 -> X8 (published, a flag each)
     kt     (S): the token's attention keys for K2 -- top-k compressed slots
            through the kv source's block table, then window slots -> KT
     wqkv_a (112 row tiles x 2 K halves, 16 rows): the input's MXFP8 half --
@@ -21,7 +21,7 @@ kernel start, before it waits on anything; the stages:
     wq_b   (H x 512 / 16, 16 rows): QX8 times wq_b -> bf16 -> GPT-J RoPE of
            each head's dims 448.. -> q (global, bf16)
 
-Each elementwise step follows Aphrodite's ROCm path (``mxfp8_quantize``,
+Each elementwise step follows Sonar's ROCm path (``mxfp8_quantize``,
 ``FusedQKVRMSNorm``, ``fused_deepseek_v4_qnorm_rope_kv_rope_quant_insert``);
 the GEMV reductions differ from the Triton GEMMs' only in their order.
 Adapted from ATOM's V4.1 ``attn_pre`` (K1), less its mHC seam.
@@ -147,7 +147,7 @@ def xq_loads(c, unit, pred):
 
 @traced
 def stage_xq(c, unit, w, live):
-    """``xq_loads``' values -> Aphrodite's MXFP8 -> X8 words / X8S codes of the
+    """``xq_loads``' values -> Sonar's MXFP8 -> X8 words / X8S codes of the
     unit (published by the caller)."""
     tid, lane = c["tid"], c["lane"]
     vals = []
@@ -243,7 +243,7 @@ def x_half_loads(c, part, pred, t0, n):
 
 @traced
 def quant_x_half(c, regs, n):
-    """``x_half_loads``' values -> Aphrodite's MXFP8 rows of the K half in LDS (a
+    """``x_half_loads``' values -> Sonar's MXFP8 rows of the K half in LDS (a
     32-group = 4 lanes)."""
     tid, lane = c["tid"], c["lane"]
     x_row, s_row = lds_row(KWORDS), lds_row(KGROUPS)
@@ -336,7 +336,7 @@ def stage_qkv(c, t):
     tk = (fx.ptr_load(red + 4) + fx.ptr_load(red + 5)) + (fx.ptr_load(red + 6) + fx.ptr_load(red + 7))
     rq = hw_rsq(div_rn(tq, fx.Float32(float(Q_RANK)), fx.Float32(1.0 / Q_RANK)) + fx.Float32(EPS))
     rk = hw_rsq(div_rn(tk, fx.Float32(float(KV_DIM)), fx.Float32(1.0 / KV_DIM)) + fx.Float32(EPS))
-    # q: bf16 normed row, then Aphrodite's MXFP8 (a 32-group = 4 threads)
+    # q: bf16 normed row, then Sonar's MXFP8 (a 32-group = 4 threads)
     ys = [bf16_round((xq[j] * rq) * qw[j]) for j in range(8)]
     amax = abs(ys[0])
     for y in ys[1:]:
@@ -344,7 +344,7 @@ def stage_qkv(c, t):
     code = mx_code(butterfly(amax, (1, 2), fx.max))
     mul = mx_mul(code)
     if const_expr(c.get("index", False)):  # noqa: SIM102
-        # the bf16 qr, Aphrodite's indexer's input
+        # the bf16 qr, Sonar's indexer's input
         if mine & (tt * 8 < Q_RANK):
             words = [
                 fx.Vector.from_elements([ys[2 * i], ys[2 * i + 1]], fx.Float32).to(fx.BFloat16).bitcast(fx.Int32)[0]
@@ -376,7 +376,7 @@ def stage_qkv(c, t):
     e0 = bf16_round(kn[0] * cs - kn[1] * sn)
     e1 = bf16_round(kn[0] * sn + kn[1] * cs)
     # record quant of the nope dims: a 64-block = 32 threads (half a wave).
-    # On gfx942 FP8_MAX is 224: Aphrodite's gfx942 cache writer and reader use
+    # On gfx942 FP8_MAX is 224: Sonar's gfx942 cache writer and reader use
     # FNUZ records with that maximum.
     amax = butterfly(fx.max(abs(e0), abs(e1)), (1, 2, 4, 8, 16), fx.max)
     rcode = ceil_exp(

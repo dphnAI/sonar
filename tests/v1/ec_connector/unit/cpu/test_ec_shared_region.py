@@ -14,9 +14,9 @@ from unittest.mock import MagicMock, patch
 import pytest
 import torch
 
-from aphrodite.config import ParallelConfig
-from aphrodite.distributed.ec_transfer.ec_connector.cpu import common
-from aphrodite.distributed.ec_transfer.ec_connector.cpu.ec_shared_region import (
+from sonar.config import ParallelConfig
+from sonar.distributed.ec_transfer.ec_connector.cpu import common
+from sonar.distributed.ec_transfer.ec_connector.cpu.ec_shared_region import (
     ECSharedRegion,
     _wait_for_file_size,
 )
@@ -183,7 +183,7 @@ def test_madvise_success_selects_madvise_population(monkeypatch):
     Spies on both helpers so we can verify call counts: 1 probe call over a
     single page + 1 populate call over the whole flat region, fallback 0 times.
     """
-    from aphrodite.distributed.ec_transfer.ec_connector.cpu import ec_shared_region as esr
+    from sonar.distributed.ec_transfer.ec_connector.cpu import ec_shared_region as esr
 
     madvise_calls: list[tuple[int, int, int]] = []
     fallback_calls: list[tuple[int, int]] = []
@@ -215,7 +215,7 @@ def test_madvise_einval_selects_fallback_for_whole_region(monkeypatch):
     from the `mmap` module, so advice=23 reaches a kernel that rejects it and
     every ECSharedRegion construction used to abort with EINVAL.
     """
-    from aphrodite.distributed.ec_transfer.ec_connector.cpu import ec_shared_region as esr
+    from sonar.distributed.ec_transfer.ec_connector.cpu import ec_shared_region as esr
 
     fallback_calls: list[tuple[int, int]] = []
     real_fallback = esr._fallback_populate_write
@@ -241,7 +241,7 @@ def test_madvise_einval_selects_fallback_for_whole_region(monkeypatch):
 def test_non_creator_does_not_probe_or_populate(monkeypatch):
     """Only the creator pre-faults. A second opener must not probe the advice
     nor re-touch pages the creator already populated."""
-    from aphrodite.distributed.ec_transfer.ec_connector.cpu import ec_shared_region as esr
+    from sonar.distributed.ec_transfer.ec_connector.cpu import ec_shared_region as esr
 
     instance_id = str(uuid.uuid4())
     r1 = ECSharedRegion(engine_id=instance_id, num_blocks=4, block_size_bytes=mmap.PAGESIZE)
@@ -273,7 +273,7 @@ def test_fallback_populate_write_preserves_bytes_and_faults_pages():
     `|= 0` rather than `= 0` matters here: a peer worker may already have
     written EC data into the shared mmap before we pre-fault it.
     """
-    from aphrodite.distributed.ec_transfer.ec_connector.cpu import ec_shared_region as esr
+    from sonar.distributed.ec_transfer.ec_connector.cpu import ec_shared_region as esr
 
     size = 3 * mmap.PAGESIZE
     if not hasattr(mmap, "MADV_DONTNEED"):
@@ -305,7 +305,7 @@ def test_madvise_unexpected_oserror_propagates(monkeypatch):
     """Only EINVAL triggers the fallback.  Other OSErrors (e.g. EIO) must
     propagate out of __init__, not be silently masked by the fallback branch.
     """
-    from aphrodite.distributed.ec_transfer.ec_connector.cpu import ec_shared_region as esr
+    from sonar.distributed.ec_transfer.ec_connector.cpu import ec_shared_region as esr
 
     monkeypatch.setattr(
         esr,
@@ -321,7 +321,7 @@ def test_madvise_unexpected_oserror_propagates(monkeypatch):
         # __init__ raised past the unlink-owning cleanup(), so drop the
         # backing file here rather than leaking it into /dev/shm.
         with contextlib.suppress(FileNotFoundError):
-            os.unlink(f"/dev/shm/aphrodite_ec_{engine_id}.mmap")
+            os.unlink(f"/dev/shm/sonar_ec_{engine_id}.mmap")
 
 
 # ── pin_memory ───────────────────────────────────────────────────────────────

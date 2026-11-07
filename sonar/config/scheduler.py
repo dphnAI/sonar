@@ -7,13 +7,13 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal, Self, cast
 
 from pydantic import Field, field_validator
 
-from aphrodite.config.utils import config
-from aphrodite.logger import init_logger
-from aphrodite.utils.hashing import safe_hash
-from aphrodite.utils.import_utils import resolve_obj_by_qualname
+from sonar.config.utils import config
+from sonar.logger import init_logger
+from sonar.utils.hashing import safe_hash
+from sonar.utils.import_utils import resolve_obj_by_qualname
 
 if TYPE_CHECKING:
-    from aphrodite.v1.core.sched.interface import SchedulerInterface
+    from sonar.v1.core.sched.interface import SchedulerInterface
 
 logger = init_logger(__name__)
 
@@ -93,7 +93,7 @@ class SchedulerConfig:
     """Maximum number of requests that can be in-flight (waiting or running)
     at the same time, or None for no limit. When the limit is reached, new
     requests are rejected with HTTP 503 so the client can retry on another
-    instance. This bounds Aphrodite's otherwise unbounded request queue and is
+    instance. This bounds Sonar's otherwise unbounded request queue and is
     primarily a coarse capacity valve.
 
     Unlike ``max_num_seqs``, which applies per data-parallel rank, this
@@ -172,10 +172,10 @@ class SchedulerConfig:
     some image tokens can be scheduled (like TTTTIIIII, leaving IIIII),
     it will be scheduled as TTTT in one step and IIIIIIIIII in the next."""
 
-    # scheduler class or path. "aphrodite.v1.core.sched.scheduler.Scheduler"
+    # scheduler class or path. "sonar.v1.core.sched.scheduler.Scheduler"
     # (default) or "mod.custom_class".
     scheduler_cls: str | type[object] | None = None
-    """The scheduler class to use. "aphrodite.v1.core.sched.scheduler.Scheduler" is
+    """The scheduler class to use. "sonar.v1.core.sched.scheduler.Scheduler" is
     the default scheduler. Can be a class directly or the path to a class of
     form "mod.custom_class"."""
 
@@ -231,16 +231,16 @@ class SchedulerConfig:
     def get_scheduler_cls(self) -> type["SchedulerInterface"]:
         if self.scheduler_cls is None:
             if self.async_scheduling:
-                from aphrodite.v1.core.sched.async_scheduler import AsyncScheduler
+                from sonar.v1.core.sched.async_scheduler import AsyncScheduler
 
                 return AsyncScheduler
-            from aphrodite.v1.core.sched.scheduler import Scheduler
+            from sonar.v1.core.sched.scheduler import Scheduler
 
             return Scheduler
 
         # The first half of this warning can be removed once the Scheduler interface is
         # finalized and we can maintain support for scheduler classes that implement it
-        if not (isinstance(self.scheduler_cls, str) and self.scheduler_cls.startswith("aphrodite.")):
+        if not (isinstance(self.scheduler_cls, str) and self.scheduler_cls.startswith("sonar.")):
             logger.warning_once(
                 "Using custom scheduler class %s. This scheduler interface is not "
                 "public and compatibility may not be maintained. If you have "
@@ -314,7 +314,7 @@ class SchedulerConfig:
                 f"max_num_batched_tokens ({self.max_num_batched_tokens}) is "
                 f"smaller than max_model_len ({max_model_len}). "
                 "This effectively limits the maximum sequence length to "
-                "max_num_batched_tokens and makes Aphrodite reject longer "
+                "max_num_batched_tokens and makes Sonar reject longer "
                 "sequences. Please increase max_num_batched_tokens or "
                 "decrease max_model_len."
             )

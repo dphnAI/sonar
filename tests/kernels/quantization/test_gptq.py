@@ -3,7 +3,7 @@
 
 import torch
 
-from aphrodite import _custom_ops as ops  # noqa: F401
+from sonar import _custom_ops as ops  # noqa: F401
 from tests.kernels.utils import opcheck
 
 

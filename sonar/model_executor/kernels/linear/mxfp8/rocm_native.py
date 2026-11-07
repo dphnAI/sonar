@@ -13,25 +13,25 @@ does not filter on K.
 
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.model_executor.layers.fusion.quant_activation import (
+import sonar.envs as envs
+from sonar.model_executor.layers.fusion.quant_activation import (
     QuantizedActivation,
     as_quantized_activation,
 )
-from aphrodite.model_executor.layers.quantization.utils.mxfp8_utils import (
+from sonar.model_executor.layers.quantization.utils.mxfp8_utils import (
     MXFP8_BLOCK_SIZE,
     MXFP8_SCALE_DTYPE,
     MXFP8_VALUE_DTYPE,
     dequant_mxfp8_to_bf16,
     mxfp8_e4m3_quantize,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     kMxfp8Dynamic,
 )
-from aphrodite.model_executor.utils import replace_parameter
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
+from sonar.model_executor.utils import replace_parameter
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
 
 from .Mxfp8LinearKernel import Mxfp8LinearKernel, Mxfp8LinearLayerConfig
 from .rocm_block32_gemm import (
@@ -224,7 +224,7 @@ def _mxfp8_dot_scaled_linear(
 ) -> torch.Tensor:
     M, K = x.shape
     N = w.shape[0]
-    if 0 < M <= _FUSED_QUANT_MAX_M and x.dtype == torch.bfloat16 and not envs.APHRODITE_BATCH_INVARIANT:
+    if 0 < M <= _FUSED_QUANT_MAX_M and x.dtype == torch.bfloat16 and not envs.SONAR_BATCH_INVARIANT:
         cfg = _select_fused_quant_cfg(M, N, K)
         if cfg is not None:
             out = torch.empty((M, N), dtype=x.dtype, device=x.device)
@@ -253,7 +253,7 @@ def _mxfp8_dot_scaled_gemm(
 _BK256_STAGES = 3
 _ON_GFX950 = False
 if current_platform.is_rocm():
-    from aphrodite.platforms.rocm import on_gfx950
+    from sonar.platforms.rocm import on_gfx950
 
     _ON_GFX950 = on_gfx950()
     if _ON_GFX950:
@@ -380,7 +380,7 @@ class RocmDotScaledMxfp8LinearKernel(Mxfp8LinearKernel):
         scale_k = K // MXFP8_BLOCK_SIZE
         weight_scale = layer.weight_scale.data[:N, :scale_k].contiguous()
         # rocm_mxfp8_block32_gemm's split-K varies with M.
-        block_scale = None if envs.APHRODITE_BATCH_INVARIANT else _as_block32_scale(weight_scale)
+        block_scale = None if envs.SONAR_BATCH_INVARIANT else _as_block32_scale(weight_scale)
         if block_scale is not None:
             # Checkpoints with 32x32 scale blocks (DeepSeek V4/V4.1) get them
             # back from the loader expanded per row; keep the blocks and use
@@ -434,7 +434,7 @@ class RocmDotScaledMxfp8LinearKernel(Mxfp8LinearKernel):
                 # decode / DSpark shapes) the quant is fused into the packed
                 # GEMM kernel -- one launch, bit-exact with
                 # mxfp8_e4m3_quantize, kill switch
-                # APHRODITE_DISABLE_FUSED_MXFP8_QUANT_GEMM=1 -- while larger M
+                # SONAR_DISABLE_FUSED_MXFP8_QUANT_GEMM=1 -- while larger M
                 # keeps the separate launches. The branch lives inside the
                 # opaque op so a compiled caller cannot freeze the
                 # token-count decision.

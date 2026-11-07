@@ -36,7 +36,7 @@ pub struct RampUpConfig {
 }
 
 /// Range ratio for sampling input/output lengths, matching Python
-/// `aphrodite bench serve`: lengths are drawn uniformly from [len*(1-r), len*(1+r)].
+/// `sonar bench serve`: lengths are drawn uniformly from [len*(1-r), len*(1+r)].
 /// A single float applies to both; the JSON form '{"input": r1, "output": r2}'
 /// controls them independently. Each ratio must be in [0, 1).
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -79,7 +79,7 @@ impl RangeRatio {
         for (name, r) in [("input", input), ("output", output)] {
             if !(0.0..1.0).contains(&r) {
                 let hint = if r == 1.0 {
-                    " NOTE: semantics now match Python aphrodite bench serve — lengths are \
+                    " NOTE: semantics now match Python sonar bench serve — lengths are \
                      sampled from [len*(1-r), len*(1+r)] and 0.0 means fixed length. \
                      The old Rust-only default 1.0 ([len*r, len]) is no longer valid."
                 } else {
@@ -328,7 +328,7 @@ impl BenchConfig {
 
         if uses_server_default_temperature(args.backend, extra_body.as_ref()) {
             tracing::warn!(
-                "aphrodite-bench does not set temperature==0 (greedy) in requests by default. \
+                "sonar-bench does not set temperature==0 (greedy) in requests by default. \
                  The default will be determined on the server side and can be \
                  model/API specific. For greedy decoding, include --temperature=0."
             );
@@ -397,10 +397,10 @@ impl BenchConfig {
         let mut multi_turn_max_turns = args.multi_turn_num_turns;
 
         let self_timed = if args.dataset_name == DatasetName::TimedTrace {
-            if !matches!(args.backend, BackendKind::Aphrodite | BackendKind::Openai) {
+            if !matches!(args.backend, BackendKind::Sonar | BackendKind::Openai) {
                 return Err(BenchError::Config(
                     "timed_trace passes pre-tokenized prompts (list[int]) and requires \
-                     a completions backend ('aphrodite' or 'openai')"
+                     a completions backend ('sonar' or 'openai')"
                         .into(),
                 ));
             }
@@ -493,7 +493,7 @@ impl BenchConfig {
         }
 
         // LoRA validation. Adapter names must be non-empty after trim; pooling
-        // backends are out of scope (Aphrodite LoRA routing is for generative paths).
+        // backends are out of scope (Sonar LoRA routing is for generative paths).
         let lora_modules = match args.lora_modules.as_ref() {
             None => None,
             Some(names) => {
@@ -566,7 +566,7 @@ impl BenchConfig {
             if !args.backend.is_pooling() {
                 return Err(BenchError::Config(
                     "--dataset-name random-rerank requires an embeddings/pooling backend \
-                     (e.g. --backend aphrodite-rerank)"
+                     (e.g. --backend sonar-rerank)"
                         .into(),
                 ));
             }
@@ -967,7 +967,7 @@ fn parse_ramp_up(args: &BenchServeArgs) -> Result<Option<RampUpConfig>> {
 
 /// Whether generation requests leave `temperature` to the server-side default.
 ///
-/// Python `aphrodite bench serve` defaulted to greedy decoding before v0.15, so
+/// Python `sonar bench serve` defaulted to greedy decoding before v0.15, so
 /// results are only comparable with older runs when temperature is set explicitly.
 /// An explicit `"temperature": null` also falls back to the server default.
 fn uses_server_default_temperature(
@@ -1003,7 +1003,7 @@ mod tests {
 
     fn base_timed_trace_args() -> Vec<&'static str> {
         vec![
-            "aphrodite-bench",
+            "sonar-bench",
             "--model",
             "test-model",
             "--dataset-name",
@@ -1095,7 +1095,7 @@ mod tests {
 
     fn base_multi_turn_args() -> Vec<&'static str> {
         vec![
-            "aphrodite-bench",
+            "sonar-bench",
             "--backend",
             "openai-chat",
             "--multi-turn",
@@ -1107,7 +1107,7 @@ mod tests {
     #[test]
     fn test_speed_bench_flags_match_python() {
         let args = parse_args(vec![
-            "aphrodite-bench",
+            "sonar-bench",
             "--model",
             "test-model",
             "--speed-bench-dataset-subset",
@@ -1124,20 +1124,14 @@ mod tests {
     #[test]
     fn test_uses_server_default_temperature() {
         let check = |backend, extra: &[&str]| {
-            let mut argv = vec![
-                "aphrodite-bench",
-                "--model",
-                "test-model",
-                "--backend",
-                backend,
-            ];
+            let mut argv = vec!["sonar-bench", "--model", "test-model", "--backend", backend];
             argv.extend_from_slice(extra);
             let config = BenchConfig::from_args(&parse_args(argv)).unwrap();
             uses_server_default_temperature(config.backend, config.extra_body.as_ref())
         };
 
         assert!(check("openai-chat", &[]));
-        assert!(check("aphrodite", &["--extra-body", r#"{"top_p": 0.9}"#]));
+        assert!(check("sonar", &["--extra-body", r#"{"top_p": 0.9}"#]));
         assert!(!check("openai-chat", &["--temperature", "0"]));
         assert!(!check(
             "openai",
@@ -1223,7 +1217,7 @@ mod tests {
     #[test]
     fn test_prefix_sharing_requires_random_dataset() {
         let args = vec![
-            "aphrodite-bench",
+            "sonar-bench",
             "--backend",
             "openai-chat",
             "--multi-turn",
@@ -1241,7 +1235,7 @@ mod tests {
     #[test]
     fn test_sharegpt_multi_turn_max_turns_default_uncapped() {
         let args = vec![
-            "aphrodite-bench",
+            "sonar-bench",
             "--backend",
             "openai-chat",
             "--multi-turn",
@@ -1263,7 +1257,7 @@ mod tests {
         // (min=multi_turn_num_turns=3, max=2), tripping the min>max check
         // with a misleading error about a flag the user never set.
         let args = vec![
-            "aphrodite-bench",
+            "sonar-bench",
             "--backend",
             "openai-chat",
             "--multi-turn",
@@ -1282,7 +1276,7 @@ mod tests {
     #[test]
     fn test_sharegpt_multi_turn_max_turns_1_rejected() {
         let args = vec![
-            "aphrodite-bench",
+            "sonar-bench",
             "--backend",
             "openai-chat",
             "--multi-turn",
@@ -1304,7 +1298,7 @@ mod tests {
     #[test]
     fn test_sharegpt_multi_turn_max_turns_explicit_cap() {
         let args = vec![
-            "aphrodite-bench",
+            "sonar-bench",
             "--backend",
             "openai-chat",
             "--multi-turn",
@@ -1324,7 +1318,7 @@ mod tests {
     #[test]
     fn test_hf_multi_turn_uses_conversation_turn_cap() {
         let args = vec![
-            "aphrodite-bench",
+            "sonar-bench",
             "--backend",
             "openai-chat",
             "--multi-turn",
@@ -1382,7 +1376,7 @@ mod tests {
     #[test]
     fn test_max_model_len_is_configured() {
         let args = vec![
-            "aphrodite-bench",
+            "sonar-bench",
             "--model",
             "test-model",
             "--max-model-len",
@@ -1396,7 +1390,7 @@ mod tests {
 
     #[test]
     fn test_tokenizer_id_deferred_when_model_is_unspecified() {
-        let cli = parse_args(["aphrodite-bench"]);
+        let cli = parse_args(["sonar-bench"]);
         let config = BenchConfig::from_args(&cli).unwrap();
 
         assert_eq!(config.tokenizer_id, None);
@@ -1405,7 +1399,7 @@ mod tests {
     #[test]
     fn test_zero_max_model_len_fails() {
         let args = vec![
-            "aphrodite-bench",
+            "sonar-bench",
             "--model",
             "test-model",
             "--max-model-len",
@@ -1419,7 +1413,7 @@ mod tests {
     #[test]
     fn test_zero_max_concurrency_fails() {
         let args = parse_args(vec![
-            "aphrodite-bench",
+            "sonar-bench",
             "--model",
             "test-model",
             "--max-concurrency",
@@ -1437,7 +1431,7 @@ mod tests {
     fn test_positive_max_concurrency_passes() {
         for value in ["1", "16"] {
             let args = parse_args(vec![
-                "aphrodite-bench",
+                "sonar-bench",
                 "--model",
                 "test-model",
                 "--max-concurrency",
@@ -1453,7 +1447,7 @@ mod tests {
     #[test]
     fn test_zero_multi_turn_concurrency_fails() {
         let args = parse_args(vec![
-            "aphrodite-bench",
+            "sonar-bench",
             "--model",
             "test-model",
             "--multi-turn",

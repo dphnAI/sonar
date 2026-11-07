@@ -7,17 +7,17 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.config import AphroditeConfig, DeviceConfig, set_current_aphrodite_config
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.layers.rotary_embedding.bailing_mrope import (
+from sonar.config import DeviceConfig, SonarConfig, set_current_sonar_config
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.layers.rotary_embedding.bailing_mrope import (
     BailingMRotaryEmbedding,
 )
-from aphrodite.model_executor.models.bailing_moe_v3 import _build_mla_rotary_embedding
-from aphrodite.platforms import current_platform
+from sonar.model_executor.models.bailing_moe_v3 import _build_mla_rotary_embedding
+from sonar.platforms import current_platform
 
 
 def test_bailing_mrope_selects_alternating_spatial_then_temporal():
-    with set_current_aphrodite_config(AphroditeConfig(device_config=DeviceConfig("cpu"))):
+    with set_current_sonar_config(SonarConfig(device_config=DeviceConfig("cpu"))):
         rotary_emb = BailingMRotaryEmbedding(
             head_size=12,
             rotary_dim=12,
@@ -62,7 +62,7 @@ def test_bailing_factory_preserves_mla_width_and_config():
         rope_scaling={"partial_rotary_factor": 0.5},
     )
     original = copy.deepcopy(vars(config))
-    with set_current_aphrodite_config(AphroditeConfig(device_config=DeviceConfig("cpu"))):
+    with set_current_sonar_config(SonarConfig(device_config=DeviceConfig("cpu"))):
         rope = _build_mla_rotary_embedding(config, head_size=64)
         assert rope is _build_mla_rotary_embedding(config, head_size=64)
         generic = get_rope(
@@ -107,7 +107,7 @@ def test_bailing_mrope_cuda_matches_native_for_strided_mla_views(
     device = torch.device("cuda")
     num_tokens = 17
     num_query_heads = 8
-    with set_current_aphrodite_config(AphroditeConfig()):
+    with set_current_sonar_config(SonarConfig()):
         rotary_emb = BailingMRotaryEmbedding(
             head_size=64,
             rotary_dim=64,

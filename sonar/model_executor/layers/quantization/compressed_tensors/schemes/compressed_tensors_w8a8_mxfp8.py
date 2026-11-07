@@ -4,16 +4,16 @@ from collections.abc import Callable
 
 import torch
 
-from aphrodite.model_executor.kernels.linear import init_mxfp8_linear_kernel
-from aphrodite.model_executor.layers.quantization.compressed_tensors.schemes import (
+from sonar.model_executor.kernels.linear import init_mxfp8_linear_kernel
+from sonar.model_executor.layers.quantization.compressed_tensors.schemes import (
     CompressedTensorsScheme,
 )
-from aphrodite.model_executor.layers.quantization.utils.mxfp8_utils import (
+from sonar.model_executor.layers.quantization.utils.mxfp8_utils import (
     MXFP8_BLOCK_SIZE,
     MXFP8_SCALE_DTYPE,
     MXFP8_VALUE_DTYPE,
 )
-from aphrodite.model_executor.parameter import (
+from sonar.model_executor.parameter import (
     GroupQuantScaleParameter,
     ModelWeightParameter,
 )

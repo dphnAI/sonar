@@ -7,7 +7,7 @@ import sys
 import pytest
 import torch
 
-from aphrodite.plugins import load_general_plugins
+from sonar.plugins import load_general_plugins
 
 
 def test_platform_plugins():
@@ -25,7 +25,7 @@ def test_platform_plugins():
     runpy.run_path(example_file)
 
     # check if the plugin is loaded correctly
-    from aphrodite.platforms import _init_trace, current_platform
+    from sonar.platforms import _init_trace, current_platform
 
     assert current_platform.device_name == "DummyDevice", (
         f"Expected DummyDevice, got {current_platform.device_name}, "
@@ -34,24 +34,24 @@ def test_platform_plugins():
     )
 
 
-def test_import_aphrodite_does_not_resolve_platform():
-    # Platform plugins must be loaded after `import aphrodite` completes; resolving
-    # current_platform during it runs plugins against a half-imported Aphrodite.
-    # Needs a fresh interpreter, since aphrodite is already imported here.
+def test_import_sonar_does_not_resolve_platform():
+    # Platform plugins must be loaded after `import sonar` completes; resolving
+    # current_platform during it runs plugins against a half-imported Sonar.
+    # Needs a fresh interpreter, since sonar is already imported here.
     code = (
-        "import sys, aphrodite\n"
-        "p = sys.modules.get('aphrodite.platforms')\n"
+        "import sys, sonar\n"
+        "p = sys.modules.get('sonar.platforms')\n"
         "assert p is None or p._current_platform is None, p._init_trace\n"
-        "from aphrodite.platforms import current_platform\n"
+        "from sonar.platforms import current_platform\n"
         "assert current_platform.device_name == 'DummyDevice'\n"
     )
     subprocess.run([sys.executable, "-c", code], check=True)
 
 
-def test_oot_custom_op(default_aphrodite_config, monkeypatch: pytest.MonkeyPatch):
+def test_oot_custom_op(default_sonar_config, monkeypatch: pytest.MonkeyPatch):
     # simulate workload by running an example
     load_general_plugins()
-    from aphrodite.model_executor.layers.rotary_embedding import RotaryEmbedding
+    from sonar.model_executor.layers.rotary_embedding import RotaryEmbedding
 
     layer = RotaryEmbedding(16, 16, 16, 16, True, torch.float16)
     assert layer.__class__.__name__ == "DummyRotaryEmbedding", (
@@ -63,9 +63,9 @@ def test_oot_custom_op(default_aphrodite_config, monkeypatch: pytest.MonkeyPatch
     )
 
 
-def test_oot_pluggable_layer(default_aphrodite_config):
+def test_oot_pluggable_layer(default_sonar_config):
     load_general_plugins()
-    from aphrodite.model_executor.layers.rotary_embedding.mrope_vit_setup import (
+    from sonar.model_executor.layers.rotary_embedding.mrope_vit_setup import (
         VitMropeSetup,
     )
 

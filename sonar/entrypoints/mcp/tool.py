@@ -10,12 +10,12 @@ from openai.types.responses.response_function_tool_call_output_item import (
 )
 from openai_harmony import Author, Message, Role, TextContent
 
-from aphrodite.logger import init_logger
-from aphrodite.utils import random_uuid
+from sonar.logger import init_logger
+from sonar.utils import random_uuid
 
 if TYPE_CHECKING:
     # Avoid circular import.
-    from aphrodite.entrypoints.openai.responses.context import ConversationContext
+    from sonar.entrypoints.openai.responses.context import ConversationContext
 
 logger = init_logger(__name__)
 
@@ -75,7 +75,7 @@ class HarmonyBrowserTool(Tool):
         logger.info_once("Browser tool initialized")
 
     async def get_result(self, context: "ConversationContext") -> Any:
-        from aphrodite.entrypoints.openai.responses.context import HarmonyContext
+        from sonar.entrypoints.openai.responses.context import HarmonyContext
 
         assert isinstance(context, HarmonyContext)
         last_msg = context.messages[-1]
@@ -134,7 +134,7 @@ class HarmonyPythonTool(Tool):
         logger.info_once("Code interpreter tool initialized")
 
     async def get_result(self, context: "ConversationContext") -> Any:
-        from aphrodite.entrypoints.openai.responses.context import HarmonyContext
+        from sonar.entrypoints.openai.responses.context import HarmonyContext
 
         assert isinstance(context, HarmonyContext)
         last_msg = context.messages[-1]
@@ -147,7 +147,7 @@ class HarmonyPythonTool(Tool):
         """This function converts parsable context types to harmony and
         back so we can use GPTOSS demo python tool
         """
-        from aphrodite.entrypoints.openai.responses.context import ParsableContext
+        from sonar.entrypoints.openai.responses.context import ParsableContext
 
         assert isinstance(context, ParsableContext)
 

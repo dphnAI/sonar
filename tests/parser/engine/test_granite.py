@@ -13,7 +13,7 @@ import json
 
 import pytest
 
-from aphrodite.parser.granite import GraniteParser, _granite_arg_converter
+from sonar.parser.granite import GraniteParser, _granite_arg_converter
 from tests.parser.engine.conftest import make_mock_tokenizer
 from tests.parser.engine.trace_builder import _GRANITE_SCENARIOS, _build_granite
 

@@ -12,16 +12,16 @@ from typing import TYPE_CHECKING
 
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.platforms import current_platform
-from aphrodite.v1.attention.backends.mla.prefill.base import MLAPrefillBackend
+import sonar.envs as envs
+from sonar.platforms import current_platform
+from sonar.v1.attention.backends.mla.prefill.base import MLAPrefillBackend
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
-    from aphrodite.model_executor.layers.attention.mla_attention import (
+    from sonar.config import SonarConfig
+    from sonar.model_executor.layers.attention.mla_attention import (
         MLACommonPrefillMetadata,
     )
-    from aphrodite.platforms.interface import DeviceCapability
+    from sonar.platforms.interface import DeviceCapability
 
 
 class AiterFlashAttnPrefillBackend(MLAPrefillBackend):
@@ -38,20 +38,20 @@ class AiterFlashAttnPrefillBackend(MLAPrefillBackend):
     ) -> bool:
         if not current_platform.is_rocm():
             return False
-        from aphrodite.platforms.rocm import on_mi3xx
+        from sonar.platforms.rocm import on_mi3xx
 
         return on_mi3xx()
 
     @classmethod
     def is_available(cls) -> bool:
-        from aphrodite._aiter_ops import rocm_aiter_ops
+        from sonar._aiter_ops import rocm_aiter_ops
 
         return rocm_aiter_ops.is_enabled()
 
     @classmethod
     def validate_configuration(cls, device_capability, selector_config):
         invalid_reasons = super().validate_configuration(device_capability, selector_config)
-        if envs.APHRODITE_BATCH_INVARIANT:
+        if envs.SONAR_BATCH_INVARIANT:
             invalid_reasons.append("batch invariance not supported")
         return invalid_reasons
 
@@ -63,7 +63,7 @@ class AiterFlashAttnPrefillBackend(MLAPrefillBackend):
         qk_nope_head_dim: int,
         qk_rope_head_dim: int,
         v_head_dim: int,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
     ) -> None:
         super().__init__(
             num_heads=num_heads,
@@ -72,7 +72,7 @@ class AiterFlashAttnPrefillBackend(MLAPrefillBackend):
             qk_nope_head_dim=qk_nope_head_dim,
             qk_rope_head_dim=qk_rope_head_dim,
             v_head_dim=v_head_dim,
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
         )
 
         from aiter import flash_attn_varlen_func

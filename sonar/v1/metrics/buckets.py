@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Default bucket boundaries for the Prometheus histograms emitted by Aphrodite.
+"""Default bucket boundaries for the Prometheus histograms emitted by Sonar.
 
 Every core engine histogram created by the Prometheus stat logger draws its
 bucket boundaries from exactly one of the families defined here, so each

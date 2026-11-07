@@ -7,32 +7,32 @@ import json
 import numpy as np
 import torch
 
-from aphrodite.config import MultiModalConfig
-from aphrodite.kernels.triton.qkv_padded_fp8_quant import (
+from sonar.config import MultiModalConfig
+from sonar.kernels.triton.qkv_padded_fp8_quant import (
     quantize_fp8_maybe_pad_head_dim,
 )
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.custom_op import CustomOp, maybe_get_oot_by_class
-from aphrodite.model_executor.layers.quantization.input_quant_fp8 import (
+from sonar.logger import init_logger
+from sonar.model_executor.custom_op import CustomOp, maybe_get_oot_by_class
+from sonar.model_executor.layers.quantization.input_quant_fp8 import (
     QuantFP8,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     GroupShape,
     get_fp8_min_max,
 )
-from aphrodite.model_executor.models.vision import (
+from sonar.model_executor.models.vision import (
     get_multimodal_config,
     get_vit_attn_backend,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.flashinfer import (
+from sonar.platforms import current_platform
+from sonar.utils.flashinfer import (
     is_flashinfer_cudnn_fp8_prefill_attn_supported,
 )
-from aphrodite.utils.math_utils import round_up
-from aphrodite.utils.torch_utils import async_tensor_h2d
-from aphrodite.v1.attention.backends.fa_utils import get_flash_attn_version
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
-from aphrodite.v1.attention.ops.vit_attn_wrappers import (
+from sonar.utils.math_utils import round_up
+from sonar.utils.torch_utils import async_tensor_h2d
+from sonar.v1.attention.backends.fa_utils import get_flash_attn_version
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
+from sonar.v1.attention.ops.vit_attn_wrappers import (
     vit_aiter_fp8_attn_wrapper,
     vit_flash_attn_wrapper,
     vit_flashinfer_wrapper,
@@ -47,7 +47,7 @@ _FP8_AMAX_HISTORY_LEN = 16
 
 # Module-level state for auto-saving dynamic scales. The save is a one-shot
 # triggered by the first layer whose amax buffer wraps. Path and margin are
-# captured during layer init (set_current_aphrodite_config context only lives
+# captured during layer init (set_current_sonar_config context only lives
 # across model init, not forward passes).
 _fp8_scale_save_path: str | None = None
 _fp8_scale_save_margin: float = MultiModalConfig.mm_encoder_fp8_scale_save_margin
@@ -378,7 +378,7 @@ class MMEncoderAttention(CustomOp):
             if not current_platform.is_rocm():
                 raise ValueError("AITER FP8 ViT attention requires ROCm.")
 
-            from aphrodite.platforms.rocm import on_mi3xx
+            from sonar.platforms.rocm import on_mi3xx
 
             if not on_mi3xx():
                 raise ValueError(
@@ -424,7 +424,7 @@ class MMEncoderAttention(CustomOp):
                 )
             self._fp8_amax_pos = 0
 
-        # Capture auto-save config now: the AphroditeConfig context only lives
+        # Capture auto-save config now: the SonarConfig context only lives
         # across model init, not forward passes, so ``_maybe_save_fp8_scales``
         # reads these globals instead of re-querying ``get_multimodal_config``.
         if mm_cfg.mm_encoder_fp8_scale_save_path is not None and self._fp8_dynamic_scale:

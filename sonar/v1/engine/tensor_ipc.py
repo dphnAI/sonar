@@ -19,8 +19,8 @@ from typing import Any
 
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.v1.serial_utils import OOBTensorConsumer
+from sonar.logger import init_logger
+from sonar.v1.serial_utils import OOBTensorConsumer
 
 logger = init_logger(__name__)
 

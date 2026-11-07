@@ -27,23 +27,23 @@ from typing import TYPE_CHECKING, Any, Protocol
 import regex as re
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.model_loader.weight_cache.seed import Seedable
-from aphrodite.model_executor.model_loader.weight_cache.utils import (
+from sonar.logger import init_logger
+from sonar.model_executor.model_loader.weight_cache.seed import Seedable
+from sonar.model_executor.model_loader.weight_cache.utils import (
     build_warmup_runner,
     is_draft_model_cacheable,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.flashinfer import has_flashinfer
+from sonar.platforms import current_platform
+from sonar.utils.flashinfer import has_flashinfer
 
 if TYPE_CHECKING:
-    from aphrodite.model_executor.model_loader.weight_cache.daemon import (
+    from sonar.model_executor.model_loader.weight_cache.daemon import (
         WeightCacheDaemon,
     )
-    from aphrodite.model_executor.model_loader.weight_cache.seed import (
+    from sonar.model_executor.model_loader.weight_cache.seed import (
         SeedTransport,
     )
-    from aphrodite.v1.worker.gpu_model_runner import GPUModelRunner
+    from sonar.v1.worker.gpu_model_runner import GPUModelRunner
 
 logger = init_logger(__name__)
 
@@ -67,21 +67,21 @@ class FlashInferWarmupCache(WarmupCache):
     kind = "flashinfer_autotune"
 
     def warmup(self, daemon: "WeightCacheDaemon", transport: "SeedTransport") -> None:
-        aphrodite_config = daemon.aphrodite_config
+        sonar_config = daemon.sonar_config
         # Mirrors the gate in the engine's kernel warmup.
         if (
-            aphrodite_config.kernel_config.enable_flashinfer_autotune is False
+            sonar_config.kernel_config.enable_flashinfer_autotune is False
             or not has_flashinfer()
             or not current_platform.has_device_capability(90)
-            or is_draft_model_cacheable(aphrodite_config.speculative_config)
+            or is_draft_model_cacheable(sonar_config.speculative_config)
         ):
             return
-        from aphrodite.model_executor.warmup.kernel_warmup import flashinfer_autotune
+        from sonar.model_executor.warmup.kernel_warmup import flashinfer_autotune
 
         try:
-            current_platform.update_block_size_for_backend(aphrodite_config)
+            current_platform.update_block_size_for_backend(sonar_config)
             runner = build_warmup_runner(
-                aphrodite_config,
+                sonar_config,
                 daemon.local_rank,
                 is_draft=daemon.is_draft,
                 model_config=daemon.model_config,
@@ -90,7 +90,7 @@ class FlashInferWarmupCache(WarmupCache):
             runner.load_model(model=daemon.model)
             transport.adopt(self, runner)
             # The V2 runner requires skip_attn when no KV cache exists
-            flashinfer_autotune(runner, skip_attn=aphrodite_config.use_v2_model_runner)
+            flashinfer_autotune(runner, skip_attn=sonar_config.use_v2_model_runner)
             logger.info(
                 "Weight cache %s daemon rank %d tuned FlashInfer; the tuned configs are in the on-disk autotune cache",
                 daemon.role,
@@ -103,19 +103,19 @@ class FlashInferWarmupCache(WarmupCache):
             torch.accelerator.empty_cache()
 
     def request_params(self, runner: "GPUModelRunner") -> dict[str, Any]:
-        from aphrodite.distributed.parallel_state import get_world_group
-        from aphrodite.model_executor.warmup.flashinfer_autotune_cache import (
+        from sonar.distributed.parallel_state import get_world_group
+        from sonar.model_executor.warmup.flashinfer_autotune_cache import (
             flashinfer_autotune_cache_hash,
         )
 
         return {
             "config_hash": flashinfer_autotune_cache_hash(runner),
-            "dp_rank": runner.aphrodite_config.parallel_config.data_parallel_rank,
+            "dp_rank": runner.sonar_config.parallel_config.data_parallel_rank,
             "rank": get_world_group().rank_in_group,
         }
 
     def resolve(self, request: dict[str, Any]) -> dict[str, Any] | None:
-        from aphrodite.model_executor.warmup.flashinfer_autotune_cache import (
+        from sonar.model_executor.warmup.flashinfer_autotune_cache import (
             flashinfer_autotune_filename,
             flashinfer_autotune_root,
         )
@@ -163,7 +163,7 @@ class FlashInferWarmupCache(WarmupCache):
         return payload
 
     def install(self, runner: "GPUModelRunner", payload: dict[str, Any]) -> None:
-        from aphrodite.model_executor.warmup.flashinfer_autotune_cache import (
+        from sonar.model_executor.warmup.flashinfer_autotune_cache import (
             resolve_rank_flashinfer_autotune_file,
             write_flashinfer_autotune_cache,
         )

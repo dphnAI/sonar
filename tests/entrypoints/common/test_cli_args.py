@@ -6,42 +6,42 @@ from types import SimpleNamespace
 
 import pytest
 
-import aphrodite.entrypoints.common.cli_args as cli_args_module
-from aphrodite.engine.arg_utils import AsyncEngineArgs
-from aphrodite.entrypoints.common.cli_args import (
+import sonar.entrypoints.common.cli_args as cli_args_module
+from sonar.engine.arg_utils import AsyncEngineArgs
+from sonar.entrypoints.common.cli_args import (
     make_arg_parser,
     validate_parsed_serve_args,
 )
-from aphrodite.entrypoints.openai.models.protocol import LoRAModulePath
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
-from tests.utils import APHRODITE_PATH
+from sonar.entrypoints.openai.models.protocol import LoRAModulePath
+from sonar.exceptions import SonarValidationError
+from sonar.utils.argparse_utils import FlexibleArgumentParser
+from tests.utils import SONAR_PATH
 
 LORA_MODULE = {
     "name": "module2",
     "path": "/path/to/module2",
     "base_model_name": "llama",
 }
-CHATML_JINJA_PATH = APHRODITE_PATH / "examples/template_chatml.jinja"
+CHATML_JINJA_PATH = SONAR_PATH / "examples/template_chatml.jinja"
 assert CHATML_JINJA_PATH.exists()
 
 
-def _build_aphrodite_parsers():
-    aphrodite_parser = FlexibleArgumentParser()
-    subparsers = aphrodite_parser.add_subparsers(dest="subparser")
+def _build_sonar_parsers():
+    sonar_parser = FlexibleArgumentParser()
+    subparsers = sonar_parser.add_subparsers(dest="subparser")
     serve_parser = subparsers.add_parser("serve")
     make_arg_parser(serve_parser)
-    return {"aphrodite": aphrodite_parser, "aphrodite serve": serve_parser}
+    return {"sonar": sonar_parser, "sonar serve": serve_parser}
 
 
 @pytest.fixture
-def aphrodite_parser():
-    return _build_aphrodite_parsers()["aphrodite"]
+def sonar_parser():
+    return _build_sonar_parsers()["sonar"]
 
 
 @pytest.fixture
 def serve_parser():
-    return _build_aphrodite_parsers()["aphrodite serve"]
+    return _build_sonar_parsers()["sonar serve"]
 
 
 def test_cors_origins_require_explicit_opt_in(serve_parser):
@@ -179,12 +179,12 @@ def test_multiple_valid_inputs(serve_parser):
     [
         (50051, []),
         (0, ["--port", "0"]),
-        (50051, ["--port", "50051", "--uds", "/tmp/aphrodite.sock"]),
+        (50051, ["--port", "50051", "--uds", "/tmp/sonar.sock"]),
     ],
 )
-def test_rust_grpc_port_accepts_frontend_launch(aphrodite_parser, monkeypatch, port, extra_args):
-    monkeypatch.setenv("APHRODITE_USE_RUST_FRONTEND", "1")
-    args = aphrodite_parser.parse_args(
+def test_rust_grpc_port_accepts_frontend_launch(sonar_parser, monkeypatch, port, extra_args):
+    monkeypatch.setenv("SONAR_USE_RUST_FRONTEND", "1")
+    args = sonar_parser.parse_args(
         [
             "serve",
             "--grpc-port",
@@ -218,9 +218,9 @@ def test_rust_grpc_port_accepts_frontend_launch(aphrodite_parser, monkeypatch, p
         (True, [], 65536),
     ],
 )
-def test_rust_grpc_port_rejects_incompatible_launch(aphrodite_parser, monkeypatch, rust_enabled, extra_args, port):
-    monkeypatch.setenv("APHRODITE_USE_RUST_FRONTEND", "1" if rust_enabled else "0")
-    args = aphrodite_parser.parse_args(["serve", "--grpc-port", str(port), *extra_args])
+def test_rust_grpc_port_rejects_incompatible_launch(sonar_parser, monkeypatch, rust_enabled, extra_args, port):
+    monkeypatch.setenv("SONAR_USE_RUST_FRONTEND", "1" if rust_enabled else "0")
+    args = sonar_parser.parse_args(["serve", "--grpc-port", str(port), *extra_args])
     error = "--grpc and --grpc-port are mutually exclusive" if "--grpc" in extra_args else "--grpc-port"
     with pytest.raises(ValueError, match=error):
         validate_parsed_serve_args(args)
@@ -228,7 +228,7 @@ def test_rust_grpc_port_rejects_incompatible_launch(aphrodite_parser, monkeypatc
 
 def test_rust_grpc_port_requires_serve_subcommand(monkeypatch):
     """Direct Python render/API entrypoints must reject a Rust-only listener."""
-    monkeypatch.setenv("APHRODITE_USE_RUST_FRONTEND", "1")
+    monkeypatch.setenv("SONAR_USE_RUST_FRONTEND", "1")
     parser = make_arg_parser(FlexibleArgumentParser())
     args = parser.parse_args(["--grpc-port", "50051"])
     with pytest.raises(ValueError, match="--grpc-port requires"):
@@ -243,7 +243,7 @@ def test_python_grpc_rejects_dphn_network_before_engine_startup(serve_parser):
 
 @pytest.mark.asyncio
 async def test_direct_python_grpc_launcher_rejects_dphn_network():
-    grpc_server = pytest.importorskip("aphrodite.entrypoints.launchers.grpc_server", exc_type=ImportError)
+    grpc_server = pytest.importorskip("sonar.entrypoints.launchers.grpc_server", exc_type=ImportError)
     # No model or server settings: rejection must happen before either engine
     # construction or the creation of a gRPC listener, including direct calls.
     with pytest.raises(ValueError, match="gRPC server cannot serve --dphn-network"):
@@ -306,7 +306,7 @@ def test_passes_with_reasoning_parser(serve_parser):
     [("none", ""), ("None", ""), ("NONE", ""), ("deepseek_r1", "deepseek_r1")],
 )
 def test_reasoning_parser_none_disables_parser(serve_parser, value, expected):
-    """`--reasoning-parser none` disables parsing, as in `aphrodite-rs serve`."""
+    """`--reasoning-parser none` disables parsing, as in `sonar-rs serve`."""
     args = serve_parser.parse_args(args=["--reasoning-parser", value])
     assert args.reasoning_parser == expected
 
@@ -320,7 +320,7 @@ def test_chat_template_validation_for_happy_paths(serve_parser):
 def test_chat_template_validation_for_sad_paths(serve_parser):
     """Ensure validation fails if the chat template doesn't exist."""
     args = serve_parser.parse_args(args=["--chat-template", "does/not/exist"])
-    with pytest.raises(AphroditeValidationError):
+    with pytest.raises(SonarValidationError):
         validate_parsed_serve_args(args)
 
 
@@ -331,20 +331,20 @@ def test_per_request_metrics_requires_log_stats(serve_parser):
 
 
 def _build_launch_render_parser():
-    """Mirror `aphrodite launch render`.
+    """Mirror `sonar launch render`.
 
-    `aphrodite/entrypoints/cli/main.py` parses subcommands with ``dest="subparser"``,
+    `sonar/entrypoints/cli/main.py` parses subcommands with ``dest="subparser"``,
     and `LaunchSubcommandBase.add_cli_args` builds the component parser with
     `make_arg_parser`, so a launch component carries serve args under
     ``args.subparser == "launch"``.
     """
-    aphrodite_parser = FlexibleArgumentParser()
-    subparsers = aphrodite_parser.add_subparsers(required=False, dest="subparser")
+    sonar_parser = FlexibleArgumentParser()
+    subparsers = sonar_parser.add_subparsers(required=False, dest="subparser")
     launch_parser = subparsers.add_parser("launch")
     launch_subparsers = launch_parser.add_subparsers(required=True, dest="launch_component")
     render_parser = launch_subparsers.add_parser("render")
     make_arg_parser(render_parser)
-    return aphrodite_parser
+    return sonar_parser
 
 
 @pytest.fixture
@@ -360,8 +360,8 @@ def launch_render_parser():
     ],
 )
 def test_launch_render_validates_serve_args(launch_render_parser, monkeypatch, cli_args, error):
-    """`aphrodite launch render` reuses the serve parser, so it gets the serve checks"""
-    monkeypatch.setenv("APHRODITE_USE_RUST_FRONTEND", "1")
+    """`sonar launch render` reuses the serve parser, so it gets the serve checks"""
+    monkeypatch.setenv("SONAR_USE_RUST_FRONTEND", "1")
     args = launch_render_parser.parse_args(args=["launch", "render", *cli_args])
     assert args.subparser == "launch"
     with pytest.raises(error):
@@ -370,10 +370,10 @@ def test_launch_render_validates_serve_args(launch_render_parser, monkeypatch, c
 
 def test_subcommand_without_serve_args_skips_validation():
     """A subcommand that does not use the serve parser is still skipped"""
-    aphrodite_parser = FlexibleArgumentParser()
-    subparsers = aphrodite_parser.add_subparsers(required=False, dest="subparser")
+    sonar_parser = FlexibleArgumentParser()
+    subparsers = sonar_parser.add_subparsers(required=False, dest="subparser")
     subparsers.add_parser("chat")
-    args = aphrodite_parser.parse_args(args=["chat"])
+    args = sonar_parser.parse_args(args=["chat"])
 
     validate_parsed_serve_args(args)
 
@@ -504,7 +504,7 @@ def test_default_chat_template_kwargs_invalid_json(serve_parser):
         "served_model_name_with_no_model_in_config",
     ],
 )
-def test_served_model_name_parsing(tmp_path, aphrodite_parser, args, raises):
+def test_served_model_name_parsing(tmp_path, sonar_parser, args, raises):
     """Ensure that users don't misuse --served-model-name and end up with the default
     model tag instead of the one they intended to serve."""
     # Call the serve subparser
@@ -517,12 +517,12 @@ def test_served_model_name_parsing(tmp_path, aphrodite_parser, args, raises):
         args[args.index("config.yaml")] = config_path.as_posix()
     # Do the parsing and check for expected exceptions or values
     if raises is None:
-        parsed_args = aphrodite_parser.parse_args(args=args)
+        parsed_args = sonar_parser.parse_args(args=args)
         expected = "user/model"
         assert parsed_args.model_tag == expected or parsed_args.model == expected
     else:
         with pytest.raises(raises):
-            aphrodite_parser.parse_args(args=args)
+            sonar_parser.parse_args(args=args)
 
 
 ### Tests for LoRA target modules parsing

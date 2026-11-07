@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Pluggable sleep-mode backends (RFC #34303).
 
-Aphrodite's sleep/wake-up today is hard-wired to ``CuMemAllocator``: the GPU worker
+Sonar's sleep/wake-up today is hard-wired to ``CuMemAllocator``: the GPU worker
 calls ``allocator.sleep(...)`` / ``allocator.wake_up(...)`` directly. RFC #34303
 proposes additional mechanisms for freeing and restoring GPU state - CUDA
 process checkpoint, CRIU, durable snapshot/restore - that share the *dispatch*
@@ -14,7 +14,7 @@ This module introduces a thin backend abstraction so those mechanisms can be
 selected by name without changing the public API. The default ``cumem`` backend
 wraps today's ``CuMemAllocator`` path 1:1, so existing users see no behavior
 change. The factory mirrors ``KVConnectorFactory`` and lets third-party
-backends register through a ``aphrodite.general_plugins`` entry point at import time.
+backends register through a ``sonar.general_plugins`` entry point at import time.
 """
 
 from __future__ import annotations
@@ -24,10 +24,10 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Literal
 
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 if TYPE_CHECKING:
-    from aphrodite.config.model import ModelConfig
+    from sonar.config.model import ModelConfig
 
 logger = init_logger(__name__)
 
@@ -114,7 +114,7 @@ class CuMemBackend(SleepModeBackend):
     """Default backend.
 
     Wraps the platform sleep-mode allocator exactly as the GPU worker did
-    before this abstraction existed, so behavior is identical to Aphrodite's current
+    before this abstraction existed, so behavior is identical to Sonar's current
     sleep/wake-up. ``get_mem_allocator_instance()`` resolves to
     ``CuMemAllocator`` on CUDA and ``XpuMemAllocator`` on XPU; suspend offloads
     per-allocation between GPU and host, with NCCL buffers left untouched (they
@@ -122,7 +122,7 @@ class CuMemBackend(SleepModeBackend):
     """
 
     def suspend(self, level: int = 1) -> None:
-        from aphrodite.device_allocator import get_mem_allocator_instance
+        from sonar.device_allocator import get_mem_allocator_instance
 
         self._state = "SUSPENDED"
         allocator = get_mem_allocator_instance()
@@ -134,7 +134,7 @@ class CuMemBackend(SleepModeBackend):
         allocator.sleep(offload_tags=offload_tags)
 
     def resume(self, tags: list[str] | None = None) -> None:
-        from aphrodite.device_allocator import get_mem_allocator_instance
+        from sonar.device_allocator import get_mem_allocator_instance
 
         self._state = "RESUMING"
         allocator = get_mem_allocator_instance()
@@ -142,7 +142,7 @@ class CuMemBackend(SleepModeBackend):
         self._state = "RUNNING"
 
     def discard(self, tags: tuple[str, ...]) -> None:
-        from aphrodite.device_allocator import get_mem_allocator_instance
+        from sonar.device_allocator import get_mem_allocator_instance
 
         allocator = get_mem_allocator_instance()
         allocator.discard(tags)
@@ -159,7 +159,7 @@ class SleepModeBackendFactory:
 
     Mirrors ``KVConnectorFactory``: lazy module/class registration and a
     built-in registry populated at import time. Third-party backends register
-    the same way from a ``aphrodite.general_plugins`` entry point.
+    the same way from a ``sonar.general_plugins`` entry point.
     """
 
     _registry: dict[str, Callable[[], type[SleepModeBackend]]] = {}
@@ -197,10 +197,10 @@ class SleepModeBackendFactory:
 
 # Register built-in backends here. Registration is lazy: only the module for the
 # selected backend is imported. Third-party backends (CUDA checkpoint, CRIU,
-# durable snapshot) register the same way through a aphrodite.general_plugins entry
-# point, without changes to Aphrodite core.
+# durable snapshot) register the same way through a sonar.general_plugins entry
+# point, without changes to Sonar core.
 SleepModeBackendFactory.register_backend(
     "cumem",
-    "aphrodite.device_allocator.sleep_mode_backend",
+    "sonar.device_allocator.sleep_mode_backend",
     "CuMemBackend",
 )

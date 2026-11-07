@@ -14,17 +14,17 @@ import torch
 import torch.nn as nn
 from typing_extensions import TypeIs, TypeVar
 
-from aphrodite.logger import init_logger
-from aphrodite.tasks import ScoreType
-from aphrodite.utils.func_utils import supports_kw
+from sonar.logger import init_logger
+from sonar.tasks import ScoreType
+from sonar.utils.func_utils import supports_kw
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
-    from aphrodite.config.model import AttnTypeStr
-    from aphrodite.config.pooler import SequencePoolingType, TokenPoolingType
-    from aphrodite.model_executor.layers.pooler import Pooler
+    from sonar.config import SonarConfig
+    from sonar.config.model import AttnTypeStr
+    from sonar.config.pooler import SequencePoolingType, TokenPoolingType
+    from sonar.model_executor.layers.pooler import Pooler
 else:
-    AphroditeConfig = Any
+    SonarConfig = Any
     Pooler = Any
     SequencePoolingType = Any
     TokenPoolingType = Any
@@ -38,10 +38,10 @@ logger = init_logger(__name__)
 
 
 @runtime_checkable
-class AphroditeModel(Protocol):
-    """The interface required for all models in Aphrodite."""
+class SonarModel(Protocol):
+    """The interface required for all models in Sonar."""
 
-    def __init__(self, aphrodite_config: AphroditeConfig, prefix: str = "") -> None: ...
+    def __init__(self, sonar_config: SonarConfig, prefix: str = "") -> None: ...
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
         """Apply token embeddings to `input_ids`."""
@@ -59,12 +59,12 @@ class AphroditeModel(Protocol):
         return False
 
 
-def _check_aphrodite_model_init(model: type[object] | object) -> bool:
+def _check_sonar_model_init(model: type[object] | object) -> bool:
     model_init = getattr(model, "__init__")  # noqa: B009
-    return supports_kw(model_init, "aphrodite_config")
+    return supports_kw(model_init, "sonar_config")
 
 
-def _check_aphrodite_model_embed_input_ids(model: type[object] | object) -> bool:
+def _check_sonar_model_embed_input_ids(model: type[object] | object) -> bool:
     model_embed_input_ids = getattr(model, "embed_input_ids", None)
     if not callable(model_embed_input_ids):
         logger.warning(
@@ -76,17 +76,17 @@ def _check_aphrodite_model_embed_input_ids(model: type[object] | object) -> bool
     return True
 
 
-def _check_aphrodite_model_forward(model: type[object] | object) -> bool:
+def _check_sonar_model_forward(model: type[object] | object) -> bool:
     model_forward = getattr(model, "forward", None)
     if not callable(model_forward):
         return False
 
-    aphrodite_kws = ("input_ids", "positions")
-    missing_kws = tuple(kw for kw in aphrodite_kws if not supports_kw(model_forward, kw))
+    sonar_kws = ("input_ids", "positions")
+    missing_kws = tuple(kw for kw in sonar_kws if not supports_kw(model_forward, kw))
 
     if missing_kws and (isinstance(model, type) and issubclass(model, nn.Module)):
         logger.warning(
-            "The model (%s) is missing Aphrodite-specific keywords from its `forward` method: %s",
+            "The model (%s) is missing Sonar-specific keywords from its `forward` method: %s",
             model,
             missing_kws,
         )
@@ -95,26 +95,26 @@ def _check_aphrodite_model_forward(model: type[object] | object) -> bool:
 
 
 @overload
-def is_aphrodite_model(model: type[object]) -> TypeIs[type[AphroditeModel]]: ...
+def is_sonar_model(model: type[object]) -> TypeIs[type[SonarModel]]: ...
 
 
 @overload
-def is_aphrodite_model(model: object) -> TypeIs[AphroditeModel]: ...
+def is_sonar_model(model: object) -> TypeIs[SonarModel]: ...
 
 
-def is_aphrodite_model(
+def is_sonar_model(
     model: type[object] | object,
-) -> TypeIs[type[AphroditeModel]] | TypeIs[AphroditeModel]:
+) -> TypeIs[type[SonarModel]] | TypeIs[SonarModel]:
     return (
-        _check_aphrodite_model_init(model)
-        and _check_aphrodite_model_embed_input_ids(model)
-        and _check_aphrodite_model_forward(model)
+        _check_sonar_model_init(model)
+        and _check_sonar_model_embed_input_ids(model)
+        and _check_sonar_model_forward(model)
     )
 
 
 @runtime_checkable
-class AphroditeModelForTextGeneration(AphroditeModel, Protocol):
-    """The interface required for all generative models in Aphrodite."""
+class SonarModelForTextGeneration(SonarModel, Protocol):
+    """The interface required for all generative models in Sonar."""
 
     def compute_logits(
         self,
@@ -127,17 +127,17 @@ class AphroditeModelForTextGeneration(AphroditeModel, Protocol):
 @overload
 def is_text_generation_model(
     model: type[object],
-) -> TypeIs[type[AphroditeModelForTextGeneration]]: ...
+) -> TypeIs[type[SonarModelForTextGeneration]]: ...
 
 
 @overload
-def is_text_generation_model(model: object) -> TypeIs[AphroditeModelForTextGeneration]: ...
+def is_text_generation_model(model: object) -> TypeIs[SonarModelForTextGeneration]: ...
 
 
 def is_text_generation_model(
     model: type[object] | object,
-) -> TypeIs[type[AphroditeModelForTextGeneration]] | TypeIs[AphroditeModelForTextGeneration]:
-    if not is_aphrodite_model(model):
+) -> TypeIs[type[SonarModelForTextGeneration]] | TypeIs[SonarModelForTextGeneration]:
+    if not is_sonar_model(model):
         return False
 
     # Optional protocol defaults are not inherited by structural models.
@@ -145,8 +145,8 @@ def is_text_generation_model(
 
 
 @runtime_checkable
-class AphroditeModelForPooling(AphroditeModel, Protocol):
-    """The interface required for all pooling models in Aphrodite."""
+class SonarModelForPooling(SonarModel, Protocol):
+    """The interface required for all pooling models in Sonar."""
 
     is_pooling_model: ClassVar[Literal[True]] = True
     """
@@ -159,39 +159,39 @@ class AphroditeModelForPooling(AphroditeModel, Protocol):
 
     default_seq_pooling_type: ClassVar[SequencePoolingType] = "LAST"
     """
-    Indicates the [aphrodite.config.pooler.PoolerConfig.seq_pooling_type][]
+    Indicates the [sonar.config.pooler.PoolerConfig.seq_pooling_type][]
     to use by default.
 
     You can use the
-    [aphrodite.model_executor.models.interfaces_base.default_pooling_type][]
+    [sonar.model_executor.models.interfaces_base.default_pooling_type][]
     decorator to conveniently set this field.
     """
 
     default_tok_pooling_type: ClassVar[TokenPoolingType] = "ALL"
     """
-    Indicates the [aphrodite.config.pooler.PoolerConfig.tok_pooling_type][]
+    Indicates the [sonar.config.pooler.PoolerConfig.tok_pooling_type][]
     to use by default.
 
     You can use the
-    [aphrodite.model_executor.models.interfaces_base.default_pooling_type][]
+    [sonar.model_executor.models.interfaces_base.default_pooling_type][]
     decorator to conveniently set this field.
     """
 
     attn_type: ClassVar[AttnTypeStr] = "decoder"
     """
     Indicates the
-    [aphrodite.config.model.ModelConfig.attn_type][]
+    [sonar.config.model.ModelConfig.attn_type][]
     to use by default.
 
     You can use the
-    [aphrodite.model_executor.models.interfaces_base.attn_type][]
+    [sonar.model_executor.models.interfaces_base.attn_type][]
     decorator to conveniently set this field.
     """
 
     score_type: ClassVar[ScoreType] = "bi-encoder"
     """
     Indicates the
-    [aphrodite.config.model.ModelConfig.score_type][]
+    [sonar.config.model.ModelConfig.score_type][]
     to use by default.
     
     Scoring API handles score/rerank for:\n
@@ -201,10 +201,10 @@ class AphroditeModelForPooling(AphroditeModel, Protocol):
     
     score_type defaults to bi-encoder, then the Score API uses the "embed" task.\n
     If you set score_type to cross-encoder via 
-    [aphrodite.model_executor.models.interfaces.SupportsCrossEncoding][], 
+    [sonar.model_executor.models.interfaces.SupportsCrossEncoding][], 
     then the Score API uses the "score" task.\n
     If you set score_type to late-interaction via 
-    [aphrodite.model_executor.models.interfaces.SupportsLateInteraction][], 
+    [sonar.model_executor.models.interfaces.SupportsLateInteraction][], 
     then the Score API uses the "token_embed" task.\n
     """
 
@@ -213,17 +213,17 @@ class AphroditeModelForPooling(AphroditeModel, Protocol):
 
 
 @overload
-def is_pooling_model(model: type[object]) -> TypeIs[type[AphroditeModelForPooling]]: ...
+def is_pooling_model(model: type[object]) -> TypeIs[type[SonarModelForPooling]]: ...
 
 
 @overload
-def is_pooling_model(model: object) -> TypeIs[AphroditeModelForPooling]: ...
+def is_pooling_model(model: object) -> TypeIs[SonarModelForPooling]: ...
 
 
 def is_pooling_model(
     model: type[object] | object,
-) -> TypeIs[type[AphroditeModelForPooling]] | TypeIs[AphroditeModelForPooling]:
-    if not is_aphrodite_model(model):
+) -> TypeIs[type[SonarModelForPooling]] | TypeIs[SonarModelForPooling]:
+    if not is_sonar_model(model):
         return False
 
     return getattr(model, "is_pooling_model", False)
@@ -237,7 +237,7 @@ def default_pooling_type(
     seq_pooling_type: SequencePoolingType = "LAST",
     tok_pooling_type: TokenPoolingType = "ALL",
 ):
-    """Decorator to set `AphroditeModelForPooling.default_*_pooling_type`."""
+    """Decorator to set `SonarModelForPooling.default_*_pooling_type`."""
 
     def func(model: _T) -> _T:
         model.default_seq_pooling_type = seq_pooling_type  # type: ignore
@@ -260,7 +260,7 @@ def get_default_tok_pooling_type(
 
 
 def attn_type(attn_type: AttnTypeStr):
-    """Decorator to set `AphroditeModelForPooling.attn_type`."""
+    """Decorator to set `SonarModelForPooling.attn_type`."""
 
     def func(model: _T) -> _T:
         model.attn_type = attn_type  # type: ignore

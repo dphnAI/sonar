@@ -11,7 +11,7 @@ import pytest
 import pytest_asyncio
 import requests
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 from tests.utils import RemoteOpenAIServer
 from tests.v1.utils import check_request_balancing
 
@@ -28,7 +28,7 @@ DP_SIZE_LOCAL = DP_SIZE // NUM_NODES  # 2 ranks per node
 
 
 class HybridLBServerManager:
-    """Manages hybrid data parallel Aphrodite server instances where each node
+    """Manages hybrid data parallel Sonar server instances where each node
     runs a single logical API server that balances requests only to the
     DP engines running on that same node."""
 
@@ -97,7 +97,7 @@ class HybridLBServerManager:
                         sargs,
                         auto_port=False,
                         env_dict={
-                            "APHRODITE_SERVER_DEV_MODE": "1",
+                            "SONAR_SERVER_DEV_MODE": "1",
                             current_platform.device_control_env_var: ",".join(
                                 str(current_platform.device_id_to_physical_device_id(i))
                                 for i in range(gpu_start, gpu_end)
@@ -188,8 +188,8 @@ def _get_parallel_config(server: RemoteOpenAIServer):
     response = requests.get(server.url_for("server_info?config_format=json"))
     response.raise_for_status()
 
-    aphrodite_config = response.json()["aphrodite_config"]
-    return aphrodite_config["parallel_config"]
+    sonar_config = response.json()["sonar_config"]
+    return sonar_config["parallel_config"]
 
 
 def test_hybrid_dp_server_info(server_manager):

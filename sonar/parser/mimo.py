@@ -6,7 +6,7 @@ import functools
 import json
 from dataclasses import replace
 
-from aphrodite.parser.qwen3 import (
+from sonar.parser.qwen3 import (
     _PARAM_RE,
     _PARTIAL_PARAM_RE,
     CHATML_TURN_BOUNDARIES,

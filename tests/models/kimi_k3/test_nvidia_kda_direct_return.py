@@ -4,7 +4,7 @@
 import torch
 from torch import nn
 
-from aphrodite.models.kimi_k3.nvidia.model import KimiDecoderLayer
+from sonar.models.kimi_k3.nvidia.model import KimiDecoderLayer
 
 
 class _ReturningSharedKDA(nn.Module):

@@ -38,14 +38,14 @@ from cutlass.cute.runtime import make_fake_stream, make_fake_tensor, make_ptr, n
 from cutlass.cutlass_dsl import dsl_user_op
 from cutlass.utils import get_smem_capacity_in_bytes
 
-from aphrodite.cute_utils import _tcgen05, mbarrier, simple_tma_copy, to_cta0_smem
-from aphrodite.distributed import get_tp_group
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.linear import LinearBase, UnquantizedLinearMethod
-from aphrodite.platforms import current_platform
+from sonar.cute_utils import _tcgen05, mbarrier, simple_tma_copy, to_cta0_smem
+from sonar.distributed import get_tp_group
+from sonar.logger import init_logger
+from sonar.model_executor.layers.linear import LinearBase, UnquantizedLinearMethod
+from sonar.platforms import current_platform
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
+    from sonar.config import SonarConfig
 
 logger = init_logger(__name__)
 
@@ -813,7 +813,7 @@ class GemmRsAr:
 
     All TP ranks must belong to one NVLink domain for multimem instructions.
 
-    Each instance is bound to either RS or AR. A Aphrodite worker has one static
+    Each instance is bound to either RS or AR. A Sonar worker has one static
     sequence-parallel topology, so the process-wide singleton only needs one
     mode. Two independent mode-specific singletons would lift that restriction
     but duplicate the large symmetric workspace. A future mixed-mode design
@@ -879,7 +879,7 @@ class GemmRsAr:
         tp_group.barrier()
 
     def can_run(self, linear: LinearBase) -> bool:
-        from aphrodite.model_executor.kernels.linear.mxfp8.flashinfer import (
+        from sonar.model_executor.kernels.linear.mxfp8.flashinfer import (
             FlashInferCutedslMxfp8LinearKernel,
             FlashInferCutlassMxfp8LinearKernel,
         )
@@ -926,7 +926,7 @@ class GemmRsAr:
         return x.shape[0] >= 128
 
     def apply(self, x: torch.Tensor, linear: LinearBase) -> torch.Tensor:
-        from aphrodite.model_executor.kernels.linear.mxfp8.flashinfer import (
+        from sonar.model_executor.kernels.linear.mxfp8.flashinfer import (
             FlashInferCutedslMxfp8LinearKernel,
         )
 
@@ -948,7 +948,7 @@ class GemmRsAr:
         dtype = "mxfp8" if w.dtype == torch.float8_e4m3fn else "bf16"
         x_sf = None
         if dtype == "mxfp8":
-            from aphrodite.model_executor.layers.quantization.utils.mxfp8_utils import (
+            from sonar.model_executor.layers.quantization.utils.mxfp8_utils import (
                 mxfp8_e4m3_quantize,
             )
 
@@ -1040,7 +1040,7 @@ def init_gemm_rs_ar(max_M: int, N: int, *, all_reduce: bool = False) -> None:
     _gemm_rs_ar = GemmRsAr(max_M=max_M, N=N, all_reduce=all_reduce)
 
 
-def maybe_init_gemm_rs_ar(aphrodite_config: "AphroditeConfig", *, N: int, all_reduce: bool) -> bool:
+def maybe_init_gemm_rs_ar(sonar_config: "SonarConfig", *, N: int, all_reduce: bool) -> bool:
     """Collectively initialize the mode-bound GEMM-RS/AR state if supported.
 
     Callers gate on their own feature flag first; this checks the worker
@@ -1049,11 +1049,11 @@ def maybe_init_gemm_rs_ar(aphrodite_config: "AphroditeConfig", *, N: int, all_re
     projections may bind to the kernel through ``get_gemm_rs_ar().can_run``.
     """
     mode = "GEMM-AR" if all_reduce else "GEMM-RS"
-    parallel_config = aphrodite_config.parallel_config
+    parallel_config = sonar_config.parallel_config
     tp_size = parallel_config.tensor_parallel_size
     if parallel_config.use_ubatching:
         reason = "ubatching is enabled"
-    elif aphrodite_config.model_config.dtype != torch.bfloat16:
+    elif sonar_config.model_config.dtype != torch.bfloat16:
         reason = "the model dtype is not BF16"
     elif not current_platform.is_cuda():
         reason = "the device is not CUDA"
@@ -1074,7 +1074,7 @@ def maybe_init_gemm_rs_ar(aphrodite_config: "AphroditeConfig", *, N: int, all_re
 
     try:
         init_gemm_rs_ar(
-            max_M=aphrodite_config.scheduler_config.max_num_batched_tokens,
+            max_M=sonar_config.scheduler_config.max_num_batched_tokens,
             N=N,
             all_reduce=all_reduce,
         )

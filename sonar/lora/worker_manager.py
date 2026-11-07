@@ -6,20 +6,20 @@ from typing import Any, Literal
 
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.lora import LoRAConfig
-from aphrodite.exceptions import LoRAAdapterNotFoundError
-from aphrodite.logger import init_logger
-from aphrodite.lora.lora_model import LoRAModel
-from aphrodite.lora.model_manager import (
+from sonar.config import SonarConfig
+from sonar.config.lora import LoRAConfig
+from sonar.exceptions import LoRAAdapterNotFoundError
+from sonar.logger import init_logger
+from sonar.lora.lora_model import LoRAModel
+from sonar.lora.model_manager import (
     LoRAModelManager,
     LRUCacheLoRAModelManager,
     create_lora_manager,
 )
-from aphrodite.lora.peft_helper import PEFTHelper
-from aphrodite.lora.request import LoRARequest
-from aphrodite.lora.utils import get_adapter_absolute_path
-from aphrodite.utils.gpu_sync_debug import gpu_sync_allowed
+from sonar.lora.peft_helper import PEFTHelper
+from sonar.lora.request import LoRARequest
+from sonar.lora.utils import get_adapter_absolute_path
+from sonar.utils.gpu_sync_debug import gpu_sync_allowed
 
 logger = init_logger(__name__)
 
@@ -34,7 +34,7 @@ class WorkerLoRAManager:
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
         embedding_modules: dict[str, str],
         lora_model_cls: type[LoRAModel] = LoRAModel,
@@ -42,22 +42,22 @@ class WorkerLoRAManager:
         self._lora_model_cls = lora_model_cls
         self.embedding_modules = embedding_modules
         self._cached_dummy_lora: None | Literal[False] | LoRAModel = False
-        self.max_num_seqs = aphrodite_config.scheduler_config.max_num_seqs
-        self.max_num_batched_tokens = aphrodite_config.scheduler_config.max_num_batched_tokens
-        self.vocab_size = aphrodite_config.model_config.get_vocab_size()
-        lora_config = aphrodite_config.lora_config
+        self.max_num_seqs = sonar_config.scheduler_config.max_num_seqs
+        self.max_num_batched_tokens = sonar_config.scheduler_config.max_num_batched_tokens
+        self.vocab_size = sonar_config.model_config.get_vocab_size()
+        lora_config = sonar_config.lora_config
         if lora_config is None:
             raise ValueError("LoRA config must be set for WorkerLoRAManager.")
         self.lora_config: LoRAConfig = lora_config
 
         # Use get_text_config() in case of multimodal models
-        text_config = aphrodite_config.model_config.hf_config.get_text_config()
+        text_config = sonar_config.model_config.hf_config.get_text_config()
 
         # For encoder-decoder models (e.g., Whisper), use max_target_positions
         # instead of max_position_embeddings
         # TODO: Generalize max_position_embeddings handling for
         # out-of-tree (OOT) encoder-decoder models
-        if aphrodite_config.model_config.is_encoder_decoder:
+        if sonar_config.model_config.is_encoder_decoder:
             self.max_position_embeddings = getattr(text_config, "max_target_positions", None)
         else:
             self.max_position_embeddings = getattr(text_config, "max_position_embeddings", None)
@@ -80,10 +80,10 @@ class WorkerLoRAManager:
     def create_lora_manager(
         self,
         model: torch.nn.Module,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
     ) -> Any:
-        if aphrodite_config is None:
-            raise ValueError("aphrodite_config must be provided to create a LoRA manager.")
+        if sonar_config is None:
+            raise ValueError("sonar_config must be provided to create a LoRA manager.")
         lora_manager = create_lora_manager(
             model,
             max_num_seqs=self.max_num_seqs,
@@ -92,7 +92,7 @@ class WorkerLoRAManager:
             lora_config=self.lora_config,
             device=self.device,
             lora_manager_cls=self._manager_cls,
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
         )
         self._adapter_manager = lora_manager
         return lora_manager.model
@@ -118,13 +118,13 @@ class WorkerLoRAManager:
             # loading weights, throwing an exception if validation fails.
             peft_helper.validate_legal(self.lora_config)
 
-            # For some models like Qwen2VL, we need to use hf_to_aphrodite_mapper to ensure
+            # For some models like Qwen2VL, we need to use hf_to_sonar_mapper to ensure
             # correct loading of lora weights. We only need to know about renames for
             # this, so we use get_rename_mapper() to ignore stacking and deletions.
             model = self._adapter_manager.model
-            hf_to_aphrodite_mapper = getattr(model, "hf_to_aphrodite_mapper", None)
-            if hf_to_aphrodite_mapper is not None:
-                hf_to_aphrodite_mapper = hf_to_aphrodite_mapper.get_rename_mapper()
+            hf_to_sonar_mapper = getattr(model, "hf_to_sonar_mapper", None)
+            if hf_to_sonar_mapper is not None:
+                hf_to_sonar_mapper = hf_to_sonar_mapper.get_rename_mapper()
 
             # Get model-defined prefixes to skip during LoRA loading.
             lora_skip_prefixes = getattr(model, "lora_skip_prefixes", None)
@@ -137,7 +137,7 @@ class WorkerLoRAManager:
                 device="cpu",
                 dtype=self.lora_config.lora_dtype,
                 model_vocab_size=self.vocab_size,
-                weights_mapper=hf_to_aphrodite_mapper,
+                weights_mapper=hf_to_sonar_mapper,
                 skip_prefixes=lora_skip_prefixes,
                 moe_ep_spec=self._adapter_manager.moe_ep_load_spec,
                 unsupported_lora_modules=self._adapter_manager.unsupported_lora_modules,
@@ -237,10 +237,10 @@ class LRUCacheWorkerLoRAManager(WorkerLoRAManager):
     def create_lora_manager(
         self,
         model: torch.nn.Module,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
     ) -> Any:
-        if aphrodite_config is None:
-            raise ValueError("aphrodite_config must be provided to create a LoRA manager.")
+        if sonar_config is None:
+            raise ValueError("sonar_config must be provided to create a LoRA manager.")
         lora_manager = create_lora_manager(
             model,
             lora_manager_cls=self._manager_cls,
@@ -249,7 +249,7 @@ class LRUCacheWorkerLoRAManager(WorkerLoRAManager):
             lora_config=self.lora_config,
             device=self.device,
             max_num_batched_tokens=self.max_num_batched_tokens,
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
         )
         self._adapter_manager = lora_manager
         return lora_manager.model

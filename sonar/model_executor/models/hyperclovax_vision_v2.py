@@ -17,17 +17,17 @@ import torch
 import torch.nn as nn
 from transformers import BatchFeature
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.multimodal import MultiModalDummyOptions
-from aphrodite.forward_context import set_forward_context
-from aphrodite.inputs import MultiModalDataDict
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import (
+from sonar.config import SonarConfig
+from sonar.config.multimodal import MultiModalDummyOptions
+from sonar.forward_context import set_forward_context
+from sonar.inputs import MultiModalDataDict
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import (
     MultiModalFieldConfig,
     MultiModalKwargsItems,
 )
-from aphrodite.multimodal.parse import ImageSize, MultiModalDataItems
-from aphrodite.multimodal.processing import (
+from sonar.multimodal.parse import ImageSize, MultiModalDataItems
+from sonar.multimodal.processing import (
     BaseDummyInputsBuilder,
     BaseMultiModalProcessor,
     BaseProcessingInfo,
@@ -35,15 +35,15 @@ from aphrodite.multimodal.processing import (
     PromptReplacement,
     PromptUpdate,
 )
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.utils.tensor_schema import TensorSchema, TensorShape
+from sonar.sequence import IntermediateTensors
+from sonar.utils.tensor_schema import TensorSchema, TensorShape
 
 from .interfaces import MultiModalEmbeddings, SupportsMultiModal, SupportsPP
 from .qwen2_5_vl import Qwen2_5_VisionTransformer
 from .utils import (
     AutoWeightsLoader,
     WeightsMapper,
-    init_aphrodite_registered_model,
+    init_sonar_registered_model,
     maybe_prefix,
 )
 
@@ -365,13 +365,13 @@ class HCXVisionV2ForCausalLM(nn.Module, SupportsMultiModal, SupportsPP):
     # Weight mapping for loading HuggingFace checkpoints
     # NOTE: Order matters! Ignores (None) should come before renames to prevent
     # partial matches
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={
             "model.": "",  # Remove model. prefix if present
             "vision_model.": "visual.",  # HF uses vision_model, we use visual
         },
         orig_to_new_substr={
-            # Ignore modules not implemented in Aphrodite
+            # Ignore modules not implemented in Sonar
             "discrete_vision_model": None,  # TextAlignedTokenizer
         },
     )
@@ -379,13 +379,13 @@ class HCXVisionV2ForCausalLM(nn.Module, SupportsMultiModal, SupportsPP):
     def __init__(
         self,
         *,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
     ) -> None:
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
 
         # Text config
         text_config = config.text_config
@@ -400,7 +400,7 @@ class HCXVisionV2ForCausalLM(nn.Module, SupportsMultiModal, SupportsPP):
         self.config = config
         self.vision_config = vision_config
         self.text_config = text_config
-        self.aphrodite_config = aphrodite_config
+        self.sonar_config = sonar_config
 
         # Linear projector (vision_hidden_size -> text_hidden_size)
         # For V2 model: mm_projector_type is "linear"
@@ -414,7 +414,7 @@ class HCXVisionV2ForCausalLM(nn.Module, SupportsMultiModal, SupportsPP):
         else:
             out_hidden = vision_hidden_size
 
-        with self._mark_tower_model(aphrodite_config, {"image", "video"}):
+        with self._mark_tower_model(sonar_config, {"image", "video"}):
             self.visual = Qwen2_5_VisionTransformer(
                 vision_config=vision_config,
                 norm_eps=getattr(config, "rms_norm_eps", 1e-6),
@@ -423,9 +423,9 @@ class HCXVisionV2ForCausalLM(nn.Module, SupportsMultiModal, SupportsPP):
             )
             self.mm_projector = nn.Linear(out_hidden, text_hidden_size)
 
-        with self._mark_language_model(aphrodite_config):
-            self.language_model = init_aphrodite_registered_model(
-                aphrodite_config=aphrodite_config,
+        with self._mark_language_model(sonar_config):
+            self.language_model = init_sonar_registered_model(
+                sonar_config=sonar_config,
                 hf_config=text_config,
                 prefix=maybe_prefix(prefix, "language_model"),
             )
@@ -504,7 +504,7 @@ class HCXVisionV2ForCausalLM(nn.Module, SupportsMultiModal, SupportsPP):
             image_embeds = image_input["image_embeds"].type(self.visual.dtype)
         else:
             pixel_values = image_input["pixel_values"]
-            with set_forward_context(None, self.aphrodite_config):
+            with set_forward_context(None, self.sonar_config):
                 image_embeds = self.visual(pixel_values, grid_thw=grid_thw_list)
 
         # Apply projector
@@ -528,7 +528,7 @@ class HCXVisionV2ForCausalLM(nn.Module, SupportsMultiModal, SupportsPP):
             video_embeds = video_input["video_embeds"].type(self.visual.dtype)
         else:
             pixel_values_videos = video_input["pixel_values_videos"]
-            with set_forward_context(None, self.aphrodite_config):
+            with set_forward_context(None, self.sonar_config):
                 video_embeds = self.visual(pixel_values_videos, grid_thw=grid_thw_list)
 
         # Apply projector
@@ -601,4 +601,4 @@ class HCXVisionV2ForCausalLM(nn.Module, SupportsMultiModal, SupportsPP):
         weights: Iterable[tuple[str, torch.Tensor]],
     ) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)

@@ -5,7 +5,7 @@ from collections import deque
 
 import numpy as np
 
-from aphrodite.v1.outputs import LogprobsLists
+from sonar.v1.outputs import LogprobsLists
 
 
 def join_logprobs(rows: list[LogprobsLists]) -> LogprobsLists | None:

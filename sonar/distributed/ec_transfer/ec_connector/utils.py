@@ -6,13 +6,13 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.utils.collection_utils import is_list_of
-from aphrodite.v1.outputs import ECConnectorOutput, ModelRunnerOutput
+from sonar.logger import init_logger
+from sonar.utils.collection_utils import is_list_of
+from sonar.v1.outputs import ECConnectorOutput, ModelRunnerOutput
 
 if TYPE_CHECKING:
-    from aphrodite.config import ModelConfig
-    from aphrodite.multimodal.inputs import MultiModalFeatureSpec
+    from sonar.config import ModelConfig
+    from sonar.multimodal.inputs import MultiModalFeatureSpec
 
 logger = init_logger(__name__)
 
@@ -36,7 +36,7 @@ class PlaceholderMetadataResolver:
 
         fields: set[str] = set()
         try:
-            from aphrodite.multimodal import MULTIMODAL_REGISTRY
+            from sonar.multimodal import MULTIMODAL_REGISTRY
 
             info = MULTIMODAL_REGISTRY.create_processor(self._model_config).info
             fields = info.data_parser.placeholder_metadata_fields(modality)

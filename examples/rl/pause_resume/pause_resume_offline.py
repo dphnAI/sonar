@@ -14,9 +14,9 @@ matching the pause duration.
 import asyncio
 import time
 
-from aphrodite import SamplingParams
-from aphrodite.engine.arg_utils import AsyncEngineArgs
-from aphrodite.v1.engine.async_llm import AsyncLLM
+from sonar import SamplingParams
+from sonar.engine.arg_utils import AsyncEngineArgs
+from sonar.v1.engine.async_llm import AsyncLLM
 
 PAUSE_DURATION = 3.0  # seconds
 

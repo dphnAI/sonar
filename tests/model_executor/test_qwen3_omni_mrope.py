@@ -6,10 +6,10 @@ from dataclasses import dataclass
 import pytest
 import torch
 
-from aphrodite.model_executor.models.qwen3_omni_moe_thinker import (
+from sonar.model_executor.models.qwen3_omni_moe_thinker import (
     Qwen3OmniMoeThinkerForConditionalGeneration,
 )
-from aphrodite.multimodal.inputs import (
+from sonar.multimodal.inputs import (
     MultiModalFeatureSpec,
     MultiModalFieldElem,
     MultiModalKwargsItem,

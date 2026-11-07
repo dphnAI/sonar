@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-from aphrodite.v1.attention.backends.mla.rocm_aiter_mla import AiterMLABackend, AiterMLAImpl
+from sonar.v1.attention.backends.mla.rocm_aiter_mla import AiterMLABackend, AiterMLAImpl
 
 
 class AiterTritonMLABackend(AiterMLABackend):

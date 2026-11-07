@@ -7,7 +7,7 @@ _PAD_KERNEL = None
 
 
 def _make_pad_kernel():
-    from aphrodite.triton_utils import tl, triton
+    from sonar.triton_utils import tl, triton
 
     @triton.jit
     def _pad_mxfp8_columns_kernel(

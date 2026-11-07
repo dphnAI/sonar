@@ -4,7 +4,7 @@
 """Single-request model performance benchmark.
 
 This intentionally mirrors the compact output style of exllamav3's
-``eval/perf.py`` while running through Aphrodite's normal offline engine.
+``eval/perf.py`` while running through Sonar's normal offline engine.
 """
 
 import argparse
@@ -21,11 +21,11 @@ import numpy as np
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 
-from aphrodite.inputs import TokensPrompt
-from aphrodite.outputs import RequestOutput
+from sonar.inputs import TokensPrompt
+from sonar.outputs import RequestOutput
 
 if TYPE_CHECKING:
-    from aphrodite.utils.argparse_utils import FlexibleArgumentParser
+    from sonar.utils.argparse_utils import FlexibleArgumentParser
 
 ESC = "\u001b"
 COL_DEFAULT = f"{ESC}[0m"
@@ -40,17 +40,17 @@ def _suppress_startup_logs(enabled: bool):
         return
 
     previous_disable_level = logging.root.manager.disable
-    previous_env_level = os.environ.get("APHRODITE_LOGGING_LEVEL")
-    aphrodite_logger = logging.getLogger("aphrodite")
-    previous_aphrodite_level = aphrodite_logger.level
-    previous_handler_levels = [handler.level for handler in aphrodite_logger.handlers]
+    previous_env_level = os.environ.get("SONAR_LOGGING_LEVEL")
+    sonar_logger = logging.getLogger("sonar")
+    previous_sonar_level = sonar_logger.level
+    previous_handler_levels = [handler.level for handler in sonar_logger.handlers]
     stdout_fd = os.dup(1)
     stderr_fd = os.dup(2)
     devnull_fd = os.open(os.devnull, os.O_WRONLY)
 
-    os.environ["APHRODITE_LOGGING_LEVEL"] = "ERROR"
-    aphrodite_logger.setLevel(logging.ERROR)
-    for handler in aphrodite_logger.handlers:
+    os.environ["SONAR_LOGGING_LEVEL"] = "ERROR"
+    sonar_logger.setLevel(logging.ERROR)
+    for handler in sonar_logger.handlers:
         handler.setLevel(logging.ERROR)
     logging.disable(logging.INFO)
     os.dup2(devnull_fd, 1)
@@ -65,11 +65,11 @@ def _suppress_startup_logs(enabled: bool):
         os.close(devnull_fd)
         logging.disable(previous_disable_level)
         if previous_env_level is None:
-            os.environ.pop("APHRODITE_LOGGING_LEVEL", None)
+            os.environ.pop("SONAR_LOGGING_LEVEL", None)
         else:
-            os.environ["APHRODITE_LOGGING_LEVEL"] = previous_env_level
-        aphrodite_logger.setLevel(previous_aphrodite_level)
-        for handler, level in zip(aphrodite_logger.handlers, previous_handler_levels):
+            os.environ["SONAR_LOGGING_LEVEL"] = previous_env_level
+        sonar_logger.setLevel(previous_sonar_level)
+        for handler, level in zip(sonar_logger.handlers, previous_handler_levels):
             handler.setLevel(level)
 
 
@@ -162,7 +162,7 @@ def _decode_time(output: RequestOutput, wall_time: float) -> float:
 
 
 def _run_generate(llm, prompt: TokensPrompt, max_tokens: int):  # type: ignore[no-untyped-def]
-    from aphrodite import SamplingParams
+    from sonar import SamplingParams
 
     sampling_params = SamplingParams(
         temperature=0.0,
@@ -208,7 +208,7 @@ def _measure_generate(
 ) -> dict[int, float]:
     results: dict[int, float] = {}
     for context_len in contexts:
-        # Aphrodite needs at least one prompt token. Label the first case as
+        # Sonar needs at least one prompt token. Label the first case as
         # context 0 to match exllamav3's eval/perf.py output.
         prompt_len = max(context_len, 1)
         prompt = _make_prompt(rng, prompt_len, vocab_size)
@@ -271,12 +271,12 @@ def add_cli_args(parser: "FlexibleArgumentParser") -> None:
     parser.add_argument(
         "--show-startup-logs",
         action="store_true",
-        help="Show normal Aphrodite engine startup logs instead of the compact startup progress line.",
+        help="Show normal Sonar engine startup logs instead of the compact startup progress line.",
     )
     # Building engine CLI args can initialize parts of the platform layer.
     # Keep that quiet so `bench perf` has a compact exllamav3-like surface.
     with _suppress_startup_logs(enabled=True):
-        from aphrodite.engine.arg_utils import EngineArgs
+        from sonar.engine.arg_utils import EngineArgs
 
         EngineArgs.add_cli_args(parser)
     parser.set_defaults(enable_prefix_caching=False, disable_log_stats=False)
@@ -285,7 +285,7 @@ def add_cli_args(parser: "FlexibleArgumentParser") -> None:
 def main(args: argparse.Namespace) -> None:
     model = args.model_dir or args.model_tag or args.model
     if model is None:
-        raise ValueError("aphrodite bench perf requires a model via MODEL, -m, or --model.")
+        raise ValueError("sonar bench perf requires a model via MODEL, -m, or --model.")
     args.model = model
 
     if args.max_num_batched_tokens is None:
@@ -296,13 +296,13 @@ def main(args: argparse.Namespace) -> None:
 
     # Keep request-level timing metrics enabled, but avoid interleaving the
     # normal "Request completed" log line with the perf.py-style table.
-    logging.getLogger("aphrodite.v1.metrics.loggers").setLevel(logging.WARNING)
+    logging.getLogger("sonar.v1.metrics.loggers").setLevel(logging.WARNING)
 
     hide_startup_logs = not args.show_startup_logs
     with _StartupProgress(enabled=hide_startup_logs):
         with _suppress_startup_logs(enabled=hide_startup_logs):
-            from aphrodite import LLM
-            from aphrodite.engine.arg_utils import EngineArgs
+            from sonar import LLM
+            from sonar.engine.arg_utils import EngineArgs
 
             engine_args = EngineArgs.from_cli_args(args)
             llm = LLM.from_engine_args(engine_args)

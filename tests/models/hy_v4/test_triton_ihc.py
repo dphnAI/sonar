@@ -4,15 +4,15 @@
 import pytest
 import torch
 
-from aphrodite.models.hy_v4.amd.triton_ihc import (
+from sonar.models.hy_v4.amd.triton_ihc import (
     triton_ihc_post,
     triton_ihc_post_pre_rms_norm,
     triton_ihc_pre,
     triton_ihc_supported,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import HAS_TRITON
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.platforms import current_platform
+from sonar.triton_utils import HAS_TRITON
+from sonar.utils.torch_utils import set_random_seed
 
 pytestmark = pytest.mark.skipif(
     not current_platform.is_rocm() or not HAS_TRITON or not torch.cuda.is_available(),

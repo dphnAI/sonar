@@ -12,14 +12,14 @@ import torch
 import torch._inductor.compile_fx
 import torch.fx as fx
 
-import aphrodite.envs as envs
-from aphrodite.compilation.counter import compilation_counter
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.utils import Range
-from aphrodite.env_override import _apply_constrain_to_fx_strides_patch
-from aphrodite.logger import init_logger
-from aphrodite.utils.hashing import safe_hash
-from aphrodite.utils.torch_utils import is_torch_equal_or_newer
+import sonar.envs as envs
+from sonar.compilation.counter import compilation_counter
+from sonar.config import SonarConfig
+from sonar.config.utils import Range
+from sonar.env_override import _apply_constrain_to_fx_strides_patch
+from sonar.logger import init_logger
+from sonar.utils.hashing import safe_hash
+from sonar.utils.torch_utils import is_torch_equal_or_newer
 
 logger = init_logger(__name__)
 
@@ -43,14 +43,14 @@ def initialize_inductor_cache(base_cache_dir: str) -> None:
 
 
 class CompilerInterface:
-    """The interface for a compiler that can be used by Aphrodite."""
+    """The interface for a compiler that can be used by Sonar."""
 
     # The name of the compiler, e.g. inductor.
     # This is a class-level attribute.
     name: str
 
     def initialize_cache(self, cache_dir: str, disable_cache: bool = False, prefix: str = "") -> None:
-        """When the Aphrodite process uses `cache_dir` as the cache directory,
+        """When the Sonar process uses `cache_dir` as the cache directory,
         the compiler should initialize itself with the cache directory,
         e.g. by re-directing its own cache directory to a sub-directory.
 
@@ -64,11 +64,11 @@ class CompilerInterface:
         """
         pass
 
-    def compute_hash(self, aphrodite_config: AphroditeConfig) -> str:
-        """Gather all the relevant information from the Aphrodite config,
+    def compute_hash(self, sonar_config: SonarConfig) -> str:
+        """Gather all the relevant information from the Sonar config,
         to compute a hash so that we can cache the compiled model.
 
-        See [`AphroditeConfig.compute_hash`][aphrodite.config.AphroditeConfig.compute_hash]
+        See [`SonarConfig.compute_hash`][sonar.config.SonarConfig.compute_hash]
         to check what information
         is already considered by default. This function should only
         consider the information that is specific to the compiler.
@@ -165,13 +165,13 @@ class AlwaysHitShapeEnv:
         return ""
 
 
-def _get_aphrodite_functorch_config(use_aot_compile: bool = True) -> dict[str, Any]:
-    """Return the functorch config overrides that Aphrodite applies at compile time.
+def _get_sonar_functorch_config(use_aot_compile: bool = True) -> dict[str, Any]:
+    """Return the functorch config overrides that Sonar applies at compile time.
 
     Used by both set_functorch_config() and get_inductor_factors() to ensure
     the compile-time config and cache key are always consistent."""
     cfg: dict[str, Any] = {}
-    if not (use_aot_compile and envs.APHRODITE_USE_MEGA_AOT_ARTIFACT):
+    if not (use_aot_compile and envs.SONAR_USE_MEGA_AOT_ARTIFACT):
         cfg["bundled_autograd_cache"] = False
     return cfg
 
@@ -194,23 +194,23 @@ def get_inductor_factors(use_aot_compile: bool = True) -> list[Any]:
     from torch._inductor import config as inductor_config
 
     factors.append(inductor_config.save_config_portable())
-    with functorch_config.patch(_get_aphrodite_functorch_config(use_aot_compile)):
+    with functorch_config.patch(_get_sonar_functorch_config(use_aot_compile)):
         factors.append(functorch_config.save_config_portable())
     return factors
 
 
 def is_compile_cache_enabled(
-    aphrodite_additional_inductor_config: dict[str, Any],
+    sonar_additional_inductor_config: dict[str, Any],
 ) -> bool:
-    aphrodite_inductor_config_disable_cache = aphrodite_additional_inductor_config.get("force_disable_caches", False)
+    sonar_inductor_config_disable_cache = sonar_additional_inductor_config.get("force_disable_caches", False)
 
     # TODO(gmagogsfm): Replace torch._inductor.config.force_disable_caches
     # with torch.compiler.config.force_disable_caches when minimum PyTorch
     # version reaches 2.10
     return (
-        not envs.APHRODITE_DISABLE_COMPILE_CACHE
+        not envs.SONAR_DISABLE_COMPILE_CACHE
         and not torch._inductor.config.force_disable_caches
-        and not aphrodite_inductor_config_disable_cache
+        and not sonar_inductor_config_disable_cache
     )
 
 
@@ -224,7 +224,7 @@ def _patch_standalone_compile_atomic_save() -> None:
     from torch._inductor.codecache import write_atomic
     from torch._inductor.standalone_compile import CompiledArtifact as cls
 
-    if getattr(cls.save, "_aphrodite_patched", False):
+    if getattr(cls.save, "_sonar_patched", False):
         return
 
     original_save = cls.save
@@ -248,7 +248,7 @@ def _patch_standalone_compile_atomic_save() -> None:
             writer.write_bytes(artifact_bytes)
             write_atomic(path, writer.to_bytes())
 
-    _save._aphrodite_patched = True  # type: ignore[attr-defined]
+    _save._sonar_patched = True  # type: ignore[attr-defined]
     cls.save = _save  # type: ignore[assignment]
     logger.debug("Patched %s.save for atomic writes (torch < 2.10)", cls.__name__)
 
@@ -259,7 +259,7 @@ class InductorStandaloneAdaptor(CompilerInterface):
     This is not on by default yet, but we plan to turn it on by default for
     PyTorch 2.8.
 
-    Use APHRODITE_USE_STANDALONE_COMPILE to toggle this on or off.
+    Use SONAR_USE_STANDALONE_COMPILE to toggle this on or off.
     """
 
     name = "inductor_standalone"
@@ -270,7 +270,7 @@ class InductorStandaloneAdaptor(CompilerInterface):
         self.save_format = save_format
         self.use_aot_compile = use_aot_compile
 
-    def compute_hash(self, aphrodite_config: AphroditeConfig) -> str:
+    def compute_hash(self, sonar_config: SonarConfig) -> str:
         factors = get_inductor_factors(self.use_aot_compile)
         hash_str: str = safe_hash(str(factors).encode(), usedforsecurity=False).hexdigest()[:10]
         return hash_str
@@ -304,9 +304,9 @@ class InductorStandaloneAdaptor(CompilerInterface):
 
         supports_aot = is_torch_equal_or_newer("2.10.0")
 
-        if not supports_aot and self.use_aot_compile and envs.APHRODITE_USE_MEGA_AOT_ARTIFACT:
+        if not supports_aot and self.use_aot_compile and envs.SONAR_USE_MEGA_AOT_ARTIFACT:
             logger.error(
-                "CRITICAL: APHRODITE_USE_MEGA_AOT_ARTIFACT "
+                "CRITICAL: SONAR_USE_MEGA_AOT_ARTIFACT "
                 "is enabled but PyTorch version does not support 'aot' "
                 "parameter in standalone_compile. This requires PyTorch "
                 "2.10.0+. Falling back to non-AOT mode."
@@ -322,19 +322,19 @@ class InductorStandaloneAdaptor(CompilerInterface):
         if is_torch_equal_or_newer("2.13.0.dev"):
             compile_kwargs["donate_graph_module"] = True  # type: ignore[assignment]
 
-        use_aot: bool = supports_aot and self.use_aot_compile and envs.APHRODITE_USE_MEGA_AOT_ARTIFACT
+        use_aot: bool = supports_aot and self.use_aot_compile and envs.SONAR_USE_MEGA_AOT_ARTIFACT
         # only add 'aot' parameter if both supported and enabled...
         # this will set bundled_autograd_cache
         # https://github.com/pytorch/pytorch/blob/9bbc5b2905c260adf41bc866a732f9c121a2828a/torch/_inductor/standalone_compile.py#L359 # noqa
         if use_aot:
             compile_kwargs["aot"] = True  # type: ignore[assignment]
 
-        # Inductor's pre-grad passes don't do anything for Aphrodite.
+        # Inductor's pre-grad passes don't do anything for Sonar.
         # The pre-grad passes get run even on cache-hit and negatively impact
-        # aphrodite cold compile times by O(1s)
+        # sonar cold compile times by O(1s)
         # Fixed upstream in PyTorch 2.12:
         # https://github.com/pytorch/pytorch/issues/174502
-        if is_torch_equal_or_newer("2.12.0.dev") or envs.APHRODITE_ENABLE_PREGRAD_PASSES:
+        if is_torch_equal_or_newer("2.12.0.dev") or envs.SONAR_ENABLE_PREGRAD_PASSES:
             pregrad_ctx: Any = contextlib.nullcontext()
         else:
             pregrad_ctx = patch(
@@ -415,9 +415,9 @@ class InductorStandaloneAdaptor(CompilerInterface):
                     "figuring out what is not serializable and rewriting it, "
                     "filing a bug report, "
                     "or suppressing this error by "
-                    "disabling Aphrodite's compilation cache via "
-                    "APHRODITE_DISABLE_COMPILE_CACHE=1 "
-                    "(this will greatly increase Aphrodite server warm start times)."
+                    "disabling Sonar's compilation cache via "
+                    "SONAR_DISABLE_COMPILE_CACHE=1 "
+                    "(this will greatly increase Sonar server warm start times)."
                 )
             compiled_graph.save(path=path, format=self.save_format)
             compilation_counter.num_compiled_artifacts_saved += 1
@@ -445,7 +445,7 @@ class InductorStandaloneAdaptor(CompilerInterface):
             graph_output = inductor_compiled_graph(*args)
             # unpack the tuple if needed
             # TODO(rzou): the implication is that we're not
-            # reading the python bytecode correctly in Aphrodite?
+            # reading the python bytecode correctly in Sonar?
             if returns_tuple:
                 return graph_output
             else:
@@ -462,7 +462,7 @@ class InductorAdaptor(CompilerInterface):
     def __init__(self, *, use_aot_compile: bool) -> None:
         self.use_aot_compile = use_aot_compile
 
-    def compute_hash(self, aphrodite_config: AphroditeConfig) -> str:
+    def compute_hash(self, sonar_config: SonarConfig) -> str:
         factors = get_inductor_factors(self.use_aot_compile)
         hash_str: str = safe_hash(str(factors).encode(), usedforsecurity=False).hexdigest()[:10]
         return hash_str
@@ -543,7 +543,7 @@ class InductorAdaptor(CompilerInterface):
             # Inductor refuses to cache the graph outside of Dynamo
             # tracing context, and also disables caching for graphs
             # with high-order ops.
-            # For Aphrodite, in either case, we want to cache the graph.
+            # For Sonar, in either case, we want to cache the graph.
             # see https://github.com/pytorch/pytorch/blob/9f5ebf3fc609105a74eab4ccc24932d6353ff566/torch/_inductor/codecache.py#L1221 # noqa
             return
 
@@ -593,7 +593,7 @@ class InductorAdaptor(CompilerInterface):
 
             # Disable remote caching. When these are on, on remote cache-hit,
             # the monkey-patched functions never actually get called.
-            # Aphrodite today assumes and requires the monkey-patched functions to
+            # Sonar today assumes and requires the monkey-patched functions to
             # get hit.
             # TODO(zou3519): we're going to replace this all with
             # standalone_compile sometime.
@@ -606,7 +606,7 @@ class InductorAdaptor(CompilerInterface):
             stack.enter_context(torch._functorch.config.patch(enable_remote_autograd_cache=False))
 
             # Clear the tracing context before calling compile_fx.
-            # Aphrodite calls compile_fx from within a PiecewiseCompileInterpreter
+            # Sonar calls compile_fx from within a PiecewiseCompileInterpreter
             # that runs under Dynamo's tracing context. The tracing context
             # has a FakeTensorMode from Dynamo, but the example inputs for
             # this subgraph have fake tensors from a different FakeTensorMode.
@@ -633,11 +633,11 @@ class InductorAdaptor(CompilerInterface):
         if is_compile_cache_enabled(compiler_config):
             if hash_str is None:
                 raise RuntimeError(
-                    "Aphrodite failed to compile the model. The most "
+                    "Sonar failed to compile the model. The most "
                     "likely reason for this is that a previous compilation "
                     "failed, leading to a corrupted compilation artifact. "
                     "We recommend trying to "
-                    "remove ~/.cache/aphrodite/torch_compile_cache and try again "
+                    "remove ~/.cache/sonar/torch_compile_cache and try again "
                     "to see the real issue. "
                 )
             assert file_path is not None, "failed to get the file path of the compiled graph"
@@ -736,13 +736,13 @@ def set_inductor_config(config: dict[str, Any], compile_range: Range) -> None:
     if compile_range.is_single_size():
         # for a specific batch size, tuning triton kernel parameters
         # can be beneficial
-        config["max_autotune"] = envs.APHRODITE_ENABLE_INDUCTOR_MAX_AUTOTUNE
-        config["coordinate_descent_tuning"] = envs.APHRODITE_ENABLE_INDUCTOR_COORDINATE_DESCENT_TUNING
+        config["max_autotune"] = envs.SONAR_ENABLE_INDUCTOR_MAX_AUTOTUNE
+        config["coordinate_descent_tuning"] = envs.SONAR_ENABLE_INDUCTOR_COORDINATE_DESCENT_TUNING
 
 
 @contextlib.contextmanager
 def set_functorch_config(use_aot_compile: bool) -> Generator[None, None, None]:
-    overrides = _get_aphrodite_functorch_config(use_aot_compile)
+    overrides = _get_sonar_functorch_config(use_aot_compile)
     if use_aot_compile:
         # Preserve the existing native configuration lifetime.
         for key, value in overrides.items():
@@ -756,14 +756,14 @@ def set_functorch_config(use_aot_compile: bool) -> Generator[None, None, None]:
 @contextlib.contextmanager
 def set_compile_on_one_rank() -> Generator[None, None, None]:
     # Resolve the device at run time so the cached code runs on any device
-    # index (--device-ids). Follow APHRODITE_COMPILE_ON_ONE_RANK, which is part of
+    # index (--device-ids). Follow SONAR_COMPILE_ON_ONE_RANK, which is part of
     # the cache key, rather than torch's own setting.
     from torch.compiler import config as compiler_config
 
     if not is_torch_equal_or_newer("2.14.0.dev"):
         yield
         return
-    with compiler_config.patch(compile_on_one_rank=envs.APHRODITE_COMPILE_ON_ONE_RANK):
+    with compiler_config.patch(compile_on_one_rank=envs.SONAR_COMPILE_ON_ONE_RANK):
         yield
 
 

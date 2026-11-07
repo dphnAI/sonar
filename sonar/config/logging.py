@@ -5,8 +5,8 @@ from typing import Literal, cast
 
 from pydantic import Field
 
-import aphrodite.envs as envs
-from aphrodite.config.utils import config
+import sonar.envs as envs
+from sonar.config.utils import config
 
 LogLevel = Literal["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG", "NOTSET"]
 LogFormatter = Literal["text", "json"]
@@ -14,7 +14,7 @@ LogFormatter = Literal["text", "json"]
 
 @config
 class LoggingConfig:
-    """Aphrodite logging. Default ``dictConfig`` adds a formatted stream handler.
+    """Sonar logging. Default ``dictConfig`` adds a formatted stream handler.
 
     Supply a JSON object with ``--logging-config`` or individual fields with
     dotted arguments such as ``--logging-config.log_level DEBUG`` and
@@ -23,21 +23,21 @@ class LoggingConfig:
     ``configure_logging`` to false to skip applying a ``dictConfig``.
     """
 
-    log_level: LogLevel = Field(default_factory=lambda: cast(LogLevel, envs.APHRODITE_LOGGING_LEVEL))
+    log_level: LogLevel = Field(default_factory=lambda: cast(LogLevel, envs.SONAR_LOGGING_LEVEL))
     """Log level used when no custom logging configuration is provided."""
 
     formatter: LogFormatter = "text"
     """Formatter used by the built-in logging configuration."""
 
-    configure_logging: bool = Field(default_factory=lambda: envs.APHRODITE_CONFIGURE_LOGGING)
+    configure_logging: bool = Field(default_factory=lambda: envs.SONAR_CONFIGURE_LOGGING)
     """Whether to apply a Python logging configuration.
 
     With no ``pylogging_config_file``, the default config adds a formatted
-    stream handler to the ``aphrodite`` logger. A custom Python logging configuration
+    stream handler to the ``sonar`` logger. A custom Python logging configuration
     file also requires this to be enabled.
     """
 
-    pylogging_config_file: str | None = Field(default_factory=lambda: envs.APHRODITE_LOGGING_CONFIG_PATH)
+    pylogging_config_file: str | None = Field(default_factory=lambda: envs.SONAR_LOGGING_CONFIG_PATH)
     """Path to a Python logging JSON file using
     [``dictConfig`` schema](https://docs.python.org/3/library/logging.config.html#configuration-file-format).
 

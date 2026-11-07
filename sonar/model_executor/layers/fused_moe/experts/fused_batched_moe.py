@@ -4,29 +4,29 @@
 
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite.model_executor.layers.fused_moe.activation import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar.model_executor.layers.fused_moe.activation import (
     MoEActivation,
     apply_moe_activation_masked_supported,
 )
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEParallelConfig,
     FusedMoEQuantConfig,
 )
-from aphrodite.model_executor.layers.fused_moe.fused_moe import (
+from sonar.model_executor.layers.fused_moe.fused_moe import (
     has_configured_moe_config,
     try_get_optimal_moe_config,
 )
-from aphrodite.model_executor.layers.fused_moe.topk_weight_and_reduce import (
+from sonar.model_executor.layers.fused_moe.topk_weight_and_reduce import (
     TopKWeightAndReduceDelegate,
 )
-from aphrodite.model_executor.layers.fused_moe.utils import (
+from sonar.model_executor.layers.fused_moe.utils import (
     _resize_cache,
     moe_kernel_quantize_input,
     normalize_batched_scales_shape,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     group_broadcast,
     kFp8Dynamic128Sym,
@@ -36,9 +36,9 @@ from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
     kFp8StaticChannelSym,
     kFp8StaticTensorSym,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton, use_tensor_descriptor
-from aphrodite.triton_utils.allocation import set_triton_allocator
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton, use_tensor_descriptor
+from sonar.triton_utils.allocation import set_triton_allocator
 
 
 def _is_capturing_or_compiling() -> bool:
@@ -932,7 +932,7 @@ class BatchedTritonExperts(mk.FusedMoEExpertsModular):
     ) -> bool:
         p = current_platform
         if p.is_rocm():
-            from aphrodite.platforms.rocm import get_cdna_version, on_rdna4
+            from sonar.platforms.rocm import get_cdna_version, on_rdna4
 
             is_rocm_fp8_supported = get_cdna_version() > 2 or on_rdna4()
         else:

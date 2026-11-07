@@ -4,10 +4,10 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use aphrodite_parser::tool::test_utils::test_tools;
-use aphrodite_parser::tool::{DeepSeekV32ToolParser, Tool, ToolParser};
-use aphrodite_tokenizer::test_utils::TestTokenizer;
 use criterion::{BatchSize, Criterion, Throughput, black_box, criterion_group, criterion_main};
+use sonar_parser::tool::test_utils::test_tools;
+use sonar_parser::tool::{DeepSeekV32ToolParser, Tool, ToolParser};
+use sonar_tokenizer::test_utils::TestTokenizer;
 
 mod utils;
 use utils::{attributed_chunks, feed_attributed_parser};

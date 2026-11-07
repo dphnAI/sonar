@@ -1,18 +1,18 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Tests for the V2 model runner's InputBatch (aphrodite.v1.worker.gpu.input_batch)."""
+"""Tests for the V2 model runner's InputBatch (sonar.v1.worker.gpu.input_batch)."""
 
 import numpy as np
 import pytest
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.forward_context import set_forward_context
-from aphrodite.model_executor.layers.fused_moe.router.fused_topk_router import fused_topk
-from aphrodite.platforms import current_platform
-from aphrodite.v1.attention.backends.utils import get_dcp_local_seq_lens
-from aphrodite.v1.worker.gpu import cp_utils
-from aphrodite.v1.worker.gpu.input_batch import InputBatch, InputBuffers
+from sonar.config import SonarConfig
+from sonar.forward_context import set_forward_context
+from sonar.model_executor.layers.fused_moe.router.fused_topk_router import fused_topk
+from sonar.platforms import current_platform
+from sonar.v1.attention.backends.utils import get_dcp_local_seq_lens
+from sonar.v1.worker.gpu import cp_utils
+from sonar.v1.worker.gpu.input_batch import InputBatch, InputBuffers
 
 DEVICE = current_platform.device_type
 
@@ -59,14 +59,14 @@ def test_make_dummy_padding_controls_moe_routing(monkeypatch, is_padding: bool):
     """Dummy tokens marked as padding are dropped by the MoE router (top-k id
     -1), which is wanted for idle DP ranks. Profile runs must not mark them, or
     no token reaches the experts and MoE memory is never profiled."""
-    monkeypatch.setenv("APHRODITE_MOE_SKIP_PADDING", "1")
+    monkeypatch.setenv("SONAR_MOE_SKIP_PADDING", "1")
     num_tokens = 16
     buffers = InputBuffers(max_num_reqs=4, max_num_tokens=num_tokens, device=torch.device(DEVICE))
     batch = InputBatch.make_dummy(4, num_tokens, buffers, is_padding=is_padding)
     hidden_states = torch.randn(num_tokens, 4, device=DEVICE)
     router_logits = torch.randn(num_tokens, 8, device=DEVICE)
 
-    with set_forward_context(None, AphroditeConfig(), is_padding=batch.is_padding):
+    with set_forward_context(None, SonarConfig(), is_padding=batch.is_padding):
         _, topk_ids, _ = fused_topk(hidden_states, router_logits, 2, False)
 
     assert bool((topk_ids == -1).all()) is is_padding

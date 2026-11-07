@@ -9,10 +9,10 @@
 
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
+from sonar import _custom_ops as ops
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
 
 from .prefix_prefill import context_attention_fwd
 
@@ -371,7 +371,7 @@ def chunked_prefill_paged_decode(
 
     num_queries_per_kv_padded = max(triton.next_power_of_2(num_queries_per_kv), 16)
 
-    from aphrodite.platforms.rocm import on_rdna, use_rocm_custom_paged_attention
+    from sonar.platforms.rocm import on_rdna, use_rocm_custom_paged_attention
 
     use_custom = use_rocm_custom_paged_attention(
         query.dtype,

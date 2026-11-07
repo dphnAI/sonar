@@ -4,10 +4,10 @@
 
 from typing import TYPE_CHECKING
 
-from aphrodite.exceptions import AphroditeValidationError
+from sonar.exceptions import SonarValidationError
 
 if TYPE_CHECKING:
-    from aphrodite.sampling_params import SamplingParams
+    from sonar.sampling_params import SamplingParams
 
 
 def validate_diffusion_sampling_params(
@@ -23,7 +23,7 @@ def validate_diffusion_sampling_params(
 
     def check(valid: bool, message: str) -> None:
         if not valid:
-            raise AphroditeValidationError(message, parameter="extra_args")
+            raise SonarValidationError(message, parameter="extra_args")
 
     width = extra.get("diffusion_canvas_length")
     if width is not None:
@@ -74,7 +74,7 @@ def validate_diffusion_sampling_params(
             "diffusion_max_steps must be a positive integer.",
         )
 
-    # The OpenAI server's aphrodite_xargs narrows JSON booleans to 0/1.
+    # The OpenAI server's sonar_xargs narrows JSON booleans to 0/1.
     read_only = extra.get("diffusion_read_only")
     if read_only is not None:
         check(

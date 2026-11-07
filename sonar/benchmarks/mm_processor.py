@@ -7,7 +7,7 @@ using multimodal prompts from datasets.
 MM processor stats are automatically enabled.
 
 Run:
-    aphrodite bench mm-processor \
+    sonar bench mm-processor \
         --model <your_model> \
         --dataset-name random-mm \
         --num-prompts 10 \
@@ -22,15 +22,15 @@ from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
 
-from aphrodite.benchmarks.datasets import (
+from sonar.benchmarks.datasets import (
     MultiModalConversationDataset,
     VisionArenaDataset,
 )
-from aphrodite.benchmarks.throughput import get_requests
-from aphrodite.engine.arg_utils import EngineArgs
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
-from aphrodite.utils.gc_utils import freeze_gc_heap
-from aphrodite.utils.import_utils import PlaceholderModule
+from sonar.benchmarks.throughput import get_requests
+from sonar.engine.arg_utils import EngineArgs
+from sonar.utils.argparse_utils import FlexibleArgumentParser
+from sonar.utils.gc_utils import freeze_gc_heap
+from sonar.utils.import_utils import PlaceholderModule
 
 try:
     import pandas as pd
@@ -38,7 +38,7 @@ except ImportError:
     pd = PlaceholderModule("pandas")
 
 if TYPE_CHECKING:  # Avoid having to mock during docs build
-    from aphrodite.v1.engine.llm_engine import LLMEngine
+    from sonar.v1.engine.llm_engine import LLMEngine
 else:
     LLMEngine = object
 
@@ -71,7 +71,7 @@ def get_timing_stats_from_engine(llm_engine: LLMEngine) -> dict[str, dict[str, f
         }
 
     """
-    observability_config = llm_engine.aphrodite_config.observability_config
+    observability_config = llm_engine.sonar_config.observability_config
     if not observability_config or not observability_config.enable_mm_processor_stats:
         return {}
 
@@ -203,7 +203,7 @@ def benchmark_multimodal_processor(
     args: argparse.Namespace,
 ) -> dict[str, Any]:
     """Run the multimodal processor benchmark."""
-    from aphrodite import LLM, SamplingParams
+    from sonar import LLM, SamplingParams
 
     validate_args(args)
 
@@ -347,7 +347,7 @@ def benchmark_multimodal_processor(
 
 def add_cli_args(parser: FlexibleArgumentParser) -> None:
     """Add CLI arguments for the multimodal processor benchmark."""
-    from aphrodite.engine.arg_utils import EngineArgs
+    from sonar.engine.arg_utils import EngineArgs
 
     EngineArgs.add_cli_args(parser)
 
@@ -373,7 +373,7 @@ def add_cli_args(parser: FlexibleArgumentParser) -> None:
         help="Number of warmup prompts to process.",
     )
 
-    from aphrodite.benchmarks.datasets import (
+    from sonar.benchmarks.datasets import (
         add_random_dataset_base_args,
         add_random_multimodal_dataset_args,
     )

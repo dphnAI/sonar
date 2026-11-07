@@ -4,9 +4,9 @@
 
 import pytest
 
-import aphrodite.envs as envs
-from aphrodite.platforms import current_platform
-from aphrodite.v1.metrics.reader import Counter
+import sonar.envs as envs
+from sonar.platforms import current_platform
+from sonar.v1.metrics.reader import Counter
 
 from ...models.utils import check_logprobs_close
 from ...utils import large_gpu_mark, multi_gpu_test
@@ -39,14 +39,14 @@ FLASHINFER_PROMPTS = [
 def _use_v1_model_runner_by_default(monkeypatch):
     # Triton ReplaySSM is V1-only. FlashInfer V2 tests override this locally.
     with monkeypatch.context() as patch:
-        patch.setenv("APHRODITE_USE_V2_MODEL_RUNNER", "0")
+        patch.setenv("SONAR_USE_V2_MODEL_RUNNER", "0")
         envs.disable_envs_cache()
         yield
     envs.disable_envs_cache()
 
 
 def _check_replayssm_parity(
-    aphrodite_runner,
+    sonar_runner,
     model_name,
     *,
     tensor_parallel_size=1,
@@ -65,18 +65,18 @@ def _check_replayssm_parity(
         tensor_parallel_size=tensor_parallel_size,
         mamba_backend=mamba_backend,
     )
-    with aphrodite_runner(model_name, **common) as llm:
+    with sonar_runner(model_name, **common) as llm:
         if expected_v2 is not None:
-            assert llm.llm.llm_engine.aphrodite_config.use_v2_model_runner is expected_v2
+            assert llm.llm.llm_engine.sonar_config.use_v2_model_runner is expected_v2
         baseline = llm.generate_greedy_logprobs(prompts, max_tokens=32, num_logprobs=5)
-    with aphrodite_runner(
+    with sonar_runner(
         model_name,
         use_replayssm=True,
         replayssm_buffer_len=16,
         **common,
     ) as llm:
         if expected_v2 is not None:
-            assert llm.llm.llm_engine.aphrodite_config.use_v2_model_runner is expected_v2
+            assert llm.llm.llm_engine.sonar_config.use_v2_model_runner is expected_v2
         replay = llm.generate_greedy_logprobs(prompts, max_tokens=32, num_logprobs=5)
 
     check_logprobs_close(
@@ -88,27 +88,27 @@ def _check_replayssm_parity(
 
 
 @pytest.mark.parametrize("model_name", MODELS)
-def test_replayssm_decode_matches_baseline(aphrodite_runner, model_name):
-    _check_replayssm_parity(aphrodite_runner, model_name)
+def test_replayssm_decode_matches_baseline(sonar_runner, model_name):
+    _check_replayssm_parity(sonar_runner, model_name)
 
 
 @multi_gpu_test(num_gpus=2)
 @pytest.mark.parametrize("model_name", [MAMBA2_MODEL])
-def test_replayssm_decode_matches_baseline_tp2(aphrodite_runner, model_name):
+def test_replayssm_decode_matches_baseline_tp2(sonar_runner, model_name):
     # Tensor-parallel correctness: ReplaySSM's caches and checkpoint state are
     # sharded per rank, so TP2 decode must still match the baseline at TP2.
-    _check_replayssm_parity(aphrodite_runner, model_name, tensor_parallel_size=2)
+    _check_replayssm_parity(sonar_runner, model_name, tensor_parallel_size=2)
 
 
 @pytest.mark.parametrize("model_name", FLASHINFER_MODELS)
 @pytest.mark.parametrize("use_v2_model_runner", [False, True], ids=["v1", "v2"])
-def test_replayssm_flashinfer_decode_matches_baseline(aphrodite_runner, model_name, monkeypatch, use_v2_model_runner):
+def test_replayssm_flashinfer_decode_matches_baseline(sonar_runner, model_name, monkeypatch, use_v2_model_runner):
     try:
         with monkeypatch.context() as patch:
-            patch.setenv("APHRODITE_USE_V2_MODEL_RUNNER", str(int(use_v2_model_runner)))
+            patch.setenv("SONAR_USE_V2_MODEL_RUNNER", str(int(use_v2_model_runner)))
             envs.disable_envs_cache()
             _check_replayssm_parity(
-                aphrodite_runner,
+                sonar_runner,
                 model_name,
                 mamba_backend="flashinfer",
                 prompts=FLASHINFER_PROMPTS,
@@ -122,9 +122,7 @@ def test_replayssm_flashinfer_decode_matches_baseline(aphrodite_runner, model_na
 
 @pytest.mark.parametrize("model_name", FLASHINFER_MODELS)
 @pytest.mark.parametrize("use_v2_model_runner", [False, True], ids=["v1", "v2"])
-def test_replayssm_flashinfer_spec_decode_matches_baseline(
-    aphrodite_runner, model_name, monkeypatch, use_v2_model_runner
-):
+def test_replayssm_flashinfer_spec_decode_matches_baseline(sonar_runner, model_name, monkeypatch, use_v2_model_runner):
     common = dict(
         max_model_len=1024,
         trust_remote_code=True,
@@ -137,19 +135,19 @@ def test_replayssm_flashinfer_spec_decode_matches_baseline(
     )
     try:
         with monkeypatch.context() as patch:
-            patch.setenv("APHRODITE_USE_V2_MODEL_RUNNER", str(int(use_v2_model_runner)))
+            patch.setenv("SONAR_USE_V2_MODEL_RUNNER", str(int(use_v2_model_runner)))
             envs.disable_envs_cache()
-            with aphrodite_runner(model_name, mamba_backend="flashinfer", **common) as llm:
-                assert llm.llm.llm_engine.aphrodite_config.use_v2_model_runner is use_v2_model_runner
+            with sonar_runner(model_name, mamba_backend="flashinfer", **common) as llm:
+                assert llm.llm.llm_engine.sonar_config.use_v2_model_runner is use_v2_model_runner
                 baseline = llm.generate_greedy_logprobs(FLASHINFER_PROMPTS, max_tokens=32, num_logprobs=5)
-            with aphrodite_runner(
+            with sonar_runner(
                 model_name,
                 use_replayssm=True,
                 replayssm_buffer_len=16,
                 mamba_backend="flashinfer",
                 **common,
             ) as llm:
-                assert llm.llm.llm_engine.aphrodite_config.use_v2_model_runner is use_v2_model_runner
+                assert llm.llm.llm_engine.sonar_config.use_v2_model_runner is use_v2_model_runner
                 replay = llm.generate_greedy_logprobs(FLASHINFER_PROMPTS, max_tokens=32, num_logprobs=5)
     finally:
         envs.disable_envs_cache()
@@ -166,7 +164,7 @@ def test_replayssm_flashinfer_spec_decode_matches_baseline(
 @large_gpu_mark(min_gb=40)
 @requires_flashinfer
 @pytest.mark.parametrize("use_v2_model_runner", [False, True], ids=["v1", "v2"])
-def test_replayssm_flashinfer_mtp(aphrodite_runner, monkeypatch, use_v2_model_runner):
+def test_replayssm_flashinfer_mtp(sonar_runner, monkeypatch, use_v2_model_runner):
     common = dict(
         max_model_len=1024,
         trust_remote_code=True,
@@ -178,20 +176,20 @@ def test_replayssm_flashinfer_mtp(aphrodite_runner, monkeypatch, use_v2_model_ru
     )
     try:
         with monkeypatch.context() as patch:
-            patch.setenv("APHRODITE_USE_V2_MODEL_RUNNER", str(int(use_v2_model_runner)))
+            patch.setenv("SONAR_USE_V2_MODEL_RUNNER", str(int(use_v2_model_runner)))
             envs.disable_envs_cache()
-            with aphrodite_runner(
+            with sonar_runner(
                 MAMBA2_FLASHINFER_MODEL,
                 use_replayssm=True,
                 replayssm_buffer_len=16,
                 **common,
             ) as llm:
-                assert llm.llm.llm_engine.aphrodite_config.use_v2_model_runner is use_v2_model_runner
+                assert llm.llm.llm_engine.sonar_config.use_v2_model_runner is use_v2_model_runner
                 outputs = llm.generate_greedy(PROMPTS, max_tokens=32)
                 draft_count = sum(
                     metric.value
                     for metric in llm.llm.get_metrics()
-                    if isinstance(metric, Counter) and metric.name == "aphrodite:spec_decode_num_drafts"
+                    if isinstance(metric, Counter) and metric.name == "sonar:spec_decode_num_drafts"
                 )
     finally:
         envs.disable_envs_cache()
@@ -217,12 +215,10 @@ PREFIX_CACHING_PROMPTS = [
 
 
 def _prefix_cache_hits(llm) -> int:
-    return sum(
-        m.value for m in llm.llm.get_metrics() if isinstance(m, Counter) and m.name == "aphrodite:prefix_cache_hits"
-    )
+    return sum(m.value for m in llm.llm.get_metrics() if isinstance(m, Counter) and m.name == "sonar:prefix_cache_hits")
 
 
-def _check_replayssm_prefix_caching_parity(aphrodite_runner, model_name, *, tensor_parallel_size=1):
+def _check_replayssm_prefix_caching_parity(sonar_runner, model_name, *, tensor_parallel_size=1):
     # align mode materializes the exact SSM state at each block boundary, so
     # ReplaySSM's cached prefixes must match the always-materialized baseline.
     common = dict(
@@ -233,9 +229,9 @@ def _check_replayssm_prefix_caching_parity(aphrodite_runner, model_name, *, tens
         disable_log_stats=False,  # required for llm.get_metrics()
         tensor_parallel_size=tensor_parallel_size,
     )
-    with aphrodite_runner(model_name, **common) as llm:
+    with sonar_runner(model_name, **common) as llm:
         baseline = llm.generate_greedy_logprobs(PREFIX_CACHING_PROMPTS, max_tokens=32, num_logprobs=5)
-    with aphrodite_runner(model_name, use_replayssm=True, replayssm_buffer_len=16, **common) as llm:
+    with sonar_runner(model_name, use_replayssm=True, replayssm_buffer_len=16, **common) as llm:
         # Prime the cache, then measure, so cache hits are deterministic.
         llm.generate_greedy_logprobs(PREFIX_CACHING_PROMPTS, max_tokens=32, num_logprobs=5)
         replay = llm.generate_greedy_logprobs(PREFIX_CACHING_PROMPTS, max_tokens=32, num_logprobs=5)
@@ -255,11 +251,11 @@ def _check_replayssm_prefix_caching_parity(aphrodite_runner, model_name, *, tens
 
 
 @pytest.mark.parametrize("model_name", MODELS)
-def test_replayssm_prefix_caching_matches_baseline(aphrodite_runner, model_name):
-    _check_replayssm_prefix_caching_parity(aphrodite_runner, model_name)
+def test_replayssm_prefix_caching_matches_baseline(sonar_runner, model_name):
+    _check_replayssm_prefix_caching_parity(sonar_runner, model_name)
 
 
 @multi_gpu_test(num_gpus=2)
 @pytest.mark.parametrize("model_name", [MAMBA2_MODEL])
-def test_replayssm_prefix_caching_matches_baseline_tp2(aphrodite_runner, model_name):
-    _check_replayssm_prefix_caching_parity(aphrodite_runner, model_name, tensor_parallel_size=2)
+def test_replayssm_prefix_caching_matches_baseline_tp2(sonar_runner, model_name):
+    _check_replayssm_prefix_caching_parity(sonar_runner, model_name, tensor_parallel_size=2)

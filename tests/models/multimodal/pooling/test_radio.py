@@ -11,12 +11,12 @@ import torch.nn as nn
 from safetensors.torch import load_file
 from transformers import AutoConfig, AutoModel, CLIPImageProcessor
 
-from aphrodite.distributed import cleanup_dist_env_and_memory
-from aphrodite.model_executor.models.radio import RadioModel
-from aphrodite.platforms import current_platform
-from aphrodite.transformers_utils.configs.radio import RadioConfig
-from aphrodite.transformers_utils.repo_utils import hf_api
-from aphrodite.utils.torch_utils import STR_DTYPE_TO_TORCH_DTYPE
+from sonar.distributed import cleanup_dist_env_and_memory
+from sonar.model_executor.models.radio import RadioModel
+from sonar.platforms import current_platform
+from sonar.transformers_utils.configs.radio import RadioConfig
+from sonar.transformers_utils.repo_utils import hf_api
+from sonar.utils.torch_utils import STR_DTYPE_TO_TORCH_DTYPE
 
 from ....conftest import ImageTestAssets
 
@@ -56,7 +56,7 @@ def run_radio_test(
     hf_model.eval()
 
     # A HF model has image normalization as a part of model's forward
-    # However in Aphrodite we don't make normalization a part of the model
+    # However in Sonar we don't make normalization a part of the model
     # forward step since mean/std stored as model's parameters and
     # subject to precision loss (when using fp16/bf16) which negatively
     # affects evaluation benchmarks.
@@ -80,34 +80,32 @@ def run_radio_test(
 
     hf_outputs_per_image = [hf_model(pixel_value.to(DEVICE_TYPE)) for pixel_value in pixel_values]
 
-    aphrodite_config = RadioConfig(
+    sonar_config = RadioConfig(
         model_name=hf_config.args["model"],
         **hf_config.args,
     )
-    aphrodite_model = RadioModel(aphrodite_config)
-    loaded = aphrodite_model.load_weights(hf_model.state_dict())
-    # Guard the remote-code -> Aphrodite key remap: every parameter must be loaded
+    sonar_model = RadioModel(sonar_config)
+    loaded = sonar_model.load_weights(hf_model.state_dict())
+    # Guard the remote-code -> Sonar key remap: every parameter must be loaded
     # from the checkpoint, except the LayerScale gains (layer_scale{1,2}.lambda1),
     # which are identity-init and may be absent from the remote-code checkpoint.
     expected = {
         name
-        for name, _ in aphrodite_model.named_parameters()
+        for name, _ in sonar_model.named_parameters()
         if not name.endswith((".layer_scale1.lambda1", ".layer_scale2.lambda1"))
     }
     missing = expected - loaded
     assert not missing, f"parameters not loaded from checkpoint: {sorted(missing)}"
-    aphrodite_model = aphrodite_model.to(DEVICE_TYPE, torch_dtype)
+    sonar_model = sonar_model.to(DEVICE_TYPE, torch_dtype)
 
-    aphrodite_outputs_per_image = [
-        aphrodite_model(pixel_values=pixel_value.to(DEVICE_TYPE)) for pixel_value in pixel_values
-    ]
-    del aphrodite_model, hf_model
+    sonar_outputs_per_image = [sonar_model(pixel_values=pixel_value.to(DEVICE_TYPE)) for pixel_value in pixel_values]
+    del sonar_model, hf_model
     cleanup_dist_env_and_memory()
 
     cos_similar = nn.CosineSimilarity(dim=-1)
-    for aphrodite_output, hf_output in zip(aphrodite_outputs_per_image, hf_outputs_per_image):
-        summary_sim = cos_similar(aphrodite_output[0], hf_output[0]).mean()
-        feature_sim = cos_similar(aphrodite_output[1], hf_output[1]).mean()
+    for sonar_output, hf_output in zip(sonar_outputs_per_image, hf_outputs_per_image):
+        summary_sim = cos_similar(sonar_output[0], hf_output[0]).mean()
+        feature_sim = cos_similar(sonar_output[1], hf_output[1]).mean()
         print(f"[radio] {model_id} {dtype} summary={summary_sim:.6f} features={feature_sim:.6f}")
         assert summary_sim > 0.99
         assert feature_sim > 0.99
@@ -122,7 +120,7 @@ def run_radio_test(
     ],
 )
 @pytest.mark.parametrize("dtype", ["half", "bfloat16"])
-def test_radio(default_aphrodite_config, dist_init, image_assets, model_id, dtype: str) -> None:
+def test_radio(default_sonar_config, dist_init, image_assets, model_id, dtype: str) -> None:
     run_radio_test(
         image_assets,
         model_id,
@@ -184,7 +182,7 @@ def _native_state_dict_from_model(model: RadioModel) -> dict[str, torch.Tensor]:
     return state_dict
 
 
-def test_native_format_weight_loading(default_aphrodite_config, dist_init):
+def test_native_format_weight_loading(default_sonar_config, dist_init):
     # Native Transformers checkpoints nest the encoder under ``encoder.layer.N``
     # with split attention projections; loading must fuse q/k/v into the packed
     # ``qkv`` in the right order and land every other tensor in place, matching
@@ -218,12 +216,12 @@ def test_native_format_weight_loading(default_aphrodite_config, dist_init):
         assert torch.equal(params[name], original), f"parameter mismatch after native load: {name}"
 
 
-def test_native_format_from_transformers(default_aphrodite_config, dist_init):
+def test_native_format_from_transformers(default_sonar_config, dist_init):
     # Real-checkpoint native-format round-trip: load a published (legacy)
     # checkpoint through Transformers' native ``RadioModel`` (which converts it to
     # the native layout), re-save it with ``save_original_format=False`` so the
     # on-disk checkpoint stays native -- the default re-applies the reverse
-    # native->legacy mapping for backward compatibility -- then confirm Aphrodite's
+    # native->legacy mapping for backward compatibility -- then confirm Sonar's
     # ``RadioModel`` loads that native checkpoint with values matching the
     # reference. ``nvidia/C-RADIOv4-H`` loads on Transformers' config defaults and
     # is already downloaded by ``test_radio``.
@@ -252,13 +250,13 @@ def test_native_format_from_transformers(default_aphrodite_config, dist_init):
     assert not any(name.startswith("radio_model.") for name in native_weights)
 
     hf_config = AutoConfig.from_pretrained(model_id, trust_remote_code=True)
-    aphrodite_config = RadioConfig(model_name=hf_config.args["model"], **hf_config.args)
-    aphrodite_model = RadioModel(aphrodite_config)
-    loaded = aphrodite_model.load_weights(native_weights)
+    sonar_config = RadioConfig(model_name=hf_config.args["model"], **hf_config.args)
+    sonar_model = RadioModel(sonar_config)
+    loaded = sonar_model.load_weights(native_weights)
 
     expected = {
         name
-        for name, _ in aphrodite_model.named_parameters()
+        for name, _ in sonar_model.named_parameters()
         if not name.endswith((".layer_scale1.lambda1", ".layer_scale2.lambda1"))
     }
     missing = expected - loaded
@@ -266,7 +264,7 @@ def test_native_format_from_transformers(default_aphrodite_config, dist_init):
 
     # Values match the reference: the fused qkv is the concatenation of the
     # native split q/k/v_proj, and proj is the native o_proj.
-    for name, param in aphrodite_model.named_parameters():
+    for name, param in sonar_model.named_parameters():
         if ".attention.qkv." in name:
             base, suffix = name.split(".attention.qkv.")
             ref = torch.cat(

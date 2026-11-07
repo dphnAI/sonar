@@ -11,18 +11,18 @@ from typing import ClassVar
 
 import torch
 
-from aphrodite.config.cache import CacheDType
-from aphrodite.forward_context import get_forward_context
-from aphrodite.models.minimax_m3.common.sparse_attention import (
+from sonar.config.cache import CacheDType
+from sonar.forward_context import get_forward_context
+from sonar.models.minimax_m3.common.sparse_attention import (
     MiniMaxM3SparseBackend,
     MiniMaxM3SparseImpl,
     MiniMaxM3SparseMetadata,
     MiniMaxM3SparseMetadataBuilder,
     minimax_m3_query_token_positions,
 )
-from aphrodite.utils.torch_utils import get_dtype_size, nvfp4_kv_cache_full_dim
-from aphrodite.v1.attention.backend import AttentionLayer, CommonAttentionMetadata
-from aphrodite.v1.kv_cache_interface import AttentionSpec, KVCacheLayout
+from sonar.utils.torch_utils import get_dtype_size, nvfp4_kv_cache_full_dim
+from sonar.v1.attention.backend import AttentionLayer, CommonAttentionMetadata
+from sonar.v1.kv_cache_interface import AttentionSpec, KVCacheLayout
 
 
 class MiniMaxM3SparseRocmNvfp4MetadataBuilder(MiniMaxM3SparseMetadataBuilder):
@@ -74,7 +74,7 @@ def rocm_nvfp4_unsupported_reason(
     num_heads: int, num_kv_heads: int, head_dim: int, topk_blocks: int, block_size: int
 ) -> str | None:
     """Why the ROCm NVFP4 attend cannot serve this layer, None when it can."""
-    from aphrodite.models.minimax_m3.amd.ops.nvfp4_prefill.host import (
+    from sonar.models.minimax_m3.amd.ops.nvfp4_prefill.host import (
         supports_nvfp4_sparse_prefill,
     )
 
@@ -110,10 +110,10 @@ class MiniMaxM3SparseRocmNvfp4Impl(MiniMaxM3SparseImpl):
         kv_cache: torch.Tensor,
         output: torch.Tensor,
     ) -> torch.Tensor:
-        from aphrodite.models.minimax_m3.amd.ops.nvfp4_prefill.host import (
+        from sonar.models.minimax_m3.amd.ops.nvfp4_prefill.host import (
             minimax_m3_nvfp4_sparse_prefill,
         )
-        from aphrodite.models.minimax_m3.amd.ops.nvfp4_sparse_decode.host import (
+        from sonar.models.minimax_m3.amd.ops.nvfp4_sparse_decode.host import (
             minimax_m3_nvfp4_sparse_decode_fly,
         )
 

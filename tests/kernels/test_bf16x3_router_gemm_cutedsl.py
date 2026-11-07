@@ -5,8 +5,8 @@
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.utils.import_utils import has_cutedsl
+from sonar.platforms import current_platform
+from sonar.utils.import_utils import has_cutedsl
 
 # Match the observed router weight scale
 ROUTER_WEIGHT_SCALE = 0.053
@@ -38,8 +38,8 @@ def _requires_sm90_or_sm100_cutedsl():
 
 def _use_single_rank(monkeypatch):
     for module in (
-        "aphrodite.model_executor.layers.linear",
-        "aphrodite.model_executor.parameter",
+        "sonar.model_executor.layers.linear",
+        "sonar.model_executor.parameter",
     ):
         monkeypatch.setattr(f"{module}.get_tensor_model_parallel_rank", lambda: 0)
         monkeypatch.setattr(f"{module}.get_tensor_model_parallel_world_size", lambda: 1)
@@ -60,7 +60,7 @@ def _use_single_rank(monkeypatch):
 )
 def test_bf16x3_router_gemm_matches_reference(num_tokens: int, hidden_dim: int, num_experts: int):
     _requires_sm100_cutedsl()
-    from aphrodite.model_executor.layers.fused_moe.router.bf16x3_router_gemm_sm100 import (  # noqa: E501
+    from sonar.model_executor.layers.fused_moe.router.bf16x3_router_gemm_sm100 import (  # noqa: E501
         bf16x3_router_gemm,
     )
 
@@ -106,7 +106,7 @@ def _mae(out, ref):
 @pytest.mark.parametrize("num_tokens", [8, 33, 100, 513, 1024, 3072, 8192])
 def test_sm90_bf16x3_router_gemm_beats_fp32_gemm(num_tokens, hidden_size, num_experts):
     _requires_sm90_cutedsl()
-    from aphrodite.model_executor.layers.fused_moe.router.bf16x3_router_gemm_sm90 import (  # noqa: E501
+    from sonar.model_executor.layers.fused_moe.router.bf16x3_router_gemm_sm90 import (  # noqa: E501
         bf16x3_router_gemm,
     )
 
@@ -131,7 +131,7 @@ def test_sm90_bf16x3_router_gemm_beats_fp32_gemm(num_tokens, hidden_size, num_ex
 @pytest.mark.parametrize("num_tokens", [1, 40, 777])
 def test_sm90_bf16x3_router_gemm_partial_tiles(num_tokens, hidden_size, num_experts):
     _requires_sm90_cutedsl()
-    from aphrodite.model_executor.layers.fused_moe.router.bf16x3_router_gemm_sm90 import (  # noqa: E501
+    from sonar.model_executor.layers.fused_moe.router.bf16x3_router_gemm_sm90 import (  # noqa: E501
         bf16x3_router_gemm,
     )
 
@@ -145,7 +145,7 @@ def test_sm90_bf16x3_weight_split_is_exact():
     """One-hot activations select single weights, so the three bf16 terms of
     each weight must sum back to it bit for bit."""
     _requires_sm90_cutedsl()
-    from aphrodite.model_executor.layers.fused_moe.router.bf16x3_router_gemm_sm90 import (  # noqa: E501
+    from sonar.model_executor.layers.fused_moe.router.bf16x3_router_gemm_sm90 import (  # noqa: E501
         bf16x3_router_gemm,
     )
 
@@ -180,8 +180,8 @@ def test_sm90_bf16x3_weight_split_is_exact():
 def test_sm90_gate_linear_dispatch(monkeypatch, input_size, output_size, num_tokens, uses_bf16x3):
     _requires_sm90_cutedsl()
     _use_single_rank(monkeypatch)
-    from aphrodite.model_executor.layers.fused_moe.router import bf16x3_router_gemm_sm90
-    from aphrodite.model_executor.layers.fused_moe.router.gate_linear import GateLinear
+    from sonar.model_executor.layers.fused_moe.router import bf16x3_router_gemm_sm90
+    from sonar.model_executor.layers.fused_moe.router.gate_linear import GateLinear
 
     calls = []
     # The fp32 GEMV tier calls the op body, the generic tier the public op.
@@ -214,7 +214,7 @@ def test_gate_linear_bf16x3_tier_traces_fullgraph(monkeypatch):
     GateLinear.forward must trace without a graph break."""
     _requires_sm90_or_sm100_cutedsl()
     _use_single_rank(monkeypatch)
-    from aphrodite.model_executor.layers.fused_moe.router.gate_linear import GateLinear
+    from sonar.model_executor.layers.fused_moe.router.gate_linear import GateLinear
 
     # Outside the fp32 GEMV table, so forward reaches the bf16x3 tier directly.
     gate = GateLinear(

@@ -25,7 +25,7 @@ model:
     - "shm"
     - "--reasoning-parser"
     - "glm45"
-  base_env: {APHRODITE_VIDEO_LOADER_BACKEND: "glm4_6v"}
+  base_env: {SONAR_VIDEO_LOADER_BACKEND: "glm4_6v"}
 
 dependencies:
   - command: "uv pip install git+https://github.com/huggingface/transformers.git"
@@ -66,16 +66,16 @@ guide: |
 
   ## Prerequisites
 
-  - **Aphrodite version:** >= 0.21.0
+  - **Sonar version:** >= 0.21.0
   - **Transformers:** latest (required for Glmga processor support)
   - **Hardware:** 1x H100/H200 or equivalent (BF16)
 
-  ### Install Aphrodite
+  ### Install Sonar
 
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U aphrodite-engine --torch-backend auto
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   uv pip install git+https://github.com/huggingface/transformers.git
   ```
 
@@ -84,8 +84,8 @@ guide: |
   ### Single GPU
 
   ```bash
-  export APHRODITE_VIDEO_LOADER_BACKEND=glm4_6v
-  aphrodite serve zai-org/GLM-GA \
+  export SONAR_VIDEO_LOADER_BACKEND=glm4_6v
+  sonar serve zai-org/GLM-GA \
        --tool-call-parser glm45 \
        --reasoning-parser glm45 \
        --enable-auto-tool-choice \
@@ -158,4 +158,4 @@ guide: |
 
   - [Model card](https://huggingface.co/zai-org/GLM-GA)
   - [GLM-4.6V-Flash](https://huggingface.co/zai-org/GLM-4.6V-Flash) (base architecture)
-  - [Aphrodite multimodal inputs guide](https://docs.vllm.ai/en/latest/features/multimodal_inputs.html)
+  - [Sonar multimodal inputs guide](https://docs.vllm.ai/en/latest/features/multimodal_inputs.html)

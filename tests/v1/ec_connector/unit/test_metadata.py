@@ -2,8 +2,8 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Unit tests for ECCPUConnectorMetadata."""
 
-from aphrodite.distributed.ec_transfer.ec_connector.base import ECConnectorMetadata
-from aphrodite.distributed.ec_transfer.ec_connector.cpu.common import (
+from sonar.distributed.ec_transfer.ec_connector.base import ECConnectorMetadata
+from sonar.distributed.ec_transfer.ec_connector.cpu.common import (
     ECCPUConnectorMetadata,
 )
 

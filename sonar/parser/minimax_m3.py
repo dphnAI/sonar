@@ -26,26 +26,26 @@ import functools
 import json
 from typing import TYPE_CHECKING, Any
 
-from aphrodite.parser.engine.events import EventType
-from aphrodite.parser.engine.parser_engine import ParserEngine
-from aphrodite.parser.engine.parser_engine_config import (
+from sonar.parser.engine.events import EventType
+from sonar.parser.engine.parser_engine import ParserEngine
+from sonar.parser.engine.parser_engine_config import (
     ParserEngineConfig,
     ParserState,
     Transition,
 )
-from aphrodite.tool_parsers.utils import (
+from sonar.tool_parsers.utils import (
     coerce_to_schema_type,
     extract_types_from_schema,
     find_tool_properties,
 )
 
 if TYPE_CHECKING:
-    from aphrodite.entrypoints.openai.chat_completion.protocol import (
+    from sonar.entrypoints.openai.chat_completion.protocol import (
         ChatCompletionRequest,
     )
-    from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
-    from aphrodite.tokenizers import TokenizerLike
-    from aphrodite.tool_parsers.abstract_tool_parser import Tool
+    from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
+    from sonar.tokenizers import TokenizerLike
+    from sonar.tool_parsers.abstract_tool_parser import Tool
 
 NAMESPACE = "]<]minimax[>["
 TOOL_CALL_START = f"{NAMESPACE}<tool_call>"

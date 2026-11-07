@@ -10,8 +10,8 @@ import time
 
 from transformers import AutoTokenizer, PreTrainedTokenizerBase
 
-from aphrodite.engine.arg_utils import EngineArgs
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
+from sonar.engine.arg_utils import EngineArgs
+from sonar.utils.argparse_utils import FlexibleArgumentParser
 
 
 # Select a equi-probable random priority
@@ -66,13 +66,13 @@ def sample_requests(
     return filtered_dataset
 
 
-def run_aphrodite(
+def run_sonar(
     requests: list[tuple[str, int, int]],
     n: int,
     engine_args: EngineArgs,
     disable_detokenize: bool = False,
 ) -> float:
-    from aphrodite import LLM, SamplingParams
+    from sonar import LLM, SamplingParams
 
     llm = LLM(**dataclasses.asdict(engine_args))
 
@@ -117,8 +117,8 @@ def main(args: argparse.Namespace):
     else:
         requests = sample_requests(args.dataset, args.num_prompts, tokenizer, args.output_len)
 
-    if args.backend == "aphrodite":
-        elapsed_time = run_aphrodite(requests, args.n, EngineArgs.from_cli_args(args), args.disable_detokenize)
+    if args.backend == "sonar":
+        elapsed_time = run_sonar(requests, args.n, EngineArgs.from_cli_args(args), args.disable_detokenize)
     else:
         raise ValueError(f"Unknown backend: {args.backend}")
     total_num_tokens = sum(prompt_len + output_len for _, prompt_len, output_len, priority in requests)
@@ -139,7 +139,7 @@ def main(args: argparse.Namespace):
 
 def create_argument_parser():
     parser = FlexibleArgumentParser(description="Benchmark the throughput.")
-    parser.add_argument("--backend", type=str, choices=["aphrodite", "hf", "mii"], default="aphrodite")
+    parser.add_argument("--backend", type=str, choices=["sonar", "hf", "mii"], default="sonar")
     parser.add_argument("--dataset", type=str, default=None, help="Path to the dataset.")
     parser.add_argument(
         "--input-len",

@@ -26,7 +26,7 @@ from flydsl.expr import const_expr, range_constexpr
 from flydsl.expr.typing import T
 from flydsl.expr.typing import Vector as Vec
 
-from aphrodite.models.minimax_m3.amd.ops.flydsl_utils import (
+from sonar.models.minimax_m3.amd.ops.flydsl_utils import (
     PRELOAD_HINTS,
     SC1,
     as_f32,
@@ -41,7 +41,7 @@ from aphrodite.models.minimax_m3.amd.ops.flydsl_utils import (
     pk_bf16,
     xlane4,
 )
-from aphrodite.models.minimax_m3.amd.ops.nvfp4_prefill.kernel import (
+from sonar.models.minimax_m3.amd.ops.nvfp4_prefill.kernel import (
     BLK,
     HG,
     KPW,

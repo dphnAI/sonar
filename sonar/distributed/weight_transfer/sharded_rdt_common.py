@@ -53,7 +53,7 @@ RDT_MIN_RAY_VERSION = "2.56.0"
 def check_ray_rdt_version() -> None:
     """Refuse an installed Ray older than the one this backend is tested on.
 
-    Aphrodite does not depend on Ray, so there is no pin to carry this. Without the
+    Sonar does not depend on Ray, so there is no pin to carry this. Without the
     check the failure is an opaque option-validation error out of
     ``.options(enable_tensor_transport=True)`` (below 2.49) or an ImportError
     raised deep in the first pull, long after init reported success (below 2.55).
@@ -80,7 +80,7 @@ def check_ray_rdt_version() -> None:
 
 def register_nixl_memory(tensor: torch.Tensor) -> None:
     """Register a tensor with Ray using the platform's NIXL package."""
-    from aphrodite.distributed.nixl_utils import alias_nixl_for_ray
+    from sonar.distributed.nixl_utils import alias_nixl_for_ray
 
     alias_nixl_for_ray()
     from ray.experimental import register_nixl_memory as ray_register_nixl_memory

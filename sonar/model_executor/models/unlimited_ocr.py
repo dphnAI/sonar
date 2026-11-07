@@ -11,7 +11,7 @@ language backbone, which is a DeepSeek-V2 *MoE* (64 routed + 2 shared experts,
 (``use_mla=False``, ``qk_nope_head_dim == qk_rope_head_dim == 0``) instead of
 the dense MLA decoder used by DeepSeek-OCR.
 
-Aphrodite's ``DeepseekV2DecoderLayer`` already dispatches to the plain-MHA
+Sonar's ``DeepseekV2DecoderLayer`` already dispatches to the plain-MHA
 ``DeepseekAttention`` whenever ``qk_nope_head_dim == qk_rope_head_dim == 0`` and
 builds the MoE blocks straight from the config, so the whole DeepSeek-OCR
 multimodal wrapper can be reused verbatim. Model-specific config (language
@@ -52,7 +52,7 @@ Multi-image requests fall back to non-crop mode: crop ("gundam") mode is only
 used for single-image input. DeepSeek-OCR does *not* have this restriction.
 
 Because that fallback makes the per-image processor output depend on *how many*
-images are in the request, it breaks the assumption behind Aphrodite's per-item
+images are in the request, it breaks the assumption behind Sonar's per-item
 multimodal processing cache (``MultiModalProcessorOnlyCache``). We handle this
 the same way ``DeepseekVL2MultiModalProcessor`` does: only the single-image case
 (which always crops) is cached, while multi-image requests bypass the cache and
@@ -63,22 +63,22 @@ processing cache consistent (verified by ``test_processing_correctness``).
 import math
 from collections.abc import Mapping, Sequence
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.inputs import MultiModalHashes
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.hasher import MultiModalHasher
-from aphrodite.multimodal.inputs import MultiModalKwargsItems
-from aphrodite.multimodal.parse import (
+from sonar.config import SonarConfig
+from sonar.inputs import MultiModalHashes
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.hasher import MultiModalHasher
+from sonar.multimodal.inputs import MultiModalKwargsItems
+from sonar.multimodal.parse import (
     ImageEmbeddingItems,
     ImageProcessorItems,
     ImageSize,
     MultiModalDataItems,
 )
-from aphrodite.multimodal.processing import PromptReplacement, PromptUpdate
-from aphrodite.multimodal.processing.context import TimingContext
-from aphrodite.multimodal.processing.inputs import ProcessorInputs
-from aphrodite.multimodal.processing.processor import MultiModalProcessingResult
-from aphrodite.transformers_utils.processors.deepseek_ocr import (
+from sonar.multimodal.processing import PromptReplacement, PromptUpdate
+from sonar.multimodal.processing.context import TimingContext
+from sonar.multimodal.processing.inputs import ProcessorInputs
+from sonar.multimodal.processing.processor import MultiModalProcessingResult
+from sonar.transformers_utils.processors.deepseek_ocr import (
     BASE_SIZE,
     CROP_MODE,
     IMAGE_SIZE,
@@ -109,12 +109,12 @@ class UnlimitedOCRProcessingInfo(DeepseekOCRProcessingInfo):
     """
 
     def get_hf_config(self):
-        from aphrodite.transformers_utils.configs.unlimited_ocr import UnlimitedOCRConfig
+        from sonar.transformers_utils.configs.unlimited_ocr import UnlimitedOCRConfig
 
         return self.ctx.get_hf_config(UnlimitedOCRConfig)
 
     def get_hf_processor(self, **kwargs: object):
-        from aphrodite.transformers_utils.processors.unlimited_ocr import (
+        from sonar.transformers_utils.processors.unlimited_ocr import (
             UnlimitedOCRProcessor,
         )
 
@@ -255,5 +255,5 @@ class UnlimitedOCRMultiModalProcessor(DeepseekOCRMultiModalProcessor):
     dummy_inputs=DeepseekOCRDummyInputsBuilder,
 )
 class UnlimitedOCRForCausalLM(DeepseekOCRForCausalLM):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
-        super().__init__(aphrodite_config=aphrodite_config, prefix=prefix)
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
+        super().__init__(sonar_config=sonar_config, prefix=prefix)

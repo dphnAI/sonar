@@ -16,149 +16,149 @@ from typing import TypeVar
 
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.kernels.linear.base import (
+import sonar.envs as envs
+from sonar.logger import init_logger
+from sonar.model_executor.kernels.linear.base import (
     MMLinearKernel,
     MMLinearLayerConfig,
 )
-from aphrodite.model_executor.kernels.linear.mixed_precision import (
+from sonar.model_executor.kernels.linear.mixed_precision import (
     MPLinearKernel,
     MPLinearLayerConfig,
 )
-from aphrodite.model_executor.kernels.linear.mixed_precision.conch import (
+from sonar.model_executor.kernels.linear.mixed_precision.conch import (
     ConchLinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.mixed_precision.cpu import (
+from sonar.model_executor.kernels.linear.mixed_precision.cpu import (
     CPUWNA16LinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.mixed_precision.cutlass import (
+from sonar.model_executor.kernels.linear.mixed_precision.cutlass import (
     CutlassW4A8LinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.mixed_precision.dynamic_4bit import (
+from sonar.model_executor.kernels.linear.mixed_precision.dynamic_4bit import (
     Dynamic4bitLinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.mixed_precision.exllama import (
+from sonar.model_executor.kernels.linear.mixed_precision.exllama import (
     ExllamaLinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.mixed_precision.humming import (
+from sonar.model_executor.kernels.linear.mixed_precision.humming import (
     HummingLinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.mixed_precision.machete import (
+from sonar.model_executor.kernels.linear.mixed_precision.machete import (
     MacheteLinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.mixed_precision.marlin import (
+from sonar.model_executor.kernels.linear.mixed_precision.marlin import (
     MarlinLinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.mixed_precision.rdna3_w4a16 import (
+from sonar.model_executor.kernels.linear.mixed_precision.rdna3_w4a16 import (
     RDNA3W4A16LinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.mixed_precision.rdna_hybrid_w4a16 import (
+from sonar.model_executor.kernels.linear.mixed_precision.rdna_hybrid_w4a16 import (
     RDNAHybridW4A16LinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.mixed_precision.swordfish import (
+from sonar.model_executor.kernels.linear.mixed_precision.swordfish import (
     SwordfishLinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.mixed_precision.triton_w4a16 import (
+from sonar.model_executor.kernels.linear.mixed_precision.triton_w4a16 import (
     TritonW4A16LinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.mixed_precision.xpu import (
+from sonar.model_executor.kernels.linear.mixed_precision.xpu import (
     XPUW4A8IntLinearKernel,
     XPUwNa16LinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.mixed_precision.zentorch import (
+from sonar.model_executor.kernels.linear.mixed_precision.zentorch import (
     ZentorchWNA16LinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.mxfp4 import (
+from sonar.model_executor.kernels.linear.mxfp4 import (
     MxFp4LinearKernel,
     MxFp4LinearLayerConfig,
 )
-from aphrodite.model_executor.kernels.linear.mxfp4.aiter import (
+from sonar.model_executor.kernels.linear.mxfp4.aiter import (
     AiterMxfp4LinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.mxfp4.b12x import (
+from sonar.model_executor.kernels.linear.mxfp4.b12x import (
     B12xMxFp4LinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.mxfp4.emulation import (
+from sonar.model_executor.kernels.linear.mxfp4.emulation import (
     EmulationMxfp4LinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.mxfp4.flashinfer import (
+from sonar.model_executor.kernels.linear.mxfp4.flashinfer import (
     FlashInferMxFp4LinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.mxfp4.humming import (
+from sonar.model_executor.kernels.linear.mxfp4.humming import (
     HummingMxFp4LinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.mxfp4.marlin import (
+from sonar.model_executor.kernels.linear.mxfp4.marlin import (
     MarlinMxFp4LinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.mxfp4.pytorch import (
+from sonar.model_executor.kernels.linear.mxfp4.pytorch import (
     TorchMxFp4LinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.mxfp4.rdna3_hip import (
+from sonar.model_executor.kernels.linear.mxfp4.rdna3_hip import (
     Rdna3W4A8MxFp4LinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.mxfp4.xpu import (
+from sonar.model_executor.kernels.linear.mxfp4.xpu import (
     XPUMxFp4LinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.mxfp6 import (
+from sonar.model_executor.kernels.linear.mxfp6 import (
     MxFp6LinearKernel,
     MxFp6LinearLayerConfig,
 )
-from aphrodite.model_executor.kernels.linear.mxfp6.emulation import (
+from sonar.model_executor.kernels.linear.mxfp6.emulation import (
     EmulationMxfp6LinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.mxfp6.humming import HummingMxFp6LinearKernel
-from aphrodite.model_executor.kernels.linear.mxfp8.b12x import (
+from sonar.model_executor.kernels.linear.mxfp6.humming import HummingMxFp6LinearKernel
+from sonar.model_executor.kernels.linear.mxfp8.b12x import (
     B12xMxfp8LinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.mxfp8.deep_gemm import (
+from sonar.model_executor.kernels.linear.mxfp8.deep_gemm import (
     DeepGemmMxfp8BmmLinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.mxfp8.emulation import (
+from sonar.model_executor.kernels.linear.mxfp8.emulation import (
     EmulationMxfp8LinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.mxfp8.flashinfer import (
+from sonar.model_executor.kernels.linear.mxfp8.flashinfer import (
     FlashInferCutedslMxfp8LinearKernel,
     FlashInferCutlassMxfp8LinearKernel,
     FlashInferTrtllmMxfp8LinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.mxfp8.humming import (
+from sonar.model_executor.kernels.linear.mxfp8.humming import (
     HummingMxfp8LinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.mxfp8.marlin import (
+from sonar.model_executor.kernels.linear.mxfp8.marlin import (
     MarlinMxfp8LinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.mxfp8.Mxfp8LinearKernel import (
+from sonar.model_executor.kernels.linear.mxfp8.Mxfp8LinearKernel import (
     Mxfp8LinearKernel,
     Mxfp8LinearLayerConfig,
 )
-from aphrodite.model_executor.kernels.linear.mxfp8.pytorch import (
+from sonar.model_executor.kernels.linear.mxfp8.pytorch import (
     TorchMxFp8LinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.mxfp8.rocm_native import (
+from sonar.model_executor.kernels.linear.mxfp8.rocm_native import (
     RocmDotScaledMxfp8LinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.mxfp8.xpu import (
+from sonar.model_executor.kernels.linear.mxfp8.xpu import (
     XPUMxFp8LinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.nvfp4 import (
+from sonar.model_executor.kernels.linear.nvfp4 import (
     NvFp4LinearKernel,
     NvFp4LinearLayerConfig,
 )
-from aphrodite.model_executor.kernels.linear.nvfp4.b12x import (
+from sonar.model_executor.kernels.linear.nvfp4.b12x import (
     B12xNvFp4LinearKernel,
     B12xNvFp4W4A16LinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.nvfp4.cutlass import (
+from sonar.model_executor.kernels.linear.nvfp4.cutlass import (
     CutlassNvFp4LinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.nvfp4.emulation import (
+from sonar.model_executor.kernels.linear.nvfp4.emulation import (
     EmulationNvFp4LinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.nvfp4.fbgemm import (
+from sonar.model_executor.kernels.linear.nvfp4.fbgemm import (
     FbgemmNvFp4LinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.nvfp4.flashinfer import (
+from sonar.model_executor.kernels.linear.nvfp4.flashinfer import (
     FlashInferB12xNvFp4LinearKernel,
     FlashInferCudnnNvFp4LinearKernel,
     FlashInferCuteDslNvFp4LinearKernel,
@@ -166,16 +166,16 @@ from aphrodite.model_executor.kernels.linear.nvfp4.flashinfer import (
     FlashInferCutlassNvFp4LinearKernel,
     FlashInferTrtllmNvFp4LinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.nvfp4.humming import (
+from sonar.model_executor.kernels.linear.nvfp4.humming import (
     HummingNvFp4LinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.nvfp4.marlin import (
+from sonar.model_executor.kernels.linear.nvfp4.marlin import (
     MarlinNvFp4LinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.nvfp4.pytorch import (
+from sonar.model_executor.kernels.linear.nvfp4.pytorch import (
     TorchNvFp4LinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.scaled_mm import (
+from sonar.model_executor.kernels.linear.scaled_mm import (
     Fp8BlockScaledMMLinearKernel,
     FP8ScaledMMLinearKernel,
     FP8ScaledMMLinearLayerConfig,
@@ -183,18 +183,18 @@ from aphrodite.model_executor.kernels.linear.scaled_mm import (
     Int8ScaledMMLinearLayerConfig,
     ScaledMMLinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.scaled_mm.aiter import (
+from sonar.model_executor.kernels.linear.scaled_mm.aiter import (
     AiterFp8BlockScaledMMKernel,
     AiterHipbMMPerTokenFp8ScaledMMLinearKernel,
     AiterInt8ScaledMMLinearKernel,
     AiterPerTokenFp8ScaledMMLinearKernel,
     AiterPreshuffledPerTokenFp8ScaledMMLinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.scaled_mm.b12x import (
+from sonar.model_executor.kernels.linear.scaled_mm.b12x import (
     B12xFp8BlockScaledMMKernel,
     B12xTensorFP8ScaledMMLinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.scaled_mm.cpu import (
+from sonar.model_executor.kernels.linear.scaled_mm.cpu import (
     CPUFp8BlockScaledMMKernel,
     CPUFp8ChannelWiseScaledMMLinearKernel,
     CPUFp8PerTensorScaledMMLinearKernel,
@@ -202,65 +202,65 @@ from aphrodite.model_executor.kernels.linear.scaled_mm.cpu import (
     CPUFP8W8A8ScaledMMLinearKernel,
     CPUInt8ScaledMMLinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.scaled_mm.cutlass import (
+from sonar.model_executor.kernels.linear.scaled_mm.cutlass import (
     CutlassFp8BlockScaledMMKernel,
     CutlassFP8ScaledMMLinearKernel,
     CutlassInt8ScaledMMLinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.scaled_mm.deep_gemm import (
+from sonar.model_executor.kernels.linear.scaled_mm.deep_gemm import (
     DeepGemmFp8BlockScaledMMKernel,
 )
-from aphrodite.model_executor.kernels.linear.scaled_mm.flashinfer import (
+from sonar.model_executor.kernels.linear.scaled_mm.flashinfer import (
     FlashInferFp8DeepGEMMDynamicBlockScaledKernel,
     FlashInferFP8ScaledMMLinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.scaled_mm.humming import (
+from sonar.model_executor.kernels.linear.scaled_mm.humming import (
     HummingFP8ScaledMMLinearKernel,
     HummingInt8ScaledMMLinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.scaled_mm.marlin import (
+from sonar.model_executor.kernels.linear.scaled_mm.marlin import (
     MarlinFP8ScaledMMLinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.scaled_mm.pytorch import (
+from sonar.model_executor.kernels.linear.scaled_mm.pytorch import (
     BlockWiseTorchFP8ScaledMMLinearKernel,
     ChannelWiseTorchFP8ScaledMMLinearKernel,
     PerTensorTorchFP8ScaledMMLinearKernel,
     RowWiseTorchFP8ScaledMMLinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.scaled_mm.rocm import (
+from sonar.model_executor.kernels.linear.scaled_mm.rocm import (
     ROCmFP8ScaledMMLinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.scaled_mm.triton import (
+from sonar.model_executor.kernels.linear.scaled_mm.triton import (
     TritonFp8BlockScaledMMKernel,
     TritonFP8ScaledMMLinearKernel,
     TritonInt8ScaledMMLinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.scaled_mm.xpu import (
+from sonar.model_executor.kernels.linear.scaled_mm.xpu import (
     XPUFp8BlockScaledMMKernel,
     XPUW8A8FP8LinearKernel,
     XPUW8A16FP8LinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.scaled_mm.zentorch import (
+from sonar.model_executor.kernels.linear.scaled_mm.zentorch import (
     ZentorchInt8ScaledMMLinearKernel,
 )
-from aphrodite.model_executor.layers.quantization.utils.humming import (
+from sonar.model_executor.layers.quantization.utils.humming import (
     prefers_humming,
     prioritize_humming,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     kMxfp4Static,
 )
-from aphrodite.platforms import PlatformEnum, current_platform
+from sonar.platforms import PlatformEnum, current_platform
 
 logger = init_logger(__name__)
 
 
 def _get_linear_backend(*, quantization: str) -> str:
-    """Get the linear_backend setting from the current aphrodite config."""
-    from aphrodite.config import get_current_aphrodite_config_or_none
+    """Get the linear_backend setting from the current sonar config."""
+    from sonar.config import get_current_sonar_config_or_none
 
-    if (config := get_current_aphrodite_config_or_none()) is None:
+    if (config := get_current_sonar_config_or_none()) is None:
         return "auto"
     overrides = config.kernel_config.linear_backend_per_quant
     if overrides is not None and (override := overrides.get(quantization)):
@@ -276,7 +276,7 @@ def _batch_invariant_fp8_kernel(kernel, config, quantization: str):
     linear_backend = _get_linear_backend(quantization=quantization)
     if linear_backend not in ("auto", "triton"):
         logger.warning_once(
-            "APHRODITE_BATCH_INVARIANT overrides --linear-backend=%s; "
+            "SONAR_BATCH_INVARIANT overrides --linear-backend=%s; "
             "using the Triton backend for deterministic execution.",
             linear_backend,
         )
@@ -653,7 +653,7 @@ _KernelConfigT = TypeVar("_KernelConfigT", bound=MMLinearLayerConfig)
 def is_supported_and_can_implement_kernel(
     kernel: type[_KernelT], config: _KernelConfigT, compute_capability: int | None
 ) -> tuple[bool, str]:
-    if kernel.__name__ in envs.APHRODITE_DISABLED_KERNELS:
+    if kernel.__name__ in envs.SONAR_DISABLED_KERNELS:
         return False, f" {kernel.__name__} is disabled by environment variable"
 
     if compute_capability is None:
@@ -762,7 +762,7 @@ def init_fp8_linear_kernel(
     )
 
     if activation_quant_key.scale.group_shape.is_per_group():
-        if envs.APHRODITE_BATCH_INVARIANT and current_platform.is_rocm():
+        if envs.SONAR_BATCH_INVARIANT and current_platform.is_rocm():
             force_kernel = _batch_invariant_fp8_kernel(
                 TritonFp8BlockScaledMMKernel,
                 scaled_mm_linear_kernel_config,
@@ -801,7 +801,7 @@ def init_fp8_linear_kernel(
         )
 
     else:
-        if envs.APHRODITE_BATCH_INVARIANT and current_platform.is_rocm():
+        if envs.SONAR_BATCH_INVARIANT and current_platform.is_rocm():
             force_kernel = _batch_invariant_fp8_kernel(
                 TritonFP8ScaledMMLinearKernel,
                 scaled_mm_linear_kernel_config,
@@ -837,7 +837,7 @@ def fp8_scaled_mm_is_batch_invariant(
     kernel: FP8ScaledMMLinearKernel | Fp8BlockScaledMMLinearKernel,
 ) -> bool:
     """Whether a row's output from the kernel is independent of the other rows."""
-    # Weight-only here, and Humming honors APHRODITE_BATCH_INVARIANT itself.
+    # Weight-only here, and Humming honors SONAR_BATCH_INVARIANT itself.
     if isinstance(kernel, HummingFP8ScaledMMLinearKernel):
         return True
     if not isinstance(kernel, (CutlassFP8ScaledMMLinearKernel, TritonFP8ScaledMMLinearKernel)):
@@ -924,7 +924,7 @@ def choose_mp_linear_kernel(config: MPLinearLayerConfig, compute_capability: int
 
     failure_reasons = []
     for kernel in platform_kernels:
-        if kernel.__name__ in envs.APHRODITE_DISABLED_KERNELS:
+        if kernel.__name__ in envs.SONAR_DISABLED_KERNELS:
             failure_reasons.append(f" {kernel.__name__} disabled by environment variable")
             continue
         if compute_capability is not None and kernel.get_min_capability() > compute_capability:
@@ -971,7 +971,7 @@ def init_mxfp8_linear_kernel(*, weight_shape: tuple[int, int], bmm_batch_size: i
 
     failure_reasons = []
     for kernel_cls in possible:
-        if kernel_cls.__name__ in envs.APHRODITE_DISABLED_KERNELS:
+        if kernel_cls.__name__ in envs.SONAR_DISABLED_KERNELS:
             failure_reasons.append(f" {kernel_cls.__name__} disabled by environment variable")
             continue
 
@@ -995,10 +995,10 @@ def init_mxfp8_linear_kernel(*, weight_shape: tuple[int, int], bmm_batch_size: i
 
 def _user_linear_activation_override() -> QuantKey | None:
     """User's linear activation override from quantization_config, or None."""
-    from aphrodite.config import get_current_aphrodite_config_or_none
-    from aphrodite.config.quantization import QuantizationConfigArgs
+    from sonar.config import get_current_sonar_config_or_none
+    from sonar.config.quantization import QuantizationConfigArgs
 
-    config = get_current_aphrodite_config_or_none()
+    config = get_current_sonar_config_or_none()
     if config is None or config.model_config is None:
         return None
     args = config.model_config.quantization_config
@@ -1047,7 +1047,7 @@ def init_mxfp4_linear_kernel(
 
     failure_reasons = []
     for kernel_cls in possible:
-        if kernel_cls.__name__ in envs.APHRODITE_DISABLED_KERNELS:
+        if kernel_cls.__name__ in envs.SONAR_DISABLED_KERNELS:
             failure_reasons.append(f" {kernel_cls.__name__} disabled by environment variable")
             continue
 
@@ -1103,7 +1103,7 @@ def init_mxfp6_linear_kernel(
 
     failure_reasons = []
     for kernel_cls in possible:
-        if kernel_cls.__name__ in envs.APHRODITE_DISABLED_KERNELS:
+        if kernel_cls.__name__ in envs.SONAR_DISABLED_KERNELS:
             failure_reasons.append(f" {kernel_cls.__name__} disabled by environment variable")
             continue
 
@@ -1174,44 +1174,43 @@ def init_nvfp4_linear_kernel(use_a16: bool = False) -> NvFp4LinearKernel:
         HummingNvFp4LinearKernel,
     )
 
-    # APHRODITE_BATCH_INVARIANT forces deterministic execution. Prefer the
+    # SONAR_BATCH_INVARIANT forces deterministic execution. Prefer the
     # batch-invariant CUTLASS implementation when available, otherwise fall
     # back to emulation. It overrides --linear-backend.
     force_kernel: type[NvFp4LinearKernel] | None = None
     quantization = "nvfp4_w4a16" if use_a16 else "nvfp4_w4a4"
     linear_backend = _get_linear_backend(quantization=quantization)
-    if envs.APHRODITE_BATCH_INVARIANT and use_a16:
+    if envs.SONAR_BATCH_INVARIANT and use_a16:
         if linear_backend not in ("auto", "humming"):
             logger.warning_once(
-                "APHRODITE_BATCH_INVARIANT overrides --linear-backend=%s; using the "
+                "SONAR_BATCH_INVARIANT overrides --linear-backend=%s; using the "
                 "Humming backend for deterministic W4A16 execution.",
                 linear_backend,
             )
         force_kernel = HummingNvFp4LinearKernel
-    elif envs.APHRODITE_BATCH_INVARIANT:
+    elif envs.SONAR_BATCH_INVARIANT:
         bi_supported, reason = CutlassNvFp4LinearKernel.is_supported()
         if bi_supported:
             if linear_backend not in ("auto", "cutlass"):
                 logger.warning_once(
-                    "APHRODITE_BATCH_INVARIANT overrides --linear-backend=%s; "
+                    "SONAR_BATCH_INVARIANT overrides --linear-backend=%s; "
                     "using the CUTLASS backend for deterministic execution.",
                     linear_backend,
                 )
             else:
                 logger.info_once(
-                    "APHRODITE_BATCH_INVARIANT forces NVFP4 linear to use the "
-                    "CUTLASS backend for deterministic execution."
+                    "SONAR_BATCH_INVARIANT forces NVFP4 linear to use the CUTLASS backend for deterministic execution."
                 )
             force_kernel = CutlassNvFp4LinearKernel
         else:
             if linear_backend not in ("auto", "emulation"):
                 logger.warning_once(
-                    "APHRODITE_BATCH_INVARIANT overrides --linear-backend=%s; "
+                    "SONAR_BATCH_INVARIANT overrides --linear-backend=%s; "
                     "using the emulation backend for deterministic execution.",
                     linear_backend,
                 )
             logger.info_once(
-                "APHRODITE_BATCH_INVARIANT is set but the batch-invariant NVFP4 "
+                "SONAR_BATCH_INVARIANT is set but the batch-invariant NVFP4 "
                 "kernel is not supported on this platform; falling back to "
                 "emulation for deterministic execution. Reason: %s",
                 reason,
@@ -1252,7 +1251,7 @@ def init_nvfp4_linear_kernel(use_a16: bool = False) -> NvFp4LinearKernel:
 
     failure_reasons = []
     for kernel_cls in possible:
-        if kernel_cls.__name__ in envs.APHRODITE_DISABLED_KERNELS:
+        if kernel_cls.__name__ in envs.SONAR_DISABLED_KERNELS:
             failure_reasons.append(f" {kernel_cls.__name__} disabled by environment variable")
             continue
 

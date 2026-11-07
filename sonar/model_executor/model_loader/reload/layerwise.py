@@ -8,11 +8,11 @@ from weakref import WeakKeyDictionary, WeakSet
 
 import torch
 
-from aphrodite.config import ModelConfig
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.attention import is_deferred_attention_layer
-from aphrodite.model_executor.layers.quantization.base_config import QuantizeMethodBase
-from aphrodite.model_executor.model_loader.weight_utils import (
+from sonar.config import ModelConfig
+from sonar.logger import init_logger
+from sonar.model_executor.layers.attention import is_deferred_attention_layer
+from sonar.model_executor.layers.quantization.base_config import QuantizeMethodBase
+from sonar.model_executor.model_loader.weight_utils import (
     default_weight_loader,
     finalize_model_weights,
 )
@@ -325,11 +325,11 @@ def _reload_attention_scales(layer: torch.nn.Module, info: LayerReloadingInfo) -
         _get_weight_loader(param)(*args.args, **args.kwargs)
 
     if quant_method is not None:
-        from aphrodite.model_executor.layers.quantization.online.fp8 import OnlineLinearBase
-        from aphrodite.model_executor.layers.quantization.online.moe_base import (
+        from sonar.model_executor.layers.quantization.online.fp8 import OnlineLinearBase
+        from sonar.model_executor.layers.quantization.online.moe_base import (
             OnlineMoEMethodBase,
         )
-        from aphrodite.model_executor.model_loader.utils import (
+        from sonar.model_executor.model_loader.utils import (
             online_quantization_timing_context,
         )
 
@@ -374,11 +374,11 @@ def _layerwise_process(layer: torch.nn.Module, info: LayerReloadingInfo):
     # Process weights (quantization, repacking, etc.)
     quant_method = getattr(layer, "quant_method", None)
     if isinstance(quant_method, QuantizeMethodBase):
-        from aphrodite.model_executor.layers.quantization.online.fp8 import OnlineLinearBase
-        from aphrodite.model_executor.layers.quantization.online.moe_base import (
+        from sonar.model_executor.layers.quantization.online.fp8 import OnlineLinearBase
+        from sonar.model_executor.layers.quantization.online.moe_base import (
             OnlineMoEMethodBase,
         )
-        from aphrodite.model_executor.model_loader.utils import (
+        from sonar.model_executor.model_loader.utils import (
             online_quantization_timing_context,
         )
 

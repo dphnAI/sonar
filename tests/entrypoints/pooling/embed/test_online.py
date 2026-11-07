@@ -12,17 +12,17 @@ import requests
 import torch
 import torch.nn.functional as F
 
-from aphrodite.entrypoints.pooling.embed.protocol import EmbeddingResponse
-from aphrodite.entrypoints.pooling.pooling.protocol import PoolingResponse
-from aphrodite.entrypoints.pooling.utils import (
+from sonar.entrypoints.pooling.embed.protocol import EmbeddingResponse
+from sonar.entrypoints.pooling.pooling.protocol import PoolingResponse
+from sonar.entrypoints.pooling.utils import (
     MetadataItem,
     build_metadata_items,
     decode_pooling_output,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.renderers.chat_utils import ChatCompletionMessageParam
-from aphrodite.tokenizers import get_tokenizer
-from aphrodite.utils.serial_utils import EMBED_DTYPES, ENDIANNESS, binary2tensor
+from sonar.platforms import current_platform
+from sonar.renderers.chat_utils import ChatCompletionMessageParam
+from sonar.tokenizers import get_tokenizer
+from sonar.utils.serial_utils import EMBED_DTYPES, ENDIANNESS, binary2tensor
 from tests.models.language.pooling.embed_utils import (
     float_embeddings,
     run_embedding_correctness_test,
@@ -35,7 +35,7 @@ DUMMY_CHAT_TEMPLATE = (
     """{% for message in messages %}{{message['role'] + ': ' + message['content'] + '\\n'}}{% endfor %}"""  # noqa: E501
 )
 DTYPE = "bfloat16"
-input_text = "The best thing about Aphrodite is that it supports many different models"
+input_text = "The best thing about Sonar is that it supports many different models"
 input_tokens = [
     0,
     581,
@@ -143,8 +143,8 @@ async def test_completion_request(client: openai.AsyncOpenAI, model_name: str, h
     assert embeddings.usage.prompt_tokens == len(input_tokens)
     assert embeddings.usage.total_tokens == len(input_tokens)
 
-    aphrodite_outputs = float_embeddings(embeddings)
-    run_embedding_correctness_test(hf_model, [input_text], aphrodite_outputs)
+    sonar_outputs = float_embeddings(embeddings)
+    run_embedding_correctness_test(hf_model, [input_text], sonar_outputs)
 
     # test input: list[int]
     embedding_response = await client.embeddings.create(
@@ -161,8 +161,8 @@ async def test_completion_request(client: openai.AsyncOpenAI, model_name: str, h
     assert embeddings.usage.prompt_tokens == len(input_tokens)
     assert embeddings.usage.total_tokens == len(input_tokens)
 
-    aphrodite_outputs = float_embeddings(embeddings)
-    run_embedding_correctness_test(hf_model, [input_text], aphrodite_outputs)
+    sonar_outputs = float_embeddings(embeddings)
+    run_embedding_correctness_test(hf_model, [input_text], sonar_outputs)
 
 
 @pytest.mark.asyncio
@@ -186,8 +186,8 @@ async def test_completion_request_batched(client: openai.AsyncOpenAI, model_name
     assert embeddings.usage.prompt_tokens == len(input_tokens) * N
     assert embeddings.usage.total_tokens == len(input_tokens) * N
 
-    aphrodite_outputs = float_embeddings(embeddings)
-    run_embedding_correctness_test(hf_model, input_texts, aphrodite_outputs)
+    sonar_outputs = float_embeddings(embeddings)
+    run_embedding_correctness_test(hf_model, input_texts, sonar_outputs)
 
     # test list[list[int]]
     embedding_response = await client.embeddings.create(
@@ -204,8 +204,8 @@ async def test_completion_request_batched(client: openai.AsyncOpenAI, model_name
     assert embeddings.usage.prompt_tokens == len(input_tokens) * N
     assert embeddings.usage.total_tokens == len(input_tokens) * N
 
-    aphrodite_outputs = float_embeddings(embeddings)
-    run_embedding_correctness_test(hf_model, input_texts, aphrodite_outputs)
+    sonar_outputs = float_embeddings(embeddings)
+    run_embedding_correctness_test(hf_model, input_texts, sonar_outputs)
 
 
 @pytest.mark.asyncio
@@ -510,7 +510,7 @@ async def test_invocations_chat_request(server: RemoteOpenAIServer):
 async def test_base64_embedding(hf_model, client: openai.AsyncOpenAI, model_name: str):
     input_texts = [
         "Hello my name is",
-        "The best thing about Aphrodite is that it supports many different models",
+        "The best thing about Sonar is that it supports many different models",
     ]
 
     def check_outputs(outputs: list[list[float]]) -> None:
@@ -617,7 +617,7 @@ async def test_bytes_only_embed_dtype_and_endianness(
     server: RemoteOpenAIServer, client: openai.AsyncOpenAI, model_name: str
 ):
     input_texts = [
-        "The best thing about Aphrodite is that it supports many different models",
+        "The best thing about Sonar is that it supports many different models",
     ] * 2
 
     responses_float = await client.embeddings.create(input=input_texts, model=model_name, encoding_format="float")

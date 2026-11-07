@@ -31,7 +31,7 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 TP = 4
 HIDDEN, HC, TOP_K = 5120, 4, 6
@@ -112,15 +112,15 @@ def _assert_equal(got, want, what):
 
 
 def _check_all_reduce_mhc(arm, rank):
-    from aphrodite.distributed import get_tp_group
-    from aphrodite.model_executor.layers.fused_moe.moe_output import (
+    from sonar.distributed import get_tp_group
+    from sonar.model_executor.layers.fused_moe.moe_output import (
         MoEOutput,
         UnfinalizedMoEOutput,
     )
-    from aphrodite.model_executor.layers.quantization.utils.mxfp8_utils import (
+    from sonar.model_executor.layers.quantization.utils.mxfp8_utils import (
         mxfp8_e4m3_quantize,
     )
-    from aphrodite.models.deepseek_v41.nvidia.specialized_decode.boundary.boundary import (
+    from sonar.models.deepseek_v41.nvidia.specialized_decode.boundary.boundary import (
         Boundaries,
         BoundaryState,
         empty_quantized_layer_input,
@@ -187,13 +187,13 @@ def _check_boundaries(arm, rank):
     bitwise against the separate all-reduce and mHC post, the mixes bitwise
     against the stock mHC pre on those streams, and the layer input within
     the fused RMSNorm's ulp of it."""
-    from aphrodite.distributed import get_tp_group
-    from aphrodite.model_executor.layers.fused_moe.moe_output import (
+    from sonar.distributed import get_tp_group
+    from sonar.model_executor.layers.fused_moe.moe_output import (
         MoEOutput,
         UnfinalizedMoEOutput,
     )
-    from aphrodite.models.deepseek_v41.nvidia.ops.mhc import mhc_pre_delayed_overlap
-    from aphrodite.models.deepseek_v41.nvidia.specialized_decode.boundary.boundary import (
+    from sonar.models.deepseek_v41.nvidia.ops.mhc import mhc_pre_delayed_overlap
+    from sonar.models.deepseek_v41.nvidia.specialized_decode.boundary.boundary import (
         Boundaries,
         BoundaryState,
     )
@@ -284,13 +284,13 @@ WO_B_K = 2048  # o_lora_rank x local groups at TP4
 def _wo_b(rank: int, index: int):
     """A ``wo_b`` linear with its weights processed for the low-latency
     MXFP8 kernel, different on each rank."""
-    from aphrodite.model_executor.kernels.linear.mxfp8.flashinfer import (
+    from sonar.model_executor.kernels.linear.mxfp8.flashinfer import (
         FlashInferCutedslMxfp8LinearKernel,
     )
-    from aphrodite.model_executor.kernels.linear.mxfp8.Mxfp8LinearKernel import (
+    from sonar.model_executor.kernels.linear.mxfp8.Mxfp8LinearKernel import (
         Mxfp8LinearLayerConfig,
     )
-    from aphrodite.model_executor.layers.quantization.utils.mxfp8_utils import (
+    from sonar.model_executor.layers.quantization.utils.mxfp8_utils import (
         mxfp8_e4m3_quantize,
     )
 
@@ -309,13 +309,13 @@ def _wo_b(rank: int, index: int):
 def _attention_output(rows: int, rank: int):
     """``wo_b``'s MXFP8 input as the fused WO-A kernel emits it, with a zero
     row (zero outputs, whose negative zeros the publish clears)."""
-    from aphrodite.model_executor.layers.fusion.quant_activation import (
+    from sonar.model_executor.layers.fusion.quant_activation import (
         QuantizedActivation,
     )
-    from aphrodite.model_executor.layers.quantization.utils.mxfp8_utils import (
+    from sonar.model_executor.layers.quantization.utils.mxfp8_utils import (
         mxfp8_e4m3_quantize,
     )
-    from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+    from sonar.model_executor.layers.quantization.utils.quant_utils import (
         kMxfp8Dynamic,
     )
 
@@ -353,7 +353,7 @@ PUBLISH_PATTERN = (True, True, True, False, True, False, False, True, True)
 
 
 def _check_publishing_wo_b(arm, publisher, rank):
-    from aphrodite.models.deepseek_v41.nvidia.specialized_decode.boundary import (
+    from sonar.models.deepseek_v41.nvidia.specialized_decode.boundary import (
         publishing_gemm,
     )
 
@@ -389,9 +389,9 @@ def _check_publishing_wo_b(arm, publisher, rank):
 
 
 def _check_logits_gather(rank):
-    from aphrodite.distributed import get_tp_group
-    from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-    from aphrodite.models.deepseek_v41.nvidia.specialized_decode.logits.logits import (
+    from sonar.distributed import get_tp_group
+    from sonar.model_executor.layers.logits_processor import LogitsProcessor
+    from sonar.models.deepseek_v41.nvidia.specialized_decode.logits.logits import (
         SpecializedDecodeLogitsProcessor,
     )
 
@@ -426,7 +426,7 @@ INDEX_LAYERS = ((2, False), (1, True))
 
 def _index_keys(ratio: int, generator):
     """A paged MXFP4 indexer key cache holding every context once."""
-    from aphrodite.models.deepseek_v41.common.ops import indexer_k_norm_rope_store
+    from sonar.models.deepseek_v41.common.ops import indexer_k_norm_rope_store
 
     row_bytes = INDEX_HEAD_DIM // 2 + INDEX_HEAD_DIM // 32
     page_states = PAGE_TOKENS // ratio
@@ -450,10 +450,10 @@ def _index_keys(ratio: int, generator):
 def _decode_step(requests, padding, ratio, keys, generator):
     """The indexer metadata and queries of a pure-decode step of ``NEXT_N``
     rows per request; padding requests have rows of length 0."""
-    from aphrodite.models.deepseek_v41.common.ops import fused_indexer_q_rope_quant
-    from aphrodite.utils.deep_gemm import get_paged_mqa_logits_metadata
-    from aphrodite.utils.platform_utils import num_compute_units
-    from aphrodite.v1.attention.backends.mla.indexer import (
+    from sonar.models.deepseek_v41.common.ops import fused_indexer_q_rope_quant
+    from sonar.utils.deep_gemm import get_paged_mqa_logits_metadata
+    from sonar.utils.platform_utils import num_compute_units
+    from sonar.v1.attention.backends.mla.indexer import (
         DeepSeekV32IndexerDecodeMetadata,
         DeepseekV32IndexerMetadata,
     )
@@ -512,7 +512,7 @@ def _decode_step(requests, padding, ratio, keys, generator):
 
 def _indexer(keys, ratio, candidates):
     """The decode indexer of a layer, writing ``topk`` (and ``candidates``)."""
-    from aphrodite.model_executor.layers.sparse_attn_indexer import SparseAttnIndexer
+    from sonar.model_executor.layers.sparse_attn_indexer import SparseAttnIndexer
 
     rows = max(r for r, _ in INDEX_BATCHES) * NEXT_N
     return SparseAttnIndexer(
@@ -536,8 +536,8 @@ def _indexer(keys, ratio, candidates):
 def _run_indexer(indexer, step, stock=False):
     """One decode forward, stock or the executor's; returns the top-k and
     candidate rows it wrote."""
-    from aphrodite.forward_context import ForwardContext, override_forward_context
-    from aphrodite.models.deepseek_v41.nvidia.specialized_decode.attention.indexer import (
+    from sonar.forward_context import ForwardContext, override_forward_context
+    from sonar.models.deepseek_v41.nvidia.specialized_decode.attention.indexer import (
         decode_rows,
     )
 
@@ -557,11 +557,11 @@ def _run_indexer(indexer, step, stock=False):
 def _index_scores(indexer, step):
     """The replicated logits, and the candidate block scores (newest block
     pinned) the candidate selection ranks."""
-    from aphrodite.model_executor.layers.sparse_attn_indexer import (
+    from sonar.model_executor.layers.sparse_attn_indexer import (
         as_fp32_logits,
         kv_cache_as_quant_view,
     )
-    from aphrodite.utils.deep_gemm import fp8_fp4_paged_mqa_logits, mqa_logits_mx_inputs
+    from sonar.utils.deep_gemm import fp8_fp4_paged_mqa_logits, mqa_logits_mx_inputs
 
     decode = step.metadata.decode
     q, q_scale = step.q
@@ -637,8 +637,8 @@ def _check_replays(arm, publisher, keys, rank, replays):
     ranks arriving in a fixed skew. Every replay must equal the first; the
     indexer's top-k rows as sets up to boundary ties, since top-k writes them
     in any order and picks any of the indices that tie at the boundary."""
-    from aphrodite.distributed.parallel_state import graph_capture
-    from aphrodite.models.deepseek_v41.nvidia.specialized_decode.boundary.boundary import (
+    from sonar.distributed.parallel_state import graph_capture
+    from sonar.models.deepseek_v41.nvidia.specialized_decode.boundary.boundary import (
         empty_quantized_layer_input,
     )
 
@@ -686,20 +686,20 @@ def _check_replays(arm, publisher, keys, rank, replays):
 
 
 def _worker(rank: int, port: int, replays: int, skip_path: str) -> None:
-    from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-    from aphrodite.distributed import cleanup_dist_env_and_memory, get_tp_group
-    from aphrodite.models.deepseek_v41.nvidia.ops import mhc
-    from aphrodite.models.deepseek_v41.nvidia.specialized_decode.boundary.all_reduce import (
+    from sonar.config import SonarConfig, set_current_sonar_config
+    from sonar.distributed import cleanup_dist_env_and_memory, get_tp_group
+    from sonar.models.deepseek_v41.nvidia.ops import mhc
+    from sonar.models.deepseek_v41.nvidia.specialized_decode.boundary.all_reduce import (
         BoundaryAllReduce,
     )
-    from aphrodite.models.deepseek_v41.nvidia.specialized_decode.boundary.publishing_gemm import (  # noqa: E501
+    from sonar.models.deepseek_v41.nvidia.specialized_decode.boundary.publishing_gemm import (  # noqa: E501
         PublishingMxfp8Linear,
     )
-    from aphrodite.v1.worker.workspace import init_workspace_manager
+    from sonar.v1.worker.workspace import init_workspace_manager
     from tests.utils import init_test_distributed_environment
 
     torch.accelerator.set_device_index(rank)
-    with set_current_aphrodite_config(AphroditeConfig()), torch.inference_mode():
+    with set_current_sonar_config(SonarConfig()), torch.inference_mode():
         init_test_distributed_environment(TP, 1, rank, str(port), local_rank=rank)
         init_workspace_manager(torch.device("cuda", rank))
         config = SimpleNamespace(
@@ -731,7 +731,7 @@ def _worker(rank: int, port: int, replays: int, skip_path: str) -> None:
 
 def run(replays: int) -> str | None:
     """Run the checks on four GPUs; returns why they were skipped, if so."""
-    from aphrodite.utils.network_utils import get_open_port
+    from sonar.utils.network_utils import get_open_port
 
     with tempfile.TemporaryDirectory() as tmp:
         skip_path = os.path.join(tmp, "skipped")
@@ -747,7 +747,7 @@ def run(replays: int) -> str | None:
 def test_specialized_decode_numerics():
     if torch.accelerator.device_count() < TP:
         pytest.skip("needs four GPUs")
-    from aphrodite.models.deepseek_v41.nvidia.specialized_decode import (
+    from sonar.models.deepseek_v41.nvidia.specialized_decode import (
         MIN_FLASHINFER_VERSION,
         uses_checked_flashinfer,
     )

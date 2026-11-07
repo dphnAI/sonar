@@ -16,7 +16,7 @@ authentication, health checks, and network-level scaling.
 ## Generate text
 
 ```python
-from aphrodite import LLM, SamplingParams
+from sonar import LLM, SamplingParams
 
 llm = LLM(model="Qwen/Qwen3-0.6B")
 params = SamplingParams(temperature=0.7, top_p=0.9, max_tokens=128)
@@ -58,7 +58,7 @@ for candidate in result.outputs:
 ## Generate chat responses
 
 ```python
-from aphrodite import LLM, SamplingParams
+from sonar import LLM, SamplingParams
 
 llm = LLM(model="Qwen/Qwen3-0.6B")
 conversations = [
@@ -151,7 +151,7 @@ errors and record the source prompt.
 Release the engine before another process claims the same GPUs:
 
 ```python
-from aphrodite.distributed.parallel_state import (
+from sonar.distributed.parallel_state import (
     destroy_distributed_environment,
     destroy_model_parallel,
 )
@@ -170,5 +170,5 @@ useful in test suites and notebooks that create more than one engine.
   to control generation.
 - Use [speculative decoding](/features/speculative-decoding/) to reduce decode
   latency.
-- Run [`aphrodite bench`](/deployment/benchmarking/) before and after a
+- Run [`sonar bench`](/deployment/benchmarking/) before and after a
   performance change.

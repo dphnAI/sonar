@@ -10,38 +10,38 @@ from typing import TYPE_CHECKING
 
 import torch
 
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.logger import init_logger
-from aphrodite.logits_process import LogitsProcessor as RequestLogitsProcessor
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.utils.torch_utils import guard_cuda_initialization
-from aphrodite.v1.sample.logits_processor.builtin import (
+from sonar.exceptions import SonarValidationError
+from sonar.logger import init_logger
+from sonar.logits_process import LogitsProcessor as RequestLogitsProcessor
+from sonar.sampling_params import SamplingParams
+from sonar.utils.torch_utils import guard_cuda_initialization
+from sonar.v1.sample.logits_processor.builtin import (
     LogitBiasLogitsProcessor,
     MinPLogitsProcessor,
     MinTokensLogitsProcessor,
     process_dict_updates,
 )
-from aphrodite.v1.sample.logits_processor.interface import (
+from sonar.v1.sample.logits_processor.interface import (
     BatchUpdate,
     LogitsProcessor,
     MoveDirectionality,
 )
-from aphrodite.v1.sample.logits_processor.state import BatchUpdateBuilder, LogitsProcessors
+from sonar.v1.sample.logits_processor.state import BatchUpdateBuilder, LogitsProcessors
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
+    from sonar.config import SonarConfig
 
 logger = init_logger(__name__)
 
-# Error message when the user tries to initialize Aphrodite with a pooling model
+# Error message when the user tries to initialize Sonar with a pooling model
 # and custom logitsproces
 STR_POOLING_REJECTS_LOGITSPROCS = "Pooling models do not support custom logits processors."
 
-# Error message when the user tries to initialize Aphrodite with a speculative
+# Error message when the user tries to initialize Sonar with a speculative
 # decoding enabled and custom logitsproces
 STR_SPEC_DEC_REJECTS_LOGITSPROCS = "Custom logits processors are not supported when speculative decoding is enabled."
 
-LOGITSPROCS_GROUP = "aphrodite.logits_processors"
+LOGITSPROCS_GROUP = "sonar.logits_processors"
 
 BUILTIN_LOGITS_PROCESSORS: list[type[LogitsProcessor]] = [
     MinTokensLogitsProcessor,
@@ -164,18 +164,18 @@ def _load_custom_logitsprocs(
       A list of all loaded logitproc types
 
     """
-    from aphrodite.platforms import current_platform
+    from sonar.platforms import current_platform
 
     if current_platform.is_tpu():
         # No logitsprocs specified by caller
-        # TODO(andy) - Aphrodite V1 on TPU does not support custom logitsprocs
+        # TODO(andy) - Sonar V1 on TPU does not support custom logitsprocs
         return []
 
     return _load_logitsprocs_plugins() + _load_logitsprocs_by_fqcns(logits_processors)
 
 
 def build_logitsprocs(
-    aphrodite_config: "AphroditeConfig",
+    sonar_config: "SonarConfig",
     device: torch.device,
     is_pin_memory: bool,
     is_pooling_model: bool,
@@ -188,28 +188,28 @@ def build_logitsprocs(
         return LogitsProcessors()
 
     # Check if speculative decoding is enabled.
-    if aphrodite_config.speculative_config:
+    if sonar_config.speculative_config:
         retry_processors = []
         if custom_logitsprocs:
-            from aphrodite.v1.phrase_guard.processor import PhraseRetryProcessor
+            from sonar.v1.phrase_guard.processor import PhraseRetryProcessor
 
             classes = _load_custom_logitsprocs(custom_logitsprocs)
             if any(cls is not PhraseRetryProcessor for cls in classes):
                 raise ValueError(STR_SPEC_DEC_REJECTS_LOGITSPROCS)
             # PhraseScheduler retries checkpoints without speculative drafts.
-            retry_processors = [cls(aphrodite_config, device, is_pin_memory) for cls in classes]
+            retry_processors = [cls(sonar_config, device, is_pin_memory) for cls in classes]
         logger.warning("logit_bias parameter won't work with speculative decoding.")
         return LogitsProcessors(
             [
-                MinTokensLogitsProcessor(aphrodite_config, device, is_pin_memory),
-                MinPLogitsProcessor(aphrodite_config, device, is_pin_memory),
+                MinTokensLogitsProcessor(sonar_config, device, is_pin_memory),
+                MinPLogitsProcessor(sonar_config, device, is_pin_memory),
                 *retry_processors,
             ]
         )
 
     custom_logitsprocs_classes = _load_custom_logitsprocs(custom_logitsprocs)
     return LogitsProcessors(
-        ctor(aphrodite_config, device, is_pin_memory)
+        ctor(sonar_config, device, is_pin_memory)
         for ctor in itertools.chain(BUILTIN_LOGITS_PROCESSORS, custom_logitsprocs_classes)
     )
 
@@ -226,7 +226,7 @@ def validate_logits_processors_parameters(
         try:
             logits_procs.validate_params(sampling_params)
         except ValueError as e:
-            raise AphroditeValidationError(str(e)) from e
+            raise SonarValidationError(str(e)) from e
 
 
 class AdapterLogitsProcessor(LogitsProcessor):
@@ -237,21 +237,21 @@ class AdapterLogitsProcessor(LogitsProcessor):
     * Implement `self.is_argmax_invariant()` base-class method
     * Implement `self.new_req_logits_processor(params)`
 
-    `self.__init__(aphrodite_config, device, is_pin_memory)` does not need to be
+    `self.__init__(sonar_config, device, is_pin_memory)` does not need to be
     overridden in general. However, to implement custom constructor behavior -
-    especially any logic which operates on or stores `aphrodite_config`, `device`,
-    or `is_pin_memory` - `self.__init__(aphrodite_config, device, is_pin_memory)`
+    especially any logic which operates on or stores `sonar_config`, `device`,
+    or `is_pin_memory` - `self.__init__(sonar_config, device, is_pin_memory)`
     must be overridden and the override must call
-    `super().__init__(aphrodite_config, device, is_pin_memory)`
+    `super().__init__(sonar_config, device, is_pin_memory)`
     """
 
-    def __init__(self, aphrodite_config: "AphroditeConfig", device: torch.device, is_pin_memory: bool):
+    def __init__(self, sonar_config: "SonarConfig", device: torch.device, is_pin_memory: bool):
         """Subclass must invoke
-        `super().__init__(aphrodite_config, device, is_pin_memory)`.
+        `super().__init__(sonar_config, device, is_pin_memory)`.
 
-        Subclass constructor may find it useful to utilize the `aphrodite_config`,
+        Subclass constructor may find it useful to utilize the `sonar_config`,
         `device` and `is_pin_memory` argument. However regardless of whether
-        these arguments are used, the Aphrodite logits processor interface requires
+        these arguments are used, the Sonar logits processor interface requires
         all three arguments to be present.
         """
         # Map req index -> logits processor state

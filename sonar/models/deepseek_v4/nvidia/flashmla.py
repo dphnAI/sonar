@@ -5,35 +5,35 @@ from typing import TYPE_CHECKING, ClassVar, cast
 
 import torch
 
-from aphrodite.forward_context import get_forward_context
-from aphrodite.models.deepseek_v4.attention import DeepseekV4Attention
-from aphrodite.models.deepseek_v4.common.ops import (
+from sonar.forward_context import get_forward_context
+from sonar.models.deepseek_v4.attention import DeepseekV4Attention
+from sonar.models.deepseek_v4.common.ops import (
     combine_topk_swa_indices,
     compute_global_topk_indices_and_lens,
     dequantize_and_gather_k_cache,
 )
-from aphrodite.models.deepseek_v4.nvidia.ops.o_proj import (
+from sonar.models.deepseek_v4.nvidia.ops.o_proj import (
     compute_fp8_einsum_recipe,
     deep_gemm_fp8_o_proj,
 )
-from aphrodite.models.deepseek_v4.sparse_mla import (
+from sonar.models.deepseek_v4.sparse_mla import (
     DeepseekV4FlashMLABackend,
     DeepseekV4FlashMLAMetadata,
 )
-from aphrodite.utils.math_utils import round_up
-from aphrodite.v1.attention.backend import AttentionCGSupport
-from aphrodite.v1.attention.backends.mla.sparse_swa import (
+from sonar.utils.math_utils import round_up
+from sonar.v1.attention.backend import AttentionCGSupport
+from sonar.v1.attention.backends.mla.sparse_swa import (
     DeepseekSparseSWABackend,
     DeepseekSparseSWAMetadataBuilder,
 )
-from aphrodite.v1.attention.ops.flashmla import (
+from sonar.v1.attention.ops.flashmla import (
     flash_mla_sparse_fwd,
     flash_mla_with_kvcache,
 )
-from aphrodite.v1.worker.workspace import current_workspace_manager
+from sonar.v1.worker.workspace import current_workspace_manager
 
 if TYPE_CHECKING:
-    from aphrodite.v1.attention.backends.mla.sparse_swa import DeepseekSparseSWAMetadata
+    from sonar.v1.attention.backends.mla.sparse_swa import DeepseekSparseSWAMetadata
 
 
 class DeepseekSparseSWAFlashMLAMetadataBuilder(DeepseekSparseSWAMetadataBuilder):
@@ -197,7 +197,7 @@ class DeepseekV4FlashMLAAttention(DeepseekV4Attention):
         swa_indices = swa_metadata.decode_swa_indices
         swa_lens = swa_metadata.decode_swa_lens
 
-        from aphrodite.v1.attention.backends.mla.sm89_mla_sparse import (
+        from sonar.v1.attention.backends.mla.sm89_mla_sparse import (
             use_sm89_dsa,
         )
 
@@ -275,7 +275,7 @@ class DeepseekV4FlashMLAAttention(DeepseekV4Attention):
         output: torch.Tensor,
     ) -> None:
         """Run V4 sparse decode through the native Ada kernel."""
-        from aphrodite import _custom_ops as ops
+        from sonar import _custom_ops as ops
 
         # Decode receives token slices of the runner's padded buffers.  The
         # native kernel requires dense storage, so materialize only this small
@@ -447,7 +447,7 @@ class DeepseekV4FlashMLAAttention(DeepseekV4Attention):
                 ),
                 max_image_tokens=self.max_image_tokens,
             )
-            from aphrodite.v1.attention.backends.mla.sm89_mla_sparse import (
+            from sonar.v1.attention.backends.mla.sm89_mla_sparse import (
                 use_sm89_dsa,
             )
 
@@ -455,7 +455,7 @@ class DeepseekV4FlashMLAAttention(DeepseekV4Attention):
                 # FlashMLA sparse prefill requires SM90a+.  Its Triton
                 # counterpart is device-neutral and supports the same V4
                 # query/KV layout on Ada.
-                from aphrodite.v1.attention.ops.rocm_aiter_mla_sparse import (
+                from sonar.v1.attention.ops.rocm_aiter_mla_sparse import (
                     _rocm_sparse_attn_prefill_triton,
                 )
 

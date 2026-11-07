@@ -19,8 +19,8 @@ from cutlass._mlir import ir
 from cutlass._mlir.dialects import llvm, vector
 from cutlass.cutlass_dsl import T, dsl_user_op
 
-from aphrodite.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
-from aphrodite.models.common.ops.moe_tail_fusion.primitives import (
+from sonar.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
+from sonar.models.common.ops.moe_tail_fusion.primitives import (
     LAMPORT_GENERATIONS,
     PACKED_BYTES,
     VEC_BF16,

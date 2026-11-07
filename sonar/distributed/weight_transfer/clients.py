@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Built-in `AphroditeWeightSyncClient` implementations.
+"""Built-in `SonarWeightSyncClient` implementations.
 
 These adapt the inference engine's weight-sync control plane to concrete
 transports. A `TrainerWeightTransferEngine` takes one of these (or any object
@@ -13,7 +13,7 @@ importable without those packages installed.
 
 from typing import TYPE_CHECKING, Any
 
-from aphrodite.distributed.weight_transfer.base import (
+from sonar.distributed.weight_transfer.base import (
     WeightTransferInitRequest,
     WeightTransferUpdatePayload,
     WeightTransferUpdateRequest,
@@ -29,7 +29,7 @@ def _json_safe_update_info(update_info: dict[str, Any]) -> dict[str, Any]:
     CUDA IPC handles (`ipc_handles`) are tuples of non-JSON-native objects, so
     over HTTP they are pickled+base64-encoded into `ipc_handles_pickled` (which
     the worker auto-deserializes when
-    `APHRODITE_ALLOW_INSECURE_SERIALIZATION=1`).
+    `SONAR_ALLOW_INSECURE_SERIALIZATION=1`).
     Other backends (NCCL) carry only JSON-native metadata and pass through
     unchanged. Mirrors the old IPC `_do_send` HTTP branch.
     """
@@ -39,7 +39,7 @@ def _json_safe_update_info(update_info: dict[str, Any]) -> dict[str, Any]:
 
     import pybase64 as base64
 
-    from aphrodite.distributed.utils import pickle
+    from sonar.distributed.utils import pickle
 
     out = {k: v for k, v in update_info.items() if k != "ipc_handles"}
     out["ipc_handles_pickled"] = base64.b64encode(pickle.dumps(ipc_handles)).decode("utf-8")
@@ -54,10 +54,10 @@ def _json_safe_update_payload(
     return _json_safe_update_info(update_info)
 
 
-class HTTPAphroditeWeightSyncClient:
-    """Talks to an Aphrodite server over the RLHF HTTP routes.
+class HTTPSonarWeightSyncClient:
+    """Talks to an Sonar server over the RLHF HTTP routes.
 
-    Mirrors `aphrodite/entrypoints/rl/online/api_router.py`:
+    Mirrors `sonar/entrypoints/rl/online/api_router.py`:
     `/init_weight_transfer_engine`, `/start_weight_update`, `/update_weights`,
     `/finish_weight_update`, `/shutdown_weight_transfer_engine`.
     """
@@ -89,8 +89,8 @@ class HTTPAphroditeWeightSyncClient:
         self._post("finish_weight_update", json)
 
 
-class RayAphroditeWeightSyncClient:
-    """Talks to one or more Aphrodite `AsyncLLM`/`LLM` Ray actors.
+class RaySonarWeightSyncClient:
+    """Talks to one or more Sonar `AsyncLLM`/`LLM` Ray actors.
 
     Each call fans out to every handle and blocks on all of them, so a
     multi-actor (e.g. multi-DP) deployment is driven as one unit.

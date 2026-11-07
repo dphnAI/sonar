@@ -12,11 +12,11 @@ from collections.abc import Iterable
 import torch
 from torch import nn
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.model_executor.layers.linear import ColumnParallelLinear, RowParallelLinear
-from aphrodite.model_executor.layers.pooler import Pooler
-from aphrodite.model_executor.layers.pooler.tokwise import pooler_for_token_classify
-from aphrodite.sequence import IntermediateTensors
+from sonar.config import SonarConfig
+from sonar.model_executor.layers.linear import ColumnParallelLinear, RowParallelLinear
+from sonar.model_executor.layers.pooler import Pooler
+from sonar.model_executor.layers.pooler.tokwise import pooler_for_token_classify
+from sonar.sequence import IntermediateTensors
 
 from .interfaces import SupportsLoRA, SupportsPP
 from .interfaces_base import default_pooling_type
@@ -28,22 +28,22 @@ class Qwen2RewardBaseModel(nn.Module, SupportsLoRA, SupportsPP):
     is_pooling_model = True
     pooler: Pooler
 
-    hf_to_aphrodite_mapper = Qwen2Model.hf_to_aphrodite_mapper
+    hf_to_sonar_mapper = Qwen2Model.hf_to_sonar_mapper
     packed_modules_mapping = {
         "qkv_proj": ["q_proj", "k_proj", "v_proj"],
         "gate_up_proj": ["gate_proj", "up_proj"],
     }
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
 
         self.config = config
 
         self.quant_config = quant_config
-        self.model = Qwen2Model(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
-        self.head_dtype = aphrodite_config.model_config.head_dtype
+        self.model = Qwen2Model(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
+        self.head_dtype = sonar_config.model_config.head_dtype
 
         self.score = nn.Sequential(
             ColumnParallelLinear(
@@ -86,11 +86,11 @@ class Qwen2RewardBaseModel(nn.Module, SupportsLoRA, SupportsPP):
 
 @default_pooling_type(tok_pooling_type="ALL")
 class Qwen2ForRewardModel(Qwen2RewardBaseModel):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
-        aphrodite_config.model_config.hf_config.num_labels = 1
-        super().__init__(aphrodite_config=aphrodite_config, prefix=prefix)
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
+        sonar_config.model_config.hf_config.num_labels = 1
+        super().__init__(sonar_config=sonar_config, prefix=prefix)
 
-        pooler_config = aphrodite_config.model_config.pooler_config
+        pooler_config = sonar_config.model_config.pooler_config
         assert pooler_config is not None
 
         self.pooler = pooler_for_token_classify(pooler_config)
@@ -98,11 +98,11 @@ class Qwen2ForRewardModel(Qwen2RewardBaseModel):
 
 @default_pooling_type(tok_pooling_type="STEP")
 class Qwen2ForProcessRewardModel(Qwen2RewardBaseModel):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
-        aphrodite_config.model_config.hf_config.num_labels = 2
-        super().__init__(aphrodite_config=aphrodite_config, prefix=prefix)
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
+        sonar_config.model_config.hf_config.num_labels = 2
+        super().__init__(sonar_config=sonar_config, prefix=prefix)
 
-        pooler_config = aphrodite_config.model_config.pooler_config
+        pooler_config = sonar_config.model_config.pooler_config
         assert pooler_config is not None
 
         self.pooler = pooler_for_token_classify(pooler_config)

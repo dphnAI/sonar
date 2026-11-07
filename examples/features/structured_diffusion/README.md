@@ -3,7 +3,7 @@
 A discrete diffusion model denoises a whole canvas per forward pass. If the
 canvas is seeded with the answer's fixed text and only the answer slots are
 left as noise, one denoise step gives a distribution over each slot. These
-`extra_args` fields (`aphrodite_xargs` on the OpenAI server) expose that:
+`extra_args` fields (`sonar_xargs` on the OpenAI server) expose that:
 
 | field | type | meaning |
 | --- | --- | --- |
@@ -20,7 +20,7 @@ is the state JSON, and the reply content is one distribution per question
 with a standard error over a few noise draws.
 
 ```bash
-aphrodite serve google/diffusiongemma-26B-A4B-it \
+sonar serve google/diffusiongemma-26B-A4B-it \
     --diffusion-config '{"canvas_length": 64}' --enable-prefix-caching
 python examples/features/structured_diffusion/structured_server.py \
     --upstream http://127.0.0.1:8000 --tokenizer google/diffusiongemma-26B-A4B-it --canvas 64

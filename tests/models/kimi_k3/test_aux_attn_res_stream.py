@@ -15,7 +15,7 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.models.kimi_k3.nvidia import model as k3_model
+from sonar.models.kimi_k3.nvidia import model as k3_model
 
 END_LAYER = 4
 
@@ -152,7 +152,7 @@ def test_aux_layer_at_non_final_pp_boundary_is_rejected(monkeypatch):
     torch.nn.Module.__init__(model)
     model.use_attn_res = True
     model.end_layer = 72
-    monkeypatch.setattr("aphrodite.distributed.parallel_state.model_parallel_is_initialized", lambda: False)
+    monkeypatch.setattr("sonar.distributed.parallel_state.model_parallel_is_initialized", lambda: False)
     _set_last_rank(monkeypatch, False)
     monkeypatch.setattr(
         k3_model.KimiLinearModel,

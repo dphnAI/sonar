@@ -9,8 +9,8 @@ This keeps the external KV cache layout identical to CUDA/ROCm.
 
 import torch
 
-from aphrodite.triton_utils import tl, triton
-from aphrodite.v1.attention.ops.xpu_mla_sparse import (
+from sonar.triton_utils import tl, triton
+from sonar.v1.attention.ops.xpu_mla_sparse import (
     triton_bf16_mla_sparse_interface,
 )
 

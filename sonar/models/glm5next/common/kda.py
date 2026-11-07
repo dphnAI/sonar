@@ -8,57 +8,57 @@ import torch
 from torch import nn
 from transformers import Glm5NextTextConfig
 
-from aphrodite.compilation.breakable_cudagraph import eager_break_during_capture
-from aphrodite.config import AphroditeConfig, get_current_aphrodite_config
-from aphrodite.distributed import divide
-from aphrodite.forward_context import get_forward_context
-from aphrodite.model_executor.layers.linear import (
+from sonar.compilation.breakable_cudagraph import eager_break_during_capture
+from sonar.config import SonarConfig, get_current_sonar_config
+from sonar.distributed import divide
+from sonar.forward_context import get_forward_context
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     MergedColumnParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.mamba.checkpoint import (
+from sonar.model_executor.layers.mamba.checkpoint import (
     MambaPrefillCheckpointMetadata,
 )
-from aphrodite.model_executor.layers.mamba.gdn.base import GatedDeltaNetAttention
-from aphrodite.model_executor.layers.mamba.gdn.kimi_gdn_linear_attn import (
+from sonar.model_executor.layers.mamba.gdn.base import GatedDeltaNetAttention
+from sonar.model_executor.layers.mamba.gdn.kimi_gdn_linear_attn import (
     _make_fused_conv1d_weight_loader,
 )
-from aphrodite.model_executor.layers.mamba.kda_checkpoint import (
+from sonar.model_executor.layers.mamba.kda_checkpoint import (
     FlashKDAPrefillCheckpointExporter,
     kda_prefill_checkpoint_alignment,
 )
-from aphrodite.model_executor.layers.mamba.mamba_utils import (
+from sonar.model_executor.layers.mamba.mamba_utils import (
     MambaStateDtypeCalculator,
     MambaStateShapeCalculator,
     is_conv_state_dim_first,
 )
-from aphrodite.model_executor.layers.mamba.ops.causal_conv1d import (
+from sonar.model_executor.layers.mamba.ops.causal_conv1d import (
     causal_conv1d_fn,
     causal_conv1d_update,
 )
-from aphrodite.model_executor.layers.mamba.ops.gather_initial_states import (
+from sonar.model_executor.layers.mamba.ops.gather_initial_states import (
     gather_initial_states,
 )
-from aphrodite.model_executor.layers.mamba.ops.scatter_states import scatter_states
-from aphrodite.model_executor.model_loader.weight_utils import sharded_weight_loader
-from aphrodite.model_executor.utils import (
+from sonar.model_executor.layers.mamba.ops.scatter_states import scatter_states
+from sonar.model_executor.model_loader.weight_utils import sharded_weight_loader
+from sonar.model_executor.utils import (
     maybe_disable_graph_partition,
     set_weight_attrs,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.third_party.flash_linear_attention.ops.kda import FusedRMSNormGated
-from aphrodite.v1.attention.backends.gdn_attn import GDNAttentionMetadata
-from aphrodite.v1.kv_cache_interface import MambaSpec
-from aphrodite.v1.worker.workspace import current_workspace_manager
+from sonar.platforms import current_platform
+from sonar.third_party.flash_linear_attention.ops.kda import FusedRMSNormGated
+from sonar.v1.attention.backends.gdn_attn import GDNAttentionMetadata
+from sonar.v1.kv_cache_interface import MambaSpec
+from sonar.v1.worker.workspace import current_workspace_manager
 
 if current_platform.is_rocm():
-    from aphrodite.models.glm5next.amd.ops.third_party.kda import (
+    from sonar.models.glm5next.amd.ops.third_party.kda import (
         chunk_kda_with_fused_gate,
         fused_recurrent_kda,
     )
 else:
-    from aphrodite.models.glm5next.nvidia.ops.third_party.kda import (
+    from sonar.models.glm5next.nvidia.ops.third_party.kda import (
         chunk_kda_with_fused_gate,
         fused_recurrent_kda,
     )
@@ -189,8 +189,8 @@ class Glm5NextLinearAttention(GatedDeltaNetAttention):
     num_heads: int
     conv_size: int
 
-    def get_kv_cache_spec(self, aphrodite_config: AphroditeConfig) -> MambaSpec:
-        spec = super().get_kv_cache_spec(aphrodite_config)
+    def get_kv_cache_spec(self, sonar_config: SonarConfig) -> MambaSpec:
+        spec = super().get_kv_cache_spec(sonar_config)
         assert isinstance(spec, MambaSpec)
         alignment = kda_prefill_checkpoint_alignment(self.kda_prefill_backend)
         return replace(
@@ -228,16 +228,16 @@ class Glm5NextLinearAttention(GatedDeltaNetAttention):
     def __init__(
         self,
         config: Glm5NextTextConfig,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
     ) -> None:
         # KDA projections remain BF16 because fp8 checkpoints omit their scales.
-        saved_quant_config = aphrodite_config.quant_config
+        saved_quant_config = sonar_config.quant_config
         try:
-            aphrodite_config.quant_config = None
-            super().__init__(config, aphrodite_config, prefix)
+            sonar_config.quant_config = None
+            super().__init__(config, sonar_config, prefix)
         finally:
-            aphrodite_config.quant_config = saved_quant_config
+            sonar_config.quant_config = saved_quant_config
 
         self.head_dim = config.linear_head_dim
         self.num_heads = config.linear_num_heads
@@ -254,7 +254,7 @@ class Glm5NextLinearAttention(GatedDeltaNetAttention):
             state_shape=recurrent_state_shape,
             state_dtype=recurrent_state_dtype,
             indices_dtype=torch.int32,
-            max_num_tokens=aphrodite_config.scheduler_config.max_num_seqs,
+            max_num_tokens=sonar_config.scheduler_config.max_num_seqs,
         )
 
         # Merge q, k, v, b, f_a, g_a projections into one GEMM (6→1 launches).
@@ -315,7 +315,7 @@ class Glm5NextLinearAttention(GatedDeltaNetAttention):
             prefix=f"{prefix}.o_proj",
         )
 
-        compilation_config = get_current_aphrodite_config().compilation_config
+        compilation_config = get_current_sonar_config().compilation_config
         if prefix in compilation_config.static_forward_context:
             raise ValueError(f"Duplicate layer name: {prefix}")
         compilation_config.static_forward_context[prefix] = self
@@ -336,20 +336,20 @@ class Glm5NextLinearAttention(GatedDeltaNetAttention):
         # every _forward call (it reads an env-derived flag each time).
         self._conv_state_dim_first = is_conv_state_dim_first()
 
-        additional_config = aphrodite_config.additional_config
+        additional_config = sonar_config.additional_config
         self.kda_prefill_backend = _resolve_kda_prefill_backend(
             additional_config.get("kda_prefill_backend", "auto") if isinstance(additional_config, dict) else "auto",
             self.head_dim,
-            aphrodite_config.model_config.dtype,
+            sonar_config.model_config.dtype,
             self.kda_lower_bound,
         )
         self._flashkda_buffer_specs: tuple[tuple[tuple[int, ...], torch.dtype], ...] | None = None
         self._checkpoint_exporter: FlashKDAPrefillCheckpointExporter | None = None
         if self.kda_prefill_backend == "flashkda":
-            import aphrodite._flashkda_C  # noqa: F401
+            import sonar._flashkda_C  # noqa: F401
 
-            max_tokens = aphrodite_config.scheduler_config.max_num_batched_tokens
-            max_seqs = aphrodite_config.scheduler_config.max_num_seqs
+            max_tokens = sonar_config.scheduler_config.max_num_batched_tokens
+            max_seqs = sonar_config.scheduler_config.max_num_seqs
             workspace_size = torch.ops._flashkda_C.get_workspace_size(max_tokens, self.local_num_heads, max_seqs)
             self._flashkda_buffer_specs = (
                 (
@@ -365,7 +365,7 @@ class Glm5NextLinearAttention(GatedDeltaNetAttention):
                 # the non-spec tokens are then scattered by non_spec_token_indx.
                 (
                     (1, max_tokens, self.local_num_heads, self.head_dim),
-                    aphrodite_config.model_config.dtype,
+                    sonar_config.model_config.dtype,
                 ),
             )
             self._checkpoint_exporter = FlashKDAPrefillCheckpointExporter(state_len=self.conv_size - 1)

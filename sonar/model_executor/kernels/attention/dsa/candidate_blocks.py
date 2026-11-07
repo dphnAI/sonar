@@ -3,14 +3,14 @@
 
 import torch
 
-from aphrodite.model_executor.kernels.attention.dsa.sparse_mqa_logits import has_deep_select
-from aphrodite.model_executor.layers.indexer_topk import (
+from sonar.model_executor.kernels.attention.dsa.sparse_mqa_logits import has_deep_select
+from sonar.model_executor.layers.indexer_topk import (
     deep_select_topk,
     get_deep_select_stride_requirement,
     is_deep_select_supported,
 )
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.math_utils import round_up
+from sonar.triton_utils import tl, triton
+from sonar.utils.math_utils import round_up
 
 
 @triton.jit

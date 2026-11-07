@@ -11,35 +11,35 @@ from typing import TYPE_CHECKING, Any, NamedTuple
 import numpy as np
 import torch
 
-from aphrodite.config import AphroditeConfig, CUDAGraphMode
-from aphrodite.distributed import get_dcp_group
-from aphrodite.forward_context import (
+from sonar.config import CUDAGraphMode, SonarConfig
+from sonar.distributed import get_dcp_group
+from sonar.forward_context import (
     DPMetadata,
     ForwardContext,
     create_forward_context,
     override_forward_context,
 )
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.utils.torch_utils import current_stream
-from aphrodite.v1.kv_cache_interface import KVCacheConfig
-from aphrodite.v1.worker.gpu.attn_utils import build_slot_mappings_by_layer
-from aphrodite.v1.worker.gpu.cp_utils import prepare_dcp_local_seq_lens
-from aphrodite.v1.worker.gpu.input_batch import InputBatch
-from aphrodite.v1.worker.gpu.model_states.interface import ModelState
-from aphrodite.v1.worker.ubatch_utils import (
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.sequence import IntermediateTensors
+from sonar.utils.torch_utils import current_stream
+from sonar.v1.kv_cache_interface import KVCacheConfig
+from sonar.v1.worker.gpu.attn_utils import build_slot_mappings_by_layer
+from sonar.v1.worker.gpu.cp_utils import prepare_dcp_local_seq_lens
+from sonar.v1.worker.gpu.input_batch import InputBatch
+from sonar.v1.worker.gpu.model_states.interface import ModelState
+from sonar.v1.worker.ubatch_utils import (
     UBatchSlice,
     UBatchSlices,
     create_sm_control_context,
     maybe_create_ubatch_slices,
 )
-from aphrodite.v1.worker.ubatching import make_ubatch_contexts
-from aphrodite.v1.worker.utils import AttentionGroup
+from sonar.v1.worker.ubatching import make_ubatch_contexts
+from sonar.v1.worker.utils import AttentionGroup
 
 if TYPE_CHECKING:
-    from aphrodite.v1.worker.gpu.cudagraph_utils import BatchExecutionDescriptor
-    from aphrodite.v1.worker.gpu.dp_utils import DPSyncState
+    from sonar.v1.worker.gpu.cudagraph_utils import BatchExecutionDescriptor
+    from sonar.v1.worker.gpu.dp_utils import DPSyncState
 
 logger = init_logger(__name__)
 
@@ -290,21 +290,21 @@ class UBatchRunner:
 
     Each microbatch gets a thread and its own forward context. Only one thread
     holds the GPU at a time; they hand off to each other at the communication
-    points inside the model (see `aphrodite.v1.worker.ubatching`), so one
+    points inside the model (see `sonar.v1.worker.ubatching`), so one
     microbatch's expert all-to-all overlaps the other's compute.
     """
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
         model_state: ModelState,
         attn_groups: list[list[AttentionGroup]],
         kv_cache_config: KVCacheConfig,
         max_num_reqs: int,
     ):
-        self.aphrodite_config = aphrodite_config
-        self.parallel_config = aphrodite_config.parallel_config
+        self.sonar_config = sonar_config
+        self.parallel_config = sonar_config.parallel_config
         self.num_ubatches = self.parallel_config.num_ubatches
         self.dcp_size = self.parallel_config.decode_context_parallel_size
         self.dcp_rank = get_dcp_group().rank_in_group if self.dcp_size > 1 else 0
@@ -420,7 +420,7 @@ class UBatchRunner:
             forward_contexts.append(
                 create_forward_context(
                     attn_metadata[i],
-                    self.aphrodite_config,
+                    self.sonar_config,
                     dp_metadata=DPMetadata.make(self.parallel_config, num_tokens, num_tokens_across_dp),
                     cudagraph_runtime_mode=CUDAGraphMode.NONE,
                     slot_mapping=slot_mappings_by_layer[i],
@@ -470,7 +470,7 @@ class UBatchRunner:
 
         outputs: dict[int, Any] = {}
         errors: dict[int, BaseException] = {}
-        dtype = self.aphrodite_config.model_config.dtype
+        dtype = self.sonar_config.model_config.dtype
 
         @torch.inference_mode()
         def run_ubatch(ubatch_context, inputs: dict[str, Any]) -> None:
@@ -551,7 +551,7 @@ class UBatchRunner:
 
 
 def maybe_build_ubatch_runner(
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     device: torch.device,
     model_state: ModelState,
     attn_groups: list[list[AttentionGroup]],
@@ -563,9 +563,9 @@ def maybe_build_ubatch_runner(
     Microbatching needs the DP handshake to agree on it, so it is only
     available with more than one DP rank (as in the V1 runner).
     """
-    parallel_config = aphrodite_config.parallel_config
+    parallel_config = sonar_config.parallel_config
     if not parallel_config.use_ubatching or parallel_config.data_parallel_size <= 1:
         return None
 
     logger.info_once("Dual batch overlap is enabled.")
-    return UBatchRunner(aphrodite_config, device, model_state, attn_groups, kv_cache_config, max_num_reqs)
+    return UBatchRunner(sonar_config, device, model_state, attn_groups, kv_cache_config, max_num_reqs)

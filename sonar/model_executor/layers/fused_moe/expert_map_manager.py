@@ -9,10 +9,10 @@ mappings and placement strategies for Expert Parallelism in MoE models.
 
 import torch
 
-from aphrodite.config.parallel import ExpertPlacementStrategy
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe.config import FusedMoEParallelConfig
-from aphrodite.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
+from sonar.config.parallel import ExpertPlacementStrategy
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe.config import FusedMoEParallelConfig
+from sonar.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
     init_aiter_topK_meta_data,
 )
 

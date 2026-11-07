@@ -10,9 +10,9 @@ import random
 import pytest
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.platforms import current_platform
-from aphrodite.utils.math_utils import cdiv
+from sonar import _custom_ops as ops
+from sonar.platforms import current_platform
+from sonar.utils.math_utils import cdiv
 from tests.kernels.utils import baseline_scaled_mm, opcheck, to_fp8, to_int8
 
 if not current_platform.is_cuda():
@@ -172,7 +172,7 @@ def test_cutlass_fp8_gemm_padded(m: int, n: int, k: int, a_scale_group_shape, b_
     inputs to satisfy CUTLASS alignment requirements — the path taken by
     models like Qwen2.5-VL whose vision MLP has non-16-aligned dims.
     """
-    from aphrodite.model_executor.kernels.linear.scaled_mm.cutlass import (
+    from sonar.model_executor.kernels.linear.scaled_mm.cutlass import (
         CutlassFP8ScaledMMLinearKernel,
     )
 

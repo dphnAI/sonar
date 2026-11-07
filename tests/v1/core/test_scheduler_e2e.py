@@ -3,7 +3,7 @@
 
 import pytest
 
-from aphrodite import LLM
+from sonar import LLM
 
 MODEL = "hmellor/tiny-random-LlamaForCausalLM"
 PROMPT = "Hello my name is Robert and I"

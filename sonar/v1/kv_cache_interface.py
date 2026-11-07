@@ -16,16 +16,16 @@ from typing import TYPE_CHECKING, Self, TypeVar
 
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.utils.math_utils import cdiv, round_up
-from aphrodite.utils.torch_utils import get_dtype_size
-from aphrodite.v1.attention.backends.registry import MambaAttentionBackendEnum
-from aphrodite.v1.kv_cache_layout import _DIM_B, _DIM_L, KVCacheLayout
-from aphrodite.v1.kv_cache_spec_registry import KVCacheSpecRegistry
+from sonar.logger import init_logger
+from sonar.utils.math_utils import cdiv, round_up
+from sonar.utils.torch_utils import get_dtype_size
+from sonar.v1.attention.backends.registry import MambaAttentionBackendEnum
+from sonar.v1.kv_cache_layout import _DIM_B, _DIM_L, KVCacheLayout
+from sonar.v1.kv_cache_spec_registry import KVCacheSpecRegistry
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
-    from aphrodite.v1.attention.backend import MultipleOf
+    from sonar.config import SonarConfig
+    from sonar.v1.attention.backend import MultipleOf
 
 logger = init_logger(__name__)
 
@@ -122,7 +122,7 @@ class KVQuantMode(IntEnum):
 
 def get_kv_quant_mode(kv_cache_dtype: str) -> KVQuantMode:
     """Map a ``kv_cache_dtype`` string to a :class:`KVQuantMode`."""
-    from aphrodite.config.cache import get_kv_cache_dtype_handler
+    from sonar.config.cache import get_kv_cache_dtype_handler
 
     handler = get_kv_cache_dtype_handler(kv_cache_dtype)
     if handler is not None:
@@ -221,7 +221,7 @@ class KVCacheSpec:
 
     def get_block_stride_alignment(self) -> int:
         """Bytes the stride between physical blocks must be a multiple of."""
-        from aphrodite.v1.attention.backend import MultipleOf
+        from sonar.v1.attention.backend import MultipleOf
 
         alignment = self.block_stride_alignment
         if not isinstance(alignment, MultipleOf):
@@ -276,7 +276,7 @@ class KVCacheSpec:
     def block_table_token_alignment(self) -> int | None:
         return 128
 
-    def max_memory_usage_bytes(self, aphrodite_config: AphroditeConfig) -> int:
+    def max_memory_usage_bytes(self, sonar_config: SonarConfig) -> int:
         """The maximum possible memory usage of this KV cache in bytes.
 
         Returns:
@@ -285,12 +285,12 @@ class KVCacheSpec:
         """
         raise NotImplementedError
 
-    def max_num_blocks_per_req(self, aphrodite_config: AphroditeConfig, max_len: int) -> int:
+    def max_num_blocks_per_req(self, sonar_config: SonarConfig, max_len: int) -> int:
         """The number of block table entries needed per request, i.e. the row
         length of the worker-side block table for this cache group.
 
         Args:
-            aphrodite_config: The aphrodite config.
+            sonar_config: The sonar config.
             max_len: The maximum sequence length to size for, including the
                 encoder length for encoder-decoder models.
 
@@ -434,7 +434,7 @@ def create_kv_cache_views(
                 f"{block_stride} != page {dense_page_size}), so a manager "
                 f"block cannot be split into {ratio} kernel blocks of "
                 f"{kernel_block_size} tokens. Reduce --block-size to "
-                f"{kernel_block_size} or set APHRODITE_KV_CACHE_LAYOUT to a "
+                f"{kernel_block_size} or set SONAR_KV_CACHE_LAYOUT to a "
                 "layer-compact layout (e.g. LBNHC)."
             )
         assert block_stride % ratio == 0, f"Block stride {block_stride} must divide into {ratio} equal kernel blocks."
@@ -486,10 +486,10 @@ class HiSparseHotSpec(KVCacheSpec):
     def block_table_token_alignment(self) -> int | None:
         return None
 
-    def max_memory_usage_bytes(self, aphrodite_config: AphroditeConfig) -> int:
+    def max_memory_usage_bytes(self, sonar_config: SonarConfig) -> int:
         return self.blocks_per_request * self.page_size
 
-    def max_num_blocks_per_req(self, aphrodite_config: AphroditeConfig, max_len: int) -> int:
+    def max_num_blocks_per_req(self, sonar_config: SonarConfig, max_len: int) -> int:
         return self.blocks_per_request
 
     @property
@@ -519,10 +519,10 @@ class HiSparseResidentSpec(KVCacheSpec):
         num_tokens = min(max_in_flight_tokens, max_model_len)
         return cdiv(num_tokens, self.block_size)
 
-    def max_memory_usage_bytes(self, aphrodite_config: AphroditeConfig) -> int:
+    def max_memory_usage_bytes(self, sonar_config: SonarConfig) -> int:
         max_blocks = self.max_admission_blocks_per_request(
-            max_in_flight_tokens=aphrodite_config.max_in_flight_tokens,
-            max_model_len=aphrodite_config.model_config.max_model_len,
+            max_in_flight_tokens=sonar_config.max_in_flight_tokens,
+            max_model_len=sonar_config.model_config.max_model_len,
         )
         return max_blocks * self.page_size
 
@@ -600,8 +600,8 @@ class AttentionSpec(KVCacheSpec):
         """
         return self.unpadded_page_size_bytes
 
-    def max_num_blocks_per_req(self, aphrodite_config: AphroditeConfig, max_len: int) -> int:
-        parallel_config = aphrodite_config.parallel_config
+    def max_num_blocks_per_req(self, sonar_config: SonarConfig, max_len: int) -> int:
+        parallel_config = sonar_config.parallel_config
         kv_shard_count = parallel_config.decode_context_parallel_size if self.dcp_sharded else 1
         return cdiv(max_len, self.block_size * kv_shard_count)
 
@@ -631,9 +631,9 @@ class FullAttentionSpec(AttentionSpec):
     cache layout itself.
     """
 
-    def max_memory_usage_bytes(self, aphrodite_config: AphroditeConfig) -> int:
-        max_model_len = aphrodite_config.model_config.max_model_len
-        dcp_world_size = aphrodite_config.parallel_config.decode_context_parallel_size
+    def max_memory_usage_bytes(self, sonar_config: SonarConfig) -> int:
+        max_model_len = sonar_config.model_config.max_model_len
+        dcp_world_size = sonar_config.parallel_config.decode_context_parallel_size
         if self.dcp_sharded and dcp_world_size > 1:
             max_model_len = cdiv(max_model_len, dcp_world_size)
         return cdiv(max_model_len, self.block_size) * self.page_size_bytes
@@ -842,17 +842,17 @@ class ChunkedLocalAttentionSpec(AttentionSpec):
         admitted by startup can also be admitted at runtime.
 
         `max_in_flight_tokens` is the max tokens scheduled but not yet settled
-        (one batch per concurrent step); see `AphroditeConfig.max_in_flight_tokens`.
+        (one batch per concurrent step); see `SonarConfig.max_in_flight_tokens`.
         """
         # During chunked prefill, we hold KV for at most one chunk window plus
         # the in-flight tokens, since frees happen on the processed-token basis.
         num_tokens = min(self.attention_chunk_size + max_in_flight_tokens, max_model_len)
         return cdiv(num_tokens, self.block_size)
 
-    def max_memory_usage_bytes(self, aphrodite_config: AphroditeConfig) -> int:
+    def max_memory_usage_bytes(self, sonar_config: SonarConfig) -> int:
         max_blocks = self.max_admission_blocks_per_request(
-            max_in_flight_tokens=aphrodite_config.max_in_flight_tokens,
-            max_model_len=aphrodite_config.model_config.max_model_len,
+            max_in_flight_tokens=sonar_config.max_in_flight_tokens,
+            max_model_len=sonar_config.model_config.max_model_len,
         )
         return max_blocks * self.page_size_bytes
 
@@ -891,7 +891,7 @@ class SlidingWindowSpec(AttentionSpec):
         before each chunk's `get_num_blocks_to_allocate`.
 
         `max_in_flight_tokens` is the max tokens scheduled but not yet settled
-        (one batch per concurrent step); see `AphroditeConfig.max_in_flight_tokens`.
+        (one batch per concurrent step); see `SonarConfig.max_in_flight_tokens`.
         """
         # During chunked prefill, we hold KV for the last `sliding_window-1`
         # computed tokens plus the in-flight tokens (frees happen on the
@@ -907,13 +907,13 @@ class SlidingWindowSpec(AttentionSpec):
         # [XXCD][EF] to store the 6-token window [CDEF].
         return cdiv(num_tokens, self.block_size) + 1
 
-    def max_memory_usage_bytes(self, aphrodite_config: AphroditeConfig) -> int:
-        assert not self.dcp_sharded or aphrodite_config.parallel_config.decode_context_parallel_size == 1, (
+    def max_memory_usage_bytes(self, sonar_config: SonarConfig) -> int:
+        assert not self.dcp_sharded or sonar_config.parallel_config.decode_context_parallel_size == 1, (
             "DCP not support sliding window."
         )
         max_blocks = self.max_admission_blocks_per_request(
-            max_in_flight_tokens=aphrodite_config.max_in_flight_tokens,
-            max_model_len=aphrodite_config.model_config.max_model_len,
+            max_in_flight_tokens=sonar_config.max_in_flight_tokens,
+            max_model_len=sonar_config.model_config.max_model_len,
         )
         return max_blocks * self.page_size_bytes
 
@@ -939,13 +939,13 @@ class CircularBufferSpec(AttentionSpec):
     def block_table_token_alignment(self) -> int | None:
         return None
 
-    def max_memory_usage_bytes(self, aphrodite_config: AphroditeConfig) -> int:
+    def max_memory_usage_bytes(self, sonar_config: SonarConfig) -> int:
         # The ring occupies one block per request for its whole lifetime.
-        del aphrodite_config
+        del sonar_config
         return self.page_size_bytes
 
-    def max_num_blocks_per_req(self, aphrodite_config: AphroditeConfig, max_len: int) -> int:
-        del aphrodite_config, max_len
+    def max_num_blocks_per_req(self, sonar_config: SonarConfig, max_len: int) -> int:
+        del sonar_config, max_len
         return 1
 
     def is_uniform_with_collection(self, kv_cache_specs: dict[str, KVCacheSpec]) -> bool:
@@ -1078,8 +1078,8 @@ class MambaSpec(KVCacheSpec):
     def block_table_token_alignment(self) -> int | None:
         return None
 
-    def max_memory_usage_bytes(self, aphrodite_config: AphroditeConfig) -> int:
-        if aphrodite_config.cache_config.mamba_cache_mode == "align":
+    def max_memory_usage_bytes(self, sonar_config: SonarConfig) -> int:
+        if sonar_config.cache_config.mamba_cache_mode == "align":
             return self.page_size_bytes * (2 + self.num_speculative_blocks + self.num_prefill_checkpoint_blocks)
         else:
             return self.page_size_bytes * (1 + self.num_speculative_blocks)
@@ -1095,17 +1095,17 @@ class MambaSpec(KVCacheSpec):
             for spec in kv_cache_specs.values()
         )
 
-    def max_num_blocks_per_req(self, aphrodite_config: AphroditeConfig, max_len: int) -> int:
+    def max_num_blocks_per_req(self, sonar_config: SonarConfig, max_len: int) -> int:
         # Mamba state is replicated across DCP/PCP ranks, never sharded, so
         # no CP scaling applies.
-        if aphrodite_config.cache_config.mamba_cache_mode == "align":
+        if sonar_config.cache_config.mamba_cache_mode == "align":
             # Block table rows are position-indexed over the full sequence
             # even though only 2 + num_speculative_blocks state blocks are
             # resident at a time (earlier states are nulled out by
             # remove_skipped_blocks), so the row length must cover max_len
             # rather than max_memory_usage_bytes.
             return cdiv(max_len, self.block_size) + self.num_speculative_blocks
-        return cdiv(self.max_memory_usage_bytes(aphrodite_config), self.page_size_bytes)
+        return cdiv(self.max_memory_usage_bytes(sonar_config), self.page_size_bytes)
 
 
 def get_mamba_prefill_checkpoint_position(
@@ -1150,7 +1150,7 @@ def is_mamba_prefill_checkpoint_valid(
 
 @dataclass(frozen=True)
 class EncoderOnlyAttentionSpec(AttentionSpec):
-    def max_memory_usage_bytes(self, aphrodite_config: AphroditeConfig) -> int:
+    def max_memory_usage_bytes(self, sonar_config: SonarConfig) -> int:
         # Encoder-only layers do not need KV cache
         return 0
 
@@ -1159,10 +1159,10 @@ class EncoderOnlyAttentionSpec(AttentionSpec):
 class CrossAttentionSpec(AttentionSpec):
     """KV cache spec for cross-attention layers in encoder-decoder models."""
 
-    def max_memory_usage_bytes(self, aphrodite_config: AphroditeConfig) -> int:
+    def max_memory_usage_bytes(self, sonar_config: SonarConfig) -> int:
         # For cross-attention, we need to cache encoder states
         # Get encoder length (e.g., 1500 for Whisper).
-        max_encoder_len = aphrodite_config.scheduler_config.max_num_encoder_input_tokens
+        max_encoder_len = sonar_config.scheduler_config.max_num_encoder_input_tokens
         return cdiv(max_encoder_len, self.block_size) * self.page_size_bytes
 
 
@@ -1251,18 +1251,18 @@ class UniformTypeKVCacheSpecs(KVCacheSpec):
     def block_table_token_alignment(self) -> int | None:
         return self.first_spec.block_table_token_alignment
 
-    def max_memory_usage_bytes(self, aphrodite_config: AphroditeConfig) -> int:
+    def max_memory_usage_bytes(self, sonar_config: SonarConfig) -> int:
         max_num_pages = max(
-            cdiv(spec.max_memory_usage_bytes(aphrodite_config), spec.page_size_bytes)
+            cdiv(spec.max_memory_usage_bytes(sonar_config), spec.page_size_bytes)
             for spec in self.kv_cache_specs.values()
         )
         return max_num_pages * self.page_size_bytes
 
-    def max_num_blocks_per_req(self, aphrodite_config: AphroditeConfig, max_len: int) -> int:
+    def max_num_blocks_per_req(self, sonar_config: SonarConfig, max_len: int) -> int:
         # Metadata builders are constructed from the per-layer spec, so the base
         # cdiv(max_len, block_size) would drop its DCP sharding and size the
         # block table wider than those builders expect.
-        widths = {spec.max_num_blocks_per_req(aphrodite_config, max_len) for spec in self.kv_cache_specs.values()}
+        widths = {spec.max_num_blocks_per_req(sonar_config, max_len) for spec in self.kv_cache_specs.values()}
         assert len(widths) == 1, (
             "All layers in the same KV cache group must need the same number "
             f"of block table entries, got {sorted(widths)}."
@@ -1301,9 +1301,9 @@ class UniformTypeKVCacheSpecs(KVCacheSpec):
         this equals the number of repetitions of the layer pattern."""
         return Counter(spec.page_size_bytes for spec in self.kv_cache_specs.values()).most_common(1)[0][1]
 
-    def max_memory_usage_pages(self, aphrodite_config: AphroditeConfig) -> int:
+    def max_memory_usage_pages(self, sonar_config: SonarConfig) -> int:
         return max(
-            cdiv(spec.max_memory_usage_bytes(aphrodite_config), spec.page_size_bytes)
+            cdiv(spec.max_memory_usage_bytes(sonar_config), spec.page_size_bytes)
             for spec in self.kv_cache_specs.values()
         )
 

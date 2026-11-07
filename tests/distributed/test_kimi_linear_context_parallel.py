@@ -6,10 +6,10 @@ from pathlib import Path
 
 import pytest
 
-from aphrodite import SamplingParams, TokensPrompt
-from aphrodite.config import CUDAGraphMode
-from aphrodite.transformers_utils.configs.kimi_k3 import KimiK3Config
-from tests.conftest import AphroditeRunner
+from sonar import SamplingParams, TokensPrompt
+from sonar.config import CUDAGraphMode
+from sonar.transformers_utils.configs.kimi_k3 import KimiK3Config
+from tests.conftest import SonarRunner
 from tests.utils import create_new_process_for_each_test
 
 MODEL = "moonshotai/Kimi-Linear-48B-A3B-Instruct"
@@ -52,8 +52,8 @@ def _make_tiny_overrides() -> dict:
     }
 
 
-def _run_tiny_model(aphrodite_runner: type[AphroditeRunner], dcp_size: int) -> list[tuple[list[int], list[float]]]:
-    with aphrodite_runner(
+def _run_tiny_model(sonar_runner: type[SonarRunner], dcp_size: int) -> list[tuple[list[int], list[float]]]:
+    with sonar_runner(
         model_name=MODEL,
         skip_tokenizer_init=True,
         load_format="dummy",
@@ -104,14 +104,14 @@ def _run_tiny_model(aphrodite_runner: type[AphroditeRunner], dcp_size: int) -> l
 @create_new_process_for_each_test()
 @pytest.mark.distributed(num_gpus=2)
 def test_kimi_linear_dcp_tiny(
-    aphrodite_runner: type[AphroditeRunner],
+    sonar_runner: type[SonarRunner],
     num_gpus_available: int,
 ) -> None:
     if num_gpus_available < 2:
         pytest.skip("Need at least 2 GPUs")
 
-    baseline = _run_tiny_model(aphrodite_runner, dcp_size=1)
-    dcp = _run_tiny_model(aphrodite_runner, dcp_size=2)
+    baseline = _run_tiny_model(sonar_runner, dcp_size=1)
+    dcp = _run_tiny_model(sonar_runner, dcp_size=2)
 
     assert [tokens for tokens, _ in dcp] == [tokens for tokens, _ in baseline]
     logprob_drifts = []
@@ -141,7 +141,7 @@ def _make_tiny_k3_config(model_dir: Path) -> str:
 
 
 def _run_k3_partial_prefix_reuse(
-    aphrodite_runner: type[AphroditeRunner], model_name: str, dcp_size: int
+    sonar_runner: type[SonarRunner], model_name: str, dcp_size: int
 ) -> tuple[list[int], list[float], int]:
     block_size = 256
     common_prefix = [3 + (token_idx % 251) for token_idx in range(block_size)]
@@ -155,7 +155,7 @@ def _run_k3_partial_prefix_reuse(
         logprobs=20,
     )
 
-    with aphrodite_runner(
+    with sonar_runner(
         model_name=model_name,
         skip_tokenizer_init=True,
         load_format="dummy",
@@ -174,9 +174,7 @@ def _run_k3_partial_prefix_reuse(
         enable_chunked_prefill=True,
         enable_prefix_caching=True,
     ) as runner:
-        assert (
-            runner.llm.llm_engine.aphrodite_config.compilation_config.cudagraph_mode == CUDAGraphMode.FULL_AND_PIECEWISE
-        )
+        assert runner.llm.llm_engine.sonar_config.compilation_config.cudagraph_mode == CUDAGraphMode.FULL_AND_PIECEWISE
         runner.llm.generate(
             [prime_prompt],
             sampling_params,
@@ -202,7 +200,7 @@ def _run_k3_partial_prefix_reuse(
 @create_new_process_for_each_test()
 @pytest.mark.distributed(num_gpus=2)
 def test_kimi_k3_dcp_partial_prefix_reuse(
-    aphrodite_runner: type[AphroditeRunner],
+    sonar_runner: type[SonarRunner],
     num_gpus_available: int,
     tmp_path: Path,
 ) -> None:
@@ -211,9 +209,9 @@ def test_kimi_k3_dcp_partial_prefix_reuse(
 
     model_name = _make_tiny_k3_config(tmp_path / "tiny-kimi-k3")
     baseline_tokens, baseline_logprobs, baseline_cached = _run_k3_partial_prefix_reuse(
-        aphrodite_runner, model_name, dcp_size=1
+        sonar_runner, model_name, dcp_size=1
     )
-    dcp_tokens, dcp_logprobs, dcp_cached = _run_k3_partial_prefix_reuse(aphrodite_runner, model_name, dcp_size=2)
+    dcp_tokens, dcp_logprobs, dcp_cached = _run_k3_partial_prefix_reuse(sonar_runner, model_name, dcp_size=2)
 
     assert baseline_cached == 256
     assert dcp_cached == 256

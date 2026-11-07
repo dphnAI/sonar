@@ -7,20 +7,20 @@ from typing import Any, ClassVar, cast
 import torch
 from torch import nn
 
-from aphrodite.config import AphroditeConfig, get_current_aphrodite_config
-from aphrodite.distributed import get_pcp_group
-from aphrodite.forward_context import get_forward_context
-from aphrodite.model_executor.layers.attention_layer_base import AttentionLayerBase
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import MergedColumnParallelLinear
-from aphrodite.models.deepseek_v41.common.ops.fused_compress_quant_cache import (
+from sonar.config import SonarConfig, get_current_sonar_config
+from sonar.distributed import get_pcp_group
+from sonar.forward_context import get_forward_context
+from sonar.model_executor.layers.attention_layer_base import AttentionLayerBase
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import MergedColumnParallelLinear
+from sonar.models.deepseek_v41.common.ops.fused_compress_quant_cache import (
     fused_save_compress_norm,
     rope_quant_insert,
     save_ring_rows,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
-from aphrodite.v1.attention.backend import (
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
+from sonar.v1.attention.backend import (
     AttentionBackend,
     AttentionCGSupport,
     AttentionMetadataBuilder,
@@ -28,7 +28,7 @@ from aphrodite.v1.attention.backend import (
     MultipleOf,
     max_decode_query_len,
 )
-from aphrodite.v1.kv_cache_interface import CircularBufferSpec, KVCacheSpec
+from sonar.v1.kv_cache_interface import CircularBufferSpec, KVCacheSpec
 
 
 class CompressorBackend(AttentionBackend):
@@ -103,25 +103,25 @@ class CompressorMetadataBuilder(AttentionMetadataBuilder):
     @classmethod
     def get_varlen_cudagraph_max_query_len(
         cls,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         kv_cache_spec: KVCacheSpec,
     ) -> int | None:
         # Decode replays use device request boundaries; prefill metadata is
         # not graph-safe.
-        return max_decode_query_len(aphrodite_config)
+        return max_decode_query_len(sonar_config)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         assert isinstance(self.kv_cache_spec, CircularBufferSpec)
         self.capacity = self.kv_cache_spec.block_size
-        self.pcp_size = self.aphrodite_config.parallel_config.prefill_context_parallel_size
-        max_num_batched_tokens = self.aphrodite_config.scheduler_config.max_num_batched_tokens
+        self.pcp_size = self.sonar_config.parallel_config.prefill_context_parallel_size
+        max_num_batched_tokens = self.sonar_config.scheduler_config.max_num_batched_tokens
         self.token_to_req_indices = torch.zeros(max_num_batched_tokens, dtype=torch.int32, device=self.device)
         self.slot_mapping_buffer = torch.empty(max_num_batched_tokens, dtype=torch.int64, device=self.device)
         # Speculative rejection can resume before the chunk's last row, so
         # every PCP rank needs the full ring tail. Ordinary decode only needs
         # the latest open row to complete the next ratio-2 pair.
-        self.tail_size = self.capacity if self.aphrodite_config.speculative_config else 1
+        self.tail_size = self.capacity if self.sonar_config.speculative_config else 1
 
     def build(
         self,
@@ -163,7 +163,7 @@ class CompressorMetadataBuilder(AttentionMetadataBuilder):
         """
         num_tokens = metadata.slot_mapping.numel()
         # Equal on every rank, so the gathers line up.
-        num_rows = min(num_tokens, 2 * self.aphrodite_config.scheduler_config.max_num_seqs)
+        num_rows = min(num_tokens, 2 * self.sonar_config.scheduler_config.max_num_seqs)
         num_reqs = min(num_reqs, num_rows)
         query_start_loc = metadata.query_start_loc.long()
         starts = query_start_loc[:num_reqs].clamp(max=num_tokens - 1)
@@ -216,22 +216,22 @@ class CompressorStateCache(torch.nn.Module, AttentionLayerBase):
         self.dtype = dtype
         self.prefix = prefix
         self.kv_cache = torch.tensor([])
-        compilation_config = get_current_aphrodite_config().compilation_config
+        compilation_config = get_current_sonar_config().compilation_config
         if prefix in compilation_config.static_forward_context:
             raise ValueError(f"Duplicate layer name: {prefix}")
         compilation_config.static_forward_context[prefix] = self
 
         assert self.dtype == torch.float32
         # Drafts + bonus token + the previous row, as a power of two >= 8.
-        rows_per_step = get_current_aphrodite_config().num_speculative_tokens + 2
+        rows_per_step = get_current_sonar_config().num_speculative_tokens + 2
         self.block_size = max(8, 1 << (rows_per_step - 1).bit_length())
 
     def bind_kv_cache(self, kv_cache: torch.Tensor) -> None:
         # [B, H=1, N, C] -> [B, N, C]
         self.kv_cache = kv_cache.squeeze(1)
 
-    def get_kv_cache_spec(self, aphrodite_config: AphroditeConfig) -> KVCacheSpec:
-        del aphrodite_config
+    def get_kv_cache_spec(self, sonar_config: SonarConfig) -> KVCacheSpec:
+        del sonar_config
         return CircularBufferSpec(
             block_size=self.block_size,
             num_kv_heads=1,
@@ -258,7 +258,7 @@ class DeepseekCompressor(nn.Module):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         compress_ratio: int,
         hidden_size: int,
         head_dim: int,
@@ -279,19 +279,19 @@ class DeepseekCompressor(nn.Module):
         self.rotate = rotate
         self.prefix = prefix
         self.k_cache_prefix = k_cache_prefix
-        self.pcp_size = aphrodite_config.parallel_config.prefill_context_parallel_size
+        self.pcp_size = sonar_config.parallel_config.prefill_context_parallel_size
         self.pcp_rank = get_pcp_group().rank_in_group if self.pcp_size > 1 else 0
         # Ratio 1 pools single tokens, so the checkpoint carries no gate.
         self.has_gate = compress_ratio > 1
 
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
         self.rope_head_dim = config.qk_rope_head_dim
         self.nope_head_dim = self.head_dim - self.rope_head_dim
         assert self.head_dim == 512 and self.rope_head_dim == 64
         self.rms_norm_eps = config.rms_norm_eps
         self.device = current_platform.device_type
-        self.max_num_reqs = aphrodite_config.scheduler_config.max_num_seqs
-        self.max_model_len = aphrodite_config.model_config.max_model_len
+        self.max_num_reqs = sonar_config.scheduler_config.max_num_seqs
+        self.max_model_len = sonar_config.model_config.max_model_len
 
         wkv_wgate_sizes = [self.head_dim, self.head_dim] if self.has_gate else [self.head_dim]
         self.fused_wkv_wgate = MergedColumnParallelLinear(
@@ -316,8 +316,8 @@ class DeepseekCompressor(nn.Module):
         )
 
         # Save reference to static_forward_context for forward-time KV cache lookup.
-        # get_current_aphrodite_config() is only available during __init__, not forward.
-        self._static_forward_context = aphrodite_config.compilation_config.static_forward_context
+        # get_current_sonar_config() is only available during __init__, not forward.
+        self._static_forward_context = sonar_config.compilation_config.static_forward_context
 
     def forward(
         self,

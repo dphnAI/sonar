@@ -46,8 +46,8 @@ def server():
     ]
     env_dict = {
         **BASE_TEST_ENV,
-        "APHRODITE_ENABLE_RESPONSES_API_STORE": "1",
-        "APHRODITE_USE_EXPERIMENTAL_PARSER_CONTEXT": "1",
+        "SONAR_ENABLE_RESPONSES_API_STORE": "1",
+        "SONAR_USE_EXPERIMENTAL_PARSER_CONTEXT": "1",
         "PYTHON_EXECUTION_BACKEND": "dangerously_use_uv",
     }
     with RemoteOpenAIServer(MODEL_NAME, args, env_dict=env_dict) as remote_server:

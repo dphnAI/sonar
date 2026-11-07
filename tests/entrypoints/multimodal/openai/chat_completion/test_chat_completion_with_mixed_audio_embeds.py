@@ -14,9 +14,9 @@ import torch
 import torch.nn as nn
 from transformers import AutoConfig, AutoTokenizer
 
-from aphrodite.transformers_utils.repo_utils import hf_api
-from aphrodite.utils.serial_utils import tensor2base64
-from aphrodite.utils.torch_utils import is_torch_equal_or_newer
+from sonar.transformers_utils.repo_utils import hf_api
+from sonar.utils.serial_utils import tensor2base64
+from sonar.utils.torch_utils import is_torch_equal_or_newer
 from tests.utils import RemoteOpenAIServer
 
 QWEN2AUDIO_MODEL = "Qwen/Qwen2-Audio-7B-Instruct"

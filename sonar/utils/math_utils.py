@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Math utility functions for Aphrodite."""
+"""Math utility functions for Sonar."""
 
 from bisect import bisect_left
 

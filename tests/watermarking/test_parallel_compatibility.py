@@ -5,10 +5,10 @@ import asyncio
 
 import pytest
 
-from aphrodite import SamplingParams
-from aphrodite.distributed import cleanup_dist_env_and_memory
-from aphrodite.engine.arg_utils import AsyncEngineArgs
-from aphrodite.v1.engine.async_llm import AsyncLLM
+from sonar import SamplingParams
+from sonar.distributed import cleanup_dist_env_and_memory
+from sonar.engine.arg_utils import AsyncEngineArgs
+from sonar.v1.engine.async_llm import AsyncLLM
 from tests.utils import multi_gpu_test
 
 MODEL = "hmellor/tiny-random-LlamaForCausalLM"
@@ -23,10 +23,10 @@ MODEL = "hmellor/tiny-random-LlamaForCausalLM"
     ],
     ids=["tp2-sharded-sampling", "pp2"],
 )
-def test_watermarked_generation_with_model_parallelism(aphrodite_runner, parallel_kwargs):
+def test_watermarked_generation_with_model_parallelism(sonar_runner, parallel_kwargs):
     prompts = ["Parallel watermark smoke"] * 2
 
-    with aphrodite_runner(
+    with sonar_runner(
         MODEL,
         dtype="half",
         enforce_eager=True,

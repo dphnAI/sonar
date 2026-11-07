@@ -14,24 +14,24 @@ from functools import lru_cache
 from importlib.metadata import entry_points
 from typing import TYPE_CHECKING
 
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.logger import init_logger
-from aphrodite.v1.worker.gpu.sample.logits_processor.interface import (
+from sonar.exceptions import SonarValidationError
+from sonar.logger import init_logger
+from sonar.v1.worker.gpu.sample.logits_processor.interface import (
     LogitsProcessor,
     LogitsProcRequestState,
 )
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
-    from aphrodite.sampling_params import SamplingParams
-    from aphrodite.v1.worker.gpu.states import RequestState
+    from sonar.config import SonarConfig
+    from sonar.sampling_params import SamplingParams
+    from sonar.v1.worker.gpu.states import RequestState
 
 logger = init_logger(__name__)
 
 # Same entry-points group as
-# aphrodite.v1.sample.logits_processor.LOGITSPROCS_GROUP; duplicated here so this
+# sonar.v1.sample.logits_processor.LOGITSPROCS_GROUP; duplicated here so this
 # module stays importable without the V1 sampler machinery.
-LOGITSPROCS_GROUP = "aphrodite.logits_processors"
+LOGITSPROCS_GROUP = "sonar.logits_processors"
 
 
 def _load_v2_logitsprocs_plugins() -> list[type[LogitsProcessor]]:
@@ -41,7 +41,7 @@ def _load_v2_logitsprocs_plugins() -> list[type[LogitsProcessor]]:
     processors today; those crash under the V2 sampler, so reject them at
     load time.
     """
-    from aphrodite.utils.torch_utils import guard_cuda_initialization
+    from sonar.utils.torch_utils import guard_cuda_initialization
 
     installed_logitsprocs_plugins = entry_points(group=LOGITSPROCS_GROUP)
     if len(installed_logitsprocs_plugins) == 0:
@@ -65,7 +65,7 @@ def _load_v2_logitsprocs_plugins() -> list[type[LogitsProcessor]]:
         if not (isinstance(cls, type) and issubclass(cls, LogitsProcessor)):
             raise ValueError(
                 f"LogitsProcessor plugin {entrypoint.name} is not a subclass of "
-                "aphrodite.v1.worker.gpu.sample.logits_processor.LogitsProcessor; "
+                "sonar.v1.worker.gpu.sample.logits_processor.LogitsProcessor; "
                 "V1-interface plugins are not supported by the V2 model runner."
             )
         classes.append(cls)
@@ -79,7 +79,7 @@ def _load_v2_logitsprocs_by_fqcns(
 
     FQCN syntax is <module>:<type> i.e. x.y.z:CustomLogitProc.
     """
-    from aphrodite.utils.torch_utils import guard_cuda_initialization
+    from sonar.utils.torch_utils import guard_cuda_initialization
 
     classes: list[type[LogitsProcessor]] = []
     for ldx, logitproc in enumerate(logits_processors):
@@ -88,7 +88,7 @@ def _load_v2_logitsprocs_by_fqcns(
             if not issubclass(logitproc, LogitsProcessor):
                 raise ValueError(
                     f"{logitproc.__name__} is not a subclass of "
-                    "aphrodite.v1.worker.gpu.sample.logits_processor.LogitsProcessor"
+                    "sonar.v1.worker.gpu.sample.logits_processor.LogitsProcessor"
                 )
             classes.append(logitproc)
             continue
@@ -118,7 +118,7 @@ def _load_v2_logitsprocs_by_fqcns(
             raise ValueError("Loaded logit processor must be a type.")
         if not issubclass(obj, LogitsProcessor):
             raise ValueError(
-                f"{obj.__name__} is not a subclass of aphrodite.v1.worker.gpu.sample.logits_processor.LogitsProcessor"
+                f"{obj.__name__} is not a subclass of sonar.v1.worker.gpu.sample.logits_processor.LogitsProcessor"
             )
         classes.append(obj)
 
@@ -144,7 +144,7 @@ def _cached_load_v2_logitsprocs(
 
 
 def build_custom_logits_processors(
-    aphrodite_config: "AphroditeConfig",
+    sonar_config: "SonarConfig",
     req_states: "RequestState",
     is_pooling_model: bool,
     custom_logitsprocs: Sequence[str | type] = (),
@@ -157,7 +157,7 @@ def build_custom_logits_processors(
         RuntimeError: if an FQCN fails to import.
 
     """
-    from aphrodite.v1.sample.logits_processor import STR_POOLING_REJECTS_LOGITSPROCS
+    from sonar.v1.sample.logits_processor import STR_POOLING_REJECTS_LOGITSPROCS
 
     if is_pooling_model:
         if custom_logitsprocs:
@@ -167,7 +167,7 @@ def build_custom_logits_processors(
 
     custom_logitsprocs_classes = _load_v2_logitsprocs(custom_logitsprocs)
     lp_req_state = LogitsProcRequestState.from_request_state(req_states)
-    return [ctor(aphrodite_config, lp_req_state) for ctor in custom_logitsprocs_classes]
+    return [ctor(sonar_config, lp_req_state) for ctor in custom_logitsprocs_classes]
 
 
 def build_custom_logits_processors_params_validator(
@@ -193,6 +193,6 @@ def build_custom_logits_processors_params_validator(
             try:
                 cls.validate_params(sampling_params)
             except ValueError as e:
-                raise AphroditeValidationError(str(e)) from e
+                raise SonarValidationError(str(e)) from e
 
     return validate_params

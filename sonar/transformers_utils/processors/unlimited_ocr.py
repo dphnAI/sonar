@@ -4,8 +4,8 @@
 
 from PIL import Image
 
-from aphrodite.logger import init_logger
-from aphrodite.transformers_utils.processors.deepseek_ocr import DeepseekOCRProcessor
+from sonar.logger import init_logger
+from sonar.transformers_utils.processors.deepseek_ocr import DeepseekOCRProcessor
 
 logger = init_logger(__name__)
 

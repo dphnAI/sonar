@@ -5,17 +5,17 @@ from functools import cache
 
 import torch
 
-from aphrodite.config import get_current_aphrodite_config
-from aphrodite.distributed import (
+from sonar.config import get_current_sonar_config
+from sonar.distributed import (
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
     tensor_model_parallel_all_gather,
 )
-from aphrodite.model_executor.layers.linear import LinearBase, MergedColumnParallelLinear
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.utils import is_weight_cache_model_construction
-from aphrodite.models.deepseek_v41.common.ops.query_quant import can_fuse_query_quant
-from aphrodite.platforms import current_platform
+from sonar.model_executor.layers.linear import LinearBase, MergedColumnParallelLinear
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.utils import is_weight_cache_model_construction
+from sonar.models.deepseek_v41.common.ops.query_quant import can_fuse_query_quant
+from sonar.platforms import current_platform
 
 
 @cache
@@ -76,7 +76,7 @@ def create_sm120_engram_wkv(
         or is_weight_cache_model_construction()
     ):
         return None
-    config = get_current_aphrodite_config()
+    config = get_current_sonar_config()
     parallel = config.parallel_config
     if (
         config.lora_config is not None
@@ -97,22 +97,22 @@ def create_sm120_engram_wkv(
         return None
 
     register_sm120_engram_ops()
-    from aphrodite.model_executor.kernels.linear import init_mxfp8_linear_kernel
-    from aphrodite.model_executor.kernels.linear.mxfp8.flashinfer import (
+    from sonar.model_executor.kernels.linear import init_mxfp8_linear_kernel
+    from sonar.model_executor.kernels.linear.mxfp8.flashinfer import (
         FlashInferCutedslMxfp8LinearKernel,
         FlashInferCutlassMxfp8LinearKernel,
     )
-    from aphrodite.model_executor.layers.quantization.modelopt import (
+    from sonar.model_executor.layers.quantization.modelopt import (
         FormatScheme,
         ModelOptLinearMethod,
         ModelOptMixedPrecisionConfig,
         ModelOptMxFp8Config,
     )
-    from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+    from sonar.model_executor.layers.quantization.utils.quant_utils import (
         kMxfp8Dynamic,
         kMxfp8Static,
     )
-    from aphrodite.models.deepseek_v41.quant_config import DeepseekV4FP8Config
+    from sonar.models.deepseek_v41.quant_config import DeepseekV4FP8Config
 
     if type(quant_config) not in (
         ModelOptMixedPrecisionConfig,

@@ -13,7 +13,7 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal import MULTIMODAL_REGISTRY
 
 from ....conftest import ImageTestAssets
 from ...utils import build_model_context
@@ -137,7 +137,7 @@ def test_multi_crop_tiling(
     """Test that large images produce correct multi-crop tiling."""
     from PIL import Image
 
-    from aphrodite.transformers_utils.processors.moondream3 import Moondream3Processor
+    from sonar.transformers_utils.processors.moondream3 import Moondream3Processor
 
     processor = Moondream3Processor.from_pretrained(model_id, trust_remote_code=True)
 
@@ -168,7 +168,7 @@ def test_tiling_various_sizes(
     """Test tiling with various image sizes."""
     from PIL import Image
 
-    from aphrodite.transformers_utils.processors.moondream3 import Moondream3Processor
+    from sonar.transformers_utils.processors.moondream3 import Moondream3Processor
 
     processor = Moondream3Processor.from_pretrained(model_id, trust_remote_code=True)
 
@@ -193,7 +193,7 @@ def test_pixel_normalization(
     """Test that pixel values are normalized to [-1, 1] range."""
     from PIL import Image
 
-    from aphrodite.transformers_utils.processors.moondream3 import Moondream3Processor
+    from sonar.transformers_utils.processors.moondream3 import Moondream3Processor
 
     processor = Moondream3Processor.from_pretrained(model_id, trust_remote_code=True)
 
@@ -332,7 +332,7 @@ def test_processor_with_small_image(
     """Test processor with image smaller than crop size."""
     from PIL import Image
 
-    from aphrodite.transformers_utils.processors.moondream3 import Moondream3Processor
+    from sonar.transformers_utils.processors.moondream3 import Moondream3Processor
 
     processor = Moondream3Processor.from_pretrained(model_id, trust_remote_code=True)
 
@@ -360,7 +360,7 @@ def test_preprocess_image_accepts_non_pil_inputs(
     image_kind: str,
     model_id: str,
 ):
-    from aphrodite.transformers_utils.processors.moondream3 import Moondream3Processor
+    from sonar.transformers_utils.processors.moondream3 import Moondream3Processor
 
     processor = Moondream3Processor.from_pretrained(model_id, trust_remote_code=True)
     pil_image = image_assets[0].pil_image.convert("RGB")
@@ -425,21 +425,21 @@ class TestMoondream3TilingLogic:
 
     def test_small_image_no_tiling(self):
         """Small images should use 1x1 tiling."""
-        from aphrodite.transformers_utils.processors.moondream3 import select_tiling
+        from sonar.transformers_utils.processors.moondream3 import select_tiling
 
         tiling = select_tiling(height=300, width=300, crop_size=CROP_SIZE, max_crops=MAX_CROPS)
         assert tiling == (1, 1)
 
     def test_exact_crop_size(self):
         """Image exactly at crop size should use 1x1."""
-        from aphrodite.transformers_utils.processors.moondream3 import select_tiling
+        from sonar.transformers_utils.processors.moondream3 import select_tiling
 
         tiling = select_tiling(height=CROP_SIZE, width=CROP_SIZE, crop_size=CROP_SIZE, max_crops=MAX_CROPS)
         assert tiling == (1, 1)
 
     def test_large_square_image(self):
         """Large square image should use multiple tiles."""
-        from aphrodite.transformers_utils.processors.moondream3 import select_tiling
+        from sonar.transformers_utils.processors.moondream3 import select_tiling
 
         tiling = select_tiling(height=800, width=800, crop_size=CROP_SIZE, max_crops=MAX_CROPS)
         h_tiles, w_tiles = tiling
@@ -449,7 +449,7 @@ class TestMoondream3TilingLogic:
 
     def test_wide_image(self):
         """Wide image should have more width tiles."""
-        from aphrodite.transformers_utils.processors.moondream3 import select_tiling
+        from sonar.transformers_utils.processors.moondream3 import select_tiling
 
         tiling = select_tiling(height=400, width=1200, crop_size=CROP_SIZE, max_crops=MAX_CROPS)
         h_tiles, w_tiles = tiling
@@ -457,7 +457,7 @@ class TestMoondream3TilingLogic:
 
     def test_tall_image(self):
         """Tall image should have more height tiles."""
-        from aphrodite.transformers_utils.processors.moondream3 import select_tiling
+        from sonar.transformers_utils.processors.moondream3 import select_tiling
 
         tiling = select_tiling(height=1200, width=400, crop_size=CROP_SIZE, max_crops=MAX_CROPS)
         h_tiles, w_tiles = tiling
@@ -465,7 +465,7 @@ class TestMoondream3TilingLogic:
 
     def test_respects_max_crops(self):
         """Tiling should not exceed max_crops."""
-        from aphrodite.transformers_utils.processors.moondream3 import select_tiling
+        from sonar.transformers_utils.processors.moondream3 import select_tiling
 
         tiling = select_tiling(height=2000, width=2000, crop_size=CROP_SIZE, max_crops=4)
         h_tiles, w_tiles = tiling

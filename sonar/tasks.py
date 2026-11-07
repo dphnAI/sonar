@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 from typing import Literal, get_args
 
-from aphrodite.exceptions import AphroditeValidationError
+from sonar.exceptions import SonarValidationError
 
 GenerationTask = Literal["generate", "transcription", "realtime"]
 GENERATION_TASKS: tuple[GenerationTask, ...] = get_args(GenerationTask)
@@ -25,7 +25,7 @@ _REMOVED_POOLING_TASK_MESSAGES = {
 
 def check_removed_pooling_task(task: object) -> None:
     if isinstance(task, str) and (message := _REMOVED_POOLING_TASK_MESSAGES.get(task)):
-        raise AphroditeValidationError(message, parameter="task")
+        raise SonarValidationError(message, parameter="task")
 
 
 ScoreType = Literal["bi-encoder", "cross-encoder", "late-interaction"]

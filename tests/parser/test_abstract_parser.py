@@ -9,16 +9,16 @@ import pytest
 from xgrammar import Grammar
 from xgrammar.testing import _is_grammar_accept_string
 
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionRequest,
     ChatCompletionToolsParam,
 )
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.parser.abstract_parser import DelegatingParser, structured_outputs_to_format
-from aphrodite.sampling_params import StructuredOutputsParams
-from aphrodite.tool_parsers.abstract_tool_parser import ToolParser
-from aphrodite.tool_parsers.qwen3_engine_tool_parser import Qwen3EngineToolParser
-from aphrodite.tool_parsers.structural_tag_registry import ToolChoice
+from sonar.exceptions import SonarValidationError
+from sonar.parser.abstract_parser import DelegatingParser, structured_outputs_to_format
+from sonar.sampling_params import StructuredOutputsParams
+from sonar.tool_parsers.abstract_tool_parser import ToolParser
+from sonar.tool_parsers.qwen3_engine_tool_parser import Qwen3EngineToolParser
+from sonar.tool_parsers.structural_tag_registry import ToolChoice
 
 
 class TestToolChoice_Plus_ResponseFormat:
@@ -176,7 +176,7 @@ class TestToolChoice_Plus_ResponseFormat:
 
         # There must be a warning that tool calls are disabled
         # Consume that warning
-        with patch("aphrodite.parser.abstract_parser.logger.warning_once") as mock_warn:
+        with patch("sonar.parser.abstract_parser.logger.warning_once") as mock_warn:
             out = parser.adjust_request(request)
 
         assert isinstance(out, ChatCompletionRequest)
@@ -198,7 +198,7 @@ class TestToolChoice_Plus_ResponseFormat:
         # SIC! use parser whose model does NOT support structural tag
         parser = self._setup_abstract_parser(tools)
 
-        with patch("aphrodite.parser.abstract_parser.logger.warning_once") as mock_warn:
+        with patch("sonar.parser.abstract_parser.logger.warning_once") as mock_warn:
             out = parser.adjust_request(request)
 
         assert isinstance(out, ChatCompletionRequest)
@@ -224,7 +224,7 @@ class TestToolChoice_Plus_ResponseFormat:
         )
         parser = self._setup_qwen_parser(tools)
 
-        with patch("aphrodite.parser.abstract_parser.logger.warning_once") as mock_warn:
+        with patch("sonar.parser.abstract_parser.logger.warning_once") as mock_warn:
             out = parser.adjust_request(request)
 
         assert isinstance(out, ChatCompletionRequest)
@@ -254,7 +254,7 @@ class TestToolChoice_Plus_ResponseFormat:
         )
         parser = self._setup_qwen_parser(tools)
 
-        with patch("aphrodite.parser.abstract_parser.logger.warning_once") as mock_warn:
+        with patch("sonar.parser.abstract_parser.logger.warning_once") as mock_warn:
             out = parser.adjust_request(request)
 
         assert isinstance(out, ChatCompletionRequest)
@@ -298,7 +298,7 @@ class TestToolChoice_Plus_ResponseFormat:
         )
         parser = self._setup_qwen_parser(tools)
 
-        with patch("aphrodite.parser.abstract_parser.logger.warning_once") as mock_warn:
+        with patch("sonar.parser.abstract_parser.logger.warning_once") as mock_warn:
             out = parser.adjust_request(request)
 
         assert isinstance(out, ChatCompletionRequest)
@@ -318,5 +318,5 @@ def test_structured_outputs_to_format_rejects_deeply_nested_string(field):
     value = schema
     if field == "structural_tag":
         value = f'{{"type": "structural_tag", "format": {{"type": "json_schema", "json_schema": {schema}}}}}'
-    with pytest.raises(AphroditeValidationError, match="nested too deeply"):
+    with pytest.raises(SonarValidationError, match="nested too deeply"):
         structured_outputs_to_format(StructuredOutputsParams(**{field: value}))

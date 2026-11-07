@@ -11,11 +11,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from aphrodite import envs
-from aphrodite.model_executor.kernels.attention.dsa.sm120_indexer import use_sm120_dsa_indexer
-from aphrodite.platforms import current_platform
-from aphrodite.utils.deep_gemm import _paged_mqa_logits_schedule_slots
-from aphrodite.v1.attention.backends.mla import indexer
+from sonar import envs
+from sonar.model_executor.kernels.attention.dsa.sm120_indexer import use_sm120_dsa_indexer
+from sonar.platforms import current_platform
+from sonar.utils.deep_gemm import _paged_mqa_logits_schedule_slots
+from sonar.v1.attention.backends.mla import indexer
 
 NUM_SMS = 114  # H100 PCIe
 
@@ -80,10 +80,10 @@ def test_multicast_is_sm90_only(monkeypatch, family):
 @pytest.mark.parametrize("max_page_size", [None, 64, 128])
 @pytest.mark.parametrize("page_size", [32, 64, 128, 256])
 def test_sm120_paged_admission_requires_binary_capability(monkeypatch, tmp_path, page_size, max_page_size):
-    import aphrodite.utils.deep_gemm as deep_gemm
+    import sonar.utils.deep_gemm as deep_gemm
 
     _set_arch(monkeypatch, 12)
-    monkeypatch.setattr(envs, "APHRODITE_USE_DEEP_GEMM", True)
+    monkeypatch.setattr(envs, "SONAR_USE_DEEP_GEMM", True)
     include = tmp_path / "include" / "deep_gemm"
     for header in (
         "impls/sm120_fp8_mqa_logits.cuh",

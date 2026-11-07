@@ -11,10 +11,10 @@ def _flag(name: str) -> bool:
 
 class _Envs:
     # route supported decode steps to the mono kernels
-    MONO_ENABLE = _flag("APHRODITE_ROCM_MINIMAX_M3_MONO")
+    MONO_ENABLE = _flag("SONAR_ROCM_MINIMAX_M3_MONO")
     # run every sparse layer twice (kernels, then the original modules) and log the
     # per-token differences; the layer-parity self-check, meant for --enforce-eager
-    MONO_CHECK = _flag("APHRODITE_ROCM_MINIMAX_M3_MONO_CHECK")
+    MONO_CHECK = _flag("SONAR_ROCM_MINIMAX_M3_MONO_CHECK")
 
 
 envs = _Envs()

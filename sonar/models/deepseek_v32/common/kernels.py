@@ -4,11 +4,11 @@ from collections.abc import Callable
 
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.deep_gemm import mqa_logits_use_mx_scales
-from aphrodite.v1.attention.ops.common import pack_ue8m0_x4
-from aphrodite.v1.kv_cache_interface import is_quantized_kv_cache
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
+from sonar.utils.deep_gemm import mqa_logits_use_mx_scales
+from sonar.v1.attention.ops.common import pack_ue8m0_x4
+from sonar.v1.kv_cache_interface import is_quantized_kv_cache
 
 # Cache of tiny 1-element dummy tensors (per device, dtype) reused by the
 # has_indexer=False path so the indexer args don't allocate every call.
@@ -959,7 +959,7 @@ def fused_q(
     # cutlass at module scope, so only reach for it on CUDA.
     cutedsl_kernel: Callable[..., None] | None = None
     if current_platform.is_cuda():
-        from aphrodite.models.deepseek_v32.nvidia.ops.fused_q_cutedsl import (
+        from sonar.models.deepseek_v32.nvidia.ops.fused_q_cutedsl import (
             fused_q_cutedsl,
             is_fused_q_cutedsl_supported,
         )

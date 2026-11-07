@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-from aphrodite.v1.worker.gpu.spec_decode.mtp.config import MTPSpeculatorConfig
+from sonar.v1.worker.gpu.spec_decode.mtp.config import MTPSpeculatorConfig
 
 
 class MultiModuleMTPSpeculatorConfig(MTPSpeculatorConfig):
-    speculator_class = "aphrodite.v1.worker.gpu.spec_decode.multi_module_mtp.speculator.MultiModuleMTPSpeculator"
+    speculator_class = "sonar.v1.worker.gpu.spec_decode.multi_module_mtp.speculator.MultiModuleMTPSpeculator"
     supports_pcp = False
 
     @property

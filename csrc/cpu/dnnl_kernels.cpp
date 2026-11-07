@@ -339,14 +339,14 @@ int64_t create_onednn_scaled_mm_handler(
     args.use_a_zero_point = use_azp;
   }
 
-  APHRODITE_DISPATCH_FLOATING_TYPES(output_type,
-                                    "create_onednn_scaled_mm_handler", [&] {
-                                      if (dynamic_act_quant) {
-                                        args.c_type = get_dnnl_type<float>();
-                                      } else {
-                                        args.c_type = get_dnnl_type<scalar_t>();
-                                      }
-                                    });
+  SONAR_DISPATCH_FLOATING_TYPES(output_type, "create_onednn_scaled_mm_handler",
+                                [&] {
+                                  if (dynamic_act_quant) {
+                                    args.c_type = get_dnnl_type<float>();
+                                  } else {
+                                    args.c_type = get_dnnl_type<scalar_t>();
+                                  }
+                                });
 
   return reinterpret_cast<int64_t>(new W8A8MatMulPrimitiveHandler(args));
 }
@@ -384,7 +384,7 @@ void onednn_scaled_mm(
   exec_args.a_scales_ptr = nullptr;
   exec_args.a_zero_points_ptr = nullptr;
 
-  APHRODITE_DISPATCH_FLOATING_TYPES(c.scalar_type(), "onednn_scaled_mm", [&] {
+  SONAR_DISPATCH_FLOATING_TYPES(c.scalar_type(), "onednn_scaled_mm", [&] {
     if (ptr->get_input_scale_strategy() ==
         W8A8MatMulPrimitiveHandler::QuantizationStrategy::PER_TENSOR) {
       if (bias.has_value()) {
@@ -448,7 +448,7 @@ void static_scaled_int8_quant(
   const int64_t stride = input.stride(0);
   const int64_t hidden_size = input.size(1);
   const int64_t num_tokens = input.size(0);
-  APHRODITE_DISPATCH_FLOATING_TYPES(
+  SONAR_DISPATCH_FLOATING_TYPES(
       input.scalar_type(), "static_scaled_int8_quant_impl", [&] {
         if (azp.has_value()) {
           static_scaled_int8_quant_impl<true>(
@@ -478,7 +478,7 @@ void dynamic_scaled_int8_quant(
   const int64_t hidden_size = input.size(1);
   const int64_t num_tokens = input.size(0);
   const int64_t stride = input.stride(0);
-  APHRODITE_DISPATCH_FLOATING_TYPES(
+  SONAR_DISPATCH_FLOATING_TYPES(
       input.scalar_type(), "dynamic_scaled_int8_quant_impl", [&] {
         if (azp.has_value()) {
           dynamic_scaled_int8_quant_impl<true>(
@@ -507,13 +507,13 @@ int64_t create_onednn_mm_handler(const torch::Tensor& b,
   args.b_n_stride = b.stride(1);
   args.b_ptr = b.data_ptr();
 
-  APHRODITE_DISPATCH_FLOATING_TYPES(b.scalar_type(), "create_onednn_mm_handler",
-                                    [&] {
-                                      args.c_type = get_dnnl_type<scalar_t>();
-                                      args.ab_type = get_dnnl_type<scalar_t>();
-                                    });
+  SONAR_DISPATCH_FLOATING_TYPES(b.scalar_type(), "create_onednn_mm_handler",
+                                [&] {
+                                  args.c_type = get_dnnl_type<scalar_t>();
+                                  args.ab_type = get_dnnl_type<scalar_t>();
+                                });
 
-#ifdef APHRODITE_USE_ACL
+#ifdef SONAR_USE_ACL
   // TODO(fadara01): this is a hot-fix, remove once problem is addressed in the
   // AArch64 stack. hybrid kernels in ACL which are the fastest for LM head
   // layers are only enabled for BF16 x BF16 -> FP32 problem desc as they can't
@@ -548,25 +548,25 @@ void onednn_mm(torch::Tensor& c,        // [M, OC], row-major
   }
 
 // ACL matmuls expect contiguous source tensors
-#ifdef APHRODITE_USE_ACL
+#ifdef SONAR_USE_ACL
   torch::Tensor a_contig = a.contiguous();
 #endif
 
   MatMulPrimitiveHandler::ExecArgs exec_args;
   exec_args.c_ptr = dnnl_output.data_ptr();
 
-#ifdef APHRODITE_USE_ACL
+#ifdef SONAR_USE_ACL
   exec_args.a_m_size = a_contig.size(0);
   exec_args.a_m_stride = a_contig.stride(0);
 #else
   exec_args.a_m_size = a.size(0);
   exec_args.a_m_stride = a.stride(0);
 #endif
-  APHRODITE_DISPATCH_FLOATING_TYPES(a.scalar_type(), "onednn_mm", [&] {
+  SONAR_DISPATCH_FLOATING_TYPES(a.scalar_type(), "onednn_mm", [&] {
     if (bias.has_value()) {
       exec_args.use_bias = true;
       exec_args.bias_type = get_dnnl_type<scalar_t>();
-#ifdef APHRODITE_USE_ACL
+#ifdef SONAR_USE_ACL
       // ACL matmuls in oneDNN do not support a bias.
       // We handle a matmul with bias by doing: c = bias; c += matmul(a, b)
       dnnl_output.copy_(bias.value());
@@ -578,7 +578,7 @@ void onednn_mm(torch::Tensor& c,        // [M, OC], row-major
       exec_args.bias_type = get_dnnl_type<void>();
       exec_args.bias_ptr = nullptr;
     }
-#ifdef APHRODITE_USE_ACL
+#ifdef SONAR_USE_ACL
     exec_args.a_ptr = a_contig.data_ptr<scalar_t>();
 #else
     exec_args.a_ptr = a.data_ptr<scalar_t>();

@@ -7,32 +7,32 @@ from itertools import islice
 
 import torch
 
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed import (
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.config import SonarConfig
+from sonar.distributed import (
     get_pp_group,
     get_tensor_model_parallel_rank,
     tensor_model_parallel_all_reduce,
 )
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.model_executor.layers.fused_moe import (
     fused_moe_make_expert_params_mapping,
 )
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.model_loader.weight_utils import (
+from sonar.model_executor.model_loader.weight_utils import (
     default_weight_loader,
     maybe_remap_kv_scale_name,
 )
-from aphrodite.model_executor.models.deepseek_v2 import (
+from sonar.model_executor.models.deepseek_v2 import (
     DeepseekV2ForCausalLM,
     DeepseekV2MLP,
     DeepseekV2MoE,
     _try_load_fp8_indexer_wk,
     get_spec_layer_idx_from_weight_name,
 )
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.models.utils import (
     PPMissingLayer,
     copy_pp_buffers,
     extract_layer_index,
@@ -43,8 +43,8 @@ from aphrodite.model_executor.models.utils import (
     make_layers,
     pp_topk_buffers,
 )
-from aphrodite.models.common.ops.fused_allreduce_rms_norm import fused_allreduce_rms_norm
-from aphrodite.sequence import IntermediateTensors
+from sonar.models.common.ops.fused_allreduce_rms_norm import fused_allreduce_rms_norm
+from sonar.sequence import IntermediateTensors
 
 from .rocm import DeepseekV32MLAAttention
 
@@ -52,7 +52,7 @@ from .rocm import DeepseekV32MLAAttention
 class DeepseekV32DecoderLayer(torch.nn.Module):
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str,
         config=None,
         topk_indices_buffer: torch.Tensor | None = None,
@@ -60,9 +60,9 @@ class DeepseekV32DecoderLayer(torch.nn.Module):
         super().__init__()
 
         if config is None:
-            config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
-        parallel_config = aphrodite_config.parallel_config
+            config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
+        parallel_config = sonar_config.parallel_config
 
         self.hidden_size = config.hidden_size
         moe_layer_freq = getattr(config, "moe_layer_freq", 1)
@@ -71,7 +71,7 @@ class DeepseekV32DecoderLayer(torch.nn.Module):
         self.use_mha = False
 
         self.self_attn = DeepseekV32MLAAttention(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             config=config,
             prefix=f"{prefix}.self_attn",
             topk_indices_buffer=topk_indices_buffer,
@@ -133,20 +133,20 @@ class DeepseekV32DecoderLayer(torch.nn.Module):
 class DeepseekV32Model(torch.nn.Module):
     fall_back_to_pt_during_load = False
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
         self.config = config
-        from aphrodite.platforms import current_platform
+        from sonar.platforms import current_platform
 
         self.device = current_platform.device_type
 
         self.vocab_size = config.vocab_size
         self.is_v32 = True
         self.topk_indices_buffer = torch.empty(
-            aphrodite_config.scheduler_config.max_num_batched_tokens,
+            sonar_config.scheduler_config.max_num_batched_tokens,
             config.index_topk,
             dtype=torch.int32,
             device=self.device,
@@ -165,7 +165,7 @@ class DeepseekV32Model(torch.nn.Module):
         self.start_layer, self.end_layer, self.layers = make_layers(
             config.num_hidden_layers,
             lambda prefix: DeepseekV32DecoderLayer(
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 prefix=prefix,
                 topk_indices_buffer=self.topk_indices_buffer,
             ),
@@ -174,7 +174,7 @@ class DeepseekV32Model(torch.nn.Module):
         self.fused_shared_expert_layers = get_fused_shared_expert_layers(
             self,
             DeepseekV2MoE,
-            enable_eplb=aphrodite_config.parallel_config.enable_eplb,
+            enable_eplb=sonar_config.parallel_config.enable_eplb,
         )
 
         if get_pp_group().is_last_rank:
@@ -187,7 +187,7 @@ class DeepseekV32Model(torch.nn.Module):
         )
 
         self.aux_hidden_state_layers = tuple[int, ...]()
-        self.num_redundant_experts = aphrodite_config.parallel_config.eplb_config.num_redundant_experts
+        self.num_redundant_experts = sonar_config.parallel_config.eplb_config.num_redundant_experts
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.embed_tokens(input_ids)

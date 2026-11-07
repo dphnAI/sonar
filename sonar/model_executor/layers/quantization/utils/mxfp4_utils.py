@@ -4,11 +4,11 @@ from typing import Any
 
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.import_utils import get_triton_kernels_version, has_triton_kernels
-from aphrodite.utils.torch_utils import direct_register_custom_op, is_torch_equal_or_newer
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
+from sonar.utils.import_utils import get_triton_kernels_version, has_triton_kernels
+from sonar.utils.torch_utils import direct_register_custom_op, is_torch_equal_or_newer
 
 logger = init_logger(__name__)
 
@@ -16,7 +16,7 @@ logger = init_logger(__name__)
 def should_use_gfx1250_mx_scale_swizzle() -> bool:
     if not current_platform.is_rocm():
         return False
-    from aphrodite.platforms.rocm import on_gfx1250
+    from sonar.platforms.rocm import on_gfx1250
 
     return on_gfx1250()
 
@@ -29,8 +29,8 @@ def should_use_cdna4_mx_scale_swizzle() -> bool:
     be off. Used by both the weight-load swizzle in `_swizzle_mxfp4` and
     the kernel-argument gate in `aiter_mxfp4_w4a8_moe`; they must agree.
     """
-    from aphrodite.distributed import get_tensor_model_parallel_world_size
-    from aphrodite.platforms.rocm import on_gfx950
+    from sonar.distributed import get_tensor_model_parallel_world_size
+    from sonar.platforms.rocm import on_gfx950
 
     return on_gfx950() and get_tensor_model_parallel_world_size() <= 2
 
@@ -201,7 +201,7 @@ try:
         op_func=_dequant_mxfp4,
         fake_impl=_dequant_mxfp4_fake,
     )
-    dequant_mxfp4 = torch.ops.aphrodite.dequant_mxfp4
+    dequant_mxfp4 = torch.ops.sonar.dequant_mxfp4
 except AttributeError as error:
     raise error
 
@@ -211,13 +211,13 @@ try:
         op_func=_quant_dequant_mxfp4,
         fake_impl=_quant_dequant_mxfp4_fake,
     )
-    quant_dequant_mxfp4 = torch.ops.aphrodite.quant_dequant_mxfp4
+    quant_dequant_mxfp4 = torch.ops.sonar.quant_dequant_mxfp4
 except AttributeError as error:
     raise error
 
 
 def xpu_mxfp4_quantize(x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-    return torch.ops.aphrodite.xpu_mxfp4_quantize(x)
+    return torch.ops.sonar.xpu_mxfp4_quantize(x)
 
 
 def permute_shape(shape: tuple[int, ...], permute_order: list[int]) -> tuple[int, ...]:
@@ -483,10 +483,10 @@ def mxfp4_quantize(x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
     if current_platform.is_xpu():
         return xpu_mxfp4_quantize(x)
 
-    from aphrodite._aiter_ops import is_aiter_found_and_supported
+    from sonar._aiter_ops import is_aiter_found_and_supported
 
     if is_aiter_found_and_supported() and x.dtype == torch.bfloat16:
-        from aphrodite.model_executor.layers.quantization.quark.utils import (
+        from sonar.model_executor.layers.quantization.quark.utils import (
             quark_quantize_weight_to_mxfp4,
         )
 

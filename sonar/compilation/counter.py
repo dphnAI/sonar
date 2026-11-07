@@ -25,7 +25,7 @@ class CompilationCounter:
     num_inductor_compiles: int = 0
     # EagerAdapter.compile calls
     num_eager_compiles: int = 0
-    # The number of time Aphrodite's compiler cache entry was updated
+    # The number of time Sonar's compiler cache entry was updated
     num_cache_entries_updated: int = 0
     # The number of standalone_compile compiled artifacts saved
     num_compiled_artifacts_saved: int = 0

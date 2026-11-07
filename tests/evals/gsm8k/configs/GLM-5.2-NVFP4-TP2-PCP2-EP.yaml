@@ -18,5 +18,5 @@ server_args: >-
   --enable-expert-parallel
   --kv-cache-dtype fp8
 env:
-  APHRODITE_LOGGING_LEVEL: "DEBUG"
-  APHRODITE_USE_V2_MODEL_RUNNER: "1"
+  SONAR_LOGGING_LEVEL: "DEBUG"
+  SONAR_USE_V2_MODEL_RUNNER: "1"

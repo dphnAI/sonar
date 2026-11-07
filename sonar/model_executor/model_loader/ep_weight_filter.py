@@ -40,7 +40,7 @@ def compute_local_expert_ids(
     experts are local and no filtering should be performed.
 
     The distribution logic mirrors
-    :func:`aphrodite.model_executor.layers.fused_moe.layer.determine_expert_map`.
+    :func:`sonar.model_executor.layers.fused_moe.layer.determine_expert_map`.
 
     Args:
         num_experts: Total number of experts in the layer.

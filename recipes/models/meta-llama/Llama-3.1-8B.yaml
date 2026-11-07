@@ -65,7 +65,7 @@ guide: |
   ## Prerequisites
 
   - Hardware: 2x Xeon 6 NUMA nodes
-  - Aphrodite >= 0.6.0
+  - Sonar >= 0.6.0
 
   ### pip (Intel Xeon 6 CPUs)
 
@@ -82,7 +82,7 @@ guide: |
   ## Intel Xeon 6
 
   ```bash
-  aphrodite serve RedHatAI/Meta-Llama-3.1-8B-quantized.w8a8
+  sonar serve RedHatAI/Meta-Llama-3.1-8B-quantized.w8a8
   ```
 
   Docker:
@@ -104,7 +104,7 @@ guide: |
     tuning for workload shape, latency targets, and platform capacity.
   - `--gpu-memory-utilization`: platform memory-budget tuning.
   - `--no-enable-prefix-caching`: workload/benchmark cache-policy tuning.
-  - `APHRODITE_ENGINE_ITERATION_TIMEOUT_S`: runtime operational timeout tuning.
+  - `SONAR_ENGINE_ITERATION_TIMEOUT_S`: runtime operational timeout tuning.
 
   Hardware-specific overrides may still use these settings when they are part of a
   validated platform configuration.
@@ -112,11 +112,11 @@ guide: |
   ## Configuration Notes
 
   - The validation TP/DP layout is benchmark topology and is not hard-coded.
-  - Llama has native Aphrodite architecture support, so `--trust-remote-code` is not required by this recipe.
+  - Llama has native Sonar architecture support, so `--trust-remote-code` is not required by this recipe.
 
   ## References
 
   - [Parent model](https://huggingface.co/meta-llama/Llama-3.1-8B)
   - [Red Hat AI W8A8 variant](https://huggingface.co/RedHatAI/Meta-Llama-3.1-8B-quantized.w8a8)
   - [Llama-3.1-8B-Instruct recipe](https://recipes.vllm.ai/meta-llama/Llama-3.1-8B-Instruct)
-  - [Aphrodite CPU installation](https://docs.vllm.ai/en/latest/getting_started/installation/cpu/)
+  - [Sonar CPU installation](https://docs.vllm.ai/en/latest/getting_started/installation/cpu/)

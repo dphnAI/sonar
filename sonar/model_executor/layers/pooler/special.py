@@ -6,10 +6,10 @@ from itertools import groupby
 
 import torch
 
-from aphrodite.config import PoolerConfig
-from aphrodite.model_executor.layers.pooler import PoolingParamsUpdate
-from aphrodite.tasks import PoolingTask
-from aphrodite.v1.pool.metadata import PoolingMetadata
+from sonar.config import PoolerConfig
+from sonar.model_executor.layers.pooler import PoolingParamsUpdate
+from sonar.tasks import PoolingTask
+from sonar.v1.pool.metadata import PoolingMetadata
 
 from .abstract import Pooler, PoolerOutput
 from .common import ClassifierFn

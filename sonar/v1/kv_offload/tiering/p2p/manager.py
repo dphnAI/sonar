@@ -16,10 +16,10 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from typing_extensions import override
 
-import aphrodite.envs as envs
-from aphrodite.logger import init_logger
-from aphrodite.v1.core.kv_cache_utils import get_none_hash_seed
-from aphrodite.v1.kv_offload.base import (
+import sonar.envs as envs
+from sonar.logger import init_logger
+from sonar.v1.core.kv_cache_utils import get_none_hash_seed
+from sonar.v1.kv_offload.base import (
     LookupResult,
     OffloadKey,
     OffloadPolicy,
@@ -27,22 +27,22 @@ from aphrodite.v1.kv_offload.base import (
     RequestOffloadingContext,
     ScheduleEndContext,
 )
-from aphrodite.v1.kv_offload.file_mapper import FileMapper
-from aphrodite.v1.kv_offload.tiering.base import (
+from sonar.v1.kv_offload.file_mapper import FileMapper
+from sonar.v1.kv_offload.tiering.base import (
     JobResult,
     SecondaryTierManager,
     TransferJob,
 )
-from aphrodite.v1.kv_offload.tiering.p2p.control import ControlTransport, ZmqTransport
-from aphrodite.v1.kv_offload.tiering.p2p.data import DataTransport, NixlTransport
-from aphrodite.v1.kv_offload.tiering.p2p.session import P2PSession
-from aphrodite.v1.kv_offload.tiering.p2p.session.protocol import TYPE_KEY, DisconnectMsg
-from aphrodite.v1.metrics.cache_hit_source import CacheHitSource
+from sonar.v1.kv_offload.tiering.p2p.control import ControlTransport, ZmqTransport
+from sonar.v1.kv_offload.tiering.p2p.data import DataTransport, NixlTransport
+from sonar.v1.kv_offload.tiering.p2p.session import P2PSession
+from sonar.v1.kv_offload.tiering.p2p.session.protocol import TYPE_KEY, DisconnectMsg
+from sonar.v1.metrics.cache_hit_source import CacheHitSource
 
 if TYPE_CHECKING:
-    from aphrodite.v1.kv_offload.base import OffloadingSpec
-    from aphrodite.v1.kv_offload.tiering.base import ParentManager
-    from aphrodite.v1.kv_offload.tiering.p2p.control.base import ControlConnection
+    from sonar.v1.kv_offload.base import OffloadingSpec
+    from sonar.v1.kv_offload.tiering.base import ParentManager
+    from sonar.v1.kv_offload.tiering.p2p.control.base import ControlConnection
 
 logger = init_logger(__name__)
 
@@ -266,14 +266,14 @@ class P2PSecondaryTierManager(SecondaryTierManager):
             tier_type: Tier identifier (defaults to ``"p2p"``).
             host: Address the ZMQ control socket binds to, used verbatim
                 as both the bind address and the identity peers dial back
-                (mirrors the NIXL connector's ``APHRODITE_NIXL_SIDE_CHANNEL_HOST``;
+                (mirrors the NIXL connector's ``SONAR_NIXL_SIDE_CHANNEL_HOST``;
                 no auto-detection). Defaults to
-                ``APHRODITE_P2P_SIDE_CHANNEL_HOST`` (``localhost``) when not set;
+                ``SONAR_P2P_SIDE_CHANNEL_HOST`` (``localhost``) when not set;
                 must be set to the node's routable IP for cross-host P2P so
                 remote peers can reach the socket.
             port: Base port for the ZMQ control socket. Must be
                 reachable from peers. Defaults to
-                ``APHRODITE_P2P_SIDE_CHANNEL_PORT`` (``5710``) when not set.
+                ``SONAR_P2P_SIDE_CHANNEL_PORT`` (``5710``) when not set.
                 The bound port is ``base + data_parallel_index`` so each
                 DP replica gets a distinct port (one socket per replica,
                 like NIXL); for DP=1 the offset is 0.
@@ -335,9 +335,9 @@ class P2PSecondaryTierManager(SecondaryTierManager):
         # seeds NONE_HASH randomly, so the value is only known afterwards.
         self._hash_seed: str | None = None
         if host is None:
-            host = envs.APHRODITE_P2P_SIDE_CHANNEL_HOST
+            host = envs.SONAR_P2P_SIDE_CHANNEL_HOST
         if port is None:
-            port = envs.APHRODITE_P2P_SIDE_CHANNEL_PORT
+            port = envs.SONAR_P2P_SIDE_CHANNEL_PORT
         # One control socket per DP replica: offset the base by the global
         # data-parallel index so replicas on a host don't collide (mirrors
         # NIXL). For DP=1 the index is 0, leaving the base port unchanged.
@@ -431,7 +431,7 @@ class P2PSecondaryTierManager(SecondaryTierManager):
         # lookup() returns HIT/MISS once LookupRespMsg has arrived.
         # PD path (``remote_prefiller`` sub-dict only) keeps the eager HIT.
         # Until the peer acks the handshake, prefill locally rather than wait
-        # up to APHRODITE_P2P_HANDSHAKE_TIMEOUT_S on a peer that may be gone.
+        # up to SONAR_P2P_HANDSHAKE_TIMEOUT_S on a peer that may be gone.
         if source.do_probe:
             session = self._sessions.get(source.peer_id)
             if session is None or not session.ready:
@@ -752,11 +752,11 @@ class P2PSecondaryTierManager(SecondaryTierManager):
         if self._reconnect_wait(peer_id) > 0 or self._retained_peer(peer_id):
             return None
 
-        max_peers = envs.APHRODITE_P2P_MAX_PEERS
+        max_peers = envs.SONAR_P2P_MAX_PEERS
         if len(self._sessions) >= max_peers:
             logger.warning(
                 "P2P %s: rejecting outbound peer %s — session limit "
-                "reached (%d/%d). Set APHRODITE_P2P_MAX_PEERS to increase.",
+                "reached (%d/%d). Set SONAR_P2P_MAX_PEERS to increase.",
                 self._local_id,
                 peer_id,
                 len(self._sessions),
@@ -789,7 +789,7 @@ class P2PSecondaryTierManager(SecondaryTierManager):
         return session
 
     def _accept_new_peers(self, new_connections: Sequence[ControlConnection]) -> None:
-        max_peers = envs.APHRODITE_P2P_MAX_PEERS
+        max_peers = envs.SONAR_P2P_MAX_PEERS
         for conn in new_connections:
             logger.info(
                 "P2P %s: accepting incoming connection from %s",
@@ -799,7 +799,7 @@ class P2PSecondaryTierManager(SecondaryTierManager):
             if len(self._sessions) >= max_peers:
                 logger.warning(
                     "P2P %s: rejecting inbound peer %s — session limit "
-                    "reached (%d/%d). Set APHRODITE_P2P_MAX_PEERS to increase.",
+                    "reached (%d/%d). Set SONAR_P2P_MAX_PEERS to increase.",
                     self._local_id,
                     conn.peer_id,
                     len(self._sessions),
@@ -1037,15 +1037,15 @@ class P2PSecondaryTierManager(SecondaryTierManager):
         """Evict idle sessions when remaining peer slots are scarce.
 
         A session is idle when it has no pending work and its last activity
-        timestamp exceeds ``APHRODITE_P2P_IDLE_TIMEOUT_S``. Eviction runs only
-        when ``len(_sessions) >= APHRODITE_P2P_MAX_PEERS - _IDLE_REAP_HEADROOM``
+        timestamp exceeds ``SONAR_P2P_IDLE_TIMEOUT_S``. Eviction runs only
+        when ``len(_sessions) >= SONAR_P2P_MAX_PEERS - _IDLE_REAP_HEADROOM``
         so a quiet but healthy mesh is not torn down. Uses the same
         teardown path as ``_reap_dead_sessions``.
         """
-        idle_timeout = envs.APHRODITE_P2P_IDLE_TIMEOUT_S
+        idle_timeout = envs.SONAR_P2P_IDLE_TIMEOUT_S
         if idle_timeout <= 0:
             return
-        max_peers = envs.APHRODITE_P2P_MAX_PEERS
+        max_peers = envs.SONAR_P2P_MAX_PEERS
         headroom = min(_IDLE_REAP_HEADROOM, max(0, max_peers - 1))
         if len(self._sessions) < max_peers - headroom:
             return

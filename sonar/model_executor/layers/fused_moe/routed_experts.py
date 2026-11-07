@@ -8,34 +8,34 @@ from typing import TYPE_CHECKING, Any, Literal, cast, overload
 import regex as re
 import torch
 
-from aphrodite.distributed.eplb.eplb_state import EplbState
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.custom_op import PluggableLayer
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.distributed.eplb.eplb_state import EplbState
+from sonar.logger import init_logger
+from sonar.model_executor.custom_op import PluggableLayer
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
 )
-from aphrodite.model_executor.layers.fused_moe.expert_map_manager import (
+from sonar.model_executor.layers.fused_moe.expert_map_manager import (
     ExpertMapManager,
 )
-from aphrodite.model_executor.layers.fused_moe.fused_moe_method_base import (
+from sonar.model_executor.layers.fused_moe.fused_moe_method_base import (
     FusedMoEMethodBase,
 )
-from aphrodite.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
-from aphrodite.model_executor.layers.fused_moe.routed_experts_capturer import (
+from sonar.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
+from sonar.model_executor.layers.fused_moe.routed_experts_capturer import (
     RoutedExpertsSink,
 )
-from aphrodite.model_executor.layers.fused_moe.unquantized_fused_moe_method import (
+from sonar.model_executor.layers.fused_moe.unquantized_fused_moe_method import (
     UnquantizedFusedMoEMethod,
 )
-from aphrodite.model_executor.layers.quantization.base_config import (
+from sonar.model_executor.layers.quantization.base_config import (
     QuantizationConfig,
     resolve_quant_method,
 )
-from aphrodite.model_executor.utils import kernel_parameters
-from aphrodite.utils.math_utils import cdiv
+from sonar.model_executor.utils import kernel_parameters
+from sonar.utils.math_utils import cdiv
 
 if TYPE_CHECKING:
-    from aphrodite.model_executor.layers.fused_moe.runner.shared_experts import SharedExperts
+    from sonar.model_executor.layers.fused_moe.runner.shared_experts import SharedExperts
 
 
 logger = init_logger(__name__)
@@ -168,7 +168,7 @@ class RoutedExperts(PluggableLayer):
         self.shared_expert_online_loader = None
         online_config = getattr(self.quant_config, "online_quantization_config", None)
         if online_config is not None and self.expert_map_manager.num_fused_shared_experts > 0:
-            from aphrodite.model_executor.layers.quantization.online.shared_expert import (
+            from sonar.model_executor.layers.quantization.online.shared_expert import (
                 OnlineSharedExpertLoader,
             )
 
@@ -262,7 +262,7 @@ class RoutedExperts(PluggableLayer):
         # AITER fused-MoE kernels consume the 0/1 expert_mask; every other
         # backend consumes the canonical -1/local-slot map. Ask the active
         # experts kernel which it wants (only AITER sets consumes_expert_mask)
-        # rather than keying on the global APHRODITE_ROCM_USE_AITER switch, which
+        # rather than keying on the global SONAR_ROCM_USE_AITER switch, which
         # does not reflect the per-layer kernel actually selected.
         moe_kernel = getattr(self.quant_method, "moe_kernel", None)
         if moe_kernel is not None and moe_kernel.fused_experts.consumes_expert_mask:
@@ -473,7 +473,7 @@ class RoutedExperts(PluggableLayer):
         fused_weight: torch.Tensor,
         is_fused_checkpoint_transposed: bool,
     ) -> torch.Tensor:
-        """Normalise a fused expert tensor to the Aphrodite weight layout."""
+        """Normalise a fused expert tensor to the Sonar weight layout."""
         if is_fused_checkpoint_transposed:
             return fused_weight.transpose(-1, -2)
         return fused_weight
@@ -666,7 +666,7 @@ class RoutedExperts(PluggableLayer):
                 param.data[:, :dim1, :dim2].copy_(loaded_weight)
             return True if return_success else None
 
-        from aphrodite.model_executor.layers.quantization.online.moe_base import (
+        from sonar.model_executor.layers.quantization.online.moe_base import (
             OnlineMoEMethodBase,
         )
 
@@ -906,7 +906,7 @@ class RoutedExperts(PluggableLayer):
             # load the weight scales and zp based on the quantization scheme
             # supported weight scales/zp can be found in
             # FusedMoeWeightScaleSupported
-            # TODO @dsikka: once hardened, refactor to use Aphrodite Parameters
+            # TODO @dsikka: once hardened, refactor to use Sonar Parameters
             # specific to each case
             quant_method = getattr(param, "quant_method", None)
             if quant_method == FusedMoeWeightScaleSupported.CHANNEL.value:

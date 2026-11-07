@@ -11,17 +11,17 @@ import json
 
 import pytest
 
-from aphrodite.parser.deepseek_v4 import (
+from sonar.parser.deepseek_v4 import (
     DSML_INVOKE_END,
     DSML_INVOKE_NAME_END,
     DSML_INVOKE_PREFIX,
 )
-from aphrodite.parser.deepseek_v32 import (
+from sonar.parser.deepseek_v32 import (
     DSML_FUNC_END,
     DSML_FUNC_START,
     DeepSeekV32Parser,
 )
-from aphrodite.parser.engine.parser_engine_config import ParserState
+from sonar.parser.engine.parser_engine_config import ParserState
 from tests.parser.engine.conftest import make_mock_tokenizer
 from tests.parser.engine.streaming_helpers import (
     collect_content,
@@ -49,7 +49,7 @@ def _func_calls(*invocations: str) -> str:
 
 
 def _make_tool(name, properties):
-    from aphrodite.entrypoints.openai.chat_completion.protocol import (
+    from sonar.entrypoints.openai.chat_completion.protocol import (
         ChatCompletionToolsParam,
     )
 
@@ -74,7 +74,7 @@ def mock_tokenizer():
 def mock_request():
     from unittest.mock import MagicMock
 
-    from aphrodite.entrypoints.openai.chat_completion.protocol import (
+    from sonar.entrypoints.openai.chat_completion.protocol import (
         ChatCompletionRequest,
     )
 
@@ -120,7 +120,7 @@ class TestNonStreaming:
 
     def test_content_before_tool_call(self, mock_tokenizer, mock_request):
         text = "Let me check. " + _func_calls(
-            _invoke("search", _param("q", "true", "aphrodite")),
+            _invoke("search", _param("q", "true", "sonar")),
         )
         parser = DeepSeekV32Parser(mock_tokenizer)
         result = parser.extract_tool_calls(text, mock_request)

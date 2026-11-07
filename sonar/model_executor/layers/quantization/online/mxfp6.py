@@ -7,30 +7,30 @@ from typing import Literal
 import torch
 from torch.nn import Module
 
-from aphrodite.config.quantization import QuantSpec
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.kernels.linear.mxfp6 import (
+from sonar.config.quantization import QuantSpec
+from sonar.logger import init_logger
+from sonar.model_executor.kernels.linear.mxfp6 import (
     CutedslMxfp6LinearKernel,
     Mxfp6LinearLayerConfig,
 )
-from aphrodite.model_executor.layers.linear import UnquantizedLinearMethod
-from aphrodite.model_executor.layers.quantization.online.fp8 import (
+from sonar.model_executor.layers.linear import UnquantizedLinearMethod
+from sonar.model_executor.layers.quantization.online.fp8 import (
     OnlineLinearBase,
 )
-from aphrodite.model_executor.layers.quantization.online.moe_base import (
+from sonar.model_executor.layers.quantization.online.moe_base import (
     OnlineMoEMethodBase,
 )
-from aphrodite.model_executor.layers.quantization.utils.mxfp6_online_utils import (
+from sonar.model_executor.layers.quantization.utils.mxfp6_online_utils import (
     quantize_mxfp6_cuda,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     kMxfp6E2M3Dynamic,
     kMxfp6E2M3Static,
     kMxfp6E3M2Dynamic,
     kMxfp6E3M2Static,
     kMxfp8Dynamic,
 )
-from aphrodite.model_executor.utils import replace_parameter
+from sonar.model_executor.utils import replace_parameter
 
 logger = init_logger(__name__)
 
@@ -146,7 +146,7 @@ class Mxfp6OnlineMoEMethod(OnlineMoEMethodBase):
 
     @classmethod
     def can_implement(cls, moe) -> tuple[bool, str | None]:
-        from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
+        from sonar.model_executor.layers.fused_moe.activation import MoEActivation
 
         if moe.activation != MoEActivation.SILU:
             return False, f"activation {moe.activation} is not supported"
@@ -213,11 +213,11 @@ class Mxfp6OnlineMoEMethod(OnlineMoEMethodBase):
     def process_weights_after_loading(self, layer: Module) -> None:
         if getattr(layer, "_already_called_process_weights_after_loading", False):
             return
-        from aphrodite.model_executor.layers.fused_moe.all2all_utils import (
+        from sonar.model_executor.layers.fused_moe.all2all_utils import (
             maybe_make_prepare_finalize,
         )
-        from aphrodite.model_executor.layers.fused_moe.config import FusedMoEQuantConfig
-        from aphrodite.model_executor.layers.fused_moe.experts.cutedsl_mxfp6_moe import (
+        from sonar.model_executor.layers.fused_moe.config import FusedMoEQuantConfig
+        from sonar.model_executor.layers.fused_moe.experts.cutedsl_mxfp6_moe import (
             CutedslMxfp6Experts,
         )
 
@@ -264,7 +264,7 @@ class Mxfp6OnlineMoEMethod(OnlineMoEMethodBase):
             weight_format=self.weight_format,
             activation_format=self.activation_format,
         )
-        import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
+        import sonar.model_executor.layers.fused_moe.modular_kernel as mk
 
         self.moe_quant_config = quant_config
         self.moe_kernel = mk.FusedMoEKernel(prepare_finalize, experts)

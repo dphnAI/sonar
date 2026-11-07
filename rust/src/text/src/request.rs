@@ -4,25 +4,25 @@
 use std::collections::HashMap;
 use std::num::NonZeroU32;
 
-use aphrodite_engine_core_client::protocol::kv_hints::KvHintsEnvelope;
-use aphrodite_engine_core_client::protocol::lora::LoraRequest;
-use aphrodite_engine_core_client::protocol::multimodal::MmFeatures;
-use aphrodite_engine_core_client::protocol::request::ReasoningParserKwargs;
-use aphrodite_engine_core_client::protocol::sampling::{
-    AphroditeSamplingParams, RepetitionDetectionParams,
-};
-use aphrodite_engine_core_client::protocol::structured_outputs::StructuredOutputsParams;
 use enum_as_inner::EnumAsInner;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use sonar_engine_core_client::protocol::kv_hints::KvHintsEnvelope;
+use sonar_engine_core_client::protocol::lora::LoraRequest;
+use sonar_engine_core_client::protocol::multimodal::MmFeatures;
+use sonar_engine_core_client::protocol::request::ReasoningParserKwargs;
+use sonar_engine_core_client::protocol::sampling::{
+    RepetitionDetectionParams, SonarSamplingParams,
+};
+use sonar_engine_core_client::protocol::structured_outputs::StructuredOutputsParams;
 
 use crate::error::{Error, Result};
 use crate::output::TextDecodeOptions;
 use crate::truncation::PromptTruncation;
 
-/// Normalize Aphrodite's signed `top_k` domain into [`SamplingParams::top_k`].
+/// Normalize Sonar's signed `top_k` domain into [`SamplingParams::top_k`].
 ///
-/// Aphrodite uses both `-1` and `0` to disable top-k sampling. The text sampling
+/// Sonar uses both `-1` and `0` to disable top-k sampling. The text sampling
 /// model represents that state as `None` and preserves positive limits as
 /// `Some(k)`. Values below `-1` and values above `u32::MAX` are rejected.
 ///
@@ -59,7 +59,7 @@ impl Default for Prompt {
     }
 }
 
-/// User-facing sampling parameters accepted by `aphrodite-text`.
+/// User-facing sampling parameters accepted by `sonar-text`.
 ///
 /// This intentionally keeps only the subset that the current Rust text layer
 /// supports as northbound request semantics. Engine-core-specific normalized
@@ -158,14 +158,14 @@ pub struct SamplingParams {
     /// Python's `SamplingParams` names this `extra_args`, which clients of the
     /// token generate API send.
     #[serde(alias = "extra_args")]
-    pub aphrodite_xargs: Option<HashMap<String, Value>>,
+    pub sonar_xargs: Option<HashMap<String, Value>>,
     /// Number of newly generated tokens to batch into each streamed output.
     /// Raises the interval above the frontend-level `--stream-interval`;
     /// values below it are clamped up to it. The first and final outputs are
     /// always emitted immediately.
     pub stream_interval: Option<NonZeroU32>,
     #[serde(flatten)]
-    pub aphrodite_sampling: AphroditeSamplingParams,
+    pub sonar_sampling: SonarSamplingParams,
 }
 
 #[allow(clippy::derivable_impls)] // more explicit
@@ -199,9 +199,9 @@ impl Default for SamplingParams {
             structured_outputs: None,
             skip_reading_prefix_cache: None,
             routed_experts_prompt_start: None,
-            aphrodite_xargs: None,
+            sonar_xargs: None,
             stream_interval: None,
-            aphrodite_sampling: AphroditeSamplingParams::default(),
+            sonar_sampling: SonarSamplingParams::default(),
         }
     }
 }
@@ -218,7 +218,7 @@ pub struct TextRequest {
     /// requests keep this empty; multimodal chat uses it with pre-tokenized
     /// prompt IDs.
     pub mm_features: Option<MmFeatures>,
-    /// User-facing sampling parameters accepted by `aphrodite-text`.
+    /// User-facing sampling parameters accepted by `sonar-text`.
     pub sampling_params: SamplingParams,
     /// Incremental detokenization options for the response path.
     pub decode_options: TextDecodeOptions,

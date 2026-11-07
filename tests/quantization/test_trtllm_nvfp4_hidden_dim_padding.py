@@ -8,23 +8,23 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-from aphrodite.forward_context import set_forward_context
-from aphrodite.model_executor.layers.fused_moe.oracle.nvfp4 import NvFp4MoeBackend
-from aphrodite.model_executor.layers.fused_moe.runner import moe_runner  # noqa: F401
-from aphrodite.model_executor.layers.fused_moe.runner.moe_runner_interface import (
+from sonar.config import SonarConfig, set_current_sonar_config
+from sonar.forward_context import set_forward_context
+from sonar.model_executor.layers.fused_moe.oracle.nvfp4 import NvFp4MoeBackend
+from sonar.model_executor.layers.fused_moe.runner import moe_runner  # noqa: F401
+from sonar.model_executor.layers.fused_moe.runner.moe_runner_interface import (
     MoERunnerInterface,
 )
-from aphrodite.model_executor.layers.quantization.utils import flashinfer_fp4_moe
-from aphrodite.model_executor.layers.quantization.utils.flashinfer_fp4_moe import (
+from sonar.model_executor.layers.quantization.utils import flashinfer_fp4_moe
+from sonar.model_executor.layers.quantization.utils.flashinfer_fp4_moe import (
     prepare_nvfp4_moe_layer_for_fi_or_cutlass,
 )
-from aphrodite.model_executor.layers.quantization.utils.flashinfer_utils import (
+from sonar.model_executor.layers.quantization.utils.flashinfer_utils import (
     align_fp4_moe_hidden_dim_for_fi,
     align_fp4_moe_weights_for_fi,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import _USE_LAYERNAME, LayerName
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import _USE_LAYERNAME, LayerName
 
 
 def test_shared_nvfp4_input_scales_have_writable_storage(monkeypatch):
@@ -179,7 +179,7 @@ def test_moe_forward_shared_gets_packed_shared_input_under_inductor():
         x = x.to(torch.bfloat16) * norm_weight
         router_logits = torch.mm(x, gate_weight.t(), out_dtype=torch.float32)
         padded = F.pad(x, (0, padded_hidden - hidden))
-        shared_out, fused_out = torch.ops.aphrodite.moe_forward_shared(padded, router_logits, x, None, layer_name, 0)
+        shared_out, fused_out = torch.ops.sonar.moe_forward_shared(padded, router_logits, x, None, layer_name, 0)
         return shared_out + fused_out[..., :hidden]
 
     x = torch.randn(num_tokens, hidden, device="cuda", dtype=torch.bfloat16)
@@ -189,13 +189,13 @@ def test_moe_forward_shared_gets_packed_shared_input_under_inductor():
     torch._dynamo.mark_dynamic(x, 0)
     torch._dynamo.mark_dynamic(residual, 0)
 
-    aphrodite_config = AphroditeConfig()
-    aphrodite_config.compilation_config.static_forward_context = {name: layer}
+    sonar_config = SonarConfig()
+    sonar_config.compilation_config.static_forward_context = {name: layer}
     with (
         torch.inference_mode(),
         torch._inductor.config.patch(force_disable_caches=True),
-        set_current_aphrodite_config(aphrodite_config),
-        set_forward_context(None, aphrodite_config),
+        set_current_sonar_config(sonar_config),
+        set_forward_context(None, sonar_config),
     ):
         torch.compile(moe_block, backend="inductor", fullgraph=True)(x, residual, norm_weight, gate_weight)
 

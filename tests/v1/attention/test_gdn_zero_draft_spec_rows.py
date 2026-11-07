@@ -14,15 +14,15 @@ zero-draft decode row must not fall back to the plain decode path.
 import pytest
 import torch
 
-from aphrodite.config import SpeculativeConfig
-from aphrodite.config.compilation import CUDAGraphMode
-from aphrodite.model_executor.layers.mamba.mamba_utils import MambaStateShapeCalculator
-from aphrodite.v1.attention.backends.gdn_attn import GDNAttentionMetadataBuilder
-from aphrodite.v1.kv_cache_interface import MambaSpec
+from sonar.config import SpeculativeConfig
+from sonar.config.compilation import CUDAGraphMode
+from sonar.model_executor.layers.mamba.mamba_utils import MambaStateShapeCalculator
+from sonar.v1.attention.backends.gdn_attn import GDNAttentionMetadataBuilder
+from sonar.v1.kv_cache_interface import MambaSpec
 from tests.v1.attention.utils import (
     BatchSpec,
-    create_aphrodite_config,
     create_common_attn_metadata,
+    create_sonar_config,
 )
 
 BLOCK_SIZE = 16
@@ -36,17 +36,17 @@ def _builder(
     shapes: tuple[tuple[int, ...], ...] = ((16, 64),),
     dtypes: tuple[torch.dtype, ...] = (torch.float16,),
 ) -> GDNAttentionMetadataBuilder:
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         model_name="Qwen/Qwen3.5-0.8B",
         block_size=BLOCK_SIZE,
     )
-    aphrodite_config.compilation_config.cudagraph_mode = CUDAGraphMode.FULL_AND_PIECEWISE
-    aphrodite_config.speculative_config = (
+    sonar_config.compilation_config.cudagraph_mode = CUDAGraphMode.FULL_AND_PIECEWISE
+    sonar_config.speculative_config = (
         SpeculativeConfig(method="ngram", num_speculative_tokens=NUM_SPEC) if use_spec_decode else None
     )
     # "none" keeps the block table as-is; the align gather needs columns for
     # the speculative blocks, which `_decode_metadata` appends on request.
-    aphrodite_config.cache_config.mamba_cache_mode = mamba_cache_mode
+    sonar_config.cache_config.mamba_cache_mode = mamba_cache_mode
     mamba_spec = MambaSpec(
         block_size=BLOCK_SIZE,
         shapes=shapes,
@@ -57,7 +57,7 @@ def _builder(
     return GDNAttentionMetadataBuilder(
         kv_cache_spec=mamba_spec,
         layer_names=["layer.0"],
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         device=DEVICE,
     )
 
@@ -83,7 +83,7 @@ def _decode_metadata(builder, num_accepted: list[int], seq_len: int = 64):
     """
     batch = BatchSpec(seq_lens=[seq_len] * len(num_accepted), query_lens=[1] * len(num_accepted))
     common = create_common_attn_metadata(batch, BLOCK_SIZE, DEVICE, arange_block_indices=True)
-    if builder.aphrodite_config.cache_config.mamba_cache_mode == "align":
+    if builder.sonar_config.cache_config.mamba_cache_mode == "align":
         # Align gathers the last 1 + num_speculative_blocks columns starting at
         # the request's current block, so the table has to reach past the end of
         # the sequence -- at runtime it is sized by max_model_len, while the

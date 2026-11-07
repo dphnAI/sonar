@@ -5,21 +5,21 @@ from collections.abc import Callable
 import deep_ep
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite.forward_context import get_forward_context
-from aphrodite.model_executor.layers.fused_moe.config import FusedMoEQuantConfig
-from aphrodite.model_executor.layers.fused_moe.topk_weight_and_reduce import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar.forward_context import get_forward_context
+from sonar.model_executor.layers.fused_moe.config import FusedMoEQuantConfig
+from sonar.model_executor.layers.fused_moe.topk_weight_and_reduce import (
     TopKWeightAndReduceContiguous,
     TopKWeightAndReduceDelegate,
 )
-from aphrodite.model_executor.layers.fused_moe.utils import moe_kernel_quantize_input
-from aphrodite.model_executor.layers.quantization.utils.mxfp8_utils import (
+from sonar.model_executor.layers.fused_moe.utils import moe_kernel_quantize_input
+from sonar.model_executor.layers.quantization.utils.mxfp8_utils import (
     MXFP8_BLOCK_SIZE,
     swizzle_mxfp8_scale,
 )
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.math_utils import cdiv, round_up
-from aphrodite.v1.worker.ubatching import (
+from sonar.triton_utils import tl, triton
+from sonar.utils.math_utils import cdiv, round_up
+from sonar.v1.worker.ubatching import (
     dbo_current_ubatch_id,
     dbo_enabled,
 )

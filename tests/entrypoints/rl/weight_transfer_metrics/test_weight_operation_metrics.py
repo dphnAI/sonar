@@ -13,16 +13,16 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from prometheus_client import CollectorRegistry
 
-from aphrodite.entrypoints.rl.online import api_router
-from aphrodite.entrypoints.rl.online import metrics as rl_metrics
-from aphrodite.entrypoints.rl.online.metrics import WeightOperationMetrics
-from aphrodite.entrypoints.serve.exception_handling.register import init_exception_handler
-from aphrodite.v1.metrics.prometheus import get_prometheus_registry
+from sonar.entrypoints.rl.online import api_router
+from sonar.entrypoints.rl.online import metrics as rl_metrics
+from sonar.entrypoints.rl.online.metrics import WeightOperationMetrics
+from sonar.entrypoints.serve.exception_handling.register import init_exception_handler
+from sonar.v1.metrics.prometheus import get_prometheus_registry
 
 pytestmark = [pytest.mark.cpu_test, pytest.mark.skip_global_cleanup]
 
-DURATION = "aphrodite:rl_weight_update_operation_duration_seconds_count"
-IN_FLIGHT = "aphrodite:rl_weight_update_operations_in_flight"
+DURATION = "sonar:rl_weight_update_operation_duration_seconds_count"
+IN_FLIGHT = "sonar:rl_weight_update_operations_in_flight"
 
 
 def sample(registry, name, operation):
@@ -107,7 +107,7 @@ async def test_cancelled_route_releases_in_flight(registry):
 
 HOLD_OPERATION = """
 import sys
-from aphrodite.entrypoints.rl.online.metrics import weight_operation_metrics
+from sonar.entrypoints.rl.online.metrics import weight_operation_metrics
 with weight_operation_metrics().record("update"):
     print("entered", flush=True)
     sys.stdin.readline()
@@ -162,11 +162,11 @@ def test_default_recorder_is_created_lazily_on_the_default_registry():
     probe = """
 from prometheus_client import REGISTRY
 
-from aphrodite.entrypoints.rl.online import metrics as rl_metrics
+from sonar.entrypoints.rl.online import metrics as rl_metrics
 
 NAMES = [
-    "aphrodite:rl_weight_update_operation_duration_seconds",
-    "aphrodite:rl_weight_update_operations_in_flight",
+    "sonar:rl_weight_update_operation_duration_seconds",
+    "sonar:rl_weight_update_operations_in_flight",
 ]
 assert rl_metrics._metrics is None
 assert not set(NAMES) & set(REGISTRY._names_to_collectors)

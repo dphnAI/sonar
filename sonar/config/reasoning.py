@@ -3,10 +3,10 @@
 
 from dataclasses import field
 
-from aphrodite.config.model import ModelConfig
-from aphrodite.config.utils import config
-from aphrodite.reasoning import ReasoningParserManager
-from aphrodite.tokenizers import cached_tokenizer_from_config
+from sonar.config.model import ModelConfig
+from sonar.config.utils import config
+from sonar.reasoning import ReasoningParserManager
+from sonar.tokenizers import cached_tokenizer_from_config
 
 
 @config

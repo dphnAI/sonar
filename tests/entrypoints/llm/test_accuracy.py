@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""This file test accuracy of the Aphrodite server via LMEval.
-It uses local-completions, which interacts with Aphrodite
+"""This file test accuracy of the Sonar server via LMEval.
+It uses local-completions, which interacts with Sonar
 through the OAI API with N concurrent connections.
 This simulates real work usage of the API and makes
 sure that the zmq frontend mp RPC message passing and
@@ -10,7 +10,7 @@ AsyncLLMEngine are working correctly.
 
 import pytest
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 from tests.quantization.lm_eval_utils import evaluate_sonar
 
 MODEL_NAMES = [

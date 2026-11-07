@@ -8,34 +8,34 @@ from typing import Any, ClassVar
 
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.cache import CacheDType
-from aphrodite.model_executor.layers.attention.sparse_mla_attention import (
+from sonar.config import SonarConfig
+from sonar.config.cache import CacheDType
+from sonar.model_executor.layers.attention.sparse_mla_attention import (
     SparseMLACommonImpl,
     SparseMLACommonMetadata,
     SparseMLACommonMetadataBuilder,
 )
-from aphrodite.platforms.interface import DeviceCapability
-from aphrodite.v1.attention.backend import (
+from sonar.platforms.interface import DeviceCapability
+from sonar.v1.attention.backend import (
     AttentionBackend,
     AttentionCGSupport,
     AttentionLayer,
     MLAAttentionImpl,
     MultipleOf,
 )
-from aphrodite.v1.attention.backends.fa_utils import flash_attn_supports_mla
-from aphrodite.v1.attention.backends.mla.flashinfer_mla_sparse import (
+from sonar.v1.attention.backends.fa_utils import flash_attn_supports_mla
+from sonar.v1.attention.backends.mla.flashinfer_mla_sparse import (
     FlashInferMLASparseImpl,
     FlashInferMLASparseTRTLLMBackend,
     FlashInferMLASparseTRTLLMMetadataBuilder,
 )
-from aphrodite.v1.attention.backends.mla.sparse_utils import (
+from sonar.v1.attention.backends.mla.sparse_utils import (
     align_blocks_to_rows,
     flat_kv_row_view,
 )
-from aphrodite.v1.attention.ops.metadata import compute_token_to_req_indices
-from aphrodite.v1.kv_cache_interface import AttentionSpec
-from aphrodite.vllm_flash_attn.flash_attn_interface import flash_attn_varlen_func
+from sonar.v1.attention.ops.metadata import compute_token_to_req_indices
+from sonar.v1.kv_cache_interface import AttentionSpec
+from sonar.vllm_flash_attn.flash_attn_interface import flash_attn_varlen_func
 
 
 class FlashAttnMLASparseBackend(AttentionBackend):
@@ -101,14 +101,14 @@ class FlashAttnMLASparseBackend(AttentionBackend):
         if not flash_attn_supports_mla():
             return "FlashAttention MLA not supported on this device"
 
-        from aphrodite.config import get_current_aphrodite_config_or_none
+        from sonar.config import get_current_sonar_config_or_none
 
-        aphrodite_config = get_current_aphrodite_config_or_none()
-        if aphrodite_config is not None and aphrodite_config.model_config is not None:
-            if aphrodite_config.parallel_config.decode_context_parallel_size > 1:
+        sonar_config = get_current_sonar_config_or_none()
+        if sonar_config is not None and sonar_config.model_config is not None:
+            if sonar_config.parallel_config.decode_context_parallel_size > 1:
                 return "FlashAttention MLA Sparse does not support DCP for now"
 
-            hf_text_config = aphrodite_config.model_config.hf_text_config
+            hf_text_config = sonar_config.model_config.hf_text_config
             if not hasattr(hf_text_config, "index_topk"):
                 return "FlashAttention MLA Sparse requires model with index_topk"
         return None
@@ -127,12 +127,12 @@ class FlashAttnMLASparseMetadataBuilder(SparseMLACommonMetadataBuilder[FlashAttn
         self,
         kv_cache_spec: AttentionSpec,
         layer_names: list[str],
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
     ) -> None:
-        super().__init__(kv_cache_spec, layer_names, aphrodite_config, device)
+        super().__init__(kv_cache_spec, layer_names, sonar_config, device)
 
-        num_q_heads = self.model_config.get_num_attention_heads(aphrodite_config.parallel_config)
+        num_q_heads = self.model_config.get_num_attention_heads(sonar_config.parallel_config)
         threshold = {16: 128, 32: 128, 64: 256, 128: 256}.get(num_q_heads, 256)
         self._init_reorder_batch_threshold(threshold, supports_spec_as_decode=True)
         self.supports_draft_decode_metadata_update = self.dcp_world_size == 1
@@ -249,12 +249,12 @@ class FlashAttnMLASparseImpl(SparseMLACommonImpl[FlashAttnMLASparseMetadata]):
 
 def _fa4_cute_mla_available() -> str | None:
     """Reason the FA4 cute-DSL MLA entry point is unusable, or None."""
-    from aphrodite.vllm_flash_attn import flash_attn_interface as fa
+    from sonar.vllm_flash_attn import flash_attn_interface as fa
 
     if not fa.is_fa_version_supported(4):
         return f"FA4 unavailable: {fa.fa_version_unsupported_reason(4)}"
     try:
-        from aphrodite.vllm_flash_attn.cute.interface import _flash_attn_fwd  # noqa: F401
+        from sonar.vllm_flash_attn.cute.interface import _flash_attn_fwd  # noqa: F401
     except Exception as e:  # cute-DSL / cutlass import chain
         return f"FA4 cute-DSL entry point failed to import: {e!r}"
     return None
@@ -290,18 +290,18 @@ class FlashAttnMLASparseFA4Backend(FlashInferMLASparseTRTLLMBackend):
 
     @classmethod
     def supports_combination(cls, *args: Any, **kwargs: Any) -> str | None:
-        from aphrodite.config import get_current_aphrodite_config_or_none
-        from aphrodite.utils.flashinfer import has_flashinfer
+        from sonar.config import get_current_sonar_config_or_none
+        from sonar.utils.flashinfer import has_flashinfer
 
         if not has_flashinfer():
             return "FA4 sparse MLA runs its prefill batches on FlashInfer's kernel"
         if (reason := _fa4_cute_mla_available()) is not None:
             return reason
-        aphrodite_config = get_current_aphrodite_config_or_none()
-        if aphrodite_config is None:
+        sonar_config = get_current_sonar_config_or_none()
+        if sonar_config is None:
             return None
-        if aphrodite_config.model_config is not None:
-            hf_config = aphrodite_config.model_config.hf_text_config
+        if sonar_config.model_config is not None:
+            hf_config = sonar_config.model_config.hf_text_config
             topk = getattr(hf_config, "index_topk", None)
             # gather_kv_indices' last dim must be a whole number of n-tiles.
             if topk is None or topk % 128 != 0:
@@ -313,8 +313,8 @@ class FlashAttnMLASparseFA4Backend(FlashInferMLASparseTRTLLMBackend):
             if dims != (512, 64):
                 return f"FA4 sparse MLA requires (kv_lora_rank, qk_rope_head_dim) == (512, 64), got {dims}"
             # Under DCP the query is all-gathered: the kernel sees heads * dcp_size.
-            dcp_size = aphrodite_config.parallel_config.decode_context_parallel_size
-            num_heads = aphrodite_config.model_config.get_num_attention_heads(aphrodite_config.parallel_config)
+            dcp_size = sonar_config.parallel_config.decode_context_parallel_size
+            num_heads = sonar_config.model_config.get_num_attention_heads(sonar_config.parallel_config)
             # 128 gathered heads take FA's prefill kernel, unvalidated under DCP.
             head_counts = (8, 16, 32, 64) if dcp_size > 1 else (8, 16, 32, 64, 128)
             if num_heads * dcp_size not in head_counts:

@@ -10,33 +10,33 @@ from compressed_tensors.quantization import (
     QuantizationStrategy,
 )
 
-import aphrodite._custom_ops as ops
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite import envs
-from aphrodite.config.kernel import MoEBackend
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe.config import (
+import sonar._custom_ops as ops
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar import envs
+from sonar.config.kernel import MoEBackend
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEQuantConfig,
     int4_w4a16_moe_quant_config,
     int8_w8a16_moe_quant_config,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.marlin_moe import (
+from sonar.model_executor.layers.fused_moe.experts.marlin_moe import (
     BatchedMarlinExperts,
     MarlinExperts,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.swordfish_moe import (
+from sonar.model_executor.layers.fused_moe.experts.swordfish_moe import (
     SwordfishExperts,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.triton_moe import (
+from sonar.model_executor.layers.fused_moe.experts.triton_moe import (
     TritonWNA16Experts,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.trtllm_mxint4_moe import (
+from sonar.model_executor.layers.fused_moe.experts.trtllm_mxint4_moe import (
     TrtLlmMxint4ExpertsMonolithic,
 )
-from aphrodite.model_executor.layers.quantization.base_config import QuantizationConfig
-from aphrodite.model_executor.layers.quantization.utils.humming import prioritize_humming
-from aphrodite.model_executor.layers.quantization.utils.marlin_utils import (
+from sonar.model_executor.layers.quantization.base_config import QuantizationConfig
+from sonar.model_executor.layers.quantization.utils.humming import prioritize_humming
+from sonar.model_executor.layers.quantization.utils.marlin_utils import (
     check_moe_marlin_supports_config,
     marlin_act_int8_process_scales,
     marlin_moe_padded_intermediate,
@@ -45,12 +45,12 @@ from aphrodite.model_executor.layers.quantization.utils.marlin_utils import (
     moe_awq_to_marlin_zero_points,
     moe_packed_to_marlin_zero_points,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     pack_quantized_values_into_int32,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.scalar_type import scalar_types
+from sonar.platforms import current_platform
+from sonar.scalar_type import scalar_types
 
 logger = init_logger(__name__)
 
@@ -74,7 +74,7 @@ def backend_to_kernel_cls(
 ) -> list[type[mk.FusedMoEExperts]]:
     """Return the experts class for the given backend, or None for NONE."""
     if backend == WNA16MoEBackend.HUMMING:
-        from aphrodite.model_executor.layers.fused_moe.experts.fused_humming_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.fused_humming_moe import (
             BatchedHummingGroupedExperts,
             HummingGroupedExperts,
             HummingIndexedExperts,
@@ -96,31 +96,31 @@ def backend_to_kernel_cls(
     elif backend == WNA16MoEBackend.TRITON:
         return [TritonWNA16Experts]
     elif backend == WNA16MoEBackend.XPU:
-        from aphrodite.model_executor.layers.fused_moe.experts.xpu_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.xpu_moe import (
             XPUExpertsWNA16,
         )
 
         return [XPUExpertsWNA16]
     elif backend == WNA16MoEBackend.CPU:
-        from aphrodite.model_executor.layers.fused_moe.experts.cpu_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.cpu_moe import (
             CPUExpertsInt4,
         )
 
         return [CPUExpertsInt4]
     elif backend == WNA16MoEBackend.ZEN_CPU:
-        from aphrodite.model_executor.layers.fused_moe.experts.zentorch_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.zentorch_moe import (
             ZentorchExpertsInt4,
         )
 
         return [ZentorchExpertsInt4]
     elif backend == WNA16MoEBackend.EMULATION:
-        from aphrodite.model_executor.layers.fused_moe.experts.int4_emulation_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.int4_emulation_moe import (
             Int4EmulationTritonExperts,
         )
 
         return [Int4EmulationTritonExperts]
     elif backend == WNA16MoEBackend.RDNA3:
-        from aphrodite.model_executor.layers.fused_moe.experts.rdna3_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.rdna3_moe import (
             Rdna3WNA16Experts,
         )
 
@@ -173,9 +173,9 @@ def _backend_incompatibility_reason(
         if quant_config.strategy != QuantizationStrategy.GROUP:
             return "only group-wise scales are supported"
 
-    from aphrodite.model_executor.layers.quantization.auto_awq import AutoAWQConfig
-    from aphrodite.model_executor.layers.quantization.auto_gptq import AutoGPTQConfig
-    from aphrodite.model_executor.layers.quantization.moe_wna16 import MoeWNA16Config
+    from sonar.model_executor.layers.quantization.auto_awq import AutoAWQConfig
+    from sonar.model_executor.layers.quantization.auto_gptq import AutoGPTQConfig
+    from sonar.model_executor.layers.quantization.moe_wna16 import MoeWNA16Config
 
     if backend == WNA16MoEBackend.SWORDFISH:
         if not isinstance(quant_config, (AutoGPTQConfig, QuantizationArgs)):
@@ -193,8 +193,8 @@ def _backend_incompatibility_reason(
             return "the intermediate size must be a multiple of 64"
 
     if backend == WNA16MoEBackend.ZEN_CPU:
-        if not envs.APHRODITE_CPU_INT4_W4A8:
-            return "APHRODITE_CPU_INT4_W4A8=0 disables the DA8W4 path"
+        if not envs.SONAR_CPU_INT4_W4A8:
+            return "SONAR_CPU_INT4_W4A8=0 disables the DA8W4 path"
         if may_have_zp:
             return "zero points are not supported"
         if isinstance(quant_config, MoeWNA16Config):
@@ -417,22 +417,22 @@ def make_wna16_moe_kernel(
     backend: WNA16MoEBackend = WNA16MoEBackend.MARLIN,
     routing_tables: tuple[torch.Tensor, torch.Tensor, torch.Tensor] | None = None,
 ) -> mk.FusedMoEKernel:
-    from aphrodite.model_executor.layers.fused_moe.all2all_utils import (
+    from sonar.model_executor.layers.fused_moe.all2all_utils import (
         maybe_make_prepare_finalize,
     )
-    from aphrodite.model_executor.layers.fused_moe.experts.cpu_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.cpu_moe import (
         CPUExpertsInt4,
     )
-    from aphrodite.model_executor.layers.fused_moe.experts.int4_emulation_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.int4_emulation_moe import (
         Int4EmulationTritonExperts,
     )
-    from aphrodite.model_executor.layers.fused_moe.experts.rdna3_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.rdna3_moe import (
         Rdna3WNA16Experts,
     )
-    from aphrodite.model_executor.layers.fused_moe.experts.xpu_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.xpu_moe import (
         XPUExpertsWNA16,
     )
-    from aphrodite.model_executor.layers.fused_moe.experts.zentorch_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.zentorch_moe import (
         ZentorchExpertsInt4,
     )
 
@@ -517,7 +517,7 @@ def _process_weights_flashinfer(
     1. Transform weights/scales via ``prepare_static_weights_for_trtllm_mxint4_moe``.
     2. Return transformed tensors and biases.
     """
-    from aphrodite.model_executor.layers.quantization.utils.flashinfer_mxint4_moe import (
+    from sonar.model_executor.layers.quantization.utils.flashinfer_mxint4_moe import (
         prepare_static_weights_for_trtllm_mxint4_moe,
     )
 
@@ -1050,13 +1050,13 @@ def _process_weights_cpu(
     to K-first internally.  AWQ uses a different packing axis and arrives
     in its native format.
     """
-    from aphrodite.model_executor.layers.fused_moe.experts.cpu_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.cpu_moe import (
         prepare_int4_moe_layer_for_cpu,
     )
-    from aphrodite.model_executor.layers.quantization.auto_awq import (
+    from sonar.model_executor.layers.quantization.auto_awq import (
         AutoAWQConfig,
     )
-    from aphrodite.model_executor.layers.quantization.auto_gptq import (
+    from sonar.model_executor.layers.quantization.auto_gptq import (
         AutoGPTQConfig,
     )
 
@@ -1125,7 +1125,7 @@ def _process_weights_cpu(
 
 def _zen_repack_s4(packed: torch.Tensor, in_features: int) -> torch.Tensor:
     """Repack CT int4 ``[E, N, K//8]`` into zentorch s4 ``[E, N, K//8]``."""
-    from aphrodite.model_executor.kernels.linear.mixed_precision.zentorch import (
+    from sonar.model_executor.kernels.linear.mixed_precision.zentorch import (
         _import_unpack_from_int32,
     )
 
@@ -1231,8 +1231,8 @@ def _humming_wna16_weight_schema(
 ) -> dict[str, Any]:
     """Humming weight schema for a WNA16 checkpoint, derived from the quant
     config rather than the running kernel."""
-    from aphrodite.model_executor.layers.quantization.auto_awq import AutoAWQConfig
-    from aphrodite.model_executor.layers.quantization.auto_gptq import AutoGPTQConfig
+    from sonar.model_executor.layers.quantization.auto_awq import AutoAWQConfig
+    from sonar.model_executor.layers.quantization.auto_gptq import AutoGPTQConfig
 
     if isinstance(quant_config, AutoAWQConfig):
         return {
@@ -1302,7 +1302,7 @@ class _MoeWNA16HummingWeightSchema:
         num_experts: int | None = None,
     ) -> tuple[Any, dict[str, torch.Tensor]]:
         del shape_n_stacks, shape_k_stacks, num_experts
-        from aphrodite.utils.humming import HummingWeightSchema, dtypes
+        from sonar.utils.humming import HummingWeightSchema, dtypes
 
         output = _convert_moe_wna16_humming_tensors(tensors, has_zero_point=self.has_zero_point)
         output["weight_scale"] = output["weight_scale"].to(param_dtype)
@@ -1500,13 +1500,13 @@ def convert_to_wna16_moe_kernel_format(
 
     """
     if backend == WNA16MoEBackend.HUMMING:
-        from aphrodite.model_executor.layers.quantization.moe_wna16 import MoeWNA16Config
-        from aphrodite.model_executor.layers.quantization.utils.humming import (
+        from sonar.model_executor.layers.quantization.moe_wna16 import MoeWNA16Config
+        from sonar.model_executor.layers.quantization.utils.humming import (
             convert_to_humming_moe_kernel_format,
         )
 
         if isinstance(quant_config, MoeWNA16Config):
-            from aphrodite.utils.humming import HummingInputSchema
+            from sonar.utils.humming import HummingInputSchema
 
             convert_to_humming_moe_kernel_format(
                 layer,
@@ -1522,7 +1522,7 @@ def convert_to_wna16_moe_kernel_format(
         return None
 
     if backend == WNA16MoEBackend.SWORDFISH:
-        from aphrodite.model_executor.layers.quantization.auto_gptq import (
+        from sonar.model_executor.layers.quantization.auto_gptq import (
             AutoGPTQConfig,
         )
 
@@ -1564,10 +1564,10 @@ def convert_to_wna16_moe_kernel_format(
         WNA16MoEBackend.MARLIN,
         WNA16MoEBackend.BATCHED_MARLIN,
     ):
-        from aphrodite.model_executor.layers.quantization.auto_awq import (
+        from sonar.model_executor.layers.quantization.auto_awq import (
             AutoAWQConfig,
         )
-        from aphrodite.model_executor.layers.quantization.auto_gptq import (
+        from sonar.model_executor.layers.quantization.auto_gptq import (
             AutoGPTQConfig,
         )
 
@@ -1695,7 +1695,7 @@ def convert_to_wna16_moe_kernel_format(
             w2_bias_out,
         )
     elif backend == WNA16MoEBackend.EMULATION:
-        from aphrodite.model_executor.layers.quantization.auto_awq import AutoAWQConfig
+        from sonar.model_executor.layers.quantization.auto_awq import AutoAWQConfig
 
         if isinstance(quant_config, AutoAWQConfig):
             return _process_weights_emulation_awq(

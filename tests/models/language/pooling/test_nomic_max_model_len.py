@@ -31,7 +31,7 @@ max_model_len = int(original_max_position_embeddings * factor)
 @pytest.fixture(scope="module", autouse=True)
 def predownload_models():
     """Warm the HF cache so engine startup never hits transient hub errors."""
-    from aphrodite.transformers_utils.repo_utils import hf_api, with_retry
+    from sonar.transformers_utils.repo_utils import hf_api, with_retry
 
     for model_info in MODELS:
         with_retry(
@@ -45,14 +45,14 @@ def predownload_models():
 
 
 @pytest.mark.parametrize("model_info", MODELS)
-def test_default(model_info, aphrodite_runner):
-    with aphrodite_runner(
+def test_default(model_info, sonar_runner):
+    with sonar_runner(
         model_info.name,
         revision=model_info.revision,
         runner="pooling",
         max_model_len=None,
-    ) as aphrodite_model:
-        model_config = aphrodite_model.llm.llm_engine.model_config
+    ) as sonar_model:
+        model_config = sonar_model.llm.llm_engine.model_config
         if model_info.name == "nomic-ai/nomic-embed-text-v2-moe":
             # For nomic-embed-text-v2-moe the length is set to 512
             # by sentence_bert_config.json.
@@ -62,22 +62,22 @@ def test_default(model_info, aphrodite_runner):
 
 
 @pytest.mark.parametrize("model_info", MODELS)
-def test_set_max_model_len_legal(model_info, aphrodite_runner):
+def test_set_max_model_len_legal(model_info, sonar_runner):
     # set max_model_len <= 512
-    with aphrodite_runner(
+    with sonar_runner(
         model_info.name,
         revision=model_info.revision,
         runner="pooling",
         max_model_len=256,
-    ) as aphrodite_model:
-        model_config = aphrodite_model.llm.llm_engine.model_config
+    ) as sonar_model:
+        model_config = sonar_model.llm.llm_engine.model_config
         assert model_config.max_model_len == 256
 
     # For nomic-embed-text-v2-moe the length is set to 512
     # by sentence_bert_config.json.
     if model_info.name == "nomic-ai/nomic-embed-text-v2-moe":
         with pytest.raises(ValueError):
-            with aphrodite_runner(
+            with sonar_runner(
                 model_info.name,
                 revision=model_info.revision,
                 runner="pooling",
@@ -87,28 +87,28 @@ def test_set_max_model_len_legal(model_info, aphrodite_runner):
         return
 
     # set 512 < max_model_len <= 2048
-    with aphrodite_runner(
+    with sonar_runner(
         model_info.name,
         revision=model_info.revision,
         runner="pooling",
         max_model_len=1024,
-    ) as aphrodite_model:
-        model_config = aphrodite_model.llm.llm_engine.model_config
+    ) as sonar_model:
+        model_config = sonar_model.llm.llm_engine.model_config
         assert model_config.max_model_len == 1024
 
     # set max_model_len > 2048
-    with aphrodite_runner(
+    with sonar_runner(
         model_info.name,
         revision=model_info.revision,
         runner="pooling",
         max_model_len=4096,
-    ) as aphrodite_model:
-        model_config = aphrodite_model.llm.llm_engine.model_config
+    ) as sonar_model:
+        model_config = sonar_model.llm.llm_engine.model_config
         assert model_config.max_model_len == 4096
 
 
 @pytest.mark.parametrize("model_info", MODELS)
-def test_use_rope_scaling_legal(model_info, aphrodite_runner):
+def test_use_rope_scaling_legal(model_info, sonar_runner):
     hf_overrides = {
         "rope_parameters": {
             "rope_theta": rope_theta,
@@ -119,7 +119,7 @@ def test_use_rope_scaling_legal(model_info, aphrodite_runner):
         "max_model_len": max_model_len,
     }
 
-    with aphrodite_runner(
+    with sonar_runner(
         model_info.name,
         revision=model_info.revision,
         runner="pooling",

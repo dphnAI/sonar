@@ -20,12 +20,12 @@ import numpy as np
 import torch
 from torch import nn
 
-from aphrodite.config import AphroditeConfig, CUDAGraphMode
-from aphrodite.v1.kv_cache_interface import KVCacheConfig
-from aphrodite.v1.worker.gpu.block_table import BlockTables
-from aphrodite.v1.worker.gpu.input_batch import InputBatch, InputBuffers
-from aphrodite.v1.worker.gpu.mm.encoder_cache import EncoderCache
-from aphrodite.v1.worker.utils import AttentionGroup
+from sonar.config import CUDAGraphMode, SonarConfig
+from sonar.v1.kv_cache_interface import KVCacheConfig
+from sonar.v1.worker.gpu.block_table import BlockTables
+from sonar.v1.worker.gpu.input_batch import InputBatch, InputBuffers
+from sonar.v1.worker.gpu.mm.encoder_cache import EncoderCache
+from sonar.v1.worker.utils import AttentionGroup
 
 from ...model_state import DeepseekV41ModelState
 from .metadata_graphs import AttnMetadataCudaGraphs, GraphKey
@@ -58,18 +58,18 @@ def padded_decode_batch(key: GraphKey, input_buffers: InputBuffers, max_model_le
 class DeepseekV41SpecializedDecodeModelState(DeepseekV41ModelState):
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         model: nn.Module,
         encoder_cache: EncoderCache | None,
         device: torch.device,
     ):
-        super().__init__(aphrodite_config, model, encoder_cache, device)
+        super().__init__(sonar_config, model, encoder_cache, device)
         language_model = model.get_language_model() if hasattr(model, "get_language_model") else model
         self.decode = language_model.build_specialized_decode()
-        warm_up(self.decode, aphrodite_config)
+        warm_up(self.decode, sonar_config)
         self.graphs = AttnMetadataCudaGraphs(
-            aphrodite_config,
-            aphrodite_config.num_speculative_tokens + self.num_new_sampled_tokens_per_step,
+            sonar_config,
+            sonar_config.num_speculative_tokens + self.num_new_sampled_tokens_per_step,
         )
         # Leading rows of _replay_start known to hold zeros.
         self._zero_replay_starts = 0

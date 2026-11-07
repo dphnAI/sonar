@@ -8,9 +8,9 @@ from typing import Any, NamedTuple
 import numpy as np
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
+import sonar.envs as envs
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
 
 logger = init_logger(__name__)
 
@@ -66,7 +66,7 @@ _batch_memcpy: tuple[Any, int] | None = None
 _max_batch_descriptors: int | None = None
 
 # ROCm hipMemcpyBatchAsync faults for count > 8192 (MI350X/gfx950), so we chunk
-# at that ceiling. Override via APHRODITE_KV_OFFLOAD_MAX_BATCH_DESCRIPTORS.
+# at that ceiling. Override via SONAR_KV_OFFLOAD_MAX_BATCH_DESCRIPTORS.
 _ROCM_DEFAULT_MAX_BATCH_DESCRIPTORS = 8192
 
 
@@ -76,11 +76,11 @@ def _resolve_max_batch_descriptors() -> int:
     ROCm's ``hipMemcpyBatchAsync`` faults above 8192 descriptors per call, so
     on ROCm we cap and chunk larger transfers. CUDA's ``cuMemcpyBatchAsync``
     handles arbitrary counts and is left uncapped. Set
-    ``APHRODITE_KV_OFFLOAD_MAX_BATCH_DESCRIPTORS`` (>0) to override on any platform.
+    ``SONAR_KV_OFFLOAD_MAX_BATCH_DESCRIPTORS`` (>0) to override on any platform.
     """
     global _max_batch_descriptors
     if _max_batch_descriptors is None:
-        override = envs.APHRODITE_KV_OFFLOAD_MAX_BATCH_DESCRIPTORS
+        override = envs.SONAR_KV_OFFLOAD_MAX_BATCH_DESCRIPTORS
         if override > 0:
             _max_batch_descriptors = override
         else:

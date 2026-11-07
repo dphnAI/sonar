@@ -6,25 +6,25 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe import (
     RoutedExperts,
     UnquantizedFusedMoEMethod,
 )
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.linear import (
     LinearBase,
     UnquantizedLinearMethod,
 )
-from aphrodite.model_executor.layers.quantization import (
+from sonar.model_executor.layers.quantization import (
     QuantizationConfig,
     QuantizationMethods,
 )
-from aphrodite.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
+from sonar.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
 
 from .config_parser import INCConfigParser
 
 if TYPE_CHECKING:
-    from aphrodite.model_executor.models.utils import WeightsMapper
+    from sonar.model_executor.models.utils import WeightsMapper
 
 logger = init_logger(__name__)
 
@@ -265,7 +265,7 @@ class INCConfig(QuantizationConfig):
             ),
             extra_config=cls.get_from_keys_or(config, ["extra_config"], None),
             data_type=data_type,
-            backend=cls.get_from_keys_or(config, ["backend", "aphrodite_backend"], "auto"),
+            backend=cls.get_from_keys_or(config, ["backend", "sonar_backend"], "auto"),
         )
         quant_config._validate_raw_config(config)
         return quant_config
@@ -273,11 +273,11 @@ class INCConfig(QuantizationConfig):
     def get_layer_config(self, layer, layer_name: str):
         return self.config_parser.get_layer_config(layer, layer_name)
 
-    def apply_aphrodite_mapper(self, hf_to_aphrodite_mapper: "WeightsMapper"):
+    def apply_sonar_mapper(self, hf_to_sonar_mapper: "WeightsMapper"):
         if self.block_name_to_quantize is not None:
-            self.block_name_to_quantize = hf_to_aphrodite_mapper.apply_list(self.block_name_to_quantize)
+            self.block_name_to_quantize = hf_to_sonar_mapper.apply_list(self.block_name_to_quantize)
         if self.extra_config is not None:
-            self.extra_config = hf_to_aphrodite_mapper.apply_dict(self.extra_config)
+            self.extra_config = hf_to_sonar_mapper.apply_dict(self.extra_config)
 
     def get_quant_method(self, layer: torch.nn.Module, prefix: str):
         from .schemes.factory import resolve_scheme

@@ -7,12 +7,12 @@ unavailable on ROCm) with single-pass Triton kernels to cut launch overhead and
 intermediate-tensor traffic during decode.
 """
 
-from aphrodite.models.minimax_m3.amd.ops.gemma_rmsnorm import (
+from sonar.models.minimax_m3.amd.ops.gemma_rmsnorm import (
     gemma_fused_add_rmsnorm,
     gemma_fused_add_rmsnorm_mxfp8,
     gemma_rmsnorm,
 )
-from aphrodite.models.minimax_m3.amd.ops.swiglu_oai import (
+from sonar.models.minimax_m3.amd.ops.swiglu_oai import (
     swiglu_oai_quantize_mxfp8,
     swiglu_oai_split,
 )

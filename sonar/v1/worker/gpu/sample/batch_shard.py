@@ -9,18 +9,18 @@ import torch
 import torch.distributed
 import torch.nn as nn
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed.communication_op import tensor_model_parallel_all_gather
-from aphrodite.distributed.parallel_state import get_tp_group
-from aphrodite.triton_utils import tl, triton
-from aphrodite.v1.core.sched.output import GrammarOutput
-from aphrodite.v1.outputs import LogprobsTensors
-from aphrodite.v1.worker.gpu.input_batch import InputBatch
-from aphrodite.v1.worker.gpu.sample.output import SamplerOutput
+from sonar.config import SonarConfig
+from sonar.distributed.communication_op import tensor_model_parallel_all_gather
+from sonar.distributed.parallel_state import get_tp_group
+from sonar.triton_utils import tl, triton
+from sonar.v1.core.sched.output import GrammarOutput
+from sonar.v1.outputs import LogprobsTensors
+from sonar.v1.worker.gpu.input_batch import InputBatch
+from sonar.v1.worker.gpu.sample.output import SamplerOutput
 
 if TYPE_CHECKING:
-    from aphrodite.distributed.device_communicators.pynccl import PyNcclCommunicator
-    from aphrodite.v1.worker.gpu.spec_decode.draft_logits import DraftLogitsCache
+    from sonar.distributed.device_communicators.pynccl import PyNcclCommunicator
+    from sonar.v1.worker.gpu.spec_decode.draft_logits import DraftLogitsCache
 
 
 @dataclass
@@ -55,10 +55,10 @@ class BatchShardMetadata:
     adaptive_verification_enabled: bool
 
 
-def batch_sharded_sampling_enabled(aphrodite_config: AphroditeConfig, target_model: nn.Module) -> bool:
+def batch_sharded_sampling_enabled(sonar_config: SonarConfig, target_model: nn.Module) -> bool:
     """Whether the target's sampling and verification are batch-sharded."""
     return bool(
-        aphrodite_config.parallel_config.enable_batch_sharded_sampling and hasattr(target_model, "compute_logits_local")
+        sonar_config.parallel_config.enable_batch_sharded_sampling and hasattr(target_model, "compute_logits_local")
     )
 
 

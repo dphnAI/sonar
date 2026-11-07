@@ -42,7 +42,7 @@ impl From<Runtime> for BackgroundShutdownRuntime {
     }
 }
 
-const ZMQ_WORKER_THREADS_ENV: &str = "APHRODITE_RS_ZMQ_WORKER_THREADS";
+const ZMQ_WORKER_THREADS_ENV: &str = "SONAR_RS_ZMQ_WORKER_THREADS";
 /// The number of tasks running on the ZMQ runtime is fixed and expected to remain
 /// small, and multiple engines share the same ZMQ socket. Therefore, based on
 /// benchmarks, a default value of 4 is generally sufficient.
@@ -59,15 +59,15 @@ pub(crate) fn build_zmq_runtime() -> BackgroundShutdownRuntime {
 
     tokio::runtime::Builder::new_multi_thread()
         .worker_threads(zmq_worker_threads())
-        .thread_name_fn(move || format!("aphrodite-zmq-{sequence}"))
+        .thread_name_fn(move || format!("sonar-zmq-{sequence}"))
         .enable_all()
         .build()
-        .expect("failed to build Aphrodite ZMQ runtime")
+        .expect("failed to build Sonar ZMQ runtime")
         .into()
 }
 
 /// Get the number of worker threads to use for the ZMQ runtime. If env var
-/// `APHRODITE_RS_ZMQ_WORKER_THREADS` is set and a valid positive integer, it will be used.
+/// `SONAR_RS_ZMQ_WORKER_THREADS` is set and a valid positive integer, it will be used.
 /// Otherwise, the default value of `DEFAULT_ZMQ_WORKER_THREADS` will be used.
 fn zmq_worker_threads() -> usize {
     std::env::var(ZMQ_WORKER_THREADS_ENV)

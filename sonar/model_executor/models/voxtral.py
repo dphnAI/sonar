@@ -18,33 +18,33 @@ from mistral_common.protocol.transcription.request import TranscriptionRequest
 from mistral_common.tokens.tokenizers.audio import Audio
 from transformers import WhisperConfig
 
-from aphrodite.config import AphroditeConfig, ModelConfig, SpeechToTextConfig
-from aphrodite.config.multimodal import MultiModalDummyOptions
-from aphrodite.config.speech_to_text import SpeechToTextParams
-from aphrodite.inputs import MultiModalDataDict, PromptType, TokensPrompt
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
-from aphrodite.model_executor.models import SupportsPP
-from aphrodite.model_executor.models.module_mapping import MultiModelKeys
-from aphrodite.model_executor.models.whisper import (
+from sonar.config import ModelConfig, SonarConfig, SpeechToTextConfig
+from sonar.config.multimodal import MultiModalDummyOptions
+from sonar.config.speech_to_text import SpeechToTextParams
+from sonar.inputs import MultiModalDataDict, PromptType, TokensPrompt
+from sonar.logger import init_logger
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.model_loader.weight_utils import default_weight_loader
+from sonar.model_executor.models import SupportsPP
+from sonar.model_executor.models.module_mapping import MultiModelKeys
+from sonar.model_executor.models.whisper import (
     WhisperEncoder,
     _create_fake_bias_for_k_proj,
 )
-from aphrodite.model_executor.models.whisper_causal import WhisperCausalEncoder
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import (
+from sonar.model_executor.models.whisper_causal import WhisperCausalEncoder
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import (
     MultiModalFieldConfig,
     MultiModalKwargsItems,
     NestedTensors,
 )
-from aphrodite.multimodal.parse import (
+from sonar.multimodal.parse import (
     AudioProcessorItems,
     MultiModalDataItems,
     MultiModalDataParser,
 )
-from aphrodite.multimodal.processing import BaseDummyInputsBuilder
-from aphrodite.multimodal.processing.processor import (
+from sonar.multimodal.processing import BaseDummyInputsBuilder
+from sonar.multimodal.processing.processor import (
     BaseMultiModalProcessor,
     BaseProcessingInfo,
     HFMultiModalInputs,
@@ -54,16 +54,16 @@ from aphrodite.multimodal.processing.processor import (
     PromptReplacement,
     PromptUpdate,
 )
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.tokenizers import cached_tokenizer_from_config
-from aphrodite.tokenizers.mistral import MistralTokenizer
-from aphrodite.transformers_utils.processors.voxtral import (
+from sonar.sequence import IntermediateTensors
+from sonar.tokenizers import cached_tokenizer_from_config
+from sonar.tokenizers.mistral import MistralTokenizer
+from sonar.transformers_utils.processors.voxtral import (
     MistralCommonFeatureExtractor,
     MistralCommonVoxtralProcessor,
 )
 
 from .interfaces import SupportsLoRA, SupportsMultiModal, SupportsTranscription
-from .utils import init_aphrodite_registered_model, maybe_prefix
+from .utils import init_sonar_registered_model, maybe_prefix
 
 logger = init_logger(__name__)
 
@@ -294,29 +294,29 @@ class VoxtralForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsPP,
         "gate_up_proj": ["gate_proj", "up_proj"],
     }
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        self.tokenizer = cached_tokenizer_from_config(aphrodite_config.model_config)
+        self.tokenizer = cached_tokenizer_from_config(sonar_config.model_config)
 
         # update quant config to so that ignored module and target module names
-        # match the Aphrodite model names
-        if aphrodite_config.quant_config is not None:
-            aphrodite_config.quant_config = self.maybe_update_quant_config(aphrodite_config.quant_config)
+        # match the Sonar model names
+        if sonar_config.quant_config is not None:
+            sonar_config.quant_config = self.maybe_update_quant_config(sonar_config.quant_config)
 
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
         self.config = config
         self.downsample_factor = self.config.audio_config.downsample_factor
 
-        with self._mark_language_model(aphrodite_config):
-            self.language_model = init_aphrodite_registered_model(
-                aphrodite_config=aphrodite_config,
+        with self._mark_language_model(sonar_config):
+            self.language_model = init_sonar_registered_model(
+                sonar_config=sonar_config,
                 hf_config=config.text_config,
                 prefix=maybe_prefix(prefix, "language_model"),
             )
 
-        with self._mark_tower_model(aphrodite_config, "audio"):
+        with self._mark_tower_model(sonar_config, "audio"):
             self.whisper_encoder = VoxtralEncoderModel(
-                aphrodite_config.with_hf_config(config.audio_config),
+                sonar_config.with_hf_config(config.audio_config),
                 prefix=maybe_prefix(prefix, "whisper_encoder"),
             )
             self.audio_language_adapter = AudioLanguageAdapter(
@@ -521,7 +521,7 @@ class VoxtralForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsPP,
 
     def maybe_update_quant_config(self, quant_config: QuantizationConfig) -> QuantizationConfig:
         """Update quant config to so that ignored module and target module names
-        match the Aphrodite model names.
+        match the Sonar model names.
         Right now this is specific for compressed-tensors format and
         load_format mistral.
         """
@@ -674,13 +674,13 @@ class VoxtralEncoderModel(nn.Module):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         *,
         prefix: str = "",
     ) -> None:
         super().__init__()
-        self.config = cast(WhisperConfig, aphrodite_config.model_config.hf_config)
-        self.dtype: torch.dtype = aphrodite_config.model_config.dtype
+        self.config = cast(WhisperConfig, sonar_config.model_config.hf_config)
+        self.dtype: torch.dtype = sonar_config.model_config.dtype
         self.is_causal = getattr(self.config, "is_causal", False)
         WhisperEncoderCls: Callable[..., WhisperEncoder | WhisperCausalEncoder]
         if self.is_causal:
@@ -689,7 +689,7 @@ class VoxtralEncoderModel(nn.Module):
             WhisperEncoderCls = partial(WhisperEncoder, init_in_fp32=True)
 
         self.whisper_encoder = WhisperEncoderCls(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             prefix=maybe_prefix(prefix, "whisper_encoder"),
         )
         mel_filters = mel_filter_bank(

@@ -5,12 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
-from aphrodite.config.utils import config
+from sonar.config.utils import config
 
 if TYPE_CHECKING:
     import numpy as np
 
-    from aphrodite.config.model import ModelConfig
+    from sonar.config.model import ModelConfig
 
 
 @dataclass
@@ -51,7 +51,7 @@ class SpeechToTextParams:
     """Target language for translation (model-dependent)."""
 
     extra_args: dict[str, str | int | float | list[str | int | float]] | None = None
-    """Request extensions supplied through aphrodite_xargs."""
+    """Request extensions supplied through sonar_xargs."""
 
 
 @config

@@ -8,7 +8,7 @@
 
 import pytest
 
-from aphrodite.distributed.kv_transfer.kv_connector.v1.hf3fs.hf3fs_metadata_server import (
+from sonar.distributed.kv_transfer.kv_connector.v1.hf3fs.hf3fs_metadata_server import (
     GlobalMetadataState,
     KeyMetadata,
     RankFileMetadata,

@@ -9,23 +9,23 @@ from typing import TYPE_CHECKING, Any, Literal, cast
 
 import torch
 
-from aphrodite.config import (
-    AphroditeConfig,
-    get_current_aphrodite_config_or_none,
-    get_layers_from_aphrodite_config,
-    set_current_aphrodite_config,
+from sonar.config import (
+    SonarConfig,
+    get_current_sonar_config_or_none,
+    get_layers_from_sonar_config,
+    set_current_sonar_config,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.factory import KVConnectorFactory
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.attention_layer_base import AttentionLayerBase
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import async_tensor_h2d
-from aphrodite.v1.attention.backend import AttentionBackend
-from aphrodite.v1.kv_cache_interface import AttentionSpec, KVCacheConfig, iter_layer_specs
-from aphrodite.v1.outputs import KVConnectorOutput, ModelRunnerOutput
+from sonar.distributed.kv_transfer.kv_connector.factory import KVConnectorFactory
+from sonar.logger import init_logger
+from sonar.model_executor.layers.attention_layer_base import AttentionLayerBase
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import async_tensor_h2d
+from sonar.v1.attention.backend import AttentionBackend
+from sonar.v1.kv_cache_interface import AttentionSpec, KVCacheConfig, iter_layer_specs
+from sonar.v1.outputs import KVConnectorOutput, ModelRunnerOutput
 
 if TYPE_CHECKING:
-    from aphrodite.distributed.kv_transfer.kv_connector.base import KVConnectorBase
+    from sonar.distributed.kv_transfer.kv_connector.base import KVConnectorBase
 
 logger = init_logger(__name__)
 
@@ -45,17 +45,17 @@ def clip_ssm_state_blocks(blocks: list[int], num_spec_blocks: int) -> list[int]:
     return blocks[-1:]
 
 
-def get_kv_connector_cache_layout(aphrodite_config: AphroditeConfig | None = None):
+def get_kv_connector_cache_layout(sonar_config: SonarConfig | None = None):
     # NOTE (NickLucche) When running disaggregated PD with NIXL, LBHNC layout is
     # used for faster transfer.
-    if aphrodite_config is None:
-        aphrodite_config = get_current_aphrodite_config_or_none()
-    if aphrodite_config is None:
+    if sonar_config is None:
+        sonar_config = get_current_sonar_config_or_none()
+    if sonar_config is None:
         return None
-    kv_config = aphrodite_config.kv_transfer_config
+    kv_config = sonar_config.kv_transfer_config
     if kv_config is not None:
         connector_cls = KVConnectorFactory.get_connector_class(kv_config)
-        required_kvcache_layout = connector_cls.get_required_kvcache_layout(aphrodite_config)
+        required_kvcache_layout = connector_cls.get_required_kvcache_layout(sonar_config)
         if required_kvcache_layout is not None:
             return required_kvcache_layout
     return None
@@ -324,12 +324,12 @@ def yield_req_data(
 
 
 def get_current_attn_backends(
-    aphrodite_config: AphroditeConfig, layer_names: list[str] | None = None
+    sonar_config: SonarConfig, layer_names: list[str] | None = None
 ) -> list[type[AttentionBackend]]:
     """Get all distinct attention backends for the given layers.
 
     Args:
-        aphrodite_config: The current Aphrodite configuration.
+        sonar_config: The current Sonar configuration.
         layer_names: Optional list of layer names to scope the lookup.
             When None, all attention layers are considered.
 
@@ -338,7 +338,7 @@ def get_current_attn_backends(
 
     """
     layer_type = cast(type[Any], AttentionLayerBase)
-    layers = get_layers_from_aphrodite_config(aphrodite_config, layer_type, layer_names)
+    layers = get_layers_from_sonar_config(sonar_config, layer_type, layer_names)
     if layers:
         seen: dict[str, type[AttentionBackend]] = {}
         for layer in layers.values():
@@ -347,22 +347,22 @@ def get_current_attn_backends(
         return list(seen.values())
 
     # Fallback for tests, when static_forward_context is empty.
-    logger.debug("No layers found in the Aphrodite config. Falling back to default attention backend.")
-    from aphrodite.v1.attention.selector import get_attn_backend
+    logger.debug("No layers found in the Sonar config. Falling back to default attention backend.")
+    from sonar.v1.attention.selector import get_attn_backend
 
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         return [
             get_attn_backend(
-                head_size=aphrodite_config.model_config.get_head_size(),
-                dtype=aphrodite_config.model_config.dtype,
-                kv_cache_dtype=aphrodite_config.cache_config.cache_dtype,
-                use_mla=aphrodite_config.model_config.use_mla,
+                head_size=sonar_config.model_config.get_head_size(),
+                dtype=sonar_config.model_config.dtype,
+                kv_cache_dtype=sonar_config.cache_config.cache_dtype,
+                use_mla=sonar_config.model_config.use_mla,
             )
         ]
 
 
 def get_current_attn_backends_and_specs(
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     kv_cache_config: KVCacheConfig,
     fallback: list[type[AttentionBackend]],
 ) -> tuple[list[type[AttentionBackend]], list[AttentionSpec | None]]:
@@ -375,7 +375,7 @@ def get_current_attn_backends_and_specs(
     layer_type = cast(type[Any], AttentionLayerBase)
     for group in kv_cache_config.transfer_groups:
         specs = getattr(group.kv_cache_spec, "kv_cache_specs", {})
-        layers = get_layers_from_aphrodite_config(aphrodite_config, layer_type, group.layer_names)
+        layers = get_layers_from_sonar_config(sonar_config, layer_type, group.layer_names)
         for name, layer in layers.items():
             spec = specs.get(name, group.kv_cache_spec)
             if isinstance(spec, AttentionSpec) and spec.tokens_per_state > 1:
@@ -389,10 +389,10 @@ def get_current_attn_backends_and_specs(
 
 
 def check_compressed_kernel_split(
-    aphrodite_config: AphroditeConfig, kv_cache_config: KVCacheConfig, kernel_block_size: int
+    sonar_config: SonarConfig, kv_cache_config: KVCacheConfig, kernel_block_size: int
 ) -> None:
     """A layer-outer layout cannot split compressed pages into kernel blocks."""
-    if aphrodite_config.cache_config.get_resolved_kv_cache_layout().is_block_outermost:
+    if sonar_config.cache_config.get_resolved_kv_cache_layout().is_block_outermost:
         return
     for group in kv_cache_config.transfer_groups:
         for spec in iter_layer_specs(group.kv_cache_spec):
@@ -407,11 +407,9 @@ def check_compressed_kernel_split(
                 )
 
 
-def get_current_attn_backend(
-    aphrodite_config: AphroditeConfig, layer_names: list[str] | None = None
-) -> type[AttentionBackend]:
+def get_current_attn_backend(sonar_config: SonarConfig, layer_names: list[str] | None = None) -> type[AttentionBackend]:
     """Get the first attention backend for the given layers."""
-    return get_current_attn_backends(aphrodite_config, layer_names)[0]
+    return get_current_attn_backends(sonar_config, layer_names)[0]
 
 
 # ---- Per-engine transfer info ----

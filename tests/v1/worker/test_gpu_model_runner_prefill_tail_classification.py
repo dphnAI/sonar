@@ -28,34 +28,34 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.config import (
     CacheConfig,
     ModelConfig,
     ParallelConfig,
     SchedulerConfig,
+    SonarConfig,
     SpeculativeConfig,
-    set_current_aphrodite_config,
+    set_current_sonar_config,
 )
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.platforms import current_platform
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.utils.import_utils import resolve_obj_by_qualname
-from aphrodite.v1.core.sched.output import CachedRequestData, NewRequestData, SchedulerOutput
-from aphrodite.v1.kv_cache_interface import (
+from sonar.model_executor.layers.attention import Attention
+from sonar.platforms import current_platform
+from sonar.sampling_params import SamplingParams
+from sonar.utils.import_utils import resolve_obj_by_qualname
+from sonar.v1.core.sched.output import CachedRequestData, NewRequestData, SchedulerOutput
+from sonar.v1.kv_cache_interface import (
     FullAttentionSpec,
     KVCacheConfig,
     KVCacheGroupSpec,
     KVCacheTensor,
 )
-from aphrodite.v1.worker.gpu_input_batch import InputBatch
-from aphrodite.v1.worker.gpu_model_runner import GPUModelRunner
+from sonar.v1.worker.gpu_input_batch import InputBatch
+from sonar.v1.worker.gpu_model_runner import GPUModelRunner
 
 BLOCK_SIZE = 16
 NUM_BLOCKS = 10
 
 
-def _get_aphrodite_config() -> AphroditeConfig:
+def _get_sonar_config() -> SonarConfig:
     model_config = ModelConfig(model="facebook/opt-125m", dtype="float16", seed=42)
     scheduler_config = SchedulerConfig(
         max_num_seqs=10,
@@ -65,7 +65,7 @@ def _get_aphrodite_config() -> AphroditeConfig:
     )
     cache_config = CacheConfig(block_size=BLOCK_SIZE, gpu_memory_utilization=0.9, cache_dtype="auto")
     cache_config.kv_cache_layout = "LBNHC"
-    return AphroditeConfig(
+    return SonarConfig(
         model_config=model_config,
         cache_config=cache_config,
         scheduler_config=scheduler_config,
@@ -76,11 +76,11 @@ def _get_aphrodite_config() -> AphroditeConfig:
     )
 
 
-def _make_model_runner(aphrodite_config: AphroditeConfig) -> GPUModelRunner:
+def _make_model_runner(sonar_config: SonarConfig) -> GPUModelRunner:
     """Build the V1 runner the platform's worker would, without starting it."""
-    worker_cls = resolve_obj_by_qualname(aphrodite_config.parallel_config.worker_cls)
+    worker_cls = resolve_obj_by_qualname(sonar_config.parallel_config.worker_cls)
     worker = SimpleNamespace(
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         device=current_platform.device_type,
         use_v2_model_runner=False,
     )
@@ -122,13 +122,13 @@ def _initialize_kv_cache(runner: GPUModelRunner) -> None:
 
 @pytest.fixture
 def spec_decode_model_runner(dist_init):
-    aphrodite_config = _get_aphrodite_config()
-    with set_current_aphrodite_config(aphrodite_config):
-        model_config = aphrodite_config.model_config
-        num_heads = model_config.get_num_kv_heads(aphrodite_config.parallel_config)
+    sonar_config = _get_sonar_config()
+    with set_current_sonar_config(sonar_config):
+        model_config = sonar_config.model_config
+        num_heads = model_config.get_num_kv_heads(sonar_config.parallel_config)
         head_size = model_config.get_head_size()
-        aphrodite_config.compilation_config.static_forward_context["layer.0"] = Attention(num_heads, head_size, 0.1)
-        runner = _make_model_runner(aphrodite_config)
+        sonar_config.compilation_config.static_forward_context["layer.0"] = Attention(num_heads, head_size, 0.1)
+        runner = _make_model_runner(sonar_config)
         _initialize_kv_cache(runner)
         yield runner
 

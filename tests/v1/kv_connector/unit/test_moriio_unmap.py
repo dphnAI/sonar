@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Unit tests for MoRIIOConnectorScheduler.{map,unmap}_request_id.
 
-Aphrodite's input_processor mutates a request_id after the connector has stored it
+Sonar's input_processor mutates a request_id after the connector has stored it
 (e.g. ``cmpl-abc-0`` -> ``cmpl-abc-0-956053a4``), so an exact-match unmap can
 miss. These tests cover the stable-``transfer_id`` fallback that handles that
 case (and the clean exact-match and miss paths).
@@ -13,7 +13,7 @@ lightweight stand-in rather than constructing a full scheduler.
 
 from types import SimpleNamespace
 
-from aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_connector import (
+from sonar.distributed.kv_transfer.kv_connector.v1.moriio.moriio_connector import (
     MoRIIOConnectorScheduler,
 )
 

@@ -6,7 +6,7 @@ from .registry import MultiModalRegistry
 
 MULTIMODAL_REGISTRY = MultiModalRegistry()
 """
-The global [`MultiModalRegistry`][aphrodite.multimodal.registry.MultiModalRegistry]
+The global [`MultiModalRegistry`][sonar.multimodal.registry.MultiModalRegistry]
 is used by model runners to dispatch data processing according to the target
 model.
 

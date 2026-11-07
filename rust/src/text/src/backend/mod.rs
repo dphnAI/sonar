@@ -7,8 +7,8 @@ use std::fmt;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use aphrodite_tokenizer::DynTokenizer;
 use serde_with::{DeserializeFromStr, SerializeDisplay};
+use sonar_tokenizer::DynTokenizer;
 
 use crate::error::Result;
 
@@ -18,13 +18,13 @@ pub enum GenerationConfigMode {
     /// Inherit sampling defaults from the model's generation config.
     #[default]
     Auto,
-    /// Use Aphrodite's neutral sampling defaults.
-    Aphrodite,
+    /// Use Sonar's neutral sampling defaults.
+    Sonar,
 }
 
 impl GenerationConfigMode {
     pub const AUTO_LITERAL: &str = "auto";
-    pub const APHRODITE_LITERAL: &str = "aphrodite";
+    pub const SONAR_LITERAL: &str = "sonar";
 }
 
 impl FromStr for GenerationConfigMode {
@@ -33,12 +33,12 @@ impl FromStr for GenerationConfigMode {
     fn from_str(value: &str) -> std::result::Result<Self, Self::Err> {
         if value.eq_ignore_ascii_case(Self::AUTO_LITERAL) {
             Ok(Self::Auto)
-        } else if value.eq_ignore_ascii_case(Self::APHRODITE_LITERAL) {
-            Ok(Self::Aphrodite)
+        } else if value.eq_ignore_ascii_case(Self::SONAR_LITERAL) {
+            Ok(Self::Sonar)
         } else {
             Err(format!(
                 "generation config source `{value}` is not implemented yet \
-                 (expected one of: auto, aphrodite)"
+                 (expected one of: auto, sonar)"
             ))
         }
     }
@@ -48,7 +48,7 @@ impl fmt::Display for GenerationConfigMode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Auto => f.write_str(Self::AUTO_LITERAL),
-            Self::Aphrodite => f.write_str(Self::APHRODITE_LITERAL),
+            Self::Sonar => f.write_str(Self::SONAR_LITERAL),
         }
     }
 }
@@ -101,7 +101,7 @@ impl SamplingLimits {
     }
 }
 
-/// Minimal text-processing backend needed by `aphrodite-text`.
+/// Minimal text-processing backend needed by `sonar-text`.
 pub trait TextBackend: Send + Sync {
     /// Return the tokenizer used by this backend.
     fn tokenizer(&self) -> DynTokenizer;

@@ -5,17 +5,17 @@ from typing import TYPE_CHECKING, Any, Literal, TypeAlias
 
 from pydantic import Field, field_validator
 
-from aphrodite.config.utils import config
-from aphrodite.logger import init_logger
-from aphrodite.utils.hashing import safe_hash
+from sonar.config.utils import config
+from sonar.logger import init_logger
+from sonar.utils.hashing import safe_hash
 
 DEFAULT_SAFETENSORS_PREFETCH_NUM_THREADS = 8
 DEFAULT_SAFETENSORS_PREFETCH_BLOCK_SIZE = 16 * 1024 * 1024
 SafetensorsLoadStrategy: TypeAlias = Literal["lazy", "eager", "prefetch", "torchao"]
 
 if TYPE_CHECKING:
-    from aphrodite.model_executor.model_loader import LoadFormats
-    from aphrodite.model_executor.model_loader.tensorizer import TensorizerConfig
+    from sonar.model_executor.model_loader import LoadFormats
+    from sonar.model_executor.model_loader.tensorizer import TensorizerConfig
 else:
     LoadFormats = str
     TensorizerConfig = Any
@@ -40,13 +40,13 @@ class LoadConfig:
       and fast direct I/O.
     - "ipc_cache" will map post-quantized weights from a local weight cache
       daemon via CUDA IPC for fast engine restarts. Launch the daemon with
-      `aphrodite preload` first.
+      `sonar preload` first.
     - "npcache" will load the weights in pytorch format and store a numpy cache
       to speed up the loading.
     - "dummy" will initialize the weights with random values, which is mainly
       for profiling.
     - "tensorizer" will use CoreWeave's tensorizer library for fast weight
-      loading. See the Tensorize Aphrodite Model script in the Examples section for
+      loading. See the Tensorize Sonar Model script in the Examples section for
       more information.
     - "runai_streamer" will load the Safetensors weights using Run:ai Model
       Streamer.

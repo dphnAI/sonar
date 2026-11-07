@@ -4,10 +4,10 @@
 
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.model_executor.layers.vocab_parallel_embedding import VocabParallelEmbedding
-from aphrodite.model_executor.model_loader.default_loader import DefaultModelLoader
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
+from sonar.config import SonarConfig
+from sonar.model_executor.layers.vocab_parallel_embedding import VocabParallelEmbedding
+from sonar.model_executor.model_loader.default_loader import DefaultModelLoader
+from sonar.multimodal import MULTIMODAL_REGISTRY
 
 from .clef_joint_schema import JOINT_HEAD_WEIGHTS, JointSchemaHead, JointSchemaPooler
 from .interfaces_base import default_pooling_type
@@ -24,9 +24,9 @@ from .qwen3_vl import Qwen3VLDummyInputsBuilder, Qwen3VLMultiModalProcessor
 class ClefFlashForJointSchema(Qwen3_5ForConditionalGeneration):
     is_pooling_model = True
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
-        super().__init__(aphrodite_config=aphrodite_config, prefix=prefix)
-        model_config = aphrodite_config.model_config
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
+        super().__init__(sonar_config=sonar_config, prefix=prefix)
+        model_config = sonar_config.model_config
         self.pooler = JointSchemaPooler(
             JointSchemaHead(**model_config.hf_config.joint_head_config),
             self._embed_lexical,

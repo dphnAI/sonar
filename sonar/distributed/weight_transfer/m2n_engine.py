@@ -9,7 +9,7 @@ occupy `[0, T)`, workers `[T, T + N)`. Each parameter is moved with a single
 local shards and never all-gathers a full tensor, which is what the broadcast
 NCCL backend forces it to do.
 
-When an incoming checkpoint parameter maps directly to a live Aphrodite parameter,
+When an incoming checkpoint parameter maps directly to a live Sonar parameter,
 M2N reshards into that worker's local model storage. Parameters whose names or
 layouts cannot be resolved receive a full tensor and fall back to
 `load_weights`, preserving the existing backend's loading behavior.
@@ -26,13 +26,13 @@ from typing import TYPE_CHECKING, Any, cast
 
 import torch
 
-from aphrodite.config.weight_transfer import WeightTransferConfig
-from aphrodite.distributed.weight_transfer.base import (
+from sonar.config.weight_transfer import WeightTransferConfig
+from sonar.distributed.weight_transfer.base import (
     WeightTransferEngine,
     WeightTransferInitInfo,
     WeightTransferUpdateInfo,
 )
-from aphrodite.distributed.weight_transfer.m2n_common import (
+from sonar.distributed.weight_transfer.m2n_common import (
     DESTINATION_SHARD_AXIS,
     M2N_WIRE_SCHEMA_VERSION,
     MESH_NDIMS,
@@ -57,19 +57,19 @@ from aphrodite.distributed.weight_transfer.m2n_common import (
     to_placements,
     validate_transfer_plan,
 )
-from aphrodite.distributed.weight_transfer.m2n_layout import (
+from sonar.distributed.weight_transfer.m2n_layout import (
     M2NDestination,
     resolve_parameter_destinations,
 )
-from aphrodite.distributed.weight_transfer.nccl_common import (
+from sonar.distributed.weight_transfer.nccl_common import (
     NCCLWeightTransferInitInfo,
     decode_nccl_unique_id,
     worker_init_metadata_group,
 )
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
+    from sonar.config import SonarConfig
 
 logger = init_logger(__name__)
 
@@ -219,11 +219,11 @@ class M2NWeightTransferEngine(WeightTransferEngine[M2NWeightTransferInitInfo, M2
     def __init__(
         self,
         config: WeightTransferConfig,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
         device: torch.device,
         model: torch.nn.Module,
     ) -> None:
-        super().__init__(config, aphrodite_config, device, model)
+        super().__init__(config, sonar_config, device, model)
         self.model_update_group: Any = None
         self._m2n: Any = None
         self._handle: Any = None
@@ -425,7 +425,7 @@ class M2NWeightTransferEngine(WeightTransferEngine[M2NWeightTransferInitInfo, M2
         """
         if not self._uses_load_weights:
             return
-        from aphrodite.model_executor.model_loader.reload import start_reload
+        from sonar.model_executor.model_loader.reload import start_reload
 
         start_reload(self.model)
 
@@ -433,7 +433,7 @@ class M2NWeightTransferEngine(WeightTransferEngine[M2NWeightTransferInitInfo, M2
         """Finish reloading when the plan uses fallback entries."""
         if not self._uses_load_weights:
             return
-        from aphrodite.model_executor.model_loader.reload import finish_reload
+        from sonar.model_executor.model_loader.reload import finish_reload
 
         finish_reload(self.model, self.model_config, self.device)
 
@@ -454,7 +454,7 @@ class M2NWeightTransferEngine(WeightTransferEngine[M2NWeightTransferInitInfo, M2
                 )
             requested.append((name, index))
 
-        from aphrodite.model_executor.model_loader.mtp_validation import (
+        from sonar.model_executor.model_loader.mtp_validation import (
             disable_mtp_completeness_check,
         )
 

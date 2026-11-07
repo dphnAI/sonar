@@ -9,9 +9,9 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from aphrodite.entrypoints.rl.online.api_router import router as rl_router
-from aphrodite.entrypoints.serve.dev.rpc.api_router import router as rpc_router
-from aphrodite.entrypoints.serve.exception_handling.register import init_exception_handler
+from sonar.entrypoints.rl.online.api_router import router as rl_router
+from sonar.entrypoints.serve.dev.rpc.api_router import router as rpc_router
+from sonar.entrypoints.serve.exception_handling.register import init_exception_handler
 
 pytestmark = pytest.mark.cpu_test
 

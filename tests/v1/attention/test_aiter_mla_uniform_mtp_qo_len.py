@@ -22,7 +22,7 @@ import itertools
 import pytest
 import torch
 
-from aphrodite.v1.attention.backends.mla.rocm_aiter_mla import AiterMLAMetadataBuilder
+from sonar.v1.attention.backends.mla.rocm_aiter_mla import AiterMLAMetadataBuilder
 
 
 def _reference(qo_len: torch.Tensor, max_qo_len: int, num_decode_tokens: int) -> int:

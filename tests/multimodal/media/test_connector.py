@@ -16,11 +16,11 @@ import requests
 import torch
 from PIL import Image, ImageChops
 
-from aphrodite.assets.base import APHRODITE_S3_BUCKET_URL
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.multimodal.image import convert_image_mode
-from aphrodite.multimodal.inputs import PlaceholderRange
-from aphrodite.multimodal.media import MediaConnector
+from sonar.assets.base import SONAR_S3_BUCKET_URL
+from sonar.exceptions import SonarValidationError
+from sonar.multimodal.image import convert_image_mode
+from sonar.multimodal.inputs import PlaceholderRange
+from sonar.multimodal.media import MediaConnector
 
 # Test different image extensions (JPG/PNG) and formats (gray/RGB/RGBA)
 TEST_IMAGE_ASSETS = [
@@ -31,8 +31,8 @@ TEST_IMAGE_ASSETS = [
 ]
 
 TEST_VIDEO_URLS = [
-    f"{APHRODITE_S3_BUCKET_URL}/multimodal_asset/slow_traffic_small.mp4",
-    f"{APHRODITE_S3_BUCKET_URL}/multimodal_asset/vtest.avi",
+    f"{SONAR_S3_BUCKET_URL}/multimodal_asset/slow_traffic_small.mp4",
+    f"{SONAR_S3_BUCKET_URL}/multimodal_asset/vtest.avi",
 ]
 
 
@@ -72,7 +72,7 @@ async def test_fetch_image_base64(url_images: dict[str, Image.Image], raw_image_
     connector = MediaConnector(
         # Domain restriction should not apply to data URLs.
         allowed_media_domains=[
-            APHRODITE_S3_BUCKET_URL.removeprefix("https://"),
+            SONAR_S3_BUCKET_URL.removeprefix("https://"),
         ]
     )
     url_image = url_images[raw_image_url]
@@ -155,12 +155,12 @@ async def test_fetch_image_local_files(image_url: str):
 
         with pytest.raises(ValueError, match="must be a subpath"):
             await local_connector.fetch_image_async(f"file://{temp_dir}/../{os.path.basename(image_url)}")
-        with pytest.raises(AphroditeValidationError, match="Cannot load local files"):
+        with pytest.raises(SonarValidationError, match="Cannot load local files"):
             await connector.fetch_image_async(f"file://{temp_dir}/../{os.path.basename(image_url)}")
 
         with pytest.raises(ValueError, match="must be a subpath"):
             local_connector.fetch_image(f"file://{temp_dir}/../{os.path.basename(image_url)}")
-        with pytest.raises(AphroditeValidationError, match="Cannot load local files"):
+        with pytest.raises(SonarValidationError, match="Cannot load local files"):
             connector.fetch_image(f"file://{temp_dir}/../{os.path.basename(image_url)}")
 
 
@@ -292,7 +292,7 @@ async def test_fetch_video_http_with_dynamic_loader(
     monkeypatch: pytest.MonkeyPatch,
 ):
     with monkeypatch.context() as m:
-        m.setenv("APHRODITE_VIDEO_LOADER_BACKEND", "opencv_dynamic")
+        m.setenv("SONAR_VIDEO_LOADER_BACKEND", "opencv_dynamic")
         connector = MediaConnector(
             media_io_kwargs={
                 "video": {
@@ -374,7 +374,7 @@ async def test_allowed_media_domains(video_url: str, num_frames: int):
             }
         },
         allowed_media_domains=[
-            APHRODITE_S3_BUCKET_URL.removeprefix("https://"),
+            SONAR_S3_BUCKET_URL.removeprefix("https://"),
         ],
     )
 

@@ -133,7 +133,7 @@ RUN pip install filelock "typing-extensions>=4.10.0" "sympy>=1.13.3" \
 
 
 # Expose the rocm-sdk wheel as a conventional /opt/rocm install so downstream
-# builds (Dockerfile.rocm: Aphrodite csrc, RIXL/UCX, ROCShmem/DeepEP) keep working.
+# builds (Dockerfile.rocm: Sonar csrc, RIXL/UCX, ROCShmem/DeepEP) keep working.
 RUN ln -sfn "${ROCM_PATH}" /opt/rocm;  
 
 RUN if [ -f "${SITE_PACKAGES}/rocm_sdk/__init__.py" ]; then \

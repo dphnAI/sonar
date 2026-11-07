@@ -5,13 +5,13 @@ from dataclasses import dataclass, replace
 
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.utils.torch_utils import async_tensor_h2d
-from aphrodite.v1.attention.backend import CommonAttentionMetadata
-from aphrodite.v1.attention.backends.utils import NULL_BLOCK_ID
-from aphrodite.v1.kv_cache_interface import (
+from sonar.config import SonarConfig
+from sonar.triton_utils import tl, triton
+from sonar.utils.math_utils import cdiv
+from sonar.utils.torch_utils import async_tensor_h2d
+from sonar.v1.attention.backend import CommonAttentionMetadata
+from sonar.v1.attention.backends.utils import NULL_BLOCK_ID
+from sonar.v1.kv_cache_interface import (
     MambaSpec,
     get_mamba_prefill_checkpoint_position,
     is_mamba_prefill_checkpoint_valid,
@@ -94,14 +94,14 @@ class MambaPrefillCheckpointMetadata:
 class MambaPrefillCheckpointBuilder:
     """Build backend-neutral prefill checkpoint locations."""
 
-    def __init__(self, aphrodite_config: AphroditeConfig, kv_cache_spec: MambaSpec) -> None:
-        self.aphrodite_config = aphrodite_config
+    def __init__(self, sonar_config: SonarConfig, kv_cache_spec: MambaSpec) -> None:
+        self.sonar_config = sonar_config
         self.kv_cache_spec = kv_cache_spec
-        speculative_config = aphrodite_config.speculative_config
+        speculative_config = sonar_config.speculative_config
         self.drop_eagle_block = (
             speculative_config is not None
             and speculative_config.use_eagle_block_drop()
-            and not aphrodite_config.num_hash_lookahead_tokens
+            and not sonar_config.num_hash_lookahead_tokens
         )
 
     def build(
@@ -109,11 +109,11 @@ class MambaPrefillCheckpointBuilder:
         m: CommonAttentionMetadata,
         request_rows: list[int],
     ) -> MambaPrefillCheckpointMetadata | None:
-        if self.aphrodite_config.cache_config.mamba_cache_mode != "align":
+        if self.sonar_config.cache_config.mamba_cache_mode != "align":
             return None
         if self.kv_cache_spec.num_prefill_checkpoint_blocks == 0:
             return None
-        cache_config = self.aphrodite_config.cache_config
+        cache_config = self.sonar_config.cache_config
         hash_block_size = cache_config.hash_block_size
         cache_hit_alignment_tokens = cache_config.cache_hit_alignment_tokens
         if hash_block_size is None or cache_hit_alignment_tokens is None:
@@ -132,7 +132,7 @@ class MambaPrefillCheckpointBuilder:
             checkpoint_alignment=self.kv_cache_spec.prefill_checkpoint_alignment,
             drop_eagle_block=self.drop_eagle_block,
             cache_hit_alignment_tokens=cache_hit_alignment_tokens,
-            num_hash_lookahead_tokens=self.aphrodite_config.num_hash_lookahead_tokens,
+            num_hash_lookahead_tokens=self.sonar_config.num_hash_lookahead_tokens,
         )
         if not any(checkpoint_offsets):
             return None

@@ -21,7 +21,7 @@ from __future__ import annotations
 import functools
 from typing import TYPE_CHECKING
 
-from aphrodite.parser.deepseek_v4 import (
+from sonar.parser.deepseek_v4 import (
     DSML_INVOKE_END,
     DSML_INVOKE_NAME_END,
     DSML_INVOKE_PREFIX,
@@ -31,17 +31,17 @@ from aphrodite.parser.deepseek_v4 import (
     _dsml_arg_value_extender,
     _unwrap_wrapper_args,
 )
-from aphrodite.parser.engine.events import EventType
-from aphrodite.parser.engine.parser_engine import ParserEngine
-from aphrodite.parser.engine.parser_engine_config import (
+from sonar.parser.engine.events import EventType
+from sonar.parser.engine.parser_engine import ParserEngine
+from sonar.parser.engine.parser_engine_config import (
     ParserEngineConfig,
     ParserState,
     Transition,
 )
 
 if TYPE_CHECKING:
-    from aphrodite.tokenizers import TokenizerLike
-    from aphrodite.tool_parsers.abstract_tool_parser import Tool
+    from sonar.tokenizers import TokenizerLike
+    from sonar.tool_parsers.abstract_tool_parser import Tool
 
 _DSML = "｜DSML｜"
 

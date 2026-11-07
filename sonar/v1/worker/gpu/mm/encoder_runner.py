@@ -9,24 +9,24 @@ from typing import TYPE_CHECKING
 import numpy as np
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.models.interfaces import SupportsMultiModal, supports_realtime
-from aphrodite.multimodal.encoder_budget import MultiModalBudget
-from aphrodite.multimodal.inputs import MultiModalKwargsItem
-from aphrodite.multimodal.utils import (
+from sonar.logger import init_logger
+from sonar.model_executor.models.interfaces import SupportsMultiModal, supports_realtime
+from sonar.multimodal.encoder_budget import MultiModalBudget
+from sonar.multimodal.inputs import MultiModalKwargsItem
+from sonar.multimodal.utils import (
     get_mm_features_in_window,
     group_and_batch_mm_kwargs,
     set_mm_embedding_modality,
 )
-from aphrodite.utils.torch_utils import PIN_MEMORY, async_tensor_h2d
-from aphrodite.v1.worker.gpu.mm.encoder_cache import EncoderCache
-from aphrodite.v1.worker.utils import (
+from sonar.utils.torch_utils import PIN_MEMORY, async_tensor_h2d
+from sonar.v1.worker.gpu.mm.encoder_cache import EncoderCache
+from sonar.v1.worker.utils import (
     EncoderTimingStats,
     sanity_check_mm_encoder_outputs,
 )
 
 if TYPE_CHECKING:
-    from aphrodite.v1.worker.encoder_cudagraph import EncoderCudaGraphManager
+    from sonar.v1.worker.encoder_cudagraph import EncoderCudaGraphManager
 
 logger = init_logger(__name__)
 
@@ -65,8 +65,8 @@ class EncoderRunner:
         manager = self.cudagraph_manager
         assert manager is not None
 
-        from aphrodite.distributed.parallel_state import graph_capture
-        from aphrodite.platforms import current_platform
+        from sonar.distributed.parallel_state import graph_capture
+        from sonar.platforms import current_platform
 
         with graph_capture(device=self.device):
             manager.capture(graph_pool=current_platform.graph_pool_handle())

@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Generic, Protocol, TypeVar
 import numpy as np
 import torch
 
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     kFp8Dynamic64Sym,
     kFp8Dynamic128Sym,
     kFp8StaticTensorSym,
@@ -17,20 +17,20 @@ from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
 )
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
-    from aphrodite.config.cache import CacheDType
-    from aphrodite.model_executor.layers.linear import ColumnParallelLinear
-    from aphrodite.model_executor.layers.quantization.utils.quant_utils import QuantKey
-    from aphrodite.platforms.interface import DeviceCapability
-    from aphrodite.v1.hisparse.runtime import HiSparseCacheHandle
-    from aphrodite.v1.kv_cache_interface import (
+    from sonar.config import SonarConfig
+    from sonar.config.cache import CacheDType
+    from sonar.model_executor.layers.linear import ColumnParallelLinear
+    from sonar.model_executor.layers.quantization.utils.quant_utils import QuantKey
+    from sonar.platforms.interface import DeviceCapability
+    from sonar.v1.hisparse.runtime import HiSparseCacheHandle
+    from sonar.v1.kv_cache_interface import (
         AttentionSpec,
         KVCacheLayout,
         KVCacheSpec,
         KVQuantMode,
     )
 
-from aphrodite.v1.kv_cache_interface import KVCacheLayout, get_kv_quant_mode
+from sonar.v1.kv_cache_interface import KVCacheLayout, get_kv_quant_mode
 
 
 class AttentionType(str, Enum):
@@ -512,7 +512,7 @@ class CommonAttentionMetadata:
         # but not the right per-request boundaries. Padding requests have a query
         # length of zero and are skipped by the device boundary search.
         num_mapped_tokens = int(self.query_start_loc_cpu[-1])
-        from aphrodite.v1.attention.ops.metadata import compute_token_to_req_indices
+        from sonar.v1.attention.ops.metadata import compute_token_to_req_indices
 
         num_output_tokens = max(num_mapped_tokens, num_tokens)
         assert buffer.shape[0] >= num_output_tokens
@@ -568,7 +568,7 @@ class AttentionCGSupport(Enum):
     """NO cudagraph support"""
 
 
-def max_decode_query_len(aphrodite_config: "AphroditeConfig") -> int:
+def max_decode_query_len(sonar_config: "SonarConfig") -> int:
     """Widest request a spec-as-decode builder treats as a decode.
 
     On model runner V2 this is a verification request, 1 +
@@ -576,12 +576,12 @@ def max_decode_query_len(aphrodite_config: "AphroditeConfig") -> int:
     threshold and the code that mirrors the builders' decode/prefill split all
     read this, so they cannot drift apart.
     """
-    speculative_config = getattr(aphrodite_config, "speculative_config", None)
+    speculative_config = getattr(sonar_config, "speculative_config", None)
     if speculative_config is None or speculative_config.num_speculative_tokens is None:
         return 1
     num_speculative_tokens = speculative_config.num_speculative_tokens
     max_query_len = 1 + num_speculative_tokens
-    if speculative_config.parallel_drafting and not aphrodite_config.use_v2_model_runner:
+    if speculative_config.parallel_drafting and not sonar_config.use_v2_model_runner:
         # Model runner V1 only; remove with it. Its parallel drafter appends up
         # to num_speculative_tokens mask slots to each verified request.
         max_query_len += num_speculative_tokens
@@ -613,18 +613,18 @@ class AttentionMetadataBuilder(ABC, Generic[M]):
         self,
         kv_cache_spec: "KVCacheSpec",
         layer_names: list[str],
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
         device: torch.device,
     ):
         self.kv_cache_spec = kv_cache_spec
         self.layer_names = layer_names
-        self.aphrodite_config = aphrodite_config
+        self.sonar_config = sonar_config
         self.device = device
 
     @classmethod
     def get_cudagraph_support(
         cls: type["AttentionMetadataBuilder"],
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
         kv_cache_spec: "KVCacheSpec",
     ) -> AttentionCGSupport:
         """Get the cudagraph support level of this builder class."""
@@ -633,7 +633,7 @@ class AttentionMetadataBuilder(ABC, Generic[M]):
     @classmethod
     def get_varlen_cudagraph_max_query_len(
         cls: type["AttentionMetadataBuilder"],
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
         kv_cache_spec: "KVCacheSpec",
     ) -> int | None:
         """Get the largest per-request query length L of the variable-length
@@ -665,14 +665,14 @@ class AttentionMetadataBuilder(ABC, Generic[M]):
             # If the backend supports spec-as-decode kernels, then we can set
             # the reorder_batch_threshold based on the number of speculative
             # tokens from the config.
-            speculative_config = self.aphrodite_config.speculative_config
+            speculative_config = self.sonar_config.speculative_config
             if speculative_config is not None and speculative_config.num_speculative_tokens is not None:
                 self.reorder_batch_threshold = max(
                     self.reorder_batch_threshold,
-                    max_decode_query_len(self.aphrodite_config),
+                    max_decode_query_len(self.sonar_config),
                 )
 
-        if self.aphrodite_config.parallel_config.decode_context_parallel_size > 1 and not supports_dcp_with_varlen:
+        if self.sonar_config.parallel_config.decode_context_parallel_size > 1 and not supports_dcp_with_varlen:
             self.reorder_batch_threshold = 1
 
     @abstractmethod
@@ -803,7 +803,7 @@ class AttentionImplBase(ABC, Generic[T]):
     # False => base 2      (lse = log2(sum(exp(qk))))
     #          -- e.g. FlashInfer trtllm-gen MLA
     # The DCP combine kernel (cp_lse_ag_out_rs / dcp_a2a_lse_reduce in
-    # aphrodite/v1/attention/ops/dcp.py) branches on this via its IS_BASE_E
+    # sonar/v1/attention/ops/dcp.py) branches on this via its IS_BASE_E
     # constexpr; getting it wrong silently corrupts the cross-shard
     # softmax denominator.
     lse_base_on_e: bool = True
@@ -842,16 +842,16 @@ class AttentionImplBase(ABC, Generic[T]):
     def __new__(cls, *args, **kwargs):
         # use __new__ so that all subclasses will call this
         self = super().__new__(cls)
-        from aphrodite.config import get_current_aphrodite_config_or_none
-        from aphrodite.distributed.parallel_state import get_dcp_world_size_and_rank
+        from sonar.config import get_current_sonar_config_or_none
+        from sonar.distributed.parallel_state import get_dcp_world_size_and_rank
 
         # Replicated drafts run at DCP=1 inside a DCP target's process group.
-        config = get_current_aphrodite_config_or_none()
+        config = get_current_sonar_config_or_none()
         self.dcp_world_size, self.dcp_rank = get_dcp_world_size_and_rank(
             config is None or config.parallel_config.decode_context_parallel_size > 1
         )
         try:
-            from aphrodite.distributed.parallel_state import get_pcp_group
+            from sonar.distributed.parallel_state import get_pcp_group
 
             self.pcp_world_size = get_pcp_group().world_size
             self.pcp_rank = get_pcp_group().rank_in_group
@@ -1012,7 +1012,7 @@ class AttentionImpl(AttentionImplBase[T], Generic[T]):
         layer_slot_mapping: torch.Tensor,
     ):
         """If `fused_rope_kvcache_supported` returns True, this method will be called
-        by torch.ops.aphrodite.fused_rope_and_unified_kv_cache_update
+        by torch.ops.sonar.fused_rope_and_unified_kv_cache_update
         to perform the inplace RoPE and KV cache update.
         """
         raise NotImplementedError
@@ -1111,7 +1111,7 @@ class MLAAttentionImpl(AttentionImplBase[T], Generic[T]):
     ) -> None:
         if kv_cache.numel() == 0:
             return
-        from aphrodite import _custom_ops as ops
+        from sonar import _custom_ops as ops
 
         ops.concat_and_cache_mla(
             kv_c_normed,
@@ -1194,7 +1194,7 @@ class SparseMLAAttentionImpl(AttentionImplBase[T], Generic[T]):
     ) -> None:
         if kv_cache.numel() == 0:
             return
-        from aphrodite import _custom_ops as ops
+        from sonar import _custom_ops as ops
 
         ops.concat_and_cache_mla(
             kv_c_normed,

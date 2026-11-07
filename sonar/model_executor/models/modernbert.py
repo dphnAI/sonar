@@ -7,29 +7,29 @@ from torch import nn
 from transformers import ModernBertConfig
 from transformers.activations import ACT2FN
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, ModelConfig
-from aphrodite.distributed import get_tensor_model_parallel_world_size
-from aphrodite.model_executor.layers.attention import (
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import ModelConfig, SonarConfig
+from sonar.distributed import get_tensor_model_parallel_world_size
+from sonar.model_executor.layers.attention import (
     EncoderOnlyAttention,
 )
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.linear import (
     MergedColumnParallelLinear,
     QKVParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.pooler import DispatchPooler
-from aphrodite.model_executor.layers.pooler.seqwise import (
+from sonar.model_executor.layers.pooler import DispatchPooler
+from sonar.model_executor.layers.pooler.seqwise import (
     EmbeddingPoolerHead,
     SequencePooler,
     get_seq_pooling_method,
 )
-from aphrodite.model_executor.layers.pooler.tokwise import pooler_for_token_classify
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.layers.vocab_parallel_embedding import VocabParallelEmbedding
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
-from aphrodite.sequence import IntermediateTensors
+from sonar.model_executor.layers.pooler.tokwise import pooler_for_token_classify
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.layers.vocab_parallel_embedding import VocabParallelEmbedding
+from sonar.model_executor.model_loader.weight_utils import default_weight_loader
+from sonar.sequence import IntermediateTensors
 
 from .interfaces import SupportsCrossEncoding, SupportsLoRA
 from .interfaces_base import attn_type, default_pooling_type
@@ -203,11 +203,11 @@ class ModernBertLayer(nn.Module):
 
 
 class ModernBertEncoderLayer(nn.Module):
-    def __init__(self, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        dtype = aphrodite_config.model_config.dtype
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        dtype = sonar_config.model_config.dtype
+        quant_config = sonar_config.quant_config
         self.layers = nn.ModuleList(
             [
                 ModernBertLayer(
@@ -234,7 +234,7 @@ class ModernBertEncoderLayer(nn.Module):
 @support_torch_compile
 @default_pooling_type(seq_pooling_type="CLS")
 class ModernBertModel(nn.Module, SupportsLoRA):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={
             "model.layers.": "encoder_layer.layers.",
             "layers.": "encoder_layer.layers.",
@@ -249,21 +249,21 @@ class ModernBertModel(nn.Module, SupportsLoRA):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
     ):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
         self.config = config
         self.embeddings = ModernBertEmbeddings(config)
-        self.encoder_layer = ModernBertEncoderLayer(aphrodite_config, prefix=f"{prefix}.encoder_layer")
+        self.encoder_layer = ModernBertEncoderLayer(sonar_config, prefix=f"{prefix}.encoder_layer")
         self.final_norm = nn.LayerNorm(config.hidden_size, eps=config.norm_eps, bias=config.norm_bias)
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.embeddings.embed_input_ids(input_ids)
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
-        weights = self.hf_to_aphrodite_mapper.apply(weights)
+        weights = self.hf_to_sonar_mapper.apply(weights)
         params_dict = dict(self.named_parameters())
         loaded_params: set[str] = set()
         for name, loaded_weight in weights:
@@ -304,7 +304,7 @@ class ModernBertPooler(SequencePooler):
 
         config: ModernBertConfig = model_config.hf_config
         hf_pooling_type = config.classifier_pooling.upper()
-        # aphrodite_pooling_type = pooler_config.seq_pooling_type
+        # sonar_pooling_type = pooler_config.seq_pooling_type
         # Currently we don't have a way to see if the user set the pooling type
         # explicitly or not, so we always use the HF pooling type for now.
 
@@ -340,23 +340,23 @@ class ModernBertPooler(SequencePooler):
 class ModernBertForSequenceClassification(nn.Module, SupportsCrossEncoding):
     is_pooling_model = True
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
 
         self.config = config
-        self.model = ModernBertModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "modernbert"))
+        self.model = ModernBertModel(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "modernbert"))
         self.classifier = nn.Linear(
             config.hidden_size,
             config.num_labels,
-            dtype=aphrodite_config.model_config.head_dtype,
+            dtype=sonar_config.model_config.head_dtype,
         )
 
-        pooler_config = aphrodite_config.model_config.pooler_config
+        pooler_config = sonar_config.model_config.pooler_config
         assert pooler_config is not None
 
-        self.pooling = ModernBertPooler(aphrodite_config.model_config)
+        self.pooling = ModernBertPooler(sonar_config.model_config)
 
         self.pooler = DispatchPooler.for_seq_cls(
             pooler_config,
@@ -426,18 +426,18 @@ class ModernBertPredictionHead(nn.Module):
 class ModernBertForTokenClassification(nn.Module):
     is_pooling_model = True
 
-    hf_to_aphrodite_mapper = WeightsMapper(orig_to_new_prefix={"drop": None})
+    hf_to_sonar_mapper = WeightsMapper(orig_to_new_prefix={"drop": None})
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        self.head_dtype = aphrodite_config.model_config.head_dtype
+        config = sonar_config.model_config.hf_config
+        self.head_dtype = sonar_config.model_config.head_dtype
         self.num_labels = config.num_labels
-        self.model = ModernBertModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "modernbert"))
+        self.model = ModernBertModel(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "modernbert"))
         self.head = ModernBertPredictionHead(config)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels, dtype=self.head_dtype)
 
-        pooler_config = aphrodite_config.model_config.pooler_config
+        pooler_config = sonar_config.model_config.pooler_config
         assert pooler_config is not None
 
         self.pooler = pooler_for_token_classify(pooler_config)
@@ -447,7 +447,7 @@ class ModernBertForTokenClassification(nn.Module):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]):
         loader = AutoWeightsLoader(self)
-        loaded_params = loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        loaded_params = loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
         return loaded_params
 
     def forward(

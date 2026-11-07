@@ -7,10 +7,10 @@ import pytest
 import torch
 from torch import nn
 
-from aphrodite.distributed import parallel_state
-from aphrodite.model_executor.models import utils as model_utils
-from aphrodite.models.deepseek_v32.nvidia import model as deepseek_v32_model
-from aphrodite.sequence import IntermediateTensors
+from sonar.distributed import parallel_state
+from sonar.model_executor.models import utils as model_utils
+from sonar.models.deepseek_v32.nvidia import model as deepseek_v32_model
+from sonar.sequence import IntermediateTensors
 
 # GLM-5.3: each group of 4 layers from layer 3 reuses its first layer's top-k.
 GLM5_TOPK = dict(index_topk_freq=4, index_skip_topk_offset=3)

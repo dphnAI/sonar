@@ -9,10 +9,10 @@ import numpy as np
 import torch
 from transformers import PythonBackend, TokenizersBackend
 
-from aphrodite.engine.arg_utils import EngineArgs
-from aphrodite.v1.engine import EngineCoreOutput, FinishReason
-from aphrodite.v1.metrics.stats import PrefillStats
-from aphrodite.v1.outputs import LogprobsLists, LogprobsTensors
+from sonar.engine.arg_utils import EngineArgs
+from sonar.v1.engine import EngineCoreOutput, FinishReason
+from sonar.v1.metrics.stats import PrefillStats
+from sonar.v1.outputs import LogprobsLists, LogprobsTensors
 
 GeneralTokenizerType: TypeAlias = PythonBackend | TokenizersBackend
 
@@ -24,7 +24,7 @@ NUM_PROMPT_LOGPROBS_UNDER_TEST = 7
 TOKENIZER_NAME = "meta-llama/Llama-3.2-1B"
 
 FULL_STRINGS = [
-    "My name is Robert from Neural Magic and I love working on Aphrodite so much!",
+    "My name is Robert from Neural Magic and I love working on Sonar so much!",
     "Red Hat is the best open source company by far across Linux, K8s, and AI.",
     "Nick is the name of my brother in addition to my colleague from Red Hat.",
 ]
@@ -294,7 +294,7 @@ class DummyOutputProcessorTestVectors:
     """Dummy test vectors for output processor tests."""
 
     tokenizer: GeneralTokenizerType
-    aphrodite_config: EngineArgs
+    sonar_config: EngineArgs
     full_tokens: list[list[int]]  # Prompt + generated tokens
     prompt_tokens: list[list[int]]
     generation_tokens: list[list[int]]

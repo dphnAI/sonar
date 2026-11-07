@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
-from aphrodite.model_executor.hw_agnostic.custom_op import CustomOp
+from sonar.model_executor.hw_agnostic.custom_op import CustomOp
 
 
 @CustomOp.register("rms_norm")

@@ -5,13 +5,13 @@
 from collections.abc import AsyncGenerator, Mapping, Sequence
 from dataclasses import dataclass
 
-from aphrodite.engine.protocol import EngineClient
-from aphrodite.exceptions import GenerationError
-from aphrodite.inputs import EngineInput
-from aphrodite.lora.request import LoRARequest
-from aphrodite.outputs import RequestOutput
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.utils.async_utils import merge_async_iterators
+from sonar.engine.protocol import EngineClient
+from sonar.exceptions import GenerationError
+from sonar.inputs import EngineInput
+from sonar.lora.request import LoRARequest
+from sonar.outputs import RequestOutput
+from sonar.sampling_params import SamplingParams
+from sonar.utils.async_utils import merge_async_iterators
 
 
 @dataclass(frozen=True)

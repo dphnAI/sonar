@@ -8,15 +8,15 @@ from typing import Annotated, Any, Literal
 from fastapi import APIRouter, Body, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 
-from aphrodite.distributed.weight_transfer.base import (
+from sonar.distributed.weight_transfer.base import (
     WeightTransferInitRequest,
     WeightTransferUpdatePayload,
     WeightTransferUpdateRequest,
 )
-from aphrodite.engine.protocol import EngineClient
-from aphrodite.entrypoints.rl.online.metrics import weight_operation_metrics
-from aphrodite.logger import init_logger
-from aphrodite.v1.engine import PauseMode
+from sonar.engine.protocol import EngineClient
+from sonar.entrypoints.rl.online.metrics import weight_operation_metrics
+from sonar.logger import init_logger
+from sonar.v1.engine import PauseMode
 
 logger = init_logger(__name__)
 
@@ -119,7 +119,7 @@ async def abort_requests(raw_request: Request) -> JSONResponse:
             # The dev RL server runs AsyncLLM; abort everything it is tracking.
             # request_states is keyed by internal ids; parent_requests holds
             # parallel-sampling parents. Abort both as internal ids.
-            from aphrodite.v1.engine.async_llm import AsyncLLM
+            from sonar.v1.engine.async_llm import AsyncLLM
 
             assert isinstance(engine, AsyncLLM)
             op = engine.output_processor
@@ -271,7 +271,7 @@ async def get_world_size(
             size without data parallelism (TP * PP).
 
     """
-    parallel_config = engine_client(raw_request).aphrodite_config.parallel_config
+    parallel_config = engine_client(raw_request).sonar_config.parallel_config
     if include_dp:
         world_size = parallel_config.world_size_across_dp
     else:

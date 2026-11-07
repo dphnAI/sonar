@@ -12,8 +12,8 @@ metrics to hint at.
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.v1.worker.gpu.spec_decode.acceptance_estimator import (
+from sonar.platforms import current_platform
+from sonar.v1.worker.gpu.spec_decode.acceptance_estimator import (
     OnlineAcceptanceEstimator,
     _accumulate_kernel,
     _refit_kernel,

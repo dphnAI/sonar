@@ -7,14 +7,14 @@ unquantized run of it. Computing that reference once per session avoids
 booting an identical engine for every quantization scheme under test.
 
 Only the outputs are cached; each engine is still torn down as usual, so
-tests keep the isolation ``AphroditeRunner.__exit__`` provides.
+tests keep the isolation ``SonarRunner.__exit__`` provides.
 """
 
 import pytest
 
 
 @pytest.fixture(scope="session")
-def quant_baseline_logprobs(aphrodite_runner):
+def quant_baseline_logprobs(sonar_runner):
     """Greedy logprobs for an unquantized model, computed once per config."""
     cache: dict = {}
 
@@ -28,12 +28,12 @@ def quant_baseline_logprobs(aphrodite_runner):
     ):
         key = (model, max_model_len, max_tokens, num_logprobs, tuple(prompts))
         if key not in cache:
-            with aphrodite_runner(
+            with sonar_runner(
                 model,
                 max_model_len=max_model_len,
                 enforce_eager=True,
-            ) as aphrodite_model:
-                cache[key] = aphrodite_model.generate_greedy_logprobs(prompts, max_tokens, num_logprobs)
+            ) as sonar_model:
+                cache[key] = sonar_model.generate_greedy_logprobs(prompts, max_tokens, num_logprobs)
         return cache[key]
 
     return baseline

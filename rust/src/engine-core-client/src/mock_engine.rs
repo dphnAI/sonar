@@ -57,7 +57,7 @@ pub fn default_ready_response() -> EngineCoreReadyResponse {
         block_size: DEFAULT_MOCK_BLOCK_SIZE,
         dp_stats_address: None,
         dtype: ModelDtype::Float32,
-        aphrodite_version: "test-aphrodite-version".to_string(),
+        sonar_version: "test-sonar-version".to_string(),
         world_size: 1,
         effective_data_parallel_size: 1,
         tensor_parallel_size: 1,
@@ -76,7 +76,7 @@ pub fn default_ready_response() -> EngineCoreReadyResponse {
         enable_sleep_mode: false,
         supports_draft_weight_updates: false,
         effective_attention_block_size: None,
-        aphrodite_config: None,
+        sonar_config: None,
         prefix_hash_config: None,
         dphn_network_enabled: false,
     }
@@ -95,7 +95,7 @@ pub struct MockCoordinatorSockets {
 
 /// One mock engine's connection to one frontend client.
 ///
-/// Aphrodite launches one engine-client pair per API server process. A remote
+/// Sonar launches one engine-client pair per API server process. A remote
 /// engine connects to every advertised input/output pair and uses the request's
 /// `client_index` to route outputs back to the originating API server.
 pub struct MockEngineDataSockets {

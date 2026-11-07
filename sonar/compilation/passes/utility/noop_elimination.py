@@ -7,15 +7,15 @@ import torch.fx
 from torch import SymInt
 from torch.fx.experimental.symbolic_shapes import statically_known_true
 
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
-from ..aphrodite_inductor_pass import AphroditeInductorPass
 from ..fx_utils import is_func
+from ..sonar_inductor_pass import SonarInductorPass
 
 logger = init_logger(__name__)
 
 
-class NoOpEliminationPass(AphroditeInductorPass):
+class NoOpEliminationPass(SonarInductorPass):
     """This is an inductor pass that removes redundant reshape/slice operations.
     It is required for RMSNorm-quant fusion to work properly.
     That's because apply_fp8_linear adds a reshape, which is redundant
@@ -63,7 +63,7 @@ class NoOpEliminationPass(AphroditeInductorPass):
     out: "f16[s0, 4096]" = at[1]
     """
 
-    @AphroditeInductorPass.time_and_log
+    @SonarInductorPass.time_and_log
     def __call__(self, graph: torch.fx.Graph) -> None:
         count = 0
         # Remove no-op reshapes/views:

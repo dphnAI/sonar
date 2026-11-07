@@ -8,35 +8,35 @@ from typing import TYPE_CHECKING
 import torch
 import torch.nn as nn
 
-from aphrodite.config import AphroditeConfig, CUDAGraphMode, get_layers_from_aphrodite_config
-from aphrodite.distributed.eplb.eplb_state import EplbState
-from aphrodite.forward_context import set_forward_context
-from aphrodite.model_executor.layers.attention_layer_base import AttentionLayerBase
-from aphrodite.model_executor.model_loader import get_model
-from aphrodite.v1.attention.backend import AttentionMetadataBuilder, CommonAttentionMetadata
-from aphrodite.v1.cudagraph_dispatcher import CudagraphDispatcher
-from aphrodite.v1.utils import CpuGpuBuffer
-from aphrodite.v1.worker.dp_utils import coordinate_batch_across_dp
-from aphrodite.v1.worker.gpu_input_batch import CachedRequestState, InputBatch
+from sonar.config import CUDAGraphMode, SonarConfig, get_layers_from_sonar_config
+from sonar.distributed.eplb.eplb_state import EplbState
+from sonar.forward_context import set_forward_context
+from sonar.model_executor.layers.attention_layer_base import AttentionLayerBase
+from sonar.model_executor.model_loader import get_model
+from sonar.v1.attention.backend import AttentionMetadataBuilder, CommonAttentionMetadata
+from sonar.v1.cudagraph_dispatcher import CudagraphDispatcher
+from sonar.v1.utils import CpuGpuBuffer
+from sonar.v1.worker.dp_utils import coordinate_batch_across_dp
+from sonar.v1.worker.gpu_input_batch import CachedRequestState, InputBatch
 
 if TYPE_CHECKING:
-    from aphrodite.v1.kv_cache_interface import KVCacheConfig
+    from sonar.v1.kv_cache_interface import KVCacheConfig
 
 PADDING_SLOT_ID = -1
 
 
 class ExtractHiddenStatesProposer:
-    def __init__(self, aphrodite_config: AphroditeConfig, device):
-        assert aphrodite_config.speculative_config is not None
+    def __init__(self, sonar_config: SonarConfig, device):
+        assert sonar_config.speculative_config is not None
 
-        self.num_speculative_tokens = aphrodite_config.speculative_config.num_speculative_tokens
+        self.num_speculative_tokens = sonar_config.speculative_config.num_speculative_tokens
         assert self.num_speculative_tokens == 1
-        if aphrodite_config.speculative_config.disable_padded_drafter_batch:
+        if sonar_config.speculative_config.disable_padded_drafter_batch:
             raise ValueError("disable_padded_drafter_batch is not supported with extract_hidden_states method")
-        self.aphrodite_config = aphrodite_config
+        self.sonar_config = sonar_config
         self.device = device
-        self.dtype = aphrodite_config.model_config.dtype
-        self.dp_rank = aphrodite_config.parallel_config.data_parallel_rank
+        self.dtype = sonar_config.model_config.dtype
+        self.dp_rank = sonar_config.parallel_config.data_parallel_rank
 
         self.eplb_state: EplbState | None = None
 
@@ -47,12 +47,12 @@ class ExtractHiddenStatesProposer:
         self.kv_cache_gid: int = -1
 
         # Maximum number of tokens for buffers
-        max_batch_size = aphrodite_config.scheduler_config.max_num_seqs
-        self.max_num_tokens = aphrodite_config.scheduler_config.max_num_batched_tokens + max_batch_size
+        max_batch_size = sonar_config.scheduler_config.max_num_seqs
+        self.max_num_tokens = sonar_config.scheduler_config.max_num_batched_tokens + max_batch_size
 
         self.backup_next_token_ids = CpuGpuBuffer(max_batch_size, dtype=torch.int32, device=device)
 
-        self.hf_config = aphrodite_config.speculative_config.draft_model_config.hf_config
+        self.hf_config = sonar_config.speculative_config.draft_model_config.hf_config
         layer_ids = getattr(self.hf_config, "eagle_aux_hidden_state_layer_ids", None)
         if not layer_ids:
             raise ValueError(
@@ -60,13 +60,13 @@ class ExtractHiddenStatesProposer:
                 "model config for extract_hidden_states method"
             )
         self.num_hidden_states = len(layer_ids)
-        self.hidden_size = aphrodite_config.model_config.get_hidden_size()
+        self.hidden_size = sonar_config.model_config.get_hidden_size()
         self.hidden_states = torch.zeros(
             (self.max_num_tokens, self.num_hidden_states, self.hidden_size),
             dtype=self.dtype,
             device=device,
         )
-        self.cudagraph_dispatcher = CudagraphDispatcher(self.aphrodite_config)
+        self.cudagraph_dispatcher = CudagraphDispatcher(self.sonar_config)
 
         self._slot_mapping_buffer = torch.zeros(self.max_num_tokens, dtype=torch.int64, device=device)
 
@@ -137,14 +137,14 @@ class ExtractHiddenStatesProposer:
             num_tokens_across_dp[self.dp_rank] = num_input_tokens
 
         if self.eplb_state is not None:
-            assert self.aphrodite_config.speculative_config is not None
+            assert self.sonar_config.speculative_config is not None
             self.eplb_state.prepare_forward(
-                self.aphrodite_config.speculative_config.draft_model_config,
+                self.sonar_config.speculative_config.draft_model_config,
                 num_tokens,
             )
         with set_forward_context(
             per_layer_attn_metadata,
-            self.aphrodite_config,
+            self.sonar_config,
             num_tokens=num_input_tokens,
             num_tokens_across_dp=num_tokens_across_dp,
             cudagraph_runtime_mode=cudagraph_runtime_mode,
@@ -194,10 +194,10 @@ class ExtractHiddenStatesProposer:
         # coordinate across ranks
         # TODO(Flechman): support DBO ubatching
         should_ubatch, num_tokens_across_dp = False, None
-        if self.aphrodite_config.parallel_config.data_parallel_size > 1:
+        if self.sonar_config.parallel_config.data_parallel_size > 1:
             should_ubatch, num_tokens_across_dp, synced_cudagraph_mode = coordinate_batch_across_dp(
                 num_tokens_unpadded=num_tokens,
-                parallel_config=self.aphrodite_config.parallel_config,
+                parallel_config=self.sonar_config.parallel_config,
                 allow_microbatching=False,
                 num_tokens_padded=num_tokens_padded,
                 cudagraph_mode=cudagraph_mode.value,
@@ -227,8 +227,8 @@ class ExtractHiddenStatesProposer:
         Only supports PIECEWISE cudagraphs (via mixed_mode).
         Should be called after adjust_cudagraph_sizes_for_spec_decode.
         """
-        assert self.aphrodite_config.speculative_config is not None
-        if not self.aphrodite_config.speculative_config.enforce_eager and cudagraph_mode.mixed_mode() in [
+        assert self.sonar_config.speculative_config is not None
+        if not self.sonar_config.speculative_config.enforce_eager and cudagraph_mode.mixed_mode() in [
             CUDAGraphMode.PIECEWISE,
             CUDAGraphMode.FULL,
         ]:
@@ -262,7 +262,7 @@ class ExtractHiddenStatesProposer:
 
         with set_forward_context(
             None,
-            self.aphrodite_config,
+            self.sonar_config,
             num_tokens=num_input_tokens,
             num_tokens_across_dp=num_tokens_across_dp,
             cudagraph_runtime_mode=cudagraph_runtime_mode,
@@ -281,9 +281,9 @@ class ExtractHiddenStatesProposer:
         layer = next(iter(draft_attn_layers.values()))
         attn_backend = layer.get_attn_backend()
         return attn_backend.get_builder_cls()(
-            layer.get_kv_cache_spec(self.aphrodite_config),
+            layer.get_kv_cache_spec(self.sonar_config),
             self.attn_layer_names,
-            self.aphrodite_config,
+            self.sonar_config,
             self.device,
         )
 
@@ -335,19 +335,19 @@ class ExtractHiddenStatesProposer:
         """
         # Get the target model's attention layers before loading draft model
         target_attn_layer_names = set(
-            get_layers_from_aphrodite_config(self.aphrodite_config, AttentionLayerBase).keys()  # type: ignore[type-abstract]
+            get_layers_from_sonar_config(self.sonar_config, AttentionLayerBase).keys()  # type: ignore[type-abstract]
         )
 
-        assert self.aphrodite_config.speculative_config is not None
-        draft_model_config = self.aphrodite_config.speculative_config.draft_model_config
-        from aphrodite.compilation.backends import set_model_tag
+        assert self.sonar_config.speculative_config is not None
+        draft_model_config = self.sonar_config.speculative_config.draft_model_config
+        from sonar.compilation.backends import set_model_tag
 
         with set_model_tag("extract_hidden_states"):
-            self.model = get_model(aphrodite_config=self.aphrodite_config, model_config=draft_model_config)
+            self.model = get_model(sonar_config=self.sonar_config, model_config=draft_model_config)
 
         # Identify draft model's attention layers (difference from target)
-        all_attn_layers = get_layers_from_aphrodite_config(
-            self.aphrodite_config,
+        all_attn_layers = get_layers_from_sonar_config(
+            self.sonar_config,
             AttentionLayerBase,  # type: ignore[type-abstract]
         )
         draft_attn_layers = {

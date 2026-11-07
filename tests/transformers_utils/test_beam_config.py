@@ -6,8 +6,8 @@ import json
 
 import pytest
 
-from aphrodite.transformers_utils.config import get_config
-from aphrodite.transformers_utils.configs.beam import BeamConfig
+from sonar.transformers_utils.config import get_config
+from sonar.transformers_utils.configs.beam import BeamConfig
 
 _NUM_LAYERS = 6
 # Shaped like reflection/Beam-1.0-501B-A23B's config.json, scaled down.

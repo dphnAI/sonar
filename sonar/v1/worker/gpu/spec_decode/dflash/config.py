@@ -2,18 +2,18 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 from typing import TYPE_CHECKING
 
-from aphrodite.v1.worker.gpu.spec_decode.eagle.config import wrap_eagle_hf_config
-from aphrodite.v1.worker.gpu.spec_decode.speculator_config import (
+from sonar.v1.worker.gpu.spec_decode.eagle.config import wrap_eagle_hf_config
+from sonar.v1.worker.gpu.spec_decode.speculator_config import (
     DraftModelSpeculatorConfig,
 )
 
 if TYPE_CHECKING:
-    from aphrodite.config import SpeculativeConfig
+    from sonar.config import SpeculativeConfig
 
 
 class DFlashSpeculatorConfig(DraftModelSpeculatorConfig):
     base_method = "dflash"
-    speculator_class = "aphrodite.v1.worker.gpu.spec_decode.dflash.speculator.DFlashSpeculator"
+    speculator_class = "sonar.v1.worker.gpu.spec_decode.dflash.speculator.DFlashSpeculator"
     uses_target_hidden_states = True
     supports_watermarking = True
 

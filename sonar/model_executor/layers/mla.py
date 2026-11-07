@@ -5,15 +5,15 @@ from typing import TYPE_CHECKING
 
 import torch
 
-from aphrodite.config import CacheConfig
-from aphrodite.model_executor.custom_op import PluggableLayer
-from aphrodite.model_executor.layers.attention import MLAAttention
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.models.common.ops import fused_q_kv_rmsnorm
-from aphrodite.platforms import current_platform
+from sonar.config import CacheConfig
+from sonar.model_executor.custom_op import PluggableLayer
+from sonar.model_executor.layers.attention import MLAAttention
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.models.common.ops import fused_q_kv_rmsnorm
+from sonar.platforms import current_platform
 
 if TYPE_CHECKING:
-    from aphrodite.v1.attention.backends.mla.index_group import (
+    from sonar.v1.attention.backends.mla.index_group import (
         SparseMLAIndexGroupBuilder,
     )
 

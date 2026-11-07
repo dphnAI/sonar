@@ -2,22 +2,22 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 from typing import TYPE_CHECKING, Any, get_args
 
-from aphrodite.config.speculative import MTPModelTypes
-from aphrodite.logger import init_logger
-from aphrodite.v1.worker.gpu.spec_decode.eagle.config import EagleSpeculatorConfig
-from aphrodite.v1.worker.gpu.spec_decode.speculator_config import (
+from sonar.config.speculative import MTPModelTypes
+from sonar.logger import init_logger
+from sonar.v1.worker.gpu.spec_decode.eagle.config import EagleSpeculatorConfig
+from sonar.v1.worker.gpu.spec_decode.speculator_config import (
     SpeculatorConfig,
 )
 
 if TYPE_CHECKING:
-    from aphrodite.config import SpeculativeConfig
+    from sonar.config import SpeculativeConfig
 
 logger = init_logger(__name__)
 
 
 class MTPSpeculatorConfig(EagleSpeculatorConfig):
     base_method = "mtp"
-    speculator_class = "aphrodite.v1.worker.gpu.spec_decode.mtp.speculator.MTPSpeculator"
+    speculator_class = "sonar.v1.worker.gpu.spec_decode.mtp.speculator.MTPSpeculator"
     supported_options = EagleSpeculatorConfig.supported_options | {"index_share_for_mtp_iteration"}
     supports_pcp = True
 
@@ -31,7 +31,7 @@ class MTPSpeculatorConfig(EagleSpeculatorConfig):
         if not spec.use_multi_module_mtp():
             return cls
         # Imported lazily since it imports this module.
-        from aphrodite.v1.worker.gpu.spec_decode.multi_module_mtp.config import (
+        from sonar.v1.worker.gpu.spec_decode.multi_module_mtp.config import (
             MultiModuleMTPSpeculatorConfig,
         )
 

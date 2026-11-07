@@ -4,15 +4,13 @@
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
-use aphrodite_engine_core_client::protocol::utility::{PauseMode, SleepLevel};
-use aphrodite_engine_core_client::{EngineCoreClient, EngineCoreClientConfig, TransportMode};
 use clap::Parser;
+use sonar_engine_core_client::protocol::utility::{PauseMode, SleepLevel};
+use sonar_engine_core_client::{EngineCoreClient, EngineCoreClientConfig, TransportMode};
 use tracing_subscriber::EnvFilter;
 
 #[derive(Debug, Parser)]
-#[command(
-    about = "Smoke-test EngineCoreClient utility calls against an external Aphrodite engine."
-)]
+#[command(about = "Smoke-test EngineCoreClient utility calls against an external Sonar engine.")]
 struct Args {
     #[arg(long)]
     handshake_address: String,
@@ -50,7 +48,7 @@ struct Args {
 
 fn init_tracing() {
     let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("aphrodite_engine_core_client=debug"));
+        .unwrap_or_else(|_| EnvFilter::new("sonar_engine_core_client=debug"));
     let _ = tracing_subscriber::fmt().with_env_filter(filter).try_init();
 }
 
@@ -75,7 +73,7 @@ async fn main() -> Result<()> {
         engine_stats_enabled: true,
     })
     .await
-    .context("failed to connect to external Aphrodite engine")?;
+    .context("failed to connect to external Sonar engine")?;
 
     println!("model={}", args.model);
     println!("handshake_address={}", args.handshake_address);

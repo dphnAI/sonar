@@ -9,7 +9,7 @@ from typing import cast
 import mlx.core as mx
 from transformers import AutoTokenizer
 
-from aphrodite.tokenizers import TokenizerLike
+from sonar.tokenizers import TokenizerLike
 
 from .config import QWEN3_ASR_MAX_DECODE_TOKENS
 from .model import Qwen3ASRModel

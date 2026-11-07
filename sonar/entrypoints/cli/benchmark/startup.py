@@ -2,16 +2,16 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import argparse
 
-from aphrodite.benchmarks.startup import add_cli_args, main
-from aphrodite.entrypoints.cli.benchmark.base import BenchmarkSubcommandBase
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
+from sonar.benchmarks.startup import add_cli_args, main
+from sonar.entrypoints.cli.benchmark.base import BenchmarkSubcommandBase
+from sonar.utils.argparse_utils import FlexibleArgumentParser
 
 
 class BenchmarkStartupSubcommand(BenchmarkSubcommandBase):
-    """The `startup` subcommand for `aphrodite bench`."""
+    """The `startup` subcommand for `sonar bench`."""
 
     name = "startup"
-    help = "Benchmark the startup time of Aphrodite models."
+    help = "Benchmark the startup time of Sonar models."
 
     @classmethod
     def add_cli_args(cls, parser: FlexibleArgumentParser) -> None:

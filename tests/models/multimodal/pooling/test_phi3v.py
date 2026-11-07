@@ -7,12 +7,12 @@ import torch.nn.functional as F
 import transformers.utils
 from PIL import Image
 
-from aphrodite.assets.base import get_aphrodite_public_assets
-from aphrodite.assets.image import VLM_IMAGES_DIR
-from aphrodite.config import ModelConfig
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
+from sonar.assets.base import get_sonar_public_assets
+from sonar.assets.image import VLM_IMAGES_DIR
+from sonar.config import ModelConfig
+from sonar.multimodal import MULTIMODAL_REGISTRY
 
-from ....conftest import IMAGE_ASSETS, AphroditeRunner, HfRunner, PromptImageInput
+from ....conftest import IMAGE_ASSETS, HfRunner, PromptImageInput, SonarRunner
 from ....utils import large_gpu_test
 from ...utils import check_embeddings_close
 
@@ -46,25 +46,25 @@ SPECIAL_TOKEN_IMAGE_PROMPT = (
 
 
 def _get_cherry_blossom_image() -> Image.Image:
-    return Image.open(get_aphrodite_public_assets(filename="cherry_blossom.jpg", s3_prefix=VLM_IMAGES_DIR))
+    return Image.open(get_sonar_public_assets(filename="cherry_blossom.jpg", s3_prefix=VLM_IMAGES_DIR))
 
 
 @torch.inference_mode()
 def _run_test(
     hf_runner: type[HfRunner],
-    aphrodite_runner: type[AphroditeRunner],
+    sonar_runner: type[SonarRunner],
     input_texts: list[str],
     input_images: PromptImageInput,
     model: str,
     *,
     dtype: str,
 ) -> None:
-    # NOTE: take care of the order. run Aphrodite first, and then run HF.
-    # Aphrodite needs a fresh new process without cuda initialization.
+    # NOTE: take care of the order. run Sonar first, and then run HF.
+    # Sonar needs a fresh new process without cuda initialization.
     # if we run HF first, the cuda initialization will be done and it
     # will hurt multiprocessing backend with fork method (the default method).
-    with aphrodite_runner(model, runner="pooling", dtype=dtype, enforce_eager=True) as aphrodite_model:
-        aphrodite_outputs = aphrodite_model.embed(input_texts, images=input_images)
+    with sonar_runner(model, runner="pooling", dtype=dtype, enforce_eager=True) as sonar_model:
+        sonar_outputs = sonar_model.embed(input_texts, images=input_images)
 
     # use eager mode for hf runner, since phi3_v didn't work with flash_attn
     hf_model_kwargs = {"_attn_implementation": "eager"}
@@ -89,9 +89,9 @@ def _run_test(
 
     check_embeddings_close(
         embeddings_0_lst=hf_outputs,
-        embeddings_1_lst=aphrodite_outputs,
+        embeddings_1_lst=sonar_outputs,
         name_0="hf",
-        name_1="aphrodite",
+        name_1="sonar",
     )
 
 
@@ -100,7 +100,7 @@ def _run_test(
 @pytest.mark.parametrize("dtype", ["half"])
 def test_models_text(
     hf_runner,
-    aphrodite_runner,
+    sonar_runner,
     image_assets,
     model: str,
     dtype: str,
@@ -111,7 +111,7 @@ def test_models_text(
 
     _run_test(
         hf_runner,
-        aphrodite_runner,
+        sonar_runner,
         input_texts,
         input_images,
         model,
@@ -125,7 +125,7 @@ def test_models_text(
 @pytest.mark.parametrize("dtype", ["half"])
 def test_models_image(
     hf_runner,
-    aphrodite_runner,
+    sonar_runner,
     image_assets,
     model: str,
     dtype: str,
@@ -136,7 +136,7 @@ def test_models_image(
 
     _run_test(
         hf_runner,
-        aphrodite_runner,
+        sonar_runner,
         input_texts,
         input_images,
         model,

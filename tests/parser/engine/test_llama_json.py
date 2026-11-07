@@ -6,13 +6,13 @@ import json
 
 import pytest
 
-from aphrodite.entrypoints.generate.base.protocol import ExtractedToolCallInformation
-from aphrodite.parser.llama_json import (
+from sonar.entrypoints.generate.base.protocol import ExtractedToolCallInformation
+from sonar.parser.llama_json import (
     TOOL_START,
     LlamaJsonParser,
     _llama_arg_converter,
 )
-from aphrodite.tool_parsers import ToolParserManager
+from sonar.tool_parsers import ToolParserManager
 from tests.parser.engine.conftest import make_mock_tokenizer
 
 # =============================================================================

@@ -9,28 +9,28 @@ from typing import TYPE_CHECKING
 
 from torch import fx, nn
 
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.linear import QKVParallelLinear
-from aphrodite.model_executor.models.transformers.fusers.base import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.linear import QKVParallelLinear
+from sonar.model_executor.models.transformers.fusers.base import (
     RewriteFuser,
     fused_head_size,
     local_output_sizes,
 )
-from aphrodite.model_executor.models.transformers.fx_utils import (
+from sonar.model_executor.models.transformers.fx_utils import (
     compile_forward,
     is_method,
     recover_forward,
     returned_linear,
     upstream_linear,
 )
-from aphrodite.model_executor.models.transformers.utils import (
+from sonar.model_executor.models.transformers.utils import (
     log_replacement,
     replace_linear_class,
 )
-from aphrodite.model_executor.models.utils import maybe_prefix
+from sonar.model_executor.models.utils import maybe_prefix
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
+    from sonar.config import SonarConfig
 
 logger = init_logger(__name__)
 
@@ -113,9 +113,9 @@ class PackedQKVFuser(RewriteFuser):
         split.args[0] = ast.parse(sections, mode="eval").body
         self.fused_forward = compile_forward(funcdef, fn)
 
-    def validate(self, module: nn.Module, aphrodite_config: "AphroditeConfig") -> bool:
+    def validate(self, module: nn.Module, sonar_config: "SonarConfig") -> bool:
         """Shapes must be compatible with a head-sharded packed GEMM."""
-        head_size = fused_head_size(module, aphrodite_config)
+        head_size = fused_head_size(module, sonar_config)
         qkv = module.get_submodule(self.qkv_name)
         compatible = (
             self.q_size % head_size == 0
@@ -126,9 +126,9 @@ class PackedQKVFuser(RewriteFuser):
             logger.debug("%s is not compatible with packed QKV fusion", type(module))
         return compatible
 
-    def update_attrs(self, module: nn.Module, prefix: str, aphrodite_config: "AphroditeConfig") -> None:
-        quant_config = aphrodite_config.quant_config
-        head_size = fused_head_size(module, aphrodite_config)
+    def update_attrs(self, module: nn.Module, prefix: str, sonar_config: "SonarConfig") -> None:
+        quant_config = sonar_config.quant_config
+        head_size = fused_head_size(module, sonar_config)
         qkv_prefix = maybe_prefix(prefix, self.qkv_name)
         qkv = module.get_submodule(self.qkv_name)
         merged = QKVParallelLinear(

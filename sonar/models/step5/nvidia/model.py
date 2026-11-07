@@ -13,17 +13,17 @@ from torch import nn
 from torch.nn.parameter import Parameter
 from typing_extensions import TypeIs
 
-import aphrodite.envs as envs
-from aphrodite import _custom_ops as ops
-from aphrodite.compilation.breakable_cudagraph import eager_break_during_capture
-from aphrodite.config import (
-    AphroditeConfig,
+import sonar.envs as envs
+from sonar import _custom_ops as ops
+from sonar.compilation.breakable_cudagraph import eager_break_during_capture
+from sonar.config import (
     CacheConfig,
     CUDAGraphMode,
     KVTransferConfig,
     ModelConfig,
+    SonarConfig,
 )
-from aphrodite.distributed import (
+from sonar.distributed import (
     get_dp_group,
     get_ep_group,
     get_pp_group,
@@ -32,19 +32,19 @@ from aphrodite.distributed import (
     get_tp_group,
     tensor_model_parallel_all_reduce,
 )
-from aphrodite.forward_context import get_forward_context, is_forward_context_available
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.activation import SiluAndMul, SwigluStepAndMul
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.layers.attention.attention import (
+from sonar.forward_context import get_forward_context, is_forward_context_available
+from sonar.logger import init_logger
+from sonar.model_executor.layers.activation import SiluAndMul, SwigluStepAndMul
+from sonar.model_executor.layers.attention import Attention
+from sonar.model_executor.layers.attention.attention import (
     get_attention_context,
     unified_kv_cache_update,
 )
-from aphrodite.model_executor.layers.attention.kv_transfer_utils import (
+from sonar.model_executor.layers.attention.kv_transfer_utils import (
     maybe_transfer_kv_layer,
 )
-from aphrodite.model_executor.layers.fused_moe.router.gate_linear import GateLinear
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.fused_moe.router.gate_linear import GateLinear
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     LinearBase,
     MergedColumnParallelLinear,
@@ -52,19 +52,19 @@ from aphrodite.model_executor.layers.linear import (
     RowParallelLinear,
     UnquantizedLinearMethod,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization.base_config import QuantizationConfig
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization.base_config import QuantizationConfig
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.models.interfaces import (
+from sonar.model_executor.models.interfaces import (
     MixtureOfExperts,
     SupportsLoRA,
     SupportsPP,
 )
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.models.utils import (
     AutoWeightsLoader,
     PPMissingLayer,
     WeightsMapper,
@@ -75,16 +75,16 @@ from aphrodite.model_executor.models.utils import (
     maybe_prefix,
     skip_spec_layers,
 )
-from aphrodite.model_executor.parameter import BaseAphroditeParameter, ModelWeightParameter
-from aphrodite.models.common.ops.sequence_parallel import (
+from sonar.model_executor.parameter import BaseSonarParameter, ModelWeightParameter
+from sonar.models.common.ops.sequence_parallel import (
     sp_all_gather,
     sp_padding_mask,
     sp_reduce_scatter,
     sp_shard,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.v1.attention.backend import AttentionBackend, AttentionType
+from sonar.platforms import current_platform
+from sonar.sequence import IntermediateTensors
+from sonar.v1.attention.backend import AttentionBackend, AttentionType
 
 from ..common.config import (
     Step5SparseConfig,
@@ -292,8 +292,8 @@ def _set_step5_moe_protocol_metadata(
     model.num_redundant_experts = example_layer.n_redundant_experts
 
 
-def _verify_step5_dsa_kv_transfer_compatibility(aphrodite_config: AphroditeConfig) -> None:
-    config = aphrodite_config.kv_transfer_config
+def _verify_step5_dsa_kv_transfer_compatibility(sonar_config: SonarConfig) -> None:
+    config = sonar_config.kv_transfer_config
     if config is None or not config.is_kv_transfer_instance:
         return
     configs = [config]
@@ -578,7 +578,7 @@ class Step5FusedQKVIndexerLinear(QKVParallelLinear):
 
     def weight_loader_v2(
         self,
-        param: BaseAphroditeParameter,
+        param: BaseSonarParameter,
         loaded_weight: torch.Tensor,
         loaded_shard_id: str | None = None,
     ) -> None:
@@ -706,19 +706,19 @@ class Step5SparseIndexerIndexTPLinear(ColumnParallelLinear):
         return torch.nn.functional.linear(input_, self.weight, None), None
 
 
-def _step5_use_sequence_parallel(aphrodite_config: AphroditeConfig) -> bool:
-    parallel = aphrodite_config.parallel_config
+def _step5_use_sequence_parallel(sonar_config: SonarConfig) -> bool:
+    parallel = sonar_config.parallel_config
     return (
         parallel.pipeline_parallel_size == 1
         and parallel.enable_expert_parallel
         and parallel.tensor_parallel_size > 1
-        and aphrodite_config.kernel_config.moe_backend == "deep_gemm_mega_moe"
+        and sonar_config.kernel_config.moe_backend == "deep_gemm_mega_moe"
     )
 
 
 def _step5_sp_padding(hidden_states: torch.Tensor) -> torch.Tensor:
     padding = None
-    if envs.APHRODITE_MOE_SKIP_PADDING and is_forward_context_available():
+    if envs.SONAR_MOE_SKIP_PADDING and is_forward_context_available():
         padding = get_forward_context().is_padding
         if padding is not None:
             padding = padding[: hidden_states.shape[0]]
@@ -744,7 +744,7 @@ class Step5MLP(nn.Module):
         self.shard_sequence_parallel = (
             sequence_parallel
             and can_shard_sequence_parallel
-            and envs.APHRODITE_STEP5_SHARD_SP_SHARED_EXPERT
+            and envs.SONAR_STEP5_SHARD_SP_SHARED_EXPERT
             and tp_size > 1
             and hidden_size % tp_size == 0
             and intermediate_size % tp_size == 0
@@ -827,7 +827,7 @@ class Step5Attention(nn.Module):
         swa_num_attention_heads: int | None = None,
         partial_rotary_factor: float = 1.0,
         zero_centered: bool = True,
-        aphrodite_config: AphroditeConfig | None = None,
+        sonar_config: SonarConfig | None = None,
         sparse_config: Step5SparseConfig | None = None,
         norm_dtype: torch.dtype | None = None,
     ):
@@ -960,15 +960,15 @@ class Step5Attention(nn.Module):
         if self.use_dsa_backend:
             from .sparse_attention import Step5DSAAttentionBackend
 
-            if aphrodite_config is None:
-                raise ValueError("Step5 DSA requires a complete AphroditeConfig.")
-            _verify_step5_dsa_kv_transfer_compatibility(aphrodite_config)
+            if sonar_config is None:
+                raise ValueError("Step5 DSA requires a complete SonarConfig.")
+            _verify_step5_dsa_kv_transfer_compatibility(sonar_config)
             capability = current_platform.get_device_capability()
             if capability is None or not (Step5DSAAttentionBackend.supports_compute_capability(capability)):
                 raise NotImplementedError(f"Step5 DSA requires SM90, SM100 or SM103; got {capability}.")
             if self.head_dim not in (128, 192):
                 raise ValueError(f"Step5 DSA supports attention head dimensions 128 or 192, got {self.head_dim}.")
-            if aphrodite_config.parallel_config.use_ubatching:
+            if sonar_config.parallel_config.use_ubatching:
                 raise ValueError(
                     "Step5 DSA does not support dual-batch overlap or "
                     "microbatching yet. Disable --enable-dbo and set "
@@ -1095,10 +1095,10 @@ class Step5Attention(nn.Module):
             attn_backend = Step5SplitKVFlashAttentionBackend
         sparse_impl_args: dict[str, Any] = {}
         if self.use_dsa_backend:
-            dsa_aphrodite_config = typing.cast(AphroditeConfig, aphrodite_config)
-            model_config = dsa_aphrodite_config.model_config
-            scheduler_config = dsa_aphrodite_config.scheduler_config
-            speculative_config = dsa_aphrodite_config.speculative_config
+            dsa_sonar_config = typing.cast(SonarConfig, sonar_config)
+            model_config = dsa_sonar_config.model_config
+            scheduler_config = dsa_sonar_config.scheduler_config
+            speculative_config = dsa_sonar_config.speculative_config
             sparse_impl_args = {
                 "sparse_config": sparse_config,
                 "max_model_len": int(model_config.max_model_len),
@@ -1153,9 +1153,7 @@ class Step5Attention(nn.Module):
                 proxy_dim,
                 eps=rms_norm_eps,
             )
-            static_forward_context = typing.cast(
-                AphroditeConfig, aphrodite_config
-            ).compilation_config.static_forward_context
+            static_forward_context = typing.cast(SonarConfig, sonar_config).compilation_config.static_forward_context
             self.sparse_summary_cache = Step5SparseSummaryCacheLayer(
                 prefix=f"{prefix}.attn.sparse_summary_cache",
                 target_impl=self.attn.impl,
@@ -1561,19 +1559,19 @@ class Step5SparseAttention:
 class Step5MoE(nn.Module):
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
     ):
         super().__init__()
-        from aphrodite.model_executor.layers.fused_moe import FusedMoEFactory
+        from sonar.model_executor.layers.fused_moe import FusedMoEFactory
 
         self.tp_size = get_tensor_model_parallel_world_size()
         self.layer_idx = extract_layer_index(prefix)
 
         self.ep_size = get_ep_group().device_group.size()
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
-        parallel_config = aphrodite_config.parallel_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
+        parallel_config = sonar_config.parallel_config
 
         self.hidden_size = config.hidden_size
         self.enable_eplb = parallel_config.enable_eplb
@@ -1621,9 +1619,9 @@ class Step5MoE(nn.Module):
             get_dp_group().world_size,
         )
 
-        kernel_config = getattr(aphrodite_config, "kernel_config", None)
+        kernel_config = getattr(sonar_config, "kernel_config", None)
         self.use_mega_moe = getattr(kernel_config, "moe_backend", "auto") == "deep_gemm_mega_moe"
-        self.use_sequence_parallel = _step5_use_sequence_parallel(aphrodite_config)
+        self.use_sequence_parallel = _step5_use_sequence_parallel(sonar_config)
         if self.use_mega_moe:
             self.fuse_all_reduce, reduce_results = False, False
 
@@ -1655,10 +1653,10 @@ class Step5MoE(nn.Module):
             routed_scaling_factor=config.moe_router_scaling_factor,
         )
         if self.use_mega_moe:
-            from aphrodite.models.step5.nvidia.mega_moe import Step5MegaMoE
+            from sonar.models.step5.nvidia.mega_moe import Step5MegaMoE
 
             self.experts = Step5MegaMoE(
-                aphrodite_config,
+                sonar_config,
                 **expert_kwargs,
                 activation_clamp=swiglu_limit or None,
                 sequence_parallel=self.use_sequence_parallel,
@@ -1692,23 +1690,23 @@ class Step5MoE(nn.Module):
 class Step5DecoderLayer(nn.Module):
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
     ) -> None:
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
         self.hidden_size = config.hidden_size
         self.fp32_residual_connection = config.fp32_residual_connection
         layer_idx = extract_layer_index(prefix)
         self.layer_idx = layer_idx
-        cache_config = aphrodite_config.cache_config
-        quant_config = aphrodite_config.quant_config
+        cache_config = sonar_config.cache_config
+        quant_config = sonar_config.quant_config
         # Preserve the configured SWA window before clearing the per-layer
         # cache copy; layer_types determines which layers use it.
         sliding_window = getattr(config, "sliding_window", None)
         if sliding_window is None:
             # Multimodal checkpoints keep sliding_window in the text config.
-            sliding_window = getattr(aphrodite_config.model_config.hf_text_config, "sliding_window", None)
+            sliding_window = getattr(sonar_config.model_config.hf_text_config, "sliding_window", None)
         if sliding_window is None and cache_config is not None:
             sliding_window = cache_config.sliding_window
         if cache_config is not None:
@@ -1747,7 +1745,7 @@ class Step5DecoderLayer(nn.Module):
             )
             max_position = getattr(config, "max_position_embeddings", None)
             if max_position is None:
-                max_position = aphrodite_config.model_config.max_model_len
+                max_position = sonar_config.model_config.max_model_len
             self.self_attn = Step5Attention(
                 hidden_size=self.hidden_size,
                 num_heads=num_attention_heads if num_attention_heads else config.num_attention_heads,
@@ -1769,13 +1767,13 @@ class Step5DecoderLayer(nn.Module):
                 partial_rotary_factor=partial_rotary_factor,
                 prefix=f"{prefix}.self_attn",
                 zero_centered=config.zero_centered,
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 sparse_config=sparse_config if use_dsa_for_layer else None,
                 norm_dtype=norm_dtype,
             )
         else:
             raise ValueError(f"Unsupported attention implementation: {config.att_impl_type}")
-        self.use_sequence_parallel = _step5_use_sequence_parallel(aphrodite_config)
+        self.use_sequence_parallel = _step5_use_sequence_parallel(sonar_config)
         if self.use_sequence_parallel:
             self.self_attn.o_proj.reduce_results = False
         self.use_moe = False
@@ -1789,7 +1787,7 @@ class Step5DecoderLayer(nn.Module):
         moe_layers_idx = _get_step5_moe_layer_indices(config)
         if layer_idx in moe_layers_idx:
             self.moe = Step5MoE(
-                aphrodite_config,
+                sonar_config,
                 prefix=f"{prefix}.moe",
             )
             self.use_moe = True
@@ -1893,11 +1891,11 @@ class Step5DecoderLayer(nn.Module):
 
 
 class Step5Model(nn.Module):
-    def __init__(self, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__()
 
-        self.use_sequence_parallel = _step5_use_sequence_parallel(aphrodite_config)
-        config = aphrodite_config.model_config.hf_config
+        self.use_sequence_parallel = _step5_use_sequence_parallel(sonar_config)
+        config = sonar_config.model_config.hf_config
         self.vocab_size = config.vocab_size
         self.config = config
         self.fp32_residual_connection = config.fp32_residual_connection
@@ -1914,7 +1912,7 @@ class Step5Model(nn.Module):
         self.start_layer, self.end_layer, self.layers = make_layers(
             config.num_hidden_layers,
             lambda prefix: Step5DecoderLayer(
-                aphrodite_config,
+                sonar_config,
                 prefix=prefix,
             ),
             prefix=f"{prefix}.layers",
@@ -1981,7 +1979,7 @@ class Step5Model(nn.Module):
         return hidden_states
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
-        from aphrodite.model_executor.model_loader.weight_utils import (
+        from sonar.model_executor.model_loader.weight_utils import (
             default_weight_loader,
             maybe_remap_kv_scale_name,
         )
@@ -2140,7 +2138,7 @@ class Step5ForCausalLM(nn.Module, SupportsPP, MixtureOfExperts, SupportsLoRA):
     # Required so quantization exclude lists match fused module prefixes.
     packed_modules_mapping = STEP5_PACKED_MODULES_MAPPING
 
-    hf_to_aphrodite_mapper = (
+    hf_to_sonar_mapper = (
         WeightsMapper(
             orig_to_new_regex={
                 re.compile(r"^vit_large_projector\.weight$"): None,
@@ -2152,16 +2150,16 @@ class Step5ForCausalLM(nn.Module, SupportsPP, MixtureOfExperts, SupportsLoRA):
     def __init__(
         self,
         *,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
     ):
         super().__init__()
-        self.aphrodite_config = aphrodite_config
-        model_config = aphrodite_config.model_config
+        self.sonar_config = sonar_config
+        model_config = sonar_config.model_config
         config = model_config.hf_config
         self.config = config
         self.fp32_residual_connection = config.fp32_residual_connection
-        self.model = Step5Model(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = Step5Model(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
         self.num_moe_layers: int
         self.num_expert_groups: int
         self.num_shared_experts: int
@@ -2174,7 +2172,7 @@ class Step5ForCausalLM(nn.Module, SupportsPP, MixtureOfExperts, SupportsLoRA):
             self.lm_head = ParallelLMHead(
                 config.vocab_size,
                 config.hidden_size,
-                quant_config=aphrodite_config.quant_config,
+                quant_config=sonar_config.quant_config,
                 prefix=maybe_prefix(prefix, "lm_head"),
             )
             if config.tie_word_embeddings:
@@ -2249,7 +2247,7 @@ class Step5ForCausalLM(nn.Module, SupportsPP, MixtureOfExperts, SupportsLoRA):
             moe.experts.update_expert_map()
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
-        from aphrodite.model_executor.model_loader.mtp_validation import (
+        from sonar.model_executor.model_loader.mtp_validation import (
             is_mtp_completeness_check_enabled,
         )
 
@@ -2259,9 +2257,7 @@ class Step5ForCausalLM(nn.Module, SupportsPP, MixtureOfExperts, SupportsLoRA):
         skip_prefixes = ["vision_model."]
         if self.config.tie_word_embeddings:
             skip_prefixes.append("lm_head.")
-        mapper = self.hf_to_aphrodite_mapper | WeightsMapper(
-            orig_to_new_prefix={prefix: None for prefix in skip_prefixes}
-        )
+        mapper = self.hf_to_sonar_mapper | WeightsMapper(orig_to_new_prefix={prefix: None for prefix in skip_prefixes})
         loader = AutoWeightsLoader(self)
         loaded_params = loader.load_weights(weights, mapper=mapper)
         if validate_completeness:

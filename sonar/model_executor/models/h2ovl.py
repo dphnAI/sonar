@@ -12,24 +12,24 @@
 import torch
 from transformers import PreTrainedConfig
 
-from aphrodite.inputs import MultiModalHashes
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.hasher import MultiModalHasher
-from aphrodite.multimodal.inputs import BatchedTensorInputs, MultiModalKwargsItem
-from aphrodite.multimodal.parse import (
+from sonar.inputs import MultiModalHashes
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.hasher import MultiModalHasher
+from sonar.multimodal.inputs import BatchedTensorInputs, MultiModalKwargsItem
+from sonar.multimodal.parse import (
     ImageEmbeddingItems,
     ImageProcessorItems,
     MultiModalDataItems,
 )
-from aphrodite.multimodal.processing.processor import (
+from sonar.multimodal.processing.processor import (
     MultiModalProcessingResult,
     ProcessorInputs,
     PromptReplacement,
     TimingContext,
     cached_encode,
 )
-from aphrodite.transformers_utils.processors.h2ovl import H2OVLImageProcessor, H2OVLProcessor
+from sonar.transformers_utils.processors.h2ovl import H2OVLImageProcessor, H2OVLProcessor
 
 from .intern_vit import InternVisionModel
 from .internvl import (

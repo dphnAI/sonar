@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-from aphrodite.distributed.ec_transfer.ec_transfer_state import (
+from sonar.distributed.ec_transfer.ec_transfer_state import (
     ensure_ec_transfer_initialized,
     ensure_ec_transfer_shutdown,
     get_ec_transfer,

@@ -11,11 +11,11 @@
 
 namespace {
 
-using aphrodite::direct_dcp::check_cuda_launch;
-using aphrodite::direct_dcp::increment_epoch_kernel;
-using aphrodite::direct_dcp::multimem_store_16;
-using aphrodite::direct_dcp::multimem_store_release_system;
-using aphrodite::direct_dcp::wait_for_epoch;
+using sonar::direct_dcp::check_cuda_launch;
+using sonar::direct_dcp::increment_epoch_kernel;
+using sonar::direct_dcp::multimem_store_16;
+using sonar::direct_dcp::multimem_store_release_system;
+using sonar::direct_dcp::wait_for_epoch;
 
 // Multicast each rank's head slice directly into every consumer's final query
 // buffer. Reuse is ordered by the downstream DCP output synchronization.

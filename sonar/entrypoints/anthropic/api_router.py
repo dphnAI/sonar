@@ -7,7 +7,7 @@ from http import HTTPStatus
 from fastapi import APIRouter, Depends, FastAPI, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from aphrodite.entrypoints.anthropic.protocol import (
+from sonar.entrypoints.anthropic.protocol import (
     AnthropicCountTokensRequest,
     AnthropicCountTokensResponse,
     AnthropicError,
@@ -16,17 +16,17 @@ from aphrodite.entrypoints.anthropic.protocol import (
     AnthropicMessagesResponse,
     translate_error_type,
 )
-from aphrodite.entrypoints.anthropic.serving import AnthropicServingMessages
-from aphrodite.entrypoints.serve.engine.protocol import ErrorResponse
-from aphrodite.entrypoints.serve.exception_handling.error_response import (
+from sonar.entrypoints.anthropic.serving import AnthropicServingMessages
+from sonar.entrypoints.serve.engine.protocol import ErrorResponse
+from sonar.entrypoints.serve.exception_handling.error_response import (
     create_error_response,
 )
-from aphrodite.entrypoints.serve.utils.api_utils import (
+from sonar.entrypoints.serve.utils.api_utils import (
     load_aware_call,
     validate_json_request,
     with_cancellation,
 )
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 

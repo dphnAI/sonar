@@ -4,15 +4,15 @@
 
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.config import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEParallelConfig,
     FusedMoEQuantConfig,
     RoutingMethodType,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     kInt4W4A8StaticChannelSym,
     kInt4W4A8StaticGroup32Sym,
@@ -20,7 +20,7 @@ from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
     kInt4W4A8StaticGroup128Sym,
     kInt4W4A8StaticGroupSym,
 )
-from aphrodite.platforms import CpuArchEnum, current_platform
+from sonar.platforms import CpuArchEnum, current_platform
 
 
 class CPUExpertsInt4(mk.FusedMoEExpertsMonolithic):
@@ -218,7 +218,7 @@ class CPUExpertsInt4(mk.FusedMoEExpertsMonolithic):
             Output tensor after MoE computation
 
         """
-        from aphrodite.model_executor.layers.fused_moe.router.cpu_router import (
+        from sonar.model_executor.layers.fused_moe.router.cpu_router import (
             select_experts,
         )
 

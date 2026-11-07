@@ -13,22 +13,22 @@ import torch
 from torch.distributed import PrefixStore, ProcessGroup
 from torch.distributed.distributed_c10d import is_nccl_available
 
-import aphrodite.envs as envs
-from aphrodite.logger import init_logger
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
+import sonar.envs as envs
+from sonar.logger import init_logger
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
 
 from .interface import DeviceCapability, Platform, PlatformEnum, in_wsl, log_extension_import_failure
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
-    from aphrodite.config.kernel import IrOpPriorityConfig
-    from aphrodite.utils.argparse_utils import FlexibleArgumentParser
-    from aphrodite.v1.attention.backend import AttentionBackend
-    from aphrodite.v1.attention.backends.mla.prefill.base import MLAPrefillBackend
-    from aphrodite.v1.attention.backends.mla.prefill.selector import (
+    from sonar.config import SonarConfig
+    from sonar.config.kernel import IrOpPriorityConfig
+    from sonar.utils.argparse_utils import FlexibleArgumentParser
+    from sonar.v1.attention.backend import AttentionBackend
+    from sonar.v1.attention.backends.mla.prefill.base import MLAPrefillBackend
+    from sonar.v1.attention.backends.mla.prefill.selector import (
         MLAPrefillSelectorConfig,
     )
-    from aphrodite.v1.attention.selector import AttentionSelectorConfig
+    from sonar.v1.attention.selector import AttentionSelectorConfig
 
 logger = init_logger(__name__)
 
@@ -53,20 +53,20 @@ except ImportError as e:
     logger.warning_once("Failed to import from amdsmi with %r", e)
 
 try:
-    import aphrodite._C  # noqa: F401
+    import sonar._C  # noqa: F401
 except ImportError as e:
-    log_extension_import_failure("aphrodite._C", e, target_logger=logger)
+    log_extension_import_failure("sonar._C", e, target_logger=logger)
 
 # import custom ops, trigger op registration
 try:
-    import aphrodite._C_stable_libtorch  # noqa: F401
+    import sonar._C_stable_libtorch  # noqa: F401
 except ImportError as e:
-    logger.warning("Failed to import from aphrodite._C_stable_libtorch with %r", e)
+    logger.warning("Failed to import from sonar._C_stable_libtorch with %r", e)
 
 try:
-    import aphrodite._rocm_C  # noqa: F401
+    import sonar._rocm_C  # noqa: F401
 except ImportError as e:
-    log_extension_import_failure("aphrodite._rocm_C", e, target_logger=logger)
+    log_extension_import_failure("sonar._rocm_C", e, target_logger=logger)
 
 # Models not supported by ROCm.
 _ROCM_UNSUPPORTED_MODELS: list[str] = []
@@ -258,7 +258,7 @@ def _capability_from_gcn_arch(gcn_arch: str) -> tuple[int, int] | None:
         raise ValueError(
             f"GCN arch '{gcn_arch}' has too few digits ({n}) after 'gfx' "
             f"to derive a (major, minor) capability. "
-            f"Please file a Aphrodite issue with your GPU model."
+            f"Please file a Sonar issue with your GPU model."
         )
 
     if n in (2, 3):
@@ -277,7 +277,7 @@ def _capability_from_gcn_arch(gcn_arch: str) -> tuple[int, int] | None:
             f"GCN arch '{gcn_arch}' has {n} digits after 'gfx', which "
             f"exceeds the known 4-digit layout (MMms). Cannot determine "
             f"major/minor split unambiguously. "
-            f"Please file a Aphrodite issue with your GPU model."
+            f"Please file a Sonar issue with your GPU model."
         )
 
     if major < 9:
@@ -285,7 +285,7 @@ def _capability_from_gcn_arch(gcn_arch: str) -> tuple[int, int] | None:
             f"Parsed unknown ROCm architecture from GCN arch '{gcn_arch}': "
             f"major={major}, minor={minor}. "
             f"Major version < 9 is not expected for any supported AMD GPU. "
-            f"Please file a Aphrodite issue with your GPU model."
+            f"Please file a Sonar issue with your GPU model."
         )
 
     if major > 12:
@@ -293,7 +293,7 @@ def _capability_from_gcn_arch(gcn_arch: str) -> tuple[int, int] | None:
             f"Parsed unknown ROCm architecture from GCN arch '{gcn_arch}': "
             f"major={major}, minor={minor}. "
             f"Major version > 12 is beyond currently known AMD generations. "
-            f"Please file a Aphrodite issue with your GPU model so support "
+            f"Please file a Sonar issue with your GPU model so support "
             f"can be added."
         )
 
@@ -380,7 +380,7 @@ def get_rdna_version() -> int:
     return 0
 
 
-def _maybe_default_dsv4_mxfp4_indexer(aphrodite_config: "AphroditeConfig") -> None:
+def _maybe_default_dsv4_mxfp4_indexer(sonar_config: "SonarConfig") -> None:
     """Default DeepSeek-V4's sparse indexer K cache to MXFP4 on CDNA4.
 
     aiter's paged MXFP4 indexer is faster than FP8 on MI350/MI355 (lower
@@ -388,11 +388,11 @@ def _maybe_default_dsv4_mxfp4_indexer(aphrodite_config: "AphroditeConfig") -> No
     "auto" and fall back to FP8 silently when the MXFP4 path can't run, so
     configs that worked before never start failing.
     """
-    hf_config = getattr(aphrodite_config.model_config, "hf_config", None)
+    hf_config = getattr(sonar_config.model_config, "hf_config", None)
     if getattr(hf_config, "model_type", None) != "deepseek_v4":
         return
-    attention_config = aphrodite_config.attention_config
-    parallel_config = aphrodite_config.parallel_config
+    attention_config = sonar_config.attention_config
+    parallel_config = sonar_config.parallel_config
     if (
         attention_config.indexer_kv_dtype != "auto"
         or attention_config.indexer_sparse_logits
@@ -402,7 +402,7 @@ def _maybe_default_dsv4_mxfp4_indexer(aphrodite_config: "AphroditeConfig") -> No
         or parallel_config.prefill_context_parallel_size > 1
     ):
         return
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     if not rocm_aiter_ops.is_enabled():
         return
@@ -436,9 +436,9 @@ def get_rocm_version() -> tuple[int, ...] | None:
 # Enable HIP online tuning early, before hipBLASLt initializes.
 # Turn on hipBLASLt online tuning if use AITER hipBLASLt GEMM.
 if (
-    envs.APHRODITE_ROCM_USE_AITER
-    and envs.APHRODITE_ROCM_USE_AITER_LINEAR
-    and envs.APHRODITE_ROCM_USE_AITER_LINEAR_HIPBMM
+    envs.SONAR_ROCM_USE_AITER
+    and envs.SONAR_ROCM_USE_AITER_LINEAR
+    and envs.SONAR_ROCM_USE_AITER_LINEAR_HIPBMM
     and get_cdna_version() > 2
 ):
     os.environ["HIP_ONLINE_TUNING"] = "1"
@@ -528,7 +528,7 @@ def _get_backend_priorities(
     use_sparse: bool,
     use_kv_connector: bool = False,
 ) -> list[AttentionBackendEnum]:
-    from aphrodite._aiter_ops import is_aiter_found_and_supported, rocm_aiter_ops
+    from sonar._aiter_ops import is_aiter_found_and_supported, rocm_aiter_ops
 
     if use_sparse:
         return [AttentionBackendEnum.ROCM_AITER_MLA_SPARSE]
@@ -567,15 +567,15 @@ def _get_backend_priorities(
     return backends
 
 
-def _uses_turboquant(aphrodite_config: "AphroditeConfig | None") -> bool:
+def _uses_turboquant(sonar_config: "SonarConfig | None") -> bool:
     """Whether the run's KV cache dtype is one of the turboquant_* presets."""
-    cache_config = getattr(aphrodite_config, "cache_config", None)
+    cache_config = getattr(sonar_config, "cache_config", None)
     return cache_config is not None and str(cache_config.cache_dtype).startswith("turboquant_")
 
 
-def _uses_ultraquant(aphrodite_config: "AphroditeConfig | None") -> bool:
+def _uses_ultraquant(sonar_config: "SonarConfig | None") -> bool:
     """Whether the run's KV cache dtype is the UltraQuant 4-bit format."""
-    cache_config = getattr(aphrodite_config, "cache_config", None)
+    cache_config = getattr(sonar_config, "cache_config", None)
     return cache_config is not None and str(cache_config.cache_dtype) == "ultraquant_4bit"
 
 
@@ -683,7 +683,7 @@ class RocmPlatform(Platform):
 
         # Import ROCm-specific extension
         with contextlib.suppress(ImportError):
-            import aphrodite._rocm_C  # noqa: F401
+            import sonar._rocm_C  # noqa: F401
 
     @classmethod
     def check_runner_kv_caches_multi_layer(cls) -> None:
@@ -722,11 +722,11 @@ class RocmPlatform(Platform):
             attn_selector_config.use_sparse,
             attn_selector_config.use_kv_connector,
         )
-        from aphrodite.config import get_current_aphrodite_config_or_none
+        from sonar.config import get_current_sonar_config_or_none
 
-        aphrodite_config = get_current_aphrodite_config_or_none()
+        sonar_config = get_current_sonar_config_or_none()
         is_encoder_decoder = (
-            getattr(getattr(aphrodite_config, "model_config", None), "attn_type", None) == "encoder_decoder"
+            getattr(getattr(sonar_config, "model_config", None), "attn_type", None) == "encoder_decoder"
         )
         # ROCM_ATTN still uses a legacy attention layout (KV is the outer
         # dimension) that is incompatible with the encoder backend layouts. The
@@ -735,8 +735,8 @@ class RocmPlatform(Platform):
         # TODO: Make this explicit in the selector in a future PR.
         if is_encoder_decoder and AttentionBackendEnum.ROCM_ATTN in backend_priorities:
             backend_priorities.remove(AttentionBackendEnum.ROCM_ATTN)
-        is_turboquant_run = _uses_turboquant(aphrodite_config)
-        is_ultraquant_run = _uses_ultraquant(aphrodite_config)
+        is_turboquant_run = _uses_turboquant(sonar_config)
+        is_ultraquant_run = _uses_ultraquant(sonar_config)
         for priority, backend in enumerate(backend_priorities):
             try:
                 invalid_reasons_i = _get_invalid_reasons(
@@ -767,12 +767,12 @@ class RocmPlatform(Platform):
 
         # First try checking just the selected backend, if there is one.
         if selected_backend is not None:
-            # Keep lazy: aphrodite.config imports current_platform during initialization.
-            from aphrodite.config import get_current_aphrodite_config_or_none
+            # Keep lazy: sonar.config imports current_platform during initialization.
+            from sonar.config import get_current_sonar_config_or_none
 
-            aphrodite_config = get_current_aphrodite_config_or_none()
-            is_turboquant_run = _uses_turboquant(aphrodite_config)
-            is_ultraquant_run = _uses_ultraquant(aphrodite_config)
+            sonar_config = get_current_sonar_config_or_none()
+            is_turboquant_run = _uses_turboquant(sonar_config)
+            is_ultraquant_run = _uses_ultraquant(sonar_config)
             try:
                 sel_invalid_reasons = _get_invalid_reasons(
                     selected_backend.get_class(),
@@ -905,7 +905,7 @@ class RocmPlatform(Platform):
 
         from importlib.util import find_spec
 
-        from aphrodite._aiter_ops import rocm_aiter_ops
+        from sonar._aiter_ops import rocm_aiter_ops
 
         if rocm_aiter_ops.is_mha_enabled() and on_cdna() and (dtype == torch.float16 or dtype == torch.bfloat16):
             logger.info_once("Using AITER Flash Attention backend for ViT model.")
@@ -935,7 +935,7 @@ class RocmPlatform(Platform):
             ValueError: If neither backend is valid for the configuration.
 
         """
-        from aphrodite.v1.attention.backends.mla.prefill.registry import (
+        from sonar.v1.attention.backends.mla.prefill.registry import (
             MLAPrefillBackendEnum,
         )
 
@@ -1036,7 +1036,7 @@ class RocmPlatform(Platform):
     def get_device_total_memory(cls, device_id: int = 0) -> int:
         # Query total VRAM via amdsmi so we don't initialize a HIP context in
         # the calling process. torch.cuda.get_device_properties() creates a
-        # HIP context, which makes Aphrodite fall back from `fork` to `spawn` for
+        # HIP context, which makes Sonar fall back from `fork` to `spawn` for
         # worker processes. Keeping this query context-free preserves `fork`
         # where it is otherwise valid (e.g. out-of-tree models registered in
         # the parent process).
@@ -1059,10 +1059,10 @@ class RocmPlatform(Platform):
         os.environ.setdefault("GPU_PINNED_MIN_XFER_SIZE", str(4 * 1024 * 1024))
 
     @classmethod
-    def apply_config_platform_defaults(cls, aphrodite_config: "AphroditeConfig") -> None:
-        from aphrodite._aiter_ops import rocm_aiter_ops
+    def apply_config_platform_defaults(cls, sonar_config: "SonarConfig") -> None:
+        from sonar._aiter_ops import rocm_aiter_ops
 
-        compilation_config = aphrodite_config.compilation_config
+        compilation_config = sonar_config.compilation_config
         use_aiter_fused_moe = rocm_aiter_ops.is_fused_moe_enabled()
         use_aiter_fp8_linear = rocm_aiter_ops.is_linear_fp8_enabled()
         use_aiter_fused_se = rocm_aiter_ops.is_fusion_moe_shared_experts_enabled()
@@ -1073,12 +1073,12 @@ class RocmPlatform(Platform):
         # Only RMSNorm's custom op reaches rms_norm_batch_invariant. Inductor
         # lowers the native one to a reduction whose block size it picks by
         # benchmarking, so the summation order varies with the batch and run.
-        if envs.APHRODITE_BATCH_INVARIANT and "-rms_norm" not in compilation_config.custom_ops:
+        if envs.SONAR_BATCH_INVARIANT and "-rms_norm" not in compilation_config.custom_ops:
             compilation_config.custom_ops.append("+rms_norm")
 
         if use_aiter_fused_se and "-grouped_topk" in compilation_config.custom_ops:
             logger.warning_once(
-                "APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS is enabled, which "
+                "SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS is enabled, which "
                 "requires the 'grouped_topk' custom op. Overriding the "
                 "user-provided '-grouped_topk'."
             )
@@ -1097,7 +1097,7 @@ class RocmPlatform(Platform):
 
         # Default the gated RMSNorm custom op on for unquantized models. Quantized
         # is untested in serving.
-        model_config = aphrodite_config.model_config
+        model_config = sonar_config.model_config
         if (
             model_config is not None
             and model_config.quantization is None
@@ -1107,11 +1107,11 @@ class RocmPlatform(Platform):
             compilation_config.custom_ops.append("+rms_norm_gated")
 
     @classmethod
-    def check_and_update_config(cls, aphrodite_config: "AphroditeConfig") -> None:
-        from aphrodite.config.compilation import CUDAGraphMode
+    def check_and_update_config(cls, sonar_config: "SonarConfig") -> None:
+        from sonar.config.compilation import CUDAGraphMode
 
-        compilation_config = aphrodite_config.compilation_config
-        parallel_config = aphrodite_config.parallel_config
+        compilation_config = sonar_config.compilation_config
+        parallel_config = sonar_config.parallel_config
 
         if (
             compilation_config.cudagraph_mode.has_full_cudagraphs()
@@ -1126,10 +1126,10 @@ class RocmPlatform(Platform):
             compilation_config.cudagraph_mode = CUDAGraphMode.PIECEWISE
 
         if parallel_config.worker_cls == "auto":
-            parallel_config.worker_cls = "aphrodite.v1.worker.gpu_worker.Worker"
+            parallel_config.worker_cls = "sonar.v1.worker.gpu_worker.Worker"
 
-        model_config = aphrodite_config.model_config
-        scheduler_config = aphrodite_config.scheduler_config
+        model_config = sonar_config.model_config
+        scheduler_config = sonar_config.scheduler_config
         # Note: model_config may be None during testing
         if (
             model_config is not None
@@ -1142,15 +1142,15 @@ class RocmPlatform(Platform):
             )
             scheduler_config.disable_chunked_mm_input = True
 
-        _maybe_default_dsv4_mxfp4_indexer(aphrodite_config)
+        _maybe_default_dsv4_mxfp4_indexer(sonar_config)
 
         if parallel_config.all2all_backend == "mori":
-            from aphrodite.config.parallel import resolve_mori_all2all
+            from sonar.config.parallel import resolve_mori_all2all
 
             resolve_mori_all2all(
                 parallel_config,
                 model_config,
-                aphrodite_config.kernel_config.moe_backend,
+                sonar_config.kernel_config.moe_backend,
                 lsa_spans_hosts=on_gfx1250(),
                 sdma_picks_epv1=not on_gfx1250(),
                 validated_arch=on_gfx950() or on_gfx1250(),
@@ -1172,16 +1172,15 @@ class RocmPlatform(Platform):
     @classmethod
     def verify_quantization(cls, quant: str) -> None:
         super().verify_quantization(quant)
-        if quant == "awq" and not envs.APHRODITE_USE_TRITON_AWQ:
+        if quant == "awq" and not envs.SONAR_USE_TRITON_AWQ:
             logger.warning(
-                "Using AWQ quantization with ROCm, but APHRODITE_USE_TRITON_AWQ"
-                " is not set, enabling APHRODITE_USE_TRITON_AWQ."
+                "Using AWQ quantization with ROCm, but SONAR_USE_TRITON_AWQ is not set, enabling SONAR_USE_TRITON_AWQ."
             )
-        os.environ["APHRODITE_USE_TRITON_AWQ"] = "1"
+        os.environ["SONAR_USE_TRITON_AWQ"] = "1"
 
     @classmethod
     def get_punica_wrapper(cls) -> str:
-        return "aphrodite.lora.punica_wrapper.punica_gpu.PunicaWrapperGPU"
+        return "sonar.lora.punica_wrapper.punica_gpu.PunicaWrapperGPU"
 
     @classmethod
     def get_current_memory_usage(cls, device: torch.types.Device | None = None) -> float:
@@ -1191,7 +1190,7 @@ class RocmPlatform(Platform):
 
     @classmethod
     def get_device_communicator_cls(cls) -> str:
-        return "aphrodite.distributed.device_communicators.cuda_communicator.CudaCommunicator"  # noqa
+        return "sonar.distributed.device_communicators.cuda_communicator.CudaCommunicator"  # noqa
 
     @classmethod
     def supports_mx(cls) -> bool:
@@ -1248,7 +1247,7 @@ class RocmPlatform(Platform):
 
     @classmethod
     def get_static_graph_wrapper_cls(cls) -> str:
-        return "aphrodite.compilation.cuda_graph.CUDAGraphWrapper"
+        return "sonar.compilation.cuda_graph.CUDAGraphWrapper"
 
     @classmethod
     def stateless_init_device_torch_dist_pg(
@@ -1345,24 +1344,24 @@ class RocmPlatform(Platform):
         return True
 
     @classmethod
-    def get_default_ir_op_priority(cls, aphrodite_config: "AphroditeConfig") -> "IrOpPriorityConfig":
-        from aphrodite.config.compilation import CompilationMode, CUDAGraphMode
-        from aphrodite.config.kernel import IrOpPriorityConfig
+    def get_default_ir_op_priority(cls, sonar_config: "SonarConfig") -> "IrOpPriorityConfig":
+        from sonar.config.compilation import CompilationMode, CUDAGraphMode
+        from sonar.config.kernel import IrOpPriorityConfig
 
         # Native used by default when compiling,
-        # use aphrodite_c kernels where available when no codegen
-        # TODO(luka/TJ) use aiter, aphrodite_c, native by default on ROCm
-        cc = aphrodite_config.compilation_config
+        # use sonar_c kernels where available when no codegen
+        # TODO(luka/TJ) use aiter, sonar_c, native by default on ROCm
+        cc = sonar_config.compilation_config
         using_inductor = cc.backend == "inductor" and cc.mode != CompilationMode.NONE
-        default = ["native"] if using_inductor else ["aphrodite_c", "native"]
+        default = ["native"] if using_inductor else ["sonar_c", "native"]
 
         #  Aiter rms norm perform best when CUDA Graph capture is enabled.
         # TODO(Rohan138/dllehr-amd/rasmith) Change this to be an inclusive
         # check instead of exclusive check in the future.
         if (
             cc.cudagraph_mode != CUDAGraphMode.NONE
-            and envs.APHRODITE_ROCM_USE_AITER
-            and envs.APHRODITE_ROCM_USE_AITER_RMSNORM
+            and envs.SONAR_ROCM_USE_AITER
+            and envs.SONAR_ROCM_USE_AITER_RMSNORM
             and not on_gfx90a()  # AITER not built for gfx90a, rmsnorm -> SEGV.
         ):
             rms_norm = ["aiter"] + default

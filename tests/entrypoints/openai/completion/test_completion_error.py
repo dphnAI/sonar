@@ -11,27 +11,27 @@ import pytest
 from pydantic import ValidationError
 from starlette.requests import Request
 
-from aphrodite.config.multimodal import MultiModalConfig
-from aphrodite.entrypoints.generate.base.protocol import RequestResponseMetadata
-from aphrodite.entrypoints.openai.completion.protocol import (
+from sonar.config.multimodal import MultiModalConfig
+from sonar.entrypoints.generate.base.protocol import RequestResponseMetadata
+from sonar.entrypoints.openai.completion.protocol import (
     CompletionRequest,
     CompletionResponse,
 )
-from aphrodite.entrypoints.openai.completion.serving import OpenAIServingCompletion
-from aphrodite.entrypoints.openai.models.protocol import BaseModelPath
-from aphrodite.entrypoints.openai.models.serving import OpenAIServingModels
-from aphrodite.entrypoints.scale_out.render.serving import ServingRender
-from aphrodite.entrypoints.serve.engine.protocol import ErrorResponse
-from aphrodite.entrypoints.serve.utils.request_logger import RequestLogger
-from aphrodite.exceptions import AphroditeValidationError, GenerationError
-from aphrodite.logprobs import Logprob
-from aphrodite.outputs import CompletionOutput, RequestOutput, WeightVersionSpan
-from aphrodite.renderers.deepseek_v4 import DeepseekV4Renderer
-from aphrodite.renderers.hf import HfRenderer
-from aphrodite.renderers.online_renderer import OnlineRenderer
-from aphrodite.tokenizers.registry import cached_tokenizer_from_config
-from aphrodite.v1.engine.async_llm import AsyncLLM
-from aphrodite.v1.metrics.stats import RequestSpecDecodeMetrics, RequestStateStats
+from sonar.entrypoints.openai.completion.serving import OpenAIServingCompletion
+from sonar.entrypoints.openai.models.protocol import BaseModelPath
+from sonar.entrypoints.openai.models.serving import OpenAIServingModels
+from sonar.entrypoints.scale_out.render.serving import ServingRender
+from sonar.entrypoints.serve.engine.protocol import ErrorResponse
+from sonar.entrypoints.serve.utils.request_logger import RequestLogger
+from sonar.exceptions import GenerationError, SonarValidationError
+from sonar.logprobs import Logprob
+from sonar.outputs import CompletionOutput, RequestOutput, WeightVersionSpan
+from sonar.renderers.deepseek_v4 import DeepseekV4Renderer
+from sonar.renderers.hf import HfRenderer
+from sonar.renderers.online_renderer import OnlineRenderer
+from sonar.tokenizers.registry import cached_tokenizer_from_config
+from sonar.v1.engine.async_llm import AsyncLLM
+from sonar.v1.metrics.stats import RequestSpecDecodeMetrics, RequestStateStats
 
 MODEL_NAME = "openai-community/gpt2"
 MODEL_NAME_SHORT = "gpt2"
@@ -93,7 +93,7 @@ class MockParallelConfig:
 
 
 @dataclass
-class MockAphroditeConfig:
+class MockSonarConfig:
     model_config: MockModelConfig
     parallel_config: MockParallelConfig
 
@@ -185,7 +185,7 @@ async def test_beam_search_preserves_request_priority(header):
         watermarking=False,
         priority=-9,
     )
-    headers = [] if header is None else [(b"x-aphrodite-priority", header.encode())]
+    headers = [] if header is None else [(b"x-sonar-priority", header.encode())]
     response = await serving.create_completion(request, Request({"type": "http", "headers": headers}))
 
     assert isinstance(response, CompletionResponse)
@@ -195,7 +195,7 @@ async def test_beam_search_preserves_request_priority(header):
 
 def _build_renderer(model_config: MockModelConfig):
     return HfRenderer(
-        MockAphroditeConfig(model_config, parallel_config=MockParallelConfig()),
+        MockSonarConfig(model_config, parallel_config=MockParallelConfig()),
         cached_tokenizer_from_config(model_config),
     )
 
@@ -445,7 +445,7 @@ def _deepseek_v4_suffix_renderer(
     model_config: MockModelConfig,
 ) -> DeepseekV4Renderer:
     return DeepseekV4Renderer(
-        MockAphroditeConfig(model_config, parallel_config=MockParallelConfig()),
+        MockSonarConfig(model_config, parallel_config=MockParallelConfig()),
         None,
     )
 
@@ -1081,7 +1081,7 @@ def test_logprobs_below_minus_one_rejected():
 @pytest.mark.parametrize("max_tokens", [5, 0])
 def test_beam_search_echo_logprobs_rejected(max_tokens):
     """Beam search does not compute prompt logprobs, so echo + logprobs is rejected."""
-    with pytest.raises(AphroditeValidationError, match="not supported with beam search"):
+    with pytest.raises(SonarValidationError, match="not supported with beam search"):
         CompletionRequest(
             model=MODEL_NAME,
             prompt="Test prompt",
@@ -1112,8 +1112,8 @@ class TestCompletionPromptListLimit:
         assert request.prompt == [1, 2, 3]
 
     def test_bounded_text_prompt_list_allowed(self, monkeypatch):
-        monkeypatch.setenv("APHRODITE_MAX_COMPLETION_PROMPTS", "10")
-        from aphrodite import envs
+        monkeypatch.setenv("SONAR_MAX_COMPLETION_PROMPTS", "10")
+        from sonar import envs
 
         if hasattr(envs.__getattr__, "cache_clear"):
             envs.__getattr__.cache_clear()
@@ -1126,8 +1126,8 @@ class TestCompletionPromptListLimit:
         assert request.prompt == ["a", "b", "c"]
 
     def test_bounded_token_id_prompt_list_allowed(self, monkeypatch):
-        monkeypatch.setenv("APHRODITE_MAX_COMPLETION_PROMPTS", "10")
-        from aphrodite import envs
+        monkeypatch.setenv("SONAR_MAX_COMPLETION_PROMPTS", "10")
+        from sonar import envs
 
         if hasattr(envs.__getattr__, "cache_clear"):
             envs.__getattr__.cache_clear()
@@ -1140,8 +1140,8 @@ class TestCompletionPromptListLimit:
         assert request.prompt == [[1], [2], [3]]
 
     def test_oversized_text_prompt_list_rejected(self, monkeypatch):
-        monkeypatch.setenv("APHRODITE_MAX_COMPLETION_PROMPTS", "5")
-        from aphrodite import envs
+        monkeypatch.setenv("SONAR_MAX_COMPLETION_PROMPTS", "5")
+        from sonar import envs
 
         if hasattr(envs.__getattr__, "cache_clear"):
             envs.__getattr__.cache_clear()
@@ -1154,8 +1154,8 @@ class TestCompletionPromptListLimit:
             )
 
     def test_oversized_token_id_prompt_list_rejected(self, monkeypatch):
-        monkeypatch.setenv("APHRODITE_MAX_COMPLETION_PROMPTS", "5")
-        from aphrodite import envs
+        monkeypatch.setenv("SONAR_MAX_COMPLETION_PROMPTS", "5")
+        from sonar import envs
 
         if hasattr(envs.__getattr__, "cache_clear"):
             envs.__getattr__.cache_clear()
@@ -1168,8 +1168,8 @@ class TestCompletionPromptListLimit:
             )
 
     def test_exact_limit_allowed(self, monkeypatch):
-        monkeypatch.setenv("APHRODITE_MAX_COMPLETION_PROMPTS", "5")
-        from aphrodite import envs
+        monkeypatch.setenv("SONAR_MAX_COMPLETION_PROMPTS", "5")
+        from sonar import envs
 
         if hasattr(envs.__getattr__, "cache_clear"):
             envs.__getattr__.cache_clear()
@@ -1182,8 +1182,8 @@ class TestCompletionPromptListLimit:
         assert len(request.prompt) == 5
 
     def test_one_over_limit_rejected(self, monkeypatch):
-        monkeypatch.setenv("APHRODITE_MAX_COMPLETION_PROMPTS", "5")
-        from aphrodite import envs
+        monkeypatch.setenv("SONAR_MAX_COMPLETION_PROMPTS", "5")
+        from sonar import envs
 
         if hasattr(envs.__getattr__, "cache_clear"):
             envs.__getattr__.cache_clear()
@@ -1196,8 +1196,8 @@ class TestCompletionPromptListLimit:
             )
 
     def test_oversized_prompt_embeds_list_rejected(self, monkeypatch):
-        monkeypatch.setenv("APHRODITE_MAX_COMPLETION_PROMPTS", "5")
-        from aphrodite import envs
+        monkeypatch.setenv("SONAR_MAX_COMPLETION_PROMPTS", "5")
+        from sonar import envs
 
         if hasattr(envs.__getattr__, "cache_clear"):
             envs.__getattr__.cache_clear()
@@ -1210,8 +1210,8 @@ class TestCompletionPromptListLimit:
             )
 
     def test_bounded_prompt_embeds_list_allowed(self, monkeypatch):
-        monkeypatch.setenv("APHRODITE_MAX_COMPLETION_PROMPTS", "5")
-        from aphrodite import envs
+        monkeypatch.setenv("SONAR_MAX_COMPLETION_PROMPTS", "5")
+        from sonar import envs
 
         if hasattr(envs.__getattr__, "cache_clear"):
             envs.__getattr__.cache_clear()

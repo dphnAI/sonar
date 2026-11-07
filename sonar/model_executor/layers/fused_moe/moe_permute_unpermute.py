@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 
 import torch
 
-from aphrodite.v1.worker.workspace import (
+from sonar.v1.worker.workspace import (
     current_workspace_manager,
     is_workspace_manager_initialized,
 )

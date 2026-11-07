@@ -4,9 +4,9 @@ from collections.abc import Callable
 
 import torch
 
-from aphrodite.distributed.eplb.eplb_state import EplbLayerState
-from aphrodite.model_executor.layers.fused_moe.config import RoutingMethodType
-from aphrodite.model_executor.layers.fused_moe.router.base_router import BaseRouter
+from sonar.distributed.eplb.eplb_state import EplbLayerState
+from sonar.model_executor.layers.fused_moe.config import RoutingMethodType
+from sonar.model_executor.layers.fused_moe.router.base_router import BaseRouter
 
 
 class CustomRoutingRouter(BaseRouter):
@@ -30,14 +30,14 @@ class CustomRoutingRouter(BaseRouter):
 
     @property
     def routing_method_type(self) -> RoutingMethodType:
-        from aphrodite.model_executor.models.cohere2_moe import (
+        from sonar.model_executor.models.cohere2_moe import (
             token_choice_with_bias as cohere2_token_choice_with_bias,
         )
-        from aphrodite.model_executor.models.llama4 import Llama4MoE
+        from sonar.model_executor.models.llama4 import Llama4MoE
 
         # Cohere (v1) MoE lives in a fork-specific module; recognize its router too.
         try:
-            from aphrodite.model_executor.models.cohere_moe import (
+            from sonar.model_executor.models.cohere_moe import (
                 token_choice_with_bias as cohere_token_choice_with_bias,
             )
         except ImportError:

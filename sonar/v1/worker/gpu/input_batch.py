@@ -7,15 +7,15 @@ from typing import TYPE_CHECKING
 import numpy as np
 import torch
 
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils import random_uuid
-from aphrodite.utils.math_utils import cdiv
+from sonar.triton_utils import tl, triton
+from sonar.utils import random_uuid
+from sonar.utils.math_utils import cdiv
 
 if TYPE_CHECKING:
-    from aphrodite.v1.worker.gpu.attn_utils import FastPrefillBatchMetadata
-    from aphrodite.v1.worker.gpu.block_table import BlockTables
-    from aphrodite.v1.worker.gpu.pcp_manager import PCPBatchMetadata
-    from aphrodite.v1.worker.gpu.spec_decode.adaptive_verification import (
+    from sonar.v1.worker.gpu.attn_utils import FastPrefillBatchMetadata
+    from sonar.v1.worker.gpu.block_table import BlockTables
+    from sonar.v1.worker.gpu.pcp_manager import PCPBatchMetadata
+    from sonar.v1.worker.gpu.spec_decode.adaptive_verification import (
         AdmittedDraftCounts,
     )
 

@@ -7,12 +7,12 @@ from contextvars import ContextVar
 import torch
 import torch.distributed as dist
 
-from aphrodite.config import ParallelConfig
-from aphrodite.distributed.parallel_state import get_dp_group
-from aphrodite.logger import init_logger
-from aphrodite.utils.gpu_sync_debug import gpu_sync_allowed
-from aphrodite.utils.torch_utils import PIN_MEMORY
-from aphrodite.v1.worker.ubatch_utils import (
+from sonar.config import ParallelConfig
+from sonar.distributed.parallel_state import get_dp_group
+from sonar.logger import init_logger
+from sonar.utils.gpu_sync_debug import gpu_sync_allowed
+from sonar.utils.torch_utils import PIN_MEMORY
+from sonar.v1.worker.ubatch_utils import (
     check_ubatch_thresholds,
     is_last_ubatch_empty,
 )
@@ -42,7 +42,7 @@ def _get_device_and_group(parallel_config: ParallelConfig):
     group = get_dp_group().device_group
 
     # Transferring this tensor from GPU to CPU will introduce a GPU sync
-    # point that could adversely affect performance of aphrodite with asynch
+    # point that could adversely affect performance of sonar with asynch
     # scheduling. This environment variable exists to quickly disable
     # this optimization if we run into this case.
     if parallel_config.disable_nccl_for_dp_synchronization:

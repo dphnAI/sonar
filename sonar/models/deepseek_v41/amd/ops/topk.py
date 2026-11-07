@@ -7,15 +7,15 @@ a minute), and later processes load the cached build. The mono decode layers
 call it when the model is created, so that the build happens at startup and
 not at the first decode step. The TP ranks share one build: torch's extension
 loader makes the other ranks wait for the rank that builds it. When the build
-fails, every hook here returns False and Aphrodite runs its own ops.
+fails, every hook here returns False and Sonar runs its own ops.
 """
 
 import os
 
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.models.deepseek_v41.amd.ops import enabled
+from sonar.logger import init_logger
+from sonar.models.deepseek_v41.amd.ops import enabled
 
 logger = init_logger(__name__)
 
@@ -24,7 +24,7 @@ _SOURCE = os.path.join(_HERE, "topk512_gfx942.cu")
 
 # A row is split into one block for every MIN_CHUNK live logits, up to
 # MAX_BLOCKS blocks. On the indexer logits of one 128k decode step, 8 and
-# 16384 took 222 us for the step's 8 calls, against 543 us for Aphrodite's kernel.
+# 16384 took 222 us for the step's 8 calls, against 543 us for Sonar's kernel.
 # 16 blocks took 294 us: a block of a masked row then often holds fewer than
 # 512 finite logits, and the exact emission of -inf ties is slow.
 MAX_BLOCKS = 8
@@ -37,7 +37,7 @@ _build_failed = False
 def _compile():
     from torch.utils.cpp_extension import load
 
-    # Aphrodite's ROCm Docker image lists all of its ROCm targets in
+    # Sonar's ROCm Docker image lists all of its ROCm targets in
     # PYTORCH_ROCM_ARCH. Build for gfx942 only, and then restore the list, so
     # that other extensions built in this process still get the full list.
     saved = os.environ.get("PYTORCH_ROCM_ARCH")
@@ -54,7 +54,7 @@ def _compile():
 def build() -> bool:
     """Build or load the extension once, and return whether it is available.
     A failed build, for example without hipcc or without a writable extension
-    cache, logs a warning. The hooks then return False and Aphrodite runs its own
+    cache, logs a warning. The hooks then return False and Sonar runs its own
     top-k ops for the rest of the process."""
     global _ext, _build_failed
     if _ext is None and not _build_failed:
@@ -63,7 +63,7 @@ def build() -> bool:
         except Exception as err:
             _build_failed = True
             logger.warning(
-                "DSv4.1 gfx942 top-k: building topk512_gfx942.cu failed, so Aphrodite's top-k ops run instead: %s",
+                "DSv4.1 gfx942 top-k: building topk512_gfx942.cu failed, so Sonar's top-k ops run instead: %s",
                 err,
             )
     return _ext is not None
@@ -82,12 +82,12 @@ def _load():
 
 
 def decode_top_k(logits, next_n, seq_lens, indices, topk_tokens) -> bool:
-    """The hook in front of Aphrodite's decode top-k in the indexer's decode path
+    """The hook in front of Sonar's decode top-k in the indexer's decode path
     (sparse_indexer.py).
 
     When ``enabled()`` and the extension is built, a call with topK 512 and
     unit column strides runs here and returns True. Otherwise it returns
-    False and Aphrodite runs torch.ops._C.top_k_per_row_decode."""
+    False and Sonar runs torch.ops._C.top_k_per_row_decode."""
     if not _ready():
         return False
     taken = topk_tokens == 512 and logits.stride(1) == 1 and indices.stride(1) == 1
@@ -102,10 +102,10 @@ def candidate_top_k(logits, next_n, seq_lens, candidates, block_size, indices, t
 
     When ``enabled()`` and the extension is built, a call with topK 512
     writes each row's top 512 among its candidate blocks to ``indices`` and
-    returns True. Aphrodite then skips its mask and its top-k. The mask writes -inf
+    returns True. Sonar then skips its mask and its top-k. The mask writes -inf
     to about 7 of every 8 logits of a 128k row, and the top-k then reads the
     whole row. Here only the 2048 x 8 candidate logits of a row are read.
-    Otherwise this returns False and Aphrodite runs its mask and its top-k."""
+    Otherwise this returns False and Sonar runs its mask and its top-k."""
     if not _ready():
         return False
     taken = (
@@ -139,11 +139,11 @@ def candidate_logits_top_k(
 
     When ``enabled()`` and the extension is built, a call that the hook
     takes writes each row's top 512 among its candidate blocks to ``indices``
-    and returns True. Aphrodite then skips its dense logits, its candidate mask and
+    and returns True. Sonar then skips its dense logits, its candidate mask and
     its top-k for the layer. The call computes only the 2048 x 8 candidate
     logits of each row (cand_logits.py), bit-identical to the dense kernel's,
     and then runs the same top-512 as candidate_top_k. Otherwise this returns
-    False and Aphrodite runs the dense path.
+    False and Sonar runs the dense path.
 
     The hook only takes calls whose dense logits would come from AITER's
     gfx942 Gluon kernel, because cand_logits.py reproduces that kernel's
@@ -178,7 +178,7 @@ def candidate_logits_top_k(
         return False
     # cand_logits imports AITER's Gluon kernels, so only a call that the
     # hook takes loads it.
-    from aphrodite.models.deepseek_v41.amd.ops import cand_logits
+    from sonar.models.deepseek_v41.amd.ops import cand_logits
 
     next_n = q_fp8.shape[1]
     candidates = candidates[:rows]
@@ -207,16 +207,16 @@ def candidate_logits_top_k(
 
 
 def select_candidates(logits, next_n, seq_lens, block_size, candidates) -> bool:
-    """The hook in front of Aphrodite's select_candidate_blocks in the decode
+    """The hook in front of Sonar's select_candidate_blocks in the decode
     indexer (sparse_indexer.py), on layer 20, which writes the
     candidate blocks of layers 24 to 36.
 
     When ``enabled()`` and the extension is built, ``candidates`` gets each
     row's block ids from one launch (candidateBlocks in topk512_gfx942.cu) and
-    this returns True. Aphrodite takes three launches and torch.topk, which also
+    this returns True. Sonar takes three launches and torch.topk, which also
     sorts the picks, and about 100 us for a 128k step's 6 rows. The block ids
     are the same, in no particular order. Otherwise this returns False and
-    Aphrodite runs its version."""
+    Sonar runs its version."""
     if not _ready():
         return False
     ends = seq_lens.reshape(-1)
@@ -231,7 +231,7 @@ def select_candidates(logits, next_n, seq_lens, block_size, candidates) -> bool:
         and block_size >= 1
     )
     if taken:
-        # Aphrodite repeats each request's length over its next_n rows when
+        # Sonar repeats each request's length over its next_n rows when
         # seq_lens holds one length a request (_row_bounds in
         # sparse_indexer.py).
         row_repeat = 1 if ends.numel() == rows else next_n
@@ -240,12 +240,12 @@ def select_candidates(logits, next_n, seq_lens, block_size, candidates) -> bool:
 
 
 def skip_decode_fill(has_prefill, num_decode_tokens, num_tokens, decode) -> bool:
-    """Whether the indexer's decode path (sparse_indexer.py) may skip Aphrodite's
+    """Whether the indexer's decode path (sparse_indexer.py) may skip Sonar's
     -1 fill of the step's top-k rows. When ``enabled()`` and the extension is
     built, it may when every row of the step is a decode row and none is
     padded. The decode top-k then writes every entry of every row, the -1
     past a short row's end included. The extension's top-k (decode_top_k and
-    candidate_top_k) and Aphrodite's top_k_per_row_decode both do. AITER's indexer
+    candidate_top_k) and Sonar's top_k_per_row_decode both do. AITER's indexer
     top-k, which runs before them on gfx950, is not used on gfx942. This saves
     one launch on each of the 8 index layers."""
     return (
@@ -266,14 +266,14 @@ def top_k_per_row_decode_512(
     min_chunk: int = MIN_CHUNK,
     register_select: bool = True,
 ) -> None:
-    """The contract of Aphrodite's ops.top_k_per_row_decode with topK = 512:
+    """The contract of Sonar's ops.top_k_per_row_decode with topK = 512:
     indices[r, :512] gets the column indices of row r's 512 largest logits, in
     no particular order, and -1 past the row's length when it is shorter.
 
     With ``register_select``, rows of up to 1M logits that start at 16-byte
     boundaries run selectFromRegisters, which keeps a block's logits in
     registers. Other rows, and all rows without ``register_select``, run the
-    gfx942 build of Aphrodite's topKPerRowJob. The index sets are the same, except
+    gfx942 build of Sonar's topKPerRowJob. The index sets are the same, except
     for ties at the cut."""
     if register_select and logits.stride(0) % 4 == 0 and logits.data_ptr() % 16 == 0 and logits.shape[1] <= 64 * 16384:
         _load().top_k_per_row_decode_512_regs(logits, next_n, seq_lens, indices)

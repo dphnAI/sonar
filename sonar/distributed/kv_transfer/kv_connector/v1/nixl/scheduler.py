@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Backward-compatible re-export of NixlPullConnectorScheduler."""
 
-from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.pull_scheduler import (
+from sonar.distributed.kv_transfer.kv_connector.v1.nixl.pull_scheduler import (
     NixlPullConnectorScheduler,
 )
 

@@ -6,8 +6,8 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.v1.outputs import (
+from sonar.platforms import current_platform
+from sonar.v1.outputs import (
     EMPTY_MODEL_RUNNER_OUTPUT,
     ECConnectorOutput,
     LogprobsLists,
@@ -15,8 +15,8 @@ from aphrodite.v1.outputs import (
     ModelRunnerOutput,
     SamplingMaskLists,
 )
-from aphrodite.v1.sample.ops.topk_topp_sampler import apply_top_k_top_p
-from aphrodite.v1.worker.gpu.sample.output import SamplingMaskTensors
+from sonar.v1.sample.ops.topk_topp_sampler import apply_top_k_top_p
+from sonar.v1.worker.gpu.sample.output import SamplingMaskTensors
 
 DEVICE_TYPE = current_platform.device_type
 
@@ -99,7 +99,7 @@ def test_sampling_mask_tensors_match_finite_support(max_num_kept):
     """Whatever its size (empty, one, around the compact width, beyond the
     cap, the whole vocab), a sampled row's mask is exactly the ascending set
     of its finite logits; rows that sampled nothing are empty."""
-    from aphrodite.v1.worker.gpu.sample.output import MAX_COMPACT_SUPPORT
+    from sonar.v1.worker.gpu.sample.output import MAX_COMPACT_SUPPORT
 
     vocab_size = 20_001
     sizes = [0, 1, 7, 511, 512, 513, MAX_COMPACT_SUPPORT + 5, vocab_size, 40, 3]

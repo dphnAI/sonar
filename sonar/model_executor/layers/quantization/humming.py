@@ -7,29 +7,29 @@ from typing import TYPE_CHECKING, Any
 import regex as re
 import torch
 
-import aphrodite.utils.humming as _hm
-from aphrodite import envs
-from aphrodite.model_executor.layers.fused_moe import (
+import sonar.utils.humming as _hm
+from sonar import envs
+from sonar.model_executor.layers.fused_moe import (
     FusedMoEConfig,
     FusedMoEMethodBase,
     FusedMoEQuantConfig,
     RoutedExperts,
     SharedExperts,
 )
-from aphrodite.model_executor.layers.fused_moe.unquantized_fused_moe_method import (
+from sonar.model_executor.layers.fused_moe.unquantized_fused_moe_method import (
     UnquantizedFusedMoEMethod,
 )
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.linear import (
     LinearBase,
     LinearMethodBase,
     UnquantizedLinearMethod,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationMethods
-from aphrodite.model_executor.layers.quantization.base_config import (
+from sonar.model_executor.layers.quantization import QuantizationMethods
+from sonar.model_executor.layers.quantization.base_config import (
     QuantizationConfig,
     QuantizeMethodBase,
 )
-from aphrodite.model_executor.layers.quantization.utils.humming import (
+from sonar.model_executor.layers.quantization.utils.humming import (
     check_and_fallback_input_schema,
     convert_to_humming_moe_kernel_format,
     get_humming_linear_compute_config,
@@ -41,27 +41,27 @@ from aphrodite.model_executor.layers.quantization.utils.humming import (
     select_humming_moe_experts,
     weight_schema_to_quant_key,
 )
-from aphrodite.model_executor.layers.quantization.utils.humming.linear import (
+from sonar.model_executor.layers.quantization.utils.humming.linear import (
     get_live_param,
     kernel_parameters,
     replace_layer_parameters,
 )
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
-from aphrodite.model_executor.parameter import (
-    BaseAphroditeParameter,
+from sonar.model_executor.model_loader.weight_utils import default_weight_loader
+from sonar.model_executor.parameter import (
+    BaseSonarParameter,
     BlockQuantScaleParameter,
     ChannelQuantScaleParameter,
     GroupQuantScaleParameter,
     ModelWeightParameter,
-    PackedAphroditeParameter,
+    PackedSonarParameter,
     PerTensorScaleParameter,
-    RowAphroditeParameter,
+    RowSonarParameter,
 )
-from aphrodite.model_executor.utils import set_weight_attrs
+from sonar.model_executor.utils import set_weight_attrs
 
 if TYPE_CHECKING:
-    from aphrodite.model_executor.models.utils import WeightsMapper
-    from aphrodite.utils.humming import (
+    from sonar.model_executor.models.utils import WeightsMapper
+    from sonar.utils.humming import (
         BaseInputSchema,
         BaseWeightSchema,
         HummingInputSchema,
@@ -80,19 +80,19 @@ def prepare_param(tensor, name, extra_attrs):
         "input_scale": PerTensorScaleParameter,
     }
 
-    param_cls: type[BaseAphroditeParameter]
+    param_cls: type[BaseSonarParameter]
     if "packed_dim" in extra_attrs:
-        param_cls = PackedAphroditeParameter
+        param_cls = PackedSonarParameter
     elif scale_type in param_cls_name_map:
         param_cls = param_cls_name_map[scale_type]
     elif "output_dim" in extra_attrs and "input_dim" in extra_attrs:
         param_cls = ModelWeightParameter
     elif "input_dim" in extra_attrs:
-        param_cls = RowAphroditeParameter
+        param_cls = RowSonarParameter
     elif "output_dim" in extra_attrs:
         param_cls = ChannelQuantScaleParameter
     else:
-        param_cls = BaseAphroditeParameter
+        param_cls = BaseSonarParameter
 
     kwargs_keys = [
         "input_dim",
@@ -190,14 +190,14 @@ class HummingConfig(QuantizationConfig):
                 raise ValueError(msg)
         return "humming" if user_quant == "humming" else None
 
-    def apply_aphrodite_mapper(self, hf_to_aphrodite_mapper: "WeightsMapper"):
-        self.hf_to_aphrodite_mapper = hf_to_aphrodite_mapper
+    def apply_sonar_mapper(self, hf_to_sonar_mapper: "WeightsMapper"):
+        self.hf_to_sonar_mapper = hf_to_sonar_mapper
 
     def is_layer_skipped(self, config: dict[str, Any], prefix: str):
         keys = ["ignored_layers", "ignore", "modules_to_not_convert"]
         ignored_layers = self.get_from_keys_or(config, keys, []) or []
-        if hasattr(self, "hf_to_aphrodite_mapper"):
-            ignored_layers = self.hf_to_aphrodite_mapper.apply_list(ignored_layers)
+        if hasattr(self, "hf_to_sonar_mapper"):
+            ignored_layers = self.hf_to_sonar_mapper.apply_list(ignored_layers)
 
         for module_name in ignored_layers:
             # compressed-tensors style entries may be regex patterns prefixed
@@ -263,7 +263,7 @@ class HummingConfig(QuantizationConfig):
             weight_schema = self.get_layer_weight_schema(self.full_config, prefix)
 
         is_online_quant = False
-        online_quant_config = envs.APHRODITE_HUMMING_ONLINE_QUANT_CONFIG or {}
+        online_quant_config = envs.SONAR_HUMMING_ONLINE_QUANT_CONFIG or {}
         if not self.full_config or online_quant_config.get("force_requant", False):
             online_quant_config["quant_method"] = "humming"
             schema = self.get_layer_weight_schema(online_quant_config, prefix)
@@ -284,8 +284,8 @@ class HummingConfig(QuantizationConfig):
                     allow_input_schema_fallback = input_config.pop("allow_fallback", True)
                     input_schema = _hm.BaseInputSchema.from_config(input_config)
 
-            if envs.APHRODITE_HUMMING_INPUT_QUANT_CONFIG:
-                quant_config = envs.APHRODITE_HUMMING_INPUT_QUANT_CONFIG.copy()
+            if envs.SONAR_HUMMING_INPUT_QUANT_CONFIG:
+                quant_config = envs.SONAR_HUMMING_INPUT_QUANT_CONFIG.copy()
                 quant_config["quant_method"] = "humming"
                 input_config = self.get_layer_input_config(quant_config, prefix)
                 if input_config is not None:

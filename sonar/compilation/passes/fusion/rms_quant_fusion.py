@@ -9,10 +9,10 @@ from torch._higher_order_ops.auto_functionalize import auto_functionalized
 from torch._inductor.pattern_matcher import PatternMatcherPass
 from torch._ops import OpOverload
 
-import aphrodite.ir.ops
-from aphrodite.config import AphroditeConfig, get_current_aphrodite_config
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+import sonar.ir.ops
+from sonar.config import SonarConfig, get_current_sonar_config
+from sonar.logger import init_logger
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     GroupShape,
     QuantKey,
     ScaleDesc,
@@ -25,12 +25,12 @@ from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
     kNvfp4Dynamic,
     kStaticTensorScale,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.flashinfer import has_flashinfer
-from aphrodite.utils.torch_utils import direct_register_custom_op
+from sonar.platforms import current_platform
+from sonar.utils.flashinfer import has_flashinfer
+from sonar.utils.torch_utils import direct_register_custom_op
 
-from ..aphrodite_inductor_pass import AphroditeInductorPass, AphroditePatternMatcherPass
 from ..inductor_pass import enable_fake_mode
+from ..sonar_inductor_pass import SonarInductorPass, SonarPatternMatcherPass
 from .matcher_utils import (
     MatcherQuantFP8,
 )
@@ -40,8 +40,8 @@ FP8_DTYPE = current_platform.fp8_dtype()
 FP4_DTYPE = torch.uint8
 
 
-_RMS_NORM_OP = torch.ops.aphrodite_ir.rms_norm.default
-_FUSED_ADD_RMS_NORM_OP = torch.ops.aphrodite_ir.fused_add_rms_norm.default
+_RMS_NORM_OP = torch.ops.sonar_ir.rms_norm.default
+_FUSED_ADD_RMS_NORM_OP = torch.ops.sonar_ir.fused_add_rms_norm.default
 _FLASHINFER_ADD_RMSNORM_FP4QUANT: Any | None = None
 
 
@@ -102,7 +102,7 @@ if current_platform.is_cuda() and hasattr(torch, "float4_e2m1fn_x2") and has_fla
             mutates_args=["result", "result_block_scale", "residual"],
             fake_impl=_flashinfer_fused_add_rms_norm_nvfp4_quant_fake,
         )
-        _FLASHINFER_NVFP4_RMS_QUANT_OP = torch.ops.aphrodite.flashinfer_fused_add_rms_norm_nvfp4_quant.default
+        _FLASHINFER_NVFP4_RMS_QUANT_OP = torch.ops.sonar.flashinfer_fused_add_rms_norm_nvfp4_quant.default
 
 
 # TODO: extend rmsnorm quant kernels to support mixed input/weight dtypes,
@@ -192,7 +192,7 @@ class RMSNormQuantPattern:
     ) -> None:
         self.epsilon = epsilon
         self.quant_dtype = key.quant.dtype
-        config = get_current_aphrodite_config()
+        config = get_current_sonar_config()
         self.model_dtype = config.model_config.dtype if config.model_config else None
 
         assert key in FUSED_OPS, f"unsupported fused rmsnorm+quant op for {key}"
@@ -217,7 +217,7 @@ class RMSNormStaticQuantPattern(RMSNormQuantPattern):
     def register(self, pm_pass: PatternMatcherPass) -> None:
         # Cannot use methods, as the self argument affects tracing
         def pattern(input: torch.Tensor, weight: torch.Tensor, scale: torch.Tensor) -> torch.Tensor:
-            result_rms = aphrodite.ir.ops.rms_norm(input, weight, self.epsilon)
+            result_rms = sonar.ir.ops.rms_norm(input, weight, self.epsilon)
             return self.quant_matcher(result_rms, scale)[0]
 
         def replacement(input: torch.Tensor, weight: torch.Tensor, scale: torch.Tensor) -> torch.Tensor:
@@ -266,7 +266,7 @@ class FusedAddRMSNormStaticQuantPattern(RMSNormQuantPattern):
             residual: torch.Tensor,
             scale: torch.Tensor,
         ) -> tuple[torch.Tensor, torch.Tensor]:
-            result_rms, residual = aphrodite.ir.ops.fused_add_rms_norm(input, residual, weight, self.epsilon)
+            result_rms, residual = sonar.ir.ops.fused_add_rms_norm(input, residual, weight, self.epsilon)
             result, _ = self.quant_matcher(result_rms, scale)
 
             return result, residual
@@ -347,7 +347,7 @@ class FusedAddRMSNormGroupQuantPattern(RMSNormQuantPattern):
             residual: torch.Tensor,
             scale: torch.Tensor,
         ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-            result_rms, residual = aphrodite.ir.ops.fused_add_rms_norm(input, residual, weight, self.epsilon)
+            result_rms, residual = sonar.ir.ops.fused_add_rms_norm(input, residual, weight, self.epsilon)
             result = torch.empty(
                 result_rms.shape,
                 device=result_rms.device,
@@ -448,7 +448,7 @@ class RMSNormGroupQuantPattern(RMSNormQuantPattern):
         def pattern(
             input: torch.Tensor, weight: torch.Tensor, scale: torch.Tensor
         ) -> tuple[torch.Tensor, torch.Tensor]:
-            result_rms = aphrodite.ir.ops.rms_norm(input, weight, self.epsilon)
+            result_rms = sonar.ir.ops.rms_norm(input, weight, self.epsilon)
             result = torch.empty(
                 result_rms.shape,
                 device=result_rms.device,
@@ -528,7 +528,7 @@ class RMSNormDynamicQuantPattern(RMSNormQuantPattern):
 
     def register(self, pm_pass: PatternMatcherPass) -> None:
         def pattern(input: torch.Tensor, weight: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-            result_rms = aphrodite.ir.ops.rms_norm(input, weight, self.epsilon)
+            result_rms = sonar.ir.ops.rms_norm(input, weight, self.epsilon)
             # result, scale
             return self.quant_matcher(result_rms)  # type: ignore[no-any-return]
 
@@ -585,7 +585,7 @@ class FusedAddRMSNormDynamicQuantPattern(RMSNormQuantPattern):
         def pattern(
             input: torch.Tensor, weight: torch.Tensor, residual: torch.Tensor
         ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-            result_rms, residual = aphrodite.ir.ops.fused_add_rms_norm(input, residual, weight, self.epsilon)
+            result_rms, residual = sonar.ir.ops.fused_add_rms_norm(input, residual, weight, self.epsilon)
             result, scale = self.quant_matcher(result_rms)
 
             return result, residual, scale
@@ -647,7 +647,7 @@ class FusedAddRMSNormNvfp4QuantPattern:
             residual: torch.Tensor,
             input_global_scale: torch.Tensor,
         ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-            result_rms, updated_residual = aphrodite.ir.ops.fused_add_rms_norm(input, residual, weight, self.epsilon)
+            result_rms, updated_residual = sonar.ir.ops.fused_add_rms_norm(input, residual, weight, self.epsilon)
             at = auto_functionalized(
                 torch.ops._C.scaled_fp4_quant.out,
                 input=result_rms,
@@ -716,13 +716,13 @@ class FusedAddRMSNormNvfp4QuantPattern:
         )
 
 
-class RMSNormQuantFusionPass(AphroditePatternMatcherPass):
+class RMSNormQuantFusionPass(SonarPatternMatcherPass):
     """This pass fuses rms_norm & quant custom ops into a fused rms_norm_quant op.
     It also supports fused_add_rms_norm.
     """
 
     @enable_fake_mode
-    def __init__(self, config: AphroditeConfig) -> None:
+    def __init__(self, config: SonarConfig) -> None:
         super().__init__(config)
 
         self.patterns: PatternMatcherPass = PatternMatcherPass(pass_name="rmsnorm_quant_fusion_pass")
@@ -773,7 +773,7 @@ class RMSNormQuantFusionPass(AphroditePatternMatcherPass):
 
         self.dump_patterns(config, self.patterns)
 
-    @AphroditeInductorPass.time_and_log
+    @SonarInductorPass.time_and_log
     def __call__(self, graph: fx.Graph) -> None:
         self.matched_count = self.patterns.apply(graph)
         logger.debug("Replaced %s patterns", self.matched_count)

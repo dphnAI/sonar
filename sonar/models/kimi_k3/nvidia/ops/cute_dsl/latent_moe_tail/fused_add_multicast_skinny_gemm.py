@@ -14,7 +14,7 @@ import torch
 from cutlass import BFloat16, Float32, Int64, const_expr
 from cutlass.cute.runtime import from_dlpack
 
-from aphrodite.models.common.ops.moe_tail_fusion.primitives import (
+from sonar.models.common.ops.moe_tail_fusion.primitives import (
     CUDAGraphCompatibleWrapper,
     bf16x2_to_u32,
     bf16x4_to_packed_u32x2,

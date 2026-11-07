@@ -8,14 +8,14 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.proof import dump_runtime_snapshot, generate_weight_receipt, rank_worker_id
-from aphrodite.proof.bundle import RuntimeWeightVerifier
-from aphrodite.proof.verifier import decrypt_payload, generate_x25519_keypair, verify_proof
+from sonar.proof import dump_runtime_snapshot, generate_weight_receipt, rank_worker_id
+from sonar.proof.bundle import RuntimeWeightVerifier
+from sonar.proof.verifier import decrypt_payload, generate_x25519_keypair, verify_proof
 
 
 @pytest.fixture
 def receipt_set(tmp_path):
-    pytest.importorskip("aphrodite._proof_C")
+    pytest.importorskip("sonar._proof_C")
     private, public = generate_x25519_keypair()
     config = SimpleNamespace(
         public_key=public,

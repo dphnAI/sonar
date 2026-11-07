@@ -8,17 +8,17 @@ from typing import Any, ClassVar, cast
 import torch
 from torch import nn
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.forward_context import get_forward_context
-from aphrodite.model_executor.layers.attention_layer_base import AttentionLayerBase
-from aphrodite.triton_utils import tl, triton
-from aphrodite.v1.attention.backend import (
+from sonar.config import SonarConfig
+from sonar.forward_context import get_forward_context
+from sonar.model_executor.layers.attention_layer_base import AttentionLayerBase
+from sonar.triton_utils import tl, triton
+from sonar.v1.attention.backend import (
     AttentionBackend,
     AttentionCGSupport,
     AttentionMetadataBuilder,
     CommonAttentionMetadata,
 )
-from aphrodite.v1.kv_cache_interface import CircularBufferSpec, KVCacheSpec
+from sonar.v1.kv_cache_interface import CircularBufferSpec, KVCacheSpec
 
 # One bf16 ``[index_k | index_z]`` row: 2 * 256 * 2 bytes.
 _ROW_ELEMENTS = 512
@@ -80,9 +80,9 @@ class Step5CSATailRingMetadataBuilder(AttentionMetadataBuilder):
         super().__init__(*args, **kwargs)
         spec = cast(CircularBufferSpec, self.kv_cache_spec)
         self.capacity = spec.page_size_bytes // _ROW_BYTES
-        context = self.aphrodite_config.compilation_config.static_forward_context
+        context = self.sonar_config.compilation_config.static_forward_context
         self.layers = [cast("Step5CSATailRing", context[n]) for n in self.layer_names]
-        tokens = self.aphrodite_config.scheduler_config.max_num_batched_tokens
+        tokens = self.sonar_config.scheduler_config.max_num_batched_tokens
         self.token_to_req = torch.zeros(tokens, dtype=torch.int32, device=self.device)
         self.base = torch.empty(tokens, dtype=torch.int64, device=self.device)
         self.slot_mapping = torch.empty(tokens, dtype=torch.int64, device=self.device)
@@ -161,9 +161,9 @@ class Step5CSATailRing(nn.Module, AttentionLayerBase):
         self.capacity = 0
         self.rows_per_block = 0
 
-    def get_kv_cache_spec(self, aphrodite_config: AphroditeConfig) -> KVCacheSpec:
+    def get_kv_cache_spec(self, sonar_config: SonarConfig) -> KVCacheSpec:
         main = self._static_forward_context[self.main_layer_name]
-        main_spec = main.get_kv_cache_spec(aphrodite_config)
+        main_spec = main.get_kv_cache_spec(sonar_config)
         page_bytes = main_spec.page_size_bytes
         if page_bytes % _ROW_BYTES or page_bytes // _ROW_BYTES < self.required_rows:
             raise ValueError(

@@ -4,43 +4,43 @@
 
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite import _custom_ops as ops
-from aphrodite.model_executor.layers.fused_moe.activation import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar import _custom_ops as ops
+from sonar.model_executor.layers.fused_moe.activation import (
     MoEActivation,
     apply_moe_activation_supported,
 )
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEParallelConfig,
     FusedMoEQuantConfig,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.lora_experts_mixin import (
+from sonar.model_executor.layers.fused_moe.experts.lora_experts_mixin import (
     LoRAExpertsMixin,
 )
-from aphrodite.model_executor.layers.fused_moe.fused_moe import (
+from sonar.model_executor.layers.fused_moe.fused_moe import (
     _prepare_expert_assignment,
     _weights_host_resident,
     invoke_fused_moe_triton_kernel,
     invoke_fused_moe_wna16_triton_kernel,
     try_get_optimal_moe_config,
 )
-from aphrodite.model_executor.layers.fused_moe.moe_align_block_size import (
+from sonar.model_executor.layers.fused_moe.moe_align_block_size import (
     moe_align_block_size,
 )
-from aphrodite.model_executor.layers.fused_moe.moe_output import route_major_moe_output
-from aphrodite.model_executor.layers.fused_moe.topk_weight_and_reduce import (
+from sonar.model_executor.layers.fused_moe.moe_output import route_major_moe_output
+from sonar.model_executor.layers.fused_moe.topk_weight_and_reduce import (
     TopKWeightAndReduceNoOP,
 )
-from aphrodite.model_executor.layers.fused_moe.utils import (
+from sonar.model_executor.layers.fused_moe.utils import (
     _resize_cache,
     moe_kernel_quantize_input,
     swiglu_limit_func,
 )
-from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
+from sonar.model_executor.layers.quantization.utils.fp8_utils import (
     is_deep_gemm_e8m0_used,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     FP8_DTYPE,
     QuantKey,
     kFp8Dynamic128Sym,
@@ -59,9 +59,9 @@ from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
     kInt8StaticChannelSym,
     kInt8StaticTensorSym,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl
-from aphrodite.utils.multi_stream_utils import maybe_execute_in_parallel
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl
+from sonar.utils.multi_stream_utils import maybe_execute_in_parallel
 
 
 class TritonExperts(LoRAExpertsMixin, mk.FusedMoEExpertsModular):

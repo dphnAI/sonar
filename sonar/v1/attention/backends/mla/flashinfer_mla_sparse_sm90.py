@@ -37,31 +37,31 @@ from typing import Any, ClassVar
 
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.cache import CacheDType
-from aphrodite.model_executor.layers.attention.sparse_mla_attention import (
+from sonar.config import SonarConfig
+from sonar.config.cache import CacheDType
+from sonar.model_executor.layers.attention.sparse_mla_attention import (
     SparseMLACommonImpl,
 )
-from aphrodite.platforms.interface import DeviceCapability
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.flashinfer import has_flashinfer_sm90_nope_mla
-from aphrodite.v1.attention.backend import (
+from sonar.platforms.interface import DeviceCapability
+from sonar.triton_utils import tl, triton
+from sonar.utils.flashinfer import has_flashinfer_sm90_nope_mla
+from sonar.v1.attention.backend import (
     AttentionBackend,
     AttentionLayer,
     CommonAttentionMetadata,
     MLAAttentionImpl,
     MultipleOf,
 )
-from aphrodite.v1.attention.backends.mla.flashinfer_mla_sparse import (
+from sonar.v1.attention.backends.mla.flashinfer_mla_sparse import (
     FlashInferMLASparseMetadata,
     FlashInferMLASparseMetadataBuilder,
 )
-from aphrodite.v1.attention.backends.mla.sparse_utils import (
+from sonar.v1.attention.backends.mla.sparse_utils import (
     align_blocks_to_rows,
     flat_kv_row_view,
     triton_convert_req_index_to_global_index,
 )
-from aphrodite.v1.kv_cache_interface import AttentionSpec
+from sonar.v1.kv_cache_interface import AttentionSpec
 
 _FP8_KV_DTYPES = ("fp8", "fp8_e4m3")
 _WORKSPACE_BYTES = 128 * 1024 * 1024
@@ -210,11 +210,11 @@ class FlashInferMLASparseSM90Backend(AttentionBackend):
             )
         if not use_sparse:
             return "FLASHINFER_MLA_SPARSE_SM90 requires sparse MLA"
-        from aphrodite.config import get_current_aphrodite_config
+        from sonar.config import get_current_sonar_config
 
-        aphrodite_config = get_current_aphrodite_config()
-        if aphrodite_config.model_config is not None:
-            hf = aphrodite_config.model_config.hf_text_config
+        sonar_config = get_current_sonar_config()
+        if sonar_config.model_config is not None:
+            hf = sonar_config.model_config.hf_text_config
             # The SM90 FA2/FA3 kernel covers ckv=512 with kpe in {0, 64}
             # (NoPE models and DeepSeek-style rope MLA alike).
             if hf.kv_lora_rank != 512:
@@ -408,11 +408,11 @@ class FlashInferMLASparseSM90Builder(FlashInferMLASparseMetadataBuilder):
         self,
         kv_cache_spec: "AttentionSpec",
         layer_names: list[str],
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
         device: torch.device,
     ) -> None:
-        super().__init__(kv_cache_spec, layer_names, aphrodite_config, device)
-        attention_layer = aphrodite_config.compilation_config.static_forward_context[layer_names[0]]
+        super().__init__(kv_cache_spec, layer_names, sonar_config, device)
+        attention_layer = sonar_config.compilation_config.static_forward_context[layer_names[0]]
         self._attention_layer = attention_layer
         impl = attention_layer.impl
         if not isinstance(impl, FlashInferMLASparseSM90Impl):
@@ -421,7 +421,7 @@ class FlashInferMLASparseSM90Builder(FlashInferMLASparseMetadataBuilder):
             )
         topk_indices_buffer = impl.topk_indices_buffer
         assert topk_indices_buffer is not None
-        hf_config = aphrodite_config.model_config.hf_text_config
+        hf_config = sonar_config.model_config.hf_text_config
         assert hf_config.index_topk is not None
         # fp8 KV cache is stored as uint8; plan() needs the logical dtype.
         kv_plan_dtype = torch.float8_e4m3fn if kv_cache_spec.dtype == torch.uint8 else kv_cache_spec.dtype
@@ -429,7 +429,7 @@ class FlashInferMLASparseSM90Builder(FlashInferMLASparseMetadataBuilder):
             device,
             impl.num_heads,
             kv_plan_dtype,
-            aphrodite_config.scheduler_config.max_num_batched_tokens,
+            sonar_config.scheduler_config.max_num_batched_tokens,
             topk_indices_buffer.shape[1],
             kv_lora_rank=impl.kv_lora_rank,
             qk_rope_head_dim=impl.qk_rope_head_dim,
@@ -437,7 +437,7 @@ class FlashInferMLASparseSM90Builder(FlashInferMLASparseMetadataBuilder):
             index_topk=int(hf_config.index_topk),
             index_kpool=int(getattr(hf_config, "index_kpool", 1) or 1),
         )
-        spec_config = aphrodite_config.speculative_config
+        spec_config = sonar_config.speculative_config
         self._adaptive_verification = bool(spec_config is not None and spec_config.enable_adaptive_verification)
 
     def _kv_lens_host(self, cam: CommonAttentionMetadata) -> tuple[int, torch.Tensor, bool]:

@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Targeted unit tests for APHRODITE_TRITON_FORCE_FIRST_CONFIG.
+"""Targeted unit tests for SONAR_TRITON_FORCE_FIRST_CONFIG.
 
 These tests exercise only the patched `Autotuner.run` logic installed by
-`aphrodite.triton_utils.force_first_config.install`. The wrapped kernel is a
+`sonar.triton_utils.force_first_config.install`. The wrapped kernel is a
 plain callable so the tests run on CPU-only hosts (no GPU, no actual
 kernel launch) as long as the `triton` package is importable.
 """
@@ -12,12 +12,12 @@ from types import SimpleNamespace
 
 import pytest
 
-from aphrodite.triton_utils import HAS_TRITON, triton
+from sonar.triton_utils import HAS_TRITON, triton
 
 if not HAS_TRITON:
     pytest.skip("triton not available", allow_module_level=True)
 
-from aphrodite.triton_utils import force_first_config  # noqa: E402
+from sonar.triton_utils import force_first_config  # noqa: E402
 
 OutOfResources = triton.runtime.errors.OutOfResources
 
@@ -26,7 +26,7 @@ OutOfResources = triton.runtime.errors.OutOfResources
 def patched_autotuner(monkeypatch: pytest.MonkeyPatch):
     """Install the first-valid-config patch and restore after.
 
-    The env-var gate lives in aphrodite.triton_utils; install() itself does not
+    The env-var gate lives in sonar.triton_utils; install() itself does not
     read the environment, so the test calls it directly.
     """
     Autotuner = triton.runtime.autotuner.Autotuner

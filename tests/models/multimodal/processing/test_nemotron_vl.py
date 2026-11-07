@@ -9,9 +9,9 @@ import torch
 from PIL import Image
 from transformers import PreTrainedConfig
 
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.image import rescale_image_size
-from aphrodite.multimodal.processing import BaseMultiModalProcessor
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.image import rescale_image_size
+from sonar.multimodal.processing import BaseMultiModalProcessor
 
 from ....conftest import ImageTestAssets
 from ...utils import build_model_context
@@ -24,7 +24,7 @@ def _get_expected_num_patches(
     min_num: int,
     max_num: int,
 ):
-    from aphrodite.transformers_utils.processors.nemotron_vl import (
+    from sonar.transformers_utils.processors.nemotron_vl import (
         calculate_nemotron_vl_targets,
         get_nemotron_vl_target_ratios,
     )

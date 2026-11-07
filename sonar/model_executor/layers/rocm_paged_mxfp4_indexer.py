@@ -11,9 +11,9 @@ Requires `RocmMxfp4IndexerMetadataBuilder` metadata.
 import torch
 from torch import nn
 
-from aphrodite.config import get_current_aphrodite_config
-from aphrodite.model_executor.layers.sparse_attn_indexer import SparseAttnIndexer
-from aphrodite.v1.attention.ops.rocm_paged_mxfp4_indexer import (
+from sonar.config import get_current_sonar_config
+from sonar.model_executor.layers.sparse_attn_indexer import SparseAttnIndexer
+from sonar.v1.attention.ops.rocm_paged_mxfp4_indexer import (
     rocm_mxfp4_sparse_attn_indexer,
     rocm_mxfp4_sparse_mqa_indexer,
 )
@@ -81,7 +81,7 @@ class RocmSparseMQAIndexer(nn.Module):
         self.head_dim = head_dim
         # aiter's kernel bounds a row by the model length in compressed
         # positions, not by the prefill buffer SparseMQAIndexer sizes.
-        model_config = get_current_aphrodite_config().model_config
+        model_config = get_current_sonar_config().model_config
         self.max_model_len = model_config.max_model_len // k_cache.compress_ratio
         self.topk_indices_buffer = topk_indices_buffer
         self.candidate_blocks = candidate_blocks

@@ -30,7 +30,9 @@ def main() -> None:
     )
     parser.add_argument(
         "--install-command",
-        default="uv pip install aphrodite-engine --index-url https://sonar.dphn.ai/nightly",
+        default="uv pip install sonar "
+        "--extra-index-url https://sonar.dphn.ai/whl/nightly/cuda/x86_64/simple "
+        "--index-strategy first-index --torch-backend cu130",
     )
     args = parser.parse_args()
 
@@ -45,11 +47,15 @@ def main() -> None:
         digest = fields[2] if len(fields) == 3 else ""
         if not name.endswith(".whl") or Path(name).name != name:
             raise ValueError(f"Invalid wheel name: {name!r}")
+        # Shared storage may still contain wheels from before the package rename.
+        # Never advertise another distribution in Sonar's simple package index.
+        if not name.startswith("sonar-"):
+            continue
         url = canonicalize_url(url)
         if digest:
             url = f"{url}#sha256={digest}"
         try:
-            version, python, abi, platform = name.removeprefix("aphrodite_engine-").removesuffix(".whl").rsplit("-", 3)
+            version, python, abi, platform = name.removeprefix("sonar-").removesuffix(".whl").rsplit("-", 3)
             platform = platform.replace("_", " ", 1)
         except ValueError:
             version, python, abi, platform = "Nightly build", "Python", "ABI", "Linux"
@@ -178,12 +184,13 @@ def main() -> None:
           <code id="command">{html.escape(args.install_command)}</code>
           <button id="copy" type="button">Copy</button>
         </div>
+        <p class="lede">Use the Sonar index in the command above, not a plain PyPI install of <code>sonar</code>.</p>
       </header>
       <div class="toolbar">
         <div><h2>Available builds</h2><span class="count" id="count">{len(cards)} wheels</span></div>
         <input id="filter" type="search" placeholder="Filter by version or commit…" aria-label="Filter wheels">
       </div>
-      <section class="wheels" aria-label="Available nightly wheels">
+      <section class="wheels" aria-label="Available wheels">
 {chr(10).join(cards)}
       </section>
       <p class="empty" id="empty">No wheels match that filter.</p>

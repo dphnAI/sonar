@@ -5,14 +5,14 @@ from unittest.mock import patch
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.config import RoutingMethodType
-from aphrodite.model_executor.layers.fused_moe.oracle.unquantized import (
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.config import RoutingMethodType
+from sonar.model_executor.layers.fused_moe.oracle.unquantized import (
     UnquantizedMoeBackend,
     backend_to_kernel_cls,
     select_unquantized_moe_backend,
 )
-from aphrodite.platforms import CpuArchEnum, current_platform
+from sonar.platforms import CpuArchEnum, current_platform
 from tests.kernels.moe.utils import make_dummy_moe_config
 
 skipif_not_cuda_rocm = pytest.mark.skipif(
@@ -34,7 +34,7 @@ def test_x86_cpu_unquantized_kernel_selection(
     in_dtype: torch.dtype,
     expect_amx_kernel: bool,
 ):
-    from aphrodite.model_executor.layers.fused_moe.experts.cpu_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.cpu_moe import (
         CPUUnquantizedExperts,
         X86CPUUnquantizedExperts,
     )
@@ -82,7 +82,7 @@ def test_arm_cpu_unquantized_kernel_selection(
     in_dtype: torch.dtype,
     expect_arm_kernel: bool,
 ):
-    from aphrodite.model_executor.layers.fused_moe.experts.cpu_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.cpu_moe import (
         ArmCPUUnquantizedExperts,
         CPUUnquantizedExperts,
     )
@@ -95,7 +95,7 @@ def test_arm_cpu_unquantized_kernel_selection(
             return_value=CpuArchEnum.ARM,
         ),
         patch(
-            "aphrodite.model_executor.layers.fused_moe.experts.cpu_moe.sys.platform",
+            "sonar.model_executor.layers.fused_moe.experts.cpu_moe.sys.platform",
             platform,
         ),
     ):
@@ -132,15 +132,15 @@ def test_arm_cpu_unquantized_kernel_selection(
     ],
 )
 @patch(
-    "aphrodite.model_executor.layers.fused_moe.experts.flashinfer_cutlass_moe.has_flashinfer_cutlass_fused_moe",
+    "sonar.model_executor.layers.fused_moe.experts.flashinfer_cutlass_moe.has_flashinfer_cutlass_fused_moe",
     return_value=False,
 )
 @patch(
-    "aphrodite.model_executor.layers.fused_moe.experts.trtllm_bf16_moe.has_flashinfer_trtllm_fused_moe",
+    "sonar.model_executor.layers.fused_moe.experts.trtllm_bf16_moe.has_flashinfer_trtllm_fused_moe",
     return_value=False,
 )
 @patch(
-    "aphrodite.model_executor.layers.fused_moe.oracle.unquantized.rocm_aiter_ops.is_fused_moe_enabled",
+    "sonar.model_executor.layers.fused_moe.oracle.unquantized.rocm_aiter_ops.is_fused_moe_enabled",
     return_value=False,
 )
 def test_select_default_backend_by_platform(
@@ -157,7 +157,7 @@ def test_select_default_backend_by_platform(
     Patch the feature probes directly because their cached results can outlive
     changes to has_flashinfer().
     """
-    with patch("aphrodite.model_executor.layers.fused_moe.oracle.unquantized.current_platform") as mock_platform:
+    with patch("sonar.model_executor.layers.fused_moe.oracle.unquantized.current_platform") as mock_platform:
         # Set all platform checks to False
         mock_platform.is_cuda.return_value = False
         mock_platform.is_rocm.return_value = False
@@ -199,17 +199,17 @@ def test_select_default_backend_by_platform(
 
 
 @patch(
-    "aphrodite.utils.flashinfer.has_flashinfer",
+    "sonar.utils.flashinfer.has_flashinfer",
     return_value=False,
 )
 @patch(
-    "aphrodite.model_executor.layers.fused_moe.oracle.unquantized.rocm_aiter_ops.is_fused_moe_enabled",
+    "sonar.model_executor.layers.fused_moe.oracle.unquantized.rocm_aiter_ops.is_fused_moe_enabled",
     return_value=True,
 )
 @pytest.mark.skipif(not current_platform.is_rocm(), reason="ROCm-specific backend selection test")
 def test_select_rocm_aiter_backend(mock_aiter_enabled, mock_has_flashinfer):
     """Test ROCm backend selection when AITER is available."""
-    with patch("aphrodite.model_executor.layers.fused_moe.oracle.unquantized.current_platform") as mock_platform:
+    with patch("sonar.model_executor.layers.fused_moe.oracle.unquantized.current_platform") as mock_platform:
         mock_platform.is_cuda.return_value = False
         mock_platform.is_rocm.return_value = True
         mock_platform.is_cpu.return_value = False
@@ -227,15 +227,15 @@ def test_select_rocm_aiter_backend(mock_aiter_enabled, mock_has_flashinfer):
 
 
 @patch(
-    "aphrodite.utils.flashinfer.has_flashinfer",
+    "sonar.utils.flashinfer.has_flashinfer",
     return_value=False,
 )
 @patch(
-    "aphrodite.model_executor.layers.fused_moe.oracle.unquantized.rocm_aiter_ops.is_fused_moe_enabled",
+    "sonar.model_executor.layers.fused_moe.oracle.unquantized.rocm_aiter_ops.is_fused_moe_enabled",
     return_value=True,
 )
 @patch(
-    "aphrodite.model_executor.layers.fused_moe.oracle.unquantized.rocm_aiter_ops.is_rdna_aiter_enabled",
+    "sonar.model_executor.layers.fused_moe.oracle.unquantized.rocm_aiter_ops.is_rdna_aiter_enabled",
     return_value=False,
 )
 @pytest.mark.skipif(not current_platform.is_rocm(), reason="ROCm-specific backend selection test")
@@ -243,10 +243,10 @@ def test_select_rocm_aiter_backend_non_gated_activation_falls_back(
     mock_rdna_disabled, mock_aiter_enabled, mock_has_flashinfer, monkeypatch
 ):
     """Test ROCm backend selection falls back (not raises) for non-gated MoE."""
-    monkeypatch.setenv("APHRODITE_ROCM_USE_AITER", "1")
-    monkeypatch.setenv("APHRODITE_ROCM_USE_AITER_MOE", "1")
+    monkeypatch.setenv("SONAR_ROCM_USE_AITER", "1")
+    monkeypatch.setenv("SONAR_ROCM_USE_AITER_MOE", "1")
 
-    with patch("aphrodite.model_executor.layers.fused_moe.oracle.unquantized.current_platform") as mock_platform:
+    with patch("sonar.model_executor.layers.fused_moe.oracle.unquantized.current_platform") as mock_platform:
         mock_platform.is_cuda.return_value = False
         mock_platform.is_rocm.return_value = True
         mock_platform.is_cpu.return_value = False
@@ -278,7 +278,7 @@ def test_explicit_aiter_backend_non_gated_activation_still_raises():
 
 
 @patch(
-    "aphrodite.model_executor.layers.fused_moe.experts.trtllm_bf16_moe.TrtLlmBf16ExpertsMonolithic.is_supported_config",
+    "sonar.model_executor.layers.fused_moe.experts.trtllm_bf16_moe.TrtLlmBf16ExpertsMonolithic.is_supported_config",
     return_value=(True, None),
 )
 @pytest.mark.skipif(not current_platform.is_cuda(), reason="Only supported on NVIDIA platforms.")
@@ -306,11 +306,11 @@ def test_select_cuda_flashinfer_trtllm_backend(mock_is_supported_trtllm_monolith
 
 
 @patch(
-    "aphrodite.model_executor.layers.fused_moe.experts.trtllm_bf16_moe.TrtLlmBf16ExpertsMonolithic.is_supported_config",
+    "sonar.model_executor.layers.fused_moe.experts.trtllm_bf16_moe.TrtLlmBf16ExpertsMonolithic.is_supported_config",
     return_value=(False, "monolithic unsupported"),
 )
 @patch(
-    "aphrodite.model_executor.layers.fused_moe.experts.trtllm_bf16_moe.TrtLlmBf16ExpertsModular.is_supported_config",
+    "sonar.model_executor.layers.fused_moe.experts.trtllm_bf16_moe.TrtLlmBf16ExpertsModular.is_supported_config",
     return_value=(True, None),
 )
 @pytest.mark.skipif(not current_platform.is_cuda(), reason="Only supported on NVIDIA platforms.")
@@ -340,7 +340,7 @@ def test_select_cuda_flashinfer_trtllm_modular_backend(
 
 
 @patch(
-    "aphrodite.model_executor.layers.fused_moe.experts.trtllm_bf16_moe.TrtLlmBf16ExpertsBase._supports_current_device",
+    "sonar.model_executor.layers.fused_moe.experts.trtllm_bf16_moe.TrtLlmBf16ExpertsBase._supports_current_device",
     return_value=True,
 )
 @pytest.mark.parametrize(
@@ -382,7 +382,7 @@ def test_select_cuda_flashinfer_trtllm_modular_for_standard_all2all(
 
 
 @patch(
-    "aphrodite.model_executor.layers.fused_moe.experts.trtllm_bf16_moe.TrtLlmBf16ExpertsBase._supports_current_device",
+    "sonar.model_executor.layers.fused_moe.experts.trtllm_bf16_moe.TrtLlmBf16ExpertsBase._supports_current_device",
     return_value=True,
 )
 @pytest.mark.parametrize("require_decomposed_backend", [False, True])
@@ -391,10 +391,10 @@ def test_require_decomposed_backend_rejects_monolithic_kernels(
     require_decomposed_backend,
 ):
     """Expert substitution adjusts routes, so the kernel must not route itself."""
-    from aphrodite.model_executor.layers.fused_moe.experts.trtllm_bf16_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.trtllm_bf16_moe import (
         TrtLlmBf16ExpertsMonolithic,
     )
-    from aphrodite.model_executor.layers.fused_moe.modular_kernel import (
+    from sonar.model_executor.layers.fused_moe.modular_kernel import (
         FusedMoEActivationFormat,
     )
 
@@ -415,7 +415,7 @@ def test_require_decomposed_backend_rejects_monolithic_kernels(
 
 
 @patch(
-    "aphrodite.model_executor.layers.fused_moe.experts.trtllm_bf16_moe.TrtLlmBf16ExpertsBase._supports_current_device",
+    "sonar.model_executor.layers.fused_moe.experts.trtllm_bf16_moe.TrtLlmBf16ExpertsBase._supports_current_device",
     return_value=True,
 )
 def test_select_cuda_deepep_ht_falls_back_from_trtllm(
@@ -446,7 +446,7 @@ def test_select_cuda_deepep_ht_falls_back_from_trtllm(
 
 
 @patch(
-    "aphrodite.model_executor.layers.fused_moe.experts.trtllm_bf16_moe.TrtLlmBf16ExpertsBase._supports_current_device",
+    "sonar.model_executor.layers.fused_moe.experts.trtllm_bf16_moe.TrtLlmBf16ExpertsBase._supports_current_device",
     return_value=True,
 )
 @pytest.mark.parametrize(
@@ -485,19 +485,19 @@ def test_select_cuda_flashinfer_trtllm_ag_rs_uses_monolithic(
 
 
 @patch(
-    "aphrodite.utils.flashinfer.has_flashinfer",
+    "sonar.utils.flashinfer.has_flashinfer",
     return_value=True,
 )
 @patch(
-    "aphrodite.model_executor.layers.fused_moe.experts.trtllm_bf16_moe.TrtLlmBf16ExpertsMonolithic.is_supported_config",
+    "sonar.model_executor.layers.fused_moe.experts.trtllm_bf16_moe.TrtLlmBf16ExpertsMonolithic.is_supported_config",
     return_value=(False, None),
 )
 @patch(
-    "aphrodite.model_executor.layers.fused_moe.experts.trtllm_bf16_moe.TrtLlmBf16ExpertsModular.is_supported_config",
+    "sonar.model_executor.layers.fused_moe.experts.trtllm_bf16_moe.TrtLlmBf16ExpertsModular.is_supported_config",
     return_value=(False, None),
 )
 @patch(
-    "aphrodite.model_executor.layers.fused_moe.experts.flashinfer_cutlass_moe.FlashInferExperts.is_supported_config",
+    "sonar.model_executor.layers.fused_moe.experts.flashinfer_cutlass_moe.FlashInferExperts.is_supported_config",
     return_value=(True, None),
 )
 @pytest.mark.skipif(not current_platform.is_cuda(), reason="Only supported on NVIDIA platforms.")

@@ -9,10 +9,10 @@ from unittest import mock
 
 import pytest
 
-from aphrodite.platforms import CpuArchEnum
-from aphrodite.utils import cpu_resource_utils as cru
-from aphrodite.utils import ompmultiprocessing as omp
-from aphrodite.utils.mem_constants import GiB_bytes
+from sonar.platforms import CpuArchEnum
+from sonar.utils import cpu_resource_utils as cru
+from sonar.utils import ompmultiprocessing as omp
+from sonar.utils.mem_constants import GiB_bytes
 
 _V2_LIMIT_PATH = "/sys/fs/cgroup/memory.max"
 _V2_USAGE_PATH = "/sys/fs/cgroup/memory.current"
@@ -195,7 +195,7 @@ def six_numa_nodes(monkeypatch):
     monkeypatch.setattr(sys, "platform", "linux")
     monkeypatch.setattr(cru, "get_memory_affinity", lambda: [0, 1, 2, 3, 4, 5])
     monkeypatch.delenv(cru.DEVICE_CONTROL_ENV_VAR, raising=False)
-    monkeypatch.delenv("APHRODITE_CPU_SIM_MULTI_NUMA", raising=False)
+    monkeypatch.delenv("SONAR_CPU_SIM_MULTI_NUMA", raising=False)
 
 
 def test_visible_memory_node_uses_env_var(six_numa_nodes, monkeypatch):
@@ -220,7 +220,7 @@ def test_visible_memory_node_assigned_ids_are_limited_to_allowed_nodes(six_numa_
 
 
 def test_visible_memory_node_sim_multi_numa_ignores_assigned_ids(six_numa_nodes, monkeypatch):
-    monkeypatch.setenv("APHRODITE_CPU_SIM_MULTI_NUMA", "1")
+    monkeypatch.setenv("SONAR_CPU_SIM_MULTI_NUMA", "1")
     assert cru.get_visible_memory_node([2]) == [0, 1, 2, 3, 4, 5]
 
 
@@ -236,8 +236,8 @@ def test_omp_manager_binds_each_dp_rank_to_its_assigned_node(monkeypatch):
         "current_platform",
         SimpleNamespace(is_cpu=lambda: True, get_cpu_architecture=lambda: CpuArchEnum.X86),
     )
-    monkeypatch.setenv("APHRODITE_CPU_OMP_THREADS_BIND", "auto")
-    monkeypatch.delenv("APHRODITE_CPU_SIM_MULTI_NUMA", raising=False)
+    monkeypatch.setenv("SONAR_CPU_OMP_THREADS_BIND", "auto")
+    monkeypatch.delenv("SONAR_CPU_SIM_MULTI_NUMA", raising=False)
     monkeypatch.delenv(cru.DEVICE_CONTROL_ENV_VAR, raising=False)
 
     def cpu_ids(dp_rank: int) -> set[int]:

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Inference-only LLaVA-OneVision-2 (OV2) model for Aphrodite.
+"""Inference-only LLaVA-OneVision-2 (OV2) model for Sonar.
 
 Architecture notes:
 
@@ -51,53 +51,53 @@ from transformers.models.qwen2_vl import Qwen2VLImageProcessor
 from transformers.models.qwen2_vl.image_processing_qwen2_vl import smart_resize
 from typing_extensions import Buffer
 
-from aphrodite.compilation.decorators import (
+from sonar.compilation.decorators import (
     should_torch_compile_mm_encoder,
     support_torch_compile,
 )
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.multimodal import MultiModalDummyOptions
-from aphrodite.distributed import parallel_state
-from aphrodite.distributed import utils as dist_utils
-from aphrodite.inputs import ModalityData, MultiModalDataDict
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.attention import MMEncoderAttention
-from aphrodite.model_executor.layers.linear import (
+from sonar.config import SonarConfig
+from sonar.config.multimodal import MultiModalDummyOptions
+from sonar.distributed import parallel_state
+from sonar.distributed import utils as dist_utils
+from sonar.inputs import ModalityData, MultiModalDataDict
+from sonar.logger import init_logger
+from sonar.model_executor.layers.attention import MMEncoderAttention
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     QKVParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.models.interfaces import (
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.models.interfaces import (
     MultiModalEmbeddings,
     SupportsMultiModal,
     SupportsPP,
 )
-from aphrodite.model_executor.models.module_mapping import MultiModelKeys
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.models.module_mapping import MultiModelKeys
+from sonar.model_executor.models.utils import (
     AutoWeightsLoader,
     WeightsMapper,
-    init_aphrodite_registered_model,
+    init_sonar_registered_model,
     maybe_prefix,
 )
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.models.utils import (
     _merge_multimodal_embeddings as merge_multimodal_embeddings,
 )
-from aphrodite.model_executor.models.vision import get_vit_attn_backend
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import (
+from sonar.model_executor.models.vision import get_vit_attn_backend
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import (
     ImageItem,
     MultiModalFieldConfig,
     MultiModalKwargsItems,
 )
-from aphrodite.multimodal.parse import (
+from sonar.multimodal.parse import (
     DictEmbeddingItems,
     ImageSize,
     ModalityDataItems,
     MultiModalDataItems,
     MultiModalDataParser,
 )
-from aphrodite.multimodal.processing import (
+from sonar.multimodal.processing import (
     BaseMultiModalProcessor,
     BaseProcessingInfo,
     PromptReplacement,
@@ -105,18 +105,18 @@ from aphrodite.multimodal.processing import (
     PromptUpdateDetails,
     cached_encode,
 )
-from aphrodite.multimodal.processing.dummy_inputs import BaseDummyInputsBuilder
-from aphrodite.multimodal.video import (
+from sonar.multimodal.processing.dummy_inputs import BaseDummyInputsBuilder
+from sonar.multimodal.video import (
     VIDEO_LOADER_REGISTRY,
     VideoBackend,
     VideoSourceMetadata,
     VideoTargetMetadata,
 )
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.transformers_utils.processor import _merge_mm_kwargs
-from aphrodite.transformers_utils.repo_utils import hf_api
-from aphrodite.transformers_utils.utils import convert_model_repo_to_path
-from aphrodite.utils.tensor_schema import TensorSchema, TensorShape
+from sonar.sequence import IntermediateTensors
+from sonar.transformers_utils.processor import _merge_mm_kwargs
+from sonar.transformers_utils.repo_utils import hf_api
+from sonar.transformers_utils.utils import convert_model_repo_to_path
+from sonar.utils.tensor_schema import TensorSchema, TensorShape
 
 logger = init_logger(__name__)
 
@@ -208,14 +208,14 @@ def _pack_timestamps(per_video: list[list[float]]) -> torch.Tensor:
 def _validate_video_source(path: str, model_config) -> str:
     """Confine a codec video path to ``--allowed-local-media-path``.
 
-    The codec backend keeps the raw path string alive past Aphrodite's
+    The codec backend keeps the raw path string alive past Sonar's
     ``MultiModalDataParser`` and hands it to the trust-remote-code codec
     module, which opens it directly via ``cv2.VideoCapture`` / ffmpeg. That
     bypasses both ``MediaConnector``'s access controls and its redirect
-    handling (``APHRODITE_MEDIA_URL_ALLOW_REDIRECTS``), so we restrict the codec
+    handling (``SONAR_MEDIA_URL_ALLOW_REDIRECTS``), so we restrict the codec
     backend to **local files only**: remote ``http(s)`` / ``data`` URLs are
     rejected here and must instead go through the frame backend (a registered
-    ``VIDEO_LOADER_REGISTRY`` loader), which rides Aphrodite's connector and its
+    ``VIDEO_LOADER_REGISTRY`` loader), which rides Sonar's connector and its
     domain/redirect gates.
 
     Returns the *resolved* absolute path so the codec module opens exactly the
@@ -235,7 +235,7 @@ def _validate_video_source(path: str, model_config) -> str:
     if scheme in ("http", "https", "data"):
         raise ValueError(
             f"The codec video backend does not support remote {scheme!r} URLs: "
-            f"its trust-remote-code decoder fetches them outside Aphrodite's domain "
+            f"its trust-remote-code decoder fetches them outside Sonar's domain "
             f"and redirect controls. Use a local file path, or the frame "
             f"backend for remote videos."
         )
@@ -275,7 +275,7 @@ def _validate_video_sources(paths, model_config) -> list[str]:
 
 # Design note: the two video backends take deliberately different paths.
 #
-# * frame backend: a normal Aphrodite VIDEO_LOADER_REGISTRY loader
+# * frame backend: a normal Sonar VIDEO_LOADER_REGISTRY loader
 #   (``LlavaOnevision2VideoBackend`` below). Decoding to RGB
 #   ``(frames, metadata)`` is exactly what loaders are for, so frame sampling
 #   participates in the standard decode-stage pipeline.
@@ -293,7 +293,7 @@ _CODEC_VIDEO_MARKER = "ov2_codec_video"
 
 
 def prepare_codec_video_input(video_path: str) -> tuple:
-    """Wrap a video path for Aphrodite's MultiModalDataParser + OV2 codec backend.
+    """Wrap a video path for Sonar's MultiModalDataParser + OV2 codec backend.
 
     Returns ``(dummy_ndarray, metadata)`` where the ndarray satisfies the
     parser's 4-D shape check and the metadata carries the actual path to
@@ -314,7 +314,7 @@ def prepare_codec_video_input(video_path: str) -> tuple:
 
 
 def _extract_codec_video_paths(videos: Any) -> list[str] | None:
-    # Aphrodite's parser yields list-of-(ndarray, metadata-dict) for tuple inputs.
+    # Sonar's parser yields list-of-(ndarray, metadata-dict) for tuple inputs.
     # We accept either that shape or a single raw tuple (pre-parser cases).
     def _path_from(item):
         if isinstance(item, tuple) and len(item) == 2 and isinstance(item[1], dict) and _CODEC_VIDEO_MARKER in item[1]:
@@ -396,7 +396,7 @@ def _create_field_factory(
         image_embed_grid_sizes = image_pixel_grid_sizes // spatial_merge_size // spatial_merge_size
 
         video_grid_thw = hf_inputs.get("video_grid_thw", torch.empty((0, 3)))
-        # OV2 emits one grid_thw row per frame, so Aphrodite's per-video sharding
+        # OV2 emits one grid_thw row per frame, so Sonar's per-video sharding
         # requires explicit frame counts. video_patch_sizes sums H*W over the
         # frames that belong to each video; video_grid_thw uses the frame
         # count directly (one row per frame).
@@ -445,7 +445,7 @@ def _create_field_factory(
 # (decoded + sampled by the registered ``LlavaOnevision2VideoBackend``) and
 # feeds them to the HF processor through the *image* branch (per-frame timestamp
 # marker + ``<|image_pad|>``). This mirrors the validated lmms-eval
-# ``aphrodite_hf_chat`` adapter, and empirically scores higher on Video-MME than
+# ``sonar_hf_chat`` adapter, and empirically scores higher on Video-MME than
 # OV2's native VideoProcessor frame extractor.
 _DEFAULT_TIMESTAMP_DECIMALS = 1
 _DEFAULT_FPS = 1.0
@@ -454,7 +454,7 @@ _DEFAULT_MAX_FRAMES = 32
 # even. The hf-chat reference pads by repeating the last frame; same here.
 _TEMPORAL_MERGE_SIZE = 2
 
-# Token sequence emitted by the OV2 Aphrodite dummy inputs builder for each video
+# Token sequence emitted by the OV2 Sonar dummy inputs builder for each video
 # item. The frame backend expands each marker into per-frame image markers
 # (timestamp + image_pad block).
 _VIDEO_MARKER = "<|vision_start|><|video_pad|><|vision_end|>"
@@ -528,7 +528,7 @@ def _expand_video_markers_in_prompt(
 ) -> str:
     """Replace each ``<|vision_start|><|video_pad|><|vision_end|>`` with a
     sequence of ``<{t:.Nf} seconds><|vision_start|><|image_pad|><|vision_end|>``
-    blocks -- one per frame -- matching ``aphrodite_hf_chat._build_prompt``.
+    blocks -- one per frame -- matching ``sonar_hf_chat._build_prompt``.
 
     Replacement is positional: the *i*-th marker consumes
     ``per_video_timestamps[i]``.
@@ -559,16 +559,16 @@ def _expand_video_markers_in_prompt(
 # ---------------------------------------------------------------------------
 # Registered video loader backend (frame sampling)
 # ---------------------------------------------------------------------------
-# OV2 frame-sampling policy, expressed as a Aphrodite ``VideoBackend`` so videos
+# OV2 frame-sampling policy, expressed as a Sonar ``VideoBackend`` so videos
 # entering through the standard ``video_url`` -> MediaConnector -> VideoMediaIO
-# path are decoded + sampled inside Aphrodite (no qwen_vl_utils dependency, and the
+# path are decoded + sampled inside Sonar (no qwen_vl_utils dependency, and the
 # connector's SSRF / local-file gates apply automatically).
 #
 # Parity note: ``compute_frames_index_to_sample`` replicates
 # ``qwen_vl_utils.smart_nframes`` (the policy the OV2 hf-chat recipe validated)
 # -- frame count and index selection are byte-identical to qwen. The one
 # residual difference is the source frame *count*: qwen decodes via decord
-# whereas Aphrodite uses OpenCV/PyAV, whose ``CAP_PROP_FRAME_COUNT`` (a duration x
+# whereas Sonar uses OpenCV/PyAV, whose ``CAP_PROP_FRAME_COUNT`` (a duration x
 # fps estimate) can differ by +/-1 frame on some containers, shifting sampled
 # indices by one frame on those files. Downstream metrics stay within noise.
 _OV2_FRAME_FACTOR = 2
@@ -1510,7 +1510,7 @@ class LlavaOnevision2MultiModalProcessor(BaseMultiModalProcessor[LlavaOnevision2
         is_codec_marker = codec_video_paths is not None
         # Fallback: caller passed video_backend=codec via mm_processor_kwargs
         # without wrapping paths through prepare_codec_video_input (e.g.
-        # lmms-eval's chat/aphrodite.py ov2_path_video=True). Recover the path
+        # lmms-eval's chat/sonar.py ov2_path_video=True). Recover the path
         # strings directly from mm_data["videos"] so the codec rename
         # branch still fires and video-modality fields get populated.
         is_codec_kwarg = not is_codec_marker and videos_present and call_kwargs.get("video_backend") == "codec"
@@ -1558,7 +1558,7 @@ class LlavaOnevision2MultiModalProcessor(BaseMultiModalProcessor[LlavaOnevision2
         # profiling. We materialise the frames as PIL images + per-frame
         # timestamp markers and feed them through the HF processor's *image*
         # branch (smart_resize + patchify), then re-tag the image-series outputs
-        # as video-series so Aphrodite's ``<|video_pad|>`` placeholder replacement
+        # as video-series so Sonar's ``<|video_pad|>`` placeholder replacement
         # finds them. Sampling parity with the original qwen_vl_utils policy is
         # provided by the backend's ``compute_frames_index_to_sample``; SSRF /
         # local-file gating is enforced by the connector before decoding.
@@ -1715,7 +1715,7 @@ class LlavaOnevision2MultiModalProcessor(BaseMultiModalProcessor[LlavaOnevision2
         codec_video_paths: list[str],
         hf_processor,
     ) -> dict:
-        # Codec branch emits image-series keys; Aphrodite expects video-series.
+        # Codec branch emits image-series keys; Sonar expects video-series.
         # Timestamps are NOT synthesized here: the codec format packs multiple
         # source-frame timestamps into one canvas, so a per-canvas list is
         # ill-defined. We ship per-video fps and let get_video_replacement
@@ -1744,7 +1744,7 @@ class LlavaOnevision2MultiModalProcessor(BaseMultiModalProcessor[LlavaOnevision2
 
         data["video_num_frames"] = torch.tensor(per_video_canvas_counts, dtype=torch.long)
         data["video_is_codec"] = torch.ones((len(per_video_canvas_counts),), dtype=torch.long)
-        # Stored as scaled int64 (fps * 1e9 rounded) because Aphrodite casts
+        # Stored as scaled int64 (fps * 1e9 rounded) because Sonar casts
         # all float MM fields to model dtype (bfloat16), which rounds
         # 29.97003 fps to 30.0 and shifts every timestamp tag by ~0.1s.
         # Integer storage round-trips losslessly through the field-config
@@ -1871,9 +1871,9 @@ class LlavaOnevision2MultiModalProcessor(BaseMultiModalProcessor[LlavaOnevision2
     dummy_inputs=LlavaOnevision2DummyInputsBuilder,
 )
 class LlavaOnevision2ForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsPP):
-    """Aphrodite-side OV2 top-level model.
+    """Sonar-side OV2 top-level model.
 
-    Weight name rewriting (HF checkpoint → Aphrodite module tree):
+    Weight name rewriting (HF checkpoint → Sonar module tree):
       Prefix rewrites only (longest match wins). Vision tower attribute names
       mirror HF names verbatim, so no substring rules are needed. Substring
       rules would otherwise collide with the Qwen3 text-path ``self_attn``
@@ -1884,7 +1884,7 @@ class LlavaOnevision2ForConditionalGeneration(nn.Module, SupportsMultiModal, Sup
         ``model.`` (fallback)            → ``language_model.model.``
     """
 
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={
             "model.language_model.": "language_model.model.",
             "model.visual.": "visual.",
@@ -1901,10 +1901,10 @@ class LlavaOnevision2ForConditionalGeneration(nn.Module, SupportsMultiModal, Sup
             return "<|vision_start|><|video_pad|><|vision_end|>"
         raise ValueError("Only image or video modality is supported")
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        multimodal_config = aphrodite_config.model_config.multimodal_config
+        config = sonar_config.model_config.hf_config
+        multimodal_config = sonar_config.model_config.multimodal_config
 
         self.config = config
         self.multimodal_config = multimodal_config
@@ -1914,7 +1914,7 @@ class LlavaOnevision2ForConditionalGeneration(nn.Module, SupportsMultiModal, Sup
         # ``self.visual``). When both modalities are disabled via
         # ``--limit-mm-per-prompt`` the marker turns the tower into a skipped
         # placeholder whose weights are dropped automatically by the loader.
-        with self._mark_tower_model(aphrodite_config, {"image", "video"}):
+        with self._mark_tower_model(sonar_config, {"image", "video"}):
             self.visual = LlavaOnevision2VisionTower(
                 config.vision_config,
                 text_hidden_size=config.text_config.hidden_size,
@@ -1927,8 +1927,8 @@ class LlavaOnevision2ForConditionalGeneration(nn.Module, SupportsMultiModal, Sup
         # LlavaOnevision2Config keeps text/vision configs nested (unlike OV1.5
         # which promoted text fields), so explicitly hand text_config to the
         # Qwen3 init path or qwen3.py will hit AttributeError on vocab_size.
-        self.language_model = init_aphrodite_registered_model(
-            aphrodite_config=aphrodite_config,
+        self.language_model = init_sonar_registered_model(
+            sonar_config=sonar_config,
             hf_config=config.text_config,
             prefix=maybe_prefix(prefix, "language_model"),
             architectures=["Qwen3ForCausalLM"],
@@ -2127,7 +2127,7 @@ class LlavaOnevision2ForConditionalGeneration(nn.Module, SupportsMultiModal, Sup
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
     def get_mm_mapping(self) -> MultiModelKeys:
         return MultiModelKeys.from_string_field(

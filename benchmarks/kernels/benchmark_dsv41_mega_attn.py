@@ -32,20 +32,20 @@ import argparse
 
 import torch
 
-import aphrodite.v1.attention.ops.flashmla as fm
-from aphrodite.models.deepseek_v4.common.ops.fused_inv_rope_fp8_quant import (
+import sonar.v1.attention.ops.flashmla as fm
+from sonar.models.deepseek_v4.common.ops.fused_inv_rope_fp8_quant import (
     fused_inv_rope_fp8_quant,
 )
-from aphrodite.models.deepseek_v41.common.ops import quantize_and_insert_k_cache
-from aphrodite.models.deepseek_v41.common.ops.fused_compress_quant_cache import (
+from sonar.models.deepseek_v41.common.ops import quantize_and_insert_k_cache
+from sonar.models.deepseek_v41.common.ops.fused_compress_quant_cache import (
     rope_quant_insert,
 )
-from aphrodite.models.deepseek_v41.common.ops.fused_layout import permute_q_to_fused
-from aphrodite.models.deepseek_v41.nvidia.flash_mla_mega_attn import (
+from sonar.models.deepseek_v41.common.ops.fused_layout import permute_q_to_fused
+from sonar.models.deepseek_v41.nvidia.flash_mla_mega_attn import (
     alloc_mega_attn_output,
     is_flashmla_mega_attn_supported,
 )
-from aphrodite.utils.math_utils import round_up
+from sonar.utils.math_utils import round_up
 
 HEAD_DIM, ROPE_DIM = 512, 64
 V41_BYTES, V41_FP4_BYTES = 528, 288

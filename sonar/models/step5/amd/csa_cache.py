@@ -8,26 +8,26 @@ from typing import ClassVar
 
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.cache import CacheDType
-from aphrodite.models.step5.common.config import get_step5_sparse_config
-from aphrodite.models.step5.common.ops.prefill_indexer_metadata import (
+from sonar.config import SonarConfig
+from sonar.config.cache import CacheDType
+from sonar.models.step5.common.config import get_step5_sparse_config
+from sonar.models.step5.common.ops.prefill_indexer_metadata import (
     PrefillIndexerMetadata,
     prepare_prefill_indexer,
 )
-from aphrodite.models.step5.common.ops.summary_update import build_prefill_groups
-from aphrodite.models.step5.common.sparse_summary_cache import (
+from sonar.models.step5.common.ops.summary_update import build_prefill_groups
+from sonar.models.step5.common.sparse_summary_cache import (
     Step5SparseSummaryCacheLayer,
 )
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.v1.attention.backend import (
+from sonar.utils.math_utils import cdiv
+from sonar.v1.attention.backend import (
     AttentionBackend,
     AttentionCGSupport,
     AttentionMetadata,
     AttentionMetadataBuilder,
     CommonAttentionMetadata,
 )
-from aphrodite.v1.kv_cache_interface import AttentionSpec
+from sonar.v1.kv_cache_interface import AttentionSpec
 
 
 @dataclass
@@ -56,19 +56,19 @@ class Step5CSAMetadataBuilder(AttentionMetadataBuilder[Step5CSAMetadata]):
         self,
         kv_cache_spec: AttentionSpec,
         layer_names: list[str],
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
     ) -> None:
-        super().__init__(kv_cache_spec, layer_names, aphrodite_config, device)
-        sparse = get_step5_sparse_config(aphrodite_config.model_config.hf_text_config)
+        super().__init__(kv_cache_spec, layer_names, sonar_config, device)
+        sparse = get_step5_sparse_config(sonar_config.model_config.hf_text_config)
         assert sparse is not None
         self.region_size = sparse.region_block_size
         self.topk = sparse.topk
-        spec = aphrodite_config.speculative_config
+        spec = sonar_config.speculative_config
         self.max_uniform_query_len = 1 + (spec.num_speculative_tokens if spec is not None else 0)
         self.num_sms = torch.cuda.get_device_properties(device).multi_processor_count
         self.token_req_buffer = torch.empty(
-            aphrodite_config.scheduler_config.max_num_batched_tokens,
+            sonar_config.scheduler_config.max_num_batched_tokens,
             dtype=torch.int32,
             device=device,
         )

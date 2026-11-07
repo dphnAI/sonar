@@ -20,21 +20,21 @@ import torch
 from torch import nn
 from transformers import Qwen4ExpTextConfig
 
-from aphrodite import envs
-from aphrodite.config import AphroditeConfig, replace, set_current_aphrodite_config
-from aphrodite.distributed import get_pp_group
-from aphrodite.forward_context import get_forward_context, is_forward_context_available
-from aphrodite.model_executor.layers.layernorm import GemmaRMSNorm
-from aphrodite.model_executor.layers.linear import ColumnParallelLinear
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar import envs
+from sonar.config import SonarConfig, replace, set_current_sonar_config
+from sonar.distributed import get_pp_group
+from sonar.forward_context import get_forward_context, is_forward_context_available
+from sonar.model_executor.layers.layernorm import GemmaRMSNorm
+from sonar.model_executor.layers.linear import ColumnParallelLinear
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.model_loader.utils import configure_quant_config
-from aphrodite.model_executor.models.interfaces import SupportsHCSP, SupportsPP
-from aphrodite.model_executor.models.qwen3_5 import Qwen3_5Model
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.model_loader.utils import configure_quant_config
+from sonar.model_executor.models.interfaces import SupportsHCSP, SupportsPP
+from sonar.model_executor.models.qwen3_5 import Qwen3_5Model
+from sonar.model_executor.models.utils import (
     AutoWeightsLoader,
     PPMissingLayer,
     WeightsMapper,
@@ -44,12 +44,12 @@ from aphrodite.model_executor.models.utils import (
     maybe_fuse_shared_experts,
     maybe_prefix,
 )
-from aphrodite.models.common.ops.sequence_parallel import (
+from sonar.models.common.ops.sequence_parallel import (
     sp_all_gather,
     sp_padding_mask,
     sp_shard,
 )
-from aphrodite.sequence import IntermediateTensors
+from sonar.sequence import IntermediateTensors
 
 from ..common.hyperconnection import is_hc_sequence_parallel_enabled
 from .hyperconnection import GatedResidual, HyperConnectionConfig
@@ -121,16 +121,16 @@ def _remap_mtp_weight_name(name: str) -> str | None:
     return None
 
 
-def _make_draft_aphrodite_config(
-    aphrodite_config: AphroditeConfig,
+def _make_draft_sonar_config(
+    sonar_config: SonarConfig,
     mtp_start_layer_idx: int,
-) -> AphroditeConfig:
-    """Ensure that the draft model config is set in the Aphrodite config."""
-    speculative_config = aphrodite_config.speculative_config
+) -> SonarConfig:
+    """Ensure that the draft model config is set in the Sonar config."""
+    speculative_config = sonar_config.speculative_config
     if speculative_config is None or speculative_config.draft_model_config is None:
         raise ValueError("speculative_config.draft_model_config must be set")
 
-    draft_quant_config = get_draft_quant_config(aphrodite_config)
+    draft_quant_config = get_draft_quant_config(sonar_config)
 
     # inject packed and ignored modules to the quantization config of draft model
     if draft_quant_config is not None:
@@ -157,29 +157,29 @@ def _make_draft_aphrodite_config(
                 _remap_quantized_layers(quantized_layers, mtp_start_layer_idx),
             )
 
-    draft_aphrodite_config = replace(
-        aphrodite_config,
+    draft_sonar_config = replace(
+        sonar_config,
         model_config=speculative_config.draft_model_config,
     )
-    # AphroditeConfig post-init derives the target quant config, so restore the
+    # SonarConfig post-init derives the target quant config, so restore the
     # independently resolved draft quant config after replacement.
-    draft_aphrodite_config.quant_config = draft_quant_config
-    return draft_aphrodite_config
+    draft_sonar_config.quant_config = draft_quant_config
+    return draft_sonar_config
 
 
 class Qwen4ExpMultiTokenPredictor(nn.Module):
-    hf_to_aphrodite_mapper = Qwen3_5Model.hf_to_aphrodite_mapper | _EXTRA_WEIGHTS_MAPPER
+    hf_to_sonar_mapper = Qwen3_5Model.hf_to_sonar_mapper | _EXTRA_WEIGHTS_MAPPER
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__()
 
-        model_config = aphrodite_config.model_config
+        model_config = sonar_config.model_config
         config: Qwen4ExpTextConfig = model_config.hf_text_config
 
         self.config = config
         # MoE SP also enables HC SP, while HC SP can be enabled independently.
-        self.use_hc_sequence_parallel = is_hc_sequence_parallel_enabled(aphrodite_config)
-        self.use_sequence_parallel = aphrodite_config.parallel_config.use_sequence_parallel_moe
+        self.use_hc_sequence_parallel = is_hc_sequence_parallel_enabled(sonar_config)
+        self.use_sequence_parallel = sonar_config.parallel_config.use_sequence_parallel_moe
         self.vocab_size = config.vocab_size
 
         self.mtp_start_layer_idx = config.num_hidden_layers
@@ -189,11 +189,11 @@ class Qwen4ExpMultiTokenPredictor(nn.Module):
         self.hc_count = config.hc_count
 
         self.embed_tokens = VocabParallelEmbedding(self.vocab_size, self.hidden_size)
-        draft_aphrodite_config = _make_draft_aphrodite_config(
-            aphrodite_config,
+        draft_sonar_config = _make_draft_sonar_config(
+            sonar_config,
             self.mtp_start_layer_idx,
         )
-        with set_current_aphrodite_config(draft_aphrodite_config, prefix=prefix):
+        with set_current_sonar_config(draft_sonar_config, prefix=prefix):
             # residual_linear_shared fusion: fc_embedding projects the token
             # embedding, fc_hidden (shared across HC branches) projects the
             # backbone hidden; the embedding is added as a residual to every
@@ -204,7 +204,7 @@ class Qwen4ExpMultiTokenPredictor(nn.Module):
                 gather_output=True,
                 bias=False,
                 return_bias=False,
-                quant_config=draft_aphrodite_config.quant_config,
+                quant_config=draft_sonar_config.quant_config,
                 prefix=f"{prefix}.fc_embedding",
             )
             self.fc_hidden = ColumnParallelLinear(
@@ -213,12 +213,12 @@ class Qwen4ExpMultiTokenPredictor(nn.Module):
                 gather_output=True,
                 bias=False,
                 return_bias=False,
-                quant_config=draft_aphrodite_config.quant_config,
+                quant_config=draft_sonar_config.quant_config,
                 prefix=f"{prefix}.fc_hidden",
             )
             self.layers = nn.ModuleList(
                 Qwen4ExpDecoderLayer(
-                    draft_aphrodite_config,
+                    draft_sonar_config,
                     layer_type="qwen_sparse_attention",
                     prefix=f"{prefix}.layers.{self.mtp_start_layer_idx + idx}",
                 )
@@ -227,7 +227,7 @@ class Qwen4ExpMultiTokenPredictor(nn.Module):
         self.fused_shared_expert_layers = get_fused_shared_expert_layers(
             self,
             Qwen4ExpSparseMoeBlock,
-            enable_eplb=aphrodite_config.parallel_config.enable_eplb,
+            enable_eplb=sonar_config.parallel_config.enable_eplb,
         )
 
         self.pre_fc_norm_embedding = GemmaRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
@@ -316,7 +316,7 @@ class Qwen4ExpMultiTokenPredictor(nn.Module):
         if self.use_hc_sequence_parallel:
             # SP requires PP=1, so the first-rank branch sets prev_block_output.
             assert prev_block_output is not None
-            if self.use_sequence_parallel and envs.APHRODITE_MOE_SKIP_PADDING and is_forward_context_available():
+            if self.use_sequence_parallel and envs.SONAR_MOE_SKIP_PADDING and is_forward_context_available():
                 forward_context = get_forward_context()
                 forward_context.is_padding = sp_padding_mask(forward_context.is_padding, hidden_states)
             hidden_states = sp_shard(hidden_states)
@@ -364,7 +364,7 @@ class Qwen4ExpMultiTokenPredictor(nn.Module):
             n_shared_experts=1,
             ckpt_prefix="mlp.shared_expert",
         )
-        mapper = self.hf_to_aphrodite_mapper | WeightsMapper(
+        mapper = self.hf_to_sonar_mapper | WeightsMapper(
             orig_to_new_substr={"hyper_connection_mixer.block_inject_weight": None}
         )
         loader = AutoWeightsLoader(
@@ -387,15 +387,15 @@ class Qwen4ExpMTP(nn.Module, SupportsHCSP, SupportsPP, Qwen4ExpMixtureOfExperts)
         ],
     }
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
-        config: Qwen4ExpTextConfig = aphrodite_config.model_config.hf_text_config
-        self.aphrodite_config = aphrodite_config
-        self.quant_config = aphrodite_config.quant_config
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
+        config: Qwen4ExpTextConfig = sonar_config.model_config.hf_text_config
+        self.sonar_config = sonar_config
+        self.quant_config = sonar_config.quant_config
 
         super().__init__()
         self.config = config
         self.model = Qwen4ExpMultiTokenPredictor(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             prefix=maybe_prefix(prefix, "mtp"),
         )
 
@@ -414,7 +414,7 @@ class Qwen4ExpMTP(nn.Module, SupportsHCSP, SupportsPP, Qwen4ExpMixtureOfExperts)
         self.logits_processor = LogitsProcessor(config.vocab_size)
         self.make_empty_intermediate_tensors = self.model.make_empty_intermediate_tensors
         self.set_moe_parameters(self.model.layers)
-        enable_qwen4_exp_low_latency_gemm(self, aphrodite_config.model_config.dtype)
+        enable_qwen4_exp_low_latency_gemm(self, sonar_config.model_config.dtype)
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.model.embed_input_ids(input_ids)

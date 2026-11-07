@@ -4,9 +4,9 @@
 import numpy as np
 import torch
 
-from aphrodite.triton_utils import tl, triton
-from aphrodite.v1.phrase_guard.matcher import MAX_RETRIES
-from aphrodite.v1.worker.gpu.buffer_utils import StagedWriteTensor, UvaBackedTensor
+from sonar.triton_utils import tl, triton
+from sonar.v1.phrase_guard.matcher import MAX_RETRIES
+from sonar.v1.worker.gpu.buffer_utils import StagedWriteTensor, UvaBackedTensor
 
 
 class RetryMask:

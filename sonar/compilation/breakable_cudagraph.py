@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Breakable CUDA graph capture/replay.
 
-This is an alternative to :class:`CUDAGraphWrapper` that replaces Aphrodite's
+This is an alternative to :class:`CUDAGraphWrapper` that replaces Sonar's
 torch.compile-based FX graph splitting with runtime stream-capture
 breaks.
 
@@ -33,26 +33,26 @@ from typing import Any, ClassVar, TypeVar
 
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.compilation.cudagraph_pool import capture_pool
-from aphrodite.compilation.monitor import validate_cudagraph_capturing_enabled
-from aphrodite.config import AphroditeConfig, CUDAGraphMode
-from aphrodite.forward_context import (
+import sonar.envs as envs
+from sonar.compilation.cudagraph_pool import capture_pool
+from sonar.compilation.monitor import validate_cudagraph_capturing_enabled
+from sonar.config import CUDAGraphMode, SonarConfig
+from sonar.forward_context import (
     BatchDescriptor,
     get_forward_context,
     is_forward_context_available,
 )
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fusion.quant_activation import QuantizedActivation
-from aphrodite.model_executor.offloader.base import get_offloader
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import weak_ref_tensor, weak_ref_tensors
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fusion.quant_activation import QuantizedActivation
+from sonar.model_executor.offloader.base import get_offloader
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import weak_ref_tensor, weak_ref_tensors
 
 logger = init_logger(__name__)
 
 
 def is_breakable_cudagraph_enabled() -> bool:
-    return bool(envs.APHRODITE_USE_BREAKABLE_CUDAGRAPH)
+    return bool(envs.SONAR_USE_BREAKABLE_CUDAGRAPH)
 
 
 F = TypeVar("F", bound=Callable[..., Any])
@@ -268,7 +268,7 @@ class BreakableCUDAGraphWrapper:
     def __init__(
         self,
         runnable: Callable[..., Any],
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         runtime_mode: CUDAGraphMode | None = None,
         key_fn: Callable[..., Hashable] | None = None,
     ) -> None:
@@ -276,10 +276,10 @@ class BreakableCUDAGraphWrapper:
         # are keyed by BatchDescriptor, which already encodes batch
         # shape / uniformity.
         self.runnable = runnable
-        self.aphrodite_config = aphrodite_config
+        self.sonar_config = sonar_config
         self.runtime_mode = runtime_mode
         self.key_fn = key_fn
-        self.compilation_config = aphrodite_config.compilation_config
+        self.compilation_config = sonar_config.compilation_config
         self.graph_pool = current_platform.get_global_graph_pool()
         self.is_debugging_mode = logger.isEnabledFor(logging.DEBUG)
 
@@ -288,7 +288,7 @@ class BreakableCUDAGraphWrapper:
 
         logger.info_once("Breakable CUDA graph enabled")
 
-    # --- aphrodite-style attribute forwarding ---------------------------------
+    # --- sonar-style attribute forwarding ---------------------------------
 
     def __getattr__(self, key: str) -> Any:
         runnable = self.__dict__.get("runnable")
@@ -348,7 +348,7 @@ class BreakableCUDAGraphWrapper:
         stable order (positionals first, then kwargs in insertion order).
 
         Used for the DEBUG-mode address-stability check; covers both call
-        styles since Aphrodite models are typically invoked with kwargs.
+        styles since Sonar models are typically invoked with kwargs.
         """
         addrs = [x.data_ptr() for x in args if isinstance(x, torch.Tensor)]
         addrs.extend(v.data_ptr() for v in kwargs.values() if isinstance(v, torch.Tensor))
@@ -376,7 +376,7 @@ class BreakableCUDAGraphWrapper:
         get_offloader().sync_prev_onload()
 
         with (
-            capture_pool(self.graph_pool, self.aphrodite_config) as pool,
+            capture_pool(self.graph_pool, self.sonar_config) as pool,
             BreakableCUDAGraphCapture(pool=pool) as capture,
         ):
             output = self.runnable(*args, **kwargs)

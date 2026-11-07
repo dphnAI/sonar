@@ -9,32 +9,32 @@ import torch
 from torch import nn
 from transformers import GraniteMoeHybridConfig
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, CacheConfig, ModelConfig
-from aphrodite.distributed import get_tensor_model_parallel_world_size
-from aphrodite.distributed.parallel_state import get_pp_group
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import QKVParallelLinear, RowParallelLinear
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.mamba.mamba_mixer2 import MambaMixer2
-from aphrodite.model_executor.layers.mamba.mamba_utils import (
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import CacheConfig, ModelConfig, SonarConfig
+from sonar.distributed import get_tensor_model_parallel_world_size
+from sonar.distributed.parallel_state import get_pp_group
+from sonar.model_executor.layers.attention import Attention
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import QKVParallelLinear, RowParallelLinear
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.mamba.mamba_mixer2 import MambaMixer2
+from sonar.model_executor.layers.mamba.mamba_utils import (
     MambaStateCopyFunc,
     MambaStateCopyFuncCalculator,
     MambaStateDtypeCalculator,
     MambaStateShapeCalculator,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.model_loader.weight_utils import (
+from sonar.model_executor.model_loader.weight_utils import (
     default_weight_loader,
     maybe_remap_moe_expert_param_name,
 )
-from aphrodite.sequence import IntermediateTensors
+from sonar.sequence import IntermediateTensors
 
 from .granitemoe import GraniteMoeMoE
 from .granitemoeshared import GraniteMoeSharedMLP
@@ -318,13 +318,13 @@ ALL_DECODER_LAYER_TYPES = {
 
 @support_torch_compile
 class GraniteMoeHybridModel(nn.Module):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_config
-        model_config = aphrodite_config.model_config
-        cache_config = aphrodite_config.cache_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        model_config = sonar_config.model_config
+        cache_config = sonar_config.cache_config
+        quant_config = sonar_config.quant_config
 
         self.config = config
         self.quant_config = quant_config
@@ -499,7 +499,7 @@ class GraniteMoeHybridModel(nn.Module):
             # Logic analogous to: https://github.com/vllm-project/vllm/blob/f49e5aff11c986ed4d45202b1716c5d74786efa9/vllm/model_executor/models/granitemoeshared.py#L215
             # Mapping different experts' layout:
             #  from HF (input_linear, output_linear, router)
-            #  to Aphrodite (experts_w13({e}.w1, {e}.w2), experts_w3({e}.w3), gate)
+            #  to Sonar (experts_w13({e}.w1, {e}.w2), experts_w3({e}.w3), gate)
             # The renaming and parameter loading logic is the same for weight
             # and weight_scale tensors so we can reuse them without issues.
             if n.endswith(".block_sparse_moe.input_linear.weight") or n.endswith(
@@ -589,23 +589,23 @@ class GraniteMoeHybridForCausalLM(
     @classmethod
     def get_mamba_state_dtype_from_config(
         cls,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
     ) -> tuple[torch.dtype, torch.dtype]:
         return MambaStateDtypeCalculator.mamba2_state_dtype(
-            aphrodite_config.model_config.dtype,
-            aphrodite_config.cache_config.mamba_cache_dtype,
-            aphrodite_config.cache_config.mamba_ssm_cache_dtype,
+            sonar_config.model_config.dtype,
+            sonar_config.cache_config.mamba_cache_dtype,
+            sonar_config.cache_config.mamba_ssm_cache_dtype,
         )
 
     @classmethod
     def get_mamba_state_shape_from_config(
         cls,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
     ) -> tuple[tuple[int, int], tuple[int, int, int]]:
         """Calculate shapes for Mamba's convolutional and state caches.
 
         Args:
-            aphrodite_config: Aphrodite config
+            sonar_config: Sonar config
 
         Returns:
             Tuple containing:
@@ -613,8 +613,8 @@ class GraniteMoeHybridForCausalLM(
             - temporal_state_shape: Shape for state space model cache
 
         """
-        parallel_config = aphrodite_config.parallel_config
-        hf_config = aphrodite_config.model_config.hf_config
+        parallel_config = sonar_config.parallel_config
+        hf_config = sonar_config.model_config.hf_config
         intermediate_size = hf_config.mamba_expand * hf_config.hidden_size
 
         return MambaStateShapeCalculator.mamba2_state_shape(
@@ -625,25 +625,25 @@ class GraniteMoeHybridForCausalLM(
             head_dim=hf_config.mamba_d_head,
             state_size=hf_config.mamba_d_state,
             conv_kernel=hf_config.mamba_d_conv,
-            num_spec=aphrodite_config.num_speculative_tokens,
+            num_spec=sonar_config.num_speculative_tokens,
         )
 
     @classmethod
     def get_mamba_state_copy_func(cls) -> tuple[MambaStateCopyFunc, MambaStateCopyFunc]:
         return MambaStateCopyFuncCalculator.mamba2_state_copy_func()
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_config
-        self.aphrodite_config = aphrodite_config
-        self.model_config = aphrodite_config.model_config
+        config = sonar_config.model_config.hf_config
+        self.sonar_config = sonar_config
+        self.model_config = sonar_config.model_config
 
-        scheduler_config = aphrodite_config.scheduler_config
-        self.quant_config = aphrodite_config.quant_config
+        scheduler_config = sonar_config.scheduler_config
+        self.quant_config = sonar_config.quant_config
         self.config = config
         self.scheduler_config = scheduler_config
-        self.model = GraniteMoeHybridModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = GraniteMoeHybridModel(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
 
         self.lm_head = ParallelLMHead(
             config.vocab_size,

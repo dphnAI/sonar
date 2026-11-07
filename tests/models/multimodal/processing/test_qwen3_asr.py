@@ -8,11 +8,11 @@ import torch
 from transformers.feature_extraction_utils import BatchFeature
 from transformers.models.qwen3_asr import Qwen3ASRProcessor
 
-from aphrodite.config import ModelConfig
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.cache import MultiModalProcessorOnlyCache
-from aphrodite.multimodal.inputs import batched_tensors_equal
-from aphrodite.transformers_utils.processor import cached_processor_from_config
+from sonar.config import ModelConfig
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.cache import MultiModalProcessorOnlyCache
+from sonar.multimodal.inputs import batched_tensors_equal
+from sonar.transformers_utils.processor import cached_processor_from_config
 
 from .test_common import _assert_inputs_equal
 

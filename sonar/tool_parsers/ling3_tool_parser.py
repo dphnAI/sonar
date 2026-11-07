@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from aphrodite.parser.ling3 import Ling3ParserToolAdapter
+from sonar.parser.ling3 import Ling3ParserToolAdapter
 
 
 class Ling3ToolParser(Ling3ParserToolAdapter):  # type: ignore[valid-type, misc]

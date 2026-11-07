@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-//! Reasoning parser registration and selection boundary for `aphrodite-chat`.
+//! Reasoning parser registration and selection boundary for `sonar-chat`.
 
 use std::sync::{Arc, LazyLock};
 
-pub use aphrodite_parser::reasoning::{
+pub use sonar_parser::reasoning::{
     CohereCmdReasoningParser, DeepSeekR1ReasoningParser, DeepSeekV3ReasoningParser,
     DeepSeekV4ReasoningParser, DeepSeekV41ReasoningParser, Glm45ReasoningParser,
     Glm47ReasoningParser, KimiK2ReasoningParser, KimiReasoningParser, MiMoReasoningParser,
@@ -13,7 +13,7 @@ pub use aphrodite_parser::reasoning::{
     Qwen3ReasoningParser, ReasoningDelta, ReasoningError, ReasoningParser, SeedOssReasoningParser,
     Step3ReasoningParser, Step3p5ReasoningParser,
 };
-use aphrodite_tokenizer::DynTokenizer;
+use sonar_tokenizer::DynTokenizer;
 
 use crate::parser::ParserFactory;
 
@@ -41,9 +41,7 @@ pub mod names {
 
 /// Constructor signature for one registered reasoning parser implementation.
 type ReasoningParserCreator = Arc<
-    dyn Fn(DynTokenizer) -> aphrodite_parser::reasoning::Result<Box<dyn ReasoningParser>>
-        + Send
-        + Sync,
+    dyn Fn(DynTokenizer) -> sonar_parser::reasoning::Result<Box<dyn ReasoningParser>> + Send + Sync,
 >;
 
 /// Registry and model matcher for reasoning parsers.

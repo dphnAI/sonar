@@ -17,7 +17,7 @@ from aiter.ops.flydsl.kernels import buffer_ops as bo
 from flydsl.expr import range_constexpr, rocdl
 from flydsl.expr.typing import T
 
-from aphrodite.models.deepseek_v41.amd.mono.common.ops import CM_NT, mfma_bf16, rsrc
+from sonar.models.deepseek_v41.amd.mono.common.ops import CM_NT, mfma_bf16, rsrc
 
 STEP = 128  # K a lane group covers in one 16-byte weight load
 STEP_DWORDS = 256  # a 16-row group's dwords per step

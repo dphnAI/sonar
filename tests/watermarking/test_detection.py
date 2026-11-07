@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-from aphrodite.v1.watermarking import GumbelWatermarkDetector
+from sonar.v1.watermarking import GumbelWatermarkDetector
 
 _NON_WATERMARKED_TOKEN_IDS = list(range(64))
 _WATERMARKED_TOKEN_IDS = [

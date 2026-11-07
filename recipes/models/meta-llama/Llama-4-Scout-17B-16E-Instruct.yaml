@@ -83,7 +83,7 @@ variants:
       - "--kv-cache-dtype"
       - "fp8"
     extra_env:
-      APHRODITE_USE_FLASHINFER_MOE_FP4: "1"
+      SONAR_USE_FLASHINFER_MOE_FP4: "1"
 
   redhat_fp8_block:
     model_id: "RedHatAI/Llama-4-Scout-17B-16E-Instruct-FP8-block"
@@ -136,7 +136,7 @@ hardware_overrides:
       - "--max-model-len"
       - "32000"
     extra_env:
-      APHRODITE_ROCM_USE_AITER: "1"
+      SONAR_ROCM_USE_AITER: "1"
 
 strategy_overrides:
   single_node_tp:
@@ -153,7 +153,7 @@ guide: |
   ## Prerequisites
 
   - Hardware: 1x B200 (FP4), 1x H100 (FP8), 4x GPUs (BF16), 8x MI300X/MI325X/MI355X, or 4x Xeon6/Xeon5 NUMA nodes
-  - Aphrodite >= 0.12.0
+  - Sonar >= 0.12.0
   - CUDA Driver >= 575 for GPUs
   - Docker with NVIDIA Container Toolkit (recommended) for GPUs
   - License: Must agree to Meta's Llama 4 Scout Community License for GPUs
@@ -166,14 +166,14 @@ guide: |
   ```bash
   uv venv --python 3.12
   source .venv/bin/activate
-  uv pip install aphrodite-engine --extra-index-url https://wheels.vllm.ai/rocm/
+  uv pip install sonar --index-strategy first-index --extra-index-url https://sonar.dphn.ai/whl/release/rocm/x86_64/simple
   ```
 
   Launch on 8x MI300X / MI325X / MI355X with AITER enabled:
 
   ```bash
-  export APHRODITE_ROCM_USE_AITER=1
-  aphrodite serve meta-llama/Llama-4-Scout-17B-16E-Instruct \
+  export SONAR_ROCM_USE_AITER=1
+  sonar serve meta-llama/Llama-4-Scout-17B-16E-Instruct \
     --tensor-parallel-size 8 \
     --max-num-seqs 64 \
     --no-enable-prefix-caching \
@@ -194,7 +194,7 @@ guide: |
 
   ### Intel Xeon 6 Deployment via Docker
 
-  Launch the x86 CPU Aphrodite Docker container for `meta-llama/Llama-4-Scout-17B-16E-Instruct`:
+  Launch the x86 CPU Sonar Docker container for `meta-llama/Llama-4-Scout-17B-16E-Instruct`:
 
   ```bash
   docker run \
@@ -216,7 +216,7 @@ guide: |
     tuning for workload shape, latency targets, and platform capacity.
   - `--gpu-memory-utilization`: platform memory-budget tuning.
   - `--no-enable-prefix-caching`: workload/benchmark cache-policy tuning.
-  - `APHRODITE_ENGINE_ITERATION_TIMEOUT_S`: runtime operational timeout tuning.
+  - `SONAR_ENGINE_ITERATION_TIMEOUT_S`: runtime operational timeout tuning.
 
   Hardware-specific overrides may still use these settings when they are part of a
   validated platform configuration.

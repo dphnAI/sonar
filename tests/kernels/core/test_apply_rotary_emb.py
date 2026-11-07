@@ -15,13 +15,13 @@ from dataclasses import dataclass
 import pytest
 import torch
 
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.config import (
     CompilationConfig,
+    SonarConfig,
     get_cached_compilation_config,
-    set_current_aphrodite_config,
+    set_current_sonar_config,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 CUDA_DEVICES = ["cuda:0"]
 
@@ -41,10 +41,10 @@ class RotaryEmbeddingTestCase:
 
 def get_test_cases() -> list[RotaryEmbeddingTestCase]:
     """Generate test cases for all RotaryEmbedding classes."""
-    from aphrodite.model_executor.layers.rotary_embedding.ernie45_vl_rope import (
+    from sonar.model_executor.layers.rotary_embedding.ernie45_vl_rope import (
         Ernie4_5_VLRotaryEmbedding,
     )
-    from aphrodite.model_executor.layers.rotary_embedding.mrope import MRotaryEmbedding
+    from sonar.model_executor.layers.rotary_embedding.mrope import MRotaryEmbedding
 
     common_kwargs = {
         "head_size": 128,
@@ -93,10 +93,10 @@ def run_dispatch_test(
     device: str,
 ):
     """Run a dispatch test for a RotaryEmbedding class."""
-    aphrodite_config = AphroditeConfig(compilation_config=CompilationConfig(custom_ops=["all", "+apply_rotary_emb"]))
+    sonar_config = SonarConfig(compilation_config=CompilationConfig(custom_ops=["all", "+apply_rotary_emb"]))
     get_cached_compilation_config.cache_clear()
 
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         rope = test_case.rope_class(**test_case.rope_kwargs).to(device=device)
 
         apply_rotary_emb = rope.apply_rotary_emb
@@ -193,14 +193,14 @@ def test_apply_rotary_emb_xpu_matches_native(
     rot_dim: int,
     is_neox_style: bool,
 ):
-    """ApplyRotaryEmb.forward_xpu (aphrodite_xpu_kernels SYCL op) must match
+    """ApplyRotaryEmb.forward_xpu (sonar_xpu_kernels SYCL op) must match
     forward_native (the CustomOp default fallback) exactly."""
-    from aphrodite.model_executor.layers.rotary_embedding.common import ApplyRotaryEmb
+    from sonar.model_executor.layers.rotary_embedding.common import ApplyRotaryEmb
 
-    aphrodite_config = AphroditeConfig(compilation_config=CompilationConfig(custom_ops=["all", "+apply_rotary_emb"]))
+    sonar_config = SonarConfig(compilation_config=CompilationConfig(custom_ops=["all", "+apply_rotary_emb"]))
     get_cached_compilation_config.cache_clear()
 
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         op = ApplyRotaryEmb(enforce_enable=True, is_neox_style=is_neox_style)
 
         x = torch.randn(num_tokens, num_heads, head_size, device="xpu", dtype=torch.bfloat16)
@@ -216,7 +216,7 @@ def test_apply_rotary_emb_xpu_matches_native(
 @pytest.mark.skipif(not current_platform.is_cuda_alike(), reason="CUDA/ROCm only test.")
 @pytest.mark.parametrize("num_tokens", [257, 2304])
 @pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float16])
-def test_packed_qk_rope_correctness(num_tokens: int, dtype: torch.dtype, default_aphrodite_config):
+def test_packed_qk_rope_correctness(num_tokens: int, dtype: torch.dtype, default_sonar_config):
     """packed_qk_rope_ must match the per-tensor ApplyRotaryEmb path with
     enable_fp32_compute=True to within one ULP, and must leave the V slice
     untouched.
@@ -226,8 +226,8 @@ def test_packed_qk_rope_correctness(num_tokens: int, dtype: torch.dtype, default
     follows the register layout, so it is decided by codegen rather than by
     the source and holds neither across backends nor across Triton versions.
     """
-    from aphrodite.model_executor.layers.rotary_embedding.common import ApplyRotaryEmb
-    from aphrodite.model_executor.layers.rotary_embedding.packed_qk_rope import (
+    from sonar.model_executor.layers.rotary_embedding.common import ApplyRotaryEmb
+    from sonar.model_executor.layers.rotary_embedding.packed_qk_rope import (
         packed_qk_rope_,
     )
 

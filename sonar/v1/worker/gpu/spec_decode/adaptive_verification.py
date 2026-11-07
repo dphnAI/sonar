@@ -9,17 +9,17 @@ from typing import TYPE_CHECKING
 import numpy as np
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.config.compilation import CUDAGraphMode
-from aphrodite.distributed.parallel_state import get_tp_group
-from aphrodite.logger import init_logger
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.gpu_sync_debug import gpu_sync_allowed
-from aphrodite.utils.torch_utils import async_tensor_h2d
-from aphrodite.v1.attention.backend import AttentionCGSupport
-from aphrodite.v1.utils import CpuGpuBuffer
-from aphrodite.v1.worker.gpu.async_utils import StepTimingSample, stream
-from aphrodite.v1.worker.gpu.attn_utils import (
+import sonar.envs as envs
+from sonar.config.compilation import CUDAGraphMode
+from sonar.distributed.parallel_state import get_tp_group
+from sonar.logger import init_logger
+from sonar.triton_utils import tl, triton
+from sonar.utils.gpu_sync_debug import gpu_sync_allowed
+from sonar.utils.torch_utils import async_tensor_h2d
+from sonar.v1.attention.backend import AttentionCGSupport
+from sonar.v1.utils import CpuGpuBuffer
+from sonar.v1.worker.gpu.async_utils import StepTimingSample, stream
+from sonar.v1.worker.gpu.attn_utils import (
     get_query_lens_mismatch_unsupported_backend,
     get_varlen_cudagraph_unsupported_backend,
 )
@@ -28,10 +28,10 @@ logger = init_logger(__name__)
 _PROFILE_REPLAYS = 5
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
-    from aphrodite.v1.worker.gpu.input_batch import InputBatch
-    from aphrodite.v1.worker.gpu.states import RequestState
-    from aphrodite.v1.worker.utils import AttentionGroup
+    from sonar.config import SonarConfig
+    from sonar.v1.worker.gpu.input_batch import InputBatch
+    from sonar.v1.worker.gpu.states import RequestState
+    from sonar.v1.worker.utils import AttentionGroup
 
 
 def resolve_adaptive_cudagraph_mode(mode: CUDAGraphMode, *, piecewise_capture_available: bool) -> CUDAGraphMode:
@@ -306,7 +306,7 @@ class AdaptiveVerificationManager:
             for _ in range(_PROFILE_REPLAYS):
                 yield {
                     "num_tokens": num_tokens,
-                    "context_len": envs.APHRODITE_ADAPTIVE_VERIFICATION_PROFILE_CONTEXT_LEN,
+                    "context_len": envs.SONAR_ADAPTIVE_VERIFICATION_PROFILE_CONTEXT_LEN,
                 }
 
     def set_initial_cost_curves(self, samples: list[StepTimingSample]) -> None:
@@ -550,7 +550,7 @@ def maybe_create_adaptive_verification_manager(
     query_start_loc: torch.Tensor,
     num_bonus_tokens: int,
     max_total_logits: int,
-    aphrodite_config: "AphroditeConfig",
+    sonar_config: "SonarConfig",
     target_layer_names: set[str] | None = None,
     additional_attn_cg_support: tuple[AttentionCGSupport, str | None] | None = None,
     copy_admitted_drafts_to_host: bool = False,
@@ -573,7 +573,7 @@ def maybe_create_adaptive_verification_manager(
     max_query_len = req_states.num_speculative_steps + num_bonus_tokens
     unsupported: tuple[str | None, int | None] | None = get_varlen_cudagraph_unsupported_backend(
         attn_groups,
-        aphrodite_config,
+        sonar_config,
         max_query_len,
         checked_layer_names=target_layer_names,
     )

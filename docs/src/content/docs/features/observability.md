@@ -46,7 +46,7 @@ Do not put user content in a request ID.
 
 ## Logs
 
-Set `APHRODITE_LOGGING_LEVEL=DEBUG` for a bounded diagnostic run. Debug output
+Set `SONAR_LOGGING_LEVEL=DEBUG` for a bounded diagnostic run. Debug output
 can be large and can contain workload details.
 
 Request logging must follow the service privacy policy. Restrict access and

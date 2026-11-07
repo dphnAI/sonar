@@ -8,18 +8,18 @@ import ray
 import torch
 import torch.distributed as dist
 
-from aphrodite._aiter_ops import is_aiter_found, rocm_aiter_ops
-from aphrodite.device_allocator import alloc_conf
-from aphrodite.distributed.communication_op import tensor_model_parallel_all_reduce  # noqa
-from aphrodite.distributed.device_communicators.cuda_wrapper import find_loaded_library
-from aphrodite.distributed.parallel_state import (
+from sonar._aiter_ops import is_aiter_found, rocm_aiter_ops
+from sonar.device_allocator import alloc_conf
+from sonar.distributed.communication_op import tensor_model_parallel_all_reduce  # noqa
+from sonar.distributed.device_communicators.cuda_wrapper import find_loaded_library
+from sonar.distributed.parallel_state import (
     GraphCaptureContext,
     get_dp_group,
     get_tp_group,
     graph_capture,
 )
-from aphrodite.envs import disable_envs_cache
-from aphrodite.platforms import current_platform
+from sonar.envs import disable_envs_cache
+from sonar.platforms import current_platform
 
 from ..utils import (
     assert_rocm_custom_allreduce_backend_state,
@@ -45,9 +45,9 @@ test_cases = [
 def _configure_aiter_custom_ar_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
     monkeypatch.delenv("HIP_VISIBLE_DEVICES", raising=False)
-    monkeypatch.setenv("APHRODITE_ROCM_USE_AITER", "1")
-    monkeypatch.setenv("APHRODITE_ROCM_USE_AITER_CUSTOM_AR", "1")
-    monkeypatch.setenv("APHRODITE_ROCM_QUICK_REDUCE_QUANTIZATION", "NONE")
+    monkeypatch.setenv("SONAR_ROCM_USE_AITER", "1")
+    monkeypatch.setenv("SONAR_ROCM_USE_AITER_CUSTOM_AR", "1")
+    monkeypatch.setenv("SONAR_ROCM_QUICK_REDUCE_QUANTIZATION", "NONE")
     disable_envs_cache()
     rocm_aiter_ops.refresh_env_variables()
 

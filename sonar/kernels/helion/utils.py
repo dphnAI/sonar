@@ -5,8 +5,8 @@
 import regex as re
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
 
 logger = init_logger(__name__)
 

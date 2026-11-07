@@ -25,7 +25,7 @@
 
 #include "qdq_util.cuh"
 
-namespace aphrodite {
+namespace sonar {
 namespace exl2 {
 // Permutation:
 //
@@ -86,6 +86,6 @@ __forceinline__ __device__ void dequant_2bit_16(const uint32_t q_0,
 }
 
 }  // namespace exl2
-}  // namespace aphrodite
+}  // namespace sonar
 
 #endif

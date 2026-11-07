@@ -36,32 +36,32 @@ from transformers import (
     Qwen3_5TextConfig,
 )
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed import (
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import SonarConfig
+from sonar.distributed import (
     get_pp_group,
 )
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fusion.mm_input_norm import build_mm_input_norm
-from aphrodite.model_executor.layers.layernorm import GemmaRMSNorm as Qwen3_5RMSNorm
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.mamba.gdn.qwen_gdn_linear_attn import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fusion.mm_input_norm import build_mm_input_norm
+from sonar.model_executor.layers.layernorm import GemmaRMSNorm as Qwen3_5RMSNorm
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.mamba.gdn.qwen_gdn_linear_attn import (
     QwenGatedDeltaNetAttention,
 )
-from aphrodite.model_executor.layers.mamba.mamba_utils import (
+from sonar.model_executor.layers.mamba.mamba_utils import (
     MambaStateCopyFunc,
     MambaStateCopyFuncCalculator,
     MambaStateDtypeCalculator,
     MambaStateShapeCalculator,
 )
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import MultiModalFeatureSpec
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.tokenizers.registry import cached_tokenizer_from_config
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import MultiModalFeatureSpec
+from sonar.sequence import IntermediateTensors
+from sonar.tokenizers.registry import cached_tokenizer_from_config
 
 from .interfaces import (
     HasInnerState,
@@ -117,24 +117,24 @@ class Qwen3_5MoeProcessingInfo(Qwen3VLProcessingInfo):
         # transformers 5.x renames the top-level Qwen3.5-MoE config class to
         # Qwen3_5MoeTextConfig for text-only models, while transformers ≤4.x
         # returns Qwen3_5MoeConfig (the multimodal wrapper).  Accept both so
-        # that Aphrodite works regardless of which transformers version is installed.
+        # that Sonar works regardless of which transformers version is installed.
         return self.ctx.get_hf_config((Qwen3_5MoeConfig, Qwen3_5MoeTextConfig))
 
 
 class Qwen3_5DecoderLayer(Qwen3NextDecoderLayer):
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         layer_type: str,
         prefix: str = "",
     ) -> None:
         super(Qwen3NextDecoderLayer, self).__init__()
 
-        config = aphrodite_config.model_config.hf_text_config
-        model_config = aphrodite_config.model_config
-        cache_config = aphrodite_config.cache_config
-        parallel_config = aphrodite_config.parallel_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_text_config
+        model_config = sonar_config.model_config
+        cache_config = sonar_config.cache_config
+        parallel_config = sonar_config.parallel_config
+        quant_config = sonar_config.quant_config
 
         self.layer_type = layer_type
         self.layer_idx = extract_layer_index(prefix)
@@ -146,7 +146,7 @@ class Qwen3_5DecoderLayer(Qwen3NextDecoderLayer):
         if self.layer_type == "linear_attention":
             self.linear_attn = QwenGatedDeltaNetAttention(
                 config=config,
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 prefix=f"{prefix}.linear_attn",
                 gqa_interleaved_layout=False,
                 reduce_results=not self.use_attn_reduce_scatter_for_moe,
@@ -159,7 +159,7 @@ class Qwen3_5DecoderLayer(Qwen3NextDecoderLayer):
                 quant_config=quant_config,
                 reduce_results=not self.use_attn_reduce_scatter_for_moe,
                 prefix=f"{prefix}.self_attn",
-                mrope_positions_factor=mrope_positions_factor(aphrodite_config),
+                mrope_positions_factor=mrope_positions_factor(sonar_config),
             )
         else:
             raise ValueError(f"Invalid layer_type {self.layer_type}")
@@ -168,7 +168,7 @@ class Qwen3_5DecoderLayer(Qwen3NextDecoderLayer):
         # Qwen3.5 use all layers for MLP / Qwen3.5-MoE use sparse MoE blocks
         if config.model_type == "qwen3_5_moe_text":
             self.mlp = Qwen3NextSparseMoeBlock(
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 prefix=f"{prefix}.mlp",
             )
         elif config.model_type == "qwen3_5_text":
@@ -216,7 +216,7 @@ class Qwen3_5DecoderLayer(Qwen3NextDecoderLayer):
 class Qwen3_5Model(Qwen3NextModel):
     # Qwen3.5 ships the GDN in_proj checkpoints separately (qwen3-next
     # pre-fuses them); fuse them on top of the qwen3-next QKV/gate_up mapping.
-    hf_to_aphrodite_mapper = Qwen3NextModel.hf_to_aphrodite_mapper | WeightsMapper(
+    hf_to_sonar_mapper = Qwen3NextModel.hf_to_sonar_mapper | WeightsMapper(
         orig_to_new_stacked={
             ".in_proj_qkv": (".in_proj_qkvz", (0, 1, 2)),
             ".in_proj_z": (".in_proj_qkvz", 3),
@@ -225,17 +225,17 @@ class Qwen3_5Model(Qwen3NextModel):
         }
     )
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super(Qwen3NextModel, self).__init__()
 
-        config: Qwen3_5TextConfig | Qwen3_5MoeTextConfig = aphrodite_config.model_config.hf_text_config
-        parallel_config = aphrodite_config.parallel_config
+        config: Qwen3_5TextConfig | Qwen3_5MoeTextConfig = sonar_config.model_config.hf_text_config
+        parallel_config = sonar_config.parallel_config
 
         eplb_config = parallel_config.eplb_config
         self.num_redundant_experts = eplb_config.num_redundant_experts
 
         self.config = config
-        self.quant_config = aphrodite_config.quant_config
+        self.quant_config = sonar_config.quant_config
 
         self.vocab_size = config.vocab_size
 
@@ -246,7 +246,7 @@ class Qwen3_5Model(Qwen3NextModel):
 
         def get_layer(prefix: str):
             return Qwen3_5DecoderLayer(
-                aphrodite_config,
+                sonar_config,
                 layer_type=config.layer_types[extract_layer_index(prefix)],
                 prefix=prefix,
             )
@@ -257,7 +257,7 @@ class Qwen3_5Model(Qwen3NextModel):
         self.fused_shared_expert_layers = get_fused_shared_expert_layers(
             self,
             Qwen3NextSparseMoeBlock,
-            enable_eplb=aphrodite_config.parallel_config.enable_eplb,
+            enable_eplb=sonar_config.parallel_config.enable_eplb,
         )
         self.make_empty_intermediate_tensors = make_empty_intermediate_tensors_factory(
             ["hidden_states", "residual"], config.hidden_size
@@ -283,7 +283,7 @@ class Qwen3_5Model(Qwen3NextModel):
                 ckpt_prefix="mlp.shared_expert",
             )
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
 
 class Qwen3_5ForCausalLMBase(
@@ -306,7 +306,7 @@ class Qwen3_5ForCausalLMBase(
         "in_proj_qkvz": ["in_proj_qkv", "in_proj_z"],
         "in_proj_ba": ["in_proj_b", "in_proj_a"],
     }
-    # Maps PEFT embed/lm_head LoRA targets onto Aphrodite embedding wrappers.
+    # Maps PEFT embed/lm_head LoRA targets onto Sonar embedding wrappers.
     embedding_modules = {
         "embed_tokens": "input_embeddings",
         "lm_head": "output_embeddings",
@@ -315,23 +315,23 @@ class Qwen3_5ForCausalLMBase(
     # Some community text-only checkpoints keep the extraneous
     # `model.language_model.` prefix inherited from the VL training stack.
     # Strip it so both prefixed and clean checkpoints load correctly.
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={"model.language_model.": "model.", "mtp.": None},
     )
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
-        config = aphrodite_config.model_config.hf_text_config
-        self.aphrodite_config = aphrodite_config
-        self.model_config = aphrodite_config.model_config
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
+        config = sonar_config.model_config.hf_text_config
+        self.sonar_config = sonar_config
+        self.model_config = sonar_config.model_config
 
-        scheduler_config = aphrodite_config.scheduler_config
-        self.quant_config = aphrodite_config.quant_config
+        scheduler_config = sonar_config.scheduler_config
+        self.quant_config = sonar_config.quant_config
 
         super().__init__()
         self.config = config
         self.scheduler_config = scheduler_config
         self.use_tied_lm_head = model_should_use_tied_lm_head(config, self.quant_config)
-        self.model = Qwen3_5Model(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = Qwen3_5Model(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
 
         if get_pp_group().is_last_rank:
             self.lm_head = ParallelLMHead(
@@ -373,24 +373,20 @@ class Qwen3_5ForCausalLMBase(
     @classmethod
     def get_mamba_state_dtype_from_config(
         cls,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
     ) -> tuple[torch.dtype, torch.dtype]:
         return MambaStateDtypeCalculator.gated_delta_net_state_dtype(
-            aphrodite_config.model_config.dtype,
-            aphrodite_config.cache_config.mamba_cache_dtype,
-            aphrodite_config.cache_config.mamba_ssm_cache_dtype,
+            sonar_config.model_config.dtype,
+            sonar_config.cache_config.mamba_cache_dtype,
+            sonar_config.cache_config.mamba_ssm_cache_dtype,
         )
 
     @classmethod
-    def get_mamba_state_shape_from_config(
-        cls, aphrodite_config: AphroditeConfig
-    ) -> tuple[tuple[int, int], tuple[int, int]]:
-        parallel_config = aphrodite_config.parallel_config
-        hf_config = aphrodite_config.model_config.hf_text_config
+    def get_mamba_state_shape_from_config(cls, sonar_config: SonarConfig) -> tuple[tuple[int, int], tuple[int, int]]:
+        parallel_config = sonar_config.parallel_config
+        hf_config = sonar_config.model_config.hf_text_config
         tp_size = parallel_config.tensor_parallel_size
-        num_spec = (
-            aphrodite_config.speculative_config.num_speculative_tokens if aphrodite_config.speculative_config else 0
-        )
+        num_spec = sonar_config.speculative_config.num_speculative_tokens if sonar_config.speculative_config else 0
         return MambaStateShapeCalculator.gated_delta_net_state_shape(
             tp_size,
             hf_config.linear_num_key_heads,
@@ -421,7 +417,7 @@ class Qwen3_5ForCausalLMBase(
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
     def get_mrope_input_positions(
         self,
@@ -437,8 +433,8 @@ class Qwen3_5ForCausalLM(Qwen3_5ForCausalLMBase):
 
 
 class Qwen3_5MoeForCausalLM(Qwen3_5ForCausalLMBase, QwenNextMixtureOfExperts):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
-        super().__init__(aphrodite_config=aphrodite_config, prefix=prefix)
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
+        super().__init__(sonar_config=sonar_config, prefix=prefix)
 
         # set MoE hyperparameters
         self.set_moe_parameters()
@@ -457,7 +453,7 @@ class Qwen3_5MoeForCausalLM(Qwen3_5ForCausalLMBase, QwenNextMixtureOfExperts):
 class Qwen3_5ForConditionalGeneration(Qwen3VLForConditionalGeneration, IsHybrid):
     supports_multimodal_pruning = True
 
-    hf_to_aphrodite_mapper = Qwen3VLForConditionalGeneration.hf_to_aphrodite_mapper | WeightsMapper(
+    hf_to_sonar_mapper = Qwen3VLForConditionalGeneration.hf_to_sonar_mapper | WeightsMapper(
         orig_to_new_prefix={"mtp.": None}
     )
 
@@ -466,20 +462,20 @@ class Qwen3_5ForConditionalGeneration(Qwen3VLForConditionalGeneration, IsHybrid)
         "in_proj_ba": ["in_proj_b", "in_proj_a"],
     }
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "model"):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "model"):
         # protocols have not __init__ method, so we need to use nn.Module.__init__
         nn.Module.__init__(self)
-        config: Qwen3_5Config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
-        multimodal_config = aphrodite_config.model_config.get_multimodal_config()
+        config: Qwen3_5Config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
+        multimodal_config = sonar_config.model_config.get_multimodal_config()
 
         self.config = config
-        self.model_config = aphrodite_config.model_config
+        self.model_config = sonar_config.model_config
         self.multimodal_config = multimodal_config
         self.use_data_parallel = multimodal_config.mm_encoder_tp_mode == "data"
         self.is_multimodal_pruning_enabled = multimodal_config.is_multimodal_pruning_enabled()
         self.video_pruning_rate = self.multimodal_config.video_pruning_rate
-        self._tokenizer = cached_tokenizer_from_config(aphrodite_config.model_config)
+        self._tokenizer = cached_tokenizer_from_config(sonar_config.model_config)
 
         # attributes needed by EVS-related functions inherited from Qwen3-VL
         self.use_deepstack = hasattr(config.vision_config, "deepstack_visual_indexes")
@@ -487,7 +483,7 @@ class Qwen3_5ForConditionalGeneration(Qwen3VLForConditionalGeneration, IsHybrid)
         self.visual_dim = config.vision_config.out_hidden_size
         self.multiscale_dim = self.visual_dim * self.deepstack_num_level
 
-        with self._mark_tower_model(aphrodite_config, {"image", "video"}):
+        with self._mark_tower_model(sonar_config, {"image", "video"}):
             self.visual = Qwen3_VisionTransformer(
                 config.vision_config,
                 norm_eps=getattr(config, "rms_norm_eps", 1e-6),
@@ -496,9 +492,9 @@ class Qwen3_5ForConditionalGeneration(Qwen3VLForConditionalGeneration, IsHybrid)
                 prefix=maybe_prefix(prefix, "visual"),
             )
 
-        with self._mark_language_model(aphrodite_config):
+        with self._mark_language_model(sonar_config):
             self.language_model = Qwen3_5ForCausalLM(
-                aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "language_model")
+                sonar_config=sonar_config, prefix=maybe_prefix(prefix, "language_model")
             )
 
         self.make_empty_intermediate_tensors = self.language_model.make_empty_intermediate_tensors
@@ -578,29 +574,25 @@ class Qwen3_5ForConditionalGeneration(Qwen3VLForConditionalGeneration, IsHybrid)
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
     @classmethod
     def get_mamba_state_dtype_from_config(
         cls,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
     ) -> tuple[torch.dtype, torch.dtype]:
         return MambaStateDtypeCalculator.gated_delta_net_state_dtype(
-            aphrodite_config.model_config.dtype,
-            aphrodite_config.cache_config.mamba_cache_dtype,
-            aphrodite_config.cache_config.mamba_ssm_cache_dtype,
+            sonar_config.model_config.dtype,
+            sonar_config.cache_config.mamba_cache_dtype,
+            sonar_config.cache_config.mamba_ssm_cache_dtype,
         )
 
     @classmethod
-    def get_mamba_state_shape_from_config(
-        cls, aphrodite_config: "AphroditeConfig"
-    ) -> tuple[tuple[int, int], tuple[int, int]]:
-        parallel_config = aphrodite_config.parallel_config
-        hf_config = aphrodite_config.model_config.hf_text_config
+    def get_mamba_state_shape_from_config(cls, sonar_config: "SonarConfig") -> tuple[tuple[int, int], tuple[int, int]]:
+        parallel_config = sonar_config.parallel_config
+        hf_config = sonar_config.model_config.hf_text_config
         tp_size = parallel_config.tensor_parallel_size
-        num_spec = (
-            aphrodite_config.speculative_config.num_speculative_tokens if aphrodite_config.speculative_config else 0
-        )
+        num_spec = sonar_config.speculative_config.num_speculative_tokens if sonar_config.speculative_config else 0
         return MambaStateShapeCalculator.gated_delta_net_state_shape(
             tp_size,
             hf_config.linear_num_key_heads,
@@ -673,20 +665,20 @@ class Qwen3_5MoeForConditionalGeneration(Qwen3_5ForConditionalGeneration, Qwen3_
     # For MoE LoRA weights loading
     is_3d_moe_weight: ClassVar[bool] = True
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "model"):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "model"):
         # protocols have not __init__ method, so we need to use nn.Module.__init__
         nn.Module.__init__(self)
-        config: Qwen3_5MoeConfig = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
-        multimodal_config = aphrodite_config.model_config.get_multimodal_config()
+        config: Qwen3_5MoeConfig = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
+        multimodal_config = sonar_config.model_config.get_multimodal_config()
 
         self.config = config
-        self.model_config = aphrodite_config.model_config
+        self.model_config = sonar_config.model_config
         self.multimodal_config = multimodal_config
         self.use_data_parallel = multimodal_config.mm_encoder_tp_mode == "data"
         self.is_multimodal_pruning_enabled = multimodal_config.is_multimodal_pruning_enabled()
         self.video_pruning_rate = self.multimodal_config.video_pruning_rate
-        self._tokenizer = cached_tokenizer_from_config(aphrodite_config.model_config)
+        self._tokenizer = cached_tokenizer_from_config(sonar_config.model_config)
 
         # attributes needed by EVS-related functions inherited from Qwen3-VL
         self.use_deepstack = hasattr(config.vision_config, "deepstack_visual_indexes")
@@ -694,7 +686,7 @@ class Qwen3_5MoeForConditionalGeneration(Qwen3_5ForConditionalGeneration, Qwen3_
         self.visual_dim = config.vision_config.out_hidden_size
         self.multiscale_dim = self.visual_dim * self.deepstack_num_level
 
-        with self._mark_tower_model(aphrodite_config, {"image", "video"}):
+        with self._mark_tower_model(sonar_config, {"image", "video"}):
             self.visual = Qwen3_VisionTransformer(
                 config.vision_config,
                 norm_eps=getattr(config, "rms_norm_eps", 1e-6),
@@ -703,9 +695,9 @@ class Qwen3_5MoeForConditionalGeneration(Qwen3_5ForConditionalGeneration, Qwen3_
                 prefix=maybe_prefix(prefix, "visual"),
             )
 
-        with self._mark_language_model(aphrodite_config):
+        with self._mark_language_model(sonar_config):
             self.language_model = Qwen3_5MoeForCausalLM(
-                aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "language_model")
+                sonar_config=sonar_config, prefix=maybe_prefix(prefix, "language_model")
             )
 
         self.make_empty_intermediate_tensors = self.language_model.make_empty_intermediate_tensors

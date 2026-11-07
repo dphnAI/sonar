@@ -15,11 +15,11 @@ from typing import Any
 import torch
 from torch import nn
 
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.kernels.linear.nvfp4.flashinfer import (
+from sonar.logger import init_logger
+from sonar.model_executor.kernels.linear.nvfp4.flashinfer import (
     FlashInferCuteDslNvFp4W4A16LinearKernel,
 )
-from aphrodite.model_executor.layers.linear import LinearBase, UnquantizedLinearMethod
+from sonar.model_executor.layers.linear import LinearBase, UnquantizedLinearMethod
 
 from . import nvfp4_gemv
 

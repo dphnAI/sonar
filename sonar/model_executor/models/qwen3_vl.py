@@ -48,41 +48,41 @@ from transformers.models.qwen3_vl.video_processing_qwen3_vl import (
 )
 from transformers.video_utils import VideoMetadata
 
-from aphrodite.compilation.decorators import (
+from sonar.compilation.decorators import (
     should_torch_compile_mm_encoder,
     support_torch_compile,
 )
-from aphrodite.config import AphroditeConfig, get_current_aphrodite_config
-from aphrodite.config.multimodal import (
+from sonar.config import SonarConfig, get_current_sonar_config
+from sonar.config.multimodal import (
     MultiModalConfig,
     MultiModalDummyOptions,
     VideoDummyOptions,
     VideoPruningMethod,
 )
-from aphrodite.distributed import get_pp_group, parallel_state
-from aphrodite.inputs import MultiModalDataDict, MultiModalHashes
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.activation import _ACTIVATION_REGISTRY
-from aphrodite.model_executor.layers.attention.mm_encoder_attention import (
+from sonar.distributed import get_pp_group, parallel_state
+from sonar.inputs import MultiModalDataDict, MultiModalHashes
+from sonar.logger import init_logger
+from sonar.model_executor.layers.activation import _ACTIVATION_REGISTRY
+from sonar.model_executor.layers.attention.mm_encoder_attention import (
     MMEncoderAttention,
 )
-from aphrodite.model_executor.layers.conv import Conv3dLayer
-from aphrodite.model_executor.layers.fusion.mm_input_norm import (
+from sonar.model_executor.layers.conv import Conv3dLayer
+from sonar.model_executor.layers.fusion.mm_input_norm import (
     IdentityInputNorm,
     build_mm_input_norm,
 )
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
-from aphrodite.model_executor.models.module_mapping import MultiModelKeys
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.hasher import MultiModalHasher
-from aphrodite.multimodal.inputs import (
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
+from sonar.model_executor.models.module_mapping import MultiModelKeys
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.hasher import MultiModalHasher
+from sonar.multimodal.inputs import (
     MultiModalFeatureSpec,
     MultiModalFieldConfig,
     MultiModalFieldElem,
@@ -91,8 +91,8 @@ from aphrodite.multimodal.inputs import (
     PlaceholderRange,
     VideoItem,
 )
-from aphrodite.multimodal.parse import ImageSize, MultiModalDataItems
-from aphrodite.multimodal.processing import (
+from sonar.multimodal.parse import ImageSize, MultiModalDataItems
+from sonar.multimodal.processing import (
     BaseDummyInputsBuilder,
     BaseMultiModalProcessor,
     ProcessorInputs,
@@ -100,27 +100,27 @@ from aphrodite.multimodal.processing import (
     PromptUpdate,
     PromptUpdateDetails,
 )
-from aphrodite.multimodal.video_prune.evs import (
+from sonar.multimodal.video_prune.evs import (
     compute_mrope_for_media,
     compute_retained_tokens_count,
     compute_retention_mask,
     recompute_mrope_positions,
 )
-from aphrodite.multimodal.video_prune.vidcom2 import (
+from sonar.multimodal.video_prune.vidcom2 import (
     compute_retained_tokens_count as vidcom2_compute_retained_tokens_count,
 )
-from aphrodite.multimodal.video_prune.vidcom2 import (
+from sonar.multimodal.video_prune.vidcom2 import (
     compute_retention_mask as vidcom2_compute_retention_mask,
 )
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.tokenizers.protocol import TokenizerLike
-from aphrodite.tokenizers.registry import cached_tokenizer_from_config
-from aphrodite.triton_utils import HAS_TRITON, tl, triton
-from aphrodite.utils.cache import LRUCache
-from aphrodite.utils.collection_utils import is_list_of
-from aphrodite.utils.math_utils import cdiv, round_up
-from aphrodite.utils.torch_utils import PIN_MEMORY
-from aphrodite.v1.worker.encoder_cudagraph_defs import EncoderCudaGraphReplayBuffers
+from sonar.sequence import IntermediateTensors
+from sonar.tokenizers.protocol import TokenizerLike
+from sonar.tokenizers.registry import cached_tokenizer_from_config
+from sonar.triton_utils import HAS_TRITON, tl, triton
+from sonar.utils.cache import LRUCache
+from sonar.utils.collection_utils import is_list_of
+from sonar.utils.math_utils import cdiv, round_up
+from sonar.utils.torch_utils import PIN_MEMORY
+from sonar.v1.worker.encoder_cudagraph_defs import EncoderCudaGraphReplayBuffers
 
 from ...utils.gpu_sync_debug import gpu_sync_allowed
 from ...utils.torch_utils import async_tensor_h2d
@@ -555,7 +555,7 @@ class Qwen3_VisionPatchMerger(nn.Module):
 
 
 class Qwen3_VisionTransformer(nn.Module):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_stacked={
             "attn.q.": ("attn.qkv.", "q"),
             "attn.k.": ("attn.qkv.", "k"),
@@ -872,7 +872,7 @@ class Qwen3_VisionTransformer(nn.Module):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
 
 class Qwen3VLMultiModalDataParser(Qwen2VLMultiModalDataParser):
@@ -915,7 +915,7 @@ class Qwen3VLProcessingInfo(Qwen2VLProcessingInfo):
     def get_supported_mm_processor_kwargs(self) -> dict[str, set[str]]:
         supported = super().get_supported_mm_processor_kwargs()
 
-        # Aphrodite has historically accepted `min_pixels` / `max_pixels` for
+        # Sonar has historically accepted `min_pixels` / `max_pixels` for
         # Qwen3-VL video. Include them in the routing schema even though
         # Qwen3VLVideoProcessor only accepts the equivalent `size`; they are
         # folded into `size` before calling HF.
@@ -1055,7 +1055,7 @@ class Qwen3VLProcessingInfo(Qwen2VLProcessingInfo):
         if do_sample_frames is None:
             do_sample_frames = metadata.get("do_sample_frames", False)
 
-        # If video frames are sampled in HF processor (instead of Aphrodite
+        # If video frames are sampled in HF processor (instead of Sonar
         # video loader), we need to re-calculate the indices from original
         # metadata.
         if do_sample_frames:
@@ -1387,7 +1387,7 @@ class Qwen3VLMultiModalProcessor(BaseMultiModalProcessor[Qwen3VLProcessingInfo])
                     default_size=default_video_size,
                 )
 
-            # Qwen3VLVideoProcessor does not accept Aphrodite's min/max pixel
+            # Qwen3VLVideoProcessor does not accept Sonar's min/max pixel
             # compatibility kwargs. They have already been folded into `size`,
             # so remove them before any HF call, including calls that contain
             # only text/images.
@@ -1715,11 +1715,11 @@ class Qwen3VLMultiModalProcessor(BaseMultiModalProcessor[Qwen3VLProcessingInfo])
         return PromptUpdateDetails.from_seq(all_token_ids)
 
 
-def mrope_positions_factor(aphrodite_config: AphroditeConfig) -> int:
+def mrope_positions_factor(sonar_config: SonarConfig) -> int:
     # Video pruning keeps the positions of the tokens it drops. A drafter gets
     # the target's positions, so it follows the target.
-    spec = aphrodite_config.speculative_config
-    model_config = (spec and spec.target_model_config) or aphrodite_config.model_config
+    spec = sonar_config.speculative_config
+    model_config = (spec and spec.target_model_config) or sonar_config.model_config
     mm_config = model_config.multimodal_config
     pruned = mm_config is not None and mm_config.is_multimodal_pruning_enabled()
     return 4 if pruned else 1
@@ -1727,7 +1727,7 @@ def mrope_positions_factor(aphrodite_config: AphroditeConfig) -> int:
 
 class Qwen3VLDecoderLayer(Qwen3DecoderLayer):
     def __init__(self, **kwargs) -> None:
-        factor = mrope_positions_factor(get_current_aphrodite_config())
+        factor = mrope_positions_factor(get_current_sonar_config())
         super().__init__(**kwargs, mrope_positions_factor=factor)
 
 
@@ -1788,15 +1788,15 @@ class Qwen3LLMModel(Qwen3Model):
 
 
 class Qwen3LLMForCausalLM(Qwen3ForCausalLM):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super(Qwen3ForCausalLM, self).__init__()
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
 
         self.config = config
 
         self.quant_config = quant_config
-        self.model = Qwen3LLMModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = Qwen3LLMModel(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
 
         if get_pp_group().is_last_rank:
             self.lm_head = ParallelLMHead(
@@ -1851,7 +1851,7 @@ class Qwen3VLForConditionalGeneration(
     supported_video_pruning_methods = ("evs", "vidcom2")
 
     # To ensure correct weight loading and mapping.
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={
             "model.visual.": "visual.",
             "lm_head.": "language_model.lm_head.",
@@ -1877,20 +1877,20 @@ class Qwen3VLForConditionalGeneration(
             self.video_pruning_method, self.video_pruning_rate = pruning_spec
         self.is_multimodal_pruning_enabled = multimodal_config.is_multimodal_pruning_enabled()
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "model"):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "model"):
         super().__init__()
-        config: Qwen3VLConfig = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
-        multimodal_config = aphrodite_config.model_config.get_multimodal_config()
+        config: Qwen3VLConfig = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
+        multimodal_config = sonar_config.model_config.get_multimodal_config()
 
         self.config = config
-        self.model_config = aphrodite_config.model_config
-        self._tokenizer = cached_tokenizer_from_config(aphrodite_config.model_config)
+        self.model_config = sonar_config.model_config
+        self._tokenizer = cached_tokenizer_from_config(sonar_config.model_config)
         self.multimodal_config = multimodal_config
         self.use_data_parallel = multimodal_config.mm_encoder_tp_mode == "data"
         self._init_video_pruning(multimodal_config)
 
-        with self._mark_tower_model(aphrodite_config, {"image", "video"}):
+        with self._mark_tower_model(sonar_config, {"image", "video"}):
             self.visual = Qwen3_VisionTransformer(
                 config.vision_config,
                 norm_eps=getattr(config, "rms_norm_eps", 1e-6),
@@ -1909,7 +1909,7 @@ class Qwen3VLForConditionalGeneration(
         if self.use_deepstack:
             self.deepstack_input_embeds = [
                 torch.zeros(
-                    aphrodite_config.scheduler_config.max_num_batched_tokens,
+                    sonar_config.scheduler_config.max_num_batched_tokens,
                     config.text_config.hidden_size,
                 )
                 for _ in range(self.deepstack_num_level)
@@ -1918,9 +1918,9 @@ class Qwen3VLForConditionalGeneration(
             # Zero means there is no active deepstack payload to consume.
             self.deepstack_input_embeds_num_tokens = 0
 
-        with self._mark_language_model(aphrodite_config):
+        with self._mark_language_model(sonar_config):
             self.language_model = Qwen3LLMForCausalLM(
-                aphrodite_config=aphrodite_config.with_hf_config(
+                sonar_config=sonar_config.with_hf_config(
                     config.text_config,
                     architectures=["Qwen3ForCausalLM"],
                 ),
@@ -1989,7 +1989,7 @@ class Qwen3VLForConditionalGeneration(
     # -- SupportsEncoderCudaGraph protocol methods --
 
     def get_encoder_cudagraph_config(self):
-        from aphrodite.v1.worker.encoder_cudagraph_defs import (
+        from sonar.v1.worker.encoder_cudagraph_defs import (
             EncoderCudaGraphConfig,
         )
 
@@ -2040,7 +2040,7 @@ class Qwen3VLForConditionalGeneration(
 
     def get_encoder_cudagraph_budget_range(
         self,
-        aphrodite_config,
+        sonar_config,
     ) -> tuple[int, int]:
         # Min: estimated smallest possible encoder input.
         # 224x224 image → 16x16 patches (patch_size=14)
@@ -2049,7 +2049,7 @@ class Qwen3VLForConditionalGeneration(
         # Max: capped by max_num_batched_tokens
         # TODO(shen-shanshan): the max_budget auto-infer needs to be optimized later.
         max_budget = min(
-            aphrodite_config.scheduler_config.max_num_batched_tokens,
+            sonar_config.scheduler_config.max_num_batched_tokens,
             self.model_config.max_model_len,
         )
         return (min_budget, max_budget)
@@ -2079,7 +2079,7 @@ class Qwen3VLForConditionalGeneration(
         self,
         mm_kwargs: dict[str, Any],
     ):
-        from aphrodite.v1.worker.encoder_cudagraph_defs import EncoderItemSpec
+        from sonar.v1.worker.encoder_cudagraph_defs import EncoderItemSpec
 
         m = self.visual.spatial_merge_size
         grid_thw = self._get_grid_thw_by_modality(mm_kwargs)
@@ -2141,7 +2141,7 @@ class Qwen3VLForConditionalGeneration(
         path: str = "default",
         axis_keys: tuple[Hashable, ...] | None = None,
     ):
-        from aphrodite.v1.worker.encoder_cudagraph_defs import (
+        from sonar.v1.worker.encoder_cudagraph_defs import (
             EncoderCudaGraphCaptureInputs,
         )
 
@@ -3029,7 +3029,7 @@ class Qwen3VLForConditionalGeneration(
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
     def get_mm_mapping(self) -> MultiModelKeys:
         """Get the module prefix in multimodal models."""

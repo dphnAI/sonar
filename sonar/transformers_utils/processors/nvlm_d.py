@@ -7,8 +7,8 @@
 # Copyright (c) 2024 NVIDIA
 # Licensed under Apache 2.0 License [see LICENSE for details]
 # --------------------------------------------------------
-from aphrodite.multimodal.processing import PromptUpdateDetails, cached_encode
-from aphrodite.tokenizers.hf import HfTokenizer
+from sonar.multimodal.processing import PromptUpdateDetails, cached_encode
+from sonar.tokenizers.hf import HfTokenizer
 
 from .internvl import InternVLChatImageProcessor, InternVLChatProcessor
 

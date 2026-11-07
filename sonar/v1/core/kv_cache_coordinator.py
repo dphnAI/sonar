@@ -4,22 +4,22 @@ from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from typing import NamedTuple
 
-from aphrodite.utils.math_utils import cdiv, round_down
-from aphrodite.v1.core.block_pool import BlockPool
-from aphrodite.v1.core.kv_cache_metrics import KVCacheMetricsCollector
-from aphrodite.v1.core.kv_cache_utils import (
+from sonar.utils.math_utils import cdiv, round_down
+from sonar.v1.core.block_pool import BlockPool
+from sonar.v1.core.kv_cache_metrics import KVCacheMetricsCollector
+from sonar.v1.core.kv_cache_utils import (
     BlockHash,
     KVCacheBlock,
     eagle_proof_margin,
     partial_hash_hits_enabled,
 )
-from aphrodite.v1.core.single_type_kv_cache_manager import (
+from sonar.v1.core.single_type_kv_cache_manager import (
     CrossAttentionManager,
     MambaManager,
     SingleTypeKVCacheManager,
     get_manager_for_kv_cache_spec,
 )
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.kv_cache_interface import (
     AttentionSpec,
     FullAttentionSpec,
     KVCacheConfig,
@@ -27,7 +27,7 @@ from aphrodite.v1.kv_cache_interface import (
     MambaSpec,
     SlidingWindowSpec,
 )
-from aphrodite.v1.request import Request
+from sonar.v1.request import Request
 
 
 def _validate_prefix_cache_retention_interval(

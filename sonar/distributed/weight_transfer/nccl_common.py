@@ -18,20 +18,20 @@ import pybase64 as base64
 import torch
 
 if TYPE_CHECKING:
-    from aphrodite.config.parallel import ParallelConfig
-    from aphrodite.distributed.device_communicators.pynccl import PyNcclCommunicator
-    from aphrodite.distributed.utils import StatelessProcessGroup
+    from sonar.config.parallel import ParallelConfig
+    from sonar.distributed.device_communicators.pynccl import PyNcclCommunicator
+    from sonar.distributed.utils import StatelessProcessGroup
 
-from aphrodite.distributed.device_communicators.pynccl_wrapper import (
+from sonar.distributed.device_communicators.pynccl_wrapper import (
     NCCL_UNIQUE_ID_BYTES,
 )
-from aphrodite.distributed.weight_transfer.base import WeightTransferInitInfo
-from aphrodite.distributed.weight_transfer.packed_tensor import (
+from sonar.distributed.weight_transfer.base import WeightTransferInitInfo
+from sonar.distributed.weight_transfer.packed_tensor import (
     DEFAULT_PACKED_BUFFER_SIZE_BYTES,
     DEFAULT_PACKED_NUM_BUFFERS,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.nccl import unpinned_nccl_env
+from sonar.platforms import current_platform
+from sonar.utils.nccl import unpinned_nccl_env
 
 
 def decode_nccl_unique_id(
@@ -182,7 +182,7 @@ def stateless_init_metadata_group(
     listen_socket: socket.socket | None = None,
 ) -> "StatelessProcessGroup":
     """Create only the TCPStore group used for metadata agreement."""
-    from aphrodite.distributed.utils import StatelessProcessGroup
+    from sonar.distributed.utils import StatelessProcessGroup
 
     return StatelessProcessGroup.create(
         host=master_address,
@@ -200,14 +200,14 @@ def stateless_init_process_group(
     world_size: int,
     device,
 ) -> "PyNcclCommunicator":
-    """APHRODITE provides `StatelessProcessGroup` to create a process group
+    """SONAR provides `StatelessProcessGroup` to create a process group
     without considering the global process group in torch.distributed.
     It is recommended to create `StatelessProcessGroup`, and then initialize
     the data-plane communication (NCCL) between external (train processes)
-    and Aphrodite workers.
+    and Sonar workers.
     """
-    from aphrodite.distributed.device_communicators.pynccl import PyNcclCommunicator
-    from aphrodite.distributed.utils import StatelessProcessGroup
+    from sonar.distributed.device_communicators.pynccl import PyNcclCommunicator
+    from sonar.distributed.utils import StatelessProcessGroup
 
     pg = StatelessProcessGroup.create(host=master_address, port=master_port, rank=rank, world_size=world_size)
     with unpinned_nccl_env():
@@ -225,7 +225,7 @@ def uid_init_process_group(
     The torch-free rendezvous alternative to `stateless_init_process_group`: no
     TCPStore, and therefore no barrier -- every rank must enter concurrently.
     """
-    from aphrodite.distributed.device_communicators.pynccl import PyNcclCommunicator
+    from sonar.distributed.device_communicators.pynccl import PyNcclCommunicator
 
     with unpinned_nccl_env():
         return _require_usable_communicator(

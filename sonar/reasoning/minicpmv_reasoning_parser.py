@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-from aphrodite.parser.engine.adapters import ParserEngineReasoningAdapter
-from aphrodite.parser.minicpmv import MiniCPMVParser
+from sonar.parser.engine.adapters import ParserEngineReasoningAdapter
+from sonar.parser.minicpmv import MiniCPMVParser
 
 
 class MiniCPMVParserReasoningAdapter(ParserEngineReasoningAdapter):

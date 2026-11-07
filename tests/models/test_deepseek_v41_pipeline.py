@@ -6,13 +6,13 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 
 @pytest.mark.skipif(not current_platform.is_cuda(), reason="CUDA required")
 @pytest.mark.skip_global_cleanup
 def test_stage_entry_injects_engram_before_mhc_pre(monkeypatch):
-    model_module = import_module("aphrodite.models.deepseek_v41.nvidia.model")
+    model_module = import_module("sonar.models.deepseek_v41.nvidia.model")
 
     class StopAfterMhcPre(Exception):
         pass

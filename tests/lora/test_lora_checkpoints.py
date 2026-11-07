@@ -3,11 +3,11 @@
 
 import pytest
 
-from aphrodite.lora.lora_model import LoRAModel
-from aphrodite.lora.peft_helper import PEFTHelper
-from aphrodite.lora.utils import parse_fine_tuned_lora_name
-from aphrodite.model_executor.models.gemma4 import Gemma4ForCausalLM
-from aphrodite.model_executor.models.utils import WeightsMapper
+from sonar.lora.lora_model import LoRAModel
+from sonar.lora.peft_helper import PEFTHelper
+from sonar.lora.utils import parse_fine_tuned_lora_name
+from sonar.model_executor.models.gemma4 import Gemma4ForCausalLM
+from sonar.model_executor.models.utils import WeightsMapper
 
 lora_lst = ["baichuan7B", "baichuan7B-zero", "baichuan7B-zero-regex", "chatglm3-6b"]
 BAICHUAN_LORA_MODULES = [
@@ -102,7 +102,7 @@ def test_lora_weights_mapping(baichuan_lora_files):
         else:
             expected_lora_lst.append(module)
     expected_lora_modules = set(expected_lora_lst)
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={
             "model.": "language_model.model.",
         },
@@ -118,15 +118,15 @@ def test_lora_weights_mapping(baichuan_lora_files):
         lora_model_id=1,
         device="cpu",
         model_vocab_size=64000,
-        weights_mapper=hf_to_aphrodite_mapper,
+        weights_mapper=hf_to_sonar_mapper,
     )
     for name in lora_model.loras:
-        assert name.startswith(hf_to_aphrodite_mapper.orig_to_new_prefix["model."])
+        assert name.startswith(hf_to_sonar_mapper.orig_to_new_prefix["model."])
         assert ".baichuan_layers." in name
 
 
 def test_gemma4_lora_weights_mapping():
-    mapper = Gemma4ForCausalLM.hf_to_aphrodite_mapper
+    mapper = Gemma4ForCausalLM.hf_to_sonar_mapper
     name = "base_model.model.model.language_model.layers.9.mlp.down_proj.lora_A.weight"
     assert parse_fine_tuned_lora_name(name, mapper) == (
         "model.layers.9.mlp.down_proj",
@@ -135,7 +135,7 @@ def test_gemma4_lora_weights_mapping():
 
 
 def test_gemma4_moe_lora_weights_mapping():
-    mapper = Gemma4ForCausalLM.hf_to_aphrodite_mapper
+    mapper = Gemma4ForCausalLM.hf_to_sonar_mapper
     name = "base_model.model.model.language_model.layers.9.experts.gate_up_proj.lora_B.weight"
     assert parse_fine_tuned_lora_name(name, mapper) == (
         "model.layers.9.experts.gate_up_proj",

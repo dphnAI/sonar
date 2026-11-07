@@ -3,11 +3,11 @@
 import numpy as np
 import torch
 
-from aphrodite.distributed.parallel_state import get_tp_group
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.v1.worker.gpu.input_batch import InputBatch
-from aphrodite.v1.worker.gpu.sample.batch_shard import (
+from sonar.distributed.parallel_state import get_tp_group
+from sonar.triton_utils import tl, triton
+from sonar.utils.math_utils import cdiv
+from sonar.v1.worker.gpu.input_batch import InputBatch
+from sonar.v1.worker.gpu.sample.batch_shard import (
     shard_owner,
     shard_owners,
     shard_row,

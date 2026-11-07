@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""E2E tests for render endpoints via `aphrodite launch` (GPU-less serving)."""
+"""E2E tests for render endpoints via `sonar launch` (GPU-less serving)."""
 
 import httpx
 import pytest

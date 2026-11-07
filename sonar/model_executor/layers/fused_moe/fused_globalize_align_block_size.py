@@ -3,8 +3,8 @@
 
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.triton_utils import triton
+from sonar import _custom_ops as ops
+from sonar.triton_utils import triton
 
 
 def fused_globalize_align_block_size(

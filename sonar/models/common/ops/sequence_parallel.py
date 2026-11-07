@@ -5,7 +5,7 @@ from functools import lru_cache
 
 import torch
 
-from aphrodite.distributed import (
+from sonar.distributed import (
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
     get_tp_group,

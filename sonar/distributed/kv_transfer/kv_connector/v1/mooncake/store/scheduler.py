@@ -7,14 +7,14 @@
 
 from collections.abc import Sequence
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed.kv_transfer.kv_connector.v1.base import (
+from sonar.config import SonarConfig
+from sonar.distributed.kv_transfer.kv_connector.v1.base import (
     KVConnectorMetadata,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.coordinator import (
+from sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.coordinator import (
     MooncakeStoreCoordinator,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.data import (  # noqa: E501
+from sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.data import (  # noqa: E501
     BoundaryPut,
     LoadSpec,
     MooncakeStoreConnectorMetadata,
@@ -22,25 +22,25 @@ from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.data impor
     ReqMeta,
     RequestTracker,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.worker import (  # noqa: E501
+from sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.worker import (  # noqa: E501
     LookupKeyClient,
 )
-from aphrodite.logger import init_logger
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.v1.attention.backends.utils import NULL_BLOCK_ID
-from aphrodite.v1.core.block_pool import BlockPool
-from aphrodite.v1.core.kv_cache_manager import KVCacheBlocks
-from aphrodite.v1.core.kv_cache_utils import (
+from sonar.logger import init_logger
+from sonar.utils.math_utils import cdiv
+from sonar.v1.attention.backends.utils import NULL_BLOCK_ID
+from sonar.v1.core.block_pool import BlockPool
+from sonar.v1.core.kv_cache_manager import KVCacheBlocks
+from sonar.v1.core.kv_cache_utils import (
     resolve_kv_cache_block_sizes,
 )
-from aphrodite.v1.core.sched.output import NewRequestData, SchedulerOutput
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.core.sched.output import NewRequestData, SchedulerOutput
+from sonar.v1.kv_cache_interface import (
     KVCacheConfig,
     MambaSpec,
     get_mamba_prefill_checkpoint_position,
 )
-from aphrodite.v1.outputs import KVConnectorOutput
-from aphrodite.v1.request import Request
+from sonar.v1.outputs import KVConnectorOutput
+from sonar.v1.request import Request
 
 logger = init_logger(__name__)
 
@@ -134,20 +134,20 @@ class MooncakeStoreScheduler:
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         kv_cache_config: KVCacheConfig,
     ):
-        assert aphrodite_config.kv_transfer_config is not None
-        self.kv_role = aphrodite_config.kv_transfer_config.kv_role
-        kvc_extra_config = aphrodite_config.kv_transfer_config.kv_connector_extra_config
+        assert sonar_config.kv_transfer_config is not None
+        self.kv_role = sonar_config.kv_transfer_config.kv_role
+        kvc_extra_config = sonar_config.kv_transfer_config.kv_connector_extra_config
         self.load_async = kvc_extra_config.get("load_async", True)
         self.lookup_async = kvc_extra_config.get("lookup_async", False)
         # Skips lookup CPU cost on instances that never load KV from the store.
         self.enable_lookup = kvc_extra_config.get("enable_lookup", True)
         self.save_decode_cache = kvc_extra_config.get("save_decode_cache", False)
-        kv_event_config = aphrodite_config.kv_events_config
+        kv_event_config = sonar_config.kv_events_config
         self.enable_kv_events = bool(kv_event_config and kv_event_config.enable_kv_cache_events)
-        self.client = LookupKeyClient(aphrodite_config)
+        self.client = LookupKeyClient(sonar_config)
         self.kv_cache_config = kv_cache_config
         self._store_group_ids = kv_cache_config.prefix_cacheable_group_ids
         # Map scheduler group IDs to store group indices. Groups outside the
@@ -158,7 +158,7 @@ class MooncakeStoreScheduler:
         store_groups = kv_cache_config.prefix_cacheable_groups
 
         # Align with the engine's own scheduler_block_size and hash_block_size.
-        self._block_size, self._hash_block_size = resolve_kv_cache_block_sizes(kv_cache_config, aphrodite_config)
+        self._block_size, self._hash_block_size = resolve_kv_cache_block_sizes(kv_cache_config, sonar_config)
         mamba_groups = {
             group_id: group.kv_cache_spec
             for group_id, group in enumerate(store_groups)
@@ -178,12 +178,12 @@ class MooncakeStoreScheduler:
                 "MooncakeStoreScheduler requires mamba_cache_mode='align'"
             )
             self._store_coord = MooncakeStoreCoordinator.from_kv_cache_config(
-                kv_cache_config, aphrodite_config, self._block_size, self._hash_block_size
+                kv_cache_config, sonar_config, self._block_size, self._hash_block_size
             )
             self.enable_partial_hash_hits = self._store_coord.enable_partial_hash_hits
 
         self._gpu_block_pool: BlockPool | None = None
-        self._num_workers = aphrodite_config.parallel_config.world_size
+        self._num_workers = sonar_config.parallel_config.world_size
         self._next_store_job_id = 0
         # store_job_id -> (referenced block ids, ranks yet to report completion)
         self._pinned_saves: dict[int, tuple[list[int], int]] = {}
@@ -244,7 +244,7 @@ class MooncakeStoreScheduler:
             return 0, False
 
         self.load_specs[request.request_id] = LoadSpec(
-            aphrodite_cached_tokens=num_computed_tokens,
+            sonar_cached_tokens=num_computed_tokens,
             kvpool_cached_tokens=num_external_hit_tokens,
             can_load=False,
             tail_key_boundaries=lookup_result.tail_key_boundaries,
@@ -279,11 +279,11 @@ class MooncakeStoreScheduler:
             num_external_tokens > 0
             and num_external_tokens
             == self.load_specs[request.request_id].kvpool_cached_tokens
-            - self.load_specs[request.request_id].aphrodite_cached_tokens
+            - self.load_specs[request.request_id].sonar_cached_tokens
         ), (
             f"Mismatch in number of tokens: {num_external_tokens} vs "
             f"{self.load_specs[request.request_id].kvpool_cached_tokens} - "
-            f"{self.load_specs[request.request_id].aphrodite_cached_tokens}"
+            f"{self.load_specs[request.request_id].sonar_cached_tokens}"
             f" for request {request.request_id}"
         )
 

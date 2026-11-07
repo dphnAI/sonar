@@ -4,9 +4,9 @@ from collections.abc import Iterable
 
 import torch
 
-from aphrodite.triton_utils import tl, triton
-from aphrodite.v1.attention.backends.utils import PAD_SLOT_ID
-from aphrodite.v1.worker.gpu.buffer_utils import (
+from sonar.triton_utils import tl, triton
+from sonar.v1.attention.backends.utils import PAD_SLOT_ID
+from sonar.v1.worker.gpu.buffer_utils import (
     FusedStagedWriter,
     StagedWriteTensor,
     UvaBackedTensor,

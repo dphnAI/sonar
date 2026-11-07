@@ -13,10 +13,10 @@ import tiktoken
 from transformers import AddedToken, BatchEncoding
 from transformers.utils import chat_template_utils as hf_chat_utils
 
-from aphrodite.logger import init_logger
-from aphrodite.renderers.chat_utils import ChatCompletionMessageParam
-from aphrodite.tokenizers.protocol import TokenizerLike
-from aphrodite.transformers_utils.repo_utils import hf_api
+from sonar.logger import init_logger
+from sonar.renderers.chat_utils import ChatCompletionMessageParam
+from sonar.tokenizers.protocol import TokenizerLike
+from sonar.transformers_utils.repo_utils import hf_api
 
 logger = init_logger(__name__)
 

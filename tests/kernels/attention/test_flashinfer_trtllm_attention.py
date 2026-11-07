@@ -4,9 +4,9 @@
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.utils.math_utils import round_up
-from aphrodite.utils.torch_utils import (
+from sonar.platforms import current_platform
+from sonar.utils.math_utils import round_up
+from sonar.utils.torch_utils import (
     nvfp4_kv_cache_full_dim,
     nvfp4_split_data_scale,
     set_random_seed,
@@ -626,7 +626,7 @@ def test_flashinfer_dcp_prefill_trtllm_context(
 ) -> None:
     """The trtllm-gen DCP context pass matches the native one, and gives
     requests without local context a zero output and a -inf LSE."""
-    from aphrodite.v1.attention.backends.flashinfer import BatchDCPPrefillWrapper
+    from sonar.v1.attention.backends.flashinfer import BatchDCPPrefillWrapper
 
     set_random_seed(42)
     device = "cuda"
@@ -705,7 +705,7 @@ def test_flashinfer_dcp_prefill_trtllm_context(
 def test_trtllm_dcp_context_workspace_fit() -> None:
     """Batches whose LSE scratch exceeds the trtllm-gen workspace fall back to
     the native context pass."""
-    from aphrodite.v1.attention.backends.flashinfer import TrtllmDCPContextWrapper
+    from sonar.v1.attention.backends.flashinfer import TrtllmDCPContextWrapper
 
     # One 8K prefill chunk plus 256 speculative-decode verify queries.
     q_lens = torch.tensor([8192] + [4] * 256, dtype=torch.int32)

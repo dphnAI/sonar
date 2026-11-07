@@ -6,8 +6,8 @@
 
 use std::sync::Arc;
 
-use aphrodite_engine_core_client::protocol::dtype::ModelDtype;
 use llm_multimodal::{ImageFrame, Modality, PreprocessedEncoderInputs, VisionPreprocessingContext};
+use sonar_engine_core_client::protocol::dtype::ModelDtype;
 
 use super::timing::MM_STAGE_TARGET;
 use super::{MultimodalModelInfo, PreparedMedia, VisionModalitySupport, item};

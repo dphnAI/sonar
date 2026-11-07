@@ -4,14 +4,14 @@ import pytest
 import torch
 from PIL import Image
 
-from aphrodite.multimodal.inputs import (
+from sonar.multimodal.inputs import (
     MultiModalBatchedField,
     MultiModalFieldElem,
     MultiModalKwargsItem,
     MultiModalSharedField,
     PlaceholderRange,
 )
-from aphrodite.multimodal.utils import (
+from sonar.multimodal.utils import (
     argsort_mm_positions,
     encode_image_url,
     group_and_batch_mm_items,

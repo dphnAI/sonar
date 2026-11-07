@@ -14,7 +14,7 @@
    EVTCompute::Arguments struct.
 */
 
-namespace aphrodite::c2x {
+namespace sonar::c2x {
 
 using namespace cute;
 
@@ -322,4 +322,4 @@ struct ScaledEpilogueBiasAzpToken
   }
 };
 
-};  // namespace aphrodite::c2x
+};  // namespace sonar::c2x

@@ -9,15 +9,15 @@ from typing import Any
 
 import torch
 
-from aphrodite.models.kimi_k3.amd.specialized_decode.runtime import WHOLE, layer_kinds
+from sonar.models.kimi_k3.amd.specialized_decode.runtime import WHOLE, layer_kinds
 
 
 def weight_reasons(model) -> list[str]:
     """``model``: the loaded ``KimiLinearModel``; every kernel layer's weights as
     the kernels read them, and the MoE backend that lays them out."""
-    from aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 import Mxfp4MoeBackend
-    from aphrodite.models.kimi_k3.amd.specialized_decode.mono.attention import back, kda
-    from aphrodite.models.kimi_k3.amd.specialized_decode.mono.stages import moe
+    from sonar.model_executor.layers.fused_moe.oracle.mxfp4 import Mxfp4MoeBackend
+    from sonar.models.kimi_k3.amd.specialized_decode.mono.attention import back, kda
+    from sonar.models.kimi_k3.amd.specialized_decode.mono.stages import moe
 
     reasons: list[str] = []
     bf, f32 = torch.bfloat16, torch.float32
@@ -94,7 +94,7 @@ def weight_reasons(model) -> list[str]:
 
 def cache_reasons(caches: Mapping[str, Any]) -> list[str]:
     """Every KDA layer's (conv, recurrent) state as K1 reads them."""
-    from aphrodite.models.kimi_k3.amd.specialized_decode.mono.attention import kda
+    from sonar.models.kimi_k3.amd.specialized_decode.mono.attention import kda
 
     reasons = []
     for name, (conv_state, rstate) in caches.items():
@@ -145,5 +145,5 @@ class FailStop:
             ranks = [r for r, v in enumerate(votes.tolist()) if v]
             raise RuntimeError(
                 f"Kimi-K3 specialized decode: TP ranks {ranks} gave up an in-kernel "
-                "wait; stopping the engine (decode_backend=auto runs Aphrodite's decode)"
+                "wait; stopping the engine (decode_backend=auto runs Sonar's decode)"
             )

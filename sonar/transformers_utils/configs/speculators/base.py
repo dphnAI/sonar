@@ -6,10 +6,10 @@ from typing import Any
 
 from transformers import PreTrainedConfig
 
-from aphrodite.transformers_utils.configs.speculators.algos import (
+from sonar.transformers_utils.configs.speculators.algos import (
     SUPPORTED_SPECULATORS_TYPES,
 )
-from aphrodite.transformers_utils.utils import without_trust_remote_code
+from sonar.transformers_utils.utils import without_trust_remote_code
 
 
 class SpeculatorsConfig(PreTrainedConfig):
@@ -35,11 +35,11 @@ class SpeculatorsConfig(PreTrainedConfig):
         pretrained_model_name_or_path: str | os.PathLike,
         **kwargs,
     ) -> "SpeculatorsConfig":
-        """Load speculators Eagle config and convert to Aphrodite format."""
+        """Load speculators Eagle config and convert to Sonar format."""
         config_dict, _ = cls.get_config_dict(pretrained_model_name_or_path, **without_trust_remote_code(kwargs))
 
-        aphrodite_config = cls.extract_transformers_pre_trained_config(config_dict)
-        return cls(**aphrodite_config)
+        sonar_config = cls.extract_transformers_pre_trained_config(config_dict)
+        return cls(**sonar_config)
 
     @classmethod
     def extract_transformers_pre_trained_config(cls, config_dict: dict[str, Any]) -> dict[str, Any]:
@@ -59,13 +59,13 @@ class SpeculatorsConfig(PreTrainedConfig):
         return pre_trained_config
 
     @classmethod
-    def extract_aphrodite_speculative_config(cls, config_dict: dict[str, Any]) -> dict[str, Any]:
-        """Extract Aphrodite speculative config from speculators config."""
+    def extract_sonar_speculative_config(cls, config_dict: dict[str, Any]) -> dict[str, Any]:
+        """Extract Sonar speculative config from speculators config."""
         # validate fields
         # TODO: @dsikka - use speculators pydantic model to validate
         cls.validate_speculators_config(config_dict=config_dict)
-        # Convert from speculators config -> format that can be ingested by Aphrodite
-        return cls.build_aphrodite_speculative_config(config_dict=config_dict)
+        # Convert from speculators config -> format that can be ingested by Sonar
+        return cls.build_sonar_speculative_config(config_dict=config_dict)
 
     @classmethod
     def validate_speculators_config(cls, config_dict: dict[str, Any]) -> None:
@@ -86,17 +86,17 @@ class SpeculatorsConfig(PreTrainedConfig):
             raise TypeError("'transformer_layer_config' must be a dictionary if provided")
 
     @classmethod
-    def build_aphrodite_speculative_config(cls, config_dict: dict[str, Any]) -> dict[str, Any]:
-        """Build Aphrodite-compatible speculative configuration from speculators format.
+    def build_sonar_speculative_config(cls, config_dict: dict[str, Any]) -> dict[str, Any]:
+        """Build Sonar-compatible speculative configuration from speculators format.
 
         This method extracts and transforms speculative configuration from the
-        speculators format into the structure expected by Aphrodite.
+        speculators format into the structure expected by Sonar.
 
         Args:
             config_dict: Configuration dictionary in speculators format
 
         Returns:
-            Dictionary with Aphrodite-compatible speculative configuration
+            Dictionary with Sonar-compatible speculative configuration
 
         """
         # Extract speculators configuration
@@ -113,7 +113,7 @@ class SpeculatorsConfig(PreTrainedConfig):
         if num_speculative_tokens is None:
             raise ValueError(f"Missing 'speculative_tokens' in proposal method. Got: {first_method}")
 
-        # Build base Aphrodite speculative configuration
+        # Build base Sonar speculative configuration
         result = {
             "method": config_dict.get("speculators_model_type"),
             "num_speculative_tokens": num_speculative_tokens,

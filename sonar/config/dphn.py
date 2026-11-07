@@ -7,7 +7,7 @@ from typing import Any, Self
 
 from pydantic import Field, model_validator
 
-from aphrodite.config.utils import config
+from sonar.config.utils import config
 
 
 @config
@@ -31,7 +31,7 @@ class DphnNetworkConfig:
     def _validate_sampling(self) -> Self:
         from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey, X25519PublicKey
 
-        from aphrodite.proof.verifier import _load_x25519_public_key
+        from sonar.proof.verifier import _load_x25519_public_key
 
         missing = [name for name in ("public_key", "worker_id", "model_manifest_id") if not getattr(self, name)]
         if missing:

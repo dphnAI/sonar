@@ -32,12 +32,12 @@ from cutlass import (
 from cutlass.cute.nvgpu import cpasync, tcgen05
 from cutlass.cute.runtime import make_fake_tensor
 
-from aphrodite.cute_utils import _tcgen05, mbarrier, simple_tma_copy, to_cta0_smem
-from aphrodite.cute_utils.cvt import (
+from sonar.cute_utils import _tcgen05, mbarrier, simple_tma_copy, to_cta0_smem
+from sonar.cute_utils.cvt import (
     bf16x2_to_fp32x2,
     fp32x8_to_fp4x8,
 )
-from aphrodite.model_executor.warmup.jit_warmup_cutedsl_helper import AphroditeCuTeDSLJitKernel
+from sonar.model_executor.warmup.jit_warmup_cutedsl_helper import SonarCuTeDSLJitKernel
 
 HEAD_DIM = 128  # one 128-col N-tile per head
 # epilogue outputs are consumed by other kernels: stores bypass L1
@@ -786,7 +786,7 @@ class QkvIndexFusedEpilogueKernel:
                 _tcgen05.dealloc(cta_group=cg)
 
 
-class _QkvIndexFusedEpilogueJit(AphroditeCuTeDSLJitKernel["_QkvIndexFusedEpilogueJit.CompileKey"]):
+class _QkvIndexFusedEpilogueJit(SonarCuTeDSLJitKernel["_QkvIndexFusedEpilogueJit.CompileKey"]):
     """Compile keys, warmup (fake) inputs and the compiled executors of
     QkvIndexFusedEpilogueKernel."""
 

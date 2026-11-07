@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 
 import torch
 
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.kv_cache_interface import (
     AttentionSpec,
     KVCacheConfig,
     KVCacheLayout,
@@ -23,10 +23,10 @@ from aphrodite.v1.kv_cache_interface import (
     MLAAttentionSpec,
     UniformTypeKVCacheSpecs,
 )
-from aphrodite.v1.kv_offload.base import CanonicalPageMapping, CopyRun
+from sonar.v1.kv_offload.base import CanonicalPageMapping, CopyRun
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
+    from sonar.config import SonarConfig
 
 # Version of the canonical byte format; bump on any layout change
 CANONICAL_FORMAT_VERSION = 1
@@ -386,7 +386,7 @@ def _unpadded_page_size(spec: KVCacheSpec) -> int | None:
 
 
 def derive_canonical_mappings(
-    aphrodite_config: "AphroditeConfig",
+    sonar_config: "SonarConfig",
     kv_cache_config: KVCacheConfig,
     kv_caches: dict[str, torch.Tensor | list[torch.Tensor]],
 ) -> dict[str, CanonicalPageMapping]:
@@ -395,7 +395,7 @@ def derive_canonical_mappings(
     Empty when the worker group is not exactly the TP x PCP grid; layers
     absent from the result have no canonical representation.
     """
-    parallel_config = aphrodite_config.parallel_config
+    parallel_config = sonar_config.parallel_config
     tp_size = parallel_config.tensor_parallel_size
     pcp_size = parallel_config.prefill_context_parallel_size
     group_size = tp_size * pcp_size
@@ -408,7 +408,7 @@ def derive_canonical_mappings(
             dcp_size=parallel_config.decode_context_parallel_size,
             pcp_size=pcp_size,
             interleave=parallel_config.cp_kv_cache_interleave_size,
-            total_kv_heads=aphrodite_config.model_config.get_total_num_kv_heads(),
+            total_kv_heads=sonar_config.model_config.get_total_num_kv_heads(),
             rank=rank,
         )
 

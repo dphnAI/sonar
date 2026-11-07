@@ -26,20 +26,20 @@ from typing import TYPE_CHECKING, Any
 import torch
 import transformers
 
-from aphrodite.compilation.decorators import should_torch_compile_mm_encoder
-from aphrodite.config.utils import getattr_iter
-from aphrodite.inputs import MultiModalDataBuiltins, MultiModalDataDict
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.models.interfaces import (
+from sonar.compilation.decorators import should_torch_compile_mm_encoder
+from sonar.config.utils import getattr_iter
+from sonar.inputs import MultiModalDataBuiltins, MultiModalDataDict
+from sonar.logger import init_logger
+from sonar.model_executor.models.interfaces import (
     MultiModalEmbeddings,
     SupportsMRoPE,
     SupportsMultiModal,
 )
-from aphrodite.model_executor.models.module_mapping import MultiModelKeys
-from aphrodite.multimodal import MULTIMODAL_REGISTRY, MultiModalKwargsItems
-from aphrodite.multimodal.inputs import MultiModalFeatureSpec, MultiModalFieldConfig
-from aphrodite.multimodal.parse import ImageSize, MultiModalDataItems, MultiModalDataParser
-from aphrodite.multimodal.processing import (
+from sonar.model_executor.models.module_mapping import MultiModelKeys
+from sonar.multimodal import MULTIMODAL_REGISTRY, MultiModalKwargsItems
+from sonar.multimodal.inputs import MultiModalFeatureSpec, MultiModalFieldConfig
+from sonar.multimodal.parse import ImageSize, MultiModalDataItems, MultiModalDataParser
+from sonar.multimodal.processing import (
     BaseDummyInputsBuilder,
     BaseMultiModalProcessor,
     BaseProcessingInfo,
@@ -48,18 +48,18 @@ from aphrodite.multimodal.processing import (
     PromptUpdateDetails,
     cached_encode,
 )
-from aphrodite.multimodal.processing.processor import HFMultiModalInputs
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.utils.gpu_sync_debug import gpu_sync_allowed
-from aphrodite.utils.torch_utils import async_tensor_h2d
+from sonar.multimodal.processing.processor import HFMultiModalInputs
+from sonar.sequence import IntermediateTensors
+from sonar.utils.gpu_sync_debug import gpu_sync_allowed
+from sonar.utils.torch_utils import async_tensor_h2d
 
 from .base import Base
 
 if TYPE_CHECKING:
     from transformers import BatchFeature, PreTrainedModel
 
-    from aphrodite.config import AphroditeConfig
-    from aphrodite.config.multimodal import MultiModalDummyOptions
+    from sonar.config import SonarConfig
+    from sonar.config.multimodal import MultiModalDummyOptions
 
 logger = init_logger(__name__)
 
@@ -492,7 +492,7 @@ class MultiModalProcessor(BaseMultiModalProcessor[MultiModalProcessingInfo]):
         hf_inputs: "BatchFeature",
         hf_processor_mm_kwargs: Mapping[str, object],
     ) -> Mapping[str, MultiModalFieldConfig]:
-        # HF Processors always return a mask but Aphrodite doesn't need it
+        # HF Processors always return a mask but Sonar doesn't need it
         hf_inputs.pop("attention_mask", None)
 
         # Absent if the modality had no items
@@ -792,9 +792,9 @@ class MultiModalProcessor(BaseMultiModalProcessor[MultiModalProcessingInfo]):
 
 
 class MultiModalMixin(SupportsMultiModal, SupportsMRoPE, Base):
-    def __init__(self, *, aphrodite_config: "AphroditeConfig", prefix: str = ""):
+    def __init__(self, *, sonar_config: "SonarConfig", prefix: str = ""):
         # Skip SupportsMRoPE.__init__ and call the next class in MRO
-        super(SupportsMRoPE, self).__init__(aphrodite_config=aphrodite_config, prefix=prefix)
+        super(SupportsMRoPE, self).__init__(sonar_config=sonar_config, prefix=prefix)
 
     def _find_encoder_classes(self, model: "PreTrainedModel") -> dict[str, type["PreTrainedModel"]]:
         """Modalities whose encoder cannot be told apart from the model itself are
@@ -810,8 +810,8 @@ class MultiModalMixin(SupportsMultiModal, SupportsMRoPE, Base):
         return encoder_classes
 
     @contextmanager
-    def _mark_model_components(self, aphrodite_config: "AphroditeConfig"):
-        model_config = aphrodite_config.model_config
+    def _mark_model_components(self, sonar_config: "SonarConfig"):
+        model_config = sonar_config.model_config
         encoder_classes = self._pre_trained_model_classes.encoders
         if not encoder_classes:
             logger.debug("No encoders identified, so no components will be marked")
@@ -845,14 +845,14 @@ class MultiModalMixin(SupportsMultiModal, SupportsMRoPE, Base):
 
         with ExitStack() as stack:
             stack.enter_context(
-                self._mark_language_model(aphrodite_config, targets=self._pre_trained_model_classes.decoder)
+                self._mark_language_model(sonar_config, targets=self._pre_trained_model_classes.decoder)
             )
             for encoder_cls, modalities in modalities_by_encoder.items():
-                stack.enter_context(self._mark_tower_model(aphrodite_config, modalities, targets=encoder_cls))
+                stack.enter_context(self._mark_tower_model(sonar_config, modalities, targets=encoder_cls))
             yield
 
     def _decorate_for_torch_compile(self):
-        """Decorate the model's decoder and encoder classes to indicate to Aphrodite
+        """Decorate the model's decoder and encoder classes to indicate to Sonar
         that they support torch compile if `can_enable_torch_compile` and
         `should_torch_compile_mm_encoder` are True respectively.
         """
@@ -906,11 +906,11 @@ class MultiModalMixin(SupportsMultiModal, SupportsMRoPE, Base):
 
     def get_language_model(self) -> torch.nn.Module:
         """Transformers modeling backend multimodal classes do not contain a separate
-        Aphrodite language model class. Therefore, in order to return a language model Aphrodite
+        Sonar language model class. Therefore, in order to return a language model Sonar
         class, we use a wrapper to give `self` the same interface as a text model."""
         # Exclude self and object
         bases = self.__class__.mro()[1:-1]
-        # Keep only classes defined in `aphrodite.model_executor.models.transformers`
+        # Keep only classes defined in `sonar.model_executor.models.transformers`
         bases = [b for b in bases if ".transformers." in b.__module__]
         # Exclude MultiModalMixin itself
         bases = [b for b in bases if b is not MultiModalMixin]

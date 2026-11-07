@@ -4,36 +4,36 @@ from argparse import Namespace
 
 from starlette.datastructures import State
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.entrypoints.common.cli_args import resolve_default_chat_template_kwargs
-from aphrodite.entrypoints.mcp.tool_server import init_tool_server
-from aphrodite.entrypoints.openai.models.protocol import BaseModelPath
-from aphrodite.entrypoints.openai.models.serving import OpenAIModelRegistry
-from aphrodite.entrypoints.scale_out.factories import init_render_state
-from aphrodite.entrypoints.serve.tokenize.serving import ServingTokenization
-from aphrodite.entrypoints.serve.utils.request_logger import RequestLogger
-from aphrodite.plugins.endpoint_plugins.interface import init_endpoint_plugins_state
-from aphrodite.renderers import renderer_from_config
-from aphrodite.renderers.chat_utils import load_chat_template
-from aphrodite.renderers.online_derenderer import OnlineDerenderer
-from aphrodite.renderers.online_renderer import OnlineRenderer
+from sonar.config import SonarConfig
+from sonar.entrypoints.common.cli_args import resolve_default_chat_template_kwargs
+from sonar.entrypoints.mcp.tool_server import init_tool_server
+from sonar.entrypoints.openai.models.protocol import BaseModelPath
+from sonar.entrypoints.openai.models.serving import OpenAIModelRegistry
+from sonar.entrypoints.scale_out.factories import init_render_state
+from sonar.entrypoints.serve.tokenize.serving import ServingTokenization
+from sonar.entrypoints.serve.utils.request_logger import RequestLogger
+from sonar.plugins.endpoint_plugins.interface import init_endpoint_plugins_state
+from sonar.renderers import renderer_from_config
+from sonar.renderers.chat_utils import load_chat_template
+from sonar.renderers.online_derenderer import OnlineDerenderer
+from sonar.renderers.online_renderer import OnlineRenderer
 
 
 async def init_render_app_state(
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     state: State,
     args: Namespace,
 ) -> None:
     """Initialise FastAPI app state for a CPU-only render server.
 
     Unlike :func:`init_app_state` this function does not require an
-    :class:`~aphrodite.engine.protocol.EngineClient`; it bootstraps the
+    :class:`~sonar.engine.protocol.EngineClient`; it bootstraps the
     preprocessing pipeline (renderer, input_processor)
-    directly from the :class:`~aphrodite.config.AphroditeConfig`.
+    directly from the :class:`~sonar.config.SonarConfig`.
     """
     served_model_names = args.served_model_name or [args.model]
     model_registry = OpenAIModelRegistry(
-        model_config=aphrodite_config.model_config,
+        model_config=sonar_config.model_config,
         base_model_paths=[BaseModelPath(name=name, model_path=args.model) for name in served_model_names],
     )
 
@@ -42,7 +42,7 @@ async def init_render_app_state(
     else:
         request_logger = None
 
-    renderer = renderer_from_config(aphrodite_config)
+    renderer = renderer_from_config(sonar_config)
     resolved_chat_template = load_chat_template(args.chat_template)
     default_chat_template_kwargs = resolve_default_chat_template_kwargs(args)
     state.tool_server = await init_tool_server(args)
@@ -52,11 +52,11 @@ async def init_render_app_state(
     # model-specific default applied by `verify_and_update_config`
     # (e.g. "openai_gptoss" for gpt_oss), matching the main API server.
     # Keep `args.reasoning_parser` as the first source so callers that build
-    # a AphroditeConfig without that merge still honor an explicit flag.
-    reasoning_parser = args.reasoning_parser or aphrodite_config.structured_outputs_config.reasoning_parser
+    # a SonarConfig without that merge still honor an explicit flag.
+    reasoning_parser = args.reasoning_parser or sonar_config.structured_outputs_config.reasoning_parser
 
     state.online_renderer = OnlineRenderer(
-        model_config=aphrodite_config.model_config,
+        model_config=sonar_config.model_config,
         renderer=renderer,
         request_logger=request_logger,
         chat_template=resolved_chat_template,
@@ -75,7 +75,7 @@ async def init_render_app_state(
     state.online_renderer.warmup()
 
     state.online_derenderer = OnlineDerenderer(
-        model_config=aphrodite_config.model_config,
+        model_config=sonar_config.model_config,
         renderer=renderer,
         request_logger=request_logger,
         chat_template=resolved_chat_template,
@@ -108,7 +108,7 @@ async def init_render_app_state(
         disabled_thinking_effort=args.anthropic_disabled_thinking_effort,
     )
 
-    state.aphrodite_config = aphrodite_config
+    state.sonar_config = sonar_config
     # Disable stats logging — there is no engine to poll.
     state.log_stats = False
     state.engine_client = None

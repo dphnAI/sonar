@@ -4,48 +4,48 @@ import torch
 from einops import rearrange
 from torch import nn
 
-from aphrodite.compilation.breakable_cudagraph import eager_break_during_capture
-from aphrodite.config import (
-    AphroditeConfig,
-    get_current_aphrodite_config,
+from sonar.compilation.breakable_cudagraph import eager_break_during_capture
+from sonar.config import (
+    SonarConfig,
+    get_current_sonar_config,
 )
-from aphrodite.distributed import (
+from sonar.distributed import (
     divide,
 )
-from aphrodite.forward_context import ForwardContext, get_forward_context
-from aphrodite.model_executor.custom_op import PluggableLayer
-from aphrodite.model_executor.layers.layernorm import RMSNormGated
-from aphrodite.model_executor.layers.linear import (
+from sonar.forward_context import ForwardContext, get_forward_context
+from sonar.model_executor.custom_op import PluggableLayer
+from sonar.model_executor.layers.layernorm import RMSNormGated
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     MergedColumnParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.mamba.gdn.base import GatedDeltaNetAttention
-from aphrodite.model_executor.layers.mamba.gdn.qwen_gdn_linear_attn import (
+from sonar.model_executor.layers.mamba.gdn.base import GatedDeltaNetAttention
+from sonar.model_executor.layers.mamba.gdn.qwen_gdn_linear_attn import (
     _log_gdn_backend_decision,
     _resolve_gdn_prefill_backend,
 )
-from aphrodite.model_executor.layers.mamba.mamba_utils import (
+from sonar.model_executor.layers.mamba.mamba_utils import (
     MambaStateShapeCalculator,
     is_conv_state_dim_first,
 )
-from aphrodite.model_executor.layers.mamba.ops.causal_conv1d import (
+from sonar.model_executor.layers.mamba.ops.causal_conv1d import (
     causal_conv1d_fn,
     causal_conv1d_update,
 )
-from aphrodite.model_executor.model_loader.weight_utils import (
+from sonar.model_executor.model_loader.weight_utils import (
     sharded_weight_loader,
 )
-from aphrodite.model_executor.utils import set_weight_attrs
-from aphrodite.platforms import current_platform
-from aphrodite.third_party.flash_linear_attention.ops import (
+from sonar.model_executor.utils import set_weight_attrs
+from sonar.platforms import current_platform
+from sonar.third_party.flash_linear_attention.ops import (
     chunk_gated_delta_rule,
     fused_recurrent_gated_delta_rule,
 )
-from aphrodite.triton_utils import tl, triton
-from aphrodite.triton_utils.allocation import set_triton_allocator
-from aphrodite.utils.torch_utils import direct_register_custom_op
-from aphrodite.v1.attention.backends.gdn_attn import GDNAttentionMetadata
+from sonar.triton_utils import tl, triton
+from sonar.triton_utils.allocation import set_triton_allocator
+from sonar.utils.torch_utils import direct_register_custom_op
+from sonar.v1.attention.backends.gdn_attn import GDNAttentionMetadata
 
 
 @PluggableLayer.register("olmo_hybrid_gated_delta_net_attention")
@@ -72,10 +72,10 @@ class OlmoHybridGatedDeltaNetAttention(GatedDeltaNetAttention):
     def __init__(
         self,
         config,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
     ) -> None:
-        super().__init__(config, aphrodite_config, prefix=prefix)
+        super().__init__(config, sonar_config, prefix=prefix)
 
         assert getattr(config, "linear_use_gate", True), "OlmoHybridGatedDeltaNet requires linear_use_gate=True"
         self.num_k_heads = config.linear_num_key_heads
@@ -88,10 +88,10 @@ class OlmoHybridGatedDeltaNetAttention(GatedDeltaNetAttention):
         self.allow_neg_eigval = getattr(config, "linear_allow_neg_eigval", False)
 
         # OLMo always runs FLA; the resolver may still pick FlashInfer on CUDA.
-        requested_backend, _ = _resolve_gdn_prefill_backend(aphrodite_config)
+        requested_backend, _ = _resolve_gdn_prefill_backend(sonar_config)
         if requested_backend == "sycl":
             raise ValueError("GDN prefill backend 'sycl' is not supported for OLMo Hybrid.")
-        _log_gdn_backend_decision(aphrodite_config, requested_backend, "triton")
+        _log_gdn_backend_decision(sonar_config, requested_backend, "triton")
 
         # Fused QKVG projection: 1 matmul instead of 4
         self.in_proj_qkvg = MergedColumnParallelLinear(
@@ -176,7 +176,7 @@ class OlmoHybridGatedDeltaNetAttention(GatedDeltaNetAttention):
         # memory (required by triton >= 3.x autotuner). Set once at init.
         set_triton_allocator(current_platform.current_device())
 
-        compilation_config = get_current_aphrodite_config().compilation_config
+        compilation_config = get_current_sonar_config().compilation_config
         if prefix in compilation_config.static_forward_context:
             raise ValueError(f"Duplicate layer name: {prefix}")
         compilation_config.static_forward_context[prefix] = self
@@ -241,7 +241,7 @@ class OlmoHybridGatedDeltaNetAttention(GatedDeltaNetAttention):
         # the MLP and transformer attention layers that are NOT wrapped
         # in custom ops -- their small precision differences propagate
         # as inputs to the GDN layers from outside.
-        torch.ops.aphrodite.olmo_hybrid_gdn_full_forward(
+        torch.ops.sonar.olmo_hybrid_gdn_full_forward(
             hidden_states,
             output,
             self.prefix,

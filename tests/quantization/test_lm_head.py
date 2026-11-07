@@ -11,21 +11,21 @@ import pytest
 import torch
 from compressed_tensors.quantization import preset_name_to_scheme
 
-from aphrodite.model_executor.layers.linear import ColumnParallelLinear
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization.auto_gptq import AutoGPTQLinearMethod
-from aphrodite.model_executor.layers.quantization.base_config import QuantizationConfig
-from aphrodite.model_executor.layers.quantization.compressed_tensors.compressed_tensors import (  # noqa: E501
+from sonar.model_executor.layers.linear import ColumnParallelLinear
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization.auto_gptq import AutoGPTQLinearMethod
+from sonar.model_executor.layers.quantization.base_config import QuantizationConfig
+from sonar.model_executor.layers.quantization.compressed_tensors.compressed_tensors import (  # noqa: E501
     CompressedTensorsConfig,
 )
-from aphrodite.model_executor.layers.quantization.modelopt import ModelOptNvFp4Config
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.quantization.modelopt import ModelOptNvFp4Config
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     UnquantizedEmbeddingMethod,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.import_utils import has_humming
-from tests.quantization.utils import load_model_without_aphrodite_runner
+from sonar.platforms import current_platform
+from sonar.utils.import_utils import has_humming
+from tests.quantization.utils import load_model_without_sonar_runner
 
 PROMPT = "On the surface of Mars, we found"
 
@@ -43,8 +43,8 @@ def test_lm_head(
     workspace_init,
 ) -> None:
     # `LLM.apply_model` requires pickling a function.
-    monkeypatch.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
-    model, _ = load_model_without_aphrodite_runner(
+    monkeypatch.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")
+    model, _ = load_model_without_sonar_runner(
         model_id,
         dtype=torch.float16,
         model_config_kwargs={
@@ -71,10 +71,10 @@ def test_lm_head(
 )
 @pytest.mark.parametrize("bias", [False, True])
 @torch.inference_mode()
-def test_quantized_lm_head_matches_linear(dist_init, default_aphrodite_config, preset, quant_format, bias):
+def test_quantized_lm_head_matches_linear(dist_init, default_sonar_config, preset, quant_format, bias):
     """An explicitly quantized head must produce the same logits as a linear layer."""
-    default_aphrodite_config.model_config = SimpleNamespace(dtype=torch.bfloat16, head_dtype=None)
-    default_aphrodite_config.kernel_config.linear_backend = "humming"
+    default_sonar_config.model_config = SimpleNamespace(dtype=torch.bfloat16, head_dtype=None)
+    default_sonar_config.kernel_config.linear_backend = "humming"
     quant_config: QuantizationConfig
     if quant_format is None:
         quant_config = ModelOptNvFp4Config(

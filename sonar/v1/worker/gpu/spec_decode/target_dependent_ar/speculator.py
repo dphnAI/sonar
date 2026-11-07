@@ -5,20 +5,20 @@ from typing import Any
 import torch
 import torch.nn as nn
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.compilation import CUDAGraphMode
-from aphrodite.forward_context import BatchDescriptor, set_forward_context
-from aphrodite.logger import init_logger
-from aphrodite.triton_utils import tl, triton
-from aphrodite.v1.worker.gpu.attn_utils import build_slot_mappings_by_layer
-from aphrodite.v1.worker.gpu.cudagraph_utils import BatchExecutionDescriptor
-from aphrodite.v1.worker.gpu.dp_utils import DPSyncState, dispatch_cg_and_sync_dp
-from aphrodite.v1.worker.gpu.input_batch import InputBatch, InputBuffers
-from aphrodite.v1.worker.gpu.spec_decode.speculator import DraftModelSpeculator
-from aphrodite.v1.worker.gpu.spec_decode.target_dependent_ar.cudagraph_utils import (
+from sonar.config import SonarConfig
+from sonar.config.compilation import CUDAGraphMode
+from sonar.forward_context import BatchDescriptor, set_forward_context
+from sonar.logger import init_logger
+from sonar.triton_utils import tl, triton
+from sonar.v1.worker.gpu.attn_utils import build_slot_mappings_by_layer
+from sonar.v1.worker.gpu.cudagraph_utils import BatchExecutionDescriptor
+from sonar.v1.worker.gpu.dp_utils import DPSyncState, dispatch_cg_and_sync_dp
+from sonar.v1.worker.gpu.input_batch import InputBatch, InputBuffers
+from sonar.v1.worker.gpu.spec_decode.speculator import DraftModelSpeculator
+from sonar.v1.worker.gpu.spec_decode.target_dependent_ar.cudagraph_utils import (
     SpeculatorCudaGraphManager,
 )
-from aphrodite.v1.worker.utils import get_uniform_decode_token_count
+from sonar.v1.worker.utils import get_uniform_decode_token_count
 
 logger = init_logger(__name__)
 
@@ -30,8 +30,8 @@ class TargetDependentARSpeculator(DraftModelSpeculator):
     hidden states (and, for Gemma4, its KV cache) at each draft step.
     """
 
-    def __init__(self, aphrodite_config: AphroditeConfig, device: torch.device):
-        super().__init__(aphrodite_config, device)
+    def __init__(self, sonar_config: SonarConfig, device: torch.device):
+        super().__init__(sonar_config, device)
 
         self.hidden_states = torch.zeros(self.max_num_tokens, self.hidden_size, dtype=self.dtype, device=device)
         self.current_draft_step = torch.tensor(0, dtype=torch.int64, device=device)
@@ -81,7 +81,7 @@ class TargetDependentARSpeculator(DraftModelSpeculator):
     def init_cudagraph_manager(self, cudagraph_mode: CUDAGraphMode) -> None:
         # Initialize cudagraph manager for draft prefill (draft position 0).
         self.prefill_cudagraph_manager = SpeculatorCudaGraphManager(
-            self.aphrodite_config,
+            self.sonar_config,
             self.device,
             cudagraph_mode,
             self.num_speculative_steps + 1,
@@ -97,7 +97,7 @@ class TargetDependentARSpeculator(DraftModelSpeculator):
 
         # Initialize cudagraph manager for draft decodes (draft positions > 0).
         self.decode_cudagraph_manager = SpeculatorCudaGraphManager(
-            self.aphrodite_config, self.device, cudagraph_mode, decode_query_len=1
+            self.sonar_config, self.device, cudagraph_mode, decode_query_len=1
         )
 
     def capture(self) -> None:
@@ -253,7 +253,7 @@ class TargetDependentARSpeculator(DraftModelSpeculator):
             max_query_len=None if input_batch.has_prefill else int(max_query_len),
             need_eager=is_profile,
             dp_sync_state=dp_sync_state,
-            parallel_config=self.aphrodite_config.parallel_config,
+            parallel_config=self.sonar_config.parallel_config,
         )
         num_tokens_across_dp = prefill_batch_sync.num_tokens_across_dp if prefill_batch_sync is not None else None
 
@@ -333,7 +333,7 @@ class TargetDependentARSpeculator(DraftModelSpeculator):
             dp_rank=self.dp_rank,
             need_eager=is_profile,
             dp_sync_state=decode_batch_sync,
-            parallel_config=self.aphrodite_config.parallel_config,
+            parallel_config=self.sonar_config.parallel_config,
         )
         if self.decode_cudagraph_manager is not None:
             decode_batch_desc = self.decode_cudagraph_manager.specialize_spec_tokens(
@@ -373,7 +373,7 @@ class TargetDependentARSpeculator(DraftModelSpeculator):
         batch_descriptor = BatchDescriptor(num_tokens=num_tokens)
         with set_forward_context(
             attn_metadata,
-            self.aphrodite_config,
+            self.sonar_config,
             num_tokens=num_tokens,
             cudagraph_runtime_mode=cudagraph_runtime_mode,
             num_tokens_across_dp=num_tokens_across_dp,

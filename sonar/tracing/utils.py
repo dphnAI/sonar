@@ -3,8 +3,8 @@
 
 from collections.abc import Mapping
 
-from aphrodite.logger import init_logger
-from aphrodite.utils.func_utils import run_once
+from sonar.logger import init_logger
+from sonar.utils.func_utils import run_once
 
 logger = init_logger(__name__)
 

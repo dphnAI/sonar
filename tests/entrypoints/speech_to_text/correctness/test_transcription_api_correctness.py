@@ -19,9 +19,9 @@ from datasets import Audio, load_dataset
 from jiwer import wer
 from transformers.models.whisper.english_normalizer import EnglishTextNormalizer
 
-from aphrodite.benchmarks.datasets.datasets import ASRDataset
-from aphrodite.multimodal.audio import get_audio_duration
-from aphrodite.tokenizers import get_tokenizer
+from sonar.benchmarks.datasets.datasets import ASRDataset
+from sonar.multimodal.audio import get_audio_duration
+from sonar.tokenizers import get_tokenizer
 
 from ....models.registry import HF_EXAMPLE_MODELS
 from ....utils import RemoteOpenAIServer
@@ -351,7 +351,7 @@ def test_long_audio_wer_correctness(model_config):
 
     # 1800 seconds is 30 minutes
     env_dict = {
-        "APHRODITE_MAX_AUDIO_DECODE_DURATION_S": "1800",
+        "SONAR_MAX_AUDIO_DECODE_DURATION_S": "1800",
     }
 
     with RemoteOpenAIServer(

@@ -21,7 +21,7 @@ from flydsl.expr import rocdl as _rocdl
 from flydsl.expr.typing import T
 from flydsl.expr.typing import Vector as Vec
 
-from aphrodite.models.minimax_m3.amd.ops.flydsl_utils import (
+from sonar.models.minimax_m3.amd.ops.flydsl_utils import (
     as_f32,
     bits,
     cvt_fp4x2_f16,
@@ -29,7 +29,7 @@ from aphrodite.models.minimax_m3.amd.ops.flydsl_utils import (
     maxf_nn,
     permlane_swap,
 )
-from aphrodite.models.minimax_m3.amd.ops.nvfp4_index_prefill.kernel import (
+from sonar.models.minimax_m3.amd.ops.nvfp4_index_prefill.kernel import (
     BLK,
     PAGE_BYTES,
     PAGE_CODES,

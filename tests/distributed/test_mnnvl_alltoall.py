@@ -16,14 +16,14 @@ import pytest
 import torch
 import torch.multiprocessing as mp
 
-from aphrodite.distributed import get_ep_group
-from aphrodite.platforms import current_platform
-from aphrodite.utils.flashinfer import (
+from sonar.distributed import get_ep_group
+from sonar.platforms import current_platform
+from sonar.utils.flashinfer import (
     has_flashinfer_nvlink_one_sided,
     has_flashinfer_nvlink_two_sided,
 )
-from aphrodite.utils.import_utils import has_deep_ep_v2
-from aphrodite.utils.network_utils import get_open_port
+from sonar.utils.import_utils import has_deep_ep_v2
+from sonar.utils.network_utils import get_open_port
 
 from ..utils import init_test_distributed_environment
 
@@ -141,22 +141,22 @@ def _init_dp_environment(world_size, rank, port, dp_size, dp_port):
         dp_port: Separate port for the DP master group init.
 
     """
-    from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-    from aphrodite.config.parallel import ParallelConfig
-    from aphrodite.distributed.parallel_state import (
+    from sonar.config import SonarConfig, set_current_sonar_config
+    from sonar.config.parallel import ParallelConfig
+    from sonar.distributed.parallel_state import (
         ensure_model_parallel_initialized,
         init_distributed_environment,
     )
 
-    aphrodite_config = AphroditeConfig()
-    aphrodite_config.parallel_config = ParallelConfig(
+    sonar_config = SonarConfig()
+    sonar_config.parallel_config = ParallelConfig(
         data_parallel_size=dp_size,
         data_parallel_rank=rank,
         # Pre-populate port list so __post_init__ doesn't auto-generate
         # random ports. All DP ranks must agree on the same port.
         _data_parallel_master_port_list=[int(dp_port)],
     )
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         # rank=0 here because each DP rank has a single (tp=1,pp=1) process,
         # so the local rank within the tp*pp group is always 0.
         # init_distributed_environment will offset by data_parallel_rank.
@@ -171,16 +171,16 @@ def _init_dp_environment(world_size, rank, port, dp_size, dp_port):
 
 @contextmanager
 def _make_forward_context(rank, world_size, num_tokens_per_rank, num_tokens_across_dp=None):
-    """Keep the Aphrodite config and mock-DP forward context active together.
+    """Keep the Sonar config and mock-DP forward context active together.
 
     Returns a context manager suitable for ``with`` statements.
     The real DPMetadata (with sp_local_sizes etc.) is created internally
     by set_forward_context from num_tokens_across_dp; the attn_metadata
     placeholder just satisfies the "attn_metadata is not None" guard.
     """
-    from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-    from aphrodite.config.parallel import ParallelConfig
-    from aphrodite.forward_context import set_forward_context
+    from sonar.config import SonarConfig, set_current_sonar_config
+    from sonar.config.parallel import ParallelConfig
+    from sonar.forward_context import set_forward_context
 
     class _AttnMeta:
         """Minimal placeholder so set_forward_context's
@@ -189,8 +189,8 @@ def _make_forward_context(rank, world_size, num_tokens_per_rank, num_tokens_acro
 
         dp_metadata = None
 
-    aphrodite_config = AphroditeConfig()
-    aphrodite_config.parallel_config = ParallelConfig(
+    sonar_config = SonarConfig()
+    sonar_config.parallel_config = ParallelConfig(
         data_parallel_size=world_size,
         is_moe_model=True,
         data_parallel_rank=rank,
@@ -198,10 +198,10 @@ def _make_forward_context(rank, world_size, num_tokens_per_rank, num_tokens_acro
     if num_tokens_across_dp is None:
         num_tokens_across_dp = [num_tokens_per_rank] * world_size
     with (
-        set_current_aphrodite_config(aphrodite_config),
+        set_current_sonar_config(sonar_config),
         set_forward_context(
             _AttnMeta(),
-            aphrodite_config,
+            sonar_config,
             num_tokens=num_tokens_per_rank,
             num_tokens_across_dp=torch.tensor(num_tokens_across_dp, dtype=torch.int),
         ),
@@ -253,7 +253,7 @@ requires_deep_ep_v2 = pytest.mark.skipif(
 
 
 def _two_sided_lifecycle_worker(rank, world_size):
-    from aphrodite.distributed.device_communicators.all2all import (
+    from sonar.distributed.device_communicators.all2all import (
         FlashInferNVLinkTwoSidedManager,
     )
 
@@ -315,10 +315,10 @@ def test_two_sided_manager_lifecycle(world_size):
 
 
 def _one_sided_lifecycle_worker(rank, world_size):
-    from aphrodite.distributed.device_communicators.all2all import (
+    from sonar.distributed.device_communicators.all2all import (
         FlashInferNVLinkOneSidedManager,
     )
-    from aphrodite.distributed.parallel_state import get_dp_group
+    from sonar.distributed.parallel_state import get_dp_group
 
     cpu_group = get_dp_group().cpu_group
     manager = FlashInferNVLinkOneSidedManager(cpu_group)
@@ -383,10 +383,10 @@ def test_one_sided_manager_lifecycle(world_size):
 def _one_sided_workspace_grow_worker(rank, world_size):
     from flashinfer.fused_moe import QuantFormat
 
-    from aphrodite.distributed.device_communicators.all2all import (
+    from sonar.distributed.device_communicators.all2all import (
         FlashInferNVLinkOneSidedManager,
     )
-    from aphrodite.distributed.parallel_state import get_dp_group
+    from sonar.distributed.parallel_state import get_dp_group
 
     cpu_group = get_dp_group().cpu_group
     manager = FlashInferNVLinkOneSidedManager(cpu_group)
@@ -530,8 +530,8 @@ class _FakeCombineGroup:
 def test_args_cpu_workspace_allocation(monkeypatch):
     from types import SimpleNamespace
 
-    import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-    from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
+    import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+    from sonar.model_executor.layers.fused_moe.activation import MoEActivation
 
     kernel = object.__new__(mk.FusedMoEKernelModularImpl)
     kernel.fused_experts = SimpleNamespace(
@@ -564,8 +564,8 @@ def test_args_cpu_workspace_allocation(monkeypatch):
 
 
 def test_args_finalize_noop_reuses_fused_expert_output(monkeypatch):
-    import aphrodite.model_executor.layers.fused_moe.prepare_finalize.naive_dp_ep as pf
-    from aphrodite.model_executor.layers.fused_moe.topk_weight_and_reduce import (
+    import sonar.model_executor.layers.fused_moe.prepare_finalize.naive_dp_ep as pf
+    from sonar.model_executor.layers.fused_moe.topk_weight_and_reduce import (
         TopKWeightAndReduceNoOP,
     )
 
@@ -590,8 +590,8 @@ def test_args_finalize_noop_reuses_fused_expert_output(monkeypatch):
 
 
 def test_args_finalize_contiguous_writes_combine_input(monkeypatch):
-    import aphrodite.model_executor.layers.fused_moe.prepare_finalize.naive_dp_ep as pf
-    import aphrodite.model_executor.layers.fused_moe.topk_weight_and_reduce as wr
+    import sonar.model_executor.layers.fused_moe.prepare_finalize.naive_dp_ep as pf
+    import sonar.model_executor.layers.fused_moe.topk_weight_and_reduce as wr
 
     fused_expert_output = torch.arange(12, dtype=torch.float32).view(2, 2, 3)
     original = fused_expert_output.clone()
@@ -623,8 +623,8 @@ def test_args_finalize_contiguous_writes_combine_input(monkeypatch):
 
 
 def _args_dispatch_combine_worker(rank, world_size):
-    from aphrodite.distributed.device_communicators.all2all import AgRsAll2AllManager
-    from aphrodite.forward_context import get_forward_context
+    from sonar.distributed.device_communicators.all2all import AgRsAll2AllManager
+    from sonar.forward_context import get_forward_context
 
     cpu_group = get_ep_group().cpu_group
     device = torch.device(f"{DEVICE}:{rank}")
@@ -725,7 +725,7 @@ def _args_dispatch_combine_worker(rank, world_size):
             if expert_out is None:
                 expert_out = expert_values
             else:
-                from aphrodite.distributed.device_communicators.pynccl_allocator import (
+                from sonar.distributed.device_communicators.pynccl_allocator import (
                     is_symmetric_memory_tensor,
                 )
 
@@ -831,16 +831,16 @@ def test_args_dispatch_combine(world_size):
 
 
 def _two_sided_data_worker(rank, world_size):
-    from aphrodite.distributed.device_communicators.all2all import (
+    from sonar.distributed.device_communicators.all2all import (
         FlashInferNVLinkTwoSidedManager,
     )
-    from aphrodite.distributed.parallel_state import get_dp_group
-    from aphrodite.forward_context import get_forward_context
-    from aphrodite.model_executor.layers.fused_moe.config import (
+    from sonar.distributed.parallel_state import get_dp_group
+    from sonar.forward_context import get_forward_context
+    from sonar.model_executor.layers.fused_moe.config import (
         FusedMoEQuantConfig,
         FusedMoEQuantDesc,
     )
-    from aphrodite.model_executor.layers.fused_moe.prepare_finalize.flashinfer_nvlink_two_sided import (  # noqa: E501
+    from sonar.model_executor.layers.fused_moe.prepare_finalize.flashinfer_nvlink_two_sided import (  # noqa: E501
         flashinfer_alltoall_combine,
         flashinfer_alltoall_dispatch,
     )
@@ -986,15 +986,15 @@ def test_two_sided_dispatch_combine(world_size):
 def _one_sided_data_worker(rank, world_size, *, padded_mxfp8):
     from flashinfer.fused_moe import QuantFormat
 
-    from aphrodite.distributed.device_communicators.all2all import (
+    from sonar.distributed.device_communicators.all2all import (
         FlashInferNVLinkOneSidedManager,
     )
-    from aphrodite.distributed.parallel_state import get_dp_group
-    from aphrodite.forward_context import get_forward_context
-    from aphrodite.model_executor.layers.fused_moe.all2all_utils import (
+    from sonar.distributed.parallel_state import get_dp_group
+    from sonar.forward_context import get_forward_context
+    from sonar.model_executor.layers.fused_moe.all2all_utils import (
         flashinfer_one_sided_dispatch_layout,
     )
-    from aphrodite.model_executor.layers.fused_moe.config import FusedMoEQuantConfig
+    from sonar.model_executor.layers.fused_moe.config import FusedMoEQuantConfig
 
     cpu_group = get_dp_group().cpu_group
     device = torch.device(f"{DEVICE}:{rank}")
@@ -1108,15 +1108,15 @@ def test_one_sided_dispatch_combine(world_size, padded_mxfp8):
 
 
 def _one_sided_prepare_finalize_worker(rank, world_size, *, empty_rank, cuda_graph):
-    from aphrodite.distributed.device_communicators.all2all import (
+    from sonar.distributed.device_communicators.all2all import (
         FlashInferNVLinkOneSidedManager,
     )
-    from aphrodite.forward_context import get_forward_context
-    from aphrodite.model_executor.layers.fused_moe.config import FusedMoEQuantConfig
-    from aphrodite.model_executor.layers.fused_moe.prepare_finalize.flashinfer_nvlink_one_sided import (  # noqa: E501
+    from sonar.forward_context import get_forward_context
+    from sonar.model_executor.layers.fused_moe.config import FusedMoEQuantConfig
+    from sonar.model_executor.layers.fused_moe.prepare_finalize.flashinfer_nvlink_one_sided import (  # noqa: E501
         FlashInferNVLinkOneSidedPrepareAndFinalize,
     )
-    from aphrodite.model_executor.layers.fused_moe.topk_weight_and_reduce import (
+    from sonar.model_executor.layers.fused_moe.topk_weight_and_reduce import (
         TopKWeightAndReduceNoOP,
     )
 
@@ -1208,7 +1208,7 @@ def _one_sided_prepare_finalize_worker(rank, world_size, *, empty_rank, cuda_gra
 @pytest.mark.parametrize("empty_rank", [False, True])
 @pytest.mark.parametrize("cuda_graph", [False, True])
 def test_one_sided_prepare_finalize(empty_rank, cuda_graph):
-    """Check the Aphrodite adapter's weighted routing, padding and output on two GPUs."""
+    """Check the Sonar adapter's weighted routing, padding and output on two GPUs."""
     _spawn_workers(
         partial(
             _one_sided_prepare_finalize_worker,
@@ -1223,10 +1223,10 @@ def test_one_sided_prepare_finalize(empty_rank, cuda_graph):
 def _one_sided_low_precision_worker(rank, world_size):
     from flashinfer.fused_moe import QuantFormat
 
-    from aphrodite.distributed.device_communicators.all2all import (
+    from sonar.distributed.device_communicators.all2all import (
         FlashInferNVLinkOneSidedManager,
     )
-    from aphrodite.distributed.parallel_state import get_dp_group
+    from sonar.distributed.parallel_state import get_dp_group
 
     device = torch.device(f"cuda:{rank}")
     hidden_size = 256
@@ -1294,7 +1294,7 @@ def test_one_sided_combine_low_precision(world_size, monkeypatch):
     A workspace/dtype mismatch corrupts the combine buffer silently rather
     than raising, so this asserts the combined values are exactly right.
     """
-    monkeypatch.setenv("APHRODITE_FLASHINFER_MOE_A2A_LOW_PRECISION_COMBINE", "1")
+    monkeypatch.setenv("SONAR_FLASHINFER_MOE_A2A_LOW_PRECISION_COMBINE", "1")
     _spawn_workers(_one_sided_low_precision_worker, world_size, dp_size=world_size)
 
 
@@ -1312,7 +1312,7 @@ def test_one_sided_combine_low_precision(world_size, monkeypatch):
 
 
 def _deepep_v2_lifecycle_worker(rank, world_size):
-    from aphrodite.distributed.device_communicators.all2all import (
+    from sonar.distributed.device_communicators.all2all import (
         DeepEPV2All2AllManager,
     )
 

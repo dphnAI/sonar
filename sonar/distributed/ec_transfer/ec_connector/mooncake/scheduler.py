@@ -17,47 +17,47 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 
-from aphrodite.distributed.ec_transfer.ec_connector.base import (
+from sonar.distributed.ec_transfer.ec_connector.base import (
     ECConnectorMetadata,
 )
-from aphrodite.distributed.ec_transfer.ec_connector.encoder_output_width import (
+from sonar.distributed.ec_transfer.ec_connector.encoder_output_width import (
     get_encoder_output_width,
 )
-from aphrodite.distributed.ec_transfer.ec_connector.mooncake.config import (
+from sonar.distributed.ec_transfer.ec_connector.mooncake.config import (
     _RESERVATION_TTL_SECONDS,
     MooncakeECConfig,
 )
-from aphrodite.distributed.ec_transfer.ec_connector.mooncake.control import (
+from sonar.distributed.ec_transfer.ec_connector.mooncake.control import (
     ControlClient,
     EventInbox,
     make_cancel_request,
 )
-from aphrodite.distributed.ec_transfer.ec_connector.mooncake.metadata import (
+from sonar.distributed.ec_transfer.ec_connector.mooncake.metadata import (
     ECMooncakeConnectorMetadata,
     ECMooncakeLoadSpec,
     ECMooncakePushSpec,
     ECMooncakeWorkerMetadata,
 )
-from aphrodite.distributed.ec_transfer.ec_connector.mooncake.state import (
+from sonar.distributed.ec_transfer.ec_connector.mooncake.state import (
     SchedulerTransferState,
     SchedulerTransferTable,
 )
-from aphrodite.distributed.ec_transfer.ec_connector.mooncake.transfer import (
+from sonar.distributed.ec_transfer.ec_connector.mooncake.transfer import (
     ensure_mooncake_available,
 )
-from aphrodite.distributed.ec_transfer.ec_connector.mooncake_store_embedding.data import (
+from sonar.distributed.ec_transfer.ec_connector.mooncake_store_embedding.data import (
     TensorSpec,
 )
-from aphrodite.distributed.ec_transfer.ec_connector.utils import (
+from sonar.distributed.ec_transfer.ec_connector.utils import (
     PlaceholderMetadataResolver,
     collect_ec_item_metadata,
 )
-from aphrodite.logger import init_logger
-from aphrodite.v1.core.sched.output import SchedulerOutput
-from aphrodite.v1.outputs import ECConnectorOutput
+from sonar.logger import init_logger
+from sonar.v1.core.sched.output import SchedulerOutput
+from sonar.v1.outputs import ECConnectorOutput
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
+    from sonar.config import SonarConfig
 
 logger = init_logger(__name__)
 
@@ -73,11 +73,11 @@ _CONTROL_WORKERS = 8
 
 
 class ECMooncakeScheduler:
-    """Coordinate Mooncake transfers from the Aphrodite Scheduler process."""
+    """Coordinate Mooncake transfers from the Sonar Scheduler process."""
 
-    def __init__(self, aphrodite_config: AphroditeConfig) -> None:
+    def __init__(self, sonar_config: SonarConfig) -> None:
         ensure_mooncake_available()
-        config = MooncakeECConfig.from_aphrodite_config(aphrodite_config)
+        config = MooncakeECConfig.from_sonar_config(sonar_config)
 
         self._store_candidates: list[tuple[str, str, TensorSpec]] = []
         self._cross_encoder_cache = config.cross_encoder_cache
@@ -85,8 +85,8 @@ class ECMooncakeScheduler:
         self._is_consumer = config.is_consumer
         self._control_addr = config.control_addr
         self._push_wait_timeout = config.push_wait_timeout_s
-        self._aphrodite_config = aphrodite_config
-        self._model_config = aphrodite_config.model_config
+        self._sonar_config = sonar_config
+        self._model_config = sonar_config.model_config
         self._control_client = ControlClient(config.control_timeout_ms)
         self._control_executor = ThreadPoolExecutor(
             max_workers=_CONTROL_WORKERS,
@@ -94,7 +94,7 @@ class ECMooncakeScheduler:
         )
         self._event_inbox = EventInbox(self._control_client, self._control_executor)
 
-        self._metadata_resolver = PlaceholderMetadataResolver(aphrodite_config.model_config)
+        self._metadata_resolver = PlaceholderMetadataResolver(sonar_config.model_config)
         self._unresolved_transfer_ids = 0
         self._drain_pending = True
         self._drained_at = 0.0
@@ -424,7 +424,7 @@ class ECMooncakeScheduler:
     def _encoder_output_spec(self, request: Any, index: int) -> TensorSpec:
         dtype = self._model_config.dtype
         assert isinstance(dtype, torch.dtype)
-        hidden_dim = get_encoder_output_width(self._aphrodite_config, request.mm_features[index].modality)
+        hidden_dim = get_encoder_output_width(self._sonar_config, request.mm_features[index].modality)
         shape = (request.get_num_encoder_embeds(index), hidden_dim)
         return TensorSpec(shape, str(dtype), math.prod(shape) * dtype.itemsize)
 

@@ -7,23 +7,23 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.mamba.abstract import MambaBase
-from aphrodite.model_executor.layers.mamba.linear.minimax_linear_attn import (
+from sonar.model_executor.layers.mamba.abstract import MambaBase
+from sonar.model_executor.layers.mamba.linear.minimax_linear_attn import (
     MiniMaxText01LinearAttention,
 )
-from aphrodite.model_executor.layers.mamba.mamba_mixer import MambaMixer
-from aphrodite.model_executor.layers.mamba.mamba_mixer2 import MambaMixer2
-from aphrodite.model_executor.layers.mamba.mamba_utils import MambaStateShapeCalculator
-from aphrodite.model_executor.layers.mamba.short_conv import ShortConv
-from aphrodite.model_executor.models.falcon_h1 import FalconH1ForCausalLM
-from aphrodite.model_executor.models.granitemoehybrid import GraniteMoeHybridForCausalLM
-from aphrodite.model_executor.models.zamba2 import Zamba2ForCausalLM
-from aphrodite.v1.attention.backends.linear_attn import LinearAttentionBackend
-from aphrodite.v1.attention.backends.mamba1_attn import Mamba1AttentionBackend
-from aphrodite.v1.attention.backends.mamba2_attn import Mamba2AttentionBackend
-from aphrodite.v1.attention.backends.registry import MambaAttentionBackendEnum
-from aphrodite.v1.attention.backends.short_conv_attn import ShortConvAttentionBackend
-from aphrodite.v1.kv_cache_interface import MambaSpec
+from sonar.model_executor.layers.mamba.mamba_mixer import MambaMixer
+from sonar.model_executor.layers.mamba.mamba_mixer2 import MambaMixer2
+from sonar.model_executor.layers.mamba.mamba_utils import MambaStateShapeCalculator
+from sonar.model_executor.layers.mamba.short_conv import ShortConv
+from sonar.model_executor.models.falcon_h1 import FalconH1ForCausalLM
+from sonar.model_executor.models.granitemoehybrid import GraniteMoeHybridForCausalLM
+from sonar.model_executor.models.zamba2 import Zamba2ForCausalLM
+from sonar.v1.attention.backends.linear_attn import LinearAttentionBackend
+from sonar.v1.attention.backends.mamba1_attn import Mamba1AttentionBackend
+from sonar.v1.attention.backends.mamba2_attn import Mamba2AttentionBackend
+from sonar.v1.attention.backends.registry import MambaAttentionBackendEnum
+from sonar.v1.attention.backends.short_conv_attn import ShortConvAttentionBackend
+from sonar.v1.kv_cache_interface import MambaSpec
 
 
 @pytest.mark.parametrize(("use_replayssm", "expected_blocks"), [(False, 3), (True, 0)])
@@ -34,7 +34,7 @@ def test_replayssm_does_not_reserve_speculative_state_blocks(use_replayssm, expe
         mamba_type=MambaAttentionBackendEnum.MAMBA2,
         is_kv_cache_tp_replicated=False,
     )
-    aphrodite_config = SimpleNamespace(
+    sonar_config = SimpleNamespace(
         cache_config=SimpleNamespace(
             mamba_block_size=1,
             mamba_page_size_padded=None,
@@ -44,7 +44,7 @@ def test_replayssm_does_not_reserve_speculative_state_blocks(use_replayssm, expe
         num_speculative_tokens=3,
     )
 
-    spec = MambaBase.get_kv_cache_spec(layer, aphrodite_config)
+    spec = MambaBase.get_kv_cache_spec(layer, sonar_config)
 
     assert spec is not None
     assert isinstance(spec, MambaSpec)
@@ -68,15 +68,13 @@ def test_mamba2_config_state_shape_includes_speculative_tokens(model_cls):
         mamba_d_state=16,
         mamba_d_conv=4,
     )
-    aphrodite_config = SimpleNamespace(
+    sonar_config = SimpleNamespace(
         model_config=SimpleNamespace(hf_config=hf_config),
         parallel_config=SimpleNamespace(tensor_parallel_size=1),
         num_speculative_tokens=2,
     )
 
-    assert model_cls.get_mamba_state_shape_from_config(
-        aphrodite_config
-    ) == MambaStateShapeCalculator.mamba2_state_shape(
+    assert model_cls.get_mamba_state_shape_from_config(sonar_config) == MambaStateShapeCalculator.mamba2_state_shape(
         tp_world_size=1,
         intermediate_size=256,
         n_groups=1,
@@ -150,7 +148,7 @@ def test_mamba2_config_state_shape_includes_speculative_tokens(model_cls):
     ],
 )
 def test_mamba_layers_get_attn_backend(
-    default_aphrodite_config,
+    default_sonar_config,
     dist_init,
     layer_class,
     init_kwargs,
@@ -159,7 +157,7 @@ def test_mamba_layers_get_attn_backend(
 ):
     """Test that Mamba-like layers return the correct attention backend."""
     if layer_class is MiniMaxText01LinearAttention:
-        init_kwargs["aphrodite_config"] = default_aphrodite_config
+        init_kwargs["sonar_config"] = default_sonar_config
     layer = layer_class(**init_kwargs)
 
     backend_class = layer.get_attn_backend()

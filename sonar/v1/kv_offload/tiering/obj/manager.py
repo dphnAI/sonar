@@ -9,10 +9,10 @@ from typing import TYPE_CHECKING, ClassVar, NamedTuple
 
 import numpy as np
 
-from aphrodite.distributed.nixl_utils import NixlWrapper as nixl_agent
-from aphrodite.distributed.nixl_utils import nixl_agent_config
-from aphrodite.logger import init_logger
-from aphrodite.v1.kv_offload.base import (
+from sonar.distributed.nixl_utils import NixlWrapper as nixl_agent
+from sonar.distributed.nixl_utils import nixl_agent_config
+from sonar.logger import init_logger
+from sonar.v1.kv_offload.base import (
     Locality,
     LookupResult,
     Medium,
@@ -20,10 +20,10 @@ from aphrodite.v1.kv_offload.base import (
     OffloadKey,
     ReqContext,
 )
-from aphrodite.v1.kv_offload.file_mapper import FileMapper
-from aphrodite.v1.kv_offload.tiering.async_lookup import AsyncLookupManager
-from aphrodite.v1.kv_offload.tiering.backpressure import BackpressureDetector
-from aphrodite.v1.kv_offload.tiering.base import (
+from sonar.v1.kv_offload.file_mapper import FileMapper
+from sonar.v1.kv_offload.tiering.async_lookup import AsyncLookupManager
+from sonar.v1.kv_offload.tiering.backpressure import BackpressureDetector
+from sonar.v1.kv_offload.tiering.base import (
     JobId,
     JobResult,
     RequestOffloadingContext,
@@ -31,12 +31,12 @@ from aphrodite.v1.kv_offload.tiering.base import (
     SecondaryTierManager,
     TransferJob,
 )
-from aphrodite.v1.kv_offload.tiering.obj.config import ObjStoreConfig
+from sonar.v1.kv_offload.tiering.obj.config import ObjStoreConfig
 
 if TYPE_CHECKING:
     from nixl._api import nixl_prepped_dlist_handle, nixl_xfer_handle
 
-    from aphrodite.v1.kv_offload.base import OffloadingSpec
+    from sonar.v1.kv_offload.base import OffloadingSpec
 
 logger = init_logger(__name__)
 
@@ -125,7 +125,7 @@ class ObjectStoreSecondaryTierManager(SecondaryTierManager):
             successfully stored to this tier. Effective only when KV
             cache events are enabled globally (kv_events_config).
         locality: Whether this tier's storage is LOCAL or REMOTE relative
-            to the publishing Aphrodite instance.
+            to the publishing Sonar instance.
         backpressure_detector: Optional backpressure detector.
 
         """

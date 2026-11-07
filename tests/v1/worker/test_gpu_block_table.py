@@ -4,9 +4,9 @@
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.v1.attention.backends.utils import PAD_SLOT_ID
-from aphrodite.v1.worker.gpu.block_table import BlockTables
+from sonar.platforms import current_platform
+from sonar.v1.attention.backends.utils import PAD_SLOT_ID
+from sonar.v1.worker.gpu.block_table import BlockTables
 
 pytestmark = pytest.mark.skipif(
     not current_platform.is_cuda(),
@@ -231,7 +231,7 @@ def test_v1_block_table_move_row_clears_vacated_row():
     as mamba state slots (bypassing the NULL_BLOCK_ID fill of real decode
     padding) and write state in place there — corrupting the blocks' new
     owner once they are reallocated, e.g. to an in-flight NIXL load."""
-    from aphrodite.v1.worker.block_table import BlockTable
+    from sonar.v1.worker.block_table import BlockTable
 
     block_table = BlockTable(
         block_size=16,
@@ -439,7 +439,7 @@ def test_external_block_table_output_preserves_shared_rows(populated_block_table
 @pytest.mark.parametrize("use_cuda_graph", [False, True])
 def test_larger_draft_batch_uses_null_kpool_slots(populated_block_tables, use_cuda_graph):
     """Draft padding must not resolve to another request's physical KPool slots."""
-    from aphrodite.v1.attention.backends.mla.indexer import compute_kpool_tail_slot_mapping
+    from sonar.v1.attention.backends.mla.indexer import compute_kpool_tail_slot_mapping
 
     tables = populated_block_tables
     idx = torch.tensor([2, 0, 4, 1, 3], device="cuda")

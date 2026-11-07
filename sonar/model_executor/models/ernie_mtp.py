@@ -28,14 +28,14 @@ from collections.abc import Iterable
 import torch
 import torch.nn as nn
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.config import SonarConfig
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.sequence import IntermediateTensors
+from sonar.sequence import IntermediateTensors
 
 from .llama import LlamaDecoderLayer
 from .utils import AutoWeightsLoader, WeightsMapper, maybe_prefix
@@ -44,16 +44,16 @@ from .utils import AutoWeightsLoader, WeightsMapper, maybe_prefix
 class ErnieMultiTokenPredictorLayer(nn.Module):
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str,
     ) -> None:
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
 
         self.mtp_emb_norm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.mtp_hidden_norm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.mtp_linear_proj = nn.Linear(config.hidden_size * 2, config.hidden_size, bias=False)
-        self.mtp_block = LlamaDecoderLayer(aphrodite_config, prefix)
+        self.mtp_block = LlamaDecoderLayer(sonar_config, prefix)
 
     def forward(
         self,
@@ -78,17 +78,17 @@ class ErnieMultiTokenPredictorLayer(nn.Module):
 
 
 class ErnieMultiTokenPredictor(nn.Module):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
         self.mtp_start_layer_idx = config.num_hidden_layers
         self.num_mtp_layers = config.num_nextn_predict_layers
         # to map the exact layer index from weights
         self.layers = torch.nn.ModuleDict(
             {
                 str(idx): ErnieMultiTokenPredictorLayer(
-                    aphrodite_config,
+                    sonar_config,
                     f"{prefix}.layers.{idx}",
                 )
                 for idx in range(
@@ -135,14 +135,14 @@ class ErnieMultiTokenPredictor(nn.Module):
 
 
 class ErnieMTP(nn.Module):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
 
-        self.config = aphrodite_config.model_config.hf_config
+        self.config = sonar_config.model_config.hf_config
         # MTP weights are stored under a flat `mtp_*.0.` block in the
         # checkpoint; rewrite them into `model.layers.{spec_layer}.*`.
         spec_layer = self.config.num_hidden_layers
-        self.hf_to_aphrodite_mapper = WeightsMapper(
+        self.hf_to_sonar_mapper = WeightsMapper(
             orig_to_new_substr={
                 "model.mtp_emb_norm.0.": f"model.layers.{spec_layer}.mtp_emb_norm.",
                 "model.mtp_hidden_norm.0.": (f"model.layers.{spec_layer}.mtp_hidden_norm."),
@@ -157,7 +157,7 @@ class ErnieMTP(nn.Module):
                 ".up_proj": (".gate_up_proj", 1),
             },
         )
-        self.model = ErnieMultiTokenPredictor(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = ErnieMultiTokenPredictor(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
         self.lm_head = ParallelLMHead(
             self.config.vocab_size,
             self.config.hidden_size,
@@ -201,4 +201,4 @@ class ErnieMTP(nn.Module):
                     yield name, weight
 
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(_filter(weights), mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(_filter(weights), mapper=self.hf_to_sonar_mapper)

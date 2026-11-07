@@ -6,10 +6,10 @@ import os
 import shutil
 import signal
 
-from aphrodite import envs
-from aphrodite.assets.base import get_cache_dir
-from aphrodite.logger import init_logger
-from aphrodite.utils.import_utils import PlaceholderModule
+from sonar import envs
+from sonar.assets.base import get_cache_dir
+from sonar.logger import init_logger
+from sonar.utils.import_utils import PlaceholderModule
 
 logger = init_logger(__name__)
 
@@ -54,7 +54,7 @@ class ObjectStorageModel:
     """
 
     def __init__(self, url: str) -> None:
-        if envs.APHRODITE_ASSETS_CACHE_MODEL_CLEAN:
+        if envs.SONAR_ASSETS_CACHE_MODEL_CLEAN:
             for sig in (signal.SIGINT, signal.SIGTERM):
                 existing_handler = signal.getsignal(sig)
                 signal.signal(sig, self._close_by_signal(existing_handler))

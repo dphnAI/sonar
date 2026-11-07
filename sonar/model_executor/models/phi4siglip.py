@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Aphrodite support for microsoft/Phi-4-reasoning-vision-15B.
+"""Sonar support for microsoft/Phi-4-reasoning-vision-15B.
 
 Architecture: Siglip2 vision tower + MLP projector + Phi3 language model.
 """
@@ -13,31 +13,31 @@ import torch
 import torch.nn as nn
 from transformers import BatchFeature, PreTrainedConfig, Siglip2VisionConfig
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.multimodal import MultiModalDummyOptions
-from aphrodite.inputs import MultiModalDataDict
-from aphrodite.logger import init_logger
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import (
+from sonar.config import SonarConfig
+from sonar.config.multimodal import MultiModalDummyOptions
+from sonar.inputs import MultiModalDataDict
+from sonar.logger import init_logger
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import (
     MultiModalFieldConfig,
     MultiModalKwargsItems,
 )
-from aphrodite.multimodal.parse import (
+from sonar.multimodal.parse import (
     ImageSize,
     MultiModalDataItems,
 )
-from aphrodite.multimodal.processing import (
+from sonar.multimodal.processing import (
     BaseDummyInputsBuilder,
     PromptReplacement,
     PromptUpdate,
 )
-from aphrodite.multimodal.processing.processor import (
+from sonar.multimodal.processing.processor import (
     BaseMultiModalProcessor,
     BaseProcessingInfo,
     cached_encode,
 )
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.utils.tensor_schema import TensorSchema, TensorShape
+from sonar.sequence import IntermediateTensors
+from sonar.utils.tensor_schema import TensorSchema, TensorShape
 
 from .interfaces import MultiModalEmbeddings, SupportsMultiModal, SupportsPP
 from .lfm2_siglip2 import Siglip2Model
@@ -45,7 +45,7 @@ from .llava import LlavaMultiModalProjector
 from .utils import (
     AutoWeightsLoader,
     WeightsMapper,
-    init_aphrodite_registered_model,
+    init_sonar_registered_model,
     maybe_prefix,
 )
 
@@ -211,7 +211,7 @@ class Phi4SiglipImagePixelInputs(TensorSchema):
     dummy_inputs=Phi4SiglipDummyInputsBuilder,
 )
 class Phi4ForCausalLMV(nn.Module, SupportsMultiModal, SupportsPP):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={
             "model.vision_tower.vision_tower.vision_model.head.": None,
             "model.vision_tower.vision_tower.": "vision_tower.",
@@ -228,11 +228,11 @@ class Phi4ForCausalLMV(nn.Module, SupportsMultiModal, SupportsPP):
             return DEFAULT_IMAGE_TOKEN
         raise ValueError("Only image modality is supported")
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__()
 
-        config: PreTrainedConfig = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        config: PreTrainedConfig = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
         self.config = config
 
         vision_config_dict: dict = getattr(config, "vision_config", {})
@@ -246,7 +246,7 @@ class Phi4ForCausalLMV(nn.Module, SupportsMultiModal, SupportsPP):
         vision_hidden_size: int = config.mm_hidden_size  # type: ignore[attr-defined]
         text_hidden_size: int = config.hidden_size  # type: ignore[attr-defined]
 
-        with self._mark_tower_model(aphrodite_config, "image"):
+        with self._mark_tower_model(sonar_config, "image"):
             layer_idx = -2
             num_hidden_layers = siglip2_config.num_hidden_layers + layer_idx + 1
 
@@ -266,9 +266,9 @@ class Phi4ForCausalLMV(nn.Module, SupportsMultiModal, SupportsPP):
                 prefix=maybe_prefix(prefix, "multi_modal_projector"),
             )
 
-        with self._mark_language_model(aphrodite_config):
-            self.language_model = init_aphrodite_registered_model(
-                aphrodite_config=aphrodite_config,
+        with self._mark_language_model(sonar_config):
+            self.language_model = init_sonar_registered_model(
+                sonar_config=sonar_config,
                 hf_config=config,
                 prefix=maybe_prefix(prefix, "language_model"),
                 architectures=["Phi3ForCausalLM"],
@@ -380,4 +380,4 @@ class Phi4ForCausalLMV(nn.Module, SupportsMultiModal, SupportsPP):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)

@@ -12,16 +12,16 @@ from cutlass import BFloat16, Int32, Uint8, Uint32
 from cutlass.cute.nvgpu import cpasync
 from quack.compile_utils import make_fake_tensor
 
-from aphrodite.cute_utils import _bf16x2_mul, cvt
-from aphrodite.model_executor.warmup.jit_warmup import kernel_launcher, zip_inputs
-from aphrodite.model_executor.warmup.jit_warmup_cutedsl_helper import (
-    AphroditeCuTeDSLJitKernel,
+from sonar.cute_utils import _bf16x2_mul, cvt
+from sonar.model_executor.warmup.jit_warmup import kernel_launcher, zip_inputs
+from sonar.model_executor.warmup.jit_warmup_cutedsl_helper import (
     CuTeDSLLaunchSpec,
+    SonarCuTeDSLJitKernel,
 )
-from aphrodite.transformers_utils.deepseek_v4_utils import get_compress_ratios
+from sonar.transformers_utils.deepseek_v4_utils import get_compress_ratios
 
 
-class DequantGatherKCacheKernel(AphroditeCuTeDSLJitKernel["DequantGatherKCacheKernel.CompileKey"]):
+class DequantGatherKCacheKernel(SonarCuTeDSLJitKernel["DequantGatherKCacheKernel.CompileKey"]):
     # DSv4 geometry. The record format (how much of the row is quantized and
     # how wide a scale group is) comes from the compile key: V4 quantizes the
     # 448 NoPE dims in groups of 64 and keeps a bf16 RoPE tail, V4.1 quantizes
@@ -320,9 +320,9 @@ class DequantGatherKCacheKernel(AphroditeCuTeDSLJitKernel["DequantGatherKCacheKe
             group_size=group_size,
         )
 
-    def get_warmup_keys(self, aphrodite_config: Any) -> list[CompileKey]:
-        block_size = aphrodite_config.cache_config.block_size
-        compress_ratios = get_compress_ratios(aphrodite_config.model_config.hf_config)
+    def get_warmup_keys(self, sonar_config: Any) -> list[CompileKey]:
+        block_size = sonar_config.cache_config.block_size
+        compress_ratios = get_compress_ratios(sonar_config.model_config.hf_config)
         return self._trace_dispatch(self.dispatch)(
             zip_inputs(
                 dict(

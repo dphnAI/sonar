@@ -11,31 +11,31 @@ from typing import Any, cast
 import pytest
 import torch
 
-import aphrodite.v1.core.kv_cache_planning as kv_cache_planning
-import aphrodite.v1.core.kv_cache_utils as kv_cache_utils
-from aphrodite.config import (
-    AphroditeConfig,
+import sonar.v1.core.kv_cache_planning as kv_cache_planning
+import sonar.v1.core.kv_cache_utils as kv_cache_utils
+from sonar.config import (
     CacheConfig,
     ModelConfig,
     SchedulerConfig,
+    SonarConfig,
 )
-from aphrodite.config.attention import HiSparseConfig
-from aphrodite.config.kv_events import KVEventsConfig
-from aphrodite.config.speculative import SpeculativeConfig
-from aphrodite.lora.request import LoRARequest
-from aphrodite.multimodal.inputs import (
+from sonar.config.attention import HiSparseConfig
+from sonar.config.kv_events import KVEventsConfig
+from sonar.config.speculative import SpeculativeConfig
+from sonar.lora.request import LoRARequest
+from sonar.multimodal.inputs import (
     MultiModalFeatureSpec,
     MultiModalKwargsItem,
     PlaceholderRange,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.utils.hashing import sha256, sha256_cbor, xxhash, xxhash_cbor
-from aphrodite.v1.core.kv_cache_manager import KVCacheBlocks, KVCacheManager
-from aphrodite.v1.core.kv_cache_planning import (
+from sonar.platforms import current_platform
+from sonar.sampling_params import SamplingParams
+from sonar.utils.hashing import sha256, sha256_cbor, xxhash, xxhash_cbor
+from sonar.v1.core.kv_cache_manager import KVCacheBlocks, KVCacheManager
+from sonar.v1.core.kv_cache_planning import (
     get_kv_cache_groups,
 )
-from aphrodite.v1.core.kv_cache_utils import (
+from sonar.v1.core.kv_cache_utils import (
     BlockHash,
     FreeKVCacheBlockQueue,
     KVCacheBlock,
@@ -51,12 +51,12 @@ from aphrodite.v1.core.kv_cache_utils import (
     tensor_data,
     to_event_extra_keys,
 )
-from aphrodite.v1.hisparse.layout import (
+from sonar.v1.hisparse.layout import (
     create_hisparse_layout,
     get_hisparse_kv_cache_groups,
     get_hisparse_steady_state_concurrency,
 )
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.kv_cache_interface import (
     CircularBufferSpec,
     FullAttentionSpec,
     HiSparseHotSpec,
@@ -79,9 +79,9 @@ from aphrodite.v1.kv_cache_interface import (
     is_full_attention_spec,
     iter_layer_specs,
 )
-from aphrodite.v1.kv_cache_layout import KVCacheLayout
-from aphrodite.v1.metrics.stats import CachingMetrics, PrefixCacheStats
-from aphrodite.v1.request import Request
+from sonar.v1.kv_cache_layout import KVCacheLayout
+from sonar.v1.metrics.stats import CachingMetrics, PrefixCacheStats
+from sonar.v1.request import Request
 from tests.v1.core.utils import (
     new_kv_cache_spec,
     new_mamba_spec,
@@ -134,7 +134,7 @@ def test_hisparse_host_pool_must_fit_max_model_len(monkeypatch, extra_blocks, ok
     monkeypatch.setattr(
         current_platform,
         "get_hisparse_backend_cls",
-        lambda: "aphrodite.v1.hisparse.backend.CUDAHiSparseBackend",
+        lambda: "sonar.v1.hisparse.backend.CUDAHiSparseBackend",
     )
     specs = {
         "model.layers.0.self_attn": MLAAttentionSpec(
@@ -173,9 +173,9 @@ def test_hisparse_host_pool_must_fit_max_model_len(monkeypatch, extra_blocks, ok
 def test_hisparse_derived_specs_do_not_affect_kv_cache_layout(monkeypatch):
     """Workers report HiSparse's resident/hot caches, which lay out their own raw
     backing; KV cache layout resolution must skip them."""
-    from aphrodite.v1.attention.backends.utils import resolve_kv_cache_layout
+    from sonar.v1.attention.backends.utils import resolve_kv_cache_layout
 
-    monkeypatch.delenv("APHRODITE_KV_CACHE_LAYOUT", raising=False)
+    monkeypatch.delenv("SONAR_KV_CACHE_LAYOUT", raising=False)
     specs: dict[str, KVCacheSpec] = {
         "model.layers.0.self_attn": MLAAttentionSpec(
             block_size=64,
@@ -192,7 +192,7 @@ def test_hisparse_derived_specs_do_not_affect_kv_cache_layout(monkeypatch):
             cache_role=SparseCacheRole.INDEXER,
         ),
     }
-    config = AphroditeConfig(model_config=ModelConfig(max_model_len=1024))
+    config = SonarConfig(model_config=ModelConfig(max_model_len=1024))
     config.attention_config.hisparse_config = HiSparseConfig()
     config.model_config.hf_config.index_topk = 128
     reported = specs | {
@@ -281,8 +281,8 @@ def make_request(
 
 @pytest.mark.parametrize("dcp", [1, 4])
 def test_effective_attention_block_size_matches_events(dcp):
-    from aphrodite.distributed.kv_events import BlockStored
-    from aphrodite.v1.engine.core import EngineCore
+    from sonar.distributed.kv_events import BlockStored
+    from sonar.v1.engine.core import EngineCore
 
     config = KVCacheConfig(
         num_blocks=32,
@@ -300,10 +300,10 @@ def test_effective_attention_block_size_matches_events(dcp):
         enable_kv_cache_events=True,
     )
     core = EngineCore.__new__(EngineCore)
-    core.aphrodite_config = SimpleNamespace(cache_config=CacheConfig(block_size=16))
+    core.sonar_config = SimpleNamespace(cache_config=CacheConfig(block_size=16))
     core.scheduler = SimpleNamespace(kv_cache_manager=manager)
     core._initialize_effective_attention_block_size()
-    block_size = core.aphrodite_config.cache_config.effective_attention_block_size
+    block_size = core.sonar_config.cache_config.effective_attention_block_size
     assert block_size == 16 * dcp
 
     request = make_request("block-size", list(range(64)), block_size=16 * dcp, hash_fn=sha256)
@@ -374,14 +374,14 @@ def test_kv_cache_blocks_selects_requested_groups():
 
 @pytest.mark.parametrize("hash_fn", [sha256, sha256_cbor])
 def test_none_hash(monkeypatch, hash_fn):
-    import aphrodite.v1.core.kv_cache_utils
+    import sonar.v1.core.kv_cache_utils
 
     # case 1: PYTHONHASHSEED is not set -> deterministic default seed so that
     # independent processes compute identical block hashes for identical
     # content (e.g. for KV cache reuse across nodes).
     with monkeypatch.context() as m:
         m.delenv("PYTHONHASHSEED", raising=False)
-        reloaded_kv_cache_utils = importlib.reload(aphrodite.v1.core.kv_cache_utils)
+        reloaded_kv_cache_utils = importlib.reload(sonar.v1.core.kv_cache_utils)
         reloaded_kv_cache_utils.init_none_hash(hash_fn)
         none_hash = reloaded_kv_cache_utils.NONE_HASH
         assert isinstance(none_hash, bytes)
@@ -394,7 +394,7 @@ def test_none_hash(monkeypatch, hash_fn):
     # case 2: PYTHONHASHSEED is set, use the seed and hash_fn
     with monkeypatch.context() as m:
         m.setenv("PYTHONHASHSEED", "python hash seed")
-        reloaded_kv_cache_utils = importlib.reload(aphrodite.v1.core.kv_cache_utils)
+        reloaded_kv_cache_utils = importlib.reload(sonar.v1.core.kv_cache_utils)
         reloaded_kv_cache_utils.init_none_hash(hash_fn)
         assert reloaded_kv_cache_utils.NONE_HASH is not None
         assert isinstance(reloaded_kv_cache_utils.NONE_HASH, bytes)
@@ -438,17 +438,17 @@ def test_get_none_hash_seed_reports_effective_seed(monkeypatch):
     The P2P tier is constructed before init_none_hash runs, so it must read the
     resolved seed lazily rather than re-deriving it.
     """
-    import aphrodite.v1.core.kv_cache_utils
+    import sonar.v1.core.kv_cache_utils
 
     with monkeypatch.context() as m:
         m.delenv("PYTHONHASHSEED", raising=False)
-        reloaded = importlib.reload(aphrodite.v1.core.kv_cache_utils)
+        reloaded = importlib.reload(sonar.v1.core.kv_cache_utils)
         reloaded.init_none_hash(sha256)
         assert reloaded.get_none_hash_seed() == reloaded.DEFAULT_NONE_HASH_SEED
 
     with monkeypatch.context() as m:
         m.setenv("PYTHONHASHSEED", "12345")
-        reloaded = importlib.reload(aphrodite.v1.core.kv_cache_utils)
+        reloaded = importlib.reload(sonar.v1.core.kv_cache_utils)
         reloaded.init_none_hash(sha256)
         assert reloaded.get_none_hash_seed() == "12345"
 
@@ -1027,7 +1027,7 @@ def test_request_continues_from_frontend_block_hashes(hash_fn):
 
 
 def test_frontend_block_hashes_count_check():
-    from aphrodite.v1.engine import EngineCoreRequest, PrefixHashConfig
+    from sonar.v1.engine import EngineCoreRequest, PrefixHashConfig
 
     def frontend_hashes(config, num_hashes):
         request = EngineCoreRequest(
@@ -1144,8 +1144,8 @@ def test_num_hash_lookahead_tokens(overrides: dict[str, Any], expected: int):
         "disable_lookahead_block_hashes",
         overrides.get("disable_lookahead_block_hashes", False),
     )
-    aphrodite_config = cast(
-        AphroditeConfig,
+    sonar_config = cast(
+        SonarConfig,
         SimpleNamespace(
             cache_config=SimpleNamespace(enable_prefix_caching=overrides.get("enable_prefix_caching", True)),
             speculative_config=speculative_config,
@@ -1154,7 +1154,7 @@ def test_num_hash_lookahead_tokens(overrides: dict[str, Any], expected: int):
         ),
     )
 
-    assert AphroditeConfig.num_hash_lookahead_tokens.fget(aphrodite_config) == expected
+    assert SonarConfig.num_hash_lookahead_tokens.fget(sonar_config) == expected
 
 
 @pytest.mark.parametrize("hash_fn", [sha256, sha256_cbor])
@@ -1288,10 +1288,10 @@ def test_metrics_empty_stats():
 @pytest.mark.parametrize("pcp_size", [1, 4])
 def test_dcp_target_allocates_replicated_draft_independently(monkeypatch, sliding_window, disable_hybrid, pcp_size):
     """A draft must retain all positions even when the target shards them."""
-    from aphrodite.v1.attention.backends.utils import resolve_kv_cache_layout
+    from sonar.v1.attention.backends.utils import resolve_kv_cache_layout
 
-    monkeypatch.delenv("APHRODITE_KV_CACHE_LAYOUT", raising=False)
-    config = AphroditeConfig(model_config=ModelConfig(max_model_len=1024))
+    monkeypatch.delenv("SONAR_KV_CACHE_LAYOUT", raising=False)
+    config = SonarConfig(model_config=ModelConfig(max_model_len=1024))
     config.parallel_config.decode_context_parallel_size = 4
     config.parallel_config.prefill_context_parallel_size = pcp_size
     config.scheduler_config.disable_hybrid_kv_cache_manager = disable_hybrid
@@ -1346,10 +1346,10 @@ def test_dcp_target_allocates_replicated_draft_independently(monkeypatch, slidin
 
 def test_dcp_replicated_kpool_tail_keeps_block_interior_layout(monkeypatch):
     """A replicated kpool tail ring is per-request state, not a draft group."""
-    from aphrodite.v1.attention.backends.utils import resolve_kv_cache_layout
+    from sonar.v1.attention.backends.utils import resolve_kv_cache_layout
 
-    monkeypatch.delenv("APHRODITE_KV_CACHE_LAYOUT", raising=False)
-    config = AphroditeConfig(model_config=ModelConfig(max_model_len=1024))
+    monkeypatch.delenv("SONAR_KV_CACHE_LAYOUT", raising=False)
+    config = SonarConfig(model_config=ModelConfig(max_model_len=1024))
     config.parallel_config.decode_context_parallel_size = 4
     config.cache_config.kv_cache_layout = None
     tail = CircularBufferSpec(
@@ -1367,13 +1367,13 @@ def test_dcp_replicated_kpool_tail_keeps_block_interior_layout(monkeypatch):
 def test_pipeline_stages_resolve_a_layout_every_stage_supports(monkeypatch):
     """PP stages hold different layers, so their workers can report different
     supported layouts (e.g. only one stage has FlashInfer layers on SM100)."""
-    from aphrodite.v1.attention.backends.utils import (
+    from sonar.v1.attention.backends.utils import (
         get_supported_kv_cache_layouts,
         resolve_kv_cache_layout,
     )
 
-    monkeypatch.delenv("APHRODITE_KV_CACHE_LAYOUT", raising=False)
-    config = AphroditeConfig(model_config=ModelConfig(max_model_len=1024))
+    monkeypatch.delenv("SONAR_KV_CACHE_LAYOUT", raising=False)
+    config = SonarConfig(model_config=ModelConfig(max_model_len=1024))
     config.cache_config.kv_cache_layout = None
     any_layout = [layout.name for layout in get_supported_kv_cache_layouts([])]
     layout = resolve_kv_cache_layout(config, [["LBHNC", "BLHNC"], any_layout])
@@ -1391,7 +1391,7 @@ def test_pipeline_stages_resolve_a_layout_every_stage_supports(monkeypatch):
 
 @pytest.mark.parametrize("use_mla", [False, True])
 def test_full_attention_merge_preserves_replicated_cache_geometry(use_mla):
-    config = AphroditeConfig(model_config=ModelConfig(max_model_len=1024))
+    config = SonarConfig(model_config=ModelConfig(max_model_len=1024))
     config.parallel_config.decode_context_parallel_size = 4
     draft = replace(
         new_mla_spec() if use_mla else new_kv_cache_spec(),
@@ -1436,16 +1436,16 @@ def test_uniform_type_spec_block_table_width_matches_layer_spec(layer_type, dcp_
     # The runner sizes the block table from the group spec while the metadata
     # builders are constructed from the per-layer spec, so the aggregate must
     # report the same width as the layers it wraps.
-    aphrodite_config = AphroditeConfig(model_config=ModelConfig(max_model_len=1024))
-    aphrodite_config.parallel_config.decode_context_parallel_size = dcp_size
+    sonar_config = SonarConfig(model_config=ModelConfig(max_model_len=1024))
+    sonar_config.parallel_config.decode_context_parallel_size = dcp_size
     layer_spec = new_mla_spec() if layer_type == "mla" else new_mamba_spec()
     uniform_spec = UniformTypeKVCacheSpecs(
         block_size=layer_spec.block_size,
         kv_cache_specs={"layer1": layer_spec, "layer2": layer_spec},
     )
 
-    assert layer_spec.max_num_blocks_per_req(aphrodite_config, 1024) == expected_width
-    assert uniform_spec.max_num_blocks_per_req(aphrodite_config, 1024) == expected_width
+    assert layer_spec.max_num_blocks_per_req(sonar_config, 1024) == expected_width
+    assert uniform_spec.max_num_blocks_per_req(sonar_config, 1024) == expected_width
 
 
 def test_merge_kv_cache_spec():
@@ -1507,7 +1507,7 @@ def test_merge_kv_cache_spec():
 
 
 def test_get_max_concurrency_for_kv_cache_config():
-    # Create a AphroditeConfig
+    # Create a SonarConfig
     model_id = "Qwen/Qwen1.5-7B"
     max_model_len = 16384
     model_config = ModelConfig(
@@ -1525,11 +1525,11 @@ def test_get_max_concurrency_for_kv_cache_config():
         async_scheduling=False,
     )
 
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         model_config=model_config,
         scheduler_config=scheduler_config,
     )
-    assert aphrodite_config.max_concurrent_batches == 1
+    assert sonar_config.max_concurrent_batches == 1
 
     full_attention_spec = FullAttentionSpec(
         block_size=16,
@@ -1554,7 +1554,7 @@ def test_get_max_concurrency_for_kv_cache_config():
         ],
     )
     max_concurrency_full_attention = get_max_concurrency_for_kv_cache_config(
-        aphrodite_config, kv_cache_config_full_attention
+        sonar_config, kv_cache_config_full_attention
     )
     assert max_concurrency_full_attention == 1.5
 
@@ -1566,7 +1566,7 @@ def test_get_max_concurrency_for_kv_cache_config():
         ],
     )
     max_concurrency_sliding_window = get_max_concurrency_for_kv_cache_config(
-        aphrodite_config, kv_cache_config_sliding_window
+        sonar_config, kv_cache_config_sliding_window
     )
     assert max_concurrency_sliding_window == 3
 
@@ -1578,11 +1578,9 @@ def test_get_max_concurrency_for_kv_cache_config():
             KVCacheGroupSpec([f"layer_{i}" for i in range(32, 64)], sliding_window_spec),
         ],
     )
-    max_concurrency_hybrid_model = get_max_concurrency_for_kv_cache_config(
-        aphrodite_config, kv_cache_config_hybrid_model
-    )
+    max_concurrency_hybrid_model = get_max_concurrency_for_kv_cache_config(sonar_config, kv_cache_config_hybrid_model)
     assert max_concurrency_hybrid_model == 3
-    num_tokens, max_concurrency = get_kv_cache_capacity(aphrodite_config, kv_cache_config_hybrid_model)
+    num_tokens, max_concurrency = get_kv_cache_capacity(sonar_config, kv_cache_config_hybrid_model)
     assert num_tokens == max_concurrency_hybrid_model * max_model_len
     assert max_concurrency == max_concurrency_hybrid_model
 
@@ -1598,7 +1596,7 @@ def test_get_max_concurrency_for_kv_cache_config():
             KVCacheGroupSpec(["layer_32", "layer_33"], sliding_window_spec),
         ],
     )
-    assert get_max_concurrency_for_kv_cache_config(aphrodite_config, kv_cache_config_unequal_groups) == 3
+    assert get_max_concurrency_for_kv_cache_config(sonar_config, kv_cache_config_unequal_groups) == 3
 
     # UniformTypeKVCacheSpecs group (worker config shape): the aggregated
     # spec's memory/page ratio equals a single layer's page count, so the
@@ -1618,7 +1616,7 @@ def test_get_max_concurrency_for_kv_cache_config():
             KVCacheGroupSpec(["layer_4", "layer_5"], sliding_window_spec),
         ],
     )
-    assert get_max_concurrency_for_kv_cache_config(aphrodite_config, kv_cache_config_uniform_group) == 3
+    assert get_max_concurrency_for_kv_cache_config(sonar_config, kv_cache_config_uniform_group) == 3
 
     # Scheduler-config shape: generate_scheduler_kv_cache_config replaces the
     # uniform-type group's spec with a representative per-layer spec.
@@ -1626,8 +1624,8 @@ def test_get_max_concurrency_for_kv_cache_config():
     # on the scheduler config, the worker loop on the worker config).
     kv_cache_config_scheduler_shape = generate_scheduler_kv_cache_config([copy.deepcopy(kv_cache_config_uniform_group)])
     assert get_max_concurrency_for_kv_cache_config(
-        aphrodite_config, kv_cache_config_scheduler_shape
-    ) == get_max_concurrency_for_kv_cache_config(aphrodite_config, kv_cache_config_uniform_group)
+        sonar_config, kv_cache_config_scheduler_shape
+    ) == get_max_concurrency_for_kv_cache_config(sonar_config, kv_cache_config_uniform_group)
 
 
 def test_allocate_with_lookahead():
@@ -2081,7 +2079,7 @@ def test_unpadded_page_size_includes_per_token_head_scales():
     # Per-token-head quant carries inline fp32 scales that are carved from the
     # raw KV allocation, so they must be budgeted into the offload width. The
     # packing is published by the owning backend's customize_spec hook.
-    from aphrodite.v1.attention.backends.triton_attn import TritonAttentionBackend
+    from sonar.v1.attention.backends.triton_attn import TritonAttentionBackend
 
     dense = new_kv_cache_spec(dtype=torch.uint8)
     spec = TritonAttentionBackend.customize_spec(
@@ -2094,7 +2092,7 @@ def test_unpadded_page_size_includes_per_token_head_scales():
 
 def test_page_size_padded_wins():
     # An explicit padded page size takes precedence over the unpadded size.
-    from aphrodite.v1.attention.backends.triton_attn import TritonAttentionBackend
+    from sonar.v1.attention.backends.triton_attn import TritonAttentionBackend
 
     spec = TritonAttentionBackend.customize_spec(
         new_kv_cache_spec(
@@ -2109,7 +2107,7 @@ def test_page_size_padded_wins():
 def test_hma_not_disabled_when_kv_events_enabled():
     """Test enabling KV events must not force disable_hybrid_kv_cache_manager to True.
 
-    This test guards against that regression by verifying that a AphroditeConfig
+    This test guards against that regression by verifying that a SonarConfig
     with kv_events_config set still resolves disable_hybrid_kv_cache_manager
     to False (i.e. HMA remains enabled) when no other condition requires it
     to be disabled.
@@ -2121,13 +2119,13 @@ def test_hma_not_disabled_when_kv_events_enabled():
     )
 
     # Leave disable_hybrid_kv_cache_manager as None (the default) so that
-    # AphroditeConfig.__post_init__ resolves it automatically.
-    aphrodite_config = AphroditeConfig(
+    # SonarConfig.__post_init__ resolves it automatically.
+    sonar_config = SonarConfig(
         model_config=model_config,
         kv_events_config=kv_events_config,
     )
 
-    assert aphrodite_config.scheduler_config.disable_hybrid_kv_cache_manager is False, (
+    assert sonar_config.scheduler_config.disable_hybrid_kv_cache_manager is False, (
         "kv_events_config must not force-disable the hybrid KV cache manager."
     )
 

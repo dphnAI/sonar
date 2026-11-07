@@ -1,51 +1,51 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-from aphrodite.model_executor.kernels.linear.scaled_mm.aiter import (
+from sonar.model_executor.kernels.linear.scaled_mm.aiter import (
     AiterInt8ScaledMMLinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.scaled_mm.BlockScaledMMLinearKernel import (
+from sonar.model_executor.kernels.linear.scaled_mm.BlockScaledMMLinearKernel import (
     Fp8BlockScaledMMLinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.scaled_mm.cpu import (
+from sonar.model_executor.kernels.linear.scaled_mm.cpu import (
     CPUFp8BlockScaledMMKernel,
     CPUFp8PerTensorScaledMMLinearKernel,
     CPUFP8W8A8ScaledMMLinearKernel,
     CPUInt8ScaledMMLinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.scaled_mm.cutlass import (
+from sonar.model_executor.kernels.linear.scaled_mm.cutlass import (
     CutlassFP8ScaledMMLinearKernel,
     CutlassInt8ScaledMMLinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.scaled_mm.flashinfer import (
+from sonar.model_executor.kernels.linear.scaled_mm.flashinfer import (
     FlashInferFP8ScaledMMLinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.scaled_mm.marlin import (
+from sonar.model_executor.kernels.linear.scaled_mm.marlin import (
     MarlinFP8ScaledMMLinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.scaled_mm.pytorch import (
+from sonar.model_executor.kernels.linear.scaled_mm.pytorch import (
     ChannelWiseTorchFP8ScaledMMLinearKernel,
     PerTensorTorchFP8ScaledMMLinearKernel,
     RowWiseTorchFP8ScaledMMLinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.scaled_mm.rocm import (
+from sonar.model_executor.kernels.linear.scaled_mm.rocm import (
     ROCmFP8ScaledMMLinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.scaled_mm.ScaledMMLinearKernel import (
+from sonar.model_executor.kernels.linear.scaled_mm.ScaledMMLinearKernel import (
     FP8ScaledMMLinearKernel,
     FP8ScaledMMLinearLayerConfig,
     Int8ScaledMMLinearKernel,
     Int8ScaledMMLinearLayerConfig,
     ScaledMMLinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.scaled_mm.triton import (
+from sonar.model_executor.kernels.linear.scaled_mm.triton import (
     TritonFP8ScaledMMLinearKernel,
     TritonInt8ScaledMMLinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.scaled_mm.xpu import (
+from sonar.model_executor.kernels.linear.scaled_mm.xpu import (
     XPUFp8BlockScaledMMKernel,
 )
-from aphrodite.model_executor.kernels.linear.scaled_mm.zentorch import (
+from sonar.model_executor.kernels.linear.scaled_mm.zentorch import (
     ZentorchInt8ScaledMMLinearKernel,
 )
 

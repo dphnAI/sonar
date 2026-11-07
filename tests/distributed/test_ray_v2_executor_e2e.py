@@ -40,15 +40,15 @@ class _AsyncLLMActor:
     def start(self, pg, bundle_indices=None, ray_runtime_env=None):
         # Needed so collective_rpc can pickle _get_env_var over the
         # AsyncLLM -> EngineCore ZMQ boundary.
-        os.environ["APHRODITE_ALLOW_INSECURE_SERIALIZATION"] = "1"
+        os.environ["SONAR_ALLOW_INSECURE_SERIALIZATION"] = "1"
         if bundle_indices is not None:
-            os.environ["APHRODITE_RAY_BUNDLE_INDICES"] = bundle_indices
+            os.environ["SONAR_RAY_BUNDLE_INDICES"] = bundle_indices
         else:
-            os.environ.pop("APHRODITE_RAY_BUNDLE_INDICES", None)
+            os.environ.pop("SONAR_RAY_BUNDLE_INDICES", None)
 
-        from aphrodite.engine.arg_utils import AsyncEngineArgs
-        from aphrodite.v1.engine.async_llm import AsyncLLM
-        from aphrodite.v1.executor.abstract import Executor
+        from sonar.engine.arg_utils import AsyncEngineArgs
+        from sonar.v1.engine.async_llm import AsyncLLM
+        from sonar.v1.executor.abstract import Executor
 
         engine_args = AsyncEngineArgs(
             model=MODEL,
@@ -58,21 +58,21 @@ class _AsyncLLMActor:
             max_model_len=256,
             gpu_memory_utilization=0.8,
         )
-        aphrodite_config = engine_args.create_engine_config()
-        aphrodite_config.parallel_config.placement_group = pg
+        sonar_config = engine_args.create_engine_config()
+        sonar_config.parallel_config.placement_group = pg
         if ray_runtime_env is not None:
-            aphrodite_config.parallel_config.ray_runtime_env = ray_runtime_env
+            sonar_config.parallel_config.ray_runtime_env = ray_runtime_env
 
-        executor_class = Executor.get_class(aphrodite_config)
+        executor_class = Executor.get_class(sonar_config)
         self.engine = AsyncLLM(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             executor_class=executor_class,
             log_stats=False,
             log_requests=False,
         )
 
     async def generate(self, prompt):
-        from aphrodite.sampling_params import SamplingParams
+        from sonar.sampling_params import SamplingParams
 
         params = SamplingParams(max_tokens=16)
         result = None
@@ -82,7 +82,7 @@ class _AsyncLLMActor:
         return result.outputs[0].text
 
     async def generate_and_get_worker_envs(self, prompt, env_names):
-        from aphrodite.sampling_params import SamplingParams
+        from sonar.sampling_params import SamplingParams
 
         params = SamplingParams(max_tokens=16)
         result = None

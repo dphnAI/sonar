@@ -4,7 +4,7 @@ import pydantic
 from fastapi import Request
 from starlette.concurrency import iterate_in_threadpool
 
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 
@@ -65,10 +65,10 @@ class SSEDecoder:
 def _extract_content_from_chunk(chunk_data: dict) -> str:
     """Extract content from a streaming response chunk."""
     try:
-        from aphrodite.entrypoints.openai.chat_completion.protocol import (
+        from sonar.entrypoints.openai.chat_completion.protocol import (
             ChatCompletionStreamResponse,
         )
-        from aphrodite.entrypoints.openai.completion.protocol import (
+        from sonar.entrypoints.openai.completion.protocol import (
             CompletionStreamResponse,
         )
 

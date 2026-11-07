@@ -9,17 +9,17 @@ from typing import TYPE_CHECKING, Any, cast
 
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.config import get_current_aphrodite_config_or_none
-from aphrodite.config.quantization import QuantizationConfigArgs, QuantSpec
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.kernels.linear import (
+import sonar.envs as envs
+from sonar.config import get_current_sonar_config_or_none
+from sonar.config.quantization import QuantizationConfigArgs, QuantSpec
+from sonar.logger import init_logger
+from sonar.model_executor.kernels.linear import (
     init_fp8_linear_kernel,
     init_mxfp8_linear_kernel,
     init_nvfp4_linear_kernel,
 )
-from aphrodite.model_executor.layers.attention import Attention, MLAAttention
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.model_executor.layers.attention import Attention, MLAAttention
+from sonar.model_executor.layers.fused_moe import (
     FusedMoEConfig,
     FusedMoEMethodBase,
     FusedMoEQuantConfig,
@@ -27,18 +27,18 @@ from aphrodite.model_executor.layers.fused_moe import (
     RoutedExperts,
     SharedExperts,
 )
-from aphrodite.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
-from aphrodite.model_executor.layers.fused_moe.oracle.fp8 import (
+from sonar.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
+from sonar.model_executor.layers.fused_moe.oracle.fp8 import (
     Fp8MoeBackend,
     convert_to_fp8_moe_kernel_format,
     make_fp8_moe_kernel,
     make_fp8_moe_quant_config,
     select_fp8_moe_backend,
 )
-from aphrodite.model_executor.layers.fused_moe.oracle.mxfp8 import (
+from sonar.model_executor.layers.fused_moe.oracle.mxfp8 import (
     select_mxfp8_moe_backend,
 )
-from aphrodite.model_executor.layers.fused_moe.oracle.nvfp4 import (
+from sonar.model_executor.layers.fused_moe.oracle.nvfp4 import (
     NvFp4MoeBackend,
     convert_to_nvfp4_moe_kernel_format,
     is_global_sf_supported_for_nvfp4_backend,
@@ -46,44 +46,44 @@ from aphrodite.model_executor.layers.fused_moe.oracle.nvfp4 import (
     make_nvfp4_moe_quant_config,
     select_nvfp4_moe_backend,
 )
-from aphrodite.model_executor.layers.fusion.quant_activation import (
+from sonar.model_executor.layers.fusion.quant_activation import (
     expose_input_quant_key,
 )
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.linear import (
     LinearBase,
     LinearMethodBase,
     UnquantizedLinearMethod,
     register_weight_loader_v2_supported_method,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationMethods
-from aphrodite.model_executor.layers.quantization.base_config import (
+from sonar.model_executor.layers.quantization import QuantizationMethods
+from sonar.model_executor.layers.quantization.base_config import (
     QuantizationConfig,
     QuantizeMethodBase,
 )
-from aphrodite.model_executor.layers.quantization.fp8 import Fp8Config, Fp8MoEMethod
-from aphrodite.model_executor.layers.quantization.kv_cache import BaseKVCacheMethod
-from aphrodite.model_executor.layers.quantization.utils.flashinfer_utils import (
+from sonar.model_executor.layers.quantization.fp8 import Fp8Config, Fp8MoEMethod
+from sonar.model_executor.layers.quantization.kv_cache import BaseKVCacheMethod
+from sonar.model_executor.layers.quantization.utils.flashinfer_utils import (
     trtllm_nvfp4_hidden_alignment,
 )
-from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
+from sonar.model_executor.layers.quantization.utils.fp8_utils import (
     FP8_SCALE_SENTINEL,
     process_fp8_input_tensor_strategy_moe,
     process_fp8_weight_channel_strategy,
     process_fp8_weight_tensor_strategy_moe,
 )
-from aphrodite.model_executor.layers.quantization.utils.marlin_utils import (
+from sonar.model_executor.layers.quantization.utils.marlin_utils import (
     get_marlin_input_dtype,
 )
-from aphrodite.model_executor.layers.quantization.utils.mxfp8_utils import (
+from sonar.model_executor.layers.quantization.utils.mxfp8_utils import (
     MXFP8_BLOCK_SIZE,
     MXFP8_SCALE_DTYPE,
     MXFP8_VALUE_DTYPE,
     dequant_mxfp8_to_bf16,
 )
-from aphrodite.model_executor.layers.quantization.utils.nvfp4_emulation_utils import (
+from sonar.model_executor.layers.quantization.utils.nvfp4_emulation_utils import (
     dequantize_nvfp4_moe_weights,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     FP4_DTYPE,
     QuantKey,
     is_layer_skipped,
@@ -98,32 +98,32 @@ from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
     kNvfp4DynamicToken,
     kNvfp4Static,
 )
-from aphrodite.model_executor.layers.quantization.utils.w8a8_utils import (
+from sonar.model_executor.layers.quantization.utils.w8a8_utils import (
     normalize_e4m3fn_to_e4m3fnuz,
     requantize_with_max_scale,
 )
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.parameter import (
+from sonar.model_executor.parameter import (
     BlockQuantScaleParameter,
     ChannelQuantScaleParameter,
     ModelWeightParameter,
     PerTensorScaleParameter,
 )
-from aphrodite.model_executor.utils import (
+from sonar.model_executor.utils import (
     is_weights_pre_processed,
     replace_parameter,
     retire_parameter,
     set_weight_attrs,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.b12x import B12X_BLOCK_CODECS
-from aphrodite.utils.math_utils import cdiv
+from sonar.platforms import current_platform
+from sonar.utils.b12x import B12X_BLOCK_CODECS
+from sonar.utils.math_utils import cdiv
 
 if TYPE_CHECKING:
-    from aphrodite.model_executor.models.utils import WeightsMapper
+    from sonar.model_executor.models.utils import WeightsMapper
 
 logger = init_logger(__name__)
 
@@ -249,7 +249,7 @@ class ModelOptQuantConfigBase(QuantizationConfig):
 
         return None
 
-    def apply_aphrodite_mapper(self, hf_to_aphrodite_mapper: "WeightsMapper"):
+    def apply_sonar_mapper(self, hf_to_sonar_mapper: "WeightsMapper"):
         if len(self.exclude_modules) > 0:
             # This is a workaround for the weights remapping issue:
             # https://github.com/vllm-project/vllm/issues/28072
@@ -268,7 +268,7 @@ class ModelOptQuantConfigBase(QuantizationConfig):
                 else:
                     new_exclude_modules.append(exclude)
 
-            self.exclude_modules = hf_to_aphrodite_mapper.apply_list(new_exclude_modules)
+            self.exclude_modules = hf_to_sonar_mapper.apply_list(new_exclude_modules)
 
     @staticmethod
     def _extract_modelopt_quant_algo(
@@ -374,7 +374,7 @@ class ModelOptQuantConfigBase(QuantizationConfig):
         if quant_method not in QUANT_ALGOS:
             raise ValueError(
                 f"ModelOpt currently only supports: {QUANT_ALGOS} "
-                "quantizations in Aphrodite. Please check the "
+                "quantizations in Sonar. Please check the "
                 "`hf_quant_config.json` file for your model's "
                 "quant configuration."
             )
@@ -406,12 +406,12 @@ class ModelOptFp8Config(ModelOptQuantConfigBase):
         supported = algos_owned_by("modelopt")
         if self.quant_method not in supported:
             raise ValueError(
-                "Unsupported ModelOpt FP8 quant_algo for Aphrodite: "
+                "Unsupported ModelOpt FP8 quant_algo for Sonar: "
                 f"{self.quant_method}. Supported: {' / '.join(supported)}."
             )
 
     def has_blocked_weights(self) -> bool:
-        # Gates "+quant_fp8" in AphroditeConfig. FP8_PB_WO runs the block-scaled
+        # Gates "+quant_fp8" in SonarConfig. FP8_PB_WO runs the block-scaled
         # kernels, whose DeepGEMM path needs UE8M0-packed group scales; without
         # the op enabled QuantFP8 falls back to forward_native, which emits
         # unpacked fp32 scales and the GEMM fails to launch.
@@ -1262,7 +1262,7 @@ class ModelOptMxFp8Config(ModelOptQuantConfigBase):
 
     def get_quant_method(self, layer: torch.nn.Module, prefix: str) -> "QuantizeMethodBase | None":
         if self.moe_quant_algo == "NVFP4" and isinstance(layer, RoutedExperts) and not self.is_layer_excluded(prefix):
-            from aphrodite.model_executor.layers.quantization.compressed_tensors.compressed_tensors_moe.compressed_tensors_moe_w4a4_nvfp4 import (  # noqa: E501
+            from sonar.model_executor.layers.quantization.compressed_tensors.compressed_tensors_moe.compressed_tensors_moe_w4a4_nvfp4 import (  # noqa: E501
                 CompressedTensorsW4A4Nvfp4MoEMethod,
             )
 
@@ -1408,7 +1408,7 @@ class ModelOptMxFp8FusedMoE(FusedMoEMethodBase):
         are freed by ``replace_parameter`` (BF16 is 2x their size; the small
         E8M0 scale tensors are left in place, unused).
         """
-        from aphrodite.model_executor.layers.quantization.utils.mxfp8_utils import (
+        from sonar.model_executor.layers.quantization.utils.mxfp8_utils import (
             dequant_mxfp8_to_bf16,
         )
 
@@ -1468,9 +1468,9 @@ class ModelOptMxFp8FusedMoE(FusedMoEMethodBase):
         # No native MXFP8 MoE kernel on this device (e.g. gfx942): the emulation
         # experts would dequant MXFP8->BF16 every forward step. Convert the
         # weights to BF16 once, here, so the MoE runs like a BF16 checkpoint.
-        # Opt out (APHRODITE_MXFP8_EMULATION_DEQUANT_AT_LOAD=0) to keep the 1-byte
+        # Opt out (SONAR_MXFP8_EMULATION_DEQUANT_AT_LOAD=0) to keep the 1-byte
         # MXFP8 weights and dequant per-step (~half the memory, much slower).
-        if self.mxfp8_backend == Fp8MoeBackend.EMULATION and envs.APHRODITE_MXFP8_EMULATION_DEQUANT_AT_LOAD:
+        if self.mxfp8_backend == Fp8MoeBackend.EMULATION and envs.SONAR_MXFP8_EMULATION_DEQUANT_AT_LOAD:
             self._dequant_mxfp8_weights_to_bf16(layer)
 
     def get_fused_moe_quant_config(self, layer: RoutedExperts) -> FusedMoEQuantConfig | None:
@@ -1710,7 +1710,7 @@ class ModelOptMixedPrecisionConfig(ModelOptQuantConfigBase):
         )
 
     def _resolve_quant_algo(self, prefix: str) -> str | None:
-        """Look up the quant_algo for a Aphrodite-side layer prefix.
+        """Look up the quant_algo for a Sonar-side layer prefix.
 
         Tries three strategies in order:
         1. Direct lookup in ``quantized_layers``.
@@ -1759,7 +1759,7 @@ class ModelOptMixedPrecisionConfig(ModelOptQuantConfigBase):
                     return info["quant_algo"].upper()
 
         # 4. Parent-prefix fallback for fused projections whose config lists
-        # shard names instead of Aphrodite's packed module name.
+        # shard names instead of Sonar's packed module name.
         fused_projection_shards = {
             "qkv_proj": ("q_proj", "k_proj", "v_proj"),
             "gate_up_proj": ("gate_proj", "up_proj"),
@@ -1864,10 +1864,10 @@ class ModelOptMixedPrecisionConfig(ModelOptQuantConfigBase):
 
         return None
 
-    def apply_aphrodite_mapper(self, hf_to_aphrodite_mapper: "WeightsMapper"):
-        super().apply_aphrodite_mapper(hf_to_aphrodite_mapper)
+    def apply_sonar_mapper(self, hf_to_sonar_mapper: "WeightsMapper"):
+        super().apply_sonar_mapper(hf_to_sonar_mapper)
         if self.quantized_layers:
-            self.quantized_layers = hf_to_aphrodite_mapper.apply_dict(self.quantized_layers)
+            self.quantized_layers = hf_to_sonar_mapper.apply_dict(self.quantized_layers)
 
 
 # ===========================================================================
@@ -2305,7 +2305,7 @@ class KMxfp8Static(QuantKeyScheme):
         if role is not WEIGHT:
             self.reject(role)
         # Idempotency: the emulation kernel's post-load may replace the 1-byte
-        # MXFP8 weight with BF16 (APHRODITE_MXFP8_EMULATION_DEQUANT_AT_LOAD, default
+        # MXFP8 weight with BF16 (SONAR_MXFP8_EMULATION_DEQUANT_AT_LOAD, default
         # on). On a weight reload process runs again after that swap, so skip
         # the fp8 asserts when the weight is already >=2-byte.
         if layer.weight.element_size() >= 2:
@@ -2496,7 +2496,7 @@ class ModelOptLinearMethod(LinearMethodBase):
     and applies.
 
     Registered for weight_loader_v2 (like every ModelOpt linear method) so the
-    ``BaseAphroditeParameter`` params route through the v2 fused loader, not the
+    ``BaseSonarParameter`` params route through the v2 fused loader, not the
     legacy shape-assert path.
     """
 
@@ -2514,7 +2514,7 @@ class ModelOptLinearMethod(LinearMethodBase):
         # Only the fp8/mxfp8 kernels read input_dtype; nvfp4 ignores it. During
         # real serving model_config is always set; fall back defensively when
         # there is no config context (bare unit-test dispatch).
-        model_config = getattr(get_current_aphrodite_config_or_none(), "model_config", None)
+        model_config = getattr(get_current_sonar_config_or_none(), "model_config", None)
         dtype = model_config.dtype if model_config is not None else torch.get_default_dtype()
         self.out_dtype = dtype
         self.input_dtype = dtype
@@ -2682,7 +2682,7 @@ def resolve(algo: str, subcfg, prefix: str):
 #     LINEAR_METHOD_BUILDERS["FOO"] = lambda cfg, prefix: ModelOptFooLinearMethod(cfg)
 #
 # Keep the ModelOpt* class-name prefix and decorate the class with
-# @register_weight_loader_v2_supported_method if it uses BaseAphroditeParameter
+# @register_weight_loader_v2_supported_method if it uses BaseSonarParameter
 # params. Also add the algo to the owning config's quant_method validation.
 LINEAR_METHOD_BUILDERS: dict[str, Callable[..., LinearMethodBase]] = {}
 

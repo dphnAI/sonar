@@ -10,14 +10,14 @@ from torch import fx
 from torch._higher_order_ops.auto_functionalize import auto_functionalized
 from torch._inductor.pattern_matcher import PatternMatcherPass
 
-import aphrodite.ir.ops
-from aphrodite.config import AphroditeConfig, get_layers_from_aphrodite_config
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.layers.rotary_embedding import RotaryEmbedding
+import sonar.ir.ops
+from sonar.config import SonarConfig, get_layers_from_sonar_config
+from sonar.logger import init_logger
+from sonar.model_executor.layers.attention import Attention
+from sonar.model_executor.layers.rotary_embedding import RotaryEmbedding
 
-from ..aphrodite_inductor_pass import AphroditeInductorPass, AphroditePatternMatcherPass
 from ..inductor_pass import enable_fake_mode
+from ..sonar_inductor_pass import SonarInductorPass, SonarPatternMatcherPass
 from .matcher_utils import MatcherRotaryEmbedding
 from .rms_quant_fusion import empty_bf16, empty_fp32, empty_i64
 
@@ -135,12 +135,12 @@ class QkNormRopePattern:
 
             # Q path: view -> RMS -> view back to q.shape
             q_by_head = q.view(*q.shape[:-1], q.shape[-1] // self.head_dim, self.head_dim)
-            q_normed_by_head = aphrodite.ir.ops.rms_norm(q_by_head, q_weight, self.eps)
+            q_normed_by_head = sonar.ir.ops.rms_norm(q_by_head, q_weight, self.eps)
             q_flat = q_normed_by_head.view(q.shape)
 
             # K path: view -> RMS -> view back to k.shape
             k_by_head = k.view(*k.shape[:-1], k.shape[-1] // self.head_dim, self.head_dim)
-            k_normed_by_head = aphrodite.ir.ops.rms_norm(k_by_head, k_weight, self.eps)
+            k_normed_by_head = sonar.ir.ops.rms_norm(k_by_head, k_weight, self.eps)
             k_flat = k_normed_by_head.view(k.shape)
 
             # RoPE: apply to flattened q/k
@@ -189,16 +189,16 @@ class QkNormRopePattern:
         )
 
 
-class QKNormRoPEFusionPass(AphroditePatternMatcherPass):
+class QKNormRoPEFusionPass(SonarPatternMatcherPass):
     """Fuse Q/K RMSNorm + RoPE into fused_qk_norm_rope when the custom op exists.
 
-    Registers patterns for both standard Aphrodite ops and ROCm AITER ops
+    Registers patterns for both standard Sonar ops and ROCm AITER ops
     (when AITER is enabled), so the fusion fires regardless of which
     RMSNorm/RoPE implementation the graph uses.
     """
 
     @enable_fake_mode
-    def __init__(self, config: AphroditeConfig) -> None:
+    def __init__(self, config: SonarConfig) -> None:
         super().__init__(config)
         self.patterns: PatternMatcherPass = PatternMatcherPass(pass_name="qk_norm_rope_fusion_pass")
         self._attention_geometries: tuple[tuple[int, int, int], ...] = ()
@@ -208,7 +208,7 @@ class QKNormRoPEFusionPass(AphroditePatternMatcherPass):
             logger.warning_once("QK Norm+RoPE fusion not enabled: unsupported dtype %s", dtype)
             return
 
-        attn_layers: dict[str, Attention] = get_layers_from_aphrodite_config(config, Attention)
+        attn_layers: dict[str, Attention] = get_layers_from_sonar_config(config, Attention)
         if len(attn_layers) == 0:
             logger.warning_once("QK Norm+RoPE fusion enabled, but no Attention layers were discovered.")
             return
@@ -244,10 +244,10 @@ class QKNormRoPEFusionPass(AphroditePatternMatcherPass):
 
         self.dump_patterns(config, self.patterns)
 
-    @AphroditeInductorPass.time_and_log
+    @SonarInductorPass.time_and_log
     def __call__(self, graph: fx.Graph) -> None:
         self.matched_count = self.patterns.apply(graph)
         logger.debug("Fused QK Norm+RoPE on %s sites", self.matched_count)
 
     def uuid(self) -> str:
-        return AphroditeInductorPass.hash_source(self, QkNormRopePattern, repr(self._attention_geometries))
+        return SonarInductorPass.hash_source(self, QkNormRopePattern, repr(self._attention_geometries))

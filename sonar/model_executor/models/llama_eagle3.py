@@ -8,26 +8,26 @@ import torch
 import torch.nn as nn
 from transformers import LlamaConfig
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, get_current_aphrodite_config
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import QKVParallelLinear, ReplicatedLinear
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization.base_config import QuantizationConfig
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import SonarConfig, get_current_sonar_config
+from sonar.logger import init_logger
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import QKVParallelLinear, ReplicatedLinear
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization.base_config import QuantizationConfig
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.models.llama import (
+from sonar.model_executor.models.llama import (
     LlamaAttention,
     LlamaForCausalLM,
     LlamaMLP,
 )
-from aphrodite.model_executor.models.llama import (
+from sonar.model_executor.models.llama import (
     LlamaDecoderLayer as BaseLlamaDecoderLayer,
 )
-from aphrodite.multimodal.inputs import NestedTensors
+from sonar.multimodal.inputs import NestedTensors
 
 from .utils import (
     AutoWeightsLoader,
@@ -51,7 +51,7 @@ if TYPE_CHECKING:
 
         def __init__(
             self,
-            aphrodite_config: AphroditeConfig,
+            sonar_config: SonarConfig,
             prefix: str = "",
             config: LlamaConfig | None = None,
         ) -> None: ...
@@ -67,15 +67,15 @@ else:
 class LlamaDecoderLayer(_Eagle3LlamaDecoderLayerBase):
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
         config: LlamaConfig | None = None,
         layer_idx: int = 0,
     ) -> None:
-        super().__init__(aphrodite_config, prefix=prefix, config=config)
+        super().__init__(sonar_config, prefix=prefix, config=config)
 
-        config = config or aphrodite_config.model_config.hf_config
-        quant_config = self.get_quant_config(aphrodite_config)
+        config = config or sonar_config.model_config.hf_config
+        quant_config = self.get_quant_config(sonar_config)
 
         # First layer uses 2*hidden_size (embeds + hidden_states concatenated)
         # Subsequent layers use hidden_size (only hidden_states, no embeds)
@@ -103,9 +103,9 @@ class LlamaDecoderLayer(_Eagle3LlamaDecoderLayerBase):
         else:
             self._residual_norm = self._norm_after_residual
 
-    def get_quant_config(self, aphrodite_config: AphroditeConfig) -> QuantizationConfig | None:
+    def get_quant_config(self, sonar_config: SonarConfig) -> QuantizationConfig | None:
         """Use drafter's quantization config instead of verifier's."""
-        return get_draft_quant_config(aphrodite_config)
+        return get_draft_quant_config(sonar_config)
 
     def _norm_before_residual(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         hidden_states = self.hidden_norm(hidden_states)
@@ -159,18 +159,18 @@ class LlamaModel(nn.Module):
     def __init__(
         self,
         *,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         start_layer_id: int = 0,
         prefix: str = "",
     ) -> None:
         super().__init__()
-        speculative_config = aphrodite_config.speculative_config
+        speculative_config = sonar_config.speculative_config
         assert speculative_config is not None
         self.config = speculative_config.draft_model_config.hf_config
         self.vocab_size = self.config.vocab_size
 
         # Get drafter's quantization config
-        self.quant_config = get_draft_quant_config(aphrodite_config)
+        self.quant_config = get_draft_quant_config(sonar_config)
 
         eagle_config = getattr(self.config, "eagle_config", None) or {}
         if "use_aux_hidden_state" in eagle_config:
@@ -179,7 +179,7 @@ class LlamaModel(nn.Module):
             self.use_aux_hidden_state = True
         self.norm_before_fc = bool(eagle_config.get("norm_before_fc", getattr(self.config, "norm_before_fc", False)))
 
-        current_aphrodite_config = get_current_aphrodite_config()
+        current_sonar_config = get_current_sonar_config()
 
         self.embed_tokens = VocabParallelEmbedding(
             self.config.vocab_size,
@@ -190,7 +190,7 @@ class LlamaModel(nn.Module):
         self.layers = nn.ModuleList(
             [
                 LlamaDecoderLayer(
-                    current_aphrodite_config,
+                    current_sonar_config,
                     prefix=maybe_prefix(prefix, f"layers.{layer_idx + start_layer_id}"),
                     config=self.config,
                     layer_idx=layer_idx,
@@ -231,7 +231,7 @@ class LlamaModel(nn.Module):
                 input_size=self.fc_input_size,
                 output_size=self.config.hidden_size,
                 bias=False,
-                params_dtype=aphrodite_config.model_config.dtype,
+                params_dtype=sonar_config.model_config.dtype,
                 quant_config=self.quant_config,
                 prefix=maybe_prefix(prefix, "fc"),
                 return_bias=False,
@@ -275,7 +275,7 @@ class LlamaModel(nn.Module):
 
         return hidden_states, aux_output
 
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_substr={"midlayer.": "layers.0."},
         orig_to_new_stacked={
             ".q_proj": (".qkv_proj", "q"),
@@ -288,13 +288,13 @@ class LlamaModel(nn.Module):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
 
 class Eagle3LlamaForCausalLM(_Eagle3LlamaForCausalLMBase):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         nn.Module.__init__(self)
-        speculative_config = aphrodite_config.speculative_config
+        speculative_config = sonar_config.speculative_config
         assert speculative_config is not None
         self.config = speculative_config.draft_model_config.hf_config
         # Ensure draft_vocab_size is set
@@ -302,13 +302,13 @@ class Eagle3LlamaForCausalLM(_Eagle3LlamaForCausalLMBase):
         if getattr(self.config, "draft_vocab_size", None) is None:
             base_vocab_size = getattr(self.config, "vocab_size", None)
             self.config.draft_vocab_size = base_vocab_size
-        target_layer_num = aphrodite_config.model_config.get_total_num_hidden_layers()
+        target_layer_num = sonar_config.model_config.get_total_num_hidden_layers()
 
         # Store target layer count in draft config for
         # proper layer_types indexing in draft models
         self.config.target_layer_count = target_layer_num
         self.model = LlamaModel(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             prefix=maybe_prefix(prefix, "model"),
             start_layer_id=target_layer_num,
         )
@@ -317,11 +317,11 @@ class Eagle3LlamaForCausalLM(_Eagle3LlamaForCausalLMBase):
         self.lm_head = ParallelLMHead(
             self.config.draft_vocab_size,
             self.config.hidden_size,
-            quant_config=get_draft_quant_config(aphrodite_config),
+            quant_config=get_draft_quant_config(sonar_config),
             prefix=maybe_prefix(prefix, "lm_head"),
         )
         self.logits_processor = LogitsProcessor(self.config.draft_vocab_size, scale=logit_scale)
-        target_vocab_size = aphrodite_config.model_config.get_vocab_size()
+        target_vocab_size = sonar_config.model_config.get_vocab_size()
         if self.config.draft_vocab_size != target_vocab_size:
             self.draft_id_to_target_id = nn.Parameter(
                 torch.zeros(self.config.draft_vocab_size, dtype=torch.long),

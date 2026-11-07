@@ -6,14 +6,14 @@ import torch
 import torch.nn.functional as F
 from einops import rearrange, repeat
 
-from aphrodite import _custom_ops as ops  # noqa: F401
-from aphrodite.model_executor.layers.mamba.ops.mamba_ssm import (
+from sonar import _custom_ops as ops  # noqa: F401
+from sonar.model_executor.layers.mamba.ops.mamba_ssm import (
     selective_scan_fn,
     selective_state_update,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
-from aphrodite.v1.attention.backends.utils import NULL_BLOCK_ID
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_random_seed
+from sonar.v1.attention.backends.utils import NULL_BLOCK_ID
 from tests.kernels.mamba.utils import selective_state_update_ref
 from tests.kernels.utils import opcheck
 

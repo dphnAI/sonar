@@ -15,8 +15,8 @@ from typing import Any, Literal, get_args
 import jinja2
 from fastapi import Request
 
-from aphrodite.engine.protocol import EngineClient
-from aphrodite.entrypoints.anthropic.protocol import (
+from sonar.engine.protocol import EngineClient
+from sonar.entrypoints.anthropic.protocol import (
     AnthropicContentBlock,
     AnthropicContextManagement,
     AnthropicCountTokensRequest,
@@ -36,32 +36,32 @@ from aphrodite.entrypoints.anthropic.protocol import (
     AnthropicUsage,
     translate_error_type,
 )
-from aphrodite.entrypoints.generate.base.protocol import (
+from sonar.entrypoints.generate.base.protocol import (
     JsonSchemaResponseFormat,
     ResponseFormat,
     StreamOptions,
 )
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionNamedToolChoiceParam,
     ChatCompletionRequest,
     ChatCompletionResponse,
     ChatCompletionStreamResponse,
     ChatCompletionToolsParam,
 )
-from aphrodite.entrypoints.openai.chat_completion.serving import OpenAIServingChat
-from aphrodite.entrypoints.openai.models.serving import OpenAIServingModels
-from aphrodite.entrypoints.serve.engine.protocol import ErrorInfo, ErrorResponse, UsageInfo
-from aphrodite.entrypoints.serve.exception_handling.utils import sanitize_message
-from aphrodite.entrypoints.serve.utils.request_logger import RequestLogger
-from aphrodite.logger import init_logger
-from aphrodite.renderers.chat_utils import ChatTemplateContentFormatOption
-from aphrodite.renderers.hf import HfRenderer, resolve_chat_template
-from aphrodite.renderers.inputs.preprocess import (
+from sonar.entrypoints.openai.chat_completion.serving import OpenAIServingChat
+from sonar.entrypoints.openai.models.serving import OpenAIServingModels
+from sonar.entrypoints.serve.engine.protocol import ErrorInfo, ErrorResponse, UsageInfo
+from sonar.entrypoints.serve.exception_handling.utils import sanitize_message
+from sonar.entrypoints.serve.utils.request_logger import RequestLogger
+from sonar.logger import init_logger
+from sonar.renderers.chat_utils import ChatTemplateContentFormatOption
+from sonar.renderers.hf import HfRenderer, resolve_chat_template
+from sonar.renderers.inputs.preprocess import (
     extract_prompt_components,
     parse_dec_only_prompt,
 )
-from aphrodite.renderers.online_renderer import OnlineRenderer
-from aphrodite.renderers.params import ChatParams
+from sonar.renderers.online_renderer import OnlineRenderer
+from sonar.renderers.params import ChatParams
 
 logger = init_logger(__name__)
 
@@ -82,7 +82,7 @@ def _build_anthropic_usage(
     """Build an AnthropicUsage from UsageInfo.
 
     Anthropic defines ``total_input == input_tokens + cache_read +
-    cache_creation``.  Aphrodite's ``prompt_tokens`` is the total, so
+    cache_creation``.  Sonar's ``prompt_tokens`` is the total, so
     ``input_tokens = prompt_tokens - cache_read - cache_creation``.
 
     Cache fields are taken from ``UsageInfo.prompt_tokens_details``.
@@ -138,7 +138,7 @@ def _to_anthropic_stop_reason(
         return None, None
     if tool_complete:
         return "tool_use", None
-    # Aphrodite reports the matched stop string in stop_reason (a str);
+    # Sonar reports the matched stop string in stop_reason (a str);
     # an int stop-token-id or None (natural EOS) is not a stop sequence.
     if isinstance(stop_reason, str):
         return "stop_sequence", stop_reason
@@ -390,7 +390,7 @@ class AnthropicServingMessages(OpenAIServingChat):
         - url: {"type": "url", "url": "https://..."}
 
         For base64 sources, this constructs a proper data URI that
-        downstream processors (e.g. Aphrodite's media connector) can handle.
+        downstream processors (e.g. Sonar's media connector) can handle.
         """
         source_type = source.get("type")
         if source_type == "url":
@@ -697,7 +697,7 @@ class AnthropicServingMessages(OpenAIServingChat):
             cache_salt=anthropic_request.cache_salt,
             kv_transfer_params=anthropic_request.kv_transfer_params,
             ec_transfer_params=anthropic_request.ec_transfer_params,
-            aphrodite_xargs=anthropic_request.aphrodite_xargs,
+            sonar_xargs=anthropic_request.sonar_xargs,
             chat_template_kwargs=anthropic_request.chat_template_kwargs,
         )
 

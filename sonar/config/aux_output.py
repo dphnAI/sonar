@@ -4,7 +4,7 @@
 
 from pydantic import Field
 
-from aphrodite.config.utils import config
+from sonar.config.utils import config
 
 
 @config
@@ -25,6 +25,6 @@ class AuxOutputConfig:
 
     def compute_hash(self) -> str:
         """Hash AuxOutput settings that alter the model forward graph."""
-        from aphrodite.config.utils import hash_factors
+        from sonar.config.utils import hash_factors
 
         return hash_factors({"enable_return_routed_experts": self.enable_return_routed_experts})

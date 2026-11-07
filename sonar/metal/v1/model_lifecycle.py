@@ -17,22 +17,22 @@ import torch
 from mlx_lm import load as mlx_lm_load
 from mlx_vlm import load as mlx_vlm_load
 
-from aphrodite.logger import init_logger
-from aphrodite.metal.compat import apply_compat_patches
-from aphrodite.metal.paged_attention_backend.mla import MLA_DEFAULT_QK_ROPE_HEAD_DIM
-from aphrodite.metal.pytorch_backend.tensor_bridge import torch_to_mlx
-from aphrodite.metal.stt.detection import is_stt_model
-from aphrodite.metal.utils import get_model_download_path
-from aphrodite.metal.v1.model_adapter import ModelAdapter
+from sonar.logger import init_logger
+from sonar.metal.compat import apply_compat_patches
+from sonar.metal.paged_attention_backend.mla import MLA_DEFAULT_QK_ROPE_HEAD_DIM
+from sonar.metal.pytorch_backend.tensor_bridge import torch_to_mlx
+from sonar.metal.stt.detection import is_stt_model
+from sonar.metal.utils import get_model_download_path
+from sonar.metal.v1.model_adapter import ModelAdapter
 
-# Engine-core subprocesses don't always re-invoke `aphrodite.metal._register()`,
+# Engine-core subprocesses don't always re-invoke `sonar.metal._register()`,
 # so the compat patches applied there may be missing here. Reapply on import
 # (idempotent via the `_APPLIED` guard in compat.py) to ensure mlx_lm sanitize
 # patches are in place before any model load.
 apply_compat_patches()
 
 if TYPE_CHECKING:
-    from aphrodite.metal.v1.model_runner import MetalModelRunner
+    from sonar.metal.v1.model_runner import MetalModelRunner
 
 logger = init_logger(__name__)
 
@@ -105,7 +105,7 @@ def _mlx_lm_compatible_model_path(model_name: str):
         yield model_name
         return
 
-    with TemporaryDirectory(prefix="aphrodite-metal-mlx-lm-") as tmpdir:
+    with TemporaryDirectory(prefix="sonar-metal-mlx-lm-") as tmpdir:
         compat_path = Path(tmpdir)
 
         for src in model_path.iterdir():
@@ -148,7 +148,7 @@ class ModelLifecycle:
             return
 
         model_config = runner.model_config
-        # Aphrodite model_config shape varies across backends.
+        # Sonar model_config shape varies across backends.
         hf_config = getattr(model_config, "hf_config", None)
         is_vlm = bool(getattr(model_config, "is_multimodal_model", False))
         if self._model_adapter.should_force_text_backbone(hf_config):
@@ -219,7 +219,7 @@ class ModelLifecycle:
                 model_name,
             )
         else:
-            from aphrodite.metal.stt.loader import load_model as stt_load_model
+            from sonar.metal.stt.loader import load_model as stt_load_model
 
             logger.info("Loading STT model: %s", model_name)
             model = stt_load_model(model_name)

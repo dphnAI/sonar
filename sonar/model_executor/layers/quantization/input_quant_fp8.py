@@ -4,17 +4,17 @@
 import torch
 import torch.nn.functional as F
 
-from aphrodite import _custom_ops as ops
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.model_executor.custom_op import CustomOp
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar import _custom_ops as ops
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.model_executor.custom_op import CustomOp
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     GroupShape,
     get_fp8_min_max,
     group_broadcast,
     prep_scale_for_group_broadcast,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.deep_gemm import (
+from sonar.platforms import current_platform
+from sonar.utils.deep_gemm import (
     DeepGemmQuantScaleFMT,
     is_deep_gemm_e8m0_used,
     is_deep_gemm_supported,
@@ -86,7 +86,7 @@ class QuantFP8(CustomOp):
         scale_ub: torch.Tensor | None = None,
         use_triton: bool = False,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        from aphrodite.model_executor.layers.quantization.utils import fp8_utils
+        from sonar.model_executor.layers.quantization.utils import fp8_utils
 
         if (
             self.is_group_quant
@@ -162,7 +162,7 @@ class QuantFP8(CustomOp):
         use_triton: bool = False,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         if self.is_group_quant and not self.static:
-            from aphrodite.model_executor.layers.quantization.utils import fp8_utils
+            from sonar.model_executor.layers.quantization.utils import fp8_utils
 
             return fp8_utils.per_token_group_quant_fp8(
                 x,

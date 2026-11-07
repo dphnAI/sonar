@@ -7,25 +7,25 @@ import shutil
 import sys
 from pathlib import Path
 
-from aphrodite.snapshot.manifest import (
+from sonar.snapshot.manifest import (
     read_manifest,
     validate_artifact_root,
     validate_identity,
 )
-from aphrodite.snapshot.runtime import (
+from sonar.snapshot.runtime import (
     LocalSnapshotTools,
     SnapshotCreateError,
     SnapshotRestoreError,
     _error_detail,
 )
-from aphrodite.snapshot.types import Oracle, oracles_match
+from sonar.snapshot.types import Oracle, oracles_match
 
 
 def _child_engine_argv(args: argparse.Namespace, engine_argv: tuple[str, ...] | None) -> tuple[str, ...]:
     """Build the child argv from the first argv source that is present.
 
     In order: an explicit ``engine_argv`` from the caller, the process argv
-    tail when invoked as ``aphrodite snapshot create ...``, then the bare model from
+    tail when invoked as ``sonar snapshot create ...``, then the bare model from
     the parsed args. Whichever source wins, snapshot options are stripped and
     sleep mode is appended.
     """

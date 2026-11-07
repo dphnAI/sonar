@@ -18,7 +18,7 @@ import pytest
 import torch
 
 rocm_aiter_mla = pytest.importorskip(
-    "aphrodite.v1.attention.backends.mla.rocm_aiter_mla",
+    "sonar.v1.attention.backends.mla.rocm_aiter_mla",
     reason="ROCm AITER MLA backend not available",
 )
 
@@ -65,7 +65,7 @@ def test_head_count_above_the_largest_native_is_unservable():
 def on_gfx950(monkeypatch):
     """The cprr kernels are built only for gfx950, so the gate checks the arch.
     Patched rather than detected, so both branches run on any runner."""
-    import aphrodite.platforms.rocm as rocm
+    import sonar.platforms.rocm as rocm
 
     monkeypatch.setattr(rocm, "on_gfx950", lambda: True)
 
@@ -91,7 +91,7 @@ def test_route_needs_multi_token_decode(on_gfx950):
 def test_route_needs_gfx950(monkeypatch):
     """hsa/gfx942/mla and hsa/gfx1250/mla carry no cprr rows, so off gfx950 the
     kernel lookup fails at the first verify step rather than falling back."""
-    import aphrodite.platforms.rocm as rocm
+    import sonar.platforms.rocm as rocm
 
     monkeypatch.setattr(rocm, "on_gfx950", lambda: False)
     assert _configured(dcp_world_size=8, cp_interleave=1, multi_token_decode=True) is (False)
@@ -132,7 +132,7 @@ def _build(monkeypatch, gathered_heads, segmented_supported=True):
     monkeypatch.setattr(rocm_aiter_mla, "_fp8_mla_prefill_supported", lambda: False)
     # These cases pick between cprr and segmented. On a gfx942 runner the real
     # arch would add the Triton verify route, which this stub cannot build.
-    import aphrodite.platforms.rocm as rocm
+    import sonar.platforms.rocm as rocm
 
     monkeypatch.setattr(rocm, "on_gfx942", lambda: False)
     monkeypatch.setattr(rocm_aiter_mla, "get_dcp_group", lambda: SimpleNamespace(rank_in_group=0))
@@ -160,7 +160,7 @@ def _build(monkeypatch, gathered_heads, segmented_supported=True):
     return rocm_aiter_mla.AiterMLAMetadataBuilder(
         kv_cache_spec=SimpleNamespace(block_size=1, dtype=torch.bfloat16),
         layer_names=["layer.0"],
-        aphrodite_config=config,
+        sonar_config=config,
         device=torch.device("cpu"),
     )
 
@@ -182,7 +182,7 @@ def test_selects_cprr_for_k3_gathered_heads(on_gfx950, monkeypatch):
 )
 def test_falls_back_to_segmented_when_cprr_cannot_serve(monkeypatch, gfx950, gathered_heads):
     """Decode must keep the gathered head count, not cprr's padded one."""
-    import aphrodite.platforms.rocm as rocm
+    import sonar.platforms.rocm as rocm
 
     monkeypatch.setattr(rocm, "on_gfx950", lambda: gfx950)
     builder = _build(monkeypatch, gathered_heads=gathered_heads)

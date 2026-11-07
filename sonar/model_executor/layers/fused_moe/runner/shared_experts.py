@@ -5,18 +5,18 @@ from enum import IntEnum
 
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.config import get_current_aphrodite_config_or_none
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe.config import (
+import sonar.envs as envs
+from sonar.config import get_current_sonar_config_or_none
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import (
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import (
     aux_stream,
     current_stream,
 )
-from aphrodite.v1.worker.ubatching import (
+from sonar.v1.worker.ubatching import (
     dbo_current_ubatch_id,
 )
 
@@ -61,15 +61,15 @@ class SharedExperts(torch.nn.Module):
         # With fully-sharded LoRA the shared experts' LoRA layers issue TP
         # collectives themselves, so they must not run on the aux stream
         # (see _disable_shared_experts_overlap).
-        aphrodite_config = get_current_aphrodite_config_or_none()
-        lora_config = aphrodite_config.lora_config if aphrodite_config is not None else None
+        sonar_config = get_current_sonar_config_or_none()
+        lora_config = sonar_config.lora_config if sonar_config is not None else None
         self._lora_fully_sharded = lora_config is not None and lora_config.fully_sharded_loras
 
         # Allow disabling of the separate shared experts stream for
         # debug purposes.
         # TODO: Remove this after more extensive testings with TP/DP
         # and other execution modes
-        if envs.APHRODITE_DISABLE_SHARED_EXPERTS_STREAM:
+        if envs.SONAR_DISABLE_SHARED_EXPERTS_STREAM:
             logger.debug_once("Disabling MoE shared_experts cuda stream")
             self._stream = None
         else:
@@ -132,7 +132,7 @@ class SharedExperts(torch.nn.Module):
         should_run_shared_in_aux_stream = (
             current_platform.is_cuda_alike()
             and self._stream is not None
-            and hidden_states.shape[0] <= envs.APHRODITE_SHARED_EXPERTS_STREAM_TOKEN_THRESHOLD
+            and hidden_states.shape[0] <= envs.SONAR_SHARED_EXPERTS_STREAM_TOKEN_THRESHOLD
         )
 
         if should_run_shared_in_aux_stream:

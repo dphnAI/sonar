@@ -14,9 +14,9 @@ from PIL import Image
 from transformers.image_processing_utils import BaseImageProcessor, BatchFeature
 from transformers.utils import TensorType
 
-from aphrodite.multimodal.image import open_image
-from aphrodite.utils.import_utils import is_numba_available
-from aphrodite.utils.jit_monitor import numba_workqueue_threading_layer
+from sonar.multimodal.image import open_image
+from sonar.utils.import_utils import is_numba_available
+from sonar.utils.jit_monitor import numba_workqueue_threading_layer
 
 _IDENTITY_LUT = np.tile(np.arange(256, dtype=np.uint8)[:, None], (1, 3))
 

@@ -9,16 +9,16 @@ import httpx
 import pytest
 import pytest_asyncio
 
-from aphrodite.entrypoints.generate.base.protocol import FunctionCall
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-from aphrodite.entrypoints.openai.completion.protocol import CompletionRequest
-from aphrodite.entrypoints.scale_out.token_in_token_out.protocol import (
+from sonar.entrypoints.generate.base.protocol import FunctionCall
+from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+from sonar.entrypoints.openai.completion.protocol import CompletionRequest
+from sonar.entrypoints.scale_out.token_in_token_out.protocol import (
     GenerateTokensResponse,
     GenerateTokensStreamResponse,
 )
-from aphrodite.renderers.online_derenderer import OnlineDerenderer
-from aphrodite.tokenizers import get_tokenizer
-from aphrodite.tokenizers.detokenizer_utils import convert_ids_list_to_tokens
+from sonar.renderers.online_derenderer import OnlineDerenderer
+from sonar.tokenizers import get_tokenizer
+from sonar.tokenizers.detokenizer_utils import convert_ids_list_to_tokens
 from tests.utils import RemoteLaunchRenderServer
 
 MODEL_NAME = "hmellor/tiny-random-LlamaForCausalLM"
@@ -854,8 +854,8 @@ async def test_derender_chat_oversized_token_ids_rejected(client):
 
 @pytest.mark.asyncio
 async def test_derender_chat_too_many_choices_rejected(client):
-    """Choices count exceeding APHRODITE_MAX_N_SEQUENCES returns 400."""
-    # Default APHRODITE_MAX_N_SEQUENCES is 16384; use a larger count.
+    """Choices count exceeding SONAR_MAX_N_SEQUENCES returns 400."""
+    # Default SONAR_MAX_N_SEQUENCES is 16384; use a larger count.
     oversized_choices = [{"index": i, "token_ids": [42], "finish_reason": "stop"} for i in range(20_000)]
     response = await client.post(
         "/v1/chat/completions/derender",
@@ -902,7 +902,7 @@ async def test_derender_chat_negative_token_ids_rejected(client):
             "generate_response": _make_generate_response([-1, 42, 100]),
         },
     )
-    # Aphrodite's validation_exception_handler converts Pydantic errors to 400.
+    # Sonar's validation_exception_handler converts Pydantic errors to 400.
     assert response.status_code == 400
 
 

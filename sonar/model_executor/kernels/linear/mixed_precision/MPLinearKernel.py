@@ -7,9 +7,9 @@ from dataclasses import dataclass
 
 import torch
 
-from aphrodite.model_executor.layers.quantization.utils import replace_parameter
-from aphrodite.model_executor.utils import retire_parameter
-from aphrodite.scalar_type import ScalarType
+from sonar.model_executor.layers.quantization.utils import replace_parameter
+from sonar.model_executor.utils import retire_parameter
+from sonar.scalar_type import ScalarType
 
 
 def _shallow_copy(param: torch.Tensor) -> torch.Tensor:

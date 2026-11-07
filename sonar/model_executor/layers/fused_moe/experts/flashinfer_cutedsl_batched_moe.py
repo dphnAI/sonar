@@ -3,25 +3,25 @@
 
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite import envs
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.config import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar import envs
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEParallelConfig,
     FusedMoEQuantConfig,
 )
-from aphrodite.model_executor.layers.fused_moe.topk_weight_and_reduce import (
+from sonar.model_executor.layers.fused_moe.topk_weight_and_reduce import (
     TopKWeightAndReduceDelegate,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     kNvfp4Dynamic,
     kNvfp4Static,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.flashinfer import (
+from sonar.platforms import current_platform
+from sonar.utils.flashinfer import (
     flashinfer_cutedsl_grouped_gemm_nt_masked,
     has_flashinfer_cutedsl_grouped_gemm_nt_masked,
     scaled_fp4_grouped_quantize,
@@ -47,7 +47,7 @@ class FlashInferCuteDSLBatchedExperts(mk.FusedMoEExpertsModular):
         )
         assert quant_config.quant_dtype == "nvfp4", "Only nvfp4 quantization are currently supported."
         self.out_dtype = moe_config.in_dtype
-        self.use_deep_ep_ll_nvfp4_dispatch = envs.APHRODITE_DEEPEPLL_NVFP4_DISPATCH and moe_config.use_deepep_ll_kernels
+        self.use_deep_ep_ll_nvfp4_dispatch = envs.SONAR_DEEPEPLL_NVFP4_DISPATCH and moe_config.use_deepep_ll_kernels
 
     def process_weights_after_loading(self, layer: torch.nn.Module) -> None:
         layer.w13_weight_scale_2.data.mul_(layer.w13_input_scale)

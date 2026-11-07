@@ -12,17 +12,17 @@ from typing import TYPE_CHECKING
 import mlx.core as mx
 import torch
 
-from aphrodite.metal.pytorch_backend.tensor_bridge import mlx_to_torch
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.utils.torch_utils import make_tensor_with_pad
-from aphrodite.v1.outputs import LogprobsTensors
-from aphrodite.v1.sample.logits_processor import LogitsProcessors
-from aphrodite.v1.sample.logits_processor.interface import BatchUpdate
-from aphrodite.v1.sample.metadata import SamplingMetadata
-from aphrodite.v1.sample.sampler import Sampler
+from sonar.metal.pytorch_backend.tensor_bridge import mlx_to_torch
+from sonar.sampling_params import SamplingParams
+from sonar.utils.torch_utils import make_tensor_with_pad
+from sonar.v1.outputs import LogprobsTensors
+from sonar.v1.sample.logits_processor import LogitsProcessors
+from sonar.v1.sample.logits_processor.interface import BatchUpdate
+from sonar.v1.sample.metadata import SamplingMetadata
+from sonar.v1.sample.sampler import Sampler
 
 if TYPE_CHECKING:
-    from aphrodite.metal.v1.model_runner import RequestState
+    from sonar.metal.v1.model_runner import RequestState
 
 GREEDY_TEMPERATURE_EPS = 1e-5
 
@@ -370,7 +370,7 @@ class SamplingBatch:
         This fast path intentionally covers the common serving case:
         temperature + top-k/top-p sampling without request-specific logits
         processors, penalties, constraints, or logprob output.  Everything
-        else stays on Aphrodite's torch sampler for feature parity.
+        else stays on Sonar's torch sampler for feature parity.
         """
         if not self.all_random:
             return False
@@ -406,7 +406,7 @@ class SamplingBatch:
         )
 
     def make_sampling_metadata(self) -> SamplingMetadata:
-        """Create Aphrodite ``SamplingMetadata`` for this batch."""
+        """Create Sonar ``SamplingMetadata`` for this batch."""
         self._refresh_logits_processors()
         (
             frequency_penalties,
@@ -569,7 +569,7 @@ def sample_from_logits(
     """Sample tokens from pre-sliced 2D logits ``(batch_size, vocab)``.
 
     Single entry point for all sampling paths.  Chooses native MLX greedy
-    when possible, otherwise bridges to the Aphrodite torch sampler.
+    when possible, otherwise bridges to the Sonar torch sampler.
     """
     if batch.can_use_native_greedy_for_batch():
         tokens = _mlx_greedy_sample(logits_2d)
@@ -611,7 +611,7 @@ def sample_decode_tokens(
         logits: Full logits array, shape ``(1, total_tokens, vocab)``.
         decode_reqs: ``(req_id, RequestState)`` pairs for decode requests.
         num_decode: Number of decode requests (prefix of the token dimension).
-        sampler: Aphrodite Sampler instance.
+        sampler: Sonar Sampler instance.
         device: PyTorch device for the torch bridge path.
         vocab_size: Model vocabulary size.
         logitsprocs: Optional logits processors.
@@ -659,7 +659,7 @@ def sample_prefill_tokens(
         prefill_reqs: List of ``PrefillRequest`` objects.
         cu_seqlens: Cumulative sequence lengths for logit position lookup.
         num_decode: Number of decode requests (offset into cu_seqlens).
-        sampler: Aphrodite Sampler instance.
+        sampler: Sonar Sampler instance.
         device: PyTorch device for the torch bridge path.
         vocab_size: Model vocabulary size.
         logitsprocs: Optional logits processors.

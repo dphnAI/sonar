@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""This file contains the command line arguments for the Aphrodite's online server.
+"""This file contains the command line arguments for the Sonar's online server.
 It is kept in a separate file for documentation purposes.
 """
 
@@ -11,26 +11,26 @@ from collections.abc import Sequence
 from dataclasses import field
 from typing import Any, Literal, get_args
 
-import aphrodite.envs as envs
-from aphrodite.config import config
-from aphrodite.engine.arg_utils import AsyncEngineArgs, optional_type
-from aphrodite.entrypoints.anthropic.protocol import (
+import sonar.envs as envs
+from sonar.config import config
+from sonar.engine.arg_utils import AsyncEngineArgs, optional_type
+from sonar.entrypoints.anthropic.protocol import (
     AnthropicDisabledThinkingEffortOption,
 )
-from aphrodite.entrypoints.launchers.utils.constants import (
+from sonar.entrypoints.launchers.utils.constants import (
     H11_MAX_HEADER_COUNT_DEFAULT,
     H11_MAX_INCOMPLETE_EVENT_SIZE_DEFAULT,
 )
-from aphrodite.entrypoints.openai.models.protocol import LoRAModulePath
-from aphrodite.logger import init_logger
-from aphrodite.renderers import ReasoningEffort
-from aphrodite.renderers.chat_utils import (
+from sonar.entrypoints.openai.models.protocol import LoRAModulePath
+from sonar.logger import init_logger
+from sonar.renderers import ReasoningEffort
+from sonar.renderers.chat_utils import (
     ChatTemplateContentFormatOption,
     validate_chat_template,
 )
-from aphrodite.tool_parsers import ToolParserManager
-from aphrodite.tool_parsers.tool_strict_level import ToolStrictLevelName
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
+from sonar.tool_parsers import ToolParserManager
+from sonar.tool_parsers.tool_strict_level import ToolStrictLevelName
+from sonar.utils.argparse_utils import FlexibleArgumentParser
 
 logger = init_logger(__name__)
 
@@ -204,7 +204,7 @@ class BaseFrontendArgs:
     (e.g. GLM-5.3) or reject ``none`` (e.g. gpt-oss). ``auto`` (default) uses
     ``low`` when the renderer rejects ``none`` or renders it the same as a
     thinking effort, and ``none`` otherwise."""
-    log_error_stack: bool = envs.APHRODITE_SERVER_DEV_MODE
+    log_error_stack: bool = envs.SONAR_SERVER_DEV_MODE
     """If set to True, log the stack trace of error responses"""
     tokens_only: bool = False
     """
@@ -214,17 +214,17 @@ class BaseFrontendArgs:
     enable_scale_out: bool = False
     """
     If set to True, register the scale-out endpoints (`/render`, `/derender`,
-    `/inference/v1/generate` and `/inference/v1/abort_requests`) on `aphrodite serve`.
-    Has no effect on `aphrodite launch render` or `aphrodite serve --tokens-only` which
+    `/inference/v1/generate` and `/inference/v1/abort_requests`) on `sonar serve`.
+    Has no effect on `sonar launch render` or `sonar serve --tokens-only` which
     always register their required endpoints regardless of this flag.
     """
     fingerprint_mode: Literal["full", "hash", "custom", "none"] = "full"
     """Controls the ``system_fingerprint`` field on responses.
 
-    - ``full`` (default): ``aphrodite-<version>[-<parallelism>]-<hash8>``. Encodes
+    - ``full`` (default): ``sonar-<version>[-<parallelism>]-<hash8>``. Encodes
       server version, non-trivial parallelism degrees (tp/pp/dp/ep), and an
       8-char config hash.
-    - ``hash``: ``aphrodite-<version>-<hash8>``. Parallelism stripped.
+    - ``hash``: ``sonar-<version>-<hash8>``. Parallelism stripped.
     - ``custom``: emits the literal string from ``--fingerprint-value``.
     - ``none``: the field is omitted (serialized as ``null``).
     """
@@ -263,7 +263,7 @@ class BaseFrontendArgs:
         Subclasses should override ``_customize_cli_kwargs`` instead of
         this method so that base-class postprocessing is always applied.
         """
-        from aphrodite.engine.arg_utils import get_kwargs
+        from sonar.engine.arg_utils import get_kwargs
 
         frontend_kwargs = get_kwargs(cls)
         frontend_kwargs = cls._customize_cli_kwargs(frontend_kwargs)
@@ -290,7 +290,7 @@ class FrontendArgs(BaseFrontendArgs):
     """Port number."""
     grpc_port: int | None = None
     """Enable the Rust frontend's additional gRPC Inference and Control services
-    on this port. Requires `APHRODITE_USE_RUST_FRONTEND=1 aphrodite serve`; HTTP remains on
+    on this port. Requires `SONAR_USE_RUST_FRONTEND=1 sonar serve`; HTTP remains on
     `--port`. Binds on `--host`, or 127.0.0.1 with `--uds`. Cannot be combined
     with the Python gRPC server's `--grpc` flag."""
     data_parallel_supervisor_port: int = 9256
@@ -331,7 +331,7 @@ class FrontendArgs(BaseFrontendArgs):
     Warning: this only authenticates endpoints under the `/v1`, `/v2`, and
     `/inference` path prefixes. Other endpoints on the same server, including
     `/invocations` (which exposes the same inference capabilities as `/v1`),
-    remain unauthenticated. Do not rely on `--api-key` alone to secure Aphrodite;
+    remain unauthenticated. Do not rely on `--api-key` alone to secure Sonar;
     see
     https://sonar.dphn.ai/usage/security.html#api-key-authentication-limitations
     for what it does and does not protect."""
@@ -353,8 +353,8 @@ class FrontendArgs(BaseFrontendArgs):
     middleware: list[str] = field(default_factory=lambda: [])
     """Additional ASGI middleware to apply to the app. We accept multiple
     --middleware arguments. The value should be an import path. If a function
-    is provided, Aphrodite will add it to the server using
-    `@app.middleware('http')`. If a class is provided, Aphrodite will
+    is provided, Sonar will add it to the server using
+    `@app.middleware('http')`. If a class is provided, Sonar will
     add it to the server using `app.add_middleware()`."""
     enable_request_id_headers: bool = False
     """If specified, API server will add X-Request-Id header to responses."""
@@ -369,7 +369,7 @@ class FrontendArgs(BaseFrontendArgs):
     enable_offline_docs: bool = False
     """
     Enable offline FastAPI documentation for air-gapped environments.
-    Uses vendored static assets bundled with Aphrodite.
+    Uses vendored static assets bundled with Sonar.
     """
     enable_flash_late_interaction: bool = True
     """If set, run pooling score MaxSim on GPU in the API server process.
@@ -458,14 +458,14 @@ def make_arg_parser(parser: FlexibleArgumentParser) -> FlexibleArgumentParser:
         "--config",
         help="Read CLI options from a config file. "
         "Must be a YAML with the following options: "
-        "https://docs.aphrodite.ai/en/latest/configuration/serve_args.html",
+        "https://sonar.dphn.ai/en/latest/configuration/serve_args.html",
     )
     parser.add_argument(
         "--grpc",
         action="store_true",
         default=False,
         help="Launch the Python gRPC (SMG VllmEngine) server on --port instead "
-        "of the HTTP OpenAI-compatible server. Requires: pip install 'aphrodite-engine[grpc]'. "
+        "of the HTTP OpenAI-compatible server. Requires sonar[grpc] from the Sonar wheel index. "
         "Cannot be combined with --grpc-port, which enables the Rust "
         "frontend's gRPC services.",
     )
@@ -483,11 +483,11 @@ def validate_grpc_port_arg(args: argparse.Namespace) -> None:
     if args.grpc:
         raise ValueError(
             "--grpc and --grpc-port are mutually exclusive. Use --grpc "
-            "--port for the Python gRPC server, or APHRODITE_USE_RUST_FRONTEND=1 "
+            "--port for the Python gRPC server, or SONAR_USE_RUST_FRONTEND=1 "
             "with --grpc-port for the Rust frontend."
         )
-    if not envs.APHRODITE_USE_RUST_FRONTEND or getattr(args, "subparser", None) != "serve":
-        raise ValueError("--grpc-port requires APHRODITE_USE_RUST_FRONTEND=1 aphrodite serve")
+    if not envs.SONAR_USE_RUST_FRONTEND or getattr(args, "subparser", None) != "serve":
+        raise ValueError("--grpc-port requires SONAR_USE_RUST_FRONTEND=1 sonar serve")
     if args.headless or (args.api_server_count is not None and args.api_server_count <= 0):
         raise ValueError("--grpc-port requires a Rust frontend; remove --headless and non-positive --api-server-count")
     if args.data_parallel_multi_port_external_lb:
@@ -517,7 +517,7 @@ def validate_reasoning_effort_map(effort_map: Any) -> None:
 
 def validate_parsed_serve_args(args: argparse.Namespace):
     """Quick checks for model serve args that raise prior to loading."""
-    # `aphrodite launch <component>` builds its parser with make_arg_parser too (see
+    # `sonar launch <component>` builds its parser with make_arg_parser too (see
     # LaunchSubcommandBase.add_cli_args), so its args are serve args as well.
     if hasattr(args, "subparser") and args.subparser not in ("serve", "launch"):
         return
@@ -555,7 +555,7 @@ def validate_parsed_serve_args(args: argparse.Namespace):
         )
 
     if args.data_parallel_multi_port_external_lb:
-        from aphrodite.entrypoints.launchers.dp_supervisor import (
+        from sonar.entrypoints.launchers.dp_supervisor import (
             validate_multi_port_external_lb_args,
         )
 
@@ -563,7 +563,7 @@ def validate_parsed_serve_args(args: argparse.Namespace):
 
 
 def create_parser_for_docs() -> FlexibleArgumentParser:
-    parser_for_docs = FlexibleArgumentParser(prog="-m aphrodite.entrypoints.launchers.api_server.entry")
+    parser_for_docs = FlexibleArgumentParser(prog="-m sonar.entrypoints.launchers.api_server.entry")
     return make_arg_parser(parser_for_docs)
 
 
@@ -576,7 +576,7 @@ def propagate_flash_late_interaction(args, engine_args) -> None:
     """
     if getattr(args, "enable_flash_late_interaction", True):
         return
-    from aphrodite.config.pooler import PoolerConfig
+    from sonar.config.pooler import PoolerConfig
 
     if engine_args.pooler_config is None:
         engine_args.pooler_config = PoolerConfig(enable_flash_late_interaction=False)
@@ -585,7 +585,7 @@ def propagate_flash_late_interaction(args, engine_args) -> None:
 
 
 def init_parser_plugin(args: argparse.Namespace):
-    from aphrodite.reasoning import ReasoningParserManager
+    from sonar.reasoning import ReasoningParserManager
 
     if args.tool_parser_plugin and len(args.tool_parser_plugin) > 3:
         ToolParserManager.import_tool_parser(args.tool_parser_plugin)
@@ -595,7 +595,7 @@ def init_parser_plugin(args: argparse.Namespace):
 
 
 def validate_api_server_args(args: argparse.Namespace):
-    from aphrodite.reasoning import ReasoningParserManager
+    from sonar.reasoning import ReasoningParserManager
 
     valid_tool_parses = ToolParserManager.list_registered()
     if args.enable_auto_tool_choice and args.tool_call_parser not in valid_tool_parses:

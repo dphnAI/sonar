@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 if not current_platform.is_rocm():
     pytest.skip(
@@ -14,7 +14,7 @@ if not current_platform.is_rocm():
         allow_module_level=True,
     )
 
-from aphrodite._aiter_ops import is_aiter_found_and_supported
+from sonar._aiter_ops import is_aiter_found_and_supported
 
 if not is_aiter_found_and_supported():
     pytest.skip(
@@ -22,8 +22,8 @@ if not is_aiter_found_and_supported():
         allow_module_level=True,
     )
 
-from aphrodite.model_executor.layers.attention import sparse_mla_attention as sparse_mla_mod
-from aphrodite.v1.attention.backends.mla import rocm_aiter_mla_sparse as sparse_mod
+from sonar.model_executor.layers.attention import sparse_mla_attention as sparse_mla_mod
+from sonar.v1.attention.backends.mla import rocm_aiter_mla_sparse as sparse_mod
 
 NUM_HEADS = 16
 KV_LORA_RANK = 512
@@ -63,14 +63,14 @@ def _patch_init_deps(monkeypatch, *, speculative: bool = False):
         "check_num_heads_validity",
         staticmethod(lambda num_heads: None),
     )
-    aphrodite_config = SimpleNamespace(
+    sonar_config = SimpleNamespace(
         scheduler_config=SimpleNamespace(max_num_batched_tokens=NUM_TOKENS),
         model_config=SimpleNamespace(dtype=torch.bfloat16),
         speculative_config=SimpleNamespace() if speculative else None,
         attention_config=SimpleNamespace(hisparse_config=None),
     )
-    monkeypatch.setattr(sparse_mod, "get_current_aphrodite_config", lambda: aphrodite_config)
-    monkeypatch.setattr(sparse_mla_mod, "get_current_aphrodite_config", lambda: aphrodite_config)
+    monkeypatch.setattr(sparse_mod, "get_current_sonar_config", lambda: sonar_config)
+    monkeypatch.setattr(sparse_mla_mod, "get_current_sonar_config", lambda: sonar_config)
     monkeypatch.setattr(sparse_mla_mod, "get_tensor_model_parallel_world_size", lambda: 1)
     monkeypatch.setattr(
         sparse_mod,

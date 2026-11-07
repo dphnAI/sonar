@@ -7,12 +7,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from aphrodite.model_executor.warmup import step5_dsa_warmup as warmup
+from sonar.model_executor.warmup import step5_dsa_warmup as warmup
 
 
 def _worker(model_type: str = "step5"):
     return SimpleNamespace(
-        aphrodite_config=SimpleNamespace(
+        sonar_config=SimpleNamespace(
             model_config=SimpleNamespace(hf_text_config=SimpleNamespace(model_type=model_type))
         ),
         device="cuda",

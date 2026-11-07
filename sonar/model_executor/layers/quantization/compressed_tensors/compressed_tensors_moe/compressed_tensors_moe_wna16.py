@@ -9,34 +9,34 @@ from compressed_tensors.quantization import (
     QuantizationArgs,
 )
 
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe import (
     RoutedExperts,
     SharedExperts,
 )
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEQuantConfig,
 )
-from aphrodite.model_executor.layers.fused_moe.oracle.int_wna16 import (
+from sonar.model_executor.layers.fused_moe.oracle.int_wna16 import (
     WNA16MoEBackend,
     convert_to_wna16_moe_kernel_format,
     make_wna16_moe_kernel,
     make_wna16_moe_quant_config,
     select_wna16_moe_backend,
 )
-from aphrodite.model_executor.layers.quantization.compressed_tensors.compressed_tensors_moe import (  # noqa E501
+from sonar.model_executor.layers.quantization.compressed_tensors.compressed_tensors_moe import (  # noqa E501
     CompressedTensorsMoEMethod,
 )
-from aphrodite.model_executor.layers.quantization.compressed_tensors.schemes.compressed_tensors_wNa16 import (  # noqa
+from sonar.model_executor.layers.quantization.compressed_tensors.schemes.compressed_tensors_wNa16 import (  # noqa
     WNA16_SUPPORTED_TYPES_MAP,
     WNA16_ZP_SUPPORTED_TYPES_MAP,
 )
-from aphrodite.model_executor.layers.quantization.utils.marlin_utils import (
+from sonar.model_executor.layers.quantization.utils.marlin_utils import (
     check_moe_marlin_supports_config,
     get_marlin_input_dtype,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     GroupShape,
     QuantKey,
     ScaleDesc,
@@ -44,7 +44,7 @@ from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
     kInt4StaticGroupScale,
     kInt8StaticGroupScale,
 )
-from aphrodite.model_executor.utils import replace_parameter, set_weight_attrs
+from sonar.model_executor.utils import replace_parameter, set_weight_attrs
 
 logger = init_logger(__name__)
 
@@ -363,7 +363,7 @@ class CompressedTensorsWNA16MoEMethod(CompressedTensorsMoEMethod):
             self.moe_kernel.fused_experts.process_weights_after_loading(layer)
 
     def process_weights_after_loading(self, layer: torch.nn.Module) -> None:
-        from aphrodite.model_executor.layers.fused_moe.experts.cpu_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.cpu_moe import (
             swigluoai_w13_interleave_perm,
         )
 
@@ -465,7 +465,7 @@ class CompressedTensorsWNA16MoEMethod(CompressedTensorsMoEMethod):
 
     def get_fused_moe_quant_config(self, layer: torch.nn.Module) -> FusedMoEQuantConfig | None:
         if self.wna16_backend == WNA16MoEBackend.HUMMING:
-            from aphrodite.model_executor.layers.quantization.utils.humming import (
+            from sonar.model_executor.layers.quantization.utils.humming import (
                 get_humming_moe_quant_config,
             )
 

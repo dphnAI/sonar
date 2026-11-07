@@ -2,8 +2,8 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import pytest
 
-from aphrodite.config.cache import CacheConfig
-from aphrodite.platforms import current_platform
+from sonar.config.cache import CacheConfig
+from sonar.platforms import current_platform
 
 from ..utils import (
     compare_two_settings,

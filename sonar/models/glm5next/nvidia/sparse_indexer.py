@@ -4,28 +4,28 @@
 
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.compilation.breakable_cudagraph import eager_break_during_capture
-from aphrodite.config import get_current_aphrodite_config_or_none
-from aphrodite.distributed import get_dcp_group
-from aphrodite.forward_context import get_forward_context
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.custom_op import CustomOp
-from aphrodite.model_executor.kernels.attention.dsa.fused_mqa_topk import (
+import sonar.envs as envs
+from sonar.compilation.breakable_cudagraph import eager_break_during_capture
+from sonar.config import get_current_sonar_config_or_none
+from sonar.distributed import get_dcp_group
+from sonar.forward_context import get_forward_context
+from sonar.logger import init_logger
+from sonar.model_executor.custom_op import CustomOp
+from sonar.model_executor.kernels.attention.dsa.fused_mqa_topk import (
     fused_mqa_topk_chunk,
     fused_mqa_topk_key_scales,
     fused_mqa_topk_prefill,
     get_fused_mqa_topk_workspaces,
     use_fused_mqa_topk,
 )
-from aphrodite.model_executor.layers.indexer_topk import get_indexer_topk
-from aphrodite.model_executor.layers.sparse_attn_indexer import (
+from sonar.model_executor.layers.indexer_topk import get_indexer_topk
+from sonar.model_executor.layers.sparse_attn_indexer import (
     PrefillRowShard,
     _merge_dcp_topk_global,
     _reserve_row_shard_exchange_transient,
     as_fp32_logits,
 )
-from aphrodite.models.glm5next.common.sparse_indexer import (
+from sonar.models.glm5next.common.sparse_indexer import (
     RADIX_TOPK_WORKSPACE_SIZE,
     _build_decode_scatter_indices,
     _decode_topk_seq_lens,
@@ -35,29 +35,29 @@ from aphrodite.models.glm5next.common.sparse_indexer import (
     _scatter_decode_tokens_by_request,
     kv_cache_as_quant_view,
 )
-from aphrodite.models.glm5next.nvidia.ops import kpool_compress as kpool_ops
-from aphrodite.platforms import current_platform
-from aphrodite.utils.deep_gemm import (
+from sonar.models.glm5next.nvidia.ops import kpool_compress as kpool_ops
+from sonar.platforms import current_platform
+from sonar.utils.deep_gemm import (
     fp8_fp4_mqa_logits,
     fp8_fp4_paged_mqa_logits,
     has_deep_gemm,
     mqa_logits_mx_inputs,
     mqa_logits_use_mx_scales,
 )
-from aphrodite.utils.import_utils import has_cutedsl
-from aphrodite.utils.torch_utils import (
+from sonar.utils.import_utils import has_cutedsl
+from sonar.utils.torch_utils import (
     LayerNameType,
     _resolve_layer_name,
 )
-from aphrodite.v1.attention.backends.mla.indexer import (
+from sonar.v1.attention.backends.mla.indexer import (
     DeepseekV32IndexerMetadata,
     dense_logits_rows,
 )
-from aphrodite.v1.attention.ops.common import pack_seq_triton, unpack_seq_triton
-from aphrodite.v1.worker.workspace import current_workspace_manager
+from sonar.v1.attention.ops.common import pack_seq_triton, unpack_seq_triton
+from sonar.v1.worker.workspace import current_workspace_manager
 
 if current_platform.is_cuda_alike():
-    from aphrodite import _custom_ops as ops
+    from sonar import _custom_ops as ops
 
 logger = init_logger(__name__)
 
@@ -176,7 +176,7 @@ def sparse_attn_indexer_kpool(
         # Reserve profiler-visible memory for the worst-case decode logits,
         # whose shape is [B * next_n, max_pool_len]. This profiling branch
         # returns before invoking the logits kernel itself.
-        cfg = get_current_aphrodite_config_or_none()
+        cfg = get_current_sonar_config_or_none()
         worst_decode_tokens = 0
         if cfg is not None:
             sched = cfg.scheduler_config
@@ -187,7 +187,7 @@ def sparse_attn_indexer_kpool(
             )
         # float32 logits -> 4 bytes/element; uint8 sentinel so elems == bytes.
         decode_logits_elems = worst_decode_tokens * max_pool_len * 4
-        prefill_cap_elems = envs.APHRODITE_SPARSE_INDEXER_MAX_LOGITS_MB * 1024 * 1024
+        prefill_cap_elems = envs.SONAR_SPARSE_INDEXER_MAX_LOGITS_MB * 1024 * 1024
         max_logits_elems = max(decode_logits_elems, prefill_cap_elems)
         _ = torch.empty(max_logits_elems, dtype=torch.uint8, device=hidden_states.device)
 
@@ -730,7 +730,7 @@ class SparseAttnIndexerKpool(CustomOp):
         self.use_fp4_cache = use_fp4_cache
         if current_platform.is_cuda() and not has_deep_gemm():
             raise RuntimeError("Sparse Attention Indexer CUDA op requires DeepGEMM to be installed.")
-        _cfg = get_current_aphrodite_config_or_none()
+        _cfg = get_current_sonar_config_or_none()
         self.topk_backend = _cfg.kernel_config.sparse_indexer_topk_backend if _cfg is not None else "auto"
         _parallel = _cfg.parallel_config if _cfg is not None else None
         self._parallel_config = _parallel
@@ -742,7 +742,7 @@ class SparseAttnIndexerKpool(CustomOp):
             self.dcp_world_size = _parallel.decode_context_parallel_size
             self.dcp_rank = get_dcp_group().rank_in_group
             if current_platform.is_cuda() and has_cutedsl():
-                from aphrodite.model_executor.kernels.attention.dsa.dcp_indexer_cutedsl import (  # noqa: E501
+                from sonar.model_executor.kernels.attention.dsa.dcp_indexer_cutedsl import (  # noqa: E501
                     _PACK_DCP_TOPK_CANDIDATES_KERNEL,
                     _STABLE_TOPK_FROM_GATHERED_CANDIDATES_KERNEL,
                 )

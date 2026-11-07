@@ -6,27 +6,27 @@ from typing import Any
 import torch
 import torch.nn as nn
 
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.config import (
     CompilationMode,
+    SonarConfig,
 )
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.model_loader import get_model
-from aphrodite.tracing import instrument
-from aphrodite.v1.kv_cache_interface import FullAttentionSpec, KVCacheConfig
-from aphrodite.v1.utils import CpuGpuBuffer
-from aphrodite.v1.worker.gpu_model_runner import GPUModelRunner
+from sonar.logger import init_logger
+from sonar.model_executor.model_loader import get_model
+from sonar.tracing import instrument
+from sonar.v1.kv_cache_interface import FullAttentionSpec, KVCacheConfig
+from sonar.v1.utils import CpuGpuBuffer
+from sonar.v1.worker.gpu_model_runner import GPUModelRunner
 
 logger = init_logger(__name__)
 
 
 class CPUModelRunner(GPUModelRunner):
-    def __init__(self, aphrodite_config: AphroditeConfig, device: torch.device):
+    def __init__(self, sonar_config: SonarConfig, device: torch.device):
         # avoid calling accelerator APIs for methods inherited from super class
         _set_torch_accelerator_to_noop()
 
         with _torch_cuda_wrapper():
-            super().__init__(aphrodite_config, device)
+            super().__init__(sonar_config, device)
 
         assert device == torch.device("cpu")
         # Note: speculative decoding is now supported on CPU with C++ native impls
@@ -63,10 +63,10 @@ class CPUModelRunner(GPUModelRunner):
                 "Loading dummy weights (needed for elastic EP scale-up) Is not supported by the CPU Model Runner."
             )
         logger.info("Starting to load model %s...", self.model_config.model)
-        self.model = get_model(aphrodite_config=self.aphrodite_config)
+        self.model = get_model(sonar_config=self.sonar_config)
 
         if self.lora_config:
-            self.model = self.load_lora_model(self.model, self.aphrodite_config, self.device)
+            self.model = self.load_lora_model(self.model, self.sonar_config, self.device)
 
         if hasattr(self, "drafter"):
             logger.info_once("Loading drafter model...")
@@ -79,11 +79,11 @@ class CPUModelRunner(GPUModelRunner):
 
     @instrument(span_name="Warmup (CPU)")
     def warming_up_model(self) -> None:
-        if self.aphrodite_config.compilation_config.mode == CompilationMode.NONE:
+        if self.sonar_config.compilation_config.mode == CompilationMode.NONE:
             return
         logger.info("Warming up model for the compilation...")
         # Only generate graph for the generic shape
-        with _set_global_compilation_settings(self.aphrodite_config):
+        with _set_global_compilation_settings(self.sonar_config):
             self.profile_run()
         logger.info("Warming up done.")
 
@@ -158,7 +158,7 @@ def _torch_cuda_wrapper():
 
 
 @contextmanager
-def _set_global_compilation_settings(config: AphroditeConfig):
+def _set_global_compilation_settings(config: SonarConfig):
     import torch._inductor.config as torch_inductor_config
 
     inductor_config = config.compilation_config.inductor_compile_config

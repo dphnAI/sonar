@@ -10,21 +10,21 @@ from typing import Any, final
 
 import torch
 
-from aphrodite.lora.layers import LoRAMapping
-from aphrodite.lora.utils import get_captured_lora_counts
-from aphrodite.triton_utils import HAS_TRITON, triton
-from aphrodite.utils.gpu_sync_debug import gpu_sync_allowed
-from aphrodite.utils.math_utils import round_up
+from sonar.lora.layers import LoRAMapping
+from sonar.lora.utils import get_captured_lora_counts
+from sonar.triton_utils import HAS_TRITON, triton
+from sonar.utils.gpu_sync_debug import gpu_sync_allowed
+from sonar.utils.math_utils import round_up
 
 if HAS_TRITON:
-    from aphrodite.lora.ops.triton_ops import (
+    from sonar.lora.ops.triton_ops import (
         LoRAKernelMeta,
         fused_moe_lora,
         lora_expand,
         lora_shrink,
     )
 
-from aphrodite import _custom_ops as ops
+from sonar import _custom_ops as ops
 
 from .punica_base import PunicaWrapperBase
 
@@ -524,12 +524,12 @@ class PunicaWrapperGPU(PunicaWrapperBase):
     ]:
         import functools
 
-        from aphrodite.lora.layers.utils import try_get_optimal_moe_lora_config
-        from aphrodite.lora.ops.triton_ops.utils import (
+        from sonar.lora.layers.utils import try_get_optimal_moe_lora_config
+        from sonar.lora.ops.triton_ops.utils import (
             _normalize_lora_config_keys,
             get_lora_op_configs,
         )
-        from aphrodite.model_executor.layers.fused_moe.config import _get_config_dtype_str
+        from sonar.model_executor.layers.fused_moe.config import _get_config_dtype_str
 
         config_dtype = _get_config_dtype_str(
             dtype=x.dtype,
@@ -655,12 +655,12 @@ class PunicaWrapperGPU(PunicaWrapperBase):
     ) -> None:
         import functools
 
-        from aphrodite.lora.layers.utils import try_get_optimal_moe_lora_config
-        from aphrodite.lora.ops.triton_ops.utils import (
+        from sonar.lora.layers.utils import try_get_optimal_moe_lora_config
+        from sonar.lora.ops.triton_ops.utils import (
             _normalize_lora_config_keys,
             get_lora_op_configs,
         )
-        from aphrodite.model_executor.layers.fused_moe.config import _get_config_dtype_str
+        from sonar.model_executor.layers.fused_moe.config import _get_config_dtype_str
 
         config_dtype = _get_config_dtype_str(
             dtype=x.dtype,

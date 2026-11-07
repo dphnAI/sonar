@@ -4,7 +4,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TypeAlias
 
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 logger = init_logger(__file__)
 

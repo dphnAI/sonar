@@ -7,12 +7,12 @@ from typing import Any, ClassVar
 
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.cache import CacheDType
-from aphrodite.distributed import get_pcp_group
-from aphrodite.platforms import current_platform
-from aphrodite.platforms.interface import DeviceCapability
-from aphrodite.v1.attention.backend import (
+from sonar.config import SonarConfig
+from sonar.config.cache import CacheDType
+from sonar.distributed import get_pcp_group
+from sonar.platforms import current_platform
+from sonar.platforms.interface import DeviceCapability
+from sonar.v1.attention.backend import (
     AttentionBackend,
     AttentionCGSupport,
     AttentionMetadata,
@@ -21,15 +21,15 @@ from aphrodite.v1.attention.backend import (
     MultipleOf,
     max_decode_query_len,
 )
-from aphrodite.v1.attention.backends.mla.compressor_utils import get_compressed_slot_mapping
-from aphrodite.v1.attention.backends.mla.sparse_swa import (
+from sonar.v1.attention.backends.mla.compressor_utils import get_compressed_slot_mapping
+from sonar.v1.attention.backends.mla.sparse_swa import (
     _LAYER_TYPE_C1A,
     _LAYER_TYPE_C2A,
     _LAYER_TYPE_SWAONLY,
     DeepseekSparseSWAMetadata,
     DeepseekSparseSWAMetadataBuilder,
 )
-from aphrodite.v1.kv_cache_interface import AttentionSpec, KVCacheSpec
+from sonar.v1.kv_cache_interface import AttentionSpec, KVCacheSpec
 
 # v4.1 per-layer compress ratios: 0 = pure sliding window, 1 = full-length
 # compressed cache, 2 = ratio-2 compressed cache. Ratio-1 and ratio-2 layers
@@ -60,13 +60,13 @@ class DeepseekV41SparseSWAMetadataBuilder(DeepseekSparseSWAMetadataBuilder):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.pcp_size = self.aphrodite_config.parallel_config.prefill_context_parallel_size
+        self.pcp_size = self.sonar_config.parallel_config.prefill_context_parallel_size
         self.pcp_rank = get_pcp_group().rank_in_group if self.pcp_size > 1 else 0
         if self.pcp_size > 1:
             self.no_replay_start = self.no_replay_start.new_zeros(
-                2 * self.aphrodite_config.scheduler_config.max_num_seqs + 1
+                2 * self.sonar_config.scheduler_config.max_num_seqs + 1
             )
-        compress_ratios = getattr(self.aphrodite_config.model_config.hf_config, "compress_ratios", None) or [0]
+        compress_ratios = getattr(self.sonar_config.model_config.hf_config, "compress_ratios", None) or [0]
         self._layer_types = {deepseek_v41_layer_type(int(ratio)) for ratio in compress_ratios}
 
     def build(
@@ -168,19 +168,19 @@ class DeepseekV4SparseMLAMetadataBuilder(AttentionMetadataBuilder[DeepseekV4Flas
         self,
         kv_cache_spec: AttentionSpec,
         layer_names: list[str],
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
     ) -> None:
-        super().__init__(kv_cache_spec, layer_names, aphrodite_config, device)
-        self.model_config = aphrodite_config.model_config
-        self.pcp_size = aphrodite_config.parallel_config.prefill_context_parallel_size
+        super().__init__(kv_cache_spec, layer_names, sonar_config, device)
+        self.model_config = sonar_config.model_config
+        self.pcp_size = sonar_config.parallel_config.prefill_context_parallel_size
         self.pcp_rank = get_pcp_group().rank_in_group if self.pcp_size > 1 else 0
         # Classify single-token queries (plus num_speculative_tokens via
         # supports_spec_as_decode=True) as decodes; longer queries go to prefill.
         self._init_reorder_batch_threshold(1, supports_spec_as_decode=True)
         self.topk_tokens = self.model_config.hf_config.index_topk
 
-        max_num_batched_tokens = aphrodite_config.scheduler_config.max_num_batched_tokens
+        max_num_batched_tokens = sonar_config.scheduler_config.max_num_batched_tokens
         self.req_id_per_token_buffer = torch.empty((max_num_batched_tokens,), dtype=torch.int32, device=device)
 
         assert isinstance(self.kv_cache_spec.tokens_per_state, int)
@@ -246,12 +246,12 @@ class DeepseekV4FlashMLAMetadataBuilder(DeepseekV4SparseMLAMetadataBuilder):
     @classmethod
     def get_varlen_cudagraph_max_query_len(
         cls,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         kv_cache_spec: KVCacheSpec,
     ) -> int | None:
         # Decode replays use device request boundaries; prefill metadata is
         # not graph-safe.
-        return max_decode_query_len(aphrodite_config)
+        return max_decode_query_len(sonar_config)
 
 
 class DeepseekV4FlashMLABackend(DeepseekV4SparseMLABackend):
@@ -316,7 +316,7 @@ class FlashMLAMegaAttnBackend(DeepseekV4FlashMLABackend):
         device_capability: DeviceCapability,
     ) -> str | None:
         # Imported here: the layer module imports this backend class.
-        from aphrodite.models.deepseek_v41.nvidia.flash_mla_mega_attn import (
+        from sonar.models.deepseek_v41.nvidia.flash_mla_mega_attn import (
             is_flashmla_mega_attn_supported,
         )
 

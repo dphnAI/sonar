@@ -7,11 +7,11 @@ import pytest
 import torch
 from torch import nn
 
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.model_loader.weight_tying import maybe_retie_word_embeddings
+from sonar.model_executor.model_loader.weight_tying import maybe_retie_word_embeddings
 
 VOCAB_SIZE = 16
 HIDDEN_SIZE = 4

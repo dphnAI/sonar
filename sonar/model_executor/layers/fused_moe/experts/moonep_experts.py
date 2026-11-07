@@ -17,7 +17,7 @@ Rows ``[E, E+B)`` are the redundant-expert prefetch slots that
 
 Weight layout: MoonEP's ``prefetch_weight`` requires each projection to be
 its own contiguous ``[E+B, ., .]`` tensor, so gate and up are separate
-tensors rather than Aphrodite's interleaved ``[E, 2I, H]`` ``w13``. The modular
+tensors rather than Sonar's interleaved ``[E, 2I, H]`` ``w13``. The modular
 kernel passes ``w1``/``w2`` from the layer (``w1`` is the gate tensor); the
 full layout is picked up from the layer in ``process_weights_after_loading``
 and shared with ``MoonEPPrepareAndFinalize`` via ``post_init_setup``.
@@ -25,18 +25,18 @@ and shared with ``MoonEPPrepareAndFinalize`` via ``post_init_setup``.
 
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.config import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEParallelConfig,
     FusedMoEQuantConfig,
 )
-from aphrodite.model_executor.layers.fused_moe.topk_weight_and_reduce import (
+from sonar.model_executor.layers.fused_moe.topk_weight_and_reduce import (
     TopKWeightAndReduceNoOP,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import QuantKey
-from aphrodite.platforms import current_platform
+from sonar.model_executor.layers.quantization.utils.quant_utils import QuantKey
+from sonar.platforms import current_platform
 
 
 def moonep_grouped_gemm(
@@ -48,7 +48,7 @@ def moonep_grouped_gemm(
 
     Args:
         a: ``[NvS, K]`` activations in segment order.
-        w: ``[G, N, K]`` weights (Aphrodite ``[E, N, K]`` convention).
+        w: ``[G, N, K]`` weights (Sonar ``[E, N, K]`` convention).
         cu_seqlens: ``[G]`` int32 cumulative segment end offsets.
 
     Returns:

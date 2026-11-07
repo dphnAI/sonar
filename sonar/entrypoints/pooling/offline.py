@@ -6,19 +6,19 @@ from typing import Any
 
 from tqdm.auto import tqdm
 
-from aphrodite.entrypoints.common.offline import OfflineInferenceMixin
-from aphrodite.inputs import DataPrompt, PromptType
-from aphrodite.logger import init_logger
-from aphrodite.lora.request import LoRARequest
-from aphrodite.outputs import (
+from sonar.entrypoints.common.offline import OfflineInferenceMixin
+from sonar.inputs import DataPrompt, PromptType
+from sonar.logger import init_logger
+from sonar.lora.request import LoRARequest
+from sonar.outputs import (
     ClassificationRequestOutput,
     EmbeddingRequestOutput,
     PoolingRequestOutput,
     ScoringRequestOutput,
 )
-from aphrodite.pooling_params import PoolingParams
-from aphrodite.renderers.chat_utils import ChatTemplateConfig
-from aphrodite.tasks import SCORE_TYPE_MAP, PoolingTask, SupportedTask
+from sonar.pooling_params import PoolingParams
+from sonar.renderers.chat_utils import ChatTemplateConfig
+from sonar.tasks import SCORE_TYPE_MAP, PoolingTask, SupportedTask
 
 from .base.io_processor import PoolingIOProcessor
 from .factories import init_pooling_io_processors
@@ -51,7 +51,7 @@ class PoolingOfflineMixin(OfflineInferenceMixin):
         self.chat_template_config = ChatTemplateConfig(chat_template=self.chat_template)
         self.pooling_io_processors = init_pooling_io_processors(
             supported_tasks=self.supported_tasks,
-            aphrodite_config=self.llm_engine.aphrodite_config,
+            sonar_config=self.llm_engine.sonar_config,
             renderer=self.renderer,
             chat_template_config=self.chat_template_config,
         )
@@ -78,7 +78,7 @@ class PoolingOfflineMixin(OfflineInferenceMixin):
 
         Args:
             prompts: The prompts to the LLM. You may pass a sequence of prompts
-                for batch inference. See [PromptType][aphrodite.inputs.PromptType]
+                for batch inference. See [PromptType][sonar.inputs.PromptType]
                 for more details about the format of each prompt.
             pooling_params: The pooling parameters for pooling. If None, we
                 use the default pooling parameters.
@@ -194,7 +194,7 @@ class PoolingOfflineMixin(OfflineInferenceMixin):
 
         Args:
             prompts: The prompts to the LLM. You may pass a sequence of prompts
-                for batch inference. See [PromptType][aphrodite.inputs.PromptType]
+                for batch inference. See [PromptType][sonar.inputs.PromptType]
                 for more details about the format of each prompt.
             pooling_params: The pooling parameters for pooling. If None, we
                 use the default pooling parameters.
@@ -243,7 +243,7 @@ class PoolingOfflineMixin(OfflineInferenceMixin):
 
         Args:
             prompts: The prompts to the LLM. You may pass a sequence of prompts
-                for batch inference. See [PromptType][aphrodite.inputs.PromptType]
+                for batch inference. See [PromptType][sonar.inputs.PromptType]
                 for more details about the format of each prompt.
             pooling_params: The pooling parameters for pooling. If None, we
                 use the default pooling parameters.
@@ -304,7 +304,7 @@ class PoolingOfflineMixin(OfflineInferenceMixin):
                 the `data_2` list.
             data_2: The data to pair with the query to form the input to
                 the LLM. Can be text or multi-modal data. See [PromptType]
-                [aphrodite.inputs.PromptType] for more details about the format of
+                [sonar.inputs.PromptType] for more details about the format of
                 each prompt.
             pooling_params: The pooling parameters for pooling. If None, we
                 use the default pooling parameters.
@@ -386,7 +386,7 @@ class PoolingOfflineMixin(OfflineInferenceMixin):
 
         # Keeping max_num_seqs * 2 requests in the core can already saturate the core.
         # Therefore, keep most requests waiting outside the core.
-        max_requests_in_core = self.llm_engine.aphrodite_config.scheduler_config.max_num_seqs * 2
+        max_requests_in_core = self.llm_engine.sonar_config.scheduler_config.max_num_seqs * 2
         num_requests_in_core = 0
         num_waited_requests = num_requests
 

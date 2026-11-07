@@ -12,8 +12,8 @@ from unittest.mock import patch
 import pytest
 import torch
 
-from aphrodite.config import set_current_aphrodite_config
-from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connector import (
+from sonar.config import set_current_sonar_config
+from sonar.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connector import (
     KVConnectorRole,
     MooncakeConnector,
     MooncakeConnectorMetadata,
@@ -25,7 +25,7 @@ from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connect
     SendBlockMeta,
     TransferRegion,
 )
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.kv_cache_interface import (
     FullAttentionSpec,
     KVCacheConfig,
     KVCacheGroupSpec,
@@ -33,8 +33,8 @@ from aphrodite.v1.kv_cache_interface import (
 
 from .test_mooncake_connector import FakeMooncakeWrapper, patch_worker_dependencies
 from .utils import (
-    create_aphrodite_config,
     create_request,
+    create_sonar_config,
     make_kv_cache_config,
     maybe_update_block_size,
 )
@@ -56,17 +56,17 @@ from .utils import (
 def test_sw_sizes(swa_enabled, expected_blocks_per_sw):
     """blocks_per_sw is correctly computed based on SWA enabled/disabled."""
     block_size = 16
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         kv_connector="MooncakeConnector",
         kv_role="kv_both",
         block_size=block_size,
     )
     # Override so HMA detection works
-    aphrodite_config.scheduler_config.disable_hybrid_kv_cache_manager = False
+    sonar_config.scheduler_config.disable_hybrid_kv_cache_manager = False
     kv_cache_config = make_kv_cache_config(block_size=block_size, swa_enabled=swa_enabled, sw_size=2048)
 
     scheduler = MooncakeConnectorScheduler(
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         engine_id="test-engine",
         kv_cache_config=kv_cache_config,
     )
@@ -88,16 +88,16 @@ def test_sw_sizes(swa_enabled, expected_blocks_per_sw):
 def test_is_hma_required(swa_enabled, disable_hma, expected_is_hma):
     """_is_hma_required is correctly derived from kv_cache_config."""
     block_size = 16
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         kv_connector="MooncakeConnector",
         kv_role="kv_both",
         block_size=block_size,
     )
-    aphrodite_config.scheduler_config.disable_hybrid_kv_cache_manager = disable_hma
+    sonar_config.scheduler_config.disable_hybrid_kv_cache_manager = disable_hma
     kv_cache_config = make_kv_cache_config(block_size=block_size, swa_enabled=swa_enabled)
 
     scheduler = MooncakeConnectorScheduler(
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         engine_id="test-engine",
         kv_cache_config=kv_cache_config,
     )
@@ -111,17 +111,17 @@ def test_is_hma_required(swa_enabled, disable_hma, expected_is_hma):
 def test_get_sw_clipped_blocks():
     """get_sw_clipped_blocks clips SWA group but keeps FA group intact."""
     block_size = 16
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         kv_connector="MooncakeConnector",
         kv_role="kv_both",
         block_size=block_size,
     )
-    aphrodite_config.scheduler_config.disable_hybrid_kv_cache_manager = False
+    sonar_config.scheduler_config.disable_hybrid_kv_cache_manager = False
     # SW=128 tokens → 128/16 = 8 blocks + 1 = 9 blocks_per_sw
     kv_cache_config = make_kv_cache_config(block_size=block_size, swa_enabled=True, sw_size=128)
 
     scheduler = MooncakeConnectorScheduler(
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         engine_id="test-engine",
         kv_cache_config=kv_cache_config,
     )
@@ -145,7 +145,7 @@ def test_get_sw_clipped_blocks():
 def test_get_sw_clipped_blocks_noop_no_hma():
     """get_sw_clipped_blocks is a no-op when HMA is not required."""
     block_size = 16
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         kv_connector="MooncakeConnector",
         kv_role="kv_both",
         block_size=block_size,
@@ -154,7 +154,7 @@ def test_get_sw_clipped_blocks_noop_no_hma():
     kv_cache_config = make_kv_cache_config(block_size=block_size, swa_enabled=False)
 
     scheduler = MooncakeConnectorScheduler(
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         engine_id="test-engine",
         kv_cache_config=kv_cache_config,
     )
@@ -218,20 +218,18 @@ def test_metadata_hma_block_ids():
 # ---------------------------------------------------------------------------
 @pytest.mark.asyncio
 @patch(
-    "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connector.TransferEngine",
+    "sonar.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connector.TransferEngine",
     FakeMooncakeWrapper,
 )
 async def test_build_transfer_params_multi_group_trimming(monkeypatch):
     """_build_transfer_params trims per-group blocks when local > remote."""
-    monkeypatch.setenv("APHRODITE_MOONCAKE_ABORT_REQUEST_TIMEOUT", "5")
+    monkeypatch.setenv("SONAR_MOONCAKE_ABORT_REQUEST_TIMEOUT", "5")
     block_size = maybe_update_block_size(16)
-    aphrodite_config = create_aphrodite_config(
-        kv_connector="MooncakeConnector", kv_role="kv_producer", block_size=block_size
-    )
+    sonar_config = create_sonar_config(kv_connector="MooncakeConnector", kv_role="kv_producer", block_size=block_size)
     kv_cache_config = make_kv_cache_config(block_size=block_size, swa_enabled=True)
 
-    with set_current_aphrodite_config(aphrodite_config), patch_worker_dependencies():
-        connector = MooncakeConnector(aphrodite_config, KVConnectorRole.WORKER, kv_cache_config)
+    with set_current_sonar_config(sonar_config), patch_worker_dependencies():
+        connector = MooncakeConnector(sonar_config, KVConnectorRole.WORKER, kv_cache_config)
         worker = connector.connector_worker
         assert worker is not None
 
@@ -309,20 +307,18 @@ async def test_build_transfer_params_multi_group_trimming(monkeypatch):
 # ---------------------------------------------------------------------------
 @pytest.mark.asyncio
 @patch(
-    "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connector.TransferEngine",
+    "sonar.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connector.TransferEngine",
     FakeMooncakeWrapper,
 )
 async def test_build_transfer_params_group_count_mismatch(monkeypatch):
     """_build_transfer_params reports an error when group counts differ."""
-    monkeypatch.setenv("APHRODITE_MOONCAKE_ABORT_REQUEST_TIMEOUT", "5")
+    monkeypatch.setenv("SONAR_MOONCAKE_ABORT_REQUEST_TIMEOUT", "5")
     block_size = maybe_update_block_size(16)
-    aphrodite_config = create_aphrodite_config(
-        kv_connector="MooncakeConnector", kv_role="kv_producer", block_size=block_size
-    )
+    sonar_config = create_sonar_config(kv_connector="MooncakeConnector", kv_role="kv_producer", block_size=block_size)
     kv_cache_config = make_kv_cache_config(block_size=block_size, swa_enabled=True)
 
-    with set_current_aphrodite_config(aphrodite_config), patch_worker_dependencies():
-        connector = MooncakeConnector(aphrodite_config, KVConnectorRole.WORKER, kv_cache_config)
+    with set_current_sonar_config(sonar_config), patch_worker_dependencies():
+        connector = MooncakeConnector(sonar_config, KVConnectorRole.WORKER, kv_cache_config)
         worker = connector.connector_worker
         assert worker is not None
 
@@ -395,16 +391,16 @@ async def test_build_transfer_params_group_count_mismatch(monkeypatch):
 def test_request_finished_with_hma_groups():
     """request_finished correctly handles per-group block_ids."""
     block_size = 16
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         kv_connector="MooncakeConnector",
         kv_role="kv_producer",
         block_size=block_size,
     )
-    aphrodite_config.scheduler_config.disable_hybrid_kv_cache_manager = False
+    sonar_config.scheduler_config.disable_hybrid_kv_cache_manager = False
     kv_cache_config = make_kv_cache_config(block_size=block_size, swa_enabled=True, sw_size=128)
 
     scheduler = MooncakeConnectorScheduler(
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         engine_id="test-engine",
         kv_cache_config=kv_cache_config,
     )
@@ -413,7 +409,7 @@ def test_request_finished_with_hma_groups():
     assert request.kv_transfer_params is not None
     request.kv_transfer_params["transfer_id"] = request.request_id
 
-    from aphrodite.v1.request import RequestStatus
+    from sonar.v1.request import RequestStatus
 
     request.status = RequestStatus.FINISHED_LENGTH_CAPPED
 
@@ -438,15 +434,15 @@ def test_request_finished_with_hma_groups():
 # ---------------------------------------------------------------------------
 def _make_kv_consumer_worker(swa_enabled: bool = False, kv_cache_config: KVCacheConfig | None = None):
     block_size = maybe_update_block_size(16)
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         kv_connector="MooncakeConnector",
         kv_role="kv_consumer",
         block_size=block_size,
     )
     if kv_cache_config is None:
         kv_cache_config = make_kv_cache_config(block_size=block_size, swa_enabled=swa_enabled)
-    with set_current_aphrodite_config(aphrodite_config), patch_worker_dependencies():
-        connector = MooncakeConnector(aphrodite_config, KVConnectorRole.WORKER, kv_cache_config)
+    with set_current_sonar_config(sonar_config), patch_worker_dependencies():
+        connector = MooncakeConnector(sonar_config, KVConnectorRole.WORKER, kv_cache_config)
     return connector.connector_worker
 
 

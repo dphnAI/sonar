@@ -6,8 +6,8 @@ import json
 
 import pytest
 
-from aphrodite.parser.abstract_parser import DelegatingParser
-from aphrodite.parser.deepseek_v4 import (
+from sonar.parser.abstract_parser import DelegatingParser
+from sonar.parser.deepseek_v4 import (
     DSML_INVOKE_END,
     DSML_INVOKE_NAME_END,
     DSML_INVOKE_PREFIX,
@@ -22,7 +22,7 @@ from aphrodite.parser.deepseek_v4 import (
     _unwrap_wrapper_args,
     deepseek_v4_config,
 )
-from aphrodite.parser.engine.registered_adapters import (
+from sonar.parser.engine.registered_adapters import (
     DeepSeekV4ParserReasoningAdapter,
     DeepSeekV4ParserToolAdapter,
 )
@@ -666,7 +666,7 @@ class TestImplicitReasoningEnd:
 
 class TestWrapperUnwrapping:
     def test_unwrap_arguments_wrapper(self):
-        from aphrodite.entrypoints.openai.chat_completion.protocol import (
+        from sonar.entrypoints.openai.chat_completion.protocol import (
             ChatCompletionToolsParam,
         )
 
@@ -689,7 +689,7 @@ class TestWrapperUnwrapping:
         assert json.loads(result) == {"location": "Beijing"}
 
     def test_unwrap_input_wrapper(self):
-        from aphrodite.entrypoints.openai.chat_completion.protocol import (
+        from sonar.entrypoints.openai.chat_completion.protocol import (
             ChatCompletionToolsParam,
         )
 
@@ -712,7 +712,7 @@ class TestWrapperUnwrapping:
         assert json.loads(result) == {"location": "Beijing"}
 
     def test_no_unwrap_when_key_in_schema(self):
-        from aphrodite.entrypoints.openai.chat_completion.protocol import (
+        from sonar.entrypoints.openai.chat_completion.protocol import (
             ChatCompletionToolsParam,
         )
 
@@ -743,7 +743,7 @@ class TestWrapperUnwrapping:
         assert json.loads(result) == {"arguments": {"location": "Beijing"}}
 
     def test_unwrap_json_string_inner(self):
-        from aphrodite.entrypoints.openai.chat_completion.protocol import (
+        from sonar.entrypoints.openai.chat_completion.protocol import (
             ChatCompletionToolsParam,
         )
 
@@ -770,7 +770,7 @@ class TestWrapperUnwrapping:
 
 
 def _make_tool(name, properties):
-    from aphrodite.entrypoints.openai.chat_completion.protocol import (  # noqa: E501
+    from sonar.entrypoints.openai.chat_completion.protocol import (  # noqa: E501
         ChatCompletionToolsParam,
     )
 

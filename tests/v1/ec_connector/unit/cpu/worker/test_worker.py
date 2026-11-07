@@ -31,18 +31,18 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.distributed.ec_transfer.ec_connector.cpu.common import (
+from sonar.distributed.ec_transfer.ec_connector.cpu.common import (
     ECCPUConnectorMetadata,
 )
-from aphrodite.distributed.ec_transfer.ec_connector.cpu.ec_shared_region import (
+from sonar.distributed.ec_transfer.ec_connector.cpu.ec_shared_region import (
     ECSharedRegion,
 )
-from aphrodite.distributed.ec_transfer.ec_connector.cpu.worker import (
+from sonar.distributed.ec_transfer.ec_connector.cpu.worker import (
     ECCPUTransferDirection,
     ECCPUWorker,
 )
-from aphrodite.platforms import current_platform
-from tests.v1.ec_connector.unit.utils import create_ec_aphrodite_config
+from sonar.platforms import current_platform
+from tests.v1.ec_connector.unit.utils import create_ec_sonar_config
 
 # ── shape constants ──────────────────────────────────────────────────────────
 
@@ -70,7 +70,7 @@ _requires_cuda_alike = pytest.mark.skipif(
 _requires_swap_blocks_batch = pytest.mark.skipif(
     not hasattr(torch.ops._C_cache_ops, "swap_blocks_batch"),
     reason=(
-        "installed aphrodite C++ extension predates the swap_blocks_batch op "
+        "installed sonar C++ extension predates the swap_blocks_batch op "
         "flush_saves/start_load_caches use; rebuild the extension to run this"
     ),
 )
@@ -90,8 +90,8 @@ def _make_region() -> ECSharedRegion:
     )
 
 
-def _aphrodite_config(rank: int = 0) -> Mock:
-    config = create_ec_aphrodite_config(rank=rank, dtype=_DTYPE)
+def _sonar_config(rank: int = 0) -> Mock:
+    config = create_ec_sonar_config(rank=rank, dtype=_DTYPE)
     config.model_config.get_inputs_embeds_size.return_value = _HIDDEN_DIM
     return config
 
@@ -141,23 +141,23 @@ def make_worker():
         pcp_group.rank_in_group = pcp_rank
         with (
             patch(
-                "aphrodite.distributed.ec_transfer.ec_connector.cpu.worker.create_ec_shared_region",
+                "sonar.distributed.ec_transfer.ec_connector.cpu.worker.create_ec_shared_region",
                 return_value=region,
             ),
             patch(
-                "aphrodite.distributed.ec_transfer.ec_connector.cpu.worker.is_pin_memory_available",
+                "sonar.distributed.ec_transfer.ec_connector.cpu.worker.is_pin_memory_available",
                 return_value=pin_memory_available,
             ),
             patch(
-                "aphrodite.distributed.ec_transfer.ec_connector.cpu.worker.get_tensor_model_parallel_rank",
+                "sonar.distributed.ec_transfer.ec_connector.cpu.worker.get_tensor_model_parallel_rank",
                 return_value=tp_rank,
             ),
             patch(
-                "aphrodite.distributed.ec_transfer.ec_connector.cpu.worker.get_pcp_group",
+                "sonar.distributed.ec_transfer.ec_connector.cpu.worker.get_pcp_group",
                 return_value=pcp_group,
             ),
         ):
-            worker = ECCPUWorker(_aphrodite_config(rank=rank))
+            worker = ECCPUWorker(_sonar_config(rank=rank))
         workers.append(worker)
         return worker
 
@@ -220,7 +220,7 @@ def test_save_path_delegates_transfer_submission(make_worker):
     platform.current_stream.return_value = Mock()
     platform.stream.return_value = contextlib.nullcontext()
     with patch(
-        "aphrodite.distributed.ec_transfer.ec_connector.cpu.worker.current_platform",
+        "sonar.distributed.ec_transfer.ec_connector.cpu.worker.current_platform",
         platform,
     ):
         worker.save_caches({"h": src}, "h", _meta(saves={"h": [3]}))
@@ -249,11 +249,11 @@ def test_load_path_delegates_transfer_submission(make_worker):
     platform.stream.return_value = contextlib.nullcontext()
     with (
         patch(
-            "aphrodite.distributed.ec_transfer.ec_connector.cpu.worker.current_platform",
+            "sonar.distributed.ec_transfer.ec_connector.cpu.worker.current_platform",
             platform,
         ),
         patch(
-            "aphrodite.distributed.ec_transfer.ec_connector.cpu.worker.torch.empty",
+            "sonar.distributed.ec_transfer.ec_connector.cpu.worker.torch.empty",
             return_value=dst_buf,
         ),
     ):
@@ -510,7 +510,7 @@ def test_start_load_caches_coalesces_across_entries(make_worker, loads, expected
     captured: list[list[int]] = []
 
     with patch(
-        "aphrodite.distributed.ec_transfer.ec_connector.cpu.worker.swap_blocks_batch",
+        "sonar.distributed.ec_transfer.ec_connector.cpu.worker.swap_blocks_batch",
         side_effect=lambda src, dst, sizes, **kw: captured.append(sizes.tolist()),
     ):
         worker.start_load_caches({}, _meta(loads=loads))
@@ -794,23 +794,23 @@ def test_init_pins_memory_when_available(pin_available, expected_pinned):
     pcp_group.rank_in_group = 0
     with (
         patch(
-            "aphrodite.distributed.ec_transfer.ec_connector.cpu.worker.create_ec_shared_region",
+            "sonar.distributed.ec_transfer.ec_connector.cpu.worker.create_ec_shared_region",
             return_value=region,
         ),
         patch(
-            "aphrodite.distributed.ec_transfer.ec_connector.cpu.worker.is_pin_memory_available",
+            "sonar.distributed.ec_transfer.ec_connector.cpu.worker.is_pin_memory_available",
             return_value=pin_available,
         ),
         patch(
-            "aphrodite.distributed.ec_transfer.ec_connector.cpu.worker.get_tensor_model_parallel_rank",
+            "sonar.distributed.ec_transfer.ec_connector.cpu.worker.get_tensor_model_parallel_rank",
             return_value=0,
         ),
         patch(
-            "aphrodite.distributed.ec_transfer.ec_connector.cpu.worker.get_pcp_group",
+            "sonar.distributed.ec_transfer.ec_connector.cpu.worker.get_pcp_group",
             return_value=pcp_group,
         ),
     ):
-        ECCPUWorker(_aphrodite_config(rank=0))
+        ECCPUWorker(_sonar_config(rank=0))
 
     try:
         if expected_pinned:
@@ -842,7 +842,7 @@ def test_shutdown_calls_region_cleanup_and_swallows_errors(caplog, monkeypatch):
     mock_region.cleanup.assert_called_once()
 
     mock_region.cleanup.side_effect = RuntimeError("boom")
-    with caplog.at_level(logging.DEBUG, logger="aphrodite"):
+    with caplog.at_level(logging.DEBUG, logger="sonar"):
         worker.shutdown()  # exception must be swallowed
 
     assert mock_region.cleanup.call_count == 2
@@ -863,8 +863,8 @@ def test_e2e_scheduler_worker_save_then_load(make_worker, monkeypatch):
     ECSharedRegion, with real accelerator transfers and stream coordination,
     and the event-driven mark_ready path.
     """
-    import aphrodite.distributed.ec_transfer.ec_connector.cpu.scheduler as sched_mod
-    from aphrodite.distributed.ec_transfer.ec_connector.cpu.scheduler import (
+    import sonar.distributed.ec_transfer.ec_connector.cpu.scheduler as sched_mod
+    from sonar.distributed.ec_transfer.ec_connector.cpu.scheduler import (
         ECCPUScheduler,
     )
 
@@ -875,7 +875,7 @@ def test_e2e_scheduler_worker_save_then_load(make_worker, monkeypatch):
     # Build scheduler sharing the same region.
     monkeypatch.setattr(sched_mod, "create_ec_shared_region", lambda cfg: region)
 
-    config = _aphrodite_config()
+    config = _sonar_config()
     # DeepStack-wide output: each embedding spans four blocks.
     width = 4 * _HIDDEN_DIM
     config.ec_transfer_config.mm_encoder_output_widths = {"image": width}

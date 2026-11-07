@@ -8,32 +8,32 @@ from typing import Any
 
 import torch
 
-from aphrodite.config.quantization import (
+from sonar.config.quantization import (
     _ONLINE_SHORTHANDS,
     QuantizationConfigArgs,
     QuantSpec,
 )
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe import (
     FusedMoEMethodBase,
     RoutedExperts,
 )
-from aphrodite.model_executor.layers.fused_moe.unquantized_fused_moe_method import (
+from sonar.model_executor.layers.fused_moe.unquantized_fused_moe_method import (
     UnquantizedFusedMoEMethod,
 )
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.linear import (
     LinearBase,
     UnquantizedLinearMethod,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationMethods
-from aphrodite.model_executor.layers.quantization.base_config import (
+from sonar.model_executor.layers.quantization import QuantizationMethods
+from sonar.model_executor.layers.quantization.base_config import (
     QuantizationConfig,
     QuantizeMethodBase,
 )
-from aphrodite.model_executor.layers.quantization.compressed_tensors.utils import (
+from sonar.model_executor.layers.quantization.compressed_tensors.utils import (
     should_ignore_layer,
 )
-from aphrodite.model_executor.layers.quantization.online.fp8 import (
+from sonar.model_executor.layers.quantization.online.fp8 import (
     Fp8PerBlockOnlineLinearMethod,
     Fp8PerBlockOnlineMoEMethod,
     Fp8PerTensorOnlineLinearMethod,
@@ -42,39 +42,39 @@ from aphrodite.model_executor.layers.quantization.online.fp8 import (
     Fp8PtpcOnlineMoEMethod,
     OnlineLinearBase,
 )
-from aphrodite.model_executor.layers.quantization.online.int8 import (
+from sonar.model_executor.layers.quantization.online.int8 import (
     Int8OnlineMoEMethod,
 )
-from aphrodite.model_executor.layers.quantization.online.mxfp4 import (
+from sonar.model_executor.layers.quantization.online.mxfp4 import (
     Mxfp4OnlineLinearMethod,
     Mxfp4OnlineMoEMethod,
 )
-from aphrodite.model_executor.layers.quantization.online.mxfp6 import (
+from sonar.model_executor.layers.quantization.online.mxfp6 import (
     Mxfp6OnlineLinearMethod,
     Mxfp6OnlineMoEMethod,
 )
-from aphrodite.model_executor.layers.quantization.online.mxfp8 import (
+from sonar.model_executor.layers.quantization.online.mxfp8 import (
     Mxfp8OnlineLinearMethod,
     Mxfp8OnlineMoEMethod,
 )
-from aphrodite.model_executor.layers.quantization.online.nf12 import (
+from sonar.model_executor.layers.quantization.online.nf12 import (
     Nf12OnlineLinearMethod,
 )
-from aphrodite.model_executor.layers.quantization.online.nf12_moe import (
+from sonar.model_executor.layers.quantization.online.nf12_moe import (
     Nf12OnlineMoEMethod,
 )
-from aphrodite.model_executor.layers.quantization.online.nvfp4 import (
+from sonar.model_executor.layers.quantization.online.nvfp4 import (
     Nvfp4OnlineMoEMethod,
 )
-from aphrodite.model_executor.layers.quantization.utils.config_utils import (
+from sonar.model_executor.layers.quantization.utils.config_utils import (
     find_matching_patterns,
     get_layer_name_after_index,
 )
-from aphrodite.model_executor.layers.quantization.utils.mxfp4_utils import mxfp4_quantize
-from aphrodite.model_executor.layers.quantization.utils.mxfp8_utils import (
+from sonar.model_executor.layers.quantization.utils.mxfp4_utils import mxfp4_quantize
+from sonar.model_executor.layers.quantization.utils.mxfp8_utils import (
     dequant_mxfp8_to_bf16,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     kFp8Static128BlockSym,
     kFp8StaticChannelSym,
@@ -152,7 +152,7 @@ def _find_matching_targets(
         return []
     if any(len(matches) == 0 for matches in per_shard_matches):
         raise ValueError(
-            f"Found unmatched shards for {prefix}: {per_shard_matches}. Aphrodite "
+            f"Found unmatched shards for {prefix}: {per_shard_matches}. Sonar "
             "requires all shards of a fused layer to match a target."
         )
     if any(len(matches) > 1 for matches in per_shard_matches):
@@ -167,7 +167,7 @@ def _find_matching_targets(
     if len(quant_key_strs) > 1:
         raise ValueError(
             f"Found different quantization_config.targets values for the "
-            f"shards of {prefix}: {matched_patterns}. Aphrodite requires all "
+            f"shards of {prefix}: {matched_patterns}. Sonar requires all "
             "shards of a fused layer to use the same target."
         )
     return [matched_patterns[0]]
@@ -308,7 +308,7 @@ class OnlineQuantizationConfig(QuantizationConfig):
                 f"keys: {sorted(str(k) for k in table)}"
             )
         if cls in (Mxfp6OnlineLinearMethod, Mxfp6OnlineMoEMethod):
-            from aphrodite.model_executor.kernels.linear.mxfp6 import CutedslMxfp6LinearKernel
+            from sonar.model_executor.kernels.linear.mxfp6 import CutedslMxfp6LinearKernel
 
             supported, reason = CutedslMxfp6LinearKernel.is_supported()
             if not supported:

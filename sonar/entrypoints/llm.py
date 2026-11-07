@@ -10,7 +10,7 @@ import torch.nn as nn
 from pydantic import ValidationError
 from tqdm.auto import tqdm
 
-from aphrodite.config import (
+from sonar.config import (
     AttentionConfig,
     CompilationConfig,
     PoolerConfig,
@@ -18,43 +18,43 @@ from aphrodite.config import (
     StructuredOutputsConfig,
     is_init_field,
 )
-from aphrodite.config.compilation import CompilationMode
-from aphrodite.config.model import (
+from sonar.config.compilation import CompilationMode
+from sonar.config.model import (
     ConvertOption,
     HfOverrides,
     ModelDType,
     RunnerOption,
     TokenizerMode,
 )
-from aphrodite.config.quantization import QuantizationConfigArgs
-from aphrodite.engine.arg_utils import EngineArgs
-from aphrodite.entrypoints.common.offline import _O, _R, OfflineInferenceMixin
-from aphrodite.entrypoints.common.startup import log_non_default_args
-from aphrodite.entrypoints.generate.beam_search.offline import BeamSearchOfflineMixin
-from aphrodite.entrypoints.pooling.offline import PoolingOfflineMixin
-from aphrodite.entrypoints.rl.offline import RLOfflineMixin
-from aphrodite.inputs import PromptType
-from aphrodite.logger import configure_logging_if_needed, init_logger
-from aphrodite.lora.request import LoRARequest
-from aphrodite.model_executor.layers.quantization import QuantizationMethods
-from aphrodite.outputs import PoolingRequestOutput, RequestOutput
-from aphrodite.platforms import current_platform
-from aphrodite.renderers import ChatParams
-from aphrodite.renderers.chat_utils import (
+from sonar.config.quantization import QuantizationConfigArgs
+from sonar.engine.arg_utils import EngineArgs
+from sonar.entrypoints.common.offline import _O, _R, OfflineInferenceMixin
+from sonar.entrypoints.common.startup import log_non_default_args
+from sonar.entrypoints.generate.beam_search.offline import BeamSearchOfflineMixin
+from sonar.entrypoints.pooling.offline import PoolingOfflineMixin
+from sonar.entrypoints.rl.offline import RLOfflineMixin
+from sonar.inputs import PromptType
+from sonar.logger import configure_logging_if_needed, init_logger
+from sonar.lora.request import LoRARequest
+from sonar.model_executor.layers.quantization import QuantizationMethods
+from sonar.outputs import PoolingRequestOutput, RequestOutput
+from sonar.platforms import current_platform
+from sonar.renderers import ChatParams
+from sonar.renderers.chat_utils import (
     ChatCompletionMessageParam,
     ChatTemplateContentFormatOption,
     load_chat_template,
 )
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.tokenizers import TokenizerLike
-from aphrodite.usage.usage_lib import UsageContext
-from aphrodite.utils.counter import Counter
-from aphrodite.v1.engine import PauseMode
-from aphrodite.v1.engine.llm_engine import LLMEngine
-from aphrodite.v1.sample.logits_processor import LogitsProcessor
+from sonar.sampling_params import SamplingParams
+from sonar.tokenizers import TokenizerLike
+from sonar.usage.usage_lib import UsageContext
+from sonar.utils.counter import Counter
+from sonar.v1.engine import PauseMode
+from sonar.v1.engine.llm_engine import LLMEngine
+from sonar.v1.sample.logits_processor import LogitsProcessor
 
 if TYPE_CHECKING:
-    from aphrodite.v1.metrics.reader import Metric
+    from sonar.v1.metrics.reader import Metric
 
 logger = init_logger(__name__)
 
@@ -72,7 +72,7 @@ class LLM(BeamSearchOfflineMixin, PoolingOfflineMixin, RLOfflineMixin, OfflineIn
         model: The name or path of a HuggingFace Transformers model.
         tokenizer: The name or path of a HuggingFace Transformers tokenizer.
         tokenizer_mode: The tokenizer mode. See
-            [ModelConfig.tokenizer_mode][aphrodite.config.ModelConfig.tokenizer_mode].
+            [ModelConfig.tokenizer_mode][sonar.config.ModelConfig.tokenizer_mode].
         skip_tokenizer_init: If true, skip initialization of tokenizer and
             detokenizer. Expect valid prompt_token_ids and None for prompt
             from the input.
@@ -108,7 +108,7 @@ class LLM(BeamSearchOfflineMixin, PoolingOfflineMixin, RLOfflineMixin, OfflineIn
             throughput. However, if the value is too high, it may cause out-of-
             memory (OOM) errors.
         kv_cache_memory_bytes: Size of KV Cache per GPU in bytes. By default,
-            this is set to None and aphrodite can automatically infer the kv cache
+            this is set to None and sonar can automatically infer the kv cache
             size based on gpu_memory_utilization. However, users may want to
             manually specify the kv cache memory size. kv_cache_memory_bytes
             allows more fine-grain control of how much memory gets used when
@@ -137,7 +137,7 @@ class LLM(BeamSearchOfflineMixin, PoolingOfflineMixin, RLOfflineMixin, OfflineIn
             If False, we will use CUDA graph and eager execution in hybrid.
         enable_return_routed_experts: Whether to return routed experts.
         disable_custom_all_reduce: See
-            [ParallelConfig][aphrodite.config.ParallelConfig].
+            [ParallelConfig][sonar.config.ParallelConfig].
         hf_token: The token to use as HTTP bearer authorization for remote files
             . If `True`, will use the token generated when running
             `hf auth login` (stored in `~/.cache/huggingface/token`).
@@ -164,11 +164,11 @@ class LLM(BeamSearchOfflineMixin, PoolingOfflineMixin, RLOfflineMixin, OfflineIn
         spec_model: Top-level alias for `speculative_config["model"]`.
         spec_tokens: Top-level alias for
             `speculative_config["num_speculative_tokens"]`.
-        **kwargs: Arguments for [`EngineArgs`][aphrodite.EngineArgs].
+        **kwargs: Arguments for [`EngineArgs`][sonar.EngineArgs].
 
     Note:
         This class is intended to be used for offline inference. For online
-        serving, use the [AsyncLLMEngine][aphrodite.AsyncLLMEngine] class instead.
+        serving, use the [AsyncLLMEngine][sonar.AsyncLLMEngine] class instead.
 
     """
 
@@ -229,7 +229,7 @@ class LLM(BeamSearchOfflineMixin, PoolingOfflineMixin, RLOfflineMixin, OfflineIn
                 kwargs["worker_cls"] = cloudpickle.dumps(worker_cls)
 
         if "kv_transfer_config" in kwargs and isinstance(kwargs["kv_transfer_config"], dict):
-            from aphrodite.config.kv_transfer import KVTransferConfig
+            from sonar.config.kv_transfer import KVTransferConfig
 
             raw_config_dict = kwargs["kv_transfer_config"]
             try:
@@ -240,7 +240,7 @@ class LLM(BeamSearchOfflineMixin, PoolingOfflineMixin, RLOfflineMixin, OfflineIn
                     raw_config_dict,
                     e,
                 )
-                # Consider re-raising a more specific Aphrodite error or ValueError
+                # Consider re-raising a more specific Sonar error or ValueError
                 # to provide better context to the user.
                 raise ValueError(f"Invalid 'kv_transfer_config' provided: {e}") from e
 
@@ -348,7 +348,7 @@ class LLM(BeamSearchOfflineMixin, PoolingOfflineMixin, RLOfflineMixin, OfflineIn
                 "entrypoint uses the synchronous renderer path and runs "
                 "multimodal preprocessing serially across prompts. The "
                 "renderer thread pool is only consumed by the async "
-                "renderer path used by `aphrodite serve` / `AsyncLLM`, so this "
+                "renderer path used by `sonar serve` / `AsyncLLM`, so this "
                 "setting has no effect here.",
                 self.model_config.renderer_num_workers,
             )
@@ -379,7 +379,7 @@ class LLM(BeamSearchOfflineMixin, PoolingOfflineMixin, RLOfflineMixin, OfflineIn
             optionally multiplied by data_parallel_size if include_dp is True.
 
         """
-        parallel_config = self.llm_engine.aphrodite_config.parallel_config
+        parallel_config = self.llm_engine.sonar_config.parallel_config
         if include_dp:
             return parallel_config.world_size_across_dp
         return parallel_config.world_size
@@ -414,7 +414,7 @@ class LLM(BeamSearchOfflineMixin, PoolingOfflineMixin, RLOfflineMixin, OfflineIn
 
         Args:
             prompts: The prompts to the LLM. You may pass a sequence of prompts
-                for batch inference. See [PromptType][aphrodite.inputs.PromptType]
+                for batch inference. See [PromptType][sonar.inputs.PromptType]
                 for more details about the format of each prompt.
             sampling_params: The sampling parameters for text generation. If
                 None, we use the default sampling parameters.
@@ -613,7 +613,7 @@ class LLM(BeamSearchOfflineMixin, PoolingOfflineMixin, RLOfflineMixin, OfflineIn
         """Generate responses for a chat conversation.
 
         The chat conversation is converted into a text prompt using the
-        tokenizer and calls the [generate][aphrodite.LLM.generate] method to generate
+        tokenizer and calls the [generate][sonar.LLM.generate] method to generate
         the responses.
 
         Multi-modal inputs can be passed in the same way you would pass them
@@ -845,7 +845,7 @@ class LLM(BeamSearchOfflineMixin, PoolingOfflineMixin, RLOfflineMixin, OfflineIn
         self.llm_engine.release_kv_cache_memory()
 
     def wake_up(self, tags: list[str] | None = None) -> bool:
-        """Wake up the engine from sleep mode. See the [sleep][aphrodite.LLM.sleep]
+        """Wake up the engine from sleep mode. See the [sleep][sonar.LLM.sleep]
         method for more details.
 
         Args:

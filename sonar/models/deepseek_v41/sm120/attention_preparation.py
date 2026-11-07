@@ -8,7 +8,7 @@ import torch
 from b12x.attention import compressed_sparse_mla as mla
 from b12x.attention.compressed_sparse_mla import rotary, weight_scale
 
-from aphrodite.utils.b12x import B12xPreparationUnit, B12xWorkload
+from sonar.utils.b12x import B12xPreparationUnit, B12xWorkload
 
 
 class AttentionHelperPreparation:
@@ -61,7 +61,7 @@ class AttentionHelperPreparation:
                     _memory_requirements=memory,
                     invocation=FrozenMapping(
                         {
-                            "aphrodite_staging": tuple(
+                            "sonar_staging": tuple(
                                 (name, shape, str(dtype)) for name, shape, dtype in attn._staging_specs
                             )
                         }

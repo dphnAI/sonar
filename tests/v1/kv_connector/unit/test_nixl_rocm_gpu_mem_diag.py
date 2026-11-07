@@ -12,7 +12,7 @@ import gc
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 from tests.utils import wait_for_gpu_memory_to_clear
 
 pytestmark = pytest.mark.skipif(
@@ -79,9 +79,9 @@ def _wait_for_driver_memory_release(baseline: dict, peak: dict) -> None:
 @pytest.mark.parametrize("model_name, sw_size", [("google/gemma-3-1b-it", 512)])
 def test_gpu_memory_nixl_hma(model_name, sw_size):
     """Track GPU memory through NixlConnector create/infer/shutdown cycle."""
-    from aphrodite import LLM, SamplingParams
-    from aphrodite.config import KVTransferConfig
-    from aphrodite.distributed.parallel_state import cleanup_dist_env_and_memory
+    from sonar import LLM, SamplingParams
+    from sonar.config import KVTransferConfig
+    from sonar.distributed.parallel_state import cleanup_dist_env_and_memory
 
     llm_kwargs = {
         "model": model_name,
@@ -184,8 +184,8 @@ def test_gpu_memory_nixl_hma(model_name, sw_size):
 def test_gpu_memory_no_nixl_baseline(model_name):
     """Same workload without NixlConnector.  Comparing driver-level memory
     between this and test_gpu_memory_nixl_hma isolates UCX/NIXL impact."""
-    from aphrodite import LLM, SamplingParams
-    from aphrodite.distributed.parallel_state import cleanup_dist_env_and_memory
+    from sonar import LLM, SamplingParams
+    from sonar.distributed.parallel_state import cleanup_dist_env_and_memory
 
     print("\n" + "=" * 90)
     print("CONTROL -- same model, no NIXL connector")

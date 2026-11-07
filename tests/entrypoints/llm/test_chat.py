@@ -4,24 +4,24 @@ import weakref
 
 import pytest
 
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.sampling_params import SamplingParams
+from sonar.exceptions import SonarValidationError
+from sonar.sampling_params import SamplingParams
 
 
 @pytest.fixture(scope="function")
-def text_llm(aphrodite_runner):
-    with aphrodite_runner("meta-llama/Llama-3.2-1B-Instruct", enforce_eager=True, seed=0) as runner:
+def text_llm(sonar_runner):
+    with sonar_runner("meta-llama/Llama-3.2-1B-Instruct", enforce_eager=True, seed=0) as runner:
         # pytest caches yielded fixtures until after teardown, so use a proxy to
-        # avoid retaining the LLM while AphroditeRunner.__exit__ releases ROCm memory.
+        # avoid retaining the LLM while SonarRunner.__exit__ releases ROCm memory.
         yield weakref.proxy(runner.llm)
 
 
 @pytest.fixture(scope="function")
-def llm_for_failure_test(aphrodite_runner):
+def llm_for_failure_test(sonar_runner):
     """Fixture for testing issue #26081.
     Uses a small max_model_len to easily trigger length errors.
     """
-    with aphrodite_runner(
+    with sonar_runner(
         "meta-llama/Llama-3.2-1B-Instruct",
         enforce_eager=True,
         seed=0,
@@ -29,7 +29,7 @@ def llm_for_failure_test(aphrodite_runner):
         disable_log_stats=True,
     ) as runner:
         # pytest caches yielded fixtures until after teardown, so use a proxy to
-        # avoid retaining the LLM while AphroditeRunner.__exit__ releases ROCm memory.
+        # avoid retaining the LLM while SonarRunner.__exit__ releases ROCm memory.
         yield weakref.proxy(runner.llm)
 
 
@@ -78,7 +78,7 @@ def test_chat_priority(text_llm):
 
     # Exception raised, if the length of priority does not match the length of
     # conversations
-    with pytest.raises(AphroditeValidationError):
+    with pytest.raises(SonarValidationError):
         text_llm.chat([messages, messages], priority=[0])
 
 
@@ -104,15 +104,15 @@ def test_llm_chat_tokenization_no_double_bos(text_llm):
 
 
 @pytest.fixture(scope="function")
-def thinking_llm(aphrodite_runner):
-    with aphrodite_runner(
+def thinking_llm(sonar_runner):
+    with sonar_runner(
         "Qwen/Qwen3-0.6B",
         max_model_len=4096,
         enforce_eager=True,
         seed=0,
     ) as runner:
         # pytest caches yielded fixtures until after teardown, so use a proxy to
-        # avoid retaining the LLM while AphroditeRunner.__exit__ releases ROCm memory.
+        # avoid retaining the LLM while SonarRunner.__exit__ releases ROCm memory.
         yield weakref.proxy(runner.llm)
 
 

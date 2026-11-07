@@ -7,7 +7,7 @@ from typing import Any
 
 import regex as re
 
-from aphrodite.entrypoints.generate.base.protocol import (
+from sonar.entrypoints.generate.base.protocol import (
     DeltaFunctionCall,
     DeltaMessage,
     DeltaToolCall,
@@ -15,20 +15,20 @@ from aphrodite.entrypoints.generate.base.protocol import (
     FunctionCall,
     ToolCall,
 )
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionRequest,
     ChatCompletionToolsParam,
 )
-from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
-from aphrodite.logger import init_logger
-from aphrodite.renderers.chat_utils import make_tool_call_id
-from aphrodite.tokenizers import TokenizerLike
-from aphrodite.tool_parsers.abstract_tool_parser import (
+from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
+from sonar.logger import init_logger
+from sonar.renderers.chat_utils import make_tool_call_id
+from sonar.tokenizers import TokenizerLike
+from sonar.tool_parsers.abstract_tool_parser import (
     Tool,
     ToolParser,
 )
-from aphrodite.tool_parsers.utils import partial_tag_overlap, safe_literal_eval
-from aphrodite.utils import random_uuid
+from sonar.tool_parsers.utils import partial_tag_overlap, safe_literal_eval
+from sonar.utils import random_uuid
 
 logger = init_logger(__name__)
 
@@ -467,7 +467,7 @@ class MiniCPM5XMLToolParser(ToolParser):
         request = super().adjust_request(request)
         if request.tools and request.tool_choice != "none":
             # Tool XML tags are special tokens in MiniCPM5; must not strip them
-            # before tool parsing (see internlm2/mistral Aphrodite tool parsers).
+            # before tool parsing (see internlm2/mistral Sonar tool parsers).
             request.skip_special_tokens = False
         return request
 

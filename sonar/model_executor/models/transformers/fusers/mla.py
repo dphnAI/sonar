@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""MLA fuser: adapt a Transformers MLA attention module for Aphrodite's MLA layer."""
+"""MLA fuser: adapt a Transformers MLA attention module for Sonar's MLA layer."""
 
 import ast
 import inspect
@@ -10,11 +10,11 @@ from typing import TYPE_CHECKING, ClassVar
 
 from torch import fx, nn
 
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.linear import MergedColumnParallelLinear
-from aphrodite.model_executor.models.transformers.fusers.base import StackedFuser
-from aphrodite.model_executor.models.transformers.fusers.rms_norm import RMSNormFuser
-from aphrodite.model_executor.models.transformers.fx_utils import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.linear import MergedColumnParallelLinear
+from sonar.model_executor.models.transformers.fusers.base import StackedFuser
+from sonar.model_executor.models.transformers.fusers.rms_norm import RMSNormFuser
+from sonar.model_executor.models.transformers.fx_utils import (
     compile_forward,
     downstream_linear,
     is_linear,
@@ -23,15 +23,15 @@ from aphrodite.model_executor.models.transformers.fx_utils import (
     returned_linear,
     upstream_linear,
 )
-from aphrodite.model_executor.models.transformers.utils import (
+from sonar.model_executor.models.transformers.utils import (
     Style,
     log_replacement,
     replace_linear_class,
 )
-from aphrodite.model_executor.models.utils import ShardId, maybe_prefix
+from sonar.model_executor.models.utils import ShardId, maybe_prefix
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
+    from sonar.config import SonarConfig
 
 logger = init_logger(__name__)
 
@@ -49,7 +49,7 @@ def _norm_size(norm: nn.Module) -> int:
 def _is_rms_norm(module: nn.Module) -> bool:
     """Whether `module` computes an RMSNorm, verified by `RMSNormFuser`'s matcher."""
     # Go via `get_fuser` because it caches
-    from aphrodite.model_executor.models.transformers.fuser import get_fuser
+    from sonar.model_executor.models.transformers.fuser import get_fuser
 
     return get_fuser(module, RMSNormFuser) is not None
 
@@ -210,12 +210,12 @@ class MLAFuser(StackedFuser):
             o_proj_name=o_proj_name,
         )
 
-    def validate(self, module: nn.Module, aphrodite_config: "AphroditeConfig") -> bool:
-        return aphrodite_config.model_config.use_mla
+    def validate(self, module: nn.Module, sonar_config: "SonarConfig") -> bool:
+        return sonar_config.model_config.use_mla
 
     def update_forward(self, module: nn.Module) -> None:
         """Merge `q_a_proj` and `kv_a_proj` into one fused down proj then split.
-        Bypass the KV expansion method so the compressed latent reaches the `aphrodite_mla`
+        Bypass the KV expansion method so the compressed latent reaches the `sonar_mla`
         attention interface unexpanded."""
         funcdef, fn = recover_forward(type(module))
         if (q_a_proj_name := self.q_a_proj_name) is not None:
@@ -237,8 +237,8 @@ class MLAFuser(StackedFuser):
         replace_expr(funcdef, expand_call, ast.Tuple(elts=list(expand_call.args), ctx=ast.Load()))
         self.fused_forward = compile_forward(funcdef, fn)
 
-    def update_attrs(self, module: nn.Module, prefix: str, aphrodite_config: "AphroditeConfig"):
-        quant_config = aphrodite_config.quant_config
+    def update_attrs(self, module: nn.Module, prefix: str, sonar_config: "SonarConfig"):
+        quant_config = sonar_config.quant_config
 
         def replace_linear_by_name(name: str, style: Style):
             linear = module.get_submodule(name)
@@ -280,7 +280,7 @@ class MLAFuser(StackedFuser):
             replace_linear_by_name(self.q_proj_name, "colwise")
 
         replace_linear_by_name(self.kv_b_proj_name, "colwise")
-        # MLAAttention calls kv_b_proj and expects Aphrodite's default return_bias=True
+        # MLAAttention calls kv_b_proj and expects Sonar's default return_bias=True
         module.get_submodule(self.kv_b_proj_name).return_bias = True
         if self.o_proj_name is not None:
             replace_linear_by_name(self.o_proj_name, "rowwise")

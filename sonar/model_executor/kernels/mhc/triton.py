@@ -4,8 +4,8 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor
 
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.torch_utils import direct_register_custom_op
+from sonar.triton_utils import tl, triton
+from sonar.utils.torch_utils import direct_register_custom_op
 
 
 @triton.jit

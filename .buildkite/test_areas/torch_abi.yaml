@@ -11,4 +11,4 @@ steps:
   - cmake/
   - setup.py
   commands:
-  - python3 /aphrodite-workspace/.buildkite/check-torch-abi.py
+  - python3 /sonar-workspace/.buildkite/check-torch-abi.py

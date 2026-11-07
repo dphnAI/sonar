@@ -4,39 +4,39 @@ from collections.abc import Callable
 
 import torch
 
-import aphrodite.envs as envs
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.distributed.eplb.eplb_state import EplbLayerState
-from aphrodite.model_executor.layers.fused_moe.config import (
+import sonar.envs as envs
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.distributed.eplb.eplb_state import EplbLayerState
+from sonar.model_executor.layers.fused_moe.config import (
     RoutingMethodType,
     get_routing_method_type,
 )
-from aphrodite.model_executor.layers.fused_moe.router.aiter_shared_routed_fused_moe_router import (  # noqa: E501
+from sonar.model_executor.layers.fused_moe.router.aiter_shared_routed_fused_moe_router import (  # noqa: E501
     AiterSharedRoutedFusedMoERouter,
 )
-from aphrodite.model_executor.layers.fused_moe.router.cpu_router import CPURouter
-from aphrodite.model_executor.layers.fused_moe.router.custom_routing_router import (
+from sonar.model_executor.layers.fused_moe.router.cpu_router import CPURouter
+from sonar.model_executor.layers.fused_moe.router.custom_routing_router import (
     CustomRoutingRouter,
 )
-from aphrodite.model_executor.layers.fused_moe.router.fused_moe_router import (
+from sonar.model_executor.layers.fused_moe.router.fused_moe_router import (
     FusedMoERouter,
 )
-from aphrodite.model_executor.layers.fused_moe.router.fused_topk_bias_router import (
+from sonar.model_executor.layers.fused_moe.router.fused_topk_bias_router import (
     FusedTopKBiasRouter,
 )
-from aphrodite.model_executor.layers.fused_moe.router.fused_topk_router import (
+from sonar.model_executor.layers.fused_moe.router.fused_topk_router import (
     FusedTopKRouter,
 )
-from aphrodite.model_executor.layers.fused_moe.router.grouped_topk_router import (
+from sonar.model_executor.layers.fused_moe.router.grouped_topk_router import (
     GroupedTopKRouter,
 )
-from aphrodite.model_executor.layers.fused_moe.router.routing_simulator_router import (
+from sonar.model_executor.layers.fused_moe.router.routing_simulator_router import (
     RoutingSimulatorRouter,
 )
-from aphrodite.model_executor.layers.fused_moe.router.zero_expert_router import (
+from sonar.model_executor.layers.fused_moe.router.zero_expert_router import (
     ZeroExpertRouter,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 
 def create_fused_moe_router(
@@ -82,7 +82,7 @@ def create_fused_moe_router(
        scoring_func is softmax, and AITER shared-expert fusion is enabled
     7. FusedTopKRouter - default fallback
 
-    When APHRODITE_MOE_ROUTING_SIMULATION_STRATEGY is set, the selected router
+    When SONAR_MOE_ROUTING_SIMULATION_STRATEGY is set, the selected router
     supplies the kernel routing method and is replaced by a
     RoutingSimulatorRouter.
 
@@ -250,7 +250,7 @@ def create_fused_moe_router(
                 scoring_func=scoring_func,
             )
 
-    if envs.APHRODITE_MOE_ROUTING_SIMULATION_STRATEGY != "":
+    if envs.SONAR_MOE_ROUTING_SIMULATION_STRATEGY != "":
         router = RoutingSimulatorRouter(
             top_k=top_k,
             global_num_experts=global_num_experts,

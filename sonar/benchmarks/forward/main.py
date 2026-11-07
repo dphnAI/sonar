@@ -8,8 +8,8 @@ the real `execute_model` (input prep, attention metadata, DP sync), and times
 the target forward and configured drafter captured as a CUDA graph. Target
 sampling, rejection sampling and CPU step overhead aren't measured.
 
-Single GPU: `aphrodite bench forward --model M --case decode=32*1@8192`.
-Multi-GPU: `torchrun --nproc-per-node=N -m aphrodite.entrypoints.cli.main bench
+Single GPU: `sonar bench forward --model M --case decode=32*1@8192`.
+Multi-GPU: `torchrun --nproc-per-node=N -m sonar.entrypoints.cli.main bench
 forward ...`, one process per GPU.
 """
 
@@ -23,15 +23,15 @@ from typing import Any
 import numpy as np
 import torch
 
-from aphrodite.benchmarks.forward.shapes import (
+from sonar.benchmarks.forward.shapes import (
     BenchCase,
     jitter_kv_lens,
     load_cases,
     parse_case,
 )
-from aphrodite.engine.arg_utils import EngineArgs
-from aphrodite.logger import init_logger
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
+from sonar.engine.arg_utils import EngineArgs
+from sonar.logger import init_logger
+from sonar.utils.argparse_utils import FlexibleArgumentParser
 
 logger = init_logger(__name__)
 
@@ -89,17 +89,17 @@ def add_cli_args(parser: FlexibleArgumentParser) -> None:
         help="After timing, trace a few replays of each case and write "
         "`<case>.rank<r>.trace.json.gz` (Perfetto) and `<case>.rank<r>.kernels.json` "
         "(GPU time per kernel per forward) here. Summarize or compare with "
-        "`python -m aphrodite.benchmarks.forward.profile A.kernels.json [B.kernels.json]`.",
+        "`python -m sonar.benchmarks.forward.profile A.kernels.json [B.kernels.json]`.",
     )
     EngineArgs.add_cli_args(parser)
     parser.set_defaults(load_format="dummy", enable_prefix_caching=False)
 
 
 def _setup_env() -> None:
-    os.environ["APHRODITE_USE_V2_MODEL_RUNNER"] = "1"
-    os.environ["APHRODITE_ENABLE_V1_MULTIPROCESSING"] = "0"
+    os.environ["SONAR_USE_V2_MODEL_RUNNER"] = "1"
+    os.environ["SONAR_ENABLE_V1_MULTIPROCESSING"] = "0"
     # Each case's eager pass compiles exactly the shapes it needs.
-    os.environ.setdefault("APHRODITE_DEEP_GEMM_WARMUP", "skip")
+    os.environ.setdefault("SONAR_DEEP_GEMM_WARMUP", "skip")
     if "RANK" in os.environ:
         return  # Launched by torchrun.
     with socket.socket() as s:
@@ -115,12 +115,12 @@ def _setup_env() -> None:
 
 
 def _make_engine_args(args: argparse.Namespace, cases: list[BenchCase]):
-    from aphrodite.config.compilation import CompilationMode, CUDAGraphMode
+    from sonar.config.compilation import CompilationMode, CUDAGraphMode
 
     engine_args = EngineArgs.from_cli_args(args)
     engine_args.distributed_executor_backend = "external_launcher"
     if engine_args.pipeline_parallel_size > 1:
-        from aphrodite.benchmarks.forward.pipeline import ForwardPipelineExecutor
+        from sonar.benchmarks.forward.pipeline import ForwardPipelineExecutor
 
         engine_args.distributed_executor_backend = ForwardPipelineExecutor
     engine_args.enable_prefix_caching = False
@@ -146,13 +146,13 @@ def run_case(runner, case: BenchCase, args: argparse.Namespace) -> dict[str, Any
             "Set --speculative-config with a sufficient num_speculative_tokens."
         )
 
-    from aphrodite.benchmarks.forward.batch import build_batch
-    from aphrodite.benchmarks.forward.capture import ForwardBench
-    from aphrodite.benchmarks.forward.kv_init import touched_kv_views, zero_kv_blocks
-    from aphrodite.benchmarks.forward.pipeline import PipelineBench
-    from aphrodite.benchmarks.forward.routing import install_routing
+    from sonar.benchmarks.forward.batch import build_batch
+    from sonar.benchmarks.forward.capture import ForwardBench
+    from sonar.benchmarks.forward.kv_init import touched_kv_views, zero_kv_blocks
+    from sonar.benchmarks.forward.pipeline import PipelineBench
+    from sonar.benchmarks.forward.routing import install_routing
 
-    context = runner.aphrodite_config.compilation_config.static_forward_context
+    context = runner.sonar_config.compilation_config.static_forward_context
     kv_caches = {name: getattr(layer, "kv_cache", None) for name, layer in context.items()}
     attn_groups = [group for groups in runner.attn_groups for group in groups]
     kv_config = runner.kv_cache_config
@@ -161,7 +161,7 @@ def run_case(runner, case: BenchCase, args: argparse.Namespace) -> dict[str, Any
     include_drafter = not args.exclude_drafter
     lookahead = (
         runner.num_speculative_steps + 1
-        if include_drafter and runner.aphrodite_config.speculative_config is not None
+        if include_drafter and runner.sonar_config.speculative_config is not None
         else 0
     )
     if lookahead and any(r.kv_len + lookahead > runner.model_config.max_model_len for r in case.requests):
@@ -178,7 +178,7 @@ def run_case(runner, case: BenchCase, args: argparse.Namespace) -> dict[str, Any
     zero_kv_blocks(kv_caches, attn_groups, batch, kv_config.num_blocks)
     profile_prefix = None
     if args.profile_dir:
-        from aphrodite.distributed.parallel_state import get_world_group
+        from sonar.distributed.parallel_state import get_world_group
 
         os.makedirs(args.profile_dir, exist_ok=True)
         rank = get_world_group().rank
@@ -228,9 +228,9 @@ def main(args: argparse.Namespace) -> None:
         raise ValueError("--kv-len-jitter must be in [0, 1).")
     _setup_env()
 
-    from aphrodite import LLM
-    from aphrodite.config import set_current_aphrodite_config
-    from aphrodite.distributed.parallel_state import get_world_group
+    from sonar import LLM
+    from sonar.config import set_current_sonar_config
+    from sonar.distributed.parallel_state import get_world_group
 
     llm = LLM.from_engine_args(_make_engine_args(args, cases))
     runner = llm.llm_engine.model_executor.driver_worker.worker.model_runner
@@ -239,7 +239,7 @@ def main(args: argparse.Namespace) -> None:
     cases = [jitter_kv_lens(c, args.kv_len_jitter, max_kv_len, args.seed) for c in cases]
     world = get_world_group()
     results = []
-    with torch.inference_mode(), set_current_aphrodite_config(runner.aphrodite_config):
+    with torch.inference_mode(), set_current_sonar_config(runner.sonar_config):
         for case in cases:
             result = run_case(runner, case, args)
             gathered: list[Any] = [None] * world.world_size
@@ -264,7 +264,7 @@ def main(args: argparse.Namespace) -> None:
                 flush=True,
             )
             if profile := rank0.get("profile"):
-                from aphrodite.benchmarks.forward.profile import format_summary
+                from sonar.benchmarks.forward.profile import format_summary
 
                 print(
                     f"[forward] {case.name} rank 0 kernels ({profile['summary']}):\n"

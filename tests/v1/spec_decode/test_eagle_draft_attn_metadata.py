@@ -9,10 +9,10 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.config.compilation import CUDAGraphMode
-from aphrodite.v1.worker.gpu.cudagraph_utils import BatchExecutionDescriptor
-from aphrodite.v1.worker.gpu.spec_decode import speculator as base_speculator
-from aphrodite.v1.worker.gpu.spec_decode.eagle.speculator import EagleSpeculator
+from sonar.config.compilation import CUDAGraphMode
+from sonar.v1.worker.gpu.cudagraph_utils import BatchExecutionDescriptor
+from sonar.v1.worker.gpu.spec_decode import speculator as base_speculator
+from sonar.v1.worker.gpu.spec_decode.eagle.speculator import EagleSpeculator
 
 
 def _make_fake_speculator(

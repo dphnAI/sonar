@@ -57,8 +57,8 @@ pub fn utility_call_error(method: &str, error: impl AsReport) -> ApiError {
     ApiError::server_error(format!("failed to call {method}: {}", error.as_report()))
 }
 
-/// Merge `kv_transfer_params` into the `aphrodite_xargs` map, mirroring the Python
-/// Aphrodite behavior where `kv_transfer_params` is injected into `extra_args` for
+/// Merge `kv_transfer_params` into the `sonar_xargs` map, mirroring the Python
+/// Sonar behavior where `kv_transfer_params` is injected into `extra_args` for
 /// engine-core consumption.
 pub fn merge_kv_transfer_params(
     mut xargs: Option<HashMap<String, Value>>,
@@ -75,8 +75,8 @@ pub fn merge_kv_transfer_params(
     xargs
 }
 
-/// Merge `ec_transfer_params` into the `aphrodite_xargs` map, mirroring the
-/// Python Aphrodite behavior where `ec_transfer_params` is injected into
+/// Merge `ec_transfer_params` into the `sonar_xargs` map, mirroring the
+/// Python Sonar behavior where `ec_transfer_params` is injected into
 /// `extra_args` for engine-core consumption.
 pub fn merge_ec_transfer_params(
     mut xargs: Option<HashMap<String, Value>>,
@@ -157,7 +157,7 @@ pub fn resolve_request_context(
         .and_then(|v| v.to_str().ok())
         .and_then(|s| s.trim().parse().ok());
     let priority = headers
-        .get("X-Aphrodite-Priority")
+        .get("X-Sonar-Priority")
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.trim().parse().ok());
 

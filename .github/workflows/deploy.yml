@@ -24,18 +24,18 @@ jobs:
         shell: bash
         run: |
           ./.github/scripts/preserve_wheel_indexes.sh docs/public
-          if [[ ! -f docs/public/nightly/aphrodite-engine/index.html ]]; then
-            mkdir -p docs/public/nightly/aphrodite-engine
+          if [[ ! -f docs/public/nightly/sonar/index.html ]]; then
+            mkdir -p docs/public/nightly/sonar
             printf '%s\n' '<!doctype html><html><body></body></html>' \
-              > docs/public/nightly/aphrodite-engine/index.html
+              > docs/public/nightly/sonar/index.html
           fi
-          mkdir -p docs/public/whl docs/public/simple/aphrodite-engine
+          mkdir -p docs/public/whl docs/public/simple/sonar
           cp \
-            docs/public/nightly/aphrodite-engine/index.html \
+            docs/public/nightly/sonar/index.html \
             docs/public/whl/index.html
           cp \
-            docs/public/nightly/aphrodite-engine/index.html \
-            docs/public/simple/aphrodite-engine/index.html
+            docs/public/nightly/sonar/index.html \
+            docs/public/simple/sonar/index.html
       - name: Install, build, and upload your site
         uses: withastro/action@v3
         with:

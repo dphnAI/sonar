@@ -8,7 +8,7 @@ use winnow::prelude::*;
 use winnow::stream::Partial;
 use winnow::token::literal;
 
-use aphrodite_tokenizer::{DecodedText, DynTokenizer};
+use sonar_tokenizer::{DecodedText, DynTokenizer};
 
 use super::{Result, UnifiedParser, UnifiedParserOutput, token_id};
 use crate::tool::json::{
@@ -426,7 +426,7 @@ mod tests {
     use super::{CONTENT_TEXT, CONTENT_THINKING, END_MESSAGE, InklingUnifiedParser, MESSAGE_MODEL};
     use crate::tool::Tool;
     use crate::unified::{UnifiedParser, UnifiedParserEvent, UnifiedParserOutput};
-    use aphrodite_tokenizer::{DecodedText, TokenAnchor, TokenAttribution, Tokenizer};
+    use sonar_tokenizer::{DecodedText, TokenAnchor, TokenAttribution, Tokenizer};
     use thiserror_ext::AsReport;
 
     struct FakeTokenizer;
@@ -436,11 +436,11 @@ mod tests {
             &self,
             text: &str,
             _add_special_tokens: bool,
-        ) -> aphrodite_tokenizer::Result<Vec<u32>> {
+        ) -> sonar_tokenizer::Result<Vec<u32>> {
             Ok(text.chars().map(u32::from).collect())
         }
 
-        fn encode_ordinary(&self, text: &str) -> aphrodite_tokenizer::Result<Vec<u32>> {
+        fn encode_ordinary(&self, text: &str) -> sonar_tokenizer::Result<Vec<u32>> {
             self.encode(text, false)
         }
 
@@ -448,7 +448,7 @@ mod tests {
             &self,
             token_ids: &[u32],
             _skip_special_tokens: bool,
-        ) -> aphrodite_tokenizer::Result<String> {
+        ) -> sonar_tokenizer::Result<String> {
             Ok(token_ids
                 .iter()
                 .map(|token_id| char::from_u32(*token_id).unwrap_or('\u{FFFD}'))
@@ -847,11 +847,11 @@ mod tests {
                 &self,
                 _text: &str,
                 _add_special_tokens: bool,
-            ) -> aphrodite_tokenizer::Result<Vec<u32>> {
+            ) -> sonar_tokenizer::Result<Vec<u32>> {
                 Ok(vec![])
             }
 
-            fn encode_ordinary(&self, text: &str) -> aphrodite_tokenizer::Result<Vec<u32>> {
+            fn encode_ordinary(&self, text: &str) -> sonar_tokenizer::Result<Vec<u32>> {
                 self.encode(text, false)
             }
 
@@ -859,7 +859,7 @@ mod tests {
                 &self,
                 _token_ids: &[u32],
                 _skip_special_tokens: bool,
-            ) -> aphrodite_tokenizer::Result<String> {
+            ) -> sonar_tokenizer::Result<String> {
                 Ok(String::new())
             }
 

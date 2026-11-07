@@ -20,9 +20,9 @@ from flydsl._mlir.dialects import llvm as _llvm
 from flydsl.expr import const_expr, range_constexpr, rocdl
 from flydsl.expr.typing import Int32, Int64, T
 
-from aphrodite.models.deepseek_v41.amd.mono.common.ops import rsrc, traced
-from aphrodite.models.deepseek_v41.amd.mono.common.sync import Space, sreg
-from aphrodite.models.minimax_m3.amd.specialized_decode.mono.sync import (
+from sonar.models.deepseek_v41.amd.mono.common.ops import rsrc, traced
+from sonar.models.deepseek_v41.amd.mono.common.sync import Space, sreg
+from sonar.models.minimax_m3.amd.specialized_decode.mono.sync import (
     Mailbox,
     cta_sync,
     load_dev,

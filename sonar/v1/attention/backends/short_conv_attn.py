@@ -5,26 +5,26 @@ from typing import Any
 
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.model_executor.layers.mamba.checkpoint import (
+from sonar.config import SonarConfig
+from sonar.model_executor.layers.mamba.checkpoint import (
     MambaPrefillCheckpointBuilder,
     MambaPrefillCheckpointMetadata,
 )
-from aphrodite.utils.torch_utils import async_tensor_h2d
-from aphrodite.v1.attention.backend import (
+from sonar.utils.torch_utils import async_tensor_h2d
+from sonar.v1.attention.backend import (
     AttentionBackend,
     AttentionCGSupport,
     CommonAttentionMetadata,
 )
-from aphrodite.v1.attention.backends.mamba_attn import (
+from sonar.v1.attention.backends.mamba_attn import (
     BaseMambaAttentionMetadata,
     BaseMambaAttentionMetadataBuilder,
 )
-from aphrodite.v1.attention.backends.utils import (
+from sonar.v1.attention.backends.utils import (
     NULL_BLOCK_ID,
     mamba_get_block_table_tensor,
 )
-from aphrodite.v1.kv_cache_interface import MambaSpec
+from sonar.v1.kv_cache_interface import MambaSpec
 
 
 class ShortConvAttentionBackend(AttentionBackend):
@@ -117,15 +117,15 @@ class PleShortConvAttentionMetadataBuilder(ShortConvAttentionMetadataBuilder):
         self,
         kv_cache_spec: MambaSpec,
         layer_names: list[str],
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
     ) -> None:
-        super().__init__(kv_cache_spec, layer_names, aphrodite_config, device)
+        super().__init__(kv_cache_spec, layer_names, sonar_config, device)
         self.num_spec = self.num_spec_tokens
-        self.checkpoint_builder = MambaPrefillCheckpointBuilder(aphrodite_config, kv_cache_spec)
+        self.checkpoint_builder = MambaPrefillCheckpointBuilder(sonar_config, kv_cache_spec)
         self.use_full_cuda_graph = self.compilation_config.cudagraph_mode.has_full_cudagraphs()
 
-        max_num_seqs = aphrodite_config.scheduler_config.max_num_seqs
+        max_num_seqs = sonar_config.scheduler_config.max_num_seqs
         max_capture_size = self.compilation_config.max_cudagraph_capture_size
         self.decode_cudagraph_max_bs = max_num_seqs
         self.decode_cudagraph_max_tokens = max_num_seqs * (self.num_spec + 1)
@@ -253,7 +253,7 @@ class PleShortConvAttentionMetadataBuilder(ShortConvAttentionMetadataBuilder):
             m.block_table_tensor,
             m.seq_lens,
             self.kv_cache_spec,
-            self.aphrodite_config.cache_config.mamba_cache_mode,
+            self.sonar_config.cache_config.mamba_cache_mode,
         )
 
         if query_start_loc.device.type == "cpu":

@@ -6,24 +6,24 @@ from typing import Any
 
 import torch
 
-from aphrodite.model_executor.layers.fused_moe import FusedMoeWeightScaleSupported
-from aphrodite.model_executor.layers.linear import LinearBase
-from aphrodite.model_executor.layers.quantization.online.requantization import (
+from sonar.model_executor.layers.fused_moe import FusedMoeWeightScaleSupported
+from sonar.model_executor.layers.linear import LinearBase
+from sonar.model_executor.layers.quantization.online.requantization import (
     OnlineRequantizationMixin,
 )
-from aphrodite.model_executor.layers.quantization.utils.config_utils import (
+from sonar.model_executor.layers.quantization.utils.config_utils import (
     get_checkpoint_quant_keys,
 )
-from aphrodite.model_executor.layers.quantization.utils.mxfp8_utils import (
+from sonar.model_executor.layers.quantization.utils.mxfp8_utils import (
     MXFP8_BLOCK_SIZE,
     MXFP8_SCALE_DTYPE,
     MXFP8_VALUE_DTYPE,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     kMxfp8Static,
 )
-from aphrodite.model_executor.utils import set_weight_attrs
+from sonar.model_executor.utils import set_weight_attrs
 
 SharedExpertQuantizer = Callable[[torch.Tensor], tuple[torch.Tensor, torch.Tensor]]
 
@@ -73,7 +73,7 @@ class OnlineSharedExpertLoader:
                 0
             ]
         if not self.routed_requantized and target_key is not None and self.stored_key != target_key:
-            from aphrodite.model_executor.layers.quantization.online.base import (
+            from sonar.model_executor.layers.quantization.online.base import (
                 ONLINE_SHARED_EXPERT_QUANTIZERS,
             )
 
@@ -87,7 +87,7 @@ class OnlineSharedExpertLoader:
             # Quantized shared experts are staged, as their weight and scale
             # are needed together to be dequantized.
             self.stages_shared_experts = self.stored_key is not None
-            from aphrodite.model_executor.layers.quantization.online.moe_base import (
+            from sonar.model_executor.layers.quantization.online.moe_base import (
                 OnlineMoEMethodBase,
             )
 
@@ -121,7 +121,7 @@ class OnlineSharedExpertLoader:
         quantized shared experts), which are separate from the routed experts'
         parameters. They are dequantized by ``dequantize_staging``.
         """
-        from aphrodite.model_executor.layers.quantization.online.base import (
+        from sonar.model_executor.layers.quantization.online.base import (
             ONLINE_SHARED_EXPERT_DEQUANTIZERS,
         )
 
@@ -169,7 +169,7 @@ class OnlineSharedExpertLoader:
         w13 = layer.online_w13_weight.data
         w2 = layer.online_w2_weight.data
         if self.stored_key is not None:
-            from aphrodite.model_executor.layers.quantization.online.base import (
+            from sonar.model_executor.layers.quantization.online.base import (
                 ONLINE_SHARED_EXPERT_DEQUANTIZERS,
             )
 

@@ -15,7 +15,7 @@ slots' flags (``polled_tile`` its tiles) before it reads their MID rows. Called
 by the kernel on traced Int32 and by the CPU property test on Python ints.
 """
 
-from aphrodite.models.deepseek_v4.amd.mono.common.plan import cdiv, imin
+from sonar.models.deepseek_v4.amd.mono.common.plan import cdiv, imin
 
 TILE = 16  # picks a pick tile: an MFMA's N
 

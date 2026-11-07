@@ -6,19 +6,19 @@ from typing import Any
 import pytest
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.ec_transfer import ECTransferConfig
-from aphrodite.distributed.ec_transfer.ec_connector.base import (
+from sonar.config import SonarConfig
+from sonar.config.ec_transfer import ECTransferConfig
+from sonar.distributed.ec_transfer.ec_connector.base import (
     ECConnectorBase,
     ECConnectorMetadata,
     ECConnectorRole,
 )
-from aphrodite.platforms import CpuArchEnum, current_platform
-from aphrodite.triton_utils import HAS_TRITON
-from aphrodite.v1.core.sched.output import SchedulerOutput
-from aphrodite.v1.outputs import EMPTY_MODEL_RUNNER_OUTPUT
-from aphrodite.v1.worker.cpu import ec_connector as cpu_ec_connector
-from aphrodite.v1.worker.cpu.ec_connector import (
+from sonar.platforms import CpuArchEnum, current_platform
+from sonar.triton_utils import HAS_TRITON
+from sonar.v1.core.sched.output import SchedulerOutput
+from sonar.v1.outputs import EMPTY_MODEL_RUNNER_OUTPUT
+from sonar.v1.worker.cpu import ec_connector as cpu_ec_connector
+from sonar.v1.worker.cpu.ec_connector import (
     NO_OP_EC_CONNECTOR,
     ActiveECConnector,
 )
@@ -37,8 +37,8 @@ class _ConnectorMetadata(ECConnectorMetadata):
 
 
 class _RecordingECConnector(ECConnectorBase):
-    def __init__(self, aphrodite_config: AphroditeConfig) -> None:
-        super().__init__(aphrodite_config, ECConnectorRole.WORKER)
+    def __init__(self, sonar_config: SonarConfig) -> None:
+        super().__init__(sonar_config, ECConnectorRole.WORKER)
         self.started_save_cache: dict[str, torch.Tensor] | None = None
         self.loaded_cache: dict[str, torch.Tensor] | None = None
         self.saved_hashes: list[str] = []
@@ -84,8 +84,8 @@ class _RecordingECConnector(ECConnectorBase):
         return _ConnectorMetadata()
 
 
-def _config(ec_role: str) -> AphroditeConfig:
-    config = AphroditeConfig()
+def _config(ec_role: str) -> SonarConfig:
+    config = SonarConfig()
     config.ec_transfer_config = ECTransferConfig(
         ec_connector="RecordingECConnector",
         ec_role=ec_role,

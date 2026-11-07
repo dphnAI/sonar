@@ -23,10 +23,10 @@ import torch
 import torch.nn as nn
 from transformers.models.qwen3_vl import Qwen3VLProcessor
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.model_executor.layers.pooler.tokwise import pooler_for_token_embed
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
+from sonar.config import SonarConfig
+from sonar.model_executor.layers.pooler.tokwise import pooler_for_token_embed
+from sonar.model_executor.model_loader.weight_utils import default_weight_loader
+from sonar.multimodal import MULTIMODAL_REGISTRY
 
 from .interfaces import SupportsLateInteraction
 from .interfaces_base import default_pooling_type
@@ -46,7 +46,7 @@ class ColQwen3_5ProcessingInfo(Qwen3_5ProcessingInfo):
     """Processing info for ColQwen3.5 models.
 
     ColQwen3.5 models use custom HuggingFace processors (e.g.
-    ColQwen3_5Processor) that are incompatible with Aphrodite's
+    ColQwen3_5Processor) that are incompatible with Sonar's
     Qwen3VLMultiModalProcessor. We override get_hf_config() and
     get_hf_processor() to skip the strict type check and force the
     standard Qwen3VLProcessor.
@@ -129,25 +129,25 @@ class ColQwen3_5Model(
 
     """
 
-    # Mark this as a pooling model so Aphrodite routes to pooler path
+    # Mark this as a pooling model so Sonar routes to pooler path
     is_pooling_model = True
 
-    # Override hf_to_aphrodite_mapper to handle ColQwen3.5 weight naming.
-    # ColPali saves weights as "language_model.*" but Aphrodite's
+    # Override hf_to_sonar_mapper to handle ColQwen3.5 weight naming.
+    # ColPali saves weights as "language_model.*" but Sonar's
     # Qwen3_5ForCausalLM has them under "language_model.model.*".
-    # Visual weights ("visual.*") already match the Aphrodite module path.
-    hf_to_aphrodite_mapper = WeightsMapper(
+    # Visual weights ("visual.*") already match the Sonar module path.
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={
             "language_model.": "language_model.model.",
             "mtp.": None,
         }
     )
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
-        super().__init__(aphrodite_config=aphrodite_config, prefix=prefix)
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
+        super().__init__(sonar_config=sonar_config, prefix=prefix)
 
-        config = aphrodite_config.model_config.hf_config
-        head_dtype = aphrodite_config.model_config.head_dtype
+        config = sonar_config.model_config.hf_config
+        head_dtype = sonar_config.model_config.head_dtype
 
         hidden_size = getattr(config, "hidden_size", None)
         if hidden_size is None and hasattr(config, "text_config"):
@@ -181,7 +181,7 @@ class ColQwen3_5Model(
         )
         nn.init.zeros_(self.custom_text_proj.bias)
 
-        pooler_config = aphrodite_config.model_config.pooler_config
+        pooler_config = sonar_config.model_config.pooler_config
         assert pooler_config is not None
         self.pooler = pooler_for_token_embed(
             pooler_config,
@@ -228,7 +228,7 @@ class ColQwen3_5Model(
                 model_weights.append((name, weight))
 
         loader = AutoWeightsLoader(self)
-        loaded = loader.load_weights(model_weights, mapper=self.hf_to_aphrodite_mapper)
+        loaded = loader.load_weights(model_weights, mapper=self.hf_to_sonar_mapper)
 
         for name, weight in proj_weights:
             param_name = name.split(".")[-1]

@@ -9,16 +9,16 @@ import torch
 from torch.nn import Module
 
 if TYPE_CHECKING:
-    import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-    from aphrodite.model_executor.layers.fused_moe import (
+    import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+    from sonar.model_executor.layers.fused_moe import (
         FusedMoEParallelConfig,
         FusedMoEQuantConfig,
         RoutedExperts,
     )
 
-from aphrodite.model_executor.kernels.linear import init_mxfp4_linear_kernel
-from aphrodite.model_executor.layers.fused_moe.config import FusedMoEConfig
-from aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 import (
+from sonar.model_executor.kernels.linear import init_mxfp4_linear_kernel
+from sonar.model_executor.layers.fused_moe.config import FusedMoEConfig
+from sonar.model_executor.layers.fused_moe.oracle.mxfp4 import (
     TRITON_BACKENDS,
     Mxfp4MoeBackend,
     convert_weight_to_mxfp4_moe_kernel_format,
@@ -27,17 +27,17 @@ from aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 import (
     mxfp4_round_up_hidden_size_and_intermediate_size,
     select_mxfp4_moe_backend,
 )
-from aphrodite.model_executor.layers.quantization.online.fp8 import (
+from sonar.model_executor.layers.quantization.online.fp8 import (
     OnlineLinearBase,
 )
-from aphrodite.model_executor.layers.quantization.online.moe_base import (
+from sonar.model_executor.layers.quantization.online.moe_base import (
     OnlineMoEMethodBase,
 )
-from aphrodite.model_executor.layers.quantization.utils.mxfp4_utils import (
+from sonar.model_executor.layers.quantization.utils.mxfp4_utils import (
     mxfp4_quantize,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import kMxfp4Dynamic
-from aphrodite.model_executor.utils import replace_parameter
+from sonar.model_executor.layers.quantization.utils.quant_utils import kMxfp4Dynamic
+from sonar.model_executor.utils import replace_parameter
 
 # MXFP4 block size (elements per shared e8m0 scale), same as the checkpoint
 # and MoE oracle paths.

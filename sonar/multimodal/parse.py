@@ -19,9 +19,9 @@ from typing import (
 import numpy as np
 import torch
 
-from aphrodite.inputs import ModalityData, MultiModalDataDict, MultiModalUUIDDict
-from aphrodite.utils.collection_utils import is_list_of
-from aphrodite.utils.import_utils import LazyLoader
+from sonar.inputs import ModalityData, MultiModalDataDict, MultiModalUUIDDict
+from sonar.utils.collection_utils import is_list_of
+from sonar.utils.import_utils import LazyLoader
 
 from .audio import AudioResampler, AudioSpec, normalize_audio
 from .image import convert_image_mode, normalize_image
@@ -59,7 +59,7 @@ else:
 
 class ModalityDataItems(ABC, Generic[_T, _I]):
     """Represents data items for a modality in
-    [`MultiModalDataItems`][aphrodite.multimodal.parse.MultiModalDataItems].
+    [`MultiModalDataItems`][sonar.multimodal.parse.MultiModalDataItems].
     """
 
     def __init__(self, data: _T, modality: str) -> None:
@@ -463,7 +463,7 @@ _D = TypeVar("_D", bound=ModalityDataItems[Any, Any])
 
 
 class MultiModalDataItems(UserDict[str, ModalityDataItems[Any, Any]]):
-    """A normalized [`MultiModalDataDict`][aphrodite.inputs.MultiModalDataDict]
+    """A normalized [`MultiModalDataDict`][sonar.inputs.MultiModalDataDict]
     such that each entry corresponds to a list.
     """
 
@@ -517,8 +517,8 @@ ModalityDataParser: TypeAlias = Callable[[ModalityData[Any]], ModalityDataItems[
 
 
 class MultiModalDataParser:
-    """Parses [`MultiModalDataDict`][aphrodite.inputs.MultiModalDataDict]
-    into [`MultiModalDataItems`][aphrodite.multimodal.parse.MultiModalDataItems].
+    """Parses [`MultiModalDataDict`][sonar.inputs.MultiModalDataDict]
+    into [`MultiModalDataItems`][sonar.multimodal.parse.MultiModalDataItems].
 
     Args:
         target_sr (float, optional): Enables automatic resampling of audio
@@ -837,7 +837,7 @@ class MultiModalDataParser:
 
 MultiModalUUIDItems: TypeAlias = dict[str, Sequence[str | None]]
 """
-A normalized [`MultiModalUUIDDict`][aphrodite.inputs.MultiModalUUIDDict]
+A normalized [`MultiModalUUIDDict`][sonar.inputs.MultiModalUUIDDict]
 such that each entry corresponds to a list.
 """
 

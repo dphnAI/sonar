@@ -240,7 +240,7 @@ async def test_anthropic_server_tool_is_rejected(client: anthropic.AsyncAnthropi
         await client.messages.create(
             model="claude-3-7-sonnet-latest",
             max_tokens=16,
-            messages=[{"role": "user", "content": "What's new in Aphrodite?"}],
+            messages=[{"role": "user", "content": "What's new in Sonar?"}],
             tools=[{"type": "web_search_20250305", "name": "web_search", "max_uses": 8}],
         )
 

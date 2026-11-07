@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Unified Aphrodite parser backed by checkpoint `response_template` metadata."""
+"""Unified Sonar parser backed by checkpoint `response_template` metadata."""
 
 from __future__ import annotations
 
@@ -12,36 +12,36 @@ from typing import TYPE_CHECKING, Any, cast
 
 from openai.types.responses import ToolChoiceCustom, ToolChoiceFunction
 
-from aphrodite.entrypoints.generate.base.protocol import (
+from sonar.entrypoints.generate.base.protocol import (
     DeltaFunctionCall,
     DeltaMessage,
     DeltaToolCall,
     FunctionCall,
 )
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionNamedToolChoiceParam,
 )
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.logger import init_logger
-from aphrodite.parser.abstract_parser import Parser
-from aphrodite.parser.chat_parsing import ResponseParser
-from aphrodite.parser.chat_parsing.response_templates import (
+from sonar.exceptions import SonarValidationError
+from sonar.logger import init_logger
+from sonar.parser.abstract_parser import Parser
+from sonar.parser.chat_parsing import ResponseParser
+from sonar.parser.chat_parsing.response_templates import (
     ResponseTemplate,
     load_response_template,
 )
-from aphrodite.parser.response_template_grammar import message_start_anchors
-from aphrodite.reasoning.abs_reasoning_parsers import ReasoningParser
-from aphrodite.renderers.chat_utils import make_tool_call_id
-from aphrodite.tool_parsers.abstract_tool_parser import ToolParser
-from aphrodite.tool_parsers.utils import iter_response_function_tool_dicts
+from sonar.parser.response_template_grammar import message_start_anchors
+from sonar.reasoning.abs_reasoning_parsers import ReasoningParser
+from sonar.renderers.chat_utils import make_tool_call_id
+from sonar.tool_parsers.abstract_tool_parser import ToolParser
+from sonar.tool_parsers.utils import iter_response_function_tool_dicts
 
 if TYPE_CHECKING:
-    from aphrodite.entrypoints.openai.chat_completion.protocol import (
+    from sonar.entrypoints.openai.chat_completion.protocol import (
         ChatCompletionRequest,
     )
-    from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
-    from aphrodite.tokenizers import TokenizerLike
-    from aphrodite.tool_parsers.abstract_tool_parser import Tool
+    from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
+    from sonar.tokenizers import TokenizerLike
+    from sonar.tool_parsers.abstract_tool_parser import Tool
 
 logger = init_logger(__name__)
 
@@ -631,7 +631,7 @@ class ResponseTemplateParser(Parser):
             and (unsupported := _unsupported_tool_guarantee(request)) is not None
         ):
             guarantee, parameter = unsupported
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 f"response_template parsing cannot guarantee {guarantee} "
                 "without a format-compatible structural grammar",
                 parameter=parameter,

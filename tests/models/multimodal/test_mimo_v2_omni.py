@@ -5,7 +5,7 @@
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 EMBED_DIM = 256
 NUM_HEADS = 4
@@ -43,7 +43,7 @@ def _reference(q, k, v, cu_seqlens, sinks, scale):
 @pytest.mark.skipif(not current_platform.is_cuda(), reason="requires flash-attn")
 @pytest.mark.parametrize("num_kv_heads", [NUM_HEADS, NUM_HEADS // 2])
 def test_window_attention_applies_sinks(vision_attn_env, num_kv_heads):
-    from aphrodite.model_executor.models.mimo_v2_omni import MiMoVisionAttention
+    from sonar.model_executor.models.mimo_v2_omni import MiMoVisionAttention
 
     torch.manual_seed(0)
     attn = MiMoVisionAttention(

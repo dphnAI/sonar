@@ -11,12 +11,12 @@ import pytest
 import torch
 from transformers.models.qwen3_vl import Qwen3VLVideoProcessor
 
-from aphrodite.config import ModelConfig
-from aphrodite.config.multimodal import MultiModalDummyOptions
-from aphrodite.model_executor.models.qwen3_vl import Qwen3VLProcessingInfo
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.cache import MultiModalProcessorOnlyCache
-from aphrodite.multimodal.processing.context import BaseProcessingInfo
+from sonar.config import ModelConfig
+from sonar.config.multimodal import MultiModalDummyOptions
+from sonar.model_executor.models.qwen3_vl import Qwen3VLProcessingInfo
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.cache import MultiModalProcessorOnlyCache
+from sonar.multimodal.processing.context import BaseProcessingInfo
 
 from ...registry import HF_EXAMPLE_MODELS
 from ...utils import build_model_context
@@ -24,7 +24,7 @@ from ...utils import build_model_context
 MODEL_ID = "Qwen/Qwen3-VL-4B-Instruct"
 
 
-def test_qwen3_video_routing_schema_adds_aphrodite_compatibility_kwargs(
+def test_qwen3_video_routing_schema_adds_sonar_compatibility_kwargs(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     native_video_kwargs = set(Qwen3VLVideoProcessor.valid_kwargs.__annotations__)

@@ -6,23 +6,23 @@ from typing import TYPE_CHECKING
 
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.quantization.utils.flashinfer_utils import (
+import sonar.envs as envs
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.quantization.utils.flashinfer_utils import (
     align_fp4_moe_hidden_dim_for_fi,
     align_fp4_moe_weights_for_fi,
 )
-from aphrodite.model_executor.layers.quantization.utils.nvfp4_utils import (
+from sonar.model_executor.layers.quantization.utils.nvfp4_utils import (
     swizzle_blockscale,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     amax_for_moe_activation_quant,
 )
 
 if TYPE_CHECKING:
-    from aphrodite.model_executor.layers.fused_moe import RoutedExperts
-    from aphrodite.model_executor.layers.fused_moe.oracle.nvfp4 import (
+    from sonar.model_executor.layers.fused_moe import RoutedExperts
+    from sonar.model_executor.layers.fused_moe.oracle.nvfp4 import (
         NvFp4MoeBackend,
     )
 
@@ -230,7 +230,7 @@ def prepare_nvfp4_moe_layer_for_flashinfer_cutedsl(
         w13_scale = interleave_linear_and_gate(w13_scale, group_size=64, dim=1)
 
     # Shard after interleaving and before scale swizzling.
-    from aphrodite.distributed.localization import get_localized_resources
+    from sonar.distributed.localization import get_localized_resources
 
     _localized_resources = get_localized_resources()
     # FlashInfer's localized half-GEMM requires a gated activation.
@@ -241,7 +241,7 @@ def prepare_nvfp4_moe_layer_for_flashinfer_cutedsl(
 
         # Free originals before memory profiling so reclaimed storage is available
         # for KV cache. Retain shape metadata; EPLB uses the registered shards.
-        if envs.APHRODITE_FLASHINFER_CUTEDSL_MOE_LOCALIZE_FREE_FULL_WEIGHTS:
+        if envs.SONAR_FLASHINFER_CUTEDSL_MOE_LOCALIZE_FREE_FULL_WEIGHTS:
             # Surface asynchronous sharding errors before releasing source storage.
             torch.accelerator.synchronize()
             freed = 0
@@ -435,13 +435,13 @@ def prepare_nvfp4_moe_layer_for_fi_or_cutlass(
     torch.Tensor,
 ]:
     # Delayed import for circular dependency avoidance.
-    from aphrodite.model_executor.layers.fused_moe.oracle.nvfp4 import (
+    from sonar.model_executor.layers.fused_moe.oracle.nvfp4 import (
         NvFp4MoeBackend,
         is_global_sf_supported_for_nvfp4_backend,
     )
 
     assert backend in [
-        NvFp4MoeBackend.APHRODITE_CUTLASS,
+        NvFp4MoeBackend.SONAR_CUTLASS,
         NvFp4MoeBackend.FLASHINFER_CUTLASS,
         NvFp4MoeBackend.FLASHINFER_TRTLLM,
         NvFp4MoeBackend.FLASHINFER_CUTEDSL_BATCHED,

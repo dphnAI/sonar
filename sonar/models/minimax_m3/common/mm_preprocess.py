@@ -10,19 +10,19 @@ import torch
 from transformers import BatchFeature
 from transformers.video_utils import VideoMetadata
 
-from aphrodite.config.multimodal import (
+from sonar.config.multimodal import (
     MultiModalDummyOptions,
 )
-from aphrodite.inputs import MultiModalDataDict
-from aphrodite.multimodal.inputs import (
+from sonar.inputs import MultiModalDataDict
+from sonar.multimodal.inputs import (
     MultiModalFieldConfig,
     MultiModalKwargsItems,
 )
-from aphrodite.multimodal.parse import (
+from sonar.multimodal.parse import (
     ImageSize,
     MultiModalDataItems,
 )
-from aphrodite.multimodal.processing import (
+from sonar.multimodal.processing import (
     BaseDummyInputsBuilder,
     BaseMultiModalProcessor,
     BaseProcessingInfo,
@@ -30,16 +30,16 @@ from aphrodite.multimodal.processing import (
     PromptUpdate,
     PromptUpdateDetails,
 )
-from aphrodite.multimodal.processing.processor import HFMultiModalInputs
-from aphrodite.multimodal.video import (
+from sonar.multimodal.processing.processor import HFMultiModalInputs
+from sonar.multimodal.video import (
     VIDEO_LOADER_REGISTRY,
     VideoBackend,
     VideoDecoderBackend,
     VideoSourceMetadata,
     VideoTargetMetadata,
 )
-from aphrodite.transformers_utils.configs.minimax_m3 import MiniMaxM3Config
-from aphrodite.transformers_utils.processors.minimax_m3 import (
+from sonar.transformers_utils.configs.minimax_m3 import MiniMaxM3Config
+from sonar.transformers_utils.processors.minimax_m3 import (
     MiniMaxM3VLImageProcessor,
     MiniMaxM3VLVideoProcessor,
     MiniMaxVLProcessor,
@@ -343,7 +343,7 @@ class MiniMaxM3VLMultiModalProcessor(BaseMultiModalProcessor[MiniMaxM3VLProcessi
         hf_data: Mapping[str, object],
         hf_kwargs: Mapping[str, object],
     ) -> BatchFeature:
-        # Override the video processor's default for Aphrodite's raw-frame inputs.
+        # Override the video processor's default for Sonar's raw-frame inputs.
         merged = dict(do_resize=True, **hf_kwargs)
         return self.info.ctx.call_hf_processor(
             self.info.get_hf_processor(**hf_kwargs),

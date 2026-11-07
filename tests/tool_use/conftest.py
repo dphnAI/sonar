@@ -4,8 +4,8 @@
 import pytest
 import pytest_asyncio
 
-from aphrodite.platforms import current_platform
-from aphrodite.transformers_utils.repo_utils import hf_api
+from sonar.platforms import current_platform
+from sonar.transformers_utils.repo_utils import hf_api
 from tests.utils import RemoteOpenAIServer
 
 from .utils import ARGS, CONFIGS, ServerConfig

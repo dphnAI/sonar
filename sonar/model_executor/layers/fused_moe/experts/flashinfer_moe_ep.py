@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """FlashInfer MoE-EP megakernels as a modular-kernel experts implementation.
 
-The megakernel routes on Aphrodite's top-k output and then dispatches, computes and
+The megakernel routes on Sonar's top-k output and then dispatches, computes and
 combines in one launch, so it is paired with a pass-through prepare/finalize.
 """
 
@@ -12,14 +12,14 @@ from typing import TYPE_CHECKING
 
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.config import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEParallelConfig,
     FusedMoEQuantConfig,
 )
-from aphrodite.model_executor.layers.fused_moe.flashinfer_moe_ep import (
+from sonar.model_executor.layers.fused_moe.flashinfer_moe_ep import (
     FlashInferMoeEp,
     FlashInferMoeEpEpilogue,
     FlashInferMoeEpWeights,
@@ -28,10 +28,10 @@ from aphrodite.model_executor.layers.fused_moe.flashinfer_moe_ep import (
     supports_current_device,
     validate_flashinfer_moe_ep_layer,
 )
-from aphrodite.model_executor.layers.fused_moe.topk_weight_and_reduce import (
+from sonar.model_executor.layers.fused_moe.topk_weight_and_reduce import (
     TopKWeightAndReduceNoOP,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     kMxfp4Static,
     kNvfp4Static,

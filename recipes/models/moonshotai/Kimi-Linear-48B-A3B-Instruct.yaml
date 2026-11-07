@@ -27,8 +27,8 @@ model:
   base_env: {}
 
 dependencies:
-  - note: "Pin aphrodite==0.11.2 — 0.12.0 has a known Kimi-Linear regression"
-    command: "uv pip install aphrodite-engine==0.11.2 --torch-backend auto"
+  - note: "Pin sonar==0.11.2 — 0.12.0 has a known Kimi-Linear regression"
+    command: "uv pip install sonar==0.11.2 --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130"
 
 features: {}
 
@@ -66,7 +66,7 @@ guide: |
   ## Prerequisites
 
   - **Hardware**: 4 or 8 GPUs on a single node
-  - **Aphrodite**: `0.11.2` recommended. Avoid Aphrodite `0.12.0`, which has a known bug
+  - **Sonar**: `0.11.2` recommended. Avoid Sonar `0.12.0`, which has a known bug
     `MLAModules.__init__() missing 1 required positional argument: 'indexer_rotary_emb'`
     that affects Kimi-Linear.
 
@@ -74,7 +74,7 @@ guide: |
   uv venv
   source .venv/bin/activate
   # Install a stable version (avoid 0.12.0)
-  uv pip install aphrodite-engine==0.11.2 --torch-backend auto
+  uv pip install sonar==0.11.2 --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   ```
 
   ### AMD ROCm
@@ -85,7 +85,7 @@ guide: |
   ```bash
   uv venv --python 3.12
   source .venv/bin/activate
-  uv pip install aphrodite-engine==0.11.2 --extra-index-url https://wheels.vllm.ai/rocm/
+  uv pip install sonar==0.11.2 --index-strategy first-index --extra-index-url https://sonar.dphn.ai/whl/release/rocm/x86_64/simple
   ```
 
   ## Running Kimi-Linear
@@ -95,7 +95,7 @@ guide: |
   ### 4-GPU Tensor Parallel
 
   ```bash
-  aphrodite serve moonshotai/Kimi-Linear-48B-A3B-Instruct \
+  sonar serve moonshotai/Kimi-Linear-48B-A3B-Instruct \
     --port 8000 \
     --tensor-parallel-size 4 \
     --max-model-len 1048576 \
@@ -105,7 +105,7 @@ guide: |
   ### 8-GPU Tensor Parallel
 
   ```bash
-  aphrodite serve moonshotai/Kimi-Linear-48B-A3B-Instruct \
+  sonar serve moonshotai/Kimi-Linear-48B-A3B-Instruct \
     --port 8000 \
     --tensor-parallel-size 8 \
     --max-model-len 1048576 \
@@ -116,7 +116,7 @@ guide: |
 
   ```bash
   export SAFETENSORS_FAST_GPU=1
-  aphrodite serve moonshotai/Kimi-Linear-48B-A3B-Instruct \
+  sonar serve moonshotai/Kimi-Linear-48B-A3B-Instruct \
     --tensor-parallel-size 8 \
     --max-model-len auto \
     --trust-remote-code
@@ -138,7 +138,7 @@ guide: |
   ## Troubleshooting
 
   - **`MLAModules.__init__() missing 1 required positional argument: 'indexer_rotary_emb'`**:
-    Known bug in Aphrodite 0.12.0 affecting Kimi-Linear. Pin to `aphrodite==0.11.2` instead.
+    Known bug in Sonar 0.12.0 affecting Kimi-Linear. Pin to `sonar==0.11.2` instead.
   - **OOM**: Reduce `--max-model-len` or increase `--gpu-memory-utilization` up to 0.95.
 
   ## References

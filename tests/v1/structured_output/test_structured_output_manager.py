@@ -10,23 +10,23 @@ import numpy as np
 import pytest
 from transformers import AutoTokenizer
 
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.config import (
     DeviceConfig,
     SchedulerConfig,
+    SonarConfig,
     StructuredOutputsConfig,
 )
-from aphrodite.config.model import ModelConfig
-from aphrodite.config.speculative import SpeculativeConfig
-from aphrodite.config.structured_outputs import StructuredOutputsBackend
-from aphrodite.parser.engine.adapters import ParserEngineReasoningAdapter
-from aphrodite.parser.engine.parser_engine import ReasoningEnd
-from aphrodite.sampling_params import SamplingParams, StructuredOutputsParams
-from aphrodite.v1.request import Request
-from aphrodite.v1.structured_output import StructuredOutputManager
-from aphrodite.v1.structured_output.backend_outlines import OutlinesBackend, OutlinesGrammar
-from aphrodite.v1.structured_output.backend_xgrammar import XgrammarBackend
-from aphrodite.v1.structured_output.request import get_structured_output_key
+from sonar.config.model import ModelConfig
+from sonar.config.speculative import SpeculativeConfig
+from sonar.config.structured_outputs import StructuredOutputsBackend
+from sonar.parser.engine.adapters import ParserEngineReasoningAdapter
+from sonar.parser.engine.parser_engine import ReasoningEnd
+from sonar.sampling_params import SamplingParams, StructuredOutputsParams
+from sonar.v1.request import Request
+from sonar.v1.structured_output import StructuredOutputManager
+from sonar.v1.structured_output.backend_outlines import OutlinesBackend, OutlinesGrammar
+from sonar.v1.structured_output.backend_xgrammar import XgrammarBackend
+from sonar.v1.structured_output.request import get_structured_output_key
 
 TOKENIZER = "gpt2"
 THINK_END = "\n"  # reasoning-end marker (single GPT-2 token)
@@ -131,7 +131,7 @@ def _build_harness(
     structured_outputs: StructuredOutputsParams | None = None,
     num_spec_tokens: int = NUM_SPEC_TOKENS,
 ) -> tuple[StructuredOutputManager, Request]:
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         model_config=ModelConfig(tokenizer=TOKENIZER),
         device_config=DeviceConfig(device="cpu"),
         structured_outputs_config=StructuredOutputsConfig(
@@ -145,7 +145,7 @@ def _build_harness(
         if num_spec_tokens
         else None,
     )
-    manager = StructuredOutputManager(aphrodite_config)
+    manager = StructuredOutputManager(sonar_config)
     if use_reasoner:
         manager.reasoner_cls = MockReasoner
 
@@ -669,7 +669,7 @@ def test_outlines_termination(tokenizer):
 def test_outlines_choice_with_non_bmp_characters(tokenizer):
     """The choice spec is JSON, which encodes emoji as surrogate pairs."""
     choices = ["😀 yes", "no"]
-    backend = OutlinesBackend(AphroditeConfig(), tokenizer=tokenizer, vocab_size=len(tokenizer))
+    backend = OutlinesBackend(SonarConfig(), tokenizer=tokenizer, vocab_size=len(tokenizer))
     request_type, grammar_spec = get_structured_output_key(StructuredOutputsParams(choice=choices))
 
     grammar = backend.compile_grammar(request_type, grammar_spec)
@@ -680,7 +680,7 @@ def test_outlines_choice_with_non_bmp_characters(tokenizer):
 def test_xgrammar_compiles_choice_without_rewrite(tokenizer):
     """Frontends that skip Python request validation send `choice` as is."""
     choices = ["yes", "no\nplease"]
-    backend = XgrammarBackend(AphroditeConfig(), tokenizer=tokenizer, vocab_size=len(tokenizer))
+    backend = XgrammarBackend(SonarConfig(), tokenizer=tokenizer, vocab_size=len(tokenizer))
     request_type, grammar_spec = get_structured_output_key(StructuredOutputsParams(choice=choices))
 
     def accepts(text: str) -> bool:
@@ -740,7 +740,7 @@ def test_clear_backend_waits_for_running_grammar_and_cancels_pending(tokenizer, 
 def test_clear_backend_without_grammar(skip_tokenizer_init, max_num_seqs):
     """Stop initialized thread pools even if no request needed a backend."""
     manager = StructuredOutputManager(
-        AphroditeConfig(
+        SonarConfig(
             model_config=ModelConfig(tokenizer=TOKENIZER, skip_tokenizer_init=skip_tokenizer_init),
             scheduler_config=SchedulerConfig(
                 max_num_seqs=max_num_seqs,

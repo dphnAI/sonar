@@ -2,16 +2,16 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import torch
 
-from aphrodite.triton_utils import tl, tldevice, triton
-from aphrodite.v1.spec_decode.fly import compute_fly_entropy
-from aphrodite.v1.worker.gpu.sample.gumbel import (
+from sonar.triton_utils import tl, tldevice, triton
+from sonar.v1.spec_decode.fly import compute_fly_entropy
+from sonar.v1.worker.gpu.sample.gumbel import (
     gumbel_block_argmax,
     spec_step_seed,
     tl_rand32,
 )
-from aphrodite.v1.worker.gpu.sample.vocab_parallel import VocabShard
-from aphrodite.v1.worker.gpu.sample.watermark import philox_gumbel_block_argmax
-from aphrodite.v1.worker.gpu.spec_decode.draft_logits import (
+from sonar.v1.worker.gpu.sample.vocab_parallel import VocabShard
+from sonar.v1.worker.gpu.sample.watermark import philox_gumbel_block_argmax
+from sonar.v1.worker.gpu.spec_decode.draft_logits import (
     DraftLogitsCache,
     draft_logits_row,
 )

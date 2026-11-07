@@ -9,17 +9,17 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 
-from aphrodite.distributed import get_tensor_model_parallel_world_size
-from aphrodite.model_executor.warmup.jit_warmup import (
-    AphroditeJitKernel,
+from sonar.distributed import get_tensor_model_parallel_world_size
+from sonar.model_executor.warmup.jit_warmup import (
+    SonarJitKernel,
     WarmupIntRange,
     zip_inputs,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import kv_cache_dtype_str_to_dtype
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import kv_cache_dtype_str_to_dtype
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
+    from sonar.config import SonarConfig
 
 
 def bucket_max_seqlen_q(max_seqlen_q: int) -> int:
@@ -39,7 +39,7 @@ def _get_score_mod(rel_extent: int) -> Callable:
     import cutlass.cute as cute
     from cutlass.cute import Float32
 
-    from aphrodite.vllm_flash_attn.cute.seqlen_info import SeqlenInfoQK
+    from sonar.vllm_flash_attn.cute.seqlen_info import SeqlenInfoQK
 
     @cute.jit
     def score_mod_rel_bias(
@@ -112,7 +112,7 @@ def _num_warps_bucket(num_reqs: int) -> int:
     return 1 << (num_warps - 1).bit_length()
 
 
-class InklingFA4RelAttentionKernel(AphroditeJitKernel["InklingFA4RelAttentionKernel.CompileKey"]):
+class InklingFA4RelAttentionKernel(SonarJitKernel["InklingFA4RelAttentionKernel.CompileKey"]):
     @dataclass(frozen=True)
     class CompileKey:
         is_local: bool
@@ -164,14 +164,14 @@ class InklingFA4RelAttentionKernel(AphroditeJitKernel["InklingFA4RelAttentionKer
         rel_logits = rel_logits.contiguous()
         flash_attn_varlen_func: Callable[..., Any]
         if _use_sheared_bias():
-            from aphrodite.third_party.tml_fa4 import (
+            from sonar.third_party.tml_fa4 import (
                 flash_attn_varlen_func as tml_flash_attn_varlen_func,
             )
 
             flash_attn_varlen_func = tml_flash_attn_varlen_func
             bias_kwargs: dict[str, Any] = {"rel_bias": rel_logits}
         else:
-            from aphrodite.vllm_flash_attn.cute import (
+            from sonar.vllm_flash_attn.cute import (
                 flash_attn_varlen_func as cute_flash_attn_varlen_func,
             )
 
@@ -251,23 +251,23 @@ class InklingFA4RelAttentionKernel(AphroditeJitKernel["InklingFA4RelAttentionKer
     ) -> bool:
         return query_len + num_reqs <= max_num_batched_tokens + 1
 
-    def get_warmup_keys(self, aphrodite_config: AphroditeConfig) -> list[CompileKey]:
-        max_num_reqs = aphrodite_config.scheduler_config.max_num_seqs
-        max_num_batched_tokens = aphrodite_config.scheduler_config.max_num_batched_tokens
+    def get_warmup_keys(self, sonar_config: SonarConfig) -> list[CompileKey]:
+        max_num_reqs = sonar_config.scheduler_config.max_num_seqs
+        max_num_batched_tokens = sonar_config.scheduler_config.max_num_batched_tokens
         if max_num_reqs <= 0 or max_num_batched_tokens <= 0:
             return []
 
-        hf_config = aphrodite_config.model_config.hf_config
+        hf_config = sonar_config.model_config.hf_config
         get_text_config = getattr(hf_config, "get_text_config", None)
         config = get_text_config() if callable(get_text_config) else hf_config
 
         tp_size = get_tensor_model_parallel_world_size()
-        dtype = aphrodite_config.model_config.dtype
+        dtype = sonar_config.model_config.dtype
         kv_dtype = kv_cache_dtype_str_to_dtype(
-            aphrodite_config.cache_config.cache_dtype,
-            aphrodite_config.model_config,
+            sonar_config.cache_config.cache_dtype,
+            sonar_config.model_config,
         )
-        block_size = aphrodite_config.cache_config.block_size
+        block_size = sonar_config.cache_config.block_size
         local_extent = config.sliding_window_size
 
         global_num_kv_heads = config.num_key_value_heads
@@ -295,7 +295,7 @@ class InklingFA4RelAttentionKernel(AphroditeJitKernel["InklingFA4RelAttentionKer
                     kv_dtype=kv_dtype,
                     block_size=block_size,
                     window_size=(-1, -1),
-                    max_kv_len=aphrodite_config.model_config.max_model_len,
+                    max_kv_len=sonar_config.model_config.max_model_len,
                 ),
                 dict(
                     is_local=True,

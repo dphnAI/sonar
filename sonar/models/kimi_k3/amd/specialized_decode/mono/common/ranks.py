@@ -8,7 +8,7 @@ all-reduce's sum of the ranks' partials. ``tp`` is a build-time constant."""
 
 from flydsl.expr import range_constexpr
 
-from aphrodite.models.kimi_k3.amd.specialized_decode.mono.common.ops import (
+from sonar.models.kimi_k3.amd.specialized_decode.mono.common.ops import (
     bf2_f32,
     load_ptr64,
 )

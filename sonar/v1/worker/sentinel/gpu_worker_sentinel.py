@@ -6,8 +6,8 @@ from typing import TYPE_CHECKING, cast
 import torch
 from torch.distributed import TCPStore
 
-from aphrodite.config import set_current_aphrodite_config
-from aphrodite.distributed import (
+from sonar.config import set_current_sonar_config
+from sonar.distributed import (
     get_dp_group,
     get_ep_group,
     get_eplb_group,
@@ -16,20 +16,20 @@ from aphrodite.distributed import (
     stateless_destroy_torch_distributed_process_group,
     stateless_init_torch_distributed_process_group,
 )
-from aphrodite.distributed.eplb.eplb_state import _commit_eplb_maps
-from aphrodite.distributed.utils import (
+from sonar.distributed.eplb.eplb_state import _commit_eplb_maps
+from sonar.distributed.utils import (
     allocate_group_ports,
     enter_steady_state,
     fetch_group_ports,
     get_cached_tcp_store_client,
     set_gloo_backend_timeout,
 )
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe.all2all_utils import get_ep_all2all_manager
-from aphrodite.utils.network_utils import get_ip
-from aphrodite.v1.fault_tolerance.utils import FaultToleranceRequest
-from aphrodite.v1.serial_utils import run_method
-from aphrodite.v1.worker.sentinel.eplb_redistribute import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe.all2all_utils import get_ep_all2all_manager
+from sonar.utils.network_utils import get_ip
+from sonar.v1.fault_tolerance.utils import FaultToleranceRequest
+from sonar.v1.serial_utils import run_method
+from sonar.v1.worker.sentinel.eplb_redistribute import (
     compute_dead_ep_ranks,
     mark_dead_expert_slots_inplace,
     redistribute_expert_placement,
@@ -38,9 +38,9 @@ from aphrodite.v1.worker.sentinel.eplb_redistribute import (
 )
 
 if TYPE_CHECKING:
-    from aphrodite.distributed.parallel_state import GroupCoordinator
-    from aphrodite.v1.worker.gpu.model_runner import GPUModelRunner as GPUModelRunnerV2
-    from aphrodite.v1.worker.gpu_worker import Worker
+    from sonar.distributed.parallel_state import GroupCoordinator
+    from sonar.v1.worker.gpu.model_runner import GPUModelRunner as GPUModelRunnerV2
+    from sonar.v1.worker.gpu_worker import Worker
 
 logger = init_logger(__name__)
 
@@ -97,7 +97,7 @@ class WorkerSentinel:
             )
         # Recover registered draft experts: until draft reload is supported,
         # reject MoE drafts before serving rather than leaving stale EP mappings.
-        spec_config = worker.aphrodite_config.speculative_config
+        spec_config = worker.sonar_config.speculative_config
         if (
             spec_config is not None
             and spec_config.draft_model_config is not None
@@ -106,12 +106,12 @@ class WorkerSentinel:
             raise ValueError("Fault tolerance does not support MoE draft models yet.")
         if worker.parallel_config.prefill_context_parallel_size > 1:
             raise ValueError("Fault tolerance does not support PCP yet.")
-        if not worker.aphrodite_config.use_v2_model_runner:
-            raise ValueError("Fault tolerance requires the v2 model runner (APHRODITE_USE_V2_MODEL_RUNNER=1).")
+        if not worker.sonar_config.use_v2_model_runner:
+            raise ValueError("Fault tolerance requires the v2 model runner (SONAR_USE_V2_MODEL_RUNNER=1).")
 
     def handle_command(self, ft_request: FaultToleranceRequest):
         """Dispatch an FT command by instruction name."""
-        with set_current_aphrodite_config(self.worker.aphrodite_config):
+        with set_current_sonar_config(self.worker.sonar_config):
             return run_method(self, ft_request.instruction, (ft_request,), {})
 
     def activate_cpu_group_timeouts(self, ft_request: FaultToleranceRequest):
@@ -267,7 +267,7 @@ class WorkerSentinel:
         if reassignments:
             reload_experts_from_disk(
                 model_runner.model,
-                self.worker.aphrodite_config,
+                self.worker.sonar_config,
                 reassignments,
                 p2l,
             )

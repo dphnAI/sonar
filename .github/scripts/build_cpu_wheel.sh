@@ -6,7 +6,7 @@ set -euo pipefail
 output_dir="${1:?usage: build_cpu_wheel.sh OUTPUT_DIR}"
 python_version="${PYTHON_VERSION:-3.13}"
 target_platform="${TARGET_PLATFORM:-linux/$(uname -m)}"
-version="${APHRODITE_VERSION_OVERRIDE:-}"
+version="${SONAR_VERSION_OVERRIDE:-}"
 cache_scope="${CACHE_SCOPE:-}"
 max_jobs="${MAX_JOBS:-4}"
 dockerfile="${CPU_BUILD_DOCKERFILE:-docker/Dockerfile.cpu}"
@@ -16,10 +16,10 @@ rm -f "$output_dir"/*.whl
 
 args=(
   --file "$dockerfile"
-  --target aphrodite-wheel-export
+  --target sonar-wheel-export
   --output "type=local,dest=${output_dir}"
   --build-arg "PYTHON_VERSION=${python_version}"
-  --build-arg "APHRODITE_VERSION_OVERRIDE=${version}"
+  --build-arg "SONAR_VERSION_OVERRIDE=${version}"
   --build-arg "MAX_JOBS=${max_jobs}"
 )
 

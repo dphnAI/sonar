@@ -7,63 +7,63 @@ from typing import Any, cast
 import torch
 from torch import nn
 
-from aphrodite import envs
-from aphrodite.config import AphroditeConfig, CacheConfig
-from aphrodite.distributed import (
+from sonar import envs
+from sonar.config import CacheConfig, SonarConfig
+from sonar.distributed import (
     get_pp_group,
     get_tensor_model_parallel_world_size,
 )
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.activation import SiluAndMul, SituAndMul
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.activation import SiluAndMul, SituAndMul
+from sonar.model_executor.layers.fused_moe import (
     FusedMoEFactory,
     fused_moe_make_expert_params_mapping,
 )
-from aphrodite.model_executor.layers.fused_moe.router.gate_linear import GateLinear
-from aphrodite.model_executor.layers.fusion.quant_activation import (
+from sonar.model_executor.layers.fused_moe.router.gate_linear import GateLinear
+from sonar.model_executor.layers.fusion.quant_activation import (
     QuantizedActivation,
     get_input_quant_key,
 )
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     KimiK3MergedQKVGateLinear,
     MergedColumnParallelLinear,
     ReplicatedLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.mamba.gdn.kimi_gdn_linear_attn import (
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.mamba.gdn.kimi_gdn_linear_attn import (
     KimiGatedDeltaNetAttention as KimiLinearGatedDeltaNetAttention,
 )
-from aphrodite.model_executor.layers.mamba.mamba_utils import (
+from sonar.model_executor.layers.mamba.mamba_utils import (
     MambaStateCopyFunc,
     MambaStateCopyFuncCalculator,
     MambaStateDtypeCalculator,
     MambaStateShapeCalculator,
 )
-from aphrodite.model_executor.layers.mla import MLAModules
-from aphrodite.model_executor.layers.quantization.base_config import QuantizationConfig
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.mla import MLAModules
+from sonar.model_executor.layers.quantization.base_config import QuantizationConfig
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     kFp8DynamicTokenSym,
 )
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.model_loader.weight_utils import (
+from sonar.model_executor.model_loader.weight_utils import (
     default_weight_loader,
     maybe_remap_kv_scale_name,
 )
-from aphrodite.model_executor.models.interfaces import (
+from sonar.model_executor.models.interfaces import (
     EagleModelMixin,
     HasInnerState,
     IsHybrid,
     MixtureOfExperts,
     SupportsPP,
 )
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.models.utils import (
     AutoWeightsLoader,
     PPMissingLayer,
     get_spec_layer_idx_from_weight_name,
@@ -71,17 +71,17 @@ from aphrodite.model_executor.models.utils import (
     make_layers,
     maybe_prefix,
 )
-from aphrodite.models.kimi_k3.amd.kda import KimiK3DeltaAttention
-from aphrodite.models.kimi_k3.amd.latent_moe_runner import ROCmLatentMoERunner
-from aphrodite.models.kimi_k3.amd.mla import KimiK3MultiHeadLatentAttentionWrapper
-from aphrodite.models.kimi_k3.amd.ops.attn_res import attn_res
-from aphrodite.models.kimi_k3.amd.specialized_decode.hooks import SpecializedDecodeMixin
-from aphrodite.models.kimi_k3.amd.specialized_decode.runtime import (
+from sonar.models.kimi_k3.amd.kda import KimiK3DeltaAttention
+from sonar.models.kimi_k3.amd.latent_moe_runner import ROCmLatentMoERunner
+from sonar.models.kimi_k3.amd.mla import KimiK3MultiHeadLatentAttentionWrapper
+from sonar.models.kimi_k3.amd.ops.attn_res import attn_res
+from sonar.models.kimi_k3.amd.specialized_decode.hooks import SpecializedDecodeMixin
+from sonar.models.kimi_k3.amd.specialized_decode.runtime import (
     specialized_decode_config,
 )
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.transformers_utils.configs.kimi_linear import KimiLinearConfig
-from aphrodite.utils.math_utils import cdiv
+from sonar.sequence import IntermediateTensors
+from sonar.transformers_utils.configs.kimi_linear import KimiLinearConfig
+from sonar.utils.math_utils import cdiv
 
 logger = init_logger(__name__)
 
@@ -166,7 +166,7 @@ def _apply_attn_res(
     block_write_idx: int = -1,
     quant_key: QuantKey | None = None,
 ) -> torch.Tensor | QuantizedActivation:
-    fuse_quant = quant_key == kFp8DynamicTokenSym and not envs.APHRODITE_BATCH_INVARIANT
+    fuse_quant = quant_key == kFp8DynamicTokenSym and not envs.SONAR_BATCH_INVARIANT
     result = attn_res(
         prefix_sum,
         delta,
@@ -502,7 +502,7 @@ class KimiDecoderLayer(nn.Module):
     def __init__(
         self,
         config: KimiLinearConfig,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
     ) -> None:
         super().__init__()
@@ -511,9 +511,9 @@ class KimiDecoderLayer(nn.Module):
 
         self.is_moe = config.is_moe
         layer_idx = self.layer_idx
-        model_config = aphrodite_config.model_config
-        cache_config = aphrodite_config.cache_config
-        quant_config = aphrodite_config.quant_config
+        model_config = sonar_config.model_config
+        cache_config = sonar_config.cache_config
+        quant_config = sonar_config.quant_config
 
         if config.is_kda_layer(layer_idx):
             # Kimi-K3 sets use_full_rank_gate and uses the ROCm-specific K3 KDA
@@ -523,13 +523,13 @@ class KimiDecoderLayer(nn.Module):
             if kda_config.get("use_full_rank_gate", False):
                 self.self_attn = KimiK3DeltaAttention(
                     config,
-                    aphrodite_config,
+                    sonar_config,
                     prefix=f"{prefix}.self_attn",
                 )
             else:
                 self.self_attn = KimiLinearGatedDeltaNetAttention(
                     config,
-                    aphrodite_config,
+                    sonar_config,
                     prefix=f"{prefix}.self_attn",
                 )
         else:
@@ -700,10 +700,10 @@ class KimiDecoderLayer(nn.Module):
 
 
 class KimiLinearModel(nn.Module, EagleModelMixin):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_text_config
+        config = sonar_config.model_config.hf_text_config
         self.config = config
 
         self.vocab_size = config.vocab_size
@@ -720,7 +720,7 @@ class KimiLinearModel(nn.Module, EagleModelMixin):
         def get_layer(prefix: str):
             return KimiDecoderLayer(
                 config,
-                aphrodite_config,
+                sonar_config,
                 prefix,
             )
 
@@ -1007,17 +1007,17 @@ class KimiLinearForCausalLM(
     IsHybrid,
     SpecializedDecodeMixin,
 ):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         # raises for an unsupported deployment before any weight is allocated
-        decode_config = specialized_decode_config(aphrodite_config)
+        decode_config = specialized_decode_config(sonar_config)
         super().__init__()
         self.init_specialized_decode(decode_config)
-        self.model_config = aphrodite_config.model_config
-        self.aphrodite_config = aphrodite_config
+        self.model_config = sonar_config.model_config
+        self.sonar_config = sonar_config
         self.config = self.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        quant_config = sonar_config.quant_config
         self.quant_config = quant_config
-        self.model = KimiLinearModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = KimiLinearModel(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
         if get_pp_group().is_last_rank:
             self.lm_head = ParallelLMHead(
                 self.config.vocab_size,
@@ -1056,24 +1056,22 @@ class KimiLinearForCausalLM(
     @classmethod
     def get_mamba_state_dtype_from_config(
         cls,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
     ) -> tuple[torch.dtype, torch.dtype]:
         return MambaStateDtypeCalculator.kda_state_dtype(
-            aphrodite_config.model_config.dtype,
-            aphrodite_config.cache_config.mamba_cache_dtype,
-            aphrodite_config.cache_config.mamba_ssm_cache_dtype,
+            sonar_config.model_config.dtype,
+            sonar_config.cache_config.mamba_cache_dtype,
+            sonar_config.cache_config.mamba_ssm_cache_dtype,
         )
 
     @classmethod
     def get_mamba_state_shape_from_config(
-        cls, aphrodite_config: "AphroditeConfig"
+        cls, sonar_config: "SonarConfig"
     ) -> tuple[tuple[int, int], tuple[int, int, int]]:
-        parallel_config = aphrodite_config.parallel_config
-        hf_config = aphrodite_config.model_config.hf_config
+        parallel_config = sonar_config.parallel_config
+        hf_config = sonar_config.model_config.hf_config
         tp_size = parallel_config.tensor_parallel_size
-        num_spec = (
-            aphrodite_config.speculative_config.num_speculative_tokens if aphrodite_config.speculative_config else 0
-        )
+        num_spec = sonar_config.speculative_config.num_speculative_tokens if sonar_config.speculative_config else 0
         return MambaStateShapeCalculator.kda_state_shape(
             tp_size,
             hf_config.linear_attn_config["num_heads"],

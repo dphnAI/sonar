@@ -6,19 +6,19 @@ from typing import TYPE_CHECKING
 
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.config import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.config import (
     FUSED_MOE_UNQUANTIZED_CONFIG,
     FusedMoEConfig,
     FusedMoEParallelConfig,
     FusedMoEQuantConfig,
 )
-from aphrodite.model_executor.layers.fused_moe.topk_weight_and_reduce import (
+from sonar.model_executor.layers.fused_moe.topk_weight_and_reduce import (
     TopKWeightAndReduceNoOP,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     kFp8Dynamic128Sym,
     kFp8DynamicTensorSym,
@@ -387,7 +387,7 @@ def rocm_aiter_fused_experts(
             )
         elif quant_config.use_mxfp4_w4a16:
             if moe_config.use_mxfp4_w4a4_dsv4:
-                # Opt-in a4w4 for DeepSeek V4.1 (APHRODITE_ROCM_USE_AITER_MOE_A4W4_DSV4=1).
+                # Opt-in a4w4 for DeepSeek V4.1 (SONAR_ROCM_USE_AITER_MOE_A4W4_DSV4=1).
                 # Must match the SEPARATED weight shuffle from load time.
                 from aiter import dtypes
 
@@ -456,7 +456,7 @@ class AiterExperts(mk.FusedMoEExpertsModular):
         if not is_supported and not rocm_aiter_ops.is_fused_moe_enabled():
             reason = (
                 f"{reason}. AITER MoE is not enabled — "
-                "set APHRODITE_ROCM_USE_AITER=1 and APHRODITE_ROCM_USE_AITER_MOE=1 "
+                "set SONAR_ROCM_USE_AITER=1 and SONAR_ROCM_USE_AITER_MOE=1 "
                 "to enable it"
             )
         return is_supported, reason
@@ -629,7 +629,7 @@ class AiterMxfp4Experts(AiterExperts):
         weight_key: QuantKey | None,
         activation_key: QuantKey | None,
     ) -> bool:
-        from aphrodite.platforms.rocm import on_gfx942, on_gfx950, on_gfx1250
+        from sonar.platforms.rocm import on_gfx942, on_gfx950, on_gfx1250
 
         if (weight_key, activation_key) == (kInt4Static32, None):
             return on_gfx942()

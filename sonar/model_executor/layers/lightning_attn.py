@@ -4,9 +4,9 @@
 import torch
 from einops import rearrange
 
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
-from aphrodite.v1.attention.backends.utils import PAD_SLOT_ID
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
+from sonar.v1.attention.backends.utils import PAD_SLOT_ID
 
 
 @triton.jit

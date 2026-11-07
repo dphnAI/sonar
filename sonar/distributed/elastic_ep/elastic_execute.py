@@ -12,18 +12,18 @@ import torch
 import torch.nn as nn
 from torch.distributed import P2POp
 
-from aphrodite.compilation.breakable_cudagraph import BreakableCUDAGraphWrapper
-from aphrodite.compilation.cuda_graph import CUDAGraphWrapper
-from aphrodite.compilation.wrapper import reset_compile_wrapper
-from aphrodite.config import ParallelConfig, set_current_aphrodite_config
-from aphrodite.distributed import (
+from sonar.compilation.breakable_cudagraph import BreakableCUDAGraphWrapper
+from sonar.compilation.cuda_graph import CUDAGraphWrapper
+from sonar.compilation.wrapper import reset_compile_wrapper
+from sonar.config import ParallelConfig, set_current_sonar_config
+from sonar.distributed import (
     get_dp_group,
     get_ep_group,
     get_pcp_group,
     get_tp_group,
     get_world_group,
 )
-from aphrodite.distributed.elastic_ep.standby_state import (
+from sonar.distributed.elastic_ep.standby_state import (
     create_standby_groups,
     get_standby_dp_group,
     get_standby_ep_group,
@@ -31,39 +31,39 @@ from aphrodite.distributed.elastic_ep.standby_state import (
     get_standby_world_group,
     pop_standby_groups,
 )
-from aphrodite.distributed.eplb.eplb_communicator import (
+from sonar.distributed.eplb.eplb_communicator import (
     EplbCommunicator,
 )
-from aphrodite.distributed.parallel_state import (
+from sonar.distributed.parallel_state import (
     GroupCoordinator,
     _replace_active_groups,
 )
-from aphrodite.distributed.stateless_coordinator import StatelessGroupCoordinator
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe.all2all_utils import (
+from sonar.distributed.stateless_coordinator import StatelessGroupCoordinator
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe.all2all_utils import (
     get_ep_all2all_manager,
 )
-from aphrodite.model_executor.layers.fused_moe.config import FusedMoEParallelConfig
-from aphrodite.model_executor.layers.fused_moe.eep_reconfigure import (
+from sonar.model_executor.layers.fused_moe.config import FusedMoEParallelConfig
+from sonar.model_executor.layers.fused_moe.eep_reconfigure import (
     make_eep_staged_quant_method,
 )
-from aphrodite.model_executor.warmup.flashinfer_autotune_cache import (
+from sonar.model_executor.warmup.flashinfer_autotune_cache import (
     sync_flashinfer_autotune_cache,
 )
-from aphrodite.model_executor.warmup.kernel_warmup import kernel_warmup
-from aphrodite.platforms import current_platform
-from aphrodite.utils import is_moe_layer
-from aphrodite.v1.engine import ReconfigureDistributedRequest, ReconfigureRankType
-from aphrodite.v1.worker.dp_utils import skip_dp_coordination
-from aphrodite.v1.worker.gpu.cudagraph_utils import CudaGraphManager
-from aphrodite.v1.worker.gpu.eplb_utils import preserve_serving_state
-from aphrodite.v1.worker.gpu_ubatch_wrapper import UBatchWrapper
-from aphrodite.v1.worker.workspace import lock_workspace, unlock_workspace
+from sonar.model_executor.warmup.kernel_warmup import kernel_warmup
+from sonar.platforms import current_platform
+from sonar.utils import is_moe_layer
+from sonar.v1.engine import ReconfigureDistributedRequest, ReconfigureRankType
+from sonar.v1.worker.dp_utils import skip_dp_coordination
+from sonar.v1.worker.gpu.cudagraph_utils import CudaGraphManager
+from sonar.v1.worker.gpu.eplb_utils import preserve_serving_state
+from sonar.v1.worker.gpu_ubatch_wrapper import UBatchWrapper
+from sonar.v1.worker.workspace import lock_workspace, unlock_workspace
 
 logger = init_logger(__name__)
 
 if TYPE_CHECKING:
-    from aphrodite.model_executor.layers.fused_moe.fused_moe_method_base import (
+    from sonar.model_executor.layers.fused_moe.fused_moe_method_base import (
         FusedMoEMethodBase,
     )
 
@@ -167,7 +167,7 @@ class ElasticEPScalingExecutor:
 
     def _can_reuse_fused_moe_kernel(self) -> bool:
         return can_reuse_fused_moe_kernel(
-            self.worker.aphrodite_config.parallel_config,
+            self.worker.sonar_config.parallel_config,
         )
 
     @contextmanager
@@ -183,7 +183,7 @@ class ElasticEPScalingExecutor:
 
     @contextmanager
     def _disable_flashinfer_autotune(self) -> Iterator[None]:
-        kernel_config = self.worker.aphrodite_config.kernel_config
+        kernel_config = self.worker.sonar_config.kernel_config
         enabled = kernel_config.enable_flashinfer_autotune
         kernel_config.enable_flashinfer_autotune = False
         try:
@@ -202,23 +202,23 @@ class ElasticEPScalingExecutor:
             raise RuntimeError("Another Elastic EP async method is active")
         if args and isinstance(args[0], ReconfigureDistributedRequest):
             self.reconfig_request = args[0]
-        dp_rank = self.worker.aphrodite_config.parallel_config.data_parallel_rank
+        dp_rank = self.worker.sonar_config.parallel_config.data_parallel_rank
         done_key = f"eep_async/{execute_method}/{dp_rank}/{self.worker.rank}"
         self._async_future = self._async_executor.submit(self._run_async, execute_method, *args, **kwargs)
         self._async_future.add_done_callback(lambda _: self._mark_async_done(done_key))
         return done_key
 
     def _run_async(self, execute_method: str, *args, **kwargs) -> None:
-        from aphrodite.platforms import current_platform
+        from sonar.platforms import current_platform
 
-        self.worker.aphrodite_config.enable_trace_function_call_for_thread()
+        self.worker.sonar_config.enable_trace_function_call_for_thread()
         assert hasattr(self.worker, "device")
         current_platform.set_device(self.worker.device)
-        with set_current_aphrodite_config(self.worker.aphrodite_config):
+        with set_current_sonar_config(self.worker.sonar_config):
             self.execute(execute_method, *args, **kwargs)
 
     def _mark_async_done(self, done_key: str) -> None:
-        from aphrodite.distributed.utils import get_cached_tcp_store_client
+        from sonar.distributed.utils import get_cached_tcp_store_client
 
         assert self.reconfig_request is not None
         get_cached_tcp_store_client(
@@ -236,7 +236,7 @@ class ElasticEPScalingExecutor:
         future.result()
 
     def _destroy_retired_groups(self, groups: tuple[GroupCoordinator | None, ...]) -> None:
-        from aphrodite.platforms import current_platform
+        from sonar.platforms import current_platform
 
         current_platform.set_device(self.worker.device)
         for group in groups:
@@ -266,7 +266,7 @@ class ElasticEPScalingExecutor:
         self.reconfig_request = reconfig_request
         new_dp_size = reconfig_request.new_data_parallel_size
         old_dp_size = get_dp_group().world_size
-        parallel_config = self.worker.aphrodite_config.parallel_config
+        parallel_config = self.worker.sonar_config.parallel_config
         world_size = parallel_config.world_size
         new_world_size_across_dp = world_size * new_dp_size
         create_standby_groups(
@@ -312,7 +312,7 @@ class ElasticEPScalingExecutor:
         old_dp_size_tensor = standby_dp_group.tcp_store_group.broadcast(old_dp_size_tensor, 0)
 
         num_new_workers = new_dp_size - old_dp_size
-        dp_rank = self.worker.aphrodite_config.parallel_config.data_parallel_rank
+        dp_rank = self.worker.sonar_config.parallel_config.data_parallel_rank
 
         # Sender-receiver pairing: the first new_workers % old_dp_size
         # senders get (k+1) contiguous receivers, the rest get k
@@ -366,7 +366,7 @@ class ElasticEPScalingExecutor:
         )
 
     def _make_eep_moe_config(self, module, dp_group, ep_group):
-        parallel_config = self.worker.aphrodite_config.parallel_config
+        parallel_config = self.worker.sonar_config.parallel_config
         tp_size = get_tp_group().world_size
         sp_size = tp_size if parallel_config.use_sequence_parallel_moe else 1
         moe_parallel_config = FusedMoEParallelConfig.make(
@@ -374,7 +374,7 @@ class ElasticEPScalingExecutor:
             pcp_size_=get_pcp_group().world_size,
             dp_size_=dp_group.world_size,
             sp_size_=sp_size,
-            aphrodite_parallel_config=parallel_config,
+            sonar_parallel_config=parallel_config,
         )
         return replace(
             module.moe_config,
@@ -388,7 +388,7 @@ class ElasticEPScalingExecutor:
         model = self.worker.model_runner.get_model()
         moe_modules = [module for module in model.modules() if is_moe_layer(module)]
         self._staged_moe_quant_methods.clear()
-        with set_current_aphrodite_config(self.worker.aphrodite_config):
+        with set_current_sonar_config(self.worker.sonar_config):
             for module in moe_modules:
                 staged_quant_method = make_eep_staged_quant_method(
                     module,
@@ -432,7 +432,7 @@ class ElasticEPScalingExecutor:
             self.worker.model_runner.model.clear_graphs()
 
         torch.compiler.reset()
-        with set_current_aphrodite_config(self.worker.aphrodite_config):
+        with set_current_sonar_config(self.worker.sonar_config):
             reset_compile_wrapper(self.worker.model_runner.get_model())
             if draft_model := getattr(speculator, "model", None):
                 reset_compile_wrapper(draft_model)
@@ -484,7 +484,7 @@ class ElasticEPScalingExecutor:
             self._release_cuda_graphs()
         retired_groups = _replace_active_groups(**pop_standby_groups())
 
-        parallel_config = self.worker.aphrodite_config.parallel_config
+        parallel_config = self.worker.sonar_config.parallel_config
         reconfig_request = self.reconfig_request
         assert reconfig_request is not None
         new_dp_size = reconfig_request.new_data_parallel_size
@@ -523,7 +523,7 @@ class ElasticEPScalingExecutor:
 
         model = self.worker.model_runner.get_model()
         model.expert_weights = []
-        with set_current_aphrodite_config(self.worker.aphrodite_config):
+        with set_current_sonar_config(self.worker.sonar_config):
             model.set_eplb_state(
                 eplb_model_state.expert_load_pass_buffer,
                 eplb_model_state.logical_to_physical_map,
@@ -614,7 +614,7 @@ class ElasticEPScalingExecutor:
         eplb_state = self.worker.model_runner.eplb_state
         if eplb_state is not None:
             eplb_state.drain_async()
-        parallel_config = self.worker.aphrodite_config.parallel_config
+        parallel_config = self.worker.sonar_config.parallel_config
         tp_size = parallel_config.tensor_parallel_size
         old_ep_size = parallel_config.data_parallel_size * tp_size
         new_ep_size = new_dp_size * tp_size
@@ -627,7 +627,7 @@ class ElasticEPScalingExecutor:
         dp_group = get_dp_group()
         assert isinstance(dp_group, StatelessGroupCoordinator)
         new_dp_size = dp_group.world_size
-        dp_rank = self.worker.aphrodite_config.parallel_config.data_parallel_rank
+        dp_rank = self.worker.sonar_config.parallel_config.data_parallel_rank
 
         # Receive old_dp_size broadcasted during transfer_weights
         old_dp_size_tensor = torch.empty(1, dtype=torch.int64, device="cpu")
@@ -671,7 +671,7 @@ class ElasticEPScalingExecutor:
         )
 
     def warmup_new_worker(self) -> None:
-        with set_current_aphrodite_config(self.worker.aphrodite_config):
+        with set_current_sonar_config(self.worker.sonar_config):
             kernel_warmup(self.worker, process_local_only=True)
         if self._can_reuse_fused_moe_kernel():
             self.warm_and_capture()

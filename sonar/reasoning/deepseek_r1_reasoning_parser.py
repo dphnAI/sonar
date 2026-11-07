@@ -3,8 +3,8 @@
 
 from collections.abc import Sequence
 
-from aphrodite.entrypoints.generate.base.protocol import DeltaMessage
-from aphrodite.reasoning.basic_parsers import BaseThinkingReasoningParser
+from sonar.entrypoints.generate.base.protocol import DeltaMessage
+from sonar.reasoning.basic_parsers import BaseThinkingReasoningParser
 
 
 class DeepSeekR1ReasoningParser(BaseThinkingReasoningParser):

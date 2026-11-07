@@ -2,8 +2,8 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Inference-only Step5 vision-language model on ROCm."""
 
-from aphrodite.model_executor.models.module_mapping import MultiModelKeys
-from aphrodite.model_executor.models.step3p7 import Step3p7ForConditionalGeneration
+from sonar.model_executor.models.module_mapping import MultiModelKeys
+from sonar.model_executor.models.step3p7 import Step3p7ForConditionalGeneration
 
 from .model import Step5ForCausalLM
 

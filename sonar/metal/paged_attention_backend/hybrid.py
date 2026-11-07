@@ -16,20 +16,20 @@ import mlx.core as mx
 import mlx.nn as nn
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.metal.metal_kernel_backend.attention_linear import (
+from sonar.logger import init_logger
+from sonar.metal.metal_kernel_backend.attention_linear import (
     GDNPagedAttentionWrapper,
     is_linear_attention,
 )
-from aphrodite.metal.metal_kernel_backend.attention_sdpa import is_sdpa
-from aphrodite.metal.metal_kernel_backend.cache import MetalPagedKVCache
-from aphrodite.metal.metal_kernel_backend.paged_attention import (
+from sonar.metal.metal_kernel_backend.attention_sdpa import is_sdpa
+from sonar.metal.metal_kernel_backend.cache import MetalPagedKVCache
+from sonar.metal.metal_kernel_backend.paged_attention import (
     MetalKernelPagedAttentionWrapper,
 )
-from aphrodite.metal.mlx_backend.gdn_cache import GDNPagedStateCache
-from aphrodite.metal.paged_attention_backend.mha import warm_up_paged_cache
-from aphrodite.metal.paged_attention_common import find_attn_attr, find_layers
-from aphrodite.v1.kv_cache_interface import MambaSpec
+from sonar.metal.mlx_backend.gdn_cache import GDNPagedStateCache
+from sonar.metal.paged_attention_backend.mha import warm_up_paged_cache
+from sonar.metal.paged_attention_common import find_attn_attr, find_layers
+from sonar.v1.kv_cache_interface import MambaSpec
 
 logger = init_logger(__name__)
 

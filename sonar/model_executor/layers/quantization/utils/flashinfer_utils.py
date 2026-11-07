@@ -4,8 +4,8 @@ from typing import TYPE_CHECKING
 
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.utils.math_utils import round_up
+from sonar.logger import init_logger
+from sonar.utils.math_utils import round_up
 
 if TYPE_CHECKING:
     # Imported lazily (also inside activation_to_flashinfer_type) to avoid a
@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     # flashinfer_utils is imported first.
     from flashinfer.fused_moe.core import ActivationType
 
-    from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
+    from sonar.model_executor.layers.fused_moe.activation import MoEActivation
 
 logger = init_logger(__name__)
 
@@ -36,7 +36,7 @@ def has_flashinfer_situ_activation() -> bool:
 def activation_to_flashinfer_type(activation: "MoEActivation") -> "ActivationType":
     from flashinfer.fused_moe.core import ActivationType
 
-    from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
+    from sonar.model_executor.layers.fused_moe.activation import MoEActivation
 
     if activation == MoEActivation.SITU:
         situ = getattr(ActivationType, "Situ", None)
@@ -549,7 +549,7 @@ def prepare_fp8_moe_layer_for_fi(
         )
         layer.moe_config.intermediate_size_per_partition = new_intermediate
         layer.moe_config.hidden_dim = new_hidden
-        # FlashInfer TRT-LLM SwiGLU expects [up; gate] but Aphrodite stores
+        # FlashInfer TRT-LLM SwiGLU expects [up; gate] but Sonar stores
         # [gate; up].  Swap both weights and scales before interleaving.
         if layer.moe_config.is_act_and_mul:
             w13 = swap_w13_to_w31(w13)

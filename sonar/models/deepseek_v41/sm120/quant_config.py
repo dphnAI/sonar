@@ -7,15 +7,15 @@ from pathlib import Path
 
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.config import get_current_aphrodite_config
-from aphrodite.model_executor.layers.fused_moe import RoutedExperts
-from aphrodite.model_executor.layers.linear import LinearBase
-from aphrodite.model_executor.layers.quantization.fp8 import Fp8Config
-from aphrodite.model_executor.layers.quantization.mxfp4 import Mxfp4MoEMethod
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import is_layer_skipped
-from aphrodite.model_executor.layers.vocab_parallel_embedding import VocabParallelEmbedding
-from aphrodite.platforms import current_platform
+import sonar.envs as envs
+from sonar.config import get_current_sonar_config
+from sonar.model_executor.layers.fused_moe import RoutedExperts
+from sonar.model_executor.layers.linear import LinearBase
+from sonar.model_executor.layers.quantization.fp8 import Fp8Config
+from sonar.model_executor.layers.quantization.mxfp4 import Mxfp4MoEMethod
+from sonar.model_executor.layers.quantization.utils.quant_utils import is_layer_skipped
+from sonar.model_executor.layers.vocab_parallel_embedding import VocabParallelEmbedding
+from sonar.platforms import current_platform
 
 
 class DeepseekV41FP8Config(Fp8Config):
@@ -24,7 +24,7 @@ class DeepseekV41FP8Config(Fp8Config):
     @staticmethod
     def _native_enabled():
         return (
-            envs.APHRODITE_DSV41_SM120_NATIVE
+            envs.SONAR_DSV41_SM120_NATIVE
             and current_platform.is_cuda()
             and current_platform.is_device_capability_family(120)
         )
@@ -51,7 +51,7 @@ class DeepseekV41FP8Config(Fp8Config):
     @classmethod
     def from_config(cls, config):
         if not cls._native_enabled():
-            raise ValueError("deepseek_v41_fp8 requires APHRODITE_DSV41_SM120_NATIVE=1 on an SM120-family CUDA GPU")
+            raise ValueError("deepseek_v41_fp8 requires SONAR_DSV41_SM120_NATIVE=1 on an SM120-family CUDA GPU")
         if config.get("quant_method") not in ("fp8", cls.get_name()) or config.get("moe_quant_algo"):
             raise ValueError("V4.1 native execution supports only the original block32 FP8/MXFP4 checkpoint")
         try:
@@ -102,7 +102,7 @@ class DeepseekV41FP8Config(Fp8Config):
 
             return B12xEmbeddingMethod()
         if isinstance(layer, RoutedExperts):
-            hf_config = get_current_aphrodite_config().model_config.hf_text_config
+            hf_config = get_current_sonar_config().model_config.hf_text_config
             if getattr(hf_config, "expert_dtype", "fp4") != "fp4":
                 raise ValueError("V4.1 native execution requires the original MXFP4 experts")
             return Mxfp4MoEMethod(layer.moe_config)

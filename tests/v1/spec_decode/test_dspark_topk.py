@@ -5,19 +5,19 @@ import pytest
 import torch
 from torch import nn
 
-from aphrodite.model_executor.layers.quantization.modelopt import (
+from sonar.model_executor.layers.quantization.modelopt import (
     ModelOptLinearMethod,
     resolve,
 )
-from aphrodite.model_executor.layers.quantization.utils.nvfp4_emulation_utils import (
+from sonar.model_executor.layers.quantization.utils.nvfp4_emulation_utils import (
     dequantize_to_dtype,
     nvfp4_gathered_bias,
 )
-from aphrodite.model_executor.models.qwen3_dspark import DSparkMarkovHead
-from aphrodite.platforms import current_platform
-from aphrodite.v1.worker.gpu.sample.gumbel import gumbel_sample
-from aphrodite.v1.worker.gpu.spec_decode.draft_logits import DraftLogitsCache
-from aphrodite.v1.worker.gpu.spec_decode.dspark.speculator import DSparkSpeculator
+from sonar.model_executor.models.qwen3_dspark import DSparkMarkovHead
+from sonar.platforms import current_platform
+from sonar.v1.worker.gpu.sample.gumbel import gumbel_sample
+from sonar.v1.worker.gpu.spec_decode.draft_logits import DraftLogitsCache
+from sonar.v1.worker.gpu.spec_decode.dspark.speculator import DSparkSpeculator
 
 
 def _markov_head(weight: torch.Tensor) -> DSparkMarkovHead:

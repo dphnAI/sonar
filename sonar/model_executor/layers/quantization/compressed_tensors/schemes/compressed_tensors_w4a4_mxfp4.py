@@ -4,19 +4,19 @@ from collections.abc import Callable
 
 import torch
 
-from aphrodite.model_executor.kernels.linear import init_mxfp4_linear_kernel
-from aphrodite.model_executor.layers.quantization.compressed_tensors.schemes import (
+from sonar.model_executor.kernels.linear import init_mxfp4_linear_kernel
+from sonar.model_executor.layers.quantization.compressed_tensors.schemes import (
     CompressedTensorsScheme,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     kMxfp4Dynamic,
 )
-from aphrodite.model_executor.parameter import (
+from sonar.model_executor.parameter import (
     GroupQuantScaleParameter,
     ModelWeightParameter,
 )
-from aphrodite.model_executor.utils import move_parameter
+from sonar.model_executor.utils import move_parameter
 
 __all__ = ["CompressedTensorsW4A4Mxfp4"]
 

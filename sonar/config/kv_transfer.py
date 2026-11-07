@@ -5,8 +5,8 @@ import uuid
 from dataclasses import field
 from typing import Any, Literal, get_args
 
-from aphrodite.config.utils import config
-from aphrodite.utils.hashing import safe_hash
+from sonar.config.utils import config
+from sonar.utils.hashing import safe_hash
 
 KVProducer = Literal["kv_producer", "kv_both"]
 KVConsumer = Literal["kv_consumer", "kv_both"]
@@ -46,7 +46,7 @@ def hisparse_host_pool_gib(
 
 
 def kv_buffer_device_default_factory() -> str:
-    from aphrodite.platforms import current_platform
+    from sonar.platforms import current_platform
 
     return current_platform.device_type
 
@@ -56,7 +56,7 @@ class KVTransferConfig:
     """Configuration for distributed KV cache transfer."""
 
     kv_connector: str | None = None
-    """The KV connector for Aphrodite to transmit KV caches between Aphrodite instances.
+    """The KV connector for Sonar to transmit KV caches between Sonar instances.
     """
 
     engine_id: str | None = None
@@ -67,7 +67,7 @@ class KVTransferConfig:
     'cuda', 'cpu' and 'xpu'."""
 
     kv_role: KVRole | None = None
-    """Whether this Aphrodite instance produces, consumes KV cache, or both. Choices
+    """Whether this Sonar instance produces, consumes KV cache, or both. Choices
     are 'kv_producer', 'kv_consumer', and 'kv_both'."""
 
     kv_port: int = 14579

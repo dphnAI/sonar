@@ -10,17 +10,17 @@ import torch
 import torch.nn as nn
 from transformers import PreTrainedConfig
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.models.module_mapping import MultiModelKeys
-from aphrodite.model_executor.models.siglip import SiglipVisionModel
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.transformers_utils.processors.internvl import (
+from sonar.config import SonarConfig
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.models.module_mapping import MultiModelKeys
+from sonar.model_executor.models.siglip import SiglipVisionModel
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.sequence import IntermediateTensors
+from sonar.transformers_utils.processors.internvl import (
     InternVLChatImageProcessor,
     InternVLChatProcessor,
 )
-from aphrodite.utils.tensor_schema import TensorSchema, TensorShape
+from sonar.utils.tensor_schema import TensorSchema, TensorShape
 
 from .interfaces import (
     MultiModalEmbeddings,
@@ -33,7 +33,7 @@ from .internvl import (
     BaseInternVLMultiModalProcessor,
     BaseInternVLProcessingInfo,
 )
-from .utils import AutoWeightsLoader, init_aphrodite_registered_model, maybe_prefix
+from .utils import AutoWeightsLoader, init_sonar_registered_model, maybe_prefix
 
 
 class Eagle2_5_VLImagePixelInputs(TensorSchema):
@@ -131,12 +131,12 @@ class Eagle2_5_VLForConditionalGeneration(nn.Module, SupportsMultiModal, Support
             return "<image>"
         raise ValueError("Only image modality is supported")
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
-        multimodal_config = aphrodite_config.model_config.multimodal_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
+        multimodal_config = sonar_config.model_config.multimodal_config
         assert multimodal_config is not None
 
         self.config = config
@@ -152,7 +152,7 @@ class Eagle2_5_VLForConditionalGeneration(nn.Module, SupportsMultiModal, Support
 
         self.select_layer = getattr(config, "select_layer", -1)
 
-        with self._mark_tower_model(aphrodite_config, "image"):
+        with self._mark_tower_model(sonar_config, "image"):
             # Vision encoder (SigLIP)
             self.vision_model = self._init_vision_model(
                 config,
@@ -163,10 +163,10 @@ class Eagle2_5_VLForConditionalGeneration(nn.Module, SupportsMultiModal, Support
             # MLP projection
             self.mlp1 = self._init_mlp1(config)
 
-        with self._mark_language_model(aphrodite_config):
+        with self._mark_language_model(sonar_config):
             # Language model (Qwen2)
-            self.language_model = init_aphrodite_registered_model(
-                aphrodite_config=aphrodite_config,
+            self.language_model = init_sonar_registered_model(
+                sonar_config=sonar_config,
                 hf_config=config.text_config,
                 prefix=maybe_prefix(prefix, "language_model"),
             )

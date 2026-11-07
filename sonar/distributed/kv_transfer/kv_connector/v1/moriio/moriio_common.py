@@ -14,24 +14,24 @@ import regex as re
 import torch
 import zmq
 
-from aphrodite.config import AphroditeConfig, KVTransferConfig
-from aphrodite.distributed.kv_transfer.kv_connector.utils import BlockIds
-from aphrodite.distributed.kv_transfer.kv_connector.v1.base import (
+from sonar.config import KVTransferConfig, SonarConfig
+from sonar.distributed.kv_transfer.kv_connector.utils import BlockIds
+from sonar.distributed.kv_transfer.kv_connector.v1.base import (
     KVConnectorMetadata,
 )
-from aphrodite.distributed.parallel_state import (
+from sonar.distributed.parallel_state import (
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
 )
-from aphrodite.logger import init_logger
-from aphrodite.utils.network_utils import (
+from sonar.logger import init_logger
+from sonar.utils.network_utils import (
     get_ip,
     get_open_port,
     make_zmq_socket,
 )
 
 if TYPE_CHECKING:
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_tp_mapping import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.moriio.moriio_tp_mapping import (
         MoRIIOWriteTPMapping,
     )
 
@@ -263,17 +263,17 @@ def resolve_host_ip(extra_config: dict) -> str:
     Honors an explicit ``host_ip`` in ``kv_connector_extra_config`` before
     falling back to ``get_ip()``. An external router/orchestrator can set it to
     the node's routable address; this is required under frameworks (e.g. Ray)
-    where ``get_ip()`` resolves to an unroutable public IP and ``APHRODITE_HOST_IP``
+    where ``get_ip()`` resolves to an unroutable public IP and ``SONAR_HOST_IP``
     cannot be propagated to the worker processes that bind the transfer engine.
     """
     return extra_config.get("host_ip") or get_ip()
 
 
 _DEPRECATED_ENV_VARS: dict[str, str] = {
-    "APHRODITE_MORIIO_CONNECTOR_READ_MODE": "read_mode",
-    "APHRODITE_MORIIO_QP_PER_TRANSFER": "qp_per_transfer",
-    "APHRODITE_MORIIO_POST_BATCH_SIZE": "post_batch_size",
-    "APHRODITE_MORIIO_NUM_WORKERS": "num_workers",
+    "SONAR_MORIIO_CONNECTOR_READ_MODE": "read_mode",
+    "SONAR_MORIIO_QP_PER_TRANSFER": "qp_per_transfer",
+    "SONAR_MORIIO_POST_BATCH_SIZE": "post_batch_size",
+    "SONAR_MORIIO_NUM_WORKERS": "num_workers",
 }
 
 
@@ -313,7 +313,7 @@ class MoRIIOConfig:
     backend: str = "rdma"
 
     @classmethod
-    def from_aphrodite_config(cls, aphrodite_config: AphroditeConfig) -> "MoRIIOConfig":
+    def from_sonar_config(cls, sonar_config: SonarConfig) -> "MoRIIOConfig":
         # Port Configuration:
         # local_ping_port   -> Outgoing heartbeat to proxy
         # proxy_ping_port   -> Remote proxy's heartbeat ingress port
@@ -342,14 +342,14 @@ class MoRIIOConfig:
 
         # TODO : merge notify_port and handshake_port to simplify port management
         #        supports non-contiguous ports
-        assert aphrodite_config.kv_transfer_config is not None, "kv_transfer_config must be set for MoRIIOConnector"
+        assert sonar_config.kv_transfer_config is not None, "kv_transfer_config must be set for MoRIIOConnector"
         _warn_deprecated_env_vars()
-        kv_transfer_config = aphrodite_config.kv_transfer_config
+        kv_transfer_config = sonar_config.kv_transfer_config
         extra_config = kv_transfer_config.kv_connector_extra_config
         tp_rank = get_tensor_model_parallel_rank()
         # Fold the global data_parallel_rank back to [0, dp_size_local) for
         # per-node port allocation (handles the external-DP sentinel).
-        pc = aphrodite_config.parallel_config
+        pc = sonar_config.parallel_config
         dp_rank = fold_local_rank(pc.data_parallel_rank, pc.data_parallel_size_local)
         base_notify_port = int(extra_config["notify_port"])
         tp_size = get_tensor_model_parallel_world_size()
@@ -368,10 +368,10 @@ class MoRIIOConfig:
             "kv_connector_extra_config.defer_timeout",
             extra_config.get("defer_timeout", MoRIIOConstants.DEFAULT_DEFER_TIMEOUT),
         )
-        legacy_recv_abort_timeout = os.environ.get("APHRODITE_MORIIO_TRANSFER_TIMEOUT_S")
+        legacy_recv_abort_timeout = os.environ.get("SONAR_MORIIO_TRANSFER_TIMEOUT_S")
         if legacy_recv_abort_timeout is not None:
             logger.warning_once(
-                "The environment variable APHRODITE_MORIIO_TRANSFER_TIMEOUT_S is "
+                "The environment variable SONAR_MORIIO_TRANSFER_TIMEOUT_S is "
                 "deprecated. Set 'recv_abort_timeout' inside "
                 "kv_transfer_config.kv_connector_extra_config instead."
             )
@@ -425,7 +425,7 @@ class MoRIIOConstants:
     DEFAULT_HANDSHAKE_PORT = "6301"
     DEFAULT_NOTIFY_PORT = "61005"
 
-    APHRODITE_MORI_READ_ABORT_REQUEST_TIMEOUT = 3600
+    SONAR_MORI_READ_ABORT_REQUEST_TIMEOUT = 3600
 
     # Timeout (seconds) for waiting_for_transfer_complete before raising TransferError.
     # Overridable via kv_connector_extra_config["transfer_timeout"].
@@ -447,7 +447,7 @@ class MoRIIOConstants:
 # This lets each connector side parse the peer's connection info without
 # requiring the router to pass it explicitly in kv_transfer_params.
 _PREFILL_ZMQ_RE = re.compile(r"___prefill_addr_(.+?)___decode_addr_")
-# Aphrodite wraps the router's X-Request-Id as "cmpl-<id>-<seq>-<hex>" so there may
+# Sonar wraps the router's X-Request-Id as "cmpl-<id>-<seq>-<hex>" so there may
 # be a trailing "-<seq>-<hex>" suffix after the 32-char UUID.  Allow it.
 _DECODE_ZMQ_RE = re.compile(r"___decode_addr_(.+)_[0-9a-f]{32}(?:-.*)?$")
 
@@ -481,7 +481,7 @@ def parse_moriio_zmq_address(
 
 
 def get_peer_zmq_from_request_id(request_id: str, is_producer: bool) -> str | None:
-    """Extract the *peer's* zmq_address from the Aphrodite router request_id.
+    """Extract the *peer's* zmq_address from the Sonar router request_id.
 
     The producer (prefill) needs the decode's address; the consumer (decode)
     needs the prefill's address.
@@ -551,7 +551,7 @@ class MoRIIOConnectorMetadata(KVConnectorMetadata):
 
         This is the single place peer info enters the connector. The
         ``kv_transfer_params`` contract (as produced by the llm-d sidecar /
-        Aphrodite router, or echoed by the prefill leg's ``request_finished``):
+        Sonar router, or echoed by the prefill leg's ``request_finished``):
 
         Required (always):
           * ``transfer_id``        -- stable id shared by both legs.
@@ -560,7 +560,7 @@ class MoRIIOConnectorMetadata(KVConnectorMetadata):
                                       where decode allocates its own blocks).
 
         Peer address -- ONE of the following two must resolve:
-          * embedded in ``request_id`` (Aphrodite-router PD id form), OR
+          * embedded in ``request_id`` (Sonar-router PD id form), OR
           * explicit ``remote_host`` + ``remote_handshake_port`` +
             ``remote_notify_port`` (llm-d sidecar / returnable path).
           If neither resolves we raise -- there is no safe default host/port.

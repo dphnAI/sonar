@@ -3,8 +3,8 @@
 import torch
 from torch._subclasses.fake_tensor import FakeTensor
 
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
 
 
 @triton.jit

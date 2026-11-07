@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""HF3FS KV Connector Implementation for Aphrodite.
+"""HF3FS KV Connector Implementation for Sonar.
 
 This module implements a KV connector that uses
 the 3FS for storing and retrieving KV cache data.
@@ -30,57 +30,57 @@ from typing import Any, Optional
 import numpy as np
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed.kv_transfer.kv_connector.v1.base import (
+from sonar.config import SonarConfig
+from sonar.distributed.kv_transfer.kv_connector.v1.base import (
     KVConnectorBase_V1,
     KVConnectorMetadata,
     KVConnectorRole,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.hf3fs.hf3fs_metadata_server import (
+from sonar.distributed.kv_transfer.kv_connector.v1.hf3fs.hf3fs_metadata_server import (
     Hf3fsGlobalMetadataClient as Hf3fsMetadataClient,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.hf3fs.utils import (
+from sonar.distributed.kv_transfer.kv_connector.v1.hf3fs.utils import (
     gather_scatter_helper,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.hf3fs.utils.common import (
+from sonar.distributed.kv_transfer.kv_connector.v1.hf3fs.utils.common import (
     AtomicCounter,
     HF3FSConnectorMetadata,
     HF3FSRequestMetadata,
     LoadBlockInfo,
     RequestSchedulingState,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.hf3fs.utils.gather_scatter_helper import (  # noqa: E501
+from sonar.distributed.kv_transfer.kv_connector.v1.hf3fs.utils.gather_scatter_helper import (  # noqa: E501
     CopyBufferAllocator,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.metrics import (
+from sonar.distributed.kv_transfer.kv_connector.v1.metrics import (
     KVConnectorPromMetrics,
     KVConnectorStats,
     PromMetric,
     PromMetricT,
 )
-from aphrodite.distributed.parallel_state import get_tensor_model_parallel_rank
-from aphrodite.forward_context import ForwardContext
-from aphrodite.logger import init_logger
-from aphrodite.v1.attention.backend import AttentionMetadata
-from aphrodite.v1.core.kv_cache_manager import KVCacheBlocks
-from aphrodite.v1.core.sched.output import SchedulerOutput
-from aphrodite.v1.kv_cache_interface import KVCacheConfig
-from aphrodite.v1.metrics.utils import create_metric_per_engine
-from aphrodite.v1.request import Request
+from sonar.distributed.parallel_state import get_tensor_model_parallel_rank
+from sonar.forward_context import ForwardContext
+from sonar.logger import init_logger
+from sonar.v1.attention.backend import AttentionMetadata
+from sonar.v1.core.kv_cache_manager import KVCacheBlocks
+from sonar.v1.core.sched.output import SchedulerOutput
+from sonar.v1.kv_cache_interface import KVCacheConfig
+from sonar.v1.metrics.utils import create_metric_per_engine
+from sonar.v1.request import Request
 
 HF3FS_AVAILABLE = True
 Hf3fsClient = None
 try:
     from hf3fs_fuse.io import deregister_fd  # noqa: F401
 
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.hf3fs.hf3fs_client import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.hf3fs.hf3fs_client import (
         Hf3fsClient as _RealClient,
     )
 
     Hf3fsClient = _RealClient
 except Exception:
     HF3FS_AVAILABLE = False
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.hf3fs.utils.hf3fs_mock_client import (  # noqa: E501
+    from sonar.distributed.kv_transfer.kv_connector.v1.hf3fs.utils.hf3fs_mock_client import (  # noqa: E501
         Hf3fsClient as _MockClient,
     )
 
@@ -430,26 +430,26 @@ class HF3FSKVConnector(KVConnectorBase_V1):
 
     def __init__(
         self,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
         role: KVConnectorRole,
         kv_cache_config: "KVCacheConfig",
     ):
-        super().__init__(aphrodite_config=aphrodite_config, role=role, kv_cache_config=kv_cache_config)
+        super().__init__(sonar_config=sonar_config, role=role, kv_cache_config=kv_cache_config)
 
         # Core configuration
-        self._aphrodite_config = aphrodite_config
+        self._sonar_config = sonar_config
         self._role = role
-        self._block_size = aphrodite_config.cache_config.block_size
-        self._use_mla = aphrodite_config.model_config.use_mla
-        self._model_config = aphrodite_config.model_config
+        self._block_size = sonar_config.cache_config.block_size
+        self._use_mla = sonar_config.model_config.use_mla
+        self._model_config = sonar_config.model_config
 
         logger.info("Using MLA: %s", self._use_mla)
 
         # HF3FS configuration
-        kv_config = aphrodite_config.kv_transfer_config
+        kv_config = sonar_config.kv_transfer_config
         assert kv_config is not None
 
-        self._storage_path = kv_config.get_from_extra_config("hf3fs_storage_path", "/aphrodite-workspace/mnt/hf3fs")
+        self._storage_path = kv_config.get_from_extra_config("hf3fs_storage_path", "/sonar-workspace/mnt/hf3fs")
         self._metadata_server_url = kv_config.get_from_extra_config(
             "hf3fs_metadata_server_url", "http://localhost:18000"
         )
@@ -524,7 +524,7 @@ class HF3FSKVConnector(KVConnectorBase_V1):
         os.makedirs(self._storage_path, exist_ok=True)
 
         self._rank = get_tensor_model_parallel_rank()
-        file_path = os.path.join(self._storage_path, f"hf3fs_aphrodite_data_file_{self._rank}")
+        file_path = os.path.join(self._storage_path, f"hf3fs_sonar_data_file_{self._rank}")
 
         try:
             # Initialize HF3FS clients
@@ -785,12 +785,12 @@ class HF3FSKVConnector(KVConnectorBase_V1):
     @classmethod
     def build_prom_metrics(
         cls,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         metric_types: dict[type[PromMetric], type[PromMetricT]],
         labelnames: list[str],
         per_engine_labelvalues: dict[int, list[object]],
     ) -> KVConnectorPromMetrics:
-        return HF3FSPromMetrics(aphrodite_config, metric_types, labelnames, per_engine_labelvalues)
+        return HF3FSPromMetrics(sonar_config, metric_types, labelnames, per_engine_labelvalues)
 
     def close(self) -> None:
         try:
@@ -818,7 +818,7 @@ class HF3FSKVConnector(KVConnectorBase_V1):
         self, state: RequestSchedulingState, request, num_tokens_to_compute: int
     ) -> None:
         """Initialize state from new request data."""
-        # Handle different block_ids formats in Aphrodite 0.9.0+
+        # Handle different block_ids formats in Sonar 0.9.0+
         if isinstance(request.block_ids[0], list):
             unfolded_block_ids = request.block_ids[0].copy()
         else:
@@ -986,12 +986,12 @@ class HF3FSKVConnectorStats(KVConnectorStats):
 class HF3FSPromMetrics(KVConnectorPromMetrics):
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         metric_types: dict[type[PromMetric], type[PromMetricT]],
         labelnames: list[str],
         per_engine_labelvalues: dict[int, list[object]],
     ):
-        super().__init__(aphrodite_config, metric_types, labelnames, per_engine_labelvalues)
+        super().__init__(sonar_config, metric_types, labelnames, per_engine_labelvalues)
         buckets = [
             0.001,
             0.005,
@@ -1008,7 +1008,7 @@ class HF3FSPromMetrics(KVConnectorPromMetrics):
             5.0,
         ]
         hf3fs_save_duration = self._histogram_cls(
-            name="aphrodite:hf3fs_save_duration_seconds",
+            name="sonar:hf3fs_save_duration_seconds",
             documentation="Histogram of save duration for HF3FSKVConnector.",
             buckets=buckets,
             labelnames=labelnames,
@@ -1016,7 +1016,7 @@ class HF3FSPromMetrics(KVConnectorPromMetrics):
         self.hf3fs_save_duration = create_metric_per_engine(hf3fs_save_duration, self.per_engine_labelvalues)
 
         hf3fs_load_duration = self._histogram_cls(
-            name="aphrodite:hf3fs_load_duration_seconds",
+            name="sonar:hf3fs_load_duration_seconds",
             documentation="Histogram of load duration for HF3FSKVConnector.",
             buckets=buckets,
             labelnames=labelnames,
@@ -1024,14 +1024,14 @@ class HF3FSPromMetrics(KVConnectorPromMetrics):
         self.hf3fs_load_duration = create_metric_per_engine(hf3fs_load_duration, self.per_engine_labelvalues)
 
         hf3fs_num_failed_save = self._counter_cls(
-            name="aphrodite:hf3fs_num_failed_save",
+            name="sonar:hf3fs_num_failed_save",
             documentation="Number of failed HF3FS KV save.",
             labelnames=labelnames,
         )
         self.hf3fs_num_failed_save = create_metric_per_engine(hf3fs_num_failed_save, self.per_engine_labelvalues)
 
         hf3fs_num_failed_load = self._counter_cls(
-            name="aphrodite:hf3fs_num_failed_load",
+            name="sonar:hf3fs_num_failed_load",
             documentation="Number of failed HF3FS KV load.",
             labelnames=labelnames,
         )

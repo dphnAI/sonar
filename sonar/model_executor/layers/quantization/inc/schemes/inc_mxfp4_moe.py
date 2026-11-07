@@ -3,44 +3,44 @@
 
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite.config.kernel import FLASHINFER_MOE_EP_BACKENDS
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar.config.kernel import FLASHINFER_MOE_EP_BACKENDS
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe import (
     FusedMoeWeightScaleSupported,
     RoutedExperts,
     SharedExperts,
 )
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEQuantConfig,
     mxfp4_moe_quant_config,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.cutlass_moe import (
+from sonar.model_executor.layers.fused_moe.experts.cutlass_moe import (
     CutlassExpertsMxfp4,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.marlin_moe import (
+from sonar.model_executor.layers.fused_moe.experts.marlin_moe import (
     MarlinExperts,
 )
-from aphrodite.model_executor.layers.fused_moe.fused_moe_method_base import (
+from sonar.model_executor.layers.fused_moe.fused_moe_method_base import (
     FusedMoEMethodBase,
 )
-from aphrodite.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
-from aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 import (
+from sonar.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
+from sonar.model_executor.layers.fused_moe.oracle.mxfp4 import (
     B12X_BACKENDS,
     Mxfp4MoeBackend,
     make_mxfp4_moe_kernel,
     make_mxfp4_moe_quant_config,
     select_mxfp4_moe_backend,
 )
-from aphrodite.model_executor.layers.quantization.utils.marlin_utils_fp4 import (
+from sonar.model_executor.layers.quantization.utils.marlin_utils_fp4 import (
     prepare_moe_fp4_layer_for_marlin,
 )
-from aphrodite.model_executor.utils import (
+from sonar.model_executor.utils import (
     move_parameter,
     replace_parameter,
     set_weight_attrs,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 logger = init_logger(__name__)
 
@@ -158,7 +158,7 @@ class INCMxfp4MoEMethod(FusedMoEMethodBase):
         move_parameter(layer, "w13_weight_packed", "w13_weight")
         move_parameter(layer, "w2_weight_packed", "w2_weight")
         if self.use_cutlass_mxfp4:
-            from aphrodite.model_executor.layers.fused_moe.experts.cutlass_moe import (
+            from sonar.model_executor.layers.fused_moe.experts.cutlass_moe import (
                 swizzle_mxfp4_scales,
             )
 

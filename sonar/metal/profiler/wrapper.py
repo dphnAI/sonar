@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Metal frame-capture wrapper for Aphrodite's WorkerProfiler abstraction.
+"""Metal frame-capture wrapper for Sonar's WorkerProfiler abstraction.
 
-Subclasses ``aphrodite.profiler.wrapper.WorkerProfiler`` so that the manual
+Subclasses ``sonar.profiler.wrapper.WorkerProfiler`` so that the manual
 start/stop surface — ``LLM.start_profile`` / ``LLM.stop_profile``, the
 ``/start_profile`` and ``/stop_profile`` HTTP endpoints, and the engine's
 ``collective_rpc("profile", ...)`` plumbing — routes through unchanged.
@@ -29,15 +29,15 @@ from pathlib import Path
 import mlx.core as mx
 from typing_extensions import override
 
-from aphrodite.config import ProfilerConfig
-from aphrodite.logger import init_logger
-from aphrodite.profiler.wrapper import WorkerProfiler
+from sonar.config import ProfilerConfig
+from sonar.logger import init_logger
+from sonar.profiler.wrapper import WorkerProfiler
 
 logger = init_logger(__name__)
 
 
 class MetalProfilerWrapper(WorkerProfiler):
-    """Metal frame-capture flavor of Aphrodite's WorkerProfiler.
+    """Metal frame-capture flavor of Sonar's WorkerProfiler.
 
     Trace output: ``<profiler_config.torch_profiler_dir>/<trace_name>.gputrace``
     """

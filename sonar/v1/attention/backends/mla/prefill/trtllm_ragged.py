@@ -6,20 +6,20 @@ from typing import TYPE_CHECKING, ClassVar
 
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.v1.attention.backends.mla.prefill.base import (
+import sonar.envs as envs
+from sonar.v1.attention.backends.mla.prefill.base import (
     MLADimensions,
     MLAPrefillBackend,
 )
-from aphrodite.v1.attention.backends.utils import log2_lse_to_ln
-from aphrodite.v1.worker.workspace import current_workspace_manager
+from sonar.v1.attention.backends.utils import log2_lse_to_ln
+from sonar.v1.worker.workspace import current_workspace_manager
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
-    from aphrodite.model_executor.layers.attention.mla_attention import (
+    from sonar.config import SonarConfig
+    from sonar.model_executor.layers.attention.mla_attention import (
         MLACommonPrefillMetadata,
     )
-    from aphrodite.platforms.interface import DeviceCapability
+    from sonar.platforms.interface import DeviceCapability
 
 
 def is_cute_dsl_mla_prefill_supported(qk_head_dim: int, v_head_dim: int, query_dtype: torch.dtype) -> bool:
@@ -77,7 +77,7 @@ class TrtllmRaggedPrefillBackend(MLAPrefillBackend):
         qk_nope_head_dim: int,
         qk_rope_head_dim: int,
         v_head_dim: int,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
     ) -> None:
         super().__init__(
             num_heads=num_heads,
@@ -86,11 +86,11 @@ class TrtllmRaggedPrefillBackend(MLAPrefillBackend):
             qk_nope_head_dim=qk_nope_head_dim,
             qk_rope_head_dim=qk_rope_head_dim,
             v_head_dim=v_head_dim,
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
         )
-        self._context_backend = aphrodite_config.attention_config.trtllm_ragged_backend
+        self._context_backend = sonar_config.attention_config.trtllm_ragged_backend
         self._workspace_spec = (
-            (envs.APHRODITE_FLASHINFER_WORKSPACE_BUFFER_SIZE,),
+            (envs.SONAR_FLASHINFER_WORKSPACE_BUFFER_SIZE,),
             torch.uint8,
         )
         # Reserve capacity without retaining a view: a retained view would pin

@@ -537,7 +537,7 @@ _RESPONSES_TOKEN_DELTA_EVENTS = frozenset(
 )
 
 # Responses events that end a request. Truncation at the output length limit
-# is a normal benchmark outcome: Aphrodite reports it as `response.completed` with
+# is a normal benchmark outcome: Sonar reports it as `response.completed` with
 # `status: "incomplete"`, while the spec also defines a dedicated
 # `response.incomplete` terminal event.
 _RESPONSES_TERMINAL_EVENTS = frozenset(
@@ -547,8 +547,8 @@ _RESPONSES_TERMINAL_EVENTS = frozenset(
     }
 )
 
-# The spec's failure terminals. Aphrodite does not emit them today, but
-# `aphrodite bench serve` can be pointed at other Responses servers.
+# The spec's failure terminals. Sonar does not emit them today, but
+# `sonar bench serve` can be pointed at other Responses servers.
 _RESPONSES_ERROR_EVENTS = frozenset({"error", "response.failed"})
 
 
@@ -566,7 +566,7 @@ async def async_request_openai_responses(
         "max_output_tokens": request_func_input.output_len,
         "stream": True,
         # `store` defaults to true. A server started with
-        # APHRODITE_ENABLE_RESPONSES_API_STORE=1 keeps every stored response for
+        # SONAR_ENABLE_RESPONSES_API_STORE=1 keeps every stored response for
         # the lifetime of the process, which would grow its heap over a long
         # benchmark run.
         "store": False,
@@ -667,7 +667,7 @@ async def async_request_openai_audio(
     session: aiohttp.ClientSession,
     pbar: tqdm | None = None,
 ) -> RequestFuncOutput:
-    # Lazy import without PlaceholderModule to avoid aphrodite dep.
+    # Lazy import without PlaceholderModule to avoid sonar dep.
     import soundfile
 
     api_url = request_func_input.api_url
@@ -886,13 +886,13 @@ async def async_request_openai_embeddings(
     )
 
 
-async def async_request_aphrodite_rerank(
+async def async_request_sonar_rerank(
     request_func_input: RequestFuncInput,
     session: aiohttp.ClientSession,
     pbar: tqdm | None = None,
 ) -> RequestFuncOutput:
     api_url = request_func_input.api_url
-    _validate_api_url(api_url, "Aphrodite score API", "rerank")
+    _validate_api_url(api_url, "Sonar score API", "rerank")
 
     assert isinstance(request_func_input.prompt, list) and len(request_func_input.prompt) > 1
 
@@ -1068,13 +1068,13 @@ async def async_request_infinity_embeddings_clip(
     )
 
 
-async def async_request_aphrodite_pooling(
+async def async_request_sonar_pooling(
     request_func_input: RequestFuncInput,
     session: aiohttp.ClientSession,
     pbar: tqdm | None = None,
 ) -> RequestFuncOutput:
     api_url = request_func_input.api_url
-    _validate_api_url(api_url, "Aphrodite Pooling API", "pooling")
+    _validate_api_url(api_url, "Sonar Pooling API", "pooling")
 
     payload = {
         "model": request_func_input.model_name if request_func_input.model_name else request_func_input.model,
@@ -1104,7 +1104,7 @@ async def async_request_aphrodite_pooling(
 
 # TODO: Add more request functions for different API protocols.
 ASYNC_REQUEST_FUNCS: dict[str, RequestFunc] = {
-    "aphrodite": async_request_openai_completions,
+    "sonar": async_request_openai_completions,
     "openai": async_request_openai_completions,
     "openai-chat": async_request_openai_chat_completions,
     "openai-responses": async_request_openai_responses,
@@ -1117,8 +1117,8 @@ ASYNC_REQUEST_FUNCS: dict[str, RequestFunc] = {
     "infinity-embeddings": async_request_infinity_embeddings,
     "infinity-embeddings-clip": async_request_infinity_embeddings_clip,
     # (Infinity embedding server does not support vlm2vec)
-    "aphrodite-pooling": async_request_aphrodite_pooling,
-    "aphrodite-rerank": async_request_aphrodite_rerank,
+    "sonar-pooling": async_request_sonar_pooling,
+    "sonar-rerank": async_request_sonar_rerank,
 }
 
 POOLING_BACKENDS = {
@@ -1128,8 +1128,8 @@ POOLING_BACKENDS = {
     "openai-embeddings-vlm2vec",
     "infinity-embeddings",
     "infinity-embeddings-clip",
-    "aphrodite-pooling",
-    "aphrodite-rerank",
+    "sonar-pooling",
+    "sonar-rerank",
 }
 
 OPENAI_COMPATIBLE_BACKENDS = [

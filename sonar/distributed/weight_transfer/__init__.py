@@ -4,21 +4,21 @@
 to inference workers.
 """
 
-from aphrodite.distributed.weight_transfer.base import (
-    AphroditeWeightSyncClient,
+from sonar.distributed.weight_transfer.base import (
     ModuleSource,
     ParamMeta,
     Replicate,
     Shard,
+    SonarWeightSyncClient,
     TrainerWeightTransferEngine,
     WeightSource,
     WeightTransferEngine,
 )
-from aphrodite.distributed.weight_transfer.clients import (
-    HTTPAphroditeWeightSyncClient,
-    RayAphroditeWeightSyncClient,
+from sonar.distributed.weight_transfer.clients import (
+    HTTPSonarWeightSyncClient,
+    RaySonarWeightSyncClient,
 )
-from aphrodite.distributed.weight_transfer.factory import (
+from sonar.distributed.weight_transfer.factory import (
     WeightTransferEngineFactory,
     WeightTransferTrainerFactory,
 )
@@ -28,9 +28,9 @@ __all__ = [
     "WeightTransferEngineFactory",
     "TrainerWeightTransferEngine",
     "WeightTransferTrainerFactory",
-    "AphroditeWeightSyncClient",
-    "HTTPAphroditeWeightSyncClient",
-    "RayAphroditeWeightSyncClient",
+    "SonarWeightSyncClient",
+    "HTTPSonarWeightSyncClient",
+    "RaySonarWeightSyncClient",
     "ParamMeta",
     "Replicate",
     "Shard",

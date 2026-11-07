@@ -8,9 +8,9 @@ from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict
 
-from aphrodite.config import ProfilerConfig
-from aphrodite.engine.protocol import EngineClient
-from aphrodite.logger import init_logger
+from sonar.config import ProfilerConfig
+from sonar.engine.protocol import EngineClient
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 

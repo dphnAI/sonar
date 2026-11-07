@@ -4,19 +4,19 @@
 
 Single bridging point for the kernels V4.1 shares verbatim with V4: the
 re-exports below are the only place this package reaches into
-``aphrodite.models.deepseek_v4``, so submodules import them from ``.`` instead of
+``sonar.models.deepseek_v4``, so submodules import them from ``.`` instead of
 naming the V4 path themselves. Keep these imports above the ``.``-relative
 ones — ``indexer_k_store`` reads them off this partially-initialized module.
 """
 
-from aphrodite.models.deepseek_v4.common.ops.fused_indexer_q import (
+from sonar.models.deepseek_v4.common.ops.fused_indexer_q import (
     MXFP4_BLOCK_SIZE,
     fused_indexer_q_rope_quant,
 )
-from aphrodite.models.deepseek_v4.common.ops.fused_indexer_q import (
+from sonar.models.deepseek_v4.common.ops.fused_indexer_q import (
     _fp32x2_to_fp4x2 as _fp32x2_to_fp4x2,  # re-export for .indexer_k_store
 )
-from aphrodite.models.deepseek_v4.common.ops.fused_inv_rope_fp8_quant import (
+from sonar.models.deepseek_v4.common.ops.fused_inv_rope_fp8_quant import (
     fused_inv_rope_fp8_quant,
 )
 

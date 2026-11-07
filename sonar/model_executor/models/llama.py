@@ -32,30 +32,30 @@ import torch
 from torch import nn
 from transformers import LlamaConfig
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, CacheConfig
-from aphrodite.distributed import get_pp_group, get_tensor_model_parallel_world_size
-from aphrodite.model_executor.layers.activation import SiluAndMul
-from aphrodite.model_executor.layers.attention import (
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import CacheConfig, SonarConfig
+from sonar.distributed import get_pp_group, get_tensor_model_parallel_world_size
+from sonar.model_executor.layers.activation import SiluAndMul
+from sonar.model_executor.layers.attention import (
     Attention,
     EncoderOnlyAttention,
 )
-from aphrodite.model_executor.layers.fusion.fused_act_quant import maybe_fused_act_quant
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.fusion.fused_act_quant import maybe_fused_act_quant
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     MergedColumnParallelLinear,
     QKVParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.v1.attention.backend import AttentionType
+from sonar.sequence import IntermediateTensors
+from sonar.v1.attention.backend import AttentionType
 
 from .adapters import as_embedding_model, as_seq_cls_model
 from .interfaces import (
@@ -245,16 +245,16 @@ class LlamaAttention(nn.Module):
 class LlamaDecoderLayer(nn.Module):
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
         config: LlamaConfig | None = None,
         attn_layer_type: type[nn.Module] = LlamaAttention,
     ) -> None:
         super().__init__()
 
-        config = config or aphrodite_config.model_config.hf_config
-        cache_config = aphrodite_config.cache_config
-        quant_config = self.get_quant_config(aphrodite_config)
+        config = config or sonar_config.model_config.hf_config
+        cache_config = sonar_config.cache_config
+        quant_config = self.get_quant_config(sonar_config)
 
         self.hidden_size = config.hidden_size
         max_position_embeddings = getattr(config, "max_position_embeddings", 8192)
@@ -317,9 +317,9 @@ class LlamaDecoderLayer(nn.Module):
         hidden_states = self.mlp(hidden_states)
         return hidden_states, residual
 
-    def get_quant_config(self, aphrodite_config: AphroditeConfig) -> QuantizationConfig | None:
+    def get_quant_config(self, sonar_config: SonarConfig) -> QuantizationConfig | None:
         """Get quantization config for this layer. Override in subclasses."""
-        return aphrodite_config.quant_config
+        return sonar_config.quant_config
 
 
 @support_torch_compile(
@@ -333,7 +333,7 @@ class LlamaDecoderLayer(nn.Module):
     },
 )
 class LlamaModel(nn.Module, EagleModelMixin):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_stacked={
             # weight_name: (param_name, shard_id)
             ".q_proj": (".qkv_proj", "q"),
@@ -348,14 +348,14 @@ class LlamaModel(nn.Module, EagleModelMixin):
     def __init__(
         self,
         *,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
         layer_type: type[nn.Module] = LlamaDecoderLayer,
     ):
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
 
         self.config = config
         self.quant_config = quant_config
@@ -365,7 +365,7 @@ class LlamaModel(nn.Module, EagleModelMixin):
         if (
             get_pp_group().is_first_rank
             or (config.tie_word_embeddings and get_pp_group().is_last_rank)
-            or spec_decode_needs_target_embed(aphrodite_config)
+            or spec_decode_needs_target_embed(sonar_config)
         ):
             self.embed_tokens = VocabParallelEmbedding(
                 self.vocab_size,
@@ -376,7 +376,7 @@ class LlamaModel(nn.Module, EagleModelMixin):
             self.embed_tokens = PPMissingLayer()
         self.start_layer, self.end_layer, self.layers = make_layers(
             config.num_hidden_layers,
-            lambda prefix: layer_type(aphrodite_config=aphrodite_config, prefix=prefix),
+            lambda prefix: layer_type(sonar_config=sonar_config, prefix=prefix),
             prefix=f"{prefix}.layers",
         )
         if get_pp_group().is_last_rank:
@@ -440,7 +440,7 @@ class LlamaModel(nn.Module, EagleModelMixin):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
 
 class LlamaForCausalLM(
@@ -452,7 +452,7 @@ class LlamaForCausalLM(
     SupportsEagle3,
     SupportsQuant,
 ):
-    hf_to_aphrodite_mapper = LlamaModel.hf_to_aphrodite_mapper
+    hf_to_sonar_mapper = LlamaModel.hf_to_sonar_mapper
     # LoRA specific attributes
     packed_modules_mapping = {
         "qkv_proj": ["q_proj", "k_proj", "v_proj"],
@@ -466,18 +466,18 @@ class LlamaForCausalLM(
     def __init__(
         self,
         *,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
         layer_type: type[nn.Module] = LlamaDecoderLayer,
     ):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
         self.config = config
         self.use_tied_lm_head = model_should_use_tied_lm_head(config, quant_config)
 
         self.model = self._init_model(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             prefix=maybe_prefix(prefix, "model"),
             layer_type=layer_type,
         )
@@ -501,11 +501,11 @@ class LlamaForCausalLM(
 
     def _init_model(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
         layer_type: type[nn.Module] = LlamaDecoderLayer,
     ):
-        return LlamaModel(aphrodite_config=aphrodite_config, prefix=prefix, layer_type=layer_type)
+        return LlamaModel(sonar_config=sonar_config, prefix=prefix, layer_type=layer_type)
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.model.embed_input_ids(input_ids)

@@ -34,38 +34,38 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from aphrodite import _custom_ops as ops
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, CacheConfig, get_current_aphrodite_config
-from aphrodite.distributed import (
+from sonar import _custom_ops as ops
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import CacheConfig, SonarConfig, get_current_sonar_config
+from sonar.distributed import (
     get_ep_group,
     get_pp_group,
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
     tensor_model_parallel_all_gather,
 )
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.activation import SiluAndMul
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.activation import SiluAndMul
+from sonar.model_executor.layers.attention import Attention
+from sonar.model_executor.layers.fused_moe import (
     FusedMoEFactory,
     GateLinear,
     fused_moe_make_expert_params_mapping,
 )
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe.config import (
     _get_config_dtype_str,
 )
-from aphrodite.model_executor.layers.fused_moe.fused_moe import (
+from sonar.model_executor.layers.fused_moe.fused_moe import (
     _get_config_quant_dtype,
     _prepare_expert_assignment,
     dispatch_fused_moe_kernel,
     try_get_optimal_moe_config,
 )
-from aphrodite.model_executor.layers.fused_moe.utils import (
+from sonar.model_executor.layers.fused_moe.utils import (
     moe_kernel_quantize_input,
 )
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     MergedColumnParallelLinear,
     QKVParallelLinear,
@@ -73,18 +73,18 @@ from aphrodite.model_executor.layers.linear import (
     RowParallelLinear,
     UnquantizedLinearMethod,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.model_loader.weight_utils import (
+from sonar.model_executor.model_loader.weight_utils import (
     default_weight_loader,
     maybe_remap_kv_scale_name,
 )
-from aphrodite.model_executor.models.interfaces import (
+from sonar.model_executor.models.interfaces import (
     EagleModelMixin,
     MixtureOfExperts,
     SupportsEagle,
@@ -92,7 +92,7 @@ from aphrodite.model_executor.models.interfaces import (
     SupportsLoRA,
     SupportsPP,
 )
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.models.utils import (
     AutoWeightsLoader,
     PPMissingLayer,
     extract_layer_index,
@@ -102,8 +102,8 @@ from aphrodite.model_executor.models.utils import (
     maybe_prefix,
     sequence_parallel_chunk,
 )
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.triton_utils import tl
+from sonar.sequence import IntermediateTensors
+from sonar.triton_utils import tl
 
 logger = init_logger(__name__)
 
@@ -182,7 +182,7 @@ def _rope_weight_perm(head_dim: int, rope_head_dim: int) -> torch.Tensor:
     The K2Horizon checkpoint stores each head's channels in a GPT-J-interleaved
     convention with rope/nope channels interleaved. Applying this fixed
     (position-independent) permutation to the q/k weight rows lets the runtime
-    use Aphrodite's *native* NeoX partial-RoPE path (``head_size = head_dim``,
+    use Sonar's *native* NeoX partial-RoPE path (``head_size = head_dim``,
     ``rotary_dim = rope_head_dim``) with no per-forward permutes/all-gather.
     """
     D, R = head_dim, rope_head_dim
@@ -370,7 +370,7 @@ class K2HorizonRMSNorm(RMSNorm):
         x_grouped = x.reshape(-1, self.n_groups, self.group_size).reshape(-1, self.group_size)
         y_grouped = torch.empty_like(x_grouped)
 
-        # Reuse Aphrodite's RMSNorm CUDA kernel on each group.
+        # Reuse Sonar's RMSNorm CUDA kernel on each group.
         ops.rms_norm(
             y_grouped,
             x_grouped,
@@ -428,14 +428,14 @@ class K2HorizonMLP(nn.Module):
 class K2HorizonSparseMoeBlock(nn.Module):
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
     ):
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_text_config
-        parallel_config = aphrodite_config.parallel_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_text_config
+        parallel_config = sonar_config.parallel_config
+        quant_config = sonar_config.quant_config
 
         self.tp_size = get_tensor_model_parallel_world_size()
 
@@ -452,8 +452,8 @@ class K2HorizonSparseMoeBlock(nn.Module):
             )
 
         # Load balancing settings.
-        aphrodite_config = get_current_aphrodite_config()
-        eplb_config = aphrodite_config.parallel_config.eplb_config
+        sonar_config = get_current_sonar_config()
+        eplb_config = sonar_config.parallel_config.eplb_config
         self.enable_eplb = parallel_config.enable_eplb
 
         self.n_logical_experts = self.n_routed_experts
@@ -689,7 +689,7 @@ class K2HorizonAttention(nn.Module):
 class K2HorizonMoVAAttention(nn.Module):
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         hidden_size: int,
         num_heads: int,
         num_kv_heads: int,
@@ -851,14 +851,14 @@ class K2HorizonMoVAAttention(nn.Module):
             use_fp8_w8a8=False,
             use_int8_w8a16=False,
             use_int4_w4a16=False,
-            dtype=aphrodite_config.model_config.dtype,
+            dtype=sonar_config.model_config.dtype,
         )
         self.fused_mova_config = try_get_optimal_moe_config(
             w1_shape=w1_shape,
             w2_shape=torch.Size([w1_shape[0], w1_shape[2], w1_shape[1]]),
             top_k=self.num_experts_per_tok,
             dtype=config_dtype,
-            M=aphrodite_config.scheduler_config.max_num_batched_tokens,
+            M=sonar_config.scheduler_config.max_num_batched_tokens,
             block_shape=None,
         )
 
@@ -929,12 +929,12 @@ class K2HorizonMoVAAttention(nn.Module):
 
 
 class K2HorizonDecoderLayer(nn.Module):
-    def __init__(self, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_text_config
-        cache_config = aphrodite_config.cache_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_text_config
+        cache_config = sonar_config.cache_config
+        quant_config = sonar_config.quant_config
 
         self.hidden_size = config.hidden_size
         max_position_embeddings = getattr(config, "max_position_embeddings", 8192)
@@ -949,7 +949,7 @@ class K2HorizonDecoderLayer(nn.Module):
 
         if is_sparse_layer and config.mova_num_experts > 0:
             self.self_attn = K2HorizonMoVAAttention(
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 hidden_size=self.hidden_size,
                 num_heads=config.num_attention_heads,
                 num_kv_heads=config.num_key_value_heads,
@@ -991,7 +991,7 @@ class K2HorizonDecoderLayer(nn.Module):
             )
 
         if is_sparse_layer:
-            self.mlp = K2HorizonSparseMoeBlock(aphrodite_config=aphrodite_config, prefix=f"{prefix}.mlp")
+            self.mlp = K2HorizonSparseMoeBlock(sonar_config=sonar_config, prefix=f"{prefix}.mlp")
         else:
             self.mlp = K2HorizonMLP(
                 hidden_size=config.hidden_size,
@@ -1039,15 +1039,15 @@ class K2HorizonModel(nn.Module, EagleModelMixin):
     def __init__(
         self,
         *,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
         decoder_layer_type: type[torch.nn.Module] = K2HorizonDecoderLayer,
     ):
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_text_config
-        quant_config = aphrodite_config.quant_config
-        parallel_config = aphrodite_config.parallel_config
+        config = sonar_config.model_config.hf_text_config
+        quant_config = sonar_config.quant_config
+        parallel_config = sonar_config.parallel_config
         eplb_config = parallel_config.eplb_config
         self.num_redundant_experts = eplb_config.num_redundant_experts
 
@@ -1062,7 +1062,7 @@ class K2HorizonModel(nn.Module, EagleModelMixin):
         )
         self.start_layer, self.end_layer, self.layers = make_layers(
             config.num_hidden_layers,
-            lambda prefix: decoder_layer_type(aphrodite_config=aphrodite_config, prefix=prefix),
+            lambda prefix: decoder_layer_type(sonar_config=sonar_config, prefix=prefix),
             prefix=f"{prefix}.layers",
         )
 
@@ -1138,7 +1138,7 @@ class K2HorizonModel(nn.Module, EagleModelMixin):
 
         # Per-head gather index used to fold K2Horizon's partial-RoPE channel
         # reordering into the q_proj/k_proj rows and the q_norm/k_norm scales,
-        # so the runtime can use Aphrodite's native partial NeoX RoPE.
+        # so the runtime can use Sonar's native partial NeoX RoPE.
         head_dim = self.config.head_dim or (self.config.hidden_size // self.config.num_attention_heads)
         rope_head_dim = self.config.rope_head_dim or head_dim
         rope_perm_idx = _rope_weight_perm(head_dim, rope_head_dim)
@@ -1398,16 +1398,16 @@ class K2HorizonForCausalLM(nn.Module, SupportsPP, SupportsLoRA, SupportsEagle, S
 
     fall_back_to_pt_during_load = False
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_text_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_text_config
+        quant_config = sonar_config.quant_config
         self.config = config
         self.quant_config = quant_config
         # Only perform the following mapping when K2HorizonMLP exists
         if getattr(config, "mlp_only_layers", []):
             self.packed_modules_mapping["gate_up_proj"] = ["gate_proj", "up_proj"]
-        self.model = K2HorizonModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = K2HorizonModel(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
         self.lm_head = ParallelLMHead(
             config.vocab_size,
             config.hidden_size,

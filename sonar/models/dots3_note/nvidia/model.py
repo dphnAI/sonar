@@ -9,51 +9,51 @@ from dataclasses import replace
 import torch
 from torch import nn
 
-import aphrodite.envs as envs
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed import (
+import sonar.envs as envs
+from sonar.config import SonarConfig
+from sonar.distributed import (
     get_pp_group,
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
     tensor_model_parallel_all_gather,
     tensor_model_parallel_all_reduce,
 )
-from aphrodite.model_executor.layers.attention import MLAAttention
-from aphrodite.model_executor.layers.fused_embed_norm import has_full_vocab_on_rank
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.attention import MLAAttention
+from sonar.model_executor.layers.fused_embed_norm import has_full_vocab_on_rank
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     DCPGroupColumnParallelLinear,
     ReplicatedLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     GroupShape,
     scaled_dequantize,
 )
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.layers.vocab_parallel_embedding import VocabParallelEmbedding
-from aphrodite.model_executor.models.deepseek_v2 import (
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.layers.vocab_parallel_embedding import VocabParallelEmbedding
+from sonar.model_executor.models.deepseek_v2 import (
     DeepSeekV2FusedQkvAProjLinear,
     DeepseekV2MLAAttention,
     DeepseekV2MLP,
     DeepseekV2MoE,
 )
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.models.utils import (
     PPMissingLayer,
     make_empty_intermediate_tensors_factory,
     make_layers,
     pp_topk_buffers,
     sequence_parallel_chunk,
 )
-from aphrodite.models.deepseek_v32.nvidia.model import (
+from sonar.models.deepseek_v32.nvidia.model import (
     DeepseekV32DecoderLayer,
     DeepseekV32ForCausalLM,
     DeepseekV32Model,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.v1.kv_cache_interface import MLAAttentionSpec
+from sonar.platforms import current_platform
+from sonar.v1.kv_cache_interface import MLAAttentionSpec
 
 from .attention import (
     Dots3NoteFlashAttnPrefillBackend,
@@ -228,8 +228,8 @@ class Dots3NotePaddedMLAAttention(MLAAttention):
         assert physical_head_size >= self.head_size
         self.physical_head_size = physical_head_size
 
-    def get_kv_cache_spec(self, aphrodite_config: AphroditeConfig) -> MLAAttentionSpec:
-        spec = super().get_kv_cache_spec(aphrodite_config)
+    def get_kv_cache_spec(self, sonar_config: SonarConfig) -> MLAAttentionSpec:
+        spec = super().get_kv_cache_spec(sonar_config)
         assert isinstance(spec, MLAAttentionSpec)
         return replace(spec, head_size=self.physical_head_size)
 
@@ -239,12 +239,12 @@ class Dots3NoteFullAttention(DeepseekV2MLAAttention):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         config,
         prefix: str,
         topk_indices_buffer: torch.Tensor | None = None,
     ) -> None:
-        quant_config = aphrodite_config.quant_config
+        quant_config = sonar_config.quant_config
         local_config = copy.copy(config)
         object.__setattr__(
             local_config,
@@ -255,7 +255,7 @@ class Dots3NoteFullAttention(DeepseekV2MLAAttention):
             },
         )
         super().__init__(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             config=local_config,
             hidden_size=config.hidden_size,
             num_heads=config.num_attention_heads,
@@ -265,7 +265,7 @@ class Dots3NoteFullAttention(DeepseekV2MLAAttention):
             q_lora_rank=config.q_lora_rank,
             kv_lora_rank=config.kv_lora_rank,
             max_position_embeddings=config.max_position_embeddings,
-            cache_config=aphrodite_config.cache_config,
+            cache_config=sonar_config.cache_config,
             quant_config=quant_config,
             prefix=prefix,
             topk_indices_buffer=topk_indices_buffer,
@@ -273,7 +273,7 @@ class Dots3NoteFullAttention(DeepseekV2MLAAttention):
         )
         wrapper = self._modules.pop("mla_attn")
         inner_attention = wrapper.mla_attn
-        aphrodite_config.compilation_config.static_forward_context.pop(inner_attention.layer_name)
+        sonar_config.compilation_config.static_forward_context.pop(inner_attention.layer_name)
         prefill_backend_cls = (
             type(inner_attention.prefill_backend) if inner_attention.prefill_backend is not None else None
         )
@@ -287,7 +287,7 @@ class Dots3NoteFullAttention(DeepseekV2MLAAttention):
             v_head_dim=inner_attention.v_head_dim,
             kv_b_proj=inner_attention.kv_b_proj,
             dcp_q_replicate=inner_attention.dcp_q_replicate,
-            cache_config=aphrodite_config.cache_config,
+            cache_config=sonar_config.cache_config,
             quant_config=quant_config,
             prefix=inner_attention.layer_name,
             use_sparse=True,
@@ -341,7 +341,7 @@ class Dots3NoteSlidingAttention(nn.Module):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         config,
         prefix: str,
         topk_indices_buffer: torch.Tensor | None = None,
@@ -357,7 +357,7 @@ class Dots3NoteSlidingAttention(nn.Module):
         qk_head_dim = qk_nope_head_dim + qk_rope_head_dim
         tp_size = get_tensor_model_parallel_world_size()
         assert num_heads % tp_size == 0
-        quant_config = aphrodite_config.quant_config
+        quant_config = sonar_config.quant_config
 
         fused_qkv_a_proj = DeepSeekV2FusedQkvAProjLinear(
             config.hidden_size,
@@ -366,9 +366,9 @@ class Dots3NoteSlidingAttention(nn.Module):
             prefix=f"{prefix}.fused_qkv_a_proj",
         )
         qrep_enabled = (
-            envs.APHRODITE_DCP_Q_REPLICATE
-            and aphrodite_config.parallel_config.decode_context_parallel_size > 1
-            and aphrodite_config.parallel_config.prefill_context_parallel_size <= 1
+            envs.SONAR_DCP_Q_REPLICATE
+            and sonar_config.parallel_config.decode_context_parallel_size > 1
+            and sonar_config.parallel_config.prefill_context_parallel_size <= 1
         )
         q_proj_cls = DCPGroupColumnParallelLinear if qrep_enabled else ColumnParallelLinear
         q_a_layernorm = RMSNorm(q_lora_rank, eps=config.rms_norm_eps)
@@ -415,7 +415,7 @@ class Dots3NoteSlidingAttention(nn.Module):
             },
             is_neox_style=False,
         )
-        cache_config = aphrodite_config.cache_config
+        cache_config = sonar_config.cache_config
         if cache_config.cache_dtype == "fp8_ds_mla":
             cache_config = copy.copy(cache_config)
             cache_config.cache_dtype = "fp8"
@@ -487,16 +487,16 @@ class Dots3NoteDecoderLayer(DeepseekV32DecoderLayer):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str,
         config=None,
         topk_indices_buffer: torch.Tensor | None = None,
     ) -> None:
         nn.Module.__init__(self)
         if config is None:
-            config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
-        parallel_config = aphrodite_config.parallel_config
+            config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
+        parallel_config = sonar_config.parallel_config
         self.hidden_size = config.hidden_size
         layer_idx = int(prefix.split(sep=".")[-1])
         self.layer_idx = layer_idx
@@ -508,7 +508,7 @@ class Dots3NoteDecoderLayer(DeepseekV32DecoderLayer):
             else Dots3NoteFullAttention
         )
         self.self_attn = attention_cls(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             config=config,
             prefix=f"{prefix}.self_attn",
             topk_indices_buffer=topk_indices_buffer,
@@ -549,10 +549,10 @@ class Dots3NoteDecoderLayer(DeepseekV32DecoderLayer):
 class Dots3NoteModel(DeepseekV32Model):
     """DeepSeek-V3.2 runtime shell with NOTE-local decoder layers."""
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         nn.Module.__init__(self)
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
         self.config = config
         self.device = current_platform.device_type
         self.vocab_size = config.vocab_size
@@ -560,7 +560,7 @@ class Dots3NoteModel(DeepseekV32Model):
         self.is_v32 = True
         self._weight_block_size = getattr(quant_config, "weight_block_size", None)
         self.topk_indices_buffer = torch.empty(
-            aphrodite_config.scheduler_config.max_num_batched_tokens,
+            sonar_config.scheduler_config.max_num_batched_tokens,
             config.index_topk,
             dtype=torch.int32,
             device=self.device,
@@ -578,7 +578,7 @@ class Dots3NoteModel(DeepseekV32Model):
         self.start_layer, self.end_layer, self.layers = make_layers(
             config.num_hidden_layers,
             lambda prefix: Dots3NoteDecoderLayer(
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 prefix=prefix,
                 topk_indices_buffer=self.topk_indices_buffer,
             ),
@@ -593,7 +593,7 @@ class Dots3NoteModel(DeepseekV32Model):
             ["hidden_states"], config.hidden_size, self.pp_buffers
         )
         self.aux_hidden_state_layers = tuple[int, ...]()
-        self.num_redundant_experts = aphrodite_config.parallel_config.eplb_config.num_redundant_experts
+        self.num_redundant_experts = sonar_config.parallel_config.eplb_config.num_redundant_experts
 
     def _adapt_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> Iterator[tuple[str, torch.Tensor]]:
         pending_indexer_fp8: dict[tuple[str, str], dict[str, torch.Tensor]] = {}

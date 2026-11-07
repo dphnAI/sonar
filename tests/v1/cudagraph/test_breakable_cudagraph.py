@@ -12,13 +12,13 @@ from unittest.mock import MagicMock, patch
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 DEVICE_TYPE = current_platform.device_type
 HAS_DEVICE_GRAPH = current_platform.is_cuda_alike() or current_platform.is_xpu()
 
 if current_platform.is_xpu():
-    from aphrodite.v1.worker.xpu_model_runner import _torch_cuda_wrapper
+    from sonar.v1.worker.xpu_model_runner import _torch_cuda_wrapper
 
     # Route torch.cuda graph/stream APIs to torch.xpu, as XPUModelRunner does.
     with _torch_cuda_wrapper():
@@ -34,15 +34,15 @@ def _enable_breakable_cudagraph(monkeypatch: pytest.MonkeyPatch):
     module-level os.environ assignment used to leak into
     test_cudagraph_dispatch.py and break it).
     """
-    import aphrodite.envs as envs
+    import sonar.envs as envs
 
-    monkeypatch.setenv("APHRODITE_USE_BREAKABLE_CUDAGRAPH", "1")
+    monkeypatch.setenv("SONAR_USE_BREAKABLE_CUDAGRAPH", "1")
     envs.disable_envs_cache()
 
 
 def test_piecewise_capture_builds_fresh_metadata_for_both_passes():
-    from aphrodite.config import CUDAGraphMode
-    from aphrodite.v1.worker.gpu.cudagraph_utils import (
+    from sonar.config import CUDAGraphMode
+    from sonar.v1.worker.gpu.cudagraph_utils import (
         BatchExecutionDescriptor,
         CudaGraphManager,
     )
@@ -72,11 +72,11 @@ def test_piecewise_capture_builds_fresh_metadata_for_both_passes():
     capture_stream = object()
     with (
         patch(
-            "aphrodite.v1.worker.gpu.cudagraph_utils.graph_capture",
+            "sonar.v1.worker.gpu.cudagraph_utils.graph_capture",
             return_value=nullcontext(SimpleNamespace(stream=capture_stream)),
         ),
         patch(
-            "aphrodite.v1.worker.gpu.cudagraph_utils.is_global_first_rank",
+            "sonar.v1.worker.gpu.cudagraph_utils.is_global_first_rank",
             return_value=False,
         ),
     ):
@@ -95,7 +95,7 @@ def test_piecewise_capture_builds_fresh_metadata_for_both_passes():
 def _reset_breakable_tls():
     """Defensively clear thread-local capture state between tests so a
     failure in one test can't leak "nested capture" errors into the next."""
-    from aphrodite.compilation.breakable_cudagraph import BreakableCUDAGraphCapture
+    from sonar.compilation.breakable_cudagraph import BreakableCUDAGraphCapture
 
     BreakableCUDAGraphCapture._tls.active = None
     yield
@@ -112,14 +112,14 @@ def cuda_capture_stream():
     """
     if not HAS_DEVICE_GRAPH:
         pytest.skip("CUDA or XPU graph required")
-    from aphrodite.utils.torch_utils import _current_stream_tls
+    from sonar.utils.torch_utils import _current_stream_tls
 
     prev_stream = getattr(_current_stream_tls, "value", None)
     stream = torch.cuda.Stream()
     with torch.cuda.stream(stream):
         yield stream
     torch.cuda.current_stream().wait_stream(stream)
-    # Exiting torch.cuda.stream() records the default stream in Aphrodite's
+    # Exiting torch.cuda.stream() records the default stream in Sonar's
     # patched set_stream cache. A later CUDAGraphWrapper capture in the same
     # process would then run on the default stream, which cannot capture
     # (this broke test_cudagraph_dispatch.py when run in-process after this
@@ -133,7 +133,7 @@ def cuda_capture_stream():
 
 
 def test_decorator_passthrough_outside_capture():
-    from aphrodite.compilation.breakable_cudagraph import eager_break_during_capture
+    from sonar.compilation.breakable_cudagraph import eager_break_during_capture
 
     calls = []
 
@@ -148,10 +148,10 @@ def test_decorator_passthrough_outside_capture():
 
 @pytest.mark.parametrize("enabled", [False, True])
 def test_decorator_passthrough_returns_fn_result(monkeypatch: pytest.MonkeyPatch, enabled: bool):
-    from aphrodite.compilation.breakable_cudagraph import eager_break_during_capture
+    from sonar.compilation.breakable_cudagraph import eager_break_during_capture
 
     if not enabled:
-        monkeypatch.delenv("APHRODITE_USE_BREAKABLE_CUDAGRAPH")
+        monkeypatch.delenv("SONAR_USE_BREAKABLE_CUDAGRAPH")
     sentinel = object()
 
     @eager_break_during_capture
@@ -164,20 +164,20 @@ def test_decorator_passthrough_returns_fn_result(monkeypatch: pytest.MonkeyPatch
 def test_decorator_breaks_when_enabled_after_decoration(
     monkeypatch: pytest.MonkeyPatch,
 ):
-    """AphroditeConfig can enable breakable cudagraphs after the decorated module
+    """SonarConfig can enable breakable cudagraphs after the decorated module
     was imported (e.g. on a cold model-info cache); the op must still break."""
-    from aphrodite.compilation.breakable_cudagraph import (
+    from sonar.compilation.breakable_cudagraph import (
         BreakableCUDAGraphCapture,
         eager_break_during_capture,
     )
 
-    monkeypatch.delenv("APHRODITE_USE_BREAKABLE_CUDAGRAPH")
+    monkeypatch.delenv("SONAR_USE_BREAKABLE_CUDAGRAPH")
 
     @eager_break_during_capture
     def op(x):
         return x + 1
 
-    monkeypatch.setenv("APHRODITE_USE_BREAKABLE_CUDAGRAPH", "1")
+    monkeypatch.setenv("SONAR_USE_BREAKABLE_CUDAGRAPH", "1")
 
     class _Capture:
         _capturing = True
@@ -203,11 +203,11 @@ def test_attention_op_breaks_when_imported_before_enable(tmp_path):
     import subprocess
     import sys
 
-    env = {k: v for k, v in os.environ.items() if k != "APHRODITE_USE_BREAKABLE_CUDAGRAPH"}
-    env["APHRODITE_CACHE_ROOT"] = str(tmp_path)
+    env = {k: v for k, v in os.environ.items() if k != "SONAR_USE_BREAKABLE_CUDAGRAPH"}
+    env["SONAR_CACHE_ROOT"] = str(tmp_path)
     code = (
-        "import aphrodite.model_executor.layers.attention.attention as a\n"
-        "import aphrodite.compilation.breakable_cudagraph as b\n"
+        "import sonar.model_executor.layers.attention.attention as a\n"
+        "import sonar.compilation.breakable_cudagraph as b\n"
         "c = a.unified_attention_with_output.__code__\n"
         "w = b.eager_break_during_capture(lambda: None).__code__\n"
         "assert (c.co_filename, c.co_name) == (w.co_filename, w.co_name), c\n"
@@ -217,10 +217,10 @@ def test_attention_op_breaks_when_imported_before_enable(tmp_path):
 
 @pytest.mark.parametrize("enabled", [False, True])
 def test_decorated_op_traces_without_graph_break(monkeypatch: pytest.MonkeyPatch, enabled: bool):
-    from aphrodite.compilation.breakable_cudagraph import eager_break_during_capture
+    from sonar.compilation.breakable_cudagraph import eager_break_during_capture
 
     if not enabled:
-        monkeypatch.delenv("APHRODITE_USE_BREAKABLE_CUDAGRAPH")
+        monkeypatch.delenv("SONAR_USE_BREAKABLE_CUDAGRAPH")
 
     @eager_break_during_capture
     def op(x):
@@ -241,14 +241,14 @@ def test_decorated_op_traces_without_graph_break(monkeypatch: pytest.MonkeyPatch
 
 
 def test_current_is_none_when_inactive():
-    from aphrodite.compilation.breakable_cudagraph import BreakableCUDAGraphCapture
+    from sonar.compilation.breakable_cudagraph import BreakableCUDAGraphCapture
 
     assert BreakableCUDAGraphCapture.current() is None
     assert BreakableCUDAGraphCapture.is_active() is False
 
 
 def test_thread_local_active_during_context(cuda_capture_stream):
-    from aphrodite.compilation.breakable_cudagraph import BreakableCUDAGraphCapture
+    from sonar.compilation.breakable_cudagraph import BreakableCUDAGraphCapture
 
     cap = BreakableCUDAGraphCapture()
     with cap:
@@ -258,7 +258,7 @@ def test_thread_local_active_during_context(cuda_capture_stream):
 
 
 def test_nested_capture_raises(cuda_capture_stream):
-    from aphrodite.compilation.breakable_cudagraph import BreakableCUDAGraphCapture
+    from sonar.compilation.breakable_cudagraph import BreakableCUDAGraphCapture
 
     outer = BreakableCUDAGraphCapture()
     inner = BreakableCUDAGraphCapture()
@@ -274,7 +274,7 @@ def test_active_state_isolated_across_threads(cuda_capture_stream):
     that the worker thread sees its own slot as None while the main
     thread has a capture active.
     """
-    from aphrodite.compilation.breakable_cudagraph import BreakableCUDAGraphCapture
+    from sonar.compilation.breakable_cudagraph import BreakableCUDAGraphCapture
 
     worker_view: dict[str, BreakableCUDAGraphCapture | None] = {}
 
@@ -301,7 +301,7 @@ def test_active_state_isolated_across_threads(cuda_capture_stream):
 
 
 def test_capture_with_no_eager_break_records_one_graph(cuda_capture_stream):
-    from aphrodite.compilation.breakable_cudagraph import BreakableCUDAGraphCapture
+    from sonar.compilation.breakable_cudagraph import BreakableCUDAGraphCapture
 
     x = torch.zeros(4, device=DEVICE_TYPE)
     cap = BreakableCUDAGraphCapture()
@@ -313,7 +313,7 @@ def test_capture_with_no_eager_break_records_one_graph(cuda_capture_stream):
 
 
 def test_add_eager_creates_alternating_graph_eager_graph(cuda_capture_stream):
-    from aphrodite.compilation.breakable_cudagraph import BreakableCUDAGraphCapture
+    from sonar.compilation.breakable_cudagraph import BreakableCUDAGraphCapture
 
     x = torch.zeros(4, device=DEVICE_TYPE)
     counter = {"eager_calls": 0}
@@ -354,7 +354,7 @@ def test_capture_replay_matches_eager_simple(cuda_capture_stream):
     actually mutate state at capture time. So we check correctness after
     ``replay()``, not after ``with cap:`` exits.
     """
-    from aphrodite.compilation.breakable_cudagraph import BreakableCUDAGraphCapture
+    from sonar.compilation.breakable_cudagraph import BreakableCUDAGraphCapture
 
     x = torch.zeros(8, device=DEVICE_TYPE)
     log: list[str] = []
@@ -394,7 +394,7 @@ def test_decorator_breaks_when_invoked_inside_capture(cuda_capture_stream):
     """Verify @eager_break_during_capture correctly routes through
     add_eager when inside a capture context, and runs straight through
     when there's no active capture."""
-    from aphrodite.compilation.breakable_cudagraph import (
+    from sonar.compilation.breakable_cudagraph import (
         BreakableCUDAGraphCapture,
         eager_break_during_capture,
     )
@@ -441,12 +441,12 @@ def test_quantized_activation_replay_does_not_retain_tensors(cuda_capture_stream
     import gc
     import weakref
 
-    from aphrodite.compilation.breakable_cudagraph import (
+    from sonar.compilation.breakable_cudagraph import (
         BreakableCUDAGraphCapture,
         eager_break_during_capture,
     )
-    from aphrodite.model_executor.layers.fusion.quant_activation import QuantizedActivation
-    from aphrodite.model_executor.layers.quantization.utils.quant_utils import kMxfp8Dynamic
+    from sonar.model_executor.layers.fusion.quant_activation import QuantizedActivation
+    from sonar.model_executor.layers.quantization.utils.quant_utils import kMxfp8Dynamic
 
     @eager_break_during_capture
     def consume(x, data_out, scale_out):
@@ -484,11 +484,11 @@ def test_quantized_activation_replay_does_not_retain_tensors(cuda_capture_stream
 
 def test_eager_attention_inside_multistream_overlap(cuda_capture_stream):
     """Handle an eager attention break inside a multi-stream overlap region."""
-    from aphrodite.compilation.breakable_cudagraph import (
+    from sonar.compilation.breakable_cudagraph import (
         BreakableCUDAGraphCapture,
         eager_break_during_capture,
     )
-    from aphrodite.utils.multi_stream_utils import maybe_execute_in_parallel
+    from sonar.utils.multi_stream_utils import maybe_execute_in_parallel
 
     x = torch.zeros(1024, device=DEVICE_TYPE)
     output = torch.empty_like(x)
@@ -536,7 +536,7 @@ def test_eager_attention_inside_multistream_overlap(cuda_capture_stream):
 
 
 def test_replay_invokes_eager_segments_in_order(cuda_capture_stream):
-    from aphrodite.compilation.breakable_cudagraph import BreakableCUDAGraphCapture
+    from sonar.compilation.breakable_cudagraph import BreakableCUDAGraphCapture
 
     log: list[str] = []
     x = torch.zeros(1, device=DEVICE_TYPE)
@@ -573,7 +573,7 @@ def test_replay_invokes_eager_segments_in_order(cuda_capture_stream):
 
 
 def test_exception_in_body_clears_active(cuda_capture_stream):
-    from aphrodite.compilation.breakable_cudagraph import BreakableCUDAGraphCapture
+    from sonar.compilation.breakable_cudagraph import BreakableCUDAGraphCapture
 
     cap = BreakableCUDAGraphCapture()
     with pytest.raises(RuntimeError, match="boom"), cap:
@@ -596,7 +596,7 @@ def test_nested_decorated_op_runs_inline(cuda_capture_stream):
     This mirrors the deepseek_v4_attention case where the outer attention
     op's impl internally dispatches sparse_attn_indexer (also decorated).
     """
-    from aphrodite.compilation.breakable_cudagraph import (
+    from sonar.compilation.breakable_cudagraph import (
         BreakableCUDAGraphCapture,
         eager_break_during_capture,
     )
@@ -641,7 +641,7 @@ def test_nested_decorated_op_runs_inline(cuda_capture_stream):
 # ---------------------------------------------------------------------------
 
 
-def _mock_aphrodite_config():
+def _mock_sonar_config():
     config = MagicMock()
     config.parallel_config.data_parallel_size = 1
     config.parallel_config.use_sequence_parallel_moe = False
@@ -652,9 +652,9 @@ def _mock_aphrodite_config():
 def test_wrapper_falls_through_on_runtime_mode_mismatch():
     """A PIECEWISE-scoped wrapper runs other modes eagerly, capturing
     nothing, so an outer CUDAGraphWrapper can own them."""
-    from aphrodite.compilation.breakable_cudagraph import BreakableCUDAGraphWrapper
-    from aphrodite.config import CUDAGraphMode
-    from aphrodite.forward_context import BatchDescriptor, set_forward_context
+    from sonar.compilation.breakable_cudagraph import BreakableCUDAGraphWrapper
+    from sonar.config import CUDAGraphMode
+    from sonar.forward_context import BatchDescriptor, set_forward_context
 
     calls = []
 
@@ -662,7 +662,7 @@ def test_wrapper_falls_through_on_runtime_mode_mismatch():
         calls.append(x)
         return x + 1
 
-    config = _mock_aphrodite_config()
+    config = _mock_sonar_config()
     wrapper = BreakableCUDAGraphWrapper(model, config, runtime_mode=CUDAGraphMode.PIECEWISE)
     desc = BatchDescriptor(num_tokens=4)
 
@@ -679,9 +679,9 @@ def test_wrapper_falls_through_on_runtime_mode_mismatch():
 
 
 def test_wrapper_captures_on_runtime_mode_match():
-    from aphrodite.compilation.breakable_cudagraph import BreakableCUDAGraphWrapper
-    from aphrodite.config import CUDAGraphMode
-    from aphrodite.forward_context import BatchDescriptor, set_forward_context
+    from sonar.compilation.breakable_cudagraph import BreakableCUDAGraphWrapper
+    from sonar.config import CUDAGraphMode
+    from sonar.forward_context import BatchDescriptor, set_forward_context
 
     calls = []
 
@@ -689,7 +689,7 @@ def test_wrapper_captures_on_runtime_mode_match():
         calls.append(x)
         return x + 1
 
-    config = _mock_aphrodite_config()
+    config = _mock_sonar_config()
     wrapper = BreakableCUDAGraphWrapper(model, config, runtime_mode=CUDAGraphMode.PIECEWISE)
     desc = BatchDescriptor(num_tokens=4)
 
@@ -712,14 +712,14 @@ def test_wrapper_captures_on_runtime_mode_match():
 
 def test_wrapper_default_matches_any_non_none_mode():
     """runtime_mode=None matches any non-NONE mode (MRV2 relies on this)."""
-    from aphrodite.compilation.breakable_cudagraph import BreakableCUDAGraphWrapper
-    from aphrodite.config import CUDAGraphMode
-    from aphrodite.forward_context import BatchDescriptor, set_forward_context
+    from sonar.compilation.breakable_cudagraph import BreakableCUDAGraphWrapper
+    from sonar.config import CUDAGraphMode
+    from sonar.forward_context import BatchDescriptor, set_forward_context
 
     def model(x):
         return x + 1
 
-    config = _mock_aphrodite_config()
+    config = _mock_sonar_config()
     wrapper = BreakableCUDAGraphWrapper(model, config)
     desc = BatchDescriptor(num_tokens=4)
 
@@ -741,14 +741,14 @@ def test_wrapper_default_matches_any_non_none_mode():
 
 def test_unwrap_recurses_through_nested_wrappers():
     """unwrap() reaches the raw model through nested wrappers."""
-    from aphrodite.compilation.breakable_cudagraph import BreakableCUDAGraphWrapper
-    from aphrodite.compilation.cuda_graph import CUDAGraphWrapper
-    from aphrodite.config import CUDAGraphMode
+    from sonar.compilation.breakable_cudagraph import BreakableCUDAGraphWrapper
+    from sonar.compilation.cuda_graph import CUDAGraphWrapper
+    from sonar.config import CUDAGraphMode
 
     def model(x):
         return x + 1
 
-    config = _mock_aphrodite_config()
+    config = _mock_sonar_config()
     inner = BreakableCUDAGraphWrapper(model, config, runtime_mode=CUDAGraphMode.PIECEWISE)
     outer = CUDAGraphWrapper(inner, config, runtime_mode=CUDAGraphMode.FULL)
 

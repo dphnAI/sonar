@@ -5,17 +5,17 @@ from typing import TypeAlias
 
 import torch
 
-from aphrodite.config import PoolerConfig, get_current_aphrodite_config
-from aphrodite.model_executor.layers.pooler import ClassifierFn, PoolingParamsUpdate
-from aphrodite.model_executor.layers.pooler.abstract import Pooler
-from aphrodite.model_executor.layers.pooler.activations import (
+from sonar.config import PoolerConfig, get_current_sonar_config
+from sonar.model_executor.layers.pooler import ClassifierFn, PoolingParamsUpdate
+from sonar.model_executor.layers.pooler.abstract import Pooler
+from sonar.model_executor.layers.pooler.activations import (
     PoolerActivation,
     PoolerNormalize,
     resolve_classifier_act_fn,
 )
-from aphrodite.model_executor.models.adapters import _load_st_projector
-from aphrodite.tasks import POOLING_TASKS, PoolingTask
-from aphrodite.v1.pool.metadata import PoolingMetadata
+from sonar.model_executor.models.adapters import _load_st_projector
+from sonar.tasks import POOLING_TASKS, PoolingTask
+from sonar.v1.pool.metadata import PoolingMetadata
 
 from .heads import (
     ClassifierPoolerHead,
@@ -94,8 +94,8 @@ class SequencePooler(Pooler):
 def pooler_for_embed(pooler_config: PoolerConfig) -> SequencePooler:
     pooling = get_seq_pooling_method(pooler_config.get_seq_pooling_type())
 
-    aphrodite_config = get_current_aphrodite_config()
-    model_config = aphrodite_config.model_config
+    sonar_config = get_current_sonar_config()
+    model_config = sonar_config.model_config
     head = EmbeddingPoolerHead(
         head_dtype=model_config.head_dtype,
         projector=_load_st_projector(model_config),
@@ -115,8 +115,8 @@ def pooler_for_classify(
     if pooling is None:
         pooling = get_seq_pooling_method(pooler_config.get_seq_pooling_type())
 
-    aphrodite_config = get_current_aphrodite_config()
-    model_config = aphrodite_config.model_config
+    sonar_config = get_current_sonar_config()
+    model_config = sonar_config.model_config
     if model_config.pooler_config is None:
         raise ValueError("model_config.pooler_config must be set for classification pooling")
     head = ClassifierPoolerHead(

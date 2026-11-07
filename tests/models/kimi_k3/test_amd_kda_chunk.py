@@ -10,13 +10,13 @@ outputs agree to bfloat16 rounding and the final states nearly exactly.
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 
 def _fused_chunk_available() -> bool:
     if not (current_platform.is_rocm() and torch.cuda.is_available()):
         return False
-    from aphrodite.models.kimi_k3.amd.ops.kda_chunk import is_fused_kda_chunk_supported
+    from sonar.models.kimi_k3.amd.ops.kda_chunk import is_fused_kda_chunk_supported
 
     return is_fused_kda_chunk_supported()
 
@@ -33,7 +33,7 @@ LOWER_BOUND = -5.0
 
 def _requires_kernel() -> None:
     if not hasattr(torch.ops._C, "fused_kda_chunk"):
-        pytest.skip("Aphrodite was built without the fused KDA chunk kernel")
+        pytest.skip("Sonar was built without the fused KDA chunk kernel")
 
 
 def _inputs(seqlens: list[int], seed: int) -> dict:
@@ -56,7 +56,7 @@ def _inputs(seqlens: list[int], seed: int) -> dict:
 
 
 def _run(inp: dict, use_fused: bool, out: torch.Tensor | None = None, **kw):
-    from aphrodite.models.kimi_k3.amd.ops.kda_prefill import chunk_kda_prefill
+    from sonar.models.kimi_k3.amd.ops.kda_prefill import chunk_kda_prefill
 
     return chunk_kda_prefill(
         q=inp["q"].clone(),
@@ -79,7 +79,7 @@ def _run(inp: dict, use_fused: bool, out: torch.Tensor | None = None, **kw):
 
 def _force_groups(monkeypatch, groups: int) -> None:
     """Pin the group count, which is otherwise a function of the device."""
-    import aphrodite.models.kimi_k3.amd.ops.kda_chunk as kda_chunk
+    import sonar.models.kimi_k3.amd.ops.kda_chunk as kda_chunk
 
     monkeypatch.setattr(kda_chunk, "_chunk_groups", lambda *_: groups)
 
@@ -112,7 +112,7 @@ def test_fused_chunk_matches_triton(seqlens: list[int]) -> None:
 )
 def test_gluon_chunk_matches_triton(seqlens: list[int]) -> None:
     """AITER's Gluon chunk_kda must match the Triton chunk path too."""
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     if not rocm_aiter_ops.is_kda_gluon_prefill_available():
         pytest.skip("AITER Gluon chunk_kda is not available here")
@@ -266,7 +266,7 @@ def test_fused_conv_matches_reference_conv(seqlens: list[int], has_state: bool) 
     """
     import torch.nn.functional as F
 
-    from aphrodite.models.kimi_k3.amd.ops.kda_chunk import (
+    from sonar.models.kimi_k3.amd.ops.kda_chunk import (
         fused_kda_chunk,
         fused_kda_prologue,
     )
@@ -405,8 +405,8 @@ def test_accepts_chunk_metadata_from_the_attention_builder(
     """
     _requires_kernel()
 
-    from aphrodite.models.kimi_k3.amd.kda_metadata import prepare_chunk_metadata_device
-    from aphrodite.third_party.flash_linear_attention.ops.utils import FLA_CHUNK_SIZE
+    from sonar.models.kimi_k3.amd.kda_metadata import prepare_chunk_metadata_device
+    from sonar.third_party.flash_linear_attention.ops.utils import FLA_CHUNK_SIZE
 
     inp = _inputs(seqlens, seed=17)
     cu = inp["cu"]
@@ -528,7 +528,7 @@ def test_gluon_hands_checkpoint_steps_to_fused() -> None:
     the checkpoint must all match a Triton prefill of the whole prompt.
     """
     _requires_kernel()
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     if not rocm_aiter_ops.is_kda_gluon_prefill_available():
         pytest.skip("AITER Gluon chunk_kda is not available here")
@@ -563,7 +563,7 @@ def test_unusable_checkpoint_offsets_write_nothing(offset: int, dtype: torch.dty
     """
     _requires_kernel()
 
-    from aphrodite.models.kimi_k3.amd.ops.kda_chunk import KDA_CHECKPOINT_ALIGNMENT
+    from sonar.models.kimi_k3.amd.ops.kda_chunk import KDA_CHECKPOINT_ALIGNMENT
 
     assert offset % KDA_CHECKPOINT_ALIGNMENT != 0 or offset > 512
     inp = _inputs([512], seed=31)
@@ -670,7 +670,7 @@ def _paged_cache(inp: dict, warm: list[bool], rows: list[int], slots: int, dtype
 
 
 def _run_paged(inp: dict, cache, idx, warm, use_fused: bool, **kw):
-    from aphrodite.models.kimi_k3.amd.ops.kda_prefill import chunk_kda_prefill
+    from sonar.models.kimi_k3.amd.ops.kda_prefill import chunk_kda_prefill
 
     return chunk_kda_prefill(
         q=inp["q"].clone(),

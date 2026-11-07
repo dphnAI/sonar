@@ -12,49 +12,49 @@ import torch.nn as nn
 import torch.nn.functional as F
 from transformers import BatchFeature
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.multimodal import MultiModalDummyOptions
-from aphrodite.distributed import (
+from sonar.config import SonarConfig
+from sonar.config.multimodal import MultiModalDummyOptions
+from sonar.distributed import (
     get_pp_group,
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
     tensor_model_parallel_all_gather,
     tensor_model_parallel_all_reduce,
 )
-from aphrodite.inputs import MultiModalDataDict
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.activation import get_act_fn
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.layers.attention.mm_encoder_attention import (
+from sonar.inputs import MultiModalDataDict
+from sonar.logger import init_logger
+from sonar.model_executor.layers.activation import get_act_fn
+from sonar.model_executor.layers.attention import Attention
+from sonar.model_executor.layers.attention.mm_encoder_attention import (
     MMEncoderAttention,
 )
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.model_executor.layers.fused_moe import (
     GateLinear,
     MoEActivation,
     fused_experts,
 )
-from aphrodite.model_executor.layers.fused_moe.config import biased_moe_quant_config
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.fused_moe.config import biased_moe_quant_config
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     QKVParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import (
+from sonar.model_executor.model_loader.weight_utils import default_weight_loader
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import (
     MultiModalFieldConfig,
     MultiModalKwargsItem,
     MultiModalKwargsItems,
 )
-from aphrodite.multimodal.parse import ImageSize, MultiModalDataItems
-from aphrodite.multimodal.processing import (
+from sonar.multimodal.parse import ImageSize, MultiModalDataItems
+from sonar.multimodal.processing import (
     BaseDummyInputsBuilder,
     BaseMultiModalProcessor,
     BaseProcessingInfo,
@@ -63,13 +63,13 @@ from aphrodite.multimodal.processing import (
     PromptUpdateDetails,
     cached_encode,
 )
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.transformers_utils.configs.moondream3 import (
+from sonar.sequence import IntermediateTensors
+from sonar.transformers_utils.configs.moondream3 import (
     Moondream3Config,
     Moondream3TextConfig,
     Moondream3VisionConfig,
 )
-from aphrodite.transformers_utils.processors.moondream3 import Moondream3Processor
+from sonar.transformers_utils.processors.moondream3 import Moondream3Processor
 
 from .interfaces import (
     MultiModalEmbeddings,
@@ -621,7 +621,7 @@ class Moondream3Attention(nn.Module):
 
         # Moondream uses 32-dim rotation out of 64-dim head (partial_rotary_factor=0.5)
         # HF Moondream uses non-interleaved RoPE (split by half)
-        # In Aphrodite, is_neox_style=True means split by half (GPT-NeoX style)
+        # In Sonar, is_neox_style=True means split by half (GPT-NeoX style)
         rope_parameters = {
             "rope_theta": config.rope_theta,
             "partial_rotary_factor": 32 / self.head_dim,  # 32/64 = 0.5
@@ -1003,7 +1003,7 @@ class Moondream3MultiModalProcessor(BaseMultiModalProcessor[Moondream3Processing
 class Moondream3ForCausalLM(nn.Module, SupportsMultiModal, SupportsPP):
     """Moondream3 multimodal model for causal language modeling.
 
-    Aphrodite supports the standard autoregressive Moondream3 query and caption
+    Sonar supports the standard autoregressive Moondream3 query and caption
     prompt formats. The region-module point/detect skills require custom
     coordinate decoding and are intentionally not exposed here.
     """
@@ -1016,14 +1016,14 @@ class Moondream3ForCausalLM(nn.Module, SupportsMultiModal, SupportsPP):
     def __init__(
         self,
         *,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
     ):
         super().__init__()
 
-        hf_config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
-        cache_config = aphrodite_config.cache_config
+        hf_config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
+        cache_config = sonar_config.cache_config
 
         # Reuse the transformers_utils config implementation.
         if isinstance(hf_config, Moondream3Config):
@@ -1032,7 +1032,7 @@ class Moondream3ForCausalLM(nn.Module, SupportsMultiModal, SupportsPP):
             config_dict = hf_config.config if hasattr(hf_config, "config") else {}
             self.config = Moondream3Config(config=config_dict)
 
-        with self._mark_tower_model(aphrodite_config, "image"):
+        with self._mark_tower_model(sonar_config, "image"):
             # Vision encoder
             self.vision = Moondream3VisionEncoder(
                 config=self.config.vision_config,
@@ -1049,7 +1049,7 @@ class Moondream3ForCausalLM(nn.Module, SupportsMultiModal, SupportsPP):
                 prefix=maybe_prefix(prefix, "vision_proj"),
             )
 
-        with self._mark_language_model(aphrodite_config):
+        with self._mark_language_model(sonar_config):
             # Text decoder
             self.text = Moondream3TextModel(
                 config=self.config.text_config,
@@ -1273,7 +1273,7 @@ class Moondream3ForCausalLM(nn.Module, SupportsMultiModal, SupportsPP):
         # Get expert intermediate size for fc1 splitting
 
         for name, loaded_weight in weights:
-            # Map from HF naming to Aphrodite naming
+            # Map from HF naming to Sonar naming
             # model.vision.* -> vision.*
             # model.text.* -> text.*
             if name.startswith("model."):
@@ -1309,7 +1309,7 @@ class Moondream3ForCausalLM(nn.Module, SupportsMultiModal, SupportsPP):
             # Each GPU stores n_experts/tp_size experts
             # Note: Only 3D weights are MoE, 2D weights are standard MLP
             if ".mlp.fc1.weight" in name and loaded_weight.dim() == 3:
-                from aphrodite.distributed import get_tensor_model_parallel_rank
+                from sonar.distributed import get_tensor_model_parallel_rank
 
                 tp_size = get_tensor_model_parallel_world_size()
                 tp_rank = get_tensor_model_parallel_rank()
@@ -1323,7 +1323,7 @@ class Moondream3ForCausalLM(nn.Module, SupportsMultiModal, SupportsPP):
                 name = name.replace(".mlp.fc1.weight", ".mlp.fc1_weight")
 
             if ".mlp.fc2.weight" in name and loaded_weight.dim() == 3:
-                from aphrodite.distributed import get_tensor_model_parallel_rank
+                from sonar.distributed import get_tensor_model_parallel_rank
 
                 tp_size = get_tensor_model_parallel_world_size()
                 tp_rank = get_tensor_model_parallel_rank()
@@ -1341,7 +1341,7 @@ class Moondream3ForCausalLM(nn.Module, SupportsMultiModal, SupportsPP):
             # tau_wq: [num_heads, qkv_dim] -> [num_heads/tp, qkv_dim/tp]
             # tau_wv: [num_heads, qkv_dim] -> [num_heads/tp, qkv_dim/tp]
             if ".tau_alpha" in name:
-                from aphrodite.distributed import get_tensor_model_parallel_rank
+                from sonar.distributed import get_tensor_model_parallel_rank
 
                 tp_size = get_tensor_model_parallel_world_size()
                 tp_rank = get_tensor_model_parallel_rank()
@@ -1352,7 +1352,7 @@ class Moondream3ForCausalLM(nn.Module, SupportsMultiModal, SupportsPP):
                 loaded_weight = loaded_weight[start:end].contiguous()
 
             if ".tau_wq" in name or ".tau_wv" in name:
-                from aphrodite.distributed import get_tensor_model_parallel_rank
+                from sonar.distributed import get_tensor_model_parallel_rank
 
                 tp_size = get_tensor_model_parallel_world_size()
                 tp_rank = get_tensor_model_parallel_rank()

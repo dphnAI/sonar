@@ -5,18 +5,18 @@ from __future__ import annotations
 
 import torch
 
-from aphrodite.model_executor.layers.quantization.utils.mxfp8_utils import (
+from sonar.model_executor.layers.quantization.utils.mxfp8_utils import (
     MXFP8_BLOCK_SIZE,
     MXFP8_SCALE_DTYPE,
     MXFP8_VALUE_DTYPE,
 )
-from aphrodite.model_executor.utils import replace_parameter
-from aphrodite.platforms import current_platform
-from aphrodite.utils.b12x import B12xWarmupUnit, reuse_packed_weight_storage
-from aphrodite.utils.b12x import (
+from sonar.model_executor.utils import replace_parameter
+from sonar.platforms import current_platform
+from sonar.utils.b12x import B12xWarmupUnit, reuse_packed_weight_storage
+from sonar.utils.b12x import (
     get_b12x_mxfp8_linear as _import_b12x_mxfp8,
 )
-from aphrodite.utils.torch_utils import current_stream
+from sonar.utils.torch_utils import current_stream
 
 from .Mxfp8LinearKernel import Mxfp8LinearKernel, Mxfp8LinearLayerConfig
 
@@ -57,7 +57,7 @@ class B12xMxfp8LinearKernel(Mxfp8LinearKernel):
             return False, "b12x MXFP8 kernels require a Blackwell 12x device"
         mxfp8 = _import_b12x_mxfp8()
         if mxfp8 is None:
-            return False, "Install the B12X backend with `pip install aphrodite[b12x]`"
+            return False, "Install sonar[b12x] from the Sonar wheel index"
         if not mxfp8.is_supported():
             return False, "b12x.gemm.mxfp8_linear is not supported"
         return True, None

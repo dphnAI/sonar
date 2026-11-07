@@ -21,12 +21,12 @@ Usage:
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
+from sonar.model_executor.layers.quantization.utils.fp8_utils import (
     deepgemm_post_process_fp8_weight_block,
 )
-from aphrodite.models.deepseek_v4.common.ops import fused_inv_rope_fp8_quant
-from aphrodite.platforms import current_platform
-from aphrodite.utils.deep_gemm import fp8_einsum
+from sonar.models.deepseek_v4.common.ops import fused_inv_rope_fp8_quant
+from sonar.platforms import current_platform
+from sonar.utils.deep_gemm import fp8_einsum
 
 # -- Default dimensions matching DeepSeek V3/V4 --------------------------
 HEAD_DIM = 512
@@ -45,7 +45,7 @@ def test_dsv41_fused_wo_a_matches_deepgemm(groups, tokens):
     """Fused WO-A matches inverse RoPE + fp8_einsum + MXFP8 quantize."""
     from flashinfer import mxfp8_quantize
 
-    from aphrodite.models.deepseek_v41.nvidia.ops.fused_wo_a import _FUSED_WO_A_KERNEL
+    from sonar.models.deepseek_v41.nvidia.ops.fused_wo_a import _FUSED_WO_A_KERNEL
 
     torch.manual_seed(0)
     n = groups * 1024
@@ -110,7 +110,7 @@ def assert_dequant_close(
 def rotate_gptj(x: torch.Tensor) -> torch.Tensor:
     """GPT-J style rotation: interleaved pairs, negate-swap.
 
-    Matches aphrodite/model_executor/layers/rotary_embedding/common.py:23-27.
+    Matches sonar/model_executor/layers/rotary_embedding/common.py:23-27.
     DeepseekV4 uses is_neox_style=False, so this is the correct rotation.
     """
     x1 = x[..., ::2]
@@ -291,7 +291,7 @@ def reference_inv_rope_fp8_quant(
 @torch.inference_mode()
 def test_packed_quantization_preserves_rotary_dimensions(num_tokens, quant_group_size):
     """RoPE may span multiple scale blocks; pack every scale and padding row."""
-    from aphrodite.models.deepseek_v4.common.ops.fused_inv_rope_fp8_quant import (
+    from sonar.models.deepseek_v4.common.ops.fused_inv_rope_fp8_quant import (
         fused_inv_rope_fp8_quant as quantize,
     )
 
@@ -724,8 +724,8 @@ def _unfused_inv_rope_fp8_quant(
 
     Uses the production CUDA RoPE kernel + per_token_group_quant_fp8.
     """
-    from aphrodite import _custom_ops as ops
-    from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
+    from sonar import _custom_ops as ops
+    from sonar.model_executor.layers.quantization.utils.fp8_utils import (
         per_token_group_quant_fp8,
     )
 
@@ -778,8 +778,8 @@ def test_einsum_end_to_end(num_tokens, num_heads, n_groups):
     This catches stride/layout bugs that only manifest when the einsum
     kernel actually consumes the quantized activations.
     """
-    from aphrodite.models.deepseek_v4.nvidia.ops.o_proj import deep_gemm_fp8_o_proj
-    from aphrodite.utils.deep_gemm import (
+    from sonar.models.deepseek_v4.nvidia.ops.o_proj import deep_gemm_fp8_o_proj
+    from sonar.utils.deep_gemm import (
         fp8_einsum,
         is_deep_gemm_supported,
         per_block_cast_to_fp8,
@@ -874,7 +874,7 @@ def test_einsum_end_to_end(num_tokens, num_heads, n_groups):
 @pytest.mark.parametrize("tokens,group_major", [(2, True), (48, False), (64, True)])
 @torch.inference_mode()
 def test_sm120_bf16_grouped_wo_a_graph(tokens, group_major):
-    from aphrodite.models.deepseek_v4.nvidia.ops._sm120_bf16_bmm import bf16_grouped_bmm
+    from sonar.models.deepseek_v4.nvidia.ops._sm120_bf16_bmm import bf16_grouped_bmm
 
     torch.manual_seed(91)
     groups, rank, width = 2, 1024, 4096
@@ -907,7 +907,7 @@ def test_sm120_bf16_grouped_wo_a_graph(tokens, group_major):
 @pytest.mark.parametrize("tokens", [1, 2, 32, 33, 64, 65])
 @torch.inference_mode()
 def test_sm120_bf16_o_proj_boundaries_graph(tokens):
-    from aphrodite.models.deepseek_v4.nvidia.ops.o_proj import deep_gemm_fp8_o_proj
+    from sonar.models.deepseek_v4.nvidia.ops.o_proj import deep_gemm_fp8_o_proj
 
     torch.manual_seed(91)
     groups, heads_per_group, rank = 2, 8, 64
@@ -959,7 +959,7 @@ def test_sm120_bf16_o_proj_boundaries_graph(tokens):
 
 @pytest.mark.parametrize("num_tokens", [1, 32, 256])
 @torch.inference_mode()
-def test_with_real_deepseek_v4_rope(num_tokens, default_aphrodite_config):
+def test_with_real_deepseek_v4_rope(num_tokens, default_sonar_config):
     """Test with real DeepseekV4ScalingRotaryEmbedding (GPT-J style,
     mscale=0, YaRN scaling) matching the production config."""
     num_heads = 64
@@ -970,7 +970,7 @@ def test_with_real_deepseek_v4_rope(num_tokens, default_aphrodite_config):
 
     # Build YaRN-scaled cos_sin_cache matching real DeepSeek V3/V4 config
     # (mscale=0 → mscale=1.0, so no magnitude scaling)
-    from aphrodite.model_executor.layers.rotary_embedding.common import (
+    from sonar.model_executor.layers.rotary_embedding.common import (
         yarn_find_correction_range,
         yarn_linear_ramp_mask,
     )
@@ -995,8 +995,8 @@ def test_with_real_deepseek_v4_rope(num_tokens, default_aphrodite_config):
     positions = torch.randint(0, 4096, (num_tokens,), device=device, dtype=torch.long)
 
     # UNFUSED: CUDA RoPE with is_neox=False (GPT-J)
-    from aphrodite import _custom_ops as ops
-    from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
+    from sonar import _custom_ops as ops
+    from sonar.model_executor.layers.quantization.utils.fp8_utils import (
         per_token_group_quant_fp8,
     )
 

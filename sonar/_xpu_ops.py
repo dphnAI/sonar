@@ -8,11 +8,11 @@ import torch
 from vllm_xpu_kernels.flash_attn_interface import flash_attn_varlen_func
 from vllm_xpu_kernels.rotary import apply_rotary_emb
 
-from aphrodite.compilation.breakable_cudagraph import eager_break_during_capture
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.torch_utils import direct_register_custom_op
+from sonar.compilation.breakable_cudagraph import eager_break_during_capture
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
+from sonar.utils.torch_utils import direct_register_custom_op
 
 logger = init_logger(__name__)
 
@@ -183,8 +183,8 @@ def _gdn_attention_core_xpu_impl(
     layer_name: str,
 ) -> None:
     """Custom op wrapping the XPU SYCL GDN kernel for torch.compile."""
-    from aphrodite.forward_context import get_forward_context
-    from aphrodite.v1.attention.backends.gdn_attn import GDNAttentionMetadata
+    from sonar.forward_context import get_forward_context
+    from sonar.v1.attention.backends.gdn_attn import GDNAttentionMetadata
 
     forward_context = get_forward_context()
     self = forward_context.no_compile_layers[layer_name]
@@ -312,7 +312,7 @@ def _xpu_fp8_bmm_impl(
     b_scale: torch.Tensor,
     bias: torch.Tensor | None,
 ) -> torch.Tensor:
-    """XPU FP8 batched GEMM implementation for ``torch.ops.aphrodite.xpu_fp8_bmm``.
+    """XPU FP8 batched GEMM implementation for ``torch.ops.sonar.xpu_fp8_bmm``.
 
     Computes batched matrix multiplication over the leading group dimension:
     ``[G, M, K] @ [G, K, N] -> [G, M, N]``.

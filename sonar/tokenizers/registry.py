@@ -10,21 +10,21 @@ from typing import TYPE_CHECKING, assert_never, cast
 import huggingface_hub
 from typing_extensions import TypeVar
 
-from aphrodite import envs
-from aphrodite.logger import init_logger
-from aphrodite.transformers_utils.config import _maybe_register_hf_config, get_config
-from aphrodite.transformers_utils.repo_utils import (
+from sonar import envs
+from sonar.logger import init_logger
+from sonar.transformers_utils.config import _maybe_register_hf_config, get_config
+from sonar.transformers_utils.repo_utils import (
     any_pattern_in_repo_files,
     get_non_weight_snapshot_path,
     is_mistral_model_repo,
 )
-from aphrodite.utils.import_utils import resolve_obj_by_qualname
+from sonar.utils.import_utils import resolve_obj_by_qualname
 
 from .hf import CachedHfTokenizer, HfTokenizer
 from .protocol import TokenizerLike
 
 if TYPE_CHECKING:
-    from aphrodite.config.model import ModelConfig, RunnerType
+    from sonar.config.model import ModelConfig, RunnerType
 
 logger = init_logger(__name__)
 
@@ -44,7 +44,7 @@ _MODEL_TYPES_WITH_INCORRECT_TOKENIZER_CLASS: set[str] = {
     "unlimited_ocr",
 }
 
-_APHRODITE_TOKENIZERS = {
+_SONAR_TOKENIZERS = {
     "alpamayo2_super": ("alpamayo2_super", "Alpamayo2SuperTokenizer"),
     # ``cohere`` mode uses the standard cached HF tokenizer; only the
     # renderer (template stage) is replaced with a melody-based one.
@@ -95,10 +95,7 @@ class _TokenizerRegistry:
 
 
 TokenizerRegistry = _TokenizerRegistry(
-    {
-        mode: (f"aphrodite.tokenizers.{mod_relname}", cls_name)
-        for mode, (mod_relname, cls_name) in _APHRODITE_TOKENIZERS.items()
-    }
+    {mode: (f"sonar.tokenizers.{mod_relname}", cls_name) for mode, (mod_relname, cls_name) in _SONAR_TOKENIZERS.items()}
 )
 
 
@@ -112,13 +109,13 @@ def resolve_tokenizer_args(
     revision: str | None = kwargs.get("revision")
     download_dir: str | None = kwargs.get("download_dir")
 
-    if envs.APHRODITE_USE_MODELSCOPE:
+    if envs.SONAR_USE_MODELSCOPE:
         # download model from ModelScope hub,
         # lazy import so that modelscope is not required for normal use.
         from modelscope.hub.snapshot_download import snapshot_download
 
         # avoid circular import
-        from aphrodite.model_executor.model_loader.weight_utils import get_lock
+        from sonar.model_executor.model_loader.weight_utils import get_lock
 
         # Only set the tokenizer here, model will be downloaded on the workers.
         if not Path(tokenizer_name).exists():
@@ -214,7 +211,7 @@ def get_tokenizer(
     **kwargs,
 ) -> _T:
     """Gets a tokenizer for the given model name via HuggingFace or ModelScope."""
-    if envs.APHRODITE_USE_FASTOKENS:
+    if envs.SONAR_USE_FASTOKENS:
         # Process-global, idempotent patch that swaps the Rust BPE backend
         # of any HF fast tokenizer loaded afterwards. No-op for non-HF modes.
         from .fastokens import apply_fastokens_patch
@@ -236,7 +233,7 @@ def get_tokenizer(
     else:
         tokenizer_cls_ = tokenizer_cls
 
-    # Ensure that, if the config were to come from aphrodite.transformers_utils.config, it is
+    # Ensure that, if the config were to come from sonar.transformers_utils.config, it is
     # registered with AutoConfig before the tokenizer is loaded. This is necessary since
     # tokenizer_cls_.from_pretrained will call AutoConfig.from_pretrained internally.
     # This may fail for paths that don't have a model config (e.g. LoRA adapters),
@@ -269,7 +266,7 @@ def get_tokenizer(
         tokenizer_cls_ = TokenizersBackend
 
     if config is not None and tokenizer_cls_ is CachedHfTokenizer:
-        if not envs.APHRODITE_USE_MODELSCOPE and str(tokenizer_name) != requested_name:
+        if not envs.SONAR_USE_MODELSCOPE and str(tokenizer_name) != requested_name:
             # AutoTokenizer selects some tokenizer classes by Hub ID
             config = copy(config)
             config._name_or_path = requested_name
@@ -280,10 +277,10 @@ def get_tokenizer(
 
     tokenizer = tokenizer_cls_.from_pretrained(tokenizer_name, *args, **kwargs)
     # Report the Hub ID rather than the local snapshot it was loaded from
-    if tokenizer_mode == "hf" and not envs.APHRODITE_USE_MODELSCOPE:
+    if tokenizer_mode == "hf" and not envs.SONAR_USE_MODELSCOPE:
         cast(HfTokenizer, tokenizer).name_or_path = requested_name
     if model_type in _MODEL_TYPES_WITH_INCORRECT_TOKENIZER_CLASS:
-        from aphrodite.tokenizers.hf import get_cached_tokenizer
+        from sonar.tokenizers.hf import get_cached_tokenizer
 
         tokenizer = get_cached_tokenizer(tokenizer)
     if not tokenizer.is_fast:

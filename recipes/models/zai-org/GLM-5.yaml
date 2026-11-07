@@ -20,7 +20,7 @@ model:
   default_frontend: rust
   docker_image:
     # No ROCm release can run this yet: v0.31.0 fails to load the shared
-    # experts without Aphrodite #58904. Switch to the first release that has it.
+    # experts without Sonar #58904. Switch to the first release that has it.
     amd: "vllm/vllm-openai-rocm:nightly-0cbac6cd1305f710e12193596b27488397bcb205"
   architecture: moe
   parameter_count: "744B"
@@ -91,11 +91,11 @@ hardware_overrides:
       - "aiter"
     extra_env:
       # Without AITER, the ROCm sparse-attention indexer only runs on gfx950/gfx11.
-      APHRODITE_ROCM_USE_AITER: "1"
-      APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS: "1"
+      SONAR_ROCM_USE_AITER: "1"
+      SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS: "1"
       # Loading the FP8 checkpoint on 8x MI325X can outlast the Rust
       # frontend's 600 s default wait for the engine.
-      APHRODITE_ENGINE_READY_TIMEOUT_S: "3600"
+      SONAR_ENGINE_READY_TIMEOUT_S: "3600"
 
 strategy_overrides: {}
 
@@ -112,9 +112,9 @@ guide: |
 
   ## Prerequisites
 
-  - **Aphrodite version:** >= 0.24.0 for the `glm47` reasoning parser
+  - **Sonar version:** >= 0.24.0 for the `glm47` reasoning parser
   - **Hardware (FP8):** 8xH200 or 8xH20 (141GB × 8)
-  - **DeepGEMM (FP8, NVIDIA):** install via `install_deepgemm.sh` from the Aphrodite repo
+  - **DeepGEMM (FP8, NVIDIA):** install via `install_deepgemm.sh` from the Sonar repo
   - **Hardware (FP8, AMD):** 8x MI325X (256GB × 8) or 8x MI350X (288GB × 8), `vllm/vllm-openai-rocm:nightly-0cbac6cd1305f710e12193596b27488397bcb205`; uses AITER, not DeepGEMM
 
   ### Using Docker
@@ -134,23 +134,23 @@ guide: |
 
   Use `vllm/vllm-openai:latest-cu129` for CUDA 12.x.
 
-  ### Install Aphrodite from Source
+  ### Install Sonar from Source
 
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install "aphrodite-engine==0.24.0" --torch-backend=auto
+  uv pip install "sonar==0.24.0" --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   uv pip install "transformers>=5.4.0"
   ```
 
-  On NVIDIA, install DeepGEMM using `install_deepgemm.sh` from the Aphrodite tools directory.
+  On NVIDIA, install DeepGEMM using `install_deepgemm.sh` from the Sonar tools directory.
 
   ## Launching the Server
 
   ### FP8 on 8xH200 with MTP
 
   ```bash
-  aphrodite serve zai-org/GLM-5-FP8 \
+  sonar serve zai-org/GLM-5-FP8 \
        --tensor-parallel-size 8 \
        --speculative-config.method mtp \
        --speculative-config.num_speculative_tokens 3 \
@@ -164,8 +164,8 @@ guide: |
   ### FP8 on AMD MI325X and MI350X
 
   Select **MI325X** or **MI350X** and the **FP8** variant in the command builder above. The
-  generated command adds `APHRODITE_ROCM_USE_AITER=1`, `APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1`,
-  `--linear-backend aiter` and `--moe-backend aiter`, and raises `APHRODITE_ENGINE_READY_TIMEOUT_S`
+  generated command adds `SONAR_ROCM_USE_AITER=1`, `SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1`,
+  `--linear-backend aiter` and `--moe-backend aiter`, and raises `SONAR_ENGINE_READY_TIMEOUT_S`
   because loading the weights can take longer than the Rust frontend's 600 s default. The
   Docker command uses the nightly build
   `vllm/vllm-openai-rocm:nightly-0cbac6cd1305f710e12193596b27488397bcb205`.
@@ -208,7 +208,7 @@ guide: |
   ## Benchmarking
 
   ```bash
-  aphrodite bench serve \
+  sonar bench serve \
     --model zai-org/GLM-5-FP8 \
     --dataset-name random \
     --random-input 8000 \
@@ -224,7 +224,7 @@ guide: |
   ## Troubleshooting
 
   - **Accuracy drift:** Prefer the 0.19.0 stable release over nightly for best accuracy.
-  - **Tool calling + MTP:** If you need both, use the latest Aphrodite main branch.
+  - **Tool calling + MTP:** If you need both, use the latest Sonar main branch.
   - **FP8 installation (NVIDIA):** DeepGEMM is required for FP8 performance.
 
   ## References

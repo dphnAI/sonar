@@ -5,19 +5,19 @@ import os
 
 import pytest
 
-from aphrodite.distributed.utils import get_pp_indices
+from sonar.distributed.utils import get_pp_indices
 
 
 def test_custom_layer_partition(monkeypatch: pytest.MonkeyPatch):
     with monkeypatch.context() as m:
 
         def _verify(partition_str, num_layers, pp_size, goldens):
-            bak = os.environ.get("APHRODITE_PP_LAYER_PARTITION", None)
-            m.setenv("APHRODITE_PP_LAYER_PARTITION", partition_str)
+            bak = os.environ.get("SONAR_PP_LAYER_PARTITION", None)
+            m.setenv("SONAR_PP_LAYER_PARTITION", partition_str)
             for pp_rank, golden in enumerate(goldens):
                 assert get_pp_indices(num_layers, pp_rank, pp_size) == golden
             if bak is not None:
-                m.setenv("APHRODITE_PP_LAYER_PARTITION", bak)
+                m.setenv("SONAR_PP_LAYER_PARTITION", bak)
 
         # Even partition
         _verify("5,5,5,5", 20, 4, [(0, 5), (5, 10), (10, 15), (15, 20)])

@@ -3,14 +3,14 @@
 
 import torch
 
-from aphrodite.model_executor.layers.fusion.quant_activation import QuantizedActivation
-from aphrodite.model_executor.layers.linear import LinearBase
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.fusion.quant_activation import QuantizedActivation
+from sonar.model_executor.layers.linear import LinearBase
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     get_fp8_min_max,
     kFp8StaticTensorSym,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
 
 _FP8_MIN, _FP8_MAX = get_fp8_min_max()
 

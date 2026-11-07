@@ -3,13 +3,13 @@
 
 import torch
 
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     FP8_DTYPE,
     get_fp8_min_max,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
-from aphrodite.v1.kv_cache_interface import KVQuantMode, is_quantized_kv_cache
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
+from sonar.v1.kv_cache_interface import KVQuantMode, is_quantized_kv_cache
 
 FP8_MIN, FP8_MAX = get_fp8_min_max()
 
@@ -272,7 +272,7 @@ def triton_reshape_and_cache_flash_per_token_head_quant(
     range (QUANT_MAX, QUANT_MIN) derived from the cache tensor dtype.
     """
     if kv_quant_mode == KVQuantMode.INT4_PER_TOKEN_HEAD:
-        from aphrodite.v1.attention.ops.int4_per_token_head import (
+        from sonar.v1.attention.ops.int4_per_token_head import (
             reshape_and_cache_int4,
         )
 

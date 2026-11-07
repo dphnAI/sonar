@@ -4,22 +4,22 @@ import functools
 
 import torch
 
-from aphrodite.config import CacheConfig
-from aphrodite.config.aphrodite import AphroditeConfig
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.v1.attention.backend import (
+from sonar.config import CacheConfig
+from sonar.config.sonar import SonarConfig
+from sonar.model_executor.layers.attention import Attention
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.v1.attention.backend import (
     AttentionBackend,
     AttentionCGSupport,
     AttentionMetadataBuilder,
     CommonAttentionMetadata,
     subclass_attention_backend,
 )
-from aphrodite.v1.attention.backends.utils import (
+from sonar.v1.attention.backends.utils import (
     make_local_attention_virtual_batches,
 )
-from aphrodite.v1.attention.selector import get_attn_backend
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.attention.selector import get_attn_backend
+from sonar.v1.kv_cache_interface import (
     ChunkedLocalAttentionSpec,
     KVCacheSpec,
     get_kv_quant_mode,
@@ -40,7 +40,7 @@ def create_chunked_local_attention_backend(
         @classmethod
         def get_cudagraph_support(
             cls: type["AttentionMetadataBuilder"],
-            aphrodite_config: AphroditeConfig,
+            sonar_config: SonarConfig,
             kv_cache_spec: KVCacheSpec,
         ) -> AttentionCGSupport:
             # Explicit override in case the underlying builder specialized this getter.
@@ -112,10 +112,10 @@ class ChunkedLocalAttention(Attention):
             attn_backend=attn_backend,
         )
 
-    def get_kv_cache_spec(self, aphrodite_config: AphroditeConfig) -> KVCacheSpec:
+    def get_kv_cache_spec(self, sonar_config: SonarConfig) -> KVCacheSpec:
         assert self.attention_chunk_size
         return ChunkedLocalAttentionSpec(
-            block_size=aphrodite_config.cache_config.block_size,
+            block_size=sonar_config.cache_config.block_size,
             num_kv_heads=self.num_kv_heads,
             head_size=self.head_size,
             dtype=self.kv_cache_torch_dtype,

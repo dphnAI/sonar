@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import torch
 
-from aphrodite.triton_utils import tl, triton
+from sonar.triton_utils import tl, triton
 
 if TYPE_CHECKING:
     from .sparse_mla import DeepseekV41B12xMetadata
@@ -66,7 +66,7 @@ def _copy_rows(
         tl.store(Output + offset, value, row < output_rows)
 
 
-@torch.library.custom_op("aphrodite::dsv41_gather_rows", mutates_args=())
+@torch.library.custom_op("sonar::dsv41_gather_rows", mutates_args=())
 def gather_rows(source: torch.Tensor, indices: torch.Tensor) -> torch.Tensor:
     """Gather first-axis rows, zeroing invalid indices (including graph padding)."""
     output = source.new_empty((indices.numel(), *source.shape[1:]))
@@ -92,7 +92,7 @@ def _gather_rows_fake(source, indices):
     return source.new_empty((indices.numel(), *source.shape[1:]))
 
 
-@torch.library.custom_op("aphrodite::dsv41_scatter_rows", mutates_args=())
+@torch.library.custom_op("sonar::dsv41_scatter_rows", mutates_args=())
 def scatter_rows(source: torch.Tensor, indices: torch.Tensor, full_rows: int) -> torch.Tensor:
     """Restore the full-row ABI; discarded rows are always zero."""
     output = source.new_zeros((full_rows, *source.shape[1:]))

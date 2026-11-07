@@ -12,21 +12,21 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from aphrodite.compilation.decorators import (
+from sonar.compilation.decorators import (
     should_torch_compile_mm_encoder,
     support_torch_compile,
 )
-from aphrodite.distributed import divide, get_tensor_model_parallel_world_size
-from aphrodite.model_executor.layers.attention import MMEncoderAttention
-from aphrodite.model_executor.layers.linear import (
+from sonar.distributed import divide, get_tensor_model_parallel_world_size
+from sonar.model_executor.layers.attention import MMEncoderAttention
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     QKVParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.models.utils import maybe_prefix
-from aphrodite.model_executor.models.vision import is_vit_use_data_parallel
-from aphrodite.transformers_utils.configs.muse_spark import MuseSparkVisionConfig
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.models.utils import maybe_prefix
+from sonar.model_executor.models.vision import is_vit_use_data_parallel
+from sonar.transformers_utils.configs.muse_spark import MuseSparkVisionConfig
 
 
 def _precompute_rope_freqs_cis(
@@ -271,7 +271,7 @@ class NaViTAttention(nn.Module):
 
 
 class NaViTMLP(nn.Module):
-    """GELU MLP built from Aphrodite parallel layers."""
+    """GELU MLP built from Sonar parallel layers."""
 
     def __init__(
         self,

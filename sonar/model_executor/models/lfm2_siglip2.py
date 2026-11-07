@@ -10,20 +10,20 @@ from torch import nn
 from torch.nn import functional as F
 from transformers import Siglip2VisionConfig
 
-from aphrodite.compilation.decorators import (
+from sonar.compilation.decorators import (
     should_torch_compile_mm_encoder,
     support_torch_compile,
 )
-from aphrodite.distributed import get_tensor_model_parallel_world_size
-from aphrodite.model_executor.layers.activation import get_act_fn
-from aphrodite.model_executor.layers.attention import MMEncoderAttention
-from aphrodite.model_executor.layers.linear import (
+from sonar.distributed import get_tensor_model_parallel_world_size
+from sonar.model_executor.layers.activation import get_act_fn
+from sonar.model_executor.layers.attention import MMEncoderAttention
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     QKVParallelLinear,
     ReplicatedLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.quantization import QuantizationConfig
 
 from .utils import AutoWeightsLoader, WeightsMapper, maybe_prefix
 from .vision import (
@@ -451,7 +451,7 @@ class Siglip2VisionTransformer(nn.Module):
 
 
 class Siglip2Model(torch.nn.Module):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_stacked={
             ".q_proj": (".qkv_proj", "q"),
             ".k_proj": (".qkv_proj", "k"),
@@ -477,7 +477,7 @@ class Siglip2Model(torch.nn.Module):
             prefix=maybe_prefix(prefix, "vision_model"),
         )
         if self.vision_model.post_layernorm is None:
-            self.hf_to_aphrodite_mapper = self.hf_to_aphrodite_mapper | WeightsMapper(
+            self.hf_to_sonar_mapper = self.hf_to_sonar_mapper | WeightsMapper(
                 orig_to_new_prefix={"vision_model.post_layernorm.": None}
             )
 
@@ -522,4 +522,4 @@ class Siglip2Model(torch.nn.Module):
                     continue
                 yield n, w
 
-        return loader.load_weights(_filter(weights), mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(_filter(weights), mapper=self.hf_to_sonar_mapper)

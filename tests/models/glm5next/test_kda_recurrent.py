@@ -11,12 +11,12 @@ recurrence, read these slices in place and reject unsupported layouts.
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 if current_platform.is_rocm():
-    from aphrodite.models.glm5next.amd.ops.third_party.kda import fused_recurrent_kda
+    from sonar.models.glm5next.amd.ops.third_party.kda import fused_recurrent_kda
 else:
-    from aphrodite.models.glm5next.nvidia.ops.third_party.kda import fused_recurrent_kda
+    from sonar.models.glm5next.nvidia.ops.third_party.kda import fused_recurrent_kda
 
 pytestmark = pytest.mark.skipif(not current_platform.is_cuda_alike(), reason="Requires CUDA or ROCm")
 
@@ -252,20 +252,20 @@ def test_prefill_checkpoint_resumes_suffix(monkeypatch, dim_first, num_spec, off
     """Restoring both cached states must reproduce an uninterrupted prefill."""
     from types import SimpleNamespace
 
-    from aphrodite.model_executor.layers.mamba.checkpoint import (
+    from sonar.model_executor.layers.mamba.checkpoint import (
         MambaPrefillCheckpointMetadata,
     )
-    from aphrodite.model_executor.layers.mamba.kda_checkpoint import (
+    from sonar.model_executor.layers.mamba.kda_checkpoint import (
         FlashKDAPrefillCheckpointExporter,
     )
-    from aphrodite.models.glm5next.common import kda
-    from aphrodite.v1.attention.backends.gdn_attn import GDNAttentionMetadata
-    from aphrodite.v1.attention.backends.utils import compute_causal_conv1d_metadata
-    from aphrodite.v1.worker.workspace import WorkspaceManager
+    from sonar.models.glm5next.common import kda
+    from sonar.v1.attention.backends.gdn_attn import GDNAttentionMetadata
+    from sonar.v1.attention.backends.utils import compute_causal_conv1d_metadata
+    from sonar.v1.worker.workspace import WorkspaceManager
 
     if kda._resolve_kda_prefill_backend("auto", D, torch.bfloat16, -5) != "flashkda":
         pytest.skip("requires FlashKDA")
-    import aphrodite._flashkda_C  # noqa: F401
+    import sonar._flashkda_C  # noqa: F401
 
     torch.manual_seed(42)
     device = torch.device("cuda")

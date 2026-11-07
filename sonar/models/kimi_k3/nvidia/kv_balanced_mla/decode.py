@@ -17,19 +17,19 @@ from typing import TYPE_CHECKING
 
 import torch
 
-from aphrodite.config import get_current_aphrodite_config
-from aphrodite.forward_context import get_forward_context
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.v1.attention.backend import max_decode_query_len
-from aphrodite.v1.worker.workspace import current_workspace_manager
+from sonar.config import get_current_sonar_config
+from sonar.forward_context import get_forward_context
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.v1.attention.backend import max_decode_query_len
+from sonar.v1.worker.workspace import current_workspace_manager
 
 if TYPE_CHECKING:
-    from aphrodite.model_executor.layers.attention.mla_attention import (
+    from sonar.model_executor.layers.attention.mla_attention import (
         MLACommonImpl,
         MLACommonMetadata,
     )
-    from aphrodite.v1.attention.backend import AttentionLayer
+    from sonar.v1.attention.backend import AttentionLayer
 
     from .core import KvBalancedMla
 
@@ -51,7 +51,7 @@ class KvBalancedDecode:
     def __init__(self, num_heads: int):
         from . import core
 
-        config = get_current_aphrodite_config()
+        config = get_current_sonar_config()
         # NIXL P/D resolves the KV interleave after the model is built: read it per
         # call.
         self.parallel_config = config.parallel_config

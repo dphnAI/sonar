@@ -14,7 +14,7 @@
 
 ## Pre-requisites
 
-* Ensure you are using `aphrodite-engine > 0.6.0`. You can check by running `python -c "import aphrodite; print(aphrodite.__version__)"`.
+* Ensure you are using `sonar > 0.6.0` from the [Sonar installer or wheel index](https://sonar.dphn.ai/getting-started/installation/). You can check by running `python -c "import sonar; print(sonar.__version__)"`.
 * The examples in this document use `NousResearch/Meta-Llama-3.1-8B-Instruct`.
 
 ## Example: Running with a local file
@@ -42,7 +42,7 @@ The batch running tool is designed to be used from the command line.
 You can run the batch with the following command, which will write its results to a file called `results.jsonl`
 
 ```
-python -m aphrodite.entrypoints.openai.run_batch -i batched_example.jsonl -o results.jsonl --model NousResearch/Meta-Llama-3.1-8B-Instruct
+python -m sonar.entrypoints.openai.run_batch -i batched_example.jsonl -o results.jsonl --model NousResearch/Meta-Llama-3.1-8B-Instruct
 ```
 
 ### Step 3: Check your results
@@ -51,8 +51,8 @@ You should now have your results at `results.jsonl`. You can check your results 
 
 ```
 $ cat ../results.jsonl
-{"id":"aphrodite-383d1c59835645aeb2e07d004d62a826","custom_id":"request-1","response":{"id":"cmpl-61c020e54b964d5a98fa7527bfcdd378","object":"chat.completion","created":1715633336,"model":"NousResearch/Meta-Llama-3.1-8B-Instruct","choices":[{"index":0,"message":{"role":"assistant","content":"Hello! It's great to meet you! I'm here to help with any questions or tasks you may have. What's on your mind today?"},"logprobs":null,"finish_reason":"stop","stop_reason":null}],"usage":{"prompt_tokens":25,"total_tokens":56,"completion_tokens":31}},"error":null}
-{"id":"aphrodite-42e3d09b14b04568afa3f1797751a267","custom_id":"request-2","response":{"id":"cmpl-f44d049f6b3a42d4b2d7850bb1e31bcc","object":"chat.completion","created":1715633336,"model":"NousResearch/Meta-Llama-3.1-8B-Instruct","choices":[{"index":0,"message":{"role":"assistant","content":"*silence*"},"logprobs":null,"finish_reason":"stop","stop_reason":null}],"usage":{"prompt_tokens":27,"total_tokens":32,"completion_tokens":5}},"error":null}
+{"id":"sonar-383d1c59835645aeb2e07d004d62a826","custom_id":"request-1","response":{"id":"cmpl-61c020e54b964d5a98fa7527bfcdd378","object":"chat.completion","created":1715633336,"model":"NousResearch/Meta-Llama-3.1-8B-Instruct","choices":[{"index":0,"message":{"role":"assistant","content":"Hello! It's great to meet you! I'm here to help with any questions or tasks you may have. What's on your mind today?"},"logprobs":null,"finish_reason":"stop","stop_reason":null}],"usage":{"prompt_tokens":25,"total_tokens":56,"completion_tokens":31}},"error":null}
+{"id":"sonar-42e3d09b14b04568afa3f1797751a267","custom_id":"request-2","response":{"id":"cmpl-f44d049f6b3a42d4b2d7850bb1e31bcc","object":"chat.completion","created":1715633336,"model":"NousResearch/Meta-Llama-3.1-8B-Instruct","choices":[{"index":0,"message":{"role":"assistant","content":"*silence*"},"logprobs":null,"finish_reason":"stop","stop_reason":null}],"usage":{"prompt_tokens":27,"total_tokens":32,"completion_tokens":5}},"error":null}
 ```
 
 ## Example 2: Using remote files
@@ -62,7 +62,7 @@ The batch runner supports remote input and output urls that are accessible via h
 For example, to run against our example input file located at `https://raw.githubusercontent.com/PygmalionAI/aphrodite-engine/rc_054/examples/openai_api/batched_example.jsonl`, you can run
 
 ```
-python -m aphrodite.entrypoints.openai.run_batch -i https://raw.githubusercontent.com/PygmalionAI/aphrodite-engine/rc_054/examples/openai_api/batched_example.jsonl -o results.jsonl --model NousResearch/Meta-Llama-3.1-8B-Instruct
+python -m sonar.entrypoints.openai.run_batch -i https://raw.githubusercontent.com/PygmalionAI/aphrodite-engine/rc_054/examples/openai_api/batched_example.jsonl -o results.jsonl --model NousResearch/Meta-Llama-3.1-8B-Instruct
 ```
 
 ## Example 3: Integrating with AWS S3
@@ -148,7 +148,7 @@ output_url='https://s3.us-west-2.amazonaws.com/MY_BUCKET/MY_OUTPUT_FILE.jsonl?AW
 You can now run the batch runner, using the urls generated in the previous section.
 
 ```
-python -m aphrodite.entrypoints.openai.run_batch \
+python -m sonar.entrypoints.openai.run_batch \
     -i "https://s3.us-west-2.amazonaws.com/MY_BUCKET/MY_INPUT_FILE.jsonl?AWSAccessKeyId=ABCDEFGHIJKLMNOPQRST&Signature=abcdefghijklmnopqrstuvwxyz12345&Expires=1715800091" \
     -o "https://s3.us-west-2.amazonaws.com/MY_BUCKET/MY_OUTPUT_FILE.jsonl?AWSAccessKeyId=ABCDEFGHIJKLMNOPQRST&Signature=abcdefghijklmnopqrstuvwxyz12345&Expires=1715800091" \
     --model --model NousResearch/Meta-Llama-3.1-8B-Instruct
@@ -166,7 +166,7 @@ aws s3 cp s3://MY_BUCKET/MY_OUTPUT_FILE.jsonl -
 
 ### Additional prerequisites
 
-* Ensure you are using `aphrodite-engine >= 0.6.0.post2`.
+* Ensure you are using `sonar >= 0.6.0.post2`.
 
 ### Step 1: Create your batch file
 
@@ -189,6 +189,6 @@ You can check your results by running `cat results.jsonl`
 
 ```
 $ cat results.jsonl
-{"id":"aphrodite-db0f71f7dec244e6bce530e0b4ef908b","custom_id":"request-1","response":{"status_code":200,"request_id":"aphrodite-batch-3580bf4d4ae54d52b67eee266a6eab20","body":{"id":"embd-33ac2efa7996430184461f2e38529746","object":"list","created":444647,"model":"intfloat/e5-mistral-7b-instruct","data":[{"index":0,"object":"embedding","embedding":[0.016204833984375,0.0092010498046875,0.0018358230590820312,-0.0028228759765625,0.001422882080078125,-0.0031147003173828125,...]}],"usage":{"prompt_tokens":8,"total_tokens":8,"completion_tokens":0}}},"error":null}
+{"id":"sonar-db0f71f7dec244e6bce530e0b4ef908b","custom_id":"request-1","response":{"status_code":200,"request_id":"sonar-batch-3580bf4d4ae54d52b67eee266a6eab20","body":{"id":"embd-33ac2efa7996430184461f2e38529746","object":"list","created":444647,"model":"intfloat/e5-mistral-7b-instruct","data":[{"index":0,"object":"embedding","embedding":[0.016204833984375,0.0092010498046875,0.0018358230590820312,-0.0028228759765625,0.001422882080078125,-0.0031147003173828125,...]}],"usage":{"prompt_tokens":8,"total_tokens":8,"completion_tokens":0}}},"error":null}
 ...```
 ```

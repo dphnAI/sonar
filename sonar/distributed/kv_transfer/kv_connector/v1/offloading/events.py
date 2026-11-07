@@ -28,27 +28,27 @@ from typing import TYPE_CHECKING, Any, NamedTuple
 
 import msgspec
 
-from aphrodite.distributed.kv_events import (
+from sonar.distributed.kv_events import (
     MEDIUM_CPU,
     MEDIUM_STORAGE,
     BlockRemoved,
     BlockStored,
     KVCacheEventType,
 )
-from aphrodite.logger import init_logger
-from aphrodite.v1.core.kv_cache_utils import (
+from sonar.logger import init_logger
+from sonar.v1.core.kv_cache_utils import (
     BlockHash,
     maybe_convert_block_hash,
     resolve_block_hashes,
     to_event_extra_keys,
 )
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.kv_cache_interface import (
     KVCacheGroupSpec,
     MambaSpec,
     get_kv_cache_spec_kind,
     get_kv_cache_spec_sliding_window,
 )
-from aphrodite.v1.kv_offload.base import (
+from sonar.v1.kv_offload.base import (
     Medium,
     OffloadingEvent,
     OffloadingKVEventsConfig,
@@ -56,10 +56,10 @@ from aphrodite.v1.kv_offload.base import (
     get_offload_block_hash,
     get_offload_group_idx,
 )
-from aphrodite.v1.request import Request
+from sonar.v1.request import Request
 
 if TYPE_CHECKING:
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.offloading.scheduler import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.offloading.scheduler import (
         GroupOffloadConfig,
     )
 

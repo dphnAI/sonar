@@ -7,18 +7,18 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from aphrodite.parser.engine.events import EventType, SemanticEvent
-from aphrodite.parser.engine.incremental_lexer import (
+from sonar.parser.engine.events import EventType, SemanticEvent
+from sonar.parser.engine.incremental_lexer import (
     LexerShape,
     TerminalDef,
     terminals_from_literals,
 )
-from aphrodite.parser.engine.parser_engine_config import (
+from sonar.parser.engine.parser_engine_config import (
     ParserEngineConfig,
     ParserState,
     Transition,
 )
-from aphrodite.parser.engine.streaming_parser_engine import StreamingParserEngine
+from sonar.parser.engine.streaming_parser_engine import StreamingParserEngine
 from tests.parser.engine.conftest import make_mock_tokenizer
 
 

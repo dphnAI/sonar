@@ -16,8 +16,8 @@ from typing import Literal
 import torch
 from torch.library import wrap_triton
 
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.math_utils import cdiv
+from sonar.triton_utils import tl, triton
+from sonar.utils.math_utils import cdiv
 
 
 @triton.jit
@@ -84,7 +84,7 @@ def triton_scale_swizzle(
     )
 
 
-@torch.library.custom_op("aphrodite::triton_mx_block_rearrange", mutates_args=())
+@torch.library.custom_op("sonar::triton_mx_block_rearrange", mutates_args=())
 def triton_mx_block_rearrange(scale_tensor: torch.Tensor) -> torch.Tensor:
     """Rearranges an E8M0 tensor scale from row-major format to
     block-scaled swizzle format.

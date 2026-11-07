@@ -3,14 +3,14 @@
 
 import torch
 
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.distributed.eplb.eplb_state import EplbLayerState
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.distributed.eplb.eplb_state import EplbLayerState
+from sonar.model_executor.layers.fused_moe.config import (
     RoutingMethodType,
     get_routing_method_type,
 )
-from aphrodite.model_executor.layers.fused_moe.router.base_router import BaseRouter
-from aphrodite.model_executor.layers.fused_moe.router.fused_topk_router import (
+from sonar.model_executor.layers.fused_moe.router.base_router import BaseRouter
+from sonar.model_executor.layers.fused_moe.router.fused_topk_router import (
     dispatch_topk_softmax_func,
 )
 
@@ -65,7 +65,7 @@ class AiterSharedRoutedFusedMoERouter(BaseRouter):
     ) -> tuple[torch.Tensor, torch.Tensor]:
         assert hidden_states.size(0) == router_logits.size(0), "Number of tokens mismatch"
 
-        from aphrodite.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
             aiter_topK_meta_data,
         )
 
@@ -125,7 +125,7 @@ class AiterSharedRoutedFusedMoERouter(BaseRouter):
         )
 
         if aiter_topK_meta_data is not None:
-            from aphrodite.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
+            from sonar.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
                 inject_shared_expert_weights,
             )
 

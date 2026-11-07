@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Op-level tests of the fused FFN launch (TP=1 builds unless noted) against
-Aphrodite's and AITER's native ops, with MXFP4 weights from Aphrodite's real post-load
+Sonar's and AITER's native ops, with MXFP4 weights from Sonar's real post-load
 path: stage parity, routing ties, padding, residency, graph replay, fail-stop
 sites, epoch reset, the gfx950 hand-off ISA, and the hand-off stresses (one-GPU
 cross-XCD; TP4 over XGMI, optional)."""
@@ -21,12 +21,12 @@ import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 if not current_platform.is_rocm():
     pytest.skip("ROCm only", allow_module_level=True)
 
-from aphrodite.platforms.rocm import on_gfx950  # noqa: E402
+from sonar.platforms.rocm import on_gfx950  # noqa: E402
 
 if not on_gfx950():
     pytest.skip("gfx950 only", allow_module_level=True)
@@ -34,17 +34,17 @@ if not on_gfx950():
 import flydsl.compiler as flyc  # noqa: E402
 import flydsl.expr as fx  # noqa: E402
 
-from aphrodite.models.minimax_m3.amd.ops.gemma_rmsnorm import (  # noqa: E402
+from sonar.models.minimax_m3.amd.ops.gemma_rmsnorm import (  # noqa: E402
     gemma_fused_add_rmsnorm,
 )
-from aphrodite.models.minimax_m3.amd.specialized_decode.mono import (  # noqa: E402
+from sonar.models.minimax_m3.amd.specialized_decode.mono import (  # noqa: E402
     ffn,
     sync,
 )
-from aphrodite.models.minimax_m3.amd.specialized_decode.mono.residency import (  # noqa: E402
+from sonar.models.minimax_m3.amd.specialized_decode.mono.residency import (  # noqa: E402
     code_object,
 )
-from aphrodite.models.minimax_m3.amd.specialized_decode.mono.runner import (  # noqa: E402
+from sonar.models.minimax_m3.amd.specialized_decode.mono.runner import (  # noqa: E402
     FfnRunner,
     _writable_flydsl_cache,
 )
@@ -66,7 +66,7 @@ def _metrics(got, want):
 
 @pytest.fixture(scope="module")
 def weights():
-    from aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 import (
+    from sonar.model_executor.layers.fused_moe.oracle.mxfp4 import (
         Mxfp4MoeBackend,
         convert_gpt_oss_weight_to_mxfp4_moe_kernel_format,
     )
@@ -363,7 +363,7 @@ def test_fail_stop_sites(weights, build, arm, final, want):
 def _reset_executor(runner, monkeypatch, agree):
     """A TP1 FfnExecutor over ``runner`` that resets every 3 output steps, its
     TP agreement ``agree``."""
-    from aphrodite.models.minimax_m3.amd.specialized_decode.runtime import executor as ex
+    from sonar.models.minimax_m3.amd.specialized_decode.runtime import executor as ex
 
     monkeypatch.setattr(ex, "tp_agree", agree)
     executor = object.__new__(ex.FfnExecutor)
@@ -599,8 +599,8 @@ RESET_EVERY = 997  # launches between collective epoch resets
 
 
 def _stress_rank(rank, port, results):
-    from aphrodite.models.deepseek_v41.amd.mono.common import peer_memory
-    from aphrodite.models.minimax_m3.amd.specialized_decode.runtime import executor as ex
+    from sonar.models.deepseek_v41.amd.mono.common import peer_memory
+    from sonar.models.minimax_m3.amd.specialized_decode.runtime import executor as ex
 
     torch.accelerator.set_device_index(rank)
     dist.init_process_group("gloo", init_method=f"tcp://127.0.0.1:{port}", rank=rank, world_size=4)
@@ -684,7 +684,7 @@ def test_peer_handoffs_under_rank_skew():
     epoch reset every ``RESET_EVERY`` launches. Every launch reproduces its
     first result bit for bit, the reduced output matches across ranks, and no
     wait times out."""
-    from aphrodite.utils.network_utils import get_open_port
+    from sonar.utils.network_utils import get_open_port
 
     timeout = 600 + STRESS_LAUNCHES // 1000
     results = mp.Manager().dict()

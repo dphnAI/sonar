@@ -26,13 +26,13 @@ import importlib.util
 
 import torch
 
-from aphrodite.model_executor.layers.indexer_topk import (
+from sonar.model_executor.layers.indexer_topk import (
     deep_select_topk,
     get_deep_select_stride_requirement,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.deep_gemm import (
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
+from sonar.utils.deep_gemm import (
     fp8_fp4_paged_sparse_mqa_logits,
     fp8_fp4_sparse_mqa_logits,
     get_paged_sparse_mqa_logits_metadata,
@@ -46,7 +46,7 @@ SPARSE_BLOCK_KV_CHOICES = (16, 8)
 def has_deep_select() -> bool:
     """Whether the DeepSelect top-k extension is built and this GPU runs it."""
     return (
-        importlib.util.find_spec("aphrodite._deepselect_C") is not None
+        importlib.util.find_spec("sonar._deepselect_C") is not None
         and current_platform.is_cuda()
         and current_platform.is_device_capability_family(100)
     )

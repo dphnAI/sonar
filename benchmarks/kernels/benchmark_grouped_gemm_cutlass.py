@@ -5,18 +5,18 @@ import torch
 import torch.utils.benchmark as benchmark
 from benchmark_shapes import WEIGHT_SHAPES_MOE
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite import _custom_ops as ops
-from aphrodite.config import AphroditeConfig, ParallelConfig, set_current_aphrodite_config
-from aphrodite.model_executor.layers.fused_moe.all2all_utils import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar import _custom_ops as ops
+from sonar.config import ParallelConfig, SonarConfig, set_current_sonar_config
+from sonar.model_executor.layers.fused_moe.all2all_utils import (
     maybe_make_prepare_finalize,
 )
-from aphrodite.model_executor.layers.fused_moe.config import fp8_w8a8_moe_quant_config
-from aphrodite.model_executor.layers.fused_moe.experts.cutlass_moe import CutlassExpertsFp8
-from aphrodite.model_executor.layers.fused_moe.fused_moe import fused_experts
-from aphrodite.model_executor.layers.fused_moe.router.fused_topk_router import fused_topk
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
-from aphrodite.v1.worker.workspace import init_workspace_manager
+from sonar.model_executor.layers.fused_moe.config import fp8_w8a8_moe_quant_config
+from sonar.model_executor.layers.fused_moe.experts.cutlass_moe import CutlassExpertsFp8
+from sonar.model_executor.layers.fused_moe.fused_moe import fused_experts
+from sonar.model_executor.layers.fused_moe.router.fused_topk_router import fused_topk
+from sonar.utils.argparse_utils import FlexibleArgumentParser
+from sonar.v1.worker.workspace import init_workspace_manager
 from tests.kernels.moe.utils import make_dummy_moe_config
 
 DEFAULT_MODELS = [
@@ -179,7 +179,7 @@ def bench_run(
             ),
         )
 
-        with set_current_aphrodite_config(AphroditeConfig(parallel_config=ParallelConfig(pipeline_parallel_size=1))):
+        with set_current_sonar_config(SonarConfig(parallel_config=ParallelConfig(pipeline_parallel_size=1))):
             return fn(a, w1, w2, topk_weights, topk_ids)
 
     def run_triton_from_graph(
@@ -197,7 +197,7 @@ def bench_run(
             w2_scale=w2_scale,
             a1_scale=a_scale,
         )
-        with set_current_aphrodite_config(AphroditeConfig(parallel_config=ParallelConfig(pipeline_parallel_size=1))):
+        with set_current_sonar_config(SonarConfig(parallel_config=ParallelConfig(pipeline_parallel_size=1))):
             return fused_experts(
                 a,
                 w1,

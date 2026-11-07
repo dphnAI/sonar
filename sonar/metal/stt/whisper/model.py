@@ -15,7 +15,7 @@ import mlx.core as mx
 import mlx.nn as nn
 import numpy as np
 
-from aphrodite.metal.stt.runtime import STTRuntimeAdapter
+from sonar.metal.stt.runtime import STTRuntimeAdapter
 
 from .config import WhisperConfig
 
@@ -259,7 +259,7 @@ class WhisperModel(nn.Module):
         self._alignment_heads = mx.array(np.asarray(all_heads.nonzero()).T)
 
     def create_runtime_adapter(self, model_path: str, trust_remote_code: bool) -> STTRuntimeAdapter:
-        """Create the model-owned runtime adapter used by the Aphrodite runner."""
+        """Create the model-owned runtime adapter used by the Sonar runner."""
         # Local import: avoid import-time cycles (adapter imports transcriber).
         from .adapter import WhisperRuntimeAdapter
 

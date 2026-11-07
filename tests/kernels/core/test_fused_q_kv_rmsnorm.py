@@ -13,10 +13,10 @@ from __future__ import annotations
 import pytest
 import torch
 
-from aphrodite.models.common.ops.fused_qk_rmsnorm import (
+from sonar.models.common.ops.fused_qk_rmsnorm import (
     fused_q_kv_rmsnorm,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 pytestmark = pytest.mark.skipif(
     not (current_platform.is_cuda_alike() or current_platform.is_xpu()),
@@ -122,10 +122,10 @@ def test_fused_q_kv_rmsnorm_launches_past_grid_y_cap(num_tokens: int):
 @pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float16])
 def test_fused_q_kv_rmsnorm_quant_matches_separate(num_tokens, q_size, dtype):
     """Preserve native MXFP8 rounding and all swizzled scale padding bytes."""
-    from aphrodite.model_executor.layers.quantization.utils.mxfp8_utils import (
+    from sonar.model_executor.layers.quantization.utils.mxfp8_utils import (
         mxfp8_e4m3_quantize,
     )
-    from aphrodite.models.deepseek_v41.common.ops.query_quant import (
+    from sonar.models.deepseek_v41.common.ops.query_quant import (
         fused_q_kv_rmsnorm_quant,
     )
 
@@ -170,37 +170,37 @@ def test_shared_query_quant_preserves_projection(num_tokens, backend, projection
     from types import SimpleNamespace
     from typing import Any, cast
 
-    from aphrodite.config import (
-        AphroditeConfig,
+    from sonar.config import (
         CompilationConfig,
         CompilationMode,
-        set_current_aphrodite_config,
+        SonarConfig,
+        set_current_sonar_config,
     )
-    from aphrodite.model_executor.kernels.linear.mxfp8 import Mxfp8LinearLayerConfig
-    from aphrodite.model_executor.kernels.linear.mxfp8.flashinfer import (
+    from sonar.model_executor.kernels.linear.mxfp8 import Mxfp8LinearLayerConfig
+    from sonar.model_executor.kernels.linear.mxfp8.flashinfer import (
         FlashInferCutedslMxfp8LinearKernel,
         FlashInferCutlassMxfp8LinearKernel,
     )
-    from aphrodite.model_executor.layers.fusion.quant_activation import (
+    from sonar.model_executor.layers.fusion.quant_activation import (
         expose_input_quant_key,
     )
-    from aphrodite.model_executor.layers.linear import ColumnParallelLinear, ReplicatedLinear
-    from aphrodite.model_executor.layers.quantization.modelopt import (
+    from sonar.model_executor.layers.linear import ColumnParallelLinear, ReplicatedLinear
+    from sonar.model_executor.layers.quantization.modelopt import (
         ModelOptLinearMethod,
     )
-    from aphrodite.model_executor.layers.quantization.utils.mxfp8_utils import (
+    from sonar.model_executor.layers.quantization.utils.mxfp8_utils import (
         mxfp8_e4m3_quantize,
     )
-    from aphrodite.model_executor.layers.quantization.utils.quant_utils import kNvfp4Dynamic
-    from aphrodite.models.deepseek_v41.attention import (
+    from sonar.model_executor.layers.quantization.utils.quant_utils import kNvfp4Dynamic
+    from sonar.models.deepseek_v41.attention import (
         DeepseekV4Attention,
         DeepseekV4Indexer,
     )
-    from aphrodite.models.deepseek_v41.common.ops.query_quant import (
+    from sonar.models.deepseek_v41.common.ops.query_quant import (
         can_fuse_query_quant,
         fused_q_kv_rmsnorm_quant,
     )
-    from aphrodite.models.deepseek_v41.quant_config import DeepseekV4FP8Config
+    from sonar.models.deepseek_v41.quant_config import DeepseekV4FP8Config
 
     cls: type[FlashInferCutedslMxfp8LinearKernel] | type[FlashInferCutlassMxfp8LinearKernel]
     if backend == "cute-dsl":
@@ -211,7 +211,7 @@ def test_shared_query_quant_preserves_projection(num_tokens, backend, projection
     if not supported:
         pytest.skip(reason)
     torch.manual_seed(0)
-    with set_current_aphrodite_config(AphroditeConfig(compilation_config=CompilationConfig(mode=CompilationMode.NONE))):
+    with set_current_sonar_config(SonarConfig(compilation_config=CompilationConfig(mode=CompilationMode.NONE))):
         # Match the checkpoint's TP4 attention and replicated indexer widths.
         if projection == "attention":
             linear = ColumnParallelLinear.__new__(ColumnParallelLinear)
@@ -261,7 +261,7 @@ def test_shared_query_quant_preserves_projection(num_tokens, backend, projection
             raise AssertionError("pre-quantized input must skip quantization")
 
         monkeypatch.setattr(
-            "aphrodite.model_executor.kernels.linear.mxfp8.flashinfer.mxfp8_e4m3_quantize",
+            "sonar.model_executor.kernels.linear.mxfp8.flashinfer.mxfp8_e4m3_quantize",
             reject_requantization,
         )
         actual = project(owner, q)

@@ -6,17 +6,17 @@ from types import SimpleNamespace
 
 import pytest
 
-from aphrodite.entrypoints.generate.base.protocol import DeltaMessage
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-from aphrodite.parser.abstract_parser import DelegatingParser
-from aphrodite.parser.engine.registered_adapters import Qwen3ParserReasoningAdapter
-from aphrodite.reasoning.basic_parsers import BaseThinkingReasoningParser
-from aphrodite.tool_parsers.hermes_tool_parser import Hermes2ProToolParser
+from sonar.entrypoints.generate.base.protocol import DeltaMessage
+from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+from sonar.parser.abstract_parser import DelegatingParser
+from sonar.parser.engine.registered_adapters import Qwen3ParserReasoningAdapter
+from sonar.reasoning.basic_parsers import BaseThinkingReasoningParser
+from sonar.tool_parsers.hermes_tool_parser import Hermes2ProToolParser
 
 
 @pytest.fixture(autouse=True)
 def enable_hermes_required_named_parsing(monkeypatch):
-    # With APHRODITE_ENFORCE_STRICT_TOOL_CALLING (default on), Hermes sets
+    # With SONAR_ENFORCE_STRICT_TOOL_CALLING (default on), Hermes sets
     # supports_required_and_named=False and uses structural-tag guided tool
     # calling. Force it True to test the non-guided JSON required/named parse path.
     monkeypatch.setattr(Hermes2ProToolParser, "supports_required_and_named", True)
@@ -41,7 +41,7 @@ MODEL_OUTPUT = (
 
 @pytest.fixture(scope="module")
 def tokenizer():
-    from aphrodite.tokenizers import get_tokenizer
+    from sonar.tokenizers import get_tokenizer
 
     return get_tokenizer("Qwen/Qwen3-32B")
 

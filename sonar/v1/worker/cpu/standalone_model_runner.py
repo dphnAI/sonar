@@ -10,52 +10,52 @@ from typing import Any, NamedTuple
 import numpy as np
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.compilation.wrapper import compile_model_with_stock_torch
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.compilation import CompilationMode
-from aphrodite.distributed.parallel_state import get_pp_group
-from aphrodite.forward_context import BatchDescriptor, set_forward_context
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.mamba.ops.ssu_dispatch import (
+import sonar.envs as envs
+from sonar.compilation.wrapper import compile_model_with_stock_torch
+from sonar.config import SonarConfig
+from sonar.config.compilation import CompilationMode
+from sonar.distributed.parallel_state import get_pp_group
+from sonar.forward_context import BatchDescriptor, set_forward_context
+from sonar.logger import init_logger
+from sonar.model_executor.layers.mamba.ops.ssu_dispatch import (
     initialize_mamba_ssu_backend,
 )
-from aphrodite.model_executor.model_loader import get_model_loader
-from aphrodite.model_executor.model_loader.reload.inplace import reload_weights
-from aphrodite.model_executor.models.interfaces import requires_raw_input_tokens
-from aphrodite.model_executor.offloader import (
+from sonar.model_executor.model_loader import get_model_loader
+from sonar.model_executor.model_loader.reload.inplace import reload_weights
+from sonar.model_executor.models.interfaces import requires_raw_input_tokens
+from sonar.model_executor.offloader import (
     create_offloader,
     get_offloader,
     set_offloader,
 )
-from aphrodite.model_executor.warmup.jit_warmup import JitWarmupRegistry
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.encoder_budget import MultiModalBudget
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.tasks import SupportedTask
-from aphrodite.utils.mem_utils import DeviceMemoryProfiler, format_gib
-from aphrodite.utils.torch_utils import STR_DTYPE_TO_TORCH_DTYPE
-from aphrodite.v1.core.sched.output import GrammarOutput, SchedulerOutput
-from aphrodite.v1.kv_cache_interface import (
+from sonar.model_executor.warmup.jit_warmup import JitWarmupRegistry
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.encoder_budget import MultiModalBudget
+from sonar.sequence import IntermediateTensors
+from sonar.tasks import SupportedTask
+from sonar.utils.mem_utils import DeviceMemoryProfiler, format_gib
+from sonar.utils.torch_utils import STR_DTYPE_TO_TORCH_DTYPE
+from sonar.v1.core.sched.output import GrammarOutput, SchedulerOutput
+from sonar.v1.kv_cache_interface import (
     KVCacheConfig,
     KVCacheSpec,
     SlidingWindowSpec,
     UniformTypeKVCacheSpecs,
 )
-from aphrodite.v1.outputs import ECConnectorOutput, ModelRunnerOutput
-from aphrodite.v1.watermarking import create_watermarker
-from aphrodite.v1.worker.block_table import get_block_table_width
-from aphrodite.v1.worker.cpu.attn_utils import (
+from sonar.v1.outputs import ECConnectorOutput, ModelRunnerOutput
+from sonar.v1.watermarking import create_watermarker
+from sonar.v1.worker.block_table import get_block_table_width
+from sonar.v1.worker.cpu.attn_utils import (
     FastPrefillHelper,
     build_slot_mappings_by_layer,
     get_kv_cache_spec,
     init_attn_backend,
     init_kv_cache,
 )
-from aphrodite.v1.worker.cpu.block_table import CPUBlockTables
-from aphrodite.v1.worker.cpu.ec_connector import get_ec_connector
-from aphrodite.v1.worker.cpu.encoder_cache import EncoderCache
-from aphrodite.v1.worker.cpu.input_batch import (
+from sonar.v1.worker.cpu.block_table import CPUBlockTables
+from sonar.v1.worker.cpu.ec_connector import get_ec_connector
+from sonar.v1.worker.cpu.encoder_cache import EncoderCache
+from sonar.v1.worker.cpu.input_batch import (
     BatchReqState,
     InputBatch,
     InputBuffers,
@@ -65,27 +65,27 @@ from aphrodite.v1.worker.cpu.input_batch import (
     prepare_pos_seq_lens,
     prepare_prefill_inputs,
 )
-from aphrodite.v1.worker.cpu.kv_connector import (
+from sonar.v1.worker.cpu.kv_connector import (
     NO_OP_KV_CONNECTOR,
     KVConnector,
     get_kv_connector,
 )
-from aphrodite.v1.worker.cpu.logprob import CPUPromptLogprobsWorker
-from aphrodite.v1.worker.cpu.lora_utils import LoraState
-from aphrodite.v1.worker.cpu.model_states import init_model_state
-from aphrodite.v1.worker.cpu.pooling_runner import PoolingRunner
-from aphrodite.v1.worker.cpu.pp_utils import PPHandler
-from aphrodite.v1.worker.cpu.sampler import (
+from sonar.v1.worker.cpu.logprob import CPUPromptLogprobsWorker
+from sonar.v1.worker.cpu.lora_utils import LoraState
+from sonar.v1.worker.cpu.model_states import init_model_state
+from sonar.v1.worker.cpu.pooling_runner import PoolingRunner
+from sonar.v1.worker.cpu.pp_utils import PPHandler
+from sonar.v1.worker.cpu.sampler import (
     CPUSampler,
     CPUWatermarkSampler,
     SamplerOutput,
 )
-from aphrodite.v1.worker.cpu.states import CPURequestState
-from aphrodite.v1.worker.cpu.structured_outputs import CPUStructuredOutputsWorker
-from aphrodite.v1.worker.cpu.utils import CPUKVBlockZeroer, free_before_shutdown
-from aphrodite.v1.worker.dp_utils import coordinate_batch_across_dp
-from aphrodite.v1.worker.lora_model_runner_mixin import LoRAModelRunnerMixin
-from aphrodite.v1.worker.utils import (
+from sonar.v1.worker.cpu.states import CPURequestState
+from sonar.v1.worker.cpu.structured_outputs import CPUStructuredOutputsWorker
+from sonar.v1.worker.cpu.utils import CPUKVBlockZeroer, free_before_shutdown
+from sonar.v1.worker.dp_utils import coordinate_batch_across_dp
+from sonar.v1.worker.lora_model_runner_mixin import LoRAModelRunnerMixin
+from sonar.v1.worker.utils import (
     clear_layer_kv_caches,
     copy_kv_cache_blocks_inplace,
     get_uniform_decode_token_count,
@@ -118,16 +118,16 @@ class StandaloneCPUModelRunner(LoRAModelRunnerMixin):
     and PyTorch operations instead of Triton.
     """
 
-    def __init__(self, aphrodite_config: AphroditeConfig, device: torch.device):
-        self.aphrodite_config = aphrodite_config
-        self.model_config = aphrodite_config.model_config
-        self.cache_config = aphrodite_config.cache_config
-        self.compilation_config = aphrodite_config.compilation_config
-        self.lora_config = aphrodite_config.lora_config
-        self.load_config = aphrodite_config.load_config
-        self.parallel_config = aphrodite_config.parallel_config
-        self.scheduler_config = aphrodite_config.scheduler_config
-        self.jit_warmup_registry = JitWarmupRegistry(aphrodite_config)
+    def __init__(self, sonar_config: SonarConfig, device: torch.device):
+        self.sonar_config = sonar_config
+        self.model_config = sonar_config.model_config
+        self.cache_config = sonar_config.cache_config
+        self.compilation_config = sonar_config.compilation_config
+        self.lora_config = sonar_config.lora_config
+        self.load_config = sonar_config.load_config
+        self.parallel_config = sonar_config.parallel_config
+        self.scheduler_config = sonar_config.scheduler_config
+        self.jit_warmup_registry = JitWarmupRegistry(sonar_config)
 
         self.device = device
         self.model: torch.nn.Module
@@ -165,7 +165,7 @@ class StandaloneCPUModelRunner(LoRAModelRunnerMixin):
         self.encoder_cache: EncoderCache | None = None
         if self.supports_mm_inputs and self.is_first_pp_rank:
             self.encoder_cache = EncoderCache()
-        self.ec_connector = get_ec_connector(aphrodite_config, self.encoder_cache)
+        self.ec_connector = get_ec_connector(sonar_config, self.encoder_cache)
 
         # General request states.
         self.req_states = CPURequestState(
@@ -204,7 +204,7 @@ class StandaloneCPUModelRunner(LoRAModelRunnerMixin):
         self.kv_connector: KVConnector = NO_OP_KV_CONNECTOR
         self.execute_model_state: ExecuteModelState | None = None
 
-        set_offloader(create_offloader(self.aphrodite_config.offload_config))
+        set_offloader(create_offloader(self.sonar_config.offload_config))
 
     def update_max_model_len(self, max_model_len: int) -> None:
         self.max_model_len = max_model_len
@@ -230,17 +230,17 @@ class StandaloneCPUModelRunner(LoRAModelRunnerMixin):
             self.load_config.load_format = "dummy"
 
         with DeviceMemoryProfiler() as m:
-            model_loader = get_model_loader(self.aphrodite_config.load_config)
+            model_loader = get_model_loader(self.sonar_config.load_config)
             logger.info_once("Loading model from scratch...")
 
             # Capture warmup providers selected while constructing the model.
             with self.jit_warmup_registry.activate():
                 self.model = model or model_loader.load_model(
-                    aphrodite_config=self.aphrodite_config,
-                    model_config=self.aphrodite_config.model_config,
+                    sonar_config=self.sonar_config,
+                    model_config=self.sonar_config.model_config,
                 )
             if self.lora_config:
-                self.model = self.load_lora_model(self.model, self.aphrodite_config, self.device)
+                self.model = self.load_lora_model(self.model, self.sonar_config, self.device)
         time_after_load = time.perf_counter()
 
         self.model_memory_usage = m.consumed_memory
@@ -250,14 +250,14 @@ class StandaloneCPUModelRunner(LoRAModelRunnerMixin):
             time_after_load - time_before_load,
         )
 
-        self.model_state = init_model_state(self.aphrodite_config, self.model, self.encoder_cache, self.device)
+        self.model_state = init_model_state(self.sonar_config, self.model, self.encoder_cache, self.device)
         self.decode_query_len = self.model_state.num_new_sampled_tokens_per_step
         if self.decode_query_len != 1:
             raise NotImplementedError("CPU Model Runner V2 without Triton supports one sampled token per decode step.")
 
         if self.is_last_pp_rank and not self.is_pooling_model:
             sampler_kwargs: dict[str, Any] = {
-                "aphrodite_config": self.aphrodite_config,
+                "sonar_config": self.sonar_config,
                 "max_num_reqs": self.max_num_reqs,
                 "vocab_size": self.vocab_size,
                 "device": self.device,
@@ -267,10 +267,10 @@ class StandaloneCPUModelRunner(LoRAModelRunnerMixin):
                 "enable_trace_replay": self.model_config.enable_trace_replay,
                 "return_sampling_mask": self.model_config.return_sampling_mask,
             }
-            if self.aphrodite_config.watermark_config is None:
+            if self.sonar_config.watermark_config is None:
                 self.sampler = CPUSampler(**sampler_kwargs)
             else:
-                wm_config = self.aphrodite_config.watermark_config
+                wm_config = self.sonar_config.watermark_config
                 watermarker = create_watermarker(wm_config)
                 self.sampler = CPUWatermarkSampler(
                     watermarker,
@@ -291,7 +291,7 @@ class StandaloneCPUModelRunner(LoRAModelRunnerMixin):
             )
 
         if self.is_pooling_model and self.is_last_pp_rank:
-            self.pooling_runner = PoolingRunner(self.model, self.aphrodite_config)
+            self.pooling_runner = PoolingRunner(self.model, self.sonar_config)
 
         if not self.is_first_pp_rank:
             self.intermediate_tensors = self.model.make_empty_intermediate_tensors(
@@ -303,7 +303,7 @@ class StandaloneCPUModelRunner(LoRAModelRunnerMixin):
         get_offloader().post_init()
 
         if self.compilation_config.mode == CompilationMode.STOCK_TORCH_COMPILE:
-            compile_model_with_stock_torch(self.model, self.aphrodite_config)
+            compile_model_with_stock_torch(self.model, self.sonar_config)
 
     @property
     def dp_size(self) -> int:
@@ -326,9 +326,9 @@ class StandaloneCPUModelRunner(LoRAModelRunnerMixin):
         is_checkpoint_format: bool = True,
     ) -> None:
         """Reload weights in place."""
-        aphrodite_config = self.aphrodite_config
+        sonar_config = self.sonar_config
         model = self.get_model()
-        reload_weights(aphrodite_config, model, weights_iterator, weights_path, is_checkpoint_format)
+        reload_weights(sonar_config, model, weights_iterator, weights_path, is_checkpoint_format)
         self.reset_lora_state()
         self.reset_encoder_cache()
         self.reset_mm_cache()
@@ -338,7 +338,7 @@ class StandaloneCPUModelRunner(LoRAModelRunnerMixin):
         return encoder_runner.get_encoder_timing_stats() if encoder_runner else {}
 
     def get_kv_cache_spec(self) -> dict[str, KVCacheSpec]:
-        return get_kv_cache_spec(self.aphrodite_config)
+        return get_kv_cache_spec(self.sonar_config)
 
     def initialize_kv_cache(
         self,
@@ -369,7 +369,7 @@ class StandaloneCPUModelRunner(LoRAModelRunnerMixin):
             sliding_window_reach.append(
                 layer_spec.num_retained_tokens if isinstance(layer_spec, SlidingWindowSpec) else 0
             )
-            max_num_blocks = spec.max_num_blocks_per_req(self.aphrodite_config, block_table_max_model_len)
+            max_num_blocks = spec.max_num_blocks_per_req(self.sonar_config, block_table_max_model_len)
             max_num_blocks = get_block_table_width(
                 max_num_blocks,
                 spec.block_size,
@@ -380,7 +380,7 @@ class StandaloneCPUModelRunner(LoRAModelRunnerMixin):
         with self.jit_warmup_registry.activate():
             self.attn_groups, self.kernel_block_sizes = init_attn_backend(
                 self.kv_cache_config,
-                self.aphrodite_config,
+                self.sonar_config,
                 self.device,
             )
 
@@ -394,7 +394,7 @@ class StandaloneCPUModelRunner(LoRAModelRunnerMixin):
             sliding_window_reach=sliding_window_reach,
         )
         initialize_mamba_ssu_backend(
-            self.aphrodite_config.mamba_config,
+            self.sonar_config.mamba_config,
             self.kv_cache_config,
             use_replayssm=self.cache_config.use_replayssm,
         )
@@ -407,7 +407,7 @@ class StandaloneCPUModelRunner(LoRAModelRunnerMixin):
                 self.kv_cache_config,
                 self.device,
                 self.kernel_block_sizes,
-                self.aphrodite_config,
+                self.sonar_config,
                 kv_cache_allocation_context=kv_cache_allocation_context,
                 attn_groups=(group for groups in self.attn_groups for group in groups),
             )
@@ -416,7 +416,7 @@ class StandaloneCPUModelRunner(LoRAModelRunnerMixin):
         if is_profiling:
             self.kv_connector = NO_OP_KV_CONNECTOR
         else:
-            self.kv_connector = get_kv_connector(self.aphrodite_config, kv_caches_dict)
+            self.kv_connector = get_kv_connector(self.sonar_config, kv_caches_dict)
 
     def _init_kv_zero_meta(self) -> None:
         self.kv_block_zeroer = CPUKVBlockZeroer(
@@ -522,7 +522,7 @@ class StandaloneCPUModelRunner(LoRAModelRunnerMixin):
         if self.supports_mm_inputs and self.is_first_pp_rank:
             mm_config = self.model_config.multimodal_config
             if mm_config is not None and not mm_config.skip_mm_profiling:
-                mm_budget = MultiModalBudget(self.aphrodite_config, self.mm_registry, enable_cache=False)
+                mm_budget = MultiModalBudget(self.sonar_config, self.mm_registry, enable_cache=False)
                 dummy_mm_inputs = mm_budget.get_dummy_encoder_profile_inputs()
                 self.model_state.encoder_runner.profile_encoder_cache(dummy_mm_inputs, mm_budget)
 
@@ -757,7 +757,7 @@ class StandaloneCPUModelRunner(LoRAModelRunnerMixin):
         num_reqs = len(req_ids)
 
         is_padding = self.input_buffers.is_padding[:num_tokens]
-        if envs.APHRODITE_MOE_SKIP_PADDING:
+        if envs.SONAR_MOE_SKIP_PADDING:
             is_padding.fill_(False)
 
         num_scheduled_tokens = batch_req_state.num_scheduled_tokens
@@ -1073,7 +1073,7 @@ class StandaloneCPUModelRunner(LoRAModelRunnerMixin):
         )
         with set_forward_context(
             attn_metadata,
-            self.aphrodite_config,
+            self.sonar_config,
             num_tokens=input_batch.num_tokens_after_padding,
             num_tokens_across_dp=num_tokens_across_dp,
             batch_descriptor=batch_descriptor,
@@ -1188,7 +1188,7 @@ class StandaloneCPUModelRunner(LoRAModelRunnerMixin):
         )
 
         model_runner_output.ec_connector_output = ec_connector_output
-        if envs.APHRODITE_RAISE_ON_LOGIT_NANS and model_runner_output.num_nans_in_logits is not None:
+        if envs.SONAR_RAISE_ON_LOGIT_NANS and model_runner_output.num_nans_in_logits is not None:
             raise_if_nan_logits(model_runner_output.num_nans_in_logits)
         return model_runner_output
 
@@ -1244,7 +1244,7 @@ class StandaloneCPUModelRunner(LoRAModelRunnerMixin):
             del self.kv_cache_config
         if self.encoder_cache is not None:
             self.encoder_cache.reset_encoder_cache()
-        free_before_shutdown(self.aphrodite_config)
+        free_before_shutdown(self.sonar_config)
         if hasattr(self, "model_state"):
             del self.model_state
         # Detach the layer-level KV/state cache tensors before dropping the

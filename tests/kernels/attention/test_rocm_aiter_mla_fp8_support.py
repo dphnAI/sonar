@@ -9,11 +9,11 @@ from unittest.mock import patch
 
 import pytest
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 _SKIP_UNSUPPORTED_AITER_HARDWARE = True
 if current_platform.is_rocm():
-    from aphrodite.platforms.rocm import get_cdna_version
+    from sonar.platforms.rocm import get_cdna_version
 
     _SKIP_UNSUPPORTED_AITER_HARDWARE = get_cdna_version() <= 2
 
@@ -22,7 +22,7 @@ pytestmark = pytest.mark.skipif(not current_platform.is_rocm(), reason="ROCm-spe
 
 @pytest.fixture(autouse=True)
 def reset_aiter_mla_support_cache(monkeypatch: pytest.MonkeyPatch) -> None:
-    import aphrodite._aiter_ops as aiter_ops
+    import sonar._aiter_ops as aiter_ops
 
     monkeypatch.setattr(aiter_ops, "_AITER_MLA_SUPPORTS_FP8", None)
 
@@ -83,7 +83,7 @@ def _install_fake_aiter_modules(
 
 def test_aiter_mla_fp8_support_detects_fp8_signature(monkeypatch):
     """The support check should detect q_scale and kv_scale parameters."""
-    from aphrodite._aiter_ops import _check_aiter_mla_fp8_support
+    from sonar._aiter_ops import _check_aiter_mla_fp8_support
 
     _install_fake_aiter_modules(monkeypatch, supports_fp8=True)
 
@@ -92,7 +92,7 @@ def test_aiter_mla_fp8_support_detects_fp8_signature(monkeypatch):
 
 def test_aiter_mla_fp8_support_rejects_missing_fp8_signature(monkeypatch):
     """The support check should return False when FP8 params are absent."""
-    from aphrodite._aiter_ops import _check_aiter_mla_fp8_support
+    from sonar._aiter_ops import _check_aiter_mla_fp8_support
 
     _install_fake_aiter_modules(monkeypatch, supports_fp8=False)
 
@@ -105,7 +105,7 @@ def test_aiter_mla_fp8_support_rejects_missing_fp8_signature(monkeypatch):
 )
 def test_installed_aiter_mla_supports_fp8():
     """Supported ROCm CI must provide AITER with MLA FP8 scaling."""
-    from aphrodite._aiter_ops import (
+    from sonar._aiter_ops import (
         _check_aiter_mla_fp8_support,
         is_aiter_found_and_supported,
     )
@@ -120,8 +120,8 @@ def test_installed_aiter_mla_supports_fp8():
 )
 def test_aiter_mla_fp8_support_handles_signature_errors(monkeypatch, error_type):
     """The support check should fail closed on import or signature problems."""
-    import aphrodite._aiter_ops as aiter_ops
-    from aphrodite._aiter_ops import _check_aiter_mla_fp8_support
+    import sonar._aiter_ops as aiter_ops
+    from sonar._aiter_ops import _check_aiter_mla_fp8_support
 
     _install_fake_aiter_modules(monkeypatch, supports_fp8=True)
 
@@ -134,7 +134,7 @@ def test_aiter_mla_fp8_support_result_is_cached(monkeypatch):
     """The support check should reuse the cached result on later calls."""
     import inspect
 
-    from aphrodite._aiter_ops import _check_aiter_mla_fp8_support
+    from sonar._aiter_ops import _check_aiter_mla_fp8_support
 
     _install_fake_aiter_modules(monkeypatch, supports_fp8=True)
 
@@ -146,8 +146,8 @@ def test_aiter_mla_fp8_support_result_is_cached(monkeypatch):
 
 def test_missing_causal_arg_fails_closed(monkeypatch):
     """Old aiter wheels have no causal=; do not report that as a valid draft path."""
-    from aphrodite._aiter_ops import rocm_aiter_ops
-    from aphrodite.v1.attention.backends.mla.rocm_aiter_mla import AiterMLABackend
+    from sonar._aiter_ops import rocm_aiter_ops
+    from sonar.v1.attention.backends.mla.rocm_aiter_mla import AiterMLABackend
 
     _install_fake_aiter_modules(monkeypatch, supports_fp8=True, supports_causal=False)
     with pytest.raises(RuntimeError, match="causal-only"):
@@ -159,9 +159,9 @@ def test_missing_causal_arg_fails_closed(monkeypatch):
 @pytest.mark.parametrize("has_kernels", [False, True])
 def test_supports_non_causal_requires_arch_kernels(monkeypatch, has_kernels):
     """The Python argument alone does not guarantee an arch has the kernel."""
-    from aphrodite._aiter_ops import rocm_aiter_ops
-    from aphrodite.v1.attention.backends.mla import rocm_aiter_mla
-    from aphrodite.v1.attention.backends.mla.rocm_aiter_mla import AiterMLABackend
+    from sonar._aiter_ops import rocm_aiter_ops
+    from sonar.v1.attention.backends.mla import rocm_aiter_mla
+    from sonar.v1.attention.backends.mla.rocm_aiter_mla import AiterMLABackend
 
     _install_fake_aiter_modules(monkeypatch, supports_fp8=True, supports_causal=True)
     monkeypatch.setattr(
@@ -190,7 +190,7 @@ def test_decode_fwd_forwards_causal_to_aiter(monkeypatch, causal):
 
     import torch
 
-    import aphrodite._aiter_ops as aiter_ops
+    import sonar._aiter_ops as aiter_ops
 
     aiter_ops._rocm_aiter_mla_decode_fwd_impl(
         torch.zeros(2, 1, 8),
@@ -210,10 +210,10 @@ def _aiter_mla_validate(
     kv_cache_dtype,
     use_non_causal,
 ):
-    from aphrodite.platforms.interface import DeviceCapability
-    from aphrodite.v1.attention.backend import AttentionType
-    from aphrodite.v1.attention.backends.mla import rocm_aiter_mla
-    from aphrodite.v1.attention.backends.mla.rocm_aiter_mla import AiterMLABackend
+    from sonar.platforms.interface import DeviceCapability
+    from sonar.v1.attention.backend import AttentionType
+    from sonar.v1.attention.backends.mla import rocm_aiter_mla
+    from sonar.v1.attention.backends.mla.rocm_aiter_mla import AiterMLABackend
 
     _install_fake_aiter_modules(monkeypatch, supports_fp8=True, supports_causal=True)
     monkeypatch.setattr(rocm_aiter_mla, "_aiter_mla_non_causal_asm_kernels", lambda: True)

@@ -81,7 +81,7 @@ class Moondream3TextConfig(PreTrainedConfig):
         self.moe_experts_per_token = moe.get("n_experts_per_tok", 8)
         self.moe_expert_inner_dim = moe.get("expert_inner_dim", 1024)
 
-        # Standard HuggingFace attributes (required by Aphrodite)
+        # Standard HuggingFace attributes (required by Sonar)
         self.hidden_size = dim
         self.num_attention_heads = n_heads
         self.num_key_value_heads = n_kv_heads
@@ -129,7 +129,7 @@ class Moondream3Config(PreTrainedConfig):
 
         super().__init__(**kwargs)
 
-        # Expose key attributes at top level for Aphrodite compatibility
+        # Expose key attributes at top level for Sonar compatibility
         self.hidden_size = self.text_config.hidden_size
         self.num_attention_heads = self.text_config.num_attention_heads
         self.num_key_value_heads = self.text_config.num_key_value_heads
@@ -144,7 +144,7 @@ class Moondream3Config(PreTrainedConfig):
         self.eos_token_id = 0
 
     def get_text_config(self, decoder: bool = False) -> "Moondream3TextConfig":
-        """Return the text config for Aphrodite's text_config detection.
+        """Return the text config for Sonar's text_config detection.
 
         Args:
             decoder: Ignored. Only used for encoder-decoder models.

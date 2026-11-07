@@ -27,26 +27,26 @@ from __future__ import annotations
 import time
 from typing import TYPE_CHECKING, Any
 
-from aphrodite.distributed.kv_transfer.kv_connector.utils import BlockIds
-from aphrodite.distributed.kv_transfer.kv_connector.v1.base import (
+from sonar.distributed.kv_transfer.kv_connector.utils import BlockIds
+from sonar.distributed.kv_transfer.kv_connector.v1.base import (
     KVConnectorMetadata,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_scheduler import (
+from sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_scheduler import (
     NixlBaseConnectorScheduler,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.metadata import (
+from sonar.distributed.kv_transfer.kv_connector.v1.nixl.metadata import (
     NixlConnectorMetadata,
     ReqId,
 )
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
-    from aphrodite.v1.core.kv_cache_manager import KVCacheBlocks
-    from aphrodite.v1.core.sched.output import SchedulerOutput
-    from aphrodite.v1.kv_cache_interface import KVCacheConfig
-    from aphrodite.v1.outputs import KVConnectorOutput
-    from aphrodite.v1.request import Request
+    from sonar.config import SonarConfig
+    from sonar.v1.core.kv_cache_manager import KVCacheBlocks
+    from sonar.v1.core.sched.output import SchedulerOutput
+    from sonar.v1.kv_cache_interface import KVCacheConfig
+    from sonar.v1.outputs import KVConnectorOutput
+    from sonar.v1.request import Request
 
 logger = init_logger(__name__)
 
@@ -64,11 +64,11 @@ class NixlPushConnectorScheduler(NixlBaseConnectorScheduler):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         engine_id: str,
         kv_cache_config: KVCacheConfig,
     ):
-        super().__init__(aphrodite_config, engine_id, kv_cache_config)
+        super().__init__(sonar_config, engine_id, kv_cache_config)
         if self.is_bidirectional_kv_xfer_enabled:
             raise NotImplementedError("Bidirectional KV transfer is not supported for NIXL push connector.")
 
@@ -90,9 +90,9 @@ class NixlPushConnectorScheduler(NixlBaseConnectorScheduler):
         # Soft watchdog timeout (seconds) for D-side registrations that
         # never receive a push completion. Defaults to the existing
         # decoder KV blocks TTL so behaviour matches the lease.
-        assert aphrodite_config.kv_transfer_config is not None
+        assert sonar_config.kv_transfer_config is not None
         self._push_registration_timeout: float = float(
-            aphrodite_config.kv_transfer_config.get_from_extra_config(
+            sonar_config.kv_transfer_config.get_from_extra_config(
                 "push_registration_timeout",
                 self.decoder_kv_blocks_ttl,
             )
@@ -171,7 +171,7 @@ class NixlPushConnectorScheduler(NixlBaseConnectorScheduler):
             "decode_engine_id": self.engine_id,
             "decode_host": self.side_channel_host,
             "decode_port": self.side_channel_port,
-            "decode_tp_size": (self.aphrodite_config.parallel_config.tensor_parallel_size),
+            "decode_tp_size": (self.sonar_config.parallel_config.tensor_parallel_size),
             "local_block_ids": local_block_ids,
             "remote_engine_id": params["remote_engine_id"],
             "remote_host": params["remote_host"],
@@ -200,7 +200,7 @@ class NixlPushConnectorScheduler(NixlBaseConnectorScheduler):
         block_ids: BlockIds,
     ) -> tuple[bool, dict[str, Any] | None]:
         """Push-mode request_finished: stores blocks for workers."""
-        from aphrodite.v1.request import RequestStatus
+        from sonar.v1.request import RequestStatus
 
         params = request.kv_transfer_params
         logger.debug(
@@ -273,8 +273,8 @@ class NixlPushConnectorScheduler(NixlBaseConnectorScheduler):
             remote_host=self.side_channel_host,
             remote_port=self.side_channel_port,
             tp_size=self.transfer_tp_size,
-            dcp_size=self.aphrodite_config.parallel_config.decode_context_parallel_size,
-            pp_size=self.aphrodite_config.parallel_config.pipeline_parallel_size,
+            dcp_size=self.sonar_config.parallel_config.decode_context_parallel_size,
+            pp_size=self.sonar_config.parallel_config.pipeline_parallel_size,
             remote_num_tokens=remote_num_tokens,
             transfer_mode=self._TRANSFER_MODE,
         )

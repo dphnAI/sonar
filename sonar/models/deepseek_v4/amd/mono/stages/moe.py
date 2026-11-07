@@ -48,7 +48,7 @@ from flydsl.expr import const_expr, gpu, range_constexpr, rocdl
 from flydsl.expr import math as fmath
 from flydsl.expr.typing import T
 
-from aphrodite.models.deepseek_v4.amd.mono.common.mx import (
+from sonar.models.deepseek_v4.amd.mono.common.mx import (
     FP4,
     FP8,
     FP8_MAX,
@@ -60,7 +60,7 @@ from aphrodite.models.deepseek_v4.amd.mono.common.mx import (
     rcp_pow2,
     scale_index,
 )
-from aphrodite.models.deepseek_v4.amd.mono.common.ops import (
+from sonar.models.deepseek_v4.amd.mono.common.ops import (
     CM_DEV,
     CM_NT,
     _hw_f32,
@@ -82,15 +82,15 @@ from aphrodite.models.deepseek_v4.amd.mono.common.ops import (
     stamp,
     traced,
 )
-from aphrodite.models.deepseek_v4.amd.mono.common.plan import (
+from sonar.models.deepseek_v4.amd.mono.common.plan import (
     BLOCKS,
     THREADS,
     WAVES,
     first_task,
     pair_layout,
 )
-from aphrodite.models.deepseek_v4.amd.mono.common.sync import preg, publish, sreg
-from aphrodite.models.deepseek_v4.amd.mono.dims import (
+from sonar.models.deepseek_v4.amd.mono.common.sync import preg, publish, sreg
+from sonar.models.deepseek_v4.amd.mono.dims import (
     DOWN_TASKS,
     HIDDEN,
     ROUTED_SCALE,
@@ -100,12 +100,12 @@ from aphrodite.models.deepseek_v4.amd.mono.dims import (
     X_WORDS,
     Dims,
 )
-from aphrodite.models.deepseek_v4.amd.mono.stages import allreduce
-from aphrodite.models.deepseek_v4.amd.mono.stages import moe_plan as mplan
+from sonar.models.deepseek_v4.amd.mono.stages import allreduce
+from sonar.models.deepseek_v4.amd.mono.stages import moe_plan as mplan
 
 # helpers the kernel calls are imported by name: FlyDSL keys a build by the
 # source of the same-directory functions it names, never through a module
-from aphrodite.models.deepseek_v4.amd.mono.stages.gemv import (
+from sonar.models.deepseek_v4.amd.mono.stages.gemv import (
     ROWS,
     TILE,
     gemv_fp8_loads,
@@ -118,18 +118,18 @@ from aphrodite.models.deepseek_v4.amd.mono.stages.gemv import (
     tile_rows,
     token_tiles,
 )
-from aphrodite.models.deepseek_v4.amd.mono.stages.moe_shape import (
+from sonar.models.deepseek_v4.amd.mono.stages.moe_shape import (
     MASK_WORDS,
     MoeBuild,
     route_shape,
 )
-from aphrodite.models.deepseek_v4.amd.mono.stages.router import PARTS as ROUTER_PARTS
-from aphrodite.models.deepseek_v4.amd.mono.stages.router import (
+from sonar.models.deepseek_v4.amd.mono.stages.router import PARTS as ROUTER_PARTS
+from sonar.models.deepseek_v4.amd.mono.stages.router import (
     router_tile_mfma,
     router_weight_loads,
     router_x_loads,
 )
-from aphrodite.models.deepseek_v4.amd.mono.stages.seam import attn_peer_bytes
+from sonar.models.deepseek_v4.amd.mono.stages.seam import attn_peer_bytes
 
 # a pick tile is a token tile's MFMA N: ``gather_x8r`` fills one from the other
 assert mplan.TILE == TILE
@@ -249,10 +249,10 @@ def stage_xq(c, t):
     for y in v[1:]:
         amax0 = fx.max(amax0, abs(y))
     # the routed experts' (aiter fused_mx_quant_moe_sort): amax floored 1e-10;
-    # the shared expert's: Aphrodite's mxfp8_e4m3_quantize (its MXFP8 linear)
+    # the shared expert's: Sonar's mxfp8_e4m3_quantize (its MXFP8 linear)
     if mine:
         put_mxfp8_group(c, "x8r", "x8rs", t, g, v, fx.max(amax0, fx.Float32(1e-10)))
-        put_mxfp8_group_aphrodite(c, "x8", "x8s", t, g, v, amax0)
+        put_mxfp8_group_sonar(c, "x8", "x8s", t, g, v, amax0)
 
 
 def put_mxfp8_group(c, words_mb, codes_mb, t, g, v, amax):
@@ -277,8 +277,8 @@ def put_mxfp8_group(c, words_mb, codes_mb, t, g, v, amax):
 FLT_MIN = 1.1754943508222875e-38
 
 
-def aphrodite_mx_code(amax):
-    """APHRODITE's ``mxfp8_e4m3_quantize`` scale code of a 32-group: the smallest
+def sonar_mx_code(amax):
+    """SONAR's ``mxfp8_e4m3_quantize`` scale code of a 32-group: the smallest
     power of two >= RN(max(amax, FLT_MIN) / 448), clamped to [0, 254]."""
     a = fx.max(amax, fx.Float32(FLT_MIN))
     q = div_rn(a, fx.Float32(FP8_MAX), fx.Float32(1.0 / FP8_MAX))
@@ -289,10 +289,10 @@ def aphrodite_mx_code(amax):
     return fx.min(fx.max(e, fx.Int32(0)), fx.Int32(254))
 
 
-def put_mxfp8_group_aphrodite(c, words_mb, codes_mb, t, g, v, amax):
-    """``put_mxfp8_group`` with Aphrodite's rule (``aphrodite_mx_code``; x * 2^(127 - code),
+def put_mxfp8_group_sonar(c, words_mb, codes_mb, t, g, v, amax):
+    """``put_mxfp8_group`` with Sonar's rule (``sonar_mx_code``; x * 2^(127 - code),
     which code 0 keeps finite)."""
-    code = aphrodite_mx_code(amax)
+    code = sonar_mx_code(amax)
     inv = ((254 - code) << 23).bitcast(fx.Float32)
     words = []
     for w4 in range_constexpr(4):
@@ -365,12 +365,12 @@ def _score(x):
 
 @traced
 def stage_route(c, t):
-    """APHRODITE's topk_hash_softplus_sqrt for token t on wave 0 (f32 logits)."""
+    """SONAR's topk_hash_softplus_sqrt for token t on wave 0 (f32 logits)."""
     lane, wave = c["lane"], c["wave"]
     experts, topk = c["rs"].experts, c["rs"].topk
     if wave == 0:
         ept = experts // 64
-        # each logit's router part sums, added in part order (Aphrodite's gate: f32 out)
+        # each logit's router part sums, added in part order (Sonar's gate: f32 out)
         assert ROUTER_PARTS == 4
         got = c["poll"](
             [(c["logit"], (t * experts + lane + 64 * i) * ROUTER_PARTS + h, 2) for i in range(ept) for h in (0, 2)]
@@ -594,7 +594,7 @@ def lane_prefix(v, lane):
 
 # ---------------------------------------------------------------- shared ug
 def _silu_mul(g, u, limit):
-    """APHRODITE's silu_and_mul_with_clamp (the shared expert's): gate min limit,
+    """SONAR's silu_and_mul_with_clamp (the shared expert's): gate min limit,
     up clamped; silu = g / (1 + expf(-g)) rounded to bf16, then times up."""
     g = bf16_round(fx.min(g, fx.Float32(limit)))
     u = fx.max(fx.min(u, fx.Float32(limit)), fx.Float32(-limit))
@@ -657,8 +657,8 @@ def smid_quant(c, task, t0, n):
         amax = abs(vals[0])
         for y in vals[1:]:
             amax = fx.max(amax, abs(y))
-        # Aphrodite's down_proj input quant (mxfp8_e4m3_quantize)
-        code = aphrodite_mx_code(amax)
+        # Sonar's down_proj input quant (mxfp8_e4m3_quantize)
+        code = sonar_mx_code(amax)
         inv = ((254 - code) << 23).bitcast(fx.Float32)
         g = task // 2
         for w in range_constexpr(8):

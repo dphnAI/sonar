@@ -5,19 +5,19 @@ from collections.abc import Iterable
 import torch
 import torch.nn as nn
 
-from aphrodite.config import AphroditeConfig, ModelConfig
-from aphrodite.inputs import TokensPrompt
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.linear import ColumnParallelLinear, RowParallelLinear
-from aphrodite.model_executor.layers.pooler import DispatchPooler
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import MultiModalKwargsItems
-from aphrodite.multimodal.processing.processor import (
+from sonar.config import ModelConfig, SonarConfig
+from sonar.inputs import TokensPrompt
+from sonar.logger import init_logger
+from sonar.model_executor.layers.linear import ColumnParallelLinear, RowParallelLinear
+from sonar.model_executor.layers.pooler import DispatchPooler
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import MultiModalKwargsItems
+from sonar.multimodal.processing.processor import (
     MultiModalProcessingResult,
     ProcessorInputs,
     TimingContext,
 )
-from aphrodite.sequence import IntermediateTensors
+from sonar.sequence import IntermediateTensors
 
 from .interfaces import SupportsCrossEncoding, SupportsMultiModal, SupportsScoreTemplate
 from .qwen2_vl import (
@@ -112,12 +112,12 @@ class JinaVLForSequenceClassification(
         }
     )
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
-        super().__init__(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "qwen2_vl"))
-        pooler_config = aphrodite_config.model_config.pooler_config
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
+        super().__init__(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "qwen2_vl"))
+        pooler_config = sonar_config.model_config.pooler_config
         assert pooler_config is not None
 
-        self.score = JinaVLScorer(aphrodite_config.model_config, prefix=maybe_prefix(prefix, "score"))
+        self.score = JinaVLScorer(sonar_config.model_config, prefix=maybe_prefix(prefix, "score"))
         self.pooler = DispatchPooler.for_seq_cls(pooler_config, classifier=self.score)
 
     @classmethod

@@ -30,13 +30,13 @@ endif()
 FetchContent_MakeAvailable(flashmla)
 message(STATUS "FlashMLA is available at ${flashmla_SOURCE_DIR}")
 
-# Vendor FlashMLA interface into Aphrodite with torch-ops shim.
-set(FLASHMLA_VENDOR_DIR "${CMAKE_SOURCE_DIR}/aphrodite/third_party/flashmla")
+# Vendor FlashMLA interface into Sonar with torch-ops shim.
+set(FLASHMLA_VENDOR_DIR "${CMAKE_SOURCE_DIR}/sonar/third_party/flashmla")
 file(MAKE_DIRECTORY "${FLASHMLA_VENDOR_DIR}")
 file(READ "${flashmla_SOURCE_DIR}/flash_mla/flash_mla_interface.py"
      FLASHMLA_INTERFACE_CONTENT)
 string(REPLACE "flash_mla_cuda = torch.ops._flashmla_C"
-               "import aphrodite._flashmla_C\nflash_mla_cuda = torch.ops._flashmla_C"
+               "import sonar._flashmla_C\nflash_mla_cuda = torch.ops._flashmla_C"
                FLASHMLA_INTERFACE_CONTENT
                "${FLASHMLA_INTERFACE_CONTENT}")
 file(WRITE "${FLASHMLA_VENDOR_DIR}/flash_mla_interface.py"
@@ -45,7 +45,7 @@ file(WRITE "${FLASHMLA_VENDOR_DIR}/flash_mla_interface.py"
 # Install the generated flash_mla_interface.py to the wheel
 # Use COMPONENT _flashmla_C to ensure it's installed with the C extension
 install(FILES "${FLASHMLA_VENDOR_DIR}/flash_mla_interface.py"
-        DESTINATION aphrodite/third_party/flashmla/
+        DESTINATION sonar/third_party/flashmla/
         COMPONENT _flashmla_C)
 
 # The FlashMLA kernels only work on hopper and require CUDA 12.3 or later.
@@ -71,8 +71,8 @@ endif()
 cuda_archs_loose_intersection(FLASH_MLA_ARCHS "${SUPPORT_ARCHS}" "${CUDA_ARCHS}")
 if(FLASH_MLA_ARCHS)
     message(STATUS "FlashMLA CUDA architectures: ${FLASH_MLA_ARCHS}")
-    set(APHRODITE_FLASHMLA_GPU_FLAGS ${APHRODITE_GPU_FLAGS})
-    list(APPEND APHRODITE_FLASHMLA_GPU_FLAGS "--expt-relaxed-constexpr" "--expt-extended-lambda" "--use_fast_math")
+    set(SONAR_FLASHMLA_GPU_FLAGS ${SONAR_GPU_FLAGS})
+    list(APPEND SONAR_FLASHMLA_GPU_FLAGS "--expt-relaxed-constexpr" "--expt-extended-lambda" "--use_fast_math")
 
     set(FlashMLA_SOURCES
         ${flashmla_SOURCE_DIR}/csrc/api/api.cpp
@@ -192,11 +192,11 @@ if(FLASH_MLA_ARCHS)
 
     define_extension_target(
         _flashmla_C
-        DESTINATION aphrodite
-        LANGUAGE ${APHRODITE_GPU_LANG}
+        DESTINATION sonar
+        LANGUAGE ${SONAR_GPU_LANG}
         SOURCES ${FlashMLA_SOURCES}
-        COMPILE_FLAGS ${APHRODITE_GPU_FLAGS}
-        ARCHITECTURES ${APHRODITE_GPU_ARCHES}
+        COMPILE_FLAGS ${SONAR_GPU_FLAGS}
+        ARCHITECTURES ${SONAR_GPU_ARCHES}
         INCLUDE_DIRECTORIES ${FlashMLA_INCLUDES}
         USE_SABI 3
         WITH_SOABI)
@@ -209,7 +209,7 @@ if(FLASH_MLA_ARCHS)
     # _flashmla_C is now ABI-stable torch 2.11+
     target_compile_definitions(_flashmla_C PRIVATE
         TORCH_TARGET_VERSION=0x020B000000000000ULL)
-    if(APHRODITE_GPU_LANG STREQUAL "CUDA")
+    if(SONAR_GPU_LANG STREQUAL "CUDA")
         target_compile_definitions(_flashmla_C PRIVATE USE_CUDA)
     endif()
 
@@ -221,11 +221,11 @@ if(FLASH_MLA_ARCHS)
 
     define_extension_target(
         _flashmla_extension_C
-        DESTINATION aphrodite
-        LANGUAGE ${APHRODITE_GPU_LANG}
+        DESTINATION sonar
+        LANGUAGE ${SONAR_GPU_LANG}
         SOURCES ${FlashMLA_Extension_SOURCES}
-        COMPILE_FLAGS ${APHRODITE_FLASHMLA_GPU_FLAGS}
-        ARCHITECTURES ${APHRODITE_GPU_ARCHES}
+        COMPILE_FLAGS ${SONAR_FLASHMLA_GPU_FLAGS}
+        ARCHITECTURES ${SONAR_GPU_ARCHES}
         INCLUDE_DIRECTORIES ${FlashMLA_Extension_INCLUDES}
         USE_SABI 3
         WITH_SOABI)
@@ -233,7 +233,7 @@ if(FLASH_MLA_ARCHS)
     # _flashmla_extension_C is now ABI-stable w/ torch 2.11+
     target_compile_definitions(_flashmla_extension_C PRIVATE
         TORCH_TARGET_VERSION=0x020B000000000000ULL)
-    if(APHRODITE_GPU_LANG STREQUAL "CUDA")
+    if(SONAR_GPU_LANG STREQUAL "CUDA")
         target_compile_definitions(_flashmla_extension_C PRIVATE USE_CUDA)
     endif()
 

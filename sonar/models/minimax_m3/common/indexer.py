@@ -20,29 +20,29 @@ from typing import TYPE_CHECKING, ClassVar
 import torch
 from torch import nn
 
-from aphrodite.config import AphroditeConfig, CacheConfig, get_current_aphrodite_config
-from aphrodite.config.attention import IndexerKVDType
-from aphrodite.config.cache import CacheDType
-from aphrodite.distributed import get_tensor_model_parallel_world_size
-from aphrodite.forward_context import get_forward_context
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.attention_layer_base import AttentionLayerBase
-from aphrodite.platforms import current_platform
+from sonar.config import CacheConfig, SonarConfig, get_current_sonar_config
+from sonar.config.attention import IndexerKVDType
+from sonar.config.cache import CacheDType
+from sonar.distributed import get_tensor_model_parallel_world_size
+from sonar.forward_context import get_forward_context
+from sonar.logger import init_logger
+from sonar.model_executor.layers.attention_layer_base import AttentionLayerBase
+from sonar.platforms import current_platform
 
 if not TYPE_CHECKING and current_platform.is_rocm():
-    from aphrodite.models.minimax_m3.amd.ops.index_topk import (
+    from sonar.models.minimax_m3.amd.ops.index_topk import (
         minimax_m3_index_decode,
         minimax_m3_index_score,
         minimax_m3_index_topk,
     )
 else:
-    from aphrodite.models.minimax_m3.common.ops.index_topk import (
+    from sonar.models.minimax_m3.common.ops.index_topk import (
         minimax_m3_index_decode,
         minimax_m3_index_score,
         minimax_m3_index_topk,
     )
 
-from aphrodite.v1.attention.backend import (
+from sonar.v1.attention.backend import (
     AttentionBackend,
     AttentionCGSupport,
     AttentionMetadata,
@@ -50,8 +50,8 @@ from aphrodite.v1.attention.backend import (
     CommonAttentionMetadata,
     MultipleOf,
 )
-from aphrodite.v1.attention.backends.utils import split_decodes_and_prefills
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.attention.backends.utils import split_decodes_and_prefills
+from sonar.v1.kv_cache_interface import (
     AttentionSpec,
     KVCacheSpec,
     MLAAttentionSpec,
@@ -143,7 +143,7 @@ class MiniMaxM3IndexerCache(nn.Module, AttentionLayerBase):
         self.cache_config = cache_config
         # Impl-chosen backend -> each impl gets its own builder (get_attn_backend).
         self.backend_cls = backend_cls
-        compilation_config = get_current_aphrodite_config().compilation_config
+        compilation_config = get_current_sonar_config().compilation_config
         if prefix in compilation_config.static_forward_context:
             raise ValueError(f"Duplicate layer name: {prefix}")
         compilation_config.static_forward_context[prefix] = self
@@ -152,10 +152,10 @@ class MiniMaxM3IndexerCache(nn.Module, AttentionLayerBase):
         # [B, H=1, N, C] -> [B, N, C]
         self.kv_cache = kv_cache.squeeze(1)
 
-    def get_kv_cache_spec(self, aphrodite_config: AphroditeConfig) -> KVCacheSpec:
+    def get_kv_cache_spec(self, sonar_config: SonarConfig) -> KVCacheSpec:
         # Key-only: MLAAttentionSpec budgets one vector/token (not 2x for K+V).
         return MLAAttentionSpec(
-            block_size=aphrodite_config.cache_config.block_size,
+            block_size=sonar_config.cache_config.block_size,
             num_kv_heads=1,
             head_size=self.head_size,
             dtype=self.dtype,
@@ -226,11 +226,11 @@ class MiniMaxM3IndexerMetadataBuilder(AttentionMetadataBuilder[MiniMaxM3IndexerM
         self,
         kv_cache_spec: AttentionSpec,
         layer_names: list[str],
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
     ) -> None:
-        super().__init__(kv_cache_spec, layer_names, aphrodite_config, device)
-        hf_config = aphrodite_config.model_config.hf_config
+        super().__init__(kv_cache_spec, layer_names, sonar_config, device)
+        hf_config = sonar_config.model_config.hf_config
         text_config = getattr(hf_config, "text_config", hf_config)
         sparse_cfg = text_config.sparse_attention_config
         # Index-query head count from model config (cache spec has 1 vec/token).
@@ -247,14 +247,14 @@ class MiniMaxM3IndexerMetadataBuilder(AttentionMetadataBuilder[MiniMaxM3IndexerM
 
         # Stable context-length buffer for decode cudagraph replays.
         self.context_len_buffer = torch.empty(
-            aphrodite_config.scheduler_config.max_num_batched_tokens,
+            sonar_config.scheduler_config.max_num_batched_tokens,
             dtype=torch.int32,
             device=device,
         )
         # Stable per-token causal page-count buffer for decode cudagraph replays
         # (consumed by the MSA top-k path's sparse_topk_select num_valid_pages).
         self.num_valid_pages_buffer = torch.empty(
-            aphrodite_config.scheduler_config.max_num_batched_tokens,
+            sonar_config.scheduler_config.max_num_batched_tokens,
             dtype=torch.int32,
             device=device,
         )
@@ -505,7 +505,7 @@ def select_indexer_impl_cls(
     the Triton indexer, with fp8 restricted to CUDA platforms that advertise fp8
     support.
     """
-    if get_current_aphrodite_config().attention_config.minimax_m3_indexer_cp:
+    if get_current_sonar_config().attention_config.minimax_m3_indexer_cp:
         # AttentionConfig already rejects non-bf16 index caches; platform and
         # TP size are only known here.
         tp_size = get_tensor_model_parallel_world_size()
@@ -519,7 +519,7 @@ def select_indexer_impl_cls(
                 "attention_config.minimax_m3_indexer_cp requires a bf16 index "
                 f"cache, got indexer_kv_dtype={indexer_kv_dtype!r}"
             )
-        from aphrodite.models.minimax_m3.amd.indexer_context_parallel import (
+        from sonar.models.minimax_m3.amd.indexer_context_parallel import (
             MiniMaxM3IndexerTritonCPImpl,
         )
 
@@ -546,7 +546,7 @@ def select_indexer_impl_cls(
             )
         ):
             raise NotImplementedError("indexer_kv_dtype='nvfp4' requires an SM100, SM103 or SM107 GPU.")
-        from aphrodite.models.minimax_m3.nvidia.indexer_nvfp4 import (
+        from sonar.models.minimax_m3.nvidia.indexer_nvfp4 import (
             MiniMaxM3IndexerNvfp4Impl,
         )
 
@@ -558,7 +558,7 @@ def select_indexer_impl_cls(
     use_msa = is_sm100 and topk_blocks == 16 and indexer_kv_dtype in ("bf16", "fp8", "fp8_e4m3")
     if use_msa:
         # Lazy import so AMD / non-SM100 never import fmha_sm100.
-        from aphrodite.models.minimax_m3.nvidia.indexer_msa import (
+        from sonar.models.minimax_m3.nvidia.indexer_msa import (
             MiniMaxM3IndexerMSAImpl,
         )
 

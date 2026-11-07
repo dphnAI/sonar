@@ -2,10 +2,10 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import pytest
 
-from aphrodite._aiter_ops import is_aiter_found_and_supported
-from aphrodite.platforms import current_platform
-from aphrodite.utils.flashinfer import has_flashinfer
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
+from sonar._aiter_ops import is_aiter_found_and_supported
+from sonar.platforms import current_platform
+from sonar.utils.flashinfer import has_flashinfer
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
 
 from .common import AttentionBackendCase, Matches, ModelFusionInfo, is_blackwell
 

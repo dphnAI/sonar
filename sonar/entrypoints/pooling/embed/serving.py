@@ -4,10 +4,10 @@ from typing import TypeAlias, assert_never, cast
 
 from fastapi.responses import Response, StreamingResponse
 
-from aphrodite.entrypoints.serve.utils.api_utils import create_json_response
-from aphrodite.logger import init_logger
-from aphrodite.outputs import PoolingRequestOutput
-from aphrodite.utils.serial_utils import EmbedDType, Endianness
+from sonar.entrypoints.serve.utils.api_utils import create_json_response
+from sonar.logger import init_logger
+from sonar.outputs import PoolingRequestOutput
+from sonar.utils.serial_utils import EmbedDType, Endianness
 
 from ..base.io_processor import PoolingIOProcessor
 from ..base.serving import PoolingServing

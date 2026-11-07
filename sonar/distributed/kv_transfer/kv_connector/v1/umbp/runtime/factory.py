@@ -8,7 +8,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from typing import Any
 
-from aphrodite.config import AphroditeConfig
+from sonar.config import SonarConfig
 
 from .base import IUMBPRuntime
 
@@ -23,8 +23,8 @@ class UMBPRuntimeConfig:
     dp_index: int = 0
 
     @classmethod
-    def from_aphrodite(cls, aphrodite_config: AphroditeConfig) -> UMBPRuntimeConfig:
-        transfer_config = aphrodite_config.kv_transfer_config
+    def from_sonar(cls, sonar_config: SonarConfig) -> UMBPRuntimeConfig:
+        transfer_config = sonar_config.kv_transfer_config
         if transfer_config is None:
             raise ValueError("UMBP requires kv_transfer_config")
         options = dict(transfer_config.kv_connector_extra_config)
@@ -37,7 +37,7 @@ class UMBPRuntimeConfig:
         return cls(
             mode=mode,
             options=options,
-            dp_index=int(getattr(aphrodite_config.parallel_config, "data_parallel_index", 0) or 0),
+            dp_index=int(getattr(sonar_config.parallel_config, "data_parallel_index", 0) or 0),
         )
 
     def resolve_for_rank_count(self, rank_count: int) -> UMBPRuntimeConfig:
@@ -51,7 +51,7 @@ RuntimeBuilder = Callable[[UMBPRuntimeConfig], IUMBPRuntime]
 
 
 class UMBPRuntimeFactory:
-    """Registry used by UMBP adapters without importing MORI in Aphrodite."""
+    """Registry used by UMBP adapters without importing MORI in Sonar."""
 
     _builders: dict[str, RuntimeBuilder] = {}
 

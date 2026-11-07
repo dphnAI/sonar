@@ -4,7 +4,7 @@ from collections.abc import Iterable, Iterator
 from itertools import chain
 from typing import TYPE_CHECKING
 
-from aphrodite.v1.sample.logits_processor.interface import (
+from sonar.v1.sample.logits_processor.interface import (
     AddedRequest,
     BatchUpdate,
     MovedRequest,
@@ -12,7 +12,7 @@ from aphrodite.v1.sample.logits_processor.interface import (
 )
 
 if TYPE_CHECKING:
-    from aphrodite.v1.sample.logits_processor.interface import LogitsProcessor
+    from sonar.v1.sample.logits_processor.interface import LogitsProcessor
 
 
 class BatchUpdateBuilder:

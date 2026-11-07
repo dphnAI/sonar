@@ -11,21 +11,21 @@ import torch
 from torch.nn.attention.flex_attention import create_block_mask, flex_attention
 from transformers import LlamaConfig
 
-from aphrodite.config import (
+from sonar.config import (
     DiffusionConfig,
     ModelConfig,
     SpeculativeConfig,
-    set_current_aphrodite_config,
+    set_current_sonar_config,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.utils.torch_utils import (
+from sonar.platforms import current_platform
+from sonar.utils.math_utils import cdiv
+from sonar.utils.torch_utils import (
     STR_DTYPE_TO_TORCH_DTYPE,
     is_torch_equal_or_newer,
     nvfp4_kv_cache_full_dim,
     set_random_seed,
 )
-from aphrodite.v1.attention.backend import (
+from sonar.v1.attention.backend import (
     AttentionCGSupport,
     AttentionImpl,
     AttentionMetadataBuilder,
@@ -33,9 +33,9 @@ from aphrodite.v1.attention.backend import (
     CommonAttentionMetadata,
     max_decode_query_len,
 )
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
-from aphrodite.v1.attention.backends.utils import PerLayerParameters
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
+from sonar.v1.attention.backends.utils import PerLayerParameters
+from sonar.v1.kv_cache_interface import (
     FullAttentionSpec,
     KVCacheLayout,
     KVQuantMode,
@@ -43,8 +43,8 @@ from aphrodite.v1.kv_cache_interface import (
 )
 from tests.v1.attention.utils import (
     BatchSpec,
-    create_aphrodite_config,
     create_common_attn_metadata,
+    create_sonar_config,
     create_standard_kv_cache_spec,
     try_backend_includes_kv_cache_update,
     try_get_attention_backend,
@@ -277,7 +277,7 @@ def run_attention_backend(
     backend: AttentionBackendEnum | str,
     kv_cache_spec: FullAttentionSpec,
     layer_names: list[str],
-    aphrodite_config,
+    sonar_config,
     device: torch.device,
     common_attn_metadata: CommonAttentionMetadata,
     query: torch.Tensor,
@@ -306,11 +306,11 @@ def run_attention_backend(
     if backend == AttentionBackendEnum.FLASHINFER:
         import unittest.mock
 
-        from aphrodite.v1.attention.backends.utils import PerLayerParameters
+        from sonar.v1.attention.backends.utils import PerLayerParameters
 
-        def mock_get_per_layer_parameters(aphrodite_config, layer_names, impl_cls):
+        def mock_get_per_layer_parameters(sonar_config, layer_names, impl_cls):
             # Return mock parameters for a single layer
-            head_size = aphrodite_config.model_config.get_head_size()
+            head_size = sonar_config.model_config.get_head_size()
             return {
                 layer_name: PerLayerParameters(
                     window_left=-1,  # No sliding window
@@ -322,19 +322,19 @@ def run_attention_backend(
             }
 
         with unittest.mock.patch(
-            "aphrodite.v1.attention.backends.flashinfer.get_per_layer_parameters",
+            "sonar.v1.attention.backends.flashinfer.get_per_layer_parameters",
             mock_get_per_layer_parameters,
         ):
-            builder = builder_cls(kv_cache_spec, layer_names, aphrodite_config, device)
+            builder = builder_cls(kv_cache_spec, layer_names, sonar_config, device)
             attn_metadata = builder.build(
                 common_prefix_len=0,
                 common_attn_metadata=common_attn_metadata,
             )
     else:
         # Build metadata
-        builder = builder_cls(kv_cache_spec, layer_names, aphrodite_config, device)
+        builder = builder_cls(kv_cache_spec, layer_names, sonar_config, device)
         if backend == AttentionBackendEnum.FLEX_ATTENTION:
-            from aphrodite.v1.attention.backends.flex_attention import (
+            from sonar.v1.attention.backends.flex_attention import (
                 FlexAttentionMetadataBuilder,
             )
 
@@ -346,12 +346,12 @@ def run_attention_backend(
         )
 
     # Instantiate implementation
-    num_heads = aphrodite_config.model_config.get_num_attention_heads(aphrodite_config.parallel_config)
-    num_kv_heads = aphrodite_config.model_config.get_num_kv_heads(aphrodite_config.parallel_config)
-    head_size = aphrodite_config.model_config.get_head_size()
+    num_heads = sonar_config.model_config.get_num_attention_heads(sonar_config.parallel_config)
+    num_kv_heads = sonar_config.model_config.get_num_kv_heads(sonar_config.parallel_config)
+    head_size = sonar_config.model_config.get_head_size()
     scale = 1.0 / (head_size**0.5)
-    # Impls capture the current aphrodite config at construction, as in model loading.
-    with set_current_aphrodite_config(aphrodite_config):
+    # Impls capture the current sonar config at construction, as in model loading.
+    with set_current_sonar_config(sonar_config):
         impl = impl_cls(
             num_heads=num_heads,
             head_size=head_size,
@@ -431,12 +431,12 @@ def _test_backend_correctness(
     1. Generating a batch of sequences with specified context and query lengths.
     2. Computing a ground-truth attention output using torch.sdpa on
        contiguous Q, K, and V tensors.
-    3. Simulating Aphrodite's paged KV cache: It takes the context portion of the
+    3. Simulating Sonar's paged KV cache: It takes the context portion of the
        K/V tensors and manually places them into a paged buffer according to
        the test's (randomly generated) block table.
-    4. Running each Aphrodite attention backend with the new queries and the
+    4. Running each Sonar attention backend with the new queries and the
        simulated paged KV cache.
-    5. Comparing the Aphrodite backend's output to the ground-truth SDPA output.
+    5. Comparing the Sonar backend's output to the ground-truth SDPA output.
 
     Note: When tensor_parallel_size > 1, we simulate the head partitioning
     by overriding the model config to use fewer heads, without requiring
@@ -447,7 +447,7 @@ def _test_backend_correctness(
 
     hf_config_override = None
     if tensor_parallel_size > 1:
-        from aphrodite.config import ModelConfig
+        from sonar.config import ModelConfig
 
         temp_config = ModelConfig(model=model, max_model_len=1)
         original_num_heads = temp_config.hf_text_config.num_attention_heads
@@ -458,7 +458,7 @@ def _test_backend_correctness(
         if original_num_kv_heads is not None:
             hf_config_override["num_key_value_heads"] = max(1, original_num_kv_heads // tensor_parallel_size)
 
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         model_name=model,
         tensor_parallel_size=1,  # Always use TP=1 to avoid multi-GPU requirements
         max_model_len=max(batch_spec.seq_lens),
@@ -468,29 +468,29 @@ def _test_backend_correctness(
         hf_config_override=hf_config_override,
     )
     if max_num_seqs is not None:
-        aphrodite_config.scheduler_config.max_num_seqs = max_num_seqs
+        sonar_config.scheduler_config.max_num_seqs = max_num_seqs
     if max_num_batched_tokens is not None:
-        aphrodite_config.scheduler_config.max_num_batched_tokens = max_num_batched_tokens
+        sonar_config.scheduler_config.max_num_batched_tokens = max_num_batched_tokens
     if num_speculative_tokens > 0:
-        aphrodite_config.speculative_config = SpeculativeConfig(
+        sonar_config.speculative_config = SpeculativeConfig(
             method="ngram", num_speculative_tokens=num_speculative_tokens
         )
-    aphrodite_config.cache_config.cache_dtype = kv_cache_dtype
+    sonar_config.cache_config.cache_dtype = kv_cache_dtype
     device = torch.device(f"{DEVICE_TYPE}:0")
 
-    kv_cache_spec = create_standard_kv_cache_spec(aphrodite_config, attn_type)
+    kv_cache_spec = create_standard_kv_cache_spec(sonar_config, attn_type)
 
     # 1. Setup
     batch_size = batch_spec.batch_size
     seq_lens = batch_spec.seq_lens
     query_lens = batch_spec.query_lens
-    num_q_heads = aphrodite_config.model_config.get_num_attention_heads(aphrodite_config.parallel_config)
-    num_kv_heads = aphrodite_config.model_config.get_num_kv_heads(aphrodite_config.parallel_config)
+    num_q_heads = sonar_config.model_config.get_num_attention_heads(sonar_config.parallel_config)
+    num_kv_heads = sonar_config.model_config.get_num_kv_heads(sonar_config.parallel_config)
     sinks = torch.linspace(-1.0, 1.0, num_q_heads, dtype=torch.float32, device=device) if use_sinks else None
-    head_size = aphrodite_config.model_config.get_head_size()
-    sliding_window = aphrodite_config.model_config.get_sliding_window()
-    dtype = _convert_dtype_to_torch(aphrodite_config.model_config.dtype)
-    block_size = aphrodite_config.cache_config.block_size
+    head_size = sonar_config.model_config.get_head_size()
+    sliding_window = sonar_config.model_config.get_sliding_window()
+    dtype = _convert_dtype_to_torch(sonar_config.model_config.dtype)
+    block_size = sonar_config.cache_config.block_size
     scale = 1.0 / (head_size**0.5)
 
     fp8_kv_cache = is_quantized_kv_cache(kv_cache_dtype)
@@ -501,7 +501,7 @@ def _test_backend_correctness(
         rtol = max(rtol, 1e-1)
 
     # 2. Generate data and compute SDPA reference output
-    all_q_aphrodite, all_k_aphrodite, all_v_aphrodite = [], [], []
+    all_q_sonar, all_k_sonar, all_v_sonar = [], [], []
     all_sdpa_outputs = []
     k_contexts, v_contexts = [], []
 
@@ -570,21 +570,21 @@ def _test_backend_correctness(
 
         all_sdpa_outputs.append(sdpa_out_i.transpose(1, 2).squeeze(0))
 
-        # Inputs for Aphrodite backends are just the new tokens
-        all_q_aphrodite.append(q)
-        all_k_aphrodite.append(k_full[context_len:])
-        all_v_aphrodite.append(v_full[context_len:])
+        # Inputs for Sonar backends are just the new tokens
+        all_q_sonar.append(q)
+        all_k_sonar.append(k_full[context_len:])
+        all_v_sonar.append(v_full[context_len:])
 
         # Contextual K/V data used to populate the paged cache
         k_contexts.append(k_full[:context_len])
         v_contexts.append(v_full[:context_len])
 
-    query_aphrodite = torch.cat(all_q_aphrodite, dim=0)
-    key_aphrodite = torch.cat(all_k_aphrodite, dim=0)
-    value_aphrodite = torch.cat(all_v_aphrodite, dim=0)
+    query_sonar = torch.cat(all_q_sonar, dim=0)
+    key_sonar = torch.cat(all_k_sonar, dim=0)
+    value_sonar = torch.cat(all_v_sonar, dim=0)
     sdpa_output = torch.cat(all_sdpa_outputs, dim=0)
 
-    common_attn_metadata = create_common_attn_metadata(batch_spec, aphrodite_config.cache_config.block_size, device)
+    common_attn_metadata = create_common_attn_metadata(batch_spec, sonar_config.cache_config.block_size, device)
     common_attn_metadata.causal = causal
 
     # 3. Simulate Paged KV Cache and a realistic slot_mapping
@@ -607,14 +607,14 @@ def _test_backend_correctness(
         head_size=head_size,
         dtype=dtype,
         device=device,
-        num_blocks=aphrodite_config.cache_config.num_gpu_blocks or 1000,
+        num_blocks=sonar_config.cache_config.num_gpu_blocks or 1000,
         common_attn_metadata=common_attn_metadata,
         layout=layout,
         randomize_blocks=True,
         kv_cache_dtype=kv_cache_dtype,
     )
 
-    # 4. Run Aphrodite backends and compare
+    # 4. Run Sonar backends and compare
     # Note: flex_attention has known Triton kernel compatibility issues
     # with test infrastructures
     for backend_name in backend_to_test:
@@ -648,18 +648,18 @@ def _test_backend_correctness(
 
         # FlashInfer reads the layout at plan time; set it to match
         # the physical order of the test cache.
-        aphrodite_config.cache_config.kv_cache_layout = backend_layout.name
+        sonar_config.cache_config.kv_cache_layout = backend_layout.name
 
         backend_output = run_attention_backend(
             backend_name,
             kv_cache_spec,
             ["placeholder"],
-            aphrodite_config,
+            sonar_config,
             device,
             common_attn_metadata,
-            query_aphrodite,
-            key_aphrodite,
-            value_aphrodite,
+            query_sonar,
+            key_sonar,
+            value_sonar,
             kv_cache_for_backend,
             sliding_window=sliding_window,
             attn_type=attn_type,
@@ -697,7 +697,7 @@ def _test_backend_correctness(
 @pytest.mark.parametrize("batch_spec_name", ["small_decode", "small_prefill"])
 @pytest.mark.parametrize("kv_cache_dtype", ["auto", "fp8"])
 def test_flashinfer_cross_layer_layout(
-    default_aphrodite_config,
+    default_sonar_config,
     layout: str,
     batch_spec_name: str,
     kv_cache_dtype: str,
@@ -744,7 +744,7 @@ def test_flashinfer_cross_layer_layout(
 @pytest.mark.parametrize("tensor_parallel_size", [1, 2, 4])
 @pytest.mark.parametrize("kv_cache_dtype", ["auto", "fp8", "fp8_e4m3"])
 def test_causal_backend_correctness(
-    default_aphrodite_config,
+    default_sonar_config,
     batch_spec_name: str,
     model: str,
     tensor_parallel_size: int,
@@ -800,8 +800,8 @@ def test_causal_backend_correctness(
 def test_flashinfer_forward_uses_metadata_layout():
     from unittest.mock import Mock
 
-    from aphrodite.config import CacheConfig
-    from aphrodite.v1.attention.backends.flashinfer import (
+    from sonar.config import CacheConfig
+    from sonar.v1.attention.backends.flashinfer import (
         FIDecode,
         FlashInferImpl,
         FlashInferMetadata,
@@ -859,7 +859,7 @@ def test_flashinfer_forward_uses_metadata_layout():
 
 def test_flashinfer_xqa_bmm1_scale_matches_decode_q_dtype():
     """XQA decode should only apply q_scale when decode Q is FP8."""
-    from aphrodite.v1.attention.backends import flashinfer as flashinfer_backend
+    from sonar.v1.attention.backends import flashinfer as flashinfer_backend
 
     class MockLayer:
         _q_scale_float = 2.0
@@ -878,7 +878,7 @@ def test_flashinfer_xqa_bmm1_scale_matches_decode_q_dtype():
     reason="FlashInfer is not available.",
 )
 def test_flashinfer_xqa_draft_masks():
-    from aphrodite.v1.attention.backends import flashinfer as flashinfer_backend
+    from sonar.v1.attention.backends import flashinfer as flashinfer_backend
 
     device = torch.device("cpu")
     causal = flashinfer_backend._make_xqa_draft_block_mask(3, True, device)
@@ -905,7 +905,7 @@ def test_flashinfer_xqa_draft_masks():
 )
 def test_flashinfer_xqa_query_lens_preserve_cudagraph_padding():
     """CUDA-graph padding stays as zero-length requests in ragged offsets."""
-    from aphrodite.v1.attention.backends import flashinfer as flashinfer_backend
+    from sonar.v1.attention.backends import flashinfer as flashinfer_backend
 
     device = torch.device("cpu")
     builder = object.__new__(flashinfer_backend.FlashInferMetadataBuilder)
@@ -933,7 +933,7 @@ def test_flashinfer_xqa_single_token_decode_preserves_cudagraph_padding(monkeypa
     """Non-ragged XQA keeps one query/output row per padded request."""
     import unittest.mock
 
-    from aphrodite.v1.attention.backends import flashinfer as flashinfer_backend
+    from sonar.v1.attention.backends import flashinfer as flashinfer_backend
 
     impl = object.__new__(flashinfer_backend.FlashInferImpl)
     impl.scale = 1.0
@@ -1023,20 +1023,20 @@ def test_flashinfer_xqa_single_token_decode_preserves_cudagraph_padding(monkeypa
     ],
 )
 def test_flashinfer_resolves_layerwise_cache_dtype(dist_init, global_dtype, checkpoint_dtype, expected):
-    from aphrodite.model_executor.layers.attention import Attention
-    from aphrodite.model_executor.layers.quantization.fp8 import Fp8Config
-    from aphrodite.utils.torch_utils import set_default_torch_dtype
-    from aphrodite.v1.attention.backends.flashinfer import FlashInferMetadataBuilder
+    from sonar.model_executor.layers.attention import Attention
+    from sonar.model_executor.layers.quantization.fp8 import Fp8Config
+    from sonar.utils.torch_utils import set_default_torch_dtype
+    from sonar.v1.attention.backends.flashinfer import FlashInferMetadataBuilder
 
     class LayerwiseKVConfig(Fp8Config):
         def get_kv_cache_dtype(self, prefix):
             return {"layer": checkpoint_dtype}.get(prefix)
 
-    config = create_aphrodite_config(dtype="bfloat16", block_size=64, max_num_seqs=1, max_num_batched_tokens=128)
+    config = create_sonar_config(dtype="bfloat16", block_size=64, max_num_seqs=1, max_num_batched_tokens=128)
     config.cache_config.cache_dtype = global_dtype
     config.attention_config.backend = AttentionBackendEnum.FLASHINFER
     quant_config = Fp8Config() if checkpoint_dtype is None else LayerwiseKVConfig()
-    with set_current_aphrodite_config(config), set_default_torch_dtype(torch.bfloat16):
+    with set_current_sonar_config(config), set_default_torch_dtype(torch.bfloat16):
         layer = Attention(
             num_heads=16,
             head_size=128,
@@ -1060,9 +1060,9 @@ def test_flashinfer_resolves_layerwise_cache_dtype(dist_init, global_dtype, chec
     reason="FlashInfer is not available.",
 )
 def test_flashinfer_rejects_unresolved_quantized_layer(dist_init):
-    from aphrodite.v1.attention.backends.flashinfer import FlashInferMetadataBuilder
+    from sonar.v1.attention.backends.flashinfer import FlashInferMetadataBuilder
 
-    config = create_aphrodite_config(dtype="bfloat16", block_size=64)
+    config = create_sonar_config(dtype="bfloat16", block_size=64)
     spec = FullAttentionSpec(
         block_size=64,
         num_kv_heads=8,
@@ -1071,7 +1071,7 @@ def test_flashinfer_rejects_unresolved_quantized_layer(dist_init):
         kv_quant_mode=KVQuantMode.FP8_PER_TENSOR,
     )
     with (
-        set_current_aphrodite_config(config),
+        set_current_sonar_config(config),
         pytest.raises(ValueError, match="requires a resolved KV cache dtype"),
     ):
         FlashInferMetadataBuilder(spec, [], config, torch.device(DEVICE_TYPE))
@@ -1089,21 +1089,21 @@ def test_flashinfer_rejects_unresolved_quantized_layer(dist_init):
     ],
 )
 def test_runtime_cache_dtype_resolution(monkeypatch, cache_dtypes, expected):
-    from aphrodite.v1.attention.backends import utils as backend_utils
+    from sonar.v1.attention.backends import utils as backend_utils
 
     layers = {str(index): SimpleNamespace(kv_cache_dtype=dtype) for index, dtype in enumerate(cache_dtypes)}
-    monkeypatch.setattr(backend_utils, "get_layers_from_aphrodite_config", lambda *_: layers)
+    monkeypatch.setattr(backend_utils, "get_layers_from_sonar_config", lambda *_: layers)
     assert backend_utils.get_kv_cache_dtype_from_layers(SimpleNamespace(), list(layers)) == expected
 
 
 def test_runtime_cache_dtype_resolution_rejects_incompatible_layers(monkeypatch):
-    from aphrodite.v1.attention.backends import utils as backend_utils
+    from sonar.v1.attention.backends import utils as backend_utils
 
     layers = {
         "layer0": SimpleNamespace(kv_cache_dtype="fp8_e4m3"),
         "layer1": SimpleNamespace(kv_cache_dtype="fp8_e5m2"),
     }
-    monkeypatch.setattr(backend_utils, "get_layers_from_aphrodite_config", lambda *_: layers)
+    monkeypatch.setattr(backend_utils, "get_layers_from_sonar_config", lambda *_: layers)
     with pytest.raises(ValueError, match="must share the same KV cache dtype"):
         backend_utils.get_kv_cache_dtype_from_layers(SimpleNamespace(), list(layers))
 
@@ -1113,7 +1113,7 @@ def test_runtime_cache_dtype_resolution_rejects_incompatible_layers(monkeypatch)
     reason="FlashInfer is not available.",
 )
 def test_flashinfer_xqa_query_lens_require_exact_uniform_product():
-    from aphrodite.v1.attention.backends import flashinfer as flashinfer_backend
+    from sonar.v1.attention.backends import flashinfer as flashinfer_backend
 
     builder = object.__new__(flashinfer_backend.FlashInferMetadataBuilder)
     builder.use_xqa = True
@@ -1149,7 +1149,7 @@ def test_flashinfer_trtllm_gen_padded_decode_uses_varlen_offsets(
     expected_q_len: int,
 ):
     """Padded speculative decode keeps its actual packed query width."""
-    from aphrodite.v1.attention.backends import flashinfer as flashinfer_backend
+    from sonar.v1.attention.backends import flashinfer as flashinfer_backend
 
     builder = object.__new__(flashinfer_backend.FlashInferMetadataBuilder)
     builder.use_xqa = False
@@ -1194,8 +1194,8 @@ def test_flashinfer_avoids_seq_lens_copy_without_spec_tokens(
     """
     import unittest.mock
 
-    from aphrodite.v1.attention.backends import flashinfer as flashinfer_backend
-    from aphrodite.v1.attention.backends.utils import PerLayerParameters
+    from sonar.v1.attention.backends import flashinfer as flashinfer_backend
+    from sonar.v1.attention.backends.utils import PerLayerParameters
 
     monkeypatch.setattr(
         flashinfer_backend,
@@ -1203,7 +1203,7 @@ def test_flashinfer_avoids_seq_lens_copy_without_spec_tokens(
         lambda *args: {"layer.0": PerLayerParameters(window_left=-1, logits_soft_cap=0.0, sm_scale=0.125)},
     )
 
-    config = create_aphrodite_config(model_name="Qwen/Qwen3-0.6B", max_model_len=64, max_num_seqs=3)
+    config = create_sonar_config(model_name="Qwen/Qwen3-0.6B", max_model_len=64, max_num_seqs=3)
     config.model_config.runner_type = runner_type
     config.attention_config.use_trtllm_attention = False
     if spec_kind == "spec_decode":
@@ -1222,7 +1222,7 @@ def test_flashinfer_avoids_seq_lens_copy_without_spec_tokens(
         assert common_attn_metadata.seq_lens_cpu_upper_bound is not None
         common_attn_metadata.seq_lens_cpu_upper_bound[0] += 1
 
-    with set_current_aphrodite_config(config):
+    with set_current_sonar_config(config):
         builder = flashinfer_backend.FlashInferMetadataBuilder(
             create_standard_kv_cache_spec(config), ["layer.0"], config, device
         )
@@ -1257,10 +1257,10 @@ def test_flashinfer_avoids_seq_lens_copy_without_spec_tokens(
 def test_flashinfer_varlen_cudagraph_capability(monkeypatch, adaptive, decode_kernel, dcp_size, expected_bound):
     """Only the trtllm-gen path that adaptive verification enables replays
     varlen decode graphs, up to the decode width; the uniform level is fixed."""
-    from aphrodite.model_executor.layers.attention.chunked_local_attention import (
+    from sonar.model_executor.layers.attention.chunked_local_attention import (
         create_chunked_local_attention_backend,
     )
-    from aphrodite.v1.attention.backends import flashinfer as fi
+    from sonar.v1.attention.backends import flashinfer as fi
 
     config = SimpleNamespace(
         attention_config=SimpleNamespace(use_non_causal=False),
@@ -1315,8 +1315,8 @@ def test_spec_as_decode_width_follows_model_runner(use_v2_model_runner, parallel
     """Only model runner V1's parallel drafter widens decode requests."""
 
     class Builder(AttentionMetadataBuilder):
-        def __init__(self, aphrodite_config):
-            self.aphrodite_config = aphrodite_config
+        def __init__(self, sonar_config):
+            self.sonar_config = sonar_config
 
         def build(self, common_prefix_len, common_attn_metadata, fast_build=False):
             raise NotImplementedError
@@ -1379,11 +1379,11 @@ def test_flashinfer_varlen_decode_graph_replays_changed_layout(
     Compare real output rows with independent FP32 causal/windowed attention,
     and verify cache writes including preservation of the null padding block.
     """
-    from aphrodite.v1.attention.backends import flashinfer as fi
-    from aphrodite.v1.attention.backends.utils import PerLayerParameters
+    from sonar.v1.attention.backends import flashinfer as fi
+    from sonar.v1.attention.backends.utils import PerLayerParameters
 
     set_random_seed(0)
-    monkeypatch.setenv("APHRODITE_USE_V2_MODEL_RUNNER", "1")
+    monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", "1")
     block_size = 16
     dtype = torch.bfloat16
     LlamaConfig(
@@ -1396,7 +1396,7 @@ def test_flashinfer_varlen_decode_graph_replays_changed_layout(
         max_position_embeddings=4096,
     ).save_pretrained(tmp_path)
     num_blocks = 1 + num_reqs * cdiv(2112, block_size)
-    config = create_aphrodite_config(
+    config = create_sonar_config(
         model_name=str(tmp_path),
         max_model_len=4096,
         dtype=dtype,
@@ -1485,7 +1485,7 @@ def test_flashinfer_varlen_decode_graph_replays_changed_layout(
         return contexts, ks, vs
 
     prepare(dummy_lens)
-    with set_current_aphrodite_config(config):
+    with set_current_sonar_config(config):
         builder = fi.FlashInferMetadataBuilder(spec, ["layer"], config, device)
         metadata = builder.build(0, common)
         assert metadata.num_prefills == 0
@@ -1567,7 +1567,7 @@ def test_flashinfer_varlen_decode_graph_replays_changed_layout(
 
         def mixed_forward():
             assert common.seq_lens_cpu_upper_bound is not None
-            with set_current_aphrodite_config(config):
+            with set_current_sonar_config(config):
                 metadata = builder.build(
                     0,
                     replace(
@@ -1594,7 +1594,7 @@ def test_flashinfer_varlen_decode_graph_replays_changed_layout(
 )
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float16, torch.bfloat16])
 def test_flashinfer_attention_sinks_refreshed_after_reload(dtype):
-    from aphrodite.v1.attention.backends import flashinfer as flashinfer_backend
+    from sonar.v1.attention.backends import flashinfer as flashinfer_backend
 
     source_sinks = torch.tensor([1.0, 2.0], dtype=dtype)
     impl = object.__new__(flashinfer_backend.FlashInferImpl)
@@ -1619,14 +1619,14 @@ def test_flashinfer_attention_sinks_refreshed_after_reload(dtype):
     AttentionBackendEnum.FLASHINFER not in BACKENDS_TO_TEST,
     reason="FlashInfer is not available.",
 )
-def test_flashinfer_native_prefill_with_sinks(default_aphrodite_config):
+def test_flashinfer_native_prefill_with_sinks(default_sonar_config):
     supported = current_platform.is_cuda() and (
         current_platform.is_device_capability(90) or current_platform.is_device_capability_family(120)
     )
     if not supported:
         pytest.skip("Native FlashInfer prefill with sinks requires SM90 or SM12x.")
 
-    from aphrodite.v1.attention.backends.flashinfer import FlashInferBackend
+    from sonar.v1.attention.backends.flashinfer import FlashInferBackend
 
     if not FlashInferBackend.supports_sink():
         pytest.skip("FlashInfer attention sinks are not available in this setup.")
@@ -1654,7 +1654,7 @@ def test_flashinfer_native_prefill_with_sinks(default_aphrodite_config):
     AttentionBackendEnum.FLASHINFER not in BACKENDS_TO_TEST,
     reason="FlashInfer is not available.",
 )
-def test_flashinfer_xqa_decode_correctness(default_aphrodite_config):
+def test_flashinfer_xqa_decode_correctness(default_sonar_config):
     """FlashInfer should route SM90/SM12x decode through XQA and match SDPA."""
     supported = current_platform.is_cuda() and (
         current_platform.is_device_capability(90) or current_platform.is_device_capability_family(120)
@@ -1664,10 +1664,10 @@ def test_flashinfer_xqa_decode_correctness(default_aphrodite_config):
 
     import unittest.mock
 
-    from aphrodite.utils.flashinfer import can_use_trtllm_attention
-    from aphrodite.v1.attention.backends import flashinfer as flashinfer_backend
+    from sonar.utils.flashinfer import can_use_trtllm_attention
+    from sonar.v1.attention.backends import flashinfer as flashinfer_backend
 
-    def mock_get_per_layer_parameters(aphrodite_config, layer_names, impl_cls):
+    def mock_get_per_layer_parameters(sonar_config, layer_names, impl_cls):
         return {
             "placeholder": PerLayerParameters(
                 window_left=-1,
@@ -1687,51 +1687,47 @@ def test_flashinfer_xqa_decode_correctness(default_aphrodite_config):
         return (q_idx + context_len) >= kv_idx
 
     batch_spec = BATCH_SPECS["small_decode"]
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         model_name="Qwen/Qwen3-0.6B",
         max_model_len=max(batch_spec.seq_lens),
         block_size=16,
     )
     device = torch.device(f"{DEVICE_TYPE}:0")
     kv_cache_spec = FullAttentionSpec(
-        block_size=aphrodite_config.cache_config.block_size,
-        num_kv_heads=aphrodite_config.model_config.get_num_kv_heads(aphrodite_config.parallel_config),
-        head_size=aphrodite_config.model_config.get_head_size(),
-        dtype=aphrodite_config.model_config.dtype,
+        block_size=sonar_config.cache_config.block_size,
+        num_kv_heads=sonar_config.model_config.get_num_kv_heads(sonar_config.parallel_config),
+        head_size=sonar_config.model_config.get_head_size(),
+        dtype=sonar_config.model_config.dtype,
     )
 
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         if not can_use_trtllm_attention(
-            aphrodite_config.model_config.get_num_attention_heads(aphrodite_config.parallel_config),
+            sonar_config.model_config.get_num_attention_heads(sonar_config.parallel_config),
             kv_cache_spec.num_kv_heads,
             is_prefill=False,
         ):
             pytest.skip("FlashInfer XQA decode is not available in this setup.")
 
         with unittest.mock.patch(
-            "aphrodite.v1.attention.backends.flashinfer.get_per_layer_parameters",
+            "sonar.v1.attention.backends.flashinfer.get_per_layer_parameters",
             mock_get_per_layer_parameters,
         ):
-            builder = flashinfer_backend.FlashInferMetadataBuilder(
-                kv_cache_spec, ["placeholder"], aphrodite_config, device
-            )
-            common_attn_metadata = create_common_attn_metadata(
-                batch_spec, aphrodite_config.cache_config.block_size, device
-            )
+            builder = flashinfer_backend.FlashInferMetadataBuilder(kv_cache_spec, ["placeholder"], sonar_config, device)
+            common_attn_metadata = create_common_attn_metadata(batch_spec, sonar_config.cache_config.block_size, device)
             attn_metadata = builder.build(0, common_attn_metadata)
 
     assert (
-        flashinfer_backend.FlashInferMetadataBuilder.get_cudagraph_support(aphrodite_config, kv_cache_spec)
+        flashinfer_backend.FlashInferMetadataBuilder.get_cudagraph_support(sonar_config, kv_cache_spec)
         == AttentionCGSupport.UNIFORM_BATCH
     )
     wide_head_kv_cache_spec = FullAttentionSpec(
-        block_size=aphrodite_config.cache_config.block_size,
+        block_size=sonar_config.cache_config.block_size,
         num_kv_heads=kv_cache_spec.num_kv_heads,
         head_size=512,
-        dtype=aphrodite_config.model_config.dtype,
+        dtype=sonar_config.model_config.dtype,
     )
     assert (
-        flashinfer_backend.FlashInferMetadataBuilder.get_cudagraph_support(aphrodite_config, wide_head_kv_cache_spec)
+        flashinfer_backend.FlashInferMetadataBuilder.get_cudagraph_support(sonar_config, wide_head_kv_cache_spec)
         == AttentionCGSupport.UNIFORM_SINGLE_TOKEN_DECODE
     )
     assert isinstance(
@@ -1755,16 +1751,16 @@ def test_flashinfer_xqa_decode_correctness(default_aphrodite_config):
 )
 @pytest.mark.parametrize("use_cuda_graph", [False, True])
 @pytest.mark.parametrize("q_len", [1, 4])
-def test_flashinfer_nvfp4_decode_correctness(default_aphrodite_config, q_len, use_cuda_graph):
+def test_flashinfer_nvfp4_decode_correctness(default_sonar_config, q_len, use_cuda_graph):
     """Single-token and spec-decode queries over an NVFP4 cache decode with
     XQA on SM12x and fa2 on SM8x, eager and replayed, and match the fa2
     prefill that wrote the cache."""
     import unittest.mock
 
-    from aphrodite.v1.attention.backends import flashinfer as fi
+    from sonar.v1.attention.backends import flashinfer as fi
 
     seq_lens, bs, d = [40, 300, 1027], 16, 256
-    config = create_aphrodite_config(
+    config = create_sonar_config(
         model_name="Qwen/Qwen3-0.6B",
         max_model_len=max(seq_lens),
         block_size=bs,
@@ -1810,7 +1806,7 @@ def test_flashinfer_nvfp4_decode_correctness(default_aphrodite_config, q_len, us
             block_table_tensor=block_table,
             slot_mapping=(starts[req] * bs + pos).to(device),
         )
-        with set_current_aphrodite_config(config):
+        with set_current_sonar_config(config):
             return rows, run_attention_backend(
                 AttentionBackendEnum.FLASHINFER,
                 spec,
@@ -1845,11 +1841,11 @@ def test_flashinfer_nvfp4_decode_correctness(default_aphrodite_config, q_len, us
     reason="FlashInfer fa2 spec decode runs before SM90.",
 )
 @pytest.mark.parametrize("use_cuda_graph", [False, True])
-def test_flashinfer_fa2_spec_decode_correctness(default_aphrodite_config, use_cuda_graph):
+def test_flashinfer_fa2_spec_decode_correctness(default_sonar_config, use_cuda_graph):
     """Uniform spec-decode queries take fa2 decode and match SDPA."""
     import unittest.mock
 
-    from aphrodite.v1.attention.backends import flashinfer as flashinfer_backend
+    from sonar.v1.attention.backends import flashinfer as flashinfer_backend
 
     def causal_mask_mod(b, h, q_idx, kv_idx, *, context_len):
         return (q_idx + context_len) >= kv_idx
@@ -1906,7 +1902,7 @@ SLIDING_WINDOW_ENCODER_BACKENDS_TO_TEST = [
 @pytest.mark.parametrize("model", ["microsoft/Phi-tiny-MoE-instruct"])
 @pytest.mark.parametrize("tensor_parallel_size", [1, 2, 4])
 def test_sliding_window_backend_correctness(
-    default_aphrodite_config,
+    default_sonar_config,
     batch_spec_name: str,
     model: str,
     tensor_parallel_size: int,
@@ -1955,10 +1951,10 @@ def test_sliding_window_backend_correctness(
 
 @pytest.mark.skipif(not current_platform.is_rocm(), reason="ROCm-specific test")
 def test_rocm_aiter_fa_unquantized_cache_ignores_kv_scales(
-    default_aphrodite_config,
+    default_sonar_config,
 ):
     """Stale scale tensors must not affect an unquantized KV cache."""
-    from aphrodite._aiter_ops import is_aiter_found_and_supported
+    from sonar._aiter_ops import is_aiter_found_and_supported
 
     if not is_aiter_found_and_supported():
         pytest.skip("AITER is required")
@@ -2002,7 +1998,7 @@ def test_rocm_aiter_fa_unquantized_cache_ignores_kv_scales(
 @pytest.mark.parametrize("model", ["google/embeddinggemma-300m"])
 @pytest.mark.parametrize("tensor_parallel_size", [1, 2])
 def test_sliding_window_encoder_backend_correctness(
-    default_aphrodite_config,
+    default_sonar_config,
     batch_spec_name: str,
     model: str,
     tensor_parallel_size: int,
@@ -2056,7 +2052,7 @@ if current_platform.is_rocm():
 )
 @pytest.mark.parametrize("model", ["Qwen/Qwen3-0.6B"])
 def test_non_causal_backend_correctness(
-    default_aphrodite_config,
+    default_sonar_config,
     batch_spec_name: str,
     model: str,
 ):

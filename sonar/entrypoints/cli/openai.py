@@ -11,10 +11,10 @@ from typing import TYPE_CHECKING
 from openai import OpenAI
 from openai.types.chat import ChatCompletionMessageParam
 
-from aphrodite.entrypoints.cli.types import CLISubcommand
+from sonar.entrypoints.cli.types import CLISubcommand
 
 if TYPE_CHECKING:
-    from aphrodite.utils.argparse_utils import FlexibleArgumentParser
+    from sonar.utils.argparse_utils import FlexibleArgumentParser
 else:
     FlexibleArgumentParser = argparse.ArgumentParser
 
@@ -151,7 +151,7 @@ def _add_query_options(parser: FlexibleArgumentParser) -> FlexibleArgumentParser
             "will overwrite the api key obtained through environment variables."
             " It is important to note that this option only applies to the "
             "OpenAI-compatible API endpoints and NOT other endpoints that may "
-            "be present in the server. See the security guide in the Aphrodite docs "
+            "be present in the server. See the security guide in the Sonar docs "
             "for more details."
         ),
     )
@@ -159,7 +159,7 @@ def _add_query_options(parser: FlexibleArgumentParser) -> FlexibleArgumentParser
 
 
 class ChatCommand(CLISubcommand):
-    """The `chat` subcommand for the Aphrodite CLI."""
+    """The `chat` subcommand for the Sonar CLI."""
 
     name = "chat"
 
@@ -226,13 +226,13 @@ class ChatCommand(CLISubcommand):
             "chat",
             help="Generate chat completions via the running API server.",
             description="Generate chat completions via the running API server.",
-            usage="aphrodite chat [options]",
+            usage="sonar chat [options]",
         )
         return ChatCommand.add_cli_args(parser)
 
 
 class CompleteCommand(CLISubcommand):
-    """The `complete` subcommand for the Aphrodite CLI."""
+    """The `complete` subcommand for the Sonar CLI."""
 
     name = "complete"
 
@@ -292,7 +292,7 @@ class CompleteCommand(CLISubcommand):
             "complete",
             help=("Generate text completions based on the given prompt via the running API server."),
             description=("Generate text completions based on the given prompt via the running API server."),
-            usage="aphrodite complete [options]",
+            usage="sonar complete [options]",
         )
         return CompleteCommand.add_cli_args(parser)
 

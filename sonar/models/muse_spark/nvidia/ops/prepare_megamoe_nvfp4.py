@@ -7,12 +7,12 @@ MegaMoE reads linear scales, not ``scaled_fp4_quant``'s swizzled 128x4 layout.
 
 import torch
 
-from aphrodite.model_executor.warmup.jit_warmup_triton_helper import (
+from sonar.model_executor.warmup.jit_warmup_triton_helper import (
     TritonWarmupTensor,
     triton_kernel_dispatcher_with_warmup,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
 
 
 @triton.jit

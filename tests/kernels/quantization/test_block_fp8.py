@@ -8,29 +8,29 @@ import types
 import pytest
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.model_executor.kernels.linear.scaled_mm.b12x import (
+from sonar.config import SonarConfig
+from sonar.model_executor.kernels.linear.scaled_mm.b12x import (
     B12xFp8BlockScaledMMKernel,
     _run_b12x_fp8_block_scaled_mm,
 )
-from aphrodite.model_executor.kernels.linear.scaled_mm.cutlass import cutlass_scaled_mm
-from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
+from sonar.model_executor.kernels.linear.scaled_mm.cutlass import cutlass_scaled_mm
+from sonar.model_executor.layers.quantization.utils.fp8_utils import (
     per_token_group_quant_fp8,
     w8a8_triton_block_scaled_mm,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.deep_gemm import (
+from sonar.platforms import current_platform
+from sonar.utils.deep_gemm import (
     fp8_gemm_nt,
     get_tma_aligned_size,
     is_deep_gemm_e8m0_used,
     per_block_cast_to_fp8,
     should_use_deepgemm_for_fp8_linear,
 )
-from aphrodite.utils.flashinfer import (
+from sonar.utils.flashinfer import (
     flashinfer_fp8_blockscale_gemm,
     has_flashinfer_fp8_blockscale_gemm,
 )
-from aphrodite.utils.import_utils import has_deep_gemm
+from sonar.utils.import_utils import has_deep_gemm
 from tests.kernels.quant_utils import (
     native_per_token_group_quant_fp8,
     native_w8a8_block_matmul,
@@ -41,7 +41,7 @@ capability = current_platform.get_device_capability()
 if capability is None or capability < (9, 0):
     pytest.skip("FP8 Triton requires CUDA 9.0 or higher", allow_module_level=True)
 
-aphrodite_config = AphroditeConfig()
+sonar_config = SonarConfig()
 
 # Test configurations
 DTYPES = [torch.bfloat16]  # [torch.half, torch.bfloat16, torch.float32]
@@ -208,7 +208,7 @@ def test_w8a8_block_fp8_torch_scaled_mm_matmul():
     # BlockWiseTorchFP8ScaledMMLinearKernel: 1x128 activation + 128x128 weight
     # block scaling routed through torch._scaled_mm. M=83 is not a multiple of
     # 4 so this also exercises the M-padding path.
-    from aphrodite.model_executor.kernels.linear.scaled_mm.pytorch import (
+    from sonar.model_executor.kernels.linear.scaled_mm.pytorch import (
         BlockWiseTorchFP8ScaledMMLinearKernel,
     )
 

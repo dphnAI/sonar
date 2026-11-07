@@ -6,20 +6,20 @@ import pytest
 import torch
 from torch import nn
 
-import aphrodite.model_executor.models.k2_horizon as k2_horizon
-from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-from aphrodite.distributed import (
+import sonar.model_executor.models.k2_horizon as k2_horizon
+from sonar.config import SonarConfig, set_current_sonar_config
+from sonar.distributed import (
     cleanup_dist_env_and_memory,
     init_distributed_environment,
     initialize_model_parallel,
 )
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.linear import (
     LinearBase,
     UnquantizedLinearMethod,
 )
-from aphrodite.model_executor.layers.quantization.fp8 import Fp8Config, Fp8LinearMethod
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.models.k2_horizon import (
+from sonar.model_executor.layers.quantization.fp8 import Fp8Config, Fp8LinearMethod
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.models.k2_horizon import (
     K2HorizonDecoderLayer,
     K2HorizonModel,
     K2HorizonRMSNorm,
@@ -27,9 +27,9 @@ from aphrodite.model_executor.models.k2_horizon import (
     apply_partial_rope,
     is_rope_weights_folding_supported,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.network_utils import get_open_port
-from aphrodite.utils.torch_utils import set_default_torch_dtype, set_random_seed
+from sonar.platforms import current_platform
+from sonar.utils.network_utils import get_open_port
+from sonar.utils.torch_utils import set_default_torch_dtype, set_random_seed
 from tests.quantization.utils import is_quant_method_supported
 
 DEVICE = current_platform.device_type
@@ -120,7 +120,7 @@ def fold_qk_channels(vec: torch.Tensor, head_dim: int, idx: torch.Tensor) -> tor
 
 
 @pytest.mark.parametrize("head_dim,rope_head_dim", SHAPES)
-def test_rope_fold_matches_permute_then_rope(head_dim, rope_head_dim, default_aphrodite_config):
+def test_rope_fold_matches_permute_then_rope(head_dim, rope_head_dim, default_sonar_config):
     dtype = DTYPE
     set_random_seed(0)
     num_tokens = 17
@@ -196,7 +196,7 @@ def test_rope_fold_matches_permute_then_rope(head_dim, rope_head_dim, default_ap
 
 @pytest.mark.parametrize("head_dim,rope_head_dim", SHAPES)
 @pytest.mark.parametrize("num_heads", [8, 2])
-def test_qk_bias_fold_matches_permute(head_dim, rope_head_dim, num_heads, default_aphrodite_config):
+def test_qk_bias_fold_matches_permute(head_dim, rope_head_dim, num_heads, default_sonar_config):
     dtype = DTYPE
     set_random_seed(0)
     num_tokens = 17
@@ -224,7 +224,7 @@ def test_qk_bias_fold_matches_permute(head_dim, rope_head_dim, num_heads, defaul
 @pytest.mark.skipif(not current_platform.is_cuda_alike(), reason="requires a GPU (CUDA/ROCm)")
 @pytest.mark.parametrize("head_dim,rope_head_dim", SHAPES)
 @pytest.mark.parametrize("num_heads", [8, 2])
-def test_qk_norm_scale_fold_matches_permute(head_dim, rope_head_dim, num_heads, default_aphrodite_config):
+def test_qk_norm_scale_fold_matches_permute(head_dim, rope_head_dim, num_heads, default_sonar_config):
     dtype = DTYPE
     set_random_seed(0)
     num_tokens = 13
@@ -269,7 +269,7 @@ class _DummyAttention(nn.Module):
 
 @pytest.fixture
 def dist_init():
-    with set_current_aphrodite_config(AphroditeConfig()):
+    with set_current_sonar_config(SonarConfig()):
         init_distributed_environment(
             world_size=1,
             rank=0,
@@ -321,12 +321,12 @@ def _make_hf_config(
 def _build_single_layer_model(monkeypatch, hf_config: SimpleNamespace, *, quant_config=None) -> K2HorizonModel:
     monkeypatch.setattr(k2_horizon, "Attention", _DummyAttention)
 
-    aphrodite_config = AphroditeConfig()
-    aphrodite_config.model_config = SimpleNamespace(hf_text_config=hf_config, dtype=torch.get_default_dtype())
-    aphrodite_config.quant_config = quant_config
+    sonar_config = SonarConfig()
+    sonar_config.model_config = SimpleNamespace(hf_text_config=hf_config, dtype=torch.get_default_dtype())
+    sonar_config.quant_config = quant_config
 
-    with set_current_aphrodite_config(aphrodite_config):
-        layer = K2HorizonDecoderLayer(aphrodite_config=aphrodite_config, prefix="model.layers.0")
+    with set_current_sonar_config(sonar_config):
+        layer = K2HorizonDecoderLayer(sonar_config=sonar_config, prefix="model.layers.0")
 
     model = K2HorizonModel.__new__(K2HorizonModel)
     nn.Module.__init__(model)
@@ -583,7 +583,7 @@ def test_load_weights_fp8_qk_no_fold(
         assert torch.equal(qkv_bias[q_size + kv_size :], biases["v_proj.bias"])
 
 
-def test_is_rope_weights_folding_supported(default_aphrodite_config):
+def test_is_rope_weights_folding_supported(default_sonar_config):
     dense = SimpleNamespace(quant_method=UnquantizedLinearMethod())
     quantized = SimpleNamespace(quant_method=object())
 

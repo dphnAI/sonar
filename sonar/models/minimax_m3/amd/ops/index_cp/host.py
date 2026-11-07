@@ -11,8 +11,8 @@ call counts stay on the device, so the handshake replays in CUDA graphs.
 import torch
 import torch.distributed as dist
 
-from aphrodite.distributed.device_communicators.custom_all_reduce import CustomAllreduce
-from aphrodite.models.minimax_m3.amd.ops.nvfp4_index_decode import (
+from sonar.distributed.device_communicators.custom_all_reduce import CustomAllreduce
+from sonar.models.minimax_m3.amd.ops.nvfp4_index_decode import (
     kernel_cp_push as _kernel,
 )
 
@@ -67,7 +67,7 @@ class IndexCP:
         Returns this rank's head over every block, [1, rows, width]: a view of
         the receive buffer, valid until the next call.
         """
-        from aphrodite.models.minimax_m3.amd.ops.nvfp4_index_decode.host import (
+        from sonar.models.minimax_m3.amd.ops.nvfp4_index_decode.host import (
             minimax_m3_nvfp4_index_score_push_cp,
         )
 
@@ -102,13 +102,13 @@ def init(device: torch.device, max_width: int) -> None:
     global _CP
     if _CP is not None:
         return
-    from aphrodite.config import get_current_aphrodite_config
-    from aphrodite.distributed import get_tp_group
-    from aphrodite.platforms.rocm import on_gfx950
+    from sonar.config import get_current_sonar_config
+    from sonar.distributed import get_tp_group
+    from sonar.platforms.rocm import on_gfx950
 
     tp = get_tp_group()
     # One set of buffers and flags: microbatches would share them.
-    if tp.world_size != WORLD or not on_gfx950() or get_current_aphrodite_config().parallel_config.use_ubatching:
+    if tp.world_size != WORLD or not on_gfx950() or get_current_sonar_config().parallel_config.use_ubatching:
         return
     _CP = IndexCP(tp.rank_in_group, tp.cpu_group, device, _kernel.MAX_ROWS, max_width)
 

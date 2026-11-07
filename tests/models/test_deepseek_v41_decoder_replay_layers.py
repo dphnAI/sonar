@@ -8,23 +8,23 @@ from unittest.mock import MagicMock
 import pytest
 import torch
 
-from aphrodite.config import CompilationConfig, CUDAGraphMode
-from aphrodite.config.kernel import FLASHINFER_MOE_EP_BACKENDS, NATIVE_MEGA_MOE_BACKENDS
-from aphrodite.distributed.parallel_state import GraphCaptureContext
-from aphrodite.forward_context import (
+from sonar.config import CompilationConfig, CUDAGraphMode
+from sonar.config.kernel import FLASHINFER_MOE_EP_BACKENDS, NATIVE_MEGA_MOE_BACKENDS
+from sonar.distributed.parallel_state import GraphCaptureContext
+from sonar.forward_context import (
     BatchDescriptor,
     ForwardContext,
     get_forward_context,
     override_forward_context,
 )
-from aphrodite.models.deepseek_v41.decoder_replay_layers import (
+from sonar.models.deepseek_v41.decoder_replay_layers import (
     DecoderReplayLayers,
     ReplayBatch,
 )
-from aphrodite.models.deepseek_v41.nvidia.decoder_replay_cudagraph import (
+from sonar.models.deepseek_v41.nvidia.decoder_replay_cudagraph import (
     DecoderReplayCudaGraphManager,
 )
-from aphrodite.v1.worker.gpu import cudagraph_utils
+from sonar.v1.worker.gpu import cudagraph_utils
 
 pytestmark = pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
 

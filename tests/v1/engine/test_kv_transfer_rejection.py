@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from aphrodite.v1.engine.async_llm import AsyncLLM
+from sonar.v1.engine.async_llm import AsyncLLM
 
 
 @pytest.mark.asyncio

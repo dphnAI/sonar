@@ -22,10 +22,10 @@ from openai_harmony import (
     load_harmony_encoding,
 )
 
-from aphrodite import envs
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionToolsParam
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.logger import init_logger
+from sonar import envs
+from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionToolsParam
+from sonar.exceptions import SonarValidationError
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 
@@ -114,23 +114,23 @@ def get_system_message(
     sys_msg_content = SystemContent.new()
     if model_identity is not None:
         sys_msg_content = sys_msg_content.with_model_identity(model_identity)
-    if instructions is not None and envs.APHRODITE_GPT_OSS_HARMONY_SYSTEM_INSTRUCTIONS:
+    if instructions is not None and envs.SONAR_GPT_OSS_HARMONY_SYSTEM_INSTRUCTIONS:
         current_identity = sys_msg_content.model_identity
         new_identity = f"{current_identity}\n{instructions}" if current_identity else instructions
         sys_msg_content = sys_msg_content.with_model_identity(new_identity)
     if reasoning_effort is not None:
         if reasoning_effort not in REASONING_EFFORT:
             supported_values = ", ".join(REASONING_EFFORT)
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 f"reasoning_effort={reasoning_effort!r} is not supported by "
                 f"Harmony. Supported values are: {supported_values}.",
                 parameter="reasoning_effort",
             )
         sys_msg_content = sys_msg_content.with_reasoning_effort(REASONING_EFFORT[reasoning_effort])
     if start_date is None:
-        # NOTE(woosuk): This brings non-determinism in Aphrodite.
-        # Set APHRODITE_SYSTEM_START_DATE to pin it.
-        start_date = envs.APHRODITE_SYSTEM_START_DATE or datetime.datetime.now().strftime("%Y-%m-%d")
+        # NOTE(woosuk): This brings non-determinism in Sonar.
+        # Set SONAR_SYSTEM_START_DATE to pin it.
+        start_date = envs.SONAR_SYSTEM_START_DATE or datetime.datetime.now().strftime("%Y-%m-%d")
     sys_msg_content = sys_msg_content.with_conversation_start_date(start_date)
     if browser_description is not None:
         sys_msg_content = sys_msg_content.with_tools(browser_description)
@@ -161,7 +161,7 @@ def get_developer_message(
     tools: list[Tool | ChatCompletionToolsParam] | None = None,
 ) -> Message:
     dev_msg_content = DeveloperContent.new()
-    if instructions is not None and not envs.APHRODITE_GPT_OSS_HARMONY_SYSTEM_INSTRUCTIONS:
+    if instructions is not None and not envs.SONAR_GPT_OSS_HARMONY_SYSTEM_INSTRUCTIONS:
         dev_msg_content = dev_msg_content.with_instructions(instructions)
     if tools is not None:
         function_tools: list[Tool | ChatCompletionToolsParam] = []
@@ -176,7 +176,7 @@ def get_developer_message(
             elif tool.type == "function":
                 function_tools.append(tool)
             else:
-                raise AphroditeValidationError(
+                raise SonarValidationError(
                     f"tool type {tool.type!r} is not supported.",
                     parameter="tools",
                 )
@@ -192,7 +192,7 @@ def get_user_message(content: str) -> Message:
 
 
 def get_system_or_developer_message(role: str, instructions: str) -> Message:
-    if role == "system" and envs.APHRODITE_GPT_OSS_HARMONY_SYSTEM_INSTRUCTIONS:
+    if role == "system" and envs.SONAR_GPT_OSS_HARMONY_SYSTEM_INSTRUCTIONS:
         return get_system_message(instructions=instructions)
     return get_developer_message(instructions=instructions)
 
@@ -285,7 +285,7 @@ def extract_instructions_from_messages(
         elif hasattr(first_message, "model_dump"):
             first_message = first_message.model_dump(exclude_none=True)
         else:
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 f"Unknown message type: {type(first_message)}",
                 parameter="input",
             )
@@ -312,7 +312,7 @@ def build_harmony_preamble(
 ) -> list[Message]:
     """Build the standard Harmony system/developer prefix for a request."""
     developer_instructions = system_instructions = None
-    if envs.APHRODITE_GPT_OSS_HARMONY_SYSTEM_INSTRUCTIONS:
+    if envs.SONAR_GPT_OSS_HARMONY_SYSTEM_INSTRUCTIONS:
         system_instructions = instructions
     else:
         developer_instructions = instructions

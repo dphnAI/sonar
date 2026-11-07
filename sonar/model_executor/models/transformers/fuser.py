@@ -16,8 +16,8 @@ from typing import TYPE_CHECKING, TypeVar
 from cachetools import cached
 from torch import nn
 
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.models.transformers.fusers import (
+from sonar.logger import init_logger
+from sonar.model_executor.models.transformers.fusers import (
     AttentionFuser,
     BaseFuser,
     GLUFuser,
@@ -28,10 +28,10 @@ from aphrodite.model_executor.models.transformers.fusers import (
     RewriteFuser,
     RMSNormFuser,
 )
-from aphrodite.model_executor.models.transformers.fx_utils import trace
+from sonar.model_executor.models.transformers.fx_utils import trace
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
+    from sonar.config import SonarConfig
 
 logger = init_logger(__name__)
 
@@ -112,8 +112,8 @@ def get_fuser(module: nn.Module, fuser_cls: type[F]) -> "F | None":
 class Fusers(UserDict):
     """Mapping from module class and shape to fusers, for all fusable modules."""
 
-    def __init__(self, model: nn.Module, aphrodite_config: "AphroditeConfig"):
-        self.aphrodite_config = aphrodite_config
+    def __init__(self, model: nn.Module, sonar_config: "SonarConfig"):
+        self.sonar_config = sonar_config
         super().__init__({key(m): get_fusers(m) for m in model.modules()})
 
     def __getitem__(self, m: nn.Module) -> list[BaseFuser]:
@@ -125,7 +125,7 @@ class Fusers(UserDict):
             # (highest-priority) one that validates for this instance.
             if fuser.redefines_forward and redefined:
                 continue
-            if not fuser.validate(m, self.aphrodite_config):
+            if not fuser.validate(m, self.sonar_config):
                 continue
             redefined = redefined or fuser.redefines_forward
             chosen.append(fuser)

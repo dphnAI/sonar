@@ -15,10 +15,10 @@ from dataclasses import dataclass
 from typing import Any
 
 _GEMMA4_MODEL_TYPES = frozenset({"gemma4", "gemma4_text"})
-_PATCHED_CALL_ATTR = "_aphrodite.metal_yoco_fast_prefill_patched"
-_ORIGINAL_CALL_ATTR = "_aphrodite.metal_yoco_fast_prefill_original_call"
-_ENABLED_ATTR = "_aphrodite.metal_yoco_fast_prefill_enabled"
-_WARNED_FALLBACK_ATTR = "_aphrodite.metal_yoco_fast_prefill_warned_fallback"
+_PATCHED_CALL_ATTR = "_sonar.metal_yoco_fast_prefill_patched"
+_ORIGINAL_CALL_ATTR = "_sonar.metal_yoco_fast_prefill_original_call"
+_ENABLED_ATTR = "_sonar.metal_yoco_fast_prefill_enabled"
+_WARNED_FALLBACK_ATTR = "_sonar.metal_yoco_fast_prefill_warned_fallback"
 
 logger = logging.getLogger(__name__)
 
@@ -310,7 +310,7 @@ def _gemma4_text_fast_prefill_call(
     try:
         import mlx.core as mx
 
-        from aphrodite.metal.paged_attention_common import (
+        from sonar.metal.paged_attention_common import (
             PagedAttentionContext,
             get_context,
             set_context,

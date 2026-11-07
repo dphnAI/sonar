@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Shared test utilities for Aphrodite IR op correctness tests."""
+"""Shared test utilities for Sonar IR op correctness tests."""
 
 import torch
 
-from aphrodite.ir.op import IrOp
+from sonar.ir.op import IrOp
 
 NUM_TOKENS = [1, 8, 17, 32, 512, 2048]
 COMMON_HIDDEN_SIZES = [

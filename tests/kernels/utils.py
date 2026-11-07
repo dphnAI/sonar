@@ -9,10 +9,10 @@ from unittest.mock import patch
 import torch
 from torch._prims_common import TensorLikeType
 
-from aphrodite.model_executor.custom_op import op_registry
-from aphrodite.model_executor.layers.activation import SiluAndMul
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.utils import moe_kernel_quantize_input
+from sonar.model_executor.custom_op import op_registry
+from sonar.model_executor.layers.activation import SiluAndMul
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.utils import moe_kernel_quantize_input
 from tests.kernels.quant_utils import native_w8a8_block_matmul
 
 # For now, disable "test_aot_dispatch_dynamic" since there are some

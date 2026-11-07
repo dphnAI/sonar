@@ -6,12 +6,12 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from aphrodite.entrypoints.generate.base.protocol import DeltaMessage
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
-from aphrodite.parser.parser_manager import ParserManager
-from aphrodite.tool_parsers import ToolParserManager
-from aphrodite.tool_parsers.k2_horizon_tool_parser import K2HorizonToolParser
+from sonar.entrypoints.generate.base.protocol import DeltaMessage
+from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
+from sonar.parser.parser_manager import ParserManager
+from sonar.tool_parsers import ToolParserManager
+from sonar.tool_parsers.k2_horizon_tool_parser import K2HorizonToolParser
 
 pytestmark = pytest.mark.skip_global_cleanup
 

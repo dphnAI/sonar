@@ -7,12 +7,12 @@ from typing import TYPE_CHECKING
 import regex as re
 from transformers import PreTrainedTokenizerBase
 
-from aphrodite.entrypoints.generate.base.protocol import DeltaMessage
-from aphrodite.reasoning import ReasoningParser
+from sonar.entrypoints.generate.base.protocol import DeltaMessage
+from sonar.reasoning import ReasoningParser
 
 if TYPE_CHECKING:
-    from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-    from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
+    from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+    from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
 
 
 class HunyuanA13BReasoningParser(ReasoningParser):

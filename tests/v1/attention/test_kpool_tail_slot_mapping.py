@@ -9,7 +9,7 @@ ever written; the rest stays zero-initialized).
 
 The generic per-group slot kernel cannot express that layout: it maps
 ``pos -> bt[req][pos // bs] * bs + pos % bs`` (``_compute_slot_mappings_kernel``
-in aphrodite/v1/worker/gpu/block_table.py), so every token at ``pos >= kpool``
+in sonar/v1/worker/gpu/block_table.py), so every token at ``pos >= kpool``
 reads a zero column and collapses onto physical tail block 0. All concurrent
 requests then share one ``kpool``-slot ring and corrupt each other's pool
 compression.
@@ -24,16 +24,16 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-from aphrodite.models.glm5next.common.attention import Glm5NextTailCache
-from aphrodite.v1.attention.backend import CommonAttentionMetadata
-from aphrodite.v1.attention.backends.mla.indexer import (
+from sonar.config import SonarConfig, set_current_sonar_config
+from sonar.models.glm5next.common.attention import Glm5NextTailCache
+from sonar.v1.attention.backend import CommonAttentionMetadata
+from sonar.v1.attention.backends.mla.indexer import (
     KpoolTailBackend,
     KpoolTailMetadataBuilder,
     compute_kpool_tail_slot_mapping,
 )
-from aphrodite.v1.kv_cache_interface import CircularBufferSpec, compute_layout_strides
-from aphrodite.v1.kv_cache_layout import KVCacheLayout
+from sonar.v1.kv_cache_interface import CircularBufferSpec, compute_layout_strides
+from sonar.v1.kv_cache_layout import KVCacheLayout
 
 KPOOL = 4
 
@@ -61,7 +61,7 @@ def test_tail_ring_divides_the_attention_block(num_speculative_tokens, ring):
     """With 7 draft tokens the ring was 12 slots. 12 does not divide the
     640-token KDA attention block, so the scheduler block grew to their lcm
     and prefix-cache hits were cut down to multiples of 1920."""
-    with set_current_aphrodite_config(AphroditeConfig()):
+    with set_current_sonar_config(SonarConfig()):
         cache = Glm5NextTailCache(
             head_dim=128,
             dtype=torch.bfloat16,

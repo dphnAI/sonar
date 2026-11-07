@@ -7,10 +7,10 @@ from dataclasses import dataclass
 
 import pytest
 
-import aphrodite
-from aphrodite.distributed import cleanup_dist_env_and_memory
-from aphrodite.lora.request import LoRARequest
-from aphrodite.platforms import current_platform
+import sonar
+from sonar.distributed import cleanup_dist_env_and_memory
+from sonar.lora.request import LoRARequest
+from sonar.platforms import current_platform
 
 
 @dataclass
@@ -38,7 +38,7 @@ else:
     ]
 
 
-def do_sample(llm: aphrodite.LLM, lora_path: str | None, lora_id: int, max_tokens: int = 256) -> list[str]:
+def do_sample(llm: sonar.LLM, lora_path: str | None, lora_id: int, max_tokens: int = 256) -> list[str]:
     messages = [
         [
             {
@@ -55,7 +55,7 @@ def do_sample(llm: aphrodite.LLM, lora_path: str | None, lora_id: int, max_token
             {"role": "user", "content": "What do you say?"},
         ],
     ]
-    sampling_params = aphrodite.SamplingParams(temperature=0, max_tokens=max_tokens)
+    sampling_params = sonar.SamplingParams(temperature=0, max_tokens=max_tokens)
     outputs = llm.chat(
         messages,
         sampling_params,
@@ -74,7 +74,7 @@ def do_sample(llm: aphrodite.LLM, lora_path: str | None, lora_id: int, max_token
 
 @pytest.mark.parametrize("model", MODELS)
 def test_quant_model_lora(qwen3_meowing_lora_files, qwen3_woofing_lora_files, model):
-    llm = aphrodite.LLM(
+    llm = sonar.LLM(
         model=model.model_path,
         enable_lora=True,
         max_num_seqs=16,
@@ -118,7 +118,7 @@ def test_quant_model_lora(qwen3_meowing_lora_files, qwen3_woofing_lora_files, mo
 def test_quant_model_tp_equality(qwen3_meowing_lora_files, num_gpus_available, model):
     if num_gpus_available < 2:
         pytest.skip(f"Not enough GPUs for tensor parallelism {2}")
-    llm_tp1 = aphrodite.LLM(
+    llm_tp1 = sonar.LLM(
         model=model.model_path,
         enable_lora=True,
         max_num_seqs=16,
@@ -134,7 +134,7 @@ def test_quant_model_tp_equality(qwen3_meowing_lora_files, num_gpus_available, m
         del llm_tp1
         cleanup_dist_env_and_memory()
 
-    llm_tp2 = aphrodite.LLM(
+    llm_tp2 = sonar.LLM(
         model=model.model_path,
         enable_lora=True,
         max_num_seqs=16,

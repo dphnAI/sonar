@@ -2,9 +2,9 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.torch_utils import async_tensor_h2d
+from sonar.logger import init_logger
+from sonar.triton_utils import tl, triton
+from sonar.utils.torch_utils import async_tensor_h2d
 
 
 @triton.jit

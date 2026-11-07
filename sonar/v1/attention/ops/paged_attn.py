@@ -4,12 +4,12 @@
 
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 if current_platform.is_cuda_alike():
-    from aphrodite import _custom_ops as ops
+    from sonar import _custom_ops as ops
 elif current_platform.is_xpu():
-    from aphrodite._xpu_ops import xpu_ops as ops  # type: ignore[no-redef]
+    from sonar._xpu_ops import xpu_ops as ops  # type: ignore[no-redef]
 
 
 class PagedAttention:

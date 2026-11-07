@@ -4,15 +4,15 @@ from typing import TYPE_CHECKING
 
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite.distributed import get_ep_group
-from aphrodite.distributed.device_communicators.all2all import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar.distributed import get_ep_group
+from sonar.distributed.device_communicators.all2all import (
     FlashInferNVLinkOneSidedManager,
 )
-from aphrodite.forward_context import get_forward_context
-from aphrodite.model_executor.layers.fused_moe.config import FusedMoEQuantConfig
-from aphrodite.model_executor.layers.fused_moe.utils import moe_kernel_quantize_input
-from aphrodite.utils.flashinfer import nvfp4_block_scale_interleave
+from sonar.forward_context import get_forward_context
+from sonar.model_executor.layers.fused_moe.config import FusedMoEQuantConfig
+from sonar.model_executor.layers.fused_moe.utils import moe_kernel_quantize_input
+from sonar.utils.flashinfer import nvfp4_block_scale_interleave
 
 if TYPE_CHECKING:
     from flashinfer.fused_moe import QuantFormat

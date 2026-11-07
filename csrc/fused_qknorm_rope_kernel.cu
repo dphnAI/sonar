@@ -88,7 +88,7 @@ inline __device__ __host__ T divUp(T m, T n) {
 
 namespace tensorrt_llm::kernels {
 
-using namespace aphrodite::cuda_async;
+using namespace sonar::cuda_async;
 
 // NOTE(zhuhaoran): This kernel is adapted from TensorRT-LLM implementation,
 // with added support for passing the cos_sin_cache as an input.
@@ -121,14 +121,14 @@ __global__ void fusedQKNormRopeKernel(
   } else {
 #endif
 
-    using Converter = aphrodite::_typeConvert<scalar_t_in>;
+    using Converter = sonar::_typeConvert<scalar_t_in>;
     static_assert(Converter::exists,
                   "Input QKV data type is not supported for this CUDA "
                   "architecture or toolkit version.");
     using T_in = typename Converter::hip_type;
     using T2_in = typename Converter::packed_hip_type;
 
-    using CacheConverter = aphrodite::_typeConvert<scalar_t_cache>;
+    using CacheConverter = sonar::_typeConvert<scalar_t_cache>;
     static_assert(CacheConverter::exists,
                   "Cache data type is not supported for this CUDA architecture "
                   "or toolkit version.");
@@ -258,9 +258,9 @@ __global__ void fusedQKNormRopeKernel(
 
           int const half_dim = dim_idx / 2;
           float const cos_val =
-              CacheConverter::convert(APHRODITE_LDG(cos_ptr + half_dim));
+              CacheConverter::convert(SONAR_LDG(cos_ptr + half_dim));
           float const sin_val =
-              CacheConverter::convert(APHRODITE_LDG(sin_ptr + half_dim));
+              CacheConverter::convert(SONAR_LDG(sin_ptr + half_dim));
 
           elements[idx0] = val0 * cos_val - val1 * sin_val;
           elements[idx1] = val0 * sin_val + val1 * cos_val;
@@ -283,9 +283,9 @@ __global__ void fusedQKNormRopeKernel(
           dim_idx = (dim_idx * 2) % rotary_dim;
           int half_dim = dim_idx / 2;
           float cos_val =
-              CacheConverter::convert(APHRODITE_LDG(cos_ptr + half_dim));
+              CacheConverter::convert(SONAR_LDG(cos_ptr + half_dim));
           float sin_val =
-              CacheConverter::convert(APHRODITE_LDG(sin_ptr + half_dim));
+              CacheConverter::convert(SONAR_LDG(sin_ptr + half_dim));
 
           elements[i] = elements[i] * cos_val + elements2[i] * sin_val;
         }
@@ -336,14 +336,14 @@ __global__ void fusedQKNormRopeKernelNTokenHeads(
   } else {
 #endif
 
-    using Converter = aphrodite::_typeConvert<scalar_t_in>;
+    using Converter = sonar::_typeConvert<scalar_t_in>;
     static_assert(Converter::exists,
                   "Input QKV data type is not supported for this CUDA "
                   "architecture or toolkit version.");
     using T_in = typename Converter::hip_type;
     using T2_in = typename Converter::packed_hip_type;
 
-    using CacheConverter = aphrodite::_typeConvert<scalar_t_cache>;
+    using CacheConverter = sonar::_typeConvert<scalar_t_cache>;
     static_assert(CacheConverter::exists,
                   "Cache data type is not supported for this CUDA architecture "
                   "or toolkit version.");
@@ -863,10 +863,10 @@ void fused_qk_norm_rope(
     }
   }
 
-  APHRODITE_STABLE_DISPATCH_HALF_TYPES(
+  SONAR_STABLE_DISPATCH_HALF_TYPES(
       qkv.scalar_type(), "fused_qk_norm_rope_kernel", [&] {
         using qkv_scalar_t = scalar_t;
-        APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(
+        SONAR_STABLE_DISPATCH_FLOATING_TYPES(
             cos_sin_cache.scalar_type(), "fused_qk_norm_rope_kernel", [&] {
               using cache_scalar_t = scalar_t;
               tensorrt_llm::kernels::launchFusedQKNormRopeNTokenHeads<

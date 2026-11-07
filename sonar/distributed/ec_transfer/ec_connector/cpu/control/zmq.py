@@ -13,12 +13,12 @@ from dataclasses import dataclass, field
 import zmq
 from zmq.utils.monitor import recv_monitor_message
 
-from aphrodite.distributed.ec_transfer.ec_connector.cpu.control.base import (
+from sonar.distributed.ec_transfer.ec_connector.cpu.control.base import (
     ControlConnection,
 )
-from aphrodite.distributed.ec_transfer.ec_connector.cpu.utils import PeerAddr
-from aphrodite.logger import init_logger
-from aphrodite.utils.network_utils import make_zmq_path, make_zmq_socket
+from sonar.distributed.ec_transfer.ec_connector.cpu.utils import PeerAddr
+from sonar.logger import init_logger
+from sonar.utils.network_utils import make_zmq_path, make_zmq_socket
 
 logger = init_logger(__name__)
 

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""FFN-launch executor: Aphrodite runs each sparse layer's input norm and attention,
+"""FFN-launch executor: Sonar runs each sparse layer's input norm and attention,
 then one fused launch runs the rest of the layer."""
 
 from __future__ import annotations
@@ -9,9 +9,9 @@ from dataclasses import dataclass
 
 import torch
 
-from aphrodite.distributed import get_tp_group
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
+from sonar.distributed import get_tp_group
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
 
 from ..mono.ffn import ERROR_BYTES, ERROR_WORDS, peer_bytes
 from ..mono.runner import FfnRunner
@@ -36,7 +36,7 @@ class MonoHealth:
 
 
 def tp_agree(ok: bool) -> bool:
-    from aphrodite.models.deepseek_v41.amd.mono.common.peer_memory import tp_agree
+    from sonar.models.deepseek_v41.amd.mono.common.peer_memory import tp_agree
 
     return tp_agree(ok, get_tp_group().cpu_group)
 
@@ -55,7 +55,7 @@ class FfnExecutor:
         tp: int,
         reset_launches: int = RESET_LAUNCHES,
     ) -> None:
-        from aphrodite.models.deepseek_v41.amd.mono.common.peer_memory import PeerBuffer
+        from sonar.models.deepseek_v41.amd.mono.common.peer_memory import PeerBuffer
 
         group = get_tp_group()
         self.rank = group.rank_in_group
@@ -204,6 +204,6 @@ class FfnExecutor:
 
 
 def _device_words(ptr: int, n: int, device: torch.device) -> torch.Tensor:
-    from aphrodite.models.deepseek_v41.amd.mono.common.peer_memory import _DeviceBytes
+    from sonar.models.deepseek_v41.amd.mono.common.peer_memory import _DeviceBytes
 
     return torch.as_tensor(_DeviceBytes(ptr, 4 * n), device=device).view(torch.int32)

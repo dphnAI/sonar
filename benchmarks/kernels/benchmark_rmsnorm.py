@@ -6,8 +6,8 @@ import torch
 from flashinfer.norm import fused_add_rmsnorm, rmsnorm
 from torch import nn
 
-from aphrodite import _custom_ops as aphrodite_ops
-from aphrodite.triton_utils import triton
+from sonar import _custom_ops as sonar_ops
+from sonar.triton_utils import triton
 
 
 class HuggingFaceRMSNorm(nn.Module):
@@ -84,7 +84,7 @@ def rmsnorm_flashinfer(
     return output
 
 
-def rmsnorm_aphrodite(
+def rmsnorm_sonar(
     x: torch.Tensor,
     weight: torch.Tensor,
     residual: torch.Tensor | None = None,
@@ -96,11 +96,11 @@ def rmsnorm_aphrodite(
         residual = residual.view(-1, residual.shape[-1])
 
     if residual is not None:
-        aphrodite_ops.fused_add_rms_norm(x, residual, weight, eps)
+        sonar_ops.fused_add_rms_norm(x, residual, weight, eps)
         output = (x, residual)
     else:
         out = torch.empty_like(x)
-        aphrodite_ops.rms_norm(out, x, weight, eps)
+        sonar_ops.rms_norm(out, x, weight, eps)
         output = out
 
     if isinstance(output, tuple):
@@ -118,19 +118,19 @@ def calculate_diff(batch_size, seq_len, hidden_size, use_residual=True):
 
     output_naive = rmsnorm_naive(x.clone(), weight, residual.clone() if residual is not None else None)
     output_flashinfer = rmsnorm_flashinfer(x.clone(), weight, residual.clone() if residual is not None else None)
-    output_aphrodite = rmsnorm_aphrodite(x.clone(), weight, residual.clone() if residual is not None else None)
+    output_sonar = rmsnorm_sonar(x.clone(), weight, residual.clone() if residual is not None else None)
 
     if use_residual:
         output_naive = output_naive[0]
         output_flashinfer = output_flashinfer[0]
-        output_aphrodite = output_aphrodite[0]
+        output_sonar = output_sonar[0]
 
     print(f"Naive output={output_naive}")
     print(f"FlashInfer output={output_flashinfer}")
-    print(f"Aphrodite output={output_aphrodite}")
+    print(f"Sonar output={output_sonar}")
 
     if torch.allclose(output_naive, output_flashinfer, atol=1e-2, rtol=1e-2) and torch.allclose(
-        output_naive, output_aphrodite, atol=1e-2, rtol=1e-2
+        output_naive, output_sonar, atol=1e-2, rtol=1e-2
     ):
         print("✅ All implementations match")
     else:
@@ -149,8 +149,8 @@ def get_benchmark(use_residual):
             x_names=["head_num", "batch_size", "seq_len"],
             x_vals=[list(_) for _ in configs],
             line_arg="provider",
-            line_vals=["huggingface", "flashinfer", "aphrodite"],
-            line_names=["HuggingFace", "FlashInfer", "Aphrodite"],
+            line_vals=["huggingface", "flashinfer", "sonar"],
+            line_names=["HuggingFace", "FlashInfer", "Sonar"],
             styles=[("blue", "-"), ("green", "-"), ("red", "-")],
             ylabel="us",
             plot_name=f"rmsnorm-perf-{'with' if use_residual else 'without'}-residual",
@@ -187,7 +187,7 @@ def get_benchmark(use_residual):
             )
         else:
             ms, min_ms, max_ms = triton.testing.do_bench(
-                lambda: rmsnorm_aphrodite(
+                lambda: rmsnorm_sonar(
                     x.clone(),
                     weight,
                     residual.clone() if residual is not None else None,

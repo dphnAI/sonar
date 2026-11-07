@@ -28,7 +28,7 @@ model:
   base_env: {}
 
 dependencies:
-  - note: "PaddlePaddle runtime (install in a separate venv from aphrodite to avoid conflicts)"
+  - note: "PaddlePaddle runtime (install in a separate venv from sonar to avoid conflicts)"
     command: "uv pip install paddlepaddle-gpu==3.2.1 --extra-index-url https://www.paddlepaddle.org.cn/packages/stable/cu126/"
     brand: NVIDIA
   - note: "PaddleOCR document-parsing helpers — 1.6 requires >= 3.6.0 (pipeline_version v1.6)"
@@ -87,25 +87,25 @@ guide: |
 
   The architecture is **fully compatible with PaddleOCR-VL-1.5** (same 0.9B NaViT-style
   dynamic-resolution vision encoder + ERNIE-4.5-0.3B LM), so migration is plug-and-play:
-  the Aphrodite launch command and feature flags are unchanged.
+  the Sonar launch command and feature flags are unchanged.
 
   ## Prerequisites
 
   - Hardware: 1x GPU (small VRAM footprint)
-  - Aphrodite >= 0.11.1
+  - Sonar >= 0.11.1
 
-  ### Install Aphrodite
+  ### Install Sonar
 
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U aphrodite-engine
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   ```
 
   ## Launch command
 
   ```bash
-  aphrodite serve PaddlePaddle/PaddleOCR-VL-1.6 \
+  sonar serve PaddlePaddle/PaddleOCR-VL-1.6 \
     --trust-remote-code \
     --max-num-batched-tokens 16384 \
     --no-enable-prefix-caching \
@@ -149,12 +149,12 @@ guide: |
 
   ## Offline Inference with PP-DocLayoutV3
 
-  Use separate venvs for `aphrodite` and `paddlepaddle` to avoid conflicts. The 1.6 pipeline
+  Use separate venvs for `sonar` and `paddlepaddle` to avoid conflicts. The 1.6 pipeline
   requires `paddleocr[doc-parser] >= 3.6.0` and `pipeline_version="v1.6"`, which
   automatically uses [PP-DocLayoutV3](https://huggingface.co/PaddlePaddle/PP-DocLayoutV3)
   for layout detection (PP-DocLayoutV2 belongs to the v1 pipeline). Pass
   `vl_rec_api_model_name="PaddlePaddle/PaddleOCR-VL-1.6"` so the client matches the
-  model name the Aphrodite server exposes — otherwise it defaults to
+  model name the Sonar server exposes — otherwise it defaults to
   `PaddleOCR-VL-1.6-0.9B` and fails with "The model PaddleOCR-VL-1.6-0.9B does not exist."
 
   ```bash
@@ -168,7 +168,7 @@ guide: |
 
   pipeline = PaddleOCRVL(
       pipeline_version="v1.6",
-      vl_rec_backend="aphrodite-server",
+      vl_rec_backend="sonar-server",
       vl_rec_server_url="http://localhost:8000/v1",
       vl_rec_api_model_name="PaddlePaddle/PaddleOCR-VL-1.6",
   )
@@ -184,4 +184,4 @@ guide: |
   - [PaddleOCR-VL-1.6 on Hugging Face](https://huggingface.co/PaddlePaddle/PaddleOCR-VL-1.6)
   - [Technical report (arXiv)](https://arxiv.org/pdf/2606.03264)
   - [PaddleOCR GitHub](https://github.com/PaddlePaddle/PaddleOCR)
-  - [Aphrodite support PR](https://github.com/vllm-project/vllm/pull/27758)
+  - [Sonar support PR](https://github.com/vllm-project/vllm/pull/27758)

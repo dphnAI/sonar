@@ -5,17 +5,17 @@ from collections.abc import Callable
 import deep_ep
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite.model_executor.layers.fused_moe.config import FusedMoEQuantConfig
-from aphrodite.model_executor.layers.fused_moe.topk_weight_and_reduce import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar.model_executor.layers.fused_moe.config import FusedMoEQuantConfig
+from sonar.model_executor.layers.fused_moe.topk_weight_and_reduce import (
     TopKWeightAndReduceContiguous,
     TopKWeightAndReduceDelegate,
 )
-from aphrodite.model_executor.layers.fused_moe.utils import moe_kernel_quantize_input
-from aphrodite.platforms import current_platform
-from aphrodite.utils.math_utils import round_up
-from aphrodite.utils.torch_utils import current_stream
-from aphrodite.v1.worker.ubatching import (
+from sonar.model_executor.layers.fused_moe.utils import moe_kernel_quantize_input
+from sonar.platforms import current_platform
+from sonar.utils.math_utils import round_up
+from sonar.utils.torch_utils import current_stream
+from sonar.v1.worker.ubatching import (
     dbo_current_ubatch_id,
     dbo_enabled,
     dbo_get_previous_event,
@@ -242,7 +242,7 @@ class DeepEPHTPrepareAndFinalize(mk.FusedMoEPrepareAndFinalizeModular):
         #
         # DeepEP's topk_ids output refers to the local experts directly. Offset
         # the topk_ids to move it back to the global experts space so it aligns
-        # with existing Aphrodite interfaces.
+        # with existing Sonar interfaces.
         assert expert_topk_ids is not None
         expert_topk_ids = torch.where(
             expert_topk_ids == -1,

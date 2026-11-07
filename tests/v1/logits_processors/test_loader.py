@@ -8,7 +8,7 @@ downloaded model; these exercise the loader alone and need no model.
 
 import pytest
 
-from aphrodite.v1.sample.logits_processor import _load_logitsprocs_by_fqcns
+from sonar.v1.sample.logits_processor import _load_logitsprocs_by_fqcns
 
 
 @pytest.mark.parametrize(

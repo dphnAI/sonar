@@ -14,8 +14,8 @@ from __future__ import annotations
 
 import torch
 
-from aphrodite.triton_utils import tl, triton
-from aphrodite.v1.attention.ops.ultraquant.format import (
+from sonar.triton_utils import tl, triton
+from sonar.v1.attention.ops.ultraquant.format import (
     FP4_BITS_TO_VALUE,
     UE8M0_BIAS,
     get_group_size,
@@ -24,7 +24,7 @@ from aphrodite.v1.attention.ops.ultraquant.format import (
     v_codes_offset,
     v_scales_offset,
 )
-from aphrodite.v1.attention.ops.ultraquant.triton_store import _kv_cache_flat
+from sonar.v1.attention.ops.ultraquant.triton_store import _kv_cache_flat
 
 _FP4_DECODE_CACHE: dict[tuple[torch.device, torch.dtype], torch.Tensor] = {}
 

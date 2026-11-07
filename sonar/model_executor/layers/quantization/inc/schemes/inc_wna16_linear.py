@@ -5,17 +5,17 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 
-from aphrodite.model_executor.layers.quantization.auto_awq import AutoAWQConfig
-from aphrodite.model_executor.layers.quantization.auto_gptq import AutoGPTQConfig
-from aphrodite.model_executor.layers.quantization.utils.marlin_utils import (
+from sonar.model_executor.layers.quantization.auto_awq import AutoAWQConfig
+from sonar.model_executor.layers.quantization.auto_gptq import AutoGPTQConfig
+from sonar.model_executor.layers.quantization.utils.marlin_utils import (
     check_marlin_supported,
 )
-from aphrodite.model_executor.parameter import (
+from sonar.model_executor.parameter import (
     GroupQuantScaleParameter,
-    PackedAphroditeParameter,
+    PackedSonarParameter,
 )
-from aphrodite.model_executor.utils import replace_parameter, retire_parameter
-from aphrodite.scalar_type import scalar_types
+from sonar.model_executor.utils import replace_parameter, retire_parameter
+from sonar.scalar_type import scalar_types
 
 from .inc_scheme import INCLinearScheme
 
@@ -58,7 +58,7 @@ class INCWNA16LinearScheme(INCLinearScheme):
             )
 
         if use_marlin:
-            from aphrodite.model_executor.layers.quantization.auto_gptq import (
+            from sonar.model_executor.layers.quantization.auto_gptq import (
                 AutoGPTQLinearMethod,
             )
 
@@ -99,7 +99,7 @@ class INCWNA16LinearScheme(INCLinearScheme):
             )
 
         if use_marlin:
-            from aphrodite.model_executor.layers.quantization.auto_awq import (
+            from sonar.model_executor.layers.quantization.auto_awq import (
                 AutoAWQMarlinLinearMethod,
             )
 
@@ -114,7 +114,7 @@ class INCWNA16LinearScheme(INCLinearScheme):
                 )
             )
 
-        from aphrodite.model_executor.layers.quantization.auto_awq import (
+        from sonar.model_executor.layers.quantization.auto_awq import (
             AutoAWQLinearMethod,
         )
 
@@ -190,7 +190,7 @@ class INCXPULinearBase(INCLinearScheme):
 
         if self.is_awq_packed:
             # AWQ: qweight [in, out // pack_factor] packed along output dim
-            qweight = PackedAphroditeParameter(
+            qweight = PackedSonarParameter(
                 data=torch.empty(
                     input_size_per_partition,
                     output_size_per_partition // self.pack_factor,
@@ -204,7 +204,7 @@ class INCXPULinearBase(INCLinearScheme):
             )
         else:
             # GPTQ: qweight [in // pack_factor, out] packed along input dim
-            qweight = PackedAphroditeParameter(
+            qweight = PackedSonarParameter(
                 data=torch.empty(
                     input_size_per_partition // self.pack_factor,
                     output_size_per_partition,
@@ -228,7 +228,7 @@ class INCXPULinearBase(INCLinearScheme):
         )
         # Both AWQ and GPTQ checkpoints store qzeros with this shape; for
         # symmetric quantization the values are ignored downstream.
-        qzeros = PackedAphroditeParameter(
+        qzeros = PackedSonarParameter(
             data=torch.empty(
                 scales_and_zp_size,
                 output_size_per_partition // self.pack_factor,
@@ -431,7 +431,7 @@ class INCARKLinearMethod(INCXPULinearBase):
         x: torch.Tensor,
         bias: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        return torch.ops.aphrodite.inc_ark_woq_linear.default(
+        return torch.ops.sonar.inc_ark_woq_linear.default(
             x,
             layer.qweight,
             layer.ark_bias,

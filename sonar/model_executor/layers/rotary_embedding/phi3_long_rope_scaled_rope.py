@@ -5,8 +5,8 @@ import math
 import torch
 import torch.nn as nn
 
-from aphrodite.config import get_current_aphrodite_config
-from aphrodite.logger import init_logger
+from sonar.config import get_current_sonar_config
+from sonar.logger import init_logger
 
 from .common import rotate_neox
 
@@ -49,7 +49,7 @@ class Phi3LongRoPEScaledRotaryEmbedding(nn.Module):
         # Force long factors if max_model_len (runtime max length) exceeds
         # original_max_position_embeddings to prevent KV cache invalidation when
         # sequences cross this threshold during generation
-        max_model_len = get_current_aphrodite_config().model_config.max_model_len
+        max_model_len = get_current_sonar_config().model_config.max_model_len
         self.use_long_rope = max_model_len > original_max_position_embeddings
         if self.use_long_rope:
             logger.warning_once(

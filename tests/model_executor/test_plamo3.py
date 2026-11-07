@@ -7,9 +7,9 @@ import pytest
 import torch
 from torch import nn
 
-from aphrodite.model_executor.models import plamo3 as plamo3_mod
-from aphrodite.model_executor.models.interfaces import SupportsEagle3
-from aphrodite.v1.worker.gpu.spec_decode.eagle.eagle3_utils import (
+from sonar.model_executor.models import plamo3 as plamo3_mod
+from sonar.model_executor.models.interfaces import SupportsEagle3
+from sonar.v1.worker.gpu.spec_decode.eagle.eagle3_utils import (
     set_eagle3_aux_hidden_state_layers,
 )
 

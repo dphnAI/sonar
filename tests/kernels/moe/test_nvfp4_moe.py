@@ -3,23 +3,23 @@
 import pytest
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite import _custom_ops as ops
-from aphrodite.config import AphroditeConfig, ParallelConfig, set_current_aphrodite_config
-from aphrodite.model_executor.layers.fused_moe import fused_topk
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.all2all_utils import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar import _custom_ops as ops
+from sonar.config import ParallelConfig, SonarConfig, set_current_sonar_config
+from sonar.model_executor.layers.fused_moe import fused_topk
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.all2all_utils import (
     maybe_make_prepare_finalize,
 )
-from aphrodite.model_executor.layers.fused_moe.config import nvfp4_moe_quant_config
-from aphrodite.model_executor.layers.fused_moe.experts.cutlass_moe import (
+from sonar.model_executor.layers.fused_moe.config import nvfp4_moe_quant_config
+from sonar.model_executor.layers.fused_moe.experts.cutlass_moe import (
     CutlassExpertsFp4,
 )
-from aphrodite.model_executor.layers.fused_moe.prepare_finalize import (
+from sonar.model_executor.layers.fused_moe.prepare_finalize import (
     make_moe_prepare_and_finalize_no_dp_ep,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_random_seed
 from tests.kernels.moe.utils import make_dummy_moe_config, make_test_weights
 from tests.kernels.quantization.nvfp4_utils import (
     FLOAT4_E2M1_MAX,
@@ -50,7 +50,7 @@ MNK_FACTORS = [
 @torch.inference_mode()
 def test_cutlass_fp4_moe_no_graph(m: int, n: int, k: int, e: int, topk: int, dtype: torch.dtype, workspace_init):
     set_random_seed(7)
-    with set_current_aphrodite_config(AphroditeConfig(parallel_config=ParallelConfig(pipeline_parallel_size=1))):
+    with set_current_sonar_config(SonarConfig(parallel_config=ParallelConfig(pipeline_parallel_size=1))):
         quant_blocksize = 16
 
         a = torch.randn((m, k), device="cuda", dtype=dtype) / 10
@@ -168,7 +168,7 @@ SWIGLUSTEP_MNK_FACTORS = [
 @torch.inference_mode()
 def test_cutlass_fp4_moe_swiglustep(m: int, n: int, k: int, e: int, topk: int, dtype: torch.dtype, workspace_init):
     set_random_seed(7)
-    with set_current_aphrodite_config(AphroditeConfig(parallel_config=ParallelConfig(pipeline_parallel_size=1))):
+    with set_current_sonar_config(SonarConfig(parallel_config=ParallelConfig(pipeline_parallel_size=1))):
         quant_blocksize = 16
 
         a = torch.randn((m, k), device="cuda", dtype=dtype) / 10

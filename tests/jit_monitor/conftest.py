@@ -3,7 +3,7 @@
 
 import pytest
 
-from aphrodite.utils import jit_monitor
+from sonar.utils import jit_monitor
 
 
 @pytest.fixture(autouse=True)

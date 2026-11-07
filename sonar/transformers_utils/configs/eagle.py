@@ -5,7 +5,7 @@ import os
 
 from transformers import AutoConfig, DeepseekV2Config, PreTrainedConfig
 
-from aphrodite.transformers_utils.utils import without_trust_remote_code
+from sonar.transformers_utils.utils import without_trust_remote_code
 
 
 class EAGLEConfig(PreTrainedConfig):

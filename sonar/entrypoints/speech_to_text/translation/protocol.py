@@ -12,24 +12,24 @@ from pydantic import (
     model_validator,
 )
 
-from aphrodite.config.speech_to_text import SpeechToTextParams
-from aphrodite.entrypoints.generate.base.protocol import DeltaMessage
-from aphrodite.entrypoints.serve.engine.protocol import OpenAIBaseModel, UsageInfo
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.logger import init_logger
-from aphrodite.sampling_params import (
+from sonar.config.speech_to_text import SpeechToTextParams
+from sonar.entrypoints.generate.base.protocol import DeltaMessage
+from sonar.entrypoints.serve.engine.protocol import OpenAIBaseModel, UsageInfo
+from sonar.exceptions import SonarValidationError
+from sonar.logger import init_logger
+from sonar.sampling_params import (
     BeamSearchParams,
     RequestOutputKind,
     SamplingParams,
 )
-from aphrodite.utils import random_uuid
+from sonar.utils import random_uuid
 
 from ..base.protocol import _LONG_INFO, AudioResponseFormat
 
 if TYPE_CHECKING:
     import numpy as np
 
-    from aphrodite.config import ModelConfig, SpeechToTextConfig
+    from sonar.config import ModelConfig, SpeechToTextConfig
 
 logger = init_logger(__name__)
 
@@ -163,7 +163,7 @@ class TranslationRequest(OpenAIBaseModel):
     max_completion_tokens: int | None = None
     """The maximum number of tokens to generate."""
 
-    aphrodite_xargs: dict[str, str | int | float | list[str | int | float]] | None = Field(
+    sonar_xargs: dict[str, str | int | float | list[str | int | float]] | None = Field(
         default=None,
         description=(
             "Additional request parameters with (list of) string or numeric values, used by custom extensions."
@@ -256,7 +256,7 @@ class TranslationRequest(OpenAIBaseModel):
             repetition_penalty=repetition_penalty,
             presence_penalty=self.presence_penalty,
             output_kind=RequestOutputKind.DELTA if self.stream else RequestOutputKind.FINAL_ONLY,
-            extra_args=self.aphrodite_xargs,
+            extra_args=self.sonar_xargs,
             skip_clone=True,  # Created fresh per request, safe to skip clone
         )
 
@@ -278,19 +278,19 @@ class TranslationRequest(OpenAIBaseModel):
                 (so for so in stream_opts if data.get(so, False)),
                 "stream_include_usage",
             )
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 "Stream options can only be defined when `stream=True`.",
                 parameter=invalid_param,
             )
 
-        xargs = data.get("aphrodite_xargs")
+        xargs = data.get("sonar_xargs")
         if isinstance(xargs, str):
             try:
-                data["aphrodite_xargs"] = json.loads(xargs)
+                data["sonar_xargs"] = json.loads(xargs)
             except json.JSONDecodeError as e:
-                raise AphroditeValidationError(
-                    f"Failed to parse aphrodite_xargs. Must be valid JSON: {e}",
-                    parameter="aphrodite_xargs",
+                raise SonarValidationError(
+                    f"Failed to parse sonar_xargs. Must be valid JSON: {e}",
+                    parameter="sonar_xargs",
                 ) from e
 
         return data

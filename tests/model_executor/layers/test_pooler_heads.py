@@ -5,18 +5,18 @@
 import torch
 import torch.nn as nn
 
-from aphrodite.model_executor.layers.pooler.activations import PoolerNormalize
-from aphrodite.model_executor.layers.pooler.seqwise.heads import (
+from sonar.model_executor.layers.pooler.activations import PoolerNormalize
+from sonar.model_executor.layers.pooler.seqwise.heads import (
     ClassifierPoolerHead,
     EmbeddingPoolerHead,
 )
-from aphrodite.model_executor.layers.pooler.tokwise.heads import (
+from sonar.model_executor.layers.pooler.tokwise.heads import (
     TokenClassifierPoolerHead,
     TokenEmbeddingPoolerHead,
 )
-from aphrodite.pooling_params import PoolingParams
-from aphrodite.tasks import PoolingTask
-from aphrodite.v1.pool.metadata import PoolingMetadata, PoolingStates
+from sonar.pooling_params import PoolingParams
+from sonar.tasks import PoolingTask
+from sonar.v1.pool.metadata import PoolingMetadata, PoolingStates
 
 _HIDDEN = 16
 _BATCH = 3

@@ -60,7 +60,7 @@ variants:
     min_vllm_version: "0.22.0"
     description: "Block-FP8 weights + FP8 KV cache — halves VRAM, fits on a single 40GB+ GPU"
     extra_env:
-      APHRODITE_BLOCKSCALE_FP8_GEMM_FLASHINFER: "0"
+      SONAR_BLOCKSCALE_FP8_GEMM_FLASHINFER: "0"
   nvfp4:
     model_id: "poolside/Laguna-XS-2.1-NVFP4"
     precision: nvfp4
@@ -99,11 +99,11 @@ guide: |
 
   ## Prerequisites
 
-  Laguna XS-2.1 support is available in Aphrodite 0.21.0 and later (via [PR #41129](https://github.com/vllm-project/vllm/pull/41129)).
+  Laguna XS-2.1 support is available in Sonar 0.21.0 and later (via [PR #41129](https://github.com/vllm-project/vllm/pull/41129)).
 
   ### pip
   ```bash
-  uv pip install -U 'aphrodite-engine>=0.21.0'
+  uv pip install -U 'sonar>=0.21.0' --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   ```
 
   ### Docker
@@ -118,13 +118,13 @@ guide: |
   | Variant | Checkpoint | Weights | ~VRAM | Notes |
   |---------|-----------|---------|-------|-------|
   | BF16 | [Laguna-XS-2.1](https://huggingface.co/poolside/Laguna-XS-2.1) | BF16 | 80 GB | Default |
-  | FP8 | [Laguna-XS-2.1-FP8](https://huggingface.co/poolside/Laguna-XS-2.1-FP8) | Block-FP8 | 40 GB | Set `APHRODITE_BLOCKSCALE_FP8_GEMM_FLASHINFER=0` |
+  | FP8 | [Laguna-XS-2.1-FP8](https://huggingface.co/poolside/Laguna-XS-2.1-FP8) | Block-FP8 | 40 GB | Set `SONAR_BLOCKSCALE_FP8_GEMM_FLASHINFER=0` |
   | NVFP4 | [Laguna-XS-2.1-NVFP4](https://huggingface.co/poolside/Laguna-XS-2.1-NVFP4) | NVFP4 | 26 GB | Blackwell only |
   | INT4 | [Laguna-XS-2.1-INT4](https://huggingface.co/poolside/Laguna-XS-2.1-INT4) | INT4 (W4A16) | 29 GB | Hopper or Blackwell |
 
   Quantization is detected automatically from each checkpoint's `quantization_config`, so the launch command is identical — just swap the model ID (select the variant above). All three quantized checkpoints ship an **FP8-quantized KV cache**.
 
-  > **Aphrodite ≥ 0.22.0 required for the quantized variants.** The FP8 KV cache needs the per-layer attention-head fix in [aphrodite#42650](https://github.com/vllm-project/vllm/pull/42650); earlier versions produce scrambled output on non-Hopper GPUs. On older Aphrodite you can disable the FP8 KV cache with `--kv-cache-dtype-skip-layers $(seq 0 39)`.
+  > **Sonar ≥ 0.22.0 required for the quantized variants.** The FP8 KV cache needs the per-layer attention-head fix in [sonar#42650](https://github.com/vllm-project/vllm/pull/42650); earlier versions produce scrambled output on non-Hopper GPUs. On older Sonar you can disable the FP8 KV cache with `--kv-cache-dtype-skip-layers $(seq 0 39)`.
 
   Precision-matched DFlash speculators are also available for each quantization — [DFlash-FP8](https://huggingface.co/poolside/Laguna-XS-2.1-DFlash-FP8), [DFlash-NVFP4](https://huggingface.co/poolside/Laguna-XS-2.1-DFlash-NVFP4), and [DFlash-INT4](https://huggingface.co/poolside/Laguna-XS-2.1-DFlash-INT4) — if you want to pair speculative decoding with a quantized base at matching precision.
 
@@ -132,7 +132,7 @@ guide: |
 
   ### Single GPU (H100/H200/B200, BF16)
   ```bash
-  aphrodite serve poolside/Laguna-XS-2.1 \
+  sonar serve poolside/Laguna-XS-2.1 \
     --trust-remote-code \
     --max-model-len 262144 \
     --enable-auto-tool-choice \
@@ -182,13 +182,13 @@ guide: |
   Enable the **Spec Decoding** toggle above to attach Poolside's [DFlash draft model](https://huggingface.co/poolside/Laguna-XS-2.1-DFlash) — a 5-layer Llama-style speculator that proposes up to 15 tokens per step. Reported end-to-end speedup is 1.67x–2.64x across evaluation datasets, with a mean accepted length of 3.55–4.57 tokens per step.
 
   Requires:
-  - Aphrodite built from [PR #46853](https://github.com/vllm-project/vllm/pull/46853) (adds DFlash drafter support for Laguna-XS-2.1) — not yet in a stable release.
+  - Sonar built from [PR #46853](https://github.com/vllm-project/vllm/pull/46853) (adds DFlash drafter support for Laguna-XS-2.1) — not yet in a stable release.
   - `--moe-backend triton` — the default DeepGEMM MoE backend is currently incompatible with the DFlash draft path, so force the Triton MoE backend. Enabling the **Spec Decoding** toggle above adds this flag automatically.
 
   Example:
 
   ```bash
-  aphrodite serve poolside/Laguna-XS-2.1 \
+  sonar serve poolside/Laguna-XS-2.1 \
     --trust-remote-code \
     --max-model-len 16384 \
     --enable-auto-tool-choice \
@@ -202,6 +202,6 @@ guide: |
 
   - [Model card](https://huggingface.co/poolside/Laguna-XS-2.1)
   - [Release blog post](https://poolside.ai/blog/laguna-a-deeper-dive)
-  - [Aphrodite support PR #41129](https://github.com/vllm-project/vllm/pull/41129)
-  - [Aphrodite DFlash spec-decoding PR #46853](https://github.com/vllm-project/vllm/pull/46853)
+  - [Sonar support PR #41129](https://github.com/vllm-project/vllm/pull/41129)
+  - [Sonar DFlash spec-decoding PR #46853](https://github.com/vllm-project/vllm/pull/46853)
   - [DFlash draft model](https://huggingface.co/poolside/Laguna-XS-2.1-DFlash)

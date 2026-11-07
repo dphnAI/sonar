@@ -14,8 +14,8 @@ from typing import TYPE_CHECKING, Any, Generic, overload
 
 from typing_extensions import TypeVar
 
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.inputs import (
+from sonar.exceptions import SonarValidationError
+from sonar.inputs import (
     EmbedsInput,
     EmbedsPrompt,
     EncoderDecoderInput,
@@ -31,27 +31,27 @@ from aphrodite.inputs import (
     embeds_input,
     tokens_input,
 )
-from aphrodite.logger import init_logger
-from aphrodite.multimodal import MULTIMODAL_REGISTRY as mm_registry
-from aphrodite.multimodal.cache import (
+from sonar.logger import init_logger
+from sonar.multimodal import MULTIMODAL_REGISTRY as mm_registry
+from sonar.multimodal.cache import (
     BaseMultiModalProcessorCache,
     processor_cache_from_config,
     processor_only_cache_from_config,
 )
-from aphrodite.multimodal.gpu_ipc_memory import maybe_init_mm_gpu_ipc_pool
-from aphrodite.multimodal.parse import (
+from sonar.multimodal.gpu_ipc_memory import maybe_init_mm_gpu_ipc_pool
+from sonar.multimodal.parse import (
     MultiModalDataItems,
     MultiModalUUIDItems,
     parse_mm_uuids,
 )
-from aphrodite.multimodal.processing import BaseMultiModalProcessor
-from aphrodite.multimodal.processing import ProcessorInputs as MMProcessorInputs
-from aphrodite.multimodal.registry import MultiModalTimingRegistry
-from aphrodite.tokenizers import TokenizerLike
-from aphrodite.utils.async_utils import make_async
-from aphrodite.utils.counter import AtomicCounter
-from aphrodite.utils.torch_utils import set_default_torch_num_threads
-from aphrodite.v1.metrics.stats import MultiModalCacheStats
+from sonar.multimodal.processing import BaseMultiModalProcessor
+from sonar.multimodal.processing import ProcessorInputs as MMProcessorInputs
+from sonar.multimodal.registry import MultiModalTimingRegistry
+from sonar.tokenizers import TokenizerLike
+from sonar.utils.async_utils import make_async
+from sonar.utils.counter import AtomicCounter
+from sonar.utils.torch_utils import set_default_torch_num_threads
+from sonar.v1.metrics.stats import MultiModalCacheStats
 
 from .embed_utils import safe_load_prompt_embeds
 from .inputs import (
@@ -66,8 +66,8 @@ from .inputs.preprocess import extract_target_prompt
 from .params import ChatParams, TokenizeParams
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
-    from aphrodite.renderers.chat_utils import (
+    from sonar.config import SonarConfig
+    from sonar.renderers.chat_utils import (
         ChatCompletionMessageParam,
         ConversationMessage,
     )
@@ -104,7 +104,7 @@ class _SwappableExecutor(Executor):
 
 
 class BaseRenderer(ABC, Generic[_T]):
-    def __init__(self, config: "AphroditeConfig", tokenizer: _T | None) -> None:
+    def __init__(self, config: "SonarConfig", tokenizer: _T | None) -> None:
         super().__init__()
 
         self.config = config
@@ -126,7 +126,7 @@ class BaseRenderer(ABC, Generic[_T]):
         # concurrently with a serving request inside the numba workqueue
         # parallel region, which would otherwise hit numba's
         # "Concurrent access has been detected" fatal abort (see
-        # aphrodite/utils/jit_monitor.py, which forces the workqueue layer).
+        # sonar/utils/jit_monitor.py, which forces the workqueue layer).
         # Joined by the first of reset_mm_cache / warmup / shutdown so the
         # mm_processor_cache is also never touched concurrently by the warmup
         # and the serving path.
@@ -315,7 +315,7 @@ class BaseRenderer(ABC, Generic[_T]):
         # would run concurrently with that single serving worker, so both
         # threads would enter the numba workqueue parallel region at the same
         # time and trip numba's "Concurrent access has been detected" ->
-        # "Fatal Python error: Aborted" (see aphrodite/utils/jit_monitor.py, which
+        # "Fatal Python error: Aborted" (see sonar/utils/jit_monitor.py, which
         # forces the non-threadsafe workqueue layer). Submitting the warmup to
         # the same single-worker executor makes warmup and serving
         # physically incapable of overlapping on the numba threading layer,
@@ -355,7 +355,7 @@ class BaseRenderer(ABC, Generic[_T]):
         no-op if the background warmup — or a prior reset_mm_cache that joined
         it — already ran it.
         """
-        from aphrodite.exceptions import ChatTemplateResolutionError
+        from sonar.exceptions import ChatTemplateResolutionError
 
         # prevent MM processor hangs
         with set_default_torch_num_threads(1):
@@ -437,7 +437,7 @@ class BaseRenderer(ABC, Generic[_T]):
         return self.tokenizer.eos_token_id
 
     def validate_token_ids(self, token_ids: Sequence[int], *, parameter: str | None = None) -> None:
-        """Raise AphroditeValidationError if a token id is out of vocabulary.
+        """Raise SonarValidationError if a token id is out of vocabulary.
 
         Without a tokenizer, the model vocab size is the only bound.
         """
@@ -465,9 +465,9 @@ class BaseRenderer(ABC, Generic[_T]):
         # but is not caught by the upper-bound check below. Reject it here
         # so it is not used as an embedding index downstream.
         if min_input_id < 0:
-            raise AphroditeValidationError(f"Token id {min_input_id} is out of vocabulary", parameter=parameter)
+            raise SonarValidationError(f"Token id {min_input_id} is out of vocabulary", parameter=parameter)
         if max_input_id > max_token_id:
-            raise AphroditeValidationError(f"Token id {max_input_id} is out of vocabulary", parameter=parameter)
+            raise SonarValidationError(f"Token id {max_input_id} is out of vocabulary", parameter=parameter)
 
     def get_dec_start_token_id(self) -> int:
         """Obtain the decoder start token id employed by an encoder/decoder model,
@@ -532,7 +532,7 @@ class BaseRenderer(ABC, Generic[_T]):
         prompts: Sequence[DictPrompt | bytes],
     ) -> list[DictPrompt]:
         if len(prompts) == 0:
-            raise AphroditeValidationError("You must pass at least one prompt", parameter="prompt")
+            raise SonarValidationError("You must pass at least one prompt", parameter="prompt")
 
         return [self.render_prompt(prompt) for prompt in prompts]
 
@@ -551,7 +551,7 @@ class BaseRenderer(ABC, Generic[_T]):
         prompts: Sequence[DictPrompt | bytes],
     ) -> list[DictPrompt]:
         if len(prompts) == 0:
-            raise AphroditeValidationError("You must pass at least one prompt", parameter="prompt")
+            raise SonarValidationError("You must pass at least one prompt", parameter="prompt")
 
         return await asyncio.gather(*(self._render_prompt_async(prompt) for prompt in prompts))
 
@@ -843,14 +843,14 @@ class BaseRenderer(ABC, Generic[_T]):
 
             if data_items is None:
                 if uuid_items is None:
-                    raise AphroditeValidationError(
+                    raise SonarValidationError(
                         f"multi_modal_data[{modality!r}] is empty but multi_modal_uuids[{modality!r}] is missing.",
                         parameter="multi_modal_uuids",
                     )
 
             elif uuid_items is not None:
                 if len(data_items) != len(uuid_items):
-                    raise AphroditeValidationError(
+                    raise SonarValidationError(
                         f"If given, multi_modal_uuids[{modality!r}] must have "
                         f"same length as multi_modal_data[{modality!r}], but "
                         f"got {len(uuid_items)} vs {len(data_items)}.",
@@ -859,7 +859,7 @@ class BaseRenderer(ABC, Generic[_T]):
 
                 for i, item in enumerate(data_items):
                     if item is None and uuid_items[i] is None:
-                        raise AphroditeValidationError(
+                        raise SonarValidationError(
                             f"multi_modal_data[{modality!r}][{i}] is empty but "
                             f"multi_modal_uuids[{modality!r}][{i}] is missing.",
                             parameter="multi_modal_uuids",
@@ -967,7 +967,7 @@ class BaseRenderer(ABC, Generic[_T]):
 
     def _process_embeds(self, prompt: EmbedsPrompt) -> EmbedsInput:
         if not self.model_config.enable_prompt_embeds:
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 "You must set `--enable-prompt-embeds` to input `prompt_embeds`.",
                 parameter="prompt_embeds",
             )
@@ -982,7 +982,7 @@ class BaseRenderer(ABC, Generic[_T]):
             prompt_embeds = prompt_embeds.squeeze(dim=0)
 
         if prompt_embeds.ndim != 2:
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 "prompt_embeds must be of shape (seq_len, hidden_size).",
                 parameter="prompt_embeds",
             )
@@ -1043,7 +1043,7 @@ class BaseRenderer(ABC, Generic[_T]):
 
         Multimodal spans are never cut: a request whose spans would not all
         survive intact is rejected, matching the post-expansion rejection in
-        `aphrodite.v1.engine.input_processor._validate_model_input`.
+        `sonar.v1.engine.input_processor._validate_model_input`.
 
         Only multimodal inputs can grow after `apply_post_tokenization`, so
         everything else returns immediately.
@@ -1071,7 +1071,7 @@ class BaseRenderer(ABC, Generic[_T]):
                 end = position.offset + position.length
                 if position.offset >= start and end <= stop:
                     continue
-                raise AphroditeValidationError(
+                raise SonarValidationError(
                     f"truncate_prompt_tokens={params.truncate_prompt_tokens} "
                     f"would split or drop a(n) {modality} item, which spans "
                     f"tokens {position.offset} to {end} of the "
@@ -1128,7 +1128,7 @@ class BaseRenderer(ABC, Generic[_T]):
     def _get_skip_decoder_start_token(self) -> bool:
         """Whether the multimodal processor supplies a complete decoder prefix."""
         if self.mm_processor is not None:
-            from aphrodite.multimodal.processing import EncDecMultiModalProcessor
+            from sonar.multimodal.processing import EncDecMultiModalProcessor
 
             if isinstance(self.mm_processor, EncDecMultiModalProcessor):
                 return self.mm_processor.skip_decoder_start_token

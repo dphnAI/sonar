@@ -3,10 +3,10 @@
 
 from argparse import Namespace
 
-from aphrodite import LLM, EngineArgs, PoolingParams
-from aphrodite.config import PoolerConfig
-from aphrodite.pooling_params import LateChunkingParams
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
+from sonar import LLM, EngineArgs, PoolingParams
+from sonar.config import PoolerConfig
+from sonar.pooling_params import LateChunkingParams
+from sonar.utils.argparse_utils import FlexibleArgumentParser
 
 
 def parse_args():

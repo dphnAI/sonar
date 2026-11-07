@@ -7,12 +7,12 @@ from typing import TypeAlias
 import torch
 import torch.nn as nn
 
-from aphrodite.config import get_current_aphrodite_config
-from aphrodite.config.pooler import TokenPoolingType
-from aphrodite.model_executor.layers.pooler import PoolingParamsUpdate
-from aphrodite.tasks import PoolingTask
-from aphrodite.utils.torch_utils import async_tensor_h2d
-from aphrodite.v1.pool.metadata import PoolingMetadata
+from sonar.config import get_current_sonar_config
+from sonar.config.pooler import TokenPoolingType
+from sonar.model_executor.layers.pooler import PoolingParamsUpdate
+from sonar.tasks import PoolingTask
+from sonar.utils.torch_utils import async_tensor_h2d
+from sonar.v1.pool.metadata import PoolingMetadata
 
 TokenPoolingMethodOutputItem: TypeAlias = torch.Tensor | None
 
@@ -39,8 +39,8 @@ class AllPool(TokenPoolingMethod):
         # Logical output widths in the current request order.
         self.output_sizes_fn = output_sizes_fn
 
-        aphrodite_config = get_current_aphrodite_config()
-        scheduler_config = aphrodite_config.scheduler_config
+        sonar_config = get_current_sonar_config()
+        scheduler_config = sonar_config.scheduler_config
 
         self.enable_chunked_prefill = scheduler_config.enable_chunked_prefill
         # With async scheduling, the next step may overwrite the hidden states

@@ -21,38 +21,38 @@ import jinja2.sandbox
 import torch
 from typing_extensions import override
 
-from aphrodite import envs
-from aphrodite.exceptions import AphroditeValidationError, ChatTemplateResolutionError
-from aphrodite.inputs import EmbedsPrompt
-from aphrodite.inputs.engine import MultiModalInput
-from aphrodite.logger import init_logger
-from aphrodite.multimodal.hasher import MultiModalHasher
-from aphrodite.multimodal.inputs import (
+from sonar import envs
+from sonar.exceptions import ChatTemplateResolutionError, SonarValidationError
+from sonar.inputs import EmbedsPrompt
+from sonar.inputs.engine import MultiModalInput
+from sonar.logger import init_logger
+from sonar.multimodal.hasher import MultiModalHasher
+from sonar.multimodal.inputs import (
     MultiModalFieldElem,
     MultiModalKwargsItem,
     MultiModalKwargsItems,
     MultiModalSharedField,
     PlaceholderRange,
 )
-from aphrodite.multimodal.processing.processor import (
+from sonar.multimodal.processing.processor import (
     PromptReplacement,
     apply_token_matches,
     find_mm_placeholders,
 )
-from aphrodite.renderers.chat_utils import (
+from sonar.renderers.chat_utils import (
     PROMPT_EMBEDS_PLACEHOLDER_TOKEN,
     load_chat_template,
     parse_chat_messages,
     parse_chat_messages_async,
 )
-from aphrodite.renderers.chat_utils.content_parser import (
+from sonar.renderers.chat_utils.content_parser import (
     PROMPT_EMBEDS_PLACEHOLDER_ID_PREFIX,
 )
-from aphrodite.tokenizers.hf import HfTokenizer, maybe_make_thread_pool
-from aphrodite.transformers_utils.chat_templates import get_chat_template_fallback_path
-from aphrodite.transformers_utils.processor import cached_get_processor
-from aphrodite.utils.async_utils import make_async
-from aphrodite.utils.func_utils import supports_kw
+from sonar.tokenizers.hf import HfTokenizer, maybe_make_thread_pool
+from sonar.transformers_utils.chat_templates import get_chat_template_fallback_path
+from sonar.transformers_utils.processor import cached_get_processor
+from sonar.utils.async_utils import make_async
+from sonar.utils.func_utils import supports_kw
 
 from .base import BaseRenderer
 from .inputs.preprocess import parse_dec_only_prompt
@@ -60,14 +60,14 @@ from .inputs.preprocess import parse_dec_only_prompt
 if TYPE_CHECKING:
     from collections.abc import Set
 
-    from aphrodite.config import AphroditeConfig, ModelConfig
-    from aphrodite.inputs import MultiModalDataDict, MultiModalUUIDDict, TokensPrompt
-    from aphrodite.inputs.engine import TokensInput
-    from aphrodite.multimodal.processing.processor import (
+    from sonar.config import ModelConfig, SonarConfig
+    from sonar.inputs import MultiModalDataDict, MultiModalUUIDDict, TokensPrompt
+    from sonar.inputs.engine import TokensInput
+    from sonar.multimodal.processing.processor import (
         MultiModalPromptUpdates,
         ResolvedPromptUpdate,
     )
-    from aphrodite.renderers.chat_utils import (
+    from sonar.renderers.chat_utils import (
         ChatCompletionMessageParam,
         ChatTemplateContentFormat,
         ChatTemplateContentFormatOption,
@@ -872,7 +872,7 @@ def safe_apply_chat_template(
         # reason (which typically lists the supported values) instead of a
         # 500 or any generic upstream wrapper message.
         logger.warning("Chat template rejected the request: %s", e)
-        raise AphroditeValidationError(_template_error_reason(e)) from e
+        raise SonarValidationError(_template_error_reason(e)) from e
 
     return plain
 
@@ -970,7 +970,7 @@ def replace_vision_chunk_video_placeholder(
 class HfRenderer(BaseRenderer[HfTokenizer]):
     def __init__(
         self,
-        config: AphroditeConfig,
+        config: SonarConfig,
         tokenizer: HfTokenizer | None,
     ) -> None:
         # Ensure the og tokenizer is never modified by maybe_make_thread_pool
@@ -1013,7 +1013,7 @@ class HfRenderer(BaseRenderer[HfTokenizer]):
         On timeout, replaces the executor so subsequent renders are not
         permanently blocked by the stuck thread.
         """
-        timeout = envs.APHRODITE_CHAT_TEMPLATE_RENDER_TIMEOUT
+        timeout = envs.SONAR_CHAT_TEMPLATE_RENDER_TIMEOUT
         if timeout <= 0:
             return await coro
         try:
@@ -1024,7 +1024,7 @@ class HfRenderer(BaseRenderer[HfTokenizer]):
                 f"Chat template rendering timed out after "
                 f"{timeout}s. This may indicate a malicious or "
                 f"excessively complex template. Adjust "
-                f"APHRODITE_CHAT_TEMPLATE_RENDER_TIMEOUT to override."
+                f"SONAR_CHAT_TEMPLATE_RENDER_TIMEOUT to override."
             ) from None
 
     def _can_produce_offsets(self) -> bool:

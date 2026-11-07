@@ -3,8 +3,8 @@
 import pytest
 import torch
 
-from aphrodite import TokensPrompt
-from aphrodite.config import PoolerConfig
+from sonar import TokensPrompt
+from sonar.config import PoolerConfig
 
 
 @pytest.mark.parametrize(
@@ -12,19 +12,19 @@ from aphrodite.config import PoolerConfig
     ["Qwen/Qwen3-0.6B"],
 )
 @torch.inference_mode
-def test_extract_hidden_states(hf_runner, aphrodite_runner, model: str):
+def test_extract_hidden_states(hf_runner, sonar_runner, model: str):
     n_prompt_tokens = [55, 56, 57]
     token_prompts = [[1024 + i for i in range(n)] for n in n_prompt_tokens]
 
-    with aphrodite_runner(
+    with sonar_runner(
         model,
         max_model_len=128,
         enforce_eager=True,
         runner="pooling",
         pooler_config=PoolerConfig(task="token_embed"),
         enable_prefix_caching=True,
-    ) as aphrodite_model:
-        pooling_outputs = aphrodite_model.llm.encode(
+    ) as sonar_model:
+        pooling_outputs = sonar_model.llm.encode(
             [TokensPrompt(prompt_token_ids=t) for t in token_prompts],
             pooling_task="token_embed",
         )
@@ -37,7 +37,7 @@ def test_extract_hidden_states(hf_runner, aphrodite_runner, model: str):
         # test enable_prefix_caching plus all pooling
         # we need to skip reading cache at this request by
         # pooling_params.skip_reading_prefix_cache
-        pooling_outputs = aphrodite_model.llm.encode(
+        pooling_outputs = sonar_model.llm.encode(
             [TokensPrompt(prompt_token_ids=t) for t in token_prompts],
             pooling_task="token_embed",
         )

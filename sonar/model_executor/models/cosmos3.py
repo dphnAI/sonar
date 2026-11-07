@@ -4,14 +4,14 @@
 import regex
 from transformers import Cosmos3OmniConfig
 
-from aphrodite.model_executor.models.qwen3_vl import (
+from sonar.model_executor.models.qwen3_vl import (
     Qwen3VLDummyInputsBuilder,
     Qwen3VLForConditionalGeneration,
     Qwen3VLMultiModalProcessor,
     Qwen3VLProcessingInfo,
 )
-from aphrodite.model_executor.models.utils import WeightsMapper
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
+from sonar.model_executor.models.utils import WeightsMapper
+from sonar.multimodal import MULTIMODAL_REGISTRY
 
 
 class Cosmos3ProcessingInfo(Qwen3VLProcessingInfo):
@@ -29,7 +29,7 @@ class Cosmos3ForConditionalGeneration(Qwen3VLForConditionalGeneration):
     # alongside a generation tower in a flat key layout. This mapper drops
     # the generation tower weights and rewrites the understanding tower keys
     # into the nested form expected by Qwen3VLForConditionalGeneration.
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_regex={
             regex.compile(r"^(layers\.|embed_tokens\.|norm\.)(.+)$"): r"language_model.model.\1\2",
             regex.compile(r"^(blocks\.|merger\.|patch_embed\.|pos_embed\.|deepstack_merger_list\.)"): r"visual.\1",
@@ -51,7 +51,7 @@ class Cosmos3ForConditionalGeneration(Qwen3VLForConditionalGeneration):
             ".norm_q.": ".q_norm.",
             ".norm_k.": ".k_norm.",
             # ModelOpt-native dialect (diffusers/transformers read these;
-            # Aphrodite reads weight_scale/input_scale instead), drop so
+            # Sonar reads weight_scale/input_scale instead), drop so
             # AutoWeightsLoader passes.
             ".input_quantizer.": None,
             ".weight_quantizer.": None,

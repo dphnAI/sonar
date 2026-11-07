@@ -26,13 +26,13 @@ suffix. Compare time to first token and prefix-cache metrics.
 Prefix caching reduces prefill work. It does not make generated decode tokens
 faster.
 
-Use [`aphrodite bench`](/deployment/benchmarking/) with a prefix-repetition
+Use [`sonar bench`](/deployment/benchmarking/) with a prefix-repetition
 dataset for a controlled comparison.
 
 ## Disable prefix caching
 
 ```bash
-aphrodite serve MODEL --no-enable-prefix-caching
+sonar serve MODEL --no-enable-prefix-caching
 ```
 
 Disable it when you need a clean benchmark baseline or when a platform feature

@@ -7,14 +7,14 @@ from typing import Literal
 import pytest
 from transformers import AutoTokenizer
 
-from aphrodite.config import AphroditeConfig, StructuredOutputsConfig
-from aphrodite.config.model import ModelConfig
-from aphrodite.config.speculative import SpeculativeConfig
-from aphrodite.parser.engine.adapters import ParserEngineReasoningAdapter
-from aphrodite.parser.engine.parser_engine import ReasoningEnd
-from aphrodite.sampling_params import SamplingParams, StructuredOutputsParams
-from aphrodite.v1.request import Request
-from aphrodite.v1.structured_output import StructuredOutputManager
+from sonar.config import SonarConfig, StructuredOutputsConfig
+from sonar.config.model import ModelConfig
+from sonar.config.speculative import SpeculativeConfig
+from sonar.parser.engine.adapters import ParserEngineReasoningAdapter
+from sonar.parser.engine.parser_engine import ReasoningEnd
+from sonar.sampling_params import SamplingParams, StructuredOutputsParams
+from sonar.v1.request import Request
+from sonar.v1.structured_output import StructuredOutputManager
 
 TOKENIZER = "gpt2"
 NUM_SPEC_TOKENS = 4
@@ -24,12 +24,12 @@ def _make_manager_and_request(backend: Literal["xgrammar", "guidance"], prompt_s
     tokenizer = AutoTokenizer.from_pretrained(TOKENIZER)
     prompt = tokenizer.encode(prompt_str)
 
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         model_config=ModelConfig(tokenizer=TOKENIZER),
         structured_outputs_config=StructuredOutputsConfig(backend=backend),
         speculative_config=SpeculativeConfig(model="[ngram]", num_speculative_tokens=NUM_SPEC_TOKENS),
     )
-    manager = StructuredOutputManager(aphrodite_config)
+    manager = StructuredOutputManager(sonar_config)
 
     sampling_params = SamplingParams(
         structured_outputs=StructuredOutputsParams(json='{"type": "object"}'),

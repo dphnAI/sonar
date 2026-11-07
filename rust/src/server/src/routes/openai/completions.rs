@@ -9,13 +9,6 @@ use std::convert::Infallible;
 use std::result::Result;
 use std::sync::Arc;
 
-use aphrodite_engine_core_client::protocol::output::StopReason;
-use aphrodite_llm::WeightVersionSpan;
-use aphrodite_text::tokenizer::Tokenizer;
-use aphrodite_text::{
-    DecodedPromptLogprobs, DecodedTextEvent, FinishReason, SampledDelta, TextOutputStream,
-    TextOutputStreamExt as _, TextRequest,
-};
 use asynk_strim_attr::{TryYielder, try_stream};
 use axum::Json;
 use axum::extract::State;
@@ -24,6 +17,13 @@ use axum::response::sse::Event;
 use axum::response::{IntoResponse, Response};
 use futures::{Stream, StreamExt as _, pin_mut};
 use serde_json::Value;
+use sonar_engine_core_client::protocol::output::StopReason;
+use sonar_llm::WeightVersionSpan;
+use sonar_text::tokenizer::Tokenizer;
+use sonar_text::{
+    DecodedPromptLogprobs, DecodedTextEvent, FinishReason, SampledDelta, TextOutputStream,
+    TextOutputStreamExt as _, TextRequest,
+};
 use thiserror_ext::AsReport as _;
 use tracing::{debug, error, info, trace};
 use tracing_futures::Instrument as _;
@@ -61,7 +61,7 @@ pub(crate) fn lower_completion_request(
         .map(|prepared| prepared.text_request)
 }
 
-/// Validate one completions request and proxy it into the shared `aphrodite-text`
+/// Validate one completions request and proxy it into the shared `sonar-text`
 /// stack.
 pub async fn completions(
     State(state): State<Arc<AppState>>,
@@ -166,7 +166,7 @@ pub(crate) async fn collect_completion(
 }
 
 pub(crate) fn render_completion(
-    collected: aphrodite_text::CollectedTextOutput,
+    collected: sonar_text::CollectedTextOutput,
     request_id: String,
     response_model: String,
     created: u64,
@@ -714,13 +714,13 @@ fn done_sse_event() -> Event {
 mod tests {
     use std::sync::Arc;
 
-    use aphrodite_engine_core_client::protocol::output::{RequestSpecDecodeMetrics, StopReason};
-    use aphrodite_text::{
+    use futures::{StreamExt as _, stream};
+    use itertools::Itertools as _;
+    use sonar_engine_core_client::protocol::output::{RequestSpecDecodeMetrics, StopReason};
+    use sonar_text::{
         DecodedLogprobs, DecodedPositionLogprobs, DecodedPromptLogprobs, DecodedText,
         DecodedTextEvent, DecodedTokenLogprob, FinishReason, Finished, SampledDelta,
     };
-    use futures::{StreamExt as _, stream};
-    use itertools::Itertools as _;
 
     use super::{
         ApiServerOptions, CompletionSseChunk, CompletionStreamResponse, ResponseOptions,
@@ -798,7 +798,7 @@ mod tests {
                     vec![2],
                     None,
                     Some(Finished {
-                        usage: aphrodite_llm::TokenUsage {
+                        usage: sonar_llm::TokenUsage {
                             prompt_token_count: 1,
                             output_token_count: 1,
                             prompt_cache_usage: Default::default(),
@@ -808,7 +808,7 @@ mod tests {
                         ec_transfer_params: None,
                         sampling_mask: None,
                         spec_decode_metrics,
-                        timestamps: aphrodite_llm::RequestTimestamps {
+                        timestamps: sonar_llm::RequestTimestamps {
                             queued_ts: 10.0,
                             scheduled_ts: 10.2,
                             first_token_ts: 10.5,
@@ -924,10 +924,10 @@ mod tests {
                     }],
                 }),
                 Some(Finished {
-                    usage: aphrodite_llm::TokenUsage {
+                    usage: sonar_llm::TokenUsage {
                         prompt_token_count: 5,
                         output_token_count: 2,
-                        prompt_cache_usage: aphrodite_llm::PromptCacheUsage {
+                        prompt_cache_usage: sonar_llm::PromptCacheUsage {
                             cached_token_count: 3,
                             cache_creation_token_count: 0,
                         },
@@ -944,7 +944,7 @@ mod tests {
                         num_draft_tokens: 6,
                         ..Default::default()
                     }),
-                    timestamps: aphrodite_llm::RequestTimestamps {
+                    timestamps: sonar_llm::RequestTimestamps {
                         queued_ts: 10.0,
                         scheduled_ts: 10.2,
                         first_token_ts: 10.5,
@@ -1099,14 +1099,14 @@ mod tests {
                     vec![i as u32],
                     Some(single_token_logprobs(token)),
                     (i == last).then(|| Finished {
-                        usage: aphrodite_llm::TokenUsage::default(),
+                        usage: sonar_llm::TokenUsage::default(),
                         finish_reason: FinishReason::Stop(None),
                         kv_transfer_params: None,
                         ec_transfer_params: None,
                         sampling_mask: None,
                         spec_decode_metrics: None,
                         weight_versions: None,
-                        timestamps: aphrodite_llm::RequestTimestamps::default(),
+                        timestamps: sonar_llm::RequestTimestamps::default(),
                     }),
                 ))
             }))
@@ -1149,7 +1149,7 @@ mod tests {
                 vec![8],
                 None,
                 Some(Finished {
-                    usage: aphrodite_llm::TokenUsage {
+                    usage: sonar_llm::TokenUsage {
                         prompt_token_count: 2,
                         output_token_count: 2,
                         prompt_cache_usage: Default::default(),
@@ -1214,7 +1214,7 @@ mod tests {
                 vec![7, 8],
                 None,
                 Some(Finished {
-                    usage: aphrodite_llm::TokenUsage {
+                    usage: sonar_llm::TokenUsage {
                         prompt_token_count: 2,
                         output_token_count: 2,
                         prompt_cache_usage: Default::default(),
@@ -1281,7 +1281,7 @@ mod tests {
                 vec![3],
                 None,
                 Some(Finished {
-                    usage: aphrodite_llm::TokenUsage {
+                    usage: sonar_llm::TokenUsage {
                         prompt_token_count: 2,
                         output_token_count: 1,
                         prompt_cache_usage: Default::default(),
@@ -1337,7 +1337,7 @@ mod tests {
                 vec![3],
                 None,
                 Some(Finished {
-                    usage: aphrodite_llm::TokenUsage {
+                    usage: sonar_llm::TokenUsage {
                         prompt_token_count: 1,
                         output_token_count: 1,
                         prompt_cache_usage: Default::default(),
@@ -1396,7 +1396,7 @@ mod tests {
                 vec![3],
                 None,
                 Some(Finished {
-                    usage: aphrodite_llm::TokenUsage {
+                    usage: sonar_llm::TokenUsage {
                         prompt_token_count: 2,
                         output_token_count: 1,
                         prompt_cache_usage: Default::default(),
@@ -1478,7 +1478,7 @@ mod tests {
                 vec![3],
                 None,
                 Some(Finished {
-                    usage: aphrodite_llm::TokenUsage {
+                    usage: sonar_llm::TokenUsage {
                         prompt_token_count: 1,
                         output_token_count: 1,
                         prompt_cache_usage: Default::default(),
@@ -1556,7 +1556,7 @@ mod tests {
                 vec![3],
                 None,
                 Some(Finished {
-                    usage: aphrodite_llm::TokenUsage {
+                    usage: sonar_llm::TokenUsage {
                         prompt_token_count: 2,
                         output_token_count: 1,
                         prompt_cache_usage: Default::default(),

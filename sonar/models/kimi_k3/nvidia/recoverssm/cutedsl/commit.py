@@ -26,7 +26,7 @@ import cutlass
 import cutlass.cute as cute
 from cutlass import Float32, Int32, Int64, Uint64
 
-from aphrodite.models.kimi_k3.nvidia.specialized_decode.cutedsl.common.primitives import (
+from sonar.models.kimi_k3.nvidia.specialized_decode.cutedsl.common.primitives import (
     alloc,
     asm,
     bf16,

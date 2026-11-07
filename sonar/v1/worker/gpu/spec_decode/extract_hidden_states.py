@@ -5,26 +5,26 @@ from typing import Any
 import torch
 import torch.nn as nn
 
-from aphrodite.compilation.backends import set_model_tag
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.compilation import CUDAGraphMode
-from aphrodite.forward_context import set_forward_context
-from aphrodite.model_executor.model_loader import get_model
-from aphrodite.model_executor.model_loader.utils import get_draft_load_config
-from aphrodite.v1.worker.gpu.dp_utils import DPSyncState
-from aphrodite.v1.worker.gpu.input_batch import InputBatch
-from aphrodite.v1.worker.gpu.spec_decode.speculator import DraftModelSpeculator
-from aphrodite.v1.worker.gpu.spec_decode.utils import get_pp_safe_draft_load_config
+from sonar.compilation.backends import set_model_tag
+from sonar.config import SonarConfig
+from sonar.config.compilation import CUDAGraphMode
+from sonar.forward_context import set_forward_context
+from sonar.model_executor.model_loader import get_model
+from sonar.model_executor.model_loader.utils import get_draft_load_config
+from sonar.v1.worker.gpu.dp_utils import DPSyncState
+from sonar.v1.worker.gpu.input_batch import InputBatch
+from sonar.v1.worker.gpu.spec_decode.speculator import DraftModelSpeculator
+from sonar.v1.worker.gpu.spec_decode.utils import get_pp_safe_draft_load_config
 
 
 class ExtractHiddenStatesSpeculator(DraftModelSpeculator):
     """Cache target hidden states while returning always-accepted draft tokens."""
 
-    def __init__(self, aphrodite_config: AphroditeConfig, device: torch.device):
-        assert aphrodite_config.speculative_config is not None
-        if aphrodite_config.speculative_config.draft_sample_method != "greedy":
+    def __init__(self, sonar_config: SonarConfig, device: torch.device):
+        assert sonar_config.speculative_config is not None
+        if sonar_config.speculative_config.draft_sample_method != "greedy":
             raise ValueError("extract_hidden_states only supports draft_sample_method='greedy'")
-        super().__init__(aphrodite_config, device)
+        super().__init__(sonar_config, device)
 
         if self.num_speculative_steps != 1:
             raise ValueError("extract_hidden_states requires num_speculative_tokens to be 1")
@@ -48,7 +48,7 @@ class ExtractHiddenStatesSpeculator(DraftModelSpeculator):
         self.hidden_states = torch.zeros(
             self.max_num_tokens,
             self.num_hidden_states,
-            self.aphrodite_config.model_config.get_hidden_size(),
+            self.sonar_config.model_config.get_hidden_size(),
             dtype=self.dtype,
             device=device,
         )
@@ -61,9 +61,9 @@ class ExtractHiddenStatesSpeculator(DraftModelSpeculator):
         del target_model, target_attn_layer_names
         with set_model_tag("extract_hidden_states"):
             return get_model(
-                aphrodite_config=self.aphrodite_config,
+                sonar_config=self.sonar_config,
                 model_config=self.draft_model_config,
-                load_config=get_pp_safe_draft_load_config(get_draft_load_config(self.aphrodite_config)),
+                load_config=get_pp_safe_draft_load_config(get_draft_load_config(self.sonar_config)),
             )
 
     def load_model(self, target_model: nn.Module) -> None:
@@ -131,7 +131,7 @@ class ExtractHiddenStatesSpeculator(DraftModelSpeculator):
         draft_slot_mappings = {name: slot_mappings[name][:num_tokens] for name in self.draft_attn_layer_names}
         with set_forward_context(
             draft_attn_metadata,
-            self.aphrodite_config,
+            self.sonar_config,
             num_tokens=num_tokens,
             num_tokens_across_dp=dp_sync_state and dp_sync_state.num_tokens_across_dp,
             cudagraph_runtime_mode=CUDAGraphMode.NONE,

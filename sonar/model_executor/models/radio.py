@@ -12,14 +12,14 @@
 
 The module tree mirrors the Transformers ``RadioModel`` (``embeddings`` and an
 ``encoder.layer`` stack of ``norm1``/``attention``/``layer_scale1``/``norm2``/
-``mlp``/``layer_scale2`` blocks). The Aphrodite-specific deviations are the fused
-``attention.qkv`` (a :class:`~aphrodite.model_executor.layers.linear.QKVParallelLinear`
+``mlp``/``layer_scale2`` blocks). The Sonar-specific deviations are the fused
+``attention.qkv`` (a :class:`~sonar.model_executor.layers.linear.QKVParallelLinear`
 for TP/quantization, vs the split ``query``/``key``/``value`` in HF) and running
 input normalization in the processor instead of an ``input_conditioner`` module;
-the attention backend and MLP reuse Aphrodite's :class:`MMEncoderAttention` and
-:class:`~aphrodite.model_executor.models.intern_vit.InternMLP`. ``load_weights`` maps
+the attention backend and MLP reuse Sonar's :class:`MMEncoderAttention` and
+:class:`~sonar.model_executor.models.intern_vit.InternMLP`. ``load_weights`` maps
 both native Transformers and legacy remote-code checkpoint keys onto this tree
-via :data:`hf_to_aphrodite_mapper`.
+via :data:`hf_to_sonar_mapper`.
 """
 
 import math
@@ -35,26 +35,26 @@ import torch.nn.functional as F
 from einops import rearrange
 from transformers import PreTrainedConfig
 
-from aphrodite.compilation.decorators import (
+from sonar.compilation.decorators import (
     should_torch_compile_mm_encoder,
     support_torch_compile,
 )
-from aphrodite.distributed import (
+from sonar.distributed import (
     divide,
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
     split_tensor_along_last_dim,
     tensor_model_parallel_all_gather,
 )
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.attention import MMEncoderAttention
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import QKVParallelLinear, RowParallelLinear
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.models.intern_vit import InternMLP
-from aphrodite.model_executor.models.utils import AutoWeightsLoader, WeightsMapper
-from aphrodite.model_executor.models.vision import is_vit_use_data_parallel
-from aphrodite.utils.torch_utils import async_tensor_h2d
+from sonar.logger import init_logger
+from sonar.model_executor.layers.attention import MMEncoderAttention
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import QKVParallelLinear, RowParallelLinear
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.models.intern_vit import InternMLP
+from sonar.model_executor.models.utils import AutoWeightsLoader, WeightsMapper
+from sonar.model_executor.models.vision import is_vit_use_data_parallel
+from sonar.utils.torch_utils import async_tensor_h2d
 
 logger = init_logger(__name__)
 
@@ -336,7 +336,7 @@ class MaskMetadata:
 
 
 class RadioAttention(nn.Module):
-    """RADIO self-attention: a fused ``qkv`` projection feeding the Aphrodite
+    """RADIO self-attention: a fused ``qkv`` projection feeding the Sonar
     attention backend, with optional QK-normalization and dynamic-resolution
     packed attention (via ``mask_meta``). The fused counterpart of the
     Transformers ``RadioAttention`` (which keeps ``query``/``key``/``value`` and
@@ -556,7 +556,7 @@ class RadioModel(nn.Module):
     # ``video_patch_projection`` must precede ``embedder`` (applied in order);
     # keys mapping to ``None`` are intentionally not loaded (input normalization
     # runs in the processor and ``summary_idxs`` comes from the config).
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_substr={
             # legacy remote-code layout onto the native module tree
             "radio_model.model.patch_generator.video_embedder": ("embeddings.video_patch_projection"),
@@ -664,7 +664,7 @@ class RadioModel(nn.Module):
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         """Load RADIO checkpoint weights, remapping legacy remote-code and
         native Transformers keys onto this module tree via
-        :data:`hf_to_aphrodite_mapper`."""
+        :data:`hf_to_sonar_mapper`."""
         if isinstance(weights, dict):
             weights = weights.items()
         # Keep only tensors belonging to the RADIO tower (legacy ``radio_model.*``
@@ -679,7 +679,7 @@ class RadioModel(nn.Module):
         )
         weights = ((name, w) for name, w in weights if name.startswith(prefixes))
         loader = AutoWeightsLoader(self)
-        loaded = loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        loaded = loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
         if not loaded:
             logger.warning(
                 "RadioModel.load_weights matched no checkpoint tensors; the "

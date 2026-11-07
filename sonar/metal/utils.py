@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Metal utility functions for Aphrodite Metal plugin."""
+"""Metal utility functions for Sonar Metal plugin."""
 
 import logging
 import os
@@ -13,7 +13,7 @@ def get_model_download_path(model_repo_name: str) -> str:
     """
     Get the path to the model, downloading from ModelScope if configured, otherwise will pass the model_repo_name.
 
-    When APHRODITE_USE_MODELSCOPE=True, downloads the model from ModelScope (modelscope.cn)
+    When SONAR_USE_MODELSCOPE=True, downloads the model from ModelScope (modelscope.cn)
     instead of HuggingFace. Useful in regions where HuggingFace is slow or blocked.
 
     Args:
@@ -25,19 +25,19 @@ def get_model_download_path(model_repo_name: str) -> str:
     Example:
 
     ```bash
-    APHRODITE_USE_MODELSCOPE=True APHRODITE_METAL_MODELSCOPE_CACHE=/path/to/cache aphrodite run Qwen/Qwen2.5-0.5B
+    SONAR_USE_MODELSCOPE=True SONAR_METAL_MODELSCOPE_CACHE=/path/to/cache sonar run Qwen/Qwen2.5-0.5B
     ```
     """
     if Path(model_repo_name).exists():
         return model_repo_name
 
-    if os.environ.get("APHRODITE_USE_MODELSCOPE", "False").lower() == "true":
+    if os.environ.get("SONAR_USE_MODELSCOPE", "False").lower() == "true":
         try:
             from modelscope.hub.snapshot_download import snapshot_download
 
-            import aphrodite.metal.envs as envs
+            import sonar.metal.envs as envs
 
-            model_cache_dir = envs.APHRODITE_METAL_MODELSCOPE_CACHE
+            model_cache_dir = envs.SONAR_METAL_MODELSCOPE_CACHE
 
             logger.info("Downloading model %s from ModelScope...", model_repo_name)
             model_path = snapshot_download(model_repo_name, cache_dir=model_cache_dir)

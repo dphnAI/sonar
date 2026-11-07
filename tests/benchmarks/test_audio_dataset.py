@@ -10,10 +10,10 @@ import numpy as np
 import pytest
 import soundfile as sf
 
-import aphrodite.benchmarks.datasets.datasets as datasets_module
-import aphrodite.benchmarks.lib.endpoint_request_func as request_func_module
-from aphrodite.benchmarks.lib.endpoint_request_func import RequestFuncInput
-from aphrodite.tokenizers import TokenizerLike
+import sonar.benchmarks.datasets.datasets as datasets_module
+import sonar.benchmarks.lib.endpoint_request_func as request_func_module
+from sonar.benchmarks.lib.endpoint_request_func import RequestFuncInput
+from sonar.tokenizers import TokenizerLike
 
 pytestmark = pytest.mark.skip_global_cleanup
 

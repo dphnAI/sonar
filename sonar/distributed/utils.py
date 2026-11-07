@@ -29,10 +29,10 @@ from torch.distributed.distributed_c10d import (
 )
 from torch.distributed.rendezvous import rendezvous
 
-import aphrodite.envs as envs
-from aphrodite.logger import init_logger
-from aphrodite.utils.network_utils import get_tcp_uri
-from aphrodite.utils.system_utils import suppress_stdout
+import sonar.envs as envs
+from sonar.logger import init_logger
+from sonar.utils.network_utils import get_tcp_uri
+from sonar.utils.system_utils import suppress_stdout
 
 logger = init_logger(__name__)
 
@@ -204,7 +204,7 @@ def get_pp_indices(num_hidden_layers: int, pp_rank: int, pp_size: int) -> tuple[
     because they contain the input and output embeddings respectively and we
     are attempting to reduce maximum memory consumption across partitions.
     """
-    partition_list_str = envs.APHRODITE_PP_LAYER_PARTITION
+    partition_list_str = envs.SONAR_PP_LAYER_PARTITION
     if partition_list_str is not None:
         try:
             partitions = [int(layer) for layer in partition_list_str.split(",")]
@@ -224,7 +224,7 @@ def get_pp_indices(num_hidden_layers: int, pp_rank: int, pp_size: int) -> tuple[
             logger.info(
                 "Hidden layers were unevenly partitioned: [%s]. "
                 "This can be manually overridden using the "
-                "APHRODITE_PP_LAYER_PARTITION environment variable",
+                "SONAR_PP_LAYER_PARTITION environment variable",
                 ",".join(str(p) for p in partitions),
             )
 
@@ -620,12 +620,12 @@ def steady_state_entered() -> bool:
 
 
 def get_cpu_distributed_timeout_or_none() -> timedelta | None:
-    from aphrodite.config import get_current_aphrodite_config_or_none
+    from sonar.config import get_current_sonar_config_or_none
 
-    aphrodite_config = get_current_aphrodite_config_or_none()
-    if aphrodite_config is None:
+    sonar_config = get_current_sonar_config_or_none()
+    if sonar_config is None:
         return None
-    return aphrodite_config.parallel_config.effective_cpu_distributed_timeout
+    return sonar_config.parallel_config.effective_cpu_distributed_timeout
 
 
 def set_gloo_backend_timeout(group: ProcessGroup, timeout: timedelta) -> None:
@@ -633,12 +633,12 @@ def set_gloo_backend_timeout(group: ProcessGroup, timeout: timedelta) -> None:
 
 
 def get_distributed_timeout_or_none() -> timedelta | None:
-    from aphrodite.config import get_current_aphrodite_config_or_none
+    from sonar.config import get_current_sonar_config_or_none
 
-    aphrodite_config = get_current_aphrodite_config_or_none()
-    if aphrodite_config is None:
+    sonar_config = get_current_sonar_config_or_none()
+    if sonar_config is None:
         return None
-    timeout_seconds = aphrodite_config.parallel_config.distributed_timeout_seconds
+    timeout_seconds = sonar_config.parallel_config.distributed_timeout_seconds
     return timedelta(seconds=timeout_seconds) if timeout_seconds is not None else None
 
 
@@ -751,7 +751,7 @@ def stateless_init_torch_distributed_process_group(
             timeout=timeout,
         )
     else:
-        from aphrodite.platforms import current_platform
+        from sonar.platforms import current_platform
 
         pg = current_platform.stateless_init_device_torch_dist_pg(
             backend=backend,
@@ -796,7 +796,7 @@ def get_worker_rank_suffix(global_rank: int | None = None) -> str:
         distributed topology.
 
     """
-    from aphrodite.distributed.parallel_state import (
+    from sonar.distributed.parallel_state import (
         get_dcp_group,
         get_dp_group,
         get_ep_group,

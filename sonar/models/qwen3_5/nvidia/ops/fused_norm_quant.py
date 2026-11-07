@@ -10,9 +10,9 @@ scale arithmetic as those kernels, so codes match the unfused chain.
 
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.math_utils import round_up
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
+from sonar.utils.math_utils import round_up
 
 FP8_DTYPE = torch.float8_e4m3fn
 FP8_MAX = tl.constexpr(448.0)

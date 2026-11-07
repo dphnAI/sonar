@@ -7,15 +7,15 @@ from logging import Logger
 from string import Template
 from typing import Any
 
-from aphrodite import EngineArgs, envs
-from aphrodite.logger import current_formatter_type, init_logger
+from sonar import EngineArgs, envs
+from sonar.logger import current_formatter_type, init_logger
 
 logger = init_logger(__name__)
 
 
 def log_version_and_model(lgr: Logger, version: str, model_name: str) -> None:
-    if envs.APHRODITE_DISABLE_LOG_LOGO or (formatter := current_formatter_type(lgr)) is None:
-        lgr.info("Aphrodite server version %s, serving model %s", version, model_name)
+    if envs.SONAR_DISABLE_LOG_LOGO or (formatter := current_formatter_type(lgr)) is None:
+        lgr.info("Sonar server version %s, serving model %s", version, model_name)
         return
 
     logo_template = Template(
@@ -39,11 +39,11 @@ def log_version_and_model(lgr: Logger, version: str, model_name: str) -> None:
     lgr.info("%s\n%s\n%s\n", logo, version_line.center(width), model_line.center(width))
 
 
-APHRODITE_SUBCMD_PARSER_EPILOG = (
-    "For full list:            aphrodite {subcmd} --help=all\n"
-    "For a section:            aphrodite {subcmd} --help=ModelConfig    (case-insensitive)\n"  # noqa: E501
-    "For a flag:               aphrodite {subcmd} --help=max-model-len  (_ or - accepted)\n"  # noqa: E501
-    "Documentation:            https://docs.aphrodite.ai\n"
+SONAR_SUBCMD_PARSER_EPILOG = (
+    "For full list:            sonar {subcmd} --help=all\n"
+    "For a section:            sonar {subcmd} --help=ModelConfig    (case-insensitive)\n"  # noqa: E501
+    "For a flag:               sonar {subcmd} --help=max-model-len  (_ or - accepted)\n"  # noqa: E501
+    "Documentation:            https://sonar.dphn.ai\n"
 )
 
 
@@ -59,8 +59,8 @@ def redact_sensitive_args(args: dict[str, Any]) -> dict[str, Any]:
 
 
 def get_non_default_args(args: Namespace | EngineArgs) -> dict[str, Any]:
-    from aphrodite.entrypoints.common.cli_args import make_arg_parser
-    from aphrodite.utils.argparse_utils import FlexibleArgumentParser
+    from sonar.entrypoints.common.cli_args import make_arg_parser
+    from sonar.utils.argparse_utils import FlexibleArgumentParser
 
     non_default_args = {}
 
@@ -128,7 +128,7 @@ def cli_env_setup():
     # possible.
     #
     # We only set it here in the CLI entrypoint, because changing to `spawn`
-    # could break some existing code using Aphrodite as a library. `spawn` will cause
+    # could break some existing code using Sonar as a library. `spawn` will cause
     # unexpected behavior if the code is not protected by
     # `if __name__ == "__main__":`.
     #
@@ -137,6 +137,6 @@ def cli_env_setup():
     # - https://pytorch.org/docs/stable/notes/multiprocessing.html#cuda-in-multiprocessing
     # - https://pytorch.org/docs/stable/multiprocessing.html#sharing-cuda-tensors
     # - https://docs.habana.ai/en/latest/PyTorch/Getting_Started_with_PyTorch_and_Gaudi/Getting_Started_with_PyTorch.html?highlight=multiprocessing#torch-multiprocessing-for-dataloaders
-    if "APHRODITE_WORKER_MULTIPROC_METHOD" not in os.environ:
-        logger.debug("Setting APHRODITE_WORKER_MULTIPROC_METHOD to 'spawn'")
-        os.environ["APHRODITE_WORKER_MULTIPROC_METHOD"] = "spawn"
+    if "SONAR_WORKER_MULTIPROC_METHOD" not in os.environ:
+        logger.debug("Setting SONAR_WORKER_MULTIPROC_METHOD to 'spawn'")
+        os.environ["SONAR_WORKER_MULTIPROC_METHOD"] = "spawn"

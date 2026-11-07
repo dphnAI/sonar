@@ -6,10 +6,10 @@ from dataclasses import dataclass, field, replace
 
 from typing_extensions import override
 
-from aphrodite.distributed.kv_transfer.kv_connector.v1.offloading.metrics import (
+from sonar.distributed.kv_transfer.kv_connector.v1.offloading.metrics import (
     OffloadingConnectorStats,
 )
-from aphrodite.v1.kv_offload.base import (
+from sonar.v1.kv_offload.base import (
     ConfigInfoMapping,
     LoadStoreSpec,
     LookupResult,
@@ -22,14 +22,14 @@ from aphrodite.v1.kv_offload.base import (
     RequestOffloadingContext,
     get_offload_group_idx,
 )
-from aphrodite.v1.kv_offload.cpu.common import (
+from sonar.v1.kv_offload.cpu.common import (
     CPULoadStoreSpec,
     CPUOffloadingInfo,
     CPUOffloadingMetrics,
 )
-from aphrodite.v1.kv_offload.cpu.policies.base import CachePolicy, ChunkStatus
-from aphrodite.v1.kv_offload.cpu.policies.factory import CachePolicyFactory
-from aphrodite.v1.metrics.cache_hit_source import CacheHitSource
+from sonar.v1.kv_offload.cpu.policies.base import CachePolicy, ChunkStatus
+from sonar.v1.kv_offload.cpu.policies.factory import CachePolicyFactory
+from sonar.v1.metrics.cache_hit_source import CacheHitSource
 
 
 @dataclass(slots=True)

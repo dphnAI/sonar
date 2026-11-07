@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-//! Conversion between gRPC protobuf types and internal `aphrodite-text`
+//! Conversion between gRPC protobuf types and internal `sonar-text`
 //! request/response types.
 
-use aphrodite_engine_core_client::protocol::kv_hints::{KvHintAction, KvHintsEnvelope};
-use aphrodite_engine_core_client::protocol::output::StopReason;
-use aphrodite_engine_core_client::protocol::request::ReasoningParserKwargs;
-use aphrodite_engine_core_client::protocol::structured_outputs::StructuredOutputsParams;
-use aphrodite_text::{
+use sonar_engine_core_client::protocol::kv_hints::{KvHintAction, KvHintsEnvelope};
+use sonar_engine_core_client::protocol::output::StopReason;
+use sonar_engine_core_client::protocol::request::ReasoningParserKwargs;
+use sonar_engine_core_client::protocol::structured_outputs::StructuredOutputsParams;
+use sonar_text::{
     DecodedLogprobs, DecodedPromptLogprobs, FinishReason, Finished, Prompt, PromptTruncation,
     PromptTruncationLimit, SamplingParams, TextDecodeOptions, TextRequest, TruncationSide,
 };
@@ -96,21 +96,21 @@ pub fn to_text_request(
     let mut sampling_params =
         build_sampling_params(req.temperature, sampling, decoding, stopping, response)?;
     sampling_params.watermarking = req.watermarking;
-    sampling_params.aphrodite_sampling =
-        req.aphrodite_sampling.map(aphrodite_sampling_from_proto).unwrap_or_default();
+    sampling_params.sonar_sampling =
+        req.sonar_sampling.map(sonar_sampling_from_proto).unwrap_or_default();
 
     // Thread KVCacheParameters → SamplingParams fields.
     if let Some(kv) = kv {
-        // Thread kv_transfer_params through aphrodite_xargs, matching the HTTP route
+        // Thread kv_transfer_params through sonar_xargs, matching the HTTP route
         // convention.
         if let Some(kv_struct) = kv.kv_transfer_params.as_ref() {
             let kv_json = proto_struct_to_json(kv_struct);
-            let map = sampling_params.aphrodite_xargs.get_or_insert_with(Default::default);
+            let map = sampling_params.sonar_xargs.get_or_insert_with(Default::default);
             map.insert("kv_transfer_params".to_string(), kv_json);
         }
         if let Some(ec_struct) = kv.ec_transfer_params.as_ref() {
             let ec_json = proto_struct_to_json(ec_struct);
-            let map = sampling_params.aphrodite_xargs.get_or_insert_with(Default::default);
+            let map = sampling_params.sonar_xargs.get_or_insert_with(Default::default);
             map.insert("ec_transfer_params".to_string(), ec_json);
         }
         if kv.bypass_prefix_cache {
@@ -156,13 +156,13 @@ pub fn to_text_request(
     })
 }
 
-fn aphrodite_sampling_from_proto(
-    params: pb::AphroditeSamplingParams,
-) -> aphrodite_engine_core_client::protocol::sampling::AphroditeSamplingParams {
-    use aphrodite_engine_core_client::protocol::sampling::AphroditeSamplingParams;
+fn sonar_sampling_from_proto(
+    params: pb::SonarSamplingParams,
+) -> sonar_engine_core_client::protocol::sampling::SonarSamplingParams {
+    use sonar_engine_core_client::protocol::sampling::SonarSamplingParams;
 
-    let defaults = AphroditeSamplingParams::default();
-    AphroditeSamplingParams {
+    let defaults = SonarSamplingParams::default();
+    SonarSamplingParams {
         no_repeat_ngram_size: params.no_repeat_ngram_size.unwrap_or(defaults.no_repeat_ngram_size),
         dynatemp_min: params.dynatemp_min.unwrap_or(defaults.dynatemp_min),
         dynatemp_max: params.dynatemp_max.unwrap_or(defaults.dynatemp_max),
@@ -431,8 +431,8 @@ fn to_finish_info(finished: &Finished, token_ids: &[u32]) -> Result<pb::FinishIn
                 }
                 // EOS-driven stop: engine-core matched the primary EOS token id but did not
                 // echo it back as a `stop_reason`. The matched token is, by construction, the
-                // last token of the terminal output batch (see aphrodite's `check_stop` in
-                // aphrodite/v1/core/sched/utils.py), so we recover it from there.
+                // last token of the terminal output batch (see sonar's `check_stop` in
+                // sonar/v1/core/sched/utils.py), so we recover it from there.
                 None => token_ids.last().copied().map(pb::finish_info::StopReason::EosTokenId),
             };
             (PbFinishReason::Stop as i32, sr)
@@ -489,7 +489,7 @@ fn prompt_logprobs_to_proto(
 /// Shared helper: convert a slice of decoded position logprobs to flat proto
 /// arrays.
 fn positions_to_proto(
-    positions: &[aphrodite_text::DecodedPositionLogprobs],
+    positions: &[sonar_text::DecodedPositionLogprobs],
 ) -> (Vec<f32>, Vec<u32>, Vec<pb::CandidateTokenInfo>) {
     let mut logprobs = Vec::with_capacity(positions.len());
     let mut ranks = Vec::with_capacity(positions.len());
@@ -610,14 +610,14 @@ impl ResponseOpts {
 
 #[cfg(test)]
 mod tests {
-    use aphrodite_engine_core_client::protocol::output::{RequestError, StopReason};
-    use aphrodite_engine_core_client::protocol::sampling_mask::SamplingMask;
-    use aphrodite_engine_core_client::protocol::structured_outputs::StructuredOutputBackend;
-    use aphrodite_text::{
+    use prost::Message as _;
+    use sonar_engine_core_client::protocol::output::{RequestError, StopReason};
+    use sonar_engine_core_client::protocol::sampling_mask::SamplingMask;
+    use sonar_engine_core_client::protocol::structured_outputs::StructuredOutputBackend;
+    use sonar_text::{
         FinishReason, Finished, Prompt, SamplingHints, SamplingLimits, lower_sampling_params,
     };
-    use aphrodite_tokenizer::test_utils::TestTokenizer;
-    use prost::Message as _;
+    use sonar_tokenizer::test_utils::TestTokenizer;
 
     use super::pb::finish_info::{FinishReason as PbFinishReason, StopReason as PbStopReason};
     use super::{
@@ -640,22 +640,22 @@ mod tests {
 
     #[test]
     fn grpc_sonar_sampler_defaults_preserve_omission_and_empty_breakers() {
-        use aphrodite_engine_core_client::protocol::sampling::AphroditeSamplingParams;
+        use sonar_engine_core_client::protocol::sampling::SonarSamplingParams;
 
-        for extension in [None, Some(pb::AphroditeSamplingParams::default())] {
+        for extension in [None, Some(pb::SonarSamplingParams::default())] {
             let request = pb::GenerateRequest {
-                aphrodite_sampling: extension,
+                sonar_sampling: extension,
                 ..base_request()
             };
             let converted = to_text_request(request, false, &served()).unwrap();
             assert_eq!(
-                converted.sampling_params.aphrodite_sampling,
-                AphroditeSamplingParams::default()
+                converted.sampling_params.sonar_sampling,
+                SonarSamplingParams::default()
             );
         }
 
-        let converted = super::aphrodite_sampling_from_proto(pb::AphroditeSamplingParams {
-            dry_sequence_breakers: Some(pb::aphrodite_sampling_params::SequenceBreakers {
+        let converted = super::sonar_sampling_from_proto(pb::SonarSamplingParams {
+            dry_sequence_breakers: Some(pb::sonar_sampling_params::SequenceBreakers {
                 values: vec![],
             }),
             ..Default::default()
@@ -665,9 +665,9 @@ mod tests {
 
     #[test]
     fn grpc_sonar_samplers_survive_protobuf_conversion() {
-        use aphrodite_engine_core_client::protocol::sampling::AphroditeSamplingParams;
+        use sonar_engine_core_client::protocol::sampling::SonarSamplingParams;
 
-        let expected = AphroditeSamplingParams {
+        let expected = SonarSamplingParams {
             no_repeat_ngram_size: 3,
             dynatemp_min: 0.2,
             dynatemp_max: 1.4,
@@ -698,7 +698,7 @@ mod tests {
             skew: 0.1,
         };
         let request = pb::GenerateRequest {
-            aphrodite_sampling: Some(pb::AphroditeSamplingParams {
+            sonar_sampling: Some(pb::SonarSamplingParams {
                 no_repeat_ngram_size: Some(expected.no_repeat_ngram_size),
                 dynatemp_min: Some(expected.dynatemp_min),
                 dynatemp_max: Some(expected.dynatemp_max),
@@ -720,7 +720,7 @@ mod tests {
                 dry_multiplier: Some(expected.dry_multiplier),
                 dry_base: Some(expected.dry_base),
                 dry_allowed_length: Some(expected.dry_allowed_length),
-                dry_sequence_breakers: Some(pb::aphrodite_sampling_params::SequenceBreakers {
+                dry_sequence_breakers: Some(pb::sonar_sampling_params::SequenceBreakers {
                     values: expected.dry_sequence_breakers.clone().unwrap(),
                 }),
                 dry_sequence_breaker_ids: expected.dry_sequence_breaker_ids.clone(),
@@ -734,7 +734,7 @@ mod tests {
         };
         let decoded = pb::GenerateRequest::decode(request.encode_to_vec().as_slice()).unwrap();
         let converted = to_text_request(decoded, false, &served()).unwrap();
-        assert_eq!(converted.sampling_params.aphrodite_sampling, expected);
+        assert_eq!(converted.sampling_params.sonar_sampling, expected);
     }
 
     #[test]
@@ -753,7 +753,7 @@ mod tests {
         for stream in [false, true] {
             let decoded = pb::GenerateRequest::decode(encoded.as_slice()).unwrap();
             let text = to_text_request(decoded, stream, &served()).unwrap();
-            let engine = aphrodite_text::lower_text_request(
+            let engine = sonar_text::lower_text_request(
                 text,
                 vec![1],
                 SamplingHints::default(),
@@ -818,7 +818,7 @@ mod tests {
                 let request = pb::GenerateRequest::decode(encoded.as_slice()).unwrap();
                 let text = to_text_request(request, stream, &served())
                     .expect("reasoning controls accepted");
-                let engine = aphrodite_text::lower_text_request(
+                let engine = sonar_text::lower_text_request(
                     text,
                     vec![1],
                     SamplingHints::default(),
@@ -1017,7 +1017,7 @@ mod tests {
             for stream in [false, true] {
                 let decoded = pb::GenerateRequest::decode(encoded.as_slice()).unwrap();
                 let text = to_text_request(decoded, stream, &served()).unwrap();
-                let engine = aphrodite_text::lower_text_request(
+                let engine = sonar_text::lower_text_request(
                     text,
                     vec![1],
                     SamplingHints {
@@ -1073,7 +1073,7 @@ mod tests {
 
     fn finished(reason: FinishReason) -> Finished {
         Finished {
-            usage: aphrodite_llm::TokenUsage {
+            usage: sonar_llm::TokenUsage {
                 prompt_token_count: 0,
                 output_token_count: 0,
                 prompt_cache_usage: Default::default(),

@@ -2,14 +2,14 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Registry for overriding Triton kernels with platform implementations.
 
-Non-CUDA platforms can replace Triton kernels defined in Aphrodite core
+Non-CUDA platforms can replace Triton kernels defined in Sonar core
 without modifying core code:
 
-    from aphrodite.triton_utils.dispatcher import register_kernels
+    from sonar.triton_utils.dispatcher import register_kernels
 
     register_kernels({
-        "aphrodite.v1.sample.rejection_sampler.expand_kernel": my_expand_impl,
-        "aphrodite.v1.worker.mamba_utils.batch_memcpy_kernel": my_memcpy_impl,
+        "sonar.v1.sample.rejection_sampler.expand_kernel": my_expand_impl,
+        "sonar.v1.worker.mamba_utils.batch_memcpy_kernel": my_memcpy_impl,
     })
 
 The same call covers Triton *device functions* (``@triton.jit`` helpers
@@ -26,7 +26,7 @@ import sys
 from collections.abc import Callable, Mapping
 from typing import Any
 
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 
@@ -216,9 +216,9 @@ def register_kernels(overrides: Mapping[str, Callable[..., Any]]) -> None:
     Args:
         overrides: Mapping from fully qualified kernel name to the
             platform implementation. Kernel names look like
-            "aphrodite.v1.sample.rejection_sampler.expand_kernel"; for kernels
+            "sonar.v1.sample.rejection_sampler.expand_kernel"; for kernels
             owned by a JIT warmup class, include the attribute path, e.g.
-            "aphrodite.v1.worker.block_table.ComputeSlotMappingKernel.kernel".
+            "sonar.v1.worker.block_table.ComputeSlotMappingKernel.kernel".
 
             An implementation that is itself a Triton kernel (also the
             only kind that works for Triton *device functions*, which are

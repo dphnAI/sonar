@@ -5,9 +5,9 @@
 import pytest
 import torch
 
-from aphrodite.model_executor.layers import utils
-from aphrodite.platforms import CpuArchEnum, current_platform
-from aphrodite.utils.torch_utils import set_default_torch_dtype
+from sonar.model_executor.layers import utils
+from sonar.platforms import CpuArchEnum, current_platform
+from sonar.utils.torch_utils import set_default_torch_dtype
 
 
 def test_dispatch_prepacks_arm_bf16_causal_conv(monkeypatch):
@@ -110,7 +110,7 @@ def test_dispatch_cpu_unquantized_gemm_zen_remove_weight(monkeypatch):
 @pytest.mark.usefixtures("_mock_zentorch_linear_unary")
 def test_dispatch_cpu_unquantized_gemm_logs_zentorch_dispatch(monkeypatch):
     monkeypatch.setattr(current_platform, "is_zen_cpu", lambda: True)
-    expected_prepacked = bool(utils.envs.APHRODITE_ZENTORCH_WEIGHT_PREPACK) and hasattr(
+    expected_prepacked = bool(utils.envs.SONAR_ZENTORCH_WEIGHT_PREPACK) and hasattr(
         torch.ops.zentorch, "zentorch_weight_prepack_for_linear"
     )
 

@@ -11,16 +11,16 @@ from openai.types.responses.tool import Mcp, Tool
 from openai_harmony import Message as OpenAIMessage
 from openai_harmony import ToolNamespaceConfig
 
-from aphrodite.config import ModelConfig
-from aphrodite.entrypoints.generate.base.protocol import validate_request_mm_kwargs
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.config import ModelConfig
+from sonar.entrypoints.generate.base.protocol import validate_request_mm_kwargs
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionNamedToolChoiceParam,
     ChatCompletionRequest,
 )
-from aphrodite.entrypoints.openai.completion.protocol import (
+from sonar.entrypoints.openai.completion.protocol import (
     CompletionRequest,
 )
-from aphrodite.entrypoints.openai.parser.harmony_utils import (
+from sonar.entrypoints.openai.parser.harmony_utils import (
     BUILTIN_TOOL_TO_MCP_SERVER_LABEL,
     build_harmony_preamble,
     extract_instructions_from_messages,
@@ -29,54 +29,54 @@ from aphrodite.entrypoints.openai.parser.harmony_utils import (
     parse_chat_inputs_to_harmony_messages,
     render_for_completion,
 )
-from aphrodite.entrypoints.openai.responses.harmony import (
+from sonar.entrypoints.openai.responses.harmony import (
     construct_harmony_previous_input_messages,
     response_input_to_harmony,
 )
-from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
-from aphrodite.entrypoints.openai.responses.utils import (
+from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
+from sonar.entrypoints.openai.responses.utils import (
     construct_input_messages,
     construct_tool_dicts,
     extract_tool_types,
 )
-from aphrodite.entrypoints.serve import create_error_response
-from aphrodite.entrypoints.serve.engine.protocol import ErrorResponse
-from aphrodite.entrypoints.serve.utils.request_logger import RequestLogger
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.inputs import (
+from sonar.entrypoints.serve import create_error_response
+from sonar.entrypoints.serve.engine.protocol import ErrorResponse
+from sonar.entrypoints.serve.utils.request_logger import RequestLogger
+from sonar.exceptions import SonarValidationError
+from sonar.inputs import (
     EngineInput,
     PromptType,
     SingletonPrompt,
     TokensPrompt,
     tokens_input,
 )
-from aphrodite.logger import init_logger
-from aphrodite.parser import Parser, ParserManager
-from aphrodite.renderers import (
+from sonar.logger import init_logger
+from sonar.parser import Parser, ParserManager
+from sonar.renderers import (
     BaseRenderer,
     ChatParams,
     TokenizeParams,
     map_reasoning_effort,
     merge_kwargs,
 )
-from aphrodite.renderers.chat_utils import (
+from sonar.renderers.chat_utils import (
     ChatCompletionMessageParam,
     ChatTemplateContentFormatOption,
     ConversationMessage,
     has_non_text_content,
 )
-from aphrodite.renderers.inputs.preprocess import (
+from sonar.renderers.inputs.preprocess import (
     extract_prompt_components,
     parse_model_prompt,
     prompt_to_seq,
 )
-from aphrodite.utils.mistral import is_mistral_tokenizer, is_mistral_tool_parser
-from aphrodite.utils.mistral import mt as _mt
+from sonar.utils.mistral import is_mistral_tokenizer, is_mistral_tool_parser
+from sonar.utils.mistral import mt as _mt
 
 logger = init_logger(__name__)
 
 if TYPE_CHECKING:
-    from aphrodite.entrypoints.mcp.tool_server import ToolServer
+    from sonar.entrypoints.mcp.tool_server import ToolServer
 
 
 ResponsesPreviousMessages: TypeAlias = list[ChatCompletionMessageParam] | list[OpenAIMessage]
@@ -118,7 +118,7 @@ def _reused_prompt_token_ids(
 
     Returns None without checking the ids when ``echo`` is set or ``messages``
     has non-text content, since both need ``messages`` to be rendered.
-    Otherwise raises AphroditeValidationError if the ids are malformed or out of
+    Otherwise raises SonarValidationError if the ids are malformed or out of
     vocabulary.
     """
     kv = getattr(request, "kv_transfer_params", None)
@@ -137,7 +137,7 @@ def _reused_prompt_token_ids(
         return None
     # bool is an int subclass, hence the exact type check.
     if not isinstance(ids, list) or not ids or any(type(x) is not int or x < 0 for x in ids):
-        raise AphroditeValidationError(
+        raise SonarValidationError(
             "`kv_transfer_params['prompt_token_ids']` must be a non-empty list of non-negative integers.",
             parameter="kv_transfer_params.prompt_token_ids",
         )
@@ -419,7 +419,7 @@ class OnlineRenderer:
                         messages.append(new_message)
                     if isinstance(response_message, ResponseFunctionToolCall):
                         previous_outputs.append(response_message)
-        except (ValueError, AphroditeValidationError) as exc:
+        except (ValueError, SonarValidationError) as exc:
             return self.create_error_response(
                 str(exc),
                 err_type="invalid_request_error",
@@ -531,7 +531,7 @@ class OnlineRenderer:
         assert not self.supports_code_interpreter
         reasoning_effort = map_reasoning_effort(request.reasoning_effort, self.reasoning_effort_map)
         if reasoning_effort == "none":
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 f"Harmony does not support {reasoning_effort=}",
                 parameter="reasoning_effort",
             )

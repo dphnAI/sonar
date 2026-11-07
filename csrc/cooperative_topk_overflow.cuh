@@ -1,5 +1,5 @@
 /* Cooperative TopK exact overflow recovery and large-tie helpers.
- * Included after the shared-memory layouts inside aphrodite::cooperative.
+ * Included after the shared-memory layouts inside sonar::cooperative.
  */
 #ifndef COOPERATIVE_TOPK_OVERFLOW_CUH_
 #define COOPERATIVE_TOPK_OVERFLOW_CUH_

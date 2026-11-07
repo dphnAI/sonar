@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from aphrodite.v1.kv_offload.tiering.p2p.session import client as client_module
+from sonar.v1.kv_offload.tiering.p2p.session import client as client_module
 
 
 @pytest.fixture

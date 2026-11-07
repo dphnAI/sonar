@@ -25,14 +25,14 @@ model:
   model_id: "reflection/Beam-1.0-501B-A23B"
   min_vllm_version: "0.33.0"
   # Docker-only at launch: Beam support ships in this image before it reaches a
-  # Aphrodite wheel. A single-key CUDA map pins the one published build, so the
+  # Sonar wheel. A single-key CUDA map pins the one published build, so the
   # CUDA toggle can't synthesize a nonexistent `-cu129` tag. Restore the pip
   # path once a release carries the support.
   docker_image:
     cu130: "vllm/vllm-openai:reflection-beam"
   install:
     docker:
-      note: "Beam support hasn't landed in a Aphrodite release yet, so it ships only in this image. Use Docker until it does."
+      note: "Beam support hasn't landed in a Sonar release yet, so it ships only in this image. Use Docker until it does."
     pip: false
   architecture: moe
   # 52 layers, 256 routed experts (top-8, moe_intermediate_size 2560), dense
@@ -48,7 +48,7 @@ model:
   base_env:
     # The first NVFP4 start spends about 10 minutes autotuning FlashInfer MoE
     # kernels, close to the 600 s default engine-ready timeout.
-    APHRODITE_ENGINE_READY_TIMEOUT_S: "3600"
+    SONAR_ENGINE_READY_TIMEOUT_S: "3600"
 
 features:
   reasoning:
@@ -87,7 +87,7 @@ variants:
     # checkpoint: 293.6 GB × 1.2 = 352.3 → 353 GB.
     vram_minimum_gb: 353
     description: "ModelOpt NVFP4 on the routed experts; all other weights BF16. W4A4 on Blackwell; W4A16 through Marlin on Hopper. Recommended on Blackwell and H100."
-    # NVFP4 defaults to Blackwell-only. On Hopper Aphrodite runs the FP4 experts
+    # NVFP4 defaults to Blackwell-only. On Hopper Sonar runs the FP4 experts
     # through Marlin (weights dequantized in-kernel, BF16 activations), so
     # widen the precision constraint to every NVIDIA GPU.
     precision_hardware:
@@ -177,25 +177,25 @@ guide: |
 
   The NVFP4 checkpoint quantizes only the routed experts; attention, dense
   MLPs, the router, embeddings and the LM head stay in BF16. On Blackwell it
-  runs W4A4; on Hopper, Aphrodite serves the FP4 experts through Marlin with BF16
+  runs W4A4; on Hopper, Sonar serves the FP4 experts through Marlin with BF16
   activations.
 
   ## Prerequisites
 
-  - **Aphrodite:** the `vllm/vllm-openai:reflection-beam` Docker image. Beam
-    support has not shipped in a Aphrodite release yet.
+  - **Sonar:** the `vllm/vllm-openai:reflection-beam` Docker image. Beam
+    support has not shipped in a Sonar release yet.
   - **Hardware:** NVIDIA GPUs. Beam's kernels, including a custom all-reduce
     used with expert parallelism, are CUDA-only.
   - **Transformers:** the tokenizer uses the Transformers 5 format
     (`TokenizersBackend`).
 
-  ### Install Aphrodite
+  ### Install Sonar
 
   ```bash
   docker pull vllm/vllm-openai:reflection-beam
   ```
 
-  The `aphrodite serve` commands below run inside this image; the command builder
+  The `sonar serve` commands below run inside this image; the command builder
   above renders the full `docker run` line.
 
   ## Launching the server
@@ -203,7 +203,7 @@ guide: |
   ### FP8 with TP8 on H200 or Blackwell
 
   ```bash
-  aphrodite serve reflection/Beam-1.0-501B-A23B-FP8 \
+  sonar serve reflection/Beam-1.0-501B-A23B-FP8 \
     --tensor-parallel-size 8 \
     --moe-backend triton \
     --kv-cache-dtype fp8 \
@@ -213,15 +213,15 @@ guide: |
   ```
 
   This is the best-performing FP8 configuration measured on both H200 and
-  B300. Set `--moe-backend triton` explicitly; Aphrodite otherwise selects CUTLASS
-  for the FP8 MoE. Aphrodite's default attention backends, FlashAttention 3 on
+  B300. Set `--moe-backend triton` explicitly; Sonar otherwise selects CUTLASS
+  for the FP8 MoE. Sonar's default attention backends, FlashAttention 3 on
   Hopper and FlashInfer with TRT-LLM kernels on Blackwell, are already the
   fastest measured.
 
   ### NVFP4 with TP4 on Blackwell
 
   ```bash
-  aphrodite serve reflection/Beam-1.0-501B-A23B-NVFP4 \
+  sonar serve reflection/Beam-1.0-501B-A23B-NVFP4 \
     --tensor-parallel-size 4 \
     --kv-cache-dtype fp8 \
     --enable-auto-tool-choice \
@@ -232,13 +232,13 @@ guide: |
   At TP4 the weights take about 73 GB per GPU, leaving room for the full
   context window many times over; an 8-GPU node can host two replicas. The
   first start takes about 10 minutes because FlashInfer autotunes the MoE
-  kernel. That is close to Aphrodite's default 600 s engine-ready timeout, so the
-  generated command sets `APHRODITE_ENGINE_READY_TIMEOUT_S=3600`.
+  kernel. That is close to Sonar's default 600 s engine-ready timeout, so the
+  generated command sets `SONAR_ENGINE_READY_TIMEOUT_S=3600`.
 
   ### NVFP4 with TP8 on H100
 
   ```bash
-  aphrodite serve reflection/Beam-1.0-501B-A23B-NVFP4 \
+  sonar serve reflection/Beam-1.0-501B-A23B-NVFP4 \
     --tensor-parallel-size 8 \
     --moe-backend marlin \
     --kv-cache-dtype fp8 \
@@ -247,14 +247,14 @@ guide: |
     --reasoning-parser beam
   ```
 
-  Set `--moe-backend marlin` explicitly; it is faster than the backend Aphrodite
+  Set `--moe-backend marlin` explicitly; it is faster than the backend Sonar
   selects by default on Hopper. The FP8 checkpoint also fits on 8x H100 but
   leaves much less memory for the KV cache.
 
   ### BF16 with TP8 on Blackwell
 
   ```bash
-  aphrodite serve reflection/Beam-1.0-501B-A23B \
+  sonar serve reflection/Beam-1.0-501B-A23B \
     --tensor-parallel-size 8 \
     --enable-auto-tool-choice \
     --tool-call-parser beam \
@@ -280,7 +280,7 @@ guide: |
   NVFP4 command and replace the parallel and MoE settings:
 
   ```bash
-  aphrodite serve reflection/Beam-1.0-501B-A23B-NVFP4 \
+  sonar serve reflection/Beam-1.0-501B-A23B-NVFP4 \
     --data-parallel-size 4 \
     --enable-expert-parallel \
     --moe-backend flashinfer_moe_ep_cutedsl \
@@ -306,7 +306,7 @@ guide: |
   --speculative-config '{"method":"dflash","model":"reflection/Beam-1.0-501B-A23B-DFlash2","num_speculative_tokens":7,"attention_backend":"FLASH_ATTN","enable_adaptive_verification":true}'
   ```
 
-  With `enable_adaptive_verification`, Aphrodite predicts how likely each draft
+  With `enable_adaptive_verification`, Sonar predicts how likely each draft
   token is to be accepted and verifies only the ones worth the compute,
   rather than all 7 every step. It makes little difference at low
   concurrency and raises throughput under load. Remove it to verify the
@@ -322,7 +322,7 @@ guide: |
 
   By default, the `beam` output grammar constrains every assistant turn from
   its first token (reasoning, then an answer or a tool call). Set
-  `APHRODITE_BEAM_ALWAYS_CONSTRAIN_OUTPUT=0` to disable it.
+  `SONAR_BEAM_ALWAYS_CONSTRAIN_OUTPUT=0` to disable it.
 
   ## Client usage
 
@@ -354,7 +354,7 @@ guide: |
     }'
   ```
 
-  The Rust frontend (`APHRODITE_USE_RUST_FRONTEND=1`) serves `/v1/chat/completions`
+  The Rust frontend (`SONAR_USE_RUST_FRONTEND=1`) serves `/v1/chat/completions`
   and `/v1/completions`, but not yet `/v1/responses` or the Anthropic-compatible
   `/v1/messages` (both return 404). Use the default Python frontend for those
   APIs.

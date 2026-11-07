@@ -8,12 +8,12 @@ from types import SimpleNamespace
 
 import pytest
 
-from aphrodite.distributed.kv_events import BlockRemoved, BlockStored
-from aphrodite.distributed.kv_transfer.kv_connector.v1.umbp.connector import (
+from sonar.distributed.kv_events import BlockRemoved, BlockStored
+from sonar.distributed.kv_transfer.kv_connector.v1.umbp.connector import (
     UMBPStoreConnector,
     UMBPStoreKVEvents,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.umbp.data import (
+from sonar.distributed.kv_transfer.kv_connector.v1.umbp.data import (
     BlockIdentityCodec,
     BlockTransferPlan,
     RankTopology,
@@ -22,24 +22,24 @@ from aphrodite.distributed.kv_transfer.kv_connector.v1.umbp.data import (
     UMBPConnectorWorkerMetadata,
     UMBPNamespace,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.umbp.scheduler import (
+from sonar.distributed.kv_transfer.kv_connector.v1.umbp.scheduler import (
     UMBPStoreConnectorScheduler,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.umbp.stats import (
+from sonar.distributed.kv_transfer.kv_connector.v1.umbp.stats import (
     UMBPStoreConnectorStats,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.umbp.worker import (
+from sonar.distributed.kv_transfer.kv_connector.v1.umbp.worker import (
     UMBPStoreConnectorWorker,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.v1.core.block_pool import BlockPool
-from aphrodite.v1.core.kv_cache_utils import (
+from sonar.platforms import current_platform
+from sonar.v1.core.block_pool import BlockPool
+from sonar.v1.core.kv_cache_utils import (
     maybe_convert_block_hash,
 )
 from tests.v1.kv_connector.umbp_test_utils import (
-    _aphrodite_config,
     _kv_cache_config,
     _SchedulerHandle,
+    _sonar_config,
     _WorkerHandle,
     make_request,
     make_scheduler_output,
@@ -63,7 +63,7 @@ def _finish_event_checks(scheduler):
 
 
 def _event_scheduler(*, ranks=1, enabled=True, limit=16):
-    config = _aphrodite_config(
+    config = _sonar_config(
         {"kv_event_max_objects": limit},
         tensor_parallel_size=ranks,
         world_size=ranks,
@@ -107,8 +107,8 @@ def _complete_store(scheduler, event_id, workers=1):
 
 
 def test_worker_events_publish_removal_from_any_rank_once():
-    from aphrodite.distributed.kv_events import BlockRemoved
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.umbp.connector import (
+    from sonar.distributed.kv_events import BlockRemoved
+    from sonar.distributed.kv_transfer.kv_connector.v1.umbp.connector import (
         UMBPStoreKVEvents,
     )
 
@@ -141,8 +141,8 @@ def test_worker_events_publish_removal_from_any_rank_once():
 
 
 def test_kv_events_preserve_repeated_events_across_steps():
-    from aphrodite.distributed.kv_events import BlockRemoved
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.umbp.connector import (
+    from sonar.distributed.kv_events import BlockRemoved
+    from sonar.distributed.kv_transfer.kv_connector.v1.umbp.connector import (
         UMBPStoreKVEvents,
     )
 
@@ -201,7 +201,7 @@ def test_store_event_failure_identity_aggregates_across_workers():
 
 
 def test_scheduler_emits_only_objects_stored_by_every_worker():
-    config = _aphrodite_config(
+    config = _sonar_config(
         {"mode": "embedded"},
         tensor_parallel_size=2,
         world_size=2,
@@ -462,7 +462,7 @@ def test_published_objects_are_removed_after_authoritative_miss():
 @pytest.mark.parametrize("enable_events", [False, True])
 def test_worker_emits_block_removed_for_runtime_eviction(enable_events):
     class _EvictingWorkerHandle(_WorkerHandle):
-        evicted_keys = ["umbp:aphrodite:v1:test:tp0:pcp0:dcp0:pp0:g2:65766963746564"]
+        evicted_keys = ["umbp:sonar:v1:test:tp0:pcp0:dcp0:pp0:g2:65766963746564"]
 
         def take_evicted_keys(self):
             keys, self.evicted_keys = self.evicted_keys, []

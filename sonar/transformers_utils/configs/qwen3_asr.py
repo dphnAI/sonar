@@ -446,7 +446,7 @@ class Qwen3ASRConfig(PreTrainedConfig):
         """
         # Overridden for deeply nested config like Qwen2.5-Omni. We don't have any omni model
         # except for Qwen yet. This has to be generalized if more deeply nested configs are
-        # added. NOTE: currently method used only by Aphrodite
+        # added. NOTE: currently method used only by Sonar
         return self.thinker_config.get_text_config()
 
 

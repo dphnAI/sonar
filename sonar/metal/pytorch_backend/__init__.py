@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """PyTorch backend for model loading and tensor interop."""
 
-from aphrodite.metal.pytorch_backend.tensor_bridge import (
+from sonar.metal.pytorch_backend.tensor_bridge import (
     get_torch_device,
     mlx_to_torch,
     torch_to_mlx,

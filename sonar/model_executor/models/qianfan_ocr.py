@@ -7,17 +7,17 @@
 
 from transformers import PreTrainedConfig, QianfanOCRConfig
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.quantization.fp8 import Fp8Config
-from aphrodite.model_executor.layers.quantization.online.base import OnlineQuantizationConfig
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.config import SonarConfig
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.quantization.fp8 import Fp8Config
+from sonar.model_executor.layers.quantization.online.base import OnlineQuantizationConfig
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     kFp8Static128BlockSym,
     kFp8StaticChannelSym,
     kFp8StaticTensorSym,
 )
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.transformers_utils.processors.internvl import (
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.transformers_utils.processors.internvl import (
     InternVLChatImageProcessor,
     InternVLChatProcessor,
 )
@@ -91,9 +91,9 @@ class QianfanOCRForConditionalGeneration(InternVLChatModel):
     name that appears in the model's config.json.
     """
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
-        _add_intern_vit_fields(aphrodite_config.model_config.hf_config)
-        super().__init__(aphrodite_config=aphrodite_config, prefix=prefix)
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
+        _add_intern_vit_fields(sonar_config.model_config.hf_config)
+        super().__init__(sonar_config=sonar_config, prefix=prefix)
 
     def _patch_quant_config(self, config: PreTrainedConfig, quant_config: QuantizationConfig | None) -> None:
         super()._patch_quant_config(config, quant_config)

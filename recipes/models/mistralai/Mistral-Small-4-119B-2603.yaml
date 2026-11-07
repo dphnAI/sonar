@@ -24,7 +24,7 @@ model:
   base_env: {}
 
 dependencies:
-  - note: "Mistral tokenizer / chat-template runtime — Mistral Small 4 needs >= 1.11.0 (Aphrodite 0.20.1+ bundles it, pin explicitly if you hit an older cached wheel)"
+  - note: "Mistral tokenizer / chat-template runtime — Mistral Small 4 needs >= 1.11.0 (Sonar 0.20.1+ bundles it, pin explicitly if you hit an older cached wheel)"
     command: 'uv pip install -U "mistral_common>=1.11.0"'
   - note: "Transformers v5 silences YaRN warnings and is required for the latest Mistral 4 chat template"
     command: "uv pip install -U transformers"
@@ -98,7 +98,7 @@ hardware_overrides:
     extra_args:
       - "--no-enable-prefix-caching"
     extra_env:
-      APHRODITE_ROCM_USE_AITER: "1"
+      SONAR_ROCM_USE_AITER: "1"
       SAFETENSORS_FAST_GPU: "1"
 
 strategy_overrides:
@@ -136,15 +136,15 @@ guide: |
 
   - Hardware: 2xB200 / 2xH200 / 2xMI300X (FP8 default) or 1xB200 with reduced
     context (NVFP4).
-  - Aphrodite **>= 0.20.0** — earlier releases load the model but trip on the
+  - Sonar **>= 0.20.0** — earlier releases load the model but trip on the
     Mistral tool-call / reasoning parsers fixed in PR #39217 (in 0.19.1+)
     and the grammar factory landed in 0.20.0.
 
-  ### Install Aphrodite
+  ### Install Sonar
 
   ```bash
   uv venv && source .venv/bin/activate
-  uv pip install -U aphrodite-engine --torch-backend=auto
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   uv pip install -U "mistral_common>=1.11.0" transformers
   ```
 
@@ -155,7 +155,7 @@ guide: |
   FP8 default (2xB200 / 2xH200):
 
   ```bash
-  aphrodite serve mistralai/Mistral-Small-4-119B-2603 \
+  sonar serve mistralai/Mistral-Small-4-119B-2603 \
     --max-model-len 262144 \
     --tensor-parallel-size 2 \
     --tool-call-parser mistral --enable-auto-tool-choice \
@@ -167,7 +167,7 @@ guide: |
   NVFP4 variant (single B200, or 2xB200 for full 256K context):
 
   ```bash
-  aphrodite serve mistralai/Mistral-Small-4-119B-2603-NVFP4 \
+  sonar serve mistralai/Mistral-Small-4-119B-2603-NVFP4 \
     --max-model-len 262144 \
     --tensor-parallel-size 2 \
     --tool-call-parser mistral --enable-auto-tool-choice \
@@ -179,7 +179,7 @@ guide: |
   Mistral publishes a custom Docker image
   [`mistralllm/vllm-ms4:latest`](https://hub.docker.com/r/mistralllm/vllm-ms4)
   with patched tool-call / reasoning parsing — use it if you're pinned to a
-  Aphrodite version below 0.20.0 and hit either of those issues.
+  Sonar version below 0.20.0 and hit either of those issues.
 
   ## EAGLE speculative decoding
 
@@ -187,7 +187,7 @@ guide: |
   `spec_decoding` feature (or pass `--speculative-config` directly):
 
   ```bash
-  aphrodite serve mistralai/Mistral-Small-4-119B-2603 \
+  sonar serve mistralai/Mistral-Small-4-119B-2603 \
     --max-model-len 262144 \
     --tensor-parallel-size 2 \
     --tool-call-parser mistral --enable-auto-tool-choice \

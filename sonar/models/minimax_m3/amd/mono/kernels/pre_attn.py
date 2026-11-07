@@ -30,8 +30,8 @@ from flydsl.expr import const_expr, gpu, range_constexpr, rocdl
 from flydsl.expr import math as fmath
 from flydsl.expr.typing import Int32, Int64, T
 
-from aphrodite.models.minimax_m3.amd.mono import config as mono_config
-from aphrodite.models.minimax_m3.amd.mono.config import (
+from sonar.models.minimax_m3.amd.mono import config as mono_config
+from sonar.models.minimax_m3.amd.mono.config import (
     BLOCKS,
     HEAD_DIM,
     HIDDEN,
@@ -47,7 +47,7 @@ from aphrodite.models.minimax_m3.amd.mono.config import (
     IndexHeads,
     qkv_rows,
 )
-from aphrodite.models.minimax_m3.amd.mono.kernels.common import (
+from sonar.models.minimax_m3.amd.mono.kernels.common import (
     CM_DEV,
     Mailbox,
     ar_block_sums,
@@ -65,7 +65,7 @@ from aphrodite.models.minimax_m3.amd.mono.kernels.common import (
     uniform,
     wave_max,
 )
-from aphrodite.models.minimax_m3.amd.mono.kernels.index_score import (
+from sonar.models.minimax_m3.amd.mono.kernels.index_score import (
     emit_index_scores,
     index_scale_log2e,
     step_rows,

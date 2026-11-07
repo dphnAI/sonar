@@ -6,14 +6,14 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from aphrodite.parser.engine.events import EventType
-from aphrodite.parser.engine.streaming_parser_engine import StreamingParserEngine
-from aphrodite.parser.engine.token_id_scanner import (
+from sonar.parser.engine.events import EventType
+from sonar.parser.engine.streaming_parser_engine import StreamingParserEngine
+from sonar.parser.engine.token_id_scanner import (
     PreLexedTerminal,
     TextChunk,
     TokenIDScanner,
 )
-from aphrodite.parser.gemma4 import gemma4_config
+from sonar.parser.gemma4 import gemma4_config
 
 CHANNEL_START = "<|channel>"
 CHANNEL_END = "<channel|>"
@@ -419,7 +419,7 @@ def _make_gemma4_tokenizer(
 
 
 def _collect_events(engine, deltas):
-    from aphrodite.parser.engine.events import SemanticEvent
+    from sonar.parser.engine.events import SemanticEvent
 
     all_events: list[SemanticEvent] = []
     for delta_text, delta_token_ids in deltas:

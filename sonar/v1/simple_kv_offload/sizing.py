@@ -9,10 +9,10 @@ from typing import TYPE_CHECKING
 import torch
 import torch.distributed as dist
 
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 if TYPE_CHECKING:
-    from aphrodite.v1.kv_cache_interface import KVCacheConfig
+    from sonar.v1.kv_cache_interface import KVCacheConfig
 
 logger = init_logger(__name__)
 
@@ -22,7 +22,7 @@ def sync_num_offload_blocks_across_workers(num_offload_blocks: int) -> int:
     if not dist.is_initialized():
         return num_offload_blocks
 
-    from aphrodite.distributed.parallel_state import get_world_group
+    from sonar.distributed.parallel_state import get_world_group
 
     world_group = get_world_group()
     if world_group.world_size <= 1:

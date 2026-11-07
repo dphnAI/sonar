@@ -48,7 +48,7 @@ guide: |
   ## Launch Commands
 
   ```bash
-  aphrodite serve IFM/K2-Horizon-3.7B \
+  sonar serve IFM/K2-Horizon-3.7B \
     --trust-remote-code \
     --chat-template-content-format string \
     --dtype bfloat16 \

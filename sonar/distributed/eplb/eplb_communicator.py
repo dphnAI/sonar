@@ -18,25 +18,25 @@ from torch.distributed import (
     batch_isend_irecv,
 )
 
-import aphrodite.distributed.nixl_utils as nixl_utils
-from aphrodite.distributed.device_communicators.pynccl import PyNcclCommunicator
-from aphrodite.distributed.device_communicators.pynccl_wrapper import (
+import sonar.distributed.nixl_utils as nixl_utils
+from sonar.distributed.device_communicators.pynccl import PyNcclCommunicator
+from sonar.distributed.device_communicators.pynccl_wrapper import (
     ncclDataTypeEnum,
 )
-from aphrodite.distributed.eplb.eplb_utils import device_stream
-from aphrodite.distributed.parallel_state import (
+from sonar.distributed.eplb.eplb_utils import device_stream
+from sonar.distributed.parallel_state import (
     GroupCoordinator,
     get_pp_group,
     in_the_same_node_as,
     is_local_first_rank,
 )
-from aphrodite.distributed.stateless_coordinator import StatelessGroupCoordinator
-from aphrodite.distributed.utils import is_weak_contiguous
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.utils.gpu_sync_debug import gpu_sync_allowed
-from aphrodite.utils.math_utils import round_up
-from aphrodite.utils.torch_utils import PIN_MEMORY
+from sonar.distributed.stateless_coordinator import StatelessGroupCoordinator
+from sonar.distributed.utils import is_weak_contiguous
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.utils.gpu_sync_debug import gpu_sync_allowed
+from sonar.utils.math_utils import round_up
+from sonar.utils.torch_utils import PIN_MEMORY
 
 logger = init_logger(__name__)
 
@@ -711,7 +711,7 @@ class SymmMemEplbCommunicator(EplbCommunicator):
     ) -> None:
         import torch.distributed._symmetric_memory as symm_mem
 
-        from aphrodite.distributed.device_communicators.custom_all_reduce import (
+        from sonar.distributed.device_communicators.custom_all_reduce import (
             _group_can_attempt_mnnvl,
         )
 

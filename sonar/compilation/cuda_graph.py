@@ -12,19 +12,19 @@ from unittest.mock import patch
 
 import torch
 
-from aphrodite.compilation.counter import compilation_counter
-from aphrodite.compilation.cudagraph_pool import capture_pool
-from aphrodite.compilation.monitor import validate_cudagraph_capturing_enabled
-from aphrodite.config import AphroditeConfig, CUDAGraphMode
-from aphrodite.forward_context import (
+from sonar.compilation.counter import compilation_counter
+from sonar.compilation.cudagraph_pool import capture_pool
+from sonar.compilation.monitor import validate_cudagraph_capturing_enabled
+from sonar.config import CUDAGraphMode, SonarConfig
+from sonar.forward_context import (
     BatchDescriptor,
     get_forward_context,
     is_forward_context_available,
 )
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.offloader.base import get_offloader
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import current_stream, weak_ref_tensors
+from sonar.logger import init_logger
+from sonar.model_executor.offloader.base import get_offloader
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import current_stream, weak_ref_tensors
 
 logger = init_logger(__name__)
 
@@ -150,7 +150,7 @@ class CUDAGraphWrapper:
     assumption on the dynamic shape (batch size) of the runtime inputs, as a
     trade-off for staying orthogonal to compilation logic. Nevertheless,
     tracing and checking the input addresses to be consistent during replay is
-    guaranteed when Aphrodite debug logging is enabled.
+    guaranteed when Sonar debug logging is enabled.
     """
 
     _all_instances: ClassVar[weakref.WeakSet["CUDAGraphWrapper"]] = weakref.WeakSet()
@@ -164,14 +164,14 @@ class CUDAGraphWrapper:
     def __init__(
         self,
         runnable: Callable[..., Any],
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         runtime_mode: CUDAGraphMode,
         cudagraph_options: CUDAGraphOptions | None = None,
     ) -> None:
         self.runnable = runnable
-        self.aphrodite_config = aphrodite_config
+        self.sonar_config = sonar_config
         self.runtime_mode = runtime_mode
-        self.compilation_config = aphrodite_config.compilation_config
+        self.compilation_config = sonar_config.compilation_config
 
         self.first_run_finished = False
         self.is_debugging_mode = logger.isEnabledFor(logging.DEBUG)
@@ -278,7 +278,7 @@ class CUDAGraphWrapper:
                         )
                     )
 
-                graph_pool = stack.enter_context(capture_pool(self.graph_pool, self.aphrodite_config))
+                graph_pool = stack.enter_context(capture_pool(self.graph_pool, self.sonar_config))
 
                 # Sync offloader's copy stream before capture.
                 # Ensure any pre-capture prefetches from offloader are complete.

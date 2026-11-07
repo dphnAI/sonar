@@ -14,10 +14,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionRequest,
 )
-from aphrodite.parser.nemotron_v3 import NemotronV3Parser
+from sonar.parser.nemotron_v3 import NemotronV3Parser
 from tests.parser.engine.conftest import make_mock_tokenizer
 from tests.parser.engine.streaming_helpers import (
     collect_function_name,

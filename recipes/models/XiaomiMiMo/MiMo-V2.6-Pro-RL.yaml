@@ -32,7 +32,7 @@ model:
     - "--max-model-len"
     - "auto"
     - "--generation-config"
-    - "aphrodite"
+    - "sonar"
   base_env: {}
 
 features:
@@ -105,8 +105,8 @@ hardware_overrides:
       - "--kv-cache-dtype"
       - "fp8"
     extra_env:
-      APHRODITE_ROCM_USE_AITER: "1"
-      APHRODITE_ROCM_QUICK_REDUCE_QUANTIZATION: "INT4"
+      SONAR_ROCM_USE_AITER: "1"
+      SONAR_ROCM_QUICK_REDUCE_QUANTIZATION: "INT4"
 strategy_overrides: {}
 
 guide: |
@@ -141,7 +141,7 @@ guide: |
 
   Weights are stored as mxfp4 and computed as FP8 (block-wise e4m3, 128x128),
   so the checkpoint is 566 GB on disk. Loading this mixed storage format
-  requires Aphrodite with the MiMo V2 mxfp4/bf16-router support
+  requires Sonar with the MiMo V2 mxfp4/bf16-router support
   ([vllm-project/vllm#57784](https://github.com/vllm-project/vllm/pull/57784)),
   first shipped in the v0.31.0 stable release.
 
@@ -149,9 +149,9 @@ guide: |
 
   - Hardware: 8x H200 (TP8), 4x MI355X (TP4), or equivalent aggregate VRAM (>= 680 GB)
 
-  ### Pull the Aphrodite docker image
+  ### Pull the Sonar docker image
 
-  Aphrodite 0.31.0 is the first stable release that can load the mxfp4-stored
+  Sonar 0.31.0 is the first stable release that can load the mxfp4-stored
   weights ([vllm-project/vllm#57784](https://github.com/vllm-project/vllm/pull/57784));
   earlier stable releases cannot:
 
@@ -159,8 +159,9 @@ guide: |
   docker pull vllm/vllm-openai:v0.31.0
   ```
 
-  A Aphrodite nightly wheel built after 2026-09-20 also works (`uv pip install -U
-  aphrodite --extra-index-url https://wheels.vllm.ai/nightly/cu130`).
+  For Sonar, install its nightly CUDA wheel with `uv pip install -U sonar
+  --extra-index-url https://sonar.dphn.ai/whl/nightly/cuda/x86_64/simple
+  --index-strategy first-index --torch-backend cu130`.
 
   The Hugging Face model cards point at `vllm/vllm-openai:mimov25-cu129`, the
   V2.5-era image; that tag predates the mxfp4-stored-weight support linked above,
@@ -177,7 +178,7 @@ guide: |
   is identical:
 
   ```bash
-  aphrodite serve XiaomiMiMo/MiMo-V2.6-Pro-MOPD \
+  sonar serve XiaomiMiMo/MiMo-V2.6-Pro-MOPD \
     --tensor-parallel-size 8 \
     --trust-remote-code \
     --gpu-memory-utilization 0.95 \
@@ -185,15 +186,15 @@ guide: |
     --reasoning-parser mimo \
     --tool-call-parser mimo \
     --enable-auto-tool-choice \
-    --generation-config aphrodite
+    --generation-config sonar
   ```
 
   ### AMD (MI355X, TP4)
 
   ```bash
-  APHRODITE_ROCM_USE_AITER=1 \
-  APHRODITE_ROCM_QUICK_REDUCE_QUANTIZATION=INT4 \
-  aphrodite serve XiaomiMiMo/MiMo-V2.6-Pro-MOPD \
+  SONAR_ROCM_USE_AITER=1 \
+  SONAR_ROCM_QUICK_REDUCE_QUANTIZATION=INT4 \
+  sonar serve XiaomiMiMo/MiMo-V2.6-Pro-MOPD \
     --tensor-parallel-size 4 \
     --trust-remote-code \
     --gpu-memory-utilization 0.93 \
@@ -202,11 +203,11 @@ guide: |
     --reasoning-parser mimo \
     --tool-call-parser mimo \
     --enable-auto-tool-choice \
-    --generation-config aphrodite
+    --generation-config sonar
   ```
 
   MXFP4 MoE weights run natively on CDNA 4, so no load-time requantization is
-  needed. `APHRODITE_ROCM_USE_AITER=1` is off by default and is required to reach
+  needed. `SONAR_ROCM_USE_AITER=1` is off by default and is required to reach
   the AITER MXFP4 MoE and FP8 block-scaled GEMM kernels. Attention resolves to
   `TRITON_ATTN_DIFFKV`, the only backend covering this model's asymmetric head
   dims (QK 192 / V 128) together with attention sinks and sliding-window
@@ -218,11 +219,11 @@ guide: |
 
   The checkpoint pre-shards its fused QKV into `num_key_value_heads` (8) chunks,
   each carrying its own FP8 scales. TP8 consumes them directly; TP4 merges two
-  chunks per rank, which Aphrodite handles by dequantizing, reordering and
+  chunks per rank, which Sonar handles by dequantizing, reordering and
   re-quantizing at load time. TP4 costs no accuracy.
 
   With DFlash speculative decoding (drafter ships inside the checkpoint).
-  Aphrodite does not resolve a `<repo>/dflash` Hub subfolder as the draft model —
+  Sonar does not resolve a `<repo>/dflash` Hub subfolder as the draft model —
   `model` must be a concrete local path to the `dflash/` directory inside the
   downloaded snapshot. Resolve it per checkpoint (run `hf download
   <checkpoint>` first if it is not cached yet):
@@ -236,7 +237,7 @@ guide: |
   ```
 
   ```bash
-  aphrodite serve XiaomiMiMo/MiMo-V2.6-Pro-MOPD \
+  sonar serve XiaomiMiMo/MiMo-V2.6-Pro-MOPD \
     --tensor-parallel-size 8 \
     --trust-remote-code \
     --gpu-memory-utilization 0.95 \
@@ -246,7 +247,7 @@ guide: |
     --reasoning-parser mimo \
     --tool-call-parser mimo \
     --enable-auto-tool-choice \
-    --generation-config aphrodite
+    --generation-config sonar
   ```
 
   The drafter inherits the target's tensor-parallel size by default. To pin it
@@ -278,7 +279,7 @@ guide: |
   - [MiMo-V2.6 technical report](https://huggingface.co/XiaomiMiMo/MiMo-V2.6-Pro-RL/blob/main/MiMo_V2_6_technical_report.pdf) (§5.6 covers MOPD2)
   - [Diagnosing and Mitigating Tool-Call Repetition in MiMo-V2.6](https://mimo.xiaomi.com/blog/mimo-v2-6-tool-call-repetition)
   - [MiMo-V2.6 blog post](https://mimo.xiaomi.com/mimo-v2-6)
-  - [Aphrodite PR #57784 — mxfp4 MoE / bf16 router / DFlash for MiMo V2](https://github.com/vllm-project/vllm/pull/57784)
-  - [Aphrodite PR #57933 — MiMo tool-call/reasoning parsers for the Rust frontend](https://github.com/vllm-project/vllm/pull/57933)
+  - [Sonar PR #57784 — mxfp4 MoE / bf16 router / DFlash for MiMo V2](https://github.com/vllm-project/vllm/pull/57784)
+  - [Sonar PR #57933 — MiMo tool-call/reasoning parsers for the Rust frontend](https://github.com/vllm-project/vllm/pull/57933)
   - [SGLang MiMo cookbook](https://docs.sglang.io/cookbook/autoregressive/Xiaomi/MiMo-V2.5)
-  - [Aphrodite ROCm GPU install docs](https://docs.vllm.ai/en/latest/getting_started/installation/gpu/?device=rocm)
+  - [Sonar ROCm GPU install docs](https://docs.vllm.ai/en/latest/getting_started/installation/gpu/?device=rocm)

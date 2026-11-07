@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Sharded Ray Direct Transport (RDT) weight transfer engine (consumer side).
 
-Pulls only the slice each Aphrodite worker consumes under tensor/expert parallelism,
+Pulls only the slice each Sonar worker consumes under tensor/expert parallelism,
 not the full HF-format tensor.
 
 Two phases. BAKE, once at ``init_transfer_engine``: drive ``model.load_weights``
@@ -56,28 +56,28 @@ from typing import TYPE_CHECKING, Any, cast
 
 import torch
 
-from aphrodite.config.weight_transfer import WeightTransferConfig
-from aphrodite.distributed.weight_transfer.base import (
+from sonar.config.weight_transfer import WeightTransferConfig
+from sonar.distributed.weight_transfer.base import (
     WeightTransferEngine,
     WeightTransferInitInfo,
     WeightTransferUpdateInfo,
 )
-from aphrodite.distributed.weight_transfer.sharded_rdt_common import (
+from sonar.distributed.weight_transfer.sharded_rdt_common import (
     RdtRouter,
     buffer_alloc_bytes,
     check_ray_rdt_version,
     register_nixl_memory,
 )
-from aphrodite.distributed.weight_transfer.sharded_rdt_fake import (
+from sonar.distributed.weight_transfer.sharded_rdt_fake import (
     BakeSink,
     FakeRDTTensor,
     FetchKey,
     _Scatter,
 )
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
+    from sonar.config import SonarConfig
 
 logger = init_logger(__name__)
 
@@ -298,18 +298,18 @@ class ShardedRDTWeightTransferEngine(
     def __init__(
         self,
         config: WeightTransferConfig,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
         device: torch.device,
         model: torch.nn.Module,
     ) -> None:
-        super().__init__(config, aphrodite_config, device, model)
+        super().__init__(config, sonar_config, device, model)
         # This engine's data plane is Ray's: the consumer resolves each trainer's
         # serve actor with ``ray.get_actor`` and pulls over NIXL through the
         # workers' tensor transport, neither of which exists unless the workers
         # ARE Ray actors. Caught here, at construction, because the alternative
         # is an opaque failure during the first handshake. A single-worker
         # deployment defaults to "uni", so "ray" has to be asked for explicitly.
-        backend = aphrodite_config.parallel_config.distributed_executor_backend
+        backend = sonar_config.parallel_config.distributed_executor_backend
         # A custom Executor subclass is a deliberate override we cannot judge;
         # only reject the named backends that are definitely not Ray.
         if isinstance(backend, str) and backend != "ray":
@@ -392,7 +392,7 @@ class ShardedRDTWeightTransferEngine(
         RPCs to the producers, so this is a heavyweight one-off; every later
         ``update_weights`` is pure replay.
         """
-        # Read the attribute directly: if a Aphrodite bump renames it, this guard
+        # Read the attribute directly: if a Sonar bump renames it, this guard
         # must fail loudly at init rather than silently disappear.
         if self.parallel_config.enable_eplb:
             raise RuntimeError(
@@ -615,7 +615,7 @@ class ShardedRDTWeightTransferEngine(
         """This worker's stable, distinct global index across the inference fleet:
         ``data_parallel_index * world_size + rank`` over the TP*PP world.
 
-        ``data_parallel_index``, not ``data_parallel_rank``: Aphrodite resets the
+        ``data_parallel_index``, not ``data_parallel_rank``: Sonar resets the
         latter to 0 in a dense worker but keeps the former as the distinct global
         DP rank. Same formula as the sibling ``nccl_engine``, so dense-via-TP and
         MoE-via-DP+EP both yield distinct 0..C-1."""
@@ -634,7 +634,7 @@ class ShardedRDTWeightTransferEngine(
     def start_weight_update(self) -> None:
         """Put the model's params on meta so layerwise reload streams them in
         as each layer's slices land. Baked replay uses checkpoint format."""
-        from aphrodite.model_executor.model_loader.reload import (
+        from sonar.model_executor.model_loader.reload import (
             initialize_layerwise_reload,
         )
 
@@ -643,7 +643,7 @@ class ShardedRDTWeightTransferEngine(
     def finish_weight_update(self) -> None:
         """Drain the deferred pull/process pipeline (so every layer is fully
         loaded) before finalizing the layerwise reload."""
-        from aphrodite.model_executor.model_loader.reload import (
+        from sonar.model_executor.model_loader.reload import (
             finalize_layerwise_reload,
         )
 
@@ -807,10 +807,10 @@ class ShardedRDTWeightTransferEngine(
         instead of bypassing ``online_process_loader``, and an
         ``abort_layerwise_reload`` instead of ``_restore_after_dry_run``.
         """
-        from aphrodite.model_executor.model_loader.reload.layerwise import (
+        from sonar.model_executor.model_loader.reload.layerwise import (
             initialize_layerwise_reload,
         )
-        from aphrodite.model_executor.model_loader.reload.utils import get_layer_size
+        from sonar.model_executor.model_loader.reload.utils import get_layer_size
 
         names, dtype_names, shapes = (
             init_info.names,
@@ -870,17 +870,17 @@ class ShardedRDTWeightTransferEngine(
         """Wrap each loadable param's ``weight_loader`` to stamp
         ``recorder.current = (leaf_module, param_name)`` before delegating to the
         original loader, so the fake's ``copy_`` can attribute each recorded copy.
-        ``functools.wraps`` keeps the loader's real signature (so Aphrodite's
+        ``functools.wraps`` keeps the loader's real signature (so Sonar's
         ``_layerwise_process`` ``param`` redirect still works if a stamp leaks),
         and ``_rdt_stamp_inner`` tags it so ``_restore_after_dry_run`` can unwrap it.
         """
         import functools
 
-        from aphrodite.model_executor.model_loader.reload.layerwise import (
+        from sonar.model_executor.model_loader.reload.layerwise import (
             _get_original_loader,
         )
-        from aphrodite.model_executor.model_loader.reload.utils import get_layer_tensors
-        from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
+        from sonar.model_executor.model_loader.reload.utils import get_layer_tensors
+        from sonar.model_executor.model_loader.weight_utils import default_weight_loader
 
         def _make_stamp(layer, name, inner, added=False):
             @functools.wraps(inner)  # keep ``inner``'s signature (incl. ``param``)
@@ -920,11 +920,11 @@ class ShardedRDTWeightTransferEngine(
         leaked stamp would sit under the next sync's ``online_process_loader`` and
         silently break ``_layerwise_process``'s ``param`` redirect.
         """
-        from aphrodite.model_executor.model_loader.reload.layerwise import (
+        from sonar.model_executor.model_loader.reload.layerwise import (
             LAYERWISE_INFO,
             _place_kernel_tensors,
         )
-        from aphrodite.model_executor.model_loader.reload.utils import get_layer_tensors
+        from sonar.model_executor.model_loader.reload.utils import get_layer_tensors
 
         for layer in model.modules():
             info = LAYERWISE_INFO.get(layer)
@@ -1273,10 +1273,10 @@ class ShardedRDTWeightTransferEngine(
         reading ``item.slot`` is enqueued, records the slot's read-done event so
         the RPC thread can block on it before overwriting the slot.
         """
-        from aphrodite.model_executor.model_loader.reload.layerwise import (
+        from sonar.model_executor.model_loader.reload.layerwise import (
             LAYERWISE_INFO,
         )
-        from aphrodite.model_executor.model_loader.reload.meta import materialize_layer
+        from sonar.model_executor.model_loader.reload.meta import materialize_layer
 
         results = item.results
         chunk = item.chunk
@@ -1340,10 +1340,10 @@ class ShardedRDTWeightTransferEngine(
         (never a receive slot), so it can overlap subsequent chunks' RDMA and
         scatters. ``info.reset()`` is what makes finalize skip the layer —
         drain_pending joins the quant queue before finalize runs."""
-        from aphrodite.model_executor.layers.quantization.base_config import (
+        from sonar.model_executor.layers.quantization.base_config import (
             QuantizeMethodBase,
         )
-        from aphrodite.model_executor.model_loader.reload.layerwise import (
+        from sonar.model_executor.model_loader.reload.layerwise import (
             LAYERWISE_INFO,
             _copy_and_restore_kernel_tensors,
         )

@@ -8,22 +8,22 @@ from unittest.mock import MagicMock
 import pytest
 import torch
 
-from aphrodite.config import CacheConfig
-from aphrodite.model_executor.layers.attention.mla_attention import MLAAttention
-from aphrodite.model_executor.models.deepseek_v2 import DeepseekV32IndexerCache
-from aphrodite.platforms import current_platform
-from aphrodite.v1.attention.backend import MultipleOf
-from aphrodite.v1.attention.backends.mla.indexer import DeepseekV32IndexerBackend
-from aphrodite.v1.attention.backends.mla.sparse_utils import (
+from sonar.config import CacheConfig
+from sonar.model_executor.layers.attention.mla_attention import MLAAttention
+from sonar.model_executor.models.deepseek_v2 import DeepseekV32IndexerCache
+from sonar.platforms import current_platform
+from sonar.v1.attention.backend import MultipleOf
+from sonar.v1.attention.backends.mla.indexer import DeepseekV32IndexerBackend
+from sonar.v1.attention.backends.mla.sparse_utils import (
     _CONVERT_REQ_INDEX_TO_GLOBAL_INDEX_KERNEL,
     flat_kv_row_view,
 )
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
-from aphrodite.v1.attention.backends.utils import get_supported_kv_cache_layouts
-from aphrodite.v1.core.kv_cache_planning import get_kv_cache_config_from_groups
-from aphrodite.v1.kv_cache_interface import KVCacheGroupSpec, UniformTypeKVCacheSpecs
-from aphrodite.v1.kv_cache_layout import KVCacheLayout
-from aphrodite.v1.worker.utils import allocate_kv_cache, customize_attention_spec
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
+from sonar.v1.attention.backends.utils import get_supported_kv_cache_layouts
+from sonar.v1.core.kv_cache_planning import get_kv_cache_config_from_groups
+from sonar.v1.kv_cache_interface import KVCacheGroupSpec, UniformTypeKVCacheSpecs
+from sonar.v1.kv_cache_layout import KVCacheLayout
+from sonar.v1.worker.utils import allocate_kv_cache, customize_attention_spec
 
 pytestmark = pytest.mark.skip_global_cleanup
 
@@ -70,7 +70,7 @@ def test_allocation_and_warmup_follow_addressing_mode(
     )
     config.cache_config.kv_cache_layout = layout.name
     layer = SimpleNamespace(
-        _aphrodite_config=config,
+        _sonar_config=config,
         attn_backend=backend,
         impl=object.__new__(backend.get_impl_cls()),
         kv_cache_dtype=cache_dtype,

@@ -22,7 +22,7 @@
  */
 #include "compat.cuh"
 
-namespace aphrodite {
+namespace sonar {
 namespace exl2 {
 
 #define MAX_Q_GEMM_WEIGHTS 4
@@ -580,4 +580,4 @@ fp_gemm_half_q_half_kernel pick_gemm_half_q_half_kernel(const int m_count) {
 }
 
 }  // namespace exl2
-}  // namespace aphrodite
+}  // namespace sonar

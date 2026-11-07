@@ -6,16 +6,16 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.model_executor.models import AphroditeModelForPooling, is_pooling_model
-from aphrodite.pooling_params import PoolingParams
-from aphrodite.tasks import PoolingTask
-from aphrodite.utils.torch_utils import PIN_MEMORY
-from aphrodite.v1.outputs import PoolerOutput
-from aphrodite.v1.pool.late_interaction_runner import LateInteractionRunner
-from aphrodite.v1.pool.metadata import PoolingMetadata, PoolingStates
-from aphrodite.v1.worker.gpu.input_batch import InputBatch
-from aphrodite.v1.worker.gpu.states import RequestState
+from sonar.config import SonarConfig
+from sonar.model_executor.models import SonarModelForPooling, is_pooling_model
+from sonar.pooling_params import PoolingParams
+from sonar.tasks import PoolingTask
+from sonar.utils.torch_utils import PIN_MEMORY
+from sonar.v1.outputs import PoolerOutput
+from sonar.v1.pool.late_interaction_runner import LateInteractionRunner
+from sonar.v1.pool.metadata import PoolingMetadata, PoolingStates
+from sonar.v1.worker.gpu.input_batch import InputBatch
+from sonar.v1.worker.gpu.states import RequestState
 
 _SUPPORTED_TASKS: frozenset[PoolingTask] = frozenset(
     {"embed", "classify", "token_embed", "token_classify", "embed&token_classify"}
@@ -23,17 +23,17 @@ _SUPPORTED_TASKS: frozenset[PoolingTask] = frozenset(
 
 
 class PoolingRunner:
-    def __init__(self, model: nn.Module, aphrodite_config: AphroditeConfig):
-        self.model = cast(AphroditeModelForPooling, model)
-        self.model_config = aphrodite_config.model_config
-        self.max_num_reqs = aphrodite_config.scheduler_config.max_num_seqs
+    def __init__(self, model: nn.Module, sonar_config: SonarConfig):
+        self.model = cast(SonarModelForPooling, model)
+        self.model_config = sonar_config.model_config
+        self.max_num_reqs = sonar_config.scheduler_config.max_num_seqs
         model_tasks = tuple(sorted(self.model.pooler.get_supported_tasks()))
         selected_task = self.model_config.get_pooling_task(model_tasks)
         if selected_task not in _SUPPORTED_TASKS:
             hint = (
-                "Set an explicitly supported task or APHRODITE_USE_V2_MODEL_RUNNER=0."
+                "Set an explicitly supported task or SONAR_USE_V2_MODEL_RUNNER=0."
                 if _SUPPORTED_TASKS.intersection(model_tasks)
-                else "Set APHRODITE_USE_V2_MODEL_RUNNER=0 to use this model."
+                else "Set SONAR_USE_V2_MODEL_RUNNER=0 to use this model."
             )
             raise ValueError(
                 "Model Runner V2 supports pooling tasks "
@@ -46,7 +46,7 @@ class PoolingRunner:
                 "Model Runner V2 supports pooling tasks "
                 f"{sorted(_SUPPORTED_TASKS)}, but this model supports "
                 f"{list(model_tasks)}. "
-                "Set APHRODITE_USE_V2_MODEL_RUNNER=0 to use this model."
+                "Set SONAR_USE_V2_MODEL_RUNNER=0 to use this model."
             )
         self.pooling_params: dict[int, PoolingParams] = {}
         self.pooling_states: dict[int, PoolingStates] = {}

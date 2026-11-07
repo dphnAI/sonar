@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Compatibility wrapper for DeepGEMM API changes.
 
-Users of Aphrodite should always import **only** these wrappers.
+Users of Sonar should always import **only** these wrappers.
 """
 
 import contextlib
@@ -16,14 +16,14 @@ from typing import Any, NoReturn
 
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.logger import logger
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+import sonar.envs as envs
+from sonar.logger import logger
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     get_fp8_min_max,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.import_utils import has_deep_gemm
-from aphrodite.utils.math_utils import cdiv
+from sonar.platforms import current_platform
+from sonar.utils.import_utils import has_deep_gemm
+from sonar.utils.math_utils import cdiv
 
 # Model type -> Blackwell device capability families to auto-disable DeepGemm on.
 _DEEPGEMM_BLACKWELL_EXCLUDED_MODEL_TYPES: dict[str, tuple[int, ...]] = {
@@ -75,7 +75,7 @@ class DeepGemmQuantScaleFMT(Enum):
         if cached is not None:
             return
 
-        use_e8m0 = envs.APHRODITE_USE_DEEP_GEMM_E8M0 and is_deep_gemm_supported() and (_fp8_gemm_nt_impl is not None)
+        use_e8m0 = envs.SONAR_USE_DEEP_GEMM_E8M0 and is_deep_gemm_supported() and (_fp8_gemm_nt_impl is not None)
         if not use_e8m0:
             cls._oracle_cache = cls.FLOAT32  # type: ignore
             return
@@ -132,7 +132,7 @@ def is_deep_gemm_supported() -> bool:
     Currently, only Hopper and Blackwell GPUs are supported.
     """
     is_supported_arch = current_platform.support_deep_gemm()
-    if not (is_supported_arch and envs.APHRODITE_USE_DEEP_GEMM and has_deep_gemm()):
+    if not (is_supported_arch and envs.SONAR_USE_DEEP_GEMM and has_deep_gemm()):
         return False
     if _deep_gemm_nvcc_path() is None:
         logger.warning_once(
@@ -146,7 +146,7 @@ def is_deep_gemm_supported() -> bool:
 
 @functools.cache
 def is_deep_gemm_e8m0_used() -> bool:
-    """Return `True` if Aphrodite is configured to use DeepGEMM "
+    """Return `True` if Sonar is configured to use DeepGEMM "
     "E8M0 scale on a Hopper or Blackwell-class GPU.
     """
     if not is_deep_gemm_supported():
@@ -159,7 +159,7 @@ def is_deep_gemm_e8m0_used() -> bool:
         logger.info_once("DeepGEMM E8M0 disabled: _fp8_gemm_nt_impl not found")
         return False
 
-    if envs.APHRODITE_USE_DEEP_GEMM_E8M0:
+    if envs.SONAR_USE_DEEP_GEMM_E8M0:
         logger.info_once("DeepGEMM E8M0 enabled on current platform.")
         return True
 
@@ -170,7 +170,7 @@ def is_deep_gemm_e8m0_used() -> bool:
 def _missing(*_: Any, **__: Any) -> NoReturn:
     """Placeholder for unavailable DeepGEMM backend."""
     raise RuntimeError(
-        "DeepGEMM backend is unavailable in the current Aphrodite environment, "
+        "DeepGEMM backend is unavailable in the current Sonar environment, "
         "or the available DeepGEMM package does not provide the required APIs "
         "for these kernels."
     )
@@ -207,7 +207,7 @@ def _import_deep_gemm():
 
     Prefers an externally installed ``deep_gemm`` package (so users can
     pin a specific version), then falls back to the vendored copy bundled
-    in the Aphrodite wheel.
+    in the Sonar wheel.
 
     Returns ``None`` when neither source is usable.
     """
@@ -217,12 +217,12 @@ def _import_deep_gemm():
         logger.debug_once("Imported deep_gemm module from site-packages")
         return module
     except ImportError:
-        logger.info_once("deep_gemm not found in site-packages, trying vendored aphrodite.third_party.deep_gemm")
+        logger.info_once("deep_gemm not found in site-packages, trying vendored sonar.third_party.deep_gemm")
 
-    # 2. Fall back to the vendored copy bundled in the Aphrodite wheel.
+    # 2. Fall back to the vendored copy bundled in the Sonar wheel.
     try:
-        module = importlib.import_module("aphrodite.third_party.deep_gemm")
-        logger.debug_once("Imported deep_gemm module from aphrodite.third_party.deep_gemm")
+        module = importlib.import_module("sonar.third_party.deep_gemm")
+        logger.debug_once("Imported deep_gemm module from sonar.third_party.deep_gemm")
         return module
     except ImportError:
         logger.info_once("Vendored deep_gemm not found either")
@@ -297,7 +297,7 @@ def _lazy_init() -> None:
     # Set up deep_gemm cache path
     DEEP_GEMM_JIT_CACHE_ENV_NAME = "DG_JIT_CACHE_DIR"
     if not os.environ.get(DEEP_GEMM_JIT_CACHE_ENV_NAME, None):
-        os.environ[DEEP_GEMM_JIT_CACHE_ENV_NAME] = os.path.join(envs.APHRODITE_CACHE_ROOT, "deep_gemm")
+        os.environ[DEEP_GEMM_JIT_CACHE_ENV_NAME] = os.path.join(envs.SONAR_CACHE_ROOT, "deep_gemm")
 
     _dg = _import_deep_gemm()
     if _dg is None:
@@ -502,7 +502,7 @@ def bf16_mega_gate(
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Run DeepGEMM Mega Gate.
 
-    The output order follows Aphrodite's router contract: weights, then indices.
+    The output order follows Sonar's router contract: weights, then indices.
     Passing PyTorch-owned outputs to DeepGEMM makes their storage part of CUDA
     graph capture.
     """

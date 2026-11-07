@@ -100,13 +100,13 @@ class ShapeDynamicSkinnyGemm:
     def _stream():
         from cuda.bindings.driver import CUstream
 
-        from aphrodite.utils.torch_utils import current_stream
+        from sonar.utils.torch_utils import current_stream
 
         return CUstream(current_stream().cuda_stream)
 
     @staticmethod
     def _use_pdl() -> bool:
-        from aphrodite.platforms import current_platform
+        from sonar.platforms import current_platform
 
         return current_platform.is_arch_support_pdl()
 
@@ -172,7 +172,7 @@ class ShapeDynamicSkinnyGemm:
         self._warmup_configs.update((dtype, config, has_residual) for config in configs)
         if self._warmup_registered:
             return
-        from aphrodite.model_executor.warmup.cutedsl_warmup import (
+        from sonar.model_executor.warmup.cutedsl_warmup import (
             register_cutedsl_warmup_provider,
         )
 
@@ -180,7 +180,7 @@ class ShapeDynamicSkinnyGemm:
         self._warmup_registered = True
 
     def get_cutedsl_warmup_compile_units(self):
-        from aphrodite.model_executor.warmup.cutedsl_warmup import CuTeDSLCompileUnit
+        from sonar.model_executor.warmup.cutedsl_warmup import CuTeDSLCompileUnit
 
         return tuple(
             CuTeDSLCompileUnit(

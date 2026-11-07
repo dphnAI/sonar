@@ -5,13 +5,13 @@ from typing import Any, Final
 
 from fastapi import Request
 
-from aphrodite.entrypoints.openai.models.serving import (
+from sonar.entrypoints.openai.models.serving import (
     OpenAIModelRegistry,
     OpenAIServingModels,
 )
-from aphrodite.entrypoints.serve.engine.protocol import ErrorResponse
-from aphrodite.entrypoints.serve.engine.serving import BaseServing
-from aphrodite.entrypoints.serve.tokenize.protocol import (
+from sonar.entrypoints.serve.engine.protocol import ErrorResponse
+from sonar.entrypoints.serve.engine.serving import BaseServing
+from sonar.entrypoints.serve.tokenize.protocol import (
     DetokenizeRequest,
     DetokenizeResponse,
     TokenizeChatRequest,
@@ -19,12 +19,12 @@ from aphrodite.entrypoints.serve.tokenize.protocol import (
     TokenizeResponse,
     TokenizerInfoResponse,
 )
-from aphrodite.entrypoints.serve.utils.request_logger import RequestLogger
-from aphrodite.inputs import TokensPrompt, tokens_input
-from aphrodite.logger import init_logger
-from aphrodite.renderers.chat_utils import ChatTemplateContentFormatOption
-from aphrodite.renderers.online_renderer import OnlineRenderer
-from aphrodite.tokenizers import TokenizerLike
+from sonar.entrypoints.serve.utils.request_logger import RequestLogger
+from sonar.inputs import TokensPrompt, tokens_input
+from sonar.logger import init_logger
+from sonar.renderers.chat_utils import ChatTemplateContentFormatOption
+from sonar.renderers.online_renderer import OnlineRenderer
+from sonar.tokenizers import TokenizerLike
 
 logger = init_logger(__name__)
 

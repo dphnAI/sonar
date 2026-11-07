@@ -3,14 +3,14 @@
 
 import pytest
 
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-from aphrodite.entrypoints.openai.completion.protocol import CompletionRequest
-from aphrodite.exceptions import AphroditeValidationError
+from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+from sonar.entrypoints.openai.completion.protocol import CompletionRequest
+from sonar.exceptions import SonarValidationError
 
 
 @pytest.mark.parametrize("raw_value", [-2, 0.6, 10.5])
 def test_chat_completion_request_rejects_invalid_thinking_token_budget(raw_value):
-    with pytest.raises(AphroditeValidationError, match="thinking_token_budget"):
+    with pytest.raises(SonarValidationError, match="thinking_token_budget"):
         ChatCompletionRequest.model_validate(
             {
                 "model": "qwen",
@@ -44,7 +44,7 @@ def test_chat_completion_request_accepts_minus_one_as_unlimited():
 
 @pytest.mark.parametrize("raw_value", [0.6, 3.14, -2])
 def test_completion_request_rejects_invalid_thinking_token_budget(raw_value):
-    with pytest.raises(AphroditeValidationError, match="thinking_token_budget"):
+    with pytest.raises(SonarValidationError, match="thinking_token_budget"):
         CompletionRequest.model_validate(
             {
                 "model": "qwen",

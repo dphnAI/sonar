@@ -6,7 +6,7 @@ import os
 import sys
 from pathlib import Path
 
-import aphrodite.envs as envs
+import sonar.envs as envs
 
 JSON_FORMAT = "%(asctime)s %(levelname)s %(name)s %(processName)s %(process)d %(message)s"
 
@@ -48,8 +48,8 @@ class NewLineFormatter(logging.Formatter):
         if self.use_relpath:
             self.root_dir = Path(__file__).resolve().parent.parent.parent
 
-        self.use_color = _supports_color() and os.environ.get("APHRODITE_LOGGING_COLOR", "1") in ("1", "true", "True")
-        self.verbose_logging = envs.APHRODITE_LOGGING_VERBOSE
+        self.use_color = _supports_color() and os.environ.get("SONAR_LOGGING_COLOR", "1") in ("1", "true", "True")
+        self.verbose_logging = envs.SONAR_LOGGING_VERBOSE
         self.level_colors = {
             "DEBUG": Colors.DEBUG,
             "INFO": Colors.INFO,
@@ -69,7 +69,7 @@ class NewLineFormatter(logging.Formatter):
         def shrink_path(relpath: Path) -> str:
             parts = list(relpath.parts)
             new_parts = []
-            if parts and parts[0] == "aphrodite":
+            if parts and parts[0] == "sonar":
                 parts = parts[1:]
             if parts and parts[0] == "v1":
                 new_parts += parts[:2]
@@ -107,7 +107,7 @@ class NewLineFormatter(logging.Formatter):
             msg = super().format(record)
         else:
             original_fmt = self._style._fmt
-            from aphrodite.logger import _FORMAT_INFO
+            from sonar.logger import _FORMAT_INFO
 
             self._style._fmt = _FORMAT_INFO
             msg = super().format(record)
@@ -149,13 +149,13 @@ class ColoredFormatter(NewLineFormatter):
 
 
 class UvicornFormatter(logging.Formatter):
-    """Uvicorn formatter that matches Aphrodite's console logging style."""
+    """Uvicorn formatter that matches Sonar's console logging style."""
 
     def __init__(self, fmt, datefmt=None, style="%"):
         super().__init__(fmt, datefmt, style)
 
-        self.verbose_logging = envs.APHRODITE_LOGGING_VERBOSE
-        self.use_color = _supports_color() and os.environ.get("APHRODITE_LOGGING_COLOR", "1") in ("1", "true", "True")
+        self.verbose_logging = envs.SONAR_LOGGING_VERBOSE
+        self.use_color = _supports_color() and os.environ.get("SONAR_LOGGING_COLOR", "1") in ("1", "true", "True")
         self.level_colors = {
             "DEBUG": Colors.DEBUG,
             "INFO": Colors.INFO,

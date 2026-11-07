@@ -13,33 +13,33 @@ import torch.distributed as dist
 from torch.distributed import PrefixStore, TCPStore
 from torch.distributed.distributed_c10d import Backend, _get_default_timeout
 
-from aphrodite.distributed import stateless_destroy_torch_distributed_process_group
-from aphrodite.distributed.utils import (
+from sonar.distributed import stateless_destroy_torch_distributed_process_group
+from sonar.distributed.utils import (
     create_tcp_store,
     enter_steady_state,
     init_gloo_process_group,
     set_gloo_backend_timeout,
 )
-from aphrodite.logger import init_logger
-from aphrodite.v1.core.sched.output import SchedulerOutput
-from aphrodite.v1.core.sched.scheduler import Scheduler
-from aphrodite.v1.engine import (
+from sonar.logger import init_logger
+from sonar.v1.core.sched.output import SchedulerOutput
+from sonar.v1.core.sched.scheduler import Scheduler
+from sonar.v1.engine import (
     FT_STATUS_CALL_ID,
     EngineCoreOutputs,
     EngineStatusType,
     UtilityOutput,
 )
-from aphrodite.v1.fault_tolerance.utils import (
+from sonar.v1.fault_tolerance.utils import (
     ALLOWED_FT_INSTRUCTIONS,
     FaultToleranceRequest,
     FaultToleranceResult,
 )
-from aphrodite.v1.outputs import ModelRunnerOutput
-from aphrodite.v1.request import RequestStatus
-from aphrodite.v1.serial_utils import UtilityResult, run_method
+from sonar.v1.outputs import ModelRunnerOutput
+from sonar.v1.request import RequestStatus
+from sonar.v1.serial_utils import UtilityResult, run_method
 
 if TYPE_CHECKING:
-    from aphrodite.v1.engine.core import DPEngineCoreProc, EngineCoreProc
+    from sonar.v1.engine.core import DPEngineCoreProc, EngineCoreProc
 
 logger = init_logger(__name__)
 

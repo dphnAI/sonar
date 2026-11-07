@@ -8,10 +8,10 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-import aphrodite.model_executor.layers.sparse_attn_indexer as sparse_indexer
-import aphrodite.v1.attention.backends.mla.indexer as indexer
-from aphrodite.config import AttentionConfig, CUDAGraphMode
-from aphrodite.model_executor.layers.sparse_attn_indexer import PrefillRowShard
+import sonar.model_executor.layers.sparse_attn_indexer as sparse_indexer
+import sonar.v1.attention.backends.mla.indexer as indexer
+from sonar.config import AttentionConfig, CUDAGraphMode
+from sonar.model_executor.layers.sparse_attn_indexer import PrefillRowShard
 
 MIN_ROWS = AttentionConfig().indexer_tp_shard_min_rows
 
@@ -149,9 +149,9 @@ def test_row_sharding_gate_rejects_unsupported_configurations(
     for bad in ({"tp_size": 1}, {"dcp_world_size": 2}, {"use_pcp": True}):
         assert not supported(**bad)
     for name in (
-        "APHRODITE_DISABLE_PYNCCL",
-        "APHRODITE_USE_NCCL_SYMM_MEM",
-        "APHRODITE_BATCH_INVARIANT",
+        "SONAR_DISABLE_PYNCCL",
+        "SONAR_USE_NCCL_SYMM_MEM",
+        "SONAR_BATCH_INVARIANT",
     ):
         with monkeypatch.context() as m:
             m.setattr(indexer.envs, name, True)
@@ -201,7 +201,7 @@ def test_profiling_run_reserves_exchange_transient(
             )
             m.setattr(
                 sparse_indexer,
-                "get_current_aphrodite_config_or_none",
+                "get_current_sonar_config_or_none",
                 lambda: SimpleNamespace(
                     compilation_config=SimpleNamespace(cudagraph_mode=CUDAGraphMode.PIECEWISE),
                     parallel_config=SimpleNamespace(
@@ -212,7 +212,7 @@ def test_profiling_run_reserves_exchange_transient(
                     num_speculative_tokens=0,
                 ),
             )
-            m.setattr(sparse_indexer.envs, "APHRODITE_SPARSE_INDEXER_MAX_LOGITS_MB", 1)
+            m.setattr(sparse_indexer.envs, "SONAR_SPARSE_INDEXER_MAX_LOGITS_MB", 1)
             m.setattr(indexer.current_platform, "is_cuda", lambda: True)
             sparse_indexer.sparse_attn_indexer(
                 hidden_states=torch.empty(4, 4),

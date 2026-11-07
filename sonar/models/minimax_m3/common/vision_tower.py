@@ -8,26 +8,26 @@ import torch.nn as nn
 from einops import rearrange
 from transformers import PreTrainedConfig
 
-from aphrodite.distributed import parallel_state
-from aphrodite.distributed import utils as dist_utils
-from aphrodite.model_executor.layers.activation import get_act_fn
-from aphrodite.model_executor.layers.attention.mm_encoder_attention import (
+from sonar.distributed import parallel_state
+from sonar.distributed import utils as dist_utils
+from sonar.model_executor.layers.activation import get_act_fn
+from sonar.model_executor.layers.attention.mm_encoder_attention import (
     MMEncoderAttention,
 )
-from aphrodite.model_executor.layers.conv import Conv3dLayer
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.conv import Conv3dLayer
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     QKVParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.rotary_embedding.mrope import triton_mrope
-from aphrodite.model_executor.layers.rotary_embedding.mrope_vit_setup import (
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.rotary_embedding.mrope import triton_mrope
+from sonar.model_executor.layers.rotary_embedding.mrope_vit_setup import (
     VitMropeSetup,
 )
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
-from aphrodite.model_executor.models.utils import maybe_prefix
-from aphrodite.model_executor.models.vision import (
+from sonar.model_executor.model_loader.weight_utils import default_weight_loader
+from sonar.model_executor.models.utils import maybe_prefix
+from sonar.model_executor.models.vision import (
     get_vit_attn_backend,
     is_vit_use_data_parallel,
 )

@@ -4,15 +4,15 @@
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
+from sonar.model_executor.layers.quantization.utils.fp8_utils import (
     _per_token_group_quant_fp8_colmajor,
     silu_mul_per_token_group_quant_fp8_colmajor,
     silu_mul_quant_fp8_packed_triton,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import triton
-from aphrodite.utils.deep_gemm import is_deep_gemm_e8m0_used
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.platforms import current_platform
+from sonar.triton_utils import triton
+from sonar.utils.deep_gemm import is_deep_gemm_e8m0_used
+from sonar.utils.torch_utils import set_random_seed
 
 DEVICE = current_platform.device_type
 FLOAT8_DTYPE = torch.float8_e4m3fn
@@ -21,7 +21,7 @@ GROUP_SIZE = 128
 
 def reference_quant(x: torch.Tensor, use_ue8m0: bool):
     """Reference triton quant kernel from,
-    aphrodite.model_executor.layers.quantization.utils.fp8_utils
+    sonar.model_executor.layers.quantization.utils.fp8_utils
     """
     x_q = torch.empty_like(x, device=x.device, dtype=FLOAT8_DTYPE)
 

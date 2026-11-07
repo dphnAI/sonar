@@ -10,39 +10,39 @@ against the pure-torch reference in `reference_mxfp4.py`.
 import pytest
 import torch
 
-from aphrodite.config.kernel import MoEBackend
-from aphrodite.config.model import ModelConfig
-from aphrodite.model_executor.kernels.linear import _POSSIBLE_MXFP4_KERNELS
-from aphrodite.model_executor.kernels.linear.mxfp4.aiter import (
+from sonar.config.kernel import MoEBackend
+from sonar.config.model import ModelConfig
+from sonar.model_executor.kernels.linear import _POSSIBLE_MXFP4_KERNELS
+from sonar.model_executor.kernels.linear.mxfp4.aiter import (
     AiterMxfp4LinearKernel,
 )
-from aphrodite.model_executor.layers.fused_moe import FusedMoEFactory
-from aphrodite.model_executor.layers.fused_moe.routed_experts import RoutedExperts
-from aphrodite.model_executor.layers.quantization.online.mxfp4 import (
+from sonar.model_executor.layers.fused_moe import FusedMoEFactory
+from sonar.model_executor.layers.fused_moe.routed_experts import RoutedExperts
+from sonar.model_executor.layers.quantization.online.mxfp4 import (
     Mxfp4OnlineLinearMethod,
     Mxfp4OnlineMoEMethod,
 )
-from aphrodite.model_executor.layers.quantization.quark.quark_moe import (
+from sonar.model_executor.layers.quantization.quark.quark_moe import (
     QuarkOCP_MX_MoEMethod,
 )
-from aphrodite.model_executor.layers.quantization.quark.schemes.quark_ocp_mx import (
+from sonar.model_executor.layers.quantization.quark.schemes.quark_ocp_mx import (
     QuarkOCP_MX,
 )
-from aphrodite.model_executor.layers.quantization.quark.utils import (
+from sonar.model_executor.layers.quantization.quark.utils import (
     quark_quantize_weight_to_mxfp4,
 )
-from aphrodite.model_executor.layers.quantization.utils.mxfp4_utils import (
+from sonar.model_executor.layers.quantization.utils.mxfp4_utils import (
     downcast_to_mxfp,
     mxfp4_quantize,
     quant_dequant_mxfp4,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     kMxfp4Dynamic,
     kMxfp4Static,
 )
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
-from aphrodite.model_executor.utils import replace_parameter
-from aphrodite.platforms import PlatformEnum, current_platform
+from sonar.model_executor.model_loader.weight_utils import default_weight_loader
+from sonar.model_executor.utils import replace_parameter
+from sonar.platforms import PlatformEnum, current_platform
 
 from .reference_mxfp4 import dq_mxfp4_torch, qdq_mxfp4_torch
 
@@ -106,7 +106,7 @@ def _skip_reason_if_unavailable(backend: str, dtype: torch.dtype) -> str | None:
             return "Triton MXFP4 kernel requires a CUDA or ROCm GPU."
         return None
     if backend == "aiter":
-        from aphrodite._aiter_ops import is_aiter_found_and_supported
+        from sonar._aiter_ops import is_aiter_found_and_supported
 
         if not is_aiter_found_and_supported():
             return "aiter is not available/supported on this platform."
@@ -156,7 +156,7 @@ def test_mxfp4_quantization_correctness(backend: str, dtype: torch.dtype):
     elif backend == "xpu":
         # TODO: enable this test on XPU
         pytest.skip("xpu mxfp4 quantization match to reference is untested")
-        # from aphrodite.model_executor.layers.quantization.utils.mxfp4_utils import (
+        # from sonar.model_executor.layers.quantization.utils.mxfp4_utils import (
         #     xpu_mxfp4_quantize,
         # )
 
@@ -267,7 +267,7 @@ def test_online_mxfp4_moe_matches_quark(
     moe_backend: MoEBackend,
     unpadded_hidden_size: int,
     unpadded_intermediate_size: int,
-    default_aphrodite_config,
+    default_sonar_config,
     dist_init,
     monkeypatch,
 ):
@@ -283,11 +283,11 @@ def test_online_mxfp4_moe_matches_quark(
     `torch.zeros`.
     """
     if moe_backend == "aiter":
-        from aphrodite._aiter_ops import rocm_aiter_ops
+        from sonar._aiter_ops import rocm_aiter_ops
 
-        monkeypatch.setenv("APHRODITE_ROCM_USE_AITER", "1")
-        monkeypatch.setenv("APHRODITE_ROCM_USE_AITER_MOE", "1")
-        monkeypatch.setattr("aphrodite.platforms.rocm.on_gfx950", lambda: True)
+        monkeypatch.setenv("SONAR_ROCM_USE_AITER", "1")
+        monkeypatch.setenv("SONAR_ROCM_USE_AITER_MOE", "1")
+        monkeypatch.setattr("sonar.platforms.rocm.on_gfx950", lambda: True)
         rocm_aiter_ops.refresh_env_variables()
 
         if current_platform.is_cuda():
@@ -299,11 +299,11 @@ def test_online_mxfp4_moe_matches_quark(
         # `OCP_MXQuantizationEmulationTritonExperts.is_supported_config` gates
         # on `has_quark()`, but its weight processing does not require it.
         monkeypatch.setattr(
-            "aphrodite.model_executor.layers.fused_moe.experts.ocp_mx_emulation_moe.has_quark",
+            "sonar.model_executor.layers.fused_moe.experts.ocp_mx_emulation_moe.has_quark",
             lambda: True,
         )
 
-    default_aphrodite_config.model_config = ModelConfig()
+    default_sonar_config.model_config = ModelConfig()
 
     num_experts = 4
     device = current_platform.device_type
@@ -460,7 +460,7 @@ def test_online_mxfp4_moe_matches_quark(
 
 @pytest.mark.skipif(not current_platform.is_cuda_alike(), reason="Only tested on ROCm/CUDA.")
 @pytest.mark.parametrize("linear_backend", ["emulation", "aiter", "marlin"])
-def test_online_mxfp4_dense_matches_quark(linear_backend: str, default_aphrodite_config, dist_init, monkeypatch):
+def test_online_mxfp4_dense_matches_quark(linear_backend: str, default_sonar_config, dist_init, monkeypatch):
     """Ensures `Mxfp4OnlineLinearMethod` (online quantization)
     and `QuarkOCP_MX` (AMD Quark checkpoints) produce the same weights,
     with same linear backend used.
@@ -493,12 +493,12 @@ def test_online_mxfp4_dense_matches_quark(linear_backend: str, default_aphrodite
         # `EmulationMxfp4LinearKernel.can_implement` gates on `has_quark()`,
         # EmulationMxfp4LinearKernel.process_weights_after_loading does not require it.
         monkeypatch.setattr(
-            "aphrodite.model_executor.kernels.linear.mxfp4.emulation.has_quark",
+            "sonar.model_executor.kernels.linear.mxfp4.emulation.has_quark",
             lambda: True,
         )
 
-    default_aphrodite_config.model_config = ModelConfig()
-    default_aphrodite_config.kernel_config.linear_backend = linear_backend
+    default_sonar_config.model_config = ModelConfig()
+    default_sonar_config.kernel_config.linear_backend = linear_backend
 
     input_size = 256
     output_size = 128

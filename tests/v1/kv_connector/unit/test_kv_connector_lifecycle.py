@@ -3,20 +3,20 @@
 
 from unittest.mock import MagicMock, patch
 
-from aphrodite.distributed.kv_transfer.kv_connector.v1.example_connector import (  # noqa: E501
+from sonar.distributed.kv_transfer.kv_connector.v1.example_connector import (  # noqa: E501
     ExampleConnectorMetadata,
 )
-from aphrodite.distributed.kv_transfer.kv_transfer_state import (
+from sonar.distributed.kv_transfer.kv_transfer_state import (
     ensure_kv_transfer_initialized,
     ensure_kv_transfer_shutdown,
     get_kv_transfer_group,
 )
-from aphrodite.v1.core.sched.output import CachedRequestData, SchedulerOutput
-from aphrodite.v1.kv_cache_interface import KVCacheConfig
-from aphrodite.v1.worker.kv_connector_model_runner_mixin import KVConnectorModelRunnerMixin
+from sonar.v1.core.sched.output import CachedRequestData, SchedulerOutput
+from sonar.v1.kv_cache_interface import KVCacheConfig
+from sonar.v1.worker.kv_connector_model_runner_mixin import KVConnectorModelRunnerMixin
 
 # Importing utils registers TestExampleConnector with the factory
-from .utils import TestExampleConnector, create_aphrodite_config
+from .utils import TestExampleConnector, create_sonar_config
 
 
 def _make_empty_scheduler_output():
@@ -34,7 +34,7 @@ def _make_empty_scheduler_output():
 
 
 def test_kv_connector_mixin_clears_metadata():
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         kv_connector="TestExampleConnector",
         kv_role="kv_both",
         kv_connector_extra_config={"name": "unit"},
@@ -48,10 +48,10 @@ def test_kv_connector_mixin_clears_metadata():
     mock_tp_group.broadcast_object.side_effect = lambda value, src=0: value
 
     with patch(
-        "aphrodite.distributed.parallel_state.get_tp_group",
+        "sonar.distributed.parallel_state.get_tp_group",
         return_value=mock_tp_group,
     ):
-        ensure_kv_transfer_initialized(aphrodite_config, kv_cache_config)
+        ensure_kv_transfer_initialized(sonar_config, kv_cache_config)
 
     try:
         # Minimal scheduler output with empty metadata; mixin should still
@@ -59,7 +59,7 @@ def test_kv_connector_mixin_clears_metadata():
         scheduler_output = _make_empty_scheduler_output()
 
         # Invoke the no-forward path which uses the mixin context manager
-        KVConnectorModelRunnerMixin.kv_connector_no_forward(scheduler_output, aphrodite_config)
+        KVConnectorModelRunnerMixin.kv_connector_no_forward(scheduler_output, sonar_config)
 
         # Verify clear_connector_metadata was called on the connector
         connector = get_kv_transfer_group()

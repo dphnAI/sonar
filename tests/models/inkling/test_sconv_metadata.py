@@ -11,9 +11,9 @@ must be initialized to safe zero values.
 import pytest
 import torch
 
-from aphrodite.models.inkling.nvidia.ops.sconv import sconv_seq_metadata
-from aphrodite.models.inkling.nvidia.sconv_swa_attn import InklingSconvMetadataBuilder
-from aphrodite.platforms import current_platform
+from sonar.models.inkling.nvidia.ops.sconv import sconv_seq_metadata
+from sonar.models.inkling.nvidia.sconv_swa_attn import InklingSconvMetadataBuilder
+from sonar.platforms import current_platform
 
 CASES = [
     # (query_lens, extra_pad_tokens)

@@ -18,13 +18,13 @@ from __future__ import annotations
 import pytest
 import torch
 
-from aphrodite.config import set_current_aphrodite_config
-from aphrodite.forward_context import set_forward_context
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.platforms import current_platform
+from sonar.config import set_current_sonar_config
+from sonar.forward_context import set_forward_context
+from sonar.model_executor.layers.attention import Attention
+from sonar.platforms import current_platform
 from tests.quantization.utils import (
     is_quant_method_supported,
-    load_model_without_aphrodite_runner,
+    load_model_without_sonar_runner,
 )
 
 
@@ -32,7 +32,7 @@ def _get_auto_awq_config_source() -> str:
     """Read the AutoAWQConfig class source code for isolated testing."""
     import inspect
 
-    import aphrodite.model_executor.layers.quantization.auto_awq as auto_awq_module
+    import sonar.model_executor.layers.quantization.auto_awq as auto_awq_module
 
     return inspect.getsource(auto_awq_module.AutoAWQConfig)
 
@@ -50,7 +50,7 @@ class TestAutoAWQConfigFromConfig:
         MoeWNA16Config only accepts 'gptq' or 'awq' as linear_quant_method.
         If full_config has 'auto_awq', the MoE fallback will fail.
         """
-        from aphrodite.model_executor.layers.quantization.auto_awq import AutoAWQConfig
+        from sonar.model_executor.layers.quantization.auto_awq import AutoAWQConfig
 
         config = {
             "w_bit": 4,
@@ -67,7 +67,7 @@ class TestAutoAWQConfigFromConfig:
 
     def test_full_config_preserves_other_fields(self):
         """full_config should preserve all original config fields."""
-        from aphrodite.model_executor.layers.quantization.auto_awq import AutoAWQConfig
+        from sonar.model_executor.layers.quantization.auto_awq import AutoAWQConfig
 
         config = {
             "w_bit": 4,
@@ -86,7 +86,7 @@ class TestAutoAWQConfigFromConfig:
 
     def test_full_config_is_copy_not_original(self):
         """full_config should be a copy, not the original dict."""
-        from aphrodite.model_executor.layers.quantization.auto_awq import AutoAWQConfig
+        from sonar.model_executor.layers.quantization.auto_awq import AutoAWQConfig
 
         config = {
             "w_bit": 4,
@@ -111,7 +111,7 @@ class TestAutoAWQConfigAttributes:
 
     def test_config_attributes_match_input(self):
         """Config attributes should match input values."""
-        from aphrodite.model_executor.layers.quantization.auto_awq import AutoAWQConfig
+        from sonar.model_executor.layers.quantization.auto_awq import AutoAWQConfig
 
         awq_config = AutoAWQConfig(
             weight_bits=4,
@@ -129,7 +129,7 @@ class TestAutoAWQConfigAttributes:
 
     def test_pack_factor_for_4bit(self):
         """Pack factor should be 8 for 4-bit quantization."""
-        from aphrodite.model_executor.layers.quantization.auto_awq import AutoAWQConfig
+        from sonar.model_executor.layers.quantization.auto_awq import AutoAWQConfig
 
         awq_config = AutoAWQConfig(
             weight_bits=4,
@@ -149,7 +149,7 @@ class TestAutoAWQConfigOverrideLogic:
         import inspect
         import pathlib
 
-        import aphrodite.model_executor.layers.quantization.auto_awq as auto_awq_module
+        import sonar.model_executor.layers.quantization.auto_awq as auto_awq_module
 
         source_path = inspect.getfile(auto_awq_module)
         return pathlib.Path(source_path).read_text()
@@ -191,8 +191,8 @@ AWQ_MODELS = [
 @pytest.mark.parametrize("model_id", AWQ_MODELS)
 def test_auto_awq_quantization_method(model_id: str, monkeypatch, dist_init, workspace_init):
     """Test that quantization='auto_awq' loads and runs correctly."""
-    monkeypatch.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
-    model, aphrodite_config = load_model_without_aphrodite_runner(
+    monkeypatch.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")
+    model, sonar_config = load_model_without_sonar_runner(
         model_id,
         dtype=torch.float16,
         quantization="auto_awq",
@@ -200,7 +200,7 @@ def test_auto_awq_quantization_method(model_id: str, monkeypatch, dist_init, wor
     )
     target_device = torch.device(current_platform.device_type)
 
-    from aphrodite.model_executor.layers.quantization.auto_awq import (
+    from sonar.model_executor.layers.quantization.auto_awq import (
         AutoAWQLinearMethod,
         AutoAWQMarlinLinearMethod,
     )
@@ -215,8 +215,8 @@ def test_auto_awq_quantization_method(model_id: str, monkeypatch, dist_init, wor
     input_ids = torch.tensor([1, 2, 3, 4], device=target_device)
     positions = torch.arange(input_ids.numel(), device=target_device)
     with (
-        set_current_aphrodite_config(aphrodite_config),
-        set_forward_context(None, aphrodite_config, num_tokens=input_ids.numel()),
+        set_current_sonar_config(sonar_config),
+        set_forward_context(None, sonar_config, num_tokens=input_ids.numel()),
     ):
         hidden_states = model(input_ids, positions, None)
         logits = model.compute_logits(hidden_states)
@@ -225,6 +225,6 @@ def test_auto_awq_quantization_method(model_id: str, monkeypatch, dist_init, wor
 
 def test_auto_awq_config_get_name():
     """Test that AutoAWQConfig.get_name() returns 'auto_awq'."""
-    from aphrodite.model_executor.layers.quantization.auto_awq import AutoAWQConfig
+    from sonar.model_executor.layers.quantization.auto_awq import AutoAWQConfig
 
     assert AutoAWQConfig.get_name() == "auto_awq"

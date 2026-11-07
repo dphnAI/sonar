@@ -8,20 +8,20 @@ from torch import nn
 
 # This import automatically registers `torch.ops.silly.attention`
 import tests.compile.silly_attention  # noqa
-from aphrodite.compilation.counter import compilation_counter
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.compilation.passes.inductor_pass import (
+from sonar.compilation.counter import compilation_counter
+from sonar.compilation.decorators import support_torch_compile
+from sonar.compilation.passes.inductor_pass import (
     InductorPass,
     get_pass_context,
 )
-from aphrodite.config import (
-    AphroditeConfig,
-    set_current_aphrodite_config,
+from sonar.config import (
+    SonarConfig,
+    set_current_sonar_config,
 )
-from aphrodite.config.compilation import CompilationConfig, CompilationMode
-from aphrodite.config.scheduler import SchedulerConfig
-from aphrodite.config.utils import Range
-from aphrodite.forward_context import set_forward_context
+from sonar.config.compilation import CompilationConfig, CompilationMode
+from sonar.config.scheduler import SchedulerConfig
+from sonar.config.utils import Range
+from sonar.forward_context import set_forward_context
 
 BATCH_SIZE = 64
 MLP_SIZE = 128
@@ -29,7 +29,7 @@ MLP_SIZE = 128
 
 @support_torch_compile
 class TestModel(nn.Module):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "", **kwargs) -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "", **kwargs) -> None:
         super().__init__()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -42,8 +42,8 @@ class TestModel(nn.Module):
 
 
 @torch.inference_mode
-def run_model(aphrodite_config: AphroditeConfig, model: nn.Module, batch_sizes: list[int]):
-    with set_forward_context({}, aphrodite_config=aphrodite_config):
+def run_model(sonar_config: SonarConfig, model: nn.Module, batch_sizes: list[int]):
+    with set_forward_context({}, sonar_config=sonar_config):
         model(torch.randn(BATCH_SIZE, MLP_SIZE))
         for batch_size in batch_sizes:
             model(torch.randn(batch_size, MLP_SIZE))
@@ -64,7 +64,7 @@ class PostGradRangeChecker(InductorPass):
         return InductorPass.hash_dict(state)
 
 
-def test_compile_ranges(disable_aphrodite_compile_cache):
+def test_compile_ranges(disable_sonar_compile_cache):
     post_grad_range_checker = PostGradRangeChecker(
         [
             Range(start=1, end=8),
@@ -76,14 +76,14 @@ def test_compile_ranges(disable_aphrodite_compile_cache):
         ]
     )
     torch.set_default_device("cuda")
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         scheduler_config=SchedulerConfig(
             max_num_batched_tokens=8192,
             max_model_len=8192,
             is_encoder_decoder=False,
         ),
         compilation_config=CompilationConfig(
-            mode=CompilationMode.APHRODITE_COMPILE,
+            mode=CompilationMode.SONAR_COMPILE,
             compile_ranges_endpoints=[8, 32],
             compile_sizes=[16, 64, 128],
             inductor_compile_config={
@@ -92,8 +92,8 @@ def test_compile_ranges(disable_aphrodite_compile_cache):
         ),
     )
 
-    with set_current_aphrodite_config(aphrodite_config):
-        model = TestModel(aphrodite_config=aphrodite_config, prefix="").eval()
+    with set_current_sonar_config(sonar_config):
+        model = TestModel(sonar_config=sonar_config, prefix="").eval()
         # Number of compilations: 3 compile ranges + 3 compile sizes
         batch_sizes = [1, 4, 16, 24, 48, 64, 8192]
 
@@ -102,7 +102,7 @@ def test_compile_ranges(disable_aphrodite_compile_cache):
             num_piecewise_graphs_seen=1,
             num_backend_compilations=6,
         ):
-            run_model(aphrodite_config, model, batch_sizes)
+            run_model(sonar_config, model, batch_sizes)
         assert post_grad_range_checker.num_calls == 6
 
 
@@ -110,7 +110,7 @@ def test_compile_config_get_compile_ranges():
     compilation_config = CompilationConfig(
         compile_ranges_endpoints=[8, 32],
     )
-    AphroditeConfig(
+    SonarConfig(
         scheduler_config=SchedulerConfig(
             max_num_batched_tokens=8192,
             max_model_len=8192,
@@ -164,19 +164,19 @@ class PostGradStaticShapeChecker(InductorPass):
         return InductorPass.hash_dict(state)
 
 
-def test_compile_sizes_produce_static_shapes(disable_aphrodite_compile_cache):
+def test_compile_sizes_produce_static_shapes(disable_sonar_compile_cache):
     """Verify that compile_sizes entries are compiled with fully concrete
     shapes (no SymInts), while compile_ranges entries retain dynamic shapes."""
     checker = PostGradStaticShapeChecker()
     torch.set_default_device("cuda")
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         scheduler_config=SchedulerConfig(
             max_num_batched_tokens=8192,
             max_model_len=8192,
             is_encoder_decoder=False,
         ),
         compilation_config=CompilationConfig(
-            mode=CompilationMode.APHRODITE_COMPILE,
+            mode=CompilationMode.SONAR_COMPILE,
             compile_ranges_endpoints=[8],
             compile_sizes=[16],
             inductor_compile_config={
@@ -185,15 +185,15 @@ def test_compile_sizes_produce_static_shapes(disable_aphrodite_compile_cache):
         ),
     )
 
-    with set_current_aphrodite_config(aphrodite_config):
-        model = TestModel(aphrodite_config=aphrodite_config, prefix="").eval()
+    with set_current_sonar_config(sonar_config):
+        model = TestModel(sonar_config=sonar_config, prefix="").eval()
         # 3 compilations: Range(1,8), Range(9,8192), single-size 16
         with compilation_counter.expect(
             num_graphs_seen=1,
             num_piecewise_graphs_seen=1,
             num_backend_compilations=3,
         ):
-            run_model(aphrodite_config, model, [1, 16, 64])
+            run_model(sonar_config, model, [1, 16, 64])
 
     # compile_sizes=16 should produce static shapes
     assert checker.num_static_calls == 1, f"Expected 1 static compilation, got {checker.num_static_calls}"
@@ -201,9 +201,9 @@ def test_compile_sizes_produce_static_shapes(disable_aphrodite_compile_cache):
     assert checker.num_dynamic_calls == 2, f"Expected 2 dynamic compilations, got {checker.num_dynamic_calls}"
 
 
-def test_inductor_cache_compile_ranges(disable_aphrodite_compile_cache):
-    # disable_aphrodite_compile_cache sets APHRODITE_DISABLE_COMPILE_CACHE=1 to
-    # force multiple compilations by disabling Aphrodite's on-disk compile cache.
+def test_inductor_cache_compile_ranges(disable_sonar_compile_cache):
+    # disable_sonar_compile_cache sets SONAR_DISABLE_COMPILE_CACHE=1 to
+    # force multiple compilations by disabling Sonar's on-disk compile cache.
     post_grad_range_checker = PostGradRangeChecker(
         ranges=[
             Range(start=1, end=8),
@@ -217,11 +217,11 @@ def test_inductor_cache_compile_ranges(disable_aphrodite_compile_cache):
     )
     torch.set_default_device("cuda")
 
-    def create_aphrodite_config():
-        return AphroditeConfig(
+    def create_sonar_config():
+        return SonarConfig(
             scheduler_config=scheduler_config,
             compilation_config=CompilationConfig(
-                mode=CompilationMode.APHRODITE_COMPILE,
+                mode=CompilationMode.SONAR_COMPILE,
                 compile_ranges_endpoints=[8],
                 inductor_compile_config={
                     "post_grad_custom_post_pass": post_grad_range_checker,
@@ -229,20 +229,20 @@ def test_inductor_cache_compile_ranges(disable_aphrodite_compile_cache):
             ),
         )
 
-    aphrodite_config_1 = create_aphrodite_config()
-    with set_current_aphrodite_config(aphrodite_config_1):
-        model1 = TestModel(aphrodite_config=aphrodite_config_1, prefix="").eval()
+    sonar_config_1 = create_sonar_config()
+    with set_current_sonar_config(sonar_config_1):
+        model1 = TestModel(sonar_config=sonar_config_1, prefix="").eval()
         batch_sizes = [1, 16]
-        run_model(aphrodite_config_1, model1, batch_sizes)
+        run_model(sonar_config_1, model1, batch_sizes)
         assert post_grad_range_checker.num_calls == 2
 
     post_grad_range_checker.num_calls = 0
-    # Create a new aphrodite config with the new pass context
-    aphrodite_config_2 = create_aphrodite_config()
-    with set_current_aphrodite_config(aphrodite_config_2):
-        model2 = TestModel(aphrodite_config=aphrodite_config_2, prefix="").eval()
+    # Create a new sonar config with the new pass context
+    sonar_config_2 = create_sonar_config()
+    with set_current_sonar_config(sonar_config_2):
+        model2 = TestModel(sonar_config=sonar_config_2, prefix="").eval()
         batch_sizes = [4, 32]
-        run_model(aphrodite_config_2, model2, batch_sizes)
+        run_model(sonar_config_2, model2, batch_sizes)
         # Check that cache is used, so the number of calls
         # should be 0
         assert post_grad_range_checker.num_calls == 0

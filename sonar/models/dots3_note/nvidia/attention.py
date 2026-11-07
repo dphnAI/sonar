@@ -11,46 +11,46 @@ from typing import ClassVar
 
 import torch
 
-import aphrodite._custom_ops as ops
-from aphrodite.model_executor.layers.attention.mla_attention import (
+import sonar._custom_ops as ops
+from sonar.model_executor.layers.attention.mla_attention import (
     MLACommonDecodeMetadata,
     MLACommonMetadata,
     QueryLenSupport,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.torch_utils import (
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
+from sonar.utils.torch_utils import (
     PIN_MEMORY,
     async_tensor_h2d,
 )
-from aphrodite.v1.attention.backend import (
+from sonar.v1.attention.backend import (
     AttentionCGSupport,
     AttentionLayer,
     CommonAttentionMetadata,
 )
-from aphrodite.v1.attention.backends.mla.flashattn_mla_sparse import (
+from sonar.v1.attention.backends.mla.flashattn_mla_sparse import (
     FlashAttnMLASparseBackend,
     FlashAttnMLASparseImpl,
     FlashAttnMLASparseMetadata,
 )
-from aphrodite.v1.attention.backends.mla.prefill.base import MLADimensions
-from aphrodite.v1.attention.backends.mla.prefill.flash_attn import (
+from sonar.v1.attention.backends.mla.prefill.base import MLADimensions
+from sonar.v1.attention.backends.mla.prefill.flash_attn import (
     FlashAttnPrefillBackend,
 )
-from aphrodite.v1.attention.backends.mla.sparse_utils import (
+from sonar.v1.attention.backends.mla.sparse_utils import (
     triton_convert_req_index_to_global_index,
 )
-from aphrodite.v1.attention.backends.mla.triton_mla import (
+from sonar.v1.attention.backends.mla.triton_mla import (
     TritonMLABackend,
     TritonMLAImpl,
     TritonMLAMetadataBuilder,
 )
-from aphrodite.v1.kv_cache_interface import KVCacheLayout, is_quantized_kv_cache
-from aphrodite.v1.worker.workspace import (
+from sonar.v1.kv_cache_interface import KVCacheLayout, is_quantized_kv_cache
+from sonar.v1.worker.workspace import (
     current_workspace_manager,
     is_workspace_manager_initialized,
 )
-from aphrodite.vllm_flash_attn.flash_attn_interface import flash_attn_varlen_func
+from sonar.vllm_flash_attn.flash_attn_interface import flash_attn_varlen_func
 
 
 @triton.jit
@@ -311,14 +311,14 @@ class Dots3NoteMLAMetadataBuilder(TritonMLAMetadataBuilder):
     _cudagraph_support: ClassVar[AttentionCGSupport] = AttentionCGSupport.UNIFORM_BATCH
     query_len_support = QueryLenSupport.UNIFORM
 
-    def __init__(self, kv_cache_spec, layer_names, aphrodite_config, device):
+    def __init__(self, kv_cache_spec, layer_names, sonar_config, device):
         self.sliding_window = kv_cache_spec.sliding_window
-        super().__init__(kv_cache_spec, layer_names, aphrodite_config, device)
+        super().__init__(kv_cache_spec, layer_names, sonar_config, device)
 
     def _reserve_attn_logits_workspace(self) -> None:
         if not is_workspace_manager_initialized():
             return
-        batch = self.aphrodite_config.scheduler_config.max_num_seqs
+        batch = self.sonar_config.scheduler_config.max_num_seqs
         max_query_len = self.reorder_batch_threshold or 1
         gather_len = (self.sliding_window + max_query_len - 1 + 7) // 8 * 8
         current_workspace_manager().get_simultaneous(

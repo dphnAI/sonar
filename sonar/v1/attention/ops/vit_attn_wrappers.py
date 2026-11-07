@@ -17,10 +17,10 @@ import einops
 import torch
 import torch.nn.functional as F
 
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.platforms import current_platform
-from aphrodite.utils.gpu_sync_debug import gpu_sync_allowed
-from aphrodite.utils.torch_utils import direct_register_custom_op
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.platforms import current_platform
+from sonar.utils.gpu_sync_debug import gpu_sync_allowed
+from sonar.utils.torch_utils import direct_register_custom_op
 
 
 def flash_attn_maxseqlen_wrapper(
@@ -40,7 +40,7 @@ def flash_attn_maxseqlen_wrapper(
 
         kwargs["window_size"] = (-1, -1)
     else:
-        from aphrodite.v1.attention.backends.fa_utils import flash_attn_varlen_func
+        from sonar.v1.attention.backends.fa_utils import flash_attn_varlen_func
 
         if not current_platform.is_rocm() and fa_version is not None:
             kwargs["fa_version"] = fa_version
@@ -114,7 +114,7 @@ def vit_flash_attn_wrapper(
     cu_seqlens: torch.Tensor | None = None,
     max_seqlen: torch.Tensor | None = None,
 ) -> torch.Tensor:
-    return torch.ops.aphrodite.flash_attn_maxseqlen_wrapper(
+    return torch.ops.sonar.flash_attn_maxseqlen_wrapper(
         q,
         k,
         v,
@@ -164,7 +164,7 @@ def triton_attn_wrapper(
     cu_seqlens: torch.Tensor | None = None,
     max_seqlen: torch.Tensor | None = None,
 ) -> torch.Tensor:
-    from aphrodite.v1.attention.ops.triton_prefill_attention import context_attention_fwd
+    from sonar.v1.attention.ops.triton_prefill_attention import context_attention_fwd
 
     q_len = q.size(1)
     if cu_seqlens is None:
@@ -224,7 +224,7 @@ def vit_triton_attn_wrapper(
     cu_seqlens: torch.Tensor | None = None,
     max_seqlen: torch.Tensor | None = None,
 ) -> torch.Tensor:
-    return torch.ops.aphrodite.triton_attn_wrapper(
+    return torch.ops.sonar.triton_attn_wrapper(
         q,
         k,
         v,
@@ -318,7 +318,7 @@ def vit_torch_sdpa_wrapper(
     cu_seqlens: torch.Tensor | None = None,
     enable_gqa: bool = False,
 ) -> torch.Tensor:
-    return torch.ops.aphrodite.torch_sdpa_wrapper(q, k, v, scale, cu_seqlens, enable_gqa=enable_gqa)
+    return torch.ops.sonar.torch_sdpa_wrapper(q, k, v, scale, cu_seqlens, enable_gqa=enable_gqa)
 
 
 def flashinfer_wrapper(
@@ -436,7 +436,7 @@ def vit_flashinfer_wrapper(
     v_scale: torch.Tensor | None = None,
     o_data_type: torch.dtype | None = None,
 ) -> torch.Tensor:
-    return torch.ops.aphrodite.flashinfer_wrapper(
+    return torch.ops.sonar.flashinfer_wrapper(
         q,
         k,
         v,

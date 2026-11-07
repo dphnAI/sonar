@@ -16,17 +16,17 @@ import torch
 from packaging.version import InvalidVersion, Version
 from typing_extensions import override
 
-import aphrodite.version
-from aphrodite.config import ProfilerConfig
-from aphrodite.config.profiler import (
+import sonar.version
+from sonar.config import ProfilerConfig
+from sonar.config.profiler import (
     ProfilerKind,
     TorchProfilerActivity,
     _is_uri_path,
     validate_profile_iteration_bounds,
 )
-from aphrodite.config.utils import replace
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
+from sonar.config.utils import replace
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
 
 logger = init_logger(__name__)
 
@@ -344,7 +344,7 @@ class TorchProfilerWrapper(WorkerProfiler):
                 print(table, file=f)
 
     def _maybe_add_version_metadata(self) -> None:
-        """Stamp the Aphrodite version (which embeds the git commit) into the trace.
+        """Stamp the Sonar version (which embeds the git commit) into the trace.
 
         add_metadata_json is a no-op until Kineto is initialized, which with a
         schedule only happens after the WAIT phase, so stamp once it's live.
@@ -355,13 +355,13 @@ class TorchProfilerWrapper(WorkerProfiler):
         if self.profiler.profiler is None:
             return
         try:
-            self.profiler.add_metadata_json("aphrodite_version", json.dumps(aphrodite.version.__version__))
+            self.profiler.add_metadata_json("sonar_version", json.dumps(sonar.version.__version__))
             self.profiler.add_metadata_json(
-                "aphrodite_version_tuple",
-                json.dumps([str(p) for p in aphrodite.version.__version_tuple__]),
+                "sonar_version_tuple",
+                json.dumps([str(p) for p in sonar.version.__version_tuple__]),
             )
         except Exception as e:
-            logger.warning("Failed to add Aphrodite version to profiler metadata: %s", e)
+            logger.warning("Failed to add Sonar version to profiler metadata: %s", e)
         # Mark done even on failure, to avoid retrying every step.
         self._version_metadata_added = True
 
@@ -528,7 +528,7 @@ class ProtonProfilerWrapper(WorkerProfiler):
     @override
     @contextmanager
     def capture_cuda_graphs(self) -> Iterator[None]:
-        """Keep a Proton session active while Aphrodite captures CUDA graphs."""
+        """Keep a Proton session active while Sonar captures CUDA graphs."""
         if not self._graph_attribution:
             yield
             return
@@ -755,7 +755,7 @@ def create_graph_capture_profiler(profiler_config: ProfilerConfig, global_rank: 
     need a session around capture (Proton with ``proton_graph_attribution``).
     """
     if profiler_config.profiler == "proton" and profiler_config.proton_graph_attribution:
-        from aphrodite.distributed.utils import get_worker_rank_suffix
+        from sonar.distributed.utils import get_worker_rank_suffix
 
         return ProtonProfilerWrapper(
             profiler_config,

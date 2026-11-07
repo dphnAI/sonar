@@ -7,7 +7,7 @@ from typing import Literal
 
 import torch
 
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import QuantKey
+from sonar.model_executor.layers.quantization.utils.quant_utils import QuantKey
 
 
 @dataclass(frozen=True)

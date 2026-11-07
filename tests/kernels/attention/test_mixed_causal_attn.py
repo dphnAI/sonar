@@ -10,8 +10,8 @@ batches where some sequences use causal masking and others use non-causal
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_random_seed
 
 # Mixed causal/non-causal attention is only validated on a subset of GPUs:
 # the Triton path on Hopper (SM90) and B200 (SM100); the FA4 path on Hopper
@@ -118,7 +118,7 @@ def test_triton_mixed_causal(
     if not current_platform.is_cuda():
         pytest.skip("Triton attention requires CUDA")
 
-    from aphrodite.v1.attention.ops.triton_unified_attention import unified_attention
+    from sonar.v1.attention.ops.triton_unified_attention import unified_attention
 
     set_random_seed(42)
     device = "cuda"
@@ -224,7 +224,7 @@ def test_flash_attn4_mixed_causal(
         pytest.skip("Flash attention requires CUDA")
 
     try:
-        from aphrodite.vllm_flash_attn import (
+        from sonar.vllm_flash_attn import (
             fa_version_unsupported_reason,
             flash_attn_varlen_func,
             is_fa_version_supported,

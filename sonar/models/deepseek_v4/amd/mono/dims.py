@@ -5,7 +5,7 @@ rank's share of them with every count the stages derive from it."""
 
 from dataclasses import dataclass
 
-from aphrodite.models.deepseek_v4.amd.mono.common.plan import Shard, cdiv, padded
+from sonar.models.deepseek_v4.amd.mono.common.plan import Shard, cdiv, padded
 
 HIDDEN = 7168
 Q_RANK = 1536
@@ -51,8 +51,8 @@ DOWN_TASKS = HIDDEN // ROWS
 
 
 def ld(k: int) -> int:
-    """The row stride of a row-major FP8 weight of K = ``k`` (bytes): Aphrodite pads
-    the rows of a multiple of 512 bytes by 256 (``APHRODITE_ROCM_FP8_PADDING``)."""
+    """The row stride of a row-major FP8 weight of K = ``k`` (bytes): Sonar pads
+    the rows of a multiple of 512 bytes by 256 (``SONAR_ROCM_FP8_PADDING``)."""
     return k + 256 if k % 512 == 0 else k
 
 

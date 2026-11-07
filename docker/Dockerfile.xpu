@@ -1,6 +1,6 @@
 ######################### RUST BUILD IMAGE #########################
-# Build the Rust frontend (`aphrodite-rs`) in a dedicated stage so the main image
-# doesn't need the rust toolchain. Runs in parallel with aphrodite-base.
+# Build the Rust frontend (`sonar-rs`) in a dedicated stage so the main image
+# doesn't need the rust toolchain. Runs in parallel with sonar-base.
 FROM ubuntu:22.04 AS rust-build-cache
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -42,7 +42,7 @@ RUN --mount=type=cache,target=/root/.cargo/registry,sharing=locked \
     --mount=type=bind,source=.git,target=.git \
     SETUPTOOLS_SCM_PRETEND_METADATA="{dirty=false}" bash tools/build_rust.sh
 
-FROM ubuntu:24.04 AS aphrodite-base
+FROM ubuntu:24.04 AS sonar-base
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -117,7 +117,7 @@ ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 SHELL ["bash", "-c"]
 CMD ["bash", "-c", "source /root/.bashrc && exec bash"]
 
-WORKDIR /workspace/aphrodite
+WORKDIR /workspace/sonar
 
 ENV UV_HTTP_TIMEOUT=500
 
@@ -128,8 +128,8 @@ ENV UV_INDEX_STRATEGY="unsafe-best-match"
 ENV UV_LINK_MODE="copy"
 
 RUN --mount=type=cache,target=/root/.cache/uv \
-    --mount=type=bind,src=requirements/common.txt,target=/workspace/aphrodite/requirements/common.txt \
-    --mount=type=bind,src=requirements/xpu.txt,target=/workspace/aphrodite/requirements/xpu.txt \
+    --mount=type=bind,src=requirements/common.txt,target=/workspace/sonar/requirements/common.txt \
+    --mount=type=bind,src=requirements/xpu.txt,target=/workspace/sonar/requirements/xpu.txt \
     uv pip install --upgrade pip
 
 
@@ -142,16 +142,16 @@ CMD ["/bin/bash"]
 ######################### WHEEL BUILD STAGE #########################
 # Produces a standalone dist/*.whl artifact (used by the release pipeline's
 # "Build wheel - XPU" step), independent of the runtime image below.
-FROM aphrodite-base AS aphrodite-build
-ENV APHRODITE_USE_PRECOMPILED_RUST=1
+FROM sonar-base AS sonar-build
+ENV SONAR_USE_PRECOMPILED_RUST=1
 
 ARG GIT_REPO_CHECK=0
 
 RUN --mount=type=cache,target=/root/.cache/uv \
-    --mount=type=bind,src=requirements/common.txt,target=/workspace/aphrodite/requirements/common.txt \
-    --mount=type=bind,src=requirements/xpu.txt,target=/workspace/aphrodite/requirements/xpu.txt \
+    --mount=type=bind,src=requirements/common.txt,target=/workspace/sonar/requirements/common.txt \
+    --mount=type=bind,src=requirements/xpu.txt,target=/workspace/sonar/requirements/xpu.txt \
     uv pip install grpcio-tools protobuf nanobind && \
-    uv pip install -r /workspace/aphrodite/requirements/xpu.txt
+    uv pip install -r /workspace/sonar/requirements/xpu.txt
 
 # Keep source-dependent layers near the end so frequent code-only changes
 # don't invalidate heavy dependency layers.
@@ -159,17 +159,17 @@ COPY . .
 
 # Drop the pre-built Rust artifacts into the source tree. setup.py detects
 # them and ships them as-is, skipping the local Rust build.
-COPY --from=rust-build /workspace/aphrodite/aphrodite-rs aphrodite/aphrodite-rs
-COPY --from=rust-build /workspace/aphrodite/_rust_*.so aphrodite/
+COPY --from=rust-build /workspace/sonar/sonar-rs sonar/sonar-rs
+COPY --from=rust-build /workspace/sonar/_rust_*.so sonar/
 
 RUN --mount=type=bind,source=.git,target=.git \
     if [ "$GIT_REPO_CHECK" != 0 ]; then bash tools/check_repo.sh; fi
 
 RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=.git,target=.git \
-    APHRODITE_TARGET_DEVICE=xpu python3 setup.py bdist_wheel --dist-dir=dist --py-limited-api=cp38
+    SONAR_TARGET_DEVICE=xpu python3 setup.py bdist_wheel --dist-dir=dist --py-limited-api=cp38
 
-FROM aphrodite-base AS ucx-nixl-build
+FROM sonar-base AS ucx-nixl-build
 
 # Keep UCX_VERSION aligned with the UCX that NIXL itself builds against for this
 # NIXL_VERSION (nixl contrib/Dockerfile.manylinux: ARG UCX_REF), so XPU runs the
@@ -208,9 +208,9 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     rm -rf /opt/ucx/{include,share,etc} /opt/ucx/lib/cmake \
            /tmp/ucx_source /tmp/nixl_source
 
-FROM aphrodite-base AS aphrodite-openai
+FROM sonar-base AS sonar-openai
 ENV UV_COMPILE_BYTECODE=1
-ENV APHRODITE_USE_PRECOMPILED_RUST=1
+ENV SONAR_USE_PRECOMPILED_RUST=1
 
 # Must match the ucx-nixl-build stage above: ARG does not cross stages, so a stale
 # value here installs a meta package that disagrees with the wheel built there.
@@ -243,13 +243,13 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     && rm -rf /tmp/nixl_wheels
 
 RUN --mount=type=cache,target=/root/.cache/uv \
-    --mount=type=bind,src=requirements/common.txt,target=/workspace/aphrodite/requirements/common.txt \
-    --mount=type=bind,src=requirements/xpu.txt,target=/workspace/aphrodite/requirements/xpu.txt \
-    --mount=type=bind,src=requirements/test/xpu.txt,target=/workspace/aphrodite/requirements/test/xpu.txt \
+    --mount=type=bind,src=requirements/common.txt,target=/workspace/sonar/requirements/common.txt \
+    --mount=type=bind,src=requirements/xpu.txt,target=/workspace/sonar/requirements/xpu.txt \
+    --mount=type=bind,src=requirements/test/xpu.txt,target=/workspace/sonar/requirements/test/xpu.txt \
     uv pip install grpcio-tools protobuf nanobind && \
-    uv pip install -r /workspace/aphrodite/requirements/xpu.txt && \
+    uv pip install -r /workspace/sonar/requirements/xpu.txt && \
     export CMAKE_PREFIX_PATH="$(python3 -c 'import site; print(site.getsitepackages()[0])'):${CMAKE_PREFIX_PATH}" && \
-    uv pip install --no-build-isolation -r /workspace/aphrodite/requirements/test/xpu.txt
+    uv pip install --no-build-isolation -r /workspace/sonar/requirements/test/xpu.txt
 
 # Keep source-dependent layers near the end so frequent code-only changes
 # don't invalidate heavy dependency and UCX/NIXL layers.
@@ -257,22 +257,22 @@ COPY . .
 
 # Drop the pre-built Rust artifacts into the source tree. setup.py detects
 # them and ships them as-is, skipping the local Rust build.
-COPY --from=rust-build /workspace/aphrodite/aphrodite-rs aphrodite/aphrodite-rs
-COPY --from=rust-build /workspace/aphrodite/_rust_*.so aphrodite/
+COPY --from=rust-build /workspace/sonar/sonar-rs sonar/sonar-rs
+COPY --from=rust-build /workspace/sonar/_rust_*.so sonar/
 
 ARG GIT_REPO_CHECK=0
 RUN --mount=type=bind,source=.git,target=.git \
     if [ "$GIT_REPO_CHECK" != 0 ]; then bash tools/check_repo.sh; fi
 
-ENV APHRODITE_TARGET_DEVICE=xpu
-ENV APHRODITE_WORKER_MULTIPROC_METHOD=spawn
+ENV SONAR_TARGET_DEVICE=xpu
+ENV SONAR_WORKER_MULTIPROC_METHOD=spawn
 
 RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=.git,target=.git \
     uv pip install --no-build-isolation --no-deps .
 
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv pip install -e tests/aphrodite_test_utils
+    uv pip install -e tests/sonar_test_utils
 
 # Replace 2026.1.2 DLE packages to 2026.1.3
 RUN --mount=type=cache,target=/root/.cache/uv \
@@ -289,4 +289,4 @@ RUN --mount=type=cache,target=/root/.cache/uv \
       "intel-openmp==2026.1.1" \
       "intel-pti==1.1.0"
 
-ENTRYPOINT ["aphrodite", "run"]
+ENTRYPOINT ["sonar", "run"]

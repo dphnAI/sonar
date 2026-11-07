@@ -7,24 +7,24 @@ from typing import TYPE_CHECKING, Any, NamedTuple, TypeVar
 import torch
 import torch.nn as nn
 
-import aphrodite.ir
-from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-from aphrodite.distributed.kv_transfer.kv_connector.utils import get_current_attn_backends
-from aphrodite.logger import init_logger
-from aphrodite.lora.request import LoRARequest
-from aphrodite.multimodal.cache import worker_receiver_cache_from_config
-from aphrodite.tracing import instrument
-from aphrodite.utils.import_utils import resolve_obj_by_qualname
-from aphrodite.utils.system_utils import update_environment_variables
-from aphrodite.v1.attention.backends.utils import (
+import sonar.ir
+from sonar.config import SonarConfig, set_current_sonar_config
+from sonar.distributed.kv_transfer.kv_connector.utils import get_current_attn_backends
+from sonar.logger import init_logger
+from sonar.lora.request import LoRARequest
+from sonar.multimodal.cache import worker_receiver_cache_from_config
+from sonar.tracing import instrument
+from sonar.utils.import_utils import resolve_obj_by_qualname
+from sonar.utils.system_utils import update_environment_variables
+from sonar.v1.attention.backends.utils import (
     get_supported_kv_cache_layouts,
     record_kv_cache_layout,
 )
-from aphrodite.v1.kv_cache_interface import KVCacheSpec
+from sonar.v1.kv_cache_interface import KVCacheSpec
 
 if TYPE_CHECKING:
-    from aphrodite.v1.core.sched.output import GrammarOutput, SchedulerOutput
-    from aphrodite.v1.outputs import AsyncModelRunnerOutput, ModelRunnerOutput
+    from sonar.v1.core.sched.output import GrammarOutput, SchedulerOutput
+    from sonar.v1.outputs import AsyncModelRunnerOutput, ModelRunnerOutput
 else:
     SchedulerOutput = object
     GrammarOutput = object
@@ -42,14 +42,14 @@ class CompilationTimes(NamedTuple):
 
 
 class WorkerBase:
-    """Worker interface that allows Aphrodite to cleanly separate implementations for
+    """Worker interface that allows Sonar to cleanly separate implementations for
     different hardware. Also abstracts control plane communication, e.g., to
     communicate request metadata to other workers.
     """
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         local_rank: int,
         rank: int,
         distributed_init_method: str,
@@ -58,7 +58,7 @@ class WorkerBase:
         """Initialize common worker components.
 
         Args:
-            aphrodite_config: Complete Aphrodite configuration
+            sonar_config: Complete Sonar configuration
             local_rank: Local device index
             rank: Global rank in distributed setup
             distributed_init_method: Distributed initialization method
@@ -66,20 +66,20 @@ class WorkerBase:
                 responsibilities
 
         """
-        self.aphrodite_config = aphrodite_config
-        self.model_config = aphrodite_config.model_config
-        self.cache_config = aphrodite_config.cache_config
-        self.lora_config = aphrodite_config.lora_config
-        self.load_config = aphrodite_config.load_config
-        self.parallel_config = aphrodite_config.parallel_config
-        self.scheduler_config = aphrodite_config.scheduler_config
-        self.device_config = aphrodite_config.device_config
-        self.speculative_config = aphrodite_config.speculative_config
-        self.observability_config = aphrodite_config.observability_config
-        self.kv_transfer_config = aphrodite_config.kv_transfer_config
-        self.compilation_config = aphrodite_config.compilation_config
+        self.sonar_config = sonar_config
+        self.model_config = sonar_config.model_config
+        self.cache_config = sonar_config.cache_config
+        self.lora_config = sonar_config.lora_config
+        self.load_config = sonar_config.load_config
+        self.parallel_config = sonar_config.parallel_config
+        self.scheduler_config = sonar_config.scheduler_config
+        self.device_config = sonar_config.device_config
+        self.speculative_config = sonar_config.speculative_config
+        self.observability_config = sonar_config.observability_config
+        self.kv_transfer_config = sonar_config.kv_transfer_config
+        self.compilation_config = sonar_config.compilation_config
 
-        from aphrodite.platforms import current_platform
+        from sonar.platforms import current_platform
 
         self.current_platform = current_platform
 
@@ -95,8 +95,8 @@ class WorkerBase:
 
         # IR op priority and torch-wrap state are constant for the worker's
         # lifetime.
-        aphrodite_config.kernel_config.ir_op_priority.set_default()
-        aphrodite.ir.set_default_torch_wrap(aphrodite_config.compilation_config.ir_enable_torch_wrap)
+        sonar_config.kernel_config.ir_op_priority.set_default()
+        sonar.ir.set_default_torch_wrap(sonar_config.compilation_config.ir_enable_torch_wrap)
 
     def get_kv_cache_spec(self) -> dict[str, KVCacheSpec]:
         """Get specifications for KV cache implementation."""
@@ -104,13 +104,13 @@ class WorkerBase:
 
     def get_supported_kv_cache_layouts(self) -> list[str]:
         """Layout names every attention backend supports, most preferred first."""
-        backends = get_current_attn_backends(self.aphrodite_config)
+        backends = get_current_attn_backends(self.sonar_config)
         return [layout.name for layout in get_supported_kv_cache_layouts(backends)]
 
     def set_kv_cache_layout(self, kv_cache_layout: str, cp_kv_cache_interleave_size: int) -> None:
         """Assign the KV cache layout and CP interleave size resolved by the core."""
-        record_kv_cache_layout(self.aphrodite_config.cache_config, kv_cache_layout)
-        self.aphrodite_config.parallel_config.cp_kv_cache_interleave_size = cp_kv_cache_interleave_size
+        record_kv_cache_layout(self.sonar_config.cache_config, kv_cache_layout)
+        self.sonar_config.parallel_config.cp_kv_cache_interleave_size = cp_kv_cache_interleave_size
 
     def compile_or_warm_up_model(self) -> CompilationTimes:
         """Prepare model for execution through compilation/warmup.
@@ -152,10 +152,10 @@ class WorkerBase:
 
     def dphn_prove(self, request_id: str, nonce: str, output_token_ids: list[int]) -> dict[str, Any]:
         """Sample runtime weights, without claiming inference provenance."""
-        config = self.aphrodite_config.dphn_network_config
+        config = self.sonar_config.dphn_network_config
         if config is None:
             raise RuntimeError("DPHN weight receipts are not enabled")
-        from aphrodite.proof import generate_weight_receipt, rank_worker_id
+        from sonar.proof import generate_weight_receipt, rank_worker_id
 
         dp_rank = self.parallel_config.data_parallel_index
         worker_id = rank_worker_id(config.worker_id, dp_rank, self.rank)
@@ -173,22 +173,22 @@ class WorkerBase:
 
     def dphn_snapshot(self, output_dir: str) -> dict[str, Any]:
         """Dump this worker's actual runtime layout for an offline manifest."""
-        config = self.aphrodite_config.dphn_network_config
+        config = self.sonar_config.dphn_network_config
         if config is None:
             raise RuntimeError("DPHN weight receipts are not enabled")
-        from aphrodite.config import get_layers_from_aphrodite_config
-        from aphrodite.model_executor.layers.attention_layer_base import AttentionLayerBase
-        from aphrodite.proof import dump_runtime_snapshot
-        from aphrodite.version import __version__
+        from sonar.config import get_layers_from_sonar_config
+        from sonar.model_executor.layers.attention_layer_base import AttentionLayerBase
+        from sonar.proof import dump_runtime_snapshot
+        from sonar.version import __version__
 
         model = self.get_model()
         parallel = self.parallel_config
         backend = parallel.distributed_executor_backend
         if isinstance(backend, type):
             backend = f"{backend.__module__}.{backend.__qualname__}"
-        quant_config = self.aphrodite_config.quant_config
-        attention_layers = get_layers_from_aphrodite_config(
-            self.aphrodite_config,
+        quant_config = self.sonar_config.quant_config
+        attention_layers = get_layers_from_sonar_config(
+            self.sonar_config,
             AttentionLayerBase,  # type: ignore[type-abstract]
         )
         runtime_info = {
@@ -212,7 +212,7 @@ class WorkerBase:
             "rank": self.rank,
             "local_rank": self.local_rank,
             "dp_rank": parallel.data_parallel_index,
-            "build": {"aphrodite": __version__, "torch": str(torch.__version__), "cuda": torch.version.cuda},
+            "build": {"sonar": __version__, "torch": str(torch.__version__), "cuda": torch.version.cuda},
         }
         return dump_runtime_snapshot(
             model,
@@ -233,7 +233,7 @@ class WorkerBase:
 
     def get_model_inspection(self) -> str:
         """Return a transformers-style hierarchical view of the model."""
-        from aphrodite.model_inspection import format_model_inspection
+        from sonar.model_inspection import format_model_inspection
 
         return format_model_inspection(self.get_model())
 
@@ -295,7 +295,7 @@ class WorkerWrapperBase:
         rpc_rank: int = 0,
         global_rank: int | None = None,
     ) -> None:
-        """Initialize the worker wrapper with the given aphrodite_config and rpc_rank.
+        """Initialize the worker wrapper with the given sonar_config and rpc_rank.
         Note: rpc_rank is the rank of the worker in the executor. In most cases,
         it is also the rank of the worker in the distributed group. However,
         when multiple executors work together, they can be different.
@@ -309,7 +309,7 @@ class WorkerWrapperBase:
 
         # Initialized after init_worker is called
         self.worker: WorkerBase
-        self.aphrodite_config: AphroditeConfig
+        self.sonar_config: SonarConfig
         self._worker_extension_cls: type | None = None
 
     def shutdown(self) -> None:
@@ -337,28 +337,28 @@ class WorkerWrapperBase:
         """
         kwargs = all_kwargs[self.rpc_rank]
 
-        aphrodite_config: AphroditeConfig | None = kwargs.get("aphrodite_config")
-        assert aphrodite_config is not None, "aphrodite_config is required to initialize the worker"
-        self.aphrodite_config = aphrodite_config
+        sonar_config: SonarConfig | None = kwargs.get("sonar_config")
+        assert sonar_config is not None, "sonar_config is required to initialize the worker"
+        self.sonar_config = sonar_config
 
-        if aphrodite_config.dphn_network_config is not None:
-            from aphrodite.proof import ensure_native_available
+        if sonar_config.dphn_network_config is not None:
+            from sonar.proof import ensure_native_available
 
             ensure_native_available()
 
-        aphrodite_config.enable_trace_function_call_for_thread()
+        sonar_config.enable_trace_function_call_for_thread()
 
-        from aphrodite.plugins import load_general_plugins
+        from sonar.plugins import load_general_plugins
 
         load_general_plugins()
 
         # Let the platform replace core Triton kernels (e.g. CPU fallback
         # implementations) before any worker or model code can launch them.
-        from aphrodite.platforms import current_platform
+        from sonar.platforms import current_platform
 
         current_platform.register_triton_kernel_overrides()
 
-        parallel_config = aphrodite_config.parallel_config
+        parallel_config = sonar_config.parallel_config
         if isinstance(parallel_config.worker_cls, str):
             worker_class: type[WorkerBase] = resolve_obj_by_qualname(parallel_config.worker_cls)
         else:
@@ -393,7 +393,7 @@ class WorkerWrapperBase:
                     extended_calls,
                 )
 
-        if aphrodite_config.dphn_network_config is not None:
+        if sonar_config.dphn_network_config is not None:
             for method in ("get_model", "dphn_prove", "dphn_snapshot"):
                 implementation = getattr(worker_class, method, None)
                 if not callable(implementation) or implementation is WorkerBase.get_model:
@@ -401,29 +401,29 @@ class WorkerWrapperBase:
 
         assigned_physical_gpu_ids = kwargs.pop("assigned_physical_gpu_ids", None)
         if assigned_physical_gpu_ids is not None:
-            aphrodite_config.parallel_config.assigned_physical_gpu_ids = assigned_physical_gpu_ids
+            sonar_config.parallel_config.assigned_physical_gpu_ids = assigned_physical_gpu_ids
 
         shared_worker_lock = kwargs.pop("shared_worker_lock", None)
         self.mm_receiver_cache = worker_receiver_cache_from_config(
-            aphrodite_config,
+            sonar_config,
             shared_worker_lock,
         )
 
-        with set_current_aphrodite_config(self.aphrodite_config):
-            # To make Aphrodite config available during worker initialization
+        with set_current_sonar_config(self.sonar_config):
+            # To make Sonar config available during worker initialization
             self.worker = worker_class(**kwargs)
             self._worker_extension_cls = worker_extension_cls
 
     def initialize_from_config(self, kv_cache_configs: list[Any]) -> None:
         kv_cache_config = kv_cache_configs[self.global_rank]
-        assert self.aphrodite_config is not None
-        with set_current_aphrodite_config(self.aphrodite_config):
+        assert self.sonar_config is not None
+        with set_current_sonar_config(self.sonar_config):
             self.worker.initialize_from_config(kv_cache_config)  # type: ignore
 
     def init_device(self):
-        assert self.aphrodite_config is not None
-        with set_current_aphrodite_config(self.aphrodite_config):
-            # To make Aphrodite config available during device initialization
+        assert self.sonar_config is not None
+        with set_current_sonar_config(self.sonar_config):
+            # To make Sonar config available during device initialization
             self.worker.init_device()  # type: ignore
             hook = getattr(self._worker_extension_cls, "init_worker_extension", None)
             if callable(hook):

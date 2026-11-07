@@ -5,10 +5,10 @@
 //!
 //! The model consumes *raw waveforms* resampled to 24 kHz — there is no mel
 //! spectrogram frontend. Each clip is emitted as-is into one flat
-//! `[sum(num_samples)]` fp32 buffer (`input_features` on the Aphrodite side), with
+//! `[sum(num_samples)]` fp32 buffer (`input_features` on the Sonar side), with
 //! one latent token per 1920 samples (80 ms): `ceil(num_samples / 1920)`.
 //!
-//! Mirrors Aphrodite `models/muse_spark/common/processor.py`
+//! Mirrors Sonar `models/muse_spark/common/processor.py`
 //! (`_apply_hf_processor_main` audio branch) and the `AutoEncoder` input
 //! contract (`models/muse_spark/common/audio.py`).
 

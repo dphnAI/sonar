@@ -8,32 +8,32 @@ from typing import TYPE_CHECKING
 import torch
 from torch.nn import Module
 
-from aphrodite.model_executor.layers.fused_moe.config import FusedMoEConfig
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import QuantKey
+from sonar.model_executor.layers.fused_moe.config import FusedMoEConfig
+from sonar.model_executor.layers.quantization.utils.quant_utils import QuantKey
 
 if TYPE_CHECKING:
-    import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-    from aphrodite.model_executor.layers.fused_moe import (
+    import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+    from sonar.model_executor.layers.fused_moe import (
         FusedMoEQuantConfig,
         RoutedExperts,
     )
-    from aphrodite.model_executor.layers.fused_moe.oracle.fp8 import Fp8MoeBackend
+    from sonar.model_executor.layers.fused_moe.oracle.fp8 import Fp8MoeBackend
 
-from aphrodite.model_executor.kernels.linear import init_mxfp8_linear_kernel
-from aphrodite.model_executor.layers.fused_moe.oracle.mxfp8 import (
+from sonar.model_executor.kernels.linear import init_mxfp8_linear_kernel
+from sonar.model_executor.layers.fused_moe.oracle.mxfp8 import (
     select_mxfp8_moe_backend,
 )
-from aphrodite.model_executor.layers.quantization.online.fp8 import (
+from sonar.model_executor.layers.quantization.online.fp8 import (
     OnlineLinearBase,
 )
-from aphrodite.model_executor.layers.quantization.online.moe_base import (
+from sonar.model_executor.layers.quantization.online.moe_base import (
     OnlineMoEMethodBase,
 )
-from aphrodite.model_executor.layers.quantization.utils.mxfp8_utils import (
+from sonar.model_executor.layers.quantization.utils.mxfp8_utils import (
     MXFP8_BLOCK_SIZE,
     mxfp8_e4m3_quantize,
 )
-from aphrodite.model_executor.utils import replace_parameter
+from sonar.model_executor.utils import replace_parameter
 
 
 class Mxfp8OnlineLinearMethod(OnlineLinearBase):
@@ -159,7 +159,7 @@ class Mxfp8OnlineMoEMethod(OnlineMoEMethodBase):
         w13_input_scale: torch.Tensor | None,
         w2_input_scale: torch.Tensor | None,
     ) -> None:
-        from aphrodite.model_executor.layers.fused_moe.oracle.fp8 import (
+        from sonar.model_executor.layers.fused_moe.oracle.fp8 import (
             convert_to_fp8_moe_kernel_format,
             make_fp8_moe_kernel,
         )
@@ -193,7 +193,7 @@ class Mxfp8OnlineMoEMethod(OnlineMoEMethodBase):
             )
 
     def get_fused_moe_quant_config(self, layer: torch.nn.Module) -> "FusedMoEQuantConfig":
-        from aphrodite.model_executor.layers.fused_moe.oracle.fp8 import (
+        from sonar.model_executor.layers.fused_moe.oracle.fp8 import (
             make_fp8_moe_quant_config,
         )
 

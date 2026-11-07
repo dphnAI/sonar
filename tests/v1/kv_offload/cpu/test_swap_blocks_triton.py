@@ -5,8 +5,8 @@
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.v1.kv_offload.cpu.swap_blocks_triton import swap_blocks_batch
+from sonar.platforms import current_platform
+from sonar.v1.kv_offload.cpu.swap_blocks_triton import swap_blocks_batch
 
 
 def _addrs(buffers: list[torch.Tensor]) -> torch.Tensor:

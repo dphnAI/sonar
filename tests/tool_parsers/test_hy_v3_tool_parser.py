@@ -8,14 +8,14 @@ from unittest.mock import Mock
 
 import pytest
 
-from aphrodite.entrypoints.generate.base.protocol import DeltaMessage
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.generate.base.protocol import DeltaMessage
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionRequest,
     ChatCompletionToolsParam,
     FunctionDefinition,
 )
-from aphrodite.tokenizers import get_tokenizer
-from aphrodite.tool_parsers.hy_v3_tool_parser import HYV3ToolParser
+from sonar.tokenizers import get_tokenizer
+from sonar.tool_parsers.hy_v3_tool_parser import HYV3ToolParser
 
 parser_name = "hy_v3"
 MODEL = "tencent/Hy3-preview"

@@ -6,9 +6,9 @@ This example demonstrates coordinated pause/resume across multiple DP ranks.
 The pause synchronizes across all DP engines via all-reduce.
 
 Prerequisites:
-    Start a Aphrodite server with data parallelism:
+    Start a Sonar server with data parallelism:
 
-    $ APHRODITE_SERVER_DEV_MODE=1 aphrodite serve facebook/opt-125m \
+    $ SONAR_SERVER_DEV_MODE=1 sonar serve facebook/opt-125m \
         --enforce-eager \
         --data-parallel-size 4 \
         --tensor-parallel-size 1

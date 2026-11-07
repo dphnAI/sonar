@@ -19,12 +19,12 @@ import torch
 from PIL import Image
 from transformers import AutoTokenizer
 
-from aphrodite.model_executor.models.deepseek_ocr import (
+from sonar.model_executor.models.deepseek_ocr import (
     DeepseekOCRForCausalLM,
     DeepseekOCRImagePixelInputs,
 )
-from aphrodite.model_executor.models.deepseek_ocr2 import DeepseekOCR2ForCausalLM
-from aphrodite.transformers_utils.processors.deepseek_ocr import (
+from sonar.model_executor.models.deepseek_ocr2 import DeepseekOCR2ForCausalLM
+from sonar.transformers_utils.processors.deepseek_ocr import (
     DeepseekOCRProcessor,
     ImageTransform,
 )

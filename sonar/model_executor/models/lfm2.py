@@ -9,37 +9,37 @@ import torch.nn as nn
 import torch.nn.functional as F
 from transformers import Lfm2Config
 
-import aphrodite.envs as envs
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, CacheConfig, ModelConfig
-from aphrodite.distributed import get_pp_group, get_tensor_model_parallel_world_size
-from aphrodite.forward_context import get_forward_context
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.activation import SiluAndMul
-from aphrodite.model_executor.layers.attention import Attention, EncoderOnlyAttention
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+import sonar.envs as envs
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import CacheConfig, ModelConfig, SonarConfig
+from sonar.distributed import get_pp_group, get_tensor_model_parallel_world_size
+from sonar.forward_context import get_forward_context
+from sonar.logger import init_logger
+from sonar.model_executor.layers.activation import SiluAndMul
+from sonar.model_executor.layers.attention import Attention, EncoderOnlyAttention
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     MergedColumnParallelLinear,
     QKVParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.mamba.mamba_utils import (
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.mamba.mamba_utils import (
     MambaStateCopyFunc,
     MambaStateCopyFuncCalculator,
     MambaStateDtypeCalculator,
     MambaStateShapeCalculator,
 )
-from aphrodite.model_executor.layers.mamba.short_conv import ShortConv
-from aphrodite.model_executor.layers.pooler.seqwise import pooler_for_embed
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.mamba.short_conv import ShortConv
+from sonar.model_executor.layers.pooler.seqwise import pooler_for_embed
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.sequence import IntermediateTensors
+from sonar.sequence import IntermediateTensors
 
 from .interfaces import HasInnerState, IsHybrid, SupportsLoRA, SupportsPP, SupportsQuant
 from .interfaces_base import attn_type, default_pooling_type
@@ -392,10 +392,10 @@ class Lfm2ShortConvDecoderLayer(nn.Module):
 
 @support_torch_compile
 class Lfm2Model(nn.Module):
-    # HF uses .conv. but Aphrodite uses .short_conv. to avoid LoRA regex collision
+    # HF uses .conv. but Sonar uses .short_conv. to avoid LoRA regex collision
     # with the inner .conv.conv child (ShortConv has a child self.conv, so
     # naming the container .conv too makes _match_target_modules match both).
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_substr={".conv.": ".short_conv."},
         orig_to_new_stacked={
             ".q_proj": (".qkv_proj", "q"),
@@ -406,13 +406,13 @@ class Lfm2Model(nn.Module):
         },
     )
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "", bidirectional: bool = False):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "", bidirectional: bool = False):
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_config
-        model_config = aphrodite_config.model_config
-        cache_config = aphrodite_config.cache_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        model_config = sonar_config.model_config
+        cache_config = sonar_config.cache_config
+        quant_config = sonar_config.quant_config
 
         self.config = config
 
@@ -482,7 +482,7 @@ class Lfm2Model(nn.Module):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
 
 @attn_type("encoder_only")
@@ -490,17 +490,17 @@ class Lfm2Model(nn.Module):
 class Lfm2BidirectionalModel(Lfm2Model):
     is_pooling_model = True
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
-        if not envs.APHRODITE_MOE_SKIP_PADDING:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
+        if not envs.SONAR_MOE_SKIP_PADDING:
             logger.warning_once(
-                "Enabling APHRODITE_MOE_SKIP_PADDING for Lfm2BidirectionalModel "
+                "Enabling SONAR_MOE_SKIP_PADDING for Lfm2BidirectionalModel "
                 "because bidirectional convolution requires an accurate "
                 "runtime padding mask."
             )
-        os.environ["APHRODITE_MOE_SKIP_PADDING"] = "1"
+        os.environ["SONAR_MOE_SKIP_PADDING"] = "1"
 
-        super().__init__(aphrodite_config=aphrodite_config, prefix=prefix, bidirectional=True)
-        pooler_config = aphrodite_config.model_config.pooler_config
+        super().__init__(sonar_config=sonar_config, prefix=prefix, bidirectional=True)
+        pooler_config = sonar_config.model_config.pooler_config
         assert pooler_config is not None
         self.pooler = pooler_for_embed(pooler_config)
 
@@ -520,7 +520,7 @@ class Lfm2ForCausalLM(nn.Module, HasInnerState, SupportsLoRA, SupportsPP, IsHybr
     }
 
     # Reuse the backbone mapper so LoRA/quantization see the same name mapping.
-    hf_to_aphrodite_mapper = Lfm2Model.hf_to_aphrodite_mapper
+    hf_to_sonar_mapper = Lfm2Model.hf_to_sonar_mapper
 
     # LoRA specific attributes
     embedding_modules = {
@@ -531,30 +531,30 @@ class Lfm2ForCausalLM(nn.Module, HasInnerState, SupportsLoRA, SupportsPP, IsHybr
     @classmethod
     def get_mamba_state_dtype_from_config(
         cls,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
     ) -> tuple[torch.dtype, ...]:
         return MambaStateDtypeCalculator.short_conv_state_dtype(
-            aphrodite_config.model_config.dtype,
-            aphrodite_config.cache_config.mamba_cache_dtype,
+            sonar_config.model_config.dtype,
+            sonar_config.cache_config.mamba_cache_dtype,
         )
 
     @classmethod
     def get_mamba_state_shape_from_config(
         cls,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
     ) -> tuple[tuple[int, int]]:
         """Calculate shapes for LFM2's convolutional cache.
 
         Args:
-            aphrodite_config: Aphrodite config
+            sonar_config: Sonar config
 
         Returns:
             Tuple containing:
             - conv_state_shape: Shape for convolutional state cache
 
         """
-        parallel_config = aphrodite_config.parallel_config
-        hf_config = aphrodite_config.model_config.hf_config
+        parallel_config = sonar_config.parallel_config
+        hf_config = sonar_config.model_config.hf_config
 
         return MambaStateShapeCalculator.short_conv_state_shape(
             tp_world_size=parallel_config.tensor_parallel_size,
@@ -566,12 +566,12 @@ class Lfm2ForCausalLM(nn.Module, HasInnerState, SupportsLoRA, SupportsPP, IsHybr
     def get_mamba_state_copy_func(cls) -> tuple[MambaStateCopyFunc]:
         return MambaStateCopyFuncCalculator.short_conv_state_copy_func()
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
         super().__init__()
         self.config = config
-        self.model = Lfm2Model(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = Lfm2Model(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
 
         if get_pp_group().is_last_rank:
             self.lm_head = ParallelLMHead(

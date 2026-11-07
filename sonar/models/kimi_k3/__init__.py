@@ -4,7 +4,7 @@
 
 The implementation lives under ``nvidia/`` and ``amd/``; this module picks the
 right one for the current platform and re-exports the public classes used by
-the model registry. (Mirrors ``aphrodite.models.minimax_m3``.)
+the model registry. (Mirrors ``sonar.models.minimax_m3``.)
 
 On XPU, Kimi-Linear uses the reference KDA/MLA path in ``amd/linear.py``
 instead of the NVIDIA-specific fused attention kernels.
@@ -12,7 +12,7 @@ instead of the NVIDIA-specific fused attention kernels.
 
 from typing import TYPE_CHECKING
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 # The NVIDIA branch is the static default that type-checkers see; the ROCm
 # branch overrides it at runtime (kept type-compatible via type: ignore).

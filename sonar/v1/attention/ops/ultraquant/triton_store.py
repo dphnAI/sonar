@@ -22,8 +22,8 @@ from typing import Any
 
 import torch
 
-from aphrodite.triton_utils import tl, triton
-from aphrodite.v1.attention.ops.ultraquant.format import (
+from sonar.triton_utils import tl, triton
+from sonar.v1.attention.ops.ultraquant.format import (
     MIDPOINTS_SORTED,
     SORTED_TO_BITS,
     UE8M0_BIAS,

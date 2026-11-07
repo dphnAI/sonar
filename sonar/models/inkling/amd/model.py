@@ -11,39 +11,39 @@ import regex as re
 import torch
 from torch import nn
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed import (
+from sonar.config import SonarConfig
+from sonar.distributed import (
     get_pp_group,
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
     tensor_model_parallel_all_gather,
     tensor_model_parallel_reduce_scatter,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
-from aphrodite.model_executor.models.interfaces import (
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
+from sonar.model_executor.models.interfaces import (
     MultiModalEmbeddings,
     SupportsLoRA,
     SupportsMultiModal,
     SupportsPP,
 )
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.models.utils import (
     AutoWeightsLoader,
     WeightsMapper,
     make_empty_intermediate_tensors_factory,
     make_layers,
     maybe_prefix,
 )
-from aphrodite.models.inkling.common.mm_preprocess import (
+from sonar.models.inkling.common.mm_preprocess import (
     InklingDummyInputsBuilder,
     InklingMultiModalProcessor,
     InklingProcessingInfo,
     inkling_audio_enabled,
     inkling_vision_enabled,
 )
-from aphrodite.models.inkling.common.towers import InklingAudio, InklingVision
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.sequence import IntermediateTensors
+from sonar.models.inkling.common.towers import InklingAudio, InklingVision
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.sequence import IntermediateTensors
 
 from ..configs import InklingMMConfig, InklingModelConfig
 from .attention import InklingAttention, compute_log_scaling_tau
@@ -298,7 +298,7 @@ class InklingModel(nn.Module):
 class _TmlForCausalLMBase(nn.Module, SupportsPP, SupportsLoRA):
     """Shared text-backbone causal-LM scaffolding for both entry classes."""
 
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_substr={
             ".w13_dn": ".gate_up_proj",
             ".w2_md": ".down_proj",
@@ -338,11 +338,11 @@ class _TmlForCausalLMBase(nn.Module, SupportsPP, SupportsLoRA):
 
     def _build(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         text_config: InklingModelConfig,
         prefix: str,
     ) -> None:
-        quant_config = aphrodite_config.quant_config
+        quant_config = sonar_config.quant_config
         self.config = text_config
         # ROCm checkpoints use Quark OCP MXFP4. The global Quark config is
         # passed into each routed MoE and its exclusion list keeps the rest of
@@ -400,9 +400,9 @@ class _TmlForCausalLMBase(nn.Module, SupportsPP, SupportsLoRA):
 class InklingForCausalLM(_TmlForCausalLMBase):
     """Text-only entry point (``inkling_model`` checkpoints)."""
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__()
-        self._build(aphrodite_config, aphrodite_config.model_config.hf_config, prefix)
+        self._build(sonar_config, sonar_config.model_config.hf_config, prefix)
 
 
 @MULTIMODAL_REGISTRY.register_processor(
@@ -420,7 +420,7 @@ class InklingForConditionalGeneration(_TmlForCausalLMBase, SupportsMultiModal):
     class only adds multimodal embedding + merge.
     """
 
-    hf_to_aphrodite_mapper = _TmlForCausalLMBase.hf_to_aphrodite_mapper | WeightsMapper(
+    hf_to_sonar_mapper = _TmlForCausalLMBase.hf_to_sonar_mapper | WeightsMapper(
         orig_to_new_prefix={
             "model.audio.": "audio.",
             "model.visual.": "visual.vision_encoder.",
@@ -435,9 +435,9 @@ class InklingForConditionalGeneration(_TmlForCausalLMBase, SupportsMultiModal):
             return "<|content_audio_input|>"
         raise ValueError("Only image or audio modality is supported")
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__()
-        config: InklingMMConfig = aphrodite_config.model_config.hf_config
+        config: InklingMMConfig = sonar_config.model_config.hf_config
 
         self.visual = (
             InklingVision(config.vision_config, prefix=maybe_prefix(prefix, "visual"))
@@ -450,7 +450,7 @@ class InklingForConditionalGeneration(_TmlForCausalLMBase, SupportsMultiModal):
             else None
         )
 
-        self._build(aphrodite_config, config.text_config, prefix)
+        self._build(sonar_config, config.text_config, prefix)
 
     # -- multimodal embedding -------------------------------------------
 
@@ -526,7 +526,7 @@ class InklingForConditionalGeneration(_TmlForCausalLMBase, SupportsMultiModal):
         # Override the base's 1-arg embed_input_ids: the runner calls this 3-arg
         # signature for multimodal models. Text embeddings come from the shared
         # backbone (which applies embed_norm); MM embeddings are scattered in.
-        from aphrodite.model_executor.models.utils import _merge_multimodal_embeddings
+        from sonar.model_executor.models.utils import _merge_multimodal_embeddings
 
         # Placeholder ids use unused vocabulary slots and these positions are
         # overwritten by MM embeds below.
@@ -572,7 +572,7 @@ def _load_inkling_weights(
     local_ids = set(config.local_layer_ids)
 
     def _iter_loadable_weights() -> Iterable[tuple[str, torch.Tensor]]:
-        for name, weight in module.hf_to_aphrodite_mapper.apply(weights):
+        for name, weight in module.hf_to_sonar_mapper.apply(weights):
             # LightSeek's MXFP4 conversion bundles a quantized copy of the
             # standalone PEFT adapter in the base safetensors index. These are
             # not base-model parameters; adapters remain opt-in at serving.

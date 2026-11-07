@@ -4,14 +4,14 @@
 
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
 
 logger = init_logger(__name__)
 
 if current_platform.is_cuda():
     try:
-        import aphrodite._flashmla_C  # noqa: F401
+        import sonar._flashmla_C  # noqa: F401
 
         _flashmla_C_AVAILABLE = True
     except ImportError:
@@ -21,7 +21,7 @@ else:
 
 if current_platform.is_cuda():
     try:
-        import aphrodite._flashmla_extension_C  # noqa: F401
+        import sonar._flashmla_extension_C  # noqa: F401
 
         _flashmla_extension_C_AVAILABLE = True
     except ImportError:
@@ -34,14 +34,14 @@ def _is_flashmla_available() -> tuple[bool, str | None]:
     if not _flashmla_C_AVAILABLE:
         return (
             False,
-            "aphrodite._flashmla_C is not available, likely was not "
+            "sonar._flashmla_C is not available, likely was not "
             "compiled due to insufficient nvcc version or a supported arch "
             "was not in the list of target arches to compile for.",
         )
     if not _flashmla_extension_C_AVAILABLE:
         return (
             False,
-            "aphrodite._flashmla_extension_C is not available, likely was not compiled due to a build error.",
+            "sonar._flashmla_extension_C is not available, likely was not compiled due to a build error.",
         )
 
     return True, None
@@ -76,7 +76,7 @@ def _raise_flashmla_unavailable(*_args, **_kwargs):
 
 
 if _is_flashmla_available()[0]:
-    from aphrodite.third_party.flashmla.flash_mla_interface import (  # noqa: F401
+    from sonar.third_party.flashmla.flash_mla_interface import (  # noqa: F401
         FlashMLASchedMeta,
         flash_attn_varlen_func,
         flash_attn_varlen_kvpacked_func,

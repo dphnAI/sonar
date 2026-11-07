@@ -11,29 +11,29 @@ from unittest.mock import Mock
 
 import pytest
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed.ec_transfer.ec_connector.base import ECConnectorRole
-from aphrodite.distributed.ec_transfer.ec_connector.example_connector import (
+from sonar.config import SonarConfig
+from sonar.distributed.ec_transfer.ec_connector.base import ECConnectorRole
+from sonar.distributed.ec_transfer.ec_connector.example_connector import (
     ECExampleConnector,
 )
-from aphrodite.distributed.ec_transfer.ec_connector.metrics import (
+from sonar.distributed.ec_transfer.ec_connector.metrics import (
     ECConnectorLogging,
     ECConnectorProm,
     ECConnectorStats,
 )
-from aphrodite.v1.outputs import ECConnectorOutput
+from sonar.v1.outputs import ECConnectorOutput
 
 pytestmark = pytest.mark.cpu_test
 
 
 @pytest.fixture
 def example_connector(tmp_path):
-    config = Mock(spec=AphroditeConfig)
+    config = Mock(spec=SonarConfig)
     config.ec_transfer_config = Mock()
     config.ec_transfer_config.get_from_extra_config = Mock(return_value=str(tmp_path))
     config.ec_transfer_config.is_ec_producer = True
     config.ec_transfer_config.is_ec_consumer = False
-    return ECExampleConnector(aphrodite_config=config, role=ECConnectorRole.SCHEDULER)
+    return ECExampleConnector(sonar_config=config, role=ECConnectorRole.SCHEDULER)
 
 
 def test_base_stats_methods_raise_not_implemented():
@@ -56,7 +56,7 @@ def test_connector_hooks_default_to_none(example_connector):
     assert ECExampleConnector.build_ec_connector_stats() is None
     assert (
         ECExampleConnector.build_prom_metrics(
-            aphrodite_config=Mock(spec=AphroditeConfig),
+            sonar_config=Mock(spec=SonarConfig),
             metric_types={},
             labelnames=[],
             per_engine_labelvalues={},
@@ -78,8 +78,8 @@ def test_logging_and_prom_are_no_ops_without_ec_transfer_config():
     logging = ECConnectorLogging(ec_transfer_config=None)
     logging.log()  # Should not raise, nothing to log.
 
-    aphrodite_config = Mock(spec=AphroditeConfig)
-    aphrodite_config.ec_transfer_config = None
-    prom = ECConnectorProm(aphrodite_config, labelnames=[], per_engine_labelvalues={})
+    sonar_config = Mock(spec=SonarConfig)
+    sonar_config.ec_transfer_config = None
+    prom = ECConnectorProm(sonar_config, labelnames=[], per_engine_labelvalues={})
     assert prom.prom_metrics is None
     prom.observe({})  # Should not raise.

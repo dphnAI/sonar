@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Kimi-K3's MonoKernels on MI355X against the ops Aphrodite runs for the same
+"""Kimi-K3's MonoKernels on MI355X against the ops Sonar runs for the same
 spec-verify step, random weights in the checkpoint's formats at TP8 shapes:
 
 - K1 (one GPU): AttnRes -> in_proj -> f_b -> conv -> KDA recurrence -> gated
@@ -19,7 +19,7 @@ import torch.distributed as dist
 import torch.nn.functional as F
 from einops import rearrange
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 from tests.utils import (
     init_test_distributed_environment,
     multi_gpu_test,
@@ -33,7 +33,7 @@ COS_MIN = 0.9999
 def _on_gfx950() -> bool:
     if not current_platform.is_rocm():
         return False
-    from aphrodite.platforms.rocm import on_gfx950
+    from sonar.platforms.rocm import on_gfx950
 
     return on_gfx950()
 
@@ -59,7 +59,7 @@ def _randn(g, *shape, scale=1.0, dtype=bf):
 
 
 def _kda_inputs(nb: int, nacc: int, dim_first: bool, S: int, slots: int = 16):
-    from aphrodite.models.kimi_k3.amd.specialized_decode.mono.attention.kda import (
+    from sonar.models.kimi_k3.amd.specialized_decode.mono.attention.kda import (
         HD,
         HIDDEN,
         NH,
@@ -85,7 +85,7 @@ def _kda_inputs(nb: int, nacc: int, dim_first: bool, S: int, slots: int = 16):
         "on_w": (1 + _randn(g, HD, scale=0.1, dtype=torch.float32)).to(bf),
     }
     w["w_in"][NPROJ - 4 :].zero_()
-    # Aphrodite packs a layer's conv and SSM state in one padded page: strided slots
+    # Sonar packs a layer's conv and SSM state in one padded page: strided slots
     pad = _randn(g, slots, NH * HD * HD + 24576, scale=0.05, dtype=torch.float32)
     w["rstate"] = pad[:, : NH * HD * HD].view(slots, NH, HD, HD)
     conv = _randn(g, slots, QKV * sl + 4096)[:, : QKV * sl]
@@ -99,19 +99,19 @@ def _kda_inputs(nb: int, nacc: int, dim_first: bool, S: int, slots: int = 16):
 
 
 def _kda_reference(w, nb: int, S: int, write_idx: int):
-    from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-    from aphrodite.model_executor.layers.mamba.ops.causal_conv1d import (
+    from sonar.config import SonarConfig, set_current_sonar_config
+    from sonar.model_executor.layers.mamba.ops.causal_conv1d import (
         causal_conv1d_update,
     )
-    from aphrodite.models.kimi_k3.amd.ops.attn_res import attn_res
-    from aphrodite.models.kimi_k3.amd.ops.third_party.kda import fused_recurrent_kda
-    from aphrodite.models.kimi_k3.amd.specialized_decode.mono.attention.kda import (
+    from sonar.models.kimi_k3.amd.ops.attn_res import attn_res
+    from sonar.models.kimi_k3.amd.ops.third_party.kda import fused_recurrent_kda
+    from sonar.models.kimi_k3.amd.specialized_decode.mono.attention.kda import (
         HD,
         NH,
         PROJ,
         QKV,
     )
-    from aphrodite.third_party.flash_linear_attention.ops.kda import FusedRMSNormGated
+    from sonar.third_party.flash_linear_attention.ops.kda import FusedRMSNormGated
 
     prefix, blocks = w["prefix"].clone(), w["blocks"].clone()
     x = attn_res(
@@ -162,7 +162,7 @@ def _kda_reference(w, nb: int, S: int, write_idx: int):
         uniform_sequence_length=S,
         out=core,
     )
-    with set_current_aphrodite_config(AphroditeConfig()):
+    with set_current_sonar_config(SonarConfig()):
         norm = FusedRMSNormGated(HD, activation="sigmoid").cuda()
     norm.weight.data = w["on_w"].clone()
     out = norm.forward_cuda(core, rearrange(g2, "n (h d) -> 1 n h d", d=HD))
@@ -179,17 +179,17 @@ def _kda_reference(w, nb: int, S: int, write_idx: int):
 @pytest.mark.parametrize("dim_first", [True, False])
 @pytest.mark.parametrize("nacc", [1, 3])
 @pytest.mark.parametrize("write", [False, True])
-def test_k1_matches_aphrodite_ops(dim_first: bool, nacc: int, write: bool) -> None:
+def test_k1_matches_sonar_ops(dim_first: bool, nacc: int, write: bool) -> None:
     """K1 against attn_res -> in_proj -> f_b -> causal_conv1d_update ->
     fused_recurrent_kda -> FusedRMSNormGated on one spec-verify step (one
     request, 8 tokens), including the state each step leaves behind."""
-    from aphrodite.models.kimi_k3.amd.specialized_decode.mono.attention.kda import (
+    from sonar.models.kimi_k3.amd.specialized_decode.mono.attention.kda import (
         PROJ,
         KdaPreBuild,
         kda_pre,
         scratch_bytes,
     )
-    from aphrodite.models.kimi_k3.amd.specialized_decode.mono.common.plan import HEALTH_WORDS
+    from sonar.models.kimi_k3.amd.specialized_decode.mono.common.plan import HEALTH_WORDS
 
     S, nb = 8, 4
     # a block-write layer appends block nb (block_write_idx == prev_valid_blocks)
@@ -260,7 +260,7 @@ def _situ(g, u):
 
 
 def _all_reduce_fp32(t: torch.Tensor) -> torch.Tensor:
-    """The ranks' bf16 partials summed in fp32, as Aphrodite's custom all-reduce."""
+    """The ranks' bf16 partials summed in fp32, as Sonar's custom all-reduce."""
     t = t.float()
     dist.all_reduce(t)
     return t.to(bf)
@@ -273,7 +273,7 @@ def _moe_reference(x, mw, rank: int):
     from aiter import ActivationType, QuantType
     from aiter.fused_moe import fused_moe
 
-    from aphrodite.models.kimi_k3.amd.specialized_decode.mono.stages.moe import (
+    from sonar.models.kimi_k3.amd.specialized_decode.mono.stages.moe import (
         SI,
         TOPK,
         UP_N,
@@ -315,8 +315,8 @@ def _moe_reference(x, mw, rank: int):
 def _moe_weights(rank: int, device):
     from aiter.utility.fp4_utils import e8m0_shuffle
 
-    from aphrodite._aiter_ops import rocm_aiter_ops
-    from aphrodite.models.kimi_k3.amd.specialized_decode.mono.stages.moe import (
+    from sonar._aiter_ops import rocm_aiter_ops
+    from sonar.models.kimi_k3.amd.specialized_decode.mono.stages.moe import (
         HIDDEN,
         LAT,
         RI,
@@ -369,7 +369,7 @@ def _moe_args(mw):
 
 
 def _k2_inputs(rank: int, device):
-    from aphrodite.models.kimi_k3.amd.specialized_decode.mono.attention.kda import (
+    from sonar.models.kimi_k3.amd.specialized_decode.mono.attention.kda import (
         HIDDEN,
         PROJ,
     )
@@ -388,7 +388,7 @@ def _k2_inputs(rank: int, device):
 
 
 def _k2_launch(runner, w, mw, prefix, out, reset: bool, nb: int = 4):
-    from aphrodite.models.kimi_k3.amd.specialized_decode.mono import layer as k2
+    from sonar.models.kimi_k3.amd.specialized_decode.mono import layer as k2
 
     key = k2.K2Build(tokens=8, nblocks=nb + int(reset), reset=reset, **runner.fault)
     k2.k2_launch(
@@ -427,10 +427,10 @@ def _k2_worker(
 ) -> None:
     device = _init_worker(monkeypatch, tp_size, pp_size, rank, distributed_init_port)
 
-    from aphrodite.models.kimi_k3.amd.ops.attn_res import attn_res
-    from aphrodite.models.kimi_k3.amd.specialized_decode.mono import layer as k2
-    from aphrodite.models.kimi_k3.amd.specialized_decode.mono.attention.kda import HIDDEN
-    from aphrodite.models.kimi_k3.amd.specialized_decode.runtime.runner import MonoRunner
+    from sonar.models.kimi_k3.amd.ops.attn_res import attn_res
+    from sonar.models.kimi_k3.amd.specialized_decode.mono import layer as k2
+    from sonar.models.kimi_k3.amd.specialized_decode.mono.attention.kda import HIDDEN
+    from sonar.models.kimi_k3.amd.specialized_decode.runtime.runner import MonoRunner
 
     S, nb = 8, 4
     runner = MonoRunner(device)
@@ -490,7 +490,7 @@ def _k2_worker(
 
 @needs_gfx950
 @multi_gpu_test(num_gpus=8)
-def test_k2_tp8_matches_aphrodite_ops_and_replays(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_k2_tp8_matches_sonar_ops_and_replays(monkeypatch: pytest.MonkeyPatch) -> None:
     multi_process_parallel(monkeypatch, 8, 1, _k2_worker)
 
 
@@ -507,13 +507,13 @@ def _fault_worker(
 ) -> None:
     device = _init_worker(monkeypatch, tp_size, pp_size, rank, distributed_init_port)
 
-    from aphrodite.models.kimi_k3.amd.specialized_decode.mono import layer as k2
-    from aphrodite.models.kimi_k3.amd.specialized_decode.mono.attention.kda import HIDDEN
-    from aphrodite.models.kimi_k3.amd.specialized_decode.mono.common.debug import (
+    from sonar.models.kimi_k3.amd.specialized_decode.mono import layer as k2
+    from sonar.models.kimi_k3.amd.specialized_decode.mono.attention.kda import HIDDEN
+    from sonar.models.kimi_k3.amd.specialized_decode.mono.common.debug import (
         given_up_waits,
     )
-    from aphrodite.models.kimi_k3.amd.specialized_decode.mono.common.sync import WAIT_TICKS
-    from aphrodite.models.kimi_k3.amd.specialized_decode.runtime.runner import MonoRunner
+    from sonar.models.kimi_k3.amd.specialized_decode.mono.common.sync import WAIT_TICKS
+    from sonar.models.kimi_k3.amd.specialized_decode.runtime.runner import MonoRunner
 
     runner = MonoRunner(device)
     # rank STALLED's CTA 0 stalls past every wait's bound in the epoch 2 launch
@@ -554,11 +554,11 @@ def test_stalled_rank_fails_the_step_without_a_hang(
 def test_warmup_compiles_without_launching() -> None:
     """The JIT warm-up compiles K1 and K2 before capture without running them:
     a launch on its null arguments would fault."""
-    from aphrodite.models.kimi_k3.amd.specialized_decode.mono.attention.kda import (
+    from sonar.models.kimi_k3.amd.specialized_decode.mono.attention.kda import (
         KdaPreBuild,
     )
-    from aphrodite.models.kimi_k3.amd.specialized_decode.mono.layer import K2Build
-    from aphrodite.models.kimi_k3.amd.specialized_decode.runtime.layers import compile_build
+    from sonar.models.kimi_k3.amd.specialized_decode.mono.layer import K2Build
+    from sonar.models.kimi_k3.amd.specialized_decode.runtime.layers import compile_build
 
     compile_build(KdaPreBuild(tokens=8, qlen=8, nblocks=4, delta=True, state_len=10))
     compile_build(K2Build(tokens=8, nblocks=4))

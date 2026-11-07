@@ -14,7 +14,7 @@
 #include "ftensor.hpp"
 #include "page.hpp"
 
-namespace aphrodite {
+namespace sonar {
 namespace vmm {
 
 class FTensorAllocator {
@@ -66,4 +66,4 @@ class FTensorAllocator {
 };
 
 }  // namespace vmm
-}  // namespace aphrodite
+}  // namespace sonar

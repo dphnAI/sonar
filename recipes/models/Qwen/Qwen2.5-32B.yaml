@@ -64,11 +64,11 @@ guide: |
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U aphrodite-engine --torch-backend auto
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   ```
 
   ### TPU (Trillium / v6e)
-  Use the official Aphrodite TPU image. The 32B model is served on a `v6e-4` slice (`--topology 2x2`, 4 chips, TP=4).
+  Use the official Sonar TPU image. The 32B model is served on a `v6e-4` slice (`--topology 2x2`, 4 chips, TP=4).
   ```bash
   export HF_HOME=/dev/shm
   export HF_TOKEN=<your HF token>
@@ -83,7 +83,7 @@ guide: |
   export HF_TOKEN=<your HF token>
   export TP=4
   export MAX_MODEL_LEN=4096
-  aphrodite serve Qwen/Qwen2.5-32B \
+  sonar serve Qwen/Qwen2.5-32B \
     --seed 42 \
     --gpu-memory-utilization 0.98 \
     --max-num-batched-tokens 2048 \
@@ -94,7 +94,7 @@ guide: |
 
   ### Single GPU / node (BF16)
   ```bash
-  aphrodite serve Qwen/Qwen2.5-32B \
+  sonar serve Qwen/Qwen2.5-32B \
     --host 0.0.0.0 \
     --port 8000 \
     --tensor-parallel-size 2
@@ -103,8 +103,8 @@ guide: |
   ## Configuration Tips
 
   - `--max-model-len 4096` keeps memory in check on a 4-chip v6e slice; native context is 128K — raise it if you have headroom.
-  - Aphrodite has been V1-engine-only for a long time, so no `APHRODITE_USE_V1=1` export is needed even though the upstream TPU recipe still shows it.
-  - Aphrodite uses 90% of device memory by default; the TPU recipe pushes `--gpu-memory-utilization 0.98` to maximize KV cache.
+  - Sonar has been V1-engine-only for a long time, so no `SONAR_USE_V1=1` export is needed even though the upstream TPU recipe still shows it.
+  - Sonar uses 90% of device memory by default; the TPU recipe pushes `--gpu-memory-utilization 0.98` to maximize KV cache.
   - `--max-num-batched-tokens` and `--max-num-seqs` tune batch throughput vs latency.
 
   ## Benchmarking
@@ -112,7 +112,7 @@ guide: |
   Launch the server with `--no-enable-prefix-caching` for consistent measurements.
 
   ```bash
-  aphrodite bench serve \
+  sonar bench serve \
     --host 0.0.0.0 \
     --port 8000 \
     --model Qwen/Qwen2.5-32B \

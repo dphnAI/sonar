@@ -8,7 +8,7 @@ from typing import Literal
 import torch
 from PIL import Image
 
-from .base import get_aphrodite_public_assets
+from .base import get_sonar_public_assets
 
 VLM_IMAGES_DIR = "vision_model_images"
 
@@ -35,7 +35,7 @@ class ImageAsset:
 
     def get_path(self, ext: str) -> Path:
         """Return s3 path for given image."""
-        return get_aphrodite_public_assets(filename=f"{self.name}.{ext}", s3_prefix=VLM_IMAGES_DIR)
+        return get_sonar_public_assets(filename=f"{self.name}.{ext}", s3_prefix=VLM_IMAGES_DIR)
 
     @property
     def pil_image(self) -> Image.Image:

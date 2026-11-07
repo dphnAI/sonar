@@ -12,11 +12,11 @@ gathered on the forward stream after any side stream has rejoined it.
 
 import torch
 
-from aphrodite.distributed import get_tp_group
-from aphrodite.distributed.device_communicators.cuda_communicator import CudaCommunicator
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.vocab_parallel_embedding import VocabParallelEmbedding
-from aphrodite.platforms import current_platform
+from sonar.distributed import get_tp_group
+from sonar.distributed.device_communicators.cuda_communicator import CudaCommunicator
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.vocab_parallel_embedding import VocabParallelEmbedding
+from sonar.platforms import current_platform
 
 from .lm_head import low_batch_lm_head, low_batch_lm_head_applies
 

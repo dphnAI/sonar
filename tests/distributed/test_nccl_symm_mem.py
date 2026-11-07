@@ -10,26 +10,26 @@ import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
 
-import aphrodite.envs as envs
-from aphrodite.distributed import cleanup_dist_env_and_memory
-from aphrodite.distributed.device_communicators.cuda_communicator import (
+import sonar.envs as envs
+from sonar.distributed import cleanup_dist_env_and_memory
+from sonar.distributed.device_communicators.cuda_communicator import (
     NCCL_DIRECT_SYMM_RS_OUTPUT_MIN_VERSION,
     CudaCommunicator,
 )
-from aphrodite.distributed.device_communicators.pynccl import register_nccl_symmetric_ops
-from aphrodite.distributed.device_communicators.pynccl_allocator import (
+from sonar.distributed.device_communicators.pynccl import register_nccl_symmetric_ops
+from sonar.distributed.device_communicators.pynccl_allocator import (
     get_nccl_mem_pool,
     is_symmetric_memory_enabled,
     is_symmetric_memory_tensor,
 )
-from aphrodite.distributed.parallel_state import (
+from sonar.distributed.parallel_state import (
     get_tp_group,
     init_distributed_environment,
     initialize_model_parallel,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.system_utils import update_environment_variables
-from tests.utils import ensure_current_aphrodite_config
+from sonar.platforms import current_platform
+from sonar.utils.system_utils import update_environment_variables
+from tests.utils import ensure_current_sonar_config
 
 torch.manual_seed(42)
 random.seed(44)
@@ -46,7 +46,7 @@ def test_disabled_pynccl_does_not_allocate_symmetric_buffer():
 
 @pytest.mark.parametrize("use_aiter", [False, True])
 def test_reduce_scatterv_preserves_caller_output(monkeypatch, use_aiter):
-    import aphrodite.distributed.device_communicators.cuda_communicator as cc
+    import sonar.distributed.device_communicators.cuda_communicator as cc
 
     communicator = object.__new__(CudaCommunicator)
     communicator.world_size = 2
@@ -66,7 +66,7 @@ def test_reduce_scatterv_preserves_caller_output(monkeypatch, use_aiter):
     )
     monkeypatch.setattr(cc, "should_nccl_symm_mem_ag_rs", lambda: True)
     monkeypatch.setattr(cc, "is_symmetric_memory_tensor", lambda tensor: False)
-    monkeypatch.setenv("APHRODITE_BATCH_INVARIANT", "0")
+    monkeypatch.setenv("SONAR_BATCH_INVARIANT", "0")
 
     # Explicit uniform sizes must not stage an ordinary input into symmetric
     # scratch, and AITER must write the supplied output after normalization.
@@ -95,7 +95,7 @@ def nccl_symm_mem_allreduce_worker(local_rank: int, world_size: int):
         )
 
         init_distributed_environment()
-        with ensure_current_aphrodite_config():
+        with ensure_current_sonar_config():
             initialize_model_parallel(tensor_model_parallel_size=world_size)
 
         cuda_communicator = typing.cast(CudaCommunicator, get_tp_group().device_communicator)
@@ -108,7 +108,7 @@ def nccl_symm_mem_allreduce_worker(local_rank: int, world_size: int):
         register_nccl_symmetric_ops(pynccl_comm)
         input = torch.randint(1, 23, (test_size_elements,), dtype=dtype, device=device)
         input_clone = input.clone()
-        output = torch.ops.aphrodite.all_reduce_symmetric_with_copy(input)
+        output = torch.ops.sonar.all_reduce_symmetric_with_copy(input)
         assert output is not None
 
         group = get_tp_group().device_group
@@ -121,13 +121,13 @@ def nccl_symm_mem_allreduce_worker(local_rank: int, world_size: int):
     reason="NCCLSymmMemAllreduce is only available for CUDA platforms.",
 )
 @pytest.mark.parametrize("world_size", [2])
-@pytest.mark.skipif(envs.APHRODITE_TARGET_DEVICE not in ["cuda"], reason="Only test on CUDA")
+@pytest.mark.skipif(envs.SONAR_TARGET_DEVICE not in ["cuda"], reason="Only test on CUDA")
 def test_nccl_symm_mem_allreduce(monkeypatch: pytest.MonkeyPatch, world_size):
     if world_size > torch.accelerator.device_count():
         pytest.skip("Not enough GPUs to run the test.")
 
     # Enable SymmMemCommunicator
-    monkeypatch.setenv("APHRODITE_USE_NCCL_SYMM_MEM", "1")
+    monkeypatch.setenv("SONAR_USE_NCCL_SYMM_MEM", "1")
     monkeypatch.setenv("NCCL_NVLS_ENABLE", "1")
     monkeypatch.setenv("NCCL_CUMEM_ENABLE", "1")
 
@@ -155,7 +155,7 @@ def nccl_symm_mem_allgather_worker(local_rank: int, world_size: int):
         )
 
         init_distributed_environment()
-        with ensure_current_aphrodite_config():
+        with ensure_current_sonar_config():
             initialize_model_parallel(tensor_model_parallel_size=world_size)
 
         cuda_communicator = typing.cast(CudaCommunicator, get_tp_group().device_communicator)
@@ -207,12 +207,12 @@ def nccl_symm_mem_allgather_worker(local_rank: int, world_size: int):
     reason="NCCL symmetric memory is only available for CUDA platforms.",
 )
 @pytest.mark.parametrize("world_size", [2])
-@pytest.mark.skipif(envs.APHRODITE_TARGET_DEVICE not in ["cuda"], reason="Only test on CUDA")
+@pytest.mark.skipif(envs.SONAR_TARGET_DEVICE not in ["cuda"], reason="Only test on CUDA")
 def test_nccl_symm_mem_allgather(monkeypatch: pytest.MonkeyPatch, world_size):
     if world_size > torch.accelerator.device_count():
         pytest.skip("Not enough GPUs to run the test.")
 
-    monkeypatch.setenv("APHRODITE_USE_NCCL_SYMM_MEM", "1")
+    monkeypatch.setenv("SONAR_USE_NCCL_SYMM_MEM", "1")
     monkeypatch.setenv("NCCL_NVLS_ENABLE", "1")
     monkeypatch.setenv("NCCL_CUMEM_ENABLE", "1")
 
@@ -240,7 +240,7 @@ def nccl_symm_mem_reduce_scatter_worker(local_rank: int, world_size: int):
         )
 
         init_distributed_environment()
-        with ensure_current_aphrodite_config():
+        with ensure_current_sonar_config():
             initialize_model_parallel(tensor_model_parallel_size=world_size)
 
         cuda_communicator = typing.cast(CudaCommunicator, get_tp_group().device_communicator)
@@ -291,7 +291,7 @@ def nccl_symm_mem_reduce_scatter_worker(local_rank: int, world_size: int):
         if pynccl_comm.nccl_version < NCCL_DIRECT_SYMM_RS_OUTPUT_MIN_VERSION:
             return
 
-        from aphrodite.v1.worker import ubatching
+        from sonar.v1.worker import ubatching
 
         m.setattr(ubatching, "dbo_current_ubatch_id", lambda: 0)
         ubatch0 = cuda_communicator._get_symm_scratch("ag_out", (128,), dtype, device)
@@ -365,12 +365,12 @@ def nccl_symm_mem_reduce_scatter_worker(local_rank: int, world_size: int):
     reason="NCCL symmetric memory is only available for CUDA platforms.",
 )
 @pytest.mark.parametrize("world_size", [2])
-@pytest.mark.skipif(envs.APHRODITE_TARGET_DEVICE not in ["cuda"], reason="Only test on CUDA")
+@pytest.mark.skipif(envs.SONAR_TARGET_DEVICE not in ["cuda"], reason="Only test on CUDA")
 def test_nccl_symm_mem_reduce_scatter(monkeypatch: pytest.MonkeyPatch, world_size):
     if world_size > torch.accelerator.device_count():
         pytest.skip("Not enough GPUs to run the test.")
 
-    monkeypatch.setenv("APHRODITE_USE_NCCL_SYMM_MEM", "1")
+    monkeypatch.setenv("SONAR_USE_NCCL_SYMM_MEM", "1")
     monkeypatch.setenv("NCCL_NVLS_ENABLE", "1")
     monkeypatch.setenv("NCCL_CUMEM_ENABLE", "1")
 

@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Speech-to-Text support for Aphrodite Metal."""
+"""Speech-to-Text support for Sonar Metal."""
 
-from aphrodite.metal.stt.loader import load_model
-from aphrodite.metal.stt.protocol import TranscriptionResult, TranscriptionSegment
-from aphrodite.metal.stt.qwen3_asr.transcriber import Qwen3ASRTranscriber
-from aphrodite.metal.stt.whisper import WhisperTranscriber
+from sonar.metal.stt.loader import load_model
+from sonar.metal.stt.protocol import TranscriptionResult, TranscriptionSegment
+from sonar.metal.stt.qwen3_asr.transcriber import Qwen3ASRTranscriber
+from sonar.metal.stt.whisper import WhisperTranscriber
 
 __all__ = [
     "Qwen3ASRTranscriber",

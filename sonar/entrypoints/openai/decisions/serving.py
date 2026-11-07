@@ -4,10 +4,10 @@ import asyncio
 
 from fastapi import Request
 
-from aphrodite.entrypoints.openai.models.serving import OpenAIServingModels
-from aphrodite.entrypoints.serve.engine.protocol import ErrorResponse
-from aphrodite.entrypoints.serve.engine.serving import BaseServing
-from aphrodite.entrypoints.serve.utils.request_logger import RequestLogger
+from sonar.entrypoints.openai.models.serving import OpenAIServingModels
+from sonar.entrypoints.serve.engine.protocol import ErrorResponse
+from sonar.entrypoints.serve.engine.serving import BaseServing
+from sonar.entrypoints.serve.utils.request_logger import RequestLogger
 
 from .adapters import input_text, make_answer, make_read_question
 from .protocol import (

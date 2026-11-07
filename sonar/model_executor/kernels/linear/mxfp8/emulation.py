@@ -3,12 +3,12 @@
 
 import torch
 
-from aphrodite.model_executor.layers.quantization.utils.mxfp8_utils import (
+from sonar.model_executor.layers.quantization.utils.mxfp8_utils import (
     MXFP8_BLOCK_SIZE,
     MXFP8_SCALE_DTYPE,
     dequant_mxfp8_to_bf16,
 )
-from aphrodite.model_executor.utils import replace_parameter
+from sonar.model_executor.utils import replace_parameter
 
 from .Mxfp8LinearKernel import Mxfp8LinearKernel, Mxfp8LinearLayerConfig
 
@@ -38,11 +38,11 @@ class EmulationMxfp8LinearKernel(Mxfp8LinearKernel):
         # BF16 checkpoint. The 1-byte MXFP8 weight is replaced by BF16 (2x its
         # size, but linear weights are small vs the MoE experts); the tiny E8M0
         # scale is kept for the dtype/ndim asserts but is otherwise unused.
-        # Opt out (APHRODITE_MXFP8_EMULATION_DEQUANT_AT_LOAD=0) to keep the MXFP8
+        # Opt out (SONAR_MXFP8_EMULATION_DEQUANT_AT_LOAD=0) to keep the MXFP8
         # weight and dequant per-step in apply_weights instead.
-        import aphrodite.envs as envs
+        import sonar.envs as envs
 
-        if envs.APHRODITE_MXFP8_EMULATION_DEQUANT_AT_LOAD:
+        if envs.SONAR_MXFP8_EMULATION_DEQUANT_AT_LOAD:
             weight = dequant_mxfp8_to_bf16(weight.contiguous(), weight_scale)
         replace_parameter(layer, "weight", weight.contiguous())
         replace_parameter(layer, "weight_scale", weight_scale)

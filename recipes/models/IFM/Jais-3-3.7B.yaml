@@ -48,7 +48,7 @@ guide: |
   ## Launch Commands
 
   ```bash
-  aphrodite serve IFM/Jais-3-3.7B \
+  sonar serve IFM/Jais-3-3.7B \
     --trust-remote-code \
     --chat-template-content-format string \
     --dtype bfloat16 \

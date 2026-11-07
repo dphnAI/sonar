@@ -6,30 +6,30 @@ from typing import TYPE_CHECKING
 
 import torch
 
-import aphrodite.envs as envs
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.config.kernel import MoEBackend
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.all2all_utils import (
+import sonar.envs as envs
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.config.kernel import MoEBackend
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.all2all_utils import (
     maybe_make_prepare_finalize,
 )
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEQuantConfig,
 )
-from aphrodite.model_executor.layers.fused_moe.oracle.base import MoEKernelOracle
-from aphrodite.model_executor.layers.quantization.utils.flashinfer_utils import (
+from sonar.model_executor.layers.fused_moe.oracle.base import MoEKernelOracle
+from sonar.model_executor.layers.quantization.utils.flashinfer_utils import (
     align_moe_weights_for_fi,
     convert_moe_weights_to_flashinfer_trtllm_block_layout,
     swap_w13_to_w31,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.math_utils import round_up
+from sonar.platforms import current_platform
+from sonar.utils.math_utils import round_up
 
 if TYPE_CHECKING:
-    from aphrodite.model_executor.layers.quantization.utils.quant_utils import QuantKey
+    from sonar.model_executor.layers.quantization.utils.quant_utils import QuantKey
 
 logger = init_logger(__name__)
 
@@ -95,7 +95,7 @@ def _get_priority_backends(moe_config: FusedMoEConfig) -> list[UnquantizedMoeBac
 
     elif current_platform.is_xpu():
         # XPUExperts does not support batch invariance; TRITON is kept as a
-        # fallback so APHRODITE_BATCH_INVARIANT=1 still resolves to a valid
+        # fallback so SONAR_BATCH_INVARIANT=1 still resolves to a valid
         # (batch-invariant) backend on XPU.
         _AVAILABLE_BACKENDS = [
             UnquantizedMoeBackend.XPU,
@@ -110,7 +110,7 @@ def backend_to_kernel_cls(
     backend: UnquantizedMoeBackend,
 ) -> list[type[mk.FusedMoEExperts]]:
     if backend == UnquantizedMoeBackend.FLASHINFER_TRTLLM:
-        from aphrodite.model_executor.layers.fused_moe.experts.trtllm_bf16_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.trtllm_bf16_moe import (
             TrtLlmBf16ExpertsModular,
             TrtLlmBf16ExpertsMonolithic,
         )
@@ -118,47 +118,47 @@ def backend_to_kernel_cls(
         return [TrtLlmBf16ExpertsMonolithic, TrtLlmBf16ExpertsModular]
 
     elif backend == UnquantizedMoeBackend.FLASHINFER_CUTLASS:
-        from aphrodite.model_executor.layers.fused_moe.experts.flashinfer_cutlass_moe import (  # noqa: E501
+        from sonar.model_executor.layers.fused_moe.experts.flashinfer_cutlass_moe import (  # noqa: E501
             FlashInferExperts,
         )
 
         return [FlashInferExperts]
 
     elif backend == UnquantizedMoeBackend.AITER:
-        from aphrodite.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
             AiterUnquantizedExperts,
         )
 
         return [AiterUnquantizedExperts]
 
     elif backend == UnquantizedMoeBackend.TRITON:
-        from aphrodite.model_executor.layers.fused_moe.experts.triton_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.triton_moe import (
             TritonExperts,
         )
 
         return [TritonExperts]
 
     elif backend == UnquantizedMoeBackend.BATCHED_TRITON:
-        from aphrodite.model_executor.layers.fused_moe.experts.fused_batched_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.fused_batched_moe import (
             BatchedTritonExperts,
         )
 
         return [BatchedTritonExperts]
 
     elif backend == UnquantizedMoeBackend.MOONEP:
-        from aphrodite.model_executor.layers.fused_moe.experts.moonep_experts import (
+        from sonar.model_executor.layers.fused_moe.experts.moonep_experts import (
             MoonEPExperts,
         )
 
         return [MoonEPExperts]
 
     elif backend == UnquantizedMoeBackend.XPU:
-        from aphrodite.model_executor.layers.fused_moe.experts.xpu_moe import XPUExperts
+        from sonar.model_executor.layers.fused_moe.experts.xpu_moe import XPUExperts
 
         return [XPUExperts]
 
     elif backend == UnquantizedMoeBackend.CPU:
-        from aphrodite.model_executor.layers.fused_moe.experts.cpu_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.cpu_moe import (
             ArmCPUUnquantizedExperts,
             CPUUnquantizedExperts,
             PowerCPUUnquantizedExperts,
@@ -197,7 +197,7 @@ def _trtllm_bf16_lora_supported(moe_config: FusedMoEConfig) -> bool:
     """Gate for routing LoRA-enabled BF16 MoE to the FlashInfer TRT-LLM
     gemm1_lora_delta path (PR #3153).
     """
-    from aphrodite.model_executor.layers.fused_moe.experts.trtllm_lora_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.trtllm_lora_moe import (
         TrtLlmBf16LoRAExperts,
     )
 
@@ -232,7 +232,7 @@ def select_unquantized_moe_backend(
 
     if moe_config.is_lora_enabled:
         if _trtllm_bf16_lora_supported(moe_config):
-            from aphrodite.model_executor.layers.fused_moe.experts.trtllm_lora_moe import (
+            from sonar.model_executor.layers.fused_moe.experts.trtllm_lora_moe import (
                 TrtLlmBf16LoRAExperts,
             )
 
@@ -297,11 +297,9 @@ def select_unquantized_moe_backend(
         return _return_or_raise(requested_backend, moe_config, activation_format)
 
     # Handle explicit AITER FP8 configuration.
-    if envs.is_set("APHRODITE_ROCM_USE_AITER") or envs.is_set("APHRODITE_ROCM_USE_AITER_MOE"):
+    if envs.is_set("SONAR_ROCM_USE_AITER") or envs.is_set("SONAR_ROCM_USE_AITER_MOE"):
         skip_aiter_moe = (
-            not envs.APHRODITE_ROCM_USE_AITER
-            or not envs.APHRODITE_ROCM_USE_AITER_MOE
-            or rocm_aiter_ops.is_rdna_aiter_enabled()
+            not envs.SONAR_ROCM_USE_AITER or not envs.SONAR_ROCM_USE_AITER_MOE or rocm_aiter_ops.is_rdna_aiter_enabled()
         )
         if skip_aiter_moe:
             if UnquantizedMoeBackend.AITER in AVAILABLE_BACKENDS:
@@ -322,7 +320,7 @@ def select_unquantized_moe_backend(
             # which backends will be tried next — and fall back to the
             # remaining backends in priority order below.
             logger.warning_once(
-                "APHRODITE_ROCM_USE_AITER_MOE=1 was requested, but %s "
+                "SONAR_ROCM_USE_AITER_MOE=1 was requested, but %s "
                 "Falling back to try the remaining available MoE backends: %s.",
                 _make_log_unsupported(backend, reason),
                 ", ".join(b.value for b in AVAILABLE_BACKENDS if b != UnquantizedMoeBackend.AITER),
@@ -397,7 +395,7 @@ def convert_to_unquantized_kernel_format(
         # w13_weight becomes the gate tensor and w2_weight the down tensor;
         # the up tensor and the full layout are stashed on the layer for
         # the kernel wiring in _setup_kernel.
-        from aphrodite.model_executor.layers.fused_moe.prepare_finalize.moonep import (
+        from sonar.model_executor.layers.fused_moe.prepare_finalize.moonep import (
             MOONEP_DEFAULT_NUM_PREFETCH_SLOTS,
             gather_moonep_weight_layout,
         )
@@ -457,7 +455,7 @@ def convert_to_unquantized_kernel_format(
     if (
         unquantized_backend == UnquantizedMoeBackend.TRITON
         and current_platform.is_rocm()
-        and envs.APHRODITE_ROCM_MOE_PADDING
+        and envs.SONAR_ROCM_MOE_PADDING
     ):
         # Skip .contiguous(): it would undo the ROCm MoE weight padding.
         return w13_weight, w2_weight
@@ -471,7 +469,7 @@ def make_unquantized_moe_kernel(
     experts_cls: type[mk.FusedMoEExperts],
     routing_tables: tuple[torch.Tensor, torch.Tensor, torch.Tensor] | None = None,
 ) -> mk.FusedMoEKernel:
-    from aphrodite.model_executor.layers.fused_moe.utils import (
+    from sonar.model_executor.layers.fused_moe.utils import (
         warn_if_moe_use_td_ineffective,
     )
 

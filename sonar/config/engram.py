@@ -5,11 +5,11 @@ from typing import TYPE_CHECKING, Self
 
 from pydantic import model_validator
 
-from aphrodite.config.utils import config, get_hash_factors, hash_factors
+from sonar.config.utils import config, get_hash_factors, hash_factors
 
 if TYPE_CHECKING:
-    from aphrodite.config.model import ModelConfig
-    from aphrodite.config.parallel import ParallelConfig
+    from sonar.config.model import ModelConfig
+    from sonar.config.parallel import ParallelConfig
 
 # Architecture -> the hf_text_config field naming its n-gram layers. A model is
 # only configurable here if it actually has such layers to store.
@@ -77,7 +77,7 @@ class EngramConfig:
                 "EngramConfig requires a model with supported Engram embeddings and non-empty n-gram layer ids."
             )
         if self.disk_offload:
-            from aphrodite.platforms import current_platform
+            from sonar.platforms import current_platform
 
             if field != "ple_layer_ids" or not current_platform.is_cuda():
                 raise ValueError("disk_offload requires a Qwen4Exp model on CUDA")

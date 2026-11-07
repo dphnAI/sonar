@@ -4,10 +4,10 @@ import copy
 
 import pytest
 
-from aphrodite.v1.engine.async_llm import AsyncEngineArgs, AsyncLLM
-from aphrodite.v1.metrics.loggers import PerEngineStatLoggerAdapter
-from aphrodite.v1.metrics.ray_wrappers import RayPrometheusStatLogger
-from tests.plugins.aphrodite_add_dummy_stat_logger.dummy_stat_logger.dummy_stat_logger import (  # noqa E501
+from sonar.v1.engine.async_llm import AsyncEngineArgs, AsyncLLM
+from sonar.v1.metrics.loggers import PerEngineStatLoggerAdapter
+from sonar.v1.metrics.ray_wrappers import RayPrometheusStatLogger
+from tests.plugins.sonar_add_dummy_stat_logger.dummy_stat_logger.dummy_stat_logger import (  # noqa E501
     DummyStatLogger,
 )
 from tests.utils import wait_for_memory_to_settle

@@ -25,8 +25,8 @@ import torch
 from torch import nn
 from transformers import WhisperConfig
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.transformers_utils.configs.ming_v3_asr import MingAudioConfig
+from sonar.config import SonarConfig
+from sonar.transformers_utils.configs.ming_v3_asr import MingAudioConfig
 
 from .utils import AutoWeightsLoader, WeightsMapper
 from .whisper import WhisperEncoder, _create_fake_bias_for_k_proj
@@ -63,7 +63,7 @@ def get_audio_token_count(config: MingAudioConfig, num_frames: int, chunk_frames
 
 
 class MingAudioEncoder(nn.Module):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_substr={
             "blocks.": "layers.",
             ".attn.query.": ".self_attn.q_proj.",
@@ -84,7 +84,7 @@ class MingAudioEncoder(nn.Module):
         },
     )
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, config: MingAudioConfig, prefix: str) -> None:
+    def __init__(self, *, sonar_config: SonarConfig, config: MingAudioConfig, prefix: str) -> None:
         super().__init__()
         encoder_config = WhisperConfig(
             num_mel_bins=config.n_mels,
@@ -97,7 +97,7 @@ class MingAudioEncoder(nn.Module):
             pos_embed="learned",
         )
         self.encoder = WhisperEncoder(
-            aphrodite_config=aphrodite_config.with_hf_config(encoder_config),
+            sonar_config=sonar_config.with_hf_config(encoder_config),
             prefix=prefix,
             enable_pp=False,
             init_in_fp32=True,
@@ -110,7 +110,7 @@ class MingAudioEncoder(nn.Module):
         weights = _create_fake_bias_for_k_proj(
             weights, ".attn.key.weight", out_features=self.encoder.conv1.out_channels
         )
-        loaded = AutoWeightsLoader(self.encoder).load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        loaded = AutoWeightsLoader(self.encoder).load_weights(weights, mapper=self.hf_to_sonar_mapper)
         return {f"encoder.{name}" for name in loaded}
 
 

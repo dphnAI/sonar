@@ -13,13 +13,13 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-import aphrodite.utils.gpu_sync_debug as gsd
-from aphrodite.model_executor.layers.attention.mla_attention import (
+import sonar.utils.gpu_sync_debug as gsd
+from sonar.model_executor.layers.attention.mla_attention import (
     build_mla_chunked_context_metadata,
     init_mla_context_partial,
     reorg_kvcache,
 )
-from aphrodite.model_executor.layers.attention.sparse_mla_attention import (
+from sonar.model_executor.layers.attention.sparse_mla_attention import (
     SparseMLACommonMetadataBuilder,
 )
 

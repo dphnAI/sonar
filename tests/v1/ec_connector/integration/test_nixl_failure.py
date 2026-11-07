@@ -19,17 +19,17 @@ import zmq
 import zmq.asyncio
 from PIL import Image
 
-from aphrodite.distributed.ec_transfer.ec_connector.cpu.protocol import (
+from examples.disaggregated.disaggregated_encoder.disagg_epd_proxy import (
+    rewrite_for_decode,
+)
+from sonar.distributed.ec_transfer.ec_connector.cpu.protocol import (
     XferAck,
     XferReq,
     XferStatus,
 )
-from aphrodite.multimodal.utils import encode_image_url
-from aphrodite.platforms import current_platform
-from aphrodite.utils.network_utils import get_open_port
-from examples.disaggregated.disaggregated_encoder.disagg_epd_proxy import (
-    rewrite_for_decode,
-)
+from sonar.multimodal.utils import encode_image_url
+from sonar.platforms import current_platform
+from sonar.utils.network_utils import get_open_port
 from tests.utils import RemoteOpenAIServer
 
 MODEL = os.environ.get("MODEL", "Qwen/Qwen2.5-VL-3B-Instruct")
@@ -79,8 +79,8 @@ def servers():
             ],
             env_dict={
                 "CUDA_VISIBLE_DEVICES": devices[0],
-                "APHRODITE_EC_SIDE_CHANNEL_HOST": "127.0.0.1",
-                "APHRODITE_EC_SIDE_CHANNEL_PORT": str(get_open_port()),
+                "SONAR_EC_SIDE_CHANNEL_HOST": "127.0.0.1",
+                "SONAR_EC_SIDE_CHANNEL_PORT": str(get_open_port()),
             },
         ) as encoder,
         RemoteOpenAIServer(

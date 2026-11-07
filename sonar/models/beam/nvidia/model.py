@@ -17,27 +17,27 @@ from typing import cast
 import torch
 from torch import nn
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed import (
+from sonar.config import SonarConfig
+from sonar.distributed import (
     get_pp_group,
     get_tensor_model_parallel_world_size,
     get_tp_group,
 )
-from aphrodite.model_executor.layers.fused_moe import MoERunner
-from aphrodite.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.fused_moe import MoERunner
+from sonar.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.models.interfaces import (
+from sonar.model_executor.models.interfaces import (
     EagleModelMixin,
     MixtureOfExperts,
     SupportsEagle3,
     SupportsPP,
     SupportsQuant,
 )
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.models.utils import (
     AutoWeightsLoader,
     PPMissingLayer,
     WeightsMapper,
@@ -46,8 +46,8 @@ from aphrodite.model_executor.models.utils import (
     make_layers,
     maybe_prefix,
 )
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.transformers_utils.configs.beam import BeamConfig
+from sonar.sequence import IntermediateTensors
+from sonar.transformers_utils.configs.beam import BeamConfig
 
 from .activation import beam_softcap_logits
 from .allreduce import (
@@ -78,14 +78,14 @@ class BeamDecoderLayer(nn.Module):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
         allreduce_workspace: BeamAllReduceWorkspace | None = None,
     ) -> None:
         super().__init__()
-        config = cast(BeamConfig, aphrodite_config.model_config.hf_config)
-        cache_config = aphrodite_config.cache_config
-        quant_config = aphrodite_config.quant_config
+        config = cast(BeamConfig, sonar_config.model_config.hf_config)
+        cache_config = sonar_config.cache_config
+        quant_config = sonar_config.quant_config
         self.layer_id = extract_layer_index(prefix)
         self.rms_norm_eps = config.rms_norm_eps
         fuse_attention_reduce = allreduce_workspace is not None
@@ -109,7 +109,7 @@ class BeamDecoderLayer(nn.Module):
             )
         else:
             self.mlp = BeamSparseMoeBlock(
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 prefix=f"{prefix}.mlp",
                 reduce_results=allreduce_workspace is None,
             )
@@ -181,7 +181,7 @@ class BeamDecoderLayer(nn.Module):
 
 
 class BeamModel(nn.Module, EagleModelMixin):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_substr={
             # Renamed so it cannot be matched as a `gate_up_proj` shard by
             # `packed_modules_mapping` consumers such as LoRA.
@@ -202,7 +202,7 @@ class BeamModel(nn.Module, EagleModelMixin):
 
     @classmethod
     def get_weights_mapper(cls, config: BeamConfig, tp_size: int) -> WeightsMapper:
-        mapper = cls.hf_to_aphrodite_mapper
+        mapper = cls.hf_to_sonar_mapper
         if not use_merged_qkv_gate(config, tp_size):
             return mapper
         return WeightsMapper(
@@ -216,12 +216,12 @@ class BeamModel(nn.Module, EagleModelMixin):
             },
         )
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        self.hf_to_aphrodite_mapper = self.get_weights_mapper(config, get_tensor_model_parallel_world_size())
-        cache_config = aphrodite_config.cache_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        self.hf_to_sonar_mapper = self.get_weights_mapper(config, get_tensor_model_parallel_world_size())
+        cache_config = sonar_config.cache_config
+        quant_config = sonar_config.quant_config
 
         # Beam drives SWA per layer off `layer_types`, passing an explicit
         # `per_layer_sliding_window` (None on the full-attention layers).
@@ -248,15 +248,15 @@ class BeamModel(nn.Module, EagleModelMixin):
             tp_group.cpu_group,
             config.hidden_size,
             max(
-                aphrodite_config.scheduler_config.max_num_batched_tokens,
-                aphrodite_config.scheduler_config.max_num_seqs,
+                sonar_config.scheduler_config.max_num_batched_tokens,
+                sonar_config.scheduler_config.max_num_seqs,
             ),
-            aphrodite_config.model_config.dtype,
+            sonar_config.model_config.dtype,
         )
         self.start_layer, self.end_layer, self.layers = make_layers(
             config.num_hidden_layers,
             lambda prefix: BeamDecoderLayer(
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 prefix=prefix,
                 allreduce_workspace=self.allreduce_workspace,
             ),
@@ -313,7 +313,7 @@ class BeamModel(nn.Module, EagleModelMixin):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
 
 class BeamForCausalLM(
@@ -325,7 +325,7 @@ class BeamForCausalLM(
 ):
     """Beam causal LM. LoRA support is deferred to a follow-up change."""
 
-    hf_to_aphrodite_mapper = BeamModel.hf_to_aphrodite_mapper
+    hf_to_sonar_mapper = BeamModel.hf_to_sonar_mapper
     packed_modules_mapping = {
         "qkv_proj": ["q_proj", "k_proj", "v_proj"],
         "qkv_gate_proj": ["q_proj", "k_proj", "v_proj", "output_gate_proj"],
@@ -338,11 +338,11 @@ class BeamForCausalLM(
             if isinstance(module, BeamAttention):
                 module.warmup_projection()
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
-        parallel_config = aphrodite_config.parallel_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
+        parallel_config = sonar_config.parallel_config
         if parallel_config.enable_eplb:
             # Expert parallelism is validated; expert rebalancing is not.
             raise NotImplementedError("Beam has not been validated with EPLB; run without --enable-eplb.")
@@ -355,7 +355,7 @@ class BeamForCausalLM(
         self.config = config
         self.quant_config = quant_config
 
-        self.model = BeamModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = BeamModel(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
         if config.tie_word_embeddings:
             raise NotImplementedError("Beam requires tie_word_embeddings=False.")
         # Untied LM head, in the model dtype. An fp32 head is available the

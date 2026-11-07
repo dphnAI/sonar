@@ -5,7 +5,7 @@
 import torch
 import torch.nn.functional as F
 
-from aphrodite.config import get_current_aphrodite_config_or_none
+from sonar.config import get_current_sonar_config_or_none
 
 from ..common.ops.prefill_indexer_metadata import prepare_prefill_indexer
 from ..common.ops.sparse_decode_attention import (
@@ -39,7 +39,7 @@ class Step5FlashInferSparse:
         from flashinfer import BatchPrefillWithRaggedKVCacheWrapper
         from flashinfer.attn_scores import fp8_paged_mqa_logits
 
-        config = get_current_aphrodite_config_or_none()
+        config = get_current_sonar_config_or_none()
         self._topk_backend = config.kernel_config.sparse_indexer_topk_backend if config else "auto"
         if torch.cuda.get_device_capability(device) == (9, 0):
             from ..common.ops.sparse_indexer_scores import paged_mqa_logits_sm90

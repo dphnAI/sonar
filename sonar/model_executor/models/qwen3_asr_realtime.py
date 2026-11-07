@@ -22,19 +22,19 @@ from collections.abc import AsyncGenerator, Mapping
 import numpy as np
 import torch
 
-from aphrodite.config import AphroditeConfig, ModelConfig, SpeechToTextConfig
-from aphrodite.inputs import PromptType, TokensPrompt
-from aphrodite.logger import init_logger
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.parse import MultiModalDataItems
-from aphrodite.multimodal.processing import ProcessorInputs, TimingContext
-from aphrodite.multimodal.processing.processor import (
+from sonar.config import ModelConfig, SonarConfig, SpeechToTextConfig
+from sonar.inputs import PromptType, TokensPrompt
+from sonar.logger import init_logger
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.parse import MultiModalDataItems
+from sonar.multimodal.processing import ProcessorInputs, TimingContext
+from sonar.multimodal.processing.processor import (
     MultiModalProcessingResult,
     PlaceholderFeaturesInfo,
     cached_encode,
 )
-from aphrodite.tokenizers import cached_tokenizer_from_config
-from aphrodite.transformers_utils.processor import cached_processor_from_config
+from sonar.tokenizers import cached_tokenizer_from_config
+from sonar.transformers_utils.processor import cached_processor_from_config
 
 from .interfaces import SupportsRealtime
 from .qwen3_asr import (
@@ -166,8 +166,8 @@ class Qwen3ASRRealtimeMultiModalProcessor(Qwen3ASRMultiModalProcessor):
 class Qwen3ASRRealtimeGeneration(Qwen3ASRForConditionalGeneration, SupportsRealtime):
     realtime_max_tokens = 64
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
-        super().__init__(aphrodite_config=aphrodite_config, prefix=prefix)
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
+        super().__init__(sonar_config=sonar_config, prefix=prefix)
 
     @classmethod
     async def buffer_realtime_audio(

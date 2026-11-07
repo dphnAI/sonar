@@ -6,10 +6,10 @@ from types import SimpleNamespace
 import torch
 from torch import nn
 
-import aphrodite.models.muse_spark.amd.model as amd_model
+import sonar.models.muse_spark.amd.model as amd_model
 
 
-def test_target_layers_share_fp32_rope_cache(monkeypatch, default_aphrodite_config):
+def test_target_layers_share_fp32_rope_cache(monkeypatch, default_sonar_config):
     monkeypatch.setattr(amd_model, "get_tensor_model_parallel_world_size", lambda: 1)
     for name in ("MuseSpark1xQKVOGateParallelLinear", "RowParallelLinear", "Attention"):
         monkeypatch.setattr(amd_model, name, lambda *args, **kwargs: nn.Identity())

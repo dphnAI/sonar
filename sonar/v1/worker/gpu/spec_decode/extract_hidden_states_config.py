@@ -3,18 +3,18 @@
 import copy
 from typing import TYPE_CHECKING
 
-from aphrodite.transformers_utils.configs.extract_hidden_states import (
+from sonar.transformers_utils.configs.extract_hidden_states import (
     ExtractHiddenStatesConfig,
 )
-from aphrodite.v1.worker.gpu.spec_decode.speculator_config import SpeculatorConfig
+from sonar.v1.worker.gpu.spec_decode.speculator_config import SpeculatorConfig
 
 if TYPE_CHECKING:
-    from aphrodite.config import SpeculativeConfig
+    from sonar.config import SpeculativeConfig
 
 
 class ExtractHiddenStatesSpeculatorConfig(SpeculatorConfig):
     base_method = "extract_hidden_states"
-    speculator_class = "aphrodite.v1.worker.gpu.spec_decode.extract_hidden_states.ExtractHiddenStatesSpeculator"
+    speculator_class = "sonar.v1.worker.gpu.spec_decode.extract_hidden_states.ExtractHiddenStatesSpeculator"
     proposes_draft_tokens = False
 
     @classmethod

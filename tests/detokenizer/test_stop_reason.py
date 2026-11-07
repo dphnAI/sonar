@@ -11,7 +11,7 @@ Run `pytest tests/engine/test_stop_reason.py`.
 import pytest
 import transformers
 
-from aphrodite import SamplingParams
+from sonar import SamplingParams
 
 MODEL = "distilbert/distilgpt2"
 STOP_STR = "."
@@ -20,15 +20,15 @@ MAX_TOKENS = 1024
 
 
 @pytest.fixture
-def aphrodite_model(aphrodite_runner):
-    with aphrodite_runner(MODEL) as aphrodite_model:
-        yield aphrodite_model
+def sonar_model(sonar_runner):
+    with sonar_runner(MODEL) as sonar_model:
+        yield sonar_model
 
 
-def test_stop_reason(aphrodite_model, example_prompts):
+def test_stop_reason(sonar_model, example_prompts):
     tokenizer = transformers.AutoTokenizer.from_pretrained(MODEL)
     stop_token_id = tokenizer.convert_tokens_to_ids(STOP_STR)
-    llm = aphrodite_model.llm
+    llm = sonar_model.llm
 
     # test stop token
     outputs = llm.generate(

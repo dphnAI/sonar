@@ -34,7 +34,7 @@ from flydsl.expr import const_expr, gpu, range_constexpr, rocdl
 from flydsl.expr import math as fmath
 from flydsl.expr.typing import T, as_ir_value
 
-from aphrodite.models.minimax_m3.amd.mono.config import LAYER_SLOTS, WAVES
+from sonar.models.minimax_m3.amd.mono.config import LAYER_SLOTS, WAVES
 
 # gfx95x cache policy bits (LLVM CPol): SC0 = 1, SC1 = 16. SC1 alone is device
 # scope (past the per-XCD caches); SC0 | SC1 is system scope (peers over XGMI).
@@ -44,11 +44,11 @@ POLL_MAX = 12  # mailbox specs polled per batch (bounds live registers)
 
 
 def kernel_symbol(stem, **params):
-    """Kernel symbol that profilers demangle to ``aphrodite::<stem>_<params>``. The
+    """Kernel symbol that profilers demangle to ``sonar::<stem>_<params>``. The
     amdhsa assembler rejects ``::`` in a symbol, so it is Itanium-mangled, as
     aiter's ``_ZN5aiter...E`` kernels are."""
     name = f"{stem}_{kernel_signature(**params)}"
-    return f"_ZN4aphrodite{len(name)}{name}E"
+    return f"_ZN4sonar{len(name)}{name}E"
 
 
 def rsrc(addr, nbytes=None):

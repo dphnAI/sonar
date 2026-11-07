@@ -8,35 +8,50 @@ from typing import TYPE_CHECKING
 import torch
 from transformers import PreTrainedTokenizerBase
 
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.utils.import_utils import LazyLoader
-from aphrodite.utils.torch_utils import PIN_MEMORY
-from aphrodite.v1.structured_output.backend_types import (
+from sonar.exceptions import SonarValidationError
+from sonar.sampling_params import SamplingParams
+from sonar.utils.import_utils import LazyLoader
+from sonar.utils.mistral import is_mistral_tokenizer
+from sonar.utils.torch_utils import PIN_MEMORY
+from sonar.v1.structured_output.backend_types import (
     StructuredOutputBackend,
     StructuredOutputGrammar,
     StructuredOutputOptions,
 )
-from aphrodite.v1.structured_output.utils import compile_regex_with_timeout
+from sonar.v1.structured_output.utils import compile_regex_with_timeout
 
 if TYPE_CHECKING:
     import lmformatenforcer
-    import lmformatenforcer.integrations.aphrodite as lmfe_aphrodite
 else:
     lmformatenforcer = LazyLoader("lmformatenforcer", globals(), "lmformatenforcer")
-    lmfe_aphrodite = LazyLoader(
-        "lmformatenforcer.integrations.aphrodite",
-        globals(),
-        "lmformatenforcer.integrations.aphrodite",
-    )
 
 
 @lru_cache
-def _cached_build_aphrodite_token_enforcer_tokenizer_data(
+def _cached_build_sonar_token_enforcer_tokenizer_data(
     tokenizer: PreTrainedTokenizerBase, vocab_size: int
-) -> "lmfe_aphrodite.TokenEnforcerTokenizerData":
-    return lmfe_aphrodite.build_aphrodite_token_enforcer_tokenizer_data(
-        tokenizer, use_bitmask=True, vocab_size=vocab_size
+) -> "lmformatenforcer.TokenEnforcerTokenizerData":
+    if hasattr(tokenizer, "get_tokenizer"):
+        tokenizer = tokenizer.get_tokenizer()
+    if not is_mistral_tokenizer(tokenizer) and hasattr(tokenizer, "tokenizer"):
+        tokenizer = tokenizer.tokenizer
+    # LMFE's framework adapters import legacy engine or Transformers modules.
+    # Use its public tokenizer-data API without retaining the old namespace.
+    prefix_id = tokenizer.encode("0")[-1]
+    special_ids = set(tokenizer.all_special_ids)
+    regular_tokens = []
+    for token_id in tokenizer.get_vocab().values():
+        if token_id >= vocab_size or token_id in special_ids:
+            continue
+        # A preceding character preserves leading spaces on word-start tokens.
+        text = tokenizer.decode([prefix_id, token_id])[1:]
+        standalone = tokenizer.decode([token_id])
+        regular_tokens.append((token_id, text, len(text) > len(standalone)))
+    return lmformatenforcer.TokenEnforcerTokenizerData(
+        regular_tokens,
+        lambda tokens: tokenizer.decode(tokens).rstrip("\ufffd"),
+        tokenizer.eos_token_id,
+        use_bitmask=True,
+        vocab_size=vocab_size,
     )
 
 
@@ -89,7 +104,7 @@ class LMFormatEnforcerGrammar(StructuredOutputGrammar):
 @dataclass
 class LMFormatEnforcerBackend(StructuredOutputBackend):
     def __post_init__(self):
-        self.tokenizer_data = _cached_build_aphrodite_token_enforcer_tokenizer_data(self.tokenizer, self.vocab_size)
+        self.tokenizer_data = _cached_build_sonar_token_enforcer_tokenizer_data(self.tokenizer, self.vocab_size)
 
     def compile_grammar(
         self,
@@ -116,8 +131,8 @@ class LMFormatEnforcerBackend(StructuredOutputBackend):
         else:
             raise ValueError(f"Invalid request type for LM Format Enforcer backend({request_type!s})")
         max_rollback_tokens = (
-            self.aphrodite_config.speculative_config.num_speculative_tokens
-            if self.aphrodite_config.speculative_config is not None
+            self.sonar_config.speculative_config.num_speculative_tokens
+            if self.sonar_config.speculative_config is not None
             else 0
         )
 
@@ -155,7 +170,7 @@ def validate_structured_output_request_lm_format_enforcer(params: SamplingParams
                 so_params.regex,
             )
         except Exception as err:
-            raise AphroditeValidationError(f"Failed to compile regex for lm-format-enforcer: {err}") from err
+            raise SonarValidationError(f"Failed to compile regex for lm-format-enforcer: {err}") from err
         return
     elif so_params.json is not None:
         if isinstance(so_params.json, str):
@@ -163,24 +178,24 @@ def validate_structured_output_request_lm_format_enforcer(params: SamplingParams
                 # make sure schema is valid json
                 json.loads(so_params.json)
             except json.JSONDecodeError as e:
-                raise AphroditeValidationError("Invalid JSON grammar specification.") from e
+                raise SonarValidationError("Invalid JSON grammar specification.") from e
         else:
             try:
                 json.dumps(so_params.json)
             except Exception as e:
-                raise AphroditeValidationError(f"Error serializing structured outputs jsonschema: {e}") from e
+                raise SonarValidationError(f"Error serializing structured outputs jsonschema: {e}") from e
         return
     elif so_params.choice or so_params.json_object:
         return
     elif so_params.grammar:
-        raise AphroditeValidationError(
+        raise SonarValidationError(
             "LM Format Enforcer structured outputs backend does not support grammar specifications"
         )
     elif so_params.structural_tag:
-        raise AphroditeValidationError(
+        raise SonarValidationError(
             "LM Format Enforcer structured outputs backend does not support structural_tag specifications"
         )
     else:
-        raise AphroditeValidationError(
+        raise SonarValidationError(
             "LM Format Enforcer structured outputs backend does not support this structured outputs specification"
         )

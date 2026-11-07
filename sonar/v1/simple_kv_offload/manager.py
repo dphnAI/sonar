@@ -8,23 +8,23 @@ from dataclasses import dataclass, field, fields, replace
 from enum import Enum, auto
 from typing import TYPE_CHECKING, Any
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed.kv_events import (
+from sonar.config import SonarConfig
+from sonar.distributed.kv_events import (
     MEDIUM_CPU,
     MEDIUM_STORAGE,
     BlockRemoved,
     BlockStored,
     KVCacheEventType,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.utils import yield_req_data
-from aphrodite.logger import init_logger
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.v1.core.block_pool import BlockPool
-from aphrodite.v1.core.kv_cache_coordinator import (
+from sonar.distributed.kv_transfer.kv_connector.utils import yield_req_data
+from sonar.logger import init_logger
+from sonar.utils.math_utils import cdiv
+from sonar.v1.core.block_pool import BlockPool
+from sonar.v1.core.kv_cache_coordinator import (
     KVCacheCoordinator,
     get_kv_cache_coordinator,
 )
-from aphrodite.v1.core.kv_cache_utils import (
+from sonar.v1.core.kv_cache_utils import (
     BlockHashWithGroupId,
     ExternalBlockHash,
     generate_block_hash_extra_keys,
@@ -36,8 +36,8 @@ from aphrodite.v1.core.kv_cache_utils import (
     resolve_dcp_kv_block_size,
     to_event_extra_keys,
 )
-from aphrodite.v1.core.sched.output import SchedulerOutput
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.core.sched.output import SchedulerOutput
+from sonar.v1.kv_cache_interface import (
     ChunkedLocalAttentionSpec,
     FullAttentionSpec,
     MambaSpec,
@@ -45,23 +45,23 @@ from aphrodite.v1.kv_cache_interface import (
     get_kv_cache_spec_kind,
     get_kv_cache_spec_sliding_window,
 )
-from aphrodite.v1.outputs import KVConnectorOutput
-from aphrodite.v1.simple_kv_offload.metadata import (
+from sonar.v1.outputs import KVConnectorOutput
+from sonar.v1.simple_kv_offload.metadata import (
     SimpleCPUOffloadMetadata,
     SimpleCPUOffloadWorkerMetadata,
 )
-from aphrodite.v1.simple_kv_offload.metrics import (
+from sonar.v1.simple_kv_offload.metrics import (
     OUTCOME_TO_FIELD,
     MetricName,
     SimpleCPUOffloadStats,
 )
-from aphrodite.v1.simple_kv_offload.sizing import gpu_total_bytes
+from sonar.v1.simple_kv_offload.sizing import gpu_total_bytes
 
 if TYPE_CHECKING:
-    from aphrodite.v1.core.kv_cache_manager import KVCacheBlocks
-    from aphrodite.v1.core.kv_cache_utils import BlockHashList, KVCacheBlock
-    from aphrodite.v1.kv_cache_interface import KVCacheConfig
-    from aphrodite.v1.request import Request
+    from sonar.v1.core.kv_cache_manager import KVCacheBlocks
+    from sonar.v1.core.kv_cache_utils import BlockHashList, KVCacheBlock
+    from sonar.v1.kv_cache_interface import KVCacheConfig
+    from sonar.v1.request import Request
 
 logger = init_logger(__name__)
 
@@ -145,7 +145,7 @@ class SimpleCPUOffloadScheduler:
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         kv_cache_config: "KVCacheConfig | None",
         cpu_capacity_bytes: int,
         scheduler_block_size: int,
@@ -156,14 +156,14 @@ class SimpleCPUOffloadScheduler:
         num_cpu_blocks: int | None = None,
         aligned_num_cpu_blocks: int | None = None,
     ):
-        self.aphrodite_config = aphrodite_config
+        self.sonar_config = sonar_config
         self.kv_cache_config = kv_cache_config
         # When disk mode is active, the offload pool size is disk-based.
         offload_capacity = disk_capacity_bytes if disk_capacity_bytes > 0 else cpu_capacity_bytes
         self.enable_kv_cache_events = (
-            aphrodite_config.kv_events_config is not None and aphrodite_config.kv_events_config.enable_kv_cache_events
+            sonar_config.kv_events_config is not None and sonar_config.kv_events_config.enable_kv_cache_events
         )
-        dcp_world_size = aphrodite_config.parallel_config.decode_context_parallel_size
+        dcp_world_size = sonar_config.parallel_config.decode_context_parallel_size
         self.cp_world_size = dcp_world_size
         self.block_size = scheduler_block_size
         self.hash_block_size = hash_block_size
@@ -198,12 +198,12 @@ class SimpleCPUOffloadScheduler:
             "disk" if disk_capacity_bytes > 0 else "cpu",
         )
 
-        spec_config = aphrodite_config.speculative_config
+        spec_config = sonar_config.speculative_config
         use_eagle_block_drop = spec_config is not None and spec_config.use_eagle_block_drop()
         self.cpu_coordinator: KVCacheCoordinator = get_kv_cache_coordinator(
             kv_cache_config=self.cpu_kv_cache_config,
-            max_model_len=aphrodite_config.model_config.max_model_len,
-            max_in_flight_tokens=aphrodite_config.max_in_flight_tokens,
+            max_model_len=sonar_config.model_config.max_model_len,
+            max_in_flight_tokens=sonar_config.max_in_flight_tokens,
             use_eagle=use_eagle_block_drop,
             enable_caching=True,
             enable_kv_cache_events=self.enable_kv_cache_events,
@@ -212,7 +212,7 @@ class SimpleCPUOffloadScheduler:
             scheduler_block_size=self.block_size,
             hash_block_size=self.hash_block_size,
             allow_partial_hash_hits=not lazy_offload,
-            num_prefill_lookahead=aphrodite_config.num_prefill_lookahead_tokens,
+            num_prefill_lookahead=sonar_config.num_prefill_lookahead_tokens,
         )
         self.group_block_sizes = self.cpu_coordinator.group_block_sizes
         # FA group's own resolved block_size; divides scheduler_block_size (the
@@ -246,7 +246,7 @@ class SimpleCPUOffloadScheduler:
         if self._lazy_mode:
             self._target_free = self._estimate_lazy_target_blocks(
                 kv_cache_config,
-                aphrodite_config.scheduler_config.max_num_batched_tokens,
+                sonar_config.scheduler_config.max_num_batched_tokens,
                 self.cp_world_size,
             )
         else:
@@ -270,7 +270,7 @@ class SimpleCPUOffloadScheduler:
 
         # For TP/PP: track partial store completions across steps.
         # Events must be reported by all world_size workers before considered complete.
-        self._expected_worker_count = aphrodite_config.parallel_config.world_size
+        self._expected_worker_count = sonar_config.parallel_config.world_size
         self._store_event_pending_counts: dict[int, int] = {}
 
     @staticmethod
@@ -287,7 +287,7 @@ class SimpleCPUOffloadScheduler:
         ``aligned_num_cpu_blocks`` comes from the live worker allocations and
         is used as-is when no explicit count is configured."""
         # Import here to avoid potential circular imports
-        from aphrodite.v1.kv_cache_interface import KVCacheTensor
+        from sonar.v1.kv_cache_interface import KVCacheTensor
 
         assert len(gpu_config.kv_cache_tensors) > 0
 

@@ -7,14 +7,14 @@ from typing import ClassVar
 
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.v1.attention.backend import (
+from sonar.config import SonarConfig
+from sonar.v1.attention.backend import (
     AttentionCGSupport,
     AttentionMetadata,
     AttentionMetadataBuilder,
     CommonAttentionMetadata,
 )
-from aphrodite.v1.kv_cache_interface import AttentionSpec
+from sonar.v1.kv_cache_interface import AttentionSpec
 
 
 @dataclass
@@ -34,10 +34,10 @@ class Qwen4ExpQSAMetadataBuilder(AttentionMetadataBuilder[Qwen4ExpQSAMetadata]):
         self,
         kv_cache_spec: AttentionSpec,
         layer_names: list[str],
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
     ) -> None:
-        super().__init__(kv_cache_spec, layer_names, aphrodite_config, device)
+        super().__init__(kv_cache_spec, layer_names, sonar_config, device)
 
     def build(
         self,

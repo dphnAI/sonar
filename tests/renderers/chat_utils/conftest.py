@@ -3,10 +3,10 @@
 
 import pytest
 
-from aphrodite.assets.audio import AudioAsset
-from aphrodite.assets.image import ImageAsset
-from aphrodite.assets.video import VideoAsset
-from aphrodite.multimodal.utils import encode_audio_url, encode_image_url, encode_video_url
+from sonar.assets.audio import AudioAsset
+from sonar.assets.image import ImageAsset
+from sonar.assets.video import VideoAsset
+from sonar.multimodal.utils import encode_audio_url, encode_image_url, encode_video_url
 
 
 @pytest.fixture(scope="module")

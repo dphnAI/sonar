@@ -28,12 +28,12 @@ model:
 
 features:
   reasoning:
-    description: "Split the model's <think>…</think> chain-of-thought into a separate reasoning field via Aphrodite's qwen3 parser"
+    description: "Split the model's <think>…</think> chain-of-thought into a separate reasoning field via Sonar's qwen3 parser"
     args:
       - "--reasoning-parser"
       - "qwen3"
   tool_calling:
-    description: "Surface LFM2.5's Pythonic tool calls (wrapped in <|tool_call_start|>…<|tool_call_end|>) as OpenAI tool_calls via Aphrodite's native lfm2 parser"
+    description: "Surface LFM2.5's Pythonic tool calls (wrapped in <|tool_call_start|>…<|tool_call_end|>) as OpenAI tool_calls via Sonar's native lfm2 parser"
     args:
       - "--enable-auto-tool-choice"
       - "--tool-call-parser"
@@ -53,7 +53,7 @@ hardware_overrides:
   # output identical). Inert (falls back to native) on non-Blackwell GPUs.
   blackwell:
     extra_env:
-      APHRODITE_USE_OINK_OPS: "1"
+      SONAR_USE_OINK_OPS: "1"
 strategy_overrides:
   single_node_tp:
     tp: 1
@@ -65,15 +65,15 @@ guide: |
   mixture-of-experts model: ~8B total parameters with only ~1B activated per token. It pairs the
   **LFM2 hybrid backbone** (short-range gated convolution blocks interleaved with grouped-query
   attention) with sparse MoE feed-forward layers, so it reaches 8B-class quality at roughly 1B
-  decode cost. It supports explicit `<think>` reasoning and Pythonic tool calling through Aphrodite's
+  decode cost. It supports explicit `<think>` reasoning and Pythonic tool calling through Sonar's
   OpenAI-compatible API.
 
   ### Key Features
   - **Hybrid + MoE**: Gated short convolutions + grouped-query attention with sparse expert FFNs — ~1B active parameters per token out of ~8B total.
-  - **`<think>` reasoning**: Emits an explicit `<think>…</think>` chain-of-thought on non-trivial problems; Aphrodite's `qwen3` parser splits it into `reasoning`.
-  - **Tool calling**: Pythonic tool calls surfaced as OpenAI `tool_calls` by Aphrodite's native `lfm2` parser.
+  - **`<think>` reasoning**: Emits an explicit `<think>…</think>` chain-of-thought on non-trivial problems; Sonar's `qwen3` parser splits it into `reasoning`.
+  - **Tool calling**: Pythonic tool calls surfaced as OpenAI `tool_calls` by Sonar's native `lfm2` parser.
   - **128K context**: Long-context support (`max_position_embeddings = 128000`).
-  - **Native Aphrodite support**: Served via the `Lfm2MoeForCausalLM` architecture.
+  - **Native Sonar support**: Served via the `Lfm2MoeForCausalLM` architecture.
 
   ### Supported Variants
 
@@ -99,26 +99,26 @@ guide: |
   ## Prerequisites
 
   - **Hardware**: 1× GPU with ≥24 GB VRAM.
-  - **Aphrodite**: ≥ 0.23.0.
+  - **Sonar**: ≥ 0.23.0.
 
   ### pip (NVIDIA CUDA)
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U aphrodite-engine --torch-backend auto
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   ```
 
   ## Deployment Configurations
 
   ### Quick Start (Single GPU, BF16)
   ```bash
-  aphrodite serve LiquidAI/LFM2.5-8B-A1B
+  sonar serve LiquidAI/LFM2.5-8B-A1B
   ```
 
   ### Full-Featured Server Launch
   Reasoning **and** tool calling:
   ```bash
-  aphrodite serve LiquidAI/LFM2.5-8B-A1B \
+  sonar serve LiquidAI/LFM2.5-8B-A1B \
     --reasoning-parser qwen3 \
     --enable-auto-tool-choice \
     --tool-call-parser lfm2 \
@@ -130,7 +130,7 @@ guide: |
   basically any GPU — there's nothing to split that helps. You can still try it on a multi-GPU
   node if you want, but expect no throughput gain:
   ```bash
-  aphrodite serve LiquidAI/LFM2.5-8B-A1B --tensor-parallel-size 2
+  sonar serve LiquidAI/LFM2.5-8B-A1B --tensor-parallel-size 2
   ```
 
   ### Docker (NVIDIA)
@@ -172,7 +172,7 @@ guide: |
   `lfm2` parser converts the model's Pythonic call into a standard `tool_calls` array.
 
   ### Structured Outputs
-  Aphrodite's guided decoding constrains output to a JSON schema via `response_format`. The model does
+  Sonar's guided decoding constrains output to a JSON schema via `response_format`. The model does
   not see the schema itself — put semantic instructions in the system prompt.
 
   ## Configuration Tips
@@ -180,10 +180,10 @@ guide: |
   - It fits on one GPU; tensor parallelism gives no real speedup on basically any GPU (you can still try `--tensor-parallel-size N`).
   - Set `--max-model-len` to match your workload (up to 128K).
   - `--gpu-memory-utilization 0.90–0.95` maximizes KV cache capacity.
-  - Sampling presets are per-request client defaults — don't bake them into `aphrodite serve`.
+  - Sampling presets are per-request client defaults — don't bake them into `sonar serve`.
 
   ## References
   - [Model card](https://huggingface.co/LiquidAI/LFM2.5-8B-A1B)
   - [LFM2.5 usage guide](../../LiquidAI/LFM2.5)
   - [Liquid AI](https://www.liquid.ai/)
-  - [Aphrodite supported models](https://docs.vllm.ai/en/latest/models/supported_models.html)
+  - [Sonar supported models](https://docs.vllm.ai/en/latest/models/supported_models.html)

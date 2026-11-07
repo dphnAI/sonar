@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Lazy facade for the optional ``humming`` package.
 
-Aphrodite code should import humming symbols from here so that ``import humming``
+Sonar code should import humming symbols from here so that ``import humming``
 (which has import-time side effects) is deferred until first use. Add new
 symbols to both the ``TYPE_CHECKING`` imports and ``_EXPORTS``, using
 ``"module.path:attr"`` or ``"module.path"`` for a whole-module re-export.
@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 
-from aphrodite.utils.platform_utils import num_compute_units
+from sonar.utils.platform_utils import num_compute_units
 
 if TYPE_CHECKING:
     from humming import dtypes as dtypes
@@ -112,7 +112,7 @@ def create_humming_locks(device: torch.device | str) -> torch.Tensor:
 def __getattr__(name: str) -> Any:
     spec = _EXPORTS.get(name)
     if spec is None:
-        raise AttributeError(f"module 'aphrodite.utils.humming' has no attribute {name!r}")
+        raise AttributeError(f"module 'sonar.utils.humming' has no attribute {name!r}")
     if ":" in spec:
         mod_path, attr = spec.split(":", 1)
         obj = getattr(importlib.import_module(mod_path), attr)

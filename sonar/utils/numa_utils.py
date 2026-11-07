@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""NUMA binding utilities for Aphrodite worker processes.
+"""NUMA binding utilities for Sonar worker processes.
 
 Adapted in part from SGLang's NUMA helper implementation:
 https://github.com/sgl-project/sglang/blob/ba6d54d0f08f82f42b8224908ae2459a496b31b3/python/sglang/srt/utils/numa_utils.py
@@ -18,14 +18,14 @@ from typing import TYPE_CHECKING, NamedTuple
 
 import psutil
 
-from aphrodite import envs
+from sonar import envs
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
+    from sonar.config import SonarConfig
 
 logger = logging.getLogger(__name__)
-_NUMACTL_ARGS_ENV = "_APHRODITE_INTERNAL_NUMACTL_ARGS"
-_NUMACTL_PYTHON_EXECUTABLE_ENV = "_APHRODITE_INTERNAL_NUMACTL_PYTHON_EXECUTABLE"
+_NUMACTL_ARGS_ENV = "_SONAR_INTERNAL_NUMACTL_ARGS"
+_NUMACTL_PYTHON_EXECUTABLE_ENV = "_SONAR_INTERNAL_NUMACTL_PYTHON_EXECUTABLE"
 _MPOL_DEFAULT = 0
 
 
@@ -66,7 +66,7 @@ def _is_auto_numa_available(verbose: bool = True, *, require_unbound_process: bo
             topology discovery keeps its existing best-effort checks.
 
     """
-    from aphrodite.platforms import current_platform
+    from sonar.platforms import current_platform
 
     log = logger.warning if verbose else logger.debug
 
@@ -126,7 +126,7 @@ def _is_auto_numa_available(verbose: bool = True, *, require_unbound_process: bo
 
 def get_auto_numa_nodes() -> list[int] | None:
     """Auto-detect NUMA nodes for all visible GPUs."""
-    from aphrodite.platforms import current_platform
+    from sonar.platforms import current_platform
 
     if not _is_auto_numa_available():
         return None
@@ -145,7 +145,7 @@ def _can_auto_bind(parallel_config, local_rank: int, dp_local_rank: int | None =
     """
     from shutil import which
 
-    if envs.APHRODITE_WORKER_MULTIPROC_METHOD != "spawn":
+    if envs.SONAR_WORKER_MULTIPROC_METHOD != "spawn":
         logger.debug("Automatic NUMA binding requires the spawn start method.")
         return False
     if (
@@ -162,8 +162,8 @@ def _can_auto_bind(parallel_config, local_rank: int, dp_local_rank: int | None =
         logger.debug("Automatic NUMA binding requires numactl on PATH.")
         return False
     try:
-        from aphrodite.platforms import current_platform
-        from aphrodite.utils.cpu_resource_utils import parse_id_list
+        from sonar.platforms import current_platform
+        from sonar.utils.cpu_resource_utils import parse_id_list
 
         if not _is_auto_numa_available(verbose=False, require_unbound_process=True):
             return False
@@ -214,7 +214,7 @@ def _can_auto_bind(parallel_config, local_rank: int, dp_local_rank: int | None =
 #     which is a non-starter in most production deployments (shared
 #     clusters, prebuilt containers, managed cloud).
 #   * Even recent stable kernels (e.g. 6.14, March 2025) do not yet
-#     preferentially schedule work on PCT priority cores, so Aphrodite cannot
+#     preferentially schedule work on PCT priority cores, so Sonar cannot
 #     just "let the scheduler handle it".
 #
 # Empirical heuristic (DGX B300 / Xeon 6776P, the SKU we measured):
@@ -321,7 +321,7 @@ def _get_numa_node(parallel_config, gpu_index: int) -> int:
         numa_nodes = get_auto_numa_nodes()
         if numa_nodes is None:
             raise RuntimeError(
-                "NUMA binding was requested, but Aphrodite could not detect the "
+                "NUMA binding was requested, but Sonar could not detect the "
                 "GPU-to-NUMA topology automatically. Pass --numa-bind-nodes "
                 "explicitly or disable --numa-bind."
             )
@@ -358,7 +358,7 @@ def _maybe_get_pct_cpu_binding(numa_nodes: list[int]) -> list[int] | None:
     if sku is None:
         return None
 
-    from aphrodite.utils.cpu_resource_utils import parse_id_list
+    from sonar.utils.cpu_resource_utils import parse_id_list
 
     stride = sku.priority_stride
     union_cpus: set[int] = set()
@@ -534,13 +534,13 @@ def _resolve_numactl_args(numactl_args: str) -> str:
 
 @contextmanager
 def configure_subprocess(
-    aphrodite_config: "AphroditeConfig",
+    sonar_config: "SonarConfig",
     local_rank: int,
     dp_local_rank: int | None = None,
     process_kind: str = "worker",
 ):
     """Temporarily replace the multiprocessing executable with a numactl wrapper."""
-    parallel_config = aphrodite_config.parallel_config
+    parallel_config = sonar_config.parallel_config
     if parallel_config.numa_bind is None:
         # Resolve once in the launching process; spawned children inherit the
         # result through the pickled config instead of re-checking (a bound
@@ -573,7 +573,7 @@ def configure_subprocess(
             parallel_config._numa_bind_auto = False
         yield
         return
-    if envs.APHRODITE_WORKER_MULTIPROC_METHOD == "spawn":
+    if envs.SONAR_WORKER_MULTIPROC_METHOD == "spawn":
         logger.info(
             "Launching %s subprocess (local_rank=%s, dp_local_rank=%s) with numactl %s",
             process_kind,
@@ -622,12 +622,12 @@ def _set_numa_wrapper_env(numactl_args: str, python_executable: str):
 
 @contextmanager
 def _mp_set_executable(executable: str, debug_str: str):
-    start_method = envs.APHRODITE_WORKER_MULTIPROC_METHOD
+    start_method = envs.SONAR_WORKER_MULTIPROC_METHOD
     if start_method != "spawn":
         logger.warning(
             "NUMA binding requires spawn method but got '%s'. "
             "NUMA binding will be ineffective. "
-            "Set APHRODITE_WORKER_MULTIPROC_METHOD=spawn to enable NUMA binding.",
+            "Set SONAR_WORKER_MULTIPROC_METHOD=spawn to enable NUMA binding.",
             start_method,
         )
         yield

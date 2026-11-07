@@ -7,23 +7,23 @@ import torch
 from safetensors.torch import _TYPES as _SAFETENSORS_TO_TORCH_DTYPE
 from transformers import PreTrainedConfig
 
-from aphrodite import envs
-from aphrodite.config.model_arch import (
+from sonar import envs
+from sonar.config.model_arch import (
     ModelArchitectureConfig,
 )
-from aphrodite.config.utils import getattr_iter
-from aphrodite.logger import init_logger
-from aphrodite.transformers_utils.config import (
+from sonar.config.utils import getattr_iter
+from sonar.logger import init_logger
+from sonar.transformers_utils.config import (
     CONFIG_FIELD_ALIASES,
     ConfigFormat,
     get_safetensors_params_metadata,
 )
-from aphrodite.transformers_utils.deepseek_v4_utils import get_compress_ratios
-from aphrodite.transformers_utils.repo_utils import (
+from sonar.transformers_utils.deepseek_v4_utils import get_compress_ratios
+from sonar.transformers_utils.repo_utils import (
     file_or_path_exists,
     get_hf_file_to_dict,
 )
-from aphrodite.utils.torch_utils import common_broadcastable_dtype
+from sonar.utils.torch_utils import common_broadcastable_dtype
 
 logger = init_logger(__name__)
 
@@ -58,7 +58,7 @@ class ModelArchConfigConvertorBase:
         if not (config_het or text_het):
             return None
         # The text config decides the layer count when it is the heterogeneous one:
-        # its stack is what Aphrodite builds attention layers for.
+        # its stack is what Sonar builds attention layers for.
         source = self.hf_text_config if text_het else self.hf_config
         return [
             (
@@ -69,7 +69,7 @@ class ModelArchConfigConvertorBase:
         ]
 
     def get_architectures(self) -> list[str]:
-        # Sometimes we get here from `aphrodite_config.with_hf_config(text_config)` where
+        # Sometimes we get here from `sonar_config.with_hf_config(text_config)` where
         # `text_config` is a sub-config from a multi-modal model. If this is the case,
         # the sub-config will not have `architectures` and it will explicitly be `None`
         return getattr(self.hf_config, "architectures", None) or []
@@ -92,7 +92,7 @@ class ModelArchConfigConvertorBase:
             if get_compress_ratios(self.hf_text_config):
                 return self.hf_text_config.head_dim
             qk_rope_head_dim = self._get_qk_rope_head_dim()
-            if not envs.APHRODITE_MLA_DISABLE:
+            if not envs.SONAR_MLA_DISABLE:
                 return self.hf_text_config.kv_lora_rank + qk_rope_head_dim
             else:
                 qk_nope_head_dim = getattr(self.hf_text_config, "qk_nope_head_dim", 0)
@@ -124,7 +124,7 @@ class ModelArchConfigConvertorBase:
             return qk_rope_head_dim  # not corrupted
 
         # Read the correct value from raw config.json.
-        from aphrodite.transformers_utils.repo_utils import get_hf_file_to_dict
+        from sonar.transformers_utils.repo_utils import get_hf_file_to_dict
 
         model_path = self.hf_config.name_or_path
         if not model_path:
@@ -514,7 +514,7 @@ class NemotronNasModelArchConfigConvertor(ModelArchConfigConvertorBase):
             "This usually indicates an unsupported model architecture or "
             "missing configuration. "
             "Please check if your model is supported at: "
-            "https://docs.aphrodite.ai/en/latest/models/supported_models.html"
+            "https://sonar.dphn.ai/en/latest/models/supported_models.html"
         )
 
 
@@ -565,7 +565,7 @@ class MimoMTPModelArchConfigConvertor(ModelArchConfigConvertorBase):
 def _strip_mimo_v2_attention_chunk_size(hf_config: PreTrainedConfig, hf_text_config: PreTrainedConfig) -> None:
     # MiMo-V2-Flash's config.json sets `attention_chunk_size=128` but the
     # architecture does not actually use chunked local attention. Leaving it
-    # set makes Aphrodite disable the hybrid KV cache manager
+    # set makes Sonar disable the hybrid KV cache manager
     for cfg in (hf_text_config, hf_config):
         if cfg is not None and hasattr(cfg, "attention_chunk_size"):
             delattr(cfg, "attention_chunk_size")

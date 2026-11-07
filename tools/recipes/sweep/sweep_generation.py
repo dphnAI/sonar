@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-"""Generate optional Aphrodite benchmark sweep files from one initial suggestion."""
+"""Generate optional Sonar benchmark sweep files from one initial suggestion."""
 
 from __future__ import annotations
 
@@ -91,7 +91,7 @@ def build_serve_params(config: dict[str, Any]) -> list[dict[str, Any]]:
     """Build a bounded batch-budget sweep at the sequence-count lower bound.
 
     Explicit candidates keep the initial per-replica sequence count. Three
-    reference points compare those tuned values with Aphrodite-resolved defaults.
+    reference points compare those tuned values with Sonar-resolved defaults.
     """
     initial_seqs = _positive_int(config, "max-num-seqs")
     initial_batch = _positive_int(config, "max-num-batched-tokens")
@@ -145,10 +145,10 @@ def build_serve_params(config: dict[str, Any]) -> list[dict[str, Any]]:
     add("higher_batch_budget", initial_seqs, higher_batch)
     # Default-reference candidates intentionally omit one or both scheduler
     # keys. The sweep server starts from sweep_config.yml, where both keys are
-    # removed, so omission lets Aphrodite resolve its normal runtime default.
-    add("aphrodite_default_max_num_seqs", None, initial_batch)
-    add("aphrodite_default_max_num_batched_tokens", initial_seqs, None)
-    add("aphrodite_defaults", None, None)
+    # removed, so omission lets Sonar resolve its normal runtime default.
+    add("sonar_default_max_num_seqs", None, initial_batch)
+    add("sonar_default_max_num_batched_tokens", initial_seqs, None)
+    add("sonar_defaults", None, None)
 
     return candidates
 
@@ -248,7 +248,7 @@ def inspect_model_parallel_metadata(config: dict[str, Any]) -> ModelParallelMeta
     if not isinstance(model, str) or not model:
         raise ValueError("Parallel-layout sweep requires a model in config.yml.")
 
-    from aphrodite.transformers_utils.config import get_config
+    from sonar.transformers_utils.config import get_config
 
     hf_config = get_config(
         model,
@@ -263,10 +263,10 @@ def inspect_model_parallel_metadata(config: dict[str, Any]) -> ModelParallelMeta
 def cpu_supports_moe_dp_collectives() -> bool:
     """Whether CPU overrides the variable-size collectives used by MoE DP."""
     try:
-        from aphrodite.distributed.device_communicators.base_device_communicator import (
+        from sonar.distributed.device_communicators.base_device_communicator import (
             DeviceCommunicatorBase,
         )
-        from aphrodite.distributed.device_communicators.cpu_communicator import (
+        from sonar.distributed.device_communicators.cpu_communicator import (
             CpuCommunicator,
         )
     except Exception:
@@ -467,7 +467,7 @@ def _write_sweep_config(path: Path, config: dict[str, Any]) -> None:
     header = (
         "# Generated for runtime sweep only.\n"
         "# Scheduler values are supplied per candidate; omitted values use "
-        "Aphrodite defaults.\n"
+        "Sonar defaults.\n"
     )
     path.write_text(header + body, encoding="utf-8")
 
@@ -485,8 +485,8 @@ def _write_run_script(
     prepare_config_rel: str | None = None,
 ) -> None:
     bench_parts = [
-        "aphrodite bench serve",
-        "--backend aphrodite",
+        "sonar bench serve",
+        "--backend sonar",
         f"--model {shlex.quote(request_model)}",
         f"--tokenizer {shlex.quote(tokenizer)}",
         "--dataset-name random",
@@ -543,29 +543,29 @@ ENV_PATH="${{SCRIPT_DIR}}/{env_rel}"
 
 source "${{ENV_PATH}}"
 
-# Released/nightly Aphrodite images keep recipe-relative assets such as
-# examples/*.jinja under /aphrodite-workspace. Launch sweep server subprocesses
+# Released/nightly Sonar images keep recipe-relative assets such as
+# examples/*.jinja under /sonar-workspace. Launch sweep server subprocesses
 # from there when available so relative recipe assets resolve like they do
 # in serve_with_recipe.sh.
-if [[ -d /aphrodite-workspace/examples ]]; then
-  cd /aphrodite-workspace
+if [[ -d /sonar-workspace/examples ]]; then
+  cd /sonar-workspace
 fi
 
-# recipe tools may be newer than the installed Aphrodite package. Only pass the
-# resilience flag when this Aphrodite CLI actually supports it.
+# recipe tools may be newer than the installed Sonar package. Only pass the
+# resilience flag when this Sonar CLI actually supports it.
 CONTINUE_ON_ERROR_ARG=""
-if aphrodite bench sweep serve --help 2>&1 | grep -q -- "--continue-on-error"; then
+if sonar bench sweep serve --help 2>&1 | grep -q -- "--continue-on-error"; then
   CONTINUE_ON_ERROR_ARG="--continue-on-error"
 fi
 
-# On older Aphrodite versions, a failed benchmark aborts the sweep process. Retry the
+# On older Sonar versions, a failed benchmark aborts the sweep process. Retry the
 # interrupted sweep with --resume so one transient run failure does not discard
 # completed work or force a manual restart.
-SWEEP_RETRY_COUNT="${{APHRODITE_RECIPE_SWEEP_RETRY_COUNT:-0}}"
-MAX_SWEEP_RETRIES="${{APHRODITE_RECIPE_SWEEP_RETRIES:-2}}"
+SWEEP_RETRY_COUNT="${{SONAR_RECIPE_SWEEP_RETRY_COUNT:-0}}"
+MAX_SWEEP_RETRIES="${{SONAR_RECIPE_SWEEP_RETRIES:-2}}"
 
-{prepare_config}aphrodite bench sweep serve \
-  --serve-cmd "aphrodite serve --config '${{CONFIG_PATH}}'" \
+{prepare_config}sonar bench sweep serve \
+  --serve-cmd "sonar serve --config '${{CONFIG_PATH}}'" \
   --bench-cmd "{bench_cmd}" \
   --serve-params "${{SCRIPT_DIR}}/{serve_params_name}" \
   --bench-params "${{SCRIPT_DIR}}/bench_params.json" \
@@ -596,7 +596,7 @@ MAX_SWEEP_RETRIES="${{APHRODITE_RECIPE_SWEEP_RETRIES:-2}}"
         "retry ${{NEXT_RETRY}}/${{MAX_SWEEP_RETRIES}} from the start"
     fi
 
-    APHRODITE_RECIPE_SWEEP_RETRY_COUNT="${{NEXT_RETRY}}" exec "$0" "${{RETRY_ARGS[@]}}"
+    SONAR_RECIPE_SWEEP_RETRY_COUNT="${{NEXT_RETRY}}" exec "$0" "${{RETRY_ARGS[@]}}"
   }}
 """
     path.write_text(script, encoding="utf-8")
@@ -646,7 +646,7 @@ def _write_guide(path: Path, workload: WorkloadHints) -> None:
         sla_text = (
             "\n## Supplied latency objectives\n\n"
             + sla_text
-            + "\n\nThe generated benchmark uses these values with Aphrodite "
+            + "\n\nThe generated benchmark uses these values with Sonar "
             "`--goodput`.\n"
         )
 
@@ -660,20 +660,20 @@ per-replica concurrency lower bound while benchmarking nearby values for:
 
 It does not test explicit `max-num-seqs` values below per-replica concurrency,
 because those values can introduce scheduler queueing and severe TTFT
-degradation. The Aphrodite-default references still test whether an explicit
+degradation. The Sonar-default references still test whether an explicit
 `max-num-seqs` override is needed.
 
-In addition to nearby tuned values, the sweep includes three Aphrodite-default
+In addition to nearby tuned values, the sweep includes three Sonar-default
 references:
 
-- Aphrodite default `max-num-seqs` with the initial batch-token budget
-- initial `max-num-seqs` with Aphrodite default `max-num-batched-tokens`
-- Aphrodite defaults for both parameters
+- Sonar default `max-num-seqs` with the initial batch-token budget
+- initial `max-num-seqs` with Sonar default `max-num-batched-tokens`
+- Sonar defaults for both parameters
 
 The sweep runs every server from a generated `sweep_config.yml` that copies the
 initial `config.yml` but removes these two scheduler keys. Tuned candidates add
 explicit CLI values; a default-reference candidate simply omits the selected
-key, allowing `aphrodite serve` to resolve its normal runtime default. This avoids
+key, allowing `sonar serve` to resolve its normal runtime default. This avoids
 passing the literal string `None` and keeps defaults platform-, world-size-,
 model-, and usage-context-aware.
 
@@ -702,10 +702,10 @@ Resume an interrupted sweep:
 Before measurement, the generated script runs one unmeasured warmup containing
 one full concurrency window ({workload.concurrency} prompts). It is saved as
 `warmup.json` for auditing but excluded from recommendation statistics. By
-default, Aphrodite then benchmarks each parameter combination three times.
+default, Sonar then benchmarks each parameter combination three times.
 
 The benchmark request count scales with the supplied workload concurrency using
-the same model as Aphrodite's `PROMPTS_PER_CONCURRENCY` performance-benchmark
+the same model as Sonar's `PROMPTS_PER_CONCURRENCY` performance-benchmark
 control:
 
 ```text
@@ -737,9 +737,9 @@ Configurations with failed requests are excluded. TP/DP comparisons continue
 to use exact highest-throughput selection.
 
 `recommended-config.yml` copies the initial configuration and changes only
-`max-num-seqs` and `max-num-batched-tokens`. If a Aphrodite-default reference wins,
+`max-num-seqs` and `max-num-batched-tokens`. If a Sonar-default reference wins,
 the corresponding key is removed from `recommended-config.yml`, allowing
-`aphrodite serve` to resolve that parameter from its normal runtime default policy.
+`sonar serve` to resolve that parameter from its normal runtime default policy.
 """
     path.write_text(content, encoding="utf-8")
 
@@ -1001,8 +1001,8 @@ def _write_concurrency_run_script(
     workload: WorkloadHints,
 ) -> None:
     bench_parts = [
-        "aphrodite bench serve",
-        "--backend aphrodite",
+        "sonar bench serve",
+        "--backend sonar",
         f"--model {shlex.quote(request_model)}",
         f"--tokenizer {shlex.quote(tokenizer)}",
         "--dataset-name random",
@@ -1040,33 +1040,33 @@ ENV_PATH="${{SCRIPT_DIR}}/{env_rel}"
 
 source "${{ENV_PATH}}"
 
-# Released/nightly Aphrodite images keep recipe-relative assets such as
-# examples/*.jinja under /aphrodite-workspace. Launch sweep server subprocesses
+# Released/nightly Sonar images keep recipe-relative assets such as
+# examples/*.jinja under /sonar-workspace. Launch sweep server subprocesses
 # from there when available so relative recipe assets resolve like they do
 # in serve_with_recipe.sh.
-if [[ -d /aphrodite-workspace/examples ]]; then
-  cd /aphrodite-workspace
+if [[ -d /sonar-workspace/examples ]]; then
+  cd /sonar-workspace
 fi
 
-# recipe tools may be newer than the installed Aphrodite package. Only pass the
-# resilience flag when this Aphrodite CLI actually supports it.
+# recipe tools may be newer than the installed Sonar package. Only pass the
+# resilience flag when this Sonar CLI actually supports it.
 CONTINUE_ON_ERROR_ARG=""
 if [[ "{int(use_adaptive_sla_search)}" == "1" ]] || \
-   aphrodite bench sweep serve_workload --help 2>&1 | grep -q -- "--continue-on-error"; then
+   sonar bench sweep serve_workload --help 2>&1 | grep -q -- "--continue-on-error"; then
   CONTINUE_ON_ERROR_ARG="--continue-on-error"
 fi
 
-# On older Aphrodite versions, a failed benchmark aborts the sweep process. Retry the
+# On older Sonar versions, a failed benchmark aborts the sweep process. Retry the
 # interrupted sweep with --resume so one transient run failure does not discard
 # completed work or force a manual restart.
-SWEEP_RETRY_COUNT="${{APHRODITE_RECIPE_SWEEP_RETRY_COUNT:-0}}"
-MAX_SWEEP_RETRIES="${{APHRODITE_RECIPE_SWEEP_RETRIES:-2}}"
-SERVER_READY_TIMEOUT="${{APHRODITE_RECIPE_SERVER_READY_TIMEOUT:-1800}}"
+SWEEP_RETRY_COUNT="${{SONAR_RECIPE_SWEEP_RETRY_COUNT:-0}}"
+MAX_SWEEP_RETRIES="${{SONAR_RECIPE_SWEEP_RETRIES:-2}}"
+SERVER_READY_TIMEOUT="${{SONAR_RECIPE_SERVER_READY_TIMEOUT:-1800}}"
 
 run_concurrency_sweep() {{
   if [[ "{int(use_adaptive_sla_search)}" == "1" ]]; then
     python3 "${{SCRIPT_DIR}}/adaptive_concurrency.py" \
-      --serve-cmd "aphrodite serve --config '${{CONFIG_PATH}}'" \
+      --serve-cmd "sonar serve --config '${{CONFIG_PATH}}'" \
       --bench-cmd "{bench_cmd}" \
       --results-dir "${{SCRIPT_DIR}}/results/concurrency-tuning" \
       {adaptive_args_text} \
@@ -1074,8 +1074,8 @@ run_concurrency_sweep() {{
       ${{CONTINUE_ON_ERROR_ARG}} \
       "$@"
   else
-    aphrodite bench sweep serve_workload \
-      --serve-cmd "aphrodite serve --config '${{CONFIG_PATH}}'" \
+    sonar bench sweep serve_workload \
+      --serve-cmd "sonar serve --config '${{CONFIG_PATH}}'" \
       --bench-cmd "{bench_cmd}" \
       --bench-params "${{SCRIPT_DIR}}/concurrency_bench_params.json" \
       --output-dir "${{SCRIPT_DIR}}/results" \
@@ -1111,7 +1111,7 @@ run_concurrency_sweep || {{
         "retry ${{NEXT_RETRY}}/${{MAX_SWEEP_RETRIES}} from the start"
     fi
 
-    APHRODITE_RECIPE_SWEEP_RETRY_COUNT="${{NEXT_RETRY}}" exec "$0" "${{RETRY_ARGS[@]}}"
+    SONAR_RECIPE_SWEEP_RETRY_COUNT="${{NEXT_RETRY}}" exec "$0" "${{RETRY_ARGS[@]}}"
   }}
 """
     path.write_text(script, encoding="utf-8")
@@ -1194,7 +1194,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${{BASH_SOURCE[0]}}")" && pwd)"
 STAGES=all
 RUN_ARGS=()
-SERVER_READY_TIMEOUT="${{APHRODITE_RECIPE_SERVER_READY_TIMEOUT:-1800}}"
+SERVER_READY_TIMEOUT="${{SONAR_RECIPE_SERVER_READY_TIMEOUT:-1800}}"
 RECOMMEND_SLA_ARGS=({recommend_sla_args})
 while (($#)); do
   case "$1" in
@@ -1244,7 +1244,7 @@ has_stage() {{ [[ ",$STAGES," == *",$1,"* ]]; }}
 
 # Keep the concurrency runner's server-start timeout explicit even when sweep
 # arguments pass through multiple generated wrapper scripts.
-export APHRODITE_RECIPE_SERVER_READY_TIMEOUT="${{SERVER_READY_TIMEOUT}}"
+export SONAR_RECIPE_SERVER_READY_TIMEOUT="${{SERVER_READY_TIMEOUT}}"
 
 # Check dependencies before starting any benchmarks.
 if has_stage scheduler && ! has_stage concurrency &&

@@ -52,18 +52,18 @@ from typing import TYPE_CHECKING, Any, NamedTuple
 import numpy as np
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.utils.gpu_sync_debug import gpu_sync_allowed
-from aphrodite.utils.torch_utils import async_tensor_h2d
-from aphrodite.v1.worker.gpu.sample.logits_processor import (
+from sonar.logger import init_logger
+from sonar.sampling_params import SamplingParams
+from sonar.utils.gpu_sync_debug import gpu_sync_allowed
+from sonar.utils.torch_utils import async_tensor_h2d
+from sonar.v1.worker.gpu.sample.logits_processor import (
     LogitsContext,
     LogitsProcessor,
     LogitsProcRequestState,
 )
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
+    from sonar.config import SonarConfig
 
 logger = init_logger(__name__)
 
@@ -373,7 +373,7 @@ def dry_core(
     # the exponent, its float64 cast, the pow result and the product stay at [R, C]
     # inside the loop.
     # Breakers zero the penalty rather than the logit, so a breaker keeps its value.
-    # The narrowing to logits.dtype below is a no-op under Aphrodite's sampler, which
+    # The narrowing to logits.dtype below is a no-op under Sonar's sampler, which
     # always passes float32 logits.
     pen2 = pen[:-1].view(R, vocab)
     if bmask is not None:
@@ -477,9 +477,9 @@ def use_dry(multiplier: float, base: float, penalty_last_n: int) -> bool:
 
 
 class DryState(LogitsProcessor):
-    def __init__(self, aphrodite_config: "AphroditeConfig", req_states: LogitsProcRequestState):
+    def __init__(self, sonar_config: "SonarConfig", req_states: LogitsProcRequestState):
         # Refuse speculative decoding here, since admission cannot see its config.
-        if aphrodite_config.speculative_config is not None:
+        if sonar_config.speculative_config is not None:
             raise ValueError(STR_SPEC_DEC_REJECTS_DRY)
         self.req_states = req_states
         max_num_reqs = req_states.max_num_reqs
@@ -503,10 +503,10 @@ class DryState(LogitsProcessor):
 
         # Deferred import: the tokenizer registry pulls in transformers, and
         # the frontend imports this module only to validate params.
-        from aphrodite.tokenizers import cached_tokenizer_from_config
+        from sonar.tokenizers import cached_tokenizer_from_config
 
         # None under skip_tokenizer_init.
-        self._tokenizer = cached_tokenizer_from_config(aphrodite_config.model_config)
+        self._tokenizer = cached_tokenizer_from_config(sonar_config.model_config)
         # Resolve the default set here to keep the vocabulary decode out of
         # execute_model, where add_request runs.
         self._default_breaker_ids = self._resolve_breakers(DEFAULT_DRY_SEQUENCE_BREAKERS)
@@ -751,7 +751,7 @@ class DryState(LogitsProcessor):
 
 def main():
     # Imported here so that loading DryState from this module does not import LLM.
-    from aphrodite import LLM
+    from sonar import LLM
 
     prompts = ["The future of AI is"] * 2
     sampling_params_list = [

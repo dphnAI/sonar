@@ -12,7 +12,7 @@ pub(super) fn validate_request_compat(
     served_model_names: &ServedModelNames,
 ) -> Result<(), ApiError> {
     // This path is intentionally scoped to the minimum surface needed by
-    // `aphrodite-bench` random workload compatibility, so unsupported legacy
+    // `sonar-bench` random workload compatibility, so unsupported legacy
     // completions features fail early here.
     served_model_names.check(request.model.as_deref())?;
 

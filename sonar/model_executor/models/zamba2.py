@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""PyTorch Zamba2 model implementation for Aphrodite.
+"""PyTorch Zamba2 model implementation for Sonar.
 
 This module implements the Zamba2 architecture from
 https://arxiv.org/abs/2411.15242, which combines Mamba and Transformer
@@ -16,34 +16,34 @@ import torch
 from torch import nn
 from transformers import Zamba2Config
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, CacheConfig, ModelConfig
-from aphrodite.distributed import get_tensor_model_parallel_world_size
-from aphrodite.model_executor.layers.activation import GeluAndMul
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import CacheConfig, ModelConfig, SonarConfig
+from sonar.distributed import get_tensor_model_parallel_world_size
+from sonar.model_executor.layers.activation import GeluAndMul
+from sonar.model_executor.layers.attention import Attention
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     MergedColumnParallelLinear,
     QKVParallelLinear,
     ReplicatedLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.mamba.mamba_mixer2 import MambaMixer2
-from aphrodite.model_executor.layers.mamba.mamba_utils import (
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.mamba.mamba_mixer2 import MambaMixer2
+from sonar.model_executor.layers.mamba.mamba_utils import (
     MambaStateCopyFunc,
     MambaStateCopyFuncCalculator,
     MambaStateDtypeCalculator,
     MambaStateShapeCalculator,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.sequence import IntermediateTensors
+from sonar.sequence import IntermediateTensors
 
 from .interfaces import HasInnerState, IsHybrid
 from .utils import AutoWeightsLoader, WeightsMapper, maybe_prefix
@@ -178,7 +178,7 @@ class Zamba2Attention(nn.Module):
 
         # Even though in Zamba2 weights are shared between attention layers, KV
         # cache is unique for every attention layer. Hence, we need to define
-        # separate Attention objects, because in recent Aphrodite KV cache tensors
+        # separate Attention objects, because in recent Sonar KV cache tensors
         # are tied to specific Attention objects.
 
         # Initialize attention blocks with proper indexing
@@ -686,21 +686,21 @@ class Zamba2Model(nn.Module):
     layers, using token embeddings and final layer normalization.
     """
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         """Initialize the Zamba2 model.
 
         Args:
-            aphrodite_config: Configuration object containing model, cache,
+            sonar_config: Configuration object containing model, cache,
                 quantization and LoRA settings
             prefix: Optional prefix for parameter names in state dict
 
         """
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_config
-        model_config = aphrodite_config.model_config
-        cache_config = aphrodite_config.cache_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        model_config = sonar_config.model_config
+        cache_config = sonar_config.cache_config
+        quant_config = sonar_config.quant_config
 
         self.config = config
 
@@ -825,7 +825,7 @@ class Zamba2ForCausalLM(nn.Module, HasInnerState, IsHybrid):
     """
 
     # To ensure correct weight loading and mapping.
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_substr={
             "A_log": "A",
             "0.weight": "A.weight",
@@ -841,23 +841,23 @@ class Zamba2ForCausalLM(nn.Module, HasInnerState, IsHybrid):
     @classmethod
     def get_mamba_state_dtype_from_config(
         cls,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
     ) -> tuple[torch.dtype, torch.dtype]:
         return MambaStateDtypeCalculator.mamba2_state_dtype(
-            aphrodite_config.model_config.dtype,
-            aphrodite_config.cache_config.mamba_cache_dtype,
-            aphrodite_config.cache_config.mamba_ssm_cache_dtype,
+            sonar_config.model_config.dtype,
+            sonar_config.cache_config.mamba_cache_dtype,
+            sonar_config.cache_config.mamba_ssm_cache_dtype,
         )
 
     @classmethod
     def get_mamba_state_shape_from_config(
         cls,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
     ) -> tuple[tuple[int, int], tuple[int, int, int]]:
         """Calculate shapes for Mamba's convolutional and state caches.
 
         Args:
-            aphrodite_config: Aphrodite config
+            sonar_config: Sonar config
 
         Returns:
             Tuple containing:
@@ -865,8 +865,8 @@ class Zamba2ForCausalLM(nn.Module, HasInnerState, IsHybrid):
             - temporal_state_shape: Shape for state space model cache
 
         """
-        parallel_config = aphrodite_config.parallel_config
-        hf_config = aphrodite_config.model_config.hf_config
+        parallel_config = sonar_config.parallel_config
+        hf_config = sonar_config.model_config.hf_config
         intermediate_size = hf_config.mamba_expand * hf_config.hidden_size
 
         return MambaStateShapeCalculator.mamba2_state_shape(
@@ -877,34 +877,34 @@ class Zamba2ForCausalLM(nn.Module, HasInnerState, IsHybrid):
             head_dim=hf_config.mamba_headdim,
             state_size=hf_config.mamba_d_state,
             conv_kernel=hf_config.mamba_d_conv,
-            num_spec=aphrodite_config.num_speculative_tokens,
+            num_spec=sonar_config.num_speculative_tokens,
         )
 
     @classmethod
     def get_mamba_state_copy_func(cls) -> tuple[MambaStateCopyFunc, MambaStateCopyFunc]:
         return MambaStateCopyFuncCalculator.mamba2_state_copy_func()
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         """Initialize the Zamba2 model for causal language modeling.
 
         Args:
-            aphrodite_config: Configuration containing model, cache, quantization,
+            sonar_config: Configuration containing model, cache, quantization,
                         LoRA and scheduler settings
             prefix: Optional prefix for parameter names
 
         """
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
 
-        scheduler_config = aphrodite_config.scheduler_config
+        scheduler_config = sonar_config.scheduler_config
 
         super().__init__()
         self.config = config
-        self.aphrodite_config = aphrodite_config
+        self.sonar_config = sonar_config
         self.scheduler_config = scheduler_config
-        self.model_config = aphrodite_config.model_config
+        self.model_config = sonar_config.model_config
 
         # Initialize core model
-        self.model = Zamba2Model(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = Zamba2Model(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
 
         # Initialize language modeling head
         self.lm_head = ParallelLMHead(
@@ -975,4 +975,4 @@ class Zamba2ForCausalLM(nn.Module, HasInnerState, IsHybrid):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)

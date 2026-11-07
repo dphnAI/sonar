@@ -3,7 +3,7 @@
 """Alpamayo 2 Super: the Qwen3-VL reasoning model of NVIDIA's driving policy.
 
 The checkpoint stores a Qwen3-VL model under ``vlm.`` and a flow-matching
-trajectory expert under ``expert.``. Aphrodite serves the Qwen3-VL part, which
+trajectory expert under ``expert.``. Sonar serves the Qwen3-VL part, which
 produces every text output of the model: visual question answering,
 grounding, chain-of-causation reasoning with meta-actions, and auto-labeling.
 The trajectory itself needs the expert and is not produced here.
@@ -13,18 +13,18 @@ from collections.abc import Mapping
 
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.model_executor.models.qwen3_vl import (
+from sonar.config import SonarConfig
+from sonar.model_executor.models.qwen3_vl import (
     Qwen3VLDummyInputsBuilder,
     Qwen3VLForConditionalGeneration,
     Qwen3VLMultiModalProcessor,
     Qwen3VLProcessingInfo,
     Qwen3VLProcessor,
 )
-from aphrodite.model_executor.models.utils import WeightsMapper
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.processing import BaseProcessingInfo
-from aphrodite.transformers_utils.configs.alpamayo2_super import Alpamayo2SuperConfig
+from sonar.model_executor.models.utils import WeightsMapper
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.processing import BaseProcessingInfo
+from sonar.transformers_utils.configs.alpamayo2_super import Alpamayo2SuperConfig
 
 
 class Alpamayo2SuperProcessingInfo(Qwen3VLProcessingInfo):
@@ -67,19 +67,19 @@ class Alpamayo2SuperProcessingInfo(Qwen3VLProcessingInfo):
     dummy_inputs=Qwen3VLDummyInputsBuilder,
 )
 class Alpamayo2SuperForConditionalGeneration(Qwen3VLForConditionalGeneration):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={
             "vlm.model.visual.": "visual.",
             "vlm.lm_head.": "language_model.lm_head.",
             "vlm.model.language_model.": "language_model.model.",
-            # The trajectory expert is not served by Aphrodite.
+            # The trajectory expert is not served by Sonar.
             "expert.": None,
         }
     )
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
-        super().__init__(aphrodite_config=aphrodite_config, prefix=prefix)
-        config = aphrodite_config.model_config.hf_config
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
+        super().__init__(sonar_config=sonar_config, prefix=prefix)
+        config = sonar_config.model_config.hf_config
         # Discrete trajectory tokens (<i0>, <i1>, ...) only ever appear in
         # prompts; like the reference implementation, never sample them.
         traj_ids = config.traj_ids

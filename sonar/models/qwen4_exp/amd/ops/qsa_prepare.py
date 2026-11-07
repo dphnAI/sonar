@@ -11,7 +11,7 @@ select, which ROCm Triton rejects.
 import torch
 from torch import nn
 
-from aphrodite.triton_utils import tl, triton
+from sonar.triton_utils import tl, triton
 
 
 def supports_fused_pre_indexer(

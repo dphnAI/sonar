@@ -7,19 +7,19 @@ from torch._inductor.pattern_matcher import (
     PatternMatcherPass,
 )
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.logger import init_logger
+from sonar.config import SonarConfig
+from sonar.logger import init_logger
 
-from ..aphrodite_inductor_pass import AphroditeInductorPass
 from ..inductor_pass import get_pass_context
+from ..sonar_inductor_pass import SonarInductorPass
 from .lowering_pass import get_ir_op
 from .utils import overload_or_default
 
 logger = init_logger(__name__)
 
 
-class AphroditeIRInplaceFunctionalizationPass(AphroditeInductorPass):
-    """This pass functionalizes maybe_inplace Aphrodite IR ops to the default overload.
+class SonarIRInplaceFunctionalizationPass(SonarInductorPass):
+    """This pass functionalizes maybe_inplace Sonar IR ops to the default overload.
     The maybe_inplace overloads have the same signature as the default overload
     so the pass simply replaces the called overload.
     That makes the graph properly functional.
@@ -31,19 +31,19 @@ class AphroditeIRInplaceFunctionalizationPass(AphroditeInductorPass):
     so it must handle non-normalized and non-functional IR.
     """
 
-    def __init__(self, aphrodite_config: AphroditeConfig) -> None:
-        super().__init__(aphrodite_config)
+    def __init__(self, sonar_config: SonarConfig) -> None:
+        super().__init__(sonar_config)
         self.patterns = PatternMatcherPass(self.pass_name)
         self.functionalized_ops: dict[str, int] = defaultdict(lambda: 0)
 
-    @AphroditeInductorPass.time_and_log
+    @SonarInductorPass.time_and_log
     def __call__(self, graph: fx.Graph) -> None:
         # clear at the beginning instead of end, so that tests can inspect
         self.functionalized_ops.clear()
         assert graph.owning_module is not None
         node_to_idx = {node: i for i, node in enumerate(graph.nodes)}
 
-        # Pass donated input via Aphrodite's pass context
+        # Pass donated input via Sonar's pass context
         pass_context = get_pass_context()
         pass_context.donated_input_ids = set[int]()
 
@@ -92,7 +92,7 @@ class AphroditeIRInplaceFunctionalizationPass(AphroditeInductorPass):
         ops = ",".join(self.functionalized_ops.keys())
         logger.debug("Donated input IDs: %s", pass_context.donated_input_ids)
         logger.debug(
-            "%s functionalized %d Aphrodite IR nodes for op(s) %s",
+            "%s functionalized %d Sonar IR nodes for op(s) %s",
             self.pass_name,
             count,
             ops,

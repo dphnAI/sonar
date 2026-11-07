@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Metal Worker for Aphrodite's v1 engine."""
+"""Metal Worker for Sonar's v1 engine."""
 
 from __future__ import annotations
 
@@ -11,43 +11,43 @@ from typing import TYPE_CHECKING, Any
 import mlx.core as mx
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed import (
+from sonar.config import SonarConfig
+from sonar.distributed import (
     ensure_model_parallel_initialized,
     init_distributed_environment,
 )
-from aphrodite.logger import init_logger
-from aphrodite.lora.request import LoRARequest
-from aphrodite.metal.config import (
+from sonar.logger import init_logger
+from sonar.lora.request import LoRARequest
+from sonar.metal.config import (
     enable_contiguous_kv_fast_path,
     get_config,
     should_use_contiguous_kv_fast_path,
 )
-from aphrodite.metal.platform import MetalPlatform
-from aphrodite.metal.utils import set_wired_limit
-from aphrodite.metal.v1.cache_policy import WorkerCachePlanner
-from aphrodite.tasks import SupportedTask
-from aphrodite.utils.torch_utils import set_random_seed
-from aphrodite.v1.core.sched.output import GrammarOutput, SchedulerOutput
-from aphrodite.v1.kv_cache_interface import KVCacheConfig, KVCacheSpec
-from aphrodite.v1.outputs import ModelRunnerOutput
-from aphrodite.v1.worker.worker_base import CompilationTimes, WorkerBase
+from sonar.metal.platform import MetalPlatform
+from sonar.metal.utils import set_wired_limit
+from sonar.metal.v1.cache_policy import WorkerCachePlanner
+from sonar.tasks import SupportedTask
+from sonar.utils.torch_utils import set_random_seed
+from sonar.v1.core.sched.output import GrammarOutput, SchedulerOutput
+from sonar.v1.kv_cache_interface import KVCacheConfig, KVCacheSpec
+from sonar.v1.outputs import ModelRunnerOutput
+from sonar.v1.worker.worker_base import CompilationTimes, WorkerBase
 
 if TYPE_CHECKING:
-    from aphrodite.metal.profiler.wrapper import MetalProfilerWrapper
-    from aphrodite.metal.v1.model_runner import MetalModelRunner
+    from sonar.metal.profiler.wrapper import MetalProfilerWrapper
+    from sonar.metal.v1.model_runner import MetalModelRunner
 
 logger = init_logger(__name__)
 
 
 def init_worker_distributed_environment(
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     rank: int,
     distributed_init_method: str,
     local_rank: int,
 ) -> None:
     """Initialize distributed environment for Metal worker."""
-    parallel_config = aphrodite_config.parallel_config
+    parallel_config = sonar_config.parallel_config
 
     init_distributed_environment(
         parallel_config.world_size,
@@ -75,7 +75,7 @@ class MetalWorker(WorkerBase):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         local_rank: int,
         rank: int,
         distributed_init_method: str,
@@ -83,7 +83,7 @@ class MetalWorker(WorkerBase):
         **kwargs: Any,
     ):
         super().__init__(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             local_rank=local_rank,
             rank=rank,
             distributed_init_method=distributed_init_method,
@@ -94,7 +94,7 @@ class MetalWorker(WorkerBase):
         # Apply TurboQuant config from --additional-config (needed because worker
         # runs in a separate process and doesn't inherit the config singleton
         # state set in MetalPlatform.check_and_update_config).
-        add = aphrodite_config.additional_config
+        add = sonar_config.additional_config
         if isinstance(add, dict) and add.get("turboquant"):
             self.metal_config.turboquant = True
             self.metal_config.k_quant = add.get("k_quant", "q8_0")
@@ -110,7 +110,7 @@ class MetalWorker(WorkerBase):
             logger.info(
                 "Metal: using contiguous MLX KV cache for low-concurrency "
                 "dense serving (max_num_seqs=%d). Set "
-                "APHRODITE_METAL_USE_PAGED_ATTENTION=1 to force paged attention.",
+                "SONAR_METAL_USE_PAGED_ATTENTION=1 to force paged attention.",
                 self.scheduler_config.max_num_seqs,
             )
 
@@ -139,7 +139,7 @@ class MetalWorker(WorkerBase):
 
         # Initialize distributed environment
         init_worker_distributed_environment(
-            self.aphrodite_config,
+            self.sonar_config,
             self.rank,
             self.distributed_init_method,
             self.local_rank,
@@ -149,11 +149,11 @@ class MetalWorker(WorkerBase):
         set_random_seed(self.model_config.seed)
 
         # Import here to avoid circular imports
-        from aphrodite.metal.v1.model_runner import MetalModelRunner
+        from sonar.metal.v1.model_runner import MetalModelRunner
 
         # Create model runner
         self.model_runner = MetalModelRunner(
-            aphrodite_config=self.aphrodite_config,
+            sonar_config=self.sonar_config,
             device=self.device,
         )
 
@@ -221,7 +221,7 @@ class MetalWorker(WorkerBase):
         ``max_model_len`` up to the nearest ``block_size`` boundary via
         ``cdiv(max_model_len, block_size) * page_size_bytes``.
         """
-        block_size = self.aphrodite_config.cache_config.block_size
+        block_size = self.sonar_config.cache_config.block_size
         return self.model_runner.estimate_one_sequence_kv_bytes(
             max_model_len=self.model_config.max_model_len,
             block_size=block_size,
@@ -397,7 +397,7 @@ class MetalWorker(WorkerBase):
         ``POST /start_profile`` / ``POST /stop_profile`` HTTP endpoints. We
         get all of those for free — only this method needs to exist.
         """
-        profiler_config = self.aphrodite_config.profiler_config
+        profiler_config = self.sonar_config.profiler_config
         if profiler_config is None:
             raise RuntimeError(
                 "Profiling is not enabled. Pass --profiler-config to enable; "
@@ -407,8 +407,8 @@ class MetalWorker(WorkerBase):
 
         if is_start:
             if self._metal_profiler is None:
-                from aphrodite.distributed.utils import get_worker_rank_suffix
-                from aphrodite.metal.profiler.wrapper import MetalProfilerWrapper
+                from sonar.distributed.utils import get_worker_rank_suffix
+                from sonar.metal.profiler.wrapper import MetalProfilerWrapper
 
                 rank_suffix = get_worker_rank_suffix(global_rank=self.rank)
                 trace_name = f"{profile_prefix}_{rank_suffix}" if profile_prefix else rank_suffix

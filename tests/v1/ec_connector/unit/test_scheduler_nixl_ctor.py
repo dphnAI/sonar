@@ -5,15 +5,15 @@ from pathlib import Path
 
 import pytest
 
-import aphrodite.distributed.ec_transfer.ec_connector.cpu.scheduler as sched_mod
-import aphrodite.distributed.nixl_utils as nixl_utils
-from aphrodite.config.ec_transfer import ECTransferConfig
-from aphrodite.distributed.ec_transfer.ec_connector.cpu.ec_shared_region import (
+import sonar.distributed.ec_transfer.ec_connector.cpu.scheduler as sched_mod
+import sonar.distributed.nixl_utils as nixl_utils
+from sonar.config.ec_transfer import ECTransferConfig
+from sonar.distributed.ec_transfer.ec_connector.cpu.ec_shared_region import (
     ECSharedRegion,
 )
-from aphrodite.distributed.ec_transfer.ec_connector.cpu.scheduler import ECCPUScheduler
-from aphrodite.distributed.nixl_utils import NixlWrapper
-from tests.v1.ec_connector.unit.utils import create_ec_aphrodite_config
+from sonar.distributed.ec_transfer.ec_connector.cpu.scheduler import ECCPUScheduler
+from sonar.distributed.nixl_utils import NixlWrapper
+from tests.v1.ec_connector.unit.utils import create_ec_sonar_config
 
 _N = 16
 _BS = 64
@@ -40,7 +40,7 @@ def test_ec_enable_nixl_read_from_extra_config():
 def test_gate_off_builds_no_nixl(monkeypatch):
     monkeypatch.setattr(sched_mod, "create_ec_shared_region", lambda cfg: _region())
     # ec_enable_nixl defaults to False.
-    s = ECCPUScheduler(create_ec_aphrodite_config(ec_role="ec_both"))
+    s = ECCPUScheduler(create_ec_sonar_config(ec_role="ec_both"))
     assert s._nixl_enabled is False
     assert getattr(s, "_data", None) is None
     assert getattr(s, "_producer_session", None) is None
@@ -50,7 +50,7 @@ def test_gate_off_builds_no_nixl(monkeypatch):
 def test_string_false_in_extra_config_leaves_nixl_off(monkeypatch):
     """Extra config is not type coerced, and bool("false") is True."""
     monkeypatch.setattr(sched_mod, "create_ec_shared_region", lambda cfg: _region())
-    cfg = create_ec_aphrodite_config(ec_role="ec_both")
+    cfg = create_ec_sonar_config(ec_role="ec_both")
     cfg.ec_transfer_config.ec_connector_extra_config["ec_enable_nixl"] = "false"
     s = ECCPUScheduler(cfg)
     assert s._nixl_enabled is False
@@ -61,13 +61,13 @@ def test_string_false_in_extra_config_leaves_nixl_off(monkeypatch):
 def test_missing_nixl_releases_shared_region(monkeypatch):
     """A failed constructor leaves no scheduler for the caller to shut down."""
     # Import before patching to avoid caching the missing-NIXL values.
-    from aphrodite.distributed.ec_transfer.ec_connector.cpu.data import nixl  # noqa: F401
+    from sonar.distributed.ec_transfer.ec_connector.cpu.data import nixl  # noqa: F401
 
     region = _region()
     monkeypatch.setattr(sched_mod, "create_ec_shared_region", lambda cfg: region)
     monkeypatch.setattr(nixl_utils, "NixlWrapper", None)
     monkeypatch.setattr(nixl_utils, "nixl_agent_config", None)
-    cfg = create_ec_aphrodite_config(ec_role="ec_both")
+    cfg = create_ec_sonar_config(ec_role="ec_both")
     cfg.ec_transfer_config.ec_connector_extra_config["ec_enable_nixl"] = True
 
     try:
@@ -83,8 +83,8 @@ def test_missing_nixl_releases_shared_region(monkeypatch):
 
 @pytest.mark.cpu_test
 def test_control_transport_failure_releases_nixl_and_shared_region(monkeypatch):
-    import aphrodite.distributed.ec_transfer.ec_connector.cpu.control.zmq as zmq_mod
-    import aphrodite.distributed.ec_transfer.ec_connector.cpu.data.nixl as data_mod
+    import sonar.distributed.ec_transfer.ec_connector.cpu.control.zmq as zmq_mod
+    import sonar.distributed.ec_transfer.ec_connector.cpu.data.nixl as data_mod
 
     class RegisteredData:
         registered = True
@@ -104,7 +104,7 @@ def test_control_transport_failure_releases_nixl_and_shared_region(monkeypatch):
     monkeypatch.setattr(nixl_utils, "nixl_agent_config", object())
     monkeypatch.setattr(data_mod, "NixlDataTransport", lambda **kwargs: data)
     monkeypatch.setattr(zmq_mod, "ZmqClientTransport", fail_control_transport)
-    cfg = create_ec_aphrodite_config(ec_role="ec_consumer")
+    cfg = create_ec_sonar_config(ec_role="ec_consumer")
     cfg.model_config.hf_config = None
     cfg.model_config.get_inputs_embeds_size.return_value = 8
     cfg.model_config.model = "test-model"
@@ -127,10 +127,10 @@ def test_control_transport_failure_releases_nixl_and_shared_region(monkeypatch):
 def test_gate_on_wires_data_transport_and_producer_session(monkeypatch):
     # Port 0 lets the OS pick an ephemeral port so the real ZMQ ROUTER bind
     # in ProducerSession.start() cannot collide with another test/process.
-    monkeypatch.setenv("APHRODITE_EC_SIDE_CHANNEL_HOST", "127.0.0.1")
-    monkeypatch.setenv("APHRODITE_EC_SIDE_CHANNEL_PORT", "0")
+    monkeypatch.setenv("SONAR_EC_SIDE_CHANNEL_HOST", "127.0.0.1")
+    monkeypatch.setenv("SONAR_EC_SIDE_CHANNEL_PORT", "0")
     monkeypatch.setattr(sched_mod, "create_ec_shared_region", lambda cfg: _region())
-    cfg = create_ec_aphrodite_config(ec_role="ec_both")
+    cfg = create_ec_sonar_config(ec_role="ec_both")
     cfg.ec_transfer_config.ec_connector_extra_config["ec_enable_nixl"] = True
     s = ECCPUScheduler(cfg)
     try:

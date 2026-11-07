@@ -5,7 +5,7 @@
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.rotary_embedding import RotaryEmbedding
+from sonar.model_executor.layers.rotary_embedding import RotaryEmbedding
 from tests.kernels.utils import opcheck
 
 
@@ -35,7 +35,7 @@ def rotary_embedding_opcheck(
 @pytest.mark.parametrize("head_stride_is_contiguous", [True, False])
 @pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16])
 def test_rotary_embedding_opcheck(
-    default_aphrodite_config,
+    default_sonar_config,
     dist_init,
     device,
     max_position,

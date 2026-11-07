@@ -8,26 +8,26 @@ import regex as re
 import torch
 import torch.nn as nn
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed import (
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import SonarConfig
+from sonar.distributed import (
     get_pp_group,
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
 )
-from aphrodite.model_executor.layers.activation import SiluAndMul, SiluAndMulWithClamp
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.model_executor.layers.activation import SiluAndMul, SiluAndMulWithClamp
+from sonar.model_executor.layers.fused_moe import (
     FusedMoEFactory,
     GateLinear,
     fused_moe_make_expert_params_mapping,
 )
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     MergedColumnParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.mhc import (
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.mhc import (
     HAS_AITER_MHC,
     HAS_TILELANG_MHC,
     HCHeadOp,
@@ -35,18 +35,18 @@ from aphrodite.model_executor.layers.mhc import (
     MHCPostOp,
     MHCPreOp,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
-from aphrodite.model_executor.models.interfaces import (
+from sonar.model_executor.model_loader.weight_utils import default_weight_loader
+from sonar.model_executor.models.interfaces import (
     EagleModelMixin,
     SupportsEagle3,
     SupportsPP,
 )
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.models.utils import (
     AutoWeightsLoader,
     PPMissingLayer,
     WeightsMapper,
@@ -55,10 +55,10 @@ from aphrodite.model_executor.models.utils import (
     make_layers,
     maybe_prefix,
 )
-from aphrodite.models.deepseek_v4.common.spec_decode import needs_mtp_hidden_buffer
-from aphrodite.models.deepseek_v4.cpu.cpu_sparse import DeepseekV4CPUAttention
-from aphrodite.platforms import current_platform
-from aphrodite.sequence import IntermediateTensors
+from sonar.models.deepseek_v4.common.spec_decode import needs_mtp_hidden_buffer
+from sonar.models.deepseek_v4.cpu.cpu_sparse import DeepseekV4CPUAttention
+from sonar.platforms import current_platform
+from sonar.sequence import IntermediateTensors
 
 
 class DeepseekV4MLP(nn.Module):
@@ -111,14 +111,14 @@ class DeepseekV4MLP(nn.Module):
 class DeepseekV4MoE(nn.Module):
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
     ):
         super().__init__()
 
         self.tp_size = get_tensor_model_parallel_world_size()
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
         self.prefix = prefix
 
         self.routed_scaling_factor = getattr(config, "routed_scaling_factor", 1.0)
@@ -226,26 +226,26 @@ class DeepseekV4MoE(nn.Module):
 class DeepseekV4DecoderLayer(nn.Module):
     def __init__(
         self,
-        aphrodite_config,
+        sonar_config,
         prefix,
         topk_indices_buffer: torch.Tensor | None = None,
     ):
         super().__init__()
 
         # Lazy import to avoid top-level tilelang dependency.
-        # Registers both torch.ops.aphrodite.mhc_pre and mhc_post
-        import aphrodite.model_executor.layers.mhc  # noqa: F401
+        # Registers both torch.ops.sonar.mhc_pre and mhc_post
+        import sonar.model_executor.layers.mhc  # noqa: F401
 
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
         self.hidden_size = config.hidden_size
 
         self.rms_norm_eps = config.rms_norm_eps
         self.attn = DeepseekV4CPUAttention(
-            aphrodite_config,
+            sonar_config,
             prefix=f"{prefix}.attn",
             topk_indices_buffer=topk_indices_buffer,
         )
-        self.ffn = DeepseekV4MoE(aphrodite_config, prefix=f"{prefix}.ffn")
+        self.ffn = DeepseekV4MoE(sonar_config, prefix=f"{prefix}.ffn")
 
         self.attn_norm = RMSNorm(self.hidden_size, self.rms_norm_eps)
         self.ffn_norm = RMSNorm(self.hidden_size, self.rms_norm_eps)
@@ -426,11 +426,11 @@ class DeepseekV4DecoderLayer(nn.Module):
     }
 )
 class DeepseekV4Model(nn.Module, EagleModelMixin):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
         self.config = config
         self.vocab_size = config.vocab_size
         self.hc_eps = config.hc_eps
@@ -441,7 +441,7 @@ class DeepseekV4Model(nn.Module, EagleModelMixin):
         self.device = current_platform.device_type
         # Reserved topk indices buffer for all Indexer layers to reuse.
         self.topk_indices_buffer = torch.empty(
-            aphrodite_config.scheduler_config.max_num_batched_tokens,
+            sonar_config.scheduler_config.max_num_batched_tokens,
             config.index_topk,
             dtype=torch.int32,
             device=self.device,
@@ -460,7 +460,7 @@ class DeepseekV4Model(nn.Module, EagleModelMixin):
         self.start_layer, self.end_layer, self.layers = make_layers(
             config.num_hidden_layers,
             lambda prefix: DeepseekV4DecoderLayer(
-                aphrodite_config,
+                sonar_config,
                 prefix=prefix,
                 topk_indices_buffer=self.topk_indices_buffer,
             ),
@@ -493,12 +493,12 @@ class DeepseekV4Model(nn.Module, EagleModelMixin):
             requires_grad=False,
         )
         self.hc_head_op = HCHeadOp()
-        spec_config = aphrodite_config.speculative_config
+        spec_config = sonar_config.speculative_config
         if get_pp_group().is_last_rank and needs_mtp_hidden_buffer(spec_config):
             self._mtp_hidden_buffer = torch.empty(
-                aphrodite_config.scheduler_config.max_num_batched_tokens,
+                sonar_config.scheduler_config.max_num_batched_tokens,
                 self.hc_dim,
-                dtype=aphrodite_config.model_config.dtype,
+                dtype=sonar_config.model_config.dtype,
                 device=self.device,
             )
         else:
@@ -772,21 +772,21 @@ class DeepseekV4ForCausalLM(nn.Module, SupportsPP, SupportsEagle3):
 
     # Default mapper assumes the original FP4-expert checkpoint layout.
     # Overridden per-instance in __init__ when expert_dtype != "fp4".
-    hf_to_aphrodite_mapper = _make_deepseek_v4_weights_mapper("fp4")
+    hf_to_sonar_mapper = _make_deepseek_v4_weights_mapper("fp4")
     packed_modules_mapping = {
         "gate_up_proj": ["w1", "w3"],
         "fused_wqa_wkv": ["wq_a", "wkv"],
     }
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
         self.config = config
         expert_dtype = getattr(config, "expert_dtype", "fp4")
-        self.model = self.model_cls(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = self.model_cls(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
         if expert_dtype != "fp4" or self.model.is_fused_shared_expert_enabled:
-            self.hf_to_aphrodite_mapper = _make_deepseek_v4_weights_mapper(
+            self.hf_to_sonar_mapper = _make_deepseek_v4_weights_mapper(
                 expert_dtype,
                 fuse_shared_experts=self.model.is_fused_shared_expert_enabled,
             )
@@ -831,7 +831,7 @@ class DeepseekV4ForCausalLM(nn.Module, SupportsPP, SupportsEagle3):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
     def process_weights_after_loading(self) -> None:
         # No CPU AMX weight-packing hook yet.

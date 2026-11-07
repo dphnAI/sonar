@@ -8,10 +8,10 @@ from typing import Any, TypeAlias
 import numpy as np
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.platform_utils import is_uva_available
-from aphrodite.utils.torch_utils import (
+from sonar.logger import init_logger
+from sonar.triton_utils import tl, triton
+from sonar.utils.platform_utils import is_uva_available
+from sonar.utils.torch_utils import (
     TORCH_DTYPE_TO_ARRAY_TYPECODE,
     get_accelerator_view_from_cpu_tensor,
 )
@@ -51,7 +51,7 @@ class NonUvaBuffer:
     """Explicit-copy fallback for platforms without pinned memory."""
 
     def __init__(self, size: int | Sequence[int], dtype: torch.dtype):
-        from aphrodite.platforms import current_platform
+        from sonar.platforms import current_platform
 
         logger.warning_once(
             "Pinned memory is not available on this platform; falling back to device memory for UVA buffers."

@@ -4,8 +4,8 @@
 
 import pytest
 
-from aphrodite.v1.kv_offload.config import OffloadingGroupConfig
-from aphrodite.v1.kv_offload.cpu.common import CPUOffloadingInfo
+from sonar.v1.kv_offload.config import OffloadingGroupConfig
+from sonar.v1.kv_offload.cpu.common import CPUOffloadingInfo
 from tests.v1.kv_offload.conftest import make_offloading_config
 
 MAX_MODEL_LEN = 36864

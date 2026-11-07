@@ -24,10 +24,10 @@ from typing import TYPE_CHECKING, cast
 
 import torch
 
-from aphrodite.forward_context import get_forward_context
-from aphrodite.logger import init_logger
-from aphrodite.models.deepseek_v41.sparse_mla import DeepseekV4FlashMLAMetadata
-from aphrodite.utils.flashinfer import flashinfer_trtllm_batch_decode_sparse_mla_dsv4
+from sonar.forward_context import get_forward_context
+from sonar.logger import init_logger
+from sonar.models.deepseek_v41.sparse_mla import DeepseekV4FlashMLAMetadata
+from sonar.utils.flashinfer import flashinfer_trtllm_batch_decode_sparse_mla_dsv4
 
 from ...flashinfer_sparse import (
     DeepseekV4FlashInferMLAAttention,
@@ -37,7 +37,7 @@ from ...flashinfer_sparse import (
 logger = init_logger(__name__)
 
 if TYPE_CHECKING:
-    from aphrodite.v1.attention.backends.mla.sparse_swa import DeepseekSparseSWAMetadata
+    from sonar.v1.attention.backends.mla.sparse_swa import DeepseekSparseSWAMetadata
 
 # (sparse_indices, sparse_topk_lens) of one step, SWA group and key.
 SparseIndexTable = tuple[torch.Tensor, torch.Tensor]

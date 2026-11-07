@@ -8,19 +8,19 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from aphrodite.distributed.kv_transfer.kv_connector.v1.base import KVConnectorRole
-from aphrodite.distributed.kv_transfer.kv_connector.v1.simple_cpu_offload_connector import (
+from sonar.distributed.kv_transfer.kv_connector.v1.base import KVConnectorRole
+from sonar.distributed.kv_transfer.kv_connector.v1.simple_cpu_offload_connector import (
     SimpleCPUOffloadConnector,
 )
-from aphrodite.v1.engine import core as engine_core_module
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.engine import core as engine_core_module
+from sonar.v1.kv_cache_interface import (
     CircularBufferSpec,
     FullAttentionSpec,
     KVCacheConfig,
     KVCacheGroupSpec,
     KVCacheTensor,
 )
-from tests.v1.kv_connector.unit.utils import create_aphrodite_config
+from tests.v1.kv_connector.unit.utils import create_sonar_config
 from tests.v1.simple_kv_offload.test_scheduler import (
     _BYTES_PER_BLOCK,
     BLOCK_SIZE,
@@ -66,13 +66,13 @@ def _make_connector(
     }
     if extra_config:
         config_dict.update(extra_config)
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         kv_connector="SimpleCPUOffloadConnector",
         kv_role="kv_both",
         kv_connector_extra_config=config_dict,
     )
     connector = SimpleCPUOffloadConnector(
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         role=KVConnectorRole.SCHEDULER,
         kv_cache_config=kv_cache_config,
     )
@@ -131,13 +131,13 @@ def _make_ring_kv_cache_config(num_blocks: int = 16) -> KVCacheConfig:
 def test_ring_scratch_group_is_accepted_and_never_offloaded() -> None:
     """The ring group's capacity is not a token granularity, it holds no
     hashed blocks, and it never participates in CPU hits."""
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         kv_connector="SimpleCPUOffloadConnector",
         kv_role="kv_both",
         kv_connector_extra_config={"cpu_bytes_to_use": _BYTES_PER_BLOCK * 8},
     )
     connector = SimpleCPUOffloadConnector(
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         role=KVConnectorRole.SCHEDULER,
         kv_cache_config=_make_ring_kv_cache_config(),
     )
@@ -165,7 +165,7 @@ def test_engine_queries_offload_blocks_only_when_enabled(
     monkeypatch, connector, prefix_caching, worker_blocks, expected_blocks
 ) -> None:
     """Only active offload queries workers, which must return a block count."""
-    config = create_aphrodite_config(
+    config = create_sonar_config(
         kv_connector=connector or "SimpleCPUOffloadConnector",
         kv_role="kv_both",
         kv_connector_extra_config={"connectors": [{"kv_connector": "SimpleCPUOffloadConnector", "kv_role": "kv_both"}]},

@@ -6,29 +6,29 @@ from typing import ClassVar
 
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite._aiter_ops import IS_AITER_FOUND, rocm_aiter_ops
-from aphrodite.config import get_current_aphrodite_config_or_none
-from aphrodite.config.cache import CacheDType
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar import _custom_ops as ops
+from sonar._aiter_ops import IS_AITER_FOUND, rocm_aiter_ops
+from sonar.config import get_current_sonar_config_or_none
+from sonar.config.cache import CacheDType
+from sonar.logger import init_logger
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     kFp8StaticTensorSym,
 )
-from aphrodite.platforms.rocm import on_gfx1250
-from aphrodite.v1.attention.backend import (
+from sonar.platforms.rocm import on_gfx1250
+from sonar.v1.attention.backend import (
     AttentionLayer,
     AttentionType,
     CommonAttentionMetadata,
     MultipleOf,
 )
-from aphrodite.v1.attention.backends.rocm_attn import (
+from sonar.v1.attention.backends.rocm_attn import (
     RocmAttentionBackend,
     RocmAttentionImpl,
     RocmAttentionMetadata,
     RocmAttentionMetadataBuilder,
 )
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.kv_cache_interface import (
     AttentionSpec,
     KVCacheLayout,
     KVQuantMode,
@@ -40,10 +40,10 @@ logger = init_logger(__name__)
 
 
 def _kv_connector_enabled() -> bool:
-    aphrodite_config = get_current_aphrodite_config_or_none()
-    if aphrodite_config is None:
+    sonar_config = get_current_sonar_config_or_none()
+    if sonar_config is None:
         return False
-    kv_transfer_config = aphrodite_config.kv_transfer_config
+    kv_transfer_config = sonar_config.kv_transfer_config
     return kv_transfer_config is not None and kv_transfer_config.is_kv_transfer_instance
 
 
@@ -188,7 +188,7 @@ class RocmAiterUnifiedAttentionImpl(RocmAttentionImpl):
         logger.info_once("Using aiter unified attention for RocmAiterUnifiedAttentionImpl")
         from aiter.ops.triton.unified_attention import unified_attention
 
-        from aphrodite.platforms.rocm import on_gfx11
+        from sonar.platforms.rocm import on_gfx11
 
         self.unified_attention = unified_attention
         # RDNA3 has no low precision MMA, preserve query precision
@@ -321,9 +321,9 @@ class RocmAiterUnifiedAttentionImpl(RocmAttentionImpl):
             )
         else:
             # The aiter kernel is causal-only. Non-causal cross-attention
-            # (ENCODER_DECODER, e.g. Whisper) falls back to the Aphrodite
+            # (ENCODER_DECODER, e.g. Whisper) falls back to the Sonar
             # Triton unified kernel, which shares this layout and honors the flag.
-            from aphrodite.v1.attention.ops.triton_unified_attention import (
+            from sonar.v1.attention.ops.triton_unified_attention import (
                 unified_attention as triton_unified_attention,
             )
 
@@ -367,7 +367,7 @@ class RocmAiterUnifiedAttentionImpl(RocmAttentionImpl):
         key_cache, value_cache = self._split_kv_cache(kv_cache)
 
         if self._use_shuffle_kv:
-            from aphrodite.v1.attention.backends.rocm_aiter_fa import (
+            from sonar.v1.attention.backends.rocm_aiter_fa import (
                 reshape_and_cache_shuffle_triton,
             )
 

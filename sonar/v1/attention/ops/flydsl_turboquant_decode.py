@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""FlyDSL TurboQuant decode launcher (Aphrodite-side).
+"""FlyDSL TurboQuant decode launcher (Sonar-side).
 
 Drop-in replacement for ``triton_turboquant_decode_attention_soa`` for the
 TQ decode profile HEAD_SIZE=128, MSE_BITS=4 K, VQB=4 V, N_CENTROIDS=16,
@@ -27,16 +27,16 @@ from typing import Any
 
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.triton_utils import tl, triton
-from aphrodite.v1.attention.ops.flydsl_kernels import _run_compiled
+from sonar.logger import init_logger
+from sonar.triton_utils import tl, triton
+from sonar.v1.attention.ops.flydsl_kernels import _run_compiled
 
 logger = init_logger(__name__)
 
 # -- FlyDSL import bootstrap --------------------------------------------------
 # FlyDSL is imported directly and must be importable (pip-installed, or on
 # PYTHONPATH). Import failures are caught below and fall back to the SoA Triton
-# decode, so Aphrodite startup is unaffected on hosts without FlyDSL.
+# decode, so Sonar startup is unaffected on hosts without FlyDSL.
 
 
 _FLYDSL_AVAILABLE: bool | None = None
@@ -53,7 +53,7 @@ def is_flydsl_available() -> bool:
         return _FLYDSL_AVAILABLE
     try:
         # gfx950-only kernel (CDNA4 intrinsics); gate before importing FlyDSL.
-        from aphrodite.platforms.rocm import on_gfx950
+        from sonar.platforms.rocm import on_gfx950
 
         if not on_gfx950():
             _FLYDSL_AVAILABLE = False
@@ -61,9 +61,9 @@ def is_flydsl_available() -> bool:
         import flydsl.compiler as flyc  # noqa: F401
         import flydsl.expr as fx  # noqa: F401
 
-        # Kernel is vendored in-tree (ships with Aphrodite); FlyDSL provides only
+        # Kernel is vendored in-tree (ships with Sonar); FlyDSL provides only
         # the compiler/runtime framework (imported above).
-        from aphrodite.v1.attention.ops.flydsl_kernels import tq_decode as tq_mod
+        from sonar.v1.attention.ops.flydsl_kernels import tq_decode as tq_mod
 
         _FLYC = flyc
         _FX = fx
@@ -92,7 +92,7 @@ _KERN_CACHE: dict[tuple, Any] = {}
 
 
 # -- One-shot log guards ------------------------------------------------------
-# Replaces aphrodite `logger.{info,warning}_once` (which hashes the format string
+# Replaces sonar `logger.{info,warning}_once` (which hashes the format string
 # every call to dedup) with a true zero-overhead bool guard.
 _LOG_INVOKED_ONCE: bool = False
 _LOG_SINKS_WARNED: bool = False
@@ -100,10 +100,10 @@ _LOG_NORM_WARNED: bool = False
 
 
 def _detect_max_capture_B() -> int:
-    """Probe Aphrodite compilation config for the largest cudagraph capture size.
+    """Probe Sonar compilation config for the largest cudagraph capture size.
 
     Returns max(cudagraph_capture_sizes) if available, else falls back to
-    512 (Aphrodite's default cap). The segm-pool auto-grows if a larger batch is
+    512 (Sonar's default cap). The segm-pool auto-grows if a larger batch is
     seen (see ``_SegmBufPool.get``).
 
     Used to size the segm-pool bucket once, so that all distinct B's
@@ -112,9 +112,9 @@ def _detect_max_capture_B() -> int:
     previously dominated dense-capture VRAM cost.
     """
     try:
-        from aphrodite.config import get_current_aphrodite_config
+        from sonar.config import get_current_sonar_config
 
-        cfg = get_current_aphrodite_config()
+        cfg = get_current_sonar_config()
         sizes = cfg.compilation_config.cudagraph_capture_sizes
         if sizes:
             return int(max(sizes))
@@ -541,7 +541,7 @@ def flydsl_turboquant_decode_attention(
     #
     # We use the worst-case context length implied by the block table's
     # allocation (block_table.shape[1] * block_size) as that source. It's
-    # bounded by `max_model_len` (Aphrodite allocates the block table for the
+    # bounded by `max_model_len` (Sonar allocates the block table for the
     # configured max), and it's identical at capture and at runtime
     # because `block_table.shape[1]` is fixed once the model is loaded.
     # Per-tile OOB redirects + the masked FA-2 reducer ensure that for

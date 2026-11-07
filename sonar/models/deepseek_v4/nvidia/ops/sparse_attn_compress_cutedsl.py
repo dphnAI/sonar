@@ -19,13 +19,13 @@ from cutlass._mlir.dialects import llvm
 from cutlass.cutlass_dsl import T, dsl_user_op
 from quack.compile_utils import make_fake_tensor
 
-from aphrodite.cute_utils import torch_to_cute_dtype
-from aphrodite.model_executor.warmup.jit_warmup import kernel_launcher
-from aphrodite.model_executor.warmup.jit_warmup_cutedsl_helper import (
-    AphroditeCuTeDSLJitKernel,
+from sonar.cute_utils import torch_to_cute_dtype
+from sonar.model_executor.warmup.jit_warmup import kernel_launcher
+from sonar.model_executor.warmup.jit_warmup_cutedsl_helper import (
     CuTeDSLLaunchSpec,
+    SonarCuTeDSLJitKernel,
 )
-from aphrodite.utils.math_utils import round_up
+from sonar.utils.math_utils import round_up
 
 
 @dsl_user_op
@@ -76,7 +76,7 @@ def _fp32x2_to_fp8e4m3x2(a: Float32, b: Float32, *, loc=None, ip=None) -> Uint16
 
 
 class SparseAttnCompressNormRopeStoreC4Kernel(
-    AphroditeCuTeDSLJitKernel["SparseAttnCompressNormRopeStoreC4Kernel.CompileKey"]
+    SonarCuTeDSLJitKernel["SparseAttnCompressNormRopeStoreC4Kernel.CompileKey"]
 ):
     min_scale = 1.0e-4
     rcp_ln2 = 1.4426950408889634
@@ -390,12 +390,12 @@ class SparseAttnCompressNormRopeStoreC4Kernel(
             norm_weight_dtype=norm_weight_dtype,
         )
 
-    def get_warmup_keys(self, aphrodite_config: Any) -> list[CompileKey]:
-        hf_config = aphrodite_config.model_config.hf_config
-        cache_config = aphrodite_config.cache_config
+    def get_warmup_keys(self, sonar_config: Any) -> list[CompileKey]:
+        hf_config = sonar_config.model_config.hf_config
+        cache_config = sonar_config.cache_config
         return self._trace_dispatch(self.dispatch)(
             compress_ratio=4,
-            norm_weight_dtype=torch_to_cute_dtype(aphrodite_config.model_config.dtype),
+            norm_weight_dtype=torch_to_cute_dtype(sonar_config.model_config.dtype),
             head_size=hf_config.head_dim,
             rope_head_dim=hf_config.qk_rope_head_dim,
             enabled=(
@@ -548,7 +548,7 @@ class SparseAttnCompressNormRopeStoreC4Kernel(
 
 
 class SparseAttnCompressNormRopeStoreFullC4Kernel(
-    AphroditeCuTeDSLJitKernel["SparseAttnCompressNormRopeStoreFullC4Kernel.CompileKey"]
+    SonarCuTeDSLJitKernel["SparseAttnCompressNormRopeStoreFullC4Kernel.CompileKey"]
 ):
     rcp_ln2 = 1.4426950408889634
 
@@ -851,13 +851,13 @@ class SparseAttnCompressNormRopeStoreFullC4Kernel(
             norm_weight_dtype=norm_weight_dtype,
         )
 
-    def get_warmup_keys(self, aphrodite_config: Any) -> list[CompileKey]:
-        hf_config = aphrodite_config.model_config.hf_config
-        cache_config = aphrodite_config.cache_config
+    def get_warmup_keys(self, sonar_config: Any) -> list[CompileKey]:
+        hf_config = sonar_config.model_config.hf_config
+        cache_config = sonar_config.cache_config
         return self._trace_dispatch(self.dispatch)(
             compress_ratio=4,
             store_full_fp8=(cache_config.cache_dtype.startswith("fp8") and cache_config.cache_dtype != "fp8_ds_mla"),
-            norm_weight_dtype=torch_to_cute_dtype(aphrodite_config.model_config.dtype),
+            norm_weight_dtype=torch_to_cute_dtype(sonar_config.model_config.dtype),
             head_size=hf_config.head_dim,
             rope_head_dim=hf_config.qk_rope_head_dim,
             enabled=(
@@ -1009,7 +1009,7 @@ class SparseAttnCompressNormRopeStoreFullC4Kernel(
         return compile_key, launch_args
 
 
-class SparseAttnCompressC128Block8Kernel(AphroditeCuTeDSLJitKernel["SparseAttnCompressC128Block8Kernel.CompileKey"]):
+class SparseAttnCompressC128Block8Kernel(SonarCuTeDSLJitKernel["SparseAttnCompressC128Block8Kernel.CompileKey"]):
     head_tile = 64
     rows_per_warp = 16
     elems_per_lane = 2
@@ -1274,8 +1274,8 @@ class SparseAttnCompressC128Block8Kernel(AphroditeCuTeDSLJitKernel["SparseAttnCo
     ) -> CompileKey:
         return self.CompileKey(head_size=head_size, state_width=state_width)
 
-    def get_warmup_keys(self, aphrodite_config: Any) -> list[CompileKey]:
-        hf_config = aphrodite_config.model_config.hf_config
+    def get_warmup_keys(self, sonar_config: Any) -> list[CompileKey]:
+        hf_config = sonar_config.model_config.hf_config
         return self._trace_dispatch(self.dispatch)(
             head_size=hf_config.head_dim,
             state_width=hf_config.head_dim,
@@ -1363,7 +1363,7 @@ class SparseAttnCompressC128Block8Kernel(AphroditeCuTeDSLJitKernel["SparseAttnCo
         return compile_key, launch_args, compressed_kv
 
 
-class SparseAttnNormRopeStoreKernel(AphroditeCuTeDSLJitKernel["SparseAttnNormRopeStoreKernel.CompileKey"]):
+class SparseAttnNormRopeStoreKernel(SonarCuTeDSLJitKernel["SparseAttnNormRopeStoreKernel.CompileKey"]):
     min_scale = 1.0e-4
 
     @dataclass(frozen=True)
@@ -1579,20 +1579,20 @@ class SparseAttnNormRopeStoreKernel(AphroditeCuTeDSLJitKernel["SparseAttnNormRop
 
     def get_warmup_keys(
         self,
-        aphrodite_config: Any,
+        sonar_config: Any,
         *,
         k_cache_prefix: str,
         compress_ratio: int,
     ) -> list[CompileKey]:
-        hf_config = aphrodite_config.model_config.hf_config
-        cache_config = aphrodite_config.cache_config
-        k_cache_layer = aphrodite_config.compilation_config.static_forward_context[k_cache_prefix]
+        hf_config = sonar_config.model_config.hf_config
+        cache_config = sonar_config.cache_config
+        k_cache_layer = sonar_config.compilation_config.static_forward_context[k_cache_prefix]
         kv_cache = k_cache_layer.kv_cache
         return self._trace_dispatch(self.dispatch)(
             compress_ratio=compress_ratio,
             cache_block_size=cache_config.block_size,
             cache_alignment=576,
-            norm_weight_dtype=torch_to_cute_dtype(aphrodite_config.model_config.dtype),
+            norm_weight_dtype=torch_to_cute_dtype(sonar_config.model_config.dtype),
             head_size=hf_config.head_dim,
             rope_head_dim=hf_config.qk_rope_head_dim,
             runtime_kv_block_stride=kv_cache.stride(0),
@@ -1713,7 +1713,7 @@ class SparseAttnNormRopeStoreKernel(AphroditeCuTeDSLJitKernel["SparseAttnNormRop
         return compile_key, launch_args
 
 
-class SparseAttnNormRopeStoreFullKernel(AphroditeCuTeDSLJitKernel["SparseAttnNormRopeStoreFullKernel.CompileKey"]):
+class SparseAttnNormRopeStoreFullKernel(SonarCuTeDSLJitKernel["SparseAttnNormRopeStoreFullKernel.CompileKey"]):
     @dataclass(frozen=True)
     class CompileKey:
         head_size: int
@@ -1892,13 +1892,13 @@ class SparseAttnNormRopeStoreFullKernel(AphroditeCuTeDSLJitKernel["SparseAttnNor
             norm_weight_dtype=norm_weight_dtype,
         )
 
-    def get_warmup_keys(self, aphrodite_config: Any) -> list[CompileKey]:
-        hf_config = aphrodite_config.model_config.hf_config
-        cache_config = aphrodite_config.cache_config
+    def get_warmup_keys(self, sonar_config: Any) -> list[CompileKey]:
+        hf_config = sonar_config.model_config.hf_config
+        cache_config = sonar_config.cache_config
         return self._trace_dispatch(self.dispatch)(
             compress_ratio=128,
             store_full_fp8=(cache_config.cache_dtype.startswith("fp8") and cache_config.cache_dtype != "fp8_ds_mla"),
-            norm_weight_dtype=torch_to_cute_dtype(aphrodite_config.model_config.dtype),
+            norm_weight_dtype=torch_to_cute_dtype(sonar_config.model_config.dtype),
             head_size=hf_config.head_dim,
             rope_head_dim=hf_config.qk_rope_head_dim,
             enabled=(

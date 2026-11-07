@@ -11,12 +11,12 @@ from typing import cast
 
 from fastapi import Request
 
-from aphrodite.engine.protocol import EngineClient
-from aphrodite.entrypoints.generate.base.protocol import (
+from sonar.engine.protocol import EngineClient
+from sonar.entrypoints.generate.base.protocol import (
     PerRequestMetrics,
     RequestResponseMetadata,
 )
-from aphrodite.entrypoints.generate.base.serving import (
+from sonar.entrypoints.generate.base.serving import (
     GenerateBaseServing,
     build_per_request_timing_metrics,
     build_spec_decoding_metrics,
@@ -24,7 +24,7 @@ from aphrodite.entrypoints.generate.base.serving import (
     completion_top_logprobs_limit,
     format_token_id_placeholder,
 )
-from aphrodite.entrypoints.openai.completion.protocol import (
+from sonar.entrypoints.openai.completion.protocol import (
     CompletionLogProbs,
     CompletionRequest,
     CompletionResponse,
@@ -32,26 +32,26 @@ from aphrodite.entrypoints.openai.completion.protocol import (
     CompletionResponseStreamChoice,
     CompletionStreamResponse,
 )
-from aphrodite.entrypoints.openai.models.serving import OpenAIServingModels
-from aphrodite.entrypoints.serve.engine.protocol import (
+from sonar.entrypoints.openai.models.serving import OpenAIServingModels
+from sonar.entrypoints.serve.engine.protocol import (
     ErrorResponse,
     PromptTokenUsageInfo,
     UsageInfo,
 )
-from aphrodite.entrypoints.serve.utils.api_utils import get_max_tokens, should_include_usage
-from aphrodite.entrypoints.serve.utils.request_logger import RequestLogger
-from aphrodite.exceptions import AphroditeValidationError, GenerationError
-from aphrodite.inputs import EngineInput
-from aphrodite.logger import init_logger
-from aphrodite.logprobs import Logprob
-from aphrodite.outputs import RequestOutput
-from aphrodite.proof.http import DphnNonceError, DphnProofContext, DphnProofError, get_proof_nonce
-from aphrodite.renderers.online_renderer import OnlineRenderer
-from aphrodite.sampling_params import BeamSearchParams, SamplingParams
-from aphrodite.tokenizers import TokenizerLike
-from aphrodite.utils.async_utils import merge_async_iterators
-from aphrodite.utils.collection_utils import as_list
-from aphrodite.utils.serial_utils import numpy2base64
+from sonar.entrypoints.serve.utils.api_utils import get_max_tokens, should_include_usage
+from sonar.entrypoints.serve.utils.request_logger import RequestLogger
+from sonar.exceptions import GenerationError, SonarValidationError
+from sonar.inputs import EngineInput
+from sonar.logger import init_logger
+from sonar.logprobs import Logprob
+from sonar.outputs import RequestOutput
+from sonar.proof.http import DphnNonceError, DphnProofContext, DphnProofError, get_proof_nonce
+from sonar.renderers.online_renderer import OnlineRenderer
+from sonar.sampling_params import BeamSearchParams, SamplingParams
+from sonar.tokenizers import TokenizerLike
+from sonar.utils.async_utils import merge_async_iterators
+from sonar.utils.collection_utils import as_list
+from sonar.utils.serial_utils import numpy2base64
 
 logger = init_logger(__name__)
 
@@ -89,7 +89,7 @@ class OpenAIServingCompletion(GenerateBaseServing):
         mc = self.model_config
         self.override_max_tokens = (
             self.default_sampling_params.get("max_tokens")
-            if mc.generation_config not in ("auto", "aphrodite")
+            if mc.generation_config not in ("auto", "sonar")
             else getattr(mc, "override_generation_config", {}).get("max_new_tokens")
         )
 
@@ -268,7 +268,7 @@ class OpenAIServingCompletion(GenerateBaseServing):
                 assert final_res is not None
 
                 # The output should contain the input text
-                # We did not pass it into Aphrodite engine to avoid being redundant
+                # We did not pass it into Sonar engine to avoid being redundant
                 # with the inputs token IDs
                 if final_res.prompt is None:
                     final_res.prompt = self._extract_prompt_text(engine_inputs[i])
@@ -709,7 +709,7 @@ class OpenAIServingCompletion(GenerateBaseServing):
                     token = format_token_id_placeholder(token_id)
                 else:
                     if tokenizer is None:
-                        raise AphroditeValidationError(
+                        raise SonarValidationError(
                             "Unable to get tokenizer because `skip_tokenizer_init=True`",
                             parameter="skip_tokenizer_init",
                             value=True,

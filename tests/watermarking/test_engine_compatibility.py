@@ -5,9 +5,9 @@ from collections.abc import Generator
 
 import pytest
 
-from aphrodite import LLM, SamplingParams
-from aphrodite.platforms import current_platform
-from aphrodite.sampling_params import StructuredOutputsParams
+from sonar import LLM, SamplingParams
+from sonar.platforms import current_platform
+from sonar.sampling_params import StructuredOutputsParams
 
 MODEL = "hmellor/tiny-random-LlamaForCausalLM"
 MAX_NUM_BATCHED_TOKENS = 32
@@ -16,8 +16,8 @@ pytestmark = pytest.mark.skipif(not current_platform.is_cuda_alike(), reason="re
 
 
 @pytest.fixture(scope="module")
-def watermarked_llm(aphrodite_runner) -> Generator[LLM, None, None]:
-    with aphrodite_runner(
+def watermarked_llm(sonar_runner) -> Generator[LLM, None, None]:
+    with sonar_runner(
         MODEL,
         dtype="half",
         enforce_eager=True,

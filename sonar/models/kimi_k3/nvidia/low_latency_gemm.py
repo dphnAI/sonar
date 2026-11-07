@@ -26,19 +26,19 @@ from typing import Literal
 import torch
 from torch import nn
 
-import aphrodite.envs as envs
-from aphrodite import _custom_ops as ops
-from aphrodite.model_executor.kernels.linear.cute_dsl.skinny_gemm import (
+import sonar.envs as envs
+from sonar import _custom_ops as ops
+from sonar.model_executor.kernels.linear.cute_dsl.skinny_gemm import (
     SkinnyGemmConfig,
     shape_dynamic_skinny_gemm,
 )
-from aphrodite.model_executor.layers.linear import LinearBase, UnquantizedLinearMethod
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.linear import LinearBase, UnquantizedLinearMethod
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     UnquantizedEmbeddingMethod,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.multi_stream_utils import maybe_execute_in_parallel
+from sonar.platforms import current_platform
+from sonar.utils.multi_stream_utils import maybe_execute_in_parallel
 
 Backend = Literal["cute", "dsv3_fused_a"]
 # A resolved per-token-count call: the backend plus its CuTe config (None for
@@ -774,7 +774,7 @@ def run_kda_projection_overlap(
             g1 = torch.empty((1, 1536), dtype=hidden_states.dtype, device=hidden_states.device)
             ops.dsv3_fused_a_gemm(g1, f_a, f_b_weight.t(), enable_pdl=True)
         else:
-            from aphrodite.models.kimi_k3.nvidia.ops.cute_dsl.kda_skinny_gemm import (
+            from sonar.models.kimi_k3.nvidia.ops.cute_dsl.kda_skinny_gemm import (
                 kda_skinny_gemm,
             )
 
@@ -807,7 +807,7 @@ def run_kda_projection_overlap(
 
 def autotune_kda_qkvg(model: nn.Module) -> None:
     """Autotune the supported QKVG GEMM before CUDA graph capture."""
-    from aphrodite.models.kimi_k3.nvidia.kda import KimiK3DeltaAttention
+    from sonar.models.kimi_k3.nvidia.kda import KimiK3DeltaAttention
 
     backend = _kda_qkvg_flashinfer_backend()
     children: list[KimiK3DeltaAttention] = []
@@ -872,7 +872,7 @@ def try_low_latency_gemm(
     precomputed plan (see :func:`enable_kimi_k3_low_latency_gemm`) and does not
     use this path.
     """
-    if envs.APHRODITE_BATCH_INVARIANT or not _runtime_ok(x, weight):
+    if envs.SONAR_BATCH_INVARIANT or not _runtime_ok(x, weight):
         return None
     table = _low_latency_table()
     if table is None:
@@ -900,7 +900,7 @@ class _KimiK3LowLatencyApply:
         x: torch.Tensor,
         bias: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        if bias is None and not envs.APHRODITE_BATCH_INVARIANT and _runtime_ok(x, layer.weight):
+        if bias is None and not envs.SONAR_BATCH_INVARIANT and _runtime_ok(x, layer.weight):
             output = _run_plan(self._plan, x, layer.weight)
             if output is not None:
                 return output
@@ -922,11 +922,7 @@ class KimiK3LowLatencyLinearMethod(_KimiK3LowLatencyApply, UnquantizedLinearMeth
         x: torch.Tensor,
         residual: torch.Tensor,
     ) -> torch.Tensor:
-        if (
-            not envs.APHRODITE_BATCH_INVARIANT
-            and _runtime_ok(x, layer.weight)
-            and _residual_ok(x, layer.weight, residual)
-        ):
+        if not envs.SONAR_BATCH_INVARIANT and _runtime_ok(x, layer.weight) and _residual_ok(x, layer.weight, residual):
             output = _run_residual_plan(self._residual_plan, x, layer.weight, residual)
             if output is not None:
                 return output
@@ -938,9 +934,9 @@ class KimiK3LowLatencyEmbeddingMethod(_KimiK3LowLatencyApply, UnquantizedEmbeddi
 
 
 def _enable_kda_projection_overlap(module: nn.Module) -> bool:
-    from aphrodite.models.kimi_k3.nvidia.kda import KimiK3DeltaAttention
+    from sonar.models.kimi_k3.nvidia.kda import KimiK3DeltaAttention
 
-    if envs.APHRODITE_BATCH_INVARIANT:
+    if envs.SONAR_BATCH_INVARIANT:
         return False
 
     enabled = False
@@ -1012,7 +1008,7 @@ def enable_kimi_k3_low_latency_gemm(
         warmup_configs.update(config for _, config in spec.cute_configs)
         residual_warmup_configs.update(config for _, config in spec.residual_configs)
     if _enable_kda_projection_overlap(module):
-        from aphrodite.models.kimi_k3.nvidia.ops.cute_dsl.kda_skinny_gemm import (
+        from sonar.models.kimi_k3.nvidia.ops.cute_dsl.kda_skinny_gemm import (
             kda_skinny_gemm,
         )
 

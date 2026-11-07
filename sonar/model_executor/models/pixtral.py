@@ -21,41 +21,41 @@ from transformers.models.pixtral.image_processing_pixtral import (
 )
 from transformers.models.pixtral.modeling_pixtral import apply_rotary_pos_emb
 
-from aphrodite.compilation.decorators import (
+from sonar.compilation.decorators import (
     should_torch_compile_mm_encoder,
     support_torch_compile,
 )
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.multimodal import MultiModalDummyOptions
-from aphrodite.distributed import divide, get_tensor_model_parallel_world_size
-from aphrodite.inputs import MultiModalDataDict
-from aphrodite.model_executor.layers.activation import SiluAndMul, get_act_and_mul_fn
-from aphrodite.model_executor.layers.attention import MMEncoderAttention
-from aphrodite.model_executor.layers.conv import Conv2dLayer
-from aphrodite.model_executor.layers.fusion.fused_act_quant import maybe_fused_act_quant
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.config import SonarConfig
+from sonar.config.multimodal import MultiModalDummyOptions
+from sonar.distributed import divide, get_tensor_model_parallel_world_size
+from sonar.inputs import MultiModalDataDict
+from sonar.model_executor.layers.activation import SiluAndMul, get_act_and_mul_fn
+from sonar.model_executor.layers.attention import MMEncoderAttention
+from sonar.model_executor.layers.conv import Conv2dLayer
+from sonar.model_executor.layers.fusion.fused_act_quant import maybe_fused_act_quant
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     MergedColumnParallelLinear,
     QKVParallelLinear,
     ReplicatedLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
-from aphrodite.model_executor.models.utils import WeightsMapper
-from aphrodite.multimodal import MULTIMODAL_REGISTRY, MultiModalKwargsItems
-from aphrodite.multimodal.inputs import (
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.model_loader.weight_utils import default_weight_loader
+from sonar.model_executor.models.utils import WeightsMapper
+from sonar.multimodal import MULTIMODAL_REGISTRY, MultiModalKwargsItems
+from sonar.multimodal.inputs import (
     MultiModalFieldConfig,
     MultiModalKwargsItem,
     NestedTensors,
 )
-from aphrodite.multimodal.parse import (
+from sonar.multimodal.parse import (
     ImageProcessorItems,
     ImageSize,
     MultiModalDataItems,
 )
-from aphrodite.multimodal.processing import BaseDummyInputsBuilder
-from aphrodite.multimodal.processing.processor import (
+from sonar.multimodal.processing import BaseDummyInputsBuilder
+from sonar.multimodal.processing.processor import (
     BaseMultiModalProcessor,
     BaseProcessingInfo,
     HFMultiModalInputs,
@@ -66,15 +66,15 @@ from aphrodite.multimodal.processing.processor import (
     PromptUpdate,
     PromptUpdateDetails,
 )
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.tokenizers import cached_tokenizer_from_config
-from aphrodite.tokenizers.mistral import MistralTokenizer
-from aphrodite.transformers_utils.processors.pixtral import (
+from sonar.sequence import IntermediateTensors
+from sonar.tokenizers import cached_tokenizer_from_config
+from sonar.tokenizers.mistral import MistralTokenizer
+from sonar.transformers_utils.processors.pixtral import (
     MistralCommonImageProcessor,
     MistralCommonPixtralProcessor,
 )
-from aphrodite.utils.tensor_schema import TensorSchema, TensorShape
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
+from sonar.utils.tensor_schema import TensorSchema, TensorShape
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
 
 from .interfaces import (
     MultiModalEmbeddings,
@@ -85,7 +85,7 @@ from .interfaces import (
     supports_eagle3,
 )
 from .module_mapping import MultiModelKeys
-from .utils import StageMissingLayer, init_aphrodite_registered_model, maybe_prefix
+from .utils import StageMissingLayer, init_sonar_registered_model, maybe_prefix
 from .vision import (
     VisionEncoderInfo,
     VisionFeatureSelectStrategy,
@@ -335,7 +335,7 @@ class PixtralMultiModalProcessor(BaseMultiModalProcessor[PixtralProcessingInfo])
     dummy_inputs=PixtralDummyInputsBuilder,
 )
 class PixtralForConditionalGeneration(nn.Module, SupportsLoRA, SupportsEagle3, SupportsMultiModal, SupportsPP):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={
             "model.language_model.": "language_model.model.",
             "model.vision_tower.": "vision_encoder.",
@@ -361,10 +361,10 @@ class PixtralForConditionalGeneration(nn.Module, SupportsLoRA, SupportsEagle3, S
 
         raise ValueError("Only image modality is supported")
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        multimodal_config = aphrodite_config.model_config.multimodal_config
+        config = sonar_config.model_config.hf_config
+        multimodal_config = sonar_config.model_config.multimodal_config
         self.config = config
         self.multimodal_config = multimodal_config
 
@@ -376,14 +376,14 @@ class PixtralForConditionalGeneration(nn.Module, SupportsLoRA, SupportsEagle3, S
         self.vision_args = VisionEncoderArgs(**vision_args)
 
         # init MistralForCausalLM
-        with self._mark_language_model(aphrodite_config):
-            self.language_model = init_aphrodite_registered_model(
-                aphrodite_config=aphrodite_config,
+        with self._mark_language_model(sonar_config):
+            self.language_model = init_sonar_registered_model(
+                sonar_config=sonar_config,
                 hf_config=config.text_config,
                 prefix=maybe_prefix(prefix, "language_model"),
             )
 
-        with self._mark_tower_model(aphrodite_config, "image"):
+        with self._mark_tower_model(sonar_config, "image"):
             self.vision_encoder = VisionTransformer(
                 self.vision_args,
                 prefix=maybe_prefix(prefix, "vision_encoder"),
@@ -500,7 +500,7 @@ class PixtralForConditionalGeneration(nn.Module, SupportsLoRA, SupportsEagle3, S
         ]
 
         # Remap Mistral native names to HF-style names
-        # used by the Aphrodite vision encoder modules.
+        # used by the Sonar vision encoder modules.
         _vision_encoder_name_remap = {
             ".wo.": ".o_proj.",
             ".w2.": ".down_proj.",

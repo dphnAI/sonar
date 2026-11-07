@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Octave attention backend for AMD GPUs (native kernels: HIP or FlyDSL).
 
-KV cache format and reference: ``aphrodite/v1/attention/ops/rocm_octave.py``.
+KV cache format and reference: ``sonar/v1/attention/ops/rocm_octave.py``.
 Kernels: ``csrc/attention/octave_attn.cu`` and the per-architecture tiers in
 ``_kernel_tier``; RDNA3 and CDNA3, validated on gfx1100 and gfx942. See
 ``docs/design/rocm_octave.md``.
@@ -21,11 +21,11 @@ from typing import ClassVar
 
 import torch
 
-from aphrodite.config import AphroditeConfig, get_current_aphrodite_config
-from aphrodite.config.cache import CacheDType
-from aphrodite.platforms import current_platform
-from aphrodite.platforms.interface import DeviceCapability
-from aphrodite.v1.attention.backend import (
+from sonar.config import SonarConfig, get_current_sonar_config
+from sonar.config.cache import CacheDType
+from sonar.platforms import current_platform
+from sonar.platforms.interface import DeviceCapability
+from sonar.v1.attention.backend import (
     AttentionBackend,
     AttentionCGSupport,
     AttentionImpl,
@@ -35,11 +35,11 @@ from aphrodite.v1.attention.backend import (
     CommonAttentionMetadata,
     MultipleOf,
 )
-from aphrodite.v1.attention.backends.utils import split_decodes_and_prefills
-from aphrodite.v1.attention.ops import rocm_octave as sq
-from aphrodite.v1.kv_cache_interface import AttentionSpec, KVCacheSpec
-from aphrodite.v1.kv_cache_layout import KVCacheLayout
-from aphrodite.v1.worker.workspace import (
+from sonar.v1.attention.backends.utils import split_decodes_and_prefills
+from sonar.v1.attention.ops import rocm_octave as sq
+from sonar.v1.kv_cache_interface import AttentionSpec, KVCacheSpec
+from sonar.v1.kv_cache_layout import KVCacheLayout
+from sonar.v1.worker.workspace import (
     current_workspace_manager,
     is_workspace_manager_initialized,
 )
@@ -48,7 +48,7 @@ from aphrodite.v1.worker.workspace import (
 # Native kernel tier per architecture family; any other family is rejected at
 # selection (supports_compute_capability) until it is validated.
 def _kernel_tier() -> str:
-    from aphrodite.platforms.rocm import get_cdna_version, get_rdna_version
+    from sonar.platforms.rocm import get_cdna_version, get_rdna_version
 
     if get_rdna_version() == 3:
         return "wmma"
@@ -82,8 +82,8 @@ def _mid_o_shape(
     return (num_q, num_heads, splits, _KERNEL_HEAD_SIZE + 2), splits
 
 
-def _max_capture_size(aphrodite_config: AphroditeConfig) -> int:
-    return aphrodite_config.compilation_config.max_cudagraph_capture_size or 4
+def _max_capture_size(sonar_config: SonarConfig) -> int:
+    return sonar_config.compilation_config.max_cudagraph_capture_size or 4
 
 
 class RocmOctaveAttentionBackend(AttentionBackend):
@@ -117,7 +117,7 @@ class RocmOctaveAttentionBackend(AttentionBackend):
 
     @classmethod
     def supports_compute_capability(cls, capability: DeviceCapability) -> bool:
-        from aphrodite.platforms.rocm import get_cdna_version, get_rdna_version
+        from sonar.platforms.rocm import get_cdna_version, get_rdna_version
 
         # DeviceCapability is unreliable on ROCm; use the gcnArchName.
         return current_platform.is_rocm() and (get_rdna_version() == 3 or get_cdna_version() == 3)
@@ -135,7 +135,7 @@ class RocmOctaveAttentionBackend(AttentionBackend):
         # The kernels take block/head/token strides; the slot is contiguous.
         # The MFMA decode loads 16 consecutive tokens of a head as one tile.
         if current_platform.is_rocm():
-            from aphrodite.platforms.rocm import get_cdna_version
+            from sonar.platforms.rocm import get_cdna_version
 
             if get_cdna_version() == 3:
                 return (KVCacheLayout.LBHNC,)
@@ -178,24 +178,24 @@ class RocmOctaveMetadataBuilder(AttentionMetadataBuilder[RocmOctaveMetadata]):
         self,
         kv_cache_spec: AttentionSpec,
         layer_names: list[str],
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
     ):
-        super().__init__(kv_cache_spec, layer_names, aphrodite_config, device)
+        super().__init__(kv_cache_spec, layer_names, sonar_config, device)
         self._init_reorder_batch_threshold(1, supports_spec_as_decode=False)
         # Persistent so captured graphs keep reading the current contents.
-        max_tokens = aphrodite_config.scheduler_config.max_num_batched_tokens
+        max_tokens = sonar_config.scheduler_config.max_num_batched_tokens
         self._q_to_req = torch.empty(max_tokens, dtype=torch.int32, device=device)
         self._q_to_klen = torch.empty(max_tokens, dtype=torch.int32, device=device)
         # Layers run one after another, so they share one set of split-KV
         # partials; reserve it before the workspace is locked.
         if is_workspace_manager_initialized():
-            num_heads = aphrodite_config.model_config.get_num_attention_heads(aphrodite_config.parallel_config)
-            capture_size = _max_capture_size(aphrodite_config)
+            num_heads = sonar_config.model_config.get_num_attention_heads(sonar_config.parallel_config)
+            capture_size = _max_capture_size(sonar_config)
             shape, _ = _mid_o_shape(
                 capture_size,
                 num_heads,
-                aphrodite_config.attention_config.tq_max_kv_splits_for_cuda_graph,
+                sonar_config.attention_config.tq_max_kv_splits_for_cuda_graph,
                 capture_size,
             )
             current_workspace_manager().get_simultaneous((shape, torch.float32))
@@ -276,8 +276,8 @@ class RocmOctaveAttentionImpl(AttentionImpl):
         self.kv_cache_dtype = kv_cache_dtype
         self.kv_sharing_target_layer_name = kv_sharing_target_layer_name
 
-        aphrodite_config = get_current_aphrodite_config()
-        rope_dim = sq.rope_dim_from_hf_config(aphrodite_config.model_config.hf_text_config, head_size)
+        sonar_config = get_current_sonar_config()
+        rope_dim = sq.rope_dim_from_hf_config(sonar_config.model_config.hf_text_config, head_size)
         sq.register_rope_dim(head_size, rope_dim)
         self.fmt = sq.OctaveFormat.from_cache_dtype(kv_cache_dtype, head_size, rope_dim)
         if not (
@@ -293,8 +293,8 @@ class RocmOctaveAttentionImpl(AttentionImpl):
         # The MFMA decode takes up to 256 splits (octave_decode_mfma_cdna.cu).
         self._split_cap = 256 if _kernel_tier() == "mfma" else None
 
-        self.max_num_kv_splits = aphrodite_config.attention_config.tq_max_kv_splits_for_cuda_graph
-        self._max_capture_size = _max_capture_size(aphrodite_config)
+        self.max_num_kv_splits = sonar_config.attention_config.tq_max_kv_splits_for_cuda_graph
+        self._max_capture_size = _max_capture_size(sonar_config)
         self._k_signs: torch.Tensor | None = None
         self._v_signs: torch.Tensor | None = None
         self._mid_o: torch.Tensor | None = None

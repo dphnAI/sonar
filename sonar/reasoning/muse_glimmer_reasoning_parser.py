@@ -3,7 +3,7 @@
 
 """Compatibility entry point for the Muse Glimmer reasoning parser."""
 
-from aphrodite.reasoning.muse_reasoning_parser import MuseReasoningParser
+from sonar.reasoning.muse_reasoning_parser import MuseReasoningParser
 
 
 class MuseGlimmerReasoningParser(MuseReasoningParser):

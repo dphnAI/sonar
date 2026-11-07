@@ -51,51 +51,51 @@ from transformers.models.glm4v.video_processing_glm4v import Glm4vVideoProcessor
 from transformers.video_processing_utils import BaseVideoProcessor
 from transformers.video_utils import VideoMetadata
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.multimodal import MultiModalDummyOptions, VideoDummyOptions
-from aphrodite.distributed import get_tensor_model_parallel_world_size, parallel_state
-from aphrodite.distributed import utils as dist_utils
-from aphrodite.inputs import MultiModalDataDict
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.attention import (
+from sonar.config import SonarConfig
+from sonar.config.multimodal import MultiModalDummyOptions, VideoDummyOptions
+from sonar.distributed import get_tensor_model_parallel_world_size, parallel_state
+from sonar.distributed import utils as dist_utils
+from sonar.inputs import MultiModalDataDict
+from sonar.logger import init_logger
+from sonar.model_executor.layers.attention import (
     MMEncoderAttention,
 )
-from aphrodite.model_executor.layers.conv import Conv2dLayer, Conv3dLayer
-from aphrodite.model_executor.layers.fusion.mm_input_norm import (
+from sonar.model_executor.layers.conv import Conv2dLayer, Conv3dLayer
+from sonar.model_executor.layers.fusion.mm_input_norm import (
     IdentityInputNorm,
     build_mm_input_norm,
 )
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     MergedColumnParallelLinear,
     QKVParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.quantization.compressed_tensors import (
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.quantization.compressed_tensors import (
     compressed_tensors,
 )
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.layers.rotary_embedding.common import (
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.layers.rotary_embedding.common import (
     ApplyRotaryEmb,
 )
-from aphrodite.model_executor.models.module_mapping import MultiModelKeys
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import (
+from sonar.model_executor.models.module_mapping import MultiModelKeys
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import (
     MultiModalFeatureSpec,
     MultiModalFieldConfig,
     MultiModalKwargsItem,
     MultiModalKwargsItems,
     VideoItem,
 )
-from aphrodite.multimodal.parse import (
+from sonar.multimodal.parse import (
     DictEmbeddingItems,
     ImageSize,
     MultiModalDataItems,
     MultiModalDataParser,
 )
-from aphrodite.multimodal.processing import (
+from sonar.multimodal.processing import (
     BaseDummyInputsBuilder,
     BaseMultiModalProcessor,
     BaseProcessingInfo,
@@ -104,13 +104,13 @@ from aphrodite.multimodal.processing import (
     PromptUpdateDetails,
     cached_encode,
 )
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.transformers_utils.processor import get_processor_cls_name_from_config
-from aphrodite.transformers_utils.utils import convert_model_repo_to_path
-from aphrodite.utils.tensor_schema import TensorSchema, TensorShape
-from aphrodite.utils.torch_utils import async_tensor_h2d
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
-from aphrodite.v1.worker.encoder_cudagraph_defs import EncoderCudaGraphReplayBuffers
+from sonar.sequence import IntermediateTensors
+from sonar.transformers_utils.processor import get_processor_cls_name_from_config
+from sonar.transformers_utils.utils import convert_model_repo_to_path
+from sonar.utils.tensor_schema import TensorSchema, TensorShape
+from sonar.utils.torch_utils import async_tensor_h2d
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
+from sonar.v1.worker.encoder_cudagraph_defs import EncoderCudaGraphReplayBuffers
 
 from ..layers.activation import SiluAndMul
 from .interfaces import (
@@ -125,7 +125,7 @@ from .qwen2_vl import _create_qwen2vl_field_factory
 from .utils import (
     AutoWeightsLoader,
     WeightsMapper,
-    init_aphrodite_registered_model,
+    init_sonar_registered_model,
     maybe_prefix,
 )
 from .vision import (
@@ -587,7 +587,7 @@ class Glm4vVisionEmbeddings(nn.Module):
 
 
 class Glm4vVisionTransformer(nn.Module):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_stacked={
             ".attn.q.": (".attn.qkv.", "q"),
             ".attn.k.": (".attn.qkv.", "k"),
@@ -925,7 +925,7 @@ class Glm4vVisionTransformer(nn.Module):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
 
 class Glm4vMultiModalDataParser(MultiModalDataParser):
@@ -1867,7 +1867,7 @@ class Glm4vForConditionalGeneration(
     }
 
     # To ensure correct weight loading and mapping.
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={
             "lm_head.": "language_model.lm_head.",
             "model.language_model.": "language_model.model.",
@@ -1888,20 +1888,20 @@ class Glm4vForConditionalGeneration(
 
         raise ValueError("Only image or video modality is supported")
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
-        multimodal_config = aphrodite_config.model_config.multimodal_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
+        multimodal_config = sonar_config.model_config.multimodal_config
 
         self.config = config
-        self.model_config = aphrodite_config.model_config
+        self.model_config = sonar_config.model_config
         self.multimodal_config = multimodal_config
         assert multimodal_config is not None
         self.use_data_parallel = multimodal_config.mm_encoder_tp_mode == "data"
         self.is_multimodal_pruning_enabled = multimodal_config.is_multimodal_pruning_enabled()
 
-        with self._mark_tower_model(aphrodite_config, {"image", "video"}):
+        with self._mark_tower_model(sonar_config, {"image", "video"}):
             self.visual = Glm4vVisionTransformer(
                 config.text_config,
                 config.vision_config,
@@ -1918,9 +1918,9 @@ class Glm4vForConditionalGeneration(
         else:
             architectures = None
 
-        with self._mark_language_model(aphrodite_config):
-            self.language_model = init_aphrodite_registered_model(
-                aphrodite_config=aphrodite_config,
+        with self._mark_language_model(sonar_config):
+            self.language_model = init_sonar_registered_model(
+                sonar_config=sonar_config,
                 hf_config=config.text_config,
                 prefix=maybe_prefix(prefix, "language_model"),
                 architectures=architectures,
@@ -2019,7 +2019,7 @@ class Glm4vForConditionalGeneration(
     # -- SupportsEncoderCudaGraph protocol methods --
 
     def get_encoder_cudagraph_config(self):
-        from aphrodite.v1.worker.encoder_cudagraph_defs import (
+        from sonar.v1.worker.encoder_cudagraph_defs import (
             EncoderCudaGraphConfig,
         )
 
@@ -2063,7 +2063,7 @@ class Glm4vForConditionalGeneration(
 
     def get_encoder_cudagraph_budget_range(
         self,
-        aphrodite_config,
+        sonar_config,
     ) -> tuple[int, int]:
         # Min: estimated smallest possible encoder input.
         # 224x224 image → 16x16 patches (patch_size=14)
@@ -2071,8 +2071,8 @@ class Glm4vForConditionalGeneration(
         min_budget = 64
         # Max: capped by max_num_batched_tokens
         max_budget = min(
-            aphrodite_config.scheduler_config.max_num_batched_tokens,
-            aphrodite_config.model_config.max_model_len,
+            sonar_config.scheduler_config.max_num_batched_tokens,
+            sonar_config.model_config.max_model_len,
         )
         return (min_budget, max_budget)
 
@@ -2100,7 +2100,7 @@ class Glm4vForConditionalGeneration(
         self,
         mm_kwargs: dict[str, Any],
     ):
-        from aphrodite.v1.worker.encoder_cudagraph_defs import EncoderItemSpec
+        from sonar.v1.worker.encoder_cudagraph_defs import EncoderItemSpec
 
         m = self.visual.spatial_merge_size
         grid_thw = self._get_grid_thw_by_modality(mm_kwargs)
@@ -2162,7 +2162,7 @@ class Glm4vForConditionalGeneration(
         path: str = "default",
         axis_keys: tuple[Hashable, ...] | None = None,
     ):
-        from aphrodite.v1.worker.encoder_cudagraph_defs import (
+        from sonar.v1.worker.encoder_cudagraph_defs import (
             EncoderCudaGraphCaptureInputs,
         )
 
@@ -2430,7 +2430,7 @@ class Glm4vForConditionalGeneration(
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
     def get_mm_mapping(self) -> MultiModelKeys:
         """Get the module prefix in multimodal models."""

@@ -4,9 +4,9 @@ from contextlib import ExitStack
 
 import pytest
 
-from aphrodite import LLM
-from aphrodite.config import CompilationConfig, CompilationMode
-from aphrodite.platforms import current_platform
+from sonar import LLM
+from sonar.config import CompilationConfig, CompilationMode
+from sonar.platforms import current_platform
 from tests.utils import create_new_process_for_each_test
 from tests.v1.attention.utils import full_cg_backend_configs as backend_configs
 
@@ -68,7 +68,7 @@ def test_backend_and_cudagraph_mode_combo(backend_name, cudagraph_mode, supporte
             max_model_len=1024,
             attention_config=attention_config,
             compilation_config=CompilationConfig(
-                mode=CompilationMode.APHRODITE_COMPILE,
+                mode=CompilationMode.SONAR_COMPILE,
                 cudagraph_mode=cudagraph_mode,
                 cudagraph_capture_sizes=[1, 2, 4, 8, 16, 64, 128],
             ),
@@ -83,12 +83,12 @@ attn_backend = "RocmAttn" if current_platform.is_rocm() else "FA2"
 combo_cases_2 = [
     (attn_backend, "FULL", CompilationMode.NONE, True),
     (attn_backend, "PIECEWISE", CompilationMode.NONE, True),
-    (attn_backend, "PIECEWISE", CompilationMode.APHRODITE_COMPILE, True),
+    (attn_backend, "PIECEWISE", CompilationMode.SONAR_COMPILE, True),
     (attn_backend, "FULL_AND_PIECEWISE", CompilationMode.NONE, True),
     (attn_backend, "FULL_DECODE_ONLY", CompilationMode.NONE, True),
-    (attn_backend, "FULL_DECODE_ONLY", CompilationMode.APHRODITE_COMPILE, True),
+    (attn_backend, "FULL_DECODE_ONLY", CompilationMode.SONAR_COMPILE, True),
     (attn_backend, "NONE", CompilationMode.NONE, True),
-    (attn_backend, "NONE", CompilationMode.APHRODITE_COMPILE, True),
+    (attn_backend, "NONE", CompilationMode.SONAR_COMPILE, True),
 ]
 
 

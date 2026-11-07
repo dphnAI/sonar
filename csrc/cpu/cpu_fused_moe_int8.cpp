@@ -643,7 +643,7 @@ void cpu_fused_moe_int8(torch::Tensor& output, const torch::Tensor& input,
   TORCH_CHECK(!skip_weighted || topk_num == 1,
               "skip_weighted is only supported for topk=1 on CPU");
 
-  APHRODITE_DISPATCH_FLOATING_TYPES(
+  SONAR_DISPATCH_FLOATING_TYPES(
       input.scalar_type(), "cpu_fused_moe_int8", [&]() {
         CPU_INT8_ISA_DISPATCH_IMPL(isa_type, scalar_t, [&]() {
           fused_moe_int8_impl<scalar_t, gemm_t>(

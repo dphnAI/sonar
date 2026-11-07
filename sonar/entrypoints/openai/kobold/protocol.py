@@ -5,7 +5,7 @@ from typing import Any
 
 from pydantic import Field, model_validator
 
-from aphrodite.entrypoints.serve.engine.protocol import OpenAIBaseModel
+from sonar.entrypoints.serve.engine.protocol import OpenAIBaseModel
 
 
 class KAIGenerationInputSchema(OpenAIBaseModel):

@@ -13,13 +13,13 @@ from typing import Any
 import torch
 from tqdm import tqdm
 
-from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
+from sonar.model_executor.layers.quantization.utils.fp8_utils import (
     _w8a8_triton_block_scaled_mm,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import triton
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
-from aphrodite.utils.platform_utils import get_device_name_as_file_name
+from sonar.platforms import current_platform
+from sonar.triton_utils import triton
+from sonar.utils.argparse_utils import FlexibleArgumentParser
+from sonar.utils.platform_utils import get_device_name_as_file_name
 
 mp.set_start_method("spawn", force=True)
 

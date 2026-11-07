@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-use aphrodite_tokenizer::{DecodedText, Tokenizer};
+use sonar_tokenizer::{DecodedText, Tokenizer};
 use winnow::ascii::{multispace0 as ws0, multispace1 as ws1};
 use winnow::combinator::{alt, delimited, eof, opt, preceded, repeat, seq, terminated};
 use winnow::prelude::*;
@@ -381,8 +381,8 @@ fn dsml_name_attr<'i>(input: &mut DsmlInput<'i>) -> ModalResult<&'i str> {
 
 #[cfg(test)]
 mod test_utils {
-    use aphrodite_tokenizer::Tokenizer as _;
-    use aphrodite_tokenizer::test_utils::TestTokenizer;
+    use sonar_tokenizer::Tokenizer as _;
+    use sonar_tokenizer::test_utils::TestTokenizer;
 
     use super::DSML;
     use crate::tool::test_utils::{collect_attributed_stream, decode_ids};
@@ -407,7 +407,7 @@ mod test_utils {
     }
 
     /// Run token IDs through the real incremental decoder.
-    pub(super) fn decode(ids: &[u32]) -> aphrodite_tokenizer::DecodedText {
+    pub(super) fn decode(ids: &[u32]) -> sonar_tokenizer::DecodedText {
         decode_ids(&tokenizer(), ids)
     }
 

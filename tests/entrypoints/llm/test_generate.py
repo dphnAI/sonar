@@ -5,8 +5,8 @@ import weakref
 
 import pytest
 
-from aphrodite import LLM, SamplingParams
-from aphrodite.exceptions import AphroditeValidationError
+from sonar import LLM, SamplingParams
+from sonar.exceptions import SonarValidationError
 
 MODEL_NAME = "distilbert/distilgpt2"
 
@@ -26,8 +26,8 @@ TOKEN_IDS = [
 
 
 @pytest.fixture(scope="module")
-def llm(aphrodite_runner):
-    with aphrodite_runner(
+def llm(sonar_runner):
+    with sonar_runner(
         MODEL_NAME,
         max_num_batched_tokens=4096,
         tensor_parallel_size=1,
@@ -35,7 +35,7 @@ def llm(aphrodite_runner):
         enforce_eager=True,
     ) as runner:
         # pytest caches yielded fixtures until after teardown, so use a proxy to
-        # avoid retaining the LLM while AphroditeRunner.__exit__ releases ROCm memory.
+        # avoid retaining the LLM while SonarRunner.__exit__ releases ROCm memory.
         yield weakref.proxy(runner.llm)
 
 
@@ -53,7 +53,7 @@ def test_multiple_sampling_params(llm: LLM):
     assert len(PROMPTS) == len(outputs)
 
     # Exception raised, if the size of params does not match the size of prompts
-    with pytest.raises(AphroditeValidationError):
+    with pytest.raises(SonarValidationError):
         outputs = llm.generate(PROMPTS, sampling_params=sampling_params[:3])
 
     # Single SamplingParams should be applied to every prompt
@@ -80,11 +80,11 @@ def test_multiple_priority(llm: LLM):
     assert len(PROMPTS) == len(outputs)
 
     # Exception raised, if the length of priority does not match the length of prompts
-    with pytest.raises(AphroditeValidationError):
+    with pytest.raises(SonarValidationError):
         outputs = llm.generate(PROMPTS, sampling_params=None, priority=[0] * (len(PROMPTS) - 1))
 
     # Exception raised, if the priority list is empty
-    with pytest.raises(AphroditeValidationError):
+    with pytest.raises(SonarValidationError):
         outputs = llm.generate(PROMPTS, sampling_params=None, priority=[])
 
 
@@ -98,9 +98,9 @@ def test_single_prompt_priority(llm: LLM):
     assert len(outputs) == 1
 
 
-def test_max_model_len(aphrodite_runner):
+def test_max_model_len(sonar_runner):
     max_model_len = 20
-    with aphrodite_runner(
+    with sonar_runner(
         MODEL_NAME,
         max_model_len=max_model_len,
         gpu_memory_utilization=0.10,
@@ -116,8 +116,8 @@ def test_max_model_len(aphrodite_runner):
             assert num_total_tokens <= max_model_len
 
 
-def test_log_stats(aphrodite_runner):
-    with aphrodite_runner(
+def test_log_stats(sonar_runner):
+    with sonar_runner(
         MODEL_NAME,
         disable_log_stats=False,
         gpu_memory_utilization=0.10,

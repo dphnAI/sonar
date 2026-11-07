@@ -16,9 +16,9 @@ import threading
 
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.v1.simple_kv_offload.cuda_mem_ops import (
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.v1.simple_kv_offload.cuda_mem_ops import (
     CU_MEMCPY_SRC_ACCESS_ORDER_ANY,
     CU_MEMCPY_SRC_ACCESS_ORDER_STREAM,
     BatchMemcpyParams,

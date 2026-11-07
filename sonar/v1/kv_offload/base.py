@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Core abstractions for KV cache offloading in Aphrodite v1."""
+"""Core abstractions for KV cache offloading in Sonar v1."""
 
 from abc import ABC, abstractmethod
 from collections.abc import Collection, Iterable, Mapping, Sequence
@@ -13,13 +13,13 @@ import numpy as np
 import torch
 
 if TYPE_CHECKING:
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.offloading.metrics import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.offloading.metrics import (
         OffloadingConnectorStats,
     )
 
-from aphrodite.v1.kv_hints import KvHintsEnvelope
-from aphrodite.v1.kv_offload.config import OffloadingConfig
-from aphrodite.v1.metrics.cache_hit_source import CacheHitSource
+from sonar.v1.kv_hints import KvHintsEnvelope
+from sonar.v1.kv_offload.config import OffloadingConfig
+from sonar.v1.metrics.cache_hit_source import CacheHitSource
 
 # `OffloadKey` identifies an offloaded block. It combines a block hash with
 # its KV cache group index, encoded as raw bytes to avoid tuple GC overhead.
@@ -201,7 +201,7 @@ class OffloadingEvent:
 
 
 """
-OffloadingManager class for managing KV data offloading in Aphrodite v1
+OffloadingManager class for managing KV data offloading in Sonar v1
 
 This class runs in the scheduler, tracks which blocks are offloaded
 and their address.
@@ -260,7 +260,7 @@ class OffloadingHistogramMetadata(OffloadingMetricMetadata):
 
 @dataclass(frozen=True)
 class OffloadingKVEventsConfig:
-    # Global Aphrodite KV event publishing flag. When false, connector-specific
+    # Global Sonar KV event publishing flag. When false, connector-specific
     # event capture must stay inert because take_events() is not drained.
     enable_kv_cache_events: bool
     # OffloadingConnector opt-in for self-describing BlockStored payloads.
@@ -274,7 +274,7 @@ ConfigInfoMapping = Mapping[str, str | int | float | bool]
 
 @dataclass(frozen=True)
 class ConfigInfo:
-    """Static facts that one component publishes on aphrodite:kv_offload_config_info.
+    """Static facts that one component publishes on sonar:kv_offload_config_info.
 
     Each field is one label. The OffloadingSpec declares the names with
     config_info_keys(), and the OffloadingManager fills the values with

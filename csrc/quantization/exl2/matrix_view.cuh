@@ -28,7 +28,7 @@
 
 #include "quant/qdq_util.cuh"
 
-namespace aphrodite {
+namespace sonar {
 namespace exl2 {
 
 class MatrixView_half {
@@ -159,6 +159,6 @@ class MatrixView_q4_row {
 };
 
 }  // namespace exl2
-}  // namespace aphrodite
+}  // namespace sonar
 
 #endif

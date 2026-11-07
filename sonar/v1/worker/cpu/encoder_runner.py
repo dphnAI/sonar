@@ -9,17 +9,17 @@ from contextlib import contextmanager
 import numpy as np
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.models.interfaces import SupportsMultiModal, supports_realtime
-from aphrodite.multimodal.encoder_budget import MultiModalBudget
-from aphrodite.multimodal.inputs import MultiModalKwargsItem
-from aphrodite.multimodal.utils import (
+from sonar.logger import init_logger
+from sonar.model_executor.models.interfaces import SupportsMultiModal, supports_realtime
+from sonar.multimodal.encoder_budget import MultiModalBudget
+from sonar.multimodal.inputs import MultiModalKwargsItem
+from sonar.multimodal.utils import (
     get_mm_features_in_window,
     group_and_batch_mm_kwargs,
     set_mm_embedding_modality,
 )
-from aphrodite.v1.worker.cpu.encoder_cache import EncoderCache
-from aphrodite.v1.worker.utils import (
+from sonar.v1.worker.cpu.encoder_cache import EncoderCache
+from sonar.v1.worker.utils import (
     EncoderTimingStats,
     sanity_check_mm_encoder_outputs,
 )

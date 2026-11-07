@@ -4,7 +4,7 @@
 
 Regression tests for https://github.com/vllm-project/vllm/issues/34792.
 
-Setting APHRODITE_LOGGING_LEVEL=debug caused tool calling to break for Mistral
+Setting SONAR_LOGGING_LEVEL=debug caused tool calling to break for Mistral
 models because:
   1. The OpenAI Python SDK types tool_calls as Iterable[...] in
      ChatCompletionAssistantMessageParam.
@@ -17,7 +17,7 @@ models because:
 
 import pytest
 
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
 
 
 def _make_tool_call(tc_id: str, name: str, args: str) -> dict:
@@ -70,13 +70,13 @@ def test_tool_calls_list_preserved_after_model_dump():
 
 def test_tool_calls_from_generator_are_materialised():
     """tool_calls passed as a generator must be converted to list on validation."""
-    tool_call = _make_tool_call("call_gen1", "search", '{"query": "aphrodite"}')
+    tool_call = _make_tool_call("call_gen1", "search", '{"query": "sonar"}')
 
     def tool_calls_gen():
         yield tool_call
 
     messages = [
-        {"role": "user", "content": "Search for aphrodite"},
+        {"role": "user", "content": "Search for sonar"},
         {
             "role": "assistant",
             "content": None,

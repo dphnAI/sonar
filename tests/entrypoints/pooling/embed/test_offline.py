@@ -6,9 +6,9 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from aphrodite import LLM, EmbeddingRequestOutput, PoolingParams
-from aphrodite.inputs import PromptType
-from aphrodite.tasks import PoolingTask
+from sonar import LLM, EmbeddingRequestOutput, PoolingParams
+from sonar.inputs import PromptType
+from sonar.tasks import PoolingTask
 
 MODEL_NAME = "intfloat/multilingual-e5-small"
 
@@ -18,8 +18,8 @@ embedding_size = 384
 
 
 @pytest.fixture(scope="module")
-def llm(aphrodite_runner):
-    with aphrodite_runner(
+def llm(sonar_runner):
+    with sonar_runner(
         MODEL_NAME,
         max_model_len=None,
         max_num_batched_tokens=32768,
@@ -31,7 +31,7 @@ def llm(aphrodite_runner):
     ) as runner:
         assert embedding_size == runner.llm.model_config.embedding_size
         # pytest caches yielded fixtures until after teardown, so use a proxy to
-        # avoid retaining the LLM while AphroditeRunner.__exit__ releases ROCm memory.
+        # avoid retaining the LLM while SonarRunner.__exit__ releases ROCm memory.
         yield weakref.proxy(runner.llm)
 
 

@@ -14,10 +14,10 @@ import time
 import torch
 from tabulate import tabulate
 
-from aphrodite.distributed.kv_transfer.kv_connector.utils import copy_kv_blocks
-from aphrodite.logger import init_logger
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
-from aphrodite.utils.torch_utils import STR_DTYPE_TO_TORCH_DTYPE
+from sonar.distributed.kv_transfer.kv_connector.utils import copy_kv_blocks
+from sonar.logger import init_logger
+from sonar.utils.argparse_utils import FlexibleArgumentParser
+from sonar.utils.torch_utils import STR_DTYPE_TO_TORCH_DTYPE
 
 logger = init_logger(__name__)
 

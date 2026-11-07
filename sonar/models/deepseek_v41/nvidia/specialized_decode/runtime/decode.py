@@ -31,14 +31,14 @@ from typing import TYPE_CHECKING, NamedTuple, TypeAlias, cast
 import torch
 from torch import nn
 
-import aphrodite.envs as envs
-from aphrodite.config import CUDAGraphMode
-from aphrodite.forward_context import get_forward_context, is_forward_context_available
-from aphrodite.model_executor.kernels.mhc.triton import hc_collapse_triton
-from aphrodite.model_executor.layers.sparse_mqa_indexer import SparseMQAIndexer
-from aphrodite.models.deepseek_v41.common.engram import Engram
-from aphrodite.models.deepseek_v41.common.ops.query_quant import can_fuse_query_quant
-from aphrodite.sequence import IntermediateTensors
+import sonar.envs as envs
+from sonar.config import CUDAGraphMode
+from sonar.forward_context import get_forward_context, is_forward_context_available
+from sonar.model_executor.kernels.mhc.triton import hc_collapse_triton
+from sonar.model_executor.layers.sparse_mqa_indexer import SparseMQAIndexer
+from sonar.models.deepseek_v41.common.engram import Engram
+from sonar.models.deepseek_v41.common.ops.query_quant import can_fuse_query_quant
+from sonar.sequence import IntermediateTensors
 
 from ...flashinfer_sparse import DeepseekV4FlashInferMLAAttention
 from .. import (
@@ -57,7 +57,7 @@ from ..moe.routed_expert_gemm import build_routed_expert_gemms
 from ..moe.step import MoEStep
 
 if TYPE_CHECKING:
-    from aphrodite.v1.attention.backends.mla.sparse_swa import DeepseekSparseSWAMetadata
+    from sonar.v1.attention.backends.mla.sparse_swa import DeepseekSparseSWAMetadata
 
     from ...model import DeepseekV4DecoderLayer, DeepseekV4Model
 
@@ -103,7 +103,7 @@ def step_gates(rows: int, executor: "SpecializedDecode") -> DecodeStep:
         rows=rows,
         side_stream=rows <= MHC_OVERLAP_MAX_ROWS,
         low_batch=rows <= LOW_BATCH_MAX_ROWS,
-        overlap_inputs=rows <= envs.APHRODITE_MULTI_STREAM_GEMM_TOKEN_THRESHOLD,
+        overlap_inputs=rows <= envs.SONAR_MULTI_STREAM_GEMM_TOKEN_THRESHOLD,
         overlap_candidates=rows <= OVERLAP_MAX_ROWS,
         engram_prefetch=rows <= ENGRAM_PREFETCH_MAX_ROWS,
         executor=executor,

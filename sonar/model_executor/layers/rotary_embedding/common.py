@@ -7,10 +7,10 @@ from importlib import import_module
 
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.custom_op import CustomOp
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import direct_register_custom_op
+from sonar.logger import init_logger
+from sonar.model_executor.custom_op import CustomOp
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import direct_register_custom_op
 
 logger = init_logger(__name__)
 
@@ -212,7 +212,7 @@ class ApplyRotaryEmb(CustomOp):
         cos: torch.Tensor,
         sin: torch.Tensor,
     ) -> torch.Tensor:
-        from aphrodite.vllm_flash_attn.layers.rotary import apply_rotary_emb
+        from sonar.vllm_flash_attn.layers.rotary import apply_rotary_emb
 
         x, cos, sin, origin_shape, origin_dtype = self._pre_process(x, cos, sin)
 
@@ -235,10 +235,10 @@ class ApplyRotaryEmb(CustomOp):
         cos: torch.Tensor,
         sin: torch.Tensor,
     ) -> torch.Tensor:
-        import aphrodite._xpu_ops  # noqa: F401 registers torch.ops.aphrodite.xpu_apply_rotary_emb
+        import sonar._xpu_ops  # noqa: F401 registers torch.ops.sonar.xpu_apply_rotary_emb
 
         x, cos, sin, origin_shape, origin_dtype = self._pre_process(x, cos, sin)
-        output = torch.ops.aphrodite.xpu_apply_rotary_emb(x, cos, sin, self.is_neox_style)
+        output = torch.ops.sonar.xpu_apply_rotary_emb(x, cos, sin, self.is_neox_style)
         return self._post_process(output, origin_shape, origin_dtype)
 
     def forward_hip(
@@ -254,7 +254,7 @@ class ApplyRotaryEmb(CustomOp):
         grid = (cdiv(nheads, BLOCK_H), cdiv(seq_len, BLOCK_M), batch)
         with BLOCK_M=8 (rotary_dim<=128) or BLOCK_M=4 (otherwise) and
         BLOCK_H=2. When the visual encoder packs many image patches into one
-        batch (e.g. Aphrodite profile_run with max_num_seqs images), gridY can
+        batch (e.g. Sonar profile_run with max_num_seqs images), gridY can
         exceed 65535 and hipModuleLaunchKernel returns
         `Triton Error [HIP]: Code: 1, invalid argument`. Fall back to the
         native PyTorch implementation in that case.

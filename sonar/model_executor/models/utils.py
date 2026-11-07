@@ -12,25 +12,25 @@ import torch
 import torch.nn as nn
 from torch.nn.modules.module import register_module_module_registration_hook
 
-from aphrodite.config import AphroditeConfig, get_current_aphrodite_config_or_none
-from aphrodite.distributed import (
+from sonar.config import SonarConfig, get_current_sonar_config_or_none
+from sonar.distributed import (
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
 )
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.vocab_parallel_embedding import VocabParallelEmbedding
-from aphrodite.model_executor.model_loader.mtp_validation import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.vocab_parallel_embedding import VocabParallelEmbedding
+from sonar.model_executor.model_loader.mtp_validation import (
     is_mtp_completeness_check_enabled,
 )
-from aphrodite.model_executor.model_loader.reload import (
+from sonar.model_executor.model_loader.reload import (
     support_quantized_model_reload_from_hp_weights,
 )
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
-from aphrodite.model_executor.models.interfaces import supports_any_eagle
-from aphrodite.multimodal import NestedTensors
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.utils.torch_utils import (
+from sonar.model_executor.model_loader.weight_utils import default_weight_loader
+from sonar.model_executor.models.interfaces import supports_any_eagle
+from sonar.multimodal import NestedTensors
+from sonar.sequence import IntermediateTensors
+from sonar.utils.math_utils import cdiv
+from sonar.utils.torch_utils import (
     direct_register_custom_op,
 )
 
@@ -38,7 +38,7 @@ if TYPE_CHECKING:
     from transformers import PreTrainedConfig
     from transformers.conversion_mapping import WeightRenaming
 
-    from aphrodite.model_executor.layers.quantization import QuantizationConfig
+    from sonar.model_executor.layers.quantization import QuantizationConfig
 
 logger = init_logger(__name__)
 
@@ -186,7 +186,7 @@ class WeightsMapper:
         LoRA name parsing and the quantization config's layer lists.
 
         Stacked maps are dropped so that constituent names (e.g. `q_proj`) survive
-        rather than being rewritten to the stacked Aphrodite name (`qkv_proj`). Mappings to
+        rather than being rewritten to the stacked Sonar name (`qkv_proj`). Mappings to
         `None` are dropped because "do not load this weight" is meaningless to such a
         consumer, and applying it would silently shrink a quantization config's ignore
         list or make LoRA name parsing fail."""
@@ -253,7 +253,7 @@ class AutoWeightsLoader:
     overridden by defining a `weight_loader` method.
 
     Detailed weight loading information can be viewed by setting the
-    environment variable `APHRODITE_LOGGING_LEVEL=DEBUG`.
+    environment variable `SONAR_LOGGING_LEVEL=DEBUG`.
     """
 
     # Models trained using early version ColossalAI or quantized by
@@ -546,8 +546,8 @@ def get_fused_shared_expert_layers(
             raise NotImplementedError(
                 "Mixed per-layer shared-expert fusion within a pipeline stage/model is not supported with EPLB"
             )
-        aphrodite_config = get_current_aphrodite_config_or_none()
-        parallel_config = aphrodite_config.parallel_config if aphrodite_config is not None else None
+        sonar_config = get_current_sonar_config_or_none()
+        parallel_config = sonar_config.parallel_config if sonar_config is not None else None
         if parallel_config is not None and parallel_config.enable_expert_parallel:
             raise NotImplementedError(
                 "Mixed per-layer shared-expert fusion with expert parallelism is "
@@ -568,7 +568,7 @@ def get_fused_shared_expert_layers(
             sorted(moe_layers - fused_layers) or "none",
         )
     elif moe_layers:
-        from aphrodite._aiter_ops import rocm_aiter_ops
+        from sonar._aiter_ops import rocm_aiter_ops
 
         if rocm_aiter_ops.is_fusion_moe_shared_experts_enabled():
             logger.info(
@@ -655,26 +655,26 @@ def skip_spec_layers(
     return ((name, weight) for name, weight in weights if get_spec_layer_idx_from_weight_name(config, name) is None)
 
 
-def init_aphrodite_registered_model(
-    aphrodite_config: AphroditeConfig,
+def init_sonar_registered_model(
+    sonar_config: SonarConfig,
     *,
     prefix: str = "",
     hf_config: "PreTrainedConfig | None" = None,
     architectures: list[str] | None = None,
 ) -> nn.Module:
-    """Helper function to initialize an inner model registered to Aphrodite,
-    based on the arguments passed to the outer Aphrodite model.
+    """Helper function to initialize an inner model registered to Sonar,
+    based on the arguments passed to the outer Sonar model.
     """
-    from aphrodite.model_executor.model_loader.utils import initialize_model
+    from sonar.model_executor.model_loader.utils import initialize_model
 
     if hf_config is None and architectures is not None:
         # So that the architectures field is overridden
-        hf_config = aphrodite_config.model_config.hf_config
+        hf_config = sonar_config.model_config.hf_config
 
     if hf_config is not None:
-        aphrodite_config = aphrodite_config.with_hf_config(hf_config, architectures=architectures)
+        sonar_config = sonar_config.with_hf_config(hf_config, architectures=architectures)
 
-    return initialize_model(aphrodite_config=aphrodite_config, prefix=prefix)
+    return initialize_model(sonar_config=sonar_config, prefix=prefix)
 
 
 @overload
@@ -898,12 +898,12 @@ class PPMissingLayer(torch.nn.Identity):
         return args[0] if args else next(iter(kwargs.values()))
 
 
-def spec_decode_needs_target_embed(aphrodite_config: AphroditeConfig) -> bool:
+def spec_decode_needs_target_embed(sonar_config: SonarConfig) -> bool:
     """Whether the last PP rank needs the target input embedding, for a
     hidden-state drafter that may reuse it (see `maybe_share_target_embed`)."""
-    from aphrodite.distributed.parallel_state import get_pp_group
+    from sonar.distributed.parallel_state import get_pp_group
 
-    speculative_config = aphrodite_config.speculative_config
+    speculative_config = sonar_config.speculative_config
     if (
         speculative_config is None
         or not speculative_config.uses_target_hidden_states
@@ -931,9 +931,9 @@ def make_layers(
         Tuple of (start_layer, end_layer, modules).
 
     """
-    from aphrodite.distributed.parallel_state import get_pp_group
-    from aphrodite.distributed.utils import get_pp_indices
-    from aphrodite.model_executor.offloader import get_offloader
+    from sonar.distributed.parallel_state import get_pp_group
+    from sonar.distributed.utils import get_pp_indices
+    from sonar.model_executor.offloader import get_offloader
 
     start_layer, end_layer = get_pp_indices(num_hidden_layers, get_pp_group().rank_in_group, get_pp_group().world_size)
 
@@ -1013,8 +1013,8 @@ def compute_skip_topk_layers(config: "PreTrainedConfig") -> set[int]:
 def pp_splits_layer_sharing(num_hidden_layers: int, users: Iterable[int], consumers: set[int]) -> bool:
     """Whether a later PP stage's first ``users`` layer is one of ``consumers``,
     which read state an earlier layer wrote in the same forward pass."""
-    from aphrodite.distributed.parallel_state import get_pp_group
-    from aphrodite.distributed.utils import get_pp_indices
+    from sonar.distributed.parallel_state import get_pp_group
+    from sonar.distributed.utils import get_pp_indices
 
     users = sorted(users)
     pp_size = get_pp_group().world_size
@@ -1083,27 +1083,25 @@ def maybe_prefix(prefix: str, name: str) -> str:
     return name if not prefix else f"{prefix}.{name}"
 
 
-def get_draft_quant_config(aphrodite_config: AphroditeConfig) -> "QuantizationConfig | None":
+def get_draft_quant_config(sonar_config: SonarConfig) -> "QuantizationConfig | None":
     """Get quantization config for Draft models.
 
     Draft models should use their own quantization config instead of the verifier/target
     model's config. This helper retrieves the draft model's quantization config.
 
     Args:
-        aphrodite_config: The Aphrodite configuration object.
+        sonar_config: The Sonar configuration object.
 
     Returns:
         The draft model's config if available, None otherwise.
 
     """
-    speculative_config = aphrodite_config.speculative_config
+    speculative_config = sonar_config.speculative_config
     assert speculative_config is not None
     draft_model_config = speculative_config.draft_model_config
-    draft_load_config = aphrodite_config.load_config
+    draft_load_config = sonar_config.load_config
 
-    return (
-        AphroditeConfig.get_quantization_config(draft_model_config, draft_load_config) if draft_model_config else None
-    )
+    return SonarConfig.get_quantization_config(draft_model_config, draft_load_config) if draft_model_config else None
 
 
 def map_draft_quant_config(
@@ -1116,10 +1114,10 @@ def map_draft_quant_config(
     """Map draft quantization settings to runtime module names."""
     if quant_config is None:
         return
-    from aphrodite.model_executor.layers.quantization.modelopt import ModelOptQuantConfigBase
+    from sonar.model_executor.layers.quantization.modelopt import ModelOptQuantConfigBase
 
     if isinstance(quant_config, ModelOptQuantConfigBase):
-        quant_config.apply_aphrodite_mapper(weight_mapper.get_rename_mapper())
+        quant_config.apply_sonar_mapper(weight_mapper.get_rename_mapper())
         root = rf"(?:{re.escape(prefix)}\.)?" if prefix else ""
         # Match root-level layers.N, optionally prefixed or wildcarded. Offset
         # higher IDs first so an offset of 1 cannot cascade from 0 -> 1 -> 2.
@@ -1131,7 +1129,7 @@ def map_draft_quant_config(
         if prefix:
             # Preserve leading wildcards and names already rooted at prefix.
             runtime_names[re.compile(rf"^(?!\*|{re.escape(prefix)}(?:\.|\*|$))")] = f"{prefix}."
-        quant_config.apply_aphrodite_mapper(WeightsMapper(orig_to_new_regex=runtime_names))
+        quant_config.apply_sonar_mapper(WeightsMapper(orig_to_new_regex=runtime_names))
         return
 
     # Other backends may use semantic keys or suffix rules rather than module
@@ -1217,7 +1215,7 @@ def fast_topk(values: torch.Tensor, topk: int, dim: int) -> tuple[torch.Tensor, 
 # The output tensor can have a sequence length 0 at small input sequence lengths
 # even though we explicitly pad to avoid this.
 def sequence_parallel_chunk(x: torch.Tensor) -> torch.Tensor:
-    return torch.ops.aphrodite.sequence_parallel_chunk_impl(x)
+    return torch.ops.sonar.sequence_parallel_chunk_impl(x)
 
 
 def sequence_parallel_chunk_impl(x: torch.Tensor) -> torch.Tensor:

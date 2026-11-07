@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 import torch
 
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 from .data import TensorSpec, make_embedding_key
 from .store_client import (

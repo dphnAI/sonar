@@ -5,17 +5,17 @@
 import time
 from typing import TYPE_CHECKING, Any
 
-from aphrodite.distributed.kv_transfer.kv_connector.utils import BlockIds
-from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_scheduler import (
+from sonar.distributed.kv_transfer.kv_connector.utils import BlockIds
+from sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_scheduler import (
     NixlBaseConnectorScheduler,
 )
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
-    from aphrodite.v1.core.kv_cache_manager import KVCacheBlocks
-    from aphrodite.v1.kv_cache_interface import KVCacheConfig
-    from aphrodite.v1.request import Request
+    from sonar.config import SonarConfig
+    from sonar.v1.core.kv_cache_manager import KVCacheBlocks
+    from sonar.v1.kv_cache_interface import KVCacheConfig
+    from sonar.v1.request import Request
 
 logger = init_logger(__name__)
 
@@ -25,11 +25,11 @@ class NixlPullConnectorScheduler(NixlBaseConnectorScheduler):
 
     def __init__(
         self,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
         engine_id: str,
         kv_cache_config: "KVCacheConfig",
     ):
-        super().__init__(aphrodite_config, engine_id, kv_cache_config)
+        super().__init__(sonar_config, engine_id, kv_cache_config)
 
     def get_num_new_matched_tokens(self, request: "Request", num_computed_tokens: int) -> tuple[int, bool]:
         """For remote prefill, pull all prompt blocks from remote
@@ -177,7 +177,7 @@ class NixlPullConnectorScheduler(NixlBaseConnectorScheduler):
         """Once a request is finished, determine whether request blocks
         should be freed now or will be sent asynchronously and freed later.
         """
-        from aphrodite.v1.request import RequestStatus
+        from sonar.v1.request import RequestStatus
 
         params = request.kv_transfer_params
         logger.debug(
@@ -261,8 +261,8 @@ class NixlPullConnectorScheduler(NixlBaseConnectorScheduler):
             remote_host=self.side_channel_host,
             remote_port=self.side_channel_port,
             tp_size=self.transfer_tp_size,
-            dcp_size=self.aphrodite_config.parallel_config.decode_context_parallel_size,
-            pp_size=self.aphrodite_config.parallel_config.pipeline_parallel_size,
+            dcp_size=self.sonar_config.parallel_config.decode_context_parallel_size,
+            pp_size=self.sonar_config.parallel_config.pipeline_parallel_size,
             remote_num_tokens=remote_num_tokens,
             remote_blocks_expiry_time=blocks_expiry_time,
             remote_registration_generation=self._registration_generation,

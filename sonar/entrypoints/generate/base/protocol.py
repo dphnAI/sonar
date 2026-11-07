@@ -13,17 +13,17 @@ from pydantic import (
     model_serializer,
 )
 
-import aphrodite.envs as envs
-from aphrodite.config.utils import replace
-from aphrodite.entrypoints.serve.engine.protocol import OpenAIBaseModel, UsageInfo
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.logger import init_logger
-from aphrodite.renderers.chat_utils import make_tool_call_id
-from aphrodite.sampling_params import StructuredOutputsParams
+import sonar.envs as envs
+from sonar.config.utils import replace
+from sonar.entrypoints.serve.engine.protocol import OpenAIBaseModel, UsageInfo
+from sonar.exceptions import SonarValidationError
+from sonar.logger import init_logger
+from sonar.renderers.chat_utils import make_tool_call_id
+from sonar.sampling_params import StructuredOutputsParams
 
 logger = init_logger(__name__)
 
-StopParam: TypeAlias = str | Annotated[list[str], Field(max_length=envs.APHRODITE_MAX_STOP_STRINGS)] | None
+StopParam: TypeAlias = str | Annotated[list[str], Field(max_length=envs.SONAR_MAX_STOP_STRINGS)] | None
 
 # `top_logprobs` is nullable in the OpenAI spec; null means the same as omitted.
 TopLogprobsParam: TypeAlias = Annotated[
@@ -42,12 +42,12 @@ def validate_cache_salt(cache_salt: object) -> None:
     if cache_salt is None:
         return
     if not isinstance(cache_salt, str) or not cache_salt:
-        raise AphroditeValidationError(
+        raise SonarValidationError(
             "Parameter 'cache_salt' must be a non-empty string if provided.",
             parameter="cache_salt",
         )
     if len(cache_salt) > _MAX_CACHE_SALT_LENGTH or any(char in _CACHE_SALT_FORBIDDEN_CHARS for char in cache_salt):
-        raise AphroditeValidationError(
+        raise SonarValidationError(
             "Parameter 'cache_salt' must be at most 128 characters and must not contain '@', '/', '\\\\', or NUL.",
             parameter="cache_salt",
         )
@@ -71,7 +71,7 @@ def validate_request_mm_kwargs(
         return
 
     if mm_processor_kwargs:
-        raise AphroditeValidationError(
+        raise SonarValidationError(
             "Per-request mm_processor_kwargs are disabled by default because "
             "they can change multimodal preprocessing resource usage. Start "
             "the server with --trust-request-mm-kwargs only when clients "
@@ -79,7 +79,7 @@ def validate_request_mm_kwargs(
             parameter="mm_processor_kwargs",
         )
     if media_io_kwargs:
-        raise AphroditeValidationError(
+        raise SonarValidationError(
             "Per-request media_io_kwargs are disabled by default because "
             "they can change multimodal media loading resource usage. Start "
             "the server with --trust-request-mm-kwargs only when clients "
@@ -210,7 +210,7 @@ def validate_structural_tag_response_format(
         try:
             response_format = TypeAdapter(AnyStructuralTagResponseFormat).validate_python(response_format)
         except ValidationError as exc:
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 "Invalid response_format structural_tag specification.",
                 parameter="response_format",
             ) from exc
@@ -220,22 +220,22 @@ def validate_structural_tag_response_format(
         payload = json.dumps(response_format.model_dump(by_alias=True))
         validate_structural_tag_payload(payload, parameter="response_format")
     except (TypeError, ValueError) as exc:
-        raise AphroditeValidationError(
+        raise SonarValidationError(
             "Invalid response_format structural_tag specification.",
             parameter="response_format",
         ) from exc
 
 
 def validate_structural_tag_payload(payload: Any, *, parameter: str) -> None:
-    from aphrodite.sampling_params import (
+    from sonar.sampling_params import (
         SamplingParams,
         StructuredOutputsParams,
         check_json_nesting,
     )
-    from aphrodite.v1.structured_output.backend_xgrammar import validate_xgrammar_grammar
+    from sonar.v1.structured_output.backend_xgrammar import validate_xgrammar_grammar
 
     if isinstance(payload, str) and not payload:
-        raise AphroditeValidationError(
+        raise SonarValidationError(
             f"Invalid {parameter} structural_tag specification.",
             parameter=parameter,
         )
@@ -245,8 +245,8 @@ def validate_structural_tag_payload(payload: Any, *, parameter: str) -> None:
         check_json_nesting(payload, structural_tag=True)
     try:
         validate_xgrammar_grammar(SamplingParams(structured_outputs=StructuredOutputsParams(structural_tag=payload)))
-    except (TypeError, ValueError, AphroditeValidationError) as exc:
-        raise AphroditeValidationError(
+    except (TypeError, ValueError, SonarValidationError) as exc:
+        raise SonarValidationError(
             f"Invalid {parameter} structural_tag specification.",
             parameter=parameter,
         ) from exc
@@ -255,7 +255,7 @@ def validate_structural_tag_payload(payload: Any, *, parameter: str) -> None:
 def validate_structured_outputs_structural_tag(
     structured_outputs: Any,
 ) -> None:
-    from aphrodite.sampling_params import StructuredOutputsParams
+    from sonar.sampling_params import StructuredOutputsParams
 
     if isinstance(structured_outputs, StructuredOutputsParams):
         structural_tag = structured_outputs.structural_tag

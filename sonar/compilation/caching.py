@@ -15,15 +15,15 @@ from torch._subclasses import FakeTensorMode
 from torch.fx._graph_pickler import GraphPickler, Options
 from torch.utils import _pytree as pytree
 
-import aphrodite.envs as envs
-from aphrodite.compilation.codegen import compile_execution_fn
-from aphrodite.compilation.compiler_interface import get_inductor_factors
-from aphrodite.compilation.counter import compilation_counter
-from aphrodite.config import AphroditeConfig, get_current_aphrodite_config
-from aphrodite.config.utils import hash_factors
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.utils.hashing import safe_hash
+import sonar.envs as envs
+from sonar.compilation.codegen import compile_execution_fn
+from sonar.compilation.compiler_interface import get_inductor_factors
+from sonar.compilation.counter import compilation_counter
+from sonar.config import SonarConfig, get_current_sonar_config
+from sonar.config.utils import hash_factors
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.utils.hashing import safe_hash
 
 try:
     from torch._dynamo.aot_compile import SerializableCallable
@@ -163,8 +163,8 @@ def patch_pytree_map_over_slice():
         pytree._deregister_pytree_node(slice)
 
 
-class AphroditeSerializableFunction(SerializableCallable):  # type: ignore[misc]
-    """A wrapper around a compiled function by aphrodite. It will forward the tensor
+class SonarSerializableFunction(SerializableCallable):  # type: ignore[misc]
+    """A wrapper around a compiled function by sonar. It will forward the tensor
     inputs to the compiled function and return the result.
     It also implements a serialization interface to support PyTorch's precompile
     with custom backend, so that we can save and load the compiled function on
@@ -181,7 +181,7 @@ class AphroditeSerializableFunction(SerializableCallable):  # type: ignore[misc]
         prefix: str,
         optimized_call: Callable[..., Any],
         is_encoder: bool = False,
-        aphrodite_backend: Any | None = None,
+        sonar_backend: Any | None = None,
         sym_tensor_indices: list[int] | None = None,
         aot_autograd_config: dict[str, Any] | None = None,
         execution_code: str | None = None,
@@ -194,7 +194,7 @@ class AphroditeSerializableFunction(SerializableCallable):  # type: ignore[misc]
         self.optimized_call = optimized_call
         self.is_encoder = is_encoder
         self.shape_env = None
-        self.aphrodite_backend = aphrodite_backend
+        self.sonar_backend = sonar_backend
         self.sym_tensor_indices = sym_tensor_indices
         self.execution_code = execution_code
         self.submod_names = submod_names
@@ -236,11 +236,11 @@ class AphroditeSerializableFunction(SerializableCallable):  # type: ignore[misc]
             return GraphPickler.loads(data, fake_mode)
 
     @classmethod
-    def serialize_compile_artifacts(cls, compiled_fn: "AphroditeSerializableFunction") -> bytes:
+    def serialize_compile_artifacts(cls, compiled_fn: "SonarSerializableFunction") -> bytes:
         state = compiled_fn.__dict__.copy()
         state.pop("optimized_call")
         state.pop("shape_env")
-        state.pop("aphrodite_backend", None)
+        state.pop("sonar_backend", None)
         state.pop("_fake_mode", None)
         for node in state["graph_module"].graph.nodes:
             node.meta.pop("source_fn_stack", None)
@@ -270,19 +270,19 @@ class AphroditeSerializableFunction(SerializableCallable):  # type: ignore[misc]
         state["graph_module"] = cls.serialize_graph_module(state["graph_module"])
         state["example_inputs"] = GraphPickler.dumps(state["example_inputs"])
 
-        if compiled_fn.aphrodite_backend:
+        if compiled_fn.sonar_backend:
             (
                 standalone_compile_artifacts,
                 sym_shape_indices_map,
                 returns_tuple_map,
-            ) = compiled_fn.aphrodite_backend.collect_standalone_compile_artifacts()
+            ) = compiled_fn.sonar_backend.collect_standalone_compile_artifacts()
             state["standalone_compile_artifacts"] = standalone_compile_artifacts
             state["sym_shape_indices_map"] = sym_shape_indices_map
             state["returns_tuple_map"] = returns_tuple_map
         return pickle.dumps(state)
 
     @classmethod
-    def deserialize_compile_artifacts(cls, data: bytes) -> "AphroditeSerializableFunction":
+    def deserialize_compile_artifacts(cls, data: bytes) -> "SonarSerializableFunction":
         from torch._guards import TracingContext, tracing
         from torch.fx.experimental.symbolic_shapes import ShapeEnv
 
@@ -301,7 +301,7 @@ class AphroditeSerializableFunction(SerializableCallable):  # type: ignore[misc]
         else:
             functorch_ctx = contextlib.nullcontext()
 
-        if envs.APHRODITE_USE_MEGA_AOT_ARTIFACT:
+        if envs.SONAR_USE_MEGA_AOT_ARTIFACT:
             assert standalone_compile_artifacts is not None
             submod_names = standalone_compile_artifacts.submodule_names()
             num_submods = len(submod_names)
@@ -311,7 +311,7 @@ class AphroditeSerializableFunction(SerializableCallable):  # type: ignore[misc]
                 fn = reconstruct_serializable_fn_from_mega_artifact(
                     state=state,
                     standalone_compile_artifacts=standalone_compile_artifacts,
-                    aphrodite_config=get_current_aphrodite_config(),
+                    sonar_config=get_current_sonar_config(),
                     sym_shape_indices_map=sym_shape_indices_map,
                     returns_tuple_map=returns_tuple_map,
                     fake_mode=fake_mode,
@@ -328,29 +328,29 @@ class AphroditeSerializableFunction(SerializableCallable):  # type: ignore[misc]
         state["graph_module"] = cls.deserialize_graph_module(state["graph_module"], fake_mode)
         state["graph_module"].recompile()
 
-        # Fall back to standard AphroditeBackend.
+        # Fall back to standard SonarBackend.
         # Use a lazy closure: the backend needs traced_files for cache
         # dir computation, but those are only populated after
         # _verify_source_unchanged runs in decorators.py (which happens
         # after deserialization completes).
-        from aphrodite.compilation.backends import AphroditeBackend
+        from sonar.compilation.backends import SonarBackend
 
         is_encoder = state.get("is_encoder", False)
-        aphrodite_config = get_current_aphrodite_config()
+        sonar_config = get_current_sonar_config()
         compile_inputs = list(state["example_inputs"])
 
         def optimized_call(*example_inputs: Any) -> Any:
-            aphrodite_backend: AphroditeBackend = AphroditeBackend(aphrodite_config, state["prefix"], is_encoder)
+            sonar_backend: SonarBackend = SonarBackend(sonar_config, state["prefix"], is_encoder)
             with tracing(TracingContext(fake_mode)), functorch_ctx:
-                fn.optimized_call = aphrodite_backend(state["graph_module"], compile_inputs).optimized_call
-                fn.aphrodite_backend = aphrodite_backend
+                fn.optimized_call = sonar_backend(state["graph_module"], compile_inputs).optimized_call
+                fn.sonar_backend = sonar_backend
             return fn.optimized_call(*example_inputs)
 
         fn = cls(**state, optimized_call=optimized_call)
         fn._fake_mode = fake_mode
         return fn
 
-    def finalize_loading(self, aphrodite_config: AphroditeConfig) -> None:
+    def finalize_loading(self, sonar_config: SonarConfig) -> None:
         """Eagerly initialize the compiled backend and perform all loading.
 
         Must be called after _verify_source_unchanged has populated
@@ -362,7 +362,7 @@ class AphroditeSerializableFunction(SerializableCallable):  # type: ignore[misc]
 
         from torch._guards import TracingContext, tracing
 
-        from aphrodite.compilation.backends import AphroditeBackend
+        from sonar.compilation.backends import SonarBackend
 
         saved_aot_autograd_config = self.aot_autograd_config
         if saved_aot_autograd_config is not None:
@@ -370,29 +370,29 @@ class AphroditeSerializableFunction(SerializableCallable):  # type: ignore[misc]
         else:
             functorch_ctx = contextlib.nullcontext()
 
-        aphrodite_backend = AphroditeBackend(aphrodite_config, self.prefix, self.is_encoder)
+        sonar_backend = SonarBackend(sonar_config, self.prefix, self.is_encoder)
         with tracing(TracingContext(self._fake_mode)), functorch_ctx:
-            result = aphrodite_backend(self.graph_module, list(self.example_inputs))
+            result = sonar_backend(self.graph_module, list(self.example_inputs))
             self.optimized_call = result.optimized_call
-            self.aphrodite_backend = aphrodite_backend
+            self.sonar_backend = sonar_backend
 
         self._fake_mode = None
 
     @property
-    def co_name(self) -> Literal["AphroditeSerializableFunction"]:
+    def co_name(self) -> Literal["SonarSerializableFunction"]:
         """Used for depyf debugging."""
-        return "AphroditeSerializableFunction"
+        return "SonarSerializableFunction"
 
 
 def reconstruct_serializable_fn_from_mega_artifact(
     state: dict[str, Any],
     standalone_compile_artifacts: "StandaloneCompiledArtifacts",
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     sym_shape_indices_map: dict[str, list[int]],
     returns_tuple_map: dict[str, bool],
     fake_mode: FakeTensorMode,
-) -> "AphroditeSerializableFunction":
-    """Construct a AphroditeSerializableFunction from cached inductor artifacts.
+) -> "SonarSerializableFunction":
+    """Construct a SonarSerializableFunction from cached inductor artifacts.
 
     This function reconstructs a callable model from pre-compiled inductor
     artifacts without re-running the compilation. It:
@@ -400,7 +400,7 @@ def reconstruct_serializable_fn_from_mega_artifact(
     2. Builds compiled callables for each submodule/shape
     3. Creates PiecewiseBackend instances that dispatch to cached artifacts
     4. Wraps with cudagraph if needed
-    5. Returns the final AphroditeSerializableFunction
+    5. Returns the final SonarSerializableFunction
 
     Note: This function shares similar logic with PiecewiseCompileInterpreter
     in backends.py. Both create PiecewiseBackend instances and wrap them with
@@ -418,24 +418,24 @@ def reconstruct_serializable_fn_from_mega_artifact(
             prefix, sym_tensor_indices, is_encoder, etc.
         standalone_compile_artifacts: The StandaloneCompiledArtifacts containing
             pre-compiled artifacts for each submodule/shape combination.
-        aphrodite_config: The Aphrodite configuration.
+        sonar_config: The Sonar configuration.
         sym_shape_indices_map: Mapping from submod_name to sym_shape_indices.
         returns_tuple_map: Mapping from submod_name to returns_tuple.
 
     Returns:
-        A AphroditeSerializableFunction that can be called directly.
+        A SonarSerializableFunction that can be called directly.
 
     """
-    from aphrodite.compilation.backends import (
-        AphroditeBackend,
+    from sonar.compilation.backends import (
+        SonarBackend,
         make_copy_and_call,
         wrap_with_cudagraph_if_needed,
     )
-    from aphrodite.compilation.piecewise_backend import PiecewiseBackend
+    from sonar.compilation.piecewise_backend import PiecewiseBackend
 
     prefix = state["prefix"]
     is_encoder = state.get("is_encoder", False)
-    compilation_config = aphrodite_config.compilation_config
+    compilation_config = sonar_config.compilation_config
 
     standalone_compile_artifacts.load_all()
 
@@ -448,10 +448,10 @@ def reconstruct_serializable_fn_from_mega_artifact(
             submod_name, shape_str
         )
 
-    aphrodite_backend = AphroditeBackend(aphrodite_config, prefix, is_encoder)
-    dummy_cache_dir = os.path.join(envs.APHRODITE_CACHE_ROOT, "dummy_cache")
+    sonar_backend = SonarBackend(sonar_config, prefix, is_encoder)
+    dummy_cache_dir = os.path.join(envs.SONAR_CACHE_ROOT, "dummy_cache")
     os.makedirs(dummy_cache_dir, exist_ok=True)
-    aphrodite_backend.compiler_manager.initialize_cache(
+    sonar_backend.compiler_manager.initialize_cache(
         cache_dir=dummy_cache_dir,
         disable_cache=True,
         prefix=prefix,
@@ -474,11 +474,11 @@ def reconstruct_serializable_fn_from_mega_artifact(
 
         piecewise_backend = PiecewiseBackend(
             graph=None,  # not needed for cached artifacts
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             piecewise_compile_index=i,
             total_piecewise_compiles=len(piecewise_submod_names),
             sym_shape_indices=sym_shape_indices,
-            aphrodite_backend=aphrodite_backend,
+            sonar_backend=sonar_backend,
             returns_tuple=returns_tuple,
             compiled_runnables=runnables,
         )
@@ -487,7 +487,7 @@ def reconstruct_serializable_fn_from_mega_artifact(
         is_last = i == len(piecewise_submod_names) - 1
         wrapped_backend = wrap_with_cudagraph_if_needed(
             piecewise_backend,
-            aphrodite_config,
+            sonar_config,
             compilation_config,
             is_first,
             is_last,
@@ -512,35 +512,35 @@ def reconstruct_serializable_fn_from_mega_artifact(
     if compilation_config.cudagraph_copy_inputs:
         sym_tensor_indices = state["sym_tensor_indices"]
         input_buffers = [
-            torch.empty_like(state["example_inputs"][idx], device=aphrodite_config.device_config.device)
+            torch.empty_like(state["example_inputs"][idx], device=sonar_config.device_config.device)
             for idx in sym_tensor_indices
         ]
         optimized_call = make_copy_and_call(sym_tensor_indices, input_buffers, runtime_callable)
     else:
         optimized_call = runtime_callable
 
-    fn = AphroditeSerializableFunction(
+    fn = SonarSerializableFunction(
         **state,
         optimized_call=optimized_call,
-        aphrodite_backend=None,
+        sonar_backend=None,
     )
     return fn
 
 
-def aot_compile_hash_factors(aphrodite_config: AphroditeConfig) -> list[str]:
+def aot_compile_hash_factors(sonar_config: SonarConfig) -> list[str]:
     factors = []
     # 0. factors come from the env, for example, The values of
-    # APHRODITE_PP_LAYER_PARTITION will affect the computation graph.
+    # SONAR_PP_LAYER_PARTITION will affect the computation graph.
     env_hash = hash_factors(envs.compile_factors())
     factors.append(env_hash)
 
-    # 1. factors come from the aphrodite_config (it mainly summarizes how the
+    # 1. factors come from the sonar_config (it mainly summarizes how the
     #    model is created)
-    config_hash = aphrodite_config.compute_hash()
+    config_hash = sonar_config.compute_hash()
     factors.append(config_hash)
 
     # 2. inductor factors if applicable
-    if envs.APHRODITE_USE_MEGA_AOT_ARTIFACT:
+    if envs.SONAR_USE_MEGA_AOT_ARTIFACT:
         factors.extend(get_inductor_factors())
 
     return factors

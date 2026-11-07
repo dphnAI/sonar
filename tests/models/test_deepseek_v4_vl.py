@@ -8,7 +8,7 @@ import pytest
 import torch
 from torch import nn
 
-from aphrodite.model_executor.models.utils import WeightsMapper
+from sonar.model_executor.models.utils import WeightsMapper
 
 
 class _FakeLanguageModel(nn.Module):
@@ -26,11 +26,11 @@ class _FakeLanguageModel(nn.Module):
     "module,cls_name",
     [
         (
-            "aphrodite.models.deepseek_v4.common.vl_model",
+            "sonar.models.deepseek_v4.common.vl_model",
             "DeepseekV4ForConditionalGeneration",
         ),
-        ("aphrodite.models.deepseek_v41.nvidia.vl_model", "DeepseekV41ForCausalLM"),
-        ("aphrodite.models.deepseek_v41.amd.vl_model", "DeepseekV41ForCausalLM"),
+        ("sonar.models.deepseek_v41.nvidia.vl_model", "DeepseekV41ForCausalLM"),
+        ("sonar.models.deepseek_v41.amd.vl_model", "DeepseekV41ForCausalLM"),
     ],
     ids=["v4", "v41-nvidia", "v41-amd"],
 )
@@ -42,7 +42,7 @@ def test_vl_wrapper_delegates_finalization_to_hook(module, cls_name) -> None:
     model.language_model = _FakeLanguageModel()
     model.vision = nn.Module()
     model.vision.tensor_b = nn.Parameter(torch.zeros(1))
-    model.hf_to_aphrodite_mapper = WeightsMapper()
+    model.hf_to_sonar_mapper = WeightsMapper()
 
     def interleaved_weights():
         yield "language_model.tensor_a", torch.tensor([1.0])

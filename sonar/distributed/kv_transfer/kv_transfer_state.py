@@ -2,16 +2,16 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 from typing import TYPE_CHECKING
 
-from aphrodite.distributed.kv_transfer.kv_connector.base import KVConnectorBaseType
-from aphrodite.distributed.kv_transfer.kv_connector.factory import KVConnectorFactory
-from aphrodite.distributed.kv_transfer.kv_connector.v1 import (
+from sonar.distributed.kv_transfer.kv_connector.base import KVConnectorBaseType
+from sonar.distributed.kv_transfer.kv_connector.factory import KVConnectorFactory
+from sonar.distributed.kv_transfer.kv_connector.v1 import (
     KVConnectorBase_V1,
     KVConnectorRole,
 )
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
-    from aphrodite.v1.kv_cache_interface import KVCacheConfig
+    from sonar.config import SonarConfig
+    from sonar.v1.kv_cache_interface import KVCacheConfig
 
 _KV_CONNECTOR_AGENT: KVConnectorBaseType | None = None
 
@@ -47,38 +47,38 @@ def is_v1_kv_transfer_group(connector: KVConnectorBaseType | None = None) -> boo
     return isinstance(connector, KVConnectorBase_V1)
 
 
-def _sync_engine_id_across_tp(aphrodite_config: "AphroditeConfig") -> None:
+def _sync_engine_id_across_tp(sonar_config: "SonarConfig") -> None:
     """Broadcast engine_id from TP rank 0 so all workers in a
     multi-node TP group share the same value.
 
     When PP is enabled, also broadcast across PP ranks so all workers in
     the same model-parallel engine share the same value.
     """
-    from aphrodite.distributed.parallel_state import (
+    from sonar.distributed.parallel_state import (
         get_pp_group,
         get_tp_group,
     )
 
-    assert aphrodite_config.kv_transfer_config is not None
-    synced_id = get_tp_group().broadcast_object(aphrodite_config.kv_transfer_config.engine_id, src=0)
-    if aphrodite_config.parallel_config.pipeline_parallel_size > 1:
+    assert sonar_config.kv_transfer_config is not None
+    synced_id = get_tp_group().broadcast_object(sonar_config.kv_transfer_config.engine_id, src=0)
+    if sonar_config.parallel_config.pipeline_parallel_size > 1:
         synced_id = get_pp_group().broadcast_object(synced_id, src=0)
-    aphrodite_config.kv_transfer_config.engine_id = synced_id
+    sonar_config.kv_transfer_config.engine_id = synced_id
 
 
-def ensure_kv_transfer_initialized(aphrodite_config: "AphroditeConfig", kv_cache_config: "KVCacheConfig") -> None:
+def ensure_kv_transfer_initialized(sonar_config: "SonarConfig", kv_cache_config: "KVCacheConfig") -> None:
     """Initialize KV cache transfer parallel group."""
     global _KV_CONNECTOR_AGENT
 
     if _KV_CONNECTOR_AGENT is not None:
         return
 
-    kv_transfer_config = aphrodite_config.kv_transfer_config
+    kv_transfer_config = sonar_config.kv_transfer_config
     if kv_transfer_config is not None and kv_transfer_config.is_kv_transfer_instance:
-        _sync_engine_id_across_tp(aphrodite_config)
+        _sync_engine_id_across_tp(sonar_config)
 
         _KV_CONNECTOR_AGENT = KVConnectorFactory.create_connector(
-            config=aphrodite_config,
+            config=sonar_config,
             role=KVConnectorRole.WORKER,
             kv_cache_config=kv_cache_config,
         )

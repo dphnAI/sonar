@@ -7,15 +7,15 @@ from typing import TYPE_CHECKING
 import torch
 import torch.distributed as dist
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed import get_tp_group
-from aphrodite.distributed.parallel_state import in_the_same_node_as
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.linear import LinearBase, UnquantizedLinearMethod
-from aphrodite.platforms import current_platform
+from sonar.config import SonarConfig
+from sonar.distributed import get_tp_group
+from sonar.distributed.parallel_state import in_the_same_node_as
+from sonar.logger import init_logger
+from sonar.model_executor.layers.linear import LinearBase, UnquantizedLinearMethod
+from sonar.platforms import current_platform
 
 if TYPE_CHECKING:
-    from aphrodite.models.common.ops.gemm_rs_ar import GemmRsAr
+    from sonar.models.common.ops.gemm_rs_ar import GemmRsAr
 
 logger = init_logger(__name__)
 
@@ -59,18 +59,18 @@ class MuseSparkGemmRs:
         return self.kernel(x, weight)
 
 
-def maybe_create_gemm_rs(aphrodite_config: AphroditeConfig, projections: list[LinearBase]) -> MuseSparkGemmRs | None:
+def maybe_create_gemm_rs(sonar_config: SonarConfig, projections: list[LinearBase]) -> MuseSparkGemmRs | None:
     """Collectively create a workspace for the measured B300 TP4/TP8 deployments."""
-    pc = aphrodite_config.parallel_config
+    pc = sonar_config.parallel_config
     if (
         not current_platform.is_cuda()
         or not current_platform.is_device_capability(103)
         or pc.tensor_parallel_size not in (4, 8)
         or pc.pipeline_parallel_size != 1
         or pc.use_ubatching
-        or aphrodite_config.lora_config is not None
-        or aphrodite_config.model_config.dtype != torch.bfloat16
-        or aphrodite_config.scheduler_config.max_num_batched_tokens < 512
+        or sonar_config.lora_config is not None
+        or sonar_config.model_config.dtype != torch.bfloat16
+        or sonar_config.scheduler_config.max_num_batched_tokens < 512
     ):
         return None
     tp_group = get_tp_group()
@@ -86,13 +86,13 @@ def maybe_create_gemm_rs(aphrodite_config: AphroditeConfig, projections: list[Li
     if not current_platform.is_fully_connected(physical_ids):
         return None
 
-    from aphrodite.models.common.ops.gemm_rs_ar import (
+    from sonar.models.common.ops.gemm_rs_ar import (
         GemmRsAr,
         Sm100GemmRsArBF16,
     )
 
     try:
-        kernel = GemmRsAr(max_M=aphrodite_config.scheduler_config.max_num_batched_tokens, N=8192)
+        kernel = GemmRsAr(max_M=sonar_config.scheduler_config.max_num_batched_tokens, N=8192)
     except RuntimeError as exc:
         logger.warning_once(
             "Muse Spark GEMM-RS workspace unavailable; using separate GEMM and reduce-scatter: %s",

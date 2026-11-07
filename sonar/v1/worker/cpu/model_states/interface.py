@@ -6,16 +6,16 @@ from typing import Any
 import torch
 import torch.nn as nn
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.tasks import GenerationTask
-from aphrodite.v1.core.sched.output import NewRequestData
-from aphrodite.v1.kv_cache_interface import KVCacheConfig
-from aphrodite.v1.worker.cpu.block_table import CPUBlockTables
-from aphrodite.v1.worker.cpu.encoder_cache import EncoderCache
-from aphrodite.v1.worker.cpu.encoder_runner import EncoderRunner
-from aphrodite.v1.worker.cpu.input_batch import InputBatch
-from aphrodite.v1.worker.cpu.states import CPURequestState
-from aphrodite.v1.worker.utils import AttentionGroup
+from sonar.config import SonarConfig
+from sonar.tasks import GenerationTask
+from sonar.v1.core.sched.output import NewRequestData
+from sonar.v1.kv_cache_interface import KVCacheConfig
+from sonar.v1.worker.cpu.block_table import CPUBlockTables
+from sonar.v1.worker.cpu.encoder_cache import EncoderCache
+from sonar.v1.worker.cpu.encoder_runner import EncoderRunner
+from sonar.v1.worker.cpu.input_batch import InputBatch
+from sonar.v1.worker.cpu.states import CPURequestState
+from sonar.v1.worker.utils import AttentionGroup
 
 
 class ModelSpecificAttnMetadata:
@@ -31,14 +31,14 @@ class ModelSpecificAttnMetadata:
 class ModelState(ABC):
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         model: nn.Module,
         encoder_cache: EncoderCache | None,
         device: torch.device,
     ) -> None:
-        self.aphrodite_config = aphrodite_config
-        self.model_config = aphrodite_config.model_config
-        self.scheduler_config = aphrodite_config.scheduler_config
+        self.sonar_config = sonar_config
+        self.model_config = sonar_config.model_config
+        self.scheduler_config = sonar_config.scheduler_config
         self.model = model
         self.device = device
 
@@ -50,7 +50,7 @@ class ModelState(ABC):
         self.supports_mm_inputs = encoder_cache is not None
         if encoder_cache is not None:
             self.encoder_cache = encoder_cache
-            observability_config = aphrodite_config.observability_config
+            observability_config = sonar_config.observability_config
             self.encoder_runner = EncoderRunner(
                 model=self.model,
                 max_num_tokens=self.max_num_tokens,
@@ -67,11 +67,11 @@ class ModelState(ABC):
         return self.model_config.max_model_len
 
     def get_supported_generation_tasks(self) -> tuple[GenerationTask, ...]:
-        from aphrodite.model_executor.models.interfaces import (
+        from sonar.model_executor.models.interfaces import (
             supports_realtime,
             supports_transcription,
         )
-        from aphrodite.model_executor.models.interfaces_base import is_text_generation_model
+        from sonar.model_executor.models.interfaces_base import is_text_generation_model
 
         supported_tasks = list[GenerationTask]()
         if is_text_generation_model(self.model):

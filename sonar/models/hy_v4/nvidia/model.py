@@ -32,23 +32,23 @@ import torch
 from torch import nn
 from transformers import PreTrainedConfig
 
-from aphrodite.config import AphroditeConfig, CacheConfig
-from aphrodite.distributed import (
+from sonar.config import CacheConfig, SonarConfig
+from sonar.distributed import (
     get_pp_group,
 )
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe import fused_moe_make_expert_params_mapping
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe import fused_moe_make_expert_params_mapping
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
-from aphrodite.model_executor.models.deepseek_v2 import _try_load_fp8_indexer_wk
-from aphrodite.model_executor.models.interfaces import SupportsLoRA, SupportsPP
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.model_loader.weight_utils import default_weight_loader
+from sonar.model_executor.models.deepseek_v2 import _try_load_fp8_indexer_wk
+from sonar.model_executor.models.interfaces import SupportsLoRA, SupportsPP
+from sonar.model_executor.models.utils import (
     AutoWeightsLoader,
     PPMissingLayer,
     WeightsMapper,
@@ -61,8 +61,8 @@ from aphrodite.model_executor.models.utils import (
     maybe_prefix,
     pp_topk_buffers,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.sequence import IntermediateTensors
+from sonar.platforms import current_platform
+from sonar.sequence import IntermediateTensors
 
 from .attention import (
     HYV4MLAAttention,
@@ -96,7 +96,7 @@ class HYV4DecoderLayer(nn.Module):
     def __init__(
         self,
         config: PreTrainedConfig,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         cache_config: CacheConfig | None = None,
         quant_config: QuantizationConfig | None = None,
         prefix: str = "",
@@ -111,7 +111,7 @@ class HYV4DecoderLayer(nn.Module):
 
         max_position_embeddings = getattr(config, "max_position_embeddings", 8192)
         self.self_attn = HYV4MLAAttention(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             config=config,
             hidden_size=self.hidden_size,
             num_heads=config.num_attention_heads,
@@ -207,13 +207,13 @@ class HYV4DecoderLayer(nn.Module):
 class HYV4Model(nn.Module):
     """HY V4 backbone."""
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
 
-        config = _normalize_hyv4_config(aphrodite_config.model_config.hf_config)
-        cache_config = aphrodite_config.cache_config
-        quant_config = aphrodite_config.quant_config
-        parallel_config = aphrodite_config.parallel_config
+        config = _normalize_hyv4_config(sonar_config.model_config.hf_config)
+        cache_config = sonar_config.cache_config
+        quant_config = sonar_config.quant_config
+        parallel_config = sonar_config.parallel_config
         eplb_config = parallel_config.eplb_config
         self.num_redundant_experts = eplb_config.num_redundant_experts
         self.device = current_platform.device_type
@@ -221,7 +221,7 @@ class HYV4Model(nn.Module):
         self.is_sparse = hasattr(config, "index_topk")
         if self.is_sparse:
             self.topk_indices_buffer = torch.empty(
-                aphrodite_config.scheduler_config.max_num_batched_tokens,
+                sonar_config.scheduler_config.max_num_batched_tokens,
                 config.index_topk,
                 dtype=torch.int32,
                 device=self.device,
@@ -243,7 +243,7 @@ class HYV4Model(nn.Module):
             config.num_hidden_layers,
             lambda prefix: HYV4DecoderLayer(
                 config=config,
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 cache_config=cache_config,
                 quant_config=quant_config,
                 prefix=prefix,
@@ -468,7 +468,7 @@ class HYV4Model(nn.Module):
                 continue
             # Names and stacked shard ids are normalized upstream by
             # AutoWeightsLoader, through quant_config.get_cache_scale_mapper()
-            # and hf_to_aphrodite_mapper.
+            # and hf_to_sonar_mapper.
             stacked_shard_id = getattr(loaded_weight, "shard_id", None)
             if ".indexer.wk." in name:
                 name = name.replace(".indexer.wk.", ".indexer.wk_weights_proj.")
@@ -585,7 +585,7 @@ class HYV4Model(nn.Module):
 
 
 class HYV4ForCausalLM(nn.Module, SupportsPP, SupportsLoRA):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_stacked={
             ".q_a_proj": (".fused_qkv_a_proj", 0),
             ".kv_a_proj_with_mqa": (".fused_qkv_a_proj", 1),
@@ -604,20 +604,20 @@ class HYV4ForCausalLM(nn.Module, SupportsPP, SupportsLoRA):
         "wk_weights_proj": ["wk", "weights_proj"],
     }
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
         self.config = config
         self.quant_config = quant_config
         if quant_config is not None:
             quant_config.packed_modules_mapping = self.packed_modules_mapping
 
-        parallel_config = aphrodite_config.parallel_config
+        parallel_config = sonar_config.parallel_config
         eplb_config = parallel_config.eplb_config
         self.num_redundant_experts = eplb_config.num_redundant_experts
 
-        self.model = HYV4Model(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = HYV4Model(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
         if get_pp_group().is_last_rank:
             # The head stays in the model dtype; ``enable_lm_head_fp32`` is
             # surfaced as ``head_dtype`` on the config (see HYV4Config), which
@@ -673,7 +673,7 @@ class HYV4ForCausalLM(nn.Module, SupportsPP, SupportsLoRA):
             drop_prefixes["lm_head."] = None
         drop_mapper = WeightsMapper(orig_to_new_prefix=drop_prefixes)
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper | drop_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper | drop_mapper)
 
     def get_expert_mapping(self) -> list[tuple[str, str, int, str]]:
         return self.model.get_expert_mapping()

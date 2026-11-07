@@ -3,8 +3,8 @@
 
 from __future__ import annotations
 
-from aphrodite.parser.engine.registered_adapters import Glm47MoeParserToolAdapter
-from aphrodite.tool_parsers.tool_strict_level import ToolStrictLevel
+from sonar.parser.engine.registered_adapters import Glm47MoeParserToolAdapter
+from sonar.tool_parsers.tool_strict_level import ToolStrictLevel
 
 
 class Glm47MoeModelToolParser(Glm47MoeParserToolAdapter):  # type: ignore[valid-type, misc]

@@ -4,20 +4,20 @@ from collections.abc import Callable
 
 import torch
 
-import aphrodite._custom_ops as ops
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.distributed.eplb.eplb_state import EplbLayerState
-from aphrodite.model_executor.layers.fused_moe.config import (
+import sonar._custom_ops as ops
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.distributed.eplb.eplb_state import EplbLayerState
+from sonar.model_executor.layers.fused_moe.config import (
     RoutingMethodType,
     get_routing_method_type,
 )
-from aphrodite.model_executor.layers.fused_moe.router.base_router import (
+from sonar.model_executor.layers.fused_moe.router.base_router import (
     BaseRouter,
     get_moe_padding_mask,
 )
 
 
-def aphrodite_topk_softmax(
+def sonar_topk_softmax(
     topk_weights: torch.Tensor,
     topk_indices: torch.Tensor,
     token_expert_indices: torch.Tensor,
@@ -36,7 +36,7 @@ def aphrodite_topk_softmax(
     return topk_weights, topk_indices
 
 
-def aphrodite_topk_sigmoid(
+def sonar_topk_sigmoid(
     topk_weights: torch.Tensor,
     topk_indices: torch.Tensor,
     token_expert_indices: torch.Tensor,
@@ -120,7 +120,7 @@ def dispatch_topk_softmax_func(
         ):
             return rocm_aiter_ops.topk_gating
         return rocm_aiter_ops.topk_softmax
-    return aphrodite_topk_softmax
+    return sonar_topk_softmax
 
 
 def dispatch_topk_sigmoid_func(
@@ -128,7 +128,7 @@ def dispatch_topk_sigmoid_func(
 ) -> Callable[..., tuple[torch.Tensor, ...]]:
     if use_rocm_aiter:
         return rocm_aiter_ops.topk_sigmoid
-    return aphrodite_topk_sigmoid
+    return sonar_topk_sigmoid
 
 
 def fused_topk(

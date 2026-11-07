@@ -12,9 +12,9 @@ import time
 
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
+from sonar import _custom_ops as ops
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
 
 
 # Consumed by kimi_k3_triton_warmup.py during kernel_warmup().

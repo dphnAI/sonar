@@ -21,7 +21,7 @@ HEADER_SAGEMAKER_NEW_SESSION_ID = "X-Amzn-SageMaker-New-Session-Id"
 @pytest.fixture(scope="session")
 def smollm2_lora_files():
     """Download LoRA files once per test session."""
-    from aphrodite.transformers_utils.repo_utils import hf_api
+    from sonar.transformers_utils.repo_utils import hf_api
 
     return hf_api().snapshot_download(repo_id=LORA_ADAPTER_NAME_SMOLLM)
 
@@ -46,7 +46,7 @@ def basic_server_with_lora(smollm2_lora_files):
     ]
 
     envs = {
-        "APHRODITE_ALLOW_RUNTIME_LORA_UPDATING": "True",
+        "SONAR_ALLOW_RUNTIME_LORA_UPDATING": "True",
         "SAGEMAKER_ENABLE_STATEFUL_SESSIONS": "True",
     }
     with RemoteOpenAIServer(MODEL_NAME_SMOLLM, args, env_dict=envs) as remote_server:

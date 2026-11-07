@@ -7,19 +7,19 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 # Import kernels
-import aphrodite.kernels  # noqa: F401
-from aphrodite import envs, ir
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.custom_op import CustomOp
-from aphrodite.model_executor.determinism.batch_invariant import rms_norm_batch_invariant
-from aphrodite.model_executor.utils import set_weight_attrs
-from aphrodite.utils.torch_utils import direct_register_custom_op
+import sonar.kernels  # noqa: F401
+from sonar import envs, ir
+from sonar.logger import init_logger
+from sonar.model_executor.custom_op import CustomOp
+from sonar.model_executor.determinism.batch_invariant import rms_norm_batch_invariant
+from sonar.model_executor.utils import set_weight_attrs
+from sonar.utils.torch_utils import direct_register_custom_op
 
 logger = init_logger(__name__)
 
 
 def poly_norm(x: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor, variance_epsilon: float) -> torch.Tensor:
-    from aphrodite import _custom_ops as ops
+    from sonar import _custom_ops as ops
 
     out = torch.empty_like(x)
     ops.poly_norm(  # type: ignore[attr-defined]
@@ -99,7 +99,7 @@ class RMSNorm(CustomOp):
         x: torch.Tensor,
         residual: torch.Tensor | None = None,
     ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
-        if envs.APHRODITE_BATCH_INVARIANT:
+        if envs.SONAR_BATCH_INVARIANT:
             assert self.variance_size_override is None, "Batch invariance is not supported for variance_size_override"
             pass_weight = self.pass_weight_add if residual is not None else self.pass_weight
             return rms_norm_batch_invariant(
@@ -116,7 +116,7 @@ class RMSNorm(CustomOp):
         x: torch.Tensor,
         residual: torch.Tensor | None = None,
     ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
-        if envs.APHRODITE_BATCH_INVARIANT and residual is not None:
+        if envs.SONAR_BATCH_INVARIANT and residual is not None:
             assert self.variance_size_override is None, "Batch invariance is not supported for variance_size_override"
             weight = self.weight.data if self.pass_weight_add else None
             return ir.ops.fused_add_rms_norm.impls["native"].impl_fn(x, residual, weight, self.variance_epsilon)
@@ -173,7 +173,7 @@ class GemmaRMSNorm(CustomOp):
         x: torch.Tensor,
         residual: torch.Tensor | None = None,
     ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
-        if envs.APHRODITE_BATCH_INVARIANT:
+        if envs.SONAR_BATCH_INVARIANT:
             if residual is None:
                 return self.forward_cuda(x, residual)
             return ir.ops.fused_add_rms_norm.impls["native"].impl_fn(
@@ -182,7 +182,7 @@ class GemmaRMSNorm(CustomOp):
                 self.weight.float() + 1.0,
                 self.variance_epsilon,
             )
-        import aphrodite._xpu_ops  # noqa: F401 registers torch.ops.aphrodite.xpu_gemma_rms_norm
+        import sonar._xpu_ops  # noqa: F401 registers torch.ops.sonar.xpu_gemma_rms_norm
 
         # Fall back to the native path if the fused gemma kernels are not
         # available in the installed vllm-xpu-kernels package.
@@ -192,12 +192,12 @@ class GemmaRMSNorm(CustomOp):
         # Pass the raw (bf16/fp16) weight; the +1 offset and the fp32 multiply
         # are folded into the kernel (matches forward_native numerics).
         if residual is not None:
-            torch.ops.aphrodite.xpu_fused_add_gemma_rms_norm(x, residual, self.weight.data, self.variance_epsilon)
+            torch.ops.sonar.xpu_fused_add_gemma_rms_norm(x, residual, self.weight.data, self.variance_epsilon)
             return x, residual
         # empty_like preserves x's strides, but the kernel requires a
         # contiguous out (unlike x, which it can handle non-contiguous).
         out = torch.empty(x.shape, device=x.device, dtype=x.dtype)
-        torch.ops.aphrodite.xpu_gemma_rms_norm(out, x, self.weight.data, self.variance_epsilon)
+        torch.ops.sonar.xpu_gemma_rms_norm(out, x, self.weight.data, self.variance_epsilon)
         return out
 
 
@@ -255,7 +255,7 @@ class LayerNorm(CustomOp):
         return self.forward_native(x)
 
     def forward_xpu(self, x: torch.Tensor) -> torch.Tensor:
-        import aphrodite._xpu_ops  # noqa: F401 registers torch.ops.aphrodite.xpu_layer_norm
+        import sonar._xpu_ops  # noqa: F401 registers torch.ops.sonar.xpu_layer_norm
 
         if (
             self.weight is None
@@ -269,7 +269,7 @@ class LayerNorm(CustomOp):
         # empty_like preserves x's strides, but the kernel requires a
         # contiguous out (unlike x, which it can handle non-contiguous).
         out = torch.empty(x.shape, device=x.device, dtype=x.dtype)
-        torch.ops.aphrodite.xpu_layer_norm(out, x, self.weight, self.bias, self.eps)
+        torch.ops.sonar.xpu_layer_norm(out, x, self.weight, self.bias, self.eps)
         return out
 
     def extra_repr(self) -> str:
@@ -393,7 +393,7 @@ class RMSNormGated(CustomOp):
         )
 
     def forward_cuda(self, x: torch.Tensor, z: torch.Tensor | None = None) -> torch.Tensor:
-        return torch.ops.aphrodite.fla_rms_norm_gated(
+        return torch.ops.sonar.fla_rms_norm_gated(
             x,
             z,
             self.weight,
@@ -416,7 +416,7 @@ def _fla_rms_norm_gated(
     norm_before_gate: bool,
     activation: str,
 ) -> torch.Tensor:
-    from aphrodite.third_party.flash_linear_attention.ops.layernorm_guard import (
+    from sonar.third_party.flash_linear_attention.ops.layernorm_guard import (
         rmsnorm_fn,
     )
 

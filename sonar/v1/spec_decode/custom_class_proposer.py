@@ -3,24 +3,24 @@
 
 import importlib
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.logger import init_logger
+from sonar.config import SonarConfig
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 
 
-def create_custom_proposer(aphrodite_config: AphroditeConfig):
+def create_custom_proposer(sonar_config: SonarConfig):
     """Load and instantiate a user-provided proposer class.
 
     The class path is read from ``speculative_config.model``
     (e.g., ``"my_module.MyCustomProposer"``).  The class is
-    imported, instantiated with *aphrodite_config*, and returned
+    imported, instantiated with *sonar_config*, and returned
     directly so the caller can use it without any wrapper.
 
     The returned object must expose a callable ``propose`` method.
     """
-    assert aphrodite_config.speculative_config is not None
-    spec_config = aphrodite_config.speculative_config
+    assert sonar_config.speculative_config is not None
+    spec_config = sonar_config.speculative_config
 
     backend = spec_config.model
     assert backend is not None
@@ -44,11 +44,11 @@ def create_custom_proposer(aphrodite_config: AphroditeConfig):
         )
 
     try:
-        instance = user_class(aphrodite_config)
+        instance = user_class(sonar_config)
     except Exception as e:
         raise RuntimeError(
             f"Failed to instantiate custom proposer class '{backend}': {e}. "
-            "The class constructor must accept AphroditeConfig as argument."
+            "The class constructor must accept SonarConfig as argument."
         ) from e
 
     if not hasattr(instance, "propose"):

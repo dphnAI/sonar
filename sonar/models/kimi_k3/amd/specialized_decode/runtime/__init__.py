@@ -13,7 +13,7 @@ from dataclasses import dataclass
 
 import torch
 
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 
@@ -36,58 +36,58 @@ class DecodeConfig:
     def widths(self) -> tuple[int, ...]:
         """The rows a launch serves: whole requests, at most MAX_TOKENS rows. Every
         uniform verify step up to MAX_TOKENS rows is one of them, so an eager step
-        never pads; a FULL replay pads whole requests the way Aphrodite's stock decode
+        never pads; a FULL replay pads whole requests the way Sonar's stock decode
         does."""
         return tuple(range(self.q, MAX_TOKENS + 1, self.q))
 
 
-def decode_backend(aphrodite_config) -> str:
+def decode_backend(sonar_config) -> str:
     """The requested decode backend: the one place that reads the switch."""
-    extra = aphrodite_config.additional_config
+    extra = sonar_config.additional_config
     return extra.get("decode_backend", AUTO) if isinstance(extra, dict) else AUTO
 
 
-def specialized_decode_config(aphrodite_config) -> DecodeConfig | None:
+def specialized_decode_config(sonar_config) -> DecodeConfig | None:
     """The deployment's specialized decode settings, None for the stock decode.
     Raises when the specialized decode is requested for an unsupported deployment,
     listing every reason."""
-    backend = decode_backend(aphrodite_config)
+    backend = decode_backend(sonar_config)
     if backend == AUTO:
         return None
     if backend != SPECIALIZED:
         raise ValueError(f"decode_backend must be '{AUTO}' or '{SPECIALIZED}', got {backend!r}")
-    reasons = unsupported(aphrodite_config)
+    reasons = unsupported(sonar_config)
     if reasons:
         raise ValueError(
             "Kimi-K3 specialized decode (decode_backend=latency_specialized) does "
             "not support: " + "; ".join(reasons) + f" (decode_backend={AUTO} runs "
-            "Aphrodite's decode)"
+            "Sonar's decode)"
         )
-    if piecewise_graphs_only(aphrodite_config):
+    if piecewise_graphs_only(sonar_config):
         logger.warning(
             "Kimi-K3 specialized decode: PIECEWISE-only CUDA graphs capture every "
             "decode step as stock; use FULL decode graphs"
         )
-    spec = aphrodite_config.speculative_config
+    spec = sonar_config.speculative_config
     return DecodeConfig(q=spec.num_speculative_tokens + 1)
 
 
-def unsupported(aphrodite_config) -> list[str]:
+def unsupported(sonar_config) -> list[str]:
     """Every reason this deployment cannot run the specialized decode (empty: it
     can). Config only: the loaded weights are checked when the executor is built.
     Default-deny: every feature below is refused, the kernels serve none of them."""
-    from aphrodite.config import CompilationMode
-    from aphrodite.model_executor.layers.mamba.mamba_utils import (
+    from sonar.config import CompilationMode
+    from sonar.model_executor.layers.mamba.mamba_utils import (
         MambaStateDtypeCalculator,
     )
 
     mc, pc, cc = (
-        aphrodite_config.model_config,
-        aphrodite_config.parallel_config,
-        aphrodite_config.cache_config,
+        sonar_config.model_config,
+        sonar_config.parallel_config,
+        sonar_config.cache_config,
     )
-    spec, oc = aphrodite_config.speculative_config, aphrodite_config.offload_config
-    kv = aphrodite_config.kv_transfer_config
+    spec, oc = sonar_config.speculative_config, sonar_config.offload_config
+    kv = sonar_config.kv_transfer_config
     checks = (
         (pc.tensor_parallel_size != TP, f"TP {pc.tensor_parallel_size} (TP{TP} only)"),
         (pc.pipeline_parallel_size != 1, "pipeline parallelism"),
@@ -101,7 +101,7 @@ def unsupported(aphrodite_config) -> list[str]:
         (pc.prefill_context_parallel_size != 1, "prefill context parallelism"),
         # the kernels read one batch's attention metadata per step
         (pc.use_ubatching, "DBO (dual-batch overlap)"),
-        (aphrodite_config.lora_config is not None, "LoRA"),
+        (sonar_config.lora_config is not None, "LoRA"),
         # MoRIIO consumers finish loads before execution, without per-layer hooks.
         (
             kv is not None
@@ -113,7 +113,7 @@ def unsupported(aphrodite_config) -> list[str]:
             "KV transfer connectors other than a MoRIIO consumer",
         ),
         (
-            aphrodite_config.aux_output_config.enable_return_routed_experts,
+            sonar_config.aux_output_config.enable_return_routed_experts,
             "routed-expert capture",
         ),
         # the kernels read the loaded weights in place
@@ -122,7 +122,7 @@ def unsupported(aphrodite_config) -> list[str]:
             oc.uva.cpu_offload_gb > 0 or oc.prefetch.offload_group_size > 0,
             "CPU weight offload",
         ),
-        (aphrodite_config.weight_transfer_config is not None, "weight updates"),
+        (sonar_config.weight_transfer_config is not None, "weight updates"),
         # the kernels serve spec-verify steps of whole uniform requests only
         (spec is None, "decoding without speculative decoding"),
         (
@@ -147,13 +147,13 @@ def unsupported(aphrodite_config) -> list[str]:
         (cc.use_replayssm or cc.use_kda_recoverssm, "ReplaySSM / RecoverSSM"),
         # the model state hooks build the executor and bind it to each KV cache
         (
-            not aphrodite_config.use_v2_model_runner,
-            "the V1 model runner (set APHRODITE_USE_V2_MODEL_RUNNER=1)",
+            not sonar_config.use_v2_model_runner,
+            "the V1 model runner (set SONAR_USE_V2_MODEL_RUNNER=1)",
         ),
         # plan() and the layer kernels run in forward; a compiled forward would
         # trace them
         (
-            aphrodite_config.compilation_config.mode == CompilationMode.STOCK_TORCH_COMPILE,
+            sonar_config.compilation_config.mode == CompilationMode.STOCK_TORCH_COMPILE,
             "torch.compile (compilation mode STOCK_TORCH_COMPILE)",
         ),
     )
@@ -180,15 +180,15 @@ def text_shapes(text) -> tuple:
 
 
 def platform_reasons() -> list[str]:
-    from aphrodite.platforms import current_platform
+    from sonar.platforms import current_platform
 
     if not current_platform.is_rocm():
         return ["this platform (ROCm only)"]
-    from aphrodite.platforms.rocm import on_gfx950
+    from sonar.platforms.rocm import on_gfx950
 
     if not on_gfx950():
         return ["this GPU (gfx950 / MI355X only)"]
-    from aphrodite.models.kimi_k3.amd.specialized_decode.mono.common.plan import BLOCKS
+    from sonar.models.kimi_k3.amd.specialized_decode.mono.common.plan import BLOCKS
 
     cus = torch.cuda.get_device_properties().multi_processor_count
     if cus != BLOCKS:
@@ -197,11 +197,11 @@ def platform_reasons() -> list[str]:
     return []
 
 
-def piecewise_graphs_only(aphrodite_config) -> bool:
+def piecewise_graphs_only(sonar_config) -> bool:
     """Decode steps captured as PIECEWISE graphs only: plan() runs them stock."""
-    from aphrodite.config import CUDAGraphMode
+    from sonar.config import CUDAGraphMode
 
-    mode = aphrodite_config.compilation_config.cudagraph_mode
+    mode = sonar_config.compilation_config.cudagraph_mode
     if mode is None or mode == CUDAGraphMode.NONE:
         return False
     return mode.decode_mode() != CUDAGraphMode.FULL

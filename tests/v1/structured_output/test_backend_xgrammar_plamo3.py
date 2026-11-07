@@ -6,11 +6,11 @@ from types import SimpleNamespace
 import pytest
 import xgrammar as xgr
 
-from aphrodite.config import AphroditeConfig, StructuredOutputsConfig
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.config import SonarConfig, StructuredOutputsConfig
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionToolsParam,
 )
-from aphrodite.parser.plamo3 import (
+from sonar.parser.plamo3 import (
     BEGIN_TOOL_ARGUMENTS,
     BEGIN_TOOL_NAME,
     BEGIN_TOOL_REQUEST,
@@ -20,9 +20,9 @@ from aphrodite.parser.plamo3 import (
     END_TOOL_REQUEST,
     END_TOOL_REQUESTS,
 )
-from aphrodite.tool_parsers.structural_tag_registry import get_model_structural_tag
-from aphrodite.v1.structured_output.backend_types import StructuredOutputOptions
-from aphrodite.v1.structured_output.backend_xgrammar import XgrammarBackend
+from sonar.tool_parsers.structural_tag_registry import get_model_structural_tag
+from sonar.v1.structured_output.backend_types import StructuredOutputOptions
+from sonar.v1.structured_output.backend_xgrammar import XgrammarBackend
 
 
 class Plamo3Tokenizer:
@@ -47,8 +47,8 @@ class Plamo3Tokenizer:
         return tokenizer_info, stop_token_ids
 
 
-def make_aphrodite_config() -> AphroditeConfig:
-    config = AphroditeConfig(
+def make_sonar_config() -> SonarConfig:
+    config = SonarConfig(
         structured_outputs_config=StructuredOutputsConfig(backend="xgrammar"),
     )
     config.model_config = SimpleNamespace(hf_config=SimpleNamespace(model_type="plamo3"))
@@ -70,7 +70,7 @@ def test_plamo3_python_tokenizer_compiles_and_accepts_structural_tag():
     ]
     tokenizer = Plamo3Tokenizer(["<eos>", *call_tokens])
     backend = XgrammarBackend(
-        make_aphrodite_config(),
+        make_sonar_config(),
         tokenizer=tokenizer,
         vocab_size=len(tokenizer.get_vocab()),
     )
@@ -104,7 +104,7 @@ def test_plamo3_grammar_matches_decoded_bytes(value):
     pieces = [f"<0x{byte:02X}>" for byte in value.encode("utf-8")]
     tokenizer = Plamo3Tokenizer(list(dict.fromkeys(["<eos>", value, *pieces])))
     backend = XgrammarBackend(
-        make_aphrodite_config(),
+        make_sonar_config(),
         tokenizer=tokenizer,
         vocab_size=len(tokenizer.get_vocab()),
     )

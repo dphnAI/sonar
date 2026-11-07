@@ -8,32 +8,32 @@ from itertools import islice
 import torch
 from torch import nn
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, replace, set_current_aphrodite_config
-from aphrodite.distributed import (
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import SonarConfig, replace, set_current_sonar_config
+from sonar.distributed import (
     get_ep_group,
     get_pp_group,
     get_tensor_model_parallel_world_size,
     tensor_model_parallel_all_gather,
     tensor_model_parallel_reduce_scatter,
 )
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.model_executor.layers.fused_moe import (
     FusedMoEFactory,
     GateLinear,
 )
-from aphrodite.model_executor.layers.fusion.mm_input_norm import build_mm_input_norm
-from aphrodite.model_executor.layers.linear import ReplicatedLinear
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.mamba.gdn.qwen_gdn_linear_attn import (
+from sonar.model_executor.layers.fusion.mm_input_norm import build_mm_input_norm
+from sonar.model_executor.layers.linear import ReplicatedLinear
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.mamba.gdn.qwen_gdn_linear_attn import (
     QwenGatedDeltaNetAttention,
 )
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.tokenizers.registry import cached_tokenizer_from_config
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.sequence import IntermediateTensors
+from sonar.tokenizers.registry import cached_tokenizer_from_config
 
 from .interfaces import EagleModelMixin
 from .interns2_preview import (
@@ -71,11 +71,11 @@ class InternS2MobiusProcessingInfo(InternS2PreviewProcessingInfo):
 class InternS2MobiusMetaMoeBlock(nn.Module):
     """A routed MoE bank shared by multiple decoder layers."""
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_text_config
-        parallel_config = aphrodite_config.parallel_config
+        config = sonar_config.model_config.hf_text_config
+        parallel_config = sonar_config.parallel_config
 
         self.tp_size = get_tensor_model_parallel_world_size()
         self.ep_group = get_ep_group().device_group
@@ -108,7 +108,7 @@ class InternS2MobiusMetaMoeBlock(nn.Module):
             hidden_size=config.hidden_size,
             intermediate_size=config.moe_intermediate_size,
             renormalize=getattr(config, "norm_topk_prob", True),
-            quant_config=aphrodite_config.quant_config,
+            quant_config=sonar_config.quant_config,
             prefix=f"{prefix}.experts",
             enable_eplb=self.enable_eplb,
             num_redundant_experts=self.n_redundant_experts,
@@ -141,11 +141,11 @@ class InternS2MobiusMetaMoeBlock(nn.Module):
 
 
 class InternS2MobiusSharedExpertBlock(nn.Module):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_text_config
-        is_sequence_parallel = aphrodite_config.parallel_config.use_sequence_parallel_moe
+        config = sonar_config.model_config.hf_text_config
+        is_sequence_parallel = sonar_config.parallel_config.use_sequence_parallel_moe
         self.shared_expert_gate = ReplicatedLinear(
             config.hidden_size,
             1,
@@ -157,7 +157,7 @@ class InternS2MobiusSharedExpertBlock(nn.Module):
             hidden_size=config.hidden_size,
             intermediate_size=config.shared_expert_intermediate_size,
             hidden_act=config.hidden_act,
-            quant_config=aphrodite_config.quant_config,
+            quant_config=sonar_config.quant_config,
             expert_gate=self.shared_expert_gate,
             is_sequence_parallel=is_sequence_parallel,
             prefix=f"{prefix}.shared_expert",
@@ -170,15 +170,15 @@ class InternS2MobiusSharedExpertBlock(nn.Module):
 class InternS2MobiusDecoderLayer(nn.Module):
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         layer_type: str,
         prefix: str = "",
     ) -> None:
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_text_config
-        model_config = aphrodite_config.model_config
-        parallel_config = aphrodite_config.parallel_config
+        config = sonar_config.model_config.hf_text_config
+        model_config = sonar_config.model_config
+        parallel_config = sonar_config.parallel_config
 
         self.layer_type = layer_type
         self.layer_idx = extract_layer_index(prefix)
@@ -190,7 +190,7 @@ class InternS2MobiusDecoderLayer(nn.Module):
         if self.layer_type == "linear_attention":
             self.linear_attn = QwenGatedDeltaNetAttention(
                 config=config,
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 prefix=f"{prefix}.linear_attn",
                 gqa_interleaved_layout=False,
                 reduce_results=not self.use_attn_reduce_scatter_for_moe,
@@ -199,8 +199,8 @@ class InternS2MobiusDecoderLayer(nn.Module):
             self.self_attn = Qwen3NextAttention(
                 config,
                 model_config=model_config,
-                cache_config=aphrodite_config.cache_config,
-                quant_config=aphrodite_config.quant_config,
+                cache_config=sonar_config.cache_config,
+                quant_config=sonar_config.quant_config,
                 prefix=f"{prefix}.self_attn",
                 reduce_results=not self.use_attn_reduce_scatter_for_moe,
             )
@@ -208,7 +208,7 @@ class InternS2MobiusDecoderLayer(nn.Module):
             raise ValueError(f"Invalid layer_type {self.layer_type}")
 
         self.mlp = InternS2MobiusSharedExpertBlock(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             prefix=f"{prefix}.mlp",
         )
         self.input_layernorm = Qwen3_5RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -280,15 +280,15 @@ class InternS2MobiusDecoderLayer(nn.Module):
     }
 )
 class InternS2MobiusModel(nn.Module, EagleModelMixin):
-    hf_to_aphrodite_mapper = Qwen3_5Model.hf_to_aphrodite_mapper
+    hf_to_sonar_mapper = Qwen3_5Model.hf_to_sonar_mapper
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         nn.Module.__init__(self)
 
-        config = aphrodite_config.model_config.hf_text_config
+        config = sonar_config.model_config.hf_text_config
         self.config = config
-        self.quant_config = aphrodite_config.quant_config
-        self.num_redundant_experts = aphrodite_config.parallel_config.eplb_config.num_redundant_experts
+        self.quant_config = sonar_config.quant_config
+        self.num_redundant_experts = sonar_config.parallel_config.eplb_config.num_redundant_experts
         self.vocab_size = config.vocab_size
         self.embed_tokens = VocabParallelEmbedding(
             self.vocab_size,
@@ -296,7 +296,7 @@ class InternS2MobiusModel(nn.Module, EagleModelMixin):
         )
         self.meta_mlp = nn.ModuleList(
             InternS2MobiusMetaMoeBlock(
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 prefix=f"{prefix}.meta_mlp.{idx}",
             )
             for idx in range(config.num_blocks)
@@ -304,7 +304,7 @@ class InternS2MobiusModel(nn.Module, EagleModelMixin):
 
         def get_layer(prefix: str) -> InternS2MobiusDecoderLayer:
             return InternS2MobiusDecoderLayer(
-                aphrodite_config,
+                sonar_config,
                 layer_type=config.layer_types[extract_layer_index(prefix)],
                 prefix=prefix,
             )
@@ -389,21 +389,21 @@ class InternS2MobiusModel(nn.Module, EagleModelMixin):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
 
 class InternS2MobiusForCausalLM(Qwen3_5ForCausalLMBase):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
-        config = aphrodite_config.model_config.hf_text_config
-        self.aphrodite_config = aphrodite_config
-        self.model_config = aphrodite_config.model_config
-        self.quant_config = aphrodite_config.quant_config
-        self.scheduler_config = aphrodite_config.scheduler_config
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
+        config = sonar_config.model_config.hf_text_config
+        self.sonar_config = sonar_config
+        self.model_config = sonar_config.model_config
+        self.quant_config = sonar_config.quant_config
+        self.scheduler_config = sonar_config.scheduler_config
 
         nn.Module.__init__(self)
         self.config = config
         self.model = InternS2MobiusModel(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             prefix=maybe_prefix(prefix, "model"),
         )
 
@@ -424,17 +424,17 @@ class InternS2MobiusForCausalLM(Qwen3_5ForCausalLMBase):
 
 
 class InternS2MobiusMTP(Qwen3_5MoeMTP):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
-        speculative_config = aphrodite_config.speculative_config
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
+        speculative_config = sonar_config.speculative_config
         if speculative_config is None or speculative_config.draft_model_config is None:
             raise ValueError("Intern-S2-Mobius MTP requires a draft model configuration.")
 
-        draft_aphrodite_config = replace(
-            aphrodite_config,
+        draft_sonar_config = replace(
+            sonar_config,
             model_config=speculative_config.draft_model_config,
         )
-        with set_current_aphrodite_config(draft_aphrodite_config, prefix=prefix):
-            super().__init__(aphrodite_config=draft_aphrodite_config, prefix=prefix)
+        with set_current_sonar_config(draft_sonar_config, prefix=prefix):
+            super().__init__(sonar_config=draft_sonar_config, prefix=prefix)
 
 
 @MULTIMODAL_REGISTRY.register_processor(
@@ -443,26 +443,26 @@ class InternS2MobiusMTP(Qwen3_5MoeMTP):
     dummy_inputs=Qwen3VLDummyInputsBuilder,
 )
 class InternS2MobiusForConditionalGeneration(InternS2PreviewForConditionalGeneration):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "model") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "model") -> None:
         nn.Module.__init__(self)
 
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
         if getattr(config, "image_token_index", None) is None:
             config.image_token_index = config.image_token_id
-        quant_config = aphrodite_config.quant_config
-        multimodal_config = aphrodite_config.model_config.get_multimodal_config()
+        quant_config = sonar_config.quant_config
+        multimodal_config = sonar_config.model_config.get_multimodal_config()
 
         self.config = config
-        self.model_config = aphrodite_config.model_config
+        self.model_config = sonar_config.model_config
         self.multimodal_config = multimodal_config
         self.use_data_parallel = multimodal_config.mm_encoder_tp_mode == "data"
         self.is_multimodal_pruning_enabled = multimodal_config.is_multimodal_pruning_enabled()
         self.video_pruning_rate = multimodal_config.video_pruning_rate
-        self._tokenizer = cached_tokenizer_from_config(aphrodite_config.model_config)
+        self._tokenizer = cached_tokenizer_from_config(sonar_config.model_config)
 
         self.use_deepstack = False
 
-        with self._mark_tower_model(aphrodite_config, {"image", "video"}):
+        with self._mark_tower_model(sonar_config, {"image", "video"}):
             self.visual = Qwen3_VisionTransformer(
                 config.vision_config,
                 norm_eps=getattr(config, "rms_norm_eps", 1e-6),
@@ -471,9 +471,9 @@ class InternS2MobiusForConditionalGeneration(InternS2PreviewForConditionalGenera
                 prefix=maybe_prefix(prefix, "visual"),
             )
 
-        with self._mark_language_model(aphrodite_config):
+        with self._mark_language_model(sonar_config):
             self.language_model = InternS2MobiusForCausalLM(
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 prefix=maybe_prefix(prefix, "language_model"),
             )
 

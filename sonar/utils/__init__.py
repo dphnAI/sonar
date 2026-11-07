@@ -52,13 +52,13 @@ def is_moe_layer(module: torch.nn.Module) -> bool:
 
 
 def get_progress_log_prefix() -> str:
-    """Generate a log-like prefix for progress bars to match Aphrodite logs."""
+    """Generate a log-like prefix for progress bars to match Sonar logs."""
     import datetime
 
-    from aphrodite import envs
-    from aphrodite.logging_utils.formatter import Colors, _supports_color
+    from sonar import envs
+    from sonar.logging_utils.formatter import Colors, _supports_color
 
-    verbose_logging = envs.APHRODITE_LOGGING_VERBOSE
+    verbose_logging = envs.SONAR_LOGGING_VERBOSE
 
     if verbose_logging:
         timestamp = datetime.datetime.now().strftime("%m-%d %H:%M:%S")
@@ -89,7 +89,7 @@ def tensor_progress_bar(
     from rich.console import Console
     from rich.progress import BarColumn, Progress, TextColumn, TimeElapsedColumn
 
-    from aphrodite.distributed.parallel_state import is_global_first_rank
+    from sonar.distributed.parallel_state import is_global_first_rank
 
     show_progress = is_global_first_rank()
     if final_bytes is None:

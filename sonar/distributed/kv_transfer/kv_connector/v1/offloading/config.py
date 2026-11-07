@@ -1,15 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Translate Aphrodite KV cache metadata for native offloading backends."""
+"""Translate Sonar KV cache metadata for native offloading backends."""
 
 from typing import TYPE_CHECKING
 
-from aphrodite.utils.math_utils import cdiv, round_up
-from aphrodite.v1.core.kv_cache_utils import (
+from sonar.utils.math_utils import cdiv, round_up
+from sonar.v1.core.kv_cache_utils import (
     resolve_dcp_kv_block_size,
     resolve_kv_cache_block_sizes,
 )
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.kv_cache_interface import (
     AttentionSpec,
     ChunkedLocalAttentionSpec,
     FullAttentionSpec,
@@ -22,7 +22,7 @@ from aphrodite.v1.kv_cache_interface import (
     UniformTypeKVCacheSpecs,
     iter_layer_specs,
 )
-from aphrodite.v1.kv_offload.config import (
+from sonar.v1.kv_offload.config import (
     OffloadingCacheConfig,
     OffloadingConfig,
     OffloadingGroupConfig,
@@ -31,8 +31,8 @@ from aphrodite.v1.kv_offload.config import (
 )
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
-    from aphrodite.v1.kv_cache_interface import KVCacheConfig, KVCacheGroupSpec
+    from sonar.config import SonarConfig
+    from sonar.v1.kv_cache_interface import KVCacheConfig, KVCacheGroupSpec
 
 
 def get_offloading_group_ids(kv_cache_config: "KVCacheConfig") -> tuple[int, ...]:
@@ -83,17 +83,17 @@ def get_sliding_window_size_in_chunks(kv_cache_spec: KVCacheSpec, tokens_per_chu
 
 
 def build_offloading_config(
-    aphrodite_config: "AphroditeConfig",
+    sonar_config: "SonarConfig",
     kv_cache_config: "KVCacheConfig",
 ) -> OffloadingConfig:
-    """Translate Aphrodite configuration into the native offloading boundary."""
-    kv_transfer_config = aphrodite_config.kv_transfer_config
+    """Translate Sonar configuration into the native offloading boundary."""
+    kv_transfer_config = sonar_config.kv_transfer_config
     assert kv_transfer_config is not None
     extra_config = kv_transfer_config.kv_connector_extra_config
     assert kv_transfer_config.engine_id is not None
     engine_id = kv_transfer_config.engine_id
 
-    parallel_config = aphrodite_config.parallel_config
+    parallel_config = sonar_config.parallel_config
     selected_groups = tuple(
         (group_id, kv_cache_config.kv_cache_groups[group_id]) for group_id in get_offloading_group_ids(kv_cache_config)
     )
@@ -104,7 +104,7 @@ def build_offloading_config(
         resolve_dcp_kv_block_size(group.kv_cache_spec, parallel_config.decode_context_parallel_size)
         for _, group in selected_groups
     )
-    _, tokens_per_hash = resolve_kv_cache_block_sizes(kv_cache_config, aphrodite_config)
+    _, tokens_per_hash = resolve_kv_cache_block_sizes(kv_cache_config, sonar_config)
     for tokens_per_block in group_tokens_per_block:
         assert tokens_per_block % tokens_per_hash == 0, (
             f"tokens_per_block={tokens_per_block} not divisible by "
@@ -180,7 +180,7 @@ def build_offloading_config(
         kv_cache_config.kv_cache_groups[0].kv_cache_spec if len(kv_cache_config.kv_cache_groups) == 1 else None
     )
     replicated_layout = (
-        aphrodite_config.model_config.use_mla
+        sonar_config.model_config.use_mla
         and parallel_config.tensor_parallel_size > 1
         and kv_cache_config.kv_tp_replicas == parallel_config.tensor_parallel_size
         and worker_kv_bytes_per_block > 0
@@ -201,12 +201,12 @@ def build_offloading_config(
     # per-token-head scales, CP token sharding, and the V2 model runner's
     # layout are all excluded.
     is_parallelism_agnostic = (
-        not aphrodite_config.use_v2_model_runner
+        not sonar_config.use_v2_model_runner
         and single_group_spec is not None
         and isinstance(single_group_spec, FullAttentionSpec)
         and not isinstance(single_group_spec, MLAAttentionSpec)
         and single_group_spec.num_kv_heads * parallel_config.tensor_parallel_size
-        == aphrodite_config.model_config.get_total_num_kv_heads()
+        == sonar_config.model_config.get_total_num_kv_heads()
         and not single_group_spec.kv_quant_mode.is_per_token_head
         and parallel_config.decode_context_parallel_size == 1
         and parallel_config.prefill_context_parallel_size == 1
@@ -216,7 +216,7 @@ def build_offloading_config(
     # per layer at registration and create_worker fails closed on this flag.
     if canonical_layout and not is_parallelism_agnostic:
         tp_size = parallel_config.tensor_parallel_size
-        total_kv_heads = aphrodite_config.model_config.get_total_num_kv_heads()
+        total_kv_heads = sonar_config.model_config.get_total_num_kv_heads()
 
         def spec_certifiable(spec: KVCacheSpec) -> bool:
             """Conservative static mirror of _layer_mapping's per-layer checks."""
@@ -259,11 +259,11 @@ def build_offloading_config(
             and (parallel_config.world_size == 1 or parallel_config.distributed_executor_backend == "mp")
         )
 
-    kv_events_config = aphrodite_config.kv_events_config
+    kv_events_config = sonar_config.kv_events_config
     cache_dtype = (
-        aphrodite_config.model_config.dtype
-        if aphrodite_config.cache_config.cache_dtype == "auto"
-        else aphrodite_config.cache_config.cache_dtype
+        sonar_config.model_config.dtype
+        if sonar_config.cache_config.cache_dtype == "auto"
+        else sonar_config.cache_config.cache_dtype
     )
 
     return OffloadingConfig(
@@ -273,9 +273,9 @@ def build_offloading_config(
         extra_config=extra_config,
         engine_id=engine_id,
         model=OffloadingModelConfig(
-            name=aphrodite_config.model_config.model,
+            name=sonar_config.model_config.model,
             dtype=str(cache_dtype).removeprefix("torch."),
-            max_model_len=aphrodite_config.model_config.max_model_len,
+            max_model_len=sonar_config.model_config.max_model_len,
         ),
         cache=OffloadingCacheConfig(
             tokens_per_hash=tokens_per_hash,
@@ -295,5 +295,5 @@ def build_offloading_config(
         ),
         replicated_layout=replicated_layout,
         canonical_layout=canonical_layout,
-        kv_cache_layout=aphrodite_config.cache_config.kv_cache_layout,
+        kv_cache_layout=sonar_config.cache_config.kv_cache_layout,
     )

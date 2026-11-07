@@ -7,16 +7,16 @@ import os
 import pytest
 import torch
 
-from aphrodite.compilation.counter import compilation_counter
-from aphrodite.compilation.wrapper import (
+from sonar.compilation.counter import compilation_counter
+from sonar.compilation.wrapper import (
     TorchCompileWithNoGuardsWrapper,
     compile_model_with_stock_torch,
 )
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.config import (
     CompilationConfig,
     CompilationMode,
-    set_current_aphrodite_config,
+    SonarConfig,
+    set_current_sonar_config,
 )
 
 
@@ -42,16 +42,16 @@ class MyWrapper(TorchCompileWithNoGuardsWrapper):
 def test_torch_compile_wrapper(use_bytecode_hook, monkeypatch):
     """Test basic functionality of TorchCompileWithNoGuardsWrapper."""
     # Set the environment variable for this test
-    monkeypatch.setenv("APHRODITE_USE_BYTECODE_HOOK", "1" if use_bytecode_hook else "0")
+    monkeypatch.setenv("SONAR_USE_BYTECODE_HOOK", "1" if use_bytecode_hook else "0")
 
-    # Create a proper Aphrodite config instead of mocking
-    aphrodite_config = AphroditeConfig()
-    aphrodite_config.compilation_config = CompilationConfig()
-    aphrodite_config.compilation_config.mode = CompilationMode.DYNAMO_TRACE_ONCE
-    aphrodite_config.compilation_config.backend = "inductor"
+    # Create a proper Sonar config instead of mocking
+    sonar_config = SonarConfig()
+    sonar_config.compilation_config = CompilationConfig()
+    sonar_config.compilation_config.mode = CompilationMode.DYNAMO_TRACE_ONCE
+    sonar_config.compilation_config.backend = "inductor"
 
     # Test DYNAMO_TRACE_ONCE
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         torch._dynamo.reset()
         mod = MyMod()
         wrapper = MyWrapper(mod)
@@ -77,9 +77,9 @@ def test_torch_compile_wrapper(use_bytecode_hook, monkeypatch):
         assert torch.allclose(result3, expected3), f"Expected {result3}, got {expected3}"
 
     # with STOCK_TORCH_COMPILE we do not remove guards.
-    aphrodite_config.compilation_config.mode = CompilationMode.STOCK_TORCH_COMPILE
+    sonar_config.compilation_config.mode = CompilationMode.STOCK_TORCH_COMPILE
     torch._dynamo.reset()
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         mod = MyMod()
         wrapper = MyWrapper(mod)
 
@@ -98,9 +98,9 @@ def test_torch_compile_wrapper(use_bytecode_hook, monkeypatch):
         assert torch.allclose(result2, expected2), f"Expected {expected2}, got {result2}"
 
     # NO_COMPILATION level not supported.
-    aphrodite_config.compilation_config.mode = None
+    sonar_config.compilation_config.mode = None
     torch._dynamo.reset()
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         torch._dynamo.reset()
         mod = MyMod()
 
@@ -122,7 +122,7 @@ def test_compile_model_with_stock_torch(monkeypatch):
     monkeypatch.setattr(
         CompilationConfig,
         "init_backend",
-        lambda self, aphrodite_config, *args, **kwargs: recording_backend,
+        lambda self, sonar_config, *args, **kwargs: recording_backend,
     )
 
     class Model(torch.nn.Module):
@@ -133,15 +133,15 @@ def test_compile_model_with_stock_torch(monkeypatch):
         def forward(self, x: torch.Tensor):
             return self.linear(x).relu()
 
-    aphrodite_config = AphroditeConfig()
-    aphrodite_config.compilation_config = CompilationConfig(mode=CompilationMode.STOCK_TORCH_COMPILE)
+    sonar_config = SonarConfig()
+    sonar_config.compilation_config = CompilationConfig(mode=CompilationMode.STOCK_TORCH_COMPILE)
     model = Model()
     x = torch.randn(3, 4)
     expected = model(x)
 
     torch._dynamo.reset()
     with compilation_counter.expect(stock_torch_compile_count=1):
-        compile_model_with_stock_torch(model, aphrodite_config)
+        compile_model_with_stock_torch(model, sonar_config)
     assert not graphs  # compilation is deferred to the first call
     torch.testing.assert_close(model(x), expected)
     assert len(graphs) == 1
@@ -156,10 +156,10 @@ if __name__ == "__main__":
 
     mp = MockMonkeypatch()
 
-    print("Testing with APHRODITE_USE_BYTECODE_HOOK=False")
+    print("Testing with SONAR_USE_BYTECODE_HOOK=False")
     test_torch_compile_wrapper(False, mp)
 
-    print("Testing with APHRODITE_USE_BYTECODE_HOOK=True")
+    print("Testing with SONAR_USE_BYTECODE_HOOK=True")
     test_torch_compile_wrapper(True, mp)
 
     print("All tests passed!")

@@ -5,10 +5,10 @@
 import torch
 import torch.nn.functional as F
 
-from aphrodite.model_executor.layers.quantization.utils.nvfp4_utils import (
+from sonar.model_executor.layers.quantization.utils.nvfp4_utils import (
     swizzle_blockscale,
 )
-from aphrodite.utils.math_utils import round_up
+from sonar.utils.math_utils import round_up
 
 
 def _pad_gated_weights(

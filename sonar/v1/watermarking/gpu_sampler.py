@@ -6,13 +6,13 @@ from typing import Literal
 import numpy as np
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.v1.sample.ops.topk_topp_sampler import apply_top_k_top_p
-from aphrodite.v1.watermarking.watermarker import RandomSampler, Watermarker
-from aphrodite.v1.worker.gpu.buffer_utils import UvaBackedTensor
-from aphrodite.v1.worker.gpu.sample.sampler import Sampler
-from aphrodite.v1.worker.gpu.sample.watermark import repeated_context_mask
+from sonar.logger import init_logger
+from sonar.sampling_params import SamplingParams
+from sonar.v1.sample.ops.topk_topp_sampler import apply_top_k_top_p
+from sonar.v1.watermarking.watermarker import RandomSampler, Watermarker
+from sonar.v1.worker.gpu.buffer_utils import UvaBackedTensor
+from sonar.v1.worker.gpu.sample.sampler import Sampler
+from sonar.v1.worker.gpu.sample.watermark import repeated_context_mask
 
 logger = init_logger(__name__)
 

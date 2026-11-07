@@ -4,8 +4,8 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.utils.torch_utils import (
-    OMP_NUM_THREADS_SET_BY_APHRODITE,
+from sonar.utils.torch_utils import (
+    OMP_NUM_THREADS_SET_BY_SONAR,
     LayerName,
     async_tensor_h2d,
     available_cpu_count,
@@ -46,8 +46,8 @@ def test_weak_ref_tensors_rejects_unknown_nested_types() -> None:
 
 
 def test_nvfp4_4over6_cache_dtype() -> None:
-    from aphrodite.config.cache import CacheConfig
-    from aphrodite.v1.kv_cache_interface import (
+    from sonar.config.cache import CacheConfig
+    from sonar.v1.kv_cache_interface import (
         KVQuantMode,
         get_kv_quant_mode,
         is_quantized_kv_cache,
@@ -208,10 +208,10 @@ def test_runtime_threads_respect_user_omp_num_threads(restore_torch_threads, mon
     assert torch.get_num_threads() == 3
 
 
-def test_runtime_threads_override_aphrodite_set_omp_num_threads(restore_torch_threads, monkeypatch: pytest.MonkeyPatch):
-    """The value Aphrodite picked for worker startup is dropped once serving starts."""
+def test_runtime_threads_override_sonar_set_omp_num_threads(restore_torch_threads, monkeypatch: pytest.MonkeyPatch):
+    """The value Sonar picked for worker startup is dropped once serving starts."""
     monkeypatch.setenv("OMP_NUM_THREADS", "3")
-    monkeypatch.setenv(OMP_NUM_THREADS_SET_BY_APHRODITE, "1")
+    monkeypatch.setenv(OMP_NUM_THREADS_SET_BY_SONAR, "1")
     torch.set_num_threads(3)
     set_torch_threads_for_runtime()
     assert torch.get_num_threads() == 1

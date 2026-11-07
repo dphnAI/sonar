@@ -5,7 +5,7 @@
 The graph is captured for a single batch and only replays that batch, so the
 host-side decisions baked in at capture (attention plans, kernel choices by
 query length, chunk splits) are correct by construction. This deliberately
-bypasses Aphrodite's CUDA graph manager: no capture sizes, padding or dummy
+bypasses Sonar's CUDA graph manager: no capture sizes, padding or dummy
 metadata. Each replay first restores the KV blocks the step writes, so state the
 forward mutates in place (e.g. compressor state) is the same on every replay.
 """
@@ -16,15 +16,15 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import torch
 
-from aphrodite.benchmarks.forward.batch import BenchBatch
-from aphrodite.config.compilation import CUDAGraphMode
-from aphrodite.distributed.parallel_state import get_world_group, graph_capture
-from aphrodite.forward_context import get_forward_context, override_forward_context
-from aphrodite.platforms import current_platform
-from aphrodite.v1.worker.gpu.input_batch import InputBatch
+from sonar.benchmarks.forward.batch import BenchBatch
+from sonar.config.compilation import CUDAGraphMode
+from sonar.distributed.parallel_state import get_world_group, graph_capture
+from sonar.forward_context import get_forward_context, override_forward_context
+from sonar.platforms import current_platform
+from sonar.v1.worker.gpu.input_batch import InputBatch
 
 if TYPE_CHECKING:
-    from aphrodite.benchmarks.forward.speculator import DraftBench
+    from sonar.benchmarks.forward.speculator import DraftBench
 
 
 def _first_tensor(output: Any) -> torch.Tensor:
@@ -137,7 +137,7 @@ class ForwardBench:
         context = get_forward_context()
         saved = dict(vars(context))
         if self.include_drafter and self.runner.speculator is not None:
-            from aphrodite.benchmarks.forward.speculator import DraftBench
+            from sonar.benchmarks.forward.speculator import DraftBench
 
             if self.drafter is None:
                 self.drafter = DraftBench(self.runner)
@@ -238,7 +238,7 @@ class ForwardBench:
         if self.drafter is not None:
             self.result["drafter"] = self.drafter.check(draft_reference)
         self.result["latency_us"] = self._time(graph)
-        from aphrodite.benchmarks.forward.profile import profile_graph
+        from sonar.benchmarks.forward.profile import profile_graph
 
         # Each replay restores the state views, then (multi-rank) rendezvouses,
         # before the timed forward.

@@ -14,8 +14,8 @@ from pydantic import (
 )
 from pydantic_core import core_schema
 
-from aphrodite.config.utils import config
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.config.utils import config
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     kFp8Dynamic128Sym,
     kFp8DynamicTensorSym,

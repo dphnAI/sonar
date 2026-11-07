@@ -6,7 +6,7 @@ from unittest.mock import Mock
 import pytest
 import torch
 
-from aphrodite.config.aphrodite import AphroditeConfig
+from sonar.config.sonar import SonarConfig
 
 pytestmark = [pytest.mark.cpu_test, pytest.mark.skip_global_cleanup]
 
@@ -24,12 +24,12 @@ def test_quantization_config_forwards_model_revision(monkeypatch: pytest.MonkeyP
     )
 
     monkeypatch.setattr(
-        "aphrodite.model_executor.model_loader.weight_utils.get_quant_config",
+        "sonar.model_executor.model_loader.weight_utils.get_quant_config",
         lambda model_config, load_config: quant_config,
     )
-    monkeypatch.setattr("aphrodite.platforms.current_platform.get_device_capability", lambda: None)
+    monkeypatch.setattr("sonar.platforms.current_platform.get_device_capability", lambda: None)
 
-    AphroditeConfig._get_quantization_config(model_config, SimpleNamespace())
+    SonarConfig._get_quantization_config(model_config, SimpleNamespace())
 
     quant_config.maybe_update_config.assert_called_once_with(
         "repo/model",

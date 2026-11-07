@@ -2,16 +2,16 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 from typing import NamedTuple
 
-from aphrodite.entrypoints.generate.base.protocol import DeltaMessage
-from aphrodite.entrypoints.openai.chat_completion.message_assembly import (
+from sonar.entrypoints.generate.base.protocol import DeltaMessage
+from sonar.entrypoints.openai.chat_completion.message_assembly import (
     keeps_tool_calls,
 )
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-from aphrodite.entrypoints.serve.utils.tool_calls_utils import (
+from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+from sonar.entrypoints.serve.utils.tool_calls_utils import (
     maybe_filter_parallel_tool_calls,
     resolve_finish_reason,
 )
-from aphrodite.parser.abstract_parser import Parser
+from sonar.parser.abstract_parser import Parser
 
 
 class ChatStreamStep(NamedTuple):

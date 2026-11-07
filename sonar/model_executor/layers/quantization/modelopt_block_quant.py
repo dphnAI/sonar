@@ -4,34 +4,34 @@
 
 import torch
 
-from aphrodite.config import get_current_aphrodite_config
-from aphrodite.model_executor.layers.fused_moe import modular_kernel as mk
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.all2all_utils import (
+from sonar.config import get_current_sonar_config
+from sonar.model_executor.layers.fused_moe import modular_kernel as mk
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.all2all_utils import (
     maybe_make_prepare_finalize,
 )
-from aphrodite.model_executor.layers.fused_moe.b12x import B12xExperts
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe.b12x import B12xExperts
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEQuantConfig,
     FusedMoEQuantDesc,
 )
-from aphrodite.model_executor.layers.fused_moe.fused_moe_method_base import (
+from sonar.model_executor.layers.fused_moe.fused_moe_method_base import (
     FusedMoEMethodBase,
 )
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.linear import (
     LinearMethodBase,
     register_weight_loader_v2_supported_method,
 )
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.parameter import ModelWeightParameter
-from aphrodite.utils.b12x import B12X_BLOCK_CODECS, B12xWarmupUnit, get_b12x_blockscaled
+from sonar.model_executor.parameter import ModelWeightParameter
+from sonar.utils.b12x import B12X_BLOCK_CODECS, B12xWarmupUnit, get_b12x_blockscaled
 
 
-@torch.library.custom_op("aphrodite::modelopt_block_embedding_chunked", mutates_args=("out",))
+@torch.library.custom_op("sonar::modelopt_block_embedding_chunked", mutates_args=("out",))
 def _modelopt_block_embedding_chunked(
     weight: torch.Tensor, ids: torch.Tensor, out: torch.Tensor, plan_handle: int
 ) -> None:
@@ -239,8 +239,8 @@ class ModelOptBlockQuantLinearMethod(LinearMethodBase):
         self.codec = codec.lower()
         self.block_size, self.block_bytes = B12X_BLOCK_CODECS[self.codec]
         self.is_embedding = False
-        from aphrodite.model_executor.kernels.linear import _get_linear_backend
-        from aphrodite.utils.b12x import get_b12x_blockscaled
+        from sonar.model_executor.kernels.linear import _get_linear_backend
+        from sonar.utils.b12x import get_b12x_blockscaled
 
         if _get_linear_backend(quantization=self.codec) not in ("auto", "b12x"):
             raise ValueError("Block-quantized dense weights require the b12x linear backend")
@@ -280,11 +280,11 @@ class ModelOptBlockQuantLinearMethod(LinearMethodBase):
     def process_weights_after_loading(self, layer):
         from b12x.sequence import embedding
 
-        from aphrodite.model_executor.utils import replace_parameter
+        from sonar.model_executor.utils import replace_parameter
 
         api = get_b12x_blockscaled()
         assert api is not None
-        config = get_current_aphrodite_config()
+        config = get_current_sonar_config()
         scheduler = config.scheduler_config
         capture_sizes = config.compilation_config.cudagraph_capture_sizes or []
         capacity = max(

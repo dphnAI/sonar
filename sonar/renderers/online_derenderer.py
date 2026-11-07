@@ -3,19 +3,19 @@
 from collections.abc import Sequence
 from typing import Any
 
-from aphrodite.config import ModelConfig
-from aphrodite.entrypoints.generate.base.protocol import (
+from sonar.config import ModelConfig
+from sonar.entrypoints.generate.base.protocol import (
     DeltaMessage,
 )
-from aphrodite.entrypoints.generate.base.serving import (
+from sonar.entrypoints.generate.base.serving import (
     chat_top_logprobs_limit,
     completion_top_logprobs_limit,
     decode_token_ids,
 )
-from aphrodite.entrypoints.openai.chat_completion.message_assembly import (
+from sonar.entrypoints.openai.chat_completion.message_assembly import (
     assemble_chat_message_fields,
 )
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionLogProb,
     ChatCompletionLogProbs,
     ChatCompletionLogProbsContent,
@@ -25,41 +25,41 @@ from aphrodite.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionStreamResponse,
     ChatMessage,
 )
-from aphrodite.entrypoints.openai.chat_completion.stream_processor import (
+from sonar.entrypoints.openai.chat_completion.stream_processor import (
     ChatStreamProcessor,
 )
-from aphrodite.entrypoints.openai.completion.protocol import (
+from sonar.entrypoints.openai.completion.protocol import (
     CompletionLogProbs,
     CompletionRequest,
     CompletionResponseChoice,
     CompletionResponseStreamChoice,
     CompletionStreamResponse,
 )
-from aphrodite.entrypoints.scale_out.token_in_token_out.protocol import (
+from sonar.entrypoints.scale_out.token_in_token_out.protocol import (
     DerenderStreamState,
     GenerateLogProbs,
     GenerateTokensResponse,
     GenerateTokensStreamResponse,
 )
-from aphrodite.entrypoints.serve.engine.protocol import UsageInfo
-from aphrodite.entrypoints.serve.utils.request_logger import RequestLogger
-from aphrodite.entrypoints.serve.utils.tool_calls_utils import (
+from sonar.entrypoints.serve.engine.protocol import UsageInfo
+from sonar.entrypoints.serve.utils.request_logger import RequestLogger
+from sonar.entrypoints.serve.utils.tool_calls_utils import (
     resolve_finish_reason,
 )
-from aphrodite.logger import init_logger
-from aphrodite.logprobs import Logprob, PromptLogprobs
-from aphrodite.outputs import CompletionOutput
-from aphrodite.parser import Parser, ParserManager
-from aphrodite.renderers import BaseRenderer
-from aphrodite.renderers.chat_utils import ChatTemplateContentFormatOption
-from aphrodite.tokenizers import TokenizerLike
-from aphrodite.tokenizers.detokenizer_utils import (
+from sonar.logger import init_logger
+from sonar.logprobs import Logprob, PromptLogprobs
+from sonar.outputs import CompletionOutput
+from sonar.parser import Parser, ParserManager
+from sonar.renderers import BaseRenderer
+from sonar.renderers.chat_utils import ChatTemplateContentFormatOption
+from sonar.tokenizers import TokenizerLike
+from sonar.tokenizers.detokenizer_utils import (
     convert_prompt_ids_to_tokens,
     detokenize_incrementally,
     get_leading_space_marker,
 )
-from aphrodite.utils.async_utils import make_async
-from aphrodite.v1.engine.detokenizer import check_stop_strings, uses_fast_detokenizer
+from sonar.utils.async_utils import make_async
+from sonar.v1.engine.detokenizer import check_stop_strings, uses_fast_detokenizer
 
 logger = init_logger(__name__)
 

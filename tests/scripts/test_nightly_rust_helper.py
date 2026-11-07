@@ -57,7 +57,7 @@ def test_backlog_uses_current_helper_and_restores_checkout(tmp_path, script, bui
     build.write_text(
         "#!/bin/bash\nset -eu\n"
         'test "$(<tools/build_rust.py)" = "new helper"\n'
-        'test "$APHRODITE_VERSION_OVERRIDE" = "0.24.0"\n' + torch_assertion + f"exit {build_status}\n"
+        'test "$SONAR_VERSION_OVERRIDE" = "0.24.0"\n' + torch_assertion + f"exit {build_status}\n"
     )
     build.chmod(0o755)
     result = subprocess.run(

@@ -7,15 +7,15 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.v1.kv_cache_interface import (
+from sonar.platforms import current_platform
+from sonar.v1.kv_cache_interface import (
     ChunkedLocalAttentionSpec,
     FullAttentionSpec,
     KVCacheLayout,
     SlidingWindowSpec,
 )
-from aphrodite.v1.worker import utils as worker_utils
-from aphrodite.v1.worker.utils import (
+from sonar.v1.worker import utils as worker_utils
+from sonar.v1.worker.utils import (
     AttentionGroup,
     KVBlockZeroer,
     _zero_kv_blocks_kernel,

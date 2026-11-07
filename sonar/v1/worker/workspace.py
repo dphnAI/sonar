@@ -12,10 +12,10 @@ from typing import Any, TypeVar, cast
 
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.logger import init_logger
-from aphrodite.utils.math_utils import round_down, round_up
-from aphrodite.v1.worker.ubatching import dbo_current_ubatch_id
+import sonar.envs as envs
+from sonar.logger import init_logger
+from sonar.utils.math_utils import round_down, round_up
+from sonar.v1.worker.ubatching import dbo_current_ubatch_id
 
 logger = init_logger(__name__)
 T = TypeVar("T")
@@ -35,9 +35,9 @@ _VIEW_ALIGNMENT = 256
 
 # Global workspace manager instance
 _manager: "WorkspaceManager | None" = None
-_workspace_lane: ContextVar[int] = ContextVar("aphrodite_workspace_lane", default=0)
+_workspace_lane: ContextVar[int] = ContextVar("sonar_workspace_lane", default=0)
 _cuda_graph_capture_resources: ContextVar[list[Any] | None] = ContextVar(
-    "aphrodite_cuda_graph_capture_resources", default=None
+    "sonar_cuda_graph_capture_resources", default=None
 )
 
 
@@ -115,7 +115,7 @@ class WorkspaceManager:
         error. Existing resources retain their storage throughout execution.
         """
         self._locked = True
-        if envs.APHRODITE_DEBUG_WORKSPACE:
+        if envs.SONAR_DEBUG_WORKSPACE:
             logger.info(
                 "[WORKSPACE DEBUG] Workspace locked. Current sizes: %s",
                 [self._workspace_size_bytes(ws) / _MB for ws in self._current_workspaces if ws is not None],
@@ -128,7 +128,7 @@ class WorkspaceManager:
         needs to grow due to changes in the number of experts.
         """
         self._locked = False
-        if envs.APHRODITE_DEBUG_WORKSPACE:
+        if envs.SONAR_DEBUG_WORKSPACE:
             logger.info(
                 "[WORKSPACE DEBUG] Workspace unlocked. Current sizes: %s",
                 [self._workspace_size_bytes(ws) / _MB for ws in self._current_workspaces if ws is not None],
@@ -368,7 +368,7 @@ class WorkspaceManager:
                 )
             current_workspace = self._current_workspaces[workspace_id]
 
-            if envs.APHRODITE_DEBUG_WORKSPACE:
+            if envs.SONAR_DEBUG_WORKSPACE:
                 logger.info(
                     "[WORKSPACE DEBUG] Resized workspace from '%s': %.2f MB -> %.2f MB (ubatch %d, lane %d)",
                     get_caller_info(),

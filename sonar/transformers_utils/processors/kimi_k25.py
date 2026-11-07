@@ -3,8 +3,8 @@
 from transformers import BaseImageProcessor, BatchFeature, TensorType
 from transformers.processing_utils import ProcessorMixin
 
-from aphrodite.multimodal.inputs import VisionChunk
-from aphrodite.tokenizers.hf import HfTokenizer
+from sonar.multimodal.inputs import VisionChunk
+from sonar.tokenizers.hf import HfTokenizer
 
 
 class KimiK25Processor(ProcessorMixin):

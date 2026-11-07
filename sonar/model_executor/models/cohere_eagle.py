@@ -7,14 +7,14 @@ import torch
 import torch.nn as nn
 from transformers import CohereConfig
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.linear import ReplicatedLinear
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization.base_config import QuantizationConfig
-from aphrodite.model_executor.layers.vocab_parallel_embedding import VocabParallelEmbedding
-from aphrodite.model_executor.models.commandr import (
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import SonarConfig
+from sonar.logger import init_logger
+from sonar.model_executor.layers.linear import ReplicatedLinear
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization.base_config import QuantizationConfig
+from sonar.model_executor.layers.vocab_parallel_embedding import VocabParallelEmbedding
+from sonar.model_executor.models.commandr import (
     CohereDecoderLayer,
     CohereForCausalLM,
     LayerNorm,
@@ -54,21 +54,21 @@ class CohereEagleModel(nn.Module):
     def __init__(
         self,
         *,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
         start_layer_id: int = 0,
     ) -> None:
         super().__init__()
-        assert aphrodite_config.speculative_config is not None
-        self.config = aphrodite_config.speculative_config.draft_model_config.hf_config
-        self.quant_config = get_draft_quant_config(aphrodite_config)
+        assert sonar_config.speculative_config is not None
+        self.config = sonar_config.speculative_config.draft_model_config.hf_config
+        self.quant_config = get_draft_quant_config(sonar_config)
 
         # Cohere2-targeted EAGLE drafts inherit the target's sliding-window
         # attention pattern. ``CohereAttention`` resolves per-layer behavior
         # via ``config.layer_types[layer_idx]`` and the eagle layers use
         # absolute indices (target_layer_num + i), so prepend the target's
         # ``layer_types`` to the draft's so the lookup succeeds.
-        target_text_config = aphrodite_config.model_config.hf_text_config
+        target_text_config = sonar_config.model_config.hf_text_config
         if hasattr(target_text_config, "layer_types") and hasattr(self.config, "layer_types"):
             self.config.layer_types = list(target_text_config.layer_types) + list(self.config.layer_types)
 
@@ -83,7 +83,7 @@ class CohereEagleModel(nn.Module):
             [
                 CohereEagleDecoderLayer(
                     self.config,
-                    cache_config=aphrodite_config.cache_config,
+                    cache_config=sonar_config.cache_config,
                     quant_config=self.quant_config,
                     prefix=maybe_prefix(prefix, f"layers.{i + start_layer_id}"),
                 )
@@ -97,7 +97,7 @@ class CohereEagleModel(nn.Module):
             input_size=self.config.hidden_size * 2,
             output_size=self.config.hidden_size,
             bias=True,
-            params_dtype=aphrodite_config.model_config.dtype,
+            params_dtype=sonar_config.model_config.dtype,
             quant_config=self.quant_config,
             prefix=maybe_prefix(prefix, "fc"),
             return_bias=False,
@@ -139,17 +139,17 @@ class EagleCohereForCausalLM(CohereForCausalLM):
     has_own_embed_tokens = False
     has_own_lm_head = False
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         nn.Module.__init__(self)
-        assert aphrodite_config.speculative_config is not None
-        self.config = aphrodite_config.speculative_config.draft_model_config.hf_config
+        assert sonar_config.speculative_config is not None
+        self.config = sonar_config.speculative_config.draft_model_config.hf_config
         if self.config.tie_word_embeddings:
-            self.hf_to_aphrodite_mapper = self.hf_to_aphrodite_mapper | WeightsMapper(
+            self.hf_to_sonar_mapper = self.hf_to_sonar_mapper | WeightsMapper(
                 orig_to_new_prefix={"model.embed_tokens.": None}
             )
-        target_layer_num = aphrodite_config.model_config.get_num_layers(aphrodite_config.parallel_config)
+        target_layer_num = sonar_config.model_config.get_num_layers(sonar_config.parallel_config)
         self.model = CohereEagleModel(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             prefix=maybe_prefix(prefix, "model"),
             start_layer_id=target_layer_num,
         )
@@ -179,7 +179,7 @@ class EagleCohereForCausalLM(CohereForCausalLM):
 
         loader = AutoWeightsLoader(self)
 
-        loaded_weight_names = loader.load_weights(map(_track_and_forward, weights), mapper=self.hf_to_aphrodite_mapper)
+        loaded_weight_names = loader.load_weights(map(_track_and_forward, weights), mapper=self.hf_to_sonar_mapper)
 
         # Embed tokens are tied with the target model and therefore not
         # present in the EAGLE checkpoint; mark them as loaded explicitly to

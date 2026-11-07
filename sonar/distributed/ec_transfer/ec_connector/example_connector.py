@@ -6,22 +6,22 @@ from typing import TYPE_CHECKING, Any
 
 import safetensors
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed.ec_transfer.ec_connector.base import (
+from sonar.config import SonarConfig
+from sonar.distributed.ec_transfer.ec_connector.base import (
     ECConnectorBase,
     ECConnectorMetadata,
     ECConnectorRole,
 )
-from aphrodite.distributed.ec_transfer.ec_connector.utils import (
+from sonar.distributed.ec_transfer.ec_connector.utils import (
     PlaceholderMetadataResolver,
     collect_ec_item_metadata,
 )
-from aphrodite.logger import init_logger
-from aphrodite.utils.gpu_sync_debug import gpu_sync_allowed
-from aphrodite.v1.core.sched.output import SchedulerOutput
+from sonar.logger import init_logger
+from sonar.utils.gpu_sync_debug import gpu_sync_allowed
+from sonar.v1.core.sched.output import SchedulerOutput
 
 if TYPE_CHECKING:
-    from aphrodite.v1.request import Request
+    from sonar.v1.request import Request
 
 logger = init_logger(__name__)
 
@@ -51,12 +51,12 @@ class ECExampleConnector(ECConnectorBase):
     # NOTE: This is Simple debug implementation of the EC connector.
     # It save / load the EC cache to / from the disk.
 
-    def __init__(self, aphrodite_config: "AphroditeConfig", role: ECConnectorRole):
-        super().__init__(aphrodite_config=aphrodite_config, role=role)
+    def __init__(self, sonar_config: "SonarConfig", role: ECConnectorRole):
+        super().__init__(sonar_config=sonar_config, role=role)
         # req_id -> index
         self._mm_datas_need_loads: dict[str, int] = {}
-        self._metadata_resolver = PlaceholderMetadataResolver(aphrodite_config.model_config)
-        transfer_config = aphrodite_config.ec_transfer_config
+        self._metadata_resolver = PlaceholderMetadataResolver(sonar_config.model_config)
+        transfer_config = sonar_config.ec_transfer_config
         if transfer_config is not None:
             self._storage_path = transfer_config.get_from_extra_config("shared_storage_path", "/tmp")
             logger.debug(transfer_config)
@@ -65,7 +65,7 @@ class ECExampleConnector(ECConnectorBase):
             raise ValueError("ec_transfer_config must be set for ECConnectorBase")
 
     def start_load_caches(self, encoder_cache, **kwargs) -> None:
-        """Start loading the cache from the connector into Aphrodite's encoder cache.
+        """Start loading the cache from the connector into Sonar's encoder cache.
 
         This method loads the encoder cache based on metadata provided by the scheduler.
         It is called before `_gather_mm_embeddings` for the EC Connector. For EC,
@@ -77,7 +77,7 @@ class ECExampleConnector(ECConnectorBase):
             kwargs (dict): Additional keyword arguments for the connector.
 
         """
-        from aphrodite.platforms import current_platform
+        from sonar.platforms import current_platform
 
         # Get the metadata
         metadata: ECConnectorMetadata = self._get_connector_metadata()

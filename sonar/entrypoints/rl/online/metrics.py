@@ -16,14 +16,14 @@ Operation = Literal["init", "shutdown", "start", "start_draft", "update", "finis
 class WeightOperationMetrics:
     def __init__(self, registry: CollectorRegistry = REGISTRY):
         self.duration = Histogram(
-            "aphrodite:rl_weight_update_operation_duration_seconds",
+            "sonar:rl_weight_update_operation_duration_seconds",
             "Duration of one weight-transfer operation.",
             ["operation"],
             buckets=(0.01, 0.1, 1, 10, 30, 60, 120, 300, 600),
             registry=registry,
         )
         self.in_flight = Gauge(
-            "aphrodite:rl_weight_update_operations_in_flight",
+            "sonar:rl_weight_update_operations_in_flight",
             "Weight-transfer operations currently awaited.",
             ["operation"],
             multiprocess_mode="livesum",

@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import torch
 
-from aphrodite.utils.torch_utils import direct_register_custom_op
+from sonar.utils.torch_utils import direct_register_custom_op
 
 
 def mhc_pre_aiter(
@@ -43,7 +43,7 @@ def mhc_pre_aiter(
     """
     hidden_size = residual.shape[-1]
     assert hidden_size % 256 == 0
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     return rocm_aiter_ops.mhc_pre(
         residual,
@@ -154,7 +154,7 @@ def mhc_pre_delayed_aiter(
     """
     hidden_size = residual.shape[-1]
     assert hidden_size % 256 == 0
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     return rocm_aiter_ops.mhc_pre_delayed(
         residual,
@@ -221,7 +221,7 @@ def mhc_fused_post_pre_delayed_rms_norm_aiter(
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """:func:`mhc_pre_delayed_aiter` with the RMSNorm of the collapse folded in:
     ``layer_input`` comes back normalised with ``norm_weight`` / ``norm_eps``."""
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     return rocm_aiter_ops.mhc_fused_post_pre_delayed_rms_norm(
         residual,
@@ -283,7 +283,7 @@ def mhc_post_aiter(
     hidden_size = residual.shape[-1]
 
     assert hidden_size % 256 == 0
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     return rocm_aiter_ops.mhc_post(
         x,
@@ -326,7 +326,7 @@ def mhc_fused_post_pre_aiter(
     """
     hidden_size = residual.shape[-1]
     assert hidden_size % 256 == 0
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     return rocm_aiter_ops.mhc_fused_post_pre(
         x,

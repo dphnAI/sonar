@@ -16,21 +16,21 @@ from unittest.mock import MagicMock
 import pytest
 import torch
 
-from aphrodite.config import CacheConfig
-from aphrodite.v1.core.kv_cache_manager import KVCacheManager
-from aphrodite.v1.core.kv_cache_planning import (
+from sonar.config import CacheConfig
+from sonar.v1.core.kv_cache_manager import KVCacheManager
+from sonar.v1.core.kv_cache_planning import (
     _get_kv_cache_bytes_per_block,
     _get_packed_kv_cache_groups,
     _pool_bytes_per_block,
     get_kv_cache_config_from_groups,
     get_kv_cache_groups,
 )
-from aphrodite.v1.core.kv_cache_utils import (
+from sonar.v1.core.kv_cache_utils import (
     generate_scheduler_kv_cache_config,
     resolve_kv_cache_block_sizes,
 )
-from aphrodite.v1.hisparse.layout import _build_hisparse_kv_cache_tensors
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.hisparse.layout import _build_hisparse_kv_cache_tensors
+from sonar.v1.kv_cache_interface import (
     CircularBufferSpec,
     FullAttentionSpec,
     HiSparseHotSpec,
@@ -43,7 +43,7 @@ from aphrodite.v1.kv_cache_interface import (
     UniformTypeKVCacheSpecs,
     iter_layer_specs,
 )
-from aphrodite.v1.worker.utils import allocate_kv_cache
+from sonar.v1.worker.utils import allocate_kv_cache
 
 MEMORY = 8 * 1024 * 1024
 
@@ -71,7 +71,7 @@ def _mixed_page_groups(n_mla=3, n_idx=3, n_swa=5):
     return [_uniform_group(g1), _uniform_group(g2)], g1, g2
 
 
-def _mock_aphrodite_config(layout: str | None):
+def _mock_sonar_config(layout: str | None):
     config = MagicMock()
     config.cache_config = CacheConfig()
     config.cache_config.num_gpu_blocks_override = None
@@ -86,7 +86,7 @@ def test_packed_alignment_preserves_hot_pages_and_generic_stride():
     hot = HiSparseHotSpec(block_size=16, page_size=5120, blocks_per_request=2)
     groups = [KVCacheGroupSpec(["attention"], spec), KVCacheGroupSpec(["hot"], hot)]
     alignment = lcm(1152, hot.page_size_bytes)
-    stride = _pool_bytes_per_block(_mock_aphrodite_config("BLHNC"), groups)
+    stride = _pool_bytes_per_block(_mock_sonar_config("BLHNC"), groups)
     assert stride == alignment
     layout = KVCacheLayout.BLHNC
     tensors = _build_hisparse_kv_cache_tensors(groups, 3, 3 * stride, layout, stride)
@@ -184,7 +184,7 @@ def _make_csa_linear_specs(
 
 
 def _shared_layout_config():
-    config = _mock_aphrodite_config("BLNHC")
+    config = _mock_sonar_config("BLNHC")
     config.scheduler_config.disable_hybrid_kv_cache_manager = False
     config.speculative_config = None
     config.model_config.max_model_len = 16
@@ -371,7 +371,7 @@ class TestCSALinearGrouping:
         cannot be split at all -- the mamba layers must be sized against it.
         Sizing them against a narrower bucket splits them past what the block
         already fits, spending a pool block per extra group for no saving."""
-        config = _mock_aphrodite_config("BLNHC")
+        config = _mock_sonar_config("BLNHC")
         config.speculative_config = None
         specs = {}
         if wide == "unbalanced_attention":
@@ -456,7 +456,7 @@ class TestDensePacking:
         groups, g1, g2 = _mixed_page_groups()
         assert _get_kv_cache_bytes_per_block(groups, KVCacheLayout.BLHNC) == _expected_bytes_per_block(groups)
 
-        config = get_kv_cache_config_from_groups(_mock_aphrodite_config("BLHNC"), groups, MEMORY)
+        config = get_kv_cache_config_from_groups(_mock_sonar_config("BLHNC"), groups, MEMORY)
         # Groups overlay: both start at offset 0.
         assert [tensor.offset for tensor in config.kv_cache_tensors].count(0) == 2
         assert [tensor.layers for tensor in config.kv_cache_tensors] == [
@@ -468,7 +468,7 @@ class TestDensePacking:
     def test_layers_within_a_group_are_dense(self):
         groups, _, _ = _mixed_page_groups()
         pages = _pages(groups)
-        config = get_kv_cache_config_from_groups(_mock_aphrodite_config("BLHNC"), groups, MEMORY)
+        config = get_kv_cache_config_from_groups(_mock_sonar_config("BLHNC"), groups, MEMORY)
         offsets = {
             name: tensor.offset + i * tensor.layer_stride
             for tensor in config.kv_cache_tensors
@@ -484,7 +484,7 @@ class TestDensePacking:
     def test_allocation_is_layout_invariant(self, layout):
         specs = {f"l.{i}": _full() for i in range(4)}
         groups = [KVCacheGroupSpec(list(specs), _full())]
-        config = get_kv_cache_config_from_groups(_mock_aphrodite_config(layout), groups, MEMORY)
+        config = get_kv_cache_config_from_groups(_mock_sonar_config(layout), groups, MEMORY)
         (tensor,) = config.kv_cache_tensors
         page = _full().page_size_bytes
         assert tensor.layers == list(specs)
@@ -502,7 +502,7 @@ class TestDensePacking:
     def test_single_group_mixed_pages_follows_layout(self, layout):
         specs = {"mla.0": _mla(512), "mla.1": _mla(512), "idx.0": _mla(128)}
         groups = [_uniform_group(specs)]
-        config = get_kv_cache_config_from_groups(_mock_aphrodite_config(layout), groups, MEMORY)
+        config = get_kv_cache_config_from_groups(_mock_sonar_config(layout), groups, MEMORY)
         block_stride = _expected_bytes_per_block(groups)
         mla_tensor, idx_tensor = config.kv_cache_tensors
         assert mla_tensor.layers == ["mla.0", "mla.1"]
@@ -520,7 +520,7 @@ class TestDensePacking:
         mla_page = _mla(512).page_size_bytes
         idx = replace(_mla(128), block_stride_alignment=12288)
         groups = [_uniform_group({"mla.0": _mla(512), "idx.0": idx})]
-        config = get_kv_cache_config_from_groups(_mock_aphrodite_config("LBNHC"), groups, MEMORY)
+        config = get_kv_cache_config_from_groups(_mock_sonar_config("LBNHC"), groups, MEMORY)
         mla_tensor, idx_tensor = config.kv_cache_tensors
         assert config.num_blocks == MEMORY // (mla_page + 12288)
         assert (mla_tensor.block_stride, idx_tensor.block_stride) == (mla_page, 12288)
@@ -531,9 +531,9 @@ class TestDensePacking:
         groups, g1, g2 = _mixed_page_groups()
         # Overlay models resolve to a block-outer layout at backend selection (the
         # model's backend declares it); mirror that here.
-        config = get_kv_cache_config_from_groups(_mock_aphrodite_config("BLNHC"), groups, MEMORY)
+        config = get_kv_cache_config_from_groups(_mock_sonar_config("BLNHC"), groups, MEMORY)
         assert config.num_blocks == MEMORY // _expected_bytes_per_block(groups)
-        assert _pool_bytes_per_block(_mock_aphrodite_config("BLNHC"), groups) == _expected_bytes_per_block(groups)
+        assert _pool_bytes_per_block(_mock_sonar_config("BLNHC"), groups) == _expected_bytes_per_block(groups)
 
         views = _bind(config, "BLNHC")
         assert set(views) == set(g1) | set(g2)
@@ -564,23 +564,23 @@ class TestDensePacking:
         # silent flip.
         groups, _, _ = _mixed_page_groups()
         with pytest.raises(ValueError, match="cannot express this model's mixed page sizes"):
-            get_kv_cache_config_from_groups(_mock_aphrodite_config("LBNHC"), groups, MEMORY)
+            get_kv_cache_config_from_groups(_mock_sonar_config("LBNHC"), groups, MEMORY)
 
     def test_unresolved_layout_rejected(self):
         groups, _, _ = _mixed_page_groups()
         with pytest.raises(ValueError, match="has not been resolved"):
-            get_kv_cache_config_from_groups(_mock_aphrodite_config(None), groups, MEMORY)
+            get_kv_cache_config_from_groups(_mock_sonar_config(None), groups, MEMORY)
 
     def test_head_outer_layout_rejected_for_mixed_pages(self):
         groups, _, _ = _mixed_page_groups()
         with pytest.raises(ValueError, match="cannot express this model's mixed page sizes"):
-            get_kv_cache_config_from_groups(_mock_aphrodite_config("LHBNC"), groups, MEMORY)
+            get_kv_cache_config_from_groups(_mock_sonar_config("LHBNC"), groups, MEMORY)
 
     @pytest.mark.parametrize("layout", ["LBNHC", "BLHNC"])
     def test_bound_views_round_trip(self, layout):
         specs = {"mla.0": _mla(512), "mla.1": _mla(512), "idx.0": _mla(128)}
         groups = [_uniform_group(specs)]
-        config = get_kv_cache_config_from_groups(_mock_aphrodite_config(layout), groups, MEMORY)
+        config = get_kv_cache_config_from_groups(_mock_sonar_config(layout), groups, MEMORY)
         views = _bind(config, layout)
         for i, name in enumerate(specs):
             views[name].fill_(i + 1)

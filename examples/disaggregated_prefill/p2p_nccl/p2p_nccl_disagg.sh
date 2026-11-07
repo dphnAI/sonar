@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # =============================================================================
-# Aphrodite Disaggregated Serving Script - P2P NCCL XpYd Architecture
+# Sonar Disaggregated Serving Script - P2P NCCL XpYd Architecture
 # =============================================================================
 # This script demonstrates disaggregated prefill and decode serving using
 # P2P NCCL communication. The architecture supports various XpYd configurations:
@@ -47,7 +47,7 @@ DECODE_GPUS=${DECODE_GPUS:-1,2,3}
 PREFILL_PORTS=${PREFILL_PORTS:-20003}
 DECODE_PORTS=${DECODE_PORTS:-20005,20007,20009}
 
-echo "Warning: P2P NCCL disaggregated prefill XpYd support for Aphrodite v1 is experimental and subject to change."
+echo "Warning: P2P NCCL disaggregated prefill XpYd support for Sonar v1 is experimental and subject to change."
 echo ""
 echo "Architecture Configuration:"
 echo "  Model: $MODEL"
@@ -130,7 +130,7 @@ main() {
     check_num_gpus
     ensure_python_library_installed pandas
     ensure_python_library_installed datasets
-    ensure_python_library_installed aphrodite
+    ensure_python_library_installed sonar
     ensure_python_library_installed quart
 
     trap cleanup INT
@@ -173,7 +173,7 @@ main() {
         local kv_port=$((21001 + i))
 
         echo "  Prefill server $((i+1)): GPU $gpu_id, Port $port, KV Port $kv_port"
-        CUDA_VISIBLE_DEVICES=$gpu_id aphrodite run "$MODEL" \
+        CUDA_VISIBLE_DEVICES=$gpu_id sonar run "$MODEL" \
         --host 0.0.0.0 \
         --port "$port" \
         --tensor-parallel-size 1 \
@@ -200,7 +200,7 @@ main() {
         local kv_port=$((22001 + i))
 
         echo "  Decode server $((i+1)): GPU $gpu_id, Port $port, KV Port $kv_port"
-        CUDA_VISIBLE_DEVICES=$gpu_id aphrodite run "$MODEL" \
+        CUDA_VISIBLE_DEVICES=$gpu_id sonar run "$MODEL" \
         --host 0.0.0.0 \
         --port "$port" \
         --tensor-parallel-size 1 \
@@ -266,7 +266,7 @@ main() {
         # =============================================================================
         echo "Starting benchmark..."
         cd ../../../benchmarks/
-        aphrodite bench run --port 10001 --seed "$(date +%s)" \
+        sonar bench run --port 10001 --seed "$(date +%s)" \
             --model "$MODEL" \
             --dataset-name random --random-input-len 7500 --random-output-len 200 \
             --num-prompts 200 --burstiness 100 --request-rate 2 | tee benchmark.log

@@ -7,7 +7,7 @@ weight, so past the last-level (memory-side) cache its effective
 bandwidth collapses. At the DSV4.1-Flash TP=4 serving point the draft
 vocab-parallel lm_head shard ([32320, 5120] bf16, ~315 MiB, one call per
 decode step) hit this collapse. The guard keeps every weight above
-APHRODITE_SKINNY_GEMM_MAX_WEIGHT_BYTES on the generic GEMM fall-through at
+SONAR_SKINNY_GEMM_MAX_WEIGHT_BYTES on the generic GEMM fall-through at
 0 < n <= 5; the default cap is the memory-side cache size, read once
 from the hardware (256 MiB on MI355X, 128 MiB on MI300X-class parts),
 with a 256 MiB fallback where that cannot be read. The swap is NOT
@@ -21,8 +21,8 @@ import os
 import pytest
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.model_executor.layers.utils import (
+import sonar.envs as envs
+from sonar.model_executor.layers.utils import (
     _amd_l3_cache_bytes,
     _skinny_gemm_max_weight_bytes,
     _skinny_guard_warned,
@@ -31,7 +31,7 @@ from aphrodite.model_executor.layers.utils import (
 )
 
 try:
-    from aphrodite import _custom_ops as ops
+    from sonar import _custom_ops as ops
 
     WVSPLITK_AVAILABLE = hasattr(ops, "wvSplitK")
 except ImportError:
@@ -45,7 +45,7 @@ pytestmark = [
     ),
 ]
 
-_MAX_BYTES_VAR = "APHRODITE_SKINNY_GEMM_MAX_WEIGHT_BYTES"
+_MAX_BYTES_VAR = "SONAR_SKINNY_GEMM_MAX_WEIGHT_BYTES"
 
 # The serving-site shape: the DSpark draft vocab-parallel lm_head shard at
 # TP=4 (draft hidden size 5120), above the 256 MiB default cap.
@@ -60,8 +60,8 @@ def _clean_env(monkeypatch):
     # that feeds it: state leaked by unrelated tests earlier in a long
     # suite run must not change the outcome here.
     monkeypatch.delenv(_MAX_BYTES_VAR, raising=False)
-    monkeypatch.setenv("APHRODITE_ROCM_USE_SKINNY_GEMM", "1")
-    monkeypatch.delenv("APHRODITE_BATCH_INVARIANT", raising=False)
+    monkeypatch.setenv("SONAR_ROCM_USE_SKINNY_GEMM", "1")
+    monkeypatch.delenv("SONAR_BATCH_INVARIANT", raising=False)
     _skinny_guard_warned.clear()
     envs.disable_envs_cache()
     _skinny_gemm_max_weight_bytes.cache_clear()
@@ -186,14 +186,14 @@ def test_cap_env_hardware_fallback_precedence(monkeypatch):
     value overrides the hardware."""
     _set_cap(None)
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.utils._amd_l3_cache_bytes",
+        "sonar.model_executor.layers.utils._amd_l3_cache_bytes",
         lambda cache_info=None: 128 * 1024 * 1024,
     )
     _skinny_gemm_max_weight_bytes.cache_clear()
     assert _skinny_gemm_max_weight_bytes() == 128 * 1024 * 1024
 
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.utils._amd_l3_cache_bytes",
+        "sonar.model_executor.layers.utils._amd_l3_cache_bytes",
         lambda cache_info=None: None,
     )
     _skinny_gemm_max_weight_bytes.cache_clear()
@@ -205,7 +205,7 @@ def test_cap_env_hardware_fallback_precedence(monkeypatch):
 
 def test_census_warning_fires_once_per_site(caplog):
     w = torch.zeros(BIG_SHAPE, dtype=torch.bfloat16)
-    with caplog.at_level("WARNING", logger="aphrodite.model_executor.layers.utils"):
+    with caplog.at_level("WARNING", logger="sonar.model_executor.layers.utils"):
         lmhead_skinny_guard_permits(w, 5)
         lmhead_skinny_guard_permits(w, 5)  # same (shape, n): once
         lmhead_skinny_guard_permits(w, 4)  # new n: second line

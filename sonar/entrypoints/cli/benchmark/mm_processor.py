@@ -2,13 +2,13 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import argparse
 
-from aphrodite.benchmarks.mm_processor import add_cli_args, main
-from aphrodite.entrypoints.cli.benchmark.base import BenchmarkSubcommandBase
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
+from sonar.benchmarks.mm_processor import add_cli_args, main
+from sonar.entrypoints.cli.benchmark.base import BenchmarkSubcommandBase
+from sonar.utils.argparse_utils import FlexibleArgumentParser
 
 
 class BenchmarkMMProcessorSubcommand(BenchmarkSubcommandBase):
-    """The `mm-processor` subcommand for `aphrodite bench`."""
+    """The `mm-processor` subcommand for `sonar bench`."""
 
     name = "mm-processor"
     help = "Benchmark multimodal processor latency across different configurations."

@@ -5,11 +5,11 @@ from typing import Any
 
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.distributed.eplb.eplb_state import EplbLayerState
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe.config import RoutingMethodType
-from aphrodite.model_executor.layers.fused_moe.router.base_router import BaseRouter
+import sonar.envs as envs
+from sonar.distributed.eplb.eplb_state import EplbLayerState
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe.config import RoutingMethodType
+from sonar.model_executor.layers.fused_moe.router.base_router import BaseRouter
 
 logger = init_logger(__name__)
 
@@ -324,7 +324,7 @@ class RoutingSimulatorRouter(BaseRouter):
         )
 
         self._kernel_routing_method_type = kernel_routing_method_type
-        strategy_name = envs.APHRODITE_MOE_ROUTING_SIMULATION_STRATEGY
+        strategy_name = envs.SONAR_MOE_ROUTING_SIMULATION_STRATEGY
         self._strategy = RoutingSimulator.get_strategy(strategy_name)
         logger.warning_once(
             "Simulating MoE routing using a %s strategy. "

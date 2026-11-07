@@ -7,22 +7,22 @@ from __future__ import annotations
 from collections.abc import Callable, Collection, Sequence
 from typing import cast
 
-from aphrodite.entrypoints.generate.base.protocol import MMPayload
-from aphrodite.entrypoints.scale_out.token_in_token_out.mm_serde import (
+from sonar.entrypoints.generate.base.protocol import MMPayload
+from sonar.entrypoints.scale_out.token_in_token_out.mm_serde import (
     decode_mm_kwargs_item,
     encode_mm_kwargs_item,
 )
-from aphrodite.entrypoints.scale_out.token_in_token_out.protocol import (
+from sonar.entrypoints.scale_out.token_in_token_out.protocol import (
     MultiModalFeatures,
     PlaceholderRangeInfo,
 )
-from aphrodite.inputs import (
+from sonar.inputs import (
     EngineInput,
     MultiModalHashes,
     MultiModalInput,
     MultiModalPlaceholders,
 )
-from aphrodite.multimodal.inputs import (
+from sonar.multimodal.inputs import (
     MultiModalKwargsItem,
     MultiModalKwargsOptionalItems,
 )

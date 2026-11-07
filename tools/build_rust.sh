@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build Aphrodite Rust artifacts and install them into the aphrodite package.
+# Build Sonar Rust artifacts and install them into the sonar package.
 # Usage: ./tools/build_rust.sh [--debug]
 #
 # By default builds in release mode. Pass --debug for faster compile times

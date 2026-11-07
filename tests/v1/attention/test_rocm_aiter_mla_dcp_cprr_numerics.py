@@ -31,14 +31,14 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 if not current_platform.is_rocm():
     pytest.skip("ROCm AITER MLA tests", allow_module_level=True)
 
-from aphrodite._aiter_ops import is_aiter_found  # noqa: E402
-from aphrodite.distributed.parallel_state import GroupCoordinator  # noqa: E402
-from aphrodite.v1.attention.backends.mla import rocm_aiter_mla  # noqa: E402
+from sonar._aiter_ops import is_aiter_found  # noqa: E402
+from sonar.distributed.parallel_state import GroupCoordinator  # noqa: E402
+from sonar.v1.attention.backends.mla import rocm_aiter_mla  # noqa: E402
 
 KV_LORA_RANK = 512
 QK_ROPE_HEAD_DIM = 64
@@ -67,7 +67,7 @@ def _gpu_available() -> bool:
 def _on_gfx950() -> bool:
     if not is_aiter_found():
         return False
-    from aphrodite.platforms.rocm import on_gfx950
+    from sonar.platforms.rocm import on_gfx950
 
     return on_gfx950()
 
@@ -143,10 +143,10 @@ class _FakeGroup(GroupCoordinator):
 
 
 def _install_fake_groups(dcp_size: int, cp_rank: int, tp_size: int = 1) -> None:
-    """Point Aphrodite's parallel_state at rank-simulating stubs (no NCCL)."""
-    import aphrodite.distributed.parallel_state as ps
-    import aphrodite.model_executor.layers.attention.mla_attention as mla_attention
-    import aphrodite.v1.attention.backends.mla.rocm_aiter_mla as backend
+    """Point Sonar's parallel_state at rank-simulating stubs (no NCCL)."""
+    import sonar.distributed.parallel_state as ps
+    import sonar.model_executor.layers.attention.mla_attention as mla_attention
+    import sonar.v1.attention.backends.mla.rocm_aiter_mla as backend
 
     dcp = _FakeGroup(dcp_size, cp_rank)
     tp = _FakeGroup(tp_size, cp_rank)
@@ -167,9 +167,9 @@ def _restore_parallel_groups():
     group leaks into the rest of the pytest session and silently breaks
     unrelated tests that expect a real (or absent) group.
     """
-    import aphrodite.distributed.parallel_state as ps
-    import aphrodite.model_executor.layers.attention.mla_attention as mla_attention
-    import aphrodite.v1.attention.backends.mla.rocm_aiter_mla as backend
+    import sonar.distributed.parallel_state as ps
+    import sonar.model_executor.layers.attention.mla_attention as mla_attention
+    import sonar.v1.attention.backends.mla.rocm_aiter_mla as backend
 
     saved = [
         (mod, name, getattr(mod, name))
@@ -196,7 +196,7 @@ class _PrefillBackendStub:
         return self
 
 
-def _make_ctx_layer(aphrodite_config, monkeypatch: pytest.MonkeyPatch):
+def _make_ctx_layer(sonar_config, monkeypatch: pytest.MonkeyPatch):
     """Stand-in for the registered attention layer in static_forward_context.
 
     ``MLACommonMetadataBuilder.__init__`` reads the MLA dims, ``dcp_manager``
@@ -205,7 +205,7 @@ def _make_ctx_layer(aphrodite_config, monkeypatch: pytest.MonkeyPatch):
     it is constructed without running __init__ so no peer pointers are exchanged
     and no collective is issued. That is what keeps this test single-process.
     """
-    from aphrodite.v1.attention.ops.dcp import MLADCPManager
+    from sonar.v1.attention.ops.dcp import MLADCPManager
 
     mgr = object.__new__(MLADCPManager)
     monkeypatch.setattr(mgr, "init_kv_gather", lambda *a, **k: None)
@@ -232,7 +232,7 @@ def _ensure_workspace_manager(device: torch.device) -> None:
     workspace -- production locks only after warmup, and this keeps allocating
     across shards.
     """
-    from aphrodite.v1.worker.workspace import (
+    from sonar.v1.worker.workspace import (
         init_workspace_manager,
         is_workspace_manager_initialized,
     )
@@ -255,7 +255,7 @@ def _build_impl(num_heads: int, dcp: int, cp_rank: int):
     weight-dependent MLA setup -- i.e. model loading, which this test exists to
     avoid. forward_mqa's fold path reads only the attributes set below.
     """
-    from aphrodite.v1.attention.backends.mla.rocm_aiter_mla import AiterMLAImpl
+    from sonar.v1.attention.backends.mla.rocm_aiter_mla import AiterMLAImpl
 
     impl = object.__new__(AiterMLAImpl)
     impl.kv_lora_rank = KV_LORA_RANK
@@ -272,7 +272,7 @@ def _build_impl(num_heads: int, dcp: int, cp_rank: int):
     return impl
 
 
-def _make_aphrodite_config(heads_per_rank: int):
+def _make_sonar_config(heads_per_rank: int):
     """A DCP8 MLA config with no weights and no distributed init.
 
     DeepSeek-R1's config supplies the MLA dims (kv_lora_rank 512, rope 64,
@@ -282,29 +282,29 @@ def _make_aphrodite_config(heads_per_rank: int):
     model_arch_config, a snapshot taken at config-creation time, so patching
     hf_config alone would be inert.
     """
-    from tests.v1.attention.utils import create_aphrodite_config
+    from tests.v1.attention.utils import create_sonar_config
 
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         model_name=MODEL,
         tensor_parallel_size=1,
         max_model_len=2048,
         max_num_seqs=NUM_REQS * 2,
         max_num_batched_tokens=4096,
     )
-    aphrodite_config.model_config.model_arch_config.total_num_attention_heads = heads_per_rank
+    sonar_config.model_config.model_arch_config.total_num_attention_heads = heads_per_rank
     # Without a speculative config the batch reorder threshold stays at 1 and a
     # qlen-QLEN row is classified as a PREFILL, so the decode path under test is
     # never reached. _init_reorder_batch_threshold reads exactly these two
     # fields, so a stand-in is enough and avoids pulling in a draft model.
-    aphrodite_config.speculative_config = SimpleNamespace(num_speculative_tokens=QLEN - 1, parallel_drafting=False)
-    aphrodite_config.cache_config.cache_dtype = "fp8"
-    aphrodite_config.parallel_config.decode_context_parallel_size = DCP
-    aphrodite_config.parallel_config.cp_kv_cache_interleave_size = 1
-    return aphrodite_config
+    sonar_config.speculative_config = SimpleNamespace(num_speculative_tokens=QLEN - 1, parallel_drafting=False)
+    sonar_config.cache_config.cache_dtype = "fp8"
+    sonar_config.parallel_config.decode_context_parallel_size = DCP
+    sonar_config.parallel_config.cp_kv_cache_interleave_size = 1
+    return sonar_config
 
 
 def _run_shard(
-    aphrodite_config,
+    sonar_config,
     spec,
     layer_name,
     device,
@@ -323,8 +323,8 @@ def _run_shard(
     ``kern_rank`` is separate from ``cp_rank`` so the positive control can hand
     rank r's pages to the kernel while telling it that it is rank r+1.
     """
-    from aphrodite.v1.attention.backend import CommonAttentionMetadata
-    from aphrodite.v1.attention.backends.mla.rocm_aiter_mla import AiterMLAMetadataBuilder
+    from sonar.v1.attention.backend import CommonAttentionMetadata
+    from sonar.v1.attention.backends.mla.rocm_aiter_mla import AiterMLAMetadataBuilder
 
     L = ctx + qlen
     local_len = int(pos.numel())
@@ -356,7 +356,7 @@ def _run_shard(
     )
 
     _install_fake_groups(dcp, kern_rank)
-    builder = AiterMLAMetadataBuilder(spec, [layer_name], aphrodite_config, device)
+    builder = AiterMLAMetadataBuilder(spec, [layer_name], sonar_config, device)
     md = builder.build(0, common)
 
     impl = _build_impl(builder.num_heads, dcp, kern_rank)
@@ -369,7 +369,7 @@ def _numerics(monkeypatch: pytest.MonkeyPatch, heads_per_rank: int, sabotage: bo
     """Run every DCP shard and return (per-shard max rel err, merged rel err)."""
     import aiter
 
-    from aphrodite.config import set_current_aphrodite_config
+    from sonar.config import set_current_sonar_config
 
     device = torch.device("cuda", 0)
     torch.accelerator.set_device_index(device.index)
@@ -377,22 +377,20 @@ def _numerics(monkeypatch: pytest.MonkeyPatch, heads_per_rank: int, sabotage: bo
     _ensure_workspace_manager(device)
 
     _install_fake_groups(DCP, 0)
-    aphrodite_config = _make_aphrodite_config(heads_per_rank)
+    sonar_config = _make_sonar_config(heads_per_rank)
 
-    with set_current_aphrodite_config(aphrodite_config):
-        from aphrodite.v1.kv_cache_interface import MLAAttentionSpec
+    with set_current_sonar_config(sonar_config):
+        from sonar.v1.kv_cache_interface import MLAAttentionSpec
 
         layer_name = "model.layers.0.self_attn.attn"
-        aphrodite_config.compilation_config.static_forward_context[layer_name] = _make_ctx_layer(
-            aphrodite_config, monkeypatch
-        )
+        sonar_config.compilation_config.static_forward_context[layer_name] = _make_ctx_layer(sonar_config, monkeypatch)
         # block_size 1: one page per token, so page ids are positions and the
         # residue-class page table is expressible directly.
         spec = MLAAttentionSpec(
             block_size=1,
             num_kv_heads=1,
             head_size=HEAD_SIZE,
-            dtype=aphrodite_config.model_config.dtype,
+            dtype=sonar_config.model_config.dtype,
             non_causal_multi_token_decode=False,
         )
 
@@ -426,7 +424,7 @@ def _numerics(monkeypatch: pytest.MonkeyPatch, heads_per_rank: int, sabotage: bo
             pos = torch.arange(r, L, DCP, device=device)  # residue class r
             kern_rank = (r + 1) % DCP if sabotage else r
             md, o, lse, _ = _run_shard(
-                aphrodite_config,
+                sonar_config,
                 spec,
                 layer_name,
                 device,
@@ -511,7 +509,7 @@ def test_cprr_kernel_is_selected_for_the_k3_shape():
     Guards against a silent fall-out to segmented/Triton, which is what the
     stock configuration does and what this route exists to avoid.
     """
-    from aphrodite.v1.attention.backends.mla import rocm_aiter_mla as m
+    from sonar.v1.attention.backends.mla import rocm_aiter_mla as m
 
     assert m._asm_dcp_verify_configured(dcp_world_size=DCP, cp_interleave=1, multi_token_decode=True) is True
     assert QLEN >= m._MIN_CPRR_QLEN
@@ -562,15 +560,15 @@ def _varlen_reference(q_f32, kv_f32, seq_lens, qo_lens, positions_per_req):
 def test_adaptive_varlen_shards_match_reference(monkeypatch, asm, expected):
     import aiter
 
-    from aphrodite.config import set_current_aphrodite_config
-    from aphrodite.v1.attention.backend import CommonAttentionMetadata
-    from aphrodite.v1.attention.backends.mla.rocm_aiter_mla import AiterMLAMetadataBuilder
-    from aphrodite.v1.attention.ops.dcp import (
+    from sonar.config import set_current_sonar_config
+    from sonar.v1.attention.backend import CommonAttentionMetadata
+    from sonar.v1.attention.backends.mla.rocm_aiter_mla import AiterMLAMetadataBuilder
+    from sonar.v1.attention.ops.dcp import (
         CPTritonContext,
         correct_attn_out,
         mask_dcp_empty_shards_,
     )
-    from aphrodite.v1.kv_cache_interface import MLAAttentionSpec
+    from sonar.v1.kv_cache_interface import MLAAttentionSpec
 
     if not asm:
         monkeypatch.setattr(rocm_aiter_mla, "_asm_dcp_verify_configured", lambda *a, **k: False)
@@ -580,8 +578,8 @@ def test_adaptive_varlen_shards_match_reference(monkeypatch, asm, expected):
     torch.manual_seed(0)
     _ensure_workspace_manager(device)
     _install_fake_groups(DCP, 0)
-    aphrodite_config = _make_aphrodite_config(heads_per_rank)
-    aphrodite_config.speculative_config.enable_adaptive_verification = True
+    sonar_config = _make_sonar_config(heads_per_rank)
+    sonar_config.speculative_config.enable_adaptive_verification = True
 
     nr = len(VARLEN_QO)
     qo_lens = list(VARLEN_QO)
@@ -596,16 +594,14 @@ def test_adaptive_varlen_shards_match_reference(monkeypatch, asm, expected):
     def qsl(lens):
         return torch.tensor([0] + lens, dtype=torch.int32).cumsum(0, dtype=torch.int32)
 
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         layer_name = "model.layers.0.self_attn.attn"
-        aphrodite_config.compilation_config.static_forward_context[layer_name] = _make_ctx_layer(
-            aphrodite_config, monkeypatch
-        )
+        sonar_config.compilation_config.static_forward_context[layer_name] = _make_ctx_layer(sonar_config, monkeypatch)
         spec = MLAAttentionSpec(
             block_size=1,
             num_kv_heads=1,
             head_size=HEAD_SIZE,
-            dtype=aphrodite_config.model_config.dtype,
+            dtype=sonar_config.model_config.dtype,
             non_causal_multi_token_decode=False,
         )
         kv_flat = torch.randn(nr * max_len, 1, HEAD_SIZE, dtype=torch.float32, device=device).to(aiter.dtypes.fp8)
@@ -636,7 +632,7 @@ def test_adaptive_varlen_shards_match_reference(monkeypatch, asm, expected):
             local = torch.tensor([p.numel() for p in positions], dtype=torch.int32)
             block_table = torch.zeros(
                 nr,
-                aphrodite_config.model_config.max_model_len // DCP,
+                sonar_config.model_config.max_model_len // DCP,
                 dtype=torch.int32,
                 device=device,
             )
@@ -657,7 +653,7 @@ def test_adaptive_varlen_shards_match_reference(monkeypatch, asm, expected):
                 dcp_local_seq_lens_cpu_upper_bound=local,
             )
             _install_fake_groups(DCP, r)
-            builder = AiterMLAMetadataBuilder(spec, [layer_name], aphrodite_config, device)
+            builder = AiterMLAMetadataBuilder(spec, [layer_name], sonar_config, device)
             md = builder.build(0, common)
             assert md.decode is not None
             assert md.decode.dcp_route is expected

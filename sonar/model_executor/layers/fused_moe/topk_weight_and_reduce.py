@@ -4,8 +4,8 @@
 
 import torch
 
-import aphrodite._custom_ops as ops
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
+import sonar._custom_ops as ops
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
 
 
 class TopKWeightAndReduceDelegate(mk.TopKWeightAndReduce):

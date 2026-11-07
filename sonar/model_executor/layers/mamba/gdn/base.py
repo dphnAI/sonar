@@ -3,20 +3,20 @@
 import torch
 from transformers import PreTrainedConfig
 
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.config import (
+    SonarConfig,
 )
-from aphrodite.distributed import (
+from sonar.distributed import (
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
 )
-from aphrodite.model_executor.custom_op import PluggableLayer
-from aphrodite.model_executor.layers.mamba.abstract import MambaBase
-from aphrodite.model_executor.layers.mamba.mamba_utils import (
+from sonar.model_executor.custom_op import PluggableLayer
+from sonar.model_executor.layers.mamba.abstract import MambaBase
+from sonar.model_executor.layers.mamba.mamba_utils import (
     MambaStateDtypeCalculator,
 )
-from aphrodite.model_executor.models.utils import extract_layer_index
-from aphrodite.v1.attention.backends.registry import MambaAttentionBackendEnum
+from sonar.model_executor.models.utils import extract_layer_index
+from sonar.v1.attention.backends.registry import MambaAttentionBackendEnum
 
 
 class GatedDeltaNetAttention(PluggableLayer, MambaBase):
@@ -25,7 +25,7 @@ class GatedDeltaNetAttention(PluggableLayer, MambaBase):
     def __init__(
         self,
         config: PreTrainedConfig,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
     ) -> None:
         super().__init__()
@@ -36,10 +36,10 @@ class GatedDeltaNetAttention(PluggableLayer, MambaBase):
         self.hidden_size = config.hidden_size
         self.activation = config.hidden_act
         self.layer_norm_epsilon = config.rms_norm_eps
-        self.model_config = aphrodite_config.model_config
-        self.cache_config = aphrodite_config.cache_config
-        self.quant_config = aphrodite_config.quant_config
-        self.speculative_config = aphrodite_config.speculative_config
+        self.model_config = sonar_config.model_config
+        self.cache_config = sonar_config.cache_config
+        self.quant_config = sonar_config.quant_config
+        self.speculative_config = sonar_config.speculative_config
         self.num_spec = self.speculative_config.num_speculative_tokens if self.speculative_config else 0
 
     @property

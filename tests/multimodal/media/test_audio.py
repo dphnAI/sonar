@@ -11,15 +11,15 @@ import pybase64 as base64
 import pytest
 import soundfile as sf
 
-import aphrodite.envs as envs
-from aphrodite.multimodal.media import AudioMediaIO
-from aphrodite.multimodal.media import audio as audio_module
-from aphrodite.multimodal.media.audio import (
+import sonar.envs as envs
+from sonar.multimodal.media import AudioMediaIO
+from sonar.multimodal.media import audio as audio_module
+from sonar.multimodal.media.audio import (
     load_audio,
     load_audio_soundfile,
     load_audio_torchcodec,
 )
-from aphrodite.multimodal.media.base import MediaDecodedBudget
+from sonar.multimodal.media.base import MediaDecodedBudget
 
 from ...conftest import AudioTestAssets
 
@@ -124,19 +124,19 @@ def _make_flac_bytes(frames: int, channels: int, samplerate: int) -> bytes:
 
 @pytest.mark.skip_global_cleanup
 def test_request_budget_rejects_second_decoded_audio_clip(monkeypatch):
-    monkeypatch.setattr(envs, "APHRODITE_MAX_MEDIA_REQUEST_DECODE_BYTES", 384)
+    monkeypatch.setattr(envs, "SONAR_MAX_MEDIA_REQUEST_DECODE_BYTES", 384)
     clip = _make_flac_bytes(frames=64, channels=1, samplerate=16000)
     audio_io = AudioMediaIO(decoded_budget=MediaDecodedBudget())
 
     audio_io.load_bytes(clip)
-    with pytest.raises(ValueError, match="APHRODITE_MAX_MEDIA_REQUEST_DECODE_BYTES"):
+    with pytest.raises(ValueError, match="SONAR_MAX_MEDIA_REQUEST_DECODE_BYTES"):
         audio_io.load_bytes(clip)
 
 
 @pytest.mark.skip_global_cleanup
 def test_request_budget_allows_parallel_audio_decodes(monkeypatch):
-    monkeypatch.setattr(envs, "APHRODITE_MAX_MEDIA_REQUEST_DECODE_BYTES", 512)
-    monkeypatch.setattr(envs, "APHRODITE_MAX_AUDIO_DECODE_BYTES", 256)
+    monkeypatch.setattr(envs, "SONAR_MAX_MEDIA_REQUEST_DECODE_BYTES", 512)
+    monkeypatch.setattr(envs, "SONAR_MAX_AUDIO_DECODE_BYTES", 256)
     budget = MediaDecodedBudget()
     audio_io = AudioMediaIO(decoded_budget=budget)
     decoding = threading.Barrier(2)
@@ -158,8 +158,8 @@ def test_request_budget_allows_parallel_audio_decodes(monkeypatch):
 
 @pytest.mark.skip_global_cleanup
 def test_request_budget_waits_for_inflight_audio_decode(monkeypatch):
-    monkeypatch.setattr(envs, "APHRODITE_MAX_MEDIA_REQUEST_DECODE_BYTES", 256)
-    monkeypatch.setattr(envs, "APHRODITE_MAX_AUDIO_DECODE_BYTES", 256)
+    monkeypatch.setattr(envs, "SONAR_MAX_MEDIA_REQUEST_DECODE_BYTES", 256)
+    monkeypatch.setattr(envs, "SONAR_MAX_AUDIO_DECODE_BYTES", 256)
     budget = MediaDecodedBudget()
     audio_io = AudioMediaIO(decoded_budget=budget)
     decoding = threading.Event()
@@ -193,7 +193,7 @@ def test_request_budget_waits_for_inflight_audio_decode(monkeypatch):
         finally:
             finish_decoding.set()
         first.result(timeout=5)
-        with pytest.raises(ValueError, match="APHRODITE_MAX_MEDIA_REQUEST_DECODE_BYTES"):
+        with pytest.raises(ValueError, match="SONAR_MAX_MEDIA_REQUEST_DECODE_BYTES"):
             second.result(timeout=5)
 
     assert decode_calls == 1
@@ -202,8 +202,8 @@ def test_request_budget_waits_for_inflight_audio_decode(monkeypatch):
 
 @pytest.mark.skip_global_cleanup
 def test_request_budget_releases_failed_audio_reservation(monkeypatch):
-    monkeypatch.setattr(envs, "APHRODITE_MAX_MEDIA_REQUEST_DECODE_BYTES", 256)
-    monkeypatch.setattr(envs, "APHRODITE_MAX_AUDIO_DECODE_BYTES", 256)
+    monkeypatch.setattr(envs, "SONAR_MAX_MEDIA_REQUEST_DECODE_BYTES", 256)
+    monkeypatch.setattr(envs, "SONAR_MAX_AUDIO_DECODE_BYTES", 256)
     budget = MediaDecodedBudget()
     audio_io = AudioMediaIO(decoded_budget=budget)
     audio = (np.zeros(64, dtype=np.float32), 16000)
@@ -235,7 +235,7 @@ def test_memory_guard_rejects_large_allocation():
     # 100_000 frames * 8 channels * 4 bytes = 3.2 MB
     payload = _make_flac_bytes(frames=100_000, channels=8, samplerate=48000)
     # Set limit to 1 MiB — should reject
-    with pytest.raises(ValueError, match="APHRODITE_MAX_AUDIO_DECODE_BYTES"):
+    with pytest.raises(ValueError, match="SONAR_MAX_AUDIO_DECODE_BYTES"):
         load_audio_soundfile(
             BytesIO(payload),
             sr=None,
@@ -252,7 +252,7 @@ def test_forged_samplerate_rejected_by_memory_guard():
     # Memory: 1_000_000 * 8 * 4 = 32 MB
     payload = _make_flac_bytes(frames=1_000_000, channels=8, samplerate=655350)
     # Set memory limit to 16 MiB — below the 32 MB allocation
-    with pytest.raises(ValueError, match="APHRODITE_MAX_AUDIO_DECODE_BYTES"):
+    with pytest.raises(ValueError, match="SONAR_MAX_AUDIO_DECODE_BYTES"):
         load_audio_soundfile(
             BytesIO(payload),
             sr=None,
@@ -266,7 +266,7 @@ def test_load_audio_threads_max_decode_bytes():
     # 50_000 frames * 4 channels * 4 bytes = 800 KB
     payload = _make_flac_bytes(frames=50_000, channels=4, samplerate=44100)
     # Limit of 512 KB should reject
-    with pytest.raises(ValueError, match="APHRODITE_MAX_AUDIO_DECODE_BYTES"):
+    with pytest.raises(ValueError, match="SONAR_MAX_AUDIO_DECODE_BYTES"):
         load_audio(
             BytesIO(payload),
             sr=None,
@@ -384,7 +384,7 @@ def test_torchcodec_max_decode_bytes_rejected(dummy_audio_bytes):
     """The decompression-bomb memory guard must hold for torchcodec too."""
     pytest.importorskip("torchcodec")
     audio, _ = load_audio_torchcodec(BytesIO(dummy_audio_bytes), sr=None)
-    with pytest.raises(ValueError, match="APHRODITE_MAX_AUDIO_DECODE_BYTES"):
+    with pytest.raises(ValueError, match="SONAR_MAX_AUDIO_DECODE_BYTES"):
         load_audio_torchcodec(
             BytesIO(dummy_audio_bytes),
             sr=None,

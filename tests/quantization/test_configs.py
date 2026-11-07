@@ -7,8 +7,8 @@ Run `pytest tests/quantization/test_configs.py --forked`.
 
 import pytest
 
-from aphrodite.config import ModelConfig
-from aphrodite.platforms import current_platform
+from sonar.config import ModelConfig
+from sonar.platforms import current_platform
 
 # Model Id // Quantization Arg // Expected Type
 MODEL_ARG_EXPTYPES = [

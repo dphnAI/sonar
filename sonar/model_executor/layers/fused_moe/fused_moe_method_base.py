@@ -6,21 +6,21 @@ from typing import TYPE_CHECKING
 
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe.config import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEParallelConfig,
     FusedMoEQuantConfig,
 )
-from aphrodite.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
-from aphrodite.model_executor.layers.quantization.base_config import (
+from sonar.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
+from sonar.model_executor.layers.quantization.base_config import (
     QuantizeMethodBase,
 )
 
 if TYPE_CHECKING:
-    from aphrodite.model_executor.layers.fused_moe.routed_experts import RoutedExperts
-    from aphrodite.model_executor.layers.fused_moe.runner.shared_experts import SharedExperts
+    from sonar.model_executor.layers.fused_moe.routed_experts import RoutedExperts
+    from sonar.model_executor.layers.fused_moe.runner.shared_experts import SharedExperts
 
 logger = init_logger(__name__)
 

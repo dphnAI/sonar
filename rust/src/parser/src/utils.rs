@@ -5,7 +5,7 @@
 
 use std::fmt::Debug;
 
-use aphrodite_tokenizer::DecodedText;
+use sonar_tokenizer::DecodedText;
 use winnow::Parser;
 use winnow::error::{ContextError, ErrMode, ModalResult, Needed, StrContext, StrContextValue};
 use winnow::stream::{Partial, Stream};

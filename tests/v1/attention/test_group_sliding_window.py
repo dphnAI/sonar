@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from aphrodite.v1.attention.backends.cpu_attn import (
+from sonar.v1.attention.backends.cpu_attn import (
     CPUAttentionBackendImpl,
     CPUAttentionMetadataBuilder,
 )
@@ -37,9 +37,9 @@ def _layers(layer_windows: list[int]):
 )
 def test_cpu_group_sliding_window(layer_windows, expected):
     layers = _layers(layer_windows)
-    builder = SimpleNamespace(aphrodite_config=None, layer_names=list(layers))
+    builder = SimpleNamespace(sonar_config=None, layer_names=list(layers))
     with patch(
-        "aphrodite.v1.attention.backends.cpu_attn.get_layers_from_aphrodite_config",
+        "sonar.v1.attention.backends.cpu_attn.get_layers_from_sonar_config",
         return_value=layers,
     ):
         window = CPUAttentionMetadataBuilder._group_sliding_window(builder)

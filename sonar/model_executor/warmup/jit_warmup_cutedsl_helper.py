@@ -5,8 +5,8 @@ from abc import abstractmethod
 from collections.abc import Callable, Mapping
 from typing import Any, ClassVar, Generic, TypeAlias, TypeVar
 
-from aphrodite.model_executor.warmup.jit_warmup import (
-    AphroditeJitKernel,
+from sonar.model_executor.warmup.jit_warmup import (
+    SonarJitKernel,
 )
 
 DEFAULT_CUTEDSL_COMPILE_OPTIONS = "--enable-tvm-ffi"
@@ -46,7 +46,7 @@ def compile_cutedsl(
     )
 
 
-class AphroditeCuTeDSLJitKernel(AphroditeJitKernel[CompileKeyT], Generic[CompileKeyT]):
+class SonarCuTeDSLJitKernel(SonarJitKernel[CompileKeyT], Generic[CompileKeyT]):
     """CuTeDSL owner whose compiled executor is shared by warmup and runtime."""
 
     kernel: ClassVar[Any]

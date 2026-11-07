@@ -28,7 +28,7 @@
 #include "nvfp4_utils.cuh"
 #include "launch_bounds_utils.h"
 
-namespace aphrodite {
+namespace sonar {
 
 // NVFP4 quantization kernel for experts (low-latency path).
 // When FUSE_SILU_MUL=true, expects input with gate||up layout and fuses
@@ -36,7 +36,7 @@ namespace aphrodite {
 // Use UE4M3 by default.
 template <class Type, bool FUSE_SILU_MUL = false, bool UE8M0_SF = false,
           bool SMALL_NUM_EXPERTS = false>
-__global__ void __launch_bounds__(512, APHRODITE_BLOCKS_PER_SM(512))
+__global__ void __launch_bounds__(512, SONAR_BLOCKS_PER_SM(512))
     cvt_fp16_to_fp4(int32_t numRows, int32_t numCols, Type const* in,
                     float const* SFScale, uint32_t* out, uint32_t* SFout,
                     uint32_t* input_offset_by_experts,
@@ -152,7 +152,7 @@ __global__ void __launch_bounds__(512, APHRODITE_BLOCKS_PER_SM(512))
 // fuses SiLU(gate)*up before quantization.
 template <class Type, bool FUSE_SILU_MUL = false, bool UE8M0_SF = false,
           bool SMALL_NUM_EXPERTS = false>
-__global__ void __launch_bounds__(1024, APHRODITE_BLOCKS_PER_SM(1024))
+__global__ void __launch_bounds__(1024, SONAR_BLOCKS_PER_SM(1024))
     cvt_fp16_to_fp4(int32_t numRows, int32_t numCols, Type const* in,
                     float const* SFScale, uint32_t* out, uint32_t* SFout,
                     uint32_t* input_offset_by_experts,
@@ -270,7 +270,7 @@ void quant_impl(void* output, void* output_scale, void* input,
   dim3 block(std::min(workSizePerRow, 512));
   // Get number of blocks per SM
   int const numBlocksPerSM =
-      aphrodite_runtime_blocks_per_sm(static_cast<int>(block.x));
+      sonar_runtime_blocks_per_sm(static_cast<int>(block.x));
   dim3 grid(std::min(static_cast<int>((totalWorkSize + block.x - 1) / block.x),
                      multiProcessorCount * numBlocksPerSM));
   while (grid.x <= multiProcessorCount && block.x > 64) {
@@ -332,7 +332,7 @@ void quant_impl(void* output, void* output_scale, void* input,
   }
 }
 
-}  // namespace aphrodite
+}  // namespace sonar
 
 /*Quantization entry for fp4 experts quantization*/
 #define CHECK_TH_CUDA(x, m) \
@@ -413,10 +413,10 @@ void scaled_fp4_experts_quant_sm1xxa(
       input.get_device_index());
   const cudaStream_t stream = get_current_cuda_stream(input.get_device_index());
 
-  APHRODITE_STABLE_DISPATCH_HALF_TYPES(
+  SONAR_STABLE_DISPATCH_HALF_TYPES(
       input.scalar_type(), "nvfp4_experts_quant_kernel", [&] {
-        using cuda_type = aphrodite::CUDATypeConverter<scalar_t>::Type;
-        aphrodite::quant_impl<cuda_type, /*FUSE_SILU_MUL=*/false>(
+        using cuda_type = sonar::CUDATypeConverter<scalar_t>::Type;
+        sonar::quant_impl<cuda_type, /*FUSE_SILU_MUL=*/false>(
             output.data_ptr(), output_scale.data_ptr(), input.data_ptr(),
             input_global_scale.data_ptr(), input_offset_by_experts.data_ptr(),
             output_scale_offset_by_experts.data_ptr(), m_topk, k, n_experts,
@@ -445,10 +445,10 @@ void silu_and_mul_scaled_fp4_experts_quant_sm1xxa(
       input.get_device_index());
   const cudaStream_t stream = get_current_cuda_stream(input.get_device_index());
 
-  APHRODITE_STABLE_DISPATCH_HALF_TYPES(
+  SONAR_STABLE_DISPATCH_HALF_TYPES(
       input.scalar_type(), "silu_mul_nvfp4_experts_quant_kernel", [&] {
-        using cuda_type = aphrodite::CUDATypeConverter<scalar_t>::Type;
-        aphrodite::quant_impl<cuda_type, /*FUSE_SILU_MUL=*/true>(
+        using cuda_type = sonar::CUDATypeConverter<scalar_t>::Type;
+        sonar::quant_impl<cuda_type, /*FUSE_SILU_MUL=*/true>(
             output.data_ptr(), output_scale.data_ptr(), input.data_ptr(),
             input_global_scale.data_ptr(), input_offset_by_experts.data_ptr(),
             output_scale_offset_by_experts.data_ptr(), m_topk, k, n_experts,

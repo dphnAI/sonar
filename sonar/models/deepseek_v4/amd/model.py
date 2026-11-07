@@ -11,39 +11,39 @@ import regex as re
 import torch
 import torch.nn as nn
 
-import aphrodite.envs as envs
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed import (
+import sonar.envs as envs
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.config import SonarConfig
+from sonar.distributed import (
     get_pp_group,
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
 )
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.activation import SiluAndMul, SiluAndMulWithClamp
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.activation import SiluAndMul, SiluAndMulWithClamp
+from sonar.model_executor.layers.fused_moe import (
     FusedMoEFactory,
     FusedMoEQuantConfig,
     GateLinear,
     RoutedExperts,
     fused_moe_make_expert_params_mapping,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
+from sonar.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
     rocm_aiter_fused_experts,
 )
-from aphrodite.model_executor.layers.fused_moe.router.fused_topk_bias_router import (
+from sonar.model_executor.layers.fused_moe.router.fused_topk_bias_router import (
     fused_topk_bias,
 )
-from aphrodite.model_executor.layers.fused_moe.utils import (
+from sonar.model_executor.layers.fused_moe.utils import (
     resolve_layer_fused_shared_expert,
 )
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     MergedColumnParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.mhc import (
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.mhc import (
     HAS_AITER_MHC,
     HAS_TILELANG_MHC,
     HCHeadOp,
@@ -51,15 +51,15 @@ from aphrodite.model_executor.layers.mhc import (
     MHCPostOp,
     MHCPreOp,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.quantization.mxfp4 import Mxfp4MoEMethod
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.quantization.mxfp4 import Mxfp4MoEMethod
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
-from aphrodite.model_executor.models.interfaces import SupportsPP
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.model_loader.weight_utils import default_weight_loader
+from sonar.model_executor.models.interfaces import SupportsPP
+from sonar.model_executor.models.utils import (
     AutoWeightsLoader,
     PPMissingLayer,
     WeightsMapper,
@@ -69,19 +69,19 @@ from aphrodite.model_executor.models.utils import (
     make_layers,
     maybe_prefix,
 )
-from aphrodite.models.deepseek_v4.amd.mega_moe import (
+from sonar.models.deepseek_v4.amd.mega_moe import (
     DeepseekV4AiterMegaMoEExperts,
     finalize_mega_moe_weights,
 )
-from aphrodite.models.deepseek_v4.amd.mono_decode import MonoDecodeLayer
-from aphrodite.models.deepseek_v4.amd.rocm import DeepseekV4ROCMAiterMLAAttention
-from aphrodite.models.deepseek_v4.common.spec_decode import needs_mtp_hidden_buffer
-from aphrodite.platforms import current_platform
-from aphrodite.platforms.rocm import on_gfx950, on_gfx1250
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.utils.multi_stream_utils import maybe_execute_in_parallel
-from aphrodite.utils.torch_utils import aux_stream
-from aphrodite.v1.worker.ubatching import dbo_current_ubatch_token_offset
+from sonar.models.deepseek_v4.amd.mono_decode import MonoDecodeLayer
+from sonar.models.deepseek_v4.amd.rocm import DeepseekV4ROCMAiterMLAAttention
+from sonar.models.deepseek_v4.common.spec_decode import needs_mtp_hidden_buffer
+from sonar.platforms import current_platform
+from sonar.platforms.rocm import on_gfx950, on_gfx1250
+from sonar.sequence import IntermediateTensors
+from sonar.utils.multi_stream_utils import maybe_execute_in_parallel
+from sonar.utils.torch_utils import aux_stream
+from sonar.v1.worker.ubatching import dbo_current_ubatch_token_offset
 
 from ..common.mm_preprocess import IMAGE_SENTINEL_BASE_ID
 
@@ -144,11 +144,11 @@ class DeepseekV4MLP(nn.Module):
         # forward() falls back to the standard gate_up_proj linear
         if on_gfx1250():
             return
-        from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
+        from sonar.model_executor.layers.quantization.utils.fp8_utils import (
             _upcast_e8m0_to_fp32,
             get_fp8_block_weight_scale,
         )
-        from aphrodite.model_executor.utils import replace_parameter
+        from sonar.model_executor.utils import replace_parameter
 
         w = getattr(self.gate_up_proj, "weight", None)
         ws = get_fp8_block_weight_scale(self.gate_up_proj)
@@ -203,10 +203,10 @@ def _validate_heterogeneous_routes(
         )
 
 
-def _heterogeneous_shared_expert_enabled(aphrodite_config: AphroditeConfig) -> bool:
-    config = aphrodite_config.model_config.hf_config
-    quant_config = aphrodite_config.quant_config
-    parallel_config = aphrodite_config.parallel_config
+def _heterogeneous_shared_expert_enabled(sonar_config: SonarConfig) -> bool:
+    config = sonar_config.model_config.hf_config
+    quant_config = sonar_config.quant_config
+    parallel_config = sonar_config.parallel_config
     reasons: list[str] = []
 
     if not rocm_aiter_ops.is_fusion_moe_shared_experts_enabled():
@@ -223,9 +223,9 @@ def _heterogeneous_shared_expert_enabled(aphrodite_config: AphroditeConfig) -> b
         reasons.append("data parallelism is enabled")
     if parallel_config.prefill_context_parallel_size != 1:
         reasons.append("prefill context parallelism is enabled")
-    if aphrodite_config.kernel_config.moe_backend != "aiter":
+    if sonar_config.kernel_config.moe_backend != "aiter":
         reasons.append("the MoE backend is not AITER")
-    if aphrodite_config.model_config.dtype != torch.bfloat16:
+    if sonar_config.model_config.dtype != torch.bfloat16:
         reasons.append("the model dtype is not BF16")
     if not rocm_aiter_ops.fused_moe_supports_heterogeneous_shared_expert(1):
         reasons.append("AITER lacks CSV-backed DSV4 I384 heterogeneous shared-expert support")
@@ -258,7 +258,7 @@ def _heterogeneous_shared_expert_enabled(aphrodite_config: AphroditeConfig) -> b
         if getattr(quant_config, "ignored_layers", None):
             reasons.append("the quantization config has ignored layers")
 
-    offload_config = getattr(aphrodite_config, "offload_config", None)
+    offload_config = getattr(sonar_config, "offload_config", None)
     if offload_config is not None and (
         getattr(getattr(offload_config, "uva", None), "cpu_offload_gb", 0) > 0
         or getattr(
@@ -495,11 +495,11 @@ class DeepseekV4HeterogeneousSharedRoutedExperts(RoutedExperts):
         return routed + shared_out
 
 
-def _validate_aiter_mega_moe_config(aphrodite_config: AphroditeConfig) -> None:
-    parallel_config = aphrodite_config.parallel_config
+def _validate_aiter_mega_moe_config(sonar_config: SonarConfig) -> None:
+    parallel_config = sonar_config.parallel_config
     if not rocm_aiter_ops.is_fused_moe_enabled():
         raise ValueError(
-            "--moe-backend aiter_mega_moe requires APHRODITE_ROCM_USE_AITER=1  and APHRODITE_ROCM_USE_AITER_MOE=1."
+            "--moe-backend aiter_mega_moe requires SONAR_ROCM_USE_AITER=1  and SONAR_ROCM_USE_AITER_MOE=1."
         )
     if not on_gfx950():
         raise NotImplementedError("AITER MegaMoE requires gfx950.")
@@ -519,29 +519,29 @@ def _validate_aiter_mega_moe_config(aphrodite_config: AphroditeConfig) -> None:
         "mori",
     ) or (parallel_config.all2all_backend == "mori" and parallel_config.mori_ep_v2):
         raise ValueError(
-            "AITER MegaMoE runs on MoRI EPv1 shmem; add --all2all-backend mori (without APHRODITE_MORI_EP_V2=1)."
+            "AITER MegaMoE runs on MoRI EPv1 shmem; add --all2all-backend mori (without SONAR_MORI_EP_V2=1)."
         )
     if parallel_config.enable_eplb:
         raise NotImplementedError("AITER MegaMoE does not support EPLB.")
-    if getattr(aphrodite_config.model_config.hf_config, "expert_dtype", "fp4") != "fp4":
+    if getattr(sonar_config.model_config.hf_config, "expert_dtype", "fp4") != "fp4":
         raise NotImplementedError("AITER MegaMoE only supports fp4 experts.")
 
 
 class DeepseekV4MoE(nn.Module):
-    # None: use the padding Aphrodite added.
+    # None: use the padding Sonar added.
     experts_intermediate_pad: int | None = None
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
         fuse_heterogeneous_shared_expert: bool = False,
     ):
         super().__init__()
 
         self.tp_size = get_tensor_model_parallel_world_size()
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
         self.prefix = prefix
 
         self.routed_scaling_factor = getattr(config, "routed_scaling_factor", 1.0)
@@ -607,23 +607,23 @@ class DeepseekV4MoE(nn.Module):
             # the fused path cannot load the FP8 shared expert into the MXFP4
             # routed slot. Fail fast with an actionable message.
             if (
-                not aphrodite_config.parallel_config.enable_expert_parallel
-                and aphrodite_config.parallel_config.data_parallel_size > 1
+                not sonar_config.parallel_config.enable_expert_parallel
+                and sonar_config.parallel_config.data_parallel_size > 1
                 and rocm_aiter_ops.is_fusion_moe_shared_experts_enabled()
             ):
                 raise ValueError(
                     "DeepSeek-V4 fused shared experts "
-                    "(APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1) are not "
+                    "(SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1) are not "
                     "supported with data parallelism "
                     "(data_parallel_size > 1). Set "
-                    "APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=0 to run the "
+                    "SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=0 to run the "
                     "shared expert as an unfused FP8 MLP."
                 )
             self.is_fused_shared_expert_enabled = resolve_layer_fused_shared_expert(
                 quant_config, prefix, disable_under_ep=True
             )
 
-        self.use_mega_moe = aphrodite_config.kernel_config.moe_backend == "aiter_mega_moe"
+        self.use_mega_moe = sonar_config.kernel_config.moe_backend == "aiter_mega_moe"
         fuse_mega_moe_shared_expert = (
             self.use_mega_moe
             and config.n_shared_experts == 1
@@ -659,9 +659,9 @@ class DeepseekV4MoE(nn.Module):
         self.experts_end_idx = self.experts_start_idx + self.n_local_experts
 
         if self.use_mega_moe:
-            _validate_aiter_mega_moe_config(aphrodite_config)
+            _validate_aiter_mega_moe_config(sonar_config)
             self.experts = DeepseekV4AiterMegaMoEExperts(
-                aphrodite_config,
+                sonar_config,
                 num_experts=config.n_routed_experts,
                 top_k=config.num_experts_per_tok,
                 hidden_size=config.hidden_size,
@@ -674,7 +674,7 @@ class DeepseekV4MoE(nn.Module):
                 aux_stream()
                 if self.shared_experts is not None
                 and not self.experts.fuse_shared_expert
-                and not envs.APHRODITE_DISABLE_SHARED_EXPERTS_STREAM
+                and not envs.SONAR_DISABLE_SHARED_EXPERTS_STREAM
                 else None
             )
             self.shared_experts_events = (
@@ -739,7 +739,7 @@ class DeepseekV4MoE(nn.Module):
         if shared_experts is None:
             return self._forward_mega_moe_routed(hidden_states, input_ids)
         events = self.shared_experts_events
-        if events is None or hidden_states.shape[0] > envs.APHRODITE_SHARED_EXPERTS_STREAM_TOKEN_THRESHOLD:
+        if events is None or hidden_states.shape[0] > envs.SONAR_SHARED_EXPERTS_STREAM_TOKEN_THRESHOLD:
             return self._forward_mega_moe_routed(hidden_states, input_ids) + shared_experts(hidden_states)
         # The unfused shared expert overlaps router + MegaMoE in small steps.
         routed, shared = maybe_execute_in_parallel(
@@ -776,7 +776,7 @@ _AITER_MHC_FUSED_RMSNORM_SIZES = frozenset({1280, 2560, 4096, 7168})
 class DeepseekV4DecoderLayer(nn.Module):
     def __init__(
         self,
-        aphrodite_config,
+        sonar_config,
         prefix,
         topk_indices_buffer: torch.Tensor | None = None,
         aux_stream_list: list[torch.cuda.Stream] | None = None,
@@ -785,21 +785,21 @@ class DeepseekV4DecoderLayer(nn.Module):
         super().__init__()
 
         # Lazy import to avoid top-level tilelang dependency.
-        # Registers both torch.ops.aphrodite.mhc_pre and mhc_post
-        import aphrodite.model_executor.layers.mhc  # noqa: F401
+        # Registers both torch.ops.sonar.mhc_pre and mhc_post
+        import sonar.model_executor.layers.mhc  # noqa: F401
 
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
         self.hidden_size = config.hidden_size
 
         self.rms_norm_eps = config.rms_norm_eps
         self.attn = DeepseekV4ROCMAiterMLAAttention(
-            aphrodite_config,
+            sonar_config,
             prefix=f"{prefix}.attn",
             topk_indices_buffer=topk_indices_buffer,
             aux_stream_list=aux_stream_list,
         )
         self.ffn = DeepseekV4MoE(
-            aphrodite_config,
+            sonar_config,
             prefix=f"{prefix}.ffn",
             fuse_heterogeneous_shared_expert=fuse_heterogeneous_shared_expert,
         )
@@ -868,7 +868,7 @@ class DeepseekV4DecoderLayer(nn.Module):
         else:
             self.fuse_mhc_rmsnorm = HAS_TILELANG_MHC and self.use_fused_mhc
         # Decode steps of an eligible layer may run as the mono decode layer.
-        self.mono = MonoDecodeLayer.create(self, aphrodite_config)
+        self.mono = MonoDecodeLayer.create(self, sonar_config)
 
     def hc_pre(
         self,
@@ -1015,11 +1015,11 @@ class DeepseekV4DecoderLayer(nn.Module):
 
 
 class DeepseekV4Model(nn.Module):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
         self.config = config
         self.vocab_size = config.vocab_size
         self.hc_eps = config.hc_eps
@@ -1032,7 +1032,7 @@ class DeepseekV4Model(nn.Module):
         self.device = current_platform.device_type
         # Reserved topk indices buffer for all Indexer layers to reuse.
         self.topk_indices_buffer = torch.empty(
-            aphrodite_config.scheduler_config.max_num_batched_tokens,
+            sonar_config.scheduler_config.max_num_batched_tokens,
             config.index_topk,
             dtype=torch.int32,
             device=self.device,
@@ -1048,12 +1048,12 @@ class DeepseekV4Model(nn.Module):
         else:
             self.embed_tokens = PPMissingLayer()
 
-        self.fuse_heterogeneous_shared_expert = _heterogeneous_shared_expert_enabled(aphrodite_config)
-        self.use_mega_moe = aphrodite_config.kernel_config.moe_backend == "aiter_mega_moe"
+        self.fuse_heterogeneous_shared_expert = _heterogeneous_shared_expert_enabled(sonar_config)
+        self.use_mega_moe = sonar_config.kernel_config.moe_backend == "aiter_mega_moe"
         self.start_layer, self.end_layer, self.layers = make_layers(
             config.num_hidden_layers,
             lambda prefix: DeepseekV4DecoderLayer(
-                aphrodite_config,
+                sonar_config,
                 prefix=prefix,
                 topk_indices_buffer=self.topk_indices_buffer,
                 aux_stream_list=aux_stream_list,
@@ -1064,7 +1064,7 @@ class DeepseekV4Model(nn.Module):
         self.fused_shared_expert_layers = get_fused_shared_expert_layers(
             self,
             DeepseekV4MoE,
-            enable_eplb=aphrodite_config.parallel_config.enable_eplb,
+            enable_eplb=sonar_config.parallel_config.enable_eplb,
         )
 
         if get_pp_group().is_last_rank:
@@ -1092,12 +1092,12 @@ class DeepseekV4Model(nn.Module):
             requires_grad=False,
         )
         self.hc_head_op = HCHeadOp()
-        spec_config = aphrodite_config.speculative_config
+        spec_config = sonar_config.speculative_config
         if get_pp_group().is_last_rank and needs_mtp_hidden_buffer(spec_config):
             self._mtp_hidden_buffer = torch.empty(
-                aphrodite_config.scheduler_config.max_num_batched_tokens,
+                sonar_config.scheduler_config.max_num_batched_tokens,
                 self.hc_dim,
-                dtype=aphrodite_config.model_config.dtype,
+                dtype=sonar_config.model_config.dtype,
                 device=self.device,
             )
         else:
@@ -1357,21 +1357,21 @@ class DeepseekV4ForCausalLM(nn.Module, SupportsPP):
 
     # Default mapper assumes the original FP4-expert checkpoint layout.
     # Overridden per-instance in __init__ when expert_dtype != "fp4".
-    hf_to_aphrodite_mapper = _make_deepseek_v4_weights_mapper("fp4")
+    hf_to_sonar_mapper = _make_deepseek_v4_weights_mapper("fp4")
     packed_modules_mapping = {
         "gate_up_proj": ["w1", "w3"],
         "fused_wqa_wkv": ["wq_a", "wkv"],
     }
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
         self.config = config
         expert_dtype = getattr(config, "expert_dtype", "fp4")
-        self.model = self.model_cls(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = self.model_cls(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
         if expert_dtype != "fp4" or self.model.fused_shared_expert_layers:
-            self.hf_to_aphrodite_mapper = _make_deepseek_v4_weights_mapper(
+            self.hf_to_sonar_mapper = _make_deepseek_v4_weights_mapper(
                 expert_dtype,
                 fuse_shared_experts=bool(self.model.fused_shared_expert_layers),
             )
@@ -1419,7 +1419,7 @@ class DeepseekV4ForCausalLM(nn.Module, SupportsPP):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
     def process_weights_after_loading(self) -> None:
         # Must precede the gate_up preshuffle of the fused shared experts.

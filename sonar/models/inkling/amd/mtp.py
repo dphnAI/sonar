@@ -25,18 +25,18 @@ import regex as re
 import torch
 from torch import nn
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.model_executor.layers.linear import ReplicatedLinear
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
-from aphrodite.model_executor.model_loader.mtp_validation import (
+from sonar.config import SonarConfig
+from sonar.model_executor.layers.linear import ReplicatedLinear
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
+from sonar.model_executor.model_loader.mtp_validation import (
     is_mtp_completeness_check_enabled,
 )
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
-from aphrodite.model_executor.models.interfaces import SupportsMultiModalEmbeddings
-from aphrodite.model_executor.models.utils import WeightsMapper, maybe_prefix
-from aphrodite.sequence import IntermediateTensors
+from sonar.model_executor.model_loader.weight_utils import default_weight_loader
+from sonar.model_executor.models.interfaces import SupportsMultiModalEmbeddings
+from sonar.model_executor.models.utils import WeightsMapper, maybe_prefix
+from sonar.sequence import IntermediateTensors
 
 from ..configs import InklingModelConfig
 from .layernorm import InklingRMSNorm
@@ -48,7 +48,7 @@ from .model import (
 from .ops.norm import embed_dual_rmsnorm_cat, embed_rmsnorm
 
 # Checkpoint attention projections (wq_du/wk_dv/wv_dv/wr_du) -> fused qkvr.
-# Mirrors the backbone's hf_to_aphrodite_mapper.orig_to_new_stacked; kept as a
+# Mirrors the backbone's hf_to_sonar_mapper.orig_to_new_stacked; kept as a
 # local (pname, wname, shard) list since the MTP loader remaps by hand.
 _ATTENTION_PARAMS_MAPPING = [
     ("qkvr", "wq_du", 0),
@@ -116,17 +116,17 @@ class InklingMTPDepthLayer(nn.Module):
 
 
 class InklingMultiTokenPredictor(nn.Module):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__()
-        assert aphrodite_config.speculative_config is not None
-        config: InklingModelConfig = aphrodite_config.speculative_config.draft_model_config.hf_config
+        assert sonar_config.speculative_config is not None
+        config: InklingModelConfig = sonar_config.speculative_config.draft_model_config.hf_config
         self.config = config
         # The checkpoint ships num_nextn_predict_layers depth blocks, but only
         # the first ``num_speculative_tokens`` are exercised (step i uses depth
         # i). Build only those to save memory — each depth is a full Inkling block
         # with its own (large) full-history sconv caches and KV cache.
         n_predict = config.num_nextn_predict_layers
-        num_spec = aphrodite_config.speculative_config.num_speculative_tokens
+        num_spec = sonar_config.speculative_config.num_speculative_tokens
         self.num_mtp_layers = _select_mtp_depth_count(n_predict, num_spec)
         self.chain_hidden_post_norm = config.chain_hidden_post_norm
 
@@ -144,7 +144,7 @@ class InklingMultiTokenPredictor(nn.Module):
                     config,
                     f"{prefix}.layers.{idx}",
                     idx in local_ids,
-                    quant_config=aphrodite_config.quant_config,
+                    quant_config=sonar_config.quant_config,
                 )
                 for idx in range(self.num_mtp_layers)
             }
@@ -185,7 +185,7 @@ class InklingMultiTokenPredictor(nn.Module):
         )
         if multimodal_embeddings is None or len(multimodal_embeddings) == 0:  # type: ignore[arg-type]
             return embeds
-        from aphrodite.model_executor.models.utils import _merge_multimodal_embeddings
+        from sonar.model_executor.models.utils import _merge_multimodal_embeddings
 
         assert is_multimodal is not None
         return _merge_multimodal_embeddings(
@@ -245,18 +245,18 @@ class InklingMultiTokenPredictor(nn.Module):
 
 
 class InklingMTP(nn.Module, SupportsMultiModalEmbeddings):
-    hf_to_aphrodite_mapper = _TmlForCausalLMBase.hf_to_aphrodite_mapper | WeightsMapper(
+    hf_to_sonar_mapper = _TmlForCausalLMBase.hf_to_sonar_mapper | WeightsMapper(
         orig_to_new_prefix={"model.mtp.": "model."},
     )
     packed_modules_mapping = _TmlForCausalLMBase.packed_modules_mapping
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__()
-        assert aphrodite_config.speculative_config is not None
-        config: InklingModelConfig = aphrodite_config.speculative_config.draft_model_config.hf_config
+        assert sonar_config.speculative_config is not None
+        config: InklingModelConfig = sonar_config.speculative_config.draft_model_config.hf_config
         self.config = config
         self.model = InklingMultiTokenPredictor(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             prefix=maybe_prefix(prefix, "model"),
         )
         # The target's (vocab-sharded) LM head, attached by load_eagle_model;

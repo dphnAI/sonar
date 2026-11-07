@@ -13,13 +13,13 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 
-from aphrodite.model_executor.models.interfaces import SupportsEncoderCudaGraph
+from sonar.model_executor.models.interfaces import SupportsEncoderCudaGraph
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
-    from aphrodite.config.multimodal import MultiModalConfig
-    from aphrodite.models.minimax_m3.common.vision_tower import MiniMaxVLVisionModel
-    from aphrodite.v1.worker.encoder_cudagraph_defs import (
+    from sonar.config import SonarConfig
+    from sonar.config.multimodal import MultiModalConfig
+    from sonar.models.minimax_m3.common.vision_tower import MiniMaxVLVisionModel
+    from sonar.v1.worker.encoder_cudagraph_defs import (
         EncoderCudaGraphCaptureInputs,
         EncoderCudaGraphConfig,
         EncoderCudaGraphReplayBuffers,
@@ -35,8 +35,8 @@ class MiniMaxM3EncoderCudaGraphMixin(SupportsEncoderCudaGraph):
     _encoder_cg_pad_totals: dict[int, int] = {}
 
     def get_encoder_cudagraph_config(self) -> "EncoderCudaGraphConfig":
-        from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
-        from aphrodite.v1.worker.encoder_cudagraph_defs import EncoderCudaGraphConfig
+        from sonar.v1.attention.backends.registry import AttentionBackendEnum
+        from sonar.v1.worker.encoder_cudagraph_defs import EncoderCudaGraphConfig
 
         if self.multimodal_config is not None and self.multimodal_config.get_limit_per_prompt("image") == 0:
             raise ValueError(
@@ -106,12 +106,12 @@ class MiniMaxM3EncoderCudaGraphMixin(SupportsEncoderCudaGraph):
 
     def get_encoder_cudagraph_budget_range(
         self,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
     ) -> tuple[int, int]:
         min_budget = 64
         max_budget = min(
-            aphrodite_config.scheduler_config.max_num_batched_tokens,
-            aphrodite_config.model_config.max_model_len,
+            sonar_config.scheduler_config.max_num_batched_tokens,
+            sonar_config.model_config.max_model_len,
         )
         return (min_budget, max_budget)
 
@@ -130,7 +130,7 @@ class MiniMaxM3EncoderCudaGraphMixin(SupportsEncoderCudaGraph):
         return pixel_values
 
     def get_encoder_cudagraph_item_specs(self, mm_kwargs: dict[str, Any]) -> list["EncoderItemSpec"]:
-        from aphrodite.v1.worker.encoder_cudagraph_defs import EncoderItemSpec
+        from sonar.v1.worker.encoder_cudagraph_defs import EncoderItemSpec
 
         merge = self.vision_tower.spatial_merge_size
         return [
@@ -177,7 +177,7 @@ class MiniMaxM3EncoderCudaGraphMixin(SupportsEncoderCudaGraph):
         path: str = "default",
         axis_keys: tuple[Hashable, ...] | None = None,
     ) -> "EncoderCudaGraphCaptureInputs":
-        from aphrodite.v1.worker.encoder_cudagraph_defs import (
+        from sonar.v1.worker.encoder_cudagraph_defs import (
             EncoderCudaGraphCaptureInputs,
         )
 
@@ -219,7 +219,7 @@ class MiniMaxM3EncoderCudaGraphMixin(SupportsEncoderCudaGraph):
         max_frames_per_batch: int,
         path: str = "default",
     ) -> "EncoderCudaGraphReplayBuffers":
-        from aphrodite.v1.worker.encoder_cudagraph_defs import (
+        from sonar.v1.worker.encoder_cudagraph_defs import (
             EncoderCudaGraphReplayBuffers,
         )
 

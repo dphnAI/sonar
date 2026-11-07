@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-"""CPU hardware discovery for optional Aphrodite Recipes runtime tuning.
+"""CPU hardware discovery for optional Sonar Recipes runtime tuning.
 
 Keep this module focused on facts exposed to the current process/container.
 Tuning decisions belong in sweep/runtime_tuning.py.
@@ -14,7 +14,7 @@ import platform
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from aphrodite.utils.cpu_resource_utils import (
+from sonar.utils.cpu_resource_utils import (
     get_allowed_cpu_list,
     get_memory_affinity,
     get_memory_node_info,
@@ -72,11 +72,11 @@ def build_numa_omp_threads_bind(
     """Build explicit x86 OMP CPU lists for the effective NUMA nodes.
 
     Temporary TP/DP sweep workaround:
-    - select one logical CPU per physical core, matching Aphrodite x86 auto-binding;
+    - select one logical CPU per physical core, matching Sonar x86 auto-binding;
     - reserve cores by omitting them from each explicit NUMA CPU list;
     - emit one pipe-separated list per effective NUMA node.
 
-    Explicit APHRODITE_CPU_OMP_THREADS_BIND lists bypass Aphrodite's auto-binding reserve
+    Explicit SONAR_CPU_OMP_THREADS_BIND lists bypass Sonar's auto-binding reserve
     logic, so the reserved cores must be excluded here.
     """
     if reserved_cores_per_numa < 0:
@@ -100,7 +100,7 @@ def build_numa_omp_threads_bind(
                 f"NUMA node {node.node_id} has no physical-core topology available for explicit OMP binding."
             )
 
-        # Match Aphrodite's x86 auto-binding selector: for SMT siblings on a physical
+        # Match Sonar's x86 auto-binding selector: for SMT siblings on a physical
         # core, use the highest logical CPU ID.
         selected_cpu_ids = sorted(max(logical_ids) for _, logical_ids in sorted(core_to_logical_ids.items()))
 
@@ -133,14 +133,14 @@ def _read_socket_id(cpu_id: int) -> int | None:
 def detect_hardware() -> HardwareInfo:
     """Return CPU resources effectively available to this process.
 
-    Aphrodite's CPU helpers already honor process CPU affinity and cgroup-aware
+    Sonar's CPU helpers already honor process CPU affinity and cgroup-aware
     memory limits. We intentionally use get_memory_affinity() rather than
     get_visible_memory_node() so CPU_VISIBLE_MEMORY_NODES does not become an
     input to the detector; auto binding remains owned by the CPU backend.
     """
     cpus = get_allowed_cpu_list()
     if not cpus:
-        raise RuntimeError("Aphrodite reported no CPUs available to this process.")
+        raise RuntimeError("Sonar reported no CPUs available to this process.")
 
     cpu_numa_nodes = {cpu.numa_node for cpu in cpus if cpu.numa_node >= 0}
     memory_numa_nodes = set(get_memory_affinity())

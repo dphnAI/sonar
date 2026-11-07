@@ -4,7 +4,7 @@
 
 from typing import Literal
 
-from aphrodite.config.utils import config
+from sonar.config.utils import config
 
 
 @config

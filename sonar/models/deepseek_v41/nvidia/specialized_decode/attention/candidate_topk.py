@@ -19,13 +19,13 @@ buffer treats a row as a set.
 
 import torch
 
-from aphrodite.model_executor.kernels.attention.dsa.candidate_blocks import _max_with_nan
-from aphrodite.model_executor.layers.indexer_topk import (
+from sonar.model_executor.kernels.attention.dsa.candidate_blocks import _max_with_nan
+from sonar.model_executor.layers.indexer_topk import (
     AUTO_COOPERATIVE_MAX_ROWS,
     RADIX_TOPK_WORKSPACE_SIZE,
 )
-from aphrodite.triton_utils import tl, triton
-from aphrodite.v1.worker.workspace import current_workspace_manager
+from sonar.triton_utils import tl, triton
+from sonar.v1.worker.workspace import current_workspace_manager
 
 
 @triton.jit(do_not_specialize=["width", "nblocks"])

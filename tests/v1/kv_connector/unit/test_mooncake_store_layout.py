@@ -9,10 +9,10 @@ import random
 import pytest
 import torch
 
-from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.data import (  # noqa: E501
+from sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.data import (  # noqa: E501
     ChunkedTokenDatabase,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.layout import (  # noqa: E501
+from sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.layout import (  # noqa: E501
     AttentionStoreLayout,
     HeadMajorStoreLayout,
     KeyMetadata,
@@ -20,10 +20,10 @@ from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.layout imp
     RankLocalStoreLayout,
     TokenMajorStoreLayout,
 )
-from aphrodite.model_executor.layers.mamba.mamba_utils import get_conv_state_layout
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.v1.core.kv_cache_utils import BlockHash
-from aphrodite.v1.kv_cache_layout import KVCacheLayout
+from sonar.model_executor.layers.mamba.mamba_utils import get_conv_state_layout
+from sonar.utils.math_utils import cdiv
+from sonar.v1.core.kv_cache_utils import BlockHash
+from sonar.v1.kv_cache_layout import KVCacheLayout
 
 BLOCK_SIZE = 128
 
@@ -36,7 +36,7 @@ def _reset_conv_state_layout_cache():
 
 
 def _attention_specs(num_layers: int, block_size: int, local_heads: int, content_size: int = 4):
-    from aphrodite.v1.kv_cache_interface import FullAttentionSpec
+    from sonar.v1.kv_cache_interface import FullAttentionSpec
 
     return tuple(
         FullAttentionSpec(
@@ -74,12 +74,12 @@ def _make_state_store_layout(spec, *, local_tp_size: int, tp_rank: int) -> tuple
 
 
 def _make_gdn_store_layout(*, local_tp_size: int, tp_rank: int) -> tuple[MambaStoreLayout, torch.Tensor]:
-    from aphrodite.v1.attention.backends.registry import MambaAttentionBackendEnum
-    from aphrodite.v1.kv_cache_interface import MambaSpec
+    from sonar.v1.attention.backends.registry import MambaAttentionBackendEnum
+    from sonar.v1.kv_cache_interface import MambaSpec
 
     local_factor = 4 // local_tp_size
     conv_shape = (6 * local_factor, 3)
-    if os.environ.get("APHRODITE_SSM_CONV_STATE_LAYOUT") == "SD":
+    if os.environ.get("SONAR_SSM_CONV_STATE_LAYOUT") == "SD":
         conv_shape = conv_shape[::-1]
     spec = MambaSpec(
         block_size=16,
@@ -91,13 +91,13 @@ def _make_gdn_store_layout(*, local_tp_size: int, tp_rank: int) -> tuple[MambaSt
 
 
 def _make_mamba2_store_layout(*, local_tp_size: int, tp_rank: int) -> tuple[MambaStoreLayout, torch.Tensor]:
-    from aphrodite.v1.attention.backends.registry import MambaAttentionBackendEnum
-    from aphrodite.v1.kv_cache_interface import MambaSpec
+    from sonar.v1.attention.backends.registry import MambaAttentionBackendEnum
+    from sonar.v1.kv_cache_interface import MambaSpec
 
     local_heads = 4 // local_tp_size
     effective_groups = local_tp_size
     conv_shape = ((8 + 2 * effective_groups * 2) // local_tp_size, 3)
-    if os.environ.get("APHRODITE_SSM_CONV_STATE_LAYOUT") == "SD":
+    if os.environ.get("SONAR_SSM_CONV_STATE_LAYOUT") == "SD":
         conv_shape = conv_shape[::-1]
     spec = MambaSpec(
         block_size=16,
@@ -179,13 +179,13 @@ def _assert_state_store_round_trip(layout_factory):
 
 @pytest.mark.parametrize("conv_layout", ["DS", "SD"])
 def test_gdn_store_shards_round_trip_in_both_tp_directions(monkeypatch, conv_layout):
-    monkeypatch.setenv("APHRODITE_SSM_CONV_STATE_LAYOUT", conv_layout)
+    monkeypatch.setenv("SONAR_SSM_CONV_STATE_LAYOUT", conv_layout)
     _assert_state_store_round_trip(_make_gdn_store_layout)
 
 
 @pytest.mark.parametrize("conv_layout", ["DS", "SD"])
 def test_mamba2_replicated_groups_round_trip_in_both_tp_directions(monkeypatch, conv_layout):
-    monkeypatch.setenv("APHRODITE_SSM_CONV_STATE_LAYOUT", conv_layout)
+    monkeypatch.setenv("SONAR_SSM_CONV_STATE_LAYOUT", conv_layout)
     _assert_state_store_round_trip(_make_mamba2_store_layout)
 
 
@@ -204,7 +204,7 @@ def test_mamba2_replicated_groups_round_trip_in_both_tp_directions(monkeypatch, 
 def test_gdn_store_shard_segments_preserve_projection_boundaries(
     monkeypatch, conv_layout, sizes, shard0_offsets, shard1_offsets
 ):
-    monkeypatch.setenv("APHRODITE_SSM_CONV_STATE_LAYOUT", conv_layout)
+    monkeypatch.setenv("SONAR_SSM_CONV_STATE_LAYOUT", conv_layout)
     layout, cache = _make_gdn_store_layout(local_tp_size=2, tp_rank=0)
 
     shard0_addrs, shard0_sizes = _descriptors_for_block(layout, 0)
@@ -501,7 +501,7 @@ def test_attention_store_layout_round_trip_across_local_block_sizes(cache_layout
 
 
 def test_attention_store_chunk_is_independent_of_k3_local_pages():
-    from aphrodite.v1.kv_cache_interface import MLAAttentionSpec
+    from sonar.v1.kv_cache_interface import MLAAttentionSpec
 
     fingerprints = set()
     for block_size in (1536, 11776):
@@ -562,7 +562,7 @@ def test_chunk_descriptors_preserve_order_across_kernel_blocks(layout_cls, chunk
 
 
 def test_tp_shared_layout_handles_kernel_blocked_compressed_states():
-    from aphrodite.v1.kv_cache_interface import MLAAttentionSpec, group_kernel_blocks
+    from sonar.v1.kv_cache_interface import MLAAttentionSpec, group_kernel_blocks
 
     spec = MLAAttentionSpec(
         block_size=16,

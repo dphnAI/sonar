@@ -4,19 +4,19 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-import aphrodite._custom_ops as ops
-from aphrodite.model_executor.layers.activation import SiluAndMul
-from aphrodite.model_executor.layers.fusion.fused_act_quant import maybe_fused_act_quant
-from aphrodite.model_executor.layers.fusion.quant_activation import QuantizedActivation
-from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
+import sonar._custom_ops as ops
+from sonar.model_executor.layers.activation import SiluAndMul
+from sonar.model_executor.layers.fusion.fused_act_quant import maybe_fused_act_quant
+from sonar.model_executor.layers.fusion.quant_activation import QuantizedActivation
+from sonar.model_executor.layers.quantization.utils.fp8_utils import (
     per_token_group_quant_fp8,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     kFp8Dynamic128Sym,
     kFp8StaticTensorSym,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_random_seed
 from tests.kernels.utils import opcheck
 
 DTYPES = [torch.bfloat16, torch.float16]
@@ -48,7 +48,7 @@ def ops_impl(x: torch.Tensor, scale: torch.Tensor) -> torch.Tensor:
 @pytest.mark.parametrize("device", CUDA_DEVICES)
 @torch.inference_mode()
 def test_silu_and_mul(
-    default_aphrodite_config,
+    default_sonar_config,
     num_tokens: int,
     hidden_size: int,
     dtype: torch.dtype,
@@ -114,7 +114,7 @@ class MockLinearRequiresUnquantized(MockLinearFp8Static):
 @pytest.mark.parametrize("dtype", DTYPES)
 @torch.inference_mode()
 def test_maybe_fused_act_quant_fp8_static(
-    default_aphrodite_config,
+    default_sonar_config,
     token_shape: tuple[int, ...],
     hidden_size: int,
     dtype: torch.dtype,
@@ -146,7 +146,7 @@ def test_maybe_fused_act_quant_fp8_static(
 @pytest.mark.parametrize("dtype", DTYPES)
 @torch.inference_mode()
 def test_maybe_fused_act_quant_fp8_dynamic_block(
-    default_aphrodite_config,
+    default_sonar_config,
     token_shape: tuple[int, ...],
     hidden_size: int,
     dtype: torch.dtype,
@@ -194,7 +194,7 @@ def test_maybe_fused_act_quant_fp8_dynamic_block(
 @pytest.mark.parametrize("dtype", DTYPES)
 @torch.inference_mode()
 def test_maybe_fused_act_quant_fallback(
-    default_aphrodite_config,
+    default_sonar_config,
     num_tokens: int,
     hidden_size: int,
     dtype: torch.dtype,
@@ -220,7 +220,7 @@ def test_maybe_fused_act_quant_fallback(
 
 @torch.inference_mode()
 def test_maybe_fused_act_quant_preserves_required_unquantized_input(
-    default_aphrodite_config,
+    default_sonar_config,
 ) -> None:
     device = "cuda:0"
     act_fn = SiluAndMul()

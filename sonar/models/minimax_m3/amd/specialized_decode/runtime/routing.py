@@ -8,8 +8,8 @@ from dataclasses import dataclass
 
 import torch
 
-from aphrodite.config import CUDAGraphMode
-from aphrodite.models.minimax_m3.common.sparse_attention import MiniMaxM3SparseMetadata
+from sonar.config import CUDAGraphMode
+from sonar.models.minimax_m3.common.sparse_attention import MiniMaxM3SparseMetadata
 
 from .spec import DecodeConfig
 

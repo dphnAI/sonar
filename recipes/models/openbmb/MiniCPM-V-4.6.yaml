@@ -26,7 +26,7 @@ dependencies:
   - note: "MiniCPM-V 4.6 ships as a standalone architecture (MiniCPMV4_6ForConditionalGeneration) only in transformers >= 5.7.0"
     command: 'uv pip install -U "transformers>=5.7.0"'
   - note: "Video understanding support (decoders for the video input path)"
-    command: 'uv pip install -U "aphrodite-engine[video]"'
+    command: 'uv pip install -U "sonar[video]" --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130'
     optional: true
 
 features:
@@ -70,20 +70,20 @@ guide: |
 
   ## Prerequisites
 
-  - **Aphrodite ≥ 0.22.0** — the `MiniCPMV4_6ForConditionalGeneration` architecture
+  - **Sonar ≥ 0.22.0** — the `MiniCPMV4_6ForConditionalGeneration` architecture
     landed via [PR #43213](https://github.com/vllm-project/vllm/pull/43213)
     (merged 2026-05-22) and first shipped in the v0.22.0 release. No fork is
     required.
   - **transformers ≥ 5.7.0** — the model is merged as a standalone architecture
     only in this version.
-  - For video inputs, install the `aphrodite[video]` extra.
+  - For video inputs, install the `sonar[video]` extra.
 
   ## Launch command
 
   Use the command builder above. The baseline is simply:
 
   ```bash
-  aphrodite serve openbmb/MiniCPM-V-4.6 --trust-remote-code --port 8000
+  sonar serve openbmb/MiniCPM-V-4.6 --trust-remote-code --port 8000
   ```
 
   Enable the **Tool calling** feature to add `--enable-auto-tool-choice
@@ -116,5 +116,5 @@ guide: |
 
   - [Model card](https://huggingface.co/openbmb/MiniCPM-V-4.6)
   - [Thinking checkpoint](https://huggingface.co/openbmb/MiniCPM-V-4.6-Thinking)
-  - [Aphrodite deployment guide (Cookbook)](https://github.com/OpenSQZ/MiniCPM-V-CookBook/blob/main/deployment/vllm/minicpm-v4_6_vllm.md)
-  - [Aphrodite support PR #43213](https://github.com/vllm-project/vllm/pull/43213)
+  - [Sonar deployment guide (Cookbook)](https://github.com/OpenSQZ/MiniCPM-V-CookBook/blob/main/deployment/vllm/minicpm-v4_6_vllm.md)
+  - [Sonar support PR #43213](https://github.com/vllm-project/vllm/pull/43213)

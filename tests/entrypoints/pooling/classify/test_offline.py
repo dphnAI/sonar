@@ -5,9 +5,9 @@ import weakref
 import pytest
 import torch
 
-from aphrodite import LLM, ClassificationRequestOutput, PoolingParams
-from aphrodite.inputs import PromptType
-from aphrodite.tasks import PoolingTask
+from sonar import LLM, ClassificationRequestOutput, PoolingParams
+from sonar.inputs import PromptType
+from sonar.tasks import PoolingTask
 from tests.models.utils import softmax
 
 MODEL_NAME = "jason9693/Qwen2.5-1.5B-apeach"
@@ -18,8 +18,8 @@ num_labels = 2
 
 
 @pytest.fixture(scope="module")
-def llm(aphrodite_runner):
-    with aphrodite_runner(
+def llm(sonar_runner):
+    with sonar_runner(
         MODEL_NAME,
         max_model_len=None,
         max_num_batched_tokens=32768,
@@ -30,7 +30,7 @@ def llm(aphrodite_runner):
         enable_chunked_prefill=None,
     ) as runner:
         # pytest caches yielded fixtures until after teardown, so use a proxy to
-        # avoid retaining the LLM while AphroditeRunner.__exit__ releases ROCm memory.
+        # avoid retaining the LLM while SonarRunner.__exit__ releases ROCm memory.
         yield weakref.proxy(runner.llm)
 
 

@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """The CuTe KDA RecoverSSM verify and state commit against the Triton reference
 (``causal_conv1d_update`` + ``kda_recoverssm_verify``, and the Triton commit), on
-Mamba page views as Aphrodite binds them (one padded page per slot holding the conv
+Mamba page views as Sonar binds them (one padded page per slot holding the conv
 and SSM state) and per-layer verify records indexed by batch row."""
 
 from math import prod
@@ -11,21 +11,21 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 if not (current_platform.is_cuda() and current_platform.is_device_capability_family(100)):
     pytest.skip("The CuTe RecoverSSM kernels need SM10x", allow_module_level=True)
 pytest.importorskip("cutlass")
 
-from aphrodite.model_executor.layers.mamba.ops.causal_conv1d import (  # noqa: E402
+from sonar.model_executor.layers.mamba.ops.causal_conv1d import (  # noqa: E402
     causal_conv1d_update,
 )
-from aphrodite.models.kimi_k3.nvidia.ops.recoverssm import (  # noqa: E402
+from sonar.models.kimi_k3.nvidia.ops.recoverssm import (  # noqa: E402
     KDARecoverSSMCommitContext,
     KDARecoverSSMRecords,
     kda_recoverssm_verify,
 )
-from aphrodite.models.kimi_k3.nvidia.recoverssm.kernels import (  # noqa: E402
+from sonar.models.kimi_k3.nvidia.recoverssm.kernels import (  # noqa: E402
     CuteRecoverSSMVerify,
     compile_state_commit,
 )
@@ -33,7 +33,7 @@ from aphrodite.models.kimi_k3.nvidia.recoverssm.kernels import (  # noqa: E402
 D = 128
 LOWER_BOUND = -5.0
 DEVICE = torch.device("cuda")
-# Extra bytes per page: Aphrodite pads Mamba pages to the attention page size.
+# Extra bytes per page: Sonar pads Mamba pages to the attention page size.
 PAGE_PADDING = 4096
 
 
@@ -356,7 +356,7 @@ def test_cute_state_commit_matches_triton(heads, batch, window, monkeypatch):
     """The CuTe fold of every layer's accepted tokens equals the Triton fold,
     with varlen windows, rejected-everything (0 accepted) and dead requests."""
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.mamba.mamba_utils.get_conv_state_layout",
+        "sonar.model_executor.layers.mamba.mamba_utils.get_conv_state_layout",
         lambda: "DS",
     )
     torch.manual_seed(heads + batch + window)
@@ -417,10 +417,10 @@ def test_recoverssm_steps_match_stock_spec_decode(heads, monkeypatch):
     commit, one state slot per request) produce the outputs of stock
     speculative decoding (``causal_conv1d_update`` + ``fused_recurrent_kda``
     over 1 + k state slots per request)."""
-    from aphrodite.models.kimi_k3.nvidia.ops.third_party.kda import fused_recurrent_kda
+    from sonar.models.kimi_k3.nvidia.ops.third_party.kda import fused_recurrent_kda
 
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.mamba.mamba_utils.get_conv_state_layout",
+        "sonar.model_executor.layers.mamba.mamba_utils.get_conv_state_layout",
         lambda: "DS",
     )
     torch.manual_seed(heads)
@@ -597,7 +597,7 @@ def test_cute_state_commit_align_matches_triton(window, batch, monkeypatch):
     block holding its last token and, when the window crosses a block boundary,
     the state at the boundary to the boundary's block."""
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.mamba.mamba_utils.get_conv_state_layout",
+        "sonar.model_executor.layers.mamba.mamba_utils.get_conv_state_layout",
         lambda: "DS",
     )
     torch.manual_seed(window * 31 + batch)

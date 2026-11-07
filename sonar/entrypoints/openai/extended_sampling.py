@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 # SPDX-FileCopyrightText: Copyright contributors to the Aphrodite project
-"""Aphrodite's extra sampler fields, shared by Completions and Chat Completions.
+"""Sonar's extra sampler fields, shared by Completions and Chat Completions.
 
 Keeping them in one base model means an upstream rewrite of either request
 class cannot silently drop them from just one endpoint.
@@ -12,7 +12,7 @@ from typing import Any
 
 from pydantic import Field, model_validator
 
-from aphrodite.entrypoints.serve.engine.protocol import OpenAIBaseModel
+from sonar.entrypoints.serve.engine.protocol import OpenAIBaseModel
 
 
 def coerce_stringified_str_list(data: Any, field_name: str) -> Any:

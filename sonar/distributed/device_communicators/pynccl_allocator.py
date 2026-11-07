@@ -11,11 +11,11 @@ from packaging import version
 from torch.cuda.memory import CUDAPluggableAllocator
 from torch.utils.cpp_extension import load_inline
 
-from aphrodite import envs
-from aphrodite.distributed.device_communicators.pynccl import PyNcclCommunicator
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.utils.nccl import find_nccl_include_paths, find_nccl_library_paths
+from sonar import envs
+from sonar.distributed.device_communicators.pynccl import PyNcclCommunicator
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.utils.nccl import find_nccl_include_paths, find_nccl_library_paths
 
 logger = init_logger(__name__)
 
@@ -48,7 +48,7 @@ _cached_pool_snapshot = None
 
 def is_symmetric_memory_enabled():
     global _nccl_allocator_failed_to_compile
-    return envs.APHRODITE_USE_NCCL_SYMM_MEM and not _nccl_allocator_failed_to_compile
+    return envs.SONAR_USE_NCCL_SYMM_MEM and not _nccl_allocator_failed_to_compile
 
 
 def is_symmetric_memory_tensor(tensor: torch.Tensor):
@@ -101,7 +101,7 @@ def compile_nccl_allocator():
             "Failed to compile NCCL memory allocator. "
             "Symmetric memory will be disabled. "
             "This is expected if NCCL headers are not available. "
-            "optionally set APHRODITE_NCCL_INCLUDE_PATH to point to a directory "
+            "optionally set SONAR_NCCL_INCLUDE_PATH to point to a directory "
             "containing the NCCL header. "
             "Error: %s",
             str(e),

@@ -7,8 +7,8 @@ import torch
 from runai_model_streamer.safetensors_streamer.streamer_mock import StreamerPatcher
 from safetensors.torch import load_file, save_file
 
-from aphrodite.engine.arg_utils import EngineArgs
-from aphrodite.transformers_utils.repo_utils import hf_api
+from sonar.engine.arg_utils import EngineArgs
+from sonar.transformers_utils.repo_utils import hf_api
 
 from .conftest import RunaiDummyExecutor
 
@@ -17,7 +17,7 @@ test_model = "openai-community/gpt2"
 
 
 def test_runai_model_loader_download_files_s3_mocked_with_patch(
-    aphrodite_runner,
+    sonar_runner,
     tmp_path: Path,
     monkeypatch,
 ):
@@ -30,15 +30,15 @@ def test_runai_model_loader_download_files_s3_mocked_with_patch(
     hf_api().snapshot_download(repo_id=test_model, local_dir=mock_model_dir)
 
     monkeypatch.setattr(
-        "aphrodite.transformers_utils.runai_utils.runai_list_safetensors",
+        "sonar.transformers_utils.runai_utils.runai_list_safetensors",
         patcher.shim_list_safetensors,
     )
     monkeypatch.setattr(
-        "aphrodite.transformers_utils.runai_utils.runai_pull_files",
+        "sonar.transformers_utils.runai_utils.runai_pull_files",
         patcher.shim_pull_files,
     )
     monkeypatch.setattr(
-        "aphrodite.model_executor.model_loader.weight_utils.SafetensorsStreamer",
+        "sonar.model_executor.model_loader.weight_utils.SafetensorsStreamer",
         patcher.create_mock_streamer,
     )
 
@@ -48,9 +48,9 @@ def test_runai_model_loader_download_files_s3_mocked_with_patch(
         tensor_parallel_size=1,
     )
 
-    aphrodite_config = engine_args.create_engine_config()
+    sonar_config = engine_args.create_engine_config()
 
-    executor = RunaiDummyExecutor(aphrodite_config)
+    executor = RunaiDummyExecutor(sonar_config)
     executor.driver_worker.load_model()
 
 
@@ -60,15 +60,15 @@ def test_runai_reload_weights_path_from_mocked_s3(tmp_path: Path, monkeypatch):
     # new checkpoint, not re-stream the one the engine started from.
     patcher = StreamerPatcher(str(tmp_path))
     monkeypatch.setattr(
-        "aphrodite.transformers_utils.runai_utils.runai_list_safetensors",
+        "sonar.transformers_utils.runai_utils.runai_list_safetensors",
         patcher.shim_list_safetensors,
     )
     monkeypatch.setattr(
-        "aphrodite.transformers_utils.runai_utils.runai_pull_files",
+        "sonar.transformers_utils.runai_utils.runai_pull_files",
         patcher.shim_pull_files,
     )
     monkeypatch.setattr(
-        "aphrodite.model_executor.model_loader.weight_utils.SafetensorsStreamer",
+        "sonar.model_executor.model_loader.weight_utils.SafetensorsStreamer",
         patcher.create_mock_streamer,
     )
 
@@ -88,14 +88,14 @@ def test_runai_reload_weights_path_from_mocked_s3(tmp_path: Path, monkeypatch):
     mod_dir.mkdir()
     save_file(tensors, mod_dir / "model.safetensors", metadata={"format": "pt"})
 
-    aphrodite_config = EngineArgs(
+    sonar_config = EngineArgs(
         model="s3://my-mock-bucket/gpt2/",
         load_format=load_format,
         tensor_parallel_size=1,
     ).create_engine_config()
-    assert aphrodite_config.model_config.model_weights == "s3://my-mock-bucket/gpt2/"
+    assert sonar_config.model_config.model_weights == "s3://my-mock-bucket/gpt2/"
 
-    executor = RunaiDummyExecutor(aphrodite_config)
+    executor = RunaiDummyExecutor(sonar_config)
     executor.driver_worker.load_model()
     model = executor.driver_worker.model_runner.get_model()
     (param,) = [p for n, p in model.named_parameters() if n.endswith("ln_f.weight")]

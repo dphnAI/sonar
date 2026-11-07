@@ -13,11 +13,11 @@ interleave, reused verbatim from marlin_utils_test) re-tiled into
 
 import torch
 
-from aphrodite.model_executor.layers.quantization.utils.marlin_utils_test import (
+from sonar.model_executor.layers.quantization.utils.marlin_utils_test import (
     get_weight_perm,
     marlin_weights,
 )
-from aphrodite.scalar_type import ScalarType, scalar_types
+from sonar.scalar_type import ScalarType, scalar_types
 
 SWORDFISH_BLOCK_N = 64
 SWORDFISH_BLOCK_K = 64
@@ -58,7 +58,7 @@ def swordfish_quantize(
 ):
     """Quantize fp weight [K, N] GPTQ-style (no act_order) and pack to the
     Swordfish ABI. Returns (w_ref, packed, scales)."""
-    from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+    from sonar.model_executor.layers.quantization.utils.quant_utils import (
         gptq_quantize_weights,
     )
 
@@ -78,7 +78,7 @@ def swordfish_quantize_act_order(
     """Quantize fp weight [K, N] GPTQ-style WITH act_order and pack the
     row-sorted weight. Returns (w_ref, packed, scales, sort_indices); the
     caller permutes activation columns by sort_indices before the GEMM."""
-    from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+    from sonar.model_executor.layers.quantization.utils.quant_utils import (
         gptq_quantize_weights,
     )
 
@@ -109,7 +109,7 @@ def swordfish_quantize_awq(
     pack to the Swordfish ABI. Returns (w_ref, packed, scales, zps_neg)
     where zps_neg holds the prescaled (8 - zp) * scale rows the kernel
     consumes."""
-    from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+    from sonar.model_executor.layers.quantization.utils.quant_utils import (
         quantize_weights,
     )
 

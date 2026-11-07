@@ -4,15 +4,15 @@ import pytest
 import torch
 from torch import nn
 
-import aphrodite.kernels  # noqa: F401 to register kernels
-from aphrodite import ir
-from aphrodite.compilation.passes.ir.lowering_pass import (
-    AphroditeIRLoweringPass,
+import sonar.kernels  # noqa: F401 to register kernels
+from sonar import ir
+from sonar.compilation.passes.ir.lowering_pass import (
+    SonarIRLoweringPass,
 )
-from aphrodite.config import get_current_aphrodite_config
-from aphrodite.ir import ops
-from aphrodite.model_executor.layers.activation import GeluAndMulSparse
-from aphrodite.platforms import current_platform
+from sonar.config import get_current_sonar_config
+from sonar.ir import ops
+from sonar.model_executor.layers.activation import GeluAndMulSparse
+from sonar.platforms import current_platform
 
 from ...backend import TestBackend
 
@@ -45,10 +45,10 @@ class SparseActivationModel(nn.Module):
 
 
 @pytest.mark.parametrize("rms_provider", ops.rms_norm.supported_providers())
-def test_lowering_rms_norm(rms_provider, default_aphrodite_config):
+def test_lowering_rms_norm(rms_provider, default_sonar_config):
     torch.set_default_device(current_platform.device_type)
 
-    lowering_pass = AphroditeIRLoweringPass(get_current_aphrodite_config())
+    lowering_pass = SonarIRLoweringPass(get_current_sonar_config())
     backend = TestBackend(lowering_pass)
     backend_unlowered = TestBackend()
 
@@ -78,9 +78,9 @@ def test_lowering_rms_norm(rms_provider, default_aphrodite_config):
 
 
 @pytest.mark.skipif(not current_platform.is_cuda(), reason="CUDA-only provider")
-def test_lowering_gelu_and_mul_sparse(default_aphrodite_config):
+def test_lowering_gelu_and_mul_sparse(default_sonar_config):
     torch.set_default_device("cuda")
-    lowering_pass = AphroditeIRLoweringPass(get_current_aphrodite_config())
+    lowering_pass = SonarIRLoweringPass(get_current_sonar_config())
     backend = TestBackend(lowering_pass)
     model = SparseActivationModel()
     x = torch.randn(8, 32768, dtype=torch.bfloat16)

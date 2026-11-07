@@ -20,20 +20,20 @@ from transformers.models.qwen2_vl import (
     Qwen2VLVideoProcessor,
 )
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import (
+from sonar.config import SonarConfig
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import (
     MultiModalFieldConfig,
     MultiModalKwargsItems,
 )
-from aphrodite.multimodal.parse import MultiModalDataItems
-from aphrodite.multimodal.processing import (
+from sonar.multimodal.parse import MultiModalDataItems
+from sonar.multimodal.processing import (
     BaseDummyInputsBuilder,
     BaseMultiModalProcessor,
     PromptReplacement,
     PromptUpdate,
 )
-from aphrodite.tokenizers import TokenizerLike
+from sonar.tokenizers import TokenizerLike
 
 from .qwen2_5_vl import (
     Qwen2_5_VisionTransformer as OpenCUAVisionTransformer,
@@ -49,7 +49,7 @@ from .qwen2_vl import (
 )
 from .utils import (
     WeightsMapper,
-    init_aphrodite_registered_model,
+    init_sonar_registered_model,
     maybe_prefix,
 )
 
@@ -207,7 +207,7 @@ class OpenCUAForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
         "gate_up_proj": ["gate_proj", "up_proj"],
     }
 
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={
             "model.language_model.": "language_model.model.",
             "model.visual.": "visual.",
@@ -225,20 +225,20 @@ class OpenCUAForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
             return "<|media_placeholder|>"
         raise ValueError("Only image modality is supported")
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         nn.Module.__init__(self)
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
-        multimodal_config = aphrodite_config.model_config.get_multimodal_config()
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
+        multimodal_config = sonar_config.model_config.get_multimodal_config()
 
         self.use_data_parallel = multimodal_config.mm_encoder_tp_mode == "data"
         self.config = config
-        self.aphrodite_config = aphrodite_config
+        self.sonar_config = sonar_config
         self.multimodal_config = multimodal_config
         self.quant_config = quant_config
         self.is_multimodal_pruning_enabled = multimodal_config.is_multimodal_pruning_enabled()
 
-        with self._mark_tower_model(aphrodite_config, "image"):
+        with self._mark_tower_model(sonar_config, "image"):
             self.visual = OpenCUAVisionTransformer(
                 vision_config=config.vision_config,
                 norm_eps=getattr(config, "rms_norm_eps", 1e-6),
@@ -246,9 +246,9 @@ class OpenCUAForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
                 prefix=maybe_prefix(prefix, "visual"),
             )
 
-        with self._mark_language_model(aphrodite_config):
-            self.language_model = init_aphrodite_registered_model(
-                aphrodite_config=aphrodite_config,
+        with self._mark_language_model(sonar_config):
+            self.language_model = init_sonar_registered_model(
+                sonar_config=sonar_config,
                 hf_config=config.text_config,
                 prefix=maybe_prefix(prefix, "language_model"),
                 architectures=["Qwen2ForCausalLM"],

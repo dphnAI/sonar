@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Correctness test for the MiniMax-M3.1 fused dense GEMM1 kernel
-(aphrodite/models/minimax_m3/nvidia/ops/dense_gemm1_mxfp8.py).
+(sonar/models/minimax_m3/nvidia/ops/dense_gemm1_mxfp8.py).
 """
 
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 pytestmark = pytest.mark.skipif(
     not (current_platform.is_cuda() and current_platform.has_device_capability(100)),
@@ -37,11 +37,11 @@ def _mxfp8_quantize_f32(x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
 @pytest.mark.parametrize("num_tokens", [1, 37, 128, 1000, 4096])
 @pytest.mark.parametrize("intermediate", [768, 3072, 12288])
 def test_dense_gemm1_mxfp8_correctness(num_tokens: int, intermediate: int):
-    from aphrodite.model_executor.layers.quantization.utils.mxfp8_utils import (
+    from sonar.model_executor.layers.quantization.utils.mxfp8_utils import (
         mxfp8_e4m3_quantize,
         swizzle_mxfp8_scale,
     )
-    from aphrodite.models.minimax_m3.nvidia.ops.dense_gemm1_mxfp8 import run
+    from sonar.models.minimax_m3.nvidia.ops.dense_gemm1_mxfp8 import run
 
     limit, alpha, beta = 7.0, 1.702, 1.0
     hidden = 6144

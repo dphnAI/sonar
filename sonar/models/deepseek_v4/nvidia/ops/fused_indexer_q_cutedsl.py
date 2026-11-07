@@ -12,19 +12,19 @@ from cuda.bindings.driver import CUstream
 from cutlass import BFloat16, Float32, Int64, Uint8, Uint32, const_expr
 from quack.compile_utils import make_fake_tensor
 
-from aphrodite.cute_utils import (
+from sonar.cute_utils import (
     _bf16x2_abs,
     _bf16x2_max,
     cvt,
     recast_val,
     torch_to_cute_dtype,
 )
-from aphrodite.model_executor.warmup.jit_warmup import kernel_launcher
-from aphrodite.model_executor.warmup.jit_warmup_cutedsl_helper import (
-    AphroditeCuTeDSLJitKernel,
+from sonar.model_executor.warmup.jit_warmup import kernel_launcher
+from sonar.model_executor.warmup.jit_warmup_cutedsl_helper import (
     CuTeDSLLaunchSpec,
+    SonarCuTeDSLJitKernel,
 )
-from aphrodite.vllm_flash_attn.cute import utils as cute_utils
+from sonar.vllm_flash_attn.cute import utils as cute_utils
 
 # MXFP4: 32 elements per block, packed 2 nibbles per byte, ue8m0 block scale.
 MXFP4_BLOCK_SIZE = 32
@@ -156,7 +156,7 @@ def _load_q_and_rope(
     )
 
 
-class IndexerQMxFp4Kernel(AphroditeCuTeDSLJitKernel["IndexerQMxFp4Kernel.CompileKey"]):
+class IndexerQMxFp4Kernel(SonarCuTeDSLJitKernel["IndexerQMxFp4Kernel.CompileKey"]):
     tb_size = 128
 
     @dataclass(frozen=True)
@@ -329,11 +329,11 @@ class IndexerQMxFp4Kernel(AphroditeCuTeDSLJitKernel["IndexerQMxFp4Kernel.Compile
             weights_out_dtype=weights_out_dtype,
         )
 
-    def get_warmup_keys(self, aphrodite_config: Any) -> list[CompileKey]:
-        from aphrodite.v1.attention.backends.mla.indexer import dsa_indexer_uses_fp4
+    def get_warmup_keys(self, sonar_config: Any) -> list[CompileKey]:
+        from sonar.v1.attention.backends.mla.indexer import dsa_indexer_uses_fp4
 
-        hf_config = aphrodite_config.model_config.hf_config
-        if hf_config is None or not dsa_indexer_uses_fp4(aphrodite_config):
+        hf_config = sonar_config.model_config.hf_config
+        if hf_config is None or not dsa_indexer_uses_fp4(sonar_config):
             return []
 
         num_heads = int(getattr(hf_config, "index_n_heads", 0) or 0)
@@ -345,7 +345,7 @@ class IndexerQMxFp4Kernel(AphroditeCuTeDSLJitKernel["IndexerQMxFp4Kernel.Compile
         # The DeepSeek V4.1 sparse-logits indexer takes bf16 weights; the
         # dense scoring kernels take fp32.
         weights_out_dtypes: tuple[type[cutlass.Numeric], ...] = (Float32,)
-        if aphrodite_config.attention_config.indexer_sparse_logits:
+        if sonar_config.attention_config.indexer_sparse_logits:
             weights_out_dtypes = (Float32, BFloat16)
         return self._trace_dispatch(self.dispatch)(
             head_dim=head_dim,
@@ -437,7 +437,7 @@ class IndexerQMxFp4Kernel(AphroditeCuTeDSLJitKernel["IndexerQMxFp4Kernel.Compile
         return compile_key, launch_args
 
 
-class IndexerQFp8Kernel(AphroditeCuTeDSLJitKernel["IndexerQFp8Kernel.CompileKey"]):
+class IndexerQFp8Kernel(SonarCuTeDSLJitKernel["IndexerQFp8Kernel.CompileKey"]):
     tb_size = 128
 
     @dataclass(frozen=True)
@@ -606,11 +606,11 @@ class IndexerQFp8Kernel(AphroditeCuTeDSLJitKernel["IndexerQFp8Kernel.CompileKey"
             cos_sin_dtype=cos_sin_dtype,
         )
 
-    def get_warmup_keys(self, aphrodite_config: Any) -> list[CompileKey]:
-        from aphrodite.v1.attention.backends.mla.indexer import dsa_indexer_uses_fp4
+    def get_warmup_keys(self, sonar_config: Any) -> list[CompileKey]:
+        from sonar.v1.attention.backends.mla.indexer import dsa_indexer_uses_fp4
 
-        hf_config = aphrodite_config.model_config.hf_config
-        if hf_config is None or dsa_indexer_uses_fp4(aphrodite_config):
+        hf_config = sonar_config.model_config.hf_config
+        if hf_config is None or dsa_indexer_uses_fp4(sonar_config):
             return []
 
         num_heads = int(getattr(hf_config, "index_n_heads", 0) or 0)

@@ -7,7 +7,7 @@ CustomAllreduce (oneshot, twoshot), PyNcclCommunicator,
 and SymmMemCommunicator (multimem, two-shot).
 
 for NCCL symmetric memory you need to set the environment variables
-NCCL_NVLS_ENABLE=1 NCCL_CUMEM_ENABLE=1 APHRODITE_USE_NCCL_SYMM_MEM=1, otherwise NCCL does
+NCCL_NVLS_ENABLE=1 NCCL_CUMEM_ENABLE=1 SONAR_USE_NCCL_SYMM_MEM=1, otherwise NCCL does
 not use fast NVLS implementation for all reduce.
 
 Usage:
@@ -29,25 +29,25 @@ import torch
 import torch.distributed as dist
 from torch.distributed import ProcessGroup
 
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.distributed.device_communicators.aiter_custom_all_reduce import (
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.distributed.device_communicators.aiter_custom_all_reduce import (
     AiterCustomAllreduce,
 )
-from aphrodite.distributed.device_communicators.custom_all_reduce import CustomAllreduce
-from aphrodite.distributed.device_communicators.flashinfer_all_reduce import (
+from sonar.distributed.device_communicators.custom_all_reduce import CustomAllreduce
+from sonar.distributed.device_communicators.flashinfer_all_reduce import (
     FlashInferAllReduce,
 )
-from aphrodite.distributed.device_communicators.pynccl import (
+from sonar.distributed.device_communicators.pynccl import (
     PyNcclCommunicator,
     register_nccl_symmetric_ops,
 )
-from aphrodite.distributed.device_communicators.pynccl_allocator import (
+from sonar.distributed.device_communicators.pynccl_allocator import (
     set_graph_pool_id,
 )
-from aphrodite.distributed.device_communicators.symm_mem import SymmMemCommunicator
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
+from sonar.distributed.device_communicators.symm_mem import SymmMemCommunicator
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.utils.argparse_utils import FlexibleArgumentParser
 
 logger = init_logger(__name__)
 
@@ -239,7 +239,7 @@ class CommunicatorBenchmark:
                     lambda t, c=comm: c.custom_all_reduce(t),
                     lambda t, c=comm: c.should_custom_ar(t),
                     comm.capture(),
-                    {"APHRODITE_CUSTOM_ALLREDUCE_ALGO": "1stage"},
+                    {"SONAR_CUSTOM_ALLREDUCE_ALGO": "1stage"},
                     None,  # no destroy function
                 )
             )
@@ -250,7 +250,7 @@ class CommunicatorBenchmark:
                     lambda t, c=comm: c.custom_all_reduce(t),
                     lambda t, c=comm: c.should_custom_ar(t),
                     comm.capture(),
-                    {"APHRODITE_CUSTOM_ALLREDUCE_ALGO": "2stage"},
+                    {"SONAR_CUSTOM_ALLREDUCE_ALGO": "2stage"},
                     None,  # no destroy function
                 )
             )
@@ -270,7 +270,7 @@ class CommunicatorBenchmark:
             communicators.append(
                 (
                     "pynccl-symm",
-                    lambda t: torch.ops.aphrodite.all_reduce_symmetric_with_copy(t),
+                    lambda t: torch.ops.sonar.all_reduce_symmetric_with_copy(t),
                     lambda t: True,  # Always available if initialized
                     nullcontext(),
                     {},  # no env variable needed
@@ -312,7 +312,7 @@ class CommunicatorBenchmark:
                     lambda t, c=comm: c.all_reduce(t),
                     lambda t, c=comm: c.should_use_fi_ar(t),
                     nullcontext(),
-                    {"APHRODITE_FLASHINFER_ALLREDUCE_BACKEND": "trtllm"},
+                    {"SONAR_FLASHINFER_ALLREDUCE_BACKEND": "trtllm"},
                     lambda c=comm: c.destroy(),
                 )
             )
@@ -322,7 +322,7 @@ class CommunicatorBenchmark:
                     lambda t, c=comm: c.all_reduce(t),
                     lambda t, c=comm: c.should_use_fi_ar(t),
                     nullcontext(),
-                    {"APHRODITE_FLASHINFER_ALLREDUCE_BACKEND": "mnnvl"},
+                    {"SONAR_FLASHINFER_ALLREDUCE_BACKEND": "mnnvl"},
                     lambda c=comm: c.destroy(),
                 )
             )
@@ -597,7 +597,7 @@ def main():
 
     # Disable USE_SYMM_MEM to avoid affecting the max_sizes
     # in symm_mem and custom_all_reduce for benchmark
-    os.environ["APHRODITE_ALLREDUCE_USE_SYMM_MEM"] = "0"
+    os.environ["SONAR_ALLREDUCE_USE_SYMM_MEM"] = "0"
 
     # Initialize benchmark
     benchmark = CommunicatorBenchmark(rank, world_size, device, cpu_group, args.sequence_lengths)

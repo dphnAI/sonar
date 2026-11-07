@@ -12,7 +12,7 @@ from cutlass import Int32, Int64, Uint32, const_expr
 from cutlass._mlir.dialects import llvm
 from cutlass.cutlass_dsl import T, dsl_user_op
 
-from aphrodite.utils.torch_utils import current_stream
+from sonar.utils.torch_utils import current_stream
 
 _LDQ = "ld.global.nc.L1::no_allocate"
 

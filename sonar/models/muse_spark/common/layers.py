@@ -10,10 +10,10 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from aphrodite import _custom_ops as ops
-from aphrodite.model_executor.layers.linear import ColumnParallelLinear
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.models.muse_spark.common.ops.fused_rmsnorm import fused_rmsnorm_fwd
+from sonar import _custom_ops as ops
+from sonar.model_executor.layers.linear import ColumnParallelLinear
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.models.muse_spark.common.ops.fused_rmsnorm import fused_rmsnorm_fwd
 
 
 def calculate_gain_center(

@@ -8,21 +8,21 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 
-from aphrodite.engine.protocol import EngineClient
-from aphrodite.entrypoints.serve.exception_handling.error_response import (
+from sonar.engine.protocol import EngineClient
+from sonar.entrypoints.serve.exception_handling.error_response import (
     create_error_response,
 )
-from aphrodite.logger import init_logger
-from aphrodite.tasks import SupportedTask
+from sonar.logger import init_logger
+from sonar.tasks import SupportedTask
 
 if TYPE_CHECKING:
     from starlette.datastructures import State
 
-    from aphrodite.entrypoints.anthropic.protocol import (
+    from sonar.entrypoints.anthropic.protocol import (
         AnthropicDisabledThinkingEffortOption,
     )
-    from aphrodite.entrypoints.anthropic.serving import DisabledThinkingEffortResolver
-    from aphrodite.entrypoints.serve.utils.request_logger import RequestLogger
+    from sonar.entrypoints.anthropic.serving import DisabledThinkingEffortResolver
+    from sonar.entrypoints.serve.utils.request_logger import RequestLogger
 else:
     RequestLogger = object
 
@@ -67,7 +67,7 @@ def init_scale_out_state(
         disabled_thinking_effort_resolver=(state.anthropic_serving_messages.disabled_thinking_effort_resolver),
     )
 
-    from aphrodite.entrypoints.scale_out.token_in_token_out.serving import ServingTokens
+    from sonar.entrypoints.scale_out.token_in_token_out.serving import ServingTokens
 
     state.serving_tokens = ServingTokens(
         engine_client,
@@ -90,13 +90,13 @@ def register_scale_out_api_routers(
     from .render.api_router import router as render_render
 
     args = getattr(app.state, "args", None)
-    # `aphrodite launch render` and `aphrodite serve --tokens-only` are dedicated to
+    # `sonar launch render` and `sonar serve --tokens-only` are dedicated to
     # serving these endpoints, so they always register them regardless of
     # `--enable-scale-out`.
     dedicated_mode = "render" in supported_tasks or getattr(args, "tokens_only", False)
     enabled = dedicated_mode or getattr(args, "enable_scale_out", False)
     if not enabled:
-        message = "Scale-out endpoints are disabled. Restart aphrodite serve with --enable-scale-out to enable them."
+        message = "Scale-out endpoints are disabled. Restart sonar serve with --enable-scale-out to enable them."
         logger.info(message)
 
         async def disabled_scale_out() -> JSONResponse:

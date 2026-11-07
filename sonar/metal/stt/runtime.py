@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""STT runtime adapter contract used by the Aphrodite runner.
+"""STT runtime adapter contract used by the Sonar runner.
 
-The Aphrodite runner delegates STT execution to model-owned runtime adapters under
+The Sonar runner delegates STT execution to model-owned runtime adapters under
 `stt/<model>/adapter.py` so shared code does not accumulate per-model branches.
 """
 
@@ -21,7 +21,7 @@ STTAudioInput: TypeAlias = mx.array | torch.Tensor | NDArray[np.generic] | Seque
 
 
 class STTRuntimeAdapter(ABC):
-    """Model-owned bridge between Aphrodite STT inputs and per-model STT execution.
+    """Model-owned bridge between Sonar STT inputs and per-model STT execution.
 
     Concrete implementations live under `stt/<model>/adapter.py` and own:
     - input_features normalization to the model's expected encoder input shape
@@ -37,7 +37,7 @@ class STTRuntimeAdapter(ABC):
     def _to_mx_float16(value: STTAudioInput) -> mx.array:
         """Convert common multimodal payload types into ``mx.float16``."""
         if isinstance(value, torch.Tensor):
-            from aphrodite.metal.pytorch_backend.tensor_bridge import torch_to_mlx
+            from sonar.metal.pytorch_backend.tensor_bridge import torch_to_mlx
 
             return torch_to_mlx(value).astype(mx.float16)
 

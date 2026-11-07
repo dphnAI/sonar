@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-//! Flag parity with the Python `aphrodite bench serve` parser.
+//! Flag parity with the Python `sonar bench serve` parser.
 //!
-//! `APHRODITE_USE_RUST_BENCH=1` makes `aphrodite bench serve` exec this crate's binary
+//! `SONAR_USE_RUST_BENCH=1` makes `sonar bench serve` exec this crate's binary
 //! with the raw argv, so every documented Python flag must either parse here
 //! or be a deliberate, allowlisted gap. The snapshot is kept current by
 //! `tests/benchmarks/test_rust_bench_cli_parity.py` in the repo root.
 
 use std::collections::HashSet;
 
-use aphrodite_bench::BenchServeArgs;
 use clap::{CommandFactory, Parser};
+use sonar_bench::BenchServeArgs;
 
 #[derive(Parser)]
 struct TestCli {
@@ -21,7 +21,7 @@ struct TestCli {
 
 const PYTHON_FLAGS: &str = include_str!("python_serve_flags.txt");
 
-/// Python-only flags: `aphrodite bench serve` features aphrodite-bench deliberately does
+/// Python-only flags: `sonar bench serve` features sonar-bench deliberately does
 /// not implement. Adding an entry is a decision to let the flag fail under
 /// Rust delegation; remove the entry once the flag gains Rust support.
 const PYTHON_ONLY: &[&str] = &[
@@ -83,7 +83,7 @@ fn python_serve_flags_parse_or_are_allowlisted() {
         .collect();
     assert!(
         missing.is_empty(),
-        "Python `aphrodite bench serve` flags unknown to aphrodite-bench: {missing:?}. \
+        "Python `sonar bench serve` flags unknown to sonar-bench: {missing:?}. \
          Support them in src/cli.rs (a clap alias is enough for renames) or \
          add them to PYTHON_ONLY above as a deliberate gap."
     );
@@ -95,7 +95,7 @@ fn python_only_allowlist_is_not_stale() {
     let stale: Vec<&&str> = PYTHON_ONLY.iter().filter(|f| known.contains(**f)).collect();
     assert!(
         stale.is_empty(),
-        "PYTHON_ONLY entries now supported by aphrodite-bench, remove them: {stale:?}"
+        "PYTHON_ONLY entries now supported by sonar-bench, remove them: {stale:?}"
     );
 }
 

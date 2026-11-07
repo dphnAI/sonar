@@ -6,7 +6,7 @@ from typing import TypeVar
 
 import torch
 
-from aphrodite.pooling_params import PoolingParams
+from sonar.pooling_params import PoolingParams
 
 _T = TypeVar("_T", bound=torch.Tensor | list[torch.Tensor])
 

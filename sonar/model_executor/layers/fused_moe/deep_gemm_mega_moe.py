@@ -17,24 +17,24 @@ from typing import Any, ClassVar, Literal
 import torch
 import torch.nn as nn
 
-import aphrodite.envs as envs
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed import get_ep_group
-from aphrodite.distributed.eplb.eplb_state import EplbLayerState
-from aphrodite.forward_context import get_forward_context, is_forward_context_available
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe.prepare_megamoe import (
+import sonar.envs as envs
+from sonar.config import SonarConfig
+from sonar.distributed import get_ep_group
+from sonar.distributed.eplb.eplb_state import EplbLayerState
+from sonar.forward_context import get_forward_context, is_forward_context_available
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe.prepare_megamoe import (
     prepare_megamoe_inputs,
     prepare_megamoe_nvfp4_inputs,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     kMxfp8Dynamic,
     kNvfp4DynamicToken,
 )
-from aphrodite.model_executor.models.utils import extract_layer_index
-from aphrodite.model_executor.utils import set_weight_attrs
-from aphrodite.platforms import current_platform
+from sonar.model_executor.models.utils import extract_layer_index
+from sonar.model_executor.utils import set_weight_attrs
+from sonar.platforms import current_platform
 
 logger = init_logger(__name__)
 
@@ -244,7 +244,7 @@ class DeepGemmMegaMoEExperts(nn.Module):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         *,
         num_experts: int,
         num_local_experts: int,
@@ -282,7 +282,7 @@ class DeepGemmMegaMoEExperts(nn.Module):
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
         self.max_num_tokens = (
-            max_num_tokens if max_num_tokens is not None else aphrodite_config.scheduler_config.max_num_batched_tokens
+            max_num_tokens if max_num_tokens is not None else sonar_config.scheduler_config.max_num_batched_tokens
         )
         self.weight_format = weight_format
         self.activation = activation
@@ -306,7 +306,7 @@ class DeepGemmMegaMoEExperts(nn.Module):
 
         # Register in the static forward context so the custom-op wrapper
         # can look up this module by name from within a torch.compile graph.
-        compilation_config = aphrodite_config.compilation_config
+        compilation_config = sonar_config.compilation_config
         if prefix in compilation_config.static_forward_context:
             raise ValueError(f"Duplicate layer name: {prefix}")
         compilation_config.static_forward_context[prefix] = self
@@ -352,7 +352,7 @@ class DeepGemmMegaMoEExperts(nn.Module):
             )
         elif not self._kernel_fuses_shared_experts(spec):
             reason = (
-                "the installed DeepGEMM Python API is older than the Aphrodite source. "
+                "the installed DeepGEMM Python API is older than the Sonar source. "
                 "Rebuild the vendored _deep_gemm_C extension to enable it"
             )
         else:
@@ -361,7 +361,7 @@ class DeepGemmMegaMoEExperts(nn.Module):
         return 0, None
 
     def _kernel_fuses_shared_experts(self, spec: MegaMoEWeightSpec) -> bool:
-        from aphrodite.utils.deep_gemm import _import_deep_gemm
+        from sonar.utils.deep_gemm import _import_deep_gemm
 
         deep_gemm = _import_deep_gemm()
         fmt = self.weight_format
@@ -567,7 +567,7 @@ class DeepGemmMegaMoEExperts(nn.Module):
         return dst, src.reshape(-1, 4, 2, 8, k)
 
     def get_symm_buffer(self):
-        from aphrodite.utils.deep_gemm import _import_deep_gemm
+        from sonar.utils.deep_gemm import _import_deep_gemm
 
         deep_gemm = _import_deep_gemm()
         group = get_ep_group().device_group
@@ -612,7 +612,7 @@ class DeepGemmMegaMoEExperts(nn.Module):
 
     def get_block_m(self, num_tokens: int) -> int:
         """BLOCK_M the MegaMoE scheduler runs ``num_tokens`` local tokens with."""
-        from aphrodite.utils.deep_gemm import _import_deep_gemm
+        from sonar.utils.deep_gemm import _import_deep_gemm
 
         deep_gemm = _import_deep_gemm()
         args = (
@@ -711,7 +711,7 @@ class DeepGemmMegaMoEExperts(nn.Module):
         self._synchronize_first_launch()
 
         is_padding = None
-        if envs.APHRODITE_MOE_SKIP_PADDING and is_forward_context_available():
+        if envs.SONAR_MOE_SKIP_PADDING and is_forward_context_available():
             is_padding = get_forward_context().is_padding
             if is_padding is not None:
                 is_padding = is_padding[:num_tokens]
@@ -720,7 +720,7 @@ class DeepGemmMegaMoEExperts(nn.Module):
         if self.capture_fn is not None:
             self.capture_fn(topk_ids)
 
-        from aphrodite.utils.deep_gemm import _import_deep_gemm
+        from sonar.utils.deep_gemm import _import_deep_gemm
 
         deep_gemm = _import_deep_gemm()
         fmt = self.weight_format

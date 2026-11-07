@@ -9,10 +9,10 @@ from typing import Any
 import torch
 import torch.distributed as dist
 
-from aphrodite.distributed import get_tp_group
-from aphrodite.distributed.parallel_state import in_the_same_node_as
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
+from sonar.distributed import get_tp_group
+from sonar.distributed.parallel_state import in_the_same_node_as
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
 
 logger = init_logger(__name__)
 

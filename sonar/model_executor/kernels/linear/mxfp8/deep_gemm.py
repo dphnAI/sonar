@@ -3,17 +3,17 @@
 
 import torch
 
-from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
+from sonar.model_executor.layers.quantization.utils.fp8_utils import (
     deepgemm_post_process_fp8_weight_block,
     per_token_group_quant_fp8_packed_for_deepgemm,
 )
-from aphrodite.model_executor.utils import replace_parameter
-from aphrodite.platforms import current_platform
-from aphrodite.utils.deep_gemm import (
+from sonar.model_executor.utils import replace_parameter
+from sonar.platforms import current_platform
+from sonar.utils.deep_gemm import (
     fp8_einsum,
     is_deep_gemm_supported,
 )
-from aphrodite.utils.torch_utils import direct_register_custom_op
+from sonar.utils.torch_utils import direct_register_custom_op
 
 from .Mxfp8LinearKernel import Mxfp8LinearKernel, Mxfp8LinearLayerConfig
 
@@ -77,7 +77,7 @@ class DeepGemmMxfp8BmmLinearKernel(Mxfp8LinearKernel):
             )
             q_input = q_input.view(tokens, groups, k)
             input_scale = input_scale.view(tokens, groups, k // 128)
-        output = torch.ops.aphrodite.deepgemm_mxfp8_bmm(
+        output = torch.ops.sonar.deepgemm_mxfp8_bmm(
             q_input, input_scale, layer.weight, layer.weight_scale, list(self.recipe)
         )
         if bias is not None:

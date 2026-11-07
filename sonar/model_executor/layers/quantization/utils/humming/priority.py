@@ -15,7 +15,7 @@ def prefers_humming(compute_capability: int | None = None) -> bool:
     """Whether Humming outranks Marlin. A missing compute capability uses the
     current device."""
     if compute_capability is None:
-        from aphrodite.platforms import current_platform
+        from sonar.platforms import current_platform
 
         if current_platform.is_cuda():
             cc = current_platform.get_device_capability()

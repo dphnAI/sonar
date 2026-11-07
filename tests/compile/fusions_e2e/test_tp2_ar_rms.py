@@ -4,8 +4,8 @@ from collections.abc import Callable
 
 import pytest
 
-from aphrodite.config import PassConfig
-from aphrodite.platforms import current_platform
+from sonar.config import PassConfig
+from sonar.platforms import current_platform
 
 from ...utils import multi_gpu_test
 from .common import (
@@ -96,7 +96,7 @@ def test_tp2_ar_rms_fp8_fusions(
             pytest.skip("ROCm static-FP8 MLA parity uses native quant and RMSNorm")
         # AITER's MoE GEMM rejects this reduced dummy model shape; keep AITER
         # for MLA and the all-reduce, and let the MoE run on Triton.
-        monkeypatch.setenv("APHRODITE_ROCM_USE_AITER_MOE", "0")
+        monkeypatch.setenv("SONAR_ROCM_USE_AITER_MOE", "0")
     if block_fp8 and "-quant_fp8" in custom_ops:
         # This is why config forces +quant_fp8 by default
         pytest.skip("native QuantFP8 matching not supported for group quant")

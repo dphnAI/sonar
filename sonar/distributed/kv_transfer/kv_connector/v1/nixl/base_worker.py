@@ -23,7 +23,7 @@ import regex as re
 import torch
 import zmq
 
-from aphrodite.distributed.kv_transfer.kv_connector.utils import (
+from sonar.distributed.kv_transfer.kv_connector.utils import (
     BlockIds,
     EngineId,
     EngineTransferInfo,
@@ -34,12 +34,12 @@ from aphrodite.distributed.kv_transfer.kv_connector.utils import (
     kv_postprocess_blksize_and_layout_on_receive,
     kv_postprocess_blksize_on_receive,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.base import (
+from sonar.distributed.kv_transfer.kv_connector.v1.base import (
     CopyBlocksOp,
     KVConnectorTransferResults,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.metrics import KVConnectorStats
-from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.metadata import (
+from sonar.distributed.kv_transfer.kv_connector.v1.metrics import KVConnectorStats
+from sonar.distributed.kv_transfer.kv_connector.v1.nixl.metadata import (
     GET_META_MSG,
     NixlAgentMetadata,
     NixlConnectorMetadata,
@@ -49,41 +49,41 @@ from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.metadata import (
     TransferHandle,
     compute_nixl_compatibility_hash,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.stats import (
+from sonar.distributed.kv_transfer.kv_connector.v1.nixl.stats import (
     NixlKVConnectorStats,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.tp_mapping import (
+from sonar.distributed.kv_transfer.kv_connector.v1.nixl.tp_mapping import (
     TPMapping,
     _is_attention_spec,
     _is_ssm_spec,
     compute_tp_mapping,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.utils import (
+from sonar.distributed.kv_transfer.kv_connector.v1.nixl.utils import (
     _NIXL_SUPPORTED_DEVICE,
     get_representative_spec_type,
     zmq_ctx,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.ssm_conv_transfer_utils import (
+from sonar.distributed.kv_transfer.kv_connector.v1.ssm_conv_transfer_utils import (
     MambaConvSplitInfo,
     derive_mamba_conv_split,
 )
-from aphrodite.distributed.nixl_utils import (
+from sonar.distributed.nixl_utils import (
     NixlWrapper,
     check_nixl_version,
     nixl_agent_config,
 )
-from aphrodite.distributed.parallel_state import (
+from sonar.distributed.parallel_state import (
     get_pcp_group,
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
 )
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.utils.gpu_sync_debug import gpu_sync_allowed
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.utils.network_utils import make_zmq_path
-from aphrodite.utils.torch_utils import async_tensor_h2d
-from aphrodite.v1.kv_cache_interface import (
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.utils.gpu_sync_debug import gpu_sync_allowed
+from sonar.utils.math_utils import cdiv
+from sonar.utils.network_utils import make_zmq_path
+from sonar.utils.torch_utils import async_tensor_h2d
+from sonar.v1.kv_cache_interface import (
     AttentionSpec,
     CircularBufferSpec,
     FullAttentionSpec,
@@ -95,11 +95,11 @@ from aphrodite.v1.kv_cache_interface import (
     UniformTypeKVCacheSpecs,
     iter_layer_specs,
 )
-from aphrodite.v1.worker.utils import select_common_block_size
+from sonar.v1.worker.utils import select_common_block_size
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
-    from aphrodite.v1.kv_cache_interface import KVCacheConfig
+    from sonar.config import SonarConfig
+    from sonar.v1.kv_cache_interface import KVCacheConfig
 
 logger = init_logger(__name__)
 
@@ -362,7 +362,7 @@ class NixlBaseConnectorWorker:
         Such a draft's KV is head-sharded while the target's is replicated."""
         if not self.use_mla or self._has_mamba or self._is_csa_linear:
             return None
-        spec_config = self.aphrodite_config.speculative_config
+        spec_config = self.sonar_config.speculative_config
         draft_config = spec_config.draft_model_config if spec_config else None
         if draft_config is None or draft_config.use_mla:
             return None
@@ -372,7 +372,7 @@ class NixlBaseConnectorWorker:
         heads = self._head_sharded_draft_kv_heads
         if heads is None:
             return set()
-        spec_config = self.aphrodite_config.speculative_config
+        spec_config = self.sonar_config.speculative_config
         assert spec_config is not None and spec_config.draft_model_config is not None
         target_layers = self.model_config.get_total_num_hidden_layers()
         draft_layers = spec_config.draft_model_config.get_total_num_hidden_layers()
@@ -595,7 +595,7 @@ class NixlBaseConnectorWorker:
 
     def __init__(
         self,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
         engine_id: str,
         kv_cache_config: "KVCacheConfig",
     ):
@@ -609,18 +609,18 @@ class NixlBaseConnectorWorker:
         logger.info("Initializing NIXL worker %s", engine_id)
 
         # Config.
-        self.aphrodite_config = aphrodite_config
+        self.sonar_config = sonar_config
 
-        if aphrodite_config.kv_transfer_config is None:
+        if sonar_config.kv_transfer_config is None:
             raise ValueError("kv_transfer_config must be set for NixlConnector")
-        self.kv_transfer_config = aphrodite_config.kv_transfer_config
+        self.kv_transfer_config = sonar_config.kv_transfer_config
 
-        self.nixl_backends = aphrodite_config.kv_transfer_config.get_from_extra_config("backends", ["UCX"])
-        kv_lease_duration: int = aphrodite_config.kv_transfer_config.get_from_extra_config("kv_lease_duration", 30)
+        self.nixl_backends = sonar_config.kv_transfer_config.get_from_extra_config("backends", ["UCX"])
+        kv_lease_duration: int = sonar_config.kv_transfer_config.get_from_extra_config("kv_lease_duration", 30)
         # NOTE (NickLucche): For now we use a hardcoded value for a simpler interface.
         self._lease_extension = kv_lease_duration * 2 // 3
 
-        self._bidirectional_kv_xfer_enabled: bool = aphrodite_config.kv_transfer_config.get_from_extra_config(
+        self._bidirectional_kv_xfer_enabled: bool = sonar_config.kv_transfer_config.get_from_extra_config(
             "bidirectional_kv_xfer", False
         )
 
@@ -631,9 +631,7 @@ class NixlBaseConnectorWorker:
             if get_representative_spec_type(group.kv_cache_spec) not in (MambaSpec, CircularBufferSpec)
         ]
         self.block_size = (
-            math.lcm(*transfer_block_sizes)
-            if transfer_block_sizes
-            else cast(int, aphrodite_config.cache_config.block_size)
+            math.lcm(*transfer_block_sizes) if transfer_block_sizes else cast(int, sonar_config.cache_config.block_size)
         )
         # Per-layer specs, unwrapping UniformTypeKVCacheSpecs group wrappers.
         self._layer_specs: dict[str, KVCacheSpec] = {}
@@ -643,7 +641,7 @@ class NixlBaseConnectorWorker:
                 self._layer_specs.update(group_spec.kv_cache_specs)
             else:
                 self._layer_specs.update(dict.fromkeys(group.layer_names, group_spec))
-        self._is_hma_required = not aphrodite_config.scheduler_config.disable_hybrid_kv_cache_manager and any(
+        self._is_hma_required = not sonar_config.scheduler_config.disable_hybrid_kv_cache_manager and any(
             not isinstance(spec, FullAttentionSpec) for spec in self._layer_specs.values()
         )
 
@@ -674,12 +672,12 @@ class NixlBaseConnectorWorker:
 
         if self._has_mamba:
             assert self._is_hma_required
-            from aphrodite.model_executor.layers.mamba.mamba_utils import (
+            from sonar.model_executor.layers.mamba.mamba_utils import (
                 is_conv_state_dim_first,
             )
 
             assert is_conv_state_dim_first(), (
-                "3-read Mamba conv transfer requires DS conv state layout. Set APHRODITE_SSM_CONV_STATE_LAYOUT=DS"
+                "3-read Mamba conv transfer requires DS conv state layout. Set SONAR_SSM_CONV_STATE_LAYOUT=DS"
             )
             mamba_spec = next(
                 spec
@@ -688,7 +686,7 @@ class NixlBaseConnectorWorker:
             )
             self._conv_decomp = derive_mamba_conv_split(
                 mamba_spec,
-                aphrodite_config.parallel_config.tensor_parallel_size,
+                sonar_config.parallel_config.tensor_parallel_size,
             )
             mamba_ssm_size = self._conv_decomp.ssm_sizes
         self._mamba_ssm_size = mamba_ssm_size
@@ -701,7 +699,7 @@ class NixlBaseConnectorWorker:
         # components like NVSHMEM (used by DeepEP kernels) to fail during RDMA
         # initialization with "mlx5dv_devx_alloc_uar" errors.
         # Ref: https://network.nvidia.com/files/doc-2020/ethernet-adapters-programming-manual.pdf#page=63
-        num_threads = aphrodite_config.kv_transfer_config.get_from_extra_config("num_threads", 4)
+        num_threads = sonar_config.kv_transfer_config.get_from_extra_config("num_threads", 4)
         if nixl_agent_config is None:
             config = None
         else:
@@ -715,7 +713,7 @@ class NixlBaseConnectorWorker:
         # Extra UCX backend init params, e.g. {"ucx_error_handling_mode": "none"}.
         params = self.kv_transfer_config.get_from_extra_config("ucx_backend_params", {})
         ucx_backend_params = {k: str(v) for k, v in params.items()}
-        sleep_mode = aphrodite_config.model_config.enable_sleep_mode and config is not None
+        sleep_mode = sonar_config.model_config.enable_sleep_mode and config is not None
         # With UCX params, create every backend here, in the configured order.
         explicit_backends = (config is not None and not sleep_mode) and (
             bool(ucx_backend_params) and "UCX" in self.nixl_backends
@@ -757,8 +755,8 @@ class NixlBaseConnectorWorker:
         self.engine_id: EngineId = engine_id
         self.tp_rank = get_tensor_model_parallel_rank()
         self.world_size = get_tensor_model_parallel_world_size()
-        self.pcp_size = aphrodite_config.parallel_config.prefill_context_parallel_size
-        self.dcp_size = aphrodite_config.parallel_config.decode_context_parallel_size
+        self.pcp_size = sonar_config.parallel_config.prefill_context_parallel_size
+        self.dcp_size = sonar_config.parallel_config.decode_context_parallel_size
         self.pcp_rank = get_pcp_group().rank_in_group if self.pcp_size > 1 else 0
 
         # TP1 PCP+DCP owns distinct KV shards; replicated PCP uses rank zero.
@@ -775,7 +773,7 @@ class NixlBaseConnectorWorker:
 
         # KV Caches and nixl tracking data.
         self.device_type = current_platform.device_type
-        self.kv_buffer_device: str = aphrodite_config.kv_transfer_config.kv_buffer_device
+        self.kv_buffer_device: str = sonar_config.kv_transfer_config.kv_buffer_device
         if self.device_type not in _NIXL_SUPPORTED_DEVICE:
             raise RuntimeError(f"{self.device_type} is not supported.")
         elif self.kv_buffer_device not in _NIXL_SUPPORTED_DEVICE[self.device_type]:
@@ -839,7 +837,7 @@ class NixlBaseConnectorWorker:
 
         # PP>1 (push mode): this worker holds a contiguous layer slice and
         # transfers into the PP=1 remote's regions that hold its layers.
-        self.pp_size = aphrodite_config.parallel_config.pipeline_parallel_size
+        self.pp_size = sonar_config.parallel_config.pipeline_parallel_size
         if self.pp_size > 1:
             if self._is_hma_required and not self._supports_pp_hma:
                 raise NotImplementedError(
@@ -853,7 +851,7 @@ class NixlBaseConnectorWorker:
                     "NixlPushConnector does not support pipeline_parallel_size > 1 "
                     "with Mamba/SSM hybrid KV cache layouts yet."
                 )
-            if aphrodite_config.kv_transfer_config.kv_role == "kv_consumer":
+            if sonar_config.kv_transfer_config.kv_role == "kv_consumer":
                 raise NotImplementedError(
                     "NixlPushConnector consumer (decode) does not support pipeline_parallel_size > 1."
                 )
@@ -910,7 +908,7 @@ class NixlBaseConnectorWorker:
         self._handshake_initiation_executor = ThreadPoolExecutor(
             # NIXL is not guaranteed to be thread-safe, limit 1 worker.
             max_workers=1,
-            thread_name_prefix="aphrodite-nixl-handshake-initiator",
+            thread_name_prefix="sonar-nixl-handshake-initiator",
         )
         self._ready_requests = queue.Queue[tuple[ReqId, ReqMeta]]()
         self._handshake_futures: dict[EngineId, Future[tuple[dict[tuple[int, int], str], float]]] = {}
@@ -919,20 +917,20 @@ class NixlBaseConnectorWorker:
 
         # TTL-based eviction of stale remote engine state.
         self._engine_last_active: dict[EngineId, float] = {}
-        self._engine_ttl: float = aphrodite_config.kv_transfer_config.get_from_extra_config("engine_ttl", 3600.0)
+        self._engine_ttl: float = sonar_config.kv_transfer_config.get_from_extra_config("engine_ttl", 3600.0)
         # Map of pull peer (host, port) -> engine_id currently serving it.
         self._engine_by_address: dict[tuple[str, int], EngineId] = {}
 
-        self.model_config = aphrodite_config.model_config
+        self.model_config = sonar_config.model_config
 
         self.use_mla = self.model_config.use_mla
 
         # Get the attention backend from the first layer
         # NOTE (NickLucche) models with multiple backends are not supported yet
-        self.attn_backends = get_current_attn_backends(aphrodite_config)
+        self.attn_backends = get_current_attn_backends(sonar_config)
         self.backend_name = self.attn_backends[0].get_name()
 
-        self.kv_cache_layout = aphrodite_config.cache_config.get_resolved_kv_cache_layout().name
+        self.kv_cache_layout = sonar_config.cache_config.get_resolved_kv_cache_layout().name
         self.host_buffer_kv_cache_layout = self.kv_cache_layout
         logger.info(
             "Detected attention backend(s) %s",
@@ -1017,10 +1015,10 @@ class NixlBaseConnectorWorker:
 
     def _sync_block_size_with_kernel(self) -> None:
         backends, specs = get_current_attn_backends_and_specs(
-            self.aphrodite_config, self.kv_cache_config, self.attn_backends
+            self.sonar_config, self.kv_cache_config, self.attn_backends
         )
         kernel_block_size = select_common_block_size(self.block_size, backends, specs)
-        check_compressed_kernel_split(self.aphrodite_config, self.kv_cache_config, kernel_block_size)
+        check_compressed_kernel_split(self.sonar_config, self.kv_cache_config, kernel_block_size)
         # Number of blocks not accounting for kernel block mismatches
         self._logical_num_blocks = self.num_blocks
         if self.block_size != kernel_block_size:
@@ -1144,7 +1142,7 @@ class NixlBaseConnectorWorker:
                         f"Local: {self.compat_hash}, "
                         f"Remote: {handshake_payload.compatibility_hash}. "
                         f"Prefill and decode instances have incompatible "
-                        f"configurations. This may be due to: different Aphrodite versions,"
+                        f"configurations. This may be due to: different Sonar versions,"
                         f" models, dtypes, KV cache layouts, attention backends, etc. "
                         f"Both instances must use identical configurations."
                         f"Disable this check using "
@@ -1421,7 +1419,7 @@ class NixlBaseConnectorWorker:
             # PP can reorder the same backends across stages of a packed model.
             backend_name = ",".join(sorted({backend.get_name() for backend in self.attn_backends}))
         self.compat_hash = compute_nixl_compatibility_hash(
-            self.aphrodite_config,
+            self.sonar_config,
             backend_name,
             transfer_mode=self._TRANSFER_MODE,
         )
@@ -2276,7 +2274,7 @@ class NixlBaseConnectorWorker:
             # Whole rows transfer as one unit, so both sides must pack them alike.
             raise RuntimeError(
                 "Packed KV block rows differ between P and D. Use the same "
-                "APHRODITE_KV_CACHE_LAYOUT and block size on both sides."
+                "SONAR_KV_CACHE_LAYOUT and block size on both sides."
             )
         pairs = self._pair_regions(nixl_agent_meta)
         if self._dst_pairs.setdefault(engine_id, pairs) != pairs:
@@ -2506,7 +2504,7 @@ class NixlBaseConnectorWorker:
         if (
             self._has_mamba
             and remote_physical_per_logical != self._physical_blocks_per_logical_kv_block
-            and self.aphrodite_config.cache_config.enable_prefix_caching
+            and self.sonar_config.cache_config.enable_prefix_caching
         ):
             raise RuntimeError(
                 "Prefix caching with heterogeneous physical_blocks_per_logical "

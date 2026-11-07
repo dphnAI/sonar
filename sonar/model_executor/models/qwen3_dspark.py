@@ -20,23 +20,23 @@ from collections.abc import Iterable
 import torch
 import torch.nn as nn
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.linear import ReplicatedLinear
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.quantization.utils.nvfp4_emulation_utils import (
+from sonar.config import SonarConfig
+from sonar.logger import init_logger
+from sonar.model_executor.layers.linear import ReplicatedLinear
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.quantization.utils.nvfp4_emulation_utils import (
     dequantize_to_dtype,
     nvfp4_gathered_bias,
 )
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
 )
-from aphrodite.model_executor.model_loader.mtp_validation import (
+from sonar.model_executor.model_loader.mtp_validation import (
     is_mtp_completeness_check_enabled,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.v1.worker.gpu.spec_decode.dspark.config import DSparkSpeculatorConfig
+from sonar.platforms import current_platform
+from sonar.v1.worker.gpu.spec_decode.dspark.config import DSparkSpeculatorConfig
 
 from .qwen3_dflash import DFlashQwen3ForCausalLM, DFlashQwen3Model
 from .utils import (
@@ -192,11 +192,11 @@ class Qwen3DSparkModel(DFlashQwen3Model):
     def __init__(
         self,
         *,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         start_layer_id: int = 0,
         prefix: str = "",
     ) -> None:
-        super().__init__(aphrodite_config=aphrodite_config, start_layer_id=start_layer_id, prefix=prefix)
+        super().__init__(sonar_config=sonar_config, start_layer_id=start_layer_id, prefix=prefix)
         config = self.config
         draft_vocab_size = getattr(config, "draft_vocab_size", None) or config.vocab_size
         self.markov_head = DSparkMarkovHead(
@@ -226,17 +226,17 @@ class Qwen3DSparkForCausalLM(DFlashQwen3ForCausalLM):
     speculator_config_class = DSparkSpeculatorConfig
     model_cls = Qwen3DSparkModel
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         nn.Module.__init__(self)
-        speculative_config = aphrodite_config.speculative_config
+        speculative_config = sonar_config.speculative_config
         assert speculative_config is not None
         self.draft_model_config = speculative_config.draft_model_config
         self.config = self.draft_model_config.hf_config
         if getattr(self.config, "draft_vocab_size", None) is None:
             self.config.draft_vocab_size = getattr(self.config, "vocab_size", None)
-        target_layer_num = aphrodite_config.model_config.get_total_num_hidden_layers()
+        target_layer_num = sonar_config.model_config.get_total_num_hidden_layers()
         self.model = self.model_cls(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             prefix=maybe_prefix(prefix, "model"),
             start_layer_id=target_layer_num,
         )
@@ -248,7 +248,7 @@ class Qwen3DSparkForCausalLM(DFlashQwen3ForCausalLM):
             prefix=maybe_prefix(prefix, "lm_head"),
         )
         self.logits_processor = LogitsProcessor(self.config.draft_vocab_size, scale=logit_scale)
-        self.target_vocab_size = aphrodite_config.model_config.get_vocab_size()
+        self.target_vocab_size = sonar_config.model_config.get_vocab_size()
         # Only a pruned draft (subset of the target vocab) needs a d2t mapping to
         # scatter ids up. A draft >= the target vocab (e.g. padded to the target's
         # physical embedding size) maps identically, so no d2t is needed.

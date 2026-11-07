@@ -8,19 +8,19 @@ from importlib import import_module
 import torch
 from torch import nn
 
-import aphrodite.envs as envs
-from aphrodite.distributed import get_ep_group
-from aphrodite.forward_context import get_forward_context, is_forward_context_available
-from aphrodite.model_executor.layers.fused_moe.router.router_factory import (
+import sonar.envs as envs
+from sonar.distributed import get_ep_group
+from sonar.forward_context import get_forward_context, is_forward_context_available
+from sonar.model_executor.layers.fused_moe.router.router_factory import (
     create_fused_moe_router,
 )
-from aphrodite.model_executor.layers.quantization.base_config import QuantizeMethodBase
-from aphrodite.model_executor.layers.quantization.fp8 import Fp8Config
-from aphrodite.model_executor.layers.quantization.modelopt import ModelOptNvFp4Config
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import is_layer_skipped
-from aphrodite.model_executor.models.utils import extract_layer_index
-from aphrodite.model_executor.utils import set_weight_attrs
-from aphrodite.utils.deep_gemm import _import_deep_gemm
+from sonar.model_executor.layers.quantization.base_config import QuantizeMethodBase
+from sonar.model_executor.layers.quantization.fp8 import Fp8Config
+from sonar.model_executor.layers.quantization.modelopt import ModelOptNvFp4Config
+from sonar.model_executor.layers.quantization.utils.quant_utils import is_layer_skipped
+from sonar.model_executor.models.utils import extract_layer_index
+from sonar.model_executor.utils import set_weight_attrs
+from sonar.utils.deep_gemm import _import_deep_gemm
 
 
 class _BufferPool:
@@ -105,7 +105,7 @@ class _MegaMoEMethod(QuantizeMethodBase):
 class Step5MegaMoEExperts(nn.Module):
     def __init__(
         self,
-        aphrodite_config,
+        sonar_config,
         *,
         num_experts,
         top_k,
@@ -118,7 +118,7 @@ class Step5MegaMoEExperts(nn.Module):
         max_num_tokens=None,
     ):
         super().__init__()
-        parallel = aphrodite_config.parallel_config
+        parallel = sonar_config.parallel_config
         if not parallel.enable_expert_parallel:
             raise ValueError("DeepGEMM MegaMoE requires expert parallelism")
         if parallel.tensor_parallel_size > 1 and parallel.pipeline_parallel_size > 1:
@@ -141,7 +141,7 @@ class Step5MegaMoEExperts(nn.Module):
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
         self.max_tokens = (
-            aphrodite_config.scheduler_config.max_num_batched_tokens if max_num_tokens is None else max_num_tokens
+            sonar_config.scheduler_config.max_num_batched_tokens if max_num_tokens is None else max_num_tokens
         )
         self.activation = "swiglu" if activation == "silu" else activation
         self.activation_clamp = activation_clamp
@@ -291,7 +291,7 @@ class Step5MegaMoEExperts(nn.Module):
             raise ValueError("DeepGEMM MegaMoE requires SM100 GPUs")
         self.dg = _import_deep_gemm()
         if self.dg is None or not hasattr(self.dg, "bf16_mega_moe"):
-            raise RuntimeError("Install the pinned Aphrodite DeepGEMM build")
+            raise RuntimeError("Install the pinned Sonar DeepGEMM build")
         if self.nvfp4:
             w1, w2 = self._prepare_nvfp4()
         else:
@@ -329,7 +329,7 @@ class Step5MegaMoEExperts(nn.Module):
         return self.pool.views[self.mma_type]
 
     def _forward_impl(self, hidden_states, topk_weights, topk_ids, padding=None):
-        from aphrodite.model_executor.layers.fused_moe.prepare_megamoe import (
+        from sonar.model_executor.layers.fused_moe.prepare_megamoe import (
             prepare_megamoe_inputs,
         )
 
@@ -408,7 +408,7 @@ class Step5MegaMoE(nn.Module):
 
     def __init__(
         self,
-        aphrodite_config,
+        sonar_config,
         *,
         num_experts,
         top_k,
@@ -435,12 +435,12 @@ class Step5MegaMoE(nn.Module):
             e_score_correction_bias=e_score_correction_bias,
             routed_scaling_factor=routed_scaling_factor,
         )
-        max_tokens = aphrodite_config.scheduler_config.max_num_batched_tokens
+        max_tokens = sonar_config.scheduler_config.max_num_batched_tokens
         if sequence_parallel:
-            tp_size = aphrodite_config.parallel_config.tensor_parallel_size
+            tp_size = sonar_config.parallel_config.tensor_parallel_size
             max_tokens = (max_tokens + tp_size - 1) // tp_size
         self.routed_experts = Step5MegaMoEExperts(
-            aphrodite_config,
+            sonar_config,
             num_experts=num_experts,
             top_k=top_k,
             hidden_size=hidden_size,
@@ -458,7 +458,7 @@ class Step5MegaMoE(nn.Module):
         if (
             padding is None
             and not self.sequence_parallel
-            and envs.APHRODITE_MOE_SKIP_PADDING
+            and envs.SONAR_MOE_SKIP_PADDING
             and is_forward_context_available()
         ):
             mask = get_forward_context().is_padding

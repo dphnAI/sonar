@@ -24,10 +24,10 @@ import torch
 import torch.nn as nn
 from transformers.models.qwen3_vl import Qwen3VLProcessor
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.model_executor.layers.pooler.tokwise import pooler_for_token_embed
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
+from sonar.config import SonarConfig
+from sonar.model_executor.layers.pooler.tokwise import pooler_for_token_embed
+from sonar.model_executor.model_loader.weight_utils import default_weight_loader
+from sonar.multimodal import MULTIMODAL_REGISTRY
 
 from .interfaces import SupportsLateInteraction
 from .interfaces_base import default_pooling_type
@@ -56,7 +56,7 @@ class ColQwen3ProcessingInfo(Qwen3VLProcessingInfo):
     def get_hf_processor(self, **kwargs: object) -> Qwen3VLProcessor:
         # Force standard Qwen3VLProcessor even when trust_remote_code=True.
         # ColQwen3 custom processors (e.g. ColQwen3Processor) have
-        # incompatible interfaces with Aphrodite's Qwen3VLMultiModalProcessor.
+        # incompatible interfaces with Sonar's Qwen3VLMultiModalProcessor.
         # The standard Qwen3VLProcessor handles both text and image inputs
         # correctly for the Qwen3-VL backbone.
         return self.ctx.get_hf_processor(
@@ -132,19 +132,19 @@ class ColQwen3Model(Qwen3VLForConditionalGeneration, SupportsLateInteraction):
 
     """
 
-    # Mark this as a pooling model so Aphrodite routes to pooler path
+    # Mark this as a pooling model so Sonar routes to pooler path
     is_pooling_model = True
     # Mark as false to avoid collision with the checkpoint's custom code path
     supports_mm_device_do_normalize = False
 
-    # Override hf_to_aphrodite_mapper to handle ColQwen3 weight naming.
+    # Override hf_to_sonar_mapper to handle ColQwen3 weight naming.
     # NOTE: WeightsMapper applies ALL matching prefix rules sequentially
     # (no early exit), so more-specific prefixes must come first.
     #   TomoroAI:    "vlm.model.visual.", "vlm.model.language_model."
     #   ColPali:     "model.visual.", "model.language_model."
     #   OpenSearch:  "visual.", "language_model." (no outer prefix,
     #                re-prefixed to "model.*" in load_weights)
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={
             # TomoroAI naming convention (most specific first)
             "vlm.model.visual.": "visual.",
@@ -161,11 +161,11 @@ class ColQwen3Model(Qwen3VLForConditionalGeneration, SupportsLateInteraction):
         }
     )
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "model"):
-        super().__init__(aphrodite_config=aphrodite_config, prefix=prefix)
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "model"):
+        super().__init__(sonar_config=sonar_config, prefix=prefix)
 
-        config = aphrodite_config.model_config.hf_config
-        head_dtype = aphrodite_config.model_config.head_dtype
+        config = sonar_config.model_config.hf_config
+        head_dtype = sonar_config.model_config.head_dtype
 
         hidden_size = getattr(config, "hidden_size", None)
         if hidden_size is None and hasattr(config, "text_config"):
@@ -197,7 +197,7 @@ class ColQwen3Model(Qwen3VLForConditionalGeneration, SupportsLateInteraction):
             # Will be created during load_weights when dim is inferred
             self.custom_text_proj = None
 
-        pooler_config = aphrodite_config.model_config.pooler_config
+        pooler_config = sonar_config.model_config.pooler_config
         assert pooler_config is not None
         self.pooler = pooler_for_token_embed(
             pooler_config,
@@ -251,7 +251,7 @@ class ColQwen3Model(Qwen3VLForConditionalGeneration, SupportsLateInteraction):
 
         # Scan all weight names to determine if re-prefixing is needed.
         # OpenSearch-AI models have unprefixed weights ("language_model.*",
-        # "visual.*") that need "model." added so hf_to_aphrodite_mapper can
+        # "visual.*") that need "model." added so hf_to_sonar_mapper can
         # process them. Only re-prefix if ALL backbone weights are
         # unprefixed (no "vlm." or "model." prefix found).
         has_unprefixed = any(
@@ -269,7 +269,7 @@ class ColQwen3Model(Qwen3VLForConditionalGeneration, SupportsLateInteraction):
                 model_weights.append((name, weight))
 
         loader = AutoWeightsLoader(self)
-        loaded = loader.load_weights(model_weights, mapper=self.hf_to_aphrodite_mapper)
+        loaded = loader.load_weights(model_weights, mapper=self.hf_to_sonar_mapper)
 
         if proj_weights:
             model_dtype = next(self.language_model.parameters()).dtype

@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionRequest,
 )
-from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
-from aphrodite.parser.engine.registered_adapters import KimiK2ParserToolAdapter
+from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
+from sonar.parser.engine.registered_adapters import KimiK2ParserToolAdapter
 
 
 class KimiK2ToolParser(KimiK2ParserToolAdapter):  # type: ignore[valid-type, misc]

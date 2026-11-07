@@ -5,20 +5,20 @@ from collections.abc import Sequence
 from concurrent.futures import Executor
 from typing import Any, Final, cast
 
-from aphrodite import (
+from sonar import (
     PoolingParams,
     PoolingRequestOutput,
 )
-from aphrodite.config import AphroditeConfig
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.lora.request import LoRARequest
-from aphrodite.renderers import BaseRenderer, merge_kwargs
-from aphrodite.renderers.chat_utils import (
+from sonar.config import SonarConfig
+from sonar.exceptions import SonarValidationError
+from sonar.lora.request import LoRARequest
+from sonar.renderers import BaseRenderer, merge_kwargs
+from sonar.renderers.chat_utils import (
     ChatTemplateConfig,
 )
-from aphrodite.renderers.inputs.preprocess import parse_model_prompt, prompt_to_seq
-from aphrodite.utils.async_utils import make_async
-from aphrodite.utils.mistral import is_mistral_tokenizer
+from sonar.renderers.inputs.preprocess import parse_model_prompt, prompt_to_seq
+from sonar.utils.async_utils import make_async
+from sonar.utils.mistral import is_mistral_tokenizer
 
 from ..typing import (
     AnyOfflineInputsContext,
@@ -48,12 +48,12 @@ class PoolingIOProcessor:
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         renderer: BaseRenderer,
         chat_template_config: ChatTemplateConfig,
     ):
-        self.aphrodite_config = aphrodite_config
-        self.model_config = aphrodite_config.model_config
+        self.sonar_config = sonar_config
+        self.model_config = sonar_config.model_config
         self.renderer = renderer
 
         self.chat_template = chat_template_config.chat_template
@@ -195,7 +195,7 @@ class PoolingIOProcessor:
                 pass
             elif param.task != pooling_task:
                 msg = f"You cannot overwrite {param.task=!r} with {pooling_task=!r}!"
-                raise AphroditeValidationError(msg)
+                raise SonarValidationError(msg)
 
         seq_lora_requests = self._lora_request_to_seq(ctx.lora_request, num_requests)
         seq_priority = self._priority_to_seq(ctx.priorities, num_requests)
@@ -264,7 +264,7 @@ class PoolingIOProcessor:
             request_chat_template is not None
             or (chat_template_kwargs and chat_template_kwargs.get("chat_template") is not None)
         ):
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 "Chat template is passed with request, but "
                 "--trust-request-chat-template is not set. "
                 "Refused request with untrusted chat template."
@@ -278,7 +278,7 @@ class PoolingIOProcessor:
     ) -> Sequence[PoolingParams]:
         if isinstance(params, Sequence):
             if len(params) != num_requests:
-                raise AphroditeValidationError(
+                raise SonarValidationError(
                     f"The lengths of prompts ({num_requests}) and params ({len(params)}) must be the same."
                 )
 
@@ -293,7 +293,7 @@ class PoolingIOProcessor:
     ) -> Sequence[LoRARequest | None]:
         if isinstance(lora_request, Sequence):
             if len(lora_request) != num_requests:
-                raise AphroditeValidationError(
+                raise SonarValidationError(
                     f"The lengths of prompts ({num_requests}) and lora_request ({len(lora_request)}) must be the same."
                 )
 

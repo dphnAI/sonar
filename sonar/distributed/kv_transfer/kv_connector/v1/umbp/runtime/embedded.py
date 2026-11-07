@@ -21,7 +21,7 @@ import numpy as np
 import regex as re
 import torch
 
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 from ..data import (
     BlockLoadBatch,
@@ -88,7 +88,7 @@ def _lookup_socket_path(
     if instance:
         identity = f"{namespace}:{instance}:{rank_namespace}"
     digest = hashlib.sha256(identity.encode()).hexdigest()[:24]
-    return str(Path(lookup_dir) / f"aphrodite-umbp-{digest}.sock")
+    return str(Path(lookup_dir) / f"sonar-umbp-{digest}.sock")
 
 
 def _socket_has_listener(path: str) -> bool:

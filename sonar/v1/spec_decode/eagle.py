@@ -3,19 +3,19 @@
 
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.v1.spec_decode.llm_base_proposer import SpecDecodeBaseProposer
+from sonar.config import SonarConfig
+from sonar.v1.spec_decode.llm_base_proposer import SpecDecodeBaseProposer
 
 
 class EagleProposer(SpecDecodeBaseProposer):
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
         runner=None,
     ):
         super().__init__(
-            aphrodite_config,
+            sonar_config,
             device,
             pass_hidden_states_to_model=True,
             runner=runner,

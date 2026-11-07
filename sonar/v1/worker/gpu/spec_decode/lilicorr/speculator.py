@@ -4,18 +4,18 @@
 import torch
 from torch import nn
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.model_executor.layers.vocab_parallel_embedding import VocabParallelEmbedding
-from aphrodite.v1.worker.gpu.spec_decode.dflash2.speculator import DFlash2Speculator
-from aphrodite.v1.worker.gpu.spec_decode.eagle.utils import get_target_lm_head
+from sonar.config import SonarConfig
+from sonar.model_executor.layers.vocab_parallel_embedding import VocabParallelEmbedding
+from sonar.v1.worker.gpu.spec_decode.dflash2.speculator import DFlash2Speculator
+from sonar.v1.worker.gpu.spec_decode.eagle.utils import get_target_lm_head
 
 
 class LiLiCorrSpeculator(DFlash2Speculator):
     _speculator_name = "LiLiCorr"
     _candidate_top_k_key = "lilicorr_candidate_topk"
 
-    def __init__(self, aphrodite_config: AphroditeConfig, device: torch.device):
-        super().__init__(aphrodite_config, device)
+    def __init__(self, sonar_config: SonarConfig, device: torch.device):
+        super().__init__(sonar_config, device)
         config = self.draft_model_config.hf_config
         self.anchor_hidden = torch.zeros(self.max_num_reqs, config.hidden_size, dtype=self.dtype, device=device)
         self.anchor_valid = torch.zeros(self.max_num_reqs, dtype=torch.bool, device=device)

@@ -4,19 +4,19 @@
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
-use aphrodite_chat::{
+use clap::Parser;
+use futures::StreamExt as _;
+use sonar_chat::{
     AssistantBlockKind, AssistantMessageExt as _, ChatEvent, ChatLlm, ChatMessage, ChatRequest,
     ChatRole, SamplingParams, load_model_backends,
 };
-use aphrodite_engine_core_client::{EngineCoreClient, EngineCoreClientConfig, TransportMode};
-use aphrodite_llm::Llm;
-use aphrodite_text::TextLlm;
-use clap::Parser;
-use futures::StreamExt as _;
+use sonar_engine_core_client::{EngineCoreClient, EngineCoreClientConfig, TransportMode};
+use sonar_llm::Llm;
+use sonar_text::TextLlm;
 use tracing_subscriber::EnvFilter;
 
 #[derive(Debug, Parser)]
-#[command(about = "Smoke-test the Rust chat facade against an external Qwen Aphrodite engine.")]
+#[command(about = "Smoke-test the Rust chat facade against an external Qwen Sonar engine.")]
 struct Args {
     #[arg(long)]
     handshake_address: String,
@@ -41,7 +41,7 @@ fn unique_request_id() -> String {
 
 fn init_tracing() {
     let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("aphrodite_engine_core_client=debug"));
+        .unwrap_or_else(|_| EnvFilter::new("sonar_engine_core_client=debug"));
     let _ = tracing_subscriber::fmt().with_env_filter(filter).try_init();
 }
 
@@ -75,7 +75,7 @@ async fn main() -> Result<()> {
         engine_stats_enabled: true,
     })
     .await
-    .context("failed to connect to external Aphrodite engine")?;
+    .context("failed to connect to external Sonar engine")?;
 
     println!("model={}", args.model);
     println!("tokenizer_source=tokenizers + hf-hub");

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""The CLI entrypoints of Aphrodite.
+"""The CLI entrypoints of Sonar.
 
 Note that all future modules must be lazily loaded within main
 to avoid certain eager import breakage."""
@@ -8,7 +8,7 @@ to avoid certain eager import breakage."""
 import importlib.metadata
 import sys
 
-from aphrodite.logger import configure_logging_from_args, init_logger
+from sonar.logger import configure_logging_from_args, init_logger
 
 logger = init_logger(__name__)
 
@@ -16,45 +16,45 @@ logger = init_logger(__name__)
 def main():
     # Keep the CPU verifier out of public help and avoid loading serving modules.
     if sys.argv[1:2] == ["verify"]:
-        from aphrodite.proof.cli import main as verify_main
+        from sonar.proof.cli import main as verify_main
 
         verify_main(sys.argv[2:])
         return
 
-    import aphrodite.entrypoints.cli.benchmark.main
-    import aphrodite.entrypoints.cli.collect_env
-    import aphrodite.entrypoints.cli.download_kernels
-    import aphrodite.entrypoints.cli.launch
-    import aphrodite.entrypoints.cli.openai
-    import aphrodite.entrypoints.cli.preload
-    import aphrodite.entrypoints.cli.run
-    import aphrodite.entrypoints.cli.run_batch
-    import aphrodite.entrypoints.cli.serve
-    import aphrodite.entrypoints.cli.snapshot
-    import aphrodite.entrypoints.cli.tokenizer
-    from aphrodite.entrypoints.common.startup import APHRODITE_SUBCMD_PARSER_EPILOG, cli_env_setup
-    from aphrodite.utils.argparse_utils import FlexibleArgumentParser
+    import sonar.entrypoints.cli.benchmark.main
+    import sonar.entrypoints.cli.collect_env
+    import sonar.entrypoints.cli.download_kernels
+    import sonar.entrypoints.cli.launch
+    import sonar.entrypoints.cli.openai
+    import sonar.entrypoints.cli.preload
+    import sonar.entrypoints.cli.run
+    import sonar.entrypoints.cli.run_batch
+    import sonar.entrypoints.cli.serve
+    import sonar.entrypoints.cli.snapshot
+    import sonar.entrypoints.cli.tokenizer
+    from sonar.entrypoints.common.startup import SONAR_SUBCMD_PARSER_EPILOG, cli_env_setup
+    from sonar.utils.argparse_utils import FlexibleArgumentParser
 
     CMD_MODULES = [
-        aphrodite.entrypoints.cli.openai,
-        aphrodite.entrypoints.cli.serve,
-        aphrodite.entrypoints.cli.run,
-        aphrodite.entrypoints.cli.launch,
-        aphrodite.entrypoints.cli.benchmark.main,
-        aphrodite.entrypoints.cli.collect_env,
-        aphrodite.entrypoints.cli.download_kernels,
-        aphrodite.entrypoints.cli.preload,
-        aphrodite.entrypoints.cli.run_batch,
-        aphrodite.entrypoints.cli.snapshot,
-        aphrodite.entrypoints.cli.tokenizer,
+        sonar.entrypoints.cli.openai,
+        sonar.entrypoints.cli.serve,
+        sonar.entrypoints.cli.run,
+        sonar.entrypoints.cli.launch,
+        sonar.entrypoints.cli.benchmark.main,
+        sonar.entrypoints.cli.collect_env,
+        sonar.entrypoints.cli.download_kernels,
+        sonar.entrypoints.cli.preload,
+        sonar.entrypoints.cli.run_batch,
+        sonar.entrypoints.cli.snapshot,
+        sonar.entrypoints.cli.tokenizer,
     ]
 
     if sys.argv[1:2] != ["snapshot"]:
         cli_env_setup()
 
-    aphrodite.entrypoints.cli.benchmark.main.maybe_exec_rust_bench()
+    sonar.entrypoints.cli.benchmark.main.maybe_exec_rust_bench()
 
-    # For 'aphrodite bench *' and the GPU-less 'aphrodite tokenizer': use CPU instead of
+    # For 'sonar bench *' and the GPU-less 'sonar tokenizer': use CPU instead of
     # UnspecifiedPlatform by default
     if len(sys.argv) > 1 and sys.argv[1] in ("bench", "tokenizer"):
         logger.debug(
@@ -62,28 +62,28 @@ def main():
             "UnspecifiedPlatform to avoid device type inference error",
             sys.argv[1],
         )
-        from aphrodite import platforms
+        from sonar import platforms
 
         if platforms.current_platform.is_unspecified():
-            from aphrodite.platforms.cpu import CpuPlatform
+            from sonar.platforms.cpu import CpuPlatform
 
             platforms.current_platform = CpuPlatform()
             logger.info("Unspecified platform detected, switching to CPU Platform instead.")
 
     parser = FlexibleArgumentParser(
-        description="Aphrodite CLI",
-        epilog=APHRODITE_SUBCMD_PARSER_EPILOG.format(subcmd="[subcommand]"),
+        description="Sonar CLI",
+        epilog=SONAR_SUBCMD_PARSER_EPILOG.format(subcmd="[subcommand]"),
     )
     parser.add_argument(
         "-v",
         "--version",
         action="version",
-        version=importlib.metadata.version("aphrodite-engine"),
+        version=importlib.metadata.version("sonar"),
     )
     subparsers = parser.add_subparsers(required=False, dest="subparser")
     cmds = {}
     for cmd_module in CMD_MODULES:
-        if cmd_module is aphrodite.entrypoints.cli.snapshot:
+        if cmd_module is sonar.entrypoints.cli.snapshot:
             new_cmds = cmd_module.cmd_init(create_requested=sys.argv[1:3] == ["snapshot", "create"])
         else:
             new_cmds = cmd_module.cmd_init()
@@ -100,6 +100,15 @@ def main():
         args.dispatch_function(args)
     else:
         parser.print_help()
+
+
+def deprecated_main():
+    print(
+        "WARNING: The 'aphrodite' CLI will be deprecated soon. Please use 'sonar' instead.",
+        file=sys.stderr,
+        flush=True,
+    )
+    return main()
 
 
 if __name__ == "__main__":

@@ -10,10 +10,10 @@ from typing import Any, Protocol
 
 import torch
 
-from aphrodite.distributed import get_tp_group
-from aphrodite.forward_context import get_forward_context, is_forward_context_available
-from aphrodite.models.minimax_m3.common.sparse_attention import MiniMaxM3SparseMetadata
-from aphrodite.v1.attention.backends.utils import PAD_SLOT_ID
+from sonar.distributed import get_tp_group
+from sonar.forward_context import get_forward_context, is_forward_context_available
+from sonar.models.minimax_m3.common.sparse_attention import MiniMaxM3SparseMetadata
+from sonar.v1.attention.backends.utils import PAD_SLOT_ID
 
 from .caches import CacheBinding, TensorIdentity, checked_cache_bindings
 from .guards import model_refusals
@@ -53,7 +53,7 @@ class KernelExecutor(Protocol):
 
 
 def tp_agree(ok: bool) -> bool:
-    from aphrodite.models.deepseek_v41.amd.mono.common.peer_memory import tp_agree
+    from sonar.models.deepseek_v41.amd.mono.common.peer_memory import tp_agree
 
     return tp_agree(ok, get_tp_group().cpu_group)
 

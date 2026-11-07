@@ -6,9 +6,9 @@ import functools
 
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
+import sonar.envs as envs
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
 
 logger = init_logger(__name__)
 
@@ -72,12 +72,12 @@ def use_fused_mqa_topk(
     full_context: every rank ranks its rows over the whole context (no DCP, or
     PCP after the KV all-gather); pure DCP needs the per-shard top-k merge;
     candidate_selection: v4.1 two-level selection needs the logits.
-    APHRODITE_BATCH_INVARIANT keeps the dense path: the fused gate depends on the
+    SONAR_BATCH_INVARIANT keeps the dense path: the fused gate depends on the
     chunk's total keys, and ties at the k-th score are taken in atomic order.
     """
     return (
-        envs.APHRODITE_USE_FUSED_MQA_TOPK
-        and not envs.APHRODITE_BATCH_INVARIANT
+        envs.SONAR_USE_FUSED_MQA_TOPK
+        and not envs.SONAR_BATCH_INVARIANT
         and not fp4_cache
         and full_context
         and not candidate_selection

@@ -40,13 +40,13 @@ def test_no_sync_with_spec_decode(
     method: str,
     num_spec_tokens: int,
     monkeypatch,
-    aphrodite_runner,
+    sonar_runner,
 ):
     """Test generation while the worker rejects unintended GPU-CPU syncs."""
-    monkeypatch.setenv("APHRODITE_GPU_SYNC_CHECK", "error")
+    monkeypatch.setenv("SONAR_GPU_SYNC_CHECK", "error")
 
-    from aphrodite import SamplingParams
-    from aphrodite.config import CompilationConfig
+    from sonar import SamplingParams
+    from sonar.config import CompilationConfig
 
     # Qwen3.5 is a VLM; without this, profile_run runs the ViT warmup
     # and peaks well above the 18GB MIG slice used by one of the CI lanes.
@@ -56,7 +56,7 @@ def test_no_sync_with_spec_decode(
     if "Qwen3.5" in model:
         extra_kwargs["limit_mm_per_prompt"] = {"image": 0, "video": 0}
 
-    with aphrodite_runner(
+    with sonar_runner(
         model,
         block_size=None,
         trust_remote_code=False,
@@ -75,7 +75,7 @@ def test_no_sync_with_spec_decode(
         llm = runner.llm
 
         # Assert async scheduling is actually active before running inference.
-        assert llm.llm_engine.aphrodite_config.scheduler_config.async_scheduling, (
+        assert llm.llm_engine.sonar_config.scheduler_config.async_scheduling, (
             f"Expected async_scheduling=True for spec decode, got False. "
             f"method={method}, target={model}, draft={spec_model}"
         )

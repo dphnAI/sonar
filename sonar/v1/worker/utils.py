@@ -11,25 +11,25 @@ from typing import Any
 import numpy as np
 import torch
 
-from aphrodite.config import CacheConfig
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.layers.mamba.mamba_mixer2 import share_replayssm_ring_trackers
-from aphrodite.model_executor.layers.utils import warmup_rocm_skinny_gemm_workspaces
-from aphrodite.model_executor.models.interfaces import MultiModalEmbeddings
-from aphrodite.model_executor.models.utils import extract_layer_index
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.mem_utils import MemorySnapshot, format_gib
-from aphrodite.utils.torch_utils import async_tensor_h2d
-from aphrodite.v1.attention.backend import (
+from sonar.config import CacheConfig
+from sonar.logger import init_logger
+from sonar.model_executor.layers.attention import Attention
+from sonar.model_executor.layers.mamba.mamba_mixer2 import share_replayssm_ring_trackers
+from sonar.model_executor.layers.utils import warmup_rocm_skinny_gemm_workspaces
+from sonar.model_executor.models.interfaces import MultiModalEmbeddings
+from sonar.model_executor.models.utils import extract_layer_index
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
+from sonar.utils.mem_utils import MemorySnapshot, format_gib
+from sonar.utils.torch_utils import async_tensor_h2d
+from sonar.v1.attention.backend import (
     AttentionBackend,
     AttentionMetadataBuilder,
     CommonAttentionMetadata,
     MultipleOf,
 )
-from aphrodite.v1.core.kv_cache_utils import KVCacheBlockCopy
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.core.kv_cache_utils import KVCacheBlockCopy
+from sonar.v1.kv_cache_interface import (
     AttentionSpec,
     EncoderOnlyAttentionSpec,
     KVCacheConfig,
@@ -40,7 +40,7 @@ from aphrodite.v1.kv_cache_interface import (
     UniformTypeKVCacheSpecs,
     create_kv_cache_views,
 )
-from aphrodite.v1.worker.block_table import get_block_table_width
+from sonar.v1.worker.block_table import get_block_table_width
 
 logger = init_logger(__name__)
 
@@ -248,7 +248,7 @@ class AttentionGroup:
     kv_cache_spec: KVCacheSpec
     kv_cache_group_id: int
     # A speculative draft can override a target-only cache layout while both
-    # models share the top-level AphroditeConfig.
+    # models share the top-level SonarConfig.
     cache_dtype: str | None = None
     # Set when the backend needs blocks smaller than the KV cache manager's: its
     # block tables and KV cache views then address kernel blocks, kernel block j
@@ -267,15 +267,15 @@ class AttentionGroup:
 
     def create_metadata_builders(
         self,
-        aphrodite_config,
+        sonar_config,
         device,
         kernel_block_size: int | None = None,
         num_metadata_builders: int = 1,
     ):
-        builder_config = aphrodite_config
-        if self.cache_dtype is not None and self.cache_dtype != aphrodite_config.cache_config.cache_dtype:
-            builder_config = copy.copy(aphrodite_config)
-            builder_config.cache_config = copy.copy(aphrodite_config.cache_config)
+        builder_config = sonar_config
+        if self.cache_dtype is not None and self.cache_dtype != sonar_config.cache_config.cache_dtype:
+            builder_config = copy.copy(sonar_config)
+            builder_config.cache_config = copy.copy(sonar_config.cache_config)
             builder_config.cache_config.cache_dtype = self.cache_dtype
         spec = self.kv_cache_spec
         if kernel_block_size is not None and isinstance(spec, AttentionSpec):
@@ -292,7 +292,7 @@ class AttentionGroup:
         builder_kwargs = {}
         if builder_cls.requires_block_table_width or self.kernel_block_size is not None:
             max_num_blocks = self.kv_cache_spec.max_num_blocks_per_req(
-                aphrodite_config, aphrodite_config.model_config.max_model_len
+                sonar_config, sonar_config.model_config.max_model_len
             )
             width = get_block_table_width(max_num_blocks, self.kv_cache_spec.block_size)
             if kernel_block_size is not None:
@@ -302,7 +302,7 @@ class AttentionGroup:
         if self.kernel_block_size is not None:
             self.kernel_block_table = torch.zeros(
                 num_metadata_builders,
-                aphrodite_config.scheduler_config.max_num_seqs,
+                sonar_config.scheduler_config.max_num_seqs,
                 width,
                 dtype=torch.int32,
                 device=device,
@@ -392,7 +392,7 @@ class AttentionGroup:
                 f"{self.backend.get_name()} needs {self.kernel_block_size}-token "
                 f"kernel blocks, which packed {spec.block_size}-token KV cache "
                 f"blocks cannot be split into. Reduce --block-size to "
-                f"{self.kernel_block_size} or set APHRODITE_KV_CACHE_LAYOUT to a "
+                f"{self.kernel_block_size} or set SONAR_KV_CACHE_LAYOUT to a "
                 "layer-compact layout (e.g. LBNHC)."
             )
         # Kernel block j of block b is b * kernel_block_stride + j. The view
@@ -655,7 +655,7 @@ def sanity_check_mm_encoder_outputs(
     expected_num_items: int,
 ) -> None:
     """Perform sanity checks for the result of
-    [`aphrodite.model_executor.models.SupportsMultiModal.embed_multimodal`][].
+    [`sonar.model_executor.models.SupportsMultiModal.embed_multimodal`][].
     """
     assert isinstance(mm_embeddings, (list, tuple, torch.Tensor)), (
         "Expected multimodal embeddings to be a list/tuple of 2D tensors, "
@@ -684,7 +684,7 @@ def request_memory(
     cache_config: CacheConfig,
     external_weight_memory: int = 0,
 ) -> int:
-    """Calculate the amount of memory required by Aphrodite, then validate
+    """Calculate the amount of memory required by Sonar, then validate
     that the current amount of free memory is sufficient for that.
     """
     requested_memory = math.ceil(init_snapshot.total_memory * cache_config.gpu_memory_utilization)

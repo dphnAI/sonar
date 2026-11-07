@@ -10,8 +10,8 @@ metric classes on the receiving side.
 from dataclasses import dataclass
 from typing import Any
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed.kv_transfer.kv_connector.v1.metrics import (
+from sonar.config import SonarConfig
+from sonar.distributed.kv_transfer.kv_connector.v1.metrics import (
     KVConnectorPromMetrics,
     KVConnectorStats,
     PromMetric,
@@ -22,11 +22,11 @@ from aphrodite.distributed.kv_transfer.kv_connector.v1.metrics import (
 class MetricName:
     """Metric names for SimpleCPUOffloadConnector."""
 
-    SAVE_OUTCOMES = "aphrodite:simple_kv_offload_save_outcomes_total"
-    LOAD_BLOCKS = "aphrodite:simple_kv_offload_load_blocks_total"
-    USED_BLOCKS = "aphrodite:simple_kv_offload_used_blocks"
-    PENDING_STORE_BLOCKS = "aphrodite:simple_kv_offload_pending_store_blocks"
-    INFO = "aphrodite:simple_kv_offload_info"
+    SAVE_OUTCOMES = "sonar:simple_kv_offload_save_outcomes_total"
+    LOAD_BLOCKS = "sonar:simple_kv_offload_load_blocks_total"
+    USED_BLOCKS = "sonar:simple_kv_offload_used_blocks"
+    PENDING_STORE_BLOCKS = "sonar:simple_kv_offload_pending_store_blocks"
+    INFO = "sonar:simple_kv_offload_info"
 
 
 # outcome label value -> BoundaryStoreStats field name.
@@ -165,17 +165,17 @@ class SimpleCPUOffloadPromMetrics(KVConnectorPromMetrics):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         metric_types: dict[type[PromMetric], type[PromMetricT]],
         labelnames: list[str],
         per_engine_labelvalues: dict[int, list[object]],
     ):
-        super().__init__(aphrodite_config, metric_types, labelnames, per_engine_labelvalues)
+        super().__init__(sonar_config, metric_types, labelnames, per_engine_labelvalues)
         # (engine_idx, metric_name, labelvalues) -> bound child metric
         self._metrics: dict[tuple[int, str, tuple[str, ...]], PromMetricT] = {}
 
         self._counter_save_outcomes = self._counter_cls(
-            name="aphrodite:simple_kv_offload_save_outcomes_total",
+            name="sonar:simple_kv_offload_save_outcomes_total",
             documentation=(
                 "Store admission decisions in SimpleCPUOffloadConnector, by "
                 "outcome. Outcomes classify eager-mode boundary hand-off "
@@ -184,7 +184,7 @@ class SimpleCPUOffloadPromMetrics(KVConnectorPromMetrics):
             labelnames=self._labelnames + ["outcome"],
         )
         self._counter_load_blocks = self._counter_cls(
-            name="aphrodite:simple_kv_offload_load_blocks_total",
+            name="sonar:simple_kv_offload_load_blocks_total",
             documentation=(
                 "KV blocks restored to GPU from the offload pool, counted "
                 "when a load finishes. This is prefill work avoided "
@@ -193,18 +193,18 @@ class SimpleCPUOffloadPromMetrics(KVConnectorPromMetrics):
             labelnames=self._labelnames,
         )
         self._gauge_used_blocks = self._gauge_cls(
-            name="aphrodite:simple_kv_offload_used_blocks",
+            name="sonar:simple_kv_offload_used_blocks",
             documentation=(
                 "Offload-pool blocks currently pinned by in-flight "
                 "transfers or cache hits (capacity minus free). Evictable "
                 "cached blocks are not counted; capacity_blocks is on "
-                "aphrodite:simple_kv_offload_info."
+                "sonar:simple_kv_offload_info."
             ),
             labelnames=self._labelnames,
             multiprocess_mode="mostrecent",
         )
         self._gauge_pending_store_blocks = self._gauge_cls(
-            name="aphrodite:simple_kv_offload_pending_store_blocks",
+            name="sonar:simple_kv_offload_pending_store_blocks",
             documentation=(
                 "Offload blocks in pending stores: queued for dispatch, "
                 "issued to workers, or awaiting release after a cache "
@@ -215,7 +215,7 @@ class SimpleCPUOffloadPromMetrics(KVConnectorPromMetrics):
             multiprocess_mode="mostrecent",
         )
         self._gauge_info = self._gauge_cls(
-            name="aphrodite:simple_kv_offload_info",
+            name="sonar:simple_kv_offload_info",
             documentation=(
                 "SimpleCPUOffloadConnector deployment facts. Value is "
                 "always 1. backend is cpu or disk; page_cache and "

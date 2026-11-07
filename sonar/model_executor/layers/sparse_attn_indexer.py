@@ -7,85 +7,85 @@ import math
 import torch
 import torch.distributed as dist
 
-import aphrodite.envs as envs
-from aphrodite import _custom_ops as ops
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.compilation.breakable_cudagraph import eager_break_during_capture
-from aphrodite.config import (
+import sonar.envs as envs
+from sonar import _custom_ops as ops
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.compilation.breakable_cudagraph import eager_break_during_capture
+from sonar.config import (
     CUDAGraphMode,
-    get_current_aphrodite_config,
-    get_current_aphrodite_config_or_none,
+    get_current_sonar_config,
+    get_current_sonar_config_or_none,
 )
-from aphrodite.distributed import (
+from sonar.distributed import (
     get_dcp_group,
     get_pcp_group,
     get_tensor_model_parallel_rank,
     get_tp_group,
 )
-from aphrodite.forward_context import get_forward_context
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.custom_op import CustomOp
-from aphrodite.model_executor.kernels.attention.dsa.candidate_blocks import (
+from sonar.forward_context import get_forward_context
+from sonar.logger import init_logger
+from sonar.model_executor.custom_op import CustomOp
+from sonar.model_executor.kernels.attention.dsa.candidate_blocks import (
     apply_candidate_mask as _apply_candidate_mask,
 )
-from aphrodite.model_executor.kernels.attention.dsa.candidate_blocks import (
+from sonar.model_executor.kernels.attention.dsa.candidate_blocks import (
     select_candidate_blocks as _select_candidate_blocks,
 )
-from aphrodite.model_executor.kernels.attention.dsa.fused_mqa_topk import (
+from sonar.model_executor.kernels.attention.dsa.fused_mqa_topk import (
     fused_mqa_topk_chunk,
     fused_mqa_topk_key_scales,
     fused_mqa_topk_prefill,
     get_fused_mqa_topk_workspaces,
     use_fused_mqa_topk,
 )
-from aphrodite.model_executor.kernels.attention.dsa.sm120_candidate_topk import (
+from sonar.model_executor.kernels.attention.dsa.sm120_candidate_topk import (
     reserve_sm120_candidate_topk,
     sm120_fp8_candidate_topk,
     supports_sm120_candidate_decode,
     supports_sm120_candidate_topk,
 )
-from aphrodite.model_executor.kernels.attention.dsa.sm120_indexer import (
+from sonar.model_executor.kernels.attention.dsa.sm120_indexer import (
     sm120_fp8_mqa_logits,
     sm120_fp8_paged_mqa_logits,
     use_sm120_dsa_indexer,
 )
-from aphrodite.model_executor.layers.indexer_topk import (
+from sonar.model_executor.layers.indexer_topk import (
     RADIX_TOPK_WORKSPACE_SIZE,
     deep_select_topk,
     get_indexer_topk,
     is_deep_select_supported,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     get_fp8_min_max,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.deep_gemm import (
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
+from sonar.utils.deep_gemm import (
     fp8_fp4_mqa_logits,
     fp8_fp4_paged_mqa_logits,
     has_deep_gemm,
     mqa_logits_mx_inputs,
     mqa_logits_use_mx_scales,
 )
-from aphrodite.utils.import_utils import has_cutedsl
-from aphrodite.utils.math_utils import round_up
-from aphrodite.utils.torch_utils import (
+from sonar.utils.import_utils import has_cutedsl
+from sonar.utils.math_utils import round_up
+from sonar.utils.torch_utils import (
     LayerNameType,
     _encode_layer_name,
     _resolve_layer_name,
     direct_register_custom_op,
 )
-from aphrodite.v1.attention.backends.mla.indexer import (
+from sonar.v1.attention.backends.mla.indexer import (
     DeepseekV32IndexerMetadata,
     dense_logits_rows,
     tp_prefill_row_sharding_supported,
 )
-from aphrodite.v1.attention.backends.mla.sm89_mla_sparse import (
+from sonar.v1.attention.backends.mla.sm89_mla_sparse import (
     use_sm89_dsa as _use_sm89_dsa,
 )
-from aphrodite.v1.attention.ops.common import pack_seq_triton, unpack_seq_triton
-from aphrodite.v1.attention.ops.pcp import maybe_gather_indexer_k
-from aphrodite.v1.worker.workspace import current_workspace_manager
+from sonar.v1.attention.ops.common import pack_seq_triton, unpack_seq_triton
+from sonar.v1.attention.ops.pcp import maybe_gather_indexer_k
+from sonar.v1.worker.workspace import current_workspace_manager
 
 logger = init_logger(__name__)
 
@@ -142,7 +142,7 @@ def _merge_dcp_topk_global(
     # (score, global_id) candidates on-device, all-gather, then the CuteDSL
     # stable-topk selector.
     _assert_cutedsl_dcp_merge_supported(logits, topk_indices, topk_tokens)
-    from aphrodite.model_executor.kernels.attention.dsa.dcp_indexer_cutedsl import (
+    from sonar.model_executor.kernels.attention.dsa.dcp_indexer_cutedsl import (
         pack_dcp_topk_candidates_cutedsl,
         stable_topk_from_gathered_candidates_cutedsl,
     )
@@ -428,7 +428,7 @@ def _reserve_row_shard_exchange_transient(topk_indices_buffer: torch.Tensor, dev
     wrapper allocates the full gathered tensor; each is bounded by the
     buffer's row capacity times its (tile-padded) width.
     """
-    cfg = get_current_aphrodite_config_or_none()
+    cfg = get_current_sonar_config_or_none()
     if cfg is None:
         return
     parallel = cfg.parallel_config
@@ -539,9 +539,9 @@ def sparse_attn_indexer(
             get_fused_mqa_topk_workspaces(q_quant.device, q_quant.shape[0])
 
         # Decode rows per step: each decode is padded to 1 + speculative tokens.
-        # The profiling run sets the Aphrodite config; other dummy runs may not.
+        # The profiling run sets the Sonar config; other dummy runs may not.
         max_decode_tokens = 0
-        if (cfg := get_current_aphrodite_config_or_none()) is not None:
+        if (cfg := get_current_sonar_config_or_none()) is not None:
             max_decode_tokens = min(
                 cfg.scheduler_config.max_num_seqs,
                 cfg.scheduler_config.max_num_batched_tokens,
@@ -562,7 +562,7 @@ def sparse_attn_indexer(
         row_align = math.lcm(split_kv, 1024 // logits_dtype.itemsize)
         copy_bytes = 0 if logits_dtype == torch.float32 else torch.float32.itemsize
         decode_copy_bytes = copy_bytes if fp32_decode_logits else 0
-        prefill_budget = envs.APHRODITE_SPARSE_INDEXER_MAX_LOGITS_MB * 1024 * 1024
+        prefill_budget = envs.SONAR_SPARSE_INDEXER_MAX_LOGITS_MB * 1024 * 1024
         max_logits_bytes = max(
             prefill_budget // torch.float32.itemsize * (logits_dtype.itemsize + copy_bytes),
             max_decode_tokens * round_up(max_model_len, row_align) * (logits_dtype.itemsize + decode_copy_bytes),
@@ -815,7 +815,7 @@ def sparse_attn_indexer(
                     if current_platform.is_xpu():
                         if q_scale_slice is not None:
                             raise RuntimeError("XPU fp8_mqa_logits does not support FP4 Q")
-                        logits = torch.ops.aphrodite.xpu_fp8_mqa_logits(
+                        logits = torch.ops.sonar.xpu_fp8_mqa_logits(
                             q_slice_cast[rows],
                             k_quant_cast,
                             k_scale_cast,
@@ -1008,7 +1008,7 @@ def sparse_attn_indexer(
             if padded_q_scale is not None:
                 raise RuntimeError("XPU fp8_paged_mqa_logits does not support FP4 Q")
             seq_lens_xpu = seq_lens[:, -1].contiguous() if seq_lens.ndim == 2 else seq_lens
-            logits = torch.ops.aphrodite.xpu_fp8_paged_mqa_logits(
+            logits = torch.ops.sonar.xpu_fp8_paged_mqa_logits(
                 padded_q_quant_cast,
                 kv_cache,
                 decode_weights,
@@ -1225,9 +1225,9 @@ class SparseAttnIndexer(CustomOp):
         # DCP scalars are constant for the run; resolve them here (config is set
         # during model construction) and pass them into the custom op, rather
         # than threading them through per-step metadata.
-        aphrodite_config = get_current_aphrodite_config()
-        parallel_config = aphrodite_config.parallel_config
-        self.topk_backend = aphrodite_config.kernel_config.sparse_indexer_topk_backend
+        sonar_config = get_current_sonar_config()
+        parallel_config = sonar_config.parallel_config
+        self.topk_backend = sonar_config.kernel_config.sparse_indexer_topk_backend
         self._parallel_config = parallel_config
         self.dcp_world_size = parallel_config.decode_context_parallel_size
         self.dcp_rank = get_dcp_group().rank_in_group if self.dcp_world_size > 1 else 0
@@ -1239,17 +1239,17 @@ class SparseAttnIndexer(CustomOp):
         # reserve workspace during the profiling run; 0 disables it.
         self.dcp_local_prefill_shadow_rows = 0
         if self.dcp_world_size > 1 and (_use_sm89_dsa() or use_sm120_dsa_indexer()):
-            scheduler_config = get_current_aphrodite_config().scheduler_config
+            scheduler_config = get_current_sonar_config().scheduler_config
             self.dcp_local_prefill_shadow_rows = (
                 round_up(scheduler_config.max_num_batched_tokens, 64) + 64 * scheduler_config.max_num_seqs
             )
         if current_platform.is_cuda() and not has_deep_gemm() and not _use_sm89_dsa() and not use_sm120_dsa_indexer():
             raise RuntimeError(
-                "Sparse Attention Indexer CUDA op requires DeepGEMM support in the current Aphrodite environment."
+                "Sparse Attention Indexer CUDA op requires DeepGEMM support in the current Sonar environment."
             )
 
-        if aphrodite_config.kernel_config.enable_jit_warmup:
-            from aphrodite.v1.attention.ops.common import (
+        if sonar_config.kernel_config.enable_jit_warmup:
+            from sonar.v1.attention.ops.common import (
                 _PACK_SEQ_TRITON_KERNEL,
                 _UNPACK_SEQ_TRITON_KERNEL,
             )
@@ -1262,7 +1262,7 @@ class SparseAttnIndexer(CustomOp):
             _UNPACK_SEQ_TRITON_KERNEL.register_warmup()
 
             if self.dcp_world_size > 1 and current_platform.is_cuda() and has_cutedsl():
-                from aphrodite.model_executor.kernels.attention.dsa.dcp_indexer_cutedsl import (  # noqa: E501
+                from sonar.model_executor.kernels.attention.dsa.dcp_indexer_cutedsl import (  # noqa: E501
                     _PACK_DCP_TOPK_CANDIDATES_KERNEL,
                     _STABLE_TOPK_FROM_GATHERED_CANDIDATES_KERNEL,
                 )
@@ -1303,7 +1303,7 @@ class SparseAttnIndexer(CustomOp):
             q_values, q_scale = q_quant
         else:
             q_values, q_scale = q_quant, None
-        return torch.ops.aphrodite.sparse_attn_indexer(
+        return torch.ops.sonar.sparse_attn_indexer(
             hidden_states,
             _encode_layer_name(self.k_cache.prefix),
             self.k_cache.kv_cache,
@@ -1351,7 +1351,7 @@ class SparseAttnIndexer(CustomOp):
     ):
         assert not self.use_fp4_cache, "AMD platform doesn't support fp4 cache yet"
         assert isinstance(q_quant, torch.Tensor), "AMD sparse_attn_indexer expects a single FP8 q_quant tensor"
-        from aphrodite.platforms.rocm import on_gfx950
+        from sonar.platforms.rocm import on_gfx950
 
         if (
             rocm_aiter_ops.is_enabled()
@@ -1361,7 +1361,7 @@ class SparseAttnIndexer(CustomOp):
             # by local Triton/C++ kernels and do not require the aiter package.
             or on_gfx950()
         ):
-            return torch.ops.aphrodite.rocm_aiter_sparse_attn_indexer(
+            return torch.ops.sonar.rocm_aiter_sparse_attn_indexer(
                 hidden_states,
                 _encode_layer_name(self.k_cache.prefix),
                 self.k_cache.kv_cache,
@@ -1457,7 +1457,7 @@ class SparseAttnIndexer(CustomOp):
                 "DeepseekV4CPUIndexerMetadataBuilder._split_indexer_prefill_chunks."
             )
             chunk = prefill_metadata.chunks[0]
-            # kv_cache is a per-layer view into Aphrodite's shared multi-layer
+            # kv_cache is a per-layer view into Sonar's shared multi-layer
             # cache allocation, so its block stride generally exceeds
             # block_size * page_width; fp8_paged_mqa_logits_cpu reads
             # kv_view.stride(0) explicitly, so no copy is needed here.

@@ -3,25 +3,25 @@
 
 import torch
 
-from aphrodite._custom_ops import fusedQuantizeNv
-from aphrodite.model_executor.kernels.linear import (
+from sonar._custom_ops import fusedQuantizeNv
+from sonar.model_executor.kernels.linear import (
     _LINEAR_BACKEND_KERNEL_MAP,
     NvFp4LinearKernel,
 )
-from aphrodite.model_executor.layers.quantization.compressed_tensors.compressed_tensors import (  # noqa: E501
+from sonar.model_executor.layers.quantization.compressed_tensors.compressed_tensors import (  # noqa: E501
     CompressedTensorsScheme,
     CompressedTensorsW4A4Fp4,
 )
-from aphrodite.model_executor.layers.quantization.compressed_tensors.transform.linear import (  # noqa: E501
+from sonar.model_executor.layers.quantization.compressed_tensors.transform.linear import (  # noqa: E501
     CompressedTensorsLinearTransformMethod,
     TransformTuple,
 )
-from aphrodite.model_executor.layers.quantization.qutlass_utils import to_blocked
-from aphrodite.model_executor.layers.quantization.utils.nvfp4_utils import (
+from sonar.model_executor.layers.quantization.qutlass_utils import to_blocked
+from sonar.model_executor.layers.quantization.utils.nvfp4_utils import (
     slice_nvfp4_output,
 )
-from aphrodite.model_executor.utils import replace_parameter
-from aphrodite.utils.flashinfer import (
+from sonar.model_executor.utils import replace_parameter
+from sonar.utils.flashinfer import (
     flashinfer_scaled_fp4_mm,
 )
 
@@ -75,7 +75,7 @@ class QutlassNvFP4LinearMethod(CompressedTensorsLinearTransformMethod):
     def _get_flashinfer_gemm_backend(kernel: NvFp4LinearKernel) -> str:
         """Given a kernel, find the string that is needed to be passed into
         `flashinfer_scaled_fp4_mm`, using
-        aphrodite.model_executor.kernels.linear._LINEAR_BACKEND_KERNEL_MAP as source of truth
+        sonar.model_executor.kernels.linear._LINEAR_BACKEND_KERNEL_MAP as source of truth
         """
         kernel_type = type(kernel)
         for key, kernels in _LINEAR_BACKEND_KERNEL_MAP.items():

@@ -20,9 +20,9 @@ import json
 import pytest
 from transformers import AutoTokenizer
 
-from aphrodite.config import AphroditeConfig, StructuredOutputsConfig
-from aphrodite.v1.structured_output.backend_types import StructuredOutputOptions
-from aphrodite.v1.structured_output.backend_xgrammar import XgrammarBackend
+from sonar.config import SonarConfig, StructuredOutputsConfig
+from sonar.v1.structured_output.backend_types import StructuredOutputOptions
+from sonar.v1.structured_output.backend_xgrammar import XgrammarBackend
 
 TOKENIZER = "openai-community/gpt2"
 VOCAB_SIZE = 50257
@@ -48,9 +48,9 @@ def _token_allowed(row, token_id: int) -> bool:
 
 @pytest.fixture(scope="module")
 def backend() -> XgrammarBackend:
-    aphrodite_config = AphroditeConfig(structured_outputs_config=StructuredOutputsConfig(backend="xgrammar"))
+    sonar_config = SonarConfig(structured_outputs_config=StructuredOutputsConfig(backend="xgrammar"))
     return XgrammarBackend(
-        aphrodite_config,
+        sonar_config,
         tokenizer=AutoTokenizer.from_pretrained(TOKENIZER),
         vocab_size=VOCAB_SIZE,
     )
@@ -100,8 +100,8 @@ def qwen_tokenizer():
 
 @pytest.fixture(scope="module")
 def qwen_backend(qwen_tokenizer) -> XgrammarBackend:
-    aphrodite_config = AphroditeConfig(structured_outputs_config=StructuredOutputsConfig(backend="xgrammar"))
-    return XgrammarBackend(aphrodite_config, tokenizer=qwen_tokenizer, vocab_size=QWEN_VOCAB_SIZE)
+    sonar_config = SonarConfig(structured_outputs_config=StructuredOutputsConfig(backend="xgrammar"))
+    return XgrammarBackend(sonar_config, tokenizer=qwen_tokenizer, vocab_size=QWEN_VOCAB_SIZE)
 
 
 @pytest.mark.parametrize(

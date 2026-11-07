@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-from aphrodite.v1.kv_offload.tiering.p2p.data.base import DataTransport, PollResult
-from aphrodite.v1.kv_offload.tiering.p2p.data.nixl import NixlTransport
+from sonar.v1.kv_offload.tiering.p2p.data.base import DataTransport, PollResult
+from sonar.v1.kv_offload.tiering.p2p.data.nixl import NixlTransport
 
 __all__ = [
     "DataTransport",

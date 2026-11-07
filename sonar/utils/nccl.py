@@ -11,8 +11,8 @@ from collections.abc import Iterator, Mapping
 
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.logger import init_logger
+import sonar.envs as envs
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 
@@ -20,11 +20,11 @@ logger = init_logger(__name__)
 def find_nccl_library() -> str:
     """Return NCCL/RCCL shared library name to load.
 
-    Uses `APHRODITE_NCCL_SO_PATH` if set; otherwise chooses by torch backend.
+    Uses `SONAR_NCCL_SO_PATH` if set; otherwise chooses by torch backend.
     """
-    so_file = envs.APHRODITE_NCCL_SO_PATH
+    so_file = envs.SONAR_NCCL_SO_PATH
     if so_file:
-        logger.info("Found nccl from environment variable APHRODITE_NCCL_SO_PATH=%s", so_file)
+        logger.info("Found nccl from environment variable SONAR_NCCL_SO_PATH=%s", so_file)
     else:
         if torch.version.cuda is not None:
             so_file = "libnccl.so.2"
@@ -39,10 +39,10 @@ def find_nccl_library() -> str:
 def find_nccl_include_paths() -> list[str] | None:
     """Return possible include paths containing `nccl.h`.
 
-    Considers `APHRODITE_NCCL_INCLUDE_PATH` and the `nvidia-nccl-cuXX` package.
+    Considers `SONAR_NCCL_INCLUDE_PATH` and the `nvidia-nccl-cuXX` package.
     """
     paths: list[str] = []
-    inc = envs.APHRODITE_NCCL_INCLUDE_PATH
+    inc = envs.SONAR_NCCL_INCLUDE_PATH
     if inc and os.path.isdir(inc):
         paths.append(inc)
 
@@ -85,7 +85,7 @@ def find_nccl_library_paths() -> list[str] | None:
 
 def query_nccl_gin_type(group: torch.distributed.ProcessGroup, *, railed: bool = False) -> int | None:
     """Return the full or railed GIN type, or ``None`` on query failure."""
-    from aphrodite.distributed.device_communicators.pynccl_wrapper import (
+    from sonar.distributed.device_communicators.pynccl_wrapper import (
         NCCL_COMM_PROPERTIES_LAYOUT_VERSION,
         NCCLLibrary,
         ncclCommProperties,
@@ -153,7 +153,7 @@ def unpinned_nccl_env() -> Iterator[None]:
     """Create communicators shared with other processes without the pins."""
     if _unpinned_env == {}:
         logger.warning_once(
-            "NCCL_NO_CACHE needs CUDA NCCL >= 2.29.7, so the NCCL settings Aphrodite "
+            "NCCL_NO_CACHE needs CUDA NCCL >= 2.29.7, so the NCCL settings Sonar "
             "pinned also apply here; a process sharing this communicator must "
             "set the same NCCL_* variables or it will hang."
         )
@@ -165,7 +165,7 @@ def unpinned_nccl_env() -> Iterator[None]:
 
 
 def _nccl_has_no_cache() -> bool:
-    # NCCL_NO_CACHE arrived in NCCL 2.29.7; ask the library Aphrodite loads.
+    # NCCL_NO_CACHE arrived in NCCL 2.29.7; ask the library Sonar loads.
     if torch.version.cuda is None:
         return False
     version = ctypes.c_int()

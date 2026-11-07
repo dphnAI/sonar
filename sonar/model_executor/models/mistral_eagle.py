@@ -7,25 +7,25 @@ from typing import TYPE_CHECKING
 import torch
 import torch.nn as nn
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import RowParallelLinear
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization.base_config import QuantizationConfig
-from aphrodite.model_executor.layers.vocab_parallel_embedding import VocabParallelEmbedding
-from aphrodite.model_executor.models.interfaces import (
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import SonarConfig
+from sonar.logger import init_logger
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import RowParallelLinear
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization.base_config import QuantizationConfig
+from sonar.model_executor.layers.vocab_parallel_embedding import VocabParallelEmbedding
+from sonar.model_executor.models.interfaces import (
     MultiModalEmbeddings,
     SupportsMultiModalEmbeddings,
 )
-from aphrodite.model_executor.models.llama import LlamaConfig
-from aphrodite.model_executor.models.mistral import (
+from sonar.model_executor.models.llama import LlamaConfig
+from sonar.model_executor.models.mistral import (
     MistralDecoderLayer,
     MistralForCausalLM,
     MistralModel,
 )
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.models.utils import (
     _merge_multimodal_embeddings,
     get_draft_quant_config,
     maybe_prefix,
@@ -51,14 +51,14 @@ else:
 class EagleMistralDecoderLayer(MistralDecoderLayer):
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
         config: LlamaConfig | None = None,
     ) -> None:
-        super().__init__(aphrodite_config, prefix=prefix, config=config)
+        super().__init__(sonar_config, prefix=prefix, config=config)
 
-    def get_quant_config(self, aphrodite_config: AphroditeConfig) -> QuantizationConfig | None:
-        return get_draft_quant_config(aphrodite_config)
+    def get_quant_config(self, sonar_config: SonarConfig) -> QuantizationConfig | None:
+        return get_draft_quant_config(sonar_config)
 
 
 @support_torch_compile
@@ -66,19 +66,19 @@ class EagleMistralModel(_EagleMistralModelBase):
     def __init__(
         self,
         *,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
         start_layer_id: int = 0,
     ) -> None:
         # Bypass MistralModel.__init__ to avoid creating duplicate attention
         # layer entries in the global context.
         nn.Module.__init__(self)
-        speculative_config = aphrodite_config.speculative_config
+        speculative_config = sonar_config.speculative_config
         assert speculative_config is not None
         self.config = speculative_config.draft_model_config.hf_config
         self.vocab_size = self.config.vocab_size
         # Get drafter's quantization config
-        self.quant_config = get_draft_quant_config(aphrodite_config)
+        self.quant_config = get_draft_quant_config(sonar_config)
 
         self.embed_tokens = VocabParallelEmbedding(
             self.config.vocab_size,
@@ -90,7 +90,7 @@ class EagleMistralModel(_EagleMistralModelBase):
         self.layers = nn.ModuleList(
             [
                 EagleMistralDecoderLayer(
-                    aphrodite_config,
+                    sonar_config,
                     prefix=maybe_prefix(prefix, f"layers.{i + start_layer_id}"),
                     config=self.config,
                 )
@@ -134,16 +134,16 @@ class EagleMistralForCausalLM(_EagleMistralForCausalLMBase, SupportsMultiModalEm
         "eagle_linear": "model.fc",
     }
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         # Bypass MistralForCausalLM.__init__ to use the draft model config
         # and to avoid creating an lm_head.
         nn.Module.__init__(self)
-        speculative_config = aphrodite_config.speculative_config
+        speculative_config = sonar_config.speculative_config
         assert speculative_config is not None
         self.config = speculative_config.draft_model_config.hf_config
-        target_layer_num = aphrodite_config.model_config.get_num_layers(aphrodite_config.parallel_config)
+        target_layer_num = sonar_config.model_config.get_num_layers(sonar_config.parallel_config)
         self.model = EagleMistralModel(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             prefix=maybe_prefix(prefix, "model"),
             start_layer_id=target_layer_num,
         )

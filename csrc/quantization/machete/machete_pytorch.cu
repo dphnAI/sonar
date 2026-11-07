@@ -8,7 +8,7 @@
 
 namespace machete {
 
-using namespace aphrodite;
+using namespace sonar;
 
 std::vector<std::string> supported_schedules(
     torch::headeronly::ScalarType a_type, int64_t b_type_id,

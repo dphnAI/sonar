@@ -16,7 +16,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Gemma 4 model implementation for Aphrodite."""
+"""Gemma 4 model implementation for Sonar."""
 
 from collections.abc import Iterable
 from dataclasses import replace
@@ -25,45 +25,45 @@ from itertools import islice
 import torch
 from torch import nn
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, CacheConfig
-from aphrodite.config.utils import getattr_iter
-from aphrodite.distributed import (
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import CacheConfig, SonarConfig
+from sonar.config.utils import getattr_iter
+from sonar.distributed import (
     get_pp_group,
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
 )
-from aphrodite.forward_context import get_forward_context
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.activation import get_act_and_mul_fn
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.forward_context import get_forward_context
+from sonar.logger import init_logger
+from sonar.model_executor.layers.activation import get_act_and_mul_fn
+from sonar.model_executor.layers.attention import Attention
+from sonar.model_executor.layers.fused_moe import (
     FusedMoEFactory,
     GateLinear,
     MoERunner,
 )
-from aphrodite.model_executor.layers.fused_moe.router.base_router import (
+from sonar.model_executor.layers.fused_moe.router.base_router import (
     get_moe_padding_mask,
 )
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     MergedColumnParallelLinear,
     QKVParallelLinear,
     ReplicatedLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.triton_utils import tl, triton
-from aphrodite.v1.attention.backends.utils import KVSharingFastPrefillMetadata
+from sonar.platforms import current_platform
+from sonar.sequence import IntermediateTensors
+from sonar.triton_utils import tl, triton
+from sonar.v1.attention.backends.utils import KVSharingFastPrefillMetadata
 
 from .interfaces import (
     EagleModelMixin,
@@ -431,7 +431,7 @@ class Gemma4Attention(nn.Module):
         else:
             # QKVParallelLinear handles GQA correctly for all layer types.
             # k_eq_v layers load K weights into both K and V slots via
-            # hf_to_aphrodite_mapper — no structural difference needed.
+            # hf_to_sonar_mapper — no structural difference needed.
             self.qkv_proj = QKVParallelLinear(
                 hidden_size,
                 self.head_dim,
@@ -776,7 +776,7 @@ def _run_decoder_layers(
     return hidden_states
 
 
-@support_torch_compile(enable_if=lambda aphrodite_config: aphrodite_config.cache_config.kv_sharing_fast_prefill)
+@support_torch_compile(enable_if=lambda sonar_config: sonar_config.cache_config.kv_sharing_fast_prefill)
 class Gemma4SelfDecoderLayers(nn.Module):
     """Compiled wrapper: embedding + non-KV-shared layers (YOCO first half).
 
@@ -787,7 +787,7 @@ class Gemma4SelfDecoderLayers(nn.Module):
     def __init__(
         self,
         *,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
         decoder_layers: list[Gemma4DecoderLayer],
         layer_idx_start: int,
@@ -804,7 +804,7 @@ class Gemma4SelfDecoderLayers(nn.Module):
         self.decoder_layers = decoder_layers
         self.layer_idx_start = layer_idx_start
 
-        config = _get_text_config(aphrodite_config.model_config.hf_config)
+        config = _get_text_config(sonar_config.model_config.hf_config)
         self.config = config
         self.hidden_size_per_layer_input = getattr(config, "hidden_size_per_layer_input", 0)
         self.vocab_size_per_layer_input = getattr(config, "vocab_size_per_layer_input", config.vocab_size)
@@ -905,14 +905,14 @@ class Gemma4SelfDecoderLayers(nn.Module):
         return hidden_states, per_layer_inputs
 
 
-@support_torch_compile(enable_if=lambda aphrodite_config: aphrodite_config.cache_config.kv_sharing_fast_prefill)
+@support_torch_compile(enable_if=lambda sonar_config: sonar_config.cache_config.kv_sharing_fast_prefill)
 class Gemma4CrossDecoderLayers(nn.Module):
     """Cross-decoder layers (YOCO second half, KV-shared)."""
 
     def __init__(
         self,
         *,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
         decoder_layers: list[Gemma4DecoderLayer],
         layer_idx_start: int,
@@ -938,16 +938,16 @@ class Gemma4CrossDecoderLayers(nn.Module):
         )
 
 
-@support_torch_compile(enable_if=lambda aphrodite_config: not aphrodite_config.cache_config.kv_sharing_fast_prefill)
+@support_torch_compile(enable_if=lambda sonar_config: not sonar_config.cache_config.kv_sharing_fast_prefill)
 class Gemma4Model(nn.Module, EagleModelMixin, SupportsQuant):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = _get_text_config(aphrodite_config.model_config.hf_config)
-        cache_config = aphrodite_config.cache_config
-        quant_config = aphrodite_config.quant_config
+        config = _get_text_config(sonar_config.model_config.hf_config)
+        cache_config = sonar_config.cache_config
+        quant_config = sonar_config.quant_config
         self.config = config
         self.quant_config = quant_config
-        self.hf_to_aphrodite_mapper = _gemma4_layer_weights_mapper(config)
+        self.hf_to_sonar_mapper = _gemma4_layer_weights_mapper(config)
 
         # PLE config values (default to 0 if not present — disables PLE)
         self.hidden_size_per_layer_input = getattr(config, "hidden_size_per_layer_input", 0)
@@ -1038,7 +1038,7 @@ class Gemma4Model(nn.Module, EagleModelMixin, SupportsQuant):
             "normalizer",
             torch.tensor(
                 config.hidden_size**0.5,
-                dtype=aphrodite_config.model_config.dtype,
+                dtype=sonar_config.model_config.dtype,
             ),
             persistent=False,
         )
@@ -1046,12 +1046,12 @@ class Gemma4Model(nn.Module, EagleModelMixin, SupportsQuant):
         # --- You Only Cache Once (YOCO) split for fast prefill ---
         first_kv_shared_layer_idx = config.num_hidden_layers - getattr(config, "num_kv_shared_layers", 0)
 
-        from aphrodite.compilation.backends import set_model_tag
+        from sonar.compilation.backends import set_model_tag
 
         # Layers 0..(K-1) are self-decoder layers in YOCO
         with set_model_tag("self_decoder"):
             self.self_decoder = Gemma4SelfDecoderLayers(
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 prefix=f"{prefix}.self_decoder",
                 decoder_layers=self.layers[:first_kv_shared_layer_idx],
                 layer_idx_start=0,
@@ -1067,7 +1067,7 @@ class Gemma4Model(nn.Module, EagleModelMixin, SupportsQuant):
         # Layers K..(N-1) are cross-decoder layers in YOCO
         with set_model_tag("cross_decoder"):
             self.cross_decoder = Gemma4CrossDecoderLayers(
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 prefix=f"{prefix}.cross_decoder",
                 decoder_layers=self.layers[first_kv_shared_layer_idx:],
                 layer_idx_start=first_kv_shared_layer_idx,
@@ -1077,12 +1077,12 @@ class Gemma4Model(nn.Module, EagleModelMixin, SupportsQuant):
 
         if self.fast_prefill_enabled:
             # Allocate static buffers for CUDAGraph
-            max_num_tokens = aphrodite_config.scheduler_config.max_num_batched_tokens
+            max_num_tokens = sonar_config.scheduler_config.max_num_batched_tokens
             device = next(self.parameters()).device
             self.positions = torch.zeros(max_num_tokens, dtype=torch.int64, device=device)
             self.hidden_states = torch.zeros(
                 (max_num_tokens, config.hidden_size),
-                dtype=aphrodite_config.model_config.dtype,
+                dtype=sonar_config.model_config.dtype,
                 device=device,
             )
             if self.hidden_size_per_layer_input and self.hidden_size_per_layer_input > 0:
@@ -1092,7 +1092,7 @@ class Gemma4Model(nn.Module, EagleModelMixin, SupportsQuant):
                         config.num_hidden_layers,
                         self.hidden_size_per_layer_input,
                     ),
-                    dtype=aphrodite_config.model_config.dtype,
+                    dtype=sonar_config.model_config.dtype,
                     device=device,
                 )
             else:
@@ -1303,11 +1303,11 @@ class Gemma4Model(nn.Module, EagleModelMixin, SupportsQuant):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
 
 class Gemma4ForCausalLM(nn.Module, SupportsLoRA, SupportsPP, MixtureOfExperts, SupportsEagle3):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_substr={
             # Multimodal weights are handled by the multimodal wrapper.
             "audio_tower.": None,
@@ -1337,16 +1337,16 @@ class Gemma4ForCausalLM(nn.Module, SupportsLoRA, SupportsPP, MixtureOfExperts, S
         ],
     }
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
-        config = _get_text_config(aphrodite_config.model_config.hf_config)
-        quant_config = aphrodite_config.quant_config
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
+        config = _get_text_config(sonar_config.model_config.hf_config)
+        quant_config = sonar_config.quant_config
 
         super().__init__()
         self.config = config
         self.quant_config = quant_config
         self.use_tied_lm_head = model_should_use_tied_lm_head(config, quant_config)
         self.model = Gemma4Model(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             prefix=maybe_prefix(prefix, "model"),
         )
 
@@ -1405,4 +1405,4 @@ class Gemma4ForCausalLM(nn.Module, SupportsLoRA, SupportsPP, MixtureOfExperts, S
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)

@@ -31,22 +31,22 @@ import numpy as np
 import pybase64 as base64
 from PIL import Image
 
-from aphrodite.benchmarks.datasets.utils import (
+from sonar.benchmarks.datasets.utils import (
     RangeRatio,
     _resolve_range_ratios,
     get_sampling_params,
 )
-from aphrodite.inputs import MultiModalDataDict
-from aphrodite.lora.request import LoRARequest
-from aphrodite.lora.utils import get_adapter_absolute_path
-from aphrodite.multimodal.audio import get_audio_duration
-from aphrodite.multimodal.image import convert_image_mode
-from aphrodite.multimodal.utils import encode_image_url, fetch_image
-from aphrodite.tokenizers import TokenizerLike
-from aphrodite.transformers_utils.repo_utils import hf_api
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
-from aphrodite.utils.import_utils import PlaceholderModule
-from aphrodite.utils.mistral import is_mistral_tokenizer
+from sonar.inputs import MultiModalDataDict
+from sonar.lora.request import LoRARequest
+from sonar.lora.utils import get_adapter_absolute_path
+from sonar.multimodal.audio import get_audio_duration
+from sonar.multimodal.image import convert_image_mode
+from sonar.multimodal.utils import encode_image_url, fetch_image
+from sonar.tokenizers import TokenizerLike
+from sonar.transformers_utils.repo_utils import hf_api
+from sonar.utils.argparse_utils import FlexibleArgumentParser
+from sonar.utils.import_utils import PlaceholderModule
+from sonar.utils.mistral import is_mistral_tokenizer
 
 try:
     from datasets import load_dataset
@@ -175,7 +175,7 @@ class BenchmarkDataset(ABC):
                 If `None`, LoRA is not used.
 
         Returns:
-            A new [`LoRARequest`][aphrodite.lora.request.LoRARequest]
+            A new [`LoRARequest`][sonar.lora.request.LoRARequest]
             (or `None` if not applicable).
 
         """
@@ -210,7 +210,7 @@ class BenchmarkDataset(ABC):
                 If `None`, LoRA is not used.
 
         Returns:
-            A new [`LoRARequest`][aphrodite.lora.request.LoRARequest]
+            A new [`LoRARequest`][sonar.lora.request.LoRARequest]
             (or `None` if not applicable).
 
         """
@@ -243,7 +243,7 @@ class BenchmarkDataset(ABC):
                 'random' (default) or 'round-robin'.
 
         Returns:
-            A new [`LoRARequest`][aphrodite.lora.request.LoRARequest]
+            A new [`LoRARequest`][sonar.lora.request.LoRARequest]
             (or `None` if not applicable).
 
         """
@@ -2123,7 +2123,7 @@ def get_samples(
         ):
             # multi-modal benchmark is only available on chat-style backends;
             # which ones are allowed is caller-controlled (serve uses the
-            # OpenAI endpoints, throughput uses aphrodite-chat).
+            # OpenAI endpoints, throughput uses sonar-chat).
             raise ValueError(
                 f"Multi-modal content is not supported on backend "
                 f"{args.backend!r}; use one of {sorted(multimodal_backends)}."
@@ -3278,11 +3278,11 @@ class MTBenchDataset(HuggingFaceDataset):
     https://huggingface.co/datasets/philschmid/mt-bench
 
     We create a single turn dataset for MT-Bench.
-    This is similar to Spec decoding benchmark setup in Aphrodite
+    This is similar to Spec decoding benchmark setup in Sonar
     https://github.com/vllm-project/vllm/blob/9d98ab5ec/examples/offline_inference/eagle.py#L14-L18
     """  # noqa: E501
 
-    DEFAULT_OUTPUT_LEN = 256  # avg len used in SD bench in Aphrodite
+    DEFAULT_OUTPUT_LEN = 256  # avg len used in SD bench in Sonar
     SUPPORTED_DATASET_PATHS = {
         "philschmid/mt-bench",
     }

@@ -9,16 +9,16 @@ import pytest
 import safetensors
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed.ec_transfer.ec_connector.base import ECConnectorRole
-from aphrodite.distributed.ec_transfer.ec_connector.example_connector import (
+from sonar.config import SonarConfig
+from sonar.distributed.ec_transfer.ec_connector.base import ECConnectorRole
+from sonar.distributed.ec_transfer.ec_connector.example_connector import (
     ECExampleConnector,
     ECExampleConnectorMetadata,
     MMMeta,
 )
-from aphrodite.distributed.ec_transfer.ec_connector.utils import collect_ec_item_metadata
-from aphrodite.multimodal.inputs import MultiModalFeatureSpec, PlaceholderRange
-from aphrodite.v1.core.sched.output import SchedulerOutput
+from sonar.distributed.ec_transfer.ec_connector.utils import collect_ec_item_metadata
+from sonar.multimodal.inputs import MultiModalFeatureSpec, PlaceholderRange
+from sonar.v1.core.sched.output import SchedulerOutput
 
 
 # ------------------ Mock Classes ------------------ #
@@ -89,9 +89,9 @@ def temp_storage(tmp_path):
 
 
 @pytest.fixture
-def mock_aphrodite_config_producer(temp_storage):
-    """Fixture providing mock AphroditeConfig for producer role."""
-    config = Mock(spec=AphroditeConfig)
+def mock_sonar_config_producer(temp_storage):
+    """Fixture providing mock SonarConfig for producer role."""
+    config = Mock(spec=SonarConfig)
     config.ec_transfer_config = Mock()
     config.ec_transfer_config.get_from_extra_config = Mock(return_value=temp_storage)
     config.ec_transfer_config.is_ec_producer = True
@@ -99,9 +99,9 @@ def mock_aphrodite_config_producer(temp_storage):
 
 
 @pytest.fixture
-def mock_aphrodite_config_consumer(temp_storage):
-    """Fixture providing mock AphroditeConfig for consumer role."""
-    config = Mock(spec=AphroditeConfig)
+def mock_sonar_config_consumer(temp_storage):
+    """Fixture providing mock SonarConfig for consumer role."""
+    config = Mock(spec=SonarConfig)
     config.ec_transfer_config = Mock()
     config.ec_transfer_config.get_from_extra_config = Mock(return_value=temp_storage)
     config.ec_transfer_config.is_ec_producer = False
@@ -123,10 +123,10 @@ def mock_request_with_3_mm():
 class TestECExampleConnectorBasics:
     """Test basic EC connector functionality."""
 
-    def test_initialization_producer(self, mock_aphrodite_config_producer, temp_storage):
+    def test_initialization_producer(self, mock_sonar_config_producer, temp_storage):
         """Test connector initializes correctly as producer."""
         connector = ECExampleConnector(
-            aphrodite_config=mock_aphrodite_config_producer,
+            sonar_config=mock_sonar_config_producer,
             role=ECConnectorRole.SCHEDULER,
         )
 
@@ -135,10 +135,10 @@ class TestECExampleConnectorBasics:
         assert connector._storage_path == temp_storage
         assert connector._mm_datas_need_loads == {}
 
-    def test_initialization_consumer(self, mock_aphrodite_config_consumer, temp_storage):
+    def test_initialization_consumer(self, mock_sonar_config_consumer, temp_storage):
         """Test connector initializes correctly as consumer."""
         connector = ECExampleConnector(
-            aphrodite_config=mock_aphrodite_config_consumer,
+            sonar_config=mock_sonar_config_consumer,
             role=ECConnectorRole.WORKER,
         )
 
@@ -146,14 +146,14 @@ class TestECExampleConnectorBasics:
         assert not connector.is_producer
         assert connector._storage_path == temp_storage
 
-    def test_role_assignment(self, mock_aphrodite_config_producer):
+    def test_role_assignment(self, mock_sonar_config_producer):
         """Test role is correctly assigned."""
         scheduler_connector = ECExampleConnector(
-            aphrodite_config=mock_aphrodite_config_producer,
+            sonar_config=mock_sonar_config_producer,
             role=ECConnectorRole.SCHEDULER,
         )
         worker_connector = ECExampleConnector(
-            aphrodite_config=mock_aphrodite_config_producer,
+            sonar_config=mock_sonar_config_producer,
             role=ECConnectorRole.WORKER,
         )
 
@@ -166,14 +166,14 @@ class TestCacheExistence:
 
     def test_has_cache_item_all_exist_3_items(
         self,
-        mock_aphrodite_config_producer,
-        mock_aphrodite_config_consumer,
+        mock_sonar_config_producer,
+        mock_sonar_config_consumer,
         mock_request_with_3_mm,
     ):
         """Test has_cache_item returns True when all 3 caches exist."""
         # Test for producer first
         producer = ECExampleConnector(
-            aphrodite_config=mock_aphrodite_config_producer,
+            sonar_config=mock_sonar_config_producer,
             role=ECConnectorRole.SCHEDULER,
         )
 
@@ -196,7 +196,7 @@ class TestCacheExistence:
 
         # Also test consumer can check if cache exists
         consumer = ECExampleConnector(
-            aphrodite_config=mock_aphrodite_config_consumer,
+            sonar_config=mock_sonar_config_consumer,
             role=ECConnectorRole.SCHEDULER,
         )
 
@@ -209,10 +209,10 @@ class TestCacheExistence:
         assert len(consumer_result) == 3
         assert all(consumer_result), f"Expected all True, got {consumer_result}"
 
-    def test_has_cache_item_none_exist(self, mock_aphrodite_config_producer, mock_request_with_3_mm):
+    def test_has_cache_item_none_exist(self, mock_sonar_config_producer, mock_request_with_3_mm):
         """Test has_caches returns False when no caches exist."""
         connector = ECExampleConnector(
-            aphrodite_config=mock_aphrodite_config_producer,
+            sonar_config=mock_sonar_config_producer,
             role=ECConnectorRole.SCHEDULER,
         )
 
@@ -223,10 +223,10 @@ class TestCacheExistence:
         assert len(result) == 3
         assert not any(result), f"Expected all False, got {result}"
 
-    def test_has_cache_item_partial_exist(self, mock_aphrodite_config_producer, mock_request_with_3_mm):
+    def test_has_cache_item_partial_exist(self, mock_sonar_config_producer, mock_request_with_3_mm):
         """Test has_caches with some caches existing (1 of 3)."""
         connector = ECExampleConnector(
-            aphrodite_config=mock_aphrodite_config_producer,
+            sonar_config=mock_sonar_config_producer,
             role=ECConnectorRole.SCHEDULER,
         )
 
@@ -244,10 +244,10 @@ class TestCacheExistence:
         assert result[1]  # Second exists
         assert not result[2]  # Third doesn't exist
 
-    def test_has_cache_item_miss_creates_no_folder(self, mock_aphrodite_config_consumer, temp_storage):
+    def test_has_cache_item_miss_creates_no_folder(self, mock_sonar_config_consumer, temp_storage):
         """Test a cache miss leaves no empty folder in the shared storage."""
         connector = ECExampleConnector(
-            aphrodite_config=mock_aphrodite_config_consumer,
+            sonar_config=mock_sonar_config_consumer,
             role=ECConnectorRole.SCHEDULER,
         )
 
@@ -258,10 +258,10 @@ class TestCacheExistence:
 class TestStateManagement:
     """Test connector state management."""
 
-    def test_update_state_after_alloc_3_items(self, mock_aphrodite_config_producer, mock_request_with_3_mm):
+    def test_update_state_after_alloc_3_items(self, mock_sonar_config_producer, mock_request_with_3_mm):
         """Test state update after allocation for 3 MM items."""
         connector = ECExampleConnector(
-            aphrodite_config=mock_aphrodite_config_producer,
+            sonar_config=mock_sonar_config_producer,
             role=ECConnectorRole.SCHEDULER,
         )
 
@@ -282,10 +282,10 @@ class TestStateManagement:
         assert connector._mm_datas_need_loads["img_hash_2"] == 150
         assert connector._mm_datas_need_loads["img_hash_3"] == 200
 
-    def test_build_connector_meta_3_items(self, mock_aphrodite_config_producer, mock_request_with_3_mm):
+    def test_build_connector_meta_3_items(self, mock_sonar_config_producer, mock_request_with_3_mm):
         """Test metadata building for 3 MM items."""
         connector = ECExampleConnector(
-            aphrodite_config=mock_aphrodite_config_producer,
+            sonar_config=mock_sonar_config_producer,
             role=ECConnectorRole.SCHEDULER,
         )
 
@@ -311,10 +311,10 @@ class TestStateManagement:
         # State should be cleared after building
         assert len(connector._mm_datas_need_loads) == 0
 
-    def test_build_connector_meta_empty(self, mock_aphrodite_config_producer):
+    def test_build_connector_meta_empty(self, mock_sonar_config_producer):
         """Test metadata building with empty state."""
         connector = ECExampleConnector(
-            aphrodite_config=mock_aphrodite_config_producer,
+            sonar_config=mock_sonar_config_producer,
             role=ECConnectorRole.SCHEDULER,
         )
 
@@ -324,10 +324,10 @@ class TestStateManagement:
         assert isinstance(metadata, ECExampleConnectorMetadata)
         assert len(metadata.mm_datas) == 0
 
-    def test_state_cleared_after_metadata_build(self, mock_aphrodite_config_producer, mock_request_with_3_mm):
+    def test_state_cleared_after_metadata_build(self, mock_sonar_config_producer, mock_request_with_3_mm):
         """Test that state is properly cleared after building metadata."""
         connector = ECExampleConnector(
-            aphrodite_config=mock_aphrodite_config_producer,
+            sonar_config=mock_sonar_config_producer,
             role=ECConnectorRole.SCHEDULER,
         )
 
@@ -353,10 +353,10 @@ class TestStateManagement:
 class TestCacheSaving:
     """Test encoder cache saving (producer only)."""
 
-    def test_save_caches_producer_3_items(self, mock_aphrodite_config_producer, mock_request_with_3_mm, temp_storage):
+    def test_save_caches_producer_3_items(self, mock_sonar_config_producer, mock_request_with_3_mm, temp_storage):
         """Test cache saving as producer for 3 different MM items."""
         connector = ECExampleConnector(
-            aphrodite_config=mock_aphrodite_config_producer,
+            sonar_config=mock_sonar_config_producer,
             role=ECConnectorRole.WORKER,
         )
 
@@ -379,10 +379,10 @@ class TestCacheSaving:
             assert "ec_cache" in loaded
             assert torch.allclose(loaded["ec_cache"], encoder_cache[mm_hash].cpu())
 
-    def test_save_caches_consumer_skips(self, mock_aphrodite_config_consumer):
+    def test_save_caches_consumer_skips(self, mock_sonar_config_consumer):
         """Test cache saving is skipped for consumer."""
         connector = ECExampleConnector(
-            aphrodite_config=mock_aphrodite_config_consumer,
+            sonar_config=mock_sonar_config_consumer,
             role=ECConnectorRole.WORKER,
         )
 
@@ -403,15 +403,15 @@ class TestCacheLoading:
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
     def test_start_load_caches_consumer_3_items(
         self,
-        mock_aphrodite_config_producer,
-        mock_aphrodite_config_consumer,
+        mock_sonar_config_producer,
+        mock_sonar_config_consumer,
         mock_request_with_3_mm,
         temp_storage,
     ):
         """Test consumer loads 3 caches from storage."""
         # First, create producer to save caches
         producer = ECExampleConnector(
-            aphrodite_config=mock_aphrodite_config_producer,
+            sonar_config=mock_sonar_config_producer,
             role=ECConnectorRole.WORKER,
         )
 
@@ -424,7 +424,7 @@ class TestCacheLoading:
 
         # Now consumer loads
         consumer = ECExampleConnector(
-            aphrodite_config=mock_aphrodite_config_consumer,
+            sonar_config=mock_sonar_config_consumer,
             role=ECConnectorRole.WORKER,
         )
 
@@ -448,12 +448,12 @@ class TestCacheLoading:
             )
 
     def test_start_load_caches_skip_existing(
-        self, mock_aphrodite_config_producer, mock_aphrodite_config_consumer, temp_storage
+        self, mock_sonar_config_producer, mock_sonar_config_consumer, temp_storage
     ):
         """Test cache loading skips already cached items."""
         # Setup: producer saves cache
         producer = ECExampleConnector(
-            aphrodite_config=mock_aphrodite_config_producer,
+            sonar_config=mock_sonar_config_producer,
             role=ECConnectorRole.WORKER,
         )
 
@@ -463,7 +463,7 @@ class TestCacheLoading:
 
         # Consumer setup
         consumer = ECExampleConnector(
-            aphrodite_config=mock_aphrodite_config_consumer,
+            sonar_config=mock_sonar_config_consumer,
             role=ECConnectorRole.WORKER,
         )
 
@@ -484,10 +484,10 @@ class TestCacheLoading:
         # Verify original cache unchanged
         assert torch.equal(encoder_cache[mm_hash], existing_cache)
 
-    def test_start_load_caches_empty_metadata(self, mock_aphrodite_config_consumer):
+    def test_start_load_caches_empty_metadata(self, mock_sonar_config_consumer):
         """Test loading with empty metadata does nothing."""
         consumer = ECExampleConnector(
-            aphrodite_config=mock_aphrodite_config_consumer,
+            sonar_config=mock_sonar_config_consumer,
             role=ECConnectorRole.WORKER,
         )
 
@@ -503,19 +503,19 @@ class TestCacheLoading:
         assert len(encoder_cache) == 0
 
     def test_start_load_caches_pins_device_to_current_rank(
-        self, mock_aphrodite_config_producer, mock_aphrodite_config_consumer
+        self, mock_sonar_config_producer, mock_sonar_config_consumer
     ):
         """Load must pin to the selected device under tensor parallelism."""
         # Produce a real cache file so the load path has something to open.
         producer = ECExampleConnector(
-            aphrodite_config=mock_aphrodite_config_producer,
+            sonar_config=mock_sonar_config_producer,
             role=ECConnectorRole.WORKER,
         )
         mm_hash = "rank_pinning_hash"
         producer.save_caches({mm_hash: torch.zeros(4, 8)}, mm_hash)
 
         consumer = ECExampleConnector(
-            aphrodite_config=mock_aphrodite_config_consumer,
+            sonar_config=mock_sonar_config_consumer,
             role=ECConnectorRole.WORKER,
         )
         metadata = ECExampleConnectorMetadata()
@@ -535,7 +535,7 @@ class TestCacheLoading:
             return {"ec_cache": torch.zeros(4, 8)}
 
         with (
-            patch("aphrodite.platforms.current_platform", mock_platform),
+            patch("sonar.platforms.current_platform", mock_platform),
             patch("safetensors.torch.load_file", side_effect=fake_load_file),
         ):
             encoder_cache: dict[str, torch.Tensor] = {}
@@ -548,18 +548,18 @@ class TestCacheLoading:
         )
 
     def test_start_load_caches_non_cuda_platform_uses_device_type(
-        self, mock_aphrodite_config_producer, mock_aphrodite_config_consumer
+        self, mock_sonar_config_producer, mock_sonar_config_consumer
     ):
         """Non-CUDA platforms pass `device_type` through unchanged (no rank suffix)."""
         producer = ECExampleConnector(
-            aphrodite_config=mock_aphrodite_config_producer,
+            sonar_config=mock_sonar_config_producer,
             role=ECConnectorRole.WORKER,
         )
         mm_hash = "cpu_device_hash"
         producer.save_caches({mm_hash: torch.zeros(2, 4)}, mm_hash)
 
         consumer = ECExampleConnector(
-            aphrodite_config=mock_aphrodite_config_consumer,
+            sonar_config=mock_sonar_config_consumer,
             role=ECConnectorRole.WORKER,
         )
         metadata = ECExampleConnectorMetadata()
@@ -577,7 +577,7 @@ class TestCacheLoading:
             return {"ec_cache": torch.zeros(2, 4)}
 
         with (
-            patch("aphrodite.platforms.current_platform", mock_platform),
+            patch("sonar.platforms.current_platform", mock_platform),
             patch("safetensors.torch.load_file", side_effect=fake_load_file),
         ):
             encoder_cache: dict[str, torch.Tensor] = {}
@@ -589,10 +589,10 @@ class TestCacheLoading:
 class TestFilenameGeneration:
     """Test filename and path generation."""
 
-    def test_generate_foldername(self, mock_aphrodite_config_producer, temp_storage):
+    def test_generate_foldername(self, mock_sonar_config_producer, temp_storage):
         """Test folder name generation."""
         connector = ECExampleConnector(
-            aphrodite_config=mock_aphrodite_config_producer,
+            sonar_config=mock_sonar_config_producer,
             role=ECConnectorRole.WORKER,
         )
 
@@ -602,10 +602,10 @@ class TestFilenameGeneration:
         assert folder == os.path.join(temp_storage, mm_hash)
         assert os.path.isdir(folder)  # Should be created
 
-    def test_generate_filename(self, mock_aphrodite_config_producer, temp_storage):
+    def test_generate_filename(self, mock_sonar_config_producer, temp_storage):
         """Test filename generation."""
         connector = ECExampleConnector(
-            aphrodite_config=mock_aphrodite_config_producer,
+            sonar_config=mock_sonar_config_producer,
             role=ECConnectorRole.WORKER,
         )
 
@@ -616,10 +616,10 @@ class TestFilenameGeneration:
         assert filename == expected
         assert os.path.isdir(os.path.dirname(filename))  # Folder created
 
-    def test_generate_filename_consistency(self, mock_aphrodite_config_producer):
+    def test_generate_filename_consistency(self, mock_sonar_config_producer):
         """Test filename generation is consistent."""
         connector = ECExampleConnector(
-            aphrodite_config=mock_aphrodite_config_producer,
+            sonar_config=mock_sonar_config_producer,
             role=ECConnectorRole.WORKER,
         )
 
@@ -633,10 +633,10 @@ class TestFilenameGeneration:
 class TestMetadataBindingLifecycle:
     """Test metadata binding and clearing lifecycle."""
 
-    def test_bind_connector_metadata(self, mock_aphrodite_config_consumer):
+    def test_bind_connector_metadata(self, mock_sonar_config_consumer):
         """Test binding connector metadata."""
         connector = ECExampleConnector(
-            aphrodite_config=mock_aphrodite_config_consumer,
+            sonar_config=mock_sonar_config_consumer,
             role=ECConnectorRole.WORKER,
         )
 
@@ -647,10 +647,10 @@ class TestMetadataBindingLifecycle:
 
         assert connector._connector_metadata is metadata
 
-    def test_clear_connector_metadata(self, mock_aphrodite_config_consumer):
+    def test_clear_connector_metadata(self, mock_sonar_config_consumer):
         """Test clearing connector metadata."""
         connector = ECExampleConnector(
-            aphrodite_config=mock_aphrodite_config_consumer,
+            sonar_config=mock_sonar_config_consumer,
             role=ECConnectorRole.WORKER,
         )
 
@@ -661,10 +661,10 @@ class TestMetadataBindingLifecycle:
 
         assert connector._connector_metadata is None
 
-    def test_get_connector_metadata(self, mock_aphrodite_config_consumer):
+    def test_get_connector_metadata(self, mock_sonar_config_consumer):
         """Test getting connector metadata."""
         connector = ECExampleConnector(
-            aphrodite_config=mock_aphrodite_config_consumer,
+            sonar_config=mock_sonar_config_consumer,
             role=ECConnectorRole.WORKER,
         )
 
@@ -675,10 +675,10 @@ class TestMetadataBindingLifecycle:
 
         assert retrieved is metadata
 
-    def test_get_connector_metadata_not_set(self, mock_aphrodite_config_consumer):
+    def test_get_connector_metadata_not_set(self, mock_sonar_config_consumer):
         """Test getting metadata when not set raises."""
         connector = ECExampleConnector(
-            aphrodite_config=mock_aphrodite_config_consumer,
+            sonar_config=mock_sonar_config_consumer,
             role=ECConnectorRole.WORKER,
         )
 
@@ -689,10 +689,10 @@ class TestMetadataBindingLifecycle:
 class TestEdgeCases:
     """Test edge cases and error handling."""
 
-    def test_save_empty_cache(self, mock_aphrodite_config_producer):
+    def test_save_empty_cache(self, mock_sonar_config_producer):
         """Test saving empty tensor."""
         connector = ECExampleConnector(
-            aphrodite_config=mock_aphrodite_config_producer,
+            sonar_config=mock_sonar_config_producer,
             role=ECConnectorRole.WORKER,
         )
 
@@ -702,10 +702,10 @@ class TestEdgeCases:
         # Should not raise
         connector.save_caches(encoder_cache, mm_hash)
 
-    def test_load_nonexistent_cache(self, mock_aphrodite_config_consumer):
+    def test_load_nonexistent_cache(self, mock_sonar_config_consumer):
         """Test loading cache that doesn't exist raises error."""
         connector = ECExampleConnector(
-            aphrodite_config=mock_aphrodite_config_consumer,
+            sonar_config=mock_sonar_config_consumer,
             role=ECConnectorRole.WORKER,
         )
 
@@ -719,10 +719,10 @@ class TestEdgeCases:
         with pytest.raises(FileNotFoundError):
             connector.start_load_caches(encoder_cache=encoder_cache)
 
-    def test_has_cache_item_empty_request(self, mock_aphrodite_config_producer):
+    def test_has_cache_item_empty_request(self, mock_sonar_config_producer):
         """Test has_cache_item with a nonexistent identifier."""
         connector = ECExampleConnector(
-            aphrodite_config=mock_aphrodite_config_producer,
+            sonar_config=mock_sonar_config_producer,
             role=ECConnectorRole.SCHEDULER,
         )
 

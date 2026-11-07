@@ -67,7 +67,7 @@ features:
       - "muse_glimmer"
   spec_decoding:
     # The 5.11 GB draft head does not fit beside the 25.42 GB nvfp4 weights on a
-    # single 32 GB RTX 5090: Aphrodite OOMs during init with ~400 MiB free. Verified,
+    # single 32 GB RTX 5090: Sonar OOMs during init with ~400 MiB free. Verified,
     # not inferred. On 2x RTX 5090 it works and is verified — see the guide's
     # RTX 5090 section for measurements.
     hardware:
@@ -124,7 +124,7 @@ hardware_overrides:
   amd:
     extra_args: []
     extra_env:
-      APHRODITE_ROCM_USE_AITER: "1"
+      SONAR_ROCM_USE_AITER: "1"
   xpu:
     extra_args:
       - "--enforce-eager"
@@ -173,7 +173,7 @@ guide: |
   The NVFP4 build quantizes **both weights and activations** to 4 bits across 364
   language-model projections (52 layers x 7); embeddings, `lm_head` and the vision
   tower stay unquantized, which is why it is 25 GB rather than the ~15 GB a
-  uniform 4-bit quant would give. Aphrodite detects it from `config.json`
+  uniform 4-bit quant would give. Sonar detects it from `config.json`
   (`quant_method: modelopt`, `quant_algo: NVFP4`) and selects `modelopt_fp4` with
   fused activation quantization — no extra flags, the launch command below is
   unchanged apart from the model path. NVFP4 kernels are Blackwell-only.
@@ -181,7 +181,7 @@ guide: |
   ## Launching the Server
 
   ```bash
-  aphrodite serve /model \
+  sonar serve /model \
     --served-model-name muse-glimmer \
     --tensor-parallel-size 4 \
     --gpu-memory-utilization 0.92 \
@@ -203,7 +203,7 @@ guide: |
   apart from having one GPU to run on:
 
   ```bash
-  aphrodite serve /model \
+  sonar serve /model \
     --served-model-name muse-glimmer \
     --tensor-parallel-size 1 \
     --enable-auto-tool-choice --tool-call-parser muse_glimmer \
@@ -222,8 +222,8 @@ guide: |
   Use the official `vllm/vllm-openai-rocm:nightly` image.
 
   ```bash
-  export APHRODITE_ROCM_USE_AITER=1
-  aphrodite serve /model \
+  export SONAR_ROCM_USE_AITER=1
+  sonar serve /model \
     --served-model-name muse-glimmer \
     --tensor-parallel-size 4 \
     --max-model-len 131072 \
@@ -263,7 +263,7 @@ guide: |
   Serve inside the container — `--enforce-eager` is required on the XPU backend:
 
   ```bash
-  aphrodite serve meta-models/Muse-Glimmer-30B \
+  sonar serve meta-models/Muse-Glimmer-30B \
     --tensor-parallel-size 4 \
     --reasoning-parser muse_glimmer \
     --enforce-eager
@@ -296,7 +296,7 @@ guide: |
     but thin.
 
     **Speculative decoding needs a second card.** The draft head is 5.11 GB and the
-    nvfp4 weights are 25.42 GB, so on one 32 GB card Aphrodite OOMs during init with
+    nvfp4 weights are 25.42 GB, so on one 32 GB card Sonar OOMs during init with
     roughly 400 MiB free. On 2x 5090 with `--tensor-parallel-size 2` it is well
     worth the second card — decode roughly triples.
 
@@ -324,7 +324,7 @@ guide: |
 
     If you *extend* beyond the recipe — a longer `--max-model-len` via rope
     scaling, or `--kv-cache-dtype fp8` — the arithmetic changes and 0.92 can OOM:
-    at 262,144 with fp8 KV, Aphrodite sized a 2,594,229-token cache and then failed to
+    at 262,144 with fp8 KV, Sonar sized a 2,594,229-token cache and then failed to
     allocate 396 MiB for the speculator. Lowering to 0.80 fixed it. That is a
     consequence of the extension, not of the recipe as written.
 
@@ -339,12 +339,12 @@ guide: |
     RuntimeError: Assertion error (deepgemm/csrc/apis/layout.hpp:60): Unknown SF transformation
     ```
 
-    Aphrodite treats capability family 120 as a supported DeepGEMM target, so the path
+    Sonar treats capability family 120 as a supported DeepGEMM target, so the path
     is selected and then DeepGEMM rejects the scale-factor layout. Filed as
     vllm-project/vllm#51884. Set both to work around it:
 
     ```bash
-    APHRODITE_USE_DEEP_GEMM=0 APHRODITE_MOE_USE_DEEP_GEMM=0
+    SONAR_USE_DEEP_GEMM=0 SONAR_MOE_USE_DEEP_GEMM=0
     ```
 
     With that, fp8_block serves fine on 2x 5090 and is the better choice than
@@ -363,7 +363,7 @@ guide: |
   attend to each other bidirectionally — and the target verifies them in parallel.
 
   DFlash uses 16 query positions per active request during warmup. To keep the
-  expanded batch within Aphrodite's token budget, replace the earlier sequence limit with:
+  expanded batch within Sonar's token budget, replace the earlier sequence limit with:
 
   ```bash
   --max-num-seqs 32 \

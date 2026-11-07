@@ -29,7 +29,7 @@
 #include "metric.h"
 #include "common.h"
 
-namespace aphrodite {
+namespace sonar {
 namespace autoquant {
 
 bool g_dump_kernel_info_once = false;
@@ -309,4 +309,4 @@ template class GemmS4F16<half, half2>;
 template class GemmS4F16<__nv_bfloat16, __nv_bfloat162>;
 
 }  // namespace autoquant
-}  // namespace aphrodite
+}  // namespace sonar

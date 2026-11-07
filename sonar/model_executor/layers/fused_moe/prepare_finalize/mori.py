@@ -4,10 +4,10 @@
 import mori
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe.config import FusedMoEQuantConfig
-from aphrodite.platforms import current_platform
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe.config import FusedMoEQuantConfig
+from sonar.platforms import current_platform
 
 logger = init_logger(__name__)
 

@@ -5,9 +5,9 @@ import random
 
 import pytest
 
-from aphrodite import LLM, SamplingParams
-from aphrodite.config import CompilationConfig, CompilationMode
-from aphrodite.platforms import current_platform
+from sonar import LLM, SamplingParams
+from sonar.config import CompilationConfig, CompilationMode
+from sonar.platforms import current_platform
 
 from ....utils import check_answers, fork_new_process_for_each_test, prep_prompts
 
@@ -81,10 +81,10 @@ def test_kv_sharing_fast_prefill(
 
     sampling_params = SamplingParams(temperature=0.0, max_tokens=100)
     compilation_config = CompilationConfig(
-        # This allows Aphrodite compilation backend to handle allocating and
+        # This allows Sonar compilation backend to handle allocating and
         # managing buffers for cudagraph
         cudagraph_copy_inputs=True,
-        mode=CompilationMode.APHRODITE_COMPILE if not enforce_eager else CompilationMode.NONE,
+        mode=CompilationMode.SONAR_COMPILE if not enforce_eager else CompilationMode.NONE,
     )
     batch_size = 10
 
@@ -92,10 +92,10 @@ def test_kv_sharing_fast_prefill(
         # Make scheduling deterministic for reproducibility
         if current_platform.is_rocm():
             # Use spawn to prevent cuda re-initialization error
-            m.setenv("APHRODITE_WORKER_MULTIPROC_METHOD", "spawn")
+            m.setenv("SONAR_WORKER_MULTIPROC_METHOD", "spawn")
         else:
-            m.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
-        m.setenv("APHRODITE_USE_V2_MODEL_RUNNER", "1" if use_v2_model_runner else "0")
+            m.setenv("SONAR_ENABLE_V1_MULTIPROCESSING", "0")
+        m.setenv("SONAR_USE_V2_MODEL_RUNNER", "1" if use_v2_model_runner else "0")
 
         prompts, answer, indices = prep_prompts(batch_size)
 
@@ -108,7 +108,7 @@ def test_kv_sharing_fast_prefill(
             attention_backend="TRITON_ATTN",
         )
         # Guard against a silent fallback to the other model runner.
-        assert llm.llm_engine.aphrodite_config.use_v2_model_runner == use_v2_model_runner
+        assert llm.llm_engine.sonar_config.use_v2_model_runner == use_v2_model_runner
         responses = llm.generate(prompts, sampling_params)
         check_answers(
             indices,

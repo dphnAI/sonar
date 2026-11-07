@@ -4,7 +4,7 @@
 import pytest
 import torch
 
-from aphrodite.model_executor.models.qwen3_xpress import XPressRefinerHead
+from sonar.model_executor.models.qwen3_xpress import XPressRefinerHead
 
 V, H, B, R = 61, 32, 8, 16
 

@@ -12,23 +12,23 @@ DECODE_PORT=8200
 PROXY_PORT=9000
 
 # Get host IP
-APHRODITE_HOST_IP=${APHRODITE_HOST_IP:-127.0.0.1}
+SONAR_HOST_IP=${SONAR_HOST_IP:-127.0.0.1}
 
-echo "Using host IP: $APHRODITE_HOST_IP"
+echo "Using host IP: $SONAR_HOST_IP"
 echo "Model: $MODEL"
 
 # Kill any existing instances
-pkill -f "aphrodite.*--port $PREFILL_PORT" || true
-pkill -f "aphrodite.*--port $DECODE_PORT" || true
+pkill -f "sonar.*--port $PREFILL_PORT" || true
+pkill -f "sonar.*--port $DECODE_PORT" || true
 pkill -f "disagg_prefill_proxy_server.py" || true
 sleep 2
 
 # Launch prefill instance (producer)
 echo "Launching prefill instance on port $PREFILL_PORT..."
 CUDA_VISIBLE_DEVICES=0 \
-APHRODITE_NIXL_SIDE_CHANNEL_HOST=$APHRODITE_HOST_IP \
-APHRODITE_NIXL_SIDE_CHANNEL_PORT=14590 \
-python -m aphrodite.entrypoints.openai.api_server \
+SONAR_NIXL_SIDE_CHANNEL_HOST=$SONAR_HOST_IP \
+SONAR_NIXL_SIDE_CHANNEL_PORT=14590 \
+python -m sonar.entrypoints.openai.api_server \
     --model $MODEL \
     --port $PREFILL_PORT \
     --max-model-len 1024 \
@@ -53,9 +53,9 @@ echo "Prefill instance ready!"
 # Launch decode instance (consumer)
 echo "Launching decode instance on port $DECODE_PORT..."
 CUDA_VISIBLE_DEVICES=1 \
-APHRODITE_NIXL_SIDE_CHANNEL_HOST=$APHRODITE_HOST_IP \
-APHRODITE_NIXL_SIDE_CHANNEL_PORT=14591 \
-python -m aphrodite.entrypoints.openai.api_server \
+SONAR_NIXL_SIDE_CHANNEL_HOST=$SONAR_HOST_IP \
+SONAR_NIXL_SIDE_CHANNEL_PORT=14591 \
+python -m sonar.entrypoints.openai.api_server \
     --model $MODEL \
     --port $DECODE_PORT \
     --max-model-len 1024 \
@@ -84,9 +84,9 @@ python3 ../../benchmarks/disagg_benchmarks/nixl_proxy_server.py \
     --decode-url http://localhost:$DECODE_PORT/v1/completions \
     --prefill-engine-id "prefill_engine" \
     --decode-engine-id "decode_engine" \
-    --prefill-nixl-host "$APHRODITE_HOST_IP" \
+    --prefill-nixl-host "$SONAR_HOST_IP" \
     --prefill-nixl-port 14590 \
-    --decode-nixl-host "$APHRODITE_HOST_IP" \
+    --decode-nixl-host "$SONAR_HOST_IP" \
     --decode-nixl-port 14591 \
     --port $PROXY_PORT > /tmp/proxy.log 2>&1 &
 

@@ -6,8 +6,8 @@
 import pytest
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.platforms import current_platform
+from sonar import _custom_ops as ops
+from sonar.platforms import current_platform
 
 pytestmark = pytest.mark.skipif(
     not current_platform.has_device_capability(100),
@@ -49,7 +49,7 @@ def _swizzled_sf_rows(sf: torch.Tensor, m: int, h: int) -> torch.Tensor:
 def test_gemma_add_rms_norm_quant_matches_chain(H: int, num_tokens: int, nvfp4: bool, has_residual: bool):
     from flashinfer.norm import gemma_fused_add_rmsnorm, gemma_rmsnorm
 
-    from aphrodite.models.qwen3_5.nvidia.ops.fused_norm_quant import (
+    from sonar.models.qwen3_5.nvidia.ops.fused_norm_quant import (
         gemma_add_rms_norm_quant,
     )
 

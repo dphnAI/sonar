@@ -16,7 +16,7 @@
 #include "dispatch_utils.h"
 #include "quantization/vectorization_utils.cuh"
 
-namespace aphrodite {
+namespace sonar {
 
 // TODO(woosuk): Further optimize this kernel.
 template <typename scalar_t, typename fp8_type, int VEC_SIZE>
@@ -43,7 +43,7 @@ __global__ void rms_norm_static_fp8_quant_kernel(
     float x = static_cast<float>(val);
     variance += x * x;
   };
-  aphrodite::vectorize_read_with_alignment<VEC_SIZE>(
+  sonar::vectorize_read_with_alignment<VEC_SIZE>(
       input_row, hidden_size, threadIdx.x, blockDim.x, vec_op, scalar_op);
 
   using BlockReduce = cub::BlockReduce<float, 1024>;
@@ -201,7 +201,7 @@ fused_add_rms_norm_static_fp8_quant_kernel(
   }
 }
 
-}  // namespace aphrodite
+}  // namespace sonar
 
 void rms_norm_static_fp8_quant(
     torch::stable::Tensor& out,     // [..., hidden_size]
@@ -215,25 +215,25 @@ void rms_norm_static_fp8_quant(
   int num_tokens = input.numel() / hidden_size;
 
   // For large num_tokens, use smaller blocks to increase SM concurrency.
-  const bool batch_invariant_launch = aphrodite::aphrodite_is_batch_invariant();
+  const bool batch_invariant_launch = sonar::sonar_is_batch_invariant();
   const int max_block_size =
       batch_invariant_launch ? 1024 : ((num_tokens < 256) ? 1024 : 256);
   dim3 grid(num_tokens);
   const torch::stable::accelerator::DeviceGuard device_guard(
       input.get_device_index());
   const cudaStream_t stream = get_current_cuda_stream();
-  APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(
+  SONAR_STABLE_DISPATCH_FLOATING_TYPES(
       input.scalar_type(), "rms_norm_kernel_scalar_type", [&] {
-        APHRODITE_STABLE_DISPATCH_FP8_TYPES(
+        SONAR_STABLE_DISPATCH_FP8_TYPES(
             out.scalar_type(), "rms_norm_kernel_fp8_type", [&] {
               const int calculated_vec_size =
                   std::gcd(16 / sizeof(scalar_t), hidden_size);
               const int block_size =
                   std::min(hidden_size / calculated_vec_size, max_block_size);
               dim3 block(block_size);
-              APHRODITE_STABLE_DISPATCH_VEC_SIZE(calculated_vec_size, [&] {
-                aphrodite::rms_norm_static_fp8_quant_kernel<scalar_t, fp8_t,
-                                                            vec_size>
+              SONAR_STABLE_DISPATCH_VEC_SIZE(calculated_vec_size, [&] {
+                sonar::rms_norm_static_fp8_quant_kernel<scalar_t, fp8_t,
+                                                        vec_size>
                     <<<grid, block, 0, stream>>>(
                         out.mutable_data_ptr<fp8_t>(),
                         input.const_data_ptr<scalar_t>(), input_stride,
@@ -245,20 +245,21 @@ void rms_norm_static_fp8_quant(
       });
 }
 
-#define LAUNCH_FUSED_ADD_RMS_NORM(width)                                   \
-  APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(                                \
-      input.scalar_type(), "fused_add_rms_norm_kernel_scalar_type", [&] {  \
-        APHRODITE_STABLE_DISPATCH_FP8_TYPES(                               \
-            out.scalar_type(), "fused_add_rms_norm_kernel_fp8_type", [&] { \
-              aphrodite::fused_add_rms_norm_static_fp8_quant_kernel<       \
-                  scalar_t, width, fp8_t><<<grid, block, 0, stream>>>(     \
-                  out.mutable_data_ptr<fp8_t>(),                           \
-                  input.mutable_data_ptr<scalar_t>(), input_stride,        \
-                  residual.mutable_data_ptr<scalar_t>(),                   \
-                  weight.const_data_ptr<scalar_t>(),                       \
-                  scale.const_data_ptr<float>(), epsilon, num_tokens,      \
-                  hidden_size);                                            \
-            });                                                            \
+#define LAUNCH_FUSED_ADD_RMS_NORM(width)                                      \
+  SONAR_STABLE_DISPATCH_FLOATING_TYPES(                                       \
+      input.scalar_type(), "fused_add_rms_norm_kernel_scalar_type", [&] {     \
+        SONAR_STABLE_DISPATCH_FP8_TYPES(                                      \
+            out.scalar_type(), "fused_add_rms_norm_kernel_fp8_type", [&] {    \
+              sonar::fused_add_rms_norm_static_fp8_quant_kernel<scalar_t,     \
+                                                                width, fp8_t> \
+                  <<<grid, block, 0, stream>>>(                               \
+                      out.mutable_data_ptr<fp8_t>(),                          \
+                      input.mutable_data_ptr<scalar_t>(), input_stride,       \
+                      residual.mutable_data_ptr<scalar_t>(),                  \
+                      weight.const_data_ptr<scalar_t>(),                      \
+                      scale.const_data_ptr<float>(), epsilon, num_tokens,     \
+                      hidden_size);                                           \
+            });                                                               \
       });
 void fused_add_rms_norm_static_fp8_quant(
     torch::stable::Tensor& out,       // [..., hidden_size],
@@ -280,7 +281,7 @@ void fused_add_rms_norm_static_fp8_quant(
      When num_tokens is large, a smaller block size allows
      for increased block occupancy on CUs and better latency
      hiding on global mem ops. */
-  const bool batch_invariant_launch = aphrodite::aphrodite_is_batch_invariant();
+  const bool batch_invariant_launch = sonar::sonar_is_batch_invariant();
   const int max_block_size =
       batch_invariant_launch ? 1024 : ((num_tokens < 256) ? 1024 : 256);
   dim3 block(std::min(hidden_size, max_block_size));

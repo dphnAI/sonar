@@ -3,27 +3,27 @@
 import torch
 from torch import Tensor
 
-from aphrodite import ir
-from aphrodite.platforms import current_platform
+from sonar import ir
+from sonar.platforms import current_platform
 
 current_platform.import_kernels()
 
 CUDA_ALIKE = current_platform.is_cuda_alike()
 """Most kernels in this file are supported on all CUDA-alike platforms."""
 IS_ROCM = current_platform.is_rocm()
-"""ROCm needs shape normalization before calling some Aphrodite C kernels."""
+"""ROCm needs shape normalization before calling some Sonar C kernels."""
 GPGPU_DEVICE = CUDA_ALIKE or current_platform.is_xpu()
 
 rms_no_var_size = lambda x, weight, epsilon, variance_size=None: (
     variance_size is None and (weight is None or weight.dtype == x.dtype)
 )
-"""Aphrodite kernel requires no variance_size override and matching input/weight dtype."""
+"""Sonar kernel requires no variance_size override and matching input/weight dtype."""
 
 
-@ir.ops.rms_norm.register_impl("aphrodite_c", supports_args=rms_no_var_size, supported=GPGPU_DEVICE)
+@ir.ops.rms_norm.register_impl("sonar_c", supports_args=rms_no_var_size, supported=GPGPU_DEVICE)
 def rms_norm(x: Tensor, weight: Tensor | None, epsilon: float, variance_size: int | None = None) -> Tensor:
     assert variance_size is None
-    # ROCm's Aphrodite C RMSNorm kernel operates on contiguous 2D tensors.
+    # ROCm's Sonar C RMSNorm kernel operates on contiguous 2D tensors.
     # Higher-rank callers still normalize over the last dimension, so flatten
     # all leading dims. reshape handles strided views from q/k/v splits.
     if IS_ROCM and (x.dim() > 2 or not x.is_contiguous()):
@@ -43,12 +43,12 @@ def rms_norm(x: Tensor, weight: Tensor | None, epsilon: float, variance_size: in
 rms_add_no_var_size = lambda x, x_residual, weight, epsilon, variance_size=None: (
     variance_size is None and (weight is None or weight.dtype == x.dtype)
 )
-"""Aphrodite Kernel does not support variance_size parameter and requires
+"""Sonar Kernel does not support variance_size parameter and requires
 matching input/weight dtype."""
 
 
 @ir.ops.fused_add_rms_norm.register_impl(
-    "aphrodite_c",
+    "sonar_c",
     supports_args=rms_add_no_var_size,
     supported=GPGPU_DEVICE,
     inplace=True,
@@ -67,7 +67,7 @@ def fused_add_rms_norm(
         x_residual.copy_(residual)
         return x, x_residual
 
-    # ROCm's Aphrodite C RMSNorm kernel operates on contiguous 2D tensors.
+    # ROCm's Sonar C RMSNorm kernel operates on contiguous 2D tensors.
     # Higher-rank callers still normalize over the last dimension, so flatten
     # all leading dims.
     if IS_ROCM and x.dim() > 2:

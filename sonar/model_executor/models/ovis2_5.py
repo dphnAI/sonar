@@ -10,35 +10,35 @@ import torch
 import torch.nn as nn
 from transformers import BaseImageProcessor, BatchFeature, PreTrainedConfig
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.multimodal import MultiModalDummyOptions
-from aphrodite.inputs import MultiModalDataDict
-from aphrodite.model_executor.layers.linear import ReplicatedLinear
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.models.ovis import VisualEmbedding
-from aphrodite.model_executor.models.siglip2navit import Siglip2NavitModel
-from aphrodite.model_executor.models.utils import (
+from sonar.config import SonarConfig
+from sonar.config.multimodal import MultiModalDummyOptions
+from sonar.inputs import MultiModalDataDict
+from sonar.model_executor.layers.linear import ReplicatedLinear
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.models.ovis import VisualEmbedding
+from sonar.model_executor.models.siglip2navit import Siglip2NavitModel
+from sonar.model_executor.models.utils import (
     AutoWeightsLoader,
     flatten_bn,
-    init_aphrodite_registered_model,
+    init_sonar_registered_model,
     maybe_prefix,
 )
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import (
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import (
     MultiModalFieldConfig,
     MultiModalKwargsItems,
 )
-from aphrodite.multimodal.parse import ImageSize, MultiModalDataItems
-from aphrodite.multimodal.processing import (
+from sonar.multimodal.parse import ImageSize, MultiModalDataItems
+from sonar.multimodal.processing import (
     BaseDummyInputsBuilder,
     BaseMultiModalProcessor,
     BaseProcessingInfo,
     PromptReplacement,
 )
-from aphrodite.renderers import TokenizeParams
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.transformers_utils.processors.ovis2_5 import Ovis2_5Processor
-from aphrodite.utils.tensor_schema import TensorSchema, TensorShape
+from sonar.renderers import TokenizeParams
+from sonar.sequence import IntermediateTensors
+from sonar.transformers_utils.processors.ovis2_5 import Ovis2_5Processor
+from sonar.utils.tensor_schema import TensorSchema, TensorShape
 
 from .interfaces import (
     MultiModalEmbeddings,
@@ -428,20 +428,20 @@ class Ovis2_5(nn.Module, SupportsMultiModal, SupportsPP):
 
         raise ValueError("Only image or video modality is supported")
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
 
         self.config: PreTrainedConfig = config
 
-        with self._mark_language_model(aphrodite_config):
-            self.llm = init_aphrodite_registered_model(
-                aphrodite_config=aphrodite_config.with_hf_config(config.text_config),
+        with self._mark_language_model(sonar_config):
+            self.llm = init_sonar_registered_model(
+                sonar_config=sonar_config.with_hf_config(config.text_config),
                 prefix=maybe_prefix(prefix, "llm"),
             )
 
-        with self._mark_tower_model(aphrodite_config, {"image", "video"}):
+        with self._mark_tower_model(sonar_config, {"image", "video"}):
             self.visual_tokenizer = VisualTokenizer(
                 config=config.vit_config,
                 visual_vocab_size=config.visual_vocab_size,

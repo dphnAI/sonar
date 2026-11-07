@@ -5,9 +5,9 @@ import torch
 from torch import Tensor
 from torch.library import triton_op, wrap_triton
 
-from aphrodite import ir
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import HAS_TRITON, tl, triton
+from sonar import ir
+from sonar.platforms import current_platform
+from sonar.triton_utils import HAS_TRITON, tl, triton
 
 _MAX_INTERMEDIATE_SIZE = 32768
 _SUPPORTED_DTYPES = {torch.float16, torch.bfloat16, torch.float32}
@@ -65,7 +65,7 @@ def _supports_gelu_and_mul_sparse(x: Tensor, std_multiplier: float, approximate:
 
 
 @triton_op(
-    "aphrodite::gelu_and_mul_sparse_triton",
+    "sonar::gelu_and_mul_sparse_triton",
     mutates_args=(),
 )
 def _gelu_and_mul_sparse_triton_op(x: Tensor, std_multiplier: float) -> Tensor:

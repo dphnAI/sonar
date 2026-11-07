@@ -10,7 +10,7 @@ weight revision.
 ## Load adapters at startup
 
 ```bash
-aphrodite serve meta-llama/Llama-3.1-8B-Instruct \
+sonar serve meta-llama/Llama-3.1-8B-Instruct \
   --enable-lora \
   --lora-modules support=/models/support legal=/models/legal
 ```

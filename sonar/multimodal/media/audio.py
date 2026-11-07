@@ -10,15 +10,15 @@ import numpy.typing as npt
 import pybase64
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.logger import init_logger
-from aphrodite.multimodal.audio import resample_audio_pyav
-from aphrodite.utils.import_utils import PlaceholderModule
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.utils.mem_constants import MiB_bytes
-from aphrodite.utils.serial_utils import tensor2base64
-from aphrodite.utils.sparse_utils import (
+import sonar.envs as envs
+from sonar.exceptions import SonarValidationError
+from sonar.logger import init_logger
+from sonar.multimodal.audio import resample_audio_pyav
+from sonar.utils.import_utils import PlaceholderModule
+from sonar.utils.math_utils import cdiv
+from sonar.utils.mem_constants import MiB_bytes
+from sonar.utils.serial_utils import tensor2base64
+from sonar.utils.sparse_utils import (
     check_sparse_tensor_invariants_threadsafe,
     safe_to_dense,
 )
@@ -140,7 +140,7 @@ def load_audio_pyav(
                     f"Audio exceeds maximum allowed duration of "
                     f"{max_duration_s}s (metadata reports "
                     f"{metadata_duration_s:.1f}s). Set "
-                    f"APHRODITE_MAX_AUDIO_DECODE_DURATION_S to "
+                    f"SONAR_MAX_AUDIO_DECODE_DURATION_S to "
                     f"increase this limit."
                 )
 
@@ -176,7 +176,7 @@ def load_audio_pyav(
                         f"Audio exceeds maximum allowed duration of "
                         f"{max_duration_s}s (decoded {total_samples} "
                         f"samples at {sr}Hz). Set "
-                        f"APHRODITE_MAX_AUDIO_DECODE_DURATION_S to "
+                        f"SONAR_MAX_AUDIO_DECODE_DURATION_S to "
                         f"increase this limit."
                     )
                 if max_decode_bytes is not None and total_decode_bytes > max_decode_bytes:
@@ -185,7 +185,7 @@ def load_audio_pyav(
                         f"{max_decode_bytes / MiB_bytes:.0f} MiB memory "
                         f"limit ({total_decode_bytes / MiB_bytes:.0f} MiB "
                         f"decoded so far). Set "
-                        f"APHRODITE_MAX_AUDIO_DECODE_BYTES to increase this "
+                        f"SONAR_MAX_AUDIO_DECODE_BYTES to increase this "
                         f"limit."
                     )
         except av.error.FFmpegError as e:
@@ -222,7 +222,7 @@ def load_audio_soundfile(
                     f"Audio exceeds maximum allowed duration of "
                     f"{max_duration_s}s (file contains "
                     f"{file_duration_s:.1f}s at {native_sr}Hz). Set "
-                    f"APHRODITE_MAX_AUDIO_DECODE_DURATION_S to "
+                    f"SONAR_MAX_AUDIO_DECODE_DURATION_S to "
                     f"increase this limit."
                 )
         if max_decode_bytes is not None:
@@ -233,7 +233,7 @@ def load_audio_soundfile(
                     f"MiB of PCM ({f.frames} frames x {f.channels} channels"
                     f" x 4B), exceeding the "
                     f"{max_decode_bytes / MiB_bytes:.0f} MiB limit. Set "
-                    f"APHRODITE_MAX_AUDIO_DECODE_BYTES to increase this limit."
+                    f"SONAR_MAX_AUDIO_DECODE_BYTES to increase this limit."
                 )
         y = f.read(dtype="float32", always_2d=False).T
 
@@ -322,7 +322,7 @@ def load_audio_torchcodec(
                     f"(~{est_duration_s:.1f}s at {est_sample_rate}Hz x "
                     f"{est_num_channels}ch), exceeding the "
                     f"{max_decode_bytes / MiB_bytes:.0f} MiB limit. Set "
-                    f"APHRODITE_MAX_AUDIO_DECODE_BYTES to increase this limit."
+                    f"SONAR_MAX_AUDIO_DECODE_BYTES to increase this limit."
                 )
 
     # Duration pre-check, same attacker-controlled → reject-only semantics.
@@ -333,7 +333,7 @@ def load_audio_torchcodec(
                 f"Audio exceeds maximum allowed duration of "
                 f"{max_duration_s}s (metadata reports "
                 f"{duration_s:.1f}s). Set "
-                f"APHRODITE_MAX_AUDIO_DECODE_DURATION_S to "
+                f"SONAR_MAX_AUDIO_DECODE_DURATION_S to "
                 f"increase this limit."
             )
 
@@ -373,7 +373,7 @@ def load_audio_torchcodec(
                 f"Audio exceeds maximum allowed duration of "
                 f"{max_duration_s}s (decoded {samples.data.shape[-1]} "
                 f"samples at {samples.sample_rate}Hz). Set "
-                f"APHRODITE_MAX_AUDIO_DECODE_DURATION_S to "
+                f"SONAR_MAX_AUDIO_DECODE_DURATION_S to "
                 f"increase this limit."
             )
     if max_decode_bytes is not None and samples.data.nbytes > max_decode_bytes:
@@ -381,7 +381,7 @@ def load_audio_torchcodec(
             f"Audio decode exceeded "
             f"{max_decode_bytes / MiB_bytes:.0f} MiB memory "
             f"limit ({samples.data.nbytes / MiB_bytes:.0f} MiB decoded). "
-            f"Set APHRODITE_MAX_AUDIO_DECODE_BYTES to increase this limit."
+            f"Set SONAR_MAX_AUDIO_DECODE_BYTES to increase this limit."
         )
 
     out_sr = samples.sample_rate
@@ -483,7 +483,7 @@ def load_audio(
 
     # PyAV is terminal: nothing left to fall back to. Normalize an FFmpeg
     # failure to ValueError; let a missing soundfile/PyAV surface its
-    # "install aphrodite[audio]" ImportError.
+    # "install sonar[audio]" ImportError.
     if isinstance(path, BytesIO):
         path.seek(0)
     try:
@@ -528,12 +528,12 @@ class AudioMediaIO(MediaIO[tuple[npt.NDArray, float]]):
         self.kwargs = kwargs
 
     def get_max_bytes(self) -> int:
-        return int(envs.APHRODITE_MAX_AUDIO_CLIP_FILESIZE_MB * MiB_bytes)
+        return int(envs.SONAR_MAX_AUDIO_CLIP_FILESIZE_MB * MiB_bytes)
 
     def _validate_encoded_size(self, size: int) -> None:
         max_bytes = self.get_max_bytes()
         if size > max_bytes:
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 "Maximum file size exceeded",
                 parameter="audio_filesize_mb",
                 value=size / MiB_bytes,
@@ -549,12 +549,12 @@ class AudioMediaIO(MediaIO[tuple[npt.NDArray, float]]):
             return load_audio(
                 source,
                 sr=None,
-                max_duration_s=envs.APHRODITE_MAX_AUDIO_DECODE_DURATION_S,
-                max_decode_bytes=envs.APHRODITE_MAX_AUDIO_DECODE_BYTES,
+                max_duration_s=envs.SONAR_MAX_AUDIO_DECODE_DURATION_S,
+                max_decode_bytes=envs.SONAR_MAX_AUDIO_DECODE_BYTES,
                 backend=self.audio_backend,
             )
 
-        max_decode_bytes = envs.APHRODITE_MAX_AUDIO_DECODE_BYTES
+        max_decode_bytes = envs.SONAR_MAX_AUDIO_DECODE_BYTES
         reserved = budget.reserve(max_decode_bytes)
         decoded_bytes = 0
         try:
@@ -562,13 +562,13 @@ class AudioMediaIO(MediaIO[tuple[npt.NDArray, float]]):
                 audio = load_audio(
                     source,
                     sr=None,
-                    max_duration_s=envs.APHRODITE_MAX_AUDIO_DECODE_DURATION_S,
+                    max_duration_s=envs.SONAR_MAX_AUDIO_DECODE_DURATION_S,
                     max_decode_bytes=reserved,
                     backend=self.audio_backend,
                 )
             except ValueError as exc:
-                if reserved < max_decode_bytes and "APHRODITE_MAX_AUDIO_DECODE_BYTES" in str(exc):
-                    raise ValueError("Request decoded media exceeds APHRODITE_MAX_MEDIA_REQUEST_DECODE_BYTES.") from exc
+                if reserved < max_decode_bytes and "SONAR_MAX_AUDIO_DECODE_BYTES" in str(exc):
+                    raise ValueError("Request decoded media exceeds SONAR_MAX_MEDIA_REQUEST_DECODE_BYTES.") from exc
                 raise
             decoded_bytes = audio[0].nbytes
             return audio
@@ -582,7 +582,7 @@ class AudioMediaIO(MediaIO[tuple[npt.NDArray, float]]):
     ) -> tuple[npt.NDArray, float]:
         max_encoded_chars = 4 * ((self.get_max_bytes() + 2) // 3)
         if len(data) > max_encoded_chars:
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 "Maximum file size exceeded",
                 parameter="audio_filesize_mb",
                 value=(len(data) * 3 / 4) / MiB_bytes,

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-echo "Warning: LMCache disaggregated prefill support for Aphrodite v1 is experimental and subject to change."
+echo "Warning: LMCache disaggregated prefill support for Sonar v1 is experimental and subject to change."
 
 
 PIDS=()
@@ -88,7 +88,7 @@ main() {
     ensure_python_library_installed nixl
     ensure_python_library_installed pandas
     ensure_python_library_installed datasets
-    ensure_python_library_installed aphrodite
+    ensure_python_library_installed sonar
 
     trap cleanup INT
     trap cleanup USR1
@@ -97,12 +97,12 @@ main() {
     echo "Launching prefiller, decoder and proxy..."
     echo "Please check prefiller.log, decoder.log and proxy.log for logs."
 
-    bash disagg_aphrodite_launcher.sh prefiller \
+    bash disagg_sonar_launcher.sh prefiller \
         > >(tee prefiller.log) 2>&1 &
     prefiller_pid=$!
     PIDS+=("$prefiller_pid")
 
-    bash disagg_aphrodite_launcher.sh decoder  \
+    bash disagg_sonar_launcher.sh decoder  \
         > >(tee decoder.log)  2>&1 &
     decoder_pid=$!
     PIDS+=("$decoder_pid")
@@ -126,7 +126,7 @@ main() {
 
     # begin benchmark
     cd ../../../../../benchmarks/
-    aphrodite bench serve --port 9000 --seed "$(date +%s)" \
+    sonar bench serve --port 9000 --seed "$(date +%s)" \
         --model Qwen/Qwen3-0.6B \
         --dataset-name random --random-input-len 7500 --random-output-len 200 \
         --num-prompts 200 --burstiness 100 --request-rate 3.6 | tee benchmark.log

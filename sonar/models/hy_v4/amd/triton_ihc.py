@@ -9,9 +9,9 @@ HIP/Triton graph capture.
 
 import torch
 
-from aphrodite import envs
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import HAS_TRITON, tl, triton
+from sonar import envs
+from sonar.platforms import current_platform
+from sonar.triton_utils import HAS_TRITON, tl, triton
 
 _BLOCK_K = 1024
 _BLOCK_D = 1024
@@ -26,7 +26,7 @@ def triton_ihc_supported(x: torch.Tensor) -> bool:
         and current_platform.is_rocm()
         and x.is_cuda
         and x.dtype in (torch.float16, torch.bfloat16)
-        and not envs.APHRODITE_BATCH_INVARIANT
+        and not envs.SONAR_BATCH_INVARIANT
     )
 
 

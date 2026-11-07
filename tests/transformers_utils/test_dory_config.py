@@ -8,9 +8,9 @@ from huggingface_hub.errors import (
     StrictDataclassFieldValidationError,
 )
 
-from aphrodite.config import ModelConfig
-from aphrodite.transformers_utils.config import get_config
-from aphrodite.transformers_utils.configs.dory import DoryConfig
+from sonar.config import ModelConfig
+from sonar.transformers_utils.config import get_config
+from sonar.transformers_utils.configs.dory import DoryConfig
 
 
 def test_dory_loads_without_remote_code_and_preserves_head_size(tmp_path):

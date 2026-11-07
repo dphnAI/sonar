@@ -7,16 +7,16 @@ from typing import TYPE_CHECKING, Any, Literal, Self
 import torch
 from pydantic import ConfigDict, Field, model_validator
 
-from aphrodite import envs
-from aphrodite.config.kernel import MEGA_MOE_BACKENDS, KernelConfig
-from aphrodite.config.utils import config
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.utils.hashing import safe_hash
+from sonar import envs
+from sonar.config.kernel import MEGA_MOE_BACKENDS, KernelConfig
+from sonar.config.utils import config
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.utils.hashing import safe_hash
 
 if TYPE_CHECKING:
-    from aphrodite.config import ModelConfig
-    from aphrodite.config.cache import CacheConfig
+    from sonar.config import ModelConfig
+    from sonar.config.cache import CacheConfig
 else:
     ModelConfig = Any
     CacheConfig = Any
@@ -120,14 +120,14 @@ class LoRAConfig:
             self.max_cpu_loras = self.max_loras
         elif self.max_cpu_loras < self.max_loras:
             raise ValueError(f"max_cpu_loras ({self.max_cpu_loras}) must be >= max_loras ({self.max_loras}).")
-        if envs.APHRODITE_LORA_ENABLE_DUAL_STREAM and not current_platform.is_cuda_alike():
+        if envs.SONAR_LORA_ENABLE_DUAL_STREAM and not current_platform.is_cuda_alike():
             raise ValueError("Dual CUDA streams are only supported on CUDA platforms.")
-        if envs.APHRODITE_LORA_ENABLE_DUAL_STREAM and self.fully_sharded_loras:
+        if envs.SONAR_LORA_ENABLE_DUAL_STREAM and self.fully_sharded_loras:
             logger.warning_once(
                 "fully_sharded_loras isn't compatible with "
-                "APHRODITE_LORA_ENABLE_DUAL_STREAM, set APHRODITE_LORA_ENABLE_DUAL_STREAM=False"
+                "SONAR_LORA_ENABLE_DUAL_STREAM, set SONAR_LORA_ENABLE_DUAL_STREAM=False"
             )
-            envs.APHRODITE_LORA_ENABLE_DUAL_STREAM = False
+            envs.SONAR_LORA_ENABLE_DUAL_STREAM = False
         return self
 
     def verify_with_kernel_config(self, kernel_config: KernelConfig) -> None:

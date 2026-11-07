@@ -144,7 +144,7 @@ def install() -> None:
     from b12x.moe._shared.kernels import w4a8_compact_micro as micro
 
     original = micro.launch_w4a8_compact_micro
-    if getattr(original, "_aphrodite_fused", False):
+    if getattr(original, "_sonar_fused", False):
         return
 
     @functools.wraps(original)
@@ -152,5 +152,5 @@ def install() -> None:
         route = _fused(micro, kw)
         return original(**kw) if route is None else route
 
-    launch._aphrodite_fused = True  # type: ignore[attr-defined]
+    launch._sonar_fused = True  # type: ignore[attr-defined]
     micro.launch_w4a8_compact_micro = launch

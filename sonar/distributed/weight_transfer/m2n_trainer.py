@@ -21,13 +21,13 @@ from typing import TYPE_CHECKING, Any, ClassVar, Self, cast
 
 import torch
 
-from aphrodite.distributed.weight_transfer.base import (
-    AphroditeWeightSyncClient,
+from sonar.distributed.weight_transfer.base import (
+    SonarWeightSyncClient,
     TrainerInitInfo,
     TrainerWeightTransferEngine,
     WeightSource,
 )
-from aphrodite.distributed.weight_transfer.m2n_common import (
+from sonar.distributed.weight_transfer.m2n_common import (
     M2N_WIRE_SCHEMA_VERSION,
     M2NMesh,
     M2NParamMeta,
@@ -50,14 +50,14 @@ from aphrodite.distributed.weight_transfer.m2n_common import (
     to_placements,
     validate_transfer_plan,
 )
-from aphrodite.distributed.weight_transfer.nccl_common import (
+from sonar.distributed.weight_transfer.nccl_common import (
     decode_nccl_unique_id,
     stateless_init_metadata_group,
 )
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 if TYPE_CHECKING:
-    from aphrodite.distributed.utils import StatelessProcessGroup
+    from sonar.distributed.utils import StatelessProcessGroup
 
 logger = init_logger(__name__)
 
@@ -166,7 +166,7 @@ class M2NTrainerWeightTransferEngine(TrainerWeightTransferEngine[M2NTrainerInitI
     def __init__(
         self,
         *,
-        client: AphroditeWeightSyncClient,
+        client: SonarWeightSyncClient,
         source: WeightSource,
         is_sender: bool,
         rank: int = 0,
@@ -189,7 +189,7 @@ class M2NTrainerWeightTransferEngine(TrainerWeightTransferEngine[M2NTrainerInitI
         cls,
         init_info: M2NTrainerInitInfo,
         *,
-        client: AphroditeWeightSyncClient,
+        client: SonarWeightSyncClient,
         source: WeightSource | None = None,
     ) -> Self:
         """Build the engine and rendezvous with the inference side.

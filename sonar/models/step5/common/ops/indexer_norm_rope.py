@@ -4,7 +4,7 @@
 
 import torch
 
-from aphrodite.triton_utils import tl, triton
+from sonar.triton_utils import tl, triton
 
 from .summary_update import _update_decode_values, summary_layout
 

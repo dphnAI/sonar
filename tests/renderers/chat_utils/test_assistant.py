@@ -3,7 +3,7 @@
 
 from unittest.mock import MagicMock
 
-from aphrodite.renderers.chat_utils import ConversationMessage, parse_chat_message_content
+from sonar.renderers.chat_utils import ConversationMessage, parse_chat_message_content
 
 
 def _parse_one(message) -> ConversationMessage:

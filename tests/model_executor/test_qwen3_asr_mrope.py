@@ -3,10 +3,10 @@
 
 import torch
 
-from aphrodite.model_executor.models.qwen3_asr import (
+from sonar.model_executor.models.qwen3_asr import (
     Qwen3ASRForConditionalGeneration,
 )
-from aphrodite.multimodal.inputs import MultiModalFeatureSpec, PlaceholderRange
+from sonar.multimodal.inputs import MultiModalFeatureSpec, PlaceholderRange
 
 
 def test_mrope_positions_with_stripped_audio_data() -> None:

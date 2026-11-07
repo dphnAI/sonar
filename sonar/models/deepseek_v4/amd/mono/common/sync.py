@@ -14,7 +14,7 @@ from aiter.ops.flydsl.kernels import buffer_ops as bo
 from flydsl.expr import const_expr, gpu, range_constexpr, rocdl
 from flydsl.expr.typing import T
 
-from aphrodite.models.deepseek_v4.amd.mono.common.ops import (
+from sonar.models.deepseek_v4.amd.mono.common.ops import (
     CM_DEV,
     CM_SYS,
     bf16_pair,

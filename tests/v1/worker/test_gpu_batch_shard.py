@@ -15,15 +15,15 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.v1.core.sched.output import GrammarOutput
-from aphrodite.v1.worker.gpu.input_batch import InputBatch
-from aphrodite.v1.worker.gpu.sample import batch_shard
-from aphrodite.v1.worker.gpu.sample.batch_shard import (
+from sonar.platforms import current_platform
+from sonar.v1.core.sched.output import GrammarOutput
+from sonar.v1.worker.gpu.input_batch import InputBatch
+from sonar.v1.worker.gpu.sample import batch_shard
+from sonar.v1.worker.gpu.sample.batch_shard import (
     BatchSharder,
     _shard_grammar_output,
 )
-from aphrodite.v1.worker.gpu.spec_decode import draft_logits as draft_logits_module
+from sonar.v1.worker.gpu.spec_decode import draft_logits as draft_logits_module
 
 DEVICE = current_platform.device_type
 
@@ -389,7 +389,7 @@ def test_gather_sampler_output_kernels(tp_size: int):
     cast back to int32, identical on every rank."""
     from dataclasses import replace as dc_replace
 
-    from aphrodite.v1.worker.gpu.sample.output import SamplerOutput
+    from sonar.v1.worker.gpu.sample.output import SamplerOutput
 
     rng = np.random.default_rng(9)
     max_num_reqs = 32
@@ -480,8 +480,8 @@ def test_gather_sampler_output_logprobs_and_nans():
     and truncate paths), and restored to global row order."""
     from dataclasses import replace as dc_replace
 
-    from aphrodite.v1.outputs import LogprobsTensors
-    from aphrodite.v1.worker.gpu.sample.output import SamplerOutput
+    from sonar.v1.outputs import LogprobsTensors
+    from sonar.v1.worker.gpu.sample.output import SamplerOutput
 
     tp_size = 2
     rng = np.random.default_rng(21)
@@ -597,7 +597,7 @@ def test_finish_requests_frees_slots_in_sorted_order():
     """Request slots must be freed in the same order on every TP rank:
     ownership derives from slot indices, and `finished_req_ids` is a set
     whose iteration order is per-process hash-randomized."""
-    from aphrodite.v1.worker.gpu.model_runner import GPUModelRunner
+    from sonar.v1.worker.gpu.model_runner import GPUModelRunner
 
     removed: list[str] = []
     fake_runner = SimpleNamespace(_remove_request=removed.append, pooling_runner=None)
@@ -692,10 +692,10 @@ def test_sharded_draft_logits_balance_and_stale_rows(tp_size: int):
 def test_draft_logits_stay_replicated_under_pcp(pcp_size: int):
     """PCPManager.sync_drafts indexes the draft logits cache by request state,
     so PCP keeps the cache replicated even under batch-sharded sampling."""
-    from aphrodite.v1.worker.gpu.spec_decode.speculator import DraftModelSpeculator
+    from sonar.v1.worker.gpu.spec_decode.speculator import DraftModelSpeculator
 
     speculator = SimpleNamespace(
-        aphrodite_config=SimpleNamespace(parallel_config=SimpleNamespace(prefill_context_parallel_size=pcp_size)),
+        sonar_config=SimpleNamespace(parallel_config=SimpleNamespace(prefill_context_parallel_size=pcp_size)),
         max_num_reqs=8,
         num_speculative_steps=2,
         vocab_size=4,
@@ -707,7 +707,7 @@ def test_draft_logits_stay_replicated_under_pcp(pcp_size: int):
     fake_group = SimpleNamespace(rank_in_group=0, world_size=2)
     with (
         mock.patch(
-            "aphrodite.v1.worker.gpu.spec_decode.speculator.batch_sharded_sampling_enabled",
+            "sonar.v1.worker.gpu.spec_decode.speculator.batch_sharded_sampling_enabled",
             return_value=True,
         ),
         mock.patch.object(draft_logits_module, "get_tp_group", return_value=fake_group),

@@ -34,7 +34,7 @@ from dataclasses import dataclass, field
 import pytest
 import requests
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 from tests.utils import RemoteOpenAIServer
 from tests.v1.kv_connector.umbp_test_utils import mori_has_umbp
 
@@ -100,7 +100,7 @@ def _reset_gpu_prefix_cache(base_url: str) -> None:
     the next run must reload KV data through the connector.
 
     The reset fails while asynchronous offload transfers still hold GPU
-    blocks, so retry until it succeeds. Requires APHRODITE_SERVER_DEV_MODE=1.
+    blocks, so retry until it succeeds. Requires SONAR_SERVER_DEV_MODE=1.
     """
     deadline = time.monotonic() + _OFFLOAD_SYNC_TIMEOUT
     while True:
@@ -124,7 +124,7 @@ def _external_kv_tokens(base_url: str) -> float:
     return sum(
         float(line.rsplit(" ", 1)[1])
         for line in metrics.text.splitlines()
-        if line.startswith("aphrodite:prompt_tokens_by_source_total{") and 'source="external_kv_transfer"' in line
+        if line.startswith("sonar:prompt_tokens_by_source_total{") and 'source="external_kv_transfer"' in line
     )
 
 
@@ -274,7 +274,7 @@ def test_gsm8k_offloading_correctness(cfg: OffloadingModelConfig):
         cfg.model,
         server_args,
         # /reset_prefix_cache requires dev mode.
-        env_dict={"APHRODITE_SERVER_DEV_MODE": "1"},
+        env_dict={"SONAR_SERVER_DEV_MODE": "1"},
         max_wait_seconds=cfg.startup_timeout,
     ) as server:
         base_url = f"http://{server.host}:{server.port}"

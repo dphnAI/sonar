@@ -6,22 +6,22 @@ from collections.abc import Iterable
 import torch
 import torch.nn as nn
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import SonarConfig
+from sonar.model_executor.layers.fused_moe import (
     fused_moe_make_expert_params_mapping,
 )
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.model_loader.weight_utils import (
+from sonar.model_executor.model_loader.weight_utils import (
     default_weight_loader,
     maybe_remap_kv_scale_name,
 )
-from aphrodite.model_executor.models.deepseek_v2 import (
+from sonar.model_executor.models.deepseek_v2 import (
     DeepseekV2DecoderLayer,
     DeepseekV3ForCausalLM,
 )
@@ -34,14 +34,14 @@ class DeepseekV2Model(nn.Module):
     def __init__(
         self,
         *,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
         start_layer_id: int = 0,
     ) -> None:
         super().__init__()
-        assert aphrodite_config.speculative_config is not None
-        self.config = aphrodite_config.speculative_config.draft_model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        assert sonar_config.speculative_config is not None
+        self.config = sonar_config.speculative_config.draft_model_config.hf_config
+        quant_config = sonar_config.quant_config
         self.vocab_size = self.config.vocab_size
 
         self.embed_tokens = VocabParallelEmbedding(
@@ -54,7 +54,7 @@ class DeepseekV2Model(nn.Module):
         self.layers = nn.ModuleList(
             [
                 DeepseekV2DecoderLayer(
-                    aphrodite_config,
+                    sonar_config,
                     prefix=maybe_prefix(prefix, f"layers.{i + start_layer_id}"),
                     config=self.config,
                 )
@@ -186,14 +186,14 @@ class DeepseekV2Model(nn.Module):
 
 
 class EagleDeepseekV3ForCausalLM(DeepseekV3ForCausalLM):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         nn.Module.__init__(self)
-        assert aphrodite_config.speculative_config is not None
-        self.config = aphrodite_config.speculative_config.draft_model_config.hf_config
-        quant_config = aphrodite_config.quant_config
-        target_layer_num = aphrodite_config.model_config.get_num_layers(aphrodite_config.parallel_config)
+        assert sonar_config.speculative_config is not None
+        self.config = sonar_config.speculative_config.draft_model_config.hf_config
+        quant_config = sonar_config.quant_config
+        target_layer_num = sonar_config.model_config.get_num_layers(sonar_config.parallel_config)
         self.model = DeepseekV2Model(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             prefix=maybe_prefix(prefix, "model"),
             start_layer_id=target_layer_num,
         )

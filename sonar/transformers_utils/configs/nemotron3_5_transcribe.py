@@ -213,7 +213,7 @@ def _other_architecture_hint(pe_encoder_config: dict[str, Any] | None, text_conf
             "This checkpoint has the Parallel Expert Encoder on a NemotronH decoder: "
             f'set "architectures": ["{_ARCHITECTURE}"] in its config.json.'
         )
-    return "Serve other NeMo SpeechLM models with the NeMo Speech Aphrodite plugin."
+    return "Serve other NeMo SpeechLM models with the NeMo Speech Sonar plugin."
 
 
 class Nemotron3_5TranscribeConfig(PreTrainedConfig):

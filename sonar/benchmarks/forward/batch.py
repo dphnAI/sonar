@@ -6,10 +6,10 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from aphrodite.benchmarks.forward.shapes import BenchCase
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.v1.core.sched.output import NewRequestData, SchedulerOutput
-from aphrodite.v1.kv_cache_interface import (
+from sonar.benchmarks.forward.shapes import BenchCase
+from sonar.sampling_params import SamplingParams
+from sonar.v1.core.sched.output import NewRequestData, SchedulerOutput
+from sonar.v1.kv_cache_interface import (
     CircularBufferSpec,
     KVCacheSpec,
     MambaSpec,

@@ -1,28 +1,28 @@
-# Aphrodite Recipes Tools
+# Sonar Recipes Tools
 
-Utilities for consuming deployment configurations from [Aphrodite Recipes](https://recipes.vllm.ai/) and converting them into files that can be used directly with Aphrodite.
+Utilities for consuming deployment configurations from [Sonar Recipes](https://recipes.vllm.ai/) and converting them into files that can be used directly with Sonar.
 
 ## Optimized Deployment Flow
 
 The recipe provides the validated deployment baseline. Hardware and workload
 information are optional inputs that can refine deployment-sensitive values
-before the generated configuration is passed to Aphrodite.
+before the generated configuration is passed to Sonar.
 
 ```mermaid
 flowchart LR
-    R["Aphrodite Recipe"] --> C["Recipe Converter"]
+    R["Sonar Recipe"] --> C["Recipe Converter"]
     H["Hardware Info (optional)"] --> C
     W["Workload Info (optional)"] --> C
     C --> F["config.yml + env.sh"]
-    F --> D["Aphrodite Docker Image"]
+    F --> D["Sonar Docker Image"]
     D --> E["OpenAI Endpoint"]
 ```
 
-## `recipe_json_to_aphrodite_config.py`
+## `recipe_json_to_sonar_config.py`
 
-Converts a hardware-specific Aphrodite Recipes JSON rendering into:
+Converts a hardware-specific Sonar Recipes JSON rendering into:
 
-- `config.yml` — native configuration for `aphrodite serve --config`
+- `config.yml` — native configuration for `sonar serve --config`
 - `env.sh` — environment variables required by the recipe
 
 The converter uses the Recipes JSON API as the source of truth. It does not reimplement model-variant, hardware, or strategy compatibility rules.
@@ -35,7 +35,7 @@ pip install pyyaml
 
 ## Recipe Selection Model
 
-Discovery follows the JSON links published by Aphrodite Recipes:
+Discovery follows the JSON links published by Sonar Recipes:
 
 ```text
 /models.json
@@ -55,7 +55,7 @@ The converter follows those exact links instead of constructing strategy paths l
 If you do not know the recipe JSON URL, run the script without an input:
 
 ```bash
-python3 tools/recipes/recipe_json_to_aphrodite_config.py
+python3 tools/recipes/recipe_json_to_sonar_config.py
 ```
 
 The script will:
@@ -100,7 +100,7 @@ Resolved recipe:
 For automation or CI, specify the model and hardware directly:
 
 ```bash
-python3 tools/recipes/recipe_json_to_aphrodite_config.py \
+python3 tools/recipes/recipe_json_to_sonar_config.py \
   --model meta-llama/Llama-3.1-8B-Instruct \
   --hardware xeon6
 ```
@@ -110,7 +110,7 @@ When `--strategy` is omitted with both `--model` and `--hardware`, the converter
 To request a generated alternative strategy explicitly:
 
 ```bash
-python3 tools/recipes/recipe_json_to_aphrodite_config.py \
+python3 tools/recipes/recipe_json_to_sonar_config.py \
   --model nvidia/Llama-3.1-8B-Instruct-FP8 \
   --hardware arc_pro_b70 \
   --strategy multi_node_tp
@@ -123,25 +123,25 @@ The converter does not synthesize a URL such as `.../strategies/multi_node_tp.js
 If you already know the recipe JSON URL:
 
 ```bash
-python3 tools/recipes/recipe_json_to_aphrodite_config.py \
+python3 tools/recipes/recipe_json_to_sonar_config.py \
   https://recipes.vllm.ai/meta-llama/Llama-3.1-8B-Instruct/hw/xeon6.json
 ```
 
 A local JSON file is also supported:
 
 ```bash
-python3 tools/recipes/recipe_json_to_aphrodite_config.py recipe.json
+python3 tools/recipes/recipe_json_to_sonar_config.py recipe.json
 ```
 
 When a positional JSON source is supplied, do not combine it with `--model`, `--hardware`, or `--strategy`.
 
-## Start Aphrodite
+## Start Sonar
 
 After generating the files:
 
 ```bash
 source env.sh
-aphrodite serve --config config.yml
+sonar serve --config config.yml
 ```
 
 Example generated `config.yml`:
@@ -156,7 +156,7 @@ If the selected recipe does not require environment variables, `env.sh` will con
 ## Custom Output Files
 
 ```bash
-python3 tools/recipes/recipe_json_to_aphrodite_config.py \
+python3 tools/recipes/recipe_json_to_sonar_config.py \
   --model meta-llama/Llama-3.1-8B-Instruct \
   --hardware xeon6 \
   --config-out llama31-xeon6.yml \
@@ -167,7 +167,7 @@ python3 tools/recipes/recipe_json_to_aphrodite_config.py \
 
 Strategy discovery and config conversion are separate concerns.
 
-The converter can resolve any generated strategy JSON exposed by the Recipes API. It currently emits one `config.yml`, so the selected rendering must contain a single `aphrodite serve` `argv`.
+The converter can resolve any generated strategy JSON exposed by the Recipes API. It currently emits one `config.yml`, so the selected rendering must contain a single `sonar serve` `argv`.
 
 Single-process renderings such as `single_node_tp` can be converted directly. Multi-node, disaggregated prefill/decode, or other multi-process renderings expose fields such as `head_argv`, `worker_argv`, `prefill`, or `decode`; the converter intentionally exits instead of generating an incomplete single-process config.
 

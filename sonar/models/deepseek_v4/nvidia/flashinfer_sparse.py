@@ -6,40 +6,40 @@ from typing import TYPE_CHECKING, ClassVar, cast
 
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.cache import CacheDType
-from aphrodite.forward_context import get_forward_context
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fusion.quant_activation import QuantizedActivation
-from aphrodite.models.deepseek_v4.attention import DeepseekV4Attention
-from aphrodite.models.deepseek_v4.common.ops import (
+from sonar.config import SonarConfig
+from sonar.config.cache import CacheDType
+from sonar.forward_context import get_forward_context
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fusion.quant_activation import QuantizedActivation
+from sonar.models.deepseek_v4.attention import DeepseekV4Attention
+from sonar.models.deepseek_v4.common.ops import (
     build_flashinfer_mixed_sparse_indices,
     compute_global_topk_indices_and_lens,
 )
-from aphrodite.models.deepseek_v4.nvidia.ops.o_proj import (
+from sonar.models.deepseek_v4.nvidia.ops.o_proj import (
     compute_fp8_einsum_recipe,
     deep_gemm_fp8_o_proj,
     rope_quant_attn_out,
     rope_quant_unsupported_reason,
 )
-from aphrodite.models.deepseek_v4.sparse_mla import (
+from sonar.models.deepseek_v4.sparse_mla import (
     DeepseekV4FlashMLAMetadata,
     DeepseekV4SparseMLABackend,
     DeepseekV4SparseMLAMetadataBuilder,
 )
-from aphrodite.platforms.interface import DeviceCapability
-from aphrodite.utils.flashinfer import flashinfer_trtllm_batch_decode_sparse_mla_dsv4
-from aphrodite.v1.attention.backend import AttentionCGSupport, MultipleOf
-from aphrodite.v1.attention.backends.mla.compressor_utils import (
+from sonar.platforms.interface import DeviceCapability
+from sonar.utils.flashinfer import flashinfer_trtllm_batch_decode_sparse_mla_dsv4
+from sonar.v1.attention.backend import AttentionCGSupport, MultipleOf
+from sonar.v1.attention.backends.mla.compressor_utils import (
     get_dspark_swa_index_width,
 )
-from aphrodite.v1.attention.backends.mla.sparse_swa import (
+from sonar.v1.attention.backends.mla.sparse_swa import (
     DeepseekSparseSWABackend,
     DeepseekSparseSWAMetadataBuilder,
 )
 
 if TYPE_CHECKING:
-    from aphrodite.v1.attention.backends.mla.sparse_swa import DeepseekSparseSWAMetadata
+    from sonar.v1.attention.backends.mla.sparse_swa import DeepseekSparseSWAMetadata
 
 logger = init_logger(__name__)
 
@@ -88,11 +88,11 @@ def _pad_to_supported_q_heads(num_heads: int) -> int:
     )
 
 
-def _required_sm120_sparse_topk(aphrodite_config: AphroditeConfig, window_size: int) -> int:
+def _required_sm120_sparse_topk(sonar_config: SonarConfig, window_size: int) -> int:
     """Return the SM120 DSV4 SWA specialization needed by this model."""
-    if not aphrodite_config.attention_config.use_non_causal:
+    if not sonar_config.attention_config.use_non_causal:
         return window_size
-    speculative_config = aphrodite_config.speculative_config
+    speculative_config = sonar_config.speculative_config
     if speculative_config is None:
         return window_size
     return get_dspark_swa_index_width(
@@ -162,7 +162,7 @@ class DeepseekV4FlashInferMLASparseBackend(DeepseekV4SparseMLABackend):
         if device_capability.major == 12:
             if kv_cache_dtype not in ("fp8", "fp8_e4m3", "fp8_ds_mla"):
                 return "kv_cache_dtype not supported"
-            from aphrodite.utils.flashinfer import has_flashinfer_sparse_mla_sm120
+            from sonar.utils.flashinfer import has_flashinfer_sparse_mla_sm120
 
             if not has_flashinfer_sparse_mla_sm120():
                 return "FLASHINFER_MLA_SPARSE_DSV4 SM120 requires FlashInfer's sparse MLA decode API"
@@ -224,8 +224,8 @@ class DeepseekV4FlashInferMLAAttention(DeepseekV4Attention):
             return rope_quant_attn_out(num_tokens, hidden_states.device)
         return super()._alloc_attn_out(num_tokens, hidden_states)
 
-    def __init__(self, aphrodite_config: AphroditeConfig, *args, **kwargs) -> None:
-        super().__init__(aphrodite_config, *args, **kwargs)
+    def __init__(self, sonar_config: SonarConfig, *args, **kwargs) -> None:
+        super().__init__(sonar_config, *args, **kwargs)
         self._einsum_recipe, self._tma_aligned_scales = compute_fp8_einsum_recipe()
         # RopeQuant derives each query's RoPE position as seq_len - q_len + i,
         # which matches `positions` for DSpark's non-causal draft block too,
@@ -615,11 +615,11 @@ class DeepseekV4FlashInferSM120Attention(DeepseekV4Attention):
             tma_aligned_scales=self._tma_aligned_scales,
         )
 
-    def __init__(self, aphrodite_config: AphroditeConfig, *args, **kwargs) -> None:
-        super().__init__(aphrodite_config, *args, **kwargs)
-        from aphrodite.utils.flashinfer import has_flashinfer_sparse_mla_sm120_config
+    def __init__(self, sonar_config: SonarConfig, *args, **kwargs) -> None:
+        super().__init__(sonar_config, *args, **kwargs)
+        from sonar.utils.flashinfer import has_flashinfer_sparse_mla_sm120_config
 
-        required_topk = _required_sm120_sparse_topk(aphrodite_config, self.window_size)
+        required_topk = _required_sm120_sparse_topk(sonar_config, self.window_size)
         if not has_flashinfer_sparse_mla_sm120_config(self.padded_heads, required_topk):
             raise RuntimeError(
                 "FLASHINFER_MLA_SPARSE_DSV4 on SM120 requires a FlashInfer "

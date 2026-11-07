@@ -4,6 +4,6 @@
 
 from __future__ import annotations
 
-from aphrodite.metal.multimodal.qwen3_vl.adapter import Qwen3VLMultimodalAdapter
+from sonar.metal.multimodal.qwen3_vl.adapter import Qwen3VLMultimodalAdapter
 
 __all__ = ["Qwen3VLMultimodalAdapter"]

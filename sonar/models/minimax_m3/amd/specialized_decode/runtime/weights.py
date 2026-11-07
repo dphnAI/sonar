@@ -9,10 +9,10 @@ from enum import Enum
 
 import torch
 
-from aphrodite.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
+from sonar.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
     AiterMxfp4Experts,
 )
-from aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 import Mxfp4MoeBackend
+from sonar.model_executor.layers.fused_moe.oracle.mxfp4 import Mxfp4MoeBackend
 
 HIDDEN = 6144
 QKV_ROWS = 2560

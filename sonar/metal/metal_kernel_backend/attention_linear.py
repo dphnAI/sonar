@@ -18,9 +18,9 @@ import mlx.core as mx
 import mlx.nn as nn
 from mlx_lm.models.gated_delta import compute_g
 
-from aphrodite.metal.metal import get_ops
-from aphrodite.metal.mlx_backend.gdn_cache import GDNPagedStateCache
-from aphrodite.metal.paged_attention_common import get_context
+from sonar.metal.metal import get_ops
+from sonar.metal.mlx_backend.gdn_cache import GDNPagedStateCache
+from sonar.metal.paged_attention_common import get_context
 
 
 def is_linear_attention(module: nn.Module) -> bool:

@@ -12,7 +12,7 @@ import requests
 # Requirements :
 # - install TerraTorch v1.1 (or later):
 #   pip install terratorch>=v1.1
-# - start aphrodite in serving mode with the below args
+# - start sonar in serving mode with the below args
 #   --model='christian-pinto/Prithvi-EO-2.0-300M-TL-VLLM'
 #   --model-impl terratorch
 #   --task embed --trust-remote-code

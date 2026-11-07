@@ -32,14 +32,14 @@ from itertools import islice
 import torch
 import torch.nn as nn
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed import get_pp_group
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
-from aphrodite.model_executor.models.qwen2 import Qwen2ForCausalLM, Qwen2Model
-from aphrodite.sequence import IntermediateTensors
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import SonarConfig
+from sonar.distributed import get_pp_group
+from sonar.logger import init_logger
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
+from sonar.model_executor.models.qwen2 import Qwen2ForCausalLM, Qwen2Model
+from sonar.sequence import IntermediateTensors
 
 from .utils import AutoWeightsLoader, PPMissingLayer, WeightsMapper, maybe_prefix
 
@@ -88,18 +88,18 @@ class MiMoModel(Qwen2Model):
 
 class MiMoForCausalLM(Qwen2ForCausalLM, nn.Module):
     # MTP layers are loaded by the draft model, not the main model.
-    hf_to_aphrodite_mapper = WeightsMapper(orig_to_new_prefix={"model.mtp_layers.": None})
+    hf_to_sonar_mapper = WeightsMapper(orig_to_new_prefix={"model.mtp_layers.": None})
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         nn.Module.__init__(self)
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
 
         self.config = config
 
         self.quant_config = quant_config
 
-        self.model = MiMoModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = MiMoModel(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
 
         if get_pp_group().is_last_rank:
             self.lm_head = ParallelLMHead(
@@ -119,7 +119,7 @@ class MiMoForCausalLM(Qwen2ForCausalLM, nn.Module):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
     def compute_logits(
         self,

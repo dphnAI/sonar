@@ -15,8 +15,8 @@ from transformers.feature_extraction_sequence_utils import SequenceFeatureExtrac
 from transformers.processing_utils import ProcessorMixin
 from transformers.utils import TensorType
 
-from aphrodite.logger import init_logger
-from aphrodite.utils.import_utils import LazyLoader
+from sonar.logger import init_logger
+from sonar.utils.import_utils import LazyLoader
 
 if TYPE_CHECKING:
     import kaldi_native_fbank as knf
@@ -189,7 +189,7 @@ class FireRedASR2FeatureExtractor(SequenceFeatureExtractor):
         for speech in raw_speech:
             """
             We must multiply by 32768 here because FireRedASR2 loads audio data
-            using kaldiio.load_mat, while Aphrodite loads audio data using pyav.
+            using kaldiio.load_mat, while Sonar loads audio data using pyav.
             """
             speech = speech * 32768
             fbank = self.fbank(sampling_rate, speech)

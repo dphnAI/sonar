@@ -3,7 +3,7 @@
 
 from fastapi.responses import Response
 
-from aphrodite.entrypoints.serve.utils.api_utils import create_json_response
+from sonar.entrypoints.serve.utils.api_utils import create_json_response
 
 from ..base.serving import PoolingServing
 from ..factories import init_pooling_io_processors

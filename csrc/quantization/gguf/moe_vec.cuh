@@ -44,7 +44,7 @@ static __global__ void moe_vec_q(const void* __restrict__ vx,
   // sum up partial sums and write back result
 #pragma unroll
   for (int mask = WARP_SIZE / 2; mask > 0; mask >>= 1) {
-    tmp += APHRODITE_SHFL_XOR_SYNC(tmp, mask);
+    tmp += SONAR_SHFL_XOR_SYNC(tmp, mask);
   }
 
   if (threadIdx.x == 0) {

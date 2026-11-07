@@ -39,28 +39,28 @@ from transformers.models.whisper.modeling_whisper import (
     WhisperEncoder,
 )
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.multimodal import MultiModalDummyOptions
-from aphrodite.inputs import ModalityData, MultiModalDataDict
-from aphrodite.multimodal import MULTIMODAL_REGISTRY, MultiModalKwargsItems
-from aphrodite.multimodal.inputs import (
+from sonar.config import SonarConfig
+from sonar.config.multimodal import MultiModalDummyOptions
+from sonar.inputs import ModalityData, MultiModalDataDict
+from sonar.multimodal import MULTIMODAL_REGISTRY, MultiModalKwargsItems
+from sonar.multimodal.inputs import (
     MultiModalFieldConfig,
     NestedTensors,
 )
-from aphrodite.multimodal.parse import (
+from sonar.multimodal.parse import (
     AudioItem,
     AudioProcessorItems,
     DictEmbeddingItems,
     ModalityDataItems,
     MultiModalDataItems,
 )
-from aphrodite.multimodal.processing import (
+from sonar.multimodal.processing import (
     PromptReplacement,
     PromptUpdate,
     PromptUpdateDetails,
     cached_encode,
 )
-from aphrodite.utils.tensor_schema import TensorSchema, TensorShape
+from sonar.utils.tensor_schema import TensorSchema, TensorShape
 
 from .minicpmv import (
     _MAX_FRAMES_PER_VIDEO,
@@ -86,7 +86,7 @@ from .utils import (
 CPU_DEVICE = torch.device("cpu")
 
 if TYPE_CHECKING:
-    from aphrodite.transformers_utils.processors.minicpmo import MiniCPMOProcessor
+    from sonar.transformers_utils.processors.minicpmo import MiniCPMOProcessor
 
 if os.getenv("USE_FLAGOS") == "1":
     import flag_gems
@@ -288,7 +288,7 @@ class MiniCPMOProcessingInfo(MiniCPMVProcessingInfo):
         hf_processor = self.ctx.get_hf_processor(**kwargs)
         image_processor = self._get_checkpoint_image_processor(**kwargs)
 
-        from aphrodite.transformers_utils.processors.minicpmo import MiniCPMOProcessor
+        from sonar.transformers_utils.processors.minicpmo import MiniCPMOProcessor
 
         # Create vendored processor with correct configuration
         vendored_processor = MiniCPMOProcessor(
@@ -658,7 +658,7 @@ class MiniCPMOBaseModel(_MiniCPMOBaseModelBase):
     """Base mixin class for MiniCPM-O models with audio support."""
 
     # Unlike the vision-only MiniCPM-V models, audio weights are loaded here.
-    hf_to_aphrodite_mapper = WeightsMapper(orig_to_new_prefix={"tts": None})
+    hf_to_sonar_mapper = WeightsMapper(orig_to_new_prefix={"tts": None})
 
     packed_modules_mapping = {
         "qkv_proj": [
@@ -683,13 +683,13 @@ class MiniCPMOBaseModel(_MiniCPMOBaseModelBase):
 
         raise ValueError("Only image, video or audio modality is supported")
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
-        super().__init__(aphrodite_config=aphrodite_config, prefix=prefix)
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
+        super().__init__(sonar_config=sonar_config, prefix=prefix)
 
-        with self._mark_tower_model(aphrodite_config, "audio"):
-            self.apm = self.init_audio_module(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "apm"))
+        with self._mark_tower_model(sonar_config, "audio"):
+            self.apm = self.init_audio_module(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "apm"))
 
-    def init_audio_module(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def init_audio_module(self, *, sonar_config: SonarConfig, prefix: str = ""):
         # Do not use parameters temporarily
         audio_config = self.config.audio_config
         model = MiniCPMWhisperEncoder(audio_config)
@@ -701,7 +701,7 @@ class MiniCPMOBaseModel(_MiniCPMOBaseModelBase):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        loaded = loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        loaded = loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
         self._ensure_resampler_device()
         return loaded
 
@@ -897,21 +897,21 @@ class MiniCPMOBaseModel(_MiniCPMOBaseModelBase):
 class MiniCPMO2_6(MiniCPMOBaseModel, MiniCPMV2_6):
     """MiniCPM-O 2.6 model with Qwen2 backbone."""
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
-        super().__init__(aphrodite_config=aphrodite_config, prefix=prefix)
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
+        super().__init__(sonar_config=sonar_config, prefix=prefix)
 
-        with self._mark_tower_model(aphrodite_config, "audio"):
-            self.apm = self.init_audio_module(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "apm"))
+        with self._mark_tower_model(sonar_config, "audio"):
+            self.apm = self.init_audio_module(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "apm"))
 
 
 class MiniCPMO4_5(MiniCPMOBaseModel, MiniCPMV4_5):
     """MiniCPM-O 4.5 model with Qwen3 backbone."""
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
-        super().__init__(aphrodite_config=aphrodite_config, prefix=prefix)
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
+        super().__init__(sonar_config=sonar_config, prefix=prefix)
 
-        with self._mark_tower_model(aphrodite_config, "audio"):
-            self.apm = self.init_audio_module(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "apm"))
+        with self._mark_tower_model(sonar_config, "audio"):
+            self.apm = self.init_audio_module(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "apm"))
 
 
 _MINICPMO_SUPPORT_VERSION = {
@@ -932,8 +932,8 @@ class MiniCPMO(MiniCPMOBaseModel, MiniCPMV2_6):
     - Version 4.5: Uses Qwen3
     """
 
-    def __new__(cls, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
-        config = aphrodite_config.model_config.hf_config
+    def __new__(cls, *, sonar_config: SonarConfig, prefix: str = ""):
+        config = sonar_config.model_config.hf_config
 
         # Determine version from config
         if hasattr(config, "version"):
@@ -962,8 +962,8 @@ class MiniCPMO(MiniCPMOBaseModel, MiniCPMV2_6):
                 f"Currently, MiniCPMO only supports versions {supported_versions}. Got version: {version_values}"
             )
 
-        return instance_cls(aphrodite_config=aphrodite_config, prefix=prefix)
+        return instance_cls(sonar_config=sonar_config, prefix=prefix)
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         # This __init__ won't be called due to __new__ returning a different class
         pass

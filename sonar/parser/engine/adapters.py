@@ -14,22 +14,22 @@ from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from typing import TYPE_CHECKING
 
-from aphrodite.parser.engine.parser_engine_config import ParserState
-from aphrodite.reasoning.abs_reasoning_parsers import ReasoningParser
-from aphrodite.tool_parsers.abstract_tool_parser import ToolParser
+from sonar.parser.engine.parser_engine_config import ParserState
+from sonar.reasoning.abs_reasoning_parsers import ReasoningParser
+from sonar.tool_parsers.abstract_tool_parser import ToolParser
 
 if TYPE_CHECKING:
-    from aphrodite.entrypoints.generate.base.protocol import (
+    from sonar.entrypoints.generate.base.protocol import (
         DeltaMessage,
         ExtractedToolCallInformation,
     )
-    from aphrodite.entrypoints.openai.chat_completion.protocol import (
+    from sonar.entrypoints.openai.chat_completion.protocol import (
         ChatCompletionRequest,
     )
-    from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
-    from aphrodite.parser.engine.parser_engine import ParserEngine, ReasoningEnd
-    from aphrodite.tokenizers import TokenizerLike
-    from aphrodite.tool_parsers.utils import Tool
+    from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
+    from sonar.parser.engine.parser_engine import ParserEngine, ReasoningEnd
+    from sonar.tokenizers import TokenizerLike
+    from sonar.tool_parsers.utils import Tool
 
 
 class ParserEngineReasoningAdapter(ReasoningParser):
@@ -164,7 +164,7 @@ class ParserEngineToolAdapter(ToolParser):
     :meth:`ReasoningParser.extract_reasoning`).
 
     When no reasoning parser is configured at the serving layer, the
-    owning :class:`~aphrodite.parser.abstract_parser.Parser` sets
+    owning :class:`~sonar.parser.abstract_parser.Parser` sets
     :attr:`skip_reasoning_parsing` so reasoning markup — plain content
     in that configuration — passes through verbatim instead of being
     consumed or reclassified by the engine. The engine honors the flag

@@ -11,17 +11,17 @@ from torch import fx
 from torch._higher_order_ops.auto_functionalize import auto_functionalized
 from torch._inductor.pattern_matcher import PatternMatcherPass
 
-import aphrodite.ir.ops
-from aphrodite.config import AphroditeConfig, get_layers_from_aphrodite_config
-from aphrodite.config.utils import Range
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.attention.attention import (
+import sonar.ir.ops
+from sonar.config import SonarConfig, get_layers_from_sonar_config
+from sonar.config.utils import Range
+from sonar.logger import init_logger
+from sonar.model_executor.layers.attention.attention import (
     Attention,
     get_attention_context,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import GroupShape
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import GroupShape
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import (
     _USE_LAYERNAME,
     LayerNameType,
     _encode_layer_name,
@@ -29,8 +29,8 @@ from aphrodite.utils.torch_utils import (
     direct_register_custom_op,
 )
 
-from ..aphrodite_inductor_pass import AphroditeInductorPass, AphroditePatternMatcherPass
 from ..inductor_pass import enable_fake_mode
+from ..sonar_inductor_pass import SonarInductorPass, SonarPatternMatcherPass
 from .matcher_utils import MROPE_OP, MatcherMRotaryEmbedding, MatcherRotaryEmbedding
 from .rms_quant_fusion import empty_bf16, empty_fp32, empty_i64
 
@@ -181,7 +181,7 @@ class QkNormRopeKvCachePattern:
     AITER's fused QK-norm/RoPE/cache kernel.
     """
 
-    FUSED_OP = torch.ops.aphrodite.fused_qk_norm_rope_and_unified_kv_cache_update.default
+    FUSED_OP = torch.ops.sonar.fused_qk_norm_rope_and_unified_kv_cache_update.default
 
     def __init__(
         self,
@@ -241,11 +241,11 @@ class QkNormRopeKvCachePattern:
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         q, k, v = qkv.split([self.q_size, self.k_size, self.v_size], dim=-1)
         q_by_head = q.view(-1, self.num_heads, self.head_size)
-        q_normed = aphrodite.ir.ops.rms_norm(q_by_head, q_weight, self.eps)
+        q_normed = sonar.ir.ops.rms_norm(q_by_head, q_weight, self.eps)
         q_flat = q_normed.view(-1, self.q_size)
 
         k_by_head = k.view(-1, self.num_kv_heads, self.head_size)
-        k_normed = aphrodite.ir.ops.rms_norm(k_by_head, k_weight, self.eps)
+        k_normed = sonar.ir.ops.rms_norm(k_by_head, k_weight, self.eps)
         k_flat = k_normed.view(-1, self.k_size)
 
         q_rope, k_rope = self.rope_matcher(positions, q_flat, k_flat, cos_sin_cache)
@@ -253,7 +253,7 @@ class QkNormRopeKvCachePattern:
         q_rope = q_rope.view(-1, self.num_heads, self.head_size)
         k_rope = k_rope.view(-1, self.num_kv_heads, self.head_size)
         v = v.view(-1, self.num_kv_heads, self.head_size_v)
-        dummy = torch.ops.aphrodite.unified_kv_cache_update(k_rope, v, self._get_layer_name(layer_name))
+        dummy = torch.ops.sonar.unified_kv_cache_update(k_rope, v, self._get_layer_name(layer_name))
         return dummy, q_rope, k_rope, v
 
     def replacement_non_fp8_quant_query(
@@ -304,7 +304,7 @@ class QkNormRopeKvCachePattern:
         if self.query_quant_group_shape.is_per_tensor():
             q_out = torch.empty_like(query, dtype=current_platform.fp8_dtype())
             q_quant = auto_functionalized(
-                torch.ops.aphrodite.rocm_aiter_per_tensor_quant.default,
+                torch.ops.sonar.rocm_aiter_per_tensor_quant.default,
                 out=q_out,
                 x=query,
                 scale=q_scale,
@@ -347,11 +347,11 @@ class QkNormRopeKvCachePattern:
     ) -> tuple[torch.Tensor, ...]:
         q, k, v = qkv.split([self.q_size, self.k_size, self.v_size], dim=-1)
         q_by_head = q.view(-1, self.num_heads, self.head_size)
-        q_normed = aphrodite.ir.ops.rms_norm(q_by_head, q_weight, self.eps)
+        q_normed = sonar.ir.ops.rms_norm(q_by_head, q_weight, self.eps)
         q_flat = q_normed.view(-1, self.q_size)
 
         k_by_head = k.view(-1, self.num_kv_heads, self.head_size)
-        k_normed = aphrodite.ir.ops.rms_norm(k_by_head, k_weight, self.eps)
+        k_normed = sonar.ir.ops.rms_norm(k_by_head, k_weight, self.eps)
         k_flat = k_normed.view(-1, self.k_size)
 
         q_rope, k_rope = self.rope_matcher(positions, q_flat, k_flat, cos_sin_cache)
@@ -359,7 +359,7 @@ class QkNormRopeKvCachePattern:
 
         k_rope = k_rope.view(-1, self.num_kv_heads, self.head_size)
         v = v.view(-1, self.num_kv_heads, self.head_size_v)
-        dummy = torch.ops.aphrodite.unified_kv_cache_update(k_rope, v, self._get_layer_name(layer_name))
+        dummy = torch.ops.sonar.unified_kv_cache_update(k_rope, v, self._get_layer_name(layer_name))
         if q_scale_out is None:
             return dummy, q_rope_fp8, k_rope, v
         return dummy, q_rope_fp8, k_rope, v, q_scale_out
@@ -563,7 +563,7 @@ class QkNormRopeKvCachePattern:
 
 
 class QkNormMRopeKvCachePattern(QkNormRopeKvCachePattern):
-    FUSED_OP = torch.ops.aphrodite.fused_qk_norm_mrope_and_unified_kv_cache_update.default
+    FUSED_OP = torch.ops.sonar.fused_qk_norm_mrope_and_unified_kv_cache_update.default
 
     def __init__(
         self,
@@ -707,7 +707,7 @@ class QkNormMRopeKvCachePattern(QkNormRopeKvCachePattern):
         if len(output_nodes) < 3 or output_nodes[2] is None:
             return False
         matched_nodes = set(match.nodes)
-        attention_op = torch.ops.aphrodite.unified_attention_with_output.default
+        attention_op = torch.ops.sonar.unified_attention_with_output.default
 
         def is_unified_attention_user(user: fx.Node) -> bool:
             return user.op == "call_function" and (
@@ -718,7 +718,7 @@ class QkNormMRopeKvCachePattern(QkNormRopeKvCachePattern):
 
 
 def _discover_mrope_configs(
-    config: AphroditeConfig,
+    config: SonarConfig,
 ) -> tuple[tuple[tuple[int, int, int], bool], ...]:
     model_config = config.model_config
     hf_configs = (
@@ -756,11 +756,11 @@ def _discover_mrope_configs(
     return tuple(sorted(configs))
 
 
-class QkNormRopeKvCacheFusionPass(AphroditePatternMatcherPass):
+class QkNormRopeKvCacheFusionPass(SonarPatternMatcherPass):
     """Fuse QK-norm + RoPE/MRoPE + KV cache update into an AITER HIP kernel."""
 
     @enable_fake_mode
-    def __init__(self, config: AphroditeConfig) -> None:
+    def __init__(self, config: SonarConfig) -> None:
         super().__init__(config)
 
         self.patterns: PatternMatcherPass = PatternMatcherPass(pass_name="qk_norm_rope_kvcache_fusion_pass")
@@ -777,7 +777,7 @@ class QkNormRopeKvCacheFusionPass(AphroditePatternMatcherPass):
             )
             return
 
-        attn_layers = get_layers_from_aphrodite_config(config, Attention)
+        attn_layers = get_layers_from_sonar_config(config, Attention)
         patterns_registered = False
         for _, layer in attn_layers.items():
             supports_rope = layer.impl.fused_qk_norm_rope_kvcache_supported()
@@ -866,7 +866,7 @@ class QkNormRopeKvCacheFusionPass(AphroditePatternMatcherPass):
 
         self.dump_patterns(config, self.patterns)
 
-    @AphroditeInductorPass.time_and_log
+    @SonarInductorPass.time_and_log
     def __call__(self, graph: fx.Graph) -> None:
         self.matched_count = self.patterns.apply(graph)
         logger.info(
@@ -878,7 +878,7 @@ class QkNormRopeKvCacheFusionPass(AphroditePatternMatcherPass):
         return compile_range.end <= self.max_token_num
 
     def uuid(self) -> str:
-        return AphroditeInductorPass.hash_source(
+        return SonarInductorPass.hash_source(
             self,
             QkNormRopeKvCachePattern,
             QkNormMRopeKvCachePattern,

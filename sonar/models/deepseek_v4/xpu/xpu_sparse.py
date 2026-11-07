@@ -11,25 +11,25 @@ from typing import TYPE_CHECKING, cast
 
 import torch
 
-from aphrodite.forward_context import get_forward_context
-from aphrodite.models.deepseek_v4.attention import DeepseekV4Attention
-from aphrodite.models.deepseek_v4.common.ops import (
+from sonar.forward_context import get_forward_context
+from sonar.models.deepseek_v4.attention import DeepseekV4Attention
+from sonar.models.deepseek_v4.common.ops import (
     combine_topk_swa_indices,
     compute_global_topk_indices_and_lens,
     dequantize_and_gather_k_cache,
 )
-from aphrodite.models.deepseek_v4.sparse_mla import (
+from sonar.models.deepseek_v4.sparse_mla import (
     DeepseekV4FlashMLAMetadata,
     DeepseekV4SparseMLABackend,
 )
-from aphrodite.models.deepseek_v4.xpu.xpu_sparse_decode_fp8 import (
+from sonar.models.deepseek_v4.xpu.xpu_sparse_decode_fp8 import (
     xpu_sparse_decode_fp8,
 )
-from aphrodite.v1.attention.ops.xpu_mla_sparse import triton_bf16_mla_sparse_interface
-from aphrodite.v1.worker.workspace import current_workspace_manager
+from sonar.v1.attention.ops.xpu_mla_sparse import triton_bf16_mla_sparse_interface
+from sonar.v1.worker.workspace import current_workspace_manager
 
 if TYPE_CHECKING:
-    from aphrodite.v1.attention.backends.mla.sparse_swa import DeepseekSparseSWAMetadata
+    from sonar.v1.attention.backends.mla.sparse_swa import DeepseekSparseSWAMetadata
 
 
 class DeepseekV4XPUSparseBackend(DeepseekV4SparseMLABackend):
@@ -57,7 +57,7 @@ class DeepseekV4XPUAttention(DeepseekV4Attention):
         )
         assert swa_metadata is not None
 
-        from aphrodite.models.deepseek_v4.xpu.xpu_qnorm_rope_kv_fp8_insert import (
+        from sonar.models.deepseek_v4.xpu.xpu_qnorm_rope_kv_fp8_insert import (
             xpu_qnorm_rope_kv_fp8_insert,
         )
 
@@ -78,7 +78,7 @@ class DeepseekV4XPUAttention(DeepseekV4Attention):
         return num_heads
 
     def _o_proj(self, o: torch.Tensor, positions: torch.Tensor) -> torch.Tensor:
-        from aphrodite.models.deepseek_v4.common.ops.fused_inv_rope_fp8_quant import (
+        from sonar.models.deepseek_v4.common.ops.fused_inv_rope_fp8_quant import (
             fused_inv_rope_fp8_quant,
         )
 
@@ -99,7 +99,7 @@ class DeepseekV4XPUAttention(DeepseekV4Attention):
 
         # TODO: optimize fused_inv_rope_fp8_quant for xpu bmm to
         # eliminate o_scale transpose + contiguous
-        z = torch.ops.aphrodite.xpu_fp8_bmm(
+        z = torch.ops.sonar.xpu_fp8_bmm(
             o_fp8.transpose(0, 1),
             wo_a_weight,
             torch.bfloat16,

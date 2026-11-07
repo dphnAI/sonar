@@ -5,8 +5,8 @@ from abc import ABC
 from dataclasses import field
 from typing import Any
 
-from aphrodite.config.utils import config
-from aphrodite.utils.import_utils import resolve_obj_by_qualname
+from sonar.config.utils import config
+from sonar.utils.import_utils import resolve_obj_by_qualname
 
 
 @config

@@ -7,17 +7,17 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.config import AphroditeConfig, CacheConfig, KVTransferConfig
-from aphrodite.platforms.cpu import CpuPlatform
+from sonar.config import CacheConfig, KVTransferConfig, SonarConfig
+from sonar.platforms.cpu import CpuPlatform
 
 
 class _FakeModel:
     @classmethod
-    def get_mamba_state_dtype_from_config(cls, aphrodite_config: AphroditeConfig) -> tuple[torch.dtype, torch.dtype]:
+    def get_mamba_state_dtype_from_config(cls, sonar_config: SonarConfig) -> tuple[torch.dtype, torch.dtype]:
         state_dtype = {
             "float16": torch.float16,
             "bfloat16": torch.bfloat16,
-        }.get(aphrodite_config.cache_config.mamba_ssm_cache_dtype, torch.float32)
+        }.get(sonar_config.cache_config.mamba_ssm_cache_dtype, torch.float32)
         return torch.float32, state_dtype
 
 
@@ -49,7 +49,7 @@ def _cpu_config(
         ),
         registry=_FakeRegistry,
     )
-    config = AphroditeConfig(cache_config=cache_config)
+    config = SonarConfig(cache_config=cache_config)
     config.model_config = model_config
     cache_config.mamba_ssm_cache_dtype = resolved_dtype
     return config
@@ -195,7 +195,7 @@ def test_cpu_conv_state_layout_selection(
     avx512_bf16_supported: bool,
     expected_layout: str | None,
 ) -> None:
-    layout_env = "APHRODITE_SSM_CONV_STATE_LAYOUT"
+    layout_env = "SONAR_SSM_CONV_STATE_LAYOUT"
     monkeypatch.setattr(
         "torch.cpu._is_avx512_bf16_supported",
         lambda: avx512_bf16_supported,

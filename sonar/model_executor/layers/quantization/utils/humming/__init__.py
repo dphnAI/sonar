@@ -2,16 +2,16 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Humming quantization integration."""
 
-from aphrodite.model_executor.layers.quantization.utils.humming.activation import (
+from sonar.model_executor.layers.quantization.utils.humming.activation import (
     get_humming_activation,
 )
-from aphrodite.model_executor.layers.quantization.utils.humming.linear import (
+from sonar.model_executor.layers.quantization.utils.humming.linear import (
     apply_humming_linear,
     convert_linear_layer_to_humming_standard,
     get_humming_linear_compute_config,
     prepare_humming_linear_layer_config,
 )
-from aphrodite.model_executor.layers.quantization.utils.humming.moe import (
+from sonar.model_executor.layers.quantization.utils.humming.moe import (
     HummingMoEQuantConfig,
     convert_to_humming_moe_kernel_format,
     get_humming_moe_quant_config,
@@ -19,11 +19,11 @@ from aphrodite.model_executor.layers.quantization.utils.humming.moe import (
     make_humming_moe_quant_config,
     select_humming_moe_experts,
 )
-from aphrodite.model_executor.layers.quantization.utils.humming.priority import (
+from sonar.model_executor.layers.quantization.utils.humming.priority import (
     prefers_humming,
     prioritize_humming,
 )
-from aphrodite.model_executor.layers.quantization.utils.humming.schema import (
+from sonar.model_executor.layers.quantization.utils.humming.schema import (
     check_and_fallback_input_schema,
     humming_is_layer_skipped,
     humming_update_schema_hadamard_block_size,

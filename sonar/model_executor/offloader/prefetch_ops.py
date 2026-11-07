@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import torch
 
-from aphrodite.model_executor.offloader.base import get_offloader
-from aphrodite.utils.torch_utils import direct_register_custom_op
+from sonar.model_executor.offloader.base import get_offloader
+from sonar.utils.torch_utils import direct_register_custom_op
 
 # --- wait_prefetch op ---
 

@@ -11,22 +11,22 @@ from torch.nn import functional as F
 from transformers import Siglip2VisionConfig
 from transformers.configuration_utils import PreTrainedConfig
 
-from aphrodite.distributed import divide, get_tensor_model_parallel_world_size
-from aphrodite.model_executor.layers.activation import get_act_fn
-from aphrodite.model_executor.layers.attention import MMEncoderAttention
-from aphrodite.model_executor.layers.conv import Conv2dLayer
-from aphrodite.model_executor.layers.linear import (
+from sonar.distributed import divide, get_tensor_model_parallel_world_size
+from sonar.model_executor.layers.activation import get_act_fn
+from sonar.model_executor.layers.attention import MMEncoderAttention
+from sonar.model_executor.layers.conv import Conv2dLayer
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     LinearBase,
     QKVParallelLinear,
     ReplicatedLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.rotary_embedding.common import (
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.rotary_embedding.common import (
     ApplyRotaryEmb,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 from .utils import AutoWeightsLoader, WeightsMapper, maybe_prefix
 from .vision import is_vit_use_data_parallel
@@ -559,7 +559,7 @@ class Siglip2VisionTransformer(nn.Module):
 
 
 class Siglip2NavitModel(torch.nn.Module):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_stacked={
             ".q_proj": (".qkv_proj", "q"),
             ".k_proj": (".qkv_proj", "k"),
@@ -593,4 +593,4 @@ class Siglip2NavitModel(torch.nn.Module):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)

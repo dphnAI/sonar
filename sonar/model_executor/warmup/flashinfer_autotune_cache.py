@@ -9,13 +9,13 @@ from contextlib import suppress
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import aphrodite.envs as envs
-from aphrodite.config import AphroditeConfig, CacheConfig, replace
-from aphrodite.logger import init_logger
+import sonar.envs as envs
+from sonar.config import CacheConfig, SonarConfig, replace
+from sonar.logger import init_logger
 
 if TYPE_CHECKING:
-    from aphrodite.distributed.parallel_state import GroupCoordinator
-    from aphrodite.v1.worker.gpu_model_runner import GPUModelRunner
+    from sonar.distributed.parallel_state import GroupCoordinator
+    from sonar.v1.worker.gpu_model_runner import GPUModelRunner
 
 logger = init_logger(__name__)
 
@@ -30,24 +30,24 @@ def _normalize_cache_config_for_hash(cache_config: CacheConfig) -> CacheConfig:
 
 
 def flashinfer_autotune_cache_hash(runner: "GPUModelRunner") -> str:
-    aphrodite_config: AphroditeConfig = runner.aphrodite_config
-    cache_config = _normalize_cache_config_for_hash(aphrodite_config.cache_config)
-    if cache_config is not aphrodite_config.cache_config:
-        aphrodite_config = replace(aphrodite_config, cache_config=cache_config)
-    config_hash = aphrodite_config.compute_hash(include_version=False)
+    sonar_config: SonarConfig = runner.sonar_config
+    cache_config = _normalize_cache_config_for_hash(sonar_config.cache_config)
+    if cache_config is not sonar_config.cache_config:
+        sonar_config = replace(sonar_config, cache_config=cache_config)
+    config_hash = sonar_config.compute_hash(include_version=False)
     return hashlib.sha256(config_hash.encode()).hexdigest()
 
 
 def flashinfer_autotune_root() -> Path:
     """Root directory of the FlashInfer autotune cache (no runner needed)."""
-    override_dir = envs.APHRODITE_FLASHINFER_AUTOTUNE_CACHE_DIR
+    override_dir = envs.SONAR_FLASHINFER_AUTOTUNE_CACHE_DIR
     if override_dir:
         return Path(override_dir).expanduser()
     from flashinfer.jit import env as flashinfer_jit_env
 
     flashinfer_workspace = flashinfer_jit_env.FLASHINFER_WORKSPACE_DIR
     return (
-        Path(envs.APHRODITE_CACHE_ROOT)
+        Path(envs.SONAR_CACHE_ROOT)
         / "flashinfer_autotune_cache"
         / flashinfer_workspace.parent.name
         / flashinfer_workspace.name
@@ -67,24 +67,24 @@ def resolve_flashinfer_autotune_file(runner: "GPUModelRunner") -> Path:
 
 def resolve_rank_flashinfer_autotune_file(runner: "GPUModelRunner") -> Path:
     """The per-rank variant of :func:`resolve_flashinfer_autotune_file`."""
-    from aphrodite.distributed.parallel_state import get_world_group
+    from sonar.distributed.parallel_state import get_world_group
 
     path = resolve_flashinfer_autotune_file(runner)
-    dp_rank = runner.aphrodite_config.parallel_config.data_parallel_rank
+    dp_rank = runner.sonar_config.parallel_config.data_parallel_rank
     return path.with_name(flashinfer_autotune_filename(dp_rank, get_world_group().rank_in_group))
 
 
 def use_flashinfer_autotune_v2(runner: "GPUModelRunner") -> bool:
-    from aphrodite.distributed.parallel_state import get_node_count, get_world_group
-    from aphrodite.utils.flashinfer import has_flashinfer_autotune_v2
+    from sonar.distributed.parallel_state import get_node_count, get_world_group
+    from sonar.utils.flashinfer import has_flashinfer_autotune_v2
 
     # Elastic EP transfers tuning state to joining workers with v1
     # save_configs/load_configs, which do not export managed-store winners.
-    if runner.aphrodite_config.parallel_config.enable_elastic_ep:
+    if runner.sonar_config.parallel_config.enable_elastic_ep:
         return False
     # PP stages profile independently. Keep their group-scoped v1 files until
     # managed-cache reads and publishes can be isolated across tuning groups.
-    if runner.aphrodite_config.parallel_config.pipeline_parallel_size > 1:
+    if runner.sonar_config.parallel_config.pipeline_parallel_size > 1:
         return False
     if not has_flashinfer_autotune_v2():
         return False
@@ -112,12 +112,12 @@ def use_flashinfer_autotune_v2(runner: "GPUModelRunner") -> bool:
 def resolve_flashinfer_autotune_v2_root() -> Path | None:
     """Placement root for FlashInfer's managed autotune store.
 
-    Unlike :func:`resolve_flashinfer_autotune_file`, no Aphrodite-side identity
+    Unlike :func:`resolve_flashinfer_autotune_file`, no Sonar-side identity
     (config hash, flashinfer version, arch) is folded into the path: the
     managed store keys entries per op and hashes the software/hardware
     environment itself. ``None`` selects FlashInfer's default root.
     """
-    override_dir = envs.APHRODITE_FLASHINFER_AUTOTUNE_CACHE_DIR
+    override_dir = envs.SONAR_FLASHINFER_AUTOTUNE_CACHE_DIR
     return Path(override_dir).expanduser() if override_dir else None
 
 
@@ -126,10 +126,10 @@ def sync_flashinfer_autotune_cache(
     group: "GroupCoordinator",
 ) -> None:
     cache: bytes | str | None = None
-    if group.rank_in_group == 0 and runner.aphrodite_config.kernel_config.enable_flashinfer_autotune:
+    if group.rank_in_group == 0 and runner.sonar_config.kernel_config.enable_flashinfer_autotune:
         try:
-            from aphrodite.platforms import current_platform
-            from aphrodite.utils.flashinfer import has_flashinfer
+            from sonar.platforms import current_platform
+            from sonar.utils.flashinfer import has_flashinfer
 
             if has_flashinfer() and current_platform.has_device_capability(90):
                 from flashinfer.autotuner import AutoTuner

@@ -9,7 +9,7 @@ import torch
 import torch.distributed as dist
 from torch.distributed import ProcessGroup
 
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 
@@ -40,7 +40,7 @@ class All2AllManagerBase:
         self.tcp_store_group = tcp_store_group
 
         # compute some common properties
-        from aphrodite.distributed.parallel_state import (
+        from sonar.distributed.parallel_state import (
             get_dp_group,
             get_tp_group,
             in_the_same_node_as,
@@ -234,9 +234,9 @@ class DeviceCommunicatorBase:
             self.rank_in_group = dist.get_group_rank(self.cpu_group, self.global_rank)
 
         all2all_backend = None
-        from aphrodite.config import get_current_aphrodite_config_or_none
+        from sonar.config import get_current_sonar_config_or_none
 
-        config = get_current_aphrodite_config_or_none()
+        config = get_current_sonar_config_or_none()
         if config is not None:
             all2all_backend = config.parallel_config.all2all_backend
 

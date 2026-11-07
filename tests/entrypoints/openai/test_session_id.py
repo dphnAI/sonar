@@ -4,10 +4,10 @@
 import pytest
 from starlette.requests import Request
 
-from aphrodite.entrypoints.generate.base.serving import GenerateBaseServing
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-from aphrodite.entrypoints.openai.completion.protocol import CompletionRequest
-from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
+from sonar.entrypoints.generate.base.serving import GenerateBaseServing
+from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+from sonar.entrypoints.openai.completion.protocol import CompletionRequest
+from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
 
 
 def _raw_request(headers: dict[str, str]) -> Request:
@@ -58,7 +58,7 @@ def test_get_session_id_ignores_correlation_header():
     request = CompletionRequest(
         model="test-model",
         prompt="hi",
-        aphrodite_xargs={"session_id": "xargs-session"},
+        sonar_xargs={"session_id": "xargs-session"},
     )
 
     session_id = GenerateBaseServing._get_session_id(
@@ -69,11 +69,11 @@ def test_get_session_id_ignores_correlation_header():
     assert session_id == "xargs-session"
 
 
-def test_get_session_id_keeps_aphrodite_xargs_as_compatibility_fallback():
+def test_get_session_id_keeps_sonar_xargs_as_compatibility_fallback():
     request = CompletionRequest(
         model="test-model",
         prompt="hi",
-        aphrodite_xargs={"session_id": "xargs-session"},
+        sonar_xargs={"session_id": "xargs-session"},
     )
 
     session_id = GenerateBaseServing._get_session_id(request, None)
@@ -86,7 +86,7 @@ def test_get_session_id_ignores_empty_and_non_string_values():
         model="test-model",
         prompt="hi",
         session_id="",
-        aphrodite_xargs={"session_id": 7},
+        sonar_xargs={"session_id": 7},
     )
 
     session_id = GenerateBaseServing._get_session_id(request, None)

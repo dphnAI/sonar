@@ -14,28 +14,28 @@ import pytest
 import pytest_asyncio
 from fastapi.responses import JSONResponse
 
-from aphrodite.entrypoints.anthropic.protocol import (
+from sonar.entrypoints.anthropic.protocol import (
     AnthropicCountTokensRequest,
     AnthropicMessagesRequest,
 )
-from aphrodite.entrypoints.anthropic.serving import (
+from sonar.entrypoints.anthropic.serving import (
     AnthropicServingMessages,
     DisabledThinkingEffortResolver,
 )
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-from aphrodite.entrypoints.openai.completion.protocol import CompletionRequest
-from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
-from aphrodite.entrypoints.scale_out.render.api_router import router
-from aphrodite.entrypoints.scale_out.render.serving import ServingRender
-from aphrodite.entrypoints.scale_out.token_in_token_out.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+from sonar.entrypoints.openai.completion.protocol import CompletionRequest
+from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
+from sonar.entrypoints.scale_out.render.api_router import router
+from sonar.entrypoints.scale_out.render.serving import ServingRender
+from sonar.entrypoints.scale_out.token_in_token_out.protocol import (
     GenerateRequest,
     MultiModalFeatures,
     PlaceholderRangeInfo,
 )
-from aphrodite.entrypoints.serve.engine.protocol import ErrorResponse
-from aphrodite.entrypoints.serve.utils.api_utils import create_json_response
-from aphrodite.renderers.online_renderer import OnlineRenderer
-from aphrodite.sampling_params import SamplingParams
+from sonar.entrypoints.serve.engine.protocol import ErrorResponse
+from sonar.entrypoints.serve.utils.api_utils import create_json_response
+from sonar.renderers.online_renderer import OnlineRenderer
+from sonar.sampling_params import SamplingParams
 from tests.utils import RemoteLaunchRenderServer
 
 MODEL_NAME = "hmellor/tiny-random-LlamaForCausalLM"
@@ -137,7 +137,7 @@ async def test_render_messages_resolves_disabled_thinking(configured_effort, thi
 @pytest.mark.asyncio
 @pytest.mark.skip_global_cleanup
 async def test_scale_out_reuses_token_counting_effort_probe():
-    from aphrodite.entrypoints.scale_out.factories import init_scale_out_state
+    from sonar.entrypoints.scale_out.factories import init_scale_out_state
 
     renderer = MagicMock()
     renderer.model_config.is_encoder_decoder = False
@@ -263,7 +263,7 @@ async def test_render_chat_hoists_transfer_params_out_of_extra_args():
         messages=[{"role": "user", "content": "Test prompt"}],
         kv_transfer_params={"do_remote_prefill": True},
         ec_transfer_params={"remote": True},
-        aphrodite_xargs={"foo": 1},
+        sonar_xargs={"foo": 1},
     )
 
     response = await serving.render_chat_request(request)

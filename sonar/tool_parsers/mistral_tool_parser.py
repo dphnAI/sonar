@@ -5,15 +5,15 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from aphrodite.parser.engine.registered_adapters import MistralParserToolAdapter
+from sonar.parser.engine.registered_adapters import MistralParserToolAdapter
 
 if TYPE_CHECKING:
-    from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-    from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
+    from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+    from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
 
 
 class MistralToolParser(MistralParserToolAdapter):  # type: ignore[valid-type, misc]
-    # Marked so is_mistral_tool_parser() in aphrodite.utils.mistral recognises
+    # Marked so is_mistral_tool_parser() in sonar.utils.mistral recognises
     # this adapter and lets adjust_request() fire for tool_choice="none"
     # on grammar-capable Mistral tokenizers.
     IS_MISTRAL_TOOL_PARSER = True

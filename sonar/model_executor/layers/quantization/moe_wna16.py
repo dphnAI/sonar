@@ -5,37 +5,37 @@ from typing import Any
 
 import torch
 
-from aphrodite.distributed import get_tensor_model_parallel_rank, get_tp_group
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.distributed import get_tensor_model_parallel_rank, get_tp_group
+from sonar.model_executor.layers.fused_moe import (
     FusedMoEConfig,
     FusedMoEMethodBase,
     FusedMoeWeightScaleSupported,
     RoutedExperts,
     SharedExperts,
 )
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEQuantConfig,
 )
-from aphrodite.model_executor.layers.fused_moe.oracle.int_wna16 import (
+from sonar.model_executor.layers.fused_moe.oracle.int_wna16 import (
     WNA16MoEBackend,
     convert_to_wna16_moe_kernel_format,
     make_wna16_moe_kernel,
     make_wna16_moe_quant_config,
     select_wna16_moe_backend,
 )
-from aphrodite.model_executor.layers.fused_moe.unquantized_fused_moe_method import (
+from sonar.model_executor.layers.fused_moe.unquantized_fused_moe_method import (
     UnquantizedFusedMoEMethod,
 )
-from aphrodite.model_executor.layers.linear import LinearBase, UnquantizedLinearMethod
-from aphrodite.model_executor.layers.quantization import QuantizationMethods
-from aphrodite.model_executor.layers.quantization.base_config import (
+from sonar.model_executor.layers.linear import LinearBase, UnquantizedLinearMethod
+from sonar.model_executor.layers.quantization import QuantizationMethods
+from sonar.model_executor.layers.quantization.base_config import (
     QuantizationConfig,
     QuantizeMethodBase,
 )
-from aphrodite.model_executor.layers.quantization.utils.gptq_utils import (
+from sonar.model_executor.layers.quantization.utils.gptq_utils import (
     normalize_and_validate_gptq_desc_act,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     INT4_DTYPE,
     INT8_DTYPE,
     QuantKey,
@@ -43,8 +43,8 @@ from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
     kInt4StaticGroupScale,
     kInt8StaticGroupScale,
 )
-from aphrodite.model_executor.utils import replace_parameter, set_weight_attrs
-from aphrodite.platforms import current_platform
+from sonar.model_executor.utils import replace_parameter, set_weight_attrs
+from sonar.platforms import current_platform
 
 
 class MoeWNA16Config(QuantizationConfig):
@@ -69,7 +69,7 @@ class MoeWNA16Config(QuantizationConfig):
         self.linear_quant_method = linear_quant_method
         self.full_config = full_config
         # Avoid circular import
-        from aphrodite.model_executor.layers.quantization.auto_awq import AutoAWQConfig
+        from sonar.model_executor.layers.quantization.auto_awq import AutoAWQConfig
 
         if self.linear_quant_method == "gptq":
             normalize_and_validate_gptq_desc_act(
@@ -163,7 +163,7 @@ class MoeWNA16Config(QuantizationConfig):
         capability_tuple = current_platform.get_device_capability()
         device_capability = -1 if capability_tuple is None else capability_tuple.to_int()
         # Avoid circular import
-        from aphrodite.model_executor.layers.quantization.auto_awq import AutoAWQConfig
+        from sonar.model_executor.layers.quantization.auto_awq import AutoAWQConfig
 
         awq_min_capability = AutoAWQConfig.get_min_capability()
 
@@ -179,8 +179,8 @@ class MoeWNA16Config(QuantizationConfig):
             return UnquantizedLinearMethod()
         elif isinstance(layer, LinearBase):
             # Avoid circular import
-            from aphrodite.model_executor.layers.quantization.auto_awq import AutoAWQConfig
-            from aphrodite.model_executor.layers.quantization.auto_gptq import (
+            from sonar.model_executor.layers.quantization.auto_awq import AutoAWQConfig
+            from sonar.model_executor.layers.quantization.auto_gptq import (
                 AutoGPTQConfig,
             )
 
@@ -367,7 +367,7 @@ class MoeWNA16Method(FusedMoEMethodBase):
 
     def get_fused_moe_quant_config(self, layer: RoutedExperts) -> FusedMoEQuantConfig | None:
         if self.wna16_backend == WNA16MoEBackend.HUMMING:
-            from aphrodite.model_executor.layers.quantization.utils.humming import (
+            from sonar.model_executor.layers.quantization.utils.humming import (
                 get_humming_moe_quant_config,
             )
 

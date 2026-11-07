@@ -11,23 +11,23 @@ from typing import Any
 
 import pytest
 
-from aphrodite.distributed.ec_transfer.ec_connector.utils import ECOutputAggregator
-from aphrodite.distributed.kv_transfer.kv_connector.utils import (
+from sonar.distributed.ec_transfer.ec_connector.utils import ECOutputAggregator
+from sonar.distributed.kv_transfer.kv_connector.utils import (
     KVConnectorOutput,
     KVOutputAggregator,
 )
-from aphrodite.engine.arg_utils import AsyncEngineArgs, EngineArgs
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.v1.engine.async_llm import AsyncLLM
-from aphrodite.v1.engine.llm_engine import LLMEngine
-from aphrodite.v1.executor import multiproc_executor as multiproc_executor_module
-from aphrodite.v1.executor.abstract import Executor
-from aphrodite.v1.executor.multiproc_executor import MultiprocExecutor, WorkerProc
-from aphrodite.v1.executor.uniproc_executor import (
+from sonar.engine.arg_utils import AsyncEngineArgs, EngineArgs
+from sonar.sampling_params import SamplingParams
+from sonar.v1.engine.async_llm import AsyncLLM
+from sonar.v1.engine.llm_engine import LLMEngine
+from sonar.v1.executor import multiproc_executor as multiproc_executor_module
+from sonar.v1.executor.abstract import Executor
+from sonar.v1.executor.multiproc_executor import MultiprocExecutor, WorkerProc
+from sonar.v1.executor.uniproc_executor import (
     ExecutorWithExternalLauncher,
     UniProcExecutor,
 )
-from aphrodite.v1.outputs import ModelRunnerOutput
+from sonar.v1.outputs import ModelRunnerOutput
 
 
 class Mock: ...
@@ -83,7 +83,7 @@ class _FakeProcess:
     ],
 )
 def test_multiproc_executor_worker_termination_timeout(monkeypatch, timeout, exits_at, expected_terminate):
-    monkeypatch.setenv("APHRODITE_WORKER_SHUTDOWN_TIMEOUT_SECONDS", str(timeout))
+    monkeypatch.setenv("SONAR_WORKER_SHUTDOWN_TIMEOUT_SECONDS", str(timeout))
     clock = _FakeClock()
     monkeypatch.setattr(multiproc_executor_module.time, "time", clock.time)
     monkeypatch.setattr(multiproc_executor_module.time, "sleep", clock.sleep)
@@ -221,7 +221,7 @@ class _FakeResponseMQ:
 
 def _make_failed_step_executor(enable_ft: bool) -> MultiprocExecutor:
     executor = MultiprocExecutor.__new__(MultiprocExecutor)
-    executor.aphrodite_config = SimpleNamespace(parallel_config=SimpleNamespace(enable_fault_tolerance=enable_ft))
+    executor.sonar_config = SimpleNamespace(parallel_config=SimpleNamespace(enable_fault_tolerance=enable_ft))
     executor.is_failed = False
     executor.rpc_broadcast_mq = SimpleNamespace(enqueue=lambda *_: None)
     executor.response_mqs = [

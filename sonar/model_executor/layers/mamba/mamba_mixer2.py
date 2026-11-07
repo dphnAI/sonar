@@ -9,67 +9,67 @@ from dataclasses import replace
 import torch
 from torch import nn
 
-from aphrodite.compilation.breakable_cudagraph import eager_break_during_capture
-from aphrodite.config import AphroditeConfig, CacheConfig, ModelConfig, get_current_aphrodite_config
-from aphrodite.config.mamba import MambaBackendEnum
-from aphrodite.distributed import (
+from sonar.compilation.breakable_cudagraph import eager_break_during_capture
+from sonar.config import CacheConfig, ModelConfig, SonarConfig, get_current_sonar_config
+from sonar.config.mamba import MambaBackendEnum
+from sonar.distributed import (
     divide,
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
     tensor_model_parallel_all_gather,
     tensor_model_parallel_all_reduce,
 )
-from aphrodite.forward_context import ForwardContext, get_forward_context
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.custom_op import CustomOp, PluggableLayer
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.layers.linear import (
+from sonar.forward_context import ForwardContext, get_forward_context
+from sonar.logger import init_logger
+from sonar.model_executor.custom_op import CustomOp, PluggableLayer
+from sonar.model_executor.layers.attention import Attention
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     MergedColumnParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.mamba.abstract import MambaBase
-from aphrodite.model_executor.layers.mamba.mamba_utils import (
+from sonar.model_executor.layers.mamba.abstract import MambaBase
+from sonar.model_executor.layers.mamba.mamba_utils import (
     MambaStateDtypeCalculator,
     MambaStateShapeCalculator,
     is_conv_state_dim_first,
 )
-from aphrodite.model_executor.layers.mamba.ops.causal_conv1d import (
+from sonar.model_executor.layers.mamba.ops.causal_conv1d import (
     causal_conv1d_fn,
     causal_conv1d_update,
 )
-from aphrodite.model_executor.layers.mamba.ops.layernorm_gated import rms_norm_gated
-from aphrodite.model_executor.layers.mamba.ops.selective_state_update_replayssm_output_only import (  # noqa: E501
+from sonar.model_executor.layers.mamba.ops.layernorm_gated import rms_norm_gated
+from sonar.model_executor.layers.mamba.ops.selective_state_update_replayssm_output_only import (  # noqa: E501
     selective_state_update_replayssm_output_only,
 )
-from aphrodite.model_executor.layers.mamba.ops.ssd_checkpoint import store_prefill_checkpoint
-from aphrodite.model_executor.layers.mamba.ops.ssd_combined import (
+from sonar.model_executor.layers.mamba.ops.ssd_checkpoint import store_prefill_checkpoint
+from sonar.model_executor.layers.mamba.ops.ssd_combined import (
     mamba_chunk_scan_combined_varlen,
 )
-from aphrodite.model_executor.layers.mamba.ops.ssu_dispatch import (
+from sonar.model_executor.layers.mamba.ops.ssu_dispatch import (
     commit_replayssm_ring_trackers,
     reset_replayssm_ring_trackers,
     selective_state_update,
     selective_state_update_replayssm_flashinfer,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.model_loader.weight_utils import (
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.model_loader.weight_utils import (
     LoaderFunction,
     composed_weight_loader,
     sharded_weight_loader,
 )
-from aphrodite.model_executor.parameter import BaseAphroditeParameter
-from aphrodite.model_executor.utils import set_weight_attrs
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import (
+from sonar.model_executor.parameter import BaseSonarParameter
+from sonar.model_executor.utils import set_weight_attrs
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import (
     LayerNameType,
     _encode_layer_name,
     _resolve_layer_name,
     direct_register_custom_op,
 )
-from aphrodite.v1.attention.backends.mamba2_attn import Mamba2AttentionMetadata
-from aphrodite.v1.attention.backends.registry import MambaAttentionBackendEnum
-from aphrodite.v1.kv_cache_interface import KVCacheGroupSpec, KVCacheSpec, MambaSpec
+from sonar.v1.attention.backends.mamba2_attn import Mamba2AttentionMetadata
+from sonar.v1.attention.backends.registry import MambaAttentionBackendEnum
+from sonar.v1.kv_cache_interface import KVCacheGroupSpec, KVCacheSpec, MambaSpec
 
 logger = init_logger(__name__)
 
@@ -445,11 +445,11 @@ class MambaMixer2(MambaBase, PluggableLayer):
 
             # Apply the custom weight loader to in_proj.weight and its scales.
             # Works for both non-quantized (Parameter) and quantized
-            # (ModelWeightParameter which extends BaseAphroditeParameter)
+            # (ModelWeightParameter which extends BaseSonarParameter)
             for attr_name in ("weight", "weight_scale", "input_scale"):
                 param = getattr(self.in_proj, attr_name, None)
                 if param is not None:
-                    if isinstance(param, BaseAphroditeParameter):
+                    if isinstance(param, BaseSonarParameter):
                         param.weight_loader = mamba_loader
                     else:
                         if hasattr(param, "weight_loader"):
@@ -505,8 +505,8 @@ class MambaMixer2(MambaBase, PluggableLayer):
             dim=-1,
         )
 
-        aphrodite_config = get_current_aphrodite_config()
-        compilation_config = aphrodite_config.compilation_config
+        sonar_config = get_current_sonar_config()
+        compilation_config = sonar_config.compilation_config
         if prefix in compilation_config.static_forward_context:
             raise ValueError(f"Duplicate layer name: {prefix}")
         compilation_config.static_forward_context[prefix] = self
@@ -518,7 +518,7 @@ class MambaMixer2(MambaBase, PluggableLayer):
         self.replayssm_buffer_len = (
             cache_config.replayssm_buffer_len if cache_config is not None and cache_config.use_replayssm else None
         )
-        self.mamba_config = aphrodite_config.mamba_config
+        self.mamba_config = sonar_config.mamba_config
         if self.use_replayssm and self.num_heads % self.tp_size != 0:
             raise ValueError("--use-replayssm requires tensor-parallel heads to divide evenly")
         # ReplaySSM appends x/dt/B rings to (conv_state, ssm_state).
@@ -530,7 +530,7 @@ class MambaMixer2(MambaBase, PluggableLayer):
         self._commits_replayssm_trackers = True
         self._updates_replayssm_trackers = True
 
-        self.num_spec = aphrodite_config.num_speculative_tokens
+        self.num_spec = sonar_config.num_speculative_tokens
 
         # Pre-compute sizes for forward pass
         self.tped_intermediate_size = self.intermediate_size // self.tp_size
@@ -573,7 +573,7 @@ class MambaMixer2(MambaBase, PluggableLayer):
         # 3. conv + SSM
         # (split `projected_states` into hidden_states_B_C, dt in the custom op to
         # ensure it is not treated as an intermediate tensor by torch compile)
-        torch.ops.aphrodite.mamba_mixer2(
+        torch.ops.sonar.mamba_mixer2(
             projected_states,
             ssm_output,
             _encode_layer_name(self.prefix),
@@ -1037,8 +1037,8 @@ class MambaMixer2(MambaBase, PluggableLayer):
                     is_blackwell=self.is_blackwell,
                 )
 
-    def get_kv_cache_spec(self, aphrodite_config: AphroditeConfig) -> KVCacheSpec | None:
-        spec = super().get_kv_cache_spec(aphrodite_config)
+    def get_kv_cache_spec(self, sonar_config: SonarConfig) -> KVCacheSpec | None:
+        spec = super().get_kv_cache_spec(sonar_config)
         if not isinstance(spec, MambaSpec):
             return spec
         # The block-boundary state can be exported from inside one forward

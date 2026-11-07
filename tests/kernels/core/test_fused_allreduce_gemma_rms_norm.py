@@ -12,19 +12,19 @@ import pytest
 import torch
 from torch.multiprocessing import spawn
 
-from aphrodite.distributed import cleanup_dist_env_and_memory
-from aphrodite.distributed.communication_op import tensor_model_parallel_all_reduce
-from aphrodite.model_executor.layers.fused_allreduce_gemma_rms_norm import (
+from sonar.distributed import cleanup_dist_env_and_memory
+from sonar.distributed.communication_op import tensor_model_parallel_all_reduce
+from sonar.model_executor.layers.fused_allreduce_gemma_rms_norm import (
     fused_allreduce_gemma_rms_norm,
 )
-from aphrodite.model_executor.layers.layernorm import GemmaRMSNorm
-from aphrodite.platforms import current_platform
-from aphrodite.utils.network_utils import get_open_port
-from aphrodite.utils.torch_utils import set_random_seed
-from tests.utils import ensure_current_aphrodite_config, init_test_distributed_environment
+from sonar.model_executor.layers.layernorm import GemmaRMSNorm
+from sonar.platforms import current_platform
+from sonar.utils.network_utils import get_open_port
+from sonar.utils.torch_utils import set_random_seed
+from tests.utils import ensure_current_sonar_config, init_test_distributed_environment
 
 
-@ensure_current_aphrodite_config()
+@ensure_current_sonar_config()
 def _worker_fused_ar_norm(
     local_rank,
     world_size,

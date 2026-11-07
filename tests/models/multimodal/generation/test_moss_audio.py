@@ -3,9 +3,9 @@
 
 import pytest
 
-from aphrodite.assets.audio import AudioAsset
-from aphrodite.model_executor.models.moss_audio import MOSS_AUDIO_PLACEHOLDER
-from aphrodite.platforms import current_platform
+from sonar.assets.audio import AudioAsset
+from sonar.model_executor.models.moss_audio import MOSS_AUDIO_PLACEHOLDER
+from sonar.platforms import current_platform
 
 from ...registry import HF_EXAMPLE_MODELS
 from ...utils import check_logprobs_close
@@ -35,12 +35,12 @@ PARALLEL_SMOKE_CASES = [
 
 HF_ACCURACY_SKIP_REASON = (
     "HF AutoModelForCausalLM cannot load remote MOSS-Audio configs; "
-    "Aphrodite generation coverage is provided by the smoke tests below."
+    "Sonar generation coverage is provided by the smoke tests below."
 )
 
 
 @pytest.mark.core_model
-def test_moss_audio_generation_smoke(aphrodite_runner) -> None:
+def test_moss_audio_generation_smoke(sonar_runner) -> None:
     model = "OpenMOSS-Team/MOSS-Audio-4B-Instruct"
     model_info = HF_EXAMPLE_MODELS.find_hf_info(model)
     model_info.check_available_online(on_fail="skip")
@@ -49,15 +49,15 @@ def test_moss_audio_generation_smoke(aphrodite_runner) -> None:
     prompts = [f"{MOSS_AUDIO_PLACEHOLDER}\nBriefly describe this audio."]
     audios = [[AudioAsset("mary_had_lamb").audio_and_sample_rate[0]]]
 
-    with aphrodite_runner(
+    with sonar_runner(
         model,
         dtype="half",
         enforce_eager=True,
         max_model_len=1024,
         limit_mm_per_prompt={"audio": 1},
         trust_remote_code=True,
-    ) as aphrodite_model:
-        outputs = aphrodite_model.generate_greedy(
+    ) as sonar_model:
+        outputs = sonar_model.generate_greedy(
             prompts,
             max_tokens=4,
             audios=audios,
@@ -72,9 +72,9 @@ def test_moss_audio_generation_smoke(aphrodite_runner) -> None:
 @pytest.mark.parametrize("dtype", ["half"])
 @pytest.mark.parametrize("max_tokens", [8])
 @pytest.mark.parametrize("num_logprobs", [5])
-def test_moss_audio_hf_aphrodite_accuracy(
+def test_moss_audio_hf_sonar_accuracy(
     hf_runner,
-    aphrodite_runner,
+    sonar_runner,
     model: str,
     dtype: str,
     max_tokens: int,
@@ -87,15 +87,15 @@ def test_moss_audio_hf_aphrodite_accuracy(
     prompts = [f"{MOSS_AUDIO_PLACEHOLDER}\nTranscribe this audio."]
     audios = [[AudioAsset("mary_had_lamb").audio_and_sample_rate[0]]]
 
-    with aphrodite_runner(
+    with sonar_runner(
         model,
         dtype=dtype,
         enforce_eager=True,
         max_model_len=1024,
         limit_mm_per_prompt={"audio": 1},
         trust_remote_code=True,
-    ) as aphrodite_model:
-        aphrodite_outputs = aphrodite_model.generate_greedy_logprobs(
+    ) as sonar_model:
+        sonar_outputs = sonar_model.generate_greedy_logprobs(
             prompts,
             max_tokens,
             num_logprobs=num_logprobs,
@@ -112,15 +112,15 @@ def test_moss_audio_hf_aphrodite_accuracy(
 
     check_logprobs_close(
         outputs_0_lst=hf_outputs,
-        outputs_1_lst=aphrodite_outputs,
+        outputs_1_lst=sonar_outputs,
         name_0="hf",
-        name_1="aphrodite",
+        name_1="sonar",
     )
 
 
 @pytest.mark.core_model
 @pytest.mark.parametrize("parallel_kwargs", PARALLEL_SMOKE_CASES)
-def test_moss_audio_parallel_smoke(aphrodite_runner, parallel_kwargs) -> None:
+def test_moss_audio_parallel_smoke(sonar_runner, parallel_kwargs) -> None:
     model = "OpenMOSS-Team/MOSS-Audio-4B-Instruct"
     required_gpus = parallel_kwargs.get("tensor_parallel_size", 1) * parallel_kwargs.get("pipeline_parallel_size", 1)
     if current_platform.device_count() < required_gpus:
@@ -134,7 +134,7 @@ def test_moss_audio_parallel_smoke(aphrodite_runner, parallel_kwargs) -> None:
     prompts = [f"{MOSS_AUDIO_PLACEHOLDER}\nBriefly describe this audio."]
     audios = [[AudioAsset("mary_had_lamb").audio_and_sample_rate[0]]]
 
-    with aphrodite_runner(
+    with sonar_runner(
         model,
         dtype="half",
         enforce_eager=True,
@@ -142,8 +142,8 @@ def test_moss_audio_parallel_smoke(aphrodite_runner, parallel_kwargs) -> None:
         limit_mm_per_prompt={"audio": 1},
         trust_remote_code=True,
         **parallel_kwargs,
-    ) as aphrodite_model:
-        outputs = aphrodite_model.generate_greedy(
+    ) as sonar_model:
+        outputs = sonar_model.generate_greedy(
             prompts,
             max_tokens=4,
             audios=audios,

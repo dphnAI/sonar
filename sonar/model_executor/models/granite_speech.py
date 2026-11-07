@@ -33,36 +33,36 @@ import torch.nn.functional as F
 from torch import nn
 from transformers import BatchFeature, PreTrainedConfig
 
-from aphrodite.config import AphroditeConfig, CacheConfig, ModelConfig, SpeechToTextConfig
-from aphrodite.config.multimodal import MultiModalDummyOptions
-from aphrodite.config.speech_to_text import SpeechToTextParams
-from aphrodite.inputs import MultiModalDataDict, PromptType, TokensPrompt
-from aphrodite.model_executor.layers.linear import ColumnParallelLinear, RowParallelLinear
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.models.module_mapping import MultiModelKeys
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import (
+from sonar.config import CacheConfig, ModelConfig, SonarConfig, SpeechToTextConfig
+from sonar.config.multimodal import MultiModalDummyOptions
+from sonar.config.speech_to_text import SpeechToTextParams
+from sonar.inputs import MultiModalDataDict, PromptType, TokensPrompt
+from sonar.model_executor.layers.linear import ColumnParallelLinear, RowParallelLinear
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.models.module_mapping import MultiModelKeys
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import (
     MultiModalFieldConfig,
     MultiModalKwargsItems,
 )
-from aphrodite.multimodal.parse import (
+from sonar.multimodal.parse import (
     AudioProcessorItems,
     MultiModalDataItems,
     MultiModalDataParser,
 )
-from aphrodite.multimodal.processing import (
+from sonar.multimodal.processing import (
     BaseDummyInputsBuilder,
     BaseMultiModalProcessor,
     BaseProcessingInfo,
     PromptReplacement,
     PromptUpdate,
 )
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.tokenizers import cached_tokenizer_from_config
-from aphrodite.transformers_utils.processor import cached_processor_from_config
-from aphrodite.utils.gpu_sync_debug import gpu_sync_allowed
-from aphrodite.utils.tensor_schema import TensorSchema, TensorShape
-from aphrodite.utils.torch_utils import PIN_MEMORY
+from sonar.sequence import IntermediateTensors
+from sonar.tokenizers import cached_tokenizer_from_config
+from sonar.transformers_utils.processor import cached_processor_from_config
+from sonar.utils.gpu_sync_debug import gpu_sync_allowed
+from sonar.utils.tensor_schema import TensorSchema, TensorShape
+from sonar.utils.torch_utils import PIN_MEMORY
 
 from .blip2 import Blip2QFormerModel
 from .interfaces import (
@@ -75,7 +75,7 @@ from .interfaces import (
 from .utils import (
     AutoWeightsLoader,
     WeightsMapper,
-    init_aphrodite_registered_model,
+    init_sonar_registered_model,
     maybe_prefix,
 )
 
@@ -271,7 +271,7 @@ class GraniteSpeechEncoderProjector(nn.Module):
 
 # Encoder - conformer is adapted from: https://github.com/lucidrains/conformer.git
 # NOTE - it would be nice to see if we can align this with other models using
-# conformer in Aphrodite, e.g., phi4mm audio.
+# conformer in Sonar, e.g., phi4mm audio.
 class GraniteSpeechConformerFeedForward(nn.Module):
     """Feedforward module for conformer encoder blocks."""
 
@@ -538,7 +538,7 @@ class GraniteSpeechForConditionalGeneration(
     }
 
     # Checkpoints saved by Transformers v5 nest the text model one level deeper
-    hf_to_aphrodite_mapper = WeightsMapper(orig_to_new_prefix={"language_model.model.model.": "language_model.model."})
+    hf_to_sonar_mapper = WeightsMapper(orig_to_new_prefix={"language_model.model.model.": "language_model.model."})
 
     @classmethod
     def get_placeholder_str(cls, modality: str, i: int) -> str | None:
@@ -547,11 +547,11 @@ class GraniteSpeechForConditionalGeneration(
 
         raise ValueError("Only audio modality is supported")
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
-        cache_config = aphrodite_config.cache_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
+        cache_config = sonar_config.cache_config
 
         self.config = config
         self.quant_config = quant_config
@@ -563,15 +563,15 @@ class GraniteSpeechForConditionalGeneration(
             mm_token_ids=[config.audio_token_index],
         )
 
-        with self._mark_language_model(aphrodite_config):
+        with self._mark_language_model(sonar_config):
             # The language model is typically a Granite LLM
-            self.language_model = init_aphrodite_registered_model(
-                aphrodite_config=aphrodite_config,
+            self.language_model = init_sonar_registered_model(
+                sonar_config=sonar_config,
                 hf_config=config.text_config,
                 prefix=maybe_prefix(prefix, "language_model"),
             )
 
-        with self._mark_tower_model(aphrodite_config, "audio"):
+        with self._mark_tower_model(sonar_config, "audio"):
             self.encoder = self._build_encoder(
                 config=config.encoder_config,
                 quant_config=quant_config,
@@ -617,7 +617,7 @@ class GraniteSpeechForConditionalGeneration(
         # If we have a batch of variable feature length audio clips, we need
         # to mask the features; usually we would get an input_features_mask
         # from the processor, but we handle rebuilding it here since
-        # Aphrodite generally processes everything independently + batches.
+        # Sonar generally processes everything independently + batches.
         if input_features_mask is None:
             input_features_mask = self._build_input_features_mask(audio_embed_sizes)
 
@@ -796,7 +796,7 @@ class GraniteSpeechForConditionalGeneration(
         weights: Iterable[tuple[str, torch.Tensor]],
     ) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
     def get_mm_mapping(self) -> MultiModelKeys:
         """Get the module prefix in multimodal models."""

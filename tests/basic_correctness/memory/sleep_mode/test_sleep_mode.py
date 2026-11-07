@@ -8,12 +8,12 @@ import os
 import pytest
 import torch
 
-import aphrodite.device_allocator.cumem as cumem
-import aphrodite.envs as envs
-from aphrodite import LLM, AsyncEngineArgs, AsyncLLMEngine, SamplingParams
-from aphrodite.model_executor.model_loader import get_model_loader
-from aphrodite.platforms import current_platform
-from aphrodite.utils.mem_constants import GiB_bytes
+import sonar.device_allocator.cumem as cumem
+import sonar.envs as envs
+from sonar import LLM, AsyncEngineArgs, AsyncLLMEngine, SamplingParams
+from sonar.model_executor.model_loader import get_model_loader
+from sonar.platforms import current_platform
+from sonar.utils.mem_constants import GiB_bytes
 
 from ....utils import (
     create_new_process_for_each_test,
@@ -95,9 +95,9 @@ def _model_state(worker) -> dict[str, list]:
     ],
 )
 def test_deep_sleep(model, monkeypatch, gpu_memory_cleared):
-    monkeypatch.setenv("APHRODITE_USE_V2_MODEL_RUNNER", "1")
+    monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", "1")
     # Needed for collective_rpc to run a function on the worker.
-    monkeypatch.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
+    monkeypatch.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")
     free, total = torch.accelerator.get_memory_info()
     used_bytes_baseline = total - free  # in case other process is running
     llm = LLM(model, enable_sleep_mode=True, max_model_len=256)
@@ -171,7 +171,7 @@ def test_deep_sleep_lora(gpu_memory_cleared):
 
 
 def _lora_logits_mapping_correct(model) -> bool:
-    from aphrodite.lora.layers.logits_processor import LogitsProcessorWithLoRA
+    from sonar.lora.layers.logits_processor import LogitsProcessorWithLoRA
 
     processors = [m for m in model.modules() if isinstance(m, LogitsProcessorWithLoRA)]
     return bool(processors) and all(
@@ -198,7 +198,7 @@ def test_deep_sleep_lora_tp2(monkeypatch):
     of the LoRA state.
     """
     # Needed for apply_model to reach the multiproc TP workers below.
-    monkeypatch.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
+    monkeypatch.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")
 
     model = "hmellor/tiny-random-LlamaForCausalLM"
     llm = LLM(
@@ -234,14 +234,14 @@ def _cudagraph_bytes(worker) -> int:
 
 
 def _custom_ar_active(worker) -> bool:
-    from aphrodite.distributed.parallel_state import get_tp_group
+    from sonar.distributed.parallel_state import get_tp_group
 
     comm = get_tp_group().device_communicator
     return any(c is not None and not c.disabled for c in (comm.ca_comm, comm.aiter_ar_comm))
 
 
 def _capture_registers_buffers(worker) -> bool:
-    from aphrodite.distributed.parallel_state import get_tp_group
+    from sonar.distributed.parallel_state import get_tp_group
 
     comm = get_tp_group().device_communicator
     ca, aiter = comm.ca_comm, comm.aiter_ar_comm
@@ -267,11 +267,11 @@ def test_sleep_cudagraph_pool(monkeypatch, mode, breakable, tp, offload):
     """Each capture site uses the pool, exact across sleeps; TP=2 needs
     unregistered custom AR; off changes nothing."""
     for name, value in [
-        ("APHRODITE_USE_V2_MODEL_RUNNER", "1"),
-        ("APHRODITE_USE_BREAKABLE_CUDAGRAPH", "1" if breakable else "0"),
-        ("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1"),
-        ("APHRODITE_ALLREDUCE_USE_FLASHINFER", "0"),
-        ("APHRODITE_ALLREDUCE_USE_SYMM_MEM", "0"),
+        ("SONAR_USE_V2_MODEL_RUNNER", "1"),
+        ("SONAR_USE_BREAKABLE_CUDAGRAPH", "1" if breakable else "0"),
+        ("SONAR_ALLOW_INSECURE_SERIALIZATION", "1"),
+        ("SONAR_ALLREDUCE_USE_FLASHINFER", "0"),
+        ("SONAR_ALLREDUCE_USE_SYMM_MEM", "0"),
     ]:
         monkeypatch.setenv(name, value)
     monkeypatch.delenv("NCCL_GRAPH_REGISTER", raising=False)
@@ -312,9 +312,9 @@ def test_sleep_cudagraph_pool_aiter_fused_ar_group_quant(monkeypatch):
     """The fused AITER AR + RMSNorm + per-group FP8 quant captures into the
     cuMem pool without IPC-registering its input, across sleeps."""
     for name, value in [
-        ("APHRODITE_USE_V2_MODEL_RUNNER", "1"),
-        ("APHRODITE_ROCM_USE_AITER", "1"),
-        ("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1"),
+        ("SONAR_USE_V2_MODEL_RUNNER", "1"),
+        ("SONAR_ROCM_USE_AITER", "1"),
+        ("SONAR_ALLOW_INSECURE_SERIALIZATION", "1"),
     ]:
         monkeypatch.setenv(name, value)
     monkeypatch.delenv("NCCL_GRAPH_REGISTER", raising=False)
@@ -400,7 +400,7 @@ def _attn_kv_scales(model) -> dict[str, list[float]]:
 @create_new_process_for_each_test()
 def test_deep_sleep_compressed_tensors_kv_scales(monkeypatch: pytest.MonkeyPatch, gpu_memory_cleared):
     """KV scales must survive level-2 sleep plus a weights reload (else NaN)."""
-    monkeypatch.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
+    monkeypatch.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")
     llm = LLM(
         "nm-testing/TinyLlama-1.1B-Chat-v1.0-kvcache-fp8-tensor",
         enable_sleep_mode=True,
@@ -467,7 +467,7 @@ def test_deep_sleep_fp8_kvcache(gpu_memory_cleared):
 def test_deep_sleep_fp8_kvcache_with_undefined_remap(
     monkeypatch: pytest.MonkeyPatch,
 ):
-    monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
+    monkeypatch.setenv("SONAR_ENABLE_V1_MULTIPROCESSING", "0")
     envs.disable_envs_cache()
 
     llm = LLM(

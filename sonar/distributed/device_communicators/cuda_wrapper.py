@@ -12,10 +12,10 @@ from typing import Any
 # this line makes it possible to directly load `libcudart.so` using `ctypes`
 import torch  # noqa
 
-import aphrodite.envs as envs
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.utils.system_utils import find_loaded_library
+import sonar.envs as envs
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.utils.system_utils import find_loaded_library
 
 logger = init_logger(__name__)
 
@@ -117,10 +117,10 @@ class CudaRTLibrary:
         if so_file is None:
             so_file = (
                 find_loaded_library("libamdhip64" if current_platform.is_rocm() else "libcudart")
-                or envs.APHRODITE_CUDART_SO_PATH  # fallback to env var
+                or envs.SONAR_CUDART_SO_PATH  # fallback to env var
             )
             assert so_file is not None, (
-                "libcudart is not loaded in the current process, try setting APHRODITE_CUDART_SO_PATH"
+                "libcudart is not loaded in the current process, try setting SONAR_CUDART_SO_PATH"
             )
         if so_file not in CudaRTLibrary.path_to_library_cache:
             lib = ctypes.CDLL(so_file)

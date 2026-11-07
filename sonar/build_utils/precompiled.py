@@ -24,21 +24,21 @@ from packaging.utils import canonicalize_name, parse_wheel_filename
 DEFAULT_WHEEL_BASE_URL = "https://sonar-nightly.dphn.ai"
 UPSTREAM_MAIN_API = "https://api.github.com/repos/dphnAI/sonar/commits/main"
 UPSTREAM_GIT_URL = "https://github.com/dphnAI/sonar.git"
-MANIFEST_PATH = Path("aphrodite/.precompiled-wheel-manifest.json")
-PACKAGE_NAME = "aphrodite-engine"
+MANIFEST_PATH = Path("sonar/.precompiled-wheel-manifest.json")
+PACKAGE_NAME = "sonar"
 
 _HEX_DIGITS = frozenset("0123456789abcdef")
 _GENERATED_TREE_PREFIXES = (
-    "aphrodite/third_party/triton_kernels/",
-    "aphrodite/third_party/flashmla/",
-    "aphrodite/third_party/deep_gemm/",
-    "aphrodite/third_party/fmha_sm100/",
-    "aphrodite/third_party/tml_fa4/",
-    "aphrodite/vllm_flash_attn/",
+    "sonar/third_party/triton_kernels/",
+    "sonar/third_party/flashmla/",
+    "sonar/third_party/deep_gemm/",
+    "sonar/third_party/fmha_sm100/",
+    "sonar/third_party/tml_fa4/",
+    "sonar/vllm_flash_attn/",
 )
 _TRACKED_FLASH_ATTN_FILES = {
-    "aphrodite/vllm_flash_attn/__init__.py",
-    "aphrodite/vllm_flash_attn/flash_attn_interface.py",
+    "sonar/vllm_flash_attn/__init__.py",
+    "sonar/vllm_flash_attn/flash_attn_interface.py",
 }
 
 
@@ -96,7 +96,7 @@ def _run_git(root: Path, *args: str) -> str:
 
 
 def _github_main_commit() -> str:
-    headers = {"Accept": "application/vnd.github+json", "User-Agent": "aphrodite-build"}
+    headers = {"Accept": "application/vnd.github+json", "User-Agent": "sonar-build"}
     token = os.getenv("GH_TOKEN") or os.getenv("GITHUB_TOKEN")
     if token:
         headers["Authorization"] = f"Bearer {token}"
@@ -114,8 +114,8 @@ def get_base_commit_in_main(root: Path) -> str:
     except (OSError, subprocess.CalledProcessError) as exc:
         raise PrecompiledWheelError(
             "Cannot determine the checkout commit. Set "
-            "APHRODITE_PRECOMPILED_WHEEL_COMMIT or "
-            "APHRODITE_PRECOMPILED_WHEEL_LOCATION explicitly."
+            "SONAR_PRECOMPILED_WHEEL_COMMIT or "
+            "SONAR_PRECOMPILED_WHEEL_LOCATION explicitly."
         ) from exc
 
     main_commit: str | None = None
@@ -137,7 +137,7 @@ def get_base_commit_in_main(root: Path) -> str:
                 )
         except Exception as exc:
             raise PrecompiledWheelError(
-                "Cannot resolve upstream main. Fetch main or set APHRODITE_PRECOMPILED_WHEEL_COMMIT explicitly."
+                "Cannot resolve upstream main. Fetch main or set SONAR_PRECOMPILED_WHEEL_COMMIT explicitly."
             ) from exc
 
     try:
@@ -152,8 +152,8 @@ def get_base_commit_in_main(root: Path) -> str:
 def _validate_host() -> None:
     if platform.system() != "Linux" or platform.machine() not in ("x86_64", "AMD64"):
         raise PrecompiledWheelError(
-            "Hosted Aphrodite precompiled wheels currently support Linux x86_64 CUDA only. "
-            "Use APHRODITE_PRECOMPILED_WHEEL_LOCATION for another compatible wheel, "
+            "Hosted Sonar precompiled wheels currently support Linux x86_64 CUDA only. "
+            "Use SONAR_PRECOMPILED_WHEEL_LOCATION for another compatible wheel, "
             "or build native extensions locally."
         )
 
@@ -163,7 +163,7 @@ def _candidate_from_location(location: str) -> WheelCandidate:
     path = parsed.path if parsed.scheme else location
     filename = unquote(Path(path).name)
     if not filename.endswith(".whl"):
-        raise PrecompiledWheelError(f"APHRODITE_PRECOMPILED_WHEEL_LOCATION must identify a .whl file, got {location!r}")
+        raise PrecompiledWheelError(f"SONAR_PRECOMPILED_WHEEL_LOCATION must identify a .whl file, got {location!r}")
     digest = parse_qs(parsed.fragment).get("sha256", [None])[0]
     if digest is not None and not _is_sha256(digest):
         raise PrecompiledWheelError(f"Invalid sha256 fragment in wheel location: {digest!r}")
@@ -202,7 +202,7 @@ def _compatible_candidate(index_url: str, html: str) -> WheelCandidate:
         )
 
     raise PrecompiledWheelError(
-        f"No compatible aphrodite-engine wheel was found at {index_url}. Available wheels: {available or 'none'}"
+        f"No compatible sonar wheel was found at {index_url}. Available wheels: {available or 'none'}"
     )
 
 
@@ -223,7 +223,7 @@ def determine_wheel(
         selected_commit = get_base_commit_in_main(root)
     elif selected_commit != "nightly" and not _is_full_commit(selected_commit):
         raise PrecompiledWheelError(
-            "APHRODITE_PRECOMPILED_WHEEL_COMMIT must be a full 40-character "
+            "SONAR_PRECOMPILED_WHEEL_COMMIT must be a full 40-character "
             f"commit SHA or 'nightly', got {selected_commit!r}"
         )
     _validate_host()
@@ -233,15 +233,15 @@ def determine_wheel(
     else:
         index_url = f"{base_url.rstrip('/')}/commits/{selected_commit}/{PACKAGE_NAME}/index.html"
 
-    print(f"Fetching Aphrodite precompiled wheel index: {index_url}")
+    print(f"Fetching Sonar precompiled wheel index: {index_url}")
     try:
-        with urlopen(Request(index_url, headers={"User-Agent": "aphrodite-build"}), timeout=60) as response:
+        with urlopen(Request(index_url, headers={"User-Agent": "sonar-build"}), timeout=60) as response:
             html = response.read().decode()
     except Exception as exc:
         raise PrecompiledWheelError(
             f"Precompiled wheel index is unavailable for {selected_commit}: {index_url}. "
-            "Wait for its wheel build, set APHRODITE_PRECOMPILED_WHEEL_COMMIT=nightly, "
-            "provide APHRODITE_PRECOMPILED_WHEEL_LOCATION, or build locally."
+            "Wait for its wheel build, set SONAR_PRECOMPILED_WHEEL_COMMIT=nightly, "
+            "provide SONAR_PRECOMPILED_WHEEL_LOCATION, or build locally."
         ) from exc
 
     candidate = _compatible_candidate(index_url, html)
@@ -252,17 +252,15 @@ def determine_wheel(
 def _should_extract(filename: str, *, extensions: bool, rust: bool) -> bool:
     if filename in _TRACKED_FLASH_ATTN_FILES:
         return False
-    if extensions and filename.startswith("aphrodite/") and filename.endswith(".so"):
+    if extensions and filename.startswith("sonar/") and filename.endswith(".so"):
         return True
-    if extensions and filename.startswith("aphrodite/libs/") and ".so." in PurePosixPath(filename).name:
+    if extensions and filename.startswith("sonar/libs/") and ".so." in PurePosixPath(filename).name:
         # CPU wheels bundle versioned tcmalloc libraries alongside extensions.
         return True
     rust_extension = (
-        filename.startswith("aphrodite/_rust_")
-        and filename.endswith(".so")
-        and "/" not in filename.removeprefix("aphrodite/")
+        filename.startswith("sonar/_rust_") and filename.endswith(".so") and "/" not in filename.removeprefix("sonar/")
     )
-    if rust and (filename == "aphrodite/aphrodite-rs" or rust_extension):
+    if rust and (filename == "sonar/sonar-rs" or rust_extension):
         return True
     return extensions and filename.startswith(_GENERATED_TREE_PREFIXES)
 
@@ -315,7 +313,7 @@ def _remove_previous_artifacts(root: Path, manifest: dict | None) -> None:
 
 
 def _remove_legacy_deepgemm_bindings(root: Path, paths: list[str]) -> None:
-    package = "aphrodite/third_party/deep_gemm"
+    package = "sonar/third_party/deep_gemm"
     if f"{package}/_C.py" not in paths or f"{package}/_C_extension.abi3.so" not in paths:
         return
     for pattern in ("_C.cpython-*.so", "_C.abi3.so"):
@@ -345,7 +343,7 @@ def extract_precompiled_wheel(
         _remove_legacy_deepgemm_bindings(root, previous["paths"])
         return _package_data_patch(previous["paths"])
 
-    with tempfile.TemporaryDirectory(prefix="aphrodite-precompiled-") as temp_dir:
+    with tempfile.TemporaryDirectory(prefix="sonar-precompiled-") as temp_dir:
         wheel_path = Path(temp_dir) / candidate.filename
         if Path(candidate.url_or_path).is_file():
             shutil.copyfile(candidate.url_or_path, wheel_path)
@@ -353,7 +351,7 @@ def extract_precompiled_wheel(
             print(f"Downloading {candidate.url_or_path}")
             request = Request(
                 candidate.url_or_path,
-                headers={"User-Agent": "aphrodite-build"},
+                headers={"User-Agent": "sonar-build"},
             )
             with urlopen(request, timeout=300) as response, wheel_path.open("wb") as destination:
                 shutil.copyfileobj(response, destination)

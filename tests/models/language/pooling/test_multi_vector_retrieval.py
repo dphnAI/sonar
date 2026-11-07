@@ -4,7 +4,7 @@ import pytest
 import torch
 from transformers import AutoModel
 
-from aphrodite.config import PoolerConfig
+from sonar.config import PoolerConfig
 from tests.models.utils import check_embeddings_close
 
 
@@ -14,15 +14,15 @@ from tests.models.utils import check_embeddings_close
 )
 @pytest.mark.parametrize("dtype", ["float"])
 @torch.inference_mode
-def test_embed_models(hf_runner, aphrodite_runner, example_prompts, model: str, dtype: str):
-    with aphrodite_runner(
+def test_embed_models(hf_runner, sonar_runner, example_prompts, model: str, dtype: str):
+    with sonar_runner(
         model,
         runner="pooling",
         pooler_config=PoolerConfig(task="token_embed"),
         max_model_len=None,
         dtype=dtype,
-    ) as aphrodite_model:
-        aphrodite_outputs = aphrodite_model.token_embed(example_prompts)
+    ) as sonar_model:
+        sonar_outputs = sonar_model.token_embed(example_prompts)
 
     with hf_runner(model, auto_cls=AutoModel, dtype=dtype) as hf_model:
         tokenizer = hf_model.tokenizer
@@ -34,11 +34,11 @@ def test_embed_models(hf_runner, aphrodite_runner, example_prompts, model: str, 
             embedding = output.last_hidden_state[0].float()
             hf_outputs.append(embedding.cpu())
 
-    for hf_output, aphrodite_output in zip(hf_outputs, aphrodite_outputs):
+    for hf_output, sonar_output in zip(hf_outputs, sonar_outputs):
         check_embeddings_close(
             embeddings_0_lst=hf_output,
-            embeddings_1_lst=aphrodite_output,
+            embeddings_1_lst=sonar_output,
             name_0="hf",
-            name_1="aphrodite",
+            name_1="sonar",
             tol=1e-2,
         )

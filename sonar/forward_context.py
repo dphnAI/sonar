@@ -9,20 +9,20 @@ from typing import Any
 
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.config import AphroditeConfig, CUDAGraphMode, ParallelConfig
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.v1.attention.backend import AttentionMetadata
-from aphrodite.v1.worker.dp_utils import coordinate_batch_across_dp
-from aphrodite.v1.worker.ubatch_utils import UBatchSlices
+import sonar.envs as envs
+from sonar.config import CUDAGraphMode, ParallelConfig, SonarConfig
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.v1.attention.backend import AttentionMetadata
+from sonar.v1.worker.dp_utils import coordinate_batch_across_dp
+from sonar.v1.worker.ubatch_utils import UBatchSlices
 
 logger = init_logger(__name__)
 
-track_batchsize: bool = envs.APHRODITE_LOG_BATCHSIZE_INTERVAL >= 0
+track_batchsize: bool = envs.SONAR_LOG_BATCHSIZE_INTERVAL >= 0
 last_logging_time: float = 0
 forward_start_time: float = 0
-batchsize_logging_interval: float = envs.APHRODITE_LOG_BATCHSIZE_INTERVAL
+batchsize_logging_interval: float = envs.SONAR_LOG_BATCHSIZE_INTERVAL
 batchsize_forward_time: defaultdict = defaultdict(list)
 
 
@@ -126,7 +126,7 @@ class DPMetadata:
 
 @dataclass
 class ForwardContext:
-    # copy from aphrodite_config.compilation_config.static_forward_context
+    # copy from sonar_config.compilation_config.static_forward_context
     no_compile_layers: dict[str, Any]
     attn_metadata: dict[str, AttentionMetadata] | list[dict[str, AttentionMetadata]]
     slot_mapping: dict[str, torch.Tensor] | list[dict[str, torch.Tensor]]
@@ -155,8 +155,8 @@ class ForwardContext:
     skip_compiled: bool = False
 
     # For torch.compile cold start times, we need to avoid hard-coding
-    # any strings into the graph. Right now, the aphrodite.moe_forward
-    # and aphrodite.moe_forward_shared custom operators hard-code strings into
+    # any strings into the graph. Right now, the sonar.moe_forward
+    # and sonar.moe_forward_shared custom operators hard-code strings into
     # the graph.
     #
     # The workaround is to store a list of the strings that each of those
@@ -212,7 +212,7 @@ def in_piecewise_cudagraph() -> bool:
 
 def create_forward_context(
     attn_metadata: Any,
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     dp_metadata: DPMetadata | None = None,
     cudagraph_runtime_mode: CUDAGraphMode = CUDAGraphMode.NONE,
     batch_descriptor: BatchDescriptor | None = None,
@@ -222,13 +222,13 @@ def create_forward_context(
     skip_compiled: bool = False,
     is_padding: torch.Tensor | None = None,
 ):
-    if aphrodite_config.compilation_config.fast_moe_cold_start:
-        all_moe_layers = aphrodite_config.compilation_config.static_all_moe_layers
+    if sonar_config.compilation_config.fast_moe_cold_start:
+        all_moe_layers = sonar_config.compilation_config.static_all_moe_layers
     else:
         all_moe_layers = None
 
     return ForwardContext(
-        no_compile_layers=aphrodite_config.compilation_config.static_forward_context,
+        no_compile_layers=sonar_config.compilation_config.static_forward_context,
         all_moe_layers=all_moe_layers,
         attn_metadata=attn_metadata,
         slot_mapping=slot_mapping or {},
@@ -260,7 +260,7 @@ def override_forward_context(forward_context: ForwardContext | None):
 @contextmanager
 def set_forward_context(
     attn_metadata: Any,
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     num_tokens: int | None = None,
     num_tokens_across_dp: torch.Tensor | None = None,
     cudagraph_runtime_mode: CUDAGraphMode = CUDAGraphMode.NONE,
@@ -281,29 +281,26 @@ def set_forward_context(
 
     dp_metadata: DPMetadata | None = None
     if (
-        (
-            aphrodite_config.parallel_config.data_parallel_size > 1
-            or aphrodite_config.parallel_config.use_sequence_parallel_moe
-        )
-        and aphrodite_config.parallel_config.is_moe_model is not False
+        (sonar_config.parallel_config.data_parallel_size > 1 or sonar_config.parallel_config.use_sequence_parallel_moe)
+        and sonar_config.parallel_config.is_moe_model is not False
         and (attn_metadata is not None or num_tokens is not None)
     ):
         # If num_tokens_across_dp hasn't already been initialized, then
         # initialize it here. Both DP padding and Microbatching will be
         # disabled.
-        if num_tokens_across_dp is None and aphrodite_config.parallel_config.data_parallel_size > 1:
+        if num_tokens_across_dp is None and sonar_config.parallel_config.data_parallel_size > 1:
             assert ubatch_slices is None
             assert num_tokens is not None
             _, num_tokens_across_dp, _ = coordinate_batch_across_dp(
                 num_tokens_unpadded=num_tokens,
-                parallel_config=aphrodite_config.parallel_config,
+                parallel_config=sonar_config.parallel_config,
                 allow_microbatching=False,
             )
             assert num_tokens_across_dp is not None
         elif num_tokens_across_dp is None:
             assert num_tokens is not None
             num_tokens_across_dp = torch.tensor([num_tokens], dtype=torch.int32)
-        dp_metadata = DPMetadata.make(aphrodite_config.parallel_config, num_tokens or 0, num_tokens_across_dp)
+        dp_metadata = DPMetadata.make(sonar_config.parallel_config, num_tokens or 0, num_tokens_across_dp)
 
     # Preserve the batch size before model-level sequence parallelism.
     if num_tokens is not None:
@@ -311,7 +308,7 @@ def set_forward_context(
 
     additional_kwargs = current_platform.set_additional_forward_context(
         attn_metadata=attn_metadata,
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         dp_metadata=dp_metadata,
         num_tokens=num_tokens,
         num_tokens_across_dp=num_tokens_across_dp,
@@ -322,7 +319,7 @@ def set_forward_context(
 
     forward_context = create_forward_context(
         attn_metadata,
-        aphrodite_config,
+        sonar_config,
         dp_metadata,
         cudagraph_runtime_mode,
         batch_descriptor,

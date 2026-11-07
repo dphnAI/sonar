@@ -4,10 +4,10 @@ import threading
 
 import torch
 
-from aphrodite import forward_context
-from aphrodite.forward_context import ForwardContext
-from aphrodite.logger import init_logger
-from aphrodite.utils.torch_utils import current_stream
+from sonar import forward_context
+from sonar.forward_context import ForwardContext
+from sonar.logger import init_logger
+from sonar.utils.torch_utils import current_stream
 
 logger = init_logger(__name__)
 

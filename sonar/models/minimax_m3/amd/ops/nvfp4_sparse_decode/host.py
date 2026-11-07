@@ -8,14 +8,14 @@ import functools
 import numpy as np
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.models.minimax_m3.amd.ops.flydsl_utils import (
+from sonar.logger import init_logger
+from sonar.models.minimax_m3.amd.ops.flydsl_utils import (
     LOG2E,
     cu_count,
     run_compiled,
     unit_scale,
 )
-from aphrodite.models.minimax_m3.amd.ops.nvfp4_index_prefill.host import nvfp4_e4m3_lut
+from sonar.models.minimax_m3.amd.ops.nvfp4_index_prefill.host import nvfp4_e4m3_lut
 
 from . import kernel as _kernel
 
@@ -54,7 +54,7 @@ def _query_xcd_count(device_index: int) -> int:
 @functools.cache
 def _xcd_count(device_index: int) -> int:
     """8 on gfx950 (the topology the XCD grid was tuned on), else 0."""
-    from aphrodite.platforms.rocm import on_gfx950
+    from sonar.platforms.rocm import on_gfx950
 
     queried = _query_xcd_count(device_index)
     count = queried if on_gfx950() and queried == _SUPPORTED_XCD_COUNT else 0

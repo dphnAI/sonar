@@ -3,8 +3,8 @@
 
 import pytest
 
-from aphrodite.renderers.chat_utils import ConversationMessage
-from aphrodite.renderers.chat_utils.chat_message import _postprocess_messages
+from sonar.renderers.chat_utils import ConversationMessage
+from sonar.renderers.chat_utils.chat_message import _postprocess_messages
 
 
 def _assistant_tool_call(arguments, name="write"):

@@ -3,7 +3,7 @@
 
 from typing import Any
 
-from aphrodite.triton_utils import tl, triton
+from sonar.triton_utils import tl, triton
 
 _autotuned_configs: dict[tuple, Any] = {}
 

@@ -2,16 +2,16 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Fused per-head q/k RMSNorm + NeoX RoPE + paged KV-cache write.
 
-Numerics follow the unfused Aphrodite ops it replaces: RMSNorm computes
+Numerics follow the unfused Sonar ops it replaces: RMSNorm computes
 ``bf16(x * rsqrt(mean(x^2) + eps) * w)`` in fp32, RoPE computes
 ``x * cos - y * sin`` in fp32 from the fp32 cos/sin cache (as the reference
-implementation does; Aphrodite's rotary op would round the cache to bf16 first) and
+implementation does; Sonar's rotary op would round the cache to bf16 first) and
 rounds to bf16, and K/V are stored unchanged in the bf16 cache.
 """
 
 import torch
 
-from aphrodite.triton_utils import tl, triton
+from sonar.triton_utils import tl, triton
 
 _BLOCK_T = 16
 

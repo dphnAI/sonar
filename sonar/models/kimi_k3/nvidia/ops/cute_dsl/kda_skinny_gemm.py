@@ -18,7 +18,7 @@ from cutlass._mlir.dialects import llvm
 from cutlass.cute.runtime import make_fake_stream, make_fake_tensor
 from cutlass.cutlass_dsl import T, dsl_user_op
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 _FAB_N = 144
 _FAB_K = 7168
@@ -480,7 +480,7 @@ class KdaSkinnyGemm:
         self._warmup_k.update(k_tokens)
         if self._warmup_registered:
             return
-        from aphrodite.model_executor.warmup.cutedsl_warmup import (
+        from sonar.model_executor.warmup.cutedsl_warmup import (
             register_cutedsl_warmup_provider,
         )
 
@@ -488,7 +488,7 @@ class KdaSkinnyGemm:
         self._warmup_registered = True
 
     def get_cutedsl_warmup_compile_units(self):
-        from aphrodite.model_executor.warmup.cutedsl_warmup import CuTeDSLCompileUnit
+        from sonar.model_executor.warmup.cutedsl_warmup import CuTeDSLCompileUnit
 
         n_units = tuple(
             CuTeDSLCompileUnit(

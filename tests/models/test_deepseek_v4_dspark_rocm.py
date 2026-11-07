@@ -6,8 +6,8 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.models.deepseek_v4.amd import dspark as dspark_module
-from aphrodite.models.deepseek_v4.amd.dspark import DSparkDeepseekV4ForCausalLM
+from sonar.models.deepseek_v4.amd import dspark as dspark_module
+from sonar.models.deepseek_v4.amd.dspark import DSparkDeepseekV4ForCausalLM
 
 
 def _make_uninitialized_model(confidence_head):

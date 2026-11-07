@@ -10,26 +10,26 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
 from pydantic import Field, TypeAdapter, field_validator
 
-import aphrodite.envs as envs
-from aphrodite.compilation.passes.inductor_pass import CallableInductorPass, InductorPass
-from aphrodite.config.utils import (
+import sonar.envs as envs
+from sonar.compilation.passes.inductor_pass import CallableInductorPass, InductorPass
+from sonar.config.utils import (
     Range,
     config,
     get_hash_factors,
     hash_factors,
 )
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.utils.import_utils import resolve_obj_by_qualname
-from aphrodite.utils.math_utils import round_up
-from aphrodite.utils.torch_utils import is_torch_equal_or_newer
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.utils.import_utils import resolve_obj_by_qualname
+from sonar.utils.math_utils import round_up
+from sonar.utils.torch_utils import is_torch_equal_or_newer
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
-    from aphrodite.v1.attention.backend import AttentionCGSupport
-    from aphrodite.v1.kv_cache_interface import KVCacheConfig
+    from sonar.config import SonarConfig
+    from sonar.v1.attention.backend import AttentionCGSupport
+    from sonar.v1.kv_cache_interface import KVCacheConfig
 else:
-    AphroditeConfig = object
+    SonarConfig = object
 
 logger = init_logger(__name__)
 
@@ -45,8 +45,8 @@ class CompilationMode(enum.IntEnum):
     """The standard `torch.compile` compilation pipeline."""
     DYNAMO_TRACE_ONCE = 2
     """Single Dynamo trace through the model, avoiding recompilation."""
-    APHRODITE_COMPILE = 3
-    """Custom Aphrodite Inductor-based backend with caching, piecewise compilation,
+    SONAR_COMPILE = 3
+    """Custom Sonar Inductor-based backend with caching, piecewise compilation,
     shape specialization, and custom passes."""
 
 
@@ -118,9 +118,9 @@ class PassConfig:
     don't all have access to full configuration - that would create a cycle as
     the `PassManager` is set as a property of config.
 
-    You must pass PassConfig to AphroditeConfig constructor via the CompilationConfig
-    constructor. AphroditeConfig's post_init does further initialization.
-    If used outside of the AphroditeConfig, some fields may be left in an
+    You must pass PassConfig to SonarConfig constructor via the CompilationConfig
+    constructor. SonarConfig's post_init does further initialization.
+    If used outside of the SonarConfig, some fields may be left in an
     improper state.
     """
 
@@ -161,7 +161,7 @@ class PassConfig:
 
     fi_allreduce_fusion_max_size_mb: float | None = None
     """The threshold of the communicated tensor sizes under which
-    aphrodite should use flashinfer fused allreduce. Specified as a
+    sonar should use flashinfer fused allreduce. Specified as a
     float in MB.
     Unspecified will fallback to default values
     which are compute capability and world size dependent.
@@ -196,10 +196,10 @@ class PassConfig:
 
     @staticmethod
     def default_fi_allreduce_fusion_max_size_mb() -> dict[int, float]:
-        from aphrodite.compilation.passes.fusion.allreduce_rms_fusion import (
+        from sonar.compilation.passes.fusion.allreduce_rms_fusion import (
             FI_ALLREDUCE_FUSION_MAX_SIZE_MB,
         )
-        from aphrodite.platforms import current_platform
+        from sonar.platforms import current_platform
 
         if not current_platform.is_cuda():
             return {}
@@ -286,7 +286,7 @@ class PassConfig:
 
     def log_enabled_passes(self) -> None:
         """Log the enabled custom fusion passes.
-        This is called at the end of AphroditeConfig post_init,
+        This is called at the end of SonarConfig post_init,
         after all defaults are finalized.
         TODO also log the compile ranges for which this is enabled.
         """
@@ -305,7 +305,7 @@ class PassConfig:
 
 class DynamicShapesType(str, enum.Enum):
     """Types of dynamic shapes handling in torch.compile().
-    see  Dynamic shapes and aphrodite guard dropping in torch_compile.md
+    see  Dynamic shapes and sonar guard dropping in torch_compile.md
     for more details."""
 
     BACKED = "backed"
@@ -342,7 +342,7 @@ class DynamicShapesConfig:
     A debug mode to detect and fail if Dynamo ever specializes a dynamic shape by
     guarding on it. When True, dynamic shape guards are not dropped from dynamo.
     And a failure will be triggered if a recompilation ever happens due to that.
-    This mode requires APHRODITE_USE_BYTECODE_HOOK to be 0.
+    This mode requires SONAR_USE_BYTECODE_HOOK to be 0.
     Enabling this allow observing the dynamic shapes guards in the tlparse
     artifacts also.
     When type is backed, aot_compile must be disabled for this mode to work.
@@ -357,7 +357,7 @@ class DynamicShapesConfig:
 
     def compute_hash(self) -> str:
         """Provide a hash for DynamicShapesConfig."""
-        from aphrodite.config.utils import get_hash_factors, hash_factors
+        from sonar.config.utils import get_hash_factors, hash_factors
 
         factors = get_hash_factors(self, set())
         return hash_factors(factors)
@@ -367,38 +367,38 @@ class DynamicShapesConfig:
 class CompilationConfig:
     """Configuration for compilation.
 
-    You must pass CompilationConfig to AphroditeConfig constructor.
-    AphroditeConfig's post_init does further initialization. If used outside of the
-    AphroditeConfig, some fields will be left in an improper state.
+    You must pass CompilationConfig to SonarConfig constructor.
+    SonarConfig's post_init does further initialization. If used outside of the
+    SonarConfig, some fields will be left in an improper state.
 
     It contains PassConfig, which controls the custom fusion/transformation passes.
     The rest has three parts:
 
     - Top-level Compilation control:
-        - [`mode`][aphrodite.config.CompilationConfig.mode]
-        - [`debug_dump_path`][aphrodite.config.CompilationConfig.debug_dump_path]
-        - [`cache_dir`][aphrodite.config.CompilationConfig.cache_dir]
-        - [`backend`][aphrodite.config.CompilationConfig.backend]
-        - [`custom_ops`][aphrodite.config.CompilationConfig.custom_ops]
-        - [`splitting_ops`][aphrodite.config.CompilationConfig.splitting_ops]
-        - [`compile_mm_encoder`][aphrodite.config.CompilationConfig.compile_mm_encoder]
+        - [`mode`][sonar.config.CompilationConfig.mode]
+        - [`debug_dump_path`][sonar.config.CompilationConfig.debug_dump_path]
+        - [`cache_dir`][sonar.config.CompilationConfig.cache_dir]
+        - [`backend`][sonar.config.CompilationConfig.backend]
+        - [`custom_ops`][sonar.config.CompilationConfig.custom_ops]
+        - [`splitting_ops`][sonar.config.CompilationConfig.splitting_ops]
+        - [`compile_mm_encoder`][sonar.config.CompilationConfig.compile_mm_encoder]
     - CudaGraph capture:
-        - [`cudagraph_mode`][aphrodite.config.CompilationConfig.cudagraph_mode]
+        - [`cudagraph_mode`][sonar.config.CompilationConfig.cudagraph_mode]
         - [`cudagraph_capture_sizes`]
-        [aphrodite.config.CompilationConfig.cudagraph_capture_sizes]
+        [sonar.config.CompilationConfig.cudagraph_capture_sizes]
         - [`max_cudagraph_capture_size`]
-        [aphrodite.config.CompilationConfig.max_cudagraph_capture_size]
+        [sonar.config.CompilationConfig.max_cudagraph_capture_size]
         - [`cudagraph_num_of_warmups`]
-        [aphrodite.config.CompilationConfig.cudagraph_num_of_warmups]
+        [sonar.config.CompilationConfig.cudagraph_num_of_warmups]
         - [`cudagraph_copy_inputs`]
-        [aphrodite.config.CompilationConfig.cudagraph_copy_inputs]
+        [sonar.config.CompilationConfig.cudagraph_copy_inputs]
     - Inductor compilation:
-        - [`compile_sizes`][aphrodite.config.CompilationConfig.compile_sizes]
+        - [`compile_sizes`][sonar.config.CompilationConfig.compile_sizes]
         - [`compile_ranges_endpoints`]
-            [aphrodite.config.CompilationConfig.compile_ranges_endpoints]
+            [sonar.config.CompilationConfig.compile_ranges_endpoints]
         - [`inductor_compile_config`]
-        [aphrodite.config.CompilationConfig.inductor_compile_config]
-        - [`inductor_passes`][aphrodite.config.CompilationConfig.inductor_passes]
+        [sonar.config.CompilationConfig.inductor_compile_config]
+        - [`inductor_passes`][sonar.config.CompilationConfig.inductor_passes]
         - custom inductor passes
 
     Why we have different sizes for cudagraph and inductor:
@@ -425,7 +425,7 @@ class CompilationConfig:
     - 2: DYNAMO_TRACE_ONCE: Single Dynamo trace through the model, avoiding
          recompilation by removing guards.
          Requires no dynamic-shape-dependent control-flow.
-    - 3: APHRODITE_COMPILE: Custom Aphrodite Inductor-based backend with caching,
+    - 3: SONAR_COMPILE: Custom Sonar Inductor-based backend with caching,
          piecewise compilation, shape specialization, and custom passes."""
     debug_dump_path: Path | None = None
     """The path to dump the debug information."""
@@ -434,13 +434,13 @@ class CompilationConfig:
     compilation. By default, it will use model-related information to generate
     a cache directory."""
     compile_cache_save_format: Literal["binary", "unpacked"] = field(
-        default_factory=lambda: envs.APHRODITE_COMPILE_CACHE_SAVE_FORMAT
+        default_factory=lambda: envs.SONAR_COMPILE_CACHE_SAVE_FORMAT
     )
     """Format for saving torch compile cache:\n
     - "binary": saves as binary file (multiprocess safe)\n
     - "unpacked": saves as directory structure for inspection/debugging
     (NOT multiprocess safe)\n
-    Defaults to `APHRODITE_COMPILE_CACHE_SAVE_FORMAT` if not specified.
+    Defaults to `SONAR_COMPILE_CACHE_SAVE_FORMAT` if not specified.
     """
     backend: str = ""
     """The backend for compilation. It needs to be a string:
@@ -476,11 +476,11 @@ class CompilationConfig:
     Inductor generates (fused) Triton kernels for disabled custom ops."""
 
     ir_enable_torch_wrap: bool = None  # type: ignore[assignment]
-    """If True, enable aphrodite_ir torch custom op wrapping during the forward pass.
+    """If True, enable sonar_ir torch custom op wrapping during the forward pass.
     When False, torch custom op wrapping is disabled, allowing Dynamo to trace the
     selected implementation directly or avoiding torch custom op overhead in eager mode.
-    Defaults to True when using Inductor with aphrodite-compile
-    (backend=="inductor" and mode == APHRODITE_COMPILE), False otherwise.
+    Defaults to True when using Inductor with sonar-compile
+    (backend=="inductor" and mode == SONAR_COMPILE), False otherwise.
     """
 
     splitting_ops: list[str] | None = None
@@ -621,7 +621,7 @@ class CompilationConfig:
     Currently, the cudagraph mode is only used for the v1 engine.
     Note that the cudagraph logic is generally orthogonal to the
     compilation logic. While piecewise cudagraphs require piecewise
-    compilation (mode=APHRODITE_COMPILE and non-empty splitting_ops), full
+    compilation (mode=SONAR_COMPILE and non-empty splitting_ops), full
     cudagraphs are supported with and without compilation.
 
     Warning: This flag is new and subject to change in addition
@@ -634,7 +634,7 @@ class CompilationConfig:
     cudagraph will be used for subsequent runs."""
     cudagraph_capture_sizes: list[int] = None  # type: ignore[assignment]
     """Sizes to capture cudagraph.
-    - None (default): capture sizes are inferred from aphrodite config.
+    - None (default): capture sizes are inferred from sonar config.
     - list[int]: capture sizes are specified as given."""
     cudagraph_copy_inputs: bool = False
     """Whether to copy input tensors for
@@ -664,7 +664,7 @@ class CompilationConfig:
     register the custom op.
 
     This config supports both full cudagraph and piecewise cudagraph without
-    compiling twice. For piecewise cudagraph, it applies Aphrodite CUDAGraph wrapper
+    compiling twice. For piecewise cudagraph, it applies Sonar CUDAGraph wrapper
     to each partition. For N+1 partitions, there would be N+1
     CUDAGraph wrapper instances.
 
@@ -748,26 +748,26 @@ class CompilationConfig:
     # Attention ops; used for piecewise cudagraphs
     # Use PyTorch operator format: "namespace::name"
     _attention_ops: ClassVar[list[str]] = [
-        "aphrodite::unified_attention_with_output",
-        "aphrodite::unified_mla_attention_with_output",
-        "aphrodite::mamba_mixer2",
-        "aphrodite::mamba_mixer",
-        "aphrodite::short_conv",
+        "sonar::unified_attention_with_output",
+        "sonar::unified_mla_attention_with_output",
+        "sonar::mamba_mixer2",
+        "sonar::mamba_mixer",
+        "sonar::short_conv",
         # Qwen4Exp's AMD backend still uses these splitting ops.
-        "aphrodite::qwen4_exp_ple_short_conv",
-        "aphrodite::qwen4_exp_qsa_with_output",
+        "sonar::qwen4_exp_ple_short_conv",
+        "sonar::qwen4_exp_qsa_with_output",
         # The fused prepare calls this op instead of the one above.
-        "aphrodite::qwen4_exp_qsa_prepare_with_output",
-        "aphrodite::linear_attention",
-        "aphrodite::qwen_gdn_attention_core",
-        "aphrodite::qwen_gdn_attention_core_fused_norm_packed",
-        "aphrodite::gdn_attention_core_xpu",
-        "aphrodite::olmo_hybrid_gdn_full_forward",
-        "aphrodite::sparse_attn_indexer",
-        "aphrodite::rocm_aiter_sparse_attn_indexer",
-        "aphrodite::deepseek_v4_attention",
-        "aphrodite::hpc_rope_norm_forward",
-        "aphrodite::step5_csa_attention",
+        "sonar::qwen4_exp_qsa_prepare_with_output",
+        "sonar::linear_attention",
+        "sonar::qwen_gdn_attention_core",
+        "sonar::qwen_gdn_attention_core_fused_norm_packed",
+        "sonar::gdn_attention_core_xpu",
+        "sonar::olmo_hybrid_gdn_full_forward",
+        "sonar::sparse_attn_indexer",
+        "sonar::rocm_aiter_sparse_attn_indexer",
+        "sonar::deepseek_v4_attention",
+        "sonar::hpc_rope_norm_forward",
+        "sonar::step5_csa_attention",
     ]
 
     def compute_hash(self) -> str:
@@ -796,7 +796,7 @@ class CompilationConfig:
             "dynamic_shapes_config",  # handled separately below
         }
 
-        from aphrodite.config.utils import get_hash_factors, hash_factors
+        from sonar.config.utils import get_hash_factors, hash_factors
 
         factors = get_hash_factors(self, ignored_factors)
 
@@ -836,7 +836,7 @@ class CompilationConfig:
     def validate_mode_before(cls, value: Any) -> Any:
         """Enable parsing the `mode` field from string mode names.
         Accepts both integers (0-3) and string names, like NONE, STOCK_TORCH_COMPILE,
-        DYNAMO_TRACE_ONCE, APHRODITE_COMPILE.
+        DYNAMO_TRACE_ONCE, SONAR_COMPILE.
         """
         if isinstance(value, str):
             # Convert string mode name to integer value
@@ -909,12 +909,12 @@ class CompilationConfig:
         # assert_alignment calls per forward). PyTorch >= 2.12 has a
         # native fix (assert-once), so we only apply this workaround on
         # older versions. On torch < 2.12, enable asserts only when
-        # APHRODITE_LOGGING_LEVEL=DEBUG. Users can still override explicitly
+        # SONAR_LOGGING_LEVEL=DEBUG. Users can still override explicitly
         # via --compilation-config '{"inductor_compile_config":
         # {"size_asserts": true, ...}}'.
         # See: https://github.com/pytorch/pytorch/issues/177719
         if not is_torch_equal_or_newer("2.12.0.dev"):
-            enable_asserts = envs.APHRODITE_LOGGING_LEVEL == "DEBUG"
+            enable_asserts = envs.SONAR_LOGGING_LEVEL == "DEBUG"
             for key in (
                 "size_asserts",
                 "alignment_asserts",
@@ -995,7 +995,7 @@ class CompilationConfig:
         # Currently only eager and inductor backend are supported.
         # for piecewise compilation. Custom backends are not supported for
         # piecewise compilation. Update when more backends are supported.
-        if self.mode == CompilationMode.APHRODITE_COMPILE and self.backend not in [
+        if self.mode == CompilationMode.SONAR_COMPILE and self.backend not in [
             "",
             "eager",
             "inductor",
@@ -1025,15 +1025,15 @@ class CompilationConfig:
 
     def init_backend(
         self,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
         prefix: str = "",
         is_encoder: bool = False,
         use_aot_compile: bool = True,
     ) -> str | Callable:
-        """Initialize the backend for the compilation config from a aphrodite config.
+        """Initialize the backend for the compilation config from a sonar config.
 
         Arguments:
-            aphrodite_config: The aphrodite config to initialize the backend from.
+            sonar_config: The sonar config to initialize the backend from.
             prefix: Cache directory prefix for this compiled module.
             is_encoder: Whether this module is used in an encoder (as
                 opposed to a text backbone).
@@ -1046,7 +1046,7 @@ class CompilationConfig:
         if self.mode is None:
             raise ValueError(
                 "No compilation mode is set. This method should only be "
-                "called via aphrodite config where the level is set if none is "
+                "called via sonar config where the level is set if none is "
                 "provided."
             )
         if self.mode == CompilationMode.NONE:
@@ -1063,14 +1063,14 @@ class CompilationConfig:
                 return self.backend
             return resolve_obj_by_qualname(self.backend)
 
-        assert self.mode == CompilationMode.APHRODITE_COMPILE
+        assert self.mode == CompilationMode.SONAR_COMPILE
         if self.backend not in ["eager", "inductor"]:
             logger.info("Using OOT custom backend for compilation.")
 
-        from aphrodite.compilation.backends import AphroditeBackend
+        from sonar.compilation.backends import SonarBackend
 
-        return AphroditeBackend(
-            aphrodite_config,
+        return SonarBackend(
+            sonar_config,
             prefix=prefix,
             is_encoder=is_encoder,
             use_aot_compile=use_aot_compile,
@@ -1102,9 +1102,9 @@ class CompilationConfig:
             assert self.cudagraph_capture_sizes[-1] == self.max_cudagraph_capture_size
 
     def set_splitting_ops_for_v1(self, all2all_backend: str, data_parallel_size: int = 1):
-        # To compatible with OOT hardware plugin platform (for example aphrodite-ascend)
+        # To compatible with OOT hardware plugin platform (for example sonar-ascend)
         # which currently only supports sequence parallelism in eager mode.
-        if self.mode != CompilationMode.APHRODITE_COMPILE:
+        if self.mode != CompilationMode.SONAR_COMPILE:
             if self.splitting_ops is None:
                 self.splitting_ops = []
             return
@@ -1149,8 +1149,8 @@ class CompilationConfig:
                             "to enable QK-Norm+RoPE+KV cache fusion."
                         )
                         self.pass_config.fuse_qk_norm_rope_kvcache = False
-                    self.splitting_ops.append("aphrodite::unified_kv_cache_update")
-                    self.splitting_ops.append("aphrodite::unified_mla_kv_cache_update")
+                    self.splitting_ops.append("sonar::unified_kv_cache_update")
+                    self.splitting_ops.append("sonar::unified_mla_kv_cache_update")
 
             elif len(self.splitting_ops) == 0:
                 if (
@@ -1234,8 +1234,8 @@ class CompilationConfig:
             return True
 
         kv_cache_update_ops = [
-            "aphrodite::unified_kv_cache_update",
-            "aphrodite::unified_mla_kv_cache_update",
+            "sonar::unified_kv_cache_update",
+            "sonar::unified_mla_kv_cache_update",
         ]
         return self.splitting_ops is not None and all(op in self.splitting_ops for op in kv_cache_update_ops)
 
@@ -1245,7 +1245,7 @@ class CompilationConfig:
 
         if not self.use_inductor_graph_partition:
             # Dynamo-level FX split case
-            return self.mode == CompilationMode.APHRODITE_COMPILE
+            return self.mode == CompilationMode.SONAR_COMPILE
 
         # Inductor partition case
         return self.backend == "inductor" and self.mode != CompilationMode.NONE
@@ -1253,7 +1253,7 @@ class CompilationConfig:
     def custom_op_log_check(self):
         """This method logs the enabled/disabled custom ops and checks that the
         passed custom_ops field only contains relevant ops.
-        It is called at the end of set_current_aphrodite_config,
+        It is called at the end of set_current_sonar_config,
         after the custom ops have been instantiated.
         """
         if len(self.enabled_custom_ops) + len(self.disabled_custom_ops) == 0:
@@ -1273,7 +1273,7 @@ class CompilationConfig:
             # check if op name exists in model
             op_name = op[1:]
             if op_name not in all_ops_in_model:
-                from aphrodite.model_executor.custom_op import op_registry
+                from sonar.model_executor.custom_op import op_registry
 
                 # Does op exist at all or is it just not present in this model?
                 # Note: Only imported op classes appear in the registry.
@@ -1314,7 +1314,7 @@ class CompilationConfig:
         is_profiling: bool = False,
         piecewise_capture_available: bool = True,
     ) -> CUDAGraphMode:
-        from aphrodite.v1.attention.backend import AttentionCGSupport
+        from sonar.v1.attention.backend import AttentionCGSupport
 
         cudagraph_mode = self.cudagraph_mode
         if cudagraph_mode is None or cudagraph_mode == CUDAGraphMode.NONE:
@@ -1330,7 +1330,7 @@ class CompilationConfig:
             )
             if min_cg_support == AttentionCGSupport.NEVER:
                 # if not supported any full cudagraphs, just raise it.
-                msg += "; please try cudagraph_mode=PIECEWISE, and make sure compilation mode is APHRODITE_COMPILE"
+                msg += "; please try cudagraph_mode=PIECEWISE, and make sure compilation mode is SONAR_COMPILE"
                 raise ValueError(msg)
 
             # attempt to resolve the full cudagraph related mode
@@ -1349,7 +1349,7 @@ class CompilationConfig:
                 f"with {min_cg_attn_backend} backend (support: "
                 f"{min_cg_support})"
             )
-            if self.mode == CompilationMode.APHRODITE_COMPILE and (
+            if self.mode == CompilationMode.SONAR_COMPILE and (
                 self.splitting_ops_contain_attention() or self.use_inductor_graph_partition
             ):
                 msg += "; setting cudagraph_mode=PIECEWISE because attention is compiled piecewise"
@@ -1398,7 +1398,7 @@ class CompilationConfig:
                 f"supported with {min_cg_attn_backend} backend ("
                 f"support:{min_cg_support}) "
                 "; please try cudagraph_mode=PIECEWISE, "
-                "and make sure compilation mode is APHRODITE_COMPILE"
+                "and make sure compilation mode is SONAR_COMPILE"
             )
 
         # MRV1 adjusts cudagraph sizes to be a multiple of uniform_decode_query_len

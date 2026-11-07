@@ -49,7 +49,7 @@ guide: |
   ## Prerequisites
 
   - Hardware: Intel Xeon 6/Xeon 5 CPUs
-  - Aphrodite >= 0.6.1
+  - Sonar >= 0.6.1
 
   ### Docker (Intel Xeon 6 CPUs)
 
@@ -60,7 +60,7 @@ guide: |
   ## Intel Xeon 6
 
   ```bash
-  aphrodite serve ibm-granite/granite-3.2-2b-instruct  ```
+  sonar serve ibm-granite/granite-3.2-2b-instruct  ```
 
   TP/DP values and host-specific CPU placement remain deployment choices and
   are not hard-coded into the portable recipe.
@@ -74,7 +74,7 @@ guide: |
   - `--max-num-seqs`: concurrency and scheduler-capacity tuning.
   - `--gpu-memory-utilization`: platform memory-budget tuning.
   - `--no-enable-prefix-caching`: workload/benchmark cache-policy tuning.
-  - `APHRODITE_ENGINE_ITERATION_TIMEOUT_S`: operational runtime timeout.
+  - `SONAR_ENGINE_ITERATION_TIMEOUT_S`: operational runtime timeout.
 
   These settings may still appear in validated hardware-specific overrides. Tune
   them at deployment time based on platform resources, workload shape, and
@@ -83,4 +83,4 @@ guide: |
   ## References
 
   - [Model card](https://huggingface.co/ibm-granite/granite-3.2-2b-instruct)
-  - [Aphrodite CPU installation](https://docs.vllm.ai/en/latest/getting_started/installation/cpu/)
+  - [Sonar CPU installation](https://docs.vllm.ai/en/latest/getting_started/installation/cpu/)

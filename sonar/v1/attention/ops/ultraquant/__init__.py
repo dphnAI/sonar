@@ -13,7 +13,7 @@ __all__ = ["ultraquant_store"]
 
 def __getattr__(name: str):
     if name == "ultraquant_store":
-        from aphrodite.v1.attention.ops.ultraquant.triton_store import ultraquant_store
+        from sonar.v1.attention.ops.ultraquant.triton_store import ultraquant_store
 
         return ultraquant_store
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

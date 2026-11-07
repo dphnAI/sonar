@@ -19,7 +19,7 @@ from typing import Any
 
 import torch
 
-from aphrodite.distributed.ec_transfer.ec_connector.mooncake.metadata import (
+from sonar.distributed.ec_transfer.ec_connector.mooncake.metadata import (
     ECMooncakePushSpec,
 )
 

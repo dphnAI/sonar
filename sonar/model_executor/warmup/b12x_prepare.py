@@ -21,8 +21,8 @@ from typing import TYPE_CHECKING, Literal, cast
 
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.utils.b12x import (
+from sonar.platforms import current_platform
+from sonar.utils.b12x import (
     B12xPreparationUnit,
     B12xWorkload,
     b12x_preparation_token_counts,
@@ -34,8 +34,8 @@ from aphrodite.utils.b12x import (
 if TYPE_CHECKING:
     from b12x.preparation import PreparationRequest
 
-    from aphrodite.v1.worker.gpu.model_runner import GPUModelRunner as GPUModelRunnerV2
-    from aphrodite.v1.worker.gpu_worker import Worker
+    from sonar.v1.worker.gpu.model_runner import GPUModelRunner as GPUModelRunnerV2
+    from sonar.v1.worker.gpu_worker import Worker
 
 
 def b12x_native_supported(worker: Worker) -> bool:
@@ -56,7 +56,7 @@ def _validate_native_worker(worker: Worker) -> None:
         raise RuntimeError("Native B12x preparation requires CUDA device family 120")
     if not worker.use_v2_model_runner:
         raise RuntimeError("Native B12x preparation requires the V2 model runner")
-    parallel = worker.aphrodite_config.parallel_config
+    parallel = worker.sonar_config.parallel_config
     if parallel.decode_context_parallel_size != 1 or parallel.prefill_context_parallel_size != 1 or parallel.enable_dbo:
         raise NotImplementedError("Native SM120 preparation does not support DCP, PCP or DBO")
 
@@ -85,7 +85,7 @@ def _planned_decode_counts(
     query_len = int(getattr(runner, "decode_query_len", 0) or 0) or 1 + int(speculative_tokens)
     if query_len <= 1 or not capture_sizes:
         return ()
-    compilation = worker.aphrodite_config.compilation_config
+    compilation = worker.sonar_config.compilation_config
     limit = int(getattr(compilation, "max_cudagraph_capture_size", None) or max(capture_sizes))
     max_reqs = int(worker.scheduler_config.max_num_seqs)
     counts = set()
@@ -98,11 +98,11 @@ def _planned_decode_counts(
 
 def b12x_workload(worker: Worker, *, stage: str, lane: int = 0) -> B12xWorkload:
     """Describe the serving shapes of one stage without constructing plans."""
-    compilation = worker.aphrodite_config.compilation_config
+    compilation = worker.sonar_config.compilation_config
     capture_sizes = tuple(compilation.cudagraph_capture_sizes or ())
     compile_sizes = tuple(size for size in (compilation.compile_sizes or ()) if isinstance(size, int))
     endpoints = tuple(compile_range.end for compile_range in compilation.get_compile_ranges())
-    spec = worker.aphrodite_config.speculative_config
+    spec = worker.sonar_config.speculative_config
     speculative_tokens = 0 if spec is None else int(getattr(spec, "num_speculative_tokens", 0))
     max_tokens = int(worker.scheduler_config.max_num_batched_tokens)
     planned = _planned_decode_counts(
@@ -213,7 +213,7 @@ def collect_b12x_units(worker: Worker, workload: B12xWorkload) -> list[B12xPrepa
     units.extend(_units_from_modules(model, workload, seen=seen, module_lanes=module_lanes))
     if draft is not None:
         draft_workload = replace(workload, lane=lane)
-        from aphrodite.v1.worker.workspace import use_workspace_lane
+        from sonar.v1.worker.workspace import use_workspace_lane
 
         with use_workspace_lane(lane):
             draft_units = list(_units_from_modules(draft, draft_workload, seen=seen, module_lanes=module_lanes))
@@ -229,7 +229,7 @@ def collect_b12x_units(worker: Worker, workload: B12xWorkload) -> list[B12xPrepa
                 continue
             lanes = tuple(sorted({0, lane})) if owner is None else module_lanes[id(owner)]
             owner_lane = lanes[0]
-            from aphrodite.v1.worker.workspace import use_workspace_lane
+            from sonar.v1.worker.workspace import use_workspace_lane
 
             with use_workspace_lane(owner_lane):
                 provider_units = hook(provider, replace(workload, lane=owner_lane))
@@ -283,7 +283,7 @@ def get_b12x_session(worker: Worker):
         return session
     from b12x.preparation import PreparationSession
 
-    config = worker.aphrodite_config
+    config = worker.sonar_config
     spec = config.speculative_config
     namespace = {
         "model": str(config.model_config.model),
@@ -302,7 +302,7 @@ def get_b12x_session(worker: Worker):
     )
     worker._b12x_session = session
     if session.autotune and os.environ.get("B12X_AUTOTUNE", "1") != "0":
-        from aphrodite.distributed.parallel_state import get_tp_group
+        from sonar.distributed.parallel_state import get_tp_group
 
         tp_group = get_tp_group()
         ranks = tuple(sorted(int(rank) for rank in tp_group.ranks))
@@ -318,9 +318,9 @@ def begin_b12x_preparation(
     initial_error: Exception | None = None,
 ):
     """Construct a complete-world round, including ranks whose discovery failed."""
-    from aphrodite.distributed.parallel_state import get_world_group
-    from aphrodite.v1.worker.b12x_startup import B12xPreparationCoordinator
-    from aphrodite.v1.worker.workspace import current_workspace_manager
+    from sonar.distributed.parallel_state import get_world_group
+    from sonar.v1.worker.b12x_startup import B12xPreparationCoordinator
+    from sonar.v1.worker.workspace import current_workspace_manager
 
     units: list[B12xPreparationUnit] = []
     batches = []
@@ -369,9 +369,9 @@ def run_b12x_preparation(
     """Finish preparation on every rank before the next model collective."""
     if not b12x_native_supported(worker):
         return None
-    from aphrodite.config import set_current_aphrodite_config
+    from sonar.config import set_current_sonar_config
 
-    with set_current_aphrodite_config(worker.aphrodite_config):
+    with set_current_sonar_config(worker.sonar_config):
         coordinator = begin_b12x_preparation(worker, stage=stage, autotune=autotune, initial_error=initial_error)
         try:
             outcome = coordinator.status()
@@ -410,11 +410,11 @@ def prepare_b12x_state(worker: Worker, kv_cache_config) -> None:
     """Tune with final cache layout before the serving pool consumes free VRAM."""
     if not b12x_native_supported(worker):
         return
-    from aphrodite.config import set_current_aphrodite_config
-    from aphrodite.v1.core.kv_cache_config_builder import get_kv_cache_config_builder
-    from aphrodite.v1.worker.gpu.cudagraph_utils import _teardown_profiling_state
+    from sonar.config import set_current_sonar_config
+    from sonar.v1.core.kv_cache_config_builder import get_kv_cache_config_builder
+    from sonar.v1.worker.gpu.cudagraph_utils import _teardown_profiling_state
 
-    config = worker.aphrodite_config
+    config = worker.sonar_config
     if config.attention_config.hisparse_config is not None:
         # HiSparse owns a separate shared host-pool lifecycle; bind its real
         # pools below instead of constructing a conflicting temporary pool.
@@ -422,7 +422,7 @@ def prepare_b12x_state(worker: Worker, kv_cache_config) -> None:
     saved_blocks = worker.cache_config.num_gpu_blocks
     batch = None
     try:
-        with set_current_aphrodite_config(config):
+        with set_current_sonar_config(config):
             error = None
             try:
                 builder = get_kv_cache_config_builder(config)

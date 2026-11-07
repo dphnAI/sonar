@@ -23,10 +23,10 @@ import zlib
 import numpy as np
 import torch
 
-from aphrodite.distributed.parallel_state import get_tp_group
-from aphrodite.forward_context import get_forward_context
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe.router.gate_linear import GateLinear
+from sonar.distributed.parallel_state import get_tp_group
+from sonar.forward_context import get_forward_context
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe.router.gate_linear import GateLinear
 
 logger = init_logger(__name__)
 

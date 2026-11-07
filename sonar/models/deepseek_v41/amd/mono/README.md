@@ -1,24 +1,24 @@
 # DeepSeek-V4.1-Flash mono decode layer (gfx950, FlyDSL)
 
-One fused decoder layer for Aphrodite's decode steps on MI355X: the attention seam,
+One fused decoder layer for Sonar's decode steps on MI355X: the attention seam,
 the attention, the attention all-reduce, the FFN seam, the MoE and the MoE
 all-reduce, in two persistent launches a layer. A layer outside the whole-layer
-kernels keeps Aphrodite's attention and runs the rest -- the attention all-reduce,
+kernels keeps Sonar's attention and runs the rest -- the attention all-reduce,
 the FFN seam, the MoE and its all-reduce -- as one launch (the FFN launch).
 ATOM's V4.1 mono decode
 (ROCm/ATOM `atom/models/deepseek_v41/mono`) is the reference design: the seam
 and MoE stages (`stages/`) and the framework under them (`common/`) are adapted
 from it, each file naming its origin; the attention stages (`attention/`) are
-new, reading Aphrodite's KV records and weights as loaded.
+new, reading Sonar's KV records and weights as loaded.
 
 ## Scope
 
 - Layers: the whole layer on all 40 backbone layers. K1 takes the residual
   settled, without folding the previous output in, on layer 0 (the embedding
   broadcast to the four streams) and after an Engram write (layers 1 and 14,
-  Aphrodite's Engram running before K1). On the index sources (2, 8, 14, 20 with
+  Sonar's Engram running before K1). On the index sources (2, 8, 14, 20 with
   their compressor; 24, 28, 32, 36) K1 also hands out its normed input and bf16
-  qr, Aphrodite's compressor and indexer run between K1 and K2, and K2 builds the
+  qr, Sonar's compressor and indexer run between K1 and K2, and K2 builds the
   key table from that top-k. The FFN launch serves a layer outside these (an
   MXFP8 KV cache, another indexer). The DSpark draft's three layers run the same
   K1 / K2 on a runner of their own (128 experts / top-3, window-only attention over
@@ -39,7 +39,7 @@ new, reading Aphrodite's KV records and weights as loaded.
     K1  seam (stages/seam.py): slice (160 x 32 columns): fold x into the
         residual (post x + sum comb r), the collapsed input (pre . R'), partial
         mixes (fn . R') and sums of squares -> gate (S): 24 mixes -> pre / post
-        / comb (Sinkhorn 20) -> norm (S): attn_norm -> Aphrodite MXFP8 -> X8
+        / comb (Sinkhorn 20) -> norm (S): attn_norm -> Sonar MXFP8 -> X8
         attention front (attention/front.py): wqkv, q / kv norms + KV insert,
         wq_b + RoPE -> Q
     K2  attention back (attention/back.py): split attention, combine + inverse
@@ -51,7 +51,7 @@ new, reading Aphrodite's KV records and weights as loaded.
         GEMVs, clamped SiLU), ug (MXFP4 x MXFP8 per expert of the step's
         union), down (+ routing weight, top-k order; + shared) -> push, rank-order
         sum -> out
-    FFN K2 without the attention back: push (160 x 32 columns) of Aphrodite's
+    FFN K2 without the attention back: push (160 x 32 columns) of Sonar's
         unreduced wo_b output, as its bits, to every rank's attention region,
         then K2's FFN seam and MoE (the same code, `layer.run_ffn`)
 
@@ -73,26 +73,26 @@ new, reading Aphrodite's KV records and weights as loaded.
   peer regions alternate by epoch parity, and a rank cannot run two steps ahead
   of a peer (each step's reduce waits on every rank's push).
 
-## Numerics (the Aphrodite path each stage reproduces)
+## Numerics (the Sonar path each stage reproduces)
 
 - Seams: aiter `mhc_fused_post_pre_delayed_rmsnorm` (post fold order, fn as
   bf16 hi + lo, products summed in order, Triton sigmoid / exp / rcp).
-- Attention: Aphrodite's ROCm chain. `mxfp8(x)`: one E8M0 per 32 values,
-  `code = clamp(ceil(log2(amax / 448)) + 127, 0, 254)`; weights in Aphrodite's
+- Attention: Sonar's ROCm chain. `mxfp8(x)`: one E8M0 per 32 values,
+  `code = clamp(ceil(log2(amax / 448)) + 127, 0, 254)`; weights in Sonar's
   row-major e4m3 [N, K] with [N/32, K/32] E8M0 scales (one shared copy); KV
-  records as Aphrodite's insert writes them (dims 0..447 e4m3 with a UE8M0 per 64,
+  records as Sonar's insert writes them (dims 0..447 e4m3 with a UE8M0 per 64,
   RoPE dims bf16, 584 B); keys = the sliding window plus the top-k compressed
   rows, softmax in base 2 with the attention sink folded in.
-- MoE: Aphrodite's router (bf16 gate GEMV, f32 logits, `topk_hash_softplus_sqrt`)
+- MoE: Sonar's router (bf16 gate GEMV, f32 logits, `topk_hash_softplus_sqrt`)
   and AITER a8w4 `fused_moe` (interleaved gate / up, swiglu limit 10, weights
   in aiter's (16, 16) shuffle and `shuffle_scale` order); the shared expert as
-  Aphrodite's MXFP8 block-32 linears with `silu_and_mul_with_clamp`.
-- All-reduces: exact, fp32 in rank order -> bf16. Aphrodite's decode all-reduces at
-  M <= 48 are below its INT4 quick-reduce threshold, so Aphrodite runs them exact too.
+  Sonar's MXFP8 block-32 linears with `silu_and_mul_with_clamp`.
+- All-reduces: exact, fp32 in rank order -> bf16. Sonar's decode all-reduces at
+  M <= 48 are below its INT4 quick-reduce threshold, so Sonar runs them exact too.
 
 ## Validation
 
-- Per layer against Aphrodite's own modules in a TP process group (`DeepseekV4MoE`,
+- Per layer against Sonar's own modules in a TP process group (`DeepseekV4MoE`,
   the mHC seams, the attention chain, the all-reduce), real checkpoint weights.
 - Bench: layers of one type back to back in one HIP graph, cold weights,
   us per layer, M = 1..48, TP2 / TP4; then e2e (AgentX, InferenceX#3690

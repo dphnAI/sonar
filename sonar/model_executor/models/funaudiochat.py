@@ -25,22 +25,22 @@ from transformers.activations import get_activation
 from transformers.feature_extraction_utils import BatchFeature
 from transformers.modeling_outputs import BaseModelOutput
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.multimodal import MultiModalDummyOptions
-from aphrodite.inputs import MultiModalDataDict
-from aphrodite.model_executor.layers.attention.mm_encoder_attention import MMEncoderAttention
-from aphrodite.model_executor.layers.linear import QKVParallelLinear, RowParallelLinear
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import (
+from sonar.config import SonarConfig
+from sonar.config.multimodal import MultiModalDummyOptions
+from sonar.inputs import MultiModalDataDict
+from sonar.model_executor.layers.attention.mm_encoder_attention import MMEncoderAttention
+from sonar.model_executor.layers.linear import QKVParallelLinear, RowParallelLinear
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import (
     MultiModalFieldConfig,
     MultiModalKwargsItems,
 )
-from aphrodite.multimodal.parse import (
+from sonar.multimodal.parse import (
     AudioProcessorItems,
     MultiModalDataItems,
     MultiModalDataParser,
 )
-from aphrodite.multimodal.processing import (
+from sonar.multimodal.processing import (
     BaseDummyInputsBuilder,
     BaseMultiModalProcessor,
     BaseProcessingInfo,
@@ -48,14 +48,14 @@ from aphrodite.multimodal.processing import (
     PromptUpdate,
     PromptUpdateDetails,
 )
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.utils.import_utils import _has_module
+from sonar.sequence import IntermediateTensors
+from sonar.utils.import_utils import _has_module
 
 from .interfaces import MultiModalEmbeddings, SupportsMultiModal, SupportsPP
 from .utils import (
     AutoWeightsLoader,
     WeightsMapper,
-    init_aphrodite_registered_model,
+    init_sonar_registered_model,
     maybe_prefix,
 )
 
@@ -79,7 +79,7 @@ class _SinusoidsPositionEmbedding(nn.Module):
 class FunAudioChatAudioAttention(nn.Module):
     """Multi-headed attention used inside the continuous audio tower."""
 
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_stacked={
             ".q_proj": (".qkv_proj", "q"),
             ".k_proj": (".qkv_proj", "k"),
@@ -139,7 +139,7 @@ class FunAudioChatAudioAttention(nn.Module):
                 self.qkv_proj.bias.zero_()
 
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
     def forward(
         self,
@@ -719,7 +719,7 @@ class FunAudioChatMultiModalProcessor(BaseMultiModalProcessor[FunAudioChatProces
     dummy_inputs=FunAudioChatDummyInputsBuilder,
 )
 class FunAudioChatForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsPP):
-    hf_to_aphrodite_mapper = WeightsMapper(orig_to_new_prefix={"audio_invert_tower.": None})
+    hf_to_sonar_mapper = WeightsMapper(orig_to_new_prefix={"audio_invert_tower.": None})
 
     @classmethod
     def get_placeholder_str(cls, modality: str, i: int) -> str | None:
@@ -728,22 +728,22 @@ class FunAudioChatForConditionalGeneration(nn.Module, SupportsMultiModal, Suppor
 
         raise ValueError("Only audio modality is supported")
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
-        multimodal_config = aphrodite_config.model_config.multimodal_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
+        multimodal_config = sonar_config.model_config.multimodal_config
         self.config = config
         self.multimodal_config = multimodal_config
         self.quant_config = quant_config
 
-        with self._mark_tower_model(aphrodite_config, "audio"):
+        with self._mark_tower_model(sonar_config, "audio"):
             self.continuous_audio_tower = FunAudioChatAudioEncoder(config.audio_config)
             self.audio_tower = FunAudioChatDiscreteEncoder(config.audio_config)
 
-        with self._mark_language_model(aphrodite_config):
-            self.language_model = init_aphrodite_registered_model(
-                aphrodite_config=aphrodite_config,
+        with self._mark_language_model(sonar_config):
+            self.language_model = init_sonar_registered_model(
+                sonar_config=sonar_config,
                 hf_config=config.text_config,
                 prefix=maybe_prefix(prefix, "language_model"),
                 architectures=["Qwen3ForCausalLM"],
@@ -910,4 +910,4 @@ class FunAudioChatForConditionalGeneration(nn.Module, SupportsMultiModal, Suppor
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)

@@ -5,17 +5,17 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import cast
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.kv_transfer import hisparse_host_pool_gib
-from aphrodite.logger import init_logger
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.v1.hisparse.runtime import (
+from sonar.config import SonarConfig
+from sonar.config.kv_transfer import hisparse_host_pool_gib
+from sonar.logger import init_logger
+from sonar.utils.math_utils import cdiv
+from sonar.v1.hisparse.runtime import (
     ResolvedHiSparseConfig,
     get_hisparse_host_block_stride,
     use_shared_hisparse_host_pool,
 )
-from aphrodite.v1.hisparse.types import ACTIVE_TAIL_PAGES
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.hisparse.types import ACTIVE_TAIL_PAGES
+from sonar.v1.kv_cache_interface import (
     HiSparseHotSpec,
     HiSparseResidentSpec,
     KVCacheConfig,
@@ -28,7 +28,7 @@ from aphrodite.v1.kv_cache_interface import (
     UniformTypeKVCacheSpecs,
     compute_layout_strides,
 )
-from aphrodite.v1.kv_cache_layout import KVCacheLayout
+from sonar.v1.kv_cache_layout import KVCacheLayout
 
 logger = init_logger(__name__)
 
@@ -46,13 +46,13 @@ class HiSparseLayout:
 
 
 def get_hisparse_kv_cache_groups(
-    aphrodite_config: AphroditeConfig, kv_cache_spec: dict[str, KVCacheSpec]
+    sonar_config: SonarConfig, kv_cache_spec: dict[str, KVCacheSpec]
 ) -> list[KVCacheGroupSpec] | None:
     """The groups HiSparse allocates: the host source group, then the GPU
     groups sharing one device pool. Derived resident/hot specs in
     `kv_cache_spec` (see `resolve_hisparse_specs`) are laid out again
     from the attention specs they belong to."""
-    attention_config = getattr(aphrodite_config, "attention_config", None)
+    attention_config = getattr(sonar_config, "attention_config", None)
     if attention_config is None or attention_config.hisparse_config is None:
         return None
 
@@ -67,17 +67,17 @@ def get_hisparse_kv_cache_groups(
     if not mla_specs:
         return None
 
-    from aphrodite.v1.core.kv_cache_planning import get_kv_cache_groups
+    from sonar.v1.core.kv_cache_planning import get_kv_cache_groups
 
     mla_group_spec = UniformTypeKVCacheSpecs.from_specs(mla_specs)
     assert mla_group_spec is not None
     mla_group = KVCacheGroupSpec(list(mla_specs), mla_group_spec)
-    regular_groups = get_kv_cache_groups(aphrodite_config, other_specs) if other_specs else []
-    return _lay_out_hisparse_groups(aphrodite_config, [mla_group, *regular_groups])
+    regular_groups = get_kv_cache_groups(sonar_config, other_specs) if other_specs else []
+    return _lay_out_hisparse_groups(sonar_config, [mla_group, *regular_groups])
 
 
-def get_hisparse_host_pool_bytes(aphrodite_config: AphroditeConfig) -> int:
-    host_pool_gib = hisparse_host_pool_gib(aphrodite_config.kv_transfer_config)
+def get_hisparse_host_pool_bytes(sonar_config: SonarConfig) -> int:
+    host_pool_gib = hisparse_host_pool_gib(sonar_config.kv_transfer_config)
     if host_pool_gib is None:
         raise ValueError("HiSparse requires HiSparseConnector with host_pool_gib")
     return int(host_pool_gib * 2**30)
@@ -111,21 +111,19 @@ def _partition_hisparse_specs(
     return source_specs, indexer_specs
 
 
-def _lay_out_hisparse_groups(
-    aphrodite_config: AphroditeConfig, groups: list[KVCacheGroupSpec]
-) -> list[KVCacheGroupSpec]:
+def _lay_out_hisparse_groups(sonar_config: SonarConfig, groups: list[KVCacheGroupSpec]) -> list[KVCacheGroupSpec]:
     source_specs, indexer_specs = _partition_hisparse_specs(groups)
     block_sizes = {spec.block_size for spec in (*source_specs.values(), *indexer_specs.values())}
     if len(block_sizes) != 1:
         raise ValueError("HiSparse requires one resolved GPU block size.")
     gpu_block_size = block_sizes.pop()
 
-    config = ResolvedHiSparseConfig.from_aphrodite_config(
-        aphrodite_config,
+    config = ResolvedHiSparseConfig.from_sonar_config(
+        sonar_config,
         max(
             spec.topk_buffer_width
             if spec.topk_buffer_width is not None
-            else aphrodite_config.model_config.hf_config.index_topk
+            else sonar_config.model_config.hf_config.index_topk
             for spec in source_specs.values()
         ),
         gpu_block_size,
@@ -212,13 +210,13 @@ def _lay_out_hisparse_groups(
 
 
 def create_hisparse_layout(
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     groups: list[KVCacheGroupSpec],
     host_budget: int,
 ) -> HiSparseLayout:
     """Size the host pool for groups laid out by `get_hisparse_kv_cache_groups`."""
     (source_group,) = [group for group in groups if group.host_resident]
-    shared_host_pool = use_shared_hisparse_host_pool(aphrodite_config)
+    shared_host_pool = use_shared_hisparse_host_pool(sonar_config)
     host_block_stride = get_hisparse_host_block_stride(
         source_group.kv_cache_spec.page_size_bytes,
         use_shared_host_pool=shared_host_pool,
@@ -229,7 +227,7 @@ def create_hisparse_layout(
     # Every computed page needs a host block, so one request at max_model_len
     # must fit alongside the pool's null block and a copy-on-write tail.
     gpu_block_size = source_group.kv_cache_spec.block_size
-    min_host_blocks = cdiv(aphrodite_config.model_config.max_model_len, gpu_block_size) + 2
+    min_host_blocks = cdiv(sonar_config.model_config.max_model_len, gpu_block_size) + 2
     if host_num_blocks < min_host_blocks:
         raise ValueError(
             f"HiSparse host pool has {host_num_blocks} blocks but max_model_len "
@@ -296,23 +294,23 @@ def _build_hisparse_kv_cache_tensors(
 
 
 def get_hisparse_kv_cache_config(
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     kv_cache_groups: list[KVCacheGroupSpec],
     available_memory: int,
     host_budget: int,
 ) -> KVCacheConfig:
-    from aphrodite.v1.core.kv_cache_planning import (
+    from sonar.v1.core.kv_cache_planning import (
         _get_kv_cache_bytes_per_block,
         may_override_num_blocks,
         validate_kv_cache_layout,
     )
 
-    hisparse_layout = create_hisparse_layout(aphrodite_config, kv_cache_groups, host_budget)
+    hisparse_layout = create_hisparse_layout(sonar_config, kv_cache_groups, host_budget)
     device_groups = hisparse_layout.device_groups
-    layout = aphrodite_config.cache_config.get_resolved_kv_cache_layout()
+    layout = sonar_config.cache_config.get_resolved_kv_cache_layout()
     validate_kv_cache_layout(layout, device_groups)
     bytes_per_block = _get_kv_cache_bytes_per_block(device_groups, layout)
-    num_blocks = may_override_num_blocks(aphrodite_config, available_memory // bytes_per_block)
+    num_blocks = may_override_num_blocks(sonar_config, available_memory // bytes_per_block)
     size = bytes_per_block * num_blocks
     kv_cache_tensors = _build_hisparse_kv_cache_tensors(device_groups, num_blocks, size, layout, bytes_per_block)
 
@@ -343,11 +341,11 @@ def get_hisparse_kv_cache_config(
         hisparse_host_num_blocks=hisparse_layout.host_num_blocks,
         hisparse_host_block_stride=hisparse_layout.host_block_stride,
         hisparse_shared_host_pool=hisparse_layout.shared_host_pool,
-        prefix_cache_retention_interval=(aphrodite_config.cache_config.prefix_cache_retention_interval),
+        prefix_cache_retention_interval=(sonar_config.cache_config.prefix_cache_retention_interval),
     )
 
 
-def get_hisparse_steady_state_concurrency(aphrodite_config: AphroditeConfig, kv_cache_config: KVCacheConfig) -> float:
+def get_hisparse_steady_state_concurrency(sonar_config: SonarConfig, kv_cache_config: KVCacheConfig) -> float:
     """Max concurrency at max_model_len once running requests read from host.
 
     A request reading from host pins only its active tail of each resident
@@ -359,7 +357,7 @@ def get_hisparse_steady_state_concurrency(aphrodite_config: AphroditeConfig, kv_
     host_blocks = 0
     for group in kv_cache_config.kv_cache_groups:
         spec = group.kv_cache_spec
-        required = cdiv(spec.max_memory_usage_bytes(aphrodite_config), spec.page_size_bytes)
+        required = cdiv(spec.max_memory_usage_bytes(sonar_config), spec.page_size_bytes)
         if group.host_resident:
             host_blocks += required
             continue

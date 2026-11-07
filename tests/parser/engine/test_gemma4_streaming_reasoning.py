@@ -8,12 +8,12 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from aphrodite.entrypoints.generate.base.protocol import DeltaMessage
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.generate.base.protocol import DeltaMessage
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionRequest,
     ChatCompletionToolsParam,
 )
-from aphrodite.parser.gemma4 import (
+from sonar.parser.gemma4 import (
     STRING_DELIM,
     Gemma4Parser,
     _gemma4_arg_value_extender,
@@ -1042,7 +1042,7 @@ class TestAdapterExtractReasoning:
 
     @pytest.fixture
     def adapter(self, mock_tokenizer):
-        from aphrodite.parser.engine.adapters import make_adapters
+        from sonar.parser.engine.adapters import make_adapters
 
         reasoning_cls, _ = make_adapters(Gemma4Parser)
         return reasoning_cls(mock_tokenizer)
@@ -1083,7 +1083,7 @@ class TestGemma4SchemaAwareTypeCoercion:
 
     @pytest.fixture
     def tools(self):
-        from aphrodite.entrypoints.openai.chat_completion.protocol import (
+        from sonar.entrypoints.openai.chat_completion.protocol import (
             ChatCompletionToolsParam,
         )
 
@@ -1165,7 +1165,7 @@ class TestGemma4SchemaCoercionBoolNumberNull:
 
     @pytest.fixture
     def tools(self):
-        from aphrodite.entrypoints.openai.chat_completion.protocol import (
+        from sonar.entrypoints.openai.chat_completion.protocol import (
             ChatCompletionToolsParam,
         )
 
@@ -1249,7 +1249,7 @@ class TestGemma4NestedSchemaCoercion:
 
     @pytest.fixture
     def tools(self):
-        from aphrodite.entrypoints.openai.chat_completion.protocol import (
+        from sonar.entrypoints.openai.chat_completion.protocol import (
             ChatCompletionToolsParam,
         )
 
@@ -1280,10 +1280,10 @@ class TestGemma4NestedSchemaCoercion:
         return Gemma4Parser(tool_call_tokenizer, tools=tools)
 
     def test_nested_object_coerced(self, parser_with_tools, mock_request):
-        text = '<|tool_call>call:search{query:<|"|>aphrodite<|"|>,filters:{language:python,min_stars:100}}<tool_call|>'
+        text = '<|tool_call>call:search{query:<|"|>sonar<|"|>,filters:{language:python,min_stars:100}}<tool_call|>'
         result = parser_with_tools.extract_tool_calls(text, mock_request)
         args = json.loads(result.tool_calls[0].function.arguments)
-        assert args["query"] == "aphrodite"
+        assert args["query"] == "sonar"
         assert args["filters"]["language"] == "python"
         assert args["filters"]["min_stars"] == 100
         assert isinstance(args["filters"]["min_stars"], int)

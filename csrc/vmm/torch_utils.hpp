@@ -3,7 +3,7 @@
 #include <string>
 #include <torch/all.h>
 
-namespace aphrodite {
+namespace sonar {
 namespace vmm {
 
 static inline torch::Dtype torch_dtype_from_size(size_t dtype_size) {
@@ -23,4 +23,4 @@ static inline torch::Dtype torch_dtype_from_size(size_t dtype_size) {
 }
 
 }  // namespace vmm
-}  // namespace aphrodite
+}  // namespace sonar

@@ -12,23 +12,23 @@ import torch
 from packaging.version import Version
 from safetensors.torch import load_file, save_file
 
-from aphrodite.config import AphroditeConfig, get_layers_from_aphrodite_config
-from aphrodite.distributed.kv_transfer.kv_connector.v1.base import (
+from sonar.config import SonarConfig, get_layers_from_sonar_config
+from sonar.distributed.kv_transfer.kv_connector.v1.base import (
     KVConnectorBase_V1,
     KVConnectorMetadata,
     KVConnectorRole,
     SupportsHMA,
 )
-from aphrodite.distributed.parallel_state import get_tensor_model_parallel_rank
-from aphrodite.logger import init_logger
-from aphrodite.utils.gpu_sync_debug import gpu_sync_allowed
-from aphrodite.v1.attention.backend import AttentionMetadata
-from aphrodite.v1.core.sched.output import SchedulerOutput
+from sonar.distributed.parallel_state import get_tensor_model_parallel_rank
+from sonar.logger import init_logger
+from sonar.utils.gpu_sync_debug import gpu_sync_allowed
+from sonar.v1.attention.backend import AttentionMetadata
+from sonar.v1.core.sched.output import SchedulerOutput
 
 if TYPE_CHECKING:
-    from aphrodite.v1.core.kv_cache_manager import KVCacheBlocks
-    from aphrodite.v1.kv_cache_interface import KVCacheConfig
-    from aphrodite.v1.request import Request
+    from sonar.v1.core.kv_cache_manager import KVCacheBlocks
+    from sonar.v1.kv_cache_interface import KVCacheConfig
+    from sonar.v1.request import Request
 
 logger = init_logger(__name__)
 
@@ -122,7 +122,7 @@ class ExampleHiddenStatesConnector(KVConnectorBase_V1, SupportsHMA):
         if kv_cache_config is None:
             return 0
 
-        from aphrodite.v1.kv_cache_interface import HiddenStateCacheSpec
+        from sonar.v1.kv_cache_interface import HiddenStateCacheSpec
 
         groups = kv_cache_config.kv_cache_groups
         group_ids = [gid for gid, group in enumerate(groups) if isinstance(group.kv_cache_spec, HiddenStateCacheSpec)]
@@ -138,7 +138,7 @@ class ExampleHiddenStatesConnector(KVConnectorBase_V1, SupportsHMA):
 
     @staticmethod
     def _get_cache_block_size(
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
         kv_cache_config: "KVCacheConfig | None",
         cache_kv_group_id: int,
     ) -> int:
@@ -148,25 +148,25 @@ class ExampleHiddenStatesConnector(KVConnectorBase_V1, SupportsHMA):
         verifiers; the page-aligned hidden-states group keeps a smaller one.
         """
         if kv_cache_config is None:
-            return aphrodite_config.cache_config.block_size
+            return sonar_config.cache_config.block_size
         cache_group = kv_cache_config.kv_cache_groups[cache_kv_group_id]
         return cache_group.kv_cache_spec.block_size
 
     def __init__(
         self,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
         role: KVConnectorRole,
         kv_cache_config: "KVCacheConfig",
     ):
         super().__init__(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             role=role,
             kv_cache_config=kv_cache_config,
         )
         # Read the hidden-states group and its block size from the group spec;
         # cache_config.block_size is bumped (wrong) for hybrid verifiers.
         self._cache_kv_group_id = self._find_cache_kv_group_id(kv_cache_config)
-        self._block_size = self._get_cache_block_size(aphrodite_config, kv_cache_config, self._cache_kv_group_id)
+        self._block_size = self._get_cache_block_size(sonar_config, kv_cache_config, self._cache_kv_group_id)
         self._storage_path = self._kv_transfer_config.get_from_extra_config("shared_storage_path", "/tmp")
         self.cache_layers: list[str] = []  # set by self.register_kv_caches
         logger.info(self._kv_transfer_config)
@@ -179,10 +179,10 @@ class ExampleHiddenStatesConnector(KVConnectorBase_V1, SupportsHMA):
                 "Upgrade to safetensors >= 0.8.0 for better performance."
             )
 
-        assert self._aphrodite_config.speculative_config is not None, (
+        assert self._sonar_config.speculative_config is not None, (
             "ExampleHiddenStatesConnector only works when using 'extract_hidden_states' speculative method"
         )
-        spec_config = self._aphrodite_config.speculative_config.draft_model_config.hf_config
+        spec_config = self._sonar_config.speculative_config.draft_model_config.hf_config
         self.num_hidden_states = len(getattr(spec_config, "eagle_aux_hidden_state_layer_ids", []))
 
         # Scheduler-side state
@@ -202,7 +202,7 @@ class ExampleHiddenStatesConnector(KVConnectorBase_V1, SupportsHMA):
         self._copy_stream: torch.cuda.Stream | None = None  # lazy init
         self._executor = ThreadPoolExecutor(
             max_workers=self._kv_transfer_config.get_from_extra_config("num_writer_threads", 8),
-            thread_name_prefix="aphrodite-hs-save",
+            thread_name_prefix="sonar-hs-save",
         )
         # Whether to use a filesystem lock when writing files to shared storage.
         # This is necessary for online transfer clients to avoid incomplete reads,
@@ -281,14 +281,12 @@ class ExampleHiddenStatesConnector(KVConnectorBase_V1, SupportsHMA):
         # Delay tp rank0 initialization until after distributed init
         self._is_tp_rank_zero = get_tensor_model_parallel_rank() == 0
 
-        from aphrodite.model_executor.models.extract_hidden_states import (
+        from sonar.model_executor.models.extract_hidden_states import (
             CacheOnlyAttentionLayer,
         )
 
         # Filter layers to only include CacheOnlyAttentionLayers
-        layers = get_layers_from_aphrodite_config(
-            self._aphrodite_config, CacheOnlyAttentionLayer, list(kv_caches.keys())
-        )
+        layers = get_layers_from_sonar_config(self._sonar_config, CacheOnlyAttentionLayer, list(kv_caches.keys()))
         self.cache_layers = list(layers.keys())
         assert len(self.cache_layers) == 1, f"Expected 1 CacheOnlyAttentionLayer, got {len(self.cache_layers)}"
         self._kv_cache = kv_caches[self.cache_layers[0]]
@@ -572,11 +570,11 @@ class ExampleHiddenStatesConnector(KVConnectorBase_V1, SupportsHMA):
         return self.request_finished(request, block_ids[self._cache_kv_group_id])
 
     @classmethod
-    def get_required_kvcache_layout(cls, aphrodite_config: "AphroditeConfig") -> str | None:
+    def get_required_kvcache_layout(cls, sonar_config: "SonarConfig") -> str | None:
         """Get the required KV cache layout for this connector.
 
         Args:
-            aphrodite_config (AphroditeConfig): the aphrodite config.
+            sonar_config (SonarConfig): the sonar config.
 
         Returns:
             str: the required KV cache layout. e.g. HND, or NHD.

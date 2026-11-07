@@ -10,10 +10,10 @@ import time
 
 import pytest
 
-import aphrodite.envs as envs
-from aphrodite import SamplingParams, TokensPrompt
-from aphrodite.config import KVTransferConfig
-from aphrodite.platforms import current_platform
+import sonar.envs as envs
+from sonar import SamplingParams, TokensPrompt
+from sonar.config import KVTransferConfig
+from sonar.platforms import current_platform
 from tests.v1.kv_connector.rocm_pd_accuracy_utils import _REVISIONS, QWEN_MODEL
 from tests.v1.kv_connector.umbp_test_utils import mori_has_umbp
 
@@ -27,10 +27,10 @@ PARAMS = SamplingParams(temperature=0, max_tokens=16, logprobs=5, ignore_eos=Tru
 
 
 @pytest.fixture
-def umbp_llm(aphrodite_runner, socket_dir, monkeypatch):
-    monkeypatch.setattr(envs, "APHRODITE_BATCH_INVARIANT", True)
-    monkeypatch.setenv("APHRODITE_BATCH_INVARIANT", "1")
-    with aphrodite_runner(
+def umbp_llm(sonar_runner, socket_dir, monkeypatch):
+    monkeypatch.setattr(envs, "SONAR_BATCH_INVARIANT", True)
+    monkeypatch.setenv("SONAR_BATCH_INVARIANT", "1")
+    with sonar_runner(
         QWEN_MODEL,
         revision=_REVISIONS[QWEN_MODEL],
         enforce_eager=True,
@@ -58,7 +58,7 @@ def _external_tokens(llm) -> int:
     return sum(
         metric.value
         for metric in llm.get_metrics()
-        if metric.name == "aphrodite:prompt_tokens_by_source" and metric.labels.get("source") == "external_kv_transfer"
+        if metric.name == "sonar:prompt_tokens_by_source" and metric.labels.get("source") == "external_kv_transfer"
     )
 
 

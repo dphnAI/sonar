@@ -9,8 +9,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from aphrodite.model_executor.custom_op import CustomOp
-from aphrodite.utils.torch_utils import is_torch_equal_or_newer
+from sonar.model_executor.custom_op import CustomOp
+from sonar.utils.torch_utils import is_torch_equal_or_newer
 
 
 class ConvLayerBase(CustomOp):

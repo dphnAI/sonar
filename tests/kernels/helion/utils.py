@@ -5,12 +5,12 @@
 import pytest
 import torch
 
-from aphrodite.kernels.helion.config_manager import ConfigManager
+from sonar.kernels.helion.config_manager import ConfigManager
 
 
 def skip_if_platform_unsupported(op_name: str):
     try:
-        from aphrodite.kernels.helion.utils import get_canonical_gpu_name
+        from sonar.kernels.helion.utils import get_canonical_gpu_name
 
         if not torch.cuda.is_available():
             pytest.skip("CUDA not available")

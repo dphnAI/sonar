@@ -7,47 +7,47 @@ from typing import TYPE_CHECKING, cast
 import torch
 import torch.nn.functional as F
 
-from aphrodite.config import AphroditeConfig, get_current_aphrodite_config
-from aphrodite.config.parallel import ExpertPlacementStrategy
-from aphrodite.distributed import (
+from sonar.config import SonarConfig, get_current_sonar_config
+from sonar.config.parallel import ExpertPlacementStrategy
+from sonar.distributed import (
     get_ep_group,
     get_pcp_group,
     tensor_model_parallel_all_reduce,
 )
-from aphrodite.distributed.eplb.eplb_state import EplbLayerState
-from aphrodite.forward_context import (
+from sonar.distributed.eplb.eplb_state import EplbLayerState
+from sonar.forward_context import (
     ForwardContext,
     get_forward_context,
     is_forward_context_available,
 )
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
 )
-from aphrodite.model_executor.layers.fused_moe.fused_moe_method_base import (
+from sonar.model_executor.layers.fused_moe.fused_moe_method_base import (
     FusedMoEMethodBase,
 )
-from aphrodite.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
-from aphrodite.model_executor.layers.fused_moe.routed_experts import (
+from sonar.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
+from sonar.model_executor.layers.fused_moe.routed_experts import (
     RoutedExperts,
 )
-from aphrodite.model_executor.layers.fused_moe.router.fused_moe_router import (
+from sonar.model_executor.layers.fused_moe.router.fused_moe_router import (
     FusedMoERouter,
 )
-from aphrodite.model_executor.layers.fused_moe.router.zero_expert_router import (
+from sonar.model_executor.layers.fused_moe.router.zero_expert_router import (
     ZeroExpertRouter,
 )
-from aphrodite.model_executor.layers.fused_moe.runner.moe_runner_interface import (
+from sonar.model_executor.layers.fused_moe.runner.moe_runner_interface import (
     MoERunnerInterface,
 )
-from aphrodite.model_executor.layers.fused_moe.runner.shared_experts import (
+from sonar.model_executor.layers.fused_moe.runner.shared_experts import (
     SharedExperts,
     SharedExpertsOrder,
 )
-from aphrodite.model_executor.layers.utils import dispatch_unquantized_gemm
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import (
+from sonar.model_executor.layers.utils import dispatch_unquantized_gemm
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import (
     _USE_LAYERNAME,
     LayerName,
     direct_register_custom_op,
@@ -57,12 +57,12 @@ logger = init_logger(__name__)
 
 
 def register_layer_for_moe_forward_op(
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     layer: "MoERunner",
 ):
     # For smuggling this layer into the fused moe custom op
     prefix = layer.layer_name
-    compilation_config = aphrodite_config.compilation_config
+    compilation_config = sonar_config.compilation_config
     if prefix in compilation_config.static_forward_context:
         raise ValueError("Duplicate layer name: {}".format(prefix))
     compilation_config.static_forward_context[prefix] = layer
@@ -79,7 +79,7 @@ def get_layer_from_name(layer_name: str) -> MoERunnerInterface:
             raise AssertionError(
                 "We expected the number of MOE layers in `all_moe_layers` "
                 "to be equal to the number of "
-                "{aphrodite.moe_forward, aphrodite.moe_forward_shared} calls."
+                "{sonar.moe_forward, sonar.moe_forward_shared} calls."
             )
         layer_name = all_moe_layers[moe_layer_index]
         forward_context.moe_layer_index += 1
@@ -237,7 +237,7 @@ class MoERunner(MoERunnerInterface):
     to experts, executing expert computations in parallel, and combining results.
     It supports advanced features like overlapped execution of shared experts,
     optimized kernels for different parallel configurations, and seamless
-    integration with Aphrodite's distributed execution framework.
+    integration with Sonar's distributed execution framework.
 
     Eventually, this class may be split into more specialized implementations
     for different configurations (e.g., with/without shared experts, gates, etc.).
@@ -292,7 +292,7 @@ class MoERunner(MoERunnerInterface):
         self._forward_entry = self._select_forward()
 
         # For smuggling this layer into the fused moe custom op
-        register_layer_for_moe_forward_op(get_current_aphrodite_config(), self)
+        register_layer_for_moe_forward_op(get_current_sonar_config(), self)
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> Iterable[str]:
         # routed_experts reports names relative to itself, but callers such as
@@ -314,9 +314,7 @@ class MoERunner(MoERunnerInterface):
             # trace, so CPU can always call the fused-MoE op directly.
             return _moe_forward if self._shared_experts is None else _moe_forward_shared
 
-        return (
-            torch.ops.aphrodite.moe_forward if self._shared_experts is None else torch.ops.aphrodite.moe_forward_shared
-        )
+        return torch.ops.sonar.moe_forward if self._shared_experts is None else torch.ops.sonar.moe_forward_shared
 
     @property
     def shared_experts(self) -> SharedExperts | None:
@@ -871,7 +869,7 @@ class MoERunner(MoERunnerInterface):
     @property
     def layer_id(self):
         # Delayed import to avoid circular dependency
-        from aphrodite.model_executor.models.utils import extract_layer_index
+        from sonar.model_executor.models.utils import extract_layer_index
 
         return extract_layer_index(self.layer_name)
 

@@ -6,7 +6,7 @@ use crate::error::{BenchError, Result};
 use crate::output::json::{compute_result_filename, save_result};
 
 /// Reset the server's prefix cache by calling POST /reset_prefix_cache.
-/// Requires APHRODITE_SERVER_DEV_MODE=1 on the Aphrodite server.
+/// Requires SONAR_SERVER_DEV_MODE=1 on the Sonar server.
 async fn reset_prefix_cache(base_url: &str) -> Result<()> {
     let url = format!("{}/reset_prefix_cache", base_url.trim_end_matches('/'));
     let client = reqwest::Client::new();
@@ -22,7 +22,7 @@ async fn reset_prefix_cache(base_url: &str) -> Result<()> {
         let body = resp.text().await.unwrap_or_default();
         return Err(BenchError::Backend(format!(
             "Failed to reset prefix cache: HTTP {status} — {body}. \
-             Is APHRODITE_SERVER_DEV_MODE=1 set on the server?"
+             Is SONAR_SERVER_DEV_MODE=1 set on the server?"
         )));
     }
     Ok(())

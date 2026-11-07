@@ -5,14 +5,14 @@ import importlib
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
-from aphrodite.distributed.ec_transfer.ec_connector.base import (
+from sonar.distributed.ec_transfer.ec_connector.base import (
     ECConnectorBase,
     ECConnectorRole,
 )
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig, ECTransferConfig
+    from sonar.config import ECTransferConfig, SonarConfig
 
 logger = init_logger(__name__)
 
@@ -35,7 +35,7 @@ class ECConnectorFactory:
     @classmethod
     def create_connector(
         cls,
-        config: "AphroditeConfig",
+        config: "SonarConfig",
         role: ECConnectorRole,
     ) -> ECConnectorBase:
         ec_transfer_config = config.ec_transfer_config
@@ -78,18 +78,18 @@ class ECConnectorFactory:
 
 ECConnectorFactory.register_connector(
     "ECExampleConnector",
-    "aphrodite.distributed.ec_transfer.ec_connector.example_connector",
+    "sonar.distributed.ec_transfer.ec_connector.example_connector",
     "ECExampleConnector",
 )
 
 ECConnectorFactory.register_connector(
     "ECCPUConnector",
-    "aphrodite.distributed.ec_transfer.ec_connector.cpu.connector",
+    "sonar.distributed.ec_transfer.ec_connector.cpu.connector",
     "ECCPUConnector",
 )
 
 ECConnectorFactory.register_connector(
     "ECMooncakeConnector",
-    "aphrodite.distributed.ec_transfer.ec_connector.mooncake_ec_connector",
+    "sonar.distributed.ec_transfer.ec_connector.mooncake_ec_connector",
     "ECMooncakeConnector",
 )

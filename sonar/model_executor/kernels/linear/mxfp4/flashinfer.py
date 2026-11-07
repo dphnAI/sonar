@@ -3,15 +3,15 @@
 
 import torch
 
-from aphrodite.model_executor.layers.fused_moe.experts.cutlass_moe import (
+from sonar.model_executor.layers.fused_moe.experts.cutlass_moe import (
     swizzle_mxfp4_scales,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     kMxfp4Dynamic,
 )
-from aphrodite.model_executor.utils import replace_parameter
-from aphrodite.platforms import current_platform
-from aphrodite.utils.flashinfer import has_flashinfer_cutedsl
+from sonar.model_executor.utils import replace_parameter
+from sonar.platforms import current_platform
+from sonar.utils.flashinfer import has_flashinfer_cutedsl
 
 from .base import MxFp4LinearKernel, MxFp4LinearLayerConfig
 
@@ -51,7 +51,7 @@ class FlashInferMxFp4LinearKernel(MxFp4LinearKernel):
         x: torch.Tensor,
         bias: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        from aphrodite.utils.flashinfer import (
+        from sonar.utils.flashinfer import (
             flashinfer_mxfp4_quantize,
             flashinfer_scaled_fp4_mm,
         )

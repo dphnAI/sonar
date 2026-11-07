@@ -6,47 +6,47 @@ from typing import Any
 
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite import envs
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.config import get_current_aphrodite_config
-from aphrodite.config.kernel import MoEBackend
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe.all2all_utils import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar import envs
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.config import get_current_sonar_config
+from sonar.config.kernel import MoEBackend
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe.all2all_utils import (
     maybe_make_prepare_finalize,
 )
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEQuantConfig,
     fp8_w8a8_moe_quant_config,
     fp8_w8a16_moe_quant_config,
 )
-from aphrodite.model_executor.layers.fused_moe.routed_experts import RoutedExperts
-from aphrodite.model_executor.layers.quantization.utils.flashinfer_utils import (
+from sonar.model_executor.layers.fused_moe.routed_experts import RoutedExperts
+from sonar.model_executor.layers.quantization.utils.flashinfer_utils import (
     prepare_fp8_moe_layer_for_fi,
 )
-from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
+from sonar.model_executor.layers.quantization.utils.fp8_utils import (
     prepare_fp8_moe_layer_for_deepgemm,
 )
-from aphrodite.model_executor.layers.quantization.utils.humming import prioritize_humming
-from aphrodite.model_executor.layers.quantization.utils.marlin_utils_fp8 import (
+from sonar.model_executor.layers.quantization.utils.humming import prioritize_humming
+from sonar.model_executor.layers.quantization.utils.marlin_utils_fp8 import (
     prepare_fp8_moe_layer_for_marlin,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     GroupShape,
     QuantKey,
     create_fp8_quant_key,
     kFp8Dynamic128Sym,
     kFp8Static128BlockSym,
 )
-from aphrodite.model_executor.utils import (
+from sonar.model_executor.utils import (
     move_parameter,
     replace_parameter,
     set_kernel_parameter,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.deep_gemm import should_auto_disable_deep_gemm
-from aphrodite.utils.math_utils import round_up
+from sonar.platforms import current_platform
+from sonar.utils.deep_gemm import should_auto_disable_deep_gemm
+from sonar.utils.math_utils import round_up
 
 logger = init_logger(__name__)
 
@@ -62,8 +62,8 @@ class Fp8MoeBackend(Enum):
     TRITON = "TRITON"
     BATCHED_TRITON = "BATCHED_TRITON"
     AITER = "AITER"
-    APHRODITE_CUTLASS = "APHRODITE_CUTLASS"
-    BATCHED_APHRODITE_CUTLASS = "BATCHED_APHRODITE_CUTLASS"
+    SONAR_CUTLASS = "SONAR_CUTLASS"
+    BATCHED_SONAR_CUTLASS = "BATCHED_SONAR_CUTLASS"
     XPU = "XPU"
     # CPU FP8 W8A16 (BF16 activations); CPU_W8A8 needs native AMX-FP8.
     CPU = "CPU"
@@ -94,12 +94,12 @@ def _get_priority_backends(
         Fp8MoeBackend.FLASHINFER_TRTLLM,
         Fp8MoeBackend.FLASHINFER_CUTLASS,
         Fp8MoeBackend.DEEPGEMM,
-        Fp8MoeBackend.APHRODITE_CUTLASS,
+        Fp8MoeBackend.SONAR_CUTLASS,
         Fp8MoeBackend.TRITON,
         Fp8MoeBackend.MARLIN,
         Fp8MoeBackend.HUMMING,
         Fp8MoeBackend.BATCHED_DEEPGEMM,
-        Fp8MoeBackend.BATCHED_APHRODITE_CUTLASS,
+        Fp8MoeBackend.BATCHED_SONAR_CUTLASS,
         Fp8MoeBackend.BATCHED_TRITON,
         Fp8MoeBackend.XPU,
         Fp8MoeBackend.CPU_W8A8,
@@ -153,7 +153,7 @@ def backend_to_kernel_cls(
     backend: Fp8MoeBackend,
 ) -> list[type[mk.FusedMoEExperts]]:
     if backend == Fp8MoeBackend.FLASHINFER_TRTLLM:
-        from aphrodite.model_executor.layers.fused_moe.experts.trtllm_fp8_moe import (  # noqa: E501
+        from sonar.model_executor.layers.fused_moe.experts.trtllm_fp8_moe import (  # noqa: E501
             TrtLlmFp8ExpertsModular,
             TrtLlmFp8ExpertsMonolithic,
         )
@@ -161,35 +161,35 @@ def backend_to_kernel_cls(
         return [TrtLlmFp8ExpertsMonolithic, TrtLlmFp8ExpertsModular]
 
     elif backend == Fp8MoeBackend.FLASHINFER_CUTLASS:
-        from aphrodite.model_executor.layers.fused_moe.experts.flashinfer_cutlass_moe import (  # noqa: E501
+        from sonar.model_executor.layers.fused_moe.experts.flashinfer_cutlass_moe import (  # noqa: E501
             FlashInferExperts,
         )
 
         return [FlashInferExperts]
 
     elif backend == Fp8MoeBackend.DEEPGEMM:
-        from aphrodite.model_executor.layers.fused_moe.experts.triton_deep_gemm_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.triton_deep_gemm_moe import (
             TritonOrDeepGemmExperts,
         )
 
         return [TritonOrDeepGemmExperts]
 
     elif backend == Fp8MoeBackend.BATCHED_DEEPGEMM:
-        from aphrodite.model_executor.layers.fused_moe.experts.batched_deep_gemm_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.batched_deep_gemm_moe import (
             BatchedDeepGemmExperts,
         )
 
         return [BatchedDeepGemmExperts]
 
     elif backend == Fp8MoeBackend.MARLIN:
-        from aphrodite.model_executor.layers.fused_moe.experts.marlin_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.marlin_moe import (
             MarlinExperts,
         )
 
         return [MarlinExperts]
 
     elif backend == Fp8MoeBackend.HUMMING:
-        from aphrodite.model_executor.layers.fused_moe.experts.fused_humming_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.fused_humming_moe import (
             BatchedHummingGroupedExperts,
             HummingGroupedExperts,
             HummingIndexedExperts,
@@ -202,21 +202,21 @@ def backend_to_kernel_cls(
         ]
 
     elif backend == Fp8MoeBackend.TRITON:
-        from aphrodite.model_executor.layers.fused_moe.experts.triton_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.triton_moe import (
             TritonExperts,
         )
 
         return [TritonExperts]
 
     elif backend == Fp8MoeBackend.BATCHED_TRITON:
-        from aphrodite.model_executor.layers.fused_moe.experts.fused_batched_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.fused_batched_moe import (
             BatchedTritonExperts,
         )
 
         return [BatchedTritonExperts]
 
     elif backend == Fp8MoeBackend.AITER:
-        from aphrodite.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
             AiterFp8BlockExperts,
             AiterFp8ChannelExperts,
             AiterFp8TensorExperts,
@@ -224,22 +224,22 @@ def backend_to_kernel_cls(
 
         return [AiterFp8BlockExperts, AiterFp8TensorExperts, AiterFp8ChannelExperts]
 
-    elif backend == Fp8MoeBackend.APHRODITE_CUTLASS:
-        from aphrodite.model_executor.layers.fused_moe.experts.triton_cutlass_moe import (
+    elif backend == Fp8MoeBackend.SONAR_CUTLASS:
+        from sonar.model_executor.layers.fused_moe.experts.triton_cutlass_moe import (
             TritonOrCutlassExperts,
         )
 
         return [TritonOrCutlassExperts]
 
-    elif backend == Fp8MoeBackend.BATCHED_APHRODITE_CUTLASS:
-        from aphrodite.model_executor.layers.fused_moe.experts.cutlass_moe import (
+    elif backend == Fp8MoeBackend.BATCHED_SONAR_CUTLASS:
+        from sonar.model_executor.layers.fused_moe.experts.cutlass_moe import (
             CutlassBatchedExpertsFp8,
         )
 
         return [CutlassBatchedExpertsFp8]
 
     elif backend == Fp8MoeBackend.XPU:
-        from aphrodite.model_executor.layers.fused_moe.experts.xpu_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.xpu_moe import (
             XPUExpertsBlockFp8,
             XPUExpertsFp8,
             XPUExpertsMxFp8,
@@ -248,21 +248,21 @@ def backend_to_kernel_cls(
         return [XPUExpertsFp8, XPUExpertsMxFp8, XPUExpertsBlockFp8]
 
     elif backend == Fp8MoeBackend.CPU:
-        from aphrodite.model_executor.layers.fused_moe.experts.cpu_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.cpu_moe import (
             CPUExpertsFp8,
         )
 
         return [CPUExpertsFp8]
 
     elif backend == Fp8MoeBackend.CPU_W8A8:
-        from aphrodite.model_executor.layers.fused_moe.experts.cpu_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.cpu_moe import (
             CPUExpertsFp8W8A8,
         )
 
         return [CPUExpertsFp8W8A8]
 
     elif backend == Fp8MoeBackend.HPC:
-        from aphrodite.model_executor.layers.fused_moe.hpc_moe import (
+        from sonar.model_executor.layers.fused_moe.hpc_moe import (
             HPCExperts,
         )
 
@@ -277,7 +277,7 @@ def map_fp8_backend(runner_backend: MoEBackend) -> Fp8MoeBackend:
     mapping = {
         "triton": Fp8MoeBackend.TRITON,
         "deep_gemm": Fp8MoeBackend.DEEPGEMM,
-        "cutlass": Fp8MoeBackend.APHRODITE_CUTLASS,
+        "cutlass": Fp8MoeBackend.SONAR_CUTLASS,
         "flashinfer_trtllm": Fp8MoeBackend.FLASHINFER_TRTLLM,
         "flashinfer_cutlass": Fp8MoeBackend.FLASHINFER_CUTLASS,
         "marlin": Fp8MoeBackend.MARLIN,
@@ -393,7 +393,7 @@ def select_fp8_moe_backend(
     config: FusedMoEConfig,
     weight_key: QuantKey | None,
     activation_key: QuantKey | None,
-    allow_aphrodite_cutlass: bool = False,
+    allow_sonar_cutlass: bool = False,
 ) -> tuple[Fp8MoeBackend, type[mk.FusedMoEExperts] | None]:
     """Select the primary FP8 MoE backend
     Note: Shape-specific fallbacks may still occur at runtime.
@@ -444,24 +444,24 @@ def select_fp8_moe_backend(
                 requested_backend = Fp8MoeBackend.BATCHED_DEEPGEMM
             elif requested_backend == Fp8MoeBackend.TRITON:
                 requested_backend = Fp8MoeBackend.BATCHED_TRITON
-            elif requested_backend == Fp8MoeBackend.APHRODITE_CUTLASS:
-                requested_backend = Fp8MoeBackend.BATCHED_APHRODITE_CUTLASS
+            elif requested_backend == Fp8MoeBackend.SONAR_CUTLASS:
+                requested_backend = Fp8MoeBackend.BATCHED_SONAR_CUTLASS
 
         if (
             requested_backend
             in [
-                Fp8MoeBackend.APHRODITE_CUTLASS,
-                Fp8MoeBackend.BATCHED_APHRODITE_CUTLASS,
+                Fp8MoeBackend.SONAR_CUTLASS,
+                Fp8MoeBackend.BATCHED_SONAR_CUTLASS,
             ]
-            and not allow_aphrodite_cutlass
+            and not allow_sonar_cutlass
         ):
-            raise ValueError("Aphrodite CUTLASS FP8 MoE backend is disabled for this configuration.")
+            raise ValueError("Sonar CUTLASS FP8 MoE backend is disabled for this configuration.")
 
         return _return_or_raise(requested_backend, config, weight_key, activation_key, activation_format)
 
     # Handle explicit DeepGEMM FP8 configuration.
-    if envs.is_set("APHRODITE_USE_DEEP_GEMM") or envs.is_set("APHRODITE_MOE_USE_DEEP_GEMM"):
-        if not envs.APHRODITE_USE_DEEP_GEMM or not envs.APHRODITE_MOE_USE_DEEP_GEMM:
+    if envs.is_set("SONAR_USE_DEEP_GEMM") or envs.is_set("SONAR_MOE_USE_DEEP_GEMM"):
+        if not envs.SONAR_USE_DEEP_GEMM or not envs.SONAR_MOE_USE_DEEP_GEMM:
             AVAILABLE_BACKENDS.remove(Fp8MoeBackend.DEEPGEMM)
             AVAILABLE_BACKENDS.remove(Fp8MoeBackend.BATCHED_DEEPGEMM)
         else:
@@ -471,18 +471,16 @@ def select_fp8_moe_backend(
                 else Fp8MoeBackend.BATCHED_DEEPGEMM
             )
             return _return_or_raise(backend, config, weight_key, activation_key, activation_format)
-    elif (model_config := get_current_aphrodite_config().model_config) is not None and (
+    elif (model_config := get_current_sonar_config().model_config) is not None and (
         should_auto_disable_deep_gemm(getattr(model_config.hf_text_config, "model_type", None))
     ):
         AVAILABLE_BACKENDS.remove(Fp8MoeBackend.DEEPGEMM)
         AVAILABLE_BACKENDS.remove(Fp8MoeBackend.BATCHED_DEEPGEMM)
 
     # Handle explicit AITER FP8 configuration.
-    if envs.is_set("APHRODITE_ROCM_USE_AITER") or envs.is_set("APHRODITE_ROCM_USE_AITER_MOE"):
+    if envs.is_set("SONAR_ROCM_USE_AITER") or envs.is_set("SONAR_ROCM_USE_AITER_MOE"):
         skip_aiter_moe = (
-            not envs.APHRODITE_ROCM_USE_AITER
-            or not envs.APHRODITE_ROCM_USE_AITER_MOE
-            or rocm_aiter_ops.is_rdna_aiter_enabled()
+            not envs.SONAR_ROCM_USE_AITER or not envs.SONAR_ROCM_USE_AITER_MOE or rocm_aiter_ops.is_rdna_aiter_enabled()
         )
         if skip_aiter_moe:
             if Fp8MoeBackend.AITER in AVAILABLE_BACKENDS:
@@ -491,9 +489,9 @@ def select_fp8_moe_backend(
             backend = Fp8MoeBackend.AITER
             return _return_or_raise(backend, config, weight_key, activation_key, activation_format)
 
-    if not allow_aphrodite_cutlass:
-        AVAILABLE_BACKENDS.remove(Fp8MoeBackend.APHRODITE_CUTLASS)
-        AVAILABLE_BACKENDS.remove(Fp8MoeBackend.BATCHED_APHRODITE_CUTLASS)
+    if not allow_sonar_cutlass:
+        AVAILABLE_BACKENDS.remove(Fp8MoeBackend.SONAR_CUTLASS)
+        AVAILABLE_BACKENDS.remove(Fp8MoeBackend.BATCHED_SONAR_CUTLASS)
 
     # Select kernels in order of backend.
     for backend in AVAILABLE_BACKENDS:
@@ -586,7 +584,7 @@ def convert_to_fp8_moe_kernel_format(
         w13.is_shuffled = True
         w2.is_shuffled = True
     elif fp8_backend == Fp8MoeBackend.HUMMING:
-        from aphrodite.model_executor.layers.quantization.utils.humming import (
+        from sonar.model_executor.layers.quantization.utils.humming import (
             convert_to_humming_moe_kernel_format,
         )
 
@@ -615,7 +613,7 @@ def convert_to_fp8_moe_kernel_format(
     elif fp8_backend == Fp8MoeBackend.MARLIN:
         weight_block_size = getattr(layer, "weight_block_size", None)
         if weight_block_size == [1, 32]:
-            from aphrodite.model_executor.layers.quantization.utils.marlin_utils_fp8 import (
+            from sonar.model_executor.layers.quantization.utils.marlin_utils_fp8 import (
                 prepare_mxfp8_moe_layer_for_marlin,
             )
 
@@ -649,19 +647,19 @@ def convert_to_fp8_moe_kernel_format(
             is_trtllm=(fp8_backend == Fp8MoeBackend.FLASHINFER_TRTLLM),
         )
     elif fp8_backend == Fp8MoeBackend.XPU:
-        from aphrodite.model_executor.layers.fused_moe.experts.xpu_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.xpu_moe import (
             prepare_fp8_moe_layer_for_xpu,
         )
 
         w13, w13_scale, w2, w2_scale = prepare_fp8_moe_layer_for_xpu(w13, w13_scale, w2, w2_scale)
     elif fp8_backend == Fp8MoeBackend.CPU:
-        from aphrodite.model_executor.layers.fused_moe.experts.cpu_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.cpu_moe import (
             prepare_fp8_moe_layer_for_cpu,
         )
 
         w13, w2 = prepare_fp8_moe_layer_for_cpu(w13, w2)
     elif fp8_backend == Fp8MoeBackend.CPU_W8A8:
-        from aphrodite.model_executor.layers.fused_moe.experts.cpu_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.cpu_moe import (
             prepare_fp8_w8a8_moe_layer_for_cpu,
         )
 
@@ -670,8 +668,8 @@ def convert_to_fp8_moe_kernel_format(
         if fp8_backend not in [
             Fp8MoeBackend.TRITON,
             Fp8MoeBackend.BATCHED_TRITON,
-            Fp8MoeBackend.APHRODITE_CUTLASS,
-            Fp8MoeBackend.BATCHED_APHRODITE_CUTLASS,
+            Fp8MoeBackend.SONAR_CUTLASS,
+            Fp8MoeBackend.BATCHED_SONAR_CUTLASS,
             Fp8MoeBackend.XPU,
             Fp8MoeBackend.HPC,
             Fp8MoeBackend.HUMMING,
@@ -734,8 +732,8 @@ def make_fp8_moe_quant_config(
         )
 
     if fp8_backend == Fp8MoeBackend.HUMMING:
-        from aphrodite.model_executor.layers.fused_moe import RoutedExperts
-        from aphrodite.model_executor.layers.quantization.utils.humming import (
+        from sonar.model_executor.layers.fused_moe import RoutedExperts
+        from sonar.model_executor.layers.quantization.utils.humming import (
             get_humming_moe_quant_config,
         )
 

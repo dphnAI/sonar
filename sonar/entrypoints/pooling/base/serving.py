@@ -11,18 +11,18 @@ import torch
 from fastapi import Request
 from fastapi.responses import Response
 
-from aphrodite import PoolingRequestOutput, envs
-from aphrodite.config import AphroditeConfig
-from aphrodite.engine.protocol import EngineClient
-from aphrodite.entrypoints.generate.base.protocol import validate_request_mm_kwargs
-from aphrodite.entrypoints.openai.models.serving import OpenAIServingModels
-from aphrodite.entrypoints.serve.engine.serving import BaseServing
-from aphrodite.entrypoints.serve.engine.typing import AnyRequest
-from aphrodite.entrypoints.serve.utils.request_logger import RequestLogger
-from aphrodite.lora.request import LoRARequest
-from aphrodite.renderers.base import BaseRenderer
-from aphrodite.renderers.chat_utils import ChatTemplateConfig
-from aphrodite.utils.async_utils import make_async, merge_async_iterators
+from sonar import PoolingRequestOutput, envs
+from sonar.config import SonarConfig
+from sonar.engine.protocol import EngineClient
+from sonar.entrypoints.generate.base.protocol import validate_request_mm_kwargs
+from sonar.entrypoints.openai.models.serving import OpenAIServingModels
+from sonar.entrypoints.serve.engine.serving import BaseServing
+from sonar.entrypoints.serve.engine.typing import AnyRequest
+from sonar.entrypoints.serve.utils.request_logger import RequestLogger
+from sonar.lora.request import LoRARequest
+from sonar.renderers.base import BaseRenderer
+from sonar.renderers.chat_utils import ChatTemplateConfig
+from sonar.utils.async_utils import make_async, merge_async_iterators
 
 from ...serve.engine.protocol import ErrorResponse
 from ..typing import AnyPoolingRequest, PoolingServeContext
@@ -50,7 +50,7 @@ class PoolingBaseServing(ABC, BaseServing):
 
         self.engine_client = engine_client
         self.renderer = engine_client.renderer
-        self.aphrodite_config = engine_client.aphrodite_config
+        self.sonar_config = engine_client.sonar_config
         self.max_model_len = self.model_config.max_model_len
         self.return_tokens_as_token_ids = return_tokens_as_token_ids
         self.log_error_stack = log_error_stack
@@ -207,7 +207,7 @@ class PoolingBaseServing(ABC, BaseServing):
         if request.model in self.models.lora_requests:
             return None
         if (
-            envs.APHRODITE_ALLOW_RUNTIME_LORA_UPDATING
+            envs.SONAR_ALLOW_RUNTIME_LORA_UPDATING
             and request.model
             and (load_result := await self.models.resolve_lora(request.model))
         ):
@@ -233,7 +233,7 @@ class PoolingServing(PoolingBaseServing, ABC):
         super().__init__(*args, **kwargs)
 
         self.io_processor = self.init_io_processor(
-            aphrodite_config=self.aphrodite_config,
+            sonar_config=self.sonar_config,
             renderer=self.renderer,
             chat_template_config=self.chat_template_config,
         )
@@ -241,7 +241,7 @@ class PoolingServing(PoolingBaseServing, ABC):
     @abstractmethod
     def init_io_processor(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         renderer: BaseRenderer,
         chat_template_config: ChatTemplateConfig,
     ) -> PoolingIOProcessor:

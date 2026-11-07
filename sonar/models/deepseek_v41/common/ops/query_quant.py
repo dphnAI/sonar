@@ -3,13 +3,13 @@
 
 import torch
 
-from aphrodite.model_executor.layers.fusion.quant_activation import (
+from sonar.model_executor.layers.fusion.quant_activation import (
     QuantizedActivation,
     get_input_quant_key,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import kMxfp8Dynamic
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
+from sonar.model_executor.layers.quantization.utils.quant_utils import kMxfp8Dynamic
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
 
 
 @triton.jit
@@ -134,7 +134,7 @@ def can_fuse_query_quant(linears: list[torch.nn.Module]) -> bool:
     """Require both local projections to use the same MXFP8 activation ABI."""
     if not current_platform.is_cuda():
         return False
-    from aphrodite.model_executor.kernels.linear.mxfp8.flashinfer import (
+    from sonar.model_executor.kernels.linear.mxfp8.flashinfer import (
         FlashInferCutedslMxfp8LinearKernel,
         FlashInferCutlassMxfp8LinearKernel,
     )

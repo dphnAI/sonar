@@ -28,12 +28,12 @@ pub fn allocate_handshake_port(host: &str) -> Result<u16> {
     Ok(port)
 }
 
-/// Spawn configuration for one managed headless Python Aphrodite engine.
+/// Spawn configuration for one managed headless Python Sonar engine.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ManagedEngineConfig {
-    /// Python executable used to launch `aphrodite.entrypoints.cli.main`.
+    /// Python executable used to launch `sonar.entrypoints.cli.main`.
     pub python: String,
-    /// Model identifier passed to `aphrodite ... serve <model>`.
+    /// Model identifier passed to `sonar ... serve <model>`.
     pub model: String,
     /// Host portion of the headless-engine handshake endpoint.
     pub handshake_host: String,
@@ -49,7 +49,7 @@ pub struct ManagedEngineConfig {
     /// handshake there for their input/output addresses, after fetching the
     /// coordinator and DP rendezvous from the frontend owning rank 0.
     pub client_handshake_address: Option<String>,
-    /// Extra CLI arguments forwarded verbatim to Python Aphrodite.
+    /// Extra CLI arguments forwarded verbatim to Python Sonar.
     pub python_args: Vec<String>,
 }
 
@@ -60,11 +60,11 @@ impl ManagedEngineConfig {
     }
 
     /// Env vars every managed engine needs when serving the Rust frontend:
-    /// `APHRODITE_USE_RUST_FRONTEND=1` tells Python Aphrodite to keep frontend-side
+    /// `SONAR_USE_RUST_FRONTEND=1` tells Python Sonar to keep frontend-side
     /// multimodal normalization (`mm_device_do_normalize = False`,
-    /// aphrodite/config/model.py) instead of expecting raw uint8 pixels.
+    /// sonar/config/model.py) instead of expecting raw uint8 pixels.
     pub fn rust_frontend_envs() -> Vec<(String, String)> {
-        vec![("APHRODITE_USE_RUST_FRONTEND".to_string(), "1".to_string())]
+        vec![("SONAR_USE_RUST_FRONTEND".to_string(), "1".to_string())]
     }
 
     /// Build the concrete Python command line for the managed headless engine.
@@ -72,7 +72,7 @@ impl ManagedEngineConfig {
         let mut command = StdCommand::new(&self.python);
         command
             .arg("-m")
-            .arg("aphrodite.entrypoints.cli.main")
+            .arg("sonar.entrypoints.cli.main")
             .arg("serve")
             .arg(&self.model)
             .arg("--headless")
@@ -253,7 +253,7 @@ mod tests {
         expect![[r#"
             [
                 "-m",
-                "aphrodite.entrypoints.cli.main",
+                "sonar.entrypoints.cli.main",
                 "serve",
                 "Qwen/Qwen3-0.6B",
                 "--headless",
@@ -279,7 +279,7 @@ mod tests {
         expect![[r#"
             [
                 (
-                    "APHRODITE_USE_RUST_FRONTEND",
+                    "SONAR_USE_RUST_FRONTEND",
                     Some(
                         "1",
                     ),
@@ -294,7 +294,7 @@ mod tests {
         expect![[r#"
             [
                 (
-                    "APHRODITE_USE_RUST_FRONTEND",
+                    "SONAR_USE_RUST_FRONTEND",
                     "1",
                 ),
             ]

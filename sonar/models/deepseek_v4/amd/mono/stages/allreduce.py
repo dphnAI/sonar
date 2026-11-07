@@ -19,15 +19,15 @@ as a tagged pair (``common.sync``)."""
 
 from flydsl.expr import range_constexpr
 
-from aphrodite.models.deepseek_v4.amd.mono.common.ops import (
+from sonar.models.deepseek_v4.amd.mono.common.ops import (
     bf16_round,
     bf_hi,
     bf_lo,
     sum_partials,
     traced,
 )
-from aphrodite.models.deepseek_v4.amd.mono.common.sync import preg
-from aphrodite.models.deepseek_v4.amd.mono.dims import HIDDEN, Dims
+from sonar.models.deepseek_v4.amd.mono.common.sync import preg
+from sonar.models.deepseek_v4.amd.mono.dims import HIDDEN, Dims
 
 PAIR_BYTES = 8
 

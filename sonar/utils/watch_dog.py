@@ -9,7 +9,7 @@ from collections.abc import Iterator
 from contextlib import AbstractContextManager, contextmanager
 from logging import Logger
 
-from aphrodite.config import WatchdogConfig
+from sonar.config import WatchdogConfig
 
 
 class WatchDog(ABC):
@@ -46,7 +46,7 @@ class ThreadedWatchDog(WatchDog):
         self.timeout = watchdog_config.timeout
         self.check_interval = watchdog_config.check_interval
         self.dump_dir = watchdog_config.dump_dir
-        self.dump_file = os.path.join(self.dump_dir, f"APHRODITE_STACK_DUMP_for_{name}_{os.getpid()}.log")
+        self.dump_file = os.path.join(self.dump_dir, f"SONAR_STACK_DUMP_for_{name}_{os.getpid()}.log")
         self.dump_seq = 1
         self.logger = logger
         self.last_feed_time = time.monotonic()

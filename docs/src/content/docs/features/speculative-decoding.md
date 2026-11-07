@@ -60,7 +60,7 @@ work when most tokens are rejected.
 The server accepts a JSON object:
 
 ```bash
-aphrodite serve MODEL \
+sonar serve MODEL \
   --speculative-config '{
     "method": "ngram",
     "num_speculative_tokens": 4
@@ -74,7 +74,7 @@ argument conversion.
 The Python API accepts a dictionary:
 
 ```python
-from aphrodite import LLM
+from sonar import LLM
 
 llm = LLM(
     model="MODEL",
@@ -99,7 +99,7 @@ embedding and language-model head when the architecture supports sharing.
 Use this form when the target checkpoint contains its MTP weights:
 
 ```bash
-aphrodite serve Qwen/Qwen3-Next-80B-A3B-Instruct \
+sonar serve Qwen/Qwen3-Next-80B-A3B-Instruct \
   --tensor-parallel-size 4 \
   --speculative-config '{
     "method": "mtp",
@@ -113,7 +113,7 @@ It also uses the target quantization setting for those layers.
 Use the same configuration with the Python API:
 
 ```python
-from aphrodite import LLM, SamplingParams
+from sonar import LLM, SamplingParams
 
 llm = LLM(
     model="Qwen/Qwen3-Next-80B-A3B-Instruct",
@@ -137,7 +137,7 @@ Some model families publish the prediction layers as an assistant checkpoint.
 Pass that checkpoint in `model`:
 
 ```bash
-aphrodite serve google/gemma-4-E4B-it \
+sonar serve google/gemma-4-E4B-it \
   --speculative-config '{
     "method": "mtp",
     "model": "google/gemma-4-E4B-it-assistant",
@@ -182,7 +182,7 @@ unsupported layout. Common checkpoints use a block size of seven.
 This configuration matches Sonar's Qwen3 DSpark end-to-end test:
 
 ```bash
-aphrodite serve Qwen/Qwen3-4B-FP8 \
+sonar serve Qwen/Qwen3-4B-FP8 \
   --trust-remote-code \
   --max-model-len 4096 \
   --speculative-config '{
@@ -205,7 +205,7 @@ greedy drafting. Remove this field to use the default greedy mode.
 ### Serve Gemma 4 with DSpark
 
 ```bash
-aphrodite serve google/gemma-4-12B-it \
+sonar serve google/gemma-4-12B-it \
   --trust-remote-code \
   --max-model-len 8192 \
   --max-num-seqs 32 \
@@ -226,7 +226,7 @@ requires the complete block layout.
 Some targets can contain their DSpark weights. Omit `model` in that case:
 
 ```bash
-aphrodite serve TARGET_WITH_DSPARK_WEIGHTS \
+sonar serve TARGET_WITH_DSPARK_WEIGHTS \
   --speculative-config '{
     "method": "dspark",
     "num_speculative_tokens": 7
@@ -253,7 +253,7 @@ lets draft positions attend within the complete query block.
 This configuration follows Sonar's acceptance-rate test:
 
 ```bash
-aphrodite serve Qwen/Qwen3-8B \
+sonar serve Qwen/Qwen3-8B \
   --trust-remote-code \
   --max-model-len 32768 \
   --max-num-seqs 128 \
@@ -277,7 +277,7 @@ state layers, attention mode, and anchor sampling mode from the draft config.
 ### Use DFlash from Python
 
 ```python
-from aphrodite import LLM, SamplingParams
+from sonar import LLM, SamplingParams
 
 llm = LLM(
     model="Qwen/Qwen3-8B",
@@ -321,7 +321,7 @@ EAGLE uses target hidden states and a trained draft head. EAGLE-3 can consume
 multiple target hidden-state layers.
 
 ```bash
-aphrodite serve meta-llama/Meta-Llama-3.1-8B-Instruct \
+sonar serve meta-llama/Meta-Llama-3.1-8B-Instruct \
   --speculative-config '{
     "method": "eagle3",
     "model": "RedHatAI/Llama-3.1-8B-Instruct-speculator.eagle3",
@@ -337,7 +337,7 @@ not establish compatibility.
 A smaller causal model can draft for a larger target:
 
 ```bash
-aphrodite serve Qwen/Qwen3-4B-Thinking-2507 \
+sonar serve Qwen/Qwen3-4B-Thinking-2507 \
   --speculative-config '{
     "method": "draft_model",
     "model": "Qwen/Qwen3-0.6B",
@@ -358,7 +358,7 @@ N-gram lookup copies a continuation that already follows a matching token
 sequence in the prompt. It needs no model checkpoint.
 
 ```bash
-aphrodite serve MODEL \
+sonar serve MODEL \
   --speculative-config '{
     "method": "ngram",
     "num_speculative_tokens": 5,
@@ -373,7 +373,7 @@ dependency first:
 
 ```bash
 uv pip install arctic-inference==0.1.1
-aphrodite serve MODEL \
+sonar serve MODEL \
   --speculative-config '{
     "method": "suffix",
     "num_speculative_tokens": 32
@@ -400,22 +400,22 @@ Sonar logs speculative decoding statistics when request statistics are enabled.
 Look for `SpecDecoding metrics`. The log includes mean acceptance length,
 accepted throughput, drafted throughput, and per-position acceptance rates.
 
-The Prometheus counters use the `aphrodite:spec_decode_*` prefix. Calculate the
+The Prometheus counters use the `sonar:spec_decode_*` prefix. Calculate the
 overall acceptance rate with:
 
 ```text
-rate(aphrodite:spec_decode_num_accepted_tokens_total[5m])
+rate(sonar:spec_decode_num_accepted_tokens_total[5m])
 /
-rate(aphrodite:spec_decode_num_draft_tokens_total[5m])
+rate(sonar:spec_decode_num_draft_tokens_total[5m])
 ```
 
 Calculate mean acceptance length, including the target bonus token, with:
 
 ```text
 1 + (
-  rate(aphrodite:spec_decode_num_accepted_tokens_total[5m])
+  rate(sonar:spec_decode_num_accepted_tokens_total[5m])
   /
-  rate(aphrodite:spec_decode_num_drafts[5m])
+  rate(sonar:spec_decode_num_drafts[5m])
 )
 ```
 

@@ -7,25 +7,25 @@ from unittest.mock import MagicMock
 import pytest
 import torch
 
-from aphrodite.config import KVEventsConfig, KVTransferConfig
-from aphrodite.distributed.kv_events import (
+from sonar.config import KVEventsConfig, KVTransferConfig
+from sonar.distributed.kv_events import (
     MEDIUM_CPU,
     BlockRemoved,
     BlockStored,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.offloading.config import (
+from sonar.distributed.kv_transfer.kv_connector.v1.offloading.config import (
     build_offloading_config,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.offloading.events import (
+from sonar.distributed.kv_transfer.kv_connector.v1.offloading.events import (
     OffloadingEventGroupSpec,
     OffloadingEventsTracker,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.offloading.scheduler import (
+from sonar.distributed.kv_transfer.kv_connector.v1.offloading.scheduler import (
     GroupOffloadConfig,
     OffloadingConnectorScheduler,
 )
-from aphrodite.v1.core.kv_cache_utils import BlockHash, maybe_convert_block_hash
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.core.kv_cache_utils import BlockHash, maybe_convert_block_hash
+from sonar.v1.kv_cache_interface import (
     FullAttentionSpec,
     KVCacheConfig,
     KVCacheGroupSpec,
@@ -33,8 +33,8 @@ from aphrodite.v1.kv_cache_interface import (
     KVCacheSpecKind,
     MambaSpec,
 )
-from aphrodite.v1.kv_cache_spec_registry import KVCacheSpecRegistry
-from aphrodite.v1.kv_offload.base import (
+from sonar.v1.kv_cache_spec_registry import KVCacheSpecRegistry
+from sonar.v1.kv_offload.base import (
     Locality,
     LookupResult,
     Medium,
@@ -44,9 +44,9 @@ from aphrodite.v1.kv_offload.base import (
     ReqContext,
     make_offload_key,
 )
-from aphrodite.v1.kv_offload.cpu.manager import CPUOffloadingManager
-from aphrodite.v1.kv_offload.tiering.spec import TieringOffloadingSpec
-from tests.v1.kv_connector.unit.utils import create_aphrodite_config
+from sonar.v1.kv_offload.cpu.manager import CPUOffloadingManager
+from sonar.v1.kv_offload.tiering.spec import TieringOffloadingSpec
+from tests.v1.kv_connector.unit.utils import create_sonar_config
 
 _CPU_MEDIUM = Medium.CPU
 _FULL_ATTENTION_EVENT_SPEC = OffloadingEventGroupSpec(
@@ -873,12 +873,12 @@ def test_reset_cache_clears_side_table():
 
 
 def test_tiering_accepts_self_describing_kv_events():
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         block_size=4,
         max_num_batched_tokens=16,
         disable_hybrid_kv_cache_manager=False,
     )
-    aphrodite_config.kv_transfer_config = KVTransferConfig(
+    sonar_config.kv_transfer_config = KVTransferConfig(
         kv_connector="OffloadingConnector",
         kv_role="kv_both",
         kv_connector_extra_config={
@@ -888,7 +888,7 @@ def test_tiering_accepts_self_describing_kv_events():
             "secondary_tiers": [{"type": "example"}],
         },
     )
-    aphrodite_config.kv_events_config = KVEventsConfig(
+    sonar_config.kv_events_config = KVEventsConfig(
         enable_kv_cache_events=True,
         publisher="null",
     )
@@ -908,7 +908,7 @@ def test_tiering_accepts_self_describing_kv_events():
         ],
     )
 
-    spec = TieringOffloadingSpec(build_offloading_config(aphrodite_config, kv_cache_config))
+    spec = TieringOffloadingSpec(build_offloading_config(sonar_config, kv_cache_config))
     tracker = OffloadingEventsTracker(spec.kv_events_config)
 
     assert spec.kv_events_config.enable_kv_cache_events
@@ -917,7 +917,7 @@ def test_tiering_accepts_self_describing_kv_events():
 
 
 def _build_tiering_spec(secondary_tiers, *, top_level_backpressure=None):
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         block_size=4,
         max_num_batched_tokens=16,
         disable_hybrid_kv_cache_manager=False,
@@ -929,7 +929,7 @@ def _build_tiering_spec(secondary_tiers, *, top_level_backpressure=None):
     }
     if top_level_backpressure is not None:
         extra_config["backpressure"] = top_level_backpressure
-    aphrodite_config.kv_transfer_config = KVTransferConfig(
+    sonar_config.kv_transfer_config = KVTransferConfig(
         kv_connector="OffloadingConnector",
         kv_role="kv_both",
         kv_connector_extra_config=extra_config,
@@ -949,7 +949,7 @@ def _build_tiering_spec(secondary_tiers, *, top_level_backpressure=None):
             )
         ],
     )
-    return TieringOffloadingSpec(build_offloading_config(aphrodite_config, kv_cache_config))
+    return TieringOffloadingSpec(build_offloading_config(sonar_config, kv_cache_config))
 
 
 def test_partial_tier_backpressure_inherits_top_level_defaults():

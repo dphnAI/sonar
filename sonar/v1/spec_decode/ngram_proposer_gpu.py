@@ -9,36 +9,36 @@ finding the first match across all sequences in parallel.
 import torch
 from torch import nn
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import (
     CompilationConfig,
     CompilationMode,
     CUDAGraphMode,
+    SonarConfig,
 )
-from aphrodite.forward_context import set_forward_context
-from aphrodite.utils.torch_utils import async_tensor_h2d
-from aphrodite.v1.core.sched.output import SchedulerOutput
-from aphrodite.v1.utils import record_function_or_nullcontext
-from aphrodite.v1.worker.gpu_input_batch import CachedRequestState, InputBatch
+from sonar.forward_context import set_forward_context
+from sonar.utils.torch_utils import async_tensor_h2d
+from sonar.v1.core.sched.output import SchedulerOutput
+from sonar.v1.utils import record_function_or_nullcontext
+from sonar.v1.worker.gpu_input_batch import CachedRequestState, InputBatch
 
 
 @support_torch_compile()
 class NgramGPUKernel(nn.Module):
     """GPU-accelerated N-gram proposer using fully async tensor operations."""
 
-    def __init__(self, aphrodite_config: AphroditeConfig, prefix: str = "", device: torch.device = "cuda"):
+    def __init__(self, sonar_config: SonarConfig, prefix: str = "", device: torch.device = "cuda"):
         super().__init__()
 
-        assert aphrodite_config.speculative_config is not None
-        assert aphrodite_config.speculative_config.prompt_lookup_min is not None
-        assert aphrodite_config.speculative_config.prompt_lookup_max is not None
+        assert sonar_config.speculative_config is not None
+        assert sonar_config.speculative_config.prompt_lookup_min is not None
+        assert sonar_config.speculative_config.prompt_lookup_max is not None
 
-        self.min_n = aphrodite_config.speculative_config.prompt_lookup_min
-        self.max_n = aphrodite_config.speculative_config.prompt_lookup_max
-        self.k = aphrodite_config.speculative_config.num_speculative_tokens
-        self.max_model_len = aphrodite_config.model_config.max_model_len
-        self.max_num_seqs = aphrodite_config.scheduler_config.max_num_seqs
+        self.min_n = sonar_config.speculative_config.prompt_lookup_min
+        self.max_n = sonar_config.speculative_config.prompt_lookup_max
+        self.k = sonar_config.speculative_config.num_speculative_tokens
+        self.max_model_len = sonar_config.model_config.max_model_len
+        self.max_num_seqs = sonar_config.scheduler_config.max_num_seqs
         self.device = device
 
     def _find_first_and_extract_all_n_parallel(
@@ -203,13 +203,13 @@ class NgramGPUKernel(nn.Module):
 
 
 class NgramProposerGPU:
-    def __init__(self, aphrodite_config: AphroditeConfig, device: torch.device, runner=None):
-        assert aphrodite_config.speculative_config is not None
-        assert aphrodite_config.speculative_config.prompt_lookup_min is not None
-        assert aphrodite_config.speculative_config.prompt_lookup_max is not None
+    def __init__(self, sonar_config: SonarConfig, device: torch.device, runner=None):
+        assert sonar_config.speculative_config is not None
+        assert sonar_config.speculative_config.prompt_lookup_min is not None
+        assert sonar_config.speculative_config.prompt_lookup_max is not None
 
         compilation_config = CompilationConfig(
-            mode=CompilationMode.APHRODITE_COMPILE,
+            mode=CompilationMode.SONAR_COMPILE,
             custom_ops=["none"],
             splitting_ops=[],
             compile_sizes=[],
@@ -223,25 +223,25 @@ class NgramProposerGPU:
             },
             cudagraph_mode=CUDAGraphMode.NONE,
         )
-        model_config = aphrodite_config.model_config
-        speculative_config = aphrodite_config.speculative_config
-        scheduler_config = aphrodite_config.scheduler_config
+        model_config = sonar_config.model_config
+        speculative_config = sonar_config.speculative_config
+        scheduler_config = sonar_config.scheduler_config
 
-        self.aphrodite_config = AphroditeConfig(
+        self.sonar_config = SonarConfig(
             compilation_config=compilation_config,
             model_config=model_config,
             speculative_config=speculative_config,
             scheduler_config=scheduler_config,
         )
 
-        self.min_n = aphrodite_config.speculative_config.prompt_lookup_min
-        self.max_n = aphrodite_config.speculative_config.prompt_lookup_max
-        self.k = aphrodite_config.speculative_config.num_speculative_tokens
-        self.max_model_len = aphrodite_config.model_config.max_model_len
-        self.max_num_seqs = aphrodite_config.scheduler_config.max_num_seqs
+        self.min_n = sonar_config.speculative_config.prompt_lookup_min
+        self.max_n = sonar_config.speculative_config.prompt_lookup_max
+        self.k = sonar_config.speculative_config.num_speculative_tokens
+        self.max_model_len = sonar_config.model_config.max_model_len
+        self.max_num_seqs = sonar_config.scheduler_config.max_num_seqs
         self.device = device
 
-        self.kernel = NgramGPUKernel(aphrodite_config=self.aphrodite_config, prefix="ngram_gpu_kernel", device=device)
+        self.kernel = NgramGPUKernel(sonar_config=self.sonar_config, prefix="ngram_gpu_kernel", device=device)
         self.kernel.to(device)
         self.kernel.eval()
 
@@ -258,7 +258,7 @@ class NgramProposerGPU:
         combined_mask = sampled_flags & valid_mask & (num_tokens >= self.min_n)
 
         for _ in range(3):
-            with set_forward_context(None, self.aphrodite_config):
+            with set_forward_context(None, self.sonar_config):
                 _, _ = self.kernel(num_tokens, token_ids, combined_mask)
 
     def _generate_dummy_data(
@@ -356,7 +356,7 @@ class NgramProposerGPU:
         sampled_flags = valid_sampled_tokens_count > 0
         valid_mask = torch.ones(batch_size, dtype=torch.bool, device=self.device)
 
-        with set_forward_context(None, self.aphrodite_config):
+        with set_forward_context(None, self.sonar_config):
             combined_mask = sampled_flags & valid_mask & (num_tokens_tmp >= self.min_n)
 
             with record_function_or_nullcontext("ngram_proposer_gpu: kernel"):

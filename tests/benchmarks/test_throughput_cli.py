@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Tests for ``aphrodite bench throughput`` CLI.
+"""Tests for ``sonar bench throughput`` CLI.
 
 Throughput reuses ``bench serve``'s ``datasets.get_samples`` dispatch; the
 LoRA-assignment and MMVU cases below cover the pieces that are throughput-only
@@ -16,16 +16,16 @@ from types import SimpleNamespace
 import pytest
 from transformers import AutoTokenizer, PreTrainedTokenizerBase
 
-from aphrodite.benchmarks.datasets import SampleRequest
-from aphrodite.benchmarks.throughput import (
-    _run_aphrodite_chat_requests,
+from sonar.benchmarks.datasets import SampleRequest
+from sonar.benchmarks.throughput import (
+    _run_sonar_chat_requests,
     _to_serve_args,
     add_cli_args,
     assign_loras,
     get_requests,
     validate_args,
 )
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
+from sonar.utils.argparse_utils import FlexibleArgumentParser
 
 MODEL_NAME = "meta-llama/Llama-3.2-1B-Instruct"
 
@@ -33,7 +33,7 @@ MODEL_NAME = "meta-llama/Llama-3.2-1B-Instruct"
 @pytest.mark.benchmark
 def test_bench_throughput():
     command = [
-        "aphrodite",
+        "sonar",
         "bench",
         "throughput",
         "--model",
@@ -76,7 +76,7 @@ def test_bench_throughput_accepts_custom_audio_args():
     assert args.enable_multimodal_chat
 
 
-def test_aphrodite_chat_requests_include_multimodal_content():
+def test_sonar_chat_requests_include_multimodal_content():
     class FakeLLM:
         def __init__(self):
             self.prompts = None
@@ -98,7 +98,7 @@ def test_aphrodite_chat_requests_include_multimodal_content():
         multi_modal_data=audio_content,
     )
 
-    _run_aphrodite_chat_requests(
+    _run_sonar_chat_requests(
         llm,
         [request],
         n=1,
@@ -198,7 +198,7 @@ def test_get_requests_resolves_mmvu(
     download is stubbed so the resolution + dispatch path is exercised without
     network access.
     """
-    import aphrodite.benchmarks.datasets.datasets as dsmod
+    import sonar.benchmarks.datasets.datasets as dsmod
 
     class _StubMMVUDataset:
         # MMVU is multimodal in content but, like the real class, does not set
@@ -223,7 +223,7 @@ def test_get_requests_resolves_mmvu(
             "--dataset-path",
             "yale-nlp/MMVU",
             "--backend",
-            "aphrodite-chat",
+            "sonar-chat",
             "--num-prompts",
             "3",
         ]
@@ -234,17 +234,17 @@ def test_get_requests_resolves_mmvu(
 
 
 @pytest.mark.benchmark
-def test_get_requests_allows_multimodal_on_plain_aphrodite_backend(
+def test_get_requests_allows_multimodal_on_plain_sonar_backend(
     monkeypatch: pytest.MonkeyPatch,
     hf_tokenizer: PreTrainedTokenizerBase,
 ) -> None:
-    """Regression: --backend aphrodite must accept multimodal datasets such as ASR.
+    """Regression: --backend sonar must accept multimodal datasets such as ASR.
 
-    _run_aphrodite_requests forwards multi_modal_data straight to LLM.generate, so
-    the aphrodite-chat-only gate in get_samples rejected a backend that always
+    _run_sonar_requests forwards multi_modal_data straight to LLM.generate, so
+    the sonar-chat-only gate in get_samples rejected a backend that always
     worked.
     """
-    import aphrodite.benchmarks.datasets.datasets as dsmod
+    import sonar.benchmarks.datasets.datasets as dsmod
 
     class _StubASRDataset:
         IS_MULTIMODAL = True
@@ -267,7 +267,7 @@ def test_get_requests_allows_multimodal_on_plain_aphrodite_backend(
             "--dataset-path",
             "openslr/librispeech_asr",
             "--backend",
-            "aphrodite",
+            "sonar",
             "--num-prompts",
             "3",
         ]
@@ -296,7 +296,7 @@ def test_to_serve_args_supports_mm_processor_flags() -> None:
     assert serve_args.random_input_len == 32
     assert serve_args.random_output_len == 1
     assert serve_args.random_prefix_len == 0
-    assert serve_args.backend == "aphrodite-chat"
+    assert serve_args.backend == "sonar-chat"
     assert serve_args.enable_multimodal_chat
     assert serve_args.no_oversample is False
 
@@ -307,14 +307,14 @@ def test_to_serve_args_keeps_legacy_flag_fallback() -> None:
         input_len=256,
         output_len=8,
         prefix_len=16,
-        backend="aphrodite",
+        backend="sonar",
     )
     serve_args = _to_serve_args(args)
 
     assert serve_args.random_input_len == 256
     assert serve_args.random_output_len == 8
     assert serve_args.random_prefix_len == 16
-    assert serve_args.backend == "aphrodite"
+    assert serve_args.backend == "sonar"
     assert not serve_args.enable_multimodal_chat
 
 
@@ -391,7 +391,7 @@ def test_get_requests_random_mm_with_mm_processor_args(
     --random-prefix-len 0 this previously crashed inside
     RandomMultiModalDataset.get_prefix with a TypeError.
     """
-    from aphrodite.benchmarks.mm_processor import add_cli_args as add_mm_cli_args
+    from sonar.benchmarks.mm_processor import add_cli_args as add_mm_cli_args
 
     parser = FlexibleArgumentParser()
     add_mm_cli_args(parser)

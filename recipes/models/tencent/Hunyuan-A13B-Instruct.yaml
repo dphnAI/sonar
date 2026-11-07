@@ -32,7 +32,7 @@ features:
       - "--max-model-len"
       - "262144"
     env:
-      APHRODITE_ALLOW_LONG_MAX_MODEL_LEN: "1"
+      SONAR_ALLOW_LONG_MAX_MODEL_LEN: "1"
 
 opt_in_features:
   - long_context
@@ -67,7 +67,7 @@ hardware_overrides:
     # Hunyuan-A13B is an AMD-first recipe; AITER acceleration required.
     extra_args: []
     extra_env:
-      APHRODITE_ROCM_USE_AITER: "1"
+      SONAR_ROCM_USE_AITER: "1"
 
 strategy_overrides: {}
 
@@ -77,31 +77,31 @@ guide: |
   Hunyuan-A13B-Instruct is Tencent's instruct-tuned Hunyuan MoE model. This recipe
   covers deployment on AMD ROCm GPUs (MI300X / MI325X / MI355X) with
   [AITER](https://github.com/ROCm/aiter) acceleration enabled via
-  `APHRODITE_ROCM_USE_AITER=1`.
+  `SONAR_ROCM_USE_AITER=1`.
 
   ## Prerequisites
 
-  - **Aphrodite version:** ROCm build
+  - **Sonar version:** ROCm build
   - **Python:** 3.12
   - **Hardware:** AMD MI300X / MI325X / MI355X
   - **ROCm:** 7.0+, glibc >= 2.35 (or use Docker)
 
-  ### Install Aphrodite (ROCm)
+  ### Install Sonar (ROCm)
 
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install aphrodite-engine --extra-index-url https://wheels.vllm.ai/rocm/
+  uv pip install sonar --index-strategy first-index --extra-index-url https://sonar.dphn.ai/whl/release/rocm/x86_64/simple
   ```
 
   If the environment does not meet the Python/ROCm/glibc requirements, use the
-  Docker-based setup from the Aphrodite install docs.
+  Docker-based setup from the Sonar install docs.
 
   ## Launching the Server
 
   ```bash
-  export APHRODITE_ROCM_USE_AITER=1
-  aphrodite serve tencent/Hunyuan-A13B-Instruct \
+  export SONAR_ROCM_USE_AITER=1
+  sonar serve tencent/Hunyuan-A13B-Instruct \
       --tensor-parallel-size 2 \
       --trust-remote-code
   ```
@@ -109,7 +109,7 @@ guide: |
   ## Benchmarking
 
   ```bash
-  aphrodite bench serve \
+  sonar bench serve \
     --model "tencent/Hunyuan-A13B-Instruct" \
     --dataset-name random \
     --random-input-len 8000 \
@@ -123,10 +123,10 @@ guide: |
 
   - **First launch delay:** AITER JIT-compiles optimized kernels on first launch, which
     can take several minutes. Subsequent runs use cached kernels.
-  - **Environment mismatch:** If wheel install fails, fall back to the Aphrodite ROCm Docker image.
+  - **Environment mismatch:** If wheel install fails, fall back to the Sonar ROCm Docker image.
 
   ## References
 
   - [Model card](https://huggingface.co/tencent/Hunyuan-A13B-Instruct)
   - [AITER](https://github.com/ROCm/aiter)
-  - [Aphrodite install docs](https://docs.vllm.ai/en/latest/getting_started/installation/gpu/)
+  - [Sonar install docs](https://docs.vllm.ai/en/latest/getting_started/installation/gpu/)

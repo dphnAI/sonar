@@ -9,32 +9,32 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+import sonar.envs as envs
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     kFp8StaticTensorSym,
 )
-from aphrodite.model_executor.warmup.jit_warmup import AphroditeJitKernel, zip_inputs
-from aphrodite.platforms import current_platform
-from aphrodite.v1.attention.backends.fa_utils import (
+from sonar.model_executor.warmup.jit_warmup import SonarJitKernel, zip_inputs
+from sonar.platforms import current_platform
+from sonar.v1.attention.backends.fa_utils import (
     compile_flash_attn_varlen_func_from_specs,
     get_flash_attn_version,
     is_flash_attn_varlen_func_available,
 )
-from aphrodite.v1.attention.backends.mla.prefill.base import (
+from sonar.v1.attention.backends.mla.prefill.base import (
     MLADimensions,
     MLAPrefillBackend,
 )
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
-    from aphrodite.model_executor.layers.attention.mla_attention import (
+    from sonar.config import SonarConfig
+    from sonar.model_executor.layers.attention.mla_attention import (
         MLACommonPrefillMetadata,
         MLADims,
     )
-    from aphrodite.model_executor.layers.quantization.utils.quant_utils import QuantKey
+    from sonar.model_executor.layers.quantization.utils.quant_utils import QuantKey
 
 if is_flash_attn_varlen_func_available():
-    from aphrodite.v1.attention.backends.fa_utils import flash_attn_varlen_func
+    from sonar.v1.attention.backends.fa_utils import flash_attn_varlen_func
 else:
     flash_attn_varlen_func = None  # type: ignore[assignment]
 
@@ -49,7 +49,7 @@ FA4_MLA_PREFILL_CAUSAL_OPTIONS = (False, True)
 FA4_MLA_PREFILL_LSE_OPTIONS = (False, True)
 
 
-class FA4MLAPrefillKernel(AphroditeJitKernel["FA4MLAPrefillKernel.CompileKey"]):
+class FA4MLAPrefillKernel(SonarJitKernel["FA4MLAPrefillKernel.CompileKey"]):
     """FA4 MLA prefill compile-key wrapper used by generic JIT warmup."""
 
     @dataclass(frozen=True)
@@ -152,18 +152,18 @@ class FA4MLAPrefillKernel(AphroditeJitKernel["FA4MLAPrefillKernel.CompileKey"]):
             or (num_splits != 1 and max_seqlen_k == very_long_k and not is_sm90 and qk_head_dim != effective_v_head_dim)
         )
 
-    def get_warmup_keys(self, aphrodite_config: "AphroditeConfig") -> list[CompileKey]:
-        from aphrodite.model_executor.layers.attention.mla_attention import (
+    def get_warmup_keys(self, sonar_config: "SonarConfig") -> list[CompileKey]:
+        from sonar.model_executor.layers.attention.mla_attention import (
             get_mla_dims,
         )
 
-        mla_dims = get_mla_dims(aphrodite_config.model_config)
+        mla_dims = get_mla_dims(sonar_config.model_config)
         qk_head_dim = mla_dims.qk_nope_head_dim + mla_dims.qk_rope_head_dim
         fa_version = get_flash_attn_version(head_size=qk_head_dim)
         if fa_version != 4:
             return []
 
-        dtype = aphrodite_config.model_config.dtype
+        dtype = sonar_config.model_config.dtype
         if dtype not in FA4_STANDARD_DTYPES:
             dtype = torch.bfloat16
 
@@ -173,11 +173,11 @@ class FA4MLAPrefillKernel(AphroditeJitKernel["FA4MLAPrefillKernel.CompileKey"]):
         if not (is_sm90 or is_sm100_family or is_sm120):
             return []
 
-        num_splits = 1 if envs.APHRODITE_BATCH_INVARIANT else 0
+        num_splits = 1 if envs.SONAR_BATCH_INVARIANT else 0
         if is_sm120 and num_splits != 1:
             return []
 
-        num_heads = aphrodite_config.model_config.get_num_attention_heads(aphrodite_config.parallel_config)
+        num_heads = sonar_config.model_config.get_num_attention_heads(sonar_config.parallel_config)
         if num_heads <= 0:
             return []
 
@@ -309,7 +309,7 @@ class FlashAttnPrefillBackend(MLAPrefillBackend):
         qk_nope_head_dim: int,
         qk_rope_head_dim: int,
         v_head_dim: int,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
     ) -> None:
         super().__init__(
             num_heads=num_heads,
@@ -318,7 +318,7 @@ class FlashAttnPrefillBackend(MLAPrefillBackend):
             qk_nope_head_dim=qk_nope_head_dim,
             qk_rope_head_dim=qk_rope_head_dim,
             v_head_dim=v_head_dim,
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
         )
 
         # Handle the differences between the flash_attn_varlen from
@@ -333,7 +333,7 @@ class FlashAttnPrefillBackend(MLAPrefillBackend):
         if self.flash_attn_version is not None:
             self.flash_attn_varlen_func = functools.partial(flash_attn_varlen_func, fa_version=self.flash_attn_version)
 
-        if aphrodite_config.kernel_config.enable_jit_warmup and self.flash_attn_version == 4:
+        if sonar_config.kernel_config.enable_jit_warmup and self.flash_attn_version == 4:
             _FA4_MLA_PREFILL_KERNEL.register_warmup()
 
         # Determine if we need to pad V
@@ -347,14 +347,14 @@ class FlashAttnPrefillBackend(MLAPrefillBackend):
             or self.flash_attn_version == 4
         )
 
-        # Track whether we're using aphrodite's FA or upstream (for ROCm)
-        self._is_aphrodite_fa = current_platform.is_cuda() or current_platform.is_xpu()
+        # Track whether we're using sonar's FA or upstream (for ROCm)
+        self._is_sonar_fa = current_platform.is_cuda() or current_platform.is_xpu()
 
     def supports_quant_output(self, quant_key: "QuantKey") -> bool:
         device_capability = current_platform.get_device_capability()
         return (
             self.flash_attn_version == 4
-            and self._is_aphrodite_fa
+            and self._is_sonar_fa
             and device_capability is not None
             and device_capability[0] in (10, 11)
             and quant_key == kFp8StaticTensorSym
@@ -375,11 +375,11 @@ class FlashAttnPrefillBackend(MLAPrefillBackend):
         if self.requires_v_padding:
             maybe_padded_v = torch.nn.functional.pad(v, [0, q.shape[-1] - v.shape[-1]], value=0)
 
-        if self._is_aphrodite_fa:
+        if self._is_sonar_fa:
             kwargs["return_softmax_lse"] = return_softmax_lse
             kwargs["out"] = out
             kwargs["output_scale"] = output_scale
-            if envs.APHRODITE_BATCH_INVARIANT:
+            if envs.SONAR_BATCH_INVARIANT:
                 kwargs["num_splits"] = 1
         else:
             # ROCm leverages the upstream flash_attn, which takes a parameter

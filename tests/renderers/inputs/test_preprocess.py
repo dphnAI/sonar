@@ -2,8 +2,8 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import pytest
 
-from aphrodite.inputs import SingletonPrompt
-from aphrodite.renderers.inputs.preprocess import (
+from sonar.inputs import SingletonPrompt
+from sonar.renderers.inputs.preprocess import (
     parse_dec_only_prompt,
     parse_enc_dec_prompt,
     prompt_to_seq,

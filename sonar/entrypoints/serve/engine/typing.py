@@ -3,18 +3,18 @@
 
 from typing import Protocol, TypeAlias
 
-from aphrodite.config import ModelConfig
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.config import ModelConfig
+from sonar.entrypoints.openai.chat_completion.protocol import (
     BatchChatCompletionRequest,
     ChatCompletionRequest,
     ChatCompletionResponse,
 )
-from aphrodite.entrypoints.openai.completion.protocol import (
+from sonar.entrypoints.openai.completion.protocol import (
     CompletionRequest,
     CompletionResponse,
 )
-from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
-from aphrodite.entrypoints.scale_out.token_in_token_out.protocol import (
+from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
+from sonar.entrypoints.scale_out.token_in_token_out.protocol import (
     DerenderChatRequest,
     DerenderChatStreamRequest,
     DerenderCompletionRequest,
@@ -22,19 +22,19 @@ from aphrodite.entrypoints.scale_out.token_in_token_out.protocol import (
     GenerateRequest,
     GenerateResponse,
 )
-from aphrodite.entrypoints.serve.tokenize.protocol import (
+from sonar.entrypoints.serve.tokenize.protocol import (
     DetokenizeRequest,
     TokenizeChatRequest,
     TokenizeCompletionRequest,
     TokenizeResponse,
 )
-from aphrodite.entrypoints.speech_to_text.transcription.protocol import (
+from sonar.entrypoints.speech_to_text.transcription.protocol import (
     TranscriptionRequest,
     TranscriptionResponse,
 )
-from aphrodite.entrypoints.speech_to_text.translation.protocol import TranslationRequest
-from aphrodite.renderers import ChatParams, TokenizeParams
-from aphrodite.renderers.chat_utils import ChatTemplateContentFormatOption
+from sonar.entrypoints.speech_to_text.translation.protocol import TranslationRequest
+from sonar.renderers import ChatParams, TokenizeParams
+from sonar.renderers.chat_utils import ChatTemplateContentFormatOption
 
 
 class RendererRequest(Protocol):

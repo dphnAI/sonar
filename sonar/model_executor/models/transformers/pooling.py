@@ -22,15 +22,15 @@ import torch
 import torch.nn as nn
 from transformers import AutoModelForSequenceClassification
 
-from aphrodite.config.utils import getattr_iter
-from aphrodite.model_executor.layers.pooler import DispatchPooler
-from aphrodite.model_executor.models.interfaces import SupportsCrossEncoding
-from aphrodite.model_executor.models.interfaces_base import AphroditeModelForPooling
+from sonar.config.utils import getattr_iter
+from sonar.model_executor.layers.pooler import DispatchPooler
+from sonar.model_executor.models.interfaces import SupportsCrossEncoding
+from sonar.model_executor.models.interfaces_base import SonarModelForPooling
 
 from .base import Base
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
+    from sonar.config import SonarConfig
 
 
 class ClassifierWithReshape(nn.Module):
@@ -45,27 +45,27 @@ class ClassifierWithReshape(nn.Module):
         return super().forward(*args, **kwargs)
 
 
-class EmbeddingMixin(AphroditeModelForPooling, Base):
+class EmbeddingMixin(SonarModelForPooling, Base):
     default_seq_pooling_type = "CLS"
 
-    def __init__(self, *, aphrodite_config: "AphroditeConfig", prefix: str = ""):
-        # Skip AphroditeModelForPooling.__init__ and call the next class in MRO
-        super(AphroditeModelForPooling, self).__init__(aphrodite_config=aphrodite_config, prefix=prefix)
+    def __init__(self, *, sonar_config: "SonarConfig", prefix: str = ""):
+        # Skip SonarModelForPooling.__init__ and call the next class in MRO
+        super(SonarModelForPooling, self).__init__(sonar_config=sonar_config, prefix=prefix)
 
-        pooler_config = aphrodite_config.model_config.pooler_config
+        pooler_config = sonar_config.model_config.pooler_config
         assert pooler_config is not None
 
         self.pooler = DispatchPooler.for_embedding(pooler_config)
 
 
-class SequenceClassificationMixin(SupportsCrossEncoding, AphroditeModelForPooling, Base):
+class SequenceClassificationMixin(SupportsCrossEncoding, SonarModelForPooling, Base):
     default_seq_pooling_type = "CLS"
 
-    def __init__(self, *, aphrodite_config: "AphroditeConfig", prefix: str = ""):
-        # Skip AphroditeModelForPooling.__init__ and call the next class in MRO
-        super(AphroditeModelForPooling, self).__init__(aphrodite_config=aphrodite_config, prefix=prefix)
+    def __init__(self, *, sonar_config: "SonarConfig", prefix: str = ""):
+        # Skip SonarModelForPooling.__init__ and call the next class in MRO
+        super(SonarModelForPooling, self).__init__(sonar_config=sonar_config, prefix=prefix)
 
-        pooler_config = aphrodite_config.model_config.pooler_config
+        pooler_config = sonar_config.model_config.pooler_config
         assert pooler_config is not None
 
         # Certain information about the model and classifier can only be
@@ -79,7 +79,7 @@ class SequenceClassificationMixin(SupportsCrossEncoding, AphroditeModelForPoolin
             )
 
         # When used for sequence classification, some models have their
-        # pooling layers removed. Make sure this is reflected in Aphrodite.
+        # pooling layers removed. Make sure this is reflected in Sonar.
         for module in seq_cls_model.modules():
             if hasattr(module, "pooler") and module.pooler is None:
                 self.model.pooler = None

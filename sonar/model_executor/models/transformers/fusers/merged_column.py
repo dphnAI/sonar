@@ -8,19 +8,19 @@ from typing import TYPE_CHECKING, ClassVar
 
 from torch import fx, nn
 
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.linear import MergedColumnParallelLinear
-from aphrodite.model_executor.models.transformers.fusers.base import StackedFuser
-from aphrodite.model_executor.models.transformers.fx_utils import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.linear import MergedColumnParallelLinear
+from sonar.model_executor.models.transformers.fusers.base import StackedFuser
+from sonar.model_executor.models.transformers.fx_utils import (
     block_chain,
     compile_forward,
     is_linear,
     recover_forward,
 )
-from aphrodite.model_executor.models.utils import ShardId, maybe_prefix
+from sonar.model_executor.models.utils import ShardId, maybe_prefix
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
+    from sonar.config import SonarConfig
 
 logger = init_logger(__name__)
 
@@ -107,10 +107,10 @@ class MergedColumnParallelFuser(StackedFuser):
         self._splice_merged_split(funcdef, calls, block, index)
         self.fused_forward = compile_forward(funcdef, fn)
 
-    def validate(self, module: nn.Module, aphrodite_config: "AphroditeConfig") -> bool:
+    def validate(self, module: nn.Module, sonar_config: "SonarConfig") -> bool:
         """Check that the parallel linears are compatible for merging."""
         linear_layers = [module.get_submodule(name) for name in self.linear_names]
-        tp_size = aphrodite_config.parallel_config.tensor_parallel_size
+        tp_size = sonar_config.parallel_config.tensor_parallel_size
         return (
             len(linear_layers) >= 2
             and len(set(linear.in_features for linear in linear_layers)) == 1
@@ -118,14 +118,14 @@ class MergedColumnParallelFuser(StackedFuser):
             and all(linear.out_features % tp_size == 0 for linear in linear_layers)
         )
 
-    def update_attrs(self, module: nn.Module, prefix: str, aphrodite_config: "AphroditeConfig") -> None:
+    def update_attrs(self, module: nn.Module, prefix: str, sonar_config: "SonarConfig") -> None:
         """Replace the module's parallel linears with one merged projection."""
         linear_modules = [module.get_submodule(name) for name in self.linear_names]
         merged = MergedColumnParallelLinear(
             input_size=linear_modules[0].in_features,
             output_sizes=[linear.out_features for linear in linear_modules],
             bias=linear_modules[0].bias is not None,
-            quant_config=aphrodite_config.quant_config,
+            quant_config=sonar_config.quant_config,
             prefix=maybe_prefix(prefix, self.merged_name),
             return_bias=False,
         )

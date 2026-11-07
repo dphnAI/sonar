@@ -4,16 +4,16 @@
 
 from typing import Any
 
-from aphrodite.distributed.ec_transfer.ec_connector.cpu.data.base import (
+from sonar.distributed.ec_transfer.ec_connector.cpu.data.base import (
     DataTransport,
 )
-from aphrodite.distributed.ec_transfer.ec_connector.cpu.utils import (
+from sonar.distributed.ec_transfer.ec_connector.cpu.utils import (
     build_block_descs,
     deserialize_mem_descriptor,
     serialize_mem_descriptor,
 )
-from aphrodite.distributed.nixl_utils import NixlWrapper, nixl_agent_config
-from aphrodite.logger import init_logger
+from sonar.distributed.nixl_utils import NixlWrapper, nixl_agent_config
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 _NIXL_DRAM = "DRAM"

@@ -13,19 +13,19 @@ from xgrammar import Grammar, StructuralTag
 from xgrammar import get_model_structural_tag as get_xgrammar_builtin_structural_tag
 from xgrammar.testing import _is_grammar_accept_string
 
-import aphrodite.envs as envs
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+import sonar.envs as envs
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionNamedFunction,
     ChatCompletionNamedToolChoiceParam,
     ChatCompletionRequest,
     ChatCompletionToolsParam,
 )
-from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
-from aphrodite.entrypoints.openai.responses.utils import construct_tool_dicts
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.parser.abstract_parser import DelegatingParser
-from aphrodite.parser.parser_manager import ParserManager
-from aphrodite.parser.plamo3 import (
+from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
+from sonar.entrypoints.openai.responses.utils import construct_tool_dicts
+from sonar.exceptions import SonarValidationError
+from sonar.parser.abstract_parser import DelegatingParser
+from sonar.parser.parser_manager import ParserManager
+from sonar.parser.plamo3 import (
     BEGIN_TOOL_ARGUMENTS,
     BEGIN_TOOL_NAME,
     BEGIN_TOOL_REQUEST,
@@ -36,38 +36,38 @@ from aphrodite.parser.plamo3 import (
     END_TOOL_REQUESTS,
     EOT,
 )
-from aphrodite.tool_parsers.abstract_tool_parser import ToolParser
-from aphrodite.tool_parsers.deepseekv3_tool_parser import DeepSeekV3ToolParser
-from aphrodite.tool_parsers.deepseekv4_engine_tool_parser import (
+from sonar.tool_parsers.abstract_tool_parser import ToolParser
+from sonar.tool_parsers.deepseekv3_tool_parser import DeepSeekV3ToolParser
+from sonar.tool_parsers.deepseekv4_engine_tool_parser import (
     DeepSeekV4EngineToolParser,
 )
-from aphrodite.tool_parsers.deepseekv31_tool_parser import DeepSeekV31ToolParser
-from aphrodite.tool_parsers.deepseekv32_engine_tool_parser import (
+from sonar.tool_parsers.deepseekv31_tool_parser import DeepSeekV31ToolParser
+from sonar.tool_parsers.deepseekv32_engine_tool_parser import (
     DeepSeekV32EngineToolParser,
 )
-from aphrodite.tool_parsers.deepseekv41_engine_tool_parser import DeepSeekV41EngineToolParser
-from aphrodite.tool_parsers.glm47_moe_tool_parser import Glm47MoeModelToolParser
-from aphrodite.tool_parsers.hermes_tool_parser import Hermes2ProToolParser
-from aphrodite.tool_parsers.kimi_k2_tool_parser import KimiK2ToolParser
-from aphrodite.tool_parsers.kimi_k3_tool_parser import KimiK3ToolParser
-from aphrodite.tool_parsers.llama_json_engine_tool_parser import (
+from sonar.tool_parsers.deepseekv41_engine_tool_parser import DeepSeekV41EngineToolParser
+from sonar.tool_parsers.glm47_moe_tool_parser import Glm47MoeModelToolParser
+from sonar.tool_parsers.hermes_tool_parser import Hermes2ProToolParser
+from sonar.tool_parsers.kimi_k2_tool_parser import KimiK2ToolParser
+from sonar.tool_parsers.kimi_k3_tool_parser import KimiK3ToolParser
+from sonar.tool_parsers.llama_json_engine_tool_parser import (
     LlamaJsonEngineToolParser,
 )
-from aphrodite.tool_parsers.longcat_tool_parser import LongcatFlashToolParser
-from aphrodite.tool_parsers.mimo_tool_parser import MiMoToolParser
-from aphrodite.tool_parsers.minimax_m2_tool_parser import MinimaxM2ToolParser
-from aphrodite.tool_parsers.plamo3_engine_tool_parser import Plamo3EngineToolParser
-from aphrodite.tool_parsers.qwen3_engine_tool_parser import Qwen3EngineToolParser
-from aphrodite.tool_parsers.step3p5_tool_parser import Step3p5ToolParser
-from aphrodite.tool_parsers.structural_tag_registry import (
-    APHRODITE_BUILTIN_STRUCTURAL_TAG_MODELS,
+from sonar.tool_parsers.longcat_tool_parser import LongcatFlashToolParser
+from sonar.tool_parsers.mimo_tool_parser import MiMoToolParser
+from sonar.tool_parsers.minimax_m2_tool_parser import MinimaxM2ToolParser
+from sonar.tool_parsers.plamo3_engine_tool_parser import Plamo3EngineToolParser
+from sonar.tool_parsers.qwen3_engine_tool_parser import Qwen3EngineToolParser
+from sonar.tool_parsers.step3p5_tool_parser import Step3p5ToolParser
+from sonar.tool_parsers.structural_tag_registry import (
+    SONAR_BUILTIN_STRUCTURAL_TAG_MODELS,
     SUPPORTED_STRUCTURAL_TAG_MODELS,
     XGRAMMAR_BUILTIN_STRUCTURAL_TAG_MODELS,
     ToolChoice,
     get_function_parameters,
     get_model_structural_tag,
 )
-from aphrodite.tool_parsers.tool_strict_level import ToolStrictLevel
+from sonar.tool_parsers.tool_strict_level import ToolStrictLevel
 
 
 @pytest.fixture
@@ -105,11 +105,11 @@ def sample_tools_strict() -> list[ChatCompletionToolsParam]:
     ]
 
 
-def test_supported_structural_tag_models_include_aphrodite_builtins():
+def test_supported_structural_tag_models_include_sonar_builtins():
     assert SUPPORTED_STRUCTURAL_TAG_MODELS == (
-        XGRAMMAR_BUILTIN_STRUCTURAL_TAG_MODELS | APHRODITE_BUILTIN_STRUCTURAL_TAG_MODELS
+        XGRAMMAR_BUILTIN_STRUCTURAL_TAG_MODELS | SONAR_BUILTIN_STRUCTURAL_TAG_MODELS
     )
-    assert "hermes" in APHRODITE_BUILTIN_STRUCTURAL_TAG_MODELS
+    assert "hermes" in SONAR_BUILTIN_STRUCTURAL_TAG_MODELS
 
 
 def test_deepseek_v41_named_choice_emits_one_call(sample_tools):
@@ -220,7 +220,7 @@ def test_no_structural_tag_without_function_tools(model: str):
     )
 
     assert tag is None
-    with pytest.raises(AphroditeValidationError, match="no function tool"):
+    with pytest.raises(SonarValidationError, match="no function tool"):
         get_model_structural_tag(
             model=model,
             tools=request.tools,
@@ -290,7 +290,7 @@ def test_glm47_default_level_allows_builtin_only_tools(
     monkeypatch: pytest.MonkeyPatch,
 ):
     """GLM-4.7's default FUNCTION level must not reject builtin-only tools."""
-    monkeypatch.setattr(envs, "APHRODITE_ENFORCE_STRICT_TOOL_CALLING", True)
+    monkeypatch.setattr(envs, "SONAR_ENFORCE_STRICT_TOOL_CALLING", True)
 
     class TestParser(DelegatingParser):
         tool_parser_cls = Glm47MoeModelToolParser
@@ -302,7 +302,7 @@ def test_glm47_default_level_allows_builtin_only_tools(
     assert parser.adjust_request(request).structured_outputs is None
 
 
-def test_get_model_structural_tag_supports_aphrodite_hermes(
+def test_get_model_structural_tag_supports_sonar_hermes(
     sample_tools_strict: list[ChatCompletionToolsParam],
 ):
     tag = get_model_structural_tag(
@@ -447,8 +447,8 @@ def _plamo3_tools() -> list[ChatCompletionToolsParam]:
     ]
 
 
-def test_plamo3_registered_as_aphrodite_structural_tag_model():
-    assert "plamo3" in APHRODITE_BUILTIN_STRUCTURAL_TAG_MODELS
+def test_plamo3_registered_as_sonar_structural_tag_model():
+    assert "plamo3" in SONAR_BUILTIN_STRUCTURAL_TAG_MODELS
     assert Plamo3EngineToolParser.structural_tag_model == "plamo3"
     assert Plamo3EngineToolParser.supports_required_and_named is False
 
@@ -590,8 +590,8 @@ def _k3_grammar(tool_choice, tools=None, *, strict: bool = True):
     return Grammar.from_structural_tag(tag)
 
 
-def test_kimi_k3_registered_as_aphrodite_builtin():
-    assert "kimi_k3" in APHRODITE_BUILTIN_STRUCTURAL_TAG_MODELS
+def test_kimi_k3_registered_as_sonar_builtin():
+    assert "kimi_k3" in SONAR_BUILTIN_STRUCTURAL_TAG_MODELS
     assert KimiK3ToolParser.structural_tag_model == "kimi_k3"
 
 
@@ -939,7 +939,7 @@ def test_glm47_without_strict_tool_calling_skips_json_schema_constraint(
 ):
     # With strict tool calling off, no structural tag is attached, so GLM-4.7
     # must decode its native XML instead of a JSON tool-call list.
-    monkeypatch.setattr(envs, "APHRODITE_ENFORCE_STRICT_TOOL_CALLING", False)
+    monkeypatch.setattr(envs, "SONAR_ENFORCE_STRICT_TOOL_CALLING", False)
 
     class TestParser(DelegatingParser):
         tool_parser_cls = Glm47MoeModelToolParser
@@ -971,7 +971,7 @@ def test_get_structural_tag_disables_reasoning(
         return None
 
     monkeypatch.setattr(
-        "aphrodite.tool_parsers.structural_tag_registry.get_model_structural_tag",
+        "sonar.tool_parsers.structural_tag_registry.get_model_structural_tag",
         fake_get_model_structural_tag,
     )
 
@@ -1001,7 +1001,7 @@ def test_unified_parser_get_structural_tag_disables_reasoning(
         return None
 
     monkeypatch.setattr(
-        "aphrodite.tool_parsers.structural_tag_registry.get_model_structural_tag",
+        "sonar.tool_parsers.structural_tag_registry.get_model_structural_tag",
         fake_get_model_structural_tag,
     )
 
@@ -1033,7 +1033,7 @@ def test_xgrammar_function_parameters_are_preserved(
         return None
 
     monkeypatch.setattr(
-        "aphrodite.tool_parsers.structural_tag_registry.get_xgrammar_model_structural_tag",
+        "sonar.tool_parsers.structural_tag_registry.get_xgrammar_model_structural_tag",
         fake_get_xgrammar_model_structural_tag,
     )
 
@@ -1845,7 +1845,7 @@ def test_glm47_mixed_tools_dispatch_per_tool(
 
 
 def _glm47_parser(tools, monkeypatch: pytest.MonkeyPatch, *, strict_calling: bool = True) -> Glm47MoeModelToolParser:
-    monkeypatch.setattr(envs, "APHRODITE_ENFORCE_STRICT_TOOL_CALLING", strict_calling)
+    monkeypatch.setattr(envs, "SONAR_ENFORCE_STRICT_TOOL_CALLING", strict_calling)
     return Glm47MoeModelToolParser(MagicMock(), tools=tools)
 
 
@@ -1877,7 +1877,7 @@ def test_glm47_default_strict_level_constrains_auto(
 ):
     # --tool-strict-level auto: the parser's FUNCTION default lifts the
     # non-strict auto gate.
-    monkeypatch.setattr(envs, "APHRODITE_ENFORCE_STRICT_TOOL_CALLING", True)
+    monkeypatch.setattr(envs, "SONAR_ENFORCE_STRICT_TOOL_CALLING", True)
 
     class TestParser(DelegatingParser):
         tool_parser_cls = Glm47MoeModelToolParser
@@ -1905,7 +1905,7 @@ def test_glm47_default_strict_level_constrains_auto(
 def test_glm47_responses_request_attaches_shallow_tag(
     monkeypatch: pytest.MonkeyPatch,
 ):
-    monkeypatch.setattr(envs, "APHRODITE_ENFORCE_STRICT_TOOL_CALLING", True)
+    monkeypatch.setattr(envs, "SONAR_ENFORCE_STRICT_TOOL_CALLING", True)
 
     class TestParser(DelegatingParser):
         tool_parser_cls = Glm47MoeModelToolParser
@@ -1946,7 +1946,7 @@ def test_glm47_operator_level_overrides_parser_default(
     monkeypatch: pytest.MonkeyPatch,
     sample_tools: list[ChatCompletionToolsParam],
 ):
-    monkeypatch.setattr(envs, "APHRODITE_ENFORCE_STRICT_TOOL_CALLING", True)
+    monkeypatch.setattr(envs, "SONAR_ENFORCE_STRICT_TOOL_CALLING", True)
 
     class TestParser(DelegatingParser):
         tool_parser_cls = Glm47MoeModelToolParser
@@ -1975,7 +1975,7 @@ def test_glm47_default_level_applies_only_when_the_level_is_unset(
     tool_strict_level: str | None,
     constrained: bool,
 ):
-    monkeypatch.setattr(envs, "APHRODITE_ENFORCE_STRICT_TOOL_CALLING", True)
+    monkeypatch.setattr(envs, "SONAR_ENFORCE_STRICT_TOOL_CALLING", True)
     parser_cls = ParserManager.get_parser(
         tool_parser_name="glm47",
         enable_auto_tools=True,
@@ -1998,7 +1998,7 @@ def test_glm47_required_with_non_strict_tools_attaches_shallow_tag(
     monkeypatch: pytest.MonkeyPatch,
     sample_tools: list[ChatCompletionToolsParam],
 ):
-    monkeypatch.setattr(envs, "APHRODITE_ENFORCE_STRICT_TOOL_CALLING", True)
+    monkeypatch.setattr(envs, "SONAR_ENFORCE_STRICT_TOOL_CALLING", True)
 
     class TestParser(DelegatingParser):
         tool_parser_cls = Glm47MoeModelToolParser
@@ -2110,7 +2110,7 @@ def _tool_calling_grammar(
     tools: list[ChatCompletionToolsParam],
     request: ChatCompletionRequest | ResponsesRequest,
 ) -> Grammar | None:
-    from aphrodite.parser.parser_manager import ParserManager
+    from sonar.parser.parser_manager import ParserManager
 
     parser_cls = ParserManager.get_parser(tool_parser_name=tool_parser, enable_auto_tools=True)
     assert parser_cls is not None

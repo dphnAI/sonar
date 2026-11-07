@@ -6,10 +6,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from aphrodite.v1.worker.gpu.model_runner import GPUModelRunner
-from aphrodite.v1.worker.gpu.spec_decode.dflash.speculator import DFlashSpeculator
-from aphrodite.v1.worker.gpu.spec_decode.dspark.speculator import DSparkSpeculator
-from aphrodite.v1.worker.gpu.spec_decode.speculator import BaseSpeculator
+from sonar.v1.worker.gpu.model_runner import GPUModelRunner
+from sonar.v1.worker.gpu.spec_decode.dflash.speculator import DFlashSpeculator
+from sonar.v1.worker.gpu.spec_decode.dspark.speculator import DSparkSpeculator
+from sonar.v1.worker.gpu.spec_decode.speculator import BaseSpeculator
 
 
 class _DefaultSpeculator(BaseSpeculator):

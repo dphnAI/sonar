@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 # mypy: ignore-errors
-"""MiMo-Omni multimodal processor for Aphrodite.
+"""MiMo-Omni multimodal processor for Sonar.
 
 Ported from SGLang's MiMoV2OmniProcessor / MiMoVLProcessor implementations.
 """
@@ -213,7 +213,7 @@ class MiMoVLProcessor:
     Handles image/video/audio preprocessing and token sequence construction.
     Ported from SGLang's MiMoVLProcessor.
 
-    Media strings (URL / path / data:) are resolved upstream in Aphrodite's
+    Media strings (URL / path / data:) are resolved upstream in Sonar's
     media pipeline; this processor accepts only already-decoded inputs
     (``PIL.Image`` for images, ``(waveform, sr)`` tuples for audio).
     """
@@ -392,7 +392,7 @@ class MiMoVLProcessor:
             raise ValueError(
                 f"Unsupported audio source type: {type(audio)}. Audio must be a "
                 "pre-decoded (waveform, sample_rate) tuple; URL/path/bytes "
-                "resolution is handled upstream in Aphrodite's media pipeline."
+                "resolution is handled upstream in Sonar's media pipeline."
             )
         waveform, original_sr = audio
 
@@ -641,7 +641,7 @@ class MiMoVLProcessor:
                     va_audio_inputs.append(spec)
                     _va_is_tokenized = False
                 else:
-                    # Pre-tokenized: not expected in Aphrodite, but handle defensively
+                    # Pre-tokenized: not expected in Sonar, but handle defensively
                     total_atok = processed_audio.shape[0]
                     _va_is_tokenized = True
 
@@ -708,7 +708,7 @@ class MiMoVLProcessor:
                         )
                         _aud_tok += [self.audio_token_id] * seg_n
                         if seg_audio is not None:
-                            # Pre-tokenized per-frame segments (rare in Aphrodite)
+                            # Pre-tokenized per-frame segments (rare in Sonar)
                             audio_inputs.append(seg_audio)
                     _ids += _vid_tok + [self.audio_start_token_id] + _aud_tok + [self.audio_end_token_id]
                 _ids += [self.video_end_token_id]
@@ -750,7 +750,7 @@ class MiMoVLProcessor:
 
 
 # ---------------------------------------------------------------------------
-# Aphrodite ProcessorMixin wrapper
+# Sonar ProcessorMixin wrapper
 # ---------------------------------------------------------------------------
 
 
@@ -929,17 +929,17 @@ class MiMoOmniProcessor(ProcessorMixin):
 
     @property
     def image_token(self) -> str:
-        """Token string used as image placeholder (for Aphrodite integration)."""
+        """Token string used as image placeholder (for Sonar integration)."""
         return "<|image_pad|>"
 
     @property
     def video_token(self) -> str:
-        """Token string used as video placeholder (for Aphrodite integration)."""
+        """Token string used as video placeholder (for Sonar integration)."""
         return "<|video_pad|>"
 
     @property
     def image_processor(self) -> Any:
-        """Minimal image-processor-like object for Aphrodite processing-info compat."""
+        """Minimal image-processor-like object for Sonar processing-info compat."""
         p = self.mimo_processor
 
         class _ImageProcessor:
@@ -1080,7 +1080,7 @@ class MiMoOmniProcessor(ProcessorMixin):
 
         sample = self.mimo_processor.process(contents, verbose=False)
 
-        # Aphrodite expects input_ids to have a batch dimension [1, seq_len].
+        # Sonar expects input_ids to have a batch dimension [1, seq_len].
         data: dict = {"input_ids": sample.input_ids.unsqueeze(0)}
 
         if sample.pixel_values:

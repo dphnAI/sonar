@@ -12,35 +12,35 @@ from typing import TYPE_CHECKING, Any, Protocol
 import torch
 import torch.distributed as dist
 
-import aphrodite.envs as envs
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed import get_dcp_group
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.warmup.jit_warmup import (
+import sonar.envs as envs
+from sonar.config import SonarConfig
+from sonar.distributed import get_dcp_group
+from sonar.logger import init_logger
+from sonar.model_executor.warmup.jit_warmup import (
     WarmupIntRange,
     kernel_launcher,
 )
-from aphrodite.model_executor.warmup.jit_warmup_triton_helper import (
-    AphroditeTritonJitKernel,
+from sonar.model_executor.warmup.jit_warmup_triton_helper import (
     LaunchSpec,
+    SonarTritonJitKernel,
     TritonWarmupTensor,
     triton_scalar_specialization_rep,
 )
-from aphrodite.triton_utils import tl, triton
-from aphrodite.v1.attention.backend import max_decode_query_len
-from aphrodite.v1.attention.ops.cp_common import (
+from sonar.triton_utils import tl, triton
+from sonar.v1.attention.backend import max_decode_query_len
+from sonar.v1.attention.ops.cp_common import (
     DirectCPWorkspace,
     direct_cp_enabled,
     direct_cp_multicast_enabled,
 )
-from aphrodite.v1.worker.ubatching import dbo_current_ubatch_id
+from sonar.v1.worker.ubatching import dbo_current_ubatch_id
 
 logger = init_logger(__name__)
 
 if TYPE_CHECKING:
     from torch.distributed import ProcessGroup
 
-    from aphrodite.distributed.parallel_state import GroupCoordinator
+    from sonar.distributed.parallel_state import GroupCoordinator
 
 
 # LSE/output combine
@@ -90,7 +90,7 @@ def mask_dcp_empty_shards_(
 # AG + RS/AR implementation
 
 
-class CorrectAttnCPOutKernel(AphroditeTritonJitKernel["CorrectAttnCPOutKernel.CompileKey"]):
+class CorrectAttnCPOutKernel(SonarTritonJitKernel["CorrectAttnCPOutKernel.CompileKey"]):
     @dataclass(frozen=True)
     class CompileKey:
         output_dtype: torch.dtype
@@ -234,29 +234,29 @@ class CorrectAttnCPOutKernel(AphroditeTritonJitKernel["CorrectAttnCPOutKernel.Co
 
     def get_warmup_keys(
         self,
-        aphrodite_config: Any,
+        sonar_config: Any,
         *,
         output_dtype: torch.dtype | None = None,
         num_heads: int | None = None,
         head_dim: int | None = None,
         is_base_e: bool | tuple[bool, ...] = (False, True),
     ) -> list[CompileKey]:
-        from aphrodite.model_executor.layers.attention.mla_attention import (
+        from sonar.model_executor.layers.attention.mla_attention import (
             get_mla_dims,
         )
 
-        dcp_world_size = aphrodite_config.parallel_config.decode_context_parallel_size
+        dcp_world_size = sonar_config.parallel_config.decode_context_parallel_size
         max_tokens = min(
             16,
-            aphrodite_config.scheduler_config.max_num_batched_tokens,
+            sonar_config.scheduler_config.max_num_batched_tokens,
         )
-        hf_config = aphrodite_config.model_config.hf_config
+        hf_config = sonar_config.model_config.hf_config
         if num_heads is None:
-            num_heads = hf_config.num_attention_heads // aphrodite_config.parallel_config.tensor_parallel_size
+            num_heads = hf_config.num_attention_heads // sonar_config.parallel_config.tensor_parallel_size
         if head_dim is None:
-            head_dim = get_mla_dims(aphrodite_config.model_config).v_head_dim
+            head_dim = get_mla_dims(sonar_config.model_config).v_head_dim
         if output_dtype is None:
-            output_dtype = aphrodite_config.model_config.dtype
+            output_dtype = sonar_config.model_config.dtype
         if dcp_world_size <= 1 or max_tokens <= 0 or num_heads <= 0:
             return []
         return self._trace_dispatch(self.dispatch)(
@@ -943,15 +943,15 @@ def dcp_a2a_lse_reduce(
     return _dcp_a2a_unpack_combine(recv_buffer, D, lse_pack_dim, return_lse, is_lse_base_on_e)
 
 
-def get_dcp_workspace_max_num_tokens(aphrodite_config: AphroditeConfig) -> int:
-    scheduler_config = aphrodite_config.scheduler_config
+def get_dcp_workspace_max_num_tokens(sonar_config: SonarConfig) -> int:
+    scheduler_config = sonar_config.scheduler_config
     # num_speculative_tokens also counts a diffusion canvas.
-    tokens_per_seq = max(1 + aphrodite_config.num_speculative_tokens, max_decode_query_len(aphrodite_config))
+    tokens_per_seq = max(1 + sonar_config.num_speculative_tokens, max_decode_query_len(sonar_config))
     return min(
         scheduler_config.max_num_batched_tokens,
         max(
             scheduler_config.max_num_seqs * tokens_per_seq,
-            aphrodite_config.compilation_config.max_cudagraph_capture_size or 0,
+            sonar_config.compilation_config.max_cudagraph_capture_size or 0,
         ),
     )
 
@@ -1056,7 +1056,7 @@ def get_direct_dcp_a2a_workspace(
     dtype: torch.dtype,
     num_ubatches: int,
 ) -> DirectDCPA2AWorkspace | None:
-    if not direct_cp_enabled(group, dtype, envs.APHRODITE_USE_DIRECT_DCP_A2A, _A2A_SUPPORTED_DTYPES):
+    if not direct_cp_enabled(group, dtype, envs.SONAR_USE_DIRECT_DCP_A2A, _A2A_SUPPORTED_DTYPES):
         return None
     try:
         return DirectDCPA2AWorkspace(
@@ -1069,7 +1069,7 @@ def get_direct_dcp_a2a_workspace(
             num_ubatches,
         )
     except RuntimeError as error:
-        if envs.APHRODITE_USE_DIRECT_DCP_A2A:
+        if envs.SONAR_USE_DIRECT_DCP_A2A:
             raise
         logger.warning_once(
             "Direct symmetric-memory DCP A2A initialization failed; falling back to the configured collective: %s",
@@ -1202,7 +1202,7 @@ def get_direct_dcp_q_gather_workspace(
     num_ubatches: int,
     padded_num_heads: int | None = None,
 ) -> DirectDCPQGatherWorkspace | None:
-    if not direct_cp_multicast_enabled(group, dtype, envs.APHRODITE_USE_DIRECT_DCP_Q_GATHER):
+    if not direct_cp_multicast_enabled(group, dtype, envs.SONAR_USE_DIRECT_DCP_Q_GATHER):
         return None
     if not _q_gather_layout_supported(group.world_size, heads_per_rank, head_dim, dtype, padded_num_heads):
         return None
@@ -1218,7 +1218,7 @@ def get_direct_dcp_q_gather_workspace(
             padded_num_heads,
         )
     except RuntimeError as error:
-        if envs.APHRODITE_USE_DIRECT_DCP_Q_GATHER:
+        if envs.SONAR_USE_DIRECT_DCP_Q_GATHER:
             raise
         logger.warning_once(
             "Direct symmetric-memory DCP query-gather initialization failed; "
@@ -1320,7 +1320,7 @@ def get_direct_dcp_kv_gather_workspace(
     if not direct_cp_multicast_enabled(
         group,
         dtype,
-        envs.APHRODITE_USE_DIRECT_DCP_KV_GATHER,
+        envs.SONAR_USE_DIRECT_DCP_KV_GATHER,
         _KV_GATHER_SUPPORTED_DTYPES,
     ):
         return None
@@ -1336,7 +1336,7 @@ def get_direct_dcp_kv_gather_workspace(
             num_ubatches,
         )
     except RuntimeError as error:
-        if envs.APHRODITE_USE_DIRECT_DCP_KV_GATHER:
+        if envs.SONAR_USE_DIRECT_DCP_KV_GATHER:
             raise
         logger.warning_once(
             "Direct symmetric-memory DCP KV-gather initialization failed; "
@@ -1367,7 +1367,7 @@ class MLADCPManager:
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
         num_heads: int,
         query_head_dim: int,
@@ -1378,11 +1378,11 @@ class MLADCPManager:
         is_lse_base_on_e: bool,
         use_pcp: bool,
     ) -> None:
-        parallel_config = aphrodite_config.parallel_config
+        parallel_config = sonar_config.parallel_config
         self.group = get_dcp_group()
         self.device = torch.device(device)
         self.num_ubatches = max(parallel_config.num_ubatches, 1)
-        self.max_num_tokens = get_dcp_workspace_max_num_tokens(aphrodite_config)
+        self.max_num_tokens = get_dcp_workspace_max_num_tokens(sonar_config)
         self.use_a2a = parallel_config.dcp_comm_backend == "a2a"
         self.padded_num_heads = padded_num_heads
 
@@ -1393,9 +1393,9 @@ class MLADCPManager:
             is_lse_base_on_e,
             use_pcp,
         )
-        if aphrodite_config.kernel_config.enable_jit_warmup and not self.use_a2a:
+        if sonar_config.kernel_config.enable_jit_warmup and not self.use_a2a:
             _CORRECT_ATTN_CP_OUT_KERNEL.register_warmup(
-                aphrodite_config,
+                sonar_config,
                 output_dtype=output_dtype,
                 num_heads=num_heads,
                 head_dim=output_head_dim,

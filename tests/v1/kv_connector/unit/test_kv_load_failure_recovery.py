@@ -5,15 +5,15 @@ from collections.abc import Callable
 
 import pytest
 
-from aphrodite.v1.core.sched.scheduler import Scheduler
-from aphrodite.v1.request import Request, RequestStatus
+from sonar.v1.core.sched.scheduler import Scheduler
+from sonar.v1.request import Request, RequestStatus
 
 from .utils import (
-    create_aphrodite_config,
     create_mock_connector,
     create_model_runner_output,
     create_request,
     create_scheduler,
+    create_sonar_config,
     make_kv_cache_config,
 )
 
@@ -31,14 +31,14 @@ def _make_get_num_new_matched_tokens(
 
 @pytest.fixture
 def scheduler():
-    aphrodite_config = create_aphrodite_config(kv_load_failure_policy="recompute")
-    return create_scheduler(aphrodite_config)
+    sonar_config = create_sonar_config(kv_load_failure_policy="recompute")
+    return create_scheduler(sonar_config)
 
 
 @pytest.mark.parametrize("policy", ["fail", "recompute"])
 def test_failed_receive_completion_honors_failure_policy(policy):
     """Failed receives still need completion to free blocks or resume computation."""
-    scheduler = create_scheduler(create_aphrodite_config(kv_load_failure_policy=policy))
+    scheduler = create_scheduler(create_sonar_config(kv_load_failure_policy=policy))
     request = create_request(num_tokens=3 * scheduler.block_size)
     scheduler.add_request(request)
     scheduler.connector = create_mock_connector()
@@ -370,9 +370,9 @@ def test_block_level_load_failure_fails_closed_with_multiple_groups():
     Block IDs are only unique within a group, so the scheduler cannot map
     them back to requests; connectors must report failed_recving instead.
     """
-    aphrodite_config = create_aphrodite_config()
+    sonar_config = create_sonar_config()
     scheduler = create_scheduler(
-        aphrodite_config,
+        sonar_config,
         kv_cache_config=make_kv_cache_config(block_size=16, swa_enabled=True),
     )
     assert len(scheduler.kv_cache_config.kv_cache_groups) == 2

@@ -9,13 +9,13 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_random_seed
 
 if not current_platform.is_cpu():
     pytest.skip("skipping CPU-only tests", allow_module_level=True)
 
-import aphrodite._custom_ops as ops  # noqa: E402
+import sonar._custom_ops as ops  # noqa: E402
 
 if not hasattr(torch.ops._C, "fused_experts_cpu"):
     pytest.skip("fused_experts_cpu op not available", allow_module_level=True)
@@ -982,7 +982,7 @@ def test_int4_w4a16_cpu_fused_moe(M, N, K, E, topk, group_size, quant_algo, seed
         group_size,
     )
 
-    from aphrodite.model_executor.layers.fused_moe.experts.cpu_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.cpu_moe import (
         prepare_int4_moe_layer_for_cpu,
     )
 
@@ -1060,7 +1060,7 @@ def test_int4_w4a16_cpu_fused_moe_gelu_tanh(M, N, K, E, topk, group_size, quant_
         act_fn=_gelu_tanh_and_mul,
     )
 
-    from aphrodite.model_executor.layers.fused_moe.experts.cpu_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.cpu_moe import (
         prepare_int4_moe_layer_for_cpu,
     )
 

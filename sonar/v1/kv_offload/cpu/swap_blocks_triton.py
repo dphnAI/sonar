@@ -6,8 +6,8 @@ from __future__ import annotations
 
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.triton_utils import tl, triton
+from sonar import _custom_ops as ops
+from sonar.triton_utils import tl, triton
 
 # Constants tuned empirically on H100 (PCIe Gen5):
 #   NUM_SMS         - smallest SM slice within 5% of peak bandwidth at the

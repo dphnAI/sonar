@@ -10,31 +10,31 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-import aphrodite.v1.core.kv_cache_planning as kv_cache_planning
-import aphrodite.v1.core.kv_cache_utils as kv_cache_utils
-from aphrodite.config import (
-    AphroditeConfig,
+import sonar.v1.core.kv_cache_planning as kv_cache_planning
+import sonar.v1.core.kv_cache_utils as kv_cache_utils
+from sonar.config import (
     CacheConfig,
     ModelConfig,
     SchedulerConfig,
+    SonarConfig,
 )
-from aphrodite.config.attention import HiSparseConfig
-from aphrodite.platforms import current_platform
-from aphrodite.utils.mem_constants import GiB_bytes
-from aphrodite.v1.core.kv_cache_planning import (
+from sonar.config.attention import HiSparseConfig
+from sonar.platforms import current_platform
+from sonar.utils.mem_constants import GiB_bytes
+from sonar.v1.core.kv_cache_planning import (
     check_enough_kv_cache_memory,
     estimate_max_model_len,
     get_kv_cache_groups,
     is_kv_cache_spec_uniform,
     kv_cache_groups_tp_replicas,
 )
-from aphrodite.v1.core.kv_cache_utils import (
+from sonar.v1.core.kv_cache_utils import (
     generate_scheduler_kv_cache_config,
 )
-from aphrodite.v1.hisparse.layout import (
+from sonar.v1.hisparse.layout import (
     get_hisparse_kv_cache_groups,
 )
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.kv_cache_interface import (
     ChunkedLocalAttentionSpec,
     CircularBufferSpec,
     FullAttentionSpec,
@@ -52,7 +52,7 @@ from aphrodite.v1.kv_cache_interface import (
     SparseCacheRole,
     UniformTypeKVCacheSpecs,
 )
-from aphrodite.v1.kv_cache_layout import KVCacheLayout
+from sonar.v1.kv_cache_layout import KVCacheLayout
 from tests.v1.core.utils import (
     get_kv_cache_configs,
     new_kv_cache_spec,
@@ -71,7 +71,7 @@ def test_hisparse_hma_uses_resolved_gpu_block_size(monkeypatch, gpu_block_size, 
     monkeypatch.setattr(
         current_platform,
         "get_hisparse_backend_cls",
-        lambda: "aphrodite.v1.hisparse.backend.CUDAHiSparseBackend",
+        lambda: "sonar.v1.hisparse.backend.CUDAHiSparseBackend",
     )
     specs = {
         "model.layers.0.self_attn": MLAAttentionSpec(
@@ -185,7 +185,7 @@ def test_hisparse_pool_must_fit_max_model_len(monkeypatch, max_model_len, num_gp
     monkeypatch.setattr(
         current_platform,
         "get_hisparse_backend_cls",
-        lambda: "aphrodite.v1.hisparse.backend.CUDAHiSparseBackend",
+        lambda: "sonar.v1.hisparse.backend.CUDAHiSparseBackend",
     )
     monkeypatch.setattr(kv_cache_planning, "get_hisparse_host_pool_bytes", lambda _: 2**30)
     specs: dict[str, KVCacheSpec] = {}
@@ -204,7 +204,7 @@ def test_hisparse_pool_must_fit_max_model_len(monkeypatch, max_model_len, num_gp
             dtype=torch.bfloat16,
             cache_role=SparseCacheRole.INDEXER,
         )
-    config = AphroditeConfig(model_config=ModelConfig(max_model_len=max_model_len))
+    config = SonarConfig(model_config=ModelConfig(max_model_len=max_model_len))
     config.scheduler_config.max_num_batched_tokens = 2048
     # Async scheduling doubles the in-flight window, and with it the bound.
     config.scheduler_config.async_scheduling = False
@@ -247,9 +247,9 @@ def new_chunked_local_attention_spec(
 
 def test_get_kv_cache_configs_multiple_workers():
     model_config = ModelConfig(max_model_len=16)
-    aphrodite_config = AphroditeConfig(model_config=model_config)
-    aphrodite_config.cache_config.kv_cache_layout = "LBNHC"
-    aphrodite_config.cache_config.prefix_cache_retention_interval = None
+    sonar_config = SonarConfig(model_config=model_config)
+    sonar_config.cache_config.kv_cache_layout = "LBNHC"
+    sonar_config.cache_config.prefix_cache_retention_interval = None
 
     ref_kv_cache_spec = new_kv_cache_spec()
     same_kv_cache_specs = [
@@ -265,7 +265,7 @@ def test_get_kv_cache_configs_multiple_workers():
 
     # Basic case. All things are the same.
     kv_cache_configs = get_kv_cache_configs(
-        aphrodite_config,
+        sonar_config,
         same_kv_cache_specs,
         [
             ref_kv_cache_spec.page_size_bytes * 2 * 10,
@@ -291,7 +291,7 @@ def test_get_kv_cache_configs_multiple_workers():
     # Different available memory. This is the case for TP.
     # Use the smallest memory available.
     kv_cache_configs = get_kv_cache_configs(
-        aphrodite_config,
+        sonar_config,
         same_kv_cache_specs,
         [
             ref_kv_cache_spec.page_size_bytes * 2 * 10,
@@ -313,7 +313,7 @@ def test_get_kv_cache_configs_multiple_workers():
 
     # Different workers have different layers.
     kv_cache_configs = get_kv_cache_configs(
-        aphrodite_config,
+        sonar_config,
         different_layer_specs,
         [
             ref_kv_cache_spec.page_size_bytes * 2 * 10,
@@ -370,7 +370,7 @@ def test_get_kv_cache_configs_multiple_workers():
     ]
 
     kv_cache_configs = get_kv_cache_configs(
-        aphrodite_config,
+        sonar_config,
         tp_pp_kv_cache_specs,
         [
             ref_kv_cache_spec.page_size_bytes * 2 * 10,
@@ -427,7 +427,7 @@ def test_get_kv_cache_configs_multiple_workers():
         },
     ]
     kv_cache_configs = get_kv_cache_configs(
-        aphrodite_config,
+        sonar_config,
         different_type_layer_specs,
         [
             ref_kv_cache_spec.page_size_bytes * 2 * 10,
@@ -482,7 +482,7 @@ def test_get_kv_cache_configs_multiple_workers():
         },
     ]
     kv_cache_configs = get_kv_cache_configs(
-        aphrodite_config,
+        sonar_config,
         different_type_layer_specs,
         [
             ref_kv_cache_spec.page_size_bytes * 10,
@@ -559,7 +559,7 @@ def test_get_kv_cache_configs_multiple_workers():
     ]
     with pytest.raises(AssertionError):
         get_kv_cache_configs(
-            aphrodite_config,
+            sonar_config,
             conflicting_layer_specs,
             [
                 ref_kv_cache_spec.page_size_bytes * 2 * 10,
@@ -575,9 +575,9 @@ def test_get_kv_cache_configs_multiple_workers():
 )
 def test_get_kv_cache_configs_pp_sharding(asymmetric_memory):
     model_config = ModelConfig(max_model_len=512)
-    aphrodite_config = AphroditeConfig(model_config=model_config)
-    aphrodite_config.cache_config.kv_cache_layout = "LBNHC"
-    aphrodite_config.cache_config.prefix_cache_retention_interval = None
+    sonar_config = SonarConfig(model_config=model_config)
+    sonar_config.cache_config.kv_cache_layout = "LBNHC"
+    sonar_config.cache_config.prefix_cache_retention_interval = None
 
     ref_kv_cache_spec = new_kv_cache_spec()
     pp_kv_cache_specs = [
@@ -593,7 +593,7 @@ def test_get_kv_cache_configs_pp_sharding(asymmetric_memory):
     available_memory = [avail_memory, avail_memory * 2] if asymmetric_memory else [avail_memory] * 2
 
     kv_cache_configs = get_kv_cache_configs(
-        aphrodite_config,
+        sonar_config,
         pp_kv_cache_specs,
         available_memory,
     )
@@ -692,10 +692,10 @@ def test_kv_cache_config_skips_uniform_group_owned_by_other_pp_stage():
 @pytest.mark.parametrize("with_draft", [False, True])
 @pytest.mark.parametrize("indexer_alignment", [None, 512])
 def test_sparse_mla_preserves_physical_row_addressing(with_draft, indexer_alignment):
-    from aphrodite.v1.attention.backends.mla.sparse_utils import flat_kv_row_view
-    from aphrodite.v1.worker.utils import allocate_kv_cache
+    from sonar.v1.attention.backends.mla.sparse_utils import flat_kv_row_view
+    from sonar.v1.worker.utils import allocate_kv_cache
 
-    config = AphroditeConfig(model_config=ModelConfig(max_model_len=1024))
+    config = SonarConfig(model_config=ModelConfig(max_model_len=1024))
     config.cache_config.kv_cache_layout = "BLHNC"
     config.parallel_config.decode_context_parallel_size = 4
     common = dict(block_size=64, num_kv_heads=1, dtype=torch.uint8)
@@ -771,8 +771,8 @@ def test_is_kv_cache_spec_uniform():
     script = """
 import sys
 
-from aphrodite.v1.core.kv_cache_planning import is_kv_cache_spec_uniform
-from aphrodite.v1.kv_cache_interface import KVCacheSpec
+from sonar.v1.core.kv_cache_planning import is_kv_cache_spec_uniform
+from sonar.v1.kv_cache_interface import KVCacheSpec
 
 if sys.flags.optimize < 1:
     raise RuntimeError("subprocess is not running with optimization enabled")
@@ -799,7 +799,7 @@ if is_kv_cache_spec_uniform(specs):
     ],
 )
 def test_estimate_max_model_len(model_id, max_model_len, want_estimated_max_len):
-    # Create a AphroditeConfig
+    # Create a SonarConfig
     model_config = ModelConfig(
         model_id,
         runner="generate",
@@ -812,7 +812,7 @@ def test_estimate_max_model_len(model_id, max_model_len, want_estimated_max_len)
         is_encoder_decoder=model_config.is_encoder_decoder,
     )
 
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         model_config=model_config,
         scheduler_config=scheduler_config,
     )
@@ -828,16 +828,16 @@ def test_estimate_max_model_len(model_id, max_model_len, want_estimated_max_len)
             dtype=torch.float16,
         )
     # Estimate the maximum model length, 16384 model_len need 8GB
-    estimated_max_len = estimate_max_model_len(aphrodite_config, kv_cache_spec, 8 * GiB_bytes)
+    estimated_max_len = estimate_max_model_len(sonar_config, kv_cache_spec, 8 * GiB_bytes)
     assert estimated_max_len == want_estimated_max_len
 
 
 def test_get_kv_cache_config_one_worker():
     # pass max_model_len to pass check_enough_kv_cache_memory
     model_config = ModelConfig(max_model_len=16)
-    aphrodite_config = AphroditeConfig(model_config=model_config)
-    aphrodite_config.cache_config.kv_cache_layout = "LBNHC"
-    aphrodite_config.cache_config.prefix_cache_retention_interval = None
+    sonar_config = SonarConfig(model_config=model_config)
+    sonar_config.cache_config.kv_cache_layout = "LBNHC"
+    sonar_config.cache_config.prefix_cache_retention_interval = None
 
     mem_per_block_per_layer = 16 * 2 * 64 * 4 * 2
     # all layers are full attention -> single group
@@ -846,7 +846,7 @@ def test_get_kv_cache_config_one_worker():
         "layer_2": new_kv_cache_spec(),
     }
     kv_cache_config_full = get_kv_cache_configs(
-        aphrodite_config, [kv_cache_specs_full], [mem_per_block_per_layer * 2 * 32]
+        sonar_config, [kv_cache_specs_full], [mem_per_block_per_layer * 2 * 32]
     )[0]
     print(kv_cache_config_full)
     assert kv_cache_config_full == KVCacheConfig(
@@ -868,7 +868,7 @@ def test_get_kv_cache_config_one_worker():
         "layer_2": new_sliding_window_spec(),
     }
     kv_cache_config_sliding = get_kv_cache_configs(
-        aphrodite_config, [kv_cache_specs_sliding], [mem_per_block_per_layer * 2 * 32]
+        sonar_config, [kv_cache_specs_sliding], [mem_per_block_per_layer * 2 * 32]
     )[0]
     assert kv_cache_config_sliding == KVCacheConfig(
         num_blocks=32,
@@ -884,13 +884,13 @@ def test_get_kv_cache_config_one_worker():
     )
 
     # full + sliding, but disable_hybrid_kv_cache_manager
-    aphrodite_config.scheduler_config.disable_hybrid_kv_cache_manager = True
+    sonar_config.scheduler_config.disable_hybrid_kv_cache_manager = True
     kv_cache_specs_hybrid = {
         "layer_1": new_kv_cache_spec(),
         "layer_2": new_sliding_window_spec(),
     }
     kv_cache_config_hybrid = get_kv_cache_configs(
-        aphrodite_config, [kv_cache_specs_hybrid], [mem_per_block_per_layer * 2 * 32]
+        sonar_config, [kv_cache_specs_hybrid], [mem_per_block_per_layer * 2 * 32]
     )[0]
     assert kv_cache_config_hybrid == KVCacheConfig(
         num_blocks=32,
@@ -906,7 +906,7 @@ def test_get_kv_cache_config_one_worker():
             KVCacheGroupSpec(["layer_1", "layer_2"], new_kv_cache_spec(sliding_window=1)),
         ],
     )
-    aphrodite_config.scheduler_config.disable_hybrid_kv_cache_manager = False
+    sonar_config.scheduler_config.disable_hybrid_kv_cache_manager = False
 
     # full + sliding, with hybrid_kv_cache_manager
     kv_cache_specs_hybrid = {
@@ -914,7 +914,7 @@ def test_get_kv_cache_config_one_worker():
         "layer_2": new_sliding_window_spec(),
     }
     kv_cache_config_hybrid = get_kv_cache_configs(
-        aphrodite_config, [kv_cache_specs_hybrid], [mem_per_block_per_layer * 2 * 32]
+        sonar_config, [kv_cache_specs_hybrid], [mem_per_block_per_layer * 2 * 32]
     )[0]
     assert kv_cache_config_hybrid == KVCacheConfig(
         num_blocks=64,
@@ -948,7 +948,7 @@ def test_get_kv_cache_config_one_worker():
         "layer_6": new_sliding_window_spec(),
     }
     kv_cache_config_hybrid = get_kv_cache_configs(
-        aphrodite_config, [kv_cache_specs_hybrid], [mem_per_block_per_layer * 2 * 32]
+        sonar_config, [kv_cache_specs_hybrid], [mem_per_block_per_layer * 2 * 32]
     )[0]
     assert kv_cache_config_hybrid == KVCacheConfig(
         num_blocks=32,
@@ -993,7 +993,7 @@ def test_get_kv_cache_config_one_worker():
         "layer_10": new_sliding_window_spec(),
     }
     kv_cache_config_hybrid = get_kv_cache_configs(
-        aphrodite_config, [kv_cache_specs_hybrid], [mem_per_block_per_layer * 3 * 32]
+        sonar_config, [kv_cache_specs_hybrid], [mem_per_block_per_layer * 3 * 32]
     )[0]
     assert kv_cache_config_hybrid == KVCacheConfig(
         num_blocks=32,
@@ -1048,7 +1048,7 @@ def test_get_kv_cache_config_one_worker():
     }
 
     kv_cache_config_hybrid = get_kv_cache_configs(
-        aphrodite_config, [kv_cache_specs_hybrid], [mem_per_block_per_layer * 6 * 32]
+        sonar_config, [kv_cache_specs_hybrid], [mem_per_block_per_layer * 6 * 32]
     )[0]
     print(kv_cache_config_hybrid)
     assert kv_cache_config_hybrid == KVCacheConfig(
@@ -1092,7 +1092,7 @@ def test_get_kv_cache_config_one_worker():
         "layer_2": new_kv_cache_spec(head_size=64),
     }
     kv_cache_config_hybrid = get_kv_cache_configs(
-        aphrodite_config, [kv_cache_specs_hybrid], [mem_per_block_per_layer * 3 * 32]
+        sonar_config, [kv_cache_specs_hybrid], [mem_per_block_per_layer * 3 * 32]
     )[0]
     # Layers of different page sizes pack densely into one allocation: the
     # 2x-larger layer_1 takes the first region, layer_2 the next.
@@ -1127,7 +1127,7 @@ def test_get_kv_cache_config_one_worker():
         "layer_2": new_sliding_window_spec(head_size=32),
     }
     kv_cache_config_hybrid = get_kv_cache_configs(
-        aphrodite_config, [kv_cache_specs_hybrid], [mem_per_block_per_layer * 32]
+        sonar_config, [kv_cache_specs_hybrid], [mem_per_block_per_layer * 32]
     )[0]
     assert kv_cache_config_hybrid == KVCacheConfig(
         num_blocks=32,
@@ -1160,7 +1160,7 @@ def test_get_kv_cache_config_one_worker():
     }
 
     kv_cache_config_hybrid = get_kv_cache_configs(
-        aphrodite_config, [kv_cache_specs_hybrid], [mem_per_block_per_layer * 2 * 32]
+        sonar_config, [kv_cache_specs_hybrid], [mem_per_block_per_layer * 2 * 32]
     )[0]
     padded_page_size = swa_spec.page_size_bytes
     assert kv_cache_config_hybrid == KVCacheConfig(
@@ -1195,9 +1195,9 @@ def test_get_kv_cache_config_one_worker():
     )
 
     # Test num_gpu_blocks_override
-    aphrodite_config.cache_config.num_gpu_blocks_override = 16
+    sonar_config.cache_config.num_gpu_blocks_override = 16
     kv_cache_config_override_blocks = get_kv_cache_configs(
-        aphrodite_config, [kv_cache_specs_full], [mem_per_block_per_layer * 2 * 32]
+        sonar_config, [kv_cache_specs_full], [mem_per_block_per_layer * 2 * 32]
     )[0]
     assert kv_cache_config_override_blocks == KVCacheConfig(
         num_blocks=16,
@@ -1215,9 +1215,9 @@ def test_get_kv_cache_config_one_worker():
 
 def test_get_kv_cache_configs_attention_free():
     kv_cache_specs: dict[str, KVCacheSpec] = {}
-    aphrodite_config = AphroditeConfig(model_config=ModelConfig(max_model_len=16))
-    aphrodite_config.cache_config.prefix_cache_retention_interval = None
-    kv_cache_configs = get_kv_cache_configs(aphrodite_config, [kv_cache_specs], [0])
+    sonar_config = SonarConfig(model_config=ModelConfig(max_model_len=16))
+    sonar_config.cache_config.prefix_cache_retention_interval = None
+    kv_cache_configs = get_kv_cache_configs(sonar_config, [kv_cache_specs], [0])
     assert kv_cache_configs == [
         KVCacheConfig(
             num_blocks=1,
@@ -1228,8 +1228,8 @@ def test_get_kv_cache_configs_attention_free():
 
 
 def test_packed_groups_glm5_like_hybrid():
-    aphrodite_config = AphroditeConfig(model_config=ModelConfig(max_model_len=8192))
-    aphrodite_config.cache_config.kv_cache_layout = "BLHNC"
+    sonar_config = SonarConfig(model_config=ModelConfig(max_model_len=8192))
+    sonar_config.cache_config.kv_cache_layout = "BLHNC"
     kpool, block_size = 4, 1024
     kv_cache_spec: dict[str, KVCacheSpec] = {}
     for i in range(11):
@@ -1262,7 +1262,7 @@ def test_packed_groups_glm5_like_hybrid():
             block_size=block_size,
         )
 
-    groups = kv_cache_planning.get_kv_cache_groups(aphrodite_config, kv_cache_spec)
+    groups = kv_cache_planning.get_kv_cache_groups(sonar_config, kv_cache_spec)
     attn = [
         g
         for g in groups
@@ -1283,7 +1283,7 @@ def test_packed_groups_glm5_like_hybrid():
     assert sum(len(g.layer_names) for g in mamba) == 34
 
     kv_cache_config = kv_cache_planning.get_kv_cache_config_from_groups(
-        aphrodite_config, groups, available_memory=2 * 1024**3
+        sonar_config, groups, available_memory=2 * 1024**3
     )
     strides = {t.block_stride for t in kv_cache_config.kv_cache_tensors}
     assert len(strides) == 1
@@ -1298,8 +1298,8 @@ def test_packed_groups_glm5_like_hybrid():
         isinstance(group.kv_cache_spec, UniformTypeKVCacheSpecs) for group in scheduler_config.kv_cache_groups
     )
     assert len({group.kv_cache_spec.page_size_bytes for group in scheduler_config.kv_cache_groups}) > 1
-    worker_capacity = kv_cache_utils.get_kv_cache_capacity(aphrodite_config, kv_cache_config)
-    scheduler_capacity = kv_cache_utils.get_kv_cache_capacity(aphrodite_config, scheduler_config)
+    worker_capacity = kv_cache_utils.get_kv_cache_capacity(sonar_config, kv_cache_config)
+    scheduler_capacity = kv_cache_utils.get_kv_cache_capacity(sonar_config, scheduler_config)
     assert worker_capacity[0] > 0
     assert scheduler_capacity[0] == worker_capacity[0]
     assert scheduler_capacity[1] == pytest.approx(worker_capacity[1])
@@ -1397,7 +1397,7 @@ def test_hidden_state_group_preserves_hybrid_prefix_cache_granularity():
         kv_cache_tensors=[],
         kv_cache_groups=groups,
     )
-    aphrodite_config = SimpleNamespace(
+    sonar_config = SimpleNamespace(
         cache_config=SimpleNamespace(
             block_size=16,
             enable_prefix_caching=True,
@@ -1406,7 +1406,7 @@ def test_hidden_state_group_preserves_hybrid_prefix_cache_granularity():
         parallel_config=SimpleNamespace(decode_context_parallel_size=1),
         kv_transfer_config=object(),
     )
-    assert kv_cache_utils.resolve_kv_cache_block_sizes(kv_cache_config, aphrodite_config) == (544, 136)
+    assert kv_cache_utils.resolve_kv_cache_block_sizes(kv_cache_config, sonar_config) == (544, 136)
 
 
 def test_multi_run_layer_compact_strides_place_hoisted_heads():
@@ -1419,10 +1419,10 @@ def test_multi_run_layer_compact_strides_place_hoisted_heads():
     page = full.page_size_bytes
     assert swa.page_size_bytes == page
 
-    aphrodite_config = AphroditeConfig(model_config=ModelConfig(max_model_len=16))
-    aphrodite_config.cache_config.kv_cache_layout = "LHBNC"
+    sonar_config = SonarConfig(model_config=ModelConfig(max_model_len=16))
+    sonar_config.cache_config.kv_cache_layout = "LHBNC"
     config = kv_cache_planning.get_kv_cache_config_from_groups(
-        aphrodite_config,
+        sonar_config,
         [
             KVCacheGroupSpec(["full.0", "full.1"], full),
             KVCacheGroupSpec(["swa.0", "swa.1"], swa),
@@ -1461,7 +1461,7 @@ def test_mla_draft_prefers_standard_layout_when_pages_can_be_unified():
     assert all(not isinstance(group.kv_cache_spec, UniformTypeKVCacheSpecs) for group in groups)
 
 
-def test_mla_with_incompatible_swa_uses_one_full_allocation_group(caplog_aphrodite):
+def test_mla_with_incompatible_swa_uses_one_full_allocation_group(caplog_sonar):
     # Sparse MLA pages cannot be padded safely. Keeping the draft's attention
     # compute sliding-window while promoting only its allocation semantics lets
     # every layer share the target's block table and remain contiguous.
@@ -1484,7 +1484,7 @@ def test_mla_with_incompatible_swa_uses_one_full_allocation_group(caplog_aphrodi
     assert promoted_draft.block_size == 64
     assert promoted_draft.sliding_window == draft.sliding_window
     assert specs["draft.0"] is draft
-    assert "attention compute is unchanged" in caplog_aphrodite.text
+    assert "attention compute is unchanged" in caplog_sonar.text
 
 
 def test_hidden_states_with_tp_scales_page_size():
@@ -1532,8 +1532,8 @@ def test_auto_fit_max_model_len():
     model_config = ModelConfig(max_model_len=1024)
     # Simulate the user passing -1 by setting original_max_model_len
     model_config.original_max_model_len = -1
-    aphrodite_config = AphroditeConfig(model_config=model_config)
-    aphrodite_config.cache_config.kv_cache_layout = "LBNHC"
+    sonar_config = SonarConfig(model_config=model_config)
+    sonar_config.cache_config.kv_cache_layout = "LBNHC"
 
     mem_per_block_per_layer = 16 * 2 * 64 * 4 * 2  # 16KB per block per layer
     kv_cache_specs = {
@@ -1543,23 +1543,23 @@ def test_auto_fit_max_model_len():
 
     # With enough memory, max_model_len stays at the derived max
     large_available_memory = mem_per_block_per_layer * 2 * 1024  # plenty of memory
-    _kv_cache_configs = get_kv_cache_configs(aphrodite_config, [kv_cache_specs], [large_available_memory])
-    assert aphrodite_config.model_config.max_model_len == 1024
+    _kv_cache_configs = get_kv_cache_configs(sonar_config, [kv_cache_specs], [large_available_memory])
+    assert sonar_config.model_config.max_model_len == 1024
 
     # Reset for next test
     model_config = ModelConfig(max_model_len=1024)
     model_config.original_max_model_len = -1
-    aphrodite_config = AphroditeConfig(model_config=model_config)
-    aphrodite_config.cache_config.kv_cache_layout = "LBNHC"
+    sonar_config = SonarConfig(model_config=model_config)
+    sonar_config.cache_config.kv_cache_layout = "LBNHC"
 
     # With limited memory, max_model_len should be reduced
     # Need memory for at least max_model_len tokens
     # 32 blocks worth of memory for 2 layers = can fit 32*16=512 tokens
     limited_memory = mem_per_block_per_layer * 2 * 32
-    _kv_cache_configs = get_kv_cache_configs(aphrodite_config, [kv_cache_specs], [limited_memory])
+    _kv_cache_configs = get_kv_cache_configs(sonar_config, [kv_cache_specs], [limited_memory])
     # Should be reduced to fit in memory
-    assert aphrodite_config.model_config.max_model_len < 1024
-    assert aphrodite_config.model_config.max_model_len > 0
+    assert sonar_config.model_config.max_model_len < 1024
+    assert sonar_config.model_config.max_model_len > 0
 
 
 def test_auto_fit_max_model_len_with_hybrid():
@@ -1568,8 +1568,8 @@ def test_auto_fit_max_model_len_with_hybrid():
     model_config = ModelConfig(max_model_len=8192)
     # Simulate the user passing -1 by setting original_max_model_len
     model_config.original_max_model_len = -1
-    aphrodite_config = AphroditeConfig(model_config=model_config)
-    aphrodite_config.cache_config.kv_cache_layout = "LBNHC"
+    sonar_config = SonarConfig(model_config=model_config)
+    sonar_config.cache_config.kv_cache_layout = "LBNHC"
 
     mem_per_block_per_layer = 16 * 2 * 64 * 4 * 2  # 16KB per block per layer
     gamma = 2
@@ -1581,16 +1581,16 @@ def test_auto_fit_max_model_len_with_hybrid():
     # One extra block on top of what a 1024-token request needs: the pool
     # reserves one block as the null block.
     available_memory = mem_per_block_per_layer * (1024 // 16 + 1 + gamma + 1)
-    _kv_cache_configs = get_kv_cache_configs(aphrodite_config, [kv_cache_specs], [available_memory])
-    assert aphrodite_config.model_config.max_model_len == 1024
+    _kv_cache_configs = get_kv_cache_configs(sonar_config, [kv_cache_specs], [available_memory])
+    assert sonar_config.model_config.max_model_len == 1024
 
 
 def test_auto_fit_max_model_len_not_triggered():
     """Test that auto-fit is not triggered when original_max_model_len is not -1."""
     model_config = ModelConfig(max_model_len=16)
     # original_max_model_len should be None by default, not -1
-    aphrodite_config = AphroditeConfig(model_config=model_config)
-    aphrodite_config.cache_config.kv_cache_layout = "LBNHC"
+    sonar_config = SonarConfig(model_config=model_config)
+    sonar_config.cache_config.kv_cache_layout = "LBNHC"
 
     mem_per_block_per_layer = 16 * 2 * 64 * 4 * 2
     kv_cache_specs = {
@@ -1599,8 +1599,8 @@ def test_auto_fit_max_model_len_not_triggered():
     }
 
     # This should work normally without auto-fit
-    _kv_cache_configs = get_kv_cache_configs(aphrodite_config, [kv_cache_specs], [mem_per_block_per_layer * 2 * 32])
-    assert aphrodite_config.model_config.max_model_len == 16
+    _kv_cache_configs = get_kv_cache_configs(sonar_config, [kv_cache_specs], [mem_per_block_per_layer * 2 * 32])
+    assert sonar_config.model_config.max_model_len == 16
 
 
 def test_auto_fit_max_model_len_respects_num_gpu_blocks_override():
@@ -1610,10 +1610,10 @@ def test_auto_fit_max_model_len_respects_num_gpu_blocks_override():
     """
     model_config = ModelConfig(max_model_len=16384)
     model_config.original_max_model_len = -1  # request auto-fit
-    aphrodite_config = AphroditeConfig(model_config=model_config)
-    aphrodite_config.cache_config.kv_cache_layout = "LBNHC"
+    sonar_config = SonarConfig(model_config=model_config)
+    sonar_config.cache_config.kv_cache_layout = "LBNHC"
     # Cap the cache to 32 blocks regardless of available memory.
-    aphrodite_config.cache_config.num_gpu_blocks_override = 32
+    sonar_config.cache_config.num_gpu_blocks_override = 32
 
     mem_per_block_per_layer = 16 * 2 * 64 * 4 * 2
     kv_cache_specs = {
@@ -1623,11 +1623,11 @@ def test_auto_fit_max_model_len_respects_num_gpu_blocks_override():
     # Plenty of raw memory (1024 blocks per layer would fit max_model_len=16384).
     large_available_memory = mem_per_block_per_layer * 2 * 1024
 
-    get_kv_cache_configs(aphrodite_config, [kv_cache_specs], [large_available_memory])
+    get_kv_cache_configs(sonar_config, [kv_cache_specs], [large_available_memory])
 
     # 32 blocks * block_size 16 = 512 token slots, so max_model_len must
     # auto-fit at or below that.
-    assert 0 < aphrodite_config.model_config.max_model_len <= 32 * 16
+    assert 0 < sonar_config.model_config.max_model_len <= 32 * 16
 
 
 def test_check_enough_kv_cache_memory_respects_num_gpu_blocks_override():
@@ -1636,10 +1636,10 @@ def test_check_enough_kv_cache_memory_respects_num_gpu_blocks_override():
     that does not actually fit in `num_gpu_blocks_override` blocks.
     """
     model_config = ModelConfig(max_model_len=16384)
-    aphrodite_config = AphroditeConfig(model_config=model_config)
-    aphrodite_config.cache_config.kv_cache_layout = "LBNHC"
+    sonar_config = SonarConfig(model_config=model_config)
+    sonar_config.cache_config.kv_cache_layout = "LBNHC"
     # 32 blocks is far too small for max_model_len=16384 (would need 1024).
-    aphrodite_config.cache_config.num_gpu_blocks_override = 32
+    sonar_config.cache_config.num_gpu_blocks_override = 32
 
     mem_per_block_per_layer = 16 * 2 * 64 * 4 * 2
     kv_cache_specs = {
@@ -1650,7 +1650,7 @@ def test_check_enough_kv_cache_memory_respects_num_gpu_blocks_override():
     large_available_memory = mem_per_block_per_layer * 2 * 1024
 
     with pytest.raises(ValueError, match="max seq len"):
-        get_kv_cache_configs(aphrodite_config, [kv_cache_specs], [large_available_memory])
+        get_kv_cache_configs(sonar_config, [kv_cache_specs], [large_available_memory])
 
 
 def test_unify_kv_cache_page_size_uses_padding_for_non_divisible_sizes():
@@ -1852,20 +1852,20 @@ def test_kv_cache_reserves_null_block_for_max_model_len(use_override):
     """
     block_size = 16
     max_model_len = 512  # needs 512 / 16 = 32 blocks
-    aphrodite_config = AphroditeConfig(model_config=ModelConfig(max_model_len=max_model_len))
-    aphrodite_config.cache_config.kv_cache_layout = "LBNHC"
+    sonar_config = SonarConfig(model_config=ModelConfig(max_model_len=max_model_len))
+    sonar_config.cache_config.kv_cache_layout = "LBNHC"
     spec = new_kv_cache_spec(block_size=block_size)
 
     # 32 blocks -> only 31 usable after the null block: one short -> reject.
     if use_override:
         # Ample raw memory; the override alone constrains the block count.
-        aphrodite_config.cache_config.num_gpu_blocks_override = 32
+        sonar_config.cache_config.num_gpu_blocks_override = 32
         available_memory = [spec.page_size_bytes * 1024]
     else:
         available_memory = [spec.page_size_bytes * 32]
 
     with pytest.raises(ValueError, match="max seq len"):
-        get_kv_cache_configs(aphrodite_config, [{"layer1": spec}], available_memory)
+        get_kv_cache_configs(sonar_config, [{"layer1": spec}], available_memory)
 
 
 def test_auto_fit_max_model_len_reserves_null_block():
@@ -1877,16 +1877,16 @@ def test_auto_fit_max_model_len_reserves_null_block():
     block_size = 16
     model_config = ModelConfig(max_model_len=1024)
     model_config.original_max_model_len = -1
-    aphrodite_config = AphroditeConfig(model_config=model_config)
-    aphrodite_config.cache_config.kv_cache_layout = "LBNHC"
+    sonar_config = SonarConfig(model_config=model_config)
+    sonar_config.cache_config.kv_cache_layout = "LBNHC"
     spec = new_kv_cache_spec(block_size=block_size)
 
     # Exactly the 1024 / 16 = 64 blocks a full-length request would need.
     available_memory = [spec.page_size_bytes * 64]
 
-    get_kv_cache_configs(aphrodite_config, [{"layer1": spec}], available_memory)
+    get_kv_cache_configs(sonar_config, [{"layer1": spec}], available_memory)
 
-    assert aphrodite_config.model_config.max_model_len == 63 * block_size
+    assert sonar_config.model_config.max_model_len == 63 * block_size
 
 
 def test_check_enough_kv_cache_memory_reserves_null_block():
@@ -1898,20 +1898,20 @@ def test_check_enough_kv_cache_memory_reserves_null_block():
     """
     block_size = 16
     max_model_len = 512  # needs 512 / 16 = 32 blocks
-    aphrodite_config = AphroditeConfig(model_config=ModelConfig(max_model_len=max_model_len))
-    aphrodite_config.cache_config.kv_cache_layout = "LBNHC"
+    sonar_config = SonarConfig(model_config=ModelConfig(max_model_len=max_model_len))
+    sonar_config.cache_config.kv_cache_layout = "LBNHC"
     spec = new_kv_cache_spec(block_size=block_size)
 
     # 32 blocks -> only 31 usable after the null block: one short -> reject.
     with pytest.raises(ValueError, match="max seq len"):
-        check_enough_kv_cache_memory(aphrodite_config, {"layer1": spec}, spec.page_size_bytes * 32)
+        check_enough_kv_cache_memory(sonar_config, {"layer1": spec}, spec.page_size_bytes * 32)
 
     # 33 blocks -> 32 usable after the null block -> accept.
-    check_enough_kv_cache_memory(aphrodite_config, {"layer1": spec}, spec.page_size_bytes * 33)
+    check_enough_kv_cache_memory(sonar_config, {"layer1": spec}, spec.page_size_bytes * 33)
 
 
 def _spec_decode_kv_cache_groups(worker_specs, use_eagle_block_drop=True):
-    config = AphroditeConfig(model_config=ModelConfig(max_model_len=64))
+    config = SonarConfig(model_config=ModelConfig(max_model_len=64))
     config.cache_config.kv_cache_layout = "BLHNC"
     config.speculative_config = fake_speculative_config(
         method="dflash",
@@ -1992,9 +1992,9 @@ def test_no_eagle_groups_without_eagle_block_drop():
     ],
     ids=["untagged_hybrid", "untagged_uniform_attention"],
 )
-def test_warns_only_when_untagged_draft_meets_mamba(make_specs, warns, caplog_aphrodite):
+def test_warns_only_when_untagged_draft_meets_mamba(make_specs, warns, caplog_sonar):
     _spec_decode_kv_cache_groups([make_specs()])
-    warned = "could be identified as the draft model's" in caplog_aphrodite.text
+    warned = "could be identified as the draft model's" in caplog_sonar.text
     assert warned == warns
 
 
@@ -2038,15 +2038,15 @@ _GQA_SWA_SPEC = SlidingWindowSpec(block_size=16, num_kv_heads=8, head_size=64, d
 )
 def test_kv_tp_replicas(monkeypatch, specs, expected):
     """Resolved per layer before scheduler flattening hides mixed groups."""
-    from aphrodite.config import ParallelConfig
-    from aphrodite.platforms import current_platform
+    from sonar.config import ParallelConfig
+    from sonar.platforms import current_platform
 
     monkeypatch.setattr(current_platform, "device_count", lambda: 4)
     parallel_config = ParallelConfig(tensor_parallel_size=4)
-    aphrodite_config = AphroditeConfig(model_config=ModelConfig(max_model_len=16), parallel_config=parallel_config)
-    aphrodite_config.cache_config.kv_cache_layout = "LBNHC"
+    sonar_config = SonarConfig(model_config=ModelConfig(max_model_len=16), parallel_config=parallel_config)
+    sonar_config.cache_config.kv_cache_layout = "LBNHC"
     mem = sum(s.page_size_bytes for s in specs.values()) * 10
-    configs = get_kv_cache_configs(aphrodite_config, [specs], [mem])
+    configs = get_kv_cache_configs(sonar_config, [specs], [mem])
     assert configs[0].kv_tp_replicas == expected
     scheduler = generate_scheduler_kv_cache_config(configs)
     assert scheduler.kv_tp_replicas == expected

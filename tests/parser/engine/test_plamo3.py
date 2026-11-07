@@ -9,8 +9,8 @@ import json
 import pytest
 import regex as re
 
-from aphrodite.parser.parser_manager import ParserManager
-from aphrodite.parser.plamo3 import (
+from sonar.parser.parser_manager import ParserManager
+from sonar.parser.plamo3 import (
     BEGIN_THINK,
     BEGIN_TOOL_ARGUMENTS,
     BEGIN_TOOL_NAME,

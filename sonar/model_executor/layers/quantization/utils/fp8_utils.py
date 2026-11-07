@@ -10,31 +10,31 @@ from typing import Any
 
 import torch
 
-import aphrodite.envs as envs
-from aphrodite import _custom_ops as ops
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+import sonar.envs as envs
+from sonar import _custom_ops as ops
+from sonar.logger import init_logger
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     amax_for_moe_activation_quant,
     get_fp8_min_max,
 )
-from aphrodite.model_executor.layers.quantization.utils.w8a8_utils import (
+from sonar.model_executor.layers.quantization.utils.w8a8_utils import (
     all_close_1d,
     per_tensor_dequantize,
 )
-from aphrodite.model_executor.parameter import (
+from sonar.model_executor.parameter import (
     BlockQuantScaleParameter,
     ChannelQuantScaleParameter,
     PerTensorScaleParameter,
 )
-from aphrodite.model_executor.utils import set_weight_attrs
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.deep_gemm import (
+from sonar.model_executor.utils import set_weight_attrs
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
+from sonar.utils.deep_gemm import (
     get_tma_aligned_size,
     is_deep_gemm_e8m0_used,
     transform_sf_into_required_layout,
 )
-from aphrodite.utils.platform_utils import get_device_name_as_file_name
+from sonar.utils.platform_utils import get_device_name_as_file_name
 
 logger = init_logger(__name__)
 
@@ -53,7 +53,7 @@ def is_fp8(x: torch.dtype | torch.Tensor) -> bool:
 def get_fp8_block_weight_scale(layer: torch.nn.Module) -> torch.Tensor | None:
     """Return the block-FP8 weight scale for supported quant methods."""
     # Local import avoids a circular import: quark_w8a8_fp8 imports this module.
-    from aphrodite.model_executor.layers.quantization.quark.schemes.quark_w8a8_fp8 import (
+    from sonar.model_executor.layers.quantization.quark.schemes.quark_w8a8_fp8 import (
         QuarkW8A8Fp8PerBlock,
     )
 
@@ -945,7 +945,7 @@ def w8a8_triton_block_scaled_mm(
     """
     _on_gfx1250 = False
     if current_platform.is_rocm():
-        from aphrodite.platforms.rocm import on_gfx1250
+        from sonar.platforms.rocm import on_gfx1250
 
         _on_gfx1250 = on_gfx1250()
 
@@ -988,7 +988,7 @@ def w8a8_triton_block_scaled_mm(
     C_shape = A.shape[:-1] + (N,)
     C = A.new_empty(C_shape, dtype=output_dtype)
 
-    if envs.APHRODITE_BATCH_INVARIANT:
+    if envs.SONAR_BATCH_INVARIANT:
         configs = None  # use the default config
     else:
         configs = get_w8a8_block_fp8_configs(N, K, block_size[0], block_size[1])
@@ -1061,7 +1061,7 @@ def requant_weight_ue8m0_inplace(
     if weight.dtype != torch.float8_e4m3fn:
         raise ValueError(f"Expected *weight* to be torch.float8_e4m3fn, got {weight.dtype} instead.")
 
-    from aphrodite.utils.deep_gemm import per_block_cast_to_fp8
+    from sonar.utils.deep_gemm import per_block_cast_to_fp8
 
     block_m, block_k = int(block_size[0]), int(block_size[1])
 
@@ -1220,7 +1220,7 @@ def _maybe_pad_fp8_weight(weight: torch.Tensor) -> torch.Tensor:
     """Pad the weight tensor. This is an optimization on ROCm platform, which
     can benefit from tensors located far enough from one another in memory"""
     if (
-        envs.APHRODITE_ROCM_FP8_PADDING
+        envs.SONAR_ROCM_FP8_PADDING
         and current_platform.is_rocm()
         and weight.stride(-1) == 1
         and (weight.stride(-2) * weight.element_size()) % 512 == 0
@@ -1242,7 +1242,7 @@ def validate_fp8_block_shape(
     block_size: list[int],
 ) -> None:
     """Validate block quantization shapes for tensor parallelism."""
-    from aphrodite.distributed import get_tensor_model_parallel_world_size
+    from sonar.distributed import get_tensor_model_parallel_world_size
 
     if getattr(layer, "allow_fp8_block_shape_mismatch", False):
         logger.debug(
@@ -1284,7 +1284,7 @@ def validate_fp8_block_shape_moe(
     block_size: list[int],
 ) -> None:
     """Validate fused MoE block quantization shapes for tensor parallelism."""
-    from aphrodite.distributed import get_tensor_model_parallel_world_size
+    from sonar.distributed import get_tensor_model_parallel_world_size
 
     tp_size = get_tensor_model_parallel_world_size()
     block_n, block_k = block_size[0], block_size[1]
@@ -1314,7 +1314,7 @@ def create_fp8_weight_parameter(
     weight_loader: Callable | None,
 ) -> torch.nn.Parameter:
     """Create FP8 weight parameter."""
-    from aphrodite.model_executor.parameter import ModelWeightParameter
+    from sonar.model_executor.parameter import ModelWeightParameter
 
     return ModelWeightParameter(
         data=torch.empty(
@@ -1374,7 +1374,7 @@ def create_fp8_scale_parameter(
 
 def create_fp8_input_scale(output_partition_sizes: list[int], weight_loader: Callable | None) -> torch.nn.Parameter:
     """Create input scale parameter for static activation quantization."""
-    from aphrodite.model_executor.parameter import PerTensorScaleParameter
+    from sonar.model_executor.parameter import PerTensorScaleParameter
 
     scale = PerTensorScaleParameter(
         data=torch.empty(len(output_partition_sizes), dtype=torch.float32),
@@ -1391,7 +1391,7 @@ def process_fp8_weight_tensor_strategy(
     input_scale: torch.Tensor | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor | None]:
     """Requantize fused shards to one scale and return ``(K, N)`` weight."""
-    from aphrodite.model_executor.layers.quantization.utils.w8a8_utils import (
+    from sonar.model_executor.layers.quantization.utils.w8a8_utils import (
         normalize_e4m3fn_to_e4m3fnuz,
         requantize_with_max_scale,
     )
@@ -1418,7 +1418,7 @@ def process_fp8_weight_channel_strategy(
     input_scale: torch.Tensor | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor | None]:
     """Normalize FNUZ if needed and return ``(K, N)`` weight."""
-    from aphrodite.model_executor.layers.quantization.utils.w8a8_utils import (
+    from sonar.model_executor.layers.quantization.utils.w8a8_utils import (
         normalize_e4m3fn_to_e4m3fnuz,
     )
 
@@ -1435,7 +1435,7 @@ def process_fp8_weight_block_strategy(
     weight_scale: torch.Tensor,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Normalize FNUZ if needed and return ``(N, K)`` weight (no transpose)."""
-    from aphrodite.model_executor.layers.quantization.utils.w8a8_utils import (
+    from sonar.model_executor.layers.quantization.utils.w8a8_utils import (
         normalize_e4m3fn_to_e4m3fnuz,
     )
 

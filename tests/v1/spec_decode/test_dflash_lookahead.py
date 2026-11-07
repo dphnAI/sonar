@@ -5,22 +5,22 @@ from types import SimpleNamespace
 
 import torch
 
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.config import (
     CacheConfig,
     ModelConfig,
     ParallelConfig,
     SchedulerConfig,
+    SonarConfig,
     SpeculativeConfig,
 )
-from aphrodite.v1.core.sched.scheduler import Scheduler
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.core.sched.scheduler import Scheduler
+from sonar.v1.kv_cache_interface import (
     FullAttentionSpec,
     KVCacheConfig,
     KVCacheGroupSpec,
 )
-from aphrodite.v1.structured_output import StructuredOutputManager
-from aphrodite.v1.worker.gpu_model_runner import GPUModelRunner
+from sonar.v1.structured_output import StructuredOutputManager
+from sonar.v1.worker.gpu_model_runner import GPUModelRunner
 from tests.v1.core.utils import create_requests
 
 # Matches defaults from tests/v1/spec_decode/test_eagle.py
@@ -63,7 +63,7 @@ def _create_dflash_scheduler(num_speculative_tokens: int) -> Scheduler:
         cache_dtype="auto",
         enable_prefix_caching=False,
     )
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         scheduler_config=scheduler_config,
         model_config=model_config,
         cache_config=cache_config,
@@ -87,11 +87,11 @@ def _create_dflash_scheduler(num_speculative_tokens: int) -> Scheduler:
     )
     cache_config.num_gpu_blocks = NUM_BLOCKS
     return Scheduler(
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         kv_cache_config=kv_cache_config,
         block_size=BLOCK_SIZE,
         log_stats=True,
-        structured_output_manager=StructuredOutputManager(aphrodite_config),
+        structured_output_manager=StructuredOutputManager(sonar_config),
     )
 
 

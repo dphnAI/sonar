@@ -14,20 +14,20 @@ import torch
 import torch.nn as nn
 from transformers import PreTrainedConfig
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.model_executor.layers.linear import ReplicatedLinear
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.quantization.auto_awq import AutoAWQConfig
-from aphrodite.model_executor.models.intern_vit import (
+from sonar.config import SonarConfig
+from sonar.model_executor.layers.linear import ReplicatedLinear
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.quantization.auto_awq import AutoAWQConfig
+from sonar.model_executor.models.intern_vit import (
     InternVisionModel,
 )
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.transformers_utils.processors.internvl import (
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.sequence import IntermediateTensors
+from sonar.transformers_utils.processors.internvl import (
     InternVLChatImageProcessor,
     InternVLChatProcessor,
 )
-from aphrodite.utils.tensor_schema import TensorSchema, TensorShape
+from sonar.utils.tensor_schema import TensorSchema, TensorShape
 
 from .interfaces import (
     MultiModalEmbeddings,
@@ -43,7 +43,7 @@ from .internvl import (
 from .utils import (
     AutoWeightsLoader,
     WeightsMapper,
-    init_aphrodite_registered_model,
+    init_sonar_registered_model,
     maybe_prefix,
 )
 
@@ -126,7 +126,7 @@ class SkyworkR1VProcessingInfo(BaseInternVLProcessingInfo):
     dummy_inputs=BaseInternVLDummyInputsBuilder,
 )
 class SkyworkR1VChatModel(nn.Module, SupportsMultiModal, SupportsPP):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix=dict.fromkeys(
             [
                 "action_embed",
@@ -152,12 +152,12 @@ class SkyworkR1VChatModel(nn.Module, SupportsMultiModal, SupportsPP):
 
         raise ValueError("Only image modality is supported")
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
-        multimodal_config = aphrodite_config.model_config.get_multimodal_config()
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
+        multimodal_config = sonar_config.model_config.get_multimodal_config()
 
         self.config = config
         self.multimodal_config = multimodal_config
@@ -170,7 +170,7 @@ class SkyworkR1VChatModel(nn.Module, SupportsMultiModal, SupportsPP):
         self.downsample_ratio = config.downsample_ratio
         self.ps_version = config.ps_version
 
-        with self._mark_tower_model(aphrodite_config, "image"):
+        with self._mark_tower_model(sonar_config, "image"):
             self.vision_model = self._init_vision_model(
                 config,
                 quant_config=quant_config,
@@ -178,9 +178,9 @@ class SkyworkR1VChatModel(nn.Module, SupportsMultiModal, SupportsPP):
             )
             self.mlp1 = self._init_mlp1(config, quant_config, prefix=maybe_prefix(prefix, "mlp1"))
 
-        with self._mark_language_model(aphrodite_config):
-            language_model = init_aphrodite_registered_model(
-                aphrodite_config=aphrodite_config,
+        with self._mark_language_model(sonar_config):
+            language_model = init_sonar_registered_model(
+                sonar_config=sonar_config,
                 hf_config=config.text_config,
                 prefix=maybe_prefix(prefix, "language_model"),
             )
@@ -391,4 +391,4 @@ class SkyworkR1VChatModel(nn.Module, SupportsMultiModal, SupportsPP):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)

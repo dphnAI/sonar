@@ -6,14 +6,14 @@ from collections.abc import Iterable
 
 import torch
 
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     RoutingMethodType,
     get_routing_method_type,
 )
-from aphrodite.model_executor.layers.fused_moe.routed_experts import RoutedExperts
-from aphrodite.model_executor.layers.fused_moe.router.base_router import BaseRouter
-from aphrodite.models.muse_spark.common.ops.fused_routing import (
+from sonar.model_executor.layers.fused_moe.routed_experts import RoutedExperts
+from sonar.model_executor.layers.fused_moe.router.base_router import BaseRouter
+from sonar.models.muse_spark.common.ops.fused_routing import (
     fused_musespark1x_routing,
 )
 
@@ -47,7 +47,7 @@ class MuseSpark1xRouter(BaseRouter):
 
     @property
     def routing_method_type(self) -> RoutingMethodType:
-        """Classify this router in Aphrodite's routing vocabulary."""
+        """Classify this router in Sonar's routing vocabulary."""
         return get_routing_method_type(
             scoring_func=self.router_score_normalization,
             top_k=self.top_k,

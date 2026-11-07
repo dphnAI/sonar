@@ -7,23 +7,23 @@ layer loop. The TP all-reduces run in-kernel over peer memory.
 
 - **Whole layers** (KDA): K1 (AttnRes, in_proj, f_b, spec conv, KDA recurrence,
   gated RMSNorm), then K2.
-- **FFN layers** (MLA): Aphrodite's AttnRes and MLA up to o_proj's input, then K2.
+- **FFN layers** (MLA): Sonar's AttnRes and MLA up to o_proj's input, then K2.
 - **K2**: o_proj + all-reduce + MLP AttnRes, then the latent MoE (router,
   top-16, MXFP4 experts, shared experts, latent all-reduce + RMSNorm, up_proj,
   final all-reduce).
 
-The kernels read Aphrodite's loaded weights and KDA states in place. Nothing is copied
+The kernels read Sonar's loaded weights and KDA states in place. Nothing is copied
 or re-quantized.
 
 ## Enabling
 
 ```bash
-APHRODITE_USE_V2_MODEL_RUNNER=1 aphrodite serve <Kimi-K3> -tp 8 \
+SONAR_USE_V2_MODEL_RUNNER=1 sonar serve <Kimi-K3> -tp 8 \
   --speculative-config '{"method": "dspark", "num_speculative_tokens": 7, ...}' \
   --additional-config '{"decode_backend": "latency_specialized"}'
 ```
 
-There are no other options. `decode_backend=auto` (the default) runs Aphrodite's decode.
+There are no other options. `decode_backend=auto` (the default) runs Sonar's decode.
 
 ## Supported deployments
 
@@ -54,10 +54,10 @@ Every TP rank agrees on each verdict before anything collective runs.
 
 `plan()` runs once per step. It picks the kernels for a pure spec-verify step of
 whole uniform requests whose width is one of the built widths: every multiple of
-`num_speculative_tokens + 1` up to 8 rows. Every other step runs Aphrodite's layers:
+`num_speculative_tokens + 1` up to 8 rows. Every other step runs Sonar's layers:
 prefill, mixed, wider and PIECEWISE steps.
 
-Under FULL graphs the plan is baked in at capture. Aphrodite's capture sizes are not
+Under FULL graphs the plan is baked in at capture. Sonar's capture sizes are not
 changed. A replay with fewer requests than its graph pads whole requests. Those
 requests get the reserved null state slot and one accepted token, and the kernels
 serve them like real ones. For example, at `num_speculative_tokens=1` three
@@ -99,7 +99,7 @@ runtime/
     decode.py    SpecializedDecode: plan() -> Step, Step.layer(i), prepare_kv(),
                  after_step()
     guards.py    weight and KV cache refusals, the fail-stop watch
-    layers.py    the layer kernels: Aphrodite tensors -> launches
+    layers.py    the layer kernels: Sonar tensors -> launches
     runner.py    per-rank launch state: scratch, step epoch, health, peers
     peer.py      peer memory and TP agreement (adapted from ROCm/ATOM, MIT)
 mono/            kernel source

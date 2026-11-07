@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Compatibility patches for Aphrodite + transformers version mismatches.
+"""Compatibility patches for Sonar + transformers version mismatches.
 
 Applied once at platform registration time. Optional missing dependencies are
 logged; unexpected runtime errors are allowed to surface so regressions remain
@@ -291,7 +291,7 @@ def _patch_mlx_lm_qwen35_fp8_sanitize() -> None:
             continue
         if _wrap_model_sanitize(
             model_cls,
-            "_aphrodite.metal_qwen35_fp8_patch",
+            "_sonar.metal_qwen35_fp8_patch",
             transform,
         ):
             patched_modules.append(short_name)
@@ -409,5 +409,5 @@ def _patch_mlx_lm_gemma4_kv_shared_sanitize() -> None:
             self.args.num_kv_shared_layers,
         )
 
-    if _wrap_model_sanitize(model_cls, "_aphrodite.metal_gemma4_kv_shared_patch", _transform):
+    if _wrap_model_sanitize(model_cls, "_sonar.metal_gemma4_kv_shared_patch", _transform):
         logger.debug("Patched mlx_lm gemma4_text KV-shared sanitize compatibility")

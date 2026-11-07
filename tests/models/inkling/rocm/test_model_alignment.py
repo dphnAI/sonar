@@ -6,11 +6,11 @@ from pathlib import Path
 
 import torch
 
-import aphrodite.models.inkling as inkling
-from aphrodite.lora.utils import get_supported_lora_modules
-from aphrodite.model_executor.models.interfaces import supports_lora
-from aphrodite.models.inkling.amd import model as amd_model
-from aphrodite.models.inkling.amd.mtp import InklingMTP
+import sonar.models.inkling as inkling
+from sonar.lora.utils import get_supported_lora_modules
+from sonar.model_executor.models.interfaces import supports_lora
+from sonar.models.inkling.amd import model as amd_model
+from sonar.models.inkling.amd.mtp import InklingMTP
 
 
 def test_backend_neutral_definitions_match_nvidia_reference() -> None:
@@ -41,7 +41,7 @@ def test_rocm_model_exposes_the_upstream_lora_contract() -> None:
 
 
 def test_lightseek_bundled_adapter_weights_remain_opt_in() -> None:
-    mapper = amd_model._TmlForCausalLMBase.hf_to_aphrodite_mapper
+    mapper = amd_model._TmlForCausalLMBase.hf_to_sonar_mapper
     weight = torch.empty(1)
     name, mapped_weight = next(iter(mapper.apply([("language_model.layers.3.attn.wq_du.lora_A.weight", weight)])))
 

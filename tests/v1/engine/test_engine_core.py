@@ -11,36 +11,36 @@ from unittest.mock import MagicMock, PropertyMock, patch
 import pytest
 from transformers import AutoTokenizer
 
-from aphrodite import SamplingParams
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar import SamplingParams
+from sonar.config import (
     CacheConfig,
     ECTransferConfig,
     KVTransferConfig,
     ModelConfig,
     ParallelConfig,
     SchedulerConfig,
+    SonarConfig,
 )
-from aphrodite.engine.arg_utils import EngineArgs
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_default_torch_num_threads
-from aphrodite.v1.core.sched.interface import PauseState
-from aphrodite.v1.engine import (
+from sonar.engine.arg_utils import EngineArgs
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_default_torch_num_threads
+from sonar.v1.core.sched.interface import PauseState
+from sonar.v1.engine import (
     CheckpointState,
     EngineCoreRequest,
     EngineCoreRequestType,
     FinishReason,
 )
-from aphrodite.v1.engine.core import (
+from sonar.v1.engine.core import (
     DPEngineCoreProc,
     EngineCore,
     EngineCoreProc,
     EngineShutdownState,
 )
-from aphrodite.v1.executor.abstract import Executor
-from aphrodite.v1.executor.uniproc_executor import UniProcExecutor
-from aphrodite.v1.kv_cache_interface import KVCacheConfig
-from aphrodite.v1.outputs import ModelRunnerOutput
+from sonar.v1.executor.abstract import Executor
+from sonar.v1.executor.uniproc_executor import UniProcExecutor
+from sonar.v1.kv_cache_interface import KVCacheConfig
+from sonar.v1.outputs import ModelRunnerOutput
 
 from ...utils import create_new_process_for_each_test, multi_gpu_test
 
@@ -79,11 +79,11 @@ def make_request() -> EngineCoreRequest:
 def test_engine_core():
     """Setup the EngineCore."""
     engine_args = EngineArgs(model=MODEL_NAME)
-    aphrodite_config = engine_args.create_engine_config()
-    executor_class = Executor.get_class(aphrodite_config)
+    sonar_config = engine_args.create_engine_config()
+    executor_class = Executor.get_class(sonar_config)
 
     with set_default_torch_num_threads(1):
-        engine_core = EngineCore(aphrodite_config=aphrodite_config, executor_class=executor_class, log_stats=True)
+        engine_core = EngineCore(sonar_config=sonar_config, executor_class=executor_class, log_stats=True)
     """Test basic request lifecycle."""
 
     # First request.
@@ -209,11 +209,11 @@ def test_engine_core_advanced_sampling():
     """
     """Setup the EngineCore."""
     engine_args = EngineArgs(model=MODEL_NAME)
-    aphrodite_config = engine_args.create_engine_config()
-    executor_class = Executor.get_class(aphrodite_config)
+    sonar_config = engine_args.create_engine_config()
+    executor_class = Executor.get_class(sonar_config)
 
     with set_default_torch_num_threads(1):
-        engine_core = EngineCore(aphrodite_config=aphrodite_config, executor_class=executor_class, log_stats=True)
+        engine_core = EngineCore(sonar_config=sonar_config, executor_class=executor_class, log_stats=True)
     """Test basic request lifecycle."""
     # First request.
     request: EngineCoreRequest = make_request()
@@ -312,19 +312,19 @@ def test_engine_core_concurrent_batches():
         # Test concurrent batch behaviour independently of async scheduling.
         async_scheduling=False,
     )
-    aphrodite_config = engine_args.create_engine_config()
+    sonar_config = engine_args.create_engine_config()
     # Force two concurrent batches to exercise the batch queue independently
     # of async scheduling (which is disabled above).
     with (
         set_default_torch_num_threads(1),
         patch.object(
-            AphroditeConfig,
+            SonarConfig,
             "max_concurrent_batches",
             new_callable=PropertyMock,
             return_value=2,
         ),
     ):
-        engine_core = EngineCore(aphrodite_config=aphrodite_config, log_stats=False, executor_class=DummyExecutor)
+        engine_core = EngineCore(sonar_config=sonar_config, log_stats=False, executor_class=DummyExecutor)
     assert engine_core.batch_queue is not None
 
     # Add two requests in a row. Each request have 12 prompt tokens.
@@ -437,11 +437,11 @@ def test_engine_core_tp():
         # Reduce startup time.
         enforce_eager=True,
     )
-    aphrodite_config = engine_args.create_engine_config()
-    executor_class = Executor.get_class(aphrodite_config)
+    sonar_config = engine_args.create_engine_config()
+    executor_class = Executor.get_class(sonar_config)
 
     with set_default_torch_num_threads(1):
-        engine_core = EngineCore(aphrodite_config=aphrodite_config, executor_class=executor_class, log_stats=True)
+        engine_core = EngineCore(sonar_config=sonar_config, executor_class=executor_class, log_stats=True)
 
     def get_worker_cache_config_field(worker, key: str):
         return getattr(worker.cache_config, key)
@@ -456,11 +456,11 @@ def test_engine_core_tp():
 def test_engine_core_invalid_request_id_type():
     """Test that engine raises TypeError for non-string request_id."""
     engine_args = EngineArgs(model=MODEL_NAME)
-    aphrodite_config = engine_args.create_engine_config()
-    executor_class = Executor.get_class(aphrodite_config)
+    sonar_config = engine_args.create_engine_config()
+    executor_class = Executor.get_class(sonar_config)
 
     with set_default_torch_num_threads(1):
-        engine_core = EngineCore(aphrodite_config=aphrodite_config, executor_class=executor_class, log_stats=True)
+        engine_core = EngineCore(sonar_config=sonar_config, executor_class=executor_class, log_stats=True)
 
     # Test with UUID object (common mistake)
     uuid_request = make_request()
@@ -513,7 +513,7 @@ def test_encoder_instance_zero_kv_cache(
     Under EPD disagg mode, Encoder instances (EC producer role) only execute
     vision encoder, so they don't need KV cache for text generation.
     """
-    # Form aphrodite config
+    # Form sonar config
     model_config = ModelConfig(
         model="llava-hf/llava-1.5-7b-hf",  # Multimodal model
         enforce_eager=True,
@@ -549,7 +549,7 @@ def test_encoder_instance_zero_kv_cache(
         ec_connector_extra_config={"shared_storage_path": "/tmp/ec_test_encoder"},
     )
 
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         model_config=model_config,
         cache_config=cache_config,
         scheduler_config=scheduler_config,
@@ -557,11 +557,11 @@ def test_encoder_instance_zero_kv_cache(
         ec_transfer_config=ec_transfer_config,
     )
 
-    executor_class = Executor.get_class(aphrodite_config)
+    executor_class = Executor.get_class(sonar_config)
     print(f"executor_class: {executor_class}")
 
     with set_default_torch_num_threads(1):
-        engine_core = EngineCore(aphrodite_config=aphrodite_config, executor_class=executor_class, log_stats=True)
+        engine_core = EngineCore(sonar_config=sonar_config, executor_class=executor_class, log_stats=True)
 
     # Check encoder cache manager exists
     assert engine_core.scheduler.encoder_cache_manager is not None, "encoder_cache_manager should exist"
@@ -590,7 +590,7 @@ def test_encoder_instance_zero_kv_cache(
         assert engine_core.scheduler.ec_connector.is_producer, "Encoder instance EC connector should be producer"
 
         # Check 5: Verify chunked prefill is disabled
-        assert not aphrodite_config.scheduler_config.enable_chunked_prefill, (
+        assert not sonar_config.scheduler_config.enable_chunked_prefill, (
             "Encoder instance should disable chunked prefill (no KV cache)"
         )
 
@@ -616,7 +616,7 @@ def _cadenced_dp_engine_core(monkeypatch, results: list[tuple[bool, bool]], dp_s
     core = object.__new__(DPEngineCoreProc)
     core.enable_fault_tolerance = False
     core.dp_group = object()
-    core.aphrodite_config = MagicMock(parallel_config=ParallelConfig())
+    core.sonar_config = MagicMock(parallel_config=ParallelConfig())
     core.dp_sync_interval = dp_sync_interval
     core.step_counter = 0
     core.pending_pause = False
@@ -819,7 +819,7 @@ def test_checkpoint_prepare_then_restore_run_in_order():
     state. Restoring brings external state back before the KV cache wakes and
     scheduling resumes. Repeating either is a no-op."""
     core = _pausable_engine_core_proc()
-    core.aphrodite_config = MagicMock()
+    core.sonar_config = MagicMock()
     core.model_executor.is_sleeping = False
     core._reset_caches = MagicMock()
     core.reject_new_requests = False
@@ -850,7 +850,7 @@ def test_checkpoint_prepare_fails_on_drain_barrier_error(deferred: bool):
     """A failing barrier at the end of the drain leaves the engine FAILED and
     still rejecting, whether the drain completes at once or later."""
     core = _pausable_engine_core_proc()
-    core.aphrodite_config = MagicMock()
+    core.sonar_config = MagicMock()
     core.model_executor.is_sleeping = False
     core.model_executor.collective_rpc.side_effect = RuntimeError("device lost")
     core.reject_new_requests = False

@@ -2,8 +2,8 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import torch
 
-from aphrodite.utils.torch_utils import make_tensor_with_pad
-from aphrodite.v1.sample.metadata import SamplingMetadata
+from sonar.utils.torch_utils import make_tensor_with_pad
+from sonar.v1.sample.metadata import SamplingMetadata
 
 
 def _get_ngrams(ngram_size: int, prev_input_ids: torch.Tensor) -> dict[tuple[int, ...], list[int]]:

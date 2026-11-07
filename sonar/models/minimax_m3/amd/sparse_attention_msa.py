@@ -6,9 +6,9 @@ from dataclasses import dataclass
 
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.forward_context import get_forward_context
-from aphrodite.models.minimax_m3.common.sparse_attention import (
+from sonar.config import SonarConfig
+from sonar.forward_context import get_forward_context
+from sonar.models.minimax_m3.common.sparse_attention import (
     MiniMaxM3SparseBackend,
     MiniMaxM3SparseDecodeMetadata,
     MiniMaxM3SparseImpl,
@@ -16,12 +16,12 @@ from aphrodite.models.minimax_m3.common.sparse_attention import (
     MiniMaxM3SparseMetadataBuilder,
     MiniMaxM3SparsePrefillMetadata,
 )
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.v1.attention.backend import (
+from sonar.utils.math_utils import cdiv
+from sonar.v1.attention.backend import (
     AttentionLayer,
 )
-from aphrodite.v1.attention.backends.utils import CommonAttentionMetadata
-from aphrodite.v1.kv_cache_interface import AttentionSpec
+from sonar.v1.attention.backends.utils import CommonAttentionMetadata
+from sonar.v1.kv_cache_interface import AttentionSpec
 
 
 class MiniMaxM3SparseAiterPABackend(MiniMaxM3SparseBackend):
@@ -59,16 +59,16 @@ class MiniMaxM3SparseAiterPAMetadataBuilder(MiniMaxM3SparseMetadataBuilder):
         self,
         kv_cache_spec: AttentionSpec,
         layer_names: list[str],
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
     ) -> None:
-        super().__init__(kv_cache_spec, layer_names, aphrodite_config, device)
+        super().__init__(kv_cache_spec, layer_names, sonar_config, device)
         # Stable address for the same reason as the base's own buffers: a
         # captured decode replay writes through the address it captured.
         self.page16_block_table_buffer = torch.empty(
             (
-                aphrodite_config.scheduler_config.max_num_seqs,
-                cdiv(aphrodite_config.model_config.max_model_len, kv_cache_spec.block_size),
+                sonar_config.scheduler_config.max_num_seqs,
+                cdiv(sonar_config.model_config.max_model_len, kv_cache_spec.block_size),
             ),
             dtype=torch.int32,
             device=device,
@@ -80,7 +80,7 @@ class MiniMaxM3SparseAiterPAMetadataBuilder(MiniMaxM3SparseMetadataBuilder):
         common_attn_metadata: CommonAttentionMetadata,
         fast_build: bool = False,
     ) -> MiniMaxM3SparseMetadata:
-        from aphrodite.models.minimax_m3.amd.ops.sparse_pa import (
+        from sonar.models.minimax_m3.amd.ops.sparse_pa import (
             minimax_m3_rebase_block_table_to_page16,
         )
 
@@ -127,7 +127,7 @@ class MiniMaxM3SparseAiterPAImpl(MiniMaxM3SparseImpl):
         *,
         decode_sparse_table: tuple[torch.Tensor, torch.Tensor] | None = None,
     ) -> torch.Tensor:
-        from aphrodite.models.minimax_m3.amd.ops.sparse_pa import (
+        from sonar.models.minimax_m3.amd.ops.sparse_pa import (
             PAGE16_SIDES_PER_BLOCK,
             PAGES_PER_SPARSE_BLOCK,
             minimax_m3_sparse_attn_decode_aiter,

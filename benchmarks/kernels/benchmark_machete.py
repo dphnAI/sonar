@@ -17,22 +17,22 @@ import torch.utils.benchmark as TBenchmark
 from torch.utils.benchmark import Measurement as TMeasurement
 from weight_shapes import WEIGHT_SHAPES
 
-from aphrodite import _custom_ops as ops
-from aphrodite.model_executor.layers.quantization.utils.marlin_utils import (
+from sonar import _custom_ops as ops
+from sonar.model_executor.layers.quantization.utils.marlin_utils import (
     GPTQ_MARLIN_MAX_PARALLEL,
     GPTQ_MARLIN_MIN_THREAD_N,
     marlin_permute_scales,
     marlin_zero_points,
 )
-from aphrodite.model_executor.layers.quantization.utils.marlin_utils_test import (
+from sonar.model_executor.layers.quantization.utils.marlin_utils_test import (
     MarlinWorkspace,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     pack_rows,
     quantize_weights,
 )
-from aphrodite.scalar_type import ScalarType, scalar_types
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
+from sonar.scalar_type import ScalarType, scalar_types
+from sonar.utils.argparse_utils import FlexibleArgumentParser
 
 DEFAULT_MODELS = ["meta-llama/Llama-3-8b", "meta-llama/Llama-2-70b-hf"]
 DEFAULT_BATCH_SIZES = [1, 16, 32, 64, 128, 256, 512, 1024]

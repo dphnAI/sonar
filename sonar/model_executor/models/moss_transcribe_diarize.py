@@ -19,11 +19,11 @@ import torch
 from torch import nn
 from transformers import BatchFeature
 
-from aphrodite.config import AphroditeConfig, ModelConfig, SpeechToTextConfig
-from aphrodite.config.multimodal import MultiModalDummyOptions
-from aphrodite.config.speech_to_text import SpeechToTextParams
-from aphrodite.inputs import ModalityData, MultiModalDataDict, PromptType, TextPrompt
-from aphrodite.model_executor.models.interfaces import (
+from sonar.config import ModelConfig, SonarConfig, SpeechToTextConfig
+from sonar.config.multimodal import MultiModalDummyOptions
+from sonar.config.speech_to_text import SpeechToTextParams
+from sonar.inputs import ModalityData, MultiModalDataDict, PromptType, TextPrompt
+from sonar.model_executor.models.interfaces import (
     DiarizedTranscriptionSegment,
     MultiModalEmbeddings,
     SupportsMultiModal,
@@ -31,33 +31,33 @@ from aphrodite.model_executor.models.interfaces import (
     SupportsTranscription,
     _require_is_multimodal,
 )
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.models.utils import (
     AutoWeightsLoader,
     WeightsMapper,
     _merge_multimodal_embeddings,
-    init_aphrodite_registered_model,
+    init_sonar_registered_model,
     maybe_prefix,
     parse_diarized_speaker,
     parse_diarized_timestamp,
 )
-from aphrodite.model_executor.models.whisper import (
+from sonar.model_executor.models.whisper import (
     WhisperEncoder,
     _create_fake_bias_for_k_proj,
 )
-from aphrodite.model_executor.models.whisper_utils import ISO639_1_SUPPORTED_LANGS
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import (
+from sonar.model_executor.models.whisper_utils import ISO639_1_SUPPORTED_LANGS
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import (
     AudioItem,
     MultiModalFieldConfig,
     MultiModalKwargsItems,
 )
-from aphrodite.multimodal.parse import (
+from sonar.multimodal.parse import (
     DictEmbeddingItems,
     ModalityDataItems,
     MultiModalDataItems,
     MultiModalDataParser,
 )
-from aphrodite.multimodal.processing import (
+from sonar.multimodal.processing import (
     BaseDummyInputsBuilder,
     BaseMultiModalProcessor,
     BaseProcessingInfo,
@@ -66,10 +66,10 @@ from aphrodite.multimodal.processing import (
     PromptUpdateDetails,
     cached_encode,
 )
-from aphrodite.multimodal.processing.processor import HFMultiModalInputs, ProcessorInputs
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.transformers_utils.processor import cached_processor_from_config
-from aphrodite.utils.tensor_schema import TensorSchema, TensorShape
+from sonar.multimodal.processing.processor import HFMultiModalInputs, ProcessorInputs
+from sonar.sequence import IntermediateTensors
+from sonar.transformers_utils.processor import cached_processor_from_config
+from sonar.utils.tensor_schema import TensorSchema, TensorShape
 
 WHISPER_ENCODER_STRIDE = 2
 MAX_AUDIO_DURATION_S = 90 * 60
@@ -196,7 +196,7 @@ def _get_audios_from_mm_data(mm_data: Mapping[str, object]) -> list[Any]:
     return audio_arrays
 
 
-def _add_aphrodite_audio_metadata(
+def _add_sonar_audio_metadata(
     processed: BatchFeature,
     num_audios: int,
 ) -> BatchFeature:
@@ -253,7 +253,7 @@ def _add_aphrodite_audio_metadata(
 
 class MossTranscribeDiarizeWhisperEncoder(WhisperEncoder):
     packed_modules_mapping = {"qkv_proj": ["q_proj", "k_proj", "v_proj"]}
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_substr={".fc1.": ".mlp.fc1.", ".fc2.": ".mlp.fc2."},
         orig_to_new_stacked={
             ".self_attn.q_proj": (".self_attn.qkv_proj", "q"),
@@ -265,20 +265,20 @@ class MossTranscribeDiarizeWhisperEncoder(WhisperEncoder):
     def __init__(
         self,
         *,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
     ) -> None:
         super().__init__(
-            aphrodite_config=aphrodite_config.with_hf_config(aphrodite_config.model_config.hf_config.audio_config),
+            sonar_config=sonar_config.with_hf_config(sonar_config.model_config.hf_config.audio_config),
             prefix=prefix,
         )
-        self.audio_merge_size = int(aphrodite_config.model_config.hf_config.audio_merge_size)
+        self.audio_merge_size = int(sonar_config.model_config.hf_config.audio_merge_size)
         self.max_encoder_batch: int | None = None
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         weights = _create_fake_bias_for_k_proj(weights, ".k_proj.weight")
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
     def forward(
         self,
@@ -470,7 +470,7 @@ class MossTranscribeDiarizeMultiModalProcessor(BaseMultiModalProcessor[MossTrans
     ) -> BatchFeature:
         audios = _get_audios_from_mm_data(mm_data)
         if audios:
-            processed_data = _add_aphrodite_audio_metadata(processed_data, len(audios))
+            processed_data = _add_sonar_audio_metadata(processed_data, len(audios))
 
         return processed_data
 
@@ -550,7 +550,7 @@ class MossTranscribeDiarizeForConditionalGeneration(
     supports_segment_timestamp = False
     supports_diarized_transcription = True
     supported_languages = ISO639_1_SUPPORTED_LANGS
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={
             "language_model.layers.": "language_model.model.layers.",
             "language_model.embed_tokens.": "language_model.model.embed_tokens.",
@@ -657,14 +657,14 @@ class MossTranscribeDiarizeForConditionalGeneration(
 
         return segments
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__()
-        self.config = aphrodite_config.model_config.hf_config
-        self.dtype = aphrodite_config.model_config.dtype
+        self.config = sonar_config.model_config.hf_config
+        self.dtype = sonar_config.model_config.dtype
 
-        with self._mark_tower_model(aphrodite_config, "audio"):
+        with self._mark_tower_model(sonar_config, "audio"):
             self.whisper_encoder = MossTranscribeDiarizeWhisperEncoder(
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 prefix=maybe_prefix(prefix, "whisper_encoder"),
             )
             self.vq_adaptor = MossTranscribeDiarizeVQAdaptor(
@@ -673,9 +673,9 @@ class MossTranscribeDiarizeForConditionalGeneration(
                 eps=float(self.config.text_config.rms_norm_eps),
             )
 
-        with self._mark_language_model(aphrodite_config):
-            self.language_model = init_aphrodite_registered_model(
-                aphrodite_config=aphrodite_config,
+        with self._mark_language_model(sonar_config):
+            self.language_model = init_sonar_registered_model(
+                sonar_config=sonar_config,
                 hf_config=self.config.text_config,
                 prefix=maybe_prefix(prefix, "language_model"),
                 architectures=["Qwen3ForCausalLM"],
@@ -815,5 +815,5 @@ class MossTranscribeDiarizeForConditionalGeneration(
         loader = AutoWeightsLoader(self)
         return loader.load_weights(
             weights,
-            mapper=self.hf_to_aphrodite_mapper,
+            mapper=self.hf_to_sonar_mapper,
         )

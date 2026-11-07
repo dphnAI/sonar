@@ -33,15 +33,15 @@ from typing import Any
 
 import msgspec
 
-from aphrodite.distributed.ec_transfer.ec_connector.cpu.control.zmq import (
+from sonar.distributed.ec_transfer.ec_connector.cpu.control.zmq import (
     ZmqClientConnection,
     ZmqClientTransport,
     ZmqServerTransport,
 )
-from aphrodite.distributed.ec_transfer.ec_connector.cpu.data.base import (
+from sonar.distributed.ec_transfer.ec_connector.cpu.data.base import (
     DataTransport,
 )
-from aphrodite.distributed.ec_transfer.ec_connector.cpu.protocol import (
+from sonar.distributed.ec_transfer.ec_connector.cpu.protocol import (
     EC_CONNECTOR_VERSION,
     EXPECTED_NACKS,
     RETRYABLE_NACKS,
@@ -49,11 +49,11 @@ from aphrodite.distributed.ec_transfer.ec_connector.cpu.protocol import (
     XferReq,
     XferStatus,
 )
-from aphrodite.distributed.ec_transfer.ec_connector.cpu.scheduler.embedding_cache import (
+from sonar.distributed.ec_transfer.ec_connector.cpu.scheduler.embedding_cache import (
     EmbeddingCache,
 )
-from aphrodite.distributed.ec_transfer.ec_connector.cpu.utils import PeerAddr
-from aphrodite.logger import init_logger
+from sonar.distributed.ec_transfer.ec_connector.cpu.utils import PeerAddr
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 

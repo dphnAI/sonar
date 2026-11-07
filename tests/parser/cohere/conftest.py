@@ -3,7 +3,7 @@
 
 import pytest
 
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
 
 from .utils import MockCohereTokenizer
 

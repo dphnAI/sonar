@@ -5,7 +5,7 @@ import uuid
 from dataclasses import field
 from typing import Any, Literal, get_args
 
-from aphrodite.config.utils import config
+from sonar.config.utils import config
 
 ECProducer = Literal["ec_producer", "ec_both"]
 ECConsumer = Literal["ec_consumer", "ec_both"]
@@ -17,7 +17,7 @@ class ECTransferConfig:
     """Configuration for distributed EC cache transfer."""
 
     ec_connector: str | None = None
-    """The EC connector for Aphrodite to transmit EC caches between Aphrodite instances.
+    """The EC connector for Sonar to transmit EC caches between Sonar instances.
 
     Built-in options include ``ECExampleConnector`` (shared filesystem via
     safetensors) and ``ECMooncakeConnector`` (Mooncake TransferEngine RDMA;
@@ -39,7 +39,7 @@ class ECTransferConfig:
     bytes. Recommended value: 1e9 (about 1GB)."""
 
     ec_role: ECRole | None = None
-    """Whether this Aphrodite instance produces, consumes EC cache, or both. Choices
+    """Whether this Sonar instance produces, consumes EC cache, or both. Choices
     are 'ec_producer', 'ec_consumer', 'ec_both'."""
 
     ec_ip: str = "127.0.0.1"

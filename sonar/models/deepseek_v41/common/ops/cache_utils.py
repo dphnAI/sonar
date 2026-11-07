@@ -18,23 +18,23 @@ from typing import Any
 
 import torch
 
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     get_fp8_min_max,
 )
-from aphrodite.model_executor.warmup.jit_warmup import (
-    AphroditeJitKernel,
+from sonar.model_executor.warmup.jit_warmup import (
+    SonarJitKernel,
     _WarmupInputRows,
     zip_inputs,
 )
-from aphrodite.model_executor.warmup.jit_warmup_triton_helper import (
+from sonar.model_executor.warmup.jit_warmup_triton_helper import (
     TritonPointerInputVariant,
     TritonWarmupTensor,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.transformers_utils.deepseek_v4_utils import get_compress_ratios
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.import_utils import has_cutedsl
-from aphrodite.utils.math_utils import cdiv, next_power_of_2
+from sonar.platforms import current_platform
+from sonar.transformers_utils.deepseek_v4_utils import get_compress_ratios
+from sonar.triton_utils import tl, triton
+from sonar.utils.import_utils import has_cutedsl
+from sonar.utils.math_utils import cdiv, next_power_of_2
 
 # Per-token byte width of the paged records; ``k_cache.shape[-1]`` -- the
 # width the KV-cache spec publishes -- identifies the record:
@@ -787,7 +787,7 @@ def dequantize_and_gather_k_cache(
     """
     if has_cutedsl() and k_cache.shape[-1] != V41_NVFP4_BYTES_PER_TOKEN:
         # lazily import, otherwise some tests fail due to CUDA driver init failure.
-        from aphrodite.models.deepseek_v4.nvidia.ops.dequant_gather_k_cutedsl import (
+        from sonar.models.deepseek_v4.nvidia.ops.dequant_gather_k_cutedsl import (
             _DEQUANT_GATHER_K_CACHE_CUTEDSL_KERNEL,
         )
 
@@ -985,23 +985,23 @@ _COMBINE_TOPK_SWA_POINTER_INPUTS = zip_inputs(
 )
 
 
-def _hf_config_int(aphrodite_config: Any, name: str, default: int) -> int:
-    model_config = getattr(aphrodite_config, "model_config", None)
+def _hf_config_int(sonar_config: Any, name: str, default: int) -> int:
+    model_config = getattr(sonar_config, "model_config", None)
     hf_config = getattr(model_config, "hf_config", None)
     return int(getattr(hf_config, name, default) or default)
 
 
-def _combine_topk_swa_warmup_inputs(aphrodite_config: Any) -> _WarmupInputRows:
+def _combine_topk_swa_warmup_inputs(sonar_config: Any) -> _WarmupInputRows:
     """One warmup row per v4.1 layer type (compress ratio) in the model.
 
     Every layer slices the shared ``index_topk``-wide indices buffer, so the
     padded width is the same for all rows; SWA-only layers (ratio 0) pass
     ``TOP_K=0``.
     """
-    model_config = getattr(aphrodite_config, "model_config", None)
+    model_config = getattr(sonar_config, "model_config", None)
     hf_config = getattr(model_config, "hf_config", None)
     compress_ratios = get_compress_ratios(hf_config) or [0]
-    topk = _hf_config_int(aphrodite_config, "index_topk", 0)
+    topk = _hf_config_int(sonar_config, "index_topk", 0)
     return zip_inputs(
         *(
             dict(compress_ratio=ratio, topk=topk if ratio > 0 else 0, topk_width=topk)
@@ -1010,12 +1010,12 @@ def _combine_topk_swa_warmup_inputs(aphrodite_config: Any) -> _WarmupInputRows:
     )
 
 
-def _scheduler_config_int(aphrodite_config: Any, name: str, default: int) -> int:
-    scheduler_config = getattr(aphrodite_config, "scheduler_config", None)
+def _scheduler_config_int(sonar_config: Any, name: str, default: int) -> int:
+    scheduler_config = getattr(sonar_config, "scheduler_config", None)
     return int(getattr(scheduler_config, name, default) or default)
 
 
-class CombineTopkSwaIndicesKernel(AphroditeJitKernel["CombineTopkSwaIndicesKernel.CompileKey"]):
+class CombineTopkSwaIndicesKernel(SonarJitKernel["CombineTopkSwaIndicesKernel.CompileKey"]):
     @dataclass(frozen=True)
     class CompileKey:
         TOP_K: int
@@ -1143,13 +1143,13 @@ class CombineTopkSwaIndicesKernel(AphroditeJitKernel["CombineTopkSwaIndicesKerne
             input_variant=input_variant,
         )
 
-    def get_warmup_keys(self, aphrodite_config: Any) -> list[CompileKey]:
-        if _scheduler_config_int(aphrodite_config, "max_num_batched_tokens", 0) <= 0:
+    def get_warmup_keys(self, sonar_config: Any) -> list[CompileKey]:
+        if _scheduler_config_int(sonar_config, "max_num_batched_tokens", 0) <= 0:
             return []
 
-        window_size = _hf_config_int(aphrodite_config, "sliding_window", 128)
+        window_size = _hf_config_int(sonar_config, "sliding_window", 128)
         return self._trace_dispatch(self.dispatch)(
-            _combine_topk_swa_warmup_inputs(aphrodite_config),
+            _combine_topk_swa_warmup_inputs(sonar_config),
             _COMBINE_TOPK_SWA_POINTER_INPUTS,
             WINDOW_SIZE=window_size,
         )

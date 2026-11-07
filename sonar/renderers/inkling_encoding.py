@@ -6,7 +6,7 @@ Pure implementation of Inkling chat rendering, kept deliberately free of
 Sonar imports. It depends only on the :class:`InklingTextTokenizer` protocol
 and speaks OpenAI-style message dicts. If a standalone Inkling
 input-processing library becomes available, this module is the unit to
-swap out — the swap point is marked in ``aphrodite/renderers/inkling.py``.
+swap out — the swap point is marked in ``sonar/renderers/inkling.py``.
 
 Multimodal parts follow the contract of Sonar's Inkling multimodal processor
 (``InklingMultiModalProcessor`` anchors prompt updates on the bare

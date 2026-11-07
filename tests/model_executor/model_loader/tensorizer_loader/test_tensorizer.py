@@ -15,23 +15,23 @@ from unittest.mock import Mock
 import pytest
 import torch
 
-import aphrodite.model_executor.model_loader.tensorizer
-from aphrodite import SamplingParams
-from aphrodite.config.load import LoadConfig
-from aphrodite.engine.arg_utils import EngineArgs
-from aphrodite.model_executor.model_loader.tensorizer import (
+import sonar.model_executor.model_loader.tensorizer
+from sonar import SamplingParams
+from sonar.config.load import LoadConfig
+from sonar.engine.arg_utils import EngineArgs
+from sonar.model_executor.model_loader.tensorizer import (
     TensorizerConfig,
     TensorSerializer,
-    is_aphrodite_tensorized,
+    is_sonar_tensorized,
     open_stream,
-    tensorize_aphrodite_model,
+    tensorize_sonar_model,
 )
-from aphrodite.model_executor.model_loader.tensorizer_loader import (
+from sonar.model_executor.model_loader.tensorizer_loader import (
     BLACKLISTED_TENSORIZER_ARGS,
     TensorizerLoader,
 )
-from aphrodite.utils.import_utils import PlaceholderModule
-from tests.utils import APHRODITE_PATH, RemoteOpenAIServer
+from sonar.utils.import_utils import PlaceholderModule
+from tests.utils import SONAR_PATH, RemoteOpenAIServer
 
 from .conftest import DummyExecutor, assert_from_collective_rpc
 
@@ -47,7 +47,7 @@ class TensorizerCaughtError(Exception):
     pass
 
 
-EXAMPLES_PATH = APHRODITE_PATH / "examples"
+EXAMPLES_PATH = SONAR_PATH / "examples"
 
 pytest_plugins = ("pytest_asyncio",)
 
@@ -110,32 +110,32 @@ def write_keyfile(keyfile_path: str):
 
 
 @pytest.mark.skipif(not is_curl_installed(), reason="cURL is not installed")
-def test_deserialized_encrypted_aphrodite_model_has_same_outputs(model_ref, aphrodite_runner, tmp_path, model_path):
+def test_deserialized_encrypted_sonar_model_has_same_outputs(model_ref, sonar_runner, tmp_path, model_path):
     args = EngineArgs(model=model_ref)
-    with aphrodite_runner(model_ref) as aphrodite_model:
+    with sonar_runner(model_ref) as sonar_model:
         key_path = tmp_path / model_ref / "model.key"
         write_keyfile(key_path)
 
-        outputs = aphrodite_model.generate(prompts, sampling_params)
+        outputs = sonar_model.generate(prompts, sampling_params)
 
     config_for_serializing = TensorizerConfig(tensorizer_uri=str(model_path), encryption_keyfile=str(key_path))
 
-    tensorize_aphrodite_model(args, config_for_serializing)
+    tensorize_sonar_model(args, config_for_serializing)
 
     config_for_deserializing = TensorizerConfig(tensorizer_uri=str(model_path), encryption_keyfile=str(key_path))
 
-    with aphrodite_runner(
+    with sonar_runner(
         model_ref,
         load_format="tensorizer",
         model_loader_extra_config=config_for_deserializing,
-    ) as loaded_aphrodite_model:  # noqa: E501
-        deserialized_outputs = loaded_aphrodite_model.generate(prompts, sampling_params)
+    ) as loaded_sonar_model:  # noqa: E501
+        deserialized_outputs = loaded_sonar_model.generate(prompts, sampling_params)
         # noqa: E501
 
         assert outputs == deserialized_outputs
 
 
-def test_deserialized_hf_model_has_same_outputs(hf_runner, aphrodite_runner, tmp_path, model_ref, model_path):
+def test_deserialized_hf_model_has_same_outputs(hf_runner, sonar_runner, tmp_path, model_ref, model_path):
     with hf_runner(model_ref) as hf_model:
         max_tokens = 50
         outputs = hf_model.generate_greedy(prompts, max_tokens=max_tokens)
@@ -143,7 +143,7 @@ def test_deserialized_hf_model_has_same_outputs(hf_runner, aphrodite_runner, tmp
             serializer = TensorSerializer(stream)
             serializer.write_module(hf_model.model)
 
-    with aphrodite_runner(
+    with sonar_runner(
         model_ref,
         load_format="tensorizer",
         model_loader_extra_config=TensorizerConfig(
@@ -156,10 +156,10 @@ def test_deserialized_hf_model_has_same_outputs(hf_runner, aphrodite_runner, tmp
         assert outputs == deserialized_outputs
 
 
-def test_load_without_tensorizer_load_format(aphrodite_runner, capfd, model_ref):
+def test_load_without_tensorizer_load_format(sonar_runner, capfd, model_ref):
     model = None
     try:
-        model = aphrodite_runner(model_ref, model_loader_extra_config=TensorizerConfig(tensorizer_uri="test"))
+        model = sonar_runner(model_ref, model_loader_extra_config=TensorizerConfig(tensorizer_uri="test"))
         pytest.fail("Expected RuntimeError for extra config keys")
     except RuntimeError:
         out, err = capfd.readouterr()
@@ -171,10 +171,10 @@ def test_load_without_tensorizer_load_format(aphrodite_runner, capfd, model_ref)
         torch.accelerator.empty_cache()
 
 
-def test_raise_value_error_on_invalid_load_format(aphrodite_runner, capfd, model_ref):
+def test_raise_value_error_on_invalid_load_format(sonar_runner, capfd, model_ref):
     model = None
     try:
-        model = aphrodite_runner(
+        model = sonar_runner(
             model_ref,
             load_format="safetensors",
             model_loader_extra_config=TensorizerConfig(tensorizer_uri="test"),
@@ -192,12 +192,12 @@ def test_raise_value_error_on_invalid_load_format(aphrodite_runner, capfd, model
 
 
 @pytest.mark.skipif(torch.accelerator.device_count() < 2, reason="Requires 2 GPUs")
-def test_tensorizer_with_tp_path_without_template(aphrodite_runner, capfd):
+def test_tensorizer_with_tp_path_without_template(sonar_runner, capfd):
     try:
         model_ref = "EleutherAI/pythia-1.4b"
         tensorized_path = f"s3://tensorized/{model_ref}/fp16/model.tensors"
 
-        aphrodite_runner(
+        sonar_runner(
             model_ref,
             load_format="tensorizer",
             model_loader_extra_config=TensorizerConfig(
@@ -220,10 +220,10 @@ def test_tensorizer_with_tp_path_without_template(aphrodite_runner, capfd):
 
 
 @pytest.mark.skipif(torch.accelerator.device_count() < 2, reason="Requires 2 GPUs")
-def test_deserialized_encrypted_aphrodite_model_with_tp_has_same_outputs(aphrodite_runner, tmp_path):
+def test_deserialized_encrypted_sonar_model_with_tp_has_same_outputs(sonar_runner, tmp_path):
     model_ref = "EleutherAI/pythia-1.4b"
     # record outputs from un-sharded un-tensorized model
-    with aphrodite_runner(
+    with sonar_runner(
         model_ref,
         disable_custom_all_reduce=True,
         enforce_eager=True,
@@ -239,7 +239,7 @@ def test_deserialized_encrypted_aphrodite_model_with_tp_has_same_outputs(aphrodi
         encryption_keyfile=str(key_path),
     )
 
-    tensorize_aphrodite_model(
+    tensorize_sonar_model(
         engine_args=EngineArgs(
             model=model_ref,
             tensor_parallel_size=2,
@@ -251,36 +251,34 @@ def test_deserialized_encrypted_aphrodite_model_with_tp_has_same_outputs(aphrodi
     assert os.path.isfile(model_path % 0), "Serialization subprocess failed"
     assert os.path.isfile(model_path % 1), "Serialization subprocess failed"
 
-    with aphrodite_runner(
+    with sonar_runner(
         model_ref,
         tensor_parallel_size=2,
         load_format="tensorizer",
         disable_custom_all_reduce=True,
         enforce_eager=True,
         model_loader_extra_config=tensorizer_config,
-    ) as loaded_aphrodite_model:
-        deserialized_outputs = loaded_aphrodite_model.generate(prompts, sampling_params)
+    ) as loaded_sonar_model:
+        deserialized_outputs = loaded_sonar_model.generate(prompts, sampling_params)
 
     assert outputs == deserialized_outputs
 
 
 @pytest.mark.flaky(reruns=3)
-def test_aphrodite_tensorized_model_has_same_outputs(model_ref, aphrodite_runner, tmp_path, model_path):
+def test_sonar_tensorized_model_has_same_outputs(model_ref, sonar_runner, tmp_path, model_path):
     gc.collect()
     torch.accelerator.empty_cache()
     config = TensorizerConfig(tensorizer_uri=str(model_path))
     args = EngineArgs(model=model_ref)
 
-    with aphrodite_runner(model_ref) as aphrodite_model:
-        outputs = aphrodite_model.generate(prompts, sampling_params)
+    with sonar_runner(model_ref) as sonar_model:
+        outputs = sonar_model.generate(prompts, sampling_params)
 
-    tensorize_aphrodite_model(args, config)
-    assert is_aphrodite_tensorized(config)
+    tensorize_sonar_model(args, config)
+    assert is_sonar_tensorized(config)
 
-    with aphrodite_runner(
-        model_ref, load_format="tensorizer", model_loader_extra_config=config
-    ) as loaded_aphrodite_model:
-        deserialized_outputs = loaded_aphrodite_model.generate(prompts, sampling_params)
+    with sonar_runner(model_ref, load_format="tensorizer", model_loader_extra_config=config) as loaded_sonar_model:
+        deserialized_outputs = loaded_sonar_model.generate(prompts, sampling_params)
         # noqa: E501
 
         assert outputs == deserialized_outputs
@@ -289,10 +287,10 @@ def test_aphrodite_tensorized_model_has_same_outputs(model_ref, aphrodite_runner
 @torch.inference_mode()
 def test_deserialized_hf_weights_are_ready_for_forward(tmp_path, monkeypatch):
     """Raw weights need CPU linear post-processing before the first forward."""
-    from aphrodite.model_executor.layers import linear
-    from aphrodite.model_executor.layers import utils as layer_utils
-    from aphrodite.model_executor.model_loader import base_loader
-    from aphrodite.platforms.cpu import CpuPlatform
+    from sonar.model_executor.layers import linear
+    from sonar.model_executor.layers import utils as layer_utils
+    from sonar.model_executor.model_loader import base_loader
+    from sonar.platforms.cpu import CpuPlatform
 
     # Exercise the CPU method on accelerator CI hosts too.
     for module in (linear, layer_utils, base_loader):
@@ -365,7 +363,7 @@ def test_load_with_just_model_tensors(just_serialize_model_tensors, model_ref):
         pass
 
 
-def test_assert_serialization_kwargs_passed_to_tensor_serializer(tmp_path, aphrodite_runner):
+def test_assert_serialization_kwargs_passed_to_tensor_serializer(tmp_path, sonar_runner):
     serialization_params = {
         "limit_cpu_concurrency": 2,
     }
@@ -398,7 +396,7 @@ def test_assert_serialization_kwargs_passed_to_tensor_serializer(tmp_path, aphro
 
     kwargs = {"tensorizer_config": config.to_serializable()}
 
-    with aphrodite_runner(model_ref) as runner:
+    with sonar_runner(model_ref) as runner:
         assert assert_from_collective_rpc(runner.get_llm(), serialization_test, kwargs)
 
 
@@ -427,14 +425,14 @@ def test_assert_serialization_kwargs_passed_to_tensor_serializer(tmp_path, aphro
         (None, None, ValueError("engine shutdown failed"), "engine shutdown failed"),
     ],
 )
-def test_tensorize_aphrodite_model_shuts_down_engine(
+def test_tensorize_sonar_model_shuts_down_engine(
     monkeypatch,
     serialization_error,
     renderer_shutdown_error,
     engine_shutdown_error,
     expected_error,
 ):
-    from aphrodite.v1.engine.llm_engine import LLMEngine
+    from sonar.v1.engine.llm_engine import LLMEngine
 
     engine_args = Mock()
     config = Mock(encryption_keyfile=None)
@@ -442,14 +440,14 @@ def test_tensorize_aphrodite_model_shuts_down_engine(
     engine.collective_rpc.side_effect = serialization_error
     engine.renderer.shutdown.side_effect = renderer_shutdown_error
     engine.engine_core.shutdown.side_effect = engine_shutdown_error
-    monkeypatch.setattr(LLMEngine, "from_aphrodite_config", Mock(return_value=engine))
-    monkeypatch.setenv("APHRODITE_WORKER_SHUTDOWN_TIMEOUT_SECONDS", "7")
+    monkeypatch.setattr(LLMEngine, "from_sonar_config", Mock(return_value=engine))
+    monkeypatch.setenv("SONAR_WORKER_SHUTDOWN_TIMEOUT_SECONDS", "7")
 
     if expected_error is None:
-        tensorize_aphrodite_model(engine_args, config)
+        tensorize_sonar_model(engine_args, config)
     else:
         with pytest.raises(Exception, match=expected_error) as exc_info:
-            tensorize_aphrodite_model(engine_args, config)
+            tensorize_sonar_model(engine_args, config)
         notes = getattr(exc_info.value, "__notes__", ())
         if serialization_error is not None and renderer_shutdown_error is not None:
             assert any("renderer shutdown failed" in note for note in notes)
@@ -474,7 +472,7 @@ def test_assert_deserialization_kwargs_passed_to_tensor_deserializer(tmp_path, c
     config = TensorizerConfig(tensorizer_uri=str(model_path), serialization_kwargs=serialization_params)
 
     args = EngineArgs(model=model_ref)
-    tensorize_aphrodite_model(args, config)
+    tensorize_sonar_model(args, config)
 
     loader_tc = TensorizerConfig(
         tensorizer_uri=str(model_path),
@@ -487,8 +485,8 @@ def test_assert_deserialization_kwargs_passed_to_tensor_deserializer(tmp_path, c
         model_loader_extra_config=loader_tc.to_serializable(),
     )
 
-    aphrodite_config = engine_args.create_engine_config()
-    executor = DummyExecutor(aphrodite_config)
+    sonar_config = engine_args.create_engine_config()
+    executor = DummyExecutor(sonar_config)
 
     assert_specific_tensorizer_error_is_raised(
         executor,
@@ -512,7 +510,7 @@ def test_assert_stream_kwargs_passed_to_tensor_deserializer(tmp_path, capfd):
     config = TensorizerConfig(tensorizer_uri=str(model_path), serialization_kwargs=serialization_params)
 
     args = EngineArgs(model=model_ref)
-    tensorize_aphrodite_model(args, config)
+    tensorize_sonar_model(args, config)
 
     stream_kwargs = {"mode": "foo"}
 
@@ -528,12 +526,12 @@ def test_assert_stream_kwargs_passed_to_tensor_deserializer(tmp_path, capfd):
         model_loader_extra_config=loader_tc.to_serializable(),
     )
 
-    aphrodite_config = engine_args.create_engine_config()
-    executor = DummyExecutor(aphrodite_config)
+    sonar_config = engine_args.create_engine_config()
+    executor = DummyExecutor(sonar_config)
 
     assert_specific_tensorizer_error_is_raised(
         executor,
-        aphrodite.model_executor.model_loader.tensorizer,
+        sonar.model_executor.model_loader.tensorizer,
         "open_stream",
         ValueError,
     )
@@ -548,7 +546,7 @@ async def test_serialize_and_serve_entrypoints(tmp_path):
         result = subprocess.run(
             [
                 sys.executable,
-                f"{APHRODITE_PATH}/examples/features/tensorize_aphrodite_model.py",
+                f"{SONAR_PATH}/examples/features/tensorize_sonar_model.py",
                 "--model",
                 model_ref,
                 "serialize",
@@ -571,8 +569,8 @@ async def test_serialize_and_serve_entrypoints(tmp_path):
 
     assert "Successfully serialized" in result.stdout
 
-    # Next, try to serve with aphrodite serve
-    model_uri = tmp_path / "aphrodite" / model_ref / suffix / "model.tensors"
+    # Next, try to serve with sonar serve
+    model_uri = tmp_path / "sonar" / model_ref / suffix / "model.tensors"
 
     model_loader_extra_config = {
         "tensorizer_uri": str(model_uri),
@@ -587,7 +585,7 @@ async def test_serialize_and_serve_entrypoints(tmp_path):
 
     cmd = [
         "-m",
-        "aphrodite.entrypoints.cli.main",
+        "sonar.entrypoints.cli.main",
         "serve",
         "--host",
         "localhost",
@@ -618,7 +616,7 @@ async def test_serialize_and_serve_entrypoints(tmp_path):
 
 
 @pytest.mark.parametrize("illegal_value", BLACKLISTED_TENSORIZER_ARGS)
-def test_blacklisted_parameter_for_loading(tmp_path, aphrodite_runner, capfd, illegal_value):
+def test_blacklisted_parameter_for_loading(tmp_path, sonar_runner, capfd, illegal_value):
     serialization_params = {
         "limit_cpu_concurrency": 2,
     }
@@ -628,12 +626,12 @@ def test_blacklisted_parameter_for_loading(tmp_path, aphrodite_runner, capfd, il
     config = TensorizerConfig(tensorizer_uri=str(model_path), serialization_kwargs=serialization_params)
 
     args = EngineArgs(model=model_ref)
-    tensorize_aphrodite_model(args, config)
+    tensorize_sonar_model(args, config)
 
     loader_tc = {"tensorizer_uri": str(model_path), illegal_value: "foo"}
 
     try:
-        aphrodite_runner(
+        sonar_runner(
             model_ref,
             load_format="tensorizer",
             model_loader_extra_config=loader_tc,

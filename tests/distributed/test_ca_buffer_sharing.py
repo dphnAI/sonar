@@ -10,8 +10,8 @@ import ctypes
 import torch
 import torch.distributed as dist
 
-from aphrodite.distributed.device_communicators.cuda_wrapper import CudaRTLibrary
-from aphrodite.distributed.device_communicators.custom_all_reduce import (  # noqa
+from sonar.distributed.device_communicators.cuda_wrapper import CudaRTLibrary
+from sonar.distributed.device_communicators.custom_all_reduce import (  # noqa
     CustomAllreduce,
 )
 

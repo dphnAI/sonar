@@ -4,7 +4,7 @@
 
 import torch
 
-from aphrodite.model_executor import utils as executor_utils
+from sonar.model_executor import utils as executor_utils
 
 
 def update_tensor_inplace(dst: torch.Tensor, src: torch.Tensor):
@@ -20,7 +20,7 @@ def update_tensor_inplace(dst: torch.Tensor, src: torch.Tensor):
 
 
 # Newly generated tensors need to replace existing tensors that are
-# already registered as parameters by Aphrodite (and won't be freed)
+# already registered as parameters by Sonar (and won't be freed)
 def replace_parameter(mod: torch.nn.Module, name: str, new: torch.Tensor | torch.nn.Parameter) -> None:
     old = getattr(mod, name)
     if (

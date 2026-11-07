@@ -7,13 +7,13 @@ import sys
 
 import pytest
 
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.config import (
     CacheConfig,
     KVTransferConfig,
     ParallelConfig,
+    SonarConfig,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.factory import KVConnectorFactory
+from sonar.distributed.kv_transfer.kv_connector.factory import KVConnectorFactory
 
 pytestmark = pytest.mark.cpu_test
 
@@ -24,14 +24,14 @@ class _StubLMCacheMPConnector:
     The real connector module hard-imports the optional ``lmcache`` package
     at module load time, which is not installed in the cpu_test image. This
     test only asserts on the connector *name* and the ``extra_config`` dict
-    produced by ``AphroditeConfig``, never instantiates the connector, so a bare
+    produced by ``SonarConfig``, never instantiates the connector, so a bare
     placeholder class is sufficient. Not subclassing ``SupportsHMA`` mirrors
     the real connector's HMA support (it does not support HMA either)."""
 
 
 @pytest.fixture
 def stub_lmcache_mp_connector(monkeypatch):
-    """Replace the lazy loader so AphroditeConfig.__post_init__ does not import
+    """Replace the lazy loader so SonarConfig.__post_init__ does not import
     ``lmcache_mp_connector`` (and thus ``lmcache``) during config tests."""
     monkeypatch.setitem(
         KVConnectorFactory._registry,
@@ -70,7 +70,7 @@ def test_kv_connector(
         else None
     )
 
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         cache_config=CacheConfig(
             kv_offloading_backend=kv_offloading_backend,
             kv_offloading_size=kv_offloading_size,
@@ -81,10 +81,10 @@ def test_kv_connector(
 
     # No KV transfer config expected
     if expected_backend is None:
-        assert aphrodite_config.kv_transfer_config is expected_backend
+        assert sonar_config.kv_transfer_config is expected_backend
         return
 
-    kv_transfer_config = aphrodite_config.kv_transfer_config
+    kv_transfer_config = sonar_config.kv_transfer_config
     assert kv_transfer_config is not None
     kv_connector_extra_config = kv_transfer_config.kv_connector_extra_config
 
@@ -110,8 +110,8 @@ def _build_config(
     kv_connector_extra_config: dict | None = None,
     enable_sleep_mode: bool = False,
     enable_cumem_allocator: bool = False,
-) -> AphroditeConfig:
-    """Build a AphroditeConfig that exercises _verify_kv_transfer_compat without
+) -> SonarConfig:
+    """Build a SonarConfig that exercises _verify_kv_transfer_compat without
     requiring a real model (avoids HF downloads in CI)."""
     from types import SimpleNamespace
 
@@ -124,7 +124,7 @@ def _build_config(
         if kv_connector is not None
         else None
     )
-    cfg = AphroditeConfig.__new__(AphroditeConfig)
+    cfg = SonarConfig.__new__(SonarConfig)
     cfg.kv_transfer_config = kv_transfer_config
     cfg.model_config = SimpleNamespace(
         enable_sleep_mode=enable_sleep_mode,
@@ -212,14 +212,14 @@ def test_no_kv_connector_ignores_expandable_segments(monkeypatch):
 
 def test_kv_offloading_size_only_uses_native_default():
     """Test that setting only kv_offloading_size enables native offloading."""
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         cache_config=CacheConfig(
             kv_offloading_size=4.0,
             # kv_offloading_backend not set, should default to "native"
         ),
     )
 
-    kv_transfer_config = aphrodite_config.kv_transfer_config
+    kv_transfer_config = sonar_config.kv_transfer_config
     assert kv_transfer_config is not None
     kv_connector_extra_config = kv_transfer_config.kv_connector_extra_config
     assert kv_transfer_config.kv_connector == "OffloadingConnector"

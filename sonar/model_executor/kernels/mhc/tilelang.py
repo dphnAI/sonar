@@ -2,8 +2,8 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import torch
 
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.utils.torch_utils import direct_register_custom_op
+from sonar.utils.math_utils import cdiv
+from sonar.utils.torch_utils import direct_register_custom_op
 
 
 def _hc_prenorm_gemm_outputs(
@@ -13,10 +13,10 @@ def _hc_prenorm_gemm_outputs(
     hidden_size: int,
     hc_mult: int,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    from aphrodite.model_executor.kernels.mhc.tilelang_kernels import (
+    from sonar.model_executor.kernels.mhc.tilelang_kernels import (
         compute_num_split,
     )
-    from aphrodite.utils.deep_gemm import (
+    from sonar.utils.deep_gemm import (
         is_deep_gemm_supported,
         tf32_hc_prenorm_gemm,
     )
@@ -40,7 +40,7 @@ def _hc_prenorm_gemm_outputs(
     if use_deep_gemm:
         tf32_hc_prenorm_gemm(x, fn, out, sqrsum, n_splits)
     else:
-        from aphrodite.model_executor.kernels.mhc.tilelang_kernels import (
+        from sonar.model_executor.kernels.mhc.tilelang_kernels import (
             _HC_PRENORM_GEMM_TILELANG_KERNEL,
         )
 
@@ -95,15 +95,15 @@ def mhc_pre_delayed_tilelang(
         (tokens, hc_mult, hc_mult), (tokens, hidden_size), and (tokens, hc_mult).
 
     """
-    from aphrodite.model_executor.kernels.mhc.tilelang_kernels import (
+    from sonar.model_executor.kernels.mhc.tilelang_kernels import (
         _HC_PRENORM_GEMM_TILELANG_KERNEL,
         mhc_pre_big_fuse_tilelang,
     )
-    from aphrodite.model_executor.kernels.mhc.warmup import (
+    from sonar.model_executor.kernels.mhc.warmup import (
         MHC_PRE_NORM_KERNEL,
         compute_mhc_pre_num_splits,
     )
-    from aphrodite.utils.deep_gemm import (
+    from sonar.utils.deep_gemm import (
         is_deep_gemm_supported,
         tf32_hc_prenorm_gemm,
     )
@@ -288,18 +288,18 @@ def mhc_fused_post_pre_delayed_tilelang(
         and (tokens, hidden_size).
 
     """
-    from aphrodite.model_executor.kernels.mhc.tilelang_kernels import (
+    from sonar.model_executor.kernels.mhc.tilelang_kernels import (
         _HC_PRENORM_GEMM_TILELANG_KERNEL,
         _MHC_FUSED_TILELANG_KERNEL,
         _MHC_POST_TILELANG_KERNEL,
         mhc_fused_post_pre_split_config,
         mhc_pre_big_fuse_tilelang,
     )
-    from aphrodite.model_executor.kernels.mhc.warmup import (
+    from sonar.model_executor.kernels.mhc.warmup import (
         MHC_PRE_NORM_KERNEL,
         compute_mhc_pre_num_splits,
     )
-    from aphrodite.utils.deep_gemm import (
+    from sonar.utils.deep_gemm import (
         is_deep_gemm_supported,
         tf32_hc_prenorm_gemm,
     )
@@ -389,7 +389,7 @@ def mhc_fused_post_pre_delayed_tilelang(
         if use_deep_gemm:
             tf32_hc_prenorm_gemm(residual_cur_2d, fn, mixes, sqrsum, n_splits)
         elif use_warp_partials:
-            from aphrodite.model_executor.kernels.mhc.sm120 import mhc_warp_partials_sm120
+            from sonar.model_executor.kernels.mhc.sm120 import mhc_warp_partials_sm120
 
             mhc_warp_partials_sm120(residual_cur_2d, fn, mixes, sqrsum, source_threads=n_splits * 32)
         else:
@@ -542,7 +542,7 @@ def mhc_pre_tilelang(
         layer_input: shape (..., hidden_size), dtype torch.bfloat16
 
     """
-    from aphrodite.model_executor.kernels.mhc.tilelang_kernels import (
+    from sonar.model_executor.kernels.mhc.tilelang_kernels import (
         _MHC_PRE_BIG_FUSE_TILELANG_KERNEL,
     )
 
@@ -669,7 +669,7 @@ def mhc_pre_broadcast_tilelang(
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """First-layer mHC pre for a residual broadcast from ``(T, H)``."""
     # n_splits is retained for the shared API; split selection is internal.
-    from aphrodite.model_executor.kernels.mhc.tilelang_kernels import (
+    from sonar.model_executor.kernels.mhc.tilelang_kernels import (
         _MHC_PRE_BIG_FUSE_TILELANG_KERNEL,
     )
 
@@ -742,7 +742,7 @@ def mhc_post_tilelang(
     post_layer_mix: torch.Tensor,
     comb_res_mix: torch.Tensor,
 ) -> torch.Tensor:
-    from aphrodite.model_executor.kernels.mhc.tilelang_kernels import (
+    from sonar.model_executor.kernels.mhc.tilelang_kernels import (
         _MHC_POST_TILELANG_KERNEL,
     )
 
@@ -799,7 +799,7 @@ def _mhc_fused_post_pre_tilelang_impl(
         layer_input_cur: shape (..., hidden_size)
 
     """
-    from aphrodite.model_executor.kernels.mhc.tilelang_kernels import (
+    from sonar.model_executor.kernels.mhc.tilelang_kernels import (
         _MHC_FUSED_TILELANG_KERNEL,
         _MHC_POST_TILELANG_KERNEL,
         _MHC_PRE_BIG_FUSE_TILELANG_KERNEL,
@@ -1084,7 +1084,7 @@ def hc_head_fused_kernel_tilelang(
     out = torch.empty(num_tokens, hidden_size, dtype=torch.bfloat16, device=hs_flat.device)
     if num_tokens == 0:
         return out
-    from aphrodite.model_executor.kernels.mhc.tilelang_kernels import (
+    from sonar.model_executor.kernels.mhc.tilelang_kernels import (
         _HC_HEAD_FUSED_TILELANG_KERNEL,
     )
 

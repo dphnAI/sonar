@@ -8,9 +8,9 @@ import os
 
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.utils.platform_utils import get_device_name_as_file_name
-from aphrodite.utils.torch_utils import direct_register_custom_op
+from sonar.logger import init_logger
+from sonar.utils.platform_utils import get_device_name_as_file_name
+from sonar.utils.torch_utils import direct_register_custom_op
 
 logger = init_logger(__name__)
 
@@ -343,7 +343,7 @@ def fused_flydsl_moe(
         tile_k = config.get("tile_k")
         tile_n2 = config.get("tile_n2")
         tile_k2 = config.get("tile_k2")
-    return torch.ops.aphrodite.fused_flydsl_moe_impl(
+    return torch.ops.sonar.fused_flydsl_moe_impl(
         hidden_states=hidden_states,
         w1=w1,
         w2=w2,

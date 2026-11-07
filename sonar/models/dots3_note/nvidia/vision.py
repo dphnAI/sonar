@@ -12,7 +12,7 @@ from torch.nn import LayerNorm
 from transformers.configuration_utils import PreTrainedConfig
 from transformers.modeling_utils import PreTrainedModel
 
-from aphrodite.third_party.deep_gemm import per_block_cast_to_fp8
+from sonar.third_party.deep_gemm import per_block_cast_to_fp8
 
 from .vision_attention import (
     VisionRMSNorm,

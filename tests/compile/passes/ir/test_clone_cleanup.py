@@ -16,14 +16,14 @@ import torch
 from torch import fx
 from torch.fx.experimental.proxy_tensor import make_fx
 
-from aphrodite.compilation.passes.fx_utils import find_op_nodes
-from aphrodite.compilation.passes.inductor_pass import get_pass_context, pass_context
-from aphrodite.compilation.passes.ir.clone_elimination import (
+from sonar.compilation.passes.fx_utils import find_op_nodes
+from sonar.compilation.passes.inductor_pass import get_pass_context, pass_context
+from sonar.compilation.passes.ir.clone_elimination import (
     UnsafeCloneEliminationPass,
     user_writes_to_node,
 )
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.utils import Range
+from sonar.config import SonarConfig
+from sonar.config.utils import Range
 
 
 def count_clones(graph: fx.Graph) -> int:
@@ -38,7 +38,7 @@ def _clone_twice(x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
 
 @pytest.fixture(scope="function")
 def clone_cleanup_pass():
-    return UnsafeCloneEliminationPass(AphroditeConfig())
+    return UnsafeCloneEliminationPass(SonarConfig())
 
 
 @pytest.fixture(autouse=True)

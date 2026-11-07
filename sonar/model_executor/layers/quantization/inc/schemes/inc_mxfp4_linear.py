@@ -5,13 +5,13 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 
-from aphrodite.model_executor.kernels.linear import init_mxfp4_linear_kernel
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import kMxfp4Dynamic
-from aphrodite.model_executor.parameter import (
+from sonar.model_executor.kernels.linear import init_mxfp4_linear_kernel
+from sonar.model_executor.layers.quantization.utils.quant_utils import kMxfp4Dynamic
+from sonar.model_executor.parameter import (
     GroupQuantScaleParameter,
     ModelWeightParameter,
 )
-from aphrodite.model_executor.utils import move_parameter
+from sonar.model_executor.utils import move_parameter
 
 from .inc_scheme import INCLinearScheme
 

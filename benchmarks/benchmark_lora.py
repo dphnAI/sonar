@@ -18,24 +18,24 @@ from torch.utils.benchmark import Measurement as TMeasurement
 from utils import ArgPool, Bench, CudaGraphBenchParams
 from weight_shapes import WEIGHT_SHAPES
 
-from aphrodite.lora.ops.triton_ops.utils import get_lora_op_configs
-from aphrodite.triton_utils import HAS_TRITON, triton
+from sonar.lora.ops.triton_ops.utils import get_lora_op_configs
+from sonar.triton_utils import HAS_TRITON, triton
 
 if HAS_TRITON:
-    from aphrodite.lora.ops.triton_ops import (  ## added fused_moe_lora
+    from sonar.lora.ops.triton_ops import (  ## added fused_moe_lora
         LoRAKernelMeta,
         fused_moe_lora_expand,
         fused_moe_lora_shrink,
         lora_expand,
         lora_shrink,
     )
-    from aphrodite.lora.ops.triton_ops.fused_moe_lora_op import (
+    from sonar.lora.ops.triton_ops.fused_moe_lora_op import (
         _LORA_PTR_DICT,  ## added _LORA_PTR_DICT for fused_moe_lora
     )
-    from aphrodite.lora.ops.triton_ops.utils import _LORA_A_PTR_DICT, _LORA_B_PTR_DICT
-from aphrodite import _custom_ops as ops
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
-from aphrodite.utils.math_utils import round_up
+    from sonar.lora.ops.triton_ops.utils import _LORA_A_PTR_DICT, _LORA_B_PTR_DICT
+from sonar import _custom_ops as ops
+from sonar.utils.argparse_utils import FlexibleArgumentParser
+from sonar.utils.math_utils import round_up
 
 DEFAULT_MODELS = list(WEIGHT_SHAPES.keys())
 DEFAULT_TP_SIZES = [1]

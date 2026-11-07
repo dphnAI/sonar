@@ -8,41 +8,41 @@ import torch
 import torch.nn as nn
 from transformers.configuration_utils import PreTrainedConfig
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed import get_pp_group
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import SonarConfig
+from sonar.distributed import get_pp_group
+from sonar.model_executor.layers.fused_moe import (
     fused_moe_make_expert_params_mapping,
 )
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.model_loader.mtp_validation import (
+from sonar.model_executor.model_loader.mtp_validation import (
     is_mtp_completeness_check_enabled,
 )
-from aphrodite.model_executor.model_loader.weight_utils import (
+from sonar.model_executor.model_loader.weight_utils import (
     default_weight_loader,
     maybe_remap_kv_scale_name,
 )
-from aphrodite.model_executor.models.bailing_moe_linear import (
+from sonar.model_executor.models.bailing_moe_linear import (
     BailingMoeV25,
     BailingMoeV25MLAAttention,
 )
-from aphrodite.sequence import IntermediateTensors
+from sonar.sequence import IntermediateTensors
 
 from .utils import PPMissingLayer, is_pp_missing_parameter, maybe_prefix
 
 
-def _get_draft_hf_config(aphrodite_config: AphroditeConfig) -> PreTrainedConfig:
-    speculative_config = aphrodite_config.speculative_config
+def _get_draft_hf_config(sonar_config: SonarConfig) -> PreTrainedConfig:
+    speculative_config = sonar_config.speculative_config
     if speculative_config is not None:
         draft_model_config = speculative_config.draft_model_config
         if draft_model_config is not None:
             return draft_model_config.hf_config
-    return aphrodite_config.model_config.hf_config
+    return sonar_config.model_config.hf_config
 
 
 class BailingMTPSharedHead(nn.Module):
@@ -50,13 +50,13 @@ class BailingMTPSharedHead(nn.Module):
         self,
         config: PreTrainedConfig,
         prefix: str,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
     ) -> None:
         super().__init__()
         self.head = ParallelLMHead(
             config.vocab_size,
             config.hidden_size,
-            quant_config=aphrodite_config.quant_config,
+            quant_config=sonar_config.quant_config,
             prefix=maybe_prefix(prefix, "head"),
         )
 
@@ -67,12 +67,12 @@ class BailingMTPSharedHead(nn.Module):
 class BailingMoeV25MultiTokenPredictorLayer(nn.Module):
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str,
         layer_id: int,
     ) -> None:
         super().__init__()
-        config = _get_draft_hf_config(aphrodite_config)
+        config = _get_draft_hf_config(sonar_config)
         self.config = config
         self.layer_id = layer_id
         self.enorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -81,15 +81,15 @@ class BailingMoeV25MultiTokenPredictorLayer(nn.Module):
         self.input_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.self_attn = BailingMoeV25MLAAttention(
             config,
-            quant_config=aphrodite_config.quant_config,
+            quant_config=sonar_config.quant_config,
             layer_id=layer_id,
             prefix=maybe_prefix(prefix, "self_attn"),
-            cache_config=aphrodite_config.cache_config,
+            cache_config=sonar_config.cache_config,
         )
         self.post_attention_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.mlp = BailingMoeV25(
             config,
-            quant_config=aphrodite_config.quant_config,
+            quant_config=sonar_config.quant_config,
             layer_id=layer_id,
             prefix=maybe_prefix(prefix, "mlp"),
         )
@@ -97,7 +97,7 @@ class BailingMoeV25MultiTokenPredictorLayer(nn.Module):
         self.shared_head = BailingMTPSharedHead(
             config,
             maybe_prefix(prefix, "shared_head"),
-            aphrodite_config,
+            sonar_config,
         )
 
     def forward(
@@ -128,15 +128,15 @@ class BailingMoeV25MultiTokenPredictorLayer(nn.Module):
 
 
 class BailingMoeV25MultiTokenPredictor(nn.Module):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__()
-        config = _get_draft_hf_config(aphrodite_config)
+        config = _get_draft_hf_config(sonar_config)
         self.mtp_start_layer_idx = config.num_hidden_layers
         self.num_mtp_layers = config.num_nextn_predict_layers
         self.layers = nn.ModuleDict(
             {
                 str(idx): BailingMoeV25MultiTokenPredictorLayer(
-                    aphrodite_config,
+                    sonar_config,
                     f"{prefix}.layers.{idx}",
                     idx,
                 )
@@ -201,12 +201,12 @@ class BailingMoeV25MTPModel(nn.Module):
         "fused_qkv_a_proj": ["q_a_proj", "kv_a_proj_with_mqa"],
     }
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__()
-        self.config = _get_draft_hf_config(aphrodite_config)
+        self.config = _get_draft_hf_config(sonar_config)
         self.lm_head: nn.Module | None = None
         self.model = BailingMoeV25MultiTokenPredictor(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             prefix=maybe_prefix(prefix, "model"),
         )
 

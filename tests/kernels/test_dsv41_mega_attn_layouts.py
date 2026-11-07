@@ -12,8 +12,8 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
-from aphrodite.models.deepseek_v41.common.ops.fused_layout import (
+from sonar.model_executor.model_loader.weight_utils import default_weight_loader
+from sonar.models.deepseek_v41.common.ops.fused_layout import (
     WV_GROUP_SIZE,
     o_fused_chunk_permutation,
     o_fused_permutation,
@@ -21,7 +21,7 @@ from aphrodite.models.deepseek_v41.common.ops.fused_layout import (
     permute_q_to_fused,
     q_fused_permutation,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 HEAD_DIM = 512
 
@@ -87,11 +87,11 @@ def test_permuted_wo_a_consumes_fused_output():
 @torch.inference_mode()
 def test_quantized_o_proj_matches_quantized_bf16(tokens, groups):
     """wo_a's MXFP8 output equals wo_b quantizing the BF16 z, also on replay."""
-    from aphrodite.model_executor.layers.fusion.quant_activation import QuantizedActivation
-    from aphrodite.model_executor.layers.quantization.utils.mxfp8_utils import (
+    from sonar.model_executor.layers.fusion.quant_activation import QuantizedActivation
+    from sonar.model_executor.layers.quantization.utils.mxfp8_utils import (
         mxfp8_e4m3_quantize,
     )
-    from aphrodite.models.deepseek_v41.nvidia.flash_mla_mega_attn import (
+    from sonar.models.deepseek_v41.nvidia.flash_mla_mega_attn import (
         DeepseekV4MegaAttnAttention,
         alloc_mega_attn_output,
     )

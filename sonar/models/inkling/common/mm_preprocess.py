@@ -15,16 +15,16 @@ from PIL import Image
 from transformers import InklingProcessor
 from transformers.feature_extraction_utils import BatchFeature
 
-from aphrodite.config.multimodal import (
+from sonar.config.multimodal import (
     MultiModalDummyOptions,
 )
-from aphrodite.inputs import MultiModalDataDict
-from aphrodite.multimodal.inputs import (
+from sonar.inputs import MultiModalDataDict
+from sonar.multimodal.inputs import (
     MultiModalFieldConfig,
     MultiModalKwargsItems,
 )
-from aphrodite.multimodal.parse import MultiModalDataItems, MultiModalDataParser
-from aphrodite.multimodal.processing import (
+from sonar.multimodal.parse import MultiModalDataItems, MultiModalDataParser
+from sonar.multimodal.processing import (
     BaseDummyInputsBuilder,
     BaseMultiModalProcessor,
     BaseProcessingInfo,

@@ -8,9 +8,9 @@ import torch.distributed as dist
 from torch import nn
 from transformers import GptOssConfig
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, CacheConfig
-from aphrodite.distributed import (
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import CacheConfig, SonarConfig
+from sonar.distributed import (
     get_dp_group,
     get_ep_group,
     get_pcp_group,
@@ -19,39 +19,39 @@ from aphrodite.distributed import (
     get_tensor_model_parallel_world_size,
     tensor_model_parallel_all_gather,
 )
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.model_executor.layers.attention import Attention
+from sonar.model_executor.layers.fused_moe import (
     FusedMoEFactory,
     GateLinear,
     fused_moe_make_expert_params_mapping,
 )
-from aphrodite.model_executor.layers.fused_moe.config import FusedMoEParallelConfig
-from aphrodite.model_executor.layers.fused_moe.routed_experts import RoutedExperts
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.fused_moe.config import FusedMoEParallelConfig
+from sonar.model_executor.layers.fused_moe.routed_experts import RoutedExperts
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     QKVParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.quantization.utils.ocp_mx_utils import OCP_MX_BLOCK_SIZE
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.layers.utils import rocm_unquantized_gemm
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.quantization.utils.ocp_mx_utils import OCP_MX_BLOCK_SIZE
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.layers.utils import rocm_unquantized_gemm
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.model_loader.weight_utils import (
+from sonar.model_executor.model_loader.weight_utils import (
     default_weight_loader,
     make_attention_sink,
     maybe_remap_kv_scale_name,
     remap_moe_expert_weights,
 )
-from aphrodite.model_executor.models.utils import sequence_parallel_chunk
-from aphrodite.platforms import current_platform
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.v1.attention.backend import AttentionType
+from sonar.model_executor.models.utils import sequence_parallel_chunk
+from sonar.platforms import current_platform
+from sonar.sequence import IntermediateTensors
+from sonar.utils.math_utils import cdiv
+from sonar.v1.attention.backend import AttentionType
 
 from .interfaces import (
     EagleModelMixin,
@@ -345,17 +345,17 @@ class GptOssRoutedExperts(RoutedExperts):
 class MLPBlock(torch.nn.Module):
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         layer_idx: int,
         prefix: str = "",
     ):
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
-        parallel_config = aphrodite_config.parallel_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
+        parallel_config = sonar_config.parallel_config
 
-        self.is_sequence_parallel = parallel_config.use_sequence_parallel_moe and aphrodite_config.lora_config is None
+        self.is_sequence_parallel = parallel_config.use_sequence_parallel_moe and sonar_config.lora_config is None
 
         self.layer_idx = layer_idx
         self.num_experts = config.num_local_experts
@@ -409,14 +409,14 @@ class TransformerBlock(torch.nn.Module):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         quant_config: QuantizationConfig,
         prefix: str = "",
     ):
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_config
-        cache_config = aphrodite_config.cache_config
+        config = sonar_config.model_config.hf_config
+        cache_config = sonar_config.cache_config
 
         self.layer_idx = extract_layer_index(prefix)
         self.attn = self.attention_cls(
@@ -425,7 +425,7 @@ class TransformerBlock(torch.nn.Module):
             quant_config=quant_config,
             cache_config=cache_config,
         )
-        self.mlp = self.mlp_cls(aphrodite_config, self.layer_idx, prefix=f"{prefix}.mlp")
+        self.mlp = self.mlp_cls(sonar_config, self.layer_idx, prefix=f"{prefix}.mlp")
         self.input_layernorm = RMSNorm(config.hidden_size, eps=1e-5)
         self.post_attention_layernorm = RMSNorm(config.hidden_size, eps=1e-5)
 
@@ -457,13 +457,13 @@ class GptOssModel(nn.Module, EagleModelMixin):
     def __init__(
         self,
         *,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
     ):
         super().__init__()
-        self.config = aphrodite_config.model_config.hf_config
-        self.quant_config = aphrodite_config.quant_config
-        self.parallel_config = aphrodite_config.parallel_config
+        self.config = sonar_config.model_config.hf_config
+        self.quant_config = sonar_config.quant_config
+        self.parallel_config = sonar_config.parallel_config
         self.embedding = VocabParallelEmbedding(
             self.config.vocab_size,
             self.config.hidden_size,
@@ -471,7 +471,7 @@ class GptOssModel(nn.Module, EagleModelMixin):
         self.start_layer, self.end_layer, self.layers = make_layers(
             self.config.num_hidden_layers,
             lambda prefix: self.block_cls(
-                aphrodite_config,
+                sonar_config,
                 prefix=prefix,
                 quant_config=self.quant_config,
             ),
@@ -1294,7 +1294,7 @@ class GptOssForCausalLM(nn.Module, SupportsPP, SupportsEagle, SupportsEagle3, Su
     is_3d_moe_weight: typing.ClassVar[bool] = True
     packed_modules_mapping = {"qkv_proj": ["q_proj", "k_proj", "v_proj"]}
 
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_substr={
             ".self_attn.": ".attn.",
         },
@@ -1325,15 +1325,15 @@ class GptOssForCausalLM(nn.Module, SupportsPP, SupportsEagle, SupportsEagle3, Su
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
     ):
         super().__init__()
-        self.aphrodite_config = aphrodite_config
-        self.config = aphrodite_config.model_config.hf_config
+        self.sonar_config = sonar_config
+        self.config = sonar_config.model_config.hf_config
 
         self.model = GptOssModel(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             prefix=maybe_prefix(prefix, "model"),
         )
         self.lm_head = ParallelLMHead(
@@ -1365,4 +1365,4 @@ class GptOssForCausalLM(nn.Module, SupportsPP, SupportsEagle, SupportsEagle3, Su
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)

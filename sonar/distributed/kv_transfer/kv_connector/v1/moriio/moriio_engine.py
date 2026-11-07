@@ -12,8 +12,8 @@ import msgpack
 import torch
 import zmq
 
-from aphrodite.logger import init_logger
-from aphrodite.utils.network_utils import (
+from sonar.logger import init_logger
+from sonar.utils.network_utils import (
     make_zmq_path,
     make_zmq_socket,
 )
@@ -21,7 +21,7 @@ from aphrodite.utils.network_utils import (
 if TYPE_CHECKING:
     from mori.io import BackendType
 
-from aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_common import (
+from sonar.distributed.kv_transfer.kv_connector.v1.moriio.moriio_common import (
     ROLE,
     HandshakeError,
     LayerTransferPlan,
@@ -42,10 +42,10 @@ from aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_common impo
 )
 
 if TYPE_CHECKING:
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_connector import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.moriio.moriio_connector import (
         MoRIIOConnectorWorker,
     )
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_tp_mapping import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.moriio.moriio_tp_mapping import (
         WriteTarget,
     )
 
@@ -723,7 +723,7 @@ class MoRIIOWrapper:
                 post_batch_size,
                 num_workers,
                 PollCqMode.POLLING,
-                # Aphrodite uses ZMQ for completion signaling
+                # Sonar uses ZMQ for completion signaling
                 # and never calls PopInboundTransferStatus.
                 # With notifications enabled, ibv_post_send
                 # ENOMEM at high concurrency permanently

@@ -4,28 +4,28 @@ from functools import partial
 
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite import envs as envs
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.distributed.eplb.eplb_state import EplbLayerState
-from aphrodite.model_executor.custom_op import CustomOp
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar import _custom_ops as ops
+from sonar import envs as envs
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.distributed.eplb.eplb_state import EplbLayerState
+from sonar.model_executor.custom_op import CustomOp
+from sonar.model_executor.layers.fused_moe.config import (
     RoutingMethodType,
     get_routing_method_type,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
+from sonar.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
     rocm_aiter_grouped_topk,
 )
-from aphrodite.model_executor.layers.fused_moe.router.base_router import (
+from sonar.model_executor.layers.fused_moe.router.base_router import (
     BaseRouter,
     get_moe_padding_mask,
 )
-from aphrodite.model_executor.layers.fused_moe.router.fused_topk_bias_router import (
+from sonar.model_executor.layers.fused_moe.router.fused_topk_bias_router import (
     fused_topk_bias,
 )
-from aphrodite.model_executor.layers.fused_moe.router.fused_topk_router import fused_topk
-from aphrodite.model_executor.utils import maybe_disable_graph_partition
-from aphrodite.platforms import current_platform
+from sonar.model_executor.layers.fused_moe.router.fused_topk_router import fused_topk
+from sonar.model_executor.utils import maybe_disable_graph_partition
+from sonar.platforms import current_platform
 
 
 def fused_grouped_topk(
@@ -102,7 +102,7 @@ def grouped_topk(
     is_padding: torch.Tensor | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     if (
-        envs.APHRODITE_USE_FUSED_MOE_GROUPED_TOPK
+        envs.SONAR_USE_FUSED_MOE_GROUPED_TOPK
         and (current_platform.is_cuda() or current_platform.is_xpu())
         and num_expert_group <= 32
         and topk <= 32
@@ -141,7 +141,7 @@ def grouped_topk(
         group_scores = scores.view(num_token, num_expert_group, -1).max(dim=-1).values  # [n, n_group]
 
     # For batch invariance, use sorted=True to ensure deterministic expert selection
-    use_sorted = envs.APHRODITE_BATCH_INVARIANT
+    use_sorted = envs.SONAR_BATCH_INVARIANT
     group_idx = torch.topk(group_scores, k=topk_group, dim=-1, sorted=use_sorted)[1]  # [n, top_k_group]
     group_mask = torch.zeros_like(group_scores)  # [n, n_group]
     group_mask.scatter_(1, group_idx, 1)  # [n, n_group]

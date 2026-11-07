@@ -8,43 +8,43 @@ from dataclasses import dataclass, field, replace
 from itertools import chain
 from typing import Any, NamedTuple
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed.kv_events import KVCacheEventType
-from aphrodite.distributed.kv_transfer.kv_connector.utils import yield_req_data
-from aphrodite.distributed.kv_transfer.kv_connector.v1.base import KVConnectorMetadata
-from aphrodite.distributed.kv_transfer.kv_connector.v1.offloading.common import (
+from sonar.config import SonarConfig
+from sonar.distributed.kv_events import KVCacheEventType
+from sonar.distributed.kv_transfer.kv_connector.utils import yield_req_data
+from sonar.distributed.kv_transfer.kv_connector.v1.base import KVConnectorMetadata
+from sonar.distributed.kv_transfer.kv_connector.v1.offloading.common import (
     OffloadingConnectorMetadata,
     OffloadingWorkerMetadata,
     ReqId,
     TransferJob,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.offloading.config import (
+from sonar.distributed.kv_transfer.kv_connector.v1.offloading.config import (
     _group_kv_bytes_per_block,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.offloading.events import (
+from sonar.distributed.kv_transfer.kv_connector.v1.offloading.events import (
     OffloadingEventGroupSpec,
     OffloadingEventsTracker,
     get_offloading_event_group_spec,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.offloading.metrics import (
+from sonar.distributed.kv_transfer.kv_connector.v1.offloading.metrics import (
     OffloadingConnectorStats,
     _ConnectorMetricName,
     _TransferMetricName,
 )
-from aphrodite.logger import init_logger
-from aphrodite.utils.math_utils import cdiv, round_down
-from aphrodite.v1.core.kv_cache_manager import KVCacheBlocks
-from aphrodite.v1.core.kv_cache_utils import eagle_proof_margin
-from aphrodite.v1.core.sched.output import SchedulerOutput
-from aphrodite.v1.core.single_type_kv_cache_manager import SingleTypeKVCacheManager
-from aphrodite.v1.kv_cache_interface import (
+from sonar.logger import init_logger
+from sonar.utils.math_utils import cdiv, round_down
+from sonar.v1.core.kv_cache_manager import KVCacheBlocks
+from sonar.v1.core.kv_cache_utils import eagle_proof_margin
+from sonar.v1.core.sched.output import SchedulerOutput
+from sonar.v1.core.single_type_kv_cache_manager import SingleTypeKVCacheManager
+from sonar.v1.kv_cache_interface import (
     KVCacheConfig,
     KVCacheSpec,
     MambaSpec,
     SlidingWindowSpec,
 )
-from aphrodite.v1.kv_cache_spec_registry import KVCacheSpecRegistry
-from aphrodite.v1.kv_offload.base import (
+from sonar.v1.kv_cache_spec_registry import KVCacheSpecRegistry
+from sonar.v1.kv_offload.base import (
     GPULoadStoreSpec,
     Locality,
     LookupResult,
@@ -60,9 +60,9 @@ from aphrodite.v1.kv_offload.base import (
     TierMatcher,
     make_offload_key,
 )
-from aphrodite.v1.metrics.cache_hit_source import CacheHitSource
-from aphrodite.v1.outputs import KVConnectorOutput
-from aphrodite.v1.request import Request, RequestStatus
+from sonar.v1.metrics.cache_hit_source import CacheHitSource
+from sonar.v1.outputs import KVConnectorOutput
+from sonar.v1.request import Request, RequestStatus
 
 logger = init_logger(__name__)
 
@@ -170,7 +170,7 @@ class SchedulerOffloadConfig(NamedTuple):
     def from_spec(
         cls,
         spec: OffloadingSpec,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         kv_cache_config: KVCacheConfig,
     ) -> "SchedulerOffloadConfig":
         # Determine the alignment token count from the full-attention group(s).
@@ -196,7 +196,7 @@ class SchedulerOffloadConfig(NamedTuple):
             if all_tokens_per_chunk:
                 alignment_tokens = max(all_tokens_per_chunk)
 
-        retention_interval = aphrodite_config.cache_config.prefix_cache_retention_interval
+        retention_interval = sonar_config.cache_config.prefix_cache_retention_interval
 
         eagle_groups = {
             group.group_id
@@ -205,8 +205,7 @@ class SchedulerOffloadConfig(NamedTuple):
         }
 
         use_eagle_block_drop = (
-            aphrodite_config.speculative_config is not None
-            and aphrodite_config.speculative_config.use_eagle_block_drop()
+            sonar_config.speculative_config is not None and sonar_config.speculative_config.use_eagle_block_drop()
         )
         if use_eagle_block_drop and not eagle_groups:
             # No group is annotated as holding drafter layers. This happens
@@ -271,7 +270,7 @@ class SchedulerOffloadConfig(NamedTuple):
                 config.sliding_window_size_in_chunks is None or config.requires_cow_source
                 for config in kv_group_configs
             )
-            and aphrodite_config.parallel_config.decode_context_parallel_size == 1
+            and sonar_config.parallel_config.decode_context_parallel_size == 1
         )
 
         if retention_interval is not None:
@@ -289,7 +288,7 @@ class SchedulerOffloadConfig(NamedTuple):
                     )
 
         return cls(
-            num_workers=aphrodite_config.parallel_config.world_size,
+            num_workers=sonar_config.parallel_config.world_size,
             kv_group_configs=kv_group_configs,
             blocks_per_chunk=spec.blocks_per_chunk,
             tokens_per_hash=spec.tokens_per_hash,
@@ -297,7 +296,7 @@ class SchedulerOffloadConfig(NamedTuple):
             supports_partial_tail=supports_partial_tail,
             alignment_tokens=alignment_tokens,
             retention_interval=retention_interval,
-            dcp_world_size=aphrodite_config.parallel_config.decode_context_parallel_size,
+            dcp_world_size=sonar_config.parallel_config.decode_context_parallel_size,
             # Per-step KV bytes (per worker) loaded within the step (0 disables).
             sync_load_budget_bytes=int(spec.extra_config.get("sync_load_budget_bytes", 0)),
             kv_bytes_per_token=sum(
@@ -499,7 +498,7 @@ class _RequestTokens(NamedTuple):
 
 
 @dataclass
-class _AphroditeReqContext(ReqContext):
+class _SonarReqContext(ReqContext):
     _scheduler: "OffloadingConnectorScheduler" = field(kw_only=True, repr=False, compare=False)
 
     @property
@@ -533,7 +532,7 @@ def _create_req_context(req: Request, scheduler: "OffloadingConnectorScheduler")
         raw = params.get(KV_LOAD_TIERS_KEY)
         if raw is not None:
             load_filter = _parse_tier_filter(raw)
-    return _AphroditeReqContext(
+    return _SonarReqContext(
         req_id=req.request_id,
         kv_transfer_params=params,
         kv_hints=req.kv_hints,
@@ -548,10 +547,10 @@ class OffloadingConnectorScheduler:
     def __init__(
         self,
         spec: OffloadingSpec,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         kv_cache_config: KVCacheConfig,
     ):
-        self.config = SchedulerOffloadConfig.from_spec(spec, aphrodite_config, kv_cache_config)
+        self.config = SchedulerOffloadConfig.from_spec(spec, sonar_config, kv_cache_config)
         self.manager: OffloadingManager = spec.get_manager()
         self._connector_stats = OffloadingConnectorStats()
         # The static config facts ride on the first stats payload of this
@@ -614,7 +613,7 @@ class OffloadingConnectorScheduler:
         # if GPU prefix caching is enabled,
         # Track loaded chunks to avoid redundant loads.
         self._chunks_being_loaded: set[OffloadKey] | None = (
-            set() if aphrodite_config.cache_config.enable_prefix_caching else None
+            set() if sonar_config.cache_config.enable_prefix_caching else None
         )
 
         # Job ID counter shared by loads and stores.

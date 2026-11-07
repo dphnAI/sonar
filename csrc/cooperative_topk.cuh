@@ -16,7 +16,7 @@
 #include "topk_histogram_4096.cuh"
 #include "topk_histogram_4096_overflow.cuh"
 
-namespace aphrodite {
+namespace sonar {
 namespace cooperative {
 
 namespace hist4096 = topk_histogram_4096;
@@ -628,6 +628,6 @@ constexpr size_t kSmemSize8 =
 
 }  // namespace cooperative
 
-}  // namespace aphrodite
+}  // namespace sonar
 
 #endif  // COOPERATIVE_TOPK_CUH_

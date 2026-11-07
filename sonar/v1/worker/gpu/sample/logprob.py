@@ -4,10 +4,10 @@
 import numpy as np
 import torch
 
-from aphrodite.sampling_params import MAX_LOGPROB_TOKEN_IDS, SamplingParams
-from aphrodite.triton_utils import tl, triton
-from aphrodite.v1.outputs import LogprobsTensors
-from aphrodite.v1.worker.gpu.buffer_utils import StagedWriteTensor, UvaBackedTensor
+from sonar.sampling_params import MAX_LOGPROB_TOKEN_IDS, SamplingParams
+from sonar.triton_utils import tl, triton
+from sonar.v1.outputs import LogprobsTensors
+from sonar.v1.worker.gpu.buffer_utils import StagedWriteTensor, UvaBackedTensor
 
 # Upper bound on the topk kernel's per-iteration gather width.
 _MAX_TOPK_BLOCK = 1024

@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Aphrodite NIXL disaggregation proxy server")
+    parser = argparse.ArgumentParser(description="Sonar NIXL disaggregation proxy server")
     parser.add_argument("--timeout", type=float, default=300, help="Timeout for backend service requests in seconds")
     parser.add_argument(
         "--max-concurrent", type=int, default=100, help="Maximum concurrent requests to backend services"

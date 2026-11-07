@@ -8,13 +8,13 @@ head_dim to a multiple of 16 for cuDNN compatibility.
 
 import torch
 
-from aphrodite.model_executor.layers.quantization.input_quant_fp8 import QuantFP8
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.input_quant_fp8 import QuantFP8
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     get_fp8_min_max,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import HAS_TRITON, tl, triton
-from aphrodite.utils.math_utils import round_up
+from sonar.platforms import current_platform
+from sonar.triton_utils import HAS_TRITON, tl, triton
+from sonar.utils.math_utils import round_up
 
 _FP8_MIN, _FP8_MAX = get_fp8_min_max()
 

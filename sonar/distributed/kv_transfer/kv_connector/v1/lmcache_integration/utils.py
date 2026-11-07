@@ -10,13 +10,13 @@ from lmcache.logging import init_logger
 from lmcache.v1.config import LMCacheEngineConfig as V1Config
 
 if TYPE_CHECKING:
-    from aphrodite.config import ModelConfig
-    from aphrodite.multimodal.inputs import PlaceholderRange
-    from aphrodite.v1.core.sched.output import NewRequestData
-    from aphrodite.v1.request import Request
+    from sonar.config import ModelConfig
+    from sonar.multimodal.inputs import PlaceholderRange
+    from sonar.v1.core.sched.output import NewRequestData
+    from sonar.v1.request import Request
 
 logger = init_logger(__name__)
-ENGINE_NAME = "aphrodite-instance"
+ENGINE_NAME = "sonar-instance"
 
 # Thread-safe singleton storage
 _config_instance: V1Config | None = None

@@ -5,30 +5,30 @@ import pytest
 import torch
 from torch._ops import OpOverload, OpOverloadPacket
 
-from aphrodite.compilation.passes.fusion.matcher_utils import (
+from sonar.compilation.passes.fusion.matcher_utils import (
     FLASHINFER_ROTARY_OP,
     ROTARY_OP,
 )
-from aphrodite.compilation.passes.fusion.qk_norm_rope_fusion import (
+from sonar.compilation.passes.fusion.qk_norm_rope_fusion import (
     FUSED_QK_ROPE_OP,
     QKNormRoPEFusionPass,
 )
-from aphrodite.compilation.passes.utility.noop_elimination import NoOpEliminationPass
-from aphrodite.compilation.passes.utility.post_cleanup import PostCleanupPass
-from aphrodite.compilation.passes.utility.split_coalescing import SplitCoalescingPass
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.compilation.passes.utility.noop_elimination import NoOpEliminationPass
+from sonar.compilation.passes.utility.post_cleanup import PostCleanupPass
+from sonar.compilation.passes.utility.split_coalescing import SplitCoalescingPass
+from sonar.config import (
     CompilationConfig,
     CompilationMode,
     ModelConfig,
     PassConfig,
-    set_current_aphrodite_config,
+    SonarConfig,
+    set_current_sonar_config,
 )
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.rotary_embedding import RotaryEmbedding
-from aphrodite.platforms import current_platform
-from aphrodite.v1.attention.backend import AttentionType
+from sonar.model_executor.layers.attention import Attention
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.rotary_embedding import RotaryEmbedding
+from sonar.platforms import current_platform
+from sonar.v1.attention.backend import AttentionType
 from tests.compile.backend import TestBackend
 
 RSQRT_OP = torch.ops.aten.rsqrt.default
@@ -44,7 +44,7 @@ class QKNormRoPETestModel(torch.nn.Module):
         head_dim: int,
         eps: float,
         is_neox: bool,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         dtype: torch.dtype,
         test_scattered_split: bool = False,
         prefix: str = "model.layers.0.self_attn.attn",
@@ -65,7 +65,7 @@ class QKNormRoPETestModel(torch.nn.Module):
             head_size=self.head_dim,
             scale=1.0 / self.head_dim**0.5,
             num_kv_heads=self.num_kv_heads,
-            cache_config=aphrodite_config.cache_config,
+            cache_config=sonar_config.cache_config,
             prefix=prefix,
             attn_type=AttentionType.DECODER,
         )
@@ -101,7 +101,7 @@ class QKNormRoPETestModel(torch.nn.Module):
         return q, k, v
 
     def ops_in_model_before(self) -> list[OpOverload | OpOverloadPacket]:
-        ops: list[OpOverload | OpOverloadPacket] = [torch.ops.aphrodite_ir.rms_norm]
+        ops: list[OpOverload | OpOverloadPacket] = [torch.ops.sonar_ir.rms_norm]
         if self.enable_rope_custom_op:
             if self.rotary_emb.use_flashinfer:
                 ops.append(FLASHINFER_ROTARY_OP)
@@ -146,10 +146,10 @@ def test_qk_norm_rope_fusion(
     if enable_rope_custom_op:
         custom_ops.append("+rotary_embedding")
 
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         model_config=ModelConfig(dtype=dtype),
         compilation_config=CompilationConfig(
-            mode=CompilationMode.APHRODITE_COMPILE,
+            mode=CompilationMode.SONAR_COMPILE,
             custom_ops=custom_ops,
             pass_config=PassConfig(
                 enable_qk_norm_rope_fusion=True,
@@ -162,8 +162,8 @@ def test_qk_norm_rope_fusion(
     T = 5
 
     with (
-        set_current_aphrodite_config(aphrodite_config),
-        aphrodite_config.kernel_config.ir_op_priority.set_priority(),
+        set_current_sonar_config(sonar_config),
+        sonar_config.kernel_config.ir_op_priority.set_priority(),
     ):
         model = QKNormRoPETestModel(
             num_heads=num_heads,
@@ -171,15 +171,15 @@ def test_qk_norm_rope_fusion(
             head_dim=head_dim,
             eps=eps,
             is_neox=is_neox,
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             dtype=dtype,
             test_scattered_split=scattered_split,
         )
 
-        noop_pass = NoOpEliminationPass(aphrodite_config)
-        coalesce_pass = SplitCoalescingPass(aphrodite_config)
-        fusion_pass = QKNormRoPEFusionPass(aphrodite_config)
-        cleanup_pass = PostCleanupPass(aphrodite_config)
+        noop_pass = NoOpEliminationPass(sonar_config)
+        coalesce_pass = SplitCoalescingPass(sonar_config)
+        fusion_pass = QKNormRoPEFusionPass(sonar_config)
+        cleanup_pass = PostCleanupPass(sonar_config)
 
         backend = TestBackend(noop_pass, coalesce_pass, fusion_pass, cleanup_pass)
         backend_baseline = TestBackend(noop_pass, cleanup_pass)
@@ -228,10 +228,10 @@ def test_qk_norm_rope_fusion_with_heterogeneous_draft_model():
     torch.set_default_dtype(dtype)
     torch.manual_seed(0)
 
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         model_config=ModelConfig(dtype=dtype),
         compilation_config=CompilationConfig(
-            mode=CompilationMode.APHRODITE_COMPILE,
+            mode=CompilationMode.SONAR_COMPILE,
             custom_ops=["+rms_norm", "+rotary_embedding"],
             pass_config=PassConfig(
                 enable_qk_norm_rope_fusion=True,
@@ -241,8 +241,8 @@ def test_qk_norm_rope_fusion_with_heterogeneous_draft_model():
     )
 
     with (
-        set_current_aphrodite_config(aphrodite_config),
-        aphrodite_config.kernel_config.ir_op_priority.set_priority(),
+        set_current_sonar_config(sonar_config),
+        sonar_config.kernel_config.ir_op_priority.set_priority(),
     ):
         target_model = QKNormRoPETestModel(
             num_heads=32,
@@ -250,7 +250,7 @@ def test_qk_norm_rope_fusion_with_heterogeneous_draft_model():
             head_dim=128,
             eps=1e-6,
             is_neox=True,
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             dtype=dtype,
             prefix="model.layers.0.self_attn.attn",
         )
@@ -260,17 +260,17 @@ def test_qk_norm_rope_fusion_with_heterogeneous_draft_model():
             head_dim=128,
             eps=1e-6,
             is_neox=True,
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             dtype=dtype,
             prefix="draft_model.layers.0.self_attn.attn",
         )
 
-        fusion_pass = QKNormRoPEFusionPass(aphrodite_config)
+        fusion_pass = QKNormRoPEFusionPass(sonar_config)
         backend = TestBackend(
-            NoOpEliminationPass(aphrodite_config),
-            SplitCoalescingPass(aphrodite_config),
+            NoOpEliminationPass(sonar_config),
+            SplitCoalescingPass(sonar_config),
             fusion_pass,
-            PostCleanupPass(aphrodite_config),
+            PostCleanupPass(sonar_config),
         )
 
         for model in (target_model, draft_model):

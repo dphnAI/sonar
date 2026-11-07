@@ -44,7 +44,7 @@ def maybe_execute_in_parallel(
 
     """
     if aux_stream is not None:
-        from aphrodite.compilation.breakable_cudagraph import BreakableCUDAGraphCapture
+        from sonar.compilation.breakable_cudagraph import BreakableCUDAGraphCapture
 
         if BreakableCUDAGraphCapture.is_active():
             aux_stream = None

@@ -1,20 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-//! Minimal chat facade above [`aphrodite_text`].
+//! Minimal chat facade above [`sonar_text`].
 //!
 //! This crate keeps the northbound boundary intentionally small:
 //! `messages -> rendered prompt -> tokenized prompt -> engine request ->
 //! streamed structured assistant events`. The request side remains text-first,
 //! while the response side can emit structured reasoning and final-answer
-//! blocks. It is closer to Aphrodite's internal chat-rendering flow than to a full
+//! blocks. It is closer to Sonar's internal chat-rendering flow than to a full
 //! OpenAI-compatible surface.
 
 use std::sync::Once;
 
-pub use aphrodite_engine_core_client::protocol::multimodal::MmFeatures;
-pub use aphrodite_llm::FinishReason;
-pub use aphrodite_text::GenerationConfigMode;
 pub use backend::hf::HfChatBackend;
 pub use backend::{
     ChatBackend, ChatTextBackend, DynChatBackend, DynChatTextBackend, LoadModelBackendsOptions,
@@ -49,6 +46,9 @@ pub use request::{
     ChatContent, ChatContentPart, ChatMessage, ChatOptions, ChatRequest, ChatRole, ChatTool,
     ChatToolChoice, GenerationPromptMode, ResolvedToolContext, SamplingParams,
 };
+pub use sonar_engine_core_client::protocol::multimodal::MmFeatures;
+pub use sonar_llm::FinishReason;
+pub use sonar_text::GenerationConfigMode;
 pub use stream::{ChatEventStream, ChatEventStreamTrait, CollectedAssistantMessage};
 
 mod backend;
@@ -64,12 +64,12 @@ mod stream;
 
 use std::collections::HashMap;
 
-use aphrodite_engine_core_client::EngineCoreClient;
-use aphrodite_engine_core_client::protocol::dtype::ModelDtype;
-use aphrodite_engine_core_client::protocol::request::ReasoningParserKwargs;
-use aphrodite_engine_core_client::protocol::structured_outputs::StructuredOutputBackend;
-use aphrodite_llm::Llm;
-use aphrodite_text::{Prompt, TextLlm, TextRequest, TextRequestProcessor};
+use sonar_engine_core_client::EngineCoreClient;
+use sonar_engine_core_client::protocol::dtype::ModelDtype;
+use sonar_engine_core_client::protocol::request::ReasoningParserKwargs;
+use sonar_engine_core_client::protocol::structured_outputs::StructuredOutputBackend;
+use sonar_llm::Llm;
+use sonar_text::{Prompt, TextLlm, TextRequest, TextRequestProcessor};
 use tracing::warn;
 
 /// Chat request preparation shared by inference and render-only frontends.
@@ -229,7 +229,7 @@ impl ChatRequestProcessor {
         mut request: ChatRequest,
     ) -> Result<(TextRequest, Option<String>)> {
         // Stamp before rendering so render and tokenize count toward TTFT/e2e.
-        let arrival_time = aphrodite_llm::current_unix_timestamp_secs();
+        let arrival_time = sonar_llm::current_unix_timestamp_secs();
         if self.exclude_tools_when_tool_choice_none {
             request.tool_context.exclude_initial_tools_if_none();
         }

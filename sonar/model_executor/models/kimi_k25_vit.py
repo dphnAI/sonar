@@ -18,31 +18,31 @@ import torch.nn.functional as F
 from transformers import Kimi_K25VisionConfig
 from transformers.activations import GELUActivation
 
-from aphrodite.distributed import divide, get_tensor_model_parallel_world_size
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.activation import get_act_fn
-from aphrodite.model_executor.layers.attention.mm_encoder_attention import MMEncoderAttention
-from aphrodite.model_executor.layers.conv import Conv2dLayer
-from aphrodite.model_executor.layers.fusion.mm_input_norm import IdentityInputNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.distributed import divide, get_tensor_model_parallel_world_size
+from sonar.logger import init_logger
+from sonar.model_executor.layers.activation import get_act_fn
+from sonar.model_executor.layers.attention.mm_encoder_attention import MMEncoderAttention
+from sonar.model_executor.layers.conv import Conv2dLayer
+from sonar.model_executor.layers.fusion.mm_input_norm import IdentityInputNorm
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     QKVParallelLinear,
     ReplicatedLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.rotary_embedding.common import ApplyRotaryEmb
-from aphrodite.model_executor.layers.rotary_embedding.packed_qk_rope import (
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.rotary_embedding.common import ApplyRotaryEmb
+from sonar.model_executor.layers.rotary_embedding.packed_qk_rope import (
     packed_qk_rope_,
 )
-from aphrodite.model_executor.models.utils import maybe_prefix
-from aphrodite.model_executor.models.vision import (
+from sonar.model_executor.models.utils import maybe_prefix
+from sonar.model_executor.models.vision import (
     is_vit_use_data_parallel,
     run_dp_sharded_mrope_vision_model,
 )
-from aphrodite.transformers_utils.configs.kimi_k3 import KimiK3VisionConfig
-from aphrodite.triton_utils import HAS_TRITON
-from aphrodite.utils.torch_utils import async_tensor_h2d
+from sonar.transformers_utils.configs.kimi_k3 import KimiK3VisionConfig
+from sonar.triton_utils import HAS_TRITON
+from sonar.utils.torch_utils import async_tensor_h2d
 
 logger = init_logger(__name__)
 
@@ -782,7 +782,7 @@ def vision_tower_forward(
 ) -> list[torch.Tensor]:
     """DP-sharded vision tower forward with mrope.
 
-    Uses Aphrodite's standard data parallelism utility to shard the batch
+    Uses Sonar's standard data parallelism utility to shard the batch
     across available GPUs, enabling parallel processing of vision features.
     """
     if use_data_parallel:

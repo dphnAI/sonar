@@ -3,9 +3,9 @@
 
 import torch
 
-from aphrodite.model_executor.custom_op import PluggableLayer
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.torch_utils import async_tensor_h2d
+from sonar.model_executor.custom_op import PluggableLayer
+from sonar.triton_utils import tl, triton
+from sonar.utils.torch_utils import async_tensor_h2d
 
 
 # num_tokens/num_grids vary per request (incl. the ==1 class) and grids_ptr

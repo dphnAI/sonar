@@ -3,13 +3,13 @@
 
 import torch
 
-from aphrodite._custom_ops import scaled_fp4_quant
-from aphrodite.model_executor.layers.quantization.utils.nvfp4_utils import (
+from sonar._custom_ops import scaled_fp4_quant
+from sonar.model_executor.layers.quantization.utils.nvfp4_utils import (
     slice_nvfp4_output,
     swizzle_blockscale,
 )
-from aphrodite.model_executor.utils import replace_parameter
-from aphrodite.utils.import_utils import has_fbgemm_gpu
+from sonar.model_executor.utils import replace_parameter
+from sonar.utils.import_utils import has_fbgemm_gpu
 
 from .base import NvFp4LinearKernel, NvFp4LinearLayerConfig
 

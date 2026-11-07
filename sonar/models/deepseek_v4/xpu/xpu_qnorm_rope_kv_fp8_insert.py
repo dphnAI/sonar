@@ -8,7 +8,7 @@ Uses the existing quantize_and_insert_k_cache for the FP8 portion.
 
 import torch
 
-from aphrodite.triton_utils import tl, triton
+from sonar.triton_utils import tl, triton
 
 HEAD_DIM = 512
 ROPE_DIM = 64
@@ -119,7 +119,7 @@ def xpu_qnorm_rope_kv_fp8_insert(
     block_size: int,
 ):
     """XPU Triton: qnorm+rope on Q, rope on KV, then FP8 UE8M0 quant+insert."""
-    from aphrodite.models.deepseek_v4.common.ops.cache_utils import (
+    from sonar.models.deepseek_v4.common.ops.cache_utils import (
         quantize_and_insert_k_cache,
     )
 

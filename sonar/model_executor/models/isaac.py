@@ -12,42 +12,42 @@ import torch.nn.functional as F
 from einops import rearrange
 from transformers.image_processing_utils import BatchFeature
 
-from aphrodite.config import AphroditeConfig, ModelConfig
-from aphrodite.config.multimodal import MultiModalDummyOptions
-from aphrodite.distributed import parallel_state
-from aphrodite.distributed import utils as dist_utils
-from aphrodite.inputs import MultiModalDataDict
-from aphrodite.model_executor.layers.attention import MMEncoderAttention
-from aphrodite.model_executor.layers.linear import (
+from sonar.config import ModelConfig, SonarConfig
+from sonar.config.multimodal import MultiModalDummyOptions
+from sonar.distributed import parallel_state
+from sonar.distributed import utils as dist_utils
+from sonar.inputs import MultiModalDataDict
+from sonar.model_executor.layers.attention import MMEncoderAttention
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     QKVParallelLinear,
     ReplicatedLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.models.interfaces import (
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.models.interfaces import (
     MultiModalEmbeddings,
     SupportsLoRA,
     SupportsMRoPE,
     SupportsMultiModal,
     SupportsPP,
 )
-from aphrodite.model_executor.models.module_mapping import MultiModelKeys
-from aphrodite.model_executor.models.siglip import SiglipMLP
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.models.module_mapping import MultiModelKeys
+from sonar.model_executor.models.siglip import SiglipMLP
+from sonar.model_executor.models.utils import (
     AutoWeightsLoader,
     WeightsMapper,
-    init_aphrodite_registered_model,
+    init_sonar_registered_model,
     maybe_prefix,
 )
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import (
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import (
     MultiModalFeatureSpec,
     MultiModalFieldConfig,
     MultiModalKwargsItems,
 )
-from aphrodite.multimodal.parse import ImageSize, MultiModalDataItems
-from aphrodite.multimodal.processing import (
+from sonar.multimodal.parse import ImageSize, MultiModalDataItems
+from sonar.multimodal.processing import (
     BaseDummyInputsBuilder,
     BaseMultiModalProcessor,
     BaseProcessingInfo,
@@ -56,20 +56,20 @@ from aphrodite.multimodal.processing import (
     PromptUpdateDetails,
     cached_encode,
 )
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.tokenizers import cached_tokenizer_from_config
-from aphrodite.transformers_utils.config import patch_rope_parameters
-from aphrodite.transformers_utils.configs.isaac import (
+from sonar.sequence import IntermediateTensors
+from sonar.tokenizers import cached_tokenizer_from_config
+from sonar.transformers_utils.config import patch_rope_parameters
+from sonar.transformers_utils.configs.isaac import (
     IsaacConfig,
     PixelShuffleSiglip2VisionConfig,
 )
-from aphrodite.transformers_utils.processors.isaac import (
+from sonar.transformers_utils.processors.isaac import (
     IsaacImageProcessor,
     IsaacProcessor,
     get_image_size_for_max_num_patches,
 )
-from aphrodite.utils.tensor_schema import TensorSchema, TensorShape
-from aphrodite.utils.torch_utils import PIN_MEMORY, async_tensor_h2d
+from sonar.utils.tensor_schema import TensorSchema, TensorShape
+from sonar.utils.torch_utils import PIN_MEMORY, async_tensor_h2d
 
 from .vision import is_vit_use_data_parallel
 
@@ -296,7 +296,7 @@ class IsaacProcessingInfo(BaseProcessingInfo):
     def get_hf_config(self) -> IsaacConfig:
         if hasattr(self.ctx, "get_hf_config"):
             original_config = self.ctx.get_hf_config()
-            # Map HF config parameters to our Aphrodite config parameters
+            # Map HF config parameters to our Sonar config parameters
             return IsaacConfig(
                 # Vision parameters - map from HF names
                 vision_config=getattr(original_config, "vision_config", None),
@@ -615,7 +615,7 @@ class Siglip2Encoder(nn.Module):
 
 
 class Siglip2VisionTransformer(nn.Module):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_stacked={
             ".q_proj": (".qkv_proj", "q"),
             ".k_proj": (".qkv_proj", "k"),
@@ -683,7 +683,7 @@ class Siglip2VisionTransformer(nn.Module):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
 
 def _resolve_vision_token_id(model_config: ModelConfig, vision_token: str) -> int:
@@ -754,7 +754,7 @@ class IsaacForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsLoRA,
     supports_encoder_tp_data = True
 
     # To ensure correct weight loading and mapping.
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={
             "lm_head.": "language_model.lm_head.",
             "model.text_model.lm_head.": "language_model.lm_head.",
@@ -776,10 +776,10 @@ class IsaacForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsLoRA,
 
         raise ValueError("Only image modality is supported")
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "model"):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "model"):
         super().__init__()
-        config: IsaacConfig = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        config: IsaacConfig = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
         self.config = config
 
         head_dim = config.head_dim
@@ -789,7 +789,7 @@ class IsaacForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsLoRA,
             head_dim // 8,
         ]
 
-        self.vision_token_id = _resolve_vision_token_id(aphrodite_config.model_config, config.vision_token)
+        self.vision_token_id = _resolve_vision_token_id(sonar_config.model_config, config.vision_token)
         config.image_token_id = self.vision_token_id
 
         text_cfg = getattr(config, "text_config", None)
@@ -806,9 +806,9 @@ class IsaacForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsLoRA,
             rope_parameters.setdefault("mrope_interleaved", rope_scaling["mrope_interleaved"])
         target_cfg.rope_parameters = rope_parameters
 
-        with self._mark_language_model(aphrodite_config):
-            self.language_model = init_aphrodite_registered_model(
-                aphrodite_config=aphrodite_config,
+        with self._mark_language_model(sonar_config):
+            self.language_model = init_sonar_registered_model(
+                sonar_config=sonar_config,
                 architectures=["Qwen3ForCausalLM"],
                 prefix=maybe_prefix(prefix, "language_model"),
             )
@@ -828,7 +828,7 @@ class IsaacForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsLoRA,
 
         hidden_dim = vision_cfg.hidden_size * (vision_cfg.pixel_shuffle_scale_factor**2)
 
-        with self._mark_tower_model(aphrodite_config, "image"):
+        with self._mark_tower_model(sonar_config, "image"):
             self.vision_embedding = IsaacVisionEmbedding(
                 vision_cfg=vision_cfg,
                 hidden_dim=hidden_dim,
@@ -946,7 +946,7 @@ class IsaacForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsLoRA,
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
     def get_mm_mapping(self) -> MultiModelKeys:
         """Get the module prefix in multimodal models."""

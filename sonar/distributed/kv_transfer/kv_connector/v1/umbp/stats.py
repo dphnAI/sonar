@@ -7,8 +7,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed.kv_transfer.kv_connector.v1.metrics import (
+from sonar.config import SonarConfig
+from sonar.distributed.kv_transfer.kv_connector.v1.metrics import (
     KVConnectorPromMetrics,
     KVConnectorStats,
     PromMetric,
@@ -78,35 +78,35 @@ class UMBPStorePromMetrics(KVConnectorPromMetrics):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         metric_types: dict[type[PromMetric], type[PromMetricT]],
         labelnames: list[str],
         per_engine_labelvalues: dict[int, list[object]],
     ) -> None:
         super().__init__(
-            aphrodite_config,
+            sonar_config,
             metric_types,
             labelnames,
             per_engine_labelvalues,
         )
         labels = labelnames + ["operation"]
         self._submitted = self._counter_cls(
-            name="aphrodite:umbp_transfer_submitted_total",
+            name="sonar:umbp_transfer_submitted_total",
             documentation="Number of UMBP objects submitted.",
             labelnames=labels,
         )
         self._completed = self._counter_cls(
-            name="aphrodite:umbp_transfer_completed_total",
+            name="sonar:umbp_transfer_completed_total",
             documentation="Number of UMBP objects completed.",
             labelnames=labels,
         )
         self._failed = self._counter_cls(
-            name="aphrodite:umbp_transfer_failed_total",
+            name="sonar:umbp_transfer_failed_total",
             documentation="Number of UMBP objects failed.",
             labelnames=labels,
         )
         self._bytes = self._counter_cls(
-            name="aphrodite:umbp_transfer_bytes_total",
+            name="sonar:umbp_transfer_bytes_total",
             documentation="Bytes in successfully completed UMBP transfer ranges.",
             labelnames=labels,
         )

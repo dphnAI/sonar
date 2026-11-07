@@ -22,12 +22,12 @@ import torch
 from PIL import Image
 from transformers import BatchFeature, PreTrainedConfig, TensorType
 
-from aphrodite.model_executor.models.parakeet import ParakeetExtractor
-from aphrodite.multimodal.inputs import AudioItem
-from aphrodite.multimodal.processing.processor import PromptUpdateDetails, cached_encode
-from aphrodite.multimodal.video_prune.evs import compute_retained_tokens_count
-from aphrodite.platforms import current_platform
-from aphrodite.tokenizers.hf import HfTokenizer
+from sonar.model_executor.models.parakeet import ParakeetExtractor
+from sonar.multimodal.inputs import AudioItem
+from sonar.multimodal.processing.processor import PromptUpdateDetails, cached_encode
+from sonar.multimodal.video_prune.evs import compute_retained_tokens_count
+from sonar.platforms import current_platform
+from sonar.tokenizers.hf import HfTokenizer
 
 from .internvl import calculate_internvl_targets, get_internvl_target_ratios
 

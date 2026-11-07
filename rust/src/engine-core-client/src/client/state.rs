@@ -32,9 +32,9 @@ struct TrackedRequest {
 /// Frontend-side view of one LoRA request's scheduling phase.
 ///
 /// The engine's `SchedulerStats` does not carry adapter names, so
-/// `aphrodite:lora_requests_info` must be derived from per-request lifecycle events
+/// `sonar:lora_requests_info` must be derived from per-request lifecycle events
 /// observed by this client, mirroring `LoRARequestStates` in the Python
-/// frontend (`aphrodite/v1/engine/output_processor.py`).
+/// frontend (`sonar/v1/engine/output_processor.py`).
 #[derive(Debug)]
 struct LoraRequestState {
     adapter_name: String,
@@ -286,7 +286,7 @@ impl RequestRegistry {
     }
 
     /// Snapshot the adapter names of tracked LoRA requests as
-    /// (running, waiting) sets. Feeds the `aphrodite:lora_requests_info` gauge.
+    /// (running, waiting) sets. Feeds the `sonar:lora_requests_info` gauge.
     pub fn lora_adapter_states(&self) -> (BTreeSet<String>, BTreeSet<String>) {
         if self.active_lora_requests == 0 {
             return (BTreeSet::new(), BTreeSet::new());

@@ -6,49 +6,49 @@ from collections.abc import Callable, Iterable
 import torch
 import torch.nn as nn
 
-import aphrodite.envs as envs
-from aphrodite.config import AphroditeConfig
-from aphrodite.forward_context import get_forward_context, is_forward_context_available
-from aphrodite.model_executor.layers.fused_embed_norm import (
+import sonar.envs as envs
+from sonar.config import SonarConfig
+from sonar.forward_context import get_forward_context, is_forward_context_available
+from sonar.model_executor.layers.fused_embed_norm import (
     fused_embed_eh_norm,
     has_full_vocab_on_rank,
     make_input_embedding,
 )
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.model_executor.layers.fused_moe import (
     fused_moe_make_expert_params_mapping,
 )
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.model_loader.mtp_validation import (
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.model_loader.mtp_validation import (
     is_mtp_completeness_check_enabled,
 )
-from aphrodite.model_executor.model_loader.weight_utils import (
+from sonar.model_executor.model_loader.weight_utils import (
     default_weight_loader,
     maybe_remap_kv_scale_name,
 )
-from aphrodite.model_executor.models.deepseek_mtp import SharedHead
-from aphrodite.model_executor.models.deepseek_v2 import (
+from sonar.model_executor.models.deepseek_mtp import SharedHead
+from sonar.model_executor.models.deepseek_v2 import (
     DeepseekV2MixtureOfExperts,
     DeepseekV2MoE,
     _try_load_fp8_indexer_wk,
     get_spec_layer_idx_from_weight_name,
 )
-from aphrodite.model_executor.models.interfaces import SupportsPP
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.models.interfaces import SupportsPP
+from sonar.model_executor.models.utils import (
     get_pp_missing_layer_names,
     make_empty_intermediate_tensors_factory,
     maybe_prefix,
 )
-from aphrodite.models.common.ops.fused_allreduce_rms_norm import fused_allreduce_rms_norm
-from aphrodite.models.common.ops.sequence_parallel import (
+from sonar.models.common.ops.fused_allreduce_rms_norm import fused_allreduce_rms_norm
+from sonar.models.common.ops.sequence_parallel import (
     sp_all_gather,
     sp_padding_mask,
     sp_shard,
 )
-from aphrodite.models.deepseek_v32.common.kernels import fused_eh_norm
-from aphrodite.platforms import current_platform
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.v1.attention.backends.mla.index_group import (
+from sonar.models.deepseek_v32.common.kernels import fused_eh_norm
+from sonar.platforms import current_platform
+from sonar.sequence import IntermediateTensors
+from sonar.v1.attention.backends.mla.index_group import (
     SparseMLAIndexGroupBuilder,
     get_sparse_mla_index_group_max_rows,
 )
@@ -62,36 +62,36 @@ from .model import DeepseekV32DecoderLayer
 
 
 class DeepseekV32MultiTokenPredictorLayer(nn.Module):
-    def __init__(self, aphrodite_config: AphroditeConfig, prefix: str) -> None:
+    def __init__(self, sonar_config: SonarConfig, prefix: str) -> None:
         super().__init__()
-        assert aphrodite_config.speculative_config is not None
-        config = aphrodite_config.speculative_config.draft_model_config.hf_config
+        assert sonar_config.speculative_config is not None
+        config = sonar_config.speculative_config.draft_model_config.hf_config
         self.config = config
-        quant_config = aphrodite_config.quant_config
+        quant_config = sonar_config.quant_config
 
         self.enorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.hnorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.eh_proj = nn.Linear(config.hidden_size * 2, config.hidden_size, bias=False)
         self._eh_plan = (
-            build_glm52_plan(self.eh_proj.weight, aphrodite_config.model_config.dtype)
+            build_glm52_plan(self.eh_proj.weight, sonar_config.model_config.dtype)
             if config.model_type == "glm_moe_dsa"
             else None
         )
 
         topk_indices_buffer = torch.empty(
-            aphrodite_config.scheduler_config.max_num_batched_tokens,
+            sonar_config.scheduler_config.max_num_batched_tokens,
             config.index_topk,
             dtype=torch.int32,
             device=current_platform.device_type,
         )
         index_group_builder = SparseMLAIndexGroupBuilder(
             topk_indices_buffer,
-            get_sparse_mla_index_group_max_rows(aphrodite_config),
+            get_sparse_mla_index_group_max_rows(sonar_config),
         )
         self.shared_head = SharedHead(config=config, prefix=prefix, quant_config=quant_config)
 
         self.mtp_block = DeepseekV32DecoderLayer(
-            aphrodite_config,
+            sonar_config,
             prefix,
             config=config,
             topk_indices_buffer=topk_indices_buffer,
@@ -133,7 +133,7 @@ class DeepseekV32MultiTokenPredictorLayer(nn.Module):
             )
         is_sequence_parallel = self.mtp_block.use_sequence_parallel
         if is_sequence_parallel:
-            if envs.APHRODITE_MOE_SKIP_PADDING and is_forward_context_available():
+            if envs.SONAR_MOE_SKIP_PADDING and is_forward_context_available():
                 forward_context = get_forward_context()
                 forward_context.is_padding = sp_padding_mask(forward_context.is_padding, eh_input)
             eh_input = sp_shard(eh_input)
@@ -162,14 +162,14 @@ class DeepseekV32MultiTokenPredictorLayer(nn.Module):
 
 
 class DeepseekV32MultiTokenPredictor(nn.Module):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
         self.mtp_start_layer_idx = config.num_hidden_layers
         self.num_mtp_layers = config.num_nextn_predict_layers
         self.layers = torch.nn.ModuleDict(
             {
-                str(idx): DeepseekV32MultiTokenPredictorLayer(aphrodite_config, f"{prefix}.layers.{idx}")
+                str(idx): DeepseekV32MultiTokenPredictorLayer(sonar_config, f"{prefix}.layers.{idx}")
                 for idx in range(
                     self.mtp_start_layer_idx,
                     self.mtp_start_layer_idx + self.num_mtp_layers,
@@ -179,7 +179,7 @@ class DeepseekV32MultiTokenPredictor(nn.Module):
         self.embed_tokens = make_input_embedding(
             config.vocab_size,
             config.hidden_size,
-            quant_config=aphrodite_config.quant_config,
+            quant_config=sonar_config.quant_config,
             prefix=maybe_prefix(prefix, "embed_tokens"),
             tie_word_embeddings=getattr(config, "tie_word_embeddings", False),
         )
@@ -261,15 +261,13 @@ class DeepseekV32MultiTokenPredictor(nn.Module):
 
 
 class DeepseekV32MTP(nn.Module, DeepseekV2MixtureOfExperts, SupportsPP):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        self.config = aphrodite_config.model_config.hf_config
-        self.quant_config = aphrodite_config.quant_config
-        self.model = DeepseekV32MultiTokenPredictor(
-            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
-        )
+        self.config = sonar_config.model_config.hf_config
+        self.quant_config = sonar_config.quant_config
+        self.model = DeepseekV32MultiTokenPredictor(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
         if self.config.model_type == "glm_moe_dsa":
-            enable_glm52_low_latency_gemm(self, aphrodite_config.model_config.dtype)
+            enable_glm52_low_latency_gemm(self, sonar_config.model_config.dtype)
         self.set_moe_parameters()
         self.make_empty_intermediate_tensors = make_empty_intermediate_tensors_factory(
             ["hidden_states", "residual"], self.config.hidden_size

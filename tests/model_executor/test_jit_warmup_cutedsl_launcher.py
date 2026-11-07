@@ -4,15 +4,15 @@
 from dataclasses import dataclass
 from typing import Any
 
-from aphrodite.model_executor.warmup import jit_warmup_cutedsl_helper
-from aphrodite.model_executor.warmup.jit_warmup import kernel_launcher
-from aphrodite.model_executor.warmup.jit_warmup_cutedsl_helper import (
-    AphroditeCuTeDSLJitKernel,
+from sonar.model_executor.warmup import jit_warmup_cutedsl_helper
+from sonar.model_executor.warmup.jit_warmup import kernel_launcher
+from sonar.model_executor.warmup.jit_warmup_cutedsl_helper import (
     CuTeDSLLaunchSpec,
+    SonarCuTeDSLJitKernel,
 )
 
 
-class _TestCuTeDSLKernel(AphroditeCuTeDSLJitKernel["_TestCuTeDSLKernel.CompileKey"]):
+class _TestCuTeDSLKernel(SonarCuTeDSLJitKernel["_TestCuTeDSLKernel.CompileKey"]):
     @dataclass(frozen=True)
     class CompileKey:
         variant: int

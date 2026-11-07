@@ -8,15 +8,15 @@ import random
 import torch
 import torch.distributed as dist
 
-import aphrodite.envs as envs
-from aphrodite import LLM, SamplingParams
-from aphrodite.distributed.parallel_state import get_world_group
+import sonar.envs as envs
+from sonar import LLM, SamplingParams
+from sonar.distributed.parallel_state import get_world_group
 
 # By default, let PyTorch choose the WORLD backend for the current device
-# type (legacy lazy-init path). When APHRODITE_DISTRIBUTED_USE_SPLIT_GROUP=1,
+# type (legacy lazy-init path). When SONAR_DISTRIBUTED_USE_SPLIT_GROUP=1,
 # use the explicit eager-init pattern required by `split_group` (mixed
 # cpu:gloo,cuda:nccl backend + device_id binding).
-if envs.APHRODITE_DISTRIBUTED_USE_SPLIT_GROUP:
+if envs.SONAR_DISTRIBUTED_USE_SPLIT_GROUP:
     local_rank = int(os.environ["LOCAL_RANK"])
     torch.accelerator.set_device_index(local_rank)
     dist.init_process_group(
@@ -63,8 +63,8 @@ def test_consistent_across_ranks(obj):
         assert container[0] == obj
 
 
-test_consistent_across_ranks(llm.llm_engine.aphrodite_config.cache_config.num_cpu_blocks)
-test_consistent_across_ranks(llm.llm_engine.aphrodite_config.cache_config.num_gpu_blocks)
+test_consistent_across_ranks(llm.llm_engine.sonar_config.cache_config.num_cpu_blocks)
+test_consistent_across_ranks(llm.llm_engine.sonar_config.cache_config.num_gpu_blocks)
 
 # make sure we can access the model parameters from the calling process
 # of the `LLM` instance.

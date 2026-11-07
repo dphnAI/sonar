@@ -21,35 +21,35 @@ from typing import ClassVar
 
 import torch
 
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.cache import CacheDType
-from aphrodite.forward_context import get_forward_context
-from aphrodite.logger import init_logger
-from aphrodite.models.minimax_m3.common.ops.sparse_attn import SPARSE_BLOCK_SIZE
-from aphrodite.platforms import current_platform
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.config import SonarConfig
+from sonar.config.cache import CacheDType
+from sonar.forward_context import get_forward_context
+from sonar.logger import init_logger
+from sonar.models.minimax_m3.common.ops.sparse_attn import SPARSE_BLOCK_SIZE
+from sonar.platforms import current_platform
 
 # AMD/ROCm uses the gfx942/gfx950-optimized block-sparse kernels in amd.ops.
 # Hopper uses query-tiled NVIDIA prefill and the common split-K decode kernel;
 # every other platform uses the generic common.ops implementation.
 if current_platform.is_rocm():
-    from aphrodite.models.minimax_m3.amd.ops.sparse_attn import (
+    from sonar.models.minimax_m3.amd.ops.sparse_attn import (
         minimax_m3_sparse_attn,
         minimax_m3_sparse_attn_decode,
     )
 elif current_platform.is_cuda() and current_platform.is_device_capability_family(90):
-    from aphrodite.models.minimax_m3.common.ops.sparse_attn import (
+    from sonar.models.minimax_m3.common.ops.sparse_attn import (
         minimax_m3_sparse_attn_decode,
     )
-    from aphrodite.models.minimax_m3.nvidia.ops.sparse_prefill import (
+    from sonar.models.minimax_m3.nvidia.ops.sparse_prefill import (
         minimax_m3_sparse_attn,
     )
 else:
-    from aphrodite.models.minimax_m3.common.ops.sparse_attn import (
+    from sonar.models.minimax_m3.common.ops.sparse_attn import (
         minimax_m3_sparse_attn,
         minimax_m3_sparse_attn_decode,
     )
-from aphrodite.v1.attention.backend import (
+from sonar.v1.attention.backend import (
     AttentionBackend,
     AttentionCGSupport,
     AttentionImplBase,
@@ -59,10 +59,10 @@ from aphrodite.v1.attention.backend import (
     CommonAttentionMetadata,
     MultipleOf,
 )
-from aphrodite.v1.attention.backends.utils import (
+from sonar.v1.attention.backends.utils import (
     split_decodes_and_prefills,
 )
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.kv_cache_interface import (
     AttentionSpec,
     KVCacheLayout,
     get_kv_quant_mode,
@@ -251,14 +251,14 @@ class MiniMaxM3SparseMetadataBuilder(AttentionMetadataBuilder[MiniMaxM3SparseMet
         self,
         kv_cache_spec: AttentionSpec,
         layer_names: list[str],
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
     ) -> None:
-        super().__init__(kv_cache_spec, layer_names, aphrodite_config, device)
+        super().__init__(kv_cache_spec, layer_names, sonar_config, device)
         self._init_reorder_batch_threshold(1, supports_spec_as_decode=True)
         # Stable context-length buffer for the prefill metadata.
         self.context_len_buffer = torch.empty(
-            aphrodite_config.scheduler_config.max_num_batched_tokens,
+            sonar_config.scheduler_config.max_num_batched_tokens,
             dtype=torch.int32,
             device=device,
         )
@@ -271,7 +271,7 @@ class MiniMaxM3SparseMetadataBuilder(AttentionMetadataBuilder[MiniMaxM3SparseMet
         self.page16_slot_mapping_buffer: torch.Tensor | None = None
         if self.use_aiter_sparse_pa:
             self.page16_slot_mapping_buffer = torch.empty(
-                aphrodite_config.scheduler_config.max_num_batched_tokens,
+                sonar_config.scheduler_config.max_num_batched_tokens,
                 dtype=torch.int64,
                 device=device,
             )
@@ -529,7 +529,7 @@ def select_main_backend_and_impl_cls(
             f"MiniMax M3 sparse attention supports only the 'nvfp4' NVFP4 KV cache dtype, got {kv_cache_dtype}"
         )
     if use_nvfp4 and current_platform.is_rocm():
-        from aphrodite.models.minimax_m3.amd.sparse_attention_nvfp4 import (
+        from sonar.models.minimax_m3.amd.sparse_attention_nvfp4 import (
             MiniMaxM3SparseRocmNvfp4Backend,
             MiniMaxM3SparseRocmNvfp4Impl,
         )
@@ -553,14 +553,14 @@ def select_main_backend_and_impl_cls(
         topk_blocks,
     )
     if use_aiter_sparse_pa:
-        from aphrodite.models.minimax_m3.amd.sparse_attention_msa import (
+        from sonar.models.minimax_m3.amd.sparse_attention_msa import (
             MiniMaxM3SparseAiterPABackend,
             MiniMaxM3SparseAiterPAImpl,
         )
 
         return MiniMaxM3SparseAiterPABackend, MiniMaxM3SparseAiterPAImpl
     if use_msa:
-        from aphrodite.models.minimax_m3.nvidia.sparse_attention_msa import (
+        from sonar.models.minimax_m3.nvidia.sparse_attention_msa import (
             MiniMaxM3SparseMSABackend,
             MiniMaxM3SparseMSAImpl,
             MiniMaxM3SparseMSANvfp4Backend,

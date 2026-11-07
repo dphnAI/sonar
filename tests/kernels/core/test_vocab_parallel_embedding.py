@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Unit tests for the fused vocab-parallel embedding kernel
-(``aphrodite._custom_ops.vocab_parallel_embedding``).
+(``sonar._custom_ops.vocab_parallel_embedding``).
 
 The guarantee: the kernel is a drop-in for the TP > 1 embedding path, i.e. it
 returns bit-exactly what mask + shift + gather + ``masked_fill_`` returns on
@@ -14,14 +14,14 @@ from unittest.mock import Mock
 import pytest
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar import _custom_ops as ops
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     VocabParallelEmbedding,
     get_masked_input_and_mask,
     pad_vocab_size,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_random_seed
 
 requires_cuda = pytest.mark.skipif(
     not current_platform.is_cuda(),
@@ -124,7 +124,7 @@ def test_rank_sum_is_full_lookup(tp_size):
 @torch.inference_mode()
 @pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float8_e4m3fn])
 @pytest.mark.parametrize("use_fused", [False, True])
-def test_embedding_optionally_reduces_output(dtype, use_fused, default_aphrodite_config):
+def test_embedding_optionally_reduces_output(dtype, use_fused, default_sonar_config):
     """SP's deferred reduction preserves masked contributions and their dtype."""
     with torch.device("cuda"):
         values = torch.arange(128 * 16).reshape(128, 16)

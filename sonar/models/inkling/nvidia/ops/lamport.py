@@ -48,10 +48,10 @@ import os
 
 import torch
 
-from aphrodite.distributed import get_tp_group
-from aphrodite.distributed.parallel_state import in_the_same_node_as
-from aphrodite.logger import init_logger
-from aphrodite.triton_utils import HAS_TRITON, tl, triton
+from sonar.distributed import get_tp_group
+from sonar.distributed.parallel_state import in_the_same_node_as
+from sonar.logger import init_logger
+from sonar.triton_utils import HAS_TRITON, tl, triton
 
 logger = init_logger(__name__)
 

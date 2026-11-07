@@ -4,12 +4,12 @@
 
 import torch
 
-from aphrodite.models.deepseek_v4.common.ops.fused_indexer_q import _fp32x2_to_fp4x2
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
+from sonar.models.deepseek_v4.common.ops.fused_indexer_q import _fp32x2_to_fp4x2
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
 
 if current_platform.is_rocm():
-    from aphrodite.platforms.rocm import _ON_GFX950
+    from sonar.platforms.rocm import _ON_GFX950
 else:
     _ON_GFX950 = False
 

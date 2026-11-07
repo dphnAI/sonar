@@ -16,12 +16,12 @@ from pydantic import (
 from pydantic.dataclasses import dataclass
 from pydantic_core import core_schema
 
-import aphrodite.envs as envs
-from aphrodite.config.ec_transfer import ECTransferConfig
-from aphrodite.config.utils import config
-from aphrodite.logger import init_logger
-from aphrodite.utils.hashing import safe_hash
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
+import sonar.envs as envs
+from sonar.config.ec_transfer import ECTransferConfig
+from sonar.config.utils import config
+from sonar.logger import init_logger
+from sonar.utils.hashing import safe_hash
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
 
 logger = init_logger(__name__)
 
@@ -29,7 +29,7 @@ _T = TypeVar("_T")
 
 # HuggingFace processors accept a shared flat namespace in addition to the
 # nested processor kwarg scopes ``text_kwargs`` / ``images_kwargs`` /
-# ``videos_kwargs`` / ``audio_kwargs``. Aphrodite recognizes these scopes when
+# ``videos_kwargs`` / ``audio_kwargs``. Sonar recognizes these scopes when
 # resolving ``mm_processor_kwargs``.
 _HF_PROCESSOR_KWARG_SCOPES = (
     "text_kwargs",
@@ -229,9 +229,9 @@ class AudioDummyOptions(BaseDummyOptions):
 class MultiModalDummyOptions(dict[str, BaseDummyOptions]):
     """Dummy data options for each modality.
 
-    Lookups of the modalities predefined by Aphrodite return their own options
+    Lookups of the modalities predefined by Sonar return their own options
     class, while any other modality returns
-    [`BaseDummyOptions`][aphrodite.config.multimodal.BaseDummyOptions].
+    [`BaseDummyOptions`][sonar.config.multimodal.BaseDummyOptions].
     """
 
     @overload  # type: ignore[override]
@@ -316,7 +316,7 @@ class MultiModalConfig:
     saving memory by not loading encoder modules while still enabling 
     embeddings as an input. Limits greater than 0 still apply to embeddings.
 
-    WARNING: The Aphrodite engine may crash if incorrect shape of embeddings is passed.
+    WARNING: The Sonar engine may crash if incorrect shape of embeddings is passed.
     Only enable this flag for trusted users!"""
     media_io_kwargs: dict[str, dict[str, Any]] = Field(default_factory=dict)
     """Additional args passed to process media inputs, keyed by modalities.
@@ -368,9 +368,9 @@ class MultiModalConfig:
     """Indicates how to optimize multi-modal encoder inference using tensor
     parallelism (TP).
 
-    - `"weights"`: Within the same Aphrodite engine, split the weights of
+    - `"weights"`: Within the same Sonar engine, split the weights of
       each layer across TP ranks. (default TP behavior)
-    - `"data"`: Within the same Aphrodite engine, split the batched input data
+    - `"data"`: Within the same Sonar engine, split the batched input data
       across TP ranks to process the data in parallel, while hosting
       the full weights on each TP rank.
       This batch-level DP is not to be confused with API request-level
@@ -380,7 +380,7 @@ class MultiModalConfig:
     mm_encoder_attn_backend: AttentionBackendEnum | None = None
     """Optional override for the multi-modal encoder attention backend when
     using vision transformers. Accepts any value from
-    `aphrodite.v1.attention.backends.registry.AttentionBackendEnum` (e.g. `FLASH_ATTN`)."""
+    `sonar.v1.attention.backends.registry.AttentionBackendEnum` (e.g. `FLASH_ATTN`)."""
     mm_encoder_attn_dtype: Literal["fp8"] | None = None
     """Optional dtype override for ViT encoder attention. Set to `"fp8"` to
     enable FP8 quantization through FlashInfer cuDNN on NVIDIA GPUs or AITER
@@ -434,7 +434,7 @@ class MultiModalConfig:
     cache. Their requests only need the grid/size metadata that sizes the
     placeholder range.
 
-    Derived, not user-settable: `AphroditeConfig.__post_init__` sets this to True
+    Derived, not user-settable: `SonarConfig.__post_init__` sets this to True
     on EC consumers, and on KV consumers unless `language_model_only` is set
     without `enable_mm_embeds`. Everywhere else it stays False so that a request
     which forgets its embeddings still fails fast in the frontend, with a clear
@@ -535,7 +535,7 @@ class MultiModalConfig:
         The flag keeps no state of its own: `mm_processor_kwargs["device"]` is
         the only representation of where the processor runs, so an explicit
         `device` there always wins and `"auto"` stays unresolved for
-        `AphroditeConfig`, which is where the EC role needed to resolve it lives.
+        `SonarConfig`, which is where the EC role needed to resolve it lives.
 
         Args:
             mm_processor_kwargs: The kwargs as given, or None.
@@ -551,7 +551,7 @@ class MultiModalConfig:
         if (mm_processor_kwargs or {}).get("device") is not None:
             return mm_processor_kwargs
 
-        from aphrodite.platforms import current_platform
+        from sonar.platforms import current_platform
 
         # Any explicit value other than "cpu" means "the accelerator", so a
         # programmatically-set "cuda" still works on a platform whose device type
@@ -605,7 +605,7 @@ class MultiModalConfig:
                 model.
 
         """
-        from aphrodite.platforms import current_platform
+        from sonar.platforms import current_platform
 
         device_type = self.get_mm_processor_device_type()
         accelerator = current_platform.device_type
@@ -700,10 +700,10 @@ class MultiModalConfig:
 
     def use_gpu_video_backend(self) -> bool:
         """Return whether the configured video loader or codec uses the GPU."""
-        from aphrodite.multimodal.video import VIDEO_LOADER_REGISTRY
+        from sonar.multimodal.video import VIDEO_LOADER_REGISTRY
 
         video_kwargs = self.media_io_kwargs.get("video", {})
-        video_loader_backend = video_kwargs.get("video_backend") or envs.APHRODITE_VIDEO_LOADER_BACKEND
+        video_loader_backend = video_kwargs.get("video_backend") or envs.SONAR_VIDEO_LOADER_BACKEND
         codec_backend = video_kwargs.get("backend")
         return VIDEO_LOADER_REGISTRY.backend_requires_gpu(video_loader_backend) or (
             codec_backend is not None and VIDEO_LOADER_REGISTRY.backend_requires_gpu(codec_backend)

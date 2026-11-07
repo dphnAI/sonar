@@ -6,17 +6,17 @@ from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-import aphrodite.envs as envs
-from aphrodite.compilation.cuda_graph import CUDAGraphStat
-from aphrodite.logger import init_logger
-from aphrodite.v1.metrics.cache_hit_source import CacheHitSource
-from aphrodite.v1.metrics.perf import PerfStats
-from aphrodite.v1.spec_decode.metrics import SpecDecodingStats
+import sonar.envs as envs
+from sonar.compilation.cuda_graph import CUDAGraphStat
+from sonar.logger import init_logger
+from sonar.v1.metrics.cache_hit_source import CacheHitSource
+from sonar.v1.metrics.perf import PerfStats
+from sonar.v1.spec_decode.metrics import SpecDecodingStats
 
 logger = init_logger(__name__)
 
 if TYPE_CHECKING:
-    from aphrodite.v1.engine import EngineCoreEvent, EngineCoreOutput, FinishReason
+    from sonar.v1.engine import EngineCoreEvent, EngineCoreOutput, FinishReason
 
 
 @dataclass
@@ -474,7 +474,7 @@ class IterationStats:
         # Read once per iteration: update_from_output runs per request per
         # step, and each envs attribute access re-reads the environment
         # in processes that never enable the envs cache (the API server).
-        self.compute_nans_in_logits = envs.APHRODITE_COMPUTE_NANS_IN_LOGITS
+        self.compute_nans_in_logits = envs.SONAR_COMPUTE_NANS_IN_LOGITS
         self.num_generation_tokens = 0
         self.prompt_token_stats = PromptTokenStats()
         self.num_preempted_reqs = 0
@@ -558,7 +558,7 @@ class IterationStats:
         lora_name: str | None,
     ):
         # Avoid circular dependency
-        from aphrodite.v1.engine import EngineCoreEventType
+        from sonar.v1.engine import EngineCoreEventType
 
         for event in events:
             if event.type == EngineCoreEventType.QUEUED:

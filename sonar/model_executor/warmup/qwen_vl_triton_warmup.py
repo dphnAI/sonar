@@ -6,11 +6,11 @@ from typing import TYPE_CHECKING
 
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.utils.math_utils import round_up
+from sonar.logger import init_logger
+from sonar.utils.math_utils import round_up
 
 if TYPE_CHECKING:
-    from aphrodite.v1.worker.gpu_model_runner import GPUModelRunner
+    from sonar.v1.worker.gpu_model_runner import GPUModelRunner
 
 logger = init_logger(__name__)
 
@@ -19,7 +19,7 @@ _MROPE_TOKEN_COUNTS = (1, 2, 16)
 
 
 def _warm_vision(model: torch.nn.Module, device: torch.device) -> None:
-    from aphrodite.model_executor.models.qwen3_vl import Qwen3_VisionTransformer
+    from sonar.model_executor.models.qwen3_vl import Qwen3_VisionTransformer
 
     for visual in model.modules():
         if not isinstance(visual, Qwen3_VisionTransformer):
@@ -61,8 +61,8 @@ def _warm_vision(model: torch.nn.Module, device: torch.device) -> None:
 
 
 def _warm_mrope(runner: "GPUModelRunner", model: torch.nn.Module) -> None:
-    from aphrodite.model_executor.layers.rotary_embedding.mrope import MRotaryEmbedding
-    from aphrodite.model_executor.models.interfaces import supports_mrope
+    from sonar.model_executor.layers.rotary_embedding.mrope import MRotaryEmbedding
+    from sonar.model_executor.models.interfaces import supports_mrope
 
     is_mrope_model = supports_mrope(model)
     if not is_mrope_model:

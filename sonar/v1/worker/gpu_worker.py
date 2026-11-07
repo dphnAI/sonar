@@ -15,38 +15,38 @@ from typing import TYPE_CHECKING, Any, cast
 import torch
 import torch.nn as nn
 
-import aphrodite.envs as envs
-from aphrodite.config import (
-    AphroditeConfig,
+import sonar.envs as envs
+from sonar.config import (
     CUDAGraphMode,
-    set_current_aphrodite_config,
+    SonarConfig,
+    set_current_sonar_config,
     update_config,
 )
-from aphrodite.config.compilation import CompilationMode
-from aphrodite.config.profiler import validate_profile_prefix
-from aphrodite.device_allocator import get_mem_allocator_instance
-from aphrodite.distributed import (
+from sonar.config.compilation import CompilationMode
+from sonar.config.profiler import validate_profile_prefix
+from sonar.device_allocator import get_mem_allocator_instance
+from sonar.distributed import (
     ensure_model_parallel_initialized,
     init_distributed_environment,
     set_custom_all_reduce,
 )
-from aphrodite.distributed.ec_transfer import (
+from sonar.distributed.ec_transfer import (
     ensure_ec_transfer_initialized,
     ensure_ec_transfer_shutdown,
     get_ec_transfer,
     has_ec_transfer,
 )
-from aphrodite.distributed.eplb.eplb_utils import override_envs_for_eplb
-from aphrodite.distributed.kv_transfer import (
+from sonar.distributed.eplb.eplb_utils import override_envs_for_eplb
+from sonar.distributed.kv_transfer import (
     ensure_kv_transfer_initialized,
     ensure_kv_transfer_shutdown,
     get_kv_transfer_group,
     has_kv_transfer_group,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.base import (
+from sonar.distributed.kv_transfer.kv_connector.v1.base import (
     KVConnectorHandshakeMetadata,
 )
-from aphrodite.distributed.parallel_state import (
+from sonar.distributed.parallel_state import (
     Handle,
     checkpoint_prepare_distributed_state,
     checkpoint_restore_distributed_state,
@@ -56,66 +56,66 @@ from aphrodite.distributed.parallel_state import (
     resume_device_comms,
     suspend_device_comms,
 )
-from aphrodite.distributed.weight_transfer import (
+from sonar.distributed.weight_transfer import (
     WeightTransferEngine,
     WeightTransferEngineFactory,
 )
-from aphrodite.logger import init_logger
-from aphrodite.lora.request import LoRARequest
-from aphrodite.model_executor.layers.quantization.online.lm_head import (
+from sonar.logger import init_logger
+from sonar.lora.request import LoRARequest
+from sonar.model_executor.layers.quantization.online.lm_head import (
     restore_quantized_lm_heads,
     share_source_lm_heads,
 )
-from aphrodite.model_executor.model_loader import get_model_loader
-from aphrodite.model_executor.model_loader.reload.direct import direct_reload_enabled
-from aphrodite.model_executor.model_loader.weight_checksum import (
+from sonar.model_executor.model_loader import get_model_loader
+from sonar.model_executor.model_loader.reload.direct import direct_reload_enabled
+from sonar.model_executor.model_loader.weight_checksum import (
     compute_tensor_digests,
     zero_weights,
 )
-from aphrodite.model_executor.warmup.kernel_warmup import kernel_warmup
-from aphrodite.multimodal.gpu_ipc_memory import reserve_mm_ipc_gpu_memory
-from aphrodite.platforms import current_platform
-from aphrodite.profiler.wrapper import (
+from sonar.model_executor.warmup.kernel_warmup import kernel_warmup
+from sonar.multimodal.gpu_ipc_memory import reserve_mm_ipc_gpu_memory
+from sonar.platforms import current_platform
+from sonar.profiler.wrapper import (
     create_graph_capture_profiler,
     create_worker_profiler,
     validate_worker_profiler_config,
 )
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.tasks import SupportedTask
-from aphrodite.tracing import instrument
-from aphrodite.triton_utils import HAS_TRITON
-from aphrodite.utils.flashinfer import warn_if_flashinfer_kernels_missing
-from aphrodite.utils.gc_utils import freeze_gc_heap, maybe_attach_gc_debug_callback
-from aphrodite.utils.gpu_sync_debug import enable_gpu_sync_check, with_gpu_sync_check
-from aphrodite.utils.mem_constants import GiB_bytes
-from aphrodite.utils.mem_utils import (
+from sonar.sequence import IntermediateTensors
+from sonar.tasks import SupportedTask
+from sonar.tracing import instrument
+from sonar.triton_utils import HAS_TRITON
+from sonar.utils.flashinfer import warn_if_flashinfer_kernels_missing
+from sonar.utils.gc_utils import freeze_gc_heap, maybe_attach_gc_debug_callback
+from sonar.utils.gpu_sync_debug import enable_gpu_sync_check, with_gpu_sync_check
+from sonar.utils.mem_constants import GiB_bytes
+from sonar.utils.mem_utils import (
     MemoryProfilingResult,
     MemorySnapshot,
     format_gib,
     memory_profiling,
 )
-from aphrodite.utils.torch_utils import set_random_seed, set_torch_threads_for_runtime
-from aphrodite.v1.attention.backends.utils import record_kv_cache_layout
-from aphrodite.v1.core.sched.output import GrammarOutput, SchedulerOutput
-from aphrodite.v1.kv_cache_interface import KVCacheConfig, KVCacheSpec
-from aphrodite.v1.outputs import (
+from sonar.utils.torch_utils import set_random_seed, set_torch_threads_for_runtime
+from sonar.v1.attention.backends.utils import record_kv_cache_layout
+from sonar.v1.core.sched.output import GrammarOutput, SchedulerOutput
+from sonar.v1.kv_cache_interface import KVCacheConfig, KVCacheSpec
+from sonar.v1.outputs import (
     AsyncModelRunnerOutput,
     DraftTokenIds,
     ModelRunnerOutput,
 )
-from aphrodite.v1.utils import compute_iteration_details, report_usage_stats
-from aphrodite.v1.worker.b12x_utils import (
+from sonar.v1.utils import compute_iteration_details, report_usage_stats
+from sonar.v1.worker.b12x_utils import (
     capture_b12x_model,
     prepare_b12x_weights,
     profile_b12x_memory,
 )
-from aphrodite.v1.worker.sentinel.gpu_worker_sentinel import WorkerSentinel
-from aphrodite.v1.worker.startup_plan import (
+from sonar.v1.worker.sentinel.gpu_worker_sentinel import WorkerSentinel
+from sonar.v1.worker.startup_plan import (
     maybe_apply_startup_plan,
     maybe_save_startup_plan,
 )
-from aphrodite.v1.worker.worker_base import CompilationTimes, WorkerBase
-from aphrodite.v1.worker.workspace import init_workspace_manager
+from sonar.v1.worker.worker_base import CompilationTimes, WorkerBase
+from sonar.v1.worker.workspace import init_workspace_manager
 
 from ...model_executor.model_loader import TensorizerLoader
 from .gpu.cudagraph_utils import has_compiled_submodule
@@ -125,8 +125,8 @@ from .utils import request_memory
 logger = init_logger(__name__)
 
 
-def _num_workspace_lanes(aphrodite_config: AphroditeConfig, use_v2_model_runner: bool) -> int:
-    spec_config = aphrodite_config.speculative_config
+def _num_workspace_lanes(sonar_config: SonarConfig, use_v2_model_runner: bool) -> int:
+    spec_config = sonar_config.speculative_config
     return 2 if use_v2_model_runner and spec_config is not None and spec_config.uses_separate_workspace_lane else 1
 
 
@@ -158,10 +158,10 @@ def maybe_rocm_profiling_fallback(profile_result: MemoryProfilingResult) -> int 
 
 
 if TYPE_CHECKING:
-    from aphrodite.device_allocator.sleep_mode_backend import SleepModeBackend
-    from aphrodite.model_executor.model_loader.tensorizer import TensorizerConfig
-    from aphrodite.v1.worker.gpu.model_runner import GPUModelRunner as GPUModelRunnerV2
-    from aphrodite.v1.worker.gpu_model_runner import GPUModelRunner
+    from sonar.device_allocator.sleep_mode_backend import SleepModeBackend
+    from sonar.model_executor.model_loader.tensorizer import TensorizerConfig
+    from sonar.v1.worker.gpu.model_runner import GPUModelRunner as GPUModelRunnerV2
+    from sonar.v1.worker.gpu_model_runner import GPUModelRunner
 
 
 class AsyncIntermediateTensors(IntermediateTensors):
@@ -199,29 +199,29 @@ class AsyncIntermediateTensors(IntermediateTensors):
 class Worker(WorkerBase):
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         local_rank: int,
         rank: int,
         distributed_init_method: str,
         is_driver_worker: bool = False,
     ):
-        self.use_v2_model_runner = aphrodite_config.use_v2_model_runner
+        self.use_v2_model_runner = sonar_config.use_v2_model_runner
         if self.use_v2_model_runner and not HAS_TRITON and not current_platform.uses_standalone_cpu_model_runner():
             raise ValueError("Model Runner V2 requires Triton.")
 
         super().__init__(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             local_rank=local_rank,
             rank=rank,
             distributed_init_method=distributed_init_method,
             is_driver_worker=is_driver_worker,
         )
 
-        # configure float32 matmul precision according to Aphrodite env.
-        precision = envs.APHRODITE_FLOAT32_MATMUL_PRECISION
+        # configure float32 matmul precision according to Sonar env.
+        precision = envs.SONAR_FLOAT32_MATMUL_PRECISION
         torch.set_float32_matmul_precision(precision)
 
-        from aphrodite.distributed.elastic_ep.elastic_execute import ElasticEPScalingExecutor
+        from sonar.distributed.elastic_ep.elastic_execute import ElasticEPScalingExecutor
 
         self.elastic_ep_executor = ElasticEPScalingExecutor(self)
         self.worker_sentinel: WorkerSentinel | None = None
@@ -242,7 +242,7 @@ class Worker(WorkerBase):
         # Profiler wrapper is created lazily in profile() when start is called,
         # so we have all the information needed for proper trace naming.
         self.profiler: Any | None = None
-        self.profiler_config = aphrodite_config.profiler_config
+        self.profiler_config = sonar_config.profiler_config
         validate_worker_profiler_config(self.profiler_config)
 
         self._b12x_session = None
@@ -256,11 +256,11 @@ class Worker(WorkerBase):
     @property
     def sleep_mode_backend(self) -> "SleepModeBackend":
         if self._sleep_mode_backend is None:
-            from aphrodite.device_allocator.sleep_mode_backend import (
+            from sonar.device_allocator.sleep_mode_backend import (
                 SleepModeBackendFactory,
             )
 
-            self._sleep_mode_backend = SleepModeBackendFactory.create_backend(self.aphrodite_config.model_config)
+            self._sleep_mode_backend = SleepModeBackendFactory.create_backend(self.sonar_config.model_config)
         return self._sleep_mode_backend
 
     def _get_sleep_parameters(self, model: nn.Module) -> dict[str, nn.Parameter]:
@@ -314,7 +314,7 @@ class Worker(WorkerBase):
         if has_kv_transfer_group():
             get_kv_transfer_group().unregister_kv_caches()
         self.sleep_mode_backend.suspend(level)
-        if self.aphrodite_config.model_config.enable_nccl_comm_suspend:
+        if self.sonar_config.model_config.enable_nccl_comm_suspend:
             suspend_device_comms()
 
         torch.accelerator.synchronize()
@@ -338,7 +338,7 @@ class Worker(WorkerBase):
         self.sleep_mode_backend.resume(tags)
         if has_kv_transfer_group() and (tags is None or "kv_cache" in tags):
             get_kv_transfer_group().restore_kv_caches()
-        if self.aphrodite_config.model_config.enable_nccl_comm_suspend:
+        if self.sonar_config.model_config.enable_nccl_comm_suspend:
             resume_device_comms()
 
         # Restore the buffers after level 2 sleep
@@ -390,10 +390,10 @@ class Worker(WorkerBase):
         zero_weights(self.model_runner.get_model())
 
     def _maybe_get_memory_pool_context(self, tag: str) -> AbstractContextManager:
-        if current_platform.is_cuda_alike() and not self.aphrodite_config.model_config.enable_cumem_allocator:
+        if current_platform.is_cuda_alike() and not self.sonar_config.model_config.enable_cumem_allocator:
             return nullcontext()
 
-        if current_platform.is_xpu() and not self.aphrodite_config.model_config.enable_sleep_mode:
+        if current_platform.is_xpu() and not self.sonar_config.model_config.enable_sleep_mode:
             return nullcontext()
 
         if current_platform.is_cpu():
@@ -440,7 +440,7 @@ class Worker(WorkerBase):
             # such as NIC affinity and P2P checks.
             assigned_physical_gpu_ids = parallel_config.assigned_physical_gpu_ids
             if assigned_physical_gpu_ids is not None:
-                from aphrodite.platforms.interface import set_assigned_physical_gpu_ids
+                from sonar.platforms.interface import set_assigned_physical_gpu_ids
 
                 set_assigned_physical_gpu_ids(assigned_physical_gpu_ids)
                 assert self.local_rank < len(assigned_physical_gpu_ids), (
@@ -481,7 +481,7 @@ class Worker(WorkerBase):
             # This ensures NCCL buffers are allocated before we measure
             # available memory
             init_worker_distributed_environment(
-                self.aphrodite_config,
+                self.sonar_config,
                 self.rank,
                 self.distributed_init_method,
                 self.local_rank,
@@ -491,7 +491,7 @@ class Worker(WorkerBase):
             self._pcie_pull_comm = pcie_pull_comm
             if pcie_pull_comm is not None:
                 pcie_pull_comm.initialize(
-                    self.aphrodite_config,
+                    self.sonar_config,
                     use_v2_model_runner=self.use_v2_model_runner,
                 )
 
@@ -503,7 +503,7 @@ class Worker(WorkerBase):
             set_random_seed(self.model_config.seed)
 
             # Initialize shared locality resources before weight loading and capture.
-            from aphrodite.distributed.localization import (
+            from sonar.distributed.localization import (
                 maybe_init_localized_resources,
             )
 
@@ -526,9 +526,7 @@ class Worker(WorkerBase):
             torch.accelerator.empty_cache()
 
             # Weights from external model loader process
-            external_weight_memory = get_model_loader(self.load_config).get_external_weight_memory(
-                self.aphrodite_config
-            )
+            external_weight_memory = get_model_loader(self.load_config).get_external_weight_memory(self.sonar_config)
 
             # take current memory snapshot after external weights are ready
             self.init_snapshot = init_snapshot = MemorySnapshot(device=self.device)
@@ -543,36 +541,36 @@ class Worker(WorkerBase):
     def _init_workspace_and_model_runner(self) -> None:
         """Set up the workspace manager, build the model runner, report usage."""
         # DSpark target and draft CUDA graphs retain workspace views concurrently.
-        num_ubatches = 2 if self.aphrodite_config.parallel_config.enable_dbo else 1
+        num_ubatches = 2 if self.sonar_config.parallel_config.enable_dbo else 1
         init_workspace_manager(
             self.device,
             num_ubatches,
-            _num_workspace_lanes(self.aphrodite_config, self.use_v2_model_runner),
+            _num_workspace_lanes(self.sonar_config, self.use_v2_model_runner),
             # Scratch holds no state across steps: discard it on sleep.
             alloc_context=lambda: self._maybe_get_memory_pool_context("workspace"),
         )
         self.model_runner: GPUModelRunner = self._make_model_runner()
         if self.rank == 0:
             # If usage stat is enabled, collect relevant info.
-            report_usage_stats(self.aphrodite_config)
+            report_usage_stats(self.sonar_config)
 
     def _make_model_runner(self) -> "GPUModelRunner":
         """Construct the platform's model runner; subclasses override this."""
         if self.use_v2_model_runner:
-            if self.aphrodite_config.is_mm_encoder_only:
-                from aphrodite.v1.worker.mm_encoder_model_runner import (
+            if self.sonar_config.is_mm_encoder_only:
+                from sonar.v1.worker.mm_encoder_model_runner import (
                     MMEncoderModelRunner as GPUModelRunnerV2,
                 )
             else:
-                from aphrodite.v1.worker.gpu.model_runner import (  # type: ignore[assignment]
+                from sonar.v1.worker.gpu.model_runner import (  # type: ignore[assignment]
                     GPUModelRunner as GPUModelRunnerV2,
                 )
 
             # HACK(woosuk): This is a temporary fix to avoid type errors.
-            return GPUModelRunnerV2(self.aphrodite_config, self.device)  # type: ignore
-        from aphrodite.v1.worker.gpu_model_runner import GPUModelRunner as GPUModelRunnerV1
+            return GPUModelRunnerV2(self.sonar_config, self.device)  # type: ignore
+        from sonar.v1.worker.gpu_model_runner import GPUModelRunner as GPUModelRunnerV1
 
-        return GPUModelRunnerV1(self.aphrodite_config, self.device)
+        return GPUModelRunnerV1(self.sonar_config, self.device)
 
     def handle_ft_command(self, ft_request):
         assert self.worker_sentinel is not None
@@ -583,7 +581,7 @@ class Worker(WorkerBase):
     def load_model(self, *, load_dummy_weights: bool = False) -> None:
         with (
             self._maybe_get_memory_pool_context(tag="weights"),
-            set_current_aphrodite_config(self.aphrodite_config),
+            set_current_sonar_config(self.sonar_config),
             # 20 MiB is the minimum PyTorch allows for max_split_size_mb.
             self._scoped_allocator_max_split(max_split_size_mb=20),
         ):
@@ -592,10 +590,10 @@ class Worker(WorkerBase):
         if has_ec_transfer():
             get_ec_transfer().start_worker_services()
 
-        if self.aphrodite_config.weight_transfer_config is not None:
+        if self.sonar_config.weight_transfer_config is not None:
             self.weight_transfer_engine = WeightTransferEngineFactory.create_engine(
-                self.aphrodite_config.weight_transfer_config,
-                self.aphrodite_config,
+                self.sonar_config.weight_transfer_config,
+                self.sonar_config,
                 self.device,
                 self.model_runner.get_model(),
             )
@@ -609,20 +607,20 @@ class Worker(WorkerBase):
 
     def update_config(self, overrides: dict[str, Any]) -> None:
         """Apply config overrides to the worker, its model runner and the
-        shared AphroditeConfig."""
+        shared SonarConfig."""
         allowed_config_names = {"load_config", "model_config"}
         for config_name, config_overrides in overrides.items():
             if config_name not in allowed_config_names:
                 allowed = ", ".join(sorted(allowed_config_names))
                 raise ValueError(f"Config override '{config_name}' is not supported. Supported configs: {allowed}")
-            config = getattr(self.aphrodite_config, config_name)
+            config = getattr(self.sonar_config, config_name)
             new_config = update_config(config, config_overrides)
-            setattr(self.aphrodite_config, config_name, new_config)
+            setattr(self.sonar_config, config_name, new_config)
             setattr(self.model_runner, config_name, new_config)
             setattr(self, config_name, new_config)
 
     def reload_weights(self, *args, **kwargs) -> None:
-        with set_current_aphrodite_config(self.aphrodite_config):
+        with set_current_sonar_config(self.sonar_config):
             self.model_runner.reload_weights(*args, **kwargs)
 
     @torch.inference_mode()
@@ -644,7 +642,7 @@ class Worker(WorkerBase):
         if kv_cache_memory_bytes := self.cache_config.kv_cache_memory_bytes:
             # still need a profile run which compiles the model for
             # max_num_batched_tokens
-            with set_current_aphrodite_config(self.aphrodite_config):
+            with set_current_sonar_config(self.sonar_config):
                 profile_b12x_memory(self)
 
             msg = (
@@ -681,7 +679,7 @@ class Worker(WorkerBase):
             # limit are never split, so they stay releasable. Exits before
             # memory_profiling measures, restoring the original limit.
             self._scoped_allocator_max_split(max_split_size_mb=20),
-            set_current_aphrodite_config(self.aphrodite_config),
+            set_current_sonar_config(self.sonar_config),
         ):
             profile_b12x_memory(self)
 
@@ -693,13 +691,13 @@ class Worker(WorkerBase):
         # torch.cuda handle the live capture path already uses on ROCm.
         cudagraph_memory_estimate = 0
         if (current_platform.is_cuda_alike() or current_platform.is_xpu()) and (
-            self.use_v2_model_runner or self.aphrodite_config.compilation_config.cudagraph_mode != CUDAGraphMode.NONE
+            self.use_v2_model_runner or self.sonar_config.compilation_config.cudagraph_mode != CUDAGraphMode.NONE
         ):
             cudagraph_memory_estimate = profile_b12x_memory(self, cudagraphs=True)
 
         # Respect the opt-in flag as originally designed.
         cudagraph_memory_estimate_applied = (
-            cudagraph_memory_estimate if envs.APHRODITE_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS else 0
+            cudagraph_memory_estimate if envs.SONAR_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS else 0
         )
 
         init_free_memory = self.init_snapshot.free_memory
@@ -713,9 +711,9 @@ class Worker(WorkerBase):
                 f"Initial free memory {format_gib(init_free_memory)} GiB, "
                 f"current free memory {format_gib(free_gpu_memory)} GiB. "
                 "This happens when other processes sharing the same container "
-                "release GPU memory while Aphrodite is profiling during initialization. "
+                "release GPU memory while Sonar is profiling during initialization. "
                 "To fix this, ensure consistent GPU memory allocation or "
-                "isolate Aphrodite in its own container."
+                "isolate Sonar in its own container."
             )
         else:
             profile_result.total_consumed = rocm_fallback
@@ -751,7 +749,7 @@ class Worker(WorkerBase):
             total_mem = self.init_snapshot.total_memory
             current_util = self.cache_config.gpu_memory_utilization
             cg_util_delta = cudagraph_memory_estimate / total_mem
-            if envs.APHRODITE_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS:
+            if envs.SONAR_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS:
                 equiv_util = round(current_util - cg_util_delta, 4)
                 suggested_util = min(
                     round(current_util + cg_util_delta, 4),
@@ -764,7 +762,7 @@ class Worker(WorkerBase):
                     "CUDA graph memory profiling. To maintain the same "
                     "effective KV cache size as before, increase "
                     "--gpu-memory-utilization to %.4f. To disable, set "
-                    "APHRODITE_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0.",
+                    "SONAR_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0.",
                     current_util,
                     equiv_util,
                     suggested_util,
@@ -776,7 +774,7 @@ class Worker(WorkerBase):
                 )
                 logger.warning(
                     "CUDA graph memory profiling is disabled "
-                    "(APHRODITE_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0). "
+                    "(SONAR_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0). "
                     "Without it, CUDA graph memory is not accounted for "
                     "during KV cache allocation, which may require lowering "
                     "--gpu-memory-utilization to avoid OOM. Consider "
@@ -810,7 +808,7 @@ class Worker(WorkerBase):
 
         pp_rank = get_pp_group().rank_in_group
         tp_rank = get_tp_group().rank_in_group
-        parallel_config = self.aphrodite_config.parallel_config
+        parallel_config = self.sonar_config.parallel_config
         if parallel_config.prefill_context_parallel_size > 1 and parallel_config.decode_context_parallel_size > 1:
             tp_rank += get_pcp_group().rank_in_group * parallel_config.tensor_parallel_size
         return {(pp_rank, tp_rank): metadata}
@@ -845,7 +843,7 @@ class Worker(WorkerBase):
         self.cache_config.hash_block_size = kv_cache_config.hash_block_size
         self.cache_config.cache_hit_alignment_tokens = kv_cache_config.cache_hit_alignment_tokens
 
-        from aphrodite.model_executor.warmup.b12x_prepare import prepare_b12x_state
+        from sonar.model_executor.warmup.b12x_prepare import prepare_b12x_state
 
         prepare_b12x_state(self, kv_cache_config)
 
@@ -854,7 +852,7 @@ class Worker(WorkerBase):
         # NOTE(Kuntai): This need to be done before `initialize_kv_cache`,
         # because `initialize_kv_cache` will inject kv cache groups not
         # related to kv cache connector (e.g. kv cache sharing layers).
-        ensure_kv_transfer_initialized(self.aphrodite_config, kv_cache_config)
+        ensure_kv_transfer_initialized(self.sonar_config, kv_cache_config)
 
         # If the connector provides a custom memory pool (e.g. Mooncake
         # NVLink/BAREX), use it for KV cache allocation; otherwise fall
@@ -879,13 +877,13 @@ class Worker(WorkerBase):
         if kv_cache_config.needs_kv_cache_zeroing and hasattr(self.model_runner, "_init_kv_zero_meta"):
             self.model_runner._init_kv_zero_meta()
 
-        from aphrodite.model_executor.warmup.b12x_prepare import run_b12x_preparation
+        from sonar.model_executor.warmup.b12x_prepare import run_b12x_preparation
 
         # Rebind final storage through the selection cache, not warmup-only defaults.
         run_b12x_preparation(self, stage="bind")
 
     def get_simple_cpu_offload_num_cpu_blocks(self) -> int | None:
-        from aphrodite.distributed.kv_transfer.kv_connector.v1.simple_cpu_offload_connector import (  # noqa: E501
+        from sonar.distributed.kv_transfer.kv_connector.v1.simple_cpu_offload_connector import (  # noqa: E501
             _find_simple_cpu_offload_connector,
         )
 
@@ -907,23 +905,22 @@ class Worker(WorkerBase):
     def _compile_or_warm_up_model(self) -> CompilationTimes:
         warmup_sizes: list[int] = []
 
-        if (
-            self.aphrodite_config.compilation_config.mode == CompilationMode.APHRODITE_COMPILE
-            and has_compiled_submodule(self.model_runner.get_model())
+        if self.sonar_config.compilation_config.mode == CompilationMode.SONAR_COMPILE and has_compiled_submodule(
+            self.model_runner.get_model()
         ):
             # warm up sizes that are not in cudagraph capture sizes,
             # but users still want to compile for better performance,
             # e.g. for the max-num-batched token size in chunked prefill.
-            compile_sizes = self.aphrodite_config.compilation_config.compile_sizes
+            compile_sizes = self.sonar_config.compilation_config.compile_sizes
             warmup_sizes = compile_sizes.copy() if compile_sizes is not None else []  # type: ignore[assignment]
             cg_capture_sizes: list[int] = []
 
-            if self.aphrodite_config.compilation_config.cudagraph_mode != CUDAGraphMode.NONE:
-                cg_sizes = self.aphrodite_config.compilation_config.cudagraph_capture_sizes
+            if self.sonar_config.compilation_config.cudagraph_mode != CUDAGraphMode.NONE:
+                cg_sizes = self.sonar_config.compilation_config.cudagraph_capture_sizes
                 cg_capture_sizes = [] if cg_sizes is None else cg_sizes
                 warmup_sizes = [x for x in warmup_sizes if x not in cg_capture_sizes]
 
-            compile_ranges = self.aphrodite_config.compilation_config.get_compile_ranges()
+            compile_ranges = self.sonar_config.compilation_config.get_compile_ranges()
             # For each compile_range, if none of the batch sizes
             # in warmup_sizes or cudagraph_capture_sizes are in the range,
             # add the end of the range to ensure compilation/warmup.
@@ -949,7 +946,7 @@ class Worker(WorkerBase):
         kernel_warmup(self)
 
         if self.use_v2_model_runner:  # noqa: SIM102
-            if self.aphrodite_config.kernel_config.enable_jit_warmup:
+            if self.sonar_config.kernel_config.enable_jit_warmup:
                 # A workspace resize after capture frees what the graphs point at.
                 warmup_kernels(self.model_runner, self.execute_model, self.sample_tokens)
 
@@ -1048,7 +1045,7 @@ class Worker(WorkerBase):
         # warmup (rather than on a later compile cache-miss at runtime).
         c_config = self.compilation_config
         if c_config.mode != CompilationMode.NONE and c_config.backend == "inductor":
-            from aphrodite.compilation.compiler_interface import (
+            from sonar.compilation.compiler_interface import (
                 trigger_inductor_lazy_init,
             )
 
@@ -1067,7 +1064,7 @@ class Worker(WorkerBase):
         freeze_gc_heap()
         maybe_attach_gc_debug_callback()
 
-        # Warmup / first-compile is done — activate the `APHRODITE_GPU_SYNC_CHECK`
+        # Warmup / first-compile is done — activate the `SONAR_GPU_SYNC_CHECK`
         # gate so subsequent `execute_model` / `sample_tokens` calls enforce it.
         enable_gpu_sync_check()
 
@@ -1080,10 +1077,10 @@ class Worker(WorkerBase):
         # When JIT warmup is disabled (e.g. enforce_eager), runtime JIT
         # compilation is expected, so monitoring would only produce noise
         # (or spurious errors in "error" mode).
-        if not self.aphrodite_config.kernel_config.enable_jit_warmup:
+        if not self.sonar_config.kernel_config.enable_jit_warmup:
             return
 
-        from aphrodite.utils.jit_monitor import activate as activate_jit_monitor
+        from sonar.utils.jit_monitor import activate as activate_jit_monitor
 
         activate_jit_monitor(
             mode=self.observability_config.jit_monitor_mode,
@@ -1145,7 +1142,7 @@ class Worker(WorkerBase):
         return self.model_runner.get_supported_tasks()
 
     def get_compilation_match_table(self) -> dict[str, int]:
-        from aphrodite.compilation.passes.aphrodite_inductor_pass import get_match_table
+        from sonar.compilation.passes.sonar_inductor_pass import get_match_table
 
         return get_match_table()
 
@@ -1166,7 +1163,7 @@ class Worker(WorkerBase):
 
         iteration_details = compute_iteration_details(scheduler_output)
 
-        if self.aphrodite_config.profiler_config.detailed_trace_annotation:
+        if self.sonar_config.profiler_config.detailed_trace_annotation:
             ctx_seq_len_sum = 0
             ctx_qq_compute = 0
             ctx_qk_compute = 0
@@ -1277,7 +1274,7 @@ class Worker(WorkerBase):
                 return output
 
         assert isinstance(output, IntermediateTensors)
-        parallel_config = self.aphrodite_config.parallel_config
+        parallel_config = self.sonar_config.parallel_config
         assert parallel_config.distributed_executor_backend != "external_launcher" and not get_pp_group().is_last_rank
 
         # Non-blocking send of the intermediate tensors. The metadata handle
@@ -1318,7 +1315,7 @@ class Worker(WorkerBase):
             validate_profile_prefix(profile_prefix)
 
             # Generate the trace name by combining prefix with comprehensive rank suffix
-            from aphrodite.distributed.utils import get_worker_rank_suffix
+            from sonar.distributed.utils import get_worker_rank_suffix
 
             rank_suffix = get_worker_rank_suffix(global_rank=self.rank)
 
@@ -1358,7 +1355,7 @@ class Worker(WorkerBase):
     @property
     def randomize_dummy_inputs(self) -> bool:
         # Not cached: elastic EP rewrites parallel_config in place on reconfigure.
-        return envs.APHRODITE_RANDOMIZE_DP_DUMMY_INPUTS and self.parallel_config.data_parallel_size > 1
+        return envs.SONAR_RANDOMIZE_DP_DUMMY_INPUTS and self.parallel_config.data_parallel_size > 1
 
     def execute_dummy_batch(self) -> None:
         num_tokens = getattr(self.model_runner, "uniform_decode_query_len", 1)
@@ -1390,7 +1387,7 @@ class Worker(WorkerBase):
         pattern: str | None = None,
         max_size: int | None = None,
     ) -> None:
-        from aphrodite.model_executor.model_loader import ShardedStateLoader
+        from sonar.model_executor.model_loader import ShardedStateLoader
 
         ShardedStateLoader.save_model(
             self.model_runner.model,
@@ -1440,14 +1437,14 @@ class Worker(WorkerBase):
         the configured weight transfer engine. The worker only tracks that a
         session is active.
         """
-        with set_current_aphrodite_config(self.aphrodite_config):
+        with set_current_sonar_config(self.sonar_config):
             self._start_weight_update()
 
     def start_draft_weight_update(self) -> None:
         """Like start_weight_update, but retargets the engine at the speculative
         draft model for this session.
         """
-        with set_current_aphrodite_config(self.aphrodite_config):
+        with set_current_sonar_config(self.sonar_config):
             self._start_weight_update(is_draft=True)
 
     def _start_weight_update(self, is_draft: bool = False) -> None:
@@ -1500,10 +1497,10 @@ class Worker(WorkerBase):
         if not self._weight_update_active:
             raise RuntimeError("start_weight_update must be called before update_weights.")
 
-        with set_current_aphrodite_config(self.aphrodite_config):
+        with set_current_sonar_config(self.sonar_config):
             try:
                 if isinstance(update_info, list):
-                    parallel_config = self.aphrodite_config.parallel_config
+                    parallel_config = self.sonar_config.parallel_config
                     local_update_info = update_info[
                         parallel_config.data_parallel_index * parallel_config.world_size + self.rank
                     ]
@@ -1529,7 +1526,7 @@ class Worker(WorkerBase):
         if not self._weight_update_active:
             raise RuntimeError("finish_weight_update called without a matching start_weight_update.")
 
-        with set_current_aphrodite_config(self.aphrodite_config):
+        with set_current_sonar_config(self.sonar_config):
             try:
                 self.weight_transfer_engine.finish_weight_update()
             except BaseException:
@@ -1579,7 +1576,7 @@ class Worker(WorkerBase):
         # and callbacks are still alive, so MemPool teardown is not deferred to
         # interpreter finalization (pytorch/pytorch#145168).
         if current_platform.is_cuda_alike():
-            from aphrodite.device_allocator.cumem import CuMemAllocator
+            from sonar.device_allocator.cumem import CuMemAllocator
 
             if CuMemAllocator.instance is not None:
                 CuMemAllocator.instance.release_pools()
@@ -1589,20 +1586,20 @@ class Worker(WorkerBase):
 
 
 def init_worker_distributed_environment(
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     rank: int,
     distributed_init_method: str | None = None,
     local_rank: int = -1,
     backend: str = "nccl",
 ) -> None:
     """Initialize the distributed environment."""
-    parallel_config = aphrodite_config.parallel_config
-    from aphrodite.model_executor.determinism.batch_invariant import init_batch_invariance
+    parallel_config = sonar_config.parallel_config
+    from sonar.model_executor.determinism.batch_invariant import init_batch_invariance
 
     init_batch_invariance()
     override_envs_for_eplb(
         parallel_config,
-        moe_backend=getattr(aphrodite_config.kernel_config, "moe_backend", None),
+        moe_backend=getattr(sonar_config.kernel_config, "moe_backend", None),
     )
     set_custom_all_reduce(not parallel_config.disable_custom_all_reduce)
 
@@ -1630,4 +1627,4 @@ def init_worker_distributed_environment(
 
     # Init ec connector here before KV caches init
     # NOTE: We do not init KV caches for Encoder-only instance in EPD disagg mode
-    ensure_ec_transfer_initialized(aphrodite_config)
+    ensure_ec_transfer_initialized(sonar_config)

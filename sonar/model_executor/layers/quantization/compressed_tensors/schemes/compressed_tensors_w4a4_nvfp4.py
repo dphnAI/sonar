@@ -4,20 +4,20 @@ from collections.abc import Callable
 
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.kernels.linear import init_nvfp4_linear_kernel
-from aphrodite.model_executor.layers.fusion.quant_activation import (
+from sonar.logger import init_logger
+from sonar.model_executor.kernels.linear import init_nvfp4_linear_kernel
+from sonar.model_executor.layers.fusion.quant_activation import (
     expose_input_quant_key,
 )
-from aphrodite.model_executor.layers.quantization.compressed_tensors.schemes import (
+from sonar.model_executor.layers.quantization.compressed_tensors.schemes import (
     CompressedTensorsScheme,
 )
-from aphrodite.model_executor.parameter import (
+from sonar.model_executor.parameter import (
     GroupQuantScaleParameter,
     ModelWeightParameter,
     PerTensorScaleParameter,
 )
-from aphrodite.model_executor.utils import move_parameter, replace_parameter
+from sonar.model_executor.utils import move_parameter, replace_parameter
 
 logger = init_logger(__name__)
 

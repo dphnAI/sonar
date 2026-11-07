@@ -4,7 +4,7 @@
 
 The V2 model runner stores per-request state in a fixed-size slab sized to
 ``max_num_seqs`` (``RequestState.free_indices`` in
-``aphrodite/v1/worker/gpu/states.py``). A slot is occupied from the moment a
+``sonar/v1/worker/gpu/states.py``). A slot is occupied from the moment a
 request appears in ``scheduled_new_reqs`` (worker ``add_requests``) until it
 appears in ``finished_req_ids``/``preempted_req_ids`` (worker
 ``finish_requests``), with a defensive same-id ``_remove_request`` on re-add. If
@@ -21,8 +21,8 @@ faithful model of the worker's slot accounting.
 
 import pytest
 
-from aphrodite.v1.outputs import ModelRunnerOutput
-from aphrodite.v1.request import RequestStatus
+from sonar.v1.outputs import ModelRunnerOutput
+from sonar.v1.request import RequestStatus
 
 from .test_scheduler import create_scheduler_with_priority
 from .utils import create_requests, create_scheduler

@@ -6,8 +6,8 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.config.multimodal import MultiModalDummyOptions, VideoDummyOptions
-from aphrodite.model_executor.models.molmo2 import (
+from sonar.config.multimodal import MultiModalDummyOptions, VideoDummyOptions
+from sonar.model_executor.models.molmo2 import (
     Molmo2DummyInputsBuilder,
     Molmo2VisionBackbone,
     build_flat_image_bool_length,

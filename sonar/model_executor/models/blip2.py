@@ -14,19 +14,19 @@ from transformers import (
     apply_chunking_to_forward,
 )
 
-from aphrodite.config import AphroditeConfig, CacheConfig
-from aphrodite.config.multimodal import MultiModalDummyOptions
-from aphrodite.inputs import MultiModalDataDict
-from aphrodite.model_executor.layers.activation import get_act_fn
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import (
+from sonar.config import CacheConfig, SonarConfig
+from sonar.config.multimodal import MultiModalDummyOptions
+from sonar.inputs import MultiModalDataDict
+from sonar.model_executor.layers.activation import get_act_fn
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import (
     MultiModalFieldConfig,
     MultiModalKwargsItem,
     MultiModalKwargsItems,
 )
-from aphrodite.multimodal.parse import MultiModalDataItems
-from aphrodite.multimodal.processing import (
+from sonar.multimodal.parse import MultiModalDataItems
+from sonar.multimodal.processing import (
     BaseDummyInputsBuilder,
     BaseMultiModalProcessor,
     BaseProcessingInfo,
@@ -34,8 +34,8 @@ from aphrodite.multimodal.processing import (
     PromptInsertion,
     PromptUpdate,
 )
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.utils.tensor_schema import TensorSchema, TensorShape
+from sonar.sequence import IntermediateTensors
+from sonar.utils.tensor_schema import TensorSchema, TensorShape
 
 from .blip import BlipVisionModel, get_blip_num_patches
 from .interfaces import (
@@ -46,7 +46,7 @@ from .interfaces import (
     SupportsQuant,
 )
 from .module_mapping import MultiModelKeys
-from .utils import AutoWeightsLoader, init_aphrodite_registered_model, maybe_prefix
+from .utils import AutoWeightsLoader, init_sonar_registered_model, maybe_prefix
 
 
 class Blip2ImagePixelInputs(TensorSchema):
@@ -501,12 +501,12 @@ class Blip2ForConditionalGeneration(nn.Module, SupportsLoRA, SupportsMultiModal,
 
         raise ValueError("Only image modality is supported")
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        cache_config = aphrodite_config.cache_config
-        quant_config = aphrodite_config.quant_config
-        multimodal_config = aphrodite_config.model_config.multimodal_config
+        config = sonar_config.model_config.hf_config
+        cache_config = sonar_config.cache_config
+        quant_config = sonar_config.quant_config
+        multimodal_config = sonar_config.model_config.multimodal_config
         self.config = config
         self.multimodal_config = multimodal_config
         vision_config = config.vision_config
@@ -518,7 +518,7 @@ class Blip2ForConditionalGeneration(nn.Module, SupportsLoRA, SupportsMultiModal,
             + 1  # include class token
         )
 
-        with self._mark_tower_model(aphrodite_config, "image"):
+        with self._mark_tower_model(sonar_config, "image"):
             self.vision_model = BlipVisionModel(vision_config, quant_config)
             self.query_tokens = nn.Parameter(torch.zeros(1, config.num_query_tokens, config.qformer_config.hidden_size))
             self.qformer = Blip2QFormerModel(
@@ -533,9 +533,9 @@ class Blip2ForConditionalGeneration(nn.Module, SupportsLoRA, SupportsMultiModal,
                 bias=True,
             )
 
-        with self._mark_language_model(aphrodite_config):
-            self.language_model = init_aphrodite_registered_model(
-                aphrodite_config=aphrodite_config,
+        with self._mark_language_model(sonar_config):
+            self.language_model = init_sonar_registered_model(
+                sonar_config=sonar_config,
                 hf_config=config.text_config,
                 prefix=maybe_prefix(prefix, "language_model"),
             )
@@ -637,7 +637,7 @@ class Blip2ForConditionalGeneration(nn.Module, SupportsLoRA, SupportsMultiModal,
             inputs_embeds: Optional tensor of input embeddings.
 
         Info:
-            [`Blip2ImageInputs`][aphrodite.model_executor.models.blip2.Blip2ImageInputs]
+            [`Blip2ImageInputs`][sonar.model_executor.models.blip2.Blip2ImageInputs]
 
         """
         if intermediate_tensors is not None:

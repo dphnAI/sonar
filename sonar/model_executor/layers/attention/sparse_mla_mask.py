@@ -4,7 +4,7 @@
 import cutlass
 import cutlass.cute as cute
 
-from aphrodite.vllm_flash_attn.cute import utils
+from sonar.vllm_flash_attn.cute import utils
 
 
 @cute.jit

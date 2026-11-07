@@ -23,10 +23,10 @@ from cutlass.cute.nvgpu import cpasync
 from cutlass.cutlass_dsl import T, dsl_user_op
 from quack.compile_utils import make_fake_tensor
 
-from aphrodite.cute_utils import _tcgen05, simple_tma_copy
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils import math_utils
-from aphrodite.utils.torch_utils import direct_register_custom_op
+from sonar.cute_utils import _tcgen05, simple_tma_copy
+from sonar.triton_utils import tl, triton
+from sonar.utils import math_utils
+from sonar.utils.torch_utils import direct_register_custom_op
 
 __all__ = ["bf16x3_router_gemm"]
 
@@ -531,7 +531,7 @@ def warmup_bf16x3_router_gemm(
     max_num_tokens: int,
 ) -> tuple[int, ...]:
     """Compile every BF16x3 router GEMM configuration reachable at runtime."""
-    from aphrodite.model_executor.warmup.jit_warmup_triton_helper import (
+    from sonar.model_executor.warmup.jit_warmup_triton_helper import (
         TritonWarmupTensor,
         triton_scalar_specialization_rep,
     )
@@ -617,4 +617,4 @@ direct_register_custom_op(
 
 
 def bf16x3_router_gemm(X: torch.Tensor, W: torch.Tensor) -> torch.Tensor:
-    return torch.ops.aphrodite.bf16x3_router_gemm(X, W)
+    return torch.ops.sonar.bf16x3_router_gemm(X, W)

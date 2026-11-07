@@ -24,19 +24,19 @@ from typing import TYPE_CHECKING
 
 import torch
 
-from aphrodite.distributed import tensor_model_parallel_all_reduce
-from aphrodite.model_executor.kernels.mhc.tilelang import (
+from sonar.distributed import tensor_model_parallel_all_reduce
+from sonar.model_executor.kernels.mhc.tilelang import (
     mhc_post_tilelang,
     mhc_pre_delayed_tilelang,
 )
-from aphrodite.model_executor.layers.fused_moe.moe_output import (
+from sonar.model_executor.layers.fused_moe.moe_output import (
     MoEOutput,
     UnfinalizedMoEOutput,
 )
-from aphrodite.model_executor.layers.fusion.quant_activation import QuantizedActivation
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import kMxfp8Dynamic
-from aphrodite.models.deepseek_v41.common.ops.query_quant import mxfp8_scale_bytes
+from sonar.model_executor.layers.fusion.quant_activation import QuantizedActivation
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.quantization.utils.quant_utils import kMxfp8Dynamic
+from sonar.models.deepseek_v41.common.ops.query_quant import mxfp8_scale_bytes
 
 from ...ops.mhc import mhc_pre_delayed_overlap
 

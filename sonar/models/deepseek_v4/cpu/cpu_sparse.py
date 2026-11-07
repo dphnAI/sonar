@@ -13,30 +13,30 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from aphrodite import _custom_ops as ops
-from aphrodite.forward_context import get_forward_context
-from aphrodite.model_executor.utils import replace_parameter, retire_parameter
-from aphrodite.models.deepseek_v4.attention import (
+from sonar import _custom_ops as ops
+from sonar.forward_context import get_forward_context
+from sonar.model_executor.utils import replace_parameter, retire_parameter
+from sonar.models.deepseek_v4.attention import (
     DeepseekV4Attention,
     DeepseekV4Indexer,
     DeepseekV4IndexerCache,
 )
-from aphrodite.models.deepseek_v4.cpu.cpu_compressor import DeepseekV4CPUCompressor
-from aphrodite.models.deepseek_v4.cpu.cpu_mla import (
+from sonar.models.deepseek_v4.cpu.cpu_compressor import DeepseekV4CPUCompressor
+from sonar.models.deepseek_v4.cpu.cpu_mla import (
     DeepseekV4CPUIndexerBackend,
     DeepseekV4CPUSparseBackend,
 )
-from aphrodite.models.deepseek_v4.cpu.cpu_utils import map_local_to_global_slots_cpu
-from aphrodite.models.deepseek_v4.sparse_mla import DeepseekV4FlashMLAMetadata
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import (
+from sonar.models.deepseek_v4.cpu.cpu_utils import map_local_to_global_slots_cpu
+from sonar.models.deepseek_v4.sparse_mla import DeepseekV4FlashMLAMetadata
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import (
     LayerNameType,
     _encode_layer_name,
     _resolve_layer_name,
     direct_register_custom_op,
 )
-from aphrodite.v1.attention.backend import AttentionBackend, AttentionMetadata
-from aphrodite.v1.attention.backends.mla.sparse_swa import DeepseekSparseSWAMetadata
+from sonar.v1.attention.backend import AttentionBackend, AttentionMetadata
+from sonar.v1.attention.backends.mla.sparse_swa import DeepseekSparseSWAMetadata
 
 _ROPE_DIM = 64
 
@@ -121,7 +121,7 @@ def _dequant_linear_weight(layer: torch.nn.Module) -> torch.Tensor:
         return weight.float()
 
     if scale.dtype == torch.float8_e8m0fnu:
-        from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
+        from sonar.model_executor.layers.quantization.utils.fp8_utils import (
             _upcast_e8m0_to_fp32,
         )
 
@@ -349,7 +349,7 @@ class DeepseekV4CPUAttention(DeepseekV4Attention):
 
         qr, qr_scale, kv = self._split_qkv_and_norm(qr_kv)
 
-        return torch.ops.aphrodite.deepseek_v4_cpu_prepare_and_attn(
+        return torch.ops.sonar.deepseek_v4_cpu_prepare_and_attn(
             hidden_states,
             qr,
             kv,

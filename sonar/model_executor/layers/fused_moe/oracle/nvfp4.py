@@ -5,39 +5,39 @@ from typing import Any
 
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite import envs
-from aphrodite.config.kernel import MoEBackend
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe.all2all_utils import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar import envs
+from sonar.config.kernel import MoEBackend
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe.all2all_utils import (
     maybe_make_prepare_finalize,
 )
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEQuantConfig,
     nvfp4_moe_quant_config,
     nvfp4_w4a16_moe_quant_config,
 )
-from aphrodite.model_executor.layers.fused_moe.routed_experts import RoutedExperts
-from aphrodite.model_executor.layers.quantization.utils.b12x_moe import (
+from sonar.model_executor.layers.fused_moe.routed_experts import RoutedExperts
+from sonar.model_executor.layers.quantization.utils.b12x_moe import (
     prepare_nvfp4_moe_layer_for_b12x,
 )
-from aphrodite.model_executor.layers.quantization.utils.flashinfer_fp4_moe import (
+from sonar.model_executor.layers.quantization.utils.flashinfer_fp4_moe import (
     nvfp4_swizzled_scale_to_cutedsl_mma_view,
     prepare_nvfp4_moe_layer_for_fi_or_cutlass,
     prepare_nvfp4_moe_layer_for_flashinfer_cutedsl,
 )
-from aphrodite.model_executor.layers.quantization.utils.humming import prioritize_humming
-from aphrodite.model_executor.layers.quantization.utils.marlin_utils_fp4 import (
+from sonar.model_executor.layers.quantization.utils.humming import prioritize_humming
+from sonar.model_executor.layers.quantization.utils.marlin_utils_fp4 import (
     prepare_nvfp4_moe_layer_for_marlin,
 )
-from aphrodite.model_executor.layers.quantization.utils.nvfp4_emulation_utils import (
+from sonar.model_executor.layers.quantization.utils.nvfp4_emulation_utils import (
     kE2M1ToFloat_handle,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
 )
-from aphrodite.model_executor.utils import move_parameter
+from sonar.model_executor.utils import move_parameter
 
 logger = init_logger(__name__)
 
@@ -49,7 +49,7 @@ class NvFp4MoeBackend(Enum):
     FLASHINFER_CUTEDSL = "FLASHINFER_CUTEDSL"
     FLASHINFER_CUTEDSL_BATCHED = "FLASHINFER_CUTEDSL_BATCHED"
     FLASHINFER_B12X = "FLASHINFER_B12X"
-    APHRODITE_CUTLASS = "APHRODITE_CUTLASS"
+    SONAR_CUTLASS = "SONAR_CUTLASS"
     MARLIN = "MARLIN"
     HUMMING = "HUMMING"
     EMULATION = "EMULATION"
@@ -86,12 +86,12 @@ def backend_to_kernel_cls(
     backend: NvFp4MoeBackend,
 ) -> list[type[mk.FusedMoEExperts]]:
     if backend == NvFp4MoeBackend.B12X:
-        from aphrodite.model_executor.layers.fused_moe.b12x import B12xExperts
+        from sonar.model_executor.layers.fused_moe.b12x import B12xExperts
 
         return [B12xExperts]
 
     elif backend == NvFp4MoeBackend.FLASHINFER_TRTLLM:
-        from aphrodite.model_executor.layers.fused_moe.experts.trtllm_nvfp4_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.trtllm_nvfp4_moe import (
             TrtLlmNvFp4ExpertsModular,
             TrtLlmNvFp4ExpertsMonolithic,
         )
@@ -103,48 +103,48 @@ def backend_to_kernel_cls(
         ]
 
     elif backend == NvFp4MoeBackend.FLASHINFER_CUTLASS:
-        from aphrodite.model_executor.layers.fused_moe.experts.flashinfer_cutlass_moe import (  # noqa: E501
+        from sonar.model_executor.layers.fused_moe.experts.flashinfer_cutlass_moe import (  # noqa: E501
             FlashInferExperts,
         )
 
         return [FlashInferExperts]
 
     elif backend == NvFp4MoeBackend.FLASHINFER_CUTEDSL:
-        from aphrodite.model_executor.layers.fused_moe.experts.flashinfer_cutedsl_moe import (  # noqa: E501
+        from sonar.model_executor.layers.fused_moe.experts.flashinfer_cutedsl_moe import (  # noqa: E501
             FlashInferCuteDSLExperts,
         )
 
         return [FlashInferCuteDSLExperts]
 
     elif backend == NvFp4MoeBackend.FLASHINFER_CUTEDSL_BATCHED:
-        from aphrodite.model_executor.layers.fused_moe.experts.flashinfer_cutedsl_batched_moe import (  # noqa: E501
+        from sonar.model_executor.layers.fused_moe.experts.flashinfer_cutedsl_batched_moe import (  # noqa: E501
             FlashInferCuteDSLBatchedExperts,
         )
 
         return [FlashInferCuteDSLBatchedExperts]
 
     elif backend == NvFp4MoeBackend.FLASHINFER_B12X:
-        from aphrodite.model_executor.layers.fused_moe.experts.flashinfer_b12x_moe import (  # noqa: E501
+        from sonar.model_executor.layers.fused_moe.experts.flashinfer_b12x_moe import (  # noqa: E501
             FlashInferB12xExperts,
         )
 
         return [FlashInferB12xExperts]
 
-    elif backend == NvFp4MoeBackend.APHRODITE_CUTLASS:
-        from aphrodite.model_executor.layers.fused_moe.experts.cutlass_moe import (
+    elif backend == NvFp4MoeBackend.SONAR_CUTLASS:
+        from sonar.model_executor.layers.fused_moe.experts.cutlass_moe import (
             CutlassExpertsFp4,
         )
 
         return [CutlassExpertsFp4]
 
     elif backend == NvFp4MoeBackend.MARLIN:
-        from aphrodite.model_executor.layers.fused_moe.experts.marlin_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.marlin_moe import (
             MarlinExperts,
         )
 
         return [MarlinExperts]
     elif backend == NvFp4MoeBackend.HUMMING:
-        from aphrodite.model_executor.layers.fused_moe.experts.fused_humming_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.fused_humming_moe import (
             BatchedHummingGroupedExperts,
             HummingGroupedExperts,
             HummingIndexedExperts,
@@ -156,13 +156,13 @@ def backend_to_kernel_cls(
             HummingIndexedExperts,
         ]
     elif backend == NvFp4MoeBackend.EMULATION:
-        from aphrodite.model_executor.layers.fused_moe.experts.nvfp4_emulation_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.nvfp4_emulation_moe import (
             Nvfp4QuantizationEmulationTritonExperts,
         )
 
         return [Nvfp4QuantizationEmulationTritonExperts]
     elif backend == NvFp4MoeBackend.FLASHINFER_MOE_EP_CUTEDSL:
-        from aphrodite.model_executor.layers.fused_moe.experts.flashinfer_moe_ep import (  # noqa: E501
+        from sonar.model_executor.layers.fused_moe.experts.flashinfer_moe_ep import (  # noqa: E501
             FlashInferMoeEpExperts,
         )
 
@@ -175,7 +175,7 @@ def map_nvfp4_backend(runner_backend: MoEBackend) -> NvFp4MoeBackend:
     """Map user's MoEBackend to NvFp4MoeBackend."""
     mapping = {
         "b12x": NvFp4MoeBackend.B12X,
-        "cutlass": NvFp4MoeBackend.APHRODITE_CUTLASS,
+        "cutlass": NvFp4MoeBackend.SONAR_CUTLASS,
         "flashinfer_trtllm": NvFp4MoeBackend.FLASHINFER_TRTLLM,
         "flashinfer_cutlass": NvFp4MoeBackend.FLASHINFER_CUTLASS,
         "flashinfer_cutedsl": NvFp4MoeBackend.FLASHINFER_CUTEDSL,
@@ -193,7 +193,7 @@ def map_nvfp4_backend(runner_backend: MoEBackend) -> NvFp4MoeBackend:
 
 
 def _use_a16(backend: NvFp4MoeBackend, checkpoint_uses_a16: bool) -> bool:
-    return checkpoint_uses_a16 or (backend == NvFp4MoeBackend.B12X and envs.APHRODITE_B12X_MOE_FP4_FORCE_A16)
+    return checkpoint_uses_a16 or (backend == NvFp4MoeBackend.B12X and envs.SONAR_B12X_MOE_FP4_FORCE_A16)
 
 
 def select_nvfp4_moe_backend(
@@ -204,13 +204,13 @@ def select_nvfp4_moe_backend(
     """Select the primary NvFP4 MoE backend
     Note: Shape-specific fallbacks may still occur at runtime.
     """
-    from aphrodite.model_executor.layers.quantization.online.requantization import (
+    from sonar.model_executor.layers.quantization.online.requantization import (
         is_requantization_source,
     )
 
     # TODO: remove and let the oracles have an option to skip init.
     if is_requantization_source():
-        from aphrodite.model_executor.layers.fused_moe.experts.nvfp4_emulation_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.nvfp4_emulation_moe import (
             Nvfp4QuantizationEmulationTritonExperts,
         )
 
@@ -225,7 +225,7 @@ def select_nvfp4_moe_backend(
         NvFp4MoeBackend.FLASHINFER_CUTEDSL,
         NvFp4MoeBackend.FLASHINFER_CUTEDSL_BATCHED,
         NvFp4MoeBackend.FLASHINFER_CUTLASS,
-        NvFp4MoeBackend.APHRODITE_CUTLASS,
+        NvFp4MoeBackend.SONAR_CUTLASS,
         NvFp4MoeBackend.MARLIN,
         NvFp4MoeBackend.HUMMING,
         NvFp4MoeBackend.EMULATION,
@@ -238,7 +238,7 @@ def select_nvfp4_moe_backend(
         NvFp4MoeBackend.FLASHINFER_CUTLASS,
         NvFp4MoeBackend.FLASHINFER_CUTEDSL,
         NvFp4MoeBackend.FLASHINFER_MOE_EP_CUTEDSL,
-        NvFp4MoeBackend.APHRODITE_CUTLASS,
+        NvFp4MoeBackend.SONAR_CUTLASS,
         NvFp4MoeBackend.MARLIN,
         NvFp4MoeBackend.EMULATION,
         NvFp4MoeBackend.HUMMING,
@@ -392,7 +392,7 @@ def convert_to_nvfp4_moe_kernel_format(
             w2_scale_2=w2_scale_2,
             a2_scale=a2_scale,
         )
-    elif nvfp4_backend in FLASHINFER_NVFP4_MOE_BACKENDS or nvfp4_backend == NvFp4MoeBackend.APHRODITE_CUTLASS:
+    elif nvfp4_backend in FLASHINFER_NVFP4_MOE_BACKENDS or nvfp4_backend == NvFp4MoeBackend.SONAR_CUTLASS:
         (
             w13,
             w13_scale,
@@ -437,7 +437,7 @@ def convert_to_nvfp4_moe_kernel_format(
             is_act_and_mul=is_act_and_mul,
         )
     elif nvfp4_backend == NvFp4MoeBackend.HUMMING:
-        from aphrodite.model_executor.layers.quantization.utils.humming import (
+        from sonar.model_executor.layers.quantization.utils.humming import (
             convert_to_humming_moe_kernel_format,
         )
 
@@ -552,8 +552,8 @@ def make_nvfp4_moe_quant_config(
 ) -> FusedMoEQuantConfig:
     use_a16 = _use_a16(backend, use_a16)
     if backend == NvFp4MoeBackend.HUMMING:
-        from aphrodite.model_executor.layers.fused_moe import RoutedExperts
-        from aphrodite.model_executor.layers.quantization.utils.humming import (
+        from sonar.model_executor.layers.fused_moe import RoutedExperts
+        from sonar.model_executor.layers.quantization.utils.humming import (
             get_humming_moe_quant_config,
         )
 

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Argument parsing utilities for Aphrodite."""
+"""Argument parsing utilities for Sonar."""
 
 import argparse
 import json
@@ -22,7 +22,7 @@ from typing import Any, NoReturn
 import regex as re
 import yaml
 
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 
@@ -184,7 +184,7 @@ class FlexibleArgumentParser(ArgumentParser):
             and re.search(r"(^|\s)--task(=|\s|$)", message)
         ):
             message += (
-                "\n\nHint: --task is not a aphrodite serve option. "
+                "\n\nHint: --task is not a sonar serve option. "
                 "For embedding, reranking, or reward models, use "
                 "--runner pooling. To adapt a generative model for pooling, "
                 "also use --convert embed, --convert classify, or "
@@ -317,7 +317,7 @@ class FlexibleArgumentParser(ArgumentParser):
             try:
                 model_idx = next(i for i, arg in enumerate(args) if re.match(r"^--model(=.+|$)", arg))
                 logger.warning(
-                    "With `aphrodite serve`, you should provide the model as a "
+                    "With `sonar serve`, you should provide the model as a "
                     "positional argument or in a config file instead of via "
                     "the `--model` option. "
                     "The `--model` option will be removed in a future version."
@@ -332,9 +332,9 @@ class FlexibleArgumentParser(ArgumentParser):
 
                 # Move <model> to the front, e,g:
                 # [Before]
-                # aphrodite serve -tp 2 --model <model> --enforce-eager --port 8001
+                # sonar serve -tp 2 --model <model> --enforce-eager --port 8001
                 # [After]
-                # aphrodite serve <model> -tp 2 --enforce-eager --port 8001
+                # sonar serve <model> -tp 2 --enforce-eager --port 8001
                 args = [
                     "serve",
                     model_tag,
@@ -352,7 +352,7 @@ class FlexibleArgumentParser(ArgumentParser):
             ):
                 raise ValueError(
                     "`model` should be provided as the first positional argument when "
-                    "using `aphrodite serve`. i.e. `aphrodite serve <model> --<arg> <value>`."
+                    "using `sonar serve`. i.e. `sonar serve <model> --<arg> <value>`."
                 )
 
         if "--config" in args:
@@ -509,7 +509,7 @@ class FlexibleArgumentParser(ArgumentParser):
             tensor-parallel-size: 4
         ```
         ```python
-        $: aphrodite {serve,chat,complete} "facebook/opt-12B" \
+        $: sonar {serve,chat,complete} "facebook/opt-12B" \
             --config config.yaml -tp 2
         $: args = [
             "serve,chat,complete",

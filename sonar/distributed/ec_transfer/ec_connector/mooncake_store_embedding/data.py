@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
+    from sonar.config import SonarConfig
 
 EMBEDDING_CACHE_KEY_VERSION = "v3"
 
@@ -26,9 +26,9 @@ class TensorSpec:
     nbytes: int
 
 
-def build_embedding_namespace(aphrodite_config: AphroditeConfig) -> str:
-    model_config = aphrodite_config.model_config
-    ec_config = aphrodite_config.ec_transfer_config
+def build_embedding_namespace(sonar_config: SonarConfig) -> str:
+    model_config = sonar_config.model_config
+    ec_config = sonar_config.ec_transfer_config
     assert ec_config is not None
     extra_config = ec_config.ec_connector_extra_config
 

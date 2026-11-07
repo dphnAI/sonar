@@ -19,11 +19,11 @@ meta:
   # 1000-sample OCRBench at 83.5% with zero request errors.
   # Atlas A5 8-card mixed serving of the native FP4+FP8 Vision-Exp checkpoint
   # (DP4+EP, TP=1, no speculative decoding). 950PR verified 2026-09-10 on
-  # Aphrodite Ascend; 950DT uses the same command (4 of 8 NPUs). See the hardware
+  # Sonar Ascend; 950DT uses the same command (4 of 8 NPUs). See the hardware
   # note for the required hash-router bias fix.
   # AMD MI350X (gfx950): ROCm vision merged in vllm-project/vllm#55107 (2026-09-11)
   # on the #54566 base. Verified text+vision on stock ROCm nightly at single-node
-  # TP2 and TP4, with DSpark k=3 (needs APHRODITE_USE_V2_MODEL_RUNNER=1). See
+  # TP2 and TP4, with DSpark k=3 (needs SONAR_USE_V2_MODEL_RUNNER=1). See
   # "Launching on AMD" in the guide.
   default_hardware: gb200
   hardware:
@@ -43,11 +43,11 @@ model:
     amd: "vllm/vllm-openai-rocm:nightly"
   install:
     # Docker first so it is the default tab. The official wheel can't run this
-    # checkpoint: released Aphrodite prior to v0.30.0 routes it to the text-only
+    # checkpoint: released Sonar prior to v0.30.0 routes it to the text-only
     # DeepseekV4ForCausalLM, which then fails on the vision/aligner tensors.
     # v0.30.0 already resolves it to DeepseekV4ForConditionalGeneration (verified on the ROCm image, 2026-10-02).
     docker:
-      note: "NVIDIA: use the dedicated DeepSeek-V4-Flash-Vision image until support lands in the standard Aphrodite image. AMD: vllm/vllm-openai-rocm:v0.30.0 (ROCm 7.2.3) or a nightly >= 2026-09-11 (includes #55107); on v0.30.0 also pass --compilation-config '{\"cudagraph_mode\":\"FULL_DECODE_ONLY\"}' (see the AMD section). Ascend 950PR/950DT: pin quay.io/ascend/vllm-ascend:v0.23.0-a5 and overlay vllm-project/vllm-ascend#16259."
+      note: "NVIDIA: use the dedicated DeepSeek-V4-Flash-Vision image until support lands in the standard Sonar image. AMD: vllm/vllm-openai-rocm:v0.30.0 (ROCm 7.2.3) or a nightly >= 2026-09-11 (includes #55107); on v0.30.0 also pass --compilation-config '{\"cudagraph_mode\":\"FULL_DECODE_ONLY\"}' (see the AMD section). Ascend 950PR/950DT: pin quay.io/ascend/vllm-ascend:v0.23.0-a5 and overlay vllm-project/vllm-ascend#16259."
     pip: false
   architecture: moe
   parameter_count: "285B"
@@ -97,7 +97,7 @@ features:
     # hardware_opt_in_features below — GB200 keeps DSpark on.
     hardware_overrides:
       # ROCm: the DeepseekV4 indexer backend rejects adaptive verification, so it
-      # is forced false (DSpark still drafts k=3). APHRODITE_USE_V2_MODEL_RUNNER=1
+      # is forced false (DSpark still drafts k=3). SONAR_USE_V2_MODEL_RUNNER=1
       # (hardware_overrides.amd.extra_env) is also required.
       amd:
         args:
@@ -170,9 +170,9 @@ hardware_overrides:
       - "--max-model-len"
       - "32768"
     extra_env:
-      APHRODITE_ROCM_USE_AITER: "1"
-      APHRODITE_USE_BREAKABLE_CUDAGRAPH: "1"
-      APHRODITE_USE_V2_MODEL_RUNNER: "1"
+      SONAR_ROCM_USE_AITER: "1"
+      SONAR_USE_BREAKABLE_CUDAGRAPH: "1"
+      SONAR_USE_V2_MODEL_RUNNER: "1"
   npu:
     extra_args:
       - "--data-parallel-size"
@@ -211,10 +211,10 @@ hardware_overrides:
 
 hardware_notes:
   ascend_950dt_8x:
-    title: "Aphrodite Ascend A5 image required"
+    title: "Sonar Ascend A5 image required"
     body: "Mixed serving on one 8-card 950DT node uses 4 of 8 NPUs (DP4+EP, TP=1). Same command as 950PR. Pin quay.io/ascend/vllm-ascend:v0.23.0-a5 — the NVIDIA pip wheel cannot run here. Set HCCL_BUFFSIZE=1024 before launch. Native Flash-Vision checkpoints need the hash-router bias skip in vllm-project/vllm-ascend#16259 — without it load_weights aborts on model.layers.0.mlp.gate.e_score_correction_bias."
   ascend_950pr_8x:
-    title: "Aphrodite Ascend A5 image required"
+    title: "Sonar Ascend A5 image required"
     body: "Mixed serving on one 8-card 950PR node uses 4 of 8 NPUs (DP4+EP, TP=1). Same command as 950DT. Pin quay.io/ascend/vllm-ascend:v0.23.0-a5 and set HCCL_BUFFSIZE=1024 before launch. Native Flash-Vision checkpoints need the hash-router bias skip in vllm-project/vllm-ascend#16259 — without it load_weights aborts on model.layers.0.mlp.gate.e_score_correction_bias."
 
 guide: |
@@ -235,7 +235,7 @@ guide: |
 
   ## Prerequisites
 
-  Vision support is not in a stable Aphrodite release yet — it lives in
+  Vision support is not in a stable Sonar release yet — it lives in
   [vllm-project/vllm#54566](https://github.com/vllm-project/vllm/pull/54566). Until that
   lands, use the pinned `vllm/vllm-openai:deepseekv4-flash-vision` image; the official
   wheel routes this checkpoint to the text-only class and fails on the vision tensors.
@@ -244,7 +244,7 @@ guide: |
   - **Hardware:** NVIDIA (verified on GB200) and AMD MI350X (gfx950);
     XPU still has no vision implementation.
   - **Tokenizer / chat template:** nothing to pass. The repo ships no Jinja template
-    (prompt encoding lives in `encoding/`); Aphrodite resolves `--tokenizer-mode` to
+    (prompt encoding lives in `encoding/`); Sonar resolves `--tokenizer-mode` to
     `deepseek_v4` automatically, which is what turns OpenAI content blocks into
     `<｜deepseek_image｜>` placeholders.
 
@@ -253,9 +253,9 @@ guide: |
   ### Verified configuration — one GB200 NVL4 tray (TP4 + EP)
 
   ```bash
-  export APHRODITE_FLASHINFER_AUTOTUNE_SKIP_OPS="trtllm_fp4_block_scale_moe,flashinfer::trtllm_fp4_block_scale_moe"
+  export SONAR_FLASHINFER_AUTOTUNE_SKIP_OPS="trtllm_fp4_block_scale_moe,flashinfer::trtllm_fp4_block_scale_moe"
 
-  aphrodite serve deepseek-ai/DeepSeek-V4-Flash-Vision-Exp \
+  sonar serve deepseek-ai/DeepSeek-V4-Flash-Vision-Exp \
     --tensor-parallel-size 4 \
     --enable-expert-parallel \
     --kv-cache-dtype fp8 \
@@ -268,7 +268,7 @@ guide: |
   Three things there are environment-specific, which is why the builder above leaves
   them out:
 
-  - `APHRODITE_FLASHINFER_AUTOTUNE_SKIP_OPS` excludes the FP4 block-scale MoE op from
+  - `SONAR_FLASHINFER_AUTOTUNE_SKIP_OPS` excludes the FP4 block-scale MoE op from
     FlashInfer's startup autotuning. Export it if autotuning that op fails or costs more
     startup time than it earns back on your FlashInfer build; it is a tuning knob, not a
     requirement. The Advanced row's `--disable-flashinfer-autotune` turns autotuning
@@ -297,11 +297,11 @@ guide: |
   `vllm/vllm-openai-rocm:nightly` built on/after 2026-09-11 runs the checkpoint
   natively. Three env vars are required:
 
-  - `APHRODITE_ROCM_USE_AITER=1` — the sparse-attention indexer's ROCm path runs only on
+  - `SONAR_ROCM_USE_AITER=1` — the sparse-attention indexer's ROCm path runs only on
     AITER; without it the engine aborts at KV-cache profiling.
-  - `APHRODITE_USE_BREAKABLE_CUDAGRAPH=1` — the multimodal wrapper is not torch-compiled, so
+  - `SONAR_USE_BREAKABLE_CUDAGRAPH=1` — the multimodal wrapper is not torch-compiled, so
     the default `FULL_AND_PIECEWISE` capture cannot attach without breakable graphs.
-  - `APHRODITE_USE_V2_MODEL_RUNNER=1` — required for DSpark (the V1 ROCm runner refuses it);
+  - `SONAR_USE_V2_MODEL_RUNNER=1` — required for DSpark (the V1 ROCm runner refuses it);
     harmless for plain serving.
 
   Verified single-node launch:
@@ -311,9 +311,9 @@ guide: |
     --ipc host --network host --privileged --shm-size 128g \
     --device /dev/kfd --device /dev/dri --group-add video \
     -v ~/.cache/huggingface:/root/.cache/huggingface \
-    -e APHRODITE_ROCM_USE_AITER=1 \
-    -e APHRODITE_USE_BREAKABLE_CUDAGRAPH=1 \
-    -e APHRODITE_USE_V2_MODEL_RUNNER=1 \
+    -e SONAR_ROCM_USE_AITER=1 \
+    -e SONAR_USE_BREAKABLE_CUDAGRAPH=1 \
+    -e SONAR_USE_V2_MODEL_RUNNER=1 \
     vllm/vllm-openai-rocm:nightly \
     deepseek-ai/DeepSeek-V4-Flash-Vision-Exp \
     --tensor-parallel-size 2 \
@@ -435,7 +435,7 @@ guide: |
   For throughput:
 
   ```bash
-  aphrodite bench serve \
+  sonar bench serve \
     --model deepseek-ai/DeepSeek-V4-Flash-Vision-Exp \
     --dataset-name random \
     --random-input-len 4096 \
@@ -458,7 +458,7 @@ guide: |
   ## References
 
   - [Model card](https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash-Vision-Exp)
-  - [Aphrodite support PR #54566](https://github.com/vllm-project/vllm/pull/54566)
-  - [Aphrodite ROCm vision PR #55107](https://github.com/vllm-project/vllm/pull/55107)
+  - [Sonar support PR #54566](https://github.com/vllm-project/vllm/pull/54566)
+  - [Sonar ROCm vision PR #55107](https://github.com/vllm-project/vllm/pull/55107)
   - [DeepSeek-V4-Flash recipe](/deepseek-ai/DeepSeek-V4-Flash) — the text-only sibling
   - [DeepSpec (DSpark)](https://github.com/deepseek-ai/DeepSpec)

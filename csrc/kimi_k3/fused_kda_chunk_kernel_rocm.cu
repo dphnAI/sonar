@@ -59,7 +59,7 @@ namespace {
 #ifndef ROCM_USE_FUSED_PREFILL_KDA
 __device__ inline void kda_unsupported_arch(const char* name) {
   if (threadIdx.x == 0 && blockIdx.x == 0 && blockIdx.y == 0) {
-    printf("Aphrodite %s is built for gfx950 only, aborting.\n", name);
+    printf("Sonar %s is built for gfx950 only, aborting.\n", name);
   }
   __builtin_trap();
 }
@@ -1306,7 +1306,7 @@ struct PrologueParams {
   // Optional depthwise convolution fused into the load phases. When conv_w is
   // null, q/k/v are already convolved and are read directly; otherwise they
   // alias the three bands of the raw QKV projection and the conv + silu is
-  // applied here. Aphrodite never takes the fused path: it recomputes the conv
+  // applied here. Sonar never takes the fused path: it recomputes the conv
   // once per load phase, which costs more than the launches it saves.
   const float* conv_w;   // [width][3 * LP] fp32, tap stride cw_stride
   bf16_t* conv_state;    // [slots][3][3 * LP] bf16, same tap stride
@@ -2243,7 +2243,7 @@ void fused_kda_chunk(
                 static_cast<float>(scale)};
 
   // `groups` is chosen host-side by _chunk_groups() in
-  // aphrodite/models/kimi_k3/amd/ops/kda_chunk.py, which also sizes
+  // sonar/models/kimi_k3/amd/ops/kda_chunk.py, which also sizes
   // `group_state`. Keeping the policy and the workspace sizing in one place is
   // what guarantees the workspace is big enough for the G actually launched.
   int const num_cus = get_device_prop()->multiProcessorCount;
@@ -2291,7 +2291,7 @@ void fused_kda_chunk(
 
   if (G > 1) {
     // One caller-owned fp32 workspace carved into the four group buffers, so
-    // the memory stays inside the caching allocator and Aphrodite's memory
+    // the memory stays inside the caching allocator and Sonar's memory
     // profiling sees it. Layout matches _kda_group_workspace() in
     // kda_chunk.py.
     int64_t const planes = static_cast<int64_t>(G) * nh_total;
@@ -2324,7 +2324,7 @@ void fused_kda_chunk(
     hipLaunchKernelGGL(kernel, grid, dim3(64 * (bv / 16) * ks), 0, stream,
                        params);
   };
-#define APHRODITE_KDA_PASS1_CASE(WAVES)                                    \
+#define SONAR_KDA_PASS1_CASE(WAVES)                                        \
   case WAVES:                                                              \
     if (cache_in != nullptr)                                               \
       launch1(kda_chunk_fused<16, WAVES, true, false, 1>, 16 * WAVES, 1);  \
@@ -2335,7 +2335,7 @@ void fused_kda_chunk(
 // come from launching more blocks; KS == 2 puts a pair of waves on each
 // v-slice instead. WAVES == 8 already runs 8 waves per block, and pairing
 // there would need 1024 threads and more LDS than a CU has, so it stays at 1.
-#define APHRODITE_KDA_PASS2_CASE(WAVES, KSPLIT)                            \
+#define SONAR_KDA_PASS2_CASE(WAVES, KSPLIT)                                \
   case WAVES:                                                              \
     if (cache_in != nullptr)                                               \
       launch2(kda_chunk_fused<16, WAVES, true, true, KSPLIT>, 16 * WAVES,  \
@@ -2347,9 +2347,9 @@ void fused_kda_chunk(
 
   if (G > 1) {
     switch (waves1) {
-      APHRODITE_KDA_PASS1_CASE(2)
-      APHRODITE_KDA_PASS1_CASE(4)
-      APHRODITE_KDA_PASS1_CASE(8)
+      SONAR_KDA_PASS1_CASE(2)
+      SONAR_KDA_PASS1_CASE(4)
+      SONAR_KDA_PASS1_CASE(8)
       default:
         STD_TORCH_CHECK(false, "unsupported KDA chunk wave count: ", waves1);
     }
@@ -2361,14 +2361,14 @@ void fused_kda_chunk(
         params.sin_, G, static_cast<int>(nh_total));
   }
   switch (waves2) {
-    APHRODITE_KDA_PASS2_CASE(2, 2)
-    APHRODITE_KDA_PASS2_CASE(4, 2)
-    APHRODITE_KDA_PASS2_CASE(8, 1)
+    SONAR_KDA_PASS2_CASE(2, 2)
+    SONAR_KDA_PASS2_CASE(4, 2)
+    SONAR_KDA_PASS2_CASE(8, 1)
     default:
       STD_TORCH_CHECK(false, "unsupported KDA chunk wave count: ", waves2);
   }
-#undef APHRODITE_KDA_PASS1_CASE
-#undef APHRODITE_KDA_PASS2_CASE
+#undef SONAR_KDA_PASS1_CASE
+#undef SONAR_KDA_PASS2_CASE
 
   hipError_t const error = hipGetLastError();
   STD_TORCH_CHECK(error == hipSuccess,

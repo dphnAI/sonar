@@ -7,24 +7,24 @@ from http import HTTPStatus
 from fastapi import APIRouter, Depends, FastAPI, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from aphrodite.entrypoints.openai.chat_completion.batch_serving import OpenAIServingChatBatch
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.batch_serving import OpenAIServingChatBatch
+from sonar.entrypoints.openai.chat_completion.protocol import (
     BatchChatCompletionRequest,
     ChatCompletionRequest,
     ChatCompletionResponse,
     ChatCompletionStreamResponse,
 )
-from aphrodite.entrypoints.openai.chat_completion.serving import OpenAIServingChat
-from aphrodite.entrypoints.serve.engine.protocol import ErrorResponse
-from aphrodite.entrypoints.serve.utils.api_utils import (
+from sonar.entrypoints.openai.chat_completion.serving import OpenAIServingChat
+from sonar.entrypoints.serve.engine.protocol import ErrorResponse
+from sonar.entrypoints.serve.utils.api_utils import (
     json_or_sse_responses,
     load_aware_call,
     validate_json_request,
     with_cancellation,
 )
-from aphrodite.entrypoints.serve.utils.orca_metrics import metrics_header
-from aphrodite.entrypoints.serve.utils.sse_keep_alive import with_sse_keep_alive
-from aphrodite.logger import init_logger
+from sonar.entrypoints.serve.utils.orca_metrics import metrics_header
+from sonar.entrypoints.serve.utils.sse_keep_alive import with_sse_keep_alive
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 

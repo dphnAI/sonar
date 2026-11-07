@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 import torch
 
-from aphrodite.lora.punica_wrapper.punica_base import PunicaWrapperBase
+from sonar.lora.punica_wrapper.punica_base import PunicaWrapperBase
 
 
 @dataclass
@@ -38,7 +38,7 @@ class MoELoRAContext:
 
     punica_wrapper: PunicaWrapperBase
 
-    # Whether APHRODITE_TUNED_CONFIG_FOLDER is set; selects get_lora_op_configs vs
+    # Whether SONAR_TUNED_CONFIG_FOLDER is set; selects get_lora_op_configs vs
     # try_get_optimal_moe_lora_config for Triton kernel tile configs.
     use_tuned_config: bool
 

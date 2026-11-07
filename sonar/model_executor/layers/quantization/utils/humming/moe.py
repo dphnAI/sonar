@@ -7,41 +7,41 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-import aphrodite.model_executor.layers.quantization.utils.humming.schema as humming_schema
-from aphrodite import envs
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe.all2all_utils import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+import sonar.model_executor.layers.quantization.utils.humming.schema as humming_schema
+from sonar import envs
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe.all2all_utils import (
     maybe_make_prepare_finalize,
 )
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEQuantConfig,
     FusedMoEQuantDesc,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.fused_humming_moe import (
+from sonar.model_executor.layers.fused_moe.experts.fused_humming_moe import (
     BatchedHummingGroupedExperts,
     HummingGroupedExperts,
     HummingIndexedExperts,
 )
-from aphrodite.model_executor.layers.quantization.utils.humming.linear import (
+from sonar.model_executor.layers.quantization.utils.humming.linear import (
     get_live_param,
     kernel_parameters,
     replace_layer_parameters,
 )
-from aphrodite.model_executor.layers.quantization.utils.humming.schema import (
+from sonar.model_executor.layers.quantization.utils.humming.schema import (
     humming_is_layer_skipped,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     FP8_DTYPE,
     GroupShape,
     QuantKey,
 )
-from aphrodite.utils.import_utils import has_humming
+from sonar.utils.import_utils import has_humming
 
 if TYPE_CHECKING:
-    from aphrodite.model_executor.layers.fused_moe.routed_experts import RoutedExperts
-    from aphrodite.utils.humming import LayerConfig
+    from sonar.model_executor.layers.fused_moe.routed_experts import RoutedExperts
+    from sonar.utils.humming import LayerConfig
 
 logger = init_logger(__name__)
 
@@ -390,7 +390,7 @@ def _prepare_and_transform_sublayer(
     param_dtype: torch.dtype,
 ) -> "LayerConfig":
     """Prepare Humming configuration and transform one sublayer's tensors."""
-    from aphrodite.utils.humming import (
+    from sonar.utils.humming import (
         prepare_and_transform_humming_tensors,
     )
 
@@ -453,7 +453,7 @@ def _process_single_sublayer(
         Tuple of the final weight schema, input schema, and Humming layer config.
 
     """
-    from aphrodite.utils.humming import HummingWeightSchema
+    from sonar.utils.humming import HummingWeightSchema
 
     # Step 1: Convert from checkpoint format to humming format if needed
     current_weight_schema, current_input_schema = _convert_sublayer_to_humming(
@@ -554,13 +554,13 @@ def convert_to_humming_moe_kernel_format(
         if quant_config is None:
             raise ValueError("Must provide either weight_schema/input_schema or quant_config")
 
-        from aphrodite.utils.humming import BaseWeightSchema, HummingInputSchema
+        from sonar.utils.humming import BaseWeightSchema, HummingInputSchema
 
         if weight_schema is None:
             weight_schema = BaseWeightSchema.from_config(quant_config)
 
         if input_schema is None:
-            input_quant_config = (envs.APHRODITE_HUMMING_INPUT_QUANT_CONFIG or {}).copy()
+            input_quant_config = (envs.SONAR_HUMMING_INPUT_QUANT_CONFIG or {}).copy()
             if humming_is_layer_skipped(input_quant_config, layer.layer_name):
                 input_schema = HummingInputSchema()
             else:

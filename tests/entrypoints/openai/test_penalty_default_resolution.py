@@ -12,11 +12,11 @@ forwarded them straight through, so server-side defaults coming from
 discarded on the /v1/chat/completions and /v1/completions endpoints.
 """
 
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import (
     BatchChatCompletionRequest,
     ChatCompletionRequest,
 )
-from aphrodite.entrypoints.openai.completion.protocol import (
+from sonar.entrypoints.openai.completion.protocol import (
     CompletionRequest,
 )
 

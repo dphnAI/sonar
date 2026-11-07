@@ -18,20 +18,20 @@ import torch
 import torch.nn as nn
 from transformers import BatchFeature, PreTrainedConfig
 
-from aphrodite import envs
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.multimodal import (
+from sonar import envs
+from sonar.config import SonarConfig
+from sonar.config.multimodal import (
     MultiModalDummyOptions,
     VideoDummyOptions,
 )
-from aphrodite.inputs import MultiModalDataDict, MultiModalInput
-from aphrodite.logger import init_logger
-from aphrodite.lora.layers.base import BaseLayerWithLoRA
-from aphrodite.model_executor.layers.activation import ReLUSquaredActivation
-from aphrodite.model_executor.layers.fusion.mm_input_norm import FusedMMInputNorm
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
-from aphrodite.model_executor.models.interfaces import (
+from sonar.inputs import MultiModalDataDict, MultiModalInput
+from sonar.logger import init_logger
+from sonar.lora.layers.base import BaseLayerWithLoRA
+from sonar.model_executor.layers.activation import ReLUSquaredActivation
+from sonar.model_executor.layers.fusion.mm_input_norm import FusedMMInputNorm
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.model_loader.weight_utils import default_weight_loader
+from sonar.model_executor.models.interfaces import (
     HasInnerState,
     IsHybrid,
     MultiModalEmbeddings,
@@ -40,25 +40,25 @@ from aphrodite.model_executor.models.interfaces import (
     SupportsMultiModal,
     SupportsMultiModalPruning,
 )
-from aphrodite.model_executor.models.module_mapping import MultiModelKeys
-from aphrodite.model_executor.models.nemotron_h import NemotronHForCausalLM
-from aphrodite.model_executor.models.parakeet import ParakeetExtractor, ProjectedParakeet
-from aphrodite.model_executor.models.radio import RadioModel, calc_seq_lens
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.models.module_mapping import MultiModelKeys
+from sonar.model_executor.models.nemotron_h import NemotronHForCausalLM
+from sonar.model_executor.models.parakeet import ParakeetExtractor, ProjectedParakeet
+from sonar.model_executor.models.radio import RadioModel, calc_seq_lens
+from sonar.model_executor.models.utils import (
     WeightsMapper,
-    init_aphrodite_registered_model,
+    init_sonar_registered_model,
     maybe_prefix,
 )
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import (
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import (
     AudioItem,
     BatchedTensorInputs,
     MultiModalFieldConfig,
     MultiModalKwargsItems,
     VideoItem,
 )
-from aphrodite.multimodal.media.audio import load_audio_pyav
-from aphrodite.multimodal.parse import (
+from sonar.multimodal.media.audio import load_audio_pyav
+from sonar.multimodal.parse import (
     AudioProcessorItems,
     ImageEmbeddingItems,
     ImageProcessorItems,
@@ -67,12 +67,12 @@ from aphrodite.multimodal.parse import (
     MultiModalDataParser,
     VideoProcessorItems,
 )
-from aphrodite.multimodal.processing import (
+from sonar.multimodal.processing import (
     BaseDummyInputsBuilder,
     ProcessorInputs,
     TimingContext,
 )
-from aphrodite.multimodal.processing.processor import (
+from sonar.multimodal.processing.processor import (
     BaseMultiModalProcessor,
     BaseProcessingInfo,
     HFMultiModalInputs,
@@ -80,16 +80,16 @@ from aphrodite.multimodal.processing.processor import (
     PromptUpdate,
     cached_encode,
 )
-from aphrodite.multimodal.video_prune.evs import (
+from sonar.multimodal.video_prune.evs import (
     compute_retained_tokens_count,
     compute_retention_mask,
 )
-from aphrodite.renderers import TokenizeParams
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.tokenizers import cached_tokenizer_from_config
-from aphrodite.transformers_utils.configs.radio import RadioConfig
-from aphrodite.transformers_utils.processors.internvl import get_internvl_target_ratios
-from aphrodite.transformers_utils.processors.nano_nemotron_vl import (
+from sonar.renderers import TokenizeParams
+from sonar.sequence import IntermediateTensors
+from sonar.tokenizers import cached_tokenizer_from_config
+from sonar.transformers_utils.configs.radio import RadioConfig
+from sonar.transformers_utils.processors.internvl import get_internvl_target_ratios
+from sonar.transformers_utils.processors.nano_nemotron_vl import (
     AUDIO_CONTEXT,
     IMG_CONTEXT,
     IMG_END,
@@ -99,7 +99,7 @@ from aphrodite.transformers_utils.processors.nano_nemotron_vl import (
     NanoNemotronVLProcessor,
     get_video_target_size_and_feature_size,
 )
-from aphrodite.utils.tensor_schema import TensorSchema, TensorShape
+from sonar.utils.tensor_schema import TensorSchema, TensorShape
 
 from .utils import _merge_multimodal_embeddings
 
@@ -626,7 +626,7 @@ class NanoNemotronVLMultiModalProcessor(BaseMultiModalProcessor[NanoNemotronVLPr
                 audio_items.append(
                     load_audio_pyav(
                         BytesIO(video_bytes),
-                        max_duration_s=envs.APHRODITE_MAX_AUDIO_DECODE_DURATION_S,
+                        max_duration_s=envs.SONAR_MAX_AUDIO_DECODE_DURATION_S,
                     )
                 )
                 has_audio.append(True)
@@ -886,7 +886,7 @@ class NemotronH_Nano_VL_V2(
     embedding_modules = NemotronHForCausalLM.embedding_modules
     lora_skip_prefixes = NemotronHForCausalLM.lora_skip_prefixes
 
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={
             "language_model.backbone": "language_model.model",
         },
@@ -902,9 +902,9 @@ class NemotronH_Nano_VL_V2(
             return AUDIO_CONTEXT
         return None
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        model_config = aphrodite_config.model_config
+        model_config = sonar_config.model_config
         config = model_config.hf_config
         multimodal_config = model_config.multimodal_config
         assert multimodal_config is not None
@@ -921,16 +921,16 @@ class NemotronH_Nano_VL_V2(
         vision_config = getattr(config, "vision_config", config)
         self.video_temporal_patch_size: int = getattr(vision_config, "video_temporal_patch_size", 1)
 
-        with self._mark_language_model(aphrodite_config):
-            self.language_model = init_aphrodite_registered_model(
-                aphrodite_config=aphrodite_config,
+        with self._mark_language_model(sonar_config):
+            self.language_model = init_sonar_registered_model(
+                sonar_config=sonar_config,
                 hf_config=config.text_config,
                 prefix=maybe_prefix(prefix, "language_model"),
             )
         llm_dtype = self.language_model.config.dtype
         assert isinstance(llm_dtype, torch.dtype)
         self.llm_dtype = llm_dtype
-        with self._mark_tower_model(aphrodite_config, {"image", "video", "audio"}):
+        with self._mark_tower_model(sonar_config, {"image", "video", "audio"}):
             self.input_norm: FusedMMInputNorm | None = (
                 FusedMMInputNorm(
                     image_mean=config.norm_mean,
@@ -987,7 +987,7 @@ class NemotronH_Nano_VL_V2(
                 )
 
         self.config = config
-        self.model_config = aphrodite_config.model_config
+        self.model_config = sonar_config.model_config
 
         # Pre-tokenize special tokens for video processing
         # to avoid repeated tokenization
@@ -1638,16 +1638,16 @@ class NemotronH_Nano_VL_V2(
         return self.language_model.mamba_cache.get_seqlen_agnostic_capture_inputs(batch_size)
 
     @classmethod
-    def get_mamba_state_shape_from_config(cls, aphrodite_config: "AphroditeConfig"):
-        text_config = aphrodite_config.model_config.hf_config.text_config
-        temp_aphrodite_config = aphrodite_config.with_hf_config(text_config)
-        return NemotronHForCausalLM.get_mamba_state_shape_from_config(temp_aphrodite_config)
+    def get_mamba_state_shape_from_config(cls, sonar_config: "SonarConfig"):
+        text_config = sonar_config.model_config.hf_config.text_config
+        temp_sonar_config = sonar_config.with_hf_config(text_config)
+        return NemotronHForCausalLM.get_mamba_state_shape_from_config(temp_sonar_config)
 
     @classmethod
-    def get_mamba_state_dtype_from_config(cls, aphrodite_config: "AphroditeConfig"):
-        text_config = aphrodite_config.model_config.hf_config.text_config
-        temp_aphrodite_config = aphrodite_config.with_hf_config(text_config)
-        return NemotronHForCausalLM.get_mamba_state_dtype_from_config(temp_aphrodite_config)
+    def get_mamba_state_dtype_from_config(cls, sonar_config: "SonarConfig"):
+        text_config = sonar_config.model_config.hf_config.text_config
+        temp_sonar_config = sonar_config.with_hf_config(text_config)
+        return NemotronHForCausalLM.get_mamba_state_dtype_from_config(temp_sonar_config)
 
     @classmethod
     def get_mamba_state_copy_func(cls):

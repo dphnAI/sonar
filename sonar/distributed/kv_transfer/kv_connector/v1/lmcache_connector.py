@@ -5,28 +5,28 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed.kv_events import (
+from sonar.config import SonarConfig
+from sonar.distributed.kv_events import (
     BlockStored,
     KVCacheEventType,
     KVConnectorKVEvents,
     KVEventAggregator,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.base import (
+from sonar.distributed.kv_transfer.kv_connector.v1.base import (
     KVConnectorBase_V1,
     KVConnectorMetadata,
     KVConnectorRole,
 )
-from aphrodite.logger import init_logger
-from aphrodite.v1.attention.backend import AttentionMetadata
-from aphrodite.v1.core.sched.output import SchedulerOutput
-from aphrodite.v1.outputs import KVConnectorOutput
+from sonar.logger import init_logger
+from sonar.v1.attention.backend import AttentionMetadata
+from sonar.v1.core.sched.output import SchedulerOutput
+from sonar.v1.outputs import KVConnectorOutput
 
 if TYPE_CHECKING:
-    from aphrodite.forward_context import ForwardContext
-    from aphrodite.v1.core.kv_cache_manager import KVCacheBlocks
-    from aphrodite.v1.kv_cache_interface import KVCacheConfig
-    from aphrodite.v1.request import Request
+    from sonar.forward_context import ForwardContext
+    from sonar.v1.core.kv_cache_manager import KVCacheBlocks
+    from sonar.v1.kv_cache_interface import KVCacheConfig
+    from sonar.v1.request import Request
 
 logger = init_logger(__name__)
 
@@ -77,19 +77,19 @@ class LMCacheConnectorV1(KVConnectorBase_V1):
 
     def __init__(
         self,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
         role: KVConnectorRole,
         kv_cache_config: "KVCacheConfig",
     ):
-        super().__init__(aphrodite_config=aphrodite_config, role=role, kv_cache_config=kv_cache_config)
-        assert aphrodite_config.kv_transfer_config is not None
-        use_native = aphrodite_config.kv_transfer_config.get_from_extra_config("use_native", False)
+        super().__init__(sonar_config=sonar_config, role=role, kv_cache_config=kv_cache_config)
+        assert sonar_config.kv_transfer_config is not None
+        use_native = sonar_config.kv_transfer_config.get_from_extra_config("use_native", False)
         if use_native:
             logger.info("Initializing native LMCache connector")
             # lazy import
-            from aphrodite.distributed.kv_transfer.kv_connector.v1 import lmcache_integration
+            from sonar.distributed.kv_transfer.kv_connector.v1 import lmcache_integration
 
-            _adapter = lmcache_integration.aphrodite_v1_adapter
+            _adapter = lmcache_integration.sonar_v1_adapter
 
             cls = _adapter.LMCacheConnectorV1Impl
         else:
@@ -101,7 +101,7 @@ class LMCacheConnectorV1(KVConnectorBase_V1):
 
             cls = LMCacheConnectorLatestImpl
 
-        self._lmcache_engine = cls(aphrodite_config, role, self)
+        self._lmcache_engine = cls(sonar_config, role, self)
 
         self._kv_cache_events: LMCacheKVEvents | None = None
 
@@ -140,7 +140,7 @@ class LMCacheConnectorV1(KVConnectorBase_V1):
             engine.layerwise_storers = []
 
     def start_load_kv(self, forward_context: "ForwardContext", **kwargs: Any) -> None:
-        """Start loading the KV cache from the connector to Aphrodite's paged
+        """Start loading the KV cache from the connector to Sonar's paged
         KV buffer. This is called from the forward context before the
         forward pass to enable async loading during model execution.
 
@@ -156,7 +156,7 @@ class LMCacheConnectorV1(KVConnectorBase_V1):
         self._lmcache_engine.start_load_kv(forward_context, **kwargs)
 
     def wait_for_layer_load(self, layer_name: str) -> None:
-        """Block until the KV for a specific layer is loaded into Aphrodite's
+        """Block until the KV for a specific layer is loaded into Sonar's
         paged buffer. This is called from within attention layer to ensure
         async copying from start_load_kv is complete.
 
@@ -175,14 +175,14 @@ class LMCacheConnectorV1(KVConnectorBase_V1):
         attn_metadata: AttentionMetadata,
         **kwargs: Any,
     ) -> None:
-        """Start saving the a layer of KV cache from Aphrodite's paged buffer
+        """Start saving the a layer of KV cache from Sonar's paged buffer
         to the connector. This is called from within attention layer to
         enable async copying during execution.
 
         Args:
             layer_name (str): the name of the layer.
             kv_layer (torch.Tensor): the paged KV buffer of the current
-                layer in Aphrodite.
+                layer in Sonar.
             attn_metadata (AttentionMetadata): the attention metadata.
             **kwargs: additional arguments for the save operation.
 

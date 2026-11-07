@@ -3,20 +3,20 @@
 
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.config import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEQuantConfig,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.deep_gemm_moe import (
+from sonar.model_executor.layers.fused_moe.experts.deep_gemm_moe import (
     DeepGemmExperts,
     _valid_deep_gemm,
     _valid_deep_gemm_shape,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.fallback import FallbackExperts
-from aphrodite.model_executor.layers.fused_moe.experts.triton_moe import TritonExperts
-from aphrodite.utils.deep_gemm import (
+from sonar.model_executor.layers.fused_moe.experts.fallback import FallbackExperts
+from sonar.model_executor.layers.fused_moe.experts.triton_moe import TritonExperts
+from sonar.utils.deep_gemm import (
     is_deep_gemm_e8m0_used,
 )
 

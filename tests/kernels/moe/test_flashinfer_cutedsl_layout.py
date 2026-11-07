@@ -5,8 +5,8 @@
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.quantization.utils.flashinfer_fp4_moe import (
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.quantization.utils.flashinfer_fp4_moe import (
     reorder_w13_to_w31_for_flashinfer_cutedsl,
 )
 

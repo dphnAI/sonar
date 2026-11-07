@@ -9,18 +9,18 @@ path.
 
 import torch
 
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.mamba.ops.gather_initial_states import (
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.logger import init_logger
+from sonar.model_executor.layers.mamba.ops.gather_initial_states import (
     gather_initial_states,
 )
-from aphrodite.models.kimi_k3.amd.ops.kda_chunk import (
+from sonar.models.kimi_k3.amd.ops.kda_chunk import (
     can_use_fused_kda_chunk,
     fused_kda_chunk,
     fused_kda_prologue,
 )
-from aphrodite.models.kimi_k3.amd.ops.third_party.kda import chunk_kda_with_fused_gate
-from aphrodite.third_party.flash_linear_attention.ops.utils import FLA_CHUNK_SIZE
+from sonar.models.kimi_k3.amd.ops.third_party.kda import chunk_kda_with_fused_gate
+from sonar.third_party.flash_linear_attention.ops.utils import FLA_CHUNK_SIZE
 
 logger = init_logger(__name__)
 

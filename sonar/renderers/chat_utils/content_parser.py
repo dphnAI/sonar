@@ -11,11 +11,11 @@ import torch
 from PIL import Image
 from typing_extensions import override
 
-from aphrodite import envs
-from aphrodite.config import ModelConfig
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.multimodal.media import MEDIA_CONNECTOR_REGISTRY, MediaConnector
-from aphrodite.renderers.embed_utils import (
+from sonar import envs
+from sonar.config import ModelConfig
+from sonar.exceptions import SonarValidationError
+from sonar.multimodal.media import MEDIA_CONNECTOR_REGISTRY, MediaConnector
+from sonar.renderers.embed_utils import (
     safe_load_prompt_embeds,
     safe_load_prompt_embeds_async,
 )
@@ -38,9 +38,9 @@ PROMPT_EMBEDS_PLACEHOLDER_TOKEN: Final[str] = "<prompt_embeds>"
 position during chat template rendering.
 
 Registered as an additional special token when `--enable-prompt-embeds` is set.
-See `_ensure_prompt_embeds_placeholder_token` in `aphrodite/renderers/hf.py`.
+See `_ensure_prompt_embeds_placeholder_token` in `sonar/renderers/hf.py`.
 """
-PROMPT_EMBEDS_PLACEHOLDER_ID_PREFIX: Final[str] = f"{PROMPT_EMBEDS_PLACEHOLDER_TOKEN}__aphrodite_prompt_embed_"
+PROMPT_EMBEDS_PLACEHOLDER_ID_PREFIX: Final[str] = f"{PROMPT_EMBEDS_PLACEHOLDER_TOKEN}__sonar_prompt_embed_"
 
 
 def make_prompt_embeds_placeholder(index: int) -> str:
@@ -139,10 +139,10 @@ class MultiModalContentParser(BaseMultiModalContentParser):
 
     @cached_property
     def _connector(self) -> MediaConnector:
-        # Connector setup may probe APHRODITE_MEDIA_CACHE. Defer it until a request
+        # Connector setup may probe SONAR_MEDIA_CACHE. Defer it until a request
         # actually contains media so text-only parsing never blocks on that I/O.
         return MEDIA_CONNECTOR_REGISTRY.load(
-            envs.APHRODITE_MEDIA_CONNECTOR,
+            envs.SONAR_MEDIA_CONNECTOR,
             media_io_kwargs=self._tracker.media_io_kwargs,
             allowed_local_media_path=self._tracker.allowed_local_media_path,
             allowed_media_domains=self._tracker.allowed_media_domains,
@@ -163,7 +163,7 @@ class MultiModalContentParser(BaseMultiModalContentParser):
         `tensor.shape[0]` placeholder tokens after tokenization.
         """
         if not self.model_config.enable_prompt_embeds:
-            raise AphroditeValidationError(_ENABLE_PROMPT_EMBEDS_ERROR, parameter="prompt_embeds")
+            raise SonarValidationError(_ENABLE_PROMPT_EMBEDS_ERROR, parameter="prompt_embeds")
 
         tensor = safe_load_prompt_embeds(self.model_config, data.encode())
         self._tracker.add("prompt_embeds", (tensor, None))
@@ -182,7 +182,7 @@ class MultiModalContentParser(BaseMultiModalContentParser):
     ) -> None:
         mm_config = self.model_config.get_multimodal_config()
         if not mm_config.enable_mm_embeds:
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 "You must set `--enable-mm-embeds` to input `image_embeds`",
                 parameter="image_embeds",
             )
@@ -210,7 +210,7 @@ class MultiModalContentParser(BaseMultiModalContentParser):
     ) -> None:
         mm_config = self.model_config.get_multimodal_config()
         if not mm_config.enable_mm_embeds:
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 "You must set `--enable-mm-embeds` to input `audio_embeds`",
                 parameter="audio_embeds",
             )
@@ -282,7 +282,7 @@ class MultiModalContentParser(BaseMultiModalContentParser):
     ) -> None:
         mm_config = self.model_config.get_multimodal_config()
         if not mm_config.enable_mm_embeds:
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 "You must set `--enable-mm-embeds` to input `video_embeds`",
                 parameter="video_embeds",
             )
@@ -317,10 +317,10 @@ class AsyncMultiModalContentParser(BaseMultiModalContentParser):
 
     @cached_property
     def _connector(self) -> MediaConnector:
-        # Connector setup may probe APHRODITE_MEDIA_CACHE. Defer it until a request
+        # Connector setup may probe SONAR_MEDIA_CACHE. Defer it until a request
         # actually contains media so text-only parsing never blocks on that I/O.
         return MEDIA_CONNECTOR_REGISTRY.load(
-            envs.APHRODITE_MEDIA_CONNECTOR,
+            envs.SONAR_MEDIA_CONNECTOR,
             media_io_kwargs=self._tracker.media_io_kwargs,
             allowed_local_media_path=self._tracker.allowed_local_media_path,
             allowed_media_domains=self._tracker.allowed_media_domains,
@@ -344,7 +344,7 @@ class AsyncMultiModalContentParser(BaseMultiModalContentParser):
         thread-pool executor via `safe_load_prompt_embeds_async`.
         """
         if not self.model_config.enable_prompt_embeds:
-            raise AphroditeValidationError(_ENABLE_PROMPT_EMBEDS_ERROR, parameter="prompt_embeds")
+            raise SonarValidationError(_ENABLE_PROMPT_EMBEDS_ERROR, parameter="prompt_embeds")
 
         self._tracker.add("prompt_embeds", partial(self._load_prompt_embeds_async, data.encode()))
         self._add_placeholder("prompt_embeds", PROMPT_EMBEDS_PLACEHOLDER_TOKEN)
@@ -370,7 +370,7 @@ class AsyncMultiModalContentParser(BaseMultiModalContentParser):
     ) -> None:
         mm_config = self.model_config.get_multimodal_config()
         if not mm_config.enable_mm_embeds:
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 "You must set `--enable-mm-embeds` to input `image_embeds`",
                 parameter="image_embeds",
             )
@@ -401,7 +401,7 @@ class AsyncMultiModalContentParser(BaseMultiModalContentParser):
     ) -> None:
         mm_config = self.model_config.get_multimodal_config()
         if not mm_config.enable_mm_embeds:
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 "You must set `--enable-mm-embeds` to input `audio_embeds`",
                 parameter="audio_embeds",
             )
@@ -485,7 +485,7 @@ class AsyncMultiModalContentParser(BaseMultiModalContentParser):
     ) -> None:
         mm_config = self.model_config.get_multimodal_config()
         if not mm_config.enable_mm_embeds:
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 "You must set `--enable-mm-embeds` to input `video_embeds`",
                 parameter="video_embeds",
             )

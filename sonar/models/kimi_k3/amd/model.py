@@ -8,13 +8,13 @@ from typing import cast
 import torch
 from torch import nn
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.model_executor.layers.fusion.mm_input_norm import build_mm_input_norm
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.quantization.compressed_tensors import (
+from sonar.config import SonarConfig
+from sonar.model_executor.layers.fusion.mm_input_norm import build_mm_input_norm
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.quantization.compressed_tensors import (
     compressed_tensors,
 )
-from aphrodite.model_executor.models.interfaces import (
+from sonar.model_executor.models.interfaces import (
     HasInnerState,
     IsHybrid,
     SupportsEagle3,
@@ -22,24 +22,24 @@ from aphrodite.model_executor.models.interfaces import (
     SupportsPP,
     SupportsQuant,
 )
-from aphrodite.model_executor.models.kimi_k25 import KimiK25MediaPixelInputs
-from aphrodite.model_executor.models.kimi_k25_vit import (
+from sonar.model_executor.models.kimi_k25 import KimiK25MediaPixelInputs
+from sonar.model_executor.models.kimi_k25_vit import (
     KimiK25MultiModalProjector,
     MoonViT3dPretrainedModel,
     vision_tower_forward,
 )
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.models.utils import (
     AutoWeightsLoader,
     WeightsMapper,
-    init_aphrodite_registered_model,
+    init_sonar_registered_model,
     maybe_prefix,
 )
-from aphrodite.model_executor.models.vision import is_vit_use_data_parallel
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import NestedTensors
-from aphrodite.platforms import current_platform
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.transformers_utils.configs.kimi_k3 import KimiK3Config
+from sonar.model_executor.models.vision import is_vit_use_data_parallel
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import NestedTensors
+from sonar.platforms import current_platform
+from sonar.sequence import IntermediateTensors
+from sonar.transformers_utils.configs.kimi_k3 import KimiK3Config
 
 from ..common.mm_preprocess import (
     KimiK3DummyInputsBuilder,
@@ -68,7 +68,7 @@ class KimiK3ForConditionalGeneration(
     supports_encoder_tp_data = True
     supports_mm_device_do_normalize = True
 
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={
             "language_model.layers.": "language_model.model.layers.",
             "mm_projector.proj.0": "mm_projector.linear_1",
@@ -84,14 +84,14 @@ class KimiK3ForConditionalGeneration(
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
     ) -> None:
         super().__init__()
-        model_config = aphrodite_config.model_config
+        model_config = sonar_config.model_config
         config: KimiK3Config = model_config.hf_config
         self.config = config
-        quant_config = aphrodite_config.quant_config
+        quant_config = sonar_config.quant_config
 
         multimodal_config = model_config.multimodal_config
         assert multimodal_config is not None
@@ -99,11 +99,11 @@ class KimiK3ForConditionalGeneration(
         self.hidden_size = config.text_config.hidden_size
         self.device = current_platform.current_device()
 
-        with self._mark_tower_model(aphrodite_config, "image"):
+        with self._mark_tower_model(sonar_config, "image"):
             self.vision_tower = MoonViT3dPretrainedModel(
                 config.vision_config,
                 quant_config=self._maybe_ignore_quant_config(quant_config),
-                input_norm=build_mm_input_norm(aphrodite_config.model_config),
+                input_norm=build_mm_input_norm(sonar_config.model_config),
                 prefix=maybe_prefix(prefix, "vision_tower"),
             )
             if self._maybe_ignore_quant_config(quant_config) is not None:
@@ -121,9 +121,9 @@ class KimiK3ForConditionalGeneration(
             self.mm_projector = self.mm_projector.to(device=self.device, dtype=model_config.dtype)
 
         self.quant_config = quant_config
-        with self._mark_language_model(aphrodite_config):
-            self.language_model = init_aphrodite_registered_model(
-                aphrodite_config=aphrodite_config,
+        with self._mark_language_model(sonar_config):
+            self.language_model = init_sonar_registered_model(
+                sonar_config=sonar_config,
                 hf_config=config.text_config,
                 prefix=maybe_prefix(prefix, "language_model"),
                 architectures=["KimiLinearForCausalLM"],
@@ -209,16 +209,16 @@ class KimiK3ForConditionalGeneration(
         return self.language_model.mamba_cache.get_seqlen_agnostic_capture_inputs(batch_size)
 
     @classmethod
-    def get_mamba_state_dtype_from_config(cls, aphrodite_config: AphroditeConfig):
-        text_config = aphrodite_config.model_config.hf_config.text_config
-        temp_aphrodite_config = aphrodite_config.with_hf_config(text_config)
-        return KimiLinearForCausalLM.get_mamba_state_dtype_from_config(temp_aphrodite_config)
+    def get_mamba_state_dtype_from_config(cls, sonar_config: SonarConfig):
+        text_config = sonar_config.model_config.hf_config.text_config
+        temp_sonar_config = sonar_config.with_hf_config(text_config)
+        return KimiLinearForCausalLM.get_mamba_state_dtype_from_config(temp_sonar_config)
 
     @classmethod
-    def get_mamba_state_shape_from_config(cls, aphrodite_config: AphroditeConfig):
-        text_config = aphrodite_config.model_config.hf_config.text_config
-        temp_aphrodite_config = aphrodite_config.with_hf_config(text_config)
-        return KimiLinearForCausalLM.get_mamba_state_shape_from_config(temp_aphrodite_config)
+    def get_mamba_state_shape_from_config(cls, sonar_config: SonarConfig):
+        text_config = sonar_config.model_config.hf_config.text_config
+        temp_sonar_config = sonar_config.with_hf_config(text_config)
+        return KimiLinearForCausalLM.get_mamba_state_shape_from_config(temp_sonar_config)
 
     @classmethod
     def get_mamba_state_copy_func(cls):
@@ -226,7 +226,7 @@ class KimiK3ForConditionalGeneration(
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]):
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
     def process_weights_after_loading(self) -> None:
         # The loader calls only the root model's hook; forward it so the text

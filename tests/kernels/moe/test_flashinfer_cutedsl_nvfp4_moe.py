@@ -8,42 +8,42 @@ from unittest.mock import Mock
 import pytest
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite import _custom_ops as ops
-from aphrodite.config import AphroditeConfig, ParallelConfig, set_current_aphrodite_config
-from aphrodite.model_executor.layers.activation import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar import _custom_ops as ops
+from sonar.config import ParallelConfig, SonarConfig, set_current_sonar_config
+from sonar.model_executor.layers.activation import (
     SiluAndMul,
     SiluAndMulWithClamp,
     SwigluOAIAndMul,
 )
-from aphrodite.model_executor.layers.fused_moe import fused_topk
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.all2all_utils import (
+from sonar.model_executor.layers.fused_moe import fused_topk
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.all2all_utils import (
     maybe_make_prepare_finalize,
 )
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEParallelConfig,
     RoutingMethodType,
     nvfp4_moe_quant_config,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.flashinfer_cutedsl_moe import (
+from sonar.model_executor.layers.fused_moe.experts.flashinfer_cutedsl_moe import (
     FlashInferCuteDSLExperts,
 )
-from aphrodite.model_executor.layers.fused_moe.oracle.nvfp4 import (
+from sonar.model_executor.layers.fused_moe.oracle.nvfp4 import (
     NvFp4MoeBackend,
     make_nvfp4_moe_quant_config,
 )
-from aphrodite.model_executor.layers.quantization.utils.flashinfer_fp4_moe import (
+from sonar.model_executor.layers.quantization.utils.flashinfer_fp4_moe import (
     prepare_nvfp4_moe_layer_for_flashinfer_cutedsl,
 )
-from aphrodite.model_executor.layers.quantization.utils.flashinfer_utils import (
+from sonar.model_executor.layers.quantization.utils.flashinfer_utils import (
     quantize_nvfp4_per_token_input,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.flashinfer import has_flashinfer_cutedsl_moe_nvfp4
-from aphrodite.utils.math_utils import next_power_of_2
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.platforms import current_platform
+from sonar.utils.flashinfer import has_flashinfer_cutedsl_moe_nvfp4
+from sonar.utils.math_utils import next_power_of_2
+from sonar.utils.torch_utils import set_random_seed
 from tests.kernels.quantization.nvfp4_utils import (
     FLOAT4_E2M1_MAX,
     FLOAT8_E4M3_MAX,
@@ -89,7 +89,7 @@ def _reference_activation(
     beta: float | None,
     limit: float | None,
 ):
-    """APHRODITE's own op for this activation, so the reference is not re-derived."""
+    """SONAR's own op for this activation, so the reference is not re-derived."""
     if activation == MoEActivation.RELU2_NO_MUL:
         return lambda x: torch.square(torch.relu(x))
     if activation == MoEActivation.SWIGLUOAI:
@@ -190,8 +190,8 @@ def test_flashinfer_cutedsl_fp4_moe(
     monkeypatch,
     workspace_init,
 ):
-    import aphrodite.distributed.localization as loc
-    import aphrodite.model_executor.layers.fused_moe.experts.flashinfer_cutedsl_moe as mod
+    import sonar.distributed.localization as loc
+    import sonar.model_executor.layers.fused_moe.experts.flashinfer_cutedsl_moe as mod
 
     if current_platform.is_device_capability(107) and per_token_activation:
         pytest.skip("Rubin CuTeDSL MoE does not support per-token activation scales")
@@ -207,17 +207,17 @@ def test_flashinfer_cutedsl_fp4_moe(
             pytest.skip("Localized CuTeDSL MoE requires Rubin")
         if not hasattr(torch.cuda, "LocalizedAllocator") or not hasattr(torch.cuda, "execute_on_streams"):
             pytest.skip("Requires PyTorch locality allocation and stream execution APIs")
-        monkeypatch.setenv("APHRODITE_USE_LOCALITY_DOMAINS", "1")
+        monkeypatch.setenv("SONAR_USE_LOCALITY_DOMAINS", "1")
         resources = loc.maybe_init_localized_resources(torch.device("cuda"))
         assert resources is not None, "localization initialization failed"
     monkeypatch.setattr(loc, "get_localized_resources", lambda: resources)
     monkeypatch.setattr(mod, "get_localized_resources", lambda: resources)
     monkeypatch.setenv(
-        "APHRODITE_FLASHINFER_CUTEDSL_MOE_LOCALIZE_FREE_FULL_WEIGHTS",
+        "SONAR_FLASHINFER_CUTEDSL_MOE_LOCALIZE_FREE_FULL_WEIGHTS",
         str(int(localization == "free")),
     )
     set_random_seed(7)
-    with set_current_aphrodite_config(AphroditeConfig(parallel_config=ParallelConfig(pipeline_parallel_size=1))):
+    with set_current_sonar_config(SonarConfig(parallel_config=ParallelConfig(pipeline_parallel_size=1))):
         hidden_states = torch.randn((m, k), device="cuda", dtype=dtype) / 10
         # Keep GEMM1 activation variance stable as K changes, so the fixed
         # tolerance against the BF16 GEMM2 reference measures comparable FP4
@@ -434,7 +434,7 @@ def test_flashinfer_cutedsl_fp4_moe(
 def test_localization_arguments_initialized_after_loading(
     monkeypatch, localized, overlap, max_capture_size, activation
 ):
-    import aphrodite.model_executor.layers.fused_moe.experts.flashinfer_cutedsl_moe as mod
+    import sonar.model_executor.layers.fused_moe.experts.flashinfer_cutedsl_moe as mod
 
     scale = torch.ones(1)
     config = FusedMoEConfig(
@@ -479,8 +479,8 @@ def test_localization_arguments_initialized_after_loading(
     )
     lookup = Mock(return_value=resources)
     monkeypatch.setattr(mod, "get_localized_resources", lookup)
-    monkeypatch.setenv("APHRODITE_FLASHINFER_CUTEDSL_MOE_LOCALIZE_MEMSET_OVERLAP", str(int(overlap)))
-    monkeypatch.setenv("APHRODITE_FLASHINFER_CUTEDSL_MOE_LOCALIZE_FREE_FULL_WEIGHTS", "1")
+    monkeypatch.setenv("SONAR_FLASHINFER_CUTEDSL_MOE_LOCALIZE_MEMSET_OVERLAP", str(int(overlap)))
+    monkeypatch.setenv("SONAR_FLASHINFER_CUTEDSL_MOE_LOCALIZE_FREE_FULL_WEIGHTS", "1")
     experts.process_weights_after_loading(layer)
     lookup.assert_called_once_with()
     lookup.side_effect = AssertionError("apply must not discover localization resources")

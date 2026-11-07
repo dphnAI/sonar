@@ -13,25 +13,25 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from aphrodite import _custom_ops as ops
-from aphrodite.compilation.breakable_cudagraph import BreakableCUDAGraphCapture
-from aphrodite.model_executor.layers.mamba.checkpoint import MambaPrefillCheckpointMetadata
-from aphrodite.model_executor.layers.mamba.kda_checkpoint import (
+from sonar import _custom_ops as ops
+from sonar.compilation.breakable_cudagraph import BreakableCUDAGraphCapture
+from sonar.model_executor.layers.mamba.checkpoint import MambaPrefillCheckpointMetadata
+from sonar.model_executor.layers.mamba.kda_checkpoint import (
     FlashKDAPrefillCheckpointExporter,
 )
-from aphrodite.model_executor.layers.mamba.mamba_utils import MambaStateShapeCalculator
-from aphrodite.model_executor.layers.mamba.ops.causal_conv1d import causal_conv1d_update
-from aphrodite.model_executor.layers.mamba.ops.gather_initial_states import (
+from sonar.model_executor.layers.mamba.mamba_utils import MambaStateShapeCalculator
+from sonar.model_executor.layers.mamba.ops.causal_conv1d import causal_conv1d_update
+from sonar.model_executor.layers.mamba.ops.gather_initial_states import (
     gather_initial_states,
 )
-from aphrodite.models.kimi_k3.amd.ops.third_party.kda import (
+from sonar.models.kimi_k3.amd.ops.third_party.kda import (
     fused_recurrent_kda as fused_recurrent_kda_amd,
 )
-from aphrodite.models.kimi_k3.amd.ops.third_party.kda import (
+from sonar.models.kimi_k3.amd.ops.third_party.kda import (
     fused_recurrent_kda_packed_decode as fused_recurrent_kda_packed_decode_amd,
 )
-from aphrodite.models.kimi_k3.nvidia import kda as nvidia_kda
-from aphrodite.models.kimi_k3.nvidia.kda import (
+from sonar.models.kimi_k3.nvidia import kda as nvidia_kda
+from sonar.models.kimi_k3.nvidia.kda import (
     KimiK3DeltaAttention,
     _flashinfer_kda_prefill,
     _flashkda_prefill,
@@ -42,28 +42,28 @@ from aphrodite.models.kimi_k3.nvidia.kda import (
     is_fused_kda_decode_supported,
     resolve_kda_spec_decode_backend,
 )
-from aphrodite.models.kimi_k3.nvidia.kda_metadata import KimiK3KDAMetadata
-from aphrodite.models.kimi_k3.nvidia.model import KimiLinearForCausalLM
-from aphrodite.models.kimi_k3.nvidia.ops import recoverssm as recoverssm_ops
-from aphrodite.models.kimi_k3.nvidia.ops.recoverssm import (
+from sonar.models.kimi_k3.nvidia.kda_metadata import KimiK3KDAMetadata
+from sonar.models.kimi_k3.nvidia.model import KimiLinearForCausalLM
+from sonar.models.kimi_k3.nvidia.ops import recoverssm as recoverssm_ops
+from sonar.models.kimi_k3.nvidia.ops.recoverssm import (
     KDARecoverSSMCommitContext,
     KDARecoverSSMRecords,
     kda_recoverssm_verify,
 )
-from aphrodite.models.kimi_k3.nvidia.ops.third_party.kda import (
+from sonar.models.kimi_k3.nvidia.ops.third_party.kda import (
     chunk_kda,
     chunk_kda_with_fused_gate,
     fused_kda_gate,
     fused_recurrent_kda_fwd,
     fused_recurrent_kda_packed_decode,
 )
-from aphrodite.models.kimi_k3.nvidia.ops.third_party.kda import (
+from sonar.models.kimi_k3.nvidia.ops.third_party.kda import (
     fused_recurrent_kda as fused_recurrent_kda_nvidia,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.third_party.flash_linear_attention.ops.l2norm import l2norm_fwd
-from aphrodite.utils.flashinfer import flashinfer_fused_kda_decode
-from aphrodite.v1.attention.backends.utils import NULL_BLOCK_ID
+from sonar.platforms import current_platform
+from sonar.third_party.flash_linear_attention.ops.l2norm import l2norm_fwd
+from sonar.utils.flashinfer import flashinfer_fused_kda_decode
+from sonar.v1.attention.backends.utils import NULL_BLOCK_ID
 
 DEVICE = current_platform.device_type
 
@@ -99,7 +99,7 @@ def test_kda_warmup_skips_missing_metadata(monkeypatch):
 
 def test_resolve_kda_spec_decode_backend(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(
-        "aphrodite.models.kimi_k3.nvidia.kda.is_flashinfer_fused_kda_spec_decode_supported",
+        "sonar.models.kimi_k3.nvidia.kda.is_flashinfer_fused_kda_spec_decode_supported",
         lambda *args: True,
     )
     args = (12, 128, 4, 6, torch.bfloat16, torch.bfloat16, torch.float32, -5.0)
@@ -108,7 +108,7 @@ def test_resolve_kda_spec_decode_backend(monkeypatch: pytest.MonkeyPatch):
     assert resolve_kda_spec_decode_backend("flashinfer", *args, False) == "flashinfer"
 
     monkeypatch.setattr(
-        "aphrodite.models.kimi_k3.nvidia.kda.is_flashinfer_fused_kda_spec_decode_supported",
+        "sonar.models.kimi_k3.nvidia.kda.is_flashinfer_fused_kda_spec_decode_supported",
         lambda *args: False,
     )
     assert resolve_kda_spec_decode_backend("auto", *args, False) == "native"
@@ -117,7 +117,7 @@ def test_resolve_kda_spec_decode_backend(monkeypatch: pytest.MonkeyPatch):
 
 
 def test_kda_recoverssm_config_state_layout():
-    aphrodite_config = SimpleNamespace(
+    sonar_config = SimpleNamespace(
         model_config=SimpleNamespace(
             dtype=torch.bfloat16,
             hf_config=SimpleNamespace(
@@ -139,12 +139,12 @@ def test_kda_recoverssm_config_state_layout():
 
     # The verify records are kept outside the KV cache: the Mamba page holds the
     # stock conv and SSM state.
-    assert KimiLinearForCausalLM.get_mamba_state_dtype_from_config(aphrodite_config) == (
+    assert KimiLinearForCausalLM.get_mamba_state_dtype_from_config(sonar_config) == (
         torch.bfloat16,
         torch.float32,
     )
     assert KimiLinearForCausalLM.get_mamba_state_shape_from_config(
-        aphrodite_config
+        sonar_config
     ) == MambaStateShapeCalculator.kda_state_shape(1, 4, 32, num_spec=2)
 
 
@@ -989,7 +989,7 @@ def test_fused_kda_decode_correctness(
     weight = 0.1 * torch.randn(3 * dim, W, dtype=torch.float32, device=DEVICE)
     if conv_layout == "DS":
         # DS cache layout: per slot the taps are innermost
-        # (stride (W-1, 1)), matching APHRODITE_SSM_CONV_STATE_LAYOUT=DS.
+        # (stride (W-1, 1)), matching SONAR_SSM_CONV_STATE_LAYOUT=DS.
         conv_seed = 0.1 * torch.randn(
             slots,
             3 * dim,
@@ -1245,7 +1245,7 @@ def test_flashinfer_fused_kda_spec_decode_integration(
         num_accepted_tokens=num_accepted_tokens,
     )
     monkeypatch.setattr(
-        "aphrodite.models.kimi_k3.nvidia.kda.get_forward_context",
+        "sonar.models.kimi_k3.nvidia.kda.get_forward_context",
         lambda: SimpleNamespace(attn_metadata={"test.layer": metadata}),
     )
 
@@ -1445,7 +1445,7 @@ def _run_kda_prefill_backend(
         )
 
     assert backend == "flashkda"
-    import aphrodite._flashkda_C  # noqa: F401
+    import sonar._flashkda_C  # noqa: F401
 
     final_state = torch.empty_like(initial_state)
     workspace = torch.empty(
@@ -1641,7 +1641,7 @@ def test_flashkda_checkpoint_correctness(state_dtype: torch.dtype, tolerance: fl
     lower_bound = -3.0
     _require_kda_prefill_backend("flashkda", state_dtype, lower_bound)
 
-    import aphrodite._flashkda_C  # noqa: F401
+    import sonar._flashkda_C  # noqa: F401
 
     inputs = _make_kda_prefill_inputs(state_dtype, lower_bound=lower_bound)
     q, k, v = inputs.q, inputs.k, inputs.v

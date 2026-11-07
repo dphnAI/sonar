@@ -5,7 +5,7 @@
 # bf16x4_to_e4m3x4) are adapted from FlashInfer
 # (flashinfer/quantization/quantization_cute_dsl_utils.py and
 # flashinfer/cute_dsl/fp4_common.py, flashinfer-python 0.7.1), which carry the
-# notice below. Modified by the Aphrodite contributors: helpers are merged and
+# notice below. Modified by the Sonar contributors: helpers are merged and
 # renamed.
 #
 # Copyright (c) 2025 by FlashInfer team.
@@ -29,7 +29,7 @@
 Between the router GEMM and the first routed-expert GEMM, the stock path runs
 three kernels; :class:`RoutedExpertFront` replaces them with one launch:
 
-1. the DSv4 top-k (Aphrodite's Triton ``_dsv4_topk_kernel``, ``dsv4_topk.py``):
+1. the DSv4 top-k (Sonar's Triton ``_dsv4_topk_kernel``, ``dsv4_topk.py``):
    per row, ``score = sqrt(softplus(logit))`` (softplus(x) = x above 20, else
    log(1 + exp(x))), ``biased = score + bias`` (``bias_vl`` for image sentinel
    tokens), the six largest biased scores (lowest expert id on exact ties, NaN
@@ -74,7 +74,7 @@ from cutlass import Float32, Int32, Int64, Uint8, Uint32
 from cutlass._mlir.dialects import llvm
 from cutlass.cutlass_dsl import T, dsl_user_op
 
-from aphrodite.models.common.ops.moe_tail_fusion.primitives import load_global_u32x4
+from sonar.models.common.ops.moe_tail_fusion.primitives import load_global_u32x4
 
 from .routed_expert_route_cute import (
     MAX_EXPERTS,

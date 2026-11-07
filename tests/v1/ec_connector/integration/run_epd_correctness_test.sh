@@ -66,8 +66,8 @@ TIMEOUT_SECONDS="${TIMEOUT_SECONDS:-600}"
 
 # Output file for baseline comparison and logs
 LOG_PATH="${LOG_PATH:-/tmp}"
-BASELINE_FILE="${BASELINE_FILE:-/tmp/aphrodite_baseline.txt}"
-BASELINE_PD_FILE="${BASELINE_PD_FILE:-/tmp/aphrodite_epd_baseline.txt}"
+BASELINE_FILE="${BASELINE_FILE:-/tmp/sonar_baseline.txt}"
+BASELINE_PD_FILE="${BASELINE_PD_FILE:-/tmp/sonar_epd_baseline.txt}"
 
 mkdir -p "$LOG_PATH"
 
@@ -86,7 +86,7 @@ wait_for_server() {
 # Cleanup function
 cleanup_instances() {
     echo "Cleaning up any running Sonar instances..."
-    pkill -f "aphrodite serve" || true
+    pkill -f "sonar serve" || true
     pkill -f "disagg_epd_proxy.py" || true
     sleep 2
 }
@@ -104,7 +104,7 @@ run_baseline() {
     
     # Start baseline instance
     echo "Starting baseline instance on GPU $GPU_SINGLE, port $PORT"
-    env "$DEVICE_AFFINITY_ENV=$GPU_SINGLE" aphrodite serve "$MODEL" \
+    env "$DEVICE_AFFINITY_ENV=$GPU_SINGLE" sonar serve "$MODEL" \
         --port "$PORT" \
         --max-model-len "$MAX_MODEL_LEN" \
         --enforce-eager \
@@ -157,7 +157,7 @@ run_epd_1e_1pd() {
     
     # Start encoder instance
     echo "Starting encoder instance on GPU $GPU_E, port $ENCODE_PORT"
-    env "$DEVICE_AFFINITY_ENV=$GPU_E" aphrodite serve "$MODEL" \
+    env "$DEVICE_AFFINITY_ENV=$GPU_E" sonar serve "$MODEL" \
         --port "$ENCODE_PORT" \
         --max-model-len "$MAX_MODEL_LEN" \
         --enforce-eager \
@@ -179,7 +179,7 @@ run_epd_1e_1pd() {
     
     # Start prefill+decode instance
     echo "Starting PD instance on GPU $GPU_PD, port $PREFILL_DECODE_PORT"
-    env "$DEVICE_AFFINITY_ENV=$GPU_PD" aphrodite serve "$MODEL" \
+    env "$DEVICE_AFFINITY_ENV=$GPU_PD" sonar serve "$MODEL" \
         --port "$PREFILL_DECODE_PORT" \
         --max-model-len "$MAX_MODEL_LEN" \
         --enforce-eager \
@@ -264,8 +264,8 @@ run_baseline_1p_1d() {
     # Start prefill instance
     echo "Starting prefill instance on GPU $GPU_P, port $PREFILL_PORT"
     env "$DEVICE_AFFINITY_ENV=$GPU_P" \
-    APHRODITE_NIXL_SIDE_CHANNEL_PORT=5559 \
-    aphrodite serve "$MODEL" \
+    SONAR_NIXL_SIDE_CHANNEL_PORT=5559 \
+    sonar serve "$MODEL" \
         --port "$PREFILL_PORT" \
         --max-model-len "$MAX_MODEL_LEN" \
         --enforce-eager \
@@ -283,8 +283,8 @@ run_baseline_1p_1d() {
     # Start decode instance
     echo "Starting decode instance on GPU $GPU_D, port $DECODE_PORT"
     env "$DEVICE_AFFINITY_ENV=$GPU_D" \
-    APHRODITE_NIXL_SIDE_CHANNEL_PORT=6000 \
-    aphrodite serve "$MODEL" \
+    SONAR_NIXL_SIDE_CHANNEL_PORT=6000 \
+    sonar serve "$MODEL" \
         --port "$DECODE_PORT" \
         --max-model-len "$MAX_MODEL_LEN" \
         --enforce-eager \
@@ -362,7 +362,7 @@ run_epd_1e_1p_1d() {
     
     # Start encoder instance
     echo "Starting encoder instance on GPU $GPU_E, port $ENCODE_PORT"
-    env "$DEVICE_AFFINITY_ENV=$GPU_E" aphrodite serve "$MODEL" \
+    env "$DEVICE_AFFINITY_ENV=$GPU_E" sonar serve "$MODEL" \
         --port "$ENCODE_PORT" \
         --max-model-len "$MAX_MODEL_LEN" \
         --enforce-eager \
@@ -385,8 +385,8 @@ run_epd_1e_1p_1d() {
     # Start prefill instance
     echo "Starting prefill instance on GPU $GPU_P, port $PREFILL_PORT"
     env "$DEVICE_AFFINITY_ENV=$GPU_P" \
-    APHRODITE_NIXL_SIDE_CHANNEL_PORT=5559 \
-    aphrodite serve "$MODEL" \
+    SONAR_NIXL_SIDE_CHANNEL_PORT=5559 \
+    sonar serve "$MODEL" \
         --port "$PREFILL_PORT" \
         --max-model-len "$MAX_MODEL_LEN" \
         --enforce-eager \
@@ -412,8 +412,8 @@ run_epd_1e_1p_1d() {
     # Start decode instance
     echo "Starting decode instance on GPU $GPU_D, port $DECODE_PORT"
     env "$DEVICE_AFFINITY_ENV=$GPU_D" \
-    APHRODITE_NIXL_SIDE_CHANNEL_PORT=6000 \
-    aphrodite serve "$MODEL" \
+    SONAR_NIXL_SIDE_CHANNEL_PORT=6000 \
+    sonar serve "$MODEL" \
         --port "$DECODE_PORT" \
         --max-model-len "$MAX_MODEL_LEN" \
         --enforce-eager \

@@ -12,18 +12,18 @@ that state, and the conv window, into the paged cache.
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.mamba.checkpoint import (
+from sonar.model_executor.layers.mamba.checkpoint import (
     MambaPrefillCheckpointMetadata,
 )
-from aphrodite.model_executor.layers.mamba.ops.ssd_checkpoint import (
+from sonar.model_executor.layers.mamba.ops.ssd_checkpoint import (
     store_prefill_checkpoint,
 )
-from aphrodite.model_executor.layers.mamba.ops.ssd_combined import (
+from sonar.model_executor.layers.mamba.ops.ssd_combined import (
     mamba_chunk_scan_combined_varlen,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.v1.attention.backends.mamba_attn import BaseMambaAttentionMetadataBuilder
-from aphrodite.v1.attention.backends.utils import NULL_BLOCK_ID
+from sonar.platforms import current_platform
+from sonar.v1.attention.backends.mamba_attn import BaseMambaAttentionMetadataBuilder
+from sonar.v1.attention.backends.utils import NULL_BLOCK_ID
 from tests.kernels.mamba.test_mamba_ssm_ssd import generate_random_inputs
 
 DEVICE = current_platform.device_type

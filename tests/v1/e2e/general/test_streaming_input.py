@@ -17,13 +17,13 @@ from collections.abc import AsyncGenerator
 import pytest
 import pytest_asyncio
 
-from aphrodite import SamplingParams
-from aphrodite.engine.protocol import StreamingInput
-from aphrodite.outputs import RequestOutput
-from aphrodite.platforms import current_platform
-from aphrodite.sampling_params import RequestOutputKind
-from aphrodite.utils.torch_utils import set_default_torch_num_threads
-from aphrodite.v1.engine.async_llm import AsyncLLM
+from sonar import SamplingParams
+from sonar.engine.protocol import StreamingInput
+from sonar.outputs import RequestOutput
+from sonar.platforms import current_platform
+from sonar.sampling_params import RequestOutputKind
+from sonar.utils.torch_utils import set_default_torch_num_threads
+from sonar.v1.engine.async_llm import AsyncLLM
 
 if not (current_platform.is_cuda() or current_platform.is_xpu()):
     pytest.skip(reason="V1 currently only supported on CUDA and XPU.", allow_module_level=True)
@@ -40,7 +40,7 @@ async def engine():
     for each test, and the output_handler task gets cancelled between tests
     with module scope.
     """
-    from aphrodite.engine.arg_utils import AsyncEngineArgs
+    from sonar.engine.arg_utils import AsyncEngineArgs
 
     engine_args = AsyncEngineArgs(model=MODEL, enforce_eager=True, gpu_memory_utilization=0.7)
     with set_default_torch_num_threads(1):

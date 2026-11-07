@@ -6,8 +6,8 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.v1.attention.ops.rocm_aiter_mla_prefill import context_row_indices
+from sonar.platforms import current_platform
+from sonar.v1.attention.ops.rocm_aiter_mla_prefill import context_row_indices
 from tests.utils import multi_gpu_only
 
 
@@ -38,7 +38,7 @@ def test_dcp_context_indices(padded, lengths, starts, total, expected):
 
 
 def test_compressed_gather_preserves_bytes_and_workspace_partition(monkeypatch):
-    from aphrodite.v1.attention.ops import rocm_aiter_mla_prefill as prefill
+    from sonar.v1.attention.ops import rocm_aiter_mla_prefill as prefill
 
     workspace = torch.full((12, 4), -1, dtype=torch.bfloat16)
     cache = torch.arange(8, dtype=torch.uint8).reshape(2, 4)
@@ -90,18 +90,18 @@ def test_compressed_gather_preserves_bytes_and_workspace_partition(monkeypatch):
     ],
 )
 def test_dcp_prefill_unsupported_formats_use_original_path(monkeypatch, unsupported):
-    from aphrodite.platforms import current_platform
+    from sonar.platforms import current_platform
 
     if not current_platform.is_rocm():
         pytest.skip("ROCm MLA backend")
-    from aphrodite.v1.attention.backends.mla.rocm_aiter_mla import (
+    from sonar.v1.attention.backends.mla.rocm_aiter_mla import (
         AiterMLAImpl,
         MLACommonImpl,
     )
 
     if unsupported == "no_aiter":
         monkeypatch.setattr(
-            "aphrodite.v1.attention.backends.mla.rocm_aiter_mla.is_aiter_found_and_supported",
+            "sonar.v1.attention.backends.mla.rocm_aiter_mla.is_aiter_found_and_supported",
             lambda: False,
         )
 
@@ -175,7 +175,7 @@ def test_dcp_prefill_matches_full_attention(interleave, context_lens, workspace_
     """Real DCP gather, fused expansion and suffix/chunk merges match dense SDPA."""
     import torch.multiprocessing as mp
 
-    from aphrodite._aiter_ops import is_aiter_found_and_supported
+    from sonar._aiter_ops import is_aiter_found_and_supported
 
     if not is_aiter_found_and_supported():
         pytest.skip("AITER on CDNA 3 or newer is required")
@@ -195,28 +195,28 @@ def test_dcp_prefill_matches_full_attention(interleave, context_lens, workspace_
 def _dcp_prefill_worker(rank, init_method, interleave, context_lens, workspace_size):
     import torch.nn.functional as F
 
-    from aphrodite.config import set_current_aphrodite_config
-    from aphrodite.distributed import (
+    from sonar.config import set_current_sonar_config
+    from sonar.distributed import (
         cleanup_dist_env_and_memory,
         init_distributed_environment,
         initialize_model_parallel,
     )
-    from aphrodite.model_executor.layers.linear import ColumnParallelLinear
-    from aphrodite.v1.attention.backends.mla.prefill.aiter_flash_attn import (
+    from sonar.model_executor.layers.linear import ColumnParallelLinear
+    from sonar.v1.attention.backends.mla.prefill.aiter_flash_attn import (
         AiterFlashAttnPrefillBackend,
     )
-    from aphrodite.v1.attention.backends.mla.rocm_aiter_mla import (
+    from sonar.v1.attention.backends.mla.rocm_aiter_mla import (
         AiterMLAImpl,
         AiterMLAMetadataBuilder,
     )
-    from aphrodite.v1.attention.ops.dcp import MLADCPManager
-    from aphrodite.v1.kv_cache_interface import MLAAttentionSpec
-    from aphrodite.v1.worker.workspace import init_workspace_manager
+    from sonar.v1.attention.ops.dcp import MLADCPManager
+    from sonar.v1.kv_cache_interface import MLAAttentionSpec
+    from sonar.v1.worker.workspace import init_workspace_manager
     from tests.v1.attention.test_mla_backends import MockMLAAttentionLayer
     from tests.v1.attention.utils import (
         BatchSpec,
-        create_aphrodite_config,
         create_common_attn_metadata,
+        create_sonar_config,
     )
 
     torch.accelerator.set_device_index(rank)
@@ -224,7 +224,7 @@ def _dcp_prefill_worker(rank, init_method, interleave, context_lens, workspace_s
     device = torch.device(f"cuda:{rank}")
     init_workspace_manager(device)
     world_size, num_heads, block_size = 2, 12, 64
-    config = create_aphrodite_config(
+    config = create_sonar_config(
         model_name="deepseek-ai/DeepSeek-V2-Lite",
         dtype=torch.bfloat16,
         tensor_parallel_size=world_size,
@@ -238,7 +238,7 @@ def _dcp_prefill_worker(rank, init_method, interleave, context_lens, workspace_s
     config.parallel_config.cp_kv_cache_interleave_size = interleave
     config.attention_config.use_prefill_query_quantization = False
     config.kernel_config.enable_jit_warmup = False
-    with set_current_aphrodite_config(config):
+    with set_current_sonar_config(config):
         init_distributed_environment(
             world_size=world_size,
             rank=rank,
@@ -292,7 +292,7 @@ def _dcp_prefill_worker(rank, init_method, interleave, context_lens, workspace_s
             layer.prefill_backend = AiterFlashAttnPrefillBackend(
                 num_heads=num_heads,
                 scale=impl.scale,
-                aphrodite_config=config,
+                sonar_config=config,
                 **dims,
             )
             layer.dcp_manager = MLADCPManager(
@@ -390,7 +390,7 @@ def _dcp_prefill_worker(rank, init_method, interleave, context_lens, workspace_s
                     raise AssertionError("Expected the compressed DCP path")
 
                 patch.setattr(
-                    "aphrodite.model_executor.layers.attention.mla_attention."
+                    "sonar.model_executor.layers.attention.mla_attention."
                     "MLACommonImpl._context_parallel_compute_prefill_context",
                     unexpected_fallback,
                 )

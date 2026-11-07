@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from aphrodite.tokenizers import TokenizerLike
+from sonar.tokenizers import TokenizerLike
 from tests.tool_parsers.common_tests import (
     ToolParserTestConfig,
     ToolParserTests,

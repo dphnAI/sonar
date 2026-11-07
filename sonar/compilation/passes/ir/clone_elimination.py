@@ -7,12 +7,12 @@ from torch._higher_order_ops.triton_kernel_wrap import TritonKernelWrapperFuncti
 from torch._inductor.fx_utils import get_node_storage
 from torch._ops import HigherOrderOperator, OpOverload
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.logger import init_logger
+from sonar.config import SonarConfig
+from sonar.logger import init_logger
 
-from ..aphrodite_inductor_pass import AphroditeInductorPass
 from ..fx_utils import is_func
 from ..inductor_pass import get_pass_context
+from ..sonar_inductor_pass import SonarInductorPass
 
 logger = init_logger(__name__)
 
@@ -80,21 +80,21 @@ def would_alias_graph_io(clone: fx.Node, original: fx.Node) -> bool:
     return clone_storage in outputs and original_storage in inputs | outputs
 
 
-class UnsafeCloneEliminationPass(AphroditeInductorPass):
-    """This pass removes clone nodes that are no longer needed after Aphrodite IR lowering.
+class UnsafeCloneEliminationPass(SonarInductorPass):
+    """This pass removes clone nodes that are no longer needed after Sonar IR lowering.
     It uses donated_input_ids to eliminate clones of donated graph inputs, preserving
     contents of non-donated graph inputs.
 
     It is "unsafe" because it only handles aliasing of graph outputs. Solving
-    aliasing is an open problem, so this pass intends to support known Aphrodite cases
+    aliasing is an open problem, so this pass intends to support known Sonar cases
     and not guarantee soundness on general graphs. In the future, this pass will likely
     support basic forms of aliasing to handle simple views (e.g. qkv -> q,k,v).
     """
 
-    def __init__(self, aphrodite_config: AphroditeConfig) -> None:
-        super().__init__(aphrodite_config)
+    def __init__(self, sonar_config: SonarConfig) -> None:
+        super().__init__(sonar_config)
 
-    @AphroditeInductorPass.time_and_log
+    @SonarInductorPass.time_and_log
     def __call__(self, graph: fx.Graph) -> None:
         count = 0
         node_to_idx = {node: i for i, node in enumerate(graph.nodes)}

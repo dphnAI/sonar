@@ -2,13 +2,13 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import argparse
 
-from aphrodite.benchmarks.throughput import add_cli_args, main
-from aphrodite.entrypoints.cli.benchmark.base import BenchmarkSubcommandBase
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
+from sonar.benchmarks.throughput import add_cli_args, main
+from sonar.entrypoints.cli.benchmark.base import BenchmarkSubcommandBase
+from sonar.utils.argparse_utils import FlexibleArgumentParser
 
 
 class BenchmarkThroughputSubcommand(BenchmarkSubcommandBase):
-    """The `throughput` subcommand for `aphrodite bench`."""
+    """The `throughput` subcommand for `sonar bench`."""
 
     name = "throughput"
     help = "Benchmark offline inference throughput."

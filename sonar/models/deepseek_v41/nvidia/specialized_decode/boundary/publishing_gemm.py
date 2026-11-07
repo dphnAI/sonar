@@ -5,7 +5,7 @@
 # LowLatencyBlockscaledGemmKernel.epilog_warp in FlashInfer
 # (flashinfer/gemm/kernels/cute_dsl/low_latency_blockscaled_gemm.py,
 # flashinfer-python 0.7.0.post1), which carries the notice below. Modified by
-# the Aphrodite contributors: the epilogue also stores every output value into the
+# the Sonar contributors: the epilogue also stores every output value into the
 # fused all-reduce + mHC kernel's Lamport mailbox on all ranks.
 
 # Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
@@ -97,11 +97,11 @@ from flashinfer.gemm.kernels.cute_dsl.low_latency_blockscaled_gemm import (
     WorkTileInfo,
 )
 
-from aphrodite.model_executor.layers.fusion.quant_activation import (
+from sonar.model_executor.layers.fusion.quant_activation import (
     QuantizedActivation,
     as_quantized_activation,
 )
-from aphrodite.models.common.ops.moe_tail_fusion.primitives import (
+from sonar.models.common.ops.moe_tail_fusion.primitives import (
     VEC_BF16,
     _asm,
     current_cu_stream,
@@ -110,7 +110,7 @@ from aphrodite.models.common.ops.moe_tail_fusion.primitives import (
     shuffle_sync_idx_u32,
     stmc_bf16x8,
 )
-from aphrodite.models.deepseek_v41.common.ops.query_quant import mxfp8_scale_bytes
+from sonar.models.deepseek_v41.common.ops.query_quant import mxfp8_scale_bytes
 
 from ...ops.cute_dsl.all_reduce_mhc import ACTIVE_STAGE, NEXT_STAGE
 from .. import LOW_BATCH_MAX_ROWS

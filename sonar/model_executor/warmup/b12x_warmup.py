@@ -8,12 +8,12 @@ from typing import TYPE_CHECKING
 
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.utils.b12x import B12xWarmupUnit, b12x_warmup_token_counts
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.utils.b12x import B12xWarmupUnit, b12x_warmup_token_counts
 
 if TYPE_CHECKING:
-    from aphrodite.v1.worker.gpu_worker import Worker
+    from sonar.v1.worker.gpu_worker import Worker
 
 logger = init_logger(__name__)
 
@@ -77,7 +77,7 @@ def b12x_warmup(worker: "Worker", cudagraph_capture_sizes: list[int]) -> None:
     )
     if output_dtype not in (torch.bfloat16, torch.float16):
         output_dtype = torch.bfloat16
-    compile_sizes = worker.aphrodite_config.compilation_config.compile_sizes or []
+    compile_sizes = worker.sonar_config.compilation_config.compile_sizes or []
     max_num_batched_tokens = worker.scheduler_config.max_num_batched_tokens
     serving_sizes = [
         max_num_batched_tokens,

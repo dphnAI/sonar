@@ -12,8 +12,8 @@ import pytest
 import pytest_asyncio
 import soundfile as sf
 
-from aphrodite.multimodal.media.audio import load_audio
-from aphrodite.platforms import current_platform
+from sonar.multimodal.media.audio import load_audio
+from sonar.platforms import current_platform
 from tests.utils import RemoteOpenAIServer
 
 MODEL_NAME = "openai/whisper-large-v3-turbo"
@@ -36,11 +36,11 @@ def _get_attention_backend_params() -> list[str | None]:
     On non-ROCm platforms, we just run with the default backend.
     """
     try:
-        from aphrodite.platforms import current_platform
+        from sonar.platforms import current_platform
 
         if current_platform.is_rocm():
             backends: list[str | None] = [None, "TRITON_ATTN"]
-            from aphrodite.platforms.rocm import get_cdna_version
+            from sonar.platforms.rocm import get_cdna_version
 
             if get_cdna_version() > 2:
                 backends.append("ROCM_AITER_UNIFIED_ATTN")
@@ -50,11 +50,11 @@ def _get_attention_backend_params() -> list[str | None]:
     return [None]
 
 
-# Aiter backends need APHRODITE_ROCM_USE_AITER=1 (and MHA=1 for ROCM_AITER_FA)
+# Aiter backends need SONAR_ROCM_USE_AITER=1 (and MHA=1 for ROCM_AITER_FA)
 # to be enabled in the server subprocess.
 _AITER_ENV = {
-    "APHRODITE_ROCM_USE_AITER": "1",
-    "APHRODITE_ROCM_USE_AITER_MHA": "1",
+    "SONAR_ROCM_USE_AITER": "1",
+    "SONAR_ROCM_USE_AITER_MHA": "1",
 }
 
 _ATTN_BACKENDS = _get_attention_backend_params()
@@ -88,7 +88,7 @@ async def test_basic_audio(whisper_client, mary_had_lamb):
         language="en",
         response_format="text",
         temperature=0.0,
-        extra_body={"aphrodite_xargs": json.dumps({"frontend_window": 128})},
+        extra_body={"sonar_xargs": json.dumps({"frontend_window": 128})},
     )
     out = json.loads(transcription)
     out_text = out["text"]

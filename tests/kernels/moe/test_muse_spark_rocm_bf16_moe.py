@@ -9,40 +9,40 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-import aphrodite.models.muse_spark.amd.muse_moe_runner as amd_muse_moe_runner
-from aphrodite import envs
-from aphrodite.config.kernel import MoEBackend
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.config import (
+import sonar.models.muse_spark.amd.muse_moe_runner as amd_muse_moe_runner
+from sonar import envs
+from sonar.config.kernel import MoEBackend
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.config import (
     FUSED_MOE_UNQUANTIZED_CONFIG,
     FusedMoEConfig,
     FusedMoEParallelConfig,
     FusedMoEQuantConfig,
     RoutingMethodType,
 )
-from aphrodite.model_executor.layers.fused_moe.expert_map_manager import (
+from sonar.model_executor.layers.fused_moe.expert_map_manager import (
     determine_expert_map,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
+from sonar.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
     rocm_aiter_fused_experts,
 )
-from aphrodite.model_executor.layers.fused_moe.oracle.fp8 import Fp8MoeBackend
-from aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 import (
+from sonar.model_executor.layers.fused_moe.oracle.fp8 import Fp8MoeBackend
+from sonar.model_executor.layers.fused_moe.oracle.mxfp4 import (
     Mxfp4MoeBackend,
     convert_gpt_oss_weight_to_mxfp4_moe_kernel_format,
     make_mxfp4_moe_quant_config,
 )
-from aphrodite.model_executor.layers.quantization.quark.quark_moe import (
+from sonar.model_executor.layers.quantization.quark.quark_moe import (
     QuarkOCP_MX_MoEMethod,
     QuarkW8A8Fp8MoEMethod,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     kFp8DynamicTokenSym,
     kFp8StaticChannelSym,
     kMxfp4Dynamic,
     kMxfp4Static,
 )
-from aphrodite.models.muse_spark.amd.muse_moe_runner import (
+from sonar.models.muse_spark.amd.muse_moe_runner import (
     MuseMoERunner,
     MuseSparkAiterExperts,
     MuseSparkOnlineMXFP4FusedMoE,
@@ -59,7 +59,7 @@ from aphrodite.models.muse_spark.amd.muse_moe_runner import (
     validate_fp8_deployment,
     validate_mxfp4_deployment,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 
 def _parallel_config(
@@ -205,7 +205,7 @@ def test_muse_aiter_experts_expand_routes_with_unit_weights(monkeypatch) -> None
         return hidden_states + topk_ids.to(hidden_states.dtype)
 
     monkeypatch.setattr(
-        "aphrodite.models.muse_spark.amd.muse_moe_runner.rocm_aiter_fused_experts",
+        "sonar.models.muse_spark.amd.muse_moe_runner.rocm_aiter_fused_experts",
         _fake_aiter_fused_experts,
     )
 
@@ -294,19 +294,19 @@ def test_muse_fp8_method_requires_route_preserving_triton(monkeypatch) -> None:
         MuseSparkQuarkW8A8Fp8FusedMoE(config, kFp8StaticChannelSym, kFp8DynamicTokenSym)
 
 
-def test_muse_unquantized_method_is_pinned_to_triton(monkeypatch, default_aphrodite_config) -> None:
+def test_muse_unquantized_method_is_pinned_to_triton(monkeypatch, default_sonar_config) -> None:
     def _unexpected_backend_selection(*args, **kwargs):
         raise AssertionError("the generic backend oracle must not run")
 
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.fused_moe.unquantized_fused_moe_method.select_unquantized_moe_backend",
+        "sonar.model_executor.layers.fused_moe.unquantized_fused_moe_method.select_unquantized_moe_backend",
         _unexpected_backend_selection,
     )
     method = MuseSparkUnquantizedFusedMoE(_moe_config(moe_backend="auto"))
     assert method.experts_cls is MuseSparkTritonExperts
 
 
-def test_muse_quant_config_ignores_cached_properties(default_aphrodite_config) -> None:
+def test_muse_quant_config_ignores_cached_properties(default_sonar_config) -> None:
     method = MuseSparkUnquantizedFusedMoE(_moe_config(moe_backend="auto"))
     # Other models may have populated this cache on the shared base config.
     assert FUSED_MOE_UNQUANTIZED_CONFIG.ocp_mx_scheme is None
@@ -352,7 +352,7 @@ def test_tp_partial_routes_are_reduced_before_norm(monkeypatch) -> None:
         return x + peer
 
     monkeypatch.setattr(
-        "aphrodite.models.muse_spark.amd.muse_moe_runner.tensor_model_parallel_all_reduce",
+        "sonar.models.muse_spark.amd.muse_moe_runner.tensor_model_parallel_all_reduce",
         _all_reduce,
     )
 
@@ -430,8 +430,8 @@ ROCM_GFX950 = False
 ROCM_AITER_SUPPORTED = False
 
 if ROCM_AVAILABLE:
-    from aphrodite._aiter_ops import is_aiter_found_and_supported, rocm_aiter_ops
-    from aphrodite.platforms.rocm import on_gfx950
+    from sonar._aiter_ops import is_aiter_found_and_supported, rocm_aiter_ops
+    from sonar.platforms.rocm import on_gfx950
 
     ROCM_GFX950 = on_gfx950()
     ROCM_AITER_SUPPORTED = is_aiter_found_and_supported()
@@ -439,8 +439,8 @@ if ROCM_AVAILABLE:
 
 @pytest.fixture
 def enable_rocm_aiter(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setenv("APHRODITE_ROCM_USE_AITER", "1")
-    monkeypatch.setenv("APHRODITE_ROCM_USE_AITER_MOE", "1")
+    monkeypatch.setenv("SONAR_ROCM_USE_AITER", "1")
+    monkeypatch.setenv("SONAR_ROCM_USE_AITER_MOE", "1")
     rocm_aiter_ops.refresh_env_variables()
     yield
     rocm_aiter_ops.refresh_env_variables()
@@ -802,7 +802,7 @@ def test_rocm_ep_ranks_sum_to_the_unsharded_output(request: pytest.FixtureReques
 
 
 def _post_expert_norm_module(hidden_size: int) -> torch.nn.Module:
-    from aphrodite.models.muse_spark.common.layers import MuseSpark1xRMSNormWithInputScale
+    from sonar.models.muse_spark.common.layers import MuseSpark1xRMSNormWithInputScale
 
     norm = MuseSpark1xRMSNormWithInputScale(
         hidden_size=hidden_size,
@@ -880,7 +880,7 @@ def test_token_sharded_finalize_pads_and_slices_per_rank(monkeypatch) -> None:
         assert dim == 0
         return torch.cat([x, torch.zeros_like(x)])
 
-    module = "aphrodite.models.muse_spark.amd.muse_moe_runner"
+    module = "sonar.models.muse_spark.amd.muse_moe_runner"
     monkeypatch.setattr(f"{module}.tensor_model_parallel_reduce_scatter", _reduce_scatter)
     monkeypatch.setattr(f"{module}.tensor_model_parallel_all_gather", _all_gather)
     monkeypatch.setattr(f"{module}.get_tensor_model_parallel_world_size", lambda: 2)
@@ -932,13 +932,13 @@ def test_online_mxfp4_is_opt_in_and_skips_the_first_and_last_layer(
     monkeypatch,
 ) -> None:
     config = SimpleNamespace(model_config=SimpleNamespace(hf_text_config=SimpleNamespace(num_hidden_layers=62)))
-    monkeypatch.setattr(amd_muse_moe_runner, "get_current_aphrodite_config", lambda: config)
+    monkeypatch.setattr(amd_muse_moe_runner, "get_current_sonar_config", lambda: config)
     prefix = "model.layers.{}.feed_forward.experts"
 
-    monkeypatch.setattr(envs, "APHRODITE_ROCM_MUSE_MOE_ONLINE_QUANT", "")
+    monkeypatch.setattr(envs, "SONAR_ROCM_MUSE_MOE_ONLINE_QUANT", "")
     assert not _online_mxfp4_applies(prefix.format(5))
 
-    monkeypatch.setattr(envs, "APHRODITE_ROCM_MUSE_MOE_ONLINE_QUANT", "mxfp4")
+    monkeypatch.setattr(envs, "SONAR_ROCM_MUSE_MOE_ONLINE_QUANT", "mxfp4")
     assert _online_mxfp4_applies(prefix.format(5))
     assert not _online_mxfp4_applies(prefix.format(0))
     assert not _online_mxfp4_applies(prefix.format(61))

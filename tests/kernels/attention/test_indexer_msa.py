@@ -8,17 +8,17 @@ import multiprocess as mp
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 if not current_platform.is_rocm():
     pytest.skip("the MiniMax-M3 MSA indexer is AMD-only", allow_module_level=True)
 
-import aphrodite.platforms.rocm as rocm_platform  # noqa: E402
-from aphrodite.distributed.parallel_state import (  # noqa: E402
+import sonar.platforms.rocm as rocm_platform  # noqa: E402
+from sonar.distributed.parallel_state import (  # noqa: E402
     ensure_model_parallel_initialized,
     init_distributed_environment,
 )
-from aphrodite.models.minimax_m3.amd.indexer_msa import (  # noqa: E402
+from sonar.models.minimax_m3.amd.indexer_msa import (  # noqa: E402
     MAX_SUPPORTED_BLOCKS,
     MSA_INDEX_HEAD_DIM,
     MSA_SCORE_TYPE,
@@ -27,13 +27,13 @@ from aphrodite.models.minimax_m3.amd.indexer_msa import (  # noqa: E402
     SLOTS_MAX,
     WAVE_SIZE,
 )
-from aphrodite.models.minimax_m3.amd.ops.sparse_pa import (  # noqa: E402
+from sonar.models.minimax_m3.amd.ops.sparse_pa import (  # noqa: E402
     ASM_PAGE_SIZE,
     PAGE16_SIDES_PER_BLOCK,
 )
-from aphrodite.utils.network_utils import get_open_port  # noqa: E402
-from aphrodite.utils.system_utils import update_environment_variables  # noqa: E402
-from tests.utils import ensure_current_aphrodite_config  # noqa: E402
+from sonar.utils.network_utils import get_open_port  # noqa: E402
+from sonar.utils.system_utils import update_environment_variables  # noqa: E402
+from tests.utils import ensure_current_sonar_config  # noqa: E402
 
 mp.set_start_method("spawn", force=True)
 
@@ -65,7 +65,7 @@ _MAX_LEN = MAX_SUPPORTED_BLOCKS * MSA_SPARSE_BLOCK_SIZE
 
 @pytest.fixture
 def aiter_msa_indexer_gate(monkeypatch):
-    import aphrodite.models.minimax_m3.amd.indexer_msa as indexer_msa_mod
+    import sonar.models.minimax_m3.amd.indexer_msa as indexer_msa_mod
 
     def probe(rocm=True, gfx950=True, aiter_attend=True, base=_ADMITTED, **overrides):
         monkeypatch.setattr(indexer_msa_mod.current_platform, "is_rocm", lambda: rocm)
@@ -361,9 +361,9 @@ def _cp_worker(env) -> None:
     device = torch.device(f"cuda:{os.environ['LOCAL_RANK']}")
     torch.accelerator.set_device_index(device)
 
-    from aphrodite.models.minimax_m3.amd.indexer_cp import get_indexer_cp_peers
+    from sonar.models.minimax_m3.amd.indexer_cp import get_indexer_cp_peers
 
-    with ensure_current_aphrodite_config():
+    with ensure_current_sonar_config():
         init_distributed_environment()
         ensure_model_parallel_initialized(world, 1)
 

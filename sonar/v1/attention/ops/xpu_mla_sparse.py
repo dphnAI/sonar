@@ -3,7 +3,7 @@
 
 import torch
 
-from aphrodite.triton_utils import LOG2E, LOGE2, tl, triton
+from sonar.triton_utils import LOG2E, LOGE2, tl, triton
 
 
 @triton.jit

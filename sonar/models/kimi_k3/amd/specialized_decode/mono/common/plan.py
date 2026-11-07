@@ -33,7 +33,7 @@ from dataclasses import dataclass, field, fields
 from enum import Enum
 from pathlib import Path
 
-from aphrodite.models.kimi_k3.amd.specialized_decode.mono.abi import health_words
+from sonar.models.kimi_k3.amd.specialized_decode.mono.abi import health_words
 
 _SCALARS = (int, float, bool, str, enum.Enum)
 _ROOT = Path(__file__).resolve().parents[1]

@@ -213,44 +213,44 @@ import torch
 import torch.nn as nn
 from tqdm import tqdm
 
-import aphrodite.envs as envs
-from aphrodite import _custom_ops as ops
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.compilation.breakable_cudagraph import eager_break_during_capture
-from aphrodite.config import (
-    AphroditeConfig,
+import sonar.envs as envs
+from sonar import _custom_ops as ops
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.compilation.breakable_cudagraph import eager_break_during_capture
+from sonar.config import (
     CacheConfig,
     ModelConfig,
-    get_current_aphrodite_config,
+    SonarConfig,
+    get_current_sonar_config,
 )
-from aphrodite.config.cache import CacheDType
-from aphrodite.distributed.parallel_state import (
+from sonar.config.cache import CacheDType
+from sonar.distributed.parallel_state import (
     get_dcp_group,
     get_tp_group,
     is_global_first_rank,
 )
-from aphrodite.forward_context import ForwardContext, get_forward_context
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.custom_op import CustomOp
-from aphrodite.model_executor.layers.attention.attention import (
+from sonar.forward_context import ForwardContext, get_forward_context
+from sonar.logger import init_logger
+from sonar.model_executor.custom_op import CustomOp
+from sonar.model_executor.layers.attention.attention import (
     _init_kv_cache_quant,
     get_attention_context,
     set_default_quant_scales,
     should_load_quant_weights,
 )
-from aphrodite.model_executor.layers.attention.kv_transfer_utils import (
+from sonar.model_executor.layers.attention.kv_transfer_utils import (
     maybe_transfer_kv_layer,
 )
-from aphrodite.model_executor.layers.attention_layer_base import AttentionLayerBase
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.attention_layer_base import AttentionLayerBase
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
 )
-from aphrodite.model_executor.layers.quantization import (
+from sonar.model_executor.layers.quantization import (
     QuantizationConfig,
     resolve_quant_method,
 )
-from aphrodite.model_executor.layers.quantization.input_quant_fp8 import QuantFP8
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.input_quant_fp8 import QuantFP8
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     GroupShape,
     QuantKey,
     get_and_maybe_dequant_weights,
@@ -259,12 +259,12 @@ from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
     kFp8StaticTensorSym,
     kNvfp4Dynamic,
 )
-from aphrodite.model_executor.utils import replace_parameter
-from aphrodite.platforms import current_platform
-from aphrodite.transformers_utils.deepseek_v4_utils import get_compress_ratios
-from aphrodite.utils.flashinfer import has_flashinfer
-from aphrodite.utils.math_utils import cdiv, round_down, round_up
-from aphrodite.utils.torch_utils import (
+from sonar.model_executor.utils import replace_parameter
+from sonar.platforms import current_platform
+from sonar.transformers_utils.deepseek_v4_utils import get_compress_ratios
+from sonar.utils.flashinfer import has_flashinfer
+from sonar.utils.math_utils import cdiv, round_down, round_up
+from sonar.utils.torch_utils import (
     PIN_MEMORY,
     LayerNameType,
     _encode_layer_name,
@@ -274,7 +274,7 @@ from aphrodite.utils.torch_utils import (
     get_dtype_size,
     kv_cache_dtype_str_to_dtype,
 )
-from aphrodite.v1.attention.backend import (
+from sonar.v1.attention.backend import (
     AttentionBackend,
     AttentionLayer,
     AttentionMetadata,
@@ -283,24 +283,24 @@ from aphrodite.v1.attention.backend import (
     CommonAttentionMetadata,
     MLAAttentionImpl,
 )
-from aphrodite.v1.attention.backends.mla.index_group import HiSparseMLAIndexGroup
-from aphrodite.v1.attention.backends.mla.prefill import (
+from sonar.v1.attention.backends.mla.index_group import HiSparseMLAIndexGroup
+from sonar.v1.attention.backends.mla.prefill import (
     MLAPrefillBackend,
     get_mla_prefill_backend,
 )
-from aphrodite.v1.attention.backends.utils import (
+from sonar.v1.attention.backends.utils import (
     get_dcp_local_seq_lens,
     get_num_attention_heads_from_layers,
     split_decodes_and_prefills,
 )
-from aphrodite.v1.attention.ops.dcp import MLADCPManager
-from aphrodite.v1.attention.ops.merge_attn_states import merge_attn_states
-from aphrodite.v1.attention.ops.pcp import (
+from sonar.v1.attention.ops.dcp import MLADCPManager
+from sonar.v1.attention.ops.merge_attn_states import merge_attn_states
+from sonar.v1.attention.ops.pcp import (
     finalize_mla_pcp_decode,
     maybe_gather_mla_latent_cache_inputs,
 )
-from aphrodite.v1.attention.selector import get_attn_backend
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.attention.selector import get_attn_backend
+from sonar.v1.kv_cache_interface import (
     AttentionSpec,
     KVCacheSpec,
     KVQuantMode,
@@ -311,7 +311,7 @@ from aphrodite.v1.kv_cache_interface import (
 )
 
 if TYPE_CHECKING:
-    from aphrodite.v1.attention.backends.mla.index_group import (
+    from sonar.v1.attention.backends.mla.index_group import (
         SparseMLAIndexGroupBuilder,
     )
 
@@ -384,10 +384,10 @@ def _get_kv_b_proj_input_dtype(kv_b_proj: ColumnParallelLinear, use_fp8_prefill:
     if weight_dtype == torch.uint8:
         return None
     if weight_dtype == current_platform.fp8_dtype():
-        from aphrodite.model_executor.layers.quantization.modelopt import (
+        from sonar.model_executor.layers.quantization.modelopt import (
             ModelOptLinearMethod,
         )
-        from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+        from sonar.model_executor.layers.quantization.utils.quant_utils import (
             kFp8Static128BlockSym,
         )
 
@@ -487,7 +487,7 @@ class MLAAttention(nn.Module, AttentionLayerBase):
         self.quant_config = quant_config
 
         if cache_config is not None and cache_config.kv_cache_dtype_skip_layers:
-            from aphrodite.model_executor.models.utils import extract_layer_index
+            from sonar.model_executor.models.utils import extract_layer_index
 
             layer_idx = extract_layer_index(prefix)
             if str(layer_idx) in cache_config.kv_cache_dtype_skip_layers:
@@ -542,7 +542,7 @@ class MLAAttention(nn.Module, AttentionLayerBase):
         if (
             cache_config is not None
             and cache_config.enable_prefix_caching
-            and envs.APHRODITE_BATCH_INVARIANT
+            and envs.SONAR_BATCH_INVARIANT
             and (self.attn_backend.get_name() == "TRITON_MLA" or self.attn_backend.get_name() == "FLASHINFER")
         ):
             logger.warning_once(
@@ -597,11 +597,11 @@ class MLAAttention(nn.Module, AttentionLayerBase):
         kv_b_proj._cpu_skip_gemm_dispatch = True
         self.use_direct_call = not current_platform.opaque_attention_op()
 
-        aphrodite_config = get_current_aphrodite_config()
-        parallel_config = aphrodite_config.parallel_config
+        sonar_config = get_current_sonar_config()
+        parallel_config = sonar_config.parallel_config
         self.use_pcp = parallel_config.prefill_context_parallel_size > 1
         self.pcp_shard_decode_requests = parallel_config.pcp_shard_decode_requests
-        compilation_config = aphrodite_config.compilation_config
+        compilation_config = sonar_config.compilation_config
         if prefix in compilation_config.static_forward_context:
             raise ValueError(f"Duplicate layer name: {prefix}")
         compilation_config.static_forward_context[prefix] = self
@@ -612,9 +612,9 @@ class MLAAttention(nn.Module, AttentionLayerBase):
             self.prefill_backend = None
         else:
             try:
-                prefill_backend_cls = prefill_backend_cls or get_mla_prefill_backend(aphrodite_config)
+                prefill_backend_cls = prefill_backend_cls or get_mla_prefill_backend(sonar_config)
             except ValueError:
-                if not self.impl.is_sparse or aphrodite_config.attention_config.mla_prefill_backend is not None:
+                if not self.impl.is_sparse or sonar_config.attention_config.mla_prefill_backend is not None:
                     raise
                 logger.warning_once(
                     "No MLA prefill backend supports this model; sparse MLA will "
@@ -629,14 +629,14 @@ class MLAAttention(nn.Module, AttentionLayerBase):
                     qk_nope_head_dim=self.qk_nope_head_dim,
                     qk_rope_head_dim=self.qk_rope_head_dim,
                     v_head_dim=self.v_head_dim,
-                    aphrodite_config=aphrodite_config,
+                    sonar_config=sonar_config,
                 )
 
         self.kv_cache = torch.tensor([])
 
         self.use_sparse = use_sparse
 
-        if aphrodite_config.kernel_config.enable_jit_warmup:
+        if sonar_config.kernel_config.enable_jit_warmup:
             backend_name = self.attn_backend.get_name()
             if backend_name in (
                 "FLASHMLA_SPARSE",
@@ -645,10 +645,10 @@ class MLAAttention(nn.Module, AttentionLayerBase):
                 "FLASH_ATTN_MLA_SPARSE_FA4",
                 "DEEPSEEK_V32_INDEXER",
             ):
-                from aphrodite.v1.attention.backends.mla.compressor_utils import (
+                from sonar.v1.attention.backends.mla.compressor_utils import (
                     _COMPRESSED_SLOT_MAPPING_KERNEL,
                 )
-                from aphrodite.v1.attention.backends.mla.indexer import (
+                from sonar.v1.attention.backends.mla.indexer import (
                     _BUILD_PREFILL_CHUNK_METADATA_KERNEL,
                     _PREPARE_UNIFORM_DECODE_KERNEL,
                 )
@@ -658,7 +658,7 @@ class MLAAttention(nn.Module, AttentionLayerBase):
                 _BUILD_PREFILL_CHUNK_METADATA_KERNEL.register_warmup()
 
                 if backend_name != "DEEPSEEK_V32_INDEXER":
-                    from aphrodite.v1.attention.backends.mla.sparse_swa import (
+                    from sonar.v1.attention.backends.mla.sparse_swa import (
                         _COMPUTE_PREFILL_METADATA_KERNEL,
                     )
 
@@ -676,7 +676,7 @@ class MLAAttention(nn.Module, AttentionLayerBase):
                 else dtype
             )
             self.dcp_manager = MLADCPManager(
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 device=next(kv_b_proj.parameters()).device,
                 num_heads=self.num_heads,
                 query_head_dim=self.kv_lora_rank + self.qk_rope_head_dim,
@@ -703,7 +703,7 @@ class MLAAttention(nn.Module, AttentionLayerBase):
         )
 
         # Attributes for forward_impl method
-        self._aphrodite_config = get_current_aphrodite_config()
+        self._sonar_config = get_current_sonar_config()
         self._chunked_prefill_workspace_size: int | None = None
         self._decode_concat_quant_fp8_op = _DecodeConcatQuantFP8(
             static=True,
@@ -721,15 +721,15 @@ class MLAAttention(nn.Module, AttentionLayerBase):
     def bind_kv_cache(self, kv_cache: torch.Tensor) -> None:
         # [B, H=1, N, C] -> [B, N, C]
         self.kv_cache = kv_cache.squeeze(1)
-        if self._aphrodite_config.kernel_config.enable_jit_warmup and self._uses_flat_kv_cache():
-            from aphrodite.v1.attention.backends.mla.sparse_utils import (
+        if self._sonar_config.kernel_config.enable_jit_warmup and self._uses_flat_kv_cache():
+            from sonar.v1.attention.backends.mla.sparse_utils import (
                 _CONVERT_REQ_INDEX_TO_GLOBAL_INDEX_KERNEL,
             )
 
             row_width = self.kv_cache.shape[-1]
             assert self.kv_cache.stride(0) % row_width == 0
             _CONVERT_REQ_INDEX_TO_GLOBAL_INDEX_KERNEL.register_warmup(
-                self._aphrodite_config,
+                self._sonar_config,
                 block_stride_rows=self.kv_cache.stride(0) // row_width,
             )
 
@@ -743,7 +743,7 @@ class MLAAttention(nn.Module, AttentionLayerBase):
     def chunked_prefill_workspace_size(self) -> int:
         if self._chunked_prefill_workspace_size is None:
             self._chunked_prefill_workspace_size = MLACommonMetadataBuilder.determine_chunked_prefill_workspace_size(
-                self._aphrodite_config
+                self._sonar_config
             )
         return self._chunked_prefill_workspace_size
 
@@ -838,7 +838,7 @@ class MLAAttention(nn.Module, AttentionLayerBase):
             return output
         else:
             encoded = _encode_layer_name(self.layer_name)
-            kv_cache_dummy_dep = torch.ops.aphrodite.unified_mla_kv_cache_update(
+            kv_cache_dummy_dep = torch.ops.sonar.unified_mla_kv_cache_update(
                 kv_c_normed,
                 k_pe,
                 encoded,
@@ -846,7 +846,7 @@ class MLAAttention(nn.Module, AttentionLayerBase):
                 self._k_scale,
             )
             output = torch.empty(output_shape, dtype=q.dtype, device=q.device)
-            torch.ops.aphrodite.unified_mla_attention_with_output(
+            torch.ops.sonar.unified_mla_attention_with_output(
                 q,
                 kv_c_normed,
                 k_pe,
@@ -1194,9 +1194,7 @@ class MLAAttention(nn.Module, AttentionLayerBase):
             elif quant_key == kFp8StaticTensorSym:
                 # Static FP8 quantization
                 if self._aiter_output_quant:
-                    torch.ops.aphrodite.rocm_aiter_per_tensor_quant(
-                        quant_output[:quant_idx], actual, output_scale, False
-                    )
+                    torch.ops.sonar.rocm_aiter_per_tensor_quant(quant_output[:quant_idx], actual, output_scale, False)
                 else:
                     fp8_data, _ = self._quant_fp8_op(actual, output_scale)
                     quant_output[:quant_idx].copy_(fp8_data)
@@ -1222,7 +1220,7 @@ class MLAAttention(nn.Module, AttentionLayerBase):
             and self.impl.dcp_world_size <= 1
             and _use_masked_mha(
                 backend_name=self.attn_backend.get_name(),
-                tensor_parallel_size=(self._aphrodite_config.parallel_config.tensor_parallel_size),
+                tensor_parallel_size=(self._sonar_config.parallel_config.tensor_parallel_size),
                 qk_head_dim=self.qk_nope_head_dim + self.qk_rope_head_dim,
                 v_head_dim=self.v_head_dim,
                 query_len=prefill.max_query_len,
@@ -1232,7 +1230,7 @@ class MLAAttention(nn.Module, AttentionLayerBase):
             and self.impl.masked_mha_workspace_fits(prefill)  # type: ignore[attr-defined]
         )
         return (prefill.use_dense_mha or use_masked_mha) and not (
-            self._aphrodite_config.attention_config.sparse_mla_force_mqa
+            self._sonar_config.attention_config.sparse_mla_force_mqa
         )
 
     def process_weights_after_loading(self, act_dtype: torch.dtype):
@@ -1267,7 +1265,7 @@ class MLAAttention(nn.Module, AttentionLayerBase):
 
         # If kv_b_proj_weight is unquantized, quantize it to mxfp4 if supported
         if self.is_aiter_triton_fp4_bmm_enabled:
-            from aphrodite.model_executor.layers.quantization.quark.utils import (
+            from sonar.model_executor.layers.quantization.quark.utils import (
                 quark_quantize_weight_to_mxfp4,
             )
 
@@ -1347,10 +1345,10 @@ class MLAAttention(nn.Module, AttentionLayerBase):
     def get_attn_backend(self) -> type[AttentionBackend]:
         return self.attn_backend
 
-    def get_kv_cache_spec(self, aphrodite_config: AphroditeConfig) -> KVCacheSpec:
-        kv_cache_dtype = kv_cache_dtype_str_to_dtype(self.kv_cache_dtype, aphrodite_config.model_config)
+    def get_kv_cache_spec(self, sonar_config: SonarConfig) -> KVCacheSpec:
+        kv_cache_dtype = kv_cache_dtype_str_to_dtype(self.kv_cache_dtype, sonar_config.model_config)
         common_kwargs = dict(
-            block_size=aphrodite_config.cache_config.block_size,
+            block_size=sonar_config.cache_config.block_size,
             num_kv_heads=1,
             max_tp_shards=1,
             head_size=self.head_size,
@@ -1884,11 +1882,11 @@ def backend_supports_prefill_query_quantization() -> bool:
     if not current_platform.is_device_capability_family(100):
         return False
 
-    from aphrodite.config import get_current_aphrodite_config
-    from aphrodite.v1.attention.backends.mla.prefill import get_mla_prefill_backend
+    from sonar.config import get_current_sonar_config
+    from sonar.v1.attention.backends.mla.prefill import get_mla_prefill_backend
 
-    aphrodite_config = get_current_aphrodite_config()
-    backend_cls = get_mla_prefill_backend(aphrodite_config)
+    sonar_config = get_current_sonar_config()
+    backend_cls = get_mla_prefill_backend(sonar_config)
     return backend_cls.get_name() in (
         "FLASHINFER",
         "TRTLLM_RAGGED",
@@ -1980,11 +1978,11 @@ def plan_mla_context_chunks(
 
 
 def align_mla_chunked_context_workspace_size(
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     workspace_size: int,
 ) -> int:
-    parallel_config = aphrodite_config.parallel_config
-    alignment = aphrodite_config.cache_config.block_size
+    parallel_config = sonar_config.parallel_config
+    alignment = sonar_config.cache_config.block_size
     if parallel_config.decode_context_parallel_size > 1:
         alignment = lcm(
             alignment,
@@ -2242,8 +2240,8 @@ class MLACommonMetadataBuilder(AttentionMetadataBuilder[M]):
     reorder_batch_threshold: int = 1
 
     def _validate_dspark_dcp_support(self, supports_dcp_with_varlen: bool) -> None:
-        speculative_config = getattr(self.aphrodite_config, "speculative_config", None)
-        parallel_config = self.aphrodite_config.parallel_config
+        speculative_config = getattr(self.sonar_config, "speculative_config", None)
+        parallel_config = self.sonar_config.parallel_config
         if (
             speculative_config is None
             or getattr(speculative_config, "method", None) != "dspark"
@@ -2267,10 +2265,10 @@ class MLACommonMetadataBuilder(AttentionMetadataBuilder[M]):
             )
 
     @staticmethod
-    def determine_chunked_prefill_workspace_size(aphrodite_config: AphroditeConfig) -> int:
-        scheduler_config = aphrodite_config.scheduler_config
-        cache_config = aphrodite_config.cache_config
-        model_config = aphrodite_config.model_config
+    def determine_chunked_prefill_workspace_size(sonar_config: SonarConfig) -> int:
+        scheduler_config = sonar_config.scheduler_config
+        cache_config = sonar_config.cache_config
+        model_config = sonar_config.model_config
 
         chunked_prefill_workspace_size = min(
             # Try for 8 full length request or at least 4 pages per-request
@@ -2290,13 +2288,13 @@ class MLACommonMetadataBuilder(AttentionMetadataBuilder[M]):
         )
 
         return align_mla_chunked_context_workspace_size(
-            aphrodite_config,
+            sonar_config,
             chunked_prefill_workspace_size,
         )
 
     @staticmethod
     def determine_prefill_query_data_type(
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         model_dtype: torch.dtype,
     ) -> torch.dtype:
         """Determine the query data type for prefill queries.
@@ -2304,8 +2302,8 @@ class MLACommonMetadataBuilder(AttentionMetadataBuilder[M]):
         is enabled, else model dtype.
         """
         use_fp8 = (
-            is_quantized_kv_cache(aphrodite_config.cache_config.cache_dtype)
-            and aphrodite_config.attention_config.use_prefill_query_quantization
+            is_quantized_kv_cache(sonar_config.cache_config.cache_dtype)
+            and sonar_config.attention_config.use_prefill_query_quantization
             and backend_supports_prefill_query_quantization()
         )
 
@@ -2313,7 +2311,7 @@ class MLACommonMetadataBuilder(AttentionMetadataBuilder[M]):
             fp8_dtype = current_platform.fp8_dtype()
             logger.info_once("FP8 prefill attention enabled: query data type is FP8")
             return fp8_dtype
-        elif aphrodite_config.attention_config.use_prefill_query_quantization:
+        elif sonar_config.attention_config.use_prefill_query_quantization:
             logger.info_once(
                 "Unable to perform FP8 prefill attention when"
                 " use_prefill_query_quantization is enabled. Please"
@@ -2322,7 +2320,7 @@ class MLACommonMetadataBuilder(AttentionMetadataBuilder[M]):
             )
             return model_dtype
         elif (
-            is_quantized_kv_cache(aphrodite_config.cache_config.cache_dtype)
+            is_quantized_kv_cache(sonar_config.cache_config.cache_dtype)
             and backend_supports_prefill_query_quantization()
         ):
             logger.warning_once(
@@ -2340,17 +2338,17 @@ class MLACommonMetadataBuilder(AttentionMetadataBuilder[M]):
         self,
         kv_cache_spec: AttentionSpec,
         layer_names: list[str],
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
         metadata_cls: type[M] | None = None,
         supports_dcp_with_varlen: bool = False,
     ):
         self.metadata_cls = metadata_cls if metadata_cls is not None else MLACommonMetadata
         self.kv_cache_spec = kv_cache_spec
-        self.model_config = aphrodite_config.model_config
-        parallel_config = aphrodite_config.parallel_config
-        self.compilation_config = aphrodite_config.compilation_config
-        self.aphrodite_config = aphrodite_config
+        self.model_config = sonar_config.model_config
+        parallel_config = sonar_config.parallel_config
+        self.compilation_config = sonar_config.compilation_config
+        self.sonar_config = sonar_config
         self.device = device
         self.use_pcp = parallel_config.prefill_context_parallel_size > 1
         # merge() unions this flag across the KV group, so a shared target/draft
@@ -2363,7 +2361,7 @@ class MLACommonMetadataBuilder(AttentionMetadataBuilder[M]):
 
         # A draft cache group can have a different head count from the target.
         self.num_heads = get_num_attention_heads_from_layers(
-            aphrodite_config, layer_names
+            sonar_config, layer_names
         ) or self.model_config.get_num_attention_heads(parallel_config)
         # Hybrid MLA models may use different latent dimensions per KV group.
         layer = self.compilation_config.static_forward_context[layer_names[0]]
@@ -2377,7 +2375,7 @@ class MLACommonMetadataBuilder(AttentionMetadataBuilder[M]):
         self.aot_schedule = current_platform.is_cuda()
 
         self.kv_cache_spec = kv_cache_spec
-        self.q_data_type = self.determine_prefill_query_data_type(aphrodite_config, self.model_config.dtype)
+        self.q_data_type = self.determine_prefill_query_data_type(sonar_config, self.model_config.dtype)
         attention_layer = self.compilation_config.static_forward_context[layer_names[0]]
 
         try:
@@ -2391,9 +2389,9 @@ class MLACommonMetadataBuilder(AttentionMetadataBuilder[M]):
 
         self.page_size = self.kv_cache_spec.block_size
 
-        self.chunked_prefill_workspace_size = self.determine_chunked_prefill_workspace_size(aphrodite_config)
+        self.chunked_prefill_workspace_size = self.determine_chunked_prefill_workspace_size(sonar_config)
 
-        use_packed_fp8_cache = aphrodite_config.cache_config.cache_dtype == "fp8_ds_mla"
+        use_packed_fp8_cache = sonar_config.cache_config.cache_dtype == "fp8_ds_mla"
         self.dcp_manager: MLADCPManager | None = None
         if self.dcp_world_size > 1:
             # Note(hc): The local kvcache is incomplete when DCP is triggered,
@@ -2552,7 +2550,7 @@ class MLACommonMetadataBuilder(AttentionMetadataBuilder[M]):
             align_indptr = False
             if (
                 self._prefill_backend.get_name() == "TRTLLM_RAGGED"
-                and self.aphrodite_config.attention_config.trtllm_ragged_backend == "cute-dsl"
+                and self.sonar_config.attention_config.trtllm_ragged_backend == "cute-dsl"
             ):
                 align_indptr = True
 
@@ -2850,7 +2848,7 @@ class MLACommonBaseImpl(MLAAttentionImpl[A], Generic[A]):
         )
 
         if self._use_flashinfer_concat_mla_k:
-            torch.ops.aphrodite.flashinfer_concat_mla_k(k, k_nope, k_pe)
+            torch.ops.sonar.flashinfer_concat_mla_k(k, k_nope, k_pe)
         else:
             # Fallback: Direct copies with efficient broadcasting
             k[..., : k_nope.shape[-1]] = k_nope
@@ -3241,7 +3239,7 @@ class MLACommonImpl(MLACommonBaseImpl[M], Generic[M]):
             and (self.qk_rope_head_dim == 64)
         )
 
-        parallel_config = get_current_aphrodite_config().parallel_config
+        parallel_config = get_current_sonar_config().parallel_config
         # Avoid requiring an initialized DCP group in tests.
         self.dcp_world_size: int = parallel_config.decode_context_parallel_size
 

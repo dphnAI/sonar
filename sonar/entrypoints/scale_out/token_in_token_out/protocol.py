@@ -15,13 +15,13 @@ from pydantic import (
     model_validator,
 )
 
-from aphrodite.config import ModelConfig
-from aphrodite.entrypoints.generate.base.protocol import (
+from sonar.config import ModelConfig
+from sonar.entrypoints.generate.base.protocol import (
     PerRequestMetrics,
     StreamOptions,
     validate_cache_salt,
 )
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionLogProbs,
     ChatCompletionNamedToolChoiceParam,
     ChatCompletionRequest,
@@ -29,18 +29,18 @@ from aphrodite.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionToolsParam,
     ChatMessage,
 )
-from aphrodite.entrypoints.openai.completion.protocol import (
+from sonar.entrypoints.openai.completion.protocol import (
     CompletionRequest,
     CompletionStreamResponse,
 )
-from aphrodite.entrypoints.serve.engine.protocol import UsageInfo
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.logger import init_logger
-from aphrodite.logprobs import Logprob
-from aphrodite.outputs import WeightVersionSpan
-from aphrodite.renderers import TokenizeParams
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.utils import random_uuid
+from sonar.entrypoints.serve.engine.protocol import UsageInfo
+from sonar.exceptions import SonarValidationError
+from sonar.logger import init_logger
+from sonar.logprobs import Logprob
+from sonar.outputs import WeightVersionSpan
+from sonar.renderers import TokenizeParams
+from sonar.sampling_params import SamplingParams
+from sonar.utils import random_uuid
 
 logger = init_logger(__name__)
 
@@ -77,13 +77,13 @@ class ParseContext(BaseModel):
         coupled path serves those as is.
 
         Raises:
-            AphroditeValidationError: If a named `tool_choice` matches no tool.
+            SonarValidationError: If a named `tool_choice` matches no tool.
 
         """
         if isinstance(self.tool_choice, ChatCompletionNamedToolChoiceParam):
             name = self.tool_choice.function.name
             if not any(tool.function.name == name for tool in self.tools or ()):
-                raise AphroditeValidationError(
+                raise SonarValidationError(
                     "The tool specified in `tool_choice` does not match any of the specified `tools`",
                     parameter="tool_choice",
                 )

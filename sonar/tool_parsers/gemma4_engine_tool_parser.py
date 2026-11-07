@@ -3,12 +3,12 @@
 
 from openai.types.responses import ToolChoiceCustom, ToolChoiceFunction
 
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionNamedToolChoiceParam,
     ChatCompletionRequest,
 )
-from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
-from aphrodite.parser.engine.registered_adapters import Gemma4ParserToolAdapter
+from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
+from sonar.parser.engine.registered_adapters import Gemma4ParserToolAdapter
 
 
 class Gemma4EngineToolParser(Gemma4ParserToolAdapter):  # type: ignore[valid-type, misc]

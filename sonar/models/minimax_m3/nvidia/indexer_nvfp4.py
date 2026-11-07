@@ -31,31 +31,31 @@ from typing import Any, ClassVar
 
 import torch
 
-from aphrodite.config import AphroditeConfig, get_current_aphrodite_config
-from aphrodite.forward_context import get_forward_context
-from aphrodite.models.minimax_m3.common.indexer import (
+from sonar.config import SonarConfig, get_current_sonar_config
+from sonar.forward_context import get_forward_context
+from sonar.models.minimax_m3.common.indexer import (
     MiniMaxM3IndexerBackend,
     MiniMaxM3IndexerImpl,
     MiniMaxM3IndexerMetadata,
     MiniMaxM3IndexerMetadataBuilder,
 )
-from aphrodite.models.minimax_m3.nvidia.indexer_nvfp4_decode_cp import (
+from sonar.models.minimax_m3.nvidia.indexer_nvfp4_decode_cp import (
     Nvfp4DecodeCPLayer,
     Nvfp4DecodeCPPlan,
     get_nvfp4_indexer_decode_cp,
 )
-from aphrodite.models.minimax_m3.nvidia.ops.gather_nvfp4_index_k import (
+from sonar.models.minimax_m3.nvidia.ops.gather_nvfp4_index_k import (
     minimax_m3_gather_nvfp4_index_k_fp8,
 )
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.v1.attention.backend import (
+from sonar.utils.math_utils import cdiv
+from sonar.v1.attention.backend import (
     AttentionBackend,
     CommonAttentionMetadata,
     max_decode_query_len,
 )
-from aphrodite.v1.attention.backends.utils import split_decodes_and_prefills
-from aphrodite.v1.kv_cache_interface import AttentionSpec
-from aphrodite.v1.worker.workspace import current_workspace_manager
+from sonar.v1.attention.backends.utils import split_decodes_and_prefills
+from sonar.v1.kv_cache_interface import AttentionSpec
+from sonar.v1.worker.workspace import current_workspace_manager
 
 PAGE_SIZE = 128
 HEAD_DIM = 128
@@ -73,7 +73,7 @@ def _msa_indexers():
 
     Through ``fmha_sm100.sparse``, which binds the package's csrc JIT loader.
     """
-    from aphrodite.third_party.fmha_sm100.sparse import (
+    from sonar.third_party.fmha_sm100.sparse import (
         BatchDecodeIndexerQ8KV4Wrapper,
         BatchPrefillIndexerQ8KV8Wrapper,
     )
@@ -81,11 +81,11 @@ def _msa_indexers():
     return BatchDecodeIndexerQ8KV4Wrapper, BatchPrefillIndexerQ8KV8Wrapper
 
 
-def max_gather_pages(aphrodite_config: AphroditeConfig) -> int:
+def max_gather_pages(sonar_config: SonarConfig) -> int:
     """FP8 pages one prefill chunk may gather; always fits one full request."""
     tokens = max(
-        aphrodite_config.model_config.max_model_len,
-        4 * aphrodite_config.scheduler_config.max_num_batched_tokens,
+        sonar_config.model_config.max_model_len,
+        4 * sonar_config.scheduler_config.max_num_batched_tokens,
     )
     return cdiv(tokens, PAGE_SIZE)
 
@@ -135,10 +135,10 @@ class MiniMaxM3IndexerNvfp4MetadataBuilder(MiniMaxM3IndexerMetadataBuilder):
         self,
         kv_cache_spec: AttentionSpec,
         layer_names: list[str],
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
     ) -> None:
-        super().__init__(kv_cache_spec, layer_names, aphrodite_config, device)
+        super().__init__(kv_cache_spec, layer_names, sonar_config, device)
         if self.max_decode_query_len > DECODE_QUERY_LEN:
             raise NotImplementedError(
                 "The MiniMax M3 NVFP4 indexer scores at most "
@@ -152,7 +152,7 @@ class MiniMaxM3IndexerNvfp4MetadataBuilder(MiniMaxM3IndexerMetadataBuilder):
                 f"{DECODE_NUM_HEADS} index heads per rank, got "
                 f"{self.num_index_heads}."
             )
-        self.max_gather_pages = max_gather_pages(aphrodite_config)
+        self.max_gather_pages = max_gather_pages(sonar_config)
         # Decode wrapper per padded decode batch size and query length.
         self.decode_wrappers: dict[tuple[int, int], Any] = {}
         # Decode CP (opt-in); static, so all ranks and graphs agree.
@@ -161,7 +161,7 @@ class MiniMaxM3IndexerNvfp4MetadataBuilder(MiniMaxM3IndexerMetadataBuilder):
             max_decode_query_len=self.max_decode_query_len,
         )
         # Pages a request can span; decode scores at most this many.
-        self.max_decode_pages = min(cdiv(aphrodite_config.model_config.max_model_len, PAGE_SIZE), MAX_PAGES)
+        self.max_decode_pages = min(cdiv(sonar_config.model_config.max_model_len, PAGE_SIZE), MAX_PAGES)
         # One page-score scratch for every decode wrapper: they never run at
         # once, and a buffer per batch size would hold 256 KiB per request at a
         # 1M context for every batch size the engine sees. Decode batches,
@@ -169,8 +169,8 @@ class MiniMaxM3IndexerNvfp4MetadataBuilder(MiniMaxM3IndexerMetadataBuilder):
         self.decode_score_buffer: torch.Tensor | None = None
         if self.decode_cp is None:
             max_decode_reqs = max(
-                aphrodite_config.scheduler_config.max_num_seqs,
-                aphrodite_config.compilation_config.max_cudagraph_capture_size or 0,
+                sonar_config.scheduler_config.max_num_seqs,
+                sonar_config.compilation_config.max_cudagraph_capture_size or 0,
             )
             decode_wrapper_cls, _ = _msa_indexers()
             self.decode_score_buffer = torch.empty(
@@ -382,12 +382,12 @@ class MiniMaxM3IndexerNvfp4Impl(MiniMaxM3IndexerImpl):
                 "local_blocks, block_size, index_head_dim, score_type)="
                 f"{config}."
             )
-        aphrodite_config = get_current_aphrodite_config()
-        self.max_gather_pages = max_gather_pages(aphrodite_config)
+        sonar_config = get_current_sonar_config()
+        self.max_gather_pages = max_gather_pages(sonar_config)
         # Per-layer decode-CP buffers (collective: same layer order on all ranks).
         self.decode_cp = get_nvfp4_indexer_decode_cp(
             num_index_heads=self.num_index_heads,
-            max_decode_query_len=max_decode_query_len(aphrodite_config),
+            max_decode_query_len=max_decode_query_len(sonar_config),
         )
         self.decode_cp_layer: Nvfp4DecodeCPLayer | None = None if self.decode_cp is None else self.decode_cp.new_layer()
 

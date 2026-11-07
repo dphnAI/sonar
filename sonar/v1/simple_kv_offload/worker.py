@@ -6,20 +6,20 @@ from typing import TYPE_CHECKING
 
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.logger import init_logger
-from aphrodite.utils.torch_utils import PIN_MEMORY
-from aphrodite.v1.simple_kv_offload.copy_backend import DmaCopyBackend
-from aphrodite.v1.simple_kv_offload.cuda_mem_ops import pin_tensor
-from aphrodite.v1.simple_kv_offload.disk_backend import DiskBackend
-from aphrodite.v1.simple_kv_offload.metadata import (
+from sonar.config import SonarConfig
+from sonar.logger import init_logger
+from sonar.utils.torch_utils import PIN_MEMORY
+from sonar.v1.simple_kv_offload.copy_backend import DmaCopyBackend
+from sonar.v1.simple_kv_offload.cuda_mem_ops import pin_tensor
+from sonar.v1.simple_kv_offload.disk_backend import DiskBackend
+from sonar.v1.simple_kv_offload.metadata import (
     SimpleCPUOffloadMetadata,
     SimpleCPUOffloadWorkerMetadata,
 )
-from aphrodite.v1.simple_kv_offload.sizing import sync_num_offload_blocks_across_workers
+from sonar.v1.simple_kv_offload.sizing import sync_num_offload_blocks_across_workers
 
 if TYPE_CHECKING:
-    from aphrodite.v1.kv_cache_interface import KVCacheConfig
+    from sonar.v1.kv_cache_interface import KVCacheConfig
 
 logger = init_logger(__name__)
 
@@ -29,7 +29,7 @@ class SimpleCPUOffloadWorker:
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         kv_cache_config: "KVCacheConfig | None",
         cpu_capacity_bytes: int,
         kv_offload_backend: str = "cpu",
@@ -39,7 +39,7 @@ class SimpleCPUOffloadWorker:
         use_page_cache: bool = False,
         num_cpu_blocks: int | None = None,
     ):
-        self.aphrodite_config = aphrodite_config
+        self.sonar_config = sonar_config
         self.kv_cache_config = kv_cache_config
         self.cpu_capacity_bytes = cpu_capacity_bytes
         self._num_cpu_blocks_override = num_cpu_blocks

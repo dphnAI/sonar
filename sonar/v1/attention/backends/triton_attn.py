@@ -7,20 +7,20 @@ from typing import ClassVar
 
 import torch
 
-import aphrodite.envs as envs
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.config import AphroditeConfig, CUDAGraphMode
-from aphrodite.config.cache import CacheDType
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+import sonar.envs as envs
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.config import CUDAGraphMode, SonarConfig
+from sonar.config.cache import CacheDType
+from sonar.logger import init_logger
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     kFp8StaticTensorSym,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.platforms.interface import DeviceCapability
-from aphrodite.utils.math_utils import cdiv, next_power_of_2
-from aphrodite.utils.torch_utils import get_dtype_size
-from aphrodite.v1.attention.backend import (
+from sonar.platforms import current_platform
+from sonar.platforms.interface import DeviceCapability
+from sonar.utils.math_utils import cdiv, next_power_of_2
+from sonar.utils.torch_utils import get_dtype_size
+from sonar.v1.attention.backend import (
     AttentionBackend,
     AttentionCGSupport,
     AttentionImpl,
@@ -30,21 +30,21 @@ from aphrodite.v1.attention.backend import (
     CommonAttentionMetadata,
     MultipleOf,
 )
-from aphrodite.v1.attention.backends.utils import (
+from sonar.v1.attention.backends.utils import (
     compute_mm_prefix_range_tensor,
     get_num_attention_heads_from_layers,
     set_triton_ptr_range,
 )
-from aphrodite.v1.attention.ops.triton_prefill_attention import context_attention_fwd
-from aphrodite.v1.attention.ops.triton_reshape_and_cache_flash import (
+from sonar.v1.attention.ops.triton_prefill_attention import context_attention_fwd
+from sonar.v1.attention.ops.triton_reshape_and_cache_flash import (
     triton_reshape_and_cache_flash,
     triton_reshape_and_cache_flash_per_token_head_quant,
 )
-from aphrodite.v1.attention.ops.triton_unified_attention import (
+from sonar.v1.attention.ops.triton_unified_attention import (
     MAX_3D_QUERY_LEN,
     unified_attention,
 )
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.kv_cache_interface import (
     AttentionSpec,
     KVQuantMode,
     get_kv_quant_mode,
@@ -102,18 +102,18 @@ class TritonAttentionMetadataBuilder(AttentionMetadataBuilder[TritonAttentionMet
         self,
         kv_cache_spec: AttentionSpec,
         layer_names: list[str],
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
     ):
-        super().__init__(kv_cache_spec, layer_names, aphrodite_config, device)
+        super().__init__(kv_cache_spec, layer_names, sonar_config, device)
 
         self.block_size = kv_cache_spec.block_size
 
-        model_config = aphrodite_config.model_config
+        model_config = sonar_config.model_config
         # Compatible with models with non-uniform per-layer head counts.
         self.num_heads_q = get_num_attention_heads_from_layers(
-            aphrodite_config, layer_names
-        ) or model_config.get_num_attention_heads(aphrodite_config.parallel_config)
+            sonar_config, layer_names
+        ) or model_config.get_num_attention_heads(sonar_config.parallel_config)
         # Some models (e.g. Gemma4) use different KV/head geometry for
         # different attention layer groups, so size decode metadata from the
         # actual KV cache spec instead of the model-wide defaults.
@@ -121,7 +121,7 @@ class TritonAttentionMetadataBuilder(AttentionMetadataBuilder[TritonAttentionMet
         self.headdim = kv_cache_spec.head_size
 
         # Check if CUDA Graphs are enabled for decode
-        self.decode_cudagraph_enabled = self.aphrodite_config.compilation_config.cudagraph_mode in (
+        self.decode_cudagraph_enabled = self.sonar_config.compilation_config.cudagraph_mode in (
             CUDAGraphMode.FULL_AND_PIECEWISE,
             CUDAGraphMode.FULL_DECODE_ONLY,
             CUDAGraphMode.FULL,
@@ -137,7 +137,7 @@ class TritonAttentionMetadataBuilder(AttentionMetadataBuilder[TritonAttentionMet
 
         # Modify the threshold if needed.
         if self.decode_cudagraph_enabled:
-            capture_sizes = self.aphrodite_config.compilation_config.cudagraph_capture_sizes
+            capture_sizes = self.sonar_config.compilation_config.cudagraph_capture_sizes
             assert capture_sizes, "CUDA Graphs enabled but no capture sizes specified."
 
             # Select the CUDA Graph capture size closest to self.seq_threshold_3D
@@ -160,14 +160,14 @@ class TritonAttentionMetadataBuilder(AttentionMetadataBuilder[TritonAttentionMet
             )
         headdim_padded = next_power_of_2(self.headdim)
         max_query_len_3d = 1
-        speculative_config = aphrodite_config.speculative_config
+        speculative_config = sonar_config.speculative_config
         # The INT4 launcher runs multi-query batches in 2D only.
         if speculative_config is not None and kv_cache_spec.kv_quant_mode != KVQuantMode.INT4_PER_TOKEN_HEAD:
             num_speculative_tokens = speculative_config.num_speculative_tokens or 0
             query_len = 1 + num_speculative_tokens * (2 if speculative_config.parallel_drafting else 1)
             max_query_len_3d = min(query_len, MAX_3D_QUERY_LEN)
         # Scratch is indexed by query token, including verification tokens.
-        max_num_seqs_3d = min(self.seq_threshold_3D, aphrodite_config.scheduler_config.max_num_seqs)
+        max_num_seqs_3d = min(self.seq_threshold_3D, sonar_config.scheduler_config.max_num_seqs)
         max_num_tokens_3d = max_num_seqs_3d * max_query_len_3d
         if self.max_seqs_64_segments > 0:
             self.num_par_softmax_segments = 64
@@ -206,7 +206,7 @@ class TritonAttentionMetadataBuilder(AttentionMetadataBuilder[TritonAttentionMet
         self.persistent_rswa_prefix_lens: torch.Tensor | None = None
         if self.rswa_window is not None:
             self.persistent_rswa_prefix_lens = torch.empty(
-                aphrodite_config.scheduler_config.max_num_seqs,
+                sonar_config.scheduler_config.max_num_seqs,
                 dtype=torch.int32,
                 device=device,
             )
@@ -407,7 +407,7 @@ class TritonAttentionImpl(AttentionImpl):
         """
         if self._k_scale_cache is not None:
             return
-        from aphrodite.utils.torch_utils import get_dtype_size
+        from sonar.utils.torch_utils import get_dtype_size
 
         num_blocks, nkv, block_size, content = kv_cache.shape
         dtype_sz = kv_cache.element_size()
@@ -522,7 +522,7 @@ class TritonAttentionImpl(AttentionImpl):
         self.supports_quant_query_input = current_platform.is_cuda()
         if current_platform.is_rocm():
             # Enable GPUs with fp8 MMA support
-            from aphrodite.platforms.rocm import on_gfx11, on_gfx90a
+            from sonar.platforms.rocm import on_gfx11, on_gfx90a
 
             self.supports_quant_query_input = not (on_gfx90a() or on_gfx11())
 
@@ -534,11 +534,11 @@ class TritonAttentionImpl(AttentionImpl):
         # is eliminated at Triton compile time, so other platforms see
         # zero cost when TD is off.
         #
-        # ``APHRODITE_TRITON_USE_TD`` is tri-state:
+        # ``SONAR_TRITON_USE_TD`` is tri-state:
         #   - unset (None): auto-select (TD on for XPU, off elsewhere),
         #   - ``1``: force TD on regardless of platform,
         #   - ``0``: force TD off regardless of platform (useful for A/B).
-        td_override = envs.APHRODITE_TRITON_USE_TD
+        td_override = envs.SONAR_TRITON_USE_TD
         if td_override is None:
             self.use_td = current_platform.is_xpu()
         else:

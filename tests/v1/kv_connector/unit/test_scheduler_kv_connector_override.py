@@ -4,22 +4,22 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-import aphrodite.plugins as plugins_module
-from aphrodite.distributed.device_communicators.shm_broadcast import MessageQueue
-from aphrodite.distributed.kv_transfer.kv_connector.factory import (
+import sonar.plugins as plugins_module
+from sonar.distributed.device_communicators.shm_broadcast import MessageQueue
+from sonar.distributed.kv_transfer.kv_connector.factory import (
     KVConnectorFactory,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.base import (
+from sonar.distributed.kv_transfer.kv_connector.v1.base import (
     KVConnectorBase_V1,
     KVConnectorMetadata,
 )
-from aphrodite.v1.core.kv_cache_manager import KVCacheBlocks
-from aphrodite.v1.core.kv_cache_utils import BlockHash
-from aphrodite.v1.core.sched.output import KVConnectorBlockState, SchedulerOutput
-from aphrodite.v1.core.sched.scheduler import Scheduler
-from aphrodite.v1.kv_cache_interface import KVCacheConfig
-from aphrodite.v1.outputs import ModelRunnerOutput
-from aphrodite.v1.request import Request
+from sonar.v1.core.kv_cache_manager import KVCacheBlocks
+from sonar.v1.core.kv_cache_utils import BlockHash
+from sonar.v1.core.sched.output import KVConnectorBlockState, SchedulerOutput
+from sonar.v1.core.sched.scheduler import Scheduler
+from sonar.v1.kv_cache_interface import KVCacheConfig
+from sonar.v1.outputs import ModelRunnerOutput
+from sonar.v1.request import Request
 from tests.v1.core.utils import create_requests, create_scheduler
 
 
@@ -34,8 +34,8 @@ class DummyConnectorMetadata(KVConnectorMetadata):
 
 
 class DummyKVConnector(KVConnectorBase_V1):
-    def __init__(self, aphrodite_config, role, kv_cache_config: KVCacheConfig):
-        super().__init__(aphrodite_config, role, kv_cache_config)
+    def __init__(self, sonar_config, role, kv_cache_config: KVCacheConfig):
+        super().__init__(sonar_config, role, kv_cache_config)
 
     def get_num_new_matched_tokens(self, request: Request, num_computed_tokens: int) -> tuple[int | None, bool]:
         return (0, False)

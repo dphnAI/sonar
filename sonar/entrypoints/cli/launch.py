@@ -5,23 +5,23 @@ import argparse
 
 import uvloop
 
-from aphrodite.entrypoints.cli.types import CLISubcommand
-from aphrodite.entrypoints.common.cli_args import (
+from sonar.entrypoints.cli.types import CLISubcommand
+from sonar.entrypoints.common.cli_args import (
     make_arg_parser,
     validate_parsed_serve_args,
 )
-from aphrodite.entrypoints.common.startup import APHRODITE_SUBCMD_PARSER_EPILOG
-from aphrodite.entrypoints.launchers.render.entry import run_launch_fastapi
-from aphrodite.logger import init_logger
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
+from sonar.entrypoints.common.startup import SONAR_SUBCMD_PARSER_EPILOG
+from sonar.entrypoints.launchers.render.entry import run_launch_fastapi
+from sonar.logger import init_logger
+from sonar.utils.argparse_utils import FlexibleArgumentParser
 
 logger = init_logger(__name__)
 
-DESCRIPTION = "Launch individual Aphrodite components."
+DESCRIPTION = "Launch individual Sonar components."
 
 
 class LaunchSubcommandBase(CLISubcommand):
-    """The base class of subcommands for `aphrodite launch`."""
+    """The base class of subcommands for `sonar launch`."""
 
     help: str
 
@@ -29,7 +29,7 @@ class LaunchSubcommandBase(CLISubcommand):
     def add_cli_args(cls, parser: FlexibleArgumentParser) -> None:
         """Add the CLI arguments to the parser.
 
-        By default, adds the standard Aphrodite serving arguments.
+        By default, adds the standard Sonar serving arguments.
         Subclasses can override to add component-specific arguments.
         """
         make_arg_parser(parser)
@@ -40,7 +40,7 @@ class LaunchSubcommandBase(CLISubcommand):
 
 
 class RenderSubcommand(LaunchSubcommandBase):
-    """The `render` subcommand for `aphrodite launch`."""
+    """The `render` subcommand for `sonar launch`."""
 
     name = "render"
     help = "Launch a GPU-less rendering server (preprocessing and postprocessing only)."
@@ -51,10 +51,10 @@ class RenderSubcommand(LaunchSubcommandBase):
 
 
 class LaunchSubcommand(CLISubcommand):
-    """The `launch` subcommand for the Aphrodite CLI.
+    """The `launch` subcommand for the Sonar CLI.
 
     Uses nested sub-subcommands so each component can define its own
-    arguments independently (e.g. ``aphrodite launch render``).
+    arguments independently (e.g. ``sonar launch render``).
     """
 
     name = "launch"
@@ -74,7 +74,7 @@ class LaunchSubcommand(CLISubcommand):
             self.name,
             help=DESCRIPTION,
             description=DESCRIPTION,
-            usage=f"aphrodite {self.name} <component> [options]",
+            usage=f"sonar {self.name} <component> [options]",
         )
         launch_subparsers = launch_parser.add_subparsers(required=True, dest="launch_component")
 
@@ -83,11 +83,11 @@ class LaunchSubcommand(CLISubcommand):
                 cmd_cls.name,
                 help=cmd_cls.help,
                 description=cmd_cls.help,
-                usage=f"aphrodite {self.name} {cmd_cls.name} [options]",
+                usage=f"sonar {self.name} {cmd_cls.name} [options]",
             )
             cmd_subparser.set_defaults(launch_command=cmd_cls.cmd)
             cmd_cls.add_cli_args(cmd_subparser)
-            cmd_subparser.epilog = APHRODITE_SUBCMD_PARSER_EPILOG.format(subcmd=f"{self.name} {cmd_cls.name}")
+            cmd_subparser.epilog = SONAR_SUBCMD_PARSER_EPILOG.format(subcmd=f"{self.name} {cmd_cls.name}")
 
         return launch_parser
 

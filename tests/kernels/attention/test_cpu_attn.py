@@ -8,30 +8,30 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.config import set_current_aphrodite_config
-from aphrodite.model_executor.kernels.linear.zentorch_utils import has_zentorch_op
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.platforms import CpuArchEnum, current_platform
-from aphrodite.platforms.cpu import CpuPlatform
-from aphrodite.utils.torch_utils import set_default_torch_num_threads, set_random_seed
-from aphrodite.v1.attention.backend import AttentionType
-from aphrodite.v1.attention.backends.cpu_attn import _get_attn_isa
-from aphrodite.v1.attention.backends.zentorch_sdpa import (
+from sonar.config import set_current_sonar_config
+from sonar.model_executor.kernels.linear.zentorch_utils import has_zentorch_op
+from sonar.model_executor.layers.attention import Attention
+from sonar.platforms import CpuArchEnum, current_platform
+from sonar.platforms.cpu import CpuPlatform
+from sonar.utils.torch_utils import set_default_torch_num_threads, set_random_seed
+from sonar.v1.attention.backend import AttentionType
+from sonar.v1.attention.backends.cpu_attn import _get_attn_isa
+from sonar.v1.attention.backends.zentorch_sdpa import (
     should_use_zentorch_sdpa,
     zentorch_sdpa_attn,
 )
-from aphrodite.v1.attention.selector import AttentionSelectorConfig
-from aphrodite.v1.kv_cache_interface import EncoderOnlyAttentionSpec
+from sonar.v1.attention.selector import AttentionSelectorConfig
+from sonar.v1.kv_cache_interface import EncoderOnlyAttentionSpec
 from tests.v1.attention.utils import (
     BatchSpec,
-    create_aphrodite_config,
     create_common_attn_metadata,
+    create_sonar_config,
 )
 
 if not current_platform.is_cpu():
     pytest.skip("skipping CPU-only tests", allow_module_level=True)
 
-from aphrodite._custom_ops import (
+from sonar._custom_ops import (
     cpu_attention_with_kv_cache,
     cpu_attn_get_scheduler_metadata,
     cpu_attn_reshape_and_cache,
@@ -791,9 +791,9 @@ def test_encoder_only_attention_ignores_default_causal(
     dtype = torch.float32
     device = torch.device("cpu")
     layer_name = "model.layers.0.self_attn.attn"
-    aphrodite_config = create_aphrodite_config(dtype=dtype, block_size=block_size)
+    sonar_config = create_sonar_config(dtype=dtype, block_size=block_size)
 
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         layer = Attention(
             num_heads,
             head_size,
@@ -809,7 +809,7 @@ def test_encoder_only_attention_ignores_default_causal(
             head_size=head_size,
             dtype=dtype,
         )
-        builder = layer.get_attn_backend().get_builder_cls()(spec, [layer_name], aphrodite_config, device)
+        builder = layer.get_attn_backend().get_builder_cls()(spec, [layer_name], sonar_config, device)
         common_attn_metadata = create_common_attn_metadata(
             BatchSpec(seq_lens=seq_lens, query_lens=seq_lens),
             block_size,

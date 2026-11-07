@@ -20,8 +20,8 @@ from .interfaces import (
     supports_transcription,
 )
 from .interfaces_base import (
-    AphroditeModelForPooling,
-    AphroditeModelForTextGeneration,
+    SonarModelForPooling,
+    SonarModelForTextGeneration,
     is_pooling_model,
     is_text_generation_model,
 )
@@ -29,9 +29,9 @@ from .registry import ModelRegistry
 
 __all__ = [
     "ModelRegistry",
-    "AphroditeModelForPooling",
+    "SonarModelForPooling",
     "is_pooling_model",
-    "AphroditeModelForTextGeneration",
+    "SonarModelForTextGeneration",
     "is_text_generation_model",
     "HasInnerState",
     "has_inner_state",

@@ -5,9 +5,9 @@ from typing import Any, TypeAlias, TypeVar
 
 from prometheus_client import Counter, Gauge, Histogram
 
-from aphrodite.config import AphroditeConfig, KVTransferConfig
-from aphrodite.distributed.kv_transfer.kv_connector.factory import KVConnectorFactory
-from aphrodite.logger import init_logger
+from sonar.config import KVTransferConfig, SonarConfig
+from sonar.distributed.kv_transfer.kv_connector.factory import KVConnectorFactory
+from sonar.logger import init_logger
 
 PromMetric: TypeAlias = Gauge | Counter | Histogram
 PromMetricT = TypeVar("PromMetricT", bound=PromMetric)
@@ -107,12 +107,12 @@ class KVConnectorPromMetrics:
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         metric_types: dict[type[PromMetric], type[PromMetricT]],
         labelnames: list[str],
         per_engine_labelvalues: dict[int, list[object]],
     ):
-        self._kv_transfer_config = aphrodite_config.kv_transfer_config
+        self._kv_transfer_config = sonar_config.kv_transfer_config
         self._gauge_cls = metric_types[Gauge]
         self._counter_cls = metric_types[Counter]
         self._histogram_cls = metric_types[Histogram]
@@ -140,12 +140,12 @@ class KVConnectorProm:
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         labelnames: list[str],
         per_engine_labelvalues: dict[int, list[object]],
     ):
         self.prom_metrics: KVConnectorPromMetrics | None = None
-        kv_transfer_config = aphrodite_config.kv_transfer_config
+        kv_transfer_config = sonar_config.kv_transfer_config
         if kv_transfer_config and kv_transfer_config.kv_connector:
             connector_cls = KVConnectorFactory.get_connector_class(kv_transfer_config)
             metric_types = {
@@ -154,7 +154,7 @@ class KVConnectorProm:
                 Histogram: self._histogram_cls,
             }
             self.prom_metrics = connector_cls.build_prom_metrics(
-                aphrodite_config,
+                sonar_config,
                 metric_types,
                 labelnames,
                 per_engine_labelvalues,

@@ -3,12 +3,12 @@
 """Sink-capable FlashMLA sparse backend for HY V4 (NVIDIA).
 
 HY V4 adds a per-head learnable attention sink on top of sparse MLA. The
-vendored FlashMLA kernels already accept an ``attn_sink`` argument, but Aphrodite's
+vendored FlashMLA kernels already accept an ``attn_sink`` argument, but Sonar's
 shared ``FLASHMLA_SPARSE`` backend neither advertises sink support nor forwards
 the tensor, so the bias would be silently dropped.
 
 This module supplies the missing wiring inside the model package, mirroring how
-`aphrodite.models.deepseek_v4.nvidia.flashinfer_sparse` hands ``sinks`` to the
+`sonar.models.deepseek_v4.nvidia.flashinfer_sparse` hands ``sinks`` to the
 FlashInfer sparse MLA kernels: subclass the platform backend, declare
 `supports_sink`, and thread the sink into every kernel call.
 
@@ -24,20 +24,20 @@ from typing import TYPE_CHECKING
 
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.v1.attention.backends.mla.flashmla_sparse import (
+from sonar.logger import init_logger
+from sonar.v1.attention.backends.mla.flashmla_sparse import (
     FlashMLASparseBackend,
     FlashMLASparseImpl,
     FlashMLASparseMetadata,
 )
-from aphrodite.v1.attention.ops.flashmla import (
+from sonar.v1.attention.ops.flashmla import (
     flash_mla_sparse_fwd,
     flash_mla_with_kvcache,
 )
-from aphrodite.v1.worker.workspace import current_workspace_manager
+from sonar.v1.worker.workspace import current_workspace_manager
 
 if TYPE_CHECKING:
-    from aphrodite.model_executor.models.deepseek_v2 import Indexer
+    from sonar.model_executor.models.deepseek_v2 import Indexer
 
 logger = init_logger(__name__)
 
@@ -46,7 +46,7 @@ class HYV4FlashMLASparseImpl(FlashMLASparseImpl):
     """FlashMLA sparse impl that applies HY V4's per-head learnable sink.
 
     The sink enters as the ``sinks`` impl kwarg of
-    `aphrodite.model_executor.layers.attention.MLAAttention` and is consumed by the
+    `sonar.model_executor.layers.attention.MLAAttention` and is consumed by the
     FlashMLA kernels, which fold it into the softmax denominator:
     ``out *= exp(lse) / (exp(lse) + exp(sink))``.
     """

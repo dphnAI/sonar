@@ -6,22 +6,22 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.v1.kv_cache_interface import AttentionSpec
-from aphrodite.v1.worker.utils import KVBlockZeroer
+from sonar.config import SonarConfig
+from sonar.v1.kv_cache_interface import AttentionSpec
+from sonar.v1.worker.utils import KVBlockZeroer
 
 if TYPE_CHECKING:
-    from aphrodite.v1.worker.utils import AttentionGroup
+    from sonar.v1.worker.utils import AttentionGroup
 
 
-def free_before_shutdown(aphrodite_config: AphroditeConfig) -> None:
-    from aphrodite.model_executor.layers.rotary_embedding import _ROPE_DICT
-    from aphrodite.v1.worker.workspace import reset_workspace_manager
+def free_before_shutdown(sonar_config: SonarConfig) -> None:
+    from sonar.model_executor.layers.rotary_embedding import _ROPE_DICT
+    from sonar.v1.worker.workspace import reset_workspace_manager
 
-    cache_config = aphrodite_config.cache_config
+    cache_config = sonar_config.cache_config
     cache_config.num_gpu_blocks = None
 
-    compilation_config = aphrodite_config.compilation_config
+    compilation_config = sonar_config.compilation_config
     compilation_config.static_forward_context.clear()
 
     _ROPE_DICT.clear()

@@ -18,7 +18,7 @@ One launch a layer and rank, ``BLOCKS`` x ``THREADS``, S rows:
             keys, known from its position.
     combine (S x H): a (token, head)'s chunks merged with the sink folded in
             (``bounded``: its live chunks only, ``merge_live``),
-            bf16, inverse GPT-J RoPE of dims 448.., Aphrodite's MXFP8 of each 32
+            bf16, inverse GPT-J RoPE of dims 448.., Sonar's MXFP8 of each 32
             -> XO (published)
     wo_a    (G x 1024 / 32, two 16-row tiles): the group's XO rows times wo_a
             -> bf16 -> MXFP8 of the 32 rows -> X8B (published)
@@ -217,7 +217,7 @@ def stage_split(c, unit):
 @traced
 def q_head_rstd(c):
     """Each head's weightless RMSNorm of the token's q in LDS:
-    rsq(mean(q^2) + eps) -> ``qn`` [head]. Aphrodite norms q before its RoPE, which
+    rsq(mean(q^2) + eps) -> ``qn`` [head]. Sonar norms q before its RoPE, which
     keeps every pair's norm: the scores scale by it after the dot product."""
     tid, d, sl = c["tid"], c["d"], c["sl"]
     tph = THREADS // d.heads  # threads a head
@@ -607,7 +607,7 @@ def stage_combine(c, unit):
 
 @traced
 def stage_woa(c, task, ops, t0, n):
-    """Rows 32 task .. of wo_a -> bf16 -> Aphrodite's MXFP8 of the 32 -> X8B."""
+    """Rows 32 task .. of wo_a -> bf16 -> Sonar's MXFP8 of the 32 -> X8B."""
     tid, red, d, lane = c["tid"], c["red"], c["d"], c["lane"]
     split = WOA_SPLIT_K
     gemv_mfmas(c, d.group_k, c["xl"], c["xsl"], red, ops, split, tiled=True, rows=n)

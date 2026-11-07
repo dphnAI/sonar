@@ -6,43 +6,43 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from aphrodite.distributed.ec_transfer.ec_connector.base import (
+from sonar.distributed.ec_transfer.ec_connector.base import (
     ECConnectorBase,
     ECConnectorMetadata,
     ECConnectorRole,
     ECConnectorWorkerMetadata,
 )
-from aphrodite.distributed.ec_transfer.ec_connector.mooncake.metadata import (
+from sonar.distributed.ec_transfer.ec_connector.mooncake.metadata import (
     ECMooncakeConnectorMetadata,
 )
-from aphrodite.distributed.ec_transfer.ec_connector.mooncake.scheduler import (
+from sonar.distributed.ec_transfer.ec_connector.mooncake.scheduler import (
     ECMooncakeScheduler,
 )
-from aphrodite.distributed.ec_transfer.ec_connector.mooncake.worker import ECMooncakeWorker
+from sonar.distributed.ec_transfer.ec_connector.mooncake.worker import ECMooncakeWorker
 
 if TYPE_CHECKING:
     import torch
 
-    from aphrodite.config import AphroditeConfig
-    from aphrodite.v1.core.sched.output import SchedulerOutput
-    from aphrodite.v1.outputs import ECConnectorOutput
-    from aphrodite.v1.request import Request
+    from sonar.config import SonarConfig
+    from sonar.v1.core.sched.output import SchedulerOutput
+    from sonar.v1.outputs import ECConnectorOutput
+    from sonar.v1.request import Request
 
 
 class ECMooncakeConnector(ECConnectorBase):
     """Preserve the public API while delegating to one process-role component."""
 
-    def __init__(self, aphrodite_config: AphroditeConfig, role: ECConnectorRole):
-        super().__init__(aphrodite_config=aphrodite_config, role=role)
+    def __init__(self, sonar_config: SonarConfig, role: ECConnectorRole):
+        super().__init__(sonar_config=sonar_config, role=role)
 
         self._scheduler: ECMooncakeScheduler | None = None
         self._worker: ECMooncakeWorker | None = None
         self._closed = False
 
         if role == ECConnectorRole.SCHEDULER:
-            self._scheduler = ECMooncakeScheduler(aphrodite_config)
+            self._scheduler = ECMooncakeScheduler(sonar_config)
         elif role == ECConnectorRole.WORKER:
-            self._worker = ECMooncakeWorker(aphrodite_config)
+            self._worker = ECMooncakeWorker(sonar_config)
         else:
             raise ValueError(f"Unknown EC connector role: {role}")
 

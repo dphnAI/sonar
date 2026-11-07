@@ -6,8 +6,8 @@ from typing import TYPE_CHECKING, Any
 
 from openai_harmony import ToolDescription, ToolNamespaceConfig
 
-from aphrodite.entrypoints.mcp.tool import HarmonyBrowserTool, HarmonyPythonTool, Tool
-from aphrodite.logger import init_logger
+from sonar.entrypoints.mcp.tool import HarmonyBrowserTool, HarmonyPythonTool, Tool
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 

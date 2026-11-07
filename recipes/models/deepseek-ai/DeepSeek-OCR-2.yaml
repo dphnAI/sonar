@@ -21,7 +21,7 @@ model:
   base_args:
     - "--trust-remote-code"
     - "--logits_processors"
-    - "aphrodite.model_executor.models.deepseek_ocr:NGramPerReqLogitsProcessor"
+    - "sonar.model_executor.models.deepseek_ocr:NGramPerReqLogitsProcessor"
     - "--no-enable-prefix-caching"
     - "--mm-processor-cache-gb"
     - "0"
@@ -67,14 +67,14 @@ guide: |
   ## Prerequisites
 
   - **Hardware**: Single GPU with >=8 GB VRAM is typically sufficient for BF16 inference.
-  - **Aphrodite**: Current stable release (tested with `uv pip install -U aphrodite-engine --torch-backend auto`).
+  - **Sonar**: Current stable release (tested with `uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130`).
   - **Python**: 3.10+
 
-  Install Aphrodite:
+  Install Sonar:
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U aphrodite-engine --torch-backend auto
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   ```
 
   ## Client Usage
@@ -82,8 +82,8 @@ guide: |
   ### Offline OCR (Python)
 
   ```python
-  from aphrodite import LLM, SamplingParams
-  from aphrodite.model_executor.models.deepseek_ocr import NGramPerReqLogitsProcessor
+  from sonar import LLM, SamplingParams
+  from sonar.model_executor.models.deepseek_ocr import NGramPerReqLogitsProcessor
   from PIL import Image
 
   llm = LLM(
@@ -121,8 +121,8 @@ guide: |
   ### Online OCR serving
 
   ```bash
-  aphrodite serve deepseek-ai/DeepSeek-OCR-2 \
-    --logits_processors aphrodite.model_executor.models.deepseek_ocr:NGramPerReqLogitsProcessor \
+  sonar serve deepseek-ai/DeepSeek-OCR-2 \
+    --logits_processors sonar.model_executor.models.deepseek_ocr:NGramPerReqLogitsProcessor \
     --no-enable-prefix-caching \
     --mm-processor-cache-gb 0
   ```
@@ -151,7 +151,7 @@ guide: |
       temperature=0.0,
       extra_body={
           "skip_special_tokens": False,
-          "aphrodite_xargs": {
+          "sonar_xargs": {
               "ngram_size": 30,
               "window_size": 90,
               "whitelist_token_ids": [128821, 128822],
@@ -175,4 +175,4 @@ guide: |
   ## References
 
   - [DeepSeek-OCR-2 on Hugging Face](https://huggingface.co/deepseek-ai/DeepSeek-OCR-2)
-  - [Aphrodite multimodal inputs guide](https://docs.vllm.ai/en/latest/features/multimodal_inputs.html#offline-inference)
+  - [Sonar multimodal inputs guide](https://docs.vllm.ai/en/latest/features/multimodal_inputs.html#offline-inference)

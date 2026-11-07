@@ -8,20 +8,20 @@ import torch
 import torch.nn.functional as F
 from einops import rearrange
 
-from aphrodite.compilation.breakable_cudagraph import eager_break_during_capture
-from aphrodite.config import get_current_aphrodite_config
-from aphrodite.forward_context import ForwardContext, get_forward_context
-from aphrodite.model_executor.custom_op import PluggableLayer
-from aphrodite.model_executor.layers.lightning_attn import (
+from sonar.compilation.breakable_cudagraph import eager_break_during_capture
+from sonar.config import get_current_sonar_config
+from sonar.forward_context import ForwardContext, get_forward_context
+from sonar.model_executor.custom_op import PluggableLayer
+from sonar.model_executor.layers.lightning_attn import (
     lightning_attention,
     linear_decode_forward_triton,
 )
-from aphrodite.model_executor.layers.linear import ColumnParallelLinear, RowParallelLinear
-from aphrodite.model_executor.layers.mamba.linear.base import LinearAttention
-from aphrodite.model_executor.layers.minimax_rms_norm import MiniMaxText01RMSNormTP
-from aphrodite.utils.torch_utils import direct_register_custom_op
-from aphrodite.v1.attention.backend import AttentionMetadata
-from aphrodite.v1.attention.backends.linear_attn import LinearAttentionMetadata
+from sonar.model_executor.layers.linear import ColumnParallelLinear, RowParallelLinear
+from sonar.model_executor.layers.mamba.linear.base import LinearAttention
+from sonar.model_executor.layers.minimax_rms_norm import MiniMaxText01RMSNormTP
+from sonar.utils.torch_utils import direct_register_custom_op
+from sonar.v1.attention.backend import AttentionMetadata
+from sonar.v1.attention.backends.linear_attn import LinearAttentionMetadata
 
 
 def clear_linear_attention_cache_for_new_sequences(
@@ -145,10 +145,10 @@ class MiniMaxText01LinearAttention(LinearAttention):
     def __init__(
         self,
         config,
-        aphrodite_config,
+        sonar_config,
         prefix: str = "linear_attn",
     ) -> None:
-        super().__init__(config, aphrodite_config, prefix)
+        super().__init__(config, sonar_config, prefix)
 
         self.tp_heads = self.num_heads // self.tp_size
         self.qkv_size = self.num_heads * self.head_dim
@@ -187,7 +187,7 @@ class MiniMaxText01LinearAttention(LinearAttention):
             self.slope_rate = slope_rate * (1 - self.layer_idx / (self.num_hidden_layers - 1) + 1e-5)
         self.tp_slope = self.slope_rate[self.tp_rank * self.tp_heads : (self.tp_rank + 1) * self.tp_heads].contiguous()
 
-        compilation_config = get_current_aphrodite_config().compilation_config
+        compilation_config = get_current_sonar_config().compilation_config
         if prefix in compilation_config.static_forward_context:
             raise ValueError(f"Duplicate layer name: {prefix}")
         compilation_config.static_forward_context[prefix] = self
@@ -250,7 +250,7 @@ class MiniMaxText01LinearAttention(LinearAttention):
         return hidden
 
     def forward(self, hidden_states: torch.Tensor, output: torch.Tensor, positions: torch.Tensor) -> None:
-        torch.ops.aphrodite.linear_attention(
+        torch.ops.sonar.linear_attention(
             hidden_states,
             output,
             positions,

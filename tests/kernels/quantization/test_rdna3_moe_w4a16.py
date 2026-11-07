@@ -20,27 +20,27 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 if not current_platform.is_rocm():
     pytest.skip("RDNA3 MoE W4A16 kernel is ROCm-only", allow_module_level=True)
 
-from aphrodite import _custom_ops as ops  # noqa: E402
-from aphrodite.model_executor.layers.fused_moe.activation import (  # noqa: E402
+from sonar import _custom_ops as ops  # noqa: E402
+from sonar.model_executor.layers.fused_moe.activation import (  # noqa: E402
     MoEActivation,
     apply_moe_activation,
 )
-from aphrodite.model_executor.layers.fused_moe.moe_align_block_size import (  # noqa: E402
+from sonar.model_executor.layers.fused_moe.moe_align_block_size import (  # noqa: E402
     moe_align_block_size,
 )
-from aphrodite.model_executor.layers.fused_moe.oracle.int_wna16 import (  # noqa: E402
+from sonar.model_executor.layers.fused_moe.oracle.int_wna16 import (  # noqa: E402
     _process_weights_rdna3,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (  # noqa: E402
+from sonar.model_executor.layers.quantization.utils.quant_utils import (  # noqa: E402
     pack_quantized_values_into_int32,
 )
-from aphrodite.platforms.rocm import on_gfx1100  # noqa: E402
-from aphrodite.scalar_type import scalar_types  # noqa: E402
+from sonar.platforms.rocm import on_gfx1100  # noqa: E402
+from sonar.scalar_type import scalar_types  # noqa: E402
 
 device = "cuda"
 

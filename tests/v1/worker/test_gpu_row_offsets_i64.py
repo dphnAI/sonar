@@ -15,12 +15,12 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.v1.worker.gpu.buffer_utils import StagedWriteTensor
-from aphrodite.v1.worker.gpu.input_batch import post_update
-from aphrodite.v1.worker.gpu.mm.rope import RopeState
-from aphrodite.v1.worker.gpu.sample.penalties import bincount
+from sonar.platforms import current_platform
+from sonar.utils.math_utils import cdiv
+from sonar.v1.worker.gpu.buffer_utils import StagedWriteTensor
+from sonar.v1.worker.gpu.input_batch import post_update
+from sonar.v1.worker.gpu.mm.rope import RopeState
+from sonar.v1.worker.gpu.sample.penalties import bincount
 
 STRIDE = 1_000_000  # max_model_len
 ROW = 2559  # ROW * STRIDE > 2**31 (first overflowing row at 1M: 2148)

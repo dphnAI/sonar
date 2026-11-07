@@ -7,8 +7,8 @@ import dataclasses
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.fused_moe.utils import count_expert_num_tokens
-from aphrodite.platforms import current_platform
+from sonar.model_executor.layers.fused_moe.utils import count_expert_num_tokens
+from sonar.platforms import current_platform
 
 DEVICE = current_platform.device_type
 

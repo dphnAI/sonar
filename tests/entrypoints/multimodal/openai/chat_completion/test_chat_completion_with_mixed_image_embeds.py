@@ -15,10 +15,10 @@ import torch
 import torch.nn as nn
 from transformers import AutoTokenizer
 
-from aphrodite.assets.image import ImageAsset
-from aphrodite.multimodal.utils import encode_image_url
-from aphrodite.transformers_utils.repo_utils import hf_api
-from aphrodite.utils.serial_utils import tensor2base64
+from sonar.assets.image import ImageAsset
+from sonar.multimodal.utils import encode_image_url
+from sonar.transformers_utils.repo_utils import hf_api
+from sonar.utils.serial_utils import tensor2base64
 from tests.utils import RemoteOpenAIServer
 
 MODEL_NAME = "Qwen/Qwen2-VL-2B-Instruct"
@@ -79,7 +79,7 @@ def aligned_content_and_embeds_b64() -> tuple[str, str]:
 
     Loads only the `embed_tokens` shard from disk on CPU instead of the full
     model on GPU, so the fixture has zero VRAM footprint and won't contend
-    with the running Aphrodite server.
+    with the running Sonar server.
     """
     content = "Describe this image."
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, trust_remote_code=True)

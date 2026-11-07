@@ -7,43 +7,43 @@ import torch
 from torch.nn import Module
 
 if TYPE_CHECKING:
-    import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-    from aphrodite.model_executor.layers.fused_moe.config import (
+    import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+    from sonar.model_executor.layers.fused_moe.config import (
         FusedMoEQuantConfig,
     )
-    from aphrodite.model_executor.layers.fused_moe.oracle.fp8 import Fp8MoeBackend
-import aphrodite.envs as envs
-from aphrodite import _custom_ops as ops
-from aphrodite.config import get_current_aphrodite_config
-from aphrodite.model_executor.kernels.linear import (
+    from sonar.model_executor.layers.fused_moe.oracle.fp8 import Fp8MoeBackend
+import sonar.envs as envs
+from sonar import _custom_ops as ops
+from sonar.config import get_current_sonar_config
+from sonar.model_executor.kernels.linear import (
     fp8_scaled_mm_is_batch_invariant,
     init_fp8_linear_kernel,
 )
-from aphrodite.model_executor.kernels.linear.scaled_mm import (
+from sonar.model_executor.kernels.linear.scaled_mm import (
     MarlinFP8ScaledMMLinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.scaled_mm.humming import (
+from sonar.model_executor.kernels.linear.scaled_mm.humming import (
     HummingFP8ScaledMMLinearKernel,
 )
-from aphrodite.model_executor.layers.fused_moe import RoutedExperts
-from aphrodite.model_executor.layers.fused_moe.config import FusedMoEConfig
-from aphrodite.model_executor.layers.fused_moe.oracle.fp8 import (
+from sonar.model_executor.layers.fused_moe import RoutedExperts
+from sonar.model_executor.layers.fused_moe.config import FusedMoEConfig
+from sonar.model_executor.layers.fused_moe.oracle.fp8 import (
     select_fp8_moe_backend,
 )
-from aphrodite.model_executor.layers.fusion.quant_activation import (
+from sonar.model_executor.layers.fusion.quant_activation import (
     QuantizedActivation,
     expose_input_quant_key,
 )
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.linear import (
     LinearMethodBase,
 )
-from aphrodite.model_executor.layers.quantization.online.moe_base import (
+from sonar.model_executor.layers.quantization.online.moe_base import (
     OnlineMoEMethodBase,
 )
-from aphrodite.model_executor.layers.quantization.online.requantization import (
+from sonar.model_executor.layers.quantization.online.requantization import (
     OnlineRequantizationMixin,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     GroupShape,
     QuantKey,
     amax_for_moe_weight_quant,
@@ -58,17 +58,17 @@ from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
     kFp8StaticTensorSym,
     weight_amax,
 )
-from aphrodite.model_executor.layers.quantization.utils.w8a8_utils import (
+from sonar.model_executor.layers.quantization.utils.w8a8_utils import (
     cutlass_fp8_supported,
 )
-from aphrodite.model_executor.model_loader.reload.layerwise import (
+from sonar.model_executor.model_loader.reload.layerwise import (
     initialize_online_processing,
 )
-from aphrodite.model_executor.parameter import ModelWeightParameter
-from aphrodite.model_executor.utils import replace_parameter
-from aphrodite.platforms import current_platform
-from aphrodite.utils.deep_gemm import per_block_cast_to_fp8
-from aphrodite.utils.math_utils import round_up
+from sonar.model_executor.parameter import ModelWeightParameter
+from sonar.model_executor.utils import replace_parameter
+from sonar.platforms import current_platform
+from sonar.utils.deep_gemm import per_block_cast_to_fp8
+from sonar.utils.math_utils import round_up
 
 # ---------------------------------------------------------------------------
 # Online FP8 Linear Methods
@@ -133,7 +133,7 @@ class OnlineLinearBase(OnlineRequantizationMixin, LinearMethodBase):
     def __init__(self):
         super().__init__()
         self.out_dtype = torch.get_default_dtype()
-        self.input_dtype = get_current_aphrodite_config().model_config.dtype
+        self.input_dtype = get_current_sonar_config().model_config.dtype
 
     def get_weight_for_quantization(self, layer: torch.nn.Module) -> torch.Tensor:
         if self.requantization_source is None:
@@ -269,7 +269,7 @@ class Fp8PerTensorOnlineLinearMethod(OnlineLinearBase):
         bias: torch.Tensor | None = None,
     ) -> torch.Tensor:
         # if batch invariant mode is enabled, use BF16 dequant
-        if envs.APHRODITE_BATCH_INVARIANT:
+        if envs.SONAR_BATCH_INVARIANT:
             if fp8_scaled_mm_is_batch_invariant(self.fp8_linear):
                 return self.fp8_linear.apply_weights(layer, x, bias)
 
@@ -453,7 +453,7 @@ class Fp8PtpcOnlineLinearMethod(OnlineLinearBase):
     ) -> torch.Tensor:
         # if batch invariant mode is enabled dequant
         if (
-            envs.APHRODITE_BATCH_INVARIANT
+            envs.SONAR_BATCH_INVARIANT
             and not fp8_scaled_mm_is_batch_invariant(self.fp8_linear)
             and not isinstance(x, QuantizedActivation)
         ):
@@ -487,7 +487,7 @@ class _Fp8OnlineMoEBase(OnlineMoEMethodBase):
         moe: FusedMoEConfig,
         weight_key: "QuantKey | None" = None,
         activation_key: "QuantKey | None" = None,
-        allow_aphrodite_cutlass: bool = False,
+        allow_sonar_cutlass: bool = False,
     ):
         super().__init__(moe)
         self.weight_block_size = weight_block_size
@@ -509,7 +509,7 @@ class _Fp8OnlineMoEBase(OnlineMoEMethodBase):
             config=self.moe,
             weight_key=weight_key,
             activation_key=activation_key,
-            allow_aphrodite_cutlass=allow_aphrodite_cutlass,
+            allow_sonar_cutlass=allow_sonar_cutlass,
         )
 
     def _setup_kernel(
@@ -522,7 +522,7 @@ class _Fp8OnlineMoEBase(OnlineMoEMethodBase):
         w13_input_scale: torch.Tensor | None,
         w2_input_scale: torch.Tensor | None,
     ) -> None:
-        from aphrodite.model_executor.layers.fused_moe.oracle.fp8 import (
+        from sonar.model_executor.layers.fused_moe.oracle.fp8 import (
             convert_to_fp8_moe_kernel_format,
             make_fp8_moe_kernel,
         )
@@ -558,7 +558,7 @@ class _Fp8OnlineMoEBase(OnlineMoEMethodBase):
             )
 
     def get_fused_moe_quant_config(self, layer: torch.nn.Module) -> "FusedMoEQuantConfig":
-        from aphrodite.model_executor.layers.fused_moe.oracle.fp8 import (
+        from sonar.model_executor.layers.fused_moe.oracle.fp8 import (
             make_fp8_moe_quant_config,
         )
 
@@ -597,7 +597,7 @@ class Fp8PerTensorOnlineMoEMethod(_Fp8OnlineMoEBase):
         # A per-tensor dynamic activation scale is the max over every token in
         # the batch, so a request's quantized expert inputs would depend on the
         # requests it is batched with.
-        activation_key = kFp8DynamicTokenSym if envs.APHRODITE_BATCH_INVARIANT else kFp8DynamicTensorSym
+        activation_key = kFp8DynamicTokenSym if envs.SONAR_BATCH_INVARIANT else kFp8DynamicTensorSym
         self.per_act_token_quant = activation_key == kFp8DynamicTokenSym
         super().__init__(
             weight_block_size=None,
@@ -767,14 +767,14 @@ class Fp8PtpcOnlineMoEMethod(_Fp8OnlineMoEBase):
         *,
         moe: FusedMoEConfig,
     ):
-        from aphrodite.model_executor.layers.fused_moe.oracle.fp8 import Fp8MoeBackend
+        from sonar.model_executor.layers.fused_moe.oracle.fp8 import Fp8MoeBackend
 
         super().__init__(
             weight_block_size=None,
             moe=moe,
             weight_key=kFp8StaticChannelSym,
             activation_key=kFp8DynamicTokenSym,
-            allow_aphrodite_cutlass=True,
+            allow_sonar_cutlass=True,
         )
         # Reject backends whose make_fp8_moe_quant_config branch silently
         # drops per_act_token_quant / per_out_ch_quant or collapses scales:
@@ -808,7 +808,7 @@ class Fp8PtpcOnlineMoEMethod(_Fp8OnlineMoEBase):
 
         use_torch_w13_quant = False
         if current_platform.is_rocm():
-            from aphrodite.platforms.rocm import on_gfx942
+            from sonar.platforms.rocm import on_gfx942
 
             use_torch_w13_quant = on_gfx942()
 

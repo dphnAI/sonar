@@ -8,30 +8,30 @@ from unittest.mock import MagicMock, patch
 import pytest
 import torch
 
-from aphrodite.config import set_current_aphrodite_config
-from aphrodite.distributed.kv_events import BlockStored
-from aphrodite.distributed.kv_transfer.kv_connector.v1.base import (
+from sonar.config import set_current_sonar_config
+from sonar.distributed.kv_events import BlockStored
+from sonar.distributed.kv_transfer.kv_connector.v1.base import (
     KVConnectorRole,
     KVConnectorTransferResults,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store import (
+from sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store import (
     connector as mooncake_store_connector,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store import (
+from sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store import (
     protocol,
     scheduler,
     worker,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.data import (
+from sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.data import (
     MooncakeLookupResult,
     MooncakeStoreConnectorMetadata,
     TailKeyBoundary,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.metrics import (
+from sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.metrics import (
     MooncakeStoreConnectorStats,
 )
-from aphrodite.v1.core.sched.output import SchedulerOutput
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.core.sched.output import SchedulerOutput
+from sonar.v1.kv_cache_interface import (
     CircularBufferSpec,
     FullAttentionSpec,
     KVCacheConfig,
@@ -39,14 +39,14 @@ from aphrodite.v1.kv_cache_interface import (
     KVCacheTensor,
     MambaSpec,
 )
-from aphrodite.v1.metrics.cache_hit_source import CacheHitSource
-from aphrodite.v1.outputs import KVConnectorOutput
+from sonar.v1.metrics.cache_hit_source import CacheHitSource
+from sonar.v1.outputs import KVConnectorOutput
 
-from .utils import create_aphrodite_config
+from .utils import create_sonar_config
 
 
-def _make_aphrodite_config():
-    return create_aphrodite_config(
+def _make_sonar_config():
+    return create_sonar_config(
         kv_connector="MooncakeStoreConnector",
         kv_role="kv_both",
     )
@@ -63,13 +63,13 @@ def _make_aphrodite_config():
     ],
 )
 def test_store_tp_does_not_override_backend_kv_cache_layout(extra_config):
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         kv_connector="MooncakeStoreConnector",
         kv_role="kv_both",
         kv_connector_extra_config=extra_config,
     )
 
-    assert mooncake_store_connector.MooncakeStoreConnector.get_required_kvcache_layout(aphrodite_config) is None
+    assert mooncake_store_connector.MooncakeStoreConnector.get_required_kvcache_layout(sonar_config) is None
 
 
 def _make_kv_cache_config() -> KVCacheConfig:
@@ -117,21 +117,21 @@ def _make_qsa_hybrid_kv_cache_config(mamba_mode: str):
 
 
 def test_validation_accepts_aligned_mamba_after_block_size_rewrite():
-    aphrodite_config = _make_aphrodite_config()
-    aphrodite_config.cache_config.block_size = 8
+    sonar_config = _make_sonar_config()
+    sonar_config.cache_config.block_size = 8
 
     mooncake_store_connector.MooncakeStoreConnector._validate_kv_cache_config(
-        aphrodite_config, _make_qsa_hybrid_kv_cache_config("align")
+        sonar_config, _make_qsa_hybrid_kv_cache_config("align")
     )
 
 
 def test_validation_rejects_mamba_mode_directly():
-    aphrodite_config = _make_aphrodite_config()
-    aphrodite_config.cache_config.block_size = 800
+    sonar_config = _make_sonar_config()
+    sonar_config.cache_config.block_size = 800
 
     with pytest.raises(ValueError, match="mamba_cache_mode=\x27none\x27"):
         mooncake_store_connector.MooncakeStoreConnector._validate_kv_cache_config(
-            aphrodite_config, _make_qsa_hybrid_kv_cache_config("none")
+            sonar_config, _make_qsa_hybrid_kv_cache_config("none")
         )
 
 
@@ -165,8 +165,8 @@ def _make_mamba_none_kv_cache_config(attention_block_size: int | None, mamba_blo
     return KVCacheConfig(num_blocks=4, kv_cache_tensors=[], kv_cache_groups=groups)
 
 
-def _make_role_aphrodite_config(kv_role: str, enable_lookup: bool, save_decode_cache: bool):
-    aphrodite_config = create_aphrodite_config(
+def _make_role_sonar_config(kv_role: str, enable_lookup: bool, save_decode_cache: bool):
+    sonar_config = create_sonar_config(
         kv_connector="MooncakeStoreConnector",
         kv_role=kv_role,
         kv_connector_extra_config={
@@ -174,8 +174,8 @@ def _make_role_aphrodite_config(kv_role: str, enable_lookup: bool, save_decode_c
             "save_decode_cache": save_decode_cache,
         },
     )
-    aphrodite_config.cache_config.enable_prefix_caching = False
-    return aphrodite_config
+    sonar_config.cache_config.enable_prefix_caching = False
+    return sonar_config
 
 
 _MAMBA_NONE_LAYOUTS = pytest.mark.parametrize(
@@ -198,26 +198,24 @@ _MAMBA_NONE_LAYOUTS = pytest.mark.parametrize(
 def test_scheduler_requires_align_mode_for_mamba_kv_transfer(
     kv_role, enable_lookup, save_decode_cache, attention_block_size, mamba_block_size
 ):
-    aphrodite_config = _make_role_aphrodite_config(kv_role, enable_lookup, save_decode_cache)
+    sonar_config = _make_role_sonar_config(kv_role, enable_lookup, save_decode_cache)
     kv_cache_config = _make_mamba_none_kv_cache_config(attention_block_size, mamba_block_size)
 
     with (
-        patch("aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.scheduler.LookupKeyClient"),
+        patch("sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.scheduler.LookupKeyClient"),
         pytest.raises(AssertionError, match="requires mamba_cache_mode='align'"),
     ):
-        scheduler.MooncakeStoreScheduler(aphrodite_config, kv_cache_config)
+        scheduler.MooncakeStoreScheduler(sonar_config, kv_cache_config)
 
 
 @_MAMBA_NONE_LAYOUTS
 def test_capacity_only_scheduler_allows_mamba_none_mode(attention_block_size, mamba_block_size):
     """Capacity-only consumers transfer no KV, so any Mamba mode is allowed."""
-    aphrodite_config = _make_role_aphrodite_config("kv_consumer", enable_lookup=False, save_decode_cache=False)
+    sonar_config = _make_role_sonar_config("kv_consumer", enable_lookup=False, save_decode_cache=False)
     kv_cache_config = _make_mamba_none_kv_cache_config(attention_block_size, mamba_block_size)
 
-    with patch(
-        "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.scheduler.LookupKeyClient"
-    ) as mock_client:
-        store_scheduler = scheduler.MooncakeStoreScheduler(aphrodite_config, kv_cache_config)
+    with patch("sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.scheduler.LookupKeyClient") as mock_client:
+        store_scheduler = scheduler.MooncakeStoreScheduler(sonar_config, kv_cache_config)
         assert store_scheduler.get_num_new_matched_tokens(MagicMock(), 0) == (0, False)
         meta = store_scheduler.build_connector_meta(SchedulerOutput.make_empty())
 
@@ -239,23 +237,23 @@ def _make_block_stored(block_hash: bytes = b"hash", group_idx: int | None = None
 
 
 def test_scheduler_role_initializes_store_scheduler_only():
-    aphrodite_config = _make_aphrodite_config()
+    sonar_config = _make_sonar_config()
     kv_cache_config = _make_kv_cache_config()
 
     with (
-        set_current_aphrodite_config(aphrodite_config),
+        set_current_sonar_config(sonar_config),
         patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.connector.MooncakeStoreScheduler"
+            "sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.connector.MooncakeStoreScheduler"
         ) as mock_scheduler,
         patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.connector.MooncakeStoreWorker"
+            "sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.connector.MooncakeStoreWorker"
         ) as mock_worker,
     ):
         connector = mooncake_store_connector.MooncakeStoreConnector(
-            aphrodite_config, KVConnectorRole.SCHEDULER, kv_cache_config
+            sonar_config, KVConnectorRole.SCHEDULER, kv_cache_config
         )
 
-    mock_scheduler.assert_called_once_with(aphrodite_config, kv_cache_config)
+    mock_scheduler.assert_called_once_with(sonar_config, kv_cache_config)
     mock_worker.assert_not_called()
     assert connector.connector_scheduler is mock_scheduler.return_value
     assert connector.connector_worker is None
@@ -266,15 +264,15 @@ def test_scheduler_role_initializes_store_scheduler_only():
 
 
 def test_scheduler_reports_mooncake_cache_source():
-    aphrodite_config = _make_aphrodite_config()
+    sonar_config = _make_sonar_config()
     kv_cache_config = _make_kv_cache_config()
 
     with (
-        set_current_aphrodite_config(aphrodite_config),
-        patch("aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.connector.MooncakeStoreScheduler"),
+        set_current_sonar_config(sonar_config),
+        patch("sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.connector.MooncakeStoreScheduler"),
     ):
         connector = mooncake_store_connector.MooncakeStoreConnector(
-            aphrodite_config, KVConnectorRole.SCHEDULER, kv_cache_config
+            sonar_config, KVConnectorRole.SCHEDULER, kv_cache_config
         )
 
     # Mooncake Store is an external cache service. Its internal memory and
@@ -286,20 +284,20 @@ def test_scheduler_reports_mooncake_cache_source():
 
 
 def test_worker_methods_delegate_to_store_worker():
-    aphrodite_config = _make_aphrodite_config()
+    sonar_config = _make_sonar_config()
     kv_cache_config = _make_kv_cache_config()
     kv_caches = {"layer0": MagicMock()}
     metadata = MooncakeStoreConnectorMetadata(set(), set())
     finished_req_ids = {"req-1"}
 
     with (
-        set_current_aphrodite_config(aphrodite_config),
+        set_current_sonar_config(sonar_config),
         patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.connector.MooncakeStoreWorker"
+            "sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.connector.MooncakeStoreWorker"
         ) as mock_worker_cls,
     ):
         connector = mooncake_store_connector.MooncakeStoreConnector(
-            aphrodite_config, KVConnectorRole.WORKER, kv_cache_config
+            sonar_config, KVConnectorRole.WORKER, kv_cache_config
         )
 
     worker = mock_worker_cls.return_value
@@ -323,19 +321,19 @@ def test_worker_methods_delegate_to_store_worker():
 
 
 def test_get_transfer_results_delegates_to_store_worker():
-    aphrodite_config = _make_aphrodite_config()
+    sonar_config = _make_sonar_config()
     kv_cache_config = _make_kv_cache_config()
     metadata = MooncakeStoreConnectorMetadata(set(), set())
     finished_req_ids = {"req-1"}
 
     with (
-        set_current_aphrodite_config(aphrodite_config),
+        set_current_sonar_config(sonar_config),
         patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.connector.MooncakeStoreWorker"
+            "sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.connector.MooncakeStoreWorker"
         ) as mock_worker_cls,
     ):
         connector = mooncake_store_connector.MooncakeStoreConnector(
-            aphrodite_config, KVConnectorRole.WORKER, kv_cache_config
+            sonar_config, KVConnectorRole.WORKER, kv_cache_config
         )
 
     worker = mock_worker_cls.return_value
@@ -354,17 +352,17 @@ def test_get_transfer_results_delegates_to_store_worker():
 
 
 def test_get_kv_connector_kv_cache_events_returns_none_when_disabled():
-    aphrodite_config = _make_aphrodite_config()
+    sonar_config = _make_sonar_config()
     kv_cache_config = _make_kv_cache_config()
 
     with (
-        set_current_aphrodite_config(aphrodite_config),
+        set_current_sonar_config(sonar_config),
         patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.connector.MooncakeStoreWorker"
+            "sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.connector.MooncakeStoreWorker"
         ) as mock_worker_cls,
     ):
         connector = mooncake_store_connector.MooncakeStoreConnector(
-            aphrodite_config, KVConnectorRole.WORKER, kv_cache_config
+            sonar_config, KVConnectorRole.WORKER, kv_cache_config
         )
 
     mock_worker_cls.return_value.enable_kv_events = False
@@ -372,19 +370,19 @@ def test_get_kv_connector_kv_cache_events_returns_none_when_disabled():
 
 
 def test_get_kv_connector_stats_delegates_to_worker():
-    aphrodite_config = _make_aphrodite_config()
+    sonar_config = _make_sonar_config()
     kv_cache_config = _make_kv_cache_config()
     expected_stats = MooncakeStoreConnectorStats()
     expected_stats.record_operation("save_put", 0.01, 2, num_bytes=1024)
 
     with (
-        set_current_aphrodite_config(aphrodite_config),
+        set_current_sonar_config(sonar_config),
         patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.connector.MooncakeStoreWorker"
+            "sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.connector.MooncakeStoreWorker"
         ) as mock_worker_cls,
     ):
         connector = mooncake_store_connector.MooncakeStoreConnector(
-            aphrodite_config, KVConnectorRole.WORKER, kv_cache_config
+            sonar_config, KVConnectorRole.WORKER, kv_cache_config
         )
 
     mock_worker_cls.return_value.get_kv_connector_stats.return_value = expected_stats
@@ -414,18 +412,18 @@ def test_build_kv_connector_stats_reconstructs_mooncake_stats():
 
 
 def test_get_kv_connector_kv_cache_events_wraps_worker_events():
-    aphrodite_config = _make_aphrodite_config()
+    sonar_config = _make_sonar_config()
     kv_cache_config = _make_kv_cache_config()
     event = _make_block_stored()
 
     with (
-        set_current_aphrodite_config(aphrodite_config),
+        set_current_sonar_config(sonar_config),
         patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.connector.MooncakeStoreWorker"
+            "sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.connector.MooncakeStoreWorker"
         ) as mock_worker_cls,
     ):
         connector = mooncake_store_connector.MooncakeStoreConnector(
-            aphrodite_config, KVConnectorRole.WORKER, kv_cache_config
+            sonar_config, KVConnectorRole.WORKER, kv_cache_config
         )
 
     mock_worker_cls.return_value.get_kv_events.return_value = [event]
@@ -440,17 +438,17 @@ def test_get_kv_connector_kv_cache_events_wraps_worker_events():
 
 
 def test_get_kv_connector_kv_cache_events_keeps_empty_worker_contribution():
-    aphrodite_config = _make_aphrodite_config()
+    sonar_config = _make_sonar_config()
     kv_cache_config = _make_kv_cache_config()
 
     with (
-        set_current_aphrodite_config(aphrodite_config),
+        set_current_sonar_config(sonar_config),
         patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.connector.MooncakeStoreWorker"
+            "sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.connector.MooncakeStoreWorker"
         ) as mock_worker_cls,
     ):
         connector = mooncake_store_connector.MooncakeStoreConnector(
-            aphrodite_config, KVConnectorRole.WORKER, kv_cache_config
+            sonar_config, KVConnectorRole.WORKER, kv_cache_config
         )
 
     worker = mock_worker_cls.return_value
@@ -552,16 +550,16 @@ def test_store_events_use_each_groups_replication_factor():
 
 
 def test_update_connector_output_and_take_events():
-    aphrodite_config = _make_aphrodite_config()
+    sonar_config = _make_sonar_config()
     kv_cache_config = _make_kv_cache_config()
     event = _make_block_stored()
 
     with (
-        set_current_aphrodite_config(aphrodite_config),
-        patch("aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.connector.MooncakeStoreScheduler"),
+        set_current_sonar_config(sonar_config),
+        patch("sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.connector.MooncakeStoreScheduler"),
     ):
         connector = mooncake_store_connector.MooncakeStoreConnector(
-            aphrodite_config, KVConnectorRole.SCHEDULER, kv_cache_config
+            sonar_config, KVConnectorRole.SCHEDULER, kv_cache_config
         )
 
     kv_events = mooncake_store_connector.MooncakeStoreKVEvents(num_workers=1)
@@ -604,18 +602,16 @@ def test_store_events_persist_across_polls():
 
 def test_reset_cache_scheduler_role_delegates_to_reset_store():
     """SCHEDULER role reset_cache() routes to scheduler.reset_store()."""
-    aphrodite_config = _make_aphrodite_config()
+    sonar_config = _make_sonar_config()
     kv_cache_config = _make_kv_cache_config()
 
     with (
-        set_current_aphrodite_config(aphrodite_config),
+        set_current_sonar_config(sonar_config),
         patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.connector.MooncakeStoreScheduler"
+            "sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.connector.MooncakeStoreScheduler"
         ) as mock_scheduler_cls,
     ):
-        conn = mooncake_store_connector.MooncakeStoreConnector(
-            aphrodite_config, KVConnectorRole.SCHEDULER, kv_cache_config
-        )
+        conn = mooncake_store_connector.MooncakeStoreConnector(sonar_config, KVConnectorRole.SCHEDULER, kv_cache_config)
 
     mock_scheduler_cls.return_value.reset_store.return_value = True
     assert conn.reset_cache() is True
@@ -624,18 +620,16 @@ def test_reset_cache_scheduler_role_delegates_to_reset_store():
 
 def test_reset_cache_scheduler_role_propagates_failure():
     """SCHEDULER role surfaces False when scheduler.reset_store() fails."""
-    aphrodite_config = _make_aphrodite_config()
+    sonar_config = _make_sonar_config()
     kv_cache_config = _make_kv_cache_config()
 
     with (
-        set_current_aphrodite_config(aphrodite_config),
+        set_current_sonar_config(sonar_config),
         patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.connector.MooncakeStoreScheduler"
+            "sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.connector.MooncakeStoreScheduler"
         ) as mock_scheduler_cls,
     ):
-        conn = mooncake_store_connector.MooncakeStoreConnector(
-            aphrodite_config, KVConnectorRole.SCHEDULER, kv_cache_config
-        )
+        conn = mooncake_store_connector.MooncakeStoreConnector(sonar_config, KVConnectorRole.SCHEDULER, kv_cache_config)
 
     mock_scheduler_cls.return_value.reset_store.return_value = False
     assert conn.reset_cache() is False
@@ -643,32 +637,30 @@ def test_reset_cache_scheduler_role_propagates_failure():
 
 def test_reset_cache_worker_role_returns_none():
     """WORKER role reset_cache() is a no-op; reset is driven via ZMQ admin."""
-    aphrodite_config = _make_aphrodite_config()
+    sonar_config = _make_sonar_config()
     kv_cache_config = _make_kv_cache_config()
 
     with (
-        set_current_aphrodite_config(aphrodite_config),
-        patch("aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.connector.MooncakeStoreWorker"),
+        set_current_sonar_config(sonar_config),
+        patch("sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.connector.MooncakeStoreWorker"),
     ):
-        conn = mooncake_store_connector.MooncakeStoreConnector(
-            aphrodite_config, KVConnectorRole.WORKER, kv_cache_config
-        )
+        conn = mooncake_store_connector.MooncakeStoreConnector(sonar_config, KVConnectorRole.WORKER, kv_cache_config)
 
     assert conn.reset_cache() is None
 
 
 def test_scheduler_reset_store_returns_client_reset_result():
     """MooncakeStoreScheduler.reset_store() returns LookupKeyClient.reset()."""
-    aphrodite_config = _make_aphrodite_config()
+    sonar_config = _make_sonar_config()
     kv_cache_config = _make_kv_cache_config()
 
     with (
-        set_current_aphrodite_config(aphrodite_config),
+        set_current_sonar_config(sonar_config),
         patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.scheduler.LookupKeyClient"
+            "sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.scheduler.LookupKeyClient"
         ) as mock_client_cls,
     ):
-        sched = scheduler.MooncakeStoreScheduler(aphrodite_config, kv_cache_config)
+        sched = scheduler.MooncakeStoreScheduler(sonar_config, kv_cache_config)
 
     mock_client_cls.return_value.reset.return_value = True
     assert sched.reset_store() is True
@@ -677,16 +669,16 @@ def test_scheduler_reset_store_returns_client_reset_result():
 
 def test_scheduler_reset_store_handles_rpc_exception():
     """Exceptions from the ZMQ reset RPC convert to False, not raise."""
-    aphrodite_config = _make_aphrodite_config()
+    sonar_config = _make_sonar_config()
     kv_cache_config = _make_kv_cache_config()
 
     with (
-        set_current_aphrodite_config(aphrodite_config),
+        set_current_sonar_config(sonar_config),
         patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.scheduler.LookupKeyClient"
+            "sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.scheduler.LookupKeyClient"
         ) as mock_client_cls,
     ):
-        sched = scheduler.MooncakeStoreScheduler(aphrodite_config, kv_cache_config)
+        sched = scheduler.MooncakeStoreScheduler(sonar_config, kv_cache_config)
 
     mock_client_cls.return_value.reset.side_effect = RuntimeError("rpc timed out")
     assert sched.reset_store() is False
@@ -694,12 +686,12 @@ def test_scheduler_reset_store_handles_rpc_exception():
 
 def test_lookup_key_client_lookup_prepends_typed_tag():
     """LookupKeyClient.lookup() puts LOOKUP_MSG tag at frame 0."""
-    aphrodite_config = _make_aphrodite_config()
+    sonar_config = _make_sonar_config()
 
     with patch(
-        "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.worker.make_zmq_socket"
+        "sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.worker.make_zmq_socket"
     ) as mock_make_socket:
-        client = worker.LookupKeyClient(aphrodite_config)
+        client = worker.LookupKeyClient(sonar_config)
 
     fake_socket = mock_make_socket.return_value
     fake_socket.recv.return_value = (5).to_bytes(4, "big")
@@ -717,12 +709,12 @@ def test_lookup_key_client_lookup_prepends_typed_tag():
 
 def test_lookup_key_client_reset_uses_typed_protocol():
     """LookupKeyClient.reset() sends RESET_MSG and parses RESP_OK / RESP_ERR."""
-    aphrodite_config = _make_aphrodite_config()
+    sonar_config = _make_sonar_config()
 
     with patch(
-        "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.worker.make_zmq_socket"
+        "sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.worker.make_zmq_socket"
     ) as mock_make_socket:
-        client = worker.LookupKeyClient(aphrodite_config)
+        client = worker.LookupKeyClient(sonar_config)
 
     fake_socket = mock_make_socket.return_value
 
@@ -761,12 +753,12 @@ def _gated_recv(gate: threading.Event, value: int):
 def test_lookup_key_client_non_block_lookup_async():
     """Non-blocking lookup defers to the executor: None first, hit once the
     Future resolves."""
-    aphrodite_config = _make_aphrodite_config()
+    sonar_config = _make_sonar_config()
 
     with patch(
-        "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.worker.make_zmq_socket"
+        "sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.worker.make_zmq_socket"
     ) as mock_make_socket:
-        client = worker.LookupKeyClient(aphrodite_config)
+        client = worker.LookupKeyClient(sonar_config)
 
     fake_socket = mock_make_socket.return_value
     # Hold the executor's lookup pending until we release the gate.
@@ -784,12 +776,12 @@ def test_lookup_key_client_non_block_lookup_async():
 
 def test_lookup_key_client_discard_clears_state():
     """discard() drops a completed lookup Future so it is not served stale."""
-    aphrodite_config = _make_aphrodite_config()
+    sonar_config = _make_sonar_config()
 
     with patch(
-        "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.worker.make_zmq_socket"
+        "sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.worker.make_zmq_socket"
     ) as mock_make_socket:
-        client = worker.LookupKeyClient(aphrodite_config)
+        client = worker.LookupKeyClient(sonar_config)
 
     fake_socket = mock_make_socket.return_value
     gate = threading.Event()
@@ -816,7 +808,7 @@ def test_lookup_key_client_discard_clears_state():
 
 def test_get_num_new_matched_tokens_async_defers_then_reports():
     """Async lookup returns (None, False) until ready, then the hit count."""
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         kv_connector="MooncakeStoreConnector",
         kv_role="kv_both",
         kv_connector_extra_config={"lookup_async": True},
@@ -824,12 +816,12 @@ def test_get_num_new_matched_tokens_async_defers_then_reports():
     kv_cache_config = _make_kv_cache_config()
 
     with (
-        set_current_aphrodite_config(aphrodite_config),
+        set_current_sonar_config(sonar_config),
         patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.scheduler.LookupKeyClient"
+            "sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.scheduler.LookupKeyClient"
         ) as mock_client_cls,
     ):
-        sched = scheduler.MooncakeStoreScheduler(aphrodite_config, kv_cache_config)
+        sched = scheduler.MooncakeStoreScheduler(sonar_config, kv_cache_config)
 
     assert sched.lookup_async is True
     mock_client = mock_client_cls.return_value
@@ -883,18 +875,16 @@ def test_scheduler_reset_connector_cache_invokes_connector_reset():
     cascades into MooncakeStoreConnector.reset_cache without dragging in
     the heavy KVCacheManager fixtures.
     """
-    aphrodite_config = _make_aphrodite_config()
+    sonar_config = _make_sonar_config()
     kv_cache_config = _make_kv_cache_config()
 
     with (
-        set_current_aphrodite_config(aphrodite_config),
+        set_current_sonar_config(sonar_config),
         patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.connector.MooncakeStoreScheduler"
+            "sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.connector.MooncakeStoreScheduler"
         ) as mock_scheduler_cls,
     ):
-        conn = mooncake_store_connector.MooncakeStoreConnector(
-            aphrodite_config, KVConnectorRole.SCHEDULER, kv_cache_config
-        )
+        conn = mooncake_store_connector.MooncakeStoreConnector(sonar_config, KVConnectorRole.SCHEDULER, kv_cache_config)
 
     mock_scheduler_cls.return_value.reset_store.return_value = True
 
@@ -921,26 +911,24 @@ def test_reset_cache_scheduler_role_clears_local_state():
     about to be remove_all'd, so reading them after reset would surface
     stale references to wiped keys.
     """
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.data import (  # noqa: E501
+    from sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.data import (  # noqa: E501
         LoadSpec,
     )
 
-    aphrodite_config = _make_aphrodite_config()
+    sonar_config = _make_sonar_config()
     kv_cache_config = _make_kv_cache_config()
 
     with (
-        set_current_aphrodite_config(aphrodite_config),
+        set_current_sonar_config(sonar_config),
         patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.connector.MooncakeStoreScheduler"
+            "sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.connector.MooncakeStoreScheduler"
         ) as mock_scheduler_cls,
     ):
-        conn = mooncake_store_connector.MooncakeStoreConnector(
-            aphrodite_config, KVConnectorRole.SCHEDULER, kv_cache_config
-        )
+        conn = mooncake_store_connector.MooncakeStoreConnector(sonar_config, KVConnectorRole.SCHEDULER, kv_cache_config)
 
     # Seed both sentinel pieces of stale-reference state.
     sched_inst = mock_scheduler_cls.return_value
-    sched_inst.load_specs = {"req-A": LoadSpec(aphrodite_cached_tokens=0, kvpool_cached_tokens=128, can_load=True)}
+    sched_inst.load_specs = {"req-A": LoadSpec(sonar_cached_tokens=0, kvpool_cached_tokens=128, can_load=True)}
     conn._kv_cache_events = mooncake_store_connector.MooncakeStoreKVEvents(num_workers=1)
     sched_inst.reset_store.return_value = True
 
@@ -964,7 +952,7 @@ def test_lookup_key_server_reset_drains_send_queue_before_remove_all():
     # and (c) join() comes BEFORE remove_all in the call order. The full
     # LookupKeyServer is heavy (binds a real ZMQ REP socket), so we drive
     # just the dispatch branch here via a stub equivalent.
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store import (
         protocol,
     )
 
@@ -1011,7 +999,7 @@ def test_lookup_key_server_reset_skips_drain_when_no_send_thread():
     configurations), the RESET handler must still call remove_all
     instead of dereferencing a None send thread.
     """
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store import (
         protocol,
     )
 
@@ -1042,17 +1030,17 @@ def test_lookup_key_server_reset_skips_drain_when_no_send_thread():
 
 
 def test_shutdown_closes_worker_store():
-    aphrodite_config = _make_aphrodite_config()
+    sonar_config = _make_sonar_config()
     kv_cache_config = _make_kv_cache_config()
 
     with (
-        set_current_aphrodite_config(aphrodite_config),
+        set_current_sonar_config(sonar_config),
         patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.connector.MooncakeStoreWorker"
+            "sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.connector.MooncakeStoreWorker"
         ) as mock_worker_cls,
     ):
         connector = mooncake_store_connector.MooncakeStoreConnector(
-            aphrodite_config, KVConnectorRole.WORKER, kv_cache_config
+            sonar_config, KVConnectorRole.WORKER, kv_cache_config
         )
 
     worker = mock_worker_cls.return_value
@@ -1062,17 +1050,17 @@ def test_shutdown_closes_worker_store():
 
 
 def test_del_invokes_shutdown_and_closes_store():
-    aphrodite_config = _make_aphrodite_config()
+    sonar_config = _make_sonar_config()
     kv_cache_config = _make_kv_cache_config()
 
     with (
-        set_current_aphrodite_config(aphrodite_config),
+        set_current_sonar_config(sonar_config),
         patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.connector.MooncakeStoreWorker"
+            "sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.connector.MooncakeStoreWorker"
         ) as mock_worker_cls,
     ):
         connector = mooncake_store_connector.MooncakeStoreConnector(
-            aphrodite_config, KVConnectorRole.WORKER, kv_cache_config
+            sonar_config, KVConnectorRole.WORKER, kv_cache_config
         )
 
     worker = mock_worker_cls.return_value
@@ -1083,15 +1071,15 @@ def test_del_invokes_shutdown_and_closes_store():
 
 
 def test_shutdown_scheduler_role_is_noop():
-    aphrodite_config = _make_aphrodite_config()
+    sonar_config = _make_sonar_config()
     kv_cache_config = _make_kv_cache_config()
 
     with (
-        set_current_aphrodite_config(aphrodite_config),
-        patch("aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.connector.MooncakeStoreScheduler"),
+        set_current_sonar_config(sonar_config),
+        patch("sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.connector.MooncakeStoreScheduler"),
     ):
         connector = mooncake_store_connector.MooncakeStoreConnector(
-            aphrodite_config, KVConnectorRole.SCHEDULER, kv_cache_config
+            sonar_config, KVConnectorRole.SCHEDULER, kv_cache_config
         )
 
     # Scheduler role holds no store handle, so shutdown must be a safe no-op.

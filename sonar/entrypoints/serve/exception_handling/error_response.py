@@ -2,8 +2,8 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 from http import HTTPStatus
 
-from aphrodite.exceptions import GenerationError, RetryableRequestError
-from aphrodite.logger import init_logger
+from sonar.exceptions import GenerationError, RetryableRequestError
+from sonar.logger import init_logger
 
 from ..engine.protocol import ErrorInfo, ErrorResponse
 from .utils import sanitize_message
@@ -24,33 +24,33 @@ def create_error_response(
         exc = message
         logger.debug("create_error_response called with %s: %s", type(exc).__name__, exc)
 
-        from aphrodite.exceptions import (
-            AphroditeClientError,
-            AphroditeNotFoundError,
-            AphroditeServerError,
-            AphroditeUnprocessableEntityError,
-            AphroditeValidationError,
+        from sonar.exceptions import (
             GracefulHTTPError,
+            SonarClientError,
+            SonarNotFoundError,
+            SonarServerError,
+            SonarUnprocessableEntityError,
+            SonarValidationError,
         )
-        from aphrodite.v1.engine.exceptions import EngineDeadError
+        from sonar.v1.engine.exceptions import EngineDeadError
 
         if isinstance(exc, GracefulHTTPError):
             err_type = HTTPStatus(exc.http_status).phrase
             status_code = exc.http_status
             param = None
-        elif isinstance(exc, AphroditeValidationError):
+        elif isinstance(exc, SonarValidationError):
             err_type = "BadRequestError"
             status_code = HTTPStatus.BAD_REQUEST
             param = exc.parameter
-        elif isinstance(exc, AphroditeUnprocessableEntityError):
+        elif isinstance(exc, SonarUnprocessableEntityError):
             err_type = "UnprocessableEntityError"
             status_code = HTTPStatus.UNPROCESSABLE_ENTITY
             param = exc.parameter
-        elif isinstance(exc, AphroditeNotFoundError):
+        elif isinstance(exc, SonarNotFoundError):
             err_type = "NotFoundError"
             status_code = HTTPStatus.NOT_FOUND
             param = None
-        elif isinstance(exc, AphroditeClientError):
+        elif isinstance(exc, SonarClientError):
             err_type = "BadRequestError"
             status_code = HTTPStatus.BAD_REQUEST
             param = None
@@ -63,11 +63,11 @@ def create_error_response(
             status_code = HTTPStatus.INTERNAL_SERVER_ERROR
             param = None
             message_text = exc.CLIENT_MESSAGE
-        elif isinstance(exc, AphroditeServerError):
+        elif isinstance(exc, SonarServerError):
             err_type = "InternalServerError"
             status_code = HTTPStatus.INTERNAL_SERVER_ERROR
             param = None
-        # Fallback for raw exceptions not yet migrated to AphroditeError.
+        # Fallback for raw exceptions not yet migrated to SonarError.
         elif isinstance(exc, (ValueError, TypeError, OverflowError)):
             err_type = "BadRequestError"
             status_code = HTTPStatus.BAD_REQUEST

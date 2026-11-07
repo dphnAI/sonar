@@ -85,8 +85,8 @@ hardware_overrides:
   amd:
     # Verified on 8× MI300X / MI355X (MI325X listed as supported but not verified).
     extra_env:
-      APHRODITE_ROCM_USE_AITER: "1"
-      APHRODITE_ROCM_QUICK_REDUCE_QUANTIZATION: "INT4"
+      SONAR_ROCM_USE_AITER: "1"
+      SONAR_ROCM_QUICK_REDUCE_QUANTIZATION: "INT4"
 
 strategy_overrides: {}
 
@@ -106,14 +106,14 @@ guide: |
 
   ## Prerequisites
 
-  - **Aphrodite version:** >= 0.19.1 (manually verified). The model is also available in the
-    Aphrodite nightly wheel, but nightly builds are experimental.
+  - **Sonar version:** >= 0.19.1 (manually verified). The model is also available in the
+    Sonar nightly wheel, but nightly builds are experimental.
   - **Hardware (INT4):** 8x H200 GPUs (verified), or equivalent aggregate VRAM (~640 GB)
 
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U aphrodite-engine --torch-backend=auto
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   ```
 
   ## Launch command
@@ -121,7 +121,7 @@ guide: |
   Serve on a single H200 node with TP8 (vision encoder in data-parallel mode):
 
   ```bash
-  aphrodite serve moonshotai/Kimi-K2.7-Code \
+  sonar serve moonshotai/Kimi-K2.7-Code \
     --tensor-parallel-size 8 \
     --mm-encoder-tp-mode data \
     --trust-remote-code \
@@ -144,10 +144,10 @@ guide: |
   and INT4 QuickReduce.
 
   ```bash
-  export APHRODITE_ROCM_USE_AITER=1
-  export APHRODITE_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
+  export SONAR_ROCM_USE_AITER=1
+  export SONAR_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 
-  aphrodite serve moonshotai/Kimi-K2.7-Code \
+  sonar serve moonshotai/Kimi-K2.7-Code \
     --host 0.0.0.0 \
     --port 8000 \
     --trust-remote-code \
@@ -164,10 +164,10 @@ guide: |
   optimized FlyDSL W4A16 MoE kernel. Keep LoRA disabled for this path.
 
   ```bash
-  export APHRODITE_ROCM_USE_AITER=1
-  export APHRODITE_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
+  export SONAR_ROCM_USE_AITER=1
+  export SONAR_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 
-  aphrodite serve moonshotai/Kimi-K2.7-Code \
+  sonar serve moonshotai/Kimi-K2.7-Code \
     --tensor-parallel-size 8 \
     --trust-remote-code \
     --mm-encoder-tp-mode data \
@@ -183,13 +183,13 @@ guide: |
     `--enable-expert-parallel`.
   - Keep `--compilation-config '{"pass_config": {"fuse_allreduce_rms": false}}'`;
     it is required for this FlyDSL path on MI350X / MI355X.
-  - Aphrodite has tuned MI350X/MI355X FlyDSL configs for this Kimi shape at TP=8 and TP=4.
-  - Keep Aphrodite's default block size unless you are tuning long-context
+  - Sonar has tuned MI350X/MI355X FlyDSL configs for this Kimi shape at TP=8 and TP=4.
+  - Keep Sonar's default block size unless you are tuning long-context
     throughput; `--block-size 64` is safe to try.
 
   ## Client Usage
 
-  Once the Aphrodite server is running, consume it via the OpenAI-compatible API. The recommended
+  Once the Sonar server is running, consume it via the OpenAI-compatible API. The recommended
   sampling for thinking mode is `temperature=1.0` and `top_p=0.95`.
 
   ```python
@@ -246,4 +246,4 @@ guide: |
   - [Kimi-K2.7-Code on Hugging Face](https://huggingface.co/moonshotai/Kimi-K2.7-Code)
   - [Kimi-K2.7-Code deployment guide](https://huggingface.co/moonshotai/Kimi-K2.7-Code/blob/main/docs/deploy_guidance.md)
   - [Kimi-K2.6 recipe](https://recipes.vllm.ai/moonshotai/Kimi-K2.6)
-  - [Aphrodite multimodal inputs guide](https://docs.vllm.ai/en/latest/features/multimodal_inputs.html)
+  - [Sonar multimodal inputs guide](https://docs.vllm.ai/en/latest/features/multimodal_inputs.html)

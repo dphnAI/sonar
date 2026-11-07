@@ -6,16 +6,16 @@ from typing import TYPE_CHECKING
 
 import torch
 
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 if TYPE_CHECKING:
-    from aphrodite.v1.worker.gpu_model_runner import GPUModelRunner
+    from sonar.v1.worker.gpu_model_runner import GPUModelRunner
 
 logger = init_logger(__name__)
 
 
 def _has_mamba_style_cache(runner: "GPUModelRunner") -> bool:
-    from aphrodite.v1.kv_cache_interface import MambaSpec, UniformTypeKVCacheSpecs
+    from sonar.v1.kv_cache_interface import MambaSpec, UniformTypeKVCacheSpecs
 
     for group in runner.kv_cache_config.kv_cache_groups:
         spec = group.kv_cache_spec
@@ -28,7 +28,7 @@ def _has_mamba_style_cache(runner: "GPUModelRunner") -> bool:
 
 def _warm_batch_memcpy_kernel(device: torch.device) -> None:
     """Warm the Mamba prefix-cache state copy specialization."""
-    from aphrodite.v1.worker.mamba_utils import batch_memcpy
+    from sonar.v1.worker.mamba_utils import batch_memcpy
 
     src = torch.empty(1024, dtype=torch.uint8, device=device)
     dst = torch.empty_like(src)

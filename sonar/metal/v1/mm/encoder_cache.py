@@ -6,13 +6,13 @@ from __future__ import annotations
 
 import mlx.core as mx
 
-from aphrodite.metal.multimodal.feature_spec import MultiModalFeatureSpec
+from sonar.metal.multimodal.feature_spec import MultiModalFeatureSpec
 
 
 class EncoderCache:
     """Store multimodal features and MLX encoder outputs by request/hash.
 
-    Mirrors upstream Aphrodite's v1 GPU ``EncoderCache`` with the tensor type
+    Mirrors upstream Sonar's v1 GPU ``EncoderCache`` with the tensor type
     changed from ``torch.Tensor`` to ``mlx.core.array``.
     """
 
@@ -28,7 +28,7 @@ class EncoderCache:
 
     def reset_mm_cache(self) -> None:
         """Mirror upstream's profiling-cache reset hook."""
-        # TODO: Implement when aphrodite metal adds profiling-time MM cache state.
+        # TODO: Implement when sonar metal adds profiling-time MM cache state.
         pass
 
     def reset_encoder_cache(self) -> None:

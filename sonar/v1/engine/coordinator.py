@@ -9,13 +9,13 @@ import weakref
 import msgspec.msgpack
 import zmq
 
-from aphrodite.config import LoggingConfig, ParallelConfig
-from aphrodite.logger import configure_logging, init_logger
-from aphrodite.utils.network_utils import make_zmq_socket
-from aphrodite.utils.system_utils import get_mp_context, set_process_title
-from aphrodite.v1.engine import EngineCoreOutputs, EngineCoreRequestType
-from aphrodite.v1.serial_utils import MsgpackDecoder
-from aphrodite.v1.utils import get_engine_client_zmq_addr, shutdown
+from sonar.config import LoggingConfig, ParallelConfig
+from sonar.logger import configure_logging, init_logger
+from sonar.utils.network_utils import make_zmq_socket
+from sonar.utils.system_utils import get_mp_context, set_process_title
+from sonar.v1.engine import EngineCoreOutputs, EngineCoreRequestType
+from sonar.v1.serial_utils import MsgpackDecoder
+from sonar.v1.utils import get_engine_client_zmq_addr, shutdown
 
 logger = init_logger(__name__)
 
@@ -96,7 +96,7 @@ class DPCoordinator:
         parent_zmq_addr_pipe, child_zmq_addr_pipe = context.Pipe(duplex=False)
         self.proc: multiprocessing.Process = context.Process(
             target=DPCoordinatorProc.run_coordinator,
-            name="APHRODITE_DP_Coordinator",
+            name="SONAR_DP_Coordinator",
             kwargs={
                 "engine_count": parallel_config.data_parallel_size,
                 "front_publish_address": front_publish_address,

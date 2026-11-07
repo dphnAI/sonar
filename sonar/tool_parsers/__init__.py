@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-from aphrodite.tool_parsers.abstract_tool_parser import (
+from sonar.tool_parsers.abstract_tool_parser import (
     ToolParser,
     ToolParserManager,
 )
@@ -15,7 +15,7 @@ Register a lazy module mapping.
 Example:
     ToolParserManager.register_lazy_module(
         name="kimi_k2",
-        module_path="aphrodite.tool_parsers.kimi_k2_tool_parser",
+        module_path="sonar.tool_parsers.kimi_k2_tool_parser",
         class_name="KimiK2ToolParser",
     )
 """
@@ -267,7 +267,7 @@ _TOOL_PARSERS_TO_REGISTER = {
 
 def register_lazy_tool_parsers():
     for name, (file_name, class_name) in _TOOL_PARSERS_TO_REGISTER.items():
-        module_path = f"aphrodite.tool_parsers.{file_name}"
+        module_path = f"sonar.tool_parsers.{file_name}"
         ToolParserManager.register_lazy_module(name, module_path, class_name)
 
 

@@ -5,19 +5,19 @@
 import pytest
 import torch
 
-import aphrodite.config
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.compilation.passes.utility.noop_elimination import NoOpEliminationPass
-from aphrodite.compilation.passes.utility.post_cleanup import PostCleanupPass
-from aphrodite.config import (
-    AphroditeConfig,
+import sonar.config
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.compilation.passes.utility.noop_elimination import NoOpEliminationPass
+from sonar.compilation.passes.utility.post_cleanup import PostCleanupPass
+from sonar.config import (
     CompilationConfig,
     CompilationMode,
     ModelConfig,
     PassConfig,
+    SonarConfig,
 )
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.utils import rocm_unquantized_gemm
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.utils import rocm_unquantized_gemm
 from tests.compile.backend import TestBackend
 
 
@@ -53,7 +53,7 @@ class TestModel(torch.nn.Module):
 
     def ops_in_model_before(self):
         return [
-            torch.ops.aphrodite_ir.fused_add_rms_norm,
+            torch.ops.sonar_ir.fused_add_rms_norm,
             torch.ops.aten.constant_pad_nd,
         ]
 
@@ -77,17 +77,17 @@ def test_fuse_act_padding(
     x_pad_to_multiple: int,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         model_config=ModelConfig(dtype=dtype),
         compilation_config=CompilationConfig(
-            mode=CompilationMode.APHRODITE_COMPILE,
+            mode=CompilationMode.SONAR_COMPILE,
             custom_ops=["+rms_norm"],
             pass_config=PassConfig(fuse_act_padding=True, eliminate_noops=True),
         ),
     )
 
-    with aphrodite.config.set_current_aphrodite_config(aphrodite_config), monkeypatch.context() as m:
-        from aphrodite.compilation.passes.fusion.rocm_aiter_fusion import (
+    with sonar.config.set_current_sonar_config(sonar_config), monkeypatch.context() as m:
+        from sonar.compilation.passes.fusion.rocm_aiter_fusion import (
             RocmAiterTritonAddRMSNormPadFusionPass,
         )
 
@@ -95,14 +95,14 @@ def test_fuse_act_padding(
         torch.set_default_dtype(dtype)
         torch.manual_seed(1)
 
-        m.setenv("APHRODITE_ROCM_USE_AITER", "1")
+        m.setenv("SONAR_ROCM_USE_AITER", "1")
         rocm_aiter_ops.refresh_env_variables()
 
-        fusion_pass = RocmAiterTritonAddRMSNormPadFusionPass(aphrodite_config)
+        fusion_pass = RocmAiterTritonAddRMSNormPadFusionPass(sonar_config)
         passes = [
-            NoOpEliminationPass(aphrodite_config),
+            NoOpEliminationPass(sonar_config),
             fusion_pass,
-            PostCleanupPass(aphrodite_config),
+            PostCleanupPass(sonar_config),
         ]
         backend = TestBackend(*passes)
         model = TestModel(num_layers, hidden_size, num_local_experts, x_pad_to_multiple)

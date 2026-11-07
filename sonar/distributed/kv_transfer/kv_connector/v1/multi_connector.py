@@ -8,11 +8,11 @@ from typing import TYPE_CHECKING, Any, cast
 
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.kv_transfer import KVTransferConfig
-from aphrodite.distributed.kv_transfer.kv_connector.base import KVConnectorBaseType
-from aphrodite.distributed.kv_transfer.kv_connector.factory import KVConnectorFactory
-from aphrodite.distributed.kv_transfer.kv_connector.v1.base import (
+from sonar.config import SonarConfig
+from sonar.config.kv_transfer import KVTransferConfig
+from sonar.distributed.kv_transfer.kv_connector.base import KVConnectorBaseType
+from sonar.distributed.kv_transfer.kv_connector.factory import KVConnectorFactory
+from sonar.distributed.kv_transfer.kv_connector.v1.base import (
     CopyBlocksOp,
     KVConnectorBase_V1,
     KVConnectorHandshakeMetadata,
@@ -22,25 +22,25 @@ from aphrodite.distributed.kv_transfer.kv_connector.v1.base import (
     KVConnectorWorkerMetadata,
     SupportsHMA,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.metrics import (
+from sonar.distributed.kv_transfer.kv_connector.v1.metrics import (
     KVConnectorPromMetrics,
     KVConnectorStats,
     PromMetric,
     PromMetricT,
 )
-from aphrodite.logger import init_logger
-from aphrodite.v1.attention.backend import AttentionMetadata
-from aphrodite.v1.core.sched.output import SchedulerOutput
-from aphrodite.v1.metrics.cache_hit_source import CacheHitSource
-from aphrodite.v1.outputs import KVConnectorOutput
+from sonar.logger import init_logger
+from sonar.v1.attention.backend import AttentionMetadata
+from sonar.v1.core.sched.output import SchedulerOutput
+from sonar.v1.metrics.cache_hit_source import CacheHitSource
+from sonar.v1.outputs import KVConnectorOutput
 
 if TYPE_CHECKING:
-    from aphrodite.distributed.kv_events import KVCacheEventType
-    from aphrodite.forward_context import ForwardContext
-    from aphrodite.v1.core.block_pool import BlockPool
-    from aphrodite.v1.core.kv_cache_manager import KVCacheBlocks, KVCacheManager
-    from aphrodite.v1.kv_cache_interface import KVCacheConfig
-    from aphrodite.v1.request import Request
+    from sonar.distributed.kv_events import KVCacheEventType
+    from sonar.forward_context import ForwardContext
+    from sonar.v1.core.block_pool import BlockPool
+    from sonar.v1.core.kv_cache_manager import KVCacheBlocks, KVCacheManager
+    from sonar.v1.kv_cache_interface import KVCacheConfig
+    from sonar.v1.request import Request
 
 logger = init_logger(__name__)
 
@@ -110,13 +110,13 @@ class MultiKVConnectorStats(KVConnectorStats):
 class MultiKVConnectorPromMetrics(KVConnectorPromMetrics):
     def __init__(
         self,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
         metric_types: dict[type[PromMetric], type[PromMetricT]],
         labelnames: list[str],
         per_engine_labelvalues: dict[int, list[object]],
         prom_metrics: dict[str, KVConnectorPromMetrics],
     ):
-        super().__init__(aphrodite_config, metric_types, labelnames, per_engine_labelvalues)
+        super().__init__(sonar_config, metric_types, labelnames, per_engine_labelvalues)
         self._prom_metrics = prom_metrics
 
     def observe(self, transfer_stats_data: dict[str, Any], engine_idx: int = 0):
@@ -163,21 +163,21 @@ class MultiConnector(KVConnectorBase_V1, SupportsHMA):
 
     def __init__(
         self,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
         role: KVConnectorRole,
         kv_cache_config: "KVCacheConfig",
     ):
-        super().__init__(aphrodite_config=aphrodite_config, role=role, kv_cache_config=kv_cache_config)
+        super().__init__(sonar_config=sonar_config, role=role, kv_cache_config=kv_cache_config)
 
         self._connectors: list[KVConnectorBase_V1] = []
         self._ktc_kv_transfer_config = []
-        for connector_cls, temp_config in self._get_connector_classes_and_configs(aphrodite_config):
+        for connector_cls, temp_config in self._get_connector_classes_and_configs(sonar_config):
             self._connectors.append(connector_cls(temp_config, role, kv_cache_config))
             self._ktc_kv_transfer_config.append(temp_config.kv_transfer_config)
 
-        assert aphrodite_config.kv_transfer_config is not None
-        self._all_support_hma = MultiConnector.all_children_support_hma(aphrodite_config.kv_transfer_config)
-        assert aphrodite_config.scheduler_config.disable_hybrid_kv_cache_manager or self._all_support_hma, (
+        assert sonar_config.kv_transfer_config is not None
+        self._all_support_hma = MultiConnector.all_children_support_hma(sonar_config.kv_transfer_config)
+        assert sonar_config.scheduler_config.disable_hybrid_kv_cache_manager or self._all_support_hma, (
             "HMA should not be enabled unless all sub-connectors support it"
         )
 
@@ -215,15 +215,15 @@ class MultiConnector(KVConnectorBase_V1, SupportsHMA):
 
     @classmethod
     def _get_connector_classes_and_configs(
-        cls, aphrodite_config: "AphroditeConfig"
-    ) -> list[tuple[type[KVConnectorBaseType], "AphroditeConfig"]]:
-        assert aphrodite_config.kv_transfer_config is not None
-        ktcs = aphrodite_config.kv_transfer_config.kv_connector_extra_config.get("connectors")
+        cls, sonar_config: "SonarConfig"
+    ) -> list[tuple[type[KVConnectorBaseType], "SonarConfig"]]:
+        assert sonar_config.kv_transfer_config is not None
+        ktcs = sonar_config.kv_transfer_config.kv_connector_extra_config.get("connectors")
         assert ktcs is not None
-        ret: list[tuple[type[KVConnectorBaseType], AphroditeConfig]] = []
+        ret: list[tuple[type[KVConnectorBaseType], SonarConfig]] = []
         for ktc in ktcs:
-            temp_config = copy.copy(aphrodite_config)
-            engine_id = ktc.get("engine_id", aphrodite_config.kv_transfer_config.engine_id)
+            temp_config = copy.copy(sonar_config)
+            engine_id = ktc.get("engine_id", sonar_config.kv_transfer_config.engine_id)
             temp_config.kv_transfer_config = KVTransferConfig(**{**ktc, "engine_id": engine_id})
             ret.append(
                 (
@@ -579,20 +579,20 @@ class MultiConnector(KVConnectorBase_V1, SupportsHMA):
         return any(c.has_pending_push_work() for c in self._connectors)
 
     @classmethod
-    def get_required_kvcache_layout(cls, aphrodite_config: "AphroditeConfig") -> str | None:
+    def get_required_kvcache_layout(cls, sonar_config: "SonarConfig") -> str | None:
         """Get the required KV cache layout for this connector.
 
         Args:
-            aphrodite_config (AphroditeConfig): the aphrodite config.
+            sonar_config (SonarConfig): the sonar config.
 
         Returns:
             str: the required KV cache layout. e.g. HND, or NHD.
             None if the connector does not require a specific layout.
 
         """
-        assert aphrodite_config.kv_transfer_config is not None
+        assert sonar_config.kv_transfer_config is not None
         layouts: set[str] = set()
-        for connector_cls, temp_config in cls._get_connector_classes_and_configs(aphrodite_config):
+        for connector_cls, temp_config in cls._get_connector_classes_and_configs(sonar_config):
             required_kvcache_layout = connector_cls.get_required_kvcache_layout(temp_config)
             if required_kvcache_layout is not None:
                 layouts.add(required_kvcache_layout)
@@ -653,14 +653,14 @@ class MultiConnector(KVConnectorBase_V1, SupportsHMA):
     @classmethod
     def build_prom_metrics(
         cls,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
         metric_types: dict[type["PromMetric"], type["PromMetricT"]],
         labelnames: list[str],
         per_engine_labelvalues: dict[int, list[object]],
     ) -> KVConnectorPromMetrics:
         prom_metrics: dict[str, KVConnectorPromMetrics] = {}
         seen_classes: set[type] = set()
-        for connector_cls, temp_config in cls._get_connector_classes_and_configs(aphrodite_config):
+        for connector_cls, temp_config in cls._get_connector_classes_and_configs(sonar_config):
             if connector_cls in seen_classes:
                 continue
             seen_classes.add(connector_cls)
@@ -670,7 +670,7 @@ class MultiConnector(KVConnectorBase_V1, SupportsHMA):
             if connector_prom is not None:
                 prom_metrics[connector_cls.__name__] = connector_prom
         return MultiKVConnectorPromMetrics(
-            aphrodite_config,
+            sonar_config,
             metric_types,
             labelnames,
             per_engine_labelvalues,

@@ -2,8 +2,8 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import argparse
 
-from aphrodite.entrypoints.common.startup import APHRODITE_SUBCMD_PARSER_EPILOG
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
+from sonar.entrypoints.common.startup import SONAR_SUBCMD_PARSER_EPILOG
+from sonar.utils.argparse_utils import FlexibleArgumentParser
 
 from .plot import SweepPlotArgs
 from .plot import main as plot_main
@@ -32,11 +32,11 @@ def add_cli_args(parser: FlexibleArgumentParser):
         cmd_subparser = subparsers.add_parser(
             cmd.parser_name,
             description=cmd.parser_help,
-            usage=f"aphrodite bench sweep {cmd.parser_name} [options]",
+            usage=f"sonar bench sweep {cmd.parser_name} [options]",
         )
         cmd_subparser.set_defaults(dispatch_function=entrypoint)
         cmd.add_cli_args(cmd_subparser)
-        cmd_subparser.epilog = APHRODITE_SUBCMD_PARSER_EPILOG.format(subcmd=f"sweep {cmd.parser_name}")
+        cmd_subparser.epilog = SONAR_SUBCMD_PARSER_EPILOG.format(subcmd=f"sweep {cmd.parser_name}")
 
 
 def main(args: argparse.Namespace):

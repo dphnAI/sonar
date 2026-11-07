@@ -8,8 +8,8 @@ from typing import Any
 
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
 
 # Static kernels parameters
 BASE_BLOCK = 128 if current_platform.has_device_capability(80) else 64
@@ -761,7 +761,7 @@ def context_attention_fwd(
 
     # Turing does have tensor core for float32 multiplication
     # use ieee as fallback for triton kernels work. There is also
-    # warning on aphrodite/config.py to inform users this fallback
+    # warning on sonar/config.py to inform users this fallback
     # implementation
     IN_PRECISION = "ieee" if IS_TURING and q_dtype_is_f32 else None
 

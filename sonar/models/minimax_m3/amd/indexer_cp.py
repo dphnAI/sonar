@@ -12,8 +12,8 @@ from dataclasses import dataclass
 
 import torch
 
-from aphrodite.distributed import get_tp_group
-from aphrodite.logger import init_logger
+from sonar.distributed import get_tp_group
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 
@@ -34,7 +34,7 @@ def _ipc_alloc(nbytes: int, group) -> torch.Tensor:
 
     Returns a ``[world]`` int64 CPU tensor of their device addresses, never freed.
     """
-    from aphrodite.distributed.device_communicators.custom_all_reduce import CustomAllreduce
+    from sonar.distributed.device_communicators.custom_all_reduce import CustomAllreduce
 
     nbytes = (nbytes + _HIP_PAGE - 1) // _HIP_PAGE * _HIP_PAGE
     peers = CustomAllreduce.create_shared_buffer(nbytes, group=group.cpu_group)

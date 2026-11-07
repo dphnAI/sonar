@@ -5,12 +5,12 @@
 import torch
 
 try:
-    from aphrodite.triton_utils import tl, triton
+    from sonar.triton_utils import tl, triton
 except ModuleNotFoundError:
     import triton
     import triton.language as tl
 
-from aphrodite.models.minimax_m3.common.ops.sparse_attn import SPARSE_BLOCK_SIZE
+from sonar.models.minimax_m3.common.ops.sparse_attn import SPARSE_BLOCK_SIZE
 
 ASM_PAGE_SIZE = 16
 PAGES_PER_SPARSE_BLOCK = SPARSE_BLOCK_SIZE // ASM_PAGE_SIZE

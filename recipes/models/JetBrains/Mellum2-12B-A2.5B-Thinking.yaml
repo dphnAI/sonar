@@ -92,27 +92,27 @@ guide: |
   ## Prerequisites
 
   - Hardware: a single H200, H100, or A100 (~29 GB at bf16) is plenty
-  - Aphrodite **nightly** — `MellumForCausalLM` support landed after v0.22.0 and is not yet in a
+  - Sonar **nightly** — `MellumForCausalLM` support landed after v0.22.0 and is not yet in a
     stable release. Install the nightly wheels until the next tagged release ships.
 
-  ### Install Aphrodite (nightly)
+  ### Install Sonar (nightly)
 
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U aphrodite-engine --extra-index-url https://wheels.vllm.ai/nightly
+  uv pip install -U sonar --index-strategy first-index --torch-backend cu130 --extra-index-url https://sonar.dphn.ai/whl/nightly/cuda/x86_64/simple
   ```
 
   ## Launch command
 
   ```bash
   # With reasoning (recommended for the Thinking checkpoint)
-  aphrodite serve JetBrains/Mellum2-12B-A2.5B-Thinking \
+  sonar serve JetBrains/Mellum2-12B-A2.5B-Thinking \
     --max-model-len 131072 \
     --reasoning-parser qwen3
 
   # Add tool calling
-  aphrodite serve JetBrains/Mellum2-12B-A2.5B-Thinking \
+  sonar serve JetBrains/Mellum2-12B-A2.5B-Thinking \
     --max-model-len 131072 \
     --reasoning-parser qwen3 \
     --enable-auto-tool-choice \
@@ -142,5 +142,5 @@ guide: |
   ## References
 
   - [Model card](https://huggingface.co/JetBrains/Mellum2-12B-A2.5B-Thinking)
-  - [Aphrodite support PR #43992](https://github.com/vllm-project/vllm/pull/43992)
+  - [Sonar support PR #43992](https://github.com/vllm-project/vllm/pull/43992)
   - [Mellum2 Technical Report](https://arxiv.org/abs/2605.31268)

@@ -30,7 +30,7 @@ model:
   base_env: {}
 
 dependencies:
-  - note: "Mistral tokenizer / chat-template runtime — Mistral 3.5 needs >= 1.11.1 (auto-installed by Aphrodite nightly, pin if you hit an older cached wheel)"
+  - note: "Mistral tokenizer / chat-template runtime — Mistral 3.5 needs >= 1.11.1 (auto-installed by Sonar nightly, pin if you hit an older cached wheel)"
     command: 'uv pip install -U "mistral_common>=1.11.1"'
 
 features:
@@ -84,7 +84,7 @@ hardware_overrides:
     extra_args:
       - "--no-enable-prefix-caching"
     extra_env:
-      APHRODITE_ROCM_USE_AITER: "1"
+      SONAR_ROCM_USE_AITER: "1"
       SAFETENSORS_FAST_GPU: "1"
 
 strategy_overrides: {}
@@ -107,16 +107,16 @@ guide: |
 
   - Hardware: 8xH200 (recommended), 4xB200 or 2-8xMI300X; single B200 / MI300X also fits the
     weights (~134 GB raw) but leaves little room for the 256K KV cache - see below.
-  - Aphrodite **nightly** (Mistral 3.5 architecture support has not yet shipped in a
+  - Sonar **nightly** (Mistral 3.5 architecture support has not yet shipped in a
     stable release).
 
-  ### Install Aphrodite
+  ### Install Sonar
 
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U aphrodite-engine --torch-backend=auto \
-    --extra-index-url https://wheels.vllm.ai/nightly
+  uv pip install -U sonar --index-strategy first-index --torch-backend cu130 \
+    --extra-index-url https://sonar.dphn.ai/whl/nightly/cuda/x86_64/simple
   ```
 
   This pulls in `mistral_common >= 1.11.1` and `transformers >= 5.4.0` automatically.
@@ -126,7 +126,7 @@ guide: |
   8xH200 (or 8xB200):
 
   ```bash
-  aphrodite serve mistralai/Mistral-Medium-3.5-128B \
+  sonar serve mistralai/Mistral-Medium-3.5-128B \
     --tensor-parallel-size 8 \
     --tokenizer_mode mistral --config_format mistral --load_format mistral \
     --enable-auto-tool-choice --tool-call-parser mistral \
@@ -152,7 +152,7 @@ guide: |
   Mistral's recommended serve command (from the EAGLE model card):
 
   ```bash
-  aphrodite serve mistralai/Mistral-Medium-3.5-128B --tensor-parallel-size 8 \
+  sonar serve mistralai/Mistral-Medium-3.5-128B --tensor-parallel-size 8 \
     --tool-call-parser mistral --enable-auto-tool-choice --reasoning-parser mistral \
     --max-num-batched-tokens 16384 --max-num-seqs 128 --gpu-memory-utilization 0.8 \
     --speculative-config '{"model":"mistralai/Mistral-Medium-3.5-128B-EAGLE","num_speculative_tokens":3,"method":"eagle","max_model_len":"65536"}'
@@ -210,7 +210,7 @@ guide: |
   docker run --device=/dev/kfd --device=/dev/dri \
     --security-opt seccomp=unconfined --group-add video \
     --privileged --ipc=host -p 8000:8000 \
-    -e APHRODITE_ROCM_USE_AITER=1 \
+    -e SONAR_ROCM_USE_AITER=1 \
     -e SAFETENSORS_FAST_GPU=1 \
     -v ~/.cache/huggingface:/root/.cache/huggingface \
     vllm/vllm-openai-rocm:nightly mistralai/Mistral-Medium-3.5-128B \
@@ -232,7 +232,7 @@ guide: |
   docker run --device=/dev/kfd --device=/dev/dri \
     --security-opt seccomp=unconfined --group-add video \
     --privileged --ipc=host -p 8000:8000 \
-    -e APHRODITE_ROCM_USE_AITER=1 \
+    -e SONAR_ROCM_USE_AITER=1 \
     -e SAFETENSORS_FAST_GPU=1 \
     -v ~/.cache/huggingface:/root/.cache/huggingface \
     vllm/vllm-openai-rocm:nightly mistralai/Mistral-Medium-3.5-128B \
@@ -257,7 +257,7 @@ guide: |
     --security-opt seccomp=unconfined --group-add video \
     --privileged --ipc=host -p 8000:8000 \
     -e SAFETENSORS_FAST_GPU=1 \
-    -e APHRODITE_ROCM_USE_AITER=1 \
+    -e SONAR_ROCM_USE_AITER=1 \
     -v ~/.cache/huggingface:/root/.cache/huggingface \
     vllm/vllm-openai-rocm:nightly mistralai/Mistral-Medium-3.5-128B \
       --tokenizer_mode mistral --config_format mistral --load_format mistral \
@@ -271,7 +271,7 @@ guide: |
 
   ### MI300X benchmarking (text-only)
 
-  Serving benchmark: `aphrodite bench serve` with 100 requests, max concurrency 32,
+  Serving benchmark: `sonar bench serve` with 100 requests, max concurrency 32,
   1024 input + 1024 output tokens per request.
   Accuracy: `lm_eval` GSM8k (5-shot), `local-completions` backend.
 

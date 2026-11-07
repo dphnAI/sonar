@@ -9,7 +9,7 @@ import textwrap
 import pytest
 import torch
 
-from aphrodite.multimodal.video import EmbeddingGemma2VideoBackend
+from sonar.multimodal.video import EmbeddingGemma2VideoBackend
 
 MODEL = os.environ.get("EG2_MODEL_PATH")
 needs_model = pytest.mark.skipif(not MODEL, reason="EG2_MODEL_PATH not set")
@@ -54,9 +54,9 @@ def st_model():
 
 
 @needs_model
-def test_structure(aphrodite_runner, monkeypatch):
-    monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
-    with aphrodite_runner(MODEL, runner="pooling", max_model_len=8192) as vm:
+def test_structure(sonar_runner, monkeypatch):
+    monkeypatch.setenv("SONAR_ENABLE_V1_MULTIPROCESSING", "0")
+    with sonar_runner(MODEL, runner="pooling", max_model_len=8192) as vm:
 
         def probe(model):
             lm = model.language_model
@@ -72,21 +72,21 @@ def test_structure(aphrodite_runner, monkeypatch):
     "prompt",
     [
         "short query",
-        "task: search result | query: what is aphrodite",
+        "task: search result | query: what is sonar",
         "word " * 700,  # > 512: crosses sliding window
         "word " * 1500,  # > 1024
     ],
 )
-def test_text_parity(aphrodite_runner, st_model, prompt):
+def test_text_parity(sonar_runner, st_model, prompt):
     ref = st_model.encode([prompt], normalize_embeddings=True)
-    with aphrodite_runner(MODEL, runner="pooling", max_model_len=8192) as vm:
+    with sonar_runner(MODEL, runner="pooling", max_model_len=8192) as vm:
         out = vm.embed([prompt])
     sim = _cos(out, ref).min().item()
     assert sim >= TEXT_COS, f"Text cosine {sim} < {TEXT_COS} for prompt len {len(prompt)}"
 
 
 @needs_model
-def test_mm_recipe(aphrodite_runner, st_model):
+def test_mm_recipe(sonar_runner, st_model):
     from PIL import Image
 
     img = Image.new("RGB", (224, 224), color=(255, 0, 0))
@@ -94,14 +94,14 @@ def test_mm_recipe(aphrodite_runner, st_model):
 
     # SentenceTransformer multimodal encode
     ref = st_model.encode([{"image": img, "text": prompt}], normalize_embeddings=True)
-    with aphrodite_runner(MODEL, runner="pooling", max_model_len=8192) as vm:
+    with sonar_runner(MODEL, runner="pooling", max_model_len=8192) as vm:
         out = vm.embed([{"prompt": prompt, "multi_modal_data": {"image": img}}])
     sim = _cos(out, ref).min().item()
     assert sim >= MM_COS, f"Image cosine {sim} < {MM_COS}"
 
 
 @needs_model
-def test_natural_image_parity(aphrodite_runner, st_model):
+def test_natural_image_parity(sonar_runner, st_model):
     from PIL import Image
 
     img_path = "/projects/gemma4-aphrodite/images/cat.jpg"
@@ -110,14 +110,14 @@ def test_natural_image_parity(aphrodite_runner, st_model):
     img = Image.open(img_path)
     prompt = "What is this image? <|image|>"
     ref = st_model.encode([{"image": img, "text": prompt}], normalize_embeddings=True)
-    with aphrodite_runner(MODEL, runner="pooling", max_model_len=8192) as vm:
+    with sonar_runner(MODEL, runner="pooling", max_model_len=8192) as vm:
         out = vm.embed([{"prompt": prompt, "multi_modal_data": {"image": img}}])
     sim = _cos(out, ref).min().item()
     assert sim >= MM_COS, f"Natural image cosine {sim} < {MM_COS}"
 
 
 @needs_model
-def test_audio_parity(aphrodite_runner, st_model):
+def test_audio_parity(sonar_runner, st_model):
     import torchaudio
 
     audio_path = "/projects/gemma4-aphrodite/audio/tellMeAboutTheSun.wav"
@@ -127,14 +127,14 @@ def test_audio_parity(aphrodite_runner, st_model):
     mono_wav = wav.mean(dim=0).numpy()
     prompt = "Describe this audio: <|audio|>"
     ref = st_model.encode([{"audio": audio_path, "text": prompt}], normalize_embeddings=True)
-    with aphrodite_runner(MODEL, runner="pooling", max_model_len=8192) as vm:
+    with sonar_runner(MODEL, runner="pooling", max_model_len=8192) as vm:
         out = vm.embed([{"prompt": prompt, "multi_modal_data": {"audio": (mono_wav, sr)}}])
     sim = _cos(out, ref).min().item()
     assert sim >= MM_COS, f"Audio cosine {sim} < {MM_COS}"
 
 
 @needs_model
-def test_mixed_parity(aphrodite_runner, st_model):
+def test_mixed_parity(sonar_runner, st_model):
     import torchaudio
     from PIL import Image
 
@@ -150,7 +150,7 @@ def test_mixed_parity(aphrodite_runner, st_model):
         [{"image": img, "audio": audio_path, "text": prompt}],
         normalize_embeddings=True,
     )
-    with aphrodite_runner(MODEL, runner="pooling", max_model_len=8192) as vm:
+    with sonar_runner(MODEL, runner="pooling", max_model_len=8192) as vm:
         out = vm.embed(
             [
                 {
@@ -167,41 +167,41 @@ def test_mixed_parity(aphrodite_runner, st_model):
 
 
 @needs_model
-def test_video_parity_uniform_overflow(aphrodite_runner, st_model):
+def test_video_parity_uniform_overflow(sonar_runner, st_model):
     from transformers.video_utils import load_video
 
     video_path = _ensure_synthetic_video("/tmp/test_40s.mp4", duration=40.0, fps=10.0, width=160, height=120)
     frames, meta = load_video(video_path, backend="opencv")
     prompt = "Describe this video: <|video|>"
     ref = st_model.encode([{"video": video_path, "text": prompt}], normalize_embeddings=True)
-    with aphrodite_runner(MODEL, runner="pooling", max_model_len=8192) as vm:
+    with sonar_runner(MODEL, runner="pooling", max_model_len=8192) as vm:
         out = vm.embed([{"prompt": prompt, "multi_modal_data": {"video": (frames, meta)}}])
     sim = _cos(out, ref).min().item()
     assert sim >= MM_COS, f"40s video cosine {sim} < {MM_COS}"
 
 
 @needs_model
-def test_video_parity_portrait(aphrodite_runner, st_model):
+def test_video_parity_portrait(sonar_runner, st_model):
     from transformers.video_utils import load_video
 
     video_path = _ensure_synthetic_video("/tmp/test_portrait.mp4", duration=3.0, fps=10.0, width=120, height=160)
     frames, meta = load_video(video_path, backend="opencv")
     prompt = "Describe this video: <|video|>"
     ref = st_model.encode([{"video": video_path, "text": prompt}], normalize_embeddings=True)
-    with aphrodite_runner(MODEL, runner="pooling", max_model_len=8192) as vm:
+    with sonar_runner(MODEL, runner="pooling", max_model_len=8192) as vm:
         out = vm.embed([{"prompt": prompt, "multi_modal_data": {"video": (frames, meta)}}])
     sim = _cos(out, ref).min().item()
     assert sim >= MM_COS, f"Portrait video cosine {sim} < {MM_COS}"
 
 
 @needs_model
-def test_tower_skip(aphrodite_runner, monkeypatch):
-    monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
+def test_tower_skip(sonar_runner, monkeypatch):
+    monkeypatch.setenv("SONAR_ENABLE_V1_MULTIPROCESSING", "0")
 
     def nparams(m):
         return sum(p.numel() for p in m.parameters()) / 1e6
 
-    with aphrodite_runner(
+    with sonar_runner(
         MODEL,
         runner="pooling",
         max_model_len=2048,
@@ -210,14 +210,14 @@ def test_tower_skip(aphrodite_runner, monkeypatch):
         p_text = vm.apply_model(nparams)[0]
         assert abs(p_text - 271.00) <= 0.05, f"Expected 271.00M text params, got {p_text}M"
 
-    with aphrodite_runner(MODEL, runner="pooling", max_model_len=2048) as vm:
+    with sonar_runner(MODEL, runner="pooling", max_model_len=2048) as vm:
         p_full = vm.apply_model(nparams)[0]
         assert abs(p_full - 744.37) <= 0.05, f"Expected 744.37M full params, got {p_full}M"
 
 
 def test_encoder_contract():
-    from aphrodite.model_executor.models.embedding_gemma2 import EmbeddingGemma2Model
-    from aphrodite.model_executor.models.gemma4_mm import (
+    from sonar.model_executor.models.embedding_gemma2 import EmbeddingGemma2Model
+    from sonar.model_executor.models.gemma4_mm import (
         Gemma4ForConditionalGeneration as G,
     )
 
@@ -260,9 +260,9 @@ def test_encoder_contract():
 
 
 @needs_model
-def test_instance_attribute_access(aphrodite_runner):
+def test_instance_attribute_access(sonar_runner):
     """Check self.<attr> accesses on a real model instance."""
-    from aphrodite.model_executor.models.embedding_gemma2 import EmbeddingGemma2Model
+    from sonar.model_executor.models.embedding_gemma2 import EmbeddingGemma2Model
 
     borrowed_methods = [
         "_parse_and_validate_multimodal_inputs",
@@ -291,20 +291,20 @@ def test_instance_attribute_access(aphrodite_runner):
             )
         return True
 
-    with aphrodite_runner(MODEL, runner="pooling", max_model_len=2048) as vm:
+    with sonar_runner(MODEL, runner="pooling", max_model_len=2048) as vm:
         res = vm.apply_model(check_attrs)
         assert res[0] is True
 
 
 @needs_model
-def test_video_loader_real_video(aphrodite_runner, st_model):
+def test_video_loader_real_video(sonar_runner, st_model):
     """Decode a real MP4 file through EmbeddingGemma2VideoBackend.load_bytes
 
     and VideoMediaIO / MediaConnector with default num_frames=32.
     """
-    from aphrodite.multimodal.media import MediaConnector
-    from aphrodite.multimodal.media.video import VideoMediaIO
-    from aphrodite.multimodal.video import VIDEO_LOADER_REGISTRY
+    from sonar.multimodal.media import MediaConnector
+    from sonar.multimodal.media.video import VideoMediaIO
+    from sonar.multimodal.video import VIDEO_LOADER_REGISTRY
 
     video_path = "/projects/gemma4-aphrodite/videos/test_intel.mp4"
     backend_cls = VIDEO_LOADER_REGISTRY.name2class["embedding_gemma2"]
@@ -334,7 +334,7 @@ def test_video_loader_real_video(aphrodite_runner, st_model):
 
     prompt = "Describe this video: <|video|>"
     ref = st_model.encode([{"video": video_path, "text": prompt}], normalize_embeddings=True)
-    with aphrodite_runner(MODEL, runner="pooling", max_model_len=8192) as vm:
+    with sonar_runner(MODEL, runner="pooling", max_model_len=8192) as vm:
         out = vm.embed(
             [
                 {
@@ -348,11 +348,11 @@ def test_video_loader_real_video(aphrodite_runner, st_model):
 
 
 @needs_model
-def test_video_loader_duplicate_expansion_e2e(aphrodite_runner, st_model):
+def test_video_loader_duplicate_expansion_e2e(sonar_runner, st_model):
     """End-to-end duplicate expansion test with low-fps clip."""
     import numpy as np
 
-    from aphrodite.multimodal.video import VIDEO_LOADER_REGISTRY
+    from sonar.multimodal.video import VIDEO_LOADER_REGISTRY
 
     backend_cls = VIDEO_LOADER_REGISTRY.name2class["embedding_gemma2"]
     assert issubclass(backend_cls, EmbeddingGemma2VideoBackend)
@@ -370,7 +370,7 @@ def test_video_loader_duplicate_expansion_e2e(aphrodite_runner, st_model):
     assert np.array_equal(frames[2], frames[3])
 
     prompt = "Describe this video: <|video|>"
-    with aphrodite_runner(MODEL, runner="pooling", max_model_len=8192) as vm:
+    with sonar_runner(MODEL, runner="pooling", max_model_len=8192) as vm:
         out = vm.embed([{"prompt": prompt, "multi_modal_data": {"video": (frames, meta)}}])
     ref = st_model.encode([{"video": lowfps_path, "text": prompt}], normalize_embeddings=True)
     sim = _cos(out, ref).min().item()
@@ -385,7 +385,7 @@ def test_video_loader_indices():
     )
     from transformers.video_utils import VideoMetadata
 
-    from aphrodite.multimodal.video import (
+    from sonar.multimodal.video import (
         VIDEO_LOADER_REGISTRY,
         VideoSourceMetadata,
         VideoTargetMetadata,
@@ -398,33 +398,33 @@ def test_video_loader_indices():
     # Case 1: clip shorter than 32s (e.g. 5s @ 24fps = 120 frames)
     src_5s = VideoSourceMetadata(total_frames_num=120, original_fps=24.0, duration=5.0)
     tgt = VideoTargetMetadata(num_frames=-1, fps=1.0, max_duration=300)
-    aphrodite_indices = backend_cls.compute_frames_index_to_sample(src_5s, tgt)
+    sonar_indices = backend_cls.compute_frames_index_to_sample(src_5s, tgt)
     hf_meta_5s = VideoMetadata(fps=24.0, duration=5.0, total_num_frames=120)
     hf_indices_5s = hf_proc.sample_frames(hf_meta_5s, fps=1.0, max_frames=32, overflow_strategy="uniform").tolist()
-    assert aphrodite_indices == hf_indices_5s
+    assert sonar_indices == hf_indices_5s
 
     # Case 2: clip shorter than 1s (e.g. 0.5s @ 24fps = 12 frames)
     src_sub1s = VideoSourceMetadata(total_frames_num=12, original_fps=24.0, duration=0.5)
-    aphrodite_sub1s = backend_cls.compute_frames_index_to_sample(src_sub1s, tgt)
+    sonar_sub1s = backend_cls.compute_frames_index_to_sample(src_sub1s, tgt)
     hf_meta_sub1s = VideoMetadata(fps=24.0, duration=0.5, total_num_frames=12)
     hf_indices_sub1s = hf_proc.sample_frames(
         hf_meta_sub1s, fps=1.0, max_frames=32, overflow_strategy="uniform"
     ).tolist()
-    assert aphrodite_sub1s == hf_indices_sub1s
+    assert sonar_sub1s == hf_indices_sub1s
 
     # Case 3: clip longer than 32s (e.g. 40s @ 10fps = 400 frames)
     # -> uniform overflow cap 32 frames
     src_40s = VideoSourceMetadata(total_frames_num=400, original_fps=10.0, duration=40.0)
-    aphrodite_40s = backend_cls.compute_frames_index_to_sample(src_40s, tgt)
+    sonar_40s = backend_cls.compute_frames_index_to_sample(src_40s, tgt)
     hf_meta_40s = VideoMetadata(fps=10.0, duration=40.0, total_num_frames=400)
     hf_indices_40s = hf_proc.sample_frames(hf_meta_40s, fps=1.0, max_frames=32, overflow_strategy="uniform").tolist()
-    assert aphrodite_40s == hf_indices_40s
-    assert len(aphrodite_40s) == 32
+    assert sonar_40s == hf_indices_40s
+    assert len(sonar_40s) == 32
 
     # Case 4: default target fps (target.fps <= 0 defaults to 1.0)
     tgt_default_fps = VideoTargetMetadata(num_frames=-1, fps=-1.0, max_duration=300)
-    aphrodite_def = backend_cls.compute_frames_index_to_sample(src_5s, tgt_default_fps)
-    assert aphrodite_def == hf_indices_5s
+    sonar_def = backend_cls.compute_frames_index_to_sample(src_5s, tgt_default_fps)
+    assert sonar_def == hf_indices_5s
 
     # Case 5 (NEW-2): 60 fps / 300 s (18000 frames) vs HF sample_frames
     src_300s = VideoSourceMetadata(total_frames_num=18000, original_fps=60.0, duration=300.0)
@@ -459,7 +459,7 @@ def test_video_loader_duplicate_expansion():
     )
     from transformers.video_utils import VideoMetadata
 
-    from aphrodite.multimodal.video import (
+    from sonar.multimodal.video import (
         VIDEO_LOADER_REGISTRY,
         VideoSourceMetadata,
         VideoTargetMetadata,
@@ -473,12 +473,12 @@ def test_video_loader_duplicate_expansion():
     # Source has fewer frames than requested sampled frames, requiring duplicates.
     src_lowfps = VideoSourceMetadata(total_frames_num=2, original_fps=0.5, duration=4.0)
     tgt = VideoTargetMetadata(num_frames=-1, fps=1.0, max_duration=300)
-    aphrodite_indices = backend_cls.compute_frames_index_to_sample(src_lowfps, tgt)
+    sonar_indices = backend_cls.compute_frames_index_to_sample(src_lowfps, tgt)
     hf_meta = VideoMetadata(fps=0.5, duration=4.0, total_num_frames=2)
     hf_indices = hf_proc.sample_frames(hf_meta, fps=1.0, max_frames=32, overflow_strategy="uniform").tolist()
-    assert aphrodite_indices == hf_indices
-    assert len(aphrodite_indices) == 4
-    assert aphrodite_indices == [0, 0, 1, 1]
+    assert sonar_indices == hf_indices
+    assert len(sonar_indices) == 4
+    assert sonar_indices == [0, 0, 1, 1]
 
 
 def test_video_media_io_embedding_gemma2():
@@ -489,8 +489,8 @@ def test_video_media_io_embedding_gemma2():
     import os
     from unittest.mock import MagicMock
 
-    from aphrodite.multimodal.media import MediaConnector
-    from aphrodite.multimodal.media.video import VideoMediaIO
+    from sonar.multimodal.media import MediaConnector
+    from sonar.multimodal.media.video import VideoMediaIO
 
     video_path = "/projects/gemma4-aphrodite/videos/test_intel.mp4"
     if not os.path.exists(video_path):
@@ -524,11 +524,11 @@ def test_config_capping_and_explicit_limits():
     from types import SimpleNamespace
     from unittest.mock import patch
 
-    from aphrodite.model_executor.models.config import (
+    from sonar.model_executor.models.config import (
         EmbeddingGemma2ModelConfig,
         Gemma4Config,
     )
-    from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
+    from sonar.v1.attention.backends.registry import AttentionBackendEnum
 
     # (a) When attention backend is None, default to TRITON_ATTN,
     # and default capping: max_model_len > 8192 without explicit limit capped to 8192
@@ -592,7 +592,7 @@ def test_sentence_transformer_tokenizer_config_max_seq_length(tmp_path):
     """
     import json
 
-    from aphrodite.transformers_utils.config import (
+    from sonar.transformers_utils.config import (
         get_sentence_transformer_tokenizer_config,
     )
 

@@ -15,9 +15,9 @@ from PIL import Image
 from transformers import BaseVideoProcessor, BatchFeature, ImageProcessingMixin, TensorType
 from transformers.processing_utils import ProcessorMixin
 
-from aphrodite.multimodal.image import convert_image_mode
-from aphrodite.multimodal.processing import PromptUpdateDetails, cached_encode
-from aphrodite.tokenizers.hf import HfTokenizer
+from sonar.multimodal.image import convert_image_mode
+from sonar.multimodal.processing import PromptUpdateDetails, cached_encode
+from sonar.tokenizers.hf import HfTokenizer
 
 IMAGENET_MEAN = (0.485, 0.456, 0.406)
 IMAGENET_STD = (0.229, 0.224, 0.225)

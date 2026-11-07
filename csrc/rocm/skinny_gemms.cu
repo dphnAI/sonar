@@ -1880,7 +1880,7 @@ torch::Tensor wvSplitKrc(const at::Tensor& in_a, const at::Tensor& in_b,
   // if the readback cost changes, and note the directions are not symmetric:
   // capping too high costs about twice what capping too low does.
   // Mirrored by rocm_unquantized_gemm_impl() in
-  // aphrodite/model_executor/layers/utils.py; both must pick the same chunkk or
+  // sonar/model_executor/layers/utils.py; both must pick the same chunkk or
   // the host-side fit check bounds the wrong k_rnd.
   constexpr int64_t CHUNKK2_MAX_SHARDS = 11;
   const int64_t shards_chunkk2 = (K_in + 256 - 1) / 256;  // 256 == 512 / 2
@@ -1953,7 +1953,7 @@ torch::Tensor wvSplitKrc(const at::Tensor& in_a, const at::Tensor& in_b,
                   "wvSplitKrc: the split-K workspace pool cannot be allocated "
                   "during graph capture. Call "
                   "warmup_rocm_skinny_gemm_workspaces() "
-                  "(aphrodite/model_executor/layers/utils.py) eagerly first.");
+                  "(sonar/model_executor/layers/utils.py) eagerly first.");
       P.glbl_stride = wv_gf;
       P.cntr_stride = wv_ci;
       P.glbl = torch::zeros(wv_gf * wv_all_slots, torch::TensorOptions()
@@ -1979,7 +1979,7 @@ torch::Tensor wvSplitKrc(const at::Tensor& in_a, const at::Tensor& in_b,
     if (wv_capturing) {
       // One workspace per capturing stream, so graphs captured on the same
       // stream share it -- safe because at most one of them replays at a time
-      // (Aphrodite captures one graph per padded batch size, and runs one per
+      // (Sonar captures one graph per padded batch size, and runs one per
       // step).
       auto cap_it = P.capture_slot_of.find(stream);
       if (cap_it == P.capture_slot_of.end()) {

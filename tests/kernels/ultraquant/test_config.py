@@ -2,10 +2,10 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """CPU-only integration tests for the UltraQuant cache dtype."""
 
-from aphrodite.v1.attention.backends.ultraquant_attn import (
+from sonar.v1.attention.backends.ultraquant_attn import (
     UltraQuantAttentionBackend,
 )
-from aphrodite.v1.attention.ops.flydsl_ultraquant_decode import (
+from sonar.v1.attention.ops.flydsl_ultraquant_decode import (
     ultraquant_flydsl_decode_eligible,
 )
 

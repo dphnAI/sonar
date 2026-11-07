@@ -3,16 +3,16 @@
 
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.config import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEParallelConfig,
     FusedMoEQuantConfig,
     RoutingMethodType,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     kMxfp4Dynamic,
     kMxfp4Static,
@@ -63,10 +63,10 @@ def aiter_triton_kernel_w4a4_moe_forward(
     except ImportError:
         from aiter.ops.triton.moe_routing import routing as _routing_mod
 
-    from aphrodite.model_executor.layers.quantization.utils.mxfp4_utils import (
+    from sonar.model_executor.layers.quantization.utils.mxfp4_utils import (
         get_aiter_mx_scale_swizzle,
     )
-    from aphrodite.platforms.rocm import on_gfx1250
+    from sonar.platforms.rocm import on_gfx1250
 
     if on_gfx1250():
         _routing_mod.is_tdm_avail = lambda: False
@@ -232,7 +232,7 @@ class AiterW4A4ExpertsMonolithic(mk.FusedMoEExpertsMonolithic):
     def _supports_current_device() -> bool:
         if not rocm_aiter_ops.is_enabled():
             return False
-        from aphrodite.platforms.rocm import on_gfx1250
+        from sonar.platforms.rocm import on_gfx1250
 
         return on_gfx1250()
 

@@ -4,10 +4,10 @@
 from fastapi import Request
 from starlette.responses import JSONResponse
 
-from aphrodite.entrypoints.launchers.launcher import terminate_if_errored
-from aphrodite.exceptions import AphroditeError, GenerationError
-from aphrodite.logger import init_logger
-from aphrodite.v1.engine.exceptions import EngineDeadError, EngineGenerateError
+from sonar.entrypoints.launchers.launcher import terminate_if_errored
+from sonar.exceptions import GenerationError, SonarError
+from sonar.logger import init_logger
+from sonar.v1.engine.exceptions import EngineDeadError, EngineGenerateError
 
 from ..error_response import create_error_response
 from .exception import exception_handler
@@ -15,8 +15,8 @@ from .exception import exception_handler
 logger = init_logger(__name__)
 
 
-async def aphrodite_error_handler(req: Request, exc: AphroditeError):
-    """Dispatch a Aphrodite-specific error to the appropriate handler."""
+async def sonar_error_handler(req: Request, exc: SonarError):
+    """Dispatch a Sonar-specific error to the appropriate handler."""
     if isinstance(exc, (EngineGenerateError, EngineDeadError)):
         return await engine_error_handler(req, exc)
     elif isinstance(exc, GenerationError):
@@ -26,7 +26,7 @@ async def aphrodite_error_handler(req: Request, exc: AphroditeError):
 
 
 async def engine_error_handler(req: Request, exc: EngineDeadError | EngineGenerateError):
-    """APHRODITE V1 AsyncLLM catches exceptions and returns
+    """SONAR V1 AsyncLLM catches exceptions and returns
     only two types: EngineGenerateError and EngineDeadError.
 
     EngineGenerateError is raised by the per request generate()

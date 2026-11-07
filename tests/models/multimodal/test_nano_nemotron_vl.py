@@ -10,21 +10,21 @@ import torch
 import torch.nn as nn
 from PIL import Image
 
-from aphrodite import envs
-from aphrodite.config import MultiModalConfig
-from aphrodite.engine.arg_utils import EngineArgs
-from aphrodite.model_executor.layers.fusion.mm_input_norm import FusedMMInputNorm
-from aphrodite.model_executor.models.nano_nemotron_vl import (
+from sonar import envs
+from sonar.config import MultiModalConfig
+from sonar.engine.arg_utils import EngineArgs
+from sonar.model_executor.layers.fusion.mm_input_norm import FusedMMInputNorm
+from sonar.model_executor.models.nano_nemotron_vl import (
     NanoNemotronVLMultiModalProcessor,
     NemotronH_Nano_VL_V2,
 )
-from aphrodite.multimodal.parse import (
+from sonar.multimodal.parse import (
     MultiModalDataItems,
     MultiModalDataParser,
     VideoProcessorItems,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.transformers_utils.processors.nano_nemotron_vl import (
+from sonar.platforms import current_platform
+from sonar.transformers_utils.processors.nano_nemotron_vl import (
     DynamicResolutionImageTiler,
     NanoNemotronVLProcessor,
     _bicubic_resize_and_normalize,
@@ -38,7 +38,7 @@ _DEVICE = torch.device(current_platform.device_type)
 @pytest.mark.parametrize("do_cpu_normalize", [True, False])
 @pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float16])
 def test_nemotron_resized_normalization_matches_reference(
-    dtype: torch.dtype, do_cpu_normalize: bool, default_aphrodite_config
+    dtype: torch.dtype, do_cpu_normalize: bool, default_sonar_config
 ):
     pixels = torch.randint(
         0,
@@ -80,7 +80,7 @@ def test_nemotron_resized_normalization_matches_reference(
 
 
 def test_nemotron_dynamic_device_normalization_matches_cpu_reference(
-    default_aphrodite_config,
+    default_sonar_config,
 ):
     image_mean = [0.485, 0.456, 0.406]
     image_std = [0.229, 0.224, 0.225]
@@ -111,7 +111,7 @@ def test_nemotron_cpu_normalized_pixels_bypass_input_norm():
 
 
 @pytest.mark.parametrize("modality", ["image", "video", "dynamic_image"])
-def test_nemotron_processor_defers_normalization_to_device(modality: str, default_aphrodite_config):
+def test_nemotron_processor_defers_normalization_to_device(modality: str, default_sonar_config):
     dynamic_image = modality == "dynamic_image"
     config = SimpleNamespace(
         force_image_size=16,
@@ -371,7 +371,7 @@ def _make_mm_items_with_video_bytes(
 
 
 def test_extract_audio_from_videos_passes_max_duration():
-    """_extract_audio_from_videos must forward APHRODITE_MAX_AUDIO_DECODE_DURATION_S
+    """_extract_audio_from_videos must forward SONAR_MAX_AUDIO_DECODE_DURATION_S
     to load_audio_pyav so decompression-bomb audio is rejected."""
     dummy_audio = (np.zeros(16000, dtype=np.float32), 16000.0)
     mm_items = _make_mm_items_with_video_bytes(b"\x00" * 64)
@@ -379,13 +379,13 @@ def test_extract_audio_from_videos_passes_max_duration():
     processor = object.__new__(NanoNemotronVLMultiModalProcessor)
     processor.data_parser = MultiModalDataParser(target_sr=dummy_audio[1], target_channels=1)
 
-    target = "aphrodite.model_executor.models.nano_nemotron_vl.load_audio_pyav"
+    target = "sonar.model_executor.models.nano_nemotron_vl.load_audio_pyav"
     with patch(target, return_value=dummy_audio) as mock_load:
         processor._extract_audio_from_videos(mm_items)
 
     mock_load.assert_called_once()
     _, kwargs = mock_load.call_args
-    assert kwargs["max_duration_s"] == envs.APHRODITE_MAX_AUDIO_DECODE_DURATION_S
+    assert kwargs["max_duration_s"] == envs.SONAR_MAX_AUDIO_DECODE_DURATION_S
 
 
 def test_extract_audio_from_videos_rejects_oversized_audio():
@@ -395,7 +395,7 @@ def test_extract_audio_from_videos_rejects_oversized_audio():
 
     processor = object.__new__(NanoNemotronVLMultiModalProcessor)
 
-    target = "aphrodite.model_executor.models.nano_nemotron_vl.load_audio_pyav"
+    target = "sonar.model_executor.models.nano_nemotron_vl.load_audio_pyav"
     with patch(
         target,
         side_effect=ValueError("Audio exceeds maximum allowed duration"),
@@ -417,10 +417,10 @@ def test_extract_audio_from_videos_rejects_oversized_audio():
 @pytest.mark.parametrize(("requested", "expected"), [("auto", "float32"), ("bfloat16", "bfloat16")])
 def test_omni_mamba_ssm_cache_dtype(model: str, requested: str, expected: str):
     """Omni archs get the NemotronH float32 SSM-cache default; explicit wins."""
-    aphrodite_config = EngineArgs(
+    sonar_config = EngineArgs(
         model=model,
         trust_remote_code=True,
         mamba_ssm_cache_dtype=requested,
         max_model_len=4096,
     ).create_engine_config()
-    assert aphrodite_config.cache_config.mamba_ssm_cache_dtype == expected
+    assert sonar_config.cache_config.mamba_ssm_cache_dtype == expected

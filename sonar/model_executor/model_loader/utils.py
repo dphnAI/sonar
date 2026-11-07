@@ -11,45 +11,45 @@ from typing import Any, assert_never
 import torch
 from torch import nn
 
-import aphrodite.envs as envs
-from aphrodite.config import (
-    AphroditeConfig,
+import sonar.envs as envs
+from sonar.config import (
     LoadConfig,
     ModelConfig,
+    SonarConfig,
     replace,
-    set_current_aphrodite_config,
+    set_current_sonar_config,
 )
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.attention import is_deferred_attention_layer
-from aphrodite.model_executor.layers.quantization.base_config import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.attention import is_deferred_attention_layer
+from sonar.model_executor.layers.quantization.base_config import (
     QuantizationConfig,
     QuantizeMethodBase,
 )
-from aphrodite.model_executor.model_loader.reload import (
+from sonar.model_executor.model_loader.reload import (
     record_metadata_for_reloading,
     set_torchao_reload_attrs,
 )
-from aphrodite.model_executor.model_loader.weight_cache.utils import (
+from sonar.model_executor.model_loader.weight_cache.utils import (
     is_draft_model_cacheable,
 )
-from aphrodite.model_executor.model_loader.weight_tying import maybe_retie_word_embeddings
-from aphrodite.model_executor.model_loader.weight_utils import finalize_model_weights
-from aphrodite.model_executor.models.interfaces import SupportsQuant
-from aphrodite.model_executor.utils import is_weights_pre_processed
-from aphrodite.tracing import instrument
-from aphrodite.utils.mem_utils import release_device_memory_under_pressure
-from aphrodite.utils.platform_utils import is_pin_memory_available
-from aphrodite.utils.torch_utils import get_accelerator_view_from_cpu_tensor
+from sonar.model_executor.model_loader.weight_tying import maybe_retie_word_embeddings
+from sonar.model_executor.model_loader.weight_utils import finalize_model_weights
+from sonar.model_executor.models.interfaces import SupportsQuant
+from sonar.model_executor.utils import is_weights_pre_processed
+from sonar.tracing import instrument
+from sonar.utils.mem_utils import release_device_memory_under_pressure
+from sonar.utils.platform_utils import is_pin_memory_available
+from sonar.utils.torch_utils import get_accelerator_view_from_cpu_tensor
 
 logger = init_logger(__name__)
 
 
-def get_draft_load_config(aphrodite_config: AphroditeConfig) -> LoadConfig:
+def get_draft_load_config(sonar_config: SonarConfig) -> LoadConfig:
     """Get load config for the speculative draft model."""
-    speculative_config = aphrodite_config.speculative_config
+    speculative_config = sonar_config.speculative_config
     if speculative_config is not None and speculative_config.draft_load_config is not None:
         return speculative_config.draft_load_config
-    load_config = aphrodite_config.load_config
+    load_config = sonar_config.load_config
     if load_config is not None and load_config.load_format != "ipc_cache":
         return load_config
     kwargs: dict[str, Any] = (
@@ -70,7 +70,7 @@ def get_draft_load_config(aphrodite_config: AphroditeConfig) -> LoadConfig:
 
 @instrument(span_name="Initialize model")
 def initialize_model(
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     *,
     prefix: str = "",
     model_class: type[nn.Module] | None = None,
@@ -78,33 +78,33 @@ def initialize_model(
 ) -> nn.Module:
     """Initialize a model with the given configurations."""
     if model_config is None:
-        model_config = aphrodite_config.model_config
+        model_config = sonar_config.model_config
     if model_class is None:
         model_class, _ = get_model_architecture(model_config)
 
-    from aphrodite.model_executor.models.expert_substitution import (
+    from sonar.model_executor.models.expert_substitution import (
         as_expert_substitution_model,
     )
 
     model_class = as_expert_substitution_model(model_class, model_config)
 
-    if aphrodite_config.quant_config is not None:
-        configure_quant_config(aphrodite_config.quant_config, model_class)
+    if sonar_config.quant_config is not None:
+        configure_quant_config(sonar_config.quant_config, model_class)
 
     signatures = inspect.signature(model_class.__init__)
     all_params = [param.name for param in signatures.parameters.values()]
-    if "aphrodite_config" in all_params and "prefix" in all_params:
+    if "sonar_config" in all_params and "prefix" in all_params:
         # new-style model class
-        with set_current_aphrodite_config(aphrodite_config, check_compile=True, prefix=prefix):
-            model = model_class(aphrodite_config=aphrodite_config, prefix=prefix)
+        with set_current_sonar_config(sonar_config, check_compile=True, prefix=prefix):
+            model = model_class(sonar_config=sonar_config, prefix=prefix)
             record_metadata_for_reloading(model)
             return model
 
     msg = (
-        "Aphrodite model class should accept `aphrodite_config` and `prefix` as "
+        "Sonar model class should accept `sonar_config` and `prefix` as "
         "input arguments. Possibly you have an old-style model class"
-        " registered from out of tree and it is used for new Aphrodite version. "
-        "Check https://docs.aphrodite.ai/en/latest/design/arch_overview.html "
+        " registered from out of tree and it is used for new Sonar version. "
+        "Check https://sonar.dphn.ai/en/latest/design/arch_overview.html "
         "for the design and update the model class accordingly."
     )
     warnings.warn(msg, DeprecationWarning, stacklevel=2)
@@ -120,14 +120,14 @@ def initialize_model(
     if "config" in all_params:
         kwargs["config"] = model_config.hf_config
     if "cache_config" in all_params:
-        kwargs["cache_config"] = aphrodite_config.cache_config
+        kwargs["cache_config"] = sonar_config.cache_config
     if "quant_config" in all_params:
-        kwargs["quant_config"] = aphrodite_config.quant_config
+        kwargs["quant_config"] = sonar_config.quant_config
     if "lora_config" in all_params:
-        kwargs["lora_config"] = aphrodite_config.lora_config
+        kwargs["lora_config"] = sonar_config.lora_config
     if "scheduler_config" in all_params:
-        kwargs["scheduler_config"] = aphrodite_config.scheduler_config
-    with set_current_aphrodite_config(aphrodite_config, check_compile=True, prefix=prefix):
+        kwargs["scheduler_config"] = sonar_config.scheduler_config
+    with set_current_sonar_config(sonar_config, check_compile=True, prefix=prefix):
         model = model_class(**kwargs)
         record_metadata_for_reloading(model)
 
@@ -143,11 +143,11 @@ def process_weights_after_loading(model: nn.Module, model_config: ModelConfig, t
     """
     # Reclaim memory when an explicit lm_head has been
     # loaded, but it is identical to the input embeddings.
-    from aphrodite.model_executor.layers.quantization.online.fp8 import OnlineLinearBase
-    from aphrodite.model_executor.layers.quantization.online.moe_base import (
+    from sonar.model_executor.layers.quantization.online.fp8 import OnlineLinearBase
+    from sonar.model_executor.layers.quantization.online.moe_base import (
         OnlineMoEMethodBase,
     )
-    from aphrodite.model_executor.model_loader.reload.direct import (
+    from sonar.model_executor.model_loader.reload.direct import (
         direct_reload_enabled,
         record_checkpoint_layout,
     )
@@ -187,7 +187,7 @@ def process_weights_after_loading(model: nn.Module, model_config: ModelConfig, t
                 quant_method.process_weights_after_loading(module)
             # process_weights_after_loading may swap in freshly-created
             # Parameters (e.g. FP8 requantization), which are stamped with the
-            # global rank in BaseAphroditeParameter.__init__. Re-reconcile their
+            # global rank in BaseSonarParameter.__init__. Re-reconcile their
             # TP state to the layer so a later weight reload / RL weight-refit
             # narrows replicated (disable_tp) weights at the correct offset.
             if hasattr(module, "update_param_tp_status"):
@@ -230,7 +230,7 @@ def device_loading_context(module: torch.nn.Module, target_device: torch.device)
         if p.device.type == "cpu":
             cpu_params.add(name)
             p.data = p.data.to(target_device)
-        if getattr(p, "_aphrodite_is_uva_offloaded", False):
+        if getattr(p, "_sonar_is_uva_offloaded", False):
             uva_offloaded_parameters.append(name)
         # Parameters already on target device are not touched
 
@@ -238,7 +238,7 @@ def device_loading_context(module: torch.nn.Module, target_device: torch.device)
         yield module
 
     finally:
-        use_pin_memory = is_pin_memory_available() and not envs.APHRODITE_WEIGHT_OFFLOADING_DISABLE_PIN_MEMORY
+        use_pin_memory = is_pin_memory_available() and not envs.SONAR_WEIGHT_OFFLOADING_DISABLE_PIN_MEMORY
         # Restore the CPU-resident parameters, ignoring new parameters.
         for name, p in module.named_parameters():
             if name in cpu_params:
@@ -246,20 +246,20 @@ def device_loading_context(module: torch.nn.Module, target_device: torch.device)
 
             # parameter is UVA offloaded, but was replaced with a new device tensor
             # re-offload it to CPU using UVA
-            if name in uva_offloaded_parameters and not getattr(p, "_aphrodite_is_uva_offloaded", False):
+            if name in uva_offloaded_parameters and not getattr(p, "_sonar_is_uva_offloaded", False):
                 cpu_data = torch.empty_like(p.data, device="cpu", pin_memory=use_pin_memory).copy_(p.data)
                 p.data = get_accelerator_view_from_cpu_tensor(cpu_data)
-                p._aphrodite_is_uva_offloaded = True
+                p._sonar_is_uva_offloaded = True
 
 
 @contextmanager
 def online_quantization_timing_context(layer: nn.Module, quant_method: QuantizeMethodBase):
     """Accumulate online quantization processing time for ``quant_method``."""
-    from aphrodite.model_executor.layers.quantization.online.base import (
+    from sonar.model_executor.layers.quantization.online.base import (
         OnlineQuantizationConfig,
     )
-    from aphrodite.model_executor.layers.quantization.online.fp8 import OnlineLinearBase
-    from aphrodite.model_executor.layers.quantization.online.moe_base import (
+    from sonar.model_executor.layers.quantization.online.fp8 import OnlineLinearBase
+    from sonar.model_executor.layers.quantization.online.moe_base import (
         OnlineMoEMethodBase,
     )
 
@@ -288,7 +288,7 @@ _MODEL_ARCH_BY_HASH = dict[int, tuple[type[nn.Module], str]]()
 
 
 def _get_model_architecture(model_config: ModelConfig) -> tuple[type[nn.Module], str]:
-    from aphrodite.model_executor.models.adapters import as_embedding_model, as_seq_cls_model
+    from sonar.model_executor.models.adapters import as_embedding_model, as_seq_cls_model
 
     architectures = getattr(model_config.hf_config, "architectures", None) or []
 
@@ -298,10 +298,10 @@ def _get_model_architecture(model_config: ModelConfig) -> tuple[type[nn.Module],
     )
 
     if arch == model_config._get_transformers_backend_cls():
-        assert model_config.model_impl != "aphrodite"
+        assert model_config.model_impl != "sonar"
         if model_config.model_impl == "auto":
             logger.warning_once(
-                "%s has no Aphrodite implementation, falling back to Transformers "
+                "%s has no Sonar implementation, falling back to Transformers "
                 "implementation. Some features may not be supported and "
                 "performance may not be optimal.",
                 arch,
@@ -360,11 +360,11 @@ def configure_quant_config(quant_config: QuantizationConfig, model_class: type[n
     function can be removed
     """
     if not issubclass(model_class, SupportsQuant):
-        hf_to_aphrodite_mapper = getattr(model_class, "hf_to_aphrodite_mapper", None)
+        hf_to_sonar_mapper = getattr(model_class, "hf_to_sonar_mapper", None)
         packed_mapping = getattr(model_class, "packed_modules_mapping", None)
 
         # pass mappings by reference to quant_config
-        if hf_to_aphrodite_mapper is not None:
-            quant_config.apply_aphrodite_mapper(hf_to_aphrodite_mapper.get_rename_mapper())
+        if hf_to_sonar_mapper is not None:
+            quant_config.apply_sonar_mapper(hf_to_sonar_mapper.get_rename_mapper())
         if packed_mapping is not None:
             quant_config.packed_modules_mapping = packed_mapping

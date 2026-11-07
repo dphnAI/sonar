@@ -8,12 +8,12 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.config.model import PROCESSED_LOGPROBS_MODES, LogprobsMode
-from aphrodite.platforms import current_platform
-from aphrodite.v1.worker.gpu.sample.logprob import LogprobTokenIdsState
-from aphrodite.v1.worker.gpu.sample.output import SamplingMaskTensors
-from aphrodite.v1.worker.gpu.spec_decode.draft_logits import DraftLogitsCache
-from aphrodite.v1.worker.gpu.spec_decode.rejection_sampler import (
+from sonar.config.model import PROCESSED_LOGPROBS_MODES, LogprobsMode
+from sonar.platforms import current_platform
+from sonar.v1.worker.gpu.sample.logprob import LogprobTokenIdsState
+from sonar.v1.worker.gpu.sample.output import SamplingMaskTensors
+from sonar.v1.worker.gpu.spec_decode.draft_logits import DraftLogitsCache
+from sonar.v1.worker.gpu.spec_decode.rejection_sampler import (
     RejectionSampler,
     _iter_request_chunks,
 )

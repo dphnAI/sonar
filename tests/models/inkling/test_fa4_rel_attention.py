@@ -18,17 +18,17 @@ import importlib
 import pytest
 import torch
 
-from aphrodite.models.inkling.nvidia.attention import (
+from sonar.models.inkling.nvidia.attention import (
     InklingAttention,
     compute_log_scaling_tau,
 )
-from aphrodite.models.inkling.nvidia.ops.fa4_rel_attention import (
+from sonar.models.inkling.nvidia.ops.fa4_rel_attention import (
     _INKLING_FA4_REL_ATTENTION_KERNEL,
     _use_sheared_bias,
     inkling_fa4_num_splits,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.platforms.interface import DeviceCapability
+from sonar.platforms import current_platform
+from sonar.platforms.interface import DeviceCapability
 
 _cap = current_platform.get_device_capability() if current_platform.is_cuda() else None
 
@@ -313,7 +313,7 @@ def _run_case(seq_lens, num_heads, num_kv_heads, rel_extent, window_left, seed=0
 )
 @torch.inference_mode()
 def test_score_mod_relative_attention(monkeypatch):
-    module = importlib.import_module("aphrodite.models.inkling.nvidia.ops.fa4_rel_attention")
+    module = importlib.import_module("sonar.models.inkling.nvidia.ops.fa4_rel_attention")
     monkeypatch.setattr(module, "_use_sheared_bias", lambda: False)
     _run_case(
         [(64, 64), (1, 80)],

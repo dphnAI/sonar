@@ -18,9 +18,9 @@ from dataclasses import dataclass
 
 import torch
 
-from aphrodite.model_executor.layers.mamba.mamba_utils import is_conv_state_dim_first
-from aphrodite.v1.attention.backends.registry import MambaAttentionBackendEnum
-from aphrodite.v1.kv_cache_interface import MambaSpec
+from sonar.model_executor.layers.mamba.mamba_utils import is_conv_state_dim_first
+from sonar.v1.attention.backends.registry import MambaAttentionBackendEnum
+from sonar.v1.kv_cache_interface import MambaSpec
 
 
 @dataclass(frozen=True)

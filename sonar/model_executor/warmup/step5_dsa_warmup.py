@@ -10,21 +10,21 @@ prefill longer than top-k regions. Under DP every rank stalls on that rank.
 
 from typing import TYPE_CHECKING, cast
 
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.v1.worker.gpu.warmup import run_mixed_prefill_decode_warmup
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.v1.worker.gpu.warmup import run_mixed_prefill_decode_warmup
 
 if TYPE_CHECKING:
-    from aphrodite.v1.worker.gpu.model_runner import GPUModelRunner
-    from aphrodite.v1.worker.gpu_worker import Worker
+    from sonar.v1.worker.gpu.model_runner import GPUModelRunner
+    from sonar.v1.worker.gpu_worker import Worker
 
 logger = init_logger(__name__)
 
 
 def _step5_dsa_impl(worker: "Worker"):
-    from aphrodite.models.step5.nvidia.sparse_attention import Step5DSAAttentionImpl
+    from sonar.models.step5.nvidia.sparse_attention import Step5DSAAttentionImpl
 
-    context = worker.aphrodite_config.compilation_config.static_forward_context
+    context = worker.sonar_config.compilation_config.static_forward_context
     for layer in context.values():
         impl = getattr(layer, "impl", None)
         if isinstance(impl, Step5DSAAttentionImpl):
@@ -33,10 +33,10 @@ def _step5_dsa_impl(worker: "Worker"):
 
 
 def step5_dsa_warmup(worker: "Worker") -> None:
-    if worker.aphrodite_config.model_config.hf_text_config.model_type != "step5":
+    if worker.sonar_config.model_config.hf_text_config.model_type != "step5":
         return
     if current_platform.is_rocm():
-        from aphrodite.models.step5.amd.warmup import step5_csa_warmup
+        from sonar.models.step5.amd.warmup import step5_csa_warmup
 
         step5_csa_warmup(worker)
         return

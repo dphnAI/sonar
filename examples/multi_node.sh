@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Helper script to manually start or join a Ray cluster for online serving of Aphrodite models.
+# Helper script to manually start or join a Ray cluster for online serving of Sonar models.
 # This script is first executed on the head node, and then on each worker node with the IP address
 # of the head node.
 #
@@ -9,9 +9,9 @@
 #   worker: Starts a worker node that connects to an existing Ray head node.
 #
 # Example usage:
-# On the head node machine, start the Ray head node process and run a Aphrodite server.
+# On the head node machine, start the Ray head node process and run a Sonar server.
 #   ./multi-node-serving.sh leader --ray_port=6379 --ray_cluster_size=<SIZE> [<extra ray args>]  && \
-#   aphrodite serve meta-llama/Meta-Llama-3.1-405B-Instruct --port 8080 --tensor-parallel-size 8 --pipeline_parallel_size 2
+#   sonar serve meta-llama/Meta-Llama-3.1-405B-Instruct --port 8080 --tensor-parallel-size 8 --pipeline_parallel_size 2
 # 
 # On each worker node, start the Ray worker node process.
 #   ./multi-node-serving.sh worker --ray_address=<HEAD_NODE_IP> --ray_port=6379 [<extra ray args>]

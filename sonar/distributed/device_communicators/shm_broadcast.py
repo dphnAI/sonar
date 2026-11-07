@@ -31,12 +31,12 @@ from zmq import (  # type: ignore
     Context,
 )
 
-import aphrodite.envs as envs
-from aphrodite.distributed.utils import StatelessProcessGroup, sched_yield
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.utils.cpu_resource_utils import check_cgroup_memory_available
-from aphrodite.utils.network_utils import (
+import sonar.envs as envs
+from sonar.distributed.utils import StatelessProcessGroup, sched_yield
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.utils.cpu_resource_utils import check_cgroup_memory_available
+from sonar.utils.network_utils import (
     get_ip,
     get_open_zmq_inproc_path,
     get_open_zmq_ipc_path,
@@ -46,23 +46,23 @@ from aphrodite.utils.network_utils import (
 logger = init_logger(__name__)
 
 SPINLOOP_EXT_ENABLED = False
-if envs.APHRODITE_USE_SPINLOOP_EXT:
+if envs.SONAR_USE_SPINLOOP_EXT:
     try:
-        from aphrodite.spinloop import spinloop
+        from sonar.spinloop import spinloop
 
         SPINLOOP_EXT_ENABLED = True
     except ImportError:
-        logger.warning("spinloop extension could not be loaded, disabling APHRODITE_USE_SPINLOOP_EXT!")
+        logger.warning("spinloop extension could not be loaded, disabling SONAR_USE_SPINLOOP_EXT!")
 SPINLOOP_TIMEOUT_SECONDS = 0.1
 
 if TYPE_CHECKING:
     from _typeshed import SizedBuffer
 
-    from aphrodite.distributed.device_communicators.shm_tensor_arena import (
+    from sonar.distributed.device_communicators.shm_tensor_arena import (
         ShmTensorArena,
     )
 
-APHRODITE_RINGBUFFER_WARNING_INTERVAL = envs.APHRODITE_RINGBUFFER_WARNING_INTERVAL
+SONAR_RINGBUFFER_WARNING_INTERVAL = envs.SONAR_RINGBUFFER_WARNING_INTERVAL
 # Cap on how long an idle reader parks before re-reading the authoritative SHM
 # written-flag. Bounds lost-notify recovery latency to ~5s while the periodic
 # wakeup stays negligible (one flag check per reader every 5s).
@@ -516,7 +516,7 @@ class MessageQueue:
             # over a socket and cannot map the arena, so the substitution
             # would break them.
             if enable_shm_tensor_arena and n_remote_reader == 0:
-                from aphrodite.distributed.device_communicators import shm_tensor_arena
+                from sonar.distributed.device_communicators import shm_tensor_arena
 
                 self.tensor_arena = shm_tensor_arena.ShmTensorArena(n_local_reader)
 
@@ -582,7 +582,7 @@ class MessageQueue:
         )
         self._close_zmq_on_collect(context)
 
-        logger.debug("Aphrodite message queue communication handle: %s", self.handle)
+        logger.debug("Sonar message queue communication handle: %s", self.handle)
 
     def _close_zmq_on_collect(self, context: zmq.Context) -> None:
         # pyzmq's Context.__del__ can block forever in term() when the context
@@ -620,7 +620,7 @@ class MessageQueue:
 
             arena_handle = handle.tensor_arena_handle
             if arena_handle is not None:
-                from aphrodite.distributed.device_communicators import shm_tensor_arena
+                from sonar.distributed.device_communicators import shm_tensor_arena
 
                 self.tensor_arena = shm_tensor_arena.ShmTensorArena(*arena_handle, reader_rank=self.local_reader_rank)
                 # `shared_memory` is unset (not just None) if attaching to
@@ -736,8 +736,8 @@ class MessageQueue:
                         raise TimeoutError
 
                     # if we wait for a long time, log a message
-                    if elapsed > APHRODITE_RINGBUFFER_WARNING_INTERVAL * n_warning:
-                        logger.info(LONG_WAIT_TIME_LOG_MSG, APHRODITE_RINGBUFFER_WARNING_INTERVAL)
+                    if elapsed > SONAR_RINGBUFFER_WARNING_INTERVAL * n_warning:
+                        logger.info(LONG_WAIT_TIME_LOG_MSG, SONAR_RINGBUFFER_WARNING_INTERVAL)
                         n_warning += 1
 
                     continue
@@ -780,9 +780,7 @@ class MessageQueue:
             self.deadline = sys.maxsize if timeout is None else self.started + timeout
 
             # if should_warn, we need to wake up periodically to log
-            self.warning_wait_time_ms: int | None = (
-                APHRODITE_RINGBUFFER_WARNING_INTERVAL * 1000 if should_warn else None
-            )
+            self.warning_wait_time_ms: int | None = SONAR_RINGBUFFER_WARNING_INTERVAL * 1000 if should_warn else None
 
             self._should_warn = should_warn
             self.n_warning = 1
@@ -810,7 +808,7 @@ class MessageQueue:
             indefinite"""
             if self._should_warn:
                 elapsed = time.monotonic() - self.started
-                if elapsed >= APHRODITE_RINGBUFFER_WARNING_INTERVAL * self.n_warning:
+                if elapsed >= SONAR_RINGBUFFER_WARNING_INTERVAL * self.n_warning:
                     self.n_warning += 1
                     return True
             return False
@@ -852,7 +850,7 @@ class MessageQueue:
 
         # if we wait for a long time, log a message
         if read_timeout.should_warn():
-            logger.info(LONG_WAIT_TIME_LOG_MSG, APHRODITE_RINGBUFFER_WARNING_INTERVAL)
+            logger.info(LONG_WAIT_TIME_LOG_MSG, SONAR_RINGBUFFER_WARNING_INTERVAL)
         return False
 
     @contextmanager
@@ -912,7 +910,7 @@ class MessageQueue:
         with io.BytesIO() as bio:
             pickler: pickle.Pickler
             if arena is not None:
-                from aphrodite.distributed.device_communicators.shm_tensor_arena import (
+                from sonar.distributed.device_communicators.shm_tensor_arena import (
                     _ArenaPickler,
                 )
 
@@ -1029,7 +1027,7 @@ class MessageQueue:
             and a list of handles (only non-empty for the reader process).
 
         """
-        from aphrodite.platforms.interface import get_assigned_physical_gpu_ids
+        from sonar.platforms.interface import get_assigned_physical_gpu_ids
 
         assigned_physical_gpu_ids = get_assigned_physical_gpu_ids()
         if assigned_physical_gpu_ids is not None:
@@ -1093,7 +1091,7 @@ class MessageQueue:
             group_rank = pg.rank
             group_world_size = pg.world_size
             global_ranks = list(range(pg.world_size))
-        from aphrodite.distributed.parallel_state import in_the_same_node_as
+        from sonar.distributed.parallel_state import in_the_same_node_as
 
         status = in_the_same_node_as(pg, source_rank=writer_rank)
         if group_rank == writer_rank:

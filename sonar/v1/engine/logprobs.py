@@ -7,8 +7,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from aphrodite.logger import init_logger
-from aphrodite.logprobs import (
+from sonar.logger import init_logger
+from sonar.logprobs import (
     FlatLogprobs,
     PromptLogprobs,
     SampleLogprobs,
@@ -16,12 +16,12 @@ from aphrodite.logprobs import (
     create_prompt_logprobs,
     create_sample_logprobs,
 )
-from aphrodite.tokenizers.detokenizer_utils import (
+from sonar.tokenizers.detokenizer_utils import (
     TokenizerLike,
     convert_ids_list_to_tokens,
 )
-from aphrodite.v1.engine import EngineCoreOutput, EngineCoreRequest
-from aphrodite.v1.outputs import LogprobsLists, LogprobsTensors
+from sonar.v1.engine import EngineCoreOutput, EngineCoreRequest
+from sonar.v1.outputs import LogprobsLists, LogprobsTensors
 
 logger = init_logger(__name__)
 

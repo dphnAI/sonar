@@ -5,26 +5,26 @@ from typing import Literal
 
 from torch import nn
 
-from aphrodite.config import AphroditeConfig, ModelConfig
-from aphrodite.config.load import LoadConfig
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.model_loader.base_loader import BaseModelLoader
-from aphrodite.model_executor.model_loader.default_loader import DefaultModelLoader
-from aphrodite.model_executor.model_loader.dummy_loader import DummyModelLoader
-from aphrodite.model_executor.model_loader.modelexpress_loader import (
+from sonar.config import ModelConfig, SonarConfig
+from sonar.config.load import LoadConfig
+from sonar.logger import init_logger
+from sonar.model_executor.model_loader.base_loader import BaseModelLoader
+from sonar.model_executor.model_loader.default_loader import DefaultModelLoader
+from sonar.model_executor.model_loader.dummy_loader import DummyModelLoader
+from sonar.model_executor.model_loader.modelexpress_loader import (
     ModelExpressModelLoader,
 )
-from aphrodite.model_executor.model_loader.runai_streamer_loader import (
+from sonar.model_executor.model_loader.runai_streamer_loader import (
     RunaiModelStreamerLoader,
 )
-from aphrodite.model_executor.model_loader.sharded_state_loader import ShardedStateLoader
-from aphrodite.model_executor.model_loader.tensorizer_loader import TensorizerLoader
-from aphrodite.model_executor.model_loader.utils import (
+from sonar.model_executor.model_loader.sharded_state_loader import ShardedStateLoader
+from sonar.model_executor.model_loader.tensorizer_loader import TensorizerLoader
+from sonar.model_executor.model_loader.utils import (
     get_architecture_class_name,
     get_model_architecture,
     get_model_cls,
 )
-from aphrodite.model_executor.model_loader.weight_cache.ipc_loader import IpcModelLoader
+from sonar.model_executor.model_loader.weight_cache.ipc_loader import IpcModelLoader
 
 logger = init_logger(__name__)
 
@@ -68,21 +68,21 @@ _LOAD_FORMAT_TO_MODEL_LOADER: dict[str, type[BaseModelLoader]] = {
 
 
 def register_model_loader(load_format: str):
-    """Register a customized aphrodite model loader.
+    """Register a customized sonar model loader.
 
-    When a load format is not supported by aphrodite, you can register a customized
+    When a load format is not supported by sonar, you can register a customized
     model loader to support it.
 
     Args:
         load_format (str): The model loader format name.
 
     Examples:
-        >>> from aphrodite.config.load import LoadConfig
-        >>> from aphrodite.model_executor.model_loader import (
+        >>> from sonar.config.load import LoadConfig
+        >>> from sonar.model_executor.model_loader import (
         ...     get_model_loader,
         ...     register_model_loader,
         ... )
-        >>> from aphrodite.model_executor.model_loader.base_loader import BaseModelLoader
+        >>> from sonar.model_executor.model_loader.base_loader import BaseModelLoader
         >>>
         >>> @register_model_loader("my_loader")
         ... class MyModelLoader(BaseModelLoader):
@@ -122,7 +122,7 @@ def get_model_loader(load_config: LoadConfig) -> BaseModelLoader:
     """Get a model loader based on the load format."""
     load_format = load_config.load_format
     if load_format == "bitsandbytes" and load_format not in _LOAD_FORMAT_TO_MODEL_LOADER:
-        from aphrodite.model_executor.model_loader.bitsandbytes_loader import BitsAndBytesModelLoader
+        from sonar.model_executor.model_loader.bitsandbytes_loader import BitsAndBytesModelLoader
 
         return BitsAndBytesModelLoader(load_config)
     if load_format not in _LOAD_FORMAT_TO_MODEL_LOADER:
@@ -132,15 +132,15 @@ def get_model_loader(load_config: LoadConfig) -> BaseModelLoader:
 
 def get_model(
     *,
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     model_config: ModelConfig | None = None,
     prefix: str = "",
     load_config: LoadConfig | None = None,
 ) -> nn.Module:
-    loader = get_model_loader(load_config or aphrodite_config.load_config)
+    loader = get_model_loader(load_config or sonar_config.load_config)
     if model_config is None:
-        model_config = aphrodite_config.model_config
-    return loader.load_model(aphrodite_config=aphrodite_config, model_config=model_config, prefix=prefix)
+        model_config = sonar_config.model_config
+    return loader.load_model(sonar_config=sonar_config, model_config=model_config, prefix=prefix)
 
 
 __all__ = [

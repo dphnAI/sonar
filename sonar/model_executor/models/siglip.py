@@ -15,36 +15,36 @@ from transformers import (
     SiglipVisionConfig,
 )
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.multimodal import MultiModalDummyOptions
-from aphrodite.distributed import divide, get_tensor_model_parallel_world_size
-from aphrodite.inputs import MultiModalDataDict, MultiModalInput
-from aphrodite.model_executor.layers.activation import get_act_fn
-from aphrodite.model_executor.layers.attention import (
+from sonar.config import SonarConfig
+from sonar.config.multimodal import MultiModalDummyOptions
+from sonar.distributed import divide, get_tensor_model_parallel_world_size
+from sonar.inputs import MultiModalDataDict, MultiModalInput
+from sonar.model_executor.layers.activation import get_act_fn
+from sonar.model_executor.layers.attention import (
     EncoderOnlyAttention,
     MMEncoderAttention,
 )
-from aphrodite.model_executor.layers.conv import Conv2dLayer
-from aphrodite.model_executor.layers.layernorm import LayerNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.conv import Conv2dLayer
+from sonar.model_executor.layers.layernorm import LayerNorm
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     QKVParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.pooler import DispatchPooler
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.vocab_parallel_embedding import VocabParallelEmbedding
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import (
+from sonar.model_executor.layers.pooler import DispatchPooler
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.vocab_parallel_embedding import VocabParallelEmbedding
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import (
     MultiModalFieldConfig,
     MultiModalKwargsItems,
 )
-from aphrodite.multimodal.parse import (
+from sonar.multimodal.parse import (
     ImageProcessorItems,
     ImageSize,
     MultiModalDataItems,
 )
-from aphrodite.multimodal.processing import (
+from sonar.multimodal.processing import (
     BaseDummyInputsBuilder,
     BaseMultiModalProcessor,
     BaseProcessingInfo,
@@ -54,10 +54,10 @@ from aphrodite.multimodal.processing import (
     PromptUpdate,
     TimingContext,
 )
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.utils.gpu_sync_debug import gpu_sync_allowed
-from aphrodite.utils.tensor_schema import TensorSchema, TensorShape
-from aphrodite.utils.torch_utils import async_tensor_h2d
+from sonar.sequence import IntermediateTensors
+from sonar.utils.gpu_sync_debug import gpu_sync_allowed
+from sonar.utils.tensor_schema import TensorSchema, TensorShape
+from sonar.utils.torch_utils import async_tensor_h2d
 
 from .clip import dual_encoder_has_text_tokens, merge_dual_encoder_text_and_vision
 from .interfaces import MultiModalEmbeddings, SupportsMultiModal, SupportsQuant
@@ -526,7 +526,7 @@ class SiglipEncoder(nn.Module):
 
 
 class SiglipTextTransformer(nn.Module):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_stacked={
             ".q_proj": (".qkv_proj", "q"),
             ".k_proj": (".qkv_proj", "k"),
@@ -577,7 +577,7 @@ class SiglipTextTransformer(nn.Module):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
 
 class SiglipMultiheadAttentionPoolingHead(nn.Module):
@@ -592,7 +592,7 @@ class SiglipMultiheadAttentionPoolingHead(nn.Module):
         super().__init__()
 
         self.probe = nn.Parameter(torch.randn(1, 1, config.hidden_size))
-        # TODO(ChristopherCho): Implement Aphrodite version of MultiheadAttention
+        # TODO(ChristopherCho): Implement Sonar version of MultiheadAttention
         self.attention = torch.nn.MultiheadAttention(config.hidden_size, config.num_attention_heads, batch_first=True)
         self.layernorm = LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.mlp = SiglipMLP(
@@ -619,7 +619,7 @@ class SiglipMultiheadAttentionPoolingHead(nn.Module):
 
 
 class SiglipVisionTransformer(nn.Module):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_stacked={
             ".q_proj": (".qkv_proj", "q"),
             ".k_proj": (".qkv_proj", "k"),
@@ -695,7 +695,7 @@ class SiglipVisionTransformer(nn.Module):
         if self.head is None:
             drops["head."] = None
         if drops:
-            self.hf_to_aphrodite_mapper = self.hf_to_aphrodite_mapper | WeightsMapper(orig_to_new_prefix=drops)
+            self.hf_to_sonar_mapper = self.hf_to_sonar_mapper | WeightsMapper(orig_to_new_prefix=drops)
 
     @property
     def dtype(self):
@@ -766,7 +766,7 @@ class SiglipVisionTransformer(nn.Module):
                     continue
                 yield name, w
 
-        return loader.load_weights(_filter(weights), mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(_filter(weights), mapper=self.hf_to_sonar_mapper)
 
 
 class SiglipVisionModel(nn.Module):
@@ -859,7 +859,7 @@ class SiglipTextEmbeddings(nn.Module):
 class SiglipEmbeddingModel(nn.Module, SupportsMultiModal, SupportsQuant):
     is_pooling_model = True
 
-    hf_to_aphrodite_mapper = WeightsMapper(orig_to_new_substr={".position_ids": None})
+    hf_to_sonar_mapper = WeightsMapper(orig_to_new_substr={".position_ids": None})
 
     packed_modules_mapping = {"qkv_proj": ["q_proj", "k_proj", "v_proj"]}
 
@@ -870,11 +870,11 @@ class SiglipEmbeddingModel(nn.Module, SupportsMultiModal, SupportsQuant):
 
         raise ValueError("Only image modality is supported")
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
 
-        config: SiglipConfig = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        config: SiglipConfig = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
         self.config = config
 
         if hasattr(config, "num_labels"):
@@ -887,14 +887,14 @@ class SiglipEmbeddingModel(nn.Module, SupportsMultiModal, SupportsQuant):
         self.vision_embed_dim = vision_config.hidden_size
         self.text_projection_size = text_config.projection_size
 
-        with self._mark_language_model(aphrodite_config):
+        with self._mark_language_model(sonar_config):
             self.text_model = SiglipTextTransformer(
                 text_config,
                 quant_config=quant_config,
                 prefix=maybe_prefix(prefix, "text_model"),
             )
 
-        with self._mark_tower_model(aphrodite_config, "image"):
+        with self._mark_tower_model(sonar_config, "image"):
             self.vision_model = SiglipVisionTransformer(
                 vision_config,
                 quant_config=quant_config,
@@ -902,7 +902,7 @@ class SiglipEmbeddingModel(nn.Module, SupportsMultiModal, SupportsQuant):
                 use_head=None,  # Allows potential pooling head
             )
 
-        pooler_config = aphrodite_config.model_config.pooler_config
+        pooler_config = sonar_config.model_config.pooler_config
         assert pooler_config is not None
         self.pooler_config = pooler_config
 
@@ -1101,4 +1101,4 @@ class SiglipEmbeddingModel(nn.Module, SupportsMultiModal, SupportsQuant):
             ignore_unexpected_prefixes=["logit_scale.", "logit_bias."],
         )
 
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)

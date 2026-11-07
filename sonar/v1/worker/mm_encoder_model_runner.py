@@ -14,23 +14,23 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.compilation import CUDAGraphMode
-from aphrodite.logger import init_logger
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.utils.gc_utils import freeze_gc_for_cudagraph_capture
-from aphrodite.v1.kv_cache_interface import KVCacheSpec
-from aphrodite.v1.outputs import (
+from sonar.config import SonarConfig
+from sonar.config.compilation import CUDAGraphMode
+from sonar.logger import init_logger
+from sonar.sequence import IntermediateTensors
+from sonar.utils.gc_utils import freeze_gc_for_cudagraph_capture
+from sonar.v1.kv_cache_interface import KVCacheSpec
+from sonar.v1.outputs import (
     ModelRunnerOutput,
     make_empty_encoder_model_runner_output,
 )
-from aphrodite.v1.worker.gpu.cudagraph_utils import BatchExecutionDescriptor
-from aphrodite.v1.worker.gpu.mm.lora import set_active_mm_loras
-from aphrodite.v1.worker.gpu.model_runner import GPUModelRunner
-from aphrodite.v1.worker.workspace import lock_workspace
+from sonar.v1.worker.gpu.cudagraph_utils import BatchExecutionDescriptor
+from sonar.v1.worker.gpu.mm.lora import set_active_mm_loras
+from sonar.v1.worker.gpu.model_runner import GPUModelRunner
+from sonar.v1.worker.workspace import lock_workspace
 
 if TYPE_CHECKING:
-    from aphrodite.v1.core.sched.output import SchedulerOutput
+    from sonar.v1.core.sched.output import SchedulerOutput
 
 logger = init_logger(__name__)
 
@@ -38,12 +38,12 @@ logger = init_logger(__name__)
 class MMEncoderModelRunner(GPUModelRunner):
     """Encoder-only variant of the V2 GPU model runner."""
 
-    def __init__(self, aphrodite_config: AphroditeConfig, device: torch.device):
-        super().__init__(aphrodite_config, device)
+    def __init__(self, sonar_config: SonarConfig, device: torch.device):
+        super().__init__(sonar_config, device)
         assert self.supports_mm_inputs, "An encoder-only instance must serve a multi-modal model."
         assert self.dp_size == 1, "An encoder-only instance does not support DP."
 
-        depth = aphrodite_config.max_concurrent_batches
+        depth = sonar_config.max_concurrent_batches
         # Blocking (sleep) events: busy-polling the driver lock can make this
         # rank a straggler under contention.
         self._input_events = [torch.Event(blocking=True) for _ in range(depth)]

@@ -10,11 +10,11 @@ import pytest
 from PIL import Image, features
 from PIL.BlpImagePlugin import BLPFormatError
 
-from aphrodite.multimodal.image import (
+from sonar.multimodal.image import (
     ALLOWED_IMAGE_FORMATS,
     open_image,
 )
-from aphrodite.multimodal.media import ImageMediaIO, MediaConnector, MediaDecodedBudget
+from sonar.multimodal.media import ImageMediaIO, MediaConnector, MediaDecodedBudget
 
 pytestmark = [pytest.mark.cpu_test, pytest.mark.skip_global_cleanup]
 
@@ -241,7 +241,7 @@ def test_image_media_io_load_file(tmp_path):
 
 def test_image_pixel_limit_respected():
     """A small image within the pixel limit loads successfully."""
-    import aphrodite.envs as envs
+    import sonar.envs as envs
 
     image = Image.new("RGB", (100, 100), (255, 0, 0))
     from io import BytesIO
@@ -250,7 +250,7 @@ def test_image_pixel_limit_respected():
     image.save(buf, format="PNG")
     data = buf.getvalue()
 
-    assert envs.APHRODITE_MAX_IMAGE_PIXELS >= 100 * 100
+    assert envs.SONAR_MAX_IMAGE_PIXELS >= 100 * 100
 
     image_io = ImageMediaIO()
     result = image_io.load_bytes(data)
@@ -259,9 +259,9 @@ def test_image_pixel_limit_respected():
 
 def test_image_pixel_limit_rejected(monkeypatch):
     """An image exceeding the pixel limit is rejected before raster decode."""
-    import aphrodite.envs as envs
+    import sonar.envs as envs
 
-    monkeypatch.setattr(envs, "APHRODITE_MAX_IMAGE_PIXELS", 100)
+    monkeypatch.setattr(envs, "SONAR_MAX_IMAGE_PIXELS", 100)
 
     image = Image.new("RGB", (20, 20), (0, 255, 0))
     from io import BytesIO
@@ -329,10 +329,10 @@ def test_image_decoder_error_rejected(data, cause):
 
 
 def test_image_pixel_limit_disabled(monkeypatch):
-    """Setting APHRODITE_MAX_IMAGE_PIXELS=0 disables the pixel limit."""
-    import aphrodite.envs as envs
+    """Setting SONAR_MAX_IMAGE_PIXELS=0 disables the pixel limit."""
+    import sonar.envs as envs
 
-    monkeypatch.setattr(envs, "APHRODITE_MAX_IMAGE_PIXELS", 0)
+    monkeypatch.setattr(envs, "SONAR_MAX_IMAGE_PIXELS", 0)
 
     image = Image.new("RGB", (1000, 1000), (0, 0, 255))
     from io import BytesIO
@@ -355,22 +355,22 @@ def _png_bytes(width: int, height: int) -> bytes:
 
 
 def test_request_decoded_budget_rejects_aggregate(monkeypatch):
-    import aphrodite.envs as envs
+    import sonar.envs as envs
 
-    monkeypatch.setattr(envs, "APHRODITE_MAX_MEDIA_REQUEST_DECODE_BYTES", 600)
+    monkeypatch.setattr(envs, "SONAR_MAX_MEDIA_REQUEST_DECODE_BYTES", 600)
     budget = MediaDecodedBudget()
     image_io = ImageMediaIO(decoded_budget=budget)
     data = _png_bytes(10, 10)
 
     image_io.load_bytes(data)
-    with pytest.raises(ValueError, match="APHRODITE_MAX_MEDIA_REQUEST_DECODE_BYTES"):
+    with pytest.raises(ValueError, match="SONAR_MAX_MEDIA_REQUEST_DECODE_BYTES"):
         image_io.load_bytes(data)
 
 
 def test_request_decoded_budget_accepts_images_within_limit(monkeypatch):
-    import aphrodite.envs as envs
+    import sonar.envs as envs
 
-    monkeypatch.setattr(envs, "APHRODITE_MAX_MEDIA_REQUEST_DECODE_BYTES", 800)
+    monkeypatch.setattr(envs, "SONAR_MAX_MEDIA_REQUEST_DECODE_BYTES", 800)
     budget = MediaDecodedBudget()
     image_io = ImageMediaIO(decoded_budget=budget)
     data = _png_bytes(10, 10)
@@ -381,9 +381,9 @@ def test_request_decoded_budget_accepts_images_within_limit(monkeypatch):
 
 
 def test_request_decoded_budget_disabled(monkeypatch):
-    import aphrodite.envs as envs
+    import sonar.envs as envs
 
-    monkeypatch.setattr(envs, "APHRODITE_MAX_MEDIA_REQUEST_DECODE_BYTES", 0)
+    monkeypatch.setattr(envs, "SONAR_MAX_MEDIA_REQUEST_DECODE_BYTES", 0)
     budget = MediaDecodedBudget()
     image_io = ImageMediaIO(decoded_budget=budget)
     data = _png_bytes(100, 100)
@@ -396,15 +396,15 @@ def test_request_decoded_budget_disabled(monkeypatch):
 def test_media_connector_enforces_request_decoded_budget(monkeypatch):
     import pybase64
 
-    import aphrodite.envs as envs
+    import sonar.envs as envs
 
-    monkeypatch.setattr(envs, "APHRODITE_MAX_MEDIA_REQUEST_DECODE_BYTES", 600)
+    monkeypatch.setattr(envs, "SONAR_MAX_MEDIA_REQUEST_DECODE_BYTES", 600)
     b64 = pybase64.b64encode(_png_bytes(10, 10)).decode()
     url = f"data:image/png;base64,{b64}"
     connector = MediaConnector(decoded_budget=MediaDecodedBudget())
 
     connector.fetch_image(url)
-    with pytest.raises(ValueError, match="APHRODITE_MAX_MEDIA_REQUEST_DECODE_BYTES"):
+    with pytest.raises(ValueError, match="SONAR_MAX_MEDIA_REQUEST_DECODE_BYTES"):
         connector.fetch_image(url)
 
 
@@ -460,7 +460,7 @@ def test_allowed_image_formats_exclude_external_renderer_plugins():
 
 def test_kimi_fused_vision_rejects_postscript_payload():
     """Kimi fused vision must use the same image format allowlist."""
-    from aphrodite.transformers_utils.processors.kimi_k25_vision_fused import _to_pil
+    from sonar.transformers_utils.processors.kimi_k25_vision_fused import _to_pil
 
     eps = b"""%!PS-Adobe-3.0 EPSF-3.0
 %%BoundingBox: 0 0 10 10

@@ -2,7 +2,7 @@
 
 # default values
 MODEL=${MODEL:-"Qwen/Qwen2.5-7B-Instruct"}
-BACKEND=${BACKEND:-"aphrodite"}
+BACKEND=${BACKEND:-"sonar"}
 DATASET=${DATASET:-"xgrammar_bench"}
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OUTPUT_DIR=${OUTPUT_DIR:-"$SCRIPT_DIR/structured_output_benchmark_results"}

@@ -12,61 +12,61 @@ import pytest
 import torch
 from torch.distributed import ProcessGroup
 
-from aphrodite import _custom_ops as ops
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite._custom_ops import scaled_fp4_quant
-from aphrodite.config.aphrodite import AphroditeConfig
-from aphrodite.config.cache import CacheConfig
-from aphrodite.config.kernel import KernelConfig
-from aphrodite.config.load import LoadConfig
-from aphrodite.config.model import ModelConfig
-from aphrodite.config.quantization import (
+from sonar import _custom_ops as ops
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar._custom_ops import scaled_fp4_quant
+from sonar.config.cache import CacheConfig
+from sonar.config.kernel import KernelConfig
+from sonar.config.load import LoadConfig
+from sonar.config.model import ModelConfig
+from sonar.config.quantization import (
     QuantizationConfigArgs,
     resolve_quantization_config,
 )
-from aphrodite.forward_context import set_forward_context
-from aphrodite.model_executor.kernels.linear.mxfp8.emulation import (
+from sonar.config.sonar import SonarConfig
+from sonar.forward_context import set_forward_context
+from sonar.model_executor.kernels.linear.mxfp8.emulation import (
     EmulationMxfp8LinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.mxfp8.humming import HummingMxfp8LinearKernel
-from aphrodite.model_executor.kernels.linear.mxfp8.marlin import (
+from sonar.model_executor.kernels.linear.mxfp8.humming import HummingMxfp8LinearKernel
+from sonar.model_executor.kernels.linear.mxfp8.marlin import (
     MarlinMxfp8LinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.scaled_mm import (
+from sonar.model_executor.kernels.linear.scaled_mm import (
     MarlinFP8ScaledMMLinearKernel,
 )
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.layers.fused_moe import FusedMoEFactory, RoutedExperts
-from aphrodite.model_executor.layers.fused_moe.oracle import nvfp4 as nvfp4_oracle
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.attention import Attention
+from sonar.model_executor.layers.fused_moe import FusedMoEFactory, RoutedExperts
+from sonar.model_executor.layers.fused_moe.oracle import nvfp4 as nvfp4_oracle
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     LinearBase,
     MergedColumnParallelLinear,
     RowParallelLinear,
     UnquantizedLinearMethod,
 )
-from aphrodite.model_executor.layers.quantization.auto_awq import AutoAWQConfig
-from aphrodite.model_executor.layers.quantization.compressed_tensors.compressed_tensors import (  # noqa: E501
+from sonar.model_executor.layers.quantization.auto_awq import AutoAWQConfig
+from sonar.model_executor.layers.quantization.compressed_tensors.compressed_tensors import (  # noqa: E501
     CompressedTensorsConfig,
     CompressedTensorsLinearMethod,
 )
-from aphrodite.model_executor.layers.quantization.compressed_tensors.compressed_tensors_moe import (  # noqa: E501
+from sonar.model_executor.layers.quantization.compressed_tensors.compressed_tensors_moe import (  # noqa: E501
     CompressedTensorsMoEMethod,
 )
-from aphrodite.model_executor.layers.quantization.compressed_tensors.compressed_tensors_moe.compressed_tensors_moe_w4a4_nvfp4 import (  # noqa: E501
+from sonar.model_executor.layers.quantization.compressed_tensors.compressed_tensors_moe.compressed_tensors_moe_w4a4_nvfp4 import (  # noqa: E501
     CompressedTensorsW4A4Nvfp4MoEMethod,
 )
-from aphrodite.model_executor.layers.quantization.modelopt import (
+from sonar.model_executor.layers.quantization.modelopt import (
     ModelOptFp8Config,
     ModelOptLinearMethod,
     ModelOptMxFp8Config,
     ModelOptNvFp4Config,
     ModelOptNvFp4FusedMoE,
 )
-from aphrodite.model_executor.layers.quantization.online.base import (
+from sonar.model_executor.layers.quantization.online.base import (
     OnlineQuantizationConfig,
 )
-from aphrodite.model_executor.layers.quantization.online.fp8 import (
+from sonar.model_executor.layers.quantization.online.fp8 import (
     Fp8PerBlockOnlineLinearMethod,
     Fp8PerBlockOnlineMoEMethod,
     Fp8PerTensorOnlineLinearMethod,
@@ -78,35 +78,35 @@ from aphrodite.model_executor.layers.quantization.online.fp8 import (
     _fp8_scale,
     _is_tp_sharded,
 )
-from aphrodite.model_executor.layers.quantization.online.int8 import Int8OnlineMoEMethod
-from aphrodite.model_executor.layers.quantization.online.mxfp4 import (
+from sonar.model_executor.layers.quantization.online.int8 import Int8OnlineMoEMethod
+from sonar.model_executor.layers.quantization.online.mxfp4 import (
     Mxfp4OnlineLinearMethod,
     Mxfp4OnlineMoEMethod,
 )
-from aphrodite.model_executor.layers.quantization.online.mxfp8 import (
+from sonar.model_executor.layers.quantization.online.mxfp8 import (
     Mxfp8OnlineLinearMethod,
     Mxfp8OnlineMoEMethod,
 )
-from aphrodite.model_executor.layers.quantization.online.nvfp4 import (
+from sonar.model_executor.layers.quantization.online.nvfp4 import (
     Nvfp4OnlineMoEMethod,
     _quantize_moe_weight_to_nvfp4,
 )
-from aphrodite.model_executor.layers.quantization.quark.quark import (
+from sonar.model_executor.layers.quantization.quark.quark import (
     QuarkConfig,
     QuarkLinearMethod,
 )
-from aphrodite.model_executor.layers.quantization.quark.quark_moe import (
+from sonar.model_executor.layers.quantization.quark.quark_moe import (
     QuarkNvfp4MoEMethod,
 )
-from aphrodite.model_executor.layers.quantization.utils import quant_utils
-from aphrodite.model_executor.layers.quantization.utils.mxfp8_utils import (
+from sonar.model_executor.layers.quantization.utils import quant_utils
+from sonar.model_executor.layers.quantization.utils.mxfp8_utils import (
     MXFP8_SCALE_DTYPE,
     MXFP8_VALUE_DTYPE,
 )
-from aphrodite.model_executor.layers.quantization.utils.nvfp4_emulation_utils import (
+from sonar.model_executor.layers.quantization.utils.nvfp4_emulation_utils import (
     ref_nvfp4_quant,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     amax_for_moe_weight_quant,
     amax_for_tp_weight_quant,
     kMxfp8Dynamic,
@@ -116,36 +116,36 @@ from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
     kNvfp4Static,
     weight_amax,
 )
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.model_loader import weight_utils
-from aphrodite.model_executor.model_loader.base_loader import log_online_quantization
-from aphrodite.model_executor.model_loader.dummy_loader import DummyModelLoader
-from aphrodite.model_executor.model_loader.reload.layerwise import (
+from sonar.model_executor.model_loader import weight_utils
+from sonar.model_executor.model_loader.base_loader import log_online_quantization
+from sonar.model_executor.model_loader.dummy_loader import DummyModelLoader
+from sonar.model_executor.model_loader.reload.layerwise import (
     finalize_layerwise_reload,
     initialize_layerwise_reload,
     record_metadata_for_reloading,
 )
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
-from aphrodite.model_executor.models.granitemoe import (
+from sonar.model_executor.model_loader.weight_utils import default_weight_loader
+from sonar.model_executor.models.granitemoe import (
     GraniteMoeModel,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.flashinfer import (
+from sonar.platforms import current_platform
+from sonar.utils.flashinfer import (
     has_flashinfer_nvlink_one_sided,
     has_flashinfer_trtllm_fused_moe,
 )
-from aphrodite.utils.torch_utils import set_default_torch_dtype
+from sonar.utils.torch_utils import set_default_torch_dtype
 from tests.quantization.utils import (
     _test_online_quant_peak_mem_impl,
     is_quant_method_supported,
-    load_model_without_aphrodite_runner,
+    load_model_without_sonar_runner,
     quant_config_args,
 )
 
 if current_platform.is_rocm():
-    from aphrodite.platforms.rocm import on_gfx942, on_gfx950
+    from sonar.platforms.rocm import on_gfx942, on_gfx950
 else:
 
     def on_gfx950() -> bool:
@@ -199,7 +199,7 @@ def test_legacy_fp8_online_quantization_uses_per_tensor_shorthand(
 )
 def test_qianfan_online_fp8_keeps_vision_layers_unquantized(shorthand, method_cls) -> None:
     """Model exclusions preserve the language backbone and shared defaults."""
-    from aphrodite.model_executor.models.qianfan_ocr import (
+    from sonar.model_executor.models.qianfan_ocr import (
         QianfanOCRForConditionalGeneration,
     )
 
@@ -240,7 +240,7 @@ def test_online_nvfp4_reuses_kernel_when_weights_are_reprocessed(
     monkeypatch.setattr(current_platform, "is_device_capability_family", lambda _: True)
     select_backend = Mock(return_value=(object(), object))
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.online.nvfp4.select_nvfp4_moe_backend",
+        "sonar.model_executor.layers.quantization.online.nvfp4.select_nvfp4_moe_backend",
         select_backend,
     )
     moe_config = SimpleNamespace(is_act_and_mul=is_act_and_mul)
@@ -273,15 +273,15 @@ def test_online_nvfp4_reuses_kernel_when_weights_are_reprocessed(
     monkeypatch.setattr(method, "get_fused_moe_quant_config", get_quant_config)
 
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.online.nvfp4.convert_to_nvfp4_moe_kernel_format",
+        "sonar.model_executor.layers.quantization.online.nvfp4.convert_to_nvfp4_moe_kernel_format",
         convert_weights,
     )
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.online.nvfp4.replace_parameter",
+        "sonar.model_executor.layers.quantization.online.nvfp4.replace_parameter",
         Mock(),
     )
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.online.nvfp4.make_nvfp4_moe_kernel",
+        "sonar.model_executor.layers.quantization.online.nvfp4.make_nvfp4_moe_kernel",
         make_kernel,
     )
 
@@ -400,11 +400,11 @@ def _write_minimal_llama_config(model_path: Path, quantization_config: dict[str,
 def test_online_prequantized_compatibility(
     checkpoint_config_factory,
     raises_requantization_error: bool,
-    default_aphrodite_config,
+    default_sonar_config,
     dist_init,
 ) -> None:
     """Online weights replace only layers left unquantized by a checkpoint."""
-    default_aphrodite_config.model_config = ModelConfig()
+    default_sonar_config.model_config = ModelConfig()
     checkpoint_config = checkpoint_config_factory()
 
     checkpoint_config.online_quantization_config = OnlineQuantizationConfig(quant_config_args(linear="mxfp8"))
@@ -453,11 +453,9 @@ def test_online_prequantized_compatibility(
     not (current_platform.is_cuda() or current_platform.is_rocm()) or not is_quant_method_supported("fp8"),
     reason="Requires FP8 support on CUDA or ROCm.",
 )
-def test_online_block_fp8_requantization_removes_source_scales(
-    default_aphrodite_config, dist_init, workspace_init
-) -> None:
+def test_online_block_fp8_requantization_removes_source_scales(default_sonar_config, dist_init, workspace_init) -> None:
     """Blockwise FP8 replaces MXFP8 scales with its own scale parameter."""
-    default_aphrodite_config.model_config = ModelConfig(dtype="bfloat16")
+    default_sonar_config.model_config = ModelConfig(dtype="bfloat16")
     quant_config = _fully_quantized_modelopt_mxfp8_config()
     quant_config.online_quantization_config = OnlineQuantizationConfig(QuantizationConfigArgs(linear="fp8_per_block"))
     with set_default_torch_dtype(torch.bfloat16), torch.device(DEVICE):
@@ -480,9 +478,9 @@ def test_online_block_fp8_requantization_removes_source_scales(
         assert layer.weight_scale_inv.numel() > 0
 
 
-def test_online_ignore_keeps_checkpoint_quantization_linear(default_aphrodite_config, dist_init, monkeypatch):
+def test_online_ignore_keeps_checkpoint_quantization_linear(default_sonar_config, dist_init, monkeypatch):
     """Ignoring online quantization does not replace a checkpoint method (linear)."""
-    default_aphrodite_config.model_config = ModelConfig()
+    default_sonar_config.model_config = ModelConfig()
     quant_config = _fully_quantized_quark_config()
     prefix = "model.layers.0.self_attn.o_proj"
     quant_config.online_quantization_config = OnlineQuantizationConfig(
@@ -507,9 +505,9 @@ def test_online_ignore_keeps_checkpoint_quantization_linear(default_aphrodite_co
     assert isinstance(layer.quant_method, QuarkLinearMethod)
 
 
-def test_online_quantization_configures_prequantized_moe(default_aphrodite_config, dist_init) -> None:
+def test_online_quantization_configures_prequantized_moe(default_sonar_config, dist_init) -> None:
     """Configure the checkpoint method as the online MoE's weight source."""
-    default_aphrodite_config.model_config = ModelConfig()
+    default_sonar_config.model_config = ModelConfig()
     prefix = "model.layers.0.mlp.experts"
     quant_config = _fully_quantized_quark_config()
     quant_config.online_quantization_config = OnlineQuantizationConfig(quant_config_args(linear="mxfp4", moe="mxfp4"))
@@ -561,13 +559,13 @@ def _serialize_nvfp4_experts(
 def _make_nvfp4_moe_source(source_format: str, moe, monkeypatch):
     if source_format == "compressed_tensors":
         monkeypatch.setattr(
-            "aphrodite.model_executor.layers.quantization.compressed_tensors."
+            "sonar.model_executor.layers.quantization.compressed_tensors."
             "compressed_tensors_moe.compressed_tensors_moe_w4a4_nvfp4."
             "select_nvfp4_moe_backend",
             lambda **kwargs: (object(), None),
         )
         monkeypatch.setattr(
-            "aphrodite.model_executor.layers.quantization.compressed_tensors."
+            "sonar.model_executor.layers.quantization.compressed_tensors."
             "compressed_tensors_moe.compressed_tensors_moe_w4a4_nvfp4."
             "is_global_sf_supported_for_nvfp4_backend",
             lambda backend: False,
@@ -576,7 +574,7 @@ def _make_nvfp4_moe_source(source_format: str, moe, monkeypatch):
 
     if source_format == "quark":
         monkeypatch.setattr(
-            "aphrodite.model_executor.layers.quantization.quark.quark_moe.select_nvfp4_moe_backend",
+            "sonar.model_executor.layers.quantization.quark.quark_moe.select_nvfp4_moe_backend",
             lambda **kwargs: (object(), None),
         )
         return QuarkNvfp4MoEMethod(
@@ -586,11 +584,11 @@ def _make_nvfp4_moe_source(source_format: str, moe, monkeypatch):
         )
 
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.modelopt.select_nvfp4_moe_backend",
+        "sonar.model_executor.layers.quantization.modelopt.select_nvfp4_moe_backend",
         lambda **kwargs: (object(), None),
     )
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.modelopt.is_global_sf_supported_for_nvfp4_backend",
+        "sonar.model_executor.layers.quantization.modelopt.is_global_sf_supported_for_nvfp4_backend",
         lambda backend: False,
     )
     config = ModelOptNvFp4Config(
@@ -654,20 +652,20 @@ def test_weight_loading_requantization(
     source_format: str,
     projection: str,
     tp_rank: int,
-    default_aphrodite_config,
+    default_sonar_config,
     monkeypatch,
 ) -> None:
     """Checkpoint sources retain parameter-specific loaders under online overrides."""
-    default_aphrodite_config.model_config = SimpleNamespace(dtype=torch.bfloat16)
+    default_sonar_config.model_config = SimpleNamespace(dtype=torch.bfloat16)
     for module in (
-        "aphrodite.model_executor.layers.linear",
-        "aphrodite.model_executor.parameter",
+        "sonar.model_executor.layers.linear",
+        "sonar.model_executor.parameter",
     ):
         monkeypatch.setattr(f"{module}.get_tensor_model_parallel_rank", lambda: tp_rank)
         monkeypatch.setattr(f"{module}.get_tensor_model_parallel_world_size", lambda: 2)
     if source_format == "modelopt_mxfp8":
         monkeypatch.setattr(
-            "aphrodite.model_executor.layers.quantization.modelopt.init_mxfp8_linear_kernel",
+            "sonar.model_executor.layers.quantization.modelopt.init_mxfp8_linear_kernel",
             lambda **kwargs: Mock(),
         )
         config = _fully_quantized_modelopt_mxfp8_config()
@@ -736,16 +734,16 @@ def test_weight_loading_requantization(
         pytest.param("quark", id="quark_nvfp4"),
     ],
 )
-def test_weight_loading_requantization_moe(source_format: str, default_aphrodite_config, monkeypatch) -> None:
+def test_weight_loading_requantization_moe(source_format: str, default_sonar_config, monkeypatch) -> None:
     """Online re-quantization uses the original quant method for loading."""
     from tests.kernels.moe.utils import make_dummy_moe_config
 
     # Loading local experts needs parameter TP metadata, not a process group.
-    monkeypatch.setattr("aphrodite.model_executor.parameter.get_tensor_model_parallel_rank", lambda: 0)
-    monkeypatch.setattr("aphrodite.model_executor.parameter.get_tensor_model_parallel_world_size", lambda: 1)
-    default_aphrodite_config.model_config = SimpleNamespace(dtype=torch.bfloat16)
+    monkeypatch.setattr("sonar.model_executor.parameter.get_tensor_model_parallel_rank", lambda: 0)
+    monkeypatch.setattr("sonar.model_executor.parameter.get_tensor_model_parallel_world_size", lambda: 1)
+    default_sonar_config.model_config = SimpleNamespace(dtype=torch.bfloat16)
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.online.fp8.select_fp8_moe_backend",
+        "sonar.model_executor.layers.quantization.online.fp8.select_fp8_moe_backend",
         lambda **kwargs: (None, None),
     )
     config = make_dummy_moe_config(num_experts=2, hidden_dim=32, intermediate_size=64)
@@ -916,14 +914,14 @@ def test_online_requantized_moe_padding(
 def test_online_requantized_moe_reload(
     source_format: str,
     online_target: str,
-    default_aphrodite_config,
+    default_sonar_config,
     monkeypatch,
 ) -> None:
     """Reload each online target in place and match a fresh checkpoint conversion.
 
     Source loading is covered separately; this test isolates target reload processing.
     """
-    from aphrodite.model_executor.layers.quantization.online import fp8 as online_fp8
+    from sonar.model_executor.layers.quantization.online import fp8 as online_fp8
 
     # Test conversion and reload behavior, not torch.compile.
     monkeypatch.setattr(
@@ -932,11 +930,11 @@ def test_online_requantized_moe_reload(
         online_fp8.per_block_cast_to_fp8.__wrapped__,
     )
 
-    default_aphrodite_config.model_config = SimpleNamespace(dtype=torch.bfloat16)
+    default_sonar_config.model_config = SimpleNamespace(dtype=torch.bfloat16)
 
     # This is faster than `dist_init` arg.
-    monkeypatch.setattr("aphrodite.model_executor.parameter.get_tensor_model_parallel_rank", lambda: 0)
-    monkeypatch.setattr("aphrodite.model_executor.parameter.get_tensor_model_parallel_world_size", lambda: 1)
+    monkeypatch.setattr("sonar.model_executor.parameter.get_tensor_model_parallel_rank", lambda: 0)
+    monkeypatch.setattr("sonar.model_executor.parameter.get_tensor_model_parallel_world_size", lambda: 1)
 
     moe = SimpleNamespace(
         w13_num_shards=2,
@@ -955,19 +953,19 @@ def test_online_requantized_moe_reload(
     }
     method_cls, module_name = target_methods[online_target]
     monkeypatch.setattr(
-        f"aphrodite.model_executor.layers.quantization.online.{module_name}.select_{module_name}_moe_backend",
+        f"sonar.model_executor.layers.quantization.online.{module_name}.select_{module_name}_moe_backend",
         lambda **kwargs: (object(), object()),
     )
     source = _make_nvfp4_moe_source(source_format, moe, monkeypatch)
 
     weight_names: tuple[str, ...]
     if module_name in ("fp8", "mxfp8"):
-        kernel_module = "aphrodite.model_executor.layers.fused_moe.oracle.fp8"
+        kernel_module = "sonar.model_executor.layers.fused_moe.oracle.fp8"
         converter_name = "convert_to_fp8_moe_kernel_format"
         factory_name = "make_fp8_moe_kernel"
         weight_names = ("w13", "w2", "w13_scale", "w2_scale")
     elif module_name == "mxfp4":
-        kernel_module = "aphrodite.model_executor.layers.quantization.online.mxfp4"
+        kernel_module = "sonar.model_executor.layers.quantization.online.mxfp4"
         converter_name = "convert_weight_to_mxfp4_moe_kernel_format"
         factory_name = "make_mxfp4_moe_kernel"
         weight_names = (
@@ -979,7 +977,7 @@ def test_online_requantized_moe_reload(
             "w2_bias",
         )
     else:
-        kernel_module = "aphrodite.model_executor.layers.quantization.online.int8"
+        kernel_module = "sonar.model_executor.layers.quantization.online.int8"
         converter_name = "convert_to_int8_moe_kernel_format"
         factory_name = "make_int8_moe_kernel"
         weight_names = ("w13", "w2")
@@ -1092,7 +1090,7 @@ def test_online_requantized_moe_reload(
         # Initial loading replaces NVFP4 staging weights with online target weights.
         load_serialized_weights(layer, serialized_weights(0.25), reload=False)
         method.process_weights_after_loading(layer)
-        finalize_layerwise_reload(layer, default_aphrodite_config.model_config)
+        finalize_layerwise_reload(layer, default_sonar_config.model_config)
         # Initial processing must invoke backend-format conversion exactly once.
         converter.assert_called_once()
         # Initial processing must construct the target kernel exactly once.
@@ -1139,7 +1137,7 @@ def test_online_requantized_moe_reload(
         fresh_layer, fresh_method = create_layer()
         load_serialized_weights(fresh_layer, second_checkpoint, reload=False)
         fresh_method.process_weights_after_loading(fresh_layer)
-        finalize_layerwise_reload(fresh_layer, default_aphrodite_config.model_config)
+        finalize_layerwise_reload(fresh_layer, default_sonar_config.model_config)
         expected_parameters = dict(fresh_layer.named_parameters())
         # Fresh conversion must produce the same target parameter schema.
         assert expected_parameters.keys() == target_parameters.keys()
@@ -1159,7 +1157,7 @@ def test_online_requantized_moe_reload(
         assert all(getattr(layer, name).is_meta for name in source_names)
 
         load_serialized_weights(layer, second_checkpoint, reload=True)
-        finalize_layerwise_reload(layer, default_aphrodite_config.model_config)
+        finalize_layerwise_reload(layer, default_sonar_config.model_config)
         # Reload must reconvert checkpoint B rather than reuse checkpoint A's weights.
         converter.assert_called_once()
         # Reload must rebuild the kernel using the newly processed target tensors.
@@ -1189,7 +1187,7 @@ def test_online_requantized_moe_reload(
         torch.testing.assert_close(parameter, expected_parameters[name], rtol=0, atol=0)
 
 
-def test_activation_only_override_applies_to_checkpoint_method(default_aphrodite_config, tmp_path) -> None:
+def test_activation_only_override_applies_to_checkpoint_method(default_sonar_config, tmp_path) -> None:
     """Activation-only overrides remain available to the checkpoint method."""
     _write_minimal_llama_config(tmp_path)
     model_config = ModelConfig(
@@ -1210,8 +1208,8 @@ def test_activation_only_override_applies_to_checkpoint_method(default_aphrodite
     assert isinstance(result, CompressedTensorsConfig)
     assert isinstance(result.online_quantization_config, OnlineQuantizationConfig)
 
-    default_aphrodite_config.model_config = model_config
-    from aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 import (
+    default_sonar_config.model_config = model_config
+    from sonar.model_executor.layers.fused_moe.oracle.mxfp4 import (
         _resolve_activation_key,
     )
 
@@ -1310,14 +1308,14 @@ def test_log_online_quantization_for_composable_config(monkeypatch) -> None:
         "model.layers.0.self_attn.o_proj": ("linear", "mxfp8", None),
         "model.layers.1.self_attn.o_proj": ("linear", "mxfp8", None),
     }
-    aphrodite_config = AphroditeConfig(quant_config=online_config)
+    sonar_config = SonarConfig(quant_config=online_config)
     log_args = []
     monkeypatch.setattr(
-        "aphrodite.model_executor.model_loader.base_loader.logger.info",
+        "sonar.model_executor.model_loader.base_loader.logger.info",
         lambda *args: log_args.append(args),
     )
 
-    log_online_quantization(aphrodite_config)
+    log_online_quantization(sonar_config)
 
     assert log_args == [
         (
@@ -1337,17 +1335,17 @@ def test_checkpoint_quantization_rejects_online_shorthand(tmp_path) -> None:
 
 
 def test_nvfp4_per_token_backend_contract() -> None:
-    from aphrodite.model_executor.layers.fused_moe.experts.flashinfer_cutedsl_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.flashinfer_cutedsl_moe import (
         FlashInferCuteDSLExperts,
     )
-    from aphrodite.model_executor.layers.fused_moe.experts.flashinfer_cutlass_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.flashinfer_cutlass_moe import (
         FlashInferExperts,
     )
-    from aphrodite.model_executor.layers.fused_moe.experts.trtllm_nvfp4_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.trtllm_nvfp4_moe import (
         TrtLlmNvFp4ExpertsModular,
         TrtLlmNvFp4ExpertsMonolithic,
     )
-    from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+    from sonar.model_executor.layers.quantization.utils.quant_utils import (
         kNvfp4DynamicToken,
         kNvfp4Static,
     )
@@ -1369,11 +1367,11 @@ def test_nvfp4_one_sided_sizes_dispatched_activations(
     from flashinfer.fused_moe import QuantFormat
     from flashinfer.moe_ep import MoEEpCommParams
 
-    from aphrodite.model_executor.layers.fused_moe.all2all_utils import (
+    from sonar.model_executor.layers.fused_moe.all2all_utils import (
         flashinfer_one_sided_dispatch_layout,
     )
-    from aphrodite.model_executor.layers.fused_moe.config import FusedMoEQuantConfig
-    from aphrodite.model_executor.layers.fused_moe.experts.trtllm_nvfp4_moe import (
+    from sonar.model_executor.layers.fused_moe.config import FusedMoEQuantConfig
+    from sonar.model_executor.layers.fused_moe.experts.trtllm_nvfp4_moe import (
         TrtLlmNvFp4ExpertsModular,
     )
     from tests.kernels.moe.utils import make_dummy_moe_config
@@ -1437,10 +1435,10 @@ def test_one_sided_dispatch_format_preserves_payload_capacity(
     """Match the old payload sizes, including MXFP8's padded scale row."""
     from flashinfer.moe_ep import MoEEpCommParams
 
-    from aphrodite.model_executor.layers.fused_moe.all2all_utils import (
+    from sonar.model_executor.layers.fused_moe.all2all_utils import (
         flashinfer_one_sided_dispatch_layout,
     )
-    from aphrodite.model_executor.layers.fused_moe.config import FusedMoEQuantConfig
+    from sonar.model_executor.layers.fused_moe.config import FusedMoEQuantConfig
 
     quant_config = FusedMoEQuantConfig.make(quant_dtype, block_shape=block_shape)
     quant_config.mx_alignment = alignment
@@ -1462,10 +1460,10 @@ def test_one_sided_dispatch_format_preserves_payload_capacity(
     [torch.float32, torch.float8_e4m3fn, torch.float8_e5m2, torch.int8],
 )
 def test_nvfp4_one_sided_rejects_unsupported_input_dtype(input_dtype: torch.dtype):
-    from aphrodite.model_executor.layers.fused_moe.all2all_utils import (
+    from sonar.model_executor.layers.fused_moe.all2all_utils import (
         flashinfer_one_sided_dispatch_layout,
     )
-    from aphrodite.model_executor.layers.fused_moe.config import FusedMoEQuantConfig
+    from sonar.model_executor.layers.fused_moe.config import FusedMoEQuantConfig
 
     with pytest.raises(ValueError, match="unpacked inputs must be float16 or bfloat16"):
         flashinfer_one_sided_dispatch_layout(6144, FusedMoEQuantConfig.make("nvfp4"), input_dtype=input_dtype)
@@ -1668,7 +1666,7 @@ def test_online_quantization(
         pytest.skip("mxfp4 online quantization is only tested on AMD gfx942, gfx950.")
 
     if current_platform.is_rocm():
-        monkeypatch.setenv("APHRODITE_ROCM_USE_AITER", "1" if use_rocm_aiter else "0")
+        monkeypatch.setenv("SONAR_ROCM_USE_AITER", "1" if use_rocm_aiter else "0")
         rocm_aiter_ops.refresh_env_variables()
 
     if current_platform.is_xpu():
@@ -1687,7 +1685,7 @@ def test_online_quantization(
         # FA3 requires BF16 output when the query input is FP8.
         runner_kwargs["dtype"] = "bfloat16"
 
-    aphrodite_config_kwargs = {
+    sonar_config_kwargs = {
         "cache_config": CacheConfig(cache_dtype=kv_cache_dtype),
         "kernel_config": KernelConfig(
             linear_backend=runner_kwargs.get("linear_backend", "auto"),
@@ -1742,11 +1740,11 @@ def test_online_quantization(
         )
 
     if model_name == PARTIALLY_PREQUANTIZED_MODEL_NAME:
-        model, aphrodite_config = load_model_without_aphrodite_runner(
+        model, sonar_config = load_model_without_sonar_runner(
             model_name,
             dtype=runner_kwargs.get("dtype", "bfloat16"),
             model_config_kwargs={"quantization_config": resolve_quantization_config(None, online_quant_args)},
-            aphrodite_config_kwargs=aphrodite_config_kwargs,
+            sonar_config_kwargs=sonar_config_kwargs,
             model_loader_cls=DummyModelLoader,
         )
         assert isinstance(
@@ -1762,7 +1760,7 @@ def test_online_quantization(
             CompressedTensorsLinearMethod,
         )
     else:
-        model, aphrodite_config = load_model_without_aphrodite_runner(
+        model, sonar_config = load_model_without_sonar_runner(
             model_name,
             dtype=runner_kwargs.get("dtype", "bfloat16"),
             quantization=quant_scheme,
@@ -1780,7 +1778,7 @@ def test_online_quantization(
                     "num_experts_per_tok": 2,
                 },
             },
-            aphrodite_config_kwargs=aphrodite_config_kwargs,
+            sonar_config_kwargs=sonar_config_kwargs,
             model_loader_cls=DummyModelLoader,
         )
 
@@ -1870,7 +1868,7 @@ def test_online_quantization(
 
     input_ids = torch.tensor([1, 2, 3, 4], device=DEVICE)
     positions = torch.arange(input_ids.numel(), device=DEVICE)
-    with set_forward_context(None, aphrodite_config, num_tokens=input_ids.numel()):
+    with set_forward_context(None, sonar_config, num_tokens=input_ids.numel()):
         hidden_states = model(input_ids, positions, None)
         logits = model.compute_logits(hidden_states)
     assert torch.isfinite(logits).all()
@@ -1881,10 +1879,10 @@ def test_online_quantization(
     reason="FP8 is not supported on this GPU type.",
 )
 @pytest.mark.parametrize("model_name", [GRANITE_MODEL_NAME, PARTIALLY_PREQUANTIZED_MODEL_NAME])
-def test_online_quantization_loads_real_weights(model_name, aphrodite_runner, monkeypatch) -> None:
+def test_online_quantization_loads_real_weights(model_name, sonar_runner, monkeypatch) -> None:
     """Verify online quantization loads real checkpoints end to end."""
-    monkeypatch.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
-    monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
+    monkeypatch.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")
+    monkeypatch.setenv("SONAR_ENABLE_V1_MULTIPROCESSING", "0")
 
     original_load_weights = GraniteMoeModel.load_weights
 
@@ -1911,7 +1909,7 @@ def test_online_quantization_loads_real_weights(model_name, aphrodite_runner, mo
             "enforce_eager": True,
         }
 
-    with aphrodite_runner(model_name, **runner_kwargs) as llm:
+    with sonar_runner(model_name, **runner_kwargs) as llm:
         if model_name == GRANITE_MODEL_NAME:
 
             def check_model(model):
@@ -1978,7 +1976,7 @@ def test_online_quantization_loads_real_weights(model_name, aphrodite_runner, mo
     ids=["linear_regex", "direct_fused_regex", "legacy_fused_regex"],
 )
 def test_online_quantization_targets(
-    default_aphrodite_config,
+    default_sonar_config,
     dist_init,
     targets: dict[str, str],
     prefix: str,
@@ -1987,7 +1985,7 @@ def test_online_quantization_targets(
     expected_metadata: tuple[str, str, str],
 ) -> None:
     """Target patterns select the real online linear methods."""
-    default_aphrodite_config.model_config = ModelConfig()
+    default_sonar_config.model_config = ModelConfig()
     config = OnlineQuantizationConfig(QuantizationConfigArgs(targets=targets))
     config.packed_modules_mapping = {"qkv_proj": ["q_proj", "k_proj", "v_proj"]}
 
@@ -2011,8 +2009,8 @@ def test_online_quantization_targets(
     not is_quant_method_supported("fp8"),
     reason="FP8 is not supported on this GPU type.",
 )
-def test_online_quantization_records_global_config(default_aphrodite_config, dist_init) -> None:
-    default_aphrodite_config.model_config = ModelConfig()
+def test_online_quantization_records_global_config(default_sonar_config, dist_init) -> None:
+    default_sonar_config.model_config = ModelConfig()
     config = OnlineQuantizationConfig(quant_config_args(linear="fp8_per_block"))
     prefix = "model.layers.0.self_attn.o_proj"
     layer = ColumnParallelLinear(
@@ -2060,7 +2058,7 @@ def test_online_quantization_targets_reject_unsupported_layer() -> None:
         config.get_quant_method(lm_head, "lm_head")
 
 
-def test_log_online_quantization(default_aphrodite_config, monkeypatch) -> None:
+def test_log_online_quantization(default_sonar_config, monkeypatch) -> None:
     config = OnlineQuantizationConfig(quant_config_args(linear="fp8_per_tensor"))
     config.quantized_layers = {
         "model.layers.0.mlp.down_proj": ("linear", "fp8_per_tensor", None),
@@ -2071,15 +2069,15 @@ def test_log_online_quantization(default_aphrodite_config, monkeypatch) -> None:
             r"re:.*qkv_proj.*",
         ),
     }
-    default_aphrodite_config.quant_config = config
+    default_sonar_config.quant_config = config
 
     logged_messages: list[str] = []
 
     def record_info(message: str, *args: object) -> None:
         logged_messages.append(message % args)
 
-    monkeypatch.setattr("aphrodite.model_executor.model_loader.base_loader.logger.info", record_info)
-    log_online_quantization(default_aphrodite_config)
+    monkeypatch.setattr("sonar.model_executor.model_loader.base_loader.logger.info", record_info)
+    log_online_quantization(default_sonar_config)
 
     assert logged_messages == [
         "Quantizing 3 layers of types: mlp.down_proj: 2 (from linear: "
@@ -2096,11 +2094,11 @@ def test_log_online_quantization(default_aphrodite_config, monkeypatch) -> None:
     ),
     reason=("nvfp4_per_token needs a Blackwell (SM100) GPU + FlashInfer TRTLLM MoE."),
 )
-def test_online_nvfp4_per_token_moe(aphrodite_runner, monkeypatch) -> None:
+def test_online_nvfp4_per_token_moe(sonar_runner, monkeypatch) -> None:
     """Online NVFP4 quantizes the MoE and leaves dense layers unquantized."""
-    monkeypatch.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
+    monkeypatch.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")
 
-    with aphrodite_runner(
+    with sonar_runner(
         "ibm-granite/granite-3.0-1b-a400m-base",
         quantization="nvfp4_per_token",
         enforce_eager=True,
@@ -2461,7 +2459,7 @@ def test_online_nvfp4_quantizes_original_expert_weights() -> None:
     ids=["moe", "moe_transformers"],
 )
 def test_online_quant_peak_mem(
-    aphrodite_runner,
+    sonar_runner,
     caplog_mp_spawn,
     monkeypatch,
     model_name,
@@ -2471,7 +2469,7 @@ def test_online_quant_peak_mem(
         "fp8_per_tensor",
         model_name,
         expected_model_memory_gib,
-        aphrodite_runner,
+        sonar_runner,
         caplog_mp_spawn,
         monkeypatch,
     )
@@ -2482,11 +2480,11 @@ def test_online_quant_peak_mem(
     reason="FP8 is not supported on this GPU type.",
 )
 def test_online_quant_load_format_dummy(
-    aphrodite_runner,
+    sonar_runner,
     monkeypatch,
     caplog,
 ) -> None:
-    with aphrodite_runner(
+    with sonar_runner(
         "ibm-granite/granite-3.0-1b-a400m-base",
         quantization="fp8_per_tensor",
         enforce_eager=True,
@@ -2500,12 +2498,12 @@ def test_online_quant_load_format_dummy(
     not (current_platform.is_cuda() and current_platform.has_device_capability(80)),
     reason="NF12 requires CUDA SM80 or newer.",
 )
-def test_online_nf12_rejects_checkpoint_reload(aphrodite_runner, monkeypatch) -> None:
+def test_online_nf12_rejects_checkpoint_reload(sonar_runner, monkeypatch) -> None:
     """Reject re-encoding weights that captured graphs may still reference."""
-    monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
-    monkeypatch.setenv("APHRODITE_RELOAD_MODE", "layerwise")
+    monkeypatch.setenv("SONAR_ENABLE_V1_MULTIPROCESSING", "0")
+    monkeypatch.setenv("SONAR_RELOAD_MODE", "layerwise")
     with (
-        aphrodite_runner(
+        sonar_runner(
             "Qwen/Qwen3-0.6B",
             quantization="nf12",
             dtype="bfloat16",
@@ -2525,13 +2523,13 @@ def test_online_nf12_rejects_checkpoint_reload(aphrodite_runner, monkeypatch) ->
     reason="NF12 requires CUDA SM80 or newer.",
 )
 @pytest.mark.parametrize("targets", [False, True])
-def test_online_nf12_preserves_unsupported_quantized_moe(aphrodite_runner, tmp_path, targets) -> None:
+def test_online_nf12_preserves_unsupported_quantized_moe(sonar_runner, tmp_path, targets) -> None:
     """Unsupported NF12 experts retain checkpoint kernels and generation results."""
     from safetensors.torch import save_file
     from transformers import GptOssConfig, GptOssForCausalLM
 
-    from aphrodite import SamplingParams
-    from aphrodite.model_executor.layers.quantization.utils.mxfp4_utils import downcast_to_mxfp
+    from sonar import SamplingParams
+    from sonar.model_executor.layers.quantization.utils.mxfp4_utils import downcast_to_mxfp
 
     config = GptOssConfig(
         vocab_size=128,
@@ -2574,7 +2572,7 @@ def test_online_nf12_preserves_unsupported_quantized_moe(aphrodite_runner, tmp_p
     override = {"targets": {"*.mlp.experts": "nf12"}} if targets else {"moe": "nf12"}
     results = []
     for quantization_config in (None, override):
-        with aphrodite_runner(
+        with sonar_runner(
             str(tmp_path),
             quantization_config=quantization_config,
             dtype="bfloat16",

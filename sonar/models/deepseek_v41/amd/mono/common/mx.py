@@ -14,8 +14,8 @@ from aiter.ops.flydsl.kernels import buffer_ops as bo
 from flydsl.expr import rocdl
 from flydsl.expr.typing import T
 
-from aphrodite.models.deepseek_v41.amd.mono.common.arch import GFX942
-from aphrodite.models.deepseek_v41.amd.mono.common.ops import CM_NT
+from sonar.models.deepseek_v41.amd.mono.common.arch import GFX942
+from sonar.models.deepseek_v41.amd.mono.common.ops import CM_NT
 
 # gfx942 quantizes to FNUZ with 224: the same bytes as OCP with 448 and a scale
 # code one higher (common/gfx942.py).

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from aphrodite.benchmarks.datasets import get_samples
+from sonar.benchmarks.datasets import get_samples
 
 
 class _RecordingTokenizer:

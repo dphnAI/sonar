@@ -12,12 +12,12 @@ from typing import Protocol, runtime_checkable
 
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed.parallel_state import get_tp_group
-from aphrodite.forward_context import ForwardContext, get_forward_context
-from aphrodite.model_executor.layers.fused_moe.config import FusedMoEConfig
-from aphrodite.platforms import current_platform
-from aphrodite.v1.worker.ubatching import dbo_current_ubatch_token_offset
+from sonar.config import SonarConfig
+from sonar.distributed.parallel_state import get_tp_group
+from sonar.forward_context import ForwardContext, get_forward_context
+from sonar.model_executor.layers.fused_moe.config import FusedMoEConfig
+from sonar.platforms import current_platform
+from sonar.v1.worker.ubatching import dbo_current_ubatch_token_offset
 
 logger = logging.getLogger(__name__)
 
@@ -28,8 +28,8 @@ class RoutedExpertsCaptureSource(Protocol):
     capture_fn: Callable[[torch.Tensor], None] | None
 
 
-def _get_routed_experts_shape(aphrodite_config: AphroditeConfig) -> tuple[int, int, int]:
-    model_config = aphrodite_config.model_config
+def _get_routed_experts_shape(sonar_config: SonarConfig) -> tuple[int, int, int]:
+    model_config = sonar_config.model_config
     num_layers = model_config.get_total_num_hidden_layers()
     num_experts = model_config.get_num_experts()
     num_experts_per_tok = model_config.get_num_experts_per_tok()
@@ -60,9 +60,9 @@ class RoutedExpertsCapturer:
     def __init__(
         self,
         max_num_batched_tokens: int,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
     ) -> None:
-        num_layers, num_experts, num_experts_per_tok = _get_routed_experts_shape(aphrodite_config)
+        num_layers, num_experts, num_experts_per_tok = _get_routed_experts_shape(sonar_config)
         self.shape_per_token = (num_layers, num_experts_per_tok)
         self.output_dtype_name = "uint8" if num_experts <= 256 else "uint16"
         self.output_dtype = getattr(torch, self.output_dtype_name)
@@ -73,15 +73,15 @@ class RoutedExpertsCapturer:
             max_num_batched_tokens,
             num_layers,
             num_experts_per_tok,
-            aphrodite_config.model_config.hf_text_config.model_type,
+            sonar_config.model_config.hf_text_config.model_type,
         )
         self.device_buffer = torch.zeros(
             (max_num_batched_tokens, *self.shape_per_token),
             dtype=torch.int32,
             device=current_platform.device_type,
         )
-        self.dp_rank = aphrodite_config.parallel_config.data_parallel_rank
-        self.tp_size = aphrodite_config.parallel_config.tensor_parallel_size
+        self.dp_rank = sonar_config.parallel_config.data_parallel_rank
+        self.tp_size = sonar_config.parallel_config.tensor_parallel_size
 
     def capture(self, layer_id: int, topk_ids: torch.Tensor) -> None:
         if not 0 <= layer_id < self.device_buffer.shape[1]:
@@ -174,11 +174,11 @@ def bind_routed_experts_capturer(
     capturer: RoutedExpertsCapturer,
 ) -> None:
     """Attach capture callbacks to the target model's MoE routers."""
-    from aphrodite.model_executor.layers.fused_moe.layer import MoERunner
-    from aphrodite.model_executor.layers.fused_moe.modular_kernel import (
+    from sonar.model_executor.layers.fused_moe.layer import MoERunner
+    from sonar.model_executor.layers.fused_moe.modular_kernel import (
         FusedMoEExpertsMonolithic,
     )
-    from aphrodite.model_executor.layers.fused_moe.router.base_router import BaseRouter
+    from sonar.model_executor.layers.fused_moe.router.base_router import BaseRouter
 
     num_bound = 0
     for module in model.modules():

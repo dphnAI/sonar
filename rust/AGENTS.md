@@ -1,6 +1,6 @@
-# Alternative Frontend to Aphrodite Engine in Rust
+# Alternative Frontend to Sonar Engine in Rust
 
-This project aims to implement an alternative frontend to the Aphrodite Engine in Rust, providing a more efficient and robust interface for interacting with the engine. Currently it's still in the very early stage and is actively evolving.
+This project aims to implement an alternative frontend to the Sonar Engine in Rust, providing a more efficient and robust interface for interacting with the engine. Currently it's still in the very early stage and is actively evolving.
 
 ## Coding Styles
 

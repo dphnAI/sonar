@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import msgspec
 
-from aphrodite.distributed.ec_transfer.ec_connector.cpu.protocol import (
+from sonar.distributed.ec_transfer.ec_connector.cpu.protocol import (
     EC_CONNECTOR_VERSION,
     XferAck,
     XferReq,

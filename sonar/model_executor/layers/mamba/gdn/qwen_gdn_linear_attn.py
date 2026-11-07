@@ -14,83 +14,83 @@ from einops import rearrange
 from torch import nn
 from transformers import Qwen3NextConfig
 
-from aphrodite import _custom_ops as ops
-from aphrodite import envs
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.compilation.breakable_cudagraph import eager_break_during_capture
-from aphrodite.config import (
-    AphroditeConfig,
-    get_current_aphrodite_config,
+from sonar import _custom_ops as ops
+from sonar import envs
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.compilation.breakable_cudagraph import eager_break_during_capture
+from sonar.config import (
+    SonarConfig,
+    get_current_sonar_config,
 )
-from aphrodite.distributed import (
+from sonar.distributed import (
     divide,
 )
-from aphrodite.forward_context import ForwardContext, get_forward_context
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.custom_op import CustomOp, PluggableLayer
-from aphrodite.model_executor.layers.fusion.quant_activation import QuantizedActivation
-from aphrodite.model_executor.layers.layernorm import RMSNormGated
-from aphrodite.model_executor.layers.linear import (
+from sonar.forward_context import ForwardContext, get_forward_context
+from sonar.logger import init_logger
+from sonar.model_executor.custom_op import CustomOp, PluggableLayer
+from sonar.model_executor.layers.fusion.quant_activation import QuantizedActivation
+from sonar.model_executor.layers.layernorm import RMSNormGated
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     MergedColumnParallelLinear,
     RowParallelLinear,
     UnquantizedLinearMethod,
 )
-from aphrodite.model_executor.layers.mamba.abstract import (
+from sonar.model_executor.layers.mamba.abstract import (
     get_mamba_prefill_checkpoint_alignment,
     get_mamba_prefill_checkpoint_grid,
 )
-from aphrodite.model_executor.layers.mamba.checkpoint import (
+from sonar.model_executor.layers.mamba.checkpoint import (
     MambaPrefillCheckpointExporter,
 )
-from aphrodite.model_executor.layers.mamba.gdn.base import GatedDeltaNetAttention
-from aphrodite.model_executor.layers.mamba.mamba_mixer2 import mamba_v2_sharded_weight_loader
-from aphrodite.model_executor.layers.mamba.mamba_utils import (
+from sonar.model_executor.layers.mamba.gdn.base import GatedDeltaNetAttention
+from sonar.model_executor.layers.mamba.mamba_mixer2 import mamba_v2_sharded_weight_loader
+from sonar.model_executor.layers.mamba.mamba_utils import (
     MambaStateShapeCalculator,
     is_conv_state_dim_first,
 )
-from aphrodite.model_executor.layers.mamba.ops.causal_conv1d import (
+from sonar.model_executor.layers.mamba.ops.causal_conv1d import (
     causal_conv1d_fn,
     causal_conv1d_update,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.quantization.auto_awq import AutoAWQConfig
-from aphrodite.model_executor.layers.quantization.auto_gptq import AutoGPTQConfig
-from aphrodite.model_executor.layers.quantization.inc import INCConfig
-from aphrodite.model_executor.layers.utils import cuda_unquantized_gemm
-from aphrodite.model_executor.model_loader.weight_utils import (
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.quantization.auto_awq import AutoAWQConfig
+from sonar.model_executor.layers.quantization.auto_gptq import AutoGPTQConfig
+from sonar.model_executor.layers.quantization.inc import INCConfig
+from sonar.model_executor.layers.utils import cuda_unquantized_gemm
+from sonar.model_executor.model_loader.weight_utils import (
     sharded_weight_loader,
 )
-from aphrodite.model_executor.utils import set_weight_attrs
-from aphrodite.platforms import current_platform
-from aphrodite.third_party.flash_linear_attention.ops import (
+from sonar.model_executor.utils import set_weight_attrs
+from sonar.platforms import current_platform
+from sonar.third_party.flash_linear_attention.ops import (
     chunk_gated_delta_rule as fla_chunk_gated_delta_rule,
 )
-from aphrodite.third_party.flash_linear_attention.ops import (
+from sonar.third_party.flash_linear_attention.ops import (
     fused_post_conv_prep,
     fused_recurrent_gated_delta_rule_packed_decode,
     fused_sigmoid_gating_delta_rule_update,
 )
-from aphrodite.third_party.flash_linear_attention.ops.chunk import l2norm_fwd
-from aphrodite.third_party.flash_linear_attention.ops.fused_gdn_decode_post_conv_mtp import (
+from sonar.third_party.flash_linear_attention.ops.chunk import l2norm_fwd
+from sonar.third_party.flash_linear_attention.ops.fused_gdn_decode_post_conv_mtp import (
     fused_gdn_decode_post_conv_mtp_triton,
 )
-from aphrodite.third_party.flash_linear_attention.ops.utils import FLA_CHUNK_SIZE
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.utils.multi_stream_utils import execute_in_parallel
-from aphrodite.utils.torch_utils import (
+from sonar.third_party.flash_linear_attention.ops.utils import FLA_CHUNK_SIZE
+from sonar.utils.math_utils import cdiv
+from sonar.utils.multi_stream_utils import execute_in_parallel
+from sonar.utils.torch_utils import (
     LayerNameType,
     _encode_layer_name,
     _resolve_layer_name,
     aux_stream,
     direct_register_custom_op,
 )
-from aphrodite.v1.attention.backends.gdn_attn import (
+from sonar.v1.attention.backends.gdn_attn import (
     FLASHINFER_GDN_CHECKPOINT_ALIGNMENT,
     GDNAttentionMetadata,
 )
-from aphrodite.v1.kv_cache_interface import KVCacheSpec, MambaSpec
-from aphrodite.v1.worker.workspace import current_workspace_manager
+from sonar.v1.kv_cache_interface import KVCacheSpec, MambaSpec
+from sonar.v1.worker.workspace import current_workspace_manager
 
 # Optional ROCm AITER Triton kernels for the GDN decode path.
 # Availability is checked centrally via rocm_aiter_ops; the actual function
@@ -135,21 +135,21 @@ def xpu_gdn_kernel_available() -> bool:
 
 
 def _aiter_flydsl_unsupported_reasons(
-    aphrodite_config: AphroditeConfig, head_k_dim: int | None, head_v_dim: int | None
+    sonar_config: SonarConfig, head_k_dim: int | None, head_v_dim: int | None
 ) -> list[str]:
     """Every reason the AITER FlyDSL GDN prefill kernels cannot serve this
     model, or an empty list if they can."""
     reasons = []
     if head_k_dim != 128 or head_v_dim != 128:
         reasons.append(f"linear head dims are K={head_k_dim} V={head_v_dim}; FlyDSL requires 128/128")
-    dtype = aphrodite_config.model_config.dtype
+    dtype = sonar_config.model_config.dtype
     if dtype != torch.bfloat16:
         reasons.append(f"model dtype is {dtype}; FlyDSL requires bfloat16")
     return reasons
 
 
 def _resolve_gdn_prefill_backend(
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
 ) -> tuple[str, Literal["triton", "flashinfer", "cutedsl", "aiter_flydsl", "sycl"]]:
     """Resolve GDN prefill backend.
 
@@ -175,7 +175,7 @@ def _resolve_gdn_prefill_backend(
     * ROCm AITER exposes the optimized VK prefill API and FlyDSL kernels;
     * the model uses BF16 activations with ``head_k_dim == head_v_dim == 128``.
     """
-    additional_config = aphrodite_config.additional_config
+    additional_config = sonar_config.additional_config
     backend_cfg = (
         additional_config.get("gdn_prefill_backend", "auto") if isinstance(additional_config, dict) else "auto"
     )
@@ -195,8 +195,8 @@ def _resolve_gdn_prefill_backend(
             )
         return backend, "triton"
 
-    head_k_dim = getattr(aphrodite_config.model_config.hf_text_config, "linear_key_head_dim", None)
-    head_v_dim = getattr(aphrodite_config.model_config.hf_text_config, "linear_value_head_dim", None)
+    head_k_dim = getattr(sonar_config.model_config.hf_text_config, "linear_key_head_dim", None)
+    head_v_dim = getattr(sonar_config.model_config.hf_text_config, "linear_value_head_dim", None)
 
     if current_platform.is_rocm():
         if backend == "aiter_flydsl":
@@ -204,10 +204,10 @@ def _resolve_gdn_prefill_backend(
                 raise RuntimeError(
                     "GDN prefill backend 'aiter_flydsl' was requested but the "
                     "AITER FlyDSL prefill kernels are not importable. Check "
-                    "that APHRODITE_ROCM_USE_AITER=1, that this is a CDNA 3 or "
+                    "that SONAR_ROCM_USE_AITER=1, that this is a CDNA 3 or "
                     "newer GPU, and that the installed AITER exports them."
                 )
-            reasons = _aiter_flydsl_unsupported_reasons(aphrodite_config, head_k_dim, head_v_dim)
+            reasons = _aiter_flydsl_unsupported_reasons(sonar_config, head_k_dim, head_v_dim)
             if reasons:
                 logger.warning_once(
                     "GDN prefill backend 'aiter_flydsl' was requested but %s. Falling back to Triton/FLA.",
@@ -216,11 +216,11 @@ def _resolve_gdn_prefill_backend(
                 return backend, "triton"
             return backend, "aiter_flydsl"
         if backend == "auto":
-            from aphrodite.platforms.rocm import on_mi3xx
+            from sonar.platforms.rocm import on_mi3xx
 
             if (
                 on_mi3xx()
-                and not _aiter_flydsl_unsupported_reasons(aphrodite_config, head_k_dim, head_v_dim)
+                and not _aiter_flydsl_unsupported_reasons(sonar_config, head_k_dim, head_v_dim)
                 and rocm_aiter_ops.is_gdn_flydsl_prefill_available()
             ):
                 return backend, "aiter_flydsl"
@@ -263,12 +263,12 @@ def _resolve_gdn_prefill_backend(
 
 
 def _log_gdn_backend_decision(
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     requested_backend: str,
     active_backend: str,
 ) -> None:
     """Log the GDN prefill backend choice in the attention-selector style."""
-    head_k_dim = getattr(aphrodite_config.model_config.hf_text_config, "linear_key_head_dim", None)
+    head_k_dim = getattr(sonar_config.model_config.hf_text_config, "linear_key_head_dim", None)
 
     if current_platform.is_cpu():
         logger.info_once(
@@ -367,8 +367,8 @@ def fi_chunk_gated_delta_rule(
 class ChunkGatedDeltaRule(CustomOp):
     def __init__(self) -> None:
         super().__init__()
-        aphrodite_config = get_current_aphrodite_config()
-        backend, active_backend = _resolve_gdn_prefill_backend(aphrodite_config)
+        sonar_config = get_current_sonar_config()
+        backend, active_backend = _resolve_gdn_prefill_backend(sonar_config)
         self.gdn_prefill_backend = active_backend
 
         if backend in ("flashinfer", "cutedsl") and active_backend != backend:
@@ -377,7 +377,7 @@ class ChunkGatedDeltaRule(CustomOp):
                 "kernel on the current platform. Falling back to Triton/FLA.",
                 backend,
             )
-        _log_gdn_backend_decision(aphrodite_config, backend, active_backend)
+        _log_gdn_backend_decision(sonar_config, backend, active_backend)
 
         # On XPU "sycl" bypasses this module entirely (fused whole-layer op),
         # so the chunked prefill path stays on Triton/FLA.
@@ -474,7 +474,7 @@ class ChunkGatedDeltaRule(CustomOp):
         core_attn_out: torch.Tensor | None = None,
         aiter_prefill_metadata: object | None = None,
     ):
-        from aphrodite.model_executor.layers.mamba.ops.gdn_chunk_cutedsl import (
+        from sonar.model_executor.layers.mamba.ops.gdn_chunk_cutedsl import (
             chunk_gated_delta_rule_cutedsl,
         )
 
@@ -554,14 +554,14 @@ class QwenGatedDeltaNetAttention(GatedDeltaNetAttention):
     def __init__(
         self,
         config: Qwen3NextConfig,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
         gqa_interleaved_layout=False,
         reduce_results: bool = True,
         overlap_ba_proj: bool = False,
         fused_gdn_gated_rms_norm: (Callable[..., torch.Tensor | QuantizedActivation] | None) = None,
     ) -> None:
-        super().__init__(config, aphrodite_config, prefix)
+        super().__init__(config, sonar_config, prefix)
 
         self.num_k_heads = config.linear_num_key_heads
         self.num_v_heads = config.linear_num_value_heads
@@ -574,12 +574,12 @@ class QwenGatedDeltaNetAttention(GatedDeltaNetAttention):
         self.gdn_xpu_backend: str | None = None
         self.qkvz_layout = "interleaved" if gqa_interleaved_layout else "flat"
         if current_platform.is_xpu():
-            requested, gdn_xpu_backend = _resolve_gdn_prefill_backend(aphrodite_config)
-            _log_gdn_backend_decision(aphrodite_config, requested, gdn_xpu_backend)
+            requested, gdn_xpu_backend = _resolve_gdn_prefill_backend(sonar_config)
+            _log_gdn_backend_decision(sonar_config, requested, gdn_xpu_backend)
             self.gdn_xpu_backend = gdn_xpu_backend
             self._forward_method = self.forward_xpu
         elif current_platform.is_cpu():
-            from aphrodite.model_executor.layers.mamba.ops.cpu.gdn_attention import (
+            from sonar.model_executor.layers.mamba.ops.cpu.gdn_attention import (
                 register_cpu_gdn_attention_ops,
             )
 
@@ -633,8 +633,8 @@ class QwenGatedDeltaNetAttention(GatedDeltaNetAttention):
             and current_platform.is_cuda()
             and isinstance(ba_method, UnquantizedLinearMethod)
             and ba_method._gemm_impl is cuda_unquantized_gemm
-            and not aphrodite_config.parallel_config.use_ubatching
-            and aphrodite_config.lora_config is None
+            and not sonar_config.parallel_config.use_ubatching
+            and sonar_config.lora_config is None
         ):
             self._ba_stream = aux_stream()
             self._ba_events = (torch.cuda.Event(), torch.cuda.Event())
@@ -696,25 +696,25 @@ class QwenGatedDeltaNetAttention(GatedDeltaNetAttention):
         self.chunk_gated_delta_rule = ChunkGatedDeltaRule()
         self.gdn_prefill_backend = self.chunk_gated_delta_rule.gdn_prefill_backend
         self._prefill_kernels_warmed_up = False
-        self.aphrodite_config = aphrodite_config
+        self.sonar_config = sonar_config
         # FlashInfer's prefill emits mid-prefill states, so an align-mode
         # checkpoint needs no split prefill.
         self._checkpoint_alignment: int | None = None
-        if aphrodite_config.cache_config.mamba_cache_mode == "align" and self.gdn_prefill_backend == "flashinfer":
+        if sonar_config.cache_config.mamba_cache_mode == "align" and self.gdn_prefill_backend == "flashinfer":
             self._checkpoint_alignment = FLASHINFER_GDN_CHECKPOINT_ALIGNMENT
-            self._max_num_batched_tokens = aphrodite_config.scheduler_config.max_num_batched_tokens
+            self._max_num_batched_tokens = sonar_config.scheduler_config.max_num_batched_tokens
             self._checkpoint_exporter = MambaPrefillCheckpointExporter(state_len=self.conv_kernel_size - 1)
-        self.enable_packed_recurrent_decode = envs.APHRODITE_ENABLE_FLA_PACKED_RECURRENT_DECODE
+        self.enable_packed_recurrent_decode = envs.SONAR_ENABLE_FLA_PACKED_RECURRENT_DECODE
         # Off by default; the Qwen3.5 NVIDIA variant passes a fused gated RMS
         # norm that reads z strided from the packed qkvz projection and
         # returns the out_proj input: `out`, or a pre-quantized activation.
         self._fused_gdn_gated_rms_norm = fused_gdn_gated_rms_norm
-        self.gdn_decode_kernel = envs.APHRODITE_GDN_DECODE_KERNEL.strip().lower()
+        self.gdn_decode_kernel = envs.SONAR_GDN_DECODE_KERNEL.strip().lower()
         if self.gdn_decode_kernel == "cuda" and current_platform.is_cuda_alike():
-            reason = self._fused_gdn_decode_unsupported_reason(aphrodite_config)
+            reason = self._fused_gdn_decode_unsupported_reason(sonar_config)
             if reason is not None:
-                if "APHRODITE_GDN_DECODE_KERNEL" in os.environ:
-                    raise ValueError(f"APHRODITE_GDN_DECODE_KERNEL=cuda is not supported: {reason}")
+                if "SONAR_GDN_DECODE_KERNEL" in os.environ:
+                    raise ValueError(f"SONAR_GDN_DECODE_KERNEL=cuda is not supported: {reason}")
                 if self.speculative_config is not None:
                     logger.info_once(
                         "Falling back to the Triton GDN spec decode path: %s",
@@ -730,7 +730,7 @@ class QwenGatedDeltaNetAttention(GatedDeltaNetAttention):
         if self.speculative_config is not None:
             logger.info_once("GDN spec decode kernel: %s", self.gdn_decode_kernel)
 
-        compilation_config = get_current_aphrodite_config().compilation_config
+        compilation_config = get_current_sonar_config().compilation_config
         if prefix in compilation_config.static_forward_context:
             raise ValueError(f"Duplicate layer name: {prefix}")
         compilation_config.static_forward_context[prefix] = self
@@ -738,8 +738,8 @@ class QwenGatedDeltaNetAttention(GatedDeltaNetAttention):
     def get_prefill_checkpoint_alignment(self) -> int | None:
         return self._checkpoint_alignment
 
-    def get_kv_cache_spec(self, aphrodite_config: AphroditeConfig) -> KVCacheSpec | None:
-        spec = super().get_kv_cache_spec(aphrodite_config)
+    def get_kv_cache_spec(self, sonar_config: SonarConfig) -> KVCacheSpec | None:
+        spec = super().get_kv_cache_spec(sonar_config)
         if not self._exports_checkpoints or not isinstance(spec, MambaSpec):
             return spec
         # FlashInfer emits states at one stride for the whole batch, the gcd of
@@ -748,7 +748,7 @@ class QwenGatedDeltaNetAttention(GatedDeltaNetAttention):
         return replace(
             spec,
             num_prefill_checkpoint_blocks=1,
-            prefill_checkpoint_alignment=get_mamba_prefill_checkpoint_grid(aphrodite_config),
+            prefill_checkpoint_alignment=get_mamba_prefill_checkpoint_grid(sonar_config),
         )
 
     @functools.cached_property
@@ -758,7 +758,7 @@ class QwenGatedDeltaNetAttention(GatedDeltaNetAttention):
         # splitting the prefill instead.
         return (
             self._checkpoint_alignment is not None
-            and get_mamba_prefill_checkpoint_alignment(self.aphrodite_config) is not None
+            and get_mamba_prefill_checkpoint_alignment(self.sonar_config) is not None
         )
 
     @functools.cached_property
@@ -769,7 +769,7 @@ class QwenGatedDeltaNetAttention(GatedDeltaNetAttention):
             (
                 cdiv(
                     self._max_num_batched_tokens,
-                    get_mamba_prefill_checkpoint_grid(self.aphrodite_config),
+                    get_mamba_prefill_checkpoint_grid(self.sonar_config),
                 ),
                 self.num_v_heads // self.tp_size,
                 self.head_v_dim,
@@ -778,14 +778,14 @@ class QwenGatedDeltaNetAttention(GatedDeltaNetAttention):
             torch.float32,
         )
 
-    def _fused_gdn_decode_unsupported_reason(self, aphrodite_config: AphroditeConfig) -> str | None:
+    def _fused_gdn_decode_unsupported_reason(self, sonar_config: SonarConfig) -> str | None:
         conv_state_dtype, recurrent_state_dtype = self.get_state_dtype()
         if (
             self.gqa_interleaved_layout
             or self.head_k_dim != 128
             or self.head_v_dim != 128
             or self.norm.activation not in ("silu", "sigmoid")
-            or aphrodite_config.model_config.dtype != torch.bfloat16
+            or sonar_config.model_config.dtype != torch.bfloat16
             or conv_state_dtype != torch.bfloat16
             or recurrent_state_dtype not in FUSED_GDN_STATE_DTYPES
             or not current_platform.has_device_capability(80)
@@ -1104,7 +1104,7 @@ class QwenGatedDeltaNetAttention(GatedDeltaNetAttention):
                 device=projected_states_qkvz.device,
             )
 
-            torch.ops.aphrodite.qwen_gdn_attention_core(
+            torch.ops.sonar.qwen_gdn_attention_core(
                 projected_states_qkvz,
                 projected_states_ba,
                 z,
@@ -1164,7 +1164,7 @@ class QwenGatedDeltaNetAttention(GatedDeltaNetAttention):
                 dtype=hidden_states.dtype,
                 device=hidden_states.device,
             )
-            torch.ops.aphrodite.qwen_gdn_attention_core_fused_norm_packed(
+            torch.ops.sonar.qwen_gdn_attention_core_fused_norm_packed(
                 mixed_qkvz,
                 ba,
                 core_attn_out,
@@ -1203,7 +1203,7 @@ class QwenGatedDeltaNetAttention(GatedDeltaNetAttention):
         # (fused_post_conv_prep) and ROCm fallback kernels consume row strides
         # directly, and fused_sigmoid_gating_delta_rule_update contiguous()
         # internally where needed.
-        torch.ops.aphrodite.qwen_gdn_attention_core(
+        torch.ops.sonar.qwen_gdn_attention_core(
             mixed_qkv,
             b,
             a,
@@ -1265,7 +1265,7 @@ class QwenGatedDeltaNetAttention(GatedDeltaNetAttention):
             mixed_qkv, z, b, a = self.prepare_gdn_attention_core_inputs(
                 projected_states_qkvz, projected_states_ba, num_tokens
             )
-            torch.ops.aphrodite.qwen_gdn_attention_core(
+            torch.ops.sonar.qwen_gdn_attention_core(
                 mixed_qkv,
                 b.contiguous(),
                 a.contiguous(),
@@ -1274,7 +1274,7 @@ class QwenGatedDeltaNetAttention(GatedDeltaNetAttention):
             )
         else:
             z = torch.empty_like(core_attn_out)
-            torch.ops.aphrodite.gdn_attention_core_xpu(
+            torch.ops.sonar.gdn_attention_core_xpu(
                 core_attn_out,
                 z,
                 projected_states_qkvz,
@@ -1316,7 +1316,7 @@ class QwenGatedDeltaNetAttention(GatedDeltaNetAttention):
             device=hidden_states.device,
         )
 
-        torch.ops.aphrodite.cpu_gdn_attention_core(
+        torch.ops.sonar.cpu_gdn_attention_core(
             mixed_qkv,
             b,
             a,
@@ -1333,7 +1333,7 @@ class QwenGatedDeltaNetAttention(GatedDeltaNetAttention):
         ``attn_metadata`` is ``None``, so the autotuned kernels used by
         ``chunk_gated_delta_rule`` (e.g. ``solve_tril``,
         ``chunk_scaled_dot_kkt``) are never invoked.  After profiling,
-        Aphrodite allocates KV cache using most of the remaining GPU memory.
+        Sonar allocates KV cache using most of the remaining GPU memory.
         When the first real inference triggers the autotuner it OOMs
         because there is not enough memory left for benchmarking.
 
@@ -1404,7 +1404,7 @@ class QwenGatedDeltaNetAttention(GatedDeltaNetAttention):
         chunk_offsets = None
         aiter_prefill_metadata = None
         if self.gdn_prefill_backend == "cutedsl":
-            from aphrodite.model_executor.layers.mamba.ops.gdn_chunk_cutedsl import (
+            from sonar.model_executor.layers.mamba.ops.gdn_chunk_cutedsl import (
                 prepare_metadata_cutedsl,
             )
 
@@ -2193,7 +2193,7 @@ class QwenGatedDeltaNetAttention(GatedDeltaNetAttention):
         output_gate: torch.Tensor,
         out: torch.Tensor,
     ) -> None:
-        from aphrodite.third_party.flash_linear_attention.ops.layernorm_guard import (
+        from sonar.third_party.flash_linear_attention.ops.layernorm_guard import (
             layer_norm_fwd,
         )
 

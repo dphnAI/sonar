@@ -4,14 +4,14 @@
 
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar import _custom_ops as ops
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     pack_quantized_values_into_int32,
 )
-from aphrodite.model_executor.parameter import BaseAphroditeParameter, permute_param_layout_
-from aphrodite.model_executor.utils import replace_parameter
-from aphrodite.platforms import current_platform
-from aphrodite.scalar_type import scalar_types
+from sonar.model_executor.parameter import BaseSonarParameter, permute_param_layout_
+from sonar.model_executor.utils import replace_parameter
+from sonar.platforms import current_platform
+from sonar.scalar_type import scalar_types
 
 from .MPLinearKernel import MPLinearKernel, MPLinearLayerConfig
 
@@ -102,14 +102,14 @@ class ExllamaLinearKernel(MPLinearKernel):
             replace_parameter(layer, self.w_zp_name, zeros)
 
         def transform_w_q(x):
-            assert isinstance(x, BaseAphroditeParameter)
+            assert isinstance(x, BaseSonarParameter)
             permute_param_layout_(x, input_dim=0, output_dim=1, packed_dim=0)
             x_cont = x.data.contiguous()
             ops.gptq_shuffle(x_cont, c.weight_type.size_bits)
             return x_cont
 
         def transform_w_s(x):
-            assert isinstance(x, BaseAphroditeParameter)
+            assert isinstance(x, BaseSonarParameter)
             permute_param_layout_(x, input_dim=0, output_dim=1)
             x.data = x.data.contiguous()
             return x.to(dtype=c.act_type)

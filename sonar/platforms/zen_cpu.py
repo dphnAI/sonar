@@ -3,8 +3,8 @@
 
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.platforms.cpu import CpuPlatform
+from sonar.logger import init_logger
+from sonar.platforms.cpu import CpuPlatform
 
 logger = init_logger(__name__)
 
@@ -14,7 +14,7 @@ class ZenCpuPlatform(CpuPlatform):
 
     Model-load time (dispatch_cpu_unquantized_gemm in layers/utils.py):
       - Routes linear ops to zentorch_linear_unary.
-      - When APHRODITE_ZENTORCH_WEIGHT_PREPACK=1 (default), eagerly prepacks
+      - When SONAR_ZENTORCH_WEIGHT_PREPACK=1 (default), eagerly prepacks
         weights via zentorch_weight_prepack_for_linear.
     """
 

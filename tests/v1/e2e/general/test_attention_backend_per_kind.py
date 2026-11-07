@@ -10,17 +10,17 @@ sliding-window layers, so the model produces separate ``full_attention`` and
 
 import pytest
 
-from aphrodite import LLM
-from aphrodite.config.attention import AttentionConfig
-from aphrodite.platforms import current_platform
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
+from sonar import LLM
+from sonar.config.attention import AttentionConfig
+from sonar.platforms import current_platform
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
 
 MODEL = "google/gemma-3-1b-it"
 
 
 def _collect_group_backends(worker) -> list[tuple[str, str]]:
     """Runs on the worker: returns (spec_kind, backend_name) per attn group."""
-    from aphrodite.v1.kv_cache_interface import get_kv_cache_spec_kind
+    from sonar.v1.kv_cache_interface import get_kv_cache_spec_kind
 
     out: list[tuple[str, str]] = []
     for kv_group in worker.model_runner.attn_groups:
@@ -39,7 +39,7 @@ def _collect_group_backends(worker) -> list[tuple[str, str]]:
     ],
 )
 def test_backend_per_kind_splits_groups(backend_per_kind, monkeypatch):
-    monkeypatch.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
+    monkeypatch.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")
     llm = LLM(
         model=MODEL,
         attention_config=AttentionConfig(backend_per_kind=backend_per_kind),
@@ -63,7 +63,7 @@ def test_backend_per_kind_splits_groups(backend_per_kind, monkeypatch):
 
 @pytest.mark.skipif(not current_platform.is_cuda(), reason="backend names are CUDA-specific")
 def test_backend_per_kind_overrides_global_backend(monkeypatch):
-    monkeypatch.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
+    monkeypatch.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")
     llm = LLM(
         model=MODEL,
         attention_config=AttentionConfig(

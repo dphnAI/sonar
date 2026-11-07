@@ -12,7 +12,7 @@ import torch
 from cutlass import BFloat16, Float32, Int32, Uint8, Uint32, Uint64
 from cutlass.cute.runtime import make_fake_stream, make_fake_tensor
 
-from aphrodite.models.common.ops.moe_tail_fusion.primitives import to_cute
+from sonar.models.common.ops.moe_tail_fusion.primitives import to_cute
 
 from ...common.primitives import (
     alloc,
@@ -538,7 +538,7 @@ class MoeFrontTP16:
                 if lane < 16:
                     normalized = score
                     if cutlass.const_expr(self.renorm):
-                        # Like the TP8 front and Aphrodite's grouped_topk kernels.
+                        # Like the TP8 front and Sonar's grouped_topk kernels.
                         normalized = div_rn(score, total + Float32(1e-20))
                     bits = Uint32(gate_bf16_bits(normalized * scale))
                     if bits == 0x8000:

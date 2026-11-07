@@ -10,36 +10,36 @@ from typing import TYPE_CHECKING, Any
 import torch
 import torch.nn as nn
 
-from aphrodite.config.model import PROCESSED_LOGPROBS_MODES
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.warmup.jit_warmup import WarmupChoices
-from aphrodite.model_executor.warmup.jit_warmup_triton_helper import (
+from sonar.config.model import PROCESSED_LOGPROBS_MODES
+from sonar.logger import init_logger
+from sonar.model_executor.warmup.jit_warmup import WarmupChoices
+from sonar.model_executor.warmup.jit_warmup_triton_helper import (
     DispatchSpec,
     TritonWarmupTensor,
     triton_kernel_dispatcher_with_warmup,
 )
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.torch_utils import async_tensor_h2d
-from aphrodite.v1.outputs import LogprobsLists, LogprobsTensors, SamplerOutput
-from aphrodite.v1.sample.logits_processor.builtin import (
+from sonar.triton_utils import tl, triton
+from sonar.utils.torch_utils import async_tensor_h2d
+from sonar.v1.outputs import LogprobsLists, LogprobsTensors, SamplerOutput
+from sonar.v1.sample.logits_processor.builtin import (
     MinPLogitsProcessor,
     MinTokensLogitsProcessor,
 )
-from aphrodite.v1.sample.metadata import SamplingMetadata
-from aphrodite.v1.sample.ops.bad_words import apply_bad_words_with_drafts
-from aphrodite.v1.sample.ops.penalties import apply_all_penalties
-from aphrodite.v1.sample.ops.topk_topp_sampler import apply_top_k_top_p
-from aphrodite.v1.sample.sampler import Sampler, has_custom_sampling_params
-from aphrodite.v1.spec_decode.fly import (
+from sonar.v1.sample.metadata import SamplingMetadata
+from sonar.v1.sample.ops.bad_words import apply_bad_words_with_drafts
+from sonar.v1.sample.ops.penalties import apply_all_penalties
+from sonar.v1.sample.ops.topk_topp_sampler import apply_top_k_top_p
+from sonar.v1.sample.sampler import Sampler, has_custom_sampling_params
+from sonar.v1.spec_decode.fly import (
     apply_fly_greedy_acceptance_kernel,
     apply_fly_random_acceptance_kernel,
     compute_fly_entropy,
 )
-from aphrodite.v1.spec_decode.metadata import SpecDecodeMetadata
-from aphrodite.v1.spec_decode.utils import unconditional_to_conditional_rates
+from sonar.v1.spec_decode.metadata import SpecDecodeMetadata
+from sonar.v1.spec_decode.utils import unconditional_to_conditional_rates
 
 if TYPE_CHECKING:
-    from aphrodite.config.speculative import SpeculativeConfig
+    from sonar.config.speculative import SpeculativeConfig
 
 logger = init_logger(__name__)
 
@@ -140,7 +140,7 @@ class RejectionSampler(nn.Module):
                 probabilities from different requests are flattened into a
                 single tensor because this is the shape of the output logits.
                 NOTE: `logits` can be updated in place to save memory.
-            sampling_metadata (aphrodite.v1.sample.metadata.SamplingMetadata):
+            sampling_metadata (sonar.v1.sample.metadata.SamplingMetadata):
                 Additional metadata needed for sampling, such as temperature,
                 top-k/top-p parameters, or other relevant information.
 

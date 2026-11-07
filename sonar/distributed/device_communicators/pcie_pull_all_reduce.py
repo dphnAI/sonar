@@ -18,17 +18,17 @@ import torch
 import torch.distributed as dist
 from torch.distributed import ProcessGroup
 
-import aphrodite.envs as envs
-from aphrodite import _custom_ops as ops
-from aphrodite.distributed.parallel_state import in_the_same_node_as
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.utils.gpu_sync_debug import gpu_sync_allowed
-from aphrodite.utils.torch_utils import current_stream
-from aphrodite.v1.worker.workspace import retain_cuda_graph_capture_resource
+import sonar.envs as envs
+from sonar import _custom_ops as ops
+from sonar.distributed.parallel_state import in_the_same_node_as
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.utils.gpu_sync_debug import gpu_sync_allowed
+from sonar.utils.torch_utils import current_stream
+from sonar.v1.worker.workspace import retain_cuda_graph_capture_resource
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
+    from sonar.config import SonarConfig
 
 logger = init_logger(__name__)
 
@@ -68,7 +68,7 @@ class PciePullAllReduce:
         self.device = torch.device(device)
         self.rank = dist.get_rank(group)
         self.world_size = dist.get_world_size(group)
-        self.transport = envs.APHRODITE_ALLREDUCE_PCIE_TRANSPORT
+        self.transport = envs.SONAR_ALLREDUCE_PCIE_TRANSPORT
         if self.transport == "host":
             self.MAX_ROWS = 64
             self.WIDTHS = (self.HIDDEN_SIZE,)
@@ -128,7 +128,7 @@ class PciePullAllReduce:
             error = f"{type(exc).__name__}: {exc}"
         return self._exchange(phase, value, error)
 
-    def _manifest(self, config: "AphroditeConfig", use_v2_model_runner: bool) -> dict[str, Any]:
+    def _manifest(self, config: "SonarConfig", use_v2_model_runner: bool) -> dict[str, Any]:
         parallel = config.parallel_config
         model = config.model_config
         errors: list[str] = []
@@ -181,7 +181,7 @@ class PciePullAllReduce:
             errors.append("weight offloading is unsupported")
         if model.dtype != torch.bfloat16 or model.get_hidden_size() != self.HIDDEN_SIZE:
             errors.append("the initial model invariant is BF16 with hidden_size=5120")
-        if envs.APHRODITE_ALLREDUCE_USE_FLASHINFER_PCIE_IPC:
+        if envs.SONAR_ALLREDUCE_USE_FLASHINFER_PCIE_IPC:
             errors.append(f"FlashInfer PCIe IPC and PCIe {self.transport} all-reduce cannot both be selected")
 
         speculative = config.speculative_config
@@ -248,9 +248,9 @@ class PciePullAllReduce:
                 draft_manifest,
                 tuple(config.compilation_config.cudagraph_capture_sizes or ()),
                 str(config.compilation_config.cudagraph_mode),
-                bool(envs.APHRODITE_BATCH_INVARIANT),
-                bool(envs.APHRODITE_ALLREDUCE_USE_SYMM_MEM),
-                bool(envs.APHRODITE_ALLREDUCE_USE_FLASHINFER),
+                bool(envs.SONAR_BATCH_INVARIANT),
+                bool(envs.SONAR_ALLREDUCE_USE_SYMM_MEM),
+                bool(envs.SONAR_ALLREDUCE_USE_FLASHINFER),
                 parallel.disable_custom_all_reduce,
                 self._native.buffer_size(self.CAPACITY, self.BLOCKS, self.TRANSPORT),
             ),
@@ -261,7 +261,7 @@ class PciePullAllReduce:
     def _topology(self, physical_ids: list[int]) -> tuple[Any, ...]:
         # NVML READ/WRITE capabilities and successful IPC imports are necessary
         # setup gates, not a substitute for qualifying SM-issued transport.
-        from aphrodite.utils.import_utils import import_pynvml
+        from sonar.utils.import_utils import import_pynvml
 
         pynvml = import_pynvml()
         pynvml.nvmlInit()
@@ -296,7 +296,7 @@ class PciePullAllReduce:
         def create_file():
             if self.rank != 0:
                 return None
-            self._host_fd, self._host_path = tempfile.mkstemp(prefix="aphrodite-pcie-host-", dir="/dev/shm")
+            self._host_fd, self._host_path = tempfile.mkstemp(prefix="sonar-pcie-host-", dir="/dev/shm")
             os.ftruncate(self._host_fd, total_bytes)
             stat = os.fstat(self._host_fd)
             return (self._host_path, stat.st_dev, stat.st_ino, stat.st_size)
@@ -344,7 +344,7 @@ class PciePullAllReduce:
 
         self._stage("host registration", register)
 
-    def initialize(self, config: "AphroditeConfig", *, use_v2_model_runner: bool) -> None:
+    def initialize(self, config: "SonarConfig", *, use_v2_model_runner: bool) -> None:
         """Collectively allocate the fixed workspace before GPU memory profiling."""
         if dist.get_backend(self.group) != dist.Backend.GLOO:
             raise ValueError(f"PCIe {self.transport} all-reduce requires a CPU Gloo process group")

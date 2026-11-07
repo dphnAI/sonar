@@ -11,17 +11,17 @@ from typing import Any, ParamSpec, TypeVar
 
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.compilation.counter import compilation_counter
-from aphrodite.config import (
-    AphroditeConfig,
+import sonar.envs as envs
+from sonar.compilation.counter import compilation_counter
+from sonar.config import (
     CompilationMode,
     CUDAGraphMode,
-    get_current_aphrodite_config,
+    SonarConfig,
+    get_current_sonar_config,
 )
-from aphrodite.config.compilation import DynamicShapesType
-from aphrodite.logger import init_logger
-from aphrodite.utils.nvtx_pytorch_hooks import layerwise_nvtx_marker_context
+from sonar.config.compilation import DynamicShapesType
+from sonar.logger import init_logger
+from sonar.utils.nvtx_pytorch_hooks import layerwise_nvtx_marker_context
 
 logger = init_logger(__name__)
 
@@ -50,11 +50,11 @@ def _compilation_context() -> Generator[None, None, None]:
         torch._dynamo.config.accumulated_cache_size_limit = original_accumulated_cache
 
 
-def compile_model_with_stock_torch(model: torch.nn.Module, aphrodite_config: AphroditeConfig) -> None:
-    from aphrodite.env_override import _apply_constrain_to_fx_strides_patch
+def compile_model_with_stock_torch(model: torch.nn.Module, sonar_config: SonarConfig) -> None:
+    from sonar.env_override import _apply_constrain_to_fx_strides_patch
 
     _apply_constrain_to_fx_strides_patch()
-    backend = aphrodite_config.compilation_config.init_backend(aphrodite_config)
+    backend = sonar_config.compilation_config.init_backend(sonar_config)
     compilation_counter.stock_torch_compile_count += 1
     model.compile(fullgraph=True, backend=backend)
 
@@ -92,15 +92,15 @@ class TorchCompileWithNoGuardsWrapper:
         self._compile_prefix = compile_prefix
         self._is_encoder = is_encoder
 
-        aphrodite_config = get_current_aphrodite_config()
-        self.aphrodite_config = aphrodite_config
-        mode = aphrodite_config.compilation_config.mode
-        self.layerwise_nvtx_tracing_enabled = aphrodite_config.observability_config.enable_layerwise_nvtx_tracing
+        sonar_config = get_current_sonar_config()
+        self.sonar_config = sonar_config
+        mode = sonar_config.compilation_config.mode
+        self.layerwise_nvtx_tracing_enabled = sonar_config.observability_config.enable_layerwise_nvtx_tracing
         if mode is None:
             raise RuntimeError("Compilation mode cannot be NO_COMPILATION")
 
-        backend = aphrodite_config.compilation_config.init_backend(
-            aphrodite_config,
+        backend = sonar_config.compilation_config.init_backend(
+            sonar_config,
             prefix=compile_prefix,
             is_encoder=is_encoder,
             use_aot_compile=self._allow_aot_compile,
@@ -108,18 +108,18 @@ class TorchCompileWithNoGuardsWrapper:
         options = {}
 
         if isinstance(backend, str) and backend == "inductor":
-            options = aphrodite_config.compilation_config.inductor_compile_config
+            options = sonar_config.compilation_config.inductor_compile_config
 
         self.first_compile = True
-        self.evaluate_guards = aphrodite_config.compilation_config.dynamic_shapes_config.evaluate_guards
+        self.evaluate_guards = sonar_config.compilation_config.dynamic_shapes_config.evaluate_guards
 
-        ds_type = aphrodite_config.compilation_config.dynamic_shapes_config.type
+        ds_type = sonar_config.compilation_config.dynamic_shapes_config.type
 
         if mode != CompilationMode.STOCK_TORCH_COMPILE:
             # Drop all the guards.
             if self.evaluate_guards:
-                assert not envs.APHRODITE_USE_BYTECODE_HOOK, (
-                    "compilation_config.dynamic_shapes_config.evaluate_guards requires APHRODITE_USE_BYTECODE_HOOK=0. "
+                assert not envs.SONAR_USE_BYTECODE_HOOK, (
+                    "compilation_config.dynamic_shapes_config.evaluate_guards requires SONAR_USE_BYTECODE_HOOK=0. "
                 )
                 assert ds_type != DynamicShapesType.UNBACKED, "UNBACKED dynamic shapes do not add guards"
 
@@ -133,17 +133,17 @@ class TorchCompileWithNoGuardsWrapper:
                     options["guard_filter_fn"] = lambda x: [False for _ in x]
 
         compiled_ptr: Any = self.forward
-        # Validate that unbacked dynamic shapes require APHRODITE_USE_BYTECODE_HOOK=False
+        # Validate that unbacked dynamic shapes require SONAR_USE_BYTECODE_HOOK=False
 
         # Apply the constrain_to_fx_strides patch before first compilation.
-        # This covers STOCK_TORCH_COMPILE and DYNAMO_ONCE paths. The APHRODITE
+        # This covers STOCK_TORCH_COMPILE and DYNAMO_ONCE paths. The SONAR
         # compile paths call this from their own compile() methods too.
-        from aphrodite.env_override import _apply_constrain_to_fx_strides_patch
+        from sonar.env_override import _apply_constrain_to_fx_strides_patch
 
         _apply_constrain_to_fx_strides_patch()
 
         aot_context = nullcontext()
-        if self._allow_aot_compile and envs.APHRODITE_USE_AOT_COMPILE:
+        if self._allow_aot_compile and envs.SONAR_USE_AOT_COMPILE:
             if hasattr(torch._dynamo.config, "enable_aot_compile"):
                 aot_context = torch._dynamo.config.patch(enable_aot_compile=True)
             else:
@@ -161,7 +161,7 @@ class TorchCompileWithNoGuardsWrapper:
                 options=options,
             )
 
-        if envs.APHRODITE_USE_BYTECODE_HOOK and mode != CompilationMode.STOCK_TORCH_COMPILE:
+        if envs.SONAR_USE_BYTECODE_HOOK and mode != CompilationMode.STOCK_TORCH_COMPILE:
             self._bytecode_hook_handle = torch._dynamo.convert_frame.register_bytecode_hook(self.bytecode_hook)
             self._compiled_bytecode: CodeType | None = None
 
@@ -175,8 +175,8 @@ class TorchCompileWithNoGuardsWrapper:
         return self._compiled_callable.aot_compile((args, kwargs))
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
-        if envs.APHRODITE_USE_BYTECODE_HOOK:
-            if self.aphrodite_config.compilation_config.mode == CompilationMode.STOCK_TORCH_COMPILE:
+        if envs.SONAR_USE_BYTECODE_HOOK:
+            if self.sonar_config.compilation_config.mode == CompilationMode.STOCK_TORCH_COMPILE:
                 return self._compiled_callable(*args, **kwargs)
 
             if not self._compiled_bytecode:
@@ -224,7 +224,7 @@ class TorchCompileWithNoGuardsWrapper:
 
         self._compiled_bytecode = new_code
 
-        path = self.aphrodite_config.compile_debug_dump_path()
+        path = self.sonar_config.compile_debug_dump_path()
         if path:
             decompiled_file = path / "transformed_code.py"
             if not decompiled_file.exists():
@@ -244,10 +244,7 @@ class TorchCompileWithNoGuardsWrapper:
                 except Exception:
                     pass
 
-        if (
-            self.aphrodite_config.compilation_config.cudagraph_mode != CUDAGraphMode.NONE
-            and "update" in new_code.co_names
-        ):
+        if self.sonar_config.compilation_config.cudagraph_mode != CUDAGraphMode.NONE and "update" in new_code.co_names:
             import depyf
 
             src = depyf.decompile(new_code)
@@ -295,7 +292,7 @@ def reset_compile_wrapper(model: torch.nn.Module) -> None:
     # model.do_not_compile is set by the @support_torch_compile decorator
     if hasattr(model, "do_not_compile") and model.do_not_compile:
         return
-    from aphrodite.compilation.counter import compilation_counter
+    from sonar.compilation.counter import compilation_counter
 
     # reset the compilation counter
     compilation_counter.num_models_seen = 0
@@ -324,9 +321,9 @@ def reset_compile_wrapper(model: torch.nn.Module) -> None:
     if hasattr(model, "was_aot_compile_fn_loaded_from_disk"):
         model.was_aot_compile_fn_loaded_from_disk = False
 
-    # Reset the cache_dir so AphroditeBackend recomputes the hash
+    # Reset the cache_dir so SonarBackend recomputes the hash
     # (data_parallel_size changed, so the config hash differs).
-    compilation_config = model.aphrodite_config.compilation_config
+    compilation_config = model.sonar_config.compilation_config
     compilation_config.cache_dir = ""
     compilation_config.local_cache_dir = ""
 

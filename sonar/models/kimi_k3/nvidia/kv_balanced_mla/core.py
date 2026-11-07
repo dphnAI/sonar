@@ -18,7 +18,7 @@ import torch
 import tvm_ffi
 from cutlass import Float32, Int32
 
-from aphrodite.triton_utils import tl, triton
+from sonar.triton_utils import tl, triton
 
 from .helpers import get_mla_decode_arch, select_mla_decode_tilers
 from .kernel import BlackwellMultiHeadLatentAttentionForwardFP8

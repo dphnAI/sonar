@@ -3,7 +3,7 @@
 
 import pytest
 
-from aphrodite.model_executor.layers.fused_moe.expert_map_manager import (
+from sonar.model_executor.layers.fused_moe.expert_map_manager import (
     determine_expert_map,
 )
 

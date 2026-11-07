@@ -7,15 +7,15 @@ from typing import Any, ClassVar
 import torch
 from torch import nn
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.model_executor.layers.attention_layer_base import AttentionLayerBase
-from aphrodite.v1.attention.backend import (
+from sonar.config import SonarConfig
+from sonar.model_executor.layers.attention_layer_base import AttentionLayerBase
+from sonar.v1.attention.backend import (
     AttentionBackend,
     AttentionCGSupport,
     AttentionMetadataBuilder,
     CommonAttentionMetadata,
 )
-from aphrodite.v1.kv_cache_interface import FullAttentionSpec, KVCacheSpec
+from sonar.v1.kv_cache_interface import FullAttentionSpec, KVCacheSpec
 
 from .csa_tail_ring import Step5CSATailRing
 
@@ -88,10 +88,10 @@ class Step5SparseSummaryMetadataBuilder(AttentionMetadataBuilder):
         self,
         kv_cache_spec: KVCacheSpec,
         layer_names: list[str],
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
     ):
-        super().__init__(kv_cache_spec, layer_names, aphrodite_config, device)
+        super().__init__(kv_cache_spec, layer_names, sonar_config, device)
 
     def build(
         self,
@@ -138,8 +138,8 @@ class Step5SparseSummaryCacheLayer(nn.Module, AttentionLayerBase):
     def get_attn_backend(self) -> type[AttentionBackend]:
         return Step5SparseSummaryBackend
 
-    def get_kv_cache_spec(self, aphrodite_config: AphroditeConfig) -> KVCacheSpec:
-        block_size = aphrodite_config.cache_config.block_size
+    def get_kv_cache_spec(self, sonar_config: SonarConfig) -> KVCacheSpec:
+        block_size = sonar_config.cache_config.block_size
         if block_size % 8:
             raise ValueError("Step5 KV blocks must align to eight-token regions")
         return FullAttentionSpec(

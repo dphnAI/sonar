@@ -25,7 +25,7 @@ import os
 import shutil
 from pathlib import Path
 
-from aphrodite import LLM, EngineArgs
+from sonar import LLM, EngineArgs
 
 parser = argparse.ArgumentParser()
 EngineArgs.add_cli_args(parser)

@@ -17,23 +17,23 @@ import regex as re
 import torch
 from transformers import AutoTokenizer
 
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.inputs import EmbedsPrompt
-from aphrodite.renderers import ChatParams, TokenizeParams
-from aphrodite.renderers.chat_utils import parse_chat_messages, parse_chat_messages_async
-from aphrodite.renderers.chat_utils.chat_message import (
+from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+from sonar.exceptions import SonarValidationError
+from sonar.inputs import EmbedsPrompt
+from sonar.renderers import ChatParams, TokenizeParams
+from sonar.renderers.chat_utils import parse_chat_messages, parse_chat_messages_async
+from sonar.renderers.chat_utils.chat_message import (
     _PROMPT_EMBEDS_MISSING_DATA_ERROR,
     _RESERVED_PLACEHOLDER_IN_TEXT_ERROR,
     MM_PARSER_MAP,
 )
-from aphrodite.renderers.chat_utils.content_parser import (
+from sonar.renderers.chat_utils.content_parser import (
     _ENABLE_PROMPT_EMBEDS_ERROR,
     MODALITY_PLACEHOLDERS_MAP,
     PROMPT_EMBEDS_PLACEHOLDER_ID_PREFIX,
     PROMPT_EMBEDS_PLACEHOLDER_TOKEN,
 )
-from aphrodite.renderers.hf import (
+from sonar.renderers.hf import (
     _PROMPT_EMBEDS_PLACEHOLDER_SPAN_MISMATCH_ERROR,
     HfRenderer,
     _build_mixed_prompt_embeds,
@@ -166,7 +166,7 @@ def test_parse_chat_messages_openai_format():
     texts = [p["text"] for p in parts]
     assert texts == [
         "Hello ",
-        f"{PROMPT_EMBEDS_PLACEHOLDER_TOKEN}__aphrodite_prompt_embed_0__",
+        f"{PROMPT_EMBEDS_PLACEHOLDER_TOKEN}__sonar_prompt_embed_0__",
         " world",
     ]
     assert mm_data is not None and "prompt_embeds" in mm_data
@@ -419,9 +419,7 @@ def test_parse_chat_messages_string_format_preserves_position(layout, interleave
             expected_embeds.append(t)
             content.append({"type": "prompt_embeds", "data": _encode_tensor(t)})
             # Parser emits one identity-preserving sentinel per part.
-            expected_parts.append(
-                f"{PROMPT_EMBEDS_PLACEHOLDER_TOKEN}__aphrodite_prompt_embed_{len(expected_embeds) - 1}__"
-            )
+            expected_parts.append(f"{PROMPT_EMBEDS_PLACEHOLDER_TOKEN}__sonar_prompt_embed_{len(expected_embeds) - 1}__")
 
     messages = [{"role": "user", "content": content}]
     conv, mm_data, _ = parse_chat_messages(
@@ -445,7 +443,7 @@ def test_parse_chat_messages_requires_flag(field):
 
     part = {"type": "prompt_embeds", "data": b64}
     messages = [{"role": "assistant", field: [part] if field == "content" else part}]
-    with pytest.raises(AphroditeValidationError, match=_ENABLE_PROMPT_EMBEDS_ERROR):
+    with pytest.raises(SonarValidationError, match=_ENABLE_PROMPT_EMBEDS_ERROR):
         parse_chat_messages(
             messages,
             mc,
@@ -461,7 +459,7 @@ def test_parse_chat_messages_rejects_missing_data(field):
     mc = _make_mock_model_config()
     part = {"type": "prompt_embeds"}
     messages = [{"role": "assistant", field: [part] if field == "content" else part}]
-    with pytest.raises(AphroditeValidationError, match=_PROMPT_EMBEDS_MISSING_DATA_ERROR):
+    with pytest.raises(SonarValidationError, match=_PROMPT_EMBEDS_MISSING_DATA_ERROR):
         parse_chat_messages(
             messages,
             mc,
@@ -491,7 +489,7 @@ _PLACEHOLDER_ERROR_PATTERN: Final[str] = re.sub(r"\\{[^}]*\\}", ".*", re.escape(
 def test_parse_chat_messages_rejects_placeholder_in_user_text(content):
     mc = _make_mock_model_config()  # enable_prompt_embeds=True by default
     messages = [{"role": "user", "content": content}]
-    with pytest.raises(AphroditeValidationError, match=_PLACEHOLDER_ERROR_PATTERN):
+    with pytest.raises(SonarValidationError, match=_PLACEHOLDER_ERROR_PATTERN):
         parse_chat_messages(messages, mc, content_format="openai")
 
 

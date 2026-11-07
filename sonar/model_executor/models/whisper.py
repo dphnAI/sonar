@@ -17,58 +17,58 @@ from transformers import (
 )
 from transformers.models.whisper.modeling_whisper import sinusoids
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, CacheConfig, ModelConfig, SpeechToTextConfig
-from aphrodite.config.multimodal import MultiModalDummyOptions
-from aphrodite.config.speech_to_text import SpeechToTextParams
-from aphrodite.distributed import get_tensor_model_parallel_world_size
-from aphrodite.inputs import (
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import CacheConfig, ModelConfig, SonarConfig, SpeechToTextConfig
+from sonar.config.multimodal import MultiModalDummyOptions
+from sonar.config.speech_to_text import SpeechToTextParams
+from sonar.distributed import get_tensor_model_parallel_world_size
+from sonar.inputs import (
     ExplicitEncoderDecoderPrompt,
     MultiModalDataDict,
     PromptType,
     TextPrompt,
 )
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.activation import get_act_fn
-from aphrodite.model_executor.layers.attention import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.activation import get_act_fn
+from sonar.model_executor.layers.attention import (
     Attention,
     CrossAttention,
     MMEncoderAttention,
 )
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     MergedColumnParallelLinear,
     QKVParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
-from aphrodite.model_executor.models.whisper_utils import (
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
+from sonar.model_executor.models.whisper_utils import (
     ISO639_1_SUPPORTED_LANGS,
 )
-from aphrodite.model_executor.offloader import get_offloader
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import (
+from sonar.model_executor.offloader import get_offloader
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import (
     MultiModalFieldConfig,
     MultiModalKwargsItems,
 )
-from aphrodite.multimodal.parse import MultiModalDataItems, MultiModalDataParser
-from aphrodite.multimodal.processing import (
+from sonar.multimodal.parse import MultiModalDataItems, MultiModalDataParser
+from sonar.multimodal.processing import (
     BaseDummyInputsBuilder,
     BaseProcessingInfo,
     EncDecMultiModalProcessor,
     PromptReplacement,
     PromptUpdate,
 )
-from aphrodite.multimodal.processing.processor import HFMultiModalInputs
-from aphrodite.renderers import TokenizeParams
-from aphrodite.tokenizers import TokenizerLike
-from aphrodite.transformers_utils.processor import cached_processor_from_config
-from aphrodite.utils.jsontree import json_map_leaves
-from aphrodite.utils.tensor_schema import TensorSchema, TensorShape
-from aphrodite.utils.torch_utils import set_default_torch_dtype
-from aphrodite.v1.attention.backend import (
+from sonar.multimodal.processing.processor import HFMultiModalInputs
+from sonar.renderers import TokenizeParams
+from sonar.tokenizers import TokenizerLike
+from sonar.transformers_utils.processor import cached_processor_from_config
+from sonar.utils.jsontree import json_map_leaves
+from sonar.utils.tensor_schema import TensorSchema, TensorShape
+from sonar.utils.torch_utils import set_default_torch_dtype
+from sonar.v1.attention.backend import (
     AttentionType,
 )
 
@@ -380,12 +380,12 @@ class WhisperMLP(nn.Module):
 
 
 class WhisperEncoderLayer(nn.Module):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
         sliding_window = getattr(config, "sliding_window", None)
-        cache_config = aphrodite_config.cache_config
-        quant_config = aphrodite_config.quant_config
+        cache_config = sonar_config.cache_config
+        quant_config = sonar_config.quant_config
 
         self.embed_dim = config.d_model
         self.self_attn = WhisperAttention(
@@ -435,11 +435,11 @@ class WhisperEncoderLayer(nn.Module):
 
 
 class WhisperDecoderLayer(nn.Module):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        cache_config = aphrodite_config.cache_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        cache_config = sonar_config.cache_config
+        quant_config = sonar_config.quant_config
 
         self.self_attn = WhisperAttention(
             embed_dim=config.d_model,
@@ -497,13 +497,13 @@ class WhisperEncoder(nn.Module):
     def __init__(
         self,
         *,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
         init_in_fp32: bool = False,
         enable_pp: bool = True,
     ):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
         embed_dim = config.d_model
 
         self.pos_embed_type = WhisperPosEmbedType(getattr(config, "pos_embed", "sinusoidal"))
@@ -517,7 +517,7 @@ class WhisperEncoder(nn.Module):
         self.total_stride = self.conv1.stride[0] * self.conv2.stride[0]
 
         def create_layer(prefix: str) -> nn.Module:
-            return WhisperEncoderLayer(aphrodite_config=aphrodite_config, prefix=f"{prefix}.layers")
+            return WhisperEncoderLayer(sonar_config=sonar_config, prefix=f"{prefix}.layers")
 
         if enable_pp:
             self.start_layer, self.end_layer, self.layers = make_layers(
@@ -581,9 +581,9 @@ class WhisperEncoder(nn.Module):
 
 @support_torch_compile(dynamic_arg_dims={"input_ids": 0, "positions": -1})
 class WhisperDecoder(nn.Module):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
         self.layerdrop = config.decoder_layerdrop
         self.padding_idx = config.pad_token_id
         self.max_target_positions = config.max_target_positions
@@ -594,7 +594,7 @@ class WhisperDecoder(nn.Module):
         self.embed_positions = WhisperPositionalEmbedding(self.max_target_positions, config.d_model)
         self.start_layer, self.end_layer, self.layers = make_layers(
             config.decoder_layers,
-            lambda prefix: WhisperDecoderLayer(aphrodite_config=aphrodite_config, prefix=f"{prefix}.layers"),
+            lambda prefix: WhisperDecoderLayer(sonar_config=sonar_config, prefix=f"{prefix}.layers"),
             prefix=f"{prefix}.layers",
         )
         self.layer_norm = nn.LayerNorm(config.d_model)
@@ -623,10 +623,10 @@ class WhisperDecoder(nn.Module):
 
 
 class WhisperModel(nn.Module):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        self.encoder = WhisperEncoder(aphrodite_config=aphrodite_config, prefix=f"{prefix}.encoder")
-        self.decoder = WhisperDecoder(aphrodite_config=aphrodite_config, prefix=f"{prefix}.decoder")
+        self.encoder = WhisperEncoder(sonar_config=sonar_config, prefix=f"{prefix}.encoder")
+        self.decoder = WhisperDecoder(sonar_config=sonar_config, prefix=f"{prefix}.decoder")
 
     def forward(
         self,
@@ -788,7 +788,7 @@ class WhisperForConditionalGeneration(
         "kv_proj": ["k_proj", "v_proj"],
     }
 
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_substr={".fc1.": ".mlp.fc1.", ".fc2.": ".mlp.fc2."},
         orig_to_new_stacked={
             # weight_name: (param_name, shard_id)
@@ -934,19 +934,19 @@ class WhisperForConditionalGeneration(
         # is the log-mel spectogram length.
         return math.ceil(audio_duration_s * stt_config.sample_rate / hop_length)
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
         self.config = config
-        self.dtype = aphrodite_config.model_config.dtype
+        self.dtype = sonar_config.model_config.dtype
 
         with self._mark_composite_model(
-            aphrodite_config,
+            sonar_config,
             language_targets=WhisperDecoder,
             tower_targets={"audio": WhisperEncoder},
         ):
-            self.model = WhisperModel(aphrodite_config=aphrodite_config, prefix=prefix)
+            self.model = WhisperModel(sonar_config=sonar_config, prefix=prefix)
 
         self.proj_out = ParallelLMHead(
             config.vocab_size,
@@ -1012,7 +1012,7 @@ class WhisperForConditionalGeneration(
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
 
 def _create_fake_bias_for_k_proj(

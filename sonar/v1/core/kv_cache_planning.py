@@ -9,19 +9,19 @@ from dataclasses import replace
 from functools import partial, reduce
 from typing import Any
 
-from aphrodite.config import AphroditeConfig, SpeculativeConfig
-from aphrodite.logger import init_logger
-from aphrodite.utils.math_utils import cdiv, round_up
-from aphrodite.utils.mem_utils import format_gib
-from aphrodite.utils.torch_utils import get_dtype_size
-from aphrodite.v1.core.kv_cache_config_builder import KVCacheConfigBuilder
-from aphrodite.v1.core.kv_cache_utils import _kv_cache_device_name
-from aphrodite.v1.hisparse.layout import (
+from sonar.config import SonarConfig, SpeculativeConfig
+from sonar.logger import init_logger
+from sonar.utils.math_utils import cdiv, round_up
+from sonar.utils.mem_utils import format_gib
+from sonar.utils.torch_utils import get_dtype_size
+from sonar.v1.core.kv_cache_config_builder import KVCacheConfigBuilder
+from sonar.v1.core.kv_cache_utils import _kv_cache_device_name
+from sonar.v1.hisparse.layout import (
     get_hisparse_host_pool_bytes,
     get_hisparse_kv_cache_config,
     get_hisparse_kv_cache_groups,
 )
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.kv_cache_interface import (
     AttentionSpec,
     ChunkedLocalAttentionSpec,
     CircularBufferSpec,
@@ -42,7 +42,7 @@ from aphrodite.v1.kv_cache_interface import (
     iter_layer_specs,
     replace_as,
 )
-from aphrodite.v1.kv_cache_spec_registry import KVCacheSpecRegistry
+from sonar.v1.kv_cache_spec_registry import KVCacheSpecRegistry
 
 logger = init_logger(__name__)
 
@@ -59,7 +59,7 @@ def _check_enough_kv_cache_memory(
             "Try increasing `gpu_memory_utilization` when initializing the engine "
             "(this flag also controls CPU memory reservation on the CPU "
             "backend, despite its name). "
-            "See https://docs.aphrodite.ai/en/latest/configuration/conserving_memory/ "
+            "See https://sonar.dphn.ai/en/latest/configuration/conserving_memory/ "
             "for more details."
         )
 
@@ -81,18 +81,18 @@ def _check_enough_kv_cache_memory(
             f"Try increasing `gpu_memory_utilization` (which also controls "
             f"CPU memory on the CPU backend) or decreasing `max_model_len` "
             f"when initializing the engine. "
-            f"See https://docs.aphrodite.ai/en/latest/configuration/conserving_memory/ "
+            f"See https://sonar.dphn.ai/en/latest/configuration/conserving_memory/ "
             f"for more details."
         )
 
 
-def max_memory_usage_bytes(aphrodite_config: AphroditeConfig, kv_cache_specs: Iterable[KVCacheSpec]) -> int:
+def max_memory_usage_bytes(sonar_config: SonarConfig, kv_cache_specs: Iterable[KVCacheSpec]) -> int:
     """Get the maximum memory usage in bytes for the given KV cache specs."""
-    return sum(spec.max_memory_usage_bytes(aphrodite_config) for spec in kv_cache_specs)
+    return sum(spec.max_memory_usage_bytes(sonar_config) for spec in kv_cache_specs)
 
 
 def estimate_max_model_len(
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     kv_cache_spec: dict[str, KVCacheSpec],
     available_memory: int,
 ) -> int:
@@ -103,7 +103,7 @@ def estimate_max_model_len(
     restores the original value before returning, ensuring no side effects.
 
     Args:
-        aphrodite_config: The global AphroditeConfig
+        sonar_config: The global SonarConfig
         kv_cache_spec: The kv cache spec of each attention layer in the model
         available_memory: Memory available for KV cache in bytes.
 
@@ -112,14 +112,14 @@ def estimate_max_model_len(
 
     """
     # Save the original max_model_len to restore after estimation
-    original_max_model_len = aphrodite_config.model_config.max_model_len
+    original_max_model_len = sonar_config.model_config.max_model_len
 
     # Define a function to check if a given model length fits in memory
     def fits_in_memory(model_len: int) -> bool:
         # Temporarily modify the max_model_len for this calculation
-        aphrodite_config.model_config.max_model_len = model_len
+        sonar_config.model_config.max_model_len = model_len
         # Calculate memory needed for the given model length
-        memory_needed = max_memory_usage_bytes(aphrodite_config, kv_cache_spec.values())
+        memory_needed = max_memory_usage_bytes(sonar_config, kv_cache_spec.values())
         return memory_needed <= available_memory
 
     try:
@@ -142,11 +142,11 @@ def estimate_max_model_len(
         return result
     finally:
         # Always restore the original max_model_len to avoid side effects
-        aphrodite_config.model_config.max_model_len = original_max_model_len
+        sonar_config.model_config.max_model_len = original_max_model_len
 
 
 def check_enough_kv_cache_memory(
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     kv_cache_spec: dict[str, KVCacheSpec],
     available_memory: int,
 ):
@@ -154,7 +154,7 @@ def check_enough_kv_cache_memory(
     least one request with the model's max_model_len.
 
     Args:
-        aphrodite_config: The global AphroditeConfig
+        sonar_config: The global SonarConfig
         kv_cache_spec: The kv cache spec of each attention layer in the model
         available_memory: Memory available for KV cache in bytes.
 
@@ -167,15 +167,13 @@ def check_enough_kv_cache_memory(
         # Reserve the null block BlockPool permanently holds back, so the check
         # plans against usable blocks, as in get_kv_cache_configs. Group a copy
         # of the specs since grouping may unify them in-place.
-        groups = get_kv_cache_groups(aphrodite_config, dict(kv_cache_spec))
-        check_memory = (
-            available_memory - _pool_bytes_per_block(aphrodite_config, groups) if groups else available_memory
-        )
+        groups = get_kv_cache_groups(sonar_config, dict(kv_cache_spec))
+        check_memory = available_memory - _pool_bytes_per_block(sonar_config, groups) if groups else available_memory
         _check_enough_kv_cache_memory(
             check_memory,
-            lambda: max_memory_usage_bytes(aphrodite_config, kv_cache_spec.values()),
-            aphrodite_config.model_config.max_model_len,
-            lambda am: estimate_max_model_len(aphrodite_config, kv_cache_spec, am),
+            lambda: max_memory_usage_bytes(sonar_config, kv_cache_spec.values()),
+            sonar_config.model_config.max_model_len,
+            lambda am: estimate_max_model_len(sonar_config, kv_cache_spec, am),
         )
 
 
@@ -230,16 +228,16 @@ def is_kv_cache_spec_uniform(kv_cache_spec: dict[str, KVCacheSpec]) -> bool:
     return True
 
 
-def may_override_num_blocks(aphrodite_config: AphroditeConfig, num_blocks: int) -> int:
+def may_override_num_blocks(sonar_config: SonarConfig, num_blocks: int) -> int:
     """Override the number of kv cache blocks if `num_gpu_blocks_override` is set.
     The override is logged once, at the call site in `get_kv_cache_configs`.
     """
-    if aphrodite_config.cache_config.num_gpu_blocks_override is not None:
-        num_blocks = aphrodite_config.cache_config.num_gpu_blocks_override
+    if sonar_config.cache_config.num_gpu_blocks_override is not None:
+        num_blocks = sonar_config.cache_config.num_gpu_blocks_override
     return num_blocks
 
 
-def _pool_bytes_per_block(aphrodite_config: AphroditeConfig, kv_cache_groups: list[KVCacheGroupSpec]) -> int:
+def _pool_bytes_per_block(sonar_config: SonarConfig, kv_cache_groups: list[KVCacheGroupSpec]) -> int:
     """Bytes consumed by one block in the worker's shared KV cache pool, mirroring
     the divisor used by `get_kv_cache_config_from_groups` to convert
     `available_memory` into `num_blocks`. Used to compute the effective KV cache
@@ -247,13 +245,13 @@ def _pool_bytes_per_block(aphrodite_config: AphroditeConfig, kv_cache_groups: li
     """
     return _get_kv_cache_bytes_per_block(
         [group for group in kv_cache_groups if not group.host_resident],
-        aphrodite_config.cache_config.get_resolved_kv_cache_layout(),
+        sonar_config.cache_config.get_resolved_kv_cache_layout(),
     )
 
 
 def _pool_bytes_per_block_from_builder(
     builder: KVCacheConfigBuilder,
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     kv_cache_groups: list[KVCacheGroupSpec],
 ) -> int:
     """Bytes consumed by one block in the worker's device KV cache pool.
@@ -267,17 +265,17 @@ def _pool_bytes_per_block_from_builder(
     """
     if not kv_cache_groups:
         return 0
-    if aphrodite_config.attention_config.hisparse_config is not None:
-        return _pool_bytes_per_block(aphrodite_config, kv_cache_groups)
-    pool_bytes = builder._get_pool_bytes_per_block(aphrodite_config, kv_cache_groups)
+    if sonar_config.attention_config.hisparse_config is not None:
+        return _pool_bytes_per_block(sonar_config, kv_cache_groups)
+    pool_bytes = builder._get_pool_bytes_per_block(sonar_config, kv_cache_groups)
     if pool_bytes is not None:
         return pool_bytes
-    saved_override = aphrodite_config.cache_config.num_gpu_blocks_override
-    aphrodite_config.cache_config.num_gpu_blocks_override = None
+    saved_override = sonar_config.cache_config.num_gpu_blocks_override
+    sonar_config.cache_config.num_gpu_blocks_override = None
     try:
-        probe = builder.get_kv_cache_config_from_groups(aphrodite_config, kv_cache_groups, num_blocks=1)
+        probe = builder.get_kv_cache_config_from_groups(sonar_config, kv_cache_groups, num_blocks=1)
     finally:
-        aphrodite_config.cache_config.num_gpu_blocks_override = saved_override
+        sonar_config.cache_config.num_gpu_blocks_override = saved_override
     backing_sizes = {tensor.size for tensor in probe.kv_cache_tensors if not tensor.host_resident}
     if len(backing_sizes) != 1:
         raise ValueError(
@@ -612,12 +610,12 @@ def validate_kv_cache_layout(
             f"KV cache layout {layout.name} cannot express this model's "
             f"mixed page sizes ({sorted(page_sizes)}); a backend should "
             "declare block-outermost supported layouts (e.g. BLHNC), or "
-            "set APHRODITE_KV_CACHE_LAYOUT=BLHNC."
+            "set SONAR_KV_CACHE_LAYOUT=BLHNC."
         )
 
 
 def get_kv_cache_config_from_groups(
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     kv_cache_groups: list[KVCacheGroupSpec],
     available_memory: int,
 ) -> KVCacheConfig:
@@ -625,7 +623,7 @@ def get_kv_cache_config_from_groups(
     of each layer.
 
     Args:
-        aphrodite_config: The global AphroditeConfig
+        sonar_config: The global SonarConfig
         kv_cache_groups: The KV cache groups
         available_memory: Memory available for KV cache in bytes
     Returns:
@@ -639,20 +637,20 @@ def get_kv_cache_config_from_groups(
             num_blocks=1,
             kv_cache_tensors=[],
             kv_cache_groups=kv_cache_groups,
-            prefix_cache_retention_interval=(aphrodite_config.cache_config.prefix_cache_retention_interval),
+            prefix_cache_retention_interval=(sonar_config.cache_config.prefix_cache_retention_interval),
         )
 
-    if aphrodite_config.attention_config.hisparse_config is not None:
-        host_budget = get_hisparse_host_pool_bytes(aphrodite_config)
-        return get_hisparse_kv_cache_config(aphrodite_config, kv_cache_groups, available_memory, host_budget)
+    if sonar_config.attention_config.hisparse_config is not None:
+        host_budget = get_hisparse_host_pool_bytes(sonar_config)
+        return get_hisparse_kv_cache_config(sonar_config, kv_cache_groups, available_memory, host_budget)
 
-    layout = aphrodite_config.cache_config.get_resolved_kv_cache_layout()
+    layout = sonar_config.cache_config.get_resolved_kv_cache_layout()
     validate_kv_cache_layout(layout, kv_cache_groups)
     bytes_per_block = _get_kv_cache_bytes_per_block(kv_cache_groups, layout)
     interleaved_block_stride = bytes_per_block if layout.is_block_outermost else None
 
     num_blocks = available_memory // bytes_per_block
-    num_blocks = may_override_num_blocks(aphrodite_config, num_blocks)
+    num_blocks = may_override_num_blocks(sonar_config, num_blocks)
     size = bytes_per_block * num_blocks
 
     # Groups alias from byte 0. Spec regions are laid out differently:
@@ -702,7 +700,7 @@ def get_kv_cache_config_from_groups(
         num_blocks=num_blocks,
         kv_cache_tensors=kv_cache_tensors,
         kv_cache_groups=kv_cache_groups,
-        prefix_cache_retention_interval=(aphrodite_config.cache_config.prefix_cache_retention_interval),
+        prefix_cache_retention_interval=(sonar_config.cache_config.prefix_cache_retention_interval),
     )
 
 
@@ -851,7 +849,7 @@ def _approximate_gcd(values: Sequence[int], *, lower_bound: int | None = None) -
 
 
 def _get_packed_kv_cache_groups(
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     kv_cache_spec: dict[str, KVCacheSpec],
 ) -> list[KVCacheGroupSpec] | None:
     """Group mixed-page-size layers for contiguous block-outermost packing.
@@ -865,7 +863,7 @@ def _get_packed_kv_cache_groups(
     Returns None when the layout is not block-outermost or all layers already
     share one page size.
     """
-    layout = aphrodite_config.cache_config.get_resolved_kv_cache_layout()
+    layout = sonar_config.cache_config.get_resolved_kv_cache_layout()
     page_sizes = {spec.page_size_bytes for spec in kv_cache_spec.values()}
     if not layout.is_block_outermost or len(page_sizes) <= 1:
         return None
@@ -1029,20 +1027,20 @@ def _ensure_min_page_size(
 
 
 def get_kv_cache_groups(
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     kv_cache_spec: dict[str, KVCacheSpec],
 ) -> list[KVCacheGroupSpec]:
     """Split the layers in the model into groups with the same KV cache spec.
 
     Args:
-        aphrodite_config: The global AphroditeConfig
+        sonar_config: The global SonarConfig
         kv_cache_spec: The kv cache spec of each attention layer in the model
 
     Returns:
         The generated KVCacheGroups
 
     """
-    if aphrodite_config.scheduler_config.disable_hybrid_kv_cache_manager:
+    if sonar_config.scheduler_config.disable_hybrid_kv_cache_manager:
         unify_hybrid_kv_cache_specs(kv_cache_spec)
 
     if is_kv_cache_type_attention_free(kv_cache_spec):
@@ -1050,7 +1048,7 @@ def get_kv_cache_groups(
         # attention free models.
         return []
 
-    if hisparse_groups := get_hisparse_kv_cache_groups(aphrodite_config, kv_cache_spec):
+    if hisparse_groups := get_hisparse_kv_cache_groups(sonar_config, kv_cache_spec):
         return hisparse_groups
 
     if is_kv_cache_spec_uniform(kv_cache_spec):
@@ -1068,7 +1066,7 @@ def get_kv_cache_groups(
     hidden_specs = {k: v for k, v in kv_cache_spec.items() if isinstance(v, HiddenStateCacheSpec)}
     filtered_spec = {k: v for k, v in kv_cache_spec.items() if not isinstance(v, HiddenStateCacheSpec)}
 
-    if packed_groups := _get_packed_kv_cache_groups(aphrodite_config, filtered_spec):
+    if packed_groups := _get_packed_kv_cache_groups(sonar_config, filtered_spec):
         # Block-outermost blocks are strided by the widest group, so hidden
         # groups need no page alignment.
         packed_groups += [KVCacheGroupSpec([name], spec) for name, spec in hidden_specs.items()]
@@ -1112,7 +1110,7 @@ def get_kv_cache_groups(
 
 def get_kv_cache_groups_from_builder(
     builder: KVCacheConfigBuilder,
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     kv_cache_spec: dict[str, KVCacheSpec],
 ) -> list[KVCacheGroupSpec]:
     """Group the layers with the builder and check the result.
@@ -1120,7 +1118,7 @@ def get_kv_cache_groups_from_builder(
     Core checks every grouping, whether it comes from the default grouping, a
     model's ``SupportsKVCacheGrouping`` or a platform builder.
     """
-    groups = builder.get_kv_cache_groups(aphrodite_config, kv_cache_spec)
+    groups = builder.get_kv_cache_groups(sonar_config, kv_cache_spec)
     _check_exact_partition(groups, kv_cache_spec)
     return groups
 
@@ -1158,7 +1156,7 @@ def kv_cache_groups_tp_replicas(groups: list[KVCacheGroupSpec], tp_size: int, dc
 
 def _max_memory_usage_bytes_from_groups(
     builder: KVCacheConfigBuilder,
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     kv_cache_groups: list[KVCacheGroupSpec],
 ) -> int:
     """Calculate maximum memory usage in bytes from KV cache groups.
@@ -1174,15 +1172,15 @@ def _max_memory_usage_bytes_from_groups(
     if not kv_cache_groups:
         return 0
 
-    bytes_per_block = _pool_bytes_per_block_from_builder(builder, aphrodite_config, kv_cache_groups)
+    bytes_per_block = _pool_bytes_per_block_from_builder(builder, sonar_config, kv_cache_groups)
     total_blocks = 0
     for group in kv_cache_groups:
         spec = group.kv_cache_spec
         if isinstance(spec, UniformTypeKVCacheSpecs):
-            total_blocks += spec.max_memory_usage_pages(aphrodite_config)
+            total_blocks += spec.max_memory_usage_pages(sonar_config)
         else:
             total_blocks += cdiv(
-                spec.max_memory_usage_bytes(aphrodite_config),
+                spec.max_memory_usage_bytes(sonar_config),
                 spec.page_size_bytes,
             )
 
@@ -1191,27 +1189,27 @@ def _max_memory_usage_bytes_from_groups(
 
 def _estimate_max_model_len_from_groups(
     builder: KVCacheConfigBuilder,
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     kv_cache_groups: list[KVCacheGroupSpec],
     available_memory: int,
 ) -> int:
     """Binary search for the maximum model length that fits in available memory.
     Returns 0 if even 1 token doesn't fit.
     """
-    original_max = aphrodite_config.model_config.max_model_len
-    hisparse_enabled = aphrodite_config.attention_config.hisparse_config is not None and bool(kv_cache_groups)
+    original_max = sonar_config.model_config.max_model_len
+    hisparse_enabled = sonar_config.attention_config.hisparse_config is not None and bool(kv_cache_groups)
 
     def fits(model_len: int) -> bool:
-        aphrodite_config.model_config.max_model_len = model_len
+        sonar_config.model_config.max_model_len = model_len
         if hisparse_enabled:
             try:
                 num_blocks = available_memory // _pool_bytes_per_block_from_builder(
-                    builder, aphrodite_config, kv_cache_groups
+                    builder, sonar_config, kv_cache_groups
                 )
-                builder.get_kv_cache_config_from_groups(aphrodite_config, kv_cache_groups, num_blocks)
+                builder.get_kv_cache_config_from_groups(sonar_config, kv_cache_groups, num_blocks)
             except ValueError:
                 return False
-        return _max_memory_usage_bytes_from_groups(builder, aphrodite_config, kv_cache_groups) <= available_memory
+        return _max_memory_usage_bytes_from_groups(builder, sonar_config, kv_cache_groups) <= available_memory
 
     try:
         left, right = 1, original_max
@@ -1227,12 +1225,12 @@ def _estimate_max_model_len_from_groups(
                 right = mid - 1
         return result
     finally:
-        aphrodite_config.model_config.max_model_len = original_max
+        sonar_config.model_config.max_model_len = original_max
 
 
 def _auto_fit_max_model_len(
     builder: KVCacheConfigBuilder,
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     projected_groups_per_worker: list[list[KVCacheGroupSpec]],
     available_memory: list[int],
 ) -> None:
@@ -1243,13 +1241,13 @@ def _auto_fit_max_model_len(
 
     Args:
         builder: The builder whose hooks drive block accounting.
-        aphrodite_config: The global AphroditeConfig (will be modified in-place)
+        sonar_config: The global SonarConfig (will be modified in-place)
         projected_groups_per_worker: KV cache groups projected to each worker.
         available_memory: Memory available for KV cache in bytes for each
             worker.
 
     """
-    original_max = aphrodite_config.model_config.max_model_len
+    original_max = sonar_config.model_config.max_model_len
 
     if all(not groups for groups in projected_groups_per_worker):
         # All workers have empty specs (attention-free model)
@@ -1265,7 +1263,7 @@ def _auto_fit_max_model_len(
     for groups, avail_mem in zip(projected_groups_per_worker, available_memory):
         if not groups:
             continue
-        worker_max = _estimate_max_model_len_from_groups(builder, aphrodite_config, groups, avail_mem)
+        worker_max = _estimate_max_model_len_from_groups(builder, sonar_config, groups, avail_mem)
         if worker_max < auto_fit_max:
             auto_fit_max = worker_max
             limiting_worker_mem = avail_mem
@@ -1276,9 +1274,9 @@ def _auto_fit_max_model_len(
             "to serve even a single token. Try increasing `gpu_memory_utilization`."
         )
 
-    kv_cache_memory = f"{format_gib(limiting_worker_mem)} GiB {_kv_cache_device_name(aphrodite_config)}"
-    if aphrodite_config.attention_config.hisparse_config is not None:
-        host_pool_gib = format_gib(get_hisparse_host_pool_bytes(aphrodite_config))
+    kv_cache_memory = f"{format_gib(limiting_worker_mem)} GiB {_kv_cache_device_name(sonar_config)}"
+    if sonar_config.attention_config.hisparse_config is not None:
+        host_pool_gib = format_gib(get_hisparse_host_pool_bytes(sonar_config))
         kv_cache_memory += f" + {host_pool_gib} GiB host"
 
     if auto_fit_max >= original_max:
@@ -1290,7 +1288,7 @@ def _auto_fit_max_model_len(
         )
     else:
         # Need to reduce max_model_len to fit in memory
-        aphrodite_config.model_config.max_model_len = auto_fit_max
+        sonar_config.model_config.max_model_len = auto_fit_max
         logger.info_once(
             "Auto-fit max_model_len: reduced from %d to %d to fit in available KV cache memory (%s)",
             original_max,
@@ -1343,7 +1341,7 @@ def _project_kv_cache_groups_to_worker(
 
 
 def get_kv_cache_configs(
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     kv_cache_specs: list[dict[str, KVCacheSpec]],
     available_memory: list[int],
     global_kv_cache_groups: list[KVCacheGroupSpec],
@@ -1369,7 +1367,7 @@ def get_kv_cache_configs(
        and shrink tensor sizes proportionally to avoid allocating unused memory.
 
     Args:
-        aphrodite_config: The global AphroditeConfig
+        sonar_config: The global SonarConfig
         kv_cache_specs: List of dict[layer_name, KVCacheSpec] for each worker.
         available_memory: Memory available for KV cache in bytes for each
             worker.
@@ -1379,9 +1377,9 @@ def get_kv_cache_configs(
         The generated KVCacheConfigs for each worker.
 
     """
-    from aphrodite.v1.core.kv_cache_config_builder import get_kv_cache_config_builder
+    from sonar.v1.core.kv_cache_config_builder import get_kv_cache_config_builder
 
-    builder = get_kv_cache_config_builder(aphrodite_config)
+    builder = get_kv_cache_config_builder(sonar_config)
 
     # If original_max_model_len was -1, automatically
     # determine the maximum model length that fits in available GPU memory.
@@ -1395,14 +1393,14 @@ def get_kv_cache_configs(
     # that in `available_memory` here so auto-fit, the admission check, and
     # the per-worker config builder all plan against the same effective
     # capacity.
-    override = aphrodite_config.cache_config.num_gpu_blocks_override
+    override = sonar_config.cache_config.num_gpu_blocks_override
     if override is not None:
         adjusted_memory: list[int] = []
         for groups, avail_mem in zip(projected_groups_per_worker, available_memory):
             if not groups:
                 adjusted_memory.append(avail_mem)
                 continue
-            bytes_per_block = _pool_bytes_per_block_from_builder(builder, aphrodite_config, groups)
+            bytes_per_block = _pool_bytes_per_block_from_builder(builder, sonar_config, groups)
             logger.info(
                 "Overriding num_gpu_blocks=%d with num_gpu_blocks_override=%d",
                 avail_mem // bytes_per_block,
@@ -1415,12 +1413,12 @@ def get_kv_cache_configs(
     # the capacity check both plan against usable blocks. Allocation below
     # still uses the full memory.
     check_memory = [
-        (avail_mem - _pool_bytes_per_block_from_builder(builder, aphrodite_config, groups) if groups else avail_mem)
+        (avail_mem - _pool_bytes_per_block_from_builder(builder, sonar_config, groups) if groups else avail_mem)
         for groups, avail_mem in zip(projected_groups_per_worker, available_memory)
     ]
 
-    if aphrodite_config.model_config.original_max_model_len == -1:
-        _auto_fit_max_model_len(builder, aphrodite_config, projected_groups_per_worker, check_memory)
+    if sonar_config.model_config.original_max_model_len == -1:
+        _auto_fit_max_model_len(builder, sonar_config, projected_groups_per_worker, check_memory)
 
     # Check if the available memory is enough per worker.
     for groups, avail_mem in zip(projected_groups_per_worker, check_memory):
@@ -1428,9 +1426,9 @@ def get_kv_cache_configs(
             continue
         _check_enough_kv_cache_memory(
             avail_mem,
-            partial(_max_memory_usage_bytes_from_groups, builder, aphrodite_config, groups),
-            aphrodite_config.model_config.max_model_len,
-            partial(_estimate_max_model_len_from_groups, builder, aphrodite_config, groups),
+            partial(_max_memory_usage_bytes_from_groups, builder, sonar_config, groups),
+            sonar_config.model_config.max_model_len,
+            partial(_estimate_max_model_len_from_groups, builder, sonar_config, groups),
         )
 
     kv_cache_configs: list[KVCacheConfig] = []
@@ -1440,9 +1438,9 @@ def get_kv_cache_configs(
         assert sum(len(group.layer_names) for group in projected_groups) == len(kv_cache_spec_one_worker), (
             "Some layers are not assigned to any group."
         )
-        bytes_per_block = _pool_bytes_per_block_from_builder(builder, aphrodite_config, projected_groups)
+        bytes_per_block = _pool_bytes_per_block_from_builder(builder, sonar_config, projected_groups)
         num_blocks = available_memory_one_worker // bytes_per_block if projected_groups else 1
-        kv_cache_configs.append(builder.get_kv_cache_config_from_groups(aphrodite_config, projected_groups, num_blocks))
+        kv_cache_configs.append(builder.get_kv_cache_config_from_groups(sonar_config, projected_groups, num_blocks))
 
     # Change the num_blocks of each rank to the smallest among all ranks.
     # We also need to shrink the tensor size proportionally to avoid
@@ -1454,7 +1452,7 @@ def get_kv_cache_configs(
         # Re-plan with exactly the smallest rank's block count, so strides and
         # offsets stay consistent with the shrunken allocation.
         kv_cache_configs[i] = builder.get_kv_cache_config_from_groups(
-            aphrodite_config,
+            sonar_config,
             kv_cache_config.kv_cache_groups,
             min_num_blocks,
         )
@@ -1462,21 +1460,21 @@ def get_kv_cache_configs(
     for kv_cache_config in kv_cache_configs:
         kv_cache_config.kv_tp_replicas = kv_cache_groups_tp_replicas(
             kv_cache_config.kv_cache_groups,
-            aphrodite_config.parallel_config.tensor_parallel_size,
-            aphrodite_config.parallel_config.decode_context_parallel_size,
+            sonar_config.parallel_config.tensor_parallel_size,
+            sonar_config.parallel_config.decode_context_parallel_size,
         )
 
     return kv_cache_configs
 
 
 def get_global_kv_cache_groups(
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     kv_cache_specs: list[dict[str, KVCacheSpec]],
 ) -> list[KVCacheGroupSpec]:
     """Group the layers of the whole model (all workers' specs merged)."""
-    from aphrodite.v1.core.kv_cache_config_builder import get_kv_cache_config_builder
+    from sonar.v1.core.kv_cache_config_builder import get_kv_cache_config_builder
 
-    builder = get_kv_cache_config_builder(aphrodite_config)
+    builder = get_kv_cache_config_builder(sonar_config)
 
     # Merge the KV cache specs of all workers. Different PP stages may have
     # different layer names, and different TP ranks of the same PP stage should
@@ -1497,7 +1495,7 @@ def get_global_kv_cache_groups(
 
     # When speculating with more than 1 speculative module (e.g. multi-layered MTP)
     # tag every SlidingWindowSpec with how many extra tokens to retain in the window.
-    extra_retained_tokens = max(0, aphrodite_config.num_prefill_lookahead_tokens - 1)
+    extra_retained_tokens = max(0, sonar_config.num_prefill_lookahead_tokens - 1)
     for layer_name, layer_spec in merged_kv_cache_specs.items():
         if isinstance(layer_spec, SlidingWindowSpec):
             merged_kv_cache_specs[layer_name] = replace(layer_spec, extra_retained_tokens=extra_retained_tokens)
@@ -1505,8 +1503,8 @@ def get_global_kv_cache_groups(
     # Get global KV cache groups. This also handles spec unification for
     # hybrid models when disable_hybrid_kv_cache_manager is enabled.
     # After this call, merged_kv_cache_specs may be modified in-place.
-    global_kv_cache_groups = get_kv_cache_groups_from_builder(builder, aphrodite_config, merged_kv_cache_specs)
-    spec_config = aphrodite_config.speculative_config
+    global_kv_cache_groups = get_kv_cache_groups_from_builder(builder, sonar_config, merged_kv_cache_specs)
+    spec_config = sonar_config.speculative_config
     if spec_config is not None and spec_config.use_eagle_block_drop():
         draft_layer_names = {name for name, spec in merged_kv_cache_specs.items() if spec.is_draft}
         for group in global_kv_cache_groups:
@@ -1530,7 +1528,7 @@ class DefaultKVCacheConfigBuilder(KVCacheConfigBuilder):
 
     def get_kv_cache_groups(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         kv_cache_spec: dict[str, KVCacheSpec],
     ) -> list[KVCacheGroupSpec]:
         """See ``KVCacheConfigBuilder.get_kv_cache_groups``.
@@ -1538,23 +1536,23 @@ class DefaultKVCacheConfigBuilder(KVCacheConfigBuilder):
         A model implementing ``SupportsKVCacheGrouping`` owns the grouping
         decision; otherwise the default grouping is used.
         """
-        if not aphrodite_config.model_config.supports_kv_cache_grouping:
-            return get_kv_cache_groups(aphrodite_config, kv_cache_spec)
-        if aphrodite_config.attention_config.hisparse_config is not None:
+        if not sonar_config.model_config.supports_kv_cache_grouping:
+            return get_kv_cache_groups(sonar_config, kv_cache_spec)
+        if sonar_config.attention_config.hisparse_config is not None:
             raise ValueError(
                 "A model-declared get_kv_cache_groups cannot be combined "
                 "with HiSparse, which owns its own KV cache grouping. "
                 "Remove one of them."
             )
-        model_cls, _ = aphrodite_config.model_config.registry.resolve_model_cls(
-            aphrodite_config.model_config.architectures,
-            aphrodite_config.model_config,
+        model_cls, _ = sonar_config.model_config.registry.resolve_model_cls(
+            sonar_config.model_config.architectures,
+            sonar_config.model_config,
         )
-        return model_cls.get_kv_cache_groups(aphrodite_config, kv_cache_spec)
+        return model_cls.get_kv_cache_groups(sonar_config, kv_cache_spec)
 
     def get_kv_cache_config_from_groups(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         kv_cache_groups: list[KVCacheGroupSpec],
         num_blocks: int,
     ) -> KVCacheConfig:
@@ -1566,7 +1564,7 @@ class DefaultKVCacheConfigBuilder(KVCacheConfigBuilder):
                 num_blocks=1,
                 kv_cache_tensors=[],
                 kv_cache_groups=kv_cache_groups,
-                prefix_cache_retention_interval=(aphrodite_config.cache_config.prefix_cache_retention_interval),
+                prefix_cache_retention_interval=(sonar_config.cache_config.prefix_cache_retention_interval),
             )
-        bytes_per_block = _pool_bytes_per_block(aphrodite_config, kv_cache_groups)
-        return get_kv_cache_config_from_groups(aphrodite_config, kv_cache_groups, num_blocks * bytes_per_block)
+        bytes_per_block = _pool_bytes_per_block(sonar_config, kv_cache_groups)
+        return get_kv_cache_config_from_groups(sonar_config, kv_cache_groups, num_blocks * bytes_per_block)

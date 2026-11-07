@@ -7,51 +7,51 @@ from typing import Any, cast
 
 import torch
 
-from aphrodite import envs
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed import (
+from sonar import envs
+from sonar.config import SonarConfig
+from sonar.distributed import (
     get_tensor_model_parallel_world_size,
     tensor_model_parallel_all_reduce,
 )
-from aphrodite.forward_context import get_forward_context
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.rocm_paged_mxfp4_indexer import RocmSparseAttnIndexer
-from aphrodite.model_executor.layers.sparse_attn_indexer import SparseAttnIndexer
-from aphrodite.model_executor.warmup.jit_warmup_triton_helper import (
+from sonar.forward_context import get_forward_context
+from sonar.logger import init_logger
+from sonar.model_executor.layers.rocm_paged_mxfp4_indexer import RocmSparseAttnIndexer
+from sonar.model_executor.layers.sparse_attn_indexer import SparseAttnIndexer
+from sonar.model_executor.warmup.jit_warmup_triton_helper import (
     DispatchSpec,
     TritonWarmupTensor,
     triton_kernel_dispatcher_with_warmup,
 )
-from aphrodite.models.deepseek_v4.attention import (
+from sonar.models.deepseek_v4.attention import (
     DeepseekV4Attention,
     DeepseekV4Indexer,
     DeepseekV4IndexerCache,
 )
-from aphrodite.models.deepseek_v4.common.ops import dequantize_and_gather_k_cache
-from aphrodite.models.deepseek_v4.compressor import CompressorMetadata, DeepseekCompressor
-from aphrodite.models.deepseek_v4.sparse_mla import (
+from sonar.models.deepseek_v4.common.ops import dequantize_and_gather_k_cache
+from sonar.models.deepseek_v4.compressor import CompressorMetadata, DeepseekCompressor
+from sonar.models.deepseek_v4.sparse_mla import (
     DeepseekV4FlashMLAMetadata,
     DeepseekV4SparseMLABackend,
     DeepseekV4SparseMLAMetadataBuilder,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.platforms.rocm import _ON_GFX950, on_gfx1250, on_rdna
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.multi_stream_utils import execute_in_parallel
-from aphrodite.v1.attention.backend import (
+from sonar.platforms import current_platform
+from sonar.platforms.rocm import _ON_GFX950, on_gfx1250, on_rdna
+from sonar.triton_utils import tl, triton
+from sonar.utils.multi_stream_utils import execute_in_parallel
+from sonar.v1.attention.backend import (
     AttentionBackend,
     AttentionCGSupport,
     CommonAttentionMetadata,
 )
-from aphrodite.v1.attention.backends.mla.indexer import dsa_indexer_uses_fp4
-from aphrodite.v1.attention.backends.mla.rocm_paged_mxfp4_indexer import (
+from sonar.v1.attention.backends.mla.indexer import dsa_indexer_uses_fp4
+from sonar.v1.attention.backends.mla.rocm_paged_mxfp4_indexer import (
     DeepseekV4RocmMxfp4IndexerBackend,
 )
-from aphrodite.v1.attention.backends.mla.sparse_swa import (
+from sonar.v1.attention.backends.mla.sparse_swa import (
     DeepseekSparseSWAMetadata,
     DeepseekSparseSWAMetadataBuilder,
 )
-from aphrodite.v1.attention.ops.rocm_aiter_mla_sparse import (
+from sonar.v1.attention.ops.rocm_aiter_mla_sparse import (
     build_prefill_topk_ragged_indices,
     build_ragged_indices_from_dense,
     rocm_inv_rope_einsum,
@@ -59,12 +59,12 @@ from aphrodite.v1.attention.ops.rocm_aiter_mla_sparse import (
     rocm_sparse_attn_decode,
     rocm_sparse_attn_prefill,
 )
-from aphrodite.v1.attention.ops.rocm_paged_mxfp4_indexer import (
+from sonar.v1.attention.ops.rocm_paged_mxfp4_indexer import (
     rocm_mxfp4_indexer_k_store,
     rocm_mxfp4_indexer_q_quant,
 )
-from aphrodite.v1.kv_cache_interface import KVCacheSpec
-from aphrodite.v1.worker.workspace import current_workspace_manager
+from sonar.v1.kv_cache_interface import KVCacheSpec
+from sonar.v1.worker.workspace import current_workspace_manager
 
 logger = init_logger(__name__)
 
@@ -121,7 +121,7 @@ def _trust_dsv4_extra_cache_nan_free(
 
 
 def _aiter_sparse_mla_enabled(has_kv_transfer: bool) -> bool:
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     if not rocm_aiter_ops.is_triton_sparse_mla_enabled():
         return False
@@ -129,7 +129,7 @@ def _aiter_sparse_mla_enabled(has_kv_transfer: bool) -> bool:
     # needs a cache only the canonical writer has touched.
     if has_kv_transfer:
         logger.warning_once(
-            "APHRODITE_ROCM_USE_AITER_TRITON_SPARSE_MLA is ignored with a KV "
+            "SONAR_ROCM_USE_AITER_TRITON_SPARSE_MLA is ignored with a KV "
             "connector; DeepSeek V4 keeps the Triton sparse attention."
         )
         return False
@@ -165,7 +165,7 @@ def apply_pre_quantized_block_scaled_mm(
     the wq_b-style column/replicated linears: their output is the local
     TP shard, so no all-reduce is needed.
     """
-    from aphrodite.model_executor.kernels.linear.scaled_mm.BlockScaledMMLinearKernel import (
+    from sonar.model_executor.kernels.linear.scaled_mm.BlockScaledMMLinearKernel import (
         FP8BlockParams,
     )
 
@@ -625,23 +625,23 @@ class DeepseekV4ROCMAiterMLASparseMetadataBuilder(DeepseekV4SparseMLAMetadataBui
     @classmethod
     def get_cudagraph_support(
         cls,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         kv_cache_spec: KVCacheSpec,
     ) -> AttentionCGSupport:
-        spec_config = aphrodite_config.speculative_config
+        spec_config = sonar_config.speculative_config
         if spec_config is not None and spec_config.enable_adaptive_verification:
             # All per-token metadata is built from device query boundaries into
             # persistent buffers, so adaptive verification can replay varlen
             # FULL decode graphs after reallocating drafts across requests.
             return AttentionCGSupport.ALWAYS
-        return super().get_cudagraph_support(aphrodite_config, kv_cache_spec)
+        return super().get_cudagraph_support(sonar_config, kv_cache_spec)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.c128a_decode_topk_ragged_indices_buffer: torch.Tensor | None = None
         self.c128a_decode_topk_ragged_indptr_buffer: torch.Tensor | None = None
         if self.compress_ratio == 128:
-            max_tokens = self.aphrodite_config.scheduler_config.max_num_batched_tokens
+            max_tokens = self.sonar_config.scheduler_config.max_num_batched_tokens
             self.c128a_decode_topk_ragged_indices_buffer = torch.empty(
                 max_tokens * self.c128a_max_compressed,
                 dtype=torch.int32,
@@ -706,16 +706,16 @@ class DeepseekV4ROCMAiterSparseSWAMetadataBuilder(DeepseekSparseSWAMetadataBuild
     @classmethod
     def get_cudagraph_support(
         cls,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         kv_cache_spec: KVCacheSpec,
     ) -> AttentionCGSupport:
-        spec_config = aphrodite_config.speculative_config
+        spec_config = sonar_config.speculative_config
         if spec_config is not None and spec_config.enable_adaptive_verification:
             # SWA indices, lengths, and token-to-request mappings are built from
             # device boundaries into persistent buffers, so adaptive verification
             # can replay varlen FULL decode graphs safely.
             return AttentionCGSupport.ALWAYS
-        return super().get_cudagraph_support(aphrodite_config, kv_cache_spec)
+        return super().get_cudagraph_support(sonar_config, kv_cache_spec)
 
     # Keep fused multi-step decode disabled until update_draft_decode_metadata()
     # also refreshes the ROCm-specific ragged SWA indices and indptrs.
@@ -723,7 +723,7 @@ class DeepseekV4ROCMAiterSparseSWAMetadataBuilder(DeepseekSparseSWAMetadataBuild
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        max_tokens = self.aphrodite_config.scheduler_config.max_num_batched_tokens
+        max_tokens = self.sonar_config.scheduler_config.max_num_batched_tokens
         self.decode_swa_ragged_indices_buffer = torch.empty(
             max_tokens * max(self.window_size, self.noncausal_index_width),
             dtype=torch.int32,
@@ -737,8 +737,8 @@ class DeepseekV4ROCMAiterSparseSWAMetadataBuilder(DeepseekSparseSWAMetadataBuild
         # The ragged prefill SWA indices are only read by the aiter prefill, so
         # build them under the same head-count gate the attention layer uses.
         self._use_aiter_sparse_mla_prefill = _aiter_sparse_mla_prefill_enabled(
-            self.aphrodite_config.model_config.get_num_attention_heads(self.aphrodite_config.parallel_config),
-            self.aphrodite_config.kv_transfer_config is not None,
+            self.sonar_config.model_config.get_num_attention_heads(self.sonar_config.parallel_config),
+            self.sonar_config.kv_transfer_config is not None,
         )
 
     def build(
@@ -810,16 +810,16 @@ class DeepseekV4ROCMAiterMLAAttention(DeepseekV4Attention):
 
     backend_cls = DeepseekV4ROCMAiterMLASparseBackend
 
-    def _get_indexer_cls(self, aphrodite_config: AphroditeConfig) -> type[DeepseekV4Indexer]:
-        if dsa_indexer_uses_fp4(aphrodite_config):
+    def _get_indexer_cls(self, sonar_config: SonarConfig) -> type[DeepseekV4Indexer]:
+        if dsa_indexer_uses_fp4(sonar_config):
             # aiter's paged MXFP4 kernels write and score the index K cache.
             return DeepseekV4RocmMxfp4Indexer
-        return super()._get_indexer_cls(aphrodite_config)
+        return super()._get_indexer_cls(sonar_config)
 
     def __init__(self, *args, **kwargs):
-        aphrodite_config = args[0] if args else kwargs["aphrodite_config"]
+        sonar_config = args[0] if args else kwargs["sonar_config"]
         super().__init__(*args, **kwargs)
-        self._has_kv_transfer = aphrodite_config.kv_transfer_config is not None
+        self._has_kv_transfer = sonar_config.kv_transfer_config is not None
         # Block scale for the preshuffled weight; None = not preshuffled.
         self._wqa_wkv_scale: torch.Tensor | None = None
         self._wo_b_scale: torch.Tensor | None = None
@@ -1040,7 +1040,7 @@ class DeepseekV4ROCMAiterMLAAttention(DeepseekV4Attention):
         return num_heads
 
     def prepare_attn_preshuffle(self) -> None:
-        from aphrodite._aiter_ops import rocm_aiter_ops
+        from sonar._aiter_ops import rocm_aiter_ops
 
         if not rocm_aiter_ops.is_enabled():
             return
@@ -1049,11 +1049,11 @@ class DeepseekV4ROCMAiterMLAAttention(DeepseekV4Attention):
         # _fused_wqa_wkv_gemm and _o_proj both fall back to the standard linear path
         if on_gfx1250():
             return
-        from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
+        from sonar.model_executor.layers.quantization.utils.fp8_utils import (
             _upcast_e8m0_to_fp32,
             get_fp8_block_weight_scale,
         )
-        from aphrodite.model_executor.utils import replace_parameter
+        from sonar.model_executor.utils import replace_parameter
 
         def _prep(linear) -> torch.Tensor | None:
             w = getattr(linear, "weight", None)
@@ -1078,7 +1078,7 @@ class DeepseekV4ROCMAiterMLAAttention(DeepseekV4Attention):
 
         self._wqa_wkv_scale = _prep(self.fused_wqa_wkv)
         self._wo_b_scale = _prep(self.wo_b)
-        if _ON_GFX950 and envs.APHRODITE_ROCM_USE_AITER_FP8BMM:
+        if _ON_GFX950 and envs.SONAR_ROCM_USE_AITER_FP8BMM:
             self._prepare_fp8_wo_a()
 
     def _prepare_fp8_wo_a(self) -> None:
@@ -1094,7 +1094,7 @@ class DeepseekV4ROCMAiterMLAAttention(DeepseekV4Attention):
             return
         del mxscale_op, inverse_quant_op
 
-        from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
+        from sonar.model_executor.layers.quantization.utils.fp8_utils import (
             get_fp8_block_weight_scale,
             is_fp8,
         )
@@ -1165,7 +1165,7 @@ class DeepseekV4ROCMAiterMLAAttention(DeepseekV4Attention):
         if self._fused_compressor_weight is not None:
             return False
 
-        from aphrodite.model_executor.offloader import NoopOffloader, get_offloader
+        from sonar.model_executor.offloader import NoopOffloader, get_offloader
 
         if not isinstance(get_offloader(), NoopOffloader):
             logger.warning_once(
@@ -1207,7 +1207,7 @@ class DeepseekV4ROCMAiterMLAAttention(DeepseekV4Attention):
         x: torch.Tensor,
         reduce_tp: bool,
     ) -> torch.Tensor:
-        from aphrodite._aiter_ops import rocm_aiter_ops
+        from sonar._aiter_ops import rocm_aiter_ops
 
         x_fp8, x_scale = rocm_aiter_ops.group_fp8_quant(x, transpose_scale=True)
         out = rocm_aiter_ops.gemm_a8w8_blockscale_bpreshuffle(x_fp8, weight, x_scale, scale, output_dtype=x.dtype)
@@ -1264,8 +1264,8 @@ class DeepseekV4ROCMAiterMLAAttention(DeepseekV4Attention):
         replaces are exactly the aiter ones; otherwise fall back to the
         shared path.
         """
-        from aphrodite._aiter_ops import rocm_aiter_ops
-        from aphrodite.model_executor.kernels.linear.scaled_mm import (
+        from sonar._aiter_ops import rocm_aiter_ops
+        from sonar.model_executor.kernels.linear.scaled_mm import (
             Fp8BlockScaledMMLinearKernel,
         )
 
@@ -1299,7 +1299,7 @@ class DeepseekV4ROCMAiterMLAAttention(DeepseekV4Attention):
         ):
             return super()._split_qkv_and_norm(qr_kv)
 
-        from aphrodite._aiter_ops import rocm_aiter_ops
+        from sonar._aiter_ops import rocm_aiter_ops
 
         return rocm_aiter_ops.fused_qk_rmsnorm_group_quant(
             q=qr,
@@ -1741,7 +1741,7 @@ class DeepseekV4ROCMAiterMLAAttention(DeepseekV4Attention):
         topk_indptr: torch.Tensor | None,
         positions: torch.Tensor | None = None,
     ) -> None:
-        from aphrodite._aiter_ops import rocm_aiter_ops
+        from sonar._aiter_ops import rocm_aiter_ops
 
         # Both fp8 caches are read in place: the SWA window as the main segment,
         # the top-k compressed tokens as the extra one. With positions the
@@ -1767,11 +1767,11 @@ class DeepseekV4RocmMxfp4Compressor(DeepseekCompressor):
     pooling kernel, then aiter's norm + RoPE + MXFP4 cache op, which owns the
     page layout its MQA-logits kernel reads."""
 
-    def __init__(self, aphrodite_config: AphroditeConfig, **kwargs: Any) -> None:
-        super().__init__(aphrodite_config, **kwargs)
+    def __init__(self, sonar_config: SonarConfig, **kwargs: Any) -> None:
+        super().__init__(sonar_config, **kwargs)
         assert self.head_dim == 128 and self.use_fp4_cache
-        self.num_index_heads = aphrodite_config.model_config.hf_config.index_n_heads
-        if aphrodite_config.kernel_config.enable_jit_warmup:
+        self.num_index_heads = sonar_config.model_config.hf_config.index_n_heads
+        if sonar_config.kernel_config.enable_jit_warmup:
             # Compile at startup instead of on the first boundary token.
             compress_pool.register_warmup(
                 head_dim=self.head_dim,

@@ -9,41 +9,41 @@ import torch
 from torch import nn
 from transformers import CohereConfig
 
-import aphrodite.envs as envs
-from aphrodite.compilation.breakable_cudagraph import BreakableCUDAGraphCapture
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import (
-    AphroditeConfig,
+import sonar.envs as envs
+from sonar.compilation.breakable_cudagraph import BreakableCUDAGraphCapture
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import (
     CacheConfig,
     CUDAGraphMode,
-    get_current_aphrodite_config,
+    SonarConfig,
+    get_current_sonar_config,
 )
-from aphrodite.distributed import (
+from sonar.distributed import (
     get_pp_group,
     get_tensor_model_parallel_world_size,
     tensor_model_parallel_all_reduce,
 )
-from aphrodite.forward_context import get_forward_context
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.activation import SiluAndMul
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.forward_context import get_forward_context
+from sonar.logger import init_logger
+from sonar.model_executor.layers.activation import SiluAndMul
+from sonar.model_executor.layers.attention import Attention
+from sonar.model_executor.layers.fused_moe import (
     FusedMoEFactory,
     GateLinear,
 )
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     MergedColumnParallelLinear,
     QKVParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.layers.vocab_parallel_embedding import VocabParallelEmbedding
-from aphrodite.platforms import current_platform
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.utils.torch_utils import (
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.layers.vocab_parallel_embedding import VocabParallelEmbedding
+from sonar.platforms import current_platform
+from sonar.sequence import IntermediateTensors
+from sonar.utils.torch_utils import (
     LayerNameType,
     _encode_layer_name,
     _resolve_layer_name,
@@ -354,16 +354,16 @@ class Cohere2Moe(nn.Module):
         return final_hidden_states.view(orig_shape)
 
 
-def _make_dual_stream(aphrodite_config: AphroditeConfig) -> torch.cuda.Stream | None:
+def _make_dual_stream(sonar_config: SonarConfig) -> torch.cuda.Stream | None:
     """Side stream shared by all decoder layers, or None when the dual stream
     is disabled (token threshold 0) or unsupported."""
-    token_threshold = envs.APHRODITE_COHERE2_ATTN_MOE_DUAL_STREAM_TOKEN_THRESHOLD
+    token_threshold = envs.SONAR_COHERE2_ATTN_MOE_DUAL_STREAM_TOKEN_THRESHOLD
     if token_threshold <= 0:
         return None
     if not current_platform.is_cuda():
         logger.info_once("Cohere2MoE attention/MoE dual stream is CUDA-only; running single-stream.")
         return None
-    if aphrodite_config.parallel_config.use_ubatching:
+    if sonar_config.parallel_config.use_ubatching:
         # Each layer holds a single fork/join state, so microbatches would race.
         logger.info_once(
             "Cohere2MoE attention/MoE dual stream does not support microbatching (DBO); running single-stream."
@@ -438,14 +438,14 @@ class Cohere2MoeDecoderLayer(nn.Module):
         self.dual_stream = (
             _DualStreamState(
                 stream=moe_stream,
-                token_threshold=envs.APHRODITE_COHERE2_ATTN_MOE_DUAL_STREAM_TOKEN_THRESHOLD,
+                token_threshold=envs.SONAR_COHERE2_ATTN_MOE_DUAL_STREAM_TOKEN_THRESHOLD,
             )
             if moe_stream is not None
             else None
         )
         self.layer_name = prefix
         if self.dual_stream is not None:
-            static_forward_context = get_current_aphrodite_config().compilation_config.static_forward_context
+            static_forward_context = get_current_sonar_config().compilation_config.static_forward_context
             if prefix in static_forward_context:
                 raise ValueError(f"Duplicate layer name: {prefix}")
             static_forward_context[prefix] = self
@@ -519,12 +519,12 @@ class Cohere2MoeDecoderLayer(nn.Module):
 
         if self.dual_stream is not None:
             layer_name = _encode_layer_name(self.layer_name)
-            hidden_states_mlp = torch.ops.aphrodite.cohere2_mlp_fork(hidden_states, layer_name)
+            hidden_states_mlp = torch.ops.sonar.cohere2_mlp_fork(hidden_states, layer_name)
             hidden_states_attention = self.self_attn(positions=positions, hidden_states=hidden_states)
             # Only layers that reduce attention + MLP together keep a
             # dual_stream (see __init__), so the join can return the sum.
             parallel_block_output = tensor_model_parallel_all_reduce(
-                torch.ops.aphrodite.cohere2_mlp_join(hidden_states_attention, hidden_states_mlp, layer_name)
+                torch.ops.sonar.cohere2_mlp_join(hidden_states_attention, hidden_states_mlp, layer_name)
             )
         else:
             hidden_states_attention = self.self_attn(
@@ -547,12 +547,12 @@ class Cohere2MoeDecoderLayer(nn.Module):
 class Cohere2MoeModel(nn.Module, EagleModelMixin):
     """Transformer decoder for Cohere2Moe."""
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_config
-        cache_config = aphrodite_config.cache_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        cache_config = sonar_config.cache_config
+        quant_config = sonar_config.quant_config
 
         self.config = config
         self.quant_config = quant_config
@@ -560,7 +560,7 @@ class Cohere2MoeModel(nn.Module, EagleModelMixin):
         self.org_vocab_size = config.vocab_size
         self.embed_tokens = VocabParallelEmbedding(config.vocab_size, config.hidden_size)
 
-        self._moe_stream = _make_dual_stream(aphrodite_config)
+        self._moe_stream = _make_dual_stream(sonar_config)
 
         self.start_layer, self.end_layer, self.layers = make_layers(
             config.num_hidden_layers,
@@ -635,7 +635,7 @@ class Cohere2MoeModel(nn.Module, EagleModelMixin):
 class Cohere2MoeForCausalLM(nn.Module, SupportsPP, SupportsQuant, SupportsEagle3):
     is_text_generation_model = True
 
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_stacked={
             # weight_name: (param_name, shard_id)
             ".q_proj": (".qkv_proj", "q"),
@@ -661,16 +661,16 @@ class Cohere2MoeForCausalLM(nn.Module, SupportsPP, SupportsQuant, SupportsEagle3
         ],
     }
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
         self.config = config
         self.unpadded_vocab_size = config.vocab_size
         self.quant_config = quant_config
         self.logits_scale = config.logit_scale
         self.logits_processor = LogitsProcessor(self.unpadded_vocab_size, config.vocab_size, scale=self.logits_scale)
-        self.model = Cohere2MoeModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = Cohere2MoeModel(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
         self.make_empty_intermediate_tensors = self.model.make_empty_intermediate_tensors
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
@@ -697,4 +697,4 @@ class Cohere2MoeForCausalLM(nn.Module, SupportsPP, SupportsQuant, SupportsEagle3
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)

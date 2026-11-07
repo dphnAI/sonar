@@ -19,9 +19,9 @@ import torch
 from torch import nn
 from transformers import PreTrainedConfig
 
-from aphrodite.model_executor.layers.hpc import HpcIHCHead, HpcIHCPost, HpcIHCPre
-from aphrodite.model_executor.layers.linear import ReplicatedLinear
-from aphrodite.models.hy_v4.nvidia.triton_ihc import (
+from sonar.model_executor.layers.hpc import HpcIHCHead, HpcIHCPost, HpcIHCPre
+from sonar.model_executor.layers.linear import ReplicatedLinear
+from sonar.models.hy_v4.nvidia.triton_ihc import (
     triton_ihc_post,
     triton_ihc_pre,
     triton_ihc_supported,

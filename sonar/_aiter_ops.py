@@ -10,12 +10,12 @@ import torch
 import torch.distributed as dist
 from torch._ops import OpOverload
 
-import aphrodite.envs as envs
-from aphrodite import _custom_ops as ops
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import direct_register_custom_op
-from aphrodite.v1.attention.ops.rocm_aiter_mla_sparse import (
+import sonar.envs as envs
+from sonar import _custom_ops as ops
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import direct_register_custom_op
+from sonar.v1.attention.ops.rocm_aiter_mla_sparse import (
     rocm_aiter_sparse_attn_indexer,
     rocm_aiter_sparse_attn_indexer_fake,
 )
@@ -51,9 +51,9 @@ def _get_or_create_aiter_qr_rmsnorm_comm(
 ) -> tuple[int, int, bool] | None:
     """Create the AITER QR communicator used by fused QR+RMSNorm.
 
-    Aphrodite's normal QuickReduce communicator owns Aphrodite C++ QR buffers. The fused
+    Sonar's normal QuickReduce communicator owns Sonar C++ QR buffers. The fused
     QR+RMSNorm kernel added in AITER needs an AITER DeviceComms instance, so we
-    lazily create one on the same TP CPU group and keep it on the Aphrodite device
+    lazily create one on the same TP CPU group and keep it on the Sonar device
     communicator for reuse.
     """
     existing = getattr(device_comm, "_aiter_qr_rmsnorm_comm", None)
@@ -83,7 +83,7 @@ def _get_or_create_aiter_qr_rmsnorm_comm(
         device_comm._aiter_qr_rmsnorm_comm = False
         return None
 
-    qr_max_size_mb = envs.APHRODITE_ROCM_QUICK_REDUCE_MAX_SIZE_BYTES_MB
+    qr_max_size_mb = envs.SONAR_ROCM_QUICK_REDUCE_MAX_SIZE_BYTES_MB
     qr_max_size = None if qr_max_size_mb is None else qr_max_size_mb * MB
 
     try:
@@ -96,7 +96,7 @@ def _get_or_create_aiter_qr_rmsnorm_comm(
         device_comm._aiter_qr_rmsnorm_comm = False
         return None
 
-    comm = (ptr, world_size, envs.APHRODITE_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16)
+    comm = (ptr, world_size, envs.SONAR_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16)
     device_comm._aiter_qr_rmsnorm_comm = comm
     return comm
 
@@ -212,10 +212,10 @@ def is_aiter_found_and_supported() -> bool:
     - Backend selection: Can explicitly request aiter regardless of env var
 
     This allows explicit backend selection via attention_config to work even when
-    APHRODITE_ROCM_USE_AITER=0, while preventing unwanted JIT warnings for auto-discovery.
+    SONAR_ROCM_USE_AITER=0, while preventing unwanted JIT warnings for auto-discovery.
     """
     if current_platform.is_rocm() and IS_AITER_FOUND:
-        from aphrodite.platforms.rocm import get_cdna_version
+        from sonar.platforms.rocm import get_cdna_version
 
         return get_cdna_version() > 2
     return False
@@ -230,7 +230,7 @@ def is_aiter_found_and_supported_on_rdna4() -> bool:
     arch + library availability and does not check environment variables.
     """
     if current_platform.is_rocm() and IS_AITER_FOUND:
-        from aphrodite.platforms.rocm import on_rdna4
+        from sonar.platforms.rocm import on_rdna4
 
         return on_rdna4()
     return False
@@ -239,7 +239,7 @@ def is_aiter_found_and_supported_on_rdna4() -> bool:
 def is_aiter_found_and_supported_on_rdna() -> bool:
     """RDNA (gfx11 + gfx12) analog of `is_aiter_found_and_supported()`."""
     if current_platform.is_rocm() and IS_AITER_FOUND:
-        from aphrodite.platforms.rocm import on_rdna
+        from sonar.platforms.rocm import on_rdna
 
         return on_rdna()
     return False
@@ -528,7 +528,7 @@ def _rocm_aiter_topk_gating_impl(
     from aiter.ops.topk import topk_gating
 
     # AITER renormalizes the selected softmax mass inside this launch,
-    # preserving Aphrodite's `renormalize=True` semantics without a second
+    # preserving Sonar's `renormalize=True` semantics without a second
     # pointwise kernel, and sigmoids the trailing shared-expert columns.
     topk_gating(
         topk_weights,
@@ -788,7 +788,7 @@ def _rocm_aiter_mla_decode_fwd_lse_impl(
         kwargs["kv_scale"] = kv_scale
 
     if q.dtype == torch.bfloat16 and kv_buffer.dtype == torch.bfloat16 and q.shape[1] == 32:
-        from aphrodite.platforms.rocm import on_gfx950
+        from sonar.platforms.rocm import on_gfx950
 
         if on_gfx950():
             # The gfx950 H32 BF16 kernel mishandles ragged tails with split KV.
@@ -1140,9 +1140,9 @@ def _unfused_allreduce_rmsnorm(
     epsilon: float,
     gemma_norm: bool,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    from aphrodite.distributed import tensor_model_parallel_all_reduce
+    from sonar.distributed import tensor_model_parallel_all_reduce
 
-    return torch.ops.aphrodite_aiter.fused_add_rms_norm(
+    return torch.ops.sonar_aiter.fused_add_rms_norm(
         tensor_model_parallel_all_reduce(input_),
         residual,
         weight,
@@ -1164,7 +1164,7 @@ def _rocm_aiter_fused_allreduce_rmsnorm_impl(
     use_1stage = aiter_ar.use_1stage_fused_ar_rms(input_)
 
     if not use_1stage:
-        from aphrodite.distributed import get_tp_group
+        from sonar.distributed import get_tp_group
 
         device_comm = get_tp_group().device_communicator
         qr_comm = getattr(device_comm, "qr_comm", None)
@@ -2004,7 +2004,7 @@ def _mhc_delayed_pre_tail(
             sinkhorn_repeat,
         )
 
-    next_pre_mix = torch.ops.aphrodite.mhc_pre_mix_triton(
+    next_pre_mix = torch.ops.sonar.mhc_pre_mix_triton(
         gemm_out,
         sqrsum,
         hc_scale,
@@ -2018,7 +2018,7 @@ def _mhc_delayed_pre_tail(
         # Model entry selects residual stream zero.
         layer_input = residual[:, 0]
     else:
-        layer_input = torch.ops.aphrodite.hc_collapse_triton(residual, pre_mix)
+        layer_input = torch.ops.sonar.hc_collapse_triton(residual, pre_mix)
     return post_mix, comb_mix, layer_input, next_pre_mix
 
 
@@ -2033,11 +2033,11 @@ _AITER_SITUV2_ACT_ENV = {
 
 
 def _resolve_situv2_activation() -> str:
-    """APHRODITE_ROCM_USE_AITER_MOE_SITUV2 -> a4w4 | a8w4 | a16w4.
+    """SONAR_ROCM_USE_AITER_MOE_SITUV2 -> a4w4 | a8w4 | a16w4.
 
     auto (default) and the legacy 1 mean a4w4; legacy 0 means a16w4.
     """
-    value = envs.APHRODITE_ROCM_USE_AITER_MOE_SITUV2.lower()
+    value = envs.SONAR_ROCM_USE_AITER_MOE_SITUV2.lower()
     if value in ("auto", "1"):
         return "a4w4"
     if value == "0":
@@ -2046,7 +2046,7 @@ def _resolve_situv2_activation() -> str:
 
 
 def _sync_aiter_situv2_moe_env() -> None:
-    """Set the AITER_SITUV2_* env matching APHRODITE_ROCM_USE_AITER_MOE_SITUV2.
+    """Set the AITER_SITUV2_* env matching SONAR_ROCM_USE_AITER_MOE_SITUV2.
 
     AITER reads AITER_SITUV2_A8W4 / AITER_SITUV2_A4W4 and defaults to a16w4,
     so exactly one is set for a8w4/a4w4 and both are cleared for a16w4.
@@ -2068,7 +2068,7 @@ _GFX950_DSA_AITER_MIN_PREFILL_SEQ_LEN = 32 * 1024
 
 
 class rocm_aiter_ops:
-    """ROCm AITER operations wrapper for AMD GPU acceleration in Aphrodite.
+    """ROCm AITER operations wrapper for AMD GPU acceleration in Sonar.
 
     This class centralizes the import and registration of AITER ops,
     and provides a unified interface for checking if AITER is enabled.
@@ -2079,20 +2079,20 @@ class rocm_aiter_ops:
     allowing fine-grained control over which AITER optimizations are used.
 
     Environment Variables:
-        APHRODITE_ROCM_USE_AITER: Main toggle for all AITER operations.
-        APHRODITE_ROCM_USE_AITER_LINEAR: Controls GEMM and quantization ops.
-        APHRODITE_ROCM_USE_AITER_RMSNORM: Controls RMSNorm operations.
-        APHRODITE_ROCM_USE_AITER_MOE: Controls MoE (Mixture of Experts) ops.
-        APHRODITE_ROCM_USE_AITER_MLA: Controls MLA (Multi-head Latent Attention) ops.
-        APHRODITE_ROCM_USE_AITER_MHA: Controls MHA ops including flash_attn_varlen.
-        APHRODITE_ROCM_USE_AITER_UNIFIED_ATTENTION: Controls Triton unified attention.
-        APHRODITE_ROCM_USE_AITER_FP8BMM: Controls FP8 batched matrix multiply.
-        APHRODITE_ROCM_USE_AITER_TRITON_ROPE: Controls Triton rotary embeddings.
-        APHRODITE_ROCM_USE_AITER_TRITON_SPARSE_MLA: Controls Triton sparse MLA (gfx950).
-        APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS: Controls shared expert fusion.
-        APHRODITE_ROCM_USE_AITER_MOE_SITUV2: SiTUv2 FlyDSL MoE activation
+        SONAR_ROCM_USE_AITER: Main toggle for all AITER operations.
+        SONAR_ROCM_USE_AITER_LINEAR: Controls GEMM and quantization ops.
+        SONAR_ROCM_USE_AITER_RMSNORM: Controls RMSNorm operations.
+        SONAR_ROCM_USE_AITER_MOE: Controls MoE (Mixture of Experts) ops.
+        SONAR_ROCM_USE_AITER_MLA: Controls MLA (Multi-head Latent Attention) ops.
+        SONAR_ROCM_USE_AITER_MHA: Controls MHA ops including flash_attn_varlen.
+        SONAR_ROCM_USE_AITER_UNIFIED_ATTENTION: Controls Triton unified attention.
+        SONAR_ROCM_USE_AITER_FP8BMM: Controls FP8 batched matrix multiply.
+        SONAR_ROCM_USE_AITER_TRITON_ROPE: Controls Triton rotary embeddings.
+        SONAR_ROCM_USE_AITER_TRITON_SPARSE_MLA: Controls Triton sparse MLA (gfx950).
+        SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS: Controls shared expert fusion.
+        SONAR_ROCM_USE_AITER_MOE_SITUV2: SiTUv2 FlyDSL MoE activation
             dtype (a16w4 | a8w4 | a4w4).
-        APHRODITE_ROCM_USE_AITER_TRITON_GEMM: Controls Triton unquantized GEMM.
+        SONAR_ROCM_USE_AITER_TRITON_GEMM: Controls Triton unquantized GEMM.
 
     Note:
         The environment variables are assigned when the module is imported,
@@ -2115,7 +2115,7 @@ class rocm_aiter_ops:
                         cls._AITER_ENABLED   -----> Check by the logic in `is_enabled()`
 
     Example:
-        from aphrodite._aiter_ops import rocm_aiter_ops
+        from sonar._aiter_ops import rocm_aiter_ops
 
         # Check if aiter is enabled before using operations
         if rocm_aiter_ops.is_enabled():
@@ -2138,33 +2138,33 @@ class rocm_aiter_ops:
     def get_moe_dispatch_policy(cls) -> int:
         """Cached MoE sorting dispatch policy."""
         if cls._MOE_DISPATCH_POLICY is None:
-            import aphrodite.envs as envs
+            import sonar.envs as envs
 
-            cls._MOE_DISPATCH_POLICY = envs.APHRODITE_ROCM_AITER_MOE_DISPATCH_POLICY
+            cls._MOE_DISPATCH_POLICY = envs.SONAR_ROCM_AITER_MOE_DISPATCH_POLICY
         return cls._MOE_DISPATCH_POLICY
 
     # Check if the env variable is set
-    _AITER_ENABLED = envs.APHRODITE_ROCM_USE_AITER
+    _AITER_ENABLED = envs.SONAR_ROCM_USE_AITER
     # Chunk length the AITER FlyDSL K5 prefill kernels are compiled for.
     GDN_FLYDSL_CHUNK_SIZE = 64
-    _CUSTOM_ALL_REDUCE_ENABLED = envs.APHRODITE_ROCM_USE_AITER_CUSTOM_AR
-    _LINEAR_ENABLED = envs.APHRODITE_ROCM_USE_AITER_LINEAR
-    _FMOE_ENABLED = envs.APHRODITE_ROCM_USE_AITER_MOE
-    _MLA_ENABLED = envs.APHRODITE_ROCM_USE_AITER_MLA
-    _MHA_ENABLED = envs.APHRODITE_ROCM_USE_AITER_MHA
-    _SHUFFLE_KV_CACHE_ENABLED = envs.APHRODITE_ROCM_SHUFFLE_KV_CACHE_LAYOUT
-    _TRITON_UNIFIED_ATTN_ENABLED = envs.APHRODITE_ROCM_USE_AITER_UNIFIED_ATTENTION
+    _CUSTOM_ALL_REDUCE_ENABLED = envs.SONAR_ROCM_USE_AITER_CUSTOM_AR
+    _LINEAR_ENABLED = envs.SONAR_ROCM_USE_AITER_LINEAR
+    _FMOE_ENABLED = envs.SONAR_ROCM_USE_AITER_MOE
+    _MLA_ENABLED = envs.SONAR_ROCM_USE_AITER_MLA
+    _MHA_ENABLED = envs.SONAR_ROCM_USE_AITER_MHA
+    _SHUFFLE_KV_CACHE_ENABLED = envs.SONAR_ROCM_SHUFFLE_KV_CACHE_LAYOUT
+    _TRITON_UNIFIED_ATTN_ENABLED = envs.SONAR_ROCM_USE_AITER_UNIFIED_ATTENTION
     # TODO: Consolidate under _LINEAR_ENABLED
-    _FP8BMM_ENABLED = envs.APHRODITE_ROCM_USE_AITER_FP8BMM
-    _FP4BMM_ENABLED = envs.APHRODITE_ROCM_USE_AITER_FP4BMM
-    _LINEAR_HIPBMM_ENABLED = envs.APHRODITE_ROCM_USE_AITER_LINEAR_HIPBMM
-    # TODO: Consolidate under APHRODITE_ROCM_USE_AITER_ROPE
-    _TRITON_ROTARY_EMBED = envs.APHRODITE_ROCM_USE_AITER_TRITON_ROPE
-    _TRITON_SPARSE_MLA = envs.APHRODITE_ROCM_USE_AITER_TRITON_SPARSE_MLA
-    _MOE_SHARED_EXPERTS_ENABLED = envs.APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS
+    _FP8BMM_ENABLED = envs.SONAR_ROCM_USE_AITER_FP8BMM
+    _FP4BMM_ENABLED = envs.SONAR_ROCM_USE_AITER_FP4BMM
+    _LINEAR_HIPBMM_ENABLED = envs.SONAR_ROCM_USE_AITER_LINEAR_HIPBMM
+    # TODO: Consolidate under SONAR_ROCM_USE_AITER_ROPE
+    _TRITON_ROTARY_EMBED = envs.SONAR_ROCM_USE_AITER_TRITON_ROPE
+    _TRITON_SPARSE_MLA = envs.SONAR_ROCM_USE_AITER_TRITON_SPARSE_MLA
+    _MOE_SHARED_EXPERTS_ENABLED = envs.SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS
     _MOE_SITUV2 = _resolve_situv2_activation()
     # TODO: Consolidate under _LINEAR_ENABLED
-    _TRITON_UNQUANT_GEMM = envs.APHRODITE_ROCM_USE_AITER_TRITON_GEMM
+    _TRITON_UNQUANT_GEMM = envs.SONAR_ROCM_USE_AITER_TRITON_GEMM
     # Lazily probed: whether aiter.topk_softmax supports the
     # num_shared_experts / shared_expert_scoring_func args (7-arg form).
     _TOPK_SOFTMAX_FUSED_SIGMOID: bool | None = None
@@ -2177,24 +2177,24 @@ class rocm_aiter_ops:
         for example, after monkey patching the env variables in the unit test,
         you can call this function to reload the env variables.
         """
-        cls._AITER_ENABLED = envs.APHRODITE_ROCM_USE_AITER
-        cls._CUSTOM_ALL_REDUCE_ENABLED = envs.APHRODITE_ROCM_USE_AITER_CUSTOM_AR
-        cls._LINEAR_ENABLED = envs.APHRODITE_ROCM_USE_AITER_LINEAR
-        cls._FMOE_ENABLED = envs.APHRODITE_ROCM_USE_AITER_MOE
-        cls._MLA_ENABLED = envs.APHRODITE_ROCM_USE_AITER_MLA
-        cls._MHA_ENABLED = envs.APHRODITE_ROCM_USE_AITER_MHA
-        cls._SHUFFLE_KV_CACHE_ENABLED = envs.APHRODITE_ROCM_SHUFFLE_KV_CACHE_LAYOUT
-        cls._TRITON_UNIFIED_ATTN_ENABLED = envs.APHRODITE_ROCM_USE_AITER_UNIFIED_ATTENTION
-        cls._FP8BMM_ENABLED = envs.APHRODITE_ROCM_USE_AITER_FP8BMM
-        cls._FP4BMM_ENABLED = envs.APHRODITE_ROCM_USE_AITER_FP4BMM
-        cls._LINEAR_HIPBMM_ENABLED = envs.APHRODITE_ROCM_USE_AITER_LINEAR_HIPBMM
-        cls._TRITON_ROTARY_EMBED = envs.APHRODITE_ROCM_USE_AITER_TRITON_ROPE
-        cls._TRITON_SPARSE_MLA = envs.APHRODITE_ROCM_USE_AITER_TRITON_SPARSE_MLA
-        cls._MOE_SHARED_EXPERTS_ENABLED = envs.APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS
+        cls._AITER_ENABLED = envs.SONAR_ROCM_USE_AITER
+        cls._CUSTOM_ALL_REDUCE_ENABLED = envs.SONAR_ROCM_USE_AITER_CUSTOM_AR
+        cls._LINEAR_ENABLED = envs.SONAR_ROCM_USE_AITER_LINEAR
+        cls._FMOE_ENABLED = envs.SONAR_ROCM_USE_AITER_MOE
+        cls._MLA_ENABLED = envs.SONAR_ROCM_USE_AITER_MLA
+        cls._MHA_ENABLED = envs.SONAR_ROCM_USE_AITER_MHA
+        cls._SHUFFLE_KV_CACHE_ENABLED = envs.SONAR_ROCM_SHUFFLE_KV_CACHE_LAYOUT
+        cls._TRITON_UNIFIED_ATTN_ENABLED = envs.SONAR_ROCM_USE_AITER_UNIFIED_ATTENTION
+        cls._FP8BMM_ENABLED = envs.SONAR_ROCM_USE_AITER_FP8BMM
+        cls._FP4BMM_ENABLED = envs.SONAR_ROCM_USE_AITER_FP4BMM
+        cls._LINEAR_HIPBMM_ENABLED = envs.SONAR_ROCM_USE_AITER_LINEAR_HIPBMM
+        cls._TRITON_ROTARY_EMBED = envs.SONAR_ROCM_USE_AITER_TRITON_ROPE
+        cls._TRITON_SPARSE_MLA = envs.SONAR_ROCM_USE_AITER_TRITON_SPARSE_MLA
+        cls._MOE_SHARED_EXPERTS_ENABLED = envs.SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS
         cls._MOE_SITUV2 = _resolve_situv2_activation()
         _sync_aiter_situv2_moe_env()
-        cls._TRITON_UNQUANT_GEMM = envs.APHRODITE_ROCM_USE_AITER_TRITON_GEMM
-        cls._MOE_DISPATCH_POLICY = envs.APHRODITE_ROCM_AITER_MOE_DISPATCH_POLICY
+        cls._TRITON_UNQUANT_GEMM = envs.SONAR_ROCM_USE_AITER_TRITON_GEMM
+        cls._MOE_DISPATCH_POLICY = envs.SONAR_ROCM_AITER_MOE_DISPATCH_POLICY
 
     @staticmethod
     def get_aiter_activation_type(activation_str: str) -> "ActivationType | None":
@@ -2243,7 +2243,7 @@ class rocm_aiter_ops:
         `is_enabled()`."""
         if not current_platform.is_rocm() or not IS_AITER_FOUND:
             return False
-        from aphrodite.platforms.rocm import on_rdna
+        from sonar.platforms.rocm import on_rdna
 
         return on_rdna() and cls._AITER_ENABLED
 
@@ -2275,7 +2275,7 @@ class rocm_aiter_ops:
         CDNA3 and CDNA4 only (gfx942, gfx950): those are the targets it was
         measured on. Other AITER targets keep the legacy ``topk_softmax`` launcher.
         """
-        from aphrodite.platforms.rocm import get_cdna_version
+        from sonar.platforms.rocm import get_cdna_version
 
         return cls.is_fused_moe_enabled() and get_cdna_version() in (3, 4)
 
@@ -2391,11 +2391,11 @@ class rocm_aiter_ops:
     def is_flydsl_quick_reduce_available(cls) -> bool:
         """Whether AITER's FlyDSL INT4 QuickReduce can run here.
 
-        It runs AITER kernels, so APHRODITE_ROCM_USE_AITER remains the one switch
+        It runs AITER kernels, so SONAR_ROCM_USE_AITER remains the one switch
         that turns it off. AITER's QuickAllReduceInt4 supports gfx942 and
         gfx950 only (CDNA 3 and 4); `> 2` would also admit gfx1250.
         """
-        from aphrodite.platforms.rocm import get_cdna_version
+        from sonar.platforms.rocm import get_cdna_version
 
         return cls._AITER_ENABLED and get_cdna_version() in (3, 4)
 
@@ -2422,7 +2422,7 @@ class rocm_aiter_ops:
 
         Requires AITER to be installed and enabled. bf16 (``auto``) always
         qualifies; fp8 e4m3 also needs K/V scales. Other cache dtypes fall
-        back to Aphrodite's fused kernel.
+        back to Sonar's fused kernel.
         """
         if not cls._AITER_ENABLED:
             return False
@@ -2522,7 +2522,7 @@ class rocm_aiter_ops:
     @classmethod
     @if_aiter_supported
     def is_fp4bmm_enabled(cls) -> bool:
-        from aphrodite.platforms.rocm import get_cdna_version
+        from sonar.platforms.rocm import get_cdna_version
 
         # TODO GFX1250: Enable for cdna 4+ when aiter supports batched_gemm_a16wfp4 on gfx1250
         return cls._AITER_ENABLED and cls._FP4BMM_ENABLED and get_cdna_version() == 4
@@ -2530,14 +2530,14 @@ class rocm_aiter_ops:
     @classmethod
     @if_aiter_supported
     def is_linear_hipbmm_enabled(cls) -> bool:
-        from aphrodite.platforms.rocm import get_cdna_version
+        from sonar.platforms.rocm import get_cdna_version
 
         return cls.is_linear_enabled() and (get_cdna_version() > 2) and cls._LINEAR_HIPBMM_ENABLED
 
     @classmethod
     @if_aiter_supported
     def is_asm_fp4_gemm_supported(cls) -> bool:
-        from aphrodite.platforms.rocm import on_gfx950
+        from sonar.platforms.rocm import on_gfx950
 
         return cls._AITER_ENABLED and on_gfx950()
 
@@ -2551,16 +2551,16 @@ class rocm_aiter_ops:
     def is_triton_sparse_mla_enabled(cls) -> bool:
         if not cls._TRITON_SPARSE_MLA:
             return False
-        from aphrodite.platforms.rocm import on_gfx950
+        from sonar.platforms.rocm import on_gfx950
 
         if not cls._AITER_ENABLED:
-            reason = "APHRODITE_ROCM_USE_AITER is off"
+            reason = "SONAR_ROCM_USE_AITER is off"
         elif not on_gfx950():
             reason = "the kernel is gfx950-only"
         else:
             return True
         logger.warning_once(
-            "APHRODITE_ROCM_USE_AITER_TRITON_SPARSE_MLA is set, but %s; ignoring it.",
+            "SONAR_ROCM_USE_AITER_TRITON_SPARSE_MLA is set, but %s; ignoring it.",
             reason,
         )
         return False
@@ -2573,7 +2573,7 @@ class rocm_aiter_ops:
     @classmethod
     @if_aiter_supported
     def is_tgemm_enabled(cls) -> bool:
-        from aphrodite.platforms.rocm import on_gfx950
+        from sonar.platforms.rocm import on_gfx950
 
         return cls.is_linear_enabled() and on_gfx950()
 
@@ -2590,17 +2590,17 @@ class rocm_aiter_ops:
     @classmethod
     @if_aiter_supported
     def is_kda_gluon_prefill_available(cls) -> bool:
-        from aphrodite.platforms.rocm import get_cdna_version
+        from sonar.platforms.rocm import get_cdna_version
 
         return cls._AITER_ENABLED and get_cdna_version() >= 4 and cls._kda_gluon_prefill_importable()
 
     @classmethod
     def get_aiter_allreduce(cls):
         """Return the TP device communicator's AITER custom all-reduce."""
-        from aphrodite.distributed.device_communicators.aiter_custom_all_reduce import (
+        from sonar.distributed.device_communicators.aiter_custom_all_reduce import (
             AiterCustomAllreduce,
         )
-        from aphrodite.distributed.parallel_state import get_tp_group
+        from sonar.distributed.parallel_state import get_tp_group
 
         device_comm = get_tp_group().device_communicator
         aiter_ar_comm = getattr(device_comm, "aiter_ar_comm", None)
@@ -2665,7 +2665,7 @@ class rocm_aiter_ops:
         RMSNorm in one launch, plain and speculative decode) ships CDNA4+
         (gfx950, gfx1250) builds only, and is absent in older aiter releases.
         """
-        from aphrodite.platforms.rocm import get_cdna_version
+        from sonar.platforms.rocm import get_cdna_version
 
         return cls._AITER_ENABLED and get_cdna_version() >= 4 and cls._kda_gluon_decode_importable()
 
@@ -2674,7 +2674,7 @@ class rocm_aiter_ops:
     def is_gdn_flydsl_prefill_available(cls) -> bool:
         """Whether the AITER FlyDSL GDN prefill path can be used.
 
-        It runs AITER kernels, so APHRODITE_ROCM_USE_AITER remains the one switch
+        It runs AITER kernels, so SONAR_ROCM_USE_AITER remains the one switch
         that turns all of them off.
         """
         return cls._AITER_ENABLED and is_aiter_found_and_supported() and cls._gdn_flydsl_prefill_kernels_importable()
@@ -2828,7 +2828,7 @@ class rocm_aiter_ops:
     @if_aiter_supported
     def is_indexer_top_k_enabled(cls) -> bool:
         """gfx950 is the only arch with tuned AITER indexer top-k kernels."""
-        from aphrodite.platforms.rocm import on_gfx950
+        from sonar.platforms.rocm import on_gfx950
 
         return cls._AITER_ENABLED and on_gfx950()
 
@@ -2931,7 +2931,7 @@ class rocm_aiter_ops:
             if not current_platform.is_rocm():
                 return
 
-            from aphrodite.platforms.rocm import on_gfx950
+            from sonar.platforms.rocm import on_gfx950
 
             # This op has self-contained Triton/C++ implementations on gfx950.
             # Only its optional top-k fast path comes from aiter.
@@ -3221,76 +3221,76 @@ class rocm_aiter_ops:
 
     @staticmethod
     def get_rmsnorm_fused_add_dynamic_quant_op() -> OpOverload:
-        return torch.ops.aphrodite.rocm_aiter_rmsnorm_fused_add_dynamic_quant.default
+        return torch.ops.sonar.rocm_aiter_rmsnorm_fused_add_dynamic_quant.default
 
     @staticmethod
     def get_rmsnorm_fused_dynamic_quant_op() -> OpOverload:
-        return torch.ops.aphrodite.rocm_aiter_rmsnorm_fused_dynamic_quant.default
+        return torch.ops.sonar.rocm_aiter_rmsnorm_fused_dynamic_quant.default
 
     @staticmethod
     def get_rmsnorm_group_fused_quant_op() -> OpOverload:
-        return torch.ops.aphrodite.rocm_aiter_rmsnorm_fp8_group_quant.default
+        return torch.ops.sonar.rocm_aiter_rmsnorm_fp8_group_quant.default
 
     @staticmethod
     def get_fused_rms_fp8_per_tensor_static_quant_op() -> OpOverload:
-        return torch.ops.aphrodite.rocm_aiter_fused_rms_fp8_per_tensor_static_quant.default
+        return torch.ops.sonar.rocm_aiter_fused_rms_fp8_per_tensor_static_quant.default
 
     @staticmethod
     def get_fused_add_rms_fp8_per_tensor_static_quant_op() -> OpOverload:
-        return torch.ops.aphrodite.rocm_aiter_fused_add_rms_fp8_per_tensor_static_quant.default
+        return torch.ops.sonar.rocm_aiter_fused_add_rms_fp8_per_tensor_static_quant.default
 
     @staticmethod
     def get_fused_rms_gated_fp8_group_quant_op() -> OpOverload:
         """Return the fused gated-RMSNorm + FP8 group quant custom op."""
-        return torch.ops.aphrodite.rocm_aiter_fused_rms_gated_fp8_group_quant.default
+        return torch.ops.sonar.rocm_aiter_fused_rms_gated_fp8_group_quant.default
 
     @staticmethod
     def get_rmsnorm_group_add_fused_quant_op() -> OpOverload:
-        return torch.ops.aphrodite.rocm_aiter_rmsnorm_with_add_fp8_group_quant.default
+        return torch.ops.sonar.rocm_aiter_rmsnorm_with_add_fp8_group_quant.default
 
     @staticmethod
     def get_per_token_quant_op() -> OpOverload:
-        return torch.ops.aphrodite.rocm_aiter_per_token_quant.default
+        return torch.ops.sonar.rocm_aiter_per_token_quant.default
 
     @staticmethod
     def get_per_tensor_quant_op() -> OpOverload:
-        return torch.ops.aphrodite.rocm_aiter_per_tensor_quant.default
+        return torch.ops.sonar.rocm_aiter_per_tensor_quant.default
 
     @staticmethod
     def get_group_quant_op() -> OpOverload:
-        return torch.ops.aphrodite.rocm_aiter_group_fp8_quant.default
+        return torch.ops.sonar.rocm_aiter_group_fp8_quant.default
 
     @staticmethod
     def get_act_mul_fused_fp8_group_quant_op() -> OpOverload:
-        return torch.ops.aphrodite.rocm_aiter_act_mul_and_fp8_group_quant.default
+        return torch.ops.sonar.rocm_aiter_act_mul_and_fp8_group_quant.default
 
     @staticmethod
     def get_triton_add_rmsnorm_pad_op() -> OpOverload:
-        return torch.ops.aphrodite.rocm_aiter_triton_add_rmsnorm_pad.default
+        return torch.ops.sonar.rocm_aiter_triton_add_rmsnorm_pad.default
 
     @staticmethod
     def get_triton_rotary_embedding_op() -> OpOverload:
-        return torch.ops.aphrodite.rocm_aiter_triton_rotary_embedding.default
+        return torch.ops.sonar.rocm_aiter_triton_rotary_embedding.default
 
     @staticmethod
     def get_fused_allreduce_rmsnorm_op() -> OpOverload:
-        return torch.ops.aphrodite.rocm_aiter_fused_allreduce_rmsnorm.default
+        return torch.ops.sonar.rocm_aiter_fused_allreduce_rmsnorm.default
 
     @staticmethod
     def get_fused_allreduce_rmsnorm_quant_per_group_op() -> OpOverload:
-        return torch.ops.aphrodite.rocm_aiter_fused_allreduce_rmsnorm_quant_per_group.default
+        return torch.ops.sonar.rocm_aiter_fused_allreduce_rmsnorm_quant_per_group.default
 
     @staticmethod
     def get_fused_allreduce_rmsnorm_quant_per_group_with_bf16_norm_op() -> OpOverload:  # noqa: E501
-        return torch.ops.aphrodite.rocm_aiter_fused_allreduce_rmsnorm_quant_per_group_with_bf16_norm.default  # noqa: E501
+        return torch.ops.sonar.rocm_aiter_fused_allreduce_rmsnorm_quant_per_group_with_bf16_norm.default  # noqa: E501
 
     @staticmethod
     def get_fused_mla_dual_rms_norm_op() -> OpOverload:
-        return torch.ops.aphrodite.fused_mla_dual_rms_norm.default
+        return torch.ops.sonar.fused_mla_dual_rms_norm.default
 
     @staticmethod
     def get_fused_mla_dual_rms_norm_per_token_quant_op() -> OpOverload:
-        return torch.ops.aphrodite.fused_mla_dual_rms_norm_per_token_quant.default
+        return torch.ops.sonar.fused_mla_dual_rms_norm_per_token_quant.default
 
     @staticmethod
     def fused_qk_rmsnorm_group_quant(
@@ -3304,7 +3304,7 @@ class rocm_aiter_ops:
         transpose_scale: bool = False,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Fused q/kv RMSNorm + per-1x128 FP8 group quant on q via AITER."""
-        return torch.ops.aphrodite.fused_mla_dual_rms_norm_group_quant(
+        return torch.ops.sonar.fused_mla_dual_rms_norm_group_quant(
             q,
             q_weight,
             kv,
@@ -3317,7 +3317,7 @@ class rocm_aiter_ops:
 
     @staticmethod
     def get_fused_mla_dual_rms_norm_group_quant_op() -> OpOverload:
-        return torch.ops.aphrodite.fused_mla_dual_rms_norm_group_quant.default
+        return torch.ops.sonar.fused_mla_dual_rms_norm_group_quant.default
 
     @staticmethod
     def rms_norm(
@@ -3357,7 +3357,7 @@ class rocm_aiter_ops:
         bias: torch.Tensor | None = None,
         output_dtype: torch.dtype = torch.float16,
     ) -> torch.Tensor:
-        return torch.ops.aphrodite.rocm_aiter_w8a8_gemm(A, B, As, Bs, bias, output_dtype)
+        return torch.ops.sonar.rocm_aiter_w8a8_gemm(A, B, As, Bs, bias, output_dtype)
 
     @staticmethod
     def preshuffled_per_token_w8a8_gemm(
@@ -3368,7 +3368,7 @@ class rocm_aiter_ops:
         bias: torch.Tensor | None = None,
         output_dtype: torch.dtype = torch.float16,
     ) -> torch.Tensor:
-        return torch.ops.aphrodite._rocm_aiter_preshuffled_per_token_w8a8_gemm(A, B, As, Bs, bias, output_dtype)
+        return torch.ops.sonar._rocm_aiter_preshuffled_per_token_w8a8_gemm(A, B, As, Bs, bias, output_dtype)
 
     @staticmethod
     def hipb_mm_fp8(
@@ -3379,7 +3379,7 @@ class rocm_aiter_ops:
         bias: torch.Tensor | None = None,
         output_dtype: torch.dtype = torch.bfloat16,
     ) -> torch.Tensor:
-        return torch.ops.aphrodite.rocm_aiter_hipb_mm_fp8(A, B, As, Bs, bias, output_dtype)
+        return torch.ops.sonar.rocm_aiter_hipb_mm_fp8(A, B, As, Bs, bias, output_dtype)
 
     @staticmethod
     def triton_gemm_a8w8_blockscale(
@@ -3390,7 +3390,7 @@ class rocm_aiter_ops:
         block_size: list[int],
         output_dtype: torch.dtype = torch.float16,
     ) -> torch.Tensor:
-        return torch.ops.aphrodite.rocm_aiter_triton_gemm_a8w8_blockscale(A, B, As, Bs, output_dtype)
+        return torch.ops.sonar.rocm_aiter_triton_gemm_a8w8_blockscale(A, B, As, Bs, output_dtype)
 
     @staticmethod
     def triton_gemm_a8w8_blockscale_preshuffle(
@@ -3401,7 +3401,7 @@ class rocm_aiter_ops:
         block_size: list[int],
         output_dtype: torch.dtype = torch.bfloat16,
     ) -> torch.Tensor:
-        return torch.ops.aphrodite.rocm_aiter_triton_gemm_a8w8_blockscale_preshuffle(A, B, As, Bs, output_dtype)
+        return torch.ops.sonar.rocm_aiter_triton_gemm_a8w8_blockscale_preshuffle(A, B, As, Bs, output_dtype)
 
     @staticmethod
     def gemm_a8w8_blockscale(
@@ -3412,7 +3412,7 @@ class rocm_aiter_ops:
         block_size: list[int],
         output_dtype: torch.dtype = torch.float16,
     ) -> torch.Tensor:
-        return torch.ops.aphrodite.rocm_aiter_gemm_a8w8_blockscale(A, B, As, Bs, output_dtype)
+        return torch.ops.sonar.rocm_aiter_gemm_a8w8_blockscale(A, B, As, Bs, output_dtype)
 
     @staticmethod
     def gemm_a8w8_blockscale_bpreshuffle(
@@ -3422,7 +3422,7 @@ class rocm_aiter_ops:
         Bs: torch.Tensor,
         output_dtype: torch.dtype = torch.float16,
     ) -> torch.Tensor:
-        return torch.ops.aphrodite.rocm_aiter_gemm_a8w8_blockscale_bpreshuffle(A, B, As, Bs, output_dtype)
+        return torch.ops.sonar.rocm_aiter_gemm_a8w8_blockscale_bpreshuffle(A, B, As, Bs, output_dtype)
 
     @staticmethod
     def fused_moe(
@@ -3457,7 +3457,7 @@ class rocm_aiter_ops:
         shared_expert_id: int = -1,
         q_dtype_a: torch.dtype | None = None,
     ) -> torch.Tensor:
-        return torch.ops.aphrodite.rocm_aiter_fused_moe(
+        return torch.ops.sonar.rocm_aiter_fused_moe(
             hidden_states,
             w1,
             w2,
@@ -3506,7 +3506,7 @@ class rocm_aiter_ops:
         expert_mask: torch.Tensor | None = None,
         activation_method: int = 0,
     ) -> torch.Tensor:
-        return torch.ops.aphrodite.rocm_aiter_asm_moe_tkw1(
+        return torch.ops.sonar.rocm_aiter_asm_moe_tkw1(
             hidden_states,
             w1,
             w2,
@@ -3532,7 +3532,7 @@ class rocm_aiter_ops:
         num_shared_experts: int = 0,
         shared_expert_scoring_func: str = "",
     ) -> tuple[torch.Tensor, ...]:
-        torch.ops.aphrodite.rocm_aiter_topk_softmax(
+        torch.ops.sonar.rocm_aiter_topk_softmax(
             topk_weights,
             topk_indices,
             token_expert_indices,
@@ -3553,7 +3553,7 @@ class rocm_aiter_ops:
         num_shared_experts: int = 0,
         shared_expert_scoring_func: str = "",
     ) -> tuple[torch.Tensor, ...]:
-        torch.ops.aphrodite.rocm_aiter_topk_gating(
+        torch.ops.sonar.rocm_aiter_topk_gating(
             topk_weights,
             topk_indices,
             token_expert_indices,
@@ -3572,7 +3572,7 @@ class rocm_aiter_ops:
         gating_output: torch.Tensor,
         renormalize: bool,
     ) -> tuple[torch.Tensor, ...]:
-        torch.ops.aphrodite.rocm_aiter_topk_sigmoid(topk_weights, topk_indices, gating_output)
+        torch.ops.sonar.rocm_aiter_topk_sigmoid(topk_weights, topk_indices, gating_output)
         return topk_weights, topk_indices
 
     @staticmethod
@@ -3588,7 +3588,7 @@ class rocm_aiter_ops:
     ) -> None:
         if correction_bias.dtype != gating_output.dtype:
             correction_bias = correction_bias.to(gating_output.dtype)
-        torch.ops.aphrodite.rocm_aiter_biased_grouped_topk(
+        torch.ops.sonar.rocm_aiter_biased_grouped_topk(
             gating_output,
             correction_bias,
             topk_weights,
@@ -3610,7 +3610,7 @@ class rocm_aiter_ops:
         scoring_func: str = "softmax",
         routed_scaling_factor: float = 1.0,
     ) -> None:
-        torch.ops.aphrodite.rocm_aiter_grouped_topk(
+        torch.ops.sonar.rocm_aiter_grouped_topk(
             gating_output,
             topk_weights,
             topk_ids,
@@ -3628,7 +3628,7 @@ class rocm_aiter_ops:
         top_k: int,
         gate_up: bool,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        return torch.ops.aphrodite.rocm_aiter_fused_topk(x, router_logits, top_k, gate_up)
+        return torch.ops.sonar.rocm_aiter_fused_topk(x, router_logits, top_k, gate_up)
 
     @staticmethod
     def triton_sparse_mla_fwd(
@@ -3701,7 +3701,7 @@ class rocm_aiter_ops:
         k: torch.Tensor,
         v: torch.Tensor,
     ) -> None:
-        torch.ops.aphrodite.rocm_aiter_gather_kv_b_proj(
+        torch.ops.sonar.rocm_aiter_gather_kv_b_proj(
             kv_cache, kv_scale, kv_indptr, kv_indices, cu_seq_lens, weight, k, v
         )
 
@@ -3727,7 +3727,7 @@ class rocm_aiter_ops:
         reduce_partial_map: torch.Tensor | None = None,
         causal: bool = True,
     ):
-        torch.ops.aphrodite.rocm_aiter_mla_decode_fwd(
+        torch.ops.sonar.rocm_aiter_mla_decode_fwd(
             q,
             kv_buffer.view(-1, 1, 1, q.shape[-1]),
             o,
@@ -3765,7 +3765,7 @@ class rocm_aiter_ops:
         kv_scale: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """Run MLA decode without persistent metadata and return its LSE."""
-        return torch.ops.aphrodite.rocm_aiter_mla_decode_fwd_lse(
+        return torch.ops.sonar.rocm_aiter_mla_decode_fwd_lse(
             q,
             kv_buffer.view(-1, 1, 1, q.shape[-1]),
             o,
@@ -3790,7 +3790,7 @@ class rocm_aiter_ops:
         is_dynamic = scale is None
         if is_dynamic:
             scale = torch.empty(1, dtype=torch.float32, device=x.device)
-        torch.ops.aphrodite.rocm_aiter_per_tensor_quant(out, x, scale, is_dynamic)
+        torch.ops.sonar.rocm_aiter_per_tensor_quant(out, x, scale, is_dynamic)
         return out, scale
 
     @staticmethod
@@ -3799,7 +3799,7 @@ class rocm_aiter_ops:
         quant_dtype: torch.dtype,
         scale: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        return torch.ops.aphrodite.rocm_aiter_per_token_quant(x, quant_dtype, scale)
+        return torch.ops.sonar.rocm_aiter_per_token_quant(x, quant_dtype, scale)
 
     @staticmethod
     def gemm_a8wfp4(
@@ -3809,7 +3809,7 @@ class rocm_aiter_ops:
         w_scales: torch.Tensor,
         out_dtype: torch.dtype,
     ) -> torch.Tensor:
-        return torch.ops.aphrodite.rocm_aiter_gemm_a8wfp4(x, w, x_scales, w_scales, out_dtype)
+        return torch.ops.sonar.rocm_aiter_gemm_a8wfp4(x, w, x_scales, w_scales, out_dtype)
 
     @staticmethod
     def triton_fp4_gemm_dynamic_quant(
@@ -4262,7 +4262,7 @@ class rocm_aiter_ops:
         transpose_scale: bool = False,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         assert group_size == 128, "Group size must be 128"
-        return torch.ops.aphrodite.rocm_aiter_group_fp8_quant(input_2d, group_size, transpose_scale)
+        return torch.ops.sonar.rocm_aiter_group_fp8_quant(input_2d, group_size, transpose_scale)
 
     @staticmethod
     @functools.cache
@@ -4444,7 +4444,7 @@ class rocm_aiter_ops:
 
         This function is NOT wrapped with @is_aiter_supported decorator
         to allow explicit backend selection via attention_config to work
-        even when APHRODITE_ROCM_USE_AITER=0.
+        even when SONAR_ROCM_USE_AITER=0.
 
         Note: This performs lazy import of aiter.flash_attn_varlen_func
         """
@@ -4483,7 +4483,7 @@ class rocm_aiter_ops:
         cu_seqlens: torch.Tensor | None = None,
         max_seqlen: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        return torch.ops.aphrodite.aiter_fp8_attn_wrapper(
+        return torch.ops.sonar.aiter_fp8_attn_wrapper(
             q,
             k,
             v,
@@ -4513,7 +4513,7 @@ class rocm_aiter_ops:
 
         This function is NOT wrapped with @is_aiter_supported decorator
         to allow explicit backend selection via attention_config to work
-        even when APHRODITE_ROCM_USE_AITER=0.
+        even when SONAR_ROCM_USE_AITER=0.
 
         Note: This performs lazy import of aiter.pa_fwd_asm
         """
@@ -4555,7 +4555,7 @@ class rocm_aiter_ops:
 
         This function is NOT wrapped with @is_aiter_supported decorator
         to allow explicit backend selection via attention_config to work
-        even when APHRODITE_ROCM_USE_AITER=0.
+        even when SONAR_ROCM_USE_AITER=0.
 
         Note: This performs lazy import of aiter.paged_attention_common
         """
@@ -4996,7 +4996,7 @@ class rocm_aiter_ops:
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """Fused mHC post + next mHC pre via AITER.
 
-        Returns residual_cur, post_mix, comb_mix, layer_input in Aphrodite order
+        Returns residual_cur, post_mix, comb_mix, layer_input in Sonar order
         (AITER returns post_mix, comb_mix, layer_input, next_residual).
         """
         from aiter.ops.mhc import mhc_fused_post_pre

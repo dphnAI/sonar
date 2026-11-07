@@ -13,12 +13,12 @@ from functools import cache
 
 import torch
 
-from aphrodite.config.mamba import MambaBackendEnum, MambaConfig, MambaSSUAlgorithm
-from aphrodite.logger import init_logger
-from aphrodite.triton_utils import tl, triton
-from aphrodite.v1.attention.backends.registry import MambaAttentionBackendEnum
-from aphrodite.v1.attention.backends.utils import NULL_BLOCK_ID
-from aphrodite.v1.kv_cache_interface import KVCacheConfig, MambaSpec
+from sonar.config.mamba import MambaBackendEnum, MambaConfig, MambaSSUAlgorithm
+from sonar.logger import init_logger
+from sonar.triton_utils import tl, triton
+from sonar.v1.attention.backends.registry import MambaAttentionBackendEnum
+from sonar.v1.attention.backends.utils import NULL_BLOCK_ID
+from sonar.v1.kv_cache_interface import KVCacheConfig, MambaSpec
 
 logger = init_logger(__name__)
 
@@ -268,11 +268,11 @@ class MambaSSUBackend(ABC):
 
 
 class TritonSSUBackend(MambaSSUBackend):
-    """Triton-based SSU backend (Aphrodite's default)."""
+    """Triton-based SSU backend (Sonar's default)."""
 
     def __init__(self, mamba_config: MambaConfig):
         super().__init__(mamba_config)
-        from aphrodite.model_executor.layers.mamba.ops.mamba_ssm import (
+        from sonar.model_executor.layers.mamba.ops.mamba_ssm import (
             selective_state_update as _triton_selective_state_update,
         )
 
@@ -405,7 +405,7 @@ class CPUSSUBackend(MambaSSUBackend):
 
     def __init__(self, mamba_config: MambaConfig):
         super().__init__(mamba_config)
-        from aphrodite import _custom_ops as ops
+        from sonar import _custom_ops as ops
 
         self._cpp_kernel = ops.selective_state_update_cpu
         logger.info("CPUSSUBackend: using compiled C++ selective_state_update kernel.")
@@ -590,7 +590,7 @@ def initialize_mamba_ssu_backend(
     backend = mamba_config.backend
 
     if backend == MambaBackendEnum.TRITON:
-        from aphrodite.platforms import current_platform
+        from sonar.platforms import current_platform
 
         if current_platform.is_cpu():
             logger.info("CPU platform detected: overriding Mamba SSU backend from 'triton' to 'cpu'.")

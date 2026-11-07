@@ -9,22 +9,22 @@ from typing import Any
 import pytest
 from openai.types.responses import NamespaceTool
 
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionNamedToolChoiceParam,
     ChatCompletionToolsParam,
 )
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.parser import response_template as response_template_module
-from aphrodite.parser.gemma4 import Gemma4Parser
-from aphrodite.parser.parser_manager import ParserManager
-from aphrodite.parser.response_template import (
+from sonar.exceptions import SonarValidationError
+from sonar.parser import response_template as response_template_module
+from sonar.parser.gemma4 import Gemma4Parser
+from sonar.parser.parser_manager import ParserManager
+from sonar.parser.response_template import (
     ResponseTemplateParser,
     ResponseTemplateReasoningParser,
     ResponseTemplateToolParser,
     resolve_response_template,
 )
-from aphrodite.reasoning import ReasoningParserManager
-from aphrodite.tool_parsers import ToolParserManager
+from sonar.reasoning import ReasoningParserManager
+from sonar.tool_parsers import ToolParserManager
 
 # Public metadata shared by the Gemma 4 instruction checkpoints.
 GEMMA4_RESPONSE_TEMPLATE: dict[str, Any] = {
@@ -956,7 +956,7 @@ def test_malformed_call_opened_across_prompt_boundary_is_dropped():
     assert delta is None
 
 
-def test_responses_namespace_tools_use_aphrodite_flattened_names():
+def test_responses_namespace_tools_use_sonar_flattened_names():
     namespace = NamespaceTool(
         type="namespace",
         name="calendar",
@@ -1219,7 +1219,7 @@ def test_unconstrained_tool_guarantees_are_rejected(req, match):
         enable_auto_tools=True,
     )
 
-    with pytest.raises(AphroditeValidationError, match=match):
+    with pytest.raises(SonarValidationError, match=match):
         parser.adjust_request(req)
 
 

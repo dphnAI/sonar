@@ -143,412 +143,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f202df86484c868dbad7eaa557ef785d5c66295e41b460ef922eca0723b842c"
 
 [[package]]
-name = "aphrodite-bench"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "aphrodite-build-info",
- "aphrodite-chat",
- "aphrodite-engine-core-client",
- "aphrodite-llm",
- "aphrodite-managed-engine",
- "aphrodite-text",
- "aphrodite-tracing",
- "base64 0.22.1",
- "bytes",
- "chrono",
- "clap",
- "dirs",
- "futures",
- "hf-hub",
- "image",
- "indicatif",
- "mimalloc",
- "parquet",
- "rand 0.9.5",
- "rand_distr",
- "rayon",
- "reqwest 0.12.28",
- "rlimit",
- "rustc-hash 1.1.0",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
- "thiserror-ext",
- "tiktoken-rs",
- "tokenizers",
- "tokio",
- "tokio-stream",
- "tracing",
- "url",
- "uuid",
-]
-
-[[package]]
-name = "aphrodite-build-info"
-version = "0.1.0"
-
-[[package]]
-name = "aphrodite-chat"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "aphrodite-engine-core-client",
- "aphrodite-llm",
- "aphrodite-parser",
- "aphrodite-text",
- "aphrodite-tokenizer",
- "aphrodite-tracing",
- "asynk-strim-attr",
- "bytes",
- "chrono",
- "clap",
- "easy-ext",
- "expect-test",
- "futures",
- "half",
- "image",
- "itertools 0.14.0",
- "llm-multimodal",
- "minijinja",
- "minijinja-contrib",
- "ndarray",
- "oss-harmony",
- "paste",
- "reqwest 0.13.4",
- "rmp-serde",
- "serde",
- "serde-json-fmt",
- "serde_json",
- "serde_with",
- "serial_test",
- "strum",
- "subenum",
- "tempfile",
- "thiserror 2.0.18",
- "thiserror-ext",
- "time",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "trait-set",
- "uuid",
- "xgrammar-structural-tag",
- "zeromq",
-]
-
-[[package]]
-name = "aphrodite-cmd"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "aphrodite-bench",
- "aphrodite-build-info",
- "aphrodite-chat",
- "aphrodite-engine-core-client",
- "aphrodite-managed-engine",
- "aphrodite-server",
- "aphrodite-text",
- "aphrodite-tracing",
- "clap",
- "educe",
- "expect-test",
- "itertools 0.14.0",
- "mimalloc",
- "native-tls",
- "serde",
- "serde_json",
- "serde_with",
- "thiserror-ext",
- "tokio",
- "tokio-util",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "aphrodite-engine-core-client"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "aphrodite-metrics",
- "arc-swap",
- "bytemuck",
- "byteorder",
- "bytes",
- "clap",
- "easy-ext",
- "enum-as-inner",
- "expect-test",
- "futures",
- "half",
- "hex",
- "itertools 0.14.0",
- "libc",
- "parking_lot",
- "rmp-serde",
- "rmpv",
- "serde",
- "serde_default",
- "serde_json",
- "serde_repr",
- "serde_tuple",
- "serde_with",
- "sha2",
- "socket2",
- "task-local",
- "tempfile",
- "thiserror 2.0.18",
- "thiserror-ext",
- "tokio",
- "tokio-util",
- "tracing",
- "tracing-subscriber",
- "zeromq",
-]
-
-[[package]]
-name = "aphrodite-llm"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "aphrodite-engine-core-client",
- "aphrodite-metrics",
- "bytes",
- "clap",
- "easy-ext",
- "enum-as-inner",
- "expect-test",
- "futures",
- "parking_lot",
- "rmp-serde",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
- "tokio",
- "tokio-util",
- "tracing",
- "tracing-subscriber",
- "uuid",
- "zeromq",
-]
-
-[[package]]
-name = "aphrodite-managed-engine"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "clap",
- "expect-test",
- "libc",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "aphrodite-metrics"
-version = "0.1.0"
-dependencies = [
- "expect-test",
- "itertools 0.14.0",
- "prometheus-client",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "aphrodite-mock-engine"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "aphrodite-engine-core-client",
- "asynk-strim-attr",
- "clap",
- "futures",
- "rand 0.9.5",
- "rmpv",
- "serde",
- "tokio",
- "tokio-util",
- "tracing",
- "tracing-subscriber",
- "zeromq",
-]
-
-[[package]]
-name = "aphrodite-parser"
-version = "0.1.0"
-dependencies = [
- "aphrodite-tokenizer",
- "auto_impl",
- "criterion",
- "easy-ext",
- "educe",
- "expect-test",
- "futures",
- "openai-protocol",
- "regex-automata",
- "regex-syntax",
- "serde",
- "serde_json",
- "serde_path_to_error",
- "serde_with",
- "thiserror 2.0.18",
- "thiserror-ext",
- "tool-parser",
- "tracing",
- "winnow",
- "xgrammar-structural-tag",
-]
-
-[[package]]
-name = "aphrodite-proto"
-version = "0.6.0"
-dependencies = [
- "prost",
- "prost-types",
- "protox",
- "tonic",
- "tonic-prost",
- "tonic-prost-build",
-]
-
-[[package]]
-name = "aphrodite-server"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "aphrodite-build-info",
- "aphrodite-chat",
- "aphrodite-engine-core-client",
- "aphrodite-llm",
- "aphrodite-metrics",
- "aphrodite-proto",
- "aphrodite-text",
- "aphrodite-tokenizer",
- "async-openai",
- "asynk-strim-attr",
- "auto_enums",
- "axum",
- "base64 0.22.1",
- "bytes",
- "clap",
- "educe",
- "expect-test",
- "futures",
- "http-body",
- "hyper",
- "hyper-util",
- "indexmap 2.13.0",
- "itertools 0.14.0",
- "libc",
- "llm-multimodal",
- "openssl",
- "prost",
- "prost-types",
- "rmp-serde",
- "rmpv",
- "serde",
- "serde_json",
- "serde_with",
- "serial_test",
- "sha2",
- "socket2",
- "subtle",
- "tempfile",
- "thiserror 2.0.18",
- "thiserror-ext",
- "tls-listener",
- "tokio",
- "tokio-openssl",
- "tokio-util",
- "tonic",
- "tonic-health",
- "tower",
- "tower-http",
- "tracing",
- "tracing-futures",
- "tracing-subscriber",
- "url",
- "uuid",
- "validator",
- "zeromq",
-]
-
-[[package]]
-name = "aphrodite-text"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "aphrodite-engine-core-client",
- "aphrodite-llm",
- "aphrodite-tokenizer",
- "asynk-strim-attr",
- "easy-ext",
- "enum-as-inner",
- "expect-test",
- "futures",
- "hf-hub",
- "itertools 0.14.0",
- "reqwest 0.12.28",
- "serde",
- "serde_json",
- "serde_with",
- "serial_test",
- "tempfile",
- "thiserror 2.0.18",
- "thiserror-ext",
- "tokio",
- "tracing",
- "trait-set",
-]
-
-[[package]]
-name = "aphrodite-tokenizer"
-version = "0.1.0"
-dependencies = [
- "base64 0.22.1",
- "criterion",
- "fastokens",
- "hf-hub",
- "reqwest 0.12.28",
- "riptoken",
- "rustc-hash 1.1.0",
- "serde",
- "serde_json",
- "smallvec",
- "tekken",
- "tempfile",
- "thiserror 2.0.18",
- "thiserror-ext",
- "tiktoken-rs",
- "tokenizers",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "aphrodite-tool-parser-py"
-version = "0.1.0"
-dependencies = [
- "aphrodite-parser",
- "aphrodite-tokenizer",
- "pyo3",
- "pythonize",
- "serde_json",
- "thiserror-ext",
-]
-
-[[package]]
-name = "aphrodite-tracing"
-version = "0.1.0"
-dependencies = [
- "time",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "arc-swap"
 version = "1.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4820,6 +4414,412 @@ checksum = "3a766e1110788c36f4fa1c2b71b387a7815aa65f88ce0229841826633d93723e"
 dependencies = [
  "libc",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "sonar-bench"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base64 0.22.1",
+ "bytes",
+ "chrono",
+ "clap",
+ "dirs",
+ "futures",
+ "hf-hub",
+ "image",
+ "indicatif",
+ "mimalloc",
+ "parquet",
+ "rand 0.9.5",
+ "rand_distr",
+ "rayon",
+ "reqwest 0.12.28",
+ "rlimit",
+ "rustc-hash 1.1.0",
+ "serde",
+ "serde_json",
+ "sonar-build-info",
+ "sonar-chat",
+ "sonar-engine-core-client",
+ "sonar-llm",
+ "sonar-managed-engine",
+ "sonar-text",
+ "sonar-tracing",
+ "thiserror 2.0.18",
+ "thiserror-ext",
+ "tiktoken-rs",
+ "tokenizers",
+ "tokio",
+ "tokio-stream",
+ "tracing",
+ "url",
+ "uuid",
+]
+
+[[package]]
+name = "sonar-build-info"
+version = "0.1.0"
+
+[[package]]
+name = "sonar-chat"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "asynk-strim-attr",
+ "bytes",
+ "chrono",
+ "clap",
+ "easy-ext",
+ "expect-test",
+ "futures",
+ "half",
+ "image",
+ "itertools 0.14.0",
+ "llm-multimodal",
+ "minijinja",
+ "minijinja-contrib",
+ "ndarray",
+ "oss-harmony",
+ "paste",
+ "reqwest 0.13.4",
+ "rmp-serde",
+ "serde",
+ "serde-json-fmt",
+ "serde_json",
+ "serde_with",
+ "serial_test",
+ "sonar-engine-core-client",
+ "sonar-llm",
+ "sonar-parser",
+ "sonar-text",
+ "sonar-tokenizer",
+ "sonar-tracing",
+ "strum",
+ "subenum",
+ "tempfile",
+ "thiserror 2.0.18",
+ "thiserror-ext",
+ "time",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "trait-set",
+ "uuid",
+ "xgrammar-structural-tag",
+ "zeromq",
+]
+
+[[package]]
+name = "sonar-cmd"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "educe",
+ "expect-test",
+ "itertools 0.14.0",
+ "mimalloc",
+ "native-tls",
+ "serde",
+ "serde_json",
+ "serde_with",
+ "sonar-bench",
+ "sonar-build-info",
+ "sonar-chat",
+ "sonar-engine-core-client",
+ "sonar-managed-engine",
+ "sonar-server",
+ "sonar-text",
+ "sonar-tracing",
+ "thiserror-ext",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "sonar-engine-core-client"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "arc-swap",
+ "bytemuck",
+ "byteorder",
+ "bytes",
+ "clap",
+ "easy-ext",
+ "enum-as-inner",
+ "expect-test",
+ "futures",
+ "half",
+ "hex",
+ "itertools 0.14.0",
+ "libc",
+ "parking_lot",
+ "rmp-serde",
+ "rmpv",
+ "serde",
+ "serde_default",
+ "serde_json",
+ "serde_repr",
+ "serde_tuple",
+ "serde_with",
+ "sha2",
+ "socket2",
+ "sonar-metrics",
+ "task-local",
+ "tempfile",
+ "thiserror 2.0.18",
+ "thiserror-ext",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "tracing-subscriber",
+ "zeromq",
+]
+
+[[package]]
+name = "sonar-llm"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bytes",
+ "clap",
+ "easy-ext",
+ "enum-as-inner",
+ "expect-test",
+ "futures",
+ "parking_lot",
+ "rmp-serde",
+ "serde",
+ "serde_json",
+ "sonar-engine-core-client",
+ "sonar-metrics",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+ "zeromq",
+]
+
+[[package]]
+name = "sonar-managed-engine"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "expect-test",
+ "libc",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "sonar-metrics"
+version = "0.1.0"
+dependencies = [
+ "expect-test",
+ "itertools 0.14.0",
+ "prometheus-client",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "sonar-mock-engine"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "asynk-strim-attr",
+ "clap",
+ "futures",
+ "rand 0.9.5",
+ "rmpv",
+ "serde",
+ "sonar-engine-core-client",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "tracing-subscriber",
+ "zeromq",
+]
+
+[[package]]
+name = "sonar-parser"
+version = "0.1.0"
+dependencies = [
+ "auto_impl",
+ "criterion",
+ "easy-ext",
+ "educe",
+ "expect-test",
+ "futures",
+ "openai-protocol",
+ "regex-automata",
+ "regex-syntax",
+ "serde",
+ "serde_json",
+ "serde_path_to_error",
+ "serde_with",
+ "sonar-tokenizer",
+ "thiserror 2.0.18",
+ "thiserror-ext",
+ "tool-parser",
+ "tracing",
+ "winnow",
+ "xgrammar-structural-tag",
+]
+
+[[package]]
+name = "sonar-proto"
+version = "0.6.0"
+dependencies = [
+ "prost",
+ "prost-types",
+ "protox",
+ "tonic",
+ "tonic-prost",
+ "tonic-prost-build",
+]
+
+[[package]]
+name = "sonar-server"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-openai",
+ "asynk-strim-attr",
+ "auto_enums",
+ "axum",
+ "base64 0.22.1",
+ "bytes",
+ "clap",
+ "educe",
+ "expect-test",
+ "futures",
+ "http-body",
+ "hyper",
+ "hyper-util",
+ "indexmap 2.13.0",
+ "itertools 0.14.0",
+ "libc",
+ "llm-multimodal",
+ "openssl",
+ "prost",
+ "prost-types",
+ "rmp-serde",
+ "rmpv",
+ "serde",
+ "serde_json",
+ "serde_with",
+ "serial_test",
+ "sha2",
+ "socket2",
+ "sonar-build-info",
+ "sonar-chat",
+ "sonar-engine-core-client",
+ "sonar-llm",
+ "sonar-metrics",
+ "sonar-proto",
+ "sonar-text",
+ "sonar-tokenizer",
+ "subtle",
+ "tempfile",
+ "thiserror 2.0.18",
+ "thiserror-ext",
+ "tls-listener",
+ "tokio",
+ "tokio-openssl",
+ "tokio-util",
+ "tonic",
+ "tonic-health",
+ "tower",
+ "tower-http",
+ "tracing",
+ "tracing-futures",
+ "tracing-subscriber",
+ "url",
+ "uuid",
+ "validator",
+ "zeromq",
+]
+
+[[package]]
+name = "sonar-text"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "asynk-strim-attr",
+ "easy-ext",
+ "enum-as-inner",
+ "expect-test",
+ "futures",
+ "hf-hub",
+ "itertools 0.14.0",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "serde_with",
+ "serial_test",
+ "sonar-engine-core-client",
+ "sonar-llm",
+ "sonar-tokenizer",
+ "tempfile",
+ "thiserror 2.0.18",
+ "thiserror-ext",
+ "tokio",
+ "tracing",
+ "trait-set",
+]
+
+[[package]]
+name = "sonar-tokenizer"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "criterion",
+ "fastokens",
+ "hf-hub",
+ "reqwest 0.12.28",
+ "riptoken",
+ "rustc-hash 1.1.0",
+ "serde",
+ "serde_json",
+ "smallvec",
+ "tekken",
+ "tempfile",
+ "thiserror 2.0.18",
+ "thiserror-ext",
+ "tiktoken-rs",
+ "tokenizers",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "sonar-tool-parser-py"
+version = "0.1.0"
+dependencies = [
+ "pyo3",
+ "pythonize",
+ "serde_json",
+ "sonar-parser",
+ "sonar-tokenizer",
+ "thiserror-ext",
+]
+
+[[package]]
+name = "sonar-tracing"
+version = "0.1.0"
+dependencies = [
+ "time",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

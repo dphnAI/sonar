@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """MoonEP (https://github.com/MoonshotAI/MoonEP) prepare/finalize.
 
-BF16 correctness-first proof of concept on top of Aphrodite's modular kernel
+BF16 correctness-first proof of concept on top of Sonar's modular kernel
 interface.
 
 MoonEP differs from DeepEP-style backends in two ways that shape this
@@ -34,10 +34,10 @@ from typing import Any, NamedTuple
 import torch
 import torch.nn.functional as F
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite.forward_context import get_forward_context
-from aphrodite.model_executor.layers.fused_moe.config import FusedMoEQuantConfig
-from aphrodite.model_executor.layers.fused_moe.topk_weight_and_reduce import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar.forward_context import get_forward_context
+from sonar.model_executor.layers.fused_moe.config import FusedMoEQuantConfig
+from sonar.model_executor.layers.fused_moe.topk_weight_and_reduce import (
     TopKWeightAndReduceNoOP,
 )
 
@@ -138,7 +138,7 @@ def gather_moonep_weight_layout(
     rank. Production MoonEP instead maps rows ``[0, E)`` onto each home
     rank's parameter memory via symmetric memory (RFC #52095 item 5).
     """
-    from aphrodite.distributed import get_ep_group
+    from sonar.distributed import get_ep_group
 
     ep_group = get_ep_group()
     ep_size = ep_group.world_size

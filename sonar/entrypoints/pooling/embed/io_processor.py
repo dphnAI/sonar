@@ -10,21 +10,21 @@ from openai.types.chat import (
     ChatCompletionContentPartTextParam,
 )
 
-from aphrodite import PoolingParams
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.inputs import tokens_input
-from aphrodite.logger import init_logger
-from aphrodite.outputs import PoolingOutput, PoolingRequestOutput
-from aphrodite.renderers import merge_kwargs
-from aphrodite.renderers.chat_utils import (
+from sonar import PoolingParams
+from sonar.exceptions import SonarValidationError
+from sonar.inputs import tokens_input
+from sonar.logger import init_logger
+from sonar.outputs import PoolingOutput, PoolingRequestOutput
+from sonar.renderers import merge_kwargs
+from sonar.renderers.chat_utils import (
     ChatCompletionContentPartParam,
     ChatCompletionMessageParam,
     CustomChatCompletionMessageParam,
     ImageURL,
 )
-from aphrodite.renderers.hf import resolve_chat_template
-from aphrodite.utils.collection_utils import chunk_list
-from aphrodite.utils.mistral import is_mistral_tokenizer
+from sonar.renderers.hf import resolve_chat_template
+from sonar.utils.collection_utils import chunk_list
+from sonar.utils.mistral import is_mistral_tokenizer
 
 from ..base.io_processor import PoolingIOProcessor
 from ..scoring.io_processor import JinaRankingIOProcessorMixin
@@ -135,7 +135,7 @@ class EmbedIOProcessor(PoolingIOProcessor):
             raise ValueError("Engine prompts not available")
 
         if any(engine_input["prompts"]["type"] == "multimodal" for engine_input in ctx.engine_inputs):
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 "Chunked embedding processing does not support multimodal inputs. "
                 "Disable enable_chunked_processing to use multimodal inputs."
             )
@@ -364,7 +364,7 @@ class EmbedIOProcessor(PoolingIOProcessor):
         revision: str | None,
     ) -> dict[str, str] | None:
         """Load ``task_instructions`` from ``config_sentence_transformers.json``."""
-        from aphrodite.transformers_utils.repo_utils import get_hf_file_to_dict
+        from sonar.transformers_utils.repo_utils import get_hf_file_to_dict
 
         try:
             cfg = get_hf_file_to_dict("config_sentence_transformers.json", str(model), revision)
@@ -648,7 +648,7 @@ class TokenEmbedIOProcessor(PoolingIOProcessor):
             False,
             "do_not_pad",
         ):
-            raise AphroditeValidationError("Late chunking does not support input padding")
+            raise SonarValidationError("Late chunking does not support input padding")
 
         def request_factory() -> RequestGenerator:
             for request in factory():
@@ -666,13 +666,13 @@ class TokenEmbedIOProcessor(PoolingIOProcessor):
         if late_chunking is None:
             return super().render(render_params)
 
-        text, tok_params = prepare_late_chunking_input(self.aphrodite_config, render_params)
+        text, tok_params = prepare_late_chunking_input(self.sonar_config, render_params)
         render_params = render_params.copy()
         render_params["tok_params"] = tok_params
         result = super().render(render_params)
         prompt = result["prompts"]
         if prompt["type"] != "token":
-            raise AphroditeValidationError("Late chunking requires tokenized text")
+            raise SonarValidationError("Late chunking requires tokenized text")
         render_params["late_chunking"].metadata = build_late_chunking_metadata(
             text,
             len(prompt["prompt_token_ids"]),
@@ -693,7 +693,7 @@ class TokenEmbedIOProcessor(PoolingIOProcessor):
 class JinaRankingTokenEmbedIOProcessor(TokenEmbedIOProcessor, JinaRankingIOProcessorMixin):
     def render(self, render_params: AnyRenderParam) -> PoolingEngineInput:
         if render_params["params"].late_chunking_params is not None:
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 "JinaForRanking returns document/query vectors and does not support late chunking"
             )
         return super().render(render_params)

@@ -33,7 +33,7 @@ compatibility before production use.
 ```bash
 export SONAR_API_KEY="$(openssl rand -hex 32)"
 
-aphrodite serve Qwen/Qwen3-8B \
+sonar serve Qwen/Qwen3-8B \
   --host 127.0.0.1 \
   --port 2242 \
   --served-model-name qwen3 \
@@ -113,9 +113,9 @@ Start a prefill instance:
 
 ```bash
 CUDA_VISIBLE_DEVICES=0 \
-APHRODITE_NIXL_SIDE_CHANNEL_HOST=10.0.0.10 \
-APHRODITE_NIXL_SIDE_CHANNEL_PORT=14590 \
-aphrodite serve MODEL \
+SONAR_NIXL_SIDE_CHANNEL_HOST=10.0.0.10 \
+SONAR_NIXL_SIDE_CHANNEL_PORT=14590 \
+sonar serve MODEL \
   --host 0.0.0.0 \
   --port 8100 \
   --kv-transfer-config '{
@@ -130,9 +130,9 @@ Start a decode instance:
 
 ```bash
 CUDA_VISIBLE_DEVICES=1 \
-APHRODITE_NIXL_SIDE_CHANNEL_HOST=10.0.0.11 \
-APHRODITE_NIXL_SIDE_CHANNEL_PORT=14591 \
-aphrodite serve MODEL \
+SONAR_NIXL_SIDE_CHANNEL_HOST=10.0.0.11 \
+SONAR_NIXL_SIDE_CHANNEL_PORT=14591 \
+sonar serve MODEL \
   --host 0.0.0.0 \
   --port 8200 \
   --kv-transfer-config '{
@@ -267,7 +267,7 @@ does not show whether prompt processing or decode latency is the limit.
 Send benchmark traffic through the public routing path:
 
 ```bash
-aphrodite bench serve \
+sonar bench serve \
   --backend openai \
   --base-url http://router.internal:9000 \
   --model MODEL \

@@ -3,8 +3,8 @@
 
 import torch
 
-import aphrodite._custom_ops as ops
-from aphrodite.v1.attention.backends.utils import NULL_BLOCK_ID
+import sonar._custom_ops as ops
+from sonar.v1.attention.backends.utils import NULL_BLOCK_ID
 
 
 def _mamba_chunk_scan_combined_fwd_cpu(

@@ -10,9 +10,9 @@ response as ``metrics.speculative_decoding``.
 import msgspec
 import pytest
 
-from aphrodite.outputs import CompletionOutput
-from aphrodite.v1.engine import EngineCoreOutput
-from aphrodite.v1.metrics.stats import RequestSpecDecodeMetrics
+from sonar.outputs import CompletionOutput
+from sonar.v1.engine import EngineCoreOutput
+from sonar.v1.metrics.stats import RequestSpecDecodeMetrics
 
 
 def _metrics(pairs, num_spec_tokens=3, detailed=False):

@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.multimodal.audio import (
+from sonar.multimodal.audio import (
     MONO_AUDIO_SPEC,
     PASSTHROUGH_AUDIO_SPEC,
     AudioResampler,
@@ -120,7 +120,7 @@ def test_resample_audio_torchaudio_short_input_needs_no_padding():
 
 def test_audio_resampler_pyav_calls_resample(dummy_audio):
     resampler = AudioResampler(target_sr=22050, method="pyav")
-    with patch("aphrodite.multimodal.audio.resample_audio_pyav") as mock_resample:
+    with patch("sonar.multimodal.audio.resample_audio_pyav") as mock_resample:
         mock_resample.return_value = dummy_audio
         out = resampler.resample(dummy_audio, orig_sr=44100)
         mock_resample.assert_called_once_with(dummy_audio, orig_sr=44100, target_sr=22050)
@@ -129,7 +129,7 @@ def test_audio_resampler_pyav_calls_resample(dummy_audio):
 
 def test_audio_resampler_scipy_calls_resample(dummy_audio):
     resampler = AudioResampler(target_sr=22050, method="scipy")
-    with patch("aphrodite.multimodal.audio.resample_audio_scipy") as mock_resample:
+    with patch("sonar.multimodal.audio.resample_audio_scipy") as mock_resample:
         mock_resample.return_value = dummy_audio
         out = resampler.resample(dummy_audio, orig_sr=44100)
         mock_resample.assert_called_once_with(dummy_audio, orig_sr=44100, target_sr=22050)
@@ -165,7 +165,7 @@ def test_audio_resampler_default_is_torchaudio():
     # for both AudioResampler and the data parser that wraps it.
     assert AudioResampler(target_sr=16000).method == "torchaudio"
 
-    from aphrodite.multimodal.parse import MultiModalDataParser
+    from sonar.multimodal.parse import MultiModalDataParser
 
     parser = MultiModalDataParser(target_sr=16000)
     assert parser.audio_resampler.method == "torchaudio"
@@ -358,7 +358,7 @@ class TestMultiModalDataParserChannelNormalization:
 
     def test_parser_normalizes_stereo_to_mono(self):
         """Parser should normalize stereo to mono when target_channels=1."""
-        from aphrodite.multimodal.parse import MultiModalDataParser
+        from sonar.multimodal.parse import MultiModalDataParser
 
         # Create parser with mono normalization enabled
         parser = MultiModalDataParser(
@@ -385,7 +385,7 @@ class TestMultiModalDataParserChannelNormalization:
 
     def test_parser_preserves_stereo_when_target_channels_none(self):
         """Parser should preserve stereo when target_channels=None."""
-        from aphrodite.multimodal.parse import MultiModalDataParser
+        from sonar.multimodal.parse import MultiModalDataParser
 
         # Create parser without channel normalization
         parser = MultiModalDataParser(
@@ -411,7 +411,7 @@ class TestMultiModalDataParserChannelNormalization:
     @pytest.mark.parametrize("shape", [(16000,), (1, 16000), (16000, 1)])
     def test_parser_mono_passthrough_when_target_channels_1(self, shape):
         """Mono layouts must preserve samples and report the waveform length."""
-        from aphrodite.multimodal.parse import MultiModalDataParser
+        from sonar.multimodal.parse import MultiModalDataParser
 
         # Create parser with mono normalization enabled
         parser = MultiModalDataParser(
@@ -434,7 +434,7 @@ class TestMultiModalDataParserChannelNormalization:
 
     def test_parser_with_target_channels_2(self):
         """Parser should reduce 6-channel to 2-channel when target_channels=2."""
-        from aphrodite.multimodal.parse import MultiModalDataParser
+        from sonar.multimodal.parse import MultiModalDataParser
 
         # Create parser with stereo target
         parser = MultiModalDataParser(
@@ -469,7 +469,7 @@ class TestAudioPipelineE2E:
 
     def test_stereo_audio_normalized_to_mono_e2e(self):
         """Full pipeline: stereo audio (torchaudio format) → mono output."""
-        from aphrodite.multimodal.parse import MultiModalDataParser
+        from sonar.multimodal.parse import MultiModalDataParser
 
         # Simulate torchaudio output: (channels, time) format
         # Stereo audio with left channel = 1.0, right channel = -1.0
@@ -499,7 +499,7 @@ class TestAudioPipelineE2E:
 
     def test_soundfile_format_normalized_to_mono_e2e(self):
         """Full pipeline: soundfile format (time, channels) → mono output."""
-        from aphrodite.multimodal.parse import MultiModalDataParser
+        from sonar.multimodal.parse import MultiModalDataParser
 
         # Simulate soundfile output: (time, channels) format
         # 16000 samples, 2 channels
@@ -529,7 +529,7 @@ class TestAudioPipelineE2E:
 
     def test_pyav_mono_passthrough_e2e(self):
         """Full pipeline: pyav mono format → preserved as mono."""
-        from aphrodite.multimodal.parse import MultiModalDataParser
+        from sonar.multimodal.parse import MultiModalDataParser
 
         # Simulate pyav output: already mono (time,) format
         mono_pyav = np.random.randn(16000).astype(np.float32)
@@ -555,7 +555,7 @@ class TestAudioPipelineE2E:
 
     def test_multichannel_5_1_surround_to_mono_e2e(self):
         """Full pipeline: 5.1 surround (6 channels) → mono output."""
-        from aphrodite.multimodal.parse import MultiModalDataParser
+        from sonar.multimodal.parse import MultiModalDataParser
 
         # Simulate 5.1 surround audio: 6 channels
         surround_audio = np.array(
@@ -591,7 +591,7 @@ class TestAudioPipelineE2E:
 
     def test_torch_tensor_input_e2e(self):
         """Full pipeline: torch.Tensor stereo input → mono numpy output."""
-        from aphrodite.multimodal.parse import MultiModalDataParser
+        from sonar.multimodal.parse import MultiModalDataParser
 
         # Simulate torch tensor input (from torchaudio)
         stereo_torch = torch.tensor(
@@ -621,7 +621,7 @@ class TestAudioPipelineE2E:
 
     def test_passthrough_preserves_stereo_e2e(self):
         """Full pipeline: stereo with target_channels=None → stereo preserved."""
-        from aphrodite.multimodal.parse import MultiModalDataParser
+        from sonar.multimodal.parse import MultiModalDataParser
 
         # Stereo audio
         stereo_audio = np.array(
@@ -646,7 +646,7 @@ class TestAudioPipelineE2E:
 
     def test_resampling_with_channel_normalization_e2e(self):
         """Full pipeline: resample + channel normalize in single pass."""
-        from aphrodite.multimodal.parse import MultiModalDataParser
+        from sonar.multimodal.parse import MultiModalDataParser
 
         # Stereo audio at 48kHz (common recording rate)
         stereo_48k = np.array(
@@ -672,7 +672,7 @@ class TestAudioPipelineE2E:
 
     def test_very_short_audio_e2e(self):
         """Full pipeline: very short audio (< 1 frame) handled correctly."""
-        from aphrodite.multimodal.parse import MultiModalDataParser
+        from sonar.multimodal.parse import MultiModalDataParser
 
         # Very short stereo audio (10 samples)
         short_stereo = np.array(
@@ -701,7 +701,7 @@ class TestAudioPipelineE2E:
 
 
 class TestAudioChunking:
-    """Tests for split_audio and find_split_point utilities in aphrodite.multimodal.audio."""
+    """Tests for split_audio and find_split_point utilities in sonar.multimodal.audio."""
 
     def test_split_audio_short_clip(self):
         """Audio shorter than max_clip_duration_s should not be split."""
@@ -776,7 +776,7 @@ class TestAudioChunking:
 
     def test_find_split_point_finds_quiet_region(self):
         """find_split_point should identify low-energy regions."""
-        from aphrodite.multimodal.audio import find_split_point
+        from sonar.multimodal.audio import find_split_point
 
         # Create audio with a quiet section in the middle
         segment = np.ones(32000, dtype=np.float32)
@@ -795,7 +795,7 @@ class TestAudioChunking:
 
     def test_find_split_point_handles_uniform_audio(self):
         """find_split_point should handle uniform energy audio gracefully."""
-        from aphrodite.multimodal.audio import find_split_point
+        from sonar.multimodal.audio import find_split_point
 
         segment = np.ones(32000, dtype=np.float32) * 0.5
 
@@ -810,7 +810,7 @@ class TestAudioChunking:
 
     def test_find_split_point_silence(self):
         """find_split_point should prefer the quietest scanned window."""
-        from aphrodite.multimodal.audio import find_split_point
+        from sonar.multimodal.audio import find_split_point
 
         # Deterministic signal: constant energy everywhere except silence.
         segment = np.ones(32000, dtype=np.float32)
@@ -862,7 +862,7 @@ class TestAudioChunking:
 
     def test_find_split_point_nan_input(self):
         """find_split_point must not return 0 for all-NaN input."""
-        from aphrodite.multimodal.audio import find_split_point
+        from sonar.multimodal.audio import find_split_point
 
         nan_audio = np.full(32000, float("nan"), dtype=np.float32)
         start_idx = 16000

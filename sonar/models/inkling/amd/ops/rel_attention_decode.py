@@ -32,7 +32,7 @@ import os
 
 import torch
 
-from aphrodite.triton_utils import tl, triton
+from sonar.triton_utils import tl, triton
 
 _MIN_BLOCK_KV = tl.constexpr(32)
 

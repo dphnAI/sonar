@@ -5,12 +5,12 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.distributed.eplb.eplb_state import (
+from sonar.distributed.eplb.eplb_state import (
     _compute_eplb_load_stats,  # pyright: ignore[reportPrivateUsage]
     compute_logical_maps,
 )
-from aphrodite.distributed.eplb.policy.default import DefaultEplbPolicy
-from aphrodite.platforms import current_platform
+from sonar.distributed.eplb.policy.default import DefaultEplbPolicy
+from sonar.platforms import current_platform
 
 
 def test_eplb_load_stats_reduce_across_ranks():

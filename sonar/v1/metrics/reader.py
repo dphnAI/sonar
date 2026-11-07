@@ -13,7 +13,7 @@ class Metric:
     """A base class for prometheus metrics.
 
     Each metric may be associated with key=value labels, and
-    in some cases a single Aphrodite instance may have multiple
+    in some cases a single Sonar instance may have multiple
     metrics with the same name but different sets of labels.
     """
 
@@ -33,7 +33,7 @@ class Vector(Metric):
     """An ordered array of integer counters.
 
     This type - which doesn't exist in Prometheus - models one very
-    specific metric, aphrodite:spec_decode_num_accepted_tokens_per_pos.
+    specific metric, sonar:spec_decode_num_accepted_tokens_per_pos.
     """
 
     values: list[int]
@@ -86,7 +86,7 @@ def get_metrics_snapshot() -> list[Metric]:
     """
     collected: list[Metric] = []
     for metric in REGISTRY.collect():
-        if not metric.name.startswith("aphrodite:"):
+        if not metric.name.startswith("sonar:"):
             continue
         if metric.type == "gauge":
             samples = _get_samples(metric)
@@ -94,9 +94,9 @@ def get_metrics_snapshot() -> list[Metric]:
                 collected.append(Gauge(name=metric.name, labels=s.labels, value=s.value))
         elif metric.type == "counter":
             samples = _get_samples(metric, "_total")
-            if metric.name == "aphrodite:spec_decode_num_accepted_tokens_per_pos":
+            if metric.name == "sonar:spec_decode_num_accepted_tokens_per_pos":
                 #
-                # Ugly aphrodite:num_accepted_tokens_per_pos special case.
+                # Ugly sonar:num_accepted_tokens_per_pos special case.
                 #
                 # This metric is a vector of counters - for each spec
                 # decoding token position, we observe the number of

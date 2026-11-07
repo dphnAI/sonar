@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Utility functions for Aphrodite config dataclasses."""
+"""Utility functions for Sonar config dataclasses."""
 
 import ast
 import enum
@@ -22,8 +22,8 @@ from pydantic.fields import Field as PydanticField
 from pydantic.fields import FieldInfo
 from typing_extensions import dataclass_transform, runtime_checkable
 
-import aphrodite.envs as envs
-from aphrodite.logger import init_logger
+import sonar.envs as envs
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 
@@ -56,7 +56,7 @@ def config(
     """Decorator to create a pydantic dataclass with default config. The default config
     for the dataclass forbids extra fields.
 
-    All config classes in Aphrodite should use this decorator.
+    All config classes in Sonar should use this decorator.
 
     Args:
         cls: The class to decorate

@@ -5,11 +5,11 @@ from typing import Literal, get_args
 
 from pydantic import BaseModel, Field
 
-from aphrodite.entrypoints.pooling.base.protocol import (
+from sonar.entrypoints.pooling.base.protocol import (
     CompletionRequestMixin,
     EmbedRequestMixin,
 )
-from aphrodite.entrypoints.serve.engine.protocol import UsageInfo
+from sonar.entrypoints.serve.engine.protocol import UsageInfo
 
 EmbedTask = Literal[
     "sparse",

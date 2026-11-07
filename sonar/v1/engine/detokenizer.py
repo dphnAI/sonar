@@ -8,14 +8,14 @@ import tokenizers.decoders
 from tokenizers import Tokenizer
 from transformers import TokenizersBackend
 
-from aphrodite.logger import init_logger
-from aphrodite.tokenizers import TokenizerLike
-from aphrodite.tokenizers.detokenizer_utils import (
+from sonar.logger import init_logger
+from sonar.tokenizers import TokenizerLike
+from sonar.tokenizers.detokenizer_utils import (
     convert_prompt_ids_to_tokens,
     detokenize_incrementally,
 )
-from aphrodite.utils import length_from_prompt_token_ids_or_embeds
-from aphrodite.v1.engine import EngineCoreRequest
+from sonar.utils import length_from_prompt_token_ids_or_embeds
+from sonar.v1.engine import EngineCoreRequest
 
 logger = init_logger(__name__)
 

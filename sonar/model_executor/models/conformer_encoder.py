@@ -10,7 +10,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from aphrodite.model_executor.layers.linear import ReplicatedLinear
+from sonar.model_executor.layers.linear import ReplicatedLinear
 
 
 class Conv2dSubsampling(nn.Module):

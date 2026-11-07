@@ -9,27 +9,27 @@ import torch
 from torch import nn
 from transformers import Qwen4ExpConfig, Qwen4ExpTextConfig
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed import get_pp_group
-from aphrodite.model_executor.layers.fusion.mm_input_norm import build_mm_input_norm
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.mamba.gdn.qwen_gdn_linear_attn import (
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import SonarConfig
+from sonar.distributed import get_pp_group
+from sonar.model_executor.layers.fusion.mm_input_norm import build_mm_input_norm
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.mamba.gdn.qwen_gdn_linear_attn import (
     QwenGatedDeltaNetAttention,
 )
-from aphrodite.model_executor.layers.mamba.mamba_utils import (
+from sonar.model_executor.layers.mamba.mamba_utils import (
     MambaStateCopyFunc,
     MambaStateCopyFuncCalculator,
     MambaStateCopyFuncsByType,
     MambaStateDtypeCalculator,
     MambaStateShapeCalculator,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.models.interfaces import (
+from sonar.model_executor.models.interfaces import (
     HasInnerState,
     IsHybrid,
     MixtureOfExperts,
@@ -40,21 +40,21 @@ from aphrodite.model_executor.models.interfaces import (
     SupportsPP,
     _require_is_multimodal,
 )
-from aphrodite.model_executor.models.qwen3_5 import (
+from sonar.model_executor.models.qwen3_5 import (
     Qwen3_5ForConditionalGeneration,
     Qwen3_5Model,
 )
-from aphrodite.model_executor.models.qwen3_next import (
+from sonar.model_executor.models.qwen3_next import (
     Qwen3NextAttention,
     Qwen3NextSparseMoeBlock,
 )
-from aphrodite.model_executor.models.qwen3_vl import (
+from sonar.model_executor.models.qwen3_vl import (
     Qwen3_VisionTransformer,
     Qwen3VLDummyInputsBuilder,
     Qwen3VLMultiModalProcessor,
     Qwen3VLProcessingInfo,
 )
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.models.utils import (
     AutoWeightsLoader,
     PPMissingLayer,
     StageMissingLayer,
@@ -67,13 +67,13 @@ from aphrodite.model_executor.models.utils import (
     maybe_fuse_shared_experts,
     maybe_prefix,
 )
-from aphrodite.models.common.ops.sequence_parallel import sp_all_gather
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import MultiModalFeatureSpec
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.tokenizers.registry import cached_tokenizer_from_config
-from aphrodite.v1.attention.backends.registry import MambaAttentionBackendEnum
-from aphrodite.v1.kv_cache_interface import MambaSpec
+from sonar.models.common.ops.sequence_parallel import sp_all_gather
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import MultiModalFeatureSpec
+from sonar.sequence import IntermediateTensors
+from sonar.tokenizers.registry import cached_tokenizer_from_config
+from sonar.v1.attention.backends.registry import MambaAttentionBackendEnum
+from sonar.v1.kv_cache_interface import MambaSpec
 
 from ..common.hyperconnection import is_hc_sequence_parallel_enabled
 from .hyperconnection import GatedResidual, HyperConnectionConfig
@@ -166,36 +166,36 @@ class Qwen4ExpSparseMoeBlock(Qwen3NextSparseMoeBlock):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
         reduce_results: bool = True,
     ) -> None:
-        super().__init__(aphrodite_config=aphrodite_config, prefix=prefix, reduce_results=reduce_results)
+        super().__init__(sonar_config=sonar_config, prefix=prefix, reduce_results=reduce_results)
         if self.replicate_shared_expert and not self.is_sequence_parallel:
             # Reduce routed outputs before adding replicated shared outputs.
             # SP then slices the result to avoid summing shared outputs again via RS.
             self.experts.moe_config.skip_final_all_reduce = False
-        config = aphrodite_config.model_config.hf_text_config
+        config = sonar_config.model_config.hf_text_config
         self.n_shared_experts = int(config.shared_expert_intermediate_size > 0)
 
 
 class Qwen4ExpDecoderLayer(nn.Module):
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         layer_type: str,
         prefix: str = "",
     ) -> None:
         super().__init__()
-        config: Qwen4ExpTextConfig = aphrodite_config.model_config.hf_text_config
-        quant_config = aphrodite_config.quant_config
+        config: Qwen4ExpTextConfig = sonar_config.model_config.hf_text_config
+        quant_config = sonar_config.quant_config
 
         self.config = config
         self.layer_type = layer_type
         # MoE SP also enables HC SP, while HC SP can be enabled independently.
-        self.use_hc_sequence_parallel = is_hc_sequence_parallel_enabled(aphrodite_config)
+        self.use_hc_sequence_parallel = is_hc_sequence_parallel_enabled(sonar_config)
         self.layer_idx = extract_layer_index(prefix)
-        self.use_sequence_parallel = aphrodite_config.parallel_config.use_sequence_parallel_moe
+        self.use_sequence_parallel = sonar_config.parallel_config.use_sequence_parallel_moe
         self.ple: Qwen4ExpPLELayer | None = None
         ple_layer_ids = config.ple_layer_ids
         if (self.layer_idx + 1) in ple_layer_ids:
@@ -204,7 +204,7 @@ class Qwen4ExpDecoderLayer(nn.Module):
             ple_dense_layer_id = ple_dense_layer_id_map[self.layer_idx + 1]
             self.ple = Qwen4ExpPLELayer(
                 config,
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 layer_idx=self.layer_idx,
                 ple_dense_layer_id=ple_dense_layer_id,
                 prefix=f"{prefix}.ple",
@@ -214,7 +214,7 @@ class Qwen4ExpDecoderLayer(nn.Module):
         if layer_type == "linear_attention":
             self.linear_attn = QwenGatedDeltaNetAttention(
                 config,
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 prefix=f"{prefix}.linear_attn",
                 gqa_interleaved_layout=False,
                 reduce_results=not self.use_hc_sequence_parallel,
@@ -224,15 +224,15 @@ class Qwen4ExpDecoderLayer(nn.Module):
             if not use_qsa:
                 self.self_attn = Qwen3NextAttention(
                     config,
-                    model_config=aphrodite_config.model_config,
-                    cache_config=aphrodite_config.cache_config,
+                    model_config=sonar_config.model_config,
+                    cache_config=sonar_config.cache_config,
                     quant_config=quant_config,
                     prefix=f"{prefix}.self_attn",
                     reduce_results=not self.use_hc_sequence_parallel,
                 )
             else:
                 self.self_attn = Qwen4ExpQSAAttention(
-                    aphrodite_config=aphrodite_config,
+                    sonar_config=sonar_config,
                     config=config,
                     layer_id=self.layer_idx,
                     quant_config=quant_config,
@@ -243,7 +243,7 @@ class Qwen4ExpDecoderLayer(nn.Module):
             raise ValueError(f"Invalid layer_type {layer_type}")
 
         self.mlp = Qwen4ExpSparseMoeBlock(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             prefix=f"{prefix}.mlp",
             reduce_results=not self.use_hc_sequence_parallel,
         )
@@ -334,7 +334,7 @@ class Qwen4ExpDecoderLayer(nn.Module):
 
 
 class Qwen4ExpMixtureOfExperts(MixtureOfExperts):
-    """Expose Qwen4Exp routed experts through Aphrodite's EPLB protocol."""
+    """Expose Qwen4Exp routed experts through Sonar's EPLB protocol."""
 
     def set_moe_parameters(self, layers: Iterable[nn.Module]) -> None:
         self.moe_layers = []
@@ -393,15 +393,15 @@ class Qwen4ExpMixtureOfExperts(MixtureOfExperts):
     }
 )
 class Qwen4ExpModel(nn.Module):
-    hf_to_aphrodite_mapper = Qwen3_5Model.hf_to_aphrodite_mapper | _EXTRA_WEIGHTS_MAPPER
+    hf_to_sonar_mapper = Qwen3_5Model.hf_to_sonar_mapper | _EXTRA_WEIGHTS_MAPPER
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__()
-        config: Qwen4ExpTextConfig = aphrodite_config.model_config.hf_text_config
+        config: Qwen4ExpTextConfig = sonar_config.model_config.hf_text_config
         self.config = config
-        self.num_redundant_experts = aphrodite_config.parallel_config.eplb_config.num_redundant_experts
+        self.num_redundant_experts = sonar_config.parallel_config.eplb_config.num_redundant_experts
         # MoE SP also enables HC SP, while HC SP can be enabled independently.
-        self.use_hc_sequence_parallel = is_hc_sequence_parallel_enabled(aphrodite_config)
+        self.use_hc_sequence_parallel = is_hc_sequence_parallel_enabled(sonar_config)
         self.vocab_size = config.vocab_size
         self._qsa_layer_ids = frozenset(
             layer_idx
@@ -417,7 +417,7 @@ class Qwen4ExpModel(nn.Module):
         def get_layer(prefix: str) -> Qwen4ExpDecoderLayer:
             layer_idx = extract_layer_index(prefix)
             return Qwen4ExpDecoderLayer(
-                aphrodite_config,
+                sonar_config,
                 layer_type=config.layer_types[layer_idx],
                 prefix=prefix,
             )
@@ -428,7 +428,7 @@ class Qwen4ExpModel(nn.Module):
         self.fused_shared_expert_layers = get_fused_shared_expert_layers(
             self,
             Qwen4ExpSparseMoeBlock,
-            enable_eplb=aphrodite_config.parallel_config.enable_eplb,
+            enable_eplb=sonar_config.parallel_config.enable_eplb,
         )
         intermediate_size = config.hidden_size * config.hc_count
         self.make_empty_intermediate_tensors = make_empty_intermediate_tensors_factory(
@@ -453,7 +453,7 @@ class Qwen4ExpModel(nn.Module):
         else:
             self.hyper_connection_mixer = None
 
-        spec_config = aphrodite_config.speculative_config
+        spec_config = sonar_config.speculative_config
         # MTP HC multi-stream outputs: when speculative method=="mtp" and the
         # model uses HC with hc_count>1, retain the pre-final-mixer multi-stream
         # hidden state [T, hc_count*H] so the MTP drafter can feed a real
@@ -464,9 +464,9 @@ class Qwen4ExpModel(nn.Module):
         )
         if needs_mtp_hidden:
             self._mtp_hidden_buffer = torch.empty(
-                aphrodite_config.scheduler_config.max_num_batched_tokens,
+                sonar_config.scheduler_config.max_num_batched_tokens,
                 config.hc_count * config.hidden_size,
-                dtype=aphrodite_config.model_config.dtype,
+                dtype=sonar_config.model_config.dtype,
             )
         else:
             self._mtp_hidden_buffer = None
@@ -591,9 +591,7 @@ class Qwen4ExpModel(nn.Module):
             "token_lookup",
             "hyper_connection_mixer.block_inject_weight",
         )
-        mapper = self.hf_to_aphrodite_mapper | WeightsMapper(
-            orig_to_new_substr={substr: None for substr in skip_substrs}
-        )
+        mapper = self.hf_to_sonar_mapper | WeightsMapper(orig_to_new_substr={substr: None for substr in skip_substrs})
         # The final HC mixer only exists on the last PP rank; earlier ranks
         # must drop its checkpoint weights instead of failing to place them.
         ignore_prefixes = None if self.hyper_connection_mixer is not None else ["hyper_connection_mixer."]
@@ -631,18 +629,18 @@ class Qwen4ExpForCausalLM(
             "_input_mix_padding",
         ],
     }
-    hf_to_aphrodite_mapper = WeightsMapper(orig_to_new_prefix={"model.language_model.": "model."})
+    hf_to_sonar_mapper = WeightsMapper(orig_to_new_prefix={"model.language_model.": "model."})
     requires_raw_input_tokens = True
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__()
-        config: Qwen4ExpTextConfig = aphrodite_config.model_config.hf_text_config
-        self.aphrodite_config = aphrodite_config
-        self.model_config = aphrodite_config.model_config
-        self.quant_config = aphrodite_config.quant_config
+        config: Qwen4ExpTextConfig = sonar_config.model_config.hf_text_config
+        self.sonar_config = sonar_config
+        self.model_config = sonar_config.model_config
+        self.quant_config = sonar_config.quant_config
         self.config = config
-        self.scheduler_config = aphrodite_config.scheduler_config
-        self.model = Qwen4ExpModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.scheduler_config = sonar_config.scheduler_config
+        self.model = Qwen4ExpModel(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
         self.lm_head: ParallelLMHead | PPMissingLayer
         if get_pp_group().is_last_rank:
             self.lm_head = ParallelLMHead(
@@ -685,22 +683,20 @@ class Qwen4ExpForCausalLM(
     @classmethod
     def get_ple_mamba_state_dtype_from_config(
         cls,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
     ) -> tuple[torch.dtype, ...]:
         return MambaStateDtypeCalculator.short_conv_state_dtype(
-            aphrodite_config.model_config.dtype,
-            aphrodite_config.cache_config.mamba_cache_dtype,
+            sonar_config.model_config.dtype,
+            sonar_config.cache_config.mamba_cache_dtype,
         )
 
     @classmethod
-    def get_ple_mamba_state_shape_from_config(cls, aphrodite_config: AphroditeConfig) -> tuple[tuple[int, int]]:
-        hf_config = aphrodite_config.model_config.hf_text_config
+    def get_ple_mamba_state_shape_from_config(cls, sonar_config: SonarConfig) -> tuple[tuple[int, int]]:
+        hf_config = sonar_config.model_config.hf_text_config
         conv_kernel_size = hf_config.ple_conv_kernel_size
         short_conv_dilation = hf_config.ngram_size
         conv_state_len = (conv_kernel_size - 1) * short_conv_dilation
-        num_spec = (
-            aphrodite_config.speculative_config.num_speculative_tokens if aphrodite_config.speculative_config else 0
-        )
+        num_spec = sonar_config.speculative_config.num_speculative_tokens if sonar_config.speculative_config else 0
         hc_count = hf_config.hc_count
         hc_hidden_size = hf_config.hidden_size * hc_count
         return MambaStateShapeCalculator.short_conv_state_shape(
@@ -711,25 +707,21 @@ class Qwen4ExpForCausalLM(
         )
 
     @classmethod
-    def get_gdn_mamba_state_dtype_from_config(
-        cls, aphrodite_config: AphroditeConfig
-    ) -> tuple[torch.dtype, torch.dtype]:
+    def get_gdn_mamba_state_dtype_from_config(cls, sonar_config: SonarConfig) -> tuple[torch.dtype, torch.dtype]:
         return MambaStateDtypeCalculator.gated_delta_net_state_dtype(
-            aphrodite_config.model_config.dtype,
-            aphrodite_config.cache_config.mamba_cache_dtype,
-            aphrodite_config.cache_config.mamba_ssm_cache_dtype,
+            sonar_config.model_config.dtype,
+            sonar_config.cache_config.mamba_cache_dtype,
+            sonar_config.cache_config.mamba_ssm_cache_dtype,
         )
 
     @classmethod
     def get_gdn_mamba_state_shape_from_config(
-        cls, aphrodite_config: AphroditeConfig
+        cls, sonar_config: SonarConfig
     ) -> tuple[tuple[int, int], tuple[int, int]]:
-        parallel_config = aphrodite_config.parallel_config
-        hf_config = aphrodite_config.model_config.hf_text_config
+        parallel_config = sonar_config.parallel_config
+        hf_config = sonar_config.model_config.hf_text_config
         tp_size = parallel_config.tensor_parallel_size
-        num_spec = (
-            aphrodite_config.speculative_config.num_speculative_tokens if aphrodite_config.speculative_config else 0
-        )
+        num_spec = sonar_config.speculative_config.num_speculative_tokens if sonar_config.speculative_config else 0
         return MambaStateShapeCalculator.gated_delta_net_state_shape(
             tp_size,
             hf_config.linear_num_key_heads,
@@ -743,15 +735,13 @@ class Qwen4ExpForCausalLM(
     @classmethod
     def get_mamba_state_dtype_from_config(
         cls,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
     ) -> tuple[torch.dtype, torch.dtype]:
-        return cls.get_gdn_mamba_state_dtype_from_config(aphrodite_config)
+        return cls.get_gdn_mamba_state_dtype_from_config(sonar_config)
 
     @classmethod
-    def get_mamba_state_shape_from_config(
-        cls, aphrodite_config: AphroditeConfig
-    ) -> tuple[tuple[int, int], tuple[int, int]]:
-        return cls.get_gdn_mamba_state_shape_from_config(aphrodite_config)
+    def get_mamba_state_shape_from_config(cls, sonar_config: SonarConfig) -> tuple[tuple[int, int], tuple[int, int]]:
+        return cls.get_gdn_mamba_state_shape_from_config(sonar_config)
 
     @classmethod
     def get_mamba_state_copy_func(
@@ -773,7 +763,7 @@ class Qwen4ExpForCausalLM(
         return {mamba_type: copy_funcs_by_type[mamba_type] for mamba_type in mamba_types}
 
     @classmethod
-    def get_mamba_specs_from_config(cls, aphrodite_config: AphroditeConfig) -> tuple[MambaSpec, ...]:
+    def get_mamba_specs_from_config(cls, sonar_config: SonarConfig) -> tuple[MambaSpec, ...]:
         """Return all MambaSpecs for this model (GDN layers + PLE layer).
 
         The PLE layer uses a separate short_conv MambaSpec whose page_size_bytes
@@ -781,13 +771,13 @@ class Qwen4ExpForCausalLM(
         """
         return (
             MambaSpec(
-                shapes=cls.get_gdn_mamba_state_shape_from_config(aphrodite_config),
-                dtypes=cls.get_gdn_mamba_state_dtype_from_config(aphrodite_config),
+                shapes=cls.get_gdn_mamba_state_shape_from_config(sonar_config),
+                dtypes=cls.get_gdn_mamba_state_dtype_from_config(sonar_config),
                 block_size=-1,
             ),
             MambaSpec(
-                shapes=cls.get_ple_mamba_state_shape_from_config(aphrodite_config),
-                dtypes=cls.get_ple_mamba_state_dtype_from_config(aphrodite_config),
+                shapes=cls.get_ple_mamba_state_shape_from_config(sonar_config),
+                dtypes=cls.get_ple_mamba_state_dtype_from_config(sonar_config),
                 block_size=-1,
                 tp_replicated=True,
             ),
@@ -808,7 +798,7 @@ class Qwen4ExpForCausalLM(
         return positions.unsqueeze(0).expand(3, -1), 0
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
-        mapper = self.hf_to_aphrodite_mapper | WeightsMapper(orig_to_new_substr={"mtp.": None})
+        mapper = self.hf_to_sonar_mapper | WeightsMapper(orig_to_new_substr={"mtp.": None})
         loader = AutoWeightsLoader(
             self,
             ignore_unexpected_suffixes=_QWEN4_EXP_IGNORED_MISSING_SUFFIXES.copy(),
@@ -851,16 +841,16 @@ class Qwen4ExpForConditionalGeneration(
 
         return Qwen4ExpModelState
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "model") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "model") -> None:
         nn.Module.__init__(self)
-        config: Qwen4ExpConfig = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
-        multimodal_config = aphrodite_config.model_config.multimodal_config
+        config: Qwen4ExpConfig = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
+        multimodal_config = sonar_config.model_config.multimodal_config
         if multimodal_config is None:
             raise ValueError("Qwen4ExpForConditionalGeneration requires multimodal_config")
 
         self.config = config
-        self.model_config = aphrodite_config.model_config
+        self.model_config = sonar_config.model_config
         self.multimodal_config = multimodal_config
         self.language_model_only = multimodal_config.language_model_only
         if self.language_model_only:
@@ -874,9 +864,9 @@ class Qwen4ExpForConditionalGeneration(
         else:
             self.use_data_parallel = multimodal_config.mm_encoder_tp_mode == "data"
             self._init_video_pruning(multimodal_config)
-            self._tokenizer = cached_tokenizer_from_config(aphrodite_config.model_config)
+            self._tokenizer = cached_tokenizer_from_config(sonar_config.model_config)
 
-            with self._mark_tower_model(aphrodite_config, {"image", "video"}):
+            with self._mark_tower_model(sonar_config, {"image", "video"}):
                 self.visual = Qwen3_VisionTransformer(
                     config.vision_config,
                     norm_eps=config.text_config.rms_norm_eps,
@@ -897,16 +887,16 @@ class Qwen4ExpForConditionalGeneration(
         if self.use_deepstack:
             self.deepstack_input_embeds = [
                 torch.zeros(
-                    aphrodite_config.scheduler_config.max_num_batched_tokens,
+                    sonar_config.scheduler_config.max_num_batched_tokens,
                     config.text_config.hidden_size,
                 )
                 for _ in range(self.deepstack_num_level)
             ]
             self.deepstack_input_embeds_num_tokens = 0
 
-        with self._mark_language_model(aphrodite_config):
+        with self._mark_language_model(sonar_config):
             self.language_model = Qwen4ExpForCausalLM(
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 prefix=maybe_prefix(prefix, "language_model"),
             )
 
@@ -985,7 +975,7 @@ class Qwen4ExpForConditionalGeneration(
         return hidden_states
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
-        mapper = self.hf_to_aphrodite_mapper | WeightsMapper(
+        mapper = self.hf_to_sonar_mapper | WeightsMapper(
             orig_to_new_substr={"mtp.": None},
             orig_to_new_prefix={"visual.": None} if self.language_model_only else {},
         )
@@ -998,16 +988,16 @@ class Qwen4ExpForConditionalGeneration(
     @classmethod
     def get_mamba_state_dtype_from_config(
         cls,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
     ) -> tuple[torch.dtype, torch.dtype]:
-        return Qwen4ExpForCausalLM.get_mamba_state_dtype_from_config(aphrodite_config)
+        return Qwen4ExpForCausalLM.get_mamba_state_dtype_from_config(sonar_config)
 
     @classmethod
     def get_mamba_state_shape_from_config(
         cls,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
     ) -> tuple[tuple[int, int], tuple[int, int]]:
-        return Qwen4ExpForCausalLM.get_mamba_state_shape_from_config(aphrodite_config)
+        return Qwen4ExpForCausalLM.get_mamba_state_shape_from_config(sonar_config)
 
     @classmethod
     def get_mamba_state_copy_func(
@@ -1023,8 +1013,8 @@ class Qwen4ExpForConditionalGeneration(
         return Qwen4ExpForCausalLM.get_mamba_state_copy_funcs(mamba_types)
 
     @classmethod
-    def get_mamba_specs_from_config(cls, aphrodite_config: AphroditeConfig) -> tuple[MambaSpec, ...]:
-        return Qwen4ExpForCausalLM.get_mamba_specs_from_config(aphrodite_config)
+    def get_mamba_specs_from_config(cls, sonar_config: SonarConfig) -> tuple[MambaSpec, ...]:
+        return Qwen4ExpForCausalLM.get_mamba_specs_from_config(sonar_config)
 
 
 __all__ = [

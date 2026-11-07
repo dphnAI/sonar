@@ -28,11 +28,11 @@ from typing import NamedTuple
 import numpy as np
 from typing_extensions import override
 
-from aphrodite.distributed.kv_transfer.kv_connector.v1.offloading.metrics import (
+from sonar.distributed.kv_transfer.kv_connector.v1.offloading.metrics import (
     OffloadingConnectorStats,
 )
-from aphrodite.logger import init_logger
-from aphrodite.v1.kv_offload.base import (
+from sonar.logger import init_logger
+from sonar.v1.kv_offload.base import (
     ConfigInfoMapping,
     LoadStoreSpec,
     LookupResult,
@@ -45,10 +45,10 @@ from aphrodite.v1.kv_offload.base import (
     RequestOffloadingContext,
     ScheduleEndContext,
 )
-from aphrodite.v1.kv_offload.cpu.common import CPULoadStoreSpec, CPUOffloadingInfo
-from aphrodite.v1.kv_offload.cpu.manager import CPUOffloadingManager
-from aphrodite.v1.kv_offload.cpu.shared_offload_region import SharedOffloadRegion
-from aphrodite.v1.kv_offload.tiering.base import (
+from sonar.v1.kv_offload.cpu.common import CPULoadStoreSpec, CPUOffloadingInfo
+from sonar.v1.kv_offload.cpu.manager import CPUOffloadingManager
+from sonar.v1.kv_offload.cpu.shared_offload_region import SharedOffloadRegion
+from sonar.v1.kv_offload.tiering.base import (
     TIER_LABEL,
     JobId,
     JobResult,
@@ -56,8 +56,8 @@ from aphrodite.v1.kv_offload.tiering.base import (
     SecondaryTierManager,
     TransferJob,
 )
-from aphrodite.v1.kv_offload.tiering.metrics import TieringMetricsTracker
-from aphrodite.v1.metrics.cache_hit_source import CacheHitSource
+from sonar.v1.kv_offload.tiering.metrics import TieringMetricsTracker
+from sonar.v1.metrics.cache_hit_source import CacheHitSource
 
 logger = init_logger(__name__)
 
@@ -364,7 +364,7 @@ class TieringOffloadingManager(OffloadingManager):
             return
         self._tier_poll_thread = threading.Thread(
             target=self._tier_poll_loop,
-            name="aphrodite_offload_tier_poll",
+            name="sonar_offload_tier_poll",
             daemon=True,
         )
         self._tier_poll_thread.start()

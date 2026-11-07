@@ -4,7 +4,7 @@
 """Inference-only BAGEL model compatible with HuggingFace weights.
 
 BAGEL is a unified multimodal model for image understanding and generation.
-For Aphrodite, we focus on the image understanding (vision-to-text) capabilities.
+For Sonar, we focus on the image understanding (vision-to-text) capabilities.
 """
 
 from collections.abc import Iterable, Mapping, Sequence
@@ -13,31 +13,31 @@ from typing import Any, Literal, TypeAlias
 import torch
 import torch.nn as nn
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.multimodal import MultiModalDummyOptions
-from aphrodite.inputs import MultiModalDataDict
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.activation import get_act_fn
-from aphrodite.model_executor.layers.linear import (
+from sonar.config import SonarConfig
+from sonar.config.multimodal import MultiModalDummyOptions
+from sonar.inputs import MultiModalDataDict
+from sonar.logger import init_logger
+from sonar.model_executor.layers.activation import get_act_fn
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import (
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import (
     MultiModalFieldConfig,
     MultiModalKwargsItems,
 )
-from aphrodite.multimodal.parse import MultiModalDataItems
-from aphrodite.multimodal.processing import (
+from sonar.multimodal.parse import MultiModalDataItems
+from sonar.multimodal.processing import (
     BaseDummyInputsBuilder,
     BaseMultiModalProcessor,
     BaseProcessingInfo,
     PromptReplacement,
 )
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.transformers_utils.processors.bagel import BagelProcessor
-from aphrodite.utils.tensor_schema import TensorSchema
+from sonar.sequence import IntermediateTensors
+from sonar.transformers_utils.processors.bagel import BagelProcessor
+from sonar.utils.tensor_schema import TensorSchema
 
 from .interfaces import (
     MultiModalEmbeddings,
@@ -50,7 +50,7 @@ from .utils import (
     AutoWeightsLoader,
     StageMissingLayer,
     WeightsMapper,
-    init_aphrodite_registered_model,
+    init_sonar_registered_model,
     maybe_prefix,
 )
 
@@ -184,7 +184,7 @@ class BagelProcessingInfo(BaseProcessingInfo):
     """Processing information for BAGEL model."""
 
     def get_hf_processor(self, **kwargs: object) -> BagelProcessor:
-        from aphrodite.transformers_utils.processor import cached_get_image_processor
+        from sonar.transformers_utils.processor import cached_get_image_processor
 
         image_processor = cached_get_image_processor(
             self.ctx.model_config.model,
@@ -310,12 +310,12 @@ class BagelMultiModalProcessor(BaseMultiModalProcessor[BagelProcessingInfo]):
 class BagelForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsLoRA, SupportsPP):
     """BAGEL: A unified multimodal model for image understanding and generation.
 
-    For Aphrodite, we focus on the image understanding (vision-to-text) capabilities.
-    The image generation part is not supported in Aphrodite.
+    For Sonar, we focus on the image understanding (vision-to-text) capabilities.
+    The image generation part is not supported in Sonar.
     """
 
     # pos_embed is handled by the PositionEmbedding module
-    hf_to_aphrodite_mapper = WeightsMapper(orig_to_new_prefix={"vit_pos_embed.pos_embed": None})
+    hf_to_sonar_mapper = WeightsMapper(orig_to_new_prefix={"vit_pos_embed.pos_embed": None})
 
     @classmethod
     def get_placeholder_str(cls, modality: str, i: int) -> str | None:
@@ -324,12 +324,12 @@ class BagelForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsLoRA,
 
         raise ValueError("Only image modality is supported")
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
-        multimodal_config = aphrodite_config.model_config.multimodal_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
+        multimodal_config = sonar_config.model_config.multimodal_config
 
         # Ensure we have a BagelConfig (check by name to handle trust_remote_code)
         # When trust_remote_code=True, the config comes from transformers_modules
@@ -343,9 +343,9 @@ class BagelForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsLoRA,
 
         # Initialize language model (Qwen2)
         # Pass the llm_config from BagelConfig to initialize Qwen2 properly
-        with self._mark_language_model(aphrodite_config):
-            self.language_model = init_aphrodite_registered_model(
-                aphrodite_config=aphrodite_config,
+        with self._mark_language_model(sonar_config):
+            self.language_model = init_sonar_registered_model(
+                sonar_config=sonar_config,
                 hf_config=config.llm_config,
                 prefix=maybe_prefix(prefix, "language_model"),
                 architectures=["Qwen2ForCausalLM"],
@@ -367,7 +367,7 @@ class BagelForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsLoRA,
                 )
                 vit_config.vision_use_head = False
 
-            with self._mark_tower_model(aphrodite_config, "image"):
+            with self._mark_tower_model(sonar_config, "image"):
                 self.vit_model = SiglipVisionModel(
                     config=vit_config,
                     quant_config=quant_config,
@@ -538,4 +538,4 @@ class BagelForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsLoRA,
             filtered_weights.append((name, tensor))
 
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(filtered_weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(filtered_weights, mapper=self.hf_to_sonar_mapper)

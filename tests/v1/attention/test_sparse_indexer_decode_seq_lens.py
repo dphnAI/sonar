@@ -28,28 +28,28 @@ import torch
 # dispatcher (sparse_indexer) -> back into the nvidia/amd sparse_indexer
 # modules. Production always enters via attention.py first.
 # isort: off
-import aphrodite.models.glm5next  # noqa: F401
-from aphrodite.models.glm5next.nvidia.ops.kpool_compress import (  # noqa: E402
+import sonar.models.glm5next  # noqa: F401
+from sonar.models.glm5next.nvidia.ops.kpool_compress import (  # noqa: E402
     append_tail_to_topk,
     expand_pools_to_tokens,
 )
 # isort: on
 
-from aphrodite.models.glm5next.common.sparse_indexer import (
+from sonar.models.glm5next.common.sparse_indexer import (
     _build_decode_scatter_indices,
     _decode_topk_seq_lens,
     _fill_short_decode_causal_indices,
     _scatter_decode_tokens_by_request,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 indexer_mod: ModuleType
 if current_platform.is_rocm():
-    from aphrodite.models.glm5next.amd import sparse_indexer as amd_indexer_mod
+    from sonar.models.glm5next.amd import sparse_indexer as amd_indexer_mod
 
     indexer_mod = amd_indexer_mod
 else:
-    from aphrodite.models.glm5next.nvidia import sparse_indexer as nvidia_indexer_mod
+    from sonar.models.glm5next.nvidia import sparse_indexer as nvidia_indexer_mod
 
     indexer_mod = nvidia_indexer_mod
 

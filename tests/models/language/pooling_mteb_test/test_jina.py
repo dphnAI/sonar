@@ -4,8 +4,8 @@ from functools import partial
 
 import pytest
 
-from aphrodite import PoolingParams
-from aphrodite.platforms import current_platform
+from sonar import PoolingParams
+from sonar.platforms import current_platform
 from tests.models.language.pooling.embed_utils import (
     check_embeddings_close,
     correctness_test_embed_models,
@@ -69,7 +69,7 @@ RERANK_MODELS = [
 
 @pytest.mark.flaky(reruns=2)
 @pytest.mark.parametrize("model_info", EMBEDDING_MODELS)
-def test_embed_models_mteb(hf_runner, aphrodite_runner, model_info: EmbedModelInfo) -> None:
+def test_embed_models_mteb(hf_runner, sonar_runner, model_info: EmbedModelInfo) -> None:
     task = "retrieval" if "v5" in model_info.name else "text-matching"
     prompt_prefix: str | None = "Document: " if "v5" in model_info.name else None
 
@@ -78,7 +78,7 @@ def test_embed_models_mteb(hf_runner, aphrodite_runner, model_info: EmbedModelIn
 
     mteb_test_embed_models(
         hf_runner,
-        aphrodite_runner,
+        sonar_runner,
         model_info,
         hf_model_callback=hf_model_callback,
         prompt_prefix=prompt_prefix,
@@ -86,7 +86,7 @@ def test_embed_models_mteb(hf_runner, aphrodite_runner, model_info: EmbedModelIn
 
 
 @pytest.mark.parametrize("model_info", EMBEDDING_MODELS)
-def test_embed_models_correctness(hf_runner, aphrodite_runner, model_info: EmbedModelInfo, example_prompts) -> None:
+def test_embed_models_correctness(hf_runner, sonar_runner, model_info: EmbedModelInfo, example_prompts) -> None:
     task = "retrieval" if "v5" in model_info.name else "text-matching"
 
     def hf_model_callback(model):
@@ -94,7 +94,7 @@ def test_embed_models_correctness(hf_runner, aphrodite_runner, model_info: Embed
 
     correctness_test_embed_models(
         hf_runner,
-        aphrodite_runner,
+        sonar_runner,
         model_info,
         example_prompts,
         hf_model_callback=hf_model_callback,
@@ -103,8 +103,8 @@ def test_embed_models_correctness(hf_runner, aphrodite_runner, model_info: Embed
 
 @pytest.mark.flaky(reruns=2)
 @pytest.mark.parametrize("model_info", RERANK_MODELS)
-def test_rerank_models_mteb(aphrodite_runner, model_info: RerankModelInfo) -> None:
-    mteb_test_rerank_models(aphrodite_runner, model_info)
+def test_rerank_models_mteb(sonar_runner, model_info: RerankModelInfo) -> None:
+    mteb_test_rerank_models(sonar_runner, model_info)
 
 
 @pytest.mark.skip(
@@ -116,7 +116,7 @@ def test_rerank_models_mteb(aphrodite_runner, model_info: RerankModelInfo) -> No
 @pytest.mark.parametrize("dimensions", [16, 32])
 def test_matryoshka(
     hf_runner,
-    aphrodite_runner,
+    sonar_runner,
     model_info,
     dtype: str,
     dimensions: int,
@@ -139,24 +139,22 @@ def test_matryoshka(
         hf_outputs = hf_model.encode(example_prompts, task=task)
         hf_outputs = matryoshka_fy(hf_outputs, dimensions)
 
-    with aphrodite_runner(model_info.name, runner="pooling", dtype=dtype, max_model_len=None) as aphrodite_model:
-        assert aphrodite_model.llm.llm_engine.model_config.is_matryoshka
+    with sonar_runner(model_info.name, runner="pooling", dtype=dtype, max_model_len=None) as sonar_model:
+        assert sonar_model.llm.llm_engine.model_config.is_matryoshka
 
-        matryoshka_dimensions = aphrodite_model.llm.llm_engine.model_config.matryoshka_dimensions
+        matryoshka_dimensions = sonar_model.llm.llm_engine.model_config.matryoshka_dimensions
         assert matryoshka_dimensions is not None
 
         if dimensions not in matryoshka_dimensions:
             with pytest.raises(ValueError):
-                aphrodite_model.embed(example_prompts, pooling_params=PoolingParams(dimensions=dimensions))
+                sonar_model.embed(example_prompts, pooling_params=PoolingParams(dimensions=dimensions))
         else:
-            aphrodite_outputs = aphrodite_model.embed(
-                example_prompts, pooling_params=PoolingParams(dimensions=dimensions)
-            )
+            sonar_outputs = sonar_model.embed(example_prompts, pooling_params=PoolingParams(dimensions=dimensions))
 
             check_embeddings_close(
                 embeddings_0_lst=hf_outputs,
-                embeddings_1_lst=aphrodite_outputs,
+                embeddings_1_lst=sonar_outputs,
                 name_0="hf",
-                name_1="aphrodite",
+                name_1="sonar",
                 tol=1e-2,
             )

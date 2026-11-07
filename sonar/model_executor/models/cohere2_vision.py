@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-# Adapted from aphrodite/model_executor/models/aya_vision.py
-"""Command-A-Vision (Cohere2Vision) multimodal model implementation for Aphrodite."""
+# Adapted from sonar/model_executor/models/aya_vision.py
+"""Command-A-Vision (Cohere2Vision) multimodal model implementation for Sonar."""
 
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Annotated, Literal
@@ -17,23 +17,23 @@ from transformers.models.cohere2_vision.processing_cohere2_vision import (
     Cohere2VisionProcessor,
 )
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.multimodal import MultiModalDummyOptions
-from aphrodite.inputs import MultiModalDataDict
-from aphrodite.model_executor.layers.activation import MulAndSilu
-from aphrodite.model_executor.layers.linear import (
+from sonar.config import SonarConfig
+from sonar.config.multimodal import MultiModalDummyOptions
+from sonar.inputs import MultiModalDataDict
+from sonar.model_executor.layers.activation import MulAndSilu
+from sonar.model_executor.layers.linear import (
     MergedColumnParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.quantization.auto_awq import AutoAWQConfig
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import (
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.quantization.auto_awq import AutoAWQConfig
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import (
     MultiModalFieldConfig,
     MultiModalKwargsItems,
 )
-from aphrodite.multimodal.parse import ImageProcessorItems, ImageSize, MultiModalDataItems
-from aphrodite.multimodal.processing import (
+from sonar.multimodal.parse import ImageProcessorItems, ImageSize, MultiModalDataItems
+from sonar.multimodal.processing import (
     BaseDummyInputsBuilder,
     BaseMultiModalProcessor,
     BaseProcessingInfo,
@@ -42,8 +42,8 @@ from aphrodite.multimodal.processing import (
     PromptUpdateDetails,
     cached_encode,
 )
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.utils.tensor_schema import TensorSchema, TensorShape
+from sonar.sequence import IntermediateTensors
+from sonar.utils.tensor_schema import TensorSchema, TensorShape
 
 from .interfaces import (
     MultiModalEmbeddings,
@@ -55,7 +55,7 @@ from .siglip import SiglipVisionModel
 from .utils import (
     AutoWeightsLoader,
     WeightsMapper,
-    init_aphrodite_registered_model,
+    init_sonar_registered_model,
     maybe_prefix,
 )
 
@@ -305,7 +305,7 @@ class Cohere2VisionMultiModalProcessor(BaseMultiModalProcessor[Cohere2VisionProc
     dummy_inputs=Cohere2VisionDummyInputsBuilder,
 )
 class Cohere2VisionForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsPP, SupportsQuant):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={
             "model.vision_tower.": "vision_tower.",
             "model.multi_modal_projector.": "multi_modal_projector.",
@@ -318,17 +318,17 @@ class Cohere2VisionForConditionalGeneration(nn.Module, SupportsMultiModal, Suppo
         "gate_up_proj": ["gate_proj", "up_proj"],
     }
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config: Cohere2VisionConfig = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
-        multimodal_config = aphrodite_config.model_config.multimodal_config
+        config: Cohere2VisionConfig = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
+        multimodal_config = sonar_config.model_config.multimodal_config
         self.config = config
         self.quant_config = quant_config
         self.multimodal_config = multimodal_config
         self._patch_quant_config(config, quant_config)
 
-        with self._mark_tower_model(aphrodite_config, "image"):
+        with self._mark_tower_model(sonar_config, "image"):
             self.vision_tower = SiglipVisionModel(
                 config.vision_config,
                 quant_config,
@@ -338,9 +338,9 @@ class Cohere2VisionForConditionalGeneration(nn.Module, SupportsMultiModal, Suppo
                 config, prefix=maybe_prefix(prefix, "multi_modal_projector")
             )
 
-        with self._mark_language_model(aphrodite_config):
-            self.language_model = init_aphrodite_registered_model(
-                aphrodite_config=aphrodite_config,
+        with self._mark_language_model(sonar_config):
+            self.language_model = init_sonar_registered_model(
+                sonar_config=sonar_config,
                 hf_config=config.text_config,
                 prefix=maybe_prefix(prefix, "language_model"),
                 architectures=config.text_config.architectures,
@@ -354,7 +354,7 @@ class Cohere2VisionForConditionalGeneration(nn.Module, SupportsMultiModal, Suppo
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
     def _process_image_input(self, image_input: Cohere2VisionImagePixelInputs, **kwargs: object) -> list[torch.Tensor]:
         """Process image pixels through vision tower and projector.

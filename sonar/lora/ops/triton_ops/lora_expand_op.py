@@ -8,16 +8,16 @@ https://arxiv.org/abs/2310.18547
 
 import torch
 
-from aphrodite import envs
-from aphrodite.lora.ops.triton_ops.kernel_utils import do_expand_kernel
-from aphrodite.lora.ops.triton_ops.utils import (
+from sonar import envs
+from sonar.lora.ops.triton_ops.kernel_utils import do_expand_kernel
+from sonar.lora.ops.triton_ops.utils import (
     _get_lora_b_ptr,
     get_lora_op_configs,
     supports_pdl,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.torch_utils import direct_register_custom_op
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
+from sonar.utils.torch_utils import direct_register_custom_op
 
 
 @triton.jit
@@ -245,7 +245,7 @@ def _lora_expand(
     )
 
     # PDL only works when dual-stream is being used.
-    use_gdc = supports_pdl(inputs.device) and envs.APHRODITE_LORA_ENABLE_DUAL_STREAM
+    use_gdc = supports_pdl(inputs.device) and envs.SONAR_LORA_ENABLE_DUAL_STREAM
     _lora_expand_kernel[grid](
         inputs,
         lora_ptr_tensor,
@@ -291,7 +291,7 @@ try:
         op_func=_lora_expand,
         mutates_args=["output_tensor"],
     )
-    lora_expand = torch.ops.aphrodite.lora_expand
+    lora_expand = torch.ops.sonar.lora_expand
 
 except AttributeError:
     lora_expand = _lora_expand

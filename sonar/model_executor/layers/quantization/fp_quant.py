@@ -8,23 +8,23 @@ from typing import Any, Literal, cast
 import torch
 from torch.nn.parameter import Parameter
 
-from aphrodite._custom_ops import (
+from sonar._custom_ops import (
     cutlass_scaled_fp4_mm,
     fusedQuantizeMx,
     fusedQuantizeNv,
     matmul_mxf4_bf16_tn,
 )
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.linear import (
     LinearBase,
     LinearMethodBase,
     UnquantizedLinearMethod,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationMethods
-from aphrodite.model_executor.layers.quantization.base_config import QuantizationConfig
-from aphrodite.model_executor.layers.quantization.qutlass_utils import to_blocked
-from aphrodite.model_executor.utils import set_weight_attrs
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import direct_register_custom_op
+from sonar.model_executor.layers.quantization import QuantizationMethods
+from sonar.model_executor.layers.quantization.base_config import QuantizationConfig
+from sonar.model_executor.layers.quantization.qutlass_utils import to_blocked
+from sonar.model_executor.utils import set_weight_attrs
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import direct_register_custom_op
 
 
 class FPQuantConfig(QuantizationConfig):
@@ -345,8 +345,8 @@ def quantized_forward(
     x_flat = x.contiguous().flatten(end_dim=-2)
 
     if forward_dtype == "mxfp4":
-        x_flat_q, x_flat_scales = torch.ops.aphrodite.fused_quantize_mx(x_flat, forward_hadamard_matrix, forward_method)
-        y = torch.ops.aphrodite.matmul_mxf4_bf16(
+        x_flat_q, x_flat_scales = torch.ops.sonar.fused_quantize_mx(x_flat, forward_hadamard_matrix, forward_method)
+        y = torch.ops.sonar.matmul_mxf4_bf16(
             x_flat_q,
             qweight,
             x_flat_scales,
@@ -354,10 +354,8 @@ def quantized_forward(
             1 / (weight_global_scale * act_global_scale),
         )
     elif forward_dtype == "nvfp4":
-        x_flat_q, x_flat_scales = torch.ops.aphrodite.fused_quantize_nv(
-            x_flat, forward_hadamard_matrix, act_global_scale
-        )
-        y = torch.ops.aphrodite.matmul_nvf4_bf16(
+        x_flat_q, x_flat_scales = torch.ops.sonar.fused_quantize_nv(x_flat, forward_hadamard_matrix, act_global_scale)
+        y = torch.ops.sonar.matmul_nvf4_bf16(
             x_flat_q,
             qweight,
             x_flat_scales,

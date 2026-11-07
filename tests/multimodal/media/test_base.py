@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-from aphrodite.multimodal.media import MediaWithBytes
+from sonar.multimodal.media import MediaWithBytes
 
 pytestmark = pytest.mark.cpu_test
 

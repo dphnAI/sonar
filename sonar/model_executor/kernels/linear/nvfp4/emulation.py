@@ -3,7 +3,7 @@
 
 import torch
 
-from aphrodite.model_executor.layers.quantization.utils.nvfp4_emulation_utils import (
+from sonar.model_executor.layers.quantization.utils.nvfp4_emulation_utils import (
     kE2M1ToFloat_handle,
     run_nvfp4_emulations,
 )

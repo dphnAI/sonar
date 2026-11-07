@@ -10,27 +10,27 @@ from typing import Any
 
 from torch.distributed import TCPStore
 
-import aphrodite.envs as envs
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed.device_communicators.shm_broadcast import (
+import sonar.envs as envs
+from sonar.config import SonarConfig
+from sonar.distributed.device_communicators.shm_broadcast import (
     Handle,
     MessageQueue,
 )
-from aphrodite.logger import configure_logging, init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.utils.network_utils import (
+from sonar.logger import configure_logging, init_logger
+from sonar.platforms import current_platform
+from sonar.utils.network_utils import (
     get_distributed_init_method,
 )
-from aphrodite.v1.executor.multiproc_executor import (
+from sonar.v1.executor.multiproc_executor import (
     FutureWrapper,
     MultiprocExecutor,
     WorkerProc,
 )
-from aphrodite.v1.executor.ray_env_utils import (
+from sonar.v1.executor.ray_env_utils import (
     get_driver_env_vars,
     update_runtime_env_for_worker_import,
 )
-from aphrodite.v1.executor.ray_utils import (
+from sonar.v1.executor.ray_utils import (
     WORKER_SPECIFIC_ENV_VARS,
     build_actor_name,
     get_bundles_for_indices,
@@ -99,7 +99,7 @@ class RayWorkerProc(WorkerProc):
     group is externally managed: only then is the GPU tied to the worker's
     bundle resolved.
 
-    This sequence allows multiple Aphrodite instances to coexist on the same node:
+    This sequence allows multiple Sonar instances to coexist on the same node:
     each instance is unaware which physical devices others hold, and the
     externally managed placement group avoids device assignment conflicts
     by binding workers to specific placement group bundles.
@@ -107,20 +107,20 @@ class RayWorkerProc(WorkerProc):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         rank: int,
         input_shm_handle: Handle,
         is_driver_worker: bool,
         is_driver_node: bool = False,
     ):
-        if logging_config := getattr(aphrodite_config, "logging_config", None):
+        if logging_config := getattr(sonar_config, "logging_config", None):
             configure_logging(logging_config)
 
         # Defer WorkerProc.__init__ until GPU IDs are known.
         self._is_driver_node = is_driver_node
-        self._parallel_config = aphrodite_config.parallel_config
+        self._parallel_config = sonar_config.parallel_config
         self._init_kwargs = dict(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             rank=rank,
             input_shm_handle=input_shm_handle,
             shared_worker_lock=None,
@@ -172,9 +172,9 @@ class RayWorkerProc(WorkerProc):
             os.environ[key] = value
 
         if assigned_physical_gpu_ids is not None:
-            aphrodite_config = self._init_kwargs["aphrodite_config"]
-            assert isinstance(aphrodite_config, AphroditeConfig)
-            aphrodite_config.parallel_config.assigned_physical_gpu_ids = assigned_physical_gpu_ids
+            sonar_config = self._init_kwargs["sonar_config"]
+            assert isinstance(sonar_config, SonarConfig)
+            sonar_config.parallel_config.assigned_physical_gpu_ids = assigned_physical_gpu_ids
 
         self._init_kwargs["distributed_init_method"] = distributed_init_method
         self.local_rank = local_rank
@@ -183,7 +183,7 @@ class RayWorkerProc(WorkerProc):
             **self._init_kwargs,
         )
 
-    def _init_message_queues(self, input_shm_handle: Handle, aphrodite_config: AphroditeConfig) -> None:
+    def _init_message_queues(self, input_shm_handle: Handle, sonar_config: SonarConfig) -> None:
         """Workers on the same node as the executor use shared memory for
         both the broadcast (input) MQ and the response MQ. Workers on
         different nodes use TCP (n_local_reader=0).
@@ -238,8 +238,8 @@ class RayExecutorV2(MultiprocExecutor):
     uses_ray: bool = True
     supports_pp: bool = True
 
-    def __init__(self, aphrodite_config: AphroditeConfig):
-        super().__init__(aphrodite_config)
+    def __init__(self, sonar_config: SonarConfig):
+        super().__init__(sonar_config)
 
     def _build_runtime_env(self) -> dict:
         """Build a runtime_env dict for RayWorkerProc actors.
@@ -264,7 +264,7 @@ class RayExecutorV2(MultiprocExecutor):
     @staticmethod
     def _get_actor_resource_kwargs() -> dict[str, Any]:
         """Return Ray actor resource kwargs for the current platform."""
-        num_devices = envs.APHRODITE_RAY_PER_WORKER_GPUS
+        num_devices = envs.SONAR_RAY_PER_WORKER_GPUS
         device_key = current_platform.ray_device_key
         if device_key == "GPU":
             return {"num_gpus": num_devices}
@@ -293,11 +293,11 @@ class RayExecutorV2(MultiprocExecutor):
         )
 
         # Step 2: Build bundle assignments for worker rank placement
-        # while respecting APHRODITE_RAY_BUNDLE_INDICES.
-        if envs.APHRODITE_RAY_BUNDLE_INDICES:
+        # while respecting SONAR_RAY_BUNDLE_INDICES.
+        if envs.SONAR_RAY_BUNDLE_INDICES:
             bundle_to_node_id = get_bundles_for_indices(
                 placement_group,
-                list(map(int, envs.APHRODITE_RAY_BUNDLE_INDICES.split(","))),
+                list(map(int, envs.SONAR_RAY_BUNDLE_INDICES.split(","))),
                 self.world_size,
             )
         else:
@@ -317,7 +317,7 @@ class RayExecutorV2(MultiprocExecutor):
 
         # Step 3: Create broadcast MessageQueue.
         # Workers on the driver node use shared memory; the rest use TCP.
-        max_chunk_bytes = envs.APHRODITE_MQ_MAX_CHUNK_BYTES_MB * 1024 * 1024
+        max_chunk_bytes = envs.SONAR_MQ_MAX_CHUNK_BYTES_MB * 1024 * 1024
         n_local = sum(1 for a in bundle_assignments if a["node_id"] == driver_node)
         self.rpc_broadcast_mq = MessageQueue(
             self.world_size,
@@ -331,7 +331,7 @@ class RayExecutorV2(MultiprocExecutor):
         # Workers are created lightweight here; full initialization happens
         # in Step 6 after GPU IDs are discovered.
         self.ray_worker_handles: list[RayWorkerHandle] = []
-        instance_id = self.aphrodite_config.instance_id
+        instance_id = self.sonar_config.instance_id
 
         # Collect driver env vars and apply but don't overwrite node-local values.
         self.driver_env_vars = get_driver_env_vars(
@@ -343,11 +343,11 @@ class RayExecutorV2(MultiprocExecutor):
 
         # The sharded_rdt weight transfer backend pulls weights via Ray's tensor
         # transport (@ray.method(tensor_transport=...)). Ray requires the
-        # *calling* actor (the Aphrodite worker) to opt in via enable_tensor_transport.
-        wt_cfg = self.aphrodite_config.weight_transfer_config
+        # *calling* actor (the Sonar worker) to opt in via enable_tensor_transport.
+        wt_cfg = self.sonar_config.weight_transfer_config
         extra_actor_options: dict[str, object] = {}
         if wt_cfg is not None and wt_cfg.backend == "sharded_rdt":
-            from aphrodite.distributed.weight_transfer.sharded_rdt_common import (
+            from sonar.distributed.weight_transfer.sharded_rdt_common import (
                 check_ray_rdt_version,
             )
 
@@ -377,7 +377,7 @@ class RayExecutorV2(MultiprocExecutor):
                     **extra_actor_options,
                 )
                 .remote(
-                    aphrodite_config=self.aphrodite_config,
+                    sonar_config=self.sonar_config,
                     rank=bundle["rank"],
                     input_shm_handle=scheduler_output_handle,
                     is_driver_worker=is_driver_worker,
@@ -430,7 +430,7 @@ class RayExecutorV2(MultiprocExecutor):
         # is per-node, so only do this when all workers share one node.
         if len(node_physical_gpu_ids) == 1:
             node_id_0 = worker_node_and_physical_gpu_ids[0][0]
-            self.aphrodite_config.parallel_config.assigned_physical_gpu_ids = sorted(node_physical_gpu_ids[node_id_0])
+            self.sonar_config.parallel_config.assigned_physical_gpu_ids = sorted(node_physical_gpu_ids[node_id_0])
         ray.get(init_worker_refs)
 
         # Step 7: Collect response MQ handles

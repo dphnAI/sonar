@@ -7,7 +7,7 @@ from typing import Any
 
 import torch.nn as nn
 
-from aphrodite.config import ModelConfig
+from sonar.config import ModelConfig
 
 
 def dspark_draft_supports_eplb(draft_model_config: ModelConfig) -> bool:

@@ -4,10 +4,10 @@
 
 Index queries score each 128-token block of index keys (max over the block),
 then the top-k blocks (plus forced init/local blocks) are selected per query
-token. Adapted to Aphrodite's paged KV cache: the KV page size is forced to equal the
+token. Adapted to Sonar's paged KV cache: the KV page size is forced to equal the
 sparse block size (128), so one sparse block maps to exactly one page.
 
-Index-K cache layout (Aphrodite): ``(num_blocks, 128, idx_head_dim)`` (single head).
+Index-K cache layout (Sonar): ``(num_blocks, 128, idx_head_dim)`` (single head).
 
 Only the paths MiniMax M3 uses are implemented: score_type="max", index value
 disabled (score-only indexer), single shared index head. The selected block ids
@@ -16,9 +16,9 @@ feed the block-sparse attention kernels in ``sparse_attn``.
 
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.math_utils import round_up
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
+from sonar.utils.math_utils import round_up
 
 # One sparse block == one KV page.
 SPARSE_BLOCK_SIZE = 128

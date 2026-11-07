@@ -52,7 +52,7 @@
   #endif
 #endif
 
-namespace aphrodite {
+namespace sonar {
 namespace muse_spark_fused_ops {
 
 namespace {
@@ -128,7 +128,7 @@ __device__ __forceinline__ float groupReduceSum(float val,
 template <typename scalar_t, int kElems>
 __device__ __forceinline__ uint4 loadElems(scalar_t const* __restrict__ src,
                                            float (&elems)[kElems]) {
-  using Converter = aphrodite::_typeConvert<scalar_t>;
+  using Converter = sonar::_typeConvert<scalar_t>;
   using T2 = typename Converter::packed_hip_type;
   uint4 raw = *reinterpret_cast<uint4 const*>(src);
   auto const* p = reinterpret_cast<T2 const*>(&raw);
@@ -152,15 +152,15 @@ __device__ __forceinline__ void loadRopeVec(rope_t const* __restrict__ cos_ptr,
                                             float (&s)[kPairs]) {
   static_assert(kPairs == 4, "rope vector load assumes 4 pairs per lane");
   if constexpr (std::is_same_v<rope_t, float>) {
-    float4 const cv = APHRODITE_LDG(reinterpret_cast<float4 const*>(cos_ptr));
-    float4 const sv = APHRODITE_LDG(reinterpret_cast<float4 const*>(sin_ptr));
+    float4 const cv = SONAR_LDG(reinterpret_cast<float4 const*>(cos_ptr));
+    float4 const sv = SONAR_LDG(reinterpret_cast<float4 const*>(sin_ptr));
     c[0] = cv.x, c[1] = cv.y, c[2] = cv.z, c[3] = cv.w;
     s[0] = sv.x, s[1] = sv.y, s[2] = sv.z, s[3] = sv.w;
   } else {
-    using Converter = aphrodite::_typeConvert<rope_t>;
+    using Converter = sonar::_typeConvert<rope_t>;
     using T2 = typename Converter::packed_hip_type;
-    uint2 const cv = APHRODITE_LDG(reinterpret_cast<uint2 const*>(cos_ptr));
-    uint2 const sv = APHRODITE_LDG(reinterpret_cast<uint2 const*>(sin_ptr));
+    uint2 const cv = SONAR_LDG(reinterpret_cast<uint2 const*>(cos_ptr));
+    uint2 const sv = SONAR_LDG(reinterpret_cast<uint2 const*>(sin_ptr));
     auto const* cp = reinterpret_cast<T2 const*>(&cv);
     auto const* sp = reinterpret_cast<T2 const*>(&sv);
 #pragma unroll
@@ -178,7 +178,7 @@ __device__ __forceinline__ void loadRopeVec(rope_t const* __restrict__ cos_ptr,
 // which is what reshape_and_cache_flash quantizes from.
 template <typename scalar_t, int kElems>
 __device__ __forceinline__ uint4 packElems(float const (&elems)[kElems]) {
-  using Converter = aphrodite::_typeConvert<scalar_t>;
+  using Converter = sonar::_typeConvert<scalar_t>;
   using T2 = typename Converter::packed_hip_type;
   uint4 raw;
   auto* p = reinterpret_cast<T2*>(&raw);
@@ -203,7 +203,7 @@ __device__ __forceinline__ void storeCache(cache_t* __restrict__ dst,
   if constexpr (kv_dt == Fp8KVCacheDataType::kAuto) {
     *reinterpret_cast<uint4*>(dst) = packed;
   } else {
-    using Converter = aphrodite::_typeConvert<scalar_t>;
+    using Converter = sonar::_typeConvert<scalar_t>;
     using HipT = typename Converter::hip_type;
     auto const* rounded = reinterpret_cast<HipT const*>(&packed);
 #ifndef USE_ROCM
@@ -350,7 +350,7 @@ __launch_bounds__(256, 6) void fusedMuseSparkQKNormRopeKVInsertKernel(
       float elems[kElems];
       uint4 packed = raw[h];
       if (isQK) {
-        using Converter = aphrodite::_typeConvert<scalar_t>;
+        using Converter = sonar::_typeConvert<scalar_t>;
         using T2 = typename Converter::packed_hip_type;
         auto const* p = reinterpret_cast<T2 const*>(&raw[h]);
 #pragma unroll
@@ -587,11 +587,11 @@ void launchFusedMuseSpark(
 }
 
 }  // namespace muse_spark_fused_ops
-}  // namespace aphrodite
+}  // namespace sonar
 
 // clang-format off
 #define CALL_FUSED_MUSE_SPARK(_RAW_T, CACHE_T, KV_DTYPE)                       \
-  aphrodite::muse_spark_fused_ops::launchFusedMuseSpark<st, CACHE_T, KV_DTYPE>(     \
+  sonar::muse_spark_fused_ops::launchFusedMuseSpark<st, CACHE_T, KV_DTYPE>(     \
       reinterpret_cast<st*>(qkv.data_ptr()),                                   \
       do_rope ? cos_sin_cache->data_ptr() : nullptr, rope_is_fp32,             \
       reinterpret_cast<int64_t const*>(positions.data_ptr()),                  \
@@ -692,11 +692,11 @@ void fused_muse_spark_qknorm_rope_kv_insert(
                     "head_dim");
   }
 
-  aphrodite::Fp8KVCacheDataType const kv_dt =
-      aphrodite::get_fp8_kv_cache_data_type(kv_cache_dtype);
+  sonar::Fp8KVCacheDataType const kv_dt =
+      sonar::get_fp8_kv_cache_data_type(kv_cache_dtype);
   bool const insert_kv = kv_cache.has_value() && kv_cache->numel() > 0;
   bool const needs_scales =
-      insert_kv && kv_dt != aphrodite::Fp8KVCacheDataType::kAuto;
+      insert_kv && kv_dt != sonar::Fp8KVCacheDataType::kAuto;
 
   int64_t kv_s_block = 0, kv_s_head = 0, kv_s_token = 0;
   if (insert_kv) {
@@ -715,7 +715,7 @@ void fused_muse_spark_qknorm_rope_kv_insert(
                     "kv_cache head dim must equal num_kv_heads");
     STD_TORCH_CHECK(kv_cache->size(2) == block_size,
                     "kv_cache token dim must equal block_size");
-    if (kv_dt == aphrodite::Fp8KVCacheDataType::kAuto) {
+    if (kv_dt == sonar::Fp8KVCacheDataType::kAuto) {
       STD_TORCH_CHECK(kv_cache->scalar_type() == qkv.scalar_type(),
                       "auto kv_cache dtype must match qkv");
     } else {
@@ -741,7 +741,7 @@ void fused_muse_spark_qknorm_rope_kv_insert(
       qkv.get_device_index());
   auto stream = get_current_cuda_stream(qkv.get_device_index());
 
-  APHRODITE_STABLE_DISPATCH_HALF_TYPES(
+  SONAR_STABLE_DISPATCH_HALF_TYPES(
       qkv.scalar_type(), "fused_muse_spark_qknorm_rope_kv_insert", [&] {
         using st = scalar_t;
         DISPATCH_BY_KV_CACHE_DTYPE(qkv.scalar_type(), kv_cache_dtype,

@@ -13,7 +13,7 @@ use super::{
 use crate::error::Result;
 
 /// Backend for OpenAI-compatible Completions API (/v1/completions).
-/// Used by "aphrodite" and "openai" backends.
+/// Used by "sonar" and "openai" backends.
 #[derive(Clone)]
 pub struct OpenAICompletionsBackend;
 

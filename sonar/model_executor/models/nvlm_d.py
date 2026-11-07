@@ -13,23 +13,23 @@ import torch
 import torch.nn as nn
 from transformers import PreTrainedConfig
 
-from aphrodite.config.multimodal import MultiModalDummyOptions
-from aphrodite.inputs import MultiModalDataDict
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import BatchedTensorInputs
-from aphrodite.multimodal.parse import (
+from sonar.config.multimodal import MultiModalDummyOptions
+from sonar.inputs import MultiModalDataDict
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import BatchedTensorInputs
+from sonar.multimodal.parse import (
     ImageEmbeddingItems,
     ImageProcessorItems,
     MultiModalDataItems,
 )
-from aphrodite.multimodal.processing import (
+from sonar.multimodal.processing import (
     PromptReplacement,
     PromptUpdateDetails,
     cached_encode,
 )
-from aphrodite.transformers_utils.processors.internvl import InternVLChatImageProcessor
-from aphrodite.transformers_utils.processors.nvlm_d import NVLMProcessor
+from sonar.transformers_utils.processors.internvl import InternVLChatImageProcessor
+from sonar.transformers_utils.processors.nvlm_d import NVLMProcessor
 
 from .intern_vit import InternVisionModel
 from .internvl import (

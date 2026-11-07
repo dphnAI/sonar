@@ -7,7 +7,7 @@ from typing import Any
 
 from openai.types.responses.function_tool import FunctionTool
 
-from aphrodite.entrypoints.generate.base.protocol import (
+from sonar.entrypoints.generate.base.protocol import (
     DeltaFunctionCall,
     DeltaMessage,
     DeltaToolCall,
@@ -15,46 +15,46 @@ from aphrodite.entrypoints.generate.base.protocol import (
     FunctionCall,
     ToolCall,
 )
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionRequest,
     ChatCompletionToolsParam,
 )
-from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
-from aphrodite.logger import init_logger
-from aphrodite.renderers.chat_utils import make_tool_call_id
-from aphrodite.tokenizers import TokenizerLike
-from aphrodite.tool_parsers.abstract_tool_parser import Tool, ToolParser
-from aphrodite.tool_parsers.utils import get_function_tools
+from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
+from sonar.logger import init_logger
+from sonar.renderers.chat_utils import make_tool_call_id
+from sonar.tokenizers import TokenizerLike
+from sonar.tool_parsers.abstract_tool_parser import Tool, ToolParser
+from sonar.tool_parsers.utils import get_function_tools
 
 logger = init_logger(__name__)
 
 
 def _rust_tool_parser_module() -> Any:
     try:
-        return importlib.import_module("aphrodite._rust_tool_parser")
+        return importlib.import_module("sonar._rust_tool_parser")
     except ImportError as exc:
         raise RuntimeError(
-            "Rust tool parsing requires the aphrodite._rust_tool_parser PyO3 "
-            "extension. Rebuild Aphrodite with Rust frontend/extensions enabled."
+            "Rust tool parsing requires the sonar._rust_tool_parser PyO3 "
+            "extension. Rebuild Sonar with Rust frontend/extensions enabled."
         ) from exc
 
 
 class RustToolParser(ToolParser):
-    """Adapter from an opaque Rust parser to the Aphrodite ToolParser API.
+    """Adapter from an opaque Rust parser to the Sonar ToolParser API.
 
     Subclasses provide only model-specific configuration: the exact Rust parser
     name and an optional tool-call start marker for fast complete-output
     rejection.
 
-    This class keeps the Aphrodite-specific bridge work:
-    - convert Aphrodite tool definitions into the Rust ``Tool`` shape;
-    - translate typed Rust parser outputs into Aphrodite protocol objects; and
-    - maintain Aphrodite streaming bookkeeping used by finish-reason handling.
+    This class keeps the Sonar-specific bridge work:
+    - convert Sonar tool definitions into the Rust ``Tool`` shape;
+    - translate typed Rust parser outputs into Sonar protocol objects; and
+    - maintain Sonar streaming bookkeeping used by finish-reason handling.
 
     The parser grammar and incremental parser state stay in Rust.
     """
 
-    # Rust-backed parsers are opaque to Python by default. Do not use Aphrodite's
+    # Rust-backed parsers are opaque to Python by default. Do not use Sonar's
     # standard JSON required/named handling; let the Rust parser consume the
     # model's native tool-call syntax.
     supports_required_and_named = False
@@ -70,7 +70,7 @@ class RustToolParser(ToolParser):
         if not self.model_tokenizer:
             raise ValueError("The model tokenizer must be passed to the ToolParser constructor during construction.")
 
-        logger.debug("Aphrodite successfully imported tool parser %s", self.__class__.__name__)
+        logger.debug("Sonar successfully imported tool parser %s", self.__class__.__name__)
 
     def adjust_request(
         self, request: ChatCompletionRequest | ResponsesRequest
@@ -87,7 +87,7 @@ class RustToolParser(ToolParser):
         return request
 
     def _rust_tools(self) -> list[Any]:
-        """Build Rust ``Tool`` objects from Aphrodite tool definitions."""
+        """Build Rust ``Tool`` objects from Sonar tool definitions."""
         if not self.tools:
             return []
 
@@ -131,14 +131,14 @@ class RustToolParser(ToolParser):
         self.current_tool_name_sent = False
 
     def _ensure_tool_state(self, index: int) -> None:
-        """Grow Aphrodite streaming state arrays to contain ``index``."""
+        """Grow Sonar streaming state arrays to contain ``index``."""
         while len(self.prev_tool_call_arr) <= index:
             self.prev_tool_call_arr.append({})
         while len(self.streamed_args_for_tool) <= index:
             self.streamed_args_for_tool.append("")
 
     def _record_delta(self, index: int, name: str | None, arguments: str | None) -> str | None:
-        """Mirror a Rust parser delta into Aphrodite streaming bookkeeping.
+        """Mirror a Rust parser delta into Sonar streaming bookkeeping.
 
         ``prev_tool_call_arr`` and ``streamed_args_for_tool`` are read later by
         the chat serving layer to decide the final ``tool_calls`` finish reason
@@ -162,7 +162,7 @@ class RustToolParser(ToolParser):
         return tool_call_id
 
     def _delta_message_from_parser_output(self, parser_output: Any | None) -> DeltaMessage | None:
-        """Translate one Rust parser output into a Aphrodite ``DeltaMessage``."""
+        """Translate one Rust parser output into a Sonar ``DeltaMessage``."""
         if parser_output is None:
             return None
 

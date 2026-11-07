@@ -24,8 +24,8 @@ import math
 
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
 
 # ROCm prefers num_stages=1 in attention-like kernels to reduce shared-memory
 # pressure (mirrors the pattern used in triton_decode_attention.py and

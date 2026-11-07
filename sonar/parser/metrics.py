@@ -12,7 +12,7 @@ from prometheus_client import REGISTRY, Counter
 
 _model_name: str | None = None
 
-_TOOL_CALL_PARSER_INVOCATIONS_TOTAL = "aphrodite:tool_call_parser_invocations_total"
+_TOOL_CALL_PARSER_INVOCATIONS_TOTAL = "sonar:tool_call_parser_invocations_total"
 _tool_call_parser_invocations: Counter | None = None
 
 
@@ -79,8 +79,8 @@ def record_tool_parser_invocation(
     if _tool_call_parser_invocations is None:
         return
 
-    from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-    from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
+    from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+    from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
 
     match request:
         case ChatCompletionRequest():

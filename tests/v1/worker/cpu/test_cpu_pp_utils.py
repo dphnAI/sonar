@@ -7,18 +7,18 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-from aphrodite.distributed.parallel_state import (
+from sonar.config import SonarConfig, set_current_sonar_config
+from sonar.distributed.parallel_state import (
     destroy_distributed_environment,
     destroy_model_parallel,
     init_distributed_environment,
     initialize_model_parallel,
 )
-from aphrodite.platforms import CpuArchEnum, current_platform
-from aphrodite.triton_utils import HAS_TRITON
-from aphrodite.utils.network_utils import get_open_port
-from aphrodite.v1.worker.cpu.input_batch import InputBatch, InputBuffers
-from aphrodite.v1.worker.cpu.pp_utils import PPHandler, compute_need_sampled_mask
+from sonar.platforms import CpuArchEnum, current_platform
+from sonar.triton_utils import HAS_TRITON
+from sonar.utils.network_utils import get_open_port
+from sonar.v1.worker.cpu.input_batch import InputBatch, InputBuffers
+from sonar.v1.worker.cpu.pp_utils import PPHandler, compute_need_sampled_mask
 
 pytestmark = pytest.mark.skipif(
     not current_platform.is_cpu() or HAS_TRITON or current_platform.get_cpu_architecture() == CpuArchEnum.X86,
@@ -102,8 +102,8 @@ def test_cpu_pp_sample_mask_matches_supported_gpu_scenarios(
 
 def _run_cpu_pp_sample_sync(rank: int, port: int) -> None:
     try:
-        os.environ["APHRODITE_DIST_IDENT"] = str(port)
-        with set_current_aphrodite_config(AphroditeConfig()):
+        os.environ["SONAR_DIST_IDENT"] = str(port)
+        with set_current_sonar_config(SonarConfig()):
             init_distributed_environment(
                 world_size=2,
                 rank=rank,

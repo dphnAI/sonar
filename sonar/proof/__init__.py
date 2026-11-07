@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from torch import nn
 
-    from aphrodite.config.dphn import DphnNetworkConfig
+    from sonar.config.dphn import DphnNetworkConfig
 
 PROOF_VERSION = 2
 NONCE_HEADER = "X-DPHN-Proof-Nonce"
@@ -24,10 +24,10 @@ def ensure_native_available() -> None:
     import torch  # noqa: F401 -- load ATen shared libraries before the extension
 
     try:
-        importlib.import_module("aphrodite._proof_C")
+        importlib.import_module("sonar._proof_C")
     except ImportError as exc:
         raise RuntimeError(
-            "--dphn-network requires aphrodite._proof_C. Install a wheel containing "
+            "--dphn-network requires sonar._proof_C. Install a wheel containing "
             "the extension or build/install the _proof_C CMake target. Refusing "
             "to serve without weight receipts."
         ) from exc
@@ -83,7 +83,7 @@ def dump_runtime_snapshot(
     import torch
     from safetensors.torch import save_file
 
-    from aphrodite.proof.verifier import compute_registry_hash
+    from sonar.proof.verifier import compute_registry_hash
 
     directory = Path(output_dir)
     directory.mkdir(parents=True, exist_ok=True)

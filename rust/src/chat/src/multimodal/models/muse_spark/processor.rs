@@ -3,7 +3,7 @@
 
 //! MuseSpark1x Omni vision preprocessing for the NaViT encoder.
 //!
-//! Ports the native preprocessing from Aphrodite's
+//! Ports the native preprocessing from Sonar's
 //! `models/muse_spark/common/processor.py`:
 //!
 //! - Images are converted to RGB (alpha composited over white), fit to the
@@ -30,14 +30,14 @@ use llm_multimodal::{
 
 use super::transform::resize_lanczos_pil_rgb;
 
-/// 80ms @ 24kHz per latent token (mirrors Aphrodite `WAVEFORM_PER_TOKEN`).
+/// 80ms @ 24kHz per latent token (mirrors Sonar `WAVEFORM_PER_TOKEN`).
 pub(crate) const WAVEFORM_PER_TOKEN: usize = 1920;
-/// MuseSpark audio is raw 24kHz waveform (mirrors Aphrodite `AUDIO_TARGET_SAMPLE_RATE`).
+/// MuseSpark audio is raw 24kHz waveform (mirrors Sonar `AUDIO_TARGET_SAMPLE_RATE`).
 pub(crate) const AUDIO_TARGET_SAMPLE_RATE: usize = 24_000;
 
 pub const MUSE_SPARK_IMAGE_MEAN: [f64; 3] = [0.5; 3];
 pub const MUSE_SPARK_IMAGE_STD: [f64; 3] = [0.5; 3];
-/// Background an alpha channel is composited over, matching Aphrodite's
+/// Background an alpha channel is composited over, matching Sonar's
 /// `RGBA_BACKGROUND_COLOR` (`ImageMediaIO` default).
 pub const RGBA_BACKGROUND_COLOR: [u8; 3] = [255, 255, 255];
 
@@ -55,7 +55,7 @@ const DEFAULT_MAX_NUM_TOKENS_PER_FRAME: usize = 256;
 
 /// Configuration for image/video preprocessing.
 ///
-/// Mirrors Aphrodite's `PreprocessConfig`, populated from the image/video sections
+/// Mirrors Sonar's `PreprocessConfig`, populated from the image/video sections
 /// of the current checkpoint's `processor_config.json`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct MuseSparkVisionParams {
@@ -168,7 +168,7 @@ fn py_round(x: f64) -> f64 {
 
 /// Find the patch grid (nph, npw) minimizing aspect-ratio distortion.
 ///
-/// Mirrors Aphrodite `_least_distortion_fit`; returns `None` when no candidate
+/// Mirrors Sonar `_least_distortion_fit`; returns `None` when no candidate
 /// grid satisfies the token bounds (the caller falls back to
 /// [`least_distance_fit`]).
 #[expect(
@@ -221,7 +221,7 @@ fn least_distortion_fit(
 
 /// Fallback: closest grid point between the min/max token hyperbolas.
 ///
-/// Mirrors Aphrodite `_least_distance_fit`. The ideal width is rounded (Python
+/// Mirrors Sonar `_least_distance_fit`. The ideal width is rounded (Python
 /// `round`, i.e. half-to-even) *before* clamping: truncating after the clip
 /// is off-by-one vs the reference for fractional parts > 0.5.
 fn least_distance_fit(
@@ -257,7 +257,7 @@ pub type ResizeTarget = ((usize, usize), (usize, usize));
 
 /// Find the target resolution best preserving the image aspect ratio.
 ///
-/// Mirrors Aphrodite `find_resize_target`.
+/// Mirrors Sonar `find_resize_target`.
 pub fn find_resize_target(
     img_h: usize,
     img_w: usize,
@@ -318,7 +318,7 @@ pub fn find_resize_target(
 
 /// Convert a frame to 3-channel RGB, compositing alpha over white.
 ///
-/// Mirrors Aphrodite `_to_rgb`: RGBA alpha is composited over
+/// Mirrors Sonar `_to_rgb`: RGBA alpha is composited over
 /// [`RGBA_BACKGROUND_COLOR`] (Pillow `paste` mask blending,
 /// `DIV255(v + 128)` rounding); every other mode takes `.convert("RGB")`.
 /// Compositing happens *before* resize so transparent pixels don't bleed
@@ -401,7 +401,7 @@ impl MuseSparkVisionProcessor {
     /// Preprocess one image for the NaViT encoder.
     ///
     /// Returns the normalized `[3, H', W']` planar pixels and the
-    /// post-downsample token count, mirroring Aphrodite `preprocess_image`.
+    /// post-downsample token count, mirroring Sonar `preprocess_image`.
     fn preprocess_image(&self, image: &DynamicImage) -> Result<(RgbImage, usize), TransformError> {
         let params = &self.params;
         let rgb = to_rgb_composited(image);
@@ -427,7 +427,7 @@ impl MuseSparkVisionProcessor {
         Ok((resized, num_tokens))
     }
 
-    /// Shared video pipeline over RGB frames, mirroring Aphrodite
+    /// Shared video pipeline over RGB frames, mirroring Sonar
     /// `_preprocess_single_video` + `preprocess_video` +
     /// `compute_video_clip_metadata`.
     ///
@@ -781,14 +781,14 @@ mod tests {
         assert!(distortion < 0.1);
     }
 
-    /// Golden grid-fit values produced by the Aphrodite reference
+    /// Golden grid-fit values produced by the Sonar reference
     /// (`models/muse_spark/common/processor.py::find_resize_target`) with
     /// 28px token patches, min 1 token, max 4096 (image) / 144 (video frame)
     /// tokens. Exact distortion ties resolve in CPython hash order there; the
     /// `100x100` case is such a tie and asserts this port's deterministic
     /// (sorted-order) choice instead.
     #[test]
-    fn grid_fit_matches_aphrodite_reference() {
+    fn grid_fit_matches_sonar_reference() {
         // (img_h, img_w), (target_h, target_w), (nph, npw)
         type Case = ((usize, usize), (usize, usize), (usize, usize));
         let cases: &[Case] = &[

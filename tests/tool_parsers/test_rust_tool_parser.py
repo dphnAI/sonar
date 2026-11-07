@@ -7,14 +7,14 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionRequest,
     ChatCompletionToolsParam,
 )
-from aphrodite.tool_parsers.rust_tool_parser import RustToolParser
+from sonar.tool_parsers.rust_tool_parser import RustToolParser
 
 # The PyO3 extension is an optional build artifact; skip when absent.
-_rust_tool_parser = pytest.importorskip("aphrodite._rust_tool_parser")
+_rust_tool_parser = pytest.importorskip("sonar._rust_tool_parser")
 
 MOCK_TOKENIZER = MagicMock()
 MOCK_TOKENIZER.get_vocab.return_value = {}

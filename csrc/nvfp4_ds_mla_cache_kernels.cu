@@ -9,29 +9,29 @@
 
 #include "nvfp4_ds_mla_cache.h"
 
-#include "quantization/fp4/nvfp4_utils.cuh"  // aphrodite::fp32_vec16_to_e2m1()
+#include "quantization/fp4/nvfp4_utils.cuh"  // sonar::fp32_vec16_to_e2m1()
 
 #include <cuda_bf16.h>
 #include <cuda_fp8.h>
 
 #if defined(CUDART_VERSION) && CUDART_VERSION >= 12080
   #include <cuda_fp4.h>
-  #define APHRODITE_HAS_CUDA_FP4 1
+  #define SONAR_HAS_CUDA_FP4 1
 #else
-  #define APHRODITE_HAS_CUDA_FP4 0
+  #define SONAR_HAS_CUDA_FP4 0
 #endif
 
 // __CUDA_ARCH_FAMILY_SPECIFIC__ is defined only for the suffixed targets. The
 // non-native paths trap rather than emulate; the host entry points reject this
 // format off SM100, so they are unreachable.
-#if APHRODITE_HAS_CUDA_FP4 && defined(__CUDA_ARCH__) && \
-    __CUDA_ARCH__ >= 1000 && defined(__CUDA_ARCH_FAMILY_SPECIFIC__)
-  #define APHRODITE_NVFP4_NATIVE_CVT 1
+#if SONAR_HAS_CUDA_FP4 && defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 1000 && \
+    defined(__CUDA_ARCH_FAMILY_SPECIFIC__)
+  #define SONAR_NVFP4_NATIVE_CVT 1
 #else
-  #define APHRODITE_NVFP4_NATIVE_CVT 0
+  #define SONAR_NVFP4_NATIVE_CVT 0
 #endif
 
-namespace aphrodite {
+namespace sonar {
 
 // nvfp4_ds_mla cache format, 352 B/token:
 //   [0,   256)  512 x e2m1 NoPE, packed 2/byte (low nibble = even element)
@@ -72,7 +72,7 @@ static_assert(nvfp4_sf_perm_ok(),
 // LOW nibble, so the odd element of a pair is the first source.
 __device__ __forceinline__ uint64_t
 nvfp4_pack16_e2m1_rn(const float (&vals)[16], float inv_sf) {
-#if APHRODITE_NVFP4_NATIVE_CVT
+#if SONAR_NVFP4_NATIVE_CVT
   float2 pairs[8];
   #pragma unroll
   for (int i = 0; i < 8; i++) {
@@ -91,7 +91,7 @@ nvfp4_pack16_e2m1_rn(const float (&vals)[16], float inv_sf) {
 __device__ __forceinline__ void nvfp4_unpack16_e2m1(uint64_t raw,
                                                     uint8_t sf_byte,
                                                     __nv_bfloat16 (&out)[16]) {
-#if APHRODITE_NVFP4_NATIVE_CVT
+#if SONAR_NVFP4_NATIVE_CVT
   const __half2_raw sf2_raw = __nv_cvt_fp8x2_to_halfraw2(
       static_cast<__nv_fp8x2_storage_t>(sf_byte * 0x0101u), __NV_E4M3);
   const __half2 sf2 = *reinterpret_cast<const __half2*>(&sf2_raw);
@@ -273,4 +273,4 @@ void launch_cp_gather_and_upconvert_nvfp4_kv_cache(
       dst_entry_stride);
 }
 
-}  // namespace aphrodite
+}  // namespace sonar

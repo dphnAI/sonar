@@ -6,16 +6,16 @@ import torch
 from torch import nn
 from transformers import PreTrainedConfig
 
-from aphrodite.config import get_current_aphrodite_config
-from aphrodite.distributed import get_ep_group, get_tensor_model_parallel_world_size
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.activation import SiluAndMul
-from aphrodite.model_executor.layers.fused_moe import FusedMoEFactory, GateLinear
-from aphrodite.model_executor.layers.linear import (
+from sonar.config import get_current_sonar_config
+from sonar.distributed import get_ep_group, get_tensor_model_parallel_world_size
+from sonar.logger import init_logger
+from sonar.model_executor.layers.activation import SiluAndMul
+from sonar.model_executor.layers.fused_moe import FusedMoEFactory, GateLinear
+from sonar.model_executor.layers.linear import (
     MergedColumnParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.quantization import QuantizationConfig
 
 logger = init_logger(__name__)
 
@@ -103,8 +103,8 @@ class HYV4MoEFused(nn.Module):
         top_k = config.num_experts_per_tok
         intermediate_size = config.expert_hidden_dim
         router_scaling_factor = getattr(config, "router_scaling_factor", 1.0)
-        aphrodite_config = get_current_aphrodite_config()
-        eplb_config = aphrodite_config.parallel_config.eplb_config
+        sonar_config = get_current_sonar_config()
+        eplb_config = sonar_config.parallel_config.eplb_config
         self.enable_eplb = enable_eplb
 
         self.n_logical_experts = self.n_routed_experts

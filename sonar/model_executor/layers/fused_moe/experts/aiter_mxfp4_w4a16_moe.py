@@ -3,20 +3,20 @@
 
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.config import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEParallelConfig,
     FusedMoEQuantConfig,
     RoutingMethodType,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     kMxfp4Static,
 )
-from aphrodite.triton_utils import triton
+from sonar.triton_utils import triton
 
 __all__ = [
     "AiterW4A16ExpertsMonolithic",
@@ -52,7 +52,7 @@ def _aiter_w4a16_silu_via_a8w4(
     except ImportError:
         from aiter.ops.triton.moe_op_gemm_a8w4 import moe_gemm_a8w4
 
-    from aphrodite.model_executor.layers.quantization.utils.mxfp4_utils import (
+    from sonar.model_executor.layers.quantization.utils.mxfp4_utils import (
         get_aiter_mx_scale_swizzle,
     )
 
@@ -139,10 +139,10 @@ def aiter_triton_kernel_w4a16_moe_forward(
     hash_indices_table: torch.Tensor | None = None,
 ):
     assert quant_config is not None and rocm_aiter_ops.is_enabled()
-    from aphrodite.model_executor.layers.quantization.utils.mxfp4_utils import (
+    from sonar.model_executor.layers.quantization.utils.mxfp4_utils import (
         should_use_cdna4_mx_scale_swizzle,
     )
-    from aphrodite.platforms.rocm import on_gfx950, on_gfx1250
+    from sonar.platforms.rocm import on_gfx950, on_gfx1250
 
     try:
         from aiter.ops.triton.moe.moe_op_gemm_a16w4 import moe_gemm_a16w4
@@ -208,7 +208,7 @@ def aiter_triton_kernel_w4a16_moe_forward(
 
     w1_data = w1.storage.data
     w2_data = w2.storage.data
-    from aphrodite.model_executor.layers.quantization.utils.mxfp4_utils import (
+    from sonar.model_executor.layers.quantization.utils.mxfp4_utils import (
         weight_mx_scale,
     )
 
@@ -264,7 +264,7 @@ def aiter_triton_kernel_w4a16_moe_forward(
     swz = "CDNA4_SCALE" if should_use_cdna4_mx_scale_swizzle() else None
 
     # AITER's gfx950 Gluon a16w4 kernel (default backend="None"/auto-detect
-    # picks it) calls a Triton-Gluon AMD API that isn't available in Aphrodite's
+    # picks it) calls a Triton-Gluon AMD API that isn't available in Sonar's
     # pinned Triton, so force the Triton backend on gfx950. gfx1250 already
     # used Gluon before this and is unaffected, so leave it on auto-detect.
     a16w4_backend = "triton" if on_gfx950() else None
@@ -337,7 +337,7 @@ class AiterW4A16ExpertsMonolithic(mk.FusedMoEExpertsMonolithic):
     def _supports_current_device() -> bool:
         if not rocm_aiter_ops.is_enabled():
             return False
-        from aphrodite.platforms.rocm import on_gfx942, on_gfx950, on_gfx1250
+        from sonar.platforms.rocm import on_gfx942, on_gfx950, on_gfx1250
 
         return on_gfx942() or on_gfx950() or on_gfx1250()
 

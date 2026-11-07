@@ -26,16 +26,16 @@ import torch
 import torch.nn as nn
 from transformers import PreTrainedConfig
 
-from aphrodite.config import AphroditeConfig, CacheConfig, ModelConfig
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.config import CacheConfig, ModelConfig, SonarConfig
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.models.qwen2 import Qwen2DecoderLayer
-from aphrodite.sequence import IntermediateTensors
+from sonar.model_executor.models.qwen2 import Qwen2DecoderLayer
+from sonar.sequence import IntermediateTensors
 
 from .utils import AutoWeightsLoader, WeightsMapper, maybe_prefix
 
@@ -83,10 +83,10 @@ class MiMoMultiTokenPredictorLayer(nn.Module):
 
 
 class MiMoMultiTokenPredictor(nn.Module):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
         self.mtp_start_layer_idx = config.num_hidden_layers
         self.num_mtp_layers = config.num_nextn_predict_layers
 
@@ -100,9 +100,9 @@ class MiMoMultiTokenPredictor(nn.Module):
                 str(idx): MiMoMultiTokenPredictorLayer(
                     config,
                     f"{prefix}.layers.{idx}",
-                    model_config=aphrodite_config.model_config,
-                    cache_config=aphrodite_config.cache_config,
-                    quant_config=aphrodite_config.quant_config,
+                    model_config=sonar_config.model_config,
+                    cache_config=sonar_config.cache_config,
+                    quant_config=sonar_config.quant_config,
                 )
                 for idx in range(
                     self.mtp_start_layer_idx,
@@ -145,10 +145,10 @@ class MiMoMultiTokenPredictor(nn.Module):
 
 
 class MiMoMTP(nn.Module):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        self.config = aphrodite_config.model_config.hf_config
-        self.model = MiMoMultiTokenPredictor(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.config = sonar_config.model_config.hf_config
+        self.model = MiMoMultiTokenPredictor(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
         self.lm_head = ParallelLMHead(
             self.config.vocab_size,
             self.config.hidden_size,
@@ -157,7 +157,7 @@ class MiMoMTP(nn.Module):
         # Checkpoint stores MTP layers 0-indexed and without the `mtp_block`
         # wrapper around the transformer block; remap onto the offset index.
         start = self.config.num_hidden_layers
-        self.hf_to_aphrodite_mapper = WeightsMapper(
+        self.hf_to_sonar_mapper = WeightsMapper(
             orig_to_new_substr={
                 ".self_attn.": ".mtp_block.self_attn.",
                 ".mlp.": ".mtp_block.mlp.",
@@ -209,4 +209,4 @@ class MiMoMTP(nn.Module):
                     yield name, weight
 
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(mtp_weights(), mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(mtp_weights(), mapper=self.hf_to_sonar_mapper)

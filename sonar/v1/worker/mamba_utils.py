@@ -7,26 +7,26 @@ from typing import Any, NamedTuple
 
 import torch
 
-from aphrodite.config import CacheConfig
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.mamba.mamba_utils import (
+from sonar.config import CacheConfig
+from sonar.logger import init_logger
+from sonar.model_executor.layers.mamba.mamba_utils import (
     MambaStateCopyFuncsByType,
     get_conv_copy_spec,
     get_temporal_copy_spec,
     is_conv_state_dim_first,
 )
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.gpu_sync_debug import gpu_sync_allowed
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.v1.core.sched.output import SchedulerOutput
-from aphrodite.v1.kv_cache_interface import (
+from sonar.triton_utils import tl, triton
+from sonar.utils.gpu_sync_debug import gpu_sync_allowed
+from sonar.utils.math_utils import cdiv
+from sonar.v1.core.sched.output import SchedulerOutput
+from sonar.v1.kv_cache_interface import (
     KVCacheConfig,
     KVCacheGroupSpec,
     MambaSpec,
     UniformTypeKVCacheSpecs,
 )
-from aphrodite.v1.utils import CpuGpuBuffer
-from aphrodite.v1.worker.gpu_input_batch import CachedRequestState, InputBatch
+from sonar.v1.utils import CpuGpuBuffer
+from sonar.v1.worker.gpu_input_batch import CachedRequestState, InputBatch
 
 logger = init_logger(__name__)
 

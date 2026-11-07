@@ -6,9 +6,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from aphrodite.config import WatchdogConfig
-from aphrodite.utils import watch_dog as watch_dog_module
-from aphrodite.utils.watch_dog import (
+from sonar.config import WatchdogConfig
+from sonar.utils import watch_dog as watch_dog_module
+from sonar.utils.watch_dog import (
     NoopWatchDog,
     ThreadedWatchDog,
     get_watch_dog,
@@ -111,6 +111,6 @@ def test_start_watch_dog_with_dump_dir(tmp_path):
         assert wd.thread is not None
         assert wd.thread.is_alive() and wd.thread.daemon
         wd.handle_failure("shutdown")
-        assert os.path.exists(tmp_path / f"APHRODITE_STACK_DUMP_for_worker_1_{os.getpid()}.log")
+        assert os.path.exists(tmp_path / f"SONAR_STACK_DUMP_for_worker_1_{os.getpid()}.log")
     finally:
         wd.stop()

@@ -52,18 +52,18 @@ MODEL_CONFIGS = [
 ]
 
 
-def _create_runner(aphrodite_runner, model_config):
+def _create_runner(sonar_runner, model_config):
     runner_config = model_config.copy()
     model = runner_config.pop("model")
     tokenizer_name = runner_config.pop("tokenizer", None)
-    return aphrodite_runner(model, tokenizer_name=tokenizer_name, **runner_config)
+    return sonar_runner(model, tokenizer_name=tokenizer_name, **runner_config)
 
 
 @pytest.fixture(scope="module")
-def cache_models(aphrodite_runner):
+def cache_models(sonar_runner):
     # Cache model files first
     for model_config in MODEL_CONFIGS:
-        with _create_runner(aphrodite_runner, model_config):
+        with _create_runner(sonar_runner, model_config):
             pass
 
     yield
@@ -71,12 +71,12 @@ def cache_models(aphrodite_runner):
 
 @pytest.mark.skip_global_cleanup
 @pytest.mark.usefixtures("cache_models")
-def test_offline_mode(monkeypatch: pytest.MonkeyPatch, aphrodite_runner):
+def test_offline_mode(monkeypatch: pytest.MonkeyPatch, sonar_runner):
     # Set HF to offline mode and ensure we can still construct an LLM
     with monkeypatch.context() as m:
         try:
             m.setenv("HF_HUB_OFFLINE", "1")
-            m.setenv("APHRODITE_NO_USAGE_STATS", "1")
+            m.setenv("SONAR_NO_USAGE_STATS", "1")
 
             def disable_connect(*args, **kwargs):
                 raise RuntimeError("No http calls allowed")
@@ -97,7 +97,7 @@ def test_offline_mode(monkeypatch: pytest.MonkeyPatch, aphrodite_runner):
             _re_import_modules()
             # Cached model files should be used in offline mode
             for model_config in MODEL_CONFIGS:
-                with _create_runner(aphrodite_runner, model_config):
+                with _create_runner(sonar_runner, model_config):
                     pass
         finally:
             # Reset the environment after the test
@@ -139,12 +139,12 @@ def _re_import_modules():
 
 @pytest.mark.skip_global_cleanup
 @pytest.mark.usefixtures("cache_models")
-def test_model_from_huggingface_offline(monkeypatch: pytest.MonkeyPatch, aphrodite_runner):
+def test_model_from_huggingface_offline(monkeypatch: pytest.MonkeyPatch, sonar_runner):
     # Set HF to offline mode and ensure we can still construct an LLM
     with monkeypatch.context() as m:
         try:
             m.setenv("HF_HUB_OFFLINE", "1")
-            m.setenv("APHRODITE_NO_USAGE_STATS", "1")
+            m.setenv("SONAR_NO_USAGE_STATS", "1")
 
             def disable_connect(*args, **kwargs):
                 raise RuntimeError("No http calls allowed")
@@ -162,7 +162,7 @@ def test_model_from_huggingface_offline(monkeypatch: pytest.MonkeyPatch, aphrodi
             # Need to re-import huggingface_hub
             # and friends to set up offline mode
             _re_import_modules()
-            with aphrodite_runner("facebook/opt-125m"):
+            with sonar_runner("facebook/opt-125m"):
                 pass
         finally:
             # Reset the environment after the test

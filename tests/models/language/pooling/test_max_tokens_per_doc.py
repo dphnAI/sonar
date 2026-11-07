@@ -9,10 +9,10 @@ from dataclasses import dataclass
 import pytest
 import requests
 
-from aphrodite.entrypoints.pooling.scoring.protocol import RerankResponse
-from tests.utils import APHRODITE_PATH, RemoteOpenAIServer
+from sonar.entrypoints.pooling.scoring.protocol import RerankResponse
+from tests.utils import SONAR_PATH, RemoteOpenAIServer
 
-TEMPLATE_DIR = str(APHRODITE_PATH / "examples/pooling/score/template")
+TEMPLATE_DIR = str(SONAR_PATH / "examples/pooling/score/template")
 ExpectedPromptTokens = int | tuple[int, ...]
 
 long_query = "What is the capital of France?" * 20
@@ -124,7 +124,7 @@ def assert_prompt_tokens(actual: int, expected: ExpectedPromptTokens) -> None:
 @pytest.fixture(scope="module", params=RERANK_CONFIGS, ids=lambda c: c.model)
 def server(request):
     config: TestConfig = request.param
-    env_dict = {"APHRODITE_LOGGING_LEVEL": "WARNING"}
+    env_dict = {"SONAR_LOGGING_LEVEL": "WARNING"}
     with RemoteOpenAIServer(config.model, config.args, env_dict=env_dict) as remote_server:
         yield config, remote_server
 

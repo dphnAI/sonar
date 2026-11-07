@@ -11,13 +11,13 @@ K % 128 == 0, N % 128 == 0.
 import pytest
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.model_executor.layers.quantization.utils.swordfish_utils_test import (
+from sonar import _custom_ops as ops
+from sonar.model_executor.layers.quantization.utils.swordfish_utils_test import (
     swordfish_quantize,
     swordfish_quantize_awq,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.scalar_type import scalar_types
+from sonar.platforms import current_platform
+from sonar.scalar_type import scalar_types
 from tests.kernels.utils import opcheck
 
 if not current_platform.is_cuda():

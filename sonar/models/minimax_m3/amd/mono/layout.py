@@ -10,7 +10,7 @@ scratch and peer-symmetric regions, and the LDS row pitches. Kept free of FlyDSL
 so it is testable without a GPU.
 """
 
-from aphrodite.models.minimax_m3.amd.mono.config import (
+from sonar.models.minimax_m3.amd.mono.config import (
     BLOCKS,
     HEAD_DIM,
     HIDDEN,

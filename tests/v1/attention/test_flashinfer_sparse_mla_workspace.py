@@ -8,14 +8,14 @@ from unittest.mock import patch
 import pytest
 import torch
 
-from aphrodite.v1.attention.backends.mla.flashinfer_mla_sparse import (
+from sonar.v1.attention.backends.mla.flashinfer_mla_sparse import (
     _DEFAULT_WORKSPACE_BUFFER_SIZE,
     FlashInferMLASparseTRTLLMBackend,
     _required_workspace_bytes,
     compute_trtllm_sparse_mla_workspace_bytes,
 )
 
-# Reporter config from aphrodite#50781: GLM-5.2 (64 q heads), TP=8, DCP=8,
+# Reporter config from sonar#50781: GLM-5.2 (64 q heads), TP=8, DCP=8,
 # max_num_batched_tokens=16384, FlashInfer 0.6.14.
 _REPORTER_HEADS_PER_RANK = 64 // 8
 _REPORTER_DCP = 8
@@ -85,7 +85,7 @@ def test_combined_pcp_dcp_rejects_flashinfer_sparse():
         ),
         model_config=None,
     )
-    with patch("aphrodite.config.get_current_aphrodite_config", return_value=config):
+    with patch("sonar.config.get_current_sonar_config", return_value=config):
         reason = FlashInferMLASparseTRTLLMBackend.supports_combination(
             head_size=576,
             dtype=torch.bfloat16,
@@ -111,7 +111,7 @@ def test_single_context_parallel_mode_allows_flashinfer_sparse(pcp_size: int, dc
         ),
         model_config=None,
     )
-    with patch("aphrodite.config.get_current_aphrodite_config", return_value=config):
+    with patch("sonar.config.get_current_sonar_config", return_value=config):
         reason = FlashInferMLASparseTRTLLMBackend.supports_combination(
             head_size=576,
             dtype=torch.bfloat16,
@@ -128,14 +128,14 @@ def test_single_context_parallel_mode_allows_flashinfer_sparse(pcp_size: int, dc
 
 
 def test_default_constant_matches_envs_default(monkeypatch):
-    from aphrodite import envs
+    from sonar import envs
 
-    monkeypatch.delenv("APHRODITE_FLASHINFER_WORKSPACE_BUFFER_SIZE", raising=False)
-    assert _DEFAULT_WORKSPACE_BUFFER_SIZE == envs.APHRODITE_FLASHINFER_WORKSPACE_BUFFER_SIZE
+    monkeypatch.delenv("SONAR_FLASHINFER_WORKSPACE_BUFFER_SIZE", raising=False)
+    assert _DEFAULT_WORKSPACE_BUFFER_SIZE == envs.SONAR_FLASHINFER_WORKSPACE_BUFFER_SIZE
 
 
 def test_env_unset_returns_computed(monkeypatch):
-    monkeypatch.delenv("APHRODITE_FLASHINFER_WORKSPACE_BUFFER_SIZE", raising=False)
+    monkeypatch.delenv("SONAR_FLASHINFER_WORKSPACE_BUFFER_SIZE", raising=False)
     required = _required_workspace_bytes(
         dcp_world_size=_REPORTER_DCP,
         num_heads_per_rank=_REPORTER_HEADS_PER_RANK,
@@ -151,8 +151,8 @@ def test_env_unset_returns_computed(monkeypatch):
 
 def test_env_override_below_computed_is_respected_with_warning(monkeypatch):
     override = 100 * 1024 * 1024
-    monkeypatch.setenv("APHRODITE_FLASHINFER_WORKSPACE_BUFFER_SIZE", str(override))
-    with patch("aphrodite.v1.attention.backends.mla.flashinfer_mla_sparse.logger") as mock_logger:
+    monkeypatch.setenv("SONAR_FLASHINFER_WORKSPACE_BUFFER_SIZE", str(override))
+    with patch("sonar.v1.attention.backends.mla.flashinfer_mla_sparse.logger") as mock_logger:
         required = _required_workspace_bytes(
             dcp_world_size=_REPORTER_DCP,
             num_heads_per_rank=_REPORTER_HEADS_PER_RANK,
@@ -164,8 +164,8 @@ def test_env_override_below_computed_is_respected_with_warning(monkeypatch):
 
 def test_env_override_above_computed_is_respected_without_warning(monkeypatch):
     override = 8 * 1024 * 1024 * 1024
-    monkeypatch.setenv("APHRODITE_FLASHINFER_WORKSPACE_BUFFER_SIZE", str(override))
-    with patch("aphrodite.v1.attention.backends.mla.flashinfer_mla_sparse.logger") as mock_logger:
+    monkeypatch.setenv("SONAR_FLASHINFER_WORKSPACE_BUFFER_SIZE", str(override))
+    with patch("sonar.v1.attention.backends.mla.flashinfer_mla_sparse.logger") as mock_logger:
         required = _required_workspace_bytes(
             dcp_world_size=_REPORTER_DCP,
             num_heads_per_rank=_REPORTER_HEADS_PER_RANK,

@@ -5,16 +5,16 @@ from typing import Any
 
 import torch
 
-from aphrodite.model_executor.warmup.jit_warmup import kernel_launcher
-from aphrodite.model_executor.warmup.jit_warmup_triton_helper import (
-    AphroditeTritonJitKernel,
+from sonar.model_executor.warmup.jit_warmup import kernel_launcher
+from sonar.model_executor.warmup.jit_warmup_triton_helper import (
     LaunchSpec,
+    SonarTritonJitKernel,
     TritonWarmupTensor,
 )
-from aphrodite.triton_utils import tl, triton
+from sonar.triton_utils import tl, triton
 
 
-class PackSeqTritonKernel(AphroditeTritonJitKernel["PackSeqTritonKernel.CompileKey"]):
+class PackSeqTritonKernel(SonarTritonJitKernel["PackSeqTritonKernel.CompileKey"]):
     @dataclass(frozen=True)
     class CompileKey:
         dtype: torch.dtype
@@ -231,7 +231,7 @@ def pack_seq_triton(
     return out
 
 
-class UnpackSeqTritonKernel(AphroditeTritonJitKernel["UnpackSeqTritonKernel.CompileKey"]):
+class UnpackSeqTritonKernel(SonarTritonJitKernel["UnpackSeqTritonKernel.CompileKey"]):
     @dataclass(frozen=True)
     class CompileKey:
         dtype: torch.dtype

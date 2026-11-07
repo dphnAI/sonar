@@ -5,11 +5,11 @@ from typing import TYPE_CHECKING
 
 import torch
 
-from aphrodite.utils.torch_utils import async_tensor_h2d
+from sonar.utils.torch_utils import async_tensor_h2d
 
 if TYPE_CHECKING:
     # avoid circuit import
-    from aphrodite.lora.layers import LoRAMapping
+    from sonar.lora.layers import LoRAMapping
 
 
 def compute_meta(

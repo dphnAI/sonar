@@ -28,35 +28,35 @@ from itertools import islice
 import torch
 from torch import nn
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, CacheConfig, ParallelConfig
-from aphrodite.distributed import (
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import CacheConfig, ParallelConfig, SonarConfig
+from sonar.distributed import (
     get_pp_group,
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
 )
-from aphrodite.model_executor.layers.activation import SiluAndMul
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.model_executor.layers.activation import SiluAndMul
+from sonar.model_executor.layers.fused_moe import (
     FusedMoEFactory,
     GateLinear,
     MoERunner,
 )
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     MergedColumnParallelLinear,
     ReplicatedLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.mla import MLAModules, MultiHeadLatentAttentionWrapper
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.mla import MLAModules, MultiHeadLatentAttentionWrapper
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.sequence import IntermediateTensors
+from sonar.sequence import IntermediateTensors
 
 from .bailing_moe import BailingMoeForCausalLM
 from .interfaces import (
@@ -106,7 +106,7 @@ def _normalized_weights(
 class SarvamMLAAttention(nn.Module):
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         config,
         cache_config: CacheConfig | None = None,
         quant_config: QuantizationConfig | None = None,
@@ -380,21 +380,21 @@ class SarvamMLAMoE(nn.Module):
 class SarvamMLABlock(nn.Module):
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
     ) -> None:
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        cache_config = aphrodite_config.cache_config
-        quant_config = aphrodite_config.quant_config
-        parallel_config = aphrodite_config.parallel_config
+        config = sonar_config.model_config.hf_config
+        cache_config = sonar_config.cache_config
+        quant_config = sonar_config.quant_config
+        parallel_config = sonar_config.parallel_config
         layer_idx = int(prefix.split(".")[-1])
         hidden_size = config.hidden_size
         dense_intermediate = getattr(config, "intermediate_size", 16384)
 
         self.input_layernorm = RMSNorm(hidden_size, eps=config.rms_norm_eps)
         self.self_attn = SarvamMLAAttention(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             config=config,
             cache_config=cache_config,
             quant_config=quant_config,
@@ -461,7 +461,7 @@ class SarvamMLAModel(nn.Module, EagleModelMixin):
 
     supports_aux_hidden_states_over_pp = True
 
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_stacked={
             # .experts.gate_up_proj must be handled by MoERunner.load_weights for EP
             ".mlp.gate_proj": (".mlp.gate_up_proj", 0),
@@ -474,13 +474,13 @@ class SarvamMLAModel(nn.Module, EagleModelMixin):
     def __init__(
         self,
         *,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
     ) -> None:
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
 
         self.config = config
         self.vocab_size = config.vocab_size
@@ -489,7 +489,7 @@ class SarvamMLAModel(nn.Module, EagleModelMixin):
         if (
             get_pp_group().is_first_rank
             or (self.tie_word_embeddings and get_pp_group().is_last_rank)
-            or spec_decode_needs_target_embed(aphrodite_config)
+            or spec_decode_needs_target_embed(sonar_config)
         ):
             self.embed_tokens = VocabParallelEmbedding(
                 self.vocab_size,
@@ -504,7 +504,7 @@ class SarvamMLAModel(nn.Module, EagleModelMixin):
         self.start_layer, self.end_layer, self.layers = make_layers(
             config.num_hidden_layers,
             lambda prefix: SarvamMLABlock(
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 prefix=prefix,
             ),
             prefix=f"{prefix}.layers",
@@ -585,7 +585,7 @@ class SarvamMLAModel(nn.Module, EagleModelMixin):
         weights: Iterable[tuple[str, torch.Tensor]],
     ) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(_normalized_weights(weights), mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(_normalized_weights(weights), mapper=self.hf_to_sonar_mapper)
 
 
 class SarvamMixtureOfExperts(MixtureOfExperts):
@@ -650,16 +650,16 @@ class SarvamMLAForCausalLM(nn.Module, SupportsPP, SupportsLoRA, SupportsEagle3, 
             if getattr(config, attr, None) is None:
                 setattr(config, attr, default)
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
         self._remap_config(config)
-        quant_config = aphrodite_config.quant_config
+        quant_config = sonar_config.quant_config
         self.config = config
         self.quant_config = quant_config
 
         self.model = SarvamMLAModel(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             prefix=maybe_prefix(prefix, "model"),
         )
 

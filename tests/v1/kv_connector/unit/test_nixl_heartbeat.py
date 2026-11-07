@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from aphrodite.v1.outputs import KVConnectorOutput
+from sonar.v1.outputs import KVConnectorOutput
 
 from .utils import create_request, make_nixl_scheduler
 
@@ -23,7 +23,7 @@ def _req(request_id: int = 1):
 
 
 def _worker_stub():
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.worker import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.worker import (
         NixlConnectorWorker,
     )
 
@@ -181,7 +181,7 @@ def test_reaper_reclaims_expired_leases_behind_heartbeated_head(monkeypatch):
     # Insertion order is A, B, C. Heartbeats will keep A at the head.
     w._reqs_to_send = {"A": 30.0, "B": 32.0, "C": 34.0}
 
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl import base_worker
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl import base_worker
 
     now = {"t": 0.0}
     monkeypatch.setattr(base_worker.time, "perf_counter", lambda: now["t"])
@@ -218,7 +218,7 @@ def test_reaper_reclaims_when_now_equals_expiry(monkeypatch):
     w._reqs_to_process.add("eq")
     w._reqs_to_send = {"eq": 50.0}
 
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl import base_worker
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl import base_worker
 
     monkeypatch.setattr(base_worker.time, "perf_counter", lambda: 50.0)
 
@@ -241,7 +241,7 @@ def test_reaper_reclaims_shorter_lease_behind_later_deadline(monkeypatch):
     w._reqs_to_process.update(("X", "Y"))
     w._reqs_to_send = {"X": 55.0, "Y": 46.0}
 
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl import base_worker
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl import base_worker
 
     monkeypatch.setattr(base_worker.time, "perf_counter", lambda: 50.0)
 

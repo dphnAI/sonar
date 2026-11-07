@@ -10,22 +10,22 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.config import CUDAGraphMode
-from aphrodite.forward_context import (
+from sonar.config import CUDAGraphMode
+from sonar.forward_context import (
     BatchDescriptor,
     ForwardContext,
     override_forward_context,
 )
-from aphrodite.model_executor.layers.fused_moe.routed_experts_capturer import (
+from sonar.model_executor.layers.fused_moe.routed_experts_capturer import (
     RoutedExpertsCapturer,
 )
-from aphrodite.models.deepseek_v41.decoder_replay_layers import DecoderReplayLayers
-from aphrodite.models.deepseek_v41.nvidia.model_state import DeepseekV41ModelState
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.v1.worker.gpu.cudagraph_utils import BatchExecutionDescriptor
-from aphrodite.v1.worker.gpu.input_batch import InputBatch, InputBuffers
-from aphrodite.v1.worker.gpu.model_states.default import DefaultModelState
-from aphrodite.v1.worker.gpu.pcp_manager import PCPManager
+from sonar.models.deepseek_v41.decoder_replay_layers import DecoderReplayLayers
+from sonar.models.deepseek_v41.nvidia.model_state import DeepseekV41ModelState
+from sonar.sampling_params import SamplingParams
+from sonar.v1.worker.gpu.cudagraph_utils import BatchExecutionDescriptor
+from sonar.v1.worker.gpu.input_batch import InputBatch, InputBuffers
+from sonar.v1.worker.gpu.model_states.default import DefaultModelState
+from sonar.v1.worker.gpu.pcp_manager import PCPManager
 
 pytestmark = pytest.mark.skipif(not torch.cuda.is_available(), reason="the replay buffers live on the GPU")
 
@@ -188,7 +188,7 @@ def test_replay_context_restores_tp_routing_rows(state):
     gathered = torch.cat((expected, torch.full((1, 2), -1, device=DEVICE)))
     with (
         override_forward_context(context),
-        patch("aphrodite.model_executor.layers.fused_moe.routed_experts_capturer.get_tp_group") as group,
+        patch("sonar.model_executor.layers.fused_moe.routed_experts_capturer.get_tp_group") as group,
     ):
         group.return_value.all_gather.return_value = gathered
         capturer.capture(0, gathered[: (count + 1) // 2])
@@ -266,8 +266,8 @@ def test_prompt_logprobs_requests_keep_their_rows(state):
 @pytest.mark.parametrize("state", [2], indirect=True)
 def test_pcp_replay_keeps_global_tail_after_prefix_hit(state, monkeypatch):
     """The 128-row tail spans two owners; early segments keep no rows."""
-    import aphrodite.models.deepseek_v41.nvidia.model_state as module
-    from aphrodite.distributed.device_communicators.pynccl_wrapper import ncclDataTypeEnum
+    import sonar.models.deepseek_v41.nvidia.model_state as module
+    from sonar.distributed.device_communicators.pynccl_wrapper import ncclDataTypeEnum
 
     def all_gather(tensor, dim):
         ncclDataTypeEnum.from_torch(tensor.dtype)
@@ -320,7 +320,7 @@ def test_pcp_replay_keeps_global_tail_after_prefix_hit(state, monkeypatch):
 @pytest.mark.parametrize("cg_mode", [CUDAGraphMode.NONE, CUDAGraphMode.PIECEWISE])
 def test_aux_output_requests_keep_every_routing_row(state, cg_mode):
     """R3 needs every prefill row even when final logits only need the window."""
-    state.aphrodite_config.aux_output_config.enable_return_routed_experts = True
+    state.sonar_config.aux_output_config.enable_return_routed_experts = True
     for index in range(3):
         state.add_request(
             index,
@@ -390,11 +390,11 @@ def test_whole_batch_forwards_get_no_replay_batch(state):
 def dp_state(state, monkeypatch):
     """`state` on DP rank 0 of 2; `state.other` sets what rank 1 reports
     (trims, replay tokens)."""
-    import aphrodite.models.deepseek_v41.nvidia.model_state as module
+    import sonar.models.deepseek_v41.nvidia.model_state as module
 
-    state.aphrodite_config.parallel_config.data_parallel_size = 2
-    state.aphrodite_config.parallel_config.data_parallel_rank = 0
-    state.aphrodite_config.parallel_config.is_moe_model = True
+    state.sonar_config.parallel_config.data_parallel_size = 2
+    state.sonar_config.parallel_config.data_parallel_rank = 0
+    state.sonar_config.parallel_config.is_moe_model = True
     state.other = (False, 0)  # type: ignore[attr-defined]
 
     def all_reduce(tensor, group):
@@ -433,7 +433,7 @@ def test_idle_dp_rank_dummy_trims_with_its_peers(dp_state):
 def test_zero_prefix_window_warms_gather_and_skips_pad(monkeypatch):
     """ROCm leaves the prefix-cache window at 0. Replay still needs replay_start
     and a warmed gather kernel. The pad kernel stays on the prefix-cache path."""
-    import aphrodite.models.deepseek_v41.nvidia.model_state as model_state
+    import sonar.models.deepseek_v41.nvidia.model_state as model_state
 
     calls = {"pad_warmup": 0, "gather_warmup": 0, "pad_launch": 0}
 

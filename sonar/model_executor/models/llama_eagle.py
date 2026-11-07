@@ -8,17 +8,17 @@ import torch
 import torch.nn as nn
 from transformers import LlamaConfig
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.linear import ReplicatedLinear
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization.base_config import QuantizationConfig
-from aphrodite.model_executor.layers.vocab_parallel_embedding import VocabParallelEmbedding
-from aphrodite.model_executor.models.llama import (
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import SonarConfig
+from sonar.logger import init_logger
+from sonar.model_executor.layers.linear import ReplicatedLinear
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization.base_config import QuantizationConfig
+from sonar.model_executor.layers.vocab_parallel_embedding import VocabParallelEmbedding
+from sonar.model_executor.models.llama import (
     LlamaDecoderLayer as BaseLlamaDecoderLayer,
 )
-from aphrodite.model_executor.models.llama import LlamaForCausalLM
+from sonar.model_executor.models.llama import LlamaForCausalLM
 
 from .utils import (
     AutoWeightsLoader,
@@ -43,12 +43,12 @@ else:
 class LlamaDecoderLayer(BaseLlamaDecoderLayer):
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         disable_input_layernorm: bool,
         prefix: str = "",
         config: LlamaConfig | None = None,
     ) -> None:
-        super().__init__(aphrodite_config, prefix=prefix, config=config)
+        super().__init__(sonar_config, prefix=prefix, config=config)
 
         # Skip the input_layernorm
         # https://github.com/SafeAILab/EAGLE/blob/35c78f6cdc19a73e05cf5c330b4c358dad970c6a/eagle/model/cnets.py#L427
@@ -56,14 +56,14 @@ class LlamaDecoderLayer(BaseLlamaDecoderLayer):
             del self.input_layernorm
             self.input_layernorm = nn.Identity()
 
-    def get_quant_config(self, aphrodite_config: AphroditeConfig) -> QuantizationConfig | None:
+    def get_quant_config(self, sonar_config: SonarConfig) -> QuantizationConfig | None:
         """Use drafter's quantization config instead of verifier's."""
-        return get_draft_quant_config(aphrodite_config)
+        return get_draft_quant_config(sonar_config)
 
 
 @support_torch_compile
 class LlamaModel(nn.Module):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_stacked={
             # weight_name: (param_name, shard_id)
             ".q_proj": (".qkv_proj", "q"),
@@ -77,18 +77,18 @@ class LlamaModel(nn.Module):
     def __init__(
         self,
         *,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
         start_layer_id: int = 0,
     ) -> None:
         super().__init__()
-        speculative_config = aphrodite_config.speculative_config
+        speculative_config = sonar_config.speculative_config
         assert speculative_config is not None
         self.config = speculative_config.draft_model_config.hf_config
         self.vocab_size = self.config.vocab_size
 
         # Get drafter's quantization config
-        self.quant_config = get_draft_quant_config(aphrodite_config)
+        self.quant_config = get_draft_quant_config(sonar_config)
 
         self.embed_tokens = VocabParallelEmbedding(
             self.config.vocab_size,
@@ -99,7 +99,7 @@ class LlamaModel(nn.Module):
         self.layers = nn.ModuleList(
             [
                 LlamaDecoderLayer(
-                    aphrodite_config,
+                    sonar_config,
                     i == 0,
                     prefix=maybe_prefix(prefix, f"layers.{i + start_layer_id}"),
                     config=self.config,
@@ -111,7 +111,7 @@ class LlamaModel(nn.Module):
             input_size=self.config.hidden_size * 2,
             output_size=self.config.hidden_size,
             bias=False,
-            params_dtype=aphrodite_config.model_config.dtype,
+            params_dtype=sonar_config.model_config.dtype,
             quant_config=self.quant_config,
             prefix=maybe_prefix(prefix, "fc"),
             return_bias=False,
@@ -140,13 +140,13 @@ class LlamaModel(nn.Module):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
 
 class EagleLlamaForCausalLM(_EagleLlamaForCausalLMBase):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         nn.Module.__init__(self)
-        speculative_config = aphrodite_config.speculative_config
+        speculative_config = sonar_config.speculative_config
         assert speculative_config is not None
         self.config = speculative_config.draft_model_config.hf_config
         # Ensure draft_vocab_size is set
@@ -154,9 +154,9 @@ class EagleLlamaForCausalLM(_EagleLlamaForCausalLMBase):
         if getattr(self.config, "draft_vocab_size", None) is None:
             base_vocab_size = getattr(self.config, "vocab_size", None)
             self.config.draft_vocab_size = base_vocab_size
-        target_layer_num = aphrodite_config.model_config.get_num_layers(aphrodite_config.parallel_config)
+        target_layer_num = sonar_config.model_config.get_num_layers(sonar_config.parallel_config)
         self.model = LlamaModel(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             prefix=maybe_prefix(prefix, "model"),
             start_layer_id=target_layer_num,
         )

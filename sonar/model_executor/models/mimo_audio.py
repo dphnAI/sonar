@@ -616,7 +616,7 @@ class AudioEncoderAttention(nn.Module):
         max_seqlen: int,
         rope_position_embeddings=None,
     ):
-        from aphrodite.vllm_flash_attn import flash_attn_varlen_func
+        from sonar.vllm_flash_attn import flash_attn_varlen_func
 
         bsz, _ = hidden_states.size()
 

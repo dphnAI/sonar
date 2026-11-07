@@ -13,9 +13,9 @@ from typing import Any
 
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.triton_utils import triton
-from aphrodite.v1.attention.ops.flydsl_kernels import _run_compiled
+from sonar.logger import init_logger
+from sonar.triton_utils import triton
+from sonar.v1.attention.ops.flydsl_kernels import _run_compiled
 
 logger = init_logger(__name__)
 
@@ -32,7 +32,7 @@ def is_ultraquant_flydsl_available() -> bool:
     if _FLYDSL_AVAILABLE is not None:
         return _FLYDSL_AVAILABLE
     try:
-        from aphrodite.platforms.rocm import on_gfx950
+        from sonar.platforms.rocm import on_gfx950
 
         if not on_gfx950():
             _FLYDSL_AVAILABLE = False
@@ -41,7 +41,7 @@ def is_ultraquant_flydsl_available() -> bool:
         import flydsl.compiler as flyc
         import flydsl.expr as fx
 
-        from aphrodite.v1.attention.ops.flydsl_kernels import (
+        from sonar.v1.attention.ops.flydsl_kernels import (
             ultraquant_decode_hd256 as ultraquant_mod,
         )
 
@@ -104,7 +104,7 @@ def _fp4_value_lut(device: torch.device) -> torch.Tensor:
     Indexed by the stored 4-bit E2M1 code, so ``lut[nibble]`` is the dequant
     value directly (matches ``format.FP4_BITS_TO_VALUE``).
     """
-    from aphrodite.v1.attention.ops.ultraquant.format import FP4_BITS_TO_VALUE
+    from sonar.v1.attention.ops.ultraquant.format import FP4_BITS_TO_VALUE
 
     key = (str(device), torch.float32)
     t = _FP4_LUT_CACHE.get(key)
@@ -157,9 +157,9 @@ def _qperm_index(device: torch.device, D: int = 128, group_size: int = 32) -> to
 
 def _detect_max_capture_B() -> int:
     try:
-        from aphrodite.config import get_current_aphrodite_config
+        from sonar.config import get_current_sonar_config
 
-        cfg = get_current_aphrodite_config()
+        cfg = get_current_sonar_config()
         candidates: list[int] = []
         sizes = cfg.compilation_config.cudagraph_capture_sizes
         if sizes:
@@ -393,7 +393,7 @@ def _get_kernel(
 
 
 # -- Partition reducer ---------------------------------------------------------
-from aphrodite.triton_utils import tl  # noqa: E402
+from sonar.triton_utils import tl  # noqa: E402
 
 
 @triton.jit

@@ -4,13 +4,13 @@
 
 import torch
 
-from aphrodite.models.minimax_m3.common.ops.sparse_attn import (
+from sonar.models.minimax_m3.common.ops.sparse_attn import (
     _FP8_DTYPES,
     _KV_SCALE_NONE,
     SPARSE_BLOCK_SIZE,
     _kv_scale_args,
 )
-from aphrodite.triton_utils import tl, triton
+from sonar.triton_utils import tl, triton
 
 # Tuned on H200. Hopper selects this backend automatically.
 _PREFILL_TILE_Q = 16

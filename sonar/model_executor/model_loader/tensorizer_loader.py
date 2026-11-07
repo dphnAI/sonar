@@ -7,28 +7,28 @@ from collections.abc import Generator
 import torch
 from torch import nn
 
-from aphrodite.config import AphroditeConfig, ModelConfig, ParallelConfig
-from aphrodite.config.load import LoadConfig
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.model_loader.base_loader import BaseModelLoader
-from aphrodite.model_executor.model_loader.tensorizer import (
+from sonar.config import ModelConfig, ParallelConfig, SonarConfig
+from sonar.config.load import LoadConfig
+from sonar.logger import init_logger
+from sonar.model_executor.model_loader.base_loader import BaseModelLoader
+from sonar.model_executor.model_loader.tensorizer import (
     TensorizerConfig,
     deserialize_tensorizer_model,
     init_tensorizer_model,
-    is_aphrodite_tensorized,
-    serialize_aphrodite_model,
+    is_sonar_tensorized,
+    serialize_sonar_model,
     tensorizer_weights_iterator,
 )
-from aphrodite.model_executor.model_loader.utils import (
+from sonar.model_executor.model_loader.utils import (
     get_model_architecture,
 )
-from aphrodite.utils.torch_utils import set_default_torch_dtype
+from sonar.utils.torch_utils import set_default_torch_dtype
 
 logger = init_logger(__name__)
 
 BLACKLISTED_TENSORIZER_ARGS = {
-    "device",  # Aphrodite decides this
-    "dtype",  # Aphrodite decides this
+    "device",  # Sonar decides this
+    "dtype",  # Sonar decides this
     "mode",  # Not meant to be configurable by the user
 }
 
@@ -77,38 +77,36 @@ class TensorizerLoader(BaseModelLoader):
     def load_weights(self, model: nn.Module, model_config: ModelConfig) -> None:
         """Load serialized model weights with tensorizer.
 
-        Expects a Aphrodite-tensorized model. See the
-        examples/features/tensorize_aphrodite_model.py example script
-        for serializing Aphrodite models."""
-        if is_aphrodite_tensorized(self.tensorizer_config):
+        Expects a Sonar-tensorized model. See the
+        examples/features/tensorize_sonar_model.py example script
+        for serializing Sonar models."""
+        if is_sonar_tensorized(self.tensorizer_config):
             tensorizer_config = self._patch_tensorizer_config(model_config)
             deserialize_tensorizer_model(model, tensorizer_config)
         else:
             model.load_weights(self._get_weights_iterator())
 
-    def load_model(self, aphrodite_config: AphroditeConfig, model_config: ModelConfig, prefix: str = "") -> nn.Module:
-        parallel_config = aphrodite_config.parallel_config
+    def load_model(self, sonar_config: SonarConfig, model_config: ModelConfig, prefix: str = "") -> nn.Module:
+        parallel_config = sonar_config.parallel_config
         self._verify_config(model_config, parallel_config)
 
         if parallel_config.tensor_parallel_size > 1:
-            from aphrodite.distributed import get_tensor_model_parallel_rank
+            from sonar.distributed import get_tensor_model_parallel_rank
 
             assert self.tensorizer_config.tensorizer_uri is not None
             self.tensorizer_config.tensorizer_uri = (
                 self.tensorizer_config.tensorizer_uri % get_tensor_model_parallel_rank()
             )
 
-        if is_aphrodite_tensorized(self.tensorizer_config):
+        if is_sonar_tensorized(self.tensorizer_config):
             tensorizer_config = self._patch_tensorizer_config(model_config)
-            device_config = aphrodite_config.device_config
+            device_config = sonar_config.device_config
             with set_default_torch_dtype(model_config.dtype):
                 with torch.device(device_config.device):
-                    model = init_tensorizer_model(
-                        tensorizer_config=tensorizer_config, aphrodite_config=aphrodite_config
-                    )
+                    model = init_tensorizer_model(tensorizer_config=tensorizer_config, sonar_config=sonar_config)
             self.load_weights(model, model_config)
             return model
-        return super().load_model(aphrodite_config, model_config, prefix)
+        return super().load_model(sonar_config, model_config, prefix)
 
     @staticmethod
     def save_model(
@@ -118,7 +116,7 @@ class TensorizerLoader(BaseModelLoader):
     ) -> None:
         if isinstance(tensorizer_config, dict):
             tensorizer_config = TensorizerConfig(**tensorizer_config)
-        serialize_aphrodite_model(
+        serialize_sonar_model(
             model=model,
             tensorizer_config=tensorizer_config,
             model_config=model_config,

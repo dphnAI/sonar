@@ -8,50 +8,50 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from aphrodite.compilation.breakable_cudagraph import BreakableCUDAGraphWrapper
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.compilation.breakable_cudagraph import BreakableCUDAGraphWrapper
+from sonar.config import (
     CUDAGraphMode,
-    get_layers_from_aphrodite_config,
+    SonarConfig,
+    get_layers_from_sonar_config,
     replace,
 )
 
 if TYPE_CHECKING:
-    from aphrodite.v1.spec_decode.vocab_mapping import VocabMapping
+    from sonar.v1.spec_decode.vocab_mapping import VocabMapping
 
-from aphrodite.distributed.eplb.eplb_state import EplbState
-from aphrodite.distributed.parallel_state import get_pp_group
-from aphrodite.forward_context import set_forward_context
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.attention_layer_base import AttentionLayerBase
-from aphrodite.model_executor.model_loader import get_model
-from aphrodite.model_executor.model_loader.utils import get_draft_load_config
-from aphrodite.model_executor.models import (
+from sonar.distributed.eplb.eplb_state import EplbState
+from sonar.distributed.parallel_state import get_pp_group
+from sonar.forward_context import set_forward_context
+from sonar.logger import init_logger
+from sonar.model_executor.layers.attention_layer_base import AttentionLayerBase
+from sonar.model_executor.model_loader import get_model
+from sonar.model_executor.model_loader.utils import get_draft_load_config
+from sonar.model_executor.models import (
     supports_multimodal,
     supports_multimodal_embeddings,
 )
-from aphrodite.model_executor.models.deepseek_eagle3 import Eagle3DeepseekV2ForCausalLM
-from aphrodite.model_executor.models.interfaces import SupportsMultiModal
-from aphrodite.model_executor.models.laguna_dflash import DFlashLagunaForCausalLM
-from aphrodite.model_executor.models.llama_eagle3 import Eagle3LlamaForCausalLM
-from aphrodite.model_executor.models.qwen3_dflash import DFlashQwen3ForCausalLM
-from aphrodite.model_executor.models.qwen3_eagle3 import Eagle3Qwen3ForCausalLM
-from aphrodite.platforms import current_platform
-from aphrodite.transformers_utils.deepseek_v4_utils import get_compress_ratios
-from aphrodite.utils.torch_utils import PIN_MEMORY, async_tensor_h2d
-from aphrodite.v1.attention.backend import CommonAttentionMetadata
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
-from aphrodite.v1.attention.backends.triton_attn import TritonAttentionMetadata
-from aphrodite.v1.cudagraph_dispatcher import CudagraphDispatcher
-from aphrodite.v1.kv_cache_interface import KVCacheConfig, UniformTypeKVCacheSpecs
-from aphrodite.v1.sample.metadata import SamplingMetadata
-from aphrodite.v1.sample.ops.topk_topp_sampler import (
+from sonar.model_executor.models.deepseek_eagle3 import Eagle3DeepseekV2ForCausalLM
+from sonar.model_executor.models.interfaces import SupportsMultiModal
+from sonar.model_executor.models.laguna_dflash import DFlashLagunaForCausalLM
+from sonar.model_executor.models.llama_eagle3 import Eagle3LlamaForCausalLM
+from sonar.model_executor.models.qwen3_dflash import DFlashQwen3ForCausalLM
+from sonar.model_executor.models.qwen3_eagle3 import Eagle3Qwen3ForCausalLM
+from sonar.platforms import current_platform
+from sonar.transformers_utils.deepseek_v4_utils import get_compress_ratios
+from sonar.utils.torch_utils import PIN_MEMORY, async_tensor_h2d
+from sonar.v1.attention.backend import CommonAttentionMetadata
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
+from sonar.v1.attention.backends.triton_attn import TritonAttentionMetadata
+from sonar.v1.cudagraph_dispatcher import CudagraphDispatcher
+from sonar.v1.kv_cache_interface import KVCacheConfig, UniformTypeKVCacheSpecs
+from sonar.v1.sample.metadata import SamplingMetadata
+from sonar.v1.sample.ops.topk_topp_sampler import (
     empty_exponential_noise_like,
     sample_with_exponential_noise,
 )
-from aphrodite.v1.sample.sampler import _SAMPLING_EPS
-from aphrodite.v1.spec_decode.metadata import SpecDecodeMetadata
-from aphrodite.v1.spec_decode.utils import (
+from sonar.v1.sample.sampler import _SAMPLING_EPS
+from sonar.v1.spec_decode.metadata import SpecDecodeMetadata
+from sonar.v1.spec_decode.utils import (
     PADDING_SLOT_ID,
     _copy_and_expand_eagle_inputs,
     _eagle_prepare_inputs_padded,
@@ -62,13 +62,13 @@ from aphrodite.v1.spec_decode.utils import (
     extend_all_queries_by_N,
     next_power_of_2,
 )
-from aphrodite.v1.utils import CpuGpuBuffer
-from aphrodite.v1.worker.dp_utils import coordinate_batch_across_dp
-from aphrodite.v1.worker.gpu_input_batch import CachedRequestState, InputBatch
-from aphrodite.v1.worker.utils import AttentionGroup
+from sonar.v1.utils import CpuGpuBuffer
+from sonar.v1.worker.dp_utils import coordinate_batch_across_dp
+from sonar.v1.worker.gpu_input_batch import CachedRequestState, InputBatch
+from sonar.v1.worker.utils import AttentionGroup
 
 if TYPE_CHECKING:
-    from aphrodite.v1.spec_decode.vocab_mapping import VocabMapping
+    from sonar.v1.spec_decode.vocab_mapping import VocabMapping
 
 logger = init_logger(__name__)
 
@@ -76,23 +76,23 @@ logger = init_logger(__name__)
 class SpecDecodeBaseProposer:
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
         pass_hidden_states_to_model: bool,
         runner=None,
     ):
-        self.aphrodite_config = aphrodite_config
-        assert aphrodite_config.speculative_config is not None
-        self.speculative_config = aphrodite_config.speculative_config
+        self.sonar_config = sonar_config
+        assert sonar_config.speculative_config is not None
+        self.speculative_config = sonar_config.speculative_config
         self.draft_model_config = self.speculative_config.draft_model_config
         self.method = self.speculative_config.method
         self.pass_hidden_states_to_model = pass_hidden_states_to_model
         self._share_mtp_indices = False
 
         self.device = device
-        self.dtype = aphrodite_config.model_config.dtype
-        self.max_model_len = aphrodite_config.model_config.max_model_len
-        self.dp_rank = aphrodite_config.parallel_config.data_parallel_rank
+        self.dtype = sonar_config.model_config.dtype
+        self.max_model_len = sonar_config.model_config.max_model_len
+        self.dp_rank = sonar_config.parallel_config.data_parallel_rank
         self.eplb_state: EplbState | None = None
         self.num_speculative_tokens = self.speculative_config.num_speculative_tokens
 
@@ -130,19 +130,19 @@ class SpecDecodeBaseProposer:
         if self.parallel_drafting:
             self._init_parallel_drafting_params()
         self.use_local_argmax_reduction: bool = self.speculative_config.use_local_argmax_reduction
-        self.use_fp64_gumbel = aphrodite_config.model_config.use_fp64_gumbel
+        self.use_fp64_gumbel = sonar_config.model_config.use_fp64_gumbel
         self.use_heterogeneous_vocab: bool = self.speculative_config.use_heterogeneous_vocab
         self.vocab_mapping: VocabMapping | None = None
 
-        self.max_batch_size = aphrodite_config.scheduler_config.max_num_seqs
-        self.max_num_tokens = aphrodite_config.scheduler_config.max_num_batched_tokens
+        self.max_batch_size = sonar_config.scheduler_config.max_num_seqs
+        self.max_num_tokens = sonar_config.scheduler_config.max_num_batched_tokens
         _eagle_step_slot_mapping_metadata.register_warmup(
             max_model_len=self.max_model_len,
             max_batch_size=self.max_batch_size,
         )
         _eagle_prepare_inputs_padded.register_warmup(max_batch_size=self.max_batch_size)
         _eagle_prepare_next_token_padded.register_warmup(
-            vocab_size=aphrodite_config.model_config.get_vocab_size(),
+            vocab_size=sonar_config.model_config.get_vocab_size(),
             num_sampled_tokens_per_req=self.num_speculative_tokens + 1,
             max_batch_size=self.max_batch_size,
         )
@@ -160,19 +160,19 @@ class SpecDecodeBaseProposer:
         self.max_positions = self.max_num_tokens
 
         # Multi-modal data support
-        self.supports_mm_inputs = aphrodite_config.model_config.supports_multimodal_inputs
+        self.supports_mm_inputs = sonar_config.model_config.supports_multimodal_inputs
 
         self.draft_attn_groups: list[AttentionGroup] = []
         self.kv_cache_gid: int = -1
         self.eagle3_use_aux_hidden_state: bool = self._get_eagle3_use_aux_hidden_state_from_config()
 
-        self.compilation_config = self.aphrodite_config.compilation_config
+        self.compilation_config = self.sonar_config.compilation_config
 
         # Cudagraph dispatcher for PIECEWISE-only dispatching in eagle.
         # Keys are initialized later via initialize_cudagraph_keys() called from
         # gpu_model_runner._check_and_update_cudagraph_mode after
         # adjust_cudagraph_sizes_for_spec_decode is called.
-        self.cudagraph_dispatcher = CudagraphDispatcher(self.aphrodite_config)
+        self.cudagraph_dispatcher = CudagraphDispatcher(self.sonar_config)
 
         # persistent buffers for cuda graph
         self.input_ids = torch.zeros(self.max_num_tokens, dtype=torch.int32, device=device)
@@ -249,7 +249,7 @@ class SpecDecodeBaseProposer:
         # Determine allowed attention backends once during initialization.
         self.allowed_attn_types: tuple | None = None
         if current_platform.is_rocm():
-            from aphrodite.models.deepseek_v4.amd.rocm import (
+            from sonar.models.deepseek_v4.amd.rocm import (
                 DeepseekV4ROCMAiterMLASparseMetadata,
                 DeepseekV4ROCMAiterSparseSWAMetadata,
             )
@@ -257,16 +257,16 @@ class SpecDecodeBaseProposer:
             # MiniMax-M3 sparse (lightning-indexer) attention. The multi-step
             # drafting machinery is shared code at num_speculative_tokens>1.
             # this just opts the metadata into the ROCm allowlist.
-            from aphrodite.models.minimax_m3.common.sparse_attention import (
+            from sonar.models.minimax_m3.common.sparse_attention import (
                 MiniMaxM3SparseMetadata,
             )
-            from aphrodite.v1.attention.backends.mla.indexer import (
+            from sonar.v1.attention.backends.mla.indexer import (
                 DeepseekV32IndexerMetadata,
             )
-            from aphrodite.v1.attention.backends.mla.rocm_aiter_mla_sparse import (
+            from sonar.v1.attention.backends.mla.rocm_aiter_mla_sparse import (
                 ROCMAiterMLASparseMetadata,
             )
-            from aphrodite.v1.attention.backends.rocm_attn import RocmAttentionMetadata
+            from sonar.v1.attention.backends.rocm_attn import RocmAttentionMetadata
 
             rocm_types = [
                 TritonAttentionMetadata,
@@ -279,27 +279,27 @@ class SpecDecodeBaseProposer:
             ]
             # ROCM_AITER_FA is an optional backend
             # We check is_enabled() here to avoid importing the backend module during
-            # auto-discovery when APHRODITE_ROCM_USE_AITER=0, which would trigger aiter
+            # auto-discovery when SONAR_ROCM_USE_AITER=0, which would trigger aiter
             # import and JIT compilation warnings. Explicit backend selection via
             # attention_config still works because the backend module is loaded
             # directly when selected, not through this auto-discovery path.
             # Check if backend module exists to allow explicit selection
             if find_spec(AttentionBackendEnum.ROCM_AITER_FA.get_path(include_classname=False)):
-                from aphrodite.v1.attention.backends.rocm_aiter_fa import (
+                from sonar.v1.attention.backends.rocm_aiter_fa import (
                     AiterFlashAttentionMetadata,
                 )
 
                 rocm_types.append(AiterFlashAttentionMetadata)
 
             # TRITON_MLA backend support for MLA models (e.g., DeepSeek)
-            from aphrodite.model_executor.layers.attention.mla_attention import (
+            from sonar.model_executor.layers.attention.mla_attention import (
                 MLACommonMetadata,
             )
 
             rocm_types.append(MLACommonMetadata)
 
             # FlexAttention backend support
-            from aphrodite.v1.attention.backends.flex_attention import FlexAttentionMetadata
+            from sonar.v1.attention.backends.flex_attention import FlexAttentionMetadata
 
             rocm_types.append(FlexAttentionMetadata)
 
@@ -374,7 +374,7 @@ class SpecDecodeBaseProposer:
             # Convert M-RoPE positions if target model uses M-RoPE
             # but draft doesn't, For text inputs, all M-RoPE
             # dimensions are identical
-            if self.aphrodite_config.model_config.uses_mrope:
+            if self.sonar_config.model_config.uses_mrope:
                 positions = positions[0]
             self.positions[:num_tokens] = positions
 
@@ -551,7 +551,7 @@ class SpecDecodeBaseProposer:
 
         with set_forward_context(
             per_layer_attn_metadata,
-            self.aphrodite_config,
+            self.sonar_config,
             num_tokens=num_input_tokens,
             num_tokens_across_dp=num_tokens_across_dp,
             cudagraph_runtime_mode=cudagraph_runtime_mode,
@@ -697,7 +697,7 @@ class SpecDecodeBaseProposer:
 
             with set_forward_context(
                 per_layer_attn_metadata,
-                self.aphrodite_config,
+                self.sonar_config,
                 num_tokens=input_batch_size,
                 num_tokens_across_dp=batch_size_across_dp,
                 cudagraph_runtime_mode=cudagraph_runtime_mode,
@@ -1188,12 +1188,12 @@ class SpecDecodeBaseProposer:
             model = model.module
         return model.__class__.__name__
 
-    def _create_draft_aphrodite_config(self) -> AphroditeConfig:
-        """Return a AphroditeConfig with kernel-level overrides for the proposer.
+    def _create_draft_sonar_config(self) -> SonarConfig:
+        """Return a SonarConfig with kernel-level overrides for the proposer.
         Subclasses may override to apply additional config changes.
         """
         spec_cfg = self.speculative_config
-        base = self.aphrodite_config
+        base = self.sonar_config
 
         if spec_cfg.moe_backend is not None:
             base = replace(
@@ -1215,7 +1215,7 @@ class SpecDecodeBaseProposer:
             ),
         )
 
-        from aphrodite.config.speculative import resolve_draft_kv_cache_dtype
+        from sonar.config.speculative import resolve_draft_kv_cache_dtype
 
         base = replace(
             base,
@@ -1234,21 +1234,21 @@ class SpecDecodeBaseProposer:
         """Default method to call get_model(). Can be overridden by subclasses which
         need to customize model loading.
         """
-        from aphrodite.compilation.backends import set_model_tag
+        from sonar.compilation.backends import set_model_tag
 
-        draft_aphrodite_config = self._create_draft_aphrodite_config()
+        draft_sonar_config = self._create_draft_sonar_config()
         with set_model_tag("eagle_head"):
             model = get_model(
-                aphrodite_config=draft_aphrodite_config,
+                sonar_config=draft_sonar_config,
                 model_config=self.speculative_config.draft_model_config,
-                load_config=get_draft_load_config(draft_aphrodite_config),
+                load_config=get_draft_load_config(draft_sonar_config),
             )
         return model
 
     def load_model(self, target_model: nn.Module) -> None:
         target_attn_layer_names = set(
-            get_layers_from_aphrodite_config(
-                self.aphrodite_config,
+            get_layers_from_sonar_config(
+                self.sonar_config,
                 AttentionLayerBase,  # type: ignore[type-abstract]
             ).keys()
         )
@@ -1256,8 +1256,8 @@ class SpecDecodeBaseProposer:
         self.model = self._get_model()
 
         # Find draft layers (attention layers added by draft model)
-        all_attn_layers = get_layers_from_aphrodite_config(
-            self.aphrodite_config,
+        all_attn_layers = get_layers_from_sonar_config(
+            self.sonar_config,
             AttentionLayerBase,  # type: ignore[type-abstract]
         )
         draft_attn_layer_names = set(all_attn_layers) - target_attn_layer_names
@@ -1267,7 +1267,7 @@ class SpecDecodeBaseProposer:
         self._draft_attn_layer_names = {
             name
             for name in draft_attn_layer_names
-            if all_attn_layers[name].get_kv_cache_spec(self.aphrodite_config) is not None
+            if all_attn_layers[name].get_kv_cache_spec(self.sonar_config) is not None
         }
 
         # Even if the target model is multimodal, we can also use
@@ -1499,7 +1499,7 @@ class SpecDecodeBaseProposer:
         # Detect index_share_for_mtp_iteration: when True, the proposer
         # toggles skip_topk so step 0 computes MTP's own indices and
         # steps 1+ reuse them.
-        spec_config = self.aphrodite_config.speculative_config
+        spec_config = self.sonar_config.speculative_config
         draft_hf_config = spec_config.draft_model_config.hf_config if spec_config is not None else None
         self._share_mtp_indices = getattr(draft_hf_config, "index_share_for_mtp_iteration", False)
 
@@ -1544,7 +1544,7 @@ class SpecDecodeBaseProposer:
 
             with set_forward_context(
                 None,
-                self.aphrodite_config,
+                self.sonar_config,
                 num_tokens=num_input_tokens,
                 num_tokens_across_dp=num_tokens_across_dp,
                 cudagraph_runtime_mode=cudagraph_runtime_mode,
@@ -1603,8 +1603,8 @@ class SpecDecodeBaseProposer:
         """Initialize AttentionGroups for draft layers using kv_cache_config.
         Called from the model runner's initialize_metadata_builders.
         """
-        all_attn_layers = get_layers_from_aphrodite_config(
-            self.aphrodite_config,
+        all_attn_layers = get_layers_from_sonar_config(
+            self.sonar_config,
             AttentionLayerBase,  # type: ignore[type-abstract]
         )
 
@@ -1640,7 +1640,7 @@ class SpecDecodeBaseProposer:
                         kv_cache_group_id=self.kv_cache_gid,
                     )
                     attn_group.create_metadata_builders(
-                        self.aphrodite_config,
+                        self.sonar_config,
                         self.device,
                         kernel_block_size=kernel_block_size,
                     )
@@ -1671,10 +1671,10 @@ class SpecDecodeBaseProposer:
         # coordinate across ranks
         # TODO(Flechman): support DBO ubatching
         should_ubatch, num_tokens_across_dp = False, None
-        if self.aphrodite_config.parallel_config.data_parallel_size > 1:
+        if self.sonar_config.parallel_config.data_parallel_size > 1:
             should_ubatch, num_tokens_across_dp, synced_cudagraph_mode = coordinate_batch_across_dp(
                 num_tokens_unpadded=num_tokens,
-                parallel_config=self.aphrodite_config.parallel_config,
+                parallel_config=self.sonar_config.parallel_config,
                 allow_microbatching=False,
                 num_tokens_padded=num_tokens_padded,
                 cudagraph_mode=cudagraph_mode.value,

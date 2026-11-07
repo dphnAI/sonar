@@ -13,22 +13,22 @@ from fastapi import Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from starlette.background import BackgroundTask, BackgroundTasks
 
-from aphrodite.engine.arg_utils import EngineArgs
-from aphrodite.entrypoints.generate.base.protocol import StreamOptions
-from aphrodite.entrypoints.openai.models.protocol import LoRAModulePath
-from aphrodite.entrypoints.serve.engine.protocol import ErrorInfo, ErrorResponse
-from aphrodite.exceptions import GenerationError
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
+from sonar.engine.arg_utils import EngineArgs
+from sonar.entrypoints.generate.base.protocol import StreamOptions
+from sonar.entrypoints.openai.models.protocol import LoRAModulePath
+from sonar.entrypoints.serve.engine.protocol import ErrorInfo, ErrorResponse
+from sonar.exceptions import GenerationError
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.utils.argparse_utils import FlexibleArgumentParser
 
 logger = init_logger(__name__)
 
-APHRODITE_SUBCMD_PARSER_EPILOG = (
-    "For full list:            aphrodite {subcmd} --help=all\n"
-    "For a section:            aphrodite {subcmd} --help=ModelConfig    (case-insensitive)\n"  # noqa: E501
-    "For a flag:               aphrodite {subcmd} --help=max-model-len  (_ or - accepted)\n"  # noqa: E501
-    "Documentation:            https://aphrodite.pygmalion.chat\n"
+SONAR_SUBCMD_PARSER_EPILOG = (
+    "For full list:            sonar {subcmd} --help=all\n"
+    "For a section:            sonar {subcmd} --help=ModelConfig    (case-insensitive)\n"  # noqa: E501
+    "For a flag:               sonar {subcmd} --help=max-model-len  (_ or - accepted)\n"  # noqa: E501
+    "Documentation:            https://sonar.dphn.ai\n"
 )
 
 
@@ -147,7 +147,7 @@ def cli_env_setup():
     # possible.
     #
     # We only set it here in the CLI entrypoint, because changing to `spawn`
-    # could break some existing code using Aphrodite as a library. `spawn` will cause
+    # could break some existing code using Sonar as a library. `spawn` will cause
     # unexpected behavior if the code is not protected by
     # `if __name__ == "__main__":`.
     #
@@ -156,9 +156,9 @@ def cli_env_setup():
     # - https://pytorch.org/docs/stable/notes/multiprocessing.html#cuda-in-multiprocessing
     # - https://pytorch.org/docs/stable/multiprocessing.html#sharing-cuda-tensors
     # - https://docs.habana.ai/en/latest/PyTorch/Getting_Started_with_PyTorch_and_Gaudi/Getting_Started_with_PyTorch.html?highlight=multiprocessing#torch-multiprocessing-for-dataloaders
-    if "APHRODITE_WORKER_MULTIPROC_METHOD" not in os.environ:
-        logger.debug("Setting APHRODITE_WORKER_MULTIPROC_METHOD to 'spawn'")
-        os.environ["APHRODITE_WORKER_MULTIPROC_METHOD"] = "spawn"
+    if "SONAR_WORKER_MULTIPROC_METHOD" not in os.environ:
+        logger.debug("Setting SONAR_WORKER_MULTIPROC_METHOD to 'spawn'")
+        os.environ["SONAR_WORKER_MULTIPROC_METHOD"] = "spawn"
 
 
 def get_max_tokens(
@@ -187,7 +187,7 @@ def get_max_tokens(
 
 
 def log_non_default_args(args: Namespace | EngineArgs):
-    from aphrodite.entrypoints.common.cli_args import make_arg_parser
+    from sonar.entrypoints.common.cli_args import make_arg_parser
 
     non_default_args = {}
 
@@ -228,7 +228,7 @@ def should_include_usage(stream_options: "StreamOptions | None", enable_force_in
 def process_lora_modules(
     args_lora_modules: list[LoRAModulePath], default_mm_loras: dict[str, str] | None
 ) -> list[LoRAModulePath]:
-    from aphrodite.entrypoints.openai.models.serving import LoRAModulePath
+    from sonar.entrypoints.openai.models.serving import LoRAModulePath
 
     lora_modules = args_lora_modules
     if default_mm_loras:
@@ -267,21 +267,21 @@ def create_error_response(
         exc = message
         logger.debug("create_error_response called with %s: %s", type(exc).__name__, exc)
 
-        from aphrodite.exceptions import (
-            AphroditeNotFoundError,
-            AphroditeUnprocessableEntityError,
-            AphroditeValidationError,
+        from sonar.exceptions import (
+            SonarNotFoundError,
+            SonarUnprocessableEntityError,
+            SonarValidationError,
         )
 
-        if isinstance(exc, AphroditeValidationError):
+        if isinstance(exc, SonarValidationError):
             err_type = "BadRequestError"
             status_code = HTTPStatus.BAD_REQUEST
             param = exc.parameter
-        elif isinstance(exc, AphroditeUnprocessableEntityError):
+        elif isinstance(exc, SonarUnprocessableEntityError):
             err_type = "UnprocessableEntityError"
             status_code = HTTPStatus.UNPROCESSABLE_ENTITY
             param = exc.parameter
-        elif isinstance(exc, AphroditeNotFoundError):
+        elif isinstance(exc, SonarNotFoundError):
             err_type = "NotFoundError"
             status_code = HTTPStatus.NOT_FOUND
             param = None

@@ -16,27 +16,27 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEParallelConfig,
     RoutingMethodType,
     int4_w4a16_moe_quant_config,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.int4_emulation_moe import (
+from sonar.model_executor.layers.fused_moe.experts.int4_emulation_moe import (
     Int4EmulationTritonExperts,
 )
-from aphrodite.model_executor.layers.fused_moe.oracle.int_wna16 import (
+from sonar.model_executor.layers.fused_moe.oracle.int_wna16 import (
     _process_weights_emulation_awq,
     _process_weights_emulation_gptq,
     _unpack_and_dequant_int4_awq,
     _unpack_and_dequant_int4_gptq,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     awq_pack,
     gptq_pack,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 pytestmark = pytest.mark.skipif(
     not current_platform.is_cuda_alike(),

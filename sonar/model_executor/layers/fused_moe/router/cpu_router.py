@@ -14,13 +14,13 @@ from collections.abc import Callable
 
 import torch
 
-from aphrodite._custom_ops import biased_topk_cpu, hash_topk_cpu
-from aphrodite.distributed.eplb.eplb_state import EplbLayerState
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar._custom_ops import biased_topk_cpu, hash_topk_cpu
+from sonar.distributed.eplb.eplb_state import EplbLayerState
+from sonar.model_executor.layers.fused_moe.config import (
     RoutingMethodType,
     get_routing_method_type,
 )
-from aphrodite.model_executor.layers.fused_moe.router.base_router import BaseRouter
+from sonar.model_executor.layers.fused_moe.router.base_router import BaseRouter
 
 
 def _grouped_topk(
@@ -87,7 +87,7 @@ def _sqrtsoftplus_bias_topk(
     (the "noaux_tc" pattern -- bias steers selection only). Always
     renormalizes selected weights to sum to ``routed_scaling_factor``,
     matching the reference Triton kernel
-    (aphrodite/model_executor/layers/fused_moe/router/dsv4_topk.py).
+    (sonar/model_executor/layers/fused_moe/router/dsv4_topk.py).
 
     When ``hash_indices_table`` is given (hash-routed layers), expert
     selection instead comes from ``hash_indices_table[input_ids]`` --

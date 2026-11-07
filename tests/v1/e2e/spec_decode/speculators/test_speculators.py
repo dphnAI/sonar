@@ -3,8 +3,8 @@
 
 import pytest
 
-from aphrodite import SamplingParams
-from aphrodite.config import CompilationConfig
+from sonar import SamplingParams
+from sonar.config import CompilationConfig
 from tests.utils import single_gpu_only
 
 from ..utils import (
@@ -30,11 +30,11 @@ def test_speculators_model_integration(
     sampling_config: SamplingParams,
     model_path: str,
     expected_accuracy_threshold: float,
-    aphrodite_runner,
+    sonar_runner,
 ):
     """Test that speculators models work with the simplified integration.
 
-    This verifies the `aphrodite serve <speculator-model>` use case where
+    This verifies the `sonar serve <speculator-model>` use case where
     speculative config is automatically detected from the model config
     without requiring explicit --speculative-config argument.
 
@@ -46,13 +46,13 @@ def test_speculators_model_integration(
     5. GSM8k accuracy of the model passes a sanity check when speculative decoding on
     6. Output matches reference (non-speculative) generation
     """
-    monkeypatch.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
+    monkeypatch.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")
 
     # Generate test prompts
     test_prompts = get_test_prompts(mm_enabled=False)
 
     # First run: Direct speculator model (simplified integration)
-    with aphrodite_runner(
+    with sonar_runner(
         model_path,
         block_size=None,
         trust_remote_code=False,
@@ -65,11 +65,11 @@ def test_speculators_model_integration(
         spec_outputs = spec_runner.llm.chat(test_prompts, sampling_config)
 
         # Verify speculative config was auto-detected
-        assert spec_runner.llm.llm_engine.aphrodite_config.speculative_config is not None, (
+        assert spec_runner.llm.llm_engine.sonar_config.speculative_config is not None, (
             f"Speculative config should be auto-detected for {model_path}"
         )
 
-        spec_config = spec_runner.llm.llm_engine.aphrodite_config.speculative_config
+        spec_config = spec_runner.llm.llm_engine.sonar_config.speculative_config
         assert spec_config.num_speculative_tokens > 0, (
             f"Expected positive speculative tokens, got {spec_config.num_speculative_tokens}"
         )
@@ -78,10 +78,10 @@ def test_speculators_model_integration(
         assert spec_config.model == model_path, f"Draft model should be {model_path}, got {spec_config.model}"
 
         # Extract verifier model for reference run
-        verifier_model = spec_runner.llm.llm_engine.aphrodite_config.model_config.model
+        verifier_model = spec_runner.llm.llm_engine.sonar_config.model_config.model
 
     # Second run: Reference without speculative decoding
-    with aphrodite_runner(
+    with sonar_runner(
         verifier_model,
         block_size=None,
         trust_remote_code=False,

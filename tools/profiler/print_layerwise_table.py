@@ -3,8 +3,8 @@
 import argparse
 import json
 
-from aphrodite.profiler.layerwise_profile import ModelStatsEntry, SummaryStatsEntry
-from aphrodite.profiler.utils import TablePrinter, indent_string
+from sonar.profiler.layerwise_profile import ModelStatsEntry, SummaryStatsEntry
+from sonar.profiler.utils import TablePrinter, indent_string
 
 
 def flatten_entries(entry_cls, profile_dict: dict):

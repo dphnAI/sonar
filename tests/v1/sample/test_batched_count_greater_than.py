@@ -5,9 +5,9 @@ recompiles when batch_size varies."""
 
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.v1.sample.ops.logprobs import batched_count_greater_than
-from aphrodite.v1.sample.sampler import Sampler
+from sonar.platforms import current_platform
+from sonar.v1.sample.ops.logprobs import batched_count_greater_than
+from sonar.v1.sample.sampler import Sampler
 
 DEVICE = current_platform.device_type
 
@@ -42,8 +42,8 @@ def test_gather_logprobs_no_recompile():
 
     # Monkey-patch batched_count_greater_than with our counting backend
     # so we can detect recompiles through the production code path.
-    import aphrodite.v1.sample.ops.logprobs as logprobs_module
-    import aphrodite.v1.sample.sampler as sampler_module
+    import sonar.v1.sample.ops.logprobs as logprobs_module
+    import sonar.v1.sample.sampler as sampler_module
 
     unwrapped = batched_count_greater_than._torchdynamo_orig_callable
     patched = torch.compile(unwrapped, backend=counting_backend)

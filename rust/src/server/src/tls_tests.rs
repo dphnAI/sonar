@@ -121,7 +121,7 @@ fn key_pem(key: &PKey<Private>) -> String {
 /// A self-signed CA used to sign the server/client leaf certs.
 fn build_ca() -> (X509, PKey<Private>) {
     let key = gen_key();
-    let name = x509_name("Aphrodite Test CA");
+    let name = x509_name("Sonar Test CA");
     let mut builder = X509::builder().expect("x509 builder");
     builder.set_version(2).expect("version");
     builder.set_serial_number(&serial()).expect("serial");
@@ -210,7 +210,7 @@ fn build_intermediate(ca: &X509, ca_key: &PKey<Private>) -> (X509, PKey<Private>
     builder.set_version(2).expect("version");
     builder.set_serial_number(&serial()).expect("serial");
     builder
-        .set_subject_name(&x509_name("Aphrodite Test Intermediate CA"))
+        .set_subject_name(&x509_name("Sonar Test Intermediate CA"))
         .expect("subject");
     builder.set_issuer_name(ca.subject_name()).expect("issuer");
     builder.set_pubkey(&key).expect("pubkey");

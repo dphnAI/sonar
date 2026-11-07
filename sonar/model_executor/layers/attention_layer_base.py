@@ -6,9 +6,9 @@ from abc import ABC, abstractmethod
 
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.v1.attention.backend import AttentionBackend, AttentionImpl
-from aphrodite.v1.kv_cache_interface import KVCacheSpec
+from sonar.config import SonarConfig
+from sonar.v1.attention.backend import AttentionBackend, AttentionImpl
+from sonar.v1.kv_cache_interface import KVCacheSpec
 
 
 class AttentionLayerBase(ABC):
@@ -37,7 +37,7 @@ class AttentionLayerBase(ABC):
         pass
 
     @abstractmethod
-    def get_kv_cache_spec(self, aphrodite_config: AphroditeConfig) -> KVCacheSpec | None:
+    def get_kv_cache_spec(self, sonar_config: SonarConfig) -> KVCacheSpec | None:
         """Get the KV cache spec for this layer.
         May be None if the layer does not need KV cache.
         """

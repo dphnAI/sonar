@@ -27,35 +27,35 @@ except ImportError as e:
         "Install it with:\n    pip install 'cohere-melody>=0.14.0'"
     ) from e
 
-from aphrodite.entrypoints.cohere.cohere_chat_message import (
+from sonar.entrypoints.cohere.cohere_chat_message import (
     Citation,
     CitationSource,
     CohereDeltaMessage,
 )
-from aphrodite.entrypoints.generate.base.protocol import (
+from sonar.entrypoints.generate.base.protocol import (
     AnyResponseFormat,
     DeltaFunctionCall,
     DeltaMessage,
     DeltaToolCall,
     FunctionCall,
 )
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-from aphrodite.parser.abstract_parser import DelegatingParser
-from aphrodite.reasoning.cohere_command_reasoning_parser import (
+from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+from sonar.parser.abstract_parser import DelegatingParser
+from sonar.reasoning.cohere_command_reasoning_parser import (
     BaseCohereCommandReasoningParser,
 )
-from aphrodite.renderers.cohere import POSITION_TO_SOURCE_KEY
-from aphrodite.sampling_params import StructuredOutputsParams, check_json_nesting
-from aphrodite.tool_parsers.cohere_command_tool_parser import BaseCohereCommandToolParser
+from sonar.renderers.cohere import POSITION_TO_SOURCE_KEY
+from sonar.sampling_params import StructuredOutputsParams, check_json_nesting
+from sonar.tool_parsers.cohere_command_tool_parser import BaseCohereCommandToolParser
 
 if TYPE_CHECKING:
     # Declared in melody's stub only; not exported at runtime.
     from cohere_melody import FilterCitation, Source
 
-    from aphrodite.config import ModelConfig
-    from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
-    from aphrodite.tokenizers import TokenizerLike
-    from aphrodite.tool_parsers.utils import Tool
+    from sonar.config import ModelConfig
+    from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
+    from sonar.tokenizers import TokenizerLike
+    from sonar.tool_parsers.utils import Tool
 
 PositionToSource = Mapping[tuple[int, int], CitationSource]
 
@@ -222,7 +222,7 @@ def _has_effective_tools(
     return len(tools) > 0
 
 
-# Builder: produces Aphrodite response_format in xgrammar's canonical format.
+# Builder: produces Sonar response_format in xgrammar's canonical format.
 # See xgrammar docs: type "structural_tag" with "format" = triggered_tags
 # and tag content type = json_schema | grammar.
 def convert_schema_to_structural_tags(
@@ -411,14 +411,14 @@ def _schema_dict_from_structured_outputs(
     raise ValueError(f"structured_outputs.json has unsupported type {type(raw).__name__}.")
 
 
-def _melody_sources_to_aphrodite(
+def _melody_sources_to_sonar(
     sources: list[Source], position_to_source: PositionToSource | None
 ) -> list[CitationSource]:
     """Resolve melody ``Source`` addresses into :class:`CitationSource` objects.
 
     Melody reports each source as ``(tool_call_index, tool_result_indices)``.
     ``position_to_source`` is built by
-    :meth:`aphrodite.entrypoints.cohere.serving.CohereServingChatV2._build_position_to_source`
+    :meth:`sonar.entrypoints.cohere.serving.CohereServingChatV2._build_position_to_source`
     and forwarded through ``chat_template_kwargs``; each index fans out to one
     resolved source, and unresolved positions are skipped. Without a map (a
     request that did not come through the Cohere v2 handler) every source is
@@ -435,7 +435,7 @@ def _melody_sources_to_aphrodite(
     return out
 
 
-def _melody_citations_to_aphrodite(
+def _melody_citations_to_sonar(
     citations: list[FilterCitation], position_to_source: PositionToSource | None
 ) -> list[Citation] | None:
     """Convert melody ``FilterCitation`` objects into :class:`Citation`.
@@ -451,7 +451,7 @@ def _melody_citations_to_aphrodite(
             start=c.start_index,
             end=c.end_index,
             text=c.text,
-            sources=_melody_sources_to_aphrodite(c.sources, position_to_source),
+            sources=_melody_sources_to_sonar(c.sources, position_to_source),
             type="THINKING_CONTENT" if c.is_thinking else "TEXT_CONTENT",
         )
         for c in citations
@@ -502,7 +502,7 @@ class CohereCommandParser(DelegatingParser):
         if so is not None and so.structural_tag:
             return request
         # Schema: prefer ``response_format`` (OpenAI Chat Completions), then
-        # ``structured_outputs.json`` / ``json_object`` (Aphrodite direct). Tools stay
+        # ``structured_outputs.json`` / ``json_object`` (Sonar direct). Tools stay
         # on ``request.tools``.
         rf = request.response_format if isinstance(request, ChatCompletionRequest) else None
         if rf is not None and _response_format_type(rf) == "structural_tag":
@@ -573,7 +573,7 @@ class CohereCommandParser(DelegatingParser):
         model_output_token_ids: Sequence[int] = (),
     ) -> tuple[str | None, str | None, list[FunctionCall] | None]:
         result = self._unary.process_full_text(model_output)
-        self.last_unary_citations = _melody_citations_to_aphrodite(result.citations, self._position_to_source)
+        self.last_unary_citations = _melody_citations_to_sonar(result.citations, self._position_to_source)
         tool_calls: list[FunctionCall] | None = None
         if self._tools_allowed(request):
             tool_calls = [
@@ -610,7 +610,7 @@ class CohereCommandParser(DelegatingParser):
         for result in results:
             if result.tool_calls and self._tools_allowed(request):
                 tool_calls.extend(self._tool_call_deltas(result.tool_calls))
-            citations.extend(_melody_citations_to_aphrodite(result.citations, self._position_to_source) or [])
+            citations.extend(_melody_citations_to_sonar(result.citations, self._position_to_source) or [])
         if not (content or reasoning or tool_calls or citations):
             return None
         # ``CohereDeltaMessage`` carries citations to the wire via

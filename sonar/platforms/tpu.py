@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 
@@ -14,5 +14,5 @@ try:
     TpuPlatform = TpuInferencePlatform  # type: ignore
     USE_TPU_INFERENCE = True
 except ImportError:
-    logger.error("tpu_inference not found, please install tpu_inference to run aphrodite on TPU")
+    logger.error("tpu_inference not found, please install tpu_inference to run sonar on TPU")
     pass

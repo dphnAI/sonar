@@ -6,14 +6,14 @@ from collections import defaultdict
 import pytest
 import regex as re
 
-from aphrodite import SamplingParams
-from aphrodite.config import CompilationConfig, CompilationMode, CUDAGraphMode
+from sonar import SamplingParams
+from sonar.config import CompilationConfig, CompilationMode, CUDAGraphMode
 
 from .common import FUSION_LOG_PATTERNS, AttentionBackendCase, Matches
 
 
 def run_model(
-    aphrodite_runner,
+    sonar_runner,
     compile_config: CompilationMode | CompilationConfig,
     model: str,
     **model_kwargs,
@@ -39,19 +39,19 @@ def run_model(
         compilation_config.cudagraph_mode = CUDAGraphMode.NONE
 
     # trust_remote_code/enable_chunked_prefill/block_size/kernel_config are
-    # pinned to LLM()'s own defaults since AphroditeRunner overrides them for
+    # pinned to LLM()'s own defaults since SonarRunner overrides them for
     # other test needs (e.g. it forces block_size=16, which some attention
     # backends like FLASHINFER_MLA reject, and disables JIT warmup).
     model_kwargs.setdefault("kernel_config", {"enable_jit_warmup": True})
-    with aphrodite_runner(
+    with sonar_runner(
         model,
         compilation_config=compilation_config,
         trust_remote_code=False,
         enable_chunked_prefill=None,
         block_size=None,
         **model_kwargs,
-    ) as aphrodite_model:
-        llm = aphrodite_model.llm
+    ) as sonar_model:
+        llm = sonar_model.llm
         outputs = llm.generate(prompts, sampling_params)
 
         # Print the outputs.
@@ -60,10 +60,10 @@ def run_model(
             generated_text = output.outputs[0].text
             print(f"Prompt: {prompt!r}, Generated text: {generated_text!r}")
 
-        # Get the compile ranges endpoints after aphrodite config post init
+        # Get the compile ranges endpoints after sonar config post init
         # in order to compute compile ranges correctly
         compilation_config.compile_ranges_endpoints = (
-            llm.llm_engine.aphrodite_config.compilation_config.compile_ranges_endpoints
+            llm.llm_engine.sonar_config.compilation_config.compile_ranges_endpoints
         )
 
         # Fetch match table from each worker via RPC and sum across workers.
@@ -76,7 +76,7 @@ def run_model(
 
 
 @pytest.fixture
-def run_e2e_fusion_test(monkeypatch, caplog_mp_spawn, aphrodite_runner):
+def run_e2e_fusion_test(monkeypatch, caplog_mp_spawn, sonar_runner):
     def run(
         model_name: str,
         matches: Matches,
@@ -88,10 +88,10 @@ def run_e2e_fusion_test(monkeypatch, caplog_mp_spawn, aphrodite_runner):
         use_aiter: bool = False,
         tp_size: int = 1,
     ):
-        monkeypatch.setenv("APHRODITE_USE_DEEP_GEMM", "1" if use_deepgemm else "0")
-        monkeypatch.setenv("APHRODITE_ROCM_USE_AITER", "1" if use_aiter else "0")
-        monkeypatch.setenv("APHRODITE_ROCM_USE_AITER_CUSTOM_AR", "1" if use_aiter else "0")
-        from aphrodite._aiter_ops import rocm_aiter_ops
+        monkeypatch.setenv("SONAR_USE_DEEP_GEMM", "1" if use_deepgemm else "0")
+        monkeypatch.setenv("SONAR_ROCM_USE_AITER", "1" if use_aiter else "0")
+        monkeypatch.setenv("SONAR_ROCM_USE_AITER_CUSTOM_AR", "1" if use_aiter else "0")
+        from sonar._aiter_ops import rocm_aiter_ops
 
         rocm_aiter_ops.refresh_env_variables()
 
@@ -107,18 +107,18 @@ def run_e2e_fusion_test(monkeypatch, caplog_mp_spawn, aphrodite_runner):
             pytest.skip("ROCM_ATTN does not support attention sinks (required by gpt-oss-20b)")
 
         if attn_backend.backend.name == "FLASHINFER":
-            from aphrodite.utils.flashinfer import supports_trtllm_attention
+            from sonar.utils.flashinfer import supports_trtllm_attention
 
             if not supports_trtllm_attention():
                 matches = matches._replace(attn_quant_fusion=0)
 
         # Disable, compile cache to make sure custom passes run.
         # Otherwise, we can't verify fusion happened through the logs.
-        monkeypatch.setenv("APHRODITE_DISABLE_COMPILE_CACHE", "1")
+        monkeypatch.setenv("SONAR_DISABLE_COMPILE_CACHE", "1")
 
         # To capture subprocess logs, we need to know whether spawn or fork is used.
         # Force spawn as it is more general.
-        monkeypatch.setenv("APHRODITE_WORKER_MULTIPROC_METHOD", "spawn")
+        monkeypatch.setenv("SONAR_WORKER_MULTIPROC_METHOD", "spawn")
 
         model_kwargs = {**attn_backend.model_kwargs, **model_kwargs}
         model_kwargs["attention_config"] = {"backend": attn_backend.backend.name}
@@ -135,13 +135,13 @@ def run_e2e_fusion_test(monkeypatch, caplog_mp_spawn, aphrodite_runner):
 
         full_compilation_config = CompilationConfig(
             cudagraph_mode=CUDAGraphMode.NONE,
-            mode=CompilationMode.APHRODITE_COMPILE,
+            mode=CompilationMode.SONAR_COMPILE,
             inductor_compile_config={"force_disable_caches": True},
             **compilation_config,
         )
 
         with caplog_mp_spawn(logging.DEBUG) as log_holder:
-            match_table = run_model(aphrodite_runner, full_compilation_config, model_name, **model_kwargs)
+            match_table = run_model(sonar_runner, full_compilation_config, model_name, **model_kwargs)
 
         num_compile_ranges = len(full_compilation_config.get_compile_ranges())
         assert num_compile_ranges in [1, 2, 3]
@@ -166,7 +166,7 @@ def run_e2e_fusion_test(monkeypatch, caplog_mp_spawn, aphrodite_runner):
                 num_ranges_activated = num_compile_ranges
 
             # TODO: Remove log counting in unit tests
-            # once all matchers implement AphroditeFusionPatternMatcherPass
+            # once all matchers implement SonarFusionPatternMatcherPass
             n_expected = tp_size * num_ranges_activated
             if match_name not in (
                 "attn_quant_fusion",

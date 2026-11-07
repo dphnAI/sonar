@@ -5,8 +5,8 @@ from dataclasses import replace
 import pytest
 import torch
 
-from aphrodite.v1.worker.gpu.input_batch import InputBatch, InputBuffers
-from aphrodite.v1.worker.gpu.spec_decode.utils import DraftTokensHandler
+from sonar.v1.worker.gpu.input_batch import InputBatch, InputBuffers
+from sonar.v1.worker.gpu.spec_decode.utils import DraftTokensHandler
 
 
 def _input_batch(req_ids: list[str], structured: bool) -> InputBatch:

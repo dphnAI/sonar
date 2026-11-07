@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Test cases for long text embedding with automatic chunking mechanism.
 
-This test suite validates Aphrodite's automatic chunking functionality for handling
+This test suite validates Sonar's automatic chunking functionality for handling
 text inputs that exceed the model's maximum token length, specifically targeting
 the intfloat/multilingual-e5-small model (max token length: 512).
 """
@@ -13,7 +13,7 @@ import openai
 import pytest
 import pytest_asyncio
 
-from aphrodite.entrypoints.pooling.embed.protocol import EmbeddingResponse
+from sonar.entrypoints.pooling.embed.protocol import EmbeddingResponse
 from tests.utils import RemoteOpenAIServer
 
 

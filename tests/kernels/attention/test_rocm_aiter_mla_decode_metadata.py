@@ -15,14 +15,14 @@ from unittest.mock import patch
 import pytest
 import torch
 
-from aphrodite._aiter_ops import is_aiter_found
-from aphrodite.platforms import current_platform
+from sonar._aiter_ops import is_aiter_found
+from sonar.platforms import current_platform
 
 
 def _on_gfx950() -> bool:
     if not (current_platform.is_rocm() and is_aiter_found()):
         return False
-    from aphrodite.platforms.rocm import on_gfx950
+    from sonar.platforms.rocm import on_gfx950
 
     return on_gfx950()
 
@@ -76,20 +76,20 @@ def _build_decode_metadata():
     args/kwargs the builder passed to ``get_mla_metadata_v1``, so the golden can
     be recomputed from the identical inputs.
     """
-    from aphrodite.config.aphrodite import set_current_aphrodite_config
-    from aphrodite.model_executor.layers.attention.mla_attention import get_mla_dims
-    from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
-    from aphrodite.v1.kv_cache_interface import MLAAttentionSpec
-    from aphrodite.v1.worker.workspace import init_workspace_manager
+    from sonar.config.sonar import set_current_sonar_config
+    from sonar.model_executor.layers.attention.mla_attention import get_mla_dims
+    from sonar.v1.attention.backends.registry import AttentionBackendEnum
+    from sonar.v1.kv_cache_interface import MLAAttentionSpec
+    from sonar.v1.worker.workspace import init_workspace_manager
     from tests.v1.attention.utils import (
         BatchSpec,
-        create_aphrodite_config,
         create_common_attn_metadata,
+        create_sonar_config,
     )
 
     device = torch.device("cuda:0")
 
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         model_name="deepseek-ai/DeepSeek-R1",
         max_model_len=CONTEXT_LEN,
         # One flat page per token (page_size=1); +buffer for the null block.
@@ -99,13 +99,13 @@ def _build_decode_metadata():
         max_num_batched_tokens=8192,
         hf_config_override={"num_attention_heads": NUM_QUERY_HEADS},
     )
-    aphrodite_config.cache_config.cache_dtype = "fp8"
+    sonar_config.cache_config.cache_dtype = "fp8"
 
     spec = MLAAttentionSpec(
         block_size=PAGE_SIZE,
         num_kv_heads=1,
-        head_size=aphrodite_config.model_config.get_head_size(),
-        dtype=aphrodite_config.model_config.dtype,
+        head_size=sonar_config.model_config.get_head_size(),
+        dtype=sonar_config.model_config.dtype,
         cache_dtype_str="fp8",
     )
 
@@ -114,9 +114,9 @@ def _build_decode_metadata():
     # The builder reads prefill_backend and the MLA latent dims off the layer,
     # so the stub carries both; the dims come from the model config to stay in
     # step with the checkpoint.
-    mla_dims = get_mla_dims(aphrodite_config.model_config)
+    mla_dims = get_mla_dims(sonar_config.model_config)
     layer_name = "placeholder"
-    aphrodite_config.compilation_config.static_forward_context[layer_name] = types.SimpleNamespace(
+    sonar_config.compilation_config.static_forward_context[layer_name] = types.SimpleNamespace(
         prefill_backend=torch.empty((1,)),
         q_lora_rank=mla_dims.q_lora_rank,
         kv_lora_rank=mla_dims.kv_lora_rank,
@@ -134,8 +134,8 @@ def _build_decode_metadata():
 
     captured: dict = {}
 
-    with set_current_aphrodite_config(aphrodite_config):
-        builder = builder_cls(spec, [layer_name], aphrodite_config, device)
+    with set_current_sonar_config(sonar_config):
+        builder = builder_cls(spec, [layer_name], sonar_config, device)
         common_attn_metadata = create_common_attn_metadata(batch_spec, PAGE_SIZE, device, arange_block_indices=True)
 
         import aiter

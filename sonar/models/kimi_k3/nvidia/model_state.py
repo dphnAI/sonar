@@ -3,7 +3,7 @@
 """Kimi K3's model runner state: the hybrid (KDA + MLA) state, plus the lifecycle of
 the specialized decode when ``decode_backend=latency_specialized`` selects it."""
 
-from aphrodite.v1.worker.gpu.model_states.mamba_hybrid import MambaHybridModelState
+from sonar.v1.worker.gpu.model_states.mamba_hybrid import MambaHybridModelState
 
 
 class KimiK3ModelState(MambaHybridModelState):
@@ -11,8 +11,8 @@ class KimiK3ModelState(MambaHybridModelState):
     set, and prepares it for every bound KV cache (the profiling cache, then the
     real one)."""
 
-    def __init__(self, aphrodite_config, model, encoder_cache, device):
-        super().__init__(aphrodite_config, model, encoder_cache, device)
+    def __init__(self, sonar_config, model, encoder_cache, device):
+        super().__init__(sonar_config, model, encoder_cache, device)
         if hasattr(model, "get_language_model"):
             model = model.get_language_model()
         self.language_model = model

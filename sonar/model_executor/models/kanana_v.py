@@ -17,17 +17,17 @@ from transformers import BatchFeature
 from transformers.modeling_outputs import BaseModelOutput
 from transformers.models.qwen2_vl.configuration_qwen2_vl import Qwen2VLVisionConfig
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.multimodal import MultiModalDummyOptions
-from aphrodite.inputs import MultiModalDataDict
-from aphrodite.logger import init_logger
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import (
+from sonar.config import SonarConfig
+from sonar.config.multimodal import MultiModalDummyOptions
+from sonar.inputs import MultiModalDataDict
+from sonar.logger import init_logger
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import (
     MultiModalFieldConfig,
     MultiModalKwargsItems,
 )
-from aphrodite.multimodal.parse import ImageSize, MultiModalDataItems
-from aphrodite.multimodal.processing import (
+from sonar.multimodal.parse import ImageSize, MultiModalDataItems
+from sonar.multimodal.processing import (
     BaseDummyInputsBuilder,
     BaseMultiModalProcessor,
     BaseProcessingInfo,
@@ -35,14 +35,14 @@ from aphrodite.multimodal.processing import (
     PromptUpdate,
     cached_encode,
 )
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.utils.import_utils import resolve_obj_by_qualname
-from aphrodite.utils.tensor_schema import TensorSchema, TensorShape
-from aphrodite.utils.torch_utils import async_tensor_h2d
+from sonar.sequence import IntermediateTensors
+from sonar.utils.import_utils import resolve_obj_by_qualname
+from sonar.utils.tensor_schema import TensorSchema, TensorShape
+from sonar.utils.torch_utils import async_tensor_h2d
 
 from .interfaces import MultiModalEmbeddings, SupportsMultiModal, SupportsPP
 from .qwen2_vl import Qwen2VisionTransformer
-from .utils import AutoWeightsLoader, init_aphrodite_registered_model, maybe_prefix
+from .utils import AutoWeightsLoader, init_sonar_registered_model, maybe_prefix
 
 logger = init_logger(__name__)
 
@@ -262,7 +262,7 @@ class CustomQwen2VLVE(Qwen2VisionTransformer):
     """Thin wrapper around the Qwen2-VL used as a vision encoder.
 
     This mirrors the original HF-based vision encoder used in Kanana-V, but
-    reuses Aphrodite's optimized `Qwen2VisionTransformer` building blocks.
+    reuses Sonar's optimized `Qwen2VisionTransformer` building blocks.
     """
 
     def __init__(self, config: Qwen2VLVisionConfig) -> None:
@@ -446,7 +446,7 @@ class KananaVDummyInputsBuilder(BaseDummyInputsBuilder[KananaVProcessingInfo]):
 
 
 class KananaVMultiModalProcessor(BaseMultiModalProcessor[KananaVProcessingInfo]):
-    """Aphrodite multimodal processor for Kanana-V (text + image)."""
+    """Sonar multimodal processor for Kanana-V (text + image)."""
 
     @property
     def media_token_id(self) -> int:
@@ -493,7 +493,7 @@ class KananaVMultiModalProcessor(BaseMultiModalProcessor[KananaVProcessingInfo])
         input_ids = tokenizer.encode(prompt_replaced)
         input_ids = torch.tensor(input_ids)
 
-        # Ensure HF output is consistent with Aphrodite prompt-update expectations:
+        # Ensure HF output is consistent with Sonar prompt-update expectations:
         # if the HF tokenizer emits exactly 1 placeholder token per image, expand
         # it to `T*H*W` placeholder tokens per image so placeholder detection works.
         num_images = len(image_inputs)
@@ -576,22 +576,22 @@ class KananaVForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsPP)
         else:
             raise ValueError(f"Unsupported modality: {modality}")
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
         self.config = config
 
-        with self._mark_tower_model(aphrodite_config, "image"):
+        with self._mark_tower_model(sonar_config, "image"):
             self.vision_model = CustomQwen2VLVE._from_config(config.vision_config)
             self.abstractor = DynamicCAbstractor(
                 config.projector_config,
                 num_input_tokens=self.vision_model.get_num_tokens(),
             )
 
-        with self._mark_language_model(aphrodite_config):
-            self.language_model = init_aphrodite_registered_model(
-                aphrodite_config=aphrodite_config,
+        with self._mark_language_model(sonar_config):
+            self.language_model = init_sonar_registered_model(
+                sonar_config=sonar_config,
                 hf_config=config.text_config,
                 prefix=maybe_prefix(prefix, "model"),
                 architectures=["LlamaForCausalLM"],

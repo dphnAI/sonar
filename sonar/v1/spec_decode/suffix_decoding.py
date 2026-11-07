@@ -2,8 +2,8 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.v1.worker.gpu_input_batch import InputBatch
+from sonar.config import SonarConfig
+from sonar.v1.worker.gpu_input_batch import InputBatch
 
 
 class SuffixDecodingProposer:
@@ -12,14 +12,14 @@ class SuffixDecodingProposer:
     (https://github.com/snowflakedb/ArcticInference).
     """
 
-    def __init__(self, aphrodite_config: AphroditeConfig):
-        config = aphrodite_config.speculative_config
+    def __init__(self, sonar_config: SonarConfig):
+        config = sonar_config.speculative_config
         assert config is not None, "Speculative config must be set"
         self.num_speculative_tokens = config.num_speculative_tokens
         self.max_tree_depth = config.suffix_decoding_max_tree_depth
         self.max_spec_factor = config.suffix_decoding_max_spec_factor
         self.min_token_prob = config.suffix_decoding_min_token_prob
-        self.max_model_len = aphrodite_config.model_config.max_model_len
+        self.max_model_len = sonar_config.model_config.max_model_len
 
         # Lazy import to avoid error when Suffix Decoding is not used.
         from arctic_inference.suffix_decoding import SuffixDecodingCache

@@ -31,12 +31,12 @@ from __future__ import annotations
 import mlx.core as mx
 import mlx.nn as nn
 
-from aphrodite.metal.metal import get_ops
-from aphrodite.metal.metal_kernel_backend.cache import MetalPagedKVCache
-from aphrodite.metal.metal_kernel_backend.packed_prefill_compat import (
+from sonar.metal.metal import get_ops
+from sonar.metal.metal_kernel_backend.cache import MetalPagedKVCache
+from sonar.metal.metal_kernel_backend.packed_prefill_compat import (
     apply_packed_rope,
 )
-from aphrodite.metal.paged_attention_common import PagedAttentionContext
+from sonar.metal.paged_attention_common import PagedAttentionContext
 
 # === Metal kernel block-size support ===
 # The paged attention Metal kernel is template-instantiated for these block
@@ -111,7 +111,7 @@ def _build_block_tables(
     """Build kernel-compatible block tables, translating if necessary.
 
     When ``cache_block_size`` exceeds the kernel's compiled block sizes,
-    each Aphrodite block ``b`` is expanded into ``ratio`` kernel blocks
+    each Sonar block ``b`` is expanded into ``ratio`` kernel blocks
     ``[b*ratio, b*ratio+ratio)``.  The cache is reshaped later to
     match (zero-copy).
 
@@ -137,7 +137,7 @@ def _build_block_tables(
         return result
 
     # Hybrid path — translate large block_size to a kernel-compatible one.
-    # Vectorized: each Aphrodite block b → [b*ratio, b*ratio+1, …, b*ratio+ratio-1].
+    # Vectorized: each Sonar block b → [b*ratio, b*ratio+1, …, b*ratio+ratio-1].
     kernel_bs = _pick_kernel_block_size(cache_block_size)
     ratio = cache_block_size // kernel_bs
 
@@ -439,10 +439,10 @@ def sdpa_forward(
     max_seq_len = ctx.max_context_len or max(ctx.context_lens)
 
     # --- Block tables (with hybrid block-size translation) ---
-    # Aphrodite may inflate block_size (e.g. 544) to align attention pages with
+    # Sonar may inflate block_size (e.g. 544) to align attention pages with
     # mamba pages in hybrid models.  The Metal kernel only supports small
     # block sizes (8, 16, 32).  _build_block_tables handles the translation:
-    # it expands each Aphrodite block into multiple kernel blocks and returns the
+    # it expands each Sonar block into multiple kernel blocks and returns the
     # kernel-compatible block_size.  The cache is reshaped to match (zero-copy).
     block_tables, kernel_block_size = _build_block_tables(ctx, kv_cache.block_size)
 
@@ -465,7 +465,7 @@ def sdpa_forward(
         # Supports the full QUANT_PARAMS matrix: signed q8_0/int8 at k_bits=8
         # and unsigned uint8/q5_0/q4_0/int4/uint4/int2/uint2 at k_bits in
         # {2, 3, 4, 5, 8}.
-        from aphrodite.metal.metal_kernel_backend.turboquant import (
+        from sonar.metal.metal_kernel_backend.turboquant import (
             QUANT_PARAMS,
             get_v_centroids,
         )
@@ -556,7 +556,7 @@ def sdpa_forward(
             kernel_value_scale = new_value_scale_cache.reshape(-1, kernel_block_size, kv_cache.num_kv_heads, sg)
             kernel_key_zero = new_key_zero_cache.reshape(-1, kernel_block_size, kv_cache.num_kv_heads, sg)
         # Get Lloyd-Max centroids for V quantization (lazily computed, cached)
-        from aphrodite.metal.metal_kernel_backend.turboquant import get_v_centroids
+        from sonar.metal.metal_kernel_backend.turboquant import get_v_centroids
 
         v_centroids = get_v_centroids(kv_cache.v_bits)
         ops.paged_attention_primitive(

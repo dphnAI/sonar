@@ -9,7 +9,7 @@ import math
 import pytest
 import torch
 
-from aphrodite.model_executor.models.diffusion_gemma_sampler import (
+from sonar.model_executor.models.diffusion_gemma_sampler import (
     sample_row_stats,
     sample_row_stats_reference,
 )

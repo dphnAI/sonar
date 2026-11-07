@@ -14,7 +14,7 @@ from typing import cast
 import pytest
 import torch
 
-from aphrodite.models.inkling.amd.ops.norm import (
+from sonar.models.inkling.amd.ops.norm import (
     embed_dual_rmsnorm_cat,
     embed_rmsnorm,
     rmsnorm,

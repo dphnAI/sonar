@@ -14,14 +14,14 @@ from aiter.ops.flydsl.kernels import buffer_ops as bo
 from flydsl.expr import gpu, range_constexpr
 from flydsl.expr.typing import T
 
-from aphrodite.models.kimi_k3.amd.specialized_decode.mono.common.ops import (
+from sonar.models.kimi_k3.amd.specialized_decode.mono.common.ops import (
     CM_DEV,
     CM_NT,
     mfma_bf16,
     rsrc,
     traced,
 )
-from aphrodite.models.kimi_k3.amd.specialized_decode.mono.common.plan import THREADS, WAVES
+from sonar.models.kimi_k3.amd.specialized_decode.mono.common.plan import THREADS, WAVES
 
 ROWS = 16
 KCH = 128

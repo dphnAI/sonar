@@ -6,8 +6,8 @@ import logging
 
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
 
 logger = logging.getLogger(__name__)
 

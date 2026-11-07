@@ -4,30 +4,30 @@
 import pytest
 from dummy_stat_logger.dummy_stat_logger import DummyStatLogger
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.engine.arg_utils import AsyncEngineArgs
-from aphrodite.v1.engine.async_llm import AsyncLLM
-from aphrodite.v1.metrics.loggers import load_stat_logger_plugin_factories
+from sonar.config import SonarConfig
+from sonar.engine.arg_utils import AsyncEngineArgs
+from sonar.v1.engine.async_llm import AsyncLLM
+from sonar.v1.metrics.loggers import load_stat_logger_plugin_factories
 
 
 def test_stat_logger_plugin_is_discovered(monkeypatch: pytest.MonkeyPatch):
     with monkeypatch.context() as m:
-        m.setenv("APHRODITE_PLUGINS", "dummy_stat_logger")
+        m.setenv("SONAR_PLUGINS", "dummy_stat_logger")
 
         factories = load_stat_logger_plugin_factories()
         assert len(factories) == 1, f"Expected 1 factory, got {len(factories)}"
         assert factories[0] is DummyStatLogger, f"Expected DummyStatLogger class, got {factories[0]}"
 
         # instantiate and confirm the right type
-        aphrodite_config = AphroditeConfig()
-        instance = factories[0](aphrodite_config)
+        sonar_config = SonarConfig()
+        instance = factories[0](sonar_config)
         # The `is` check above narrows DummyStatLogger to a Callable
         assert isinstance(instance, DummyStatLogger)
 
 
 def test_no_plugins_loaded_if_env_empty(monkeypatch: pytest.MonkeyPatch):
     with monkeypatch.context() as m:
-        m.setenv("APHRODITE_PLUGINS", "")
+        m.setenv("SONAR_PLUGINS", "")
 
         factories = load_stat_logger_plugin_factories()
         assert factories == []
@@ -35,12 +35,12 @@ def test_no_plugins_loaded_if_env_empty(monkeypatch: pytest.MonkeyPatch):
 
 def test_invalid_stat_logger_plugin_raises(monkeypatch: pytest.MonkeyPatch):
     def fake_plugin_loader(group: str):
-        assert group == "aphrodite.stat_logger_plugins"
+        assert group == "sonar.stat_logger_plugins"
         return {"bad": object()}
 
     with monkeypatch.context() as m:
         m.setattr(
-            "aphrodite.v1.metrics.loggers.load_plugins_by_group",
+            "sonar.v1.metrics.loggers.load_plugins_by_group",
             fake_plugin_loader,
         )
         with pytest.raises(
@@ -55,7 +55,7 @@ async def test_stat_logger_plugin_integration_with_engine(
     monkeypatch: pytest.MonkeyPatch,
 ):
     with monkeypatch.context() as m:
-        m.setenv("APHRODITE_PLUGINS", "dummy_stat_logger")
+        m.setenv("SONAR_PLUGINS", "dummy_stat_logger")
 
         engine_args = AsyncEngineArgs(
             model="facebook/opt-125m",

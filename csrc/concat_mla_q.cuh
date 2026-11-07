@@ -3,7 +3,7 @@
 
 #include "cuda_vec_utils.cuh"
 
-namespace aphrodite {
+namespace sonar {
 
 // Concatenates ql_nope [num_tokens, num_heads, NOPE_DIM] and
 // q_pe [num_tokens, num_heads, 64]
@@ -24,7 +24,7 @@ __global__ void ConcatMLAQKernel(
   const int head_id = flat_warp_id % num_heads;
   const int lane_id = threadIdx.x & 31;
 
-  constexpr bool use_256b = APHRODITE_256B_PTX_ENABLED;
+  constexpr bool use_256b = SONAR_256B_PTX_ENABLED;
   constexpr int nope_vec_loads =
       NOPE_DIM * sizeof(DType) / (VecTraits<use_256b>::ARCH_MAX_VEC_SIZE * 32);
 
@@ -52,6 +52,6 @@ __global__ void ConcatMLAQKernel(
   st32_cs(rope_dst + lane_id, ld32_cs(rope_src + lane_id));
 }
 
-}  // namespace aphrodite
+}  // namespace sonar
 
 #endif  // CONCAT_MLA_Q_CUH_

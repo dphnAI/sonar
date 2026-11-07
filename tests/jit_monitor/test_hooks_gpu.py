@@ -6,7 +6,7 @@ from unittest import mock
 
 import pytest
 
-from aphrodite.utils import jit_monitor
+from sonar.utils import jit_monitor
 
 try:
     import torch
@@ -15,8 +15,8 @@ try:
 except ImportError:
     _HAS_CUDA = False
 
-from aphrodite.triton_utils import HAS_TRITON as _HAS_TRITON
-from aphrodite.triton_utils import tl, triton
+from sonar.triton_utils import HAS_TRITON as _HAS_TRITON
+from sonar.triton_utils import tl, triton
 
 pytestmark = pytest.mark.skipif(
     not (_HAS_CUDA and _HAS_TRITON),

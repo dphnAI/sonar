@@ -3,7 +3,7 @@
 """Static consistency check between the pinned zentorch and torch versions.
 
 zentorch (the AMD Zen CPU optimization extra) tracks the torch release that
-Aphrodite depends on, differing only by an extra trailing "patch level" segment.
+Sonar depends on, differing only by an extra trailing "patch level" segment.
 Concretely, torch ``X.Y.Z`` corresponds to zentorch ``X.Y.Z.W``.
 
 This test parses the raw text of ``setup.py`` and ``requirements/cpu.txt`` and

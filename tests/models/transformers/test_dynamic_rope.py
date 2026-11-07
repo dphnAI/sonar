@@ -12,7 +12,7 @@ from transformers.models.hunyuan_v1_dense.modeling_hunyuan_v1_dense import (
 )
 from transformers.models.llama.modeling_llama import LlamaRotaryEmbedding
 
-from aphrodite.model_executor.models.transformers.utils import (
+from sonar.model_executor.models.transformers.utils import (
     can_enable_torch_compile,
     disable_noop_dynamic_rope,
 )
@@ -27,7 +27,7 @@ CONFIG_KWARGS = dict(
 DYNAMIC = {"rope_type": "dynamic", "factor": 4.0, "rope_theta": 1e4}
 
 
-def make_aphrodite_config(hf_config, max_model_len: int) -> SimpleNamespace:
+def make_sonar_config(hf_config, max_model_len: int) -> SimpleNamespace:
     model_config = SimpleNamespace(hf_config=hf_config, max_model_len=max_model_len)
     return SimpleNamespace(model_config=model_config)
 
@@ -52,8 +52,8 @@ def test_can_enable_torch_compile(rope_parameters, max_model_len, compilable):
         rope_parameters=rope_parameters,
     )
     config.get_text_config = lambda: config
-    aphrodite_config = make_aphrodite_config(config, max_model_len)
-    assert can_enable_torch_compile(aphrodite_config) is compilable
+    sonar_config = make_sonar_config(config, max_model_len)
+    assert can_enable_torch_compile(sonar_config) is compilable
 
 
 @pytest.mark.parametrize(
@@ -73,8 +73,8 @@ def test_disable_noop_dynamic_rope(monkeypatch, config, rotary_cls):
     rotary_emb = rotary_cls(config)
     expected = rotary_emb(*inputs)
 
-    aphrodite_config = make_aphrodite_config(config, MAX_POSITION_EMBEDDINGS)
-    disable_noop_dynamic_rope(rotary_emb, aphrodite_config)
+    sonar_config = make_sonar_config(config, MAX_POSITION_EMBEDDINGS)
+    disable_noop_dynamic_rope(rotary_emb, sonar_config)
 
     def no_sync(*args, **kwargs):
         raise AssertionError("dynamic rope update still runs")

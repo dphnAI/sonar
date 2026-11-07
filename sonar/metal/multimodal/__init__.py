@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Generic multimodal helpers for Aphrodite Metal."""
+"""Generic multimodal helpers for Sonar Metal."""
 
 from __future__ import annotations
 
-from aphrodite.metal.multimodal.embeddings import merge_multimodal_embeddings
-from aphrodite.metal.multimodal.feature_spec import (
+from sonar.metal.multimodal.embeddings import merge_multimodal_embeddings
+from sonar.metal.multimodal.feature_spec import (
     MultiModalFeatureSpec,
     PlaceholderRange,
 )

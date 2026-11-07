@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import torch
 
-from aphrodite.v1.sample.metadata import SamplingMetadata
+from sonar.v1.sample.metadata import SamplingMetadata
 
 
 def epsilon_cutoff(

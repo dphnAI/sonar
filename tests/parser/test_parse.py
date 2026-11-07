@@ -6,20 +6,20 @@ from types import SimpleNamespace
 
 import pytest
 
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
-from aphrodite.parser.abstract_parser import DelegatingParser
-from aphrodite.parser.engine.parser_engine import ParserEngine
-from aphrodite.parser.parser_manager import ParserManager
-from aphrodite.parser.qwen3 import qwen3_config
-from aphrodite.parser.utils import count_history_tool_calls
-from aphrodite.reasoning.basic_parsers import BaseThinkingReasoningParser
-from aphrodite.tool_parsers.hermes_tool_parser import Hermes2ProToolParser
+from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
+from sonar.parser.abstract_parser import DelegatingParser
+from sonar.parser.engine.parser_engine import ParserEngine
+from sonar.parser.parser_manager import ParserManager
+from sonar.parser.qwen3 import qwen3_config
+from sonar.parser.utils import count_history_tool_calls
+from sonar.reasoning.basic_parsers import BaseThinkingReasoningParser
+from sonar.tool_parsers.hermes_tool_parser import Hermes2ProToolParser
 
 
 @pytest.fixture(autouse=True)
 def enable_hermes_required_named_parsing(monkeypatch):
-    # With APHRODITE_ENFORCE_STRICT_TOOL_CALLING (default on), Hermes sets
+    # With SONAR_ENFORCE_STRICT_TOOL_CALLING (default on), Hermes sets
     # supports_required_and_named=False and uses structural-tag guided tool
     # calling. Force it True to test the non-guided JSON required/named parse path.
     monkeypatch.setattr(Hermes2ProToolParser, "supports_required_and_named", True)
@@ -50,7 +50,7 @@ TOOL_ARGUMENTS = '{"city": "Dallas"}'
 
 @pytest.fixture(scope="module")
 def tokenizer():
-    from aphrodite.tokenizers import get_tokenizer
+    from sonar.tokenizers import get_tokenizer
 
     return get_tokenizer("Qwen/Qwen3-32B")
 

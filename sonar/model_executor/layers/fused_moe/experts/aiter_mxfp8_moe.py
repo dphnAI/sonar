@@ -10,14 +10,14 @@ import math
 
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.experts.mxfp8_emulation_moe import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.experts.mxfp8_emulation_moe import (
     Mxfp8TritonExpertsBase,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 logger = init_logger(__name__)
 
@@ -113,7 +113,7 @@ class AiterMxfp8Experts(Mxfp8TritonExpertsBase):
         from aiter import ActivationType, QuantType
         from aiter.ops.flydsl.moe_common import GateMode
 
-        from aphrodite._aiter_ops import rocm_aiter_ops
+        from sonar._aiter_ops import rocm_aiter_ops
 
         limit = self.quant_config.gemm1_clamp_limit
         swiglu_limit = 0.0 if limit is None else float(limit)
@@ -128,7 +128,7 @@ class AiterMxfp8Experts(Mxfp8TritonExpertsBase):
             )
 
         # RoutedExperts.expert_map hands AITER experts the precomputed 0/1
-        # expert_mask (with trailing sentinel) instead of the Aphrodite expert_map.
+        # expert_mask (with trailing sentinel) instead of the Sonar expert_map.
         expert_mask = expert_map
 
         # Route through the graph-safe ``rocm_aiter_fused_moe`` custom op so the

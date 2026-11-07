@@ -7,7 +7,7 @@ import functools
 import numpy as np
 import torch
 
-from aphrodite.models.minimax_m3.amd.ops.flydsl_utils import (
+from sonar.models.minimax_m3.amd.ops.flydsl_utils import (
     LOG2E,
     cu_count,
     run_compiled,
@@ -26,7 +26,7 @@ def _get_kernel(rounds: int):
 def supports_nvfp4_sparse_prefill(
     num_heads: int, num_kv_heads: int, head_dim: int, topk_blocks: int, block_size: int
 ) -> bool:
-    from aphrodite.platforms.rocm import on_gfx950
+    from sonar.platforms.rocm import on_gfx950
 
     return (
         on_gfx950() and head_dim == D and num_heads == num_kv_heads * HG and topk_blocks == TOPK and block_size == BLK

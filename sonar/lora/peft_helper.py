@@ -11,8 +11,8 @@ from typing import Literal
 
 import regex as re
 
-from aphrodite.config.lora import LoRAConfig
-from aphrodite.logger import init_logger
+from sonar.config.lora import LoRAConfig
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 
@@ -36,7 +36,7 @@ class PEFTHelper:
     use_rslora: bool = field(default=False)
     # True to use Weight-Decomposed Low-Rank Adaptation (DoRA, see: https://arxiv.org/abs/2402.09353)
     use_dora: bool = field(default=False)
-    # PEFT features that change the adapter's semantics and that Aphrodite does not
+    # PEFT features that change the adapter's semantics and that Sonar does not
     # implement. They are read only to reject such adapters.
     lora_bias: bool = field(default=False)
     init_lora_weights: bool | str = field(default=True)
@@ -47,9 +47,9 @@ class PEFTHelper:
     # Per-module overrides of `r` and `lora_alpha`, keyed by module name pattern
     rank_pattern: dict[str, int] = field(default_factory=dict)
     alpha_pattern: dict[str, float] = field(default_factory=dict)
-    # Extra aphrodite field, start with 'aphrodite_' to avoid conflict
-    aphrodite_lora_scaling_factor: float = field(default=1.0)
-    aphrodite_max_position_embeddings: int | None = field(default=False)
+    # Extra sonar field, start with 'sonar_' to avoid conflict
+    sonar_lora_scaling_factor: float = field(default=1.0)
+    sonar_max_position_embeddings: int | None = field(default=False)
 
     def _validate_features(self) -> list[str]:
         """Check if there are any unsupported LoRA features."""
@@ -58,17 +58,17 @@ class PEFTHelper:
             unsupported_modules = [m for m in self.modules_to_save if m not in ["classifier", "score"]]
             if unsupported_modules:
                 error_msg.append(
-                    "Aphrodite only supports modules_to_save being either None "
+                    "Sonar only supports modules_to_save being either None "
                     'or ["classifier", "score"] for classification models. '
                     f"Unsupported modules_to_save: {unsupported_modules}"
                 )
         if self.use_dora:
-            error_msg.append("Aphrodite does not yet support DoRA.")
+            error_msg.append("Sonar does not yet support DoRA.")
         if self.lora_bias:
-            error_msg.append("Aphrodite does not support LoRA bias (lora_bias).")
+            error_msg.append("Sonar does not support LoRA bias (lora_bias).")
         if not self._init_is_supported():
             error_msg.append(
-                f"Aphrodite does not support init_lora_weights={self.init_lora_weights!r}."
+                f"Sonar does not support init_lora_weights={self.init_lora_weights!r}."
                 " Inits such as PiSSA, OLoRA, CorDA and LoftQ modify the base model"
                 " weights when PEFT loads the adapter. Convert it to a regular LoRA"
                 " adapter with PEFT's path_initial_model_for_weight_conversion, or"
@@ -76,13 +76,13 @@ class PEFTHelper:
                 " contains the modified weights."
             )
         if self.alora_invocation_tokens:
-            error_msg.append("Aphrodite does not support Activated LoRA (aLoRA).")
+            error_msg.append("Sonar does not support Activated LoRA (aLoRA).")
         if self.layer_replication:
-            error_msg.append("Aphrodite does not support layer_replication.")
+            error_msg.append("Sonar does not support layer_replication.")
         if self.use_bdlora:
-            error_msg.append("Aphrodite does not support block-diagonal LoRA (BD-LoRA).")
+            error_msg.append("Sonar does not support block-diagonal LoRA (BD-LoRA).")
         if self.use_qalora:
-            error_msg.append("Aphrodite does not support QALoRA.")
+            error_msg.append("Sonar does not support QALoRA.")
         return error_msg
 
     def _init_is_supported(self) -> bool:
@@ -112,7 +112,7 @@ class PEFTHelper:
             self.modules_to_save = list(dict.fromkeys([*(self.modules_to_save or []), "classifier", "score"]))
         if self.use_rslora:
             logger.info_once("Loading LoRA weights trained with rsLoRA.")
-        self.aphrodite_lora_scaling_factor = self._scaling(self.r, self.lora_alpha)
+        self.sonar_lora_scaling_factor = self._scaling(self.r, self.lora_alpha)
 
     def _scaling(self, rank: int, alpha: float) -> float:
         if self.use_rslora:
@@ -136,7 +136,7 @@ class PEFTHelper:
         `base_model.model.` prefix and before any weights mapping.
         """
         if not self.rank_pattern and not self.alpha_pattern:
-            return self.r, self.aphrodite_lora_scaling_factor
+            return self.r, self.sonar_lora_scaling_factor
         # PEFT stores fused MoE expert LoRAs (`target_parameters`) as
         # `experts.base_layer` (gate_up_proj) and `experts` (down_proj), but
         # matches the patterns against the parameter names.
@@ -180,7 +180,7 @@ class PEFTHelper:
         with open(lora_config_path) as f:
             config = json.load(f)
 
-        config["aphrodite_max_position_embeddings"] = max_position_embeddings
+        config["sonar_max_position_embeddings"] = max_position_embeddings
         return cls.from_dict(config)
 
     def validate_legal(self, lora_config: LoRAConfig) -> None:

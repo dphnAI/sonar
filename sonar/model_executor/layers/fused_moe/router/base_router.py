@@ -5,16 +5,16 @@ from collections.abc import Callable
 
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.distributed.eplb.eplb_state import EplbLayerState
-from aphrodite.forward_context import get_forward_context, is_forward_context_available
-from aphrodite.model_executor.layers.fused_moe.eplb_triton import eplb_map_and_record
-from aphrodite.model_executor.layers.fused_moe.router.fused_moe_router import (
+import sonar.envs as envs
+from sonar.distributed.eplb.eplb_state import EplbLayerState
+from sonar.forward_context import get_forward_context, is_forward_context_available
+from sonar.model_executor.layers.fused_moe.eplb_triton import eplb_map_and_record
+from sonar.model_executor.layers.fused_moe.router.fused_moe_router import (
     FusedMoERouter,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
-from aphrodite.v1.worker.ubatching import dbo_current_ubatch_id
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
+from sonar.v1.worker.ubatching import dbo_current_ubatch_id
 
 if current_platform.is_cuda_alike() or current_platform.is_xpu():
 
@@ -133,10 +133,10 @@ def get_moe_padding_mask(num_tokens: int) -> torch.Tensor | None:
     """Rows of the current batch that are CUDA graph or DP padding.
 
     Routers set these rows' expert ids to -1 so the dispatch and experts skip
-    them; None when APHRODITE_MOE_SKIP_PADDING is off or the runner does not mark
+    them; None when SONAR_MOE_SKIP_PADDING is off or the runner does not mark
     padding.
     """
-    if envs.APHRODITE_MOE_SKIP_PADDING and is_forward_context_available():
+    if envs.SONAR_MOE_SKIP_PADDING and is_forward_context_available():
         is_padding = get_forward_context().is_padding
         return is_padding[:num_tokens] if is_padding is not None else None
     return None

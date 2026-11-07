@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Compatibility wrapper for HPC API changes.
 
-Users of Aphrodite should always import **only** these wrappers.
+Users of Sonar should always import **only** these wrappers.
 """
 
 import functools
@@ -11,7 +11,7 @@ import importlib.util
 
 import torch
 
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 
@@ -38,7 +38,7 @@ def has_hpc() -> bool:
 # Please instead return a clone of the offending output tensor(s) (e.g.
 # return x.clone()) or refactor the custom operator to not return y.
 # @torch.library.custom_op(
-#     "aphrodite::fuse_moe_impl",
+#     "sonar::fuse_moe_impl",
 #     mutates_args=[],
 #     device_types="cuda",
 # )
@@ -109,7 +109,7 @@ def hpc_fuse_moe(
 
 
 # @torch.library.custom_op(
-#     "aphrodite::fuse_moe_blockwise_impl",
+#     "sonar::fuse_moe_blockwise_impl",
 #     mutates_args=[],
 #     device_types="cuda",
 # )

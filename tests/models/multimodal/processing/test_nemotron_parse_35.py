@@ -10,12 +10,12 @@ import torch
 from PIL import Image
 from transformers import BatchFeature
 
-from aphrodite.model_executor.models.nemotron_parse3_5 import (
+from sonar.model_executor.models.nemotron_parse3_5 import (
     NemotronParseProcessingInfo,
     RadioMBartPrefixMultiModalProcessor,
 )
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.processing import BaseProcessingInfo
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.processing import BaseProcessingInfo
 
 from ...utils import build_model_context
 
@@ -25,7 +25,7 @@ def _noise_image(width: int, height: int) -> Image.Image:
     return Image.fromarray(rng.integers(0, 256, (height, width, 3), dtype=np.uint8))
 
 
-@pytest.mark.usefixtures("default_aphrodite_config")
+@pytest.mark.usefixtures("default_sonar_config")
 @pytest.mark.parametrize("mm_device_do_normalize", [None, True])
 def test_causal_prefix_preserves_host_normalized_packed_images(
     mm_device_do_normalize: bool | None,

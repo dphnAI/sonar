@@ -4,9 +4,9 @@
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.lightning_attn import linear_decode_forward_triton
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.model_executor.layers.lightning_attn import linear_decode_forward_triton
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_random_seed
 
 DEVICE = current_platform.device_type
 
@@ -236,7 +236,7 @@ def test_lightning_attention_reference(
 
     ref_output, ref_kv_cache = reference_lightning_attention(q, k, v, ed, 256, kv_history)
 
-    from aphrodite.model_executor.layers.lightning_attn import lightning_attention
+    from sonar.model_executor.layers.lightning_attn import lightning_attention
 
     actual_output, actual_kv_cache = lightning_attention(q, k, v, ed, 256, kv_history_clone)
 

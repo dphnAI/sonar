@@ -11,8 +11,8 @@ import numpy as np
 import torch
 from PIL import Image
 
-from aphrodite.config.multimodal import MMHasherAlgorithm
-from aphrodite.logger import init_logger
+from sonar.config.multimodal import MMHasherAlgorithm
+from sonar.logger import init_logger
 
 from .media import MediaWithBytes
 

@@ -3,23 +3,23 @@
 
 //! Output processing helpers shared by text and chat layers.
 
-pub use aphrodite_tokenizer::{DecodedText, TokenAnchor, TokenAttribution};
 pub use decoded::{
     DecodedTextEvent, Finished, SampledDelta, TextDecodeOptions, decoded_text_event_stream,
 };
 pub use logprobs::{
     DecodedLogprobs, DecodedPositionLogprobs, DecodedPromptLogprobs, DecodedTokenLogprob,
 };
+pub use sonar_tokenizer::{DecodedText, TokenAnchor, TokenAttribution};
 
 mod decoded;
 mod logprobs;
 
 use std::sync::Arc;
 
-use aphrodite_engine_core_client::protocol::output::RequestSpecDecodeMetrics;
-use aphrodite_engine_core_client::protocol::sampling_mask::SamplingMask;
-use aphrodite_llm::WeightVersionSpan;
 use futures::{StreamExt as _, pin_mut};
+use sonar_engine_core_client::protocol::output::RequestSpecDecodeMetrics;
+use sonar_engine_core_client::protocol::sampling_mask::SamplingMask;
+use sonar_llm::WeightVersionSpan;
 
 use crate::{Error, FinishReason, Result, TextOutputStream};
 
@@ -32,8 +32,8 @@ pub struct CollectedTextOutput {
     pub logprobs: Option<DecodedLogprobs>,
     pub token_ids: Vec<u32>,
     pub finish_reason: FinishReason,
-    pub usage: aphrodite_llm::TokenUsage,
-    pub timestamps: aphrodite_llm::RequestTimestamps,
+    pub usage: sonar_llm::TokenUsage,
+    pub timestamps: sonar_llm::RequestTimestamps,
     /// Connector-specific KV transfer parameters for disaggregated serving.
     pub kv_transfer_params: Option<serde_json::Value>,
     /// Connector-specific encoder cache transfer parameters for disaggregated
@@ -97,8 +97,8 @@ impl<T: TextOutputStream> T {
                                 logprobs: delta_logprobs,
                                 token_ids: delta_token_ids,
                                 finish_reason: FinishReason::Error(None),
-                                usage: aphrodite_llm::TokenUsage::default(),
-                                timestamps: aphrodite_llm::RequestTimestamps::default(),
+                                usage: sonar_llm::TokenUsage::default(),
+                                timestamps: sonar_llm::RequestTimestamps::default(),
                                 kv_transfer_params: None,
                                 ec_transfer_params: None,
                                 sampling_mask: None,
@@ -136,8 +136,8 @@ impl<T: TextOutputStream> T {
 
 #[cfg(test)]
 mod tests {
-    use aphrodite_llm::FinishReason;
     use futures::stream;
+    use sonar_llm::FinishReason;
 
     use super::*;
 
@@ -185,7 +185,7 @@ mod tests {
                     }),
                 },
                 finished: Some(Box::new(Finished {
-                    usage: aphrodite_llm::TokenUsage {
+                    usage: sonar_llm::TokenUsage {
                         prompt_token_count: 2,
                         output_token_count: 2,
                         prompt_cache_usage: Default::default(),
@@ -311,7 +311,7 @@ mod tests {
                     }),
                 },
                 finished: Some(Box::new(Finished {
-                    usage: aphrodite_llm::TokenUsage {
+                    usage: sonar_llm::TokenUsage {
                         prompt_token_count: 2,
                         output_token_count: 5,
                         prompt_cache_usage: Default::default(),

@@ -4,8 +4,8 @@
 
 import torch
 
-from aphrodite.triton_utils import tl, triton, use_tensor_descriptor
-from aphrodite.triton_utils.allocation import set_triton_allocator
+from sonar.triton_utils import tl, triton, use_tensor_descriptor
+from sonar.triton_utils.allocation import set_triton_allocator
 
 _TD_ALLOCATOR_DEVICES: set[torch.device] = set()
 

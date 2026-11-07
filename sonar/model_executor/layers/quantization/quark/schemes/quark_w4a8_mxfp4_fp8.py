@@ -7,21 +7,21 @@ from fractions import Fraction
 import torch
 import torch.nn.functional as F
 
-from aphrodite._aiter_ops import is_aiter_found_and_supported, rocm_aiter_ops
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar._aiter_ops import is_aiter_found_and_supported, rocm_aiter_ops
+from sonar.logger import init_logger
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     get_fp8_min_max,
     kFp8StaticTensorSym,
     kMxfp4Static,
 )
-from aphrodite.model_executor.parameter import (
+from sonar.model_executor.parameter import (
     GroupQuantScaleParameter,
-    PackedAphroditeParameter,
+    PackedSonarParameter,
     PerTensorScaleParameter,
 )
-from aphrodite.model_executor.utils import replace_parameter
-from aphrodite.platforms import current_platform
+from sonar.model_executor.utils import replace_parameter
+from sonar.platforms import current_platform
 
 from .quark_scheme import QuarkScheme
 
@@ -89,7 +89,7 @@ class QuarkW4A8_MXFP4_FP8(QuarkScheme):
         layer.output_size_per_partition = output_size_per_partition
 
         # MXFP4 WEIGHT (packed, 2 values per byte)
-        weight = PackedAphroditeParameter(
+        weight = PackedSonarParameter(
             data=torch.empty(
                 output_size_per_partition,
                 self.get_packed_dim(input_size_per_partition),
@@ -175,7 +175,7 @@ class QuarkW4A8_MXFP4_FP8(QuarkScheme):
         x: torch.Tensor,
         bias: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        from aphrodite.model_executor.layers.quantization.utils.mxfp4_utils import (
+        from sonar.model_executor.layers.quantization.utils.mxfp4_utils import (
             dequant_mxfp4,
         )
 

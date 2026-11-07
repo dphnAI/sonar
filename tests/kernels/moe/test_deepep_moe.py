@@ -8,36 +8,36 @@ import pytest
 import torch.distributed
 from torch.distributed import ProcessGroup
 
-import aphrodite.envs as envs
-from aphrodite import _custom_ops as ops
-from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-from aphrodite.model_executor.layers.activation import SiluAndMul
-from aphrodite.model_executor.layers.fused_moe import TritonExperts
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.config import (
+import sonar.envs as envs
+from sonar import _custom_ops as ops
+from sonar.config import SonarConfig, set_current_sonar_config
+from sonar.model_executor.layers.activation import SiluAndMul
+from sonar.model_executor.layers.fused_moe import TritonExperts
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEQuantConfig,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.fused_batched_moe import (
+from sonar.model_executor.layers.fused_moe.experts.fused_batched_moe import (
     BatchedTritonExperts,
 )
-from aphrodite.model_executor.layers.fused_moe.modular_kernel import FusedMoEKernel
-from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
+from sonar.model_executor.layers.fused_moe.modular_kernel import FusedMoEKernel
+from sonar.model_executor.layers.quantization.utils.fp8_utils import (
     per_token_group_quant_fp8,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.import_utils import has_deep_ep
-from aphrodite.utils.torch_utils import set_random_seed
-from aphrodite.v1.worker.workspace import init_workspace_manager
+from sonar.platforms import current_platform
+from sonar.utils.import_utils import has_deep_ep
+from sonar.utils.torch_utils import set_random_seed
+from sonar.v1.worker.workspace import init_workspace_manager
 from tests.kernels.moe.utils import make_dummy_moe_config
 
 from ...utils import multi_gpu_test
 from .parallel_utils import ProcessGroupInfo, parallel_launch
 
 if has_deep_ep():
-    from aphrodite.model_executor.layers.fused_moe.prepare_finalize.deepep_ht import (
+    from sonar.model_executor.layers.fused_moe.prepare_finalize.deepep_ht import (
         DeepEPHTPrepareAndFinalize,
     )
-    from aphrodite.model_executor.layers.fused_moe.prepare_finalize.deepep_ll import (
+    from sonar.model_executor.layers.fused_moe.prepare_finalize.deepep_ll import (
         DeepEPLLPrepareAndFinalize,
     )
 
@@ -374,7 +374,7 @@ def _deep_ep_moe(
         w1_scale = w1_scale.to(device=device_idx)
         w2_scale = w2_scale.to(device=device_idx)
 
-    if envs.APHRODITE_DISTRIBUTED_USE_SPLIT_GROUP:
+    if envs.SONAR_DISTRIBUTED_USE_SPLIT_GROUP:
         pg = torch.distributed.split_group(
             split_ranks=[list(range(pgi.world_size))],
             group_desc="deepep_test",
@@ -383,7 +383,7 @@ def _deep_ep_moe(
         pg = torch.distributed.new_group(list(range(pgi.world_size)))
     test_tensors = TestTensors.make(config, low_latency_mode)
 
-    with set_current_aphrodite_config(AphroditeConfig()):
+    with set_current_sonar_config(SonarConfig()):
         # Reference
         torch_combined = torch_moe_impl(
             test_tensors,

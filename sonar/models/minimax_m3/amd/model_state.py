@@ -5,12 +5,12 @@
 import weakref
 from typing import Any
 
-from aphrodite.v1.worker.gpu.model_states.default import DefaultModelState
+from sonar.v1.worker.gpu.model_states.default import DefaultModelState
 
 
 class MiniMaxM3ModelState(DefaultModelState):
-    def __init__(self, aphrodite_config, model, encoder_cache, device):
-        super().__init__(aphrodite_config, model, encoder_cache, device)
+    def __init__(self, sonar_config, model, encoder_cache, device):
+        super().__init__(sonar_config, model, encoder_cache, device)
         language_model = model.language_model if hasattr(model, "language_model") else model
         self.backbone = language_model.model
         self._decode_finalizer = None

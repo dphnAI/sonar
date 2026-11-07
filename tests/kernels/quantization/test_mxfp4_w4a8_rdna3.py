@@ -10,24 +10,24 @@ from unittest.mock import patch
 import pytest
 import torch
 
-import aphrodite.model_executor.kernels.linear as linear_kernels
-from aphrodite.config.quantization import QuantizationConfigArgs
-from aphrodite.model_executor.kernels.linear import (
+import sonar.model_executor.kernels.linear as linear_kernels
+from sonar.config.quantization import QuantizationConfigArgs
+from sonar.model_executor.kernels.linear import (
     EmulationMxfp4LinearKernel,
     MxFp4LinearLayerConfig,
     Rdna3W4A8MxFp4LinearKernel,
     init_mxfp4_linear_kernel,
 )
-from aphrodite.model_executor.kernels.linear.mxfp4.rdna3_hip import (
+from sonar.model_executor.kernels.linear.mxfp4.rdna3_hip import (
     MAX_W4A8_BATCH_SIZE,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     kInt8Dynamic32Sym,
     kMxfp4Dynamic,
     kMxfp4Static,
     kMxfp6E3M2Dynamic,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 _E2M1_MAG = [0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0]
 E2M1 = torch.tensor(_E2M1_MAG + [-v for v in _E2M1_MAG], dtype=torch.float64)
@@ -36,7 +36,7 @@ E2M1 = torch.tensor(_E2M1_MAG + [-v for v in _E2M1_MAG], dtype=torch.float64)
 def _on_gfx11() -> bool:
     if not current_platform.is_rocm():
         return False
-    from aphrodite.platforms.rocm import on_gfx11
+    from sonar.platforms.rocm import on_gfx11
 
     return on_gfx11()
 
@@ -172,7 +172,7 @@ def test_linear_kernel_dispatch(M):
     bias = torch.randn(N, device="cuda", dtype=torch.bfloat16)
 
     with patch(
-        "aphrodite._custom_ops.mxfp4_w4a8_gemv_rdna3",
+        "sonar._custom_ops.mxfp4_w4a8_gemv_rdna3",
         wraps=torch.ops._rocm_C.mxfp4_w4a8_gemv_rdna3,
     ) as gemv:
         out = kernel.apply_weights(layer, x, bias)
@@ -247,7 +247,7 @@ def test_can_implement_rejects_non_int8_activation(key):
 @pytest.mark.cpu_test
 def test_is_supported_requires_rocm_gfx11():
     with patch(
-        "aphrodite.model_executor.kernels.linear.mxfp4.rdna3_hip.current_platform.is_rocm",
+        "sonar.model_executor.kernels.linear.mxfp4.rdna3_hip.current_platform.is_rocm",
         return_value=False,
     ):
         is_supported, reason = Rdna3W4A8MxFp4LinearKernel.is_supported()

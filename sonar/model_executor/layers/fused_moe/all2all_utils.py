@@ -6,36 +6,36 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 
-from aphrodite.config import get_current_aphrodite_config
-from aphrodite.distributed import (
+from sonar.config import get_current_sonar_config
+from sonar.distributed import (
     GroupCoordinator,
     get_ep_group,
 )
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEParallelConfig,
     FusedMoEQuantConfig,
 )
-from aphrodite.model_executor.layers.fused_moe.modular_kernel import (
+from sonar.model_executor.layers.fused_moe.modular_kernel import (
     FusedMoEPrepareAndFinalize,
 )
-from aphrodite.model_executor.layers.fused_moe.prepare_finalize import (
+from sonar.model_executor.layers.fused_moe.prepare_finalize import (
     BatchedPrepareAndFinalize,
     make_moe_prepare_and_finalize_naive_dp_ep,
     make_moe_prepare_and_finalize_no_dp_ep,
 )
-from aphrodite.model_executor.layers.fused_moe.prepare_finalize.flashinfer_nvlink_one_sided import (  # noqa: E501
+from sonar.model_executor.layers.fused_moe.prepare_finalize.flashinfer_nvlink_one_sided import (  # noqa: E501
     FlashInferNVLinkOneSidedPrepareAndFinalize,
 )
-from aphrodite.model_executor.layers.fused_moe.prepare_finalize.flashinfer_nvlink_two_sided import (  # noqa: E501
+from sonar.model_executor.layers.fused_moe.prepare_finalize.flashinfer_nvlink_two_sided import (  # noqa: E501
     FlashInferNVLinkTwoSidedPrepareAndFinalize,
 )
-from aphrodite.model_executor.layers.fused_moe.prepare_finalize.passthrough import (
+from sonar.model_executor.layers.fused_moe.prepare_finalize.passthrough import (
     PassThroughPrepareAndFinalize,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.import_utils import (
+from sonar.platforms import current_platform
+from sonar.utils.import_utils import (
     has_deep_ep,
     has_deep_ep_v2,
     has_moonep,
@@ -73,7 +73,7 @@ def flashinfer_one_sided_dispatch_layout(
     if quant_config.quant_dtype == "mxfp8":
         align = quant_config.mx_alignment
         padded_k = ((hidden_dim + align - 1) // align) * align if align > 0 else hidden_dim
-        # FI accounts for the logical row's scales; include Aphrodite's padding.
+        # FI accounts for the logical row's scales; include Sonar's padding.
         extra_scale_bytes = padded_k // 32 - (hidden_dim + 31) // 32
         return FlashInferOneSidedDispatchLayout(QuantFormat.MXFP8, max(0, extra_scale_bytes))
     if (
@@ -281,8 +281,8 @@ def maybe_make_prepare_finalize(
             use_fp8_dispatch=use_fp8_dispatch,
         )
         handle = all2all_manager.get_handle(all_to_all_args)
-        aphrodite_config = get_current_aphrodite_config()
-        use_cudagraph = not aphrodite_config.model_config.enforce_eager
+        sonar_config = get_current_sonar_config()
+        use_cudagraph = not sonar_config.model_config.enforce_eager
 
         prepare_finalize = DeepEPV2PrepareAndFinalize(
             buffer=handle,
@@ -403,7 +403,7 @@ def maybe_make_prepare_finalize(
 
     elif moe.use_fi_nvl_one_sided_kernels:
         assert quant_config is not None
-        max_num_tokens = get_current_aphrodite_config().scheduler_config.max_num_batched_tokens
+        max_num_tokens = get_current_sonar_config().scheduler_config.max_num_batched_tokens
         dispatch_layout = flashinfer_one_sided_dispatch_layout(moe.hidden_dim, quant_config, input_dtype=input_dtype)
         prepare_finalize = FlashInferNVLinkOneSidedPrepareAndFinalize(
             max_num_tokens=max_num_tokens,

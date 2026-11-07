@@ -16,11 +16,11 @@ import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
 
-import aphrodite.envs as envs
-from aphrodite.distributed.device_communicators.cuda_wrapper import CudaRTLibrary
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.utils.system_utils import update_environment_variables
+import sonar.envs as envs
+from sonar.distributed.device_communicators.cuda_wrapper import CudaRTLibrary
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.utils.system_utils import update_environment_variables
 
 logger = init_logger(__name__)
 
@@ -130,11 +130,11 @@ def should_nccl_symm_mem_allreduce(world_size: int, input_tensor: torch.Tensor) 
     Custom_AR is preferred for mid-range sizes where its P2P approach
     has lower overhead than the symm_mem copy-in/copy-out pattern.
     """
-    from aphrodite.distributed.device_communicators.pynccl_allocator import (
+    from sonar.distributed.device_communicators.pynccl_allocator import (
         is_symmetric_memory_enabled,
     )
 
-    if envs.APHRODITE_BATCH_INVARIANT:
+    if envs.SONAR_BATCH_INVARIANT:
         return False
 
     if not is_symmetric_memory_enabled():
@@ -157,11 +157,11 @@ def should_nccl_symm_mem_allreduce(world_size: int, input_tensor: torch.Tensor) 
 def should_nccl_symm_mem_ag_rs() -> bool:
     """Check whether NCCL symmetric memory should be used for
     AllGather / ReduceScatter collectives."""
-    from aphrodite.distributed.device_communicators.pynccl_allocator import (
+    from sonar.distributed.device_communicators.pynccl_allocator import (
         is_symmetric_memory_enabled,
     )
 
-    if envs.APHRODITE_BATCH_INVARIANT:
+    if envs.SONAR_BATCH_INVARIANT:
         return False
     return is_symmetric_memory_enabled()
 
@@ -334,9 +334,9 @@ def can_actually_p2p(
 # then all the processes can read the cache file to check the p2p access status.
 # Note that the cache file is suffixed by the CUDA_VISIBLE_DEVICES, so that we
 #  can have different cache files for different CUDA_VISIBLE_DEVICES settings,
-#  e.g. used by different aphrodite engines. The device id in the cache file is a
+#  e.g. used by different sonar engines. The device id in the cache file is a
 #  **local** device id, i.e. from 0 to num_dev-1, where num_dev is the number
-#  of visible devices in the aphrodite engine.
+#  of visible devices in the sonar engine.
 _gpu_p2p_access_cache: dict[str, bool] | None = None
 
 
@@ -350,7 +350,7 @@ def gpu_p2p_access_check(src: int, tgt: int) -> bool:
 
     is_distributed = dist.is_initialized()
 
-    from aphrodite.platforms.interface import get_assigned_physical_gpu_ids
+    from sonar.platforms.interface import get_assigned_physical_gpu_ids
 
     assigned_physical_gpu_ids = get_assigned_physical_gpu_ids()
     if assigned_physical_gpu_ids is not None:
@@ -363,9 +363,9 @@ def gpu_p2p_access_check(src: int, tgt: int) -> bool:
         cuda_visible_devices = envs.CUDA_VISIBLE_DEVICES
         cache_key = cuda_visible_devices or ",".join(str(i) for i in range(num_dev))
 
-    path = os.path.join(envs.APHRODITE_CACHE_ROOT, f"gpu_p2p_access_cache_for_{cache_key}.json")
+    path = os.path.join(envs.SONAR_CACHE_ROOT, f"gpu_p2p_access_cache_for_{cache_key}.json")
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    from aphrodite.distributed.parallel_state import get_world_group
+    from sonar.distributed.parallel_state import get_world_group
 
     if (not is_distributed or get_world_group().local_rank == 0) and (not os.path.exists(path)):
         # only the local master process (with local_rank == 0) can

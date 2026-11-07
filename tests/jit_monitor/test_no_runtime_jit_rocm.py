@@ -4,8 +4,8 @@
 
 import pytest
 
-from aphrodite import LLM
-from aphrodite.platforms import current_platform
+from sonar import LLM
+from sonar.platforms import current_platform
 
 from ..models.utils import dummy_hf_overrides
 from ..utils import create_new_process_for_each_test
@@ -15,7 +15,7 @@ pytestmark = pytest.mark.skipif(not current_platform.is_rocm(), reason="Requires
 
 
 def _worker_monitor_state(worker):
-    from aphrodite.utils import jit_monitor
+    from sonar.utils import jit_monitor
 
     return (
         jit_monitor.is_active(),
@@ -50,11 +50,11 @@ def test_v2_sampler_warmup_rocm(monkeypatch, tmp_path):
     A fresh cache and child process prevent previous model executions from
     hiding a missing warmup specialization.
     """
-    monkeypatch.setenv("APHRODITE_USE_V2_MODEL_RUNNER", "1")
-    monkeypatch.setenv("APHRODITE_ROCM_USE_AITER", "0")
-    monkeypatch.setenv("APHRODITE_WORKER_MULTIPROC_METHOD", "spawn")
-    monkeypatch.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
+    monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", "1")
+    monkeypatch.setenv("SONAR_ROCM_USE_AITER", "0")
+    monkeypatch.setenv("SONAR_WORKER_MULTIPROC_METHOD", "spawn")
+    monkeypatch.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")
     monkeypatch.setenv("TRITON_CACHE_DIR", str(tmp_path / "triton"))
-    monkeypatch.setenv("APHRODITE_CACHE_ROOT", str(tmp_path / "aphrodite"))
+    monkeypatch.setenv("SONAR_CACHE_ROOT", str(tmp_path / "sonar"))
     monkeypatch.setenv("TORCHINDUCTOR_CACHE_DIR", str(tmp_path / "inductor"))
     _run_rocm_shape_battery()

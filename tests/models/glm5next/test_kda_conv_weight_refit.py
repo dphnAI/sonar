@@ -13,13 +13,13 @@ import pytest
 import torch
 from torch import nn
 
-from aphrodite.model_executor.model_loader.reload.layerwise import (
+from sonar.model_executor.model_loader.reload.layerwise import (
     finalize_layerwise_reload,
     initialize_layerwise_reload,
     record_metadata_for_reloading,
 )
-from aphrodite.models.glm5next.common import kda
-from aphrodite.v1.attention.backends.gdn_attn import GDNAttentionMetadata
+from sonar.models.glm5next.common import kda
+from sonar.v1.attention.backends.gdn_attn import GDNAttentionMetadata
 
 CHANNELS, KERNEL = 8, 4
 

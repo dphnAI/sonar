@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 if current_platform.is_xpu():
     raise NotImplementedError("GLM-5.3-Flash does not currently support XPU.")

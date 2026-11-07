@@ -4,13 +4,13 @@ from http import HTTPStatus
 
 from fastapi import APIRouter, Depends, Request
 
-from aphrodite.entrypoints.serve.engine.protocol import ErrorResponse
-from aphrodite.entrypoints.serve.utils.api_utils import (
+from sonar.entrypoints.serve.engine.protocol import ErrorResponse
+from sonar.entrypoints.serve.utils.api_utils import (
     load_aware_call,
     validate_json_request,
     with_cancellation,
 )
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 from .protocol import RerankRequest, ScoreRequest
 from .serving import ServingScores

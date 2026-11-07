@@ -16,13 +16,13 @@ will be removed with it.
 
 from typing import TYPE_CHECKING, Any, ClassVar, final, get_args
 
-from aphrodite.utils.import_utils import resolve_obj_by_qualname
+from sonar.utils.import_utils import resolve_obj_by_qualname
 
-# aphrodite.config imports this module, so it imports aphrodite.config lazily.
+# sonar.config imports this module, so it imports sonar.config lazily.
 if TYPE_CHECKING:
-    from aphrodite.config import ParallelConfig, SpeculativeConfig
+    from sonar.config import ParallelConfig, SpeculativeConfig
 
-_PKG = "aphrodite.v1.worker.gpu.spec_decode"
+_PKG = "sonar.v1.worker.gpu.spec_decode"
 
 
 class SpeculatorConfig:
@@ -111,7 +111,7 @@ class SpeculatorConfig:
 
     @property
     def num_lookahead_tokens(self) -> int:
-        """See `AphroditeConfig.num_lookahead_tokens`."""
+        """See `SonarConfig.num_lookahead_tokens`."""
         return 0
 
     @property
@@ -122,7 +122,7 @@ class SpeculatorConfig:
 
     @property
     def num_prefill_lookahead_tokens(self) -> int:
-        """See `AphroditeConfig.num_prefill_lookahead_tokens`."""
+        """See `SonarConfig.num_prefill_lookahead_tokens`."""
         # Hidden-state drafters read only the immediate next token.
         return 1 if self.uses_target_hidden_states else 0
 
@@ -158,7 +158,7 @@ class DraftModelSpeculatorConfig(SpeculatorConfig):
 
     @property
     def max_model_len(self) -> int | None:
-        from aphrodite.config.speculative import _rope_only_sizes_cache
+        from sonar.config.speculative import _rope_only_sizes_cache
 
         draft = self.spec_config.draft_model_config
         if draft is None or (
@@ -174,7 +174,7 @@ class DraftModelSpeculatorConfig(SpeculatorConfig):
 
     @classmethod
     def configure(cls, spec: "SpeculativeConfig") -> None:
-        from aphrodite.config import ModelConfig, SpeculativeConfig
+        from sonar.config import ModelConfig, SpeculativeConfig
 
         spec.prompt_lookup_max = 0
         spec.prompt_lookup_min = 0
@@ -289,11 +289,11 @@ def register_speculative_method(name: str, config_cls: "type[SpeculatorConfig] |
     """Register a custom speculative method, used with `method=name`.
 
     `config_cls` is its `SpeculatorConfig` subclass, or its qualified name to
-    import it lazily. Register it from a Aphrodite general plugin, so that it's
+    import it lazily. Register it from a Sonar general plugin, so that it's
     registered in every process. Custom methods require the V2 model runner.
     This is an experimental interface that may change between releases.
     """
-    from aphrodite.config.speculative import SpeculativeMethod
+    from sonar.config.speculative import SpeculativeMethod
 
     if name in get_args(SpeculativeMethod) or name in _CONFIG_BY_METHOD:
         raise ValueError(f"'{name}' is a built-in speculative method.")
@@ -338,7 +338,7 @@ def get_method_config_class(spec_config: "SpeculativeConfig") -> type[Speculator
         # Not configured: a draft model, unless the checkpoint shows otherwise.
         method = "draft_model"
     if method in _V1_ONLY_METHODS:
-        from aphrodite.v1.worker.gpu.spec_decode.v1_speculator_configs import (
+        from sonar.v1.worker.gpu.spec_decode.v1_speculator_configs import (
             SuffixSpeculatorConfig,
             V1CustomProposerConfig,
         )

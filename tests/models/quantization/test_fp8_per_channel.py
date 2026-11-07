@@ -42,7 +42,7 @@ NUM_LOG_PROBS = 8
     ids=["dense", "moe", "moe_transformers"],
 )
 def test_fp8_per_channel_logprobs(
-    aphrodite_runner,
+    sonar_runner,
     quant_baseline_logprobs,
     example_prompts,
     model: str,
@@ -67,13 +67,13 @@ def test_fp8_per_channel_logprobs(
             num_logprobs=NUM_LOG_PROBS,
         )
 
-        with aphrodite_runner(
+        with sonar_runner(
             model,
             max_model_len=MAX_MODEL_LEN,
             enforce_eager=True,
             quantization="fp8_per_channel",
-        ) as aphrodite_model:
-            test_outputs = aphrodite_model.generate_greedy_logprobs(example_prompts, MAX_TOKENS, NUM_LOG_PROBS)
+        ) as sonar_model:
+            test_outputs = sonar_model.generate_greedy_logprobs(example_prompts, MAX_TOKENS, NUM_LOG_PROBS)
 
         check_logprobs_close(
             outputs_0_lst=baseline_outputs,

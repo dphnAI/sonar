@@ -1,18 +1,18 @@
-# Aphrodite Recipes Tools
+# Sonar Recipes Tools
 
-Convert a Aphrodite Recipes deployment rendering into files for `aphrodite serve`.
+Convert a Sonar Recipes deployment rendering into files for `sonar serve`.
 
 ## Optimized Deployment Flow
 
 ```mermaid
 flowchart LR
-    R["Aphrodite Recipe"] --> C["Recipe Converter"]
+    R["Sonar Recipe"] --> C["Recipe Converter"]
     H["Hardware Info (optional)"] --> C
     W["Workload Info (optional)"] --> C
     C --> F["config.yml + env.sh"]
     C -.-> S["Sweep Tuning (optional)"]
     S -.-> F
-    F --> D["Aphrodite Docker Image"]
+    F --> D["Sonar Docker Image"]
     D --> E["OpenAI Endpoint"]
 
     style S stroke-dasharray: 5 5
@@ -24,8 +24,8 @@ refine the initial configuration. Sweep tuning is optional.
 ## Getting Started
 
 Use `serve_with_recipe.sh` to fetch the selected deployment from
-[Aphrodite Recipes](https://recipes.vllm.ai/), generate the configuration, and start
-Aphrodite in one step:
+[Sonar Recipes](https://recipes.vllm.ai/), generate the configuration, and start
+Sonar in one step:
 
 ```bash
 tools/recipes/serve_with_recipe.sh \
@@ -33,13 +33,13 @@ tools/recipes/serve_with_recipe.sh \
   --hardware xeon6
 ```
 
-The converter queries `recipes.aphrodite.ai` at runtime, so it can use the latest
+The converter queries `recipes.sonar.ai` at runtime, so it can use the latest
 published recipe for the requested model and hardware without rebuilding the
-Aphrodite image.
+Sonar image.
 
 ### Find the hardware name
 
-Open [Aphrodite Recipes](https://recipes.vllm.ai/), select the model, and choose the
+Open [Sonar Recipes](https://recipes.vllm.ai/), select the model, and choose the
 target in the **Hardware** picker. The selected page URL contains the hardware
 key. For example, `?hardware=xeon6` maps to `--hardware xeon6`.
 
@@ -47,7 +47,7 @@ You can also run the converter without arguments for interactive model,
 hardware, and strategy discovery:
 
 ```bash
-python3 tools/recipes/recipe_json_to_aphrodite_config.py
+python3 tools/recipes/recipe_json_to_sonar_config.py
 ```
 
 For `xeon6`, the script enables hardware detection automatically. Generated
@@ -56,10 +56,10 @@ invoked.
 
 ## Detailed Deployment Workflow
 
-### 1. Aphrodite Recipes Only
+### 1. Sonar Recipes Only
 
 Use the converter directly when the recipe already contains the deployment
-settings you need. This path requires only PyYAML; the Aphrodite Python package is
+settings you need. This path requires only PyYAML; the Sonar Python package is
 not required unless optional runtime tuning or sweep generation is requested.
 
 ```bash
@@ -70,7 +70,7 @@ For non-interactive discovery, provide the model and hardware and use the
 Recipes-recommended strategy:
 
 ```bash
-python3 tools/recipes/recipe_json_to_aphrodite_config.py \
+python3 tools/recipes/recipe_json_to_sonar_config.py \
   --model meta-llama/Llama-3.1-8B-Instruct \
   --hardware xeon6
 ```
@@ -80,7 +80,7 @@ python3 tools/recipes/recipe_json_to_aphrodite_config.py \
 Search models, then choose hardware and strategy interactively:
 
 ```bash
-python3 tools/recipes/recipe_json_to_aphrodite_config.py
+python3 tools/recipes/recipe_json_to_sonar_config.py
 ```
 
 #### 1.2 Direct JSON Input
@@ -88,10 +88,10 @@ python3 tools/recipes/recipe_json_to_aphrodite_config.py
 Use a Recipes JSON URL or a local JSON file:
 
 ```bash
-python3 tools/recipes/recipe_json_to_aphrodite_config.py \
+python3 tools/recipes/recipe_json_to_sonar_config.py \
   https://recipes.vllm.ai/meta-llama/Llama-3.1-8B-Instruct/hw/xeon6.json
 
-python3 tools/recipes/recipe_json_to_aphrodite_config.py recipe.json
+python3 tools/recipes/recipe_json_to_sonar_config.py recipe.json
 ```
 
 #### 1.3 Test a Preview Recipe API
@@ -102,7 +102,7 @@ Use `--api-base` to validate it before the recipe is available in production:
 ```bash
 PREVIEW=https://vllm-recipes-git-fork-intel-ai-tce-dockerin-f4c148-inferact-inc.vercel.app
 
-python3 tools/recipes/recipe_json_to_aphrodite_config.py \
+python3 tools/recipes/recipe_json_to_sonar_config.py \
   --api-base "$PREVIEW" \
   --model meta-llama/Llama-3.2-1B-Instruct \
   --hardware xeon6
@@ -117,7 +117,7 @@ Add `--detect-hardware` when using the converter directly and the target host's
 effective CPU/NUMA/memory resources should refine deployment-sensitive values:
 
 ```bash
-python3 tools/recipes/recipe_json_to_aphrodite_config.py \
+python3 tools/recipes/recipe_json_to_sonar_config.py \
   --model meta-llama/Llama-3.1-8B-Instruct \
   --hardware xeon6 \
   --detect-hardware
@@ -132,7 +132,7 @@ Add workload hints when token lengths, concurrency, or latency objectives should
 seed optional benchmark tuning:
 
 ```bash
-python3 tools/recipes/recipe_json_to_aphrodite_config.py \
+python3 tools/recipes/recipe_json_to_sonar_config.py \
   --model meta-llama/Llama-3.1-8B-Instruct \
   --hardware xeon6 \
   --input-tokens 128 \
@@ -151,7 +151,7 @@ Use `--generate-full-sweep` for benchmark-backed tuning of TP/DP, concurrency,
 and scheduler settings:
 
 ```bash
-python3 tools/recipes/recipe_json_to_aphrodite_config.py \
+python3 tools/recipes/recipe_json_to_sonar_config.py \
   --model meta-llama/Llama-3.1-8B-Instruct \
   --hardware xeon6 \
   --detect-hardware \
@@ -164,11 +164,11 @@ python3 tools/recipes/recipe_json_to_aphrodite_config.py \
 See [SWEEP_TUNING.md](SWEEP_TUNING.md) for targeted sweep modes, NUMA binding,
 failure handling, recommendations, reporting, and visualization.
 
-### 5. Start Aphrodite
+### 5. Start Sonar
 
 When using the converter directly:
 
 ```bash
 source env.sh
-aphrodite serve --config config.yml
+sonar serve --config config.yml
 ```

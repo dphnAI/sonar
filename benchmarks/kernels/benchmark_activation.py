@@ -5,12 +5,12 @@ import itertools
 
 import torch
 
-import aphrodite.model_executor.layers.activation  # noqa F401
-from aphrodite.model_executor.custom_op import CustomOp
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import triton
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
-from aphrodite.utils.torch_utils import STR_DTYPE_TO_TORCH_DTYPE
+import sonar.model_executor.layers.activation  # noqa F401
+from sonar.model_executor.custom_op import CustomOp
+from sonar.platforms import current_platform
+from sonar.triton_utils import triton
+from sonar.utils.argparse_utils import FlexibleArgumentParser
+from sonar.utils.torch_utils import STR_DTYPE_TO_TORCH_DTYPE
 
 batch_size_range = [1, 16, 32, 64, 128]
 seq_len_range = [1, 16, 64, 128, 256, 512, 1024, 2048, 4096]

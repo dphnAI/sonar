@@ -3,17 +3,17 @@
 from collections.abc import Callable, Iterable, Sequence
 from typing import Any
 
-from aphrodite.distributed.kv_events import (
+from sonar.distributed.kv_events import (
     MEDIUM_GPU,
     AllBlocksCleared,
     BlockRemoved,
     BlockStored,
     KVCacheEventType,
 )
-from aphrodite.logger import init_logger
-from aphrodite.multimodal.utils import get_mm_features_in_window
-from aphrodite.v1.core.kv_cache_metrics import KVCacheMetricsCollector
-from aphrodite.v1.core.kv_cache_utils import (
+from sonar.logger import init_logger
+from sonar.multimodal.utils import get_mm_features_in_window
+from sonar.v1.core.kv_cache_metrics import KVCacheMetricsCollector
+from sonar.v1.core.kv_cache_utils import (
     BlockHash,
     BlockHashWithGroupId,
     ExternalBlockHash,
@@ -28,7 +28,7 @@ from aphrodite.v1.core.kv_cache_utils import (
     resolve_block_hashes,
     to_event_extra_keys,
 )
-from aphrodite.v1.request import Request
+from sonar.v1.request import Request
 
 logger = init_logger(__name__)
 

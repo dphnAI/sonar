@@ -8,18 +8,18 @@ import pytest
 import torch
 from torch import nn
 
-from aphrodite.compilation.backends import set_model_tag
-from aphrodite.compilation.counter import compilation_counter
-from aphrodite.compilation.decorators import ignore_torch_compile, support_torch_compile
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.compilation.backends import set_model_tag
+from sonar.compilation.counter import compilation_counter
+from sonar.compilation.decorators import ignore_torch_compile, support_torch_compile
+from sonar.config import (
     CompilationConfig,
     CompilationMode,
     CUDAGraphMode,
-    set_current_aphrodite_config,
+    SonarConfig,
+    set_current_sonar_config,
 )
-from aphrodite.forward_context import BatchDescriptor, set_forward_context
-from aphrodite.utils.torch_utils import is_torch_equal_or_newer
+from sonar.forward_context import BatchDescriptor, set_forward_context
+from sonar.utils.torch_utils import is_torch_equal_or_newer
 
 from ...utils import create_new_process_for_each_test
 
@@ -34,7 +34,7 @@ RANDOM_SEED = 0
 
 @support_torch_compile
 class ParentModel(nn.Module):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "", **kwargs) -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "", **kwargs) -> None:
         super().__init__()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -84,7 +84,7 @@ class CompiledAttention(nn.Module):
         *,
         mlp_size: int,
         hidden_size: int,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
         **kwargs,
     ) -> None:
@@ -108,11 +108,11 @@ class SimpleModelWithTwoGraphs(ParentModel):
         *,
         mlp_size: int,
         hidden_size: int,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
         **kwargs,
     ) -> None:
-        super().__init__(aphrodite_config=aphrodite_config, prefix=prefix)
+        super().__init__(sonar_config=sonar_config, prefix=prefix)
         # Test will fail without set_model_tag here with error:
         # "ValueError: too many values to unpack (expected 3)"
         # This is because CompiledAttention and CompiledAttentionTwo
@@ -122,14 +122,14 @@ class SimpleModelWithTwoGraphs(ParentModel):
             self.attn_one = CompiledAttention(
                 mlp_size=mlp_size,
                 hidden_size=hidden_size,
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 prefix=f"{prefix}.attn_one",
             )
         with set_model_tag("attn_two"):
             self.attn_two = CompiledAttentionTwo(
                 mlp_size=mlp_size,
                 hidden_size=hidden_size,
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 prefix=f"{prefix}.attn_two",
             )
 
@@ -147,19 +147,19 @@ class SimpleModelWithTwoGraphs(ParentModel):
 
 @torch.inference_mode
 def run_model(
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     model: nn.Module,
     inputs: torch.Tensor,
     cudagraph_runtime_mode: CUDAGraphMode,
 ):
-    with set_forward_context({}, aphrodite_config=aphrodite_config):
+    with set_forward_context({}, sonar_config=sonar_config):
         # warmup for the model with cudagraph_mode NONE
         model(inputs)
 
         # simulate cudagraphs capturing
         with set_forward_context(
             {},
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             cudagraph_runtime_mode=cudagraph_runtime_mode,
             batch_descriptor=BatchDescriptor(
                 num_tokens=2,
@@ -168,7 +168,7 @@ def run_model(
             model(inputs[:2])
         with set_forward_context(
             {},
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             cudagraph_runtime_mode=cudagraph_runtime_mode,
             batch_descriptor=BatchDescriptor(
                 num_tokens=1,
@@ -179,7 +179,7 @@ def run_model(
         # simulate cudagraphs replay
         with set_forward_context(
             {},
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             cudagraph_runtime_mode=cudagraph_runtime_mode,
             batch_descriptor=BatchDescriptor(
                 num_tokens=2,
@@ -196,17 +196,17 @@ def run_model(
 @create_new_process_for_each_test("spawn")
 def test_multi_graph_piecewise_compile(use_inductor_graph_partition: bool, use_bytecode_hook: bool, monkeypatch):
     # Set the environment variable for this test
-    monkeypatch.setenv("APHRODITE_USE_BYTECODE_HOOK", "1" if use_bytecode_hook else "0")
+    monkeypatch.setenv("SONAR_USE_BYTECODE_HOOK", "1" if use_bytecode_hook else "0")
 
     if use_inductor_graph_partition and not is_torch_equal_or_newer("2.9.0.dev"):
         pytest.skip("inductor graph partition is only available in PyTorch 2.9+")
 
     outputs = []
 
-    # aphroditecompile compile
-    aphrodite_config = AphroditeConfig(
+    # sonarcompile compile
+    sonar_config = SonarConfig(
         compilation_config=CompilationConfig(
-            mode=CompilationMode.APHRODITE_COMPILE,
+            mode=CompilationMode.SONAR_COMPILE,
             cudagraph_mode=CUDAGraphMode.PIECEWISE,
             splitting_ops=["silly::attention"],
             cudagraph_capture_sizes=[1, 2],
@@ -215,12 +215,12 @@ def test_multi_graph_piecewise_compile(use_inductor_graph_partition: bool, use_b
     )
     cudagraph_runtime_mode = CUDAGraphMode.PIECEWISE
 
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         model = (
             SimpleModelWithTwoGraphs(
                 mlp_size=MLP_SIZE,
                 hidden_size=HIDDEN_SIZE,
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 prefix="",
             )
             .eval()
@@ -250,22 +250,22 @@ def test_multi_graph_piecewise_compile(use_inductor_graph_partition: bool, use_b
         num_backend_compilations=num_piecewise_capturable_fx,
         num_cudagraph_captured=8,  # num_cudagraph_sizes * num_partitions
     ):
-        outputs.append(run_model(aphrodite_config, model, inputs, cudagraph_runtime_mode))
+        outputs.append(run_model(sonar_config, model, inputs, cudagraph_runtime_mode))
 
     # no compile or cudagraph
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         compilation_config=CompilationConfig(
             mode=CompilationMode.NONE,
         )
     )
     cudagraph_runtime_mode = CUDAGraphMode.NONE
 
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         model = (
             SimpleModelWithTwoGraphs(
                 mlp_size=MLP_SIZE,
                 hidden_size=HIDDEN_SIZE,
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 prefix="",
             )
             .eval()
@@ -279,12 +279,12 @@ def test_multi_graph_piecewise_compile(use_inductor_graph_partition: bool, use_b
         num_backend_compilations=0,
         num_cudagraph_captured=0,
     ):
-        outputs.append(run_model(aphrodite_config, model, inputs, cudagraph_runtime_mode))
+        outputs.append(run_model(sonar_config, model, inputs, cudagraph_runtime_mode))
 
     # piecewise compile without CUDA graph
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         compilation_config=CompilationConfig(
-            mode=CompilationMode.APHRODITE_COMPILE,
+            mode=CompilationMode.SONAR_COMPILE,
             cudagraph_mode=CUDAGraphMode.NONE,
             splitting_ops=["silly::attention"],
             use_inductor_graph_partition=use_inductor_graph_partition,
@@ -292,12 +292,12 @@ def test_multi_graph_piecewise_compile(use_inductor_graph_partition: bool, use_b
     )
     cudagraph_runtime_mode = CUDAGraphMode.PIECEWISE
 
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         model = (
             SimpleModelWithTwoGraphs(
                 mlp_size=MLP_SIZE,
                 hidden_size=HIDDEN_SIZE,
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 prefix="",
             )
             .eval()
@@ -311,7 +311,7 @@ def test_multi_graph_piecewise_compile(use_inductor_graph_partition: bool, use_b
         num_backend_compilations=num_piecewise_capturable_fx,
         num_cudagraph_captured=0,  # no cudagraph captured
     ):
-        outputs.append(run_model(aphrodite_config, model, inputs, cudagraph_runtime_mode))
+        outputs.append(run_model(sonar_config, model, inputs, cudagraph_runtime_mode))
 
     # Generally don't expect outputs with and without inductor
     # to be bitwise equivalent

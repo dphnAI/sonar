@@ -3,11 +3,11 @@
 
 use std::slice;
 
-use aphrodite_llm::{PromptCacheUsage, TokenUsage};
 use indexmap::IndexMap;
 use llm_multimodal::ImageDetail;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
+use sonar_llm::{PromptCacheUsage, TokenUsage};
 
 // ============================================================================
 // Constants
@@ -33,7 +33,7 @@ where
 {
     match Option::<i64>::deserialize(deserializer)? {
         None => Ok(None),
-        Some(value) => aphrodite_text::normalize_top_k(value)
+        Some(value) => sonar_text::normalize_top_k(value)
             .map(|value| Some(value.unwrap_or(0)))
             .map_err(serde::de::Error::custom),
     }
@@ -42,7 +42,7 @@ where
 /// Effort level for reasoning models.
 ///
 /// Fixed OpenAI HTTP request grades. Request conversion maps these names to
-/// the model-independent `aphrodite_chat::EffortValue` before renderer validation.
+/// the model-independent `sonar_chat::EffortValue` before renderer validation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ReasoningEffort {
@@ -99,7 +99,7 @@ impl StringOrArray {
 }
 
 fn max_stop_strings() -> usize {
-    std::env::var("APHRODITE_MAX_STOP_STRINGS")
+    std::env::var("SONAR_MAX_STOP_STRINGS")
         .ok()
         .and_then(|value| value.parse().ok())
         .unwrap_or(4)
@@ -253,7 +253,7 @@ impl StreamResponseEnvelope {
     }
 }
 
-/// Mirrors the Python Aphrodite `StreamOptions` class.
+/// Mirrors the Python Sonar `StreamOptions` class.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct StreamOptions {
     pub include_usage: Option<bool>,
@@ -303,7 +303,7 @@ pub struct Function {
     pub parameters: Value,
     /// Whether to enable strict schema adherence (OpenAI structured outputs).
     pub strict: Option<bool>,
-    /// Whether the schema is loaded on demand via tool search (Aphrodite extension,
+    /// Whether the schema is loaded on demand via tool search (Sonar extension,
     /// mirroring the OpenAI Responses and Anthropic Messages field).
     pub defer_loading: Option<bool>,
 }
@@ -549,7 +549,7 @@ pub enum MessageContent {
 // Usage and Logging
 // ============================================================================
 
-/// Mirrors the Python Aphrodite `UsageInfo` class.
+/// Mirrors the Python Sonar `UsageInfo` class.
 ///
 /// Do not skip serializing `None` fields here: non-streaming response types
 /// should serialize `None` as explicit `null`.
@@ -602,7 +602,7 @@ impl Usage {
     }
 }
 
-/// Mirrors the Python Aphrodite `PromptTokenUsageInfo` class.
+/// Mirrors the Python Sonar `PromptTokenUsageInfo` class.
 #[derive(Debug, Clone, Serialize)]
 pub struct PromptTokenUsageInfo {
     pub cached_tokens: usize,
@@ -611,7 +611,7 @@ pub struct PromptTokenUsageInfo {
     pub created_cache_tokens: usize,
 }
 
-/// Mirrors the Python Aphrodite `CompletionTokenUsageInfo` class.
+/// Mirrors the Python Sonar `CompletionTokenUsageInfo` class.
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct CompletionTokenUsageInfo {
     pub reasoning_tokens: usize,
@@ -619,8 +619,8 @@ pub struct CompletionTokenUsageInfo {
 
 #[cfg(test)]
 mod usage_tests {
-    use aphrodite_llm::{PromptCacheUsage, TokenUsage};
     use serde_json::json;
+    use sonar_llm::{PromptCacheUsage, TokenUsage};
 
     use super::Usage;
 
@@ -695,7 +695,7 @@ pub struct LogProbs {
     pub text_offset: Vec<u32>,
 }
 
-/// Aphrodite prompt-logprob metadata keyed by vocabulary token ID.
+/// Sonar prompt-logprob metadata keyed by vocabulary token ID.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct PromptLogprob {
     pub logprob: f32,
@@ -707,13 +707,13 @@ pub struct PromptLogprob {
 /// first), serialized in that order like Python's dict.
 pub type PromptLogprobs = Vec<Option<IndexMap<u32, PromptLogprob>>>;
 
-/// Mirrors the Python Aphrodite `ChatCompletionLogProbs` class.
+/// Mirrors the Python Sonar `ChatCompletionLogProbs` class.
 #[derive(Debug, Clone, Serialize)]
 pub struct ChatLogProbs {
     pub content: Option<Vec<ChatLogProbsContent>>,
 }
 
-/// Mirrors the Python Aphrodite `ChatCompletionLogProbsContent` class.
+/// Mirrors the Python Sonar `ChatCompletionLogProbsContent` class.
 #[derive(Debug, Clone, Serialize)]
 pub struct ChatLogProbsContent {
     pub token: String,
@@ -722,7 +722,7 @@ pub struct ChatLogProbsContent {
     pub top_logprobs: Vec<TopLogProb>,
 }
 
-/// Mirrors the Python Aphrodite `ChatCompletionLogProb` class.
+/// Mirrors the Python Sonar `ChatCompletionLogProb` class.
 #[derive(Debug, Clone, Serialize)]
 pub struct TopLogProb {
     pub token: String,
@@ -739,7 +739,7 @@ pub struct ErrorResponse {
     pub error: ErrorDetail,
 }
 
-/// Mirrors the Python Aphrodite `ErrorInfo` class.
+/// Mirrors the Python Sonar `ErrorInfo` class.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ErrorDetail {
     pub message: String,

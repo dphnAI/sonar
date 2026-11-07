@@ -511,7 +511,7 @@ class EngineCoreReadyResponse:
     block_size: int
     dp_stats_address: str | None
     dtype: str
-    aphrodite_version: str
+    sonar_version: str
     world_size: int
     data_parallel_size: int
     tensor_parallel_size: int
@@ -530,7 +530,7 @@ class EngineCoreReadyResponse:
     enable_sleep_mode: bool = False
     supports_draft_weight_updates: bool = False
     effective_attention_block_size: int | None = None
-    aphrodite_config: dict | None = None
+    sonar_config: dict | None = None
     prefix_hash_config: PrefixHashConfig | None = None
     dphn_network_enabled: bool = False
 
@@ -541,7 +541,7 @@ ready_response = EngineCoreReadyResponse(
     block_size=16,
     dp_stats_address=None,
     dtype="float32",
-    aphrodite_version="0.0.0",
+    sonar_version="0.0.0",
     data_parallel_size=1,
     world_size=1,
     tensor_parallel_size=1,
@@ -574,7 +574,7 @@ ready_response = EngineCoreReadyResponse(
         max_queue_size=100_000,
         topic="kv",
     ),
-    aphrodite_config={
+    sonar_config={
         "model_config": {"model": "test-model", "max_model_len": 32768},
         "cache_config": {"num_gpu_blocks": 1000, "gpu_memory_utilization": 0.9},
         "parallel_config": {"_api_process_count": 1, "_api_process_rank": -1},

@@ -5,7 +5,7 @@
 import pytest
 import torch
 
-from aphrodite.multimodal.video_prune.vidcom2 import (
+from sonar.multimodal.video_prune.vidcom2 import (
     compute_retained_tokens_count,
     compute_retention_mask,
 )

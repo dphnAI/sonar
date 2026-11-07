@@ -5,8 +5,8 @@ from math import prod
 
 import torch
 
-from aphrodite.models.deepseek_v4.common.ops.fused_indexer_q import MXFP4_BLOCK_SIZE
-from aphrodite.utils.math_utils import round_up
+from sonar.models.deepseek_v4.common.ops.fused_indexer_q import MXFP4_BLOCK_SIZE
+from sonar.utils.math_utils import round_up
 
 
 class DeepseekV4EagerScratchPool:

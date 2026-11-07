@@ -16,12 +16,12 @@ kernel start, before it waits on anything; the stages:
            -> the fp8_ds_mla record at the token's slot
     wq_b   (H x 512 / 16, 16 rows): QX8 times wq_b -> bf16 -> GPT-J RoPE of
            each head's dims 448.. -> q (global, bf16)
-    kt     (S, run by K2 after Aphrodite's indexer): the token's attention keys --
+    kt     (S, run by K2 after Sonar's indexer): the token's attention keys --
            top-k compressed slots through the kv source's block table (or,
-           ``global_keys``, every compressed slot of Aphrodite's c128a table), then
+           ``global_keys``, every compressed slot of Sonar's c128a table), then
            window slots -> KT
 
-Each elementwise step follows Aphrodite's ROCm path (``mxfp8_quantize``,
+Each elementwise step follows Sonar's ROCm path (``mxfp8_quantize``,
 ``FusedQKVRMSNorm``, ``fused_deepseek_v4_qnorm_rope_kv_rope_quant_insert``);
 the GEMV reductions differ from the Triton GEMMs' only in their order.
 Adapted from ATOM's V4.1 ``attn_pre`` (K1), less its mHC seam.
@@ -157,7 +157,7 @@ def stage_kt(c, t):
     invalid or absent key; KLEN[t] = kv_len (0 for a pad row), KLEN[S + t] =
     ntopk. The top-k table holds request-local compressed indices (through the
     block table) or, ``global_keys``, the slots themselves (a row of the
-    runtime width ``bt_stride``: Aphrodite's every compressed key of a C128 layer)."""
+    runtime width ``bt_stride``: Sonar's every compressed key of a C128 layer)."""
     tid = c["tid"]
     a, ratio = c["args"], c["ratio"]
     d, glob = c["d"], c.get("global_keys", False)
@@ -252,14 +252,14 @@ def stage_qkv(c, t):
     tk = (fx.ptr_load(red + 4) + fx.ptr_load(red + 5)) + (fx.ptr_load(red + 6) + fx.ptr_load(red + 7))
     rq = hw_rsq(div_rn(tq, fx.Float32(float(Q_RANK)), fx.Float32(1.0 / Q_RANK)) + fx.Float32(NORM_EPS))
     rk = hw_rsq(div_rn(tk, fx.Float32(float(KV_DIM)), fx.Float32(1.0 / KV_DIM)) + fx.Float32(NORM_EPS))
-    # q: bf16 normed row, then Aphrodite's MXFP8 (a 32-group = 4 threads)
+    # q: bf16 normed row, then Sonar's MXFP8 (a 32-group = 4 threads)
     ys = [bf16_round((xq[j] * rq) * qw[j]) for j in range(8)]
     amax = abs(ys[0])
     for y in ys[1:]:
         amax = fx.max(amax, abs(y))
     code = mx_code(butterfly(amax, (1, 2), fx.max))
     mul = mx_mul(code)
-    # the bf16 qr, Aphrodite's indexer's input
+    # the bf16 qr, Sonar's indexer's input
     if mine & (tt * 8 < Q_RANK):
         words = [
             fx.Vector.from_elements([ys[2 * i], ys[2 * i + 1]], fx.Float32).to(fx.BFloat16).bitcast(fx.Int32)[0]

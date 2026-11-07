@@ -15,7 +15,7 @@ from pathlib import Path
 
 
 def main() -> int:
-    package_name = "aphrodite.third_party.deep_gemm"
+    package_name = "sonar.third_party.deep_gemm"
     spec = importlib.util.find_spec(package_name)
     if spec is None or spec.origin is None:
         print(f"{package_name} is not installed", file=sys.stderr)

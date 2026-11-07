@@ -12,9 +12,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from aphrodite.model_executor.models.transformers.fuser import get_fuser
-from aphrodite.model_executor.models.transformers.fusers import MLAFuser
-from aphrodite.model_executor.models.transformers.fx_utils import trace
+from sonar.model_executor.models.transformers.fuser import get_fuser
+from sonar.model_executor.models.transformers.fusers import MLAFuser
+from sonar.model_executor.models.transformers.fx_utils import trace
 
 _FUSED_QKV_A_PROJ = MLAFuser.merged_name
 

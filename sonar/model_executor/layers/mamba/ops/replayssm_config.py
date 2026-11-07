@@ -9,8 +9,8 @@ auto-detected (Blackwell vs not) so call sites need not thread it through.
 
 import functools
 
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import triton
+from sonar.platforms import current_platform
+from sonar.triton_utils import triton
 
 
 @functools.cache

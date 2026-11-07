@@ -5,12 +5,12 @@ from collections.abc import Iterable, Sequence
 
 from openai.types.responses import ResponseFunctionToolCall
 
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-from aphrodite.entrypoints.openai.responses.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+from sonar.entrypoints.openai.responses.protocol import (
     ResponseInputOutputItem,
     ResponsesRequest,
 )
-from aphrodite.renderers.chat_utils import ChatCompletionMessageParam
+from sonar.renderers.chat_utils import ChatCompletionMessageParam
 
 
 def count_tool_calls(tool_calls: object) -> int:

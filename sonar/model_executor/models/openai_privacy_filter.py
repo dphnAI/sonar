@@ -12,13 +12,13 @@ from collections.abc import Iterable
 import torch
 from torch import nn
 
-from aphrodite.config import AphroditeConfig, CacheConfig
-from aphrodite.model_executor.layers.attention.encoder_only_attention import (
+from sonar.config import CacheConfig, SonarConfig
+from sonar.model_executor.layers.attention.encoder_only_attention import (
     EncoderOnlyAttention,
 )
-from aphrodite.model_executor.layers.pooler.tokwise import pooler_for_token_classify
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.sequence import IntermediateTensors
+from sonar.model_executor.layers.pooler.tokwise import pooler_for_token_classify
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.sequence import IntermediateTensors
 
 from .gpt_oss import GptOssForCausalLM, GptOssModel, OAIAttention, TransformerBlock
 from .interfaces_base import attn_type, default_pooling_type
@@ -76,21 +76,21 @@ def _interleave_gate_up_concat_to_pairs(
 @default_pooling_type(tok_pooling_type="ALL")
 class OpenAIPrivacyFilterForTokenClassification(nn.Module):
     is_pooling_model = True
-    hf_to_aphrodite_mapper = GptOssForCausalLM.hf_to_aphrodite_mapper
+    hf_to_sonar_mapper = GptOssForCausalLM.hf_to_sonar_mapper
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        self.head_dtype = aphrodite_config.model_config.head_dtype
+        config = sonar_config.model_config.hf_config
+        self.head_dtype = sonar_config.model_config.head_dtype
         self.num_labels = config.num_labels
 
         self.model = OpenAIPrivacyFilterModel(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             prefix=maybe_prefix(prefix, "model"),
         )
         self.score = nn.Linear(config.hidden_size, config.num_labels, dtype=self.head_dtype)
 
-        pooler_config = aphrodite_config.model_config.pooler_config
+        pooler_config = sonar_config.model_config.pooler_config
         assert pooler_config is not None
         self.pooler = pooler_for_token_classify(pooler_config)
 
@@ -117,5 +117,5 @@ class OpenAIPrivacyFilterForTokenClassification(nn.Module):
         loader = AutoWeightsLoader(self)
         return loader.load_weights(
             _interleave_gate_up_concat_to_pairs(weights),
-            mapper=self.hf_to_aphrodite_mapper,
+            mapper=self.hf_to_sonar_mapper,
         )

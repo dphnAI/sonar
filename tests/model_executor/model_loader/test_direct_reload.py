@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Direct weight reload (``APHRODITE_RELOAD_MODE=direct``) on a toy model whose
+"""Direct weight reload (``SONAR_RELOAD_MODE=direct``) on a toy model whose
 post-load processing has the hazards found on real models:
 
 (a) a parent derives a separate tensor from a child's weight (MLA W_UK/W_UV
@@ -22,20 +22,20 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.model_executor.layers.quantization.base_config import QuantizeMethodBase
-from aphrodite.model_executor.layers.quantization.online.base import OnlineQuantizationConfig
-from aphrodite.model_executor.layers.quantization.online.fp8 import (
+from sonar.config import SonarConfig
+from sonar.model_executor.layers.quantization.base_config import QuantizeMethodBase
+from sonar.model_executor.layers.quantization.online.base import OnlineQuantizationConfig
+from sonar.model_executor.layers.quantization.online.fp8 import (
     Fp8PerTensorOnlineLinearMethod,
 )
-from aphrodite.model_executor.model_loader.reload import finish_reload, start_reload
-from aphrodite.model_executor.model_loader.reload.direct import (
+from sonar.model_executor.model_loader.reload import finish_reload, start_reload
+from sonar.model_executor.model_loader.reload.direct import (
     begin_direct_reload,
     finish_direct_reload,
 )
-from aphrodite.model_executor.model_loader.utils import process_weights_after_loading
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
-from aphrodite.model_executor.utils import replace_parameter, retire_parameter
+from sonar.model_executor.model_loader.utils import process_weights_after_loading
+from sonar.model_executor.model_loader.weight_utils import default_weight_loader
+from sonar.model_executor.utils import replace_parameter, retire_parameter
 
 _MODEL_CONFIG = SimpleNamespace(word_embeddings_untied_by_checkpoint=False, quantization=None, dtype=torch.bfloat16)
 _DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -214,7 +214,7 @@ def _runs(model: _ToyModel) -> dict[str, int]:
 
 @pytest.fixture(autouse=True)
 def _direct_mode(monkeypatch):
-    monkeypatch.setenv("APHRODITE_RELOAD_MODE", "direct")
+    monkeypatch.setenv("SONAR_RELOAD_MODE", "direct")
 
 
 class TestReloadEqualsColdStart:
@@ -320,7 +320,7 @@ class TestRefusals:
     @pytest.mark.parametrize("method_cls", ["HummingLinearMethod", "HummingMoEMethod"])
     def test_humming_refused(self, monkeypatch, method_cls):
         # its post-load processing runs only once per quant method
-        from aphrodite.model_executor.layers.quantization import humming as humming_mod
+        from sonar.model_executor.layers.quantization import humming as humming_mod
 
         humming = object.__new__(getattr(humming_mod, method_cls))
         init = _ToyModel.__init__
@@ -562,10 +562,10 @@ _ONLINE = object.__new__(OnlineQuantizationConfig)
     ],
 )
 def test_verify_direct_reload_compat(monkeypatch, mode, overrides, match):
-    monkeypatch.setenv("APHRODITE_RELOAD_MODE", mode)
+    monkeypatch.setenv("SONAR_RELOAD_MODE", mode)
     config = _config(**overrides)
     if match is None:
-        AphroditeConfig._verify_direct_reload_compat(config)
+        SonarConfig._verify_direct_reload_compat(config)
     else:
         with pytest.raises(ValueError, match=match):
-            AphroditeConfig._verify_direct_reload_compat(config)
+            SonarConfig._verify_direct_reload_compat(config)

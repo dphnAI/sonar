@@ -8,17 +8,17 @@ import math
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 if not current_platform.is_rocm():
     pytest.skip("ROCm (gfx950) FlyDSL kernels", allow_module_level=True)
 
-from aphrodite.platforms.rocm import on_gfx950  # noqa: E402
+from sonar.platforms.rocm import on_gfx950  # noqa: E402
 
 if not on_gfx950():
     pytest.skip("gfx950 instructions", allow_module_level=True)
 
-from aphrodite.models.minimax_m3.amd.ops.index_topk_decode.host import (  # noqa: E402
+from sonar.models.minimax_m3.amd.ops.index_topk_decode.host import (  # noqa: E402
     minimax_m3_index_topk_decode_indices,
     minimax_m3_index_topk_prefill_indices,
     supports_index_topk,

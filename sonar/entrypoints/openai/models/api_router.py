@@ -5,8 +5,8 @@
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from aphrodite.entrypoints.openai.models.serving import OpenAIServingModels
-from aphrodite.logger import init_logger
+from sonar.entrypoints.openai.models.serving import OpenAIServingModels
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 

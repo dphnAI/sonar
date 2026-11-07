@@ -5,28 +5,28 @@ from http import HTTPStatus
 
 from fastapi import Request
 
-from aphrodite import PromptType, SamplingParams, envs
-from aphrodite.config import ModelConfig
-from aphrodite.entrypoints.openai.models.serving import (
+from sonar import PromptType, SamplingParams, envs
+from sonar.config import ModelConfig
+from sonar.entrypoints.openai.models.serving import (
     OpenAIModelRegistry,
     OpenAIServingModels,
 )
-from aphrodite.entrypoints.pooling.typing import AnyPoolingRequest
-from aphrodite.entrypoints.serve import create_error_response
-from aphrodite.entrypoints.serve.engine.protocol import ErrorResponse
-from aphrodite.entrypoints.serve.engine.typing import AnyRequest
-from aphrodite.entrypoints.serve.utils.request_logger import RequestLogger
-from aphrodite.exceptions import AphroditeNotFoundError
-from aphrodite.inputs import EngineInput
-from aphrodite.lora.request import LoRARequest
-from aphrodite.pooling_params import PoolingParams
-from aphrodite.renderers.inputs.preprocess import (
+from sonar.entrypoints.pooling.typing import AnyPoolingRequest
+from sonar.entrypoints.serve import create_error_response
+from sonar.entrypoints.serve.engine.protocol import ErrorResponse
+from sonar.entrypoints.serve.engine.typing import AnyRequest
+from sonar.entrypoints.serve.utils.request_logger import RequestLogger
+from sonar.exceptions import SonarNotFoundError
+from sonar.inputs import EngineInput
+from sonar.lora.request import LoRARequest
+from sonar.pooling_params import PoolingParams
+from sonar.renderers.inputs.preprocess import (
     extract_prompt_components,
     extract_prompt_len,
 )
-from aphrodite.sampling_params import BeamSearchParams
-from aphrodite.tracing import contains_trace_headers, extract_trace_headers
-from aphrodite.utils import random_uuid
+from sonar.sampling_params import BeamSearchParams
+from sonar.tracing import contains_trace_headers, extract_trace_headers
+from sonar.utils import random_uuid
 
 
 class BaseServing:
@@ -59,7 +59,7 @@ class BaseServing:
         if request.model in self.models.lora_requests:
             return None
         if (
-            envs.APHRODITE_ALLOW_RUNTIME_LORA_UPDATING
+            envs.SONAR_ALLOW_RUNTIME_LORA_UPDATING
             and request.model
             and (load_result := await self.models.resolve_lora(request.model))
         ):
@@ -79,7 +79,7 @@ class BaseServing:
     def _is_model_supported(self, model_name: str | None) -> bool:
         if not model_name:
             return True
-        if envs.APHRODITE_SKIP_MODEL_NAME_VALIDATION:
+        if envs.SONAR_SKIP_MODEL_NAME_VALIDATION:
             return True
         return self.models.is_base_model(model_name)
 
@@ -193,4 +193,4 @@ class BaseServing:
             return None
 
         # if _check_model has been called earlier, this will be unreachable
-        raise AphroditeNotFoundError(f"The model `{request.model}` does not exist.")
+        raise SonarNotFoundError(f"The model `{request.model}` does not exist.")

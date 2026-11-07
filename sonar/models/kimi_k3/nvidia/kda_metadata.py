@@ -17,29 +17,29 @@ from typing import TYPE_CHECKING
 
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.torch_utils import async_tensor_h2d
-from aphrodite.v1.attention.backend import AttentionCGSupport, CommonAttentionMetadata
-from aphrodite.v1.attention.backends.gdn_attn import (
+from sonar.config import SonarConfig
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
+from sonar.utils.torch_utils import async_tensor_h2d
+from sonar.v1.attention.backend import AttentionCGSupport, CommonAttentionMetadata
+from sonar.v1.attention.backends.gdn_attn import (
     GDNAttentionBackend,
     GDNAttentionMetadata,
     GDNAttentionMetadataBuilder,
 )
-from aphrodite.v1.attention.backends.recoverssm_metadata import (
+from sonar.v1.attention.backends.recoverssm_metadata import (
     RecoverSSMMetadata,
     RecoverSSMPostprocessMetadata,
 )
-from aphrodite.v1.attention.backends.utils import (
+from sonar.v1.attention.backends.utils import (
     NULL_BLOCK_ID,
     compute_causal_conv1d_metadata,
     split_decodes_and_prefills,
 )
-from aphrodite.v1.kv_cache_interface import MambaSpec
+from sonar.v1.kv_cache_interface import MambaSpec
 
 if TYPE_CHECKING:
-    from aphrodite.models.kimi_k3.nvidia.ops.recoverssm import (
+    from sonar.models.kimi_k3.nvidia.ops.recoverssm import (
         KDARecoverSSMCommitContext,
     )
 
@@ -300,20 +300,20 @@ class KimiK3KDAMetadataBuilder(GDNAttentionMetadataBuilder):
         self,
         kv_cache_spec: MambaSpec,
         layer_names: list[str],
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
     ) -> None:
-        super().__init__(kv_cache_spec, layer_names, aphrodite_config, device)
-        additional_config = aphrodite_config.additional_config
+        super().__init__(kv_cache_spec, layer_names, sonar_config, device)
+        additional_config = sonar_config.additional_config
         self.use_flashinfer_prefill = (
             isinstance(additional_config, dict) and additional_config.get("kda_prefill_backend") == "flashinfer"
         )
-        self.use_recoverssm = aphrodite_config.cache_config.use_kda_recoverssm
+        self.use_recoverssm = sonar_config.cache_config.use_kda_recoverssm
         self.spec_state_slots = 1 if self.use_recoverssm else self.num_spec + 1
         self.recoverssm_num_accepted_tokens: torch.Tensor | None = None
         self.recoverssm_context: KDARecoverSSMCommitContext | None = None
         if self.use_recoverssm:
-            max_num_reqs = aphrodite_config.scheduler_config.max_num_seqs
+            max_num_reqs = sonar_config.scheduler_config.max_num_seqs
             self.spec_state_indices_tensor = torch.empty(
                 (max_num_reqs, 1),
                 dtype=torch.int32,
@@ -330,16 +330,16 @@ class KimiK3KDAMetadataBuilder(GDNAttentionMetadataBuilder):
         if context is not None:
             return context
 
-        from aphrodite.models.kimi_k3.nvidia.ops.recoverssm import (
+        from sonar.models.kimi_k3.nvidia.ops.recoverssm import (
             KDARecoverSSMCommitContext,
         )
 
-        forward_context = self.aphrodite_config.compilation_config.static_forward_context
+        forward_context = self.sonar_config.compilation_config.static_forward_context
         layers = [forward_context[layer_name] for layer_name in self.layer_names]
         context = KDARecoverSSMCommitContext.create(
             layers,
-            spec_query_len=1 + self.aphrodite_config.num_speculative_tokens,
-            max_num_reqs=self.aphrodite_config.scheduler_config.max_num_seqs,
+            spec_query_len=1 + self.sonar_config.num_speculative_tokens,
+            max_num_reqs=self.sonar_config.scheduler_config.max_num_seqs,
             backend=layers[0].recoverssm_backend,
         )
         self.recoverssm_context = context
@@ -362,17 +362,17 @@ class KimiK3KDAMetadataBuilder(GDNAttentionMetadataBuilder):
         #   offsets = torch.arange(1 + num_speculative_blocks, dtype=torch.int32)
         #   indices = (start[:, None] + offsets).to(torch.int64)
         #   block_table_tensor = torch.gather(block_table, 1, indices)
-        if self.aphrodite_config.cache_config.mamba_cache_mode == "align":
+        if self.sonar_config.cache_config.mamba_cache_mode == "align":
             if self.mamba_aligned_state_indices is not None:
                 block_table_tensor = self.mamba_aligned_state_indices[: m.num_reqs]
             else:
-                assert not self.aphrodite_config.use_v2_model_runner, "Aligned Mamba state indices must be precomputed"
+                assert not self.sonar_config.use_v2_model_runner, "Aligned Mamba state indices must be precomputed"
                 # TODO: remove this MRV1 fallback once MRV2 is the default runner.
                 block_table_tensor = _mamba_get_block_table_tensor(
                     m.block_table_tensor,
                     m.seq_lens,
                     self.kv_cache_spec,
-                    self.aphrodite_config.cache_config.mamba_cache_mode,
+                    self.sonar_config.cache_config.mamba_cache_mode,
                 )
         else:
             block_table_tensor = m.block_table_tensor

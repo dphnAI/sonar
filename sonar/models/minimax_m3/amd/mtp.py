@@ -5,7 +5,7 @@
 Byte-identical to ``nvidia/mtp.py`` except this file lives under ``amd/`` so its
 ``from .model import ...`` resolves to the self-contained AMD model (native Gemma
 RMSNorm, native MXFP8 MoE, Triton sparse attention). The MTP logic is
-platform-agnostic. (Mirrors ``aphrodite.models.deepseek_v4.amd.mtp``.)
+platform-agnostic. (Mirrors ``sonar.models.deepseek_v4.amd.mtp``.)
 
 TODO(future, separate diff): since this is byte-identical to ``nvidia/mtp.py``,
 both copies could be consolidated into a single ``common/mtp.py`` that dispatches
@@ -25,39 +25,39 @@ import torch
 import torch.nn as nn
 from transformers import PreTrainedConfig
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed import get_pp_group, get_tensor_model_parallel_world_size
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.config import SonarConfig
+from sonar.distributed import get_pp_group, get_tensor_model_parallel_world_size
+from sonar.model_executor.layers.fused_moe import (
     fused_moe_make_expert_params_mapping,
 )
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.linear import (
     ReplicatedLinear,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.model_loader.mtp_validation import (
+from sonar.model_executor.model_loader.mtp_validation import (
     is_mtp_completeness_check_enabled,
 )
-from aphrodite.model_executor.model_loader.weight_utils import (
+from sonar.model_executor.model_loader.weight_utils import (
     default_weight_loader,
     maybe_remap_kv_scale_name,
 )
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.models.utils import (
     maybe_prefix,
 )
-from aphrodite.models.minimax_m3.amd.indexer_msa import (
+from sonar.models.minimax_m3.amd.indexer_msa import (
     MiniMaxM3IndexerMSAImpl,
     msa_indexer_cp_enabled,
     select_msa_indexer_impl_cls,
 )
-from aphrodite.models.minimax_m3.amd.ops.sparse_pa import ASM_PAGE_SIZE
-from aphrodite.models.minimax_m3.common.sparse_attention import (
+from sonar.models.minimax_m3.amd.ops.sparse_pa import ASM_PAGE_SIZE
+from sonar.models.minimax_m3.common.sparse_attention import (
     minimax_m3_use_aiter_sparse_pa,
 )
-from aphrodite.sequence import IntermediateTensors
+from sonar.sequence import IntermediateTensors
 
 from .model import (
     MiniMAXGemmaRMSNorm,
@@ -73,7 +73,7 @@ class _SparseIndexerContext(NamedTuple):
     indexer_cp: bool = False
 
 
-def _build_sparse_indexer_context(config: PreTrainedConfig, aphrodite_config: AphroditeConfig) -> _SparseIndexerContext:
+def _build_sparse_indexer_context(config: PreTrainedConfig, sonar_config: SonarConfig) -> _SparseIndexerContext:
     sparse_cfg = getattr(config, "sparse_attention_config", None)
     if sparse_cfg is None:
         return _SparseIndexerContext()
@@ -83,7 +83,7 @@ def _build_sparse_indexer_context(config: PreTrainedConfig, aphrodite_config: Ap
     # selection into it, the attend reads it back.
     tp_size = get_tensor_model_parallel_world_size()
     num_index_heads = max(1, sparse_cfg["sparse_num_index_heads"] // tp_size)
-    max_tokens = aphrodite_config.scheduler_config.max_num_batched_tokens
+    max_tokens = sonar_config.scheduler_config.max_num_batched_tokens
     topk_indices_buffer = torch.empty(
         num_index_heads,
         max_tokens,
@@ -92,7 +92,7 @@ def _build_sparse_indexer_context(config: PreTrainedConfig, aphrodite_config: Ap
     )
 
     num_kv_heads = max(1, config.num_key_value_heads // tp_size)
-    indexer_kv_dtype = aphrodite_config.attention_config.resolve_indexer_kv_dtype("bf16")
+    indexer_kv_dtype = sonar_config.attention_config.resolve_indexer_kv_dtype("bf16")
 
     impl_cls = select_msa_indexer_impl_cls(
         topk_blocks=sparse_cfg["sparse_topk_blocks"],
@@ -116,7 +116,7 @@ def _build_sparse_indexer_context(config: PreTrainedConfig, aphrodite_config: Ap
         )
         sparse_ctx_buffer = torch.empty(rows, dtype=torch.int32)
 
-    indexer_cp = msa_indexer_cp_enabled(aphrodite_config, msa_indexer_selected=msa_indexer_impl_cls is not None)
+    indexer_cp = msa_indexer_cp_enabled(sonar_config, msa_indexer_selected=msa_indexer_impl_cls is not None)
     return _SparseIndexerContext(
         topk_indices_buffer,
         msa_indexer_impl_cls,
@@ -129,16 +129,16 @@ def _build_sparse_indexer_context(config: PreTrainedConfig, aphrodite_config: Ap
 class MiniMaxM3MultiTokenPredictorLayer(nn.Module):
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str,
         indexer_ctx: _SparseIndexerContext,
     ) -> None:
         super().__init__()
 
-        assert aphrodite_config.speculative_config is not None
-        config = aphrodite_config.speculative_config.draft_model_config.hf_config
-        cache_config = aphrodite_config.cache_config
-        quant_config = aphrodite_config.quant_config
+        assert sonar_config.speculative_config is not None
+        config = sonar_config.speculative_config.draft_model_config.hf_config
+        cache_config = sonar_config.cache_config
+        quant_config = sonar_config.quant_config
 
         self.enorm = MiniMAXGemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.hnorm = MiniMAXGemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -194,17 +194,17 @@ class MiniMaxM3MultiTokenPredictorLayer(nn.Module):
 
 
 class MiniMaxM3MultiTokenPredictor(nn.Module):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
 
-        assert aphrodite_config.speculative_config is not None
+        assert sonar_config.speculative_config is not None
         # Use the draft (MTP) config, not the target model's. This is flat for a
         # standalone checkpoint, and the promoted text_config for a bundled one.
-        config = aphrodite_config.speculative_config.draft_model_config.hf_config
+        config = sonar_config.speculative_config.draft_model_config.hf_config
         self.num_mtp_layers = config.num_mtp_modules
-        indexer_ctx = _build_sparse_indexer_context(config, aphrodite_config)
+        indexer_ctx = _build_sparse_indexer_context(config, sonar_config)
         if indexer_ctx.msa_indexer_impl_cls is None:
-            indexer_kv_dtype = aphrodite_config.attention_config.resolve_indexer_kv_dtype("bf16")
+            indexer_kv_dtype = sonar_config.attention_config.resolve_indexer_kv_dtype("bf16")
             if indexer_kv_dtype != "bf16":
                 raise NotImplementedError(
                     f"MiniMax M3 MTP could not select the MSA indexer, leaving "
@@ -216,7 +216,7 @@ class MiniMaxM3MultiTokenPredictor(nn.Module):
                 )
         self.layers = torch.nn.ModuleDict(
             {
-                str(idx): MiniMaxM3MultiTokenPredictorLayer(aphrodite_config, f"{prefix}.layers.{idx}", indexer_ctx)
+                str(idx): MiniMaxM3MultiTokenPredictorLayer(sonar_config, f"{prefix}.layers.{idx}", indexer_ctx)
                 for idx in range(self.num_mtp_layers)
             }
         )
@@ -254,20 +254,18 @@ class MiniMaxM3MTP(nn.Module):
     # tracked under V2 PP, where the target's may not be available).
     has_own_embed_tokens = False
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
 
-        self._tracks_own_embed = aphrodite_config.use_v2_model_runner and get_pp_group().world_size > 1
+        self._tracks_own_embed = sonar_config.use_v2_model_runner and get_pp_group().world_size > 1
         if self._tracks_own_embed:
             # Preserve embeddings from loaders that bypass load_weights.
-            self.has_own_embed_tokens = aphrodite_config.load_config.load_format != "dummy"
+            self.has_own_embed_tokens = sonar_config.load_config.load_format != "dummy"
 
-        assert aphrodite_config.speculative_config is not None
-        self.config = aphrodite_config.speculative_config.draft_model_config.hf_config
-        self.quant_config = aphrodite_config.quant_config
-        self.model = MiniMaxM3MultiTokenPredictor(
-            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
-        )
+        assert sonar_config.speculative_config is not None
+        self.config = sonar_config.speculative_config.draft_model_config.hf_config
+        self.quant_config = sonar_config.quant_config
+        self.model = MiniMaxM3MultiTokenPredictor(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
         self.lm_head = ParallelLMHead(
             self.config.vocab_size,
             self.config.hidden_size,

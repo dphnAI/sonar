@@ -6,7 +6,7 @@ from typing import Any
 
 from transformers import TokenizersBackend
 
-from aphrodite.renderers.chat_utils import ChatCompletionMessageParam
+from sonar.renderers.chat_utils import ChatCompletionMessageParam
 
 from .deepseek_v41_encoding import (
     IMAGE_PLACEHOLDER,
@@ -27,7 +27,7 @@ def _reject_image_placeholder(text: Any) -> None:
 def _normalize_messages(
     messages: list[ChatCompletionMessageParam],
 ) -> list[dict[str, Any]]:
-    # Aphrodite additions to the reference: Responses API part types, image_pil,
+    # Sonar additions to the reference: Responses API part types, image_pil,
     # and ValueError (400) instead of the reference's asserts.
     result = [dict(message) for message in copy.deepcopy(messages)]
     image_idx = 0

@@ -9,7 +9,7 @@ from mistral_common.tokens.tokenizers.audio import AudioEncoder
 from transformers import BatchFeature, ProcessorMixin, SequenceFeatureExtractor, TensorType
 from transformers.audio_utils import AudioInput
 
-from aphrodite.tokenizers.mistral import MistralTokenizer
+from sonar.tokenizers.mistral import MistralTokenizer
 
 
 class MistralCommonFeatureExtractor(SequenceFeatureExtractor):

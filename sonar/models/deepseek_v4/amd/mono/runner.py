@@ -21,7 +21,7 @@ from pathlib import Path
 
 import torch
 
-from aphrodite.v1.attention.ops.flydsl_kernels import _run_compiled
+from sonar.v1.attention.ops.flydsl_kernels import _run_compiled
 
 from .common.plan import BLOCKS
 from .dims import (
@@ -78,7 +78,7 @@ def _check_tensors(owner, tag: str, want: dict, lds: dict | None = None) -> None
 
 @dataclass
 class AttnWeights:
-    """One layer's attention tensors on this rank, in Aphrodite's loaded layout."""
+    """One layer's attention tensors on this rank, in Sonar's loaded layout."""
 
     layer_id: int
     # [2048, 7168] e4m3: [wq_a; wkv], aiter (16, 16) shuffle
@@ -115,7 +115,7 @@ class AttnWeights:
 
 @dataclass
 class MonoLayerWeights:
-    """One layer's tensors on this rank, in Aphrodite's loaded layout."""
+    """One layer's tensors on this rank, in Sonar's loaded layout."""
 
     attn: AttnWeights
     hc_attn_fn: torch.Tensor  # [24, 4 * hidden] f32
@@ -194,7 +194,7 @@ class MonoRunner:
         self.klen = torch.zeros(2 * rows, dtype=torch.int32, device=dev)
         self._dummy = torch.zeros(4, dtype=torch.int32, device=dev)
         self._zero_rec = torch.zeros(1024, dtype=torch.uint8, device=dev)
-        # an index source's K1 outputs, Aphrodite's indexer's inputs
+        # an index source's K1 outputs, Sonar's indexer's inputs
         self.normed = torch.zeros(rows, HIDDEN, dtype=torch.bfloat16, device=dev)
         self.qr = torch.zeros(rows, Q_RANK, dtype=torch.bfloat16, device=dev)
         # the attention seam's outputs, K1 -> K2 (its pre-mix unread: the FFN
@@ -213,7 +213,7 @@ class MonoRunner:
     def scratch(self, tokens: int, topk: int = 0) -> torch.Tensor:
         """Step width ``tokens``'s scratch (of the builds of key table width
         ``topk``): a layout has memory of its own (``layer.scratch_layout``).
-        Allocated at the width's first step, which is eager: Aphrodite runs every
+        Allocated at the width's first step, which is eager: Sonar runs every
         graph's batch eagerly before capturing it."""
         buf = self._scratch.get((tokens, topk))
         if buf is None:
@@ -304,7 +304,7 @@ class MonoRunner:
         global_keys: bool = False,
     ):
         """-> (out, residual, post_mix, res_mix, pre_mix): the layer's outputs
-        (``outs``: buffers to write them into). ``select(normed, qr)``: Aphrodite's
+        (``outs``: buffers to write them into). ``select(normed, qr)``: Sonar's
         compressor and, on a CSA layer, its top-k selection into
         ``topk_indices``, run between the kernels on K1's normed input and qr.
         ``route_ids``: a hash layer's experts of the step's tokens. ``topk``:

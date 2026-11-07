@@ -17,11 +17,11 @@ from typing import TYPE_CHECKING, Any, cast
 
 import torch
 
-from aphrodite.distributed.weight_transfer.base import ParamMeta, Shard
-from aphrodite.utils.nccl import unpinned_nccl_env
+from sonar.distributed.weight_transfer.base import ParamMeta, Shard
+from sonar.utils.nccl import unpinned_nccl_env
 
 if TYPE_CHECKING:
-    from aphrodite.distributed.utils import StatelessProcessGroup
+    from sonar.distributed.utils import StatelessProcessGroup
 
 # Placement code for a mesh axis that replicates. Any other (non-negative) code
 # is the tensor dim that axis shards. Ints rather than `nccl.m2n` objects so
@@ -71,7 +71,7 @@ SUPPORTED_DTYPES: frozenset[torch.dtype] = frozenset(
 
 _IMPORT_HINT = (
     "The nccl_m2n weight transfer backend requires the `nccl-extensions` "
-    "package (and its `nccl4py` dependency), which is not installed by Aphrodite. "
+    "package (and its `nccl4py` dependency), which is not installed by Sonar. "
     "See https://github.com/NVIDIA/nccl-extensions for build "
     "and install instructions. It needs NCCL 2.30.5 or newer."
 )
@@ -132,7 +132,7 @@ def create_m2n_communicator(
 def import_m2n() -> Any:
     """Import `nccl.m2n` lazily, with an actionable error when it is missing.
 
-    Deferred so that importing Aphrodite — or any other weight transfer backend —
+    Deferred so that importing Sonar — or any other weight transfer backend —
     never requires the m2n runtime to be present.
     """
     try:

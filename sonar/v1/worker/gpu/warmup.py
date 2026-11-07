@@ -8,25 +8,25 @@ from typing import Any
 import numpy as np
 import torch
 
-from aphrodite import PoolingParams, SamplingParams
-from aphrodite.logger import init_logger
-from aphrodite.multimodal.inputs import MultiModalFeatureSpec, PlaceholderRange
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.v1.core.sched.output import (
+from sonar import PoolingParams, SamplingParams
+from sonar.logger import init_logger
+from sonar.multimodal.inputs import MultiModalFeatureSpec, PlaceholderRange
+from sonar.utils.math_utils import cdiv
+from sonar.v1.core.sched.output import (
     CachedRequestData,
     GrammarOutput,
     NewRequestData,
     SchedulerOutput,
 )
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.kv_cache_interface import (
     CircularBufferSpec,
     CrossAttentionSpec,
     KVCacheSpec,
     MambaSpec,
     UniformTypeKVCacheSpecs,
 )
-from aphrodite.v1.request import Request
-from aphrodite.v1.worker.gpu.model_runner import GPUModelRunner
+from sonar.v1.request import Request
+from sonar.v1.worker.gpu.model_runner import GPUModelRunner
 
 logger = init_logger(__name__)
 
@@ -68,7 +68,7 @@ def _warmup_block_counter(
     model_runner: GPUModelRunner,
 ) -> Callable[[int, KVCacheSpec], int]:
     """Bind `_reserved_block_count` to `model_runner`'s reservation policy."""
-    num_lookahead_tokens = model_runner.aphrodite_config.num_lookahead_tokens
+    num_lookahead_tokens = model_runner.sonar_config.num_lookahead_tokens
     max_model_len = model_runner.max_model_len
     max_encoder_len = getattr(model_runner.model_state, "max_encoder_len", 0)
 
@@ -249,7 +249,7 @@ def _warmup_kernels(
     worker_sample_tokens: Callable[[GrammarOutput | None], Any],
     greedy: bool = False,
 ) -> None:
-    if model_runner.aphrodite_config.is_mm_encoder_only:
+    if model_runner.sonar_config.is_mm_encoder_only:
         return
 
     num_spec_steps = model_runner.num_speculative_steps

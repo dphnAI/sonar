@@ -6,17 +6,17 @@ from functools import partial
 import torch
 from torch import nn
 
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.distributed.communication_op import tensor_model_parallel_all_reduce
-from aphrodite.distributed.parallel_state import (
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.distributed.communication_op import tensor_model_parallel_all_reduce
+from sonar.distributed.parallel_state import (
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
     get_tp_group,
 )
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.custom_op import CustomOp
-from aphrodite.triton_utils import HAS_TRITON, tl, triton
-from aphrodite.utils.torch_utils import direct_register_custom_op
+from sonar.logger import init_logger
+from sonar.model_executor.custom_op import CustomOp
+from sonar.triton_utils import HAS_TRITON, tl, triton
+from sonar.utils.torch_utils import direct_register_custom_op
 
 logger = init_logger(__name__)
 
@@ -396,7 +396,7 @@ class MiniMaxText01RMSNormTP(CustomOp):
             q, k = MiniMaxText01RMSNormTP.forward_qk(q_norm, k_norm, q, k)
             return q, k, v
         # Case : tp_size>1
-        q, k = torch.ops.aphrodite.minimax_qk_norm_fusion(
+        q, k = torch.ops.sonar.minimax_qk_norm_fusion(
             qkv,
             q_norm.weight,
             k_norm.weight,

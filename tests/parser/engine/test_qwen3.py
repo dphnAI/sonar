@@ -12,8 +12,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from aphrodite.parser.engine.parser_engine import ParserEngine
-from aphrodite.parser.qwen3 import (
+from sonar.parser.engine.parser_engine import ParserEngine
+from sonar.parser.qwen3 import (
     TOOL_CALL_END,
     TOOL_CALL_START,
     qwen3_config,
@@ -157,7 +157,7 @@ class TestNonStreaming:
     def test_multiple_parameters(self, parser, mock_request):
         text = (
             "<tool_call>\n<function=search>\n"
-            "<parameter=query>aphrodite parsing</parameter>\n"
+            "<parameter=query>sonar parsing</parameter>\n"
             "<parameter=limit>10</parameter>\n"
             "<parameter=exact_match>false</parameter>\n"
             "</function>\n</tool_call>"
@@ -167,7 +167,7 @@ class TestNonStreaming:
         assert result.tools_called is True
         args = json.loads(result.tool_calls[0].function.arguments)
         assert args == {
-            "query": "aphrodite parsing",
+            "query": "sonar parsing",
             "limit": "10",
             "exact_match": "false",
         }
@@ -734,7 +734,7 @@ class TestArgConverter:
     """Direct tests for the Qwen3 arg_converter with multi-line values."""
 
     def test_multiline_param_values(self):
-        from aphrodite.parser.qwen3 import (
+        from sonar.parser.qwen3 import (
             _qwen3_arg_converter,
         )
 
@@ -744,7 +744,7 @@ class TestArgConverter:
         assert result["description"] == "List files"
 
     def test_two_multiline_params(self):
-        from aphrodite.parser.qwen3 import (
+        from sonar.parser.qwen3 import (
             _qwen3_arg_converter,
         )
 
@@ -754,7 +754,7 @@ class TestArgConverter:
         assert result["b"] == "baz\nqux"
 
     def test_partial_multiline(self):
-        from aphrodite.parser.qwen3 import (
+        from sonar.parser.qwen3 import (
             _qwen3_arg_converter,
         )
 
@@ -764,7 +764,7 @@ class TestArgConverter:
         assert result["desc"] == "partial value"
 
     def test_partial_value_with_angle_bracket(self):
-        from aphrodite.parser.qwen3 import (
+        from sonar.parser.qwen3 import (
             _qwen3_arg_converter,
         )
 
@@ -773,7 +773,7 @@ class TestArgConverter:
         assert result == {"expr": "x<5"}
 
     def test_partial_value_with_angle_bracket_and_complete_param(self):
-        from aphrodite.parser.qwen3 import (
+        from sonar.parser.qwen3 import (
             _qwen3_arg_converter,
         )
 
@@ -803,7 +803,7 @@ class TestArgValueExtender:
 
     @pytest.fixture
     def write_tool(self):
-        from aphrodite.entrypoints.openai.chat_completion.protocol import (
+        from sonar.entrypoints.openai.chat_completion.protocol import (
             ChatCompletionToolsParam,
         )
 
@@ -827,8 +827,8 @@ class TestArgValueExtender:
     def test_long_call_streams_non_streaming_arguments(
         self, mock_tokenizer, mock_request, write_tool, use_schema, parser_name
     ):
-        from aphrodite.parser.mimo import MiMoParser
-        from aphrodite.parser.qwen3 import Qwen3Parser
+        from sonar.parser.mimo import MiMoParser
+        from sonar.parser.qwen3 import Qwen3Parser
 
         cls = MiMoParser if parser_name == "mimo" else Qwen3Parser
         mock_request.tools = [write_tool] if use_schema else []
@@ -884,7 +884,7 @@ class TestArgValueExtender:
         self, mock_tokenizer, mock_request, write_tool, size
     ):
         """Covers a duplicate open key and a second call sharing the first pair."""
-        from aphrodite.parser.qwen3 import Qwen3Parser
+        from sonar.parser.qwen3 import Qwen3Parser
 
         mock_request.tools = [write_tool]
         text = LOOP_HEAD + LOOP_PARAMS * 20 + "<parameter=content>\na > b" + WRITE_CALL_TAIL + LOOP_HEAD + LOOP_TAIL
@@ -904,7 +904,7 @@ class TestArgValueExtender:
 
     def test_closed_params_are_parsed_once(self, mock_tokenizer, mock_request, write_tool, monkeypatch):
         """Streaming cost must not grow with the closed parameters already seen."""
-        from aphrodite.parser import qwen3
+        from sonar.parser import qwen3
 
         mock_request.tools = [write_tool]
         param_re = qwen3._PARAM_RE
@@ -939,7 +939,7 @@ class TestArgValueExtender:
         assert matches == len(param_re.findall(text))
 
     def test_value_closed_by_next_parameter_needs_that_parameter(self):
-        from aphrodite.parser.qwen3 import _ClosedParams, _qwen3_arg_converter
+        from sonar.parser.qwen3 import _ClosedParams, _qwen3_arg_converter
 
         closed = _ClosedParams()
         _qwen3_arg_converter("<parameter=path>\n/a.py\n<parameter=mode>\n6", True, closed)
@@ -947,7 +947,7 @@ class TestArgValueExtender:
         assert _qwen3_arg_converter(text, False, closed) == _qwen3_arg_converter(text, False)
 
     def test_extender_follows_newline_trimming_and_split_end(self):
-        from aphrodite.parser.qwen3 import _qwen3_arg_value_extender
+        from sonar.parser.qwen3 import _qwen3_arg_value_extender
 
         extend = _qwen3_arg_value_extender("<parameter=k>")
         assert extend is not None
@@ -956,7 +956,7 @@ class TestArgValueExtender:
         assert [extend(d) for d in deltas] == expected
 
     def test_extender_stops_at_split_next_parameter(self):
-        from aphrodite.parser.qwen3 import _qwen3_arg_value_extender
+        from sonar.parser.qwen3 import _qwen3_arg_value_extender
 
         extend = _qwen3_arg_value_extender("<parameter=k>x")
         assert extend is not None
@@ -972,7 +972,7 @@ class TestArgValueExtender:
         ids=["closed_value", "open_name", "repeated_key_not_last"],
     )
     def test_no_extender_unless_open_value_is_last(self, raw_args):
-        from aphrodite.parser.qwen3 import _qwen3_arg_value_extender
+        from sonar.parser.qwen3 import _qwen3_arg_value_extender
 
         assert _qwen3_arg_value_extender(raw_args) is None
 
@@ -983,7 +983,7 @@ class TestSchemaAwareTypeCoercion:
 
     @pytest.fixture
     def tools(self):
-        from aphrodite.entrypoints.openai.chat_completion.protocol import (
+        from sonar.entrypoints.openai.chat_completion.protocol import (
             ChatCompletionToolsParam,
         )
 
@@ -1062,7 +1062,7 @@ class TestAnyOfTypeCoercion:
 
     @pytest.fixture
     def tools_with_anyof(self):
-        from aphrodite.entrypoints.openai.chat_completion.protocol import (
+        from sonar.entrypoints.openai.chat_completion.protocol import (
             ChatCompletionToolsParam,
         )
 
@@ -1111,7 +1111,7 @@ class TestSchemaCoercionBoolNumberNull:
 
     @pytest.fixture
     def tools(self):
-        from aphrodite.entrypoints.openai.chat_completion.protocol import (
+        from sonar.entrypoints.openai.chat_completion.protocol import (
             ChatCompletionToolsParam,
         )
 
@@ -1238,7 +1238,7 @@ class TestNestedSchemaCoercion:
 
     @pytest.fixture
     def tools(self):
-        from aphrodite.entrypoints.openai.chat_completion.protocol import (
+        from sonar.entrypoints.openai.chat_completion.protocol import (
             ChatCompletionToolsParam,
         )
 
@@ -1379,7 +1379,7 @@ class TestNestedSchemaCoercion:
 @pytest.mark.parametrize("value", ["\n北京 &amp;\n", "null", "42", "", "a\nb"])
 @pytest.mark.parametrize("chunk_size", [1, 7, 1000])
 def test_mimo_preserves_verbatim_parameter_values(mock_tokenizer, mock_request, value, chunk_size):
-    from aphrodite.parser.mimo import MiMoParser
+    from sonar.parser.mimo import MiMoParser
 
     text = f"<tool_call><function=run><parameter=text>{value}</parameter></function></tool_call>"
     parser = MiMoParser(mock_tokenizer, chat_template_kwargs={"enable_thinking": False})

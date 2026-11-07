@@ -44,7 +44,7 @@ class CacheBinding:
 
     def identity(self) -> dict[str, TensorIdentity]:
         layouts = {
-            "main": "aphrodite-fp8-block128",
+            "main": "sonar-fp8-block128",
             "key_pages": "aiter-page16-k",
             "value_pages": "aiter-page16-v",
             "k_scale": "scalar",

@@ -5,8 +5,8 @@
 import torch
 from transformers import PreTrainedConfig
 
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.multimodal import MULTIMODAL_REGISTRY
 
 from .granite_speech import (
     GraniteSpeechCTCEncoder,

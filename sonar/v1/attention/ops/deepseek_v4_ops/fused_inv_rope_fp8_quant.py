@@ -9,8 +9,8 @@ INT32-packed UE8M0 on SM100) so fp8_einsum skips transform_sf_into_required_layo
 
 import torch
 
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.torch_utils import direct_register_custom_op
+from sonar.triton_utils import tl, triton
+from sonar.utils.torch_utils import direct_register_custom_op
 
 
 @triton.jit
@@ -139,7 +139,7 @@ def fused_inv_rope_fp8_quant(
         o_fp8: [T, G, D] float8_e4m3fn, strides (D, T*D, 1).
         o_scale: Pre-transformed scale tensor for fp8_einsum.
     """
-    from aphrodite.utils.deep_gemm import get_tma_aligned_size
+    from sonar.utils.deep_gemm import get_tma_aligned_size
 
     num_tokens, num_heads, head_dim = o.shape
     assert num_heads == n_groups * heads_per_group
@@ -166,7 +166,7 @@ def fused_inv_rope_fp8_quant(
 
     # Run kernel through a custom op so inductor sees an opaque boundary.
     # It's a pytorch bug, see https://github.com/aphrodite-project/aphrodite/issues/41106
-    fp8_buf, scale_buf = torch.ops.aphrodite.fused_inv_rope_fp8_quant_kernel(
+    fp8_buf, scale_buf = torch.ops.sonar.fused_inv_rope_fp8_quant_kernel(
         o,
         positions,
         cos_sin_cache,

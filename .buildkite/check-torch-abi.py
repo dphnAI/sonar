@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 # SPDX-FileCopyrightText: Copyright contributors to the Aphrodite Engine project
 
-"""Audit Aphrodite compiled libraries for PyTorch stable ABI compliance."""
+"""Audit Sonar compiled libraries for PyTorch stable ABI compliance."""
 
 import fnmatch
 import sys
@@ -60,7 +60,7 @@ def _find_stale_allowlist_entries(report: PackageReport, patterns: tuple[str, ..
 
 
 def check_torch_abi(
-    package: str = "aphrodite",
+    package: str = "sonar",
     patterns: tuple[str, ...] = ALLOWED_UNSTABLE_LIBRARIES,
 ) -> int:
     report = inspect_package(package)
@@ -90,5 +90,5 @@ def check_torch_abi(
 
 
 if __name__ == "__main__":
-    print(">>> Auditing Aphrodite extension modules for PyTorch stable ABI compliance")
+    print(">>> Auditing Sonar extension modules for PyTorch stable ABI compliance")
     sys.exit(check_torch_abi())

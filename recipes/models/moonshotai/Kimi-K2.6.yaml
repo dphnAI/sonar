@@ -26,7 +26,7 @@ model:
     amd: "vllm/vllm-openai-rocm:nightly"
   install:
     pip:
-      note: "The optimized B300 EAGLE3 and native CPU KV offload path requires Aphrodite >= 0.25.0."
+      note: "The optimized B300 EAGLE3 and native CPU KV offload path requires Sonar >= 0.25.0."
   architecture: moe
   parameter_count: "1T"
   active_parameters: "32B"
@@ -119,20 +119,20 @@ hardware_overrides:
   amd:
     # Verified on 8× MI300X / MI355X (MI325X listed as supported but not verified).
     extra_env:
-      APHRODITE_ROCM_USE_AITER: "1"
-      APHRODITE_ROCM_QUICK_REDUCE_QUANTIZATION: "INT4"
+      SONAR_ROCM_USE_AITER: "1"
+      SONAR_ROCM_QUICK_REDUCE_QUANTIZATION: "INT4"
 
 strategy_overrides:
   pd_cluster:
     env:
-      APHRODITE_USE_NCCL_SYMM_MEM: "1"
+      SONAR_USE_NCCL_SYMM_MEM: "1"
       NCCL_CUMEM_ENABLE: "1"
       NCCL_MNNVL_ENABLE: "1"
       NCCL_NVLS_ENABLE: "1"
     prefill:
       nodes: 1               # 1 GB200 node = 4 GPUs
       parallelism: dep       # DP + expert-parallel pool
-      aphrodite_args:
+      sonar_args:
         - "--max-num-batched-tokens"
         - "16384"
         - "--block-size"
@@ -141,7 +141,7 @@ strategy_overrides:
     decode:
       nodes: 1               # 4 GB200 nodes = 16 GPUs
       parallelism: dep
-      aphrodite_args:
+      sonar_args:
         - "--compilation-config"
         - '{"cudagraph_mode":"FULL_DECODE_ONLY"}'
         - "--block-size"
@@ -160,7 +160,7 @@ guide: |
 
   ## Prerequisites
 
-  - **Aphrodite version:** >= 0.25.0 (required for the B300 EAGLE3 and native CPU KV offload paths below)
+  - **Sonar version:** >= 0.25.0 (required for the B300 EAGLE3 and native CPU KV offload paths below)
   - **Hardware (INT4):** 8× H200 GPUs (verified), or equivalent aggregate VRAM (~640 GB)
   - **Hardware (B300 / NVFP4):** 4× B300 (verified); use `vllm/vllm-openai:latest`
   - **AMD support:** 8x MI300X / MI325X / MI355X with ROCm 7.2.1 and Python 3.12
@@ -168,9 +168,9 @@ guide: |
   ### NVIDIA B300: NVFP4 with Eagle3
 
   ```bash
-  export APHRODITE_FLASHINFER_ALLREDUCE_BACKEND=trtllm
+  export SONAR_FLASHINFER_ALLREDUCE_BACKEND=trtllm
 
-  aphrodite serve nvidia/Kimi-K2.6-NVFP4 \
+  sonar serve nvidia/Kimi-K2.6-NVFP4 \
     --tensor-parallel-size 4 \
     --trust-remote-code \
     --kv-cache-dtype fp8 \
@@ -193,7 +193,7 @@ guide: |
   ```bash
   CPU_OFFLOAD_BYTES_PER_RANK=321854111744
 
-  aphrodite serve nvidia/Kimi-K2.6-NVFP4 \
+  sonar serve nvidia/Kimi-K2.6-NVFP4 \
     --tensor-parallel-size 4 \
     --trust-remote-code \
     --kv-cache-dtype fp8 \
@@ -216,10 +216,10 @@ guide: |
   and INT4 QuickReduce.
 
   ```bash
-  export APHRODITE_ROCM_USE_AITER=1
-  export APHRODITE_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
+  export SONAR_ROCM_USE_AITER=1
+  export SONAR_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 
-  aphrodite serve moonshotai/Kimi-K2.6 \
+  sonar serve moonshotai/Kimi-K2.6 \
     --host 0.0.0.0 \
     --port 8000 \
     --trust-remote-code \
@@ -236,10 +236,10 @@ guide: |
   optimized FlyDSL W4A16 MoE kernel. Keep LoRA disabled for this path.
 
   ```bash
-  export APHRODITE_ROCM_USE_AITER=1
-  export APHRODITE_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
+  export SONAR_ROCM_USE_AITER=1
+  export SONAR_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 
-  aphrodite serve moonshotai/Kimi-K2.6 \
+  sonar serve moonshotai/Kimi-K2.6 \
     --tensor-parallel-size 8 \
     --trust-remote-code \
     --mm-encoder-tp-mode data \
@@ -252,13 +252,13 @@ guide: |
     `--enable-expert-parallel`.
   - Keep `--compilation-config '{"pass_config": {"fuse_allreduce_rms": false}}'`;
     it is required for this FlyDSL path on MI350X / MI355X.
-  - Aphrodite has tuned MI350X/MI355X FlyDSL configs for this Kimi shape at TP=8 and TP=4.
-  - Keep Aphrodite's default block size unless you are tuning long-context
+  - Sonar has tuned MI350X/MI355X FlyDSL configs for this Kimi shape at TP=8 and TP=4.
+  - Keep Sonar's default block size unless you are tuning long-context
     throughput; `--block-size 64` is safe to try.
 
   ## Client Usage
 
-  Once the Aphrodite server is running, consume it via the OpenAI-compatible API:
+  Once the Sonar server is running, consume it via the OpenAI-compatible API:
 
   ```python
   import time
@@ -306,15 +306,15 @@ guide: |
   - **Unique multimodal inputs:** Pass `--mm-processor-cache-gb 0` to avoid caching overhead.
     For repeated inputs, `--mm-processor-cache-type shm` uses host shared memory for better
     performance at high TP settings.
-  - **MoE kernel tuning:** Use the `benchmark_moe` script from Aphrodite to tune Triton kernels
+  - **MoE kernel tuning:** Use the `benchmark_moe` script from Sonar to tune Triton kernels
     for your specific hardware.
   - **Async scheduling:** Enabled by default for better throughput. Disable if you encounter
-    issues, and file a bug report to Aphrodite.
+    issues, and file a bug report to Sonar.
 
   ## References
 
   - [Kimi-K2.6 on Hugging Face](https://huggingface.co/moonshotai/Kimi-K2.6)
   - [NVIDIA Kimi-K2.6-NVFP4 on Hugging Face](https://huggingface.co/nvidia/Kimi-K2.6-NVFP4)
-  - [Aphrodite multimodal inputs guide](https://docs.vllm.ai/en/latest/features/multimodal_inputs.html)
-  - [Aphrodite Expert Parallelism docs](https://docs.vllm.ai/en/latest/serving/expert_parallel_deployment.html)
-  - [Aphrodite NixlConnector usage guide](https://docs.vllm.ai/en/latest/features/nixl_connector_usage.html)
+  - [Sonar multimodal inputs guide](https://docs.vllm.ai/en/latest/features/multimodal_inputs.html)
+  - [Sonar Expert Parallelism docs](https://docs.vllm.ai/en/latest/serving/expert_parallel_deployment.html)
+  - [Sonar NixlConnector usage guide](https://docs.vllm.ai/en/latest/features/nixl_connector_usage.html)

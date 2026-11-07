@@ -9,8 +9,8 @@ from typing import Any
 import pytest
 from transformers import AutoConfig
 
-from aphrodite.transformers_utils.config import get_config, uses_mrope
-from aphrodite.transformers_utils.configs.bailing_moe_v3_vl import (
+from sonar.transformers_utils.config import get_config, uses_mrope
+from sonar.transformers_utils.configs.bailing_moe_v3_vl import (
     BailingMoeV3TextConfig,
     BailingMoeV3VisionConfig,
     BailingMoeV3VLConfig,

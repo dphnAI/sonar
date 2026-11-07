@@ -9,9 +9,9 @@ from typing import Any
 
 import torch
 
-from aphrodite.device_allocator import DEFERRABLE_TAGS, AllocationData, HandleType
-from aphrodite.logger import init_logger
-from aphrodite.utils.torch_utils import PIN_MEMORY
+from sonar.device_allocator import DEFERRABLE_TAGS, AllocationData, HandleType
+from sonar.logger import init_logger
+from sonar.utils.torch_utils import PIN_MEMORY
 
 logger = init_logger(__name__)
 

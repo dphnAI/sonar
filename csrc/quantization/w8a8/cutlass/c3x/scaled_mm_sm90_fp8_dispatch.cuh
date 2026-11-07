@@ -11,7 +11,7 @@
  * shape.
  */
 
-namespace aphrodite {
+namespace sonar {
 
 using c3x::cutlass_gemm_caller;
 
@@ -428,4 +428,4 @@ void cutlass_scaled_mm_sm90_fp8_batch_invariant_epilogue(
   }
 }
 
-}  // namespace aphrodite
+}  // namespace sonar

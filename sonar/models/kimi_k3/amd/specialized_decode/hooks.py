@@ -10,14 +10,14 @@ from typing import TYPE_CHECKING
 
 import torch
 
-from aphrodite.models.kimi_k3.amd.specialized_decode.runtime import DecodeConfig
+from sonar.models.kimi_k3.amd.specialized_decode.runtime import DecodeConfig
 
 if TYPE_CHECKING:
-    from aphrodite.models.kimi_k3.amd.specialized_decode.runtime.decode import (
+    from sonar.models.kimi_k3.amd.specialized_decode.runtime.decode import (
         SpecializedDecode,
         Step,
     )
-    from aphrodite.v1.worker.gpu.model_states.interface import ModelState
+    from sonar.v1.worker.gpu.model_states.interface import ModelState
 
 
 class SpecializedDecodeMixin:
@@ -28,13 +28,13 @@ class SpecializedDecodeMixin:
     specialized_decode: "SpecializedDecode | None"
 
     def init_specialized_decode(self, config: DecodeConfig | None) -> None:
-        """``config``: ``specialized_decode_config(aphrodite_config)``, None for the
+        """``config``: ``specialized_decode_config(sonar_config)``, None for the
         stock decode."""
         self.specialized_decode_config = config
         self.specialized_decode = None
 
     def build_specialized_decode(self) -> None:
-        from aphrodite.models.kimi_k3.amd.specialized_decode.runtime.decode import (
+        from sonar.models.kimi_k3.amd.specialized_decode.runtime.decode import (
             SpecializedDecode,
         )
 
@@ -42,7 +42,7 @@ class SpecializedDecodeMixin:
         self.specialized_decode = SpecializedDecode(self.model, self.specialized_decode_config)
 
     def get_model_state_cls(self) -> "type[ModelState]":
-        from aphrodite.models.kimi_k3.amd.specialized_decode.model_state import (
+        from sonar.models.kimi_k3.amd.specialized_decode.model_state import (
             KimiK3ModelState,
         )
 

@@ -8,8 +8,8 @@ import tempfile
 
 import huggingface_hub.constants
 
-from aphrodite.model_executor.model_loader.weight_utils import download_weights_from_hf
-from aphrodite.transformers_utils.runai_utils import (
+from sonar.model_executor.model_loader.weight_utils import download_weights_from_hf
+from sonar.transformers_utils.runai_utils import (
     ObjectStorageModel,
     is_runai_obj_uri,
     list_safetensors,

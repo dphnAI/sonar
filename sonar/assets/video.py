@@ -9,8 +9,8 @@ import numpy as np
 import numpy.typing as npt
 from PIL import Image
 
-from aphrodite.multimodal.media.audio import load_audio_pyav
-from aphrodite.transformers_utils.repo_utils import hf_api
+from sonar.multimodal.media.audio import load_audio_pyav
+from sonar.transformers_utils.repo_utils import hf_api
 
 from .base import get_cache_dir
 

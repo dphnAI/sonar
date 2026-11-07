@@ -5,7 +5,7 @@
 import pytest
 import torch
 
-from aphrodite.models.kimi_k3.nvidia.ops.fused_mla_key_concat_kv_cache import (
+from sonar.models.kimi_k3.nvidia.ops.fused_mla_key_concat_kv_cache import (
     fused_mla_decode_q_concat_kv_cache_insert,
     fused_mla_key_concat_ds_mla_insert,
     fused_mla_key_concat_kv_cache_insert,
@@ -14,8 +14,8 @@ from aphrodite.models.kimi_k3.nvidia.ops.fused_mla_key_concat_kv_cache import (
     fused_mla_kv_pack_quant_fp8,
     fused_mla_qkv_quant_kv_cache_fp8_insert,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.flashinfer import has_flashinfer_concat_mla_kv_quant_fp8
+from sonar.platforms import current_platform
+from sonar.utils.flashinfer import has_flashinfer_concat_mla_kv_quant_fp8
 
 pytestmark = pytest.mark.skipif(not current_platform.is_cuda(), reason="Kimi-K3 fused MLA requires CUDA")
 

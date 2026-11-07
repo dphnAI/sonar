@@ -5,14 +5,14 @@ from typing import TYPE_CHECKING, Any, cast
 
 import torch
 
-from aphrodite.config import AphroditeConfig, get_layers_from_aphrodite_config
-from aphrodite.distributed.parallel_state import get_dcp_group, get_pcp_group
-from aphrodite.logger import init_logger
-from aphrodite.v1.attention.backend import CommonAttentionMetadata
-from aphrodite.v1.attention.backends.utils import split_decodes_prefills_and_extends
+from sonar.config import SonarConfig, get_layers_from_sonar_config
+from sonar.distributed.parallel_state import get_dcp_group, get_pcp_group
+from sonar.logger import init_logger
+from sonar.v1.attention.backend import CommonAttentionMetadata
+from sonar.v1.attention.backends.utils import split_decodes_prefills_and_extends
 
 if TYPE_CHECKING:
-    from aphrodite.model_executor.layers.attention_layer_base import AttentionLayerBase
+    from sonar.model_executor.layers.attention_layer_base import AttentionLayerBase
 else:
     AttentionLayerBase = object
 
@@ -20,15 +20,15 @@ logger = init_logger(__name__)
 
 
 def check_attention_cp_compatibility(
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     target_layer_names: set[str] | None = None,
 ) -> None:
-    pcp_size = aphrodite_config.parallel_config.prefill_context_parallel_size
-    dcp_size = aphrodite_config.parallel_config.decode_context_parallel_size
-    interleave_size = aphrodite_config.parallel_config.cp_kv_cache_interleave_size
+    pcp_size = sonar_config.parallel_config.prefill_context_parallel_size
+    dcp_size = sonar_config.parallel_config.decode_context_parallel_size
+    interleave_size = sonar_config.parallel_config.cp_kv_cache_interleave_size
     if pcp_size * dcp_size > 1:
         layer_type = cast(type[Any], AttentionLayerBase)
-        layers = get_layers_from_aphrodite_config(aphrodite_config, layer_type)
+        layers = get_layers_from_sonar_config(sonar_config, layer_type)
         for layer_name, layer in layers.items():
             check_pcp = target_layer_names is None or layer_name in target_layer_names
             get_attn_backend = getattr(layer, "get_attn_backend", None)
@@ -42,7 +42,7 @@ def check_attention_cp_compatibility(
                 continue
             if not check_pcp and layer_impl.dcp_world_size == 1:
                 continue
-            if aphrodite_config.speculative_config is not None and interleave_size > 1:
+            if sonar_config.speculative_config is not None and interleave_size > 1:
                 assert layer_impl.supports_mtp_with_cp_non_trivial_interleave_size, (
                     f"MTP with cp_kv_cache_interleave_size > 1 is not supported in {layer_impl.__class__.__name__}."
                 )

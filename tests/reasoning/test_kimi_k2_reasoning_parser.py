@@ -4,11 +4,11 @@
 
 import pytest
 
-from aphrodite.entrypoints.generate.base.protocol import DeltaMessage
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-from aphrodite.parser.kimi_k2 import KimiK2Parser
-from aphrodite.reasoning.kimi_k2_reasoning_parser import KimiK2ReasoningParser
-from aphrodite.tokenizers import get_tokenizer
+from sonar.entrypoints.generate.base.protocol import DeltaMessage
+from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+from sonar.parser.kimi_k2 import KimiK2Parser
+from sonar.reasoning.kimi_k2_reasoning_parser import KimiK2ReasoningParser
+from sonar.tokenizers import get_tokenizer
 
 REASONING_MODEL_NAME = "moonshotai/Kimi-K2.5"
 

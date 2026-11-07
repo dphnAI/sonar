@@ -12,7 +12,7 @@ per-step shuffle.
 
 import torch
 
-from aphrodite.model_executor.model_loader.weight_utils import composed_weight_loader
+from sonar.model_executor.model_loader.weight_utils import composed_weight_loader
 
 HEAD_DIM = 512
 Q_CHUNK = 16

@@ -10,16 +10,16 @@ from typing import Generic, Literal, Protocol, TypeAlias, TypeVar
 import torch
 from transformers import PreTrainedConfig
 
-from aphrodite.config import MultiModalConfig, get_current_aphrodite_config_or_none
-from aphrodite.distributed import (
+from sonar.config import MultiModalConfig, get_current_sonar_config_or_none
+from sonar.distributed import (
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
     tensor_model_parallel_all_gather,
 )
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.utils.math_utils import round_up
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.utils.math_utils import round_up
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
 
 logger = init_logger(__name__)
 
@@ -116,10 +116,10 @@ def get_multimodal_config() -> MultiModalConfig | None:
     config context is active (e.g., during unit tests) or when the current
     ``model_config`` does not carry a ``multimodal_config`` (e.g., minimal
     stubs used in tests)."""
-    aphrodite_config = get_current_aphrodite_config_or_none()
-    if aphrodite_config is None or aphrodite_config.model_config is None:
+    sonar_config = get_current_sonar_config_or_none()
+    if sonar_config is None or sonar_config.model_config is None:
         return None
-    return getattr(aphrodite_config.model_config, "multimodal_config", None)
+    return getattr(sonar_config.model_config, "multimodal_config", None)
 
 
 def get_fp8_padded_hidden_size(num_heads: int, head_dim: int) -> int | None:

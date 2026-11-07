@@ -15,17 +15,17 @@ import torch.distributed as dist
 import torch.nn.functional as F
 from torch.multiprocessing import spawn
 
-from aphrodite.distributed import get_tp_group
-from aphrodite.model_executor.layers.fused_moe.runner import moe_runner
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import ColumnParallelLinear, ReplicatedLinear
-from aphrodite.models.kimi_k3.amd import latent_moe_runner
-from aphrodite.models.kimi_k3.amd.latent_moe_runner import ROCmLatentMoERunner
-from aphrodite.models.kimi_k3.amd.linear import KimiRoutedOutputTransform
-from aphrodite.platforms import current_platform
-from aphrodite.utils.network_utils import get_open_port
+from sonar.distributed import get_tp_group
+from sonar.model_executor.layers.fused_moe.runner import moe_runner
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import ColumnParallelLinear, ReplicatedLinear
+from sonar.models.kimi_k3.amd import latent_moe_runner
+from sonar.models.kimi_k3.amd.latent_moe_runner import ROCmLatentMoERunner
+from sonar.models.kimi_k3.amd.linear import KimiRoutedOutputTransform
+from sonar.platforms import current_platform
+from sonar.utils.network_utils import get_open_port
 from tests.utils import (
-    ensure_current_aphrodite_config,
+    ensure_current_sonar_config,
     init_test_distributed_environment,
     multi_gpu_test,
 )
@@ -229,7 +229,7 @@ _CHECKS: dict[str, Callable[[torch.device, int, int], None]] = {
 def _worker(local_rank: int, world_size: int, port: str, check: str) -> None:
     device = torch.device(f"cuda:{local_rank}")
     torch.accelerator.set_device_index(device)
-    with ensure_current_aphrodite_config():
+    with ensure_current_sonar_config():
         init_test_distributed_environment(world_size, 1, local_rank, port, local_rank=local_rank)
         _CHECKS[check](device, world_size, local_rank)
 

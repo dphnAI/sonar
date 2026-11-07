@@ -3,13 +3,13 @@
 """The DSpark draft's base logits on gfx942.
 
 With one request, the draft's base logits are a GEMM of 5 rows, one for each
-draft step, over the draft's lm_head shard (32320 x 5120 at TP 4). Aphrodite's
+draft step, over the draft's lm_head shard (32320 x 5120 at TP 4). Sonar's
 dispatch (rocm_unquantized_gemm) sends a GEMM of up to 5 rows to wvSplitK. On
 MI325X, wvSplitK takes 295 us for these 5 rows, which reads the shard at
 1.1 TB/s, against 71 us for 4 rows, and the torch GEMM takes 91 us for 5 or 6
-rows. So here the 5 rows get a sixth row of zeros, which makes Aphrodite's dispatch
+rows. So here the 5 rows get a sixth row of zeros, which makes Sonar's dispatch
 take the torch GEMM, and the logits of the sixth row are dropped. That takes
-96 us. Every other GEMM keeps Aphrodite's dispatch.
+96 us. Every other GEMM keeps Sonar's dispatch.
 
 It runs on gfx942 with --monokernel (``ops.enabled()``).
 tests/kernels/models/amd/test_dsv41_gfx942_draft_lm_head.py checks it.
@@ -17,10 +17,10 @@ tests/kernels/models/amd/test_dsv41_gfx942_draft_lm_head.py checks it.
 
 import torch
 
-from aphrodite.models.deepseek_v41.amd.ops import enabled
+from sonar.models.deepseek_v41.amd.ops import enabled
 
 # The draft's rows with one request and 5 draft steps. It is also the most
-# rows that Aphrodite's dispatch sends to wvSplitK.
+# rows that Sonar's dispatch sends to wvSplitK.
 ROWS = 5
 
 

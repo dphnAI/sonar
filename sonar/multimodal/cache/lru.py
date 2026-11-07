@@ -4,8 +4,8 @@
 
 from typing_extensions import override
 
-from aphrodite.config import ModelConfig
-from aphrodite.utils.cache import CacheInfo
+from sonar.config import ModelConfig
+from sonar.utils.cache import CacheInfo
 
 from ..inputs import MultiModalKwargsItem
 from .base import (

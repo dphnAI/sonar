@@ -6,11 +6,11 @@ from collections import defaultdict
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, ClassVar
 
-from aphrodite.distributed.kv_events import MEDIUM_CPU
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.v1.core.block_pool import BlockPool
-from aphrodite.v1.core.kv_cache_metrics import KVCacheMetricsCollector
-from aphrodite.v1.core.kv_cache_utils import (
+from sonar.distributed.kv_events import MEDIUM_CPU
+from sonar.utils.math_utils import cdiv
+from sonar.v1.core.block_pool import BlockPool
+from sonar.v1.core.kv_cache_metrics import KVCacheMetricsCollector
+from sonar.v1.core.kv_cache_utils import (
     BlockHashList,
     BlockHashListWithBlockSize,
     BlockHashWithGroupId,
@@ -18,8 +18,8 @@ from aphrodite.v1.core.kv_cache_utils import (
     resolve_block_hashes,
     trim_null_head,
 )
-from aphrodite.v1.hisparse.block_pool import SharedEventQueueBlockPool
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.hisparse.block_pool import SharedEventQueueBlockPool
+from sonar.v1.kv_cache_interface import (
     AttentionSpec,
     ChunkedLocalAttentionSpec,
     CircularBufferSpec,
@@ -39,11 +39,11 @@ from aphrodite.v1.kv_cache_interface import (
     get_mamba_prefill_checkpoint_position,
     is_mamba_prefill_checkpoint_valid,
 )
-from aphrodite.v1.kv_cache_spec_registry import KVCacheSpecRegistry
-from aphrodite.v1.request import Request
+from sonar.v1.kv_cache_spec_registry import KVCacheSpecRegistry
+from sonar.v1.request import Request
 
 if TYPE_CHECKING:
-    from aphrodite.v1.hisparse.coordinator import HiSparseCoordinator
+    from sonar.v1.hisparse.coordinator import HiSparseCoordinator
 
 
 class SingleTypeKVCacheManager(ABC):
@@ -2426,7 +2426,7 @@ def get_manager_for_kv_cache_spec(
     Args:
         kv_cache_spec: The KVCacheSpec instance
         max_in_flight_tokens: The max tokens scheduled but not yet settled
-            (one batch per concurrent step); see `AphroditeConfig.max_in_flight_tokens`
+            (one batch per concurrent step); see `SonarConfig.max_in_flight_tokens`
         max_model_len: The maximum context length the model could serve
         role: Optional KV cache group role used to select a role-specific
             manager
@@ -2454,7 +2454,7 @@ def get_manager_for_kv_cache_spec(
     return manager
 
 
-def register_all_kvcache_specs(aphrodite_config):
+def register_all_kvcache_specs(sonar_config):
     """Built-in spec registration"""
     KVCacheSpecRegistry.register_role_manager(KVCacheGroupRole.HISPARSE_SOURCE, HiSparseSourceManager)
     KVCacheSpecRegistry.register(
@@ -2518,6 +2518,6 @@ def register_all_kvcache_specs(aphrodite_config):
         uniform_type_base_spec=FullAttentionSpec,
     )
 
-    from aphrodite.platforms import current_platform
+    from sonar.platforms import current_platform
 
-    current_platform.register_custom_kv_cache_specs(aphrodite_config)
+    current_platform.register_custom_kv_cache_specs(sonar_config)

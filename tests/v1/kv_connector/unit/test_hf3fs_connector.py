@@ -12,10 +12,10 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.distributed.kv_transfer.kv_connector.v1.hf3fs.hf3fs_connector import (
+from sonar.distributed.kv_transfer.kv_connector.v1.hf3fs.hf3fs_connector import (
     HF3FSKVConnectorStats,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.hf3fs.utils.hf3fs_mock_client import (
+from sonar.distributed.kv_transfer.kv_connector.v1.hf3fs.utils.hf3fs_mock_client import (
     Hf3fsClient as MockHf3fsClient,
 )
 

@@ -9,8 +9,8 @@ import uvicorn
 from fastapi import FastAPI
 from pydantic import BaseModel
 
-from aphrodite.tokenizers import TokenizerLike, cached_get_tokenizer
-from aphrodite.v1.watermarking import GumbelWatermarkDetector
+from sonar.tokenizers import TokenizerLike, cached_get_tokenizer
+from sonar.v1.watermarking import GumbelWatermarkDetector
 
 app = FastAPI()
 tokenizer: TokenizerLike | None = None

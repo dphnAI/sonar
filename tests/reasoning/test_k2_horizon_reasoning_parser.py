@@ -7,11 +7,11 @@ from typing import cast
 
 import pytest
 
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-from aphrodite.parser.parser_manager import ParserManager
-from aphrodite.reasoning import ReasoningParserManager
-from aphrodite.reasoning.k2_horizon_reasoning_parser import K2HorizonReasoningParser
-from aphrodite.tokenizers import TokenizerLike
+from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+from sonar.parser.parser_manager import ParserManager
+from sonar.reasoning import ReasoningParserManager
+from sonar.reasoning.k2_horizon_reasoning_parser import K2HorizonReasoningParser
+from sonar.tokenizers import TokenizerLike
 
 pytestmark = pytest.mark.skip_global_cleanup
 

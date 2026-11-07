@@ -16,8 +16,8 @@ weight, so the router costs a single hipBLASLt GEMM plus a reduction over the
 
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
 
 __all__ = [
     "BF16X3_TERMS",
@@ -70,7 +70,7 @@ def platform_supported() -> bool:
     """
     if not current_platform.is_rocm():
         return False
-    from aphrodite.platforms.rocm import on_gfx950
+    from sonar.platforms.rocm import on_gfx950
 
     return on_gfx950()
 

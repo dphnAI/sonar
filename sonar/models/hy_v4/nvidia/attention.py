@@ -6,7 +6,7 @@ NOTE: The reference implementation also offers a fused MLA preprocessing
 wrapper, which is not available here, so this port keeps the eager MLA path
 with an FP8 indexer cache. TODO: restore the fused preprocessing once the
 kernel lands. The HPC gated-MLA GEMM *is* wired up: it replaces the eager
-output gating when the hpc package is installed, ``APHRODITE_ENABLE_HPC_OPS=1``
+output gating when the hpc package is installed, ``SONAR_ENABLE_HPC_OPS=1``
 and the elementwise/dtype/alignment constraints hold.
 
 The per-head learnable sink is supported through `.flashmla_sparse`, which
@@ -20,32 +20,32 @@ import torch
 from torch import nn
 from transformers import DeepseekV2Config, DeepseekV3Config, PreTrainedConfig
 
-from aphrodite.compilation.breakable_cudagraph import eager_break_during_capture
-from aphrodite.config import AphroditeConfig, CacheConfig, get_current_aphrodite_config
-from aphrodite.config.cache import CacheDType
-from aphrodite.distributed import get_tensor_model_parallel_world_size
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.attention import MLAAttention
-from aphrodite.model_executor.layers.hpc import hpc_gated_mla_gemm, hpc_gated_mla_supported
-from aphrodite.model_executor.layers.layernorm import LayerNorm, RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.compilation.breakable_cudagraph import eager_break_during_capture
+from sonar.config import CacheConfig, SonarConfig, get_current_sonar_config
+from sonar.config.cache import CacheDType
+from sonar.distributed import get_tensor_model_parallel_world_size
+from sonar.logger import init_logger
+from sonar.model_executor.layers.attention import MLAAttention
+from sonar.model_executor.layers.hpc import hpc_gated_mla_gemm, hpc_gated_mla_supported
+from sonar.model_executor.layers.layernorm import LayerNorm, RMSNorm
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     MergedColumnParallelLinear,
     ReplicatedLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.quantization.utils.fp8_utils import (
     per_token_group_quant_fp8,
 )
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.layers.sparse_attn_indexer import SparseAttnIndexer
-from aphrodite.model_executor.model_loader.weight_utils import make_attention_sink
-from aphrodite.model_executor.models.deepseek_v2 import DeepseekV32IndexerCache
-from aphrodite.model_executor.models.utils import compute_skip_topk_layers
-from aphrodite.platforms import current_platform
-from aphrodite.v1.attention.backend import AttentionBackend, AttentionType
-from aphrodite.v1.attention.selector import get_attn_backend
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.layers.sparse_attn_indexer import SparseAttnIndexer
+from sonar.model_executor.model_loader.weight_utils import make_attention_sink
+from sonar.model_executor.models.deepseek_v2 import DeepseekV32IndexerCache
+from sonar.model_executor.models.utils import compute_skip_topk_layers
+from sonar.platforms import current_platform
+from sonar.v1.attention.backend import AttentionBackend, AttentionType
+from sonar.v1.attention.selector import get_attn_backend
 
 logger = init_logger(__name__)
 
@@ -90,7 +90,7 @@ class Indexer(nn.Module):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         config: DeepseekV2Config | DeepseekV3Config,
         hidden_size: int,
         q_lora_rank: int,
@@ -100,7 +100,7 @@ class Indexer(nn.Module):
         prefix: str = "",
     ):
         super().__init__()
-        self.aphrodite_config = aphrodite_config
+        self.sonar_config = sonar_config
         self.config = config
         self.quant_config = quant_config
         self.topk_tokens = config.index_topk
@@ -143,12 +143,12 @@ class Indexer(nn.Module):
             prefix=f"{prefix}.k_cache",
             cache_config=cache_config,
         )
-        self.max_model_len = aphrodite_config.model_config.max_model_len
+        self.max_model_len = sonar_config.model_config.max_model_len
         self.prefix = prefix
 
-        from aphrodite.v1.attention.backends.mla.indexer import get_max_prefill_buffer_size
+        from sonar.v1.attention.backends.mla.indexer import get_max_prefill_buffer_size
 
-        self.max_total_seq_len = get_max_prefill_buffer_size(aphrodite_config)
+        self.max_total_seq_len = get_max_prefill_buffer_size(sonar_config)
         self.indexer_op = SparseAttnIndexer(
             self.k_cache,
             self.quant_block_size,
@@ -232,7 +232,7 @@ class HYV4MLAAttention(nn.Module):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         config: PreTrainedConfig,
         hidden_size: int,
         num_heads: int,
@@ -382,7 +382,7 @@ class HYV4MLAAttention(nn.Module):
             # so a sparse layer requires a query down-projection.
             assert q_lora_rank is not None, "HYV4 sparse attention requires q_lora_rank to be set"
             self.indexer = Indexer(
-                aphrodite_config,
+                sonar_config,
                 config,
                 hidden_size,
                 q_lora_rank,
@@ -533,7 +533,7 @@ class HYV4MLAAttention(nn.Module):
                 "sink bias is disabled."
             )
             return None
-        cache_config = get_current_aphrodite_config().cache_config
+        cache_config = get_current_sonar_config().cache_config
         block_size = (
             cache_config.block_size if cache_config is not None and cache_config.user_specified_block_size else None
         )
@@ -582,7 +582,7 @@ class HYV4MLAAttention(nn.Module):
         making the sparse path numerically equivalent to the dense one apart from
         also applying the sink.
         """
-        attention_config = get_current_aphrodite_config().attention_config
+        attention_config = get_current_sonar_config().attention_config
         if attention_config.sparse_mla_force_mqa:
             return
         attention_config.sparse_mla_force_mqa = True

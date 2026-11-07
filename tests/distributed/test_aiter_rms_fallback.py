@@ -8,10 +8,10 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-import aphrodite._aiter_ops as aiter_ops
-import aphrodite.distributed as aphrodite_distributed
-import aphrodite.kernels  # noqa: F401
-from aphrodite.platforms import current_platform
+import sonar._aiter_ops as aiter_ops
+import sonar.distributed as sonar_distributed
+import sonar.kernels  # noqa: F401
+from sonar.platforms import current_platform
 
 
 def test_rocm_aiter_gemma_rmsnorm_falls_back_after_allreduce(
@@ -41,7 +41,7 @@ def test_rocm_aiter_gemma_rmsnorm_falls_back_after_allreduce(
 
     device_comm = SimpleNamespace(qr_comm=FakeQuickReduce())
     monkeypatch.setattr(
-        aphrodite_distributed,
+        sonar_distributed,
         "get_tp_group",
         lambda: SimpleNamespace(device_communicator=device_comm),
     )
@@ -51,7 +51,7 @@ def test_rocm_aiter_gemma_rmsnorm_falls_back_after_allreduce(
         lambda: FakeAiterAllReduce(),
     )
     monkeypatch.setattr(
-        aphrodite_distributed,
+        sonar_distributed,
         "tensor_model_parallel_all_reduce",
         lambda inp: inp + 2,
     )
@@ -77,7 +77,7 @@ def test_rocm_aiter_gemma_rmsnorm_falls_back_after_allreduce(
     monkeypatch.setitem(sys.modules, "aiter", fake_aiter)
 
     # On the platform's device, not the CPU. The fallback leaves Python through
-    # `torch.ops.aphrodite_aiter.fused_add_rms_norm`, which is registered for the
+    # `torch.ops.sonar_aiter.fused_add_rms_norm`, which is registered for the
     # platform's dispatch key alone, so CPU tensors have nothing to dispatch to
     # on a GPU build. The kernel behind it is still the fake above.
     device = current_platform.device_type
@@ -122,12 +122,12 @@ def test_rocm_aiter_fused_rmsnorm_skips_fused_kernels_for_flydsl_payloads(
             raise AssertionError("FlyDSL payloads must not use fused HIP QR+RMSNorm")
 
     monkeypatch.setattr(
-        aphrodite_distributed,
+        sonar_distributed,
         "get_tp_group",
         lambda: SimpleNamespace(device_communicator=SimpleNamespace(qr_comm=FakeQuickReduce())),
     )
     monkeypatch.setattr(aiter_ops.rocm_aiter_ops, "get_aiter_allreduce", lambda: FakeAiterAllReduce())
-    monkeypatch.setattr(aphrodite_distributed, "tensor_model_parallel_all_reduce", lambda inp: inp + 2)
+    monkeypatch.setattr(sonar_distributed, "tensor_model_parallel_all_reduce", lambda inp: inp + 2)
     unfused = []
 
     def fake_fused_add_rms_norm(*args):
@@ -135,7 +135,7 @@ def test_rocm_aiter_fused_rmsnorm_skips_fused_kernels_for_flydsl_payloads(
         return "out", "residual_out"
 
     monkeypatch.setattr(
-        torch.ops.aphrodite_aiter,
+        torch.ops.sonar_aiter,
         "fused_add_rms_norm",
         fake_fused_add_rms_norm,
         raising=False,

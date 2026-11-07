@@ -6,7 +6,7 @@ import os
 import sys
 import types
 
-# In symlink mode (APHRODITE_FLASH_ATTN_SRC_DIR), cute/ is a symlink to the real
+# In symlink mode (SONAR_FLASH_ATTN_SRC_DIR), cute/ is a symlink to the real
 # source tree and its files use `flash_attn.cute.*` imports (not rewritten).
 # Register a virtual `flash_attn` package so those imports resolve.
 _cute_dir = os.path.join(os.path.dirname(__file__), "cute")
@@ -20,7 +20,7 @@ if os.path.islink(_cute_dir) and "flash_attn" not in sys.modules:
     _fa_mod.__spec__.submodule_search_locations = _fa_mod.__path__
     sys.modules["flash_attn"] = _fa_mod
 
-from aphrodite.vllm_flash_attn.flash_attn_interface import (  # noqa: E402
+from sonar.vllm_flash_attn.flash_attn_interface import (  # noqa: E402
     FA2_AVAILABLE,
     FA3_AVAILABLE,
     compile_flash_attn_varlen_func_from_specs,
@@ -32,7 +32,7 @@ from aphrodite.vllm_flash_attn.flash_attn_interface import (  # noqa: E402
 
 if not (FA2_AVAILABLE or FA3_AVAILABLE):
     raise ImportError(
-        "aphrodite.vllm_flash_attn requires the CUDA flash attention extensions "
+        "sonar.vllm_flash_attn requires the CUDA flash attention extensions "
         "(_vllm_fa2_C or _vllm_fa3_C). On ROCm, use upstream flash_attn."
     )
 

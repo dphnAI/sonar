@@ -11,15 +11,15 @@ from compressed_tensors.transform import (
 )
 from torch import Tensor
 
-import aphrodite._custom_ops as ops
-from aphrodite.distributed.parallel_state import get_tensor_model_parallel_world_size
-from aphrodite.model_executor.layers.linear import LinearBase
-from aphrodite.model_executor.layers.quantization.compressed_tensors.transform.utils import (  # noqa: E501
+import sonar._custom_ops as ops
+from sonar.distributed.parallel_state import get_tensor_model_parallel_world_size
+from sonar.model_executor.layers.linear import LinearBase
+from sonar.model_executor.layers.quantization.compressed_tensors.transform.utils import (  # noqa: E501
     TransformTuple,
 )
-from aphrodite.model_executor.layers.utils import dispatch_unquantized_gemm
-from aphrodite.model_executor.layers.vocab_parallel_embedding import VocabParallelEmbedding
-from aphrodite.model_executor.parameter import SharedWeightParameter
+from sonar.model_executor.layers.utils import dispatch_unquantized_gemm
+from sonar.model_executor.layers.vocab_parallel_embedding import VocabParallelEmbedding
+from sonar.model_executor.parameter import SharedWeightParameter
 
 
 class HadamardTransform(torch.nn.Module):

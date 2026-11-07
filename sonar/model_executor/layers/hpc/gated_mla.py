@@ -7,7 +7,7 @@ sigmoid and the elementwise product -- into a single kernel launch, replacing
 the eager ``attn_out * sigmoid(hidden_states @ weight.T)`` sequence.
 
 Kernel constraints:
-  - Requires APHRODITE_ENABLE_HPC_OPS=1
+  - Requires SONAR_ENABLE_HPC_OPS=1
   - Requires the hpc package (.so) built for the current arch
   - Only sm100 / sm103 (compute capability 100, 103)
   - All three operands must be bfloat16 and contiguous
@@ -17,9 +17,9 @@ Kernel constraints:
 
 import torch
 
-from aphrodite import envs
-from aphrodite.logger import init_logger
-from aphrodite.utils.hpc import has_hpc
+from sonar import envs
+from sonar.logger import init_logger
+from sonar.utils.hpc import has_hpc
 
 logger = init_logger(__name__)
 
@@ -32,7 +32,7 @@ _HPC_GATED_GEMM_CAPABILITIES: frozenset[int] = frozenset({100, 103})
 
 def hpc_gated_mla_supported(gating_type: str | None, attn_output_gate: torch.nn.Module | None) -> bool:
     """Gate for running the MLA output gating through hpc.gated_mla_gemm."""
-    if not envs.APHRODITE_ENABLE_HPC_OPS:
+    if not envs.SONAR_ENABLE_HPC_OPS:
         return False
 
     if attn_output_gate is None:
@@ -45,7 +45,7 @@ def hpc_gated_mla_supported(gating_type: str | None, attn_output_gate: torch.nn.
         )
         return False
 
-    from aphrodite.platforms import current_platform
+    from sonar.platforms import current_platform
 
     if not current_platform.is_cuda():
         logger.warning_once("HPC gated MLA disabled: only CUDA is supported.")
@@ -86,7 +86,7 @@ def hpc_gated_mla_supported(gating_type: str | None, attn_output_gate: torch.nn.
         )
         return False
 
-    logger.info_once("HPC gated MLA enabled by set APHRODITE_ENABLE_HPC_OPS.")
+    logger.info_once("HPC gated MLA enabled by set SONAR_ENABLE_HPC_OPS.")
     return True
 
 

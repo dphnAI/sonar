@@ -7,16 +7,16 @@ from dataclasses import dataclass
 import safetensors
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.lora.lora_weights import LoRAFullModuleWeights, LoRALayerWeights
-from aphrodite.lora.peft_helper import PEFTHelper
-from aphrodite.lora.utils import (
+from sonar.logger import init_logger
+from sonar.lora.lora_weights import LoRAFullModuleWeights, LoRALayerWeights
+from sonar.lora.peft_helper import PEFTHelper
+from sonar.lora.utils import (
     get_lora_id,
     is_base_embedding_weights,
     parse_fine_tuned_lora_name,
 )
-from aphrodite.model_executor.models.utils import WeightsMapper
-from aphrodite.utils.torch_utils import PIN_MEMORY
+from sonar.model_executor.models.utils import WeightsMapper
+from sonar.utils.torch_utils import PIN_MEMORY
 
 logger = init_logger(__name__)
 
@@ -211,7 +211,7 @@ class LoRAModel:
             model_vocab_size: Vocab size of the base model, used to size the
                 embedding deltas.
             weights_mapper: Optional mapper rewriting checkpoint weight names
-                to Aphrodite names.
+                to Sonar names.
             skip_prefixes: List of module name prefixes to skip during loading.
                 Models can define this to skip modules not used in inference
                 (e.g., MTP layers). Format: ["mtp."]

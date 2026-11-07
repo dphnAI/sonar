@@ -15,8 +15,8 @@ import msgspec
 import zmq
 import zmq.utils.monitor
 
-from aphrodite.logger import init_logger
-from aphrodite.v1.kv_offload.tiering.p2p.control.base import (
+from sonar.logger import init_logger
+from sonar.v1.kv_offload.tiering.p2p.control.base import (
     ControlConnection,
     ControlTransport,
 )

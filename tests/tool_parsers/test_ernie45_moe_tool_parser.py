@@ -7,15 +7,15 @@ from collections.abc import Generator
 
 import pytest
 
-from aphrodite.entrypoints.generate.base.protocol import (
+from sonar.entrypoints.generate.base.protocol import (
     DeltaMessage,
     FunctionCall,
     ToolCall,
 )
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-from aphrodite.tokenizers import TokenizerLike, get_tokenizer
-from aphrodite.tokenizers.detokenizer_utils import detokenize_incrementally
-from aphrodite.tool_parsers.ernie45_tool_parser import Ernie45ToolParser
+from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+from sonar.tokenizers import TokenizerLike, get_tokenizer
+from sonar.tokenizers.detokenizer_utils import detokenize_incrementally
+from sonar.tool_parsers.ernie45_tool_parser import Ernie45ToolParser
 
 # Use a common model that is likely to be available
 MODEL = "baidu/ERNIE-4.5-21B-A3B-Thinking"

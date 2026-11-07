@@ -65,14 +65,14 @@ compatible_strategies:
 
 hardware_overrides:
   blackwell:
-    # Aphrodite 0.24+ defaults to FLASHINFER_TRTLLM_MXFP4_BF16. Use
+    # Sonar 0.24+ defaults to FLASHINFER_TRTLLM_MXFP4_BF16. Use
     # --quantization-config.moe.activation mxfp8 to restore optimal
     # performance on Blackwell.
     extra_args:
       - "--quantization-config.moe.activation"
       - "mxfp8"
   amd:
-    # Aphrodite 0.17.0+ replaces the old APHRODITE_ROCM_USE_AITER_* env knobs with
+    # Sonar 0.17.0+ replaces the old SONAR_ROCM_USE_AITER_* env knobs with
     # --attention-backend ROCM_AITER_UNIFIED_ATTN. HSA_NO_SCRATCH_RECLAIM is
     # required on GPUs with firmware MEC < 177; harmless to keep set.
     extra_args:
@@ -84,8 +84,8 @@ hardware_overrides:
       - "0.95"
       - "--block-size=64"
     extra_env:
-      APHRODITE_ROCM_USE_AITER: "1"
-      APHRODITE_ROCM_QUICK_REDUCE_QUANTIZATION: "INT4"
+      SONAR_ROCM_USE_AITER: "1"
+      SONAR_ROCM_QUICK_REDUCE_QUANTIZATION: "INT4"
       HSA_NO_SCRATCH_RECLAIM: "1"
       AMDGCN_USE_BUFFER_OPS: "0"
   xpu:
@@ -103,15 +103,15 @@ hardware_overrides:
       - "0.9"
     extra_env:
       TORCH_LLM_ALLREDUCE: "1"
-      APHRODITE_ALLOW_LONG_MAX_MODEL_LEN: "1"
-      APHRODITE_WORKER_MULTIPROC_METHOD: "spawn"
+      SONAR_ALLOW_LONG_MAX_MODEL_LEN: "1"
+      SONAR_WORKER_MULTIPROC_METHOD: "spawn"
 
 strategy_overrides: {}
 
 guide: |
   ## Overview
 
-  `gpt-oss-20b` and `gpt-oss-120b` are open-weight reasoning models from OpenAI. Aphrodite
+  `gpt-oss-20b` and `gpt-oss-120b` are open-weight reasoning models from OpenAI. Sonar
   supports NVIDIA H100/H200/B200, AMD MI300X/MI325X/MI355X, and Radeon AI PRO R9700,
   with ongoing work for Ampere/Ada/RTX 5090.
 
@@ -123,15 +123,15 @@ guide: |
   ## Prerequisites
 
   - Hardware: NVIDIA H100/H200/B200 (or A100 80GB for single-GPU), AMD MI300+
-  - Aphrodite >= 0.10.1
+  - Sonar >= 0.10.1
   - CUDA >= 12.8 if building from source (must match between install and serving)
 
-  ### Install Aphrodite
+  ### Install Sonar
 
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install aphrodite-engine --torch-backend=auto
+  uv pip install sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   ```
 
   Docker quickstart:
@@ -143,7 +143,7 @@ guide: |
   AMD ROCm wheels:
 
   ```bash
-  uv pip install aphrodite-engine --extra-index-url https://wheels.vllm.ai/rocm
+  uv pip install sonar --index-strategy first-index --extra-index-url https://sonar.dphn.ai/whl/release/rocm/x86_64/simple
   ```
 
   Intel XPU (Arc Pro B70):
@@ -157,17 +157,17 @@ guide: |
   A100 (single card, default TRITON_ATTN + Marlin MXFP4 MoE):
 
   ```bash
-  aphrodite serve openai/gpt-oss-120b
-  aphrodite serve openai/gpt-oss-120b --tensor-parallel-size 4
+  sonar serve openai/gpt-oss-120b
+  sonar serve openai/gpt-oss-120b --tensor-parallel-size 4
   ```
 
   Blackwell (B200) with FlashInfer MXFP4+MXFP8 MoE:
 
   ```bash
-  aphrodite serve openai/gpt-oss-120b --config GPT-OSS_Blackwell.yaml --tensor-parallel-size 1
+  sonar serve openai/gpt-oss-120b --config GPT-OSS_Blackwell.yaml --tensor-parallel-size 1
   ```
 
-  On Aphrodite v0.28.0+ the FlashInfer TRTLLM MXFP4 MoE path is selected automatically on Blackwell; it can be pinned explicitly with `--moe-backend flashinfer_trtllm --quantization-config.moe.activation mxfp8`.
+  On Sonar v0.28.0+ the FlashInfer TRTLLM MXFP4 MoE path is selected automatically on Blackwell; it can be pinned explicitly with `--moe-backend flashinfer_trtllm --quantization-config.moe.activation mxfp8`.
 
   Hopper (H100/H200): same as Blackwell without `kv-cache-dtype` and without the FlashInfer MoE flags.
 
@@ -175,10 +175,10 @@ guide: |
 
   ```bash
   export TPU_BACKEND_TYPE=jax
-  export MODEL_IMPL_TYPE=aphrodite
+  export MODEL_IMPL_TYPE=sonar
   export HF_HOME=/data
   export HUGGING_FACE_HUB_TOKEN=<your HF token>
-  aphrodite serve openai/gpt-oss-120b \
+  sonar serve openai/gpt-oss-120b \
     --host 0.0.0.0 \
     --port 8000 \
     --seed 42 \
@@ -199,10 +199,10 @@ guide: |
   ```bash
   export HSA_NO_SCRATCH_RECLAIM=1
   export AMDGCN_USE_BUFFER_OPS=0
-  export APHRODITE_ROCM_USE_AITER=1
-  export APHRODITE_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
+  export SONAR_ROCM_USE_AITER=1
+  export SONAR_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 
-  aphrodite serve openai/gpt-oss-120b \
+  sonar serve openai/gpt-oss-120b \
     --tensor-parallel-size 8 \
     --attention-backend ROCM_AITER_UNIFIED_ATTN \
     -cc.pass_config.fuse_rope_kvcache=True \
@@ -219,8 +219,8 @@ guide: |
     --privileged --ipc=host -p 8000:8000 \
     -v ~/.cache/huggingface:/root/.cache/huggingface \
     -e TORCH_LLM_ALLREDUCE=1 \
-    -e APHRODITE_ALLOW_LONG_MAX_MODEL_LEN=1 \
-    -e APHRODITE_WORKER_MULTIPROC_METHOD=spawn \
+    -e SONAR_ALLOW_LONG_MAX_MODEL_LEN=1 \
+    -e SONAR_WORKER_MULTIPROC_METHOD=spawn \
     vllm/vllm-openai-xpu:latest \
     openai/gpt-oss-120b \
     --tensor-parallel-size 4 \
@@ -240,13 +240,13 @@ guide: |
   `PYTHON_EXECUTION_BACKEND=dangerously_use_uv`. For demo tools:
 
   ```bash
-  aphrodite serve ... --tool-server demo
+  sonar serve ... --tool-server demo
   ```
 
   For user-defined function calling:
 
   ```bash
-  aphrodite serve ... --tool-call-parser openai --enable-auto-tool-choice
+  sonar serve ... --tool-call-parser openai --enable-auto-tool-choice
   ```
 
   ## Client Usage
@@ -267,7 +267,7 @@ guide: |
   OpenAI recommends evaluating with the gpt-oss reference library:
 
   ```bash
-  aphrodite serve openai/gpt-oss-120b \
+  sonar serve openai/gpt-oss-120b \
     --tensor_parallel_size 8 --max-model-len 131072 \
     --max-num-batched-tokens 10240 --max-num-seqs 128 \
     --gpu-memory-utilization 0.85 --no-enable-prefix-caching

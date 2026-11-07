@@ -7,9 +7,9 @@ from dataclasses import dataclass, field
 import numpy as np
 import prometheus_client
 
-from aphrodite.config import SpeculativeConfig
-from aphrodite.logger import init_logger
-from aphrodite.v1.metrics.utils import create_metric_per_engine
+from sonar.config import SpeculativeConfig
+from sonar.logger import init_logger
+from sonar.v1.metrics.utils import create_metric_per_engine
 
 logger = init_logger(__name__)
 
@@ -167,20 +167,20 @@ class SpecDecodingProm:
 
     The acceptance rate can be calculated using a PromQL query:
 
-      rate(aphrodite:spec_decode_num_accepted_tokens_total[$interval]) /
-      rate(aphrodite:spec_decode_num_draft_tokens_total[$interval])
+      rate(sonar:spec_decode_num_accepted_tokens_total[$interval]) /
+      rate(sonar:spec_decode_num_draft_tokens_total[$interval])
 
     The mean acceptance length (conventionally including bonus tokens)
     can be calculated using:
 
       1 + (
-      rate(aphrodite:spec_decode_num_accepted_tokens_total[$interval]) /
-      rate(aphrodite:spec_decode_num_drafts_total[$interval]))
+      rate(sonar:spec_decode_num_accepted_tokens_total[$interval]) /
+      rate(sonar:spec_decode_num_drafts_total[$interval]))
 
     A per-position acceptance rate vector can be computed using
 
-      aphrodite:spec_decode_num_accepted_tokens_per_pos_total[$interval] /
-      aphrodite:spec_decode_num_drafts_total[$interval]
+      sonar:spec_decode_num_accepted_tokens_per_pos_total[$interval] /
+      sonar:spec_decode_num_drafts_total[$interval]
     """
 
     _counter_cls = prometheus_client.Counter
@@ -202,21 +202,21 @@ class SpecDecodingProm:
 
         if is_diffusion:
             counter_specs = [
-                ("aphrodite:diffusion_num_denoising_steps", "Number of denoising steps."),
+                ("sonar:diffusion_num_denoising_steps", "Number of denoising steps."),
                 (
-                    "aphrodite:diffusion_num_canvas_positions",
+                    "sonar:diffusion_num_canvas_positions",
                     "Number of canvas positions evaluated.",
                 ),
                 (
-                    "aphrodite:diffusion_num_committed_tokens",
+                    "sonar:diffusion_num_committed_tokens",
                     "Number of committed (finalized) tokens.",
                 ),
             ]
         else:
             counter_specs = [
-                ("aphrodite:spec_decode_num_drafts", "Number of spec decoding drafts."),
-                ("aphrodite:spec_decode_num_draft_tokens", "Number of draft tokens."),
-                ("aphrodite:spec_decode_num_accepted_tokens", "Number of accepted tokens."),
+                ("sonar:spec_decode_num_drafts", "Number of spec decoding drafts."),
+                ("sonar:spec_decode_num_draft_tokens", "Number of draft tokens."),
+                ("sonar:spec_decode_num_accepted_tokens", "Number of accepted tokens."),
             ]
 
         counters = [
@@ -238,7 +238,7 @@ class SpecDecodingProm:
             num_spec_tokens = speculative_config.num_speculative_tokens
             pos_labelnames = labelnames + ["position"]
             base_counter = self._counter_cls(
-                name="aphrodite:spec_decode_num_accepted_tokens_per_pos",
+                name="sonar:spec_decode_num_accepted_tokens_per_pos",
                 documentation="Accepted tokens per draft position.",
                 labelnames=pos_labelnames,
             )

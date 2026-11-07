@@ -25,8 +25,8 @@ DTYPE = "half"
 
 
 @pytest.fixture(scope="module")
-def llm(aphrodite_runner):
-    with aphrodite_runner(
+def llm(sonar_runner):
+    with sonar_runner(
         MODEL_NAME,
         max_model_len=None,
         max_num_batched_tokens=32768,
@@ -37,7 +37,7 @@ def llm(aphrodite_runner):
         enable_chunked_prefill=None,
     ) as runner:
         # pytest caches yielded fixtures until after teardown, so use a proxy to
-        # avoid retaining the LLM while AphroditeRunner.__exit__ releases ROCm memory.
+        # avoid retaining the LLM while SonarRunner.__exit__ releases ROCm memory.
         yield weakref.proxy(runner.llm)
 
 
@@ -51,12 +51,12 @@ def test_1_to_1(llm, hf_model):
     text_pair = [TEXTS_1[0], TEXTS_2[0]]
 
     hf_outputs = hf_model.predict([text_pair]).tolist()
-    aphrodite_outputs = [output.outputs.score for output in llm.score(text_pair[0], text_pair[1])]
+    sonar_outputs = [output.outputs.score for output in llm.score(text_pair[0], text_pair[1])]
 
-    assert len(aphrodite_outputs) == 1
+    assert len(sonar_outputs) == 1
     assert len(hf_outputs) == 1
 
-    assert hf_outputs[0] == pytest.approx(aphrodite_outputs[0], rel=0.01)
+    assert hf_outputs[0] == pytest.approx(sonar_outputs[0], rel=0.01)
 
 
 @pytest.mark.skip_global_cleanup
@@ -67,13 +67,13 @@ def test_1_to_n(llm, hf_model):
     ]
 
     hf_outputs = hf_model.predict(text_pairs).tolist()
-    aphrodite_outputs = [output.outputs.score for output in llm.score(TEXTS_1[0], TEXTS_2)]
+    sonar_outputs = [output.outputs.score for output in llm.score(TEXTS_1[0], TEXTS_2)]
 
-    assert len(aphrodite_outputs) == 2
+    assert len(sonar_outputs) == 2
     assert len(hf_outputs) == 2
 
-    assert hf_outputs[0] == pytest.approx(aphrodite_outputs[0], rel=0.01)
-    assert hf_outputs[1] == pytest.approx(aphrodite_outputs[1], rel=0.01)
+    assert hf_outputs[0] == pytest.approx(sonar_outputs[0], rel=0.01)
+    assert hf_outputs[1] == pytest.approx(sonar_outputs[1], rel=0.01)
 
 
 @pytest.mark.skip_global_cleanup
@@ -84,13 +84,13 @@ def test_n_to_n(llm, hf_model):
     ]
 
     hf_outputs = hf_model.predict(text_pairs).tolist()
-    aphrodite_outputs = [output.outputs.score for output in llm.score(TEXTS_1, TEXTS_2)]
+    sonar_outputs = [output.outputs.score for output in llm.score(TEXTS_1, TEXTS_2)]
 
-    assert len(aphrodite_outputs) == 2
+    assert len(sonar_outputs) == 2
     assert len(hf_outputs) == 2
 
-    assert hf_outputs[0] == pytest.approx(aphrodite_outputs[0], rel=0.01)
-    assert hf_outputs[1] == pytest.approx(aphrodite_outputs[1], rel=0.01)
+    assert hf_outputs[0] == pytest.approx(sonar_outputs[0], rel=0.01)
+    assert hf_outputs[1] == pytest.approx(sonar_outputs[1], rel=0.01)
 
 
 def test_embed(llm):

@@ -10,7 +10,7 @@
 #include "page.hpp"
 #include "torch_utils.hpp"
 
-namespace aphrodite {
+namespace sonar {
 namespace vmm {
 
 size_t kPageSize = 2 * 1024 * 1024;
@@ -273,4 +273,4 @@ void FTensorAllocator::init_cuda_() {
 }
 
 }  // namespace vmm
-}  // namespace aphrodite
+}  // namespace sonar

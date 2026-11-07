@@ -3,12 +3,12 @@
 
 use std::sync::Arc;
 
-use aphrodite_engine_core_client::protocol::utility::{PauseMode, SleepLevel};
-use aphrodite_metrics::METRICS;
 use axum::Json;
 use axum::extract::rejection::QueryRejection;
 use axum::extract::{Query, RawQuery, State};
 use serde::{Deserialize, Serialize};
+use sonar_engine_core_client::protocol::utility::{PauseMode, SleepLevel};
+use sonar_metrics::METRICS;
 
 use crate::error::ApiError;
 use crate::state::AppState;

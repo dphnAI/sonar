@@ -11,60 +11,60 @@ import torch.nn as nn
 import torch.nn.functional as F
 from transformers import DeepseekV2Config, DeepseekV3Config
 
-import aphrodite.envs as envs
-from aphrodite.compilation.breakable_cudagraph import eager_break_during_capture
-from aphrodite.model_executor.layers.linear import (
+import sonar.envs as envs
+from sonar.compilation.breakable_cudagraph import eager_break_during_capture
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     MergedColumnParallelLinear,
     ReplicatedLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.sparse_attn_indexer import SparseAttnIndexer
-from aphrodite.model_executor.model_loader.weight_utils import make_attention_sink
-from aphrodite.models.common.ops.fused_qk_rmsnorm import (
+from sonar.model_executor.layers.sparse_attn_indexer import SparseAttnIndexer
+from sonar.model_executor.model_loader.weight_utils import make_attention_sink
+from sonar.models.common.ops.fused_qk_rmsnorm import (
     _FUSED_Q_KV_RMSNORM_KERNEL,
     fused_q_kv_rmsnorm,
 )
-from aphrodite.models.deepseek_v4.common.ops import (
+from sonar.models.deepseek_v4.common.ops import (
     fused_indexer_q_rope_quant,
 )
-from aphrodite.models.deepseek_v4.common.ops.fused_indexer_q import MXFP4_BLOCK_SIZE
+from sonar.models.deepseek_v4.common.ops.fused_indexer_q import MXFP4_BLOCK_SIZE
 
 if TYPE_CHECKING:
-    from aphrodite.models.deepseek_v4.eager_scratch import DeepseekV4EagerScratchPool
-    from aphrodite.v1.attention.backends.mla.sparse_swa import (
+    from sonar.models.deepseek_v4.eager_scratch import DeepseekV4EagerScratchPool
+    from sonar.v1.attention.backends.mla.sparse_swa import (
         DeepseekSparseSWAMetadata,
     )
 
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.config import (
     CacheConfig,
-    get_current_aphrodite_config,
+    SonarConfig,
+    get_current_sonar_config,
 )
-from aphrodite.distributed import get_tensor_model_parallel_world_size
-from aphrodite.forward_context import get_forward_context
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.attention_layer_base import AttentionLayerBase
-from aphrodite.model_executor.layers.fusion.quant_activation import QuantizedActivation
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.models.utils import extract_layer_index
-from aphrodite.models.deepseek_v4.common.rope import build_deepseek_v4_rope
-from aphrodite.models.deepseek_v4.compressor import DeepseekCompressor
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.multi_stream_utils import (
+from sonar.distributed import get_tensor_model_parallel_world_size
+from sonar.forward_context import get_forward_context
+from sonar.logger import init_logger
+from sonar.model_executor.layers.attention_layer_base import AttentionLayerBase
+from sonar.model_executor.layers.fusion.quant_activation import QuantizedActivation
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.models.utils import extract_layer_index
+from sonar.models.deepseek_v4.common.rope import build_deepseek_v4_rope
+from sonar.models.deepseek_v4.compressor import DeepseekCompressor
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
+from sonar.utils.multi_stream_utils import (
     execute_in_parallel,
     maybe_execute_in_parallel,
 )
-from aphrodite.v1.attention.backend import AttentionBackend, AttentionMetadata
-from aphrodite.v1.attention.backends.mla.indexer import (
+from sonar.v1.attention.backend import AttentionBackend, AttentionMetadata
+from sonar.v1.attention.backends.mla.indexer import (
     DeepseekV4IndexerBackend,
     dsa_indexer_uses_fp4,
     get_max_prefill_buffer_size,
 )
-from aphrodite.v1.attention.backends.mla.sparse_swa import DeepseekV4SWACache
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.attention.backends.mla.sparse_swa import DeepseekV4SWACache
+from sonar.v1.kv_cache_interface import (
     KVCacheSpec,
     MLAAttentionSpec,
     get_kv_quant_mode,
@@ -192,14 +192,14 @@ class DeepseekV4Attention(nn.Module, AttentionLayerBase, ABC):
         """Return whether this instance stores fp8 KV in fp8_ds_mla layout."""
         return self.use_fp8_ds_mla_layout
 
-    def _get_indexer_cls(self, aphrodite_config: AphroditeConfig) -> type["DeepseekV4Indexer"]:
+    def _get_indexer_cls(self, sonar_config: SonarConfig) -> type["DeepseekV4Indexer"]:
         """The indexer for this layer. A platform subclass returns one that
         writes and scores its own index K cache layout."""
         return DeepseekV4Indexer
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str,
         topk_indices_buffer: torch.Tensor | None = None,
         q_workspace: torch.Tensor | None = None,
@@ -207,9 +207,9 @@ class DeepseekV4Attention(nn.Module, AttentionLayerBase, ABC):
         eager_scratch_pool: "DeepseekV4EagerScratchPool | None" = None,
     ) -> None:
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
-        cache_config = aphrodite_config.cache_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
+        cache_config = sonar_config.cache_config
         tp_size = get_tensor_model_parallel_world_size()
         layer_id = extract_layer_index(prefix)
 
@@ -306,8 +306,8 @@ class DeepseekV4Attention(nn.Module, AttentionLayerBase, ABC):
             # overlap of wq_b+fused_indexer_q_rope_quant vs compressor. None on
             # ROCm, where aux_stream_list is None.
             indexer_aux_stream = aux_stream_list[2] if aux_stream_list is not None else None
-            self.indexer = self._get_indexer_cls(aphrodite_config)(
-                aphrodite_config,
+            self.indexer = self._get_indexer_cls(sonar_config)(
+                sonar_config,
                 config=config,
                 hidden_size=self.hidden_size,
                 q_lora_rank=self.q_lora_rank,
@@ -321,7 +321,7 @@ class DeepseekV4Attention(nn.Module, AttentionLayerBase, ABC):
             )
 
         self._prepare_and_attn_fn = self._prepare_and_attn
-        if not aphrodite_config.use_v2_model_runner:
+        if not sonar_config.use_v2_model_runner:
             # MRV1's piecewise capture only tolerates the wide eager region: with
             # the narrow one the attention input preparation stays in the captured
             # graph and MRV1 produces garbage (#51430).
@@ -335,8 +335,8 @@ class DeepseekV4Attention(nn.Module, AttentionLayerBase, ABC):
 
         assert cache_config is not None, "DeepseekV4 attention requires cache_config"
         # ---- Attention / KV-cache setup ----
-        self.max_num_batched_tokens = aphrodite_config.scheduler_config.max_num_batched_tokens
-        self.max_model_len = aphrodite_config.model_config.max_model_len
+        self.max_num_batched_tokens = sonar_config.scheduler_config.max_num_batched_tokens
+        self.max_model_len = sonar_config.model_config.max_model_len
 
         # Resolve the kv-cache dtype from this backend's block format. The same
         # resolution drives the SWA cache tensor dtype below.
@@ -354,7 +354,7 @@ class DeepseekV4Attention(nn.Module, AttentionLayerBase, ABC):
         )
 
         # Register with compilation context for metadata lookup.
-        compilation_config = aphrodite_config.compilation_config
+        compilation_config = sonar_config.compilation_config
         if prefix and prefix in compilation_config.static_forward_context:
             raise ValueError(f"Duplicate layer name: {prefix}")
         if prefix:
@@ -366,7 +366,7 @@ class DeepseekV4Attention(nn.Module, AttentionLayerBase, ABC):
         self.compressor = None
         if self.compress_ratio > 1:
             self.compressor = DeepseekCompressor(
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 compress_ratio=self.compress_ratio,
                 hidden_size=self.hidden_size,
                 head_dim=self.head_dim,
@@ -376,8 +376,8 @@ class DeepseekV4Attention(nn.Module, AttentionLayerBase, ABC):
                 eager_scratch_pool=eager_scratch_pool,
             )
 
-        if aphrodite_config.kernel_config.enable_jit_warmup:
-            from aphrodite.v1.attention.backends.mla.sparse_swa import (
+        if sonar_config.kernel_config.enable_jit_warmup:
+            from sonar.v1.attention.backends.mla.sparse_swa import (
                 _COMPUTE_PREFILL_METADATA_KERNEL,
                 _COMPUTE_SWA_INDICES_AND_LENS_KERNEL,
             )
@@ -390,14 +390,14 @@ class DeepseekV4Attention(nn.Module, AttentionLayerBase, ABC):
             )
 
             if self.compress_ratio > 1:
-                from aphrodite.v1.attention.backends.mla.compressor_utils import (
+                from sonar.v1.attention.backends.mla.compressor_utils import (
                     _COMPRESSED_SLOT_MAPPING_KERNEL,
                 )
 
                 _COMPRESSED_SLOT_MAPPING_KERNEL.register_warmup()
 
             if self.indexer is not None:
-                from aphrodite.v1.attention.backends.mla.indexer import (
+                from sonar.v1.attention.backends.mla.indexer import (
                     _BUILD_PREFILL_CHUNK_METADATA_KERNEL,
                     _PREPARE_UNIFORM_DECODE_KERNEL,
                 )
@@ -405,9 +405,9 @@ class DeepseekV4Attention(nn.Module, AttentionLayerBase, ABC):
                 _PREPARE_UNIFORM_DECODE_KERNEL.register_warmup()
                 _BUILD_PREFILL_CHUNK_METADATA_KERNEL.register_warmup()
 
-            spec_config = aphrodite_config.speculative_config
+            spec_config = sonar_config.speculative_config
             if spec_config is not None and spec_config.use_dspark():
-                from aphrodite.v1.attention.backends.mla.sparse_swa import (
+                from sonar.v1.attention.backends.mla.sparse_swa import (
                     _COMPUTE_DSPARK_NONCAUSAL_SWA_INDICES_KERNEL,
                 )
 
@@ -422,40 +422,40 @@ class DeepseekV4Attention(nn.Module, AttentionLayerBase, ABC):
                 "ROCM_FLASHMLA_SPARSE_DSV4",
                 "XPU_V4_MLA_SPARSE",
             ):
-                from aphrodite.models.deepseek_v4.common.ops.cache_utils import (
+                from sonar.models.deepseek_v4.common.ops.cache_utils import (
                     _COMBINE_TOPK_SWA_INDICES_KERNEL,
                 )
 
                 _COMBINE_TOPK_SWA_INDICES_KERNEL.register_warmup()
 
-            from aphrodite.utils.import_utils import has_cutedsl
+            from sonar.utils.import_utils import has_cutedsl
 
             _FUSED_Q_KV_RMSNORM_KERNEL.register_warmup()
 
             backend_name = self.backend_cls.get_name()
             if current_platform.is_cuda():
-                from aphrodite.models.deepseek_v4.common.ops.fused_inv_rope_fp8_quant import (  # noqa: E501
+                from sonar.models.deepseek_v4.common.ops.fused_inv_rope_fp8_quant import (  # noqa: E501
                     _FUSED_INV_ROPE_FP8_QUANT_KERNEL,
                 )
 
                 _FUSED_INV_ROPE_FP8_QUANT_KERNEL.register_warmup()
 
                 if self.compress_ratio == 128:
-                    from aphrodite.models.deepseek_v4.sparse_mla import (
+                    from sonar.models.deepseek_v4.sparse_mla import (
                         _BUILD_C128A_TOPK_METADATA_KERNEL,
                     )
 
                     _BUILD_C128A_TOPK_METADATA_KERNEL.register_warmup()
 
                 if backend_name == "FLASHMLA_SPARSE_DSV4":
-                    from aphrodite.models.deepseek_v4.common.ops.cache_utils import (
+                    from sonar.models.deepseek_v4.common.ops.cache_utils import (
                         _COMPUTE_GLOBAL_TOPK_INDICES_AND_LENS_KERNEL,
                         _DEQUANTIZE_AND_GATHER_K_CACHE_KERNEL,
                     )
 
                     _COMPUTE_GLOBAL_TOPK_INDICES_AND_LENS_KERNEL.register_warmup()
                     if has_cutedsl() and current_platform.has_device_capability(90):
-                        from aphrodite.models.deepseek_v4.nvidia.ops.dequant_gather_k_cutedsl import (  # noqa: E501
+                        from sonar.models.deepseek_v4.nvidia.ops.dequant_gather_k_cutedsl import (  # noqa: E501
                             _DEQUANT_GATHER_K_CACHE_CUTEDSL_KERNEL,
                         )
 
@@ -463,7 +463,7 @@ class DeepseekV4Attention(nn.Module, AttentionLayerBase, ABC):
                     else:
                         _DEQUANTIZE_AND_GATHER_K_CACHE_KERNEL.register_warmup()
                 elif backend_name == "FLASHINFER_MLA_SPARSE_DSV4":
-                    from aphrodite.models.deepseek_v4.common.ops.cache_utils import (
+                    from sonar.models.deepseek_v4.common.ops.cache_utils import (
                         _BUILD_FLASHINFER_MIXED_SPARSE_INDICES_KERNEL,
                         _COMPUTE_GLOBAL_TOPK_INDICES_AND_LENS_KERNEL,
                     )
@@ -656,7 +656,7 @@ class DeepseekV4Attention(nn.Module, AttentionLayerBase, ABC):
         """
         if qr_scale is None:
             return self.wq_b(qr)
-        from aphrodite.models.deepseek_v4.amd.rocm import (
+        from sonar.models.deepseek_v4.amd.rocm import (
             apply_pre_quantized_block_scaled_mm,
         )
 
@@ -717,7 +717,7 @@ class DeepseekV4Attention(nn.Module, AttentionLayerBase, ABC):
             self.ln_events[0],
             self.ln_events[1:4],
             aux_streams,
-            enable=hidden_states.shape[0] <= envs.APHRODITE_MULTI_STREAM_GEMM_TOKEN_THRESHOLD,
+            enable=hidden_states.shape[0] <= envs.SONAR_MULTI_STREAM_GEMM_TOKEN_THRESHOLD,
         )
 
         return qr_kv, kv_score, indexer_kv_score, indexer_weights
@@ -859,7 +859,7 @@ class DeepseekV4Attention(nn.Module, AttentionLayerBase, ABC):
     def get_attn_backend(self) -> type[AttentionBackend]:
         return self.backend_cls
 
-    def get_kv_cache_spec(self, aphrodite_config: AphroditeConfig) -> KVCacheSpec | None:
+    def get_kv_cache_spec(self, sonar_config: SonarConfig) -> KVCacheSpec | None:
         if self.compress_ratio <= 1:  # SWA part. Allocated separately as DeepseekV4SWACache.
             return None
         # fp8_ds_mla is a UE8M0 block-scaled uint8 layout and needs 576B
@@ -867,7 +867,7 @@ class DeepseekV4Attention(nn.Module, AttentionLayerBase, ABC):
         # pages.
         uses_fp8_ds_mla_layout = self.kv_cache_dtype == "fp8_ds_mla"
         return MLAAttentionSpec(
-            block_size=aphrodite_config.cache_config.block_size,
+            block_size=sonar_config.cache_config.block_size,
             num_kv_heads=1,
             max_tp_shards=1,
             head_size=self.head_dim,
@@ -899,7 +899,7 @@ class DeepseekV4IndexerCache(torch.nn.Module, AttentionLayerBase):
         self.cache_config = cache_config
         self.dtype = dtype
         self.compress_ratio = compress_ratio
-        compilation_config = get_current_aphrodite_config().compilation_config
+        compilation_config = get_current_sonar_config().compilation_config
         if prefix in compilation_config.static_forward_context:
             raise ValueError(f"Duplicate layer name: {prefix}")
         compilation_config.static_forward_context[prefix] = self
@@ -908,10 +908,10 @@ class DeepseekV4IndexerCache(torch.nn.Module, AttentionLayerBase):
         # [B, H=1, N, C] -> [B, N, C]
         self.kv_cache = kv_cache.squeeze(1)
 
-    def get_kv_cache_spec(self, aphrodite_config: AphroditeConfig) -> KVCacheSpec:
+    def get_kv_cache_spec(self, sonar_config: SonarConfig) -> KVCacheSpec:
         # head_dim already carries the fp8 scale padding
         # tokens_per_state=1 for V3.2, >1 for DeepseekV4; same cache layout.
-        uses_fp8_ds_mla_layout = aphrodite_config.cache_config.cache_dtype == "fp8_ds_mla"
+        uses_fp8_ds_mla_layout = sonar_config.cache_config.cache_dtype == "fp8_ds_mla"
         return MLAAttentionSpec(
             block_size=self.cache_config.block_size,
             num_kv_heads=1,
@@ -943,7 +943,7 @@ class DeepseekV4Indexer(nn.Module):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         config: DeepseekV2Config | DeepseekV3Config,
         hidden_size: int,
         q_lora_rank: int,
@@ -956,7 +956,7 @@ class DeepseekV4Indexer(nn.Module):
         eager_scratch_pool: "DeepseekV4EagerScratchPool | None" = None,
     ):
         super().__init__()
-        self.aphrodite_config = aphrodite_config
+        self.sonar_config = sonar_config
         self.config = config
         self.quant_config = quant_config
         # self.indexer_cfg = config.attn_module_list_cfg[0]["attn_index"]
@@ -967,16 +967,16 @@ class DeepseekV4Indexer(nn.Module):
         self.q_lora_rank = q_lora_rank  # 1536
         self.compress_ratio = compress_ratio
         self.eager_scratch_pool = eager_scratch_pool
-        self.use_fp4_kv = dsa_indexer_uses_fp4(aphrodite_config)
+        self.use_fp4_kv = dsa_indexer_uses_fp4(sonar_config)
         logger.info_once(
             "Using %s indexer cache for Lightning Indexer.",
             "MXFP4" if self.use_fp4_kv else "FP8",
         )
-        if aphrodite_config.kernel_config.enable_jit_warmup:
-            from aphrodite.utils.import_utils import has_cutedsl
+        if sonar_config.kernel_config.enable_jit_warmup:
+            from sonar.utils.import_utils import has_cutedsl
 
             if current_platform.is_cuda() and has_cutedsl():
-                from aphrodite.models.deepseek_v4.nvidia.ops.fused_indexer_q_cutedsl import (  # noqa: E501
+                from sonar.models.deepseek_v4.nvidia.ops.fused_indexer_q_cutedsl import (  # noqa: E501
                     _INDEXER_Q_FP8_KERNEL,
                     _INDEXER_Q_MXFP4_KERNEL,
                 )
@@ -1005,10 +1005,10 @@ class DeepseekV4Indexer(nn.Module):
         self.quant_block_size = 128  # TODO: get from config
         self.topk_indices_buffer = topk_indices_buffer
 
-        self.max_model_len = aphrodite_config.model_config.max_model_len // self.compress_ratio
+        self.max_model_len = sonar_config.model_config.max_model_len // self.compress_ratio
         self.prefix = prefix
 
-        self.max_total_seq_len = get_max_prefill_buffer_size(aphrodite_config) // self.compress_ratio
+        self.max_total_seq_len = get_max_prefill_buffer_size(sonar_config) // self.compress_ratio
 
         assert cache_config is not None, "Deepseek V4 indexer requires cache_config"
         if self.use_fp4_kv:
@@ -1027,7 +1027,7 @@ class DeepseekV4Indexer(nn.Module):
             compress_ratio=self.compress_ratio,
         )
         self.compressor = self._get_compressor_cls()(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             compress_ratio=self.compress_ratio,
             hidden_size=hidden_size,
             head_dim=self.head_dim,
@@ -1056,14 +1056,14 @@ class DeepseekV4Indexer(nn.Module):
         self.aux_stream = aux_stream
         self.ln_events: list[torch.Event] = [torch.Event(), torch.Event()]
 
-        if aphrodite_config.kernel_config.enable_jit_warmup:
+        if sonar_config.kernel_config.enable_jit_warmup:
             self._register_q_quant_warmup()
 
     def _register_q_quant_warmup(self) -> None:
-        from aphrodite.utils.import_utils import has_cutedsl
+        from sonar.utils.import_utils import has_cutedsl
 
         if not has_cutedsl() and not current_platform.is_xpu():
-            from aphrodite.models.deepseek_v4.common.ops.fused_indexer_q import (
+            from sonar.models.deepseek_v4.common.ops.fused_indexer_q import (
                 _FUSED_INDEXER_Q_ROPE_MXFP4_TRITON_KERNEL,
                 _FUSED_INDEXER_Q_ROPE_QUANT_TRITON_KERNEL,
             )
@@ -1167,7 +1167,7 @@ class DeepseekV4Indexer(nn.Module):
             # ReplicatedLinear returns (output, bias); bias is None.
             q, _ = self.wq_b(qr)
             return q
-        from aphrodite.models.deepseek_v4.amd.rocm import (
+        from sonar.models.deepseek_v4.amd.rocm import (
             apply_pre_quantized_block_scaled_mm,
         )
 

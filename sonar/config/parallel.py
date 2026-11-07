@@ -12,20 +12,20 @@ import torch
 from pydantic import Field, field_validator, model_validator
 from torch.distributed import ProcessGroup, ReduceOp, Store
 
-import aphrodite.envs as envs
-from aphrodite.config.fault_tolerance import FaultToleranceConfig
-from aphrodite.config.utils import config
-from aphrodite.distributed.utils import cpu_all_reduce_
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.utils.network_utils import get_open_ports_list
+import sonar.envs as envs
+from sonar.config.fault_tolerance import FaultToleranceConfig
+from sonar.config.utils import config
+from sonar.distributed.utils import cpu_all_reduce_
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.utils.network_utils import get_open_ports_list
 
 if TYPE_CHECKING:
     from ray.runtime_env import RuntimeEnv
     from ray.util.placement_group import PlacementGroup
 
-    from aphrodite.config.model import ModelConfig
-    from aphrodite.v1.executor import Executor
+    from sonar.config.model import ModelConfig
+    from sonar.v1.executor import Executor
 else:
     RuntimeEnv = Any
     PlacementGroup = Any
@@ -176,15 +176,15 @@ class ParallelConfig:
     """Whether to use "external" DP LB mode. Applies only to online serving
     and when data_parallel_size > 0. This is useful for a "one-pod-per-rank"
     wide-EP setup in Kubernetes. Supported only for MoE deployments; non-MoE
-    models should use independent Aphrodite instances without --data-parallel-*
+    models should use independent Sonar instances without --data-parallel-*
     arguments. Set implicitly when --data-parallel-rank is provided explicitly
-    to aphrodite serve."""
+    to sonar serve."""
     data_parallel_hybrid_lb: bool = False
     """Whether to use "hybrid" DP LB mode. Applies only to online serving
     and when data_parallel_size > 0. Enables running an AsyncLLM
-    and API server on a "per-node" basis where Aphrodite load balances
+    and API server on a "per-node" basis where Sonar load balances
     between local data parallel ranks, but an external LB balances
-    between Aphrodite nodes/replicas. Set explicitly in conjunction with
+    between Sonar nodes/replicas. Set explicitly in conjunction with
     --data-parallel-start-rank."""
     is_moe_model: bool | None = None
     """Whether the deployed model is MoE (if known)."""
@@ -234,9 +234,9 @@ class ParallelConfig:
     - "mori_low_latency": MoRI EP with InterNodeV1LL for multi-node
       (deprecated; use "mori")
     - "moonep": MoonEP balanced EP with dynamic redundant experts (NVLink)
-    - "mori": MoRI EP; uses EPv2 where supported (see `APHRODITE_MORI_EP_V2`) and
+    - "mori": MoRI EP; uses EPv2 where supported (see `SONAR_MORI_EP_V2`) and
       EPv1 otherwise, picking the EPv1 inter-node kernel from the token budget
-      (see `APHRODITE_MORI_DISPATCH_INTER_KERNEL_SWITCH_THRESHOLD`)
+      (see `SONAR_MORI_DISPATCH_INTER_KERNEL_SWITCH_THRESHOLD`)
     - "nixl_ep": Use nixl-ep kernels
     - "flashinfer_nvlink_one_sided": Use flashinfer high-throughput a2a kernels
     - "flashinfer_nvlink_two_sided": Use flashinfer two-sided kernels for mnnvl
@@ -245,7 +245,7 @@ class ParallelConfig:
       such MoE backends; not selectable from the CLI."""
     mori_ep_v2: bool | None = None
     """Whether the "mori" all2all backend runs MoRI EPv2. Resolved from
-    `APHRODITE_MORI_EP_V2` and the deployment by `resolve_mori_all2all`; not meant
+    `SONAR_MORI_EP_V2` and the deployment by `resolve_mori_all2all`; not meant
     to be set by users."""
 
     max_parallel_loading_workers: int | None = Field(default=None, ge=1)
@@ -260,7 +260,7 @@ class ParallelConfig:
     """Route large CPU tensors (e.g. multimodal ``pixel_values``) in the
     engine→worker broadcast through a zero-copy shared-memory arena instead of
     sending a copy to every reader. **Experimental**: may be reconciled with
-    Aphrodite's existing multimodal shm tensor caching in a future release. Opt-in;
+    Sonar's existing multimodal shm tensor caching in a future release. Opt-in;
     most beneficial for multimodal serving with large images and tensor
     parallelism. Active only when all queue readers are node-local; reserves
     slots in ``/dev/shm``."""
@@ -287,7 +287,7 @@ class ParallelConfig:
     processed in a single batch."""
 
     disable_nccl_for_dp_synchronization: bool | None = None
-    """Forces the dp synchronization logic in aphrodite/v1/worker/dp_utils.py 
+    """Forces the dp synchronization logic in sonar/v1/worker/dp_utils.py 
     to use Gloo instead of NCCL for its all reduce.
 
     Defaults to True when async scheduling is enabled, False otherwise.
@@ -345,7 +345,7 @@ class ParallelConfig:
     Workers are pinned to their GPU's NUMA-local CPUs; on PCT-capable
     Xeons they also auto-bind to the SKU's PCT priority cores.
 
-    If None (default), Aphrodite binds only when the environment supports it
+    If None (default), Sonar binds only when the environment supports it
     (multiple NUMA nodes, `numactl` installed, unrestricted CPU affinity,
     a default NUMA memory policy, and the `spawn` start method with an
     mp/uni executor and mp DP, including PCP).
@@ -367,7 +367,7 @@ class ParallelConfig:
 
     Specify one NUMA node per visible GPU, for example `[0, 0, 1, 1]`
     for a 4-GPU system with GPUs 0-1 on NUMA node 0 and GPUs 2-3 on
-    NUMA node 1. If unset and `numa_bind=True`, Aphrodite auto-detects the
+    NUMA node 1. If unset and `numa_bind=True`, Sonar auto-detects the
     GPU-to-NUMA topology. The values are passed to `numactl --membind`
     and `--cpunodebind`, so they must be valid `numactl` NUMA node indices.
     """
@@ -379,14 +379,14 @@ class ParallelConfig:
     It cannot be combined with `numa_bind=False`.
 
     Specify one CPU list per visible GPU, for example
-    `["0-3", "4-7", "8-11", "12-15"]`. When set, Aphrodite uses
+    `["0-3", "4-7", "8-11", "12-15"]`. When set, Sonar uses
     `numactl --physcpubind` instead of `--cpunodebind`. This is useful
     for custom policies such as binding to PCT or other high-frequency cores.
     Each entry must use `numactl --physcpubind` CPU-list syntax, for example
     `"0-3"` or `"0,2,4-7"`.
     """
     assigned_physical_gpu_ids: list[int] | None = None
-    """Mapping from Aphrodite-local logical GPU IDs to physical GPU IDs.
+    """Mapping from Sonar-local logical GPU IDs to physical GPU IDs.
 
     For example, ``[2, 3]`` means logical GPU 0 maps to physical GPU 2,
     and logical GPU 1 maps to physical GPU 3. Physical IDs are used only
@@ -439,7 +439,7 @@ class ParallelConfig:
       per layer for MLA models.
 
     `None` selects the model default, which is "ag_rs" unless the model
-    overrides it via [`set_dcp_defaults`][aphrodite.config.ParallelConfig.set_dcp_defaults].
+    overrides it via [`set_dcp_defaults`][sonar.config.ParallelConfig.set_dcp_defaults].
     """
 
     dcp_q_replicate: bool | None = None
@@ -710,7 +710,7 @@ class ParallelConfig:
         value, except under FT before steady state, where group timeouts
         are deferred because uneven rank startup would trip them."""
         if self.enable_fault_tolerance:
-            from aphrodite.distributed.utils import steady_state_entered
+            from sonar.distributed.utils import steady_state_entered
 
             if not steady_state_entered():
                 return None
@@ -742,7 +742,7 @@ class ParallelConfig:
         if not self._coord_store_port:
             return self.get_next_dp_init_port(), None
 
-        from aphrodite.distributed.utils import get_cached_tcp_store_client
+        from sonar.distributed.utils import get_cached_tcp_store_client
 
         store = get_cached_tcp_store_client(self.data_parallel_master_ip, self._coord_store_port)
 
@@ -771,7 +771,7 @@ class ParallelConfig:
         # with a fresh port whenever this specific error is observed.
         from torch.distributed import DistNetworkError
 
-        from aphrodite.distributed.utils import (
+        from sonar.distributed.utils import (
             stateless_init_torch_distributed_process_group,
         )
 
@@ -990,7 +990,7 @@ class ParallelConfig:
             # NUMA binding is per-rank host-side memory locality; it does
             # not affect collective-communication semantics. When numa_bind
             # is enabled with auto-detection, each DP rank stores its own
-            # NUMA node in numa_bind_nodes (see aphrodite/utils/numa_utils.py
+            # NUMA node in numa_bind_nodes (see sonar/utils/numa_utils.py
             # `_get_numa_node`), which would otherwise diverge the DP hash.
             "numa_bind",
             "_numa_bind_auto",
@@ -999,7 +999,7 @@ class ParallelConfig:
             "assigned_physical_gpu_ids",
         }
 
-        from aphrodite.config.utils import get_hash_factors, hash_factors
+        from sonar.config.utils import get_hash_factors, hash_factors
 
         factors = get_hash_factors(self, ignored_factors)
         return hash_factors(factors)
@@ -1027,7 +1027,7 @@ class ParallelConfig:
                     "or data_parallel_external_lb, but not hybrid load balancing."
                 )
             if self.eplb_config.use_async:
-                from aphrodite.distributed.nixl_utils import is_nixl_available
+                from sonar.distributed.nixl_utils import is_nixl_available
 
                 if not is_nixl_available():
                     raise ValueError(
@@ -1058,11 +1058,11 @@ class ParallelConfig:
                 )
         else:
             # Otherwise fall back to env vars (e.g. for offline SPMD case).
-            self.data_parallel_size = envs.APHRODITE_DP_SIZE
-            self.data_parallel_rank = envs.APHRODITE_DP_RANK
-            self.data_parallel_rank_local = envs.APHRODITE_DP_RANK_LOCAL
-            self.data_parallel_master_ip = envs.APHRODITE_DP_MASTER_IP
-            self.data_parallel_master_port = envs.APHRODITE_DP_MASTER_PORT
+            self.data_parallel_size = envs.SONAR_DP_SIZE
+            self.data_parallel_rank = envs.SONAR_DP_RANK
+            self.data_parallel_rank_local = envs.SONAR_DP_RANK_LOCAL
+            self.data_parallel_master_ip = envs.SONAR_DP_MASTER_IP
+            self.data_parallel_master_port = envs.SONAR_DP_MASTER_PORT
 
             if self.data_parallel_size > 1 and self.is_moe_model is False:
                 raise ValueError("Offline data parallel mode is not supported/useful for dense models.")
@@ -1080,18 +1080,18 @@ class ParallelConfig:
         self.data_parallel_index = self.data_parallel_rank
 
         if self.distributed_executor_backend == "external_launcher":
-            os.environ["APHRODITE_ENABLE_V1_MULTIPROCESSING"] = "0"
+            os.environ["SONAR_ENABLE_V1_MULTIPROCESSING"] = "0"
             logger.info("Disabling V1 multiprocessing for external launcher.")
 
         if self.distributed_executor_backend is None and self.world_size_across_dp > 1:
             # We use multiprocessing by default if world_size fits on the
             # current node and we aren't in a ray placement group.
 
-            from aphrodite.v1.executor import ray_utils
+            from sonar.v1.executor import ray_utils
 
             backend: DistributedExecutorBackend = "mp"
             ray_found = ray_utils.ray_is_available()
-            if current_platform.is_tpu() and envs.APHRODITE_XLA_USE_SPMD:
+            if current_platform.is_tpu() and envs.SONAR_XLA_USE_SPMD:
                 backend = "uni"
             elif current_platform.is_cuda() and self.nnodes > 1:
                 backend = "mp"
@@ -1140,7 +1140,7 @@ class ParallelConfig:
             # is incompatible with async EPLB (multi-stream conflicts) and
             # batched isend/irecv hangs under high load.
             # See https://github.com/pytorch/pytorch/issues/174288
-            from aphrodite.distributed.nixl_utils import is_nixl_available
+            from sonar.distributed.nixl_utils import is_nixl_available
 
             if current_platform.is_xpu():
                 # On XPU, use the device-native XCCL P2P backend.
@@ -1162,7 +1162,7 @@ class ParallelConfig:
     @model_validator(mode="after")
     def _verify_args(self) -> Self:
         # Lazy import to avoid circular import
-        from aphrodite.v1.executor import Executor
+        from sonar.v1.executor import Executor
 
         if (
             self.distributed_executor_backend is not None
@@ -1179,7 +1179,7 @@ class ParallelConfig:
                 " custom Executor subclass or its import path."
             )
         if self.use_ray:
-            from aphrodite.v1.executor import ray_utils
+            from sonar.v1.executor import ray_utils
 
             ray_utils.assert_ray_available()
 
@@ -1223,7 +1223,7 @@ def resolve_mori_all2all(
 ) -> None:
     """Resolve whether the "mori" all2all backend runs MoRI EPv2 or EPv1.
 
-    An unset `APHRODITE_MORI_EP_V2` prefers EPv2 and falls back to EPv1 where EPv2
+    An unset `SONAR_MORI_EP_V2` prefers EPv2 and falls back to EPv1 where EPv2
     is unsupported, an explicit true keeps EPv2 regardless, and false selects
     EPv1. `lsa_spans_hosts` says whether a CCO-LSA team can span hosts (e.g.
     gfx1250's UALink vPOD). `sdma_picks_epv1` says whether `MORI_ENABLE_SDMA=1`
@@ -1252,7 +1252,7 @@ def _resolve_mori_ep_v2(
     sdma_picks_epv1: bool,
     validated_arch: bool,
 ) -> bool:
-    if envs.APHRODITE_MORI_EP_V2 is False:
+    if envs.SONAR_MORI_EP_V2 is False:
         return False
     reason = _mori_epv2_unsupported_reason(
         parallel_config,
@@ -1264,15 +1264,15 @@ def _resolve_mori_ep_v2(
     )
     if reason is None:
         return True
-    if envs.APHRODITE_MORI_EP_V2:
+    if envs.SONAR_MORI_EP_V2:
         logger.warning(
-            "APHRODITE_MORI_EP_V2=1 is set explicitly, so MORI EPv2 is used even though it does not support %s.",
+            "SONAR_MORI_EP_V2=1 is set explicitly, so MORI EPv2 is used even though it does not support %s.",
             reason,
         )
         return True
     logger.warning(
         "MORI EPv2 does not support %s; falling back to MORI EPv1. "
-        "Set APHRODITE_MORI_EP_V2=1 to force EPv2, or 0 to select EPv1.",
+        "Set SONAR_MORI_EP_V2=1 to force EPv2, or 0 to select EPv1.",
         reason,
     )
     return False
@@ -1299,7 +1299,7 @@ def _mori_epv2_unsupported_reason(
     sdma_picks_epv1: bool,
     validated_arch: bool,
 ) -> str | None:
-    from aphrodite.utils.import_utils import mori_epv2_unavailable_reason
+    from sonar.utils.import_utils import mori_epv2_unavailable_reason
 
     reason = mori_epv2_unavailable_reason()
     if reason is not None:

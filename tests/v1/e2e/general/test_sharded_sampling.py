@@ -15,12 +15,12 @@ many-nats divergence and scrambled top-k sets."""
 import pytest
 import torch
 
-from aphrodite import LLM, SamplingParams
-from aphrodite.distributed import (
+from sonar import LLM, SamplingParams
+from sonar.distributed import (
     cleanup_dist_env_and_memory,
     tensor_model_parallel_all_gather,
 )
-from aphrodite.logprobs import Logprob, LogprobsOnePosition
+from sonar.logprobs import Logprob, LogprobsOnePosition
 from tests.utils import multi_gpu_test
 
 MODEL = "meta-llama/Llama-3.2-1B-Instruct"
@@ -267,12 +267,12 @@ def _assert_outputs_match(ref_outputs, shard_outputs, params) -> None:
 
 
 def _configure_test_environment(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("APHRODITE_USE_V2_MODEL_RUNNER", "1")
+    monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", "1")
     # Required for the collective_rpc mode check below.
-    monkeypatch.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
+    monkeypatch.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")
     # Queue every request before the first step, so both boots schedule the
     # same batches -- see the module docstring.
-    monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
+    monkeypatch.setenv("SONAR_ENABLE_V1_MULTIPROCESSING", "0")
 
 
 @multi_gpu_test(num_gpus=2)

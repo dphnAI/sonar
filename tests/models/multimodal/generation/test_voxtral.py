@@ -9,7 +9,7 @@ from mistral_common.protocol.instruct.messages import UserMessage
 from mistral_common.tokens.tokenizers.audio import Audio
 from transformers import VoxtralForConditionalGeneration
 
-from aphrodite.tokenizers.mistral import MistralTokenizer
+from sonar.tokenizers.mistral import MistralTokenizer
 
 from ....conftest import AudioTestAssets
 from ....utils import RemoteOpenAIServer
@@ -29,7 +29,7 @@ MISTRAL_FORMAT_ARGS = [
 
 
 def _get_prompt(audio_assets: AudioTestAssets, question: str) -> list[int]:
-    """Build a token-ID prompt via mistral_common for Aphrodite offline inference."""
+    """Build a token-ID prompt via mistral_common for Sonar offline inference."""
     tokenizer = MistralTokenizer.from_pretrained(MODEL_NAME)
 
     audios = [Audio.from_file(str(asset.get_local_path()), strict=False) for asset in audio_assets]
@@ -44,16 +44,16 @@ def _get_prompt(audio_assets: AudioTestAssets, question: str) -> list[int]:
 @pytest.mark.parametrize("max_tokens", [128])
 @pytest.mark.parametrize("num_logprobs", [5])
 def test_models_with_multiple_audios(
-    aphrodite_runner,
+    sonar_runner,
     audio_assets: AudioTestAssets,
     dtype: str,
     max_tokens: int,
     num_logprobs: int,
 ) -> None:
-    aphrodite_prompt = _get_prompt(audio_assets, MULTI_AUDIO_PROMPT)
+    sonar_prompt = _get_prompt(audio_assets, MULTI_AUDIO_PROMPT)
     run_multi_audio_test(
-        aphrodite_runner,
-        [(aphrodite_prompt, [a.audio_and_sample_rate for a in audio_assets])],
+        sonar_runner,
+        [(sonar_prompt, [a.audio_and_sample_rate for a in audio_assets])],
         MODEL_NAME,
         dtype=dtype,
         max_tokens=max_tokens,
@@ -62,10 +62,10 @@ def test_models_with_multiple_audios(
     )
 
 
-def test_online_serving(aphrodite_runner, audio_assets: AudioTestAssets):
+def test_online_serving(sonar_runner, audio_assets: AudioTestAssets):
     """Two-layer accuracy and serving validation using Mistral format.
 
-    1. Offline Aphrodite greedy output (runs first to avoid CUDA fork issues
+    1. Offline Sonar greedy output (runs first to avoid CUDA fork issues
        with multiprocessing - see vlm_utils/core.py).
     2. Online OpenAI-compatible API output must match offline — validates
        that the serving path (chat template, audio encoding, tokenization)
@@ -77,8 +77,8 @@ def test_online_serving(aphrodite_runner, audio_assets: AudioTestAssets):
     max_tokens = 10
     audio_data = [asset.audio_and_sample_rate for asset in audio_assets]
 
-    aphrodite_prompt = _get_prompt(audio_assets, question)
-    with aphrodite_runner(
+    sonar_prompt = _get_prompt(audio_assets, question)
+    with sonar_runner(
         MODEL_NAME,
         dtype="half",
         enforce_eager=True,
@@ -86,15 +86,15 @@ def test_online_serving(aphrodite_runner, audio_assets: AudioTestAssets):
         config_format="mistral",
         load_format="mistral",
         limit_mm_per_prompt={"audio": len(audio_assets)},
-    ) as aphrodite_model:
-        offline_outputs = aphrodite_model.generate_greedy(
-            [aphrodite_prompt],
+    ) as sonar_model:
+        offline_outputs = sonar_model.generate_greedy(
+            [sonar_prompt],
             max_tokens,
             audios=[audio_data],
         )
 
     offline_text = offline_outputs[0][1]
-    assert offline_text, "Offline Aphrodite inference produced empty output"
+    assert offline_text, "Offline Sonar inference produced empty output"
 
     def _asset_to_openai_chunk(asset):
         audio = Audio.from_file(str(asset.get_local_path()), strict=False)
@@ -121,7 +121,7 @@ def test_online_serving(aphrodite_runner, audio_assets: AudioTestAssets):
     with RemoteOpenAIServer(
         MODEL_NAME,
         server_args,
-        env_dict={"APHRODITE_AUDIO_FETCH_TIMEOUT": "30"},
+        env_dict={"SONAR_AUDIO_FETCH_TIMEOUT": "30"},
     ) as remote_server:
         client = remote_server.get_client()
         completion = client.chat.completions.create(
@@ -141,8 +141,8 @@ def test_online_serving(aphrodite_runner, audio_assets: AudioTestAssets):
     )
 
 
-def test_hf_reference(hf_runner, aphrodite_runner, audio_assets: AudioTestAssets):
-    """Compare Aphrodite Mistral-format output against HF Transformers reference.
+def test_hf_reference(hf_runner, sonar_runner, audio_assets: AudioTestAssets):
+    """Compare Sonar Mistral-format output against HF Transformers reference.
 
     Instead of requiring an exact text match (which is brittle across
     attention backends), we compare per-token logprobs using the standard
@@ -154,8 +154,8 @@ def test_hf_reference(hf_runner, aphrodite_runner, audio_assets: AudioTestAssets
     num_logprobs = 5
     audio_data = [asset.audio_and_sample_rate for asset in audio_assets]
 
-    aphrodite_prompt = _get_prompt(audio_assets, question)
-    with aphrodite_runner(
+    sonar_prompt = _get_prompt(audio_assets, question)
+    with sonar_runner(
         MODEL_NAME,
         dtype="half",
         enforce_eager=True,
@@ -163,14 +163,14 @@ def test_hf_reference(hf_runner, aphrodite_runner, audio_assets: AudioTestAssets
         config_format="mistral",
         load_format="mistral",
         limit_mm_per_prompt={"audio": len(audio_assets)},
-    ) as aphrodite_model:
-        aphrodite_outputs = aphrodite_model.generate_greedy_logprobs(
-            [aphrodite_prompt],
+    ) as sonar_model:
+        sonar_outputs = sonar_model.generate_greedy_logprobs(
+            [sonar_prompt],
             max_tokens,
             num_logprobs,
             audios=[audio_data],
         )
-    assert aphrodite_outputs[0][1], "Aphrodite inference produced empty output"
+    assert sonar_outputs[0][1], "Sonar inference produced empty output"
 
     with hf_runner(
         MODEL_NAME,
@@ -186,10 +186,10 @@ def test_hf_reference(hf_runner, aphrodite_runner, audio_assets: AudioTestAssets
         )
     assert hf_outputs[0][1], "HF Transformers produced empty output"
 
-    print(f"HF Reference Comparison\n  Aphrodite: {aphrodite_outputs[0][1]!r}\n  HF:   {hf_outputs[0][1]!r}")
+    print(f"HF Reference Comparison\n  Sonar: {sonar_outputs[0][1]!r}\n  HF:   {hf_outputs[0][1]!r}")
     check_logprobs_close(
-        outputs_0_lst=aphrodite_outputs,
+        outputs_0_lst=sonar_outputs,
         outputs_1_lst=hf_outputs,
-        name_0="aphrodite",
+        name_0="sonar",
         name_1="hf",
     )

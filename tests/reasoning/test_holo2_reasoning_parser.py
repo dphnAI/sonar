@@ -3,12 +3,12 @@
 import pytest
 from transformers import AutoTokenizer, PreTrainedTokenizerBase
 
-from aphrodite.reasoning import ReasoningParser, ReasoningParserManager
-from aphrodite.reasoning.deepseek_r1_reasoning_parser import DeepSeekR1ReasoningParser
-from aphrodite.reasoning.deepseek_v3_reasoning_parser import (
+from sonar.reasoning import ReasoningParser, ReasoningParserManager
+from sonar.reasoning.deepseek_r1_reasoning_parser import DeepSeekR1ReasoningParser
+from sonar.reasoning.deepseek_v3_reasoning_parser import (
     DeepSeekV3ReasoningWithThinkingParser as Holo2ReasoningParser,
 )
-from aphrodite.reasoning.identity_reasoning_parser import IdentityReasoningParser
+from sonar.reasoning.identity_reasoning_parser import IdentityReasoningParser
 from tests.reasoning.utils import run_reasoning_extraction
 
 REASONING_MODEL_NAME = "HCompany/Holo2-4B"

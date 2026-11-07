@@ -12,14 +12,14 @@ import numpy as np
 import torch
 from torch.distributed import ProcessGroup, all_gather
 
-from aphrodite.distributed.eplb.eplb_communicator import EplbCommunicator
-from aphrodite.distributed.eplb.eplb_utils import CpuGpuEvent, device_stream
-from aphrodite.distributed.eplb.migration_scheduler import (
+from sonar.distributed.eplb.eplb_communicator import EplbCommunicator
+from sonar.distributed.eplb.eplb_utils import CpuGpuEvent, device_stream
+from sonar.distributed.eplb.migration_scheduler import (
     MigrationFlow,
     schedule_migration_batches,
 )
-from aphrodite.logger import init_logger
-from aphrodite.utils.gpu_sync_debug import gpu_sync_allowed
+from sonar.logger import init_logger
+from sonar.utils.gpu_sync_debug import gpu_sync_allowed
 
 logger = init_logger(__name__)
 

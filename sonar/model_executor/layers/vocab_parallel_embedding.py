@@ -8,33 +8,33 @@ import torch
 import torch.nn.functional as F
 from torch.nn.parameter import Parameter
 
-import aphrodite.envs as envs
-from aphrodite import _custom_ops as ops
-from aphrodite.distributed import (
+import sonar.envs as envs
+from sonar import _custom_ops as ops
+from sonar.distributed import (
     GroupCoordinator,
     divide,
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
     tensor_model_parallel_all_reduce,
 )
-from aphrodite.model_executor.custom_op import PluggableLayer
-from aphrodite.model_executor.determinism.batch_invariant import (
+from sonar.model_executor.custom_op import PluggableLayer
+from sonar.model_executor.determinism.batch_invariant import (
     linear_batch_invariant,
 )
-from aphrodite.model_executor.layers.quantization.base_config import (
+from sonar.model_executor.layers.quantization.base_config import (
     QuantizationConfig,
     QuantizeMethodBase,
     method_has_implemented_embedding,
     resolve_quant_method,
 )
-from aphrodite.model_executor.layers.quantization.utils.fp8_utils import is_fp8
-from aphrodite.model_executor.layers.utils import (
+from sonar.model_executor.layers.quantization.utils.fp8_utils import is_fp8
+from sonar.model_executor.layers.utils import (
     dispatch_unquantized_gemm,
     maybe_use_skinny_gemm,
 )
-from aphrodite.model_executor.parameter import BaseAphroditeParameter
-from aphrodite.model_executor.utils import set_weight_attrs
-from aphrodite.platforms import current_platform
+from sonar.model_executor.parameter import BaseSonarParameter
+from sonar.model_executor.utils import set_weight_attrs
+from sonar.platforms import current_platform
 
 DEFAULT_VOCAB_PADDING_SIZE = 64
 
@@ -69,7 +69,7 @@ class UnquantizedEmbeddingMethod(QuantizeMethodBase):
 
     def process_weights_after_loading(self, layer: torch.nn.Module) -> None:
         if current_platform.is_cpu():
-            from aphrodite.model_executor.layers.utils import dispatch_cpu_unquantized_gemm
+            from sonar.model_executor.layers.utils import dispatch_cpu_unquantized_gemm
 
             dispatch_cpu_unquantized_gemm(layer, remove_weight=False)
         elif current_platform.is_cuda() and isinstance(layer, ParallelLMHead):
@@ -81,7 +81,7 @@ class UnquantizedEmbeddingMethod(QuantizeMethodBase):
         x: torch.Tensor,
         bias: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        if envs.APHRODITE_BATCH_INVARIANT and (current_platform.is_cuda_alike() or current_platform.is_xpu()):
+        if envs.SONAR_BATCH_INVARIANT and (current_platform.is_cuda_alike() or current_platform.is_xpu()):
             return linear_batch_invariant(x, layer.weight, bias)
         return dispatch_unquantized_gemm()(layer, x, layer.weight, bias)
 
@@ -350,7 +350,7 @@ class VocabParallelEmbedding(PluggableLayer):
 
     def update_param_tp_status(self):
         for param in self.parameters():
-            if isinstance(param, BaseAphroditeParameter):
+            if isinstance(param, BaseSonarParameter):
                 param.tp_rank = self.tp_rank
                 param.tp_size = self.tp_size
 
@@ -464,7 +464,7 @@ class VocabParallelEmbedding(PluggableLayer):
         # If param packed on the same dim we are sharding on, then
         # need to adjust offsets of loaded weight by pack_factor.
         if packed_dim is not None and packed_dim == output_dim:
-            packed_factor = param.packed_factor if isinstance(param, BaseAphroditeParameter) else param.pack_factor
+            packed_factor = param.packed_factor if isinstance(param, BaseSonarParameter) else param.pack_factor
             assert loaded_weight.shape[output_dim] == (self.org_vocab_size // param.packed_factor)
             start_idx = start_idx // packed_factor
             shard_size = shard_size // packed_factor

@@ -10,14 +10,14 @@ from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar
 import numpy as np
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.config import get_current_aphrodite_config
-from aphrodite.distributed import (
+from sonar import _custom_ops as ops
+from sonar.config import get_current_sonar_config
+from sonar.distributed import (
     get_dcp_group,
     get_tensor_model_parallel_world_size,
 )
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.attention.mla_attention import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.attention.mla_attention import (
     MLACommonBaseImpl,
     MLACommonDecodeMetadata,
     MLACommonMetadata,
@@ -28,39 +28,39 @@ from aphrodite.model_executor.layers.attention.mla_attention import (
     get_mla_dims,
     init_mla_context_partial,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.flashinfer import has_flashinfer
-from aphrodite.utils.torch_utils import (
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
+from sonar.utils.flashinfer import has_flashinfer
+from sonar.utils.torch_utils import (
     PIN_MEMORY,
     np_to_pinned_tensor,
 )
-from aphrodite.v1.attention.backend import AttentionLayer, AttentionMetadataBuilder
-from aphrodite.v1.attention.backends.fa_utils import get_flash_attn_version
-from aphrodite.v1.attention.backends.mla.index_group import (
+from sonar.v1.attention.backend import AttentionLayer, AttentionMetadataBuilder
+from sonar.v1.attention.backends.fa_utils import get_flash_attn_version
+from sonar.v1.attention.backends.mla.index_group import (
     HiSparseMLAIndexGroup,
     SparseMLAIndexGroup,
     SparseMLAIndexGroupBuilder,
 )
-from aphrodite.v1.attention.backends.mla.sparse_utils import (
+from sonar.v1.attention.backends.mla.sparse_utils import (
     flat_kv_row_view,
     triton_convert_req_index_to_global_index,
     triton_filter_and_convert_dcp_index,
 )
-from aphrodite.v1.attention.backends.utils import split_decodes_and_prefills
-from aphrodite.v1.attention.ops.dcp import MLADCPManager
-from aphrodite.v1.attention.ops.merge_attn_states import merge_attn_states
-from aphrodite.v1.hisparse.runtime import (
+from sonar.v1.attention.backends.utils import split_decodes_and_prefills
+from sonar.v1.attention.ops.dcp import MLADCPManager
+from sonar.v1.attention.ops.merge_attn_states import merge_attn_states
+from sonar.v1.hisparse.runtime import (
     HiSparsePrefillStagingPlan,
     build_hisparse_prefill_staging_plan,
 )
-from aphrodite.v1.kv_cache_interface import is_quantized_kv_cache
+from sonar.v1.kv_cache_interface import is_quantized_kv_cache
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
-    from aphrodite.model_executor.layers.linear import ColumnParallelLinear
-    from aphrodite.v1.attention.backend import CommonAttentionMetadata
-    from aphrodite.v1.kv_cache_interface import AttentionSpec
+    from sonar.config import SonarConfig
+    from sonar.model_executor.layers.linear import ColumnParallelLinear
+    from sonar.v1.attention.backend import CommonAttentionMetadata
+    from sonar.v1.kv_cache_interface import AttentionSpec
 
 logger = init_logger(__name__)
 
@@ -131,8 +131,8 @@ def _is_masked_mha_available(
     return fa_version == 4 and not is_quantized_kv_cache(kv_cache_dtype)
 
 
-def _use_dense_mha_prefill(aphrodite_config: "AphroditeConfig", prefill_max_seq_len: int, topk_tokens: int) -> bool:
-    attention_config = aphrodite_config.attention_config
+def _use_dense_mha_prefill(sonar_config: "SonarConfig", prefill_max_seq_len: int, topk_tokens: int) -> bool:
+    attention_config = sonar_config.attention_config
     return (
         attention_config.hisparse_config is None
         and not attention_config.sparse_mla_force_mqa
@@ -172,27 +172,27 @@ class SparseMLACommonMetadataBuilder(AttentionMetadataBuilder[T]):
         self,
         kv_cache_spec: "AttentionSpec",
         layer_names: list[str],
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
         device: torch.device,
     ) -> None:
-        super().__init__(kv_cache_spec, layer_names, aphrodite_config, device)
-        self.aphrodite_config = aphrodite_config
+        super().__init__(kv_cache_spec, layer_names, sonar_config, device)
+        self.sonar_config = sonar_config
         self.device = device
-        self.model_config = aphrodite_config.model_config
+        self.model_config = sonar_config.model_config
         self.mla_dims = get_mla_dims(self.model_config)
-        self.topk_tokens: int = aphrodite_config.model_config.hf_text_config.index_topk
+        self.topk_tokens: int = sonar_config.model_config.hf_text_config.index_topk
         self.req_id_per_token_buffer = torch.empty(
-            (aphrodite_config.scheduler_config.max_num_batched_tokens,),
+            (sonar_config.scheduler_config.max_num_batched_tokens,),
             dtype=torch.int32,
             device=device,
         )
         self._context_lens_cpu = torch.empty(
-            aphrodite_config.scheduler_config.max_num_seqs,
+            sonar_config.scheduler_config.max_num_seqs,
             dtype=torch.int32,
             device="cpu",
             pin_memory=PIN_MEMORY,
         )
-        parallel_config = aphrodite_config.parallel_config
+        parallel_config = sonar_config.parallel_config
         self.pcp_world_size = parallel_config.prefill_context_parallel_size
         self.use_pcp = self.pcp_world_size > 1
         try:
@@ -203,7 +203,7 @@ class SparseMLACommonMetadataBuilder(AttentionMetadataBuilder[T]):
         self.dcp_local_block_size = self.cp_kv_cache_interleave_size
         self.dcp_virtual_block_size = self.dcp_local_block_size * self.dcp_world_size
 
-        self.chunked_prefill_workspace_size = self.determine_chunked_prefill_workspace_size(aphrodite_config)
+        self.chunked_prefill_workspace_size = self.determine_chunked_prefill_workspace_size(sonar_config)
         workspace_head_size = self.mla_dims.kv_lora_rank + self.mla_dims.qk_rope_head_dim
         workspace_rows = self.chunked_prefill_workspace_size
         if self.dcp_world_size > 1:
@@ -221,14 +221,14 @@ class SparseMLACommonMetadataBuilder(AttentionMetadataBuilder[T]):
             self.mla_dims.qk_nope_head_dim,
             self.mla_dims.qk_rope_head_dim,
             self.mla_dims.v_head_dim,
-            aphrodite_config.cache_config.cache_dtype,
+            sonar_config.cache_config.cache_dtype,
         ):
             self.topk_mask_workspace = torch.zeros(
                 GLOBAL_TOPK_MASK_MAX_BYTES // torch.int32.itemsize,
                 dtype=torch.int32,
                 device=device,
             )
-        attention_layer = aphrodite_config.compilation_config.static_forward_context[layer_names[0]]
+        attention_layer = sonar_config.compilation_config.static_forward_context[layer_names[0]]
         layer_prefill_backend = attention_layer.prefill_backend
         self.dcp_manager: MLADCPManager | None = None
         if self.dcp_world_size > 1:
@@ -247,7 +247,7 @@ class SparseMLACommonMetadataBuilder(AttentionMetadataBuilder[T]):
         supports_spec_as_decode: bool = False,
         supports_dcp_with_varlen: bool = False,
     ) -> None:
-        if self.aphrodite_config.attention_config.hisparse_config is not None:
+        if self.sonar_config.attention_config.hisparse_config is not None:
             reorder_batch_threshold = 1
         super()._init_reorder_batch_threshold(
             reorder_batch_threshold,
@@ -256,10 +256,10 @@ class SparseMLACommonMetadataBuilder(AttentionMetadataBuilder[T]):
         )
 
     @staticmethod
-    def determine_chunked_prefill_workspace_size(aphrodite_config: "AphroditeConfig") -> int:
-        scheduler_config = aphrodite_config.scheduler_config
-        cache_config = aphrodite_config.cache_config
-        model_config = aphrodite_config.model_config
+    def determine_chunked_prefill_workspace_size(sonar_config: "SonarConfig") -> int:
+        scheduler_config = sonar_config.scheduler_config
+        cache_config = sonar_config.cache_config
+        model_config = sonar_config.model_config
         topk_tokens = model_config.hf_text_config.index_topk
 
         workspace_size = min(
@@ -271,8 +271,8 @@ class SparseMLACommonMetadataBuilder(AttentionMetadataBuilder[T]):
             scheduler_config.max_num_seqs * topk_tokens,
         )
         workspace_size = max(workspace_size, cache_config.block_size)
-        if aphrodite_config.parallel_config.decode_context_parallel_size > 1:
-            return align_mla_chunked_context_workspace_size(aphrodite_config, workspace_size)
+        if sonar_config.parallel_config.decode_context_parallel_size > 1:
+            return align_mla_chunked_context_workspace_size(sonar_config, workspace_size)
         return workspace_size
 
     def _build_req_id_per_token(
@@ -357,7 +357,7 @@ class SparseMLACommonMetadataBuilder(AttentionMetadataBuilder[T]):
                 prefill_query_lens_cpu,
             )
             staging_plan = None
-            if self.aphrodite_config.attention_config.hisparse_config is not None:
+            if self.sonar_config.attention_config.hisparse_config is not None:
                 prefill_seq_lens_cpu = seq_lens_cpu[num_decodes : num_decodes + num_prefills]
                 staging_block_capacity = int(
                     ((prefill_seq_lens_cpu + self.kv_cache_spec.block_size - 1) // self.kv_cache_spec.block_size).sum()
@@ -380,7 +380,7 @@ class SparseMLACommonMetadataBuilder(AttentionMetadataBuilder[T]):
                 output_dtype=self.model_config.dtype,
                 prefill_backend=self._prefill_backend,
                 use_dense_mha=(
-                    _use_dense_mha_prefill(self.aphrodite_config, prefill_max_seq_len, self.topk_tokens)
+                    _use_dense_mha_prefill(self.sonar_config, prefill_max_seq_len, self.topk_tokens)
                     # Dense MHA cannot be used under PCP+DCP.
                     and not (self.use_pcp and self.dcp_world_size > 1)
                 ),
@@ -641,10 +641,10 @@ class SparseMLACommonImpl(MLACommonBaseImpl[T], SharedTopkIndicesBuffer, Generic
         if index_group_builder is None and self.topk_indices_buffer is not None:
             index_group_builder = SparseMLAIndexGroupBuilder(self.topk_indices_buffer)
         if index_group_builder is not None:
-            aphrodite_config = get_current_aphrodite_config()
+            sonar_config = get_current_sonar_config()
             self.index_group, self.index_group_index = index_group_builder.register_layer(
                 indexer is not None,
-                aphrodite_config,
+                sonar_config,
                 row_width=(self.get_fp8_ds_mla_row_bytes() if kv_cache_dtype == "fp8_ds_mla" else head_size),
                 kv_cache_dtype=kv_cache_dtype,
             )
@@ -945,11 +945,11 @@ class SparseMLACommonImpl(MLACommonBaseImpl[T], SharedTopkIndicesBuffer, Generic
         key_starts: torch.Tensor | None = None,
         topk_mask_workspace: torch.Tensor | None = None,
     ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
-        from aphrodite.model_executor.layers.attention.sparse_mla_mask import (
+        from sonar.model_executor.layers.attention.sparse_mla_mask import (
             dense_mask_mod,
             offset_dense_mask_mod,
         )
-        from aphrodite.vllm_flash_attn import flash_attn_varlen_func
+        from sonar.vllm_flash_attn import flash_attn_varlen_func
 
         if dense_mask is None:
             assert topk_mask_workspace is not None

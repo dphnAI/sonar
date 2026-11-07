@@ -436,7 +436,7 @@ def packed_ipc_consumer(
     chunks, so any tensor view that aliases the buffer would observe the
     *next* chunk's bytes as soon as the producer's generator is resumed.
     Callers that retain references past their own update_weights call
-    (notably Aphrodite's layerwise reload, which buffers ``bound_args`` for
+    (notably Sonar's layerwise reload, which buffers ``bound_args`` for
     replay in ``_layerwise_process``) would otherwise replay against
     stale data and silently corrupt multi-chunk weight transfers.
 

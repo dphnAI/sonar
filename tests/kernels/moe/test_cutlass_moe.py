@@ -8,29 +8,29 @@ from math import prod
 import pytest
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite import _custom_ops as ops
-from aphrodite.config import AphroditeConfig, ParallelConfig, set_current_aphrodite_config
-from aphrodite.model_executor.layers.fused_moe import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar import _custom_ops as ops
+from sonar.config import ParallelConfig, SonarConfig, set_current_sonar_config
+from sonar.model_executor.layers.fused_moe import (
     ApplyMoEActivationConfig,
     fused_experts,
     fused_topk,
 )
-from aphrodite.model_executor.layers.fused_moe.activation import (
+from sonar.model_executor.layers.fused_moe.activation import (
     MoEActivation,
     apply_moe_activation_supported,
 )
-from aphrodite.model_executor.layers.fused_moe.all2all_utils import (
+from sonar.model_executor.layers.fused_moe.all2all_utils import (
     maybe_make_prepare_finalize,
 )
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe.config import (
     FUSED_MOE_UNQUANTIZED_CONFIG,
     FusedMoEParallelConfig,
     FusedMoEQuantConfig,
     fp8_w8a8_moe_quant_config,
     mxfp4_moe_quant_config,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.cutlass_moe import (
+from sonar.model_executor.layers.fused_moe.experts.cutlass_moe import (
     CutlassExpertsFp4,
     CutlassExpertsFp8,
     CutlassExpertsMxfp4,
@@ -40,15 +40,15 @@ from aphrodite.model_executor.layers.fused_moe.experts.cutlass_moe import (
     run_cutlass_moe_mxfp4,
     swizzle_mxfp4_scales,
 )
-from aphrodite.model_executor.layers.fused_moe.oracle import mxfp4 as mxfp4_oracle
-from aphrodite.model_executor.layers.fused_moe.oracle import nvfp4 as nvfp4_oracle
-from aphrodite.model_executor.layers.fused_moe.utils import (
+from sonar.model_executor.layers.fused_moe.oracle import mxfp4 as mxfp4_oracle
+from sonar.model_executor.layers.fused_moe.oracle import nvfp4 as nvfp4_oracle
+from sonar.model_executor.layers.fused_moe.utils import (
     moe_kernel_quantize_input,
     remap_topk_to_local,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import kMxfp4Dynamic
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.model_executor.layers.quantization.utils.quant_utils import kMxfp4Dynamic
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_random_seed
 from tests.kernels.moe.utils import make_dummy_moe_config, make_test_quant_config
 
 NUM_EXPERTS = [40, 64]
@@ -71,7 +71,7 @@ MNK_FACTORS = [
     # (40000, 2048, 5120),
 ]
 
-aphrodite_config = AphroditeConfig(parallel_config=ParallelConfig(pipeline_parallel_size=1))
+sonar_config = SonarConfig(parallel_config=ParallelConfig(pipeline_parallel_size=1))
 
 
 @pytest.mark.parametrize(
@@ -114,7 +114,7 @@ def test_cutlass_moe_forwards_shared_activation_parameters():
 @pytest.mark.parametrize(
     ("backend", "expected"),
     [
-        ("cutlass", nvfp4_oracle.NvFp4MoeBackend.APHRODITE_CUTLASS),
+        ("cutlass", nvfp4_oracle.NvFp4MoeBackend.SONAR_CUTLASS),
         ("humming", nvfp4_oracle.NvFp4MoeBackend.HUMMING),
     ],
 )
@@ -264,7 +264,7 @@ def _make_cutlass_fp4_moe_weights(
             make_gate=True,
         )
 
-    from aphrodite.model_executor.layers.quantization.utils.mxfp4_utils import (
+    from sonar.model_executor.layers.quantization.utils.mxfp4_utils import (
         mxfp4_quantize,
     )
 
@@ -500,7 +500,7 @@ def test_cutlass_mxfp4_oracle_matches_direct_kernel(monkeypatch, workspace_init)
     )
 
     moe_config = make_dummy_moe_config(num_experts=e, experts_per_token=topk, hidden_dim=k, intermediate_size=n)
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         backend, experts_cls = mxfp4_oracle.select_mxfp4_moe_backend(moe_config, activation_key=kMxfp4Dynamic)
         assert backend == mxfp4_oracle.Mxfp4MoeBackend.CUTLASS_MXFP4_MXFP4
 
@@ -786,7 +786,7 @@ def test_cutlass_moe_8_bit_no_graph(
     ep_size: int | None = None,
 ):
     set_random_seed(7)
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         mt = MOETensors8Bit.make_moe_tensors_8bit(m, k, n, e, per_act_token, per_out_ch)
 
         score = torch.randn((m, e), device="cuda", dtype=torch.half)
@@ -832,7 +832,7 @@ def test_cutlass_moe_8_bit_cuda_graph(
     workspace_init,
 ):
     set_random_seed(7)
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         dtype = torch.half
 
         mt = MOETensors8Bit.make_moe_tensors_8bit(m, k, n, e, per_act_token, per_out_ch)
@@ -958,7 +958,7 @@ def test_run_cutlass_moe_fp8(
     workspace_init,
 ):
     set_random_seed(7)
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         mt = MOETensors8Bit.make_moe_tensors_8bit(m, k, n, e, per_act_token, per_out_channel)
 
         score = torch.randn((m, e), device="cuda", dtype=torch.half)
@@ -1049,7 +1049,7 @@ def test_run_cutlass_moe_fp8_padded_routes_per_tensor(
     per_act_token = False
     num_valid, num_tokens, topk = 16, 32, 2
     n, k, e = 256, 512, 8
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         mt = MOETensors8Bit.make_moe_tensors_8bit(num_tokens, k, n, e, per_act_token, per_out_channel)
         # Zero the padding tokens so the input's per-tensor scale is the same
         # with and without them; only the intermediate scale is under test.

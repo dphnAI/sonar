@@ -138,7 +138,7 @@ hardware_overrides:
   amd:
     extra_args: []
     extra_env:
-      APHRODITE_ROCM_USE_AITER: "1"
+      SONAR_ROCM_USE_AITER: "1"
   xpu:
     extra_args:
       - "--block-size"
@@ -155,8 +155,8 @@ hardware_overrides:
     extra_env:
       PYTHONUNBUFFERED: "1"
       TORCH_LLM_ALLREDUCE: "1"
-      APHRODITE_ALLOW_LONG_MAX_MODEL_LEN: "1"
-      APHRODITE_WORKER_MULTIPROC_METHOD: "spawn"
+      SONAR_ALLOW_LONG_MAX_MODEL_LEN: "1"
+      SONAR_WORKER_MULTIPROC_METHOD: "spawn"
 
 strategy_overrides:
   single_node_tp:
@@ -171,12 +171,12 @@ guide: |
   and Blackwell (B200/GB200) GPUs. FP4 is Blackwell-only and provides the best
   VRAM efficiency.
 
-  TPU support is provided through [Aphrodite TPU](https://github.com/vllm-project/tpu-inference) with a recipe for [Trillium](https://github.com/AI-Hypercomputer/tpu-recipes/tree/main/inference/trillium/vLLM/Llama3.x).
+  TPU support is provided through [Sonar TPU](https://github.com/vllm-project/tpu-inference) with a recipe for [Trillium](https://github.com/AI-Hypercomputer/tpu-recipes/tree/main/inference/trillium/vLLM/Llama3.x).
 
   ## Prerequisites
 
   - Hardware: 1x H100/H200 (FP8), 1x B200 (FP4), 1x MI300X/MI325X/MI355X, 2x GPUs, 8x Xeon6/Xeon5 NUMA nodes, or 4x Intel Arc Pro B70 (online FP8)
-  - Aphrodite >= 0.12.0
+  - Sonar >= 0.12.0
   - CUDA Driver >= 575 for GPUs
   - Docker with NVIDIA Container Toolkit (recommended) for GPUs
 
@@ -188,14 +188,14 @@ guide: |
   ```bash
   uv venv --python 3.12
   source .venv/bin/activate
-  uv pip install aphrodite-engine --extra-index-url https://wheels.vllm.ai/rocm
+  uv pip install sonar --index-strategy first-index --extra-index-url https://sonar.dphn.ai/whl/release/rocm/x86_64/simple
   ```
 
   Launch on 1x MI300X / MI325X / MI355X with AITER enabled:
 
   ```bash
-  export APHRODITE_ROCM_USE_AITER=1
-  aphrodite serve meta-llama/Llama-3.3-70B-Instruct \
+  export SONAR_ROCM_USE_AITER=1
+  sonar serve meta-llama/Llama-3.3-70B-Instruct \
     --tensor-parallel-size 1
   ```
 
@@ -226,7 +226,7 @@ guide: |
 
   ### Intel Xeon 6 Deployment via Docker
 
-  Launch the x86 CPU Aphrodite Docker container for `meta-llama/Llama-3.3-70B-Instruct`:
+  Launch the x86 CPU Sonar Docker container for `meta-llama/Llama-3.3-70B-Instruct`:
 
   ```bash
   docker run \
@@ -245,14 +245,14 @@ guide: |
     tuning for workload shape, latency targets, and platform capacity.
   - `--gpu-memory-utilization`: platform memory-budget tuning.
   - `--no-enable-prefix-caching`: workload/benchmark cache-policy tuning.
-  - `APHRODITE_ENGINE_ITERATION_TIMEOUT_S`: runtime operational timeout tuning.
+  - `SONAR_ENGINE_ITERATION_TIMEOUT_S`: runtime operational timeout tuning.
 
   Hardware-specific overrides may still use these settings when they are part of a
   validated platform configuration.
 
   ## Intel Arc Pro B70 (XPU)
 
-  Validated on 4x Intel Arc Pro B70 (32 GB per card) with the official Aphrodite XPU
+  Validated on 4x Intel Arc Pro B70 (32 GB per card) with the official Sonar XPU
   image `vllm/vllm-openai-xpu:latest`, TP=4. BF16 weights (~140 GB) exceed the
   128 GB node, so the validated configuration quantizes the base checkpoint
   online to FP8 (`--quantization fp8`) with an FP8 KV cache.
@@ -265,8 +265,8 @@ guide: |
     -e HF_TOKEN=$HF_TOKEN \
     -e PYTHONUNBUFFERED=1 \
     -e TORCH_LLM_ALLREDUCE=1 \
-    -e APHRODITE_ALLOW_LONG_MAX_MODEL_LEN=1 \
-    -e APHRODITE_WORKER_MULTIPROC_METHOD=spawn \
+    -e SONAR_ALLOW_LONG_MAX_MODEL_LEN=1 \
+    -e SONAR_WORKER_MULTIPROC_METHOD=spawn \
     vllm/vllm-openai-xpu:latest \
     meta-llama/Llama-3.3-70B-Instruct \
     --tensor-parallel-size 4 \

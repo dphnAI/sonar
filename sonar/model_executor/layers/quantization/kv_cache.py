@@ -3,14 +3,14 @@
 
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.quantization.base_config import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.quantization.base_config import (
     QuantizationConfig,
     QuantizeMethodBase,
 )
-from aphrodite.model_executor.utils import is_weights_pre_processed
-from aphrodite.platforms import current_platform
-from aphrodite.v1.kv_cache_interface import (
+from sonar.model_executor.utils import is_weights_pre_processed
+from sonar.platforms import current_platform
+from sonar.v1.kv_cache_interface import (
     is_quantized_kv_cache,
     kv_cache_uses_per_token_head_scales,
 )

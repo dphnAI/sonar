@@ -4,7 +4,7 @@
 
 from dataclasses import replace
 
-from aphrodite.model_executor.layers.fused_moe.activation import (
+from sonar.model_executor.layers.fused_moe.activation import (
     ApplyMoEActivationConfig,
     MoEActivation,
 )

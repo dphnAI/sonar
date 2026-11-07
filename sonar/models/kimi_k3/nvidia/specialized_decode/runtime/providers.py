@@ -7,11 +7,11 @@ from typing import Any
 
 import torch
 
-from aphrodite.model_executor.kernels.linear.cute_dsl.skinny_gemm import (
+from sonar.model_executor.kernels.linear.cute_dsl.skinny_gemm import (
     SkinnyGemmConfig,
     shape_dynamic_skinny_gemm,
 )
-from aphrodite.model_executor.layers.mamba.mamba_utils import is_conv_state_dim_first
+from sonar.model_executor.layers.mamba.mamba_utils import is_conv_state_dim_first
 
 from ..cutedsl.gemm.projection import PreparedProjection
 from ..cutedsl.kda.prepared import PreparedKda
@@ -144,14 +144,14 @@ class Attention:
 def dcp_box(runtime, heads):
     """The model's DCP mailboxes (one set for every MLA layer)."""
     if runtime.dcp_box is None:
-        from aphrodite.distributed import get_dcp_group
+        from sonar.distributed import get_dcp_group
 
         group = get_dcp_group()
         assert group.world_size == runtime.dcp == runtime.tp
-        from aphrodite.config import get_current_aphrodite_config
+        from sonar.config import get_current_sonar_config
 
         args = group.device_group, runtime.device, group.world_size, group.rank_in_group
-        parallel = get_current_aphrodite_config().parallel_config
+        parallel = get_current_sonar_config().parallel_config
         interleave = parallel.cp_kv_cache_interleave_size
         runtime.dcp_box = DcpBox(*args, heads, interleave=interleave)
     return runtime.dcp_box

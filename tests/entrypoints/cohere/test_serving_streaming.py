@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Unit tests for the Cohere v2 SSE stream conversion in
-``aphrodite/entrypoints/cohere/serving.py``.
+``sonar/entrypoints/cohere/serving.py``.
 
 The stream-translation entry point is
 :meth:`CohereServingChatV2._chat_completion_stream_to_v2`, which turns an
@@ -20,14 +20,14 @@ from typing import Any
 
 import pytest
 
-from aphrodite.entrypoints.cohere.cohere_chat_message import (
-    Citation as APHRODITECitation,
+from sonar.entrypoints.cohere.cohere_chat_message import (
+    Citation as SONARCitation,
 )
-from aphrodite.entrypoints.cohere.cohere_chat_message import (
+from sonar.entrypoints.cohere.cohere_chat_message import (
     CitationSource,
 )
-from aphrodite.entrypoints.cohere.protocol import MessageStartEvent
-from aphrodite.entrypoints.cohere.serving import (
+from sonar.entrypoints.cohere.protocol import MessageStartEvent
+from sonar.entrypoints.cohere.serving import (
     _DONE_FRAME,
     CohereServingChatV2,
     ContentBlockType,
@@ -35,10 +35,10 @@ from aphrodite.entrypoints.cohere.serving import (
     _sse,
     _StreamState,
 )
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionStreamResponse,
 )
-from aphrodite.entrypoints.serve.engine.protocol import ErrorResponse
+from sonar.entrypoints.serve.engine.protocol import ErrorResponse
 
 # ----------------------------------------------------------------------
 # Helpers
@@ -415,8 +415,8 @@ class TestHandleToolCallDeltas:
 class TestHandleCitationDeltas:
     """Test the per-delta emitter. Sources are pre-resolved by the
     reasoning parser via the position map forwarded through
-    ``chat_template_kwargs`` (see :func:`_melody_sources_to_aphrodite` in
-    ``aphrodite/reasoning/cohere_command_reasoning_parser.py``), so the
+    ``chat_template_kwargs`` (see :func:`_melody_sources_to_sonar` in
+    ``sonar/reasoning/cohere_command_reasoning_parser.py``), so the
     handler only has to coerce to the SDK wire shape, apply the
     ``THINKING_CONTENT`` -> ``PLAN`` rewrite, and drop citations with
     no attributable sources.
@@ -436,7 +436,7 @@ class TestHandleCitationDeltas:
         serving = _serving()
         state = _StreamState()
         citations = [
-            APHRODITECitation(
+            SONARCitation(
                 start=0,
                 end=11,
                 text="Shakespeare",
@@ -467,7 +467,7 @@ class TestHandleCitationDeltas:
         serving = _serving()
         state = _StreamState()
         citations = [
-            APHRODITECitation(
+            SONARCitation(
                 start=0,
                 end=5,
                 text="works",
@@ -490,7 +490,7 @@ class TestHandleCitationDeltas:
         serving = _serving()
         state = _StreamState()
         citations = [
-            APHRODITECitation(
+            SONARCitation(
                 start=0,
                 end=5,
                 text="hello",
@@ -509,7 +509,7 @@ class TestHandleCitationDeltas:
         serving = _serving()
         state = _StreamState()
         citations = [
-            APHRODITECitation(
+            SONARCitation(
                 start=0,
                 end=5,
                 text="hello",
@@ -523,7 +523,7 @@ class TestHandleCitationDeltas:
         serving = _serving(is_reasoning_model=False)
         state = _StreamState()
         citations = [
-            APHRODITECitation(
+            SONARCitation(
                 start=0,
                 end=5,
                 text="hello",
@@ -844,7 +844,7 @@ class TestChatCompletionStreamToV2:
         async def _raises_mid_stream() -> AsyncGenerator[ChatCompletionStreamResponse | ErrorResponse, None]:
             if started:
                 yield _make_chunk(role="assistant")
-            raise RuntimeError("boom <Foo at 0x7fabc0deface> reading /Users/dev/aphrodite/x.py")
+            raise RuntimeError("boom <Foo at 0x7fabc0deface> reading /Users/dev/sonar/x.py")
 
         frames = [f async for f in serving._chat_completion_stream_to_v2(_raises_mid_stream())]
         assert frames[-1] == _DONE_FRAME
@@ -853,7 +853,7 @@ class TestChatCompletionStreamToV2:
         err_msg = error_end["delta"]["error"]
         # Memory address stripped and path replaced with ``<path>``.
         assert "0x7fabc0deface" not in err_msg
-        assert "/Users/dev/aphrodite/x.py" not in err_msg
+        assert "/Users/dev/sonar/x.py" not in err_msg
         assert "<path>" in err_msg
         # The human-facing prefix should still survive sanitization.
         assert "boom" in err_msg
@@ -861,8 +861,8 @@ class TestChatCompletionStreamToV2:
     @pytest.mark.asyncio
     async def test_citations_in_delta_emit_citation_events(self):
         # End-to-end streaming citation flow. The parser hands us
-        # already-resolved sources (see ``_melody_sources_to_aphrodite``
-        # in ``aphrodite/reasoning/cohere_command_reasoning_parser.py``);
+        # already-resolved sources (see ``_melody_sources_to_sonar``
+        # in ``sonar/reasoning/cohere_command_reasoning_parser.py``);
         # the streaming loop just has to coerce and emit.
         serving = _serving()
         items = [

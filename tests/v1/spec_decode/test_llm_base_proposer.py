@@ -15,9 +15,9 @@ from types import SimpleNamespace
 
 import pytest
 
-import aphrodite.v1.spec_decode.llm_base_proposer as llm_base_proposer
-from aphrodite.v1.kv_cache_interface import KVCacheConfig
-from aphrodite.v1.spec_decode.eagle import EagleProposer
+import sonar.v1.spec_decode.llm_base_proposer as llm_base_proposer
+from sonar.v1.kv_cache_interface import KVCacheConfig
+from sonar.v1.spec_decode.eagle import EagleProposer
 
 SCHEDULER_BLOCK_SIZE = 256
 KERNEL_BLOCK_SIZE = 64
@@ -31,7 +31,7 @@ class _FakeAttentionGroup:
         self.kv_cache_group_id = kv_cache_group_id
         self.kernel_block_size = None
 
-    def create_metadata_builders(self, aphrodite_config, device, kernel_block_size=None):
+    def create_metadata_builders(self, sonar_config, device, kernel_block_size=None):
         self.kernel_block_size = kernel_block_size
 
     def get_metadata_builder(self):
@@ -45,13 +45,13 @@ def _make_proposer(monkeypatch: pytest.MonkeyPatch, layer_names: set[str]) -> Ea
         fake_layers[name] = SimpleNamespace(get_attn_backend=lambda backend=backend: backend)
     monkeypatch.setattr(
         llm_base_proposer,
-        "get_layers_from_aphrodite_config",
+        "get_layers_from_sonar_config",
         lambda *args, **kwargs: fake_layers,
     )
     monkeypatch.setattr(llm_base_proposer, "AttentionGroup", _FakeAttentionGroup)
 
     proposer = EagleProposer.__new__(EagleProposer)
-    proposer.aphrodite_config = None
+    proposer.sonar_config = None
     proposer.device = None
     proposer._draft_attn_layer_names = set(layer_names)
     proposer.kv_cache_gid = -1

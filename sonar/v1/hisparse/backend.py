@@ -9,12 +9,12 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.utils.import_utils import resolve_obj_by_qualname
+from sonar.platforms import current_platform
+from sonar.utils.import_utils import resolve_obj_by_qualname
 
 if TYPE_CHECKING:
-    from aphrodite.v1.hisparse.runtime import HiSparseRuntime
-    from aphrodite.v1.kv_cache_interface import KVCacheConfig
+    from sonar.v1.hisparse.runtime import HiSparseRuntime
+    from sonar.v1.kv_cache_interface import KVCacheConfig
 
 
 class HiSparseBackend:
@@ -88,11 +88,11 @@ class CUDAHiSparseBackend(HiSparseBackend):
         if not all(hasattr(torch.ops._C_cache_ops, name) for name in names):
             raise RuntimeError(
                 "HiSparse requires its compiled _C_cache_ops CUDA kernels. "
-                "Rebuild Aphrodite from source with csrc/hisparse_kernels.cu."
+                "Rebuild Sonar from source with csrc/hisparse_kernels.cu."
             )
 
     def pin_tensor(self, tensor: torch.Tensor) -> None:
-        from aphrodite.v1.simple_kv_offload.cuda_mem_ops import pin_tensor
+        from sonar.v1.simple_kv_offload.cuda_mem_ops import pin_tensor
 
         pin_tensor(tensor)
 
@@ -119,7 +119,7 @@ class CUDAHiSparseBackend(HiSparseBackend):
         return torch.cuda.is_current_stream_capturing()
 
     def swap_blocks_batch(self, src: torch.Tensor, dst: torch.Tensor, sizes: torch.Tensor) -> None:
-        from aphrodite import _custom_ops as ops
+        from sonar import _custom_ops as ops
 
         ops.swap_blocks_batch(src, dst, sizes)
 

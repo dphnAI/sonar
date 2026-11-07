@@ -12,15 +12,15 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from aphrodite.v1.core.kv_cache_utils import maybe_convert_block_hash
+from sonar.v1.core.kv_cache_utils import maybe_convert_block_hash
 
 if TYPE_CHECKING:
-    from aphrodite.distributed.kv_events import ExternalBlockHash
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.base import KVConnectorBase_V1
-    from aphrodite.v1.core.kv_cache_manager import KVCacheManager
-    from aphrodite.v1.core.kv_cache_utils import BlockHash, KVCacheBlock
-    from aphrodite.v1.core.sched.output import SchedulerOutput
-    from aphrodite.v1.request import Request
+    from sonar.distributed.kv_events import ExternalBlockHash
+    from sonar.distributed.kv_transfer.kv_connector.v1.base import KVConnectorBase_V1
+    from sonar.v1.core.kv_cache_manager import KVCacheManager
+    from sonar.v1.core.kv_cache_utils import BlockHash, KVCacheBlock
+    from sonar.v1.core.sched.output import SchedulerOutput
+    from sonar.v1.request import Request
 
 
 @dataclass

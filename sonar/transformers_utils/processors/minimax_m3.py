@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """MiniMax M3.1 VL HuggingFace-compatible Processor / ImageProcessor /
-VideoProcessor, vendored into Aphrodite so the model loads without
+VideoProcessor, vendored into Sonar so the model loads without
 ``--trust-remote-code`` (the released checkpoint only ships these classes as
 remote code via ``auto_map``).
 
@@ -10,7 +10,7 @@ Both image and video processors use the MiniMax M3.1 aligned-size resize
 short side, then both dims are ceil-aligned to the patch factor and capped
 at a per-modality long side (selectable via the OpenAI-style ``detail``
 kwarg or an explicit ``max_long_side_pixel``). The original async
-frame-sampling helpers are intentionally omitted: Aphrodite performs its own
+frame-sampling helpers are intentionally omitted: Sonar performs its own
 frame loading and feeds decoded frames to the processor.
 """
 
@@ -527,7 +527,7 @@ class MiniMaxVLProcessor(ProcessorMixin):
         # _extra_content, but get_possibly_dynamic_module() still calls
         # .__name__ on the raw value, crashing with AttributeError on dicts.
         #
-        # Reuse the tokenizer passed by Aphrodite instead of loading another one,
+        # Reuse the tokenizer passed by Sonar instead of loading another one,
         # and keep it out of the kwargs forwarded to the sub-processor loaders.
         tokenizer = kwargs.pop("tokenizer", None)
         if tokenizer is None:

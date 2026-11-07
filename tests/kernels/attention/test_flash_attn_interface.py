@@ -17,14 +17,14 @@ import torch
 def flash_attn_interface():
     # Load the wrapper without requiring the package's CUDA extensions.
     root = Path(__file__).resolve().parents[3]
-    relative_path = Path("aphrodite/vllm_flash_attn/flash_attn_interface.py")
+    relative_path = Path("sonar/vllm_flash_attn/flash_attn_interface.py")
     path = root / relative_path
     if not path.is_file():
         # CI images move the source tree under src/ to test the installed wheel.
         path = root / "src" / relative_path
     if not path.is_file():
         # Native ROCm CI ships only the installed wheel and test workspace.
-        path = Path(distribution("aphrodite").locate_file(relative_path))
+        path = Path(distribution("sonar").locate_file(relative_path))
     spec = importlib.util.spec_from_file_location("flash_attn_interface", path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -54,7 +54,7 @@ def test_fa4_descale_layout(flash_attn_interface, monkeypatch, batch_size, num_k
     kv = torch.empty(batch_size, num_kv_heads, 128, dtype=dtype, device="cpu")
     out = torch.empty_like(q, dtype=torch.bfloat16)
     fwd = Mock(return_value=(out, None, None, None))
-    cute_interface = ModuleType("aphrodite.vllm_flash_attn.cute.interface")
+    cute_interface = ModuleType("sonar.vllm_flash_attn.cute.interface")
     monkeypatch.setattr(cute_interface, "_flash_attn_fwd", fwd, raising=False)
     monkeypatch.setitem(sys.modules, cute_interface.__name__, cute_interface)
     cu_seqlens = torch.arange(batch_size + 1, dtype=torch.int32, device="cpu")

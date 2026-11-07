@@ -3,7 +3,7 @@
 
 from unittest.mock import Mock
 
-from aphrodite.reasoning.gptoss_reasoning_parser import GptOssReasoningParser
+from sonar.reasoning.gptoss_reasoning_parser import GptOssReasoningParser
 
 
 def test_gptoss_reasoning_ended_is_true():

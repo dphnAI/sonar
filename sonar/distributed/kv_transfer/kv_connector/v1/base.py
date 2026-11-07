@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """KVConnectorBase_V1 Class for Distributed KV Cache & Hidden State
-communication in Aphrodite v1
+communication in Sonar v1
 
 The class provides the following primitives:
     Scheduler-side: runs in the scheduler, binds metadata, which
@@ -48,27 +48,27 @@ from typing import TYPE_CHECKING, Any, Literal
 
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.v1.attention.backend import AttentionMetadata
-from aphrodite.v1.core.sched.output import SchedulerOutput
-from aphrodite.v1.metrics.cache_hit_source import CacheHitSource
-from aphrodite.v1.outputs import KVConnectorOutput
+from sonar.logger import init_logger
+from sonar.v1.attention.backend import AttentionMetadata
+from sonar.v1.core.sched.output import SchedulerOutput
+from sonar.v1.metrics.cache_hit_source import CacheHitSource
+from sonar.v1.outputs import KVConnectorOutput
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
-    from aphrodite.config.kv_transfer import KVTransferConfig
-    from aphrodite.distributed.kv_events import KVCacheEventType, KVConnectorKVEvents
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.metrics import (
+    from sonar.config import SonarConfig
+    from sonar.config.kv_transfer import KVTransferConfig
+    from sonar.distributed.kv_events import KVCacheEventType, KVConnectorKVEvents
+    from sonar.distributed.kv_transfer.kv_connector.v1.metrics import (
         KVConnectorPromMetrics,
         KVConnectorStats,
         PromMetric,
         PromMetricT,
     )
-    from aphrodite.forward_context import ForwardContext
-    from aphrodite.v1.core.block_pool import BlockPool
-    from aphrodite.v1.core.kv_cache_manager import KVCacheBlocks, KVCacheManager
-    from aphrodite.v1.kv_cache_interface import KVCacheConfig
-    from aphrodite.v1.request import Request
+    from sonar.forward_context import ForwardContext
+    from sonar.v1.core.block_pool import BlockPool
+    from sonar.v1.core.kv_cache_manager import KVCacheBlocks, KVCacheManager
+    from sonar.v1.kv_cache_interface import KVCacheConfig
+    from sonar.v1.request import Request
 
 # s_tensor_list, d_tensor_list, s_indices, d_indices, direction
 CopyBlocksOp = Callable[
@@ -211,7 +211,7 @@ class KVConnectorBase_V1(ABC):
 
     def __init__(
         self,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
         role: KVConnectorRole,
         kv_cache_config: "KVCacheConfig",
     ):
@@ -220,9 +220,9 @@ class KVConnectorBase_V1(ABC):
             "subject to change in the future as we iterate the design."
         )
         self._connector_metadata: KVConnectorMetadata | None = None
-        self._aphrodite_config = aphrodite_config
-        if aphrodite_config.kv_transfer_config is not None:
-            self._kv_transfer_config = aphrodite_config.kv_transfer_config
+        self._sonar_config = sonar_config
+        if sonar_config.kv_transfer_config is not None:
+            self._kv_transfer_config = sonar_config.kv_transfer_config
         else:
             raise ValueError("kv_transfer_config must be set for KVConnectorBase_V1")
         self._kv_cache_config = kv_cache_config
@@ -329,7 +329,7 @@ class KVConnectorBase_V1(ABC):
 
     @abstractmethod
     def start_load_kv(self, forward_context: "ForwardContext", **kwargs: Any) -> None:
-        """Start loading the KV cache from the connector to Aphrodite's paged
+        """Start loading the KV cache from the connector to Sonar's paged
         KV buffer. Loads required by the current forward start before it;
         independent asynchronous loads may start after it is submitted.
 
@@ -346,7 +346,7 @@ class KVConnectorBase_V1(ABC):
 
     @abstractmethod
     def wait_for_layer_load(self, layer_name: str) -> None:
-        """Block until the KV for a specific layer is loaded into Aphrodite's
+        """Block until the KV for a specific layer is loaded into Sonar's
         paged buffer. This is called from within attention layer to ensure
         async copying from start_load_kv is complete.
 
@@ -366,14 +366,14 @@ class KVConnectorBase_V1(ABC):
         attn_metadata: "AttentionMetadata",
         **kwargs: Any,
     ) -> None:
-        """Start saving a layer of KV cache from Aphrodite's paged buffer
+        """Start saving a layer of KV cache from Sonar's paged buffer
         to the connector. This is called from within attention layer to
         enable async copying during execution.
 
         Args:
             layer_name (str): the name of the layer.
             kv_layer (torch.Tensor): the paged KV buffer of the current
-                layer in Aphrodite.
+                layer in Sonar.
             attn_metadata (AttentionMetadata): the attention metadata.
             **kwargs: additional arguments for the save operation.
 
@@ -678,11 +678,11 @@ class KVConnectorBase_V1(ABC):
         return False
 
     @classmethod
-    def get_required_kvcache_layout(cls, aphrodite_config: "AphroditeConfig") -> str | None:
+    def get_required_kvcache_layout(cls, sonar_config: "SonarConfig") -> str | None:
         """Get the required KV cache layout for this connector.
 
         Args:
-            aphrodite_config (AphroditeConfig): the aphrodite config.
+            sonar_config (SonarConfig): the sonar config.
 
         Returns:
             str: the required KV cache layout. e.g. HND, or NHD.
@@ -760,7 +760,7 @@ class KVConnectorBase_V1(ABC):
     @classmethod
     def build_prom_metrics(
         cls,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
         metric_types: dict[type["PromMetric"], type["PromMetricT"]],
         labelnames: list[str],
         per_engine_labelvalues: dict[int, list[object]],

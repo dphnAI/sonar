@@ -13,11 +13,11 @@ from __future__ import annotations
 import torch
 from torch import nn
 
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.quantization import QuantizationConfig
 
 
 class InklingDenseMLP(nn.Module):

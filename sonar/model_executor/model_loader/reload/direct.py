@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Direct weight reload (``APHRODITE_RELOAD_MODE=direct``).
+"""Direct weight reload (``SONAR_RELOAD_MODE=direct``).
 
 Cold start records each tensor's checkpoint layout before post-load processing
 (PWAL). ``begin`` views re-laid-out tensors back to that layout on their
@@ -17,11 +17,11 @@ from collections.abc import Iterator
 
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.config import ModelConfig
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.quantization.base_config import QuantizeMethodBase
-from aphrodite.model_executor.utils import (
+import sonar.envs as envs
+from sonar.config import ModelConfig
+from sonar.logger import init_logger
+from sonar.model_executor.layers.quantization.base_config import QuantizeMethodBase
+from sonar.model_executor.utils import (
     is_weights_pre_processed,
     storage_view,
 )
@@ -53,8 +53,8 @@ _LOADER_ATTRS = (
 
 
 def direct_reload_enabled() -> bool:
-    """Whether weight updates reload in place (``APHRODITE_RELOAD_MODE=direct``)."""
-    return envs.APHRODITE_RELOAD_MODE == "direct"
+    """Whether weight updates reload in place (``SONAR_RELOAD_MODE=direct``)."""
+    return envs.SONAR_RELOAD_MODE == "direct"
 
 
 def _layout(t: torch.Tensor) -> tuple:
@@ -74,13 +74,13 @@ def _loadable_tensors(model: torch.nn.Module) -> Iterator[tuple[str, torch.Tenso
 
 
 def _check_supported_modules(model: torch.nn.Module) -> None:
-    # config-level refusals: AphroditeConfig._verify_direct_reload_compat
-    from aphrodite.model_executor.layers.quantization.humming import (
+    # config-level refusals: SonarConfig._verify_direct_reload_compat
+    from sonar.model_executor.layers.quantization.humming import (
         HummingLinearMethod,
         HummingMoEMethod,
     )
-    from aphrodite.model_executor.layers.quantization.online.fp8 import OnlineLinearBase
-    from aphrodite.model_executor.layers.quantization.online.moe_base import (
+    from sonar.model_executor.layers.quantization.online.fp8 import OnlineLinearBase
+    from sonar.model_executor.layers.quantization.online.moe_base import (
         OnlineMoEMethodBase,
     )
 
@@ -201,7 +201,7 @@ def begin_direct_reload(model: torch.nn.Module) -> None:
 @torch.no_grad()
 def finish_direct_reload(model: torch.nn.Module, model_config: ModelConfig, device: torch.device) -> None:
     """Rerun cold-start post-load processing."""
-    from aphrodite.model_executor.model_loader.utils import process_weights_after_loading
+    from sonar.model_executor.model_loader.utils import process_weights_after_loading
 
     if not model.__dict__.pop("_direct_reload_begun", False):
         # e.g. a retry after a failed finish, which may have processed some

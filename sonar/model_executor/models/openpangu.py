@@ -28,9 +28,9 @@ import torch
 from torch import nn
 from transformers import PreTrainedConfig
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, CacheConfig, ParallelConfig
-from aphrodite.distributed import (
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import CacheConfig, ParallelConfig, SonarConfig
+from sonar.distributed import (
     get_ep_group,
     get_pp_group,
     get_tensor_model_parallel_rank,
@@ -38,37 +38,37 @@ from aphrodite.distributed import (
     get_tp_group,
     tensor_model_parallel_all_gather,
 )
-from aphrodite.model_executor.layers.activation import SiluAndMul
-from aphrodite.model_executor.layers.attention import (
+from sonar.model_executor.layers.activation import SiluAndMul
+from sonar.model_executor.layers.attention import (
     Attention,
     StaticSinkAttention,
 )
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.model_executor.layers.fused_moe import (
     FusedMoEFactory,
     GateLinear,
 )
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     MergedColumnParallelLinear,
     QKVParallelLinear,
     ReplicatedLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.mla import MLAModules, MultiHeadLatentAttentionWrapper
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.mla import MLAModules, MultiHeadLatentAttentionWrapper
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.models.interfaces import (
+from sonar.model_executor.models.interfaces import (
     MixtureOfExperts,
     SupportsLoRA,
     SupportsPP,
 )
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.models.utils import (
     AutoWeightsLoader,
     PPMissingLayer,
     WeightsMapper,
@@ -78,12 +78,12 @@ from aphrodite.model_executor.models.utils import (
     maybe_prefix,
     sequence_parallel_chunk,
 )
-from aphrodite.model_executor.utils import set_weight_attrs
-from aphrodite.platforms import current_platform
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.transformers_utils.config import set_default_rope_theta
-from aphrodite.v1.attention.backend import AttentionType
-from aphrodite.v1.attention.backends.flash_attn_diffkv import FlashAttentionDiffKVBackend
+from sonar.model_executor.utils import set_weight_attrs
+from sonar.platforms import current_platform
+from sonar.sequence import IntermediateTensors
+from sonar.transformers_utils.config import set_default_rope_theta
+from sonar.v1.attention.backend import AttentionType
+from sonar.v1.attention.backends.flash_attn_diffkv import FlashAttentionDiffKVBackend
 
 
 def check_ffn_act_fn(act_fn: str):
@@ -731,15 +731,15 @@ class OpenPanguDecoderLayer(nn.Module):
         self,
         config: PreTrainedConfig,
         prefix: str,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
     ) -> None:
         super().__init__()
 
         if config is None:
-            config = aphrodite_config.model_config.hf_config
-        cache_config = aphrodite_config.cache_config
-        quant_config = aphrodite_config.quant_config
-        parallel_config = aphrodite_config.parallel_config
+            config = sonar_config.model_config.hf_config
+        cache_config = sonar_config.cache_config
+        quant_config = sonar_config.quant_config
+        parallel_config = sonar_config.parallel_config
 
         self.hidden_size = config.hidden_size
         max_position_embeddings = getattr(config, "max_position_embeddings", 8192)
@@ -906,12 +906,12 @@ class OpenPanguDecoderLayer(nn.Module):
 class OpenPanguModel(nn.Module):
     fall_back_to_pt_during_load = False
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
-        eplb_config = aphrodite_config.parallel_config.eplb_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
+        eplb_config = sonar_config.parallel_config.eplb_config
         self.config = config
         self.num_redundant_experts = eplb_config.num_redundant_experts
 
@@ -929,7 +929,7 @@ class OpenPanguModel(nn.Module):
 
         self.start_layer, self.end_layer, self.layers = make_layers(
             config.num_hidden_layers,
-            lambda prefix: OpenPanguDecoderLayer(config, prefix, aphrodite_config),
+            lambda prefix: OpenPanguDecoderLayer(config, prefix, sonar_config),
             prefix=f"{prefix}.layers",
         )
 
@@ -1022,10 +1022,10 @@ class OpenPanguModelBase(nn.Module, SupportsPP, SupportsLoRA):
         "gate_up_proj": ["gate_proj", "up_proj"],
     }
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
         self.config = config
         self.quant_config = quant_config
 
@@ -1036,7 +1036,7 @@ class OpenPanguModelBase(nn.Module, SupportsPP, SupportsLoRA):
                 "kv_a_proj_with_mqa",
             ]
 
-        self.model = OpenPanguModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = OpenPanguModel(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
         if get_pp_group().is_last_rank:
             self.lm_head = ParallelLMHead(
                 config.vocab_size,
@@ -1077,9 +1077,9 @@ class OpenPanguModelBase(nn.Module, SupportsPP, SupportsLoRA):
 
 
 class OpenPanguMoEModel(OpenPanguModelBase, MixtureOfExperts):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
-        super().__init__(aphrodite_config=aphrodite_config, prefix=prefix)
-        config = aphrodite_config.model_config.hf_config
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
+        super().__init__(sonar_config=sonar_config, prefix=prefix)
+        config = sonar_config.model_config.hf_config
 
         # Set MoE hyperparameters
         self.num_moe_layers = config.num_hidden_layers - config.first_k_dense_replace
@@ -1126,8 +1126,8 @@ class OpenPanguMoEModel(OpenPanguModelBase, MixtureOfExperts):
 
 
 class OpenPanguEmbeddedModel(OpenPanguModelBase):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
-        super().__init__(aphrodite_config=aphrodite_config, prefix=prefix)
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
+        super().__init__(sonar_config=sonar_config, prefix=prefix)
 
 
 class PanguEmbeddedForCausalLM(OpenPanguEmbeddedModel):

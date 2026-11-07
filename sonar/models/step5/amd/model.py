@@ -7,37 +7,37 @@ from collections.abc import Iterable
 import torch
 from torch import nn
 
-import aphrodite.envs as envs
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, get_current_aphrodite_config
-from aphrodite.distributed import (
+import sonar.envs as envs
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import SonarConfig, get_current_sonar_config
+from sonar.distributed import (
     get_ep_group,
     get_pp_group,
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
 )
-from aphrodite.model_executor.layers.activation import SiluAndMul, SwigluStepAndMul
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.layers.attention.attention import unified_kv_cache_update
-from aphrodite.model_executor.layers.fused_moe import FusedMoEFactory, GateLinear
-from aphrodite.model_executor.layers.layernorm import GemmaRMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.activation import SiluAndMul, SwigluStepAndMul
+from sonar.model_executor.layers.attention import Attention
+from sonar.model_executor.layers.attention.attention import unified_kv_cache_update
+from sonar.model_executor.layers.fused_moe import FusedMoEFactory, GateLinear
+from sonar.model_executor.layers.layernorm import GemmaRMSNorm
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     MergedColumnParallelLinear,
     QKVParallelLinear,
     ReplicatedLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
-from aphrodite.model_executor.models.interfaces import MixtureOfExperts, SupportsPP
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.model_loader.weight_utils import default_weight_loader
+from sonar.model_executor.models.interfaces import MixtureOfExperts, SupportsPP
+from sonar.model_executor.models.utils import (
     AutoWeightsLoader,
     PPMissingLayer,
     WeightsMapper,
@@ -47,13 +47,13 @@ from aphrodite.model_executor.models.utils import (
     maybe_prefix,
     skip_spec_layers,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.platforms.rocm import on_gfx1250
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.transformers_utils.configs.step5 import Step5Config
-from aphrodite.utils.math_utils import cdiv, round_up
-from aphrodite.utils.torch_utils import _encode_layer_name, kv_cache_dtype_str_to_dtype
-from aphrodite.v1.attention.backends.rocm_aiter_unified_attn import (
+from sonar.platforms import current_platform
+from sonar.platforms.rocm import on_gfx1250
+from sonar.sequence import IntermediateTensors
+from sonar.transformers_utils.configs.step5 import Step5Config
+from sonar.utils.math_utils import cdiv, round_up
+from sonar.utils.torch_utils import _encode_layer_name, kv_cache_dtype_str_to_dtype
+from sonar.v1.attention.backends.rocm_aiter_unified_attn import (
     RocmAiterUnifiedAttentionBackend,
 )
 
@@ -121,19 +121,19 @@ class Step5SparseIndexer(nn.Module):
         )
 
         self.native_rope = not self.rotary_emb.enabled()
-        aphrodite_config = get_current_aphrodite_config()
-        self.topk_backend = aphrodite_config.kernel_config.sparse_indexer_topk_backend
-        spec = aphrodite_config.speculative_config
+        sonar_config = get_current_sonar_config()
+        self.topk_backend = sonar_config.kernel_config.sparse_indexer_topk_backend
+        spec = sonar_config.speculative_config
         self.num_speculative_tokens = spec.num_speculative_tokens if spec else 0
-        self.max_regions = cdiv(aphrodite_config.model_config.max_model_len, self.region_size)
+        self.max_regions = cdiv(sonar_config.model_config.max_model_len, self.region_size)
         self.num_sms = current_platform.num_compute_units()
         # Peak scoring workspace: decode scores or bounded prefill logits, plus
         # the per-step prefill page table.
-        sched = aphrodite_config.scheduler_config
+        sched = sonar_config.scheduler_config
         decode_rows = sched.max_num_seqs * (1 + self.num_speculative_tokens) * self.num_local_groups
         decode_scores = decode_rows * round_up(self.max_regions, 256) * 4
         prefill_table = sched.max_num_batched_tokens * cdiv(self.max_regions, 128) * 16
-        self.workspace_bytes = max(envs.APHRODITE_SPARSE_INDEXER_MAX_LOGITS_MB << 20, decode_scores) + prefill_table
+        self.workspace_bytes = max(envs.SONAR_SPARSE_INDEXER_MAX_LOGITS_MB << 20, decode_scores) + prefill_table
 
     def forward(
         self, hidden_states: torch.Tensor, positions: torch.Tensor, decode=None
@@ -244,10 +244,10 @@ class Step5MoE(nn.Module):
     """Routed experts with the shared expert fused into one FusedMoE call, so
     the combined output is all-reduced once in the model dtype."""
 
-    def __init__(self, aphrodite_config: AphroditeConfig, prefix: str) -> None:
+    def __init__(self, sonar_config: SonarConfig, prefix: str) -> None:
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        parallel_config = aphrodite_config.parallel_config
+        config = sonar_config.model_config.hf_config
+        parallel_config = sonar_config.parallel_config
         layer_idx = extract_layer_index(prefix)
         self.n_routed_experts = config.moe_num_experts
         self.n_logical_experts = self.n_routed_experts
@@ -276,7 +276,7 @@ class Step5MoE(nn.Module):
         self.share_expert = Step5MLP(
             config,
             config.share_expert_dim,
-            aphrodite_config.quant_config,
+            sonar_config.quant_config,
             reduce_results=False,
             prefix=f"{prefix}.share_expert",
         )
@@ -288,7 +288,7 @@ class Step5MoE(nn.Module):
             hidden_size=config.hidden_size,
             intermediate_size=config.moe_intermediate_size,
             renormalize=config.norm_expert_weight,
-            quant_config=aphrodite_config.quant_config,
+            quant_config=sonar_config.quant_config,
             activation="swiglustep" if limit else "silu",
             prefix=f"{prefix}.experts",
             scoring_func=config.moe_router_activation,
@@ -318,11 +318,11 @@ def _rope_scaling(config: Step5Config, layer_idx: int) -> dict | None:
 
 
 class Step5Attention(nn.Module):
-    def __init__(self, aphrodite_config: AphroditeConfig, prefix: str) -> None:
+    def __init__(self, sonar_config: SonarConfig, prefix: str) -> None:
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        cache_config = aphrodite_config.cache_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        cache_config = sonar_config.cache_config
+        quant_config = sonar_config.quant_config
         self.layer_idx = extract_layer_index(prefix)
         layer_type = _layer_types(config)[self.layer_idx]
         tp_size = get_tensor_model_parallel_world_size()
@@ -389,9 +389,9 @@ class Step5Attention(nn.Module):
         self.indexer = None
         if not sparse:
             return
-        self._validate_sparse(aphrodite_config)
+        self._validate_sparse(sonar_config)
         self.indexer = Step5SparseIndexer(config, self.layer_idx, prefix=prefix)
-        static_context = aphrodite_config.compilation_config.static_forward_context
+        static_context = sonar_config.compilation_config.static_forward_context
         self.sparse_summary_cache = Step5CSASummaryCacheLayer(
             prefix=f"{prefix}.attn.sparse_summary_cache",
             target_impl=self.attn.impl,
@@ -408,26 +408,26 @@ class Step5Attention(nn.Module):
             raise ValueError(f"Duplicate layer name: {self.csa_layer_name}")
         static_context[self.csa_layer_name] = self
 
-    def _validate_sparse(self, aphrodite_config: AphroditeConfig) -> None:
-        cache_dtype = aphrodite_config.cache_config.cache_dtype
+    def _validate_sparse(self, sonar_config: SonarConfig) -> None:
+        cache_dtype = sonar_config.cache_config.cache_dtype
         if (
             cache_dtype not in ("fp8", "fp8_e4m3")
-            and kv_cache_dtype_str_to_dtype(cache_dtype, aphrodite_config.model_config) != torch.bfloat16
+            and kv_cache_dtype_str_to_dtype(cache_dtype, sonar_config.model_config) != torch.bfloat16
         ):
             raise NotImplementedError(f"Step-5 sparse attention reads a BF16 or FP8 E4M3 KV cache; got {cache_dtype}")
         if not self.use_rope:
             raise NotImplementedError("Step-5 sparse layers require RoPE")
         if self.head_dim != 192:
             raise ValueError(f"Step-5 sparse attention requires head_dim 192, got {self.head_dim}")
-        if aphrodite_config.parallel_config.use_ubatching:
+        if sonar_config.parallel_config.use_ubatching:
             raise ValueError(
                 "Step-5 sparse attention does not support dual-batch overlap or "
                 "microbatching yet. Disable --enable-dbo and set --ubatch-size 1."
             )
-        verify_kv_transfer_compatibility(aphrodite_config)
+        verify_kv_transfer_compatibility(sonar_config)
         if rocm_aiter_ops.is_shuffle_kv_cache_enabled() and on_gfx1250():
             raise NotImplementedError("Step-5 sparse attention reads the unshuffled KV cache layout.")
-        sparse = get_step5_sparse_config(aphrodite_config.model_config.hf_config)
+        sparse = get_step5_sparse_config(sonar_config.model_config.hf_config)
         assert sparse is not None
         validate_parallel_geometry(
             total_num_heads=self.total_num_heads,
@@ -461,8 +461,8 @@ class Step5Attention(nn.Module):
         attn_name = _encode_layer_name(self.attn.layer_name)
         csa_name = _encode_layer_name(self.csa_layer_name)
         if current_platform.opaque_attention_op():
-            kv_dep = torch.ops.aphrodite.unified_kv_cache_update(k, v, attn_name)
-            torch.ops.aphrodite.step5_csa_attention(hidden_states, positions, query, out, csa_name, gate, kv_dep)
+            kv_dep = torch.ops.sonar.unified_kv_cache_update(k, v, attn_name)
+            torch.ops.sonar.step5_csa_attention(hidden_states, positions, query, out, csa_name, gate, kv_dep)
         else:
             kv_dep = unified_kv_cache_update(k, v, attn_name)
             step5_csa_attention(hidden_states, positions, query, out, csa_name, gate, kv_dep)
@@ -481,27 +481,27 @@ def use_fp32_norm_weights(module: nn.Module, config: Step5Config) -> None:
 
 
 class Step5DecoderLayer(nn.Module):
-    def __init__(self, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
         layer_idx = extract_layer_index(prefix)
-        if aphrodite_config.cache_config is not None:
-            aphrodite_config.cache_config.sliding_window = None
-        self.self_attn = Step5Attention(aphrodite_config, prefix=f"{prefix}.self_attn")
+        if sonar_config.cache_config is not None:
+            sonar_config.cache_config.sliding_window = None
+        self.self_attn = Step5Attention(sonar_config, prefix=f"{prefix}.self_attn")
         self.use_moe = _is_moe_layer(config, layer_idx)
         if self.use_moe:
-            self.moe = Step5MoE(aphrodite_config, prefix=f"{prefix}.moe")
+            self.moe = Step5MoE(sonar_config, prefix=f"{prefix}.moe")
         else:
             self.mlp = Step5MLP(
                 config,
                 config.intermediate_size,
-                aphrodite_config.quant_config,
+                sonar_config.quant_config,
                 reduce_results=True,
                 prefix=f"{prefix}.mlp",
             )
         self.input_layernorm = GemmaRMSNorm(config.hidden_size, config.rms_norm_eps)
         self.post_attention_layernorm = GemmaRMSNorm(config.hidden_size, config.rms_norm_eps)
-        self.act_dtype = aphrodite_config.model_config.dtype
+        self.act_dtype = sonar_config.model_config.dtype
 
     def forward(self, positions: torch.Tensor, hidden_states: torch.Tensor) -> torch.Tensor:
         residual = hidden_states
@@ -576,12 +576,12 @@ def load_step5_weights(model: nn.Module, weights: Iterable[tuple[str, torch.Tens
 
 @support_torch_compile
 class Step5Model(nn.Module):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
         self.config = config
         self.moe_num_experts = config.moe_num_experts
-        self.act_dtype = aphrodite_config.model_config.dtype
+        self.act_dtype = sonar_config.model_config.dtype
         if config.tie_word_embeddings:
             raise NotImplementedError("Step5 does not tie word embeddings")
         if get_pp_group().is_first_rank:
@@ -590,7 +590,7 @@ class Step5Model(nn.Module):
             self.embed_tokens = PPMissingLayer()
         self.start_layer, self.end_layer, self.layers = make_layers(
             config.num_hidden_layers,
-            lambda prefix: Step5DecoderLayer(aphrodite_config, prefix=prefix),
+            lambda prefix: Step5DecoderLayer(sonar_config, prefix=prefix),
             prefix=f"{prefix}.layers",
         )
         if get_pp_group().is_last_rank:
@@ -646,7 +646,7 @@ class Step5ForCausalLM(nn.Module, SupportsPP, MixtureOfExperts):
         "qkv_proj": ["q_proj", "k_proj", "v_proj"],
         "gate_up_proj": ["gate_proj", "up_proj"],
     }
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_substr={
             ".share_expert.": ".moe.share_expert.",
             ".self_attn.sparse_indexer_": ".self_attn.indexer.sparse_indexer_",
@@ -655,15 +655,15 @@ class Step5ForCausalLM(nn.Module, SupportsPP, MixtureOfExperts):
         orig_to_new_prefix={"vision_model.": None, "vit_large_projector.": None},
     )
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        self.model = Step5Model(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        config = sonar_config.model_config.hf_config
+        self.model = Step5Model(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
         if get_pp_group().is_last_rank:
             self.lm_head = ParallelLMHead(
                 config.vocab_size,
                 config.hidden_size,
-                quant_config=aphrodite_config.quant_config,
+                quant_config=sonar_config.quant_config,
                 prefix=maybe_prefix(prefix, "lm_head"),
             )
             self.logits_processor = LogitsProcessor(config.vocab_size)
@@ -711,4 +711,4 @@ class Step5ForCausalLM(nn.Module, SupportsPP, MixtureOfExperts):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)

@@ -13,12 +13,12 @@ from transformers import ParakeetEncoder as HFParakeetEncoder
 from transformers import PreTrainedConfig
 from transformers.audio_utils import mel_filter_bank
 
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.activation import ReLUSquaredActivation
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
-from aphrodite.platforms import current_platform
-from aphrodite.transformers_utils.configs.parakeet import ExtractorConfig, ParakeetConfig
+from sonar.logger import init_logger
+from sonar.model_executor.layers.activation import ReLUSquaredActivation
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.model_loader.weight_utils import default_weight_loader
+from sonar.platforms import current_platform
+from sonar.transformers_utils.configs.parakeet import ExtractorConfig, ParakeetConfig
 
 logger = init_logger(__name__)
 

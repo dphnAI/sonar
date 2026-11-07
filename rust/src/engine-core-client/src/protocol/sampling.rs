@@ -78,7 +78,7 @@ pub enum RequestOutputKind {
 #[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
-pub struct AphroditeSamplingParams {
+pub struct SonarSamplingParams {
     #[serde(deserialize_with = "default_on_null")]
     pub no_repeat_ngram_size: u32,
     #[serde(deserialize_with = "default_on_null")]
@@ -136,7 +136,7 @@ pub struct AphroditeSamplingParams {
     pub skew: f32,
 }
 
-impl Default for AphroditeSamplingParams {
+impl Default for SonarSamplingParams {
     fn default() -> Self {
         Self {
             no_repeat_ngram_size: 0,
@@ -316,7 +316,7 @@ pub struct EngineCoreSamplingParams {
     /// cache; newly computed blocks may still populate the cache. `None`
     /// defers to engine-core defaults.
     pub skip_reading_prefix_cache: Option<bool>,
-    /// Additional request parameters for custom extensions (from `aphrodite_xargs`).
+    /// Additional request parameters for custom extensions (from `sonar_xargs`).
     pub extra_args: Option<HashMap<String, serde_json::Value>>,
     /// Number of prompt tokens to skip from returned routed-expert data.
     /// A value of zero returns routing data for the entire prompt.
@@ -327,7 +327,7 @@ pub struct EngineCoreSamplingParams {
     /// batches output deliveries by it.
     pub stream_interval: Option<NonZeroU32>,
     #[serde(flatten)]
-    pub aphrodite_sampling: AphroditeSamplingParams,
+    pub sonar_sampling: SonarSamplingParams,
 }
 
 impl EngineCoreSamplingParams {
@@ -363,7 +363,7 @@ impl EngineCoreSamplingParams {
             extra_args: None,
             routed_experts_prompt_start: 0,
             stream_interval: None,
-            aphrodite_sampling: AphroditeSamplingParams::default(),
+            sonar_sampling: SonarSamplingParams::default(),
         }
     }
 }
@@ -372,7 +372,7 @@ impl EngineCoreSamplingParams {
 mod tests {
     use rmpv::Value;
 
-    use super::{AphroditeSamplingParams, EngineCoreSamplingParams};
+    use super::{EngineCoreSamplingParams, SonarSamplingParams};
     use crate::protocol::decode_msgpack;
     use crate::protocol::request::EngineCoreRequest;
 
@@ -397,7 +397,7 @@ mod tests {
             value["extra_args"]["_sonar_phrase_retry"]["rollback_tokens"],
             3
         );
-        assert!(value.get("aphrodite_sampling").is_none());
+        assert!(value.get("sonar_sampling").is_none());
         let decoded: EngineCoreSamplingParams = decode_msgpack(&bytes).unwrap();
         assert_eq!(decoded, params);
     }
@@ -419,10 +419,7 @@ mod tests {
             "dry_sequence_breaker_ids": null
         }))
         .unwrap();
-        assert_eq!(
-            params.aphrodite_sampling,
-            AphroditeSamplingParams::default()
-        );
+        assert_eq!(params.sonar_sampling, SonarSamplingParams::default());
     }
 
     #[test]
@@ -476,9 +473,6 @@ mod tests {
         assert_eq!(sampling.prompt_logprobs, None);
         assert_eq!(sampling.eos_token_id, None);
         assert!(sampling.all_stop_token_ids.is_empty());
-        assert_eq!(
-            sampling.aphrodite_sampling,
-            AphroditeSamplingParams::default()
-        );
+        assert_eq!(sampling.sonar_sampling, SonarSamplingParams::default());
     }
 }

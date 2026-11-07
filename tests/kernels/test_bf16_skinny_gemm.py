@@ -11,18 +11,18 @@ import regex as re
 import torch
 from torch import nn
 
-from aphrodite.model_executor.kernels.linear.cute_dsl import (
+from sonar.model_executor.kernels.linear.cute_dsl import (
     skinny_gemm_plans as skinny_plans,
 )
-from aphrodite.model_executor.kernels.linear.cute_dsl.skinny_gemm import (
+from sonar.model_executor.kernels.linear.cute_dsl.skinny_gemm import (
     SkinnyGemmConfig,
 )
-from aphrodite.model_executor.layers.utils import maybe_use_skinny_gemm
-from aphrodite.models.deepseek_v32.nvidia import glm52_low_latency_gemm as glm52_gemm
-from aphrodite.models.kimi_k3.nvidia import low_latency_gemm as k3_gemm
-from aphrodite.models.kimi_k3.nvidia.low_latency_gemm import KIMI_K3_PROJECTIONS
-from aphrodite.models.qwen4_exp.nvidia import low_latency_gemm as qwen4_exp_gemm
-from aphrodite.platforms import current_platform
+from sonar.model_executor.layers.utils import maybe_use_skinny_gemm
+from sonar.models.deepseek_v32.nvidia import glm52_low_latency_gemm as glm52_gemm
+from sonar.models.kimi_k3.nvidia import low_latency_gemm as k3_gemm
+from sonar.models.kimi_k3.nvidia.low_latency_gemm import KIMI_K3_PROJECTIONS
+from sonar.models.qwen4_exp.nvidia import low_latency_gemm as qwen4_exp_gemm
+from sonar.platforms import current_platform
 
 # Keyed by local (N, K): (cute token counts, dsv3 token counts). 1536x7168 is
 # the unified shared_gate_up_proj/mla_g_proj entry (dsv3 M1..16).
@@ -197,10 +197,10 @@ def test_every_dsv3_routed_shape_is_instantiated() -> None:
     let (3216, 7168) ship without its DISPATCH_DSV3_SHAPE(7168, 3216).
     """
     source = (Path(__file__).resolve().parents[2] / "csrc" / "dsv3_fused_a_gemm.cu").read_text(encoding="utf-8")
-    # Benchmark-only shapes live behind APHRODITE_K3_BENCH_SHAPES and are not built
+    # Benchmark-only shapes live behind SONAR_K3_BENCH_SHAPES and are not built
     # by default, so they must not count as available.
-    production_macros = source.split("#ifdef APHRODITE_K3_BENCH_SHAPES")[0]
-    explicit = source.split("#undef DISPATCH_DSV3_SHAPE")[1].split("#ifdef APHRODITE_K3_BENCH_SHAPES")[0]
+    production_macros = source.split("#ifdef SONAR_K3_BENCH_SHAPES")[0]
+    explicit = source.split("#undef DISPATCH_DSV3_SHAPE")[1].split("#ifdef SONAR_K3_BENCH_SHAPES")[0]
     compiled = {
         (int(hd_in), int(hd_out))
         for hd_in, hd_out in re.findall(r"DISPATCH_DSV3_SHAPE\((\d+),\s*(\d+)\)", production_macros)
@@ -278,7 +278,7 @@ def test_kda_mixed_precision_bf16_fma_capability(
     compute_capability: tuple[int, int],
     supported: bool,
 ) -> None:
-    from aphrodite.models.kimi_k3.nvidia.ops.cute_dsl import kda_skinny_gemm
+    from sonar.models.kimi_k3.nvidia.ops.cute_dsl import kda_skinny_gemm
 
     capability = compute_capability[0] * 10 + compute_capability[1]
     monkeypatch.setattr(
@@ -294,7 +294,7 @@ def test_kda_mixed_precision_bf16_fma_capability(
 def test_kda_skinny_gemms_sm90_cuda_graph(num_tokens: int) -> None:
     """Hopper must compile and capture the pre-SM100 FMA specialization."""
     _require_capability_and_cute((9, 0))
-    from aphrodite.models.kimi_k3.nvidia.ops.cute_dsl.kda_skinny_gemm import (
+    from sonar.models.kimi_k3.nvidia.ops.cute_dsl.kda_skinny_gemm import (
         KdaSkinnyGemm,
     )
 
@@ -329,7 +329,7 @@ def test_kda_skinny_gemms_sm90_cuda_graph(num_tokens: int) -> None:
 
 @pytest.mark.parametrize("tp_size", [1, 2, 4, 16])
 def test_kda_projection_overlap_is_tp8_only(tp_size: int) -> None:
-    from aphrodite.models.kimi_k3.nvidia.kda import KimiK3DeltaAttention
+    from sonar.models.kimi_k3.nvidia.kda import KimiK3DeltaAttention
 
     kda = KimiK3DeltaAttention.__new__(KimiK3DeltaAttention)
     nn.Module.__init__(kda)
@@ -371,7 +371,7 @@ def test_kda_qkvg_autotune_enables_full_overlap(
 ) -> None:
     flashinfer_gemm = pytest.importorskip("flashinfer.gemm")
 
-    from aphrodite.models.kimi_k3.nvidia.kda import KimiK3DeltaAttention
+    from sonar.models.kimi_k3.nvidia.kda import KimiK3DeltaAttention
 
     kda = KimiK3DeltaAttention.__new__(KimiK3DeltaAttention)
     nn.Module.__init__(kda)
@@ -1002,7 +1002,7 @@ def test_maybe_use_skinny_gemm(
     # Isolate hardware/dependency detection, keeping the real plan lookup.
     monkeypatch.setattr(skinny_plans.current_platform, "get_device_capability", lambda: (12, 1))
     monkeypatch.setattr(skinny_plans.shape_dynamic_skinny_gemm, "is_available", lambda: True)
-    monkeypatch.setenv("APHRODITE_BATCH_INVARIANT", str(int(batch_invariant)))
+    monkeypatch.setenv("SONAR_BATCH_INVARIANT", str(int(batch_invariant)))
     layer: nn.Module
     if ndim == 2:
         layer = nn.Linear(k, 4096, bias=bias, dtype=dtype, device="cpu")
@@ -1275,7 +1275,7 @@ def test_cute_residual_epilogue(n: int, k: int, num_tokens: int) -> None:
 @pytest.mark.parametrize("num_tokens", range(1, 17))
 def test_cute_residual_epilogue_all_supported_token_counts(num_tokens: int) -> None:
     _require_sm103_and_cute()
-    from aphrodite.model_executor.kernels.linear.cute_dsl.skinny_gemm import (
+    from sonar.model_executor.kernels.linear.cute_dsl.skinny_gemm import (
         ShapeDynamicSkinnyGemm,
     )
 
@@ -1382,7 +1382,7 @@ def test_residual_dispatch_falls_back_to_addmm(
 @pytest.mark.skipif(
     not current_platform.is_cuda(),
     reason="The base UnquantizedLinearMethod is platform-dispatched: on ROCm it "
-    "goes through the aphrodite::rocm_unquantized_gemm custom op, which has no CPU "
+    "goes through the sonar::rocm_unquantized_gemm custom op, which has no CPU "
     "kernel, so the CPU-tensor fallback cannot be exercised there.",
 )
 def test_fallback_preserves_default_method() -> None:

@@ -4,10 +4,10 @@
 
 import torch
 
-import aphrodite._custom_ops as ops
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe.routed_experts import RoutedExperts
-from aphrodite.model_executor.layers.quantization.utils.marlin_utils import (
+import sonar._custom_ops as ops
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe.routed_experts import RoutedExperts
+from sonar.model_executor.layers.quantization.utils.marlin_utils import (
     USE_FP32_REDUCE_DEFAULT,
     get_marlin_input_dtype,
     marlin_pad_dim,
@@ -21,10 +21,10 @@ from aphrodite.model_executor.layers.quantization.utils.marlin_utils import (
     marlin_unpad_output,
     should_use_atomic_add_reduce,
 )
-from aphrodite.model_executor.utils import replace_parameter
-from aphrodite.platforms import current_platform
-from aphrodite.scalar_type import scalar_types
-from aphrodite.utils.math_utils import round_up
+from sonar.model_executor.utils import replace_parameter
+from sonar.platforms import current_platform
+from sonar.scalar_type import scalar_types
+from sonar.utils.math_utils import round_up
 
 FP4_MARLIN_SUPPORTED_GROUP_SIZES = [16]
 
@@ -192,7 +192,7 @@ def apply_fp4_marlin_linear(
 
         inputs, a_scales = marlin_quant_input(inputs, torch.float8_e4m3fn)
 
-    output = torch.ops.aphrodite.marlin_gemm(
+    output = torch.ops.sonar.marlin_gemm(
         a=inputs,
         b_q_weight=weight,
         b_bias=bias,

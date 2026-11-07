@@ -9,23 +9,23 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.config import (
     CompilationConfig,
     CompilationMode,
     DeviceConfig,
     LoadConfig,
-    set_current_aphrodite_config,
+    SonarConfig,
+    set_current_sonar_config,
 )
-from aphrodite.distributed import parallel_state
-from aphrodite.model_executor.layers import logits_processor
-from aphrodite.model_executor.layers.linear import LinearBase
-from aphrodite.model_executor.models.lilicorr import LiLiCorrHead
-from aphrodite.transformers_utils.configs.eagle import EAGLEConfig
-from aphrodite.v1.worker.gpu.sample.gumbel import gumbel_sample
-from aphrodite.v1.worker.gpu.spec_decode.dflash2.speculator import CandidateSampler
-from aphrodite.v1.worker.gpu.spec_decode.draft_logits import DraftLogitsCache
-from aphrodite.v1.worker.gpu.spec_decode.lilicorr.speculator import LiLiCorrSpeculator
+from sonar.distributed import parallel_state
+from sonar.model_executor.layers import logits_processor
+from sonar.model_executor.layers.linear import LinearBase
+from sonar.model_executor.models.lilicorr import LiLiCorrHead
+from sonar.transformers_utils.configs.eagle import EAGLEConfig
+from sonar.v1.worker.gpu.sample.gumbel import gumbel_sample
+from sonar.v1.worker.gpu.spec_decode.dflash2.speculator import CandidateSampler
+from sonar.v1.worker.gpu.spec_decode.draft_logits import DraftLogitsCache
+from sonar.v1.worker.gpu.spec_decode.lilicorr.speculator import LiLiCorrSpeculator
 
 
 @pytest.fixture(autouse=True)
@@ -112,8 +112,8 @@ def test_lilicorr_matches_exported_head(head_width, slots, dtype):
     torch.manual_seed(7)
     with (
         torch.device(device),
-        set_current_aphrodite_config(
-            AphroditeConfig(
+        set_current_sonar_config(
+            SonarConfig(
                 device_config=DeviceConfig("cuda"),
                 compilation_config=CompilationConfig(mode=CompilationMode.NONE),
             )
@@ -125,7 +125,7 @@ def test_lilicorr_matches_exported_head(head_width, slots, dtype):
             rms_norm_eps=1e-6,
             config=_config(hidden_size=head_width),
         ).to(dtype)
-    # Aphrodite linear parameters are initialized by the checkpoint loader.
+    # Sonar linear parameters are initialized by the checkpoint loader.
     with torch.no_grad(), torch.device(device):
         for module in head.modules():
             if isinstance(module, LinearBase):
@@ -153,8 +153,8 @@ def test_lilicorr_matches_exported_head(head_width, slots, dtype):
 
 
 def test_runtime_length_keeps_trained_checkpoint_geometry(monkeypatch):
-    from aphrodite.model_executor.models.lilicorr import LiLiCorr
-    from aphrodite.model_executor.models.qwen3_dflash import DFlashQwen3Model
+    from sonar.model_executor.models.lilicorr import LiLiCorr
+    from sonar.model_executor.models.qwen3_dflash import DFlashQwen3Model
 
     def init_backbone(self, **kwargs):
         nn.Module.__init__(self)
@@ -171,24 +171,24 @@ def test_runtime_length_keeps_trained_checkpoint_geometry(monkeypatch):
             )
         ),
     )
-    with set_current_aphrodite_config(
-        AphroditeConfig(
+    with set_current_sonar_config(
+        SonarConfig(
             device_config=DeviceConfig("cpu"),
             compilation_config=CompilationConfig(mode=CompilationMode.NONE),
         )
     ):
         for slots in (1, 3):
             spec.num_speculative_tokens = slots
-            head = LiLiCorr(aphrodite_config=SimpleNamespace(speculative_config=spec)).lilicorr
+            head = LiLiCorr(sonar_config=SimpleNamespace(speculative_config=spec)).lilicorr
             assert head.slot_embedding.shape == (1, 1, 3, 1, 8)
             assert head.relative_slot_bias.shape == (2, 7)
         spec.draft_model_config.hf_config.dflash_config["lilicorr_enabled"] = False
         with pytest.raises(ValueError, match="lilicorr_enabled"):
-            LiLiCorr(aphrodite_config=SimpleNamespace(speculative_config=spec))
+            LiLiCorr(sonar_config=SimpleNamespace(speculative_config=spec))
         spec.draft_model_config.hf_config.dflash_config["lilicorr_enabled"] = True
         spec.num_speculative_tokens = 4
         with pytest.raises(ValueError, match="trained block_size"):
-            LiLiCorr(aphrodite_config=SimpleNamespace(speculative_config=spec))
+            LiLiCorr(sonar_config=SimpleNamespace(speculative_config=spec))
 
 
 @pytest.mark.parametrize("tp_size", [1, 2])
@@ -317,8 +317,8 @@ def test_captured_context_anchor_rereads_fixed_inputs():
 @pytest.mark.parametrize("lilicorr", [False, True])
 def test_candidate_generation_routes_scores_and_adaptive_inputs(monkeypatch, lilicorr):
     """Both heads share the walk, including a padded request and adaptive scores."""
-    from aphrodite.v1.worker.gpu.spec_decode.dflash.speculator import DFlashSpeculator
-    from aphrodite.v1.worker.gpu.spec_decode.dflash2.speculator import DFlash2Speculator
+    from sonar.v1.worker.gpu.spec_decode.dflash.speculator import DFlashSpeculator
+    from sonar.v1.worker.gpu.spec_decode.dflash2.speculator import DFlash2Speculator
 
     key = "lilicorr_candidate_topk" if lilicorr else "selector_top_k"
 
@@ -532,7 +532,7 @@ def test_candidate_walk_revisited_position_matches_step_seed(use_fp64):
     ],
 )
 def test_checkpoint_coverage_rejects_incomplete_or_wrong_heads(monkeypatch, convolution, mismatch, quantized):
-    from aphrodite.model_executor.models.lilicorr import LiLiCorr, LiLiCorrForCausalLM
+    from sonar.model_executor.models.lilicorr import LiLiCorr, LiLiCorrForCausalLM
 
     wrapper = LiLiCorrForCausalLM.__new__(LiLiCorrForCausalLM)  # type: ignore[type-abstract]
     nn.Module.__init__(wrapper)
@@ -540,8 +540,8 @@ def test_checkpoint_coverage_rejects_incomplete_or_wrong_heads(monkeypatch, conv
     nn.Module.__init__(wrapper.model)
     wrapper.model._context_kv_proj = None  # set by __init__ (no MXFP8 projection)
     wrapper.has_own_lm_head = False
-    with set_current_aphrodite_config(
-        AphroditeConfig(
+    with set_current_sonar_config(
+        SonarConfig(
             device_config=DeviceConfig("cpu"),
             compilation_config=CompilationConfig(mode=CompilationMode.NONE),
         )
@@ -552,12 +552,12 @@ def test_checkpoint_coverage_rejects_incomplete_or_wrong_heads(monkeypatch, conv
         layer.attention_conv = nn.Linear(2, 2, bias=False)
     wrapper.model.layers = nn.ModuleList([layer])
     if quantized:
-        from aphrodite.config.quantization import QuantSpec
-        from aphrodite.model_executor.layers.quantization.modelopt import (
+        from sonar.config.quantization import QuantSpec
+        from sonar.model_executor.layers.quantization.modelopt import (
             CkptCtx,
             ModelOptLinearMethod,
         )
-        from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+        from sonar.model_executor.layers.quantization.utils.quant_utils import (
             kNvfp4Static,
         )
 
@@ -609,9 +609,9 @@ def test_checkpoint_coverage_rejects_incomplete_or_wrong_heads(monkeypatch, conv
 
 @pytest.fixture
 def owned_head_model(monkeypatch):
-    from aphrodite.model_executor.layers.quantization import modelopt
-    from aphrodite.model_executor.models import qwen3_dflash
-    from aphrodite.model_executor.models.lilicorr import LiLiCorrForCausalLM
+    from sonar.model_executor.layers.quantization import modelopt
+    from sonar.model_executor.models import qwen3_dflash
+    from sonar.model_executor.models.lilicorr import LiLiCorrForCausalLM
 
     quant_config = modelopt.ModelOptNvFp4Config(quant_method="W4A16_NVFP4", is_checkpoint_nvfp4_serialized=True)
     monkeypatch.setattr(
@@ -644,7 +644,7 @@ def owned_head_model(monkeypatch):
             num_hidden_layers=0,
             dflash_config={},
         )
-        aphrodite_config = SimpleNamespace(
+        sonar_config = SimpleNamespace(
             speculative_config=SimpleNamespace(
                 draft_model_config=SimpleNamespace(hf_config=config),
                 draft_load_config=None,
@@ -659,14 +659,14 @@ def owned_head_model(monkeypatch):
             cache_config=SimpleNamespace(),
             load_config=LoadConfig(),
         )
-        with set_current_aphrodite_config(
-            AphroditeConfig(
+        with set_current_sonar_config(
+            SonarConfig(
                 device_config=DeviceConfig("cpu"),
                 compilation_config=CompilationConfig(mode=CompilationMode.NONE),
             )
         ):
-            model = LiLiCorrForCausalLM(aphrodite_config=aphrodite_config)
-        return model, aphrodite_config
+            model = LiLiCorrForCausalLM(sonar_config=sonar_config)
+        return model, sonar_config
 
     return build
 
@@ -691,11 +691,11 @@ def test_owned_nvfp4_lm_head_loads_required_checkpoint_tensors(owned_head_model,
 
 @pytest.mark.parametrize("owned", [False, True])
 def test_selected_lm_head_survives_dflash_and_lilicorr_sharing(monkeypatch, owned_head_model, owned):
-    from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+    from sonar.model_executor.layers.vocab_parallel_embedding import (
         VocabParallelEmbedding,
     )
-    from aphrodite.v1.worker.gpu.spec_decode.dflash import utils as dflash_utils
-    from aphrodite.v1.worker.gpu.spec_decode.eagle import utils as eagle_utils
+    from sonar.v1.worker.gpu.spec_decode.dflash import utils as dflash_utils
+    from sonar.v1.worker.gpu.spec_decode.eagle import utils as eagle_utils
 
     model, config = owned_head_model(owned)
     own_head = model.lm_head
@@ -720,7 +720,7 @@ def test_selected_lm_head_survives_dflash_and_lilicorr_sharing(monkeypatch, owne
 
         monkeypatch.setattr(dflash_utils, "_should_share", no_weight_comparison)
     spec = LiLiCorrSpeculator.__new__(LiLiCorrSpeculator)
-    spec.aphrodite_config = config
+    spec.sonar_config = config
     assert spec.load_draft_model(target, set()) is model
     assert model.lm_head is (own_head if owned else target_head)
     assert spec.target_embeddings is embedding
@@ -730,8 +730,8 @@ def test_selected_lm_head_survives_dflash_and_lilicorr_sharing(monkeypatch, owne
 
 
 def test_quantized_head_calls_methods_without_reading_packed_weights(monkeypatch):
-    from aphrodite.model_executor.layers import linear
-    from aphrodite.model_executor.layers.linear import UnquantizedLinearMethod
+    from sonar.model_executor.layers import linear
+    from sonar.model_executor.layers.linear import UnquantizedLinearMethod
 
     calls = []
     configured = []
@@ -750,8 +750,8 @@ def test_quantized_head_calls_methods_without_reading_packed_weights(monkeypatch
         return PackedMethod()
 
     monkeypatch.setattr(linear, "resolve_quant_method", resolve)
-    with set_current_aphrodite_config(
-        AphroditeConfig(
+    with set_current_sonar_config(
+        SonarConfig(
             device_config=DeviceConfig("cpu"),
             compilation_config=CompilationConfig(mode=CompilationMode.NONE),
         )

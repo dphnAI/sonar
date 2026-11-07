@@ -16,12 +16,12 @@ from aiter.ops.flydsl.kernels import buffer_ops as bo
 from flydsl.expr import const_expr, gpu, range_constexpr, rocdl
 from flydsl.expr.typing import T
 
-from aphrodite.models.kimi_k3.amd.specialized_decode.mono.abi import (
+from sonar.models.kimi_k3.amd.specialized_decode.mono.abi import (
     FAILED,
     RECORD_WORDS,
     WAIT_SECONDS,
 )
-from aphrodite.models.kimi_k3.amd.specialized_decode.mono.common.ops import (
+from sonar.models.kimi_k3.amd.specialized_decode.mono.common.ops import (
     CM_DEV,
     CM_SYS,
     bf16_pair,
@@ -31,7 +31,7 @@ from aphrodite.models.kimi_k3.amd.specialized_decode.mono.common.ops import (
     traced,
     uniform,
 )
-from aphrodite.models.kimi_k3.amd.specialized_decode.mono.common.plan import Space, note
+from sonar.models.kimi_k3.amd.specialized_decode.mono.common.plan import Space, note
 
 POLL_MAX = 12  # mailbox specs polled per batch (bounds live registers)
 

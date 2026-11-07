@@ -63,7 +63,7 @@ features:
       - "--max-model-len"
       - "1010000"
     env:
-      APHRODITE_ALLOW_LONG_MAX_MODEL_LEN: "1"
+      SONAR_ALLOW_LONG_MAX_MODEL_LEN: "1"
 
 opt_in_features:
   - spec_decoding
@@ -108,17 +108,17 @@ guide: |
 
   ## Prerequisites
 
-  - **Aphrodite version:** >= 0.17.0
+  - **Sonar version:** >= 0.17.0
   - **Hardware (BF16):** 1x H200, 2x H100, 4x Intel Arc Pro B60, 2x Intel Arc Pro B70
   - **Hardware (FP8):** single 40 GB GPU (H100/H200/L40S)
   - **Hardware (Int4):** single 24 GB GPU
 
-  ### Install Aphrodite
+  ### Install Sonar
 
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U aphrodite-engine --torch-backend=auto
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   ```
 
   ### Docker
@@ -131,7 +131,7 @@ guide: |
   ### Single-GPU FP8
 
   ```bash
-  aphrodite serve Qwen/Qwen3.5-27B-FP8 \
+  sonar serve Qwen/Qwen3.5-27B-FP8 \
     --max-model-len 262144 \
     --reasoning-parser qwen3
   ```
@@ -139,7 +139,7 @@ guide: |
   ### BF16 on 2xH100 (TP2)
 
   ```bash
-  aphrodite serve Qwen/Qwen3.5-27B \
+  sonar serve Qwen/Qwen3.5-27B \
     --tensor-parallel-size 2 \
     --max-model-len 262144 \
     --reasoning-parser qwen3
@@ -148,7 +148,7 @@ guide: |
   ### MTP speculative decoding
 
   ```bash
-  aphrodite serve Qwen/Qwen3.5-27B-FP8 \
+  sonar serve Qwen/Qwen3.5-27B-FP8 \
     --speculative-config '{"method": "mtp", "num_speculative_tokens": 1}' \
     --reasoning-parser qwen3
   ```
@@ -156,7 +156,7 @@ guide: |
   ### Text-only (skip vision encoder)
 
   ```bash
-  aphrodite serve Qwen/Qwen3.5-27B-FP8 \
+  sonar serve Qwen/Qwen3.5-27B-FP8 \
     --language-model-only \
     --reasoning-parser qwen3 \
     --enable-prefix-caching
@@ -165,7 +165,7 @@ guide: |
   ### Docker (Intel XPU B60 / B70)
 
   Validated on 4× Intel Arc Pro B60 or 2x Intel Arc Pro B70 (B60 24 GB, B70 32 GB per card) with the
-  official Aphrodite XPU image `vllm/vllm-openai-xpu:latest`.
+  official Sonar XPU image `vllm/vllm-openai-xpu:latest`.
 
   ```bash
   docker run --device /dev/dri \
@@ -197,7 +197,7 @@ guide: |
   ## Troubleshooting
 
   - **CUDA graph / Mamba cache size error:** reduce `--max-cudagraph-capture-size`
-    (default 512). See [Aphrodite PR #34571](https://github.com/vllm-project/vllm/pull/34571).
+    (default 512). See [Sonar PR #34571](https://github.com/vllm-project/vllm/pull/34571).
   - **Disable reasoning:** add `--default-chat-template-kwargs '{"enable_thinking": false}'`.
   - **Prefix Caching (Mamba):** currently experimental in "align" mode.
 

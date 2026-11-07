@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """NIXL connector facades.
 
-This module hosts the thin facade classes that Aphrodite's KV-connector layer
+This module hosts the thin facade classes that Sonar's KV-connector layer
 instantiates. Almost all the real work lives in the per-mode scheduler
 and worker classes; the connector classes here only forward calls.
 
@@ -16,11 +16,11 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 
-from aphrodite.config import AphroditeConfig, KVTransferConfig
-from aphrodite.distributed.kv_transfer.kv_connector.utils import (
+from sonar.config import KVTransferConfig, SonarConfig
+from sonar.distributed.kv_transfer.kv_connector.utils import (
     EngineId,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.base import (
+from sonar.distributed.kv_transfer.kv_connector.v1.base import (
     CopyBlocksOp,
     KVConnectorBase_V1,
     KVConnectorHandshakeMetadata,
@@ -29,48 +29,48 @@ from aphrodite.distributed.kv_transfer.kv_connector.v1.base import (
     KVConnectorTransferResults,
     SupportsHMA,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.metrics import (
+from sonar.distributed.kv_transfer.kv_connector.v1.metrics import (
     KVConnectorPromMetrics,
     KVConnectorStats,
     PromMetric,
     PromMetricT,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.metadata import (
+from sonar.distributed.kv_transfer.kv_connector.v1.nixl.metadata import (
     NixlConnectorMetadata,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.pull_scheduler import (
+from sonar.distributed.kv_transfer.kv_connector.v1.nixl.pull_scheduler import (
     NixlPullConnectorScheduler,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.pull_worker import (
+from sonar.distributed.kv_transfer.kv_connector.v1.nixl.pull_worker import (
     NixlPullConnectorWorker,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.push_scheduler import (
+from sonar.distributed.kv_transfer.kv_connector.v1.nixl.push_scheduler import (
     NixlPushConnectorScheduler,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.push_worker import (
+from sonar.distributed.kv_transfer.kv_connector.v1.nixl.push_worker import (
     NixlPushConnectorWorker,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.stats import (
+from sonar.distributed.kv_transfer.kv_connector.v1.nixl.stats import (
     NixlKVConnectorStats,
     NixlPromMetrics,
 )
-from aphrodite.forward_context import ForwardContext
-from aphrodite.logger import init_logger
-from aphrodite.v1.attention.backend import AttentionMetadata
-from aphrodite.v1.core.sched.output import SchedulerOutput
-from aphrodite.v1.metrics.cache_hit_source import CacheHitSource
-from aphrodite.v1.outputs import KVConnectorOutput
+from sonar.forward_context import ForwardContext
+from sonar.logger import init_logger
+from sonar.v1.attention.backend import AttentionMetadata
+from sonar.v1.core.sched.output import SchedulerOutput
+from sonar.v1.metrics.cache_hit_source import CacheHitSource
+from sonar.v1.outputs import KVConnectorOutput
 
 if TYPE_CHECKING:
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_scheduler import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_scheduler import (
         NixlBaseConnectorScheduler,
     )
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker import (
         NixlBaseConnectorWorker,
     )
-    from aphrodite.v1.core.kv_cache_manager import KVCacheBlocks
-    from aphrodite.v1.kv_cache_interface import KVCacheConfig
-    from aphrodite.v1.request import Request
+    from sonar.v1.core.kv_cache_manager import KVCacheBlocks
+    from sonar.v1.kv_cache_interface import KVCacheConfig
+    from sonar.v1.request import Request
 
 logger = init_logger(__name__)
 
@@ -86,15 +86,15 @@ class NixlBaseConnector(KVConnectorBase_V1, SupportsHMA):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         role: KVConnectorRole,
         kv_cache_config: "KVCacheConfig",
     ):
-        super().__init__(aphrodite_config, role, kv_cache_config)
-        assert aphrodite_config.kv_transfer_config is not None
-        assert aphrodite_config.kv_transfer_config.engine_id is not None
+        super().__init__(sonar_config, role, kv_cache_config)
+        assert sonar_config.kv_transfer_config is not None
+        assert sonar_config.kv_transfer_config.engine_id is not None
 
-        if aphrodite_config.kv_transfer_config.kv_role == "kv_both":
+        if sonar_config.kv_transfer_config.kv_role == "kv_both":
             logger.warning_once(
                 "Using kv_role='kv_both' with NixlConnector is deprecated "
                 "and will be removed in a future release. Please set "
@@ -102,9 +102,9 @@ class NixlBaseConnector(KVConnectorBase_V1, SupportsHMA):
                 "kv_role='kv_consumer' for decode instances. "
             )
 
-        parallel_config = aphrodite_config.parallel_config
+        parallel_config = sonar_config.parallel_config
         pcp_size = parallel_config.prefill_context_parallel_size
-        kv_role = aphrodite_config.kv_transfer_config.kv_role
+        kv_role = sonar_config.kv_transfer_config.kv_role
         if pcp_size > 1 and kv_role in ("kv_consumer", "kv_both"):
             raise NotImplementedError(
                 "NixlConnector PCP currently supports kv_producer only. "
@@ -116,12 +116,12 @@ class NixlBaseConnector(KVConnectorBase_V1, SupportsHMA):
             raise NotImplementedError("NixlConnector PCP+DCP requires TP1 with DCP spanning the full PCP group.")
         # TODO: Support PCP with bidirectional KV transfer by tracking separate
         # send and receive completion counts.
-        if pcp_size > 1 and aphrodite_config.kv_transfer_config.get_from_extra_config("bidirectional_kv_xfer", False):
+        if pcp_size > 1 and sonar_config.kv_transfer_config.get_from_extra_config("bidirectional_kv_xfer", False):
             raise NotImplementedError("NixlConnector PCP producers do not support bidirectional KV transfer.")
 
         self.kv_cache_config = kv_cache_config
-        self.engine_id: EngineId = aphrodite_config.kv_transfer_config.engine_id
-        self.kv_transfer_config = aphrodite_config.kv_transfer_config
+        self.engine_id: EngineId = sonar_config.kv_transfer_config.engine_id
+        self.kv_transfer_config = sonar_config.kv_transfer_config
         # Subclasses must set self.connector_scheduler and self.connector_worker
         self.connector_scheduler: NixlBaseConnectorScheduler | None = None
         self.connector_worker: NixlBaseConnectorWorker | None = None
@@ -135,11 +135,11 @@ class NixlBaseConnector(KVConnectorBase_V1, SupportsHMA):
         return False
 
     @classmethod
-    def get_required_kvcache_layout(cls, aphrodite_config: AphroditeConfig):
-        if aphrodite_config.model_config is None:
-            logger.warning_once("Unable to detect current APHRODITE config. Fallback to default kv cache layout.")
+    def get_required_kvcache_layout(cls, sonar_config: SonarConfig):
+        if sonar_config.model_config is None:
+            logger.warning_once("Unable to detect current SONAR config. Fallback to default kv cache layout.")
             return None
-        use_mla = aphrodite_config.model_config.use_mla
+        use_mla = sonar_config.model_config.use_mla
         if use_mla:
             # return None when we have mla
             # as the layout should not matter in that case,
@@ -258,12 +258,12 @@ class NixlBaseConnector(KVConnectorBase_V1, SupportsHMA):
     @classmethod
     def build_prom_metrics(
         cls,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         metric_types: dict[type[PromMetric], type[PromMetricT]],
         labelnames: list[str],
         per_engine_labelvalues: dict[int, list[object]],
     ) -> KVConnectorPromMetrics:
-        return NixlPromMetrics(aphrodite_config, metric_types, labelnames, per_engine_labelvalues)
+        return NixlPromMetrics(sonar_config, metric_types, labelnames, per_engine_labelvalues)
 
     def wait_for_layer_load(self, layer_name: str) -> None:
         """NixlConnector does not do layerwise saving."""
@@ -321,17 +321,17 @@ class NixlPullConnector(NixlBaseConnector):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         role: KVConnectorRole,
         kv_cache_config: "KVCacheConfig",
     ):
-        super().__init__(aphrodite_config, role, kv_cache_config)
+        super().__init__(sonar_config, role, kv_cache_config)
         if role == KVConnectorRole.SCHEDULER:
-            self.connector_scheduler = NixlPullConnectorScheduler(aphrodite_config, self.engine_id, kv_cache_config)
+            self.connector_scheduler = NixlPullConnectorScheduler(sonar_config, self.engine_id, kv_cache_config)
             self.connector_worker = None
         elif role == KVConnectorRole.WORKER:
             self.connector_scheduler = None
-            self.connector_worker = NixlPullConnectorWorker(aphrodite_config, self.engine_id, kv_cache_config)
+            self.connector_worker = NixlPullConnectorWorker(sonar_config, self.engine_id, kv_cache_config)
 
     @classmethod
     def supports_sleep_mode(cls, kv_transfer_config: KVTransferConfig) -> bool:
@@ -358,19 +358,19 @@ class NixlPushConnector(NixlBaseConnector):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         role: KVConnectorRole,
         kv_cache_config: "KVCacheConfig",
     ):
-        super().__init__(aphrodite_config, role, kv_cache_config)
-        if aphrodite_config.parallel_config.decode_context_parallel_size > 1:
+        super().__init__(sonar_config, role, kv_cache_config)
+        if sonar_config.parallel_config.decode_context_parallel_size > 1:
             raise ValueError("NixlPushConnector does not support decode_context_parallel_size > 1.")
         self.connector_scheduler: NixlPushConnectorScheduler | None = None
         self.connector_worker: NixlPushConnectorWorker | None = None
         if role == KVConnectorRole.SCHEDULER:
-            self.connector_scheduler = NixlPushConnectorScheduler(aphrodite_config, self.engine_id, kv_cache_config)
+            self.connector_scheduler = NixlPushConnectorScheduler(sonar_config, self.engine_id, kv_cache_config)
         elif role == KVConnectorRole.WORKER:
-            self.connector_worker = NixlPushConnectorWorker(aphrodite_config, self.engine_id, kv_cache_config)
+            self.connector_worker = NixlPushConnectorWorker(sonar_config, self.engine_id, kv_cache_config)
         else:
             raise ValueError(f"Unsupported KVConnectorRole: {role}")
 

@@ -3,8 +3,8 @@
 
 import pytest
 
-from aphrodite import SamplingParams
-from aphrodite.platforms import current_platform
+from sonar import SamplingParams
+from sonar.platforms import current_platform
 from tests.utils import single_gpu_only
 
 from .._correctness import check_mtp_correctness
@@ -32,7 +32,7 @@ def test_mtp_correctness(
     model_setup: tuple[str, str, int, str | None],
     mm_enabled: bool,
     expected_accuracy_threshold: float,
-    aphrodite_runner,
+    sonar_runner,
 ):
     check_mtp_correctness(
         monkeypatch,
@@ -40,5 +40,5 @@ def test_mtp_correctness(
         model_setup,
         mm_enabled,
         expected_accuracy_threshold,
-        aphrodite_runner,
+        sonar_runner,
     )

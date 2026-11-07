@@ -2,22 +2,22 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Fused all-reduce + residual-add + RMSNorm for eager model paths.
 
-This recovers a fusion that Aphrodite's torch.compile passes would normally do but
+This recovers a fusion that Sonar's torch.compile passes would normally do but
 that doesn't fire for models running eager (or under a breakable CUDA graph).
 """
 
 import torch
 
-from aphrodite.distributed import (
+from sonar.distributed import (
     get_tensor_model_parallel_world_size,
     tensor_model_parallel_all_reduce,
 )
-from aphrodite.model_executor.layers.fused_allreduce_gemma_rms_norm import (
+from sonar.model_executor.layers.fused_allreduce_gemma_rms_norm import (
     _AR_RESIDUAL_RMS_NORM,
     _can_use_flashinfer,
     flashinfer_trtllm_fused_allreduce_norm,
 )
-from aphrodite.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.layernorm import RMSNorm
 
 
 def fused_allreduce_rms_norm(

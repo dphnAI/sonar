@@ -29,12 +29,12 @@ from typing import TYPE_CHECKING
 import regex as re
 from transformers import PreTrainedTokenizerBase
 
-from aphrodite.entrypoints.generate.base.protocol import DeltaMessage
-from aphrodite.reasoning import ReasoningParser
+from sonar.entrypoints.generate.base.protocol import DeltaMessage
+from sonar.reasoning import ReasoningParser
 
 if TYPE_CHECKING:
-    from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-    from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
+    from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+    from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
 
 
 def _match_at(haystack: Sequence[int], i: int, needle: Sequence[int]) -> bool:
@@ -108,7 +108,7 @@ class KimiK3ReasoningParser(ReasoningParser):
         self._response_close = "<|close|>response<|sep|>"
         self._message_close = "<|close|>message<|sep|>"
 
-        # Tolerant matchers: defense-in-depth against Aphrodite's added-token spacing
+        # Tolerant matchers: defense-in-depth against Sonar's added-token spacing
         # ("<|open|> think <|sep|>"). The `\s*` is a no-op on clean input, so the
         # normal path stays byte-exact; it only helps if some serving path leaves
         # spaces_between_special_tokens on. See adjust_request for the real fix.

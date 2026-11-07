@@ -3,7 +3,7 @@
 
 import pytest
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 
 @pytest.fixture(autouse=True)
@@ -11,7 +11,7 @@ def require_rocm_cdna4() -> None:
     if not current_platform.is_rocm():
         pytest.skip("requires ROCm")
 
-    from aphrodite.platforms.rocm import on_gfx950
+    from sonar.platforms.rocm import on_gfx950
 
     if not on_gfx950():
         pytest.skip("requires CDNA4")

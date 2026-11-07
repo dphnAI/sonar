@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Demonstrates how to achieve reproducibility in Aphrodite.
+"""Demonstrates how to achieve reproducibility in Sonar.
 
 Main article: https://docs.vllm.ai/en/latest/usage/reproducibility.html
 """
@@ -8,13 +8,13 @@ Main article: https://docs.vllm.ai/en/latest/usage/reproducibility.html
 import os
 import random
 
-from aphrodite import LLM, SamplingParams
+from sonar import LLM, SamplingParams
 
 # Either:
 ## Turn off multiprocessing to make the scheduling deterministic, or
-os.environ["APHRODITE_ENABLE_V1_MULTIPROCESSING"] = "0"
+os.environ["SONAR_ENABLE_V1_MULTIPROCESSING"] = "0"
 ## Enable batch invariance to get consistent results regardless of scheduling.
-os.environ["APHRODITE_BATCH_INVARIANT"] = "1"
+os.environ["SONAR_BATCH_INVARIANT"] = "1"
 
 prompts = [
     "Hello, my name is",
@@ -35,9 +35,9 @@ def main():
         print(f"Prompt: {prompt!r}\nGenerated text: {generated_text!r}")
         print("-" * 50)
 
-    # Try generating random numbers outside Aphrodite
+    # Try generating random numbers outside Sonar
     # The same number is output across runs, meaning that the random state
-    # in the user code has been updated by Aphrodite
+    # in the user code has been updated by Sonar
     print(random.randint(0, 100))
 
 

@@ -5,7 +5,7 @@ from typing import Any
 
 from transformers import TokenizersBackend
 
-from aphrodite.renderers.chat_utils import ChatCompletionMessageParam
+from sonar.renderers.chat_utils import ChatCompletionMessageParam
 
 from .deepseek_v32_encoding import encode_messages
 from .hf import HfTokenizer, get_cached_tokenizer

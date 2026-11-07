@@ -22,21 +22,21 @@ from typing import TYPE_CHECKING, Any, TypeVar
 import torch.nn as nn
 import transformers
 
-from aphrodite import envs
-from aphrodite.config import (
+from sonar import envs
+from sonar.config import (
     ModelConfig,
     iter_architecture_defaults,
     try_match_architecture_defaults,
 )
-from aphrodite.logger import init_logger
-from aphrodite.logging_utils import logtime
-from aphrodite.tasks import ScoreType
-from aphrodite.transformers_utils.dynamic_module import try_get_class_from_dynamic_module
-from aphrodite.utils.hashing import safe_hash
+from sonar.logger import init_logger
+from sonar.logging_utils import logtime
+from sonar.tasks import ScoreType
+from sonar.transformers_utils.dynamic_module import try_get_class_from_dynamic_module
+from sonar.utils.hashing import safe_hash
 
 if TYPE_CHECKING:
-    from aphrodite.config.model import AttnTypeStr
-    from aphrodite.config.pooler import SequencePoolingType, TokenPoolingType
+    from sonar.config.model import AttnTypeStr
+    from sonar.config.pooler import SequencePoolingType, TokenPoolingType
 else:
     AttnTypeStr = Any
     SequencePoolingType = Any
@@ -80,7 +80,7 @@ _TEXT_GENERATION_MODELS = {
     "BailingMoeV2ForCausalLM": ("bailing_moe", "BailingMoeV2ForCausalLM"),
     "BailingMoeV2_5ForCausalLM": ("bailing_moe_linear", "BailingMoeV25ForCausalLM"),
     "BailingMoeV3ForCausalLM": ("bailing_moe_v3", "BailingMoeV3ForCausalLM"),
-    "BeamForCausalLM": ("aphrodite.models.beam", "BeamForCausalLM"),
+    "BeamForCausalLM": ("sonar.models.beam", "BeamForCausalLM"),
     "BloomForCausalLM": ("bloom", "BloomForCausalLM"),
     "ChatGLMModel": ("chatglm", "ChatGLMForCausalLM"),
     "ChatGLMForConditionalGeneration": ("chatglm", "ChatGLMForCausalLM"),
@@ -94,10 +94,10 @@ _TEXT_GENERATION_MODELS = {
     "DeepseekV2ForCausalLM": ("deepseek_v2", "DeepseekV2ForCausalLM"),
     "DeepseekV3ForCausalLM": ("deepseek_v2", "DeepseekV3ForCausalLM"),
     "DeepseekV32ForCausalLM": (
-        "aphrodite.models.deepseek_v32",
+        "sonar.models.deepseek_v32",
         "DeepseekV32ForCausalLM",
     ),
-    "DeepseekV4ForCausalLM": ("aphrodite.models.deepseek_v4", "DeepseekV4ForCausalLM"),
+    "DeepseekV4ForCausalLM": ("sonar.models.deepseek_v4", "DeepseekV4ForCausalLM"),
     "DomynEdgeForCausalLM": ("domyn_edge", "DomynEdgeForCausalLM"),
     "DoryForCausalLM": ("dory", "DoryForCausalLM"),
     "Ernie4_5ForCausalLM": ("ernie45", "Ernie4_5ForCausalLM"),
@@ -109,7 +109,7 @@ _TEXT_GENERATION_MODELS = {
     "FalconForCausalLM": ("falcon", "FalconForCausalLM"),
     "FalconMambaForCausalLM": ("mamba", "MambaForCausalLM"),
     "FalconH1ForCausalLM": ("falcon_h1", "FalconH1ForCausalLM"),
-    "FlintForCausalLM": ("aphrodite.models.flint", "FlintForCausalLM"),
+    "FlintForCausalLM": ("sonar.models.flint", "FlintForCausalLM"),
     "GemmaForCausalLM": ("gemma", "GemmaForCausalLM"),
     "Gemma2ForCausalLM": ("gemma2", "Gemma2ForCausalLM"),
     "Gemma3ForCausalLM": ("gemma3", "Gemma3ForCausalLM"),
@@ -118,14 +118,14 @@ _TEXT_GENERATION_MODELS = {
     "Gemma4ForCausalLM": ("gemma4", "Gemma4ForCausalLM"),
     "Qwen3NextForCausalLM": ("qwen3_next", "Qwen3NextForCausalLM"),
     "Qwen4ExpForCausalLM": (
-        "aphrodite.models.qwen4_exp",
+        "sonar.models.qwen4_exp",
         "Qwen4ExpForCausalLM",
     ),
     "Glm4ForCausalLM": ("glm4", "Glm4ForCausalLM"),
     "Glm4MoeForCausalLM": ("glm4_moe", "Glm4MoeForCausalLM"),
     "Glm4MoeLiteForCausalLM": ("glm4_moe_lite", "Glm4MoeLiteForCausalLM"),
-    "GlmMoeDsaForCausalLM": ("aphrodite.models.deepseek_v32", "GlmMoeDsaForCausalLM"),
-    "Glm5NextForCausalLM": ("aphrodite.models.glm5next", "Glm5NextForCausalLM"),
+    "GlmMoeDsaForCausalLM": ("sonar.models.deepseek_v32", "GlmMoeDsaForCausalLM"),
+    "Glm5NextForCausalLM": ("sonar.models.glm5next", "Glm5NextForCausalLM"),
     "GptOssForCausalLM": ("gpt_oss", "GptOssForCausalLM"),
     "GPT2LMHeadModel": ("gpt2", "GPT2LMHeadModel"),
     "GPTJForCausalLM": ("gpt_j", "GPTJForCausalLM"),
@@ -137,7 +137,7 @@ _TEXT_GENERATION_MODELS = {
     "GraniteSWAForCausalLM": ("granite", "GraniteForCausalLM"),
     "HrmTextForCausalLM": ("hrm_text", "HrmTextForCausalLM"),
     "HYV3ForCausalLM": ("hy_v3", "HYV3ForCausalLM"),
-    "HYV4ForCausalLM": ("aphrodite.models.hy_v4", "HYV4ForCausalLM"),
+    "HYV4ForCausalLM": ("sonar.models.hy_v4", "HYV4ForCausalLM"),
     "HCXVisionV2ForCausalLM": ("hyperclovax_vision_v2", "HCXVisionV2ForCausalLM"),
     "HyperCLOVAXForCausalLM": ("hyperclovax", "HyperCLOVAXForCausalLM"),
     "InternLM2ForCausalLM": ("internlm2", "InternLM2ForCausalLM"),
@@ -147,7 +147,7 @@ _TEXT_GENERATION_MODELS = {
     "JambaForCausalLM": ("jamba", "JambaForCausalLM"),
     "K2HorizonForCausalLM": ("k2_horizon", "K2HorizonForCausalLM"),
     "KimiLinearForCausalLM": (
-        "aphrodite.models.kimi_k3",
+        "sonar.models.kimi_k3",
         "KimiLinearForCausalLM",
     ),
     "Lfm2ForCausalLM": ("lfm2", "Lfm2ForCausalLM"),
@@ -168,12 +168,12 @@ _TEXT_GENERATION_MODELS = {
     "MiniCPM3ForCausalLM": ("minicpm3", "MiniCPM3ForCausalLM"),
     "MiniMaxM2ForCausalLM": ("minimax_m2", "MiniMaxM2ForCausalLM"),
     "MiniMaxM3SparseForCausalLM": (
-        "aphrodite.models.minimax_m3",
+        "sonar.models.minimax_m3",
         "MiniMaxM3SparseForCausalLM",
     ),
-    "InklingForCausalLM": ("aphrodite.models.inkling", "InklingForCausalLM"),
+    "InklingForCausalLM": ("sonar.models.inkling", "InklingForCausalLM"),
     "InklingForConditionalGeneration": (
-        "aphrodite.models.inkling",
+        "sonar.models.inkling",
         "InklingForConditionalGeneration",
     ),
     "Ministral3ForCausalLM": ("mistral", "MistralForCausalLM"),
@@ -201,14 +201,14 @@ _TEXT_GENERATION_MODELS = {
     "Qwen2MoeForCausalLM": ("qwen2_moe", "Qwen2MoeForCausalLM"),
     "Qwen3ForCausalLM": ("qwen3", "Qwen3ForCausalLM"),
     "Qwen3MoeForCausalLM": ("qwen3_moe", "Qwen3MoeForCausalLM"),
-    "Qwen3_5ForCausalLM": ("aphrodite.models.qwen3_5", "Qwen3_5ForCausalLM"),
-    "Qwen3_5MoeForCausalLM": ("aphrodite.models.qwen3_5", "Qwen3_5MoeForCausalLM"),
+    "Qwen3_5ForCausalLM": ("sonar.models.qwen3_5", "Qwen3_5ForCausalLM"),
+    "Qwen3_5MoeForCausalLM": ("sonar.models.qwen3_5", "Qwen3_5MoeForCausalLM"),
     "SarvamMoEForCausalLM": ("sarvam", "SarvamMoEForCausalLM"),
     "SarvamMLAForCausalLM": ("sarvam", "SarvamMLAForCausalLM"),
     "Step1ForCausalLM": ("step1", "Step1ForCausalLM"),
     "Step3TextForCausalLM": ("step3_text", "Step3TextForCausalLM"),
     "Step3p5ForCausalLM": ("step3p5", "Step3p5ForCausalLM"),
-    "Step5ForCausalLM": ("aphrodite.models.step5", "Step5ForCausalLM"),
+    "Step5ForCausalLM": ("sonar.models.step5", "Step5ForCausalLM"),
     "StableLmForCausalLM": ("stablelm", "StablelmForCausalLM"),
     "SolarForCausalLM": ("solar", "SolarForCausalLM"),
     "TeleChat2ForCausalLM": ("telechat2", "TeleChat2ForCausalLM"),
@@ -381,15 +381,15 @@ _MULTIMODAL_MODELS = {
     "DeepseekOCRForCausalLM": ("deepseek_ocr", "DeepseekOCRForCausalLM"),
     "DeepseekOCR2ForCausalLM": ("deepseek_ocr2", "DeepseekOCR2ForCausalLM"),
     "DeepseekV4ForConditionalGeneration": (
-        "aphrodite.models.deepseek_v4",
+        "sonar.models.deepseek_v4",
         "DeepseekV4ForConditionalGeneration",
     ),
     "DeepseekV41ForCausalLM": (
-        "aphrodite.models.deepseek_v41",
+        "sonar.models.deepseek_v41",
         "DeepseekV41ForCausalLM",
     ),
     "Dots3NoteForCausalLM": (
-        "aphrodite.models.dots3_note",
+        "sonar.models.dots3_note",
         "Dots3NoteForCausalLM",
     ),
     "UnlimitedOCRForCausalLM": ("unlimited_ocr", "UnlimitedOCRForCausalLM"),
@@ -435,7 +435,7 @@ _MULTIMODAL_MODELS = {
     "Glm4vMoeForConditionalGeneration": ("glm4_1v", "Glm4vMoeForConditionalGeneration"),
     "GlmOcrForConditionalGeneration": ("glm_ocr", "GlmOcrForConditionalGeneration"),
     "Glm5NextForConditionalGeneration": (
-        "aphrodite.models.glm5next",
+        "sonar.models.glm5next",
         "Glm5NextForConditionalGeneration",
     ),
     "GraniteSpeechForConditionalGeneration": (
@@ -481,7 +481,7 @@ _MULTIMODAL_MODELS = {
     "KimiVLForConditionalGeneration": ("kimi_vl", "KimiVLForConditionalGeneration"),
     "KimiK25ForConditionalGeneration": ("kimi_k25", "KimiK25ForConditionalGeneration"),
     "KimiK3ForConditionalGeneration": (
-        "aphrodite.models.kimi_k3",
+        "sonar.models.kimi_k3",
         "KimiK3ForConditionalGeneration",
     ),
     "MoonshotKimiaForCausalLM": ("kimi_audio", "KimiAudioForConditionalGeneration"),
@@ -516,7 +516,7 @@ _MULTIMODAL_MODELS = {
         "MingV3ASRForConditionalGeneration",
     ),
     "MiniMaxM3SparseForConditionalGeneration": (
-        "aphrodite.models.minimax_m3",
+        "sonar.models.minimax_m3",
         "MiniMaxM3SparseForConditionalGeneration",
     ),
     "MiniCPMO": ("minicpmo", "MiniCPMO"),
@@ -557,7 +557,7 @@ _MULTIMODAL_MODELS = {
     "NVLM_D": ("nvlm_d", "NVLM_D_Model"),
     "MuseGlimmerForConditionalGeneration": ("muse_glimmer", "MuseGlimmerForCausalLM"),
     "MuseSparkForConditionalGeneration": (
-        "aphrodite.models.muse_spark",
+        "sonar.models.muse_spark",
         "MuseSparkForConditionalGeneration",
     ),
     "OpenCUAForConditionalGeneration": ("opencua", "OpenCUAForConditionalGeneration"),
@@ -618,15 +618,15 @@ _MULTIMODAL_MODELS = {
         "Qwen3VLMoeForConditionalGeneration",
     ),
     "Qwen3_5ForConditionalGeneration": (
-        "aphrodite.models.qwen3_5",
+        "sonar.models.qwen3_5",
         "Qwen3_5ForConditionalGeneration",
     ),
     "Qwen3_5MoeForConditionalGeneration": (
-        "aphrodite.models.qwen3_5",
+        "sonar.models.qwen3_5",
         "Qwen3_5MoeForConditionalGeneration",
     ),
     "Qwen4ExpForConditionalGeneration": (
-        "aphrodite.models.qwen4_exp",
+        "sonar.models.qwen4_exp",
         "Qwen4ExpForConditionalGeneration",
     ),
     "RForConditionalGeneration": ("rvl", "RForConditionalGeneration"),
@@ -636,7 +636,7 @@ _MULTIMODAL_MODELS = {
     "Step3VLForConditionalGeneration": ("step3_vl", "Step3VLForConditionalGeneration"),
     "Step3p7ForConditionalGeneration": ("step3p7", "Step3p7ForConditionalGeneration"),
     "Step5ForConditionalGeneration": (
-        "aphrodite.models.step5",
+        "sonar.models.step5",
         "Step5ForConditionalGeneration",
     ),
     "UltravoxModel": ("ultravox", "UltravoxModel"),
@@ -672,7 +672,7 @@ _SPECULATIVE_DECODING_MODELS = {
     "DFlashLagunaForCausalLM": ("laguna_dflash", "DFlashLagunaForCausalLM"),
     "LiLiCorrDraftModel": ("lilicorr", "LiLiCorrForCausalLM"),
     "DFlash2DraftModel": ("qwen3_dflash2", "DFlash2Qwen3ForCausalLM"),
-    "DFlash2BeamDraftModel": ("aphrodite.models.beam", "DFlash2BeamForCausalLM"),
+    "DFlash2BeamDraftModel": ("sonar.models.beam", "DFlash2BeamForCausalLM"),
     # Muse Glimmer's DFlash draft head, reusing the generic qwen3_dflash
     # implementation. EAGLEConfig rewrites a dflash draft's architecture to
     # DFlash{arch} unless it already starts or ends with "DFlash" (see
@@ -681,13 +681,13 @@ _SPECULATIVE_DECODING_MODELS = {
     # DFlashLagunaForCausalLM. The bare name is kept as a defensive alias.
     "MuseGlimmerAssistantModel": ("qwen3_dflash", "DFlashQwen3ForCausalLM"),
     "DFlashMuseGlimmerAssistantModel": ("qwen3_dflash", "DFlashQwen3ForCausalLM"),
-    "DSparkDraftModel": ("aphrodite.models.deepseek_v4", "DSparkDeepseekV4ForCausalLM"),
+    "DSparkDraftModel": ("sonar.models.deepseek_v4", "DSparkDeepseekV4ForCausalLM"),
     "DSparkV41DraftModel": (
-        "aphrodite.models.deepseek_v41",
+        "sonar.models.deepseek_v41",
         "DSparkDeepseekV4ForCausalLM",
     ),
     "DSparkMiniMaxDraftModel": (
-        "aphrodite.models.minimax_m3.common.dspark",
+        "sonar.models.minimax_m3.common.dspark",
         "MiniMaxM3DSparkForCausalLM",
     ),
     "Qwen3DSparkModel": ("qwen3_dspark", "Qwen3DSparkForCausalLM"),
@@ -698,11 +698,11 @@ _SPECULATIVE_DECODING_MODELS = {
     "Qwen3XPressModel": ("qwen3_xpress", "Qwen3XPressForCausalLM"),
     "DFlashQwen3XPressModel": ("qwen3_xpress", "Qwen3XPressForCausalLM"),
     "K3DSparkModel": (
-        "aphrodite.models.kimi_k3.nvidia.dspark_mla",
+        "sonar.models.kimi_k3.nvidia.dspark_mla",
         "K3DSparkForCausalLM",
     ),
     "MuseSparkDSparkModel": (
-        "aphrodite.models.muse_spark.common.dspark",
+        "sonar.models.muse_spark.common.dspark",
         "MuseSparkDSparkForCausalLM",
     ),
     "Gemma4DSparkModel": ("gemma4_dspark", "Gemma4DSparkForCausalLM"),
@@ -724,13 +724,13 @@ _SPECULATIVE_DECODING_MODELS = {
     "Eagle3DeepseekV3ForCausalLM": ("deepseek_eagle3", "Eagle3DeepseekV2ForCausalLM"),
     "EagleDeepSeekMTPModel": ("deepseek_eagle", "EagleDeepseekV3ForCausalLM"),
     "DeepSeekMTPModel": ("deepseek_mtp", "DeepSeekMTP"),
-    "DeepseekV32MTPModel": ("aphrodite.models.deepseek_v32", "DeepseekV32MTP"),
-    "Dots3NoteMTPModel": ("aphrodite.models.dots3_note", "Dots3NoteMTP"),
-    "DeepSeekV4MTPModel": ("aphrodite.models.deepseek_v4", "DeepSeekV4MTP"),
+    "DeepseekV32MTPModel": ("sonar.models.deepseek_v32", "DeepseekV32MTP"),
+    "Dots3NoteMTPModel": ("sonar.models.dots3_note", "Dots3NoteMTP"),
+    "DeepSeekV4MTPModel": ("sonar.models.deepseek_v4", "DeepSeekV4MTP"),
     "BailingMoeV3MTPModel": ("bailing_moe_v3_mtp", "BailingMoeV3MTPModel"),
-    "MiniMaxM3MTP": ("aphrodite.models.minimax_m3", "MiniMaxM3MTP"),
+    "MiniMaxM3MTP": ("sonar.models.minimax_m3", "MiniMaxM3MTP"),
     "BailingMoeV25MTPModel": ("bailing_moe_mtp", "BailingMoeV25MTPModel"),
-    "InklingMTPModel": ("aphrodite.models.inkling", "InklingMTP"),
+    "InklingMTPModel": ("sonar.models.inkling", "InklingMTP"),
     "Gemma4MTPModel": ("gemma4_mtp", "Gemma4MTP"),
     "ErnieMTPModel": ("ernie_mtp", "ErnieMTP"),
     "ExaoneMoeMTP": ("exaone_moe_mtp", "ExaoneMoeMTP"),
@@ -744,19 +744,19 @@ _SPECULATIVE_DECODING_MODELS = {
     "Glm4MoeMTPModel": ("glm4_moe_mtp", "Glm4MoeMTP"),
     "Glm4MoeLiteMTPModel": ("glm4_moe_lite_mtp", "Glm4MoeLiteMTP"),
     "GlmOcrMTPModel": ("glm_ocr_mtp", "GlmOcrMTP"),
-    "Glm5NextMTPModel": ("aphrodite.models.glm5next", "Glm5NextMTP"),
+    "Glm5NextMTPModel": ("sonar.models.glm5next", "Glm5NextMTP"),
     "OpenPanguMTPModel": ("openpangu_mtp", "OpenPanguMTP"),
     "ParseAuxMTPModel": ("nemotron_parse3_5_mtp", "ParseAuxMTPModel"),
     "Qwen3NextMTP": ("qwen3_next_mtp", "Qwen3NextMTP"),
-    "Step5MTP": ("aphrodite.models.step5", "Step5MTP"),
-    "Qwen4ExpMTP": ("aphrodite.models.qwen4_exp", "Qwen4ExpMTP"),
+    "Step5MTP": ("sonar.models.step5", "Step5MTP"),
+    "Qwen4ExpMTP": ("sonar.models.qwen4_exp", "Qwen4ExpMTP"),
     "Step3p5MTP": ("step3p5_mtp", "Step3p5MTP"),
-    "Qwen3_5MTP": ("aphrodite.models.qwen3_5", "Qwen3_5MTP"),
-    "Qwen3_5MoeMTP": ("aphrodite.models.qwen3_5", "Qwen3_5MoeMTP"),
+    "Qwen3_5MTP": ("sonar.models.qwen3_5", "Qwen3_5MTP"),
+    "Qwen3_5MoeMTP": ("sonar.models.qwen3_5", "Qwen3_5MoeMTP"),
     "InternS2MobiusMTP": ("interns2_mobius", "InternS2MobiusMTP"),
     "HYV3MTPModel": ("hy_v3_mtp", "HYV3MTP"),
-    "HYV4MTPModel": ("aphrodite.models.hy_v4", "HYV4MTP"),
-    "KimiK3MTPModel": ("aphrodite.models.kimi_k3", "KimiK3MTP"),
+    "HYV4MTPModel": ("sonar.models.hy_v4", "HYV4MTP"),
+    "KimiK3MTPModel": ("sonar.models.kimi_k3", "KimiK3MTP"),
 }
 
 _TRANSFORMERS_SUPPORTED_MODELS = {
@@ -835,7 +835,7 @@ _TRANSFORMERS_BACKEND_MODELS = {
     ),
 }
 
-_APHRODITE_MODELS = {
+_SONAR_MODELS = {
     **_TEXT_GENERATION_MODELS,
     **_EMBEDDING_MODELS,
     **_LATE_INTERACTION_MODELS,
@@ -852,7 +852,7 @@ _APHRODITE_MODELS = {
 # can modify  this variable to alter the args if needed. e.g.
 # when we use par format to pack things together, sys.executable
 # might not be the target we want to run.
-_SUBPROCESS_COMMAND = [sys.executable, "-m", "aphrodite.model_executor.models.registry"]
+_SUBPROCESS_COMMAND = [sys.executable, "-m", "sonar.model_executor.models.registry"]
 
 _PREVIOUSLY_SUPPORTED_MODELS = {
     "MotifForCausalLM": "0.10.2",
@@ -1028,7 +1028,7 @@ class _LazyRegisteredModel(_BaseRegisteredModel):
 
     @staticmethod
     def _get_cache_dir() -> Path:
-        return Path(envs.APHRODITE_CACHE_ROOT) / "modelinfos"
+        return Path(envs.SONAR_CACHE_ROOT) / "modelinfos"
 
     def _get_cache_filename(self) -> str:
         cls_name = f"{self.module_name}-{self.class_name}".replace(".", "-")
@@ -1087,7 +1087,7 @@ class _LazyRegisteredModel(_BaseRegisteredModel):
 
     def _save_modelinfo_to_cache(self, mi: _ModelInfo, module_hash: str) -> None:
         """Save dictionary json file to cache."""
-        from aphrodite.model_executor.model_loader.weight_utils import atomic_writer
+        from sonar.model_executor.model_loader.weight_utils import atomic_writer
 
         try:
             modelinfo_dict = {
@@ -1105,11 +1105,11 @@ class _LazyRegisteredModel(_BaseRegisteredModel):
     @logtime(logger=logger, msg="Registry inspect model class")
     def inspect_model_cls(self) -> _ModelInfo:
         # Modules registered with a non-default location (e.g. the
-        # hardware-isolated ``aphrodite.models.<name>`` layout) live outside
-        # ``aphrodite/model_executor/models``. Resolve the module spec directly
+        # hardware-isolated ``sonar.models.<name>`` layout) live outside
+        # ``sonar/model_executor/models``. Resolve the module spec directly
         # so the file-hash cache stays warm for them.
         model_path: Path | None = None
-        if self.module_name.startswith("aphrodite.model_executor.models."):
+        if self.module_name.startswith("sonar.model_executor.models."):
             model_path = Path(__file__).parent / f"{self.module_name.split('.')[-1]}.py"
         if model_path is None or not model_path.exists():
             try:
@@ -1157,7 +1157,7 @@ def _try_load_model_cls(
     model_arch: str,
     model: _BaseRegisteredModel,
 ) -> type[nn.Module] | None:
-    from aphrodite.platforms import current_platform
+    from sonar.platforms import current_platform
 
     current_platform.verify_model_arch(model_arch)
     try:
@@ -1192,7 +1192,7 @@ class _ModelRegistry:
         model_arch: str,
         model_cls: type[nn.Module] | str,
     ) -> None:
-        """Register an external model to be used in Aphrodite.
+        """Register an external model to be used in Sonar.
 
         `model_cls` can be either:
 
@@ -1241,9 +1241,9 @@ class _ModelRegistry:
                 previous_version = _PREVIOUSLY_SUPPORTED_MODELS[arch]
 
                 raise ValueError(
-                    f"Model architecture {arch} was supported in Aphrodite until "
+                    f"Model architecture {arch} was supported in Sonar until "
                     f"v{previous_version}, and is not supported anymore. "
-                    "Please use an older version of Aphrodite if you want to "
+                    "Please use an older version of Sonar if you want to "
                     "use this model architecture."
                 )
             if arch in _OOT_SUPPORTED_MODELS:
@@ -1337,7 +1337,7 @@ class _ModelRegistry:
             if model_config.model_impl != "transformers":
                 return None
 
-            raise ValueError(f"The Transformers implementation of {architecture!r} is not compatible with Aphrodite.")
+            raise ValueError(f"The Transformers implementation of {architecture!r} is not compatible with Sonar.")
 
         return model_config._get_transformers_backend_cls()
 
@@ -1568,11 +1568,11 @@ class _ModelRegistry:
 
 def _resolve_module_name(mod_relname: str) -> str:
     # Allow registry entries to point at fully-qualified module paths (e.g.
-    # ``aphrodite.models.deepseek_v4``) for models that live outside the legacy
-    # ``aphrodite.model_executor.models`` flat layout.
-    if mod_relname.startswith("aphrodite."):
+    # ``sonar.models.deepseek_v4``) for models that live outside the legacy
+    # ``sonar.model_executor.models`` flat layout.
+    if mod_relname.startswith("sonar."):
         return mod_relname
-    return f"aphrodite.model_executor.models.{mod_relname}"
+    return f"sonar.model_executor.models.{mod_relname}"
 
 
 ModelRegistry = _ModelRegistry(
@@ -1581,7 +1581,7 @@ ModelRegistry = _ModelRegistry(
             module_name=_resolve_module_name(mod_relname),
             class_name=cls_name,
         )
-        for model_arch, (mod_relname, cls_name) in _APHRODITE_MODELS.items()
+        for model_arch, (mod_relname, cls_name) in _SONAR_MODELS.items()
     }
 )
 
@@ -1616,7 +1616,7 @@ def _run_in_subprocess(fn: Callable[[], _T]) -> _T:
 
 def _run() -> None:
     # Setup plugins
-    from aphrodite.plugins import load_general_plugins
+    from sonar.plugins import load_general_plugins
 
     load_general_plugins()
 

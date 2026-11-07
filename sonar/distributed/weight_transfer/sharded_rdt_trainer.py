@@ -35,21 +35,21 @@ from torch.multiprocessing.reductions import (
     reduce_tensor,
 )
 
-from aphrodite.distributed.weight_transfer.base import (
-    AphroditeWeightSyncClient,
+from sonar.distributed.weight_transfer.base import (
     ParamMeta,
+    SonarWeightSyncClient,
     TrainerInitInfo,
     TrainerWeightTransferEngine,
     WeightSource,
     layerwise_groups,
 )
-from aphrodite.distributed.weight_transfer.sharded_rdt_common import (
+from sonar.distributed.weight_transfer.sharded_rdt_common import (
     ALLOWED_OPS,
     buffer_alloc_bytes,
     check_ray_rdt_version,
     register_nixl_memory,
 )
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 
@@ -787,7 +787,7 @@ class ShardedRDTTrainerWeightTransferEngine(TrainerWeightTransferEngine[ShardedR
     def __init__(
         self,
         *,
-        client: AphroditeWeightSyncClient,
+        client: SonarWeightSyncClient,
         source: WeightSource,
         is_sender: bool = True,
         init_info: ShardedRDTTrainerInitInfo,
@@ -931,7 +931,7 @@ class ShardedRDTTrainerWeightTransferEngine(TrainerWeightTransferEngine[ShardedR
         cls,
         init_info: ShardedRDTTrainerInitInfo,
         *,
-        client: AphroditeWeightSyncClient,
+        client: SonarWeightSyncClient,
         source: WeightSource | None = None,
     ) -> Self:
         if source is None:
@@ -1096,7 +1096,7 @@ class ShardedRDTTrainerWeightTransferEngine(TrainerWeightTransferEngine[ShardedR
         check_ray_rdt_version()
 
         ii = self._init_info
-        self._server_name = f"aphrodite_rdt_producer_{uuid.uuid4().hex[:12]}_rk{ii.rank}"
+        self._server_name = f"sonar_rdt_producer_{uuid.uuid4().hex[:12]}_rk{ii.rank}"
         node_id = ray.get_runtime_context().get_node_id()
         # Pin the server to this rank's physical GPU: num_gpus=0 so Ray does not
         # allocate a second, CUDA_VISIBLE_DEVICES so CUDA IPC to the rank's
@@ -1104,7 +1104,7 @@ class ShardedRDTTrainerWeightTransferEngine(TrainerWeightTransferEngine[ShardedR
         # calls are in flight; enable_tensor_transport gives the NIXL serve.
         gpu_ids = ray.get_gpu_ids()
         # The server is the trainer rank's process twin: forward the env the
-        # rank runs under (library paths etc.) so it imports torch/aphrodite the
+        # rank runs under (library paths etc.) so it imports torch/sonar the
         # same way, then pin it to the rank's physical GPU for CUDA IPC.
         import os
 
@@ -1114,7 +1114,7 @@ class ShardedRDTTrainerWeightTransferEngine(TrainerWeightTransferEngine[ShardedR
                 "LD_LIBRARY_PATH",
                 "LD_PRELOAD",
                 "NCCL_CUMEM_ENABLE",
-                "APHRODITE_NCCL_SO_PATH",
+                "SONAR_NCCL_SO_PATH",
                 "PATH",
             )
             if k in os.environ
@@ -1157,7 +1157,7 @@ class ShardedRDTTrainerWeightTransferEngine(TrainerWeightTransferEngine[ShardedR
         ray.get(self._server.warmup_nixl.remote())
 
     def _build_worker_init_info(self, server_names: list[str]):
-        from aphrodite.distributed.weight_transfer.sharded_rdt_engine import (
+        from sonar.distributed.weight_transfer.sharded_rdt_engine import (
             ShardedRDTWeightTransferInitInfo,
         )
 
@@ -1212,7 +1212,7 @@ class ShardedRDTTrainerWeightTransferEngine(TrainerWeightTransferEngine[ShardedR
 
         self.client.start_weight_update()
 
-        from aphrodite.distributed.weight_transfer.sharded_rdt_engine import (
+        from sonar.distributed.weight_transfer.sharded_rdt_engine import (
             ShardedRDTWeightTransferUpdateInfo,
         )
 

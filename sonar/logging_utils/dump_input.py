@@ -7,11 +7,11 @@ import json
 
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.logger import init_logger
-from aphrodite.v1.core.sched.output import SchedulerOutput
-from aphrodite.v1.metrics.stats import SchedulerStats
-from aphrodite.version import __version__ as APHRODITE_VERSION
+from sonar.config import SonarConfig
+from sonar.logger import init_logger
+from sonar.v1.core.sched.output import SchedulerOutput
+from sonar.v1.metrics.stats import SchedulerStats
+from sonar.version import __version__ as SONAR_VERSION
 
 logger = init_logger(__name__)
 
@@ -50,7 +50,7 @@ def prepare_object_to_dump(obj) -> str:
 
 
 def dump_engine_exception(
-    config: AphroditeConfig,
+    config: SonarConfig,
     scheduler_output: SchedulerOutput,
     scheduler_stats: SchedulerStats | None,
 ):
@@ -61,13 +61,13 @@ def dump_engine_exception(
 
 
 def _dump_engine_exception(
-    config: AphroditeConfig,
+    config: SonarConfig,
     scheduler_output: SchedulerOutput,
     scheduler_stats: SchedulerStats | None,
 ):
     logger.error(
         "Dumping input data for V1 LLM engine (v%s) with config: %s, ",
-        APHRODITE_VERSION,
+        SONAR_VERSION,
         config,
     )
     try:

@@ -19,17 +19,17 @@ from typing import (
 import torch
 from typing_extensions import TypeVar
 
-from aphrodite.config import SchedulerConfig
-from aphrodite.inputs import (
+from sonar.config import SchedulerConfig
+from sonar.inputs import (
     MultiModalEncDecInput,
     MultiModalHashes,
     MultiModalInput,
     mm_enc_dec_input,
     mm_input,
 )
-from aphrodite.logger import init_logger
-from aphrodite.tokenizers import TokenizerLike
-from aphrodite.utils.collection_utils import flatten_2d_lists, full_groupby
+from sonar.logger import init_logger
+from sonar.tokenizers import TokenizerLike
+from sonar.utils.collection_utils import flatten_2d_lists, full_groupby
 
 from ..inputs import (
     MultiModalFieldConfig,
@@ -99,7 +99,7 @@ class PromptIndex:
     Resolves the index against a decoded text prompt.
 
     Used only by the private text-based fallback of
-    [`BaseMultiModalProcessor._apply_prompt_updates`][aphrodite.multimodal.processing.BaseMultiModalProcessor].
+    [`BaseMultiModalProcessor._apply_prompt_updates`][sonar.multimodal.processing.BaseMultiModalProcessor].
     """
 
 
@@ -163,7 +163,7 @@ The token sequence to update.
 PromptUpdateTarget: TypeAlias = Callable[[int], UpdateTarget] | UpdateTarget
 """
 Given the index of the processed item within
-[`modality`][aphrodite.multimodal.processing.PromptUpdate.modality],
+[`modality`][sonar.multimodal.processing.PromptUpdate.modality],
 output the corresponding token sequence.
 
 For convenience, you can directly pass in the token sequence
@@ -180,14 +180,14 @@ class PromptUpdateDetails:
 
     is_embed: Callable[[list[int]], torch.Tensor] | None = None
     """
-    Given [`full`][aphrodite.multimodal.processing.PromptUpdateDetails.full],
+    Given [`full`][sonar.multimodal.processing.PromptUpdateDetails.full],
     return a boolean mask of shape `(len(full),)` indicating which positions
     of `full` to assign embeddings to.
 
     `None` (default) means to assign embeddings to all positions of `full`.
 
     The embeddings are obtained by calling
-    [`SupportsMultiModal.embed_multimodal`][aphrodite.model_executor.models.interfaces.SupportsMultiModal.embed_multimodal].
+    [`SupportsMultiModal.embed_multimodal`][sonar.model_executor.models.interfaces.SupportsMultiModal.embed_multimodal].
     """
 
     @staticmethod
@@ -223,14 +223,14 @@ PromptUpdateInfo: TypeAlias = list[int] | PromptUpdateDetails
 The token sequence that is part of the update.
 
 If only part of the content corresponds to feature placeholders, you can
-use [`PromptUpdateDetails`][aphrodite.multimodal.processing.PromptUpdateDetails] to
+use [`PromptUpdateDetails`][sonar.multimodal.processing.PromptUpdateDetails] to
 specify which part.
 """
 
 PromptUpdateContent: TypeAlias = Callable[[int], PromptUpdateInfo] | PromptUpdateInfo
 """
 Given the index of the processed item within
-[`modality`][aphrodite.multimodal.processing.PromptUpdate.modality],
+[`modality`][sonar.multimodal.processing.PromptUpdate.modality],
 output the corresponding token sequence.
 
 For convenience, you can directly pass in the token sequence
@@ -293,7 +293,7 @@ class PromptUpdate(ABC):
 
     def resolve(self, item_idx: int) -> "ResolvedPromptUpdate":
         """Given the index of the processed item within
-        [`modality`][aphrodite.multimodal.processing.PromptUpdate.modality],
+        [`modality`][sonar.multimodal.processing.PromptUpdate.modality],
         output a copy of this object with its lazy attributes resolved.
         """
         return ResolvedPromptUpdate(
@@ -356,9 +356,9 @@ class PromptInsertion(PromptUpdate):
     insertion: PromptUpdateContent = field(repr=False)
     """
     Given the index of the processed item within
-    [`modality`][aphrodite.multimodal.processing.PromptUpdate.modality],
+    [`modality`][sonar.multimodal.processing.PromptUpdate.modality],
     output the token sequence to insert right after
-    [`target`][aphrodite.multimodal.processing.PromptUpdate.target].
+    [`target`][sonar.multimodal.processing.PromptUpdate.target].
 
     For convenience, you can directly pass in the token sequence
     instead of a function if it does not depend on the input.
@@ -410,9 +410,9 @@ class PromptReplacement(PromptUpdate):
     replacement: PromptUpdateContent = field(repr=False)
     """
     Given the index of the processed item within
-    [`modality`][aphrodite.multimodal.processing.PromptUpdate.modality],
+    [`modality`][sonar.multimodal.processing.PromptUpdate.modality],
     output the token sequence to replace
-    [`target`][aphrodite.multimodal.processing.PromptUpdate.target].
+    [`target`][sonar.multimodal.processing.PromptUpdate.target].
 
     For convenience, you can directly pass in the token sequence
     instead of a function if it does not depend on the input.
@@ -441,7 +441,7 @@ _M = TypeVar("_M", bound=_HasModalityAttr | _HasModalityProp)
 
 def full_groupby_modality(values: Iterable[_M]) -> ItemsView[str, list[_M]]:
     """Convenience function to apply
-    [`full_groupby`][aphrodite.utils.collection_utils.full_groupby]
+    [`full_groupby`][sonar.utils.collection_utils.full_groupby]
     based on modality.
     """
     return full_groupby(values, key=lambda x: x.modality)
@@ -454,7 +454,7 @@ class PromptTargetMatch(NamedTuple):
 
 @dataclass(frozen=True)
 class ResolvedPromptUpdate:
-    """A [`PromptUpdate`][aphrodite.multimodal.processing.PromptUpdate] with its
+    """A [`PromptUpdate`][sonar.multimodal.processing.PromptUpdate] with its
     lazy attributes resolved.
     """
 
@@ -974,13 +974,13 @@ def find_mm_placeholders(
 MultiModalIsCached = dict[str, list[bool]]
 """
 A collection of the `is_cached` flag for each item, with a similar structure as
-[`MultiModalKwargsItems`][aphrodite.multimodal.inputs.MultiModalKwargsItems].
+[`MultiModalKwargsItems`][sonar.multimodal.inputs.MultiModalKwargsItems].
 """
 
 MultiModalPromptUpdates = Mapping[str, Sequence[Sequence[ResolvedPromptUpdate]]]
 """
 A collection of prompt updates with a similar structure as
-[`MultiModalKwargsItems`][aphrodite.multimodal.inputs.MultiModalKwargsItems].
+[`MultiModalKwargsItems`][sonar.multimodal.inputs.MultiModalKwargsItems].
 """
 
 MultiModalPromptUpdatesApplyResult = Mapping[str, list[int | None]]
@@ -1014,7 +1014,7 @@ class MultiModalProcessingResult(NamedTuple):
 
 
 class BaseMultiModalProcessor(ABC, Generic[_I]):
-    """Abstract base class to process multi-modal inputs to be used in Aphrodite.
+    """Abstract base class to process multi-modal inputs to be used in Sonar.
 
     Not to be confused with `transformers.ProcessorMixin`.
     """
@@ -1162,7 +1162,7 @@ class BaseMultiModalProcessor(ABC, Generic[_I]):
 
         Moreover, this information is critical to determine the token positions
         in order to construct
-        [`PlaceholderRange`][aphrodite.multimodal.inputs.PlaceholderRange]
+        [`PlaceholderRange`][sonar.multimodal.inputs.PlaceholderRange]
         for each multi-modal item.
         """
         raise NotImplementedError
@@ -1211,7 +1211,7 @@ class BaseMultiModalProcessor(ABC, Generic[_I]):
         By default, no text is passed. If the HF processor requires that
         text and multi-modal items correspond to each other, you should
         override this method to return dummy text generated by
-        [`DummyInputsBuilder`][aphrodite.multimodal.processing.BaseDummyInputsBuilder].
+        [`DummyInputsBuilder`][sonar.multimodal.processing.BaseDummyInputsBuilder].
         """
         return None
 
@@ -1242,14 +1242,14 @@ class BaseMultiModalProcessor(ABC, Generic[_I]):
             if prompt_text is not None:
                 hf_data = dict(text=prompt_text, **hf_data)
 
-                # Aphrodite needs the untruncated sequence to keep placeholder
+                # Sonar needs the untruncated sequence to keep placeholder
                 # tokens aligned. Note that the text inputs are just dummy
                 # text, not the original prompt. The original prompt is
                 # already tokenized by the renderer.
                 hf_kwargs = {"truncation": False, **hf_kwargs}
 
         # HF processors accept (images, text, videos, audio)
-        # so we need to remap Aphrodite's "audios" -> HF "audio"
+        # so we need to remap Sonar's "audios" -> HF "audio"
         if "audios" in hf_data:
             hf_data["audio"] = hf_data.pop("audios")
 
@@ -1762,7 +1762,7 @@ class BaseMultiModalProcessor(ABC, Generic[_I]):
         inputs: ProcessorInputs,
         timing_ctx: TimingContext,
     ) -> MultiModalInput:
-        """Process multi-modal inputs to be used in Aphrodite.
+        """Process multi-modal inputs to be used in Sonar.
 
         The main steps are:
 
@@ -1843,7 +1843,7 @@ class EncDecMultiModalProcessor(BaseMultiModalProcessor[_I]):
         inputs: ProcessorInputs,
         timing_ctx: TimingContext,
     ) -> MultiModalEncDecInput:
-        """Process multi-modal inputs to be used in Aphrodite.
+        """Process multi-modal inputs to be used in Sonar.
         The main processing steps are modified to fit encoder-decoder model:
         1. Create encoder prompt from input prompt text.
         2. Apply the HF processor on encoder prompt.

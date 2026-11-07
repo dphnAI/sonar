@@ -12,9 +12,9 @@ high confidence in the rest.
 
 from unittest.mock import patch
 
-from aphrodite.model_executor.layers.fused_moe.experts.triton_moe import TritonExperts
-from aphrodite.model_executor.layers.fused_moe.oracle import UnquantizedMoEKernelOracle
-from aphrodite.model_executor.layers.fused_moe.oracle.unquantized import (
+from sonar.model_executor.layers.fused_moe.experts.triton_moe import TritonExperts
+from sonar.model_executor.layers.fused_moe.oracle import UnquantizedMoEKernelOracle
+from sonar.model_executor.layers.fused_moe.oracle.unquantized import (
     UnquantizedMoeBackend,
 )
 
@@ -30,7 +30,7 @@ class TestUnquantizedDelegation:
         sentinel_kernel = object()
 
         with patch(
-            "aphrodite.model_executor.layers.fused_moe.oracle.unquantized.make_unquantized_moe_kernel",
+            "sonar.model_executor.layers.fused_moe.oracle.unquantized.make_unquantized_moe_kernel",
             return_value=sentinel_kernel,
         ) as mocked:
             out = UnquantizedMoEKernelOracle().make_kernel(

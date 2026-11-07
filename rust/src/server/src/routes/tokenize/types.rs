@@ -3,13 +3,13 @@
 
 use std::collections::HashMap;
 
-use aphrodite_chat::{ChatOptions, ChatRequest, ResolvedToolContext, SamplingParams};
-use aphrodite_text::output::TextDecodeOptions;
-use aphrodite_text::{Prompt, TextRequest};
 use itertools::Itertools as _;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use serde_with::DefaultOnNull;
+use sonar_chat::{ChatOptions, ChatRequest, ResolvedToolContext, SamplingParams};
+use sonar_text::output::TextDecodeOptions;
+use sonar_text::{Prompt, TextRequest};
 use validator::{Validate, ValidationErrors};
 
 use crate::error::ApiError;
@@ -177,8 +177,8 @@ impl Normalizable for DetokenizeRequest {}
 
 #[cfg(test)]
 mod tests {
-    use aphrodite_chat::ChatTool;
     use serde_json::json;
+    use sonar_chat::ChatTool;
 
     use super::*;
     use crate::routes::openai::utils::types::{ChatMessage, MessageContent};

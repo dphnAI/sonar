@@ -3,9 +3,9 @@
 
 import pytest
 
-from aphrodite import LLM, EmbeddingRequestOutput, SamplingParams
-from aphrodite.assets.image import ImageAsset
-from aphrodite.multimodal.image import convert_image_mode
+from sonar import LLM, EmbeddingRequestOutput, SamplingParams
+from sonar.assets.image import ImageAsset
+from sonar.multimodal.image import convert_image_mode
 from tests.utils import create_new_process_for_each_test
 
 
@@ -15,7 +15,7 @@ def test_plugin(
     dummy_opt_path: str,
 ):
     with monkeypatch.context() as m:
-        m.setenv("APHRODITE_PLUGINS", "")
+        m.setenv("SONAR_PLUGINS", "")
 
         with pytest.raises(ValueError, match="are not supported for now"):
             LLM(model=dummy_opt_path, load_format="dummy")
@@ -27,7 +27,7 @@ def test_oot_registration_text_generation(
     dummy_opt_path: str,
 ):
     with monkeypatch.context() as m:
-        m.setenv("APHRODITE_PLUGINS", "register_dummy_model")
+        m.setenv("SONAR_PLUGINS", "register_dummy_model")
         prompts = ["Hello, my name is", "The text does not matter"]
         sampling_params = SamplingParams(temperature=0)
         llm = LLM(model=dummy_opt_path, load_format="dummy")
@@ -47,7 +47,7 @@ def test_oot_registration_embedding(
     dummy_gemma2_embedding_path: str,
 ):
     with monkeypatch.context() as m:
-        m.setenv("APHRODITE_PLUGINS", "register_dummy_model")
+        m.setenv("SONAR_PLUGINS", "register_dummy_model")
         prompts = ["Hello, my name is", "The text does not matter"]
         llm = LLM(model=dummy_gemma2_embedding_path, load_format="dummy", max_model_len=512)
         outputs = llm.embed(prompts)
@@ -66,7 +66,7 @@ def test_oot_registration_multimodal(
     dummy_llava_path: str,
 ):
     with monkeypatch.context() as m:
-        m.setenv("APHRODITE_PLUGINS", "register_dummy_model")
+        m.setenv("SONAR_PLUGINS", "register_dummy_model")
         prompts = [
             {
                 "prompt": "What's in the image?<image>",

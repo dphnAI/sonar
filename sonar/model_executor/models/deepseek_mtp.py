@@ -7,29 +7,29 @@ import torch
 import torch.nn as nn
 from transformers import PreTrainedConfig
 
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed import tensor_model_parallel_all_gather
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import SonarConfig
+from sonar.distributed import tensor_model_parallel_all_gather
+from sonar.model_executor.layers.fused_moe import (
     fused_moe_make_expert_params_mapping,
 )
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.model_loader.mtp_validation import (
+from sonar.model_executor.model_loader.mtp_validation import (
     is_mtp_completeness_check_enabled,
 )
-from aphrodite.model_executor.model_loader.weight_utils import (
+from sonar.model_executor.model_loader.weight_utils import (
     default_weight_loader,
     maybe_remap_kv_scale_name,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.sequence import IntermediateTensors
+from sonar.platforms import current_platform
+from sonar.sequence import IntermediateTensors
 
 from .deepseek_v2 import (
     DeepseekV2DecoderLayer,
@@ -74,13 +74,13 @@ class SharedHead(nn.Module):
 
 
 class DeepSeekMultiTokenPredictorLayer(nn.Module):
-    def __init__(self, aphrodite_config: AphroditeConfig, prefix: str) -> None:
+    def __init__(self, sonar_config: SonarConfig, prefix: str) -> None:
         super().__init__()
 
-        assert aphrodite_config.speculative_config is not None
-        config = aphrodite_config.speculative_config.draft_model_config.hf_config
+        assert sonar_config.speculative_config is not None
+        config = sonar_config.speculative_config.draft_model_config.hf_config
         self.config = config
-        quant_config = aphrodite_config.quant_config
+        quant_config = sonar_config.quant_config
 
         self.enorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.hnorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -92,7 +92,7 @@ class DeepSeekMultiTokenPredictorLayer(nn.Module):
         if self.is_v32:
             topk_tokens = config.index_topk
             topk_indices_buffer = torch.empty(
-                aphrodite_config.scheduler_config.max_num_batched_tokens,
+                sonar_config.scheduler_config.max_num_batched_tokens,
                 topk_tokens,
                 dtype=torch.int32,
                 device=self.device,
@@ -102,7 +102,7 @@ class DeepSeekMultiTokenPredictorLayer(nn.Module):
 
         self.shared_head = SharedHead(config=config, prefix=prefix, quant_config=quant_config)
         self.mtp_block = DeepseekV2DecoderLayer(
-            aphrodite_config,
+            sonar_config,
             prefix,
             config=self.config,
             topk_indices_buffer=topk_indices_buffer,
@@ -141,16 +141,16 @@ class DeepSeekMultiTokenPredictorLayer(nn.Module):
 
 
 class DeepSeekMultiTokenPredictor(nn.Module):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
         self.mtp_start_layer_idx = config.num_hidden_layers
         self.num_mtp_layers = config.num_nextn_predict_layers
         # to map the exact layer index from weights
 
         self.layers = torch.nn.ModuleDict(
             {
-                str(idx): DeepSeekMultiTokenPredictorLayer(aphrodite_config, f"{prefix}.layers.{idx}")
+                str(idx): DeepSeekMultiTokenPredictorLayer(sonar_config, f"{prefix}.layers.{idx}")
                 for idx in range(
                     self.mtp_start_layer_idx,
                     self.mtp_start_layer_idx + self.num_mtp_layers,
@@ -228,14 +228,12 @@ class DeepSeekMultiTokenPredictor(nn.Module):
 
 @support_torch_compile
 class DeepSeekMTP(nn.Module, DeepseekV2MixtureOfExperts, SupportsPP):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        self.config = aphrodite_config.model_config.hf_config
-        self.quant_config = aphrodite_config.quant_config
-        self.aphrodite_config = aphrodite_config
-        self.model = DeepSeekMultiTokenPredictor(
-            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
-        )
+        self.config = sonar_config.model_config.hf_config
+        self.quant_config = sonar_config.quant_config
+        self.sonar_config = sonar_config
+        self.model = DeepSeekMultiTokenPredictor(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
         # Set MoE hyperparameters
         self.set_moe_parameters()
         self.make_empty_intermediate_tensors = make_empty_intermediate_tensors_factory(
@@ -261,7 +259,7 @@ class DeepSeekMTP(nn.Module, DeepseekV2MixtureOfExperts, SupportsPP):
         self.fused_shared_expert_layers = get_fused_shared_expert_layers(
             self,
             DeepseekV2MoE,
-            enable_eplb=self.aphrodite_config.parallel_config.enable_eplb,
+            enable_eplb=self.sonar_config.parallel_config.enable_eplb,
         )
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:

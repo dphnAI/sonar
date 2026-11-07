@@ -9,15 +9,15 @@ from typing import Any, cast
 import torch
 from transformers import BatchFeature
 
-from aphrodite.config.multimodal import ImageDummyOptions, MultiModalDummyOptions
-from aphrodite.inputs import MultiModalDataDict
-from aphrodite.logger import init_logger
-from aphrodite.multimodal.inputs import (
+from sonar.config.multimodal import ImageDummyOptions, MultiModalDummyOptions
+from sonar.inputs import MultiModalDataDict
+from sonar.logger import init_logger
+from sonar.multimodal.inputs import (
     MultiModalFieldConfig,
     MultiModalKwargsItems,
 )
-from aphrodite.multimodal.parse import ImageProcessorItems, ImageSize, MultiModalDataItems
-from aphrodite.multimodal.processing import (
+from sonar.multimodal.parse import ImageProcessorItems, ImageSize, MultiModalDataItems
+from sonar.multimodal.processing import (
     BaseDummyInputsBuilder,
     BaseMultiModalProcessor,
     BaseProcessingInfo,
@@ -27,10 +27,10 @@ from aphrodite.multimodal.processing import (
     PromptUpdateDetails,
     cached_encode,
 )
-from aphrodite.transformers_utils.configs.kimi_k3 import KimiK3Config
-from aphrodite.transformers_utils.processor import cached_get_image_processor
-from aphrodite.transformers_utils.processors.kimi_k3 import KimiK3Processor
-from aphrodite.transformers_utils.processors.kimi_k25_vision_fused import (
+from sonar.transformers_utils.configs.kimi_k3 import KimiK3Config
+from sonar.transformers_utils.processor import cached_get_image_processor
+from sonar.transformers_utils.processors.kimi_k3 import KimiK3Processor
+from sonar.transformers_utils.processors.kimi_k25_vision_fused import (
     KimiK25FusedVisionProcessor,
 )
 

@@ -33,9 +33,8 @@ from pydantic import TypeAdapter, ValidationError
 from pydantic.fields import FieldInfo
 from typing_extensions import TypeIs
 
-import aphrodite.envs as envs
-from aphrodite.config import (
-    AphroditeConfig,
+import sonar.envs as envs
+from sonar.config import (
     AttentionConfig,
     AuxOutputConfig,
     CacheConfig,
@@ -66,6 +65,7 @@ from aphrodite.config import (
     ProfilerConfig,
     ReasoningConfig,
     SchedulerConfig,
+    SonarConfig,
     SpeculativeConfig,
     StructuredOutputsConfig,
     UVAOffloadConfig,
@@ -73,27 +73,26 @@ from aphrodite.config import (
     WeightTransferConfig,
     get_attr_docs,
 )
-from aphrodite.config.aphrodite import OptimizationLevel, PerformanceMode
-from aphrodite.config.cache import (
+from sonar.config.cache import (
     CacheDType,
     KVOffloadingBackend,
     MambaCacheMode,
     MambaDType,
     PrefixCachingHashAlgo,
 )
-from aphrodite.config.device import Device
-from aphrodite.config.kernel import (
+from sonar.config.device import Device
+from sonar.config.kernel import (
     PASSTHROUGH_ALL2ALL_BACKEND,
     IrOpPriorityConfig,
     LinearBackend,
     MoEBackend,
     SparseIndexerTopkBackend,
 )
-from aphrodite.config.load import SafetensorsLoadStrategy
-from aphrodite.config.logging import LogLevel
-from aphrodite.config.lora import MaxLoRARanks
-from aphrodite.config.mamba import MambaBackendEnum, MambaSSUAlgorithm
-from aphrodite.config.model import (
+from sonar.config.load import SafetensorsLoadStrategy
+from sonar.config.logging import LogLevel
+from sonar.config.lora import MaxLoRARanks
+from sonar.config.mamba import MambaBackendEnum, MambaSSUAlgorithm
+from sonar.config.model import (
     ConvertOption,
     HfOverrides,
     LogprobsMode,
@@ -101,49 +100,50 @@ from aphrodite.config.model import (
     RunnerOption,
     TokenizerMode,
 )
-from aphrodite.config.multimodal import (
+from sonar.config.multimodal import (
     MMCacheType,
     MMEncoderTPMode,
     MMHasherAlgorithm,
     MMProcessorDevice,
     MMTensorIPC,
 )
-from aphrodite.config.observability import DetailedTraceModules
-from aphrodite.config.parallel import (
+from sonar.config.observability import DetailedTraceModules
+from sonar.config.parallel import (
     All2AllBackend,
     DataParallelBackend,
     DCPCommBackend,
     DistributedExecutorBackend,
     ExpertPlacementStrategy,
 )
-from aphrodite.config.scheduler import SchedulerPolicy
-from aphrodite.config.utils import get_field
-from aphrodite.config.watermarking import WatermarkConfig
-from aphrodite.logger import configure_logging_if_needed, init_logger, suppress_logging
-from aphrodite.platforms import CpuArchEnum, current_platform
-from aphrodite.plugins import load_general_plugins
-from aphrodite.ray.lazy_utils import is_in_ray_actor, is_ray_initialized
-from aphrodite.transformers_utils.config import maybe_override_with_speculators
-from aphrodite.transformers_utils.repo_utils import get_model_path
-from aphrodite.transformers_utils.utils import is_cloud_storage
-from aphrodite.utils.argparse_utils import (
+from sonar.config.scheduler import SchedulerPolicy
+from sonar.config.sonar import OptimizationLevel, PerformanceMode
+from sonar.config.utils import get_field
+from sonar.config.watermarking import WatermarkConfig
+from sonar.logger import configure_logging_if_needed, init_logger, suppress_logging
+from sonar.platforms import CpuArchEnum, current_platform
+from sonar.plugins import load_general_plugins
+from sonar.ray.lazy_utils import is_in_ray_actor, is_ray_initialized
+from sonar.transformers_utils.config import maybe_override_with_speculators
+from sonar.transformers_utils.repo_utils import get_model_path
+from sonar.transformers_utils.utils import is_cloud_storage
+from sonar.utils.argparse_utils import (
     FlexibleArgumentParser,
     human_readable_int,
     human_readable_int_or_auto,
 )
-from aphrodite.utils.mem_constants import GiB_bytes
-from aphrodite.utils.network_utils import get_ip
-from aphrodite.utils.torch_utils import resolve_kv_cache_dtype_string
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
-from aphrodite.v1.sample.logits_processor import LogitsProcessor
-from aphrodite.version import __version__ as APHRODITE_VERSION
+from sonar.utils.mem_constants import GiB_bytes
+from sonar.utils.network_utils import get_ip
+from sonar.utils.torch_utils import resolve_kv_cache_dtype_string
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
+from sonar.v1.sample.logits_processor import LogitsProcessor
+from sonar.version import __version__ as SONAR_VERSION
 
 if TYPE_CHECKING:
-    from aphrodite.config.quantization import QuantizationConfigArgs
-    from aphrodite.model_executor.layers.quantization import QuantizationMethods
-    from aphrodite.model_executor.model_loader import LoadFormats
-    from aphrodite.usage.usage_lib import UsageContext
-    from aphrodite.v1.executor import Executor
+    from sonar.config.quantization import QuantizationConfigArgs
+    from sonar.model_executor.layers.quantization import QuantizationMethods
+    from sonar.model_executor.model_loader import LoadFormats
+    from sonar.usage.usage_lib import UsageContext
+    from sonar.v1.executor import Executor
 else:
     Executor = Any
     QuantizationMethods = str
@@ -185,7 +185,7 @@ def union_dict_and_str(val: str) -> str | dict[str, str] | None:
 
 
 def parse_reasoning_parser(val: str) -> str:
-    """Map `none` (any case) to the unset default, as `aphrodite-rs serve` does."""
+    """Map `none` (any case) to the unset default, as `sonar-rs serve` does."""
     return "" if val.lower() == "none" else val
 
 
@@ -273,19 +273,19 @@ def get_type_hints(type_hint: TypeHint) -> set[TypeHint]:
     return type_hints
 
 
-IS_ARGPARSE = any("--help" in arg for arg in sys.argv)  # aphrodite SUBCOMMAND --help
+IS_ARGPARSE = any("--help" in arg for arg in sys.argv)  # sonar SUBCOMMAND --help
 NEEDS_HELP = IS_ARGPARSE or "mkdocs" in sys.modules  # mkdocs SUBCOMMAND
 
 
 def _maybe_add_docs_url(cls: Any) -> str:
-    """Generate API docs URL for a aphrodite config class."""
-    import aphrodite.config
+    """Generate API docs URL for a sonar config class."""
+    import sonar.config
 
     name = cls.__name__
-    if getattr(aphrodite.config, name, None) is not cls:
+    if getattr(sonar.config, name, None) is not cls:
         return ""
-    version = f"v{APHRODITE_VERSION}" if "dev" not in APHRODITE_VERSION else "latest"
-    return f"\n\nAPI docs: https://docs.aphrodite.ai/en/{version}/api/aphrodite/config/#aphrodite.config.{name}"
+    version = f"v{SONAR_VERSION}" if "dev" not in SONAR_VERSION else "latest"
+    return f"\n\nAPI docs: https://sonar.dphn.ai/en/{version}/api/sonar/config/#sonar.config.{name}"
 
 
 def _expand_json_human_readable_numbers(val: str) -> str:
@@ -333,7 +333,7 @@ def _compute_kwargs(cls: ConfigType) -> dict[str, dict[str, Any]]:
                 if default.default_factory is None:
                     default = default.default
                 else:
-                    # AphroditeConfig's Fields have default_factory set to config classes.
+                    # SonarConfig's Fields have default_factory set to config classes.
                     # These could emit logs on init, which would be confusing.
                     with suppress_logging():
                         default = default.default_factory()  # type: ignore[call-arg]
@@ -450,8 +450,7 @@ _MAMBA_CACHE_MODE_DEPRECATION_MESSAGE = (
 
 
 _IR_OP_PRIORITY_DEPRECATION_MESSAGE = (
-    "ir_op_priority (--ir-op-priority) is deprecated because Aphrodite IR is being "
-    "removed. It will be removed in v0.34.0."
+    "ir_op_priority (--ir-op-priority) is deprecated because Sonar IR is being removed. It will be removed in v0.34.0."
 )
 
 
@@ -471,7 +470,7 @@ class DeprecatedLogConfigFileAction(argparse.Action):
 
 @dataclass
 class EngineArgs:
-    """Arguments for Aphrodite engine."""
+    """Arguments for Sonar engine."""
 
     model: str = ModelConfig.model
     # Public compatibility argument. Canonical runtime state lives in
@@ -662,8 +661,8 @@ class EngineArgs:
 
     disable_hybrid_kv_cache_manager: bool | None = SchedulerConfig.disable_hybrid_kv_cache_manager
 
-    structured_outputs_config: StructuredOutputsConfig = get_field(AphroditeConfig, "structured_outputs_config")
-    aux_output_config: AuxOutputConfig = get_field(AphroditeConfig, "aux_output_config")
+    structured_outputs_config: StructuredOutputsConfig = get_field(SonarConfig, "structured_outputs_config")
+    aux_output_config: AuxOutputConfig = get_field(SonarConfig, "aux_output_config")
     reasoning_parser: str = StructuredOutputsConfig.reasoning_parser
     reasoning_parser_plugin: str | None = None
 
@@ -694,19 +693,19 @@ class EngineArgs:
     scheduler_cls: str | type[object] | None = SchedulerConfig.scheduler_cls
 
     pooler_config: PoolerConfig | None = ModelConfig.pooler_config
-    compilation_config: CompilationConfig = get_field(AphroditeConfig, "compilation_config")
-    attention_config: AttentionConfig = get_field(AphroditeConfig, "attention_config")
-    engram_config: EngramConfig | None = AphroditeConfig.engram_config
+    compilation_config: CompilationConfig = get_field(SonarConfig, "compilation_config")
+    attention_config: AttentionConfig = get_field(SonarConfig, "attention_config")
+    engram_config: EngramConfig | None = SonarConfig.engram_config
     dphn_network: bool = False
     dphn_network_config: DphnNetworkConfig | dict[str, Any] | None = None
-    mamba_config: MambaConfig = get_field(AphroditeConfig, "mamba_config")
-    kernel_config: KernelConfig = get_field(AphroditeConfig, "kernel_config")
+    mamba_config: MambaConfig = get_field(SonarConfig, "mamba_config")
+    kernel_config: KernelConfig = get_field(SonarConfig, "kernel_config")
     enable_flashinfer_autotune: bool = get_field(KernelConfig, "enable_flashinfer_autotune")
     monokernel: bool = get_field(KernelConfig, "monokernel")
     worker_cls: str = ParallelConfig.worker_cls
     worker_extension_cls: str = ParallelConfig.worker_extension_cls
 
-    profiler_config: ProfilerConfig = get_field(AphroditeConfig, "profiler_config")
+    profiler_config: ProfilerConfig = get_field(SonarConfig, "profiler_config")
 
     logging_config: LoggingConfig | None = None
     log_level: LogLevel | None = None
@@ -716,8 +715,8 @@ class EngineArgs:
     kv_events_config: KVEventsConfig | None = None
 
     ec_transfer_config: ECTransferConfig | None = None
-    ec_manager_config: EncoderCacheManagerConfig = get_field(AphroditeConfig, "ec_manager_config")
-    reasoning_config: ReasoningConfig = get_field(AphroditeConfig, "reasoning_config")
+    ec_manager_config: EncoderCacheManagerConfig = get_field(SonarConfig, "ec_manager_config")
+    reasoning_config: ReasoningConfig = get_field(SonarConfig, "reasoning_config")
 
     generation_config: str = ModelConfig.generation_config
     enable_sleep_mode: bool = ModelConfig.enable_sleep_mode
@@ -746,7 +745,7 @@ class EngineArgs:
     enable_mamba_cache_stochastic_rounding: bool = MambaConfig.enable_stochastic_rounding
     mamba_cache_philox_rounds: int = MambaConfig.stochastic_rounding_philox_rounds
 
-    additional_config: dict[str, Any] = get_field(AphroditeConfig, "additional_config")
+    additional_config: dict[str, Any] = get_field(SonarConfig, "additional_config")
 
     use_tqdm_on_load: bool = LoadConfig.use_tqdm_on_load
     pt_load_map_location: str | dict[str, str] = LoadConfig.pt_load_map_location
@@ -760,8 +759,8 @@ class EngineArgs:
 
     kv_sharing_fast_prefill: bool = CacheConfig.kv_sharing_fast_prefill
     swa_bounded_replay: bool = CacheConfig.swa_bounded_replay
-    optimization_level: OptimizationLevel = AphroditeConfig.optimization_level
-    performance_mode: PerformanceMode = AphroditeConfig.performance_mode
+    optimization_level: OptimizationLevel = SonarConfig.optimization_level
+    performance_mode: PerformanceMode = SonarConfig.performance_mode
 
     fault_tolerance_config: FaultToleranceConfig = get_field(ParallelConfig, "fault_tolerance_config")
     enable_fault_tolerance: bool = ParallelConfig.enable_fault_tolerance
@@ -772,10 +771,10 @@ class EngineArgs:
 
     shutdown_timeout: int = 0
 
-    watchdog_config: WatchdogConfig = get_field(AphroditeConfig, "watchdog_config")
+    watchdog_config: WatchdogConfig = get_field(SonarConfig, "watchdog_config")
 
     weight_transfer_config: WeightTransferConfig | None = get_field(
-        AphroditeConfig,
+        SonarConfig,
         "weight_transfer_config",
     )
 
@@ -820,12 +819,12 @@ class EngineArgs:
         if isinstance(self.watchdog_config, dict):
             self.watchdog_config = WatchdogConfig(**self.watchdog_config)
 
-        from aphrodite.config.quantization import resolve_quantization_config
+        from sonar.config.quantization import resolve_quantization_config
 
         self.quantization_config = resolve_quantization_config(self.quantization, self.quantization_config)
 
         # Setup plugins
-        from aphrodite.plugins import load_general_plugins
+        from sonar.plugins import load_general_plugins
 
         load_general_plugins()
         # when use hf offline,replace model and tokenizer id to local model path
@@ -854,7 +853,7 @@ class EngineArgs:
 
     @staticmethod
     def add_cli_args(parser: FlexibleArgumentParser) -> FlexibleArgumentParser:
-        """Shared CLI arguments for Aphrodite engine."""
+        """Shared CLI arguments for Sonar engine."""
         # Model arguments
         model_kwargs = get_kwargs(ModelConfig)
         aux_output_kwargs = get_kwargs(AuxOutputConfig)
@@ -1092,7 +1091,7 @@ class EngineArgs:
             help="Data parallel rank of this instance. "
             "When set, enables external load balancer mode for MoE "
             "data-parallel deployments. Unsupported for non-MoE models; "
-            "launch independent Aphrodite instances instead.",
+            "launch independent Sonar instances instead.",
         )
         parallel_group.add_argument(
             "--data-parallel-start-rank",
@@ -1410,7 +1409,7 @@ class EngineArgs:
             title="LoggingConfig",
             description=LoggingConfig.__doc__,
         )
-        logging_config_kwargs = get_kwargs(AphroditeConfig)["logging_config"]
+        logging_config_kwargs = get_kwargs(SonarConfig)["logging_config"]
         logging_config_kwargs["default"] = argparse.SUPPRESS
         logging_group.add_argument("--logging-config", **logging_config_kwargs)
         logging_group.add_argument(
@@ -1589,50 +1588,50 @@ class EngineArgs:
         sparse_indexer_topk_kwargs["type"] = lambda s: s.lower().replace("-", "_")
         kernel_group.add_argument("--sparse-indexer-topk-backend", **sparse_indexer_topk_kwargs)
 
-        # Aphrodite arguments
-        aphrodite_kwargs = get_kwargs(AphroditeConfig)
-        aphrodite_group = parser.add_argument_group(
-            title="AphroditeConfig",
-            description=AphroditeConfig.__doc__,
+        # Sonar arguments
+        sonar_kwargs = get_kwargs(SonarConfig)
+        sonar_group = parser.add_argument_group(
+            title="SonarConfig",
+            description=SonarConfig.__doc__,
         )
         # We construct SpeculativeConfig using fields from other configs in
         # create_engine_config. So we set the type to a JSON string here to
         # delay the Pydantic validation that comes with SpeculativeConfig.
-        aphrodite_kwargs["speculative_config"]["type"] = optional_type(json.loads)
-        aphrodite_group.add_argument("--speculative-config", "-sc", **aphrodite_kwargs["speculative_config"])
+        sonar_kwargs["speculative_config"]["type"] = optional_type(json.loads)
+        sonar_group.add_argument("--speculative-config", "-sc", **sonar_kwargs["speculative_config"])
         speculative_kwargs = get_kwargs(SpeculativeConfig)
-        aphrodite_group.add_argument("--spec-method", **speculative_kwargs["method"])
-        aphrodite_group.add_argument("--spec-model", **speculative_kwargs["model"])
-        aphrodite_group.add_argument("--spec-tokens", **speculative_kwargs["num_speculative_tokens"])
-        aphrodite_kwargs["watermark_config"]["type"] = optional_type(json.loads)
-        aphrodite_group.add_argument("--watermark-config", **aphrodite_kwargs["watermark_config"])
-        aphrodite_kwargs["diffusion_config"]["type"] = optional_type(json.loads)
-        aphrodite_group.add_argument("--diffusion-config", "-dc", **aphrodite_kwargs["diffusion_config"])
-        aphrodite_group.add_argument("--kv-transfer-config", **aphrodite_kwargs["kv_transfer_config"])
-        aphrodite_group.add_argument("--kv-events-config", **aphrodite_kwargs["kv_events_config"])
-        aphrodite_group.add_argument("--ec-transfer-config", **aphrodite_kwargs["ec_transfer_config"])
-        aphrodite_group.add_argument("--ec-manager-config", **aphrodite_kwargs["ec_manager_config"])
-        aphrodite_group.add_argument("--compilation-config", "-cc", **aphrodite_kwargs["compilation_config"])
-        aphrodite_group.add_argument("--attention-config", "-ac", **aphrodite_kwargs["attention_config"])
-        aphrodite_group.add_argument("--engram-config", **aphrodite_kwargs["engram_config"])
-        aphrodite_group.add_argument(
+        sonar_group.add_argument("--spec-method", **speculative_kwargs["method"])
+        sonar_group.add_argument("--spec-model", **speculative_kwargs["model"])
+        sonar_group.add_argument("--spec-tokens", **speculative_kwargs["num_speculative_tokens"])
+        sonar_kwargs["watermark_config"]["type"] = optional_type(json.loads)
+        sonar_group.add_argument("--watermark-config", **sonar_kwargs["watermark_config"])
+        sonar_kwargs["diffusion_config"]["type"] = optional_type(json.loads)
+        sonar_group.add_argument("--diffusion-config", "-dc", **sonar_kwargs["diffusion_config"])
+        sonar_group.add_argument("--kv-transfer-config", **sonar_kwargs["kv_transfer_config"])
+        sonar_group.add_argument("--kv-events-config", **sonar_kwargs["kv_events_config"])
+        sonar_group.add_argument("--ec-transfer-config", **sonar_kwargs["ec_transfer_config"])
+        sonar_group.add_argument("--ec-manager-config", **sonar_kwargs["ec_manager_config"])
+        sonar_group.add_argument("--compilation-config", "-cc", **sonar_kwargs["compilation_config"])
+        sonar_group.add_argument("--attention-config", "-ac", **sonar_kwargs["attention_config"])
+        sonar_group.add_argument("--engram-config", **sonar_kwargs["engram_config"])
+        sonar_group.add_argument(
             "--dphn-network",
             action=argparse.BooleanOptionalAction,
             default=False,
             help="Enable weight-only sampling receipts (not inference provenance).",
         )
-        aphrodite_kwargs["dphn_network_config"]["type"] = optional_type(json.loads)
-        aphrodite_group.add_argument("--dphn-network-config", **aphrodite_kwargs["dphn_network_config"])
-        aphrodite_group.add_argument("--reasoning-config", **aphrodite_kwargs["reasoning_config"])
-        aphrodite_group.add_argument("--kernel-config", **aphrodite_kwargs["kernel_config"])
-        aphrodite_group.add_argument("--additional-config", **aphrodite_kwargs["additional_config"])
-        aphrodite_group.add_argument("--structured-outputs-config", **aphrodite_kwargs["structured_outputs_config"])
-        aphrodite_group.add_argument("--aux-output-config", **aphrodite_kwargs["aux_output_config"])
-        aphrodite_group.add_argument("--profiler-config", **aphrodite_kwargs["profiler_config"])
-        aphrodite_group.add_argument("--watchdog-config", **aphrodite_kwargs["watchdog_config"])
-        aphrodite_group.add_argument("--optimization-level", **aphrodite_kwargs["optimization_level"])
-        aphrodite_group.add_argument("--performance-mode", **aphrodite_kwargs["performance_mode"])
-        aphrodite_group.add_argument("--weight-transfer-config", **aphrodite_kwargs["weight_transfer_config"])
+        sonar_kwargs["dphn_network_config"]["type"] = optional_type(json.loads)
+        sonar_group.add_argument("--dphn-network-config", **sonar_kwargs["dphn_network_config"])
+        sonar_group.add_argument("--reasoning-config", **sonar_kwargs["reasoning_config"])
+        sonar_group.add_argument("--kernel-config", **sonar_kwargs["kernel_config"])
+        sonar_group.add_argument("--additional-config", **sonar_kwargs["additional_config"])
+        sonar_group.add_argument("--structured-outputs-config", **sonar_kwargs["structured_outputs_config"])
+        sonar_group.add_argument("--aux-output-config", **sonar_kwargs["aux_output_config"])
+        sonar_group.add_argument("--profiler-config", **sonar_kwargs["profiler_config"])
+        sonar_group.add_argument("--watchdog-config", **sonar_kwargs["watchdog_config"])
+        sonar_group.add_argument("--optimization-level", **sonar_kwargs["optimization_level"])
+        sonar_group.add_argument("--performance-mode", **sonar_kwargs["performance_mode"])
+        sonar_group.add_argument("--weight-transfer-config", **sonar_kwargs["weight_transfer_config"])
 
         # Other arguments
         parser.add_argument(
@@ -1694,12 +1693,12 @@ class EngineArgs:
         return engine_args
 
     def create_model_config(self) -> ModelConfig:
-        if not envs.APHRODITE_ENABLE_V1_MULTIPROCESSING:
+        if not envs.SONAR_ENABLE_V1_MULTIPROCESSING:
             logger.warning(
                 "The global random seed is set to %d. Since "
-                "APHRODITE_ENABLE_V1_MULTIPROCESSING is set to False, this may "
+                "SONAR_ENABLE_V1_MULTIPROCESSING is set to False, this may "
                 "affect the random state of the Python process that "
-                "launched Aphrodite.",
+                "launched Sonar.",
                 self.seed,
             )
         if self.disable_cascade_attn is not None:
@@ -1780,7 +1779,7 @@ class EngineArgs:
         )
 
     def validate_tensorizer_args(self):
-        from aphrodite.model_executor.model_loader.tensorizer import TensorizerConfig
+        from sonar.model_executor.model_loader.tensorizer import TensorizerConfig
 
         for key in self.model_loader_extra_config:
             if key in TensorizerConfig._fields:
@@ -1944,10 +1943,10 @@ class EngineArgs:
         self,
         usage_context: UsageContext | None = None,
         headless: bool = False,
-    ) -> AphroditeConfig:
-        """Create the AphroditeConfig.
+    ) -> SonarConfig:
+        """Create the SonarConfig.
 
-        NOTE: If AphroditeConfig is incompatible, we raise an error.
+        NOTE: If SonarConfig is incompatible, we raise an error.
         """
         logging_config = self.create_logging_config()
         configure_logging_if_needed(logging_config)
@@ -1969,7 +1968,7 @@ class EngineArgs:
                 tokenizer=self.tokenizer,
                 revision=self.revision,
                 trust_remote_code=self.trust_remote_code,
-                aphrodite_speculative_config=self.speculative_config,
+                sonar_speculative_config=self.speculative_config,
                 hf_token=self.hf_token,
             )
 
@@ -2027,7 +2026,7 @@ class EngineArgs:
             resolved_cache_dtype.startswith("turboquant_") or resolved_cache_dtype == "ultraquant_4bit"
         )
         if uses_packed_kv_backend:
-            from aphrodite.model_executor.layers.quantization.turboquant.config import (
+            from sonar.model_executor.layers.quantization.turboquant.config import (
                 TurboQuantConfig,
             )
 
@@ -2134,7 +2133,7 @@ class EngineArgs:
         if self.data_parallel_size > 1 and data_parallel_external_lb and not model_config.is_moe:
             raise ValueError(
                 "Non-MoE models do not support external data parallel mode. "
-                "For external load balancing, launch independent Aphrodite "
+                "For external load balancing, launch independent Sonar "
                 "instances without --data-parallel-* arguments."
             )
         # Local DP rank = 1, use pure-external LB.
@@ -2198,7 +2197,7 @@ class EngineArgs:
                     "data-parallel ranks on this node."
                 )
 
-            if self.data_parallel_backend == "ray" and (envs.APHRODITE_RAY_DP_PACK_STRATEGY == "span"):
+            if self.data_parallel_backend == "ray" and (envs.SONAR_RAY_DP_PACK_STRATEGY == "span"):
                 # Data parallel size defaults to 1 if DP ranks are spanning
                 # multiple nodes
                 data_parallel_size_local = 1
@@ -2384,11 +2383,10 @@ class EngineArgs:
 
         # Batch-invariant mode requires deterministic attention behavior.
         # If no backend is explicitly requested, prefer Triton Attention.
-        if envs.APHRODITE_BATCH_INVARIANT and attention_config.backend is None and current_platform.is_xpu():
+        if envs.SONAR_BATCH_INVARIANT and attention_config.backend is None and current_platform.is_xpu():
             attention_config.backend = AttentionBackendEnum.TRITON_ATTN
             logger.info(
-                "APHRODITE_BATCH_INVARIANT is enabled and no attention backend was "
-                "specified; defaulting to TRITON_ATTN."
+                "SONAR_BATCH_INVARIANT is enabled and no attention backend was specified; defaulting to TRITON_ATTN."
             )
 
         # TurboQuant requires FlashAttention 2 — FA3 boundary layers assert
@@ -2503,7 +2501,7 @@ class EngineArgs:
         if self.kda_decode_backend is not None:
             self.additional_config["kda_decode_backend"] = self.kda_decode_backend
 
-        config = AphroditeConfig(
+        config = SonarConfig(
             model_config=model_config,
             cache_config=cache_config,
             parallel_config=parallel_config,
@@ -2563,7 +2561,7 @@ class EngineArgs:
         cls,
         world_size: int,
     ) -> tuple[dict[UsageContext | None, int], dict[UsageContext | None, int]]:
-        from aphrodite.usage.usage_lib import UsageContext
+        from sonar.usage.usage_lib import UsageContext
 
         default_max_num_batched_tokens: dict[UsageContext | None, int]
         default_max_num_seqs: dict[UsageContext | None, int]
@@ -2573,9 +2571,9 @@ class EngineArgs:
         # Use different default values for different hardware.
 
         # Try to query the device name on the current platform. If it fails,
-        # it may be because the platform that imports Aphrodite is not the same
-        # as the platform that Aphrodite is running on (e.g. the case of scaling
-        # Aphrodite with Ray) and has no GPUs. In this case we use the default
+        # it may be because the platform that imports Sonar is not the same
+        # as the platform that Sonar is running on (e.g. the case of scaling
+        # Sonar with Ray) and has no GPUs. In this case we use the default
         # values for non-H100/H200 GPUs.
         try:
             device_memory = current_platform.get_device_total_memory()
@@ -2720,7 +2718,7 @@ class EngineArgs:
         or None if the value cannot be determined at this stage.
         """
         try:
-            from aphrodite.multimodal import MULTIMODAL_REGISTRY
+            from sonar.multimodal import MULTIMODAL_REGISTRY
 
             # get_processing_info returns the model's multimodal processing
             # metadata (supported modalities, token limits) without loading
@@ -2832,7 +2830,7 @@ class EngineArgs:
 
 @dataclass
 class AsyncEngineArgs(EngineArgs):
-    """Arguments for asynchronous Aphrodite engine."""
+    """Arguments for asynchronous Sonar engine."""
 
     enable_log_requests: bool = False
 
@@ -2851,9 +2849,9 @@ class AsyncEngineArgs(EngineArgs):
             help="Enable logging request information, dependent on log level:\n"
             "- INFO: Request ID, parameters and LoRA request.\n"
             "- DEBUG: Prompt inputs (e.g: text, token IDs).\n"
-            "You can set the minimum log level via `APHRODITE_LOGGING_LEVEL`.\n"
+            "You can set the minimum log level via `SONAR_LOGGING_LEVEL`.\n"
             "You can also set a separate log level for request JSON body "
-            "via `APHRODITE_REQUEST_BODY_LOG_LEVEL` (default: DEBUG).",
+            "via `SONAR_REQUEST_BODY_LOG_LEVEL` (default: DEBUG).",
         )
         current_platform.pre_register_and_update(parser)
         return parser

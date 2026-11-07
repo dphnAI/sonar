@@ -18,16 +18,16 @@ from typing import NamedTuple
 import pytest
 from pydantic import TypeAdapter
 
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionToolsParam,
 )
-from aphrodite.parser.abstract_parser import DelegatingParser, Parser
-from aphrodite.parser.engine import registered_adapters as _adapters_mod
-from aphrodite.parser.engine.adapters import (
+from sonar.parser.abstract_parser import DelegatingParser, Parser
+from sonar.parser.engine import registered_adapters as _adapters_mod
+from sonar.parser.engine.adapters import (
     ParserEngineReasoningAdapter,
     ParserEngineToolAdapter,
 )
-from aphrodite.parser.mistral import MistralParser
+from sonar.parser.mistral import MistralParser
 from tests.parser.engine.replay_harness import (
     CHUNK_SIZES,
     DUMMY_TOOLS,

@@ -9,16 +9,16 @@ import torch
 import torch.nn as nn
 from transformers import Blip2VisionConfig, BlipVisionConfig
 
-from aphrodite.distributed import divide, get_tensor_model_parallel_world_size
-from aphrodite.model_executor.layers.activation import get_act_fn
-from aphrodite.model_executor.layers.attention import MMEncoderAttention
-from aphrodite.model_executor.layers.conv import Conv2dLayer
-from aphrodite.model_executor.layers.linear import (
+from sonar.distributed import divide, get_tensor_model_parallel_world_size
+from sonar.model_executor.layers.activation import get_act_fn
+from sonar.model_executor.layers.attention import MMEncoderAttention
+from sonar.model_executor.layers.conv import Conv2dLayer
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     QKVParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.quantization import QuantizationConfig
 
 from .interfaces import SupportsQuant
 from .utils import AutoWeightsLoader, WeightsMapper
@@ -252,7 +252,7 @@ class BlipVisionModel(nn.Module, SupportsQuant):
     main_input_name = "pixel_values"
     packed_modules_mapping = {"qkv_proj": ["q_proj", "k_proj", "v_proj"]}
 
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_stacked={
             ".q_proj": (".qkv", "q"),
             ".k_proj": (".qkv", "k"),
@@ -295,7 +295,7 @@ class BlipVisionModel(nn.Module, SupportsQuant):
             self.post_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         else:
             self.post_layernorm = None
-            self.hf_to_aphrodite_mapper = self.hf_to_aphrodite_mapper | WeightsMapper(
+            self.hf_to_sonar_mapper = self.hf_to_sonar_mapper | WeightsMapper(
                 orig_to_new_prefix={"post_layernorm.": None}
             )
 
@@ -318,4 +318,4 @@ class BlipVisionModel(nn.Module, SupportsQuant):
                     continue
                 yield name, weight
 
-        return loader.load_weights(_filter(weights), mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(_filter(weights), mapper=self.hf_to_sonar_mapper)

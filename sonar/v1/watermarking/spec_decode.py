@@ -3,19 +3,19 @@
 
 import torch
 
-from aphrodite.config.watermarking import WatermarkConfig, WatermarkContextScope
-from aphrodite.v1.watermarking.factory import create_watermarker
-from aphrodite.v1.watermarking.gumbel import GumbelWatermarker
-from aphrodite.v1.watermarking.prfs import PhiloxPRF
-from aphrodite.v1.watermarking.watermarker import (
+from sonar.config.watermarking import WatermarkConfig, WatermarkContextScope
+from sonar.v1.watermarking.factory import create_watermarker
+from sonar.v1.watermarking.gumbel import GumbelWatermarker
+from sonar.v1.watermarking.prfs import PhiloxPRF
+from sonar.v1.watermarking.watermarker import (
     DraftContextState,
     RandomSampler,
     SupportsSpeculativeDecoding,
     Watermarker,
 )
-from aphrodite.v1.worker.gpu.sample.watermark import draft_watermarking_mask
-from aphrodite.v1.worker.gpu.spec_decode.draft_logits import DraftLogitsCache
-from aphrodite.v1.worker.gpu.spec_decode.rejection_sampler_utils import rejection_sample
+from sonar.v1.worker.gpu.sample.watermark import draft_watermarking_mask
+from sonar.v1.worker.gpu.spec_decode.draft_logits import DraftLogitsCache
+from sonar.v1.worker.gpu.spec_decode.rejection_sampler_utils import rejection_sample
 
 
 class DraftWatermarker:

@@ -21,7 +21,7 @@ from flydsl.expr import rocdl as _rocdl
 from flydsl.expr.typing import T
 from flydsl.expr.typing import Vector as Vec
 
-from aphrodite.models.minimax_m3.amd.ops.flydsl_utils import (
+from sonar.models.minimax_m3.amd.ops.flydsl_utils import (
     as_f32,
     bits,
     dequant8,

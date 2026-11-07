@@ -5,23 +5,23 @@ from typing import Any
 import torch
 import torch.nn as nn
 
-from aphrodite.config import AphroditeConfig, get_layers_from_aphrodite_config
-from aphrodite.config.compilation import CUDAGraphMode
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.utils.torch_utils import PIN_MEMORY, STR_DTYPE_TO_TORCH_DTYPE
-from aphrodite.v1.attention.backend import (
+from sonar.config import SonarConfig, get_layers_from_sonar_config
+from sonar.config.compilation import CUDAGraphMode
+from sonar.model_executor.layers.attention import Attention
+from sonar.utils.torch_utils import PIN_MEMORY, STR_DTYPE_TO_TORCH_DTYPE
+from sonar.v1.attention.backend import (
     AttentionCGSupport,
     AttentionType,
     CommonAttentionMetadata,
 )
-from aphrodite.v1.core.sched.output import NewRequestData
-from aphrodite.v1.kv_cache_interface import EncoderOnlyAttentionSpec, KVCacheConfig
-from aphrodite.v1.worker.gpu.input_batch import InputBatch
-from aphrodite.v1.worker.gpu.mm.encoder_cache import EncoderCache
-from aphrodite.v1.worker.gpu.model_states.default import DefaultModelState
-from aphrodite.v1.worker.gpu.model_states.interface import ModelSpecificAttnMetadata
-from aphrodite.v1.worker.gpu.states import RequestState
-from aphrodite.v1.worker.utils import AttentionGroup
+from sonar.v1.core.sched.output import NewRequestData
+from sonar.v1.kv_cache_interface import EncoderOnlyAttentionSpec, KVCacheConfig
+from sonar.v1.worker.gpu.input_batch import InputBatch
+from sonar.v1.worker.gpu.mm.encoder_cache import EncoderCache
+from sonar.v1.worker.gpu.model_states.default import DefaultModelState
+from sonar.v1.worker.gpu.model_states.interface import ModelSpecificAttnMetadata
+from sonar.v1.worker.gpu.states import RequestState
+from sonar.v1.worker.utils import AttentionGroup
 
 
 class EncoderOnlyModelState(DefaultModelState):
@@ -40,14 +40,14 @@ class EncoderOnlyModelState(DefaultModelState):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         model: nn.Module,
         encoder_cache: EncoderCache | None,
         device: torch.device,
     ):
-        super().__init__(aphrodite_config, model, encoder_cache, device)
+        super().__init__(sonar_config, model, encoder_cache, device)
 
-        cache_config = aphrodite_config.cache_config
+        cache_config = sonar_config.cache_config
         if cache_config.cache_dtype == "auto":
             kv_cache_dtype = self.dtype
         else:
@@ -56,7 +56,7 @@ class EncoderOnlyModelState(DefaultModelState):
         # Build an attention group (and its non-causal metadata builder) for the
         # encoder-only layers, grouped by backend + query/KV head config. Models
         # are typically uniform, yielding a single group.
-        attn_layers = get_layers_from_aphrodite_config(aphrodite_config, Attention)
+        attn_layers = get_layers_from_sonar_config(sonar_config, Attention)
         groups: dict[tuple[tuple[str, str], int, int, int], AttentionGroup] = {}
         for name, layer in attn_layers.items():
             if layer.attn_type != AttentionType.ENCODER_ONLY:
@@ -86,7 +86,7 @@ class EncoderOnlyModelState(DefaultModelState):
 
         self.encoder_attn_groups = list(groups.values())
         for group in self.encoder_attn_groups:
-            group.create_metadata_builders(aphrodite_config, device)
+            group.create_metadata_builders(sonar_config, device)
 
         # Encoder attention reads neither the block table nor the slot mapping
         # (full varlen self-attention over the batch's q/k/v), but the metadata
@@ -144,7 +144,7 @@ class EncoderOnlyModelState(DefaultModelState):
         backend: str | None = None
         for group in self.encoder_attn_groups:
             builder = group.get_metadata_builder(0)
-            cg_support = builder.get_cudagraph_support(self.aphrodite_config, group.kv_cache_spec)
+            cg_support = builder.get_cudagraph_support(self.sonar_config, group.kv_cache_spec)
             if cg_support.value < support.value:
                 support = cg_support
                 backend = group.backend.__name__

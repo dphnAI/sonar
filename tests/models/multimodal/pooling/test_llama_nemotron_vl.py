@@ -17,20 +17,20 @@ import torch
 from PIL import Image
 from transformers import AutoModel, AutoModelForSequenceClassification, AutoProcessor
 
-from aphrodite.entrypoints.pooling.scoring.typing import ScoreMultiModalParam
-from aphrodite.model_executor.layers.fusion.mm_input_norm import FusedMMInputNorm
-from aphrodite.platforms import current_platform
-from aphrodite.renderers.chat_utils import (
+from sonar.entrypoints.pooling.scoring.typing import ScoreMultiModalParam
+from sonar.model_executor.layers.fusion.mm_input_norm import FusedMMInputNorm
+from sonar.platforms import current_platform
+from sonar.renderers.chat_utils import (
     ChatCompletionContentPartImageParam,
     ChatCompletionContentPartTextParam,
 )
-from aphrodite.transformers_utils.processors.nemotron_vl import (
+from sonar.transformers_utils.processors.nemotron_vl import (
     SIGLIP_MEAN,
     SIGLIP_STD,
     LlamaNemotronVLEmbedImageProcessor,
 )
 
-from ....conftest import IMAGE_ASSETS, AphroditeRunner, HfRunner, PromptImageInput
+from ....conftest import IMAGE_ASSETS, HfRunner, PromptImageInput, SonarRunner
 from ....utils import ROCM_ENGINE_KWARGS
 from ...utils import check_embeddings_close
 
@@ -57,7 +57,7 @@ HF_IMAGE_PROMPTS = IMAGE_ASSETS.prompts(
 MODELS = ["nvidia/llama-nemotron-embed-vl-1b-v2"]
 
 
-@pytest.mark.usefixtures("default_aphrodite_config")
+@pytest.mark.usefixtures("default_sonar_config")
 def test_device_normalization_matches_cpu_transform() -> None:
     device = current_platform.device_type
     image = Image.new("RGB", (48, 32), color=(12, 128, 240))
@@ -101,17 +101,17 @@ def test_device_normalization_rejects_partial_cpu_processing(do_rescale: bool, d
 
 def _run_test(
     hf_runner: type[HfRunner],
-    aphrodite_runner: type[AphroditeRunner],
+    sonar_runner: type[SonarRunner],
     input_cases: list[tuple[list[str], PromptImageInput]],
     model: str,
     *,
     dtype: str,
 ) -> None:
-    """Compare HF and Aphrodite embeddings for all input cases.
+    """Compare HF and Sonar embeddings for all input cases.
 
-    NOTE: Run Aphrodite first to avoid CUDA initialization issues with multiprocessing.
+    NOTE: Run Sonar first to avoid CUDA initialization issues with multiprocessing.
     """
-    with aphrodite_runner(
+    with sonar_runner(
         model,
         runner="pooling",
         dtype=dtype,
@@ -119,9 +119,9 @@ def _run_test(
         enforce_eager=True,
         trust_remote_code=True,
         **ROCM_ENGINE_KWARGS,
-    ) as aphrodite_model:
-        aphrodite_outputs_per_case = [
-            aphrodite_model.embed(input_texts, images=input_images) for input_texts, input_images in input_cases
+    ) as sonar_model:
+        sonar_outputs_per_case = [
+            sonar_model.embed(input_texts, images=input_images) for input_texts, input_images in input_cases
         ]
 
     with hf_runner(model, dtype=dtype, auto_cls=AutoModel) as hf_model:
@@ -148,12 +148,12 @@ def _run_test(
                     hf_outputs.append(embedding[0].tolist())
             hf_outputs_per_case.append(hf_outputs)
 
-    for hf_outputs, aphrodite_outputs in zip(hf_outputs_per_case, aphrodite_outputs_per_case):
+    for hf_outputs, sonar_outputs in zip(hf_outputs_per_case, sonar_outputs_per_case):
         check_embeddings_close(
             embeddings_0_lst=hf_outputs,
-            embeddings_1_lst=aphrodite_outputs,
+            embeddings_1_lst=sonar_outputs,
             name_0="hf",
-            name_1="aphrodite",
+            name_1="sonar",
         )
 
 
@@ -161,7 +161,7 @@ def _run_test(
 @pytest.mark.parametrize("dtype", ["half"])
 def test_models(
     hf_runner,
-    aphrodite_runner,
+    sonar_runner,
     image_assets,
     model: str,
     dtype: str,
@@ -176,7 +176,7 @@ def test_models(
 
     _run_test(
         hf_runner,
-        aphrodite_runner,
+        sonar_runner,
         input_cases,
         model,
         dtype=dtype,
@@ -244,25 +244,25 @@ def _run_hf_reranker(
             }
             with torch.inference_mode():
                 logits = hf_model.model(**batch_dict, return_dict=True).logits
-            # Aphrodite applies sigmoid activation to raw logits before returning scores.
+            # Sonar applies sigmoid activation to raw logits before returning scores.
             scores = torch.sigmoid(logits.squeeze(-1).float())
             scores_per_case.append(scores.detach().cpu().tolist())
 
     return scores_per_case
 
 
-def _run_aphrodite_reranker(
-    aphrodite_runner: type[AphroditeRunner],
+def _run_sonar_reranker(
+    sonar_runner: type[SonarRunner],
     model: str,
     dtype: str,
     input_cases: Sequence[RerankerCase],
 ) -> list[list[float]]:
-    """Run all Aphrodite reranker cases in one model lifecycle.
+    """Run all Sonar reranker cases in one model lifecycle.
 
     The checkpoint declares its score template in its Sentence Transformers
     config, so no chat template is passed.
     """
-    with aphrodite_runner(
+    with sonar_runner(
         model,
         runner="pooling",
         dtype=dtype,
@@ -270,7 +270,7 @@ def _run_aphrodite_reranker(
         enforce_eager=True,
         trust_remote_code=True,
         **ROCM_ENGINE_KWARGS,
-    ) as aphrodite_model:
+    ) as sonar_model:
         scores_per_case = []
         for query, docs in input_cases:
             has_images = any(img is not None for _, img in docs)
@@ -278,7 +278,7 @@ def _run_aphrodite_reranker(
             if not has_images:
                 queries = [query] * len(docs)
                 doc_texts = [doc_text for doc_text, _ in docs]
-                outputs = aphrodite_model.score(queries, doc_texts)
+                outputs = sonar_model.score(queries, doc_texts)
             else:
                 query_params = [
                     ScoreMultiModalParam(
@@ -310,7 +310,7 @@ def _run_aphrodite_reranker(
                         )
                     doc_params.append(ScoreMultiModalParam(content=content))
 
-                raw_outputs = aphrodite_model.llm.score(query_params, doc_params)
+                raw_outputs = sonar_model.llm.score(query_params, doc_params)
                 outputs = [output.outputs.score for output in raw_outputs]
 
             scores_per_case.append(outputs)
@@ -320,28 +320,28 @@ def _run_aphrodite_reranker(
 
 def _run_reranker_test(
     hf_runner: type[HfRunner],
-    aphrodite_runner: type[AphroditeRunner],
+    sonar_runner: type[SonarRunner],
     model: str,
     dtype: str,
     input_cases: Sequence[RerankerCase],
 ) -> None:
-    """Compare HF and Aphrodite reranker scores for all input cases.
+    """Compare HF and Sonar reranker scores for all input cases.
 
-    NOTE: Run Aphrodite first to avoid CUDA initialization issues with multiprocessing.
+    NOTE: Run Sonar first to avoid CUDA initialization issues with multiprocessing.
     """
-    aphrodite_scores_per_case = _run_aphrodite_reranker(aphrodite_runner, model, dtype, input_cases)
+    sonar_scores_per_case = _run_sonar_reranker(sonar_runner, model, dtype, input_cases)
     hf_scores_per_case = _run_hf_reranker(hf_runner, model, dtype, input_cases)
 
-    # ROCm has slightly higher variance because Aphrodite and HF use different
+    # ROCm has slightly higher variance because Sonar and HF use different
     # attention backends.
     rel_tol = 0.022 if current_platform.is_rocm() else 0.02
-    for hf_scores, aphrodite_scores in zip(hf_scores_per_case, aphrodite_scores_per_case):
-        assert len(hf_scores) == len(aphrodite_scores), (
-            f"Output length mismatch: HF={len(hf_scores)}, Aphrodite={len(aphrodite_scores)}"
+    for hf_scores, sonar_scores in zip(hf_scores_per_case, sonar_scores_per_case):
+        assert len(hf_scores) == len(sonar_scores), (
+            f"Output length mismatch: HF={len(hf_scores)}, Sonar={len(sonar_scores)}"
         )
-        for i, (hf_score, aphrodite_score) in enumerate(zip(hf_scores, aphrodite_scores)):
-            assert hf_score == pytest.approx(aphrodite_score, rel=rel_tol), (
-                f"Score mismatch at index {i}: HF={hf_score:.4f}, Aphrodite={aphrodite_score:.4f}"
+        for i, (hf_score, sonar_score) in enumerate(zip(hf_scores, sonar_scores)):
+            assert hf_score == pytest.approx(sonar_score, rel=rel_tol), (
+                f"Score mismatch at index {i}: HF={hf_score:.4f}, Sonar={sonar_score:.4f}"
             )
 
 
@@ -349,7 +349,7 @@ def _run_reranker_test(
 @pytest.mark.parametrize("dtype", ["half"])
 def test_reranker(
     hf_runner,
-    aphrodite_runner,
+    sonar_runner,
     image_assets,
     model: str,
     dtype: str,
@@ -361,4 +361,4 @@ def test_reranker(
         (RERANKER_TEXT_QUERY, text_docs),
         (RERANKER_IMAGE_QUERY, image_docs),
     ]
-    _run_reranker_test(hf_runner, aphrodite_runner, model, dtype, input_cases)
+    _run_reranker_test(hf_runner, sonar_runner, model, dtype, input_cases)

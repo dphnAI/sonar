@@ -7,9 +7,9 @@ from __future__ import annotations
 from types import SimpleNamespace
 from typing import Any
 
-from aphrodite.parser.cohere_command import (
-    _melody_citations_to_aphrodite,
-    _melody_sources_to_aphrodite,
+from sonar.parser.cohere_command import (
+    _melody_citations_to_sonar,
+    _melody_sources_to_sonar,
 )
 
 from .utils import make_parser, stream_parser
@@ -17,7 +17,7 @@ from .utils import make_parser, stream_parser
 
 class TestMelodySourceResolution:
     """Pin the parser-side source resolution (see
-    ``_melody_sources_to_aphrodite``). The parser receives melody's numeric
+    ``_melody_sources_to_sonar``). The parser receives melody's numeric
     ``(tool_call_index, tool_result_indices)`` addressing and resolves
     it against a ``position_to_source`` map handed in by
     ``CohereServingChatV2._apply_cohere_template_kwargs`` -- the same
@@ -29,27 +29,27 @@ class TestMelodySourceResolution:
         return SimpleNamespace(tool_call_index=bucket, tool_result_indices=indices)
 
     def test_multi_index_source_fans_out(self):
-        from aphrodite.entrypoints.cohere.cohere_chat_message import CitationSource
+        from sonar.entrypoints.cohere.cohere_chat_message import CitationSource
 
         position_map: dict[tuple[int, int], CitationSource] = {
             (0, 0): CitationSource(type="document", id="d0", document={"id": "d0"}),
             (0, 1): CitationSource(type="document", id="d1", document={"id": "d1"}),
         }
         raw = [self._fake_melody_source(0, [0, 1])]
-        out = _melody_sources_to_aphrodite(raw, position_map)
+        out = _melody_sources_to_sonar(raw, position_map)
         assert [s.id for s in out] == ["d0", "d1"]
         # Verify type / payload were plumbed through, not just the id.
         assert out[0].type == "document"
         assert out[0].document == {"id": "d0"}
 
     def test_unresolvable_position_skipped(self):
-        from aphrodite.entrypoints.cohere.cohere_chat_message import CitationSource
+        from sonar.entrypoints.cohere.cohere_chat_message import CitationSource
 
         position_map: dict[tuple[int, int], CitationSource] = {
             (0, 0): CitationSource(type="document", id="d0"),
         }
         raw = [self._fake_melody_source(9, [0])]
-        assert _melody_sources_to_aphrodite(raw, position_map) == []
+        assert _melody_sources_to_sonar(raw, position_map) == []
 
     def test_missing_position_map_drops_all_sources(self):
         # A parser instance without a position map (parser wired
@@ -57,10 +57,10 @@ class TestMelodySourceResolution:
         # so every source is dropped. Callers downstream will see the
         # citation with empty ``sources`` and drop it entirely.
         raw = [self._fake_melody_source(0, [0])]
-        assert _melody_sources_to_aphrodite(raw, None) == []
+        assert _melody_sources_to_sonar(raw, None) == []
 
     def test_citations_pass_through_is_thinking_tag(self):
-        from aphrodite.entrypoints.cohere.cohere_chat_message import CitationSource
+        from sonar.entrypoints.cohere.cohere_chat_message import CitationSource
 
         position_map: dict[tuple[int, int], CitationSource] = {
             (0, 0): CitationSource(type="document", id="d0"),
@@ -74,7 +74,7 @@ class TestMelodySourceResolution:
                 sources=[self._fake_melody_source(0, [0])],
             )
         ]
-        out = _melody_citations_to_aphrodite(raw, position_map)
+        out = _melody_citations_to_sonar(raw, position_map)
         assert out is not None
         assert out[0].type == "THINKING_CONTENT"
         assert out[0].sources[0].id == "d0"
@@ -100,8 +100,8 @@ class TestParserStreamingEndToEnd:
     )
 
     def test_full_wire_stream_shape(self, tokenizer, request_obj):
-        from aphrodite.entrypoints.cohere.cohere_chat_message import CitationSource
-        from aphrodite.renderers.cohere import POSITION_TO_SOURCE_KEY
+        from sonar.entrypoints.cohere.cohere_chat_message import CitationSource
+        from sonar.renderers.cohere import POSITION_TO_SOURCE_KEY
 
         # Mimic what ``CohereServingChatV2._apply_cohere_template_kwargs``
         # installs on a request whose tool_call_index=0 tool result at

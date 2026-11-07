@@ -14,13 +14,13 @@ import pytest
 import torch
 from PIL import Image
 
-from aphrodite.entrypoints.pooling.scoring.typing import ScoreMultiModalParam
-from aphrodite.renderers.chat_utils import (
+from sonar.entrypoints.pooling.scoring.typing import ScoreMultiModalParam
+from sonar.renderers.chat_utils import (
     ChatCompletionContentPartImageParam,
     ChatCompletionContentPartTextParam,
 )
 
-from ....conftest import AphroditeRunner
+from ....conftest import SonarRunner
 
 MODELS = [
     "TomoroAI/tomoro-colqwen3-embed-4b",
@@ -51,17 +51,17 @@ GPU_MEMORY_UTILIZATION = 0.8
 
 
 @pytest.fixture(scope="module", params=MODELS)
-def colqwen3_model(request, aphrodite_runner):
+def colqwen3_model(request, sonar_runner):
     model = request.param
-    with aphrodite_runner(
+    with sonar_runner(
         model,
         runner="pooling",
         dtype=DTYPE,
         max_model_len=4096,
         enforce_eager=True,
         gpu_memory_utilization=GPU_MEMORY_UTILIZATION,
-    ) as aphrodite_model:
-        yield model, aphrodite_model
+    ) as sonar_model:
+        yield model, sonar_model
 
 
 def _make_base64_image(width: int = 64, height: int = 64, color: tuple[int, int, int] = (255, 0, 0)) -> str:
@@ -99,11 +99,11 @@ def _make_text_mm_param(text: str) -> ScoreMultiModalParam:
 
 
 def _run_token_embed_test(
-    aphrodite_model: AphroditeRunner,
+    sonar_model: SonarRunner,
     model: str,
 ) -> None:
     """Verify per-token embedding shape and L2 normalization."""
-    outputs = aphrodite_model.token_embed([TEXT_QUERIES[0]])
+    outputs = sonar_model.token_embed([TEXT_QUERIES[0]])
 
     assert len(outputs) == 1
     emb = torch.tensor(outputs[0])
@@ -123,27 +123,27 @@ def _run_token_embed_test(
 
 
 def _run_late_interaction_test(
-    aphrodite_model: AphroditeRunner,
+    sonar_model: SonarRunner,
 ) -> None:
     """Verify MaxSim scoring matches manual computation."""
-    from aphrodite.entrypoints.pooling.scoring.utils import compute_maxsim_score
+    from sonar.entrypoints.pooling.scoring.utils import compute_maxsim_score
 
-    q_outputs = aphrodite_model.token_embed([TEXT_QUERIES[0]])
-    d_outputs = aphrodite_model.token_embed([TEXT_DOCUMENTS[0]])
+    q_outputs = sonar_model.token_embed([TEXT_QUERIES[0]])
+    d_outputs = sonar_model.token_embed([TEXT_DOCUMENTS[0]])
 
     q_emb = torch.tensor(q_outputs[0])
     d_emb = torch.tensor(d_outputs[0])
 
     manual_score = compute_maxsim_score(q_emb, d_emb).item()
 
-    aphrodite_scores = aphrodite_model.score(TEXT_QUERIES[0], TEXT_DOCUMENTS[0])
+    sonar_scores = sonar_model.score(TEXT_QUERIES[0], TEXT_DOCUMENTS[0])
 
-    assert len(aphrodite_scores) == 1
-    assert aphrodite_scores[0] == pytest.approx(manual_score, rel=0.01)
+    assert len(sonar_scores) == 1
+    assert sonar_scores[0] == pytest.approx(manual_score, rel=0.01)
 
 
 def _run_relevance_test(
-    aphrodite_model: AphroditeRunner,
+    sonar_model: SonarRunner,
 ) -> None:
     """Verify that relevant documents score higher than irrelevant ones."""
     query = "What is machine learning?"
@@ -153,7 +153,7 @@ def _run_relevance_test(
         "Deep learning uses neural networks for complex tasks.",
     ]
 
-    scores = aphrodite_model.score(query, documents)
+    scores = sonar_model.score(query, documents)
 
     assert len(scores) == 3
     assert scores[0] > scores[1], "ML doc should score higher than weather doc"
@@ -161,25 +161,25 @@ def _run_relevance_test(
 
 
 def test_colqwen3_token_embed(colqwen3_model) -> None:
-    model, aphrodite_model = colqwen3_model
-    _run_token_embed_test(aphrodite_model, model)
+    model, sonar_model = colqwen3_model
+    _run_token_embed_test(sonar_model, model)
 
 
 def test_colqwen3_late_interaction_scoring(colqwen3_model) -> None:
-    _, aphrodite_model = colqwen3_model
-    _run_late_interaction_test(aphrodite_model)
+    _, sonar_model = colqwen3_model
+    _run_late_interaction_test(sonar_model)
 
 
 def test_colqwen3_relevance_ordering(colqwen3_model) -> None:
-    _, aphrodite_model = colqwen3_model
-    _run_relevance_test(aphrodite_model)
+    _, sonar_model = colqwen3_model
+    _run_relevance_test(sonar_model)
 
 
 # ── Multimodal scoring tests ────────────────────────────────
 
 
 def _run_multimodal_text_query_image_docs_test(
-    aphrodite_model: AphroditeRunner,
+    sonar_model: SonarRunner,
 ) -> None:
     """Score a text query against image documents via the multimodal path.
 
@@ -195,7 +195,7 @@ def _run_multimodal_text_query_image_docs_test(
         _make_image_mm_param(blue_image),
     ]
 
-    scores = aphrodite_model.llm.score(query, image_docs)
+    scores = sonar_model.llm.score(query, image_docs)
 
     assert len(scores) == 2
     for s in scores:
@@ -203,7 +203,7 @@ def _run_multimodal_text_query_image_docs_test(
 
 
 def _run_multimodal_mixed_docs_test(
-    aphrodite_model: AphroditeRunner,
+    sonar_model: SonarRunner,
 ) -> None:
     """Score a text query against a mix of text and image documents.
 
@@ -219,7 +219,7 @@ def _run_multimodal_mixed_docs_test(
         _make_image_mm_param(red_image),
     ]
 
-    scores = aphrodite_model.llm.score(query, documents)
+    scores = sonar_model.llm.score(query, documents)
 
     assert len(scores) == 2
     for s in scores:
@@ -229,7 +229,7 @@ def _run_multimodal_mixed_docs_test(
 
 
 def _run_multimodal_image_query_text_docs_test(
-    aphrodite_model: AphroditeRunner,
+    sonar_model: SonarRunner,
 ) -> None:
     """Score an image query against text documents.
 
@@ -244,7 +244,7 @@ def _run_multimodal_image_query_text_docs_test(
         "The weather forecast shows rain tomorrow.",
     ]
 
-    scores = aphrodite_model.llm.score(image_query, documents)
+    scores = sonar_model.llm.score(image_query, documents)
 
     assert len(scores) == 2
     for s in scores:
@@ -252,15 +252,15 @@ def _run_multimodal_image_query_text_docs_test(
 
 
 def test_colqwen3_multimodal_text_query_image_docs(colqwen3_model) -> None:
-    _, aphrodite_model = colqwen3_model
-    _run_multimodal_text_query_image_docs_test(aphrodite_model)
+    _, sonar_model = colqwen3_model
+    _run_multimodal_text_query_image_docs_test(sonar_model)
 
 
 def test_colqwen3_multimodal_mixed_docs(colqwen3_model) -> None:
-    _, aphrodite_model = colqwen3_model
-    _run_multimodal_mixed_docs_test(aphrodite_model)
+    _, sonar_model = colqwen3_model
+    _run_multimodal_mixed_docs_test(sonar_model)
 
 
 def test_colqwen3_multimodal_image_query_text_docs(colqwen3_model) -> None:
-    _, aphrodite_model = colqwen3_model
-    _run_multimodal_image_query_text_docs_test(aphrodite_model)
+    _, sonar_model = colqwen3_model
+    _run_multimodal_image_query_text_docs_test(sonar_model)

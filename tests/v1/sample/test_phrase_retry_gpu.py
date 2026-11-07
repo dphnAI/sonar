@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.v1.phrase_guard.v2 import RetryMask
+from sonar.v1.phrase_guard.v2 import RetryMask
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is required")
@@ -32,12 +32,12 @@ def test_retry_mask_only_changes_checkpoint_rows_and_clears_reused_slots():
 @pytest.mark.parametrize("guard_first", [False, True])
 @pytest.mark.parametrize("greedy", [False, True])
 def test_v1_retry_in_mixed_speculative_batch(guard_first, greedy):
-    from aphrodite.sampling_params import SamplingParams
-    from aphrodite.v1.phrase_guard.processor import RETRY_KEY, PhraseRetryProcessor
-    from aphrodite.v1.sample.logits_processor import BatchUpdate, LogitsProcessors
-    from aphrodite.v1.sample.rejection_sampler import RejectionSampler
-    from aphrodite.v1.sample.sampler import Sampler
-    from aphrodite.v1.spec_decode.metadata import SpecDecodeMetadata
+    from sonar.sampling_params import SamplingParams
+    from sonar.v1.phrase_guard.processor import RETRY_KEY, PhraseRetryProcessor
+    from sonar.v1.sample.logits_processor import BatchUpdate, LogitsProcessors
+    from sonar.v1.sample.rejection_sampler import RejectionSampler
+    from sonar.v1.sample.sampler import Sampler
+    from sonar.v1.spec_decode.metadata import SpecDecodeMetadata
     from tests.v1.sample.test_rejection_sampler import create_sampling_metadata
 
     device = torch.device("cuda")

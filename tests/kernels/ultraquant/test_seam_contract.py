@@ -12,9 +12,9 @@ import ast
 import inspect
 import textwrap
 
-from aphrodite.v1.attention.backends import ultraquant_attn
-from aphrodite.v1.attention.backends.turboquant_attn import TurboQuantAttentionImpl
-from aphrodite.v1.attention.backends.ultraquant_attn import UltraQuantAttentionImpl
+from sonar.v1.attention.backends import ultraquant_attn
+from sonar.v1.attention.backends.turboquant_attn import TurboQuantAttentionImpl
+from sonar.v1.attention.backends.ultraquant_attn import UltraQuantAttentionImpl
 
 _SEAMS = ("_ensure_on_device", "_store_kv", "_decode_attention", "_prefill_attention")
 

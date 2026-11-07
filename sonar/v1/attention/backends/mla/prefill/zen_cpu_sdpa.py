@@ -15,8 +15,8 @@ gates this backend once at selection time rather than per attention call.
 
 import torch
 
-from aphrodite.model_executor.kernels.linear.zentorch_utils import has_zentorch_op
-from aphrodite.v1.attention.backends.mla.prefill.cpu_sdpa import CPUSDPAMLAPrefillBackend
+from sonar.model_executor.kernels.linear.zentorch_utils import has_zentorch_op
+from sonar.v1.attention.backends.mla.prefill.cpu_sdpa import CPUSDPAMLAPrefillBackend
 
 
 class ZenCPUSDPAMLAPrefillBackend(CPUSDPAMLAPrefillBackend):

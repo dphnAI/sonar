@@ -7,8 +7,8 @@ from typing import ClassVar
 
 import torch
 
-from aphrodite.triton_utils import tl, triton
-from aphrodite.v1.attention.backend import (
+from sonar.triton_utils import tl, triton
+from sonar.v1.attention.backend import (
     AttentionBackend,
     AttentionCGSupport,
     AttentionMetadata,
@@ -16,7 +16,7 @@ from aphrodite.v1.attention.backend import (
     CommonAttentionMetadata,
     MultipleOf,
 )
-from aphrodite.v1.kv_cache_interface import CircularBufferSpec, KVCacheLayout
+from sonar.v1.kv_cache_interface import CircularBufferSpec, KVCacheLayout
 
 MAIN_BLOCK_SIZE = 256
 SWA_BLOCK_SIZE = 128
@@ -177,11 +177,11 @@ class DeepseekV41B12xMetadata(AttentionMetadata):
 class DeepseekV41B12xMetadataBuilder(AttentionMetadataBuilder[DeepseekV41B12xMetadata]):
     _cudagraph_support: ClassVar[AttentionCGSupport] = AttentionCGSupport.ALWAYS
 
-    def __init__(self, kv_cache_spec, layer_names, aphrodite_config, device):
-        super().__init__(kv_cache_spec, layer_names, aphrodite_config, device)
+    def __init__(self, kv_cache_spec, layer_names, sonar_config, device):
+        super().__init__(kv_cache_spec, layer_names, sonar_config, device)
         self._init_reorder_batch_threshold(1, supports_spec_as_decode=True)
-        self.tokens = aphrodite_config.scheduler_config.max_num_batched_tokens
-        self.requests = aphrodite_config.scheduler_config.max_num_seqs
+        self.tokens = sonar_config.scheduler_config.max_num_batched_tokens
+        self.requests = sonar_config.scheduler_config.max_num_seqs
         self.ratio = int(kv_cache_spec.tokens_per_state)
         self.page = int(kv_cache_spec.num_states)
         self.circular = isinstance(kv_cache_spec, CircularBufferSpec)

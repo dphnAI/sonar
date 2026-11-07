@@ -5,9 +5,9 @@ from dataclasses import dataclass
 import numpy as np
 import torch
 
-from aphrodite.pooling_params import PoolingParams
-from aphrodite.tasks import PoolingTask
-from aphrodite.utils.torch_utils import PIN_MEMORY
+from sonar.pooling_params import PoolingParams
+from sonar.tasks import PoolingTask
+from sonar.utils.torch_utils import PIN_MEMORY
 
 
 @dataclass

@@ -10,23 +10,23 @@ CUDA (SM >= 7.5), ROCm, or XPU — not just gfx950.
 import pytest
 import torch
 
-from aphrodite.config.kernel import MoEBackend
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.config.kernel import MoEBackend
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEParallelConfig,
     RoutingMethodType,
 )
-from aphrodite.model_executor.layers.fused_moe.oracle.int8 import (
+from sonar.model_executor.layers.fused_moe.oracle.int8 import (
     Int8MoeBackend,
     select_int8_moe_backend,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     kInt8DynamicTensorSym,
     kInt8DynamicTokenSym,
     kInt8StaticChannelSym,
     kInt8StaticTensorSym,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 # The Triton int8_w8a8 fused-MoE kernel is available on CUDA (Turing+), on
 # ROCm CDNA GPUs and on XPU. Gate on that rather than on a specific arch.
@@ -46,7 +46,7 @@ DEVICE = current_platform.device_type
 
 
 def _make_int8_moe_config(moe_backend: MoEBackend = "auto") -> FusedMoEConfig:
-    from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
+    from sonar.model_executor.layers.fused_moe.activation import MoEActivation
 
     return FusedMoEConfig(
         num_experts=8,
@@ -97,7 +97,7 @@ def test_scaled_int8_quant_is_available_on_xpu():
     per-tensor scheme be enabled here alongside CUDA and ROCm; pin it so a
     future change cannot silently remove that branch.
     """
-    from aphrodite import _custom_ops as ops
+    from sonar import _custom_ops as ops
 
     x = torch.randn(4, 16, device=DEVICE, dtype=torch.bfloat16)
     scale = torch.full((1,), 0.05, device=DEVICE, dtype=torch.float32)

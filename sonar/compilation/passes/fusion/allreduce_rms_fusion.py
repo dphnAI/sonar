@@ -11,56 +11,56 @@ import torch.fx as fx
 from torch._higher_order_ops.auto_functionalize import auto_functionalized
 from torch._inductor.pattern_matcher import PatternMatcherPass
 
-import aphrodite.ir.ops
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.compilation.passes.fusion.rms_quant_fusion import (
+import sonar.ir.ops
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.compilation.passes.fusion.rms_quant_fusion import (
     _rms_input_weight_dtype_match,
 )
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.utils import Range
-from aphrodite.distributed import get_tp_group, tensor_model_parallel_all_reduce
-from aphrodite.distributed.parallel_state import (
+from sonar.config import SonarConfig
+from sonar.config.utils import Range
+from sonar.distributed import get_tp_group, tensor_model_parallel_all_reduce
+from sonar.distributed.parallel_state import (
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
 )
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     GroupShape,
     QuantKey,
     ScaleDesc,
     kFp8StaticTensorSym,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import (
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import (
     direct_register_custom_op,
 )
 
-from ..aphrodite_inductor_pass import (
-    AphroditeFusionPatternMatcherPass,
-    AphroditeInductorPass,
-    AphroditePatternMatcherPass,
-    AphroditePatternReplacement,
-)
 from ..inductor_pass import enable_fake_mode
+from ..sonar_inductor_pass import (
+    SonarFusionPatternMatcherPass,
+    SonarInductorPass,
+    SonarPatternMatcherPass,
+    SonarPatternReplacement,
+)
 from .matcher_utils import MatcherQuantFP8
 
 FP8_DTYPE = current_platform.fp8_dtype()
 
-_IR_RMS_NORM_OP = torch.ops.aphrodite_ir.rms_norm.default
-_IR_FUSED_ADD_RMS_NORM_OP = torch.ops.aphrodite_ir.fused_add_rms_norm.default
+_IR_RMS_NORM_OP = torch.ops.sonar_ir.rms_norm.default
+_IR_FUSED_ADD_RMS_NORM_OP = torch.ops.sonar_ir.fused_add_rms_norm.default
 
 
 def _view_nvfp4_scale_out_for_flashinfer(
     scale_out: torch.Tensor,
 ) -> torch.Tensor:
-    """View Aphrodite's packed NVFP4 scale buffer as FP8 for FlashInfer."""
+    """View Sonar's packed NVFP4 scale buffer as FP8 for FlashInfer."""
     return torch.ops.aten.view.dtype(scale_out, FP8_DTYPE)
 
 
 def _view_flashinfer_nvfp4_scale_out_as_int32(
     scale_out: torch.Tensor,
 ) -> torch.Tensor:
-    """View FlashInfer's NVFP4 scale buffer back as Aphrodite's int32 format."""
+    """View FlashInfer's NVFP4 scale buffer back as Sonar's int32 format."""
     return torch.ops.aten.view.dtype(scale_out, torch.int32)
 
 
@@ -163,7 +163,7 @@ def _select_flashinfer_allreduce_use_oneshot(
 ) -> bool | None:
     if workspace_backend == "mnnvl":
         # FlashInfer sizes MNNVL workspaces around its own AUTO strategy.
-        # Forcing Aphrodite's per-rank threshold can request one-shot for tensors
+        # Forcing Sonar's per-rank threshold can request one-shot for tensors
         # larger than the MNNVL one-shot workspace.
         return None
 
@@ -175,7 +175,7 @@ def _select_flashinfer_allreduce_use_oneshot(
 
 
 if flashinfer_comm is not None:
-    from aphrodite.distributed.device_communicators.flashinfer_all_reduce import (
+    from sonar.distributed.device_communicators.flashinfer_all_reduce import (
         destroy_fi_ar_workspace,
         get_fi_ar_quant_workspace,
         get_fi_ar_workspace,
@@ -252,7 +252,7 @@ if flashinfer_comm is not None:
             residual_out = allreduce_in
 
         layout_code = None
-        # Aphrodite quant patterns use swizzled scale-factor layout. Non-quant
+        # Sonar quant patterns use swizzled scale-factor layout. Non-quant
         # patterns ignore layout_code.
         if workspace.backend in ("trtllm", "mnnvl"):
             layout_code = flashinfer_comm.QuantizationSFLayout.SWIZZLED_128x4
@@ -298,7 +298,7 @@ if flashinfer_comm is not None:
             "scale_out",
         ],
     )
-    flashinfer_trtllm_fused_allreduce_norm = torch.ops.aphrodite.flashinfer_trtllm_fused_allreduce_norm.default
+    flashinfer_trtllm_fused_allreduce_norm = torch.ops.sonar.flashinfer_trtllm_fused_allreduce_norm.default
 
 
 class FlashInferFusedAllReduceParams:
@@ -362,7 +362,7 @@ class AllReduceRMSNormPattern(BasePattern):
     def register(self, pm_pass: PatternMatcherPass) -> None:
         def pattern(input: torch.Tensor, weight: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
             allreduce_output = tensor_model_parallel_all_reduce(input)
-            rms = aphrodite.ir.ops.rms_norm(allreduce_output, weight, self.epsilon)
+            rms = sonar.ir.ops.rms_norm(allreduce_output, weight, self.epsilon)
 
             return rms, allreduce_output
 
@@ -425,7 +425,7 @@ class AllReduceFusedAddRMSNormPattern(BasePattern):
             residual: torch.Tensor, input: torch.Tensor, weight: torch.Tensor
         ) -> tuple[torch.Tensor, torch.Tensor]:
             allreduce_output = tensor_model_parallel_all_reduce(input)
-            rms, residual = aphrodite.ir.ops.fused_add_rms_norm(allreduce_output, residual, weight, self.epsilon)
+            rms, residual = sonar.ir.ops.fused_add_rms_norm(allreduce_output, residual, weight, self.epsilon)
             return rms, residual
 
         def replacement(
@@ -491,7 +491,7 @@ class AllReduceGemmaRMSNormPattern(BasePattern):
     def register(self, pm_pass: PatternMatcherPass) -> None:
         def pattern(input: torch.Tensor, weight: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
             allreduce_output = tensor_model_parallel_all_reduce(input)
-            rms = aphrodite.ir.ops.rms_norm(allreduce_output, weight.float() + 1.0, self.epsilon)
+            rms = sonar.ir.ops.rms_norm(allreduce_output, weight.float() + 1.0, self.epsilon)
             return rms, allreduce_output
 
         def replacement(input: torch.Tensor, weight: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
@@ -547,7 +547,7 @@ class AllReduceFusedAddGemmaRMSNormPattern(BasePattern):
             residual: torch.Tensor, input: torch.Tensor, weight: torch.Tensor
         ) -> tuple[torch.Tensor, torch.Tensor]:
             allreduce_output = tensor_model_parallel_all_reduce(input)
-            rms, residual = aphrodite.ir.ops.fused_add_rms_norm(
+            rms, residual = sonar.ir.ops.fused_add_rms_norm(
                 allreduce_output, residual, weight.float() + 1.0, self.epsilon
             )
             return rms, residual
@@ -624,7 +624,7 @@ class AllReduceFusedRMSNormStaticQuantFP8Pattern(BasePattern):
             scale: torch.Tensor,
         ) -> tuple[torch.Tensor, torch.Tensor]:
             all_reduce = tensor_model_parallel_all_reduce(input)
-            rms = aphrodite.ir.ops.rms_norm(all_reduce, weight, self.epsilon)
+            rms = sonar.ir.ops.rms_norm(all_reduce, weight, self.epsilon)
             quant, _ = self.quant_matcher(rms, scale)
             return quant, all_reduce
 
@@ -701,7 +701,7 @@ class AllReduceFusedAddRMSNormStaticQuantFP8Pattern(BasePattern):
             scale: torch.Tensor,
         ) -> tuple[torch.Tensor, torch.Tensor]:
             allreduce_output = tensor_model_parallel_all_reduce(input)
-            rms, res = aphrodite.ir.ops.fused_add_rms_norm(allreduce_output, residual, weight, self.epsilon)
+            rms, res = sonar.ir.ops.fused_add_rms_norm(allreduce_output, residual, weight, self.epsilon)
             quant, _ = self.quant_matcher(rms, scale)
 
             return quant, res
@@ -777,7 +777,7 @@ class AllReduceFusedRMSNormStaticQuantNVFP4Pattern(BasePattern):
             output_scale: torch.Tensor,
         ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
             all_reduce = tensor_model_parallel_all_reduce(input)
-            rms = aphrodite.ir.ops.rms_norm(all_reduce, weight, self.epsilon)
+            rms = sonar.ir.ops.rms_norm(all_reduce, weight, self.epsilon)
             quant_out_tuple = auto_functionalized(
                 STATIC_FP4_QUANT_OP,
                 input=rms,
@@ -879,7 +879,7 @@ class AllReduceFusedAddRMSNormStaticQuantNVFP4Pattern(BasePattern):
             input_global_scale: torch.Tensor,
         ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
             allreduce_output = tensor_model_parallel_all_reduce(input)
-            rms, residual = aphrodite.ir.ops.fused_add_rms_norm(allreduce_output, residual, weight, self.epsilon)
+            rms, residual = sonar.ir.ops.fused_add_rms_norm(allreduce_output, residual, weight, self.epsilon)
             quant_out_tuple = auto_functionalized(
                 STATIC_FP4_QUANT_OP,
                 input=rms,
@@ -933,14 +933,14 @@ class AllReduceFusedAddRMSNormStaticQuantNVFP4Pattern(BasePattern):
         )
 
 
-def _fused_ar_workspace_hidden_dim(config: AphroditeConfig) -> int:
+def _fused_ar_workspace_hidden_dim(config: SonarConfig) -> int:
     """Widest hidden size across the target and (optional) draft models.
 
     The FlashInfer allreduce+RMSNorm workspace is a process-global singleton
     created eagerly at pass construction and reused by every model. Under
     speculative decoding the draft shares it, so it must fit the larger of the
     two hidden sizes; a draft wider than the target otherwise overflows the
-    target-sized buffer (Aphrodite #52023).
+    target-sized buffer (Sonar #52023).
     """
     hidden_dim = config.model_config.get_hidden_size()
     spec = config.speculative_config
@@ -950,8 +950,8 @@ def _fused_ar_workspace_hidden_dim(config: AphroditeConfig) -> int:
     return hidden_dim
 
 
-class AllReduceFusionPass(AphroditePatternMatcherPass):
-    def __init__(self, config: AphroditeConfig) -> None:
+class AllReduceFusionPass(SonarPatternMatcherPass):
+    def __init__(self, config: SonarConfig) -> None:
         super().__init__(config)
         self.disabled = True
         self.tp_size = get_tensor_model_parallel_world_size()
@@ -1086,7 +1086,7 @@ class AllReduceFusionPass(AphroditePatternMatcherPass):
             return False
         return bool(compile_range.end <= self.max_token_num)
 
-    @AphroditeInductorPass.time_and_log
+    @SonarInductorPass.time_and_log
     def __call__(self, graph: fx.Graph) -> None:
         if self.disabled:
             logger.debug("AllReduceFusionPass disabled")
@@ -1102,8 +1102,8 @@ class AllReduceFusionPass(AphroditePatternMatcherPass):
             destroy_fi_ar_workspace()
 
 
-# TODO: make BasePattern to inherit from AphroditePatternReplacement
-class AiterAllreduceFusedRMSNormPattern(BasePattern, AphroditePatternReplacement):
+# TODO: make BasePattern to inherit from SonarPatternReplacement
+class AiterAllreduceFusedRMSNormPattern(BasePattern, SonarPatternReplacement):
     gemma_norm = False
 
     def __init__(
@@ -1126,7 +1126,7 @@ class AiterAllreduceFusedRMSNormPattern(BasePattern, AphroditePatternReplacement
         def _pattern(input: torch.Tensor, weight: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
             allreduce_output = tensor_model_parallel_all_reduce(input)
             norm_weight = weight.float() + 1.0 if self.gemma_norm else weight
-            rms = aphrodite.ir.ops.rms_norm(allreduce_output, norm_weight, self.epsilon)
+            rms = sonar.ir.ops.rms_norm(allreduce_output, norm_weight, self.epsilon)
 
             return rms, allreduce_output
 
@@ -1154,7 +1154,7 @@ class AiterAllreduceFusedGemmaRMSNormPattern(AiterAllreduceFusedRMSNormPattern):
     gemma_norm = True
 
 
-class AiterAllreduceFusedAddRMSNormPattern(BasePattern, AphroditePatternReplacement):
+class AiterAllreduceFusedAddRMSNormPattern(BasePattern, SonarPatternReplacement):
     gemma_norm = False
 
     def __init__(
@@ -1180,7 +1180,7 @@ class AiterAllreduceFusedAddRMSNormPattern(BasePattern, AphroditePatternReplacem
         ) -> tuple[torch.Tensor, torch.Tensor]:
             allreduce_output = tensor_model_parallel_all_reduce(input)
             norm_weight = weight.float() + 1.0 if self.gemma_norm else weight
-            rms, residual = aphrodite.ir.ops.fused_add_rms_norm(allreduce_output, residual, norm_weight, self.epsilon)
+            rms, residual = sonar.ir.ops.fused_add_rms_norm(allreduce_output, residual, norm_weight, self.epsilon)
             return rms, residual
 
         return _pattern
@@ -1236,7 +1236,7 @@ class AiterAllreduceFusedAddGemmaRMSNormOutputOnlyPattern(AiterAllreduceFusedAdd
     gemma_norm = True
 
 
-class AiterAllreduceFusedRMSNormGroupQuantFP8Pattern(BasePattern, AphroditePatternReplacement):
+class AiterAllreduceFusedRMSNormGroupQuantFP8Pattern(BasePattern, SonarPatternReplacement):
     """Fuse AllReduce + RMSNorm + per-group FP8 quant into a single AITER
     custom op.
 
@@ -1284,7 +1284,7 @@ class AiterAllreduceFusedRMSNormGroupQuantFP8Pattern(BasePattern, AphroditePatte
     def pattern(self):
         def _pattern(input: torch.Tensor, weight: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
             allreduce_output = tensor_model_parallel_all_reduce(input)
-            rms = aphrodite.ir.ops.rms_norm(allreduce_output, weight, self.epsilon)
+            rms = sonar.ir.ops.rms_norm(allreduce_output, weight, self.epsilon)
             quant, scale = self.quant_matcher(rms)
             return quant, scale
 
@@ -1309,7 +1309,7 @@ class AiterAllreduceFusedRMSNormGroupQuantFP8Pattern(BasePattern, AphroditePatte
         return _replacement
 
 
-class AiterAllreduceFusedAddRMSNormGroupQuantFP8Pattern(BasePattern, AphroditePatternReplacement):
+class AiterAllreduceFusedAddRMSNormGroupQuantFP8Pattern(BasePattern, SonarPatternReplacement):
     """``fused_add`` variant of ``AiterAllreduceFusedRMSNormGroupQuantFP8Pattern``.
 
     Targets the dominant DSv3.2-style post-attention / post-MLP path:
@@ -1355,7 +1355,7 @@ class AiterAllreduceFusedAddRMSNormGroupQuantFP8Pattern(BasePattern, AphroditePa
             weight: torch.Tensor,
         ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
             allreduce_output = tensor_model_parallel_all_reduce(input)
-            rms, residual_out = aphrodite.ir.ops.fused_add_rms_norm(allreduce_output, residual, weight, self.epsilon)
+            rms, residual_out = sonar.ir.ops.fused_add_rms_norm(allreduce_output, residual, weight, self.epsilon)
             quant, scale = self.quant_matcher(rms)
             return quant, scale, residual_out
 
@@ -1381,7 +1381,7 @@ class AiterAllreduceFusedAddRMSNormGroupQuantFP8Pattern(BasePattern, AphroditePa
         return _replacement
 
 
-class AiterAllreduceFusedAddRMSNormGroupQuantWithIndexerPattern(BasePattern, AphroditePatternReplacement):
+class AiterAllreduceFusedAddRMSNormGroupQuantWithIndexerPattern(BasePattern, SonarPatternReplacement):
     """Indexer-fan-out variant of ``AiterAllreduceFusedAddRMSNormGroupQuantFP8Pattern``.
 
     Targets the DSv3.2 post-attention / post-MLP path where the post-AR normed
@@ -1401,7 +1401,7 @@ class AiterAllreduceFusedAddRMSNormGroupQuantWithIndexerPattern(BasePattern, Aph
     The trailing FP8 group-quant is matched via ``MatcherQuantFP8`` (consistent
     with the sibling patterns above), which traces both ``QuantFP8.forward_hip``
     and ``forward_native`` paths and so matches whichever op the call site
-    lowers to (``aphrodite.rocm_aiter_group_fp8_quant``).
+    lowers to (``sonar.rocm_aiter_group_fp8_quant``).
     """
 
     def __init__(
@@ -1449,9 +1449,9 @@ class AiterAllreduceFusedAddRMSNormGroupQuantWithIndexerPattern(BasePattern, Aph
             indexer_weight: torch.Tensor,
         ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
             ar_out = tensor_model_parallel_all_reduce(input_)
-            rms, res_out = aphrodite.ir.ops.fused_add_rms_norm(ar_out, residual, norm_weight, eps)
+            rms, res_out = sonar.ir.ops.fused_add_rms_norm(ar_out, residual, norm_weight, eps)
             q, s = self.quant_matcher(rms)
-            idx = torch.ops.aphrodite.rocm_unquantized_gemm(rms, indexer_weight)
+            idx = torch.ops.sonar.rocm_unquantized_gemm(rms, indexer_weight)
             return q, s, res_out, idx, rms
 
         return _pattern
@@ -1480,14 +1480,14 @@ class AiterAllreduceFusedAddRMSNormGroupQuantWithIndexerPattern(BasePattern, Aph
                 fused[2],
                 fused[3],
             )
-            idx = torch.ops.aphrodite.rocm_unquantized_gemm(bf16_norm, indexer_weight)
+            idx = torch.ops.sonar.rocm_unquantized_gemm(bf16_norm, indexer_weight)
             return quant_out, scale_out, residual_out, idx, bf16_norm
 
         return _replacement
 
 
-class RocmAiterAllReduceFusionPass(AphroditeFusionPatternMatcherPass):
-    def __init__(self, config: AphroditeConfig) -> None:
+class RocmAiterAllReduceFusionPass(SonarFusionPatternMatcherPass):
+    def __init__(self, config: SonarConfig) -> None:
         super().__init__(config, "rocm_aiter_allreduce_fusion_pass")
         self.disabled = True
         self.tp_size = get_tensor_model_parallel_world_size()
@@ -1504,7 +1504,7 @@ class RocmAiterAllReduceFusionPass(AphroditeFusionPatternMatcherPass):
             logger.warning_once(
                 "AITER allreduce fusions are disabled because AITER Custom "
                 "All Reduce is not enabled. Set "
-                "APHRODITE_ROCM_USE_AITER_CUSTOM_AR=1 to enable it."
+                "SONAR_ROCM_USE_AITER_CUSTOM_AR=1 to enable it."
             )
             return
         self.ca_comm = ca_comm
@@ -1640,8 +1640,8 @@ class RocmAiterAllReduceFusionPass(AphroditeFusionPatternMatcherPass):
             return False
         return bool(compile_range.end <= self.max_token_num)
 
-    @AphroditeInductorPass.time_and_log
+    @SonarInductorPass.time_and_log
     def __call__(self, graph: fx.Graph) -> None:
         self.matched_count = self.pm_pass.apply(graph)
-        AphroditePatternMatcherPass.match_table[self.pass_name] += self.matched_count
+        SonarPatternMatcherPass.match_table[self.pass_name] += self.matched_count
         logger.debug("%s Replaced %s patterns", self.__class__.__name__, self.matched_count)

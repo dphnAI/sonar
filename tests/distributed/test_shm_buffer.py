@@ -6,7 +6,7 @@ import unittest
 
 import numpy as np
 
-from aphrodite.distributed.device_communicators.shm_object_storage import (
+from sonar.distributed.device_communicators.shm_object_storage import (
     SingleWriterShmRingBuffer,
 )
 

@@ -14,29 +14,29 @@ metadata (see ``AttentionConfig.indexer_sparse_logits``).
 import torch
 from torch import nn
 
-import aphrodite.envs as envs
-from aphrodite import _custom_ops as ops
-from aphrodite.config import get_current_aphrodite_config
-from aphrodite.forward_context import get_forward_context
-from aphrodite.model_executor.kernels.attention.dsa.sparse_mqa_logits import (
+import sonar.envs as envs
+from sonar import _custom_ops as ops
+from sonar.config import get_current_sonar_config
+from sonar.forward_context import get_forward_context
+from sonar.model_executor.kernels.attention.dsa.sparse_mqa_logits import (
     has_deep_select,
     sparse_mqa_logits_paged_decode,
     sparse_mqa_logits_prefill_chunk,
 )
-from aphrodite.model_executor.layers.sparse_attn_indexer import (
+from sonar.model_executor.layers.sparse_attn_indexer import (
     _gather_workspace_shapes,
     kv_cache_as_quant_view,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.deep_gemm import has_deep_gemm_sparse_mqa, mqa_logits_mx_inputs
-from aphrodite.v1.attention.backends.mla.indexer import (
+from sonar.platforms import current_platform
+from sonar.utils.deep_gemm import has_deep_gemm_sparse_mqa, mqa_logits_mx_inputs
+from sonar.v1.attention.backends.mla.indexer import (
     DeepseekV32IndexerPrefillChunkMetadata,
     dsa_indexer_uses_fp4,
 )
-from aphrodite.v1.attention.backends.mla.sparse_indexer import (
+from sonar.v1.attention.backends.mla.sparse_indexer import (
     DeepseekV41SparseIndexerMetadata,
 )
-from aphrodite.v1.worker.workspace import current_workspace_manager
+from sonar.v1.worker.workspace import current_workspace_manager
 
 
 def _prefill_k_workspaces(total_seq_lens: int, head_dim: int, use_fp4_cache: bool) -> tuple[torch.Tensor, torch.Tensor]:
@@ -102,7 +102,7 @@ class SparseMQAIndexer(nn.Module):
         ):
             raise ValueError("SparseMQAIndexer requires an SM100-class GPU and DeepGEMM >= 2.8.")
         if not has_deep_select():
-            raise ValueError("SparseMQAIndexer requires the DeepSelect top-k extension (aphrodite._deepselect_C).")
+            raise ValueError("SparseMQAIndexer requires the DeepSelect top-k extension (sonar._deepselect_C).")
         self.k_cache = k_cache
         self.topk_tokens = topk_tokens
         self.head_dim = head_dim
@@ -110,13 +110,13 @@ class SparseMQAIndexer(nn.Module):
         self.topk_indices_buffer = topk_indices_buffer
         self.candidate_blocks = candidate_blocks
         self.candidate_block_size = candidate_block_size
-        self.use_fp4_cache = dsa_indexer_uses_fp4(get_current_aphrodite_config())
+        self.use_fp4_cache = dsa_indexer_uses_fp4(get_current_sonar_config())
 
     def _reserve_workspaces(self, device: torch.device) -> None:
         """Profiling run: claim the K-gather workspace and the peak sparse
         logits allocation so the memory estimate covers them."""
         _prefill_k_workspaces(self.max_total_seq_len, self.head_dim, self.use_fp4_cache)
-        max_logits_bytes = envs.APHRODITE_SPARSE_INDEXER_MAX_LOGITS_MB * 1024 * 1024
+        max_logits_bytes = envs.SONAR_SPARSE_INDEXER_MAX_LOGITS_MB * 1024 * 1024
         torch.empty(max_logits_bytes, dtype=torch.uint8, device=device)
 
     def forward(

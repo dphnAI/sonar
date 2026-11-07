@@ -6,17 +6,17 @@ from typing import Any
 
 import torch
 
-from aphrodite.model_executor.warmup.jit_warmup import kernel_launcher
-from aphrodite.model_executor.warmup.jit_warmup_triton_helper import (
-    AphroditeTritonJitKernel,
+from sonar.model_executor.warmup.jit_warmup import kernel_launcher
+from sonar.model_executor.warmup.jit_warmup_triton_helper import (
     LaunchSpec,
+    SonarTritonJitKernel,
     TritonWarmupTensor,
 )
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.math_utils import next_power_of_2
+from sonar.triton_utils import tl, triton
+from sonar.utils.math_utils import next_power_of_2
 
 
-class SavePartialStatesKernel(AphroditeTritonJitKernel["SavePartialStatesKernel.CompileKey"]):
+class SavePartialStatesKernel(SonarTritonJitKernel["SavePartialStatesKernel.CompileKey"]):
     @dataclass(frozen=True)
     class CompileKey:
         head_size: int
@@ -55,7 +55,7 @@ class SavePartialStatesKernel(AphroditeTritonJitKernel["SavePartialStatesKernel.
         slot_id = tl.load(slot_mapping_ptr + token_idx)
 
         # Skip padded / invalid tokens (slot_id == -1 is the PAD sentinel used
-        # by Aphrodite).  During CUDA graph replay the batch may contain padding
+        # by Sonar).  During CUDA graph replay the batch may contain padding
         # tokens whose slot_mapping is -1; writing to kv_state[-1] would be an
         # illegal memory access.
         if slot_id < 0:

@@ -31,22 +31,22 @@ from typing import Any
 
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.compilation import CUDAGraphMode
-from aphrodite.distributed.device_communicators.pynccl import PyNcclCommunicator
-from aphrodite.distributed.parallel_state import get_tp_group
-from aphrodite.logger import init_logger
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.v1.worker.gpu.sample.batch_shard import (
+import sonar.envs as envs
+from sonar.config import SonarConfig
+from sonar.config.compilation import CUDAGraphMode
+from sonar.distributed.device_communicators.pynccl import PyNcclCommunicator
+from sonar.distributed.parallel_state import get_tp_group
+from sonar.logger import init_logger
+from sonar.utils.math_utils import cdiv
+from sonar.v1.worker.gpu.sample.batch_shard import (
     all_to_all_vocab_shards,
     batch_sharded_sampling_enabled,
     get_tp_pynccl_comm,
 )
-from aphrodite.v1.worker.gpu.sample.greedy_argmax import greedy_argmax
-from aphrodite.v1.worker.gpu.sample.gumbel import gumbel_sample
-from aphrodite.v1.worker.gpu.spec_decode.dflash.speculator import DFlashSpeculator
-from aphrodite.v1.worker.gpu.spec_decode.dspark.utils import load_dspark_model
+from sonar.v1.worker.gpu.sample.greedy_argmax import greedy_argmax
+from sonar.v1.worker.gpu.sample.gumbel import gumbel_sample
+from sonar.v1.worker.gpu.spec_decode.dflash.speculator import DFlashSpeculator
+from sonar.v1.worker.gpu.spec_decode.dspark.utils import load_dspark_model
 
 logger = init_logger(__name__)
 
@@ -54,8 +54,8 @@ logger = init_logger(__name__)
 class DSparkSpeculator(DFlashSpeculator):
     _speculator_name = "DSpark"
 
-    def __init__(self, aphrodite_config: AphroditeConfig, device: torch.device):
-        super().__init__(aphrodite_config, device)
+    def __init__(self, sonar_config: SonarConfig, device: torch.device):
+        super().__init__(sonar_config, device)
 
         # Whether to sample from the anchor position. When True, uses anchor-as-first
         # (N slots, each position predicts the next token). When False, uses 1+N
@@ -94,7 +94,7 @@ class DSparkSpeculator(DFlashSpeculator):
     def load_model(self, target_model: torch.nn.Module) -> None:
         super().load_model(target_model)
         tp_size = get_tp_group().world_size
-        if tp_size > 1 and batch_sharded_sampling_enabled(self.aphrodite_config, target_model):
+        if tp_size > 1 and batch_sharded_sampling_enabled(self.sonar_config, target_model):
             self._try_enable_sharded_sequential_sampling()
 
     def _try_enable_sharded_sequential_sampling(self) -> None:
@@ -133,7 +133,7 @@ class DSparkSpeculator(DFlashSpeculator):
         target_model: torch.nn.Module,
         target_attn_layer_names: set[str],
     ) -> torch.nn.Module:
-        model = load_dspark_model(target_model, self.aphrodite_config)
+        model = load_dspark_model(target_model, self.sonar_config)
         # Reduced draft vocab: probabilistic rejection sampling indexes draft
         # logits by target id, so precompute the draft->target column map and a
         # scratch buffer to scatter logits into target vocab before sampling.
@@ -145,7 +145,7 @@ class DSparkSpeculator(DFlashSpeculator):
             self._draft_scatter_buf = torch.full(
                 (self.max_num_reqs, self.vocab_size),
                 float("-inf"),
-                dtype=self.draft_logits_spec(self.aphrodite_config)[0],
+                dtype=self.draft_logits_spec(self.sonar_config)[0],
                 device=self.device,
             )
         self.use_confidence_head = self.enable_adaptive_verification and model.model.confidence_head is not None
@@ -173,12 +173,12 @@ class DSparkSpeculator(DFlashSpeculator):
             or self.draft_watermarker is not None
             or self.use_acceptance_estimator
             or self._draft_topk is not None
-            or self.aphrodite_config.parallel_config.enable_batch_sharded_sampling
+            or self.sonar_config.parallel_config.enable_batch_sharded_sampling
             or self.enable_adaptive_verification
             or self.speculative_config.rejection_sample_method == "synthetic"
-            or self.aphrodite_config.watermark_config is not None
-            or self.aphrodite_config.model_config.return_sampling_mask
-            or envs.APHRODITE_COMPUTE_NANS_IN_LOGITS
+            or self.sonar_config.watermark_config is not None
+            or self.sonar_config.model_config.return_sampling_mask
+            or envs.SONAR_COMPUTE_NANS_IN_LOGITS
         ):
             return
         shard = get_shard()

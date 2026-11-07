@@ -11,16 +11,16 @@ tensor-parallel group and wedges it for the rest of the run.
 import pytest
 import torch
 
-from aphrodite.distributed.parallel_state import (
+from sonar.distributed.parallel_state import (
     destroy_distributed_environment,
     destroy_model_parallel,
     init_distributed_environment,
     initialize_model_parallel,
 )
-from aphrodite.model_executor.models import moondream3
-from aphrodite.utils.network_utils import get_open_port
-from aphrodite.utils.system_utils import update_environment_variables
-from tests.utils import ensure_current_aphrodite_config
+from sonar.model_executor.models import moondream3
+from sonar.utils.network_utils import get_open_port
+from sonar.utils.system_utils import update_environment_variables
+from tests.utils import ensure_current_sonar_config
 
 pytestmark = pytest.mark.cpu_test
 
@@ -67,7 +67,7 @@ def tp1_cpu():
         }
     )
     init_distributed_environment(backend="gloo")
-    with ensure_current_aphrodite_config():
+    with ensure_current_sonar_config():
         initialize_model_parallel(tensor_model_parallel_size=1)
     yield
     destroy_model_parallel()

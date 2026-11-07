@@ -10,29 +10,29 @@ import pydantic
 from fastapi import APIRouter, FastAPI, Query, Request
 from fastapi.responses import JSONResponse
 
-import aphrodite.envs as envs
-from aphrodite.collect_env import get_env_info
-from aphrodite.config import AphroditeConfig
-from aphrodite.logger import init_logger
+import sonar.envs as envs
+from sonar.collect_env import get_env_info
+from sonar.config import SonarConfig
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 
 
 router = APIRouter()
-PydanticAphroditeConfig = pydantic.TypeAdapter(AphroditeConfig)
+PydanticSonarConfig = pydantic.TypeAdapter(SonarConfig)
 
 
-def _get_aphrodite_env_vars():
-    from aphrodite.config.utils import normalize_value
+def _get_sonar_env_vars():
+    from sonar.config.utils import normalize_value
 
-    aphrodite_envs = {}
+    sonar_envs = {}
     for key in dir(envs):
-        if key.startswith("APHRODITE_") and "KEY" not in key:
+        if key.startswith("SONAR_") and "KEY" not in key:
             value = getattr(envs, key, None)
             if value is not None:
                 value = normalize_value(value)
-                aphrodite_envs[key] = value
-    return aphrodite_envs
+                sonar_envs[key] = value
+    return sonar_envs
 
 
 @functools.lru_cache(maxsize=1)
@@ -45,15 +45,15 @@ async def show_server_info(
     raw_request: Request,
     config_format: Annotated[Literal["text", "json"], Query()] = "text",
 ):
-    aphrodite_config: AphroditeConfig = raw_request.app.state.aphrodite_config
+    sonar_config: SonarConfig = raw_request.app.state.sonar_config
     server_info = {
-        "aphrodite_config": (
-            str(aphrodite_config)
+        "sonar_config": (
+            str(sonar_config)
             if config_format == "text"
-            else PydanticAphroditeConfig.dump_python(aphrodite_config, mode="json", fallback=str)
+            else PydanticSonarConfig.dump_python(sonar_config, mode="json", fallback=str)
         ),
         # fallback=str is needed to handle e.g. torch.dtype
-        "aphrodite_env": _get_aphrodite_env_vars(),
+        "sonar_env": _get_sonar_env_vars(),
         "system_env": await asyncio.to_thread(_get_system_env_info_cached),
     }
     return JSONResponse(content=server_info)

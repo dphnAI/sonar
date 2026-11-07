@@ -15,7 +15,7 @@ from torch.utils.data import DataLoader
 from tests.conftest import HfRunner
 from tests.models.utils import (
     RerankModelInfo,
-    get_aphrodite_extra_kwargs,
+    get_sonar_extra_kwargs,
 )
 
 # See #19344
@@ -27,7 +27,7 @@ template_home = Path(__file__).parent.parent.parent.parent.parent / "examples/po
 
 _empty_model_meta = ModelMeta(
     loader=None,
-    name="aphrodite/model",
+    name="sonar/model",
     revision="1",
     release_date=None,
     languages=None,
@@ -51,11 +51,11 @@ class MtebCrossEncoderMixin(mteb.CrossEncoderProtocol):
     mteb_model_meta = _empty_model_meta
 
 
-class AphroditeMtebCrossEncoder(MtebCrossEncoderMixin):
-    def __init__(self, aphrodite_model):
-        self.llm = aphrodite_model
+class SonarMtebCrossEncoder(MtebCrossEncoderMixin):
+    def __init__(self, sonar_model):
+        self.llm = sonar_model
         self.rng = np.random.default_rng(seed=42)
-        self.chat_template: str | None = getattr(aphrodite_model, "chat_template", None)
+        self.chat_template: str | None = getattr(sonar_model, "chat_template", None)
 
     def predict(
         self,
@@ -220,34 +220,34 @@ def run_mteb_rerank(cross_encoder: mteb.CrossEncoderProtocol, tasks, languages):
 
 
 def mteb_test_rerank_models(
-    aphrodite_runner,
+    sonar_runner,
     model_info: RerankModelInfo,
     hf_runner=HFMtebCrossEncoder,
-    aphrodite_extra_kwargs=None,
-    aphrodite_mteb_encoder=AphroditeMtebCrossEncoder,
+    sonar_extra_kwargs=None,
+    sonar_mteb_encoder=SonarMtebCrossEncoder,
     atol: float | None = None,
 ):
     if atol is None:
         atol = model_info.mteb_tol if model_info.mteb_tol is not None else MTEB_RERANK_TOL
-    aphrodite_extra_kwargs = get_aphrodite_extra_kwargs(model_info, aphrodite_extra_kwargs)
+    sonar_extra_kwargs = get_sonar_extra_kwargs(model_info, sonar_extra_kwargs)
 
     # Maybe load chat_template.
     chat_template: str | None = None
     if model_info.chat_template_name is not None:
         chat_template = (template_home / model_info.chat_template_name).read_text()
 
-    with aphrodite_runner(
+    with sonar_runner(
         model_info.name,
         revision=model_info.revision,
         runner="pooling",
         max_model_len=None,
         max_num_seqs=8,
-        **aphrodite_extra_kwargs,
-    ) as aphrodite_model:
-        model_config = aphrodite_model.llm.llm_engine.model_config
-        aphrodite_model.chat_template = chat_template
+        **sonar_extra_kwargs,
+    ) as sonar_model:
+        model_config = sonar_model.llm.llm_engine.model_config
+        sonar_model.chat_template = chat_template
 
-        # Confirm whether aphrodite is using the correct architecture
+        # Confirm whether sonar is using the correct architecture
         if model_info.architecture:
             assert model_info.architecture in model_config.architectures
 
@@ -267,12 +267,12 @@ def mteb_test_rerank_models(
         if model_info.is_chunked_prefill_supported is not None:
             assert model_config.is_chunked_prefill_supported == model_info.is_chunked_prefill_supported
 
-        aphrodite_main_score = run_mteb_rerank(
-            aphrodite_mteb_encoder(aphrodite_model),
+        sonar_main_score = run_mteb_rerank(
+            sonar_mteb_encoder(sonar_model),
             tasks=MTEB_RERANK_TASKS,
             languages=MTEB_RERANK_LANGS,
         )
-        aphrodite_dtype = model_config.dtype
+        sonar_dtype = model_config.dtype
         head_dtype = model_config.head_dtype
 
     # Accelerate mteb test by setting
@@ -291,13 +291,13 @@ def mteb_test_rerank_models(
         st_dtype = "Constant"
 
     print("Model:", model_info.name)
-    print("APHRODITE:", f"dtype:{aphrodite_dtype}", f"head_dtype:{head_dtype}", aphrodite_main_score)
+    print("SONAR:", f"dtype:{sonar_dtype}", f"head_dtype:{head_dtype}", sonar_main_score)
     print("SentenceTransformers:", st_dtype, st_main_score)
-    print("Difference:", st_main_score - aphrodite_main_score)
+    print("Difference:", st_main_score - sonar_main_score)
 
-    # We are not concerned that the aphrodite mteb results are better
+    # We are not concerned that the sonar mteb results are better
     # than SentenceTransformers, so we only perform one-sided testing.
-    diff = st_main_score - aphrodite_main_score
+    diff = st_main_score - sonar_main_score
     assert diff < atol, (
-        f"diff={diff:.6g} tol={atol} model={model_info.name} (st={st_main_score}, aphrodite={aphrodite_main_score})"
+        f"diff={diff:.6g} tol={atol} model={model_info.name} (st={st_main_score}, sonar={sonar_main_score})"
     )

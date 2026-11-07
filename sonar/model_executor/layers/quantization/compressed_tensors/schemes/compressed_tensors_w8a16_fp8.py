@@ -6,31 +6,31 @@ from collections.abc import Callable
 import torch
 from compressed_tensors.quantization import QuantizationArgs, QuantizationStrategy
 
-from aphrodite.config import get_current_aphrodite_config
-from aphrodite.model_executor.kernels.linear import (
+from sonar.config import get_current_sonar_config
+from sonar.model_executor.kernels.linear import (
     init_wfp8_a16_linear_kernel,
 )
-from aphrodite.model_executor.layers.quantization.compressed_tensors.schemes import (
+from sonar.model_executor.layers.quantization.compressed_tensors.schemes import (
     CompressedTensorsScheme,
 )
-from aphrodite.model_executor.layers.quantization.compressed_tensors.utils import (
+from sonar.model_executor.layers.quantization.compressed_tensors.utils import (
     STRATEGY_TO_PARAMETER_TYPE,
     STRATEGY_TO_WEIGHT_QUANT_KEY,
 )
-from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
+from sonar.model_executor.layers.quantization.utils.fp8_utils import (
     create_fp8_scale_parameter,
     create_fp8_weight_parameter,
     validate_fp8_block_shape,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     kFp8DynamicTensorSym,
     kFp8StaticTensorSym,
 )
-from aphrodite.model_executor.layers.quantization.utils.w8a8_utils import (
+from sonar.model_executor.layers.quantization.utils.w8a8_utils import (
     convert_to_channelwise,
 )
-from aphrodite.model_executor.parameter import PerTensorScaleParameter
-from aphrodite.model_executor.utils import replace_parameter
+from sonar.model_executor.parameter import PerTensorScaleParameter
+from sonar.model_executor.utils import replace_parameter
 
 __all__ = ["CompressedTensorsW8A16Fp8"]
 
@@ -40,7 +40,7 @@ class CompressedTensorsW8A16Fp8(CompressedTensorsScheme):
         self.weight_quant = weight_quant
         self.strategy = weight_quant.strategy
         self.out_dtype = torch.get_default_dtype()
-        self.input_dtype = get_current_aphrodite_config().model_config.dtype
+        self.input_dtype = get_current_sonar_config().model_config.dtype
         self.is_static_input_scheme = is_static_input_scheme
         self.weight_block_size = self.weight_quant.block_structure
 

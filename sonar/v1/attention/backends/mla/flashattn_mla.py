@@ -6,11 +6,11 @@ from typing import ClassVar
 
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.cache import CacheDType
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.attention.mla_attention import (
+import sonar.envs as envs
+from sonar.config import SonarConfig
+from sonar.config.cache import CacheDType
+from sonar.logger import init_logger
+from sonar.model_executor.layers.attention.mla_attention import (
     MLACommonBackend,
     MLACommonDecodeMetadata,
     MLACommonImpl,
@@ -18,21 +18,21 @@ from aphrodite.model_executor.layers.attention.mla_attention import (
     MLACommonMetadataBuilder,
     QueryLenSupport,
 )
-from aphrodite.platforms.interface import DeviceCapability
-from aphrodite.utils.math_utils import round_up
-from aphrodite.v1.attention.backend import (
+from sonar.platforms.interface import DeviceCapability
+from sonar.utils.math_utils import round_up
+from sonar.v1.attention.backend import (
     AttentionCGSupport,
     AttentionLayer,
     AttentionType,
     MultipleOf,
 )
-from aphrodite.v1.attention.backends.fa_utils import (
+from sonar.v1.attention.backends.fa_utils import (
     flash_attn_supports_mla,
     flash_attn_varlen_func,
     get_flash_attn_version,
     get_scheduler_metadata,
 )
-from aphrodite.v1.kv_cache_interface import AttentionSpec, is_quantized_kv_cache
+from sonar.v1.kv_cache_interface import AttentionSpec, is_quantized_kv_cache
 
 logger = init_logger(__name__)
 
@@ -132,14 +132,14 @@ class FlashAttnMLAMetadataBuilder(MLACommonMetadataBuilder[FlashAttnMLAMetadata]
         self,
         kv_cache_spec: AttentionSpec,
         layer_names: list[str],
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
     ):
-        interleave_size = aphrodite_config.parallel_config.cp_kv_cache_interleave_size
+        interleave_size = sonar_config.parallel_config.cp_kv_cache_interleave_size
         super().__init__(
             kv_cache_spec,
             layer_names,
-            aphrodite_config,
+            sonar_config,
             device,
             FlashAttnMLAMetadata,
             supports_dcp_with_varlen=(interleave_size == 1),
@@ -157,7 +157,7 @@ class FlashAttnMLAMetadataBuilder(MLACommonMetadataBuilder[FlashAttnMLAMetadata]
             #   prepare_varlen + dynamic_split + sort_batches + head_swizzle
             # See: https://github.com/vllm-project/flash-attention/blob/5824e6e/hopper/flash_api.cpp#L664-L671  # noqa: E501
             max_batch_size = max(
-                aphrodite_config.scheduler_config.max_num_seqs,
+                sonar_config.scheduler_config.max_num_seqs,
                 self.max_cudagraph_size or 0,
             )
             self.scheduler_metadata = torch.zeros(
@@ -168,9 +168,9 @@ class FlashAttnMLAMetadataBuilder(MLACommonMetadataBuilder[FlashAttnMLAMetadata]
             # When using cuda graph, we need to set the upper bound of the
             # number of splits so that large enough intermediate buffers are
             # pre-allocated during capture.
-            self.max_num_splits = aphrodite_config.attention_config.flash_attn_max_num_splits_for_cuda_graph
+            self.max_num_splits = sonar_config.attention_config.flash_attn_max_num_splits_for_cuda_graph
 
-        if envs.APHRODITE_BATCH_INVARIANT:
+        if envs.SONAR_BATCH_INVARIANT:
             self.max_num_splits = 1
 
     def _schedule_decode(
@@ -230,7 +230,7 @@ class FlashAttnMLAMetadataBuilder(MLACommonMetadataBuilder[FlashAttnMLAMetadata]
             # we only set num_splits when using cuda graphs.
             max_num_splits = self.max_num_splits
 
-        if envs.APHRODITE_BATCH_INVARIANT:
+        if envs.SONAR_BATCH_INVARIANT:
             max_num_splits = 1
 
         scheduler_metadata = self._schedule_decode(

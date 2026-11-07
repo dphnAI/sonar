@@ -10,28 +10,28 @@ import pytest
 import torch
 from PIL import Image
 
-from aphrodite.config import ModelConfig
-from aphrodite.config.multimodal import (
+from sonar.config import ModelConfig
+from sonar.config.multimodal import (
     AudioDummyOptions,
     BaseDummyOptions,
     ImageDummyOptions,
     MultiModalDummyOptions,
     VideoDummyOptions,
 )
-from aphrodite.distributed.ec_transfer.ec_connector.utils import (
+from sonar.distributed.ec_transfer.ec_connector.utils import (
     PlaceholderMetadataResolver,
     collect_ec_item_metadata,
 )
-from aphrodite.inputs import MultiModalDataDict, MultiModalInput
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.cache import MultiModalProcessorOnlyCache
-from aphrodite.multimodal.cache.base import MultiModalCache
-from aphrodite.multimodal.inputs import MultiModalFeatureSpec, batched_tensors_equal
-from aphrodite.multimodal.processing import BaseMultiModalProcessor, InputProcessingContext
-from aphrodite.platforms import current_platform
-from aphrodite.renderers.chat_utils.item_tracker import _get_embeds_data
-from aphrodite.tokenizers import TokenizerLike, cached_tokenizer_from_config
-from aphrodite.utils.mistral import is_mistral_tokenizer
+from sonar.inputs import MultiModalDataDict, MultiModalInput
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.cache import MultiModalProcessorOnlyCache
+from sonar.multimodal.cache.base import MultiModalCache
+from sonar.multimodal.inputs import MultiModalFeatureSpec, batched_tensors_equal
+from sonar.multimodal.processing import BaseMultiModalProcessor, InputProcessingContext
+from sonar.platforms import current_platform
+from sonar.renderers.chat_utils.item_tracker import _get_embeds_data
+from sonar.tokenizers import TokenizerLike, cached_tokenizer_from_config
+from sonar.utils.mistral import is_mistral_tokenizer
 from tests.models.utils import build_model_context
 
 from ....multimodal.utils import random_audio, random_image, random_video
@@ -141,13 +141,13 @@ def get_model_ids_to_test():
     transformers_arch_ids = {
         model_id for info in _TRANSFORMERS_BACKEND_MODELS.values() for model_id in (info.default, *info.extras.values())
     }
-    aphrodite_only_archs = {
+    sonar_only_archs = {
         arch
         for arch, info in _MULTIMODAL_EXAMPLE_MODELS.items()
         if not any(model_id in transformers_arch_ids for model_id in (info.default, *info.extras.values()))
     }
 
-    return _get_model_ids_to_test(aphrodite_only_archs)
+    return _get_model_ids_to_test(sonar_only_archs)
 
 
 def get_transformers_backend_model_ids_to_test():
@@ -330,7 +330,7 @@ def _test_processing_correctness(
     model_info.check_transformers_version(
         on_fail="skip",
         check_max_version=False,
-        check_version_reason="aphrodite",
+        check_version_reason="sonar",
     )
 
     model_config = ModelConfig(
@@ -484,7 +484,7 @@ def test_processing_correctness(
 ):
     if model_id == "openvla/openvla-7b":
         pytest.skip(
-            "OpenVLA uses a custom Aphrodite processor because its HF remote "
+            "OpenVLA uses a custom Sonar processor because its HF remote "
             "processor is incompatible with current Transformers."
         )
     if model_id == "mistralai/Voxtral-Mini-4B-Realtime-2602":
@@ -497,7 +497,7 @@ def test_processing_correctness(
     if model_id.startswith("OpenMOSS-Team/MOSS-Audio-"):
         pytest.skip(
             "MOSS-Audio uses a custom processor that dynamically expands "
-            "audio placeholders from processed audio lengths. Its Aphrodite "
+            "audio placeholders from processed audio lengths. Its Sonar "
             "processor paths are covered by test_moss_audio.py."
         )
     if model_id == "lmms-lab-encoder/LLaVA-OneVision-2-8B-Instruct":

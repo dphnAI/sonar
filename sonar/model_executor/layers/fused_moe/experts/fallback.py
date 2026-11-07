@@ -5,10 +5,10 @@ from abc import ABC, abstractmethod
 
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.config import FusedMoEParallelConfig
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import QuantKey
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.config import FusedMoEParallelConfig
+from sonar.model_executor.layers.quantization.utils.quant_utils import QuantKey
 
 
 class FallbackExperts(mk.FusedMoEExpertsModular, ABC):

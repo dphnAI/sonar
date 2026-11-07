@@ -13,7 +13,7 @@ from dataclasses import dataclass
 
 import torch
 
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 

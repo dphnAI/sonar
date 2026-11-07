@@ -16,8 +16,8 @@ the whole value dimension, and writes the out_proj input.
 
 import torch
 
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.platform_utils import num_compute_units
+from sonar.triton_utils import tl, triton
+from sonar.utils.platform_utils import num_compute_units
 
 
 @triton.jit

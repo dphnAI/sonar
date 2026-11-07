@@ -9,24 +9,24 @@ from PIL import Image
 from transformers import AutoProcessor, BatchFeature, PreTrainedConfig
 from transformers.models.pixtral import PixtralProcessor
 
-from aphrodite.model_executor.layers.fusion.mm_input_norm import (
+from sonar.model_executor.layers.fusion.mm_input_norm import (
     FusedMMInputNorm,
     IdentityInputNorm,
     build_mm_input_norm,
 )
-from aphrodite.model_executor.models.lightonocr import (
+from sonar.model_executor.models.lightonocr import (
     LightOnOCRForConditionalGeneration,
     LightOnOCRProcessingInfo,
 )
-from aphrodite.model_executor.models.mistral3 import Mistral3HFEncoderInfo
-from aphrodite.model_executor.models.pixtral import (
+from sonar.model_executor.models.mistral3 import Mistral3HFEncoderInfo
+from sonar.model_executor.models.pixtral import (
     PixtralHFEncoderInfo,
     pixtral_patch_embed,
 )
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import MultiModalKwargsItems
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import HAS_TRITON
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import MultiModalKwargsItems
+from sonar.platforms import current_platform
+from sonar.triton_utils import HAS_TRITON
 
 from ...utils import build_model_context
 
@@ -41,7 +41,7 @@ _RGB_STD = [0.26862954, 0.26130258, 0.27577711]
 _RGB_RESCALE = 1.0 / 255.0
 
 
-@pytest.mark.usefixtures("default_aphrodite_config")
+@pytest.mark.usefixtures("default_sonar_config")
 @pytest.mark.skipif(not HAS_TRITON or not current_platform.is_cuda(), reason="CUDA Triton kernel")
 @pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
 @pytest.mark.parametrize("normalize", [False, True])
@@ -187,8 +187,8 @@ def test_processor_size_override(
     )
     processor = MULTIMODAL_REGISTRY.create_processor(ctx.model_config)
     hf_processor_mm_kwargs = {} if kwargs_on_init else mm_processor_kwargs
-    aphrodite_hf_processor = processor.info.get_hf_processor(**hf_processor_mm_kwargs)
-    assert isinstance(aphrodite_hf_processor, PixtralProcessor)
+    sonar_hf_processor = processor.info.get_hf_processor(**hf_processor_mm_kwargs)
+    assert isinstance(sonar_hf_processor, PixtralProcessor)
 
     hf_processor = AutoProcessor.from_pretrained(
         model_id,
@@ -209,7 +209,7 @@ def test_processor_size_override(
     assert prompt_update_tokens == hf_placeholder_tokens
 
 
-@pytest.mark.usefixtures("default_aphrodite_config")
+@pytest.mark.usefixtures("default_sonar_config")
 def test_mm_device_do_normalize():
     ctx = build_model_context(
         _MODEL_ID,

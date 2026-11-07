@@ -4,10 +4,10 @@
 import pytest
 import torch
 
-from aphrodite.v1.attention.backends.utils import (
+from sonar.v1.attention.backends.utils import (
     split_decodes_and_prefills,
 )
-from aphrodite.v1.worker.ubatch_utils import (
+from sonar.v1.worker.ubatch_utils import (
     UBatchSlice,
     _make_metadata_with_slice,
     maybe_create_ubatch_slices,
@@ -395,8 +395,8 @@ def test_build_attention_metadata_zeros_stale_is_prefilling():
     """_build_attention_metadata zeroes is_prefilling for padded rows."""
     from unittest.mock import MagicMock, patch
 
-    from aphrodite.v1.attention.backend import CommonAttentionMetadata
-    from aphrodite.v1.worker.gpu_model_runner import GPUModelRunner
+    from sonar.v1.attention.backend import CommonAttentionMetadata
+    from sonar.v1.worker.gpu_model_runner import GPUModelRunner
 
     num_reqs = 3
     num_reqs_padded = 5

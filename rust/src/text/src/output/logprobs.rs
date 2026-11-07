@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-use aphrodite_llm::{Logprobs, PositionLogprobs};
-use aphrodite_tokenizer::Tokenizer;
 use itertools::Itertools as _;
 use serde::{Deserialize, Serialize};
+use sonar_llm::{Logprobs, PositionLogprobs};
+use sonar_tokenizer::Tokenizer;
 
 use crate::error::Error;
 
@@ -78,7 +78,7 @@ pub(super) fn decode_logprobs<T: Tokenizer + ?Sized>(
 ///
 /// The returned payload stores the first prompt token separately and decodes
 /// the remaining scored prompt positions into `scored_positions`, matching
-/// Aphrodite's prompt-logprobs semantics.
+/// Sonar's prompt-logprobs semantics.
 pub(super) fn decode_prompt_logprobs<T: Tokenizer + ?Sized>(
     tokenizer: Option<&T>,
     prompt_token_ids: &[u32],
@@ -137,7 +137,7 @@ fn decode_token<T: Tokenizer + ?Sized>(
     tokenizer: Option<&T>,
     token_id: u32,
     skip_special_tokens: bool,
-) -> aphrodite_tokenizer::Result<String> {
+) -> sonar_tokenizer::Result<String> {
     tokenizer.map_or(Ok(String::new()), |tokenizer| {
         tokenizer.decode(&[token_id], skip_special_tokens)
     })
@@ -145,8 +145,8 @@ fn decode_token<T: Tokenizer + ?Sized>(
 
 #[cfg(test)]
 mod tests {
-    use aphrodite_llm::{Logprobs, PositionLogprobs, TokenLogprob};
-    use aphrodite_tokenizer::test_utils::TestTokenizer;
+    use sonar_llm::{Logprobs, PositionLogprobs, TokenLogprob};
+    use sonar_tokenizer::test_utils::TestTokenizer;
 
     use super::*;
 

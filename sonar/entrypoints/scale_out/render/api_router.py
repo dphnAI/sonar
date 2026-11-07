@@ -4,16 +4,16 @@ from http import HTTPStatus
 
 from fastapi import APIRouter, Depends, Request
 
-from aphrodite.entrypoints.anthropic.protocol import AnthropicMessagesRequest
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-from aphrodite.entrypoints.openai.completion.protocol import CompletionRequest
-from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
-from aphrodite.entrypoints.serve.engine.protocol import ErrorResponse
-from aphrodite.entrypoints.serve.utils.api_utils import (
+from sonar.entrypoints.anthropic.protocol import AnthropicMessagesRequest
+from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+from sonar.entrypoints.openai.completion.protocol import CompletionRequest
+from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
+from sonar.entrypoints.serve.engine.protocol import ErrorResponse
+from sonar.entrypoints.serve.utils.api_utils import (
     create_json_response,
     validate_json_request,
 )
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 from ..token_in_token_out.protocol import GenerateRequest
 from .serving import ServingRender

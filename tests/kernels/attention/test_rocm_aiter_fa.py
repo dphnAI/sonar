@@ -3,7 +3,7 @@
 """ROCm-specific tests for the AITER Flash Attention backend.
 
 This file owns the ROCm backend contract and the ROCm-specific execution paths
-wired through ``aphrodite.v1.attention.backends.rocm_aiter_fa``:
+wired through ``sonar.v1.attention.backends.rocm_aiter_fa``:
 - backend contract and env gating
 - representative prefill, multi-batch, decode, and FP8-KV execution
 - direct kernel stress for large block tables and sliding-window masking
@@ -14,9 +14,9 @@ import importlib
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.platforms.rocm import on_mi3xx
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.platforms import current_platform
+from sonar.platforms.rocm import on_mi3xx
+from sonar.utils.torch_utils import set_random_seed
 
 pytestmark = pytest.mark.skipif(not current_platform.is_rocm(), reason="ROCm-specific tests")
 
@@ -104,13 +104,13 @@ def ref_paged_attn(
 
 # Small test helpers ------------------------------------------------------
 def _reload_envs():
-    import aphrodite.envs as envs
+    import sonar.envs as envs
 
     return importlib.reload(envs)
 
 
 def _assert_aiter_supported() -> None:
-    from aphrodite._aiter_ops import is_aiter_found_and_supported
+    from sonar._aiter_ops import is_aiter_found_and_supported
 
     assert is_aiter_found_and_supported(), "aiter is required on supported ROCm hardware for this test"
 
@@ -172,7 +172,7 @@ def _run_direct_flash_attn_case(
 ) -> tuple[torch.Tensor, torch.Tensor]:
     import aiter
 
-    from aphrodite.v1.attention.backends.rocm_aiter_fa import cp_mha_gather_cache
+    from sonar.v1.attention.backends.rocm_aiter_fa import cp_mha_gather_cache
 
     set_random_seed(0)
 
@@ -272,8 +272,8 @@ def _run_direct_flash_attn_case(
 def test_aiter_mha_backend_contract():
     """The ROCm backend advertises the dtypes, shapes, and attention types it
     is designed to handle."""
-    from aphrodite.v1.attention.backend import AttentionType
-    from aphrodite.v1.attention.backends.rocm_aiter_fa import AiterFlashAttentionBackend
+    from sonar.v1.attention.backend import AttentionType
+    from sonar.v1.attention.backends.rocm_aiter_fa import AiterFlashAttentionBackend
 
     assert AiterFlashAttentionBackend.get_name() == "FLASH_ATTN"
     assert AiterFlashAttentionBackend.supported_dtypes == [
@@ -298,8 +298,8 @@ def test_aiter_mha_backend_contract():
 def test_aiter_mha_backend_validates_kv_cache_block_size():
     """The backend should reject KV cache specs that cannot be gathered
     correctly by the ROCm kernel."""
-    from aphrodite.v1.attention.backends.rocm_aiter_fa import AiterFlashAttentionBackend
-    from aphrodite.v1.kv_cache_interface import FullAttentionSpec
+    from sonar.v1.attention.backends.rocm_aiter_fa import AiterFlashAttentionBackend
+    from sonar.v1.kv_cache_interface import FullAttentionSpec
 
     with pytest.raises(ValueError, match="Block size must be a multiple of 16"):
         AiterFlashAttentionBackend.customize_spec(
@@ -314,8 +314,8 @@ def test_aiter_mha_backend_validates_kv_cache_block_size():
 def test_aiter_mha_backend_supports_compute_capability_matches_mi3xx_probe():
     """The backend should trust the ROCm MI3xx probe instead of the raw torch
     capability tuple."""
-    from aphrodite.platforms.interface import DeviceCapability
-    from aphrodite.v1.attention.backends.rocm_aiter_fa import AiterFlashAttentionBackend
+    from sonar.platforms.interface import DeviceCapability
+    from sonar.v1.attention.backends.rocm_aiter_fa import AiterFlashAttentionBackend
 
     assert AiterFlashAttentionBackend.supports_compute_capability(DeviceCapability(0, 0)) is on_mi3xx()
 
@@ -334,13 +334,13 @@ def test_aiter_mha_backend_supports_compute_capability_matches_mi3xx_probe():
 def test_aiter_mha_env_flags_control_enablement(use_aiter, use_mha, expected, monkeypatch):
     """Both the global AITER flag and the MHA-specific flag must be enabled
     before the ROCm MHA path is considered active."""
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     _assert_aiter_supported()
 
     with monkeypatch.context() as mp:
-        mp.setenv("APHRODITE_ROCM_USE_AITER", "1" if use_aiter else "0")
-        mp.setenv("APHRODITE_ROCM_USE_AITER_MHA", "1" if use_mha else "0")
+        mp.setenv("SONAR_ROCM_USE_AITER", "1" if use_aiter else "0")
+        mp.setenv("SONAR_ROCM_USE_AITER_MHA", "1" if use_mha else "0")
         _reload_envs()
         rocm_aiter_ops.refresh_env_variables()
         assert rocm_aiter_ops.is_mha_enabled() is expected
@@ -352,7 +352,7 @@ def test_aiter_mha_env_flags_control_enablement(use_aiter, use_mha, expected, mo
 def test_aiter_mha_platform_gate_matches_install_and_arch():
     """The global AITER availability check should only open on ROCm MI3xx when
     the aiter package is installed."""
-    from aphrodite._aiter_ops import IS_AITER_FOUND, is_aiter_found_and_supported
+    from sonar._aiter_ops import IS_AITER_FOUND, is_aiter_found_and_supported
 
     assert is_aiter_found_and_supported() is (current_platform.is_rocm() and on_mi3xx() and IS_AITER_FOUND)
 
@@ -367,7 +367,7 @@ def _run_single_seq_flash_attn_case(
 ) -> tuple[torch.Tensor, torch.Tensor]:
     import aiter
 
-    from aphrodite.v1.attention.backends.rocm_aiter_fa import cp_mha_gather_cache
+    from sonar.v1.attention.backends.rocm_aiter_fa import cp_mha_gather_cache
 
     set_random_seed(0)
 
@@ -472,7 +472,7 @@ def test_aiter_fa_head_sizes(head_size, dtype, num_heads, seq_lens):
 def test_aiter_mha_varlen_paged_kv(head_size, num_heads, seq_lens, dtype):
     """Test AITER flash attention varlen with paged KV cache.
 
-    Exercises: APHRODITE_ROCM_USE_AITER, APHRODITE_ROCM_USE_AITER_MHA
+    Exercises: SONAR_ROCM_USE_AITER, SONAR_ROCM_USE_AITER_MHA
     """
     atol = 1.5e-2
     rtol = 1e-2
@@ -506,7 +506,7 @@ def test_aiter_mha_multi_batch(num_heads, head_size, dtype):
     _assert_aiter_supported()
     import aiter
 
-    from aphrodite.v1.attention.backends.rocm_aiter_fa import cp_mha_gather_cache
+    from sonar.v1.attention.backends.rocm_aiter_fa import cp_mha_gather_cache
 
     set_random_seed(42)
 
@@ -648,17 +648,17 @@ def test_aiter_fa_sliding_window_matches_reference():
 @pytest.mark.parametrize("batch", ["prefill", "extend", "mixed"])
 def test_aiter_fa_shared_kv_matches_reference(monkeypatch, shuffle, sliding_window, kv_cache_dtype, batch):
     """Shared layers read cached K/V for prefill and extend without modifying it."""
-    from aphrodite._aiter_ops import rocm_aiter_ops
-    from aphrodite.config import set_current_aphrodite_config
-    from aphrodite.model_executor.layers.attention import Attention
-    from aphrodite.v1.attention.backends.rocm_aiter_fa import (
+    from sonar._aiter_ops import rocm_aiter_ops
+    from sonar.config import set_current_sonar_config
+    from sonar.model_executor.layers.attention import Attention
+    from sonar.v1.attention.backends.rocm_aiter_fa import (
         AiterFlashAttentionBackend,
         AiterFlashAttentionMetadataBuilder,
     )
     from tests.v1.attention.utils import (
         BatchSpec,
-        create_aphrodite_config,
         create_common_attn_metadata,
+        create_sonar_config,
         create_standard_kv_cache_spec,
     )
 
@@ -670,7 +670,7 @@ def test_aiter_fa_shared_kv_matches_reference(monkeypatch, shuffle, sliding_wind
         "extend": BatchSpec(seq_lens=[80, 56], query_lens=[32, 24]),
         "mixed": BatchSpec(seq_lens=[48, 80, 24], query_lens=[1, 32, 24]),
     }[batch]
-    config = create_aphrodite_config(
+    config = create_sonar_config(
         model_name="Qwen/Qwen3-0.6B",
         dtype="bfloat16",
         max_num_batched_tokens=1024,
@@ -680,7 +680,7 @@ def test_aiter_fa_shared_kv_matches_reference(monkeypatch, shuffle, sliding_wind
     num_kv_heads = config.model_config.get_num_kv_heads(config.parallel_config)
     head_size = config.model_config.get_head_size()
     scale = head_size**-0.5
-    with set_current_aphrodite_config(config):
+    with set_current_sonar_config(config):
         target = Attention(
             num_heads,
             head_size,
@@ -724,7 +724,7 @@ def test_aiter_fa_shared_kv_matches_reference(monkeypatch, shuffle, sliding_wind
             attn_layer._v_scale.fill_(v_scale)
         key = torch.randn(32 * BLOCK_SIZE, num_kv_heads, head_size, dtype=torch.bfloat16)
         value = torch.randn_like(key)
-        from aphrodite.v1.attention.backends.rocm_aiter_fa import AiterFlashAttentionImpl
+        from sonar.v1.attention.backends.rocm_aiter_fa import AiterFlashAttentionImpl
 
         assert isinstance(target.impl, AiterFlashAttentionImpl)
         target.impl.do_kv_cache_update(
@@ -808,7 +808,7 @@ def test_aiter_mha_decode_single_token(dtype):
     _assert_aiter_supported()
     import aiter
 
-    from aphrodite.v1.attention.backends.rocm_aiter_fa import cp_mha_gather_cache
+    from sonar.v1.attention.backends.rocm_aiter_fa import cp_mha_gather_cache
 
     set_random_seed(0)
 
@@ -907,7 +907,7 @@ def test_aiter_mha_varlen_fp8_kv(dtype):
 
     import aiter
 
-    from aphrodite.v1.attention.backends.rocm_aiter_fa import cp_mha_gather_cache
+    from sonar.v1.attention.backends.rocm_aiter_fa import cp_mha_gather_cache
 
     FP8_DTYPE = current_platform.fp8_dtype()
 
@@ -1010,7 +1010,7 @@ def test_aiter_paged_decode_over_window_trimmed_block_table_matches_reference():
 
     import aiter  # noqa: F401
 
-    from aphrodite.v1.attention.backends.rocm_aiter_fa import (
+    from sonar.v1.attention.backends.rocm_aiter_fa import (
         AiterFlashAttentionMetadataBuilder,
     )
 
@@ -1101,7 +1101,7 @@ def test_aiter_paged_decode_over_window_trimmed_block_table_matches_reference():
 def test_asm_kv_scale_tables_shared_across_builders():
     """Builders share one AsmKvScaleTables; equal (shape, scale) requests must
     return the same dense table, a different scale a different one."""
-    from aphrodite.v1.attention.backends.rocm_aiter_fa import (
+    from sonar.v1.attention.backends.rocm_aiter_fa import (
         AiterFlashAttentionMetadataBuilder,
         AsmKvScaleTables,
     )

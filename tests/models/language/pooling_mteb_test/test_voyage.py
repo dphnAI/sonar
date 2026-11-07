@@ -37,18 +37,18 @@ MODELS = [
 
 @pytest.mark.flaky(reruns=2)
 @pytest.mark.parametrize("model_info", MODELS)
-def test_embed_models_mteb(hf_runner, aphrodite_runner, model_info: EmbedModelInfo) -> None:
+def test_embed_models_mteb(hf_runner, sonar_runner, model_info: EmbedModelInfo) -> None:
     # Encoder-only attention models need enforce_eager=True to avoid
     # CUDA graph capture issues with piecewise compilation
-    mteb_test_embed_models(hf_runner, aphrodite_runner, model_info, aphrodite_extra_kwargs={"enforce_eager": True})
+    mteb_test_embed_models(hf_runner, sonar_runner, model_info, sonar_extra_kwargs={"enforce_eager": True})
 
 
 @pytest.mark.parametrize("model_info", MODELS)
-def test_embed_models_correctness(hf_runner, aphrodite_runner, model_info: EmbedModelInfo, example_prompts) -> None:
+def test_embed_models_correctness(hf_runner, sonar_runner, model_info: EmbedModelInfo, example_prompts) -> None:
     correctness_test_embed_models(
         hf_runner,
-        aphrodite_runner,
+        sonar_runner,
         model_info,
         example_prompts,
-        aphrodite_extra_kwargs={"enforce_eager": True},
+        sonar_extra_kwargs={"enforce_eager": True},
     )

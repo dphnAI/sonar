@@ -33,30 +33,30 @@ import torch
 from torch import nn
 from transformers import Qwen2Config
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, CacheConfig
-from aphrodite.distributed import get_pp_group, get_tensor_model_parallel_world_size
-from aphrodite.model_executor.layers.activation import SiluAndMul
-from aphrodite.model_executor.layers.attention import (
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import CacheConfig, SonarConfig
+from sonar.distributed import get_pp_group, get_tensor_model_parallel_world_size
+from sonar.model_executor.layers.activation import SiluAndMul
+from sonar.model_executor.layers.attention import (
     Attention,
     EncoderOnlyAttention,
 )
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     MergedColumnParallelLinear,
     QKVParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.transformers_utils.config import set_default_rope_theta
-from aphrodite.v1.attention.backend import AttentionType
+from sonar.sequence import IntermediateTensors
+from sonar.transformers_utils.config import set_default_rope_theta
+from sonar.v1.attention.backend import AttentionType
 
 from .interfaces import (
     EagleModelMixin,
@@ -313,7 +313,7 @@ class Qwen2DecoderLayer(nn.Module):
     }
 )
 class Qwen2Model(nn.Module, EagleModelMixin):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_stacked={
             # weight_name: (param_name, shard_id)
             ".q_proj": (".qkv_proj", "q"),
@@ -328,15 +328,15 @@ class Qwen2Model(nn.Module, EagleModelMixin):
     def __init__(
         self,
         *,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
         decoder_layer_type: type[nn.Module] = Qwen2DecoderLayer,
     ):
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_config.get_text_config()
-        cache_config = aphrodite_config.cache_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config.get_text_config()
+        cache_config = sonar_config.cache_config
+        quant_config = sonar_config.quant_config
 
         # TODO (@robertgshaw2): see if this can be moved out
         if len(set(getattr(config, "layer_types", []))) > 1:
@@ -357,7 +357,7 @@ class Qwen2Model(nn.Module, EagleModelMixin):
         if (
             get_pp_group().is_first_rank
             or (config.tie_word_embeddings and get_pp_group().is_last_rank)
-            or spec_decode_needs_target_embed(aphrodite_config)
+            or spec_decode_needs_target_embed(sonar_config)
         ):
             self.embed_tokens = VocabParallelEmbedding(
                 config.vocab_size,
@@ -439,26 +439,26 @@ class Qwen2Model(nn.Module, EagleModelMixin):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
 
 class Qwen2ForCausalLM(nn.Module, SupportsLoRA, SupportsPP, SupportsEagle, SupportsEagle3, SupportsQuant):
-    hf_to_aphrodite_mapper = Qwen2Model.hf_to_aphrodite_mapper
+    hf_to_sonar_mapper = Qwen2Model.hf_to_sonar_mapper
     packed_modules_mapping = {
         "qkv_proj": ["q_proj", "k_proj", "v_proj"],
         "gate_up_proj": ["gate_proj", "up_proj"],
     }
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config.get_text_config()
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config.get_text_config()
+        quant_config = sonar_config.quant_config
 
         self.config = config
 
         self.quant_config = quant_config
         self.use_tied_lm_head = model_should_use_tied_lm_head(config, quant_config)
-        self.model = Qwen2Model(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = Qwen2Model(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
 
         if get_pp_group().is_last_rank:
             self.lm_head = ParallelLMHead(

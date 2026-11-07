@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 
-from aphrodite import LLM, SamplingParams
+from sonar import LLM, SamplingParams
 
 MODEL = "meta-llama/llama-2-7b-hf"
 MAX_TOKENS = 200
@@ -20,7 +20,7 @@ def _test_stopping(
     include_in_output: bool = False,
 ) -> None:
     output = llm.generate(
-        "A story about Aphrodite:\n",
+        "A story about Sonar:\n",
         SamplingParams(
             temperature=0.0,
             max_tokens=MAX_TOKENS,
@@ -40,7 +40,7 @@ def _stop_basic(llm):
         llm,
         stop=["."],
         include_in_output=False,
-        expected_output="APHRODITE is a 100% volunteer organization",
+        expected_output="SONAR is a 100% volunteer organization",
         expected_reason=".",
     )
 
@@ -48,7 +48,7 @@ def _stop_basic(llm):
         llm,
         stop=["."],
         include_in_output=True,
-        expected_output="APHRODITE is a 100% volunteer organization.",
+        expected_output="SONAR is a 100% volunteer organization.",
         expected_reason=".",
     )
 
@@ -58,7 +58,7 @@ def _stop_multi_tokens(llm):
         llm,
         stop=["group of peo", "short"],
         include_in_output=False,
-        expected_output="APHRODITE is a 100% volunteer organization. We are a ",
+        expected_output="SONAR is a 100% volunteer organization. We are a ",
         expected_reason="group of peo",
     )
 
@@ -66,7 +66,7 @@ def _stop_multi_tokens(llm):
         llm,
         stop=["group of peo", "short"],
         include_in_output=True,
-        expected_output="APHRODITE is a 100% volunteer organization. We are a group of peo",
+        expected_output="SONAR is a 100% volunteer organization. We are a group of peo",
         expected_reason="group of peo",
     )
 
@@ -76,7 +76,7 @@ def _stop_partial_token(llm):
         llm,
         stop=["gani"],
         include_in_output=False,
-        expected_output="APHRODITE is a 100% volunteer or",
+        expected_output="SONAR is a 100% volunteer or",
         expected_reason="gani",
     )
 
@@ -84,7 +84,7 @@ def _stop_partial_token(llm):
         llm,
         stop=["gani"],
         include_in_output=True,
-        expected_output="APHRODITE is a 100% volunteer organi",
+        expected_output="SONAR is a 100% volunteer organi",
         expected_reason="gani",
     )
 
@@ -96,7 +96,7 @@ def _stop_token_id(llm):
         llm,
         stop_token_ids=[13013],
         include_in_output=False,
-        expected_output="APHRODITE is a 100% volunteer",
+        expected_output="SONAR is a 100% volunteer",
         expected_reason=13013,
     )
 
@@ -104,7 +104,7 @@ def _stop_token_id(llm):
         llm,
         stop_token_ids=[13013],
         include_in_output=True,
-        expected_output="APHRODITE is a 100% volunteer organization",
+        expected_output="SONAR is a 100% volunteer organization",
         expected_reason=13013,
     )
 

@@ -91,7 +91,7 @@ def _arch_tuned_configs() -> tuple[
     dict[tuple[int, int], dict[int, int]],
     dict[tuple[int, int], dict[int, tuple[int, int]]],
 ]:
-    from aphrodite.platforms import current_platform
+    from sonar.platforms import current_platform
 
     if current_platform.is_device_capability_family(100):
         return (

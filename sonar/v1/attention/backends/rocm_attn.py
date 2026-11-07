@@ -7,18 +7,18 @@ from typing import ClassVar
 
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.cache import CacheDType
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar import _custom_ops as ops
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.config import SonarConfig
+from sonar.config.cache import CacheDType
+from sonar.logger import init_logger
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     kFp8StaticTensorSym,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import get_dtype_size
-from aphrodite.v1.attention.backend import (
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import get_dtype_size
+from sonar.v1.attention.backend import (
     AttentionBackend,
     AttentionCGSupport,
     AttentionImpl,
@@ -28,15 +28,15 @@ from aphrodite.v1.attention.backend import (
     CommonAttentionMetadata,
     MultipleOf,
 )
-from aphrodite.v1.attention.ops.chunked_prefill_paged_decode import (
+from sonar.v1.attention.ops.chunked_prefill_paged_decode import (
     chunked_prefill_paged_decode,
     has_native_kv_cache_layout,
 )
-from aphrodite.v1.attention.ops.paged_attn import PagedAttention
-from aphrodite.v1.attention.ops.triton_reshape_and_cache_flash import (
+from sonar.v1.attention.ops.paged_attn import PagedAttention
+from sonar.v1.attention.ops.triton_reshape_and_cache_flash import (
     triton_reshape_and_cache_flash,
 )
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.kv_cache_interface import (
     AttentionSpec,
     KVCacheLayout,
     is_quantized_kv_cache,
@@ -77,16 +77,16 @@ class RocmAttentionMetadataBuilder(AttentionMetadataBuilder[RocmAttentionMetadat
         self,
         kv_cache_spec: AttentionSpec,
         layer_names: list[str],
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
     ):
-        super().__init__(kv_cache_spec, layer_names, aphrodite_config, device)
+        super().__init__(kv_cache_spec, layer_names, sonar_config, device)
 
         self.block_size = kv_cache_spec.block_size
 
-        model_config = aphrodite_config.model_config
-        self.num_heads_q = model_config.get_num_attention_heads(aphrodite_config.parallel_config)
-        self.num_heads_kv = model_config.get_num_kv_heads(aphrodite_config.parallel_config)
+        model_config = sonar_config.model_config
+        self.num_heads_q = model_config.get_num_attention_heads(sonar_config.parallel_config)
+        self.num_heads_kv = model_config.get_num_kv_heads(sonar_config.parallel_config)
         self.headdim = model_config.get_head_size()
 
     def build_for_cudagraph_capture(self, common_attn_metadata: CommonAttentionMetadata) -> RocmAttentionMetadata:
@@ -152,8 +152,8 @@ class RocmAttentionBackend(AttentionBackend):
         # The (head_size, block_size) pairs that have a native kernel are enumerated
         # by csrc/rocm/attention_paged_attn_<head>_<dtype>_<kv>.cu, each of which
         # instantiates ATTN_LAUNCH from csrc/rocm/attention_kernels.cuh; the runtime
-        # gate is use_rocm_custom_paged_attention() in aphrodite/platforms/rocm.py.
-        # However, Aphrodite allows support for any multiple of 16 via the Triton path.
+        # gate is use_rocm_custom_paged_attention() in sonar/platforms/rocm.py.
+        # However, Sonar allows support for any multiple of 16 via the Triton path.
         # As addressed in PR: https://github.com/vllm-project/vllm/pull/31380,
         # non-standard models (like qwen3-next with block_size 544, or qwen3_5
         # with 784 and 1056) are dynamically routed to our optimized Triton kernel
@@ -327,7 +327,7 @@ class RocmAttentionImpl(AttentionImpl):
         max_query_len = attn_metadata.max_query_len
 
         # Call flash attention directly on Q, K, V tensors
-        from aphrodite.v1.attention.ops.triton_prefill_attention import context_attention_fwd
+        from sonar.v1.attention.ops.triton_prefill_attention import context_attention_fwd
 
         context_attention_fwd(
             q=query,
@@ -482,7 +482,7 @@ class RocmAttentionImpl(AttentionImpl):
         interleaved_v_pack_factor = (16 // value_cache.element_size()) if interleaved_v else 0
 
         if block_size in (16, 32) and has_native_layout:
-            # Normal 16, 32 with contiguous blocks: use Aphrodite native HIP C++ logic.
+            # Normal 16, 32 with contiguous blocks: use Sonar native HIP C++ logic.
             PagedAttention.write_to_paged_cache(
                 key,
                 value,

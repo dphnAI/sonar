@@ -8,15 +8,15 @@ import ray
 import torch
 from transformers import AutoConfig
 
-from aphrodite.model_executor.layers.fused_moe import fused_topk
-from aphrodite.model_executor.layers.fused_moe.moe_permute_unpermute import (
+from sonar.model_executor.layers.fused_moe import fused_topk
+from sonar.model_executor.layers.fused_moe.moe_permute_unpermute import (
     MoEPermuteScratch,
     moe_permute,
     moe_unpermute,
 )
-from aphrodite.model_executor.layers.fused_moe.utils import _fp8_quantize
-from aphrodite.platforms import current_platform
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
+from sonar.model_executor.layers.fused_moe.utils import _fp8_quantize
+from sonar.platforms import current_platform
+from sonar.utils.argparse_utils import FlexibleArgumentParser
 
 FP8_DTYPE = current_platform.fp8_dtype()
 

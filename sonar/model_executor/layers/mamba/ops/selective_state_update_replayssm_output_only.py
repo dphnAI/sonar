@@ -4,11 +4,11 @@
 
 import torch
 
-from aphrodite.model_executor.layers.mamba.ops.mamba_ssm import convert_rs_fp16x2, softplus
-from aphrodite.model_executor.layers.mamba.ops.replayssm_config import get_replayssm_config
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
-from aphrodite.v1.attention.backends.utils import NULL_BLOCK_ID
+from sonar.model_executor.layers.mamba.ops.mamba_ssm import convert_rs_fp16x2, softplus
+from sonar.model_executor.layers.mamba.ops.replayssm_config import get_replayssm_config
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
+from sonar.v1.attention.backends.utils import NULL_BLOCK_ID
 
 
 @triton.heuristics({"HAS_STATE_BATCH_INDICES": lambda args: args["state_batch_indices_ptr"] is not None})

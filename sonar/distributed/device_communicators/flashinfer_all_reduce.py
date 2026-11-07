@@ -12,15 +12,15 @@ import torch
 import torch.distributed as dist
 from torch.distributed import ProcessGroup
 
-import aphrodite.envs as envs
-from aphrodite.config.compilation import PassConfig
-from aphrodite.distributed.device_communicators.all_reduce_utils import (
+import sonar.envs as envs
+from sonar.config.compilation import PassConfig
+from sonar.distributed.device_communicators.all_reduce_utils import (
     FI_MNNVL_ALLREDUCE_MAX_SIZE_MB,
 )
-from aphrodite.distributed.parallel_state import _node_count
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.utils.gpu_sync_debug import gpu_sync_allowed
+from sonar.distributed.parallel_state import _node_count
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.utils.gpu_sync_debug import gpu_sync_allowed
 
 logger = init_logger(__name__)
 
@@ -143,7 +143,7 @@ def _resolve_fi_ar_backend(group: ProcessGroup) -> tuple[str | None, bool]:
         group.
 
     """
-    backend = envs.APHRODITE_FLASHINFER_ALLREDUCE_BACKEND
+    backend = envs.SONAR_FLASHINFER_ALLREDUCE_BACKEND
     if backend != "auto":
         logger.debug_once("Using flashinfer allreduce backend: %s", backend)
         return backend, False
@@ -184,7 +184,7 @@ def get_fi_ar_workspace(
 
     Used by AllReduceFusionPass (non-quant patterns) and FlashInferAllReduce
     for standalone allreduce. Backend is controlled by
-    APHRODITE_FLASHINFER_ALLREDUCE_BACKEND env var.
+    SONAR_FLASHINFER_ALLREDUCE_BACKEND env var.
     """
     global _fi_ar_workspace, _fi_ar_workspace_failed
     if _fi_ar_workspace is not None or _fi_ar_workspace_failed:
@@ -202,7 +202,7 @@ def get_fi_ar_workspace(
         )
 
     if (
-        envs.APHRODITE_ALLREDUCE_USE_FLASHINFER
+        envs.SONAR_ALLREDUCE_USE_FLASHINFER
         and (max_size := _get_tuned_standalone_max_size(world_size, backend, group)) is not None
     ):
         element_size = torch.empty((), dtype=dtype, device="cpu").element_size()
@@ -242,7 +242,7 @@ def get_fi_ar_quant_workspace(
 ):
     """Return the allreduce workspace for quant patterns, initializing if needed.
 
-    Backend is controlled by APHRODITE_FLASHINFER_ALLREDUCE_BACKEND env var,
+    Backend is controlled by SONAR_FLASHINFER_ALLREDUCE_BACKEND env var,
     matching non-quant fusion. With ``auto`` this prefers mnnvl and falls back
     to trtllm only on single-node topologies where mnnvl multicast is
     unavailable.

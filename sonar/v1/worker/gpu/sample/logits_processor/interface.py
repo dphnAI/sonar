@@ -18,10 +18,10 @@ if TYPE_CHECKING:
     import numpy as np
     import torch
 
-    from aphrodite.config import AphroditeConfig
-    from aphrodite.sampling_params import SamplingParams
-    from aphrodite.v1.worker.gpu.buffer_utils import StagedWriteTensor, UvaBackedTensor
-    from aphrodite.v1.worker.gpu.states import RequestState
+    from sonar.config import SonarConfig
+    from sonar.sampling_params import SamplingParams
+    from sonar.v1.worker.gpu.buffer_utils import StagedWriteTensor, UvaBackedTensor
+    from sonar.v1.worker.gpu.states import RequestState
 
 
 @dataclass(frozen=True)
@@ -107,7 +107,7 @@ class LogitsProcessor(ABC):
     """
 
     def __init__(  # noqa: B027
-        self, aphrodite_config: AphroditeConfig, req_states: LogitsProcRequestState
+        self, sonar_config: SonarConfig, req_states: LogitsProcRequestState
     ):
         """Capture what stays constant for the processor's lifetime.
 

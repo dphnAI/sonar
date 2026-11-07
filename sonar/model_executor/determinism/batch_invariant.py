@@ -8,18 +8,18 @@ from typing import Any
 import torch
 import torch.distributed as dist
 
-import aphrodite.envs as envs
-from aphrodite.model_executor.determinism.batch_invariant_configs import (
+import sonar.envs as envs
+from sonar.model_executor.determinism.batch_invariant_configs import (
     _get_descriptor_matmul_config,
     _get_matmul_config,
     resolve_tuned_matmul_configs,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.mem_utils import get_max_shared_memory_bytes
-from aphrodite.utils.nccl import pin_nccl_env
-from aphrodite.utils.platform_utils import num_compute_units
-from aphrodite.utils.torch_utils import is_torch_equal_or_newer
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
+from sonar.utils.mem_utils import get_max_shared_memory_bytes
+from sonar.utils.nccl import pin_nccl_env
+from sonar.utils.platform_utils import num_compute_units
+from sonar.utils.torch_utils import is_torch_equal_or_newer
 
 
 def _matmul_launch_metadata(grid: Callable[..., Any], kernel: Any, args: dict[str, Any]) -> dict[str, Any]:
@@ -1037,7 +1037,7 @@ def rms_norm_batch_invariant(
     """
     if residual is not None:
         assert input.shape == residual.shape, f"Input shape {input.shape} must match residual shape {residual.shape}"
-        import aphrodite._custom_ops as ops
+        import sonar._custom_ops as ops
 
         ops.fused_add_rms_norm(input, residual, weight, eps)
         return input, residual
@@ -1321,15 +1321,15 @@ def enable_batch_invariant_mode():
 
 
 def override_envs_for_invariance():
-    os.environ["APHRODITE_ALLREDUCE_USE_SYMM_MEM"] = "0"
+    os.environ["SONAR_ALLREDUCE_USE_SYMM_MEM"] = "0"
     # Only the 1-stage kernel has a size- and rank-independent reduction order.
-    os.environ["APHRODITE_CUSTOM_ALLREDUCE_ALGO"] = "1stage"
+    os.environ["SONAR_CUSTOM_ALLREDUCE_ALGO"] = "1stage"
 
     os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
 
     if current_platform.is_rocm():
         # The skinny GEMMs pick their split of K from the batch size.
-        os.environ["APHRODITE_ROCM_USE_SKINNY_GEMM"] = "0"
+        os.environ["SONAR_ROCM_USE_SKINNY_GEMM"] = "0"
     else:
         # NCCL determinism settings. NCCL keeps the launch mode process-wide, so,
         # unlike the pins below, it also applies to communicators shared with other
@@ -1355,7 +1355,7 @@ def override_envs_for_invariance():
         )
 
     # torch.compile settings
-    os.environ["APHRODITE_USE_AOT_COMPILE"] = "0"
+    os.environ["SONAR_USE_AOT_COMPILE"] = "0"
     import torch._inductor.config as inductor_config
 
     if hasattr(inductor_config, "batch_invariant"):
@@ -1364,7 +1364,7 @@ def override_envs_for_invariance():
 
 def init_batch_invariance():
     # this will hit all the csrc overrides as well
-    if envs.APHRODITE_BATCH_INVARIANT:
+    if envs.SONAR_BATCH_INVARIANT:
         resolve_tuned_matmul_configs()
         override_envs_for_invariance()
         enable_batch_invariant_mode()

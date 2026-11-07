@@ -12,7 +12,7 @@ import json
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
-from aphrodite.entrypoints.scale_out.token_in_token_out.protocol import (
+from sonar.entrypoints.scale_out.token_in_token_out.protocol import (
     DerenderChatRequest,
     DerenderChatStreamRequest,
     DerenderCompletionRequest,
@@ -30,8 +30,8 @@ from aphrodite.entrypoints.scale_out.token_in_token_out.protocol import (
     ParseContext,
     PlaceholderRangeInfo,
 )
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.sampling_params import SamplingParams
+from sonar.exceptions import SonarValidationError
+from sonar.sampling_params import SamplingParams
 
 
 def _base_payload() -> dict:
@@ -203,7 +203,7 @@ def test_parse_context_to_chat_request_accepts_converter_tool_fields(tools):
 
 def test_parse_context_to_chat_request_rejects_unknown_named_tool():
     parse_context = ParseContext.model_validate({"tool_choice": {"type": "function", "function": {"name": "nope"}}})
-    with pytest.raises(AphroditeValidationError, match="tool_choice"):
+    with pytest.raises(SonarValidationError, match="tool_choice"):
         parse_context.to_chat_request()
 
 

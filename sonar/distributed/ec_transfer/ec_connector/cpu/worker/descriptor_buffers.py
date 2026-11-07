@@ -11,10 +11,10 @@ from typing import NamedTuple
 import numpy as np
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 # CUDA/ROCm cache_kernels.cu requires int64 pointers; the XPU DMA engine
-# requires uint64 (see aphrodite._custom_ops.swap_blocks_batch).
+# requires uint64 (see sonar._custom_ops.swap_blocks_batch).
 _PTR_DTYPE = torch.uint64 if current_platform.is_xpu() else torch.int64
 
 

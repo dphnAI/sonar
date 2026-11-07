@@ -10,12 +10,12 @@ from typing import TYPE_CHECKING
 
 import torch.nn as nn
 
-import aphrodite.envs as envs
-from aphrodite.logger import init_logger
-from aphrodite.utils.platform_utils import is_pin_memory_available
+import sonar.envs as envs
+from sonar.logger import init_logger
+from sonar.utils.platform_utils import is_pin_memory_available
 
 if TYPE_CHECKING:
-    from aphrodite.config import OffloadConfig
+    from sonar.config import OffloadConfig
 
 logger = init_logger(__name__)
 
@@ -25,9 +25,9 @@ def should_pin_memory() -> bool:
 
     Combines the platform capability check with the user override env var.
     On unified-memory systems (e.g. GH200) pinned memory eats into GPU
-    memory, so users can disable it via APHRODITE_WEIGHT_OFFLOADING_DISABLE_PIN_MEMORY.
+    memory, so users can disable it via SONAR_WEIGHT_OFFLOADING_DISABLE_PIN_MEMORY.
     """
-    return is_pin_memory_available() and not envs.APHRODITE_WEIGHT_OFFLOADING_DISABLE_PIN_MEMORY
+    return is_pin_memory_available() and not envs.SONAR_WEIGHT_OFFLOADING_DISABLE_PIN_MEMORY
 
 
 """
@@ -144,8 +144,8 @@ def create_offloader(offload_config: "OffloadConfig") -> BaseOffloader:
     selects prefetch if ``offload_group_size > 0``, UVA if
     ``cpu_offload_gb > 0``, otherwise noop.
     """
-    from aphrodite.model_executor.offloader.prefetch import PrefetchOffloader
-    from aphrodite.model_executor.offloader.uva import UVAOffloader
+    from sonar.model_executor.offloader.prefetch import PrefetchOffloader
+    from sonar.model_executor.offloader.uva import UVAOffloader
 
     backend = offload_config.offload_backend
     uva = offload_config.uva

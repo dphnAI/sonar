@@ -12,28 +12,28 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.mamba.checkpoint import (
+from sonar.model_executor.layers.mamba.checkpoint import (
     MambaPrefillCheckpointExporter,
     MambaPrefillCheckpointMetadata,
 )
-from aphrodite.model_executor.layers.mamba.gdn.base import GatedDeltaNetAttention
-from aphrodite.model_executor.layers.mamba.ops.causal_conv1d import causal_conv1d_fn
-from aphrodite.models.kimi_k3.amd.kda import KimiK3DeltaAttention
-from aphrodite.models.kimi_k3.amd.kda_metadata import KimiK3ROCmKDAMetadataBuilder
-from aphrodite.models.kimi_k3.amd.ops.kda_checkpoint import (
+from sonar.model_executor.layers.mamba.gdn.base import GatedDeltaNetAttention
+from sonar.model_executor.layers.mamba.ops.causal_conv1d import causal_conv1d_fn
+from sonar.models.kimi_k3.amd.kda import KimiK3DeltaAttention
+from sonar.models.kimi_k3.amd.kda_metadata import KimiK3ROCmKDAMetadataBuilder
+from sonar.models.kimi_k3.amd.ops.kda_checkpoint import (
     KimiK3ROCmKDAPrefillCheckpointExporter,
 )
-from aphrodite.models.kimi_k3.amd.ops.kda_chunk import (
+from sonar.models.kimi_k3.amd.ops.kda_chunk import (
     KDA_CHECKPOINT_ALIGNMENT,
     is_fused_kda_chunk_supported,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.v1.attention.backends.utils import NULL_BLOCK_ID
-from aphrodite.v1.kv_cache_interface import MambaSpec
+from sonar.platforms import current_platform
+from sonar.v1.attention.backends.utils import NULL_BLOCK_ID
+from sonar.v1.kv_cache_interface import MambaSpec
 from tests.v1.attention.utils import (
     BatchSpec,
-    create_aphrodite_config,
     create_common_attn_metadata,
+    create_sonar_config,
 )
 
 pytestmark = pytest.mark.skipif(
@@ -68,11 +68,11 @@ def _builder(
     prefix_match_unit: int | None = None,
     num_spec: int = 0,
 ) -> KimiK3ROCmKDAMetadataBuilder:
-    aphrodite_config = create_aphrodite_config(model_name="Qwen/Qwen3.5-0.8B", block_size=block_size)
-    aphrodite_config.cache_config.mamba_cache_mode = mamba_cache_mode
-    aphrodite_config.cache_config.prefix_match_unit = prefix_match_unit
+    sonar_config = create_sonar_config(model_name="Qwen/Qwen3.5-0.8B", block_size=block_size)
+    sonar_config.cache_config.mamba_cache_mode = mamba_cache_mode
+    sonar_config.cache_config.prefix_match_unit = prefix_match_unit
     if num_spec:
-        aphrodite_config.speculative_config = _StubSpeculativeConfig(num_spec)
+        sonar_config.speculative_config = _StubSpeculativeConfig(num_spec)
     builder = KimiK3ROCmKDAMetadataBuilder(
         kv_cache_spec=MambaSpec(
             block_size=block_size,
@@ -84,11 +84,11 @@ def _builder(
             num_speculative_blocks=num_spec,
         ),
         layer_names=["layer.0"],
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         device=torch.device("cuda"),
     )
-    aphrodite_config.cache_config.hash_block_size = prefix_match_unit or block_size
-    aphrodite_config.cache_config.cache_hit_alignment_tokens = prefix_match_unit or block_size
+    sonar_config.cache_config.hash_block_size = prefix_match_unit or block_size
+    sonar_config.cache_config.cache_hit_alignment_tokens = prefix_match_unit or block_size
     return builder
 
 
@@ -449,9 +449,9 @@ def _spec_for(monkeypatch, **attrs) -> MambaSpec:
         use_safe_gate=True,
     ).items():
         setattr(layer, name, attrs.get(name, value))
-    aphrodite_config = create_aphrodite_config(model_name="Qwen/Qwen3.5-0.8B")
-    aphrodite_config.cache_config.mamba_cache_mode = "align"
-    return layer.get_kv_cache_spec(aphrodite_config)
+    sonar_config = create_sonar_config(model_name="Qwen/Qwen3.5-0.8B")
+    sonar_config.cache_config.mamba_cache_mode = "align"
+    return layer.get_kv_cache_spec(sonar_config)
 
 
 def test_opt_in_publishes_chunk_walk_alignment(monkeypatch) -> None:
@@ -489,7 +489,7 @@ def test_gluon_backend_keeps_the_checkpoint(monkeypatch) -> None:
 
 
 def test_gluon_backend_opts_out_without_the_fused_kernel(monkeypatch) -> None:
-    import aphrodite.models.kimi_k3.amd.kda as kda
+    import sonar.models.kimi_k3.amd.kda as kda
 
     monkeypatch.setattr(kda, "is_fused_kda_chunk_supported", lambda: False)
     spec = _spec_for(monkeypatch, kda_prefill_backend="gluon")

@@ -6,13 +6,13 @@ import pytest
 import torch
 from huggingface_hub.errors import GatedRepoError
 
-from aphrodite.config import AphroditeConfig, ModelConfig
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.inputs.engine import MultiModalInput
-from aphrodite.multimodal.inputs import MultiModalKwargsItems, PlaceholderRange
-from aphrodite.renderers.chat_utils import ConversationMessage, load_chat_template
-from aphrodite.renderers.hf import (
+from sonar.config import ModelConfig, SonarConfig
+from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+from sonar.exceptions import SonarValidationError
+from sonar.inputs.engine import MultiModalInput
+from sonar.multimodal.inputs import MultiModalKwargsItems, PlaceholderRange
+from sonar.renderers.chat_utils import ConversationMessage, load_chat_template
+from sonar.renderers.hf import (
     HfRenderer,
     _build_prompt_embeds_updates,
     _consolidate_system_messages,
@@ -28,13 +28,13 @@ from aphrodite.renderers.hf import (
     resolve_chat_template_kwargs,
     safe_apply_chat_template,
 )
-from aphrodite.tokenizers import get_tokenizer
-from aphrodite.transformers_utils.repo_utils import hf_api
+from sonar.tokenizers import get_tokenizer
+from sonar.transformers_utils.repo_utils import hf_api
 
 from ..models.registry import HF_EXAMPLE_MODELS
-from ..utils import APHRODITE_PATH
+from ..utils import SONAR_PATH
 
-EXAMPLES_DIR = APHRODITE_PATH / "examples"
+EXAMPLES_DIR = SONAR_PATH / "examples"
 
 
 def _check_config_access(model, revision):
@@ -44,7 +44,7 @@ def _check_config_access(model, revision):
         pytest.skip(f"Access to gated model {model} is not available")
 
 
-chatml_jinja_path = APHRODITE_PATH / "examples/template_chatml.jinja"
+chatml_jinja_path = SONAR_PATH / "examples/template_chatml.jinja"
 assert chatml_jinja_path.exists()
 
 # Define models, templates, and their corresponding expected outputs
@@ -103,7 +103,7 @@ def test_apply_prompt_embeds_keeps_engine_token_ids_in_vocabulary() -> None:
     """Consume OOV sentinels without changing text IDs or embedding offsets."""
     model = "HuggingFaceTB/SmolVLM-256M-Instruct"
     model_config = ModelConfig(model, enable_prompt_embeds=True)
-    renderer = HfRenderer(AphroditeConfig(model_config=model_config), get_tokenizer(model))
+    renderer = HfRenderer(SonarConfig(model_config=model_config), get_tokenizer(model))
     try:
         assert renderer.tokenizer is not None
         sentinel = _ensure_prompt_embeds_placeholder_token(renderer.tokenizer)
@@ -150,7 +150,7 @@ def test_no_load_chat_template_filelike():
     # Testing chatml template
     template = "../../examples/does_not_exist"
 
-    with pytest.raises(AphroditeValidationError, match="looks like a file path"):
+    with pytest.raises(SonarValidationError, match="looks like a file path"):
         load_chat_template(chat_template=template)
 
 
@@ -1011,7 +1011,7 @@ class TestApplyChatTemplateEffortTolerant:
     def test_unsupported_effort_raises_bad_request(self, model_config, tokenizer):
         conversation: list[ConversationMessage] = [{"role": "user", "content": "Hello"}]
         with pytest.raises(
-            AphroditeValidationError,
+            SonarValidationError,
             match="Unexpected reasoning effort high",
         ) as excinfo:
             safe_apply_chat_template(
@@ -1042,7 +1042,7 @@ class TestApplyChatTemplateEffortTolerant:
 
     def test_non_effort_template_error_is_bad_request(self, model_config, tokenizer):
         conversation: list[ConversationMessage] = [{"role": "user", "content": "Hello"}]
-        with pytest.raises(AphroditeValidationError, match="unrelated reason"):
+        with pytest.raises(SonarValidationError, match="unrelated reason"):
             safe_apply_chat_template(
                 model_config,
                 tokenizer,

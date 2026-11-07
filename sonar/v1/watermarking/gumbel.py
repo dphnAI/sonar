@@ -8,12 +8,12 @@ import warnings
 
 import torch
 
-from aphrodite.config.watermarking import WatermarkPRFName, derive_watermark_key
-from aphrodite.v1.watermarking.detector import (
+from sonar.config.watermarking import WatermarkPRFName, derive_watermark_key
+from sonar.v1.watermarking.detector import (
     WatermarkDetector,
 )
-from aphrodite.v1.watermarking.prfs import PhiloxPRF, WatermarkPRF, create_prf
-from aphrodite.v1.watermarking.watermarker import (
+from sonar.v1.watermarking.prfs import PhiloxPRF, WatermarkPRF, create_prf
+from sonar.v1.watermarking.watermarker import (
     DraftContextState,
     RandomSampler,
     SupportsSpeculativeDecoding,
@@ -60,7 +60,7 @@ class GumbelWatermarker(Watermarker):
         contexts: torch.Tensor,
     ) -> WatermarkSample:
         if type(self.prf) is PhiloxPRF and logits.device.type == "cuda":
-            from aphrodite.v1.worker.gpu.sample.watermark import philox_gumbel_sample
+            from sonar.v1.worker.gpu.sample.watermark import philox_gumbel_sample
 
             return WatermarkSample(philox_gumbel_sample(logits, contexts, self.prf.key), logits)
         vocabulary = torch.arange(logits.shape[-1], device=logits.device)
@@ -79,7 +79,7 @@ class GumbelWatermarker(Watermarker):
         if type(self.prf) is not PhiloxPRF or logits.device.type != "cuda":
             return None
 
-        from aphrodite.v1.worker.gpu.sample.watermark import philox_gumbel_sample
+        from sonar.v1.worker.gpu.sample.watermark import philox_gumbel_sample
 
         token_ids = philox_gumbel_sample(
             logits,
@@ -108,7 +108,7 @@ class GumbelWatermarker(Watermarker):
         if type(self.prf) is not PhiloxPRF or logits.device.type != "cuda":
             return None
 
-        from aphrodite.v1.worker.gpu.sample.watermark import draft_philox_gumbel_sample
+        from sonar.v1.worker.gpu.sample.watermark import draft_philox_gumbel_sample
 
         assert random_sampler.logits_cache is not None
         assert random_sampler.logits_cache_col is not None

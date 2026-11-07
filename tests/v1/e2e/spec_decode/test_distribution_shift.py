@@ -7,8 +7,8 @@ import pytest
 import regex as re
 from scipy.stats import chi2_contingency
 
-from aphrodite import SamplingParams
-from aphrodite.sampling_params import StructuredOutputsParams
+from sonar import SamplingParams
+from sonar.sampling_params import StructuredOutputsParams
 from tests.utils import single_gpu_only
 
 from .utils import compute_acceptance_rate
@@ -17,7 +17,7 @@ from .utils import compute_acceptance_rate
 @pytest.mark.parametrize("rejection_sample_method", ["standard", "block"])
 @pytest.mark.parametrize("async_scheduling", [False, True], ids=["sync", "async"])
 @single_gpu_only
-def test_structured_output_preserves_sampling_distribution(rejection_sample_method, async_scheduling, aphrodite_runner):
+def test_structured_output_preserves_sampling_distribution(rejection_sample_method, async_scheduling, sonar_runner):
     spec_config = {
         "method": "dflash",
         "model": "z-lab/Qwen3-4B-DFlash-b16",
@@ -29,7 +29,7 @@ def test_structured_output_preserves_sampling_distribution(rejection_sample_meth
     num_samples = 4000
     cities_counts = []
     for config in (None, spec_config):
-        with aphrodite_runner(
+        with sonar_runner(
             "Qwen/Qwen3-4B",
             speculative_config=config,
             async_scheduling=async_scheduling,

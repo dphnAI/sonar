@@ -7,34 +7,34 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.compilation import CUDAGraphMode
-from aphrodite.model_executor.layers.mamba.mamba_utils import MambaStateCopyFuncsByType
-from aphrodite.triton_utils import tl, triton
-from aphrodite.v1.attention.backends.gdn_attn import GDNAttentionMetadataBuilder
-from aphrodite.v1.attention.backends.mamba2_attn import Mamba2AttentionMetadataBuilder
-from aphrodite.v1.attention.backends.short_conv_attn import (
+from sonar.config import SonarConfig
+from sonar.config.compilation import CUDAGraphMode
+from sonar.model_executor.layers.mamba.mamba_utils import MambaStateCopyFuncsByType
+from sonar.triton_utils import tl, triton
+from sonar.v1.attention.backends.gdn_attn import GDNAttentionMetadataBuilder
+from sonar.v1.attention.backends.mamba2_attn import Mamba2AttentionMetadataBuilder
+from sonar.v1.attention.backends.short_conv_attn import (
     PleShortConvAttentionMetadataBuilder,
     ShortConvAttentionMetadataBuilder,
 )
-from aphrodite.v1.core.sched.output import NewRequestData
-from aphrodite.v1.kv_cache_interface import KVCacheConfig, MambaSpec
-from aphrodite.v1.utils import CpuGpuBuffer
-from aphrodite.v1.worker.gpu.attn_utils import build_attn_metadata
-from aphrodite.v1.worker.gpu.block_table import BlockTables
-from aphrodite.v1.worker.gpu.input_batch import InputBatch
-from aphrodite.v1.worker.gpu.mm.encoder_cache import EncoderCache
-from aphrodite.v1.worker.gpu.model_states.default import DefaultModelState
-from aphrodite.v1.worker.gpu.model_states.interface import ModelSpecificAttnMetadata
-from aphrodite.v1.worker.gpu.model_states.recoverssm import RecoverSSMState
-from aphrodite.v1.worker.mamba_utils import (
+from sonar.v1.core.sched.output import NewRequestData
+from sonar.v1.kv_cache_interface import KVCacheConfig, MambaSpec
+from sonar.v1.utils import CpuGpuBuffer
+from sonar.v1.worker.gpu.attn_utils import build_attn_metadata
+from sonar.v1.worker.gpu.block_table import BlockTables
+from sonar.v1.worker.gpu.input_batch import InputBatch
+from sonar.v1.worker.gpu.mm.encoder_cache import EncoderCache
+from sonar.v1.worker.gpu.model_states.default import DefaultModelState
+from sonar.v1.worker.gpu.model_states.interface import ModelSpecificAttnMetadata
+from sonar.v1.worker.gpu.model_states.recoverssm import RecoverSSMState
+from sonar.v1.worker.mamba_utils import (
     MambaSpecDecodeGPUContext,
     get_mamba_group_ids,
     get_mamba_groups,
     preprocess_mamba_align_fused_kernel,
     validate_mamba_state_copy_funcs,
 )
-from aphrodite.v1.worker.utils import AttentionGroup
+from sonar.v1.worker.utils import AttentionGroup
 
 
 @dataclass
@@ -70,13 +70,13 @@ class MambaHybridModelState(DefaultModelState):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         model: nn.Module,
         encoder_cache: EncoderCache | None,
         device: torch.device,
     ) -> None:
-        super().__init__(aphrodite_config, model, encoder_cache, device)
-        self.cache_config = aphrodite_config.cache_config
+        super().__init__(sonar_config, model, encoder_cache, device)
+        self.cache_config = sonar_config.cache_config
         self.num_accepted_tokens_gpu = torch.ones(self.max_num_reqs, dtype=torch.int32, device=self.device)
         # Pre-copy "align" prefix-cache state (V2). The migration of each
         # request's mamba state across block boundaries runs as a fused GPU
@@ -147,7 +147,7 @@ class MambaHybridModelState(DefaultModelState):
         # tables. Aligned state indices are for the current batch only.
         self._mamba_ctx.initialize_from_forward_context(
             kv_cache_config,
-            self.aphrodite_config.compilation_config.static_forward_context,
+            self.sonar_config.compilation_config.static_forward_context,
             self._mamba_state_copy_funcs,
             [block_tables.block_tables[gid].gpu for gid in mamba_group_ids],
             [block_tables.input_block_tables[gid] for gid in mamba_group_ids],
@@ -248,7 +248,7 @@ class MambaHybridModelState(DefaultModelState):
         # compute them during actual (non-capture) forward execution.
         num_accepted_tokens = None
         num_decode_draft_tokens_cpu = None
-        speculative_config = self.aphrodite_config.speculative_config
+        speculative_config = self.sonar_config.speculative_config
         if not for_capture and speculative_config is not None and speculative_config.num_speculative_tokens > 0:
             num_accepted_tokens = self.num_accepted_tokens_gpu.new_ones(num_reqs)
             num_accepted_tokens[: input_batch.num_reqs] = self.num_accepted_tokens_gpu[input_batch.idx_mapping]
@@ -266,7 +266,7 @@ class MambaHybridModelState(DefaultModelState):
             is_decode = (
                 ~is_prefilling_np
                 & (input_batch.num_scheduled_tokens > 0)
-                & (input_batch.num_scheduled_tokens <= self.aphrodite_config.num_speculative_tokens + 1)
+                & (input_batch.num_scheduled_tokens <= self.sonar_config.num_speculative_tokens + 1)
             )
             num_decode_draft_tokens_np[: input_batch.num_reqs] = np.where(is_decode, num_draft_tokens_per_req, -1)
             num_decode_draft_tokens_cpu = torch.from_numpy(num_decode_draft_tokens_np)

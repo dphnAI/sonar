@@ -1,4 +1,4 @@
-# This Aphrodite Dockerfile is used to build images that can run Aphrodite on both x86_64 and arm64 CPU platforms.
+# This Sonar Dockerfile is used to build images that can run Sonar on both x86_64 and arm64 CPU platforms.
 #
 # Supported platforms:
 #   - linux/amd64 (x86_64)
@@ -8,14 +8,14 @@
 #   docker buildx build --platform=linux/arm64 -f docker/Dockerfile.cpu .
 #
 # Build targets:
-#   aphrodite-openai (default): used for serving deployment
-#   aphrodite-test: used for CI tests
-#   aphrodite-dev: used for development
+#   sonar-openai (default): used for serving deployment
+#   sonar-test: used for CI tests
+#   sonar-dev: used for development
 #
 # Build arguments:
 #   PYTHON_VERSION=3.13|3.12 (default)|3.11
-#   APHRODITE_CPU_X86=false (default)|true (for cross-compilation)
-#   APHRODITE_CPU_ARM_BF16=false (default)|true (for cross-compilation)
+#   SONAR_CPU_X86=false (default)|true (for cross-compilation)
+#   SONAR_CPU_ARM_BF16=false (default)|true (for cross-compilation)
 #
 
 ######################### BASE IMAGE #########################
@@ -173,25 +173,25 @@ FROM base-${TARGETARCH} AS base
 RUN echo 'ulimit -c 0' >> ~/.bashrc
 
 ######################### BUILD IMAGE #########################
-FROM base AS aphrodite-build
+FROM base AS sonar-build
 
 ARG ENABLE_AMX_FP8=1
 ARG GIT_REPO_CHECK=0
-ENV APHRODITE_REQUIRE_RUST_FRONTEND=1
+ENV SONAR_REQUIRE_RUST_FRONTEND=1
 ARG MAX_JOBS=4
 ENV MAX_JOBS=${MAX_JOBS}
 ENV CARGO_BUILD_JOBS=${MAX_JOBS}
 # Cross-compilation feature overrides consumed by cmake/cpu_extension.cmake.
-ARG APHRODITE_CPU_X86=0
-ENV APHRODITE_CPU_X86=${APHRODITE_CPU_X86}
-ARG APHRODITE_CPU_ARM_BF16=0
-ENV APHRODITE_CPU_ARM_BF16=${APHRODITE_CPU_ARM_BF16}
-ARG APHRODITE_CPU_ARM_I8MM=0
-ENV APHRODITE_CPU_ARM_I8MM=${APHRODITE_CPU_ARM_I8MM}
-ARG APHRODITE_CPU_RVV_BF16=0
-ENV APHRODITE_CPU_RVV_BF16=${APHRODITE_CPU_RVV_BF16}
+ARG SONAR_CPU_X86=0
+ENV SONAR_CPU_X86=${SONAR_CPU_X86}
+ARG SONAR_CPU_ARM_BF16=0
+ENV SONAR_CPU_ARM_BF16=${SONAR_CPU_ARM_BF16}
+ARG SONAR_CPU_ARM_I8MM=0
+ENV SONAR_CPU_ARM_I8MM=${SONAR_CPU_ARM_I8MM}
+ARG SONAR_CPU_RVV_BF16=0
+ENV SONAR_CPU_RVV_BF16=${SONAR_CPU_RVV_BF16}
 
-WORKDIR /workspace/aphrodite
+WORKDIR /workspace/sonar
 
 COPY requirements/ requirements/
 
@@ -211,39 +211,39 @@ RUN if [ "${PYTORCH_NIGHTLY}" = "1" ]; then \
 RUN --mount=type=bind,source=.git,target=.git \
     if [ "$GIT_REPO_CHECK" != 0 ]; then bash tools/check_repo.sh ; fi
 
-ARG APHRODITE_VERSION_OVERRIDE
+ARG SONAR_VERSION_OVERRIDE
 RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=cache,target=/root/.cache/ccache \
-    --mount=type=cache,target=/workspace/aphrodite/.deps,sharing=locked \
+    --mount=type=cache,target=/workspace/sonar/.deps,sharing=locked \
     --mount=type=cache,target=/root/.cargo/registry,sharing=locked \
     --mount=type=cache,target=/root/.cargo/git,sharing=locked \
-    --mount=type=cache,target=/workspace/aphrodite/rust/target,sharing=locked \
+    --mount=type=cache,target=/workspace/sonar/rust/target,sharing=locked \
     --mount=type=bind,source=.git,target=.git \
-    APHRODITE_VERSION_OVERRIDE="${APHRODITE_VERSION_OVERRIDE}" \
+    SONAR_VERSION_OVERRIDE="${SONAR_VERSION_OVERRIDE}" \
     CMAKE_ARGS="-DENABLE_AMX_FP8=${ENABLE_AMX_FP8}" \
-    APHRODITE_TARGET_DEVICE=cpu python3 setup.py bdist_wheel \
+    SONAR_TARGET_DEVICE=cpu python3 setup.py bdist_wheel \
       --py-limited-api=cp311
 
 RUN wheel="$(find dist -maxdepth 1 -type f -name '*.whl' -print -quit)" \
     && test -n "$wheel" \
     && uv pip install --reinstall --no-deps "$wheel" \
     && cd /tmp \
-    && APHRODITE_TARGET_DEVICE=cpu python3 -c \
-        "from aphrodite.platforms.cpu import CpuPlatform; CpuPlatform.import_kernels()"
+    && SONAR_TARGET_DEVICE=cpu python3 -c \
+        "from sonar.platforms.cpu import CpuPlatform; CpuPlatform.import_kernels()"
 
 ######################### WHEEL EXPORT #########################
-FROM scratch AS aphrodite-wheel-export
+FROM scratch AS sonar-wheel-export
 
-COPY --from=aphrodite-build /workspace/aphrodite/dist/*.whl /
+COPY --from=sonar-build /workspace/sonar/dist/*.whl /
 
 ######################### RELEASE IMAGE #########################
-FROM base AS aphrodite-openai
+FROM base AS sonar-openai
 
 WORKDIR /workspace/
 
 RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=cache,target=/root/.cache/ccache \
-    --mount=type=bind,from=aphrodite-build,src=/workspace/aphrodite/dist,target=dist \
+    --mount=type=bind,from=sonar-build,src=/workspace/sonar/dist,target=dist \
     uv pip install "$(realpath dist/*cpu*.whl)[audio,bench,runai]"
 
 # Copy the examples directory (including the chat/tool templates) so it is
@@ -251,4 +251,4 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 COPY examples examples
 COPY tools/recipes tools/recipes
 
-ENTRYPOINT ["aphrodite", "run"]
+ENTRYPOINT ["sonar", "run"]

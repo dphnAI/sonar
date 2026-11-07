@@ -10,18 +10,18 @@ from typing import TYPE_CHECKING, Literal, NamedTuple
 import numpy as np
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.model import PROCESSED_LOGPROBS_MODES, LogprobsMode
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.v1.outputs import LogprobsTensors, SamplingMaskLists
-from aphrodite.v1.sample.ops.topk_topp_sampler import apply_top_k_top_p
-from aphrodite.v1.watermarking.watermarker import RandomSampler, Watermarker
-from aphrodite.v1.worker.cpu.gumbel import gumbel_sample
-from aphrodite.v1.worker.cpu.input_batch import InputBatch, get_num_sampled_and_rejected
-from aphrodite.v1.worker.cpu.logits_processors import (
+import sonar.envs as envs
+from sonar.config import SonarConfig
+from sonar.config.model import PROCESSED_LOGPROBS_MODES, LogprobsMode
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.sampling_params import SamplingParams
+from sonar.v1.outputs import LogprobsTensors, SamplingMaskLists
+from sonar.v1.sample.ops.topk_topp_sampler import apply_top_k_top_p
+from sonar.v1.watermarking.watermarker import RandomSampler, Watermarker
+from sonar.v1.worker.cpu.gumbel import gumbel_sample
+from sonar.v1.worker.cpu.input_batch import InputBatch, get_num_sampled_and_rejected
+from sonar.v1.worker.cpu.logits_processors import (
     CPUBadWords,
     CPULogitBiasState,
     CPUPenalties,
@@ -29,13 +29,13 @@ from aphrodite.v1.worker.cpu.logits_processors import (
     LogitsProcessor,
     LogitsProcRequestState,
 )
-from aphrodite.v1.worker.cpu.logprob import LogprobTokenIdsState, compute_topk_scores
-from aphrodite.v1.worker.cpu.states import CPURequestState
-from aphrodite.v1.worker.gpu.sample.fork import ForkSamplingState, needs_fork_sampling
+from sonar.v1.worker.cpu.logprob import LogprobTokenIdsState, compute_topk_scores
+from sonar.v1.worker.cpu.states import CPURequestState
+from sonar.v1.worker.gpu.sample.fork import ForkSamplingState, needs_fork_sampling
 
 if TYPE_CHECKING:
-    from aphrodite.config.reasoning import ReasoningConfig
-    from aphrodite.v1.phrase_guard.v2 import CPURetryMask
+    from sonar.config.reasoning import ReasoningConfig
+    from sonar.v1.phrase_guard.v2 import CPURetryMask
 
 logger = init_logger(__name__)
 
@@ -505,7 +505,7 @@ class CPUForkSamplingState(ForkSamplingState[CPURequestState]):
 class CPUSampler:
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         max_num_reqs: int,
         vocab_size: int,
         device: torch.device,
@@ -516,16 +516,16 @@ class CPUSampler:
         return_sampling_mask: bool = False,
     ):
         self.logprobs_mode = logprobs_mode
-        self.compute_nans = envs.APHRODITE_COMPUTE_NANS_IN_LOGITS  # False by default.
+        self.compute_nans = envs.SONAR_COMPUTE_NANS_IN_LOGITS  # False by default.
         self.use_fp64_gumbel = use_fp64_gumbel
 
         self.req_states = req_states
         self.sampling_states = CPUSamplingStates(max_num_reqs, vocab_size, device)
 
         lp_req_state = LogitsProcRequestState.from_request_state(req_states)
-        self.penalties_state = CPUPenalties(aphrodite_config, lp_req_state)
-        logit_bias_state = CPULogitBiasState(aphrodite_config, lp_req_state)
-        bad_words_state = CPUBadWords(aphrodite_config, lp_req_state)
+        self.penalties_state = CPUPenalties(sonar_config, lp_req_state)
+        logit_bias_state = CPULogitBiasState(sonar_config, lp_req_state)
+        bad_words_state = CPUBadWords(sonar_config, lp_req_state)
 
         # List order is pipeline order: bias adds, penalties scale, so the
         # two do not commute.
@@ -536,7 +536,7 @@ class CPUSampler:
         ]
 
         self.logprob_token_ids_state = LogprobTokenIdsState(max_num_reqs, device)
-        self.thinking_budget_state = CPUThinkingBudgetState(req_states, aphrodite_config.reasoning_config)
+        self.thinking_budget_state = CPUThinkingBudgetState(req_states, sonar_config.reasoning_config)
         self.trace_replay_state = CPUTraceReplayState(req_states) if enable_trace_replay else None
         self.needs_logits_processing = np.zeros(max_num_reqs, dtype=bool)
         self.return_sampling_mask = return_sampling_mask
@@ -564,7 +564,7 @@ class CPUSampler:
 
         retry = (sampling_params.extra_args or {}).get("_sonar_phrase_retry")
         if retry is not None and self.phrase_retry_mask is None:
-            from aphrodite.v1.phrase_guard.v2 import CPURetryMask
+            from sonar.v1.phrase_guard.v2 import CPURetryMask
 
             self.phrase_retry_mask = CPURetryMask(self.req_states.max_num_reqs)
         if self.phrase_retry_mask is not None:

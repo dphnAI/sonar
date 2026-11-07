@@ -9,10 +9,10 @@ from typing import TYPE_CHECKING
 
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 if TYPE_CHECKING:
-    from aphrodite.model_executor.layers.fused_moe.config import FusedMoEConfig
+    from sonar.model_executor.layers.fused_moe.config import FusedMoEConfig
 
 __all__ = [
     "has_zentorch_op",

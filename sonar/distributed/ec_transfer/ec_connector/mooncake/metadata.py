@@ -6,11 +6,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from aphrodite.distributed.ec_transfer.ec_connector.base import (
+from sonar.distributed.ec_transfer.ec_connector.base import (
     ECConnectorMetadata,
     ECConnectorWorkerMetadata,
 )
-from aphrodite.distributed.ec_transfer.ec_connector.mooncake_store_embedding.data import (
+from sonar.distributed.ec_transfer.ec_connector.mooncake_store_embedding.data import (
     TensorSpec,
 )
 

@@ -46,7 +46,7 @@ def server():
     with RemoteOpenAIServer(
         MODEL_NAME,
         args,
-        env_dict={"APHRODITE_USE_V2_MODEL_RUNNER": "1"},
+        env_dict={"SONAR_USE_V2_MODEL_RUNNER": "1"},
     ) as remote_server:
         yield remote_server
 

@@ -5,7 +5,7 @@
 The Humming kernel already implements MXFP4 weight (group-32 e8m0) with a
 grouped FP8 activation via WGMMA software dequant -- see the grouped-fp8
 `test_mxfp4.py` cases in the humming repo, which run on SM90 (H200). Enabling
-it in Aphrodite comes down to two things, both exercised here:
+it in Sonar comes down to two things, both exercised here:
 
   1. A grouped FP8 activation must classify to a float32-scaled key
      (kFp8Dynamic128Sym), not a uint8 microscale key. MX microscale
@@ -17,16 +17,16 @@ it in Aphrodite comes down to two things, both exercised here:
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.fused_moe.experts.fused_humming_moe import (
+from sonar.model_executor.layers.fused_moe.experts.fused_humming_moe import (
     HummingExpertsBase,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     kFp8Dynamic128Sym,
     kFp8DynamicTokenSym,
     kMxfp4Static,
     kMxfp8Dynamic,
 )
-from aphrodite.utils.import_utils import has_humming
+from sonar.utils.import_utils import has_humming
 
 # make_humming_moe_quant_config stores per-sublayer humming LayerConfigs but the
 # config-plumbing asserts below never read them, so a placeholder satisfies the
@@ -57,11 +57,11 @@ def test_mxfp4_weight_with_per_token_fp8_activation_still_supported():
     ],
 )
 def test_humming_fp8_input_schema_to_quant_key(group_size, expected_key):
-    from aphrodite.model_executor.layers.quantization.utils.humming import (
+    from sonar.model_executor.layers.quantization.utils.humming import (
         input_schema_to_quant_key,
     )
-    from aphrodite.utils.humming import HummingInputSchema
-    from aphrodite.utils.humming import dtypes as humming_dtypes
+    from sonar.utils.humming import HummingInputSchema
+    from sonar.utils.humming import dtypes as humming_dtypes
 
     schema = HummingInputSchema(
         a_dtype=humming_dtypes.float8e4m3,
@@ -72,10 +72,10 @@ def test_humming_fp8_input_schema_to_quant_key(group_size, expected_key):
 
 @pytest.mark.skipif(not has_humming(), reason="humming is not installed")
 def test_humming_bf16_input_schema_is_unquantized():
-    from aphrodite.model_executor.layers.quantization.utils.humming import (
+    from sonar.model_executor.layers.quantization.utils.humming import (
         input_schema_to_quant_key,
     )
-    from aphrodite.utils.humming import HummingInputSchema
+    from sonar.utils.humming import HummingInputSchema
 
     # No a_dtype -> unquantized (bf16/fp16) inputs -> None.
     assert input_schema_to_quant_key(HummingInputSchema(), param_dtype=torch.bfloat16) is None
@@ -87,11 +87,11 @@ def test_block_fp8_activation_quant_config_is_block_quantized():
     DeepEP prepare/finalize step quantize activations to block FP8 *before* the
     all-to-all dispatch instead of deferring to Humming -- and what makes
     HummingExpertsBase.expects_unquantized_inputs return False."""
-    from aphrodite.model_executor.layers.quantization.utils.humming import (
+    from sonar.model_executor.layers.quantization.utils.humming import (
         make_humming_moe_quant_config,
     )
-    from aphrodite.model_executor.layers.quantization.utils.quant_utils import GroupShape
-    from aphrodite.platforms import current_platform
+    from sonar.model_executor.layers.quantization.utils.quant_utils import GroupShape
+    from sonar.platforms import current_platform
 
     qc = make_humming_moe_quant_config(
         quant_dtype=current_platform.fp8_dtype(),
@@ -109,10 +109,10 @@ def test_default_activation_quant_config_defers_to_humming():
     """Without a block activation shape the config stays per-token (the deferred
     path): Humming quantizes internally, preserving pre-existing behavior for
     every non-block-FP8 scheme."""
-    from aphrodite.model_executor.layers.quantization.utils.humming import (
+    from sonar.model_executor.layers.quantization.utils.humming import (
         make_humming_moe_quant_config,
     )
-    from aphrodite.platforms import current_platform
+    from sonar.platforms import current_platform
 
     qc = make_humming_moe_quant_config(
         quant_dtype=current_platform.fp8_dtype(),
@@ -135,12 +135,12 @@ def test_default_activation_quant_config_defers_to_humming():
 def test_checkpoint_mxfp8_runs_as_block_fp8_on_hopper(monkeypatch, capability, user_override, expected_group_size):
     """A checkpoint's MXFP8 MoE activations (e.g. DeepSeek V4) run as block
     FP8 on Humming's SM90 kernels; an explicit user request is honored."""
-    from aphrodite.model_executor.layers.fused_moe.oracle import mxfp4
-    from aphrodite.platforms import current_platform
+    from sonar.model_executor.layers.fused_moe.oracle import mxfp4
+    from sonar.platforms import current_platform
 
     monkeypatch.setattr(current_platform, "is_device_capability_family", lambda cap: cap == capability)
     monkeypatch.setattr(mxfp4, "_user_moe_activation_override", lambda: user_override)
-    monkeypatch.delenv("APHRODITE_HUMMING_INPUT_QUANT_CONFIG", raising=False)
+    monkeypatch.delenv("SONAR_HUMMING_INPUT_QUANT_CONFIG", raising=False)
 
     schema = mxfp4._humming_input_schema(kMxfp8Dynamic)
 

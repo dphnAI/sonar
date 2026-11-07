@@ -6,15 +6,15 @@ import json
 from concurrent.futures import Future
 from typing import TYPE_CHECKING, Any, cast
 
-from aphrodite.sampling_params import SamplingParams, StructuredOutputsParams
-from aphrodite.v1.structured_output.backend_types import (
+from sonar.sampling_params import SamplingParams, StructuredOutputsParams
+from sonar.v1.structured_output.backend_types import (
     StructuredOutputGrammar,
     StructuredOutputKey,
     StructuredOutputOptions,
 )
 
 if TYPE_CHECKING:
-    from aphrodite.reasoning import ReasoningParser
+    from sonar.reasoning import ReasoningParser
 
 
 @dataclasses.dataclass

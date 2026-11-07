@@ -13,23 +13,23 @@ request models whose before-validators were missing the same guard.
 import pytest
 from pydantic import ValidationError
 
-from aphrodite.entrypoints.generate.generative_scoring.serving import (
+from sonar.entrypoints.generate.generative_scoring.serving import (
     GenerativeScoringRequest,
 )
-from aphrodite.entrypoints.generate.structured_decisions.protocol import (
+from sonar.entrypoints.generate.structured_decisions.protocol import (
     StructuredDecisionRequest,
 )
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-from aphrodite.entrypoints.openai.completion.protocol import CompletionRequest
-from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
-from aphrodite.entrypoints.pooling.classify.protocol import ClassificationChatRequest
-from aphrodite.entrypoints.pooling.embed.protocol import EmbeddingChatRequest
-from aphrodite.entrypoints.pooling.pooling.protocol import PoolingChatRequest
-from aphrodite.entrypoints.scale_out.token_in_token_out.protocol import GenerateRequest
-from aphrodite.entrypoints.serve.tokenize.protocol import TokenizeChatRequest
-from aphrodite.entrypoints.speech_to_text.transcription.protocol import TranscriptionRequest
-from aphrodite.entrypoints.speech_to_text.translation.protocol import TranslationRequest
-from aphrodite.exceptions import AphroditeValidationError
+from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+from sonar.entrypoints.openai.completion.protocol import CompletionRequest
+from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
+from sonar.entrypoints.pooling.classify.protocol import ClassificationChatRequest
+from sonar.entrypoints.pooling.embed.protocol import EmbeddingChatRequest
+from sonar.entrypoints.pooling.pooling.protocol import PoolingChatRequest
+from sonar.entrypoints.scale_out.token_in_token_out.protocol import GenerateRequest
+from sonar.entrypoints.serve.tokenize.protocol import TokenizeChatRequest
+from sonar.entrypoints.speech_to_text.transcription.protocol import TranscriptionRequest
+from sonar.entrypoints.speech_to_text.translation.protocol import TranslationRequest
+from sonar.exceptions import SonarValidationError
 
 pytestmark = pytest.mark.skip_global_cleanup
 
@@ -64,12 +64,12 @@ def test_request_models_reject_non_object_body(request_model, payload):
 
 def test_completion_request_still_validates_dict_bodies():
     """The guard must not swallow real field-level errors on object bodies."""
-    with pytest.raises(AphroditeValidationError, match="prompt"):
+    with pytest.raises(SonarValidationError, match="prompt"):
         CompletionRequest.model_validate({"model": "qwen", "prompt": ""})
 
 
 def test_tokenize_chat_request_still_validates_dict_bodies():
-    with pytest.raises(AphroditeValidationError, match="add_generation_prompt"):
+    with pytest.raises(SonarValidationError, match="add_generation_prompt"):
         TokenizeChatRequest.model_validate(
             {
                 "model": "qwen",
@@ -114,12 +114,12 @@ CACHE_SALT_MODELS = [
     ids=[m.__name__ for m, _ in CACHE_SALT_MODELS],
 )
 def test_request_models_reject_forbidden_cache_salt(request_model, payload):
-    with pytest.raises(AphroditeValidationError, match="cache_salt"):
+    with pytest.raises(SonarValidationError, match="cache_salt"):
         request_model.model_validate({**payload, "cache_salt": "/"})
 
 
 def test_request_models_reject_overlong_cache_salt():
-    with pytest.raises(AphroditeValidationError, match="cache_salt"):
+    with pytest.raises(SonarValidationError, match="cache_salt"):
         CompletionRequest.model_validate({"prompt": "hello", "cache_salt": "a" * 129})
 
 

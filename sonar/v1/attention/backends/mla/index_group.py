@@ -8,15 +8,15 @@ from typing import Any
 
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.config import AphroditeConfig
-from aphrodite.forward_context import in_piecewise_cudagraph
-from aphrodite.utils.torch_utils import current_stream
-from aphrodite.v1.attention.backend import max_decode_query_len
-from aphrodite.v1.attention.backends.mla.sparse_utils import (
+from sonar import _custom_ops as ops
+from sonar.config import SonarConfig
+from sonar.forward_context import in_piecewise_cudagraph
+from sonar.utils.torch_utils import current_stream
+from sonar.v1.attention.backend import max_decode_query_len
+from sonar.v1.attention.backends.mla.sparse_utils import (
     triton_convert_req_index_to_global_index,
 )
-from aphrodite.v1.hisparse.runtime import (
+from sonar.v1.hisparse.runtime import (
     HiSparseCacheHandle,
     HiSparsePrefillStagingPlan,
     create_hisparse_cache_handle,
@@ -41,7 +41,7 @@ class SparseMLAIndexGroup:
 
     def register_layer(
         self,
-        aphrodite_config: AphroditeConfig | None = None,
+        sonar_config: SonarConfig | None = None,
         *,
         row_width: int | None = None,
         kv_cache_dtype: str | None = None,
@@ -173,12 +173,12 @@ class HiSparseMLAIndexGroup(SparseMLAIndexGroup):
 
     def register_layer(
         self,
-        aphrodite_config: AphroditeConfig | None = None,
+        sonar_config: SonarConfig | None = None,
         *,
         row_width: int | None = None,
         kv_cache_dtype: str | None = None,
     ) -> int:
-        assert aphrodite_config is not None
+        assert sonar_config is not None
         assert row_width is not None
         assert kv_cache_dtype is not None
         layer_index = super().register_layer()
@@ -187,11 +187,11 @@ class HiSparseMLAIndexGroup(SparseMLAIndexGroup):
         if kv_cache_dtype == "fp8_ds_mla":
             kv_dtype = torch.uint8
         else:
-            from aphrodite.utils.torch_utils import kv_cache_dtype_str_to_dtype
+            from sonar.utils.torch_utils import kv_cache_dtype_str_to_dtype
 
-            kv_dtype = kv_cache_dtype_str_to_dtype(kv_cache_dtype, aphrodite_config.model_config)
+            kv_dtype = kv_cache_dtype_str_to_dtype(kv_cache_dtype, sonar_config.model_config)
         cache = create_hisparse_cache_handle(
-            aphrodite_config,
+            sonar_config,
             self.logical_topk_indices.shape[1],
             is_index_group_leader=layer_index == 0,
             row_width=row_width,
@@ -345,7 +345,7 @@ class SparseMLAIndexGroupBuilder:
     def register_layer(
         self,
         is_index_producing_layer: bool,
-        aphrodite_config: AphroditeConfig | None = None,
+        sonar_config: SonarConfig | None = None,
         *,
         row_width: int | None = None,
         kv_cache_dtype: str | None = None,
@@ -353,7 +353,7 @@ class SparseMLAIndexGroupBuilder:
         if is_index_producing_layer or self.current_group is None:
             group_cls = (
                 HiSparseMLAIndexGroup
-                if aphrodite_config is not None and aphrodite_config.attention_config.hisparse_config is not None
+                if sonar_config is not None and sonar_config.attention_config.hisparse_config is not None
                 else SparseMLAIndexGroup
             )
             workspace_rows = self.max_decode_rows
@@ -377,16 +377,16 @@ class SparseMLAIndexGroupBuilder:
             )
         group = self.current_group
         group_index = group.register_layer(
-            aphrodite_config,
+            sonar_config,
             row_width=row_width,
             kv_cache_dtype=kv_cache_dtype,
         )
         return group, group_index
 
 
-def get_sparse_mla_index_group_max_rows(aphrodite_config: AphroditeConfig) -> int:
-    scheduler_config = aphrodite_config.scheduler_config
+def get_sparse_mla_index_group_max_rows(sonar_config: SonarConfig) -> int:
+    scheduler_config = sonar_config.scheduler_config
     return min(
         scheduler_config.max_num_batched_tokens,
-        scheduler_config.max_num_seqs * max_decode_query_len(aphrodite_config),
+        scheduler_config.max_num_seqs * max_decode_query_len(sonar_config),
     )

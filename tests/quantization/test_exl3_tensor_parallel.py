@@ -14,15 +14,15 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-import aphrodite.model_executor.layers.linear as linear_module
-import aphrodite.model_executor.layers.quantization.exl3 as exl3_module
-import aphrodite.model_executor.parameter as parameter_module
-from aphrodite.config.lora import LoRAConfig
-from aphrodite.lora.layers import LoRAMapping, MergedColumnParallelLinearWithLoRA
-from aphrodite.lora.punica_wrapper import get_punica_wrapper
-from aphrodite.model_executor.layers.linear import MergedColumnParallelLinear, QKVParallelLinear
-from aphrodite.model_executor.layers.quantization.exl3 import Exl3Config, Exl3LinearMethod, _exl3_linear_one
-from aphrodite.platforms import current_platform
+import sonar.model_executor.layers.linear as linear_module
+import sonar.model_executor.layers.quantization.exl3 as exl3_module
+import sonar.model_executor.parameter as parameter_module
+from sonar.config.lora import LoRAConfig
+from sonar.lora.layers import LoRAMapping, MergedColumnParallelLinearWithLoRA
+from sonar.lora.punica_wrapper import get_punica_wrapper
+from sonar.model_executor.layers.linear import MergedColumnParallelLinear, QKVParallelLinear
+from sonar.model_executor.layers.quantization.exl3 import Exl3Config, Exl3LinearMethod, _exl3_linear_one
+from sonar.platforms import current_platform
 
 if not current_platform.is_cuda() or not current_platform.has_device_capability(80):
     pytest.skip("EXL3 requires CUDA SM80+", allow_module_level=True)
@@ -162,7 +162,7 @@ def _full_tensors(kind: str, dims: dict[str, int]):
 
 @pytest.mark.parametrize("tokens", [1, 160], ids=["gemm", "reconstruct"])
 @pytest.mark.parametrize("case", list(MERGED_CASES))
-def test_merged_layer_ranks_match_unsharded(default_aphrodite_config, monkeypatch, case: str, tokens: int):
+def test_merged_layer_ranks_match_unsharded(default_sonar_config, monkeypatch, case: str, tokens: int):
     """Fused qkv/gate_up kernels are kept for aligned shards and bypassed otherwise."""
     torch.manual_seed(0)
     kind, dims, fused = MERGED_CASES[case]
@@ -181,7 +181,7 @@ def test_merged_layer_ranks_match_unsharded(default_aphrodite_config, monkeypatc
 @torch.inference_mode()
 @pytest.mark.parametrize("tokens", [1, 160], ids=["gemm", "reconstruct"])
 @pytest.mark.parametrize("case", ["gate_up-aligned", "gate_up-mid-block"])
-def test_lora_on_sharded_exl3_matches_unsharded(default_aphrodite_config, monkeypatch, case: str, tokens: int):
+def test_lora_on_sharded_exl3_matches_unsharded(default_sonar_config, monkeypatch, case: str, tokens: int):
     """A gate_up LoRA adds to the right columns of every EXL3 rank shard."""
     torch.manual_seed(0)
     kind, dims, _ = MERGED_CASES[case]

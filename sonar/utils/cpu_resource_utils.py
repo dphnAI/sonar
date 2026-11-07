@@ -12,7 +12,7 @@ from functools import cache
 import psutil
 import regex as re
 
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 DEVICE_CONTROL_ENV_VAR = "CPU_VISIBLE_MEMORY_NODES"
 
@@ -269,7 +269,7 @@ def get_visible_memory_node(assigned_node_ids: list[int] | None = None) -> list[
 
     allowed_memory_node_list = get_memory_affinity()
 
-    if "APHRODITE_CPU_SIM_MULTI_NUMA" in os.environ:
+    if "SONAR_CPU_SIM_MULTI_NUMA" in os.environ:
         return allowed_memory_node_list
 
     if assigned_node_ids is not None:

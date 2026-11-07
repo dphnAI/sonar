@@ -16,18 +16,18 @@ import dataclasses
 import functools
 from typing import TYPE_CHECKING
 
-from aphrodite.parser.qwen3 import CHATML_TURN_BOUNDARIES, Qwen3Parser, qwen3_config
+from sonar.parser.qwen3 import CHATML_TURN_BOUNDARIES, Qwen3Parser, qwen3_config
 
 if TYPE_CHECKING:
-    from aphrodite.entrypoints.generate.base.protocol import DeltaMessage
-    from aphrodite.entrypoints.openai.chat_completion.protocol import (
+    from sonar.entrypoints.generate.base.protocol import DeltaMessage
+    from sonar.entrypoints.openai.chat_completion.protocol import (
         ChatCompletionRequest,
     )
-    from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
-    from aphrodite.parser.engine.parser_engine import SemanticEvent
-    from aphrodite.parser.engine.parser_engine_config import ParserEngineConfig
-    from aphrodite.tokenizers import TokenizerLike
-    from aphrodite.tool_parsers.abstract_tool_parser import Tool
+    from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
+    from sonar.parser.engine.parser_engine import SemanticEvent
+    from sonar.parser.engine.parser_engine_config import ParserEngineConfig
+    from sonar.tokenizers import TokenizerLike
+    from sonar.tool_parsers.abstract_tool_parser import Tool
 
 
 @functools.cache

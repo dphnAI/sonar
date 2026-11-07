@@ -33,24 +33,24 @@ from openai.types.responses.response_reasoning_item import (
 from openai.types.responses.tool import Tool
 from partial_json_parser.core.options import Allow
 
-from aphrodite import envs
-from aphrodite.entrypoints.generate.base.protocol import FunctionCall, FunctionDefinition
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar import envs
+from sonar.entrypoints.generate.base.protocol import FunctionCall, FunctionDefinition
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionMessageParam,
     ChatCompletionToolsParam,
 )
-from aphrodite.entrypoints.openai.responses.protocol import ResponseInputOutputItem
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.logger import init_logger
-from aphrodite.renderers.chat_utils import make_tool_call_id
-from aphrodite.tool_parsers.utils import (
+from sonar.entrypoints.openai.responses.protocol import ResponseInputOutputItem
+from sonar.exceptions import SonarValidationError
+from sonar.logger import init_logger
+from sonar.renderers.chat_utils import make_tool_call_id
+from sonar.tool_parsers.utils import (
     CUSTOM_TOOL_INPUT_KEY,
     build_responses_tool_call_name_map,
     flat_namespace_tool_name,
     iter_response_function_tool_dicts,
     resolve_responses_tool_call_name,
 )
-from aphrodite.utils import random_uuid
+from sonar.utils import random_uuid
 
 logger = init_logger(__name__)
 
@@ -417,7 +417,7 @@ def _construct_message_from_response_item(
     if isinstance(item, ResponseReasoningItem):
         reasoning = ""
         if item.encrypted_content:
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 "Encrypted content is not supported.",
                 parameter="input",
             )
@@ -482,7 +482,7 @@ def _construct_message_from_response_item(
     if isinstance(item, dict) and "role" in item:
         return item  # type: ignore[return-value]
     item_type = item.get("type") if isinstance(item, dict) else item.type
-    raise AphroditeValidationError(
+    raise SonarValidationError(
         f"Unsupported input item type: {item_type}",
         parameter="input",
     )
@@ -509,8 +509,8 @@ def extract_tool_types(tools: list[Tool]) -> set[str]:
         if tool.type == "mcp":
             # Allow the MCP Tool type to enable built in tools if the
             # server_label is allowlisted in
-            # envs.APHRODITE_GPT_OSS_SYSTEM_TOOL_MCP_LABELS
-            if tool.server_label in envs.APHRODITE_GPT_OSS_SYSTEM_TOOL_MCP_LABELS:
+            # envs.SONAR_GPT_OSS_SYSTEM_TOOL_MCP_LABELS
+            if tool.server_label in envs.SONAR_GPT_OSS_SYSTEM_TOOL_MCP_LABELS:
                 tool_types.add(tool.server_label)
         else:
             tool_types.add(tool.type)

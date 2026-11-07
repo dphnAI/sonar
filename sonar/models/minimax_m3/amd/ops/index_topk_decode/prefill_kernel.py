@@ -13,7 +13,7 @@ from flydsl.expr import const_expr, range_constexpr
 from flydsl.expr.typing import T
 from flydsl.expr.typing import Vector as Vec
 
-from aphrodite.models.minimax_m3.amd.ops.flydsl_utils import PRELOAD_HINTS
+from sonar.models.minimax_m3.amd.ops.flydsl_utils import PRELOAD_HINTS
 
 BLK = 128  # tokens per block
 TOPK = 16

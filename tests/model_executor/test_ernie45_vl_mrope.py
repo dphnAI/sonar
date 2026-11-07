@@ -5,10 +5,10 @@ from dataclasses import dataclass
 import pytest
 import torch
 
-from aphrodite.model_executor.models.ernie45_vl import (
+from sonar.model_executor.models.ernie45_vl import (
     Ernie4_5_VLMoeForConditionalGeneration,
 )
-from aphrodite.multimodal.inputs import (
+from sonar.multimodal.inputs import (
     MultiModalFeatureSpec,
     MultiModalFieldElem,
     MultiModalKwargsItem,

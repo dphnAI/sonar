@@ -8,7 +8,7 @@ import ctypes
 import torch
 
 
-# For _compute_slot_mapping_kernel in aphrodite/v1/worker/block_table.py
+# For _compute_slot_mapping_kernel in sonar/v1/worker/block_table.py
 def _compute_slot_mapping_kernel_impl(
     num_tokens: int,
     max_num_tokens: int,

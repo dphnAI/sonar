@@ -6,38 +6,38 @@ from typing import Any
 import torch
 from torch.nn import Module
 
-from aphrodite.config import get_current_aphrodite_config
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.kernels.linear import (
+from sonar.config import get_current_sonar_config
+from sonar.logger import init_logger
+from sonar.model_executor.kernels.linear import (
     init_fp8_linear_kernel,
 )
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.linear import (
     LinearBase,
     LinearMethodBase,
     UnquantizedLinearMethod,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationMethods
-from aphrodite.model_executor.layers.quantization.base_config import (
+from sonar.model_executor.layers.quantization import QuantizationMethods
+from sonar.model_executor.layers.quantization.base_config import (
     QuantizationConfig,
     QuantizeMethodBase,
 )
-from aphrodite.model_executor.layers.quantization.utils.marlin_utils_fp8 import (
+from sonar.model_executor.layers.quantization.utils.marlin_utils_fp8 import (
     prepare_fp8_layer_for_marlin,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     is_layer_skipped,
     kFp8DynamicTokenSym,
     kFp8StaticTokenSym,
 )
-from aphrodite.model_executor.layers.quantization.utils.w8a8_utils import (
+from sonar.model_executor.layers.quantization.utils.w8a8_utils import (
     normalize_e4m3fn_to_e4m3fnuz,
 )
-from aphrodite.model_executor.parameter import (
+from sonar.model_executor.parameter import (
     ChannelQuantScaleParameter,
     ModelWeightParameter,
 )
-from aphrodite.model_executor.utils import replace_parameter
-from aphrodite.platforms import current_platform
+from sonar.model_executor.utils import replace_parameter
+from sonar.platforms import current_platform
 
 logger = init_logger(__name__)
 
@@ -92,7 +92,7 @@ class FBGEMMFp8LinearMethod(LinearMethodBase):
     def __init__(self, quant_config: FBGEMMFp8Config):
         self.quant_config = quant_config
         self.out_dtype = torch.get_default_dtype()
-        self.input_dtype = get_current_aphrodite_config().model_config.dtype
+        self.input_dtype = get_current_sonar_config().model_config.dtype
 
     def create_weights(
         self,

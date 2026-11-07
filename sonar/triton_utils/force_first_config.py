@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Skip Triton autotuning under APHRODITE_TRITON_FORCE_FIRST_CONFIG."""
+"""Skip Triton autotuning under SONAR_TRITON_FORCE_FIRST_CONFIG."""
 
-from aphrodite.logger import init_logger
-from aphrodite.triton_utils.importing import HAS_TRITON
+from sonar.logger import init_logger
+from sonar.triton_utils.importing import HAS_TRITON
 
 logger = init_logger(__name__)
 

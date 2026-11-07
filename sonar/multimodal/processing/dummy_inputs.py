@@ -8,14 +8,14 @@ import numpy as np
 import numpy.typing as npt
 from PIL import Image
 
-from aphrodite.config.multimodal import (
+from sonar.config.multimodal import (
     AudioDummyOptions,
     ImageDummyOptions,
     MultiModalDummyOptions,
     VideoDummyOptions,
 )
-from aphrodite.inputs import MultiModalDataDict
-from aphrodite.logger import init_logger
+from sonar.inputs import MultiModalDataDict
+from sonar.logger import init_logger
 
 from .context import BaseProcessingInfo
 

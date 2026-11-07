@@ -13,12 +13,12 @@ from transformers.models.llava_next.modeling_llava_next import (
     unpad_image,
 )
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import MultiModalFieldConfig, MultiModalKwargsItem
-from aphrodite.multimodal.parse import ImageSize
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.utils.tensor_schema import TensorSchema, TensorShape
+from sonar.config import SonarConfig
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import MultiModalFieldConfig, MultiModalKwargsItem
+from sonar.multimodal.parse import ImageSize
+from sonar.sequence import IntermediateTensors
+from sonar.utils.tensor_schema import TensorSchema, TensorShape
 
 from .clip import CLIPVisionModel
 from .interfaces import (
@@ -40,7 +40,7 @@ from .siglip import SiglipVisionModel
 from .utils import (
     AutoWeightsLoader,
     WeightsMapper,
-    init_aphrodite_registered_model,
+    init_sonar_registered_model,
     maybe_prefix,
 )
 from .vision import get_num_selected_vision_tokens, get_vision_encoder_info
@@ -228,7 +228,7 @@ class LlavaNextForConditionalGeneration(nn.Module, SupportsLoRA, SupportsMultiMo
         "gate_up_proj": ["gate_proj", "up_proj"],
     }
 
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={
             # mapping for new names in checkpoint saved after transformers v4.52
             "model.language_model.": "language_model.model.",
@@ -246,12 +246,12 @@ class LlavaNextForConditionalGeneration(nn.Module, SupportsLoRA, SupportsMultiMo
 
         raise ValueError("Only image modality is supported")
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
-        multimodal_config = aphrodite_config.model_config.multimodal_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
+        multimodal_config = sonar_config.model_config.multimodal_config
 
         vision_feature_layer = config.vision_feature_layer
         # Determine the layer up to which we will initialize the vision tower
@@ -273,7 +273,7 @@ class LlavaNextForConditionalGeneration(nn.Module, SupportsLoRA, SupportsMultiMo
             mm_token_ids=[config.image_token_index],
         )
 
-        with self._mark_tower_model(aphrodite_config, "image"):
+        with self._mark_tower_model(sonar_config, "image"):
             self.vision_tower = init_vision_tower_for_llava(
                 config,
                 quant_config=quant_config,
@@ -290,9 +290,9 @@ class LlavaNextForConditionalGeneration(nn.Module, SupportsLoRA, SupportsMultiMo
                 prefix=maybe_prefix(prefix, "multi_modal_projector"),
             )
 
-        with self._mark_language_model(aphrodite_config):
-            self.language_model = init_aphrodite_registered_model(
-                aphrodite_config=aphrodite_config,
+        with self._mark_language_model(sonar_config):
+            self.language_model = init_sonar_registered_model(
+                sonar_config=sonar_config,
                 hf_config=config.text_config,
                 prefix=maybe_prefix(prefix, "language_model"),
             )
@@ -511,7 +511,7 @@ class LlavaNextForConditionalGeneration(nn.Module, SupportsLoRA, SupportsMultiMo
         Unlike in LLaVA-1.5, the number of image tokens inputted to the language
         model depends on the original size of the input image. Including the
         original image token in the input, the required number of image tokens
-        is given by [`LlavaNextProcessingInfo.get_num_image_tokens`][aphrodite.\
+        is given by [`LlavaNextProcessingInfo.get_num_image_tokens`][sonar.\
 model_executor.models.llava_next.LlavaNextProcessingInfo.get_num_image_tokens].
 
         This way, the `positions` and `attn_metadata` are consistent
@@ -527,7 +527,7 @@ model_executor.models.llava_next.LlavaNextProcessingInfo.get_num_image_tokens].
                 multimodal embedding path.
 
         Info:
-            [`LlavaNextImageInputs`][aphrodite.model_executor.models.llava_next.LlavaNextImageInputs]
+            [`LlavaNextImageInputs`][sonar.model_executor.models.llava_next.LlavaNextImageInputs]
 
         """
         if intermediate_tensors is not None:
@@ -546,7 +546,7 @@ model_executor.models.llava_next.LlavaNextProcessingInfo.get_num_image_tokens].
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
     def get_mm_mapping(self) -> MultiModelKeys:
         """Get the module prefix in multimodal models"""

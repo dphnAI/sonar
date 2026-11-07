@@ -10,14 +10,14 @@ import pybase64 as base64
 import pytest
 from PIL import Image
 
-import aphrodite.benchmarks.datasets.datasets as datasets_module
-from aphrodite.benchmarks.datasets import CustomImageDataset, get_samples
-from aphrodite.benchmarks.lib.endpoint_request_func import (
+import sonar.benchmarks.datasets.datasets as datasets_module
+from sonar.benchmarks.datasets import CustomImageDataset, get_samples
+from sonar.benchmarks.lib.endpoint_request_func import (
     RequestFuncInput,
     _get_chat_content,
     _get_chat_messages,
 )
-from aphrodite.tokenizers import TokenizerLike
+from sonar.tokenizers import TokenizerLike
 
 pytestmark = pytest.mark.skip_global_cleanup
 

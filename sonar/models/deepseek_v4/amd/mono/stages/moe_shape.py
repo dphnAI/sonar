@@ -12,8 +12,8 @@ from dataclasses import dataclass, field
 
 import flydsl.expr as fx
 
-from aphrodite.models.deepseek_v4.amd.mono.common.plan import BLOCKS, WAVES
-from aphrodite.models.deepseek_v4.amd.mono.dims import (
+from sonar.models.deepseek_v4.amd.mono.common.plan import BLOCKS, WAVES
+from sonar.models.deepseek_v4.amd.mono.dims import (
     EXPERTS,
     HIDDEN,
     TOPK,
@@ -21,9 +21,9 @@ from aphrodite.models.deepseek_v4.amd.mono.dims import (
     X_GROUPS,
     Dims,
 )
-from aphrodite.models.deepseek_v4.amd.mono.stages import moe_plan as mplan
-from aphrodite.models.deepseek_v4.amd.mono.stages.gemv import ROWS, TILE, token_tiles
-from aphrodite.models.deepseek_v4.amd.mono.stages.router import PARTS as ROUTER_PARTS
+from sonar.models.deepseek_v4.amd.mono.stages import moe_plan as mplan
+from sonar.models.deepseek_v4.amd.mono.stages.gemv import ROWS, TILE, token_tiles
+from sonar.models.deepseek_v4.amd.mono.stages.router import PARTS as ROUTER_PARTS
 
 ROUTER0 = 8  # the router's first task: past the xq tasks (a token each)
 # the LDS an x tile's MXFP8 rows may take (``RouteShape.x_tile``): beside them

@@ -12,17 +12,17 @@ from typing import TYPE_CHECKING, ClassVar
 
 from torch import fx, nn
 
-from aphrodite.model_executor.models.transformers.fx_utils import (
+from sonar.model_executor.models.transformers.fx_utils import (
     aliasing_names,
     bypass_existence_guard,
     replace_expr,
     self_call_and_refs,
     written_names,
 )
-from aphrodite.model_executor.models.utils import ShardId, maybe_prefix
+from sonar.model_executor.models.utils import ShardId, maybe_prefix
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
+    from sonar.config import SonarConfig
 
 
 @dataclass
@@ -48,11 +48,11 @@ class BaseFuser(ABC):
         """Match the pattern in `graph`, returning a fuser if found."""
 
     @abstractmethod
-    def validate(self, module: nn.Module, aphrodite_config: "AphroditeConfig") -> bool:
+    def validate(self, module: nn.Module, sonar_config: "SonarConfig") -> bool:
         """Whether this fuser can be applied to this `module` instance."""
 
     @abstractmethod
-    def fuse(self, module: nn.Module, prefix: str, aphrodite_config: "AphroditeConfig") -> nn.Module:
+    def fuse(self, module: nn.Module, prefix: str, sonar_config: "SonarConfig") -> nn.Module:
         """Apply the fusion to an already-validated `module`, returning the
         module to install in its place (mutated in place, or freshly built)."""
 
@@ -68,7 +68,7 @@ class BaseFuser(ABC):
         return {}
 
 
-def fused_head_size(module: nn.Module, aphrodite_config: "AphroditeConfig") -> int:
+def fused_head_size(module: nn.Module, sonar_config: "SonarConfig") -> int:
     """The head size of `module`, which head counts are derived from.
 
     Prefer the module's own `head_dim`, which Transformers sets per instance:
@@ -76,7 +76,7 @@ def fused_head_size(module: nn.Module, aphrodite_config: "AphroditeConfig") -> i
     heterogeneous checkpoint it would divide out the wrong number of heads, and
     it is the text head size, so it does not describe a vision tower at all.
     """
-    return getattr(module, "head_dim", None) or aphrodite_config.model_config.get_head_size()
+    return getattr(module, "head_dim", None) or sonar_config.model_config.get_head_size()
 
 
 def local_output_sizes(merged_name: str) -> str:
@@ -108,14 +108,14 @@ class RewriteFuser(BaseFuser):
         """
 
     @abstractmethod
-    def update_attrs(self, module: nn.Module, prefix: str, aphrodite_config: "AphroditeConfig") -> None:
-        """Replace `module`'s submodules with their Aphrodite equivalents."""
+    def update_attrs(self, module: nn.Module, prefix: str, sonar_config: "SonarConfig") -> None:
+        """Replace `module`'s submodules with their Sonar equivalents."""
 
-    def fuse(self, module: nn.Module, prefix: str, aphrodite_config: "AphroditeConfig") -> nn.Module:
+    def fuse(self, module: nn.Module, prefix: str, sonar_config: "SonarConfig") -> nn.Module:
         """Fuse an already-validated `module` in place (see `Fusers.__getitem__`).
 
         Builds the merged submodule and binds the compiled forward."""
-        self.update_attrs(module, prefix, aphrodite_config)
+        self.update_attrs(module, prefix, sonar_config)
         module.forward = types.MethodType(self.fused_forward, module)
         return module
 
@@ -126,7 +126,7 @@ class StackedFuser(RewriteFuser):
     rewrites the forward to call it."""
 
     merged_cls_name: ClassVar[str]
-    """Name of the Aphrodite class the merged projection becomes (for logging)."""
+    """Name of the Sonar class the merged projection becomes (for logging)."""
 
     @property
     @abstractmethod
@@ -213,7 +213,7 @@ class StackedFuser(RewriteFuser):
         they are (or would be) evaluated. Raises if a generated temporary
         would shadow an existing name in `funcdef`.
         """
-        temps = [f"_aphrodite_merged_{i}" for i in range(len(calls))]
+        temps = [f"_sonar_merged_{i}" for i in range(len(calls))]
         names = {node.id for node in ast.walk(funcdef) if isinstance(node, ast.Name)}
         if names & set(temps):
             raise ValueError("fused temporaries would shadow existing names")

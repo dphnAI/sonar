@@ -24,7 +24,7 @@ def convert_to_pytorch_benchmark_format(
     for name, benchmark_values in metrics.items():
         record = {
             "benchmark": {
-                "name": "Aphrodite benchmark",
+                "name": "Sonar benchmark",
                 "extra_info": {
                     "args": vars(args),
                 },

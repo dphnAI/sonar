@@ -10,37 +10,37 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from aphrodite.compilation.decorators import ignore_torch_compile
-from aphrodite.config import AphroditeConfig, CacheConfig
-from aphrodite.distributed import (
+from sonar.compilation.decorators import ignore_torch_compile
+from sonar.config import CacheConfig, SonarConfig
+from sonar.distributed import (
     get_ep_group,
     get_pp_group,
     get_tensor_model_parallel_world_size,
     tensor_model_parallel_all_gather,
 )
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.layers.fused_moe import FusedMoEFactory, GateLinear
-from aphrodite.model_executor.layers.linear import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.attention import Attention
+from sonar.model_executor.layers.fused_moe import FusedMoEFactory, GateLinear
+from sonar.model_executor.layers.linear import (
     QKVParallelLinear,
     ReplicatedLinear,
     RowParallelLinear,
     UnquantizedLinearMethod,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.quantization.quark.quark import QuarkConfig
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.layers.rotary_embedding.base import RotaryEmbedding
-from aphrodite.model_executor.models.interfaces import MixtureOfExperts, SupportsLoRA
-from aphrodite.model_executor.models.llama import LlamaForCausalLM, LlamaMLP, LlamaModel
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.quantization.quark.quark import QuarkConfig
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.layers.rotary_embedding.base import RotaryEmbedding
+from sonar.model_executor.models.interfaces import MixtureOfExperts, SupportsLoRA
+from sonar.model_executor.models.llama import LlamaForCausalLM, LlamaMLP, LlamaModel
+from sonar.model_executor.models.utils import (
     AutoWeightsLoader,
     PPMissingLayer,
     WeightsMapper,
     extract_layer_index,
     sequence_parallel_chunk,
 )
-from aphrodite.models.muse_spark.common.layers import (
+from sonar.models.muse_spark.common.layers import (
     MulTanhSoftCap,
     MuseSpark1xNormPreservingResidualConnection,
     MuseSpark1xQKVOGateParallelLinear,
@@ -51,20 +51,20 @@ from aphrodite.models.muse_spark.common.layers import (
     materialize_residual_path_constants,
     norm_then_gated_residual,
 )
-from aphrodite.models.muse_spark.common.moe import MuseSpark1xRouter, MuseSparkMoEConfig
-from aphrodite.models.muse_spark.common.ops.fused_qk_norm_rope_kv import (
+from sonar.models.muse_spark.common.moe import MuseSpark1xRouter, MuseSparkMoEConfig
+from sonar.models.muse_spark.common.ops.fused_qk_norm_rope_kv import (
     supports_fused_kv_insert,
 )
-from aphrodite.models.muse_spark.common.ops.fused_rmsnorm import (
+from sonar.models.muse_spark.common.ops.fused_rmsnorm import (
     fused_norm_residual_norm_fwd,
     supports_norm_residual_norm,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.third_party.flash_linear_attention.ops.kda import (
+from sonar.platforms import current_platform
+from sonar.sequence import IntermediateTensors
+from sonar.third_party.flash_linear_attention.ops.kda import (
     rms_norm_gated,
 )
-from aphrodite.transformers_utils.configs.muse_spark import (
+from sonar.transformers_utils.configs.muse_spark import (
     MuseSparkDSparkConfig,
     MuseSparkTextConfig,
 )
@@ -93,7 +93,7 @@ def _supports_router_bf16x3_device() -> bool:
         return False
 
     # Importing a foreign platform can reload torch extension libraries.
-    from aphrodite.platforms.rocm import on_gfx950
+    from sonar.platforms.rocm import on_gfx950
 
     return on_gfx950()
 
@@ -151,19 +151,19 @@ class MuseSpark1xMoE(nn.Module):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         layer_idx: int,
         prefix: str = "",
     ):
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_text_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_text_config
+        quant_config = sonar_config.quant_config
 
         self.tp_size = get_tensor_model_parallel_world_size()
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
-        self.is_sequence_parallel = aphrodite_config.parallel_config.use_sequence_parallel_moe
+        self.is_sequence_parallel = sonar_config.parallel_config.use_sequence_parallel_moe
 
         self.ep_size = get_ep_group().device_group.size()
         self.n_routed_experts = config.num_local_experts
@@ -658,14 +658,14 @@ class MuseSpark1xDecoderLayer(nn.Module):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
     ) -> None:
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_text_config
-        cache_config = aphrodite_config.cache_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_text_config
+        cache_config = sonar_config.cache_config
+        quant_config = sonar_config.quant_config
 
         is_draft = isinstance(config, MuseSparkDSparkConfig)
         norm_affine = config.norm_affine if is_draft else True
@@ -684,10 +684,10 @@ class MuseSpark1xDecoderLayer(nn.Module):
             max_position_embeddings=(
                 max(
                     config.max_position_embeddings,
-                    aphrodite_config.model_config.max_model_len,
+                    sonar_config.model_config.max_model_len,
                 )
                 if is_draft
-                else aphrodite_config.model_config.max_model_len
+                else sonar_config.model_config.max_model_len
             ),
             cache_config=cache_config,
             quant_config=quant_config,
@@ -716,7 +716,7 @@ class MuseSpark1xDecoderLayer(nn.Module):
 
         if self.is_moe_layer:
             self.feed_forward = self.moe_cls(
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 layer_idx=self.layer_idx,
                 prefix=f"{prefix}.feed_forward",
             )
@@ -826,16 +826,16 @@ def _drop_gate_up_stacking(base: WeightsMapper) -> WeightsMapper:
 # Runs uncompiled under breakable cudagraphs; drop LlamaModel's torch.compile.
 @ignore_torch_compile
 class MuseSpark1xModel(LlamaModel):
-    hf_to_aphrodite_mapper = _drop_gate_up_stacking(LlamaModel.hf_to_aphrodite_mapper)
+    hf_to_sonar_mapper = _drop_gate_up_stacking(LlamaModel.hf_to_sonar_mapper)
 
     def __init__(
         self,
         *,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
         layer_type: type[MuseSpark1xDecoderLayer] = MuseSpark1xDecoderLayer,
     ):
-        super().__init__(aphrodite_config=aphrodite_config, prefix=prefix, layer_type=layer_type)
+        super().__init__(sonar_config=sonar_config, prefix=prefix, layer_type=layer_type)
 
         config = self.config
         if get_pp_group().is_last_rank:
@@ -935,34 +935,34 @@ class MuseSpark1xForCausalLM(LlamaForCausalLM, SupportsLoRA, MixtureOfExperts):
         "gate_up_proj": ["gate_proj", "up_proj"],
     }
 
-    hf_to_aphrodite_mapper = WeightsMapper()
+    hf_to_sonar_mapper = WeightsMapper()
 
     def __init__(
         self,
         *,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
         layer_type: type[MuseSpark1xDecoderLayer] | None = None,
     ):
-        config = aphrodite_config.model_config.hf_text_config
+        config = sonar_config.model_config.hf_text_config
         gated_delta_net = getattr(config, "gated_delta_net", None)
         if gated_delta_net is not None and getattr(gated_delta_net, "enable", False):
             raise NotImplementedError(
-                "MuseSpark1x gated_delta_net layers are not supported by the native Aphrodite text stack."
+                "MuseSpark1x gated_delta_net layers are not supported by the native Sonar text stack."
             )
-        if aphrodite_config.quant_config is not None and not isinstance(
-            aphrodite_config.quant_config, self.supported_quantization_configs
+        if sonar_config.quant_config is not None and not isinstance(
+            sonar_config.quant_config, self.supported_quantization_configs
         ):
             raise NotImplementedError(
                 "MuseSpark1x on ROCm only supports "
                 f"{self.supported_quantization_description} quantized checkpoints; "
                 "got quantization "
-                f"{aphrodite_config.quant_config.get_name()!r}."
+                f"{sonar_config.quant_config.get_name()!r}."
             )
         if layer_type is None:
             layer_type = self.decoder_layer_cls
 
-        super().__init__(aphrodite_config=aphrodite_config, prefix=prefix, layer_type=layer_type)
+        super().__init__(sonar_config=sonar_config, prefix=prefix, layer_type=layer_type)
 
         # qkv_proj fuses Q+K+V+OG, so LoRA must treat it as one module.
         self.packed_modules_mapping = {  # type: ignore[misc]
@@ -988,11 +988,11 @@ class MuseSpark1xForCausalLM(LlamaForCausalLM, SupportsLoRA, MixtureOfExperts):
 
     def _init_model(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
         layer_type: type[MuseSpark1xDecoderLayer] = MuseSpark1xDecoderLayer,
     ):
-        return self.model_cls(aphrodite_config=aphrodite_config, prefix=prefix, layer_type=layer_type)
+        return self.model_cls(sonar_config=sonar_config, prefix=prefix, layer_type=layer_type)
 
     def set_moe_parameters(self):
         self.moe_layers: list[nn.Module] = []
@@ -1095,7 +1095,7 @@ class MuseSpark1xForCausalLM(LlamaForCausalLM, SupportsLoRA, MixtureOfExperts):
                 yield name, weight
 
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(interleaved_weights(), mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(interleaved_weights(), mapper=self.hf_to_sonar_mapper)
 
     def process_weights_after_loading(self) -> None:
         n_gates = materialize_residual_path_constants(self)

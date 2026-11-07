@@ -22,10 +22,10 @@ from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, NamedTuple
 
-import aphrodite.envs as envs
-from aphrodite.logger import init_logger
-from aphrodite.v1.kv_offload.base import LookupResult, OffloadKey, ReqContext
-from aphrodite.v1.kv_offload.tiering.p2p.session.protocol import (
+import sonar.envs as envs
+from sonar.logger import init_logger
+from sonar.v1.kv_offload.base import LookupResult, OffloadKey, ReqContext
+from sonar.v1.kv_offload.tiering.p2p.session.protocol import (
     TYPE_KEY,
     AbortAckMsg,
     LookupRespMsg,
@@ -33,8 +33,8 @@ from aphrodite.v1.kv_offload.tiering.p2p.session.protocol import (
 )
 
 if TYPE_CHECKING:
-    from aphrodite.v1.kv_offload.tiering.base import JobId, ParentManager
-    from aphrodite.v1.kv_offload.tiering.p2p.data import DataTransport
+    from sonar.v1.kv_offload.tiering.base import JobId, ParentManager
+    from sonar.v1.kv_offload.tiering.p2p.data import DataTransport
 
 logger = init_logger(__name__)
 
@@ -292,7 +292,7 @@ class ServerRole:
         self.peer_fault: str | None = None
         # True once peer_fault came from _check_stalled_transfers.
         self.transfer_stalled = False
-        self._stall_timeout_s = envs.APHRODITE_P2P_TRANSFER_STALL_TIMEOUT_S
+        self._stall_timeout_s = envs.SONAR_P2P_TRANSFER_STALL_TIMEOUT_S
 
     # ------------------------------------------------------------------
     # State helpers

@@ -10,11 +10,11 @@ from unittest.mock import patch
 import pytest
 import torch
 
-from aphrodite.config import set_current_aphrodite_config
-from aphrodite.engine.arg_utils import EngineArgs
-from aphrodite.platforms import current_platform
-from aphrodite.utils.mem_utils import MemorySnapshot
-from aphrodite.v1.worker.gpu_worker import Worker, init_worker_distributed_environment
+from sonar.config import set_current_sonar_config
+from sonar.engine.arg_utils import EngineArgs
+from sonar.platforms import current_platform
+from sonar.utils.mem_utils import MemorySnapshot
+from sonar.v1.worker.gpu_worker import Worker, init_worker_distributed_environment
 
 # Global queue to track operation order across processes
 _QUEUE: Queue | None = None
@@ -63,24 +63,24 @@ def worker_process(
         os.environ["LOCAL_RANK"] = str(rank)
         os.environ["WORLD_SIZE"] = str(world_size)
 
-        # Create Aphrodite config with small model
-        aphrodite_config = EngineArgs(
+        # Create Sonar config with small model
+        sonar_config = EngineArgs(
             model="facebook/opt-125m", tensor_parallel_size=2, load_format="dummy"
         ).create_engine_config()
 
         # Select worker class and patch target based on platform
         if current_platform.is_xpu():
-            from aphrodite.v1.worker.xpu_worker import XPUWorker
+            from sonar.v1.worker.xpu_worker import XPUWorker
 
             worker_cls = XPUWorker
-            init_patch_target = "aphrodite.v1.worker.xpu_worker.init_worker_distributed_environment"
+            init_patch_target = "sonar.v1.worker.xpu_worker.init_worker_distributed_environment"
         else:
             worker_cls = Worker
-            init_patch_target = "aphrodite.v1.worker.gpu_worker.init_worker_distributed_environment"
+            init_patch_target = "sonar.v1.worker.gpu_worker.init_worker_distributed_environment"
 
         # Create worker
         worker = worker_cls(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             local_rank=rank,
             rank=rank,
             distributed_init_method=distributed_init_method,
@@ -110,7 +110,7 @@ def worker_process(
             init_patch,
             memory_patch,
             all_reduce_patch,
-            set_current_aphrodite_config(aphrodite_config),
+            set_current_sonar_config(sonar_config),
         ):
             # Initialize device (this is where we test the order)
             worker.init_device()

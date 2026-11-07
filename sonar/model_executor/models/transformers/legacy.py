@@ -20,20 +20,20 @@ from typing import TYPE_CHECKING
 
 import torch
 
-from aphrodite.model_executor.models.utils import WeightsMapper
-from aphrodite.sequence import IntermediateTensors
+from sonar.model_executor.models.utils import WeightsMapper
+from sonar.sequence import IntermediateTensors
 
 from .base import Base
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
+    from sonar.config import SonarConfig
 
 
 class LegacyMixin(Base):
-    def __init__(self, *, aphrodite_config: "AphroditeConfig", prefix: str = ""):
-        super().__init__(aphrodite_config=aphrodite_config, prefix=prefix)
+    def __init__(self, *, sonar_config: "SonarConfig", prefix: str = ""):
+        super().__init__(sonar_config=sonar_config, prefix=prefix)
 
-        self.hf_to_aphrodite_mapper |= WeightsMapper(
+        self.hf_to_sonar_mapper |= WeightsMapper(
             # Drop unsupported/unwanted output embeddings layers.
             orig_to_new_prefix={
                 "model.lm_head.": None,
@@ -44,10 +44,10 @@ class LegacyMixin(Base):
             },
             orig_to_new_substr={
                 # Some encoder models have the position_ids buffer in the checkpoint.
-                # Aphrodite always passes position_ids as an argument, so drop the buffer.
+                # Sonar always passes position_ids as an argument, so drop the buffer.
                 "position_ids": None,
                 # Some encoder models have the bias of the final classifier layer in
-                # the checkpoint. Aphrodite does not use this bias, so drop it.
+                # the checkpoint. Sonar does not use this bias, so drop it.
                 "score.bias": None,
             },
         )

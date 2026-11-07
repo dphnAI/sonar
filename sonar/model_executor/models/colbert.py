@@ -21,10 +21,10 @@ from collections.abc import Iterable
 import torch
 from torch import nn
 
-from aphrodite.config import AphroditeConfig, PoolerConfig
-from aphrodite.model_executor.layers.pooler import Pooler
-from aphrodite.model_executor.layers.pooler.tokwise import pooler_for_token_embed
-from aphrodite.model_executor.models.utils import AutoWeightsLoader, WeightsMapper
+from sonar.config import PoolerConfig, SonarConfig
+from sonar.model_executor.layers.pooler import Pooler
+from sonar.model_executor.layers.pooler.tokwise import pooler_for_token_embed
+from sonar.model_executor.models.utils import AutoWeightsLoader, WeightsMapper
 
 from .bert import BertEmbeddingModel, BertModel
 from .interfaces import HasInnerState, IsHybrid, SupportsLateInteraction
@@ -199,21 +199,21 @@ class ColBERTModel(ColBERTMixin, BertEmbeddingModel):
     interaction).  MaxSim scoring is computed externally.
     """
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
-        config = aphrodite_config.model_config.hf_config
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
+        config = sonar_config.model_config.hf_config
 
         # Must run before super().__init__ because _build_pooler reads these.
         colbert_dim = self.get_colbert_dim_from_config(config)
         self._init_colbert_components(
             hidden_size=config.hidden_size,
             colbert_dim=colbert_dim,
-            head_dtype=aphrodite_config.model_config.head_dtype,
+            head_dtype=sonar_config.model_config.head_dtype,
         )
 
-        super().__init__(aphrodite_config=aphrodite_config, prefix=prefix)
+        super().__init__(sonar_config=sonar_config, prefix=prefix)
 
-    def _build_model(self, aphrodite_config: AphroditeConfig, prefix: str = "") -> BertModel:
-        return BertModel(aphrodite_config=aphrodite_config, prefix=prefix)
+    def _build_model(self, sonar_config: SonarConfig, prefix: str = "") -> BertModel:
+        return BertModel(sonar_config=sonar_config, prefix=prefix)
 
     def _build_pooler(self, pooler_config: PoolerConfig) -> Pooler:
         return self._build_colbert_pooler(pooler_config)
@@ -245,23 +245,23 @@ class ColBERTModernBertModel(ColBERTMixin, nn.Module):
 
     is_pooling_model = True
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
 
         colbert_dim = self.get_colbert_dim_from_config(config)
         self._init_colbert_components(
             hidden_size=config.hidden_size,
             colbert_dim=colbert_dim,
-            head_dtype=aphrodite_config.model_config.head_dtype,
+            head_dtype=sonar_config.model_config.head_dtype,
         )
 
         self.model = ModernBertModel(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             prefix=prefix,
         )
 
-        pooler_config = aphrodite_config.model_config.pooler_config
+        pooler_config = sonar_config.model_config.pooler_config
         assert pooler_config is not None
         self.pooler = self._build_colbert_pooler(pooler_config)
 
@@ -319,23 +319,23 @@ class ColBERTJinaRobertaModel(ColBERTMixin, nn.Module):
 
     is_pooling_model = True
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
 
         colbert_dim = self.get_colbert_dim_from_config(config)
         self._init_colbert_components(
             hidden_size=config.hidden_size,
             colbert_dim=colbert_dim,
-            head_dtype=aphrodite_config.model_config.head_dtype,
+            head_dtype=sonar_config.model_config.head_dtype,
         )
 
         self.model = JinaRobertaModel(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             prefix=prefix,
         )
 
-        pooler_config = aphrodite_config.model_config.pooler_config
+        pooler_config = sonar_config.model_config.pooler_config
         assert pooler_config is not None
         self.pooler = self._build_colbert_pooler(pooler_config)
 
@@ -390,34 +390,34 @@ class ColBERTLfm2Model(ColBERTMixin, nn.Module, HasInnerState, IsHybrid):
     has_inner_state = True
 
     @classmethod
-    def get_mamba_state_shape_from_config(cls, aphrodite_config: AphroditeConfig):
-        return Lfm2ForCausalLM.get_mamba_state_shape_from_config(aphrodite_config)
+    def get_mamba_state_shape_from_config(cls, sonar_config: SonarConfig):
+        return Lfm2ForCausalLM.get_mamba_state_shape_from_config(sonar_config)
 
     @classmethod
-    def get_mamba_state_dtype_from_config(cls, aphrodite_config: AphroditeConfig):
-        return Lfm2ForCausalLM.get_mamba_state_dtype_from_config(aphrodite_config)
+    def get_mamba_state_dtype_from_config(cls, sonar_config: SonarConfig):
+        return Lfm2ForCausalLM.get_mamba_state_dtype_from_config(sonar_config)
 
     @classmethod
     def get_mamba_state_copy_func(cls):
         return Lfm2ForCausalLM.get_mamba_state_copy_func()
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
 
         colbert_dim = self.get_colbert_dim_from_config(config)
         self._init_colbert_components(
             hidden_size=config.hidden_size,
             colbert_dim=colbert_dim,
-            head_dtype=aphrodite_config.model_config.head_dtype,
+            head_dtype=sonar_config.model_config.head_dtype,
         )
 
         self.model = Lfm2Model(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             prefix=prefix,
         )
 
-        pooler_config = aphrodite_config.model_config.pooler_config
+        pooler_config = sonar_config.model_config.pooler_config
         assert pooler_config is not None
         self.pooler = self._build_colbert_pooler(pooler_config)
 

@@ -4,10 +4,10 @@
 import hashlib
 import json
 
-from aphrodite.distributed.kv_transfer.kv_connector.v1.offloading.canonical_mapping import (
+from sonar.distributed.kv_transfer.kv_connector.v1.offloading.canonical_mapping import (
     canonical_format_id,
 )
-from aphrodite.v1.kv_offload.base import (
+from sonar.v1.kv_offload.base import (
     OffloadingSpec,
     OffloadKey,
     get_offload_block_hash,
@@ -34,7 +34,7 @@ class FileMapper:
         rank: int,
         dtype: str,
         kv_cache_groups: list[dict] | None = None,
-        inference_engine: str = "aphrodite",
+        inference_engine: str = "sonar",
         parallel_agnostic: bool = False,
         replicated_layout: bool = False,
         canonical_format: str | None = None,

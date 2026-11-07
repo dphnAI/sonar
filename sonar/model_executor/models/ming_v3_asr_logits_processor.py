@@ -4,7 +4,7 @@
 
 from numbers import Integral
 
-from aphrodite.v1.worker.gpu.sample.logits_processor.interface import LogitsProcessor
+from sonar.v1.worker.gpu.sample.logits_processor.interface import LogitsProcessor
 
 
 class NoRepeatNGramLogitsProcessor(LogitsProcessor):
@@ -14,12 +14,12 @@ class NoRepeatNGramLogitsProcessor(LogitsProcessor):
         if isinstance(size, bool) or not isinstance(size, Integral) or not 0 <= int(size) < 2**31:
             raise ValueError("no_repeat_ngram_size must be an integer in [0, 2**31)")
 
-    def __init__(self, aphrodite_config, req_states):
+    def __init__(self, sonar_config, req_states):
         import torch
 
-        from aphrodite.v1.worker.gpu.buffer_utils import UvaBackedTensor
+        from sonar.v1.worker.gpu.buffer_utils import UvaBackedTensor
 
-        if aphrodite_config.speculative_config is not None:
+        if sonar_config.speculative_config is not None:
             raise ValueError("NoRepeatNGramLogitsProcessor does not support speculation")
         self.req_states = req_states
         self.sizes = UvaBackedTensor(req_states.max_num_reqs, dtype=torch.int32)

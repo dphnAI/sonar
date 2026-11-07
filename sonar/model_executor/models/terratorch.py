@@ -32,27 +32,27 @@ from terratorch.aphrodite import (
 )
 from transformers import BatchFeature
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.multimodal import MultiModalDummyOptions
-from aphrodite.inputs import ModalityData, MultiModalDataDict, MultiModalInput, mm_input
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.pooler import IdentityPooler
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
-from aphrodite.model_executor.models.utils import AutoWeightsLoader
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import (
+from sonar.config import SonarConfig
+from sonar.config.multimodal import MultiModalDummyOptions
+from sonar.inputs import ModalityData, MultiModalDataDict, MultiModalInput, mm_input
+from sonar.logger import init_logger
+from sonar.model_executor.layers.pooler import IdentityPooler
+from sonar.model_executor.model_loader.weight_utils import default_weight_loader
+from sonar.model_executor.models.utils import AutoWeightsLoader
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import (
     ImageItem,
     MultiModalFieldConfig,
     MultiModalKwargsItems,
     PlaceholderRange,
 )
-from aphrodite.multimodal.parse import (
+from sonar.multimodal.parse import (
     DictEmbeddingItems,
     ModalityDataItems,
     MultiModalDataItems,
     MultiModalDataParser,
 )
-from aphrodite.multimodal.processing import (
+from sonar.multimodal.processing import (
     BaseDummyInputsBuilder,
     BaseMultiModalProcessor,
     BaseProcessingInfo,
@@ -60,8 +60,8 @@ from aphrodite.multimodal.processing import (
     PromptUpdate,
     TimingContext,
 )
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.utils.gpu_sync_debug import gpu_sync_allowed
+from sonar.sequence import IntermediateTensors
+from sonar.utils.gpu_sync_debug import gpu_sync_allowed
 
 from .interfaces import IsAttentionFree, MultiModalEmbeddings, SupportsMultiModal
 from .interfaces_base import attn_type
@@ -246,10 +246,10 @@ class Terratorch(nn.Module, IsAttentionFree, SupportsMultiModal):
 
         raise ValueError("Only image modality is supported")
 
-    def __init__(self, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_config.to_dict()["pretrained_cfg"]
+        config = sonar_config.model_config.hf_config.to_dict()["pretrained_cfg"]
 
         self.inference_runner = InferenceRunner(config)
         self.model = self.inference_runner.model

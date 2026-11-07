@@ -3,10 +3,10 @@
 
 import pytest
 
-from aphrodite.engine.arg_utils import EngineArgs
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.v1.core.sched.scheduler import Scheduler
-from aphrodite.v1.engine.llm_engine import LLMEngine
+from sonar.engine.arg_utils import EngineArgs
+from sonar.sampling_params import SamplingParams
+from sonar.v1.core.sched.scheduler import Scheduler
+from sonar.v1.engine.llm_engine import LLMEngine
 
 
 class DummyV1Scheduler(Scheduler):
@@ -18,7 +18,7 @@ def test_scheduler_plugins_v1(monkeypatch: pytest.MonkeyPatch):
     with monkeypatch.context() as m:
         # Explicitly turn off engine multiprocessing so
         # that the scheduler runs in this process
-        m.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
+        m.setenv("SONAR_ENABLE_V1_MULTIPROCESSING", "0")
 
         with pytest.raises(Exception) as exception_info:
             engine_args = EngineArgs(

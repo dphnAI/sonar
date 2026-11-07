@@ -3,10 +3,10 @@
 import pytest
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.platforms import current_platform
-from aphrodite.scalar_type import scalar_types
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar import _custom_ops as ops
+from sonar.platforms import current_platform
+from sonar.scalar_type import scalar_types
+from sonar.utils.torch_utils import set_random_seed
 
 if not current_platform.has_device_capability(100):
     pytest.skip(
@@ -180,7 +180,7 @@ def test_python_util_matches_cpp_allocation(
     tensors with the same shapes and dtypes as the C++ functional variant
     (scaled_fp4_quant_func).
     """
-    from aphrodite._custom_ops import create_fp4_output_tensors
+    from sonar._custom_ops import create_fp4_output_tensors
 
     torch.set_default_device("cuda:0")
     m, n = shape
@@ -206,7 +206,7 @@ def test_quantize_to_fp4_with_padded_output(
     shape: tuple[int, int],
     is_sf_swizzled_layout: bool,
 ) -> None:
-    from aphrodite._custom_ops import create_fp4_output_tensors
+    from sonar._custom_ops import create_fp4_output_tensors
 
     dtype = torch.float16
     set_random_seed(42)

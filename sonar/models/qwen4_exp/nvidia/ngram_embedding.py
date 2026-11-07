@@ -10,17 +10,17 @@ import torch
 from torch import nn
 from transformers import Qwen4ExpTextConfig
 
-from aphrodite.config import get_current_aphrodite_config
-from aphrodite.distributed import get_etp_group, get_tp_group
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.quantization.base_config import (
+from sonar.config import get_current_sonar_config
+from sonar.distributed import get_etp_group, get_tp_group
+from sonar.logger import init_logger
+from sonar.model_executor.layers.quantization.base_config import (
     QuantizationConfig,
 )
-from aphrodite.model_executor.layers.quantization.utils.fp8_utils import is_fp8
-from aphrodite.model_executor.models.utils import AutoWeightsLoader
-from aphrodite.models.common.ops.sequence_parallel import sp_reduce_scatter, sp_shard
-from aphrodite.utils.gpu_sync_debug import gpu_sync_allowed
-from aphrodite.utils.math_utils import round_up
+from sonar.model_executor.layers.quantization.utils.fp8_utils import is_fp8
+from sonar.model_executor.models.utils import AutoWeightsLoader
+from sonar.models.common.ops.sequence_parallel import sp_reduce_scatter, sp_shard
+from sonar.utils.gpu_sync_debug import gpu_sync_allowed
+from sonar.utils.math_utils import round_up
 
 from ..common.ngram_embedding import (
     Qwen4ExpPLEDeviceEmbedding,
@@ -93,7 +93,7 @@ class Qwen4ExpPLEDiskOffloadEmbedding(Qwen4ExpPLEEmbedding):
             data_parallel_rank=data_parallel_rank,
             reduce_results=reduce_results,
         )
-        self._dummy = get_current_aphrodite_config().load_config.load_format == "dummy"
+        self._dummy = get_current_sonar_config().load_config.load_format == "dummy"
         # NVFP4 rows are packed E2M1 bytes plus a separate plane of block scales.
         self._nvfp4 = isinstance(embedding_method, Qwen4ExpPLENvFp4EmbeddingMethod)
         device, pin = self.weight.device, self.weight.is_cuda
@@ -415,7 +415,7 @@ class Qwen4ExpNGramEmbedding(nn.Module):
         )
         if params_dtype is None:
             params_dtype = torch.get_default_dtype()
-        engram_config = get_current_aphrodite_config().engram_config
+        engram_config = get_current_sonar_config().engram_config
         embedding_cls = (
             Qwen4ExpPLEDiskOffloadEmbedding
             if engram_config is not None and engram_config.disk_offload

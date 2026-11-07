@@ -10,7 +10,7 @@ from transformers import CONFIG_MAPPING, PreTrainedConfig
 # recognized by released Transformers, and the public checkpoint does not
 # provide an `auto_map` to enable `trust_remote_code=True`.
 # Remove this file once Transformers adds native support (or the checkpoint
-# provides an `auto_map`) and Aphrodite can rely on `AutoConfig.from_pretrained()`.
+# provides an `auto_map`) and Sonar can rely on `AutoConfig.from_pretrained()`.
 
 
 class FunAudioChatAudioEncoderConfig(PreTrainedConfig):

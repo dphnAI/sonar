@@ -12,13 +12,13 @@ import pybase64
 import torch
 from fastapi.responses import StreamingResponse
 
-from aphrodite.config import ModelConfig
-from aphrodite.entrypoints.serve.engine.protocol import UsageInfo
-from aphrodite.logger import init_logger
-from aphrodite.outputs import PoolingRequestOutput
-from aphrodite.renderers import TokenizeParams
-from aphrodite.tasks import SupportedTask
-from aphrodite.utils.serial_utils import (
+from sonar.config import ModelConfig
+from sonar.entrypoints.serve.engine.protocol import UsageInfo
+from sonar.logger import init_logger
+from sonar.outputs import PoolingRequestOutput
+from sonar.renderers import TokenizeParams
+from sonar.tasks import SupportedTask
+from sonar.utils.serial_utils import (
     EMBED_DTYPES,
     EmbedDType,
     Endianness,

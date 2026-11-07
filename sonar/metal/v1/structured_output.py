@@ -20,8 +20,8 @@ try:
 except ImportError:
     xgr = None  # type: ignore[assignment]
 
-from aphrodite.metal.pytorch_backend.tensor_bridge import torch_to_mlx
-from aphrodite.v1.core.sched.output import GrammarOutput, SchedulerOutput
+from sonar.metal.pytorch_backend.tensor_bridge import torch_to_mlx
+from sonar.v1.core.sched.output import GrammarOutput, SchedulerOutput
 
 
 class MetalStructuredOutputApplier:

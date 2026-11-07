@@ -20,7 +20,7 @@ from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
 from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel
 from transformers import PreTrainedConfig
 
-from aphrodite.model_executor.models.phi4mm_utils import (
+from sonar.model_executor.models.phi4mm_utils import (
     AbsolutePositionalEncoding,
     ConvModule,
     FeedForward,
@@ -33,7 +33,7 @@ from aphrodite.model_executor.models.phi4mm_utils import (
     get_offset,
     unfold_tensor,
 )
-from aphrodite.utils.torch_utils import async_tensor_h2d
+from sonar.utils.torch_utils import async_tensor_h2d
 
 
 class ConformerEncoderLayer(nn.Module):

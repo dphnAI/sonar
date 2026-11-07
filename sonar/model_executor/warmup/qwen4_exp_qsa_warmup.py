@@ -7,11 +7,11 @@ from typing import TYPE_CHECKING, cast
 
 import torch
 
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 if TYPE_CHECKING:
-    from aphrodite.v1.worker.gpu.model_runner import GPUModelRunner as GPUModelRunnerV2
-    from aphrodite.v1.worker.gpu_worker import Worker
+    from sonar.v1.worker.gpu.model_runner import GPUModelRunner as GPUModelRunnerV2
+    from sonar.v1.worker.gpu_worker import Worker
 
 logger = init_logger(__name__)
 
@@ -19,8 +19,8 @@ logger = init_logger(__name__)
 def qwen4_exp_qsa_triton_warmup(worker: "Worker") -> None:
     """Warm every reachable QSA specialization: indexer decode-query-length
     profiles plus the sparse attention split-K/merge configs."""
-    qsa_module = sys.modules.get("aphrodite.models.qwen4_exp.nvidia.qsa_indexer")
-    attn_module = sys.modules.get("aphrodite.models.qwen4_exp.nvidia.qsa")
+    qsa_module = sys.modules.get("sonar.models.qwen4_exp.nvidia.qsa_indexer")
+    attn_module = sys.modules.get("sonar.models.qwen4_exp.nvidia.qsa")
     if qsa_module is None or attn_module is None:
         return
     indexer = None
@@ -49,7 +49,7 @@ def qwen4_exp_qsa_triton_warmup(worker: "Worker") -> None:
     else:
         max_decode_query_len = runner.uniform_decode_query_len
 
-    from aphrodite.models.qwen4_exp.nvidia.ops.qsa_indexer import (
+    from sonar.models.qwen4_exp.nvidia.ops.qsa_indexer import (
         warmup_qsa_mqa_paged_decode,
     )
 
@@ -66,7 +66,7 @@ def qwen4_exp_qsa_triton_warmup(worker: "Worker") -> None:
     )
     logger.info("Warmed up Qwen4Exp QSA decode kernels: %s.", profiles)
 
-    from aphrodite.models.qwen4_exp.nvidia.ops.qsa import (
+    from sonar.models.qwen4_exp.nvidia.ops.qsa import (
         warmup_qsa_sparse_paged_attention,
     )
 

@@ -6,19 +6,19 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll, ready};
 
-use aphrodite_engine_core_client::protocol::logprobs::Logprobs;
-use aphrodite_engine_core_client::protocol::output::{
-    EngineCoreFinishReason, RequestError, RequestSpecDecodeMetrics, StopReason,
-};
-use aphrodite_engine_core_client::protocol::sampling_mask::SamplingMask;
-use aphrodite_engine_core_client::protocol::tensor::WireNdArray;
-use aphrodite_engine_core_client::{
-    AbortCause, EngineCoreOutputStream, EngineCoreStreamDelivery, EngineCoreStreamOutput,
-};
 use enum_as_inner::EnumAsInner;
 use futures::stream::FusedStream;
 use futures::{Stream, StreamExt as _, pin_mut};
 use serde::{Deserialize, Serialize};
+use sonar_engine_core_client::protocol::logprobs::Logprobs;
+use sonar_engine_core_client::protocol::output::{
+    EngineCoreFinishReason, RequestError, RequestSpecDecodeMetrics, StopReason,
+};
+use sonar_engine_core_client::protocol::sampling_mask::SamplingMask;
+use sonar_engine_core_client::protocol::tensor::WireNdArray;
+use sonar_engine_core_client::{
+    AbortCause, EngineCoreOutputStream, EngineCoreStreamDelivery, EngineCoreStreamOutput,
+};
 
 use crate::RequestTimestamps;
 use crate::error::Result;

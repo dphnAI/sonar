@@ -3,10 +3,10 @@
 
 import pytest
 
-from aphrodite.lora.lora_model import LoRAModel
-from aphrodite.lora.peft_helper import PEFTHelper
-from aphrodite.lora.utils import get_adapter_absolute_path
-from aphrodite.model_executor.models.qwen3 import Qwen3ForCausalLM
+from sonar.lora.lora_model import LoRAModel
+from sonar.lora.peft_helper import PEFTHelper
+from sonar.lora.utils import get_adapter_absolute_path
+from sonar.model_executor.models.qwen3 import Qwen3ForCausalLM
 
 # Provide absolute path and huggingface lora ids
 lora_fixture_name = ["llama32_lora_files", "llama32_lora_huggingface_id"]

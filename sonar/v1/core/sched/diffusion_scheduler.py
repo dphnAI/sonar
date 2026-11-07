@@ -2,11 +2,11 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Canvas-width handling and async read deferral for diffusion requests."""
 
-from aphrodite.v1.core.sched.async_scheduler import AsyncScheduler
-from aphrodite.v1.core.sched.output import SchedulerOutput
-from aphrodite.v1.core.sched.scheduler import Scheduler
-from aphrodite.v1.outputs import DraftTokenIds
-from aphrodite.v1.request import Request
+from sonar.v1.core.sched.async_scheduler import AsyncScheduler
+from sonar.v1.core.sched.output import SchedulerOutput
+from sonar.v1.core.sched.scheduler import Scheduler
+from sonar.v1.outputs import DraftTokenIds
+from sonar.v1.request import Request
 
 
 def diffusion_canvas_width(request: Request, canvas_length: int) -> int:

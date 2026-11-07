@@ -4,19 +4,19 @@ from dataclasses import dataclass
 
 import torch
 
-from aphrodite.config import AphroditeConfig, CompilationConfig
-from aphrodite.v1.attention.backend import (
+from sonar.config import CompilationConfig, SonarConfig
+from sonar.v1.attention.backend import (
     AttentionBackend,
     AttentionCGSupport,
     AttentionMetadataBuilder,
     CommonAttentionMetadata,
 )
-from aphrodite.v1.attention.backends.utils import (
+from sonar.v1.attention.backends.utils import (
     PAD_SLOT_ID,
     mamba_get_block_table_tensor,
     split_decodes_and_prefills,
 )
-from aphrodite.v1.kv_cache_interface import KVCacheSpec, MambaSpec
+from sonar.v1.kv_cache_interface import KVCacheSpec, MambaSpec
 
 
 class LinearAttentionBackend(AttentionBackend):
@@ -55,10 +55,10 @@ class LinearAttentionMetadataBuilder(AttentionMetadataBuilder[LinearAttentionMet
         self,
         kv_cache_spec: MambaSpec,
         layer_names: list[str],
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
     ):
-        super().__init__(kv_cache_spec, layer_names, aphrodite_config, device)
+        super().__init__(kv_cache_spec, layer_names, sonar_config, device)
 
     def build(
         self,
@@ -73,7 +73,7 @@ class LinearAttentionMetadataBuilder(AttentionMetadataBuilder[LinearAttentionMet
             common_attn_metadata.block_table_tensor,
             common_attn_metadata.seq_lens,
             self.kv_cache_spec,
-            self.aphrodite_config.cache_config.mamba_cache_mode,
+            self.sonar_config.cache_config.mamba_cache_mode,
         )[:, 0]
 
         num_decodes, num_prefills, num_decode_tokens, num_prefill_tokens = split_decodes_and_prefills(
@@ -117,7 +117,7 @@ class BailingLinearAttentionMetadataBuilder(LinearAttentionMetadataBuilder):
     @classmethod
     def get_cudagraph_support(
         cls,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         kv_cache_spec: KVCacheSpec,
     ) -> AttentionCGSupport:
         return AttentionCGSupport.UNIFORM_BATCH
@@ -126,14 +126,14 @@ class BailingLinearAttentionMetadataBuilder(LinearAttentionMetadataBuilder):
         self,
         kv_cache_spec: MambaSpec,
         layer_names: list[str],
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
     ):
-        super().__init__(kv_cache_spec, layer_names, aphrodite_config, device)
-        self.compilation_config: CompilationConfig = aphrodite_config.compilation_config
-        self.num_spec_tokens: int = aphrodite_config.num_speculative_tokens
+        super().__init__(kv_cache_spec, layer_names, sonar_config, device)
+        self.compilation_config: CompilationConfig = sonar_config.compilation_config
+        self.num_spec_tokens: int = sonar_config.num_speculative_tokens
         self.use_spec_decode: bool = self.num_spec_tokens > 0
-        self.decode_cudagraph_max_bs: int = aphrodite_config.scheduler_config.max_num_seqs
+        self.decode_cudagraph_max_bs: int = sonar_config.scheduler_config.max_num_seqs
         if self.compilation_config.max_cudagraph_capture_size is not None:
             self.decode_cudagraph_max_bs = min(
                 self.decode_cudagraph_max_bs,
@@ -196,7 +196,7 @@ class BailingLinearAttentionMetadataBuilder(LinearAttentionMetadataBuilder):
             common_attn_metadata.block_table_tensor,
             common_attn_metadata.seq_lens,
             self.kv_cache_spec,
-            self.aphrodite_config.cache_config.mamba_cache_mode,
+            self.sonar_config.cache_config.mamba_cache_mode,
         )
         if state_indices_tensor.dim() == 1:
             state_indices_tensor = state_indices_tensor.unsqueeze(-1)

@@ -5,11 +5,11 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.platforms import CpuArchEnum, current_platform
-from aphrodite.triton_utils import HAS_TRITON
-from aphrodite.v1.worker.cpu import attn_utils
-from aphrodite.v1.worker.cpu.attn_utils import FastPrefillHelper
+from sonar.config import SonarConfig
+from sonar.platforms import CpuArchEnum, current_platform
+from sonar.triton_utils import HAS_TRITON
+from sonar.v1.worker.cpu import attn_utils
+from sonar.v1.worker.cpu.attn_utils import FastPrefillHelper
 
 pytestmark = pytest.mark.skipif(
     not current_platform.is_cpu() or HAS_TRITON or current_platform.get_cpu_architecture() == CpuArchEnum.X86,
@@ -45,7 +45,7 @@ def test_fast_prefill_selects_only_trailing_shared_layers(
 ) -> None:
     monkeypatch.setattr(
         attn_utils,
-        "get_layers_from_aphrodite_config",
+        "get_layers_from_sonar_config",
         lambda *args, **kwargs: dict.fromkeys(layer_names),
     )
     monkeypatch.setattr(
@@ -53,7 +53,7 @@ def test_fast_prefill_selects_only_trailing_shared_layers(
         "get_shared_kv_cache_layers",
         lambda config: shared_layers,
     )
-    config = AphroditeConfig()
+    config = SonarConfig()
     config.cache_config.kv_sharing_fast_prefill = enabled
 
     assert attn_utils.get_kv_sharing_fast_prefill_eligible_layers(config) == expected

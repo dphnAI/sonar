@@ -13,41 +13,41 @@ from unittest.mock import patch
 import pytest
 import torch
 
-from aphrodite import SamplingParams
-from aphrodite.distributed.kv_transfer.kv_connector.v1.multi_connector import (
+from sonar import SamplingParams
+from sonar.distributed.kv_transfer.kv_connector.v1.multi_connector import (
     MultiConnector,
     MultiKVConnectorMetadata,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl import (
+from sonar.distributed.kv_transfer.kv_connector.v1.nixl import (
     NixlConnectorMetadata,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.simple_cpu_offload_connector import (
+from sonar.distributed.kv_transfer.kv_connector.v1.simple_cpu_offload_connector import (
     SimpleCPUOffloadConnector,
 )
-from aphrodite.utils.hashing import sha256
-from aphrodite.v1.core.kv_cache_utils import get_request_block_hasher
-from aphrodite.v1.kv_cache_interface import (
+from sonar.utils.hashing import sha256
+from sonar.v1.core.kv_cache_utils import get_request_block_hasher
+from sonar.v1.kv_cache_interface import (
     FullAttentionSpec,
     KVCacheConfig,
     KVCacheGroupSpec,
     KVCacheTensor,
     SlidingWindowSpec,
 )
-from aphrodite.v1.metrics.cache_hit_source import CacheHitSource
-from aphrodite.v1.outputs import KVConnectorOutput
-from aphrodite.v1.request import Request
-from aphrodite.v1.simple_kv_offload.metadata import (
+from sonar.v1.metrics.cache_hit_source import CacheHitSource
+from sonar.v1.outputs import KVConnectorOutput
+from sonar.v1.request import Request
+from sonar.v1.simple_kv_offload.metadata import (
     SimpleCPUOffloadMetadata,
     SimpleCPUOffloadWorkerMetadata,
 )
 from tests.v1.kv_connector.unit.utils import (
-    create_aphrodite_config,
     create_model_runner_output,
     create_request,
     create_scheduler,
+    create_sonar_config,
 )
 
-NIXL_WRAPPER_PATCH = "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper"
+NIXL_WRAPPER_PATCH = "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper"
 
 
 class FakeNixlWrapper:
@@ -188,9 +188,9 @@ def _make_kv_cache_config(
 
 
 def _multi_connector_config(swa_enabled: bool = False):
-    """Return (aphrodite_config, kv_cache_config) for a MultiConnector test."""
+    """Return (sonar_config, kv_cache_config) for a MultiConnector test."""
     kv_cache_config = _make_kv_cache_config(swa_enabled=swa_enabled)
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         kv_connector="MultiConnector",
         kv_connector_extra_config={
             "connectors": [
@@ -208,7 +208,7 @@ def _multi_connector_config(swa_enabled: bool = False):
             ],
         },
     )
-    return aphrodite_config, kv_cache_config
+    return sonar_config, kv_cache_config
 
 
 @patch(NIXL_WRAPPER_PATCH, FakeNixlWrapper)
@@ -216,8 +216,8 @@ def test_nixl_wins_load_over_cpu_offload():
     """When NixlConnector (index 0) has matched tokens from a remote prefill, it should
     win the load: Nixl metadata tracks the recv while CPU offload metadata has no load
     scheduled."""
-    aphrodite_config, kv_cache_config = _multi_connector_config()
-    scheduler = create_scheduler(aphrodite_config, kv_cache_config=kv_cache_config)
+    sonar_config, kv_cache_config = _multi_connector_config()
+    scheduler = create_scheduler(sonar_config, kv_cache_config=kv_cache_config)
     mc = scheduler.connector
     assert isinstance(mc, MultiConnector)
 
@@ -254,8 +254,8 @@ def test_nixl_wins_load_over_cpu_offload():
 def test_cpu_offload_wins_when_nixl_has_no_match():
     """When NixlConnector returns 0 matched tokens and SimpleCPUOffloadConnector has a
     CPU cache hit, the CPU offload connector (index 1) wins the load."""
-    aphrodite_config, kv_cache_config = _multi_connector_config()
-    scheduler = create_scheduler(aphrodite_config, kv_cache_config=kv_cache_config)
+    sonar_config, kv_cache_config = _multi_connector_config()
+    scheduler = create_scheduler(sonar_config, kv_cache_config=kv_cache_config)
     mc = scheduler.connector
     assert isinstance(mc, MultiConnector)
 
@@ -314,10 +314,10 @@ def test_request_finished_no_async_save(swa_enabled: bool):
     """A normal request (no P/D) produces no async save from either connector.
     MultiConnector returns (False, None) via both request_finished and
     request_finished_all_groups, and cleans up _requests_to_connector."""
-    from aphrodite.v1.request import RequestStatus
+    from sonar.v1.request import RequestStatus
 
-    aphrodite_config, kv_cache_config = _multi_connector_config(swa_enabled=swa_enabled)
-    scheduler = create_scheduler(aphrodite_config, kv_cache_config=kv_cache_config)
+    sonar_config, kv_cache_config = _multi_connector_config(swa_enabled=swa_enabled)
+    scheduler = create_scheduler(sonar_config, kv_cache_config=kv_cache_config)
     mc = scheduler.connector
     assert isinstance(mc, MultiConnector)
 

@@ -5,15 +5,15 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from aphrodite.compilation.backends import set_model_tag
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, CacheConfig
-from aphrodite.model_executor.layers.linear import ReplicatedLinear
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization.base_config import QuantizationConfig
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.torch_utils import direct_register_custom_op
-from aphrodite.v1.worker.gpu.spec_decode.dflash2.config import DFlash2SpeculatorConfig
+from sonar.compilation.backends import set_model_tag
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import CacheConfig, SonarConfig
+from sonar.model_executor.layers.linear import ReplicatedLinear
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization.base_config import QuantizationConfig
+from sonar.triton_utils import tl, triton
+from sonar.utils.torch_utils import direct_register_custom_op
+from sonar.v1.worker.gpu.spec_decode.dflash2.config import DFlash2SpeculatorConfig
 
 from .qwen3_dflash import (
     DFlashQwen3DecoderLayer,
@@ -139,7 +139,7 @@ def dflash2_grouped_conv(
     block_size: int,
     group_size: int,
 ) -> torch.Tensor:
-    return torch.ops.aphrodite.dflash2_grouped_conv(x, delta, base, block_size, group_size)
+    return torch.ops.sonar.dflash2_grouped_conv(x, delta, base, block_size, group_size)
 
 
 def _grouped_conv(
@@ -224,7 +224,7 @@ class DFlashGroupedConv(nn.Module):
 class DFlash2Qwen3DecoderLayer(DFlashQwen3DecoderLayer):
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         *,
         config,
         layer_idx: int,
@@ -233,7 +233,7 @@ class DFlash2Qwen3DecoderLayer(DFlashQwen3DecoderLayer):
         prefix: str = "",
     ) -> None:
         super().__init__(
-            aphrodite_config,
+            sonar_config,
             config=config,
             layer_idx=layer_idx,
             cache_config=cache_config,
@@ -241,7 +241,7 @@ class DFlash2Qwen3DecoderLayer(DFlashQwen3DecoderLayer):
             prefix=prefix,
         )
         draft_config = config.dflash_config
-        speculative_config = aphrodite_config.speculative_config
+        speculative_config = sonar_config.speculative_config
         assert speculative_config is not None
         conv_args = dict(
             hidden_size=config.hidden_size,
@@ -249,7 +249,7 @@ class DFlash2Qwen3DecoderLayer(DFlashQwen3DecoderLayer):
             group_size=int(draft_config["conv_group_size"]),
             # Query tokens per request: the bonus token plus the mask tokens.
             block_size=1 + speculative_config.num_speculative_tokens,
-            params_dtype=aphrodite_config.model_config.dtype,
+            params_dtype=sonar_config.model_config.dtype,
             quant_config=quant_config,
         )
         self.attention_conv = DFlashGroupedConv(**conv_args, prefix=maybe_prefix(prefix, "attention_conv"))
@@ -353,12 +353,12 @@ class DFlash2Qwen3Model(DFlashQwen3Model):
     def __init__(
         self,
         *,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         start_layer_id: int = 0,
         prefix: str = "",
     ) -> None:
         super().__init__(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             start_layer_id=start_layer_id,
             prefix=prefix,
         )
@@ -371,7 +371,7 @@ class DFlash2Qwen3Model(DFlashQwen3Model):
                 vocab_size=self.config.vocab_size,
                 rank=int(draft_config["selector_rank"]),
                 top_k=int(draft_config["selector_top_k"]),
-                params_dtype=aphrodite_config.model_config.dtype,
+                params_dtype=sonar_config.model_config.dtype,
                 prefix=maybe_prefix(prefix, "candidate_selector"),
             )
 
@@ -385,14 +385,14 @@ class DFlash2Qwen3ForCausalLM(DFlashQwen3ForCausalLM):
 
     model_cls = DFlash2Qwen3Model
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
-        super().__init__(aphrodite_config=aphrodite_config, prefix=prefix)
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
+        super().__init__(sonar_config=sonar_config, prefix=prefix)
         draft_config = self.config.dflash_config
         softcap = float(draft_config.get("final_logit_softcapping") or 0.0)
         # Candidates index the selector codebooks, which have the draft's
         # vocabulary; the target's vocabulary can be larger.
         self.candidate_logits_processor = LogitsProcessor(
-            min(aphrodite_config.model_config.get_vocab_size(), self.config.vocab_size),
+            min(sonar_config.model_config.get_vocab_size(), self.config.vocab_size),
             scale=float(draft_config.get("output_multiplier", 1.0)),
             soft_cap=softcap if softcap > 0 else None,
         )

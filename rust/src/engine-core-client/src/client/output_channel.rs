@@ -11,7 +11,7 @@
 //! task is then woken once per delivery instead of once per engine step.
 //!
 //! Outputs are never merged, reordered, or dropped here; the consumer merges a
-//! delivery into one output (see `aphrodite-llm`). Merging here would hide the raw
+//! delivery into one output (see `sonar-llm`). Merging here would hide the raw
 //! outputs that request metrics observe one by one (per-step timestamps for
 //! inter-token latency, prefill stats, lifecycle events), and would have to
 //! combine wire-level fields such as undecoded logprobs tensors and opaque

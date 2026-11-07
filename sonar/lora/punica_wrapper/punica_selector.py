@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.utils.import_utils import resolve_obj_by_qualname
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.utils.import_utils import resolve_obj_by_qualname
 
 from .punica_base import PunicaWrapperBase
 

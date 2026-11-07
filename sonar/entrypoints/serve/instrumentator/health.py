@@ -5,9 +5,9 @@
 from fastapi import APIRouter, Request
 from fastapi.responses import Response
 
-from aphrodite.engine.protocol import EngineClient
-from aphrodite.logger import init_logger
-from aphrodite.v1.engine.exceptions import EngineDeadError
+from sonar.engine.protocol import EngineClient
+from sonar.logger import init_logger
+from sonar.v1.engine.exceptions import EngineDeadError
 
 logger = init_logger(__name__)
 

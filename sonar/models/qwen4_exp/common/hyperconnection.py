@@ -35,12 +35,12 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from aphrodite.config import AphroditeConfig
+from sonar.config import SonarConfig
 
 
-def is_hc_sequence_parallel_enabled(aphrodite_config: AphroditeConfig) -> bool:
+def is_hc_sequence_parallel_enabled(sonar_config: SonarConfig) -> bool:
     """Enable GR/PLE SP explicitly or automatically with sequence-parallel MoE."""
-    parallel_config = aphrodite_config.parallel_config
+    parallel_config = sonar_config.parallel_config
     return parallel_config.tensor_parallel_size > 1 and (
         parallel_config.enable_hc_sp or parallel_config.use_sequence_parallel_moe
     )

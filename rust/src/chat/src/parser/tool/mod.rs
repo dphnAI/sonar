@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-//! Tool parser registration and selection boundary for `aphrodite-chat`.
+//! Tool parser registration and selection boundary for `sonar-chat`.
 
 use std::sync::{Arc, LazyLock};
 
-use aphrodite_tokenizer::DynTokenizer;
+use sonar_tokenizer::DynTokenizer;
 
-pub use aphrodite_parser::tool::{
+pub use sonar_parser::tool::{
     DeepSeekV3ToolParser, DeepSeekV4ToolParser, DeepSeekV31ToolParser, DeepSeekV32ToolParser,
     DeepSeekV41ToolParser, Glm45MoeToolParser, Glm47MoeToolParser, Granite4ToolParser,
     HermesToolParser, Internlm2ToolParser, KimiK2ToolParser, Llama3JsonToolParser, MiMoToolParser,
@@ -52,7 +52,7 @@ pub mod names {
 
 /// Constructor signature for one registered tool parser implementation.
 type ToolParserCreator = Arc<
-    dyn Fn(&[ChatTool], DynTokenizer) -> aphrodite_parser::tool::Result<Box<dyn ToolParser>>
+    dyn Fn(&[ChatTool], DynTokenizer) -> sonar_parser::tool::Result<Box<dyn ToolParser>>
         + Send
         + Sync,
 >;
@@ -111,7 +111,7 @@ impl ToolParserFactory {
             // Narrow to `internlm2` substring so it matches `internlm2-chat-7b`
             // and `internlm2_5-7b-chat` but NOT `internlm-chat-7b` (InternLM v1,
             // routes to Llama), `internlm3-*` (also Llama-architecture per
-            // aphrodite/model_executor/models/registry.py:146), or `Intern-S1` /
+            // sonar/model_executor/models/registry.py:146), or `Intern-S1` /
             // `Intern-S1-Pro` (separate intern-s1 parser, see PR #40115).
             .register_pattern("internlm2", names::INTERNLM)
             .register_pattern("llama-4", names::LLAMA4_JSON)

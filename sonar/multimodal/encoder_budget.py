@@ -2,17 +2,17 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 from collections.abc import Mapping
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.logger import init_logger
-from aphrodite.multimodal.cache import (
+from sonar.config import SonarConfig
+from sonar.logger import init_logger
+from sonar.multimodal.cache import (
     BaseMultiModalProcessorCache,
     processor_only_cache_from_config,
 )
-from aphrodite.multimodal.inputs import MultiModalKwargsItem
-from aphrodite.multimodal.processing import BaseMultiModalProcessor
-from aphrodite.multimodal.registry import MultiModalRegistry
-from aphrodite.utils.torch_utils import set_default_torch_num_threads
-from aphrodite.v1.core.encoder_cache_manager import compute_mm_encoder_budget
+from sonar.multimodal.inputs import MultiModalKwargsItem
+from sonar.multimodal.processing import BaseMultiModalProcessor
+from sonar.multimodal.registry import MultiModalRegistry
+from sonar.utils.torch_utils import set_default_torch_num_threads
+from sonar.v1.core.encoder_cache_manager import compute_mm_encoder_budget
 
 logger = init_logger(__name__)
 
@@ -45,21 +45,21 @@ class MultiModalBudget:
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         mm_registry: MultiModalRegistry,
         *,
         enable_cache: bool = True,
     ) -> None:
         super().__init__()
 
-        self.model_config = model_config = aphrodite_config.model_config
-        self.scheduler_config = scheduler_config = aphrodite_config.scheduler_config
+        self.model_config = model_config = sonar_config.model_config
+        self.scheduler_config = scheduler_config = sonar_config.scheduler_config
 
         self.max_model_len = model_config.max_model_len
         self.max_num_reqs = scheduler_config.max_num_seqs
 
         with set_default_torch_num_threads():  # Avoid hang during startup
-            cache = processor_only_cache_from_config(aphrodite_config) if enable_cache else None
+            cache = processor_only_cache_from_config(sonar_config) if enable_cache else None
             processor = mm_registry.create_processor(model_config)
 
             self.cache = cache

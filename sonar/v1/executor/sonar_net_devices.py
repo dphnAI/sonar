@@ -4,21 +4,21 @@
 
 Shared by both UniProcExecutor (TP=1) and MultiprocExecutor (TP>1).
 All transport-specific env vars and sysfs lookups live here so executor
-files only need to call ``set_worker_net_device(local_rank, aphrodite_config)``.
+files only need to call ``set_worker_net_device(local_rank, sonar_config)``.
 
 Requires two env vars set together:
-- ``APHRODITE_GPU_NIC_PCIE_MAPPING`` -- comma-separated GPU_BDF=NIC_BDF pairs.
-- ``APHRODITE_NIC_SELECTION_VARS`` -- comma-separated list of env vars to set,
+- ``SONAR_GPU_NIC_PCIE_MAPPING`` -- comma-separated GPU_BDF=NIC_BDF pairs.
+- ``SONAR_NIC_SELECTION_VARS`` -- comma-separated list of env vars to set,
   each optionally suffixed (e.g. ``UCX_NET_DEVICES:1,NCCL_IB_HCA:1``).
 """
 
 import os
 from pathlib import Path
 
-import aphrodite.envs as envs
-from aphrodite.config import AphroditeConfig
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
+import sonar.envs as envs
+from sonar.config import SonarConfig
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
 
 logger = init_logger(__name__)
 
@@ -72,7 +72,7 @@ def parse_gpu_nic_mapping(
             continue
         if "=" not in segment:
             raise ValueError(
-                "APHRODITE_GPU_NIC_PCIE_MAPPING: expected comma-separated"
+                "SONAR_GPU_NIC_PCIE_MAPPING: expected comma-separated"
                 f" gpu_bdf=nic_bdf pairs; ambiguous segment: {segment!r}"
             )
         gpu_s, nic_s = segment.split("=", 1)
@@ -89,7 +89,7 @@ def rdma_name_for_nic_pci(nic_pci: tuple[int, int, int, int]) -> str:
     device directory (e.g. ``.../0101:00:00.0``). We take ``Path(...).resolve().name``
     as the BDF string.
 
-    ``APHRODITE_GPU_NIC_PCIE_MAPPING`` NIC keys must **normalize** (via ``normalize_pci``)
+    ``SONAR_GPU_NIC_PCIE_MAPPING`` NIC keys must **normalize** (via ``normalize_pci``)
     to the same tuple as this basename.
     """
     ib = Path("/sys/class/infiniband")
@@ -114,7 +114,7 @@ def rdma_name_for_nic_pci(nic_pci: tuple[int, int, int, int]) -> str:
 
 
 def parse_nic_selection_vars(raw: str) -> list[tuple[str, str]]:
-    """Parse ``APHRODITE_NIC_SELECTION_VARS`` into ``(env_var_name, suffix)`` pairs.
+    """Parse ``SONAR_NIC_SELECTION_VARS`` into ``(env_var_name, suffix)`` pairs.
 
     Each entry is ``VAR_NAME`` or ``VAR_NAME:<suffix>``.  The colon and
     everything after it is appended verbatim to the RDMA device name.
@@ -133,14 +133,14 @@ def parse_nic_selection_vars(raw: str) -> list[tuple[str, str]]:
 
 
 def set_worker_gpu_nic_mapping(local_rank: int) -> None:
-    """Set NIC selection env vars from APHRODITE_GPU_NIC_PCIE_MAPPING for a worker.
+    """Set NIC selection env vars from SONAR_GPU_NIC_PCIE_MAPPING for a worker.
 
-    Which env vars are set is controlled by ``APHRODITE_NIC_SELECTION_VARS``.
+    Which env vars are set is controlled by ``SONAR_NIC_SELECTION_VARS``.
     """
-    raw = envs.APHRODITE_GPU_NIC_PCIE_MAPPING.strip()
+    raw = envs.SONAR_GPU_NIC_PCIE_MAPPING.strip()
     if not raw:
         return
-    selection_raw = envs.APHRODITE_NIC_SELECTION_VARS.strip()
+    selection_raw = envs.SONAR_NIC_SELECTION_VARS.strip()
     selection_vars = parse_nic_selection_vars(selection_raw)
     mapping = parse_gpu_nic_mapping(raw)
     pci_by_index = current_platform.get_all_gpu_pci_bus_ids()
@@ -158,7 +158,7 @@ def set_worker_gpu_nic_mapping(local_rank: int) -> None:
     if gpu_key not in mapping:
         keys_fmt = ", ".join(f"{d:04x}:{b:02x}:{dev:02x}.{fn}" for d, b, dev, fn in sorted(mapping.keys()))
         raise RuntimeError(
-            f"No APHRODITE_GPU_NIC_PCIE_MAPPING entry for GPU PCI {gpu_bdf} "
+            f"No SONAR_GPU_NIC_PCIE_MAPPING entry for GPU PCI {gpu_bdf} "
             f"(worker local_rank={local_rank}); mapped GPUs: {keys_fmt}"
         )
     nic_pci = mapping[gpu_key]
@@ -184,26 +184,26 @@ def set_worker_gpu_nic_mapping(local_rank: int) -> None:
     )
 
 
-def set_worker_net_device(local_rank: int, aphrodite_config: AphroditeConfig) -> None:
+def set_worker_net_device(local_rank: int, sonar_config: SonarConfig) -> None:
     """Top-level entry point for both UniProcExecutor and MultiprocExecutor.
 
-    Sets NIC selection env vars from ``APHRODITE_GPU_NIC_PCIE_MAPPING`` and
-    ``APHRODITE_NIC_SELECTION_VARS`` if present; no-op otherwise.
+    Sets NIC selection env vars from ``SONAR_GPU_NIC_PCIE_MAPPING`` and
+    ``SONAR_NIC_SELECTION_VARS`` if present; no-op otherwise.
     """
-    has_pcie_mapping = bool(envs.APHRODITE_GPU_NIC_PCIE_MAPPING.strip())
-    has_selection_vars = bool(envs.APHRODITE_NIC_SELECTION_VARS.strip())
+    has_pcie_mapping = bool(envs.SONAR_GPU_NIC_PCIE_MAPPING.strip())
+    has_selection_vars = bool(envs.SONAR_NIC_SELECTION_VARS.strip())
     if has_pcie_mapping and not has_selection_vars:
         raise RuntimeError(
-            "APHRODITE_GPU_NIC_PCIE_MAPPING is set but APHRODITE_NIC_SELECTION_VARS is not; both must be set together."
+            "SONAR_GPU_NIC_PCIE_MAPPING is set but SONAR_NIC_SELECTION_VARS is not; both must be set together."
         )
     if has_selection_vars and not has_pcie_mapping:
         raise RuntimeError(
-            "APHRODITE_NIC_SELECTION_VARS is set but APHRODITE_GPU_NIC_PCIE_MAPPING is not; both must be set together."
+            "SONAR_NIC_SELECTION_VARS is set but SONAR_GPU_NIC_PCIE_MAPPING is not; both must be set together."
         )
     # No-op when neither env var is present.
     if not has_pcie_mapping and not has_selection_vars:
         return
     # Both env vars are present, so set the NIC selection env vars.
     # Resolve the node-wide GPU index before the CUDA device is initialised.
-    gpu_index = aphrodite_config.parallel_config.get_local_gpu_index(local_rank)
+    gpu_index = sonar_config.parallel_config.get_local_gpu_index(local_rank)
     set_worker_gpu_nic_mapping(gpu_index)

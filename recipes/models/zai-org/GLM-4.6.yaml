@@ -115,22 +115,22 @@ guide: |
 
   ## Prerequisites
 
-  - **Aphrodite version:** >= 0.11.0 (latest stable recommended)
+  - **Sonar version:** >= 0.11.0 (latest stable recommended)
   - **Hardware:** 8x H200 (BF16) or 4x-8x H200 (FP8), AMD MI300X / MI325X / MI355X for ROCm
   - **Python:** 3.10 - 3.13 (3.12 required for ROCm wheels)
 
-  ### Install Aphrodite (NVIDIA)
+  ### Install Sonar (NVIDIA)
 
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U aphrodite-engine --torch-backend auto
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   ```
 
-  ### Install Aphrodite (AMD ROCm)
+  ### Install Sonar (AMD ROCm)
 
   ```bash
-  uv pip install aphrodite-engine --extra-index-url https://wheels.vllm.ai/rocm
+  uv pip install sonar --index-strategy first-index --extra-index-url https://sonar.dphn.ai/whl/release/rocm/x86_64/simple
   ```
 
   ## Launching the Server
@@ -138,7 +138,7 @@ guide: |
   ### Tensor Parallel (FP8)
 
   ```bash
-  aphrodite serve zai-org/GLM-4.6-FP8 \
+  sonar serve zai-org/GLM-4.6-FP8 \
       --tensor-parallel-size 8 \
       --tool-call-parser glm45 \
       --reasoning-parser glm45 \
@@ -148,7 +148,7 @@ guide: |
   ### Enabling MTP Speculative Decoding
 
   ```bash
-  aphrodite serve zai-org/GLM-4.6-FP8 \
+  sonar serve zai-org/GLM-4.6-FP8 \
       --tensor-parallel-size 4 \
       --speculative-config.method mtp \
       --speculative-config.num_speculative_tokens 1 \
@@ -180,7 +180,7 @@ guide: |
   ## Benchmarking
 
   ```bash
-  aphrodite bench serve \
+  sonar bench serve \
     --model zai-org/GLM-4.6-FP8 \
     --dataset-name random \
     --random-input-len 8000 \
@@ -200,4 +200,4 @@ guide: |
 
   - [Model card](https://huggingface.co/zai-org/GLM-4.6)
   - [FP8 checkpoint](https://huggingface.co/zai-org/GLM-4.6-FP8)
-  - [Aphrodite docs](https://docs.vllm.ai/)
+  - [Sonar docs](https://docs.vllm.ai/)

@@ -4,14 +4,14 @@
 import torch
 from torch import nn
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.model_executor.layers.fused_moe import FusedMoEFactory, GateLinear
-from aphrodite.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
-from aphrodite.model_executor.layers.linear import (
+from sonar.config import SonarConfig
+from sonar.model_executor.layers.fused_moe import FusedMoEFactory, GateLinear
+from sonar.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
+from sonar.model_executor.layers.linear import (
     MergedColumnParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.quantization import QuantizationConfig
 
 from .activation import beam_silu_mul
 
@@ -58,11 +58,11 @@ class BeamMLP(nn.Module):
 class BeamSparseMoeBlock(nn.Module):
     """Grouped sigmoid ``noaux_tc`` MoE block."""
 
-    def __init__(self, aphrodite_config: AphroditeConfig, prefix: str = "", reduce_results: bool = True) -> None:
+    def __init__(self, sonar_config: SonarConfig, prefix: str = "", reduce_results: bool = True) -> None:
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        parallel_config = aphrodite_config.parallel_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        parallel_config = sonar_config.parallel_config
+        quant_config = sonar_config.quant_config
 
         self.gate = GateLinear(
             config.hidden_size,
@@ -98,7 +98,7 @@ class BeamSparseMoeBlock(nn.Module):
         )
 
     def defer_finalize(self, max_tokens: int) -> None:
-        from aphrodite.model_executor.layers.fused_moe.experts.trtllm_nvfp4_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.trtllm_nvfp4_moe import (
             TrtLlmNvFp4ExpertsModular,
             TrtLlmNvFp4ExpertsMonolithic,
         )

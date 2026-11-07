@@ -14,7 +14,7 @@ import cbor2
 import pybase64 as base64
 import torch
 
-from aphrodite.proof import PROOF_VERSION
+from sonar.proof import PROOF_VERSION
 
 MAX_ENVELOPE_CHARS = 1_048_576
 # Receipts are taken once per finished choice; the field is fixed in the format.

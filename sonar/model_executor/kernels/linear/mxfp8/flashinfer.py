@@ -3,23 +3,23 @@
 
 import torch
 
-from aphrodite.model_executor.layers.fusion.quant_activation import (
+from sonar.model_executor.layers.fusion.quant_activation import (
     QuantizedActivation,
     as_quantized_activation,
 )
-from aphrodite.model_executor.layers.quantization.utils.mxfp8_utils import (
+from sonar.model_executor.layers.quantization.utils.mxfp8_utils import (
     MXFP8_BLOCK_SIZE,
     mxfp8_e4m3_quantize,
     swizzle_mxfp8_scale,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     kMxfp8Dynamic,
 )
-from aphrodite.model_executor.utils import replace_parameter
-from aphrodite.platforms import current_platform
-from aphrodite.utils import flashinfer as aphrodite_flashinfer
-from aphrodite.utils.flashinfer import has_flashinfer, has_flashinfer_cutedsl
+from sonar.model_executor.utils import replace_parameter
+from sonar.platforms import current_platform
+from sonar.utils import flashinfer as sonar_flashinfer
+from sonar.utils.flashinfer import has_flashinfer, has_flashinfer_cutedsl
 
 from ._padding import pad_mxfp8_columns
 from .Mxfp8LinearKernel import Mxfp8LinearKernel, Mxfp8LinearLayerConfig
@@ -102,7 +102,7 @@ class FlashInferCutlassMxfp8LinearKernel(Mxfp8LinearKernel):
         if not weight.is_contiguous():
             weight = weight.contiguous()
 
-        output = aphrodite_flashinfer.mm_mxfp8(
+        output = sonar_flashinfer.mm_mxfp8(
             input_mxfp8,
             weight.t(),
             input_scale,
@@ -132,10 +132,7 @@ class FlashInferCutedslMxfp8LinearKernel(Mxfp8LinearKernel):
             return False, "requires sm_100/sm_103/sm_120 (Blackwell)"
         if not has_flashinfer_cutedsl():
             return False, "requires FlashInfer CuTe-DSL module"
-        if (
-            current_platform.is_device_capability_family(120)
-            and not aphrodite_flashinfer.has_flashinfer_b12x_mxfp8_gemm()
-        ):
+        if current_platform.is_device_capability_family(120) and not sonar_flashinfer.has_flashinfer_b12x_mxfp8_gemm():
             return False, "requires FlashInfer's SM120 MXFP8 CuTe-DSL backend"
         return True, None
 
@@ -192,7 +189,7 @@ class FlashInferCutedslMxfp8LinearKernel(Mxfp8LinearKernel):
         if is_sm120:
             input_mxfp8, input_scale = pad_mxfp8_columns(input_mxfp8, input_scale, K, sanitize_scales=qa is not None)
 
-        output = aphrodite_flashinfer.mm_mxfp8(
+        output = sonar_flashinfer.mm_mxfp8(
             input_mxfp8,
             weight,
             input_scale,
@@ -279,8 +276,8 @@ class FlashInferTrtllmMxfp8LinearKernel(Mxfp8LinearKernel):
         input_shape = x.shape
         input_2d = x.view(-1, K)
 
-        input_mxfp8, input_scale = aphrodite_flashinfer.flashinfer_mxfp8_quantize_8x4(input_2d)
-        output = aphrodite_flashinfer.mm_mxfp8(
+        input_mxfp8, input_scale = sonar_flashinfer.flashinfer_mxfp8_quantize_8x4(input_2d)
+        output = sonar_flashinfer.mm_mxfp8(
             input_mxfp8,
             weight.t(),
             input_scale,

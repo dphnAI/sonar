@@ -16,23 +16,23 @@ import prometheus_client
 import torch
 from pydantic import BaseModel, Field, ValidationError, model_validator
 
-import aphrodite.envs as envs
-from aphrodite.config import AphroditeConfig
-from aphrodite.logger import init_logger
-from aphrodite.utils.torch_utils import (
+import sonar.envs as envs
+from sonar.config import SonarConfig
+from sonar.logger import init_logger
+from sonar.utils.torch_utils import (
     STR_DTYPE_TO_TORCH_DTYPE,
     get_dtype_size,
     get_kv_cache_torch_dtype,
 )
-from aphrodite.v1.core.sched.output import SchedulerOutput
-from aphrodite.v1.metrics.utils import create_metric_per_engine
+from sonar.v1.core.sched.output import SchedulerOutput
+from sonar.v1.metrics.utils import create_metric_per_engine
 
 logger = init_logger(__name__)
 
 
 class InvalidComponent(Exception):
     """Custom exception to indicate that a certain ComponentMetric is not
-    applicable to the given AphroditeConfig.
+    applicable to the given SonarConfig.
     """
 
     pass
@@ -206,9 +206,9 @@ class ParsedArgs:
 
 
 class Parser(Protocol):
-    def parse(self, args: ParsedArgs, aphrodite_config: AphroditeConfig) -> ParsedArgs:
-        """Parse the aphrodite config and update the current ParsedArgs and pass it on.
-        If the parser isn't applicable to the aphrodite_config, it will do nothing.
+    def parse(self, args: ParsedArgs, sonar_config: SonarConfig) -> ParsedArgs:
+        """Parse the sonar config and update the current ParsedArgs and pass it on.
+        If the parser isn't applicable to the sonar_config, it will do nothing.
         """
         ...
 
@@ -226,11 +226,11 @@ class ParserChain:
     def add_parser(self, parser: Parser) -> None:
         self.parsers.append(parser)
 
-    def parse(self, aphrodite_config: AphroditeConfig) -> ParsedArgs:
+    def parse(self, sonar_config: SonarConfig) -> ParsedArgs:
         """Apply all parsers in sequence and return the accumulated ParsedArgs."""
         args = ParsedArgs()
         for parser in self.parsers:
-            args = parser.parse(args, aphrodite_config)
+            args = parser.parse(args, sonar_config)
         return args
 
 
@@ -241,7 +241,7 @@ class ComponentMetrics(BaseModel, ABC):
     """Each concrete ComponentMetrics class is associated with:
     - fields that are required for metric derivation
       (fields are specified/validated through pydantic model)
-    - parser to parse AphroditeConfig into fields
+    - parser to parse SonarConfig into fields
     - metric methods that derive flops/bytes for a given execution context
     """
 
@@ -257,7 +257,7 @@ class ComponentMetrics(BaseModel, ABC):
         """Return a ParserChain that provides values for all required fields.
         The returned parser chain must populate ParsedArgs with values for every
         field defined on this ComponentMetrics class. Missing fields will cause
-        a ValidationError when from_aphrodite_config() is called.
+        a ValidationError when from_sonar_config() is called.
         See individual Parser docstrings for which args they provide, and field
         comments on ComponentMetrics subclasses for which parser provides each field.
         """
@@ -267,12 +267,12 @@ class ComponentMetrics(BaseModel, ABC):
         _COMPONENT_METRICS_REGISTRY[cls.component_type()] = cls
 
     @classmethod
-    def from_aphrodite_config(cls, aphrodite_config: AphroditeConfig) -> Self:
-        """Instantiate this class from AphroditeConfig.
+    def from_sonar_config(cls, sonar_config: SonarConfig) -> Self:
+        """Instantiate this class from SonarConfig.
         Raises ValidationError if parsing fails.
         """
         parser = cls.get_parser()
-        parsed_args = parser.parse(aphrodite_config)
+        parsed_args = parser.parse(sonar_config)
         try:
             return cls.model_validate(parsed_args.model_dump())
         except ValidationError as e:
@@ -316,9 +316,9 @@ class BaseConfigParser(Parser):
     weight_byte_size, activation_byte_size, dp_size, tp_size, pp_size, enable_ep
     """
 
-    def parse(self, args: ParsedArgs, aphrodite_config: AphroditeConfig) -> ParsedArgs:
+    def parse(self, args: ParsedArgs, sonar_config: SonarConfig) -> ParsedArgs:
         """Parse base model dimensions, dtype byte sizes, and parallelism config."""
-        model_config = aphrodite_config.model_config
+        model_config = sonar_config.model_config
 
         args.vocab_size = model_config.get_vocab_size()
         args.hidden_size = model_config.get_hidden_size()
@@ -327,7 +327,7 @@ class BaseConfigParser(Parser):
         args.num_attention_heads = get_required(model_config.hf_text_config, "num_attention_heads")
         args.num_hidden_layers = get_required(model_config.hf_text_config, "num_hidden_layers")
 
-        model_dtype = aphrodite_config.model_config.dtype
+        model_dtype = sonar_config.model_config.dtype
 
         if isinstance(model_dtype, torch.dtype):
             torch_dtype = model_dtype
@@ -348,10 +348,10 @@ class BaseConfigParser(Parser):
         # this stays keyed on the model dtype.
         args.activation_byte_size = get_dtype_size(torch_dtype)
 
-        args.dp_size = aphrodite_config.parallel_config.data_parallel_size
-        args.tp_size = aphrodite_config.parallel_config.tensor_parallel_size
-        args.pp_size = aphrodite_config.parallel_config.pipeline_parallel_size
-        args.enable_ep = aphrodite_config.parallel_config.enable_expert_parallel
+        args.dp_size = sonar_config.parallel_config.data_parallel_size
+        args.tp_size = sonar_config.parallel_config.tensor_parallel_size
+        args.pp_size = sonar_config.parallel_config.pipeline_parallel_size
+        args.enable_ep = sonar_config.parallel_config.enable_expert_parallel
 
         return args
 
@@ -364,15 +364,15 @@ class BaseAttentionConfigParser(Parser):
     Provides: num_key_value_heads, head_dim, cache_byte_size
     """
 
-    def parse(self, args: ParsedArgs, aphrodite_config: AphroditeConfig) -> ParsedArgs:
+    def parse(self, args: ParsedArgs, sonar_config: SonarConfig) -> ParsedArgs:
         """Parse KV head count, head dimension, and KV-cache dtype byte size."""
-        model_config = aphrodite_config.model_config
+        model_config = sonar_config.model_config
 
         args.num_key_value_heads = model_config.get_total_num_kv_heads()
         args.head_dim = model_config.get_head_size()
 
-        model_dtype = aphrodite_config.model_config.dtype
-        cache_dtype = aphrodite_config.cache_config.cache_dtype
+        model_dtype = sonar_config.model_config.dtype
+        cache_dtype = sonar_config.cache_config.cache_dtype
 
         kv_cache_torch_dtype = get_kv_cache_torch_dtype(cache_dtype, model_dtype)
         args.cache_byte_size = get_dtype_size(kv_cache_torch_dtype)
@@ -385,19 +385,19 @@ class SlidingWindowAttentionParser(Parser):
     Provides: sliding_window, num_swa_layers
     """
 
-    def parse(self, args: ParsedArgs, aphrodite_config: AphroditeConfig) -> ParsedArgs:
+    def parse(self, args: ParsedArgs, sonar_config: SonarConfig) -> ParsedArgs:
         """Determine sliding_window size and count of SWA layers.
 
         Detects per-layer type lists (e.g. Llama-4), Gemma 2 alternating
         pattern, and uniform SWA models (Mistral, Qwen2.5).
         """
-        model_config = aphrodite_config.model_config
+        model_config = sonar_config.model_config
 
         sliding_window: int | None = None
         if not getattr(model_config, "disable_sliding_window", False):
             sliding_window = model_config.get_sliding_window()
-            if sliding_window is None and hasattr(aphrodite_config, "cache_config"):
-                sliding_window = getattr(aphrodite_config.cache_config, "sliding_window", None)
+            if sliding_window is None and hasattr(sonar_config, "cache_config"):
+                sliding_window = getattr(sonar_config.cache_config, "sliding_window", None)
 
         args.sliding_window = sliding_window
 
@@ -425,9 +425,9 @@ class AttentionQuantizationConfigParser(Parser):
     Overrides: weight_byte_size
     """
 
-    def parse(self, args: ParsedArgs, aphrodite_config: AphroditeConfig) -> ParsedArgs:
+    def parse(self, args: ParsedArgs, sonar_config: SonarConfig) -> ParsedArgs:
         """Override weight_byte_size based on the active quantization method."""
-        cfg = aphrodite_config.quant_config
+        cfg = sonar_config.quant_config
 
         if cfg is None:
             return args
@@ -446,9 +446,9 @@ class AttentionDetectionParser(Parser):
     MLA models should use MLAAttentionMetrics instead.
     """
 
-    def parse(self, args: ParsedArgs, aphrodite_config: AphroditeConfig) -> ParsedArgs:
+    def parse(self, args: ParsedArgs, sonar_config: SonarConfig) -> ParsedArgs:
         """Raise InvalidComponent for MLA models so AttentionMetrics is skipped."""
-        if aphrodite_config.model_config.is_deepseek_mla:
+        if sonar_config.model_config.is_deepseek_mla:
             raise InvalidComponent("Model uses MLA attention; use MLAAttentionMetrics instead")
         return args
 
@@ -507,7 +507,7 @@ class AttentionMetrics(ComponentMetrics):
         whole model across stages.
 
         The counts are fractional because these metrics are built from config
-        alone (see ``from_aphrodite_config``); no pipeline rank is available, so a
+        alone (see ``from_sonar_config``); no pipeline rank is available, so a
         per-GPU figure is the average stage rather than a specific one. A model
         whose layers do not divide evenly across stages has no single integer
         answer here.
@@ -689,9 +689,9 @@ class MLADetectionParser(Parser):
     so MLAAttentionMetrics is silently skipped for non-MLA models.
     """
 
-    def parse(self, args: ParsedArgs, aphrodite_config: AphroditeConfig) -> ParsedArgs:
+    def parse(self, args: ParsedArgs, sonar_config: SonarConfig) -> ParsedArgs:
         """Raise InvalidComponent if the model does not use MLA attention."""
-        if not aphrodite_config.model_config.is_deepseek_mla:
+        if not sonar_config.model_config.is_deepseek_mla:
             raise InvalidComponent("Model does not use MLA attention")
         return args
 
@@ -702,9 +702,9 @@ class MLAConfigParser(Parser):
     v_head_dim, q_lora_rank
     """
 
-    def parse(self, args: ParsedArgs, aphrodite_config: AphroditeConfig) -> ParsedArgs:
+    def parse(self, args: ParsedArgs, sonar_config: SonarConfig) -> ParsedArgs:
         """Parse MLA-specific compression dimensions and KV-cache dtype byte size."""
-        model_config = aphrodite_config.model_config
+        model_config = sonar_config.model_config
         cfg = model_config.hf_text_config
 
         args.kv_lora_rank = get_required(cfg, "kv_lora_rank")
@@ -713,8 +713,8 @@ class MLAConfigParser(Parser):
         args.v_head_dim = get_required(cfg, "v_head_dim")
         args.q_lora_rank = getattr(cfg, "q_lora_rank", None)
 
-        model_dtype = aphrodite_config.model_config.dtype
-        cache_dtype = aphrodite_config.cache_config.cache_dtype
+        model_dtype = sonar_config.model_config.dtype
+        cache_dtype = sonar_config.cache_config.cache_dtype
         kv_cache_torch_dtype = get_kv_cache_torch_dtype(cache_dtype, model_dtype)
         args.cache_byte_size = get_dtype_size(kv_cache_torch_dtype)
 
@@ -938,16 +938,16 @@ class BaseFfnConfigParser(Parser):
     moe_intermediate_size, num_shared_experts, num_moe_layers
     """
 
-    def parse(self, args: ParsedArgs, aphrodite_config: AphroditeConfig) -> ParsedArgs:
-        cfg = aphrodite_config.model_config.hf_config
+    def parse(self, args: ParsedArgs, sonar_config: SonarConfig) -> ParsedArgs:
+        cfg = sonar_config.model_config.hf_config
         if hasattr(cfg, "text_config") and cfg.text_config is not None:
             cfg = cfg.text_config
 
         args.intermediate_size = getattr(cfg, "intermediate_size", args.hidden_size * 4)
 
         # Try different naming conventions.
-        args.num_experts = aphrodite_config.model_config.get_num_experts()
-        args.num_experts_per_tok = aphrodite_config.model_config.get_num_experts_per_tok()
+        args.num_experts = sonar_config.model_config.get_num_experts()
+        args.num_experts_per_tok = sonar_config.model_config.get_num_experts_per_tok()
         args.moe_intermediate_size = getattr_from_list(cfg, ["moe_intermediate_size", "intermediate_size"], 0)
         args.num_shared_experts = getattr_from_list(cfg, ["n_shared_experts", "num_shared_experts"], 0)
 
@@ -964,7 +964,7 @@ class FfnParallelParser(Parser):
     Provides: ffn_tp_size, ffn_ep_size
     """
 
-    def parse(self, args: ParsedArgs, aphrodite_config: AphroditeConfig) -> ParsedArgs:
+    def parse(self, args: ParsedArgs, sonar_config: SonarConfig) -> ParsedArgs:
         # NOTE: ffn tp_size does not equal the tp_size parameter directly.
         # e.g.) If we use DP2TP4, ffn will use TP8 (or EP8 if EP is enabled.)
         if args.enable_ep:
@@ -984,8 +984,8 @@ class InterleaveMoeLayerStepParser(Parser):
     Overrides: num_moe_layers
     """
 
-    def parse(self, args: ParsedArgs, aphrodite_config: AphroditeConfig) -> ParsedArgs:
-        cfg = aphrodite_config.model_config.hf_config
+    def parse(self, args: ParsedArgs, sonar_config: SonarConfig) -> ParsedArgs:
+        cfg = sonar_config.model_config.hf_config
         if hasattr(cfg, "text_config") and cfg.text_config is not None:
             cfg = cfg.text_config
 
@@ -1003,8 +1003,8 @@ class MoeLayerFreqParser(Parser):
     Overrides: num_moe_layers
     """
 
-    def parse(self, args: ParsedArgs, aphrodite_config: AphroditeConfig) -> ParsedArgs:
-        cfg = aphrodite_config.model_config.hf_config
+    def parse(self, args: ParsedArgs, sonar_config: SonarConfig) -> ParsedArgs:
+        cfg = sonar_config.model_config.hf_config
         if hasattr(cfg, "text_config") and cfg.text_config is not None:
             cfg = cfg.text_config
 
@@ -1026,9 +1026,9 @@ class FfnQuantizationConfigParser(Parser):
     Overrides: weight_byte_size
     """
 
-    def parse(self, args: ParsedArgs, aphrodite_config: AphroditeConfig) -> ParsedArgs:
+    def parse(self, args: ParsedArgs, sonar_config: SonarConfig) -> ParsedArgs:
         """Override weight_byte_size based on the active FFN quantization method."""
-        cfg = aphrodite_config.quant_config
+        cfg = sonar_config.quant_config
 
         if cfg is None:
             return args
@@ -1320,16 +1320,16 @@ class UnembedMetrics(ComponentMetrics):
 
 
 class ModelMetrics:
-    def __init__(self, aphrodite_config: AphroditeConfig) -> None:
-        """Parse aphrodite_config to instantiate metrics for each component.
+    def __init__(self, sonar_config: SonarConfig) -> None:
+        """Parse sonar_config to instantiate metrics for each component.
         is_enabled() will return False if no component metrics could be instantiated.
         """
-        self.aphrodite_config = aphrodite_config
+        self.sonar_config = sonar_config
 
         self.metrics: list[ComponentMetrics] = []
         for metric_cls in ComponentMetrics.registered_metrics():
             try:
-                metric = metric_cls.from_aphrodite_config(aphrodite_config)
+                metric = metric_cls.from_sonar_config(sonar_config)
                 self.metrics.append(metric)
                 logger.info(
                     "Instantiated ComponentMetrics [%s] with (%s)",
@@ -1426,7 +1426,7 @@ class ModelMetrics:
             sum(write_bytes_breakdown.values()),
         )
 
-        if envs.APHRODITE_DEBUG_MFU_METRICS:
+        if envs.SONAR_DEBUG_MFU_METRICS:
             perf_stats.debug_stats = DebugPerfStats(
                 time.monotonic() - t0,
                 ctx.num_prefill_requests,
@@ -1514,12 +1514,12 @@ class PerfMetricsDebugLogging:
 
 
 class PerfMetricsLogging:
-    def __init__(self, aphrodite_config: AphroditeConfig):
-        self.aphrodite_config = aphrodite_config
-        self.pp_size = aphrodite_config.parallel_config.pipeline_parallel_size
+    def __init__(self, sonar_config: SonarConfig):
+        self.sonar_config = sonar_config
+        self.pp_size = sonar_config.parallel_config.pipeline_parallel_size
 
         self.debug_logging: PerfMetricsDebugLogging | None = None
-        if envs.APHRODITE_DEBUG_MFU_METRICS:
+        if envs.SONAR_DEBUG_MFU_METRICS:
             self.debug_logging = PerfMetricsDebugLogging()
 
         self.reset()
@@ -1579,24 +1579,24 @@ class PerfMetricsProm:
     Average TFLOPS (tera floating-point operations per second) can be
     calculated using a PromQL query:
 
-      rate(aphrodite:estimated_flops_per_gpu_total[1m]) / 1e12
+      rate(sonar:estimated_flops_per_gpu_total[1m]) / 1e12
 
     Average memory bandwidth in GB/s can be calculated using:
 
-      (rate(aphrodite:estimated_read_bytes_per_gpu_total[1m]) +
-       rate(aphrodite:estimated_write_bytes_per_gpu_total[1m])) / 1e9
+      (rate(sonar:estimated_read_bytes_per_gpu_total[1m]) +
+       rate(sonar:estimated_write_bytes_per_gpu_total[1m])) / 1e9
     """
 
     _counter_cls = prometheus_client.Counter
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         labelnames: list[str],
         per_engine_labelvalues: dict[int, list[object]],
     ):
         counter_flops = self._counter_cls(
-            name="aphrodite:estimated_flops_per_gpu_total",
+            name="sonar:estimated_flops_per_gpu_total",
             documentation=(
                 "Estimated number of floating point operations per GPU (for Model Flops Utilization calculations)."
             ),
@@ -1605,7 +1605,7 @@ class PerfMetricsProm:
         self.counter_flops = create_metric_per_engine(counter_flops, per_engine_labelvalues)
 
         counter_read_bytes = self._counter_cls(
-            name="aphrodite:estimated_read_bytes_per_gpu_total",
+            name="sonar:estimated_read_bytes_per_gpu_total",
             documentation=(
                 "Estimated number of bytes read from memory per GPU (for Model Flops Utilization calculations)."
             ),
@@ -1614,7 +1614,7 @@ class PerfMetricsProm:
         self.counter_read_bytes = create_metric_per_engine(counter_read_bytes, per_engine_labelvalues)
 
         counter_write_bytes = self._counter_cls(
-            name="aphrodite:estimated_write_bytes_per_gpu_total",
+            name="sonar:estimated_write_bytes_per_gpu_total",
             documentation=(
                 "Estimated number of bytes written to memory per GPU (for Model Flops Utilization calculations)."
             ),

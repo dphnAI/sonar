@@ -91,7 +91,7 @@ hardware_overrides:
     extra_args:
       - "--no-enable-prefix-caching"
     extra_env:
-      APHRODITE_ROCM_USE_AITER: "1"
+      SONAR_ROCM_USE_AITER: "1"
       SAFETENSORS_FAST_GPU: "1"
 strategy_overrides: {}
 
@@ -109,14 +109,14 @@ guide: |
   ## Prerequisites
 
   - Hardware: 1x H200 (3B/8B), 2x H200 recommended for 14B with full context
-  - Aphrodite >= 0.11.0
+  - Sonar >= 0.11.0
 
-  ### Install Aphrodite
+  ### Install Sonar
 
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U aphrodite-engine --torch-backend auto
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   ```
 
   ## Launch command
@@ -124,7 +124,7 @@ guide: |
   3B or 8B on 1x H200:
 
   ```bash
-  aphrodite serve mistralai/Ministral-3-8B-Reasoning-2512 \
+  sonar serve mistralai/Ministral-3-8B-Reasoning-2512 \
     --tokenizer_mode mistral --config_format mistral --load_format mistral \
     --enable-auto-tool-choice --tool-call-parser mistral \
     --reasoning-parser mistral
@@ -133,7 +133,7 @@ guide: |
   14B on 2x H200:
 
   ```bash
-  aphrodite serve mistralai/Ministral-3-14B-Reasoning-2512 \
+  sonar serve mistralai/Ministral-3-14B-Reasoning-2512 \
     --tensor-parallel-size 2 \
     --tokenizer_mode mistral --config_format mistral --load_format mistral \
     --enable-auto-tool-choice --tool-call-parser mistral \
@@ -160,7 +160,7 @@ guide: |
   )
   for chunk in stream:
       delta = chunk.choices[0].delta
-      # Aphrodite 0.11.0 uses reasoning_content; 0.11.1+ uses reasoning.
+      # Sonar 0.11.0 uses reasoning_content; 0.11.1+ uses reasoning.
       rc = getattr(delta, "reasoning", getattr(delta, "reasoning_content", None))
       if rc:
           print(rc, end="", flush=True)

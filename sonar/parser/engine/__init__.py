@@ -8,7 +8,7 @@ states, and transitions) and a shared incremental engine handles
 streaming, ambiguity buffering, token-ID mapping, and delta computation.
 """
 
-from aphrodite.parser.engine.events import EventType, SemanticEvent
+from sonar.parser.engine.events import EventType, SemanticEvent
 
 __all__ = [
     "EventType",

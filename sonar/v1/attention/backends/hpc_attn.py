@@ -14,13 +14,13 @@ from typing import ClassVar
 import torch
 from typing_extensions import override
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.cache import CacheDType
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.platforms.interface import DeviceCapability
-from aphrodite.utils.torch_utils import PIN_MEMORY
-from aphrodite.v1.attention.backend import (
+from sonar.config import SonarConfig
+from sonar.config.cache import CacheDType
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.platforms.interface import DeviceCapability
+from sonar.utils.torch_utils import PIN_MEMORY
+from sonar.v1.attention.backend import (
     AttentionBackend,
     AttentionCGSupport,
     AttentionImpl,
@@ -30,10 +30,10 @@ from aphrodite.v1.attention.backend import (
     CommonAttentionMetadata,
     MultipleOf,
 )
-from aphrodite.v1.attention.backends.utils import (
+from sonar.v1.attention.backends.utils import (
     split_decodes_and_prefills,
 )
-from aphrodite.v1.kv_cache_interface import AttentionSpec, KVCacheLayout, KVCacheSpec
+from sonar.v1.kv_cache_interface import AttentionSpec, KVCacheLayout, KVCacheSpec
 
 logger = init_logger(__name__)
 
@@ -113,17 +113,17 @@ class HpcAttnMetadataBuilder(AttentionMetadataBuilder[HpcAttnMetadata]):
         self,
         kv_cache_spec: AttentionSpec,
         layer_names: list[str],
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
     ):
-        super().__init__(kv_cache_spec, layer_names, aphrodite_config, device)
+        super().__init__(kv_cache_spec, layer_names, sonar_config, device)
         import hpc
 
         self.num_kv_heads = kv_cache_spec.num_kv_heads
         self.hpc_dynamic_sched_attn_min_split_len = 1024
 
         # MTP constraint: HPC decode kernel only supports mtp in {0, 1, 2, 3}
-        spec_config = aphrodite_config.speculative_config
+        spec_config = sonar_config.speculative_config
         if (
             spec_config is not None
             and spec_config.num_speculative_tokens is not None
@@ -157,8 +157,8 @@ class HpcAttnMetadataBuilder(AttentionMetadataBuilder[HpcAttnMetadata]):
         self._dynamic_sched = True
         if self._dynamic_sched:
             self.task_map = hpc.get_attention_decode_task_workspace(
-                aphrodite_config.scheduler_config.max_num_seqs,
-                aphrodite_config.model_config.max_model_len or 4096,
+                sonar_config.scheduler_config.max_num_seqs,
+                sonar_config.model_config.max_model_len or 4096,
                 self.num_kv_heads,
                 min_process_len=self.hpc_dynamic_sched_attn_min_split_len,
             )
@@ -169,10 +169,10 @@ class HpcAttnMetadataBuilder(AttentionMetadataBuilder[HpcAttnMetadata]):
     @classmethod
     def get_cudagraph_support(
         cls: type["HpcAttnMetadataBuilder"],
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         kv_cache_spec: KVCacheSpec,
     ) -> AttentionCGSupport:
-        spec_config = aphrodite_config.speculative_config
+        spec_config = sonar_config.speculative_config
         if (
             spec_config is not None
             and spec_config.num_speculative_tokens is not None
@@ -410,7 +410,7 @@ class HpcAttentionImpl(AttentionImpl[HpcAttnMetadata]):
         output_scale: torch.Tensor | None = None,
         output_block_scale: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        """HPC attention forward (standard Aphrodite backend interface).
+        """HPC attention forward (standard Sonar backend interface).
 
         Two modes:
         1. Standard: upstream handles RoPE/Norm; this backend writes KV + attn.

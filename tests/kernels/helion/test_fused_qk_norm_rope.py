@@ -11,27 +11,27 @@ import pytest
 import torch
 from torch._subclasses.fake_tensor import FakeTensorMode
 
-from aphrodite.benchmarks.lib.utils import default_aphrodite_config
-from aphrodite.kernels.helion.case_key import CaseKey
-from aphrodite.kernels.helion.config_manager import ConfigManager
-from aphrodite.kernels.helion.ops.fused_qk_norm_rope import (
+from sonar.benchmarks.lib.utils import default_sonar_config
+from sonar.kernels.helion.case_key import CaseKey
+from sonar.kernels.helion.config_manager import ConfigManager
+from sonar.kernels.helion.ops.fused_qk_norm_rope import (
     _pick_cache,
     baseline,
     fused_qk_norm_rope,
     pick_config,
 )
-from aphrodite.model_executor.layers.rotary_embedding import RotaryEmbedding
-from aphrodite.utils.import_utils import has_helion
+from sonar.model_executor.layers.rotary_embedding import RotaryEmbedding
+from sonar.utils.import_utils import has_helion
 from tests.kernels.helion.utils import skip_if_platform_unsupported
 
 if not has_helion():
     pytest.skip(
-        "Helion is not installed. Install with: pip install aphrodite[helion]",
+        "Helion is not installed. Install sonar[helion] from the Sonar wheel index.",
         allow_module_level=True,
     )
 
 
-@default_aphrodite_config()
+@default_sonar_config()
 def _generate_fake_input(num_tokens: int, num_q_heads: int, num_kv_heads: int) -> tuple[Any, ...]:
     with FakeTensorMode():
         head_dim = 128
@@ -150,7 +150,7 @@ class TestFusedQkNormRopeCorrectness:
     @pytest.mark.parametrize("is_neox", [False, True])
     @pytest.mark.parametrize("rotary_ratio", [1.0, 0.5, 0.25])
     @pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float16])
-    @default_aphrodite_config()
+    @default_sonar_config()
     def test_fused_qk_norm_rope(
         self,
         num_heads: int,
@@ -227,7 +227,7 @@ class TestFusedQkNormRopeCorrectness:
 
 class TestFusedQkNormRopeIntegration:
     def test_kernel_registration_integration(self):
-        from aphrodite.kernels.helion.register import get_registered_kernels
+        from sonar.kernels.helion.register import get_registered_kernels
 
         registered_kernels = get_registered_kernels()
         assert "fused_qk_norm_rope" in registered_kernels

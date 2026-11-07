@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 # SPDX-FileCopyrightText: Copyright contributors to the Aphrodite project
-"""Every OpenAI text endpoint must forward Aphrodite's extra sampler fields.
+"""Every OpenAI text endpoint must forward Sonar's extra sampler fields.
 
 Regression test: an upstream sync rewrote ChatCompletionRequest and silently
 dropped these fields, so chat requests ran with plain sampling while returning
@@ -12,13 +12,13 @@ from types import SimpleNamespace
 
 import pytest
 
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import (
     BatchChatCompletionRequest,
     ChatCompletionRequest,
 )
-from aphrodite.entrypoints.openai.completion.protocol import CompletionRequest
-from aphrodite.entrypoints.openai.kobold.protocol import KAIGenerationInputSchema
-from aphrodite.entrypoints.openai.kobold.serving import OpenAIServingKobold
+from sonar.entrypoints.openai.completion.protocol import CompletionRequest
+from sonar.entrypoints.openai.kobold.protocol import KAIGenerationInputSchema
+from sonar.entrypoints.openai.kobold.serving import OpenAIServingKobold
 
 pytestmark = pytest.mark.cpu_test
 

@@ -15,7 +15,7 @@ from .utils import compute_meta, convert_mapping
 
 if TYPE_CHECKING:
     # avoid circuit import
-    from aphrodite.lora.layers import LoRAMapping
+    from sonar.lora.layers import LoRAMapping
 
 
 class PunicaWrapperABC(ABC):

@@ -6,22 +6,22 @@ from collections.abc import Callable
 import torch
 from torch._higher_order_ops.auto_functionalize import auto_functionalized
 
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.config import AphroditeConfig, get_layers_from_aphrodite_config
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.attention.mla_attention import MLAAttention
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.config import SonarConfig, get_layers_from_sonar_config
+from sonar.logger import init_logger
+from sonar.model_executor.layers.attention.mla_attention import MLAAttention
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     kFp8Dynamic64Sym,
     kFp8Dynamic128Sym,
     kFp8StaticTensorSym,
     kNvfp4Dynamic,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.math_utils import round_up
-from aphrodite.utils.torch_utils import _USE_LAYERNAME, _encode_layer_name
+from sonar.platforms import current_platform
+from sonar.utils.math_utils import round_up
+from sonar.utils.torch_utils import _USE_LAYERNAME, _encode_layer_name
 
-from ..aphrodite_inductor_pass import AphroditeFusionPatternMatcherPass, AphroditePatternReplacement
+from ..sonar_inductor_pass import SonarFusionPatternMatcherPass, SonarPatternReplacement
 from .matcher_utils import MatcherQuantFP8
 from .rms_quant_fusion import QUANT_OPS
 
@@ -30,10 +30,10 @@ logger = init_logger(__name__)
 FP8_DTYPE = current_platform.fp8_dtype()
 FP4_DTYPE = torch.uint8
 
-MLA_ATTN_OP = torch.ops.aphrodite.unified_mla_attention_with_output.default
+MLA_ATTN_OP = torch.ops.sonar.unified_mla_attention_with_output.default
 
 
-class MLAAttnFp8StaticQuantPattern(AphroditePatternReplacement[..., torch.Tensor | tuple[torch.Tensor, torch.Tensor]]):
+class MLAAttnFp8StaticQuantPattern(SonarPatternReplacement[..., torch.Tensor | tuple[torch.Tensor, torch.Tensor]]):
     """Fusion for MLA Attention+Fp8StaticQuant.
 
     Matches the pattern: MLA attention -> static FP8 quant, and replaces
@@ -197,7 +197,7 @@ class RocmMLAAttnFp8StaticQuantPattern(MLAAttnFp8StaticQuantPattern):
         return value, scale
 
 
-class MLAAttnNvfp4QuantPattern(AphroditePatternReplacement[..., tuple[torch.Tensor, torch.Tensor]]):
+class MLAAttnNvfp4QuantPattern(SonarPatternReplacement[..., tuple[torch.Tensor, torch.Tensor]]):
     """Fusion for MLA Attention+Nvfp4Quant.
 
     Matches the pattern: MLA attention -> NVFP4 quant, and replaces
@@ -382,7 +382,7 @@ class MLAAttnNvfp4QuantPattern(AphroditePatternReplacement[..., tuple[torch.Tens
         return inputs
 
 
-class MLAAttnFp8GroupQuantPattern(AphroditePatternReplacement[..., tuple[torch.Tensor, torch.Tensor]]):
+class MLAAttnFp8GroupQuantPattern(SonarPatternReplacement[..., tuple[torch.Tensor, torch.Tensor]]):
     """Fusion for MLA Attention+Fp8GroupQuant (per-group dynamic FP8).
 
     Matches the pattern: MLA attention -> per_token_group_fp8_quant, and
@@ -587,7 +587,7 @@ class MLAAttnFp8GroupQuantPattern(AphroditePatternReplacement[..., tuple[torch.T
         return inputs
 
 
-class MLAAttnQuantFusionPass(AphroditeFusionPatternMatcherPass):
+class MLAAttnQuantFusionPass(SonarFusionPatternMatcherPass):
     """This pass fuses post-attention quantization onto MLA attention if supported.
 
     It uses the pattern matcher and matches each MLA layer manually, as strings
@@ -595,11 +595,11 @@ class MLAAttnQuantFusionPass(AphroditeFusionPatternMatcherPass):
     upon registration instead of during pattern matching.
     """
 
-    def __init__(self, config: AphroditeConfig) -> None:
+    def __init__(self, config: SonarConfig) -> None:
         super().__init__(config, "mla_attn_quant_fusion")
 
         dtype = config.model_config.dtype
-        layers = list(get_layers_from_aphrodite_config(config, MLAAttention).values())
+        layers = list(get_layers_from_sonar_config(config, MLAAttention).values())
 
         if len(layers) == 0:
             logger.warning(

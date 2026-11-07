@@ -8,37 +8,37 @@ from unittest.mock import MagicMock
 import pytest
 import torch
 
-from aphrodite import SamplingParams
-from aphrodite.config import (
+from sonar import SamplingParams
+from sonar.config import (
     KVEventsConfig,
     KVTransferConfig,
-    set_current_aphrodite_config,
+    set_current_sonar_config,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1 import KVConnectorRole
-from aphrodite.distributed.kv_transfer.kv_connector.v1.offloading.common import (
+from sonar.distributed.kv_transfer.kv_connector.v1 import KVConnectorRole
+from sonar.distributed.kv_transfer.kv_connector.v1.offloading.common import (
     OffloadingConnectorMetadata,
     OffloadingWorkerMetadata,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.offloading_connector import (
+from sonar.distributed.kv_transfer.kv_connector.v1.offloading_connector import (
     OffloadingConnector,
 )
-from aphrodite.forward_context import ForwardContext
-from aphrodite.utils.hashing import sha256
-from aphrodite.v1.core.kv_cache_utils import (
+from sonar.forward_context import ForwardContext
+from sonar.utils.hashing import sha256
+from sonar.v1.core.kv_cache_utils import (
     get_request_block_hasher,
     init_none_hash,
     resolve_kv_cache_block_sizes,
 )
-from aphrodite.v1.core.sched.async_scheduler import AsyncScheduler
-from aphrodite.v1.core.sched.scheduler import Scheduler
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.core.sched.async_scheduler import AsyncScheduler
+from sonar.v1.core.sched.scheduler import Scheduler
+from sonar.v1.kv_cache_interface import (
     AttentionSpec,
     FullAttentionSpec,
     KVCacheConfig,
     KVCacheGroupSpec,
     KVCacheTensor,
 )
-from aphrodite.v1.kv_offload.base import (
+from sonar.v1.kv_offload.base import (
     CanonicalKVCaches,
     GPULoadStoreSpec,
     LoadStoreSpec,
@@ -52,14 +52,14 @@ from aphrodite.v1.kv_offload.base import (
     TransferResult,
     make_offload_key,
 )
-from aphrodite.v1.kv_offload.config import OffloadingConfig
-from aphrodite.v1.metrics.cache_hit_source import CacheHitSource
-from aphrodite.v1.request import Request
-from aphrodite.v1.structured_output import StructuredOutputManager
+from sonar.v1.kv_offload.config import OffloadingConfig
+from sonar.v1.metrics.cache_hit_source import CacheHitSource
+from sonar.v1.request import Request
+from sonar.v1.structured_output import StructuredOutputManager
 from tests.v1.kv_connector.unit.utils import (
     EOS_TOKEN_ID,
-    create_aphrodite_config,
     create_model_runner_output,
+    create_sonar_config,
 )
 
 
@@ -200,16 +200,16 @@ class RequestRunner:
 
         self.req_id: int = -1
 
-        aphrodite_config = create_aphrodite_config(
+        sonar_config = create_sonar_config(
             block_size=block_size,
             max_num_batched_tokens=1000,
             disable_hybrid_kv_cache_manager=False,
         )
-        aphrodite_config.scheduler_config.async_scheduling = async_scheduling
-        aphrodite_config.parallel_config.world_size = worker_count
-        aphrodite_config.cache_config.prefix_cache_retention_interval = retention_interval
+        sonar_config.scheduler_config.async_scheduling = async_scheduling
+        sonar_config.parallel_config.world_size = worker_count
+        sonar_config.cache_config.prefix_cache_retention_interval = retention_interval
         if speculative_config is not None:
-            aphrodite_config.speculative_config = speculative_config
+            sonar_config.speculative_config = speculative_config
 
         extra_config: dict[str, Any] = {
             "spec_name": "MockOffloadingSpec",
@@ -225,12 +225,12 @@ class RequestRunner:
         if extra_config_overrides:
             extra_config.update(extra_config_overrides)
 
-        aphrodite_config.kv_transfer_config = KVTransferConfig(
+        sonar_config.kv_transfer_config = KVTransferConfig(
             kv_connector="OffloadingConnector",
             kv_role="kv_both",
             kv_connector_extra_config=extra_config,
         )
-        aphrodite_config.kv_events_config = KVEventsConfig(
+        sonar_config.kv_events_config = KVEventsConfig(
             # Enable so the offloading events tracker is active, but use the
             # null publisher: these tests drain take_events directly and a
             # real ZMQ publisher would bind a port per test.
@@ -268,22 +268,22 @@ class RequestRunner:
             kv_cache_tensors=kv_cache_tensors,
             kv_cache_groups=kv_cache_groups,
         )
-        aphrodite_config.cache_config.num_gpu_blocks = num_gpu_blocks
+        sonar_config.cache_config.num_gpu_blocks = num_gpu_blocks
         self.num_kv_groups = len(kv_cache_config.kv_cache_groups)
 
-        scheduler_block_size, tokens_per_hash = resolve_kv_cache_block_sizes(kv_cache_config, aphrodite_config)
+        scheduler_block_size, tokens_per_hash = resolve_kv_cache_block_sizes(kv_cache_config, sonar_config)
 
         scheduler_cls = AsyncScheduler if async_scheduling else Scheduler
         self.scheduler = scheduler_cls(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             kv_cache_config=kv_cache_config,
             log_stats=True,
-            structured_output_manager=StructuredOutputManager(aphrodite_config),
+            structured_output_manager=StructuredOutputManager(sonar_config),
             block_size=scheduler_block_size,
             hash_block_size=tokens_per_hash,
         )
 
-        self.worker_connector = OffloadingConnector(aphrodite_config, KVConnectorRole.WORKER, kv_cache_config)
+        self.worker_connector = OffloadingConnector(sonar_config, KVConnectorRole.WORKER, kv_cache_config)
 
         # register worker kv_caches to enable OffloadingWorker creations
         kv_caches: dict[str, torch.Tensor] = {}
@@ -302,7 +302,7 @@ class RequestRunner:
                     dtype=spec.dtype,
                 )
 
-        with set_current_aphrodite_config(aphrodite_config):
+        with set_current_sonar_config(sonar_config):
             self.worker_connector.register_kv_caches(kv_caches)
 
         # extract connector of scheduler

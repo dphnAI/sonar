@@ -3,10 +3,10 @@
 
 import pytest
 
-import aphrodite
-import aphrodite.config
-from aphrodite.lora.request import LoRARequest
-from aphrodite.platforms import current_platform
+import sonar
+import sonar.config
+from sonar.lora.request import LoRARequest
+from sonar.platforms import current_platform
 
 from ..utils import create_new_process_for_each_test, multi_gpu_test
 
@@ -33,7 +33,7 @@ MODEL_PATH = "meta-llama/Llama-3.2-3B-Instruct"
 
 
 def do_sample(
-    llm: aphrodite.LLM,
+    llm: sonar.LLM,
     lora_path: str,
     lora_id: int,
 ) -> list[str]:
@@ -46,7 +46,7 @@ def do_sample(
         PROMPT_TEMPLATE.format(context="Return the poll resource associated with the most candidates."),
     ]
 
-    sampling_params = aphrodite.SamplingParams(temperature=0, max_tokens=64, stop=["<|im_end|>"])
+    sampling_params = sonar.SamplingParams(temperature=0, max_tokens=64, stop=["<|im_end|>"])
     outputs = llm.generate(
         prompts,
         sampling_params,
@@ -84,14 +84,14 @@ def generate_and_test(llm, llama32_lora_files):
 @create_new_process_for_each_test()
 @pytest.mark.parametrize("cudagraph_specialize_lora", [True, False])
 def test_llama_lora(llama32_lora_files, cudagraph_specialize_lora: bool):
-    llm = aphrodite.LLM(
+    llm = sonar.LLM(
         MODEL_PATH,
         enable_lora=True,
         # also test odd max_num_seqs
         max_num_seqs=7,
         max_model_len=1024,
         max_loras=4,
-        compilation_config=aphrodite.config.CompilationConfig(
+        compilation_config=sonar.config.CompilationConfig(
             cudagraph_specialize_lora=cudagraph_specialize_lora,
         ),
     )
@@ -101,7 +101,7 @@ def test_llama_lora(llama32_lora_files, cudagraph_specialize_lora: bool):
 @pytest.mark.skipif(current_platform.is_cuda_alike(), reason="Skipping to avoid redundant model tests")
 @multi_gpu_test(num_gpus=4)
 def test_llama_lora_tp4(llama32_lora_files):
-    llm = aphrodite.LLM(
+    llm = sonar.LLM(
         MODEL_PATH,
         enable_lora=True,
         max_num_seqs=7,
@@ -114,7 +114,7 @@ def test_llama_lora_tp4(llama32_lora_files):
 
 @multi_gpu_test(num_gpus=4)
 def test_llama_lora_tp4_fully_sharded_loras(llama32_lora_files):
-    llm = aphrodite.LLM(
+    llm = sonar.LLM(
         MODEL_PATH,
         enable_lora=True,
         max_num_seqs=8,

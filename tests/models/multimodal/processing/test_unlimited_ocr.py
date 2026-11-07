@@ -5,18 +5,18 @@ import pytest
 import torch
 from PIL import Image
 
-from aphrodite.config import ModelConfig
-from aphrodite.model_executor.models.unlimited_ocr import UnlimitedOCRProcessingInfo
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.cache import MultiModalProcessorOnlyCache
-from aphrodite.multimodal.processing.context import TimingContext
-from aphrodite.multimodal.processing.inputs import ProcessorInputs
-from aphrodite.transformers_utils.processors.deepseek_ocr import calculate_aspect_ratios
+from sonar.config import ModelConfig
+from sonar.model_executor.models.unlimited_ocr import UnlimitedOCRProcessingInfo
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.cache import MultiModalProcessorOnlyCache
+from sonar.multimodal.processing.context import TimingContext
+from sonar.multimodal.processing.inputs import ProcessorInputs
+from sonar.transformers_utils.processors.deepseek_ocr import calculate_aspect_ratios
 
 from ...utils import build_model_context
 
 
-@pytest.mark.usefixtures("default_aphrodite_config")
+@pytest.mark.usefixtures("default_sonar_config")
 def test_profiling_tokens_cover_all_crop_grids():
     """Every supported crop grid fits the profiled image token budget."""
     ctx = build_model_context(

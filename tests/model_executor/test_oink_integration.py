@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 
 def _test_oink_availability_impl(
@@ -19,7 +19,7 @@ def _test_oink_availability_impl(
     """Test OINK support detection with mocked state."""
     import torch
 
-    from aphrodite import platforms
+    from sonar import platforms
 
     # Mock device capability (class method, override on class)
     dc = platforms.interface.DeviceCapability(*device_capability)
@@ -37,10 +37,10 @@ def _test_oink_availability_impl(
 
         torch.ops.oink = oink_ops
 
-        # Now import aphrodite modules with mocks in place (fresh import with mocked
+        # Now import sonar modules with mocks in place (fresh import with mocked
         # platform)
-        import aphrodite.kernels.oink_ops  # noqa: F401
-        from aphrodite.ir.ops import fused_add_rms_norm, rms_norm
+        import sonar.kernels.oink_ops  # noqa: F401
+        from sonar.ir.ops import fused_add_rms_norm, rms_norm
 
         # Verify support checks
         assert rms_norm.impls["oink"].supported is expected_available
@@ -93,7 +93,7 @@ def test_can_view_as_2d_stride_guard():
     import torch
 
     # Import the helper from the kernels module.
-    from aphrodite.kernels.oink_ops import _can_view_as_2d
+    from sonar.kernels.oink_ops import _can_view_as_2d
 
     x = torch.zeros((2, 3, 4))
     assert _can_view_as_2d(x) is True

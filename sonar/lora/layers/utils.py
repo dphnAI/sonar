@@ -7,16 +7,16 @@ from enum import Enum
 import torch
 import torch.nn as nn
 
-from aphrodite import envs
-from aphrodite.model_executor.layers.fused_moe.fused_moe import try_get_optimal_moe_config
-from aphrodite.platforms import current_platform
-from aphrodite.utils.math_utils import next_power_of_2
+from sonar import envs
+from sonar.model_executor.layers.fused_moe.fused_moe import try_get_optimal_moe_config
+from sonar.platforms import current_platform
+from sonar.utils.math_utils import next_power_of_2
 
 _lora_aux_cuda_stream: torch.cuda.Stream | None = None
 
 
 def _get_lora_aux_cuda_stream() -> torch.cuda.Stream | None:
-    if not envs.APHRODITE_LORA_ENABLE_DUAL_STREAM:
+    if not envs.SONAR_LORA_ENABLE_DUAL_STREAM:
         return None
     global _lora_aux_cuda_stream
     if _lora_aux_cuda_stream is None and current_platform.is_cuda_alike():

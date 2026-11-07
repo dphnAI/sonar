@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 #
 # Copyright (c) 2025 Huawei Technologies Co., Ltd. All Rights Reserved.
-# Adapted from aphrodite/model_executor/models/qwen2_5_vl.py
+# Adapted from sonar/model_executor/models/qwen2_5_vl.py
 # Copyright 2025 The vLLM team.
 # Copyright 2025 The Qwen Team.
 #
@@ -31,55 +31,55 @@ from einops import rearrange
 from torchvision.transforms import v2
 from transformers.utils import logging
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed import parallel_state
-from aphrodite.distributed import utils as dist_utils
-from aphrodite.model_executor.layers.activation import _ACTIVATION_REGISTRY
-from aphrodite.model_executor.layers.attention.mm_encoder_attention import MMEncoderAttention
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.config import SonarConfig
+from sonar.distributed import parallel_state
+from sonar.distributed import utils as dist_utils
+from sonar.model_executor.layers.activation import _ACTIVATION_REGISTRY
+from sonar.model_executor.layers.attention.mm_encoder_attention import MMEncoderAttention
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     MergedColumnParallelLinear,
     QKVParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.quantization.auto_gptq import AutoGPTQConfig
-from aphrodite.model_executor.layers.rotary_embedding.common import ApplyRotaryEmb
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
-from aphrodite.model_executor.models.interfaces import (
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.quantization.auto_gptq import AutoGPTQConfig
+from sonar.model_executor.layers.rotary_embedding.common import ApplyRotaryEmb
+from sonar.model_executor.model_loader.weight_utils import default_weight_loader
+from sonar.model_executor.models.interfaces import (
     MultiModalEmbeddings,
     SupportsLoRA,
     SupportsMRoPE,
     SupportsMultiModal,
     SupportsPP,
 )
-from aphrodite.model_executor.models.module_mapping import MultiModelKeys
-from aphrodite.model_executor.models.qwen2_5_vl import (
+from sonar.model_executor.models.module_mapping import MultiModelKeys
+from sonar.model_executor.models.qwen2_5_vl import (
     Qwen2_5_VLDummyInputsBuilder,
     Qwen2_5_VLMultiModalProcessor,
     Qwen2_5_VLProcessingInfo,
 )
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.models.utils import (
     AutoWeightsLoader,
     WeightsMapper,
-    init_aphrodite_registered_model,
+    init_sonar_registered_model,
     maybe_prefix,
 )
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import (
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import (
     MultiModalFeatureSpec,
     MultiModalKwargsItems,
 )
-from aphrodite.multimodal.parse import MultiModalDataItems
-from aphrodite.multimodal.processing import (
+from sonar.multimodal.parse import MultiModalDataItems
+from sonar.multimodal.processing import (
     PromptReplacement,
     PromptUpdate,
     PromptUpdateDetails,
 )
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.utils.tensor_schema import TensorSchema, TensorShape
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
+from sonar.sequence import IntermediateTensors
+from sonar.utils.tensor_schema import TensorSchema, TensorShape
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
 
 from .vision import get_vit_attn_backend
 
@@ -778,7 +778,7 @@ class OpenPanguVLDummyInputsBuilder(Qwen2_5_VLDummyInputsBuilder):
     dummy_inputs=OpenPanguVLDummyInputsBuilder,
 )
 class OpenPanguVLForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsLoRA, SupportsPP, SupportsMRoPE):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={
             "model.language_model.": "language_model.model.",
             "model.visual.": "visual.",
@@ -791,14 +791,14 @@ class OpenPanguVLForConditionalGeneration(nn.Module, SupportsMultiModal, Support
         "gate_up_proj": ["gate_proj", "up_proj"],
     }
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
         self.config = config
-        self.aphrodite_config = aphrodite_config
-        quant_config = aphrodite_config.quant_config
+        self.sonar_config = sonar_config
+        quant_config = sonar_config.quant_config
 
-        with self._mark_tower_model(aphrodite_config, {"image", "video"}):
+        with self._mark_tower_model(sonar_config, {"image", "video"}):
             self.visual = OpenPanguVisionTransformer(
                 vision_config=config.vision_config,
                 out_hidden_size=config.vision_config.out_hidden_size,
@@ -808,9 +808,9 @@ class OpenPanguVLForConditionalGeneration(nn.Module, SupportsMultiModal, Support
                 prefix=maybe_prefix(prefix, "visual"),
             )
 
-        with self._mark_language_model(aphrodite_config):
-            self.language_model = init_aphrodite_registered_model(
-                aphrodite_config=aphrodite_config,
+        with self._mark_language_model(sonar_config):
+            self.language_model = init_sonar_registered_model(
+                sonar_config=sonar_config,
                 prefix=maybe_prefix(prefix, "openpangu.language_model"),
                 architectures=["PanguEmbeddedForCausalLM"],
             )
@@ -821,12 +821,10 @@ class OpenPanguVLForConditionalGeneration(nn.Module, SupportsMultiModal, Support
     def _parse_preprocess_params(self, vision_config):
         self.channel = vision_config.in_channels
         self.patch_size = vision_config.patch_size
-        from aphrodite.multimodal import MULTIMODAL_REGISTRY
+        from sonar.multimodal import MULTIMODAL_REGISTRY
 
         image_processor = (
-            MULTIMODAL_REGISTRY.create_processor(self.aphrodite_config.model_config)
-            .info.get_hf_processor()
-            .image_processor
+            MULTIMODAL_REGISTRY.create_processor(self.sonar_config.model_config).info.get_hf_processor().image_processor
         )
         self.do_rescale = image_processor.do_rescale
         self.rescale_factor = image_processor.rescale_factor
@@ -1039,7 +1037,7 @@ class OpenPanguVLForConditionalGeneration(nn.Module, SupportsMultiModal, Support
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
     def get_mm_mapping(self) -> MultiModelKeys:
         """Get the module prefix in multimodal models."""

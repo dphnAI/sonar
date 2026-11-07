@@ -3,10 +3,10 @@
 
 import torch
 
-from aphrodite.distributed import get_tensor_model_parallel_world_size
-from aphrodite.models.common.ops import sequence_parallel as common_sp
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.utils.torch_utils import direct_register_custom_op
+from sonar.distributed import get_tensor_model_parallel_world_size
+from sonar.models.common.ops import sequence_parallel as common_sp
+from sonar.utils.math_utils import cdiv
+from sonar.utils.torch_utils import direct_register_custom_op
 
 
 def _sp_shard_op(x: torch.Tensor) -> torch.Tensor:
@@ -22,7 +22,7 @@ def _sp_local_fake(x: torch.Tensor) -> torch.Tensor:
 
 
 # Dynamo would specialize the padding branch on the traced token count, and
-# Aphrodite drops the resulting guards. Keep the branch opaque when compiling.
+# Sonar drops the resulting guards. Keep the branch opaque when compiling.
 direct_register_custom_op(
     op_name="sp_reduce_scatter",
     op_func=common_sp.sp_reduce_scatter,
@@ -37,11 +37,11 @@ direct_register_custom_op(
 
 def sp_reduce_scatter(x: torch.Tensor) -> torch.Tensor:
     if torch.compiler.is_compiling():
-        return torch.ops.aphrodite.sp_reduce_scatter(x)
+        return torch.ops.sonar.sp_reduce_scatter(x)
     return common_sp.sp_reduce_scatter(x)
 
 
 def sp_shard(x: torch.Tensor) -> torch.Tensor:
     if torch.compiler.is_compiling():
-        return torch.ops.aphrodite.sp_shard(x)
+        return torch.ops.sonar.sp_shard(x)
     return common_sp.sp_shard(x)

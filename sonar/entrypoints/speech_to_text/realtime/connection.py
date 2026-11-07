@@ -13,11 +13,11 @@ import pybase64 as base64
 from fastapi import WebSocket
 from starlette.websockets import WebSocketDisconnect
 
-from aphrodite import envs
-from aphrodite.entrypoints.serve.engine.protocol import ErrorResponse, UsageInfo
-from aphrodite.entrypoints.serve.exception_handling.utils import sanitize_message
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.logger import init_logger
+from sonar import envs
+from sonar.entrypoints.serve.engine.protocol import ErrorResponse, UsageInfo
+from sonar.entrypoints.serve.exception_handling.utils import sanitize_message
+from sonar.exceptions import SonarValidationError
+from sonar.logger import init_logger
 
 from .protocol import (
     ErrorEvent,
@@ -54,7 +54,7 @@ class RealtimeConnection:
         self._is_connected = False
         self._is_model_validated = False
 
-        self._max_audio_filesize_mb = envs.APHRODITE_MAX_AUDIO_CLIP_FILESIZE_MB
+        self._max_audio_filesize_mb = envs.SONAR_MAX_AUDIO_CLIP_FILESIZE_MB
 
     async def handle_connection(self):
         """Main connection loop."""
@@ -123,13 +123,13 @@ class RealtimeConnection:
                 audio_array = np.frombuffer(audio_bytes, dtype=np.int16).astype(np.float32) / 32768.0
 
                 if len(audio_array) / 1024**2 > self._max_audio_filesize_mb:
-                    raise AphroditeValidationError(
+                    raise SonarValidationError(
                         "Maximum file size exceeded",
                         parameter="audio_filesize_mb",
                         value=len(audio_array) / 1024**2,
                     )
                 if len(audio_array) == 0:
-                    raise AphroditeValidationError("Can't process empty audio.")
+                    raise SonarValidationError("Can't process empty audio.")
 
                 # Put audio chunk in queue
                 self.audio_queue.put_nowait(audio_array)
@@ -204,7 +204,7 @@ class RealtimeConnection:
 
         try:
             # Create sampling params
-            from aphrodite.sampling_params import RequestOutputKind, SamplingParams
+            from sonar.sampling_params import RequestOutputKind, SamplingParams
 
             sampling_params = SamplingParams.from_optional(
                 temperature=0.0,

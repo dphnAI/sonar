@@ -3,16 +3,16 @@
 
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.config import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEParallelConfig,
     FusedMoEQuantConfig,
     RoutingMethodType,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     kFp8StaticTensorSym,
     kMxfp4Static,
@@ -42,7 +42,7 @@ def aiter_triton_kernel_w4a8_moe_forward(
     unpadded_K_w2=None,
 ):
     assert quant_config is not None and quant_config.use_mxfp4_w4a8 and rocm_aiter_ops.is_enabled()
-    from aphrodite.platforms.rocm import on_gfx1250
+    from sonar.platforms.rocm import on_gfx1250
 
     try:
         from aiter.ops.triton.moe.moe_routing import routing as _routing_mod
@@ -121,7 +121,7 @@ def triton_kernel_fused_mxfp4_w4a8_experts(
     from aiter.ops.triton.moe_op_gemm_a8w4 import moe_gemm_a8w4
     from aiter.ops.triton.quant_moe import downcast_to_static_fp8
 
-    from aphrodite.model_executor.layers.quantization.utils.mxfp4_utils import (
+    from sonar.model_executor.layers.quantization.utils.mxfp4_utils import (
         get_aiter_mx_scale_swizzle,
         weight_mx_scale,
     )
@@ -203,7 +203,7 @@ class AiterW4A8ExpertsMonolithic(mk.FusedMoEExpertsMonolithic):
     def _supports_current_device() -> bool:
         if not rocm_aiter_ops.is_enabled():
             return False
-        from aphrodite.platforms.rocm import on_gfx950, on_gfx1250
+        from sonar.platforms.rocm import on_gfx950, on_gfx1250
 
         return on_gfx950() or on_gfx1250()
 

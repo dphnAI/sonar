@@ -8,25 +8,25 @@ import torch
 from torch import nn
 from transformers import Qwen3NextConfig
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed import get_pp_group, tensor_model_parallel_all_gather
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.linear import ColumnParallelLinear
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import SonarConfig
+from sonar.distributed import get_pp_group, tensor_model_parallel_all_gather
+from sonar.logger import init_logger
+from sonar.model_executor.layers.linear import ColumnParallelLinear
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.models.qwen3_next import (
+from sonar.model_executor.models.qwen3_next import (
     Qwen3NextDecoderLayer,
     Qwen3NextModel,
     Qwen3NextRMSNorm,
     Qwen3NextSparseMoeBlock,
     QwenNextMixtureOfExperts,
 )
-from aphrodite.model_executor.models.utils import sequence_parallel_chunk
-from aphrodite.sequence import IntermediateTensors
+from sonar.model_executor.models.utils import sequence_parallel_chunk
+from sonar.sequence import IntermediateTensors
 
 from .utils import (
     AutoWeightsLoader,
@@ -41,25 +41,25 @@ logger = init_logger(__name__)
 KVCache = tuple[torch.Tensor, torch.Tensor]
 
 
-def should_torch_compile_mtp_drafter(aphrodite_config: AphroditeConfig) -> bool:
+def should_torch_compile_mtp_drafter(sonar_config: SonarConfig) -> bool:
     """`enable_if` for MTP drafters that pick their module by `spec_step_idx`.
 
     The drafter is compiled once with guards dropped, so a compiled
     multi-module drafter would reuse the first-traced module for every step.
     """
-    spec_config = aphrodite_config.speculative_config
+    spec_config = sonar_config.speculative_config
     return spec_config is None or not spec_config.use_multi_module_mtp()
 
 
 @support_torch_compile(enable_if=should_torch_compile_mtp_drafter)
 class Qwen3NextMultiTokenPredictor(nn.Module):
-    hf_to_aphrodite_mapper = Qwen3NextModel.hf_to_aphrodite_mapper
+    hf_to_sonar_mapper = Qwen3NextModel.hf_to_sonar_mapper
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
 
-        model_config = aphrodite_config.model_config
-        quant_config = aphrodite_config.quant_config
+        model_config = sonar_config.model_config
+        quant_config = sonar_config.quant_config
 
         config: Qwen3NextConfig = model_config.hf_config
 
@@ -92,7 +92,7 @@ class Qwen3NextMultiTokenPredictor(nn.Module):
 
         self.layers = torch.nn.ModuleList(
             Qwen3NextDecoderLayer(
-                aphrodite_config,
+                sonar_config,
                 layer_type="full_attention",
                 prefix=f"{prefix}.layers.{idx}",
             )
@@ -102,7 +102,7 @@ class Qwen3NextMultiTokenPredictor(nn.Module):
         self.fused_shared_expert_layers = get_fused_shared_expert_layers(
             self,
             Qwen3NextSparseMoeBlock,
-            enable_eplb=aphrodite_config.parallel_config.enable_eplb,
+            enable_eplb=sonar_config.parallel_config.enable_eplb,
         )
         self.make_empty_intermediate_tensors = make_empty_intermediate_tensors_factory(
             ["hidden_states", "residual"], config.hidden_size
@@ -168,7 +168,7 @@ class Qwen3NextMultiTokenPredictor(nn.Module):
             ckpt_prefix="mlp.shared_expert",
         )
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
 
 @support_torch_compile(enable_if=should_torch_compile_mtp_drafter)
@@ -182,14 +182,14 @@ class Qwen3NextMTP(nn.Module, QwenNextMixtureOfExperts):
         "gate_up_proj": ["gate_proj", "up_proj"],
     }
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
-        config = aphrodite_config.model_config.hf_config
-        self.aphrodite_config = aphrodite_config
-        self.quant_config = aphrodite_config.quant_config
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
+        config = sonar_config.model_config.hf_config
+        self.sonar_config = sonar_config
+        self.quant_config = sonar_config.quant_config
 
         super().__init__()
         self.config = config
-        self.model = Qwen3NextMultiTokenPredictor(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "mtp"))
+        self.model = Qwen3NextMultiTokenPredictor(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "mtp"))
 
         self.lm_head = ParallelLMHead(
             config.vocab_size,

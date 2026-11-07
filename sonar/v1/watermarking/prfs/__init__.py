@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-from aphrodite.config.watermarking import WatermarkPRFName
-from aphrodite.v1.watermarking.prfs.base import WatermarkPRF
-from aphrodite.v1.watermarking.prfs.philox import PhiloxPRF
+from sonar.config.watermarking import WatermarkPRFName
+from sonar.v1.watermarking.prfs.base import WatermarkPRF
+from sonar.v1.watermarking.prfs.philox import PhiloxPRF
 
 
 def create_prf(name: WatermarkPRFName, key: int) -> WatermarkPRF:

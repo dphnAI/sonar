@@ -3,25 +3,25 @@
 
 import torch
 
-from aphrodite._custom_ops import scaled_fp4_quant
-from aphrodite.model_executor.layers.fusion.quant_activation import (
+from sonar._custom_ops import scaled_fp4_quant
+from sonar.model_executor.layers.fusion.quant_activation import (
     QuantizedActivation,
     as_quantized_activation,
 )
-from aphrodite.model_executor.layers.quantization.utils.nvfp4_utils import (
+from sonar.model_executor.layers.quantization.utils.nvfp4_utils import (
     nvfp4_weight_padding_bytes,
     pad_nvfp4_activation_for_cutlass,
     pad_nvfp4_weight_for_cutlass,
     slice_nvfp4_output,
     swizzle_blockscale,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     kNvfp4Dynamic,
 )
-from aphrodite.model_executor.utils import replace_parameter
-from aphrodite.platforms import current_platform
-from aphrodite.utils.flashinfer import (
+from sonar.model_executor.utils import replace_parameter
+from sonar.platforms import current_platform
+from sonar.utils.flashinfer import (
     flashinfer_prepare_bf16_fp4_weights,
     flashinfer_scaled_fp4_mm,
     has_flashinfer,
@@ -88,7 +88,7 @@ class FlashInferCuteDslNvFp4W4A16LinearKernel(NvFp4LinearKernel):
             x_2d = torch.nn.functional.pad(x_2d, (0, weights_padding_bytes * 2))
         x_2d = x_2d.contiguous()
 
-        out = torch.ops.aphrodite.flashinfer_mm_bf16_fp4(
+        out = torch.ops.sonar.flashinfer_mm_bf16_fp4(
             x_2d,
             layer.weight,
             layer.weight_scale,
@@ -181,7 +181,7 @@ class FlashInferCutlassNvFp4LinearKernel(NvFp4LinearKernel):
 
     @classmethod
     def is_supported(cls, compute_capability: int | None = None) -> tuple[bool, str | None]:
-        from aphrodite.model_executor.layers.quantization.utils.nvfp4_utils import (
+        from sonar.model_executor.layers.quantization.utils.nvfp4_utils import (
             cutlass_fp4_supported,
         )
 

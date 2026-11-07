@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-from aphrodite.parser.engine.registered_adapters import MinimaxM3ParserToolAdapter
-from aphrodite.tool_parsers.rust_tool_parser import RustToolParser
+from sonar.parser.engine.registered_adapters import MinimaxM3ParserToolAdapter
+from sonar.tool_parsers.rust_tool_parser import RustToolParser
 
 
 class MinimaxM3ToolParser(MinimaxM3ParserToolAdapter):  # type: ignore[valid-type, misc]

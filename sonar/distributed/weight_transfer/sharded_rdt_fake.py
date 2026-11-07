@@ -18,7 +18,7 @@ from typing import Any
 
 import torch
 
-from aphrodite.distributed.weight_transfer.sharded_rdt_common import SUPPORTED_OPS
+from sonar.distributed.weight_transfer.sharded_rdt_common import SUPPORTED_OPS
 
 # ("op_name", positional_args, sorted_kwargs_items). Entries must be hashable so
 # the chain can serve as a FetchKey.

@@ -11,8 +11,8 @@ import os
 
 import pytest
 
-from aphrodite.model_executor.layers.rotary_embedding import _ROPE_DICT
-from aphrodite.platforms import current_platform
+from sonar.model_executor.layers.rotary_embedding import _ROPE_DICT
+from sonar.platforms import current_platform
 from tests.quantization.utils import is_quant_method_supported
 
 from ..utils import check_logprobs_close
@@ -39,7 +39,7 @@ MODELS = [
 @pytest.mark.parametrize("max_tokens", [32])
 @pytest.mark.parametrize("num_logprobs", [5])
 def test_models(
-    aphrodite_runner,
+    sonar_runner,
     example_prompts,
     model,
     dtype: str,
@@ -49,7 +49,7 @@ def test_models(
     model_name, revision = model
 
     # Run marlin.
-    with aphrodite_runner(
+    with sonar_runner(
         model_name=model_name,
         revision=revision,
         dtype=dtype,
@@ -64,7 +64,7 @@ def test_models(
     # The naive gptq kernel doesn't support bf16 yet.
     # Here we always compare fp16/bf16 gpt marlin kernel
     # to fp16 gptq kernel.
-    with aphrodite_runner(
+    with sonar_runner(
         model_name=model_name,
         revision=revision,
         dtype="half",

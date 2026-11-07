@@ -41,8 +41,8 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from aphrodite.model_executor.layers.linear import ReplicatedLinear
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.linear import ReplicatedLinear
+from sonar.model_executor.layers.quantization import QuantizationConfig
 
 DEFAULT_LN = partial(nn.LayerNorm, eps=1e-6)
 

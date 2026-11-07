@@ -9,7 +9,7 @@ import logging
 from pathlib import Path
 
 try:
-    from aphrodite.transformers_utils.repo_utils import hf_api
+    from sonar.transformers_utils.repo_utils import hf_api
 except ImportError:  # pragma: no cover
     hf_api = None  # type: ignore[assignment]
 

@@ -105,10 +105,10 @@ def server():
     ]
     env_dict = {
         **BASE_TEST_ENV,
-        "APHRODITE_ENABLE_RESPONSES_API_STORE": "1",
+        "SONAR_ENABLE_RESPONSES_API_STORE": "1",
         "PYTHON_EXECUTION_BACKEND": "dangerously_use_uv",
-        "APHRODITE_GPT_OSS_SYSTEM_TOOL_MCP_LABELS": ("code_interpreter,container,web_search_preview"),
-        "APHRODITE_GPT_OSS_HARMONY_SYSTEM_INSTRUCTIONS": "1",
+        "SONAR_GPT_OSS_SYSTEM_TOOL_MCP_LABELS": ("code_interpreter,container,web_search_preview"),
+        "SONAR_GPT_OSS_HARMONY_SYSTEM_INSTRUCTIONS": "1",
     }
     with RemoteOpenAIServer(MODEL_NAME, args, env_dict=env_dict) as remote_server:
         yield remote_server
@@ -689,7 +689,7 @@ async def test_function_calling_multi_turn(client: OpenAI, model_name: str, tool
 @pytest.mark.asyncio
 @pytest.mark.parametrize("model_name", [MODEL_NAME])
 async def test_system_message_with_tools(client: OpenAI, model_name: str):
-    from aphrodite.entrypoints.openai.parser.harmony_utils import get_system_message
+    from sonar.entrypoints.openai.parser.harmony_utils import get_system_message
 
     # Commentary channel should always be present (needed for preambles)
     # regardless of whether custom tools are enabled

@@ -9,30 +9,30 @@ import torch
 from torch import nn
 from transformers import Qwen4ExpTextConfig
 
-from aphrodite.compilation.breakable_cudagraph import eager_break_during_capture
-from aphrodite.config import AphroditeConfig, CacheConfig, ModelConfig, get_current_aphrodite_config
-from aphrodite.forward_context import get_forward_context
-from aphrodite.model_executor.layers.linear import MergedColumnParallelLinear
-from aphrodite.model_executor.layers.mamba.abstract import (
+from sonar.compilation.breakable_cudagraph import eager_break_during_capture
+from sonar.config import CacheConfig, ModelConfig, SonarConfig, get_current_sonar_config
+from sonar.forward_context import get_forward_context
+from sonar.model_executor.layers.linear import MergedColumnParallelLinear
+from sonar.model_executor.layers.mamba.abstract import (
     MambaBase,
     get_mamba_prefill_checkpoint_alignment,
     get_mamba_prefill_checkpoint_grid,
 )
-from aphrodite.model_executor.layers.mamba.checkpoint import (
+from sonar.model_executor.layers.mamba.checkpoint import (
     MambaPrefillCheckpointExporter,
 )
-from aphrodite.model_executor.layers.mamba.mamba_utils import (
+from sonar.model_executor.layers.mamba.mamba_utils import (
     MambaStateDtypeCalculator,
     MambaStateShapeCalculator,
     is_conv_state_dim_first,
 )
-from aphrodite.models.common.ops.sequence_parallel import sp_all_gather, sp_shard
-from aphrodite.v1.attention.backends.registry import MambaAttentionBackendEnum
-from aphrodite.v1.attention.backends.short_conv_attn import (
+from sonar.models.common.ops.sequence_parallel import sp_all_gather, sp_shard
+from sonar.v1.attention.backends.registry import MambaAttentionBackendEnum
+from sonar.v1.attention.backends.short_conv_attn import (
     PleShortConvAttentionBackend,
     PleShortConvAttentionMetadata,
 )
-from aphrodite.v1.kv_cache_interface import KVCacheSpec, MambaSpec
+from sonar.v1.kv_cache_interface import KVCacheSpec, MambaSpec
 
 from ..common.ops.ple import ple_conv, ple_gate
 from .ngram_embedding import Qwen4ExpNGramEmbedding
@@ -70,7 +70,7 @@ class Qwen4ExpPLELayer(nn.Module, MambaBase):
     def __init__(
         self,
         config: Qwen4ExpTextConfig,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         layer_idx: int = 0,
         ple_dense_layer_id: int | None = None,
         prefix: str = "",
@@ -78,9 +78,9 @@ class Qwen4ExpPLELayer(nn.Module, MambaBase):
     ) -> None:
         super().__init__()
         self.use_sequence_parallel = use_sequence_parallel
-        model_config = aphrodite_config.model_config
-        cache_config = aphrodite_config.cache_config
-        quant_config = aphrodite_config.quant_config
+        model_config = sonar_config.model_config
+        cache_config = sonar_config.cache_config
+        quant_config = sonar_config.quant_config
         self.model_config: ModelConfig = model_config
         self.cache_config: CacheConfig = cache_config
         self.layer_idx = layer_idx
@@ -94,14 +94,14 @@ class Qwen4ExpPLELayer(nn.Module, MambaBase):
         self.conv_state_len = (self.conv_kernel_size - 1) * self.short_conv_dilation
         # The conv window ending at a checkpoint is a copy of its last inputs.
         self._checkpoint_exporter = MambaPrefillCheckpointExporter(state_len=self.conv_state_len)
-        self.num_spec_tokens = aphrodite_config.num_speculative_tokens
+        self.num_spec_tokens = sonar_config.num_speculative_tokens
         self.activation = "silu"
         self.ple_embedding = Qwen4ExpNGramEmbedding(
             config,
             int(config.ple_embed_dim),
             self.ple_dense_layer_id,
-            aphrodite_config.scheduler_config.max_num_batched_tokens,
-            data_parallel_rank=aphrodite_config.parallel_config.data_parallel_rank,
+            sonar_config.scheduler_config.max_num_batched_tokens,
+            data_parallel_rank=sonar_config.parallel_config.data_parallel_rank,
             prefix=f"{prefix}.ple_embedding",
             quant_config=quant_config,
             params_dtype=model_config.dtype,
@@ -139,7 +139,7 @@ class Qwen4ExpPLELayer(nn.Module, MambaBase):
         nn.init.zeros_(self.conv1d.weight)
         self.conv1d.weight._no_reinit = True
         self.kv_cache = (torch.tensor([]),)
-        compilation_config = get_current_aphrodite_config().compilation_config
+        compilation_config = get_current_sonar_config().compilation_config
         if prefix in compilation_config.static_forward_context:
             raise ValueError(f"Duplicate layer name: {prefix}")
         compilation_config.static_forward_context[prefix] = self
@@ -191,17 +191,17 @@ class Qwen4ExpPLELayer(nn.Module, MambaBase):
     def get_prefill_checkpoint_alignment(self) -> int | None:
         return 1 if self.cache_config.mamba_cache_mode == "align" else None
 
-    def get_kv_cache_spec(self, aphrodite_config: AphroditeConfig) -> KVCacheSpec | None:
-        spec = super().get_kv_cache_spec(aphrodite_config)
+    def get_kv_cache_spec(self, sonar_config: SonarConfig) -> KVCacheSpec | None:
+        spec = super().get_kv_cache_spec(sonar_config)
         # The scheduler takes internal checkpoints only when every Mamba layer
         # can export them.
         if (
             self.get_prefill_checkpoint_alignment() is None
-            or get_mamba_prefill_checkpoint_alignment(aphrodite_config) is None
+            or get_mamba_prefill_checkpoint_alignment(sonar_config) is None
             or not isinstance(spec, MambaSpec)
         ):
             return spec
-        grid = get_mamba_prefill_checkpoint_grid(aphrodite_config)
+        grid = get_mamba_prefill_checkpoint_grid(sonar_config)
         # Offsets are multiples of the grid, so the window holds only inputs.
         assert grid >= self.conv_state_len
         return replace(spec, num_prefill_checkpoint_blocks=1, prefill_checkpoint_alignment=grid)

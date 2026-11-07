@@ -9,15 +9,15 @@ Run `pytest tests/kernels/quantization/test_w4a16_kernel_selection.py`.
 import pytest
 import torch
 
-from aphrodite.model_executor.kernels.linear import (
+from sonar.model_executor.kernels.linear import (
     MPLinearLayerConfig,
     choose_mp_linear_kernel,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.scalar_type import scalar_types
+from sonar.platforms import current_platform
+from sonar.scalar_type import scalar_types
 
 if current_platform.is_rocm():
-    from aphrodite.platforms.rocm import on_gfx1x, on_gfx1100
+    from sonar.platforms.rocm import on_gfx1x, on_gfx1100
 else:
     on_gfx1100 = on_gfx1x = lambda: False  # noqa: E731
 

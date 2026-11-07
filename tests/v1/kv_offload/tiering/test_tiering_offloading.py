@@ -18,13 +18,13 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.distributed.kv_transfer.kv_connector.v1.offloading.metrics import (
+from sonar.distributed.kv_transfer.kv_connector.v1.offloading.metrics import (
     OffloadingConnectorStats,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.offloading.scheduler import (
+from sonar.distributed.kv_transfer.kv_connector.v1.offloading.scheduler import (
     _parse_tier_filter,
 )
-from aphrodite.v1.kv_offload.base import (
+from sonar.v1.kv_offload.base import (
     Locality,
     LookupResult,
     Medium,
@@ -40,21 +40,21 @@ from aphrodite.v1.kv_offload.base import (
     TierMatcher,
     make_offload_key,
 )
-from aphrodite.v1.kv_offload.cpu.common import CPULoadStoreSpec, CPUOffloadingInfo
-from aphrodite.v1.kv_offload.tiering.base import (
+from sonar.v1.kv_offload.cpu.common import CPULoadStoreSpec, CPUOffloadingInfo
+from sonar.v1.kv_offload.tiering.base import (
     JobResult,
     SecondaryTierManager,
     TieringOffloadingMetrics,
     TransferJob,
 )
-from aphrodite.v1.kv_offload.tiering.example.manager import ExampleSecondaryTierManager
-from aphrodite.v1.kv_offload.tiering.factory import SecondaryTierFactory
-from aphrodite.v1.kv_offload.tiering.manager import (
+from sonar.v1.kv_offload.tiering.example.manager import ExampleSecondaryTierManager
+from sonar.v1.kv_offload.tiering.factory import SecondaryTierFactory
+from sonar.v1.kv_offload.tiering.manager import (
     CPUPrimaryTierOffloadingManager,
     TieringOffloadingManager,
 )
-from aphrodite.v1.kv_offload.tiering.spec import TieringOffloadingSpec
-from aphrodite.v1.metrics.cache_hit_source import CacheHitSource
+from sonar.v1.kv_offload.tiering.spec import TieringOffloadingSpec
+from sonar.v1.metrics.cache_hit_source import CacheHitSource
 from tests.v1.kv_offload.conftest import make_offloading_config
 
 _CTX = ReqContext(req_id="test")
@@ -331,7 +331,7 @@ class TestTieringOffloadingManager:
         success=False; the tier corrects its own verdict."""
         from unittest.mock import patch
 
-        from aphrodite.v1.kv_offload.tiering.base import JobResult
+        from sonar.v1.kv_offload.tiering.base import JobResult
 
         self._start_request()
         # Register an in-flight promotion job for tier1 by hand.
@@ -357,7 +357,7 @@ class TestTieringOffloadingManager:
     def test_successful_promotion_finalizes_primary_with_success(self, manager_setup):
         from unittest.mock import patch
 
-        from aphrodite.v1.kv_offload.tiering.base import JobResult
+        from sonar.v1.kv_offload.tiering.base import JobResult
 
         self._start_request()
         job_id = self.manager._next_job_id()

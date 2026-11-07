@@ -6,7 +6,7 @@ does with AttnRes, ``(prefix_sum, block_residual, prefix_delta)``.
 - ``WholeLayer`` (KDA layers): K1 (AttnRes, in_proj, f_b, spec conv, the KDA
   recurrence, the gated norm) writes o_proj's input; K2 runs o_proj, its
   all-reduce, the MLP AttnRes and the latent MoE.
-- ``FfnLayer`` (MLA layers): Aphrodite's AttnRes and MLA up to o_proj's input, then
+- ``FfnLayer`` (MLA layers): Sonar's AttnRes and MLA up to o_proj's input, then
   K2.
 
 Weights are views of the loaded parameters, taken at every launch.
@@ -16,15 +16,15 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 
-from aphrodite.model_executor.layers.mamba.mamba_utils import is_conv_state_dim_first
-from aphrodite.models.kimi_k3.amd.specialized_decode.runtime.runner import MonoRunner
+from sonar.model_executor.layers.mamba.mamba_utils import is_conv_state_dim_first
+from sonar.models.kimi_k3.amd.specialized_decode.runtime.runner import MonoRunner
 
 if TYPE_CHECKING:
-    from aphrodite.models.kimi_k3.amd.specialized_decode.runtime.decode import Step
+    from sonar.models.kimi_k3.amd.specialized_decode.runtime.decode import Step
 
 
 def _k2_key(layer, runner: MonoRunner, tokens: int, reset: bool):
-    from aphrodite.models.kimi_k3.amd.specialized_decode.mono import layer as k2
+    from sonar.models.kimi_k3.amd.specialized_decode.mono import layer as k2
 
     m = layer.mlp
     return k2.K2Build(
@@ -41,9 +41,9 @@ def _k2_key(layer, runner: MonoRunner, tokens: int, reset: bool):
 def _k2(layer, runner: MonoRunner, core, prefix, blocks, reset=False):
     """K2 from ``core`` (o_proj's input): ``prefix`` updated in place (written,
     when ``reset``), the MoE output returned."""
-    from aphrodite.models.kimi_k3.amd.specialized_decode.mono import layer as k2
-    from aphrodite.models.kimi_k3.amd.specialized_decode.mono.attention.kda import HIDDEN
-    from aphrodite.models.kimi_k3.amd.specialized_decode.mono.stages import moe
+    from sonar.models.kimi_k3.amd.specialized_decode.mono import layer as k2
+    from sonar.models.kimi_k3.amd.specialized_decode.mono.attention.kda import HIDDEN
+    from sonar.models.kimi_k3.amd.specialized_decode.mono.stages import moe
 
     m = layer.mlp
     ex = getattr(m.experts, "routed_experts", m.experts)
@@ -84,8 +84,8 @@ def compile_build(key) -> None:
     running it: FlyDSL's compile-only mode returns before the launch."""
     import os
 
-    from aphrodite.models.kimi_k3.amd.specialized_decode.mono import layer as k2
-    from aphrodite.models.kimi_k3.amd.specialized_decode.mono.attention import kda
+    from sonar.models.kimi_k3.amd.specialized_decode.mono import layer as k2
+    from sonar.models.kimi_k3.amd.specialized_decode.mono.attention import kda
 
     mod = kda if isinstance(key, kda.KdaPreBuild) else k2
     launch = mod.build(key)
@@ -117,7 +117,7 @@ class _Layer:
 
 class WholeLayer(_Layer):
     def _k1_key(self, qlen: int, state_len: int, delta: bool):
-        from aphrodite.models.kimi_k3.amd.specialized_decode.mono.attention import kda
+        from sonar.models.kimi_k3.amd.specialized_decode.mono.attention import kda
 
         layer = self.layer
         attn = layer.self_attn
@@ -135,7 +135,7 @@ class WholeLayer(_Layer):
         )
 
     def builds(self) -> list:
-        from aphrodite.models.kimi_k3.amd.specialized_decode.mono.attention import kda
+        from sonar.models.kimi_k3.amd.specialized_decode.mono.attention import kda
 
         q = self.runner.num_spec + 1
         # the conv state keeps CONV_W - 1 + num_spec entries; a layer after
@@ -152,7 +152,7 @@ class WholeLayer(_Layer):
         return conv_state, rstate
 
     def launch(self, step: "Step", positions, prefix_sum, block_residual, prefix_delta):
-        from aphrodite.models.kimi_k3.amd.specialized_decode.mono.attention import kda
+        from sonar.models.kimi_k3.amd.specialized_decode.mono.attention import kda
 
         layer, runner = self.layer, self.runner
         attn = layer.self_attn
@@ -199,7 +199,7 @@ class WholeLayer(_Layer):
 
 class FfnLayer(_Layer):
     def launch(self, step: "Step", positions, prefix_sum, block_residual, prefix_delta):
-        from aphrodite.models.kimi_k3.amd.linear import _apply_attn_res
+        from sonar.models.kimi_k3.amd.linear import _apply_attn_res
 
         layer = self.layer
         if self.first:

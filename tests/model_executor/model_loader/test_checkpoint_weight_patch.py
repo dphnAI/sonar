@@ -4,7 +4,7 @@
 import pytest
 import torch
 
-from aphrodite.model_executor.model_loader.checkpoint_weight_patch import (
+from sonar.model_executor.model_loader.checkpoint_weight_patch import (
     CheckpointWeightPatch,
     load_checkpoint_weight_patches,
 )

@@ -11,14 +11,14 @@ Usage:
         --service_url http://localhost:8000 \
         --model_name Qwen/Qwen2.5-VL-3B-Instruct \
         --mode baseline \
-        --baseline_file .aphrodite_epd_baseline.txt
+        --baseline_file .sonar_epd_baseline.txt
 
     # Disagg mode (compares outputs):
     python test_epd_correctness.py \
         --service_url http://localhost:8000 \
         --model_name Qwen/Qwen2.5-VL-3B-Instruct \
         --mode disagg \
-        --baseline_file .aphrodite_epd_baseline.txt
+        --baseline_file .sonar_epd_baseline.txt
 """
 
 import argparse
@@ -31,11 +31,11 @@ from typing import TYPE_CHECKING
 import openai
 import requests
 
-from aphrodite.assets.image import ImageAsset
-from aphrodite.multimodal.utils import encode_image_url
+from sonar.assets.image import ImageAsset
+from sonar.multimodal.utils import encode_image_url
 
 if TYPE_CHECKING:
-    from aphrodite.v1.worker.mm_encoder_model_runner import MMEncoderModelRunner
+    from sonar.v1.worker.mm_encoder_model_runner import MMEncoderModelRunner
 
 
 class EncoderGraphTestWorkerExtension:
@@ -44,7 +44,7 @@ class EncoderGraphTestWorkerExtension:
     model_runner: "MMEncoderModelRunner"
 
     def encoder_graph_stats(self):
-        from aphrodite.v1.worker.mm_encoder_model_runner import MMEncoderModelRunner
+        from sonar.v1.worker.mm_encoder_model_runner import MMEncoderModelRunner
 
         runner = self.model_runner
         assert isinstance(runner, MMEncoderModelRunner)
@@ -112,8 +112,8 @@ SAMPLE_PROMPTS_TEXT: list[dict] = [
 ]
 
 
-def check_aphrodite_server(url: str, timeout=5, retries=10) -> bool:
-    """Check if the Aphrodite server is ready.
+def check_sonar_server(url: str, timeout=5, retries=10) -> bool:
+    """Check if the Sonar server is ready.
 
     Args:
         url: The URL to check (usually /health or /healthcheck endpoint)
@@ -147,7 +147,7 @@ def run_chat_completion(
     """Run a chat completion request.
 
     Args:
-        base_url: Base URL of the Aphrodite server
+        base_url: Base URL of the Sonar server
         model_name: Name of the model
         messages: Messages for chat completion
         max_tokens: Maximum tokens to generate
@@ -178,7 +178,7 @@ def main():
         "--service_url",
         type=str,
         required=True,
-        help="The Aphrodite service URL (e.g., http://localhost:8000)",
+        help="The Sonar service URL (e.g., http://localhost:8000)",
     )
 
     parser.add_argument(
@@ -199,7 +199,7 @@ def main():
     parser.add_argument(
         "--baseline_file",
         type=str,
-        default=".aphrodite_epd_baseline.txt",
+        default=".sonar_epd_baseline.txt",
         help="File to save/load baseline outputs",
     )
 
@@ -251,8 +251,8 @@ def main():
             )
 
     # Check if server is ready
-    if not check_aphrodite_server(health_check_url):
-        raise RuntimeError(f"Aphrodite server at {args.service_url} is not ready!")
+    if not check_sonar_server(health_check_url):
+        raise RuntimeError(f"Sonar server at {args.service_url} is not ready!")
 
     # Select prompts to use
     if args.use_mm_prompts:

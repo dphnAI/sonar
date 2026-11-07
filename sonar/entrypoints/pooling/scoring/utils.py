@@ -5,11 +5,11 @@ from typing import cast
 
 import torch
 
-from aphrodite import PromptType, TextPrompt
-from aphrodite.config import ModelConfig
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.inputs import MultiModalDataDict, MultiModalUUIDDict
-from aphrodite.renderers.chat_utils import (
+from sonar import PromptType, TextPrompt
+from sonar.config import ModelConfig
+from sonar.exceptions import SonarValidationError
+from sonar.inputs import MultiModalDataDict, MultiModalUUIDDict
+from sonar.renderers.chat_utils import (
     BaseMultiModalItemTracker,
     ChatCompletionContentPartParam,
     ChatCompletionContentPartTextParam,
@@ -100,7 +100,7 @@ def _validate_mm_score_input(
             out.append(d)
         else:
             if not is_multimodal_model:
-                raise AphroditeValidationError(f"MultiModalParam is not supported for {architecture}")
+                raise SonarValidationError(f"MultiModalParam is not supported for {architecture}")
             content = cast(list[ScoreContentPartParam], d.get("content", []))
             out.append(content)
     return out
@@ -114,11 +114,11 @@ def _validate_score_input_lens(
     len_2 = len(data_2)
 
     if len_1 > 1 and len_1 != len_2:
-        raise AphroditeValidationError("Input lengths must be either 1:1, 1:N or N:N")
+        raise SonarValidationError("Input lengths must be either 1:1, 1:N or N:N")
     if len_1 == 0:
-        raise AphroditeValidationError("At least one text element must be given")
+        raise SonarValidationError("At least one text element must be given")
     if len_2 == 0:
-        raise AphroditeValidationError("At least one text_pair element must be given")
+        raise SonarValidationError("At least one text_pair element must be given")
 
 
 def validate_score_input(

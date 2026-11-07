@@ -7,11 +7,11 @@ the ``cohere_melody`` Rust bindings instead of Jinja. Enabled by
 passing ``--tokenizer-mode cohere`` on the engine; tokenization itself
 still flows through the cached HuggingFace tokenizer.
 
-The renderer's client surface is ``chat_template_kwargs`` (Aphrodite's
+The renderer's client surface is ``chat_template_kwargs`` (Sonar's
 generic passthrough for template-time inputs). It is fed by two
 different code paths, which speak different vocabularies:
 
-1. :class:`aphrodite.entrypoints.cohere.serving.CohereServingChatV2` --
+1. :class:`sonar.entrypoints.cohere.serving.CohereServingChatV2` --
    translates a native `Cohere Chat v2 request
    <https://docs.cohere.com/reference/chat>`__ into
    ``chat_template_kwargs``.
@@ -61,7 +61,7 @@ callers; not part of the Cohere Chat v2 surface):
 
 **Rejected inputs**: ``template_jinja`` and ``template`` are Cohere's
 own inlets for raw Jinja template source. They are valid at Cohere's
-API surface but not at Aphrodite's -- raw template source must flow through
+API surface but not at Sonar's -- raw template source must flow through
 the standard ``chat_template`` request field (guarded by
 ``--trust-request-chat-template``), which this renderer forwards to
 melody as ``template_jinja``. Setting these keys explicitly in
@@ -70,7 +70,7 @@ misconfiguration surfaces loudly.
 
 **Everything else** in ``chat_template_kwargs`` is forwarded verbatim
 to melody as ``additional_template_fields`` and becomes accessible as
-Jinja variables inside the template. This matches Aphrodite's documented
+Jinja variables inside the template. This matches Sonar's documented
 contract for ``chat_template_kwargs`` ("kwargs accessible by the
 template"), so e.g. ``chat_template_kwargs={"reasoning_effort":
 "low"}`` resolves ``{{ reasoning_effort }}`` inside cmd3 / cmd4
@@ -79,7 +79,7 @@ templates.
 Citations produced by Cohere models are surfaced through the
 Cohere-scoped ``CohereChatMessage.citations`` /
 ``CohereDeltaMessage.citations`` fields (see
-:mod:`aphrodite.entrypoints.cohere.cohere_chat_message`), populated by the
+:mod:`sonar.entrypoints.cohere.cohere_chat_message`), populated by the
 ``cohere2`` reasoning parser. The base OpenAI ``ChatMessage`` /
 ``DeltaMessage`` keep their declared schemas unchanged; the response
 envelope declares them as ``SerializeAsAny[...]`` so the subclass
@@ -93,16 +93,16 @@ import json
 from enum import Enum
 from typing import Any
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.logger import init_logger
-from aphrodite.renderers.chat_utils import (
+from sonar.config import SonarConfig
+from sonar.logger import init_logger
+from sonar.renderers.chat_utils import (
     ChatCompletionMessageParam,
     ConversationMessage,
     parse_chat_messages,
     parse_chat_messages_async,
 )
-from aphrodite.tokenizers.hf import HfTokenizer
-from aphrodite.utils.async_utils import make_async
+from sonar.tokenizers.hf import HfTokenizer
+from sonar.utils.async_utils import make_async
 
 from .base import BaseRenderer
 from .inputs import DictPrompt
@@ -165,10 +165,10 @@ POSITION_TO_SOURCE_KEY = "_position_to_source"
 # melody-shape content list the renderer emits.
 #
 # Motivation: OpenAI's ``ChatCompletionContentPartParam`` union (in
-# ``aphrodite/renderers/chat_utils.py``) only allows ``text`` / ``image_url``
+# ``sonar/renderers/chat_utils.py``) only allows ``text`` / ``image_url``
 # / ``audio`` / ``video`` / ``file`` content parts on tool messages, so
 # ``{"type": "document", "document": {...}}`` blocks -- valid in Cohere
-# v2 -- get rejected by Aphrodite's shared chat validator before they can
+# v2 -- get rejected by Sonar's shared chat validator before they can
 # reach the renderer.
 # ``CohereServingChatV2._convert_tool_message`` works around that by
 # rewriting each content block into a plain ``text`` part (with document
@@ -196,7 +196,7 @@ TOOL_MESSAGE_V2_CONTENT_KEY = "_tool_message_v2_content"
 # set is forwarded verbatim to melody as ``additional_template_fields``
 # (i.e. as Jinja template variables), so callers can write
 # ``chat_template_kwargs = {"my_var": "..."}`` and have ``{{ my_var }}``
-# resolve inside the template -- matching Aphrodite's documented contract
+# resolve inside the template -- matching Sonar's documented contract
 # for ``chat_template_kwargs``.
 _RENDERER_CONSUMED_KEYS = frozenset(
     {
@@ -204,7 +204,7 @@ _RENDERER_CONSUMED_KEYS = frozenset(
         "template_id",
         # ``template_jinja`` / ``template`` are Cohere-only inputs for
         # raw Jinja source -- valid at Cohere's own API surface but not
-        # at Aphrodite's. In Aphrodite, raw template source must flow through the
+        # at Sonar's. In Sonar, raw template source must flow through the
         # standard ``chat_template`` request field, so a non-``None``
         # value here is rejected in ``_build_render_config``. The keys
         # stay in the consumed set so an explicit ``None`` (e.g. from
@@ -517,7 +517,7 @@ def _conversation_to_melody_messages(
     messages_citations: dict[int, list[dict[str, Any]]] | None = None,
     tool_message_v2_content: dict[int, list[dict[str, Any]]] | None = None,
 ) -> list[dict[str, Any]]:
-    """Convert Aphrodite ``ConversationMessage``s into melody's message dict shape.
+    """Convert Sonar ``ConversationMessage``s into melody's message dict shape.
 
     ``messages_citations`` is an optional index-keyed lookup of
     per-message citations from the request, populated by
@@ -563,7 +563,7 @@ def _conversation_to_melody_messages(
         #
         # Cohere models output thought as either a ``thinking``
         # block (reasoning models) or a ``tool_plan`` field (older non-
-        # reasoning Command models), but Aphrodite's ConversationMessage has a
+        # reasoning Command models), but Sonar's ConversationMessage has a
         # single unified ``reasoning`` field that drops that difference.
         # The cmd3 / cmd4 jinja templates render ``thinking`` blocks in both
         # the case of tool calls and regular thinking blocks, so this is fine
@@ -598,10 +598,10 @@ def _build_render_config(
 ) -> tuple[str, dict[str, Any]]:
     """Build the ``render_cmd3`` / ``render_cmd4`` config dict.
 
-    ``chat_template`` is the standard Aphrodite per-request template override
+    ``chat_template`` is the standard Sonar per-request template override
     (from ``ChatCompletionRequest.chat_template`` / the server-side
     ``--chat-template`` flag). When non-``None`` it is forwarded to melody
-    as ``template_jinja`` so a single Aphrodite-native path drives template
+    as ``template_jinja`` so a single Sonar-native path drives template
     source through the trust guard.
 
     Returns ``(format, config_dict)`` where ``format`` is either ``"cmd3"``
@@ -612,14 +612,14 @@ def _build_render_config(
         raise ValueError(f"Invalid cohere_format={fmt!r}; expected one of {_VALID_FORMATS}")
 
     # Reject Cohere-only inlets for raw Jinja source. These keys are
-    # valid at Cohere's own API surface but not at Aphrodite's: callers must
-    # use the standard Aphrodite ``chat_template`` request field so the
+    # valid at Cohere's own API surface but not at Sonar's: callers must
+    # use the standard Sonar ``chat_template`` request field so the
     # ``--trust-request-chat-template`` guard applies uniformly.
     for cohere_only_key in ("template_jinja", "template"):
         if chat_template_kwargs.get(cohere_only_key) is not None:
             raise ValueError(
                 f"chat_template_kwargs.{cohere_only_key!r} is not accepted "
-                "in Aphrodite (it is a Cohere-only field); pass the template "
+                "in Sonar (it is a Cohere-only field); pass the template "
                 "body via the standard 'chat_template' request field "
                 "instead (requires --trust-request-chat-template)."
             )
@@ -636,12 +636,12 @@ def _build_render_config(
     # variants (not raw source), so it is safe to accept from the client.
     if template_id := chat_template_kwargs.get("template_id"):
         config["template_id"] = template_id
-    # Raw template source flows exclusively through the standard Aphrodite
+    # Raw template source flows exclusively through the standard Sonar
     # ``chat_template`` field so it is subject to the
     # ``--trust-request-chat-template`` guard in OnlineRenderer.
     if chat_template:
         config["template_jinja"] = chat_template
-    # Only support Jinja with aphrodite
+    # Only support Jinja with sonar
     config["use_jinja"] = True
 
     # Documents
@@ -715,7 +715,7 @@ def _build_render_config(
             config["platform_instruction"] = str(pi)
 
     # Anything we didn't explicitly interpret above is forwarded to melody
-    # as a Jinja template variable. This matches Aphrodite's documented contract
+    # as a Jinja template variable. This matches Sonar's documented contract
     # for ``chat_template_kwargs`` ("kwargs accessible by the template")
     # and lets callers write e.g. ``{"reasoning_effort": "low"}`` directly
     # without a nested ``additional_template_fields`` wrapper.
@@ -736,7 +736,7 @@ class CohereRenderer(BaseRenderer[HfTokenizer]):
 
     def __init__(
         self,
-        config: AphroditeConfig,
+        config: SonarConfig,
         tokenizer: HfTokenizer | None,
     ) -> None:
         # Match HfRenderer in not mutating the cached tokenizer instance

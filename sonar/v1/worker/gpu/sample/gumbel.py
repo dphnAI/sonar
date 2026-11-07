@@ -2,8 +2,8 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import torch
 
-from aphrodite.triton_utils import tl, triton
-from aphrodite.v1.worker.gpu.spec_decode.draft_logits import draft_logits_row
+from sonar.triton_utils import tl, triton
+from sonar.v1.worker.gpu.spec_decode.draft_logits import draft_logits_row
 
 # Smallest positive value produced by Triton's fp32 `tl.rand`. Used by the
 # retained Philox helper for rejection sampling.

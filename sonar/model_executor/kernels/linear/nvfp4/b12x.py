@@ -5,14 +5,14 @@ from __future__ import annotations
 
 import torch
 
-from aphrodite._custom_ops import scaled_fp4_quant
-from aphrodite.model_executor.utils import replace_parameter
-from aphrodite.platforms import current_platform
-from aphrodite.utils.b12x import B12xWarmupUnit
-from aphrodite.utils.b12x import (
+from sonar._custom_ops import scaled_fp4_quant
+from sonar.model_executor.utils import replace_parameter
+from sonar.platforms import current_platform
+from sonar.utils.b12x import B12xWarmupUnit
+from sonar.utils.b12x import (
     get_b12x_blockscaled as _import_b12x_blockscaled,
 )
-from aphrodite.utils.b12x import get_b12x_intrinsics as _import_b12x_intrinsics
+from sonar.utils.b12x import get_b12x_intrinsics as _import_b12x_intrinsics
 
 from .base import NvFp4LinearKernel, NvFp4LinearLayerConfig
 
@@ -61,7 +61,7 @@ class B12xNvFp4LinearKernel(NvFp4LinearKernel):
             return False, "B12X NVFP4 kernels require a Blackwell 12x device"
         blockscaled = _import_b12x_blockscaled()
         if blockscaled is None or _import_b12x_intrinsics() is None:
-            return False, "Install the B12X backend with `pip install aphrodite[b12x]`"
+            return False, "Install sonar[b12x] from the Sonar wheel index"
         if not blockscaled.is_supported():
             return False, "b12x native NVFP4 GEMM is not supported"
         return True, None

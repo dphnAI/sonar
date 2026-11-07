@@ -3,12 +3,12 @@
 """AMX-only, high-performance MLA backend for DeepSeek V2/V3/R1 on CPU.
 
 Built on the AMX decode/extend/bmm kernels vendored under
-``csrc/cpu/sgl-kernels/``, plugged into Aphrodite's ``MLACommonBackend``/
+``csrc/cpu/sgl-kernels/``, plugged into Sonar's ``MLACommonBackend``/
 ``MLACommonImpl`` abstraction the same way every other concrete MLA backend
 (``TritonMLAImpl``, etc.) does.
 
 This is a separate backend from the reference ``CPUMLABackend``
-(``aphrodite/v1/attention/backends/mla/cpu_mla.py``): that one targets every CPU
+(``sonar/v1/attention/backends/mla/cpu_mla.py``): that one targets every CPU
 (any dtype, block_size=16, ``mla_decode_kvcache`` decode kernel + inherited
 SDPA-style prefill) as a functional/CI reference, not performance. This
 backend instead requires AMX (bf16 only, block_size a multiple of 32) and is
@@ -44,18 +44,18 @@ from typing import ClassVar
 
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.model_executor.layers.attention.mla_attention import (
+from sonar import _custom_ops as ops
+from sonar.model_executor.layers.attention.mla_attention import (
     MLACommonBackend,
     MLACommonImpl,
     MLACommonMetadata,
     MLACommonMetadataBuilder,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     get_and_maybe_dequant_weights,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.v1.attention.backend import AttentionLayer, AttentionType, MultipleOf
+from sonar.platforms import current_platform
+from sonar.v1.attention.backend import AttentionLayer, AttentionType, MultipleOf
 
 _MIN_WORK_PER_SPLIT = 512
 _SPLIT_OCCUPANCY_MULTIPLIER = 2
@@ -110,7 +110,7 @@ def _compute_num_kv_splits(max_seq_len: int, num_threads: int) -> int:
 
 
 def _expand_block_table(block_table: torch.Tensor, block_size: int) -> torch.Tensor:
-    """Adapter: Aphrodite's block-table paging -> the flat per-(request, position)
+    """Adapter: Sonar's block-table paging -> the flat per-(request, position)
     physical row index the decode/extend kernels expect. Called once per step
     from ``AMXMLAMetadataBuilder.build``, not per layer.
     """

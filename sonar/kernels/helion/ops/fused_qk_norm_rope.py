@@ -6,9 +6,9 @@ from typing import Any
 
 import torch
 
-from aphrodite.kernels.helion.case_key import CaseKey
-from aphrodite.logger import init_logger
-from aphrodite.utils.import_utils import has_helion
+from sonar.kernels.helion.case_key import CaseKey
+from sonar.logger import init_logger
+from sonar.utils.import_utils import has_helion
 
 if not has_helion():
     raise ImportError("Helion kernel requires helion to be installed. Install it with: pip install helion")
@@ -16,9 +16,9 @@ if not has_helion():
 import helion
 import helion.language as hl
 
-from aphrodite import ir
-from aphrodite.kernels.helion.register import register_kernel
-from aphrodite.model_executor.layers.rotary_embedding import RotaryEmbedding
+from sonar import ir
+from sonar.kernels.helion.register import register_kernel
+from sonar.model_executor.layers.rotary_embedding import RotaryEmbedding
 
 logger = init_logger(__name__)
 

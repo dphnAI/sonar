@@ -5,9 +5,9 @@ from typing import Any, Literal, Self
 
 from pydantic import model_validator
 
-from aphrodite.config.utils import config
-from aphrodite.logger import init_logger
-from aphrodite.utils.hashing import safe_hash
+from sonar.config.utils import config
+from sonar.logger import init_logger
+from sonar.utils.hashing import safe_hash
 
 logger = init_logger(__name__)
 

@@ -9,7 +9,7 @@ other exception types or normal return values.
 
 import pytest
 
-from aphrodite.env_override import _apply_fxgraphcache_pickle_patch
+from sonar.env_override import _apply_fxgraphcache_pickle_patch
 
 
 class _BypassStub(Exception):
@@ -78,22 +78,22 @@ class TestApplyFxgraphcachePicklePatch:
             def dumps(self, obj):
                 return b"ok"
 
-        assert not hasattr(Pickler.dumps, "_aphrodite_patched")
-        assert not getattr(Pickler, "_aphrodite_fxgraph_dumps_patched", False)
+        assert not hasattr(Pickler.dumps, "_sonar_patched")
+        assert not getattr(Pickler, "_sonar_fxgraph_dumps_patched", False)
 
         _apply_fxgraphcache_pickle_patch(Pickler, _BypassStub)
 
-        assert Pickler.dumps._aphrodite_patched is True  # type: ignore[attr-defined]
-        assert Pickler._aphrodite_fxgraph_dumps_patched is True  # type: ignore[attr-defined]
+        assert Pickler.dumps._sonar_patched is True  # type: ignore[attr-defined]
+        assert Pickler._sonar_fxgraph_dumps_patched is True  # type: ignore[attr-defined]
 
 
 def test_patch_applied_in_current_environment():
     """Integration: verify patch state matches current torch version."""
     from torch._inductor.codecache import FxGraphCachePickler
 
-    from aphrodite.utils.torch_utils import is_torch_equal_or_newer
+    from sonar.utils.torch_utils import is_torch_equal_or_newer
 
     should_be_patched = is_torch_equal_or_newer("2.10.0") and not is_torch_equal_or_newer("2.11.0")
 
-    assert getattr(FxGraphCachePickler, "_aphrodite_fxgraph_dumps_patched", False) == (should_be_patched)
-    assert hasattr(FxGraphCachePickler.dumps, "_aphrodite_patched") == should_be_patched
+    assert getattr(FxGraphCachePickler, "_sonar_fxgraph_dumps_patched", False) == (should_be_patched)
+    assert hasattr(FxGraphCachePickler.dumps, "_sonar_patched") == should_be_patched

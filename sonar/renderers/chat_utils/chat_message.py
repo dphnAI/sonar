@@ -18,10 +18,10 @@ from openai.types.responses import ResponseInputImageParam
 from PIL import Image
 from pydantic import TypeAdapter
 
-from aphrodite.config import ModelConfig
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.inputs import MultiModalDataDict, MultiModalUUIDDict
-from aphrodite.logger import init_logger
+from sonar.config import ModelConfig
+from sonar.exceptions import SonarValidationError
+from sonar.inputs import MultiModalDataDict, MultiModalUUIDDict
+from sonar.logger import init_logger
 
 from .content_parser import (
     MODALITY_PLACEHOLDERS_MAP,
@@ -121,7 +121,7 @@ def _get_interleaved_text_prompt(placeholder_storage: dict[str, list], texts: li
         if elem in placeholder_storage:
             slots = placeholder_storage[elem]
             if not slots:
-                raise AphroditeValidationError(
+                raise SonarValidationError(
                     f"Found more '{elem}' placeholders in input prompt than actual multimodal data items."
                 )
             texts[idx] = slots.pop(0)
@@ -168,7 +168,7 @@ def get_full_multimodal_text_prompt(
                 interleave_strings,
             )
             logger.debug("Input prompt: %s", text_prompt)
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 f"Found more '{placeholder}' placeholders in input prompt than actual multimodal data items.",
                 parameter="messages",
             )
@@ -303,10 +303,10 @@ def parse_chat_message_content_mm_part(
             tool_reference = tool_reference_params.get("name", None)
             return "tool_reference", tool_reference
         # Raise an error if no 'type' or direct URL is found.
-        raise AphroditeValidationError("Missing 'type' field in multimodal part.", parameter="type")
+        raise SonarValidationError("Missing 'type' field in multimodal part.", parameter="type")
 
     if not isinstance(part_type, str):
-        raise AphroditeValidationError("Invalid 'type' field in multimodal part.", parameter="type")
+        raise SonarValidationError("Invalid 'type' field in multimodal part.", parameter="type")
     return part_type, "unknown part_type content"
 
 
@@ -404,7 +404,7 @@ def _reject_reserved_placeholder_in_text(text: str, model_config: ModelConfig) -
     caller move or inject splice positions via plain text content.
     """
     if model_config.enable_prompt_embeds and PROMPT_EMBEDS_PLACEHOLDER_TOKEN in text:
-        raise AphroditeValidationError(
+        raise SonarValidationError(
             _RESERVED_PLACEHOLDER_IN_TEXT_ERROR.format(token=PROMPT_EMBEDS_PLACEHOLDER_TOKEN),
             parameter="messages",
         )
@@ -483,7 +483,7 @@ def parse_chat_message_content_part(
         modality = "video"
     elif part_type == "prompt_embeds":
         if not content:
-            raise AphroditeValidationError(_PROMPT_EMBEDS_MISSING_DATA_ERROR, parameter="prompt_embeds")
+            raise SonarValidationError(_PROMPT_EMBEDS_MISSING_DATA_ERROR, parameter="prompt_embeds")
         prompt_embeds_index = mm_tracker.get_num_items("prompt_embeds")
         mm_parser.parse_prompt_embeds(cast(str, content))
         prompt_embeds_placeholder = make_prompt_embeds_placeholder(prompt_embeds_index)
@@ -508,7 +508,7 @@ def parse_chat_message_content_part(
         return cast(str, content)
     else:
         supported = sorted(MM_PARSER_MAP.keys() | set(PART_TYPES_TO_SKIP_NONE_CONTENT))
-        raise AphroditeValidationError(
+        raise SonarValidationError(
             f"Unsupported chat content part type: {part_type!r}. Supported types: {', '.join(supported)}.",
             parameter="type",
             value=part_type,
@@ -670,14 +670,14 @@ def _postprocess_messages(messages: list[ConversationMessage]) -> None:
 
             for item in tool_calls:
                 if not isinstance(item, dict):
-                    raise AphroditeValidationError(
+                    raise SonarValidationError(
                         "assistant tool_calls entries must be objects.",
                         parameter="tool_calls",
                     )
 
                 function = item.get("function")
                 if item.get("type", "function") != "function" or not isinstance(function, dict):
-                    raise AphroditeValidationError(
+                    raise SonarValidationError(
                         "chat completions only support assistant tool_calls of type 'function'.",
                         parameter="tool_calls",
                     )

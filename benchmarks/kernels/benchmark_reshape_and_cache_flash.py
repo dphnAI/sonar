@@ -6,15 +6,15 @@ import time
 import torch
 from tabulate import tabulate
 
-from aphrodite import _custom_ops as ops
-from aphrodite.logger import init_logger
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
-from aphrodite.utils.torch_utils import (
+from sonar import _custom_ops as ops
+from sonar.logger import init_logger
+from sonar.utils.argparse_utils import FlexibleArgumentParser
+from sonar.utils.torch_utils import (
     STR_DTYPE_TO_TORCH_DTYPE,
     create_kv_caches_with_random_flash,
     set_random_seed,
 )
-from aphrodite.v1.attention.ops.triton_reshape_and_cache_flash import (
+from sonar.v1.attention.ops.triton_reshape_and_cache_flash import (
     triton_reshape_and_cache_flash,
 )
 

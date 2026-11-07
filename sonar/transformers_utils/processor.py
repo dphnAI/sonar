@@ -20,19 +20,19 @@ from transformers.processing_utils import ProcessorMixin
 from transformers.video_processing_utils import BaseVideoProcessor
 from typing_extensions import TypeVar
 
-from aphrodite.logger import init_logger
-from aphrodite.transformers_utils import processors
-from aphrodite.transformers_utils.repo_utils import (
+from sonar.logger import init_logger
+from sonar.transformers_utils import processors
+from sonar.transformers_utils.repo_utils import (
     get_hf_file_to_dict,
     get_non_weight_snapshot_path,
 )
-from aphrodite.transformers_utils.utils import convert_model_repo_to_path
-from aphrodite.utils.func_utils import get_allowed_kwarg_only_overrides
+from sonar.transformers_utils.utils import convert_model_repo_to_path
+from sonar.utils.func_utils import get_allowed_kwarg_only_overrides
 
 logger = init_logger(__name__)
 
 if TYPE_CHECKING:
-    from aphrodite.config import ModelConfig
+    from sonar.config import ModelConfig
 
 
 def _transformers_v4_compatibility_import():
@@ -56,7 +56,7 @@ def _transformers_v4_compatibility_init() -> Any:
 
     This can be removed if `Molmo2ForConditionalGeneration` is upstreamed to
     Transformers."""
-    if hasattr(ProcessorMixin.__init__, "_aphrodite_patched"):
+    if hasattr(ProcessorMixin.__init__, "_sonar_patched"):
         return
 
     original_init = ProcessorMixin.__init__
@@ -70,7 +70,7 @@ def _transformers_v4_compatibility_init() -> Any:
 
     # Only patch if ProcessorMixin is not mocked (for docs builds)
     if not hasattr(ProcessorMixin, "_mock_name"):
-        __init__._aphrodite_patched = True  # type: ignore[attr-defined]
+        __init__._sonar_patched = True  # type: ignore[attr-defined]
         ProcessorMixin.__init__ = __init__
 
 

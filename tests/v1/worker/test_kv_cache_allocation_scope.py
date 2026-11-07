@@ -8,11 +8,11 @@ from typing import Any, cast
 import pytest
 import torch
 
-import aphrodite.v1.hisparse.binding as hisparse_binding
-import aphrodite.v1.worker.gpu.attn_utils as attn_utils
-import aphrodite.v1.worker.gpu_model_runner as gpu_model_runner
-from aphrodite.v1.hisparse.backend import CUDAHiSparseBackend
-from aphrodite.v1.worker.gpu_worker import Worker
+import sonar.v1.hisparse.binding as hisparse_binding
+import sonar.v1.worker.gpu.attn_utils as attn_utils
+import sonar.v1.worker.gpu_model_runner as gpu_model_runner
+from sonar.v1.hisparse.backend import CUDAHiSparseBackend
+from sonar.v1.worker.gpu_worker import Worker
 
 
 class _AllocationScope(AbstractContextManager):
@@ -65,7 +65,7 @@ def test_mrv2_kv_pool_only_wraps_backing_allocation(monkeypatch, hisparse) -> No
         monkeypatch.setattr(
             hisparse_binding,
             "get_hisparse_host_pool",
-            lambda aphrodite_config, kv_cache_config: host_pool,
+            lambda sonar_config, kv_cache_config: host_pool,
         )
         monkeypatch.setattr(hisparse_binding, "allocate_hisparse_kv_caches", allocate)
         monkeypatch.setattr(hisparse_binding, "bind_hisparse_kv_caches", bind_hisparse)
@@ -152,7 +152,7 @@ def test_kv_wake_does_not_run_model_runner_recovery() -> None:
             _sleep_saved_draft_buffers={},
             model_runner=runner,
             synchronize_device=lambda: None,
-            aphrodite_config=SimpleNamespace(model_config=SimpleNamespace(enable_nccl_comm_suspend=False)),
+            sonar_config=SimpleNamespace(model_config=SimpleNamespace(enable_nccl_comm_suspend=False)),
         ),
     )
     layout_tensors = runner.layout_tensors

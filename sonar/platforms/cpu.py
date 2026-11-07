@@ -10,16 +10,16 @@ from typing import TYPE_CHECKING
 
 import torch
 
-from aphrodite import envs
-from aphrodite.logger import init_logger
-from aphrodite.utils.cpu_resource_utils import (
+from sonar import envs
+from sonar.logger import init_logger
+from sonar.utils.cpu_resource_utils import (
     DEVICE_CONTROL_ENV_VAR,
     get_memory_node_info,
     get_visible_memory_node,
 )
-from aphrodite.utils.mem_constants import GiB_bytes
-from aphrodite.v1.attention.backends.mla.prefill.registry import MLAPrefillBackendEnum
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
+from sonar.utils.mem_constants import GiB_bytes
+from sonar.v1.attention.backends.mla.prefill.registry import MLAPrefillBackendEnum
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
 
 from .interface import (
     CpuArchEnum,
@@ -32,19 +32,19 @@ from .interface import (
 logger = init_logger(__name__)
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
-    from aphrodite.v1.attention.backends.mla.prefill.base import (
+    from sonar.config import SonarConfig
+    from sonar.v1.attention.backends.mla.prefill.base import (
         MLAPrefillBackend,
     )
-    from aphrodite.v1.attention.backends.mla.prefill.selector import MLAPrefillSelectorConfig
-    from aphrodite.v1.attention.selector import AttentionSelectorConfig
+    from sonar.v1.attention.backends.mla.prefill.selector import MLAPrefillSelectorConfig
+    from sonar.v1.attention.selector import AttentionSelectorConfig
 else:
-    AphroditeConfig = None
+    SonarConfig = None
 
 
-def _cpu_mamba_backend(aphrodite_config: AphroditeConfig) -> str:
+def _cpu_mamba_backend(sonar_config: SonarConfig) -> str:
     """Return the CPU state backend selected by the model configuration."""
-    model_config = aphrodite_config.model_config
+    model_config = sonar_config.model_config
     if model_config is None:
         return "none"
 
@@ -75,16 +75,16 @@ def _cpu_mamba_backend(aphrodite_config: AphroditeConfig) -> str:
         return fallback_backend
 
     try:
-        state_dtypes = model_cls.get_mamba_state_dtype_from_config(aphrodite_config)
+        state_dtypes = model_cls.get_mamba_state_dtype_from_config(sonar_config)
     except Exception:
         return fallback_backend
 
     if not isinstance(state_dtypes, tuple) or len(state_dtypes) != 2:
         return fallback_backend
 
-    if aphrodite_config.cache_config.mamba_ssm_cache_dtype == "float16":
+    if sonar_config.cache_config.mamba_ssm_cache_dtype == "float16":
         cache_dtype = torch.float16
-    elif aphrodite_config.cache_config.mamba_ssm_cache_dtype == "bfloat16":
+    elif sonar_config.cache_config.mamba_ssm_cache_dtype == "bfloat16":
         cache_dtype = torch.bfloat16
     else:
         return fallback_backend
@@ -214,17 +214,17 @@ class CpuPlatform(Platform):
         return torch.no_grad()
 
     @classmethod
-    def check_and_update_config(cls, aphrodite_config: AphroditeConfig) -> None:
-        model_config = aphrodite_config.model_config
+    def check_and_update_config(cls, sonar_config: SonarConfig) -> None:
+        model_config = sonar_config.model_config
 
-        # Import lazily: aphrodite.triton_utils imports aphrodite.platforms.current_platform,
+        # Import lazily: sonar.triton_utils imports sonar.platforms.current_platform,
         # which is still being resolved while this platform class is loading.
-        from aphrodite.triton_utils import HAS_TRITON
+        from sonar.triton_utils import HAS_TRITON
 
         if cls.get_cpu_architecture() == CpuArchEnum.X86 and not HAS_TRITON:
             logger.warning_once("Triton is not installed. triton-cpu is expected on x86 CPUs.")
 
-        cache_config = aphrodite_config.cache_config
+        cache_config = sonar_config.cache_config
 
         is_deepseek_v4 = (
             model_config is not None and getattr(model_config.hf_config, "model_type", None) == "deepseek_v4"
@@ -246,7 +246,7 @@ class CpuPlatform(Platform):
             cpu_mla_enabled
             and cls.get_cpu_architecture() == CpuArchEnum.X86
             and torch.cpu._is_amx_tile_supported()
-            and aphrodite_config.attention_config.backend != AttentionBackendEnum.CPU_MLA
+            and sonar_config.attention_config.backend != AttentionBackendEnum.CPU_MLA
         )
         reference_cpu_mla_enabled = cpu_mla_enabled and not amx_mla_enabled
         # DeepSeek-V4's CPU attention/indexer kernels
@@ -283,7 +283,7 @@ class CpuPlatform(Platform):
 
         # Accelerated GDN uses AMX tiles or AVX-512BF16 VDPBF16PS.
         if torch.cpu._is_avx512_bf16_supported() and cache_config.mamba_ssm_cache_dtype != "float32":
-            mamba_backend = _cpu_mamba_backend(aphrodite_config)
+            mamba_backend = _cpu_mamba_backend(sonar_config)
             if cache_config.mamba_ssm_cache_dtype in ("float16", "bfloat16") and mamba_backend == "gdn":
                 logger.info(
                     "Using %s SSM state storage for the CPU accelerated GDN backend.",
@@ -297,18 +297,18 @@ class CpuPlatform(Platform):
                 )
 
         # Legacy setting
-        env_key = "APHRODITE_CPU_KVCACHE_SPACE"
+        env_key = "SONAR_CPU_KVCACHE_SPACE"
         if env_key in os.environ and os.environ[env_key] != "":
             kv_cache_space = int(os.environ[env_key])
             cache_config.kv_cache_memory_bytes = kv_cache_space * GiB_bytes
 
-        scheduler_config = aphrodite_config.scheduler_config
+        scheduler_config = sonar_config.scheduler_config
         # async scheduling is not required on CPU
         scheduler_config.async_scheduling = False
 
-        parallel_config = aphrodite_config.parallel_config
+        parallel_config = sonar_config.parallel_config
         if (
-            os.environ.get("APHRODITE_ENABLE_V1_MULTIPROCESSING", "1") == "1"
+            os.environ.get("SONAR_ENABLE_V1_MULTIPROCESSING", "1") == "1"
             and parallel_config.distributed_executor_backend == "uni"
         ):
             # OMP requires the MP executor to function correctly, UniProc
@@ -317,27 +317,27 @@ class CpuPlatform(Platform):
             parallel_config.distributed_executor_backend = "mp"
 
         if parallel_config.worker_cls == "auto":
-            parallel_config.worker_cls = "aphrodite.v1.worker.cpu_worker.CPUWorker"
+            parallel_config.worker_cls = "sonar.v1.worker.cpu_worker.CPUWorker"
         # Disable DBO
         if parallel_config.enable_dbo:
             logger.warning_once("Dual-Batch Overlap is not supported on CPU, disabled.")
             parallel_config.enable_dbo = False
 
         # Note: workaround for v1 gpu_model_runner
-        from aphrodite.config import CompilationMode
+        from sonar.config import CompilationMode
 
-        aphrodite_config.compilation_config.cudagraph_capture_sizes = []
+        sonar_config.compilation_config.cudagraph_capture_sizes = []
 
-        compilation_config = aphrodite_config.compilation_config
-        if aphrodite_config.compilation_config.mode == CompilationMode.APHRODITE_COMPILE:
-            # Note: Aphrodite V1 is using PIECEWISE level compilation, which will
+        compilation_config = sonar_config.compilation_config
+        if sonar_config.compilation_config.mode == CompilationMode.SONAR_COMPILE:
+            # Note: Sonar V1 is using PIECEWISE level compilation, which will
             # take time to compile kernels just-in-time with the inductor
             # backend. For CPU CI tests, most of them are executed fast and
             # compilations consume too much time, even with torch compile
-            # cache. So use APHRODITE_CPU_CI_ENV to indicate the CI environment,
+            # cache. So use SONAR_CPU_CI_ENV to indicate the CI environment,
             # and just execute model with dynamo + eager mode to save time.
-            # APHRODITE_CPU_CI_ENV is only used as an internal variable.
-            backend = "eager" if envs.APHRODITE_CPU_CI_ENV else "inductor"
+            # SONAR_CPU_CI_ENV is only used as an internal variable.
+            backend = "eager" if envs.SONAR_CPU_CI_ENV else "inductor"
 
             compilation_config.mode = CompilationMode.DYNAMO_TRACE_ONCE
             compilation_config.backend = backend
@@ -352,7 +352,7 @@ class CpuPlatform(Platform):
             )
             compilation_config.ir_enable_torch_wrap = False
 
-        if aphrodite_config.lora_config is not None:
+        if sonar_config.lora_config is not None:
             compilation_config.mode = CompilationMode.NONE
 
         if (
@@ -374,15 +374,15 @@ class CpuPlatform(Platform):
         ):
             compilation_config.custom_ops.append("+gelu_and_mul")
 
-        aphrodite_config.profiler_config.torch_profiler_dump_cuda_time_total = False
+        sonar_config.profiler_config.torch_profiler_dump_cuda_time_total = False
 
-        assert aphrodite_config.device_config.device_type == "cpu"
+        assert sonar_config.device_config.device_type == "cpu"
 
         #
         # Environment variables for CPU executor
         #
 
-        os.environ["APHRODITE_WORKER_MULTIPROC_METHOD"] = "spawn"
+        os.environ["SONAR_WORKER_MULTIPROC_METHOD"] = "spawn"
 
         # Note: to avoid the error 'nthreads cannot be larger than environment
         # variable "NUMEXPR_MAX_THREADS" (64)'.
@@ -392,16 +392,16 @@ class CpuPlatform(Platform):
         os.environ["TORCHINDUCTOR_COMPILE_THREADS"] = "1"
 
         # Disable multi-stream for shared experts as no Stream on CPU
-        os.environ["APHRODITE_DISABLE_SHARED_EXPERTS_STREAM"] = "1"
+        os.environ["SONAR_DISABLE_SHARED_EXPERTS_STREAM"] = "1"
 
         # Avoid inductor generates num_thread() and breaks the thread binding
         os.environ["TORCHINDUCTOR_CPP_DYNAMIC_THREADS"] = "1"
 
         # NIXL's Mamba descriptors require DS conv state storage. Select it
         # before cache shapes are created, while preserving an explicit layout.
-        conv_state_layout_env = "APHRODITE_SSM_CONV_STATE_LAYOUT"
+        conv_state_layout_env = "SONAR_SSM_CONV_STATE_LAYOUT"
         if conv_state_layout_env not in os.environ:
-            kv_transfer_config = aphrodite_config.kv_transfer_config
+            kv_transfer_config = sonar_config.kv_transfer_config
             uses_nixl = kv_transfer_config is not None and any(
                 kv_transfer_config.has_connector(name)
                 for name in (
@@ -454,17 +454,17 @@ class CpuPlatform(Platform):
                 ld_preload_str += pytorch_libgomp_so
                 os.environ["LD_PRELOAD"] = ld_preload_str
 
-        # LD_PRELOAD libtcmalloc, bundled under aphrodite/libs to reduce
+        # LD_PRELOAD libtcmalloc, bundled under sonar/libs to reduce
         # memory allocation overhead
         if (
             platform.system() == "Linux"
             and cpu_architecture in (CpuArchEnum.ARM, CpuArchEnum.X86, CpuArchEnum.S390X)
             and "libtcmalloc" not in ld_preload_str
         ):
-            aphrodite_pkg = os.path.dirname(os.path.dirname(__file__))
+            sonar_pkg = os.path.dirname(os.path.dirname(__file__))
             tcmalloc_so = None
             for pattern in ("libtcmalloc_minimal*.so*", "libtcmalloc.so*"):
-                tcmalloc_so_candidates = glob.glob(os.path.join(aphrodite_pkg, "libs", pattern))
+                tcmalloc_so_candidates = glob.glob(os.path.join(sonar_pkg, "libs", pattern))
                 if tcmalloc_so_candidates:
                     tcmalloc_so = tcmalloc_so_candidates[0]
                     break
@@ -476,40 +476,40 @@ class CpuPlatform(Platform):
                     ld_preload_str = tcmalloc_so
                 os.environ["LD_PRELOAD"] = ld_preload_str
 
-        os.environ["LOCAL_WORLD_SIZE"] = str(aphrodite_config.parallel_config.tensor_parallel_size)
+        os.environ["LOCAL_WORLD_SIZE"] = str(sonar_config.parallel_config.tensor_parallel_size)
 
         if model_config is not None and model_config.use_mla and not amx_mla_or_dsv4_enabled:
             logger.info_once(
                 "MLA is enabled on a non-GPU platform; forcing chunked prefill and prefix caching to be disabled."
             )
-            aphrodite_config.scheduler_config.enable_chunked_prefill = False
-            aphrodite_config.cache_config.enable_prefix_caching = False
-            aphrodite_config.scheduler_config.max_num_batched_tokens = max(
-                aphrodite_config.model_config.max_model_len,
-                aphrodite_config.scheduler_config.DEFAULT_MAX_NUM_BATCHED_TOKENS,
+            sonar_config.scheduler_config.enable_chunked_prefill = False
+            sonar_config.cache_config.enable_prefix_caching = False
+            sonar_config.scheduler_config.max_num_batched_tokens = max(
+                sonar_config.model_config.max_model_len,
+                sonar_config.scheduler_config.DEFAULT_MAX_NUM_BATCHED_TOKENS,
             )
 
     @classmethod
-    def update_block_size_for_backend(cls, aphrodite_config: "AphroditeConfig") -> None:
-        model_config = aphrodite_config.model_config
+    def update_block_size_for_backend(cls, sonar_config: "SonarConfig") -> None:
+        model_config = sonar_config.model_config
         if model_config is None:
             return
-        backend_classes = cls._find_non_ssm_backends(aphrodite_config)
+        backend_classes = cls._find_non_ssm_backends(sonar_config)
         if not backend_classes:
             return
 
         # Not in check_and_update_config(), which reruns with every
-        # AphroditeConfig.__post_init__ and would undo the hybrid alignment below.
-        cache_config = aphrodite_config.cache_config
+        # SonarConfig.__post_init__ and would undo the hybrid alignment below.
+        cache_config = sonar_config.cache_config
         if not cache_config.user_specified_block_size:
-            cache_config.block_size = cls._preferred_block_size_for_backends(backend_classes, 128, aphrodite_config)
+            cache_config.block_size = cls._preferred_block_size_for_backends(backend_classes, 128, sonar_config)
         if not model_config.is_hybrid:
             return
 
         # reconcile attention and mamba page sizes
         pre_block_size = cache_config.block_size
-        cls._align_hybrid_block_size(aphrodite_config, backend_classes[0])
-        cls._check_aligned_block_size(aphrodite_config, backend_classes, pre_block_size)
+        cls._align_hybrid_block_size(sonar_config, backend_classes[0])
+        cls._check_aligned_block_size(sonar_config, backend_classes, pre_block_size)
 
     @classmethod
     def discover_numa_topology(cls) -> list[list[int]]:
@@ -571,12 +571,12 @@ class CpuPlatform(Platform):
 
     @classmethod
     def get_punica_wrapper(cls) -> str:
-        return "aphrodite.lora.punica_wrapper.punica_cpu.PunicaWrapperCPU"
+        return "sonar.lora.punica_wrapper.punica_cpu.PunicaWrapperCPU"
 
     @classmethod
     def get_device_communicator_cls(cls) -> str:
         """Get device specific communicator class for distributed communication."""
-        return "aphrodite.distributed.device_communicators.cpu_communicator.CpuCommunicator"  # noqa
+        return "sonar.distributed.device_communicators.cpu_communicator.CpuCommunicator"  # noqa
 
     @classmethod
     def supports_structured_output(cls) -> bool:
@@ -593,7 +593,7 @@ class CpuPlatform(Platform):
     @classmethod
     def uses_standalone_cpu_model_runner(cls) -> bool:
         # Only non-x86 CPUs have a standalone no-Triton MRV2 runner.
-        from aphrodite.triton_utils import HAS_TRITON
+        from sonar.triton_utils import HAS_TRITON
 
         return not HAS_TRITON and cls.get_cpu_architecture() != CpuArchEnum.X86
 
@@ -613,26 +613,26 @@ class CpuPlatform(Platform):
             if torch.cpu._is_avx512_supported():
                 if torch.cpu._is_avx512_bf16_supported() and torch.cpu._is_amx_tile_supported():
                     try:
-                        import aphrodite._C  # noqa: F401
+                        import sonar._C  # noqa: F401
                     except ImportError as e:
-                        log_extension_import_failure("aphrodite._C", e, target_logger=logger)
+                        log_extension_import_failure("sonar._C", e, target_logger=logger)
                 else:
                     try:
-                        import aphrodite._C_AVX512  # noqa: F401
+                        import sonar._C_AVX512  # noqa: F401
                     except ImportError as e:
                         if ignored_msg not in e.msg:
-                            log_extension_import_failure("aphrodite._C_AVX512", e, target_logger=logger)
+                            log_extension_import_failure("sonar._C_AVX512", e, target_logger=logger)
             else:
                 try:
-                    import aphrodite._C_AVX2  # noqa: F401
+                    import sonar._C_AVX2  # noqa: F401
                 except ImportError as e:
                     if ignored_msg not in e.msg:
-                        log_extension_import_failure("aphrodite._C_AVX2", e, target_logger=logger)
+                        log_extension_import_failure("sonar._C_AVX2", e, target_logger=logger)
         else:
             try:
-                import aphrodite._C  # noqa: F401
+                import sonar._C  # noqa: F401
             except ImportError as e:
-                log_extension_import_failure("aphrodite._C", e, target_logger=logger)
+                log_extension_import_failure("sonar._C", e, target_logger=logger)
 
     @classmethod
     def register_triton_kernel_overrides(cls) -> None:
@@ -642,45 +642,45 @@ class CpuPlatform(Platform):
         present, the Triton kernels can run natively and the overrides
         would only shadow them, so registration is skipped.
         """
-        from aphrodite.triton_utils import HAS_TRITON
+        from sonar.triton_utils import HAS_TRITON
 
         if HAS_TRITON:
             return
 
-        from aphrodite.triton_utils.dispatcher import register_kernels
-        from aphrodite.utils import cpu_triton_utils as cpu_tl
+        from sonar.triton_utils.dispatcher import register_kernels
+        from sonar.utils import cpu_triton_utils as cpu_tl
 
         register_kernels(
             {
-                "aphrodite.v1.worker.block_table.ComputeSlotMappingKernel.kernel": (
+                "sonar.v1.worker.block_table.ComputeSlotMappingKernel.kernel": (
                     cpu_tl._compute_slot_mapping_kernel_impl
                 ),
-                "aphrodite.v1.spec_decode.utils.eagle_step_slot_mapping_metadata_kernel": (
+                "sonar.v1.spec_decode.utils.eagle_step_slot_mapping_metadata_kernel": (
                     cpu_tl._eagle_step_slot_mapping_metadata_kernel_impl
                 ),
-                "aphrodite.v1.spec_decode.utils.eagle_prepare_inputs_padded_kernel": (
+                "sonar.v1.spec_decode.utils.eagle_prepare_inputs_padded_kernel": (
                     cpu_tl._eagle_prepare_inputs_padded_kernel_impl
                 ),
-                "aphrodite.v1.spec_decode.utils.eagle_prepare_next_token_padded_kernel": (
+                "sonar.v1.spec_decode.utils.eagle_prepare_next_token_padded_kernel": (
                     cpu_tl._eagle_prepare_next_token_padded_kernel_impl
                 ),
-                "aphrodite.v1.spec_decode.utils.copy_and_expand_eagle_inputs_kernel": (
+                "sonar.v1.spec_decode.utils.copy_and_expand_eagle_inputs_kernel": (
                     cpu_tl._copy_and_expand_eagle_inputs_kernel_impl
                 ),
-                "aphrodite.v1.spec_decode.utils.copy_and_expand_dflash_inputs_kernel": (
+                "sonar.v1.spec_decode.utils.copy_and_expand_dflash_inputs_kernel": (
                     cpu_tl._copy_and_expand_dflash_inputs_kernel_impl
                 ),
-                "aphrodite.v1.sample.rejection_sampler.rejection_greedy_sample_kernel": (
+                "sonar.v1.sample.rejection_sampler.rejection_greedy_sample_kernel": (
                     cpu_tl._rejection_greedy_sample_kernel_impl
                 ),
-                "aphrodite.v1.sample.rejection_sampler.rejection_random_sample_kernel": (
+                "sonar.v1.sample.rejection_sampler.rejection_random_sample_kernel": (
                     cpu_tl._rejection_random_sample_kernel_impl
                 ),
-                "aphrodite.v1.sample.rejection_sampler.expand_kernel": (cpu_tl._expand_kernel_impl),
-                "aphrodite.v1.sample.rejection_sampler.sample_recovered_tokens_kernel": (
+                "sonar.v1.sample.rejection_sampler.expand_kernel": (cpu_tl._expand_kernel_impl),
+                "sonar.v1.sample.rejection_sampler.sample_recovered_tokens_kernel": (
                     cpu_tl._sample_recovered_tokens_kernel_impl
                 ),
-                "aphrodite.v1.worker.mamba_utils.batch_memcpy_kernel": (cpu_tl._batch_memcpy_impl),
+                "sonar.v1.worker.mamba_utils.batch_memcpy_kernel": (cpu_tl._batch_memcpy_impl),
             }
         )
 
@@ -692,9 +692,9 @@ class CpuPlatform(Platform):
     ) -> None:
         """Rewrite the kv cache shape for the current platform."""
         # Import lazily: cpu_attn pulls in _custom_ops, which needs a fully
-        # initialized aphrodite.platforms (avoid circular import while CpuPlatform loads).
-        from aphrodite._custom_ops import cpu_attn_reshape_and_cache
-        from aphrodite.v1.attention.backends.cpu_attn import _get_attn_isa
+        # initialized sonar.platforms (avoid circular import while CpuPlatform loads).
+        from sonar._custom_ops import cpu_attn_reshape_and_cache
+        from sonar.v1.attention.backends.cpu_attn import _get_attn_isa
 
         # MLA uses a single latent cache of shape [N, block_size, head_size],
         # so the classic key/value split does not apply. The MLA backend

@@ -6,16 +6,16 @@ from unittest.mock import MagicMock, call
 
 import pytest
 
-from aphrodite import LLM
-from aphrodite.exceptions import ProfilerAlreadyActiveError
-from aphrodite.sampling_params import SamplingParams, StructuredOutputsParams
-from aphrodite.v1.engine.llm_engine import LLMEngine
-from aphrodite.v1.metrics.reader import Counter, Gauge, Histogram, Metric, Vector
+from sonar import LLM
+from sonar.exceptions import ProfilerAlreadyActiveError
+from sonar.sampling_params import SamplingParams, StructuredOutputsParams
+from sonar.v1.engine.llm_engine import LLMEngine
+from sonar.v1.metrics.reader import Counter, Gauge, Histogram, Metric, Vector
 
 if TYPE_CHECKING:
-    from tests.conftest import AphroditeRunner
+    from tests.conftest import SonarRunner
 else:
-    AphroditeRunner = object
+    SonarRunner = object
 
 MODEL = "facebook/opt-125m"
 DTYPE = "half"
@@ -120,14 +120,14 @@ def test_invalid_profile_controls_rejected_before_engine_core_dispatch(kwargs):
     engine.engine_core.profile.assert_not_called()
 
 
-def _aphrodite_model(
+def _sonar_model(
     apc: bool,
-    aphrodite_runner: type[AphroditeRunner],
+    sonar_runner: type[SonarRunner],
     *,
     skip_tokenizer_init: bool = False,
 ):
-    """Set up AphroditeRunner instance."""
-    return aphrodite_runner(
+    """Set up SonarRunner instance."""
+    return sonar_runner(
         MODEL,
         dtype=DTYPE,
         max_model_len=128,
@@ -145,10 +145,10 @@ def _aphrodite_model(
     # Prefix caching
     params=[False, True],
 )
-def aphrodite_model(aphrodite_runner, request):
-    """AphroditeRunner test fixture parameterized by APC True/False."""
-    with _aphrodite_model(request.param, aphrodite_runner) as aphrodite_model:
-        yield aphrodite_model
+def sonar_model(sonar_runner, request):
+    """SonarRunner test fixture parameterized by APC True/False."""
+    with _sonar_model(request.param, sonar_runner) as sonar_model:
+        yield sonar_model
 
 
 @pytest.fixture(
@@ -158,14 +158,14 @@ def aphrodite_model(aphrodite_runner, request):
     # Prefix caching
     params=[False, True],
 )
-def aphrodite_model_skip_tokenizer_init(aphrodite_runner, request):
-    """AphroditeRunner test fixture with APC."""
-    with _aphrodite_model(
+def sonar_model_skip_tokenizer_init(sonar_runner, request):
+    """SonarRunner test fixture with APC."""
+    with _sonar_model(
         request.param,
-        aphrodite_runner,
+        sonar_runner,
         skip_tokenizer_init=True,
-    ) as aphrodite_model:
-        yield aphrodite_model
+    ) as sonar_model:
+        yield sonar_model
 
 
 def _get_test_sampling_params(
@@ -199,7 +199,7 @@ def _get_test_sampling_params(
 
 
 def test_compatibility_with_skip_tokenizer_init(
-    aphrodite_model_skip_tokenizer_init: AphroditeRunner,
+    sonar_model_skip_tokenizer_init: SonarRunner,
     example_prompts: list[str],
 ):
     # Case 1: Structured output request should raise an error.
@@ -207,21 +207,21 @@ def test_compatibility_with_skip_tokenizer_init(
         example_prompts,
         structured_outputs=True,
     )
-    llm: LLM = aphrodite_model_skip_tokenizer_init.llm
+    llm: LLM = sonar_model_skip_tokenizer_init.llm
     with pytest.raises(ValueError):
         _ = llm.generate(example_prompts, sampling_params_list)
 
 
-def test_parallel_sampling(aphrodite_model, example_prompts) -> None:
+def test_parallel_sampling(sonar_model, example_prompts) -> None:
     """Test passes if parallel sampling `n>1` yields `n` unique completions.
 
     Args:
-      aphrodite_model: AphroditeRunner instance under test.
+      sonar_model: SonarRunner instance under test.
       example_prompt: test fixture providing prompts for testing.
 
     """
     sampling_params_list, n_list = _get_test_sampling_params(example_prompts)
-    llm: LLM = aphrodite_model.llm
+    llm: LLM = sonar_model.llm
     outputs = llm.generate(example_prompts, sampling_params_list)
 
     # Validate each request response
@@ -241,7 +241,7 @@ def test_parallel_sampling(aphrodite_model, example_prompts) -> None:
             raise AssertionError(f"{len(completion_counts)} unique completions; expected {n}. Repeats: {repeats}")
 
 
-def test_engine_metrics(aphrodite_runner, example_prompts):
+def test_engine_metrics(sonar_runner, example_prompts):
     max_tokens = 100
     # Use spec decoding to test num_accepted_tokens_per_pos
     speculative_config = {
@@ -251,12 +251,12 @@ def test_engine_metrics(aphrodite_runner, example_prompts):
         "num_speculative_tokens": 5,
     }
 
-    with aphrodite_runner(
+    with sonar_runner(
         MODEL,
         speculative_config=speculative_config,
         disable_log_stats=False,
-    ) as aphrodite_model:
-        llm: LLM = aphrodite_model.llm
+    ) as sonar_model:
+        llm: LLM = sonar_model.llm
         sampling_params = SamplingParams(temperature=0.0, max_tokens=max_tokens)
         outputs = llm.generate(example_prompts, sampling_params)
 
@@ -278,17 +278,17 @@ def test_engine_metrics(aphrodite_runner, example_prompts):
                     found.append(metric)
             return found
 
-        num_requests_running = find_metric("aphrodite:num_requests_running")
+        num_requests_running = find_metric("sonar:num_requests_running")
         assert len(num_requests_running) == 1
         assert isinstance(num_requests_running[0], Gauge)
         assert num_requests_running[0].value == 0.0
 
-        generation_tokens = find_metric("aphrodite:generation_tokens")
+        generation_tokens = find_metric("sonar:generation_tokens")
         assert len(generation_tokens) == 1
         assert isinstance(generation_tokens[0], Counter)
         assert generation_tokens[0].value == total_tokens
 
-        request_generation_tokens = find_metric("aphrodite:request_generation_tokens")
+        request_generation_tokens = find_metric("sonar:request_generation_tokens")
         assert len(request_generation_tokens) == 1
         assert isinstance(request_generation_tokens[0], Histogram)
         assert "+Inf" in request_generation_tokens[0].buckets
@@ -296,7 +296,7 @@ def test_engine_metrics(aphrodite_runner, example_prompts):
         assert request_generation_tokens[0].count == n_prompts
         assert request_generation_tokens[0].sum == total_tokens
 
-        num_accepted_tokens_per_pos = find_metric("aphrodite:spec_decode_num_accepted_tokens_per_pos")
+        num_accepted_tokens_per_pos = find_metric("sonar:spec_decode_num_accepted_tokens_per_pos")
         assert len(num_accepted_tokens_per_pos) == 1
         assert isinstance(num_accepted_tokens_per_pos[0], Vector)
         assert len(num_accepted_tokens_per_pos[0].values) == 5

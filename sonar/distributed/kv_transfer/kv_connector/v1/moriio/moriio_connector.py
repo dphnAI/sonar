@@ -17,20 +17,20 @@ import numpy as np
 import torch
 import zmq
 
-from aphrodite.config import AphroditeConfig, KVTransferConfig
-from aphrodite.distributed.kv_transfer.kv_connector.utils import (
+from sonar.config import KVTransferConfig, SonarConfig
+from sonar.distributed.kv_transfer.kv_connector.utils import (
     BlockIds,
     clip_ssm_state_blocks,
     get_current_attn_backends,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.base import (
+from sonar.distributed.kv_transfer.kv_connector.v1.base import (
     KVConnectorBase_V1,
     KVConnectorMetadata,
     KVConnectorRole,
     KVConnectorTransferResults,
     SupportsHMA,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_common import (
+from sonar.distributed.kv_transfer.kv_connector.v1.moriio.moriio_common import (
     ROLE,
     EngineId,
     HandshakeError,
@@ -58,14 +58,14 @@ from aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_common impo
     set_role,
     zmq_ctx,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_engine import (
+from sonar.distributed.kv_transfer.kv_connector.v1.moriio.moriio_engine import (
     MoRIIOWrapper,
     MoRIIOWriter,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_heartbeat import (
+from sonar.distributed.kv_transfer.kv_connector.v1.moriio.moriio_heartbeat import (
     MoRIIOHeartbeat,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_layout import (
+from sonar.distributed.kv_transfer.kv_connector.v1.moriio.moriio_layout import (
     HeadLayout,
     LayerTransferGeometry,
     MambaOffsetTemplate,
@@ -85,29 +85,29 @@ from aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_layout impo
     kda_conv_ssm,
     validate_transfer_block_ids,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_tp_mapping import (
+from sonar.distributed.kv_transfer.kv_connector.v1.moriio.moriio_tp_mapping import (
     MoRIIOWriteTPMapping,
     WriteTarget,
     compute_write_tp_mapping,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.ssm_conv_transfer_utils import (
+from sonar.distributed.kv_transfer.kv_connector.v1.ssm_conv_transfer_utils import (
     MambaConvSplitInfo,
     derive_mamba_conv_split,
 )
-from aphrodite.distributed.parallel_state import (
+from sonar.distributed.parallel_state import (
     get_tensor_model_parallel_world_size,
     get_tp_group,
     get_world_group,
 )
-from aphrodite.forward_context import ForwardContext
-from aphrodite.logger import init_logger
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.utils.network_utils import (
+from sonar.forward_context import ForwardContext
+from sonar.logger import init_logger
+from sonar.utils.math_utils import cdiv
+from sonar.utils.network_utils import (
     make_zmq_path,
     make_zmq_socket,
 )
-from aphrodite.v1.core.sched.output import SchedulerOutput
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.core.sched.output import SchedulerOutput
+from sonar.v1.kv_cache_interface import (
     CircularBufferSpec,
     FullAttentionSpec,
     KVCacheConfig,
@@ -119,14 +119,14 @@ from aphrodite.v1.kv_cache_interface import (
     is_full_attention_spec,
     iter_layer_specs,
 )
-from aphrodite.v1.metrics.cache_hit_source import CacheHitSource
-from aphrodite.v1.outputs import KVConnectorOutput
-from aphrodite.v1.request import RequestStatus
+from sonar.v1.metrics.cache_hit_source import CacheHitSource
+from sonar.v1.outputs import KVConnectorOutput
+from sonar.v1.request import RequestStatus
 
 if TYPE_CHECKING:
-    from aphrodite.v1.attention.backend import AttentionMetadata
-    from aphrodite.v1.core.kv_cache_manager import KVCacheBlocks
-    from aphrodite.v1.request import Request
+    from sonar.v1.attention.backend import AttentionMetadata
+    from sonar.v1.core.kv_cache_manager import KVCacheBlocks
+    from sonar.v1.request import Request
 
 logger = init_logger(__name__)
 
@@ -277,15 +277,15 @@ class MoRIIOConnector(KVConnectorBase_V1, SupportsHMA):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         role: KVConnectorRole,
         kv_cache_config: "KVCacheConfig",
     ):
-        super().__init__(aphrodite_config, role, kv_cache_config)
-        assert aphrodite_config.kv_transfer_config is not None, "kv_transfer_config must be set for MoRIIOConnector"
+        super().__init__(sonar_config, role, kv_cache_config)
+        assert sonar_config.kv_transfer_config is not None, "kv_transfer_config must be set for MoRIIOConnector"
 
-        self.kv_transfer_config = aphrodite_config.kv_transfer_config
-        self._set_port_defaults(aphrodite_config)
+        self.kv_transfer_config = sonar_config.kv_transfer_config
+        self._set_port_defaults(sonar_config)
 
         self.engine_id = (
             str(resolve_host_ip(self.kv_transfer_config.kv_connector_extra_config))
@@ -299,12 +299,12 @@ class MoRIIOConnector(KVConnectorBase_V1, SupportsHMA):
         )
         if role == KVConnectorRole.SCHEDULER:
             self.connector_scheduler: MoRIIOConnectorScheduler | None = MoRIIOConnectorScheduler(
-                aphrodite_config, self.engine_id, kv_cache_config
+                sonar_config, self.engine_id, kv_cache_config
             )
             self.connector_worker: MoRIIOConnectorWorker | None = None
         elif role == KVConnectorRole.WORKER:
             self.connector_scheduler = None
-            self.connector_worker = MoRIIOConnectorWorker(aphrodite_config, self.engine_id, kv_cache_config)
+            self.connector_worker = MoRIIOConnectorWorker(sonar_config, self.engine_id, kv_cache_config)
         logger.info(
             "Initialized MoRIIO Connector,engine_id:%s,role: %s",
             self.engine_id,
@@ -315,9 +315,9 @@ class MoRIIOConnector(KVConnectorBase_V1, SupportsHMA):
     # Scheduler Side Methods
     ############################################################
 
-    def _set_port_defaults(self, aphrodite_config: AphroditeConfig):
-        assert aphrodite_config.kv_transfer_config is not None, "kv_transfer_config must be set for MoRIIOConnector"
-        kv_transfer_config = aphrodite_config.kv_transfer_config
+    def _set_port_defaults(self, sonar_config: SonarConfig):
+        assert sonar_config.kv_transfer_config is not None, "kv_transfer_config must be set for MoRIIOConnector"
+        kv_transfer_config = sonar_config.kv_transfer_config
         extra_config = kv_transfer_config.kv_connector_extra_config
 
         if "handshake_port" not in extra_config or not extra_config["handshake_port"]:
@@ -485,8 +485,8 @@ def _split_kv_cache_group_kinds(
     return attn, mamba
 
 
-def _validate_hybrid_speculation(aphrodite_config: AphroditeConfig) -> None:
-    speculative_config = aphrodite_config.speculative_config
+def _validate_hybrid_speculation(sonar_config: SonarConfig) -> None:
+    speculative_config = sonar_config.speculative_config
     if speculative_config is None:
         return
     # Other hybrid speculative methods need their own transfer validation.
@@ -519,14 +519,14 @@ class MoRIIOConnectorScheduler:
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         engine_id: str,
         kv_cache_config: "KVCacheConfig",
     ):
-        self.aphrodite_config = aphrodite_config
+        self.sonar_config = sonar_config
         self.kv_cache_config = kv_cache_config
-        assert aphrodite_config.kv_transfer_config is not None, "kv_transfer_config must be set for MoRIIOConnector"
-        self.kv_transfer_config = aphrodite_config.kv_transfer_config
+        assert sonar_config.kv_transfer_config is not None, "kv_transfer_config must be set for MoRIIOConnector"
+        self.kv_transfer_config = sonar_config.kv_transfer_config
         self.mode = get_moriio_mode(self.kv_transfer_config)
         self._attn_group_ids, self._mamba_group_ids = _split_kv_cache_group_kinds(kv_cache_config)
         self._has_mamba = bool(self._mamba_group_ids)
@@ -542,26 +542,26 @@ class MoRIIOConnectorScheduler:
             ]
             mamba_spec = _validate_mamba_specs(mamba_specs)
             if self.mode == MoRIIOMode.WRITE:
-                _validate_hybrid_speculation(aphrodite_config)
+                _validate_hybrid_speculation(sonar_config)
         self._num_ssm_scratch_blocks = mamba_spec.num_speculative_blocks if mamba_spec is not None else 0
-        self.block_size = aphrodite_config.cache_config.block_size
+        self.block_size = sonar_config.cache_config.block_size
         attn_block_size = self.block_size
-        max_decode_tail_tokens = 1 + aphrodite_config.num_lookahead_tokens
+        max_decode_tail_tokens = 1 + sonar_config.num_lookahead_tokens
         # Per attention group: not prefix-cacheable, so read even on a full hit.
         self._attn_group_is_state: list[bool] = []
         if self._has_mamba:
             attn_specs = [kv_cache_config.transfer_groups[group_id].kv_cache_spec for group_id in self._attn_group_ids]
             self._attn_group_is_state = [not spec.prefix_cacheable for spec in attn_specs]
-            dcp_size = aphrodite_config.parallel_config.decode_context_parallel_size
+            dcp_size = sonar_config.parallel_config.decode_context_parallel_size
             # The smallest attention block bounds every group's local tail.
             attn_block_size = min(spec.block_size * (dcp_size if spec.dcp_sharded else 1) for spec in attn_specs)
             # Admission can pad the final prompt token to 1 + num_spec rows;
             # allocate_slots reserves drafter lookahead in addition to those.
-            max_decode_tail_tokens += aphrodite_config.num_speculative_tokens
+            max_decode_tail_tokens += sonar_config.num_speculative_tokens
         self._max_decode_tail_blocks = cdiv(max_decode_tail_tokens, attn_block_size)
         self.engine_id: EngineId = engine_id
 
-        self._is_hma_required = not aphrodite_config.scheduler_config.disable_hybrid_kv_cache_manager and any(
+        self._is_hma_required = not sonar_config.scheduler_config.disable_hybrid_kv_cache_manager and any(
             not is_full_attention_spec(g.kv_cache_spec) for g in kv_cache_config.transfer_groups
         )
         if self._is_hma_required:
@@ -620,7 +620,7 @@ class MoRIIOConnectorScheduler:
         # hybrid models. TODO: lift once SWA + spec is validated end-to-end.
         if (
             self.mode == MoRIIOMode.WRITE
-            and aphrodite_config.speculative_config is not None
+            and sonar_config.speculative_config is not None
             and any(bps != 0 for bps in self.blocks_per_sw)
         ):
             raise NotImplementedError(
@@ -646,18 +646,18 @@ class MoRIIOConnectorScheduler:
         logger.info("Initializing MoRIIO Scheduler engine_id = %s", engine_id)
 
         self.side_notify_port = self.kv_transfer_config.kv_connector_extra_config["notify_port"]
-        self.tp_size = self.aphrodite_config.parallel_config.tensor_parallel_size
+        self.tp_size = self.sonar_config.parallel_config.tensor_parallel_size
         # Local DP rank (0..dp_local-1) for port arithmetic; fold_local_rank
         # handles the external-DP sentinel (dp_local==0) so the arithmetic
         # can't ZeroDivisionError at init.
-        _pc = self.aphrodite_config.parallel_config
+        _pc = self.sonar_config.parallel_config
         self.dp_rank = fold_local_rank(_pc.data_parallel_rank, _pc.data_parallel_size_local)
         # Only first-pod ranks originate notify to avoid duplicates. Guarding
         # via pod_index keeps _is_kv_master True for the external-DP sentinel
         # (single pod) instead of being silently stuck False.
         self._is_kv_master = pod_index(_pc.data_parallel_rank, _pc.data_parallel_size_local) == 0
         # Global DP rank for pinned request ownership check.
-        self._global_dp_rank = self.aphrodite_config.parallel_config.data_parallel_rank
+        self._global_dp_rank = self.sonar_config.parallel_config.data_parallel_rank
         self.is_producer = self.kv_transfer_config.kv_role == "kv_producer"
         # Requests that need to start recv/send.
         # New requests are added by update_state_after_alloc in
@@ -927,12 +927,12 @@ class MoRIIOConnectorScheduler:
         ------------------------------------------------
         Both legs of a disagg pair must agree on a single prefill DP rank,
         otherwise the notify lands on a rank that never handshook and the
-        request hangs until ``APHRODITE_MORIIO_DEFERRED_TIMEOUT_S``.
+        request hangs until ``SONAR_MORIIO_DEFERRED_TIMEOUT_S``.
 
         The routing authority is the external router/sidecar, NOT the
         connector. The llm-d routing sidecar computes ``H = pickDPRank(uuid,
         dp_size)`` (see ``dp_rank.go``) once and pins BOTH legs to ``H`` two
-        ways: the ``X-data-parallel-rank`` dispatch header (which Aphrodite engine
+        ways: the ``X-data-parallel-rank`` dispatch header (which Sonar engine
         the leg lands on) and ``kv_transfer_params.remote_dp_rank=H`` (which
         prefill rank this notify targets), with ``remote_dp_rank_override=True``.
 
@@ -1213,7 +1213,7 @@ class MoRIIOConnectorScheduler:
             # WRITE preserves transfer-group order, including a separate drafter
             # attention group. READ retains its attention-first wire format.
             transfer_blocks = self.kv_cache_config.select_transfer_block_ids(block_ids)
-            dcp_size = self.aphrodite_config.parallel_config.decode_context_parallel_size
+            dcp_size = self.sonar_config.parallel_config.decode_context_parallel_size
             clamped_hybrid: list[list[int]] = []
             for group, blocks in zip(self.kv_cache_config.transfer_groups, transfer_blocks, strict=True):
                 spec = group.kv_cache_spec
@@ -1493,7 +1493,7 @@ class MoRIIOConnectorScheduler:
         if delay_free_blocks:
             # Prefill request on remote. It will be read from D upon completion
             self._reqs_need_send[request.request_id] = (
-                time.perf_counter() + MoRIIOConstants.APHRODITE_MORI_READ_ABORT_REQUEST_TIMEOUT
+                time.perf_counter() + MoRIIOConstants.SONAR_MORI_READ_ABORT_REQUEST_TIMEOUT
             )
             self._deferred_send_deadlines[request.request_id] = (
                 time.monotonic() + self._defer_timeout,
@@ -1517,9 +1517,9 @@ class MoRIIOConnectorScheduler:
             remote_notify_port=self.side_notify_port,
             remote_dp_rank=self._global_dp_rank,
             remote_dp_rank_override=True,
-            remote_dp_size=self.aphrodite_config.parallel_config.data_parallel_size,
-            remote_dp_size_local=(self.aphrodite_config.parallel_config.data_parallel_size_local),
-            tp_size=self.aphrodite_config.parallel_config.tensor_parallel_size,
+            remote_dp_size=self.sonar_config.parallel_config.data_parallel_size,
+            remote_dp_size_local=(self.sonar_config.parallel_config.data_parallel_size_local),
+            tp_size=self.sonar_config.parallel_config.tensor_parallel_size,
             transfer_id=params["transfer_id"],
         )
 
@@ -1607,7 +1607,7 @@ class MoRIIOConnectorWorker:
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         engine_id: str,
         kv_cache_config: "KVCacheConfig",
     ):
@@ -1616,8 +1616,8 @@ class MoRIIOConnectorWorker:
                 "MoRIIO is not available. Please ensure the 'mori' package is installed and properly configured."
             )
 
-        assert aphrodite_config.kv_transfer_config is not None
-        self.moriio_config = MoRIIOConfig.from_aphrodite_config(aphrodite_config)
+        assert sonar_config.kv_transfer_config is not None
+        self.moriio_config = MoRIIOConfig.from_sonar_config(sonar_config)
         self.mode = MoRIIOMode.READ if self.moriio_config.read_mode else MoRIIOMode.WRITE
 
         logger.info("Initializing MoRIIO worker %s", engine_id)
@@ -1625,9 +1625,9 @@ class MoRIIOConnectorWorker:
         logging.getLogger("aiter").disabled = True
 
         # Config.
-        self.aphrodite_config = aphrodite_config
-        assert aphrodite_config.kv_transfer_config is not None, "kv_transfer_config must be set for MoRIIOConnector"
-        self.kv_transfer_config = aphrodite_config.kv_transfer_config
+        self.sonar_config = sonar_config
+        assert sonar_config.kv_transfer_config is not None, "kv_transfer_config must be set for MoRIIOConnector"
+        self.kv_transfer_config = sonar_config.kv_transfer_config
         self.is_producer = self.kv_transfer_config.is_kv_producer
         self.layer_to_spec = build_layer_to_spec(kv_cache_config)
         # we transfer by layer, but store by kv cache group
@@ -1789,7 +1789,7 @@ class MoRIIOConnectorWorker:
         self._handshake_initiation_executor = ThreadPoolExecutor(
             # MoRIIO is not guaranteed to be thread-safe, limit 1 worker.
             max_workers=1,
-            thread_name_prefix="aphrodite-moriio-handshake-initiator",
+            thread_name_prefix="sonar-moriio-handshake-initiator",
         )
         self._ready_requests = queue.Queue[tuple[ReqId, ReqMeta]]()
         self._handshake_futures: dict[EngineId, Future[set[str]]] = {}
@@ -1797,9 +1797,9 @@ class MoRIIOConnectorWorker:
         self._handshake_lock = threading.RLock()
         self._eager_handshaked_engines: set[EngineId] = set()
 
-        self.block_size = aphrodite_config.cache_config.block_size
-        self.model_config = aphrodite_config.model_config
-        self.cache_config = aphrodite_config.cache_config
+        self.block_size = sonar_config.cache_config.block_size
+        self.model_config = sonar_config.model_config
+        self.cache_config = sonar_config.cache_config
 
         self.block_window_per_layer: list[int | None] = []
         self.use_mla = self.model_config.use_mla
@@ -1813,7 +1813,7 @@ class MoRIIOConnectorWorker:
         self._region_session_index: dict[str, list[int]] | None = None
         self.built_session = False
         self.built_write_session: defaultdict[str, list] = defaultdict(list)
-        backends = get_current_attn_backends(self.aphrodite_config)
+        backends = get_current_attn_backends(self.sonar_config)
         self.backend_name = backends[0].get_name()
         logger.debug("Detected attention backend %s", self.backend_name)
 
@@ -2290,14 +2290,14 @@ class MoRIIOConnectorWorker:
             mamba_spec = _validate_mamba_specs(mamba_specs)
             assert mamba_spec is not None
 
-            from aphrodite.model_executor.layers.mamba.mamba_utils import (
+            from sonar.model_executor.layers.mamba.mamba_utils import (
                 is_conv_state_dim_first,
             )
 
             if not is_conv_state_dim_first():
                 raise MoRIIOError(
                     "MoRIIO KDA conv transfer requires the DS (dim-first) "
-                    "state layout; set APHRODITE_SSM_CONV_STATE_LAYOUT=DS"
+                    "state layout; set SONAR_SSM_CONV_STATE_LAYOUT=DS"
                 )
             self._conv_decomp = derive_mamba_conv_split(mamba_spec, self.world_size)
         # KDA layers use packed pages with different geometry; only record
@@ -2344,7 +2344,7 @@ class MoRIIOConnectorWorker:
             # DeepSeek-V3 / MLA backends (e.g. FlashMLA) override the
             # configured block_size at attention-layer creation time, so
             # the KV cache tensor is laid out with a different (usually
-            # larger) block_size than aphrodite_config.cache_config.block_size.
+            # larger) block_size than sonar_config.cache_config.block_size.
             # Trust the actual tensor shape and reconcile.
             logger.info(
                 "KV cache block_size=%d differs from config block_size=%d; "
@@ -2369,7 +2369,7 @@ class MoRIIOConnectorWorker:
         # (bytes) always, and divergent block_size (tokens/page) only when
         # the hybrid KV cache manager is enabled. Without HMA, block_size
         # must stay uniform for the peer page handshake.
-        hma_enabled = not self.aphrodite_config.scheduler_config.disable_hybrid_kv_cache_manager
+        hma_enabled = not self.sonar_config.scheduler_config.disable_hybrid_kv_cache_manager
 
         for layer_name in kv_caches:
             self.layer_base_addr_index[layer_name] = base_addr_idx
@@ -2497,11 +2497,11 @@ class MoRIIOConnectorWorker:
                 self._conv_decomp.ssm_sizes,
             )
         # Optimization for models with local attention (Llama 4)
-        if self.aphrodite_config.model_config.hf_config.model_type == "llama4":
+        if self.sonar_config.model_config.hf_config.model_type == "llama4":
             from transformers import Llama4TextConfig
 
-            assert isinstance(self.aphrodite_config.model_config.hf_text_config, Llama4TextConfig)
-            llama4_config = self.aphrodite_config.model_config.hf_text_config
+            assert isinstance(self.sonar_config.model_config.hf_text_config, Llama4TextConfig)
+            llama4_config = self.sonar_config.model_config.hf_text_config
             no_rope_layers = llama4_config.no_rope_layers
             chunk_size = llama4_config.attention_chunk_size
             chunk_block_size = math.ceil(chunk_size / self.block_size)
@@ -3311,7 +3311,7 @@ class MoRIIOConnectorWorker:
             raise MoRIIOError(
                 f"Heterogeneous-TP WRITE of layer {layer_name} needs a KV head "
                 "layout on both sides; the cache layout of this layer cannot "
-                "be sliced by head, or the peer runs an older Aphrodite"
+                "be sliced by head, or the peer runs an older Sonar"
             )
         offsets = compute_head_slice_offsets(
             local_layout,
@@ -3340,7 +3340,7 @@ class MoRIIOConnectorWorker:
         if remote_wire is None:
             raise MoRIIOError(
                 f"Heterogeneous-TP WRITE of mamba layer {layer_name} needs the "
-                "peer's state layout; the peer runs an older Aphrodite"
+                "peer's state layout; the peer runs an older Sonar"
             )
         return compute_mamba_slice_offsets(
             self.mamba_state_layouts[layer_name],

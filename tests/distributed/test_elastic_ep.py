@@ -10,7 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 import requests
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 from ..evals.gsm8k.gsm8k_eval import evaluate_gsm8k
 from ..utils import RemoteOpenAIServer, multi_gpu_test
@@ -221,8 +221,8 @@ def _base_serve_args(
 )
 @multi_gpu_test(num_gpus=4)
 def test_elastic_ep_scaling(enforce_eager: bool, traffic_mode: str, all2all_backend: str):
-    from aphrodite.distributed.eplb.eplb_communicator import has_nixl
-    from aphrodite.utils.import_utils import has_nixl_ep
+    from sonar.distributed.eplb.eplb_communicator import has_nixl
+    from sonar.utils.import_utils import has_nixl_ep
 
     if not has_nixl():
         pytest.skip("Async EPLB with elastic EP requires NIXL (not installed)")
@@ -231,14 +231,14 @@ def test_elastic_ep_scaling(enforce_eager: bool, traffic_mode: str, all2all_back
     if all2all_backend == "nixl_ep" and not has_nixl_ep():
         pytest.skip("NIXL EP is not installed")
 
-    initial_dp_size = int(os.getenv("APHRODITE_TEST_ELASTIC_EP_INITIAL_DP", "2"))
-    target_dp_size = int(os.getenv("APHRODITE_TEST_ELASTIC_EP_TARGET_DP", "4"))
+    initial_dp_size = int(os.getenv("SONAR_TEST_ELASTIC_EP_INITIAL_DP", "2"))
+    target_dp_size = int(os.getenv("SONAR_TEST_ELASTIC_EP_TARGET_DP", "4"))
     assert target_dp_size > initial_dp_size
-    aphrodite_serve_args = _base_serve_args(initial_dp_size, target_dp_size, enforce_eager, all2all_backend)
+    sonar_serve_args = _base_serve_args(initial_dp_size, target_dp_size, enforce_eager, all2all_backend)
 
     with RemoteOpenAIServer(
         MODEL_NAME,
-        aphrodite_serve_args,
+        sonar_serve_args,
         max_wait_seconds=1200,
     ) as server:
         initial_accuracy = _run_gsm8k_eval(server, "Initial")

@@ -21,8 +21,8 @@ model:
   base_env: {}
 
 dependencies:
-  - note: "Audio extras required for ASR (requires aphrodite>=0.14.1)"
-    command: 'uv pip install -U "aphrodite-engine[audio]" --torch-backend auto'
+  - note: "Audio extras required for ASR (requires sonar>=0.14.1)"
+    command: 'uv pip install -U "sonar[audio]" --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130'
   - note: "Install transformers from source for GLM-ASR tokenizer support"
     command: "uv pip install git+https://github.com/huggingface/transformers.git"
 
@@ -65,7 +65,7 @@ guide: |
 
   ## Prerequisites
 
-  - **Aphrodite version:** >= 0.14.1 (with `[audio]` extras)
+  - **Sonar version:** >= 0.14.1 (with `[audio]` extras)
   - **Transformers:** install from source for latest
 
   ### Install Dependencies
@@ -74,13 +74,13 @@ guide: |
   uv venv
   source .venv/bin/activate
   uv pip install git+https://github.com/huggingface/transformers.git
-  uv pip install -U "aphrodite-engine[audio]" --torch-backend auto
+  uv pip install -U "sonar[audio]" --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   ```
 
   ## Launching the Server
 
   ```bash
-  aphrodite serve zai-org/GLM-ASR-Nano-2512
+  sonar serve zai-org/GLM-ASR-Nano-2512
   ```
 
   ## Client Usage

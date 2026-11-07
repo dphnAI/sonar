@@ -7,25 +7,25 @@ from functools import partial
 import torch
 import torch.nn.functional as F
 
-import aphrodite.envs as envs
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.quantization.utils.mxfp4_utils import (
+import sonar.envs as envs
+from sonar.logger import init_logger
+from sonar.model_executor.layers.quantization.utils.mxfp4_utils import (
     dequant_mxfp4,
     quant_dequant_mxfp4,
 )
-from aphrodite.model_executor.layers.quantization.utils.mxfp6_utils import (
+from sonar.model_executor.layers.quantization.utils.mxfp6_utils import (
     quant_dequant_mxfp6,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     kMxfp4Dynamic,
     kMxfp4Static,
     kMxfp6E2M3Dynamic,
     kMxfp6E3M2Dynamic,
 )
-from aphrodite.model_executor.utils import replace_parameter
-from aphrodite.platforms import current_platform
-from aphrodite.utils.import_utils import has_quark
+from sonar.model_executor.utils import replace_parameter
+from sonar.platforms import current_platform
+from sonar.utils.import_utils import has_quark
 
 from .base import MxFp4LinearKernel, MxFp4LinearLayerConfig
 
@@ -85,7 +85,7 @@ class EmulationMxfp4LinearKernel(MxFp4LinearKernel):
             logger.warning_once(
                 "The current platform supports native MXFP4/MXFP6 computation, "
                 f"but kernels for activation_quant_key={config.activation_quant_key} "
-                f"are not yet integrated in Aphrodite. Using EmulationMxfp4LinearKernel, "
+                f"are not yet integrated in Sonar. Using EmulationMxfp4LinearKernel, "
                 "with simulated weight dequantization and activation "
                 "QDQ (quantize and dequantize), with the linear "
                 "layers computed in high precision."
@@ -105,7 +105,7 @@ class EmulationMxfp4LinearKernel(MxFp4LinearKernel):
         # Match the MXFP8 emulation path when explicitly enabled: dequantize
         # once at load time so inference uses a plain high-precision linear.
         # Otherwise retain packed weights and dequantize per invocation.
-        if envs.APHRODITE_MXFP4_EMULATION_DEQUANT_AT_LOAD:
+        if envs.SONAR_MXFP4_EMULATION_DEQUANT_AT_LOAD:
             weight = dequant_mxfp4(layer.weight, layer.weight_scale, torch.bfloat16)
             replace_parameter(layer, "weight", weight.contiguous())
 

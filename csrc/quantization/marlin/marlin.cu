@@ -57,7 +57,7 @@ torch::stable::Tensor marlin_gemm(
     std::optional<torch::stable::Tensor> const& a_scales_or_none,
     std::optional<torch::stable::Tensor> const& global_scale_or_none,
     std::optional<torch::stable::Tensor> const& b_zeros_or_none,
-    torch::stable::Tensor& workspace, aphrodite::ScalarTypeId const& b_type_id,
+    torch::stable::Tensor& workspace, sonar::ScalarTypeId const& b_type_id,
     int64_t size_m, int64_t size_n, int64_t size_k, bool use_atomic_add,
     bool use_fp32_reduce, bool is_zp_float) {
   STD_TORCH_CHECK_NOT_IMPLEMENTED(false,
@@ -179,10 +179,10 @@ bool is_valid_config(thread_config_t const& th_config, int thread_m_blocks,
   return cache_size <= max_shared_mem;
 }
 
-MarlinFuncPtr get_marlin_kernel(const aphrodite::ScalarType a_type,
-                                const aphrodite::ScalarType b_type,
-                                const aphrodite::ScalarType c_type,
-                                const aphrodite::ScalarType s_type,
+MarlinFuncPtr get_marlin_kernel(const sonar::ScalarType a_type,
+                                const sonar::ScalarType b_type,
+                                const sonar::ScalarType c_type,
+                                const sonar::ScalarType s_type,
                                 int thread_m_blocks, int thread_n_blocks,
                                 int thread_k_blocks, bool m_block_size_8,
                                 bool has_zp, int group_blocks, int threads,
@@ -196,8 +196,8 @@ MarlinFuncPtr get_marlin_kernel(const aphrodite::ScalarType a_type,
 }
 
 exec_config_t determine_exec_config(
-    const aphrodite::ScalarType& a_type, const aphrodite::ScalarType& b_type,
-    const aphrodite::ScalarType& c_type, const aphrodite::ScalarType& s_type,
+    const sonar::ScalarType& a_type, const sonar::ScalarType& b_type,
+    const sonar::ScalarType& c_type, const sonar::ScalarType& s_type,
     int prob_m, int prob_n, int prob_k, int thread_m_blocks,
     bool m_block_size_8, int num_bits, int group_size, bool has_zp,
     bool is_zp_float, int is_a_8bit, int stages, int max_shared_mem, int sms) {
@@ -241,13 +241,12 @@ exec_config_t determine_exec_config(
 void marlin_mm(const void* A, const void* B, void* C, void* C_tmp, void* b_bias,
                void* a_s, void* b_s, void* g_s, void* zp, int prob_m,
                int prob_n, int prob_k, int lda, void* workspace,
-               aphrodite::ScalarType const& a_type,
-               aphrodite::ScalarType const& b_type,
-               aphrodite::ScalarType const& c_type,
-               aphrodite::ScalarType const& s_type, bool has_bias, bool has_zp,
-               int num_groups, int group_size, int dev, cudaStream_t stream,
-               int thread_k_init, int thread_n_init, int sms,
-               bool use_atomic_add, bool use_fp32_reduce, bool is_zp_float) {
+               sonar::ScalarType const& a_type, sonar::ScalarType const& b_type,
+               sonar::ScalarType const& c_type, sonar::ScalarType const& s_type,
+               bool has_bias, bool has_zp, int num_groups, int group_size,
+               int dev, cudaStream_t stream, int thread_k_init,
+               int thread_n_init, int sms, bool use_atomic_add,
+               bool use_fp32_reduce, bool is_zp_float) {
   bool is_a_8bit = a_type.size_bits() == 8;
   STD_TORCH_CHECK(prob_m > 0 && prob_n > 0 && prob_k > 0, "Invalid MNK = [",
                   prob_m, ", ", prob_n, ", ", prob_k, "]");
@@ -290,10 +289,10 @@ void marlin_mm(const void* A, const void* B, void* C, void* C_tmp, void* b_bias,
   int stages = 4;
   if (major_capability == 7 && minor_capability == 5) {
     stages = 2;
-    STD_TORCH_CHECK(a_type == aphrodite::kFloat16 || a_type == aphrodite::kS8,
+    STD_TORCH_CHECK(a_type == sonar::kFloat16 || a_type == sonar::kS8,
                     "Turing only support FP16 or INT8 activation.");
   }
-  if (a_type == aphrodite::kFE4M3fn) {
+  if (a_type == sonar::kFE4M3fn) {
     STD_TORCH_CHECK(major_capability * 10 + minor_capability >= 89,
                     "FP8 only support Ada Lovelace or newer GPUs.");
     STD_TORCH_CHECK(
@@ -428,73 +427,73 @@ torch::stable::Tensor marlin_gemm(
     std::optional<torch::stable::Tensor> const& a_scales_or_none,
     std::optional<torch::stable::Tensor> const& global_scale_or_none,
     std::optional<torch::stable::Tensor> const& b_zeros_or_none,
-    torch::stable::Tensor& workspace, aphrodite::ScalarTypeId const& b_type_id,
+    torch::stable::Tensor& workspace, sonar::ScalarTypeId const& b_type_id,
     int64_t size_m, int64_t size_n, int64_t size_k, bool use_atomic_add,
     bool use_fp32_reduce, bool is_zp_float) {
-  aphrodite::ScalarTypeId a_type_id, c_type_id, s_type_id;
+  sonar::ScalarTypeId a_type_id, c_type_id, s_type_id;
 
   auto c_scalar_type = a.scalar_type();
   if (a.scalar_type() == torch::headeronly::ScalarType::Half) {
-    a_type_id = aphrodite::kFloat16.id();
-    c_type_id = aphrodite::kFloat16.id();
+    a_type_id = sonar::kFloat16.id();
+    c_type_id = sonar::kFloat16.id();
   } else if (a.scalar_type() == torch::headeronly::ScalarType::BFloat16) {
-    a_type_id = aphrodite::kBFloat16.id();
-    c_type_id = aphrodite::kBFloat16.id();
+    a_type_id = sonar::kBFloat16.id();
+    c_type_id = sonar::kBFloat16.id();
   } else {
     c_scalar_type = b_scales.scalar_type();
     if (b_scales.scalar_type() == torch::headeronly::ScalarType::Half) {
-      c_type_id = aphrodite::kFloat16.id();
+      c_type_id = sonar::kFloat16.id();
     } else if (b_scales.scalar_type() ==
                torch::headeronly::ScalarType::BFloat16) {
-      c_type_id = aphrodite::kBFloat16.id();
+      c_type_id = sonar::kBFloat16.id();
     } else {
-      c_type_id = aphrodite::kBFloat16.id();
+      c_type_id = sonar::kBFloat16.id();
 
       STD_TORCH_CHECK(c_or_none.has_value(), "c must be passed for W4A8-FP4");
       torch::stable::Tensor c = c_or_none.value();
       c_scalar_type = c.scalar_type();
 
       if (c.scalar_type() == torch::headeronly::ScalarType::Half) {
-        c_type_id = aphrodite::kFloat16.id();
+        c_type_id = sonar::kFloat16.id();
       } else if (c.scalar_type() == torch::headeronly::ScalarType::BFloat16) {
-        c_type_id = aphrodite::kBFloat16.id();
+        c_type_id = sonar::kBFloat16.id();
       } else {
         STD_TORCH_CHECK(false, "unsupported c dtype");
       }
     }
 
     if (a.scalar_type() == torch::headeronly::ScalarType::Float8_e4m3fn) {
-      a_type_id = aphrodite::kFE4M3fn.id();
+      a_type_id = sonar::kFE4M3fn.id();
     } else if (a.scalar_type() == torch::headeronly::ScalarType::Char) {
-      a_type_id = aphrodite::kS8.id();
+      a_type_id = sonar::kS8.id();
     } else {
       STD_TORCH_CHECK(false, "unsupported `a` scalar_type");
     }
   }
 
   s_type_id = c_type_id;
-  if (b_type_id == aphrodite::kFE2M1f.id()) {
+  if (b_type_id == sonar::kFE2M1f.id()) {
     if (b_scales.scalar_type() ==
         torch::headeronly::ScalarType::Float8_e4m3fn) {
-      s_type_id = aphrodite::kFE4M3fn.id();
+      s_type_id = sonar::kFE4M3fn.id();
     } else if (b_scales.scalar_type() ==
                torch::headeronly::ScalarType::Float8_e8m0fnu) {
-      s_type_id = aphrodite::kFE8M0fnu.id();
+      s_type_id = sonar::kFE8M0fnu.id();
     } else {
       STD_TORCH_CHECK(
           false, "When b_type = float4_e2m1f, b_scale scalar type must be",
           "float8_e4m3fn (for NVFP4) or float8_e8m0fnu (for MXFP4).");
     }
-  } else if (b_type_id == aphrodite::kFE4M3fn.id() &&
+  } else if (b_type_id == sonar::kFE4M3fn.id() &&
              b_scales.scalar_type() ==
                  torch::headeronly::ScalarType::Float8_e8m0fnu) {
-    s_type_id = aphrodite::kFE8M0fnu.id();
+    s_type_id = sonar::kFE8M0fnu.id();
   }
 
-  aphrodite::ScalarType a_type = aphrodite::ScalarType::from_id(a_type_id);
-  aphrodite::ScalarType b_type = aphrodite::ScalarType::from_id(b_type_id);
-  aphrodite::ScalarType c_type = aphrodite::ScalarType::from_id(c_type_id);
-  aphrodite::ScalarType s_type = aphrodite::ScalarType::from_id(s_type_id);
+  sonar::ScalarType a_type = sonar::ScalarType::from_id(a_type_id);
+  sonar::ScalarType b_type = sonar::ScalarType::from_id(b_type_id);
+  sonar::ScalarType c_type = sonar::ScalarType::from_id(c_type_id);
+  sonar::ScalarType s_type = sonar::ScalarType::from_id(s_type_id);
 
   int pack_factor = 32 / b_type.size_bits();
 
@@ -621,14 +620,13 @@ torch::stable::Tensor marlin_gemm(
   torch::stable::Tensor global_scale;
   if (global_scale_or_none.has_value()) {
     global_scale = global_scale_or_none.value();
-    STD_TORCH_CHECK(
-        b_type == aphrodite::kFE2M1f && s_type == aphrodite::kFE4M3fn,
-        "global_scale can only be used for nvfp4 format.");
+    STD_TORCH_CHECK(b_type == sonar::kFE2M1f && s_type == sonar::kFE4M3fn,
+                    "global_scale can only be used for nvfp4 format.");
   } else {
     global_scale = torch::stable::empty(
         {0}, torch::headeronly::ScalarType::Float, std::nullopt, device);
     STD_TORCH_CHECK(
-        !(b_type == aphrodite::kFE2M1f && s_type == aphrodite::kFE4M3fn),
+        !(b_type == sonar::kFE2M1f && s_type == sonar::kFE4M3fn),
         "the global_scale parameter must be passed for nvfp4 format.");
   }
 
@@ -655,16 +653,15 @@ torch::stable::Tensor marlin_gemm(
   bool has_zp = b_zeros.size(-1) > 0;
   if (has_zp) {
     STD_TORCH_CHECK(
-        b_type == aphrodite::kU4 || b_type == aphrodite::kU8,
+        b_type == sonar::kU4 || b_type == sonar::kU8,
         "b_type must be u4 or u8 when has_zp = True. Got = ", b_type.str());
   } else {
-    STD_TORCH_CHECK(
-        b_type == aphrodite::kU4B8 || b_type == aphrodite::kU8B128 ||
-            b_type == aphrodite::kS4 || b_type == aphrodite::kS8 ||
-            b_type == aphrodite::kFE4M3fn || b_type == aphrodite::kFE2M1f,
-        "b_type must be uint4b8, uint8b128, int4, int8, "
-        "float8_e4m3fn or float4_e2m1f when has_zp = False. Got = ",
-        b_type.str());
+    STD_TORCH_CHECK(b_type == sonar::kU4B8 || b_type == sonar::kU8B128 ||
+                        b_type == sonar::kS4 || b_type == sonar::kS8 ||
+                        b_type == sonar::kFE4M3fn || b_type == sonar::kFE2M1f,
+                    "b_type must be uint4b8, uint8b128, int4, int8, "
+                    "float8_e4m3fn or float4_e2m1f when has_zp = False. Got = ",
+                    b_type.str());
   }
 
   if (has_zp && is_zp_float) {

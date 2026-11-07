@@ -7,7 +7,7 @@ from typing import Protocol, TypeAlias
 
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 # py_device, py_size_or_aligned_size, py_ptr, py_handle
 # py_handle has type list[int] on ROCm and int otherwise
@@ -39,12 +39,12 @@ class MemAllocator(Protocol):
 
 def get_mem_allocator_instance() -> MemAllocator:
     if current_platform.is_cuda_alike():
-        from aphrodite.device_allocator.cumem import CuMemAllocator
+        from sonar.device_allocator.cumem import CuMemAllocator
 
         return CuMemAllocator.get_instance()
 
     if current_platform.is_xpu():
-        from aphrodite.device_allocator.xpumem import XpuMemAllocator
+        from sonar.device_allocator.xpumem import XpuMemAllocator
 
         return XpuMemAllocator.get_instance()
 

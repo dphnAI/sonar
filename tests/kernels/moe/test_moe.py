@@ -15,50 +15,50 @@ import torch
 from torch.nn import Parameter
 from torch.nn import functional as F
 
-import aphrodite.model_executor.layers.fused_moe  # noqa
-import aphrodite.model_executor.layers.fused_moe.fused_moe as fused_moe_module
-from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-from aphrodite.model_executor.layers.fused_moe import (
+import sonar.model_executor.layers.fused_moe  # noqa
+import sonar.model_executor.layers.fused_moe.fused_moe as fused_moe_module
+from sonar.config import SonarConfig, set_current_sonar_config
+from sonar.model_executor.layers.fused_moe import (
     MoEActivation,
     fused_topk,
 )
-from aphrodite.model_executor.layers.fused_moe.activation import (
+from sonar.model_executor.layers.fused_moe.activation import (
     ApplyMoEActivationConfig,
     apply_moe_activation,
     apply_moe_activation_supported,
 )
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe.config import (
     FUSED_MOE_UNQUANTIZED_CONFIG,
     int4_w4a16_moe_quant_config,
     int8_w8a16_moe_quant_config,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.marlin_moe import (
+from sonar.model_executor.layers.fused_moe.experts.marlin_moe import (
     batched_fused_marlin_moe,
     fused_marlin_moe,
 )
-from aphrodite.model_executor.layers.fused_moe.utils import (
+from sonar.model_executor.layers.fused_moe.utils import (
     moe_use_td_hw_supported,
 )
-from aphrodite.model_executor.layers.quantization.utils.marlin_utils import (
+from sonar.model_executor.layers.quantization.utils.marlin_utils import (
     marlin_permute_bias,
 )
-from aphrodite.model_executor.layers.quantization.utils.marlin_utils_fp4 import (
+from sonar.model_executor.layers.quantization.utils.marlin_utils_fp4 import (
     rand_marlin_weight_mxfp4_like,
     rand_marlin_weight_nvfp4_like,
 )
-from aphrodite.model_executor.layers.quantization.utils.marlin_utils_fp8 import (
+from sonar.model_executor.layers.quantization.utils.marlin_utils_fp8 import (
     marlin_quant_fp8_torch,
 )
-from aphrodite.model_executor.layers.quantization.utils.marlin_utils_test import (
+from sonar.model_executor.layers.quantization.utils.marlin_utils_test import (
     awq_marlin_quantize,
     marlin_quantize,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import quantize_weights
-from aphrodite.platforms import current_platform
-from aphrodite.scalar_type import ScalarType, scalar_types
-from aphrodite.triton_utils import tl
-from aphrodite.utils.math_utils import next_power_of_2
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.model_executor.layers.quantization.utils.quant_utils import quantize_weights
+from sonar.platforms import current_platform
+from sonar.scalar_type import ScalarType, scalar_types
+from sonar.triton_utils import tl
+from sonar.utils.math_utils import next_power_of_2
+from sonar.utils.torch_utils import set_random_seed
 from tests.kernels.moe.utils import (
     fused_moe,
     make_dummy_moe_config,
@@ -266,7 +266,7 @@ FUSED_MOE_WN16_MNK_FACTORS = [
     (222, 2048, 1024),
 ]
 
-aphrodite_config = AphroditeConfig()
+sonar_config = SonarConfig()
 
 
 def run_moe_test(
@@ -369,7 +369,7 @@ def test_fused_moe(
             "(sm100+); lowers to tile::gather4, which is unsupported on "
             "Hopper (sm90) and earlier"
         )
-    monkeypatch.setenv("APHRODITE_TRITON_USE_TD", "1" if use_td else "0")
+    monkeypatch.setenv("SONAR_TRITON_USE_TD", "1" if use_td else "0")
     set_random_seed(7)
 
     #
@@ -449,7 +449,7 @@ def test_fused_moe(
 
     use_cudagraph = n >= 1024 and k >= 1024 and current_platform.is_cuda_alike()
 
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         baseline_output = runner(torch_moe, iterative_moe)
         runner(
             baseline_output,
@@ -488,7 +488,7 @@ def test_fused_shared_expert_alignment(workspace_init):
     )
     modular_moe = modular_triton_fused_moe(moe_config, FUSED_MOE_UNQUANTIZED_CONFIG)
 
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         expected = torch_experts(a, w1, w2, topk_weights, topk_ids)
         actual = modular_moe.apply(
             hidden_states=a,
@@ -538,7 +538,7 @@ def test_fused_moe_int64_overflow(workspace_init):
 
     fused_moe_fn = functools.partial(fused_moe, renormalize=False)
 
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         run_moe_test(
             torch_moe,
             fused_moe_fn,
@@ -560,8 +560,8 @@ def test_host_resident_weights_take_sorted_path(
     """At small batch the naive path reads an expert once per (token, expert)
     pair. Weights read from host memory in place (UVA offloading) must take
     the sorted path instead, with the same output."""
-    from aphrodite.utils.platform_utils import is_uva_available
-    from aphrodite.utils.torch_utils import get_accelerator_view_from_cpu_tensor
+    from sonar.utils.platform_utils import is_uva_available
+    from sonar.utils.torch_utils import get_accelerator_view_from_cpu_tensor
 
     if host_resident and not is_uva_available():
         pytest.skip("needs UVA")
@@ -575,8 +575,8 @@ def test_host_resident_weights_take_sorted_path(
     if host_resident:
         w1_dev = get_accelerator_view_from_cpu_tensor(w1.pin_memory())
         w2_dev = get_accelerator_view_from_cpu_tensor(w2.pin_memory())
-        w1_dev._aphrodite_is_uva_offloaded = True
-        w2_dev._aphrodite_is_uva_offloaded = True
+        w1_dev._sonar_is_uva_offloaded = True
+        w2_dev._sonar_is_uva_offloaded = True
     else:
         w1_dev, w2_dev = w1.cuda(), w2.cuda()
 
@@ -588,7 +588,7 @@ def test_host_resident_weights_take_sorted_path(
         return align(*args, **kwargs)
 
     monkeypatch.setattr(fused_moe_module, "moe_align_block_size", counting_align)
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         if modular:
             fused_moe_fn = modular_triton_fused_moe(make_dummy_moe_config(), FUSED_MOE_UNQUANTIZED_CONFIG)
             topk_weights, topk_ids, _ = fused_topk(a, score, topk, False)
@@ -698,7 +698,7 @@ def test_naive_block_assignment_moe(
 
     use_cudagraph = n >= 1024 and k >= 1024 and current_platform.is_cuda_alike()
 
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         baseline_output = runner(torch_moe, iterative_moe)
         runner(
             baseline_output,
@@ -828,7 +828,7 @@ def test_fused_moe_wn16(
         block_shape=[0, group_size],
     )
 
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         triton_output = fused_moe(
             a,
             w1_qweight,
@@ -1029,7 +1029,7 @@ class MarlinMoEWeightData:
     marlin_moe_generate_valid_test_cases(),
 )
 @pytest.mark.skipif(current_platform.is_rocm(), reason="Skip for rocm")
-@pytest.mark.usefixtures("default_aphrodite_config")
+@pytest.mark.usefixtures("default_sonar_config")
 def test_fused_marlin_moe(
     a_type: ScalarType,
     b_type: ScalarType,
@@ -1091,7 +1091,7 @@ def test_fused_marlin_moe(
 
     topk_weights, topk_ids, _ = fused_topk(a, score, topk, False)
 
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         score = torch.softmax(score, dim=-1, dtype=torch.float32)
         topk_weight, topk_ids = torch.topk(score, topk)
         torch_output = torch_experts(
@@ -1151,7 +1151,7 @@ def test_fused_marlin_moe(
 
 @pytest.mark.flaky(reruns=2)
 @pytest.mark.skipif(current_platform.is_rocm(), reason="Skip for rocm")
-@pytest.mark.usefixtures("default_aphrodite_config")
+@pytest.mark.usefixtures("default_sonar_config")
 @pytest.mark.parametrize("m", [1, 256])
 def test_fused_marlin_moe_with_bias(m):
     set_random_seed(0)
@@ -1186,7 +1186,7 @@ def test_fused_marlin_moe_with_bias(m):
 
     topk_weights, topk_ids, _ = fused_topk(a, score, topk, False)
 
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         torch_output = torch_moe(a, w1_data.w_ref, w2_data.w_ref, score, topk, b_bias1, b_bias2)
 
     marlin_output = fused_marlin_moe(
@@ -1213,7 +1213,7 @@ def test_fused_marlin_moe_with_bias(m):
 
 @pytest.mark.flaky(reruns=2)
 @pytest.mark.skipif(current_platform.is_rocm(), reason="Skip for rocm")
-@pytest.mark.usefixtures("default_aphrodite_config")
+@pytest.mark.usefixtures("default_sonar_config")
 @pytest.mark.parametrize("m", [1, 64, 256])
 @pytest.mark.parametrize("n,k", [(1024, 1024), (2048, 2048)])
 @pytest.mark.parametrize("e,topk", [(8, 2), (64, 4)])
@@ -1251,7 +1251,7 @@ def test_fused_marlin_moe_non_gated(m: int, n: int, k: int, e: int, topk: int, a
 
     topk_weights, topk_ids, _ = fused_topk(a, score, topk, False)
 
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         torch_output = torch_moe(
             a,
             w1_data.w_ref,
@@ -1286,11 +1286,11 @@ def test_fused_marlin_moe_non_gated(m: int, n: int, k: int, e: int, topk: int, a
 
 def _make_humming_indexed_experts(activation: MoEActivation):
     pytest.importorskip("humming")
-    from aphrodite.model_executor.layers.fused_moe.experts.fused_humming_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.fused_humming_moe import (
         HummingIndexedExperts,
     )
-    from aphrodite.model_executor.layers.quantization.utils import humming as humming_utils
-    from aphrodite.utils import humming
+    from sonar.model_executor.layers.quantization.utils import humming as humming_utils
+    from sonar.utils import humming
 
     top_k, num_experts = 6, 12
     hidden_size, intermediate_size = 2688, 1856
@@ -1356,7 +1356,7 @@ def test_humming_indexed_routing_matches_each_projection_tile(valid_shape_m: int
     """Independently tuned projections preserve routed rows and expert identity."""
     from types import SimpleNamespace
 
-    from aphrodite.model_executor.layers.fused_moe.experts.fused_humming_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.fused_humming_moe import (
         HummingIndexedExperts,
     )
 
@@ -1398,7 +1398,7 @@ def test_humming_indexed_routing_matches_each_projection_tile(valid_shape_m: int
 
 @pytest.mark.parametrize("activation", list(MoEActivation))
 def test_humming_activation_metadata_tracks_shared_apply(activation: MoEActivation):
-    from aphrodite.model_executor.layers.fused_moe.experts.fused_humming_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.fused_humming_moe import (
         HummingExpertsBase,
     )
 
@@ -1421,14 +1421,14 @@ def test_humming_selects_gemm_from_parallelism_and_override(
     use_ep: bool,
     expected: str,
 ):
-    from aphrodite.model_executor.layers.fused_moe.experts.fused_humming_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.fused_humming_moe import (
         get_humming_moe_gemm_type,
     )
 
     if env_override is None:
-        monkeypatch.delenv("APHRODITE_HUMMING_MOE_GEMM_TYPE", raising=False)
+        monkeypatch.delenv("SONAR_HUMMING_MOE_GEMM_TYPE", raising=False)
     else:
-        monkeypatch.setenv("APHRODITE_HUMMING_MOE_GEMM_TYPE", env_override)
+        monkeypatch.setenv("SONAR_HUMMING_MOE_GEMM_TYPE", env_override)
     moe_config = make_dummy_moe_config()
     moe_config.moe_parallel_config.use_ep = use_ep
 
@@ -1450,7 +1450,7 @@ def test_humming_global_valid_shape_m(
 ):
     from types import SimpleNamespace
 
-    import aphrodite.model_executor.layers.fused_moe.experts.fused_humming_moe as humming
+    import sonar.model_executor.layers.fused_moe.experts.fused_humming_moe as humming
 
     dp_metadata = (
         None
@@ -1477,9 +1477,9 @@ def test_humming_permute_scratch_is_shared_by_config(
     from types import SimpleNamespace
     from unittest.mock import Mock
 
-    import aphrodite.model_executor.layers.fused_moe.experts.fused_humming_moe as humming
-    import aphrodite.model_executor.layers.fused_moe.moe_permute_unpermute as permute
-    import aphrodite.v1.worker.workspace as workspace
+    import sonar.model_executor.layers.fused_moe.experts.fused_humming_moe as humming
+    import sonar.model_executor.layers.fused_moe.moe_permute_unpermute as permute
+    import sonar.v1.worker.workspace as workspace
 
     manager = workspace.WorkspaceManager(torch.device("cpu"))
     monkeypatch.setattr(workspace, "_manager", manager)
@@ -1503,7 +1503,7 @@ def test_humming_delegates_to_instance_activation():
     from types import SimpleNamespace
     from unittest.mock import Mock
 
-    from aphrodite.model_executor.layers.fused_moe.experts.fused_humming_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.fused_humming_moe import (
         HummingExpertsBase,
     )
 
@@ -1537,8 +1537,8 @@ def test_humming_grouped_apply_forwards_valid_prefix(
     from types import SimpleNamespace
     from unittest.mock import Mock
 
-    import aphrodite.model_executor.layers.fused_moe.experts.fused_humming_moe as humming
-    from aphrodite.model_executor.layers.fused_moe.experts.fused_humming_moe import (
+    import sonar.model_executor.layers.fused_moe.experts.fused_humming_moe as humming
+    from sonar.model_executor.layers.fused_moe.experts.fused_humming_moe import (
         HummingGroupedExperts,
     )
 
@@ -1609,11 +1609,11 @@ def test_batched_marlin_activation_uses_expert_token_counts(
     from types import SimpleNamespace
     from unittest.mock import Mock
 
-    import aphrodite.model_executor.layers.fused_moe.experts.marlin_moe as marlin
-    from aphrodite.model_executor.layers.fused_moe.experts.marlin_moe import (
+    import sonar.model_executor.layers.fused_moe.experts.marlin_moe as marlin
+    from sonar.model_executor.layers.fused_moe.experts.marlin_moe import (
         BatchedMarlinExperts,
     )
-    from aphrodite.model_executor.layers.fused_moe.modular_kernel import (
+    from sonar.model_executor.layers.fused_moe.modular_kernel import (
         ExpertTokensMetadata,
     )
 
@@ -1686,7 +1686,7 @@ def test_batched_marlin_activation_uses_expert_token_counts(
     ids=["gated", "non_gated"],
 )
 def test_humming_gated_non_gated_shape_contract(activation: MoEActivation):
-    from aphrodite.utils import humming
+    from sonar.utils import humming
 
     experts, layer = _make_humming_indexed_experts(activation)
     moe_config = experts.moe_config
@@ -1728,7 +1728,7 @@ def test_humming_gated_non_gated_shape_contract(activation: MoEActivation):
 
 
 def test_humming_indexed_writes_supplied_output_buffer():
-    from aphrodite.forward_context import set_forward_context
+    from sonar.forward_context import set_forward_context
 
     activation = MoEActivation.SILU
     experts, layer = _make_humming_indexed_experts(activation)
@@ -1761,7 +1761,7 @@ def test_humming_indexed_writes_supplied_output_buffer():
         device=device,
     )
     topk_ids = torch.arange(top_k, dtype=torch.int32, device=device).unsqueeze(0)
-    with set_forward_context(None, aphrodite_config, num_tokens=num_tokens):
+    with set_forward_context(None, sonar_config, num_tokens=num_tokens):
         experts.apply(
             output=output,
             hidden_states=hidden_states,
@@ -2141,15 +2141,15 @@ def test_unquantized_bf16_flashinfer_trtllm_backend(
     """Test BF16 unquantized MoE with FlashInfer TRTLLM backend."""
     set_random_seed(7)
 
-    from aphrodite.model_executor.layers.fused_moe.config import (
+    from sonar.model_executor.layers.fused_moe.config import (
         FusedMoEConfig,
         FusedMoEParallelConfig,
         RoutingMethodType,
     )
-    from aphrodite.model_executor.layers.fused_moe.oracle.unquantized import (
+    from sonar.model_executor.layers.fused_moe.oracle.unquantized import (
         UnquantizedMoeBackend,
     )
-    from aphrodite.model_executor.layers.fused_moe.unquantized_fused_moe_method import (
+    from sonar.model_executor.layers.fused_moe.unquantized_fused_moe_method import (
         UnquantizedFusedMoEMethod,
     )
 
@@ -2175,7 +2175,7 @@ def test_unquantized_bf16_flashinfer_trtllm_backend(
         moe_backend="flashinfer_trtllm",
     )
 
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         quant_method = UnquantizedFusedMoEMethod(moe_config)
 
         # Verify TRTLLM backend was selected

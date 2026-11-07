@@ -32,18 +32,18 @@
 #define NVFP4_ENABLE_ELTS16 1
 #include "nvfp4_utils.cuh"
 
-namespace aphrodite {
+namespace sonar {
 
 // Use UE4M3 by default.
 template <class Type, bool UE8M0_SF = false>
-__global__ void __launch_bounds__(512, APHRODITE_BLOCKS_PER_SM(512))
+__global__ void __launch_bounds__(512, SONAR_BLOCKS_PER_SM(512))
     silu_mul_cvt_fp16_to_fp4(int32_t numRows, int32_t numCols,
                              int32_t num_packed_cols, int32_t num_padded_cols,
                              Type const* __restrict__ in,
                              float const* __restrict__ SFScale,
                              uint32_t* __restrict__ out,
                              uint32_t* __restrict__ SFout) {
-  using PackedVec = aphrodite::PackedVec<Type, CVT_FP4_PACK16>;
+  using PackedVec = sonar::PackedVec<Type, CVT_FP4_PACK16>;
   static constexpr int CVT_FP4_NUM_THREADS_PER_SF =
       (CVT_FP4_SF_VEC_SIZE / CVT_FP4_ELTS_PER_THREAD);
   static_assert(sizeof(PackedVec) == sizeof(Type) * CVT_FP4_ELTS_PER_THREAD,
@@ -132,7 +132,7 @@ __global__ void __launch_bounds__(512, APHRODITE_BLOCKS_PER_SM(512))
   }
 }
 
-}  // namespace aphrodite
+}  // namespace sonar
 
 void silu_and_mul_nvfp4_quant_sm1xxa(
     torch::stable::Tensor& output,  // [..., d]
@@ -159,20 +159,19 @@ void silu_and_mul_nvfp4_quant_sm1xxa(
   auto stream = get_current_cuda_stream(input.get_device_index());
   dim3 block(std::min(int(n / ELTS_PER_THREAD), 512));
   int const numBlocksPerSM =
-      aphrodite_runtime_blocks_per_sm(static_cast<int>(block.x));
+      sonar_runtime_blocks_per_sm(static_cast<int>(block.x));
 
   int num_packed_cols = int(n / CVT_FP4_ELTS_PER_THREAD);
 
   // The swizzled scale tensor is padded to 128 rows x 4 scale columns; the
   // grid covers the padding so the kernel can initialize it.
-  int sf_n_int = int(aphrodite::round_up(n / CVT_FP4_SF_VEC_SIZE, 4) / 4);
+  int sf_n_int = int(sonar::round_up(n / CVT_FP4_SF_VEC_SIZE, 4) / 4);
   int num_padded_cols =
       sf_n_int * 4 * CVT_FP4_SF_VEC_SIZE / CVT_FP4_ELTS_PER_THREAD;
 
-  int grid_y =
-      aphrodite::div_round_up(num_padded_cols, static_cast<int>(block.x));
+  int grid_y = sonar::div_round_up(num_padded_cols, static_cast<int>(block.x));
   int grid_x =
-      std::min(aphrodite::computeEffectiveRows(m),
+      std::min(sonar::computeEffectiveRows(m),
                std::max(1, (multiProcessorCount * numBlocksPerSM) / grid_y));
   dim3 grid(grid_x, grid_y);
 
@@ -181,9 +180,9 @@ void silu_and_mul_nvfp4_quant_sm1xxa(
   bool const use_pdl =
       int64_t(m) * num_packed_cols <= int64_t(multiProcessorCount) * 4096;
 
-  APHRODITE_STABLE_DISPATCH_HALF_TYPES(
+  SONAR_STABLE_DISPATCH_HALF_TYPES(
       input.scalar_type(), "silu_and_mul_nvfp4_quant_kernel", [&] {
-        using cuda_type = aphrodite::CUDATypeConverter<scalar_t>::Type;
+        using cuda_type = sonar::CUDATypeConverter<scalar_t>::Type;
         auto input_ptr = static_cast<cuda_type const*>(input.data_ptr());
         cudaLaunchConfig_t config = {};
         config.gridDim = grid;
@@ -195,10 +194,10 @@ void silu_and_mul_nvfp4_quant_sm1xxa(
         attrs[0].val.programmaticStreamSerializationAllowed = 1;
         config.numAttrs = use_pdl ? 1 : 0;
         config.attrs = attrs;
-        cudaLaunchKernelEx(
-            &config, aphrodite::silu_mul_cvt_fp16_to_fp4<cuda_type>, m, n,
-            num_packed_cols, num_padded_cols, input_ptr, input_sf_ptr,
-            reinterpret_cast<uint32_t*>(output_ptr),
-            reinterpret_cast<uint32_t*>(sf_out));
+        cudaLaunchKernelEx(&config, sonar::silu_mul_cvt_fp16_to_fp4<cuda_type>,
+                           m, n, num_packed_cols, num_padded_cols, input_ptr,
+                           input_sf_ptr,
+                           reinterpret_cast<uint32_t*>(output_ptr),
+                           reinterpret_cast<uint32_t*>(sf_out));
       });
 }

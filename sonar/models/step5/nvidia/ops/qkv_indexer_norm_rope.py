@@ -4,7 +4,7 @@
 
 import torch
 
-from aphrodite.triton_utils import tl, triton
+from sonar.triton_utils import tl, triton
 
 from ...common.ops.indexer_norm_rope import _indexer_norm_rope
 from ...common.ops.summary_update import summary_layout

@@ -6,15 +6,15 @@ from typing import TYPE_CHECKING
 
 from transformers import PreTrainedTokenizerBase
 
-from aphrodite.reasoning import ReasoningParser
-from aphrodite.reasoning.deepseek_r1_reasoning_parser import DeepSeekR1ReasoningParser
+from sonar.reasoning import ReasoningParser
+from sonar.reasoning.deepseek_r1_reasoning_parser import DeepSeekR1ReasoningParser
 
 from .identity_reasoning_parser import IdentityReasoningParser
 
 if TYPE_CHECKING:
-    from aphrodite.entrypoints.generate.base.protocol import DeltaMessage
-    from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-    from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
+    from sonar.entrypoints.generate.base.protocol import DeltaMessage
+    from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+    from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
 
 
 class DeepSeekV3ReasoningParser(ReasoningParser):

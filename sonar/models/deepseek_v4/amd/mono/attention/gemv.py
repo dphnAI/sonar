@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """MXFP8 GEMV of the mega kernel: 16 rows of a row-major e4m3 weight [N, K]
-(Aphrodite's loaded layout, E8M0 scales in 32x32 blocks [N / 32, K / 32]) against
+(Sonar's loaded layout, E8M0 scales in 32x32 blocks [N / 32, K / 32]) against
 every token of a tile, its MXFP8 rows in LDS, on the gfx950 scaled MFMA.
 
 A task may cover a window of K (``kbeg`` .. ``kbeg + nsteps`` 128-steps): a

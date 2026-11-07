@@ -4,22 +4,22 @@
 
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.activation import get_act_fn
-from aphrodite.model_executor.layers.linear import ColumnParallelLinear
+from sonar.config import SonarConfig
+from sonar.logger import init_logger
+from sonar.model_executor.layers.activation import get_act_fn
+from sonar.model_executor.layers.linear import ColumnParallelLinear
 
 from .interfaces import supports_pp
 from .step3_vl import Step3VLForConditionalGeneration
 from .step_vl import PerceptionEncoder
-from .utils import WeightsMapper, init_aphrodite_registered_model, maybe_prefix
+from .utils import WeightsMapper, init_sonar_registered_model, maybe_prefix
 from .vision import run_dp_sharded_vision_model
 
 logger = init_logger(__name__)
 
 
 class Step3p7ForConditionalGeneration(Step3VLForConditionalGeneration):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={
             "model.vision_model.": "vision_model.",
             "model.vit_large_projector.": "vit_large_projector.",
@@ -38,19 +38,19 @@ class Step3p7ForConditionalGeneration(Step3VLForConditionalGeneration):
         },
     )
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         super(Step3VLForConditionalGeneration, self).__init__()
 
-        config = aphrodite_config.model_config.hf_config
-        multimodal_config = aphrodite_config.model_config.get_multimodal_config()
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        multimodal_config = sonar_config.model_config.get_multimodal_config()
+        quant_config = sonar_config.quant_config
 
         self.config = config
-        self.model_config = aphrodite_config.model_config
+        self.model_config = sonar_config.model_config
         self.multimodal_config = multimodal_config
         self.use_data_parallel = multimodal_config.mm_encoder_tp_mode == "data"
 
-        with self._mark_tower_model(aphrodite_config, "image"):
+        with self._mark_tower_model(sonar_config, "image"):
             self.vision_model = PerceptionEncoder(
                 config.vision_config,
                 get_act_fn(config.vision_config.hidden_act),
@@ -67,9 +67,9 @@ class Step3p7ForConditionalGeneration(Step3VLForConditionalGeneration):
                 disable_tp=self.use_data_parallel,
             )
 
-        with self._mark_language_model(aphrodite_config):
-            language_model = init_aphrodite_registered_model(
-                aphrodite_config=aphrodite_config,
+        with self._mark_language_model(sonar_config):
+            language_model = init_sonar_registered_model(
+                sonar_config=sonar_config,
                 hf_config=config.text_config,
                 prefix=maybe_prefix(prefix, "language_model"),
             )

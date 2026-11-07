@@ -7,7 +7,7 @@ from typing import Literal
 
 from pydantic import Field, model_validator
 
-from aphrodite.config.utils import config
+from sonar.config.utils import config
 
 OffloadBackend = Literal["auto", "uva", "prefetch"]
 
@@ -143,7 +143,7 @@ class OffloadConfig:
         alter which layers are hooked and how prefetch indices are
         computed, so the compilation cache must distinguish them.
         """
-        from aphrodite.config.utils import get_hash_factors, hash_factors
+        from sonar.config.utils import get_hash_factors, hash_factors
 
         factors = get_hash_factors(self, ignored_factors=set())
         hash_str = hash_factors(factors)

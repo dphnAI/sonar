@@ -15,11 +15,11 @@ from typing import Any, cast
 
 import pytest
 
-from aphrodite.model_executor.warmup.jit_warmup_triton_helper import (
+from sonar.model_executor.warmup.jit_warmup_triton_helper import (
     _DecoratedTritonJitKernel,
 )
-from aphrodite.triton_utils import tl, triton
-from aphrodite.triton_utils.dispatcher import (
+from sonar.triton_utils import tl, triton
+from sonar.triton_utils.dispatcher import (
     KernelOverride,
     register_kernels,
 )
@@ -51,7 +51,7 @@ def _fake_module(monkeypatch: pytest.MonkeyPatch) -> Any:
             dict(MAX_NUM_TOKENS=8),
         ),
     )
-    module = types.ModuleType("aphrodite.tests.fake_kernel_home")
+    module = types.ModuleType("sonar.tests.fake_kernel_home")
     module.expand_kernel = kernel  # type: ignore[attr-defined]
     module._expand = owner  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, module.__name__, module)
@@ -69,7 +69,7 @@ def test_override_patches_defining_module_and_warmup_owner(
 
     register_kernels(
         {
-            "aphrodite.tests.fake_kernel_home.expand_kernel": cpu_impl,
+            "sonar.tests.fake_kernel_home.expand_kernel": cpu_impl,
         }
     )
 
@@ -95,7 +95,7 @@ def test_override_forwards_positionally_for_mismatched_names(
 
     register_kernels(
         {
-            "aphrodite.tests.fake_kernel_home.expand_kernel": cpu_impl,
+            "sonar.tests.fake_kernel_home.expand_kernel": cpu_impl,
         }
     )
     overridden = _fake_module.expand_kernel
@@ -106,20 +106,20 @@ def test_override_forwards_positionally_for_mismatched_names(
 def test_override_covers_from_import_copies(_fake_module: Any) -> None:
     import types
 
-    importer = types.ModuleType("aphrodite.tests.fake_kernel_importer")
+    importer = types.ModuleType("sonar.tests.fake_kernel_importer")
     importer.expand_kernel = _fake_module.expand_kernel  # type: ignore[attr-defined]
-    sys.modules["aphrodite.tests.fake_kernel_importer"] = importer
+    sys.modules["sonar.tests.fake_kernel_importer"] = importer
 
     def cpu_impl(output_ptr, input_ptr, replace_from, MAX_NUM_TOKENS=None):
         return "cpu"
 
     register_kernels(
         {
-            "aphrodite.tests.fake_kernel_home.expand_kernel": cpu_impl,
+            "sonar.tests.fake_kernel_home.expand_kernel": cpu_impl,
         }
     )
     assert isinstance(importer.expand_kernel, KernelOverride)
-    del sys.modules["aphrodite.tests.fake_kernel_importer"]
+    del sys.modules["sonar.tests.fake_kernel_importer"]
 
 
 def test_override_owner_launch_goes_through_impl(_fake_module: Any) -> None:
@@ -131,7 +131,7 @@ def test_override_owner_launch_goes_through_impl(_fake_module: Any) -> None:
 
     register_kernels(
         {
-            "aphrodite.tests.fake_kernel_home.expand_kernel": cpu_impl,
+            "sonar.tests.fake_kernel_home.expand_kernel": cpu_impl,
         }
     )
     owner = _fake_module._expand
@@ -165,7 +165,7 @@ def test_override_forwards_grid_to_kernel_like_impl(_fake_module: Any) -> None:
 
     register_kernels(
         {
-            "aphrodite.tests.fake_kernel_home.expand_kernel": cast(Callable[..., Any], NpuKernel()),
+            "sonar.tests.fake_kernel_home.expand_kernel": cast(Callable[..., Any], NpuKernel()),
         }
     )
     overridden = _fake_module.expand_kernel
@@ -188,7 +188,7 @@ def test_override_plain_impl_never_sees_grid(_fake_module: Any) -> None:
 
     register_kernels(
         {
-            "aphrodite.tests.fake_kernel_home.expand_kernel": cpu_impl,
+            "sonar.tests.fake_kernel_home.expand_kernel": cpu_impl,
         }
     )
     overridden = _fake_module.expand_kernel
@@ -211,7 +211,7 @@ def test_override_delegates_warmup_to_impl(_fake_module: Any) -> None:
 
     register_kernels(
         {
-            "aphrodite.tests.fake_kernel_home.expand_kernel": cast(Callable[..., Any], FakeNpuKernel()),
+            "sonar.tests.fake_kernel_home.expand_kernel": cast(Callable[..., Any], FakeNpuKernel()),
         }
     )
     overridden = _fake_module.expand_kernel
@@ -229,7 +229,7 @@ def test_override_warmup_noop_without_impl_warmup(_fake_module: Any) -> None:
 
     register_kernels(
         {
-            "aphrodite.tests.fake_kernel_home.expand_kernel": cpu_impl,
+            "sonar.tests.fake_kernel_home.expand_kernel": cpu_impl,
         }
     )
     overridden = _fake_module.expand_kernel
@@ -247,7 +247,7 @@ def test_register_triton_kernel_swaps_raw_for_device_function(
     implementation must replace the original by identity in the defining
     module and in from-import copies, where the inliner looks.
     """
-    module = types.ModuleType("aphrodite.tests.fake_device_fn_home")
+    module = types.ModuleType("sonar.tests.fake_device_fn_home")
 
     class FakeTritonKernel:
         arg_names = ("a", "b", "BLOCK")
@@ -267,14 +267,14 @@ def test_register_triton_kernel_swaps_raw_for_device_function(
     replacement = FakeTritonKernel()
     original = object()
     module._device_fn = original  # type: ignore[attr-defined]
-    importer = types.ModuleType("aphrodite.tests.fake_device_fn_importer")
+    importer = types.ModuleType("sonar.tests.fake_device_fn_importer")
     importer._device_fn = original  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, module.__name__, module)
     monkeypatch.setitem(sys.modules, importer.__name__, importer)
 
     register_kernels(
         {
-            "aphrodite.tests.fake_device_fn_home._device_fn": replacement,
+            "sonar.tests.fake_device_fn_home._device_fn": replacement,
         }
     )
 
@@ -293,7 +293,7 @@ def test_register_non_triton_impl_is_wrapped(_fake_module: Any) -> None:
 
     register_kernels(
         {
-            "aphrodite.tests.fake_kernel_home.expand_kernel": cpu_impl,
+            "sonar.tests.fake_kernel_home.expand_kernel": cpu_impl,
         }
     )
     overridden = _fake_module.expand_kernel
@@ -307,7 +307,7 @@ def test_register_kernel_auto_imports_defining_module(
 ) -> None:
     """Registering a kernel whose defining module is not imported yet must
     import it on the spot and apply the override."""
-    kernel_name = "aphrodite.v1.sample.rejection_sampler.expand_kernel"
+    kernel_name = "sonar.v1.sample.rejection_sampler.expand_kernel"
     module_name = kernel_name.rpartition(".")[0]
     calls: list[tuple[Any, ...]] = []
 
@@ -370,14 +370,14 @@ def test_real_triton_kernel_override_end_to_end() -> None:
         offsets = tl.arange(0, BLOCK)
         tl.store(out_ptr + offsets, tl.load(x_ptr + offsets) + 1)
 
-    module = types.ModuleType("aphrodite.tests.real_jit_kernel_home")
+    module = types.ModuleType("sonar.tests.real_jit_kernel_home")
     module._add_one_kernel = _add_one_kernel  # type: ignore[attr-defined]
     sys.modules[module.__name__] = module
 
     def cpu_impl(x_ptr, out_ptr, BLOCK=None):  # noqa: ARG001
         return "cpu"
 
-    register_kernels({"aphrodite.tests.real_jit_kernel_home._add_one_kernel": cpu_impl})
+    register_kernels({"sonar.tests.real_jit_kernel_home._add_one_kernel": cpu_impl})
     assert module._add_one_kernel.arg_names == (
         "x_ptr",
         "out_ptr",
@@ -388,8 +388,8 @@ def test_real_triton_kernel_override_end_to_end() -> None:
 def test_cpu_slot_mapping_override_forwards_kernel_arguments(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from aphrodite.utils import cpu_triton_utils
-    from aphrodite.v1.worker.block_table import ComputeSlotMappingKernel
+    from sonar.utils import cpu_triton_utils
+    from sonar.v1.worker.block_table import ComputeSlotMappingKernel
 
     calls: list[tuple[Any, ...]] = []
     fake_torch = types.SimpleNamespace(

@@ -65,8 +65,8 @@ from typing import Any
 import pytest
 import requests
 
-from aphrodite.platforms import current_platform
-from aphrodite.utils.network_utils import get_open_port
+from sonar.platforms import current_platform
+from sonar.utils.network_utils import get_open_port
 from tests.utils import RemoteOpenAIServer
 
 _ROOT = Path(__file__).resolve().parents[4]
@@ -175,7 +175,7 @@ def _deepseek_v3_overrides(cfg) -> dict[str, Any]:
 
 def _gemma3_overrides(cfg) -> dict[str, Any]:
     # Five sliding-window layers then one global layer, as in the real
-    # 5:1 pattern. Without the hybrid KV cache manager Aphrodite gives the sliding
+    # 5:1 pattern. Without the hybrid KV cache manager Sonar gives the sliding
     # layers full-attention cache specs, so all six share one group.
     return {
         "num_hidden_layers": 6,
@@ -201,7 +201,7 @@ ARCHS: dict[str, ArchCase] = {
         model="moonshotai/Kimi-Linear-48B-A3B-Instruct",
         overrides=_kimi_linear_overrides,
         corrupt_overrides={"rms_norm_eps": 1.0},
-        env={"APHRODITE_ROCM_USE_AITER": "1"},
+        env={"SONAR_ROCM_USE_AITER": "1"},
         args=("--trust-remote-code", "--mamba-ssm-cache-dtype", "float32"),
     ),
     "qwen3_5_moe": ArchCase(
@@ -210,21 +210,21 @@ ARCHS: dict[str, ArchCase] = {
         corrupt_overrides={"text_config": {"rms_norm_eps": 1.0}},
         # AITER's GDN conv-update kernel rejects the DS conv-state layout that
         # MoRIIO's recurrent-state transfer requires.
-        env={"APHRODITE_ROCM_USE_AITER": "0"},
+        env={"SONAR_ROCM_USE_AITER": "0"},
         args=("--language-model-only",),
     ),
     "qwen3_dense": ArchCase(
         model="Qwen/Qwen3-32B",
         overrides=_qwen3_dense_overrides,
         corrupt_overrides={"rms_norm_eps": 1.0},
-        env={"APHRODITE_ROCM_USE_AITER": "0"},
+        env={"SONAR_ROCM_USE_AITER": "0"},
         hybrid=False,
     ),
     "deepseek_v3": ArchCase(
         model="deepseek-ai/DeepSeek-V3",
         overrides=_deepseek_v3_overrides,
         corrupt_overrides={"rms_norm_eps": 1.0},
-        env={"APHRODITE_ROCM_USE_AITER": "1"},
+        env={"SONAR_ROCM_USE_AITER": "1"},
         hybrid=False,
     ),
     # Text-only Gemma 3. The multimodal Gemma3ForConditionalGeneration takes
@@ -234,14 +234,14 @@ ARCHS: dict[str, ArchCase] = {
         model="google/gemma-3-1b-it",
         overrides=_gemma3_overrides,
         corrupt_overrides={"rms_norm_eps": 1.0},
-        env={"APHRODITE_ROCM_USE_AITER": "0"},
+        env={"SONAR_ROCM_USE_AITER": "0"},
         hybrid=False,
     ),
 }
 
 
 def _arch_overrides(arch: ArchCase) -> dict[str, Any]:
-    from aphrodite.transformers_utils.config import get_config
+    from sonar.transformers_utils.config import get_config
 
     return arch.overrides(get_config(arch.model, trust_remote_code=True))
 
@@ -406,7 +406,7 @@ def _visible_devices() -> tuple[str, list[str]]:
 
 
 def _device_env(selector: str, devices: list[str]) -> dict[str, str]:
-    # Aphrodite mirrors HIP_VISIBLE_DEVICES into CUDA_VISIBLE_DEVICES at import, so
+    # Sonar mirrors HIP_VISIBLE_DEVICES into CUDA_VISIBLE_DEVICES at import, so
     # the test process carries both; pin every selector or the server refuses
     # the mismatch. ROCR narrows the set first, so HIP/CUDA then index into it.
     env = {selector: ",".join(devices)}
@@ -476,13 +476,13 @@ def _server(
     env = {
         "PATH": str(Path(sys.executable).parent) + os.pathsep + os.environ["PATH"],
         **_device_env(selector, devices),
-        "APHRODITE_HOST_IP": "127.0.0.1",
-        # Aphrodite scans upward from APHRODITE_PORT for the server internal sockets.
-        "APHRODITE_PORT": str(_open_port_block(32)),
-        "APHRODITE_WORKER_MULTIPROC_METHOD": "spawn",
-        "APHRODITE_SSM_CONV_STATE_LAYOUT": "DS",
-        "APHRODITE_CACHE_ROOT": str(_CACHE_ROOT / role),
-        # Only this directory, so the source tree cannot shadow installed aphrodite.
+        "SONAR_HOST_IP": "127.0.0.1",
+        # Sonar scans upward from SONAR_PORT for the server internal sockets.
+        "SONAR_PORT": str(_open_port_block(32)),
+        "SONAR_WORKER_MULTIPROC_METHOD": "spawn",
+        "SONAR_SSM_CONV_STATE_LAYOUT": "DS",
+        "SONAR_CACHE_ROOT": str(_CACHE_ROOT / role),
+        # Only this directory, so the source tree cannot shadow installed sonar.
         "PYTHONPATH": os.pathsep.join(filter(None, [str(_WIDE_DUMMY_DIR), os.environ.get("PYTHONPATH")])),
         "MORIIO_DUMMY_WEIGHT_RANGE": str(DUMMY_WEIGHT_RANGE),
         **arch.env,
@@ -684,7 +684,7 @@ def _metric(server: RemoteOpenAIServer, name: str) -> list[Any]:
 def _block_size(server: RemoteOpenAIServer) -> int:
     # Hybrid models pad the attention block to the recurrent-state page, so the
     # effective size is only known once the server has started.
-    sizes = {int(sample.labels["block_size"]) for sample in _metric(server, "aphrodite:cache_config_info")}
+    sizes = {int(sample.labels["block_size"]) for sample in _metric(server, "sonar:cache_config_info")}
     assert len(sizes) == 1, f"expected one cache block size, got {sizes}"
     return sizes.pop()
 
@@ -745,7 +745,7 @@ def _wait_for_prefill_blocks_freed(prefill: RemoteOpenAIServer) -> None:
     until the deferred-send reaper frees them after 60 s."""
     deadline = time.monotonic() + PREFILL_FREE_TIMEOUT_S
     while True:
-        usage = sum(s.value for s in _metric(prefill, "aphrodite:kv_cache_usage_perc"))
+        usage = sum(s.value for s in _metric(prefill, "sonar:kv_cache_usage_perc"))
         if usage == 0:
             return
         assert time.monotonic() < deadline, (
@@ -756,7 +756,7 @@ def _wait_for_prefill_blocks_freed(prefill: RemoteOpenAIServer) -> None:
 
 
 def _external_hits(server: RemoteOpenAIServer) -> float:
-    samples = _metric(server, "aphrodite:external_prefix_cache_hits_total")
+    samples = _metric(server, "sonar:external_prefix_cache_hits_total")
     return sum(sample.value for sample in samples)
 
 

@@ -12,13 +12,13 @@ import pytest
 from mistral_common.protocol.instruct.tool_calls import Tool, ToolChoiceEnum
 from transformers import AutoTokenizer
 
-from aphrodite.config import AphroditeConfig, StructuredOutputsConfig
-from aphrodite.config.structured_outputs import StructuredOutputsBackend
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.sampling_params import SamplingParams, StructuredOutputsParams
-from aphrodite.tokenizers.mistral import MistralTokenizer
-from aphrodite.v1.structured_output.backend_types import StructuredOutputOptions
-from aphrodite.v1.structured_output.backend_xgrammar import (
+from sonar.config import SonarConfig, StructuredOutputsConfig
+from sonar.config.structured_outputs import StructuredOutputsBackend
+from sonar.exceptions import SonarValidationError
+from sonar.sampling_params import SamplingParams, StructuredOutputsParams
+from sonar.tokenizers.mistral import MistralTokenizer
+from sonar.v1.structured_output.backend_types import StructuredOutputOptions
+from sonar.v1.structured_output.backend_xgrammar import (
     XgrammarBackend,
     validate_xgrammar_grammar,
 )
@@ -109,15 +109,15 @@ def test_auto_backend_selects_guidance_for_mistral_lark(mode: ToolChoiceEnum):
 )
 def test_validation_rejects_invalid_lark(grammar: str):
     params = SamplingParams(structured_outputs=StructuredOutputsParams(grammar=grammar))
-    with pytest.raises(AphroditeValidationError, match="Invalid grammar specification"):
+    with pytest.raises(SonarValidationError, match="Invalid grammar specification"):
         validate_xgrammar_grammar(params)
 
 
 @pytest.fixture(scope="module")
 def backend() -> XgrammarBackend:
-    aphrodite_config = AphroditeConfig(structured_outputs_config=StructuredOutputsConfig(backend="xgrammar"))
+    sonar_config = SonarConfig(structured_outputs_config=StructuredOutputsConfig(backend="xgrammar"))
     return XgrammarBackend(
-        aphrodite_config,
+        sonar_config,
         tokenizer=AutoTokenizer.from_pretrained(TOKENIZER),
         vocab_size=VOCAB_SIZE,
     )

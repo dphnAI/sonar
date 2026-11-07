@@ -7,21 +7,21 @@ from typing import ClassVar
 
 import torch
 
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.config import AphroditeConfig, get_layers_from_aphrodite_config
-from aphrodite.config.cache import CacheDType
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.platforms import current_platform
-from aphrodite.platforms.interface import DeviceCapability
-from aphrodite.utils.gpu_sync_debug import gpu_sync_allowed
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.utils.platform_utils import num_compute_units
-from aphrodite.utils.torch_utils import (
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.config import SonarConfig, get_layers_from_sonar_config
+from sonar.config.cache import CacheDType
+from sonar.logger import init_logger
+from sonar.model_executor.layers.attention import Attention
+from sonar.platforms import current_platform
+from sonar.platforms.interface import DeviceCapability
+from sonar.utils.gpu_sync_debug import gpu_sync_allowed
+from sonar.utils.math_utils import cdiv
+from sonar.utils.platform_utils import num_compute_units
+from sonar.utils.torch_utils import (
     async_tensor_h2d,
     get_dtype_size,
 )
-from aphrodite.v1.attention.backend import (
+from sonar.v1.attention.backend import (
     AttentionBackend,
     AttentionCGSupport,
     AttentionImpl,
@@ -31,11 +31,11 @@ from aphrodite.v1.attention.backend import (
     CommonAttentionMetadata,
     MultipleOf,
 )
-from aphrodite.v1.attention.backends.utils import (
+from sonar.v1.attention.backends.utils import (
     split_decodes_prefills_and_extends,
 )
-from aphrodite.v1.attention.ops.merge_attn_states import merge_attn_states
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.attention.ops.merge_attn_states import merge_attn_states
+from sonar.v1.kv_cache_interface import (
     AttentionSpec,
     KVCacheLayout,
     is_quantized_kv_cache,
@@ -44,7 +44,7 @@ from aphrodite.v1.kv_cache_interface import (
 _PARTITION_SIZE_ROCM = 256
 _CP_TOKENS_PER_ITER_ROCM = 32 * 1024
 if current_platform.is_rocm():
-    from aphrodite.triton_utils import tl, triton
+    from sonar.triton_utils import tl, triton
 
     def block_size(x, head_dim):
         return min(65536 // x.element_size(), triton.next_power_of_2(head_dim))
@@ -426,14 +426,14 @@ class AiterFlashAttentionMetadataBuilder(AttentionMetadataBuilder[AiterFlashAtte
         self,
         kv_cache_spec: AttentionSpec,
         layer_names: list[str],
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
     ):
-        super().__init__(kv_cache_spec, layer_names, aphrodite_config, device)
+        super().__init__(kv_cache_spec, layer_names, sonar_config, device)
 
-        self.model_config = aphrodite_config.model_config
-        self.parallel_config = aphrodite_config.parallel_config
-        self.cache_config = aphrodite_config.cache_config
+        self.model_config = sonar_config.model_config
+        self.parallel_config = sonar_config.parallel_config
+        self.cache_config = sonar_config.cache_config
 
         self.num_heads_q = self.model_config.get_num_attention_heads(self.parallel_config)
         self.num_heads_kv = self.model_config.get_num_kv_heads(self.parallel_config)
@@ -446,7 +446,7 @@ class AiterFlashAttentionMetadataBuilder(AttentionMetadataBuilder[AiterFlashAtte
 
         sliding_window_configs: set[tuple[int, int] | None] = set()
         kv_sharing_shape = None
-        layers = get_layers_from_aphrodite_config(self.aphrodite_config, Attention)
+        layers = get_layers_from_sonar_config(self.sonar_config, Attention)
         for name, layer in layers.items():
             if name not in layer_names:
                 continue
@@ -472,7 +472,7 @@ class AiterFlashAttentionMetadataBuilder(AttentionMetadataBuilder[AiterFlashAtte
         if self.aot_sliding_window is not None:
             window = self.aot_sliding_window[0] + 1
             num_window_blocks = cdiv(window, self.block_size) + 1
-            max_num_reqs = aphrodite_config.scheduler_config.max_num_seqs
+            max_num_reqs = sonar_config.scheduler_config.max_num_seqs
             self._swa_block_table = torch.zeros((max_num_reqs, num_window_blocks), dtype=torch.int32, device=device)
             self._swa_seq_lens = torch.zeros(max_num_reqs, dtype=torch.int32, device=device)
             self._swa_block_offsets = torch.arange(num_window_blocks, dtype=torch.int64, device=device)
@@ -489,7 +489,7 @@ class AiterFlashAttentionMetadataBuilder(AttentionMetadataBuilder[AiterFlashAtte
             self.kv_sharing_workspace = torch.empty(
                 (
                     2,
-                    aphrodite_config.scheduler_config.max_num_batched_tokens,
+                    sonar_config.scheduler_config.max_num_batched_tokens,
                     *kv_sharing_shape,
                 ),
                 dtype=self.model_config.dtype,
@@ -539,10 +539,10 @@ class AiterFlashAttentionMetadataBuilder(AttentionMetadataBuilder[AiterFlashAtte
         if (
             self.k_scale is not None
             or not rocm_aiter_ops.is_shuffle_kv_cache_enabled()
-            or not is_quantized_kv_cache(self.aphrodite_config.cache_config.cache_dtype)
+            or not is_quantized_kv_cache(self.sonar_config.cache_config.cache_dtype)
         ):
             return
-        attn_layers = self.aphrodite_config.compilation_config.static_forward_context
+        attn_layers = self.sonar_config.compilation_config.static_forward_context
         k_scale_tables: dict[str, torch.Tensor] = {}
         v_scale_tables: dict[str, torch.Tensor] = {}
         for layer_name in self.layer_names:
@@ -674,7 +674,7 @@ class AiterFlashAttentionMetadataBuilder(AttentionMetadataBuilder[AiterFlashAtte
                 # TODO(ganyi): Maybe reuse these 2 buffer from extend_workspace
                 swa_workspace = torch.empty(
                     (2, fetched_shape, self.num_heads_kv, self.headdim),
-                    dtype=self.aphrodite_config.model_config.dtype,
+                    dtype=self.sonar_config.model_config.dtype,
                     device=self.device,
                 )
 
@@ -893,7 +893,7 @@ class AiterFlashAttentionBackend(AttentionBackend):
 
     @classmethod
     def supports_compute_capability(cls, capability: DeviceCapability) -> bool:
-        from aphrodite.platforms.rocm import get_cdna_version
+        from sonar.platforms.rocm import get_cdna_version
 
         # DeviceCapability is currently created using torch.cuda.get_device_capability()
         # which is known to be buggy on rocm systems. on CDNA uses amd-smi which is

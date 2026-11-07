@@ -9,19 +9,19 @@ import torch
 import torch.nn as nn
 from transformers import Aimv2VisionConfig
 
-from aphrodite.distributed import get_tensor_model_parallel_world_size
-from aphrodite.distributed.utils import divide
-from aphrodite.model_executor.layers.activation import SiluAndMul
-from aphrodite.model_executor.layers.attention import MMEncoderAttention
-from aphrodite.model_executor.layers.conv import Conv2dLayer
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.distributed import get_tensor_model_parallel_world_size
+from sonar.distributed.utils import divide
+from sonar.model_executor.layers.activation import SiluAndMul
+from sonar.model_executor.layers.attention import MMEncoderAttention
+from sonar.model_executor.layers.conv import Conv2dLayer
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     MergedColumnParallelLinear,
     QKVParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.models.utils import AutoWeightsLoader, WeightsMapper
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.models.utils import AutoWeightsLoader, WeightsMapper
 
 
 class AIMv2SwiGLUFFN(nn.Module):
@@ -196,7 +196,7 @@ class AIMv2Transformer(nn.Module):
 
 
 class AIMv2Model(torch.nn.Module):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_stacked={
             ".fc1": (".fc13", 0),
             ".fc3": (".fc13", 1),
@@ -221,7 +221,7 @@ class AIMv2Model(torch.nn.Module):
         )
         # post_trunk_norm is optional (absent for clip-skip backbones).
         if self.trunk.post_trunk_norm is None:
-            self.hf_to_aphrodite_mapper = self.hf_to_aphrodite_mapper | WeightsMapper(
+            self.hf_to_sonar_mapper = self.hf_to_sonar_mapper | WeightsMapper(
                 orig_to_new_prefix={"trunk.post_trunk_norm.": None}
             )
 
@@ -233,4 +233,4 @@ class AIMv2Model(torch.nn.Module):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)

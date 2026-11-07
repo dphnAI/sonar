@@ -14,10 +14,10 @@ from contextlib import contextmanager, nullcontext
 
 import torch
 
-import aphrodite.utils.flashinfer as fi_utils
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed import get_tp_group
-from aphrodite.forward_context import set_forward_context
+import sonar.utils.flashinfer as fi_utils
+from sonar.config import SonarConfig
+from sonar.distributed import get_tp_group
+from sonar.forward_context import set_forward_context
 
 from .. import FUSED_MHC_MAX_ROWS, LOW_BATCH_MAX_ROWS
 from ..attention.aux_projections import warmup_aux_projection_gemms
@@ -28,14 +28,14 @@ from ..moe.step import deferred_finalize
 from .decode import SpecializedDecode
 
 
-def warm_up(decode: SpecializedDecode, aphrodite_config: AphroditeConfig) -> None:
+def warm_up(decode: SpecializedDecode, sonar_config: SonarConfig) -> None:
     """Tune (unless FlashInfer autotuning is off) and compile the executor's
     GEMMs for every row count it runs them at."""
     steps = [plan.attention for plan in decode.plans]
     linears = shape_representatives(
         linear for step in steps for linear in (step.attn.fused_wqa_wkv, step.attn.wq_b, step.attn.wo_b)
     )
-    rows = min(aphrodite_config.scheduler_config.max_num_batched_tokens, FUSED_MHC_MAX_ROWS)
+    rows = min(sonar_config.scheduler_config.max_num_batched_tokens, FUSED_MHC_MAX_ROWS)
     with torch.inference_mode():
         if decode.config.autotune:
             with _tuning():
@@ -43,9 +43,9 @@ def warm_up(decode: SpecializedDecode, aphrodite_config: AphroditeConfig) -> Non
                     for linear in linears:
                         run_zeros(linear, LOW_BATCH_MAX_ROWS)
                 autotune_low_batch_lm_head(decode.lm_head)
-                _deferred_moe(decode, aphrodite_config, rows, tune=True)
+                _deferred_moe(decode, sonar_config, rows, tune=True)
         else:
-            _deferred_moe(decode, aphrodite_config, rows, tune=False)
+            _deferred_moe(decode, sonar_config, rows, tune=False)
 
         for linear in linears:
             for m in range(1, LOW_BATCH_MAX_ROWS + 1):
@@ -60,7 +60,7 @@ def warm_up(decode: SpecializedDecode, aphrodite_config: AphroditeConfig) -> Non
         warmup_aux_projection_gemms(_aux_weights(steps))
         warmup_low_batch_lm_head(decode.lm_head)
     if decode.config.jit_warmup:
-        _warm_up_mhc(decode, aphrodite_config, rows)
+        _warm_up_mhc(decode, sonar_config, rows)
 
 
 @contextmanager
@@ -87,7 +87,7 @@ def _aux_weights(steps: list[AttentionStep]) -> list[torch.Tensor]:
     return weights
 
 
-def _deferred_moe(decode: SpecializedDecode, aphrodite_config: AphroditeConfig, rows: int, tune: bool) -> None:
+def _deferred_moe(decode: SpecializedDecode, sonar_config: SonarConfig, rows: int, tune: bool) -> None:
     """One deferring MoE layer on ``rows`` random rows with the finalize
     deferred, as the executor runs it above ``LOW_BATCH_MAX_ROWS`` rows:
     tunes its experts over the serving buckets, and allocates what the
@@ -113,20 +113,20 @@ def _deferred_moe(decode: SpecializedDecode, aphrodite_config: AphroditeConfig, 
         else nullcontext()
     )
     with (
-        set_forward_context(None, aphrodite_config),
+        set_forward_context(None, sonar_config),
         deferred_finalize(runner.moe_config, rows),
         tuning,
     ):
         runner._forward_impl(hidden, hidden, hidden, input_ids)
 
 
-def _warm_up_mhc(decode: SpecializedDecode, aphrodite_config: AphroditeConfig, rows: int) -> None:
+def _warm_up_mhc(decode: SpecializedDecode, sonar_config: SonarConfig, rows: int) -> None:
     """Compile the split mHC pre-norm kernels the boundaries run, for every row
     count the executor takes; the layers register them for fewer rows."""
-    from aphrodite.model_executor.kernels.mhc.tilelang_kernels import (
+    from sonar.model_executor.kernels.mhc.tilelang_kernels import (
         mhc_fused_post_pre_splits,
     )
-    from aphrodite.model_executor.kernels.mhc.warmup import MHC_PRE_NORM_KERNEL
+    from sonar.model_executor.kernels.mhc.warmup import MHC_PRE_NORM_KERNEL
 
     layer = decode.plans[0].layer
     hidden, hc_mult = layer.hidden_size, layer.hc_mult
@@ -139,7 +139,7 @@ def _warm_up_mhc(decode: SpecializedDecode, aphrodite_config: AphroditeConfig, r
         {**hc_stream, "use_pre_mix_in": False},
         {**hc_stream, "use_pre_mix_in": True},
     ]
-    if aphrodite_config.speculative_config is not None:
+    if sonar_config.speculative_config is not None:
         variants.append({**hc_stream, "use_pre_mix_in": True, "write_aux": True})
     for variant in variants:
         for split_mode in ("stats", "input"):

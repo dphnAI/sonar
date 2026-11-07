@@ -10,7 +10,7 @@ half):
     out  = gate * sigmoid(alpha * gate) * (up + beta)
 
 On ROCm the dense MLP and the native MXFP8 MoE (between its two GEMMs) fell back
-to a chain of elementwise PyTorch ops with fp32 intermediates: Aphrodite's shared
+to a chain of elementwise PyTorch ops with fp32 intermediates: Sonar's shared
 ``SiluAndMulWithClamp`` blanket-routes ROCm to ``forward_native``, and the MoE
 applies the activation inline in PyTorch. This Triton kernel collapses that into
 a single pass producing the ``[*, I]`` output directly, and computes in fp32
@@ -24,7 +24,7 @@ HIP graphs already eliminate — measured end-to-end throughput is identical
 
 import torch
 
-from aphrodite.triton_utils import tl, triton
+from sonar.triton_utils import tl, triton
 
 
 @triton.jit
@@ -138,7 +138,7 @@ def swiglu_oai_quantize_mxfp8(
     native MXFP8 MoE. Numerically equivalent to the unfused chain (bit-exact on
     measured MoE shapes); marginally more accurate (fp32 act, no bf16 round-trip).
     """
-    from aphrodite.model_executor.layers.quantization.utils.mxfp8_utils import (
+    from sonar.model_executor.layers.quantization.utils.mxfp8_utils import (
         MXFP8_BLOCK_SIZE,
         MXFP8_SCALE_DTYPE,
         MXFP8_VALUE_DTYPE,

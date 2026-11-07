@@ -43,37 +43,37 @@ from transformers.models.qwen3_omni_moe.processing_qwen3_omni_moe import (
 from transformers.models.whisper import WhisperFeatureExtractor
 from typing_extensions import TypeVar
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, ModelConfig, SpeechToTextConfig
-from aphrodite.config.speech_to_text import SpeechToTextParams
-from aphrodite.distributed import get_pp_group, get_tensor_model_parallel_world_size
-from aphrodite.inputs import PromptType, TextPrompt
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.activation import _ACTIVATION_REGISTRY
-from aphrodite.model_executor.layers.attention.mm_encoder_attention import (
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import ModelConfig, SonarConfig, SpeechToTextConfig
+from sonar.config.speech_to_text import SpeechToTextParams
+from sonar.distributed import get_pp_group, get_tensor_model_parallel_world_size
+from sonar.inputs import PromptType, TextPrompt
+from sonar.logger import init_logger
+from sonar.model_executor.layers.activation import _ACTIVATION_REGISTRY
+from sonar.model_executor.layers.attention.mm_encoder_attention import (
     MMEncoderAttention,
 )
-from aphrodite.model_executor.layers.conv import Conv3dLayer
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.conv import Conv3dLayer
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     QKVParallelLinear,
     ReplicatedLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
-from aphrodite.model_executor.models.module_mapping import MultiModelKeys
-from aphrodite.model_executor.models.qwen2_audio import Qwen2AudioProcessingInfo
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import (
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
+from sonar.model_executor.models.module_mapping import MultiModelKeys
+from sonar.model_executor.models.qwen2_audio import Qwen2AudioProcessingInfo
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import (
     MultiModalFeatureSpec,
     MultiModalKwargsItem,
     MultiModalKwargsItems,
 )
-from aphrodite.multimodal.parse import AudioProcessorItems, MultiModalDataItems
-from aphrodite.multimodal.processing.processor import (
+from sonar.multimodal.parse import AudioProcessorItems, MultiModalDataItems
+from sonar.multimodal.processing.processor import (
     BaseProcessingInfo,
     HFMultiModalInputs,
     MultiModalProcessingResult,
@@ -83,12 +83,12 @@ from aphrodite.multimodal.processing.processor import (
     PromptUpdate,
     PromptUpdateDetails,
 )
-from aphrodite.multimodal.utils import copy_mm_embedding_modality
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.transformers_utils.processor import cached_processor_from_config
-from aphrodite.utils.gpu_sync_debug import gpu_sync_allowed
-from aphrodite.utils.torch_utils import async_tensor_h2d
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
+from sonar.multimodal.utils import copy_mm_embedding_modality
+from sonar.sequence import IntermediateTensors
+from sonar.transformers_utils.processor import cached_processor_from_config
+from sonar.utils.gpu_sync_debug import gpu_sync_allowed
+from sonar.utils.torch_utils import async_tensor_h2d
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
 
 from .interfaces import (
     MultiModalEmbeddings,
@@ -329,9 +329,9 @@ class Qwen3OmniMoeAudioEncoderLayer(nn.Module):
 
 
 class Qwen3OmniMoeAudioEncoder(nn.Module):
-    """Aphrodite-native Qwen3-Omni Audio Encoder."""
+    """Sonar-native Qwen3-Omni Audio Encoder."""
 
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_stacked={
             ".self_attn.q_proj.": (".self_attn.qkv_proj.", "q"),
             ".self_attn.k_proj.": (".self_attn.qkv_proj.", "k"),
@@ -547,7 +547,7 @@ class Qwen3OmniMoeAudioEncoder(nn.Module):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
 
 class Qwen3_VisionPatchEmbed(nn.Module):
@@ -723,7 +723,7 @@ class Qwen3_VisionPatchMerger(nn.Module):
 
 
 class Qwen3Omni_VisionTransformer(nn.Module):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_stacked={
             ".attn.q.": (".attn.qkv.", "q"),
             ".attn.k.": (".attn.qkv.", "k"),
@@ -1025,7 +1025,7 @@ class Qwen3Omni_VisionTransformer(nn.Module):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
 
 @support_torch_compile(
@@ -1038,8 +1038,8 @@ class Qwen3Omni_VisionTransformer(nn.Module):
     }
 )
 class Qwen3MoeLLMModel(Qwen3MoeModel):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
-        super().__init__(aphrodite_config=aphrodite_config, prefix=prefix)
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
+        super().__init__(sonar_config=sonar_config, prefix=prefix)
 
         self.deepstack_multiscale_layer_start = 1
 
@@ -1084,13 +1084,13 @@ class Qwen3MoeLLMModel(Qwen3MoeModel):
 
 
 class Qwen3MoeLLMForCausalLM(Qwen3MoeForCausalLM):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super(Qwen3MoeForCausalLM, self).__init__()
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
         self.config = config
         self.quant_config = quant_config
-        self.model = Qwen3MoeLLMModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = Qwen3MoeLLMModel(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
         self.lm_head = ParallelLMHead(config.vocab_size, config.hidden_size, quant_config=quant_config)
         if self.config.tie_word_embeddings:
             self.lm_head = self.lm_head.tie_weights(self.model.embed_tokens)
@@ -1513,7 +1513,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
 ):
     is_3d_moe_weight: ClassVar[bool] = True
     supports_tower_connector_lora: ClassVar[bool] = True
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={
             "thinker.lm_head.": "language_model.lm_head.",
             "thinker.model.": "language_model.model.",
@@ -1552,25 +1552,25 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
 
         raise ValueError("Only image, video or audio modality is supported")
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        self.aphrodite_config = aphrodite_config  # needed for torch compile forward context
-        thinker_config: Qwen3OmniMoeThinkerConfig = aphrodite_config.model_config.hf_config.thinker_config
+        self.sonar_config = sonar_config  # needed for torch compile forward context
+        thinker_config: Qwen3OmniMoeThinkerConfig = sonar_config.model_config.hf_config.thinker_config
         # MoE LoRA uses the architecture to determine its weight layout.
-        thinker_config.architectures = aphrodite_config.model_config.hf_config.architectures
-        quant_config = aphrodite_config.quant_config
-        multimodal_config = aphrodite_config.model_config.multimodal_config
+        thinker_config.architectures = sonar_config.model_config.hf_config.architectures
+        quant_config = sonar_config.quant_config
+        multimodal_config = sonar_config.model_config.multimodal_config
         self.config = thinker_config
         self.multimodal_config = multimodal_config
         self.quant_config = quant_config
 
-        with self._mark_tower_model(aphrodite_config, "audio"):
+        with self._mark_tower_model(sonar_config, "audio"):
             self.audio_tower = Qwen3OmniMoeAudioEncoder(
                 thinker_config.audio_config,
                 prefix=maybe_prefix(prefix, "audio_tower"),
             )
 
-        with self._mark_tower_model(aphrodite_config, {"image", "video"}):
+        with self._mark_tower_model(sonar_config, {"image", "video"}):
             self.visual = Qwen3Omni_VisionTransformer(
                 vision_config=thinker_config.vision_config,
                 norm_eps=getattr(thinker_config.text_config, "rms_norm_eps", 1e-6),
@@ -1590,7 +1590,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
         if self.use_deepstack:
             self.deepstack_input_embeds = [
                 torch.zeros(
-                    aphrodite_config.scheduler_config.max_num_batched_tokens,
+                    sonar_config.scheduler_config.max_num_batched_tokens,
                     thinker_config.text_config.hidden_size,
                 )
                 for _ in range(self.deepstack_num_level)
@@ -1599,9 +1599,9 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
             # Zero means there is no active deepstack payload to consume.
             self.deepstack_input_embeds_num_tokens = 0
 
-        with self._mark_language_model(aphrodite_config):
+        with self._mark_language_model(sonar_config):
             self.language_model = Qwen3MoeLLMForCausalLM(
-                aphrodite_config=aphrodite_config.with_hf_config(
+                sonar_config=sonar_config.with_hf_config(
                     thinker_config.text_config,
                     architectures=["Qwen3MoeForCausalLM"],
                 ),
@@ -1847,7 +1847,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        loaded_weights = loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        loaded_weights = loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
         return loaded_weights
 

@@ -5,12 +5,12 @@
 import pytest
 import torch
 
-from aphrodite.models.muse_spark.amd.ops.fused_norm_expand import (
+from sonar.models.muse_spark.amd.ops.fused_norm_expand import (
     fused_rmsnorm_expand,
     take_expanded,
 )
-from aphrodite.models.muse_spark.common.ops.fused_rmsnorm import fused_rmsnorm_fwd
-from aphrodite.platforms import current_platform
+from sonar.models.muse_spark.common.ops.fused_rmsnorm import fused_rmsnorm_fwd
+from sonar.platforms import current_platform
 
 pytestmark = pytest.mark.skipif(not current_platform.is_rocm(), reason="requires a ROCm GPU")
 

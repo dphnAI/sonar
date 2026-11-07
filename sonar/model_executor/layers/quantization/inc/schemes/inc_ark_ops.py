@@ -6,9 +6,9 @@ from typing import Any
 
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import direct_register_custom_op
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import direct_register_custom_op
 
 logger = init_logger(__name__)
 

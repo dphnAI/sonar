@@ -67,8 +67,8 @@ def validate_and_normalize_dynamic_sd_schedule(
 
 def build_dynamic_sd_schedule_lookup(
     num_speculative_tokens_per_batch_size: object,
-    aphrodite_max_batch_size: int,
-    aphrodite_num_speculative_tokens: int,
+    sonar_max_batch_size: int,
+    sonar_num_speculative_tokens: int,
 ) -> list[int]:
     """Expand the configured schedule into a dense batch_size -> K lookup.
 
@@ -77,16 +77,16 @@ def build_dynamic_sd_schedule_lookup(
     scheduler do a simple array lookup instead of searching the configured
     ranges on every scheduling step.
     """
-    if aphrodite_max_batch_size <= 0:
-        raise ValueError("aphrodite_max_batch_size must be > 0.")
-    if aphrodite_num_speculative_tokens <= 0:
-        raise ValueError("aphrodite_num_speculative_tokens must be > 0.")
+    if sonar_max_batch_size <= 0:
+        raise ValueError("sonar_max_batch_size must be > 0.")
+    if sonar_num_speculative_tokens <= 0:
+        raise ValueError("sonar_num_speculative_tokens must be > 0.")
 
     parsed_schedule = validate_and_normalize_dynamic_sd_schedule(num_speculative_tokens_per_batch_size)
 
     # Index 0 is intentionally unused so that valid runtime batch sizes can be
     # looked up directly as dense_schedule[batch_size].
-    dense_schedule = [0] * (aphrodite_max_batch_size + 1)
+    dense_schedule = [0] * (sonar_max_batch_size + 1)
     next_batch_size = 1
     last_num_speculative_tokens: int | None = None
 
@@ -97,37 +97,37 @@ def build_dynamic_sd_schedule_lookup(
             # batch sizes 17-31 to K=3.
             for batch_size in range(
                 next_batch_size,
-                min(range_start, aphrodite_max_batch_size + 1),
+                min(range_start, sonar_max_batch_size + 1),
             ):
                 dense_schedule[batch_size] = min(
-                    aphrodite_num_speculative_tokens,
+                    sonar_num_speculative_tokens,
                     last_num_speculative_tokens,
                 )
 
         # Fill the current configured inclusive range with its K value.
         for batch_size in range(
             max(range_start, next_batch_size),
-            min(range_end, aphrodite_max_batch_size) + 1,
+            min(range_end, sonar_max_batch_size) + 1,
         ):
             dense_schedule[batch_size] = min(
-                aphrodite_num_speculative_tokens,
+                sonar_num_speculative_tokens,
                 num_speculative_tokens,
             )
 
         next_batch_size = max(next_batch_size, range_end + 1)
         last_num_speculative_tokens = num_speculative_tokens
 
-        if next_batch_size > aphrodite_max_batch_size:
+        if next_batch_size > sonar_max_batch_size:
             break
 
     if last_num_speculative_tokens is None:
         raise ValueError("num_speculative_tokens_per_batch_size must contain at least one valid batch-size range.")
 
     # Fill the tail after the final configured range by carrying forward the
-    # last K through aphrodite_max_batch_size.
-    for batch_size in range(next_batch_size, aphrodite_max_batch_size + 1):
+    # last K through sonar_max_batch_size.
+    for batch_size in range(next_batch_size, sonar_max_batch_size + 1):
         dense_schedule[batch_size] = min(
-            aphrodite_num_speculative_tokens,
+            sonar_num_speculative_tokens,
             last_num_speculative_tokens,
         )
 

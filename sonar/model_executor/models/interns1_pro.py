@@ -32,34 +32,34 @@ import torch
 from torch import nn
 from transformers import AutoProcessor, PreTrainedConfig
 
-from aphrodite.config import AphroditeConfig, CacheConfig
-from aphrodite.distributed import (
+from sonar.config import CacheConfig, SonarConfig
+from sonar.distributed import (
     get_ep_group,
     get_tensor_model_parallel_world_size,
     tensor_model_parallel_all_gather,
 )
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.activation import SiluAndMul
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.activation import SiluAndMul
+from sonar.model_executor.layers.attention import Attention
+from sonar.model_executor.layers.fused_moe import (
     FusedMoEFactory,
     GateLinear,
 )
-from aphrodite.model_executor.layers.fusion.mm_input_norm import build_mm_input_norm
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.fusion.mm_input_norm import build_mm_input_norm
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     MergedColumnParallelLinear,
     QKVParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
 )
-from aphrodite.model_executor.models.utils import sequence_parallel_chunk
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
+from sonar.model_executor.models.utils import sequence_parallel_chunk
+from sonar.multimodal import MULTIMODAL_REGISTRY
 
 from .interfaces import MixtureOfExperts
 from .qwen3_moe import (
@@ -131,14 +131,14 @@ class InternS1ProMoeMLP(nn.Module):
 class InternS1ProMoeSparseMoeBlock(nn.Module):
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
     ):
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_text_config
-        parallel_config = aphrodite_config.parallel_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_text_config
+        parallel_config = sonar_config.parallel_config
+        quant_config = sonar_config.quant_config
 
         self.tp_size = get_tensor_model_parallel_world_size()
 
@@ -154,7 +154,7 @@ class InternS1ProMoeSparseMoeBlock(nn.Module):
             )
 
         # Load balancing settings.
-        eplb_config = aphrodite_config.parallel_config.eplb_config
+        eplb_config = sonar_config.parallel_config.eplb_config
         self.enable_eplb = parallel_config.enable_eplb
 
         self.n_logical_experts = self.n_routed_experts
@@ -191,7 +191,7 @@ class InternS1ProMoeSparseMoeBlock(nn.Module):
         group_offsets = (torch.arange(n_groups, device=device) * group_size).view(1, -1, 1)  # [1, n_groups, 1]
         return group_offsets
 
-    # TODO: zhouxinyu, use aphrodite routing functions
+    # TODO: zhouxinyu, use sonar routing functions
     def _custom_routing_function(
         self,
         hidden_states: torch.Tensor,
@@ -350,12 +350,12 @@ class InternS1ProMoeAttention(nn.Module):
 
 
 class InternS1ProMoeDecoderLayer(nn.Module):
-    def __init__(self, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_text_config
-        cache_config = aphrodite_config.cache_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_text_config
+        cache_config = sonar_config.cache_config
+        quant_config = sonar_config.quant_config
 
         self.hidden_size = config.hidden_size
         max_position_embeddings = getattr(config, "max_position_embeddings", 32768)
@@ -396,7 +396,7 @@ class InternS1ProMoeDecoderLayer(nn.Module):
         if (layer_idx not in mlp_only_layers) and (
             config.num_experts > 0 and (layer_idx + 1) % config.decoder_sparse_step == 0
         ):
-            self.mlp = InternS1ProMoeSparseMoeBlock(aphrodite_config=aphrodite_config, prefix=f"{prefix}.mlp")
+            self.mlp = InternS1ProMoeSparseMoeBlock(sonar_config=sonar_config, prefix=f"{prefix}.mlp")
         else:
             self.mlp = InternS1ProMoeMLP(
                 hidden_size=config.hidden_size,
@@ -435,23 +435,23 @@ class InternS1ProMoeLLMModel(Qwen3MoeLLMModel):
     def __init__(
         self,
         *,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
         decoder_layer_type: type[torch.nn.Module] = InternS1ProMoeDecoderLayer,
     ):
         super().__init__(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             prefix=prefix,
             decoder_layer_type=decoder_layer_type,
         )
 
 
 class InternS1ProMoeLLMForCausalLM(Qwen3MoeForCausalLM):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super(Qwen3MoeForCausalLM, self).__init__()
-        self.config = aphrodite_config.model_config.hf_config.text_config
-        self.quant_config = aphrodite_config.quant_config
-        self.model = InternS1ProMoeLLMModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.config = sonar_config.model_config.hf_config.text_config
+        self.quant_config = sonar_config.quant_config
+        self.model = InternS1ProMoeLLMModel(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
         self.lm_head = ParallelLMHead(
             self.config.vocab_size,
             self.config.hidden_size,
@@ -523,7 +523,7 @@ class InternS1ProForConditionalGeneration(Qwen3VLForConditionalGeneration, Inter
     }
 
     # To ensure correct weight loading and mapping.
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={
             "model.visual.": "visual.",
             "lm_head.": "language_model.lm_head.",
@@ -531,18 +531,18 @@ class InternS1ProForConditionalGeneration(Qwen3VLForConditionalGeneration, Inter
         },
     )
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super(Qwen3VLForConditionalGeneration, self).__init__()
-        config: PreTrainedConfig = aphrodite_config.model_config.hf_config
-        multimodal_config = aphrodite_config.model_config.get_multimodal_config()
+        config: PreTrainedConfig = sonar_config.model_config.hf_config
+        multimodal_config = sonar_config.model_config.get_multimodal_config()
 
         self.config = config
-        self.model_config = aphrodite_config.model_config
+        self.model_config = sonar_config.model_config
         self.multimodal_config = multimodal_config
         self.use_data_parallel = multimodal_config.mm_encoder_tp_mode == "data"
         self._init_video_pruning(multimodal_config)
 
-        with self._mark_tower_model(aphrodite_config, {"image", "video"}):
+        with self._mark_tower_model(sonar_config, {"image", "video"}):
             self.visual = Qwen3_VisionTransformer(
                 config.vision_config,
                 norm_eps=getattr(config, "rms_norm_eps", 1e-6),
@@ -550,9 +550,9 @@ class InternS1ProForConditionalGeneration(Qwen3VLForConditionalGeneration, Inter
                 prefix=maybe_prefix(prefix, "visual"),
             )
 
-        with self._mark_language_model(aphrodite_config):
+        with self._mark_language_model(sonar_config):
             self.language_model = InternS1ProMoeLLMForCausalLM(
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 prefix=maybe_prefix(prefix, "language_model"),
             )
 

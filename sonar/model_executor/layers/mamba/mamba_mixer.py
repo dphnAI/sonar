@@ -7,43 +7,43 @@ import torch
 from torch import nn
 from torch.nn.parameter import Parameter
 
-from aphrodite.compilation.breakable_cudagraph import eager_break_during_capture
-from aphrodite.config import CacheConfig, ModelConfig, get_current_aphrodite_config
-from aphrodite.distributed.parallel_state import (
+from sonar.compilation.breakable_cudagraph import eager_break_during_capture
+from sonar.config import CacheConfig, ModelConfig, get_current_sonar_config
+from sonar.distributed.parallel_state import (
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
 )
-from aphrodite.forward_context import ForwardContext, get_forward_context
-from aphrodite.model_executor.custom_op import PluggableLayer
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.forward_context import ForwardContext, get_forward_context
+from sonar.model_executor.custom_op import PluggableLayer
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     MergedColumnParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.mamba.abstract import MambaBase
-from aphrodite.model_executor.layers.mamba.mamba_utils import (
+from sonar.model_executor.layers.mamba.abstract import MambaBase
+from sonar.model_executor.layers.mamba.mamba_utils import (
     MambaStateDtypeCalculator,
     MambaStateShapeCalculator,
     is_conv_state_dim_first,
 )
-from aphrodite.model_executor.layers.mamba.ops.causal_conv1d import (
+from sonar.model_executor.layers.mamba.ops.causal_conv1d import (
     causal_conv1d_fn,
     causal_conv1d_update,
 )
-from aphrodite.model_executor.layers.mamba.ops.mamba_ssm import selective_scan_fn
-from aphrodite.model_executor.layers.mamba.ops.ssu_dispatch import selective_state_update
-from aphrodite.model_executor.utils import set_weight_attrs
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import (
+from sonar.model_executor.layers.mamba.ops.mamba_ssm import selective_scan_fn
+from sonar.model_executor.layers.mamba.ops.ssu_dispatch import selective_state_update
+from sonar.model_executor.utils import set_weight_attrs
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import (
     LayerNameType,
     _encode_layer_name,
     _resolve_layer_name,
     direct_register_custom_op,
 )
-from aphrodite.v1.attention.backend import AttentionMetadata
-from aphrodite.v1.attention.backends.mamba1_attn import Mamba1AttentionMetadata
-from aphrodite.v1.attention.backends.registry import MambaAttentionBackendEnum
+from sonar.v1.attention.backend import AttentionMetadata
+from sonar.v1.attention.backends.mamba1_attn import Mamba1AttentionMetadata
+from sonar.v1.attention.backends.registry import MambaAttentionBackendEnum
 
 
 # Adapted from transformers.models.mamba.modeling_mamba.MambaMixer
@@ -184,7 +184,7 @@ class MambaMixer(MambaBase, PluggableLayer):
             else None
         )
 
-        compilation_config = get_current_aphrodite_config().compilation_config
+        compilation_config = get_current_sonar_config().compilation_config
         if prefix in compilation_config.static_forward_context:
             raise ValueError(f"Duplicate layer name: {prefix}")
         compilation_config.static_forward_context[prefix] = self
@@ -224,7 +224,7 @@ class MambaMixer(MambaBase, PluggableLayer):
         return discrete_time_step, B, C
 
     def forward(self, hidden_states: torch.Tensor, output: torch.Tensor):
-        torch.ops.aphrodite.mamba_mixer(
+        torch.ops.sonar.mamba_mixer(
             hidden_states,
             output,
             _encode_layer_name(self.prefix),

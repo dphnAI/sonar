@@ -18,28 +18,28 @@ from compressed_tensors.quantization import (
     QuantizationStrategy,
 )
 
-from aphrodite.distributed.utils import verify_group_size_divides_partition
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.kernels.linear import (
+from sonar.distributed.utils import verify_group_size_divides_partition
+from sonar.logger import init_logger
+from sonar.model_executor.kernels.linear import (
     MPLinearLayerConfig,
     choose_mp_linear_kernel,
 )
-from aphrodite.model_executor.layers.quantization.compressed_tensors.schemes import (
+from sonar.model_executor.layers.quantization.compressed_tensors.schemes import (
     CompressedTensorsScheme,
 )
-from aphrodite.model_executor.layers.quantization.compressed_tensors.schemes.compressed_tensors_wNa16 import (  # noqa: E501
+from sonar.model_executor.layers.quantization.compressed_tensors.schemes.compressed_tensors_wNa16 import (  # noqa: E501
     WNA16_SUPPORTED_TYPES_MAP,
     WNA16_ZP_SUPPORTED_TYPES_MAP,
 )
-from aphrodite.model_executor.layers.quantization.utils.marlin_utils import (
+from sonar.model_executor.layers.quantization.utils.marlin_utils import (
     marlin_repeat_scales_on_all_ranks,
 )
-from aphrodite.model_executor.parameter import (
-    BaseAphroditeParameter,
+from sonar.model_executor.parameter import (
+    BaseSonarParameter,
     ChannelQuantScaleParameter,
     GroupQuantScaleParameter,
-    PackedAphroditeParameter,
     PackedColumnParameter,
+    PackedSonarParameter,
 )
 
 logger = init_logger(__name__)
@@ -181,7 +181,7 @@ class CompressedTensorsWNA8Int(CompressedTensorsScheme):
         packed_input_dim = math.ceil(input_size_per_partition * self.num_bits / 32)
         layer.register_parameter(
             "weight_packed",
-            PackedAphroditeParameter(
+            PackedSonarParameter(
                 input_dim=1,
                 output_dim=0,
                 packed_factor=self.pack_factor,
@@ -227,7 +227,7 @@ class CompressedTensorsWNA8Int(CompressedTensorsScheme):
                     data=zeros_data,
                 )
             else:
-                qzeros = PackedAphroditeParameter(
+                qzeros = PackedSonarParameter(
                     input_dim=1,
                     output_dim=0,
                     packed_dim=0,
@@ -239,7 +239,7 @@ class CompressedTensorsWNA8Int(CompressedTensorsScheme):
 
         layer.register_parameter(
             "weight_shape",
-            BaseAphroditeParameter(
+            BaseSonarParameter(
                 data=torch.empty(2, dtype=torch.int64),
                 weight_loader=weight_loader,
             ),

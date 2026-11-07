@@ -30,9 +30,9 @@ from typing import NamedTuple
 import pytest
 import torch
 
-from aphrodite.models.deepseek_v32.common import kernels as K
-from aphrodite.platforms import current_platform
-from aphrodite.utils.deep_gemm import mqa_logits_use_mx_scales
+from sonar.models.deepseek_v32.common import kernels as K
+from sonar.platforms import current_platform
+from sonar.utils.deep_gemm import mqa_logits_use_mx_scales
 
 FP8 = torch.float8_e4m3fn
 FP8_MAX = 448.0

@@ -5,20 +5,20 @@ from collections.abc import Callable
 import torch
 import torch.nn as nn
 
-from aphrodite.model_executor.layers.fusion.quant_activation import QuantizedActivation
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.fusion.quant_activation import QuantizedActivation
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     kFp8Dynamic128Sym,
 )
-from aphrodite.models.deepseek_v4.common.ops.fused_inv_rope_fp8_quant import (
+from sonar.models.deepseek_v4.common.ops.fused_inv_rope_fp8_quant import (
     fused_inv_rope_fp8_quant,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.deep_gemm import fp8_einsum, get_tma_aligned_size, is_deep_gemm_supported
+from sonar.platforms import current_platform
+from sonar.utils.deep_gemm import fp8_einsum, get_tma_aligned_size, is_deep_gemm_supported
 
 
 def _expand_block_scales(scale: torch.Tensor, rows: int, cols: int) -> torch.Tensor:
     if scale.dtype == torch.float8_e8m0fnu:
-        from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
+        from sonar.model_executor.layers.quantization.utils.fp8_utils import (
             _upcast_e8m0_to_fp32,
         )
 

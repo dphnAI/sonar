@@ -3,11 +3,11 @@
 import os
 from argparse import Namespace
 
-from aphrodite import LLM, EngineArgs
-from aphrodite.utils import FlexibleArgumentParser
+from sonar import LLM, EngineArgs
+from sonar.utils import FlexibleArgumentParser
 
 # needs V0 engine
-os.environ["APHRODITE_USE_V1"] = "0"
+os.environ["SONAR_USE_V1"] = "0"
 
 
 def parse_args():

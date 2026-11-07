@@ -12,20 +12,20 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from aphrodite.config import AphroditeConfig, CacheConfig
-from aphrodite.distributed import get_tensor_model_parallel_world_size
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.config import CacheConfig, SonarConfig
+from sonar.distributed import get_tensor_model_parallel_world_size
+from sonar.model_executor.layers.attention import Attention
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     QKVParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.models.mistral import MistralMLP
-from aphrodite.model_executor.models.whisper import WhisperPosEmbedType
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.v1.attention.backend import (
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.models.mistral import MistralMLP
+from sonar.model_executor.models.whisper import WhisperPosEmbedType
+from sonar.utils.math_utils import cdiv
+from sonar.v1.attention.backend import (
     AttentionBackend,
     AttentionCGSupport,
     AttentionMetadata,
@@ -33,18 +33,18 @@ from aphrodite.v1.attention.backend import (
     CommonAttentionMetadata,
     subclass_attention_backend_with_overrides,
 )
-from aphrodite.v1.attention.backends.cpu_attn import CPUAttentionBackend
-from aphrodite.v1.attention.backends.flash_attn import FlashAttentionBackend
-from aphrodite.v1.attention.backends.rocm_attn import RocmAttentionBackend
-from aphrodite.v1.attention.backends.triton_attn import TritonAttentionBackend
-from aphrodite.v1.attention.selector import get_attn_backend
-from aphrodite.v1.kv_cache_interface import AttentionSpec, SlidingWindowSpec
+from sonar.v1.attention.backends.cpu_attn import CPUAttentionBackend
+from sonar.v1.attention.backends.flash_attn import FlashAttentionBackend
+from sonar.v1.attention.backends.rocm_attn import RocmAttentionBackend
+from sonar.v1.attention.backends.triton_attn import TritonAttentionBackend
+from sonar.v1.attention.selector import get_attn_backend
+from sonar.v1.kv_cache_interface import AttentionSpec, SlidingWindowSpec
 
 from .utils import make_layers
 
 AiterFlashAttentionBackend: type[AttentionBackend] | None = None
 try:
-    from aphrodite.v1.attention.backends import rocm_aiter_fa
+    from sonar.v1.attention.backends import rocm_aiter_fa
 
     AiterFlashAttentionBackend = rocm_aiter_fa.AiterFlashAttentionBackend
 except ImportError:
@@ -140,7 +140,7 @@ def create_whisper_attention_backend_with_block_pooling(
             self,
             kv_cache_spec: AttentionSpec,
             layer_names: list[str],
-            aphrodite_config: AphroditeConfig,
+            sonar_config: SonarConfig,
             device: torch.device,
         ):
             kv_cache_spec = replace(
@@ -155,7 +155,7 @@ def create_whisper_attention_backend_with_block_pooling(
                 # this window always stays resident).
                 assert sliding_window is not None
                 kv_cache_spec = replace(kv_cache_spec, sliding_window=sliding_window)
-            super().__init__(kv_cache_spec, layer_names, aphrodite_config, device)
+            super().__init__(kv_cache_spec, layer_names, sonar_config, device)
             # Override model_config-derived values with the actual
             # encoder values from kv_cache_spec
             self.num_heads_kv = kv_cache_spec.num_kv_heads
@@ -171,7 +171,7 @@ def create_whisper_attention_backend_with_block_pooling(
             if self._pool_buffers_ready:
                 return
             device = common_attn_metadata.slot_mapping.device
-            sched = self.aphrodite_config.scheduler_config
+            sched = self.sonar_config.scheduler_config
             self._qsl_buf = torch.empty(
                 sched.max_num_seqs + 1,
                 dtype=common_attn_metadata.query_start_loc.dtype,
@@ -387,8 +387,8 @@ class WhisperCausalAttentionWithBlockPooling(Attention):
             **extra_impl_args,
         )
 
-    def get_kv_cache_spec(self, aphrodite_config: AphroditeConfig):
-        kv_cache_spec = super().get_kv_cache_spec(aphrodite_config)
+    def get_kv_cache_spec(self, sonar_config: SonarConfig):
+        kv_cache_spec = super().get_kv_cache_spec(sonar_config)
         assert isinstance(kv_cache_spec, AttentionSpec)
         kv_cache_spec = replace(
             kv_cache_spec,
@@ -511,15 +511,15 @@ class WhisperCausalAttention(nn.Module):
 
 
 class WhisperCausalEncoderLayer(nn.Module):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
         sliding_window = getattr(config, "sliding_window", None)
         block_pool_size = config.block_pool_size
         assert block_pool_size > 1
 
-        cache_config = aphrodite_config.cache_config
-        quant_config = aphrodite_config.quant_config
+        cache_config = sonar_config.cache_config
+        quant_config = sonar_config.quant_config
 
         self.embed_dim = config.d_model
         self.head_dim = self.embed_dim // config.encoder_attention_heads
@@ -565,9 +565,9 @@ class WhisperCausalEncoderLayer(nn.Module):
 
 
 class WhisperCausalEncoder(nn.Module):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
         embed_dim = config.d_model
 
         assert WhisperPosEmbedType(config.pos_embed) == WhisperPosEmbedType.ROPE
@@ -583,7 +583,7 @@ class WhisperCausalEncoder(nn.Module):
         self.total_stride = self.conv1.stride[0] * self.conv2.stride[0]
         self.start_layer, self.end_layer, self.layers = make_layers(
             config.encoder_layers,
-            lambda prefix: WhisperCausalEncoderLayer(aphrodite_config=aphrodite_config, prefix=f"{prefix}.layers"),
+            lambda prefix: WhisperCausalEncoderLayer(sonar_config=sonar_config, prefix=f"{prefix}.layers"),
             prefix=f"{prefix}.layers",
         )
         self.layer_norm = CausalRMSNorm(config.d_model)

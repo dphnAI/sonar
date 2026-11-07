@@ -8,16 +8,16 @@ from typing import TYPE_CHECKING, TypeAlias
 
 from typing_extensions import override
 
-import aphrodite.envs as envs
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed.device_communicators.shm_object_storage import (
+import sonar.envs as envs
+from sonar.config import SonarConfig
+from sonar.distributed.device_communicators.shm_object_storage import (
     MsgpackSerde,
     SingleWriterShmObjectStorage,
     SingleWriterShmRingBuffer,
 )
-from aphrodite.logger import init_logger
-from aphrodite.utils.cache import CacheInfo
-from aphrodite.utils.mem_constants import GiB_bytes, MiB_bytes
+from sonar.logger import init_logger
+from sonar.utils.cache import CacheInfo
+from sonar.utils.mem_constants import GiB_bytes, MiB_bytes
 
 from ..inputs import (
     MultiModalBatchedField,
@@ -72,15 +72,15 @@ class ShmObjectStoreSenderCache(BaseMultiModalProcessorCache):
     - If the item is not in the cache, store the data in shared memory.
     """
 
-    def __init__(self, aphrodite_config: AphroditeConfig) -> None:
+    def __init__(self, sonar_config: SonarConfig) -> None:
         super().__init__()
 
-        self.world_size = aphrodite_config.parallel_config.world_size
-        mm_config = aphrodite_config.model_config.get_multimodal_config()
+        self.world_size = sonar_config.parallel_config.world_size
+        mm_config = sonar_config.model_config.get_multimodal_config()
 
         ring_buffer = SingleWriterShmRingBuffer(
             data_buffer_size=int(mm_config.mm_processor_cache_gb * GiB_bytes),
-            name=envs.APHRODITE_OBJECT_STORAGE_SHM_BUFFER_NAME,
+            name=envs.SONAR_OBJECT_STORAGE_SHM_BUFFER_NAME,
             create=True,  # sender is the writer
         )
         self._shm_cache = SingleWriterShmObjectStorage(
@@ -254,17 +254,17 @@ class ShmObjectStoreReceiverCache(BaseMultiModalReceiverCache):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         shared_worker_lock: LockType,
     ) -> None:
         super().__init__()
 
-        self.world_size = aphrodite_config.parallel_config.world_size
-        mm_config = aphrodite_config.model_config.get_multimodal_config()
+        self.world_size = sonar_config.parallel_config.world_size
+        mm_config = sonar_config.model_config.get_multimodal_config()
 
         ring_buffer = SingleWriterShmRingBuffer(
             data_buffer_size=int(mm_config.mm_processor_cache_gb * GiB_bytes),
-            name=envs.APHRODITE_OBJECT_STORAGE_SHM_BUFFER_NAME,
+            name=envs.SONAR_OBJECT_STORAGE_SHM_BUFFER_NAME,
             create=False,  # Server is a reader
         )
         self._shm_cache = SingleWriterShmObjectStorage(

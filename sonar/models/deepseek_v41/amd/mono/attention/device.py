@@ -314,7 +314,7 @@ def ceil_exp(v):
 
 
 def mx_code(amax):
-    """APHRODITE's ROCm MXFP8 scale code of a 32-group: clamp(ceil(log2(amax / 448))
+    """SONAR's ROCm MXFP8 scale code of a 32-group: clamp(ceil(log2(amax / 448))
     + 127, 0, 254), amax floored at FLT_MIN."""
     a = fx.max(amax, fx.Float32(FLT_MIN))
     q = div_rn(a, fx.Float32(FP8_MAX), fx.Float32(1.0 / FP8_MAX))

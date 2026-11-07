@@ -12,11 +12,11 @@ from unittest.mock import Mock, patch
 
 import torch
 
-from aphrodite.model_executor.models.interfaces import supports_eagle3
-from aphrodite.models.glm5next.nvidia import model as glm
-from aphrodite.v1.core import kv_cache_utils as kv
-from aphrodite.v1.core.kv_cache_coordinator import HybridKVCacheCoordinator
-from aphrodite.v1.kv_cache_interface import (
+from sonar.model_executor.models.interfaces import supports_eagle3
+from sonar.models.glm5next.nvidia import model as glm
+from sonar.v1.core import kv_cache_utils as kv
+from sonar.v1.core.kv_cache_coordinator import HybridKVCacheCoordinator
+from sonar.v1.kv_cache_interface import (
     KpoolTailSpec,
     KVCacheConfig,
     KVCacheGroupSpec,
@@ -26,7 +26,7 @@ from aphrodite.v1.kv_cache_interface import (
     SlidingWindowSpec,
     create_kv_cache_views,
 )
-from aphrodite.v1.worker.gpu.spec_decode.eagle.eagle3_utils import set_eagle3_aux_hidden_state_layers
+from sonar.v1.worker.gpu.spec_decode.eagle.eagle3_utils import set_eagle3_aux_hidden_state_layers
 
 
 class GlmAuxCaptureTest(unittest.TestCase):

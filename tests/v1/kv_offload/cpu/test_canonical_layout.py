@@ -7,21 +7,21 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.v1.kv_offload.base import (
+from sonar.v1.kv_offload.base import (
     CanonicalKVCacheRef,
     CanonicalPageMapping,
     CopyRun,
     GPULoadStoreSpec,
 )
-from aphrodite.v1.kv_offload.cpu.common import CPULoadStoreSpec
-from aphrodite.v1.kv_offload.cpu.gpu_worker import (
+from sonar.v1.kv_offload.cpu.common import CPULoadStoreSpec
+from sonar.v1.kv_offload.cpu.gpu_worker import (
     SingleDirectionOffloadingHandler,
     _build_copy_plan,
     _canonical_block_sizes,
     _canonical_page_ids,
     pin_mmap_region,
 )
-from aphrodite.v1.kv_offload.cpu.shared_offload_region import SharedOffloadRegion
+from sonar.v1.kv_offload.cpu.shared_offload_region import SharedOffloadRegion
 
 
 def _ref(mapping: CanonicalPageMapping, tensor_idx: int = 0) -> CanonicalKVCacheRef:

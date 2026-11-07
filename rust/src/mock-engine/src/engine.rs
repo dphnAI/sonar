@@ -6,19 +6,19 @@ use std::hash::{Hash as _, Hasher as _};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Result, anyhow};
-use aphrodite_engine_core_client::protocol::output::{
-    EngineCoreFinishReason, EngineCoreOutput, EngineCoreOutputs, RequestBatchOutputs,
-    UtilityCallOutput,
-};
-use aphrodite_engine_core_client::protocol::request::EngineCoreRequest;
-use aphrodite_engine_core_client::protocol::stats::PrefillStats;
-use aphrodite_engine_core_client::protocol::utility::{
-    EngineCoreUtilityRequest, UtilityOutput, UtilityResultEnvelope,
-};
 use rand::rngs::StdRng;
 use rand::{Rng as _, SeedableRng as _};
 use rmpv::Value;
 use serde::Serialize;
+use sonar_engine_core_client::protocol::output::{
+    EngineCoreFinishReason, EngineCoreOutput, EngineCoreOutputs, RequestBatchOutputs,
+    UtilityCallOutput,
+};
+use sonar_engine_core_client::protocol::request::EngineCoreRequest;
+use sonar_engine_core_client::protocol::stats::PrefillStats;
+use sonar_engine_core_client::protocol::utility::{
+    EngineCoreUtilityRequest, UtilityOutput, UtilityResultEnvelope,
+};
 use tokio::sync::mpsc;
 use tokio::task::yield_now;
 use tokio_util::sync::CancellationToken;

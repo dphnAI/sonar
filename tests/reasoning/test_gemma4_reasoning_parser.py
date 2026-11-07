@@ -3,13 +3,13 @@
 
 import pytest
 
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionRequest,
 )
-from aphrodite.reasoning import ReasoningParser, ReasoningParserManager
+from sonar.reasoning import ReasoningParser, ReasoningParserManager
 
 # Using mistral tokenizer as a generic mock since the actual model is not on HF
-from aphrodite.tokenizers.registry import get_tokenizer
+from sonar.tokenizers.registry import get_tokenizer
 from tests.reasoning.utils import run_reasoning_extraction
 
 parser_name = "gemma4"
@@ -179,7 +179,7 @@ def gemma4_encode_output(generic_tokenizer, output: str) -> list[int]:
     def _encode(text: str) -> list[int]:
         if not text:
             return []
-        # Handle both raw transformers and Aphrodite wrappers
+        # Handle both raw transformers and Sonar wrappers
         enc = getattr(generic_tokenizer, "tokenizer", generic_tokenizer)
         try:
             return enc.encode(text, add_special_tokens=False)

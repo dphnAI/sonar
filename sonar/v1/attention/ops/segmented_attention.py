@@ -9,10 +9,10 @@ from functools import lru_cache
 
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
-from aphrodite.v1.kv_cache_interface import get_kv_quant_mode
-from aphrodite.v1.worker.workspace import (
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
+from sonar.v1.kv_cache_interface import get_kv_quant_mode
+from sonar.v1.worker.workspace import (
     current_workspace_manager,
     is_workspace_manager_initialized,
 )
@@ -862,7 +862,7 @@ def _launch_segmented_attention(
 
 def get_segmented_config(*args, **kwargs):
     """Load the tuner on demand to avoid a kernel/tuner import cycle."""
-    from aphrodite.model_executor.warmup.rocm_segmented_attn_autotune_warmup import (
+    from sonar.model_executor.warmup.rocm_segmented_attn_autotune_warmup import (
         get_segmented_config as tuned_config,
     )
 
@@ -901,7 +901,7 @@ def segmented_attention(
             key_cache = key_cache.view(fp8_dtype)
             value_cache = value_cache.view(fp8_dtype)
 
-    from aphrodite.platforms.rocm import on_gfx1x, on_gfx12x
+    from sonar.platforms.rocm import on_gfx1x, on_gfx12x
 
     segmented_pattern = (
         isinstance(causal, bool)

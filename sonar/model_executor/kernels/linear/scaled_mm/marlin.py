@@ -5,20 +5,20 @@ from collections.abc import Sequence
 
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
+import sonar.envs as envs
+from sonar.model_executor.layers.quantization.utils.fp8_utils import (
     process_fp8_weight_block_strategy,
 )
-from aphrodite.model_executor.layers.quantization.utils.marlin_utils_fp8 import (
+from sonar.model_executor.layers.quantization.utils.marlin_utils_fp8 import (
     apply_fp8_marlin_linear,
     is_fp8_marlin_supported,
     prepare_fp8_layer_for_marlin,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     kFp8Static128BlockSym,
 )
-from aphrodite.model_executor.utils import replace_parameter
-from aphrodite.platforms import current_platform
+from sonar.model_executor.utils import replace_parameter
+from sonar.platforms import current_platform
 
 from .ScaledMMLinearKernel import (
     FP8ScaledMMLinearKernel,
@@ -38,7 +38,7 @@ class MarlinFP8ScaledMMLinearKernel(FP8ScaledMMLinearKernel):
         # Check if platform supports FP8 Marlin
         if not is_fp8_marlin_supported():
             return False, "FP8 Marlin requires compute capability 7.5 or higher"
-        if envs.APHRODITE_BATCH_INVARIANT:
+        if envs.SONAR_BATCH_INVARIANT:
             return False, "FP8 Marlin not supported for batch invariant execution."
         return True, None
 

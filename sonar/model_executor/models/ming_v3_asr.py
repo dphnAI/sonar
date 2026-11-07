@@ -55,26 +55,26 @@ import torch.nn.functional as F
 from torch import nn
 from transformers import BatchFeature
 
-from aphrodite.config import AphroditeConfig, ModelConfig, SpeechToTextConfig
-from aphrodite.config.multimodal import MultiModalDummyOptions
-from aphrodite.config.speech_to_text import SpeechToTextParams
-from aphrodite.inputs import MultiModalDataDict, TokensPrompt
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import MultiModalFieldConfig, MultiModalKwargsItems
-from aphrodite.multimodal.parse import MultiModalDataItems, MultiModalDataParser
-from aphrodite.multimodal.processing import (
+from sonar.config import ModelConfig, SonarConfig, SpeechToTextConfig
+from sonar.config.multimodal import MultiModalDummyOptions
+from sonar.config.speech_to_text import SpeechToTextParams
+from sonar.inputs import MultiModalDataDict, TokensPrompt
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import MultiModalFieldConfig, MultiModalKwargsItems
+from sonar.multimodal.parse import MultiModalDataItems, MultiModalDataParser
+from sonar.multimodal.processing import (
     BaseDummyInputsBuilder,
     BaseMultiModalProcessor,
     BaseProcessingInfo,
     PromptReplacement,
 )
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.tokenizers import cached_tokenizer_from_config
-from aphrodite.transformers_utils.configs.ming_v3_asr import (
+from sonar.sequence import IntermediateTensors
+from sonar.tokenizers import cached_tokenizer_from_config
+from sonar.transformers_utils.configs.ming_v3_asr import (
     MingAudioConfig,
     MingV3ASRConfig,
 )
-from aphrodite.transformers_utils.processors.ming_audio import MingASRFeatureExtractor
+from sonar.transformers_utils.processors.ming_audio import MingASRFeatureExtractor
 
 from .bailing_moe_v3 import BailingMoeV3ForCausalLM
 from .interfaces import (
@@ -304,7 +304,7 @@ class MingV3ASRForConditionalGeneration(
 ):
     supported_languages = _LANGUAGES
     supports_transcription_only = True
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={
             "model.audio.": "audio_encoder.",
             "linear_proj_audio.": "audio_projector.proj.",
@@ -315,20 +315,20 @@ class MingV3ASRForConditionalGeneration(
         }
     )
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__()
-        self.config = aphrodite_config.model_config.hf_config
-        self.dtype = aphrodite_config.model_config.dtype
-        with self._mark_tower_model(aphrodite_config, "audio"):
+        self.config = sonar_config.model_config.hf_config
+        self.dtype = sonar_config.model_config.dtype
+        with self._mark_tower_model(sonar_config, "audio"):
             self.audio_encoder = MingAudioEncoder(
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 config=self.config.audio_config,
                 prefix=maybe_prefix(prefix, "audio_encoder"),
             )
             self.audio_projector = MingAudioProjector(self.config.audio_config, self.config.text_config.hidden_size)
-        with self._mark_language_model(aphrodite_config):
+        with self._mark_language_model(sonar_config):
             self.language_model = BailingMoeV3ForCausalLM(
-                aphrodite_config=aphrodite_config.with_hf_config(self.config.text_config),
+                sonar_config=sonar_config.with_hf_config(self.config.text_config),
                 prefix=maybe_prefix(prefix, "language_model"),
             )
         self.make_empty_intermediate_tensors = self.language_model.make_empty_intermediate_tensors
@@ -370,7 +370,7 @@ class MingV3ASRForConditionalGeneration(
         return self.language_model.compute_logits(hidden_states)
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
-        return AutoWeightsLoader(self).load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return AutoWeightsLoader(self).load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
     def get_mm_mapping(self) -> MultiModelKeys:
         return MultiModelKeys.from_string_field(
@@ -379,15 +379,15 @@ class MingV3ASRForConditionalGeneration(
         )
 
     @classmethod
-    def get_mamba_state_shape_from_config(cls, aphrodite_config: AphroditeConfig):
+    def get_mamba_state_shape_from_config(cls, sonar_config: SonarConfig):
         return BailingMoeV3ForCausalLM.get_mamba_state_shape_from_config(
-            aphrodite_config.with_hf_config(aphrodite_config.model_config.hf_config.text_config)
+            sonar_config.with_hf_config(sonar_config.model_config.hf_config.text_config)
         )
 
     @classmethod
-    def get_mamba_state_dtype_from_config(cls, aphrodite_config: AphroditeConfig):
+    def get_mamba_state_dtype_from_config(cls, sonar_config: SonarConfig):
         return BailingMoeV3ForCausalLM.get_mamba_state_dtype_from_config(
-            aphrodite_config.with_hf_config(aphrodite_config.model_config.hf_config.text_config)
+            sonar_config.with_hf_config(sonar_config.model_config.hf_config.text_config)
         )
 
     @classmethod

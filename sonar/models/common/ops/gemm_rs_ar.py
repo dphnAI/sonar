@@ -20,8 +20,8 @@ from cutlass.cute.runtime import make_fake_stream, make_fake_tensor, make_ptr, n
 from cutlass.cutlass_dsl import dsl_user_op
 from cutlass.utils import get_smem_capacity_in_bytes
 
-from aphrodite.cute_utils import _tcgen05, mbarrier, simple_tma_copy, to_cta0_smem
-from aphrodite.distributed import get_tp_group
+from sonar.cute_utils import _tcgen05, mbarrier, simple_tma_copy, to_cta0_smem
+from sonar.distributed import get_tp_group
 
 
 @dsl_user_op

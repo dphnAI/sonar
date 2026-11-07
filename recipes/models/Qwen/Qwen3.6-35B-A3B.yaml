@@ -92,7 +92,7 @@ features:
       - "--max-model-len"
       - "1010000"
     env:
-      APHRODITE_ALLOW_LONG_MAX_MODEL_LEN: "1"
+      SONAR_ALLOW_LONG_MAX_MODEL_LEN: "1"
 
 opt_in_features:
   - spec_decoding
@@ -117,7 +117,7 @@ variants:
     hardware_overrides:
       rtx_pro_6000:
         extra_env:
-          APHRODITE_USE_DEEP_GEMM: "0"
+          SONAR_USE_DEEP_GEMM: "0"
   nvfp4:
     model_id: "nvidia/Qwen3.6-35B-A3B-NVFP4"
     precision: nvfp4
@@ -194,7 +194,7 @@ variants:
           - "--load-format"
           - "fastsafetensors"
         extra_env:
-          APHRODITE_HAS_FLASHINFER_CUBIN: "1"
+          SONAR_HAS_FLASHINFER_CUBIN: "1"
       rtx_5090:
         extra_args:
           - "--quantization"
@@ -222,7 +222,7 @@ variants:
           - "--async-scheduling"
           - "--skip-mm-profiling"
         extra_env:
-          APHRODITE_HAS_FLASHINFER_CUBIN: "1"
+          SONAR_HAS_FLASHINFER_CUBIN: "1"
 
   redhat_nvfp4:
     model_id: "RedHatAI/Qwen3.6-35B-A3B-NVFP4"
@@ -267,7 +267,7 @@ hardware_overrides:
   amd:
     extra_args: []
     extra_env:
-      APHRODITE_ROCM_USE_AITER: "1"
+      SONAR_ROCM_USE_AITER: "1"
   xpu:
     extra_args:
       - "--enforce-eager"
@@ -285,8 +285,8 @@ guide: |
 
   ## Prerequisites
 
-  - **Aphrodite version:** >= 0.17.0
-  - **NVFP4 Aphrodite version:** >= 0.28.0. 0.24.0 loads the checkpoint, but
+  - **Sonar version:** >= 0.17.0
+  - **NVFP4 Sonar version:** >= 0.28.0. 0.24.0 loads the checkpoint, but
     FlashInfer only selects its XQA decode kernel on SM120 GPUs from 0.28.0.
   - **Hardware (BF16):** 1x H200, 2x H100, 4x Intel Arc Pro B60 / B70
   - **Hardware (FP8):** single H100/H200 or 1x MI300X/MI325X/MI355X
@@ -305,18 +305,18 @@ guide: |
   unified memory with the host, so `--gpu-memory-utilization` is capped at 0.5.
   The SM120 parts (RTX PRO 6000, RTX 5090) load through `--quantization
   modelopt_fp4` with FlashInfer's TRT-LLM attention kernels, which need
-  `--block-size 128` and `APHRODITE_HAS_FLASHINFER_CUBIN=1`, and sustain a deeper
+  `--block-size 128` and `SONAR_HAS_FLASHINFER_CUBIN=1`, and sustain a deeper
   4-token MTP draft on `flashinfer_cutlass`. The RTX 5090's 32 GB caps context
   at 64K.
 
   Datacenter Blackwell (B200/GB200/B300/GB300) intentionally carries no
-  overrides — it runs Aphrodite's own NVFP4 defaults, which select the native FP4
+  overrides — it runs Sonar's own NVFP4 defaults, which select the native FP4
   path rather than the Marlin W4A16 kernel the workstation parts need.
 
   ### Measured on DGX Spark (GB10)
 
   The GB10 profile above was re-measured on 2026-08-31 with aiperf 0.12.0 on
-  Aphrodite 0.28.0 (Ubuntu 24.04.4, driver 580.159.03, CUDA 13.0), one GB10 at TP1,
+  Sonar 0.28.0 (Ubuntu 24.04.4, driver 580.159.03, CUDA 13.0), one GB10 at TP1,
   serving from `vllm/vllm-openai:v0.28.0`. On SPEED-Bench at 8K input / 256
   output tokens and concurrency 1, it sustained 6,265 prefill tok/s and 97.7
   decode tok/s at a 3.95 s mean end-to-end latency. The flag set is unchanged —
@@ -326,7 +326,7 @@ guide: |
   ### Docker (Intel XPU B60 / B70)
 
   Validated on 4× Intel Arc Pro B60 / B70 (B60 24 GB, B70 32 GB per card) with the
-  official Aphrodite XPU image `vllm/vllm-openai-xpu:latest`.
+  official Sonar XPU image `vllm/vllm-openai-xpu:latest`.
 
   ```bash
   docker run --device /dev/dri \
@@ -369,7 +369,7 @@ guide: |
   ## Troubleshooting
 
   - **CUDA graph / Mamba cache size error:** reduce `--max-cudagraph-capture-size`
-    (default 512). See [Aphrodite PR #34571](https://github.com/vllm-project/vllm/pull/34571).
+    (default 512). See [Sonar PR #34571](https://github.com/vllm-project/vllm/pull/34571).
   - **Reasoning disable:** add `--default-chat-template-kwargs '{"enable_thinking": false}'`.
   - **Prefix Caching (Mamba):** currently experimental in "align" mode.
 

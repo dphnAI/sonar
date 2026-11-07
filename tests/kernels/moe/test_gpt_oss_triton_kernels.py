@@ -6,8 +6,8 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from aphrodite.platforms import current_platform
-from aphrodite.utils.import_utils import get_triton_kernels_version, has_triton_kernels
+from sonar.platforms import current_platform
+from sonar.utils.import_utils import get_triton_kernels_version, has_triton_kernels
 
 if not has_triton_kernels():
     pytest.skip(
@@ -30,16 +30,16 @@ from triton_kernels.tensor import FP4, convert_layout, wrap_torch_tensor
 from triton_kernels.tensor_details import layout
 from triton_kernels.testing import assert_close
 
-from aphrodite.model_executor.layers.fused_moe.config import mxfp4_w4a16_moe_quant_config
-from aphrodite.model_executor.layers.fused_moe.experts.gpt_oss_triton_kernels_moe import (
+from sonar.model_executor.layers.fused_moe.config import mxfp4_w4a16_moe_quant_config
+from sonar.model_executor.layers.fused_moe.experts.gpt_oss_triton_kernels_moe import (
     _sm12x_block_m,
     triton_kernel_moe_forward,
 )
-from aphrodite.model_executor.layers.fused_moe.oracle import mxfp4 as mxfp4_oracle
-from aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 import Mxfp4MoeBackend
-from aphrodite.model_executor.layers.quantization.utils import mxfp4_utils
-from aphrodite.model_executor.layers.quantization.utils.mxfp4_utils import mx_scale_kwargs
-from aphrodite.utils.math_utils import round_up
+from sonar.model_executor.layers.fused_moe.oracle import mxfp4 as mxfp4_oracle
+from sonar.model_executor.layers.fused_moe.oracle.mxfp4 import Mxfp4MoeBackend
+from sonar.model_executor.layers.quantization.utils import mxfp4_utils
+from sonar.model_executor.layers.quantization.utils.mxfp4_utils import mx_scale_kwargs
+from sonar.utils.math_utils import round_up
 
 from .utils import mxfp4_w_layouts, shuffle_weight
 
@@ -424,7 +424,7 @@ def test_unit_shuffle():
 def test_routing_data_from_sparse_topk_parity(n_tokens, n_experts, topk):
     """routing_data_from_sparse_topk must produce routing structures
     identical to make_routing_data for the same topk result."""
-    from aphrodite.model_executor.layers.fused_moe.experts import (
+    from sonar.model_executor.layers.fused_moe.experts import (
         gpt_oss_triton_kernels_moe as gptoss_moe,
     )
 
@@ -478,7 +478,7 @@ def test_routing_data_from_sparse_topk_parity(n_tokens, n_experts, topk):
 @pytest.mark.parametrize("n_tokens", [1, 33, 4099])
 @pytest.mark.parametrize("n_experts,topk", [(128, 4), (256, 6)])
 def test_make_routing_data_tk38_matches_reference(n_tokens, n_experts, topk):
-    from aphrodite.model_executor.layers.fused_moe.experts import (
+    from sonar.model_executor.layers.fused_moe.experts import (
         gpt_oss_triton_kernels_moe as gptoss_moe,
     )
 

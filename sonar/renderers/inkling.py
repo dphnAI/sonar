@@ -13,16 +13,16 @@ in :meth:`InklingRenderer._render` for adopting a standalone Inkling
 input-processing library (mistral-common style) later.
 """
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.logger import init_logger
-from aphrodite.renderers.chat_utils import (
+from sonar.config import SonarConfig
+from sonar.logger import init_logger
+from sonar.renderers.chat_utils import (
     ChatCompletionMessageParam,
     ConversationMessage,
     parse_chat_messages,
     parse_chat_messages_async,
 )
-from aphrodite.tokenizers.hf import HfTokenizer
-from aphrodite.utils.async_utils import make_async
+from sonar.tokenizers.hf import HfTokenizer
+from sonar.utils.async_utils import make_async
 
 from .base import BaseRenderer
 from .inkling_encoding import SPECIAL_TOKEN_SPELLINGS, render_inkling_messages
@@ -91,7 +91,7 @@ class _HfBackedTmlTokenizer:
 class InklingRenderer(BaseRenderer[HfTokenizer]):
     def __init__(
         self,
-        config: AphroditeConfig,
+        config: SonarConfig,
         tokenizer: HfTokenizer | None,
     ) -> None:
         super().__init__(config, tokenizer)

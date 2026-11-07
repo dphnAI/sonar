@@ -9,15 +9,15 @@ import pytest
 import requests
 import torch
 
-from aphrodite.entrypoints.pooling.pooling.protocol import PoolingResponse
-from aphrodite.entrypoints.pooling.utils import (
+from sonar.entrypoints.pooling.pooling.protocol import PoolingResponse
+from sonar.entrypoints.pooling.utils import (
     MetadataItem,
     build_metadata_items,
     decode_pooling_output,
 )
-from aphrodite.renderers.chat_utils import ChatCompletionMessageParam
-from aphrodite.tokenizers import get_tokenizer
-from aphrodite.utils.serial_utils import EMBED_DTYPES, ENDIANNESS, binary2tensor
+from sonar.renderers.chat_utils import ChatCompletionMessageParam
+from sonar.tokenizers import get_tokenizer
+from sonar.utils.serial_utils import EMBED_DTYPES, ENDIANNESS, binary2tensor
 from tests.models.utils import check_embeddings_close
 from tests.utils import RemoteOpenAIServer
 
@@ -263,7 +263,7 @@ async def test_chat_request(server: RemoteOpenAIServer, model_name: str):
 async def test_batch_base64_pooling(server: RemoteOpenAIServer, model_name: str):
     input_texts = [
         "Hello my name is",
-        "The best thing about Aphrodite is that it supports many different models",
+        "The best thing about Sonar is that it supports many different models",
     ]
 
     float_response = requests.post(

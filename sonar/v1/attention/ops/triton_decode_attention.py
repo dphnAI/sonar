@@ -33,8 +33,8 @@ import logging
 import torch
 from packaging import version
 
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
 
 is_hip_ = current_platform.is_rocm()
 

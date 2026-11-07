@@ -11,16 +11,16 @@ from dataclasses import dataclass, fields
 import pytest
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.model_executor.layers.quantization.utils.machete_utils import (
+from sonar import _custom_ops as ops
+from sonar.model_executor.layers.quantization.utils.machete_utils import (
     query_machete_supported_group_sizes,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     pack_rows,
     quantize_weights,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.scalar_type import ScalarType, scalar_types
+from sonar.platforms import current_platform
+from sonar.scalar_type import ScalarType, scalar_types
 from tests.kernels.utils import opcheck
 
 if current_platform.is_rocm():

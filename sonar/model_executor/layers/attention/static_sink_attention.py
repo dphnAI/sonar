@@ -4,30 +4,30 @@ import functools
 
 import torch
 
-from aphrodite.config import AphroditeConfig, CacheConfig
-from aphrodite.forward_context import ForwardContext, get_forward_context
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.custom_op import CustomOp
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.utils.torch_utils import (
+from sonar.config import CacheConfig, SonarConfig
+from sonar.forward_context import ForwardContext, get_forward_context
+from sonar.logger import init_logger
+from sonar.model_executor.custom_op import CustomOp
+from sonar.model_executor.layers.attention import Attention
+from sonar.utils.math_utils import cdiv
+from sonar.utils.torch_utils import (
     LayerNameType,
     _encode_layer_name,
     _resolve_layer_name,
     direct_register_custom_op,
 )
-from aphrodite.v1.attention.backend import (
+from sonar.v1.attention.backend import (
     AttentionBackend,
     AttentionMetadata,
     AttentionType,
     CommonAttentionMetadata,
     subclass_attention_backend,
 )
-from aphrodite.v1.attention.ops.triton_reshape_and_cache_flash import (
+from sonar.v1.attention.ops.triton_reshape_and_cache_flash import (
     triton_reshape_and_cache_flash_diffkv,
 )
-from aphrodite.v1.attention.selector import get_attn_backend
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.attention.selector import get_attn_backend
+from sonar.v1.kv_cache_interface import (
     AttentionSpec,
     KVCacheSpec,
     SinkFullAttentionSpec,
@@ -50,16 +50,16 @@ def create_static_sink_attention_backend(
             self,
             kv_cache_spec: AttentionSpec,
             layer_names: list[str],
-            aphrodite_config: AphroditeConfig,
+            sonar_config: SonarConfig,
             device: torch.device,
         ):
-            super().__init__(kv_cache_spec, layer_names, aphrodite_config, device)
-            model_config = aphrodite_config.model_config
-            scheduler_config = aphrodite_config.scheduler_config
+            super().__init__(kv_cache_spec, layer_names, sonar_config, device)
+            model_config = sonar_config.model_config
+            scheduler_config = sonar_config.scheduler_config
             self.sink_len = sink_len
-            self.block_size = aphrodite_config.cache_config.block_size
-            self.num_sink_blocks = self.sink_len // aphrodite_config.cache_config.block_size
-            self.max_num_blocks = cdiv(model_config.max_model_len, aphrodite_config.cache_config.block_size)
+            self.block_size = sonar_config.cache_config.block_size
+            self.num_sink_blocks = self.sink_len // sonar_config.cache_config.block_size
+            self.max_num_blocks = cdiv(model_config.max_model_len, sonar_config.cache_config.block_size)
             self.block_table_with_sink = torch.zeros(
                 (
                     scheduler_config.max_num_seqs,
@@ -161,7 +161,7 @@ class StaticSinkAttention(Attention, CustomOp):
         )
         if not self.sink_populated:
             self_kv_cache = self.kv_cache
-            torch.ops.aphrodite.maybe_populate_sink(self_kv_cache, _encode_layer_name(self.layer_name))
+            torch.ops.sonar.maybe_populate_sink(self_kv_cache, _encode_layer_name(self.layer_name))
 
         return super().forward(query, key, value, output_shape)
 
@@ -196,9 +196,9 @@ class StaticSinkAttention(Attention, CustomOp):
         # We only populate the sink_key and sink_value once
         self.sink_populated = True
 
-    def get_kv_cache_spec(self, aphrodite_config: AphroditeConfig) -> KVCacheSpec:
+    def get_kv_cache_spec(self, sonar_config: SonarConfig) -> KVCacheSpec:
         # Block size may get updated after model loading, refresh it
-        self.block_size = aphrodite_config.cache_config.block_size
+        self.block_size = sonar_config.cache_config.block_size
         # Should not be called for enc-dec or encoder-only attention.
         assert self.attn_type == AttentionType.DECODER
 

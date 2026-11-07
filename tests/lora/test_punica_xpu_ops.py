@@ -4,8 +4,8 @@
 import pytest
 import torch
 
-from aphrodite.lora.ops.xpu_ops import bgmv_expand, bgmv_expand_slice, bgmv_shrink
-from aphrodite.platforms import current_platform
+from sonar.lora.ops.xpu_ops import bgmv_expand, bgmv_expand_slice, bgmv_shrink
+from sonar.platforms import current_platform
 from tests.lora.utils import (
     PunicaTensors,
     assert_close,
@@ -86,7 +86,7 @@ def check_bgmv_shrink(
     device: str,
     scaling: float,
 ):
-    """Compare aphrodite.bgmv_shrink against a reference implementation."""
+    """Compare sonar.bgmv_shrink against a reference implementation."""
     seq_length = 1
     data: PunicaTensors = generate_data(
         batches,
@@ -128,7 +128,7 @@ def check_bgmv_expand(
     device: str,
     add_inputs: bool,
 ):
-    """Compare aphrodite.bgmv_expand against a reference implementation."""
+    """Compare sonar.bgmv_expand against a reference implementation."""
     seq_length = 1
     data: PunicaTensors = generate_data(
         batches,
@@ -168,7 +168,7 @@ def check_bgmv_expand_slice(
     device: str,
     add_inputs: bool,
 ):
-    """Compare aphrodite.bgmv_expand_slice against a reference implementation."""
+    """Compare sonar.bgmv_expand_slice against a reference implementation."""
     seq_length = 1
     data: PunicaTensors = generate_data_for_expand_nslices(
         batches,

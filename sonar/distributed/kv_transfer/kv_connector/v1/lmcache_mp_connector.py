@@ -11,17 +11,17 @@ import zmq
 from lmcache.integration.vllm.utils import mla_enabled
 from lmcache.utils import init_logger as lmcache_init_logger
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed.kv_transfer.kv_connector.v1.base import (
+from sonar.config import SonarConfig
+from sonar.distributed.kv_transfer.kv_connector.v1.base import (
     KVConnectorBase_V1,
     KVConnectorMetadata,
     KVConnectorRole,
 )
-from aphrodite.v1.attention.backend import AttentionMetadata
-from aphrodite.v1.core.sched.output import SchedulerOutput
-from aphrodite.v1.outputs import KVConnectorOutput
-from aphrodite.v1.request import RequestStatus
-from aphrodite.v1.utils import ConstantList
+from sonar.v1.attention.backend import AttentionMetadata
+from sonar.v1.core.sched.output import SchedulerOutput
+from sonar.v1.outputs import KVConnectorOutput
+from sonar.v1.request import RequestStatus
+from sonar.v1.utils import ConstantList
 
 try:
     from lmcache.integration.vllm.vllm_multi_process_adapter import (
@@ -44,7 +44,7 @@ except ImportError:
         BlockAllocationRecord as RequestAllocationRecord,
     )
 
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.lmcache_integration import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.lmcache_integration import (
         LMCacheMPSchedulerAdapter,
         LMCacheMPWorkerAdapter,
         LoadStoreOp,
@@ -54,18 +54,18 @@ except ImportError:
     _USING_EXTERNAL_ADAPTER = False
 
 if TYPE_CHECKING:
-    from aphrodite.distributed.kv_events import KVCacheEventType
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.metrics import (
+    from sonar.distributed.kv_events import KVCacheEventType
+    from sonar.distributed.kv_transfer.kv_connector.v1.metrics import (
         KVConnectorPromMetrics,
         KVConnectorStats,
         PromMetric,
         PromMetricT,
     )
-    from aphrodite.forward_context import ForwardContext
-    from aphrodite.v1.core.kv_cache_manager import KVCacheBlocks
-    from aphrodite.v1.core.kv_cache_utils import BlockHash
-    from aphrodite.v1.kv_cache_interface import KVCacheConfig
-    from aphrodite.v1.request import Request
+    from sonar.forward_context import ForwardContext
+    from sonar.v1.core.kv_cache_manager import KVCacheBlocks
+    from sonar.v1.core.kv_cache_utils import BlockHash
+    from sonar.v1.kv_cache_interface import KVCacheConfig
+    from sonar.v1.request import Request
 
 logger = lmcache_init_logger(__name__)
 
@@ -79,7 +79,7 @@ def reformat_block_ids(block_ids: tuple[list[int], ...] | None) -> list[int]:
     if len(block_ids) > 1:
         raise RuntimeError(
             "LMCacheMPConnector only works without hybrid kv cache manager. "
-            "Please pass --disable-hybrid-kv-cache-manager when starting aphrodite"
+            "Please pass --disable-hybrid-kv-cache-manager when starting sonar"
         )
 
     return block_ids[0]
@@ -88,17 +88,17 @@ def reformat_block_ids(block_ids: tuple[list[int], ...] | None) -> list[int]:
 def extract_world_size_and_kv_rank(
     world_size: int,
     rank: int,
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
 ) -> tuple[int, int]:
     """Convert the rank for the MLA."""
-    use_mla = mla_enabled(aphrodite_config.model_config)
+    use_mla = mla_enabled(sonar_config.model_config)
     if not use_mla:
         return world_size, rank
     else:
         # Tensor parallel does not change the KV caches for MLA models.
         # So we need to "exclude" the effect of TP on rank and world size
-        tp_size = aphrodite_config.parallel_config.tensor_parallel_size
-        # Aphrodite constructs TP groups first, and then construct other
+        tp_size = sonar_config.parallel_config.tensor_parallel_size
+        # Sonar constructs TP groups first, and then construct other
         # parallel groups on top of TP groups.
         # for example, TP=4, PP=2,
         # PP group: [0, 1, 2, 3], [4, 5, 6, 7]
@@ -110,30 +110,30 @@ def extract_world_size_and_kv_rank(
 def create_scheduler_adapter(
     server_url: str,
     zmq_context: zmq.Context,
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     mq_timeout: float,
     heartbeat_interval: float,
 ) -> LMCacheMPSchedulerAdapter:
     world_size, kv_rank = extract_world_size_and_kv_rank(
-        aphrodite_config.parallel_config.world_size,
-        aphrodite_config.parallel_config.rank,
-        aphrodite_config,
+        sonar_config.parallel_config.world_size,
+        sonar_config.parallel_config.rank,
+        sonar_config,
     )
     parallel_strategy = ParallelStrategy(
-        mla_enabled(aphrodite_config.model_config),
+        mla_enabled(sonar_config.model_config),
         world_size,
         kv_rank,
-        aphrodite_config.parallel_config.world_size,
-        aphrodite_config.parallel_config.rank,
-        aphrodite_config.parallel_config.tensor_parallel_size,
-        aphrodite_config.parallel_config.pipeline_parallel_size,
+        sonar_config.parallel_config.world_size,
+        sonar_config.parallel_config.rank,
+        sonar_config.parallel_config.tensor_parallel_size,
+        sonar_config.parallel_config.pipeline_parallel_size,
     )
 
     return LMCacheMPSchedulerAdapter(
         server_url,
         zmq_context,
-        aphrodite_config.model_config.model,
-        aphrodite_config.cache_config.block_size,
+        sonar_config.model_config.model,
+        sonar_config.cache_config.block_size,
         parallel_strategy,
         **({"mq_timeout": mq_timeout, "heartbeat_interval": heartbeat_interval} if _USING_EXTERNAL_ADAPTER else {}),
     )
@@ -142,30 +142,30 @@ def create_scheduler_adapter(
 def create_worker_adapter(
     server_url: str,
     zmq_context: zmq.Context,
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     mq_timeout: float,
     heartbeat_interval: float,
 ) -> LMCacheMPWorkerAdapter:
     world_size, kv_rank = extract_world_size_and_kv_rank(
-        aphrodite_config.parallel_config.world_size,
-        aphrodite_config.parallel_config.rank,
-        aphrodite_config,
+        sonar_config.parallel_config.world_size,
+        sonar_config.parallel_config.rank,
+        sonar_config,
     )
     parallel_strategy = ParallelStrategy(
-        mla_enabled(aphrodite_config.model_config),
+        mla_enabled(sonar_config.model_config),
         world_size,
         kv_rank,
-        aphrodite_config.parallel_config.world_size,
-        aphrodite_config.parallel_config.rank,
-        aphrodite_config.parallel_config.tensor_parallel_size,
-        aphrodite_config.parallel_config.pipeline_parallel_size,
+        sonar_config.parallel_config.world_size,
+        sonar_config.parallel_config.rank,
+        sonar_config.parallel_config.tensor_parallel_size,
+        sonar_config.parallel_config.pipeline_parallel_size,
     )
 
     return LMCacheMPWorkerAdapter(
         server_url,
         zmq_context,
-        aphrodite_config.model_config.model,
-        aphrodite_config.cache_config.block_size,
+        sonar_config.model_config.model,
+        sonar_config.cache_config.block_size,
         parallel_strategy,
         **({"mq_timeout": mq_timeout, "heartbeat_interval": heartbeat_interval} if _USING_EXTERNAL_ADAPTER else {}),
     )
@@ -184,8 +184,8 @@ class LMCacheMPRequestState(enum.Enum):
 
 @dataclass
 class LMCacheMPRequestTracker:
-    # NOTE: this class used Aphrodite data structures, should be part of
-    # Aphrodite integration code
+    # NOTE: this class used Sonar data structures, should be part of
+    # Sonar integration code
 
     request_id: str
 
@@ -206,8 +206,8 @@ class LMCacheMPRequestTracker:
     # requests.
     num_stored_blocks: int = 0
 
-    # Staging load operation -- save aphrodite and lmcache hit tokens during lookup
-    num_aphrodite_hit_blocks: int = 0
+    # Staging load operation -- save sonar and lmcache hit tokens during lookup
+    num_sonar_hit_blocks: int = 0
     num_lmcache_hit_blocks: int = 0
 
     # Main state
@@ -222,7 +222,7 @@ class LMCacheMPRequestTracker:
         self.block_hashes = ConstantList(request.block_hashes)
         self.allocated_block_ids = []
         self.num_stored_blocks = 0
-        self.num_aphrodite_hit_blocks = 0
+        self.num_sonar_hit_blocks = 0
         self.num_lmcache_hit_blocks = 0
         self.state = LMCacheMPRequestState.PREFETCHING
 
@@ -232,7 +232,7 @@ class LMCacheMPRequestTracker:
     def needs_retrieve(self) -> bool:
         """Check whether the current request needs retrieve, will be used
         update_stage_after_alloc"""
-        return self.num_lmcache_hit_blocks > self.num_aphrodite_hit_blocks and self.state != LMCacheMPRequestState.READY
+        return self.num_lmcache_hit_blocks > self.num_sonar_hit_blocks and self.state != LMCacheMPRequestState.READY
 
     def is_ready_for_retrieving(self) -> bool:
         """Check whether the current request is ready for retrieving,
@@ -270,7 +270,7 @@ class LMCacheMPRequestTracker:
             f"num_block_hashes={len(self.block_hashes)}, "
             f"num_allocated_blocks={len(self.allocated_block_ids)}, "
             f"num_stored_blocks={self.num_stored_blocks}, "
-            f"aphrodite_hit_blocks={self.num_aphrodite_hit_blocks}, "
+            f"sonar_hit_blocks={self.num_sonar_hit_blocks}, "
             f"lmcache_hit_blocks={self.num_lmcache_hit_blocks}, "
             f"state={self.state})"
         )
@@ -290,14 +290,14 @@ class LMCacheMPRequestMetadata:
     def GetStoreMetadata(
         tracker: LMCacheMPRequestTracker,
         blocks_in_chunk: int,
-        aphrodite_block_size: int,
+        sonar_block_size: int,
     ) -> "LMCacheMPRequestMetadata | None":
         """Generate the store metadata for the current request tracker.
 
         Args:
             tracker: The request tracker to generate the metadata from.
             blocks_in_chunk: the number of blocks in a LMCache data chunk
-            aphrodite_block_size: the block size used in Aphrodite
+            sonar_block_size: the block size used in Sonar
 
         """
         # Store the blocks that has block hashes
@@ -305,25 +305,25 @@ class LMCacheMPRequestMetadata:
         # always be a multiple of `blocks_in_chunk`
         # TODO: This should be checked everytime we update the num_stored_blocks
         #
-        # Why computed_blocks uses max(num_aphrodite_hit_blocks, num_lmcache_hit_blocks):
+        # Why computed_blocks uses max(num_sonar_hit_blocks, num_lmcache_hit_blocks):
         #
         # Both values represent a prefix of blocks whose KV data is already
-        # available (either from Aphrodite APC or from LMCache), so they must NOT
+        # available (either from Sonar APC or from LMCache), so they must NOT
         # be summed (that would double-count the overlapping prefix).
         #
         # * num_lmcache_hit_blocks: LMCache-hit blocks are already counted in
         #   num_stored_blocks (set during lookup), so they must be included
         #   here to keep the upper bound consistent.  They are NOT re-stored.
-        # * num_aphrodite_hit_blocks: LMCache stores in units of chunks (N blocks),
+        # * num_sonar_hit_blocks: LMCache stores in units of chunks (N blocks),
         #   so num_lmcache_hit_blocks is rounded DOWN to the nearest chunk
-        #   boundary.  When Aphrodite APC hits more blocks than that rounded value
+        #   boundary.  When Sonar APC hits more blocks than that rounded value
         #   (e.g. APC=44 blocks, LMCache=32 blocks after chunk alignment),
         #   using only num_lmcache_hit_blocks would set the upper bound too
         #   low and silently skip the APC-hit blocks that fall between the
         #   two values, causing under-storing.  Taking the max ensures we
         #   always use the tighter (larger) of the two hit counts.
-        computed_blocks = tracker.num_scheduled_tokens // aphrodite_block_size + max(
-            tracker.num_aphrodite_hit_blocks, tracker.num_lmcache_hit_blocks
+        computed_blocks = tracker.num_scheduled_tokens // sonar_block_size + max(
+            tracker.num_sonar_hit_blocks, tracker.num_lmcache_hit_blocks
         )
         min_available_blocks = min(
             len(tracker.block_hashes),
@@ -337,8 +337,8 @@ class LMCacheMPRequestMetadata:
             start = tracker.num_stored_blocks
             end = start + num_chunks * blocks_in_chunk
             block_ids = tracker.allocated_block_ids[start:end]
-            start_token_idx = start * aphrodite_block_size
-            end_token_idx = end * aphrodite_block_size
+            start_token_idx = start * sonar_block_size
+            end_token_idx = end * sonar_block_size
             token_ids = list(tracker.all_token_ids)
             op = LoadStoreOp(
                 token_ids=token_ids,
@@ -364,25 +364,25 @@ class LMCacheMPRequestMetadata:
     def GetRetrieveMetadata(
         tracker: LMCacheMPRequestTracker,
         blocks_in_chunk: int,
-        aphrodite_block_size: int,
+        sonar_block_size: int,
     ) -> "LMCacheMPRequestMetadata | None":
         """Generate the retrieve metadata for the current request tracker.
 
         Args:
             tracker: The request tracker to generate the metadata from.
             blocks_in_chunk: the number of blocks in a LMCache data chunk
-            aphrodite_block_size: the block size used in Aphrodite
+            sonar_block_size: the block size used in Sonar
 
         """
         if not tracker.is_ready_for_retrieving():
             return None
 
         # |---------------------|-----------------|----------------|
-        # | num_aphrodite_hit_blocks |
+        # | num_sonar_hit_blocks |
         # | lmcache chunk 1   | lmcache chunk 2   |
         #                     |  need to retrieve |
 
-        start = tracker.num_aphrodite_hit_blocks // blocks_in_chunk * blocks_in_chunk
+        start = tracker.num_sonar_hit_blocks // blocks_in_chunk * blocks_in_chunk
         end = tracker.num_lmcache_hit_blocks
         assert end % blocks_in_chunk == 0, (
             "The number of LMCache hit blocks should be a multiple of the number of blocks in a lmcache chunk. "
@@ -392,17 +392,17 @@ class LMCacheMPRequestMetadata:
         )
         if end > start:
             block_ids = tracker.allocated_block_ids[start:end]
-            start_token_idx = start * aphrodite_block_size
-            end_token_idx = end * aphrodite_block_size
+            start_token_idx = start * sonar_block_size
+            end_token_idx = end * sonar_block_size
             token_ids = list(tracker.all_token_ids)
 
             # Compute how many tokens at the start of the retrieve range
             # overlap with APC-shared blocks. The server must skip writing
             # to these positions to avoid a cross-stream data race: the
             # retrieve writes on the LMCache CUDA stream while concurrent
-            # requests may read these APC-shared blocks on the Aphrodite stream.
-            apc_overlap_blocks = tracker.num_aphrodite_hit_blocks - start
-            skip_first_n_tokens = apc_overlap_blocks * aphrodite_block_size
+            # requests may read these APC-shared blocks on the Sonar stream.
+            apc_overlap_blocks = tracker.num_sonar_hit_blocks - start
+            skip_first_n_tokens = apc_overlap_blocks * sonar_block_size
 
             op = LoadStoreOp(
                 token_ids=token_ids,
@@ -463,18 +463,18 @@ class LMCacheMPConnectorUpstream(KVConnectorBase_V1):
 
     def __init__(
         self,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
         role: KVConnectorRole,
         kv_cache_config: "KVCacheConfig",
     ):
-        super().__init__(aphrodite_config, role, kv_cache_config)
+        super().__init__(sonar_config, role, kv_cache_config)
 
-        assert aphrodite_config.kv_transfer_config is not None
-        server_host = aphrodite_config.kv_transfer_config.get_from_extra_config("lmcache.mp.host", "tcp://localhost")
-        server_port = aphrodite_config.kv_transfer_config.get_from_extra_config("lmcache.mp.port", 5555)
-        mq_timeout = float(aphrodite_config.kv_transfer_config.get_from_extra_config("lmcache.mp.mq_timeout", 300.0))
+        assert sonar_config.kv_transfer_config is not None
+        server_host = sonar_config.kv_transfer_config.get_from_extra_config("lmcache.mp.host", "tcp://localhost")
+        server_port = sonar_config.kv_transfer_config.get_from_extra_config("lmcache.mp.port", 5555)
+        mq_timeout = float(sonar_config.kv_transfer_config.get_from_extra_config("lmcache.mp.mq_timeout", 300.0))
         heartbeat_interval = float(
-            aphrodite_config.kv_transfer_config.get_from_extra_config("lmcache.mp.heartbeat_interval", 10.0)
+            sonar_config.kv_transfer_config.get_from_extra_config("lmcache.mp.heartbeat_interval", 10.0)
         )
 
         server_url = f"{server_host}:{server_port}"
@@ -483,7 +483,7 @@ class LMCacheMPConnectorUpstream(KVConnectorBase_V1):
             self.scheduler_adapter = create_scheduler_adapter(
                 server_url,
                 zmq_context,
-                aphrodite_config,
+                sonar_config,
                 mq_timeout,
                 heartbeat_interval,
             )
@@ -492,14 +492,14 @@ class LMCacheMPConnectorUpstream(KVConnectorBase_V1):
             self.worker_adapter = create_worker_adapter(
                 server_url,
                 zmq_context,
-                aphrodite_config,
+                sonar_config,
                 mq_timeout,
                 heartbeat_interval,
             )
         else:
             raise ValueError(f"Unknown KVConnectorRole: {self.role}")
 
-        self.aphrodite_block_size = aphrodite_config.cache_config.block_size
+        self.sonar_block_size = sonar_config.cache_config.block_size
 
     @property
     def role(self) -> KVConnectorRole:
@@ -535,7 +535,7 @@ class LMCacheMPConnectorUpstream(KVConnectorBase_V1):
         return
 
     def start_load_kv(self, forward_context: "ForwardContext", **kwargs: Any) -> None:
-        """Start loading the KV cache from the connector to Aphrodite's paged
+        """Start loading the KV cache from the connector to Sonar's paged
         KV buffer. This is called from the forward context before the
         forward pass to enable async loading during model execution.
 
@@ -572,7 +572,7 @@ class LMCacheMPConnectorUpstream(KVConnectorBase_V1):
         self.worker_adapter.batched_submit_retrieve_requests(request_ids, ops, event, cache_salts=cache_salts)
 
     def wait_for_layer_load(self, layer_name: str) -> None:
-        """Block until the KV for a specific layer is loaded into Aphrodite's
+        """Block until the KV for a specific layer is loaded into Sonar's
         paged buffer. This is called from within attention layer to ensure
         async copying from start_load_kv is complete.
 
@@ -591,14 +591,14 @@ class LMCacheMPConnectorUpstream(KVConnectorBase_V1):
         attn_metadata: AttentionMetadata,
         **kwargs: Any,
     ) -> None:
-        """Start saving a layer of KV cache from Aphrodite's paged buffer
+        """Start saving a layer of KV cache from Sonar's paged buffer
         to the connector. This is called from within attention layer to
         enable async copying during execution.
 
         Args:
             layer_name (str): the name of the layer.
             kv_layer (torch.Tensor): the paged KV buffer of the current
-                layer in Aphrodite.
+                layer in Sonar.
             attn_metadata (AttentionMetadata): the attention metadata.
             **kwargs: additional arguments for the save operation.
 
@@ -744,19 +744,19 @@ class LMCacheMPConnectorUpstream(KVConnectorBase_V1):
         if ret == 0:
             return 0, False
 
-        assert ret % (self.scheduler_adapter.num_blocks_per_chunk() * self.aphrodite_block_size) == 0
+        assert ret % (self.scheduler_adapter.num_blocks_per_chunk() * self.sonar_block_size) == 0
 
         # Update num stored blocks for the tracker
-        num_aphrodite_blocks = num_computed_tokens // self.aphrodite_block_size
-        num_lmcache_blocks = ret // self.aphrodite_block_size
+        num_sonar_blocks = num_computed_tokens // self.sonar_block_size
+        num_lmcache_blocks = ret // self.sonar_block_size
         tracker.increase_num_stored_blocks(num_lmcache_blocks)
 
-        # Save the aphrodite and lmcache hit tokens
-        tracker.num_aphrodite_hit_blocks = num_aphrodite_blocks
+        # Save the sonar and lmcache hit tokens
+        tracker.num_sonar_hit_blocks = num_sonar_blocks
         tracker.num_lmcache_hit_blocks = num_lmcache_blocks
 
         need_to_load = max(0, ret - num_computed_tokens)
-        logger.debug("Aphrodite hit is: %d, Need to load is %d", num_computed_tokens, need_to_load)
+        logger.debug("Sonar hit is: %d, Need to load is %d", num_computed_tokens, need_to_load)
         return need_to_load, need_to_load > 0
 
     def update_state_after_alloc(self, request: "Request", blocks: "KVCacheBlocks", num_external_tokens: int):
@@ -805,20 +805,20 @@ class LMCacheMPConnectorUpstream(KVConnectorBase_V1):
             # Clean up lookup future in scheduler adapter
             self.scheduler_adapter.cleanup_lookup_result(request.request_id)
 
-            # Free locks on chunks that Aphrodite already computed and won't
+            # Free locks on chunks that Sonar already computed and won't
             # retrieve from LMCache.
             if tracker.num_lmcache_hit_blocks > 0:
                 if not condition:
                     # No retrieve needed — free ALL locked chunks
-                    free_end = tracker.num_lmcache_hit_blocks * self.aphrodite_block_size
+                    free_end = tracker.num_lmcache_hit_blocks * self.sonar_block_size
                 else:
-                    # Note(Roy): Boundary misalignment between Aphrodite blocks and LMCache
+                    # Note(Roy): Boundary misalignment between Sonar blocks and LMCache
                     # blocks is handled in free_lookup_locks. It makes sure that if
-                    # the last Aphrodite computed block ends in the middle of a LMCache
+                    # the last Sonar computed block ends in the middle of a LMCache
                     # block, the end LMCache block is not freed (i.e., floor division)
-                    # since it will still be needed by Aphrodite and such block's lock will
-                    # be freed by Aphrodite's retrieve.
-                    free_end = tracker.num_aphrodite_hit_blocks * self.aphrodite_block_size
+                    # since it will still be needed by Sonar and such block's lock will
+                    # be freed by Sonar's retrieve.
+                    free_end = tracker.num_sonar_hit_blocks * self.sonar_block_size
 
                 if free_end > 0:
                     self.scheduler_adapter.free_lookup_locks(
@@ -828,7 +828,7 @@ class LMCacheMPConnectorUpstream(KVConnectorBase_V1):
                         request_id=request.request_id,
                     )
                     logger.debug(
-                        "Free locks of tokens %d-%d since it is cached by Aphrodite.",
+                        "Free locks of tokens %d-%d since it is cached by Sonar.",
                         0,
                         free_end,
                     )
@@ -893,9 +893,9 @@ class LMCacheMPConnectorUpstream(KVConnectorBase_V1):
             request_tracker = self._get_request_tracker(request.request_id)
             num_extra_cached_blocks = max(
                 0,
-                request_tracker.num_lmcache_hit_blocks - request_tracker.num_aphrodite_hit_blocks,
+                request_tracker.num_lmcache_hit_blocks - request_tracker.num_sonar_hit_blocks,
             )
-            return_params["num_lmcache_extra_cached_tokens"] = num_extra_cached_blocks * self.aphrodite_block_size
+            return_params["num_lmcache_extra_cached_tokens"] = num_extra_cached_blocks * self.sonar_block_size
 
         # Clean up request tracker to prevent memory leak
         self._cleanup_request_tracker(request.request_id)
@@ -914,11 +914,11 @@ class LMCacheMPConnectorUpstream(KVConnectorBase_V1):
         return ()
 
     @classmethod
-    def get_required_kvcache_layout(cls, aphrodite_config: "AphroditeConfig") -> str | None:
+    def get_required_kvcache_layout(cls, sonar_config: "SonarConfig") -> str | None:
         """Get the required KV cache layout for this connector.
 
         Args:
-            aphrodite_config (AphroditeConfig): the aphrodite config.
+            sonar_config (SonarConfig): the sonar config.
 
         Returns:
             str: the required KV cache layout. e.g. HND, or NHD.
@@ -951,7 +951,7 @@ class LMCacheMPConnectorUpstream(KVConnectorBase_V1):
     @classmethod
     def build_prom_metrics(
         cls,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
         metric_types: dict[type["PromMetric"], type["PromMetricT"]],
         labelnames: list[str],
         per_engine_labelvalues: dict[int, list[object]],
@@ -977,7 +977,7 @@ class LMCacheMPConnectorUpstream(KVConnectorBase_V1):
             r_metadata = LMCacheMPRequestMetadata.GetRetrieveMetadata(
                 request_tracker,
                 blocks_per_chunk,
-                aphrodite_block_size=self.aphrodite_block_size,
+                sonar_block_size=self.sonar_block_size,
             )
             if r_metadata is not None:
                 metadata.add_request_metadata(r_metadata)
@@ -996,9 +996,7 @@ class LMCacheMPConnectorUpstream(KVConnectorBase_V1):
             num_new_tokens = scheduler_output.num_scheduled_tokens[new_request.req_id]
             request_tracker.increase_num_scheduled_tokens(num_new_tokens)
 
-            r_meta = LMCacheMPRequestMetadata.GetStoreMetadata(
-                request_tracker, blocks_per_chunk, self.aphrodite_block_size
-            )
+            r_meta = LMCacheMPRequestMetadata.GetStoreMetadata(request_tracker, blocks_per_chunk, self.sonar_block_size)
             if r_meta is not None:
                 metadata.add_request_metadata(r_meta)
 
@@ -1023,9 +1021,7 @@ class LMCacheMPConnectorUpstream(KVConnectorBase_V1):
             num_new_tokens = scheduler_output.num_scheduled_tokens[request_id]
             request_tracker.increase_num_scheduled_tokens(num_new_tokens)
 
-            r_meta = LMCacheMPRequestMetadata.GetStoreMetadata(
-                request_tracker, blocks_per_chunk, self.aphrodite_block_size
-            )
+            r_meta = LMCacheMPRequestMetadata.GetStoreMetadata(request_tracker, blocks_per_chunk, self.sonar_block_size)
 
             if r_meta is not None:
                 metadata.add_request_metadata(r_meta)
@@ -1049,7 +1045,7 @@ class LMCacheMPConnectorUpstream(KVConnectorBase_V1):
             if tracker is None:
                 continue
             num_blocks = len(tracker.allocated_block_ids)
-            total_tokens = num_blocks * self.aphrodite_block_size
+            total_tokens = num_blocks * self.sonar_block_size
             records.append(
                 RequestAllocationRecord(
                     req_id=new_request.req_id,
@@ -1074,8 +1070,8 @@ class LMCacheMPConnectorUpstream(KVConnectorBase_V1):
             # Compute the token range they cover.
             total_blocks = len(tracker.allocated_block_ids)
             num_new_blocks = len(new_block_ids)
-            start_token = (total_blocks - num_new_blocks) * self.aphrodite_block_size
-            end_token = total_blocks * self.aphrodite_block_size
+            start_token = (total_blocks - num_new_blocks) * self.sonar_block_size
+            end_token = total_blocks * self.sonar_block_size
             new_token_ids = list(tracker.all_token_ids[start_token:end_token])
             records.append(
                 RequestAllocationRecord(
@@ -1132,7 +1128,7 @@ class LMCacheMPConnectorUpstream(KVConnectorBase_V1):
 def _resolve_lmcache_mp_connector() -> type[KVConnectorBase_V1]:
     if os.environ.get("LMCACHE_USE_UPSTREAM_MP"):
         logger.info(
-            "Force use builtin LMCacheMPConnectorUpstream in Aphrodite.",
+            "Force use builtin LMCacheMPConnectorUpstream in Sonar.",
         )
         return LMCacheMPConnectorUpstream
 
@@ -1145,7 +1141,7 @@ def _resolve_lmcache_mp_connector() -> type[KVConnectorBase_V1]:
         return _ExternalLMCacheMPConnector
     except ImportError as e:
         logger.info(
-            "External LMCacheMPConnector is not available (%s), falling back to builtin implementation in Aphrodite.",
+            "External LMCacheMPConnector is not available (%s), falling back to builtin implementation in Sonar.",
             e,
         )
         return LMCacheMPConnectorUpstream

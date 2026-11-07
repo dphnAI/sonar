@@ -7,7 +7,7 @@ import httpx
 import pytest
 import pytest_asyncio
 
-from aphrodite.multimodal.utils import encode_image_url
+from sonar.multimodal.utils import encode_image_url
 from tests.utils import RemoteOpenAIServer
 
 VISION_MODEL_NAME = "Qwen/Qwen3-VL-2B-Instruct"

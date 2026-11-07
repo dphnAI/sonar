@@ -8,13 +8,13 @@ import torch
 import torch.distributed as dist
 from torch.distributed import ProcessGroup
 
-import aphrodite.envs as envs
-from aphrodite import _custom_ops as ops
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.config import get_current_aphrodite_config_or_none
-from aphrodite.distributed.parallel_state import in_the_same_node_as
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
+import sonar.envs as envs
+from sonar import _custom_ops as ops
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.config import get_current_sonar_config_or_none
+from sonar.distributed.parallel_state import in_the_same_node_as
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
 
 logger = init_logger(__name__)
 
@@ -26,7 +26,7 @@ except Exception:
     quick_ar = False
 
 
-from aphrodite.distributed.utils import is_weak_contiguous  # noqa: E402, F401
+from sonar.distributed.utils import is_weak_contiguous  # noqa: E402, F401
 
 
 class QuickReduceRegime(Enum):
@@ -157,8 +157,8 @@ class QuickAllReduce:
         # On RocM, bfloat16 kernels are slower than fp16
         # due to slower match operations
         # If environment variable is set to 1, we convert input to fp16
-        self.use_fp16_kernels = envs.APHRODITE_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16
-        regime_str = envs.APHRODITE_ROCM_QUICK_REDUCE_QUANTIZATION
+        self.use_fp16_kernels = envs.SONAR_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16
+        regime_str = envs.SONAR_ROCM_QUICK_REDUCE_QUANTIZATION
         if regime_str not in QuickReduceRegime.__members__:
             logger.warning(
                 "Custom quick allreduce:",
@@ -170,9 +170,7 @@ class QuickAllReduce:
 
         if regime_str == "NONE":
             logger.debug(
-                "Custom quick allreduce is disabled based "
-                "on env variable "
-                "APHRODITE_ROCM_QUICK_REDUCE_QUANTIZATION='NONE'"
+                "Custom quick allreduce is disabled based on env variable SONAR_ROCM_QUICK_REDUCE_QUANTIZATION='NONE'"
             )
             return
         self.qr_quant_level = QuickReduceRegime[regime_str]
@@ -194,13 +192,13 @@ class QuickAllReduce:
             return
 
         self.qr_quantization_min_size = self._get_qr_quantization_min_size()
-        aphrodite_config = get_current_aphrodite_config_or_none()
+        sonar_config = get_current_sonar_config_or_none()
         if (
-            aphrodite_config is not None
-            and hasattr(aphrodite_config, "model_config")
-            and hasattr(aphrodite_config.model_config, "dtype")
+            sonar_config is not None
+            and hasattr(sonar_config, "model_config")
+            and hasattr(sonar_config.model_config, "dtype")
         ):
-            dtype = aphrodite_config.model_config.dtype
+            dtype = sonar_config.model_config.dtype
             if dtype not in [torch.float16, torch.bfloat16]:
                 logger.debug(
                     "Custom quick allreduce disabled: only supports float16 and float16, but get %s.",
@@ -212,12 +210,12 @@ class QuickAllReduce:
                 logger.info(
                     "Custom quick allreduce: BF16 inputs will be converted "
                     "to FP16 to improve performance. set "
-                    "envs.APHRODITE_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16=0 "
+                    "envs.SONAR_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16=0 "
                     "to turn off."
                 )
 
-        # APHRODITE_ROCM_QUICK_REDUCE_MAX_SIZE_BYTES_MB is specified in MB
-        qr_max_size = envs.APHRODITE_ROCM_QUICK_REDUCE_MAX_SIZE_BYTES_MB
+        # SONAR_ROCM_QUICK_REDUCE_MAX_SIZE_BYTES_MB is specified in MB
+        qr_max_size = envs.SONAR_ROCM_QUICK_REDUCE_MAX_SIZE_BYTES_MB
         if qr_max_size is not None:
             if qr_max_size < 1:
                 logger.info(
@@ -241,10 +239,10 @@ class QuickAllReduce:
                 self.qr_quantization_min_size // KB,
             )
         self.create_shared_buffer()
-        self._flydsl_int4 = self._init_flydsl_int4(aphrodite_config)
+        self._flydsl_int4 = self._init_flydsl_int4(sonar_config)
         self.disabled = False
 
-    def _init_flydsl_int4(self, aphrodite_config) -> Any:
+    def _init_flydsl_int4(self, sonar_config) -> Any:
         if self.qr_quant_level != QuickReduceRegime.INT4 or not rocm_aiter_ops.is_flydsl_quick_reduce_available():
             return None
         flydsl_int4 = rocm_aiter_ops.create_flydsl_quick_all_reduce_int4(
@@ -261,7 +259,7 @@ class QuickAllReduce:
         logger.info(
             "Using AITER FlyDSL INT4 QuickReduce for BF16 payloads; other payloads use the HIP QuickReduce kernels."
         )
-        if aphrodite_config is not None and aphrodite_config.compilation_config.pass_config.fuse_allreduce_rms:
+        if sonar_config is not None and sonar_config.compilation_config.pass_config.fuse_allreduce_rms:
             logger.warning_once(
                 "fuse_allreduce_rms is on, but FlyDSL QuickReduce has no fused "
                 "kernels yet: the payloads it takes run all-reduce plus a "
@@ -271,28 +269,27 @@ class QuickAllReduce:
 
     @staticmethod
     def _get_qr_min_size(qr_max_size: int | None) -> int | None:
-        qr_min_size = envs.APHRODITE_ROCM_QUICK_REDUCE_MIN_SIZE_BYTES_MB
+        qr_min_size = envs.SONAR_ROCM_QUICK_REDUCE_MIN_SIZE_BYTES_MB
         if qr_min_size is None:
             return None
         if qr_min_size < 0:
-            raise ValueError(f"APHRODITE_ROCM_QUICK_REDUCE_MIN_SIZE_BYTES_MB must be non-negative, got {qr_min_size}")
+            raise ValueError(f"SONAR_ROCM_QUICK_REDUCE_MIN_SIZE_BYTES_MB must be non-negative, got {qr_min_size}")
         qr_min_size *= MB
         if qr_max_size is not None and qr_min_size > qr_max_size:
             raise ValueError(
-                "APHRODITE_ROCM_QUICK_REDUCE_MIN_SIZE_BYTES_MB must be less than or "
+                "SONAR_ROCM_QUICK_REDUCE_MIN_SIZE_BYTES_MB must be less than or "
                 "equal to the effective QuickReduce max size"
             )
         return qr_min_size
 
     @staticmethod
     def _get_qr_quantization_min_size() -> int | None:
-        quantization_min_size = envs.APHRODITE_ROCM_QUICK_REDUCE_QUANTIZATION_MIN_SIZE_KB
+        quantization_min_size = envs.SONAR_ROCM_QUICK_REDUCE_QUANTIZATION_MIN_SIZE_KB
         if quantization_min_size is None:
             return None
         if quantization_min_size < 0:
             raise ValueError(
-                "APHRODITE_ROCM_QUICK_REDUCE_QUANTIZATION_MIN_SIZE_KB must be "
-                f"non-negative, got {quantization_min_size}"
+                f"SONAR_ROCM_QUICK_REDUCE_QUANTIZATION_MIN_SIZE_KB must be non-negative, got {quantization_min_size}"
             )
         return quantization_min_size * KB
 

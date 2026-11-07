@@ -16,11 +16,11 @@
 
 namespace {
 
-using aphrodite::direct_dcp::check_cuda_launch;
-using aphrodite::direct_dcp::get_peer_ptr;
-using aphrodite::direct_dcp::increment_epoch_kernel;
-using aphrodite::direct_dcp::store_release_system;
-using aphrodite::direct_dcp::wait_for_epoch;
+using sonar::direct_dcp::check_cuda_launch;
+using sonar::direct_dcp::get_peer_ptr;
+using sonar::direct_dcp::increment_epoch_kernel;
+using sonar::direct_dcp::store_release_system;
+using sonar::direct_dcp::wait_for_epoch;
 
 __device__ __forceinline__ int64_t find_sequence(const int32_t* query_start_loc,
                                                  int64_t token_idx,

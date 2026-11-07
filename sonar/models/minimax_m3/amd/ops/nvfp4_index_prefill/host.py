@@ -7,8 +7,8 @@ import math
 
 import torch
 
-from aphrodite.models.minimax_m3.amd.ops.flydsl_utils import cu_count, run_compiled
-from aphrodite.utils.math_utils import cdiv
+from sonar.models.minimax_m3.amd.ops.flydsl_utils import cu_count, run_compiled
+from sonar.utils.math_utils import cdiv
 
 from . import kernel as _kernel
 
@@ -67,7 +67,7 @@ def _get_kernel_shared(heads: int, mq: int):
 
 
 def _supported(q_idx, index_cache, score, *int32_tensors) -> bool:
-    from aphrodite.platforms.rocm import on_gfx950
+    from sonar.platforms.rocm import on_gfx950
 
     heads = q_idx.shape[1]
     return (

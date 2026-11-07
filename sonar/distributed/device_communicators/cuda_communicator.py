@@ -6,21 +6,21 @@ import torch
 import torch.distributed as dist
 from torch.distributed import ProcessGroup
 
-import aphrodite.envs as envs
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.config import get_current_aphrodite_config_or_none
-from aphrodite.distributed.device_communicators.all_reduce_utils import (
+import sonar.envs as envs
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.config import get_current_sonar_config_or_none
+from sonar.distributed.device_communicators.all_reduce_utils import (
     NCCL_SYMM_MEM_ALL_REDUCE_CONFIG,
     should_nccl_symm_mem_ag_rs,
     should_nccl_symm_mem_allreduce,
 )
-from aphrodite.distributed.device_communicators.pynccl import register_nccl_symmetric_ops
-from aphrodite.distributed.device_communicators.pynccl_allocator import (
+from sonar.distributed.device_communicators.pynccl import register_nccl_symmetric_ops
+from sonar.distributed.device_communicators.pynccl_allocator import (
     is_symmetric_memory_enabled,
     is_symmetric_memory_tensor,
 )
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
 
 from ..utils import StatelessProcessGroup
 from .aiter_custom_all_reduce import AiterCustomAllreduce
@@ -61,14 +61,14 @@ class CudaCommunicator(DeviceCommunicatorBase):
             # Otherwise a mismatched environment can strand only some ranks
             # inside the backend's collective initialization.
             selectors = (
-                envs.APHRODITE_ALLREDUCE_USE_PCIE_PULL,
-                envs.APHRODITE_ALLREDUCE_USE_FLASHINFER_PCIE_IPC,
+                envs.SONAR_ALLREDUCE_USE_PCIE_PULL,
+                envs.SONAR_ALLREDUCE_USE_FLASHINFER_PCIE_IPC,
             )
             transport = None
             transport_error = None
             if selectors[0]:
                 try:
-                    transport = envs.APHRODITE_ALLREDUCE_PCIE_TRANSPORT
+                    transport = envs.SONAR_ALLREDUCE_PCIE_TRANSPORT
                 except ValueError as exc:
                     transport_error = str(exc)
             selection = (*selectors, transport, transport_error)
@@ -82,7 +82,7 @@ class CudaCommunicator(DeviceCommunicatorBase):
             if transport_errors:
                 raise ValueError("TP PCIe all-reduce transport configuration failed: " + "; ".join(transport_errors))
             if any(entry[2] != transport for entry in gathered_selectors):
-                raise ValueError("TP ranks must agree on APHRODITE_ALLREDUCE_PCIE_TRANSPORT")
+                raise ValueError("TP ranks must agree on SONAR_ALLREDUCE_PCIE_TRANSPORT")
             if all(selectors):
                 raise ValueError("PCIE_PULL and FLASHINFER_PCIE_IPC all-reduce cannot both be selected")
             use_pcie_pull_allreduce = selectors[0]
@@ -95,19 +95,19 @@ class CudaCommunicator(DeviceCommunicatorBase):
             use_flashinfer_pcie_ipc_allreduce = False
             use_aiter_allreduce = False
         else:
-            from aphrodite.distributed.parallel_state import _ENABLE_CUSTOM_ALL_REDUCE
+            from sonar.distributed.parallel_state import _ENABLE_CUSTOM_ALL_REDUCE
 
             use_custom_allreduce = _ENABLE_CUSTOM_ALL_REDUCE
-            use_torch_symm_mem = envs.APHRODITE_ALLREDUCE_USE_SYMM_MEM
+            use_torch_symm_mem = envs.SONAR_ALLREDUCE_USE_SYMM_MEM
             # FlashInfer all-reduce does not provide a fixed reduction order.
-            use_flashinfer_allreduce = envs.APHRODITE_ALLREDUCE_USE_FLASHINFER and not envs.APHRODITE_BATCH_INVARIANT
+            use_flashinfer_allreduce = envs.SONAR_ALLREDUCE_USE_FLASHINFER and not envs.SONAR_BATCH_INVARIANT
             use_flashinfer_pcie_ipc_allreduce = (
-                envs.APHRODITE_ALLREDUCE_USE_FLASHINFER_PCIE_IPC and not envs.APHRODITE_BATCH_INVARIANT
+                envs.SONAR_ALLREDUCE_USE_FLASHINFER_PCIE_IPC and not envs.SONAR_BATCH_INVARIANT
             )
             # Neither AITER nor QuickReduce all-reduce has a fixed reduction order.
             use_aiter_allreduce = (
                 use_custom_allreduce
-                and not envs.APHRODITE_BATCH_INVARIANT
+                and not envs.SONAR_BATCH_INVARIANT
                 and bool(rocm_aiter_ops.is_custom_all_reduce_enabled())
             )
 
@@ -119,23 +119,23 @@ class CudaCommunicator(DeviceCommunicatorBase):
         self.use_aiter_allreduce = use_aiter_allreduce
 
         # lazy import to avoid documentation build error
-        from aphrodite.distributed.device_communicators.custom_all_reduce import (
+        from sonar.distributed.device_communicators.custom_all_reduce import (
             CustomAllreduce,
         )
-        from aphrodite.distributed.device_communicators.flashinfer_all_reduce import (
+        from sonar.distributed.device_communicators.flashinfer_all_reduce import (
             FlashInferAllReduce,
         )
-        from aphrodite.distributed.device_communicators.flashinfer_pcie_ipc_all_reduce import (  # noqa: E501
+        from sonar.distributed.device_communicators.flashinfer_pcie_ipc_all_reduce import (  # noqa: E501
             FlashInferPcieIpcAllReduce,
         )
-        from aphrodite.distributed.device_communicators.pcie_pull_all_reduce import (
+        from sonar.distributed.device_communicators.pcie_pull_all_reduce import (
             PciePullAllReduce,
         )
-        from aphrodite.distributed.device_communicators.pynccl import PyNcclCommunicator
-        from aphrodite.distributed.device_communicators.quick_all_reduce import (
+        from sonar.distributed.device_communicators.pynccl import PyNcclCommunicator
+        from sonar.distributed.device_communicators.quick_all_reduce import (
             QuickAllReduce,
         )
-        from aphrodite.distributed.device_communicators.symm_mem import SymmMemCommunicator
+        from sonar.distributed.device_communicators.symm_mem import SymmMemCommunicator
 
         self.pynccl_comm: PyNcclCommunicator | None = None
         if self.world_size > 1:
@@ -156,7 +156,7 @@ class CudaCommunicator(DeviceCommunicatorBase):
         self.use_aiter_ag_rs: bool = False
 
         # cuMem graph buffers cannot be IPC-registered; capture copies them instead.
-        config = get_current_aphrodite_config_or_none()
+        config = get_current_sonar_config_or_none()
         register = config is None or not config.use_cumem_cudagraph_pool
 
         if use_torch_symm_mem and current_platform.is_cuda():
@@ -227,11 +227,11 @@ class CudaCommunicator(DeviceCommunicatorBase):
             use_custom_allreduce
             and self.world_size > 1
             and current_platform.is_rocm()
-            and not envs.APHRODITE_BATCH_INVARIANT
+            and not envs.SONAR_BATCH_INVARIANT
         ):
             # Initialize a custom quick all-reduce implementation for AMD.
             # Quick reduce is designed as a complement to custom allreduce
-            # (Aphrodite's or AITER's), so it is initialized for either backend.
+            # (Sonar's or AITER's), so it is initialized for either backend.
             # Based on quickreduce (https://github.com/mk1-project/quickreduce).
             # On ROCm, 'use_custom_allreduce==True' means it must currently be
             # an MI300 series.
@@ -320,7 +320,7 @@ class CudaCommunicator(DeviceCommunicatorBase):
 
     @staticmethod
     def _mori_ep_v2() -> bool:
-        config = get_current_aphrodite_config_or_none()
+        config = get_current_sonar_config_or_none()
         return config is not None and bool(config.parallel_config.mori_ep_v2)
 
     def _log_all_reduce_backend_selection(self) -> None:
@@ -352,7 +352,7 @@ class CudaCommunicator(DeviceCommunicatorBase):
         if self.fi_ar_comm is not None and not self.fi_ar_comm.disabled:
             enabled_ar_backends.append("FLASHINFER")
         # Mirror the static preconditions of `should_nccl_symm_mem_allreduce`:
-        # APHRODITE_BATCH_INVARIANT off, NCCL symm mem enabled, world_size meets
+        # SONAR_BATCH_INVARIANT off, NCCL symm mem enabled, world_size meets
         # min_world_size, and world_size either has a tuned entry in
         # `custom_ar_preferred_ranges` or is greater than
         # `always_use_above_world_size`. World sizes that fail the latter (e.g.
@@ -367,7 +367,7 @@ class CudaCommunicator(DeviceCommunicatorBase):
             self.pynccl_comm is not None
             and not self.pynccl_comm.disabled
             and is_symmetric_memory_enabled()
-            and not envs.APHRODITE_BATCH_INVARIANT
+            and not envs.SONAR_BATCH_INVARIANT
             and nccl_symm_ws_ok
         ):
             enabled_ar_backends.append("NCCL_SYMM_MEM")
@@ -404,7 +404,7 @@ class CudaCommunicator(DeviceCommunicatorBase):
             and not use_fi_ar
             and should_nccl_symm_mem_allreduce(self.pynccl_comm.world_size, input_)
         ):
-            out = torch.ops.aphrodite.all_reduce_symmetric_with_copy(input_)
+            out = torch.ops.sonar.all_reduce_symmetric_with_copy(input_)
             if out is not None:
                 return out
         qr_comm = self.qr_comm
@@ -435,9 +435,9 @@ class CudaCommunicator(DeviceCommunicatorBase):
             out = ca_comm.custom_all_reduce(input_)
             assert out is not None
             return out
-        if envs.APHRODITE_BATCH_INVARIANT and current_platform.is_rocm() and input_.is_floating_point():
+        if envs.SONAR_BATCH_INVARIANT and current_platform.is_rocm() and input_.is_floating_point():
             # Integer sums are exact in any order and stay on RCCL.
-            from aphrodite.model_executor.determinism.batch_invariant import (
+            from sonar.model_executor.determinism.batch_invariant import (
                 all_reduce_batch_invariant,
             )
 
@@ -511,8 +511,8 @@ class CudaCommunicator(DeviceCommunicatorBase):
         chunk_size = input_tensor.shape[0] // world_size
         output_shape = (chunk_size,) + input_tensor.shape[1:]
 
-        if envs.APHRODITE_BATCH_INVARIANT and current_platform.is_rocm() and input_.is_floating_point():
-            from aphrodite.model_executor.determinism.batch_invariant import (
+        if envs.SONAR_BATCH_INVARIANT and current_platform.is_rocm() and input_.is_floating_point():
+            from sonar.model_executor.determinism.batch_invariant import (
                 reduce_scatter_batch_invariant,
             )
 
@@ -578,8 +578,8 @@ class CudaCommunicator(DeviceCommunicatorBase):
             assert output.device == input_tensor.device
             assert output.is_contiguous()
 
-        if envs.APHRODITE_BATCH_INVARIANT and current_platform.is_rocm() and input_.is_floating_point():
-            from aphrodite.model_executor.determinism.batch_invariant import (
+        if envs.SONAR_BATCH_INVARIANT and current_platform.is_rocm() and input_.is_floating_point():
+            from sonar.model_executor.determinism.batch_invariant import (
                 reduce_scatter_batch_invariant,
             )
 
@@ -621,7 +621,7 @@ class CudaCommunicator(DeviceCommunicatorBase):
         else:
             if output is None:
                 output = torch.empty(output_shape, dtype=input_tensor.dtype, device=input_tensor.device)
-            use_deterministic_rs = envs.APHRODITE_BATCH_INVARIANT and world_size > 2
+            use_deterministic_rs = envs.SONAR_BATCH_INVARIANT and world_size > 2
             if use_deterministic_rs:
                 # Reduce to a fixed root (0) for determinism
                 reduced = torch.empty_like(input_tensor)
@@ -662,10 +662,10 @@ class CudaCommunicator(DeviceCommunicatorBase):
         MoE combines may reuse scratch when the producer and collective are
         ordered on the same stream. DBO microbatches use distinct cache entries.
         """
-        from aphrodite.distributed.device_communicators.pynccl_allocator import (
+        from sonar.distributed.device_communicators.pynccl_allocator import (
             nccl_symm_mem_context,
         )
-        from aphrodite.v1.worker.ubatching import dbo_current_ubatch_id
+        from sonar.v1.worker.ubatching import dbo_current_ubatch_id
 
         pynccl_comm = self.pynccl_comm
         assert pynccl_comm is not None
@@ -811,8 +811,8 @@ class CudaCommunicator(DeviceCommunicatorBase):
         if sizes is not None:
             return False
 
-        from aphrodite.config.compilation import CUDAGraphMode
-        from aphrodite.forward_context import get_forward_context
+        from sonar.config.compilation import CUDAGraphMode
+        from sonar.forward_context import get_forward_context
 
         try:
             ctx = get_forward_context()
@@ -945,7 +945,7 @@ class CudaCommunicator(DeviceCommunicatorBase):
         Only the output needs to be in symmetric memory (see
         _all_gather_symm_mem).
         """
-        from aphrodite.distributed.device_communicators.pynccl_allocator import (
+        from sonar.distributed.device_communicators.pynccl_allocator import (
             nccl_symm_mem_context,
         )
 

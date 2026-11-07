@@ -15,15 +15,15 @@ from typing import Any
 import msgspec
 import zmq
 
-from aphrodite.config.kv_events import KVEventsConfig
-from aphrodite.logger import init_logger
-from aphrodite.utils.network_utils import (
+from sonar.config.kv_events import KVEventsConfig
+from sonar.logger import init_logger
+from sonar.utils.network_utils import (
     get_ip,
     get_tcp_uri,
     is_valid_ipv6_address,
     split_zmq_path,
 )
-from aphrodite.v1.core.kv_cache_utils import ExternalBlockHash
+from sonar.v1.core.kv_cache_utils import ExternalBlockHash
 
 logger = init_logger(__name__)
 
@@ -460,7 +460,7 @@ class ZmqEventPublisher(EventPublisher):
             return endpoint
         ip = get_ip()
         if ip in ("0.0.0.0", "::"):
-            raise ValueError("tcp://*:0 needs a node IP; set APHRODITE_HOST_IP")
+            raise ValueError("tcp://*:0 needs a node IP; set SONAR_HOST_IP")
         if is_valid_ipv6_address(ip):
             sock.setsockopt(zmq.IPV6, 1)
         sock.bind(get_tcp_uri(ip, 0))

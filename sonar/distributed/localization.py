@@ -3,8 +3,8 @@
 """Per-device locality-domain contexts, streams, and memory pools.
 
 Initialize before weight allocation and CUDA graph capture; all layers share
-these resources. Enable with APHRODITE_USE_LOCALITY_DOMAINS. Optional
-APHRODITE_MOE_LOCALIZE_BACKFILL adds SMs outside each domain's local allocation.
+these resources. Enable with SONAR_USE_LOCALITY_DOMAINS. Optional
+SONAR_MOE_LOCALIZE_BACKFILL adds SMs outside each domain's local allocation.
 Requires upstream PyTorch LocalizedAllocator, SMPartition, and
 ``torch.cuda.execute_on_streams`` APIs (nightly from 2026-10-08, 2.16), FlashInfer
 with locality-domain MoE support (main after flashinfer-ai/flashinfer#6488; no
@@ -20,8 +20,8 @@ from typing import Any
 
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.logger import init_logger
+import sonar.envs as envs
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 
@@ -65,7 +65,7 @@ _LOCALIZED_RESOURCES: dict[int, LocalizedResources] = {}
 
 
 def localization_enabled() -> bool:
-    return envs.APHRODITE_USE_LOCALITY_DOMAINS
+    return envs.SONAR_USE_LOCALITY_DOMAINS
 
 
 def _locality_contexts(device_index: int, num_domains: int, *, backfill: bool):
@@ -121,7 +121,7 @@ def localized_moe_unsupported_reason() -> str | None:
     calls. Checked before any hardware is touched so an unsupported stack never
     shards weights it cannot use.
     """
-    from aphrodite.utils.flashinfer import has_flashinfer_localized_moe
+    from sonar.utils.flashinfer import has_flashinfer_localized_moe
 
     if not hasattr(torch.cuda, "execute_on_streams"):
         return (
@@ -189,7 +189,7 @@ def maybe_init_localized_resources(
             return None
 
         backfill = False
-        if envs.APHRODITE_MOE_LOCALIZE_BACKFILL:
+        if envs.SONAR_MOE_LOCALIZE_BACKFILL:
             try:
                 contexts, remainder = _locality_contexts(idx, num_domains, backfill=True)
                 backfill = True

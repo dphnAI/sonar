@@ -12,7 +12,7 @@ if find_spec("bitblas") is None:
 
 from bitblas import Matmul, MatmulConfig, auto_detect_nvidia_target
 
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
+from sonar.utils.argparse_utils import FlexibleArgumentParser
 
 parser = FlexibleArgumentParser(description="Benchmark BitBLAS int4 on a specific target.")
 

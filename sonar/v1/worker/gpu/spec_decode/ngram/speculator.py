@@ -6,15 +6,15 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.triton_utils import HAS_TRITON, tl, triton
-from aphrodite.v1.worker.gpu.input_batch import InputBatch
-from aphrodite.v1.worker.gpu.spec_decode.speculator import BaseSpeculator
+from sonar.config import SonarConfig
+from sonar.triton_utils import HAS_TRITON, tl, triton
+from sonar.v1.worker.gpu.input_batch import InputBatch
+from sonar.v1.worker.gpu.spec_decode.speculator import BaseSpeculator
 
 if TYPE_CHECKING:
-    from aphrodite.config.compilation import CUDAGraphMode
-    from aphrodite.v1.worker.gpu.dp_utils import DPSyncState
-    from aphrodite.v1.worker.gpu.states import RequestState
+    from sonar.config.compilation import CUDAGraphMode
+    from sonar.v1.worker.gpu.dp_utils import DPSyncState
+    from sonar.v1.worker.gpu.states import RequestState
 
 
 @triton.jit
@@ -153,19 +153,19 @@ class NgramGPUSpeculator(BaseSpeculator):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
         req_states: RequestState,
     ):
         if not HAS_TRITON:
             raise RuntimeError("ngram_gpu speculative decoding requires Triton.")
-        spec = aphrodite_config.speculative_config
+        spec = sonar_config.speculative_config
         assert spec is not None
         assert spec.prompt_lookup_min is not None, "prompt_lookup_min must be configured for ngram_gpu"
         assert spec.prompt_lookup_max is not None, "prompt_lookup_max must be configured for ngram_gpu"
         assert 1 <= spec.prompt_lookup_min <= spec.prompt_lookup_max
 
-        self.aphrodite_config = aphrodite_config
+        self.sonar_config = sonar_config
         self.device = device
         self.req_states = req_states
         self.speculative_config = spec
@@ -174,8 +174,8 @@ class NgramGPUSpeculator(BaseSpeculator):
         self.min_n: int = spec.prompt_lookup_min
         self.max_n: int = spec.prompt_lookup_max
 
-        self.max_num_reqs: int = aphrodite_config.scheduler_config.max_num_seqs
-        self.max_model_len: int = aphrodite_config.model_config.max_model_len
+        self.max_num_reqs: int = sonar_config.scheduler_config.max_num_seqs
+        self.max_model_len: int = sonar_config.model_config.max_model_len
 
         L = self.max_model_len
         if L >= 1024:

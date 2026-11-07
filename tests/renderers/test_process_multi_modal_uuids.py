@@ -5,14 +5,14 @@ from http import HTTPStatus
 
 import pytest
 
-from aphrodite.assets.image import ImageAsset
-from aphrodite.assets.video import VideoAsset
-from aphrodite.config import AphroditeConfig, CacheConfig, ModelConfig
-from aphrodite.entrypoints.serve import create_error_response
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.multimodal.parse import parse_mm_uuids
-from aphrodite.renderers.hf import HfRenderer
-from aphrodite.tokenizers.registry import cached_tokenizer_from_config
+from sonar.assets.image import ImageAsset
+from sonar.assets.video import VideoAsset
+from sonar.config import CacheConfig, ModelConfig, SonarConfig
+from sonar.entrypoints.serve import create_error_response
+from sonar.exceptions import SonarValidationError
+from sonar.multimodal.parse import parse_mm_uuids
+from sonar.renderers.hf import HfRenderer
+from sonar.tokenizers.registry import cached_tokenizer_from_config
 
 cherry_pil_image = ImageAsset("cherry_blossom").pil_image
 stop_pil_image = ImageAsset("stop_sign").pil_image
@@ -30,13 +30,13 @@ def _build_renderer(*, mm_cache_gb: float = 4.0, enable_prefix_caching: bool = T
         mm_processor_cache_gb=mm_cache_gb,
     )
 
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         model_config=model_config,
         cache_config=CacheConfig(enable_prefix_caching=enable_prefix_caching),
     )
 
     return HfRenderer(
-        aphrodite_config,
+        sonar_config,
         cached_tokenizer_from_config(model_config),
     )
 
@@ -45,7 +45,7 @@ def _build_text_only_renderer() -> HfRenderer:
     model_config = ModelConfig(model="openai-community/gpt2", max_model_len=128)
 
     return HfRenderer(
-        AphroditeConfig(model_config=model_config),
+        SonarConfig(model_config=model_config),
         cached_tokenizer_from_config(model_config),
     )
 
@@ -79,7 +79,7 @@ def test_multi_modal_uuids_length_mismatch_raises():
     mm_data_items = mm_processor.info.parse_mm_data(mm_data)
     mm_uuid_items = parse_mm_uuids(mm_uuids)
 
-    with pytest.raises(AphroditeValidationError, match="must have same length as"):
+    with pytest.raises(SonarValidationError, match="must have same length as"):
         renderer._process_mm_uuids(mm_data, mm_data_items, mm_uuid_items, "req-1a")
 
     # Mismatch: 2 items but only 1 uuid provided
@@ -89,7 +89,7 @@ def test_multi_modal_uuids_length_mismatch_raises():
     mm_data_items = mm_processor.info.parse_mm_data(mm_data)
     mm_uuid_items = parse_mm_uuids(mm_uuids)
 
-    with pytest.raises(AphroditeValidationError, match="must have same length as"):
+    with pytest.raises(SonarValidationError, match="must have same length as"):
         renderer._process_mm_uuids(mm_data, mm_data_items, mm_uuid_items, "req-1b")
 
 
@@ -108,7 +108,7 @@ def test_multi_modal_uuids_missing_modality_raises():
     mm_data_items = mm_processor.info.parse_mm_data(mm_data)
     mm_uuid_items = parse_mm_uuids(mm_uuids)
 
-    with pytest.raises(AphroditeValidationError, match="is empty but .* is missing"):
+    with pytest.raises(SonarValidationError, match="is empty but .* is missing"):
         renderer._process_mm_uuids(mm_data, mm_data_items, mm_uuid_items, "req-2")
 
 

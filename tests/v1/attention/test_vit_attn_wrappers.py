@@ -8,8 +8,8 @@ import pytest
 import torch
 from torch._subclasses.fake_tensor import FakeTensorMode
 
-from aphrodite.platforms import current_platform
-from aphrodite.v1.attention.ops import vit_attn_wrappers
+from sonar.platforms import current_platform
+from sonar.v1.attention.ops import vit_attn_wrappers
 
 
 def _noncontiguous_bshd(device: torch.device | None = None) -> torch.Tensor:
@@ -25,10 +25,10 @@ def test_registered_attention_wrapper_fake_layouts():
         sequence_lengths = torch.tensor([5], dtype=torch.int32)
 
         outputs = (
-            torch.ops.aphrodite.flash_attn_maxseqlen_wrapper(q, q, q, 1, False, None, None, cu_seqlens, max_seqlen),
-            torch.ops.aphrodite.triton_attn_wrapper(q, q, q, 1, None, cu_seqlens, max_seqlen),
-            torch.ops.aphrodite.torch_sdpa_wrapper(q, q, q, None, None, False),
-            torch.ops.aphrodite.flashinfer_wrapper(
+            torch.ops.sonar.flash_attn_maxseqlen_wrapper(q, q, q, 1, False, None, None, cu_seqlens, max_seqlen),
+            torch.ops.sonar.triton_attn_wrapper(q, q, q, 1, None, cu_seqlens, max_seqlen),
+            torch.ops.sonar.torch_sdpa_wrapper(q, q, q, None, None, False),
+            torch.ops.sonar.flashinfer_wrapper(
                 q,
                 q,
                 q,

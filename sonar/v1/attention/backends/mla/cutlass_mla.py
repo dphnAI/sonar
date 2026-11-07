@@ -6,24 +6,24 @@ from typing import ClassVar
 
 import torch
 
-import aphrodite._custom_ops as ops
-from aphrodite.config.cache import CacheDType
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.attention.mla_attention import (
+import sonar._custom_ops as ops
+from sonar.config.cache import CacheDType
+from sonar.logger import init_logger
+from sonar.model_executor.layers.attention.mla_attention import (
     MLACommonBackend,
     MLACommonImpl,
     MLACommonMetadata,
     MLACommonMetadataBuilder,
 )
-from aphrodite.platforms.interface import DeviceCapability
-from aphrodite.utils.platform_utils import num_compute_units
-from aphrodite.v1.attention.backend import (
+from sonar.platforms.interface import DeviceCapability
+from sonar.utils.platform_utils import num_compute_units
+from sonar.v1.attention.backend import (
     AttentionCGSupport,
     AttentionLayer,
     AttentionType,
     MultipleOf,
 )
-from aphrodite.v1.kv_cache_interface import is_quantized_kv_cache
+from sonar.v1.kv_cache_interface import is_quantized_kv_cache
 
 logger = init_logger(__name__)
 

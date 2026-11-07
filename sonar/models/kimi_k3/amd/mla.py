@@ -6,22 +6,22 @@ from typing import cast
 
 import torch
 
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.config import get_current_aphrodite_config
-from aphrodite.model_executor.layers.attention.attention import get_attention_context
-from aphrodite.model_executor.layers.attention.mla_attention import split_kv_b_proj
-from aphrodite.model_executor.layers.fusion.quant_activation import (
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.config import get_current_sonar_config
+from sonar.model_executor.layers.attention.attention import get_attention_context
+from sonar.model_executor.layers.attention.mla_attention import split_kv_b_proj
+from sonar.model_executor.layers.fusion.quant_activation import (
     QuantizedActivation,
     get_input_quant_key,
 )
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     KimiK3MergedQKVGateLinear,
     UnquantizedLinearMethod,
 )
-from aphrodite.model_executor.layers.mla import MultiHeadLatentAttentionWrapper
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import QuantKey
-from aphrodite.platforms import current_platform
+from sonar.model_executor.layers.mla import MultiHeadLatentAttentionWrapper
+from sonar.model_executor.layers.quantization.utils.quant_utils import QuantKey
+from sonar.platforms import current_platform
 
 _OPT_KV_LORA_RANK = 512
 _OPT_ROT_DIM = 64
@@ -40,7 +40,7 @@ class KimiK3MultiHeadLatentAttentionWrapper(MultiHeadLatentAttentionWrapper):
         self._qkv_gate_fused = isinstance(self.fused_qkv_a_proj, KimiK3MergedQKVGateLinear)
         self._fused_q_heads = self.num_heads
         if self._fused_qk_prep:
-            from aphrodite.v1.attention.backends.mla.rocm_aiter_mla import AiterMLAHelper
+            from sonar.v1.attention.backends.mla.rocm_aiter_mla import AiterMLAHelper
 
             self._fused_q_heads = AiterMLAHelper.get_actual_mla_num_heads(self.num_heads)
         # Positions fed to the fused kernel's identity RoPE; see _fused_decode.
@@ -48,10 +48,10 @@ class KimiK3MultiHeadLatentAttentionWrapper(MultiHeadLatentAttentionWrapper):
         # buffer instead of capturing a memset per layer.
         zero_positions = None
         if self._fused_qk_prep:
-            aphrodite_config = get_current_aphrodite_config()
+            sonar_config = get_current_sonar_config()
             max_tokens = max(
-                aphrodite_config.scheduler_config.max_num_batched_tokens,
-                aphrodite_config.compilation_config.max_cudagraph_capture_size or 0,
+                sonar_config.scheduler_config.max_num_batched_tokens,
+                sonar_config.compilation_config.max_cudagraph_capture_size or 0,
             )
             zero_positions = torch.zeros(max_tokens, dtype=torch.int64)
         self.register_buffer("_zero_positions", zero_positions, persistent=False)
@@ -107,7 +107,7 @@ class KimiK3MultiHeadLatentAttentionWrapper(MultiHeadLatentAttentionWrapper):
         kv_layernorm = cast(RMSNorm, self.kv_a_layernorm)
 
         if self._use_eager_qk_rmsnorm_fusion and not torch.compiler.is_compiling():
-            return torch.ops.aphrodite.fused_mla_dual_rms_norm(
+            return torch.ops.sonar.fused_mla_dual_rms_norm(
                 q_c,
                 q_layernorm.weight,
                 kv_c,

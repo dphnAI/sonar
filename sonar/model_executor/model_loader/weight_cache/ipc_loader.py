@@ -15,30 +15,30 @@ from typing import TypeVar
 import torch
 import torch.nn as nn
 
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.config import (
     CacheConfig,
     KernelConfig,
     ModelConfig,
     ParallelConfig,
-    get_current_aphrodite_config,
+    SonarConfig,
+    get_current_sonar_config,
 )
-from aphrodite.config.load import LoadConfig
-from aphrodite.distributed import (
+from sonar.config.load import LoadConfig
+from sonar.distributed import (
     get_dp_group,
     get_pp_group,
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
 )
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.model_loader.base_loader import BaseModelLoader
-from aphrodite.model_executor.model_loader.default_loader import DefaultModelLoader
-from aphrodite.model_executor.model_loader.utils import (
+from sonar.logger import init_logger
+from sonar.model_executor.model_loader.base_loader import BaseModelLoader
+from sonar.model_executor.model_loader.default_loader import DefaultModelLoader
+from sonar.model_executor.model_loader.utils import (
     get_draft_load_config,
     initialize_model,
     process_weights_after_loading,
 )
-from aphrodite.model_executor.model_loader.weight_cache.protocol import (
+from sonar.model_executor.model_loader.weight_cache.protocol import (
     CacheConfigMismatchError,
     UnsupportedQuantForIPCError,
     WeightCacheKey,
@@ -52,12 +52,12 @@ from aphrodite.model_executor.model_loader.weight_cache.protocol import (
     send_msg,
     verify_socket_owner,
 )
-from aphrodite.model_executor.model_loader.weight_cache.utils import (
+from sonar.model_executor.model_loader.weight_cache.utils import (
     is_draft_model_cacheable,
 )
-from aphrodite.model_executor.utils import weight_cache_model_construction, weights_already_processed
-from aphrodite.tracing import instrument
-from aphrodite.utils.torch_utils import set_default_torch_dtype
+from sonar.model_executor.utils import weight_cache_model_construction, weights_already_processed
+from sonar.tracing import instrument
+from sonar.utils.torch_utils import set_default_torch_dtype
 
 logger = init_logger(__name__)
 
@@ -127,15 +127,15 @@ class IpcModelLoader(BaseModelLoader):
         # load_weights so a reload keys on the same configuration.
         self._cache_key: WeightCacheKey | None = None
 
-    def get_external_weight_memory(self, aphrodite_config: AphroditeConfig) -> int:
+    def get_external_weight_memory(self, sonar_config: SonarConfig) -> int:
         # Copy mode clones the weights into this process; nothing external.
         if self.mode != "zero_copy":
             return 0
         total = self._daemon_memory()
-        if is_draft_model_cacheable(aphrodite_config.speculative_config):
+        if is_draft_model_cacheable(sonar_config.speculative_config):
             # The draft group is queried with the same config the engine
             # would load the draft with.
-            draft_config = get_draft_load_config(aphrodite_config)
+            draft_config = get_draft_load_config(sonar_config)
             if draft_config.load_format == "ipc_cache":
                 draft_loader = IpcModelLoader(draft_config)
                 # Only a zero-copy draft-group daemon holds external weights;
@@ -184,12 +184,12 @@ class IpcModelLoader(BaseModelLoader):
         device_index = torch.accelerator.current_device_index()
         cache_key = self._cache_key
         if cache_key is None:
-            aphrodite_config = get_current_aphrodite_config()
+            sonar_config = get_current_sonar_config()
             entries = self._fetch_entries(
                 model_config,
-                aphrodite_config.cache_config,
-                aphrodite_config.parallel_config,
-                aphrodite_config.kernel_config,
+                sonar_config.cache_config,
+                sonar_config.parallel_config,
+                sonar_config.kernel_config,
                 is_reload=True,
             ).entries
         else:
@@ -205,11 +205,11 @@ class IpcModelLoader(BaseModelLoader):
             target.data.copy_(source)
 
     @instrument(span_name="Load model")
-    def load_model(self, aphrodite_config: AphroditeConfig, model_config: ModelConfig, prefix: str = "") -> nn.Module:
+    def load_model(self, sonar_config: SonarConfig, model_config: ModelConfig, prefix: str = "") -> nn.Module:
         # An unsupported platform is a permanent misconfiguration rather than
         # a transient daemon outage, so it is raised even when fallback is on.
         check_ipc_platform_support()
-        if aphrodite_config.parallel_config.enable_eplb:
+        if sonar_config.parallel_config.enable_eplb:
             raise ValueError("The IPC weight cache loader does not support EPLB.")
         state_fetched = False
         try:
@@ -217,7 +217,7 @@ class IpcModelLoader(BaseModelLoader):
             # being loaded: a draft load that lost its flag (or a target load
             # that got one) would hit the wrong daemon group and
             # fingerprint-mismatch.
-            spec = aphrodite_config.speculative_config
+            spec = sonar_config.speculative_config
             inferred = spec is not None and model_config is spec.draft_model_config
             if inferred != self.is_draft:
                 raise CacheConfigMismatchError(
@@ -228,12 +228,12 @@ class IpcModelLoader(BaseModelLoader):
                 )
             state = self._fetch_entries(
                 model_config,
-                aphrodite_config.cache_config,
-                aphrodite_config.parallel_config,
-                aphrodite_config.kernel_config,
+                sonar_config.cache_config,
+                sonar_config.parallel_config,
+                sonar_config.kernel_config,
             )
             state_fetched = True
-            return self._build_model(aphrodite_config, model_config, prefix, state)
+            return self._build_model(sonar_config, model_config, prefix, state)
         except (WeightCacheUnavailableError, CacheConfigMismatchError) as e:
             if not self.fallback:
                 raise
@@ -253,16 +253,16 @@ class IpcModelLoader(BaseModelLoader):
             if state_fetched and self.mode == "copy":
                 self._send_release()
             torch.accelerator.empty_cache()
-        return self._fallback_load(aphrodite_config, model_config, prefix)
+        return self._fallback_load(sonar_config, model_config, prefix)
 
     def _build_model(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         model_config: ModelConfig,
         prefix: str,
         state: WeightCacheState,
     ) -> nn.Module:
-        device_config = aphrodite_config.device_config
+        device_config = sonar_config.device_config
         load_device = device_config.device if self.load_config.device is None else self.load_config.device
         target_device = torch.device(load_device)
         device_index = (
@@ -271,7 +271,7 @@ class IpcModelLoader(BaseModelLoader):
         with set_default_torch_dtype(model_config.dtype):
             with torch.device("meta"), weight_cache_model_construction():
                 model = initialize_model(
-                    aphrodite_config=aphrodite_config,
+                    sonar_config=sonar_config,
                     model_config=model_config,
                     prefix=prefix,
                 )
@@ -551,9 +551,9 @@ class IpcModelLoader(BaseModelLoader):
             model_loader_extra_config={},
         )
 
-    def _fallback_load(self, aphrodite_config: AphroditeConfig, model_config: ModelConfig, prefix: str) -> nn.Module:
+    def _fallback_load(self, sonar_config: SonarConfig, model_config: ModelConfig, prefix: str) -> nn.Module:
         loader = DefaultModelLoader(self._fallback_load_config())
-        return loader.load_model(aphrodite_config=aphrodite_config, model_config=model_config, prefix=prefix)
+        return loader.load_model(sonar_config=sonar_config, model_config=model_config, prefix=prefix)
 
 
 def _materialize_remaining_meta_tensors(model: nn.Module, device: torch.device) -> None:

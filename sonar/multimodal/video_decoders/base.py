@@ -3,7 +3,7 @@
 
 from typing import Literal, NamedTuple
 
-from aphrodite import envs
+from sonar import envs
 
 PYNVVIDEOCODEC_VIDEO_BACKEND: Literal["pynvvideocodec"] = "pynvvideocodec"
 PYNVVIDEOCODEC_DEFAULT_HW_DECODERS = 2
@@ -26,12 +26,12 @@ class VideoSourceMetadata(NamedTuple):
 
 
 def check_frame_pixel_limit(width: int, height: int) -> None:
-    """Reject video frames exceeding ``APHRODITE_MAX_IMAGE_PIXELS``."""
-    max_pixels = envs.APHRODITE_MAX_IMAGE_PIXELS
+    """Reject video frames exceeding ``SONAR_MAX_IMAGE_PIXELS``."""
+    max_pixels = envs.SONAR_MAX_IMAGE_PIXELS
     if max_pixels > 0 and width * height > max_pixels:
         raise ValueError(
             f"Video frame dimensions {width}x{height} "
             f"({width * height} pixels) exceed the maximum of "
-            f"{max_pixels} pixels. Set APHRODITE_MAX_IMAGE_PIXELS to "
+            f"{max_pixels} pixels. Set SONAR_MAX_IMAGE_PIXELS to "
             f"increase this limit."
         )

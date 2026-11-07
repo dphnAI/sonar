@@ -8,16 +8,16 @@ from compressed_tensors import CompressionFormat
 from compressed_tensors.quantization import QuantizationStrategy
 from torch.nn import Module
 
-from aphrodite.model_executor.layers.quantization.utils.config_utils import (
+from sonar.model_executor.layers.quantization.utils.config_utils import (
     find_matching_patterns,
     is_equal_or_regex_match,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     kFp8Static128BlockSym,
     kFp8StaticChannelSym,
     kFp8StaticTensorSym,
 )
-from aphrodite.model_executor.parameter import (
+from sonar.model_executor.parameter import (
     BlockQuantScaleParameter,
     ChannelQuantScaleParameter,
     PerTensorScaleParameter,
@@ -31,7 +31,7 @@ STRATEGY_TO_PARAMETER_TYPE = {
     QuantizationStrategy.TENSOR: PerTensorScaleParameter,
 }
 
-# Maps quantization strategy to the Aphrodite weight-quant key used for
+# Maps quantization strategy to the Sonar weight-quant key used for
 # kernel selection.  Shared across compressed-tensor scheme classes.
 STRATEGY_TO_WEIGHT_QUANT_KEY = {
     QuantizationStrategy.BLOCK: kFp8Static128BlockSym,
@@ -63,7 +63,7 @@ def should_ignore_layer(
     if any(shards_ignored) and not all(shards_ignored):
         raise ValueError(
             f"Found different quantization schemes for the shards of "
-            f"{layer_name}. Aphrodite requires all to use the same scheme."
+            f"{layer_name}. Sonar requires all to use the same scheme."
         )
     return all(shards_ignored)
 

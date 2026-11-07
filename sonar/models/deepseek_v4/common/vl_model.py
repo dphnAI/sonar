@@ -22,22 +22,22 @@ from collections.abc import Iterable
 import torch
 from torch import nn
 
-from aphrodite.model_executor.models.interfaces import (
+from sonar.model_executor.models.interfaces import (
     MultiModalEmbeddings,
     SupportsEagle3,
     SupportsLoRA,
     SupportsMultiModal,
     SupportsPP,
 )
-from aphrodite.model_executor.models.module_mapping import MultiModelKeys
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.models.module_mapping import MultiModelKeys
+from sonar.model_executor.models.utils import (
     AutoWeightsLoader,
     WeightsMapper,
-    init_aphrodite_registered_model,
+    init_sonar_registered_model,
     maybe_prefix,
 )
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import MultiModalKwargsItem
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import MultiModalKwargsItem
 
 from .mm_preprocess import (
     COMPRESS_PAD_TO,
@@ -112,16 +112,16 @@ class DeepseekV4ForConditionalGeneration(nn.Module, SupportsMultiModal, Supports
             return IMAGE_PLACEHOLDER
         raise ValueError(f"Unsupported modality: {modality!r}")
 
-    def __init__(self, *, aphrodite_config, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config, prefix: str = "") -> None:
         super().__init__()
-        model_config = aphrodite_config.model_config
+        model_config = sonar_config.model_config
         config = model_config.hf_config
         self.config = config
         self.multimodal_config = model_config.multimodal_config
         assert self.multimodal_config is not None
 
         image_enabled = config.vision_n_layers > 0 and self.multimodal_config.get_limit_per_prompt("image") > 0
-        with self._mark_tower_model(aphrodite_config, {"image"}):
+        with self._mark_tower_model(sonar_config, {"image"}):
             self.vision: DeepseekV4ViT | None = None
             self.aligner: DeepseekV4Aligner | None = None
             self.image_start: nn.Parameter | None = None
@@ -145,15 +145,15 @@ class DeepseekV4ForConditionalGeneration(nn.Module, SupportsMultiModal, Supports
                 self.vision.to(dtype=model_config.dtype)
                 self.aligner.to(dtype=model_config.dtype)
 
-        with self._mark_language_model(aphrodite_config):
+        with self._mark_language_model(sonar_config):
             # The arch convertor routes any config with a vision tower to
             # this wrapper class; mark the copy handed to the text backbone
             # so it resolves to DeepseekV4ForCausalLM instead of recursing
             # (with_hf_config deepcopies the config, the marker survives).
             config._dsv4_vl_inner = True  # type: ignore[attr-defined]
             try:
-                self.language_model = init_aphrodite_registered_model(
-                    aphrodite_config=aphrodite_config,
+                self.language_model = init_sonar_registered_model(
+                    sonar_config=sonar_config,
                     hf_config=config,
                     prefix=maybe_prefix(prefix, "language_model"),
                     architectures=["DeepseekV4ForCausalLM"],
@@ -166,13 +166,13 @@ class DeepseekV4ForConditionalGeneration(nn.Module, SupportsMultiModal, Supports
         # so the child's own mapper must be a no-op. Its suffix rules are not
         # idempotent (e.g. "lm_head.weight".endswith("head.weight") would
         # re-fire "head.weight" -> "lm_head.weight").
-        text_mapper = self.language_model.hf_to_aphrodite_mapper
-        self.language_model.hf_to_aphrodite_mapper = WeightsMapper()
+        text_mapper = self.language_model.hf_to_sonar_mapper
+        self.language_model.hf_to_sonar_mapper = WeightsMapper()
         self.make_empty_intermediate_tensors = (  # type: ignore[method-assign]
             self.language_model.make_empty_intermediate_tensors
         )
 
-        self.hf_to_aphrodite_mapper = _make_deepseek_v4_vl_weights_mapper(text_mapper, image_enabled)
+        self.hf_to_sonar_mapper = _make_deepseek_v4_vl_weights_mapper(text_mapper, image_enabled)
 
     def _parse_and_validate_image_input(self, **kwargs: object) -> dict | None:
         patches = kwargs.pop("patches", None)
@@ -247,7 +247,7 @@ class DeepseekV4ForConditionalGeneration(nn.Module, SupportsMultiModal, Supports
         *,
         is_multimodal: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        from aphrodite.model_executor.models.utils import _merge_multimodal_embeddings
+        from sonar.model_executor.models.utils import _merge_multimodal_embeddings
 
         # All ids are in-vocab here: image-block sentinels are borrowed
         # reserved tokens (their embedding rows are always overwritten below).
@@ -307,7 +307,7 @@ class DeepseekV4ForConditionalGeneration(nn.Module, SupportsMultiModal, Supports
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(self.hf_to_aphrodite_mapper.apply(weights))
+        return loader.load_weights(self.hf_to_sonar_mapper.apply(weights))
 
     def process_weights_after_loading(self) -> None:
         self.language_model.process_weights_after_loading()

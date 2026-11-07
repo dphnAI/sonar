@@ -28,11 +28,11 @@ from transformers.models.gemma4_unified.processing_gemma4_unified import (
     Gemma4UnifiedProcessor,
 )
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.model_executor.layers.linear import ColumnParallelLinear
-from aphrodite.model_executor.models.gemma3n_mm import batch_audio_features
-from aphrodite.model_executor.models.gemma4 import Gemma4ForCausalLM
-from aphrodite.model_executor.models.gemma4_mm import (
+from sonar.config import SonarConfig
+from sonar.model_executor.layers.linear import ColumnParallelLinear
+from sonar.model_executor.models.gemma3n_mm import batch_audio_features
+from sonar.model_executor.models.gemma4 import Gemma4ForCausalLM
+from sonar.model_executor.models.gemma4_mm import (
     _SUPPORTED_SOFT_TOKENS,
     _VIDEO_MAX_FRAMES,
     _VIDEO_MAX_SOFT_TOKENS,
@@ -47,14 +47,14 @@ from aphrodite.model_executor.models.gemma4_mm import (
     Gemma4VideoInputs,
     _get_max_soft_tokens,
 )
-from aphrodite.model_executor.models.module_mapping import MultiModelKeys
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.utils.gpu_sync_debug import gpu_sync_allowed
+from sonar.model_executor.models.module_mapping import MultiModelKeys
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.utils.gpu_sync_debug import gpu_sync_allowed
 
 from .utils import (
     AutoWeightsLoader,
     WeightsMapper,
-    init_aphrodite_registered_model,
+    init_sonar_registered_model,
     maybe_prefix,
 )
 
@@ -228,14 +228,14 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4ForConditionalGeneration):
       * ``__init__`` — builds the encoder-free vision embedder instead of
         SigLIP/audio towers (LightOnOCR-style: ``nn.Module.__init__`` +
         full rebuild, no ``super().__init__()``).
-      * ``hf_to_aphrodite_mapper`` — adds the ``model.vision_embedder.`` prefix.
+      * ``hf_to_sonar_mapper`` — adds the ``model.vision_embedder.`` prefix.
       * ``_process_image_input`` / ``_process_video_input`` /
         ``_process_audio_input`` — encoder-free projection paths.
       * ``load_weights`` — ignore-prefix list excludes the absent towers.
       * ``get_mm_mapping`` — no tower entries.
     """
 
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={
             "model.embed_audio.": "embed_audio.",
             "model.embed_vision.": "embed_vision.",
@@ -246,15 +246,15 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4ForConditionalGeneration):
         }
     )
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         # LightOnOCR-style rebuild: do NOT call super().__init__ — that
         # would build a SigLIP vision tower and an audio tower we don't
         # need.  Initialize nn.Module directly and assemble the
         # encoder-free pipeline below.
         nn.Module.__init__(self)
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
-        multimodal_config = aphrodite_config.model_config.multimodal_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
+        multimodal_config = sonar_config.model_config.multimodal_config
         self.config = config
         self.quant_config = quant_config
         self.multimodal_config = multimodal_config
@@ -287,10 +287,10 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4ForConditionalGeneration):
             else None
         )
 
-        # ---- Language model (Aphrodite optimised) ----
-        with self._mark_language_model(aphrodite_config):
-            self.language_model: Gemma4ForCausalLM = init_aphrodite_registered_model(
-                aphrodite_config=aphrodite_config,
+        # ---- Language model (Sonar optimised) ----
+        with self._mark_language_model(sonar_config):
+            self.language_model: Gemma4ForCausalLM = init_sonar_registered_model(
+                sonar_config=sonar_config,
                 hf_config=config.text_config,
                 prefix=maybe_prefix(prefix, "language_model"),
                 architectures=["Gemma4ForCausalLM"],
@@ -306,11 +306,11 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4ForConditionalGeneration):
             if ple_dim is not None and ple_dim > 0:
                 embed = self.language_model.model.embed_tokens
                 self.per_layer_embeddings = torch.zeros(
-                    aphrodite_config.scheduler_config.max_num_batched_tokens,
+                    sonar_config.scheduler_config.max_num_batched_tokens,
                     config.text_config.num_hidden_layers,
                     ple_dim,
                     device=next(embed.parameters()).device,
-                    dtype=aphrodite_config.model_config.dtype,
+                    dtype=sonar_config.model_config.dtype,
                 )
             else:
                 self.per_layer_embeddings = None
@@ -339,7 +339,7 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4ForConditionalGeneration):
         self.num_redundant_experts = self.language_model.num_redundant_experts
         self.set_eplb_state = self.language_model.set_eplb_state
 
-        gen_cfg = aphrodite_config.model_config.try_get_generation_config()
+        gen_cfg = sonar_config.model_config.try_get_generation_config()
         self._suppress_token_ids = gen_cfg.get("suppress_tokens") if gen_cfg else None
 
     # ------------------------------------------------------------------ #
@@ -507,7 +507,7 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4ForConditionalGeneration):
             self,
             ignore_unexpected_prefixes=ignore_prefixes,
         )
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
     # ------------------------------------------------------------------ #
     # LoRA / multimodal mapping

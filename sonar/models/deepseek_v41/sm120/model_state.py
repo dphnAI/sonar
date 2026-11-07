@@ -5,16 +5,16 @@ from typing import Any
 import torch
 import torch.nn as nn
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.compilation import CUDAGraphMode
-from aphrodite.triton_utils import tl, triton
-from aphrodite.v1.core.sched.output import NewRequestData
-from aphrodite.v1.kv_cache_interface import KVCacheConfig
-from aphrodite.v1.worker.gpu.input_batch import InputBatch
-from aphrodite.v1.worker.gpu.mm.encoder_cache import EncoderCache
-from aphrodite.v1.worker.gpu.model_states.interface import ModelSpecificAttnMetadata
-from aphrodite.v1.worker.gpu.states import RequestState
-from aphrodite.v1.worker.utils import AttentionGroup
+from sonar.config import SonarConfig
+from sonar.config.compilation import CUDAGraphMode
+from sonar.triton_utils import tl, triton
+from sonar.v1.core.sched.output import NewRequestData
+from sonar.v1.kv_cache_interface import KVCacheConfig
+from sonar.v1.worker.gpu.input_batch import InputBatch
+from sonar.v1.worker.gpu.mm.encoder_cache import EncoderCache
+from sonar.v1.worker.gpu.model_states.interface import ModelSpecificAttnMetadata
+from sonar.v1.worker.gpu.states import RequestState
+from sonar.v1.worker.utils import AttentionGroup
 
 from ..nvidia.model_state import DeepseekV41ModelState as SonarDeepseekV41ModelState
 from .ced import CED_WINDOW, CEDState, ced_decoder_start
@@ -60,12 +60,12 @@ class DeepseekV41ModelState(SonarDeepseekV41ModelState):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         model: nn.Module,
         encoder_cache: EncoderCache | None,
         device: torch.device,
     ):
-        super().__init__(aphrodite_config, model, encoder_cache, device)
+        super().__init__(sonar_config, model, encoder_cache, device)
         self.ced_state: CEDState | None = None
         self._ced_prompt_logprobs: set[str] = set()
         self._ced_prefix_start: dict[str, int] = {}
@@ -85,7 +85,7 @@ class DeepseekV41ModelState(SonarDeepseekV41ModelState):
                         *range(CED_WINDOW, compact_max + 1, CED_WINDOW),
                         *(
                             size
-                            for size in (aphrodite_config.compilation_config.cudagraph_capture_sizes or ())
+                            for size in (sonar_config.compilation_config.cudagraph_capture_sizes or ())
                             if 0 < size <= self.max_num_tokens
                         ),
                     }
@@ -146,8 +146,7 @@ class DeepseekV41ModelState(SonarDeepseekV41ModelState):
             [True] * nr
             if force_full
             else [
-                req_id in self._ced_prompt_logprobs
-                or self.aphrodite_config.aux_output_config.enable_return_routed_experts
+                req_id in self._ced_prompt_logprobs or self.sonar_config.aux_output_config.enable_return_routed_experts
                 for req_id in input_batch.req_ids
             ],
             [0] * nr if force_full else [self._ced_prefix_start.get(req_id, 0) for req_id in input_batch.req_ids],
@@ -193,7 +192,7 @@ class DeepseekV41ModelState(SonarDeepseekV41ModelState):
         return metadata
 
     def prepare_inputs(self, input_batch: InputBatch, req_states: RequestState) -> dict[str, torch.Tensor | None]:
-        from aphrodite.v1.worker.gpu.model_states.default import DefaultModelState
+        from sonar.v1.worker.gpu.model_states.default import DefaultModelState
 
         model_inputs = DefaultModelState.prepare_inputs(self, input_batch, req_states)
         if self.ced_state is not None:

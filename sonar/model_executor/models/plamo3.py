@@ -10,46 +10,46 @@ import torch
 from torch import nn
 from transformers import PreTrainedConfig
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed import get_tensor_model_parallel_world_size
-from aphrodite.distributed.parallel_state import get_pp_group
-from aphrodite.model_executor.layers.activation import SiluAndMul
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import SonarConfig
+from sonar.distributed import get_tensor_model_parallel_world_size
+from sonar.distributed.parallel_state import get_pp_group
+from sonar.model_executor.layers.activation import SiluAndMul
+from sonar.model_executor.layers.attention import Attention
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     MergedColumnParallelLinear,
     QKVParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     DEFAULT_VOCAB_PADDING_SIZE,
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.model_loader.weight_utils import (
+from sonar.model_executor.model_loader.weight_utils import (
     LoaderFunction,
     composed_weight_loader,
     default_weight_loader,
 )
-from aphrodite.model_executor.models.interfaces import (
+from sonar.model_executor.models.interfaces import (
     EagleModelMixin,
     SupportsEagle3,
     SupportsLoRA,
     SupportsPP,
 )
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.models.utils import (
     AutoWeightsLoader,
     extract_layer_index,
     make_empty_intermediate_tensors_factory,
     make_layers,
     maybe_prefix,
 )
-from aphrodite.model_executor.utils import set_weight_attrs
-from aphrodite.sequence import IntermediateTensors
+from sonar.model_executor.utils import set_weight_attrs
+from sonar.sequence import IntermediateTensors
 
 # Only used for type hinting.
 if TYPE_CHECKING:
@@ -64,7 +64,7 @@ if TYPE_CHECKING:
         num_attention_heads: int
         head_dim: int
         num_key_value_heads: int
-        # aphrodite rename `sliding_window` attr to `interleaved_sliding_window`
+        # sonar rename `sliding_window` attr to `interleaved_sliding_window`
         # if `sliding_window` is list
         interleaved_sliding_window: list[int | None]
         sliding_window_pattern: int
@@ -118,10 +118,10 @@ class DenseMLP(nn.Module):
 
 
 class Plamo3AttentionMixer(nn.Module):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "", **kwargs) -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "", **kwargs) -> None:
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
 
         self.hidden_size = config.hidden_size
         tp_size = get_tensor_model_parallel_world_size()
@@ -176,10 +176,10 @@ class Plamo3AttentionMixer(nn.Module):
             if is_sliding:
                 rope_parameters = dict(rope_type="default", rope_theta=config.rope_local_theta)
         max_position = config.max_position_embeddings
-        if hasattr(aphrodite_config.model_config, "max_model_len") and isinstance(
-            aphrodite_config.model_config.max_model_len, int
+        if hasattr(sonar_config.model_config, "max_model_len") and isinstance(
+            sonar_config.model_config.max_model_len, int
         ):
-            max_position = min(max_position, aphrodite_config.model_config.max_model_len)
+            max_position = min(max_position, sonar_config.model_config.max_model_len)
 
         self.rotary_emb = get_rope(
             self.head_dim,
@@ -195,7 +195,7 @@ class Plamo3AttentionMixer(nn.Module):
             self.head_dim,
             self.scaling,
             num_kv_heads=self.num_kv_heads,
-            cache_config=aphrodite_config.cache_config,
+            cache_config=sonar_config.cache_config,
             per_layer_sliding_window=config.interleaved_sliding_window[layer_idx],
             prefix=f"{prefix}.attn",
         )
@@ -228,13 +228,13 @@ class Plamo3AttentionMixer(nn.Module):
 
 
 class Plamo3DecoderLayer(nn.Module):
-    def __init__(self, aphrodite_config: AphroditeConfig, prefix: str = "", **kwargs: Any) -> None:
+    def __init__(self, sonar_config: SonarConfig, prefix: str = "", **kwargs: Any) -> None:
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
 
         self.mixer = Plamo3AttentionMixer(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             prefix=f"{prefix}.mixer",
         )
 
@@ -283,13 +283,13 @@ class Plamo3DecoderLayer(nn.Module):
 
 
 class Plamo3Decoder(torch.nn.Module, EagleModelMixin):
-    def __init__(self, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__()
-        num_hidden_layers = aphrodite_config.model_config.hf_config.num_hidden_layers
+        num_hidden_layers = sonar_config.model_config.hf_config.num_hidden_layers
 
         self.start_layer, self.end_layer, self.layers = make_layers(
             num_hidden_layers,
-            lambda prefix: Plamo3DecoderLayer(aphrodite_config, prefix=prefix),
+            lambda prefix: Plamo3DecoderLayer(sonar_config, prefix=prefix),
             prefix=f"{prefix}.layers",
         )
 
@@ -315,9 +315,9 @@ class Plamo3Decoder(torch.nn.Module, EagleModelMixin):
 
 @support_torch_compile
 class Plamo3Model(nn.Module, EagleModelMixin):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
 
         self.config = config
         self.vocab_size = config.vocab_size
@@ -332,7 +332,7 @@ class Plamo3Model(nn.Module, EagleModelMixin):
         self.make_empty_intermediate_tensors = make_empty_intermediate_tensors_factory(
             ["hidden_states", "residual"], config.hidden_size
         )
-        self.layers = Plamo3Decoder(aphrodite_config, prefix=f"{prefix}.layers")
+        self.layers = Plamo3Decoder(sonar_config, prefix=f"{prefix}.layers")
         self.norm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         set_weight_attrs(
             self.norm.weight,
@@ -380,14 +380,14 @@ class Plamo3ForCausalLM(nn.Module, SupportsLoRA, SupportsPP, SupportsEagle3):
         "gate_up_proj": ["gate_up_proj"],
     }
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__()
-        self.config = aphrodite_config.model_config.hf_config
-        self.aphrodite_config = aphrodite_config
-        self.model_config = aphrodite_config.model_config
-        self.scheduler_config = aphrodite_config.scheduler_config
+        self.config = sonar_config.model_config.hf_config
+        self.sonar_config = sonar_config
+        self.model_config = sonar_config.model_config
+        self.scheduler_config = sonar_config.scheduler_config
 
-        self.model = Plamo3Model(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = Plamo3Model(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
 
         self.vocab_size = self.config.vocab_size
         self.unpadded_vocab_size = self.config.vocab_size

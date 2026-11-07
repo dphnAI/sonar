@@ -110,7 +110,7 @@ parallelism overlapped computation stages to maximize utilization. \
 Ring-allreduce and parameter server architectures provided different \
 trade-offs for gradient synchronization.
 
-Inference serving systems like Aphrodite, TensorRT-LLM, and SGLang optimized the \
+Inference serving systems like Sonar, TensorRT-LLM, and SGLang optimized the \
 deployment of large language models. They introduced techniques like \
 continuous batching to maximize GPU utilization, PagedAttention for efficient \
 KV cache memory management, and speculative decoding to reduce latency. \
@@ -222,12 +222,12 @@ while len(PROMPT) < 23000:
 
 
 METRICS_OF_INTEREST = [
-    "aphrodite:nixl_bytes_transferred_sum",
-    "aphrodite:nixl_bytes_transferred_count",
-    "aphrodite:nixl_num_descriptors_sum",
-    "aphrodite:nixl_num_descriptors_count",
-    "aphrodite:prefix_cache_hits",
-    "aphrodite:prefix_cache_queries",
+    "sonar:nixl_bytes_transferred_sum",
+    "sonar:nixl_bytes_transferred_count",
+    "sonar:nixl_num_descriptors_sum",
+    "sonar:nixl_num_descriptors_count",
+    "sonar:prefix_cache_hits",
+    "sonar:prefix_cache_queries",
 ]
 
 
@@ -288,10 +288,8 @@ def test_mamba_prefix_cache_hit():
     m_after_req1 = get_all_metrics(DECODE_HOST, DECODE_PORT)
     print_metrics("D-side after req1", m_after_req1)
 
-    transfer_req1 = (
-        m_after_req1["aphrodite:nixl_bytes_transferred_sum"] - m_baseline["aphrodite:nixl_bytes_transferred_sum"]
-    )
-    descs_req1 = m_after_req1["aphrodite:nixl_num_descriptors_sum"] - m_baseline["aphrodite:nixl_num_descriptors_sum"]
+    transfer_req1 = m_after_req1["sonar:nixl_bytes_transferred_sum"] - m_baseline["sonar:nixl_bytes_transferred_sum"]
+    descs_req1 = m_after_req1["sonar:nixl_num_descriptors_sum"] - m_baseline["sonar:nixl_num_descriptors_sum"]
     print(f"  Transfer: {transfer_req1 / 1e6:.2f} MB, {descs_req1:.0f} descs")
 
     # Request 2: same prompt, should hit D-side prefix cache
@@ -304,10 +302,8 @@ def test_mamba_prefix_cache_hit():
     m_after_req2 = get_all_metrics(DECODE_HOST, DECODE_PORT)
     print_metrics("D-side after req2", m_after_req2)
 
-    transfer_req2 = (
-        m_after_req2["aphrodite:nixl_bytes_transferred_sum"] - m_after_req1["aphrodite:nixl_bytes_transferred_sum"]
-    )
-    descs_req2 = m_after_req2["aphrodite:nixl_num_descriptors_sum"] - m_after_req1["aphrodite:nixl_num_descriptors_sum"]
+    transfer_req2 = m_after_req2["sonar:nixl_bytes_transferred_sum"] - m_after_req1["sonar:nixl_bytes_transferred_sum"]
+    descs_req2 = m_after_req2["sonar:nixl_num_descriptors_sum"] - m_after_req1["sonar:nixl_num_descriptors_sum"]
     print(f"  Transfer: {transfer_req2 / 1e6:.2f} MB, {descs_req2:.0f} descs")
 
     # P-side metrics (informational)

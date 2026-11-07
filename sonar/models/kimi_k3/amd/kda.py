@@ -7,68 +7,68 @@ import torch
 from einops import rearrange
 from torch import nn
 
-from aphrodite import _custom_ops as ops
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.compilation.breakable_cudagraph import eager_break_during_capture
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed import divide
-from aphrodite.forward_context import get_forward_context
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fusion.quant_activation import (
+from sonar import _custom_ops as ops
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.compilation.breakable_cudagraph import eager_break_during_capture
+from sonar.config import SonarConfig
+from sonar.distributed import divide
+from sonar.forward_context import get_forward_context
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fusion.quant_activation import (
     QuantizedActivation,
     get_input_quant_key,
 )
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.mamba.gdn.base import GatedDeltaNetAttention
+from sonar.model_executor.layers.mamba.gdn.base import GatedDeltaNetAttention
 
 # Generic KDA helpers, shared with Kimi-Linear. They are neither ROCm- nor
 # K3-specific, so they are imported rather than duplicated. (nvidia/kda.py keeps
 # its own copies; duplicating here instead would be a one-line change.)
-from aphrodite.model_executor.layers.mamba.gdn.kimi_gdn_linear_attn import (
+from sonar.model_executor.layers.mamba.gdn.kimi_gdn_linear_attn import (
     _KDA_GATE_LOGBOUND_MIN,
     _KimiGDNMergedColumnParallelLinear,
     _make_fused_conv1d_weight_loader,
     a_log_weight_loader,
 )
-from aphrodite.model_executor.layers.mamba.mamba_utils import (
+from sonar.model_executor.layers.mamba.mamba_utils import (
     MambaStateDtypeCalculator,
     MambaStateShapeCalculator,
     is_conv_state_dim_first,
 )
-from aphrodite.model_executor.layers.mamba.ops.causal_conv1d import (
+from sonar.model_executor.layers.mamba.ops.causal_conv1d import (
     causal_conv1d_fn,
     causal_conv1d_update,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import QuantKey
-from aphrodite.model_executor.model_loader.weight_utils import sharded_weight_loader
-from aphrodite.model_executor.utils import is_weights_pre_processed, set_weight_attrs
-from aphrodite.models.kimi_k3.amd.kda_metadata import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import QuantKey
+from sonar.model_executor.model_loader.weight_utils import sharded_weight_loader
+from sonar.model_executor.utils import is_weights_pre_processed, set_weight_attrs
+from sonar.models.kimi_k3.amd.kda_metadata import (
     PREFILL_CONV_BLOCK_M,
     KimiK3ROCmKDABackend,
 )
-from aphrodite.models.kimi_k3.amd.ops.kda_checkpoint import (
+from sonar.models.kimi_k3.amd.ops.kda_checkpoint import (
     KimiK3ROCmKDAPrefillCheckpointExporter,
 )
-from aphrodite.models.kimi_k3.amd.ops.kda_chunk import (
+from sonar.models.kimi_k3.amd.ops.kda_chunk import (
     KDA_CHECKPOINT_ALIGNMENT,
     is_fused_kda_chunk_supported,
 )
-from aphrodite.models.kimi_k3.amd.ops.kda_decode import (
+from sonar.models.kimi_k3.amd.ops.kda_decode import (
     is_fused_kda_decode_supported,
 )
-from aphrodite.models.kimi_k3.amd.ops.kda_prefill import chunk_kda_prefill
-from aphrodite.models.kimi_k3.amd.ops.third_party.kda import (
+from sonar.models.kimi_k3.amd.ops.kda_prefill import chunk_kda_prefill
+from sonar.models.kimi_k3.amd.ops.third_party.kda import (
     fused_recurrent_kda,
     fused_recurrent_kda_packed_decode,
 )
-from aphrodite.third_party.flash_linear_attention.ops.kda import FusedRMSNormGated
-from aphrodite.transformers_utils.configs.kimi_linear import KimiLinearConfig
-from aphrodite.v1.attention.backend import AttentionBackend
-from aphrodite.v1.attention.backends.gdn_attn import GDNAttentionMetadata
-from aphrodite.v1.kv_cache_interface import MambaSpec
+from sonar.third_party.flash_linear_attention.ops.kda import FusedRMSNormGated
+from sonar.transformers_utils.configs.kimi_linear import KimiLinearConfig
+from sonar.v1.attention.backend import AttentionBackend
+from sonar.v1.attention.backends.gdn_attn import GDNAttentionMetadata
+from sonar.v1.kv_cache_interface import MambaSpec
 
 logger = init_logger(__name__)
 
@@ -95,8 +95,8 @@ class KimiK3DeltaAttention(GatedDeltaNetAttention):
             num_spec=self.num_spec,
         )
 
-    def get_kv_cache_spec(self, aphrodite_config: AphroditeConfig) -> MambaSpec:
-        spec = super().get_kv_cache_spec(aphrodite_config)
+    def get_kv_cache_spec(self, sonar_config: SonarConfig) -> MambaSpec:
+        spec = super().get_kv_cache_spec(sonar_config)
         assert isinstance(spec, MambaSpec)
         # Only the fused path exports the checkpoint snapshots. AITER's
         # chunk_kda cannot, so the gluon backend hands the steps that carry a
@@ -109,7 +109,7 @@ class KimiK3DeltaAttention(GatedDeltaNetAttention):
             )
             and self.use_safe_gate
         )
-        if can_checkpoint and aphrodite_config.cache_config.mamba_cache_mode == "align":
+        if can_checkpoint and sonar_config.cache_config.mamba_cache_mode == "align":
             logger.info_once("Kimi-K3 KDA prefill checkpoint enabled.")
         return replace(
             spec,
@@ -120,10 +120,10 @@ class KimiK3DeltaAttention(GatedDeltaNetAttention):
     def __init__(
         self,
         config: KimiLinearConfig,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
     ) -> None:
-        super().__init__(config, aphrodite_config, prefix)
+        super().__init__(config, sonar_config, prefix)
 
         kda_config = config.linear_attn_config  # type: ignore[attr-defined]
         assert kda_config is not None, "linear_attn_config must be set"
@@ -206,7 +206,7 @@ class KimiK3DeltaAttention(GatedDeltaNetAttention):
             self.head_dim,
             self.conv_size,
             self.num_spec,
-            aphrodite_config.model_config.dtype,
+            sonar_config.model_config.dtype,
             conv_state_dtype,
             recurrent_state_dtype,
         )
@@ -239,7 +239,7 @@ class KimiK3DeltaAttention(GatedDeltaNetAttention):
             )
         self.use_safe_gate = self.gate_lower_bound is not None
 
-        additional_config = aphrodite_config.additional_config
+        additional_config = sonar_config.additional_config
         backend = (
             additional_config.get("kda_prefill_backend", "auto") if isinstance(additional_config, dict) else "auto"
         )
@@ -286,7 +286,7 @@ class KimiK3DeltaAttention(GatedDeltaNetAttention):
             prefix=f"{prefix}.o_proj",
         )
 
-        compilation_config = aphrodite_config.compilation_config
+        compilation_config = sonar_config.compilation_config
         if prefix in compilation_config.static_forward_context:
             raise ValueError(f"Duplicate layer name: {prefix}")
         compilation_config.static_forward_context[prefix] = self

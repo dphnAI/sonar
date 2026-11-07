@@ -8,7 +8,7 @@ backend built on top of them.
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 if not current_platform.is_cpu():
     pytest.skip("skipping CPU-only tests", allow_module_level=True)
@@ -18,9 +18,9 @@ if not torch.cpu._is_amx_tile_supported():
 
 torch.cpu._init_amx()
 
-from aphrodite import _custom_ops as ops  # noqa: E402
-from aphrodite.utils.torch_utils import set_random_seed  # noqa: E402
-from aphrodite.v1.attention.backends.mla.amx_mla import (  # noqa: E402
+from sonar import _custom_ops as ops  # noqa: E402
+from sonar.utils.torch_utils import set_random_seed  # noqa: E402
+from sonar.v1.attention.backends.mla.amx_mla import (  # noqa: E402
     AMXMLAImpl,
     _compute_num_kv_splits,
     _expand_block_table,
@@ -305,7 +305,7 @@ class _FakeAttnMetadata:
         self.max_seq_len = max_seq_len
 
 
-def test_amx_mla_impl_forward_mqa_matches_reference(default_aphrodite_config):
+def test_amx_mla_impl_forward_mqa_matches_reference(default_sonar_config):
     """forward_mqa receives already-absorbed Q (as MLAAttention.forward_impl
     would produce via layer.W_UK_T) and must reproduce plain per-head MLA
     decode attention through W_UK/W_UV."""
@@ -365,7 +365,7 @@ def test_amx_mla_impl_forward_mqa_matches_reference(default_aphrodite_config):
         torch.testing.assert_close(out_real[i], ref, atol=_IMPL_ATOL, rtol=_IMPL_RTOL)
 
 
-def test_amx_mla_impl_forward_mha_matches_reference(default_aphrodite_config):
+def test_amx_mla_impl_forward_mha_matches_reference(default_sonar_config):
     """forward_mha receives raw unabsorbed Q and must attend correctly for a
     prefill batch with a mix of fresh and continued (cached-prefix)
     sequences."""

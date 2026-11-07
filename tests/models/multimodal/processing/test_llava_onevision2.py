@@ -5,7 +5,7 @@
 The codec video backend cannot be exercised end-to-end in CI because it
 relies on the model's ``trust_remote_code`` package and real video bytes.
 These tests cover the pure-Python marker plumbing that wraps a video *path*
-for Aphrodite's ``MultiModalDataParser``:
+for Sonar's ``MultiModalDataParser``:
 
 * :func:`prepare_codec_video_input` must encode a per-path hash into its
   dummy ndarray so distinct codec videos do not collide on ``mm_hash``
@@ -21,7 +21,7 @@ import types
 import numpy as np
 import pytest
 
-from aphrodite.model_executor.models.llava_onevision2 import (
+from sonar.model_executor.models.llava_onevision2 import (
     _CODEC_VIDEO_MARKER,
     LlavaOnevision2VideoBackend,
     _extract_codec_video_paths,
@@ -29,11 +29,11 @@ from aphrodite.model_executor.models.llava_onevision2 import (
     _validate_video_source,
     prepare_codec_video_input,
 )
-from aphrodite.multimodal.video import VideoSourceMetadata, VideoTargetMetadata
+from sonar.multimodal.video import VideoSourceMetadata, VideoTargetMetadata
 
 
 def _model_config(local: str = "", domains=None):
-    # Minimal stand-in for Aphrodite's ModelConfig: the validator only reads
+    # Minimal stand-in for Sonar's ModelConfig: the validator only reads
     # ``allowed_local_media_path`` and ``allowed_media_domains``.
     return types.SimpleNamespace(
         allowed_local_media_path=local,
@@ -102,9 +102,9 @@ def test_extract_codec_video_paths_mixed_batch_returns_none():
 # ---------------------------------------------------------------------------
 # Media access controls (_validate_video_source)
 #
-# The codec backend keeps the raw path string alive past Aphrodite's
+# The codec backend keeps the raw path string alive past Sonar's
 # MultiModalDataParser and hands it to the trust-remote-code codec module,
-# which opens it directly (cv2/ffmpeg) outside Aphrodite's MediaConnector. So the
+# which opens it directly (cv2/ffmpeg) outside Sonar's MediaConnector. So the
 # codec backend is restricted to *local files* confined to
 # --allowed-local-media-path; remote http(s)/data URLs are rejected (they must
 # use the frame backend, which rides the connector). The validator also returns

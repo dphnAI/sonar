@@ -13,15 +13,15 @@ _TORCH_CUDA_PATTERNS = [
 ]
 
 ALLOWED_FILES = {
-    "aphrodite/platforms/",
-    "aphrodite/device_allocator/",
-    "aphrodite/vllm_flash_attn/",
+    "sonar/platforms/",
+    "sonar/device_allocator/",
+    "sonar/vllm_flash_attn/",
     "benchmarks/",
     "examples/",
     "tests/",
-    "aphrodite/model_executor/layers/quantization/exl3.py",
-    "aphrodite/distributed/weight_transfer/ipc_engine.py",
-    "aphrodite/distributed/weight_transfer/sharded_rdt_engine.py",
+    "sonar/model_executor/layers/quantization/exl3.py",
+    "sonar/distributed/weight_transfer/ipc_engine.py",
+    "sonar/distributed/weight_transfer/sharded_rdt_engine.py",
     "tests/distributed/test_packed_tensor.py",
 }
 

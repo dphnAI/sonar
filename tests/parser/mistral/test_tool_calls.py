@@ -28,26 +28,26 @@ from mistral_common.protocol.instruct.tool_calls import (
 )
 from partial_json_parser.core.options import Allow
 
-from aphrodite.entrypoints.generate.base.protocol import (
+from sonar.entrypoints.generate.base.protocol import (
     DeltaFunctionCall,
     DeltaMessage,
     DeltaToolCall,
     ExtractedToolCallInformation,
     StructuralTagResponseFormat,
 )
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionRequest,
 )
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.parser.engine.events import EventType
-from aphrodite.parser.engine.streaming_parser_engine import StreamingParserEngine
-from aphrodite.parser.mistral import MistralParser, mistral_config
-from aphrodite.parser.parser_manager import ParserManager
-from aphrodite.sampling_params import StructuredOutputsParams
-from aphrodite.tokenizers import TokenizerLike, get_tokenizer
-from aphrodite.tokenizers.detokenizer_utils import detokenize_incrementally
-from aphrodite.tokenizers.mistral import MistralTokenizer
-from aphrodite.tool_parsers.mistral_tool_parser import MistralToolParser
+from sonar.exceptions import SonarValidationError
+from sonar.parser.engine.events import EventType
+from sonar.parser.engine.streaming_parser_engine import StreamingParserEngine
+from sonar.parser.mistral import MistralParser, mistral_config
+from sonar.parser.parser_manager import ParserManager
+from sonar.sampling_params import StructuredOutputsParams
+from sonar.tokenizers import TokenizerLike, get_tokenizer
+from sonar.tokenizers.detokenizer_utils import detokenize_incrementally
+from sonar.tokenizers.mistral import MistralTokenizer
+from sonar.tool_parsers.mistral_tool_parser import MistralToolParser
 
 _DUMMY_REQUEST = ChatCompletionRequest(messages=[], model="test")
 # Minimal request for the engine driver: tool_choice=None falls through to
@@ -1821,7 +1821,7 @@ def test_adjust_request_deeply_nested_json_string_rejected(
     request = _make_request(
         structured_outputs=StructuredOutputsParams(json=schema),
     )
-    with pytest.raises(AphroditeValidationError, match="nested too deeply"):
+    with pytest.raises(SonarValidationError, match="nested too deeply"):
         mistral_tool_parser.adjust_request(request)
 
 
@@ -1930,7 +1930,7 @@ def test_adjust_request_invalid_response_format_is_validation_error(
             "json_schema": {"name": "my_schema", "schema": {"type": 1}},
         },
     )
-    with pytest.raises(AphroditeValidationError):
+    with pytest.raises(SonarValidationError):
         mistral_tool_parser.adjust_request(request)
 
 

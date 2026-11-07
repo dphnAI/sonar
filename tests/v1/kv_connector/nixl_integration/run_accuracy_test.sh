@@ -3,7 +3,7 @@ set -xe
 
 # Parse command line arguments
 KV_BUFFER_DEVICE="cuda"  # Default to cuda
-ATTENTION_BACKEND=""  # Default to empty (use aphrodite default)
+ATTENTION_BACKEND=""  # Default to empty (use sonar default)
 CROSS_LAYERS_BLOCKS="False"
 
 while [[ $# -gt 0 ]]; do
@@ -32,8 +32,8 @@ echo "Running accuracy tests with kv_buffer_device=$KV_BUFFER_DEVICE"
 if [[ -n "$ATTENTION_BACKEND" ]]; then
   echo "Using attention backend: $ATTENTION_BACKEND"
 fi
-if [[ -n "$APHRODITE_SERVE_EXTRA_ARGS" ]]; then
-  echo "Sonar serve extra args: $APHRODITE_SERVE_EXTRA_ARGS"
+if [[ -n "$SONAR_SERVE_EXTRA_ARGS" ]]; then
+  echo "Sonar serve extra args: $SONAR_SERVE_EXTRA_ARGS"
 fi
 
 # Empty leaves the layout to the backends, for models that constrain it.
@@ -83,13 +83,13 @@ GPU_MEMORY_UTILIZATION=${GPU_MEMORY_UTILIZATION:-0.2}
 PREFILL_BLOCK_SIZE=${PREFILL_BLOCK_SIZE:-128}
 DECODE_BLOCK_SIZE=${DECODE_BLOCK_SIZE:-128}
 ENFORCE_EAGER=${ENFORCE_EAGER:-1}
-# Comma-separated extra args for aphrodite serve (e.g. --max-model-len,2048)
-APHRODITE_SERVE_EXTRA_ARGS=${APHRODITE_SERVE_EXTRA_ARGS:-}
+# Comma-separated extra args for sonar serve (e.g. --max-model-len,2048)
+SONAR_SERVE_EXTRA_ARGS=${SONAR_SERVE_EXTRA_ARGS:-}
 # Set to 1 to put every instance to sleep and wake it up before the eval.
 SLEEP_WAKE=${SLEEP_WAKE:-0}
 if [[ "$SLEEP_WAKE" == "1" ]]; then
-  export APHRODITE_SERVER_DEV_MODE=1
-  APHRODITE_SERVE_EXTRA_ARGS="${APHRODITE_SERVE_EXTRA_ARGS:+${APHRODITE_SERVE_EXTRA_ARGS},}--enable-sleep-mode"
+  export SONAR_SERVER_DEV_MODE=1
+  SONAR_SERVE_EXTRA_ARGS="${SONAR_SERVE_EXTRA_ARGS:+${SONAR_SERVE_EXTRA_ARGS},}--enable-sleep-mode"
 fi
 # Pin concurrent prefiller and non-DP decoder engines to separate internal
 # port windows. DP decoder ranks retain their existing internal port selection.
@@ -98,7 +98,7 @@ DECODER_INTERNAL_PORT_BASE=${DECODER_INTERNAL_PORT_BASE:-30000}
 INTERNAL_PORT_STRIDE=${INTERNAL_PORT_STRIDE:-100}
 
 # Resolve the repository root from the script location instead of `.git`.
-# The ROCm CI image copies `/aphrodite-workspace` without the Git metadata, so
+# The ROCm CI image copies `/sonar-workspace` without the Git metadata, so
 # `git rev-parse --show-toplevel` is not reliable at runtime.
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 GIT_ROOT="${GIT_ROOT:-$(cd -- "${SCRIPT_DIR}/../../../.." && pwd -P)}"
@@ -127,9 +127,9 @@ wait_for_gpu_memory_release() {
 cleanup_instances() {
   echo "Cleaning up any running Sonar instances..."
   pkill -f "toy_proxy_server.py" || true
-  pkill -TERM -f "aphrodite serve" || true
+  pkill -TERM -f "sonar serve" || true
   sleep 3
-  pkill -9 -f "aphrodite serve" || true
+  pkill -9 -f "sonar serve" || true
   sleep 2
   wait_for_gpu_memory_release
 }
@@ -184,11 +184,11 @@ run_tests_for_model() {
 
     # Build the command with or without model-specific args
     BASE_CMD="CUDA_VISIBLE_DEVICES=$GPU_ID \
-    ${PREFILLER_KV_LAYOUT:+APHRODITE_KV_CACHE_LAYOUT=$PREFILLER_KV_LAYOUT} \
-    APHRODITE_PORT=$INTERNAL_PORT \
+    ${PREFILLER_KV_LAYOUT:+SONAR_KV_CACHE_LAYOUT=$PREFILLER_KV_LAYOUT} \
+    SONAR_PORT=$INTERNAL_PORT \
     UCX_NET_DEVICES=all \
-    APHRODITE_NIXL_SIDE_CHANNEL_PORT=$SIDE_CHANNEL_PORT \
-    aphrodite serve $model_name \
+    SONAR_NIXL_SIDE_CHANNEL_PORT=$SIDE_CHANNEL_PORT \
+    sonar serve $model_name \
     --port $PORT \
     --block-size ${PREFILL_BLOCK_SIZE} \
     --gpu-memory-utilization $GPU_MEMORY_UTILIZATION \
@@ -198,8 +198,8 @@ run_tests_for_model() {
     if [[ "$ENFORCE_EAGER" == "1" ]]; then
       BASE_CMD="${BASE_CMD} --enforce-eager"
     fi
-    if [[ -n "$APHRODITE_SERVE_EXTRA_ARGS" ]]; then
-      IFS=',' read -r -a extra_args <<< "$APHRODITE_SERVE_EXTRA_ARGS"
+    if [[ -n "$SONAR_SERVE_EXTRA_ARGS" ]]; then
+      IFS=',' read -r -a extra_args <<< "$SONAR_SERVE_EXTRA_ARGS"
       for arg in "${extra_args[@]}"; do
         BASE_CMD="${BASE_CMD} $arg"
       done
@@ -246,23 +246,23 @@ run_tests_for_model() {
     # Calculate side channel port
     SIDE_CHANNEL_PORT=$((5659 + i * $DECODER_TP_SIZE))
     INTERNAL_PORT=$((DECODER_INTERNAL_PORT_BASE + i * INTERNAL_PORT_STRIDE))
-    # For non-DP mode, set APHRODITE_PORT to pin the internal port;
-    # For DP mode, set APHRODITE_DP_MASTER_PORT instead to avoid race condition.
+    # For non-DP mode, set SONAR_PORT to pin the internal port;
+    # For DP mode, set SONAR_DP_MASTER_PORT instead to avoid race condition.
     if [[ -z "${DP_EP:-}" ]]; then
-      DECODER_INTERNAL_PORT_ENV="APHRODITE_PORT=$INTERNAL_PORT"
+      DECODER_INTERNAL_PORT_ENV="SONAR_PORT=$INTERNAL_PORT"
     else
-      DECODER_INTERNAL_PORT_ENV="APHRODITE_DP_MASTER_PORT=$INTERNAL_PORT"
+      DECODER_INTERNAL_PORT_ENV="SONAR_DP_MASTER_PORT=$INTERNAL_PORT"
     fi
 
     echo "Starting decode instance $i on GPU $GPU_ID, port $PORT"
 
     # Build the command with or without model-specific args
     BASE_CMD="CUDA_VISIBLE_DEVICES=$GPU_ID \
-    ${DECODER_KV_LAYOUT:+APHRODITE_KV_CACHE_LAYOUT=$DECODER_KV_LAYOUT} \
+    ${DECODER_KV_LAYOUT:+SONAR_KV_CACHE_LAYOUT=$DECODER_KV_LAYOUT} \
     $DECODER_INTERNAL_PORT_ENV \
     UCX_NET_DEVICES=all \
-    APHRODITE_NIXL_SIDE_CHANNEL_PORT=$SIDE_CHANNEL_PORT \
-    aphrodite serve $model_name \
+    SONAR_NIXL_SIDE_CHANNEL_PORT=$SIDE_CHANNEL_PORT \
+    sonar serve $model_name \
     --port $PORT \
     --block-size ${DECODE_BLOCK_SIZE} \
     --gpu-memory-utilization $GPU_MEMORY_UTILIZATION \
@@ -270,8 +270,8 @@ run_tests_for_model() {
     if [[ "$ENFORCE_EAGER" == "1" ]]; then
       BASE_CMD="${BASE_CMD} --enforce-eager"
     fi
-    if [[ -n "$APHRODITE_SERVE_EXTRA_ARGS" ]]; then
-      IFS=',' read -r -a extra_args <<< "$APHRODITE_SERVE_EXTRA_ARGS"
+    if [[ -n "$SONAR_SERVE_EXTRA_ARGS" ]]; then
+      IFS=',' read -r -a extra_args <<< "$SONAR_SERVE_EXTRA_ARGS"
       for arg in "${extra_args[@]}"; do
         BASE_CMD="${BASE_CMD} $arg"
       done

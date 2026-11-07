@@ -211,7 +211,7 @@ impl Backend {
 /// Get a backend by kind.
 pub fn get_backend(kind: BackendKind) -> Result<Backend> {
     match kind {
-        BackendKind::Aphrodite | BackendKind::Openai => Ok(Backend::OpenAICompletions(
+        BackendKind::Sonar | BackendKind::Openai => Ok(Backend::OpenAICompletions(
             openai_completions::OpenAICompletionsBackend,
         )),
         BackendKind::OpenaiChat => Ok(Backend::OpenAIChat(openai_chat::OpenAIChatBackend)),

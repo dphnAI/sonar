@@ -7,18 +7,18 @@ import torch
 import torch.nn as nn
 from transformers import Qwen3Config
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, get_current_aphrodite_config
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import QKVParallelLinear, ReplicatedLinear
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import SonarConfig, get_current_sonar_config
+from sonar.logger import init_logger
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import QKVParallelLinear, ReplicatedLinear
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.models.qwen3 import Qwen3DecoderLayer, Qwen3ForCausalLM
-from aphrodite.multimodal.inputs import NestedTensors
+from sonar.model_executor.models.qwen3 import Qwen3DecoderLayer, Qwen3ForCausalLM
+from sonar.multimodal.inputs import NestedTensors
 
 from .utils import (
     AutoWeightsLoader,
@@ -34,14 +34,14 @@ logger = init_logger(__name__)
 class Qwen3Eagle3DecoderLayer(Qwen3DecoderLayer):
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
         config: Qwen3Config | None = None,
         layer_idx: int = 0,
     ) -> None:
-        config = config or aphrodite_config.model_config.hf_config
-        cache_config = aphrodite_config.cache_config
-        quant_config = get_draft_quant_config(aphrodite_config)
+        config = config or sonar_config.model_config.hf_config
+        cache_config = sonar_config.cache_config
+        quant_config = get_draft_quant_config(sonar_config)
 
         # Resolve per-layer sliding window from draft config
         sliding_window = None
@@ -132,7 +132,7 @@ class Qwen3Eagle3DecoderLayer(Qwen3DecoderLayer):
     }
 )
 class Qwen3Eagle3Model(nn.Module):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_substr={"midlayer.": "layers.0."},
         orig_to_new_stacked={
             ".q_proj": (".qkv_proj", "q"),
@@ -146,18 +146,18 @@ class Qwen3Eagle3Model(nn.Module):
     def __init__(
         self,
         *,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         start_layer_id: int = 0,
         prefix: str = "",
     ) -> None:
         super().__init__()
-        speculative_config = aphrodite_config.speculative_config
+        speculative_config = sonar_config.speculative_config
         assert speculative_config is not None
         self.config = speculative_config.draft_model_config.hf_config
         self.vocab_size = self.config.vocab_size
 
         # Get drafter's quantization config
-        self.quant_config = get_draft_quant_config(aphrodite_config)
+        self.quant_config = get_draft_quant_config(sonar_config)
 
         eagle_config = getattr(self.config, "eagle_config", None) or {}
         if "use_aux_hidden_state" in eagle_config:
@@ -167,7 +167,7 @@ class Qwen3Eagle3Model(nn.Module):
         self.norm_before_fc = bool(eagle_config.get("norm_before_fc", getattr(self.config, "norm_before_fc", False)))
         self.fc_input_size = self.config.hidden_size
 
-        current_aphrodite_config = get_current_aphrodite_config()
+        current_sonar_config = get_current_sonar_config()
 
         self.embed_tokens = VocabParallelEmbedding(
             self.config.vocab_size,
@@ -178,7 +178,7 @@ class Qwen3Eagle3Model(nn.Module):
         self.layers = nn.ModuleList(
             [
                 Qwen3Eagle3DecoderLayer(
-                    current_aphrodite_config,
+                    current_sonar_config,
                     prefix=maybe_prefix(prefix, f"layers.{layer_idx + start_layer_id}"),
                     config=self.config,
                     layer_idx=layer_idx,
@@ -219,7 +219,7 @@ class Qwen3Eagle3Model(nn.Module):
                 input_size=self.fc_input_size,
                 output_size=self.config.hidden_size,
                 bias=False,
-                params_dtype=aphrodite_config.model_config.dtype,
+                params_dtype=sonar_config.model_config.dtype,
                 quant_config=self.quant_config,
                 prefix=maybe_prefix(prefix, "fc"),
                 return_bias=False,
@@ -262,13 +262,13 @@ class Qwen3Eagle3Model(nn.Module):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
 
 class Eagle3Qwen3ForCausalLM(Qwen3ForCausalLM):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         nn.Module.__init__(self)
-        speculative_config = aphrodite_config.speculative_config
+        speculative_config = sonar_config.speculative_config
         assert speculative_config is not None
         self.config = speculative_config.draft_model_config.hf_config
         # Ensure draft_vocab_size is set
@@ -276,13 +276,13 @@ class Eagle3Qwen3ForCausalLM(Qwen3ForCausalLM):
         if getattr(self.config, "draft_vocab_size", None) is None:
             base_vocab_size = getattr(self.config, "vocab_size", None)
             self.config.draft_vocab_size = base_vocab_size
-        target_layer_num = aphrodite_config.model_config.get_total_num_hidden_layers()
+        target_layer_num = sonar_config.model_config.get_total_num_hidden_layers()
 
         # Store target layer count in draft config for
         # proper layer_types indexing in draft models
         self.config.target_layer_count = target_layer_num
         self.model = Qwen3Eagle3Model(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             prefix=maybe_prefix(prefix, "model"),
             start_layer_id=target_layer_num,
         )
@@ -291,11 +291,11 @@ class Eagle3Qwen3ForCausalLM(Qwen3ForCausalLM):
         self.lm_head = ParallelLMHead(
             self.config.draft_vocab_size,
             self.config.hidden_size,
-            quant_config=get_draft_quant_config(aphrodite_config),
+            quant_config=get_draft_quant_config(sonar_config),
             prefix=maybe_prefix(prefix, "lm_head"),
         )
         self.logits_processor = LogitsProcessor(self.config.draft_vocab_size, scale=logit_scale)
-        target_vocab_size = aphrodite_config.model_config.get_vocab_size()
+        target_vocab_size = sonar_config.model_config.get_vocab_size()
         if self.config.draft_vocab_size != target_vocab_size:
             self.draft_id_to_target_id = nn.Parameter(
                 torch.zeros(self.config.draft_vocab_size, dtype=torch.long),

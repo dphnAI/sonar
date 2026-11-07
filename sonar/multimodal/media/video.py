@@ -11,10 +11,10 @@ import pybase64
 import torch
 from PIL import Image
 
-from aphrodite import envs
-from aphrodite.logger import init_logger
-from aphrodite.utils.serial_utils import tensor2base64
-from aphrodite.utils.sparse_utils import (
+from sonar import envs
+from sonar.logger import init_logger
+from sonar.utils.serial_utils import tensor2base64
+from sonar.utils.sparse_utils import (
     check_sparse_tensor_invariants_threadsafe,
     safe_to_dense,
 )
@@ -105,9 +105,9 @@ class VideoMediaIO(MediaIO[MediaWithBytes[tuple[DecodedFrames, dict[str, Any]]]]
 
         # Allow per-request override of video backend via kwargs.
         # This enables users to specify a different backend than the
-        # global APHRODITE_VIDEO_LOADER_BACKEND env var, e.g.:
+        # global SONAR_VIDEO_LOADER_BACKEND env var, e.g.:
         #   --media-io-kwargs '{"video": {"video_backend": "torchcodec"}}'
-        video_loader_backend = kwargs.pop("video_backend", None) or envs.APHRODITE_VIDEO_LOADER_BACKEND
+        video_loader_backend = kwargs.pop("video_backend", None) or envs.SONAR_VIDEO_LOADER_BACKEND
         self.kwargs = kwargs
         self.video_loader = VIDEO_LOADER_REGISTRY.load(video_loader_backend)
 

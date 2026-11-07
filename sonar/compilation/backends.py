@@ -22,20 +22,20 @@ from torch._dynamo.utils import dynamo_timed
 from torch._logging._internal import trace_structured
 from torch.fx._lazy_graph_module import _use_lazy_graph_module
 
-import aphrodite.envs as envs
-from aphrodite.compilation.codegen import (
+import sonar.envs as envs
+from sonar.compilation.codegen import (
     compile_execution_fn,
     generate_execution_code,
 )
-from aphrodite.config import AphroditeConfig, CompilationConfig, CUDAGraphMode
-from aphrodite.config.compilation import DynamicShapesType
-from aphrodite.config.utils import Range, hash_factors
-from aphrodite.logger import init_logger
-from aphrodite.logging_utils import lazy
-from aphrodite.platforms import current_platform
-from aphrodite.tracing import instrument, instrument_manual
-from aphrodite.utils.import_utils import resolve_obj_by_qualname
-from aphrodite.utils.torch_utils import is_torch_equal_or_newer
+from sonar.config import CompilationConfig, CUDAGraphMode, SonarConfig
+from sonar.config.compilation import DynamicShapesType
+from sonar.config.utils import Range, hash_factors
+from sonar.logger import init_logger
+from sonar.logging_utils import lazy
+from sonar.platforms import current_platform
+from sonar.tracing import instrument, instrument_manual
+from sonar.utils.import_utils import resolve_obj_by_qualname
+from sonar.utils.torch_utils import is_torch_equal_or_newer
 
 from .compiler_interface import (
     CompilerInterface,
@@ -50,7 +50,7 @@ from .partition_rules import (
     should_split,
 )
 from .passes.inductor_pass import InductorPass, pass_context
-from .passes.ir.inplace_functionalization import AphroditeIRInplaceFunctionalizationPass
+from .passes.ir.inplace_functionalization import SonarIRInplaceFunctionalizationPass
 from .passes.pass_manager import PostGradPassManager
 
 logger = init_logger(__name__)
@@ -95,14 +95,14 @@ def make_copy_and_call(
 
 
 def make_compiler(compilation_config: CompilationConfig, *, use_aot_compile: bool) -> CompilerInterface:
-    assert not (use_aot_compile and envs.APHRODITE_USE_MEGA_AOT_ARTIFACT) or envs.APHRODITE_USE_STANDALONE_COMPILE, (
-        "APHRODITE_USE_MEGA_AOT_ARTIFACT=1 requires APHRODITE_USE_STANDALONE_COMPILE=1"
+    assert not (use_aot_compile and envs.SONAR_USE_MEGA_AOT_ARTIFACT) or envs.SONAR_USE_STANDALONE_COMPILE, (
+        "SONAR_USE_MEGA_AOT_ARTIFACT=1 requires SONAR_USE_STANDALONE_COMPILE=1"
     )
 
     if compilation_config.backend == "inductor":
         # Use standalone compile only if requested, version is new enough,
         # and the symbol actually exists in this PyTorch build.
-        if envs.APHRODITE_USE_STANDALONE_COMPILE and hasattr(torch._inductor, "standalone_compile"):
+        if envs.SONAR_USE_STANDALONE_COMPILE and hasattr(torch._inductor, "standalone_compile"):
             logger.debug("Using InductorStandaloneAdaptor")
             return InductorStandaloneAdaptor(
                 compilation_config.compile_cache_save_format,
@@ -147,8 +147,8 @@ class CompilerManager:
     def _log_prefix(self) -> str:
         return f"[{self.prefix}] " if self.prefix else ""
 
-    def compute_hash(self, aphrodite_config: AphroditeConfig) -> str:
-        return self.compiler.compute_hash(aphrodite_config)
+    def compute_hash(self, sonar_config: SonarConfig) -> str:
+        return self.compiler.compute_hash(sonar_config)
 
     @contextmanager
     def compile_context(self, compile_range: Range) -> Generator[None, None, None]:
@@ -168,7 +168,7 @@ class CompilerManager:
         The organization of the cache directory is as follows:
         cache_dir=/path/to/hash_str/rank_i_j/prefix/
         inside cache_dir, there will be:
-        - aphrodite_compile_cache.py
+        - sonar_compile_cache.py
         - computation_graph.py
         - transformed_code.py
 
@@ -178,7 +178,7 @@ class CompilerManager:
         """
         self.disable_cache = disable_cache
         self.cache_dir = cache_dir
-        self.cache_file_path = os.path.join(cache_dir, "aphrodite_compile_cache.py")
+        self.cache_file_path = os.path.join(cache_dir, "sonar_compile_cache.py")
         self.prefix = prefix
 
         if self.use_aot_compile and not disable_cache and os.path.exists(self.cache_file_path):
@@ -616,18 +616,18 @@ compilation_start_time = 0.0
 
 def wrap_with_cudagraph_if_needed(
     piecewise_backend: Any,
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     compilation_config: CompilationConfig,
     is_first_graph: bool,
     is_last_graph: bool,
 ) -> Any:
     """Wrap a piecewise backend with CUDA graph wrapper if needed.
-    This function is shared between AphroditeBackend and
+    This function is shared between SonarBackend and
     construct_serializable_fn_from_inductor_cache.
 
     Args:
         piecewise_backend: The backend to wrap
-        aphrodite_config: The Aphrodite configuration
+        sonar_config: The Sonar configuration
         compilation_config: The compilation configuration
         is_first_graph: Whether this is the first graph in the sequence
         is_last_graph: Whether this is the last graph in the sequence
@@ -656,7 +656,7 @@ def wrap_with_cudagraph_if_needed(
     # is wrapped on a full or piecewise fx graph.
     return static_graph_wrapper_class(
         runnable=piecewise_backend,
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         runtime_mode=CUDAGraphMode.PIECEWISE,
         cudagraph_options=CUDAGraphOptions(
             debug_log_enable=is_first_graph,
@@ -694,14 +694,14 @@ class PiecewiseCompileInterpreter(torch.fx.Interpreter):  # type: ignore[misc]
         self,
         module: torch.fx.GraphModule,
         compile_submod_names: list[str],
-        aphrodite_config: AphroditeConfig,
-        aphrodite_backend: "AphroditeBackend",
+        sonar_config: SonarConfig,
+        sonar_backend: "SonarBackend",
     ) -> None:
         super().__init__(module)
         self.compile_submod_names = compile_submod_names
-        self.compilation_config = aphrodite_config.compilation_config
-        self.aphrodite_config = aphrodite_config
-        self.aphrodite_backend = aphrodite_backend
+        self.compilation_config = sonar_config.compilation_config
+        self.sonar_config = sonar_config
+        self.sonar_backend = sonar_backend
         # When True, it annoyingly dumps the torch.fx.Graph on errors.
         self.extra_traceback = False
         self.compiled_count = 0
@@ -712,7 +712,7 @@ class PiecewiseCompileInterpreter(torch.fx.Interpreter):  # type: ignore[misc]
     @instrument(span_name="Inductor compilation")
     def run(self, *args: Any) -> Any:
         if self.total_to_compile:
-            from aphrodite.distributed.parallel_state import is_global_first_rank
+            from sonar.distributed.parallel_state import is_global_first_rank
 
             if is_global_first_rank():
                 from rich.progress import (
@@ -723,7 +723,7 @@ class PiecewiseCompileInterpreter(torch.fx.Interpreter):  # type: ignore[misc]
                     TimeElapsedColumn,
                 )
 
-                from aphrodite.utils import get_progress_log_prefix
+                from sonar.utils import get_progress_log_prefix
 
                 progress = Progress(
                     TextColumn(get_progress_log_prefix() + " [progress.description]{task.description}"),
@@ -778,18 +778,18 @@ class PiecewiseCompileInterpreter(torch.fx.Interpreter):  # type: ignore[misc]
 
             piecewise_backend = PiecewiseBackend(
                 submod,
-                self.aphrodite_config,
+                self.sonar_config,
                 index,
                 len(self.compile_submod_names),
                 sym_shape_indices,
-                self.aphrodite_backend,
+                self.sonar_backend,
                 graph_returns_tuple(submod),
                 submod_name=target,
             )
 
             self.module.__dict__[target] = wrap_with_cudagraph_if_needed(
                 piecewise_backend,
-                self.aphrodite_config,
+                self.sonar_config,
                 self.compilation_config,
                 piecewise_backend.is_first_graph,
                 piecewise_backend.is_last_graph,
@@ -828,9 +828,9 @@ def set_model_tag(tag: str, is_encoder: bool = False) -> Generator[None, None, N
         model_is_encoder = old_is_encoder
 
 
-class AphroditeBackend:
-    """The compilation backend for `torch.compile` with Aphrodite.
-    It is used for compilation mode of `CompilationMode.APHRODITE_COMPILE`,
+class SonarBackend:
+    """The compilation backend for `torch.compile` with Sonar.
+    It is used for compilation mode of `CompilationMode.SONAR_COMPILE`,
     where we customize the compilation.
 
     The major work of this backend is to split the graph into
@@ -840,7 +840,7 @@ class AphroditeBackend:
     which handles the post-grad passes.
     """
 
-    aphrodite_config: AphroditeConfig
+    sonar_config: SonarConfig
     compilation_config: CompilationConfig
     _called: bool = False
     # the graph we compiled
@@ -858,7 +858,7 @@ class AphroditeBackend:
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
         is_encoder: bool = False,
         use_aot_compile: bool = True,
@@ -878,9 +878,9 @@ class AphroditeBackend:
         self.pass_manager = resolve_obj_by_qualname(current_platform.get_pass_manager_cls())()
         self.pass_key = current_platform.pass_key
 
-        self.aphrodite_config = aphrodite_config
-        self.compilation_config = aphrodite_config.compilation_config
-        self.use_mega_artifact = use_aot_compile and envs.APHRODITE_USE_MEGA_AOT_ARTIFACT
+        self.sonar_config = sonar_config
+        self.compilation_config = sonar_config.compilation_config
+        self.use_mega_artifact = use_aot_compile and envs.SONAR_USE_MEGA_AOT_ARTIFACT
 
         self.compiler_manager: CompilerManager = CompilerManager(
             self.compilation_config, use_aot_compile=use_aot_compile
@@ -965,7 +965,7 @@ class AphroditeBackend:
         pre_grad_pass_key = "pre_grad_custom_pass"
         assert self.pass_key != pre_grad_pass_key
         assert pre_grad_pass_key not in self.inductor_config
-        self.inductor_config[pre_grad_pass_key] = AphroditeIRInplaceFunctionalizationPass(self.aphrodite_config)
+        self.inductor_config[pre_grad_pass_key] = SonarIRInplaceFunctionalizationPass(self.sonar_config)
 
         # Make sure pre_grad_custom_pass is not pickled
         # as part of AOTAutograd built-in cache key
@@ -977,7 +977,7 @@ class AphroditeBackend:
         self.inductor_config["_cache_config_ignore_prefix"] = ignore
 
         # Configure the (nominally post-grad) pass manager
-        self.pass_manager.configure(self.aphrodite_config)
+        self.pass_manager.configure(self.sonar_config)
 
         # Post-grad custom passes are run using the post_grad_custom_post_pass
         # hook. If a pass for that hook exists, add it to the pass manager.
@@ -994,7 +994,7 @@ class AphroditeBackend:
         self.inductor_config[self.pass_key] = self.pass_manager
 
     def _log_compilation_config(self):
-        """Log Aphrodite compilation config for TORCH_TRACE/tlparse."""
+        """Log Sonar compilation config for TORCH_TRACE/tlparse."""
         cc = self.compilation_config
         pass_cfg = cc.pass_config
 
@@ -1014,12 +1014,12 @@ class AphroditeBackend:
         trace_structured(
             "artifact",
             metadata_fn=lambda: {
-                "name": "aphrodite_compilation_config",
+                "name": "sonar_compilation_config",
                 "encoding": "json",
             },
             payload_fn=lambda: json.dumps(
                 {
-                    "model": getattr(self.aphrodite_config.model_config, "model", "unknown"),
+                    "model": getattr(self.sonar_config.model_config, "model", "unknown"),
                     "prefix": self.prefix,
                     "mode": str(cc.mode),
                     "backend": cc.backend,
@@ -1037,13 +1037,13 @@ class AphroditeBackend:
             ),
         )
 
-    @dynamo_timed("aphrodite_backend")
+    @dynamo_timed("sonar_backend")
     def __call__(self, graph: fx.GraphModule, example_inputs: Sequence[Any]) -> Any:
         from .caching import (
-            AphroditeSerializableFunction,
+            SonarSerializableFunction,
         )
 
-        aphrodite_config = self.aphrodite_config
+        sonar_config = self.sonar_config
 
         self._log_compilation_config()
 
@@ -1052,8 +1052,8 @@ class AphroditeBackend:
         env_factors = envs.compile_factors()
         env_hash = hash_factors(env_factors)
         # Compute config/compiler/code hashes once and reuse
-        config_hash = aphrodite_config.compute_hash()
-        compiler_hash = self.compiler_manager.compute_hash(aphrodite_config)
+        config_hash = sonar_config.compute_hash()
+        compiler_hash = self.compiler_manager.compute_hash(sonar_config)
         forward_code_files = list(sorted(self.compilation_config.traced_files))
 
         logger.debug(
@@ -1085,36 +1085,36 @@ class AphroditeBackend:
             # Use SHA-256 for cache key hashing to be consistent across
             # compute_hash functions. Truncate for a short cache dir name.
             hash_key = hashlib.sha256(str(factors).encode()).hexdigest()[:10]
-            cache_dir = os.path.join(envs.APHRODITE_CACHE_ROOT, "torch_compile_cache", hash_key)
+            cache_dir = os.path.join(envs.SONAR_CACHE_ROOT, "torch_compile_cache", hash_key)
             self.compilation_config.cache_dir = cache_dir
 
         cache_dir = self.compilation_config.cache_dir
         os.makedirs(cache_dir, exist_ok=True)
         self.compilation_config.cache_dir = cache_dir
-        rank = aphrodite_config.parallel_config.rank
-        dp_rank = aphrodite_config.parallel_config.data_parallel_index
+        rank = sonar_config.parallel_config.rank
+        dp_rank = sonar_config.parallel_config.data_parallel_index
         local_cache_dir = os.path.join(cache_dir, f"rank_{rank}_{dp_rank}", self.prefix)
         os.makedirs(local_cache_dir, exist_ok=True)
         self.compilation_config.local_cache_dir = local_cache_dir
 
-        # Honors opt-outs such as CompilationMode.NONE or APHRODITE_DISABLE_COMPILE_CACHE.
+        # Honors opt-outs such as CompilationMode.NONE or SONAR_DISABLE_COMPILE_CACHE.
         disable_cache = not is_compile_cache_enabled(self.inductor_config)
 
-        # TODO(patchy): the V1 torch.compile ngram-gpu kernel causes aphrodite
+        # TODO(patchy): the V1 torch.compile ngram-gpu kernel causes sonar
         # torch compile cache errors. The V2 implementation is pure Triton and
         # does not need the cache disabled.
         is_v1_ngram_gpu_enabled = (
-            aphrodite_config.speculative_config is not None
-            and aphrodite_config.speculative_config.use_ngram_gpu()
-            and not aphrodite_config.use_v2_model_runner
+            sonar_config.speculative_config is not None
+            and sonar_config.speculative_config.use_ngram_gpu()
+            and not sonar_config.use_v2_model_runner
         )
         disable_cache = disable_cache or is_v1_ngram_gpu_enabled
 
         if disable_cache:
-            logger.info("%sAphrodite's torch.compile cache is disabled.", self._log_prefix())
+            logger.info("%sSonar's torch.compile cache is disabled.", self._log_prefix())
         else:
             logger.info(
-                "%sUsing cache directory: %s for Aphrodite's torch.compile",
+                "%sUsing cache directory: %s for Sonar's torch.compile",
                 self._log_prefix(),
                 local_cache_dir,
             )
@@ -1135,7 +1135,7 @@ class AphroditeBackend:
         # Persist and log only hash-relevant factors together.
         try:
             logger.debug(
-                "Compile env factors (raw):\n%s\nAphrodite config hash: %s",
+                "Compile env factors (raw):\n%s\nSonar config hash: %s",
                 lazy(partial(pprint.pformat, env_factors, width=120)),
                 config_hash,
             )
@@ -1187,7 +1187,7 @@ class AphroditeBackend:
 
         # we control the compilation process, each instance can only be
         # called once
-        assert not self._called, "AphroditeBackend can only be called once"
+        assert not self._called, "SonarBackend can only be called once"
 
         self.graph = graph
         self.configure_post_pass()
@@ -1216,7 +1216,7 @@ class AphroditeBackend:
         # Log the piecewise split graph for TORCH_TRACE/tlparse
         trace_structured(
             "graph_dump",
-            metadata_fn=lambda: {"name": "aphrodite_piecewise_split_graph"},
+            metadata_fn=lambda: {"name": "sonar_piecewise_split_graph"},
             payload_fn=lambda: self.split_gm.print_readable(print_output=False),
         )
 
@@ -1234,7 +1234,7 @@ class AphroditeBackend:
         # compile submodules with symbolic shapes, and compile all ranges
         # up front so that compilation is complete before the callable
         # is returned.
-        PiecewiseCompileInterpreter(self.split_gm, submod_names_to_compile, self.aphrodite_config, self).run(*fake_args)
+        PiecewiseCompileInterpreter(self.split_gm, submod_names_to_compile, self.sonar_config, self).run(*fake_args)
 
         # All compilation is done. Save the cache.
         time_before_saving = time.perf_counter()
@@ -1273,7 +1273,7 @@ class AphroditeBackend:
             # code adapted from
             # https://github.com/thuml/depyf/blob/dab831108a752d1facc00acdd6d4243891845c37/depyf/explain/patched_lazy_format_graph_code.py#L30
             # use `print_readable` because it can include submodules
-            with dynamo_timed("aphrodite_print_readable"):
+            with dynamo_timed("sonar_print_readable"):
                 src = "from __future__ import annotations\nimport torch\n" + self.split_gm.print_readable(
                     print_output=False
                 )
@@ -1297,13 +1297,13 @@ class AphroditeBackend:
             self.compilation_config.cudagraph_mode == CUDAGraphMode.NONE
             or not self.compilation_config.cudagraph_copy_inputs
         ):
-            return AphroditeSerializableFunction(
+            return SonarSerializableFunction(
                 graph_to_serialize,
                 example_inputs,
                 self.prefix,
                 runtime_callable,
                 is_encoder=self.is_encoder,
-                aphrodite_backend=self,
+                sonar_backend=self,
                 execution_code=execution_code,
                 submod_names=submod_names,
                 consts=consts,
@@ -1329,13 +1329,13 @@ class AphroditeBackend:
             runtime_callable,
         )
 
-        return AphroditeSerializableFunction(
+        return SonarSerializableFunction(
             graph_to_serialize,
             example_inputs,
             self.prefix,
             copy_and_call,
             is_encoder=self.is_encoder,
-            aphrodite_backend=self,
+            sonar_backend=self,
             sym_tensor_indices=sym_tensor_indices,
             execution_code=execution_code,
             submod_names=submod_names,

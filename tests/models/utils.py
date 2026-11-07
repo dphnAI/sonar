@@ -10,11 +10,11 @@ import torch
 import torch.nn.functional as F
 from transformers import PreTrainedConfig
 
-from aphrodite.config.model import AttnTypeStr, ModelConfig, ModelDType, RunnerOption
-from aphrodite.config.pooler import SequencePoolingType, TokenPoolingType
-from aphrodite.logprobs import Logprob, PromptLogprobs, SampleLogprobs
-from aphrodite.multimodal.processing import InputProcessingContext
-from aphrodite.tokenizers import cached_tokenizer_from_config
+from sonar.config.model import AttnTypeStr, ModelConfig, ModelDType, RunnerOption
+from sonar.config.pooler import SequencePoolingType, TokenPoolingType
+from sonar.logprobs import Logprob, PromptLogprobs, SampleLogprobs
+from sonar.multimodal.processing import InputProcessingContext
+from sonar.tokenizers import cached_tokenizer_from_config
 
 from .. import ci_envs
 from .registry import HF_EXAMPLE_MODELS
@@ -269,7 +269,7 @@ def build_model_context(
     model_info.check_transformers_version(
         on_fail="skip",
         check_max_version=False,
-        check_version_reason="aphrodite",
+        check_version_reason="sonar",
     )
 
     model_config_kwargs = model_config_kwargs or {}
@@ -382,33 +382,33 @@ class GenerateModelInfo(ModelInfo):
     hf_ppl: float | None = None
 
 
-def get_aphrodite_extra_kwargs(model_info: ModelInfo, aphrodite_extra_kwargs):
+def get_sonar_extra_kwargs(model_info: ModelInfo, sonar_extra_kwargs):
     # A model family has many models with the same architecture,
     # and we don't need to test each one.
-    if not ci_envs.APHRODITE_CI_NO_SKIP and not model_info.enable_test:
+    if not ci_envs.SONAR_CI_NO_SKIP and not model_info.enable_test:
         import pytest
 
         pytest.skip("Skipping test.")
 
-    # Allow aphrodite to test using the given dtype, such as float32
-    aphrodite_extra_kwargs = aphrodite_extra_kwargs or {}
-    aphrodite_extra_kwargs["dtype"] = ci_envs.APHRODITE_CI_DTYPE or model_info.dtype
+    # Allow sonar to test using the given dtype, such as float32
+    sonar_extra_kwargs = sonar_extra_kwargs or {}
+    sonar_extra_kwargs["dtype"] = ci_envs.SONAR_CI_DTYPE or model_info.dtype
 
-    # Allow aphrodite to test using hf_overrides
+    # Allow sonar to test using hf_overrides
     if model_info.hf_overrides is not None:
-        aphrodite_extra_kwargs["hf_overrides"] = model_info.hf_overrides
+        sonar_extra_kwargs["hf_overrides"] = model_info.hf_overrides
 
-    # Allow changing the head dtype used by aphrodite in tests
-    if ci_envs.APHRODITE_CI_HEAD_DTYPE is not None:
-        if "hf_overrides" not in aphrodite_extra_kwargs:
-            aphrodite_extra_kwargs["hf_overrides"] = {}
-        aphrodite_extra_kwargs["hf_overrides"]["head_dtype"] = ci_envs.APHRODITE_CI_HEAD_DTYPE
+    # Allow changing the head dtype used by sonar in tests
+    if ci_envs.SONAR_CI_HEAD_DTYPE is not None:
+        if "hf_overrides" not in sonar_extra_kwargs:
+            sonar_extra_kwargs["hf_overrides"] = {}
+        sonar_extra_kwargs["hf_overrides"]["head_dtype"] = ci_envs.SONAR_CI_HEAD_DTYPE
 
     # Allow control over whether tests use enforce_eager
-    if ci_envs.APHRODITE_CI_ENFORCE_EAGER is not None:
-        aphrodite_extra_kwargs["enforce_eager"] = ci_envs.APHRODITE_CI_ENFORCE_EAGER
+    if ci_envs.SONAR_CI_ENFORCE_EAGER is not None:
+        sonar_extra_kwargs["enforce_eager"] = ci_envs.SONAR_CI_ENFORCE_EAGER
 
-    return aphrodite_extra_kwargs
+    return sonar_extra_kwargs
 
 
 def dummy_hf_overrides(

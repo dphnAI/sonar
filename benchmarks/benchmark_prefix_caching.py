@@ -45,12 +45,12 @@ import time
 
 from transformers import PreTrainedTokenizerBase
 
-from aphrodite import LLM, SamplingParams
-from aphrodite.engine.arg_utils import EngineArgs
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
+from sonar import LLM, SamplingParams
+from sonar.engine.arg_utils import EngineArgs
+from sonar.utils.argparse_utils import FlexibleArgumentParser
 
 try:
-    from aphrodite.tokenizers import get_tokenizer
+    from sonar.tokenizers import get_tokenizer
 except ImportError:
     from backend_request_func import get_tokenizer
 

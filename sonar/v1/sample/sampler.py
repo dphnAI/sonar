@@ -7,19 +7,19 @@ from dataclasses import replace
 import torch
 import torch.nn as nn
 
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.config.model import LogprobsMode
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.sampling_params import SamplerID
-from aphrodite.utils.gpu_sync_debug import gpu_sync_allowed
-from aphrodite.utils.platform_utils import is_pin_memory_available
-from aphrodite.v1.outputs import LogprobsTensors, SamplerOutput
-from aphrodite.v1.sample.metadata import SamplingMetadata
-from aphrodite.v1.sample.ops import SamplingOps
-from aphrodite.v1.sample.ops.logprobs import batched_count_greater_than
-from aphrodite.v1.sample.ops.temperatures import apply_all_temperatures
-from aphrodite.v1.sample.ops.topk_topp_sampler import TopKTopPSampler
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.config.model import LogprobsMode
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.sampling_params import SamplerID
+from sonar.utils.gpu_sync_debug import gpu_sync_allowed
+from sonar.utils.platform_utils import is_pin_memory_available
+from sonar.v1.outputs import LogprobsTensors, SamplerOutput
+from sonar.v1.sample.metadata import SamplingMetadata
+from sonar.v1.sample.ops import SamplingOps
+from sonar.v1.sample.ops.logprobs import batched_count_greater_than
+from sonar.v1.sample.ops.temperatures import apply_all_temperatures
+from sonar.v1.sample.ops.topk_topp_sampler import TopKTopPSampler
 
 logger = init_logger(__name__)
 _SAMPLING_EPS = 1e-5
@@ -72,7 +72,7 @@ def mixed_sample_eligible(sm: SamplingMetadata, predict_bonus_token: bool) -> bo
     if not rocm_aiter_ops.is_enabled():
         return False
 
-    from aphrodite.platforms.rocm import on_gfx1250
+    from sonar.platforms.rocm import on_gfx1250
 
     if not on_gfx1250():
         return False

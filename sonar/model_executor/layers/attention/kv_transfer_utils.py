@@ -4,12 +4,12 @@ import inspect
 from collections.abc import Callable
 from functools import wraps
 
-from aphrodite.distributed.kv_transfer import (
+from sonar.distributed.kv_transfer import (
     get_kv_transfer_group,
     has_kv_transfer_group,
     is_v1_kv_transfer_group,
 )
-from aphrodite.utils.torch_utils import _resolve_layer_name
+from sonar.utils.torch_utils import _resolve_layer_name
 
 
 def maybe_transfer_kv_layer(func: Callable) -> Callable:
@@ -20,7 +20,7 @@ def maybe_transfer_kv_layer(func: Callable) -> Callable:
     On exit: saves the KV layer to the connector.
     """
     # Import at runtime to avoid circular dependency
-    from aphrodite.model_executor.layers.attention.attention import get_attention_context
+    from sonar.model_executor.layers.attention.attention import get_attention_context
 
     # Inspect the signature ONCE when the decorator is applied.
     sig = inspect.signature(func)

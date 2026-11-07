@@ -5,27 +5,27 @@ from dataclasses import replace
 
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed.kv_transfer.kv_connector.v1.offloading.canonical_mapping import (
+from sonar.config import SonarConfig
+from sonar.distributed.kv_transfer.kv_connector.v1.offloading.canonical_mapping import (
     derive_canonical_mappings,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.offloading.common import (
+from sonar.distributed.kv_transfer.kv_connector.v1.offloading.common import (
     OffloadingConnectorMetadata,
     OffloadingWorkerMetadata,
     ReqId,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.offloading.config import (
+from sonar.distributed.kv_transfer.kv_connector.v1.offloading.config import (
     get_offloading_group_ids,
 )
-from aphrodite.logger import init_logger
-from aphrodite.v1.kv_cache_interface import (
+from sonar.logger import init_logger
+from sonar.v1.kv_cache_interface import (
     AttentionSpec,
     KVCacheConfig,
     MambaSpec,
     UniformTypeKVCacheSpecs,
     group_kernel_blocks,
 )
-from aphrodite.v1.kv_offload.base import (
+from sonar.v1.kv_offload.base import (
     CanonicalKVCacheRef,
     CanonicalKVCaches,
     CanonicalKVCacheTensor,
@@ -44,11 +44,11 @@ class OffloadingConnectorWorker:
     def __init__(
         self,
         spec: OffloadingSpec,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
         kv_cache_config: KVCacheConfig,
     ):
         self.spec = spec
-        self.aphrodite_config = aphrodite_config
+        self.sonar_config = sonar_config
         self.kv_cache_config = kv_cache_config
         self.worker: OffloadingWorker | None = None
         # Non-writers still ack: pending_count waits for world_size per job.
@@ -69,7 +69,7 @@ class OffloadingConnectorWorker:
         kv_cache_config = self.kv_cache_config
         selected_group_ids = get_offloading_group_ids(kv_cache_config)
         selected_groups = tuple(kv_cache_config.kv_cache_groups[group_id] for group_id in selected_group_ids)
-        mappings = derive_canonical_mappings(self.aphrodite_config, kv_cache_config, kv_caches)
+        mappings = derive_canonical_mappings(self.sonar_config, kv_cache_config, kv_caches)
 
         # layer_name -> (num_blocks, page_size_bytes) tensor
         tensors_per_block: dict[str, tuple[torch.Tensor, ...]] = {}

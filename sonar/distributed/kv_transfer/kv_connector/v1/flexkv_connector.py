@@ -5,24 +5,24 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed.kv_transfer.kv_connector.v1.base import (
+from sonar.config import SonarConfig
+from sonar.distributed.kv_transfer.kv_connector.v1.base import (
     KVConnectorBase_V1,
     KVConnectorMetadata,
     KVConnectorRole,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.metrics import KVConnectorStats
-from aphrodite.logger import init_logger
-from aphrodite.v1.core.sched.output import SchedulerOutput
-from aphrodite.v1.outputs import KVConnectorOutput
+from sonar.distributed.kv_transfer.kv_connector.v1.metrics import KVConnectorStats
+from sonar.logger import init_logger
+from sonar.v1.core.sched.output import SchedulerOutput
+from sonar.v1.outputs import KVConnectorOutput
 
 if TYPE_CHECKING:
-    from aphrodite.distributed.kv_events import KVCacheEventType
-    from aphrodite.forward_context import ForwardContext
-    from aphrodite.v1.attention.backend import AttentionMetadata
-    from aphrodite.v1.core.kv_cache_manager import KVCacheBlocks
-    from aphrodite.v1.kv_cache_interface import KVCacheConfig
-    from aphrodite.v1.request import Request
+    from sonar.distributed.kv_events import KVCacheEventType
+    from sonar.forward_context import ForwardContext
+    from sonar.v1.attention.backend import AttentionMetadata
+    from sonar.v1.core.kv_cache_manager import KVCacheBlocks
+    from sonar.v1.kv_cache_interface import KVCacheConfig
+    from sonar.v1.request import Request
 
 logger = init_logger(__name__)
 
@@ -55,11 +55,11 @@ class FlexKVConnectorV1(KVConnectorBase_V1):
 
     def __init__(
         self,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
         role: KVConnectorRole,
         kv_cache_config: "KVCacheConfig",
     ):
-        super().__init__(aphrodite_config=aphrodite_config, role=role, kv_cache_config=kv_cache_config)
+        super().__init__(sonar_config=sonar_config, role=role, kv_cache_config=kv_cache_config)
         try:
             from flexkv.integration.aphrodite.aphrodite_v1_adapter import FlexKVConnectorV1Impl
         except ImportError as e:
@@ -69,7 +69,7 @@ class FlexKVConnectorV1(KVConnectorBase_V1):
                 "for installation instructions."
             ) from e
 
-        self._flexkv_connector = FlexKVConnectorV1Impl(aphrodite_config, role)
+        self._flexkv_connector = FlexKVConnectorV1Impl(sonar_config, role)
 
     def shutdown(self):
         self._flexkv_connector.shutdown()
@@ -84,7 +84,7 @@ class FlexKVConnectorV1(KVConnectorBase_V1):
         ``build_connector_meta`` (which calls ``launch_tasks``) and
         ``update_connector_output`` (which polls ``query_finished_task``).
         KV blocks are transferred directly between the FlexKV server and
-        Aphrodite's GPU memory without worker-side intervention during the
+        Sonar's GPU memory without worker-side intervention during the
         forward pass — similar to how NIXL operates.
 
         These worker-side hooks are kept (rather than omitted) to satisfy

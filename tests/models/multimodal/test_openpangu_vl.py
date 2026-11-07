@@ -7,7 +7,7 @@ import pytest
 import torch
 from torch import nn
 
-from aphrodite.model_executor.models.openpangu_vl import (
+from sonar.model_executor.models.openpangu_vl import (
     OpenPanguVLForConditionalGeneration,
 )
 

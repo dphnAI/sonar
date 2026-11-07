@@ -10,13 +10,13 @@ from typing import TYPE_CHECKING
 import numpy as np
 import torch
 
-import aphrodite.envs as envs
-from aphrodite import _custom_ops as ops
-from aphrodite.sampling_params import SamplingParams
+import sonar.envs as envs
+from sonar import _custom_ops as ops
+from sonar.sampling_params import SamplingParams
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
-    from aphrodite.v1.worker.cpu.states import CPURequestState
+    from sonar.config import SonarConfig
+    from sonar.v1.worker.cpu.states import CPURequestState
 
 MAX_NUM_ALLOWED_TOKEN_IDS = 1024
 MAX_NUM_LOGIT_BIAS_TOKENS = 1024
@@ -63,7 +63,7 @@ class LogitsContext:
 
 class LogitsProcessor(ABC):
     def __init__(  # noqa: B027
-        self, aphrodite_config: AphroditeConfig, req_states: LogitsProcRequestState
+        self, sonar_config: SonarConfig, req_states: LogitsProcRequestState
     ) -> None:
         pass
 
@@ -80,7 +80,7 @@ class LogitsProcessor(ABC):
 
 
 class CPULogitBiasState(LogitsProcessor):
-    def __init__(self, aphrodite_config: AphroditeConfig, req_states: LogitsProcRequestState):
+    def __init__(self, sonar_config: SonarConfig, req_states: LogitsProcRequestState):
         max_num_reqs = req_states.max_num_reqs
         device = req_states.device
         self.prompt_len_np = req_states.prompt_len_np
@@ -209,7 +209,7 @@ class CPULogitBiasState(LogitsProcessor):
 
 
 class _CPULogitsProcessor(LogitsProcessor):
-    def __init__(self, aphrodite_config: AphroditeConfig, req_states: LogitsProcRequestState):
+    def __init__(self, sonar_config: SonarConfig, req_states: LogitsProcRequestState):
         self.req_states = req_states
 
     def _request_rows(self, ctx: LogitsContext):
@@ -232,8 +232,8 @@ class _CPULogitsProcessor(LogitsProcessor):
 class CPUPenalties(_CPULogitsProcessor):
     output_bin_counts = None
 
-    def __init__(self, aphrodite_config: AphroditeConfig, req_states: LogitsProcRequestState):
-        super().__init__(aphrodite_config, req_states)
+    def __init__(self, sonar_config: SonarConfig, req_states: LogitsProcRequestState):
+        super().__init__(sonar_config, req_states)
         self.repetition_penalty = torch.ones(req_states.max_num_reqs, dtype=torch.float32, device=req_states.device)
         self.frequency_penalty = torch.zeros_like(self.repetition_penalty)
         self.presence_penalty = torch.zeros_like(self.repetition_penalty)
@@ -290,8 +290,8 @@ class CPUPenalties(_CPULogitsProcessor):
 
 
 class CPUBadWords(_CPULogitsProcessor):
-    def __init__(self, aphrodite_config: AphroditeConfig, req_states: LogitsProcRequestState):
-        super().__init__(aphrodite_config, req_states)
+    def __init__(self, sonar_config: SonarConfig, req_states: LogitsProcRequestState):
+        super().__init__(sonar_config, req_states)
         self.bad_words: list[tuple[tuple[int, ...], ...] | None] = [None] * req_states.max_num_reqs
 
     def add_request(self, req_idx: int, sampling_params: SamplingParams) -> bool:
@@ -300,14 +300,12 @@ class CPUBadWords(_CPULogitsProcessor):
             self.bad_words[req_idx] = None
             return False
 
-        if len(bad_words) > envs.APHRODITE_MAX_NUM_BAD_WORDS:
-            raise ValueError(
-                f"Too many bad words: {len(bad_words)}. The max number is {envs.APHRODITE_MAX_NUM_BAD_WORDS}."
-            )
+        if len(bad_words) > envs.SONAR_MAX_NUM_BAD_WORDS:
+            raise ValueError(f"Too many bad words: {len(bad_words)}. The max number is {envs.SONAR_MAX_NUM_BAD_WORDS}.")
         num_tokens = sum(map(len, bad_words))
-        if num_tokens > envs.APHRODITE_MAX_BAD_WORDS_TOTAL_TOKENS:
+        if num_tokens > envs.SONAR_MAX_BAD_WORDS_TOTAL_TOKENS:
             raise ValueError(
-                f"Too many total bad word tokens: {num_tokens}. The max is {envs.APHRODITE_MAX_BAD_WORDS_TOTAL_TOKENS}."
+                f"Too many total bad word tokens: {num_tokens}. The max is {envs.SONAR_MAX_BAD_WORDS_TOTAL_TOKENS}."
             )
 
         self.bad_words[req_idx] = tuple(tuple(word) for word in bad_words)

@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 import torch
 
-from aphrodite.model_executor.layers.linear import LinearMethodBase
+from sonar.model_executor.layers.linear import LinearMethodBase
 
 if TYPE_CHECKING:
     from .schemes.inc_scheme import INCLinearScheme

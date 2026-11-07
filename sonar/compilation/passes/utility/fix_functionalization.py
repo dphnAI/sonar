@@ -7,16 +7,16 @@ from collections.abc import Iterable
 import torch
 from torch._higher_order_ops.auto_functionalize import auto_functionalized
 
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
 
-from ..aphrodite_inductor_pass import AphroditeInductorPass
 from ..fx_utils import is_func
+from ..sonar_inductor_pass import SonarInductorPass
 
 logger = init_logger(__name__)
 
 
-class FixFunctionalizationPass(AphroditeInductorPass):
+class FixFunctionalizationPass(SonarInductorPass):
     """This pass defunctionalizes certain nodes to avoid redundant tensor copies.
     After this pass, DCE (dead-code elimination) should never be run,
     as de-functionalized nodes may appear as dead code.
@@ -24,7 +24,7 @@ class FixFunctionalizationPass(AphroditeInductorPass):
     To add new nodes to defunctionalize, add to the if-elif chain in __call__.
     """
 
-    @AphroditeInductorPass.time_and_log
+    @SonarInductorPass.time_and_log
     def __call__(self, graph: torch.fx.Graph) -> None:
         # XPU does not support auto-functionalization yet.
         # Will enable this when switching to vllm-xpu-kernels.
@@ -37,8 +37,8 @@ class FixFunctionalizationPass(AphroditeInductorPass):
 
         rope_targets = [torch.ops._C.rotary_embedding.default]
 
-        if hasattr(torch.ops.aphrodite, "rocm_aiter_triton_rotary_embedding"):
-            rope_targets.append(torch.ops.aphrodite.rocm_aiter_triton_rotary_embedding.default)
+        if hasattr(torch.ops.sonar, "rocm_aiter_triton_rotary_embedding"):
+            rope_targets.append(torch.ops.sonar.rocm_aiter_triton_rotary_embedding.default)
 
         for node in graph.nodes:
             if not is_func(node, auto_functionalized):
@@ -82,7 +82,7 @@ class FixFunctionalizationPass(AphroditeInductorPass):
                 else:
                     # Directly replace the auto_functionalize(rotary_embedding)
                     # with the inplace rotary_embedding. In theory, we shouldn't
-                    # do this blindly, but in practice in Aphrodite it's ok. The best
+                    # do this blindly, but in practice in Sonar it's ok. The best
                     # solution is to use auto_functionalization_v2 and then use
                     # inductor's builtin defunctionalization (reinplacing) pass.
                     mutated_args = {1: "query", 2: "key"}
@@ -105,8 +105,8 @@ class FixFunctionalizationPass(AphroditeInductorPass):
                 mutated_args = {1: "result"}
                 self.defunctionalize(graph, node, mutated_args)
             elif (
-                hasattr(torch.ops.aphrodite, "flashinfer_trtllm_fused_allreduce_norm")
-                and at_target == torch.ops.aphrodite.flashinfer_trtllm_fused_allreduce_norm.default
+                hasattr(torch.ops.sonar, "flashinfer_trtllm_fused_allreduce_norm")
+                and at_target == torch.ops.sonar.flashinfer_trtllm_fused_allreduce_norm.default
             ):
                 mutated_args = {
                     1: "allreduce_in",
@@ -118,10 +118,10 @@ class FixFunctionalizationPass(AphroditeInductorPass):
                 self.defunctionalize(graph, node, mutated_args)
             elif (
                 hasattr(
-                    torch.ops.aphrodite,
+                    torch.ops.sonar,
                     "flashinfer_fused_add_rms_norm_nvfp4_quant",
                 )
-                and at_target == torch.ops.aphrodite.flashinfer_fused_add_rms_norm_nvfp4_quant.default
+                and at_target == torch.ops.sonar.flashinfer_fused_add_rms_norm_nvfp4_quant.default
             ):
                 mutated_args = {
                     1: "result",
@@ -173,8 +173,8 @@ class FixFunctionalizationPass(AphroditeInductorPass):
                 )
                 self.defunctionalize(graph, node, mutated_args=mutated_args, args=args)
             elif (
-                hasattr(torch.ops.aphrodite, "fused_rope_and_unified_kv_cache_update")
-                and at_target == torch.ops.aphrodite.fused_rope_and_unified_kv_cache_update.default
+                hasattr(torch.ops.sonar, "fused_rope_and_unified_kv_cache_update")
+                and at_target == torch.ops.sonar.fused_rope_and_unified_kv_cache_update.default
             ):
                 mutated_args = {
                     1: "query",
@@ -182,8 +182,8 @@ class FixFunctionalizationPass(AphroditeInductorPass):
                 }
                 self.defunctionalize(graph, node, mutated_args=mutated_args)
             elif (
-                hasattr(torch.ops.aphrodite, "fused_rope_unified_mla_kv_cache_update")
-                and at_target == torch.ops.aphrodite.fused_rope_unified_mla_kv_cache_update.default
+                hasattr(torch.ops.sonar, "fused_rope_unified_mla_kv_cache_update")
+                and at_target == torch.ops.sonar.fused_rope_unified_mla_kv_cache_update.default
             ):
                 # AOTAutograd functionalizes `q[..., nope_dim:] = rope_result` into
                 # a sequence of aten ops on q: view+slice+copy+slice_scatter.
@@ -221,8 +221,8 @@ class FixFunctionalizationPass(AphroditeInductorPass):
 
             # only used for test_functionalization::TestFunctionWithMutatedArgsAndReturn
             elif (
-                hasattr(torch.ops.aphrodite, "function_with_mutated_args_and_return")
-                and at_target == torch.ops.aphrodite.function_with_mutated_args_and_return.default
+                hasattr(torch.ops.sonar, "function_with_mutated_args_and_return")
+                and at_target == torch.ops.sonar.function_with_mutated_args_and_return.default
             ):
                 mutated_args = {1: "x"}
                 self.defunctionalize(graph, node, mutated_args=mutated_args)

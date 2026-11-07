@@ -8,16 +8,16 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from aphrodite.platforms import current_platform
-from aphrodite.v1.sample.logits_processor import LogitsProcessors
-from aphrodite.v1.sample.metadata import SamplingMetadata
-from aphrodite.v1.sample.rejection_sampler import (
+from sonar.platforms import current_platform
+from sonar.v1.sample.logits_processor import LogitsProcessors
+from sonar.v1.sample.metadata import SamplingMetadata
+from sonar.v1.sample.rejection_sampler import (
     PLACEHOLDER_TOKEN_ID,
     RejectionSampler,
     sample_recovered_tokens,
 )
-from aphrodite.v1.sample.sampler import Sampler, SamplerOutput
-from aphrodite.v1.spec_decode.metadata import SpecDecodeMetadata
+from sonar.v1.sample.sampler import Sampler, SamplerOutput
+from sonar.v1.spec_decode.metadata import SpecDecodeMetadata
 from tests.v1.sample.utils import create_allowed_token_ids
 
 DEVICE_TYPE = current_platform.device_type
@@ -698,7 +698,7 @@ def test_min_p(rejection_sampler, min_p):
     """Test rejection sampling with min-p sampling"""
     from types import SimpleNamespace
 
-    from aphrodite.v1.sample.logits_processor import MinPLogitsProcessor
+    from sonar.v1.sample.logits_processor import MinPLogitsProcessor
 
     vocab_size = 100
     batch_size = 100
@@ -1075,7 +1075,7 @@ def _patch_uniform_probs(monkeypatch: pytest.MonkeyPatch, values: list[float]) -
         return torch.tensor(values, dtype=torch.float64, device=device)
 
     monkeypatch.setattr(
-        "aphrodite.v1.sample.rejection_sampler.generate_uniform_probs",
+        "sonar.v1.sample.rejection_sampler.generate_uniform_probs",
         fixed_uniform_probs,
     )
 

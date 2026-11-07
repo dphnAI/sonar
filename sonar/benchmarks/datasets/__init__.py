@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-from aphrodite.benchmarks.datasets.datasets import (
+from sonar.benchmarks.datasets.datasets import (
     DEFAULT_NUM_PROMPTS,
     AIMODataset,
     ASRDataset,
@@ -42,7 +42,7 @@ from aphrodite.benchmarks.datasets.datasets import (
     process_video,
     zeta_prompt,
 )
-from aphrodite.benchmarks.datasets.utils import RangeRatio
+from sonar.benchmarks.datasets.utils import RangeRatio
 
 __all__ = [
     "DEFAULT_NUM_PROMPTS",

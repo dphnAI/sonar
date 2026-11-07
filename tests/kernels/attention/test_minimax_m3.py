@@ -7,27 +7,27 @@ from functools import partial
 import pytest
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.config import CacheConfig
-from aphrodite.config.cache import _layout_from_name
-from aphrodite.models.minimax_m3.common.ops.index_topk import (
+from sonar import _custom_ops as ops
+from sonar.config import CacheConfig
+from sonar.config.cache import _layout_from_name
+from sonar.models.minimax_m3.common.ops.index_topk import (
     minimax_m3_index_decode,
     minimax_m3_index_score,
     minimax_m3_index_topk,
 )
-from aphrodite.models.minimax_m3.common.ops.sparse_attn import (
+from sonar.models.minimax_m3.common.ops.sparse_attn import (
     _FP8_DTYPES,
     minimax_m3_sparse_attn,
     minimax_m3_sparse_attn_decode,
 )
-from aphrodite.models.minimax_m3.common.sparse_attention import (
+from sonar.models.minimax_m3.common.sparse_attention import (
     MiniMaxM3SparseTritonImpl,
     minimax_m3_rebase_slots_to_page16,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
-from aphrodite.v1.attention.backends.utils import record_kv_cache_layout
-from aphrodite.v1.kv_cache_interface import (
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_random_seed
+from sonar.v1.attention.backends.utils import record_kv_cache_layout
+from sonar.v1.kv_cache_interface import (
     FullAttentionSpec,
     KVCacheLayout,
     MLAAttentionSpec,
@@ -45,7 +45,7 @@ if not (current_platform.is_cuda() or current_platform.is_rocm()):
 
 PREFILL_KERNELS = [pytest.param(minimax_m3_sparse_attn, id="scalar")]
 if current_platform.is_cuda() and current_platform.is_device_capability_family(90):
-    from aphrodite.models.minimax_m3.nvidia.ops.sparse_prefill import (
+    from sonar.models.minimax_m3.nvidia.ops.sparse_prefill import (
         minimax_m3_sparse_attn as minimax_m3_sparse_attn_tiled,
     )
 
@@ -138,7 +138,7 @@ def test_amd_decode_score_split_launch_policy(
     is_gfx950: bool,
     expected: tuple[int, bool],
 ):
-    from aphrodite.models.minimax_m3.amd.ops.index_topk import (
+    from sonar.models.minimax_m3.amd.ops.index_topk import (
         _decode_score_split_launch_policy,
     )
 
@@ -156,7 +156,7 @@ def test_amd_decode_score_split_launch_policy(
 
 @pytest.mark.parametrize("num_reqs", range(1, 12))
 def test_amd_balanced_decode_score_mapping_exact_coverage(num_reqs: int):
-    from aphrodite.models.minimax_m3.amd.ops.index_topk import (
+    from sonar.models.minimax_m3.amd.ops.index_topk import (
         _decode_score_program_budget,
     )
 
@@ -242,7 +242,7 @@ def test_amd_optimized_decode_score_bitwise_and_graph_replay(
     init_blocks: int,
     local_blocks: int,
 ):
-    from aphrodite.models.minimax_m3.amd.ops.index_topk import (
+    from sonar.models.minimax_m3.amd.ops.index_topk import (
         _decode_index_score_balanced_kernel,
         _decode_index_score_kernel,
         _decode_score_program_budget,
@@ -698,7 +698,7 @@ def _fmha_indexer_topk(
     topk: int,
 ) -> torch.Tensor:
     """Replicate MiniMaxM3IndexerMSAImpl's score path (single decode/prefill side)."""
-    from aphrodite.third_party.fmha_sm100.api import _fmha_sm100, _fmha_sm100_plan
+    from sonar.third_party.fmha_sm100.api import _fmha_sm100, _fmha_sm100_plan
 
     num_idx_heads, head_dim = idx_q.shape[1], idx_q.shape[2]
     nvp = [(s + 127) // 128 for s in seq_lens.tolist()]
@@ -827,21 +827,21 @@ def test_fmha_sm100_indexer_matches_reference(q_lens, prefix_lens, index_dtype):
 @pytest.mark.parametrize("topk", [16])
 @pytest.mark.parametrize("index_dtype", [torch.bfloat16, torch.float8_e4m3fn])
 def test_msa_indexer_impl_matches_triton(topk, index_dtype, monkeypatch):
-    import aphrodite.models.minimax_m3.common.indexer as indexer_mod
-    from aphrodite.config import set_current_aphrodite_config
-    from aphrodite.forward_context import set_forward_context
-    from aphrodite.models.minimax_m3.common.indexer import (
+    import sonar.models.minimax_m3.common.indexer as indexer_mod
+    from sonar.config import set_current_sonar_config
+    from sonar.forward_context import set_forward_context
+    from sonar.models.minimax_m3.common.indexer import (
         MiniMaxM3IndexerTritonImpl,
         MiniMaxM3IndexerTritonMetadataBuilder,
     )
-    from aphrodite.models.minimax_m3.nvidia.indexer_msa import (
+    from sonar.models.minimax_m3.nvidia.indexer_msa import (
         MiniMaxM3IndexerMSAImpl,
         MiniMaxM3IndexerMSAMetadataBuilder,
     )
     from tests.v1.attention.utils import (
         BatchSpec,
-        create_aphrodite_config,
         create_common_attn_metadata,
+        create_sonar_config,
     )
 
     torch.manual_seed(0)
@@ -850,8 +850,8 @@ def test_msa_indexer_impl_matches_triton(topk, index_dtype, monkeypatch):
     # TP=1: avoid requiring an initialized distributed group in a unit test.
     monkeypatch.setattr(indexer_mod, "get_tensor_model_parallel_world_size", lambda: 1)
 
-    aphrodite_config = create_aphrodite_config(block_size=BLOCK_SIZE, max_model_len=8192, max_num_batched_tokens=8192)
-    aphrodite_config.model_config.hf_config.sparse_attention_config = {"sparse_num_index_heads": num_idx_heads}
+    sonar_config = create_sonar_config(block_size=BLOCK_SIZE, max_model_len=8192, max_num_batched_tokens=8192)
+    sonar_config.model_config.hf_config.sparse_attention_config = {"sparse_num_index_heads": num_idx_heads}
 
     # Decode-first mixed batch: 2 decode reqs (q_len 1) then 2 prefill reqs. Long
     # prefixes so every token sees > TOPK causal blocks (non-trivial selection).
@@ -886,12 +886,12 @@ def test_msa_indexer_impl_matches_triton(topk, index_dtype, monkeypatch):
         local_blocks=0,
     )
 
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         msa_impl = MiniMaxM3IndexerMSAImpl(prefix="idx_msa", **impl_kwargs)
         triton_impl = MiniMaxM3IndexerTritonImpl(prefix="idx_triton", **impl_kwargs)
-        msa_builder = MiniMaxM3IndexerMSAMetadataBuilder(spec, [msa_impl.index_cache.prefix], aphrodite_config, device)
+        msa_builder = MiniMaxM3IndexerMSAMetadataBuilder(spec, [msa_impl.index_cache.prefix], sonar_config, device)
         triton_builder = MiniMaxM3IndexerTritonMetadataBuilder(
-            spec, [triton_impl.index_cache.prefix], aphrodite_config, device
+            spec, [triton_impl.index_cache.prefix], sonar_config, device
         )
 
     # Both impls score against the same index keys.
@@ -911,7 +911,7 @@ def test_msa_indexer_impl_matches_triton(topk, index_dtype, monkeypatch):
         msa_impl.index_cache.prefix: msa_builder.build(0, common),
         triton_impl.index_cache.prefix: triton_builder.build(0, common),
     }
-    with set_forward_context(attn_metadata, aphrodite_config):
+    with set_forward_context(attn_metadata, sonar_config):
         msa_decode, msa_prefill = msa_impl(index_q)
         tri_decode, tri_prefill = triton_impl(index_q)
 
@@ -971,22 +971,22 @@ def _reference_aiter_sparse_table(
 @pytest.mark.parametrize("num_idx_heads", [1, 2])
 @pytest.mark.parametrize(("init_blocks", "local_blocks"), [(0, 0), (1, 2)])
 def test_aiter_indexer_impl_matches_reference(num_idx_heads, init_blocks, local_blocks, monkeypatch):
-    import aphrodite.models.minimax_m3.amd.indexer_msa as indexer_msa_mod
-    import aphrodite.models.minimax_m3.common.indexer as indexer_mod
-    from aphrodite.config import set_current_aphrodite_config
-    from aphrodite.forward_context import set_forward_context
-    from aphrodite.models.minimax_m3.amd.indexer_msa import (
+    import sonar.models.minimax_m3.amd.indexer_msa as indexer_msa_mod
+    import sonar.models.minimax_m3.common.indexer as indexer_mod
+    from sonar.config import set_current_sonar_config
+    from sonar.forward_context import set_forward_context
+    from sonar.models.minimax_m3.amd.indexer_msa import (
         MiniMaxM3IndexerMSAImpl,
         MiniMaxM3IndexerMSAMetadataBuilder,
     )
-    from aphrodite.models.minimax_m3.amd.ops.sparse_pa import (
+    from sonar.models.minimax_m3.amd.ops.sparse_pa import (
         PAGES_PER_SPARSE_BLOCK,
         minimax_m3_rebase_block_table_to_page16,
     )
     from tests.v1.attention.utils import (
         BatchSpec,
-        create_aphrodite_config,
         create_common_attn_metadata,
+        create_sonar_config,
     )
 
     monkeypatch.setattr(indexer_msa_mod, "_minimax_m3_aiter_sparse_pa_requested", lambda: True)
@@ -1004,8 +1004,8 @@ def test_aiter_indexer_impl_matches_reference(num_idx_heads, init_blocks, local_
     device = torch.device("cuda")
     monkeypatch.setattr(indexer_mod, "get_tensor_model_parallel_world_size", lambda: 1)
 
-    aphrodite_config = create_aphrodite_config(block_size=BLOCK_SIZE, max_model_len=8192, max_num_batched_tokens=8192)
-    aphrodite_config.model_config.hf_config.sparse_attention_config = {
+    sonar_config = create_sonar_config(block_size=BLOCK_SIZE, max_model_len=8192, max_num_batched_tokens=8192)
+    sonar_config.model_config.hf_config.sparse_attention_config = {
         "sparse_num_index_heads": num_idx_heads,
         "sparse_block_size": BLOCK_SIZE,
     }
@@ -1050,7 +1050,7 @@ def test_aiter_indexer_impl_matches_reference(num_idx_heads, init_blocks, local_
     topk_buf = torch.full((num_idx_heads, num_tokens, TOPK), -2, dtype=torch.int32, device=device)
     sparse_bt = torch.full((rows, TOPK * PAGES_PER_SPARSE_BLOCK), -27182, dtype=torch.int32, device=device)
     sparse_ctx = torch.full((rows,), -27182, dtype=torch.int32, device=device)
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         impl = MiniMaxM3IndexerMSAImpl(
             num_kv_heads=num_idx_heads,
             scale=HEAD_DIM**-0.5,
@@ -1064,7 +1064,7 @@ def test_aiter_indexer_impl_matches_reference(num_idx_heads, init_blocks, local_
             indexer_kv_dtype="fp8",
             topk_indices_buffer=topk_buf,
         )
-        builder = MiniMaxM3IndexerMSAMetadataBuilder(spec, [impl.index_cache.prefix], aphrodite_config, device)
+        builder = MiniMaxM3IndexerMSAMetadataBuilder(spec, [impl.index_cache.prefix], sonar_config, device)
     impl.index_cache.kv_cache = index_cache
     impl.sparse_bt_buffer = sparse_bt
     impl.sparse_ctx_buffer = sparse_ctx
@@ -1072,7 +1072,7 @@ def test_aiter_indexer_impl_matches_reference(num_idx_heads, init_blocks, local_
     md = builder.build(0, common)
     nd = md.num_decode_tokens
     assert md.num_decodes == 3 and nd == 3
-    with set_forward_context({impl.index_cache.prefix: md}, aphrodite_config):
+    with set_forward_context({impl.index_cache.prefix: md}, sonar_config):
         decode_topk, prefill_topk = impl(
             index_q.view(num_tokens, -1),
             decode_page16_block_table=page16_bt[: md.num_decodes],
@@ -1152,8 +1152,8 @@ def test_gather_nvfp4_index_k_fp8_bitwise(scale_max: float, use_qmul4: bool, mon
     """Each request's leading pages land at its compact offset, bit-identical
     to the reference dequant (incl. saturation), and nothing else is written,
     on both the QMUL4 and the fp32 dequant paths."""
-    import aphrodite.models.minimax_m3.nvidia.ops.gather_nvfp4_index_k as gather_mod
-    from aphrodite.models.minimax_m3.nvidia.ops.gather_nvfp4_index_k import (
+    import sonar.models.minimax_m3.nvidia.ops.gather_nvfp4_index_k as gather_mod
+    from sonar.models.minimax_m3.nvidia.ops.gather_nvfp4_index_k import (
         minimax_m3_gather_nvfp4_index_k_fp8,
     )
 
@@ -1225,24 +1225,24 @@ def test_nvfp4_indexer_impl_matches_reference(num_idx_heads, decode_query_len, m
     batch (short and full 8-query decodes, fresh and chunked prefills, a request
     without history pages, several gather chunks) and check every row against
     a reference computed from the dequantized NVFP4 keys."""
-    import aphrodite.models.minimax_m3.common.indexer as indexer_mod
-    from aphrodite.config import set_current_aphrodite_config
-    from aphrodite.forward_context import set_forward_context
-    from aphrodite.models.minimax_m3.nvidia.indexer_nvfp4 import (
+    import sonar.models.minimax_m3.common.indexer as indexer_mod
+    from sonar.config import set_current_sonar_config
+    from sonar.forward_context import set_forward_context
+    from sonar.models.minimax_m3.nvidia.indexer_nvfp4 import (
         MiniMaxM3IndexerNvfp4Impl,
         MiniMaxM3IndexerNvfp4MetadataBuilder,
     )
     from tests.v1.attention.utils import (
         BatchSpec,
-        create_aphrodite_config,
         create_common_attn_metadata,
+        create_sonar_config,
     )
 
     torch.manual_seed(0)
     device = torch.device("cuda")
     monkeypatch.setattr(indexer_mod, "get_tensor_model_parallel_world_size", lambda: 1)
-    aphrodite_config = create_aphrodite_config(block_size=BLOCK_SIZE, max_model_len=8192, max_num_batched_tokens=8192)
-    aphrodite_config.model_config.hf_config.sparse_attention_config = {"sparse_num_index_heads": num_idx_heads}
+    sonar_config = create_sonar_config(block_size=BLOCK_SIZE, max_model_len=8192, max_num_batched_tokens=8192)
+    sonar_config.model_config.hf_config.sparse_attention_config = {"sparse_num_index_heads": num_idx_heads}
 
     decode_seq_lens = [2305, 2561, 9]
     prefill = [(2624, 64), (2720, 96), (100, 100), (1500, 1500)]
@@ -1277,10 +1277,10 @@ def test_nvfp4_indexer_impl_matches_reference(num_idx_heads, decode_query_len, m
         head_size=_NVFP4_PAGE_WIDTH,
         dtype=torch.uint8,
     )
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         impl = MiniMaxM3IndexerNvfp4Impl(prefix="idx_nvfp4", **impl_kwargs)
-        builder = MiniMaxM3IndexerNvfp4MetadataBuilder(spec, [impl.index_cache.prefix], aphrodite_config, device)
-    index_spec = impl.index_cache.get_kv_cache_spec(aphrodite_config)
+        builder = MiniMaxM3IndexerNvfp4MetadataBuilder(spec, [impl.index_cache.prefix], sonar_config, device)
+    index_spec = impl.index_cache.get_kv_cache_spec(sonar_config)
     assert isinstance(index_spec, MLAAttentionSpec)
     assert index_spec.page_size_bytes == BLOCK_SIZE * _NVFP4_PAGE_WIDTH
     assert index_spec.dtype == torch.uint8
@@ -1299,7 +1299,7 @@ def test_nvfp4_indexer_impl_matches_reference(num_idx_heads, decode_query_len, m
         torch.cuda.set_sync_debug_mode("default")
     assert md.num_decode_tokens == decode_query_len * len(decode_seq_lens)
     assert len(md.prefill_chunks) == 3
-    with set_forward_context({impl.index_cache.prefix: md}, aphrodite_config):
+    with set_forward_context({impl.index_cache.prefix: md}, sonar_config):
         assert impl(index_q) == (None, None)
 
     # Reference: max over each history page's 128 tokens of q . k.
@@ -1333,30 +1333,30 @@ def test_nvfp4_indexer_decode_cuda_graph_replay(decode_query_len, num_idx_heads,
     zero-length padding request) outside capture and replaying must give that
     step's top-k, which fails if any captured tensor was re-allocated. The
     decode reads index_q and writes the top-k in place, copying nothing."""
-    import aphrodite.models.minimax_m3.common.indexer as indexer_mod
-    from aphrodite.config import set_current_aphrodite_config
-    from aphrodite.forward_context import set_forward_context
-    from aphrodite.models.minimax_m3.nvidia.indexer_nvfp4 import (
+    import sonar.models.minimax_m3.common.indexer as indexer_mod
+    from sonar.config import set_current_sonar_config
+    from sonar.forward_context import set_forward_context
+    from sonar.models.minimax_m3.nvidia.indexer_nvfp4 import (
         MiniMaxM3IndexerNvfp4Impl,
         MiniMaxM3IndexerNvfp4MetadataBuilder,
     )
     from tests.v1.attention.utils import (
         BatchSpec,
-        create_aphrodite_config,
         create_common_attn_metadata,
+        create_sonar_config,
     )
 
     torch.manual_seed(0)
     device = torch.device("cuda")
     monkeypatch.setattr(indexer_mod, "get_tensor_model_parallel_world_size", lambda: 1)
-    aphrodite_config = create_aphrodite_config(block_size=BLOCK_SIZE, max_model_len=8192, max_num_batched_tokens=8192)
-    aphrodite_config.model_config.hf_config.sparse_attention_config = {"sparse_num_index_heads": num_idx_heads}
+    sonar_config = create_sonar_config(block_size=BLOCK_SIZE, max_model_len=8192, max_num_batched_tokens=8192)
+    sonar_config.model_config.hf_config.sparse_attention_config = {"sparse_num_index_heads": num_idx_heads}
     num_reqs, max_blocks = 4, 24
     num_tokens = num_reqs * decode_query_len
     num_physical = num_reqs * max_blocks
     index_cache = _random_nvfp4_index_pages(num_physical)
 
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         impl = MiniMaxM3IndexerNvfp4Impl(
             prefix="idx_nvfp4_graph",
             num_kv_heads=num_idx_heads,
@@ -1377,7 +1377,7 @@ def test_nvfp4_indexer_decode_cuda_graph_replay(decode_query_len, num_idx_heads,
                 dtype=torch.uint8,
             ),
             [impl.index_cache.prefix],
-            aphrodite_config,
+            sonar_config,
             device,
         )
     builder.reorder_batch_threshold = decode_query_len
@@ -1395,7 +1395,7 @@ def test_nvfp4_indexer_decode_cuda_graph_replay(decode_query_len, num_idx_heads,
 
     # Warm up (compiles), then capture the forward of a full batch.
     common, md = step([2305, 2561, 2944, 700], [decode_query_len] * num_reqs)
-    with set_forward_context({impl.index_cache.prefix: md}, aphrodite_config):
+    with set_forward_context({impl.index_cache.prefix: md}, sonar_config):
         impl(index_q)
         with torch.profiler.profile(
             activities=[
@@ -1425,7 +1425,7 @@ def test_nvfp4_indexer_decode_cuda_graph_replay(decode_query_len, num_idx_heads,
     )
     other.block_table_tensor = common.block_table_tensor[:2].clone()
     other_md = builder.build(0, other)
-    with set_forward_context({impl.index_cache.prefix: other_md}, aphrodite_config):
+    with set_forward_context({impl.index_cache.prefix: other_md}, sonar_config):
         impl(index_q[: 2 * decode_query_len])
     assert len(builder.decode_wrappers) == 2
     impl.topk_indices_buffer.fill_(-2)
@@ -1554,7 +1554,7 @@ def test_amd_decode_topk_launch_policy(
     expected: tuple[int, int, int, int, bool, bool],
 ):
     """The short-context specialization has strict dispatch boundaries."""
-    from aphrodite.models.minimax_m3.amd.ops.index_topk import (
+    from sonar.models.minimax_m3.amd.ops.index_topk import (
         _decode_topk_launch_policy,
     )
 
@@ -1611,7 +1611,7 @@ def test_amd_decode_fused_topk_total_order_and_replay(
     num_idx_heads: int,
 ):
     """Selector specializations preserve ordering and graph state."""
-    from aphrodite.models.minimax_m3.amd.ops.index_topk import (
+    from sonar.models.minimax_m3.amd.ops.index_topk import (
         SPARSE_BLOCK_SIZE,
         _decode_topk_fused_kernel,
     )
@@ -1797,7 +1797,7 @@ def test_amd_decode_index_topk_end_to_end(
     max_decode_query_len: int,
 ):
     """ROCm BF16 score-to-selector parity crosses the atomic boundary."""
-    from aphrodite.models.minimax_m3.amd.ops.index_topk import (
+    from sonar.models.minimax_m3.amd.ops.index_topk import (
         minimax_m3_index_decode as amd_minimax_m3_index_decode,
     )
 
@@ -1931,7 +1931,7 @@ def test_decode_index_score_cutedsl_correctness(
     concurrent_writes: bool,
 ):
     pytest.importorskip("cutlass")
-    from aphrodite.models.minimax_m3.nvidia.ops import (
+    from sonar.models.minimax_m3.nvidia.ops import (
         minimax_m3_index_decode_score_cutedsl,
     )
 
@@ -2169,7 +2169,7 @@ def test_main_cache_layout_contract():
 @pytest.mark.parametrize("layout", [KVCacheLayout.LHBNC, KVCacheLayout.LBHNC])
 def test_aiter_sparse_pa_layout_contract(monkeypatch, layout):
     """Build the exact separate and packed page-16 views used by the model."""
-    import aphrodite.models.minimax_m3.common.sparse_attention as sparse_attn_mod
+    import sonar.models.minimax_m3.common.sparse_attention as sparse_attn_mod
 
     monkeypatch.setattr(sparse_attn_mod.rocm_aiter_ops, "is_enabled", lambda: True)
     monkeypatch.setattr(
@@ -2223,7 +2223,7 @@ def test_aiter_sparse_pa_layout_contract(monkeypatch, layout):
 
 def test_aiter_sparse_pa_rejects_multiple_kv_heads(monkeypatch):
     """Do not pair AITER's separated cache layout with the Triton fallback."""
-    import aphrodite.models.minimax_m3.common.sparse_attention as sparse_attn_mod
+    import sonar.models.minimax_m3.common.sparse_attention as sparse_attn_mod
 
     monkeypatch.setattr(sparse_attn_mod.rocm_aiter_ops, "is_enabled", lambda: True)
     monkeypatch.setattr(
@@ -2259,7 +2259,7 @@ def test_msa_indexer_requires_the_aiter_attend(monkeypatch):
     resolve through; falling back instead surfaces the fp8 index cache as the
     configuration error it is.
     """
-    import aphrodite.models.minimax_m3.amd.indexer_msa as indexer_msa_mod
+    import sonar.models.minimax_m3.amd.indexer_msa as indexer_msa_mod
 
     monkeypatch.setattr(indexer_msa_mod.current_platform, "is_rocm", lambda: True)
     kwargs = dict(
@@ -2283,9 +2283,9 @@ def test_msa_indexer_requires_the_aiter_attend(monkeypatch):
 
 
 def test_aiter_consolidated_qknorm_enabled(monkeypatch):
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
-    monkeypatch.setattr("aphrodite._aiter_ops.is_aiter_found_and_supported", lambda: True)
+    monkeypatch.setattr("sonar._aiter_ops.is_aiter_found_and_supported", lambda: True)
     monkeypatch.setattr(rocm_aiter_ops, "_AITER_ENABLED", True)
 
     scale = torch.tensor([0.25])
@@ -2300,7 +2300,7 @@ def test_aiter_consolidated_qknorm_enabled(monkeypatch):
     assert not rocm_aiter_ops.fused_qknorm_idxrqknorm_enabled("auto")
 
     monkeypatch.setattr(rocm_aiter_ops, "_AITER_ENABLED", True)
-    monkeypatch.setattr("aphrodite._aiter_ops.is_aiter_found_and_supported", lambda: False)
+    monkeypatch.setattr("sonar._aiter_ops.is_aiter_found_and_supported", lambda: False)
     assert not rocm_aiter_ops.fused_qknorm_idxrqknorm_enabled("auto")
 
 
@@ -2346,7 +2346,7 @@ def _install_fake_aiter_qknorm(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
 
 
 def test_aiter_consolidated_qknorm_packed_shuffle_unequal_spans(monkeypatch):
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     calls = _install_fake_aiter_qknorm(monkeypatch)
     call_args = _fake_aiter_qknorm_args()
@@ -2366,7 +2366,7 @@ def test_aiter_consolidated_qknorm_packed_shuffle_unequal_spans(monkeypatch):
     ],
 )
 def test_aiter_consolidated_qknorm_dtype_and_layout_mapping(monkeypatch, kv_cache_dtype, aiter_dtype, passes_scales):
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     calls = _install_fake_aiter_qknorm(monkeypatch)
     call_args = _fake_aiter_qknorm_args(kv_cache_dtype)
@@ -2390,7 +2390,7 @@ def test_aiter_consolidated_qknorm_dtype_and_layout_mapping(monkeypatch, kv_cach
 
 
 def test_aiter_consolidated_qknorm_fp8_index_dtype_mapping(monkeypatch):
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     calls = _install_fake_aiter_qknorm(monkeypatch)
     fp8 = current_platform.fp8_dtype()
@@ -2410,7 +2410,7 @@ def test_aiter_consolidated_qknorm_fp8_index_dtype_mapping(monkeypatch):
 
 @pytest.mark.parametrize("skip_index_branch", [False, True])
 def test_aiter_consolidated_qknorm_full_and_skip_index_args(monkeypatch, skip_index_branch):
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     calls = _install_fake_aiter_qknorm(monkeypatch)
     call_args = _fake_aiter_qknorm_args()
@@ -2445,9 +2445,9 @@ def test_aiter_consolidated_qknorm_full_and_skip_index_args(monkeypatch, skip_in
 
 
 def test_aiter_consolidated_qknorm_rejects_fp8_e5m2(monkeypatch):
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
-    monkeypatch.setattr("aphrodite._aiter_ops.is_aiter_found_and_supported", lambda: True)
+    monkeypatch.setattr("sonar._aiter_ops.is_aiter_found_and_supported", lambda: True)
     monkeypatch.setattr(rocm_aiter_ops, "_AITER_ENABLED", True)
     scale = torch.tensor([0.25])
     assert not rocm_aiter_ops.fused_qknorm_idxrqknorm_enabled("fp8_e5m2", scale, scale)
@@ -2467,7 +2467,7 @@ def test_aiter_sparse_pa_slot_rebase_preserves_page_offsets():
 @pytest.mark.parametrize("skip_index_branch", [False, True])
 @pytest.mark.parametrize("fp8_index", [False, True])
 def test_aiter_consolidated_qknorm_real_packed_shuffle(skip_index_branch, fp8_index):
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     torch.manual_seed(20260831)
     num_tokens = 4
@@ -2718,7 +2718,7 @@ def _build_decode_inputs(
 )
 def test_aiter_sparse_block_table_handles_padded_decode_rows():
     """Zero-length padded decode rows must produce empty sparse attention."""
-    from aphrodite.models.minimax_m3.amd.ops.sparse_pa import (
+    from sonar.models.minimax_m3.amd.ops.sparse_pa import (
         PAGES_PER_SPARSE_BLOCK,
         minimax_m3_build_sparse_block_table,
     )
@@ -2766,7 +2766,7 @@ def test_aiter_decode_sparse_block_table_supports_spec_decode():
     ``req_id * decode_query_len + local_q``. This verifies that the ROCm AITER
     block-table adapter uses the same mapping before handing rows to Gluon.
     """
-    from aphrodite.models.minimax_m3.amd.ops.sparse_pa import (
+    from sonar.models.minimax_m3.amd.ops.sparse_pa import (
         PAGES_PER_SPARSE_BLOCK,
         minimax_m3_build_sparse_block_table_decode,
     )
@@ -2865,10 +2865,10 @@ def test_aiter_decode_sparse_block_table_supports_spec_decode():
 )
 def test_amd_decode_fused_topk_emits_sparse_table(block_page_stride: int, seq_lens_list: list[int]):
     """The fused selector must match top-k followed by table construction."""
-    from aphrodite.models.minimax_m3.amd.ops.index_topk import (
+    from sonar.models.minimax_m3.amd.ops.index_topk import (
         minimax_m3_index_decode as amd_minimax_m3_index_decode,
     )
-    from aphrodite.models.minimax_m3.amd.ops.sparse_pa import (
+    from sonar.models.minimax_m3.amd.ops.sparse_pa import (
         PAGES_PER_SPARSE_BLOCK,
         minimax_m3_build_sparse_block_table_decode,
     )

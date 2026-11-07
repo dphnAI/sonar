@@ -4,14 +4,14 @@
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
-from aphrodite.entrypoints.generate.base.protocol import (
+from sonar.entrypoints.generate.base.protocol import (
     DeltaMessage,
     ExtractedToolCallInformation,
 )
-from aphrodite.tool_parsers.abstract_tool_parser import Tool, ToolParser
+from sonar.tool_parsers.abstract_tool_parser import Tool, ToolParser
 
 if TYPE_CHECKING:
-    from aphrodite.tokenizers import TokenizerLike
+    from sonar.tokenizers import TokenizerLike
 
 
 class GptOssToolParser(ToolParser):

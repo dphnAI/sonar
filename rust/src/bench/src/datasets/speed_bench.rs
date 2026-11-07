@@ -20,7 +20,7 @@ const MASKED_PREFIX: &str = "FULL BENCHMARK DATA SHOULD BE FETCHED";
 fn cache_dir() -> std::path::PathBuf {
     dirs::cache_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
-        .join("aphrodite-bench")
+        .join("sonar-bench")
         .join("datasets")
 }
 

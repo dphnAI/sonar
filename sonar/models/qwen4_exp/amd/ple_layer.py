@@ -8,31 +8,31 @@ import torch
 from torch import nn
 from transformers import Qwen4ExpTextConfig
 
-from aphrodite.config import AphroditeConfig, CacheConfig, ModelConfig, get_current_aphrodite_config
-from aphrodite.distributed import get_etp_group, get_tp_group
-from aphrodite.forward_context import get_forward_context
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.linear import MergedColumnParallelLinear
-from aphrodite.model_executor.layers.mamba.abstract import MambaBase
-from aphrodite.model_executor.layers.mamba.mamba_utils import (
+from sonar.config import CacheConfig, ModelConfig, SonarConfig, get_current_sonar_config
+from sonar.distributed import get_etp_group, get_tp_group
+from sonar.forward_context import get_forward_context
+from sonar.logger import init_logger
+from sonar.model_executor.layers.linear import MergedColumnParallelLinear
+from sonar.model_executor.layers.mamba.abstract import MambaBase
+from sonar.model_executor.layers.mamba.mamba_utils import (
     MambaStateDtypeCalculator,
     MambaStateShapeCalculator,
     is_conv_state_dim_first,
 )
-from aphrodite.model_executor.layers.quantization.base_config import (
+from sonar.model_executor.layers.quantization.base_config import (
     QuantizationConfig,
 )
-from aphrodite.model_executor.layers.quantization.utils.fp8_utils import is_fp8
-from aphrodite.model_executor.models.utils import AutoWeightsLoader
-from aphrodite.models.common.ops.sequence_parallel import (
+from sonar.model_executor.layers.quantization.utils.fp8_utils import is_fp8
+from sonar.model_executor.models.utils import AutoWeightsLoader
+from sonar.models.common.ops.sequence_parallel import (
     sp_all_gather,
     sp_reduce_scatter,
     sp_shard,
 )
-from aphrodite.utils.math_utils import round_up
-from aphrodite.utils.torch_utils import direct_register_custom_op
-from aphrodite.v1.attention.backends.registry import MambaAttentionBackendEnum
-from aphrodite.v1.attention.backends.short_conv_attn import (
+from sonar.utils.math_utils import round_up
+from sonar.utils.torch_utils import direct_register_custom_op
+from sonar.v1.attention.backends.registry import MambaAttentionBackendEnum
+from sonar.v1.attention.backends.short_conv_attn import (
     PleShortConvAttentionBackend,
     PleShortConvAttentionMetadata,
 )
@@ -251,7 +251,7 @@ class Qwen4ExpNGramEmbedding(nn.Module):
                 "NVFP4 Qwen4Exp PLE tables are not supported on ROCm yet; use a "
                 "checkpoint with a BF16 or FP8 PLE table."
             )
-        engram_config = get_current_aphrodite_config().engram_config
+        engram_config = get_current_sonar_config().engram_config
         embedding_cls = (
             Qwen4ExpPLEPinnedHostEmbedding
             if engram_config is not None and engram_config.cpu_offload
@@ -304,7 +304,7 @@ class Qwen4ExpNGramEmbedding(nn.Module):
         """Return full embeddings or a token shard after combining vocabulary owners."""
         input_ids = input_ids.reshape(-1)
         ngram_ids = input_ids.new_empty((input_ids.shape[0], self.ngram_heads), dtype=torch.int64)
-        torch.ops.aphrodite.qwen4_exp_amd_ple_ngram_ids(
+        torch.ops.sonar.qwen4_exp_amd_ple_ngram_ids(
             input_ids,
             query_start_loc,
             ngram_context,
@@ -317,7 +317,7 @@ class Qwen4ExpNGramEmbedding(nn.Module):
                 (ngram_ids.shape[0], self.embedding_dim),
                 dtype=embedding.weight.dtype,
             )
-            torch.ops.aphrodite.qwen4_exp_amd_ple_ngram_embedding_pinned(
+            torch.ops.sonar.qwen4_exp_amd_ple_ngram_embedding_pinned(
                 ngram_ids,
                 output,
                 self.layer_name,
@@ -327,7 +327,7 @@ class Qwen4ExpNGramEmbedding(nn.Module):
                 (ngram_ids.shape[0], self.embedding_dim),
                 dtype=embedding.params_dtype,
             )
-            torch.ops.aphrodite.qwen4_exp_amd_ple_ngram_embedding(
+            torch.ops.sonar.qwen4_exp_amd_ple_ngram_embedding(
                 ngram_ids,
                 output,
                 self.layer_name,
@@ -402,7 +402,7 @@ class Qwen4ExpPLELayer(nn.Module, MambaBase):
     def __init__(
         self,
         config: Qwen4ExpTextConfig,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         layer_idx: int = 0,
         ple_dense_layer_id: int | None = None,
         prefix: str = "",
@@ -410,9 +410,9 @@ class Qwen4ExpPLELayer(nn.Module, MambaBase):
     ) -> None:
         super().__init__()
         self.use_sequence_parallel = use_sequence_parallel
-        model_config = aphrodite_config.model_config
-        cache_config = aphrodite_config.cache_config
-        quant_config = aphrodite_config.quant_config
+        model_config = sonar_config.model_config
+        cache_config = sonar_config.cache_config
+        quant_config = sonar_config.quant_config
         self.model_config: ModelConfig = model_config
         self.cache_config: CacheConfig = cache_config
         self.layer_idx = layer_idx
@@ -424,16 +424,16 @@ class Qwen4ExpPLELayer(nn.Module, MambaBase):
         self.conv_kernel_size = int(config.ple_conv_kernel_size)
         self.short_conv_dilation = int(config.ngram_size)
         self.conv_state_len = (self.conv_kernel_size - 1) * self.short_conv_dilation
-        self.num_spec_tokens = aphrodite_config.num_speculative_tokens
+        self.num_spec_tokens = sonar_config.num_speculative_tokens
         self.activation = "silu"
         self.ple_embedding: nn.Module = Qwen4ExpNGramEmbedding(
             config,
             int(config.ple_embed_dim),
             self.ple_dense_layer_id,
-            aphrodite_config.scheduler_config.max_num_batched_tokens,
+            sonar_config.scheduler_config.max_num_batched_tokens,
             f"{prefix}.ple_embedding",
             prefix,
-            data_parallel_rank=aphrodite_config.parallel_config.data_parallel_rank,
+            data_parallel_rank=sonar_config.parallel_config.data_parallel_rank,
             quant_config=quant_config,
             params_dtype=model_config.dtype,
             use_sequence_parallel=self.use_sequence_parallel,
@@ -470,7 +470,7 @@ class Qwen4ExpPLELayer(nn.Module, MambaBase):
         nn.init.zeros_(self.conv1d.weight)
         self.conv1d.weight._no_reinit = True
         self.kv_cache = (torch.tensor([]),)
-        compilation_config = get_current_aphrodite_config().compilation_config
+        compilation_config = get_current_sonar_config().compilation_config
         if prefix in compilation_config.static_forward_context:
             raise ValueError(f"Duplicate layer name: {prefix}")
         compilation_config.static_forward_context[prefix] = self
@@ -707,7 +707,7 @@ class Qwen4ExpPLELayer(nn.Module, MambaBase):
         embeddings = self.ple_embedding.ngram_embedding.dequantize(embeddings, hidden_states.dtype)
         kv, _ = self.kv_proj(embeddings)
         key, value = kv.split(self.kv_proj.output_sizes, dim=-1)
-        gated_output, conv_input = torch.ops.aphrodite.qwen4_exp_ple_gate(
+        gated_output, conv_input = torch.ops.sonar.qwen4_exp_ple_gate(
             key,
             value,
             hidden_states,
@@ -724,11 +724,11 @@ class Qwen4ExpPLELayer(nn.Module, MambaBase):
             conv_input = sp_all_gather(conv_input)[: input_ids.shape[0]]
             # Metadata may omit padding tokens or all tokens during profiling.
             conv_output = torch.zeros_like(conv_input)
-            torch.ops.aphrodite.qwen4_exp_ple_short_conv(conv_input, conv_output, None, self.prefix)
+            torch.ops.sonar.qwen4_exp_ple_short_conv(conv_input, conv_output, None, self.prefix)
             gated_output.add_(sp_shard(conv_output))
             gated_output.add_(hidden_states)
         else:
-            torch.ops.aphrodite.qwen4_exp_ple_short_conv(
+            torch.ops.sonar.qwen4_exp_ple_short_conv(
                 conv_input,
                 gated_output,
                 hidden_states,

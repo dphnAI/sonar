@@ -8,23 +8,23 @@ import torch
 from torch import nn
 from transformers import LlamaConfig
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, CacheConfig
-from aphrodite.model_executor.layers.activation import SiluAndMul
-from aphrodite.model_executor.layers.linear import (
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import CacheConfig, SonarConfig
+from sonar.model_executor.layers.activation import SiluAndMul
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     MergedColumnParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.models.llama import (
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.models.llama import (
     LlamaAttention,
     LlamaDecoderLayer,
     LlamaForCausalLM,
     LlamaModel,
 )
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.v1.attention.backend import AttentionType
+from sonar.sequence import IntermediateTensors
+from sonar.v1.attention.backend import AttentionType
 
 from .utils import AutoWeightsLoader
 
@@ -137,19 +137,19 @@ class MistralAttention(LlamaAttention):
 class MistralDecoderLayer(LlamaDecoderLayer):
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
         config: LlamaConfig | None = None,
     ) -> None:
         super().__init__(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             prefix=prefix,
             config=config,
             attn_layer_type=MistralAttention,
         )
 
         self.layer_idx = int(prefix.split(sep=".")[-1])
-        config = config or aphrodite_config.model_config.hf_config
+        config = config or sonar_config.model_config.hf_config
 
         if getattr(config, "ada_rms_norm_t_cond", False):
             self.ada_rms_norm_t_cond = nn.Sequential(
@@ -201,11 +201,11 @@ class MistralModel(LlamaModel):
     def __init__(
         self,
         *,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
         layer_type: type[nn.Module] = MistralDecoderLayer,
     ):
-        super().__init__(aphrodite_config=aphrodite_config, prefix=prefix, layer_type=layer_type)
+        super().__init__(sonar_config=sonar_config, prefix=prefix, layer_type=layer_type)
 
     def forward(
         self,
@@ -259,19 +259,19 @@ class MistralForCausalLM(LlamaForCausalLM):
     def __init__(
         self,
         *,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
         layer_type: type[nn.Module] = MistralDecoderLayer,
     ):
-        super().__init__(aphrodite_config=aphrodite_config, prefix=prefix, layer_type=layer_type)
+        super().__init__(sonar_config=sonar_config, prefix=prefix, layer_type=layer_type)
 
     def _init_model(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
         layer_type: type[nn.Module] = MistralDecoderLayer,
     ):
-        return MistralModel(aphrodite_config=aphrodite_config, prefix=prefix, layer_type=layer_type)
+        return MistralModel(sonar_config=sonar_config, prefix=prefix, layer_type=layer_type)
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)

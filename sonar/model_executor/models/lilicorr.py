@@ -10,20 +10,20 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from aphrodite.compilation.backends import set_model_tag
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig
-from aphrodite.model_executor.layers.linear import (
+from sonar.compilation.backends import set_model_tag
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import SonarConfig
+from sonar.model_executor.layers.linear import (
     LinearBase,
     ReplicatedLinear,
     UnquantizedLinearMethod,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization.base_config import QuantizationConfig
-from aphrodite.model_executor.layers.quantization.modelopt import ModelOptLinearMethod
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import kNvfp4Static
-from aphrodite.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
-from aphrodite.v1.worker.gpu.spec_decode.lilicorr.config import LiLiCorrSpeculatorConfig
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization.base_config import QuantizationConfig
+from sonar.model_executor.layers.quantization.modelopt import ModelOptLinearMethod
+from sonar.model_executor.layers.quantization.utils.quant_utils import kNvfp4Static
+from sonar.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
+from sonar.v1.worker.gpu.spec_decode.lilicorr.config import LiLiCorrSpeculatorConfig
 
 from .nemotron_h import NemotronHMLP
 from .qwen3_dflash import DFlashQwen3ForCausalLM, DFlashQwen3Model
@@ -371,8 +371,8 @@ class LiLiCorrHead(nn.Module):
 
 
 class LiLiCorr(DFlashQwen3Model):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, start_layer_id: int = 0, prefix: str = ""):
-        spec = aphrodite_config.speculative_config
+    def __init__(self, *, sonar_config: SonarConfig, start_layer_id: int = 0, prefix: str = ""):
+        spec = sonar_config.speculative_config
         assert spec is not None
         config = spec.draft_model_config.hf_config
         draft_config = config.dflash_config
@@ -387,7 +387,7 @@ class LiLiCorr(DFlashQwen3Model):
             raise ValueError("LiLiCorr convolution geometry must enable both taps and group size.")
         if taps:
             self.decoder_layer_cls = DFlash2Qwen3DecoderLayer
-        super().__init__(aphrodite_config=aphrodite_config, start_layer_id=start_layer_id, prefix=prefix)
+        super().__init__(sonar_config=sonar_config, start_layer_id=start_layer_id, prefix=prefix)
         with set_model_tag("lilicorr_head"):
             self.lilicorr = LiLiCorrHead(
                 model_hidden_size=config.hidden_size,
@@ -405,10 +405,10 @@ class LiLiCorrForCausalLM(DFlashQwen3ForCausalLM):
 
     model_cls = LiLiCorr
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
-        spec = aphrodite_config.speculative_config
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
+        spec = sonar_config.speculative_config
         assert spec is not None
-        super().__init__(aphrodite_config=aphrodite_config, prefix=prefix)
+        super().__init__(sonar_config=sonar_config, prefix=prefix)
         if self.draft_id_to_target_id is not None:
             raise ValueError("LiLiCorr candidates require the full target vocabulary.")
         self.has_own_lm_head = bool(getattr(self.config, "has_own_lm_head", False))

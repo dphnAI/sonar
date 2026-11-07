@@ -5,26 +5,26 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.warmup.attention_warmup import (
+from sonar.logger import init_logger
+from sonar.model_executor.warmup.attention_warmup import (
     mixed_batch_attention_warmup,
 )
-from aphrodite.models.minimax_m3.nvidia.indexer_msa import MiniMaxM3IndexerMSAImpl
-from aphrodite.models.minimax_m3.nvidia.indexer_nvfp4 import MiniMaxM3IndexerNvfp4Impl
-from aphrodite.models.minimax_m3.nvidia.model import MiniMaxM3SparseAttention
-from aphrodite.models.minimax_m3.nvidia.msa_cutlass_sparse_decode import (
+from sonar.models.minimax_m3.nvidia.indexer_msa import MiniMaxM3IndexerMSAImpl
+from sonar.models.minimax_m3.nvidia.indexer_nvfp4 import MiniMaxM3IndexerNvfp4Impl
+from sonar.models.minimax_m3.nvidia.model import MiniMaxM3SparseAttention
+from sonar.models.minimax_m3.nvidia.msa_cutlass_sparse_decode import (
     NVFP4_BLOCK_SCALE_SHIFT,
     uses_q8kv4_decode,
 )
-from aphrodite.models.minimax_m3.nvidia.sparse_attention_msa import (
+from sonar.models.minimax_m3.nvidia.sparse_attention_msa import (
     MiniMaxM3SparseMSABaseImpl,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.tracing import instrument
+from sonar.platforms import current_platform
+from sonar.tracing import instrument
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
-    from aphrodite.v1.worker.gpu_worker import Worker
+    from sonar.config import SonarConfig
+    from sonar.v1.worker.gpu_worker import Worker
 
 logger = init_logger(__name__)
 
@@ -32,9 +32,7 @@ logger = init_logger(__name__)
 _MSA_KV_CACHE_DTYPES = ("auto", "bfloat16", "fp8", "fp8_e4m3", "nvfp4")
 
 
-def _msa_prebuild_kwargs(
-    aphrodite_config: "AphroditeConfig", module: MiniMaxM3SparseAttention
-) -> dict[str, Any] | None:
+def _msa_prebuild_kwargs(sonar_config: "SonarConfig", module: MiniMaxM3SparseAttention) -> dict[str, Any] | None:
     """``fmha_sm100.warmup`` arguments for the kernels this rank can request."""
     impl = module.impl
     indexer = module.indexer.impl
@@ -51,7 +49,7 @@ def _msa_prebuild_kwargs(
     if not attention and index_cache_dtype is None:
         return None
 
-    spec_config = aphrodite_config.speculative_config
+    spec_config = sonar_config.speculative_config
     num_spec = spec_config.num_speculative_tokens if spec_config is not None else 0
     q8kv4_decode = attention and uses_q8kv4_decode(
         kv_cache_dtype=module.kv_cache_dtype,
@@ -91,9 +89,9 @@ def minimax_m3_msa_warmup(worker: "Worker") -> None:
 
     # Build every native kernel the configuration can request at once instead
     # of compiling each one serially on first use.
-    kwargs = _msa_prebuild_kwargs(worker.aphrodite_config, sparse_module)
+    kwargs = _msa_prebuild_kwargs(worker.sonar_config, sparse_module)
     if kwargs is not None:
-        from aphrodite.third_party.fmha_sm100 import warmup
+        from sonar.third_party.fmha_sm100 import warmup
 
         logger.info("MiniMax M3 MSA kernels: %s", warmup(**kwargs))
 

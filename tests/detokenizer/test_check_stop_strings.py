@@ -10,7 +10,7 @@ multiple tokens (and therefore multiple stop strings) can be appended at once.
 
 import pytest
 
-from aphrodite.v1.engine.detokenizer import check_stop_strings
+from sonar.v1.engine.detokenizer import check_stop_strings
 
 
 @pytest.mark.parametrize("stop", [["a", "is"], ["is", "a"]])

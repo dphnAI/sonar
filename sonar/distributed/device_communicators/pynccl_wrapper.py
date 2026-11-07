@@ -19,7 +19,7 @@
 # recompilation of the code every time we want to switch between different
 # versions. This current implementation, with a **pure** Python wrapper, is
 # more flexible. We can easily switch between different versions of NCCL by
-# changing the environment variable `APHRODITE_NCCL_SO_PATH`, or the `so_file`
+# changing the environment variable `SONAR_NCCL_SO_PATH`, or the `so_file`
 # variable in the code.
 
 import ctypes
@@ -31,10 +31,10 @@ from typing import Any
 import torch
 from torch.distributed import ReduceOp
 
-from aphrodite import envs
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.utils.nccl import find_nccl_library
+from sonar import envs
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.utils.nccl import find_nccl_library
 
 logger = init_logger(__name__)
 
@@ -389,7 +389,7 @@ class NCCLLibrary:
                 "Otherwise, the nccl library might not exist, be corrupted "
                 "or it does not support the current platform %s. "
                 "If you already have the library, please set the "
-                "environment variable APHRODITE_NCCL_SO_PATH"
+                "environment variable SONAR_NCCL_SO_PATH"
                 " to point to the correct nccl library path.",
                 so_file,
                 platform.platform(),
@@ -409,10 +409,10 @@ class NCCLLibrary:
                         "ncclCommWindowRegister",
                         "ncclCommWindowDeregister",
                     ]:
-                        if envs.APHRODITE_USE_NCCL_SYMM_MEM:
+                        if envs.SONAR_USE_NCCL_SYMM_MEM:
                             logger.warning_once(
                                 "The symbol %s is not found in the NCCL "
-                                "library %s. To enable APHRODITE_USE_NCCL_SYMM_MEM "
+                                "library %s. To enable SONAR_USE_NCCL_SYMM_MEM "
                                 " please update your NCCL version to >= "
                                 "2.27.03.",
                                 func.name,
@@ -429,7 +429,7 @@ class NCCLLibrary:
                         continue
                     elif func.name in ("ncclCommSuspend", "ncclCommResume"):
                         # RCCL doesn't export these; NCCL >= 2.29.7 does, and
-                        # Aphrodite's CUDA path already requires that version.
+                        # Sonar's CUDA path already requires that version.
                         # PyNcclCommunicator checks has_symbol() before
                         # calling either.
                         if current_platform.is_rocm():

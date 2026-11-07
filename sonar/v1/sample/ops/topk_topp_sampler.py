@@ -6,17 +6,17 @@ from subprocess import CalledProcessError
 import torch
 import torch.nn as nn
 
-from aphrodite import envs
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.config.model import PROCESSED_LOGPROBS_MODES, LogprobsMode
-from aphrodite.logger import init_logger
-from aphrodite.platforms import CpuArchEnum, current_platform
-from aphrodite.platforms.interface import DeviceCapability
-from aphrodite.triton_utils import HAS_TRITON
-from aphrodite.utils.flashinfer import has_flashinfer
+from sonar import envs
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.config.model import PROCESSED_LOGPROBS_MODES, LogprobsMode
+from sonar.logger import init_logger
+from sonar.platforms import CpuArchEnum, current_platform
+from sonar.platforms.interface import DeviceCapability
+from sonar.triton_utils import HAS_TRITON
+from sonar.utils.flashinfer import has_flashinfer
 
 if HAS_TRITON:
-    from aphrodite.v1.sample.ops.topk_topp_triton import (
+    from sonar.v1.sample.ops.topk_topp_triton import (
         _topk_topp,
         _topp_split_mask,
         _topp_split_stats,
@@ -97,7 +97,7 @@ def _flashinfer_jit_unsupported_reason(capability: DeviceCapability) -> str | No
 def flashinfer_sampler_supported() -> bool:
     """Decide whether FlashInfer's top-p/top-k sampler can be used.
 
-    Returns False (with appropriate logging) when ``APHRODITE_USE_FLASHINFER_SAMPLER``
+    Returns False (with appropriate logging) when ``SONAR_USE_FLASHINFER_SAMPLER``
     is 0, when the platform isn't CUDA, when the GPU's compute capability is
     unsupported, when the GPU has 16 or fewer SMs, or when FlashInfer cannot
     JIT-compile for the current GPU/CUDA toolchain. Raises ``RuntimeError`` if
@@ -112,10 +112,10 @@ def flashinfer_sampler_supported() -> bool:
     """
     if not current_platform.is_cuda():
         return False
-    if not envs.APHRODITE_USE_FLASHINFER_SAMPLER:
-        logger.info_once("FlashInfer top-p/top-k sampling disabled via APHRODITE_USE_FLASHINFER_SAMPLER=0.")
+    if not envs.SONAR_USE_FLASHINFER_SAMPLER:
+        logger.info_once("FlashInfer top-p/top-k sampling disabled via SONAR_USE_FLASHINFER_SAMPLER=0.")
         return False
-    from aphrodite.v1.attention.backends.flashinfer import FlashInferBackend
+    from sonar.v1.attention.backends.flashinfer import FlashInferBackend
 
     capability = current_platform.get_device_capability()
     assert capability is not None
@@ -134,14 +134,12 @@ def flashinfer_sampler_supported() -> bool:
     if unsupported_reason is None:
         logger.info_once("Using FlashInfer for top-p & top-k sampling.", scope="global")
         return True
-    if envs.is_set("APHRODITE_USE_FLASHINFER_SAMPLER"):
+    if envs.is_set("SONAR_USE_FLASHINFER_SAMPLER"):
         raise RuntimeError(
-            f"FlashInfer top-p/top-k sampling unavailable: {unsupported_reason}. "
-            "Unset APHRODITE_USE_FLASHINFER_SAMPLER=1."
+            f"FlashInfer top-p/top-k sampling unavailable: {unsupported_reason}. Unset SONAR_USE_FLASHINFER_SAMPLER=1."
         )
     logger.warning_once(
-        "FlashInfer top-p/top-k sampling unavailable: %s; falling back. "
-        "Set APHRODITE_USE_FLASHINFER_SAMPLER=0 to silence.",
+        "FlashInfer top-p/top-k sampling unavailable: %s; falling back. Set SONAR_USE_FLASHINFER_SAMPLER=0 to silence.",
         unsupported_reason,
     )
     return False
@@ -151,7 +149,7 @@ def xpu_sampler_supported() -> bool:
     """Decide whether the fused XPU top-k/top-p sampler kernel can be used.
 
     Returns False (with appropriate logging) when the platform isn't XPU, when
-    ``APHRODITE_XPU_USE_SAMPLER_KERNEL`` is 0.
+    ``SONAR_XPU_USE_SAMPLER_KERNEL`` is 0.
 
     Note: callers must additionally ensure no request needs a per-request seed
     or greedy sampling, since the kernel draws from the device's default
@@ -159,8 +157,8 @@ def xpu_sampler_supported() -> bool:
     """
     if not current_platform.is_xpu():
         return False
-    if not envs.APHRODITE_XPU_USE_SAMPLER_KERNEL:
-        logger.info_once("Fused XPU top-p/top-k sampling disabled via APHRODITE_XPU_USE_SAMPLER_KERNEL=0.")
+    if not envs.SONAR_XPU_USE_SAMPLER_KERNEL:
+        logger.info_once("Fused XPU top-p/top-k sampling disabled via SONAR_XPU_USE_SAMPLER_KERNEL=0.")
         return False
 
     logger.info_once("Using the fused XPU kernel for top-p & top-k sampling.")
@@ -194,7 +192,7 @@ def xpu_sample(
     # stores top_k as int32. Cast here to avoid dtype mismatch.
     if k is not None:
         k = k.to(torch.int64)
-    torch.ops.aphrodite.xpu_topk_topp_sampler(sampled, logits_to_return, logits, k, p, logprobs_mode, seeds)
+    torch.ops.sonar.xpu_topk_topp_sampler(sampled, logits_to_return, logits, k, p, logprobs_mode, seeds)
     # The custom XPU sampler kernel consumes RNG values internally, so advance
     # the default generator's offset to keep future draws deterministic.
     # pytorch: offset must be multiple of 4
@@ -236,15 +234,15 @@ class TopKTopPSampler(nn.Module):
             else:
                 self.forward = self.forward_cpu
         elif current_platform.is_xpu():
-            if xpu_sampler_supported() and not envs.APHRODITE_BATCH_INVARIANT:
+            if xpu_sampler_supported() and not envs.SONAR_BATCH_INVARIANT:
                 self.forward = self.forward_xpu
             else:
-                if envs.APHRODITE_BATCH_INVARIANT:
-                    logger.info_once("APHRODITE_BATCH_INVARIANT is enabled. Using the PyTorch-native sampler on XPU.")
+                if envs.SONAR_BATCH_INVARIANT:
+                    logger.info_once("SONAR_BATCH_INVARIANT is enabled. Using the PyTorch-native sampler on XPU.")
                 self.forward = self.forward_native
         elif logprobs_mode not in PROCESSED_LOGPROBS_MODES and rocm_aiter_ops.is_enabled():
             # Lazy ROCm-only import keeps architecture detection off CUDA/CPU.
-            from aphrodite.platforms.rocm import on_gfx1250
+            from sonar.platforms.rocm import on_gfx1250
 
             self.on_gfx1250 = on_gfx1250()
             self.aiter_ops = None

@@ -28,7 +28,7 @@ def wrap_kv_caches(kv_caches: dict[str, torch.Tensor]) -> KVCache:
 def striding_block_hashes(block_hashes: list[bytes], blocks_in_chunk: int) -> Iterable[bytes]:
     """Extract chunk-level hashes from block hashes by striding.
 
-    In hash-based Aphrodite, each Aphrodite block has its own hash.  LMCache chunks
+    In hash-based Sonar, each Sonar block has its own hash.  LMCache chunks
     span ``blocks_in_chunk`` consecutive blocks.  The representative hash
     for a chunk is the hash of the **last** block in that chunk (because
     each block hash already encodes its prefix).  So we start at index
@@ -139,7 +139,7 @@ class LMCacheMPSchedulerAdapter:
         server_url: str,
         context: zmq.Context,
         model_name: str,
-        aphrodite_block_size: int,
+        sonar_block_size: int,
         parallel_strategy: ParallelStrategy,
     ):
         """Args:
@@ -147,7 +147,7 @@ class LMCacheMPSchedulerAdapter:
         context: The ZMQ context
 
         model_name: The model name used for LMCache keys
-        aphrodite_block_size: The block size used in Aphrodite
+        sonar_block_size: The block size used in Sonar
         parallel_strategy:
             The parallel strategy, which includes `use_mla`,
             `world_size`, `worker_id` and so on
@@ -163,10 +163,8 @@ class LMCacheMPSchedulerAdapter:
 
         # Read chunk size from lmcache
         self.chunk_size = get_lmcache_chunk_size(self.mq_client)
-        assert self.chunk_size % aphrodite_block_size == 0, (
-            "LMCache chunk size should be a multiple of Aphrodite block size"
-        )
-        self.blocks_in_chunk = self.chunk_size // aphrodite_block_size
+        assert self.chunk_size % sonar_block_size == 0, "LMCache chunk size should be a multiple of Sonar block size"
+        self.blocks_in_chunk = self.chunk_size // sonar_block_size
 
     @property
     def world_size(self) -> int:
@@ -192,9 +190,9 @@ class LMCacheMPSchedulerAdapter:
     ) -> None:
         """Submit a new lookup request to LMCache if there is no ongoing request.
 
-        Supports both token-based and hash-based Aphrodite:
-        - token_ids: token IDs (token-based Aphrodite) -> single token-mode key
-        - block_hashes: block hashes (hash-based Aphrodite) -> strided hash-mode keys
+        Supports both token-based and hash-based Sonar:
+        - token_ids: token IDs (token-based Sonar) -> single token-mode key
+        - block_hashes: block hashes (hash-based Sonar) -> strided hash-mode keys
 
         Exactly one of block_hashes or token_ids must be provided.
 
@@ -275,7 +273,7 @@ class LMCacheMPSchedulerAdapter:
 
     def num_blocks_per_chunk(self) -> int:
         """Returns:
-        The number of aphrodite blocks in a LMCache data chunk
+        The number of sonar blocks in a LMCache data chunk
 
         """
         return self.blocks_in_chunk
@@ -340,7 +338,7 @@ class LMCacheMPWorkerAdapter:
         server_url: str,
         context: zmq.Context,
         model_name: str,
-        aphrodite_block_size: int,
+        sonar_block_size: int,
         parallel_strategy: ParallelStrategy,
     ):
         self.mq_client = MessageQueueClient(server_url, context)
@@ -348,7 +346,7 @@ class LMCacheMPWorkerAdapter:
         # Instance id for GPU worker
         self.instance_id = os.getpid()
 
-        # Registered kv caches from Aphrodite
+        # Registered kv caches from Sonar
         self.kv_caches: dict[str, torch.Tensor] = {}
 
         # Request futures
@@ -358,7 +356,7 @@ class LMCacheMPWorkerAdapter:
 
         # The store requests that have finished execution in LMCache
         self.finished_stores: set[str] = set()
-        # The finished request ids that are passed via Aphrodite and also
+        # The finished request ids that are passed via Sonar and also
         # have corresponding store requests submitted to LMCache before
         self.previously_finished: set[str] = set()
 
@@ -367,8 +365,8 @@ class LMCacheMPWorkerAdapter:
 
         # Read chunk size from lmcache
         chunk_size = get_lmcache_chunk_size(self.mq_client)
-        assert chunk_size % aphrodite_block_size == 0, "LMCache chunk size should be a multiple of Aphrodite block size"
-        self.blocks_in_chunk = chunk_size // aphrodite_block_size
+        assert chunk_size % sonar_block_size == 0, "LMCache chunk size should be a multiple of Sonar block size"
+        self.blocks_in_chunk = chunk_size // sonar_block_size
 
     @property
     def world_size(self) -> int:
@@ -546,7 +544,7 @@ class LMCacheMPWorkerAdapter:
 
         Args:
             finished_req_ids_from_engine: the set of request ids that are
-                reported as finished from the Aphrodite engine side.
+                reported as finished from the Sonar engine side.
 
         Returns:
             A tuple of two sets:
@@ -556,7 +554,7 @@ class LMCacheMPWorkerAdapter:
             - The second set contains the finished retrieve request ids.
 
         Notes:
-            When enabling async scheduling in Aphrodite, the same request ID may appear
+            When enabling async scheduling in Sonar, the same request ID may appear
             multiple times in `finished_req_ids_from_engine`. The adapter should
             take care of deduplicating the request IDs and only return the request
             IDs that have not been returned before.
@@ -618,7 +616,7 @@ class LMCacheMPWorkerAdapter:
 
     def num_blocks_per_chunk(self) -> int:
         """Returns:
-        The number of aphrodite blocks in a LMCache data chunk
+        The number of sonar blocks in a LMCache data chunk
 
         """
         return self.blocks_in_chunk

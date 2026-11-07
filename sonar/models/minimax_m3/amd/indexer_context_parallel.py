@@ -24,29 +24,29 @@ import math
 
 import torch
 
-from aphrodite.config import get_current_aphrodite_config
-from aphrodite.distributed import get_tensor_model_parallel_world_size
-from aphrodite.distributed.parallel_state import GroupCoordinator, get_tp_group
-from aphrodite.forward_context import get_forward_context
-from aphrodite.models.minimax_m3.amd.ops.index_topk import (
+from sonar.config import get_current_sonar_config
+from sonar.distributed import get_tensor_model_parallel_world_size
+from sonar.distributed.parallel_state import GroupCoordinator, get_tp_group
+from sonar.forward_context import get_forward_context
+from sonar.models.minimax_m3.amd.ops.index_topk import (
     SPARSE_BLOCK_SIZE,
     minimax_m3_index_score,
     minimax_m3_index_topk,
 )
-from aphrodite.models.minimax_m3.amd.ops.indexer_context_parallel import (
+from sonar.models.minimax_m3.amd.ops.indexer_context_parallel import (
     check_context_score_inputs,
     indexer_context_scores,
 )
-from aphrodite.models.minimax_m3.amd.ops.indexer_cp_exchange import (
+from sonar.models.minimax_m3.amd.ops.indexer_cp_exchange import (
     all_gather,
     local_topk_keys,
     merge_topk_keys,
 )
-from aphrodite.models.minimax_m3.common.indexer import (
+from sonar.models.minimax_m3.common.indexer import (
     MiniMaxM3IndexerMetadata,
     MiniMaxM3IndexerTritonImpl,
 )
-from aphrodite.triton_utils import triton
+from sonar.triton_utils import triton
 
 
 def _packed(buf: torch.Tensor, dim: int, n: int) -> torch.Tensor:
@@ -229,24 +229,24 @@ class MiniMaxM3IndexerTritonCPImpl(MiniMaxM3IndexerTritonImpl):
 
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
-        aphrodite_config = get_current_aphrodite_config()
-        hf_config = aphrodite_config.model_config.hf_config
+        sonar_config = get_current_sonar_config()
+        hf_config = sonar_config.model_config.hf_config
         text_config = getattr(hf_config, "text_config", hf_config)
         total_heads = text_config.sparse_attention_config["sparse_num_index_heads"]
-        comp = aphrodite_config.compilation_config
+        comp = sonar_config.compilation_config
         max_cg = getattr(comp, "max_cudagraph_capture_size", 0) or 0
-        spec = getattr(aphrodite_config, "speculative_config", None)
+        spec = getattr(sonar_config, "speculative_config", None)
         n_spec = int(getattr(spec, "num_speculative_tokens", 0) or 0) if spec else 0
         # Decode rows per step: every sequence's real and draft tokens, or a
         # CUDA graph capture size (already counted in tokens).
-        max_tokens = max(aphrodite_config.scheduler_config.max_num_seqs * (n_spec + 1), max_cg)
+        max_tokens = max(sonar_config.scheduler_config.max_num_seqs * (n_spec + 1), max_cg)
         device = torch.device("cuda", torch.accelerator.current_device_index())
         self.cp_decode = get_shared_cp_decode(
             total_heads=total_heads,
             rank=get_tp_group().rank_in_group,
             world_size=get_tensor_model_parallel_world_size(),
             max_tokens=max_tokens,
-            max_seq_len=aphrodite_config.model_config.max_model_len,
+            max_seq_len=sonar_config.model_config.max_model_len,
             topk=self.topk_blocks,
             init_blocks=self.init_blocks,
             local_blocks=self.local_blocks,

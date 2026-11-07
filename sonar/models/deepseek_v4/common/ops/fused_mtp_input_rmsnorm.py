@@ -22,14 +22,14 @@ from typing import Any
 
 import torch
 
-from aphrodite.model_executor.warmup.jit_warmup import kernel_launcher
-from aphrodite.model_executor.warmup.jit_warmup_triton_helper import (
-    AphroditeTritonJitKernel,
+from sonar.model_executor.warmup.jit_warmup import kernel_launcher
+from sonar.model_executor.warmup.jit_warmup_triton_helper import (
     LaunchSpec,
+    SonarTritonJitKernel,
     TritonWarmupTensor,
 )
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.math_utils import next_power_of_2
+from sonar.triton_utils import tl, triton
+from sonar.utils.math_utils import next_power_of_2
 
 
 @triton.jit
@@ -50,7 +50,7 @@ def _rmsnorm_row(
     tl.store(out_row_ptr + block, y.to(out_row_ptr.dtype.element_ty), mask=mask)
 
 
-class FusedMTPInputRMSNormKernel(AphroditeTritonJitKernel["FusedMTPInputRMSNormKernel.CompileKey"]):
+class FusedMTPInputRMSNormKernel(SonarTritonJitKernel["FusedMTPInputRMSNormKernel.CompileKey"]):
     @dataclass(frozen=True)
     class CompileKey:
         dtype: torch.dtype
@@ -130,13 +130,13 @@ class FusedMTPInputRMSNormKernel(AphroditeTritonJitKernel["FusedMTPInputRMSNormK
             eps=eps,
         )
 
-    def get_warmup_keys(self, aphrodite_config: Any) -> list[CompileKey]:
-        hf_config = aphrodite_config.model_config.hf_config
+    def get_warmup_keys(self, sonar_config: Any) -> list[CompileKey]:
+        hf_config = sonar_config.model_config.hf_config
         if int(getattr(hf_config, "num_nextn_predict_layers", 0) or 0) <= 0:
             return []
 
         return self._trace_dispatch(self.dispatch)(
-            dtype=aphrodite_config.model_config.dtype,
+            dtype=sonar_config.model_config.dtype,
             hidden=int(hf_config.hidden_size),
             hc_mult=int(hf_config.hc_mult),
             eps=float(hf_config.rms_norm_eps),
@@ -218,7 +218,7 @@ class FusedMTPInputRMSNormKernel(AphroditeTritonJitKernel["FusedMTPInputRMSNormK
         )
 
 
-class MTPSharedHeadRMSNormKernel(AphroditeTritonJitKernel["MTPSharedHeadRMSNormKernel.CompileKey"]):
+class MTPSharedHeadRMSNormKernel(SonarTritonJitKernel["MTPSharedHeadRMSNormKernel.CompileKey"]):
     @dataclass(frozen=True)
     class CompileKey:
         dtype: torch.dtype
@@ -264,13 +264,13 @@ class MTPSharedHeadRMSNormKernel(AphroditeTritonJitKernel["MTPSharedHeadRMSNormK
             eps=eps,
         )
 
-    def get_warmup_keys(self, aphrodite_config: Any) -> list[CompileKey]:
-        hf_config = aphrodite_config.model_config.hf_config
+    def get_warmup_keys(self, sonar_config: Any) -> list[CompileKey]:
+        hf_config = sonar_config.model_config.hf_config
         if int(getattr(hf_config, "num_nextn_predict_layers", 0) or 0) <= 0:
             return []
 
         return self._trace_dispatch(self.dispatch)(
-            dtype=aphrodite_config.model_config.dtype,
+            dtype=sonar_config.model_config.dtype,
             hidden=int(hf_config.hidden_size),
             eps=float(hf_config.rms_norm_eps),
         )

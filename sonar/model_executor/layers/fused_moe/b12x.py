@@ -9,27 +9,27 @@ from typing import Any
 
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite import envs
-from aphrodite.model_executor.layers.fused_moe import b12x_fused_decode
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.config import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar import envs
+from sonar.model_executor.layers.fused_moe import b12x_fused_decode
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEParallelConfig,
     FusedMoEQuantConfig,
 )
-from aphrodite.model_executor.layers.fused_moe.topk_weight_and_reduce import (
+from sonar.model_executor.layers.fused_moe.topk_weight_and_reduce import (
     TopKWeightAndReduceNoOP,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     kMxfp4Static,
     kMxfp8Dynamic,
     kNvfp4Dynamic,
     kNvfp4Static,
 )
-from aphrodite.model_executor.utils import set_weight_attrs
-from aphrodite.platforms import current_platform
-from aphrodite.utils.b12x import (
+from sonar.model_executor.utils import set_weight_attrs
+from sonar.platforms import current_platform
+from sonar.utils.b12x import (
     B12X_BLOCK_CODECS,
     B12xPreparationUnit,
     B12xWarmupUnit,
@@ -153,7 +153,7 @@ def _prepare_b12x_moe_plan(
         # temporary tensors: serving supplies the shared caller-owned scratch.
         return PreparedCall(run=lambda: fused_moe.run(binding=binding))
 
-    prepare_default(plan.request(name="aphrodite:moe", prepare_call=prepare_call))
+    prepare_default(plan.request(name="sonar:moe", prepare_call=prepare_call))
 
 
 def _prepared_moe_call_factory(*, tokens: int, topk: int, prepared: Any, output_dtype: torch.dtype) -> Any:
@@ -335,13 +335,13 @@ class B12xExperts(mk.FusedMoEExpertsModular):
         self._apply_router_weight_on_input = False
         self._native_preparation = False
         if (
-            envs.APHRODITE_DSV41_SM120_NATIVE
+            envs.SONAR_DSV41_SM120_NATIVE
             and current_platform.is_cuda()
             and current_platform.is_device_capability_family(120)
         ):
-            from aphrodite.config import get_current_aphrodite_config
+            from sonar.config import get_current_sonar_config
 
-            self._native_preparation = get_current_aphrodite_config().model_config.quantization == "deepseek_v41_fp8"
+            self._native_preparation = get_current_sonar_config().model_config.quantization == "deepseek_v41_fp8"
         self._native_plan: Any | None = None
         self._native_plan_key: tuple[Any, ...] | None = None
         self._native_scratch_owner: Any | None = None

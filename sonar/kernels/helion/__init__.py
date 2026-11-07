@@ -1,22 +1,22 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Helion integration for Aphrodite."""
+"""Helion integration for Sonar."""
 
-from aphrodite.kernels.helion.case_key import CaseKey
-from aphrodite.kernels.helion.config_manager import (
+from sonar.kernels.helion.case_key import CaseKey
+from sonar.kernels.helion.config_manager import (
     ConfigManager,
     ConfigSet,
 )
-from aphrodite.kernels.helion.register import (
+from sonar.kernels.helion.register import (
     ConfigPicker,
     ConfiguredHelionKernel,
     HelionKernelWrapper,
-    aphrodite_helion_lib,
     get_kernel_by_name,
     get_registered_kernels,
     register_kernel,
+    sonar_helion_lib,
 )
-from aphrodite.kernels.helion.utils import canonicalize_gpu_name, get_canonical_gpu_name
+from sonar.kernels.helion.utils import canonicalize_gpu_name, get_canonical_gpu_name
 
 __all__ = [
     # Config management
@@ -30,7 +30,7 @@ __all__ = [
     "get_kernel_by_name",
     "get_registered_kernels",
     "register_kernel",
-    "aphrodite_helion_lib",
+    "sonar_helion_lib",
     # Utilities
     "canonicalize_gpu_name",
     "get_canonical_gpu_name",

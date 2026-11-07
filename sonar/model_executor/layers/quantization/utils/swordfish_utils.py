@@ -9,7 +9,7 @@ ABI v1 (frozen): int4 weights x fp16/bf16 activations, group scales
 
 import torch
 
-from aphrodite.scalar_type import ScalarType, scalar_types
+from sonar.scalar_type import ScalarType, scalar_types
 
 SWORDFISH_BLOCK_N = 64
 SWORDFISH_BLOCK_K = 64

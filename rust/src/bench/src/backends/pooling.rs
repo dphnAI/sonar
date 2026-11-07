@@ -8,8 +8,8 @@
 //! - `openai-embeddings`: Standard OpenAI `/v1/embeddings` with text input
 //! - `openai-embeddings-chat`: OpenAI `/v1/embeddings` with chat message format (supports
 //!   multimodal)
-//! - `aphrodite-pooling`: Sonar `/pooling` endpoint
-//! - `aphrodite-rerank`: Sonar `/v1/rerank` endpoint (query + documents)
+//! - `sonar-pooling`: Sonar `/pooling` endpoint
+//! - `sonar-rerank`: Sonar `/v1/rerank` endpoint (query + documents)
 
 use std::time::Instant;
 
@@ -45,11 +45,11 @@ impl PoolingBackend {
         let mut output = RequestFuncOutput {
             prompt_len: input.prompt_len,
             num_input_sequences: match self.kind {
-                BackendKind::OpenaiEmbeddings | BackendKind::AphroditePooling => {
+                BackendKind::OpenaiEmbeddings | BackendKind::SonarPooling => {
                     input.prompt_list.as_ref().map_or(1, |list| list.len())
                 }
                 BackendKind::OpenaiEmbeddingsChat => 1,
-                BackendKind::AphroditeRerank => payload
+                BackendKind::SonarRerank => payload
                     .get("documents")
                     .and_then(|documents| documents.as_array())
                     .map_or(0, |documents| documents.len()),
@@ -110,11 +110,11 @@ impl PoolingBackend {
     fn build_payload(&self, input: &RequestFuncInput) -> serde_json::Value {
         let model = input.model_name.as_deref().unwrap_or(&input.model);
 
-        // For "input" field (openai-embeddings, aphrodite-pooling): a batched request
+        // For "input" field (openai-embeddings, sonar-pooling): a batched request
         // (--random-batch-size) sends the text list; otherwise prefer prompt_token_ids
         // when available. The random dataset sets prompt="" and relies on token IDs;
         // the OpenAI embeddings API accepts both text strings and token ID arrays.
-        // Note: embeddings-chat uses text in messages; aphrodite-rerank uses text as query.
+        // Note: embeddings-chat uses text in messages; sonar-rerank uses text as query.
         let input_value = if let Some(ref list) = input.prompt_list {
             serde_json::json!(list.iter().map(|s| s.as_ref()).collect::<Vec<&str>>())
         } else if let Some(ref token_ids) = input.prompt_token_ids {
@@ -123,9 +123,9 @@ impl PoolingBackend {
             serde_json::json!(input.prompt.as_ref())
         };
 
-        let is_aphrodite_backend = matches!(
+        let is_sonar_backend = matches!(
             self.kind,
-            BackendKind::AphroditePooling | BackendKind::AphroditeRerank
+            BackendKind::SonarPooling | BackendKind::SonarRerank
         );
 
         let mut payload = match self.kind {
@@ -134,9 +134,9 @@ impl PoolingBackend {
                     "model": model,
                     "input": input_value,
                 });
-                // truncate_prompt_tokens is Aphrodite-specific; only include for Aphrodite backends
+                // truncate_prompt_tokens is Sonar-specific; only include for Sonar backends
                 // to avoid breaking standard OpenAI providers.
-                if is_aphrodite_backend {
+                if is_sonar_backend {
                     p["truncate_prompt_tokens"] = serde_json::json!(-1);
                 }
                 p
@@ -152,25 +152,25 @@ impl PoolingBackend {
                     "model": model,
                     "messages": [{"role": "user", "content": content_json}],
                 });
-                if is_aphrodite_backend {
+                if is_sonar_backend {
                     p["truncate_prompt_tokens"] = serde_json::json!(-1);
                 }
                 p
             }
-            BackendKind::AphroditePooling => {
+            BackendKind::SonarPooling => {
                 serde_json::json!({
                     "model": model,
                     "input": input_value,
                     "truncate_prompt_tokens": -1,
                 })
             }
-            BackendKind::AphroditeRerank => {
+            BackendKind::SonarRerank => {
                 // random-rerank dataset: prompt_list = [query, doc1, doc2, ...]
-                // (mirrors Python async_request_aphrodite_rerank).
+                // (mirrors Python async_request_sonar_rerank).
                 if let Some(ref list) = input.prompt_list {
                     if list.len() < 2 {
                         tracing::warn!(
-                            backend = "aphrodite-rerank",
+                            backend = "sonar-rerank",
                             inputs = list.len(),
                             "rerank request has no documents"
                         );
@@ -188,7 +188,7 @@ impl PoolingBackend {
                     let query = input.prompt.as_ref();
                     if query.is_empty() && input.prompt_token_ids.is_some() {
                         tracing::warn!(
-                            backend = "aphrodite-rerank",
+                            backend = "sonar-rerank",
                             dataset = "random",
                             "rerank request has an empty query; use the random-rerank dataset"
                         );
@@ -299,7 +299,7 @@ mod tests {
         let payload = backend.build_payload(&input);
         assert_eq!(payload["input"], serde_json::json!(["t1", "t2", "t3"]));
         assert_eq!(payload["model"], "bge");
-        // truncate_prompt_tokens is Aphrodite-specific and deliberately omitted for
+        // truncate_prompt_tokens is Sonar-specific and deliberately omitted for
         // the plain OpenAI embeddings backend.
         assert!(payload.get("truncate_prompt_tokens").is_none());
     }
@@ -307,7 +307,7 @@ mod tests {
     #[test]
     fn test_rerank_payload_query_and_documents() {
         let backend = PoolingBackend {
-            kind: BackendKind::AphroditeRerank,
+            kind: BackendKind::SonarRerank,
         };
         let input = RequestFuncInput {
             model: "reranker".to_string(),
@@ -323,7 +323,7 @@ mod tests {
     #[test]
     fn test_rerank_payload_legacy_single_prompt() {
         let backend = PoolingBackend {
-            kind: BackendKind::AphroditeRerank,
+            kind: BackendKind::SonarRerank,
         };
         let input = RequestFuncInput {
             model: "reranker".to_string(),

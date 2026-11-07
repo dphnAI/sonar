@@ -10,30 +10,30 @@ import torch
 from torch import nn
 from transformers import PreTrainedConfig
 
-from aphrodite.config import AphroditeConfig, CacheConfig, ModelConfig
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe import fused_moe_make_expert_params_mapping
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.config import CacheConfig, ModelConfig, SonarConfig
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe import fused_moe_make_expert_params_mapping
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.model_loader.weight_utils import (
+from sonar.model_executor.model_loader.weight_utils import (
     default_weight_loader,
     maybe_remap_kv_scale_name,
 )
-from aphrodite.model_executor.models.deepseek_v2 import _try_load_fp8_indexer_wk
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.models.deepseek_v2 import _try_load_fp8_indexer_wk
+from sonar.model_executor.models.utils import (
     get_pp_missing_layer_names,
     is_pp_missing_parameter,
     maybe_prefix,
 )
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.v1.outputs import SamplerOutput
-from aphrodite.v1.sample.metadata import SamplingMetadata
-from aphrodite.v1.sample.sampler import Sampler
+from sonar.sequence import IntermediateTensors
+from sonar.v1.outputs import SamplerOutput
+from sonar.v1.sample.metadata import SamplingMetadata
+from sonar.v1.sample.sampler import Sampler
 
 from .model import HYV4DecoderLayer, _normalize_hyv4_config
 
@@ -119,7 +119,7 @@ def _prepare_mtp_fp8_expert_scale(
     loaded_weight: torch.Tensor,
 ) -> tuple[str, torch.Tensor]:
     """Normalize block-wise FP8 expert scale names and dtypes."""
-    from aphrodite.model_executor.layers.quantization.fp8 import Fp8Config
+    from sonar.model_executor.layers.quantization.fp8 import Fp8Config
 
     if (
         isinstance(quant_config, Fp8Config)
@@ -172,7 +172,7 @@ def _create_mtp_quant_config(
         return None
 
     if mtp_quant_algo == "FP8":
-        from aphrodite.model_executor.layers.quantization.fp8 import Fp8Config
+        from sonar.model_executor.layers.quantization.fp8 import Fp8Config
 
         logger.info_once("MTP uses FP8 quantization (mtp_quant_algo=FP8).")
         hf_quant_config = getattr(hf_config, "quantization_config", None) or {}
@@ -312,7 +312,7 @@ class HYV4MultiTokenPredictorLayer(nn.Module):
         self,
         config: PreTrainedConfig,
         prefix: str,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         model_config: ModelConfig,
         cache_config: CacheConfig | None = None,
         quant_config: QuantizationConfig | None = None,
@@ -342,7 +342,7 @@ class HYV4MultiTokenPredictorLayer(nn.Module):
 
         self.mtp_block = HYV4DecoderLayer(
             config=mtp_config,
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             cache_config=cache_config,
             quant_config=quant_config,
             prefix=prefix,
@@ -382,10 +382,10 @@ def _extend_layer_types(layer_types: list[str] | None, layer_idx: int, fallback:
 class HYV4MultiTokenPredictor(nn.Module):
     """Owns the MTP draft blocks and their shared embedding / logits path."""
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        target_config = aphrodite_config.model_config.hf_config
-        speculative_config = aphrodite_config.speculative_config
+        target_config = sonar_config.model_config.hf_config
+        speculative_config = sonar_config.speculative_config
         assert speculative_config is not None, "HYV4MTP can only be built as a speculative draft model"
         draft_model_config = speculative_config.draft_model_config
         assert draft_model_config is not None
@@ -393,7 +393,7 @@ class HYV4MultiTokenPredictor(nn.Module):
         self.mtp_start_layer_idx = target_config.num_hidden_layers
         self.num_mtp_layers = max(getattr(target_config, "num_nextn_predict_layers", 1), 1)
         self.quant_config = _remap_mtp_quant_exclusions(
-            _create_mtp_quant_config(config, aphrodite_config.quant_config),
+            _create_mtp_quant_config(config, sonar_config.quant_config),
             self.mtp_start_layer_idx,
             self.num_mtp_layers,
         )
@@ -405,10 +405,10 @@ class HYV4MultiTokenPredictor(nn.Module):
         # before any draft forward.
         self.topk_indices_buffer: torch.Tensor | None = None
         if hasattr(config, "index_topk"):
-            from aphrodite.platforms import current_platform
+            from sonar.platforms import current_platform
 
             self.topk_indices_buffer = torch.empty(
-                aphrodite_config.scheduler_config.max_num_batched_tokens,
+                sonar_config.scheduler_config.max_num_batched_tokens,
                 config.index_topk,
                 dtype=torch.int32,
                 device=current_platform.device_type,
@@ -419,9 +419,9 @@ class HYV4MultiTokenPredictor(nn.Module):
                 str(idx): HYV4MultiTokenPredictorLayer(
                     config,
                     f"{prefix}.layers.{idx}",
-                    aphrodite_config=aphrodite_config,
+                    sonar_config=sonar_config,
                     model_config=draft_model_config,
-                    cache_config=aphrodite_config.cache_config,
+                    cache_config=sonar_config.cache_config,
                     quant_config=self.quant_config,
                     topk_indices_buffer=self.topk_indices_buffer,
                 )
@@ -507,10 +507,10 @@ class HYV4MTP(nn.Module):
         "wk_weights_proj": ["wk", "weights_proj"],
     }
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        self.config = aphrodite_config.model_config.hf_config
-        self.model = HYV4MultiTokenPredictor(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.config = sonar_config.model_config.hf_config
+        self.model = HYV4MultiTokenPredictor(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
         self.quant_config = self.model.quant_config
         self.sampler = Sampler()
 
@@ -858,7 +858,7 @@ class HYV4MTP(nn.Module):
         # null``); silence them only when the parameter is actually the
         # sentinel type so a genuine mismatch on a same-named tensor still
         # reaches the warning.
-        from aphrodite.model_executor.layers.quantization.kv_cache import (
+        from sonar.model_executor.layers.quantization.kv_cache import (
             KVCacheScaleParameter,
         )
 

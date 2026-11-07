@@ -3,14 +3,14 @@
 
 use std::collections::HashMap;
 
-use aphrodite_engine_core_client::protocol::output::StopReason;
-use aphrodite_engine_core_client::protocol::request::ReasoningParserKwargs;
-use aphrodite_llm::WeightVersionSpan;
-use aphrodite_text::SamplingParams;
 use llm_multimodal::MediaContentPart;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use serde_with::DefaultOnNull;
+use sonar_engine_core_client::protocol::output::StopReason;
+use sonar_engine_core_client::protocol::request::ReasoningParserKwargs;
+use sonar_llm::WeightVersionSpan;
+use sonar_text::SamplingParams;
 use validator::Validate;
 
 use crate::routes::openai::utils::metrics::{
@@ -47,7 +47,7 @@ pub struct GenerateSamplingParams {
     pub inner: SamplingParams,
 }
 
-/// Aphrodite-compatible request type for the token-in/token-out generate API.
+/// Sonar-compatible request type for the token-in/token-out generate API.
 #[serde_with::skip_serializing_none]
 #[serde_with::serde_as]
 #[derive(Debug, Clone, Deserialize, Serialize, Validate)]
@@ -92,7 +92,7 @@ pub enum GenerateOutputMode {
     Text,
 }
 
-/// Mirrors the Python Aphrodite `GenerateResponseChoice` class.
+/// Mirrors the Python Sonar `GenerateResponseChoice` class.
 ///
 /// Do not skip serializing `None` fields here: non-streaming response types
 /// should serialize `None` as explicit `null`.
@@ -110,7 +110,7 @@ pub(super) struct GenerateResponseChoice {
     pub weight_versions: Option<Vec<WeightVersionSpan>>,
 }
 
-/// Mirrors the Python Aphrodite `GenerateResponseStreamChoice` class.
+/// Mirrors the Python Sonar `GenerateResponseStreamChoice` class.
 #[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, Serialize)]
 pub(super) struct GenerateResponseStreamChoice {
@@ -127,7 +127,7 @@ pub(super) struct GenerateResponseStreamChoice {
     pub weight_versions: Option<Vec<WeightVersionSpan>>,
 }
 
-/// Mirrors the Python Aphrodite `GenerateStreamResponse` class.
+/// Mirrors the Python Sonar `GenerateStreamResponse` class.
 #[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, Serialize)]
 pub(super) struct GenerateStreamResponse {
@@ -142,7 +142,7 @@ pub(super) struct GenerateStreamResponse {
     pub metrics: Option<PerRequestMetrics<StreamingSpeculativeDecodingMetrics>>,
 }
 
-/// Mirrors the Python Aphrodite `GenerateResponse` class.
+/// Mirrors the Python Sonar `GenerateResponse` class.
 #[derive(Debug, Clone, Serialize)]
 pub(super) struct GenerateResponse {
     pub request_id: String,
@@ -177,14 +177,14 @@ pub(super) struct PlaceholderRangeInfo {
     pub length: usize,
 }
 
-/// Mirrors the Python Aphrodite `GenerateLogProbs` class: output logprobs for one
+/// Mirrors the Python Sonar `GenerateLogProbs` class: output logprobs for one
 /// choice, carrying integer token ids rather than the OpenAI string token.
 #[derive(Debug, Clone, Serialize)]
 pub(super) struct GenerateLogProbs {
     pub content: Option<Vec<GenerateLogProbsContent>>,
 }
 
-/// Mirrors the Python Aphrodite `GenerateLogProbsContent` class: the sampled token
+/// Mirrors the Python Sonar `GenerateLogProbsContent` class: the sampled token
 /// at one position plus its top-k candidates, in the engine's order: the
 /// sampled token first, then the remaining candidates in rank order.
 #[derive(Debug, Clone, Serialize)]
@@ -195,7 +195,7 @@ pub(super) struct GenerateLogProbsContent {
     pub top_logprobs: Vec<GenerateLogProb>,
 }
 
-/// Mirrors the Python Aphrodite `GenerateLogProb` class: one candidate token.
+/// Mirrors the Python Sonar `GenerateLogProb` class: one candidate token.
 #[derive(Debug, Clone, Serialize)]
 pub(super) struct GenerateLogProb {
     pub token_id: u32,
@@ -203,7 +203,7 @@ pub(super) struct GenerateLogProb {
     pub rank: Option<u32>,
 }
 
-/// Mirrors the Python Aphrodite `Logprob` class used in prompt-logprobs payloads.
+/// Mirrors the Python Sonar `Logprob` class used in prompt-logprobs payloads.
 #[derive(Debug, Clone, Serialize)]
 pub(super) struct GenerateLogprob {
     pub logprob: f32,

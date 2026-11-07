@@ -4,7 +4,7 @@
 
 import pytest
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 if not current_platform.is_device_capability_family(100):
     pytest.skip(
@@ -16,14 +16,14 @@ import torch
 from flashinfer import fp4_quantize
 from torch.nn import functional as F
 
-from aphrodite.model_executor.layers.activation import SiluAndMul
-from aphrodite.model_executor.layers.fused_moe.experts.flashinfer_cutedsl_batched_moe import (  # noqa: E501
+from sonar.model_executor.layers.activation import SiluAndMul
+from sonar.model_executor.layers.fused_moe.experts.flashinfer_cutedsl_batched_moe import (  # noqa: E501
     flashinfer_cutedsl_moe_masked,
 )
-from aphrodite.utils.flashinfer import (
+from sonar.utils.flashinfer import (
     flashinfer_cutedsl_grouped_gemm_nt_masked as cutedsl_gmm_masked,
 )
-from aphrodite.utils.flashinfer import (
+from sonar.utils.flashinfer import (
     scaled_fp4_grouped_quantize,
 )
 

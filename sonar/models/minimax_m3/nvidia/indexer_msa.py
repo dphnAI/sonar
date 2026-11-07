@@ -26,26 +26,26 @@ from typing import ClassVar
 
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.forward_context import get_forward_context
-from aphrodite.models.minimax_m3.common.indexer import (
+from sonar.config import SonarConfig
+from sonar.forward_context import get_forward_context
+from sonar.models.minimax_m3.common.indexer import (
     MiniMaxM3IndexerBackend,
     MiniMaxM3IndexerDecodeMetadata,
     MiniMaxM3IndexerImpl,
     MiniMaxM3IndexerMetadata,
     MiniMaxM3IndexerMetadataBuilder,
 )
-from aphrodite.models.minimax_m3.common.ops.index_topk import (
+from sonar.models.minimax_m3.common.ops.index_topk import (
     minimax_m3_index_decode_score,
 )
-from aphrodite.models.minimax_m3.nvidia.ops import minimax_m3_index_decode_score_cutedsl
-from aphrodite.v1.attention.backend import (
+from sonar.models.minimax_m3.nvidia.ops import minimax_m3_index_decode_score_cutedsl
+from sonar.v1.attention.backend import (
     AttentionBackend,
     AttentionCGSupport,
     CommonAttentionMetadata,
 )
-from aphrodite.v1.attention.backends.utils import split_decodes_and_prefills
-from aphrodite.v1.kv_cache_interface import AttentionSpec
+from sonar.v1.attention.backends.utils import split_decodes_and_prefills
+from sonar.v1.kv_cache_interface import AttentionSpec
 
 # Page size == sparse block size == index-K block; fmha tile id == M3 block id.
 PAGE_SIZE = 128
@@ -119,10 +119,10 @@ class MiniMaxM3IndexerMSAMetadataBuilder(MiniMaxM3IndexerMetadataBuilder):
         self,
         kv_cache_spec: AttentionSpec,
         layer_names: list[str],
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
     ) -> None:
-        super().__init__(kv_cache_spec, layer_names, aphrodite_config, device)
+        super().__init__(kv_cache_spec, layer_names, sonar_config, device)
         # Persistent unified score buffer [T, H, MAX_K_TILES] shared by all
         # indexer layers and reused across forwards. Stable address (required
         # for the captured decode path) + fixed tile dim so the decode score
@@ -130,7 +130,7 @@ class MiniMaxM3IndexerMSAMetadataBuilder(MiniMaxM3IndexerMetadataBuilder):
         # build(); the valid/padding partition is a per-forward constant, so
         # every layer overwrites the same valid tiles before its own top-k.
         self.unified_scores_buffer = torch.empty(
-            aphrodite_config.scheduler_config.max_num_batched_tokens,
+            sonar_config.scheduler_config.max_num_batched_tokens,
             self.num_index_heads,
             MAX_K_TILES,
             dtype=torch.float32,
@@ -193,7 +193,7 @@ class MiniMaxM3IndexerMSAMetadataBuilder(MiniMaxM3IndexerMetadataBuilder):
         if num_prefills > 0:
             # Prefill is eager (not captured); the host lengths it needs (and the
             # _fmha_sm100_plan .tolist() inside) make the D->H sync acceptable.
-            from aphrodite.third_party.fmha_sm100.api import _fmha_sm100_plan
+            from sonar.third_party.fmha_sm100.api import _fmha_sm100_plan
 
             lo, hi = num_decodes, num_reqs
             qsl_cpu = common_attn_metadata.query_start_loc_cpu[: num_reqs + 1]
@@ -308,7 +308,7 @@ class MiniMaxM3IndexerMSAImpl(MiniMaxM3IndexerImpl):
             )
 
         if md.prefill_msa is not None:
-            from aphrodite.third_party.fmha_sm100.api import _fmha_sm100
+            from sonar.third_party.fmha_sm100.api import _fmha_sm100
 
             p = md.prefill_msa
             # Index-K cache (num_blocks, 128, D) -> paged MQA (num_blocks,1,128,D).
@@ -332,7 +332,7 @@ class MiniMaxM3IndexerMSAImpl(MiniMaxM3IndexerImpl):
         # (THK, no transpose) into ``buf``. num_valid_pages drives force_end_blocks
         # (always keep each token's local block; fmha OnlyScore won't) + the -1
         # out-of-range clamp.
-        from aphrodite.third_party.fmha_sm100.api import sparse_topk_select
+        from sonar.third_party.fmha_sm100.api import sparse_topk_select
 
         sparse_topk_select(
             unified_scores,

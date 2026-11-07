@@ -12,8 +12,8 @@ per-request arithmetic and the rejection sampler are both exercised.
 import pytest
 import torch
 
-from aphrodite import LLM, SamplingParams
-from aphrodite.distributed import cleanup_dist_env_and_memory
+from sonar import LLM, SamplingParams
+from sonar.distributed import cleanup_dist_env_and_memory
 from tests.utils import wait_for_memory_to_settle
 
 from .utils import _skip_if_insufficient_gpus_for_tp, get_test_prompts, greedy_sampling
@@ -37,12 +37,12 @@ def test_mtp_sharded_sampling_equivalence(monkeypatch: pytest.MonkeyPatch):
 
     with monkeypatch.context() as m:
         # Batch-sharded sampling only exists in the V2 model runner.
-        m.setenv("APHRODITE_USE_V2_MODEL_RUNNER", "1")
+        m.setenv("SONAR_USE_V2_MODEL_RUNNER", "1")
         # Required for the collective_rpc mode check below.
-        m.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
+        m.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")
         # Queue every request before the first step, so both boots schedule
         # the same batches -- see tests/v1/e2e/general/test_sharded_sampling.py.
-        m.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
+        m.setenv("SONAR_ENABLE_V1_MULTIPROCESSING", "0")
 
         def run(disable_sharding: bool):
             llm = LLM(
@@ -118,9 +118,9 @@ def test_dspark_sharded_sampling_equivalence(monkeypatch: pytest.MonkeyPatch):
     test_prompts = get_test_prompts(mm_enabled=False, num_prompts=32)
 
     with monkeypatch.context() as m:
-        m.setenv("APHRODITE_USE_V2_MODEL_RUNNER", "1")
-        m.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
-        m.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
+        m.setenv("SONAR_USE_V2_MODEL_RUNNER", "1")
+        m.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")
+        m.setenv("SONAR_ENABLE_V1_MULTIPROCESSING", "0")
 
         def run(disable_sharding: bool):
             llm = LLM(

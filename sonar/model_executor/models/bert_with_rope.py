@@ -6,43 +6,43 @@ import torch
 from torch import nn
 from transformers import PreTrainedConfig
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, CacheConfig
-from aphrodite.distributed import (
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import CacheConfig, SonarConfig
+from sonar.distributed import (
     divide,
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
     tensor_model_parallel_all_reduce,
 )
-from aphrodite.model_executor.layers.activation import get_act_and_mul_fn, get_act_fn
-from aphrodite.model_executor.layers.attention import (
+from sonar.model_executor.layers.activation import get_act_and_mul_fn, get_act_fn
+from sonar.model_executor.layers.attention import (
     EncoderOnlyAttention,
 )
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.model_executor.layers.fused_moe import (
     GateLinear,
     activation_without_mul,
     fused_topk,
 )
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     MergedColumnParallelLinear,
     QKVParallelLinear,
     ReplicatedLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.pooler import DispatchPooler
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.layers.vocab_parallel_embedding import VocabParallelEmbedding
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.layers.pooler import DispatchPooler
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.layers.vocab_parallel_embedding import VocabParallelEmbedding
+from sonar.model_executor.model_loader.weight_utils import default_weight_loader
+from sonar.model_executor.models.utils import (
     AutoWeightsLoader,
     WeightsMapper,
     maybe_prefix,
 )
-from aphrodite.model_executor.utils import set_weight_attrs
-from aphrodite.platforms import current_platform
-from aphrodite.sequence import IntermediateTensors
+from sonar.model_executor.utils import set_weight_attrs
+from sonar.platforms import current_platform
+from sonar.sequence import IntermediateTensors
 
 from .bert import BertPooler
 from .interfaces import SupportsCrossEncoding, SupportsQuant
@@ -321,7 +321,7 @@ class NomicMoE(nn.Module):
         # after supporting ungated activation for it.
         topk_weights, topk_ids, _ = fused_topk(hidden_states, router_logits, self.top_k, renormalize=False)
 
-        final_hidden_states = torch.ops.aphrodite.fused_experts(
+        final_hidden_states = torch.ops.sonar.fused_experts(
             hidden_states=hidden_states,
             w1=self.w1,
             w2=self.w2,
@@ -400,15 +400,15 @@ class BertWithRopeBlock(nn.Module):
 class BertWithRopeEncoder(nn.Module):
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         bias: bool = True,
         rotary_kwargs: dict | None = None,
         prefix: str = "",
     ):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        cache_config = aphrodite_config.cache_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        cache_config = sonar_config.cache_config
+        quant_config = sonar_config.quant_config
         every_n = getattr(config, "moe_every_n_layers", 0)
         self.layers = nn.ModuleList(
             [
@@ -438,30 +438,30 @@ class BertWithRopeEncoder(nn.Module):
 @support_torch_compile
 @default_pooling_type(seq_pooling_type="CLS")
 class BertWithRope(nn.Module, SupportsQuant):
-    hf_to_aphrodite_mapper = WeightsMapper(orig_to_new_prefix={"model.": ""})
+    hf_to_sonar_mapper = WeightsMapper(orig_to_new_prefix={"model.": ""})
 
     def __init__(
         self,
         *,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
         add_pooling_layer: bool = False,
     ):
         super().__init__()
 
-        self.aphrodite_config = aphrodite_config
+        self.sonar_config = sonar_config
         self.add_pooling_layer = add_pooling_layer
-        self.config = aphrodite_config.model_config.hf_config
+        self.config = sonar_config.model_config.hf_config
         self.embeddings = BertWithRopeEmbedding(self.config)
         self.encoder = BertWithRopeEncoder(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             bias=getattr(self.config, "bias", True),
             rotary_kwargs=self.config.rotary_kwargs,
             prefix=f"{prefix}.encoder",
         )
 
         if add_pooling_layer:
-            self.pooler: BertPooler | None = BertPooler(aphrodite_config.model_config)
+            self.pooler: BertPooler | None = BertPooler(sonar_config.model_config)
         else:
             self.pooler = None
 
@@ -483,7 +483,7 @@ class BertWithRope(nn.Module, SupportsQuant):
         return self.encoder(positions, hidden_states)
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
-        weights = self.hf_to_aphrodite_mapper.apply(weights)
+        weights = self.hf_to_sonar_mapper.apply(weights)
 
         if self.config.hidden_act in ["silu", "geglu"]:
             stacked_params_mapping = [
@@ -528,7 +528,7 @@ class BertWithRope(nn.Module, SupportsQuant):
 class NomicBertModel(BertWithRope):
     # for https://huggingface.co/nomic-ai/nomic-bert-2048
 
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_substr={
             "emb_ln": "embeddings.LayerNorm",
             "attn.Wqkv": "attn.qkv_proj",
@@ -549,7 +549,7 @@ class NomicBertModel(BertWithRope):
 class GteNewModel(BertWithRope):
     # for https://huggingface.co/Alibaba-NLP/new-impl
 
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_substr={
             "new.": "",
             "layer": "layers",
@@ -558,8 +558,8 @@ class GteNewModel(BertWithRope):
         }
     )
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "", **kwargs):
-        super().__init__(aphrodite_config=aphrodite_config, prefix=prefix, **kwargs)
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "", **kwargs):
+        super().__init__(sonar_config=sonar_config, prefix=prefix, **kwargs)
 
         # GteNewModel only gate_up_proj does not have bias.
         for layer in self.encoder.layers:
@@ -591,7 +591,7 @@ class GteNewModel(BertWithRope):
 class SnowflakeGteNewModel(GteNewModel):
     # for Snowflake/snowflake-arctic-embed-m-v2.0
 
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_substr={
             "layer": "layers",
             "attention.qkv_proj": "attn.qkv_proj",
@@ -603,7 +603,7 @@ class SnowflakeGteNewModel(GteNewModel):
 class JinaRobertaModel(BertWithRope):
     # for https://huggingface.co/jinaai/jina-embeddings-v3
 
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_substr={
             "emb_ln": "embeddings.LayerNorm",
             "mixer.Wqkv": "attn.qkv_proj",
@@ -622,7 +622,7 @@ class JinaRobertaModel(BertWithRope):
         # This is a temporary solution until we have a better way to handle
 
         scaling = self.config.lora_alpha / self.config.lora_rank
-        device = self.aphrodite_config.device_config.device
+        device = self.sonar_config.device_config.device
 
         weights_dict = {name: weight for name, weight in weights}
 
@@ -668,23 +668,23 @@ class JinaRobertaModel(BertWithRope):
 class GteNewForSequenceClassification(nn.Module, SupportsCrossEncoding):
     is_pooling_model = True
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
 
-        self.new = GteNewModel(aphrodite_config=aphrodite_config, prefix=prefix, add_pooling_layer=True)
+        self.new = GteNewModel(sonar_config=sonar_config, prefix=prefix, add_pooling_layer=True)
         self.classifier = ReplicatedLinear(
             config.hidden_size,
             config.num_labels,
             bias=True,
             quant_config=quant_config,
-            params_dtype=aphrodite_config.model_config.head_dtype,
+            params_dtype=sonar_config.model_config.head_dtype,
             prefix=maybe_prefix(prefix, "classifier"),
             return_bias=False,
         )
 
-        pooler_config = aphrodite_config.model_config.pooler_config
+        pooler_config = sonar_config.model_config.pooler_config
         assert pooler_config is not None
 
         self.pooler = DispatchPooler.for_seq_cls(

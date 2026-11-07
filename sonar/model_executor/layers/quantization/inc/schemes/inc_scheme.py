@@ -7,8 +7,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import torch
 
-    from aphrodite.model_executor.layers.fused_moe import FusedMoEMethodBase
-    from aphrodite.model_executor.layers.linear import LinearMethodBase
+    from sonar.model_executor.layers.fused_moe import FusedMoEMethodBase
+    from sonar.model_executor.layers.linear import LinearMethodBase
 
     from ..config_parser import INCLayerConfig
     from ..inc import INCConfig

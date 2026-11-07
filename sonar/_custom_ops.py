@@ -7,14 +7,14 @@ from typing import TYPE_CHECKING, Literal
 
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.scalar_type import ScalarType
-from aphrodite.utils.flashinfer import (
+import sonar.envs as envs
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.scalar_type import ScalarType
+from sonar.utils.flashinfer import (
     flashinfer_quant_nvfp4_8x4_sf_layout,
 )
-from aphrodite.utils.math_utils import cdiv
+from sonar.utils.math_utils import cdiv
 
 logger = init_logger(__name__)
 
@@ -50,7 +50,7 @@ def create_fp4_scale_tensor(
     https://docs.nvidia.com/cuda/parallel-thread-execution/
     #tcgen05-mma-scale-factor-b-layout-4x
     """
-    from aphrodite.utils.math_utils import round_up
+    from sonar.utils.math_utils import round_up
 
     block_size = 16
     if is_sf_swizzled_layout:
@@ -422,7 +422,7 @@ def paged_attention_rocm(
     k_scale: torch.Tensor,
     v_scale: torch.Tensor,
     fp8_out_scale: torch.Tensor | None = None,
-    mfma_type: str = "fp8" if envs.APHRODITE_ROCM_FP8_MFMA_PAGE_ATTN else "f16",
+    mfma_type: str = "fp8" if envs.SONAR_ROCM_FP8_MFMA_PAGE_ATTN else "f16",
     use_interleaved_v_cache: bool = False,
 ) -> None:
     torch.ops._rocm_C.paged_attention(
@@ -858,8 +858,8 @@ def awq_dequantize(
     thx: int,
     thy: int,
 ) -> torch.Tensor:
-    if envs.APHRODITE_USE_TRITON_AWQ:
-        from aphrodite.model_executor.layers.quantization.awq_triton import (
+    if envs.SONAR_USE_TRITON_AWQ:
+        from sonar.model_executor.layers.quantization.awq_triton import (
             awq_dequantize_triton,
         )
 
@@ -891,8 +891,8 @@ def awq_gemm(
     qzeros: torch.Tensor,
     split_k_iters: int,
 ) -> torch.Tensor:
-    if envs.APHRODITE_USE_TRITON_AWQ:
-        from aphrodite.model_executor.layers.quantization.awq_triton import awq_gemm_triton
+    if envs.SONAR_USE_TRITON_AWQ:
+        from sonar.model_executor.layers.quantization.awq_triton import awq_gemm_triton
 
         return awq_gemm_triton(input, qweight, scales, qzeros, split_k_iters)
     return torch.ops._C.awq_gemm(input, qweight, scales, qzeros, split_k_iters)
@@ -1098,7 +1098,7 @@ def cutlass_scaled_mm(
 
     cutlass_compatible_b = b.shape[0] % 16 == 0 and b.shape[1] % 16 == 0
     if current_platform.is_rocm() or not cutlass_compatible_b:
-        from aphrodite.model_executor.layers.quantization.compressed_tensors.triton_scaled_mm import (  # noqa
+        from sonar.model_executor.layers.quantization.compressed_tensors.triton_scaled_mm import (  # noqa
             triton_scaled_mm,
         )
 
@@ -2101,14 +2101,14 @@ def scaled_fp4_experts_quant(
     # NVFP4 MoE Expert Quantization. This is used to prevent the kernel
     # from running out of memory. This value can also be increased to support
     # larger models.
-    MAX_TOKENS_PER_EXPERT = envs.APHRODITE_MAX_TOKENS_PER_EXPERT_FP4_MOE
+    MAX_TOKENS_PER_EXPERT = envs.SONAR_MAX_TOKENS_PER_EXPERT_FP4_MOE
     m_numtopk, k = input_tensor.shape
 
     assert m_numtopk <= MAX_TOKENS_PER_EXPERT * topk, (
         f"m_numtopk must be less than MAX_TOKENS_PER_EXPERT("
         f"{MAX_TOKENS_PER_EXPERT})"
         f" for cutlass_moe_fp4, observed m_numtopk = {m_numtopk}. Use"
-        f" APHRODITE_MAX_TOKENS_PER_EXPERT_FP4_MOE to set this value."
+        f" SONAR_MAX_TOKENS_PER_EXPERT_FP4_MOE to set this value."
     )
     scales_k = k // 16
     padded_k = (scales_k + (4 - 1)) // 4
@@ -2160,7 +2160,7 @@ def silu_and_mul_scaled_fp4_experts_quant(
     # NVFP4 MoE Expert Quantization. This is used to prevent the kernel
     # from running out of memory. This value can also be increased to support
     # larger models.
-    MAX_TOKENS_PER_EXPERT = envs.APHRODITE_MAX_TOKENS_PER_EXPERT_FP4_MOE
+    MAX_TOKENS_PER_EXPERT = envs.SONAR_MAX_TOKENS_PER_EXPERT_FP4_MOE
     m_numtopk, k_times_2 = input_tensor.shape
     assert k_times_2 % 2 == 0, "input width must be even (gate || up layout)"
     k = k_times_2 // 2
@@ -2169,7 +2169,7 @@ def silu_and_mul_scaled_fp4_experts_quant(
         f"m_numtopk must be less than MAX_TOKENS_PER_EXPERT("
         f"{MAX_TOKENS_PER_EXPERT})"
         f" for cutlass_moe_fp4, observed m_numtopk = {m_numtopk}. Use"
-        f" APHRODITE_MAX_TOKENS_PER_EXPERT_FP4_MOE to set this value."
+        f" SONAR_MAX_TOKENS_PER_EXPERT_FP4_MOE to set this value."
     )
     scales_k = k // 16
     padded_k = (scales_k + (4 - 1)) // 4
@@ -2223,14 +2223,14 @@ def mxfp4_experts_quant(
     assert not current_platform.is_rocm()
     assert input_tensor.ndim == 2
 
-    MAX_TOKENS_PER_EXPERT = envs.APHRODITE_MAX_TOKENS_PER_EXPERT_FP4_MOE
+    MAX_TOKENS_PER_EXPERT = envs.SONAR_MAX_TOKENS_PER_EXPERT_FP4_MOE
     m_numtopk, k = input_tensor.shape
 
     assert m_numtopk <= MAX_TOKENS_PER_EXPERT * topk, (
         f"m_numtopk must be less than MAX_TOKENS_PER_EXPERT("
         f"{MAX_TOKENS_PER_EXPERT})"
         f" for cutlass_moe_mxfp4, observed m_numtopk = {m_numtopk}. Use"
-        f" APHRODITE_MAX_TOKENS_PER_EXPERT_FP4_MOE to set this value."
+        f" SONAR_MAX_TOKENS_PER_EXPERT_FP4_MOE to set this value."
     )
     scales_k = k // 32
     padded_k = (scales_k + (4 - 1)) // 4
@@ -2284,7 +2284,7 @@ def silu_and_mul_mxfp4_experts_quant(
     assert not current_platform.is_rocm()
     assert input_tensor.ndim == 2
 
-    MAX_TOKENS_PER_EXPERT = envs.APHRODITE_MAX_TOKENS_PER_EXPERT_FP4_MOE
+    MAX_TOKENS_PER_EXPERT = envs.SONAR_MAX_TOKENS_PER_EXPERT_FP4_MOE
     m_numtopk, k_times_2 = input_tensor.shape
     assert k_times_2 % 2 == 0, "input width must be even (gate || up layout)"
     k = k_times_2 // 2
@@ -2412,7 +2412,7 @@ def scaled_int8_quant(
             q = (input.to(torch.float32) / scale).round().clamp(-128, 127)
             return q.to(torch.int8), scale, None
 
-        from aphrodite._xpu_ops import xpu_ops
+        from sonar._xpu_ops import xpu_ops
 
         q, scales, _ = xpu_ops.dynamic_per_token_int8_quant_ref(input.contiguous(), True, 8)
         return q, scales.reshape(-1, 1).to(torch.float32), None
@@ -5731,7 +5731,7 @@ def fusedQuantizeNv(a: torch.Tensor, b: torch.Tensor, global_scale: torch.Tensor
     return xh_e2m1, xh_e4m3
 
 
-@torch.library.custom_op("aphrodite::safeFusedQuantizeNv", mutates_args=("xh_e2m1", "xh_e4m3"))
+@torch.library.custom_op("sonar::safeFusedQuantizeNv", mutates_args=("xh_e2m1", "xh_e4m3"))
 def safeFusedQuantizeNv(
     a: torch.Tensor,
     b: torch.Tensor,

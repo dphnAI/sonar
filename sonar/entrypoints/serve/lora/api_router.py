@@ -5,16 +5,16 @@ import logging
 from fastapi import APIRouter, Depends, FastAPI, Request
 from fastapi.responses import JSONResponse, Response
 
-from aphrodite import envs
-from aphrodite.entrypoints.openai.models.api_router import models
-from aphrodite.entrypoints.openai.models.serving import OpenAIServingModels
-from aphrodite.entrypoints.serve.engine.protocol import ErrorResponse
-from aphrodite.entrypoints.serve.lora.protocol import (
+from sonar import envs
+from sonar.entrypoints.openai.models.api_router import models
+from sonar.entrypoints.openai.models.serving import OpenAIServingModels
+from sonar.entrypoints.serve.engine.protocol import ErrorResponse
+from sonar.entrypoints.serve.lora.protocol import (
     LoadLoRAAdapterRequest,
     UnloadLoRAAdapterRequest,
 )
-from aphrodite.entrypoints.serve.utils.api_utils import validate_json_request
-from aphrodite.logger import init_logger
+from sonar.entrypoints.serve.utils.api_utils import validate_json_request
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 router = APIRouter()
@@ -27,14 +27,14 @@ def attach_router(app: FastAPI):
     snapshotted and restored because importing
     model_hosting_container_standards may reconfigure root logging.
     """
-    if not envs.APHRODITE_ALLOW_RUNTIME_LORA_UPDATING:
+    if not envs.SONAR_ALLOW_RUNTIME_LORA_UPDATING:
         """If LoRA dynamic loading & unloading is not enabled, do nothing."""
         return
     logger.warning(
         "LoRA dynamic loading & unloading is enabled in the API server. This should ONLY be used for local development!"
     )
 
-    snapshot = [(h, h.level) for lg in (logging.getLogger(), logging.getLogger("aphrodite")) for h in lg.handlers]
+    snapshot = [(h, h.level) for lg in (logging.getLogger(), logging.getLogger("sonar")) for h in lg.handlers]
 
     try:
         try:

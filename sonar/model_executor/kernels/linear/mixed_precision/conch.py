@@ -6,8 +6,8 @@ from typing import Final
 
 import torch
 
-from aphrodite.model_executor.parameter import BaseAphroditeParameter, permute_param_layout_
-from aphrodite.scalar_type import scalar_types
+from sonar.model_executor.parameter import BaseSonarParameter, permute_param_layout_
+from sonar.scalar_type import scalar_types
 
 from .MPLinearKernel import MPLinearKernel, MPLinearLayerConfig
 
@@ -59,13 +59,13 @@ class ConchLinearKernel(MPLinearKernel):
     #  `weight_zero_point` is: {input_dim = 1, output_dim = 0, packed_dim = 0}
     def process_weights_after_loading(self, layer: torch.nn.Module) -> None:
         def transform_w_q(x):
-            assert isinstance(x, BaseAphroditeParameter)
+            assert isinstance(x, BaseSonarParameter)
             permute_param_layout_(x, input_dim=0, output_dim=1, packed_dim=0)
             x.data = x.data.contiguous()
             return x
 
         def transform_w_s(x):
-            assert isinstance(x, BaseAphroditeParameter)
+            assert isinstance(x, BaseSonarParameter)
             permute_param_layout_(x, input_dim=0, output_dim=1)
             x.data = x.data.contiguous()
             return x
@@ -74,7 +74,7 @@ class ConchLinearKernel(MPLinearKernel):
             # Zero points are stored PACKED as [N//pack_factor, K//G]
             # The Conch kernel expects UNPACKED zeros: [K//G, N]
             # We need to unpack and reorder
-            assert isinstance(x, BaseAphroditeParameter)
+            assert isinstance(x, BaseSonarParameter)
             packed = x.data  # shape: [N//pack_factor, K//G], dtype: int32
 
             # Determine packing based on weight bit width

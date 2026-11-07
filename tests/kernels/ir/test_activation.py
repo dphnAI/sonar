@@ -4,10 +4,10 @@
 import pytest
 import torch
 
-import aphrodite.kernels  # noqa: F401
-from aphrodite import ir
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import HAS_TRITON
+import sonar.kernels  # noqa: F401
+from sonar import ir
+from sonar.platforms import current_platform
+from sonar.triton_utils import HAS_TRITON
 from tests.ir.ir_test_utils import assert_close, clone_args
 
 gelu_and_mul_sparse_native = ir.ops.gelu_and_mul_sparse.impls["native"].impl_fn
@@ -149,7 +149,7 @@ def test_gelu_and_mul_sparse_triton_dispatch_and_opcheck():
 
     with ir.ops.gelu_and_mul_sparse.set_priority(["triton", "native"]):
         dispatched = ir.ops.gelu_and_mul_sparse(*args)
-        torch.library.opcheck(torch.ops.aphrodite_ir.gelu_and_mul_sparse, args)
+        torch.library.opcheck(torch.ops.sonar_ir.gelu_and_mul_sparse, args)
 
     direct = impl.impl_fn(*args)
     torch.testing.assert_close(dispatched, direct, rtol=0.0, atol=0.0)

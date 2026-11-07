@@ -6,10 +6,10 @@ import random
 import pytest
 import torch
 
-import aphrodite._custom_ops as ops
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import triton
-from aphrodite.utils.platform_utils import num_compute_units
+import sonar._custom_ops as ops
+from sonar.platforms import current_platform
+from sonar.triton_utils import triton
+from sonar.utils.platform_utils import num_compute_units
 
 pytestmark = pytest.mark.skip_global_cleanup
 

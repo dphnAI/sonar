@@ -3,10 +3,10 @@
 import pytest
 import torch
 
-from aphrodite._custom_ops import scaled_fp4_quant
-from aphrodite.model_executor.layers.activation import SiluAndMul
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar._custom_ops import scaled_fp4_quant
+from sonar.model_executor.layers.activation import SiluAndMul
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_random_seed
 from tests.kernels.quantization.nvfp4_utils import (
     FLOAT4_E2M1_MAX,
     FLOAT8_E4M3_MAX,
@@ -31,7 +31,7 @@ BLOCK_SIZE = 16
 @pytest.mark.parametrize("shape", SHAPES)
 @torch.inference_mode()
 def test_silu_mul_nvfp4_quant(
-    default_aphrodite_config,
+    default_sonar_config,
     dtype: torch.dtype,
     shape: tuple[int, int],
 ) -> None:
@@ -74,7 +74,7 @@ def test_silu_mul_nvfp4_quant(
 @pytest.mark.parametrize("shape", [(90, 160), (1, 160), (130, 96), (128, 256)])
 @torch.inference_mode()
 def test_silu_mul_nvfp4_quant_scale_padding_initialized(
-    default_aphrodite_config,
+    default_sonar_config,
     dtype: torch.dtype,
     shape: tuple[int, int],
 ) -> None:

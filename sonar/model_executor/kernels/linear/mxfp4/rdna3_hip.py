@@ -25,15 +25,15 @@ import torch
 import torch.nn.functional as F
 from torch.nn.parameter import Parameter
 
-from aphrodite.model_executor.layers.quantization.utils.mxfp4_utils import dequant_mxfp4
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.mxfp4_utils import dequant_mxfp4
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     kInt8Dynamic32Sym,
     kMxfp4Static,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.import_utils import has_quark
-from aphrodite.utils.torch_utils import direct_register_custom_op
+from sonar.platforms import current_platform
+from sonar.utils.import_utils import has_quark
+from sonar.utils.torch_utils import direct_register_custom_op
 
 from .base import MxFp4LinearKernel, MxFp4LinearLayerConfig
 
@@ -47,7 +47,7 @@ def _rdna3_mxfp4_w4a8_apply_impl(
     weight_scale: torch.Tensor,
     bias: torch.Tensor | None,
 ) -> torch.Tensor:
-    import aphrodite._custom_ops as ops
+    import sonar._custom_ops as ops
 
     M = x_2d.shape[0]
     if 0 < M <= MAX_W4A8_BATCH_SIZE and x_2d.dtype in (torch.float16, torch.bfloat16):
@@ -84,7 +84,7 @@ class Rdna3W4A8MxFp4LinearKernel(MxFp4LinearKernel):
     def is_supported(cls, compute_capability: int | None = None) -> tuple[bool, str | None]:
         if not current_platform.is_rocm():
             return False, "only targets ROCm"
-        from aphrodite.platforms.rocm import on_gfx11
+        from sonar.platforms.rocm import on_gfx11
 
         if not on_gfx11():
             return False, "requires RDNA3/RDNA3.5 (gfx11)"
@@ -139,5 +139,5 @@ class Rdna3W4A8MxFp4LinearKernel(MxFp4LinearKernel):
         x_2d = x.reshape(-1, x.shape[-1])
         if not x_2d.is_contiguous():
             x_2d = x_2d.contiguous()
-        out = torch.ops.aphrodite.rdna3_mxfp4_w4a8_apply(x_2d, layer.weight, layer.weight_scale, bias)
+        out = torch.ops.sonar.rdna3_mxfp4_w4a8_apply(x_2d, layer.weight, layer.weight_scale, bias)
         return out.reshape(*x.shape[:-1], out.shape[-1])

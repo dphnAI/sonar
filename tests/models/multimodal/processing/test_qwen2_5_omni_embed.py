@@ -14,11 +14,11 @@ from unittest.mock import Mock
 import pytest
 import torch
 
-from aphrodite.model_executor.models.qwen2_5_omni_thinker import (
+from sonar.model_executor.models.qwen2_5_omni_thinker import (
     check_interleaved_audio_video,
     merge_interleaved_embeddings,
 )
-from aphrodite.multimodal.utils import set_mm_embedding_modality
+from sonar.multimodal.utils import set_mm_embedding_modality
 
 # Fake token IDs
 AUDIO_TOKEN_ID = 1001
@@ -31,13 +31,13 @@ TEXT_TOKEN_ID = 0
 @pytest.mark.parametrize("modality", ["image", "video"])
 def test_precomputed_vision_embeddings_preserve_items(model_version, modality):
     """Concatenated embeddings must produce one 2D output per media item."""
-    from aphrodite.model_executor.models.qwen2_5_omni_thinker import (
+    from sonar.model_executor.models.qwen2_5_omni_thinker import (
         Qwen2_5OmniThinkerForConditionalGeneration,
     )
-    from aphrodite.model_executor.models.qwen3_omni_moe_thinker import (
+    from sonar.model_executor.models.qwen3_omni_moe_thinker import (
         Qwen3OmniMoeThinkerForConditionalGeneration,
     )
-    from aphrodite.v1.worker.utils import sanity_check_mm_encoder_outputs
+    from sonar.v1.worker.utils import sanity_check_mm_encoder_outputs
 
     model_class = (
         Qwen2_5OmniThinkerForConditionalGeneration
@@ -183,7 +183,7 @@ def make_mock_model(hidden: int = 8):
     """Return a minimal mock of Qwen2_5OmniThinkerForConditionalGeneration
     that has enough structure to run embed_input_ids.
     """
-    from aphrodite.model_executor.models.qwen2_5_omni_thinker import (
+    from sonar.model_executor.models.qwen2_5_omni_thinker import (
         Qwen2_5OmniThinkerForConditionalGeneration,
     )
 
@@ -207,7 +207,7 @@ def make_mock_model(hidden: int = 8):
     model.get_language_model = Mock(return_value=lang_model)
 
     # _embed_text_input_ids: delegate to SupportsMultiModal's implementation
-    from aphrodite.model_executor.models.interfaces import SupportsMultiModal
+    from sonar.model_executor.models.interfaces import SupportsMultiModal
 
     model._embed_text_input_ids = lambda *a, **kw: SupportsMultiModal._embed_text_input_ids(model, *a, **kw)
 

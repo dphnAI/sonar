@@ -13,43 +13,43 @@ from nvfp4_utils import (
 )
 from safetensors import safe_open
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-from aphrodite.config.kernel import KernelConfig
-from aphrodite.model_executor.kernels.linear import init_nvfp4_linear_kernel
-from aphrodite.model_executor.kernels.linear.nvfp4.emulation import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar.config import SonarConfig, set_current_sonar_config
+from sonar.config.kernel import KernelConfig
+from sonar.model_executor.kernels.linear import init_nvfp4_linear_kernel
+from sonar.model_executor.kernels.linear.nvfp4.emulation import (
     EmulationNvFp4LinearKernel,
 )
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEParallelConfig,
     FusedMoEQuantConfig,
     RoutingMethodType,
     nvfp4_moe_quant_config,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.nvfp4_emulation_moe import (
+from sonar.model_executor.layers.fused_moe.experts.nvfp4_emulation_moe import (
     Nvfp4QuantizationEmulationTritonExperts,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.triton_moe import TritonExperts
-from aphrodite.model_executor.layers.quantization.utils import (
+from sonar.model_executor.layers.fused_moe.experts.triton_moe import TritonExperts
+from sonar.model_executor.layers.quantization.utils import (
     nvfp4_emulation_utils,
 )
-from aphrodite.model_executor.layers.quantization.utils.nvfp4_emulation_utils import (
+from sonar.model_executor.layers.quantization.utils.nvfp4_emulation_utils import (
     dequantize_to_dtype,
     ref_nvfp4_quant_dequant,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     kNvfp4Dynamic,
     kNvfp4Static,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import triton
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.platforms import current_platform
+from sonar.triton_utils import triton
+from sonar.utils.torch_utils import set_random_seed
 
 if current_platform.is_rocm():
-    from aphrodite.platforms.rocm import on_gfx950
+    from sonar.platforms.rocm import on_gfx950
 else:
 
     def on_gfx950() -> bool:
@@ -781,7 +781,7 @@ def test_nvfp4_dense_emulation(dtype: torch.dtype, m: int, n: int, k: int, with_
     x = torch.randn(m, k, device="cuda", dtype=dtype)
     x[:, :16] = 0
     bias = torch.randn(n, device="cuda", dtype=dtype) if with_bias else None
-    with set_current_aphrodite_config(AphroditeConfig(kernel_config=KernelConfig(linear_backend="emulation"))):
+    with set_current_sonar_config(SonarConfig(kernel_config=KernelConfig(linear_backend="emulation"))):
         kernel = init_nvfp4_linear_kernel()
     assert isinstance(kernel, EmulationNvFp4LinearKernel)
     kernel.process_weights_after_loading(layer)

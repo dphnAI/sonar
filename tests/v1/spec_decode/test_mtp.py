@@ -7,21 +7,21 @@ import pytest
 import torch
 import torch.nn as nn
 
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.config import (
     CacheConfig,
     DeviceConfig,
     ModelConfig,
     ParallelConfig,
     SchedulerConfig,
+    SonarConfig,
     SpeculativeConfig,
 )
-from aphrodite.config.load import LoadConfig
-from aphrodite.model_executor.models.llama import LlamaForCausalLM
-from aphrodite.models.deepseek_v4.common.spec_decode import needs_mtp_hidden_buffer
-from aphrodite.platforms import current_platform
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
-from aphrodite.v1.spec_decode.eagle import EagleProposer
+from sonar.config.load import LoadConfig
+from sonar.model_executor.models.llama import LlamaForCausalLM
+from sonar.models.deepseek_v4.common.spec_decode import needs_mtp_hidden_buffer
+from sonar.platforms import current_platform
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
+from sonar.v1.spec_decode.eagle import EagleProposer
 from tests.v1.attention.utils import (
     BatchSpec,
     create_common_attn_metadata,
@@ -33,9 +33,9 @@ mimo_7b_dir = "XiaomiMiMo/MiMo-7B-Base"
 DEVICE_TYPE = current_platform.device_type
 
 
-def test_glm_mtp_defers_lm_head(default_aphrodite_config):
-    from aphrodite.model_executor.models import deepseek_mtp
-    from aphrodite.models.glm5next.common import mtp
+def test_glm_mtp_defers_lm_head(default_sonar_config):
+    from sonar.model_executor.models import deepseek_mtp
+    from sonar.models.glm5next.common import mtp
 
     config = mock.MagicMock(
         hidden_size=16,
@@ -43,16 +43,16 @@ def test_glm_mtp_defers_lm_head(default_aphrodite_config):
         index_topk=8,
         index_kpool=4,
     )
-    aphrodite_config = mock.MagicMock()
-    aphrodite_config.speculative_config.draft_model_config.hf_text_config = config
-    aphrodite_config.scheduler_config.max_num_batched_tokens = 4
+    sonar_config = mock.MagicMock()
+    sonar_config.speculative_config.draft_model_config.hf_text_config = config
+    sonar_config.scheduler_config.max_num_batched_tokens = 4
 
     with (
         mock.patch.object(mtp, "Glm5NextDecoderLayer", return_value=nn.Identity()),
         mock.patch.object(deepseek_mtp, "ParallelLMHead") as parallel_lm_head,
         mock.patch.object(mtp.current_platform, "device_type", "cpu"),
     ):
-        layer = mtp.Glm5NextMultiTokenPredictorLayer(aphrodite_config, "model.layers.1")
+        layer = mtp.Glm5NextMultiTokenPredictorLayer(sonar_config, "model.layers.1")
 
     parallel_lm_head.assert_not_called()
     assert layer.shared_head.head is None
@@ -70,7 +70,7 @@ def _create_mtp_proposer(num_speculative_tokens: int) -> EagleProposer:
         num_speculative_tokens=num_speculative_tokens,
     )
 
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         model_config=model_config,
         cache_config=CacheConfig(),
         speculative_config=speculative_config,
@@ -83,12 +83,12 @@ def _create_mtp_proposer(num_speculative_tokens: int) -> EagleProposer:
         ),
     )
 
-    return EagleProposer(aphrodite_config=aphrodite_config, device=DEVICE_TYPE)
+    return EagleProposer(sonar_config=sonar_config, device=DEVICE_TYPE)
 
 
-@mock.patch("aphrodite.v1.spec_decode.llm_base_proposer.get_pp_group")
-@mock.patch("aphrodite.v1.spec_decode.llm_base_proposer.get_layers_from_aphrodite_config")
-@mock.patch("aphrodite.v1.spec_decode.llm_base_proposer.get_model")
+@mock.patch("sonar.v1.spec_decode.llm_base_proposer.get_pp_group")
+@mock.patch("sonar.v1.spec_decode.llm_base_proposer.get_layers_from_sonar_config")
+@mock.patch("sonar.v1.spec_decode.llm_base_proposer.get_model")
 def test_mtp_load_model_unified(mock_get_model, mock_get_layers, mock_get_pp_group):
     """Test MTP-specific model loading with unified model approach."""
     # Setup mocks
@@ -199,9 +199,9 @@ def test_mtp_propose(num_speculative_tokens, monkeypatch):
     attn_metadata_builder_cls, _ = try_get_attention_backend(AttentionBackendEnum.FLASH_ATTN)
 
     attn_metadata_builder = attn_metadata_builder_cls(
-        kv_cache_spec=create_standard_kv_cache_spec(proposer.aphrodite_config),
+        kv_cache_spec=create_standard_kv_cache_spec(proposer.sonar_config),
         layer_names=list(proposer._draft_attn_layer_names),
-        aphrodite_config=proposer.aphrodite_config,
+        sonar_config=proposer.sonar_config,
         device=device,
     )
 

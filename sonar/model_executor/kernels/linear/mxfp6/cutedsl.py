@@ -8,9 +8,9 @@ from typing import Literal
 import torch
 from torch.nn.parameter import Parameter
 
-from aphrodite.model_executor.layers.quantization.utils.mxfp8_utils import swizzle_mxfp8_scale
-from aphrodite.platforms import current_platform
-from aphrodite.utils.import_utils import has_cutedsl
+from sonar.model_executor.layers.quantization.utils.mxfp8_utils import swizzle_mxfp8_scale
+from sonar.platforms import current_platform
+from sonar.utils.import_utils import has_cutedsl
 
 from .base import Mxfp6LinearKernel
 
@@ -51,7 +51,7 @@ def _compile_gemm(activation_format: str, weight_format: str, output_dtype: torc
     )
 
 
-@torch.library.custom_op("aphrodite::cutedsl_mxfp6_gemm", mutates_args={"out"})
+@torch.library.custom_op("sonar::cutedsl_mxfp6_gemm", mutates_args={"out"})
 def _cutedsl_mxfp6_gemm(
     x: torch.Tensor,
     weight: torch.Tensor,
@@ -66,8 +66,8 @@ def _cutedsl_mxfp6_gemm(
     import cutlass.cute as cute
     from cutlass.cute.runtime import make_ptr
 
-    from aphrodite.model_executor.layers.quantization.utils.mxfp6_online_utils import quantize_mxfp6_cuda
-    from aphrodite.model_executor.layers.quantization.utils.mxfp8_utils import mxfp8_e4m3_quantize
+    from sonar.model_executor.layers.quantization.utils.mxfp6_online_utils import quantize_mxfp6_cuda
+    from sonar.model_executor.layers.quantization.utils.mxfp8_utils import mxfp8_e4m3_quantize
 
     m, k = x.shape
     n = out.shape[1]

@@ -18,122 +18,122 @@ import torch
 from torch import nn
 from transformers import PreTrainedConfig
 
-import aphrodite.envs as envs
-from aphrodite import _custom_ops as ops
-from aphrodite.compilation.breakable_cudagraph import eager_break_during_capture
-from aphrodite.config import AphroditeConfig, CacheConfig, get_current_aphrodite_config
-from aphrodite.distributed import (
+import sonar.envs as envs
+from sonar import _custom_ops as ops
+from sonar.compilation.breakable_cudagraph import eager_break_during_capture
+from sonar.config import CacheConfig, SonarConfig, get_current_sonar_config
+from sonar.distributed import (
     get_ep_group,
     get_pp_group,
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
 )
-from aphrodite.forward_context import get_forward_context, is_forward_context_available
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.activation import SiluAndMulWithClamp
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.layers.attention.attention import set_default_quant_scales
-from aphrodite.model_executor.layers.attention_layer_base import AttentionLayerBase
-from aphrodite.model_executor.layers.fused_allreduce_gemma_rms_norm import (
+from sonar.forward_context import get_forward_context, is_forward_context_available
+from sonar.logger import init_logger
+from sonar.model_executor.layers.activation import SiluAndMulWithClamp
+from sonar.model_executor.layers.attention import Attention
+from sonar.model_executor.layers.attention.attention import set_default_quant_scales
+from sonar.model_executor.layers.attention_layer_base import AttentionLayerBase
+from sonar.model_executor.layers.fused_allreduce_gemma_rms_norm import (
     fused_allreduce_gemma_rms_norm,
 )
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.model_executor.layers.fused_moe import (
     FusedMoEFactory,
     GateLinear,
     fused_moe_make_expert_params_mapping,
 )
-from aphrodite.model_executor.layers.fused_moe.deep_gemm_mega_moe import (
+from sonar.model_executor.layers.fused_moe.deep_gemm_mega_moe import (
     MEGA_MOE_NVFP4,
     DeepGemmMegaMoEExperts,
     MegaMoEActivation,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.trtllm_nvfp4_moe import (
+from sonar.model_executor.layers.fused_moe.experts.trtllm_nvfp4_moe import (
     TrtLlmNvFp4ExpertsModular,
     TrtLlmNvFp4ExpertsMonolithic,
 )
-from aphrodite.model_executor.layers.fused_moe.moe_output import (
+from sonar.model_executor.layers.fused_moe.moe_output import (
     MoEOutput,
     UnfinalizedMoEOutput,
 )
-from aphrodite.model_executor.layers.fused_moe.router.fused_topk_bias_router import (
+from sonar.model_executor.layers.fused_moe.router.fused_topk_bias_router import (
     fused_topk_bias,
 )
-from aphrodite.model_executor.layers.fused_moe.runner.moe_runner import _unpack
-from aphrodite.model_executor.layers.fusion.quant_activation import (
+from sonar.model_executor.layers.fused_moe.runner.moe_runner import _unpack
+from sonar.model_executor.layers.fusion.quant_activation import (
     QuantizedActivation,
     as_quantized_activation,
     get_input_quant_key,
 )
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.linear import (
     MergedColumnParallelLinear,
     MinimaxM3QKVParallelLinearWithIndexer,
     QKVParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.quantization.utils.mxfp8_utils import (
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.quantization.utils.mxfp8_utils import (
     mxfp8_e4m3_quantize,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     kMxfp8Dynamic,
     kNvfp4DynamicToken,
 )
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.model_loader.weight_utils import (
+from sonar.model_executor.model_loader.weight_utils import (
     default_weight_loader,
     maybe_remap_kv_scale_name,
 )
-from aphrodite.model_executor.models.interfaces import (
+from sonar.model_executor.models.interfaces import (
     EagleModelMixin,
     MultiModalEmbeddings,
     SupportsEagle3,
     SupportsMultiModal,
     SupportsPP,
 )
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.models.utils import (
     AutoWeightsLoader,
     PPMissingLayer,
     WeightsMapper,
     extract_layer_index,
-    init_aphrodite_registered_model,
+    init_sonar_registered_model,
     is_pp_missing_parameter,
     make_empty_intermediate_tensors_factory,
     make_layers,
     maybe_prefix,
     spec_decode_needs_target_embed,
 )
-from aphrodite.model_executor.models.vision import run_dp_sharded_mrope_vision_model
-from aphrodite.models.common.ops.sequence_parallel import (
+from sonar.model_executor.models.vision import run_dp_sharded_mrope_vision_model
+from sonar.models.common.ops.sequence_parallel import (
     sp_all_gather,
     sp_padding_mask,
     sp_shard,
 )
-from aphrodite.models.minimax_m3.common.encoder_cudagraph import (
+from sonar.models.minimax_m3.common.encoder_cudagraph import (
     MiniMaxM3EncoderCudaGraphMixin,
 )
-from aphrodite.models.minimax_m3.common.indexer import MiniMaxM3Indexer
-from aphrodite.models.minimax_m3.common.mm_preprocess import (
+from sonar.models.minimax_m3.common.indexer import MiniMaxM3Indexer
+from sonar.models.minimax_m3.common.mm_preprocess import (
     MiniMaxM3VLDummyInputsBuilder,
     MiniMaxM3VLMultiModalProcessor,
     MiniMaxM3VLProcessingInfo,
 )
-from aphrodite.models.minimax_m3.common.sparse_attention import (
+from sonar.models.minimax_m3.common.sparse_attention import (
     MiniMaxM3SparseBackend,
     MiniMaxM3SparseImpl,
     select_main_backend_and_impl_cls,
 )
-from aphrodite.models.minimax_m3.common.vision_tower import MiniMaxVLVisionModel
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.platforms import current_platform
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.utils.flashinfer import is_flashinfer_autotuning
-from aphrodite.utils.torch_utils import kv_cache_dtype_str_to_dtype
-from aphrodite.v1.kv_cache_interface import (
+from sonar.models.minimax_m3.common.vision_tower import MiniMaxVLVisionModel
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.platforms import current_platform
+from sonar.sequence import IntermediateTensors
+from sonar.utils.flashinfer import is_flashinfer_autotuning
+from sonar.utils.torch_utils import kv_cache_dtype_str_to_dtype
+from sonar.v1.kv_cache_interface import (
     FullAttentionSpec,
     KVCacheSpec,
     get_kv_quant_mode,
@@ -152,7 +152,7 @@ _QKV_FUSED_EPILOGUE_MIN_TOKENS = 512
 def _supports_qkv_fused_epilogue(attn: "MiniMaxM3SparseAttention") -> bool:
     """Whether minimax_m3_qkv_index_fused_epilogue can replace this layer's
     qkv_proj + norm/RoPE/cache-insert chain."""
-    from aphrodite.model_executor.kernels.linear.mxfp8.flashinfer import (
+    from sonar.model_executor.kernels.linear.mxfp8.flashinfer import (
         FlashInferCutedslMxfp8LinearKernel,
         FlashInferCutlassMxfp8LinearKernel,
     )
@@ -195,22 +195,22 @@ def _is_moe_layer(config: PreTrainedConfig, layer_id: int) -> bool:
     return moe_layer_freq[layer_id] != 0
 
 
-def _use_mega_moe(aphrodite_config: AphroditeConfig) -> bool:
+def _use_mega_moe(sonar_config: SonarConfig) -> bool:
     """Whether MoE layers run the DeepGEMM NVFP4 MegaMoE kernel.
 
     Opt in with ``--kernel-config '{"moe_backend": "deep_gemm_mega_moe"}'``. Only
     checkpoints with NVFP4 routed experts (MiniMax-M3.1) are supported.
     """
-    if aphrodite_config.kernel_config.moe_backend != "deep_gemm_mega_moe":
+    if sonar_config.kernel_config.moe_backend != "deep_gemm_mega_moe":
         return False
-    moe_quant_algo = getattr(aphrodite_config.quant_config, "moe_quant_algo", None)
+    moe_quant_algo = getattr(sonar_config.quant_config, "moe_quant_algo", None)
     if moe_quant_algo != "NVFP4":
         raise NotImplementedError(
             "MiniMax M3 MegaMoE requires a checkpoint with NVFP4 routed experts "
             f"(moe_quant_algo: NVFP4), got moe_quant_algo={moe_quant_algo!r}. "
             "Pick a different moe backend for this checkpoint."
         )
-    if not aphrodite_config.parallel_config.enable_expert_parallel:
+    if not sonar_config.parallel_config.enable_expert_parallel:
         raise NotImplementedError(
             "MiniMax M3 MegaMoE requires expert parallel. Enable it with --enable-expert-parallel."
         )
@@ -328,7 +328,7 @@ class MiniMaxM3MLP(nn.Module):
             alpha=config.swiglu_alpha,
             beta=config.swiglu_beta,
         )
-        from aphrodite.models.minimax_m3.nvidia.ops import dense_gemm1_mxfp8
+        from sonar.models.minimax_m3.nvidia.ops import dense_gemm1_mxfp8
 
         # At or below the shared-experts stream threshold the persistent kernel
         # would contend with the routed experts on the aux stream.
@@ -336,7 +336,7 @@ class MiniMaxM3MLP(nn.Module):
         if dense_gemm1_mxfp8.can_fuse_gemm1(self.gate_up_proj, self.down_proj, self.act_fn):
             self.fused_gemm1_min_tokens = max(
                 dense_gemm1_mxfp8.MIN_TOKENS,
-                envs.APHRODITE_SHARED_EXPERTS_STREAM_TOKEN_THRESHOLD,
+                envs.SONAR_SHARED_EXPERTS_STREAM_TOKEN_THRESHOLD,
             )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -347,7 +347,7 @@ class MiniMaxM3MLP(nn.Module):
             and num_tokens > self.fused_gemm1_min_tokens
             and not is_flashinfer_autotuning()
         ):
-            from aphrodite.models.minimax_m3.nvidia.ops.dense_gemm1_mxfp8 import (
+            from sonar.models.minimax_m3.nvidia.ops.dense_gemm1_mxfp8 import (
                 fused_gemm1,
             )
 
@@ -482,7 +482,7 @@ class MiniMaxM3MoE(nn.Module):
             )
         num_local_experts = num_experts // ep_group.world_size
         self.experts = DeepGemmMegaMoEExperts(
-            get_current_aphrodite_config(),
+            get_current_sonar_config(),
             num_experts=num_experts,
             num_local_experts=num_local_experts,
             experts_start_idx=ep_group.rank_in_group * num_local_experts,
@@ -560,7 +560,7 @@ class MiniMaxM3MoE(nn.Module):
         # Routing and the experts read the padding mask from the forward
         # context; hand them this rank's shard of it.
         forward_context = None
-        if envs.APHRODITE_MOE_SKIP_PADDING and is_forward_context_available():
+        if envs.SONAR_MOE_SKIP_PADDING and is_forward_context_available():
             forward_context = get_forward_context()
             is_padding = forward_context.is_padding
             forward_context.is_padding = sp_padding_mask(
@@ -794,19 +794,19 @@ class MiniMaxM3SparseAttention(nn.Module, AttentionLayerBase):
         self.index_rotary_emb = self.rotary_emb
 
         # Attention-backend wiring.
-        aphrodite_config = get_current_aphrodite_config()
+        sonar_config = get_current_sonar_config()
         self.layer_name = f"{prefix}.attn"
         self.kv_cache_dtype = cache_config.cache_dtype if cache_config is not None else "auto"
-        self.kv_cache_torch_dtype = kv_cache_dtype_str_to_dtype(self.kv_cache_dtype, aphrodite_config.model_config)
+        self.kv_cache_torch_dtype = kv_cache_dtype_str_to_dtype(self.kv_cache_dtype, sonar_config.model_config)
         # MiniMax-M3 sparse attention owns its KV-cache insert/read path instead
         # of wrapping the generic Attention module. Keep the same runtime scale
-        # attributes so FP8 KV reads can honor Aphrodite's per-layer descale contract.
+        # attributes so FP8 KV reads can honor Sonar's per-layer descale contract.
         set_default_quant_scales(self, register_buffer=True)
         # The fused insert quantizes k/v into NVFP4 pages with these scales.
         self.use_nvfp4_kv = get_kv_quant_mode(self.kv_cache_dtype).is_nvfp4
         # Indexer side-cache dtype, mirroring --kv-cache-dtype for the main
         # cache (--attention-config '{"indexer_kv_dtype": ...}').
-        self.indexer_kv_dtype = aphrodite_config.attention_config.resolve_indexer_kv_dtype("bf16")
+        self.indexer_kv_dtype = sonar_config.attention_config.resolve_indexer_kv_dtype("bf16")
 
         # Shared top-k buffer: the indexer writes the selected blocks into it and
         # the attend impl reads them back (so nothing crosses the eager break as a
@@ -828,7 +828,7 @@ class MiniMaxM3SparseAttention(nn.Module, AttentionLayerBase):
             kv_cache_dtype=self.kv_cache_dtype,
             topk_blocks=sparse_cfg["sparse_topk_blocks"],
             sparse_block_size=sparse_cfg["sparse_block_size"],
-            msa_decode_backend=(aphrodite_config.attention_config.minimax_m3_msa_decode_backend),
+            msa_decode_backend=(sonar_config.attention_config.minimax_m3_msa_decode_backend),
         )
         # Self-contained nn.Module: owns its side cache, selects its impl in init.
         self.indexer = MiniMaxM3Indexer(
@@ -848,7 +848,7 @@ class MiniMaxM3SparseAttention(nn.Module, AttentionLayerBase):
         )
 
         # Register the main K/V cache so the KV-cache manager allocates it.
-        compilation_config = aphrodite_config.compilation_config
+        compilation_config = sonar_config.compilation_config
         if self.layer_name in compilation_config.static_forward_context:
             raise ValueError(f"Duplicate layer name: {self.layer_name}")
         compilation_config.static_forward_context[self.layer_name] = self
@@ -856,15 +856,15 @@ class MiniMaxM3SparseAttention(nn.Module, AttentionLayerBase):
 
         self.use_qkv_fused_epilogue = _supports_qkv_fused_epilogue(self)
         if self.use_qkv_fused_epilogue:
-            from aphrodite.models.minimax_m3.nvidia.ops.qkv_index_fused_epilogue import (
+            from sonar.models.minimax_m3.nvidia.ops.qkv_index_fused_epilogue import (
                 register_qkv_index_fused_epilogue_warmup,
             )
 
             logger.info_once("MiniMax-M3: QKV+indexer GEMM with fused epilogue enabled")
-            block_size = aphrodite_config.cache_config.block_size
+            block_size = sonar_config.cache_config.block_size
             # The query is E4M3-only when CUTLASS decode serves the layer.
             q_is_fp8 = getattr(self.impl, "use_cutlass_decode", False)
-            if aphrodite_config.kernel_config.enable_jit_warmup and block_size is not None:
+            if sonar_config.kernel_config.enable_jit_warmup and block_size is not None:
                 register_qkv_index_fused_epilogue_warmup(
                     has_q=not q_is_fp8,
                     has_qfp8=q_is_fp8,
@@ -876,10 +876,10 @@ class MiniMaxM3SparseAttention(nn.Module, AttentionLayerBase):
     def get_attn_backend(self) -> type[MiniMaxM3SparseBackend]:
         return self.attn_backend
 
-    def get_kv_cache_spec(self, aphrodite_config: AphroditeConfig) -> KVCacheSpec | None:
+    def get_kv_cache_spec(self, sonar_config: SonarConfig) -> KVCacheSpec | None:
         # Main GQA K/V cache. Block size may change after load, refresh it.
         return FullAttentionSpec(
-            block_size=aphrodite_config.cache_config.block_size,
+            block_size=sonar_config.cache_config.block_size,
             num_kv_heads=self.num_kv_heads,
             head_size=self.head_dim,
             head_size_v=self.head_dim,
@@ -898,7 +898,7 @@ class MiniMaxM3SparseAttention(nn.Module, AttentionLayerBase):
     ) -> None:
         """qkv_proj + QK-norm/RoPE + KV/index-cache insert as one MXFP8 kernel,
         writing q (bf16 or E4M3, as allocated) and index_q."""
-        from aphrodite.models.minimax_m3.nvidia.ops.qkv_index_fused_epilogue import (
+        from sonar.models.minimax_m3.nvidia.ops.qkv_index_fused_epilogue import (
             minimax_m3_qkv_index_fused_epilogue,
         )
 
@@ -1055,7 +1055,7 @@ class MiniMaxM3DecoderLayer(nn.Module):
     def __init__(
         self,
         *,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str,
         force_sparse_attn: bool = False,
         force_moe: bool = False,
@@ -1064,12 +1064,12 @@ class MiniMaxM3DecoderLayer(nn.Module):
     ) -> None:
         super().__init__()
         if is_mtp_block:
-            assert aphrodite_config.speculative_config is not None
-            config = aphrodite_config.speculative_config.draft_model_config.hf_config
+            assert sonar_config.speculative_config is not None
+            config = sonar_config.speculative_config.draft_model_config.hf_config
         else:
-            config = aphrodite_config.model_config.hf_text_config
-        cache_config = aphrodite_config.cache_config
-        quant_config = aphrodite_config.quant_config
+            config = sonar_config.model_config.hf_text_config
+        cache_config = sonar_config.cache_config
+        quant_config = sonar_config.quant_config
         self.hidden_size = config.hidden_size
         # DecoderLayers are created with `make_layers` which passes the prefix
         # with the layer's index.
@@ -1106,10 +1106,10 @@ class MiniMaxM3DecoderLayer(nn.Module):
         # Leave the FFN output un-reduced so its all-reduce fuses into the
         # next RMSNorm. MTP blocks add the residual directly and PP sends
         # hidden states across stages, so both must reduce.
-        reduce_results = is_mtp_block or aphrodite_config.parallel_config.pipeline_parallel_size > 1
+        reduce_results = is_mtp_block or sonar_config.parallel_config.pipeline_parallel_size > 1
         self.is_moe_layer = force_moe or _is_moe_layer(config, layer_id)
         if self.is_moe_layer:
-            use_mega_moe = _use_mega_moe(aphrodite_config)
+            use_mega_moe = _use_mega_moe(sonar_config)
             if use_mega_moe and is_mtp_block:
                 raise NotImplementedError("MiniMax M3 MegaMoE does not support MTP draft layers.")
             self.block_sparse_moe = MiniMaxM3MoE(
@@ -1149,7 +1149,7 @@ class MiniMaxM3DecoderLayer(nn.Module):
             # The preceding MoE left a small batch unfinalized: finalize,
             # all-reduce, norm and MXFP8-quantize the qkv_proj input at once.
             assert residual is not None
-            from aphrodite.models.minimax_m3.nvidia.ops.finalize_allreduce_norm import (
+            from sonar.models.minimax_m3.nvidia.ops.finalize_allreduce_norm import (
                 finalize_allreduce_gemma_rms_norm_mxfp8,
             )
 
@@ -1201,17 +1201,17 @@ class MiniMaxM3Model(nn.Module, EagleModelMixin):
     fall_back_to_pt_during_load = False
     supports_aux_hidden_states_over_pp = True
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_text_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_text_config
+        quant_config = sonar_config.quant_config
         self.config = config
-        self.use_mega_moe = _use_mega_moe(aphrodite_config)
+        self.use_mega_moe = _use_mega_moe(sonar_config)
 
         self.vocab_size = config.vocab_size
 
-        if get_pp_group().is_first_rank or spec_decode_needs_target_embed(aphrodite_config):
+        if get_pp_group().is_first_rank or spec_decode_needs_target_embed(sonar_config):
             self.embed_tokens = VocabParallelEmbedding(
                 config.vocab_size,
                 config.hidden_size,
@@ -1232,7 +1232,7 @@ class MiniMaxM3Model(nn.Module, EagleModelMixin):
             num_index_heads = max(1, sparse_cfg["sparse_num_index_heads"] // tp_size)
             # Pad tokens to a multiple of 4 so the buffer head stride stays
             # int4-aligned for build_k2q_csr's vectorised int4 loads.
-            max_num_batched_tokens = aphrodite_config.scheduler_config.max_num_batched_tokens
+            max_num_batched_tokens = sonar_config.scheduler_config.max_num_batched_tokens
             padded_num_tokens = (max_num_batched_tokens + 3) // 4 * 4
             self.topk_indices_buffer = torch.empty(
                 padded_num_tokens,
@@ -1246,7 +1246,7 @@ class MiniMaxM3Model(nn.Module, EagleModelMixin):
         self.start_layer, self.end_layer, self.layers = make_layers(
             config.num_hidden_layers,
             lambda prefix: MiniMaxM3DecoderLayer(
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 prefix=prefix,
                 topk_indices_buffer=self.topk_indices_buffer,
             ),
@@ -1270,9 +1270,9 @@ class MiniMaxM3Model(nn.Module, EagleModelMixin):
             prev_defers = layer.ffn_all_reduce_deferred
         self.fuse_final_norm_allreduce = prev_defers
         if current_platform.is_cuda():
-            self._init_fused_moe_finalize(aphrodite_config)
+            self._init_fused_moe_finalize(sonar_config)
 
-    def _init_fused_moe_finalize(self, aphrodite_config: AphroditeConfig) -> None:
+    def _init_fused_moe_finalize(self, sonar_config: SonarConfig) -> None:
         """Let small batches leave a MoE's top-k finalize to the next layer's
         input norm, which already fuses the TP all-reduce, and have it quantize
         the normed rows to the MXFP8 its qkv_proj reads.
@@ -1282,12 +1282,12 @@ class MiniMaxM3Model(nn.Module, EagleModelMixin):
         in BF16, so the last layer keeps its own finalize. Builds a collective
         kernel: every TP rank decides alike.
         """
-        from aphrodite.models.minimax_m3.nvidia.ops.finalize_allreduce_norm import (
+        from sonar.models.minimax_m3.nvidia.ops.finalize_allreduce_norm import (
             init_fused_moe_finalize,
             supports_fused_moe_finalize,
         )
 
-        if not supports_fused_moe_finalize(aphrodite_config):
+        if not supports_fused_moe_finalize(sonar_config):
             return
         layers = self.layers[self.start_layer : self.end_layer]
         deferring = [
@@ -1505,13 +1505,13 @@ class MiniMaxM3SparseForCausalLM(nn.Module, SupportsPP, SupportsEagle3):
         "gate_up_proj": ["gate_proj", "up_proj"],
     }
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_text_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_text_config
+        quant_config = sonar_config.quant_config
         self.config = config
         self.quant_config = quant_config
-        self.model = MiniMaxM3Model(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = MiniMaxM3Model(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
         if get_pp_group().is_last_rank:
             self.lm_head = ParallelLMHead(
                 config.vocab_size,
@@ -1582,7 +1582,7 @@ class MiniMaxM3SparseForConditionalGeneration(
         "gate_up_proj": ["gate_proj", "up_proj"],
     }
 
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={
             "multi_modal_projector.": "vision_tower.multi_modal_projector.",
             "patch_merge_mlp.": "vision_tower.patch_merge_mlp.",
@@ -1601,12 +1601,12 @@ class MiniMaxM3SparseForConditionalGeneration(
             return MiniMaxM3VLProcessingInfo.VIDEO_TOKEN
         raise ValueError(f"Unsupported modality: {modality!r}")
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
         self.config = config
-        self.quant_config = aphrodite_config.quant_config
-        self.multimodal_config = aphrodite_config.model_config.multimodal_config
+        self.quant_config = sonar_config.quant_config
+        self.multimodal_config = sonar_config.model_config.multimodal_config
         assert self.multimodal_config is not None
         self.use_data_parallel = self.multimodal_config.mm_encoder_tp_mode == "data"
 
@@ -1614,7 +1614,7 @@ class MiniMaxM3SparseForConditionalGeneration(
         assert text_hidden_size is not None, "text_config.hidden_size is required"
         projector_hidden_size = getattr(config, "projector_hidden_size", None)
 
-        with self._mark_tower_model(aphrodite_config, {"image", "video"}):
+        with self._mark_tower_model(sonar_config, {"image", "video"}):
             vision_config = config.vision_config
             self.vision_tower = MiniMaxVLVisionModel(
                 config=PreTrainedConfig.from_dict(vision_config),
@@ -1624,8 +1624,8 @@ class MiniMaxM3SparseForConditionalGeneration(
                 prefix=maybe_prefix(prefix, "vision_tower"),
             )
 
-        self.language_model = init_aphrodite_registered_model(
-            aphrodite_config=aphrodite_config,
+        self.language_model = init_sonar_registered_model(
+            sonar_config=sonar_config,
             hf_config=config.text_config,
             prefix=maybe_prefix(prefix, "language_model"),
             architectures=["MiniMaxM3SparseForCausalLM"],
@@ -1759,4 +1759,4 @@ class MiniMaxM3SparseForConditionalGeneration(
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)

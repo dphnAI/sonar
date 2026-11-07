@@ -17,17 +17,17 @@ from typing import ClassVar
 import torch
 from torch import nn
 
-from aphrodite.config import AphroditeConfig, get_current_aphrodite_config
-from aphrodite.config.attention import IndexerKVDType
-from aphrodite.distributed import (
+from sonar.config import SonarConfig, get_current_sonar_config
+from sonar.config.attention import IndexerKVDType
+from sonar.distributed import (
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
 )
-from aphrodite.forward_context import get_forward_context
-from aphrodite.logger import init_logger
-from aphrodite.models.minimax_m3.amd.indexer_cp import IndexerCpPeers, get_indexer_cp_peers
-from aphrodite.models.minimax_m3.amd.ops.sparse_pa import ASM_PAGE_SIZE
-from aphrodite.models.minimax_m3.common.indexer import (
+from sonar.forward_context import get_forward_context
+from sonar.logger import init_logger
+from sonar.models.minimax_m3.amd.indexer_cp import IndexerCpPeers, get_indexer_cp_peers
+from sonar.models.minimax_m3.amd.ops.sparse_pa import ASM_PAGE_SIZE
+from sonar.models.minimax_m3.common.indexer import (
     MiniMaxM3IndexerBackend,
     MiniMaxM3IndexerCache,
     MiniMaxM3IndexerDecodeMetadata,
@@ -39,14 +39,14 @@ from aphrodite.models.minimax_m3.common.indexer import (
 
 # The single source of truth for whether the AITER attend was asked for; this
 # indexer is only usable alongside it.
-from aphrodite.models.minimax_m3.common.sparse_attention import (
+from sonar.models.minimax_m3.common.sparse_attention import (
     _minimax_m3_aiter_sparse_pa_requested,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.math_utils import cdiv, next_power_of_2
-from aphrodite.v1.attention.backend import AttentionBackend, CommonAttentionMetadata
-from aphrodite.v1.attention.backends.utils import split_decodes_and_prefills
-from aphrodite.v1.kv_cache_interface import AttentionSpec
+from sonar.platforms import current_platform
+from sonar.utils.math_utils import cdiv, next_power_of_2
+from sonar.v1.attention.backend import AttentionBackend, CommonAttentionMetadata
+from sonar.v1.attention.backends.utils import split_decodes_and_prefills
+from sonar.v1.kv_cache_interface import AttentionSpec
 
 logger = init_logger(__name__)
 
@@ -154,14 +154,14 @@ class MiniMaxM3IndexerMSAMetadataBuilder(MiniMaxM3IndexerMetadataBuilder):
         self,
         kv_cache_spec: AttentionSpec,
         layer_names: list[str],
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
     ) -> None:
-        super().__init__(kv_cache_spec, layer_names, aphrodite_config, device)
-        hf_config = aphrodite_config.model_config.hf_config
+        super().__init__(kv_cache_spec, layer_names, sonar_config, device)
+        hf_config = sonar_config.model_config.hf_config
         text_config = getattr(hf_config, "text_config", hf_config)
         self.sparse_block_size = int(text_config.sparse_attention_config["sparse_block_size"])
-        max_tokens = aphrodite_config.scheduler_config.max_num_batched_tokens
+        max_tokens = sonar_config.scheduler_config.max_num_batched_tokens
         # Companions to the base's num_valid_pages_buffer, for the two vectors
         # only the emitted table needs.
         self.row_req_id_buffer = torch.empty(max_tokens, dtype=torch.int32, device=device)
@@ -302,7 +302,7 @@ class MiniMaxM3IndexerMSAImpl(MiniMaxM3IndexerImpl):
         one-block shard into the graph and then replay it at full context. The
         per-request causal bound clips the real work at runtime instead.
         """
-        config = get_current_aphrodite_config()
+        config = get_current_sonar_config()
         self.cp_max_seq_len = config.model_config.max_model_len
         spec = getattr(config, "speculative_config", None)
         n_spec = int(getattr(spec, "num_speculative_tokens", 0) or 0) if spec else 0
@@ -749,7 +749,7 @@ def msa_indexer_unsupported_reason(
     if indexer_kv_dtype not in ("fp8", "fp8_e4m3"):
         # The score kernels are fp8 MFMA; there is no bf16 instantiation.
         return f"needs an fp8 e4m3 index cache, got indexer_kv_dtype={indexer_kv_dtype!r}"
-    from aphrodite.platforms.rocm import on_gfx950
+    from sonar.platforms.rocm import on_gfx950
 
     if not on_gfx950():
         return f"needs {' or '.join(SUPPORTED_ARCHS)} for the fp8 MFMA"
@@ -817,7 +817,7 @@ def select_msa_indexer_impl_cls(
         sparse_block_size=sparse_block_size,
         index_head_dim=index_head_dim,
         indexer_kv_dtype=indexer_kv_dtype,
-        max_model_len=get_current_aphrodite_config().model_config.max_model_len,
+        max_model_len=get_current_sonar_config().model_config.max_model_len,
         score_type=score_type,
     )
     if reason is not None:
@@ -832,7 +832,7 @@ def select_msa_indexer_impl_cls(
 
 
 def msa_indexer_cp_enabled(
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     *,
     msa_indexer_selected: bool,
 ) -> bool:
@@ -841,8 +841,8 @@ def msa_indexer_cp_enabled(
     ``select_msa_indexer_impl_cls``'s gate re-asked at the CP world. Call once
     per model: the projection layout and head count are decided off one answer.
     """
-    requested = aphrodite_config.attention_config.minimax_m3_indexer_cp
-    sparse_cfg = getattr(aphrodite_config.model_config.hf_text_config, "sparse_attention_config", None)
+    requested = sonar_config.attention_config.minimax_m3_indexer_cp
+    sparse_cfg = getattr(sonar_config.model_config.hf_text_config, "sparse_attention_config", None)
     if not requested or sparse_cfg is None:
         return False
 
@@ -853,22 +853,22 @@ def msa_indexer_cp_enabled(
         # selection logged its own reason on the way past.
         reason: str | None = "the MSA indexer was not selected, so nothing to shard"
     else:
-        config = aphrodite_config.model_config.hf_text_config
+        config = sonar_config.model_config.hf_text_config
         tp_size = get_tensor_model_parallel_world_size()
-        spec = aphrodite_config.speculative_config
+        spec = sonar_config.speculative_config
         n_spec = int(getattr(spec, "num_speculative_tokens", 0) or 0) if spec else 0
         reason = msa_indexer_unsupported_reason(
             topk_blocks=int(sparse_cfg["sparse_topk_blocks"]),
             sparse_block_size=int(sparse_cfg["sparse_block_size"]),
             index_head_dim=int(sparse_cfg["sparse_index_dim"]),
-            indexer_kv_dtype=aphrodite_config.attention_config.resolve_indexer_kv_dtype("bf16"),
-            max_model_len=aphrodite_config.model_config.max_model_len,
+            indexer_kv_dtype=sonar_config.attention_config.resolve_indexer_kv_dtype("bf16"),
+            max_model_len=sonar_config.model_config.max_model_len,
             score_type=sparse_cfg.get("sparse_score_type", "max"),
             cp_world=tp_size,
             num_index_heads=int(sparse_cfg["sparse_num_index_heads"]),
             num_kv_heads=max(1, int(config.num_key_value_heads) // tp_size),
             max_query_len=n_spec + 1,
-            dcp_size=aphrodite_config.parallel_config.decode_context_parallel_size,
+            dcp_size=sonar_config.parallel_config.decode_context_parallel_size,
         )
 
     if reason is not None:

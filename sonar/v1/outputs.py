@@ -10,19 +10,19 @@ from typing import TYPE_CHECKING, NamedTuple, TypeAlias
 import numpy as np
 import torch
 
-from aphrodite.compilation.cuda_graph import CUDAGraphStat
-from aphrodite.utils.torch_utils import PIN_MEMORY
-from aphrodite.v1.core.sched.output import SchedulerOutput
+from sonar.compilation.cuda_graph import CUDAGraphStat
+from sonar.utils.torch_utils import PIN_MEMORY
+from sonar.v1.core.sched.output import SchedulerOutput
 
 if TYPE_CHECKING:
-    from aphrodite.distributed.aux_output_connector.connector import AuxRequestOutput
-    from aphrodite.distributed.ec_transfer.ec_connector.base import ECConnectorWorkerMetadata
-    from aphrodite.distributed.ec_transfer.ec_connector.metrics import ECConnectorStats
-    from aphrodite.distributed.kv_events import KVConnectorKVEvents
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.base import (
+    from sonar.distributed.aux_output_connector.connector import AuxRequestOutput
+    from sonar.distributed.ec_transfer.ec_connector.base import ECConnectorWorkerMetadata
+    from sonar.distributed.ec_transfer.ec_connector.metrics import ECConnectorStats
+    from sonar.distributed.kv_events import KVConnectorKVEvents
+    from sonar.distributed.kv_transfer.kv_connector.v1.base import (
         KVConnectorWorkerMetadata,
     )
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.metrics import KVConnectorStats
+    from sonar.distributed.kv_transfer.kv_connector.v1.metrics import KVConnectorStats
 else:
     AuxRequestOutput = object
     KVConnectorStats = object

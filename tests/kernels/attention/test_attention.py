@@ -6,11 +6,11 @@ import random
 import pytest
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.model_executor.layers.attention import Attention, MMEncoderAttention
-from aphrodite.platforms import current_platform
-from aphrodite.utils.mem_utils import get_max_shared_memory_bytes
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar import _custom_ops as ops
+from sonar.model_executor.layers.attention import Attention, MMEncoderAttention
+from sonar.platforms import current_platform
+from sonar.utils.mem_utils import get_max_shared_memory_bytes
+from sonar.utils.torch_utils import set_random_seed
 from tests.kernels.allclose_default import get_default_atol, get_default_rtol
 from tests.kernels.utils import opcheck
 

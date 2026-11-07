@@ -2,16 +2,16 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 # mypy: ignore-errors
-"""Aphrodite gRPC Server
+"""Sonar gRPC Server
 
 Starts a gRPC server backed by AsyncLLM, using Sonar's native adapter for
 the external SMG VllmEngine protobuf service.
 
 Usage:
-    python -m aphrodite.entrypoints.launchers.grpc_server --model <model_path>
+    python -m sonar.entrypoints.launchers.grpc_server --model <model_path>
 
 Example:
-    python -m aphrodite.entrypoints.launchers.grpc_server \
+    python -m sonar.entrypoints.launchers.grpc_server \
         --model meta-llama/Llama-2-7b-hf \
         --host 0.0.0.0 \
         --port 50051
@@ -31,26 +31,26 @@ try:
     from grpc_reflection.v1alpha import reflection
     from smg_grpc_proto import vllm_engine_pb2, vllm_engine_pb2_grpc
 
-    from aphrodite.entrypoints.grpc.health_servicer import AphroditeHealthServicer
-    from aphrodite.entrypoints.grpc.servicer import AphroditeEngineServicer
+    from sonar.entrypoints.grpc.health_servicer import SonarHealthServicer
+    from sonar.entrypoints.grpc.servicer import SonarEngineServicer
 except ImportError as e:
     raise ImportError(
         "gRPC mode requires smg-grpc-proto and the grpcio health/reflection packages. "
-        "If not installed, run: pip install 'aphrodite-engine[grpc]'. "
+        "If not installed, install sonar[grpc] from the Sonar wheel index. "
         "If already installed, there may be a broken import due to a "
         "version mismatch — see the chained exception above for details."
     ) from e
 
 import uvloop
 
-from aphrodite import envs
-from aphrodite.engine.arg_utils import AsyncEngineArgs
-from aphrodite.entrypoints.common.startup import log_version_and_model
-from aphrodite.logger import configure_logging_from_args, init_logger
-from aphrodite.usage.usage_lib import UsageContext
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
-from aphrodite.v1.engine.async_llm import AsyncLLM
-from aphrodite.version import __version__ as APHRODITE_VERSION
+from sonar import envs
+from sonar.engine.arg_utils import AsyncEngineArgs
+from sonar.entrypoints.common.startup import log_version_and_model
+from sonar.logger import configure_logging_from_args, init_logger
+from sonar.usage.usage_lib import UsageContext
+from sonar.utils.argparse_utils import FlexibleArgumentParser
+from sonar.v1.engine.async_llm import AsyncLLM
+from sonar.version import __version__ as SONAR_VERSION
 
 logger = init_logger(__name__)
 
@@ -162,29 +162,29 @@ async def serve_grpc(args: argparse.Namespace):
     """
     if getattr(args, "dphn_network", False):
         raise ValueError("The Python gRPC server cannot serve --dphn-network; weight receipts require the HTTP APIs")
-    log_version_and_model(logger, APHRODITE_VERSION, args.model)
-    logger.info("Aphrodite gRPC server args: %s", args)
+    log_version_and_model(logger, SONAR_VERSION, args.model)
+    logger.info("Sonar gRPC server args: %s", args)
 
     start_time = time.time()
 
     # Create engine args
     engine_args = AsyncEngineArgs.from_cli_args(args)
 
-    # Build Aphrodite config
-    aphrodite_config = engine_args.create_engine_config(
+    # Build Sonar config
+    sonar_config = engine_args.create_engine_config(
         usage_context=UsageContext.OPENAI_API_SERVER,
     )
 
     # Create AsyncLLM
-    async_llm = AsyncLLM.from_aphrodite_config(
-        aphrodite_config=aphrodite_config,
+    async_llm = AsyncLLM.from_sonar_config(
+        sonar_config=sonar_config,
         usage_context=UsageContext.OPENAI_API_SERVER,
         enable_log_requests=args.enable_log_requests,
         disable_log_stats=args.disable_log_stats,
     )
 
     # Create servicer
-    servicer = AphroditeEngineServicer(async_llm, start_time)
+    servicer = SonarEngineServicer(async_llm, start_time)
 
     # Create gRPC server
     inflight = _InflightRpcs(vllm_engine_pb2.DESCRIPTOR.services_by_name["VllmEngine"].full_name)
@@ -213,7 +213,7 @@ async def serve_grpc(args: argparse.Namespace):
     vllm_engine_pb2_grpc.add_VllmEngineServicer_to_server(servicer, server)
 
     # Add standard gRPC health service for Kubernetes probes
-    health_servicer = AphroditeHealthServicer(async_llm)
+    health_servicer = SonarHealthServicer(async_llm)
     health_pb2_grpc.add_HealthServicer_to_server(health_servicer, server)
 
     # Enable reflection for grpcurl and other tools
@@ -232,7 +232,7 @@ async def serve_grpc(args: argparse.Namespace):
     try:
         # Start server
         await server.start()
-        logger.info("Aphrodite gRPC server started on %s", address)
+        logger.info("Sonar gRPC server started on %s", address)
         logger.info("Server is ready to accept requests")
 
         # Start periodic stats logging (mirrors the HTTP server's lifespan task)
@@ -240,7 +240,7 @@ async def serve_grpc(args: argparse.Namespace):
 
             async def _force_log():
                 while True:
-                    await asyncio.sleep(envs.APHRODITE_LOG_STATS_INTERVAL)
+                    await asyncio.sleep(envs.SONAR_LOG_STATS_INTERVAL)
                     await async_llm.do_log_stats()
 
             stats_task = asyncio.create_task(_force_log())
@@ -270,21 +270,21 @@ async def serve_grpc(args: argparse.Namespace):
         except KeyboardInterrupt:
             logger.info("Interrupted by user")
     finally:
-        logger.info("Shutting down Aphrodite gRPC server...")
+        logger.info("Shutting down Sonar gRPC server...")
         if stats_task is not None:
             stats_task.cancel()
         try:
             health_servicer.set_not_serving()
         except Exception:  # broad: must not prevent server.stop() / shutdown()
             logger.warning("Failed to set health status to NOT_SERVING", exc_info=True)
-        await _drain_and_stop(server, async_llm, aphrodite_config.shutdown_timeout, inflight)
+        await _drain_and_stop(server, async_llm, sonar_config.shutdown_timeout, inflight)
         logger.info("Shutdown complete")
 
 
 def main():
-    """Main entry point for python -m aphrodite.entrypoints.launchers.grpc_server."""
+    """Main entry point for python -m sonar.entrypoints.launchers.grpc_server."""
     parser = FlexibleArgumentParser(
-        description="Aphrodite gRPC Server",
+        description="Sonar gRPC Server",
     )
 
     # Server args

@@ -12,7 +12,7 @@ import requests
 
 
 class ServerProcess:
-    APHRODITE_RESET_CACHE_ENDPOINTS = [
+    SONAR_RESET_CACHE_ENDPOINTS = [
         "/reset_prefix_cache",
         "/reset_mm_cache",
         "/reset_encoder_cache",
@@ -49,8 +49,8 @@ class ServerProcess:
             self.server_cmd,
             start_new_session=True,
             stdout=None if self.show_stdout else subprocess.DEVNULL,
-            # Need `APHRODITE_SERVER_DEV_MODE=1` for `_reset_caches`
-            env=os.environ | {"APHRODITE_SERVER_DEV_MODE": "1"},
+            # Need `SONAR_SERVER_DEV_MODE=1` for `_reset_caches`
+            env=os.environ | {"SONAR_SERVER_DEV_MODE": "1"},
         )
 
     def stop(self):
@@ -76,7 +76,7 @@ class ServerProcess:
 
         self.run_subcommand(self.after_bench_cmd)
 
-    def _get_aphrodite_server_address(self) -> str:
+    def _get_sonar_server_address(self) -> str:
         server_cmd = self.server_cmd
 
         for host_key in ("--host",):
@@ -91,12 +91,12 @@ class ServerProcess:
                 port = int(server_cmd[server_cmd.index(port_key) + 1])
                 break
         else:
-            port = 8000  # The default value in aphrodite serve
+            port = 8000  # The default value in sonar serve
 
         return f"http://{host}:{port}"
 
     def is_server_ready(self) -> bool:
-        server_address = self._get_aphrodite_server_address()
+        server_address = self._get_sonar_server_address()
         try:
             response = requests.get(f"{server_address}/health")
             return response.status_code == 200
@@ -118,11 +118,11 @@ class ServerProcess:
         server_cmd = self.server_cmd
 
         # Use `.endswith()` to match `/bin/...`
-        if server_cmd[0].endswith("aphrodite"):
-            server_address = self._get_aphrodite_server_address()
+        if server_cmd[0].endswith("sonar"):
+            server_address = self._get_sonar_server_address()
             print(f"Resetting caches at {server_address}")
 
-            for endpoint in self.APHRODITE_RESET_CACHE_ENDPOINTS:
+            for endpoint in self.SONAR_RESET_CACHE_ENDPOINTS:
                 res = requests.post(server_address + endpoint)
                 res.raise_for_status()
         elif server_cmd[0].endswith("infinity_emb"):

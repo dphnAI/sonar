@@ -7,9 +7,9 @@ import numpy as np
 import numpy.typing as npt
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.utils.import_utils import PlaceholderModule, check_torchcodec_available
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.utils.import_utils import PlaceholderModule, check_torchcodec_available
 
 from .base import (
     VideoSourceMetadata,

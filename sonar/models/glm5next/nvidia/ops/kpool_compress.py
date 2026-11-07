@@ -14,9 +14,9 @@ from __future__ import annotations
 
 import torch
 
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.deep_gemm import mqa_logits_use_mx_scales
-from aphrodite.v1.attention.ops.common import pack_ue8m0_x4
+from sonar.triton_utils import tl, triton
+from sonar.utils.deep_gemm import mqa_logits_use_mx_scales
+from sonar.v1.attention.ops.common import pack_ue8m0_x4
 
 # The GLM-5.3-Flash indexer head dimension is fixed at 128.
 INDEX_HEAD_DIM = 128

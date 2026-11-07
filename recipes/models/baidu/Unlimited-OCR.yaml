@@ -17,7 +17,7 @@ model:
   docker_image: "vllm/vllm-openai:unlimited-ocr"
   install:
     pip:
-      note: "Unlimited-OCR (UnlimitedOCRForCausalLM) is supported since Aphrodite v0.25.0."
+      note: "Unlimited-OCR (UnlimitedOCRForCausalLM) is supported since Sonar v0.25.0."
   architecture: dense
   parameter_count: "3B"
   active_parameters: "3B"
@@ -25,7 +25,7 @@ model:
   base_args:
     - "--trust-remote-code"
     - "--logits_processors"
-    - "aphrodite.model_executor.models.unlimited_ocr:NGramPerReqLogitsProcessor"
+    - "sonar.model_executor.models.unlimited_ocr:NGramPerReqLogitsProcessor"
     - "--no-enable-prefix-caching"
     - "--mm-processor-cache-gb"
     - "0"
@@ -67,7 +67,7 @@ guide: |
   ## Prerequisites
 
   - **Hardware**: a single GPU with >=8 GB VRAM is enough for BF16 inference.
-  - **Aphrodite**: served from the dedicated release image (the architecture is not yet
+  - **Sonar**: served from the dedicated release image (the architecture is not yet
     in a stable pip wheel). Pull the image shown in the Install → Docker tab.
 
   ## Serving recipe (required)
@@ -76,7 +76,7 @@ guide: |
   recipe — without it the model returns empty output. The required pieces:
 
   - register the no-repeat-ngram logits processor on the server:
-    `--logits_processors aphrodite.model_executor.models.unlimited_ocr:NGramPerReqLogitsProcessor`
+    `--logits_processors sonar.model_executor.models.unlimited_ocr:NGramPerReqLogitsProcessor`
   - prompt text must begin with a literal `<image>` (e.g. `<image>document parsing.`)
   - `skip_special_tokens=False`
   - pass the processor args per request: `ngram_size=35`, `window_size=128`
@@ -91,7 +91,7 @@ guide: |
     vllm/vllm-openai:unlimited-ocr \
     baidu/Unlimited-OCR \
     --trust-remote-code \
-    --logits_processors aphrodite.model_executor.models.unlimited_ocr:NGramPerReqLogitsProcessor \
+    --logits_processors sonar.model_executor.models.unlimited_ocr:NGramPerReqLogitsProcessor \
     --no-enable-prefix-caching \
     --mm-processor-cache-gb 0
   ```
@@ -120,7 +120,7 @@ guide: |
       temperature=0.0,
       extra_body={
           "skip_special_tokens": False,
-          "aphrodite_xargs": {"ngram_size": 35, "window_size": 128},
+          "sonar_xargs": {"ngram_size": 35, "window_size": 128},
       },
   )
   print(f"Response costs: {time.time() - start:.2f}s")
@@ -144,4 +144,4 @@ guide: |
   ## References
 
   - [Unlimited-OCR on Hugging Face](https://huggingface.co/baidu/Unlimited-OCR)
-  - [Aphrodite multimodal inputs guide](https://docs.vllm.ai/en/latest/features/multimodal_inputs.html#offline-inference)
+  - [Sonar multimodal inputs guide](https://docs.vllm.ai/en/latest/features/multimodal_inputs.html#offline-inference)

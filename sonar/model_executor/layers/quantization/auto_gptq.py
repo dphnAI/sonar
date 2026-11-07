@@ -8,13 +8,13 @@ import torch
 from safetensors.torch import _TYPES as _SAFETENSORS_TO_TORCH_DTYPE
 from transformers import PreTrainedConfig
 
-import aphrodite.model_executor.layers.fused_moe  # noqa
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.kernels.linear import (
+import sonar.model_executor.layers.fused_moe  # noqa
+from sonar.logger import init_logger
+from sonar.model_executor.kernels.linear import (
     MPLinearLayerConfig,
     choose_mp_linear_kernel,
 )
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.model_executor.layers.fused_moe import (
     FusedMoEConfig,
     FusedMoEMethodBase,
     FusedMoEQuantConfig,
@@ -23,45 +23,45 @@ from aphrodite.model_executor.layers.fused_moe import (
     SharedExperts,
     UnquantizedFusedMoEMethod,
 )
-from aphrodite.model_executor.layers.fused_moe.oracle.int_wna16 import (
+from sonar.model_executor.layers.fused_moe.oracle.int_wna16 import (
     WNA16MoEBackend,
     convert_to_wna16_moe_kernel_format,
     make_wna16_moe_kernel,
     select_wna16_moe_backend,
 )
-from aphrodite.model_executor.layers.linear import LinearMethodBase, set_weight_attrs
-from aphrodite.model_executor.layers.quantization import QuantizationMethods
-from aphrodite.model_executor.layers.quantization.base_config import (
+from sonar.model_executor.layers.linear import LinearMethodBase, set_weight_attrs
+from sonar.model_executor.layers.quantization import QuantizationMethods
+from sonar.model_executor.layers.quantization.base_config import (
     QuantizationConfig,
     QuantizeMethodBase,
 )
-from aphrodite.model_executor.layers.quantization.utils import replace_parameter
-from aphrodite.model_executor.layers.quantization.utils.gptq_utils import (
+from sonar.model_executor.layers.quantization.utils import replace_parameter
+from sonar.model_executor.layers.quantization.utils.gptq_utils import (
     get_dynamic_override,
     get_linear_quant_method,
     normalize_and_validate_gptq_desc_act,
     override_config,
 )
-from aphrodite.model_executor.layers.quantization.utils.marlin_utils import (
+from sonar.model_executor.layers.quantization.utils.marlin_utils import (
     check_moe_marlin_supports_layer,
     get_marlin_input_dtype,
     marlin_repeat_scales_on_all_ranks,
     verify_marlin_supported,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     kInt4StaticGroupScale,
     kInt8StaticGroupScale,
 )
-from aphrodite.model_executor.parameter import (
+from sonar.model_executor.parameter import (
     ChannelQuantScaleParameter,
     GroupQuantScaleParameter,
-    PackedAphroditeParameter,
     PackedColumnParameter,
+    PackedSonarParameter,
 )
-from aphrodite.scalar_type import scalar_types
-from aphrodite.transformers_utils.config import get_safetensors_params_metadata
-from aphrodite.utils.collection_utils import is_list_of
+from sonar.scalar_type import scalar_types
+from sonar.transformers_utils.config import get_safetensors_params_metadata
+from sonar.utils.collection_utils import is_list_of
 
 logger = init_logger(__name__)
 
@@ -228,7 +228,7 @@ class AutoGPTQConfig(QuantizationConfig):
 
     def get_quant_method(self, layer: torch.nn.Module, prefix: str) -> "QuantizeMethodBase | None":
         if isinstance(layer, RoutedExperts):
-            from aphrodite.model_executor.layers.quantization.moe_wna16 import MoeWNA16Config
+            from sonar.model_executor.layers.quantization.moe_wna16 import MoeWNA16Config
 
             if not check_moe_marlin_supports_layer(layer, self.group_size, allow_tile_padding=True):
                 logger.warning_once(
@@ -247,9 +247,9 @@ class AutoGPTQConfig(QuantizationConfig):
         quant_method.input_dtype = get_marlin_input_dtype(prefix)
         return quant_method
 
-    def apply_aphrodite_mapper(self, hf_to_aphrodite_mapper):
+    def apply_sonar_mapper(self, hf_to_sonar_mapper):
         if self.modules_in_block_to_quantize is not None:
-            self.modules_in_block_to_quantize = hf_to_aphrodite_mapper.apply_list(self.modules_in_block_to_quantize)
+            self.modules_in_block_to_quantize = hf_to_sonar_mapper.apply_list(self.modules_in_block_to_quantize)
 
     def maybe_update_config(
         self,
@@ -349,7 +349,7 @@ class AutoGPTQLinearMethod(LinearMethodBase):
             scales_and_zp_size = input_size_per_partition // group_size
 
         # Quantized weights
-        qweight = PackedAphroditeParameter(
+        qweight = PackedSonarParameter(
             data=torch.empty(
                 input_size_per_partition // self.quant_config.pack_factor,
                 output_size_per_partition,
@@ -390,7 +390,7 @@ class AutoGPTQLinearMethod(LinearMethodBase):
 
         else:
             scales = GroupQuantScaleParameter(output_dim=1, input_dim=0, **weight_scale_args)
-            qzeros = PackedAphroditeParameter(
+            qzeros = PackedSonarParameter(
                 input_dim=0,
                 output_dim=1,
                 packed_dim=1,
@@ -669,7 +669,7 @@ class AutoGPTQMoEMethod(FusedMoEMethodBase):
 
     def get_fused_moe_quant_config(self, layer: RoutedExperts) -> FusedMoEQuantConfig:
         if self.wna16_moe_backend == WNA16MoEBackend.HUMMING:
-            from aphrodite.model_executor.layers.quantization.utils.humming import (
+            from sonar.model_executor.layers.quantization.utils.humming import (
                 get_humming_moe_quant_config,
             )
 
@@ -680,7 +680,7 @@ class AutoGPTQMoEMethod(FusedMoEMethodBase):
                 gemm1_clamp_limit=getattr(layer, "swiglu_limit", None),
             )
 
-        from aphrodite.model_executor.layers.fused_moe.config import (
+        from sonar.model_executor.layers.fused_moe.config import (
             gptq_marlin_moe_quant_config,
         )
 

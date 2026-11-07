@@ -7,7 +7,7 @@ rows): two persistent launches a layer (``layer``) from the layer's
 inputs at the attention seam to its outputs at the next one -- the MoE's
 reduced output, the residual after the FFN seam and that seam's mixes -- with
 both TP all-reduces inside the kernels (symmetric peer memory). A layer whose
-attention Aphrodite runs (``ffn``) takes one launch from its unreduced attention
+attention Sonar runs (``ffn``) takes one launch from its unreduced attention
 output on. Every argument is a device pointer: the launches can be captured in a
 HIP graph. The kernels move their mailbox epoch on themselves; every rank runs
 the same launches, so the ranks' epochs agree.
@@ -22,7 +22,7 @@ from pathlib import Path
 
 import torch
 
-from aphrodite.v1.attention.ops.flydsl_kernels import _run_compiled
+from sonar.v1.attention.ops.flydsl_kernels import _run_compiled
 
 from .attention.front import FRONT_POINTS
 from .attention.plan import HEAD_DIM, HIDDEN, KEYS, Q_RANK, WINDOW, Dims
@@ -72,7 +72,7 @@ def _check_tensors(owner, tag: str, want: dict) -> None:
 
 @dataclass
 class AttnWeights:
-    """One layer's attention tensors on this rank, in Aphrodite's loaded layout."""
+    """One layer's attention tensors on this rank, in Sonar's loaded layout."""
 
     layer_id: int
     wqkv: torch.Tensor  # [1792, 5120] e4m3: [wq_a; wkv]
@@ -110,8 +110,8 @@ class AttnWeights:
 
 @dataclass
 class MonoLayerWeights:
-    """One layer's tensors on this rank, in Aphrodite's loaded layout (``attn``:
-    None for a layer whose attention Aphrodite runs)."""
+    """One layer's tensors on this rank, in Sonar's loaded layout (``attn``:
+    None for a layer whose attention Sonar runs)."""
 
     attn: AttnWeights | None
     hc_attn_fn: torch.Tensor  # [24, 4 * 5120] f32
@@ -228,7 +228,7 @@ class DSV41MonoLayer:
         # the first layer's incoming pre-mix: stream 0 of the broadcast embedding
         self._first_pre = torch.zeros(MAX_TOKENS, HC, dtype=torch.float32, device=dev)
         self._first_pre[:, 0] = 1.0
-        # an index source's K1 outputs, Aphrodite's indexer's inputs
+        # an index source's K1 outputs, Sonar's indexer's inputs
         self.normed = torch.zeros(MAX_TOKENS, HIDDEN, dtype=torch.bfloat16, device=dev)
         self.qr = torch.zeros(MAX_TOKENS, Q_RANK, dtype=torch.bfloat16, device=dev)
         # the attention seam's outputs, K1 -> K2
@@ -244,7 +244,7 @@ class DSV41MonoLayer:
     def scratch(self, tokens: int) -> torch.Tensor:
         """Step width ``tokens``'s scratch: a width's layout has memory of its own
         (``layer.scratch_layout``). Allocated at the width's first step, which is
-        eager: Aphrodite runs every graph's batch eagerly before capturing it."""
+        eager: Sonar runs every graph's batch eagerly before capturing it."""
         buf = self._scratch.get(tokens)
         if buf is None:
             if torch.cuda.is_current_stream_capturing():
@@ -280,7 +280,7 @@ class DSV41MonoLayer:
                 swa_width=self.swa_width,
             )
             # On gfx942, keylist.launch writes an index source's keys between
-            # Aphrodite's indexer and K2 (forward), so its K2 is the one without
+            # Sonar's indexer and K2 (forward), so its K2 is the one without
             # the key-table build.
             k2 = replace(b, index=False) if GFX942 else b
             self._kernels[key] = (build_mono_k1(b), build_mono_k2(k2))
@@ -512,7 +512,7 @@ class DSV41MonoLayer:
         topk: int = 6,
     ):
         """-> (out, residual, post_mix, res_mix, pre_mix) of a layer whose
-        attention Aphrodite ran: the attention's TP reduce, the FFN seam, the MoE and
+        attention Sonar ran: the attention's TP reduce, the FFN seam, the MoE and
         its all-reduce in one launch. The routed expert count is the gate
         weight's row count, and ``topk`` is the layer's picks a token: 384 / 6
         for the target, 128 / 3 for a DSpark draft layer."""

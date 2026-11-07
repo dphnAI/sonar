@@ -9,14 +9,14 @@ from http import HTTPStatus
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from aphrodite.engine.protocol import EngineClient
-from aphrodite.entrypoints.serve.tokenize.serving import ServingTokenization
-from aphrodite.entrypoints.serve.utils.api_utils import (
+from sonar.engine.protocol import EngineClient
+from sonar.entrypoints.serve.tokenize.serving import ServingTokenization
+from sonar.entrypoints.serve.utils.api_utils import (
     load_aware_call,
     validate_json_request,
     with_cancellation,
 )
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 from ...serve.engine.protocol import ErrorResponse
 from .protocol import (

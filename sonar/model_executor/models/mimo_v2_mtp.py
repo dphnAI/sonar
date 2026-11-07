@@ -24,21 +24,21 @@ import torch
 import torch.nn as nn
 from transformers import PreTrainedConfig
 
-from aphrodite.config import AphroditeConfig, CacheConfig
-from aphrodite.distributed import (
+from sonar.config import CacheConfig, SonarConfig
+from sonar.distributed import (
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
 )
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import ReplicatedLinear
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import ReplicatedLinear
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
-from aphrodite.sequence import IntermediateTensors
+from sonar.model_executor.model_loader.weight_utils import default_weight_loader
+from sonar.sequence import IntermediateTensors
 
 from .interfaces import (
     MultiModalEmbeddings,
@@ -48,7 +48,7 @@ from .interfaces import (
 from .mimo_v2 import MiMoV2Attention, MiMoV2MLP, _shard_fp8_qkv_proj
 from .utils import _merge_multimodal_embeddings, maybe_prefix
 
-# MiMo-V2 checkpoints contain multiple MTP layers, but Aphrodite currently supports
+# MiMo-V2 checkpoints contain multiple MTP layers, but Sonar currently supports
 # only the first layer
 _MIMO_V2_PRO_NUM_MTP_LAYERS = 1
 _MIMO_V2_FLASH_NUM_MTP_LAYERS = 1
@@ -158,11 +158,11 @@ class _MiMoV2MTPLayers(nn.Module):
 
 
 class MiMoV2MultiTokenPredictor(nn.Module):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_config
-        spec_cfg = aphrodite_config.speculative_config
+        config = sonar_config.model_config.hf_config
+        spec_cfg = sonar_config.speculative_config
         assert spec_cfg is not None
         num_mtp_layers = 1
 
@@ -176,8 +176,8 @@ class MiMoV2MultiTokenPredictor(nn.Module):
         self.mtp = _MiMoV2MTPLayers(
             config=config,
             num_mtp_layers=num_mtp_layers,
-            cache_config=aphrodite_config.cache_config,
-            quant_config=aphrodite_config.quant_config,
+            cache_config=sonar_config.cache_config,
+            quant_config=sonar_config.quant_config,
             prefix=maybe_prefix(prefix, "mtp.layers"),
         )
 
@@ -209,10 +209,10 @@ class MiMoV2MultiTokenPredictor(nn.Module):
 
 
 class MiMoV2MTP(nn.Module):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__()
-        self.config = aphrodite_config.model_config.hf_config
-        self.model = MiMoV2MultiTokenPredictor(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.config = sonar_config.model_config.hf_config
+        self.model = MiMoV2MultiTokenPredictor(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
         self.lm_head = ParallelLMHead(
             self.config.vocab_size,
             self.config.hidden_size,

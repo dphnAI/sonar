@@ -90,13 +90,13 @@ guide: |
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U aphrodite-engine --torch-backend auto
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   ```
 
   ### Intel Xeon 6 CPUs
 
   - Hardware: Intel Xeon 6 CPUs
-  - Aphrodite CPU >= 0.8.5 for this validated Xeon 6 configuration
+  - Sonar CPU >= 0.8.5 for this validated Xeon 6 configuration
 
   For Intel and AMD x86 CPUs, follow the
   [CPU pre-built wheels](https://docs.vllm.ai/en/latest/getting_started/installation/cpu/#pre-built-wheels)
@@ -107,7 +107,7 @@ guide: |
   ```
 
   ### TPU (Trillium / v6e)
-  Use the official Aphrodite TPU image. The 7B model fits on a single v6e chip (`v6e-1`, `--topology 1x1`).
+  Use the official Sonar TPU image. The 7B model fits on a single v6e chip (`v6e-1`, `--topology 1x1`).
   ```bash
   export HF_HOME=/dev/shm
   export HF_TOKEN=<your HF token>
@@ -115,7 +115,7 @@ guide: |
     --shm-size=16G \
     -e HF_HOME -e HF_TOKEN \
     vllm/vllm-tpu:latest \
-    aphrodite serve ...
+    sonar serve ...
   ```
 
   ## Deployment Configurations
@@ -126,7 +126,7 @@ guide: |
   prescribe a fixed TP/DP layout or hard-code NUMA node IDs.
 
   ```bash
-  aphrodite serve Qwen/Qwen2.5-VL-7B-Instruct
+  sonar serve Qwen/Qwen2.5-VL-7B-Instruct
   ```
 
   Docker:
@@ -149,7 +149,7 @@ guide: |
   - `--max-num-seqs`: concurrency and scheduler-capacity tuning.
   - `--gpu-memory-utilization`: platform memory-budget tuning.
   - `--no-enable-prefix-caching`: workload/benchmark cache-policy tuning.
-  - `APHRODITE_ENGINE_ITERATION_TIMEOUT_S`: operational runtime timeout.
+  - `SONAR_ENGINE_ITERATION_TIMEOUT_S`: operational runtime timeout.
 
   These settings may still appear in validated hardware-specific overrides. Tune
   them at deployment time based on platform resources, workload shape, and
@@ -160,7 +160,7 @@ guide: |
   ```bash
   export HF_HOME=/dev/shm
   export HF_TOKEN=<your HF token>
-  aphrodite serve Qwen/Qwen2.5-VL-7B-Instruct \
+  sonar serve Qwen/Qwen2.5-VL-7B-Instruct \
     --tensor-parallel-size 1 \
     --pipeline-parallel-size 1 \
     --dtype bfloat16 \
@@ -175,7 +175,7 @@ guide: |
   ### Single GPU (BF16, TP=1)
   ```bash
   export CUDA_VISIBLE_DEVICES=0
-  aphrodite serve Qwen/Qwen2.5-VL-7B-Instruct \
+  sonar serve Qwen/Qwen2.5-VL-7B-Instruct \
     --host 0.0.0.0 \
     --port 8000 \
     --limit-mm-per-prompt '{"image":2,"video":0}'
@@ -185,7 +185,7 @@ guide: |
   For higher throughput across a node, data parallelism works better than TP for a model this size.
   ```bash
   export CUDA_VISIBLE_DEVICES=0,1,2,3
-  aphrodite serve Qwen/Qwen2.5-VL-7B-Instruct \
+  sonar serve Qwen/Qwen2.5-VL-7B-Instruct \
     --host 0.0.0.0 \
     --port 8000 \
     --data-parallel-size 4 \
@@ -197,7 +197,7 @@ guide: |
   - `--max-model-len 16384` is a safe default on a single v6e chip (native context is 128K); raise it if you have headroom.
   - `--limit-mm-per-prompt` caps incoming multimodal requests per prompt.
   - `--mm-processor-kwargs '{"max_pixels":1003520}'` bounds the per-image resolution to control encoder cost.
-  - Aphrodite uses 90% of device memory by default; on TPU the recipe pushes `--gpu-memory-utilization 0.98` to maximize KV cache.
+  - Sonar uses 90% of device memory by default; on TPU the recipe pushes `--gpu-memory-utilization 0.98` to maximize KV cache.
   - `--disable-chunked-mm-input` is recommended on TPU for stable multimodal batching.
 
   ## Benchmarking
@@ -206,7 +206,7 @@ guide: |
 
   ### VisionArena-Chat
   ```bash
-  aphrodite bench serve \
+  sonar bench serve \
     --host 0.0.0.0 \
     --port 8000 \
     --backend openai-chat \
@@ -219,7 +219,7 @@ guide: |
 
   ### Random Synthetic
   ```bash
-  aphrodite bench serve \
+  sonar bench serve \
     --host 0.0.0.0 \
     --port 8000 \
     --model Qwen/Qwen2.5-VL-7B-Instruct \
@@ -233,4 +233,4 @@ guide: |
 
   - [Model card](https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct)
   - [Qwen2.5-VL on Trillium (v6e)](https://github.com/AI-Hypercomputer/tpu-recipes/tree/main/inference/trillium/vLLM/Qwen2.5-VL)
-  - [Aphrodite multimodal inputs guide](https://docs.vllm.ai/en/latest/features/multimodal_inputs.html)
+  - [Sonar multimodal inputs guide](https://docs.vllm.ai/en/latest/features/multimodal_inputs.html)

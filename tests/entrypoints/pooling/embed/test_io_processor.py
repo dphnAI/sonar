@@ -6,9 +6,9 @@ import pytest
 import torch
 from pydantic import TypeAdapter, ValidationError
 
-from aphrodite import PoolingParams
-from aphrodite.entrypoints.pooling.embed.io_processor import EmbedIOProcessor
-from aphrodite.entrypoints.pooling.embed.protocol import (
+from sonar import PoolingParams
+from sonar.entrypoints.pooling.embed.io_processor import EmbedIOProcessor
+from sonar.entrypoints.pooling.embed.protocol import (
     CohereEmbedRequest,
     EmbeddingBatchChatInputRequest,
     EmbeddingBatchChatRequest,
@@ -17,14 +17,14 @@ from aphrodite.entrypoints.pooling.embed.protocol import (
     EmbeddingCompletionRequest,
     EmbeddingRequest,
 )
-from aphrodite.entrypoints.pooling.typing import (
+from sonar.entrypoints.pooling.typing import (
     PoolingEngineInput,
     PoolingServeContext,
 )
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.inputs import mm_input, tokens_input
-from aphrodite.multimodal.inputs import MultiModalKwargsItems, PlaceholderRange
-from aphrodite.outputs import PoolingOutput, PoolingRequestOutput
+from sonar.exceptions import SonarValidationError
+from sonar.inputs import mm_input, tokens_input
+from sonar.multimodal.inputs import MultiModalKwargsItems, PlaceholderRange
+from sonar.outputs import PoolingOutput, PoolingRequestOutput
 
 
 class TestEmbeddingRequestParsing:
@@ -475,7 +475,7 @@ class TestChunkedEmbeddingProcessing:
         ctx.engine_inputs[1]["prompts"] = image_prompt
 
         if chunking_enabled:
-            with pytest.raises(AphroditeValidationError, match="multimodal inputs"):
+            with pytest.raises(SonarValidationError, match="multimodal inputs"):
                 handler.maybe_pre_process_chunked(ctx)
         else:
             handler.maybe_pre_process_chunked(ctx)

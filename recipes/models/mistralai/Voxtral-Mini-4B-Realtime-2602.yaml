@@ -2,7 +2,7 @@ meta:
   title: "Voxtral-Mini-4B-Realtime-2602"
   slug: "voxtral-mini-4b-realtime-2602"
   provider: "Mistral AI"
-  description: "Multilingual realtime speech transcription (13 languages) with a natively streaming causal audio encoder; configurable 80ms–2.4s transcription delay served via Aphrodite's Realtime API"
+  description: "Multilingual realtime speech transcription (13 languages) with a natively streaming causal audio encoder; configurable 80ms–2.4s transcription delay served via Sonar's Realtime API"
   date_added: 2026-05-13
   date_updated: 2026-05-13
   tasks:
@@ -25,7 +25,7 @@ model:
     - "--compilation_config"
     - '{"cudagraph_mode": "PIECEWISE"}'
   base_env:
-    APHRODITE_DISABLE_COMPILE_CACHE: "1"
+    SONAR_DISABLE_COMPILE_CACHE: "1"
 
 dependencies:
   - note: "mistral-common's audio extras bundle soxr/librosa/soundfile plus the Voxtral Realtime tokenizer (>= 1.9.0)"
@@ -72,15 +72,15 @@ guide: |
   ## Prerequisites
 
   - **Hardware**: a single GPU with **≥ 16 GB** VRAM (BF16 weights only).
-  - **Aphrodite**: **>= 0.20.0** — the Voxtral Realtime architecture has been
+  - **Sonar**: **>= 0.20.0** — the Voxtral Realtime architecture has been
     registered since v0.16.0, but v0.20.0 is the first stable release with
     the architecture documented in the supported-models list.
 
-  ### Install Aphrodite and audio dependencies
+  ### Install Sonar and audio dependencies
 
   ```bash
   uv venv && source .venv/bin/activate
-  uv pip install -U aphrodite-engine --torch-backend=auto
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   uv pip install -U "mistral-common[audio]>=1.9.0" transformers
   ```
 
@@ -93,7 +93,7 @@ guide: |
   ## Launch command
 
   ```bash
-  APHRODITE_DISABLE_COMPILE_CACHE=1 aphrodite serve mistralai/Voxtral-Mini-4B-Realtime-2602 \
+  SONAR_DISABLE_COMPILE_CACHE=1 sonar serve mistralai/Voxtral-Mini-4B-Realtime-2602 \
     --tokenizer-mode mistral \
     --compilation_config '{"cudagraph_mode": "PIECEWISE"}'
   ```
@@ -130,12 +130,12 @@ guide: |
 
   ### Stream an audio file
 
-  See Aphrodite's
+  See Sonar's
   [Realtime audio file client example](https://docs.vllm.ai/en/latest/examples/online_serving/openai_realtime_client/).
 
   ### Live microphone (Gradio demo)
 
-  See Aphrodite's
+  See Sonar's
   [Realtime microphone client example](https://docs.vllm.ai/en/latest/examples/online_serving/openai_realtime_microphone_client/)
   for an end-to-end live-transcription UI.
 
@@ -155,7 +155,7 @@ guide: |
 
   ## Troubleshooting
 
-  - **`Route: /v1/realtime` not registered** — your Aphrodite is < 0.16.0.
+  - **`Route: /v1/realtime` not registered** — your Sonar is < 0.16.0.
     Upgrade to 0.20.0+.
   - **Tokenizer initialization error** — you forgot `--tokenizer-mode mistral`.
     Voxtral Realtime's tokenizer can only load through `mistral_common`.
@@ -172,6 +172,6 @@ guide: |
   ## References
 
   - [Mistral blog: Voxtral Transcribe 2](https://mistral.ai/news/voxtral-transcribe-2)
-  - [Aphrodite Realtime API docs](https://docs.vllm.ai/en/latest/serving/openai_compatible_server/#realtime-api)
-  - [Aphrodite streaming-input blog post](https://vllm.ai/blog/streaming-realtime.html)
+  - [Sonar Realtime API docs](https://docs.vllm.ai/en/latest/serving/openai_compatible_server/#realtime-api)
+  - [Sonar streaming-input blog post](https://vllm.ai/blog/streaming-realtime.html)
   - [HuggingFace demo space](https://huggingface.co/spaces/mistralai/Voxtral-Mini-Realtime)

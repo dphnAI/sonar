@@ -15,16 +15,16 @@ depends only on the step's rows, which every TP rank shares.
 
 import torch
 
-from aphrodite.distributed import tensor_model_parallel_all_gather
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.kernels.linear.mxfp8.flashinfer import (
+from sonar.distributed import tensor_model_parallel_all_gather
+from sonar.logger import init_logger
+from sonar.model_executor.kernels.linear.mxfp8.flashinfer import (
     FlashInferCutedslMxfp8LinearKernel,
 )
-from aphrodite.models.deepseek_v41.common.engram import (
+from sonar.models.deepseek_v41.common.engram import (
     Engram,
     _fused_engram_post_wkv_kernel,
 )
-from aphrodite.triton_utils import triton
+from sonar.triton_utils import triton
 
 logger = init_logger(__name__)
 

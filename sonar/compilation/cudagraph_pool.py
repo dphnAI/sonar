@@ -7,13 +7,13 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import TYPE_CHECKING, cast
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.device_allocator import get_mem_allocator_instance
-from aphrodite.distributed.device_communicators.pynccl_allocator import set_graph_pool_id
-from aphrodite.platforms import current_platform
+from sonar.config import SonarConfig
+from sonar.device_allocator import get_mem_allocator_instance
+from sonar.distributed.device_communicators.pynccl_allocator import set_graph_pool_id
+from sonar.platforms import current_platform
 
 if TYPE_CHECKING:
-    from aphrodite.device_allocator.cumem import CuMemAllocator
+    from sonar.device_allocator.cumem import CuMemAllocator
 
 _outside_cumem: ContextVar[bool] = ContextVar("capture_outside_cumem", default=False)
 
@@ -30,10 +30,10 @@ def capture_outside_cumem_pool() -> Iterator[None]:
 
 
 @contextmanager
-def capture_pool(pool: tuple[int, int] | None, aphrodite_config: AphroditeConfig) -> Iterator[tuple[int, int] | None]:
+def capture_pool(pool: tuple[int, int] | None, sonar_config: SonarConfig) -> Iterator[tuple[int, int] | None]:
     """Yield the pool to capture into, the cuMem graph pool when sleep offloads
     graph memory, and point NCCL's graph allocator at it."""
-    if aphrodite_config.use_cumem_cudagraph_pool and not _outside_cumem.get():
+    if sonar_config.use_cumem_cudagraph_pool and not _outside_cumem.get():
         allocator = cast("CuMemAllocator", get_mem_allocator_instance())
         with allocator.cudagraph_pool() as cumem_pool:
             set_graph_pool_id(cumem_pool)

@@ -8,18 +8,18 @@ from typing import TYPE_CHECKING, ClassVar
 
 import torch
 
-from aphrodite import envs
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.cache import CacheDType
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.attention.sparse_mla_attention import (
+from sonar import envs
+from sonar.config import SonarConfig
+from sonar.config.cache import CacheDType
+from sonar.logger import init_logger
+from sonar.model_executor.layers.attention.sparse_mla_attention import (
     SparseMLACommonImpl,
     SparseMLACommonMetadata,
     SparseMLACommonMetadataBuilder,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.platforms.interface import DeviceCapability
-from aphrodite.v1.attention.backend import (
+from sonar.platforms import current_platform
+from sonar.platforms.interface import DeviceCapability
+from sonar.v1.attention.backend import (
     AttentionBackend,
     AttentionCGSupport,
     AttentionLayer,
@@ -28,17 +28,17 @@ from aphrodite.v1.attention.backend import (
     MultipleOf,
     max_decode_query_len,
 )
-from aphrodite.v1.attention.backends.mla.index_group import HiSparseMLAIndexGroup
-from aphrodite.v1.attention.backends.mla.sparse_utils import (
+from sonar.v1.attention.backends.mla.index_group import HiSparseMLAIndexGroup
+from sonar.v1.attention.backends.mla.sparse_utils import (
     align_blocks_to_rows,
     flat_kv_row_view,
     prepare_sparse_mla_safe_lengths,
 )
-from aphrodite.v1.attention.ops.metadata import compute_token_to_req_indices
-from aphrodite.v1.kv_cache_interface import AttentionSpec, KVCacheLayout, KVCacheSpec, is_quantized_kv_cache
+from sonar.v1.attention.ops.metadata import compute_token_to_req_indices
+from sonar.v1.kv_cache_interface import AttentionSpec, KVCacheLayout, KVCacheSpec, is_quantized_kv_cache
 
 if TYPE_CHECKING:
-    from aphrodite.model_executor.models.deepseek_v2 import Indexer
+    from sonar.model_executor.models.deepseek_v2 import Indexer
 
 logger = init_logger(__name__)
 
@@ -121,10 +121,10 @@ class FlashInferMLASparseTRTLLMBackend(_FlashInferMLASparseBackendBase):
         use_mm_prefix: bool,
         device_capability: DeviceCapability,
     ) -> str | None:
-        from aphrodite.config import get_current_aphrodite_config
+        from sonar.config import get_current_sonar_config
 
-        aphrodite_config = get_current_aphrodite_config()
-        parallel_config = aphrodite_config.parallel_config
+        sonar_config = get_current_sonar_config()
+        parallel_config = sonar_config.parallel_config
         if parallel_config.prefill_context_parallel_size > 1 and parallel_config.decode_context_parallel_size > 1:
             return (
                 f"{cls.get_name()} does not support combined PCP+DCP; "
@@ -135,8 +135,8 @@ class FlashInferMLASparseTRTLLMBackend(_FlashInferMLASparseBackendBase):
             return f"{cls.get_name()} SM10 does not support fp8_ds_mla kv-cache dtype"
 
         # FlashInfer MLA sparse SM10 kernel requires qk_nope_head_dim in [128, 192].
-        if aphrodite_config.model_config is not None:
-            hf_text_config = aphrodite_config.model_config.hf_text_config
+        if sonar_config.model_config is not None:
+            hf_text_config = sonar_config.model_config.hf_text_config
             qk_nope_head_dim = hf_text_config.qk_nope_head_dim
             qk_rope_head_dim = hf_text_config.qk_rope_head_dim
             kv_lora_rank = hf_text_config.kv_lora_rank
@@ -186,7 +186,7 @@ class FlashInferMLASparseSM120Backend(_FlashInferMLASparseBackendBase):
 
     @staticmethod
     def get_impl_cls() -> type[MLAAttentionImpl]:
-        from aphrodite.v1.attention.backends.mla.flashinfer_mla_sparse_sm120 import (
+        from sonar.v1.attention.backends.mla.flashinfer_mla_sparse_sm120 import (
             FlashInferMLASparseSM120Impl,
         )
 
@@ -209,8 +209,8 @@ class FlashInferMLASparseSM120Backend(_FlashInferMLASparseBackendBase):
         use_mm_prefix: bool,
         device_capability: DeviceCapability,
     ) -> str | None:
-        from aphrodite.config import get_current_aphrodite_config
-        from aphrodite.utils.flashinfer import has_flashinfer_sparse_mla_sm120
+        from sonar.config import get_current_sonar_config
+        from sonar.utils.flashinfer import has_flashinfer_sparse_mla_sm120
 
         if not has_flashinfer_sparse_mla_sm120():
             return "FLASHINFER_MLA_SPARSE_SM120 requires FlashInfer's sparse MLA decode API"
@@ -224,9 +224,9 @@ class FlashInferMLASparseSM120Backend(_FlashInferMLASparseBackendBase):
             "fp8_ds_mla",
         ):
             return "kv_cache_dtype not supported"
-        aphrodite_config = get_current_aphrodite_config()
-        if aphrodite_config.model_config is not None:
-            hf_text_config = aphrodite_config.model_config.hf_text_config
+        sonar_config = get_current_sonar_config()
+        if sonar_config.model_config is not None:
+            hf_text_config = sonar_config.model_config.hf_text_config
             index_topk = getattr(hf_text_config, "index_topk", None)
             if index_topk is None:
                 return "FLASHINFER_MLA_SPARSE_SM120 requires a model with index_topk config"
@@ -250,11 +250,11 @@ class FlashInferMLASparseMetadataBuilder(SparseMLACommonMetadataBuilder[FlashInf
         self,
         kv_cache_spec: AttentionSpec,
         layer_names: list[str],
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
     ) -> None:
-        super().__init__(kv_cache_spec, layer_names, aphrodite_config, device)
-        num_q_heads = aphrodite_config.model_config.get_num_attention_heads(aphrodite_config.parallel_config)
+        super().__init__(kv_cache_spec, layer_names, sonar_config, device)
+        num_q_heads = sonar_config.model_config.get_num_attention_heads(sonar_config.parallel_config)
         threshold = {8: 128, 16: 128, 32: 128, 64: 256, 128: 1024}.get(num_q_heads, 1024)
         self._init_reorder_batch_threshold(
             threshold,
@@ -270,7 +270,7 @@ class FlashInferMLASparseMetadataBuilder(SparseMLACommonMetadataBuilder[FlashInf
                 _required_workspace_bytes(
                     self.dcp_world_size,
                     num_q_heads,
-                    aphrodite_config.scheduler_config.max_num_batched_tokens,
+                    sonar_config.scheduler_config.max_num_batched_tokens,
                 ),
             )
 
@@ -283,24 +283,24 @@ class FlashInferMLASparseTRTLLMMetadataBuilder(FlashInferMLASparseMetadataBuilde
     @classmethod
     def get_varlen_cudagraph_max_query_len(
         cls,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         kv_cache_spec: KVCacheSpec,
     ) -> int | None:
         # Decode uses device request boundaries; prefill metadata is not graph-safe.
-        return max_decode_query_len(aphrodite_config)
+        return max_decode_query_len(sonar_config)
 
     def __init__(
         self,
         kv_cache_spec: AttentionSpec,
         layer_names: list[str],
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
     ) -> None:
-        super().__init__(kv_cache_spec, layer_names, aphrodite_config, device)
+        super().__init__(kv_cache_spec, layer_names, sonar_config, device)
         self.supports_draft_decode_metadata_update = (
             self.dcp_world_size == 1
             and self.pcp_world_size == 1
-            and aphrodite_config.attention_config.hisparse_config is None
+            and sonar_config.attention_config.hisparse_config is None
         )
 
     def update_draft_decode_metadata(self, metadata: FlashInferMLASparseMetadata) -> None:
@@ -328,8 +328,8 @@ _TRTLLM_GEN_SOFTMAX_STAT_BYTES = 8  # sizeof(float2)
 _TRTLLM_GEN_SOFTMAX_SLOTS_PER_TOKEN = 256  # round_up(q_len=1, 256)
 _TRTLLM_GEN_SOFTMAX_GUARD_BYTES = 1024 * 1024
 
-# Keep in sync with the APHRODITE_FLASHINFER_WORKSPACE_BUFFER_SIZE default in
-# aphrodite/envs.py.
+# Keep in sync with the SONAR_FLASHINFER_WORKSPACE_BUFFER_SIZE default in
+# sonar/envs.py.
 _DEFAULT_WORKSPACE_BUFFER_SIZE = 394 * 1024 * 1024
 
 
@@ -376,16 +376,16 @@ def _required_workspace_bytes(
         num_heads_per_rank,
         max_num_batched_tokens,
     )
-    if not envs.is_set("APHRODITE_FLASHINFER_WORKSPACE_BUFFER_SIZE"):
+    if not envs.is_set("SONAR_FLASHINFER_WORKSPACE_BUFFER_SIZE"):
         return computed
-    env_bytes = envs.APHRODITE_FLASHINFER_WORKSPACE_BUFFER_SIZE
+    env_bytes = envs.SONAR_FLASHINFER_WORKSPACE_BUFFER_SIZE
     if env_bytes < computed:
         logger.warning_once(
-            "APHRODITE_FLASHINFER_WORKSPACE_BUFFER_SIZE=%d is below the %d bytes "
+            "SONAR_FLASHINFER_WORKSPACE_BUFFER_SIZE=%d is below the %d bytes "
             "computed for the sparse MLA workspace with dcp_world_size=%d, "
             "%d heads/rank and max_num_batched_tokens=%d. Respecting the "
             "override, but the trtllm-gen kernel may crash with a workspace "
-            "overflow; set APHRODITE_FLASHINFER_WORKSPACE_BUFFER_SIZE=%d or unset "
+            "overflow; set SONAR_FLASHINFER_WORKSPACE_BUFFER_SIZE=%d or unset "
             "it to use the computed size.",
             env_bytes,
             computed,
@@ -399,7 +399,7 @@ def _required_workspace_bytes(
 
 def _get_workspace_buffer(device: torch.device, min_bytes: int | None = None) -> torch.Tensor:
     global _fi_sparse_workspace
-    required = min_bytes if min_bytes is not None else envs.APHRODITE_FLASHINFER_WORKSPACE_BUFFER_SIZE
+    required = min_bytes if min_bytes is not None else envs.SONAR_FLASHINFER_WORKSPACE_BUFFER_SIZE
     if _fi_sparse_workspace is None or _fi_sparse_workspace.numel() < required:
         # FlashInfer's CuteDSL MLA-decode tactic requires an int8 workspace;
         # the trtllm-gen path views it as uint8, so int8 is safe for all backends.

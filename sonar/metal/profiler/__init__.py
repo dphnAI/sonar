@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Metal frame-capture profiler for Aphrodite Metal."""
+"""Metal frame-capture profiler for Sonar Metal."""
 
-from aphrodite.metal.profiler.wrapper import MetalProfilerWrapper
+from sonar.metal.profiler.wrapper import MetalProfilerWrapper
 
 __all__ = ["MetalProfilerWrapper"]

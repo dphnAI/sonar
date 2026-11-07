@@ -14,11 +14,11 @@ from contextlib import ExitStack
 
 import pytest
 
-from aphrodite import SamplingParams
-from aphrodite.engine.arg_utils import AsyncEngineArgs
-from aphrodite.platforms import current_platform
-from aphrodite.sampling_params import RequestOutputKind
-from aphrodite.v1.engine.async_llm import AsyncLLM
+from sonar import SamplingParams
+from sonar.engine.arg_utils import AsyncEngineArgs
+from sonar.platforms import current_platform
+from sonar.sampling_params import RequestOutputKind
+from sonar.v1.engine.async_llm import AsyncLLM
 
 PP_DP_MODEL = "ibm-research/PowerMoE-3b"  # smallest cached MoE that supports PP
 PROMPT = "This is a test of data parallel and pipeline parallel together"
@@ -37,8 +37,8 @@ _GPU_SKIP = _gpu_skip_reason()
 
 pytestmark = [
     pytest.mark.skipif(
-        os.environ.get("APHRODITE_USE_V2_MODEL_RUNNER", "1") == "0",
-        reason="V2 model runner disabled via APHRODITE_USE_V2_MODEL_RUNNER=0",
+        os.environ.get("SONAR_USE_V2_MODEL_RUNNER", "1") == "0",
+        reason="V2 model runner disabled via SONAR_USE_V2_MODEL_RUNNER=0",
     ),
     pytest.mark.skipif(_GPU_SKIP is not None, reason=_GPU_SKIP or ""),
 ]

@@ -12,22 +12,22 @@ from typing import Any, ClassVar
 
 import torch
 
-from aphrodite.config import AphroditeConfig, get_current_aphrodite_config
-from aphrodite.config.cache import CacheDType
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.warmup.cutedsl_warmup import (
+from sonar.config import SonarConfig, get_current_sonar_config
+from sonar.config.cache import CacheDType
+from sonar.logger import init_logger
+from sonar.model_executor.warmup.cutedsl_warmup import (
     CuTeDSLCompileUnit,
     register_cutedsl_warmup_provider,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.platforms.interface import DeviceCapability
-from aphrodite.utils.b12x import get_b12x_paged_attention
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.utils.torch_utils import (
+from sonar.platforms import current_platform
+from sonar.platforms.interface import DeviceCapability
+from sonar.utils.b12x import get_b12x_paged_attention
+from sonar.utils.math_utils import cdiv
+from sonar.utils.torch_utils import (
     canonicalize_singleton_dim_strides,
     get_dtype_size,
 )
-from aphrodite.v1.attention.backend import (
+from sonar.v1.attention.backend import (
     AttentionBackend,
     AttentionCGSupport,
     AttentionImpl,
@@ -38,13 +38,13 @@ from aphrodite.v1.attention.backend import (
     CommonAttentionMetadata,
     MultipleOf,
 )
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.kv_cache_interface import (
     AttentionSpec,
     KVCacheLayout,
     KVCacheSpec,
     is_quantized_kv_cache,
 )
-from aphrodite.v1.worker.workspace import current_workspace_manager
+from sonar.v1.worker.workspace import current_workspace_manager
 
 logger = init_logger(__name__)
 
@@ -75,7 +75,7 @@ def _max_page_table_width(
 
 
 def _kv_page_size(key_cache: torch.Tensor, value_cache: torch.Tensor) -> int:
-    """Return the static kernel page geometry negotiated by Aphrodite.
+    """Return the static kernel page geometry negotiated by Sonar.
 
     The KV manager can split the configured storage block into a smaller
     kernel page when another backend shares its cache group. Cache shapes are
@@ -123,7 +123,7 @@ def _ensure_i32_contiguous(tensor: torch.Tensor, name: str) -> torch.Tensor:
 
 def _dtype_from_cache_config(
     kv_cache_dtype: str,
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
 ) -> torch.dtype:
     if kv_cache_dtype == "bfloat16":
         return torch.bfloat16
@@ -133,7 +133,7 @@ def _dtype_from_cache_config(
         raise NotImplementedError(
             f"b12x currently supports only auto, bfloat16, fp8, and fp8_e4m3 KV cache dtypes; got {kv_cache_dtype!r}."
         )
-    return aphrodite_config.model_config.dtype
+    return sonar_config.model_config.dtype
 
 
 def _is_b12x_fp8_kv_cache(kv_cache_dtype: str) -> bool:
@@ -200,7 +200,7 @@ class B12xPagedAttentionBackend(AttentionBackend):
     @classmethod
     def supports_compute_capability(cls, capability: DeviceCapability) -> bool:
         # Consumer Blackwell SM120 / SM121. The b12x paged kernels also gate
-        # internally, but keep Aphrodite selection fail-fast and explicit.
+        # internally, but keep Sonar selection fail-fast and explicit.
         return (capability.major, capability.minor) in ((12, 0), (12, 1))
 
     @classmethod
@@ -228,7 +228,7 @@ class B12xPagedAttentionBackend(AttentionBackend):
             return "b12x currently supports only fp8/fp8_e4m3 quantized KV cache dtypes"
         paged_attention = get_b12x_paged_attention()
         if paged_attention is None:
-            return "Install the b12x backend with `pip install aphrodite[b12x]`"
+            return "Install sonar[b12x] from the Sonar wheel index"
         if not paged_attention.is_supported():
             return "b12x paged attention is not supported on the current device"
         return None
@@ -264,20 +264,20 @@ class B12xPagedMetadataBuilder(AttentionMetadataBuilder[B12xPagedMetadata]):
     @classmethod
     def get_cudagraph_support(
         cls,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         kv_cache_spec: KVCacheSpec,
     ) -> AttentionCGSupport:
-        del aphrodite_config, kv_cache_spec
+        del sonar_config, kv_cache_spec
         return cls._cudagraph_support
 
     def __init__(
         self,
         kv_cache_spec: AttentionSpec,
         layer_names: list[str],
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
     ) -> None:
-        super().__init__(kv_cache_spec, layer_names, aphrodite_config, device)
+        super().__init__(kv_cache_spec, layer_names, sonar_config, device)
 
     def build(
         self,
@@ -365,11 +365,11 @@ class B12xPagedAttentionImpl(AttentionImpl[B12xPagedMetadata]):
             raise ValueError(f"b12x sinks must have shape [{self.num_heads}], got {tuple(sinks.shape)}.")
         self.sinks = sinks if sinks is None or sinks.dtype == torch.float32 else None
 
-        aphrodite_config = get_current_aphrodite_config()
-        scheduler_config = aphrodite_config.scheduler_config
-        model_config = aphrodite_config.model_config
-        cache_config = aphrodite_config.cache_config
-        spec_config = aphrodite_config.speculative_config
+        sonar_config = get_current_sonar_config()
+        scheduler_config = sonar_config.scheduler_config
+        model_config = sonar_config.model_config
+        cache_config = sonar_config.cache_config
+        spec_config = sonar_config.speculative_config
         default_block_size = int(cache_config.block_size)
         if default_block_size not in _B12X_SUPPORTED_PAGE_SIZES:
             raise ValueError(
@@ -378,7 +378,7 @@ class B12xPagedAttentionImpl(AttentionImpl[B12xPagedMetadata]):
 
         self.device = torch.device("cuda", torch.accelerator.current_device_index())
         self.dtype = model_config.dtype
-        self.kv_torch_dtype = _dtype_from_cache_config(kv_cache_dtype, aphrodite_config)
+        self.kv_torch_dtype = _dtype_from_cache_config(kv_cache_dtype, sonar_config)
         if self.dtype != torch.bfloat16:
             raise NotImplementedError("b12x currently requires bfloat16 queries.")
         max_batched = int(scheduler_config.max_num_batched_tokens)
@@ -469,7 +469,7 @@ class B12xPagedAttentionImpl(AttentionImpl[B12xPagedMetadata]):
                 )
             )
 
-        capture_sizes = aphrodite_config.compilation_config.cudagraph_capture_sizes or []
+        capture_sizes = sonar_config.compilation_config.cudagraph_capture_sizes or []
         decode_plan_sizes = {int(size) for size in capture_sizes if 0 < int(size) <= max_num_seqs}
         decode_plan_sizes.add(max_num_seqs)
 
@@ -938,7 +938,7 @@ class B12xPagedAttentionImpl(AttentionImpl[B12xPagedMetadata]):
         if kv_cache.numel() == 0:
             return output.fill_(0)
 
-        # In FULL cudagraph mode Aphrodite may pad attention metadata to the graph
+        # In FULL cudagraph mode Sonar may pad attention metadata to the graph
         # bucket while still passing per-layer Q/output tensors with only the
         # real rows. Use tensor capacity as the launch contract and avoid
         # selecting decode graph replay for padded virtual requests.

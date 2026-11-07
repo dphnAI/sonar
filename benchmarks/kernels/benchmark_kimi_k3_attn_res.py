@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Benchmark Aphrodite Kimi-K3 AttnRes kernels on NVIDIA Blackwell.
+"""Benchmark Sonar Kimi-K3 AttnRes kernels on NVIDIA Blackwell.
 
 The benchmark uses a zero delta so repeated in-place launches remain stable.
 
@@ -24,10 +24,10 @@ from pathlib import Path
 
 import torch
 
-import aphrodite._custom_ops  # noqa: F401 - loads torch.ops._C
-from aphrodite.models.kimi_k3.nvidia.ops.attn_res import _attn_res_kernel
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import triton
+import sonar._custom_ops  # noqa: F401 - loads torch.ops._C
+from sonar.models.kimi_k3.nvidia.ops.attn_res import _attn_res_kernel
+from sonar.platforms import current_platform
+from sonar.triton_utils import triton
 
 HIDDEN_SIZE = 7168
 MAX_BLOCKS = 8
@@ -163,9 +163,9 @@ def validate(inputs: Inputs, num_blocks: int) -> None:
 def main() -> None:
     args = parse_args()
     if torch.cuda.get_device_capability()[0] != 10:
-        raise SystemExit("The Aphrodite CUDA AttnRes kernel requires the SM100 family")
+        raise SystemExit("The Sonar CUDA AttnRes kernel requires the SM100 family")
     if not hasattr(torch.ops._C, "kimi_k3_attn_res"):
-        raise SystemExit("This Aphrodite build does not contain kimi_k3_attn_res")
+        raise SystemExit("This Sonar build does not contain kimi_k3_attn_res")
     if any(not 0 <= blocks <= MAX_BLOCKS for blocks in args.num_blocks):
         raise SystemExit(f"--num-blocks values must be in [0, {MAX_BLOCKS}]")
 
@@ -181,8 +181,8 @@ def main() -> None:
             inputs = make_inputs(num_tokens)
             output = torch.empty_like(inputs.prefix)
             candidates = {
-                "aphrodite_triton": partial(launch_triton, inputs, output, num_blocks),
-                "aphrodite_cuda": partial(launch_cuda, inputs, output, num_blocks),
+                "sonar_triton": partial(launch_triton, inputs, output, num_blocks),
+                "sonar_cuda": partial(launch_cuda, inputs, output, num_blocks),
             }
             row: dict[str, float] = {}
             for backend, candidate in candidates.items():
@@ -200,8 +200,8 @@ def main() -> None:
                 row[backend] = median_us
             print(
                 f"blocks={num_blocks} tokens={num_tokens:5d}  "
-                f"triton={row['aphrodite_triton']:9.2f} us  "
-                f"cuda={row['aphrodite_cuda']:9.2f} us",
+                f"triton={row['sonar_triton']:9.2f} us  "
+                f"cuda={row['sonar_cuda']:9.2f} us",
                 flush=True,
             )
 

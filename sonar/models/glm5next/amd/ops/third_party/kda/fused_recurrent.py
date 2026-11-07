@@ -11,8 +11,8 @@
 
 import torch
 
-from aphrodite.third_party.flash_linear_attention.ops.op import exp
-from aphrodite.triton_utils import tl, triton
+from sonar.third_party.flash_linear_attention.ops.op import exp
+from sonar.triton_utils import tl, triton
 
 
 def token_stride(x: torch.Tensor) -> int:

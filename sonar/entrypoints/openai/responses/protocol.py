@@ -60,8 +60,8 @@ from pydantic import (
     model_validator,
 )
 
-from aphrodite.config import ModelConfig
-from aphrodite.entrypoints.generate.base.protocol import (
+from sonar.config import ModelConfig
+from sonar.entrypoints.generate.base.protocol import (
     MMPayload,
     PerRequestMetrics,
     StopParam,
@@ -69,26 +69,26 @@ from aphrodite.entrypoints.generate.base.protocol import (
     resolve_return_mm_kwargs_alias,
     validate_cache_salt,
 )
-from aphrodite.entrypoints.serve.engine.protocol import OpenAIBaseModel
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.logger import init_logger
-from aphrodite.renderers import (
+from sonar.entrypoints.serve.engine.protocol import OpenAIBaseModel
+from sonar.exceptions import SonarValidationError
+from sonar.logger import init_logger
+from sonar.renderers import (
     ChatParams,
     TokenizeParams,
     map_reasoning_effort,
     merge_kwargs,
 )
-from aphrodite.renderers.chat_utils import (
+from sonar.renderers.chat_utils import (
     ChatCompletionMessageParam,
     ChatTemplateContentFormatOption,
 )
-from aphrodite.sampling_params import (
+from sonar.sampling_params import (
     RequestOutputKind,
     SamplingParams,
     StructuredOutputsParams,
     ThinkingTokenBudget,
 )
-from aphrodite.utils import random_uuid
+from sonar.utils import random_uuid
 
 logger = init_logger(__name__)
 
@@ -174,7 +174,7 @@ def _tool_field(tool: Any, field: str) -> Any:
 
 def _resolve_named_tool_choice(tool_name: str, tools: list[Any]) -> str:
     """Resolve a named tool choice to the flat ``<namespace>__<name>`` form."""
-    from aphrodite.tool_parsers.utils import flat_namespace_tool_name
+    from sonar.tool_parsers.utils import flat_namespace_tool_name
 
     exact_names: set[str] = set()
     local_names: dict[str, list[str]] = {}
@@ -201,13 +201,13 @@ def _resolve_named_tool_choice(tool_name: str, tools: list[Any]) -> str:
     if len(candidates) == 1:
         return candidates[0]
     if len(candidates) > 1:
-        raise AphroditeValidationError(
+        raise SonarValidationError(
             f"Tool choice '{tool_name}' is ambiguous: it is defined in more "
             f"than one namespace ({', '.join(candidates)}). Select it by its "
             "full '<namespace>__<name>' name.",
             parameter="tool_choice",
         )
-    raise AphroditeValidationError(
+    raise SonarValidationError(
         "Tool choice 'function' not found in 'tools' parameter.",
         parameter="tool_choice",
     )
@@ -320,23 +320,21 @@ class ResponsesRequest(OpenAIBaseModel):
         description=(
             "A key that was used to read from or write to the prompt cache."
             "Note: This field has not been implemented yet "
-            "and Aphrodite will ignore it."
+            "and Sonar will ignore it."
         ),
     )
     prompt_cache_options: PromptCacheOptionsParam | None = Field(
         default=None,
-        description=("Prompt-caching options. Accepted and echoed in the response; Aphrodite does not act on them."),
+        description=("Prompt-caching options. Accepted and echoed in the response; Sonar does not act on them."),
     )
     prompt_cache_retention: PromptCacheRetention | None = Field(
         default=None,
-        description=(
-            "Prompt cache retention policy. Accepted and echoed in the response; Aphrodite does not act on it."
-        ),
+        description=("Prompt cache retention policy. Accepted and echoed in the response; Sonar does not act on it."),
     )
     safety_identifier: str | None = Field(
         default=None,
         description=(
-            "Stable identifier for the end user. Accepted and echoed in the response; Aphrodite does not act on it."
+            "Stable identifier for the end user. Accepted and echoed in the response; Sonar does not act on it."
         ),
     )
 
@@ -434,7 +432,7 @@ class ResponsesRequest(OpenAIBaseModel):
     stop_token_ids: list[int] | None = []
     ignore_eos: bool = False
     thinking_token_budget: ThinkingTokenBudget = None
-    aphrodite_xargs: dict[str, str | int | float | list[str | int | float]] | None = Field(
+    sonar_xargs: dict[str, str | int | float | list[str | int | float]] | None = Field(
         default=None,
         description=(
             "Additional request parameters with (list of) string or numeric values, used by custom extensions."
@@ -532,7 +530,7 @@ class ResponsesRequest(OpenAIBaseModel):
             return self.structured_outputs
 
         if self.structured_outputs is not None:
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 "Cannot specify both structured_outputs and text.format",
                 parameter="structured_outputs",
             )
@@ -584,7 +582,7 @@ class ResponsesRequest(OpenAIBaseModel):
         if isinstance(stop, str):
             stop = [stop]
 
-        extra_args: dict[str, Any] = self.aphrodite_xargs if self.aphrodite_xargs else {}
+        extra_args: dict[str, Any] = self.sonar_xargs if self.sonar_xargs else {}
         if self.kv_transfer_params:
             extra_args["kv_transfer_params"] = self.kv_transfer_params
         if self.ec_transfer_params:
@@ -643,7 +641,7 @@ class ResponsesRequest(OpenAIBaseModel):
         if not data.get("background"):
             return data
         if not data.get("store", True):
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 "background can only be used when `store` is true",
                 parameter="background",
             )
@@ -655,7 +653,7 @@ class ResponsesRequest(OpenAIBaseModel):
         if not isinstance(data, dict):
             return data
         if data.get("prompt") is not None:
-            raise AphroditeValidationError("prompt template is not supported", parameter="prompt")
+            raise SonarValidationError("prompt template is not supported", parameter="prompt")
         return data
 
     @model_validator(mode="before")
@@ -770,7 +768,7 @@ class ResponsesRequest(OpenAIBaseModel):
                 and isinstance(tool_format, dict)
                 and tool_format.get("type") == "grammar"
             ):
-                raise AphroditeValidationError(
+                raise SonarValidationError(
                     "Custom tools with a grammar format are not supported; "
                     "only free-form text custom tools are accepted.",
                     parameter="tools",
@@ -792,19 +790,19 @@ class ResponsesRequest(OpenAIBaseModel):
             if tool_choice in ("auto", "none"):
                 data["tool_choice"] = "none"
             elif tool_choice == "required":
-                raise AphroditeValidationError(
+                raise SonarValidationError(
                     "Tool choice 'required' must be specified with 'tools' parameter.",
                     parameter="tool_choice",
                 )
             elif is_named_tool_choice:
-                raise AphroditeValidationError(
+                raise SonarValidationError(
                     "Tool choice 'function' not found in 'tools' parameter.",
                     parameter="tool_choice",
                 )
         elif is_named_tool_choice and tools is not None:
             tool_name = tool_choice.get("name")
             if not tool_name:
-                raise AphroditeValidationError(
+                raise SonarValidationError(
                     "Tool choice 'function' not found in 'tools' parameter.",
                     parameter="tool_choice",
                 )
@@ -848,7 +846,7 @@ class ResponsesResponse(OpenAIBaseModel):
     usage: ResponseUsage | None = None
     user: str | None = None
 
-    # Aphrodite-specific per-request metrics. Omitted unless enabled server-side.
+    # Sonar-specific per-request metrics. Omitted unless enabled server-side.
     metrics: PerRequestMetrics | None = Field(default=None, exclude_if=lambda value: value is None)
 
     presence_penalty: float | None = Field(
@@ -868,7 +866,7 @@ class ResponsesResponse(OpenAIBaseModel):
         ),
     )
 
-    # Aphrodite-specific fields that are not in OpenAI spec
+    # Sonar-specific fields that are not in OpenAI spec
     kv_transfer_params: dict[str, Any] | None = Field(default=None, description="KVTransfer parameters.")
     ec_transfer_params: dict[str, Any] | None = Field(default=None, description="ECTransfer parameters.")
 
@@ -965,8 +963,8 @@ class ResponsesResponse(OpenAIBaseModel):
         )
 
 
-# Aphrodite Streaming Events
-# Note: we override the response type with the Aphrodite ResponsesResponse type
+# Sonar Streaming Events
+# Note: we override the response type with the Sonar ResponsesResponse type
 class ResponseCompletedEvent(OpenAIResponseCompletedEvent):
     response: ResponsesResponse  # type: ignore[override]
 

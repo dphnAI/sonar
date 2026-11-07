@@ -5,16 +5,16 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from aphrodite.platforms import current_platform
-from aphrodite.third_party.flash_linear_attention.ops.layernorm_guard import (
+from sonar.platforms import current_platform
+from sonar.third_party.flash_linear_attention.ops.layernorm_guard import (
     LayerNormFwdKernel,
     calc_rows_per_block,
     layer_norm_fwd,
     layernorm_fn,
     rms_norm_ref,
 )
-from aphrodite.triton_utils import triton
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.triton_utils import triton
+from sonar.utils.torch_utils import set_random_seed
 
 DEVICE = "xpu" if current_platform.is_xpu() else "cuda"
 
@@ -433,7 +433,7 @@ def test_multidimensional_input(
 @pytest.mark.parametrize("norm_before_gate", [True, False])
 @torch.inference_mode()
 def test_rmsnorm_gated_forward_native_dtype(
-    default_aphrodite_config,
+    default_sonar_config,
     num_tokens: int,
     hidden_size: int,
     dtype: torch.dtype,
@@ -445,7 +445,7 @@ def test_rmsnorm_gated_forward_native_dtype(
     if group_size is not None and hidden_size % group_size != 0:
         pytest.skip(f"hidden_size {hidden_size} not divisible by group_size {group_size}")
 
-    from aphrodite.model_executor.layers.layernorm import RMSNormGated
+    from sonar.model_executor.layers.layernorm import RMSNormGated
 
     device = torch.device(DEVICE)
     set_random_seed(42)
@@ -484,7 +484,7 @@ def test_rmsnorm_gated_forward_native_dtype(
 @pytest.mark.parametrize("dtype", [torch.bfloat16])
 @torch.inference_mode()
 def test_rmsnorm_gated_3d_matches_flattened_2d(
-    default_aphrodite_config,
+    default_sonar_config,
     dtype: torch.dtype,
 ) -> None:
     """Qwen GDN now norms (N, H, D) in place of a flatten to (N*H, D).
@@ -492,7 +492,7 @@ def test_rmsnorm_gated_3d_matches_flattened_2d(
     Last-dim RMS + gate must match the flattened layout on both the native
     and CUDA/HIP kernels, including a 3D z view that is not contiguous.
     """
-    from aphrodite.model_executor.layers.layernorm import RMSNormGated
+    from sonar.model_executor.layers.layernorm import RMSNormGated
 
     set_random_seed(42)
     device = torch.device(DEVICE)

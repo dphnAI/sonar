@@ -3,10 +3,10 @@
 """One decode step of 1..MAX_TOKENS tokens on the mono kernels.
 
 Every sparse MoE layer is one launch of the fused layer kernel; it takes
-``(ar, res)`` -- the pair Aphrodite's input norm would receive (reduced MoE output,
+``(ar, res)`` -- the pair Sonar's input norm would receive (reduced MoE output,
 residual) -- and leaves ``(ar, h_mid)`` for the next layer, alternating between
 two buffers by layer parity. The embedding, the leading dense-FFN layers and the
-final norm run the original modules. The K/V cache is read in Aphrodite's interleaved
+final norm run the original modules. The K/V cache is read in Sonar's interleaved
 page-16 layout under the fixed unit fp8 scale; the step's tables come from the
 forward context.
 """
@@ -15,15 +15,15 @@ from typing import Any, NamedTuple, cast
 
 import torch
 
-from aphrodite.distributed import (
+from sonar.distributed import (
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
     get_tp_group,
 )
-from aphrodite.forward_context import get_forward_context
-from aphrodite.model_executor.layers.fused_moe.experts import rocm_aiter_moe
-from aphrodite.models.minimax_m3.amd.mono import config as mono_config
-from aphrodite.models.minimax_m3.amd.mono.config import (
+from sonar.forward_context import get_forward_context
+from sonar.model_executor.layers.fused_moe.experts import rocm_aiter_moe
+from sonar.models.minimax_m3.amd.mono import config as mono_config
+from sonar.models.minimax_m3.amd.mono.config import (
     BLOCKS,
     HEAD_DIM,
     HIDDEN,
@@ -37,16 +37,16 @@ from aphrodite.models.minimax_m3.amd.mono.config import (
     IndexHeads,
     MonoUnsupported,
 )
-from aphrodite.models.minimax_m3.amd.mono.kernels.post_attn import build_post_attn_kernel
-from aphrodite.models.minimax_m3.amd.mono.kernels.pre_attn import K1_ARGS
-from aphrodite.models.minimax_m3.amd.mono.kernels.pre_attn import (
+from sonar.models.minimax_m3.amd.mono.kernels.post_attn import build_post_attn_kernel
+from sonar.models.minimax_m3.amd.mono.kernels.pre_attn import K1_ARGS
+from sonar.models.minimax_m3.amd.mono.kernels.pre_attn import (
     SCRATCH_BYTES as K1_SCRATCH_BYTES,
 )
-from aphrodite.models.minimax_m3.amd.mono.layout import SCRATCH_BYTES as K4_SCRATCH_BYTES
-from aphrodite.models.minimax_m3.amd.mono.layout import sym_layout
-from aphrodite.models.minimax_m3.amd.mono.peer_buffer import PeerBuffer
-from aphrodite.models.minimax_m3.amd.mono.weights import SparseMoeLayer, build_sparse_layer
-from aphrodite.platforms import current_platform
+from sonar.models.minimax_m3.amd.mono.layout import SCRATCH_BYTES as K4_SCRATCH_BYTES
+from sonar.models.minimax_m3.amd.mono.layout import sym_layout
+from sonar.models.minimax_m3.amd.mono.peer_buffer import PeerBuffer
+from sonar.models.minimax_m3.amd.mono.weights import SparseMoeLayer, build_sparse_layer
+from sonar.platforms import current_platform
 
 
 def _ptr(t: torch.Tensor) -> int:
@@ -131,7 +131,7 @@ class MonoDecodeRunner:
             raise MonoUnsupported(f"indexer top-{sel.topk_blocks} blocks")
         self.layer_name = attn0.layer_name
         self.index_prefix = attn0.indexer.index_cache.prefix
-        # the caches this build viewed: Aphrodite re-binds them after its cudagraph
+        # the caches this build viewed: Sonar re-binds them after its cudagraph
         # memory-profiling capture, which must rebuild the runner
         self._cache_ptrs = self.cache_ptrs(model, n_dense)
         # the K/V page views (V offset to its side of the block) and how many page
@@ -158,7 +158,7 @@ class MonoDecodeRunner:
         return attn.kv_cache.data_ptr(), attn.indexer.index_cache.kv_cache.data_ptr()
 
     def stale(self) -> bool:
-        """Whether Aphrodite re-bound the caches this runner viewed (profiling capture)."""
+        """Whether Sonar re-bound the caches this runner viewed (profiling capture)."""
         return self.cache_ptrs(self.model, self.n_dense) != self._cache_ptrs
 
     def step_tables(self, n: int) -> StepTables:

@@ -5,12 +5,12 @@ from collections.abc import Callable
 
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.kernels.linear import (
+from sonar.logger import init_logger
+from sonar.model_executor.kernels.linear import (
     init_int8_linear_kernel,
 )
-from aphrodite.model_executor.layers.quantization.quark.schemes import QuarkScheme
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.quark.schemes import QuarkScheme
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     kInt8DynamicTensorAsym,
     kInt8DynamicTensorSym,
@@ -20,8 +20,8 @@ from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
     kInt8StaticTensorAsym,
     kInt8StaticTensorSym,
 )
-from aphrodite.model_executor.parameter import (
-    BaseAphroditeParameter,
+from sonar.model_executor.parameter import (
+    BaseSonarParameter,
     ChannelQuantScaleParameter,
     ModelWeightParameter,
     PerTensorScaleParameter,
@@ -132,11 +132,9 @@ class QuarkW8A8Int8(QuarkScheme):
         input_zero_point = None
         input_scale = None
         if self.is_static_input_scheme:
-            input_scale = BaseAphroditeParameter(data=torch.empty(1, dtype=torch.float32), weight_loader=weight_loader)
+            input_scale = BaseSonarParameter(data=torch.empty(1, dtype=torch.float32), weight_loader=weight_loader)
 
-            input_zero_point = BaseAphroditeParameter(
-                data=torch.empty(1, dtype=torch.int8), weight_loader=weight_loader
-            )
+            input_zero_point = BaseSonarParameter(data=torch.empty(1, dtype=torch.int8), weight_loader=weight_loader)
 
         layer.register_parameter("input_scale", input_scale)
         layer.register_parameter("input_zero_point", input_zero_point)

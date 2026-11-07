@@ -4,12 +4,12 @@
 
 import torch
 
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.v1.sample.logits_processor.interface import (
+from sonar.sampling_params import SamplingParams
+from sonar.v1.sample.logits_processor.interface import (
     BatchUpdate,
     MoveDirectionality,
 )
-from aphrodite.v1.sample.thinking_budget_state import ThinkingBudgetStateHolder
+from sonar.v1.sample.thinking_budget_state import ThinkingBudgetStateHolder
 from tests.v1.sample.utils import create_mock_reasoning_config
 
 

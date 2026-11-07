@@ -8,8 +8,8 @@ from typing import cast
 
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite._custom_ops import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar._custom_ops import (
     CPUActMethod,
     CPUQuantAlgo,
     CPUQuantMethod,
@@ -21,24 +21,24 @@ from aphrodite._custom_ops import (
     cpu_prepack_moe_weight_int8,
     fused_experts_cpu,
 )
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.kernels.linear.zentorch_utils import (
+from sonar.logger import init_logger
+from sonar.model_executor.kernels.linear.zentorch_utils import (
     _ZENTORCH_MOE_ACTIVATIONS,
     has_zentorch_op,
     is_zentorch_moe_config_supported,
     is_zentorch_moe_supported,
 )
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEParallelConfig,
     FusedMoEQuantConfig,
     RoutingMethodType,
 )
-from aphrodite.model_executor.layers.fused_moe.topk_weight_and_reduce import (
+from sonar.model_executor.layers.fused_moe.topk_weight_and_reduce import (
     TopKWeightAndReduceNoOP,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     kFp8Dynamic128Sym,
     kFp8Static128BlockSym,
@@ -47,9 +47,9 @@ from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
     kInt8StaticChannelSym,
     kMxfp4Static,
 )
-from aphrodite.model_executor.utils import replace_parameter
-from aphrodite.platforms import CpuArchEnum, current_platform
-from aphrodite.utils.math_utils import round_up
+from sonar.model_executor.utils import replace_parameter
+from sonar.platforms import CpuArchEnum, current_platform
+from sonar.utils.math_utils import round_up
 
 logger = init_logger(__name__)
 

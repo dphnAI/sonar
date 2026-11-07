@@ -10,7 +10,7 @@ embeddings for visual document retrieval.
 import pytest
 import torch
 
-from aphrodite.entrypoints.pooling.scoring.utils import compute_maxsim_score
+from sonar.entrypoints.pooling.scoring.utils import compute_maxsim_score
 
 MODEL_NAME = "ModernVBERT/colmodernvbert-merged"
 COLBERT_DIM = 128
@@ -18,14 +18,14 @@ DTYPE = "half"
 
 
 @pytest.fixture(scope="module")
-def colmodernvbert_model(aphrodite_runner):
-    with aphrodite_runner(
+def colmodernvbert_model(sonar_runner):
+    with sonar_runner(
         MODEL_NAME,
         runner="pooling",
         dtype=DTYPE,
         enforce_eager=True,
-    ) as aphrodite_model:
-        yield aphrodite_model
+    ) as sonar_model:
+        yield sonar_model
 
 
 # -----------------------------------------------------------------------
@@ -59,7 +59,7 @@ def test_colmodernvbert_text_relevance_ordering(colmodernvbert_model):
 
 
 def test_colmodernvbert_text_late_interaction(colmodernvbert_model):
-    """MaxSim scoring via Aphrodite matches manual computation."""
+    """MaxSim scoring via Sonar matches manual computation."""
     query = "What is the capital of France?"
     doc = "The capital of France is Paris."
 
@@ -70,10 +70,10 @@ def test_colmodernvbert_text_late_interaction(colmodernvbert_model):
     d_emb = torch.tensor(d_out[0])
     manual_score = compute_maxsim_score(q_emb, d_emb).item()
 
-    aphrodite_scores = colmodernvbert_model.score(query, doc)
+    sonar_scores = colmodernvbert_model.score(query, doc)
 
-    assert len(aphrodite_scores) == 1
-    assert aphrodite_scores[0] == pytest.approx(manual_score, rel=0.01)
+    assert len(sonar_scores) == 1
+    assert sonar_scores[0] == pytest.approx(manual_score, rel=0.01)
 
 
 # -----------------------------------------------------------------------

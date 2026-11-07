@@ -9,7 +9,7 @@ PREFILL_GPU_ID=${PREFILL_GPU_ID:-0}
 DECODE_GPU_ID=${DECODE_GPU_ID:-1}
 MODEL=${MODEL:-"ibm-granite/granite-4.0-h-tiny"}
 GPU_MEMORY_UTILIZATION=${GPU_MEMORY_UTILIZATION:-0.8}
-APHRODITE_SERVE_EXTRA_ARGS=${APHRODITE_SERVE_EXTRA_ARGS:-}
+SONAR_SERVE_EXTRA_ARGS=${SONAR_SERVE_EXTRA_ARGS:-}
 ATTENTION_BACKEND=${ATTENTION_BACKEND:-FLASHINFER}
 
 echo "Running Mamba prefix cache test (GPUs: P=$PREFILL_GPU_ID, D=$DECODE_GPU_ID, model=$MODEL, backend=$ATTENTION_BACKEND)"
@@ -32,15 +32,15 @@ wait_for_server() {
 
 cleanup_instances() {
   echo "Cleaning up any running Sonar instances..."
-  pkill -f "aphrodite serve" || true
+  pkill -f "sonar serve" || true
   sleep 2
 }
 
 cleanup_instances
 
 EXTRA_ARGS=()
-if [[ -n "$APHRODITE_SERVE_EXTRA_ARGS" ]]; then
-  IFS=',' read -r -a EXTRA_ARGS <<< "$APHRODITE_SERVE_EXTRA_ARGS"
+if [[ -n "$SONAR_SERVE_EXTRA_ARGS" ]]; then
+  IFS=',' read -r -a EXTRA_ARGS <<< "$SONAR_SERVE_EXTRA_ARGS"
 fi
 if [[ -n "$ATTENTION_BACKEND" ]]; then
   EXTRA_ARGS+=(--attention-backend "$ATTENTION_BACKEND")
@@ -49,10 +49,10 @@ fi
 # Start prefill instance
 PREFILL_PORT=8001
 CUDA_VISIBLE_DEVICES=$PREFILL_GPU_ID \
-APHRODITE_SSM_CONV_STATE_LAYOUT=DS \
-APHRODITE_KV_CACHE_LAYOUT=HND \
-APHRODITE_NIXL_SIDE_CHANNEL_PORT=5559 \
-aphrodite serve "$MODEL" \
+SONAR_SSM_CONV_STATE_LAYOUT=DS \
+SONAR_KV_CACHE_LAYOUT=HND \
+SONAR_NIXL_SIDE_CHANNEL_PORT=5559 \
+sonar serve "$MODEL" \
   --port $PREFILL_PORT \
   --enforce-eager \
   --gpu-memory-utilization "$GPU_MEMORY_UTILIZATION" \
@@ -66,10 +66,10 @@ aphrodite serve "$MODEL" \
 # Start decode instance
 DECODE_PORT=8002
 CUDA_VISIBLE_DEVICES=$DECODE_GPU_ID \
-APHRODITE_SSM_CONV_STATE_LAYOUT=DS \
-APHRODITE_KV_CACHE_LAYOUT=HND \
-APHRODITE_NIXL_SIDE_CHANNEL_PORT=6000 \
-aphrodite serve "$MODEL" \
+SONAR_SSM_CONV_STATE_LAYOUT=DS \
+SONAR_KV_CACHE_LAYOUT=HND \
+SONAR_NIXL_SIDE_CHANNEL_PORT=6000 \
+sonar serve "$MODEL" \
   --port $DECODE_PORT \
   --enforce-eager \
   --gpu-memory-utilization "$GPU_MEMORY_UTILIZATION" \

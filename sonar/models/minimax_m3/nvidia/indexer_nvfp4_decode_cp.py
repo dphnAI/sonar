@@ -43,16 +43,16 @@ from typing import Any
 
 import torch
 
-from aphrodite.config import get_current_aphrodite_config
-from aphrodite.distributed import (
+from sonar.config import get_current_sonar_config
+from sonar.distributed import (
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
     get_tp_group,
 )
-from aphrodite.logger import init_logger
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.v1.attention.ops.cp_common import direct_cp_enabled
+from sonar.logger import init_logger
+from sonar.triton_utils import tl, triton
+from sonar.utils.math_utils import cdiv
+from sonar.v1.attention.ops.cp_common import direct_cp_enabled
 
 logger = init_logger(__name__)
 
@@ -299,7 +299,7 @@ class Nvfp4IndexerDecodeCP:
     """Per-process state shared by the builder and every sparse layer."""
 
     def __init__(self, *, max_reqs: int, device: torch.device) -> None:
-        from aphrodite.third_party.fmha_sm100.sparse import BatchDecodeIndexerQ8KV4Wrapper
+        from sonar.third_party.fmha_sm100.sparse import BatchDecodeIndexerQ8KV4Wrapper
 
         self._wrapper_cls = BatchDecodeIndexerQ8KV4Wrapper
         self.cp = get_tensor_model_parallel_world_size()
@@ -460,18 +460,18 @@ def get_nvfp4_indexer_decode_cp(*, num_index_heads: int, max_decode_query_len: i
     if _RESOLVED:
         return _STATE
     _RESOLVED = True
-    aphrodite_config = get_current_aphrodite_config()
-    if not aphrodite_config.attention_config.indexer_decode_cp:
+    sonar_config = get_current_sonar_config()
+    if not sonar_config.attention_config.indexer_decode_cp:
         return None
     tp = get_tensor_model_parallel_world_size()
-    text_config = aphrodite_config.model_config.hf_text_config
+    text_config = sonar_config.model_config.hf_text_config
     total_heads = text_config.sparse_attention_config["sparse_num_index_heads"]
     why = None
     if tp not in SUPPORTED_TP_SIZES:
         why = f"tensor parallel size {tp} (needs one of {SUPPORTED_TP_SIZES})"
     elif total_heads != NUM_INDEX_HEADS or num_index_heads != 1:
         why = f"{total_heads} index heads, {num_index_heads} per rank"
-    elif aphrodite_config.parallel_config.decode_context_parallel_size > 1:
+    elif sonar_config.parallel_config.decode_context_parallel_size > 1:
         why = "decode context parallelism is enabled"
     elif max_decode_query_len > DECODE_QUERY_LEN:
         why = f"decode query length {max_decode_query_len} > {DECODE_QUERY_LEN}"
@@ -483,7 +483,7 @@ def get_nvfp4_indexer_decode_cp(*, num_index_heads: int, max_decode_query_len: i
             why,
         )
         return None
-    sched = aphrodite_config.scheduler_config
+    sched = sonar_config.scheduler_config
     _STATE = Nvfp4IndexerDecodeCP(
         max_reqs=sched.max_num_seqs,
         device=torch.device("cuda", torch.accelerator.current_device_index()),

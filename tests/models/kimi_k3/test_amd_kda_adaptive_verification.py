@@ -9,17 +9,17 @@ device offsets, never from host lengths that merely look uniform.
 
 import torch
 
-from aphrodite.config import SpeculativeConfig
-from aphrodite.config.compilation import CUDAGraphMode
-from aphrodite.models.kimi_k3.amd.kda_metadata import (
+from sonar.config import SpeculativeConfig
+from sonar.config.compilation import CUDAGraphMode
+from sonar.models.kimi_k3.amd.kda_metadata import (
     KimiK3ROCmKDABackend,
     KimiK3ROCmKDAMetadataBuilder,
 )
-from aphrodite.v1.kv_cache_interface import MambaSpec
+from sonar.v1.kv_cache_interface import MambaSpec
 from tests.v1.attention.utils import (
     BatchSpec,
-    create_aphrodite_config,
     create_common_attn_metadata,
+    create_sonar_config,
 )
 
 BLOCK_SIZE = 16
@@ -28,18 +28,18 @@ NUM_SPEC = 3
 
 
 def _config(adaptive: bool):
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         model_name="Qwen/Qwen3.5-0.8B",
         block_size=BLOCK_SIZE,
     )
-    aphrodite_config.compilation_config.cudagraph_mode = CUDAGraphMode.FULL_AND_PIECEWISE
-    aphrodite_config.speculative_config = SpeculativeConfig(
+    sonar_config.compilation_config.cudagraph_mode = CUDAGraphMode.FULL_AND_PIECEWISE
+    sonar_config.speculative_config = SpeculativeConfig(
         method="ngram",
         num_speculative_tokens=NUM_SPEC,
         enable_adaptive_verification=adaptive,
     )
-    aphrodite_config.cache_config.mamba_cache_mode = "none"
-    return aphrodite_config
+    sonar_config.cache_config.mamba_cache_mode = "none"
+    return sonar_config
 
 
 def _spec() -> MambaSpec:
@@ -55,7 +55,7 @@ def _builder(adaptive: bool) -> KimiK3ROCmKDAMetadataBuilder:
     return KimiK3ROCmKDAMetadataBuilder(
         kv_cache_spec=_spec(),
         layer_names=["layer.0"],
-        aphrodite_config=_config(adaptive),
+        sonar_config=_config(adaptive),
         device=DEVICE,
     )
 

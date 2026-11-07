@@ -7,18 +7,18 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 
-import aphrodite.envs
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.logger import init_logger
-from aphrodite.sampling_params import SamplingParams, check_json_nesting
-from aphrodite.utils.import_utils import LazyLoader
-from aphrodite.utils.mistral import is_mistral_tokenizer
-from aphrodite.v1.structured_output.backend_types import (
+import sonar.envs
+from sonar.exceptions import SonarValidationError
+from sonar.logger import init_logger
+from sonar.sampling_params import SamplingParams, check_json_nesting
+from sonar.utils.import_utils import LazyLoader
+from sonar.utils.mistral import is_mistral_tokenizer
+from sonar.v1.structured_output.backend_types import (
     StructuredOutputBackend,
     StructuredOutputGrammar,
     StructuredOutputOptions,
 )
-from aphrodite.v1.structured_output.utils import (
+from sonar.v1.structured_output.utils import (
     choice_as_grammar,
     compile_regex_with_timeout,
     grammar_is_likely_lark,
@@ -27,7 +27,7 @@ from aphrodite.v1.structured_output.utils import (
 if TYPE_CHECKING:
     import xgrammar as xgr
 
-    from aphrodite.tokenizers import TokenizerLike
+    from sonar.tokenizers import TokenizerLike
 else:
     xgr = LazyLoader("xgr", globals(), "xgrammar")
 
@@ -37,8 +37,8 @@ logger = init_logger(__name__)
 @dataclass
 class XgrammarBackend(StructuredOutputBackend):
     def __post_init__(self):
-        self.disable_any_whitespace = self.aphrodite_config.structured_outputs_config.disable_any_whitespace
-        model_config = self.aphrodite_config.model_config
+        self.disable_any_whitespace = self.sonar_config.structured_outputs_config.disable_any_whitespace
+        model_config = self.sonar_config.model_config
         is_plamo3 = model_config is not None and model_config.hf_config.model_type == "plamo3"
 
         full_vocab_tokenizer_info = None
@@ -100,8 +100,8 @@ class XgrammarBackend(StructuredOutputBackend):
         )
 
         self.num_speculative_tokens = 0
-        if self.aphrodite_config.speculative_config is not None:
-            self.num_speculative_tokens = self.aphrodite_config.speculative_config.num_speculative_tokens
+        if self.sonar_config.speculative_config is not None:
+            self.num_speculative_tokens = self.sonar_config.speculative_config.num_speculative_tokens
 
     def compile_grammar(
         self,
@@ -198,7 +198,7 @@ class XgrammarBackend(StructuredOutputBackend):
             tokenizer_info,
             max_threads=8,
             cache_enabled=True,
-            cache_limit_bytes=aphrodite.envs.APHRODITE_XGRAMMAR_CACHE_MB * 1024 * 1024,
+            cache_limit_bytes=sonar.envs.SONAR_XGRAMMAR_CACHE_MB * 1024 * 1024,
         )
 
     @staticmethod
@@ -438,7 +438,7 @@ def has_xgrammar_unsupported_json_features(schema: dict[str, Any]) -> bool:
 def validate_xgrammar_grammar(sampling_params: SamplingParams) -> None:
     """Validate that the request is supported by structured output.
 
-    Raises AphroditeValidationError if the request is not supported.
+    Raises SonarValidationError if the request is not supported.
     """
     if sampling_params.structured_outputs is None:
         return
@@ -458,7 +458,7 @@ def validate_xgrammar_grammar(sampling_params: SamplingParams) -> None:
                 so_params.regex,
             )
         except Exception as err:
-            raise AphroditeValidationError(f"Failed to transform regex into a grammar: {err}") from err
+            raise SonarValidationError(f"Failed to transform regex into a grammar: {err}") from err
         return
 
     if so_params.choice:
@@ -466,7 +466,7 @@ def validate_xgrammar_grammar(sampling_params: SamplingParams) -> None:
         try:
             xgr.Grammar.from_ebnf(choice_grammar)
         except Exception as err:
-            raise AphroditeValidationError(f"Failed to transform choices into a grammar: {err}") from err
+            raise SonarValidationError(f"Failed to transform choices into a grammar: {err}") from err
         so_params.choice = None
         so_params.grammar = choice_grammar
         return
@@ -477,18 +477,18 @@ def validate_xgrammar_grammar(sampling_params: SamplingParams) -> None:
             try:
                 schema = json.loads(so_params.json)
             except json.JSONDecodeError as e:
-                raise AphroditeValidationError("Invalid JSON grammar specification.") from e
+                raise SonarValidationError("Invalid JSON grammar specification.") from e
         else:
             schema = so_params.json
 
         try:
             if has_xgrammar_unsupported_json_features(schema):
-                raise AphroditeValidationError("The provided JSON schema contains features not supported by xgrammar.")
+                raise SonarValidationError("The provided JSON schema contains features not supported by xgrammar.")
             xgr.Grammar.from_json_schema(schema)
-        except AphroditeValidationError:
+        except SonarValidationError:
             raise
         except Exception as err:
-            raise AphroditeValidationError(f"Failed to transform json schema into a grammar: {err}") from err
+            raise SonarValidationError(f"Failed to transform json schema into a grammar: {err}") from err
         return
 
     if so_params.json_object:
@@ -503,7 +503,7 @@ def validate_xgrammar_grammar(sampling_params: SamplingParams) -> None:
             else:
                 xgr.Grammar.from_ebnf(so_params.grammar)
         except Exception as e:
-            raise AphroditeValidationError("Invalid grammar specification.") from e
+            raise SonarValidationError("Invalid grammar specification.") from e
         return
 
     if so_params.structural_tag:
@@ -525,9 +525,9 @@ def validate_xgrammar_grammar(sampling_params: SamplingParams) -> None:
             else:
                 xgr.Grammar.from_structural_tag(so_params.structural_tag)
         except Exception as e:
-            raise AphroditeValidationError("Invalid structural tag specification.") from e
+            raise SonarValidationError("Invalid structural tag specification.") from e
         return
 
-    raise AphroditeValidationError(
+    raise SonarValidationError(
         "XGrammar structured outputs backend does not support this structured outputs specification"
     )

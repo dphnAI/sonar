@@ -9,7 +9,7 @@ rotation/sign tables used by the Metal dequantization kernels.
 
 import mlx.core as mx
 
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 

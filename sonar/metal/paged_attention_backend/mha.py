@@ -7,11 +7,11 @@ from typing import TYPE_CHECKING, Any
 
 import mlx.core as mx
 
-from aphrodite.logger import init_logger
-from aphrodite.metal.metal import get_ops
+from sonar.logger import init_logger
+from sonar.metal.metal import get_ops
 
 if TYPE_CHECKING:
-    from aphrodite.metal.metal_kernel_backend.cache import MetalPagedKVCache
+    from sonar.metal.metal_kernel_backend.cache import MetalPagedKVCache
 
 logger = init_logger(__name__)
 
@@ -96,7 +96,7 @@ class MHAPagedAttentionBackend:
         return self._cache
 
     def initialize(self, num_blocks: int) -> None:
-        from aphrodite.metal.metal_kernel_backend.cache import MetalPagedKVCache
+        from sonar.metal.metal_kernel_backend.cache import MetalPagedKVCache
 
         self._cache = MetalPagedKVCache(
             num_layers=self._num_layers,
@@ -116,7 +116,7 @@ class MHAPagedAttentionBackend:
     def patch_model(self, model: Any) -> int:
         cache = self._require_initialized("patch_model")
 
-        from aphrodite.metal.metal_kernel_backend.paged_attention import (
+        from sonar.metal.metal_kernel_backend.paged_attention import (
             patch_model_attention_metal_kernel,
         )
 

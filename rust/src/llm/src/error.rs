@@ -11,7 +11,7 @@ pub enum Error {
     #[error("generate request `{request_id}` has an empty prompt_token_ids")]
     EmptyPromptTokenIds { request_id: String },
     #[error("engine-core error")]
-    EngineCoreClient(#[from] aphrodite_engine_core_client::Error),
+    EngineCoreClient(#[from] sonar_engine_core_client::Error),
     #[error(
         "sampling mask for request `{request_id}` has {row_count} rows for {token_count} generated tokens"
     )]

@@ -3,8 +3,8 @@
 
 import torch
 
-from aphrodite.model_executor.layers.quantization.fp8 import Fp8Config, Fp8LinearMethod
-from aphrodite.model_executor.layers.quantization.utils.marlin_utils import (
+from sonar.model_executor.layers.quantization.fp8 import Fp8Config, Fp8LinearMethod
+from sonar.model_executor.layers.quantization.utils.marlin_utils import (
     get_marlin_input_dtype,
 )
 

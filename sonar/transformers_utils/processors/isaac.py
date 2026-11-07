@@ -11,7 +11,7 @@ from transformers import BatchFeature, ImageProcessingMixin, ProcessorMixin, Ten
 from transformers.processing_utils import ProcessingKwargs
 from typing_extensions import Unpack
 
-from aphrodite.tokenizers.hf import HfTokenizer
+from sonar.tokenizers.hf import HfTokenizer
 
 MAX_PIXELS = 60_000_000  # 60-megapixel ceiling ≈ 8200 × 7300 px
 
@@ -327,7 +327,7 @@ class IsaacImageProcessor(ImageProcessingMixin):
         return_tensors: str | TensorType | None = None,
         **kwargs: Unpack[IsaacImagesKwargs],
     ) -> BatchFeature:
-        """Preprocess images into format compatible with Aphrodite input processing."""
+        """Preprocess images into format compatible with Sonar input processing."""
         if not isinstance(images, list):
             images = [images]
 

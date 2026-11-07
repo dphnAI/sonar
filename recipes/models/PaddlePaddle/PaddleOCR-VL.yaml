@@ -26,7 +26,7 @@ model:
   base_env: {}
 
 dependencies:
-  - note: "PaddlePaddle runtime (install in a separate venv from aphrodite to avoid conflicts)"
+  - note: "PaddlePaddle runtime (install in a separate venv from sonar to avoid conflicts)"
     command: "uv pip install paddlepaddle-gpu==3.2.1 --extra-index-url https://www.paddlepaddle.org.cn/packages/stable/cu126/"
   - note: "PaddleOCR document-parsing helpers"
     command: 'uv pip install -U "paddleocr[doc-parser]"'
@@ -80,32 +80,32 @@ guide: |
   ## Prerequisites
 
   - Hardware: 1x GPU (small VRAM footprint)
-  - Aphrodite >= 0.11.1 (nightly if not released yet)
+  - Sonar >= 0.11.1 (nightly if not released yet)
   - AMD ROCm wheels require Python 3.12, ROCm 7.2.3, and glibc >= 2.35.
 
-  ### Install Aphrodite (NVIDIA)
+  ### Install Sonar (NVIDIA)
 
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U aphrodite-engine --pre \
-    --extra-index-url https://wheels.vllm.ai/nightly \
+  uv pip install -U sonar --torch-backend cu130 --pre \
+    --extra-index-url https://sonar.dphn.ai/whl/nightly/cuda/x86_64/simple \
     --extra-index-url https://download.pytorch.org/whl/cu129 \
-    --index-strategy unsafe-best-match
+    --index-strategy first-index
   ```
 
-  ### Install Aphrodite (AMD ROCm)
+  ### Install Sonar (AMD ROCm)
 
   ```bash
   uv venv --python 3.12
   source .venv/bin/activate
-  uv pip install aphrodite-engine --extra-index-url https://wheels.vllm.ai/rocm
+  uv pip install sonar --index-strategy first-index --extra-index-url https://sonar.dphn.ai/whl/release/rocm/x86_64/simple
   ```
 
   ## Launch command
 
   ```bash
-  aphrodite serve PaddlePaddle/PaddleOCR-VL \
+  sonar serve PaddlePaddle/PaddleOCR-VL \
     --trust-remote-code \
     --max-num-batched-tokens 16384 \
     --no-enable-prefix-caching \
@@ -117,7 +117,7 @@ guide: |
   ```bash
   export SAFETENSORS_FAST_GPU=1
 
-  aphrodite serve PaddlePaddle/PaddleOCR-VL \
+  sonar serve PaddlePaddle/PaddleOCR-VL \
     --trust-remote-code \
     --max-num-batched-tokens 16384 \
     --no-enable-prefix-caching \
@@ -159,7 +159,7 @@ guide: |
 
   ## Offline Inference with PP-DocLayoutV2
 
-  Use separate venvs for `aphrodite` and `paddlepaddle` to avoid conflicts. If you see
+  Use separate venvs for `sonar` and `paddlepaddle` to avoid conflicts. If you see
   "The model PaddleOCR-VL-0.9B does not exist.", add `--served-model-name PaddleOCR-VL-0.9B`.
 
   ```bash
@@ -172,7 +172,7 @@ guide: |
   from paddleocr import PaddleOCRVL
 
   pipeline = PaddleOCRVL(
-      vl_rec_backend="aphrodite-server",
+      vl_rec_backend="sonar-server",
       vl_rec_server_url="http://localhost:8000/v1",
       layout_detection_model_name="PP-DocLayoutV2",
       layout_detection_model_dir="/path/to/your/PP-DocLayoutV2/",

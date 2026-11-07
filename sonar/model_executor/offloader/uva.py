@@ -9,13 +9,13 @@ import torch
 import torch.nn as nn
 from torch.func import functional_call
 
-import aphrodite.envs as envs
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.offloader.base import BaseOffloader, should_pin_memory
-from aphrodite.utils.gpu_sync_debug import gpu_sync_allowed
-from aphrodite.utils.mem_utils import format_gib
-from aphrodite.utils.platform_utils import is_uva_available
-from aphrodite.utils.torch_utils import get_accelerator_view_from_cpu_tensor
+import sonar.envs as envs
+from sonar.logger import init_logger
+from sonar.model_executor.offloader.base import BaseOffloader, should_pin_memory
+from sonar.utils.gpu_sync_debug import gpu_sync_allowed
+from sonar.utils.mem_utils import format_gib
+from sonar.utils.platform_utils import is_uva_available
+from sonar.utils.torch_utils import get_accelerator_view_from_cpu_tensor
 
 logger = init_logger(__name__)
 
@@ -49,7 +49,7 @@ class UVAOffloader(BaseOffloader):
         self.cpu_offload_params = cpu_offload_params or set()
 
         self.pin_memory = should_pin_memory()
-        self.uva_offloading = is_uva_available() and not envs.APHRODITE_WEIGHT_OFFLOADING_DISABLE_UVA
+        self.uva_offloading = is_uva_available() and not envs.SONAR_WEIGHT_OFFLOADING_DISABLE_UVA
 
     def wrap_modules(
         self,
@@ -92,7 +92,7 @@ class UVAOffloader(BaseOffloader):
             # Skip parameters an earlier wrap_modules call already offloaded.
             # The UVA path leaves p.device as the accelerator (a view of CPU
             # memory), so the marker is the only way to recognize those.
-            if p.device.type == "cpu" or getattr(p, "_aphrodite_is_uva_offloaded", False):
+            if p.device.type == "cpu" or getattr(p, "_sonar_is_uva_offloaded", False):
                 continue
 
             if self.cpu_offload_params:
@@ -112,7 +112,7 @@ class UVAOffloader(BaseOffloader):
                 p.data = cpu_data
             else:
                 p.data = get_accelerator_view_from_cpu_tensor(cpu_data)
-                p._aphrodite_is_uva_offloaded = True
+                p._sonar_is_uva_offloaded = True
 
             self.cpu_offload_bytes += p.data.numel() * p.data.element_size()
             offloaded_parameters = True

@@ -1,14 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Pytest configuration for Aphrodite language generation tests."""
+"""Pytest configuration for Sonar language generation tests."""
 
 import gc
 
 import pytest
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
 from tests.utils import wait_for_memory_to_settle
 
 logger = init_logger(__name__)
@@ -24,7 +24,7 @@ def pytest_sessionstart(session):
 def release_gpu_memory_between_tests():
     """Reclaim cached GPU memory between tests in this shard.
 
-    These tests start many Aphrodite/HF engines sequentially in one pytest
+    These tests start many Sonar/HF engines sequentially in one pytest
     process; without explicit reclamation between tests, VRAM fragmentation
     accumulates and later tests fail at engine startup ("Engine core
     initialization failed").

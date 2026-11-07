@@ -8,7 +8,7 @@ quantization. Static, per-tensor, and asymmetric activation quantization
 are not supported.
 """
 
-from aphrodite.model_executor.layers.quantization.compressed_tensors.schemes.compressed_tensors_wNa8 import (  # noqa: E501
+from sonar.model_executor.layers.quantization.compressed_tensors.schemes.compressed_tensors_wNa8 import (  # noqa: E501
     CompressedTensorsWNA8Int,
 )
 

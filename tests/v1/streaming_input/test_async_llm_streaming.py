@@ -8,12 +8,12 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from aphrodite.engine.protocol import StreamingInput
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.outputs import STREAM_FINISHED, RequestOutput
-from aphrodite.sampling_params import RequestOutputKind, SamplingParams
-from aphrodite.v1.engine.async_llm import AsyncLLM
-from aphrodite.v1.engine.output_processor import RequestOutputCollector
+from sonar.engine.protocol import StreamingInput
+from sonar.exceptions import SonarValidationError
+from sonar.outputs import STREAM_FINISHED, RequestOutput
+from sonar.sampling_params import RequestOutputKind, SamplingParams
+from sonar.v1.engine.async_llm import AsyncLLM
+from sonar.v1.engine.output_processor import RequestOutputCollector
 
 
 @pytest.fixture
@@ -23,8 +23,8 @@ def mock_async_llm():
     llm = MagicMock(spec=AsyncLLM)
 
     # Mock the essential attributes
-    llm.aphrodite_config = MagicMock()
-    llm.aphrodite_config.cache_config.kv_sharing_fast_prefill = False
+    llm.sonar_config = MagicMock()
+    llm.sonar_config.cache_config.kv_sharing_fast_prefill = False
     llm.model_config = MagicMock()
     llm.model_config.max_model_len = 2048
     llm.log_requests = False
@@ -115,11 +115,11 @@ def make_output(request_id: str, finished: bool) -> RequestOutput:
 )
 def test_resumable_requests_rejected_for_non_decoder_models(is_mm_encoder_only: bool, is_diffusion: bool):
     llm = MagicMock()
-    llm.aphrodite_config.is_mm_encoder_only = is_mm_encoder_only
+    llm.sonar_config.is_mm_encoder_only = is_mm_encoder_only
     llm.model_config.is_diffusion = is_diffusion
 
     with pytest.raises(
-        AphroditeValidationError,
+        SonarValidationError,
         match="Resumable requests are not supported",
     ):
         AsyncLLM._validate_resumable_request(llm)
@@ -137,8 +137,8 @@ async def test_generate_with_async_generator():
     sampling_params = SamplingParams(max_tokens=10)
 
     llm = MagicMock(spec=AsyncLLM)
-    llm.aphrodite_config = MagicMock()
-    llm.aphrodite_config.cache_config.kv_sharing_fast_prefill = False
+    llm.sonar_config = MagicMock()
+    llm.sonar_config.cache_config.kv_sharing_fast_prefill = False
     llm.model_config = MagicMock()
     llm.model_config.max_model_len = 2048
     llm.log_requests = False
@@ -199,7 +199,7 @@ async def test_empty_input_stream_finishes_without_engine_request(monkeypatch):
     monkeypatch.setattr(llm, "_run_output_handler", MagicMock())
     add_request = AsyncMock()
     monkeypatch.setattr(llm, "_add_request", add_request)
-    llm.aphrodite_config = MagicMock(is_mm_encoder_only=False)
+    llm.sonar_config = MagicMock(is_mm_encoder_only=False)
     llm.model_config = MagicMock(is_diffusion=False)
 
     final_req = MagicMock()
@@ -245,7 +245,7 @@ async def _stream_chunks(llm: AsyncLLM, num_chunks: int) -> None:
             yield StreamingInput(prompt=f"frame-{i}")
 
     with mock.patch(
-        "aphrodite.v1.engine.async_llm.extract_prompt_components",
+        "sonar.v1.engine.async_llm.extract_prompt_components",
         return_value=("", None, None),
     ):
         queue = await llm._add_streaming_input_request("r1", chunks(), SamplingParams(max_tokens=4))

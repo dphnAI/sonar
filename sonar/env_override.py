@@ -59,14 +59,14 @@ def _maybe_set_cuda_compatibility_path():
     datacenter NVIDIA GPUs. Consumer GPUs (GeForce, RTX) do not support it
     and will get Error 803 if compat libs are loaded.
     """
-    enable = os.environ.get("APHRODITE_ENABLE_CUDA_COMPATIBILITY", "0").strip().lower() in (
+    enable = os.environ.get("SONAR_ENABLE_CUDA_COMPATIBILITY", "0").strip().lower() in (
         "1",
         "true",
     )
     if not enable:
         return
 
-    cuda_compat_path = os.environ.get("APHRODITE_CUDA_COMPATIBILITY_PATH", "")
+    cuda_compat_path = os.environ.get("SONAR_CUDA_COMPATIBILITY_PATH", "")
     if not cuda_compat_path or not os.path.isdir(cuda_compat_path):
         conda_prefix = os.environ.get("CONDA_PREFIX", "")
         conda_compat = os.path.join(conda_prefix, "cuda-compat")
@@ -143,15 +143,15 @@ _maybe_promote_torch_symbols_for_rocm()
 
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.utils.torch_version import is_torch_equal, is_torch_equal_or_newer
+from sonar.logger import init_logger
+from sonar.utils.torch_version import is_torch_equal, is_torch_equal_or_newer
 
 logger = init_logger(__name__)
 
 # set some common config/environment variables that should be set
-# for all processes created by aphrodite and all processes
-# that interact with aphrodite workers.
-# they are executed whenever `import aphrodite` is called.
+# for all processes created by sonar and all processes
+# that interact with sonar workers.
+# they are executed whenever `import sonar` is called.
 
 # see https://github.com/vllm-project/vllm/pull/15951
 # it avoids unintentional cuda initialization from torch.cuda.is_available()
@@ -357,15 +357,15 @@ def get_graph_partition_signature_patched(self, partitions, skip_cudagraphs: lis
 #
 # The bug occurs when `use_inductor_graph_partition` is turned on and there
 # exists operators inside of `splitting_ops` that have an in-place mutation. In
-# aphrodite, this specifically occurs on the operator
-# aphrodite.unified_attention_with_output. In this case, inductor does not populate
+# sonar, this specifically occurs on the operator
+# sonar.unified_attention_with_output. In this case, inductor does not populate
 # the inductor IR's `origin_node` field, causing an assertion error when trying
 # to access the node's `origin_node` field.
 #
 # So, we will monkeypatch torch._inductor.scheduler.Scheduler.should_partition
 # so that it does not access the inductor IR node's `origin_node` field and just
 # returns True if a node is registered as having a custom partition function.
-# This is ok for now since aphrodite's implementation of the custom partition
+# This is ok for now since sonar's implementation of the custom partition
 # functions just return True.
 # ========================================
 
@@ -472,7 +472,7 @@ def _update_scheduler_patched(self) -> None:
 # For more context, see https://github.com/vllm-project/vllm/issues/30905.
 def _patch_get_raw_stream_if_needed():
     """Workaround for TorchInductor autotune get_raw_stream() bug."""
-    from aphrodite.utils.torch_version import is_torch_equal
+    from sonar.utils.torch_version import is_torch_equal
 
     # Only apply the patch for torch 2.9.0 or 2.9.1
     if is_torch_equal("2.9.0") or is_torch_equal("2.9.1"):
@@ -601,15 +601,15 @@ if is_torch_equal_or_newer("2.10.0") and not is_torch_equal_or_newer("2.12.0.dev
 def _apply_fxgraphcache_pickle_patch(pickler_cls, bypass_cls):
     """Wrap pickler_cls.dumps to convert ValueError into bypass_cls.
 
-    Idempotent: sets `_aphrodite_fxgraph_dumps_patched` on the class after the
+    Idempotent: sets `_sonar_fxgraph_dumps_patched` on the class after the
     first apply to prevent re-application. The wrapper function is also
-    marked with `_aphrodite_patched` as an additional safeguard.
+    marked with `_sonar_patched` as an additional safeguard.
     """
-    if getattr(pickler_cls, "_aphrodite_fxgraph_dumps_patched", False):
+    if getattr(pickler_cls, "_sonar_fxgraph_dumps_patched", False):
         return
 
     original_dumps = pickler_cls.dumps
-    if hasattr(original_dumps, "_aphrodite_patched"):
+    if hasattr(original_dumps, "_sonar_patched"):
         return
 
     def patched_dumps(self, obj):
@@ -618,14 +618,14 @@ def _apply_fxgraphcache_pickle_patch(pickler_cls, bypass_cls):
         except ValueError as e:
             raise bypass_cls("Failed to pickle cache key") from e
 
-    patched_dumps._aphrodite_patched = True  # type: ignore[attr-defined]
+    patched_dumps._sonar_patched = True  # type: ignore[attr-defined]
     pickler_cls.dumps = patched_dumps
-    pickler_cls._aphrodite_fxgraph_dumps_patched = True  # type: ignore[attr-defined]
+    pickler_cls._sonar_fxgraph_dumps_patched = True  # type: ignore[attr-defined]
 
 
 def _patch_fxgraphcache_pickle_if_needed():
     """Apply FxGraphCachePickler.dumps ValueError backport when on torch 2.10.x."""
-    from aphrodite.utils.torch_version import is_torch_equal_or_newer
+    from sonar.utils.torch_version import is_torch_equal_or_newer
 
     if not is_torch_equal_or_newer("2.10.0") or is_torch_equal_or_newer("2.11.0"):
         return
@@ -656,12 +656,12 @@ def _apply_cpp_indirect_assert_patch():
     """Replace CppVecKernel.indirect_assert with a fixed copy that uses
     `VecMask<...>::from(scalar)` for scalar masks.
 
-    Idempotent: marks the class with `_aphrodite_indirect_assert_patched` after
+    Idempotent: marks the class with `_sonar_indirect_assert_patched` after
     the first apply.
     """
     from torch._inductor.codegen.cpp import CppVecKernel
 
-    if getattr(CppVecKernel, "_aphrodite_indirect_assert_patched", False):
+    if getattr(CppVecKernel, "_sonar_indirect_assert_patched", False):
         return
 
     from torch._inductor.codegen.cpp import CppCSEVariable, cexpr_index
@@ -706,19 +706,19 @@ def _apply_cpp_indirect_assert_patch():
         return f'{self.assert_function}({cond}, "index out of bounds: {cond_print}")'
 
     CppVecKernel.indirect_assert = patched_indirect_assert
-    CppVecKernel._aphrodite_indirect_assert_patched = True  # type: ignore[attr-defined]
+    CppVecKernel._sonar_indirect_assert_patched = True  # type: ignore[attr-defined]
 
 
 def _patch_cpp_indirect_assert_if_needed():
     """Apply cpp codegen indirect_assert backport when on torch 2.11.x.
 
     Defers application until torch._inductor.codegen.cpp is naturally
-    imported by Inductor. Importing it eagerly during aphrodite.__init__ pulls
+    imported by Inductor. Importing it eagerly during sonar.__init__ pulls
     in torch._inductor.scheduler, whose top-level
     `import torch._inductor.async_compile` can fail with
     `ModuleNotFoundError: import of torch._inductor.async_compile halted;
     None in sys.modules` depending on the import order on the runner
-    (observed in Aphrodite CPU CI).
+    (observed in Sonar CPU CI).
     """
     if not is_torch_equal_or_newer("2.11.0") or is_torch_equal_or_newer("2.12.0.dev"):
         return
@@ -763,10 +763,10 @@ _patch_cpp_indirect_assert_if_needed()
 # eagerly, even when INFO logging is off. operator_str stringifies every IR
 # argument and IRNode.__str__ has no depth or cycle protection, so deep IR
 # with shared nodes can effectively hang compilation (see #42129, #43111).
-# Only print the target for aphrodite ops. Remove once every platform pins
+# Only print the target for sonar ops. Remove once every platform pins
 # torch >= 2.13.
 
-_APHRODITE_FALLBACK_NAMESPACE_PREFIXES = ("aphrodite::", "aphrodite_aiter::")
+_SONAR_FALLBACK_NAMESPACE_PREFIXES = ("sonar::", "sonar_aiter::")
 
 
 def _apply_inductor_operator_str_patch() -> None:
@@ -776,7 +776,7 @@ def _apply_inductor_operator_str_patch() -> None:
 
     def operator_str(target, args, kwargs) -> str:
         name = target.name() if hasattr(target, "name") else str(target)
-        if name.startswith(_APHRODITE_FALLBACK_NAMESPACE_PREFIXES):
+        if name.startswith(_SONAR_FALLBACK_NAMESPACE_PREFIXES):
             return f"  target: {target}"
         return original(target, args, kwargs)
 
@@ -784,10 +784,10 @@ def _apply_inductor_operator_str_patch() -> None:
 
 
 def _patch_inductor_operator_str_if_needed():
-    """Shorten the implicit-fallback message for aphrodite ops on torch < 2.13.
+    """Shorten the implicit-fallback message for sonar ops on torch < 2.13.
 
     Defers application until torch._inductor.exc is imported, so that
-    importing aphrodite does not import torch._inductor.
+    importing sonar does not import torch._inductor.
     """
     if is_torch_equal_or_newer("2.13.0.dev"):
         return

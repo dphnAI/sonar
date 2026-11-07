@@ -16,9 +16,9 @@ import json
 
 import pytest
 
-from aphrodite import LLM, SamplingParams
-from aphrodite.outputs import RequestOutput
-from aphrodite.sampling_params import StructuredOutputsParams
+from sonar import LLM, SamplingParams
+from sonar.outputs import RequestOutput
+from sonar.sampling_params import StructuredOutputsParams
 
 # Test configuration
 TEST_MODEL = "facebook/opt-125m"  # Small model for fast CI execution
@@ -484,7 +484,7 @@ if __name__ == "__main__":
     Run tests locally for development.
     
     Usage:
-        cd aphrodite/
+        cd sonar/
         python -m pytest tests/v1/e2e/general/test_min_tokens.py -v
     """
     pytest.main([__file__, "-v"])

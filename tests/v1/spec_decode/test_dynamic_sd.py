@@ -6,9 +6,9 @@ import logging
 
 import pytest
 
-from aphrodite.v1.core.sched.scheduler import Scheduler
-from aphrodite.v1.spec_decode.dynamic.utils import build_dynamic_sd_schedule_lookup
-from aphrodite.v1.structured_output import StructuredOutputManager
+from sonar.v1.core.sched.scheduler import Scheduler
+from sonar.v1.spec_decode.dynamic.utils import build_dynamic_sd_schedule_lookup
+from sonar.v1.structured_output import StructuredOutputManager
 from tests.v1.core.utils import create_requests, create_scheduler
 
 
@@ -20,8 +20,8 @@ def _make_lookup(
 ) -> list[int]:
     return build_dynamic_sd_schedule_lookup(
         num_speculative_tokens_per_batch_size=num_speculative_tokens_per_batch_size,
-        aphrodite_max_batch_size=max_batch_size,
-        aphrodite_num_speculative_tokens=runtime_num_speculative_tokens,
+        sonar_max_batch_size=max_batch_size,
+        sonar_num_speculative_tokens=runtime_num_speculative_tokens,
     )
 
 
@@ -38,16 +38,16 @@ def _make_scheduler_with_dynamic_sd(
         num_speculative_tokens=runtime_num_speculative_tokens,
     )
 
-    speculative_config = base_scheduler.aphrodite_config.speculative_config
+    speculative_config = base_scheduler.sonar_config.speculative_config
     assert speculative_config is not None
     speculative_config.num_speculative_tokens_per_batch_size = schedule
 
     return Scheduler(
-        aphrodite_config=base_scheduler.aphrodite_config,
+        sonar_config=base_scheduler.sonar_config,
         kv_cache_config=base_scheduler.kv_cache_config,
         block_size=base_scheduler.block_size,
         log_stats=True,
-        structured_output_manager=StructuredOutputManager(base_scheduler.aphrodite_config),
+        structured_output_manager=StructuredOutputManager(base_scheduler.sonar_config),
     )
 
 
@@ -117,8 +117,8 @@ def test_dynamic_sd_requires_schedule_config():
     with pytest.raises(ValueError, match="num_speculative_tokens_per_batch_size is required"):
         build_dynamic_sd_schedule_lookup(
             None,
-            aphrodite_max_batch_size=256,
-            aphrodite_num_speculative_tokens=3,
+            sonar_max_batch_size=256,
+            sonar_num_speculative_tokens=3,
         )
 
 
@@ -185,8 +185,8 @@ def test_scheduler_falls_back_to_static_k_when_dsd_not_configured():
     assert output.num_spec_tokens_to_schedule == 3
 
 
-def test_dynamic_sd_is_disabled_with_data_parallel(caplog_aphrodite):
-    with caplog_aphrodite.at_level(logging.WARNING, logger="aphrodite"):
+def test_dynamic_sd_is_disabled_with_data_parallel(caplog_sonar):
+    with caplog_sonar.at_level(logging.WARNING, logger="sonar"):
         scheduler = create_scheduler(
             max_num_seqs=256,
             max_num_batched_tokens=2560,
@@ -199,11 +199,11 @@ def test_dynamic_sd_is_disabled_with_data_parallel(caplog_aphrodite):
             data_parallel_size=2,
         )
 
-    speculative_config = scheduler.aphrodite_config.speculative_config
+    speculative_config = scheduler.sonar_config.speculative_config
     assert speculative_config is not None
     assert speculative_config.num_speculative_tokens_per_batch_size is None
     assert scheduler.dynamic_sd_lookup is None
-    assert "Dynamic speculative decoding is not supported with data parallelism" in caplog_aphrodite.text
+    assert "Dynamic speculative decoding is not supported with data parallelism" in caplog_sonar.text
 
     output = _add_requests_and_schedule(scheduler, 256)
     assert len(output.num_scheduled_tokens) == 256

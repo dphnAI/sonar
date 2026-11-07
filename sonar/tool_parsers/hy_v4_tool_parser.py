@@ -10,8 +10,8 @@ from typing import TYPE_CHECKING, Any, TypedDict
 
 import regex as re
 
-import aphrodite.envs as envs
-from aphrodite.entrypoints.generate.base.protocol import (
+import sonar.envs as envs
+from sonar.entrypoints.generate.base.protocol import (
     DeltaFunctionCall,
     DeltaMessage,
     DeltaToolCall,
@@ -19,14 +19,14 @@ from aphrodite.entrypoints.generate.base.protocol import (
     FunctionCall,
     ToolCall,
 )
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
-from aphrodite.logger import init_logger
-from aphrodite.renderers.chat_utils import make_tool_call_id
-from aphrodite.tokenizers import TokenizerLike
-from aphrodite.tool_parsers.abstract_tool_parser import ToolParser
-from aphrodite.tool_parsers.tool_strict_level import ToolStrictLevel
-from aphrodite.tool_parsers.utils import partial_tag_overlap
+from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
+from sonar.logger import init_logger
+from sonar.renderers.chat_utils import make_tool_call_id
+from sonar.tokenizers import TokenizerLike
+from sonar.tool_parsers.abstract_tool_parser import ToolParser
+from sonar.tool_parsers.tool_strict_level import ToolStrictLevel
+from sonar.tool_parsers.utils import partial_tag_overlap
 
 if TYPE_CHECKING:
     from xgrammar import StructuralTag
@@ -34,7 +34,7 @@ if TYPE_CHECKING:
 logger = init_logger(__name__)
 
 # =============================================================================
-# Plain-dict contract with the Aphrodite-side wrapper
+# Plain-dict contract with the Sonar-side wrapper
 # =============================================================================
 
 
@@ -86,7 +86,7 @@ class StreamDelta(TypedDict):
     tool_calls: list[StreamToolCall]
 
 
-# NOTE: mirrored in ``aphrodite.reasoning.hy_v4_reasoning_parser`` (same pattern as
+# NOTE: mirrored in ``sonar.reasoning.hy_v4_reasoning_parser`` (same pattern as
 # ``gemma4_utils``) so neither package depends on the other.
 def detect_token_suffix(tokenizer: TokenizerLike) -> str:
     """Detect the per-checkpoint suffix used by Hunyuan structural tokens.
@@ -341,7 +341,7 @@ def _parse_value(
 
 
 class HYV4ToolExtractor:
-    """Pure tool-call parsing logic for HYV4. Returns plain dicts; no Aphrodite types.
+    """Pure tool-call parsing logic for HYV4. Returns plain dicts; no Sonar types.
 
     Holds only parser state: the structural token strings/ids, the compiled
     regexes, and the streaming incremental state. Stateless argument parsing is
@@ -362,7 +362,7 @@ class HYV4ToolExtractor:
         # constrained decoding without re-scanning the tokenizer vocab.
         self.token_suffix: str = token_suffix
 
-        # Running state read by the Aphrodite serving layer (mirrored by the wrapper).
+        # Running state read by the Sonar serving layer (mirrored by the wrapper).
         self.prev_tool_call_arr: list[dict] = []
         self.current_tool_id: int = -1
         self.streamed_args_for_tool: list[str] = []
@@ -923,9 +923,9 @@ def _tools_to_plain(tools) -> list[ToolSchema] | None:
 
 
 class HYV4ToolParser(ToolParser):
-    """Aphrodite adapter around :class:`HYV4ToolExtractor`.
+    """Sonar adapter around :class:`HYV4ToolExtractor`.
 
-    Converts the extractor's plain dicts to Aphrodite protocol objects, mints
+    Converts the extractor's plain dicts to Sonar protocol objects, mints
     tool-call ids, and mirrors ``prev_tool_call_arr`` /
     ``streamed_args_for_tool`` so the serving layer sees live state.
     """
@@ -977,7 +977,7 @@ class HYV4ToolParser(ToolParser):
             The structural tag, or None when structural tagging does not apply.
 
         """
-        if not envs.APHRODITE_ENFORCE_STRICT_TOOL_CALLING:
+        if not envs.SONAR_ENFORCE_STRICT_TOOL_CALLING:
             return None
 
         # Only constrain required / forced tool choice with the structural tag.
@@ -991,7 +991,7 @@ class HYV4ToolParser(ToolParser):
         if tool_choice is None or tool_choice == "auto" or getattr(tool_choice, "mode", None) == "auto":
             return None
 
-        from aphrodite.tool_parsers.structural_tag_registry import get_model_structural_tag
+        from sonar.tool_parsers.structural_tag_registry import get_model_structural_tag
 
         try:
             return get_model_structural_tag(

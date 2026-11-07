@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-from aphrodite.config import ModelConfig
-from aphrodite.utils import random_uuid
+from sonar.config import ModelConfig
+from sonar.utils import random_uuid
 
 _KIMI_MODEL_TYPES = ("kimi_k2", "kimi_k25", "kimi_k3")
 

@@ -3,11 +3,11 @@
 """Triton kernels for MiniMax M3 block-sparse GQA attention.
 
 The main heads attend only to the blocks selected by the lightning indexer (see
-``index_topk``). Adapted to Aphrodite's paged KV cache: the KV page size is forced to
+``index_topk``). Adapted to Sonar's paged KV cache: the KV page size is forced to
 equal the sparse block size (128), so one selected block maps to exactly one
 page.
 
-Main K/V cache layout (Aphrodite):
+Main K/V cache layout (Sonar):
   ``(num_blocks, 2, 128, num_kv_heads, head_dim)``  K=[:,0] V=[:,1]
 
 Only the paths MiniMax M3 uses are implemented: no attention sink, base-2
@@ -18,8 +18,8 @@ leaves the prefill kernels (which parallelize over the query dim) idle.
 
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
 
 # One sparse block == one KV page.
 SPARSE_BLOCK_SIZE = 128

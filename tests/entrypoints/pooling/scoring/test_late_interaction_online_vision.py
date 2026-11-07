@@ -4,7 +4,7 @@
 import pytest
 import requests
 
-from aphrodite.entrypoints.pooling.scoring.protocol import RerankResponse, ScoreResponse
+from sonar.entrypoints.pooling.scoring.protocol import RerankResponse, ScoreResponse
 from tests.entrypoints.pooling.scoring.util import (
     make_base64_image,
     make_image_mm_param,

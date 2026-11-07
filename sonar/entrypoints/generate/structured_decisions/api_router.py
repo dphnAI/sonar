@@ -8,17 +8,17 @@ from fastapi import APIRouter, Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
 from starlette.datastructures import State
 
-from aphrodite.engine.protocol import EngineClient
-from aphrodite.entrypoints.openai.decisions.state import init_decisions_state
-from aphrodite.entrypoints.serve.engine.protocol import ErrorResponse
-from aphrodite.entrypoints.serve.utils.api_utils import (
+from sonar.engine.protocol import EngineClient
+from sonar.entrypoints.openai.decisions.state import init_decisions_state
+from sonar.entrypoints.serve.engine.protocol import ErrorResponse
+from sonar.entrypoints.serve.utils.api_utils import (
     load_aware_call,
     validate_json_request,
     with_cancellation,
 )
-from aphrodite.entrypoints.serve.utils.request_logger import RequestLogger
-from aphrodite.renderers.chat_utils import load_chat_template
-from aphrodite.tasks import SupportedTask
+from sonar.entrypoints.serve.utils.request_logger import RequestLogger
+from sonar.renderers.chat_utils import load_chat_template
+from sonar.tasks import SupportedTask
 
 from .protocol import StructuredDecisionRequest
 from .serving import ServingStructuredDecisions

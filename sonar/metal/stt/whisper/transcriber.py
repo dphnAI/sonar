@@ -13,8 +13,8 @@ import regex as re
 from transformers import WhisperTokenizer
 from transformers.models.whisper.tokenization_whisper import LANGUAGES, TO_LANGUAGE_CODE
 
-from aphrodite.config import SpeechToTextConfig
-from aphrodite.metal.stt.audio import (
+from sonar.config import SpeechToTextConfig
+from sonar.metal.stt.audio import (
     N_FRAMES,
     N_SAMPLES,
     SAMPLE_RATE,
@@ -24,8 +24,8 @@ from aphrodite.metal.stt.audio import (
     pad_or_trim,
     split_audio,
 )
-from aphrodite.metal.stt.protocol import TranscriptionResult, TranscriptionSegment
-from aphrodite.model_executor.models.whisper_utils import ISO639_1_SUPPORTED_LANGS
+from sonar.metal.stt.protocol import TranscriptionResult, TranscriptionSegment
+from sonar.model_executor.models.whisper_utils import ISO639_1_SUPPORTED_LANGS
 
 from .config import WHISPER_MAX_DECODE_TOKENS
 from .model import WhisperModel

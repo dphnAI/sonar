@@ -2,7 +2,7 @@
 
 #include "custom_collective_common.cuh"
 
-namespace aphrodite {
+namespace sonar {
 
 constexpr int kMnnvlLamportAgThreads = 128;
 constexpr int kMnnvlLamportRsThreads = 256;
@@ -488,4 +488,4 @@ __global__ void __launch_bounds__(kMnnvlLamportRsThreads, 1)
   }
 }
 
-}  // namespace aphrodite
+}  // namespace sonar

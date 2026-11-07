@@ -7,28 +7,28 @@ from collections.abc import Iterable
 import torch
 from torch import nn
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.model_executor.layers.layernorm import GemmaRMSNorm
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.config import SonarConfig
+from sonar.model_executor.layers.layernorm import GemmaRMSNorm
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.model_loader.mtp_validation import (
+from sonar.model_executor.model_loader.mtp_validation import (
     is_mtp_completeness_check_enabled,
 )
-from aphrodite.model_executor.models.interfaces import (
+from sonar.model_executor.models.interfaces import (
     MultiModalEmbeddings,
     SupportsMultiModal,
     _require_is_multimodal,
 )
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.models.utils import (
     _merge_multimodal_embeddings,
     get_draft_quant_config,
     get_spec_layer_idx_from_weight_name,
     maybe_prefix,
 )
-from aphrodite.sequence import IntermediateTensors
+from sonar.sequence import IntermediateTensors
 
 from .model import (
     Step5DecoderLayer,
@@ -57,14 +57,14 @@ class Step5MTPSharedHead(nn.Module):
 
 
 class Step5MultiTokenPredictorLayer(nn.Module):
-    def __init__(self, aphrodite_config: AphroditeConfig, prefix: str) -> None:
+    def __init__(self, sonar_config: SonarConfig, prefix: str) -> None:
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
         self.enorm = GemmaRMSNorm(config.hidden_size, config.rms_norm_eps)
         self.hnorm = GemmaRMSNorm(config.hidden_size, config.rms_norm_eps)
         self.eh_proj = nn.Linear(config.hidden_size * 2, config.hidden_size, bias=False)
-        self.shared_head = Step5MTPSharedHead(config, aphrodite_config.quant_config, prefix=f"{prefix}.shared_head")
-        self.mtp_block = Step5DecoderLayer(aphrodite_config, prefix=f"{prefix}.mtp_block")
+        self.shared_head = Step5MTPSharedHead(config, sonar_config.quant_config, prefix=f"{prefix}.shared_head")
+        self.mtp_block = Step5DecoderLayer(sonar_config, prefix=f"{prefix}.mtp_block")
 
     def forward(
         self,
@@ -82,15 +82,15 @@ class Step5MultiTokenPredictorLayer(nn.Module):
 
 
 class Step5MultiTokenPredictor(nn.Module):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
         self.embed_tokens = VocabParallelEmbedding(config.vocab_size, config.hidden_size)
         self.mtp_start_layer_idx = config.num_hidden_layers
         self.num_mtp_layers = config.num_nextn_predict_layers
         self.layers = nn.ModuleDict(
             {
-                str(idx): Step5MultiTokenPredictorLayer(aphrodite_config, f"{prefix}.layers.{idx}")
+                str(idx): Step5MultiTokenPredictorLayer(sonar_config, f"{prefix}.layers.{idx}")
                 for idx in range(
                     self.mtp_start_layer_idx,
                     self.mtp_start_layer_idx + self.num_mtp_layers,
@@ -131,16 +131,14 @@ class Step5MTP(nn.Module, SupportsMultiModal):
     supports_multimodal_embeddings = True
     packed_modules_mapping = Step5ForCausalLM.packed_modules_mapping
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__()
-        assert aphrodite_config.speculative_config is not None
-        draft_quant_config = get_draft_quant_config(aphrodite_config)
-        aphrodite_config = aphrodite_config.with_hf_config(
-            aphrodite_config.speculative_config.draft_model_config.hf_config
-        )
-        aphrodite_config.quant_config = draft_quant_config
-        self.config = aphrodite_config.model_config.hf_config
-        self.model = Step5MultiTokenPredictor(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        assert sonar_config.speculative_config is not None
+        draft_quant_config = get_draft_quant_config(sonar_config)
+        sonar_config = sonar_config.with_hf_config(sonar_config.speculative_config.draft_model_config.hf_config)
+        sonar_config.quant_config = draft_quant_config
+        self.config = sonar_config.model_config.hf_config
+        self.model = Step5MultiTokenPredictor(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
 
     def embed_input_ids(
         self,

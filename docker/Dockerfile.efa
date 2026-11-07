@@ -1,13 +1,15 @@
-# AWS EFA variant of an aphrodite-openai image. Adds the EFA userspace stack
+# AWS EFA variant of a sonar-openai image. Adds the EFA userspace stack
 # (libfabric, aws-ofi-nccl, hwloc), the EFA Mooncake wheel (x86_64 only),
 # and DeepEP rebuilt from the amazon-contributing fork for NCCL GIN over EFA.
 #
-# The base must be built with INSTALL_KV_CONNECTORS=true (NIXL and Mooncake):
+# Build a Sonar base with INSTALL_KV_CONNECTORS=true (NIXL and Mooncake):
+#   docker build -f docker/Dockerfile --target sonar-openai \
+#       --build-arg INSTALL_KV_CONNECTORS=true -t sonar:openai .
 #   docker build -f docker/Dockerfile.efa \
-#       --build-arg BASE_IMAGE=aphrodite/aphrodite-openai:latest -t aphrodite:openai-efa docker/
+#       --build-arg BASE_IMAGE=sonar:openai -t sonar:openai-efa docker/
 #
 # The host still provides the EFA kernel module and memlock limits.
-ARG BASE_IMAGE=aphrodite/aphrodite-openai:latest
+ARG BASE_IMAGE=sonar:openai
 FROM ${BASE_IMAGE}
 
 ARG TARGETARCH
@@ -16,9 +18,9 @@ ARG EFA_INSTALLER_SHA256=83993044fa4df3dc2f8b5c2f7051d61b9689441be023a2c92ea51d3
 
 # Without the KV connectors there is no NIXL plugin or Mooncake wheel to use EFA.
 RUN set -eu; \
-    if ! python3 -c "import importlib.metadata as m; m.version('nixl')" \
+    if ! python3 -c "import importlib.metadata as m; m.version('sonar'); m.version('nixl')" \
             2>/dev/null; then \
-        echo "Dockerfile.efa needs a base image built with \
+        echo "Dockerfile.efa needs a Sonar base image built with \
 --build-arg INSTALL_KV_CONNECTORS=true" >&2; \
         exit 1; \
     fi
@@ -130,27 +132,27 @@ print(os.path.dirname(s.origin or s.submodule_search_locations[0]))")/nccl"; \
     uv pip install --system --no-deps -vv --no-build-isolation .; \
     cd /; \
     rm -rf /tmp/deepep; \
-    # Aphrodite only logs when the deepep_v2 backend is unavailable, so fail here.
+    # Sonar only logs when the deepep_v2 backend is unavailable, so fail here.
     python3 -c "import deep_ep; assert hasattr(deep_ep, 'ElasticBuffer'), \
 'DeepEP built without the ElasticBuffer (v2) API'"
 
 # Provenance. Build args from docker-build-metadata-args.sh override the values
 # inherited from the base image; without them the base's values are kept.
 ARG BASE_IMAGE
-ARG APHRODITE_BUILD_COMMIT
-ARG APHRODITE_BUILD_PIPELINE
-ARG APHRODITE_BUILD_URL
-ARG APHRODITE_IMAGE_TAG
-ENV APHRODITE_BUILD_COMMIT=${APHRODITE_BUILD_COMMIT} \
-    APHRODITE_BUILD_PIPELINE=${APHRODITE_BUILD_PIPELINE} \
-    APHRODITE_BUILD_URL=${APHRODITE_BUILD_URL} \
-    APHRODITE_IMAGE_TAG=${APHRODITE_IMAGE_TAG}
-LABEL org.opencontainers.image.revision="${APHRODITE_BUILD_COMMIT}" \
-      org.opencontainers.image.version="${APHRODITE_IMAGE_TAG}" \
-      org.opencontainers.image.url="${APHRODITE_BUILD_URL}" \
-      ai.aphrodite.build.commit="${APHRODITE_BUILD_COMMIT}" \
-      ai.aphrodite.build.pipeline="${APHRODITE_BUILD_PIPELINE}" \
-      ai.aphrodite.build.url="${APHRODITE_BUILD_URL}" \
-      ai.aphrodite.image.tag="${APHRODITE_IMAGE_TAG}" \
-      ai.aphrodite.efa.base-image="${BASE_IMAGE}" \
-      ai.aphrodite.efa.installer-version="${EFA_INSTALLER_VERSION}"
+ARG SONAR_BUILD_COMMIT
+ARG SONAR_BUILD_PIPELINE
+ARG SONAR_BUILD_URL
+ARG SONAR_IMAGE_TAG
+ENV SONAR_BUILD_COMMIT=${SONAR_BUILD_COMMIT} \
+    SONAR_BUILD_PIPELINE=${SONAR_BUILD_PIPELINE} \
+    SONAR_BUILD_URL=${SONAR_BUILD_URL} \
+    SONAR_IMAGE_TAG=${SONAR_IMAGE_TAG}
+LABEL org.opencontainers.image.revision="${SONAR_BUILD_COMMIT}" \
+      org.opencontainers.image.version="${SONAR_IMAGE_TAG}" \
+      org.opencontainers.image.url="${SONAR_BUILD_URL}" \
+      ai.sonar.build.commit="${SONAR_BUILD_COMMIT}" \
+      ai.sonar.build.pipeline="${SONAR_BUILD_PIPELINE}" \
+      ai.sonar.build.url="${SONAR_BUILD_URL}" \
+      ai.sonar.image.tag="${SONAR_IMAGE_TAG}" \
+      ai.sonar.efa.base-image="${BASE_IMAGE}" \
+      ai.sonar.efa.installer-version="${EFA_INSTALLER_VERSION}"

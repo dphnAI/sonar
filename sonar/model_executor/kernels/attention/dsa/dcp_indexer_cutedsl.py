@@ -11,29 +11,29 @@ from cuda.bindings.driver import CUstream
 from cutlass import Float32, Int32, Uint32, Uint64
 from quack.compile_utils import make_fake_tensor
 
-from aphrodite.cute_utils import recast_val
-from aphrodite.model_executor.warmup.jit_warmup import kernel_launcher
-from aphrodite.model_executor.warmup.jit_warmup_cutedsl_helper import (
-    AphroditeCuTeDSLJitKernel,
+from sonar.cute_utils import recast_val
+from sonar.model_executor.warmup.jit_warmup import kernel_launcher
+from sonar.model_executor.warmup.jit_warmup_cutedsl_helper import (
     CuTeDSLLaunchSpec,
+    SonarCuTeDSLJitKernel,
 )
-from aphrodite.model_executor.warmup.jit_warmup_triton_helper import (
-    AphroditeTritonJitKernel,
+from sonar.model_executor.warmup.jit_warmup_triton_helper import (
     LaunchSpec,
+    SonarTritonJitKernel,
     TritonWarmupTensor,
 )
-from aphrodite.triton_utils import tl, triton
+from sonar.triton_utils import tl, triton
 
 
-def _dcp_merge_topk_and_interleave(aphrodite_config: Any) -> tuple[int, int]:
+def _dcp_merge_topk_and_interleave(sonar_config: Any) -> tuple[int, int]:
     """(topk, cp_interleave) the DCP merge runs with.
 
     Kpool indexers (GLM-5.x) merge pool ids: topk and the interleave are both
     in units of ``index_kpool`` tokens.
     """
-    hf_text_config = aphrodite_config.model_config.hf_text_config
+    hf_text_config = sonar_config.model_config.hf_text_config
     topk = hf_text_config.index_topk
-    cp_interleave = aphrodite_config.parallel_config.cp_kv_cache_interleave_size
+    cp_interleave = sonar_config.parallel_config.cp_kv_cache_interleave_size
     kpool = getattr(hf_text_config, "index_kpool", None) or 1
     if kpool > 1:
         topk //= kpool
@@ -89,7 +89,7 @@ def pack_dcp_topk_candidates_cutedsl(
     )
 
 
-class PackDCPTopkCandidatesKernel(AphroditeTritonJitKernel["PackDCPTopkCandidatesKernel.CompileKey"]):
+class PackDCPTopkCandidatesKernel(SonarTritonJitKernel["PackDCPTopkCandidatesKernel.CompileKey"]):
     @dataclass(frozen=True)
     class CompileKey:
         dcp_rank: int
@@ -181,16 +181,16 @@ class PackDCPTopkCandidatesKernel(AphroditeTritonJitKernel["PackDCPTopkCandidate
             has_row_starts=has_row_starts,
         )
 
-    def get_warmup_keys(self, aphrodite_config: Any) -> list[CompileKey]:
-        dcp_world_size = aphrodite_config.parallel_config.decode_context_parallel_size
+    def get_warmup_keys(self, sonar_config: Any) -> list[CompileKey]:
+        dcp_world_size = sonar_config.parallel_config.decode_context_parallel_size
         if dcp_world_size <= 1:
             return []
-        topk, cp_interleave = _dcp_merge_topk_and_interleave(aphrodite_config)
+        topk, cp_interleave = _dcp_merge_topk_and_interleave(sonar_config)
         if topk <= 0:
             return []
 
         try:
-            from aphrodite.distributed.parallel_state import get_dcp_group
+            from sonar.distributed.parallel_state import get_dcp_group
 
             dcp_rank = get_dcp_group().rank_in_group
         except Exception:
@@ -266,7 +266,7 @@ class PackDCPTopkCandidatesKernel(AphroditeTritonJitKernel["PackDCPTopkCandidate
 
 
 class StableTopKFromGatheredCandidatesKernel(
-    AphroditeCuTeDSLJitKernel["StableTopKFromGatheredCandidatesKernel.CompileKey"]
+    SonarCuTeDSLJitKernel["StableTopKFromGatheredCandidatesKernel.CompileKey"]
 ):
     tb_size = 512
     hist_bins = 2048
@@ -550,11 +550,11 @@ class StableTopKFromGatheredCandidatesKernel(
     ) -> CompileKey:
         return self.CompileKey(**compile_key_fields)
 
-    def get_warmup_keys(self, aphrodite_config: Any) -> list[CompileKey]:
-        dcp_world_size = aphrodite_config.parallel_config.decode_context_parallel_size
+    def get_warmup_keys(self, sonar_config: Any) -> list[CompileKey]:
+        dcp_world_size = sonar_config.parallel_config.decode_context_parallel_size
         if dcp_world_size <= 1:
             return []
-        topk, _ = _dcp_merge_topk_and_interleave(aphrodite_config)
+        topk, _ = _dcp_merge_topk_and_interleave(sonar_config)
         if topk <= 0:
             return []
         return self._trace_dispatch(self.dispatch)(

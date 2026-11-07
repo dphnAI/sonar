@@ -7,10 +7,10 @@ from typing import Any
 import torch
 from torch.distributed import ProcessGroup
 
-from aphrodite.distributed.utils import pickle
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.platforms.interface import CpuArchEnum
+from sonar.distributed.utils import pickle
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.platforms.interface import CpuArchEnum
 
 from .base_device_communicator import DeviceCommunicatorBase
 
@@ -67,7 +67,7 @@ class CpuCommunicator(DeviceCommunicatorBase):
 
     def _all_group_ranks_share_shm_group_name(self) -> bool:
         """CPUSHM requires all ranks in this group to agree on one SHM group name.
-        This is a lightweight consistency check for APHRODITE_DIST_IDENT/name inputs.
+        This is a lightweight consistency check for SONAR_DIST_IDENT/name inputs.
         """
         local_name = _CPUSHMDistributed.make_group_name(self)
         names: list[str] = [""] * self.world_size
@@ -213,7 +213,7 @@ class _CPUSHMDistributed:
 
     @staticmethod
     def make_group_name(communicator: CpuCommunicator) -> str:
-        instance_identifier = os.environ["APHRODITE_DIST_IDENT"]
+        instance_identifier = os.environ["SONAR_DIST_IDENT"]
         unique_name = communicator.unique_name
         instance_identifier = f"{instance_identifier}-{unique_name}"
         group_ranks = [str(rank) for rank in communicator.ranks]

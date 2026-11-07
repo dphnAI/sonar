@@ -4,7 +4,7 @@
 
 Loads only the model config and tokenizer (no engine, no weights, no GPU) and serves
 `/tokenize`, `/detokenize` (and `/tokenizer_info` with `--enable-tokenizer-info-endpoint`)
-with the same handlers as `aphrodite serve`, plus `/v1/models`, `/health`, `/version`
+with the same handlers as `sonar serve`, plus `/v1/models`, `/health`, `/version`
 and `/metrics`.
 """
 
@@ -13,11 +13,11 @@ from argparse import Namespace
 
 from fastapi import FastAPI
 
-from aphrodite.entrypoints.openai.models.api_router import attach_router as attach_models_router
-from aphrodite.entrypoints.serve.exception_handling.register import init_exception_handler
-from aphrodite.entrypoints.serve.instrumentator import register_instrumentator_api_routers
-from aphrodite.entrypoints.serve.middleware.register import init_entrypoints_middleware
-from aphrodite.entrypoints.serve.tokenize.api_router import attach_router as attach_tokenize_router
+from sonar.entrypoints.openai.models.api_router import attach_router as attach_models_router
+from sonar.entrypoints.serve.exception_handling.register import init_exception_handler
+from sonar.entrypoints.serve.instrumentator import register_instrumentator_api_routers
+from sonar.entrypoints.serve.middleware.register import init_entrypoints_middleware
+from sonar.entrypoints.serve.tokenize.api_router import attach_router as attach_tokenize_router
 
 from ..render.entry import run_launch_fastapi
 from ..utils.server_utils import lifespan

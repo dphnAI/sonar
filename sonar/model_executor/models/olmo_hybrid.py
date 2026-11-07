@@ -28,42 +28,42 @@ from itertools import islice
 import torch
 from torch import nn
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import (
+    SonarConfig,
 )
-from aphrodite.distributed import (
+from sonar.distributed import (
     get_pp_group,
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
     tensor_model_parallel_all_gather,
 )
-from aphrodite.distributed.utils import split_tensor_along_last_dim
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.activation import SiluAndMul
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.distributed.utils import split_tensor_along_last_dim
+from sonar.logger import init_logger
+from sonar.model_executor.layers.activation import SiluAndMul
+from sonar.model_executor.layers.attention import Attention
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     MergedColumnParallelLinear,
     QKVParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.mamba.gdn.olmo_gdn_linear_attn import (
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.mamba.gdn.olmo_gdn_linear_attn import (
     OlmoHybridGatedDeltaNetAttention,
 )
-from aphrodite.model_executor.layers.mamba.mamba_utils import (
+from sonar.model_executor.layers.mamba.mamba_utils import (
     MambaStateCopyFunc,
     MambaStateCopyFuncCalculator,
     MambaStateDtypeCalculator,
     MambaStateShapeCalculator,
 )
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.sequence import IntermediateTensors
+from sonar.sequence import IntermediateTensors
 
 from .interfaces import HasInnerState, IsHybrid, SupportsLoRA, SupportsPP
 from .utils import (
@@ -79,9 +79,9 @@ logger = init_logger(__name__)
 
 
 class OlmoHybridAttention(nn.Module):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        self.config = aphrodite_config.model_config.hf_config
+        self.config = sonar_config.model_config.hf_config
 
         hidden_size = self.config.hidden_size
         self.tp_size = get_tensor_model_parallel_world_size()
@@ -109,7 +109,7 @@ class OlmoHybridAttention(nn.Module):
             self.total_num_heads,
             self.total_num_kv_heads,
             bias=False,
-            quant_config=aphrodite_config.quant_config,
+            quant_config=sonar_config.quant_config,
             prefix=f"{prefix}.qkv_proj",
         )
 
@@ -131,8 +131,8 @@ class OlmoHybridAttention(nn.Module):
             self.head_dim,
             self.scaling,
             num_kv_heads=self.num_kv_heads,
-            cache_config=aphrodite_config.cache_config,
-            quant_config=aphrodite_config.quant_config,
+            cache_config=sonar_config.cache_config,
+            quant_config=sonar_config.quant_config,
             prefix=f"{prefix}.attn",
         )
 
@@ -153,7 +153,7 @@ class OlmoHybridAttention(nn.Module):
             self.total_num_heads * self.head_dim,
             hidden_size,
             bias=False,
-            quant_config=aphrodite_config.quant_config,
+            quant_config=sonar_config.quant_config,
             prefix=f"{prefix}.o_proj",
         )
 
@@ -186,9 +186,9 @@ class OlmoHybridAttention(nn.Module):
 
 
 class OlmoHybridMLP(nn.Module):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
         hidden_size = config.hidden_size
         intermediate_size = config.intermediate_size
 
@@ -196,7 +196,7 @@ class OlmoHybridMLP(nn.Module):
             hidden_size,
             [intermediate_size] * 2,
             bias=False,
-            quant_config=aphrodite_config.quant_config,
+            quant_config=sonar_config.quant_config,
             prefix=f"{prefix}.gate_up_proj",
         )
 
@@ -206,7 +206,7 @@ class OlmoHybridMLP(nn.Module):
             intermediate_size,
             hidden_size,
             bias=False,
-            quant_config=aphrodite_config.quant_config,
+            quant_config=sonar_config.quant_config,
             prefix=f"{prefix}.down_proj",
         )
 
@@ -218,9 +218,9 @@ class OlmoHybridMLP(nn.Module):
 
 
 class OlmoHybridDecoderLayer(nn.Module):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
 
         layer_idx = extract_layer_index(prefix)
         self.layer_type = config.layer_types[layer_idx]
@@ -229,7 +229,7 @@ class OlmoHybridDecoderLayer(nn.Module):
         if self.layer_type == "linear_attention":
             self.linear_attn = OlmoHybridGatedDeltaNetAttention(
                 config,
-                aphrodite_config,
+                sonar_config,
                 prefix=f"{prefix}.linear_attn",
             )
             self.input_layernorm = RMSNorm(
@@ -242,7 +242,7 @@ class OlmoHybridDecoderLayer(nn.Module):
             )
         else:
             self.self_attn = OlmoHybridAttention(
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 prefix=f"{prefix}.self_attn",
             )
             # Attention layers use these norm names
@@ -256,7 +256,7 @@ class OlmoHybridDecoderLayer(nn.Module):
             )
 
         self.mlp = OlmoHybridMLP(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             prefix=f"{prefix}.mlp",
         )
 
@@ -295,7 +295,7 @@ class OlmoHybridDecoderLayer(nn.Module):
 
 @support_torch_compile
 class OlmoHybridModel(nn.Module):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_stacked={
             ".self_attn.q_proj": (".self_attn.qkv_proj", "q"),
             ".self_attn.k_proj": (".self_attn.qkv_proj", "k"),
@@ -312,9 +312,9 @@ class OlmoHybridModel(nn.Module):
         }
     )
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        self.config = aphrodite_config.model_config.hf_config
+        self.config = sonar_config.model_config.hf_config
 
         self.embed_tokens = VocabParallelEmbedding(
             self.config.vocab_size,
@@ -324,7 +324,7 @@ class OlmoHybridModel(nn.Module):
 
         self.start_layer, self.end_layer, self.layers = make_layers(
             self.config.num_hidden_layers,
-            lambda prefix: OlmoHybridDecoderLayer(aphrodite_config=aphrodite_config, prefix=prefix),
+            lambda prefix: OlmoHybridDecoderLayer(sonar_config=sonar_config, prefix=prefix),
             prefix=f"{prefix}.layers",
         )
 
@@ -368,7 +368,7 @@ class OlmoHybridModel(nn.Module):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
 
 class OlmoHybridForCausalLM(nn.Module, HasInnerState, SupportsPP, SupportsLoRA, IsHybrid):
@@ -378,19 +378,19 @@ class OlmoHybridForCausalLM(nn.Module, HasInnerState, SupportsPP, SupportsLoRA, 
         "in_proj_qkvg": ["q_proj", "k_proj", "v_proj", "g_proj"],
     }
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
         self.config = config
-        self.aphrodite_config = aphrodite_config
-        self.model_config = aphrodite_config.model_config
+        self.sonar_config = sonar_config
+        self.model_config = sonar_config.model_config
 
-        self.model = OlmoHybridModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = OlmoHybridModel(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
 
         self.lm_head = ParallelLMHead(
             config.vocab_size,
             config.hidden_size,
-            quant_config=aphrodite_config.quant_config,
+            quant_config=sonar_config.quant_config,
             prefix=maybe_prefix(prefix, "lm_head"),
         )
         if config.tie_word_embeddings:
@@ -427,24 +427,20 @@ class OlmoHybridForCausalLM(nn.Module, HasInnerState, SupportsPP, SupportsLoRA, 
     @classmethod
     def get_mamba_state_dtype_from_config(
         cls,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
     ) -> tuple[torch.dtype, torch.dtype]:
         return MambaStateDtypeCalculator.gated_delta_net_state_dtype(
-            aphrodite_config.model_config.dtype,
-            aphrodite_config.cache_config.mamba_cache_dtype,
-            aphrodite_config.cache_config.mamba_ssm_cache_dtype,
+            sonar_config.model_config.dtype,
+            sonar_config.cache_config.mamba_cache_dtype,
+            sonar_config.cache_config.mamba_ssm_cache_dtype,
         )
 
     @classmethod
-    def get_mamba_state_shape_from_config(
-        cls, aphrodite_config: "AphroditeConfig"
-    ) -> tuple[tuple[int, int], tuple[int, int]]:
-        parallel_config = aphrodite_config.parallel_config
-        hf_config = aphrodite_config.model_config.hf_config
+    def get_mamba_state_shape_from_config(cls, sonar_config: "SonarConfig") -> tuple[tuple[int, int], tuple[int, int]]:
+        parallel_config = sonar_config.parallel_config
+        hf_config = sonar_config.model_config.hf_config
         tp_size = parallel_config.tensor_parallel_size
-        num_spec = (
-            aphrodite_config.speculative_config.num_speculative_tokens if aphrodite_config.speculative_config else 0
-        )
+        num_spec = sonar_config.speculative_config.num_speculative_tokens if sonar_config.speculative_config else 0
         return MambaStateShapeCalculator.gated_delta_net_state_shape(
             tp_size,
             hf_config.linear_num_key_heads,

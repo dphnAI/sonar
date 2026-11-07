@@ -12,21 +12,21 @@ from typing import Any
 
 import torch
 
-from aphrodite.model_executor.warmup.jit_warmup import (
+from sonar.model_executor.warmup.jit_warmup import (
     WarmupChoices,
     WarmupIntRange,
     _when,
 )
-from aphrodite.model_executor.warmup.jit_warmup_triton_helper import (
+from sonar.model_executor.warmup.jit_warmup_triton_helper import (
     DispatchSpec,
     TritonWarmupTensor,
     triton_kernel_dispatcher_with_warmup,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.gpu_sync_debug import gpu_sync_allowed
-from aphrodite.utils.math_utils import next_power_of_2
-from aphrodite.utils.platform_utils import num_compute_units
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
+from sonar.utils.gpu_sync_debug import gpu_sync_allowed
+from sonar.utils.math_utils import next_power_of_2
+from sonar.utils.platform_utils import num_compute_units
 
 _TRITON_TABLE_CACHE: dict[tuple[torch.device], tuple[torch.Tensor, torch.Tensor]] = {}
 _TRITON_BUFFER_CACHE: dict[tuple[torch.device, torch.dtype, int], torch.Tensor] = {}
@@ -781,16 +781,16 @@ def _topk_topp_kernel(
                 tl.store(LOGITS_ROW + offs_n, logits_blk, mask=mask_n)
 
 
-def _max_sampler_batch_size(aphrodite_config: Any) -> int:
-    return aphrodite_config.scheduler_config.max_num_seqs * (aphrodite_config.num_speculative_tokens + 1)
+def _max_sampler_batch_size(sonar_config: Any) -> int:
+    return sonar_config.scheduler_config.max_num_seqs * (sonar_config.num_speculative_tokens + 1)
 
 
-def _topk_topp_warmup_inputs(aphrodite_config: Any) -> dict[str, Any]:
-    vocab_size = aphrodite_config.model_config.get_vocab_size()
+def _topk_topp_warmup_inputs(sonar_config: Any) -> dict[str, Any]:
+    vocab_size = sonar_config.model_config.get_vocab_size()
     split_enabled = current_platform.is_cuda_alike()
     mode: Any = WarmupChoices((True, False), (True, True), (False, True))
     logits_stride: Any = WarmupChoices(16, 2)
-    batch_size: Any = WarmupIntRange(1, _max_sampler_batch_size(aphrodite_config) + 1)
+    batch_size: Any = WarmupIntRange(1, _max_sampler_batch_size(sonar_config) + 1)
     topk_enabled = mode[0]
     topp_enabled = mode[1]
     _when(topk_enabled or not (split_enabled and batch_size <= _SPLIT_MAX_BATCH))
@@ -948,11 +948,11 @@ def _topp_sb_stats_kernel(
     tl.store(STATS + base + 3, cnt)
 
 
-def _topp_split_stats_warmup_inputs(aphrodite_config: Any) -> dict[str, Any]:
-    vocab_size = aphrodite_config.model_config.get_vocab_size()
+def _topp_split_stats_warmup_inputs(sonar_config: Any) -> dict[str, Any]:
+    vocab_size = sonar_config.model_config.get_vocab_size()
     num_sm = num_compute_units()
     logits_stride: Any = WarmupChoices(16, 2)
-    batch_size: Any = WarmupIntRange(1, min(_max_sampler_batch_size(aphrodite_config), _SPLIT_MAX_BATCH) + 1)
+    batch_size: Any = WarmupIntRange(1, min(_max_sampler_batch_size(sonar_config), _SPLIT_MAX_BATCH) + 1)
     has_k: Any = WarmupChoices(False, True)
     logits = TritonWarmupTensor(
         torch.float32,
@@ -1233,11 +1233,11 @@ def _topp_sb_step_kernel(
     tl.store(pbase + fidx * 3 + 2, nmin)
 
 
-def _topp_split_step_warmup_inputs(aphrodite_config: Any) -> dict[str, Any]:
-    vocab_size = aphrodite_config.model_config.get_vocab_size()
+def _topp_split_step_warmup_inputs(sonar_config: Any) -> dict[str, Any]:
+    vocab_size = sonar_config.model_config.get_vocab_size()
     num_sm = num_compute_units()
     logits_stride: Any = WarmupChoices(16, 2)
-    batch_size: Any = WarmupIntRange(1, min(_max_sampler_batch_size(aphrodite_config), _SPLIT_MAX_BATCH) + 1)
+    batch_size: Any = WarmupIntRange(1, min(_max_sampler_batch_size(sonar_config), _SPLIT_MAX_BATCH) + 1)
     round: Any = WarmupIntRange(0, _SPLIT_ROUNDS)
     has_k: Any = WarmupChoices(False, True)
     logits = TritonWarmupTensor(
@@ -1409,11 +1409,11 @@ def _topp_sb_mask_kernel(
         tl.store(ROW + i + offs, tl.where(keep, x, MASK_VALUE), mask=mask_n)
 
 
-def _topp_split_mask_warmup_inputs(aphrodite_config: Any) -> dict[str, Any]:
-    vocab_size = aphrodite_config.model_config.get_vocab_size()
+def _topp_split_mask_warmup_inputs(sonar_config: Any) -> dict[str, Any]:
+    vocab_size = sonar_config.model_config.get_vocab_size()
     num_sm = num_compute_units()
     logits_stride: Any = WarmupChoices(16, 2)
-    batch_size: Any = WarmupIntRange(1, min(_max_sampler_batch_size(aphrodite_config), _SPLIT_MAX_BATCH) + 1)
+    batch_size: Any = WarmupIntRange(1, min(_max_sampler_batch_size(sonar_config), _SPLIT_MAX_BATCH) + 1)
     has_k: Any = WarmupChoices(False, True)
     logits = TritonWarmupTensor(
         torch.float32,

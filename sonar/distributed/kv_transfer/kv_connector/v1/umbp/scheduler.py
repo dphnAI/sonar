@@ -13,18 +13,18 @@ from functools import lru_cache
 from itertools import islice
 from typing import Any, cast
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed.kv_events import BlockRemoved, BlockStored, KVCacheEventType
-from aphrodite.distributed.kv_transfer.kv_connector.v1.base import KVConnectorMetadata
-from aphrodite.logger import init_logger
-from aphrodite.v1.attention.backends.utils import NULL_BLOCK_ID
-from aphrodite.v1.core.block_pool import BlockPool
-from aphrodite.v1.core.kv_cache_coordinator import (
+from sonar.config import SonarConfig
+from sonar.distributed.kv_events import BlockRemoved, BlockStored, KVCacheEventType
+from sonar.distributed.kv_transfer.kv_connector.v1.base import KVConnectorMetadata
+from sonar.logger import init_logger
+from sonar.v1.attention.backends.utils import NULL_BLOCK_ID
+from sonar.v1.core.block_pool import BlockPool
+from sonar.v1.core.kv_cache_coordinator import (
     get_kv_cache_coordinator,
     replay_boundaries,
 )
-from aphrodite.v1.core.kv_cache_manager import KVCacheBlocks
-from aphrodite.v1.core.kv_cache_utils import (
+from sonar.v1.core.kv_cache_manager import KVCacheBlocks
+from sonar.v1.core.kv_cache_utils import (
     BlockHash,
     KVCacheBlock,
     get_block_hash,
@@ -33,8 +33,8 @@ from aphrodite.v1.core.kv_cache_utils import (
     resolve_dcp_kv_block_size,
     resolve_kv_cache_block_sizes,
 )
-from aphrodite.v1.core.sched.output import SchedulerOutput
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.core.sched.output import SchedulerOutput
+from sonar.v1.kv_cache_interface import (
     FullAttentionSpec,
     KVCacheConfig,
     KVCacheSpec,
@@ -43,9 +43,9 @@ from aphrodite.v1.kv_cache_interface import (
     UniformTypeKVCacheSpecs,
     iter_layer_specs,
 )
-from aphrodite.v1.kv_cache_spec_registry import KVCacheSpecRegistry
-from aphrodite.v1.outputs import KVConnectorOutput
-from aphrodite.v1.request import Request
+from sonar.v1.kv_cache_spec_registry import KVCacheSpecRegistry
+from sonar.v1.outputs import KVConnectorOutput
+from sonar.v1.request import Request
 
 from .data import (
     BlockIdentityCodec,
@@ -165,7 +165,7 @@ class _LookupBlockPool(BlockPool):
 
 
 class UMBPStoreConnectorScheduler:
-    """Own Aphrodite prefix matching while the runtime owns lookup transport.
+    """Own Sonar prefix matching while the runtime owns lookup transport.
 
     Without a runtime and codec the scheduler neither looks up nor stores
     until ``bind_namespace`` supplies them.
@@ -173,15 +173,15 @@ class UMBPStoreConnectorScheduler:
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         kv_cache_config: KVCacheConfig,
         runtime: UMBPSchedulerHandle | None,
         codec: BlockIdentityCodec | None,
         topology: RankTopology | None = None,
     ) -> None:
-        self.block_size, resolved_hash_block_size = resolve_kv_cache_block_sizes(kv_cache_config, aphrodite_config)
+        self.block_size, resolved_hash_block_size = resolve_kv_cache_block_sizes(kv_cache_config, sonar_config)
         self.kv_cache_config = kv_cache_config
-        dcp_size = aphrodite_config.parallel_config.decode_context_parallel_size
+        dcp_size = sonar_config.parallel_config.decode_context_parallel_size
         self._dcp_size = dcp_size
         self._retention_interval = kv_cache_config.prefix_cache_retention_interval
         self.group_block_sizes = {
@@ -201,11 +201,11 @@ class UMBPStoreConnectorScheduler:
         )
         self.runtime = runtime
         self.enable_kv_cache_events = bool(
-            aphrodite_config.kv_events_config and aphrodite_config.kv_events_config.enable_kv_cache_events
+            sonar_config.kv_events_config and sonar_config.kv_events_config.enable_kv_cache_events
         )
         self.codec = codec
         self.topology = topology or RankTopology()
-        transfer_config = aphrodite_config.kv_transfer_config
+        transfer_config = sonar_config.kv_transfer_config
         assert transfer_config is not None
         extra = transfer_config.kv_connector_extra_config
         self.load_async = bool(extra.get("load_async", True))
@@ -239,8 +239,8 @@ class UMBPStoreConnectorScheduler:
         lookup_groups = [
             kv_cache_config.kv_cache_groups[group_id] for group_id in kv_cache_config.prefix_cacheable_group_ids
         ]
-        model_config = getattr(aphrodite_config, "model_config", None)
-        speculative_config = getattr(aphrodite_config, "speculative_config", None)
+        model_config = getattr(sonar_config, "model_config", None)
+        speculative_config = getattr(sonar_config, "speculative_config", None)
         use_eagle = bool(speculative_config is not None and speculative_config.use_eagle_block_drop())
         self.use_eagle = use_eagle
         explicit_eagle_groups = {
@@ -265,20 +265,20 @@ class UMBPStoreConnectorScheduler:
             get_kv_cache_coordinator(
                 kv_cache_config=lookup_config,
                 max_model_len=max_model_len,
-                max_in_flight_tokens=aphrodite_config.max_in_flight_tokens,
+                max_in_flight_tokens=sonar_config.max_in_flight_tokens,
                 use_eagle=use_eagle,
                 enable_caching=True,
                 enable_kv_cache_events=False,
                 dcp_world_size=dcp_size,
                 pcp_world_size=getattr(
-                    aphrodite_config.parallel_config,
+                    sonar_config.parallel_config,
                     "prefill_context_parallel_size",
                     1,
                 ),
                 scheduler_block_size=self.block_size,
                 hash_block_size=self.hash_block_size,
                 # As core's scheduler builds its coordinator.
-                num_prefill_lookahead=aphrodite_config.num_prefill_lookahead_tokens,
+                num_prefill_lookahead=sonar_config.num_prefill_lookahead_tokens,
                 allow_partial_hash_hits=self.enable_partial_hash_hits,
             )
             if lookup_groups
@@ -330,7 +330,7 @@ class UMBPStoreConnectorScheduler:
             raise ValueError("kv_event_max_objects must be a positive integer")
         self._event_check_batch_size = 256
         self._event_publications_suppressed = 0
-        self._num_workers = getattr(aphrodite_config.parallel_config, "world_size", 1)
+        self._num_workers = getattr(sonar_config.parallel_config, "world_size", 1)
         self._store_event_counter = 0
 
     def bind_gpu_block_pool(self, gpu_block_pool: BlockPool) -> None:
@@ -376,7 +376,7 @@ class UMBPStoreConnectorScheduler:
         group_ids = self.kv_cache_config.prefix_cacheable_group_ids
         if not group_ids:
             return 0, False
-        # Aphrodite must execute at least the final prompt token. Returning a hit
+        # Sonar must execute at least the final prompt token. Returning a hit
         # for the entire prompt leaves the scheduler with no new token to run.
         max_external_token = request.num_tokens - 1
         if max_external_token <= num_computed_tokens:

@@ -132,7 +132,7 @@ void extend_attention_cpu(
 void bmm_cpu(at::Tensor& out, at::Tensor& mat1, at::Tensor& mat2, bool is_vnni,
              const std::optional<at::Tensor>& scale);
 
-// Aphrodite-native: CPU cache-write op for MLA's single-latent-buffer KV cache
+// Sonar-native: CPU cache-write op for MLA's single-latent-buffer KV cache
 // (the CUDA-only `concat_and_cache_mla` has no CPU dispatch).
 void concat_and_cache_mla_cpu(const at::Tensor& kv_c_normed,
                               const at::Tensor& k_pe, at::Tensor& kv_cache,
@@ -159,7 +159,7 @@ at::Tensor fused_qnorm_rope_kv_insert_cpu(at::Tensor& q, at::Tensor& kv,
                                           int64_t q_head_padded, double eps,
                                           int64_t cache_block_size);
 
-// Aphrodite-native: DeepSeek-V4 sparse MQA attention kernel for the fp8_ds_mla
+// Sonar-native: DeepSeek-V4 sparse MQA attention kernel for the fp8_ds_mla
 // cache layout (SWA window + optional compressed top-k index sets).
 void flash_mla_with_kvcache_cpu(
     at::Tensor& out, at::Tensor& q, at::Tensor& window_cache_2d,
@@ -215,7 +215,7 @@ std::tuple<at::Tensor, at::Tensor> hash_topk_cpu(
     std::string scoring_func, int64_t num_fused_shared_experts,
     int64_t num_experts, double routed_scaling_factor);
 
-// Aphrodite-native: DeepSeek-V4 sparse indexer Q-side RoPE + FP8 quant kernel
+// Sonar-native: DeepSeek-V4 sparse indexer Q-side RoPE + FP8 quant kernel
 // (fp8 path only; MXFP4 stays on triton-cpu).
 void fused_indexer_q_rope_quant_cpu(at::Tensor& positions, at::Tensor& index_q,
                                     at::Tensor& index_q_cos_sin_cache,
@@ -225,7 +225,7 @@ void fused_indexer_q_rope_quant_cpu(at::Tensor& positions, at::Tensor& index_q,
                                     double index_weights_head_scale,
                                     at::Tensor& index_weights_out);
 
-// Aphrodite-native: inverse GPT-J RoPE for DeepSeek-V4 CPU attention's
+// Sonar-native: inverse GPT-J RoPE for DeepSeek-V4 CPU attention's
 // `_o_proj` output de-rotation.
 at::Tensor inverse_gptj_rope_o_proj_cpu(at::Tensor& o, at::Tensor& positions,
                                         at::Tensor& cos_sin_cache,
@@ -427,7 +427,7 @@ void init_cpu_memory_env(std::vector<int64_t> node_ids);
 
 namespace cpu_utils {
 // Kernels used only by standalone CPU MRV2.
-#ifdef APHRODITE_STANDALONE_CPU_MRV2
+#ifdef SONAR_STANDALONE_CPU_MRV2
 void gather_block_table_cpu(const torch::Tensor& block_table,
                             torch::Tensor& output,
                             const torch::Tensor& idx_mapping,
@@ -824,7 +824,7 @@ TORCH_LIBRARY_EXPAND(TORCH_EXTENSION_NAME, ops) {
   ops.impl("fused_qnorm_rope_kv_insert_cpu", torch::kCPU,
            &fused_qnorm_rope_kv_insert_cpu);
 
-  // Aphrodite-native: DeepSeek-V4 sparse MQA attention kernel
+  // Sonar-native: DeepSeek-V4 sparse MQA attention kernel
   ops.def(
       "flash_mla_with_kvcache_cpu(Tensor(a!) out, Tensor q, Tensor "
       "window_cache_2d, Tensor window_slots, int window_block_size, Tensor "
@@ -894,7 +894,7 @@ TORCH_LIBRARY_EXPAND(TORCH_EXTENSION_NAME, ops) {
       "routed_scaling_factor) -> (Tensor, Tensor)");
   ops.impl("hash_topk_cpu", torch::kCPU, &hash_topk_cpu);
 
-  // Aphrodite-native: inverse GPT-J RoPE for _o_proj's output de-rotation
+  // Sonar-native: inverse GPT-J RoPE for _o_proj's output de-rotation
   ops.def(
       "inverse_gptj_rope_o_proj_cpu(Tensor o, Tensor positions, Tensor "
       "cos_sin_cache, int rope_dim) -> Tensor");
@@ -1067,7 +1067,7 @@ TORCH_LIBRARY_EXPAND(TORCH_EXTENSION_NAME, ops) {
 
   ops.def("init_cpu_memory_env(SymInt[] node_ids) -> ()", &init_cpu_memory_env);
 
-#ifdef APHRODITE_STANDALONE_CPU_MRV2
+#ifdef SONAR_STANDALONE_CPU_MRV2
   ops.def(
       "gather_block_table_cpu(Tensor block_table, Tensor(a1!) output, "
       "Tensor idx_mapping, Tensor num_blocks, SymInt num_reqs_padded) -> ()",

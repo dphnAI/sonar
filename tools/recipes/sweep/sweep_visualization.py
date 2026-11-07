@@ -89,7 +89,7 @@ def _run_plot(
     dry_run: bool,
 ) -> None:
     command = [
-        "aphrodite",
+        "sonar",
         "bench",
         "sweep",
         "plot",
@@ -117,14 +117,14 @@ def generate_figures(
     selected_stages: list[str] | None = None,
     dry_run: bool = False,
 ) -> list[Path]:
-    if shutil.which("aphrodite") is None:
+    if shutil.which("sonar") is None:
         raise RuntimeError(
-            "The aphrodite executable was not found. Run this analysis inside the Aphrodite benchmark environment."
+            "The sonar executable was not found. Run this analysis inside the Sonar benchmark environment."
         )
 
     stages = selected_stages or list(STAGE_PLOTS)
     discovered: list[Path] = []
-    with tempfile.TemporaryDirectory(prefix="aphrodite-recipe-plot-") as temp_dir:
+    with tempfile.TemporaryDirectory(prefix="sonar-recipe-plot-") as temp_dir:
         temporary_root = Path(temp_dir)
         for stage in stages:
             stage_dir = results_dir / stage
@@ -184,7 +184,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Preview Aphrodite plot operations without writing figures.",
+        help="Preview Sonar plot operations without writing figures.",
     )
     return parser.parse_args()
 

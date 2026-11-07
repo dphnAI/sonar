@@ -6,28 +6,28 @@ from typing import TYPE_CHECKING, cast
 
 import torch
 
-from aphrodite.utils.import_utils import resolve_obj_by_qualname
+from sonar.utils.import_utils import resolve_obj_by_qualname
 
-# Keep this light: aphrodite.config imports the speculator configs in this package.
+# Keep this light: sonar.config imports the speculator configs in this package.
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
-    from aphrodite.v1.worker.gpu.spec_decode.speculator import BaseSpeculator
-    from aphrodite.v1.worker.gpu.states import RequestState
+    from sonar.config import SonarConfig
+    from sonar.v1.worker.gpu.spec_decode.speculator import BaseSpeculator
+    from sonar.v1.worker.gpu.states import RequestState
 
 
 def init_speculator(
-    aphrodite_config: "AphroditeConfig",
+    sonar_config: "SonarConfig",
     device: torch.device,
     req_states: "RequestState",
 ):
     """Build the speculator named by `speculative_config.speculator_config`.
 
-    The speculator is constructed with `(aphrodite_config, device)`, plus
+    The speculator is constructed with `(sonar_config, device)`, plus
     `req_states` if its constructor accepts it.
     """
-    from aphrodite.v1.worker.gpu.spec_decode.speculator import BaseSpeculator
+    from sonar.v1.worker.gpu.spec_decode.speculator import BaseSpeculator
 
-    speculative_config = aphrodite_config.speculative_config
+    speculative_config = sonar_config.speculative_config
     assert speculative_config is not None
     speculator_config = speculative_config.speculator_config
     qualname = speculator_config.speculator_class
@@ -43,5 +43,5 @@ def init_speculator(
     # BaseSpeculator doesn't define the constructor signature.
     factory = cast(Callable[..., "BaseSpeculator"], speculator_cls)
     if "req_states" in inspect.signature(factory).parameters:
-        return factory(aphrodite_config, device, req_states=req_states)
-    return factory(aphrodite_config, device)
+        return factory(sonar_config, device, req_states=req_states)
+    return factory(sonar_config, device)

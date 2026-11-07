@@ -8,8 +8,8 @@
 
 import torch
 
-from aphrodite.model_executor.layers.mamba.ops.triton_helpers import launch_autotuned
-from aphrodite.triton_utils import tl, triton
+from sonar.model_executor.layers.mamba.ops.triton_helpers import launch_autotuned
+from sonar.triton_utils import tl, triton
 
 
 @triton.autotune(

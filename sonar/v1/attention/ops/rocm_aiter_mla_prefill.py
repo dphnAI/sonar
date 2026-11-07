@@ -6,9 +6,9 @@ from collections.abc import Callable
 
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.model_executor.layers.attention.mla_attention import MLACommonPrefillMetadata
+from sonar import _custom_ops as ops
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.model_executor.layers.attention.mla_attention import MLACommonPrefillMetadata
 
 
 def context_row_indices(chunk: MLACommonPrefillMetadata.ContextChunk, device: torch.device) -> torch.Tensor:

@@ -5,16 +5,16 @@
 from dataclasses import dataclass
 from typing import Any
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed.kv_transfer.kv_connector.v1.metrics import (
+from sonar.config import SonarConfig
+from sonar.distributed.kv_transfer.kv_connector.v1.metrics import (
     KVConnectorPromMetrics,
     KVConnectorStats,
     PromMetric,
     PromMetricT,
 )
-from aphrodite.v1.metrics.buckets import histogram_buckets
-from aphrodite.v1.metrics.stats import KVCacheEvictionEvent
-from aphrodite.v1.metrics.utils import create_metric_per_engine
+from sonar.v1.metrics.buckets import histogram_buckets
+from sonar.v1.metrics.stats import KVCacheEvictionEvent
+from sonar.v1.metrics.utils import create_metric_per_engine
 
 _HISPARSE_LEVEL_KEYS = frozenset({"host_cache_usage_perc", "pending_page_transfers"})
 
@@ -92,25 +92,25 @@ class HiSparseKVConnectorStats(KVConnectorStats):
 class HiSparsePromMetrics(KVConnectorPromMetrics):
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         metric_types: dict[type[PromMetric], type[PromMetricT]],
         labelnames: list[str],
         per_engine_labelvalues: dict[int, list[object]],
     ):
-        super().__init__(aphrodite_config, metric_types, labelnames, per_engine_labelvalues)
+        super().__init__(sonar_config, metric_types, labelnames, per_engine_labelvalues)
 
         counter_cache_hits = self._counter_cls(
-            name="aphrodite:hisparse_cache_hits",
+            name="sonar:hisparse_cache_hits",
             documentation="Number of HiSparse device hot-buffer hits.",
             labelnames=labelnames,
         )
         counter_cache_misses = self._counter_cls(
-            name="aphrodite:hisparse_cache_misses",
+            name="sonar:hisparse_cache_misses",
             documentation="Number of HiSparse device hot-buffer misses.",
             labelnames=labelnames,
         )
         counter_host_to_device_bytes = self._counter_cls(
-            name="aphrodite:hisparse_host_to_device_bytes",
+            name="sonar:hisparse_host_to_device_bytes",
             documentation=("Bytes transferred from host KV storage to HiSparse hot buffers."),
             labelnames=labelnames,
         )
@@ -121,7 +121,7 @@ class HiSparsePromMetrics(KVConnectorPromMetrics):
         }
 
         gauge_host_cache_usage = self._gauge_cls(
-            name="aphrodite:hisparse_host_cache_usage_perc",
+            name="sonar:hisparse_host_cache_usage_perc",
             documentation=(
                 "HiSparse host KV-cache usage. 1 means 100 percent usage. Evictable cached blocks count as free."
             ),
@@ -129,7 +129,7 @@ class HiSparsePromMetrics(KVConnectorPromMetrics):
             labelnames=labelnames,
         )
         gauge_pending_page_transfers = self._gauge_cls(
-            name="aphrodite:hisparse_pending_page_transfers",
+            name="sonar:hisparse_pending_page_transfers",
             documentation=("HiSparse page transfers (write-backs and restores) not yet completed."),
             multiprocess_mode="mostrecent",
             labelnames=labelnames,
@@ -142,13 +142,13 @@ class HiSparsePromMetrics(KVConnectorPromMetrics):
         }
 
         self.hisparse_histograms: dict[str, Any] = {}
-        if aphrodite_config.observability_config.kv_cache_metrics:
+        if sonar_config.observability_config.kv_cache_metrics:
             residency_buckets = histogram_buckets(
                 "kv_cache_residency",
-                overrides=aphrodite_config.observability_config.custom_histogram_buckets,
+                overrides=sonar_config.observability_config.custom_histogram_buckets,
             )
             histogram_host_block_lifetime = self._histogram_cls(
-                name="aphrodite:hisparse_host_block_lifetime_seconds",
+                name="sonar:hisparse_host_block_lifetime_seconds",
                 documentation=(
                     "Histogram of HiSparse host KV block lifetime from allocation "
                     "to eviction. Sampled metrics (controlled by "
@@ -158,7 +158,7 @@ class HiSparsePromMetrics(KVConnectorPromMetrics):
                 labelnames=labelnames,
             )
             histogram_host_block_idle_before_evict = self._histogram_cls(
-                name="aphrodite:hisparse_host_block_idle_before_evict_seconds",
+                name="sonar:hisparse_host_block_idle_before_evict_seconds",
                 documentation=(
                     "Histogram of HiSparse host KV block idle time before eviction. "
                     "Sampled metrics (controlled by --kv-cache-metrics-sample)."
@@ -167,7 +167,7 @@ class HiSparsePromMetrics(KVConnectorPromMetrics):
                 labelnames=labelnames,
             )
             histogram_host_block_reuse_gap = self._histogram_cls(
-                name="aphrodite:hisparse_host_block_reuse_gap_seconds",
+                name="sonar:hisparse_host_block_reuse_gap_seconds",
                 documentation=(
                     "Histogram of time gaps between consecutive HiSparse host KV "
                     "block accesses. Sampled metrics (controlled by "

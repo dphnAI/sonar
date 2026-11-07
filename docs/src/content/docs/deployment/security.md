@@ -28,7 +28,7 @@ network, and device access as Sonar.
 Allow only required remote hosts:
 
 ```bash
-aphrodite serve MODEL \
+sonar serve MODEL \
   --allowed-media-domains images.example.com assets.example.net
 ```
 
@@ -69,7 +69,7 @@ form a security boundary inside the cluster. This matches
 `RayExecutorV2` copies the driver's environment to remote workers so they
 receive required Sonar settings, communication-library tuning, and credentials
 used to download gated models. `get_driver_env_vars()` in
-`aphrodite/v1/executor/ray_env_utils.py` uses a copy-all-except-denylist
+`sonar/v1/executor/ray_env_utils.py` uses a copy-all-except-denylist
 policy: it copies every variable except worker-specific variables and variables
 that the operator excludes. Workers apply copied values with `setdefault`, so
 an existing worker-side value is not overwritten.
@@ -80,8 +80,8 @@ present in the driver's environment. A process running as the same OS user on
 a worker may be able to read them through `/proc/<pid>/environ`.
 
 To exclude variables, create
-`$APHRODITE_CONFIG_ROOT/ray_non_carry_over_env_vars.json` (by default,
-`~/.config/aphrodite/ray_non_carry_over_env_vars.json`) containing their names:
+`$SONAR_CONFIG_ROOT/ray_non_carry_over_env_vars.json` (by default,
+`~/.config/sonar/ray_non_carry_over_env_vars.json`) containing their names:
 
 ```json
 [

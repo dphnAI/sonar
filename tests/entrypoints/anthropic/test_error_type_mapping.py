@@ -6,8 +6,8 @@ import json
 
 import pytest
 
-from aphrodite.entrypoints.anthropic.api_router import translate_error_response
-from aphrodite.entrypoints.serve.engine.protocol import ErrorInfo, ErrorResponse
+from sonar.entrypoints.anthropic.api_router import translate_error_response
+from sonar.entrypoints.serve.engine.protocol import ErrorInfo, ErrorResponse
 
 pytestmark = pytest.mark.skip_global_cleanup
 
@@ -59,7 +59,7 @@ def test_error_type_is_translated_to_anthropic_vocabulary(status_code: int, expe
 async def test_stream_error_event_uses_translated_type(status_code: int, expected_type: str):
     """The SSE error path must translate ``error.type`` the same way as the
     non-streaming path, reusing the ErrorResponse status code."""
-    from aphrodite.entrypoints.anthropic.serving import AnthropicServingMessages
+    from sonar.entrypoints.anthropic.serving import AnthropicServingMessages
 
     async def fake_generator():
         yield ErrorResponse(
@@ -87,7 +87,7 @@ async def test_stream_error_event_uses_translated_type(status_code: int, expecte
 async def test_stream_mid_stream_exception_maps_to_api_error():
     """An exception raised mid-stream (not an ErrorResponse) surfaces as
     ``api_error`` in the SSE error event."""
-    from aphrodite.entrypoints.anthropic.serving import AnthropicServingMessages
+    from sonar.entrypoints.anthropic.serving import AnthropicServingMessages
 
     async def failing_generator():
         raise RuntimeError("kaboom")

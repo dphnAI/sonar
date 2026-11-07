@@ -8,10 +8,10 @@ https://arxiv.org/abs/2310.18547
 
 import torch
 
-from aphrodite.lora.ops.triton_ops.fp8_kernel_utils import do_shrink_kernel_fp8
-from aphrodite.lora.ops.triton_ops.utils import _get_lora_a_ptr, get_lora_op_configs
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.torch_utils import direct_register_custom_op
+from sonar.lora.ops.triton_ops.fp8_kernel_utils import do_shrink_kernel_fp8
+from sonar.lora.ops.triton_ops.utils import _get_lora_a_ptr, get_lora_op_configs
+from sonar.triton_utils import tl, triton
+from sonar.utils.torch_utils import direct_register_custom_op
 
 _SHRINK_LORA_SCALE_PTR_DICT: dict[tuple[int, ...], tuple] = {}
 
@@ -382,7 +382,7 @@ try:
         op_func=_lora_shrink_fp8,
         mutates_args=["output_tensor"],
     )
-    lora_shrink_fp8 = torch.ops.aphrodite.lora_shrink_fp8
+    lora_shrink_fp8 = torch.ops.sonar.lora_shrink_fp8
 
 except AttributeError:
     lora_shrink_fp8 = _lora_shrink_fp8

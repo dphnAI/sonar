@@ -6,14 +6,14 @@ from http import HTTPStatus
 from fastapi import APIRouter, Depends, FastAPI, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from aphrodite.entrypoints.openai.kobold.protocol import (
+from sonar.entrypoints.openai.kobold.protocol import (
     KAIGenerationInputSchema,
     KAITokenizeRequest,
 )
-from aphrodite.entrypoints.openai.kobold.serving import OpenAIServingKobold
-from aphrodite.entrypoints.serve.engine.protocol import ErrorResponse
-from aphrodite.entrypoints.serve.utils.api_utils import validate_json_request
-from aphrodite.entrypoints.utils import create_error_response
+from sonar.entrypoints.openai.kobold.serving import OpenAIServingKobold
+from sonar.entrypoints.serve.engine.protocol import ErrorResponse
+from sonar.entrypoints.serve.utils.api_utils import validate_json_request
+from sonar.entrypoints.utils import create_error_response
 
 router = APIRouter()
 
@@ -139,7 +139,7 @@ async def get_version():
 async def get_model(raw_request: Request):
     handler = kobold(raw_request)
     model_name = handler.models.base_model_paths[0].name if handler is not None else raw_request.app.state.args.model
-    return JSONResponse({"result": f"aphrodite/{model_name}"})
+    return JSONResponse({"result": f"sonar/{model_name}"})
 
 
 @router.get("/api/latest/config/soft_prompts_list")
@@ -163,7 +163,7 @@ async def set_current_softprompt():
 @router.get("/api/latest/config/max_length")
 @router.get("/api/v1/config/max_length")
 async def get_max_length(raw_request: Request):
-    max_length = raw_request.app.state.aphrodite_config.model_config.max_model_len
+    max_length = raw_request.app.state.sonar_config.model_config.max_model_len
     return JSONResponse({"value": max_length})
 
 
@@ -171,7 +171,7 @@ async def get_max_length(raw_request: Request):
 @router.get("/api/v1/config/max_context_length")
 @router.get("/api/extra/true_max_context_length")
 async def get_max_context_length(raw_request: Request):
-    max_context_length = raw_request.app.state.aphrodite_config.model_config.max_model_len
+    max_context_length = raw_request.app.state.sonar_config.model_config.max_model_len
     return JSONResponse({"value": max_context_length})
 
 

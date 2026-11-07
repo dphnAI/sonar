@@ -5,8 +5,8 @@
 from importlib import import_module
 from typing import Any
 
-import aphrodite.envs as envs
-from aphrodite.platforms import current_platform
+import sonar.envs as envs
+from sonar.platforms import current_platform
 
 from .quant_config import DeepseekV4FP8Config
 
@@ -15,7 +15,7 @@ def __getattr__(name: str) -> Any:
     if name not in {"DSparkDeepseekV4ForCausalLM", "DeepseekV41ForCausalLM"}:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
     if (
-        envs.APHRODITE_DSV41_SM120_NATIVE
+        envs.SONAR_DSV41_SM120_NATIVE
         and current_platform.is_cuda()
         and current_platform.is_device_capability_family(120)
     ):

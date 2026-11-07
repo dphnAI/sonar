@@ -8,9 +8,9 @@ import math
 
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import HAS_TRITON, tl, triton
+from sonar import _custom_ops as ops
+from sonar.platforms import current_platform
+from sonar.triton_utils import HAS_TRITON, tl, triton
 
 _LOGITS_WORKSPACE_BYTES = 128 * 1024 * 1024
 _TOPK_WORKSPACE_BYTES = 1024 * 1024

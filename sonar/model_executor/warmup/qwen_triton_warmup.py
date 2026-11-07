@@ -7,12 +7,12 @@ from typing import TYPE_CHECKING
 
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
 
 if TYPE_CHECKING:
-    from aphrodite.config import ModelConfig
-    from aphrodite.v1.worker.gpu_model_runner import GPUModelRunner
+    from sonar.config import ModelConfig
+    from sonar.v1.worker.gpu_model_runner import GPUModelRunner
 
 logger = init_logger(__name__)
 
@@ -113,7 +113,7 @@ def _qwen_gdn_warmup_config(
             continue
 
         conv_cache, ssm_state = cache_tensors
-        from aphrodite.model_executor.layers.mamba.mamba_utils import (
+        from sonar.model_executor.layers.mamba.mamba_utils import (
             is_conv_state_dim_first,
         )
 
@@ -155,7 +155,7 @@ def _warm_gated_rms_norm_kernel(
     max_num_tokens: int,
     x_dtype: torch.dtype,
 ) -> None:
-    from aphrodite.third_party.flash_linear_attention.ops.layernorm_guard import (
+    from sonar.third_party.flash_linear_attention.ops.layernorm_guard import (
         warmup_layer_norm_fwd,
     )
 
@@ -173,10 +173,10 @@ def _warm_gated_rms_norm_kernel(
 
 
 def _warm_causal_conv1d_fwd_kernel(device: torch.device, config: _QwenGDNWarmupConfig) -> None:
-    from aphrodite.model_executor.layers.mamba.ops.causal_conv1d import (
+    from sonar.model_executor.layers.mamba.ops.causal_conv1d import (
         causal_conv1d_fn,
     )
-    from aphrodite.v1.attention.backends.utils import NULL_BLOCK_ID, PAD_SLOT_ID
+    from sonar.v1.attention.backends.utils import NULL_BLOCK_ID, PAD_SLOT_ID
 
     x_storage = torch.empty((1, config.conv_dim), dtype=config.conv_dtype, device=device)
     x = x_storage.t()
@@ -206,7 +206,7 @@ def _warm_causal_conv1d_fwd_kernel(device: torch.device, config: _QwenGDNWarmupC
 
 
 def _warm_fused_post_conv_kernel(device: torch.device, config: _QwenGDNWarmupConfig) -> None:
-    from aphrodite.third_party.flash_linear_attention.ops.fused_gdn_prefill_post_conv import (
+    from sonar.third_party.flash_linear_attention.ops.fused_gdn_prefill_post_conv import (
         fused_post_conv_prep,
     )
 
@@ -234,7 +234,7 @@ def _warm_fused_sigmoid_gating_delta_rule_update_kernel(
     device: torch.device,
     config: _QwenGDNWarmupConfig,
 ) -> None:
-    from aphrodite.third_party.flash_linear_attention.ops.fused_sigmoid_gating import (
+    from sonar.third_party.flash_linear_attention.ops.fused_sigmoid_gating import (
         fused_sigmoid_gating_delta_rule_update,
     )
 
@@ -281,10 +281,10 @@ def _warm_fused_gdn_decode_post_conv_mtp_kernel(
     """Compile the ROCm Triton MTP decode kernels for every V tile size the
     request count can select, with the layer's packed QKVZ/BA layouts so the
     stride specializations match serving."""
-    from aphrodite.third_party.flash_linear_attention.ops.fused_gdn_decode_post_conv_mtp import (  # noqa: E501
+    from sonar.third_party.flash_linear_attention.ops.fused_gdn_decode_post_conv_mtp import (  # noqa: E501
         fused_gdn_decode_post_conv_mtp_triton,
     )
-    from aphrodite.utils.platform_utils import num_compute_units
+    from sonar.utils.platform_utils import num_compute_units
 
     num_cus = num_compute_units(device.index)
     # Smallest request counts that select BV = 32, 64 and V (see the wrapper).

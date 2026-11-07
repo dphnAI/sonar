@@ -8,36 +8,36 @@ from typing import TYPE_CHECKING, Any
 import torch
 from transformers import PreTrainedConfig
 
-from aphrodite import _custom_ops as ops
-from aphrodite.distributed import (
+from sonar import _custom_ops as ops
+from sonar.distributed import (
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
 )
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe import (
     FusedMoEMethodBase,
     RoutedExperts,
 )
-from aphrodite.transformers_utils.repo_utils import hf_api
+from sonar.transformers_utils.repo_utils import hf_api
 
 if TYPE_CHECKING:
-    from aphrodite.model_executor.layers.fused_moe.runner.shared_experts import SharedExperts
-    from aphrodite.model_executor.models.utils import WeightsMapper
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.config import FusedMoEQuantConfig
-from aphrodite.model_executor.layers.linear import (
+    from sonar.model_executor.layers.fused_moe.runner.shared_experts import SharedExperts
+    from sonar.model_executor.models.utils import WeightsMapper
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.config import FusedMoEQuantConfig
+from sonar.model_executor.layers.linear import (
     LinearBase,
     LinearMethodBase,
     UnquantizedLinearMethod,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationMethods
-from aphrodite.model_executor.layers.quantization.base_config import (
+from sonar.model_executor.layers.quantization import QuantizationMethods
+from sonar.model_executor.layers.quantization.base_config import (
     QuantizationConfig,
     QuantizeMethodBase,
 )
-from aphrodite.model_executor.parameter import BaseAphroditeParameter
-from aphrodite.model_executor.utils import set_weight_attrs
-from aphrodite.platforms import current_platform
+from sonar.model_executor.parameter import BaseSonarParameter
+from sonar.model_executor.utils import set_weight_attrs
+from sonar.platforms import current_platform
 
 logger = init_logger(__name__)
 _EXL3_MOE_DEFAULT_MAX_TOKENS_PER_EXPERT = 128
@@ -74,7 +74,7 @@ def _get_exl3_moe_down_tuning(
 
 
 @torch.library.custom_op(
-    "aphrodite::exl3_linear_one",
+    "sonar::exl3_linear_one",
     mutates_args=(),
     device_types="cuda",
 )
@@ -165,7 +165,7 @@ def _exl3_linear_one_fake(
 
 
 @torch.library.custom_op(
-    "aphrodite::exl3_gate_up",
+    "sonar::exl3_gate_up",
     mutates_args=(),
     device_types="cuda",
 )
@@ -253,7 +253,7 @@ def _exl3_gate_up_fake(
 
 
 @torch.library.custom_op(
-    "aphrodite::exl3_qkv",
+    "sonar::exl3_qkv",
     mutates_args=(),
     device_types="cuda",
 )
@@ -427,8 +427,8 @@ class Exl3Config(QuantizationConfig):
             config = json.load(f)
         self.tensor_storage = config.get("tensor_storage", {})
 
-    def apply_aphrodite_mapper(self, hf_to_aphrodite_mapper: "WeightsMapper") -> None:
-        self.tensor_storage = hf_to_aphrodite_mapper.apply_dict(self.tensor_storage)
+    def apply_sonar_mapper(self, hf_to_sonar_mapper: "WeightsMapper") -> None:
+        self.tensor_storage = hf_to_sonar_mapper.apply_dict(self.tensor_storage)
 
     def get_quant_method(self, layer: torch.nn.Module, prefix: str) -> QuantizeMethodBase | None:
         is_lm_head = layer.__class__.__name__ == "ParallelLMHead"
@@ -522,11 +522,11 @@ class Exl3Config(QuantizationConfig):
         return self._is_exl3_prefix("lm_head")
 
 
-class Exl3Parameter(BaseAphroditeParameter):
+class Exl3Parameter(BaseSonarParameter):
     """Small placeholder parameter that stores EXL3 tensors loaded from disk.
 
     Packed layers such as QKV and gate-up load multiple HF tensors into one
-    Aphrodite module. The actual tensors can have different shapes, so a single
+    Sonar module. The actual tensors can have different shapes, so a single
     dense Parameter cannot represent them. This parameter keeps the tensors in a
     shard dictionary keyed by the loader shard id.
     """
@@ -555,7 +555,7 @@ def _exl3_weight_loader(
     param.load_exl3_weight(loaded_weight, loaded_shard_id)
 
 
-class Exl3MoEParameter(BaseAphroditeParameter):
+class Exl3MoEParameter(BaseSonarParameter):
     """Placeholder parameter storing EXL3 tensors by expert and shard."""
 
     def __new__(cls, *, weight_loader):
@@ -1202,7 +1202,7 @@ class Exl3MoEMethod(FusedMoEMethodBase):
             num_active = sum(0 < count <= fused_max_tokens for count in expert_count_list[: layer.local_num_experts])
 
         if not hasattr(torch.ops._C, "exl3_moe"):
-            raise RuntimeError("EXL3 MoE kernel is not available. Rebuild Aphrodite.")
+            raise RuntimeError("EXL3 MoE kernel is not available. Rebuild Sonar.")
 
         ops.exl3_moe(
             x_2d,

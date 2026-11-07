@@ -30,23 +30,23 @@ import torch
 from torch import nn
 from transformers import Qwen3Config
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, CacheConfig
-from aphrodite.distributed import get_pp_group, get_tensor_model_parallel_world_size
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.attention.encoder_only_attention import (
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import CacheConfig, SonarConfig
+from sonar.distributed import get_pp_group, get_tensor_model_parallel_world_size
+from sonar.logger import init_logger
+from sonar.model_executor.layers.attention.encoder_only_attention import (
     Attention,
     EncoderOnlyAttention,
 )
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import QKVParallelLinear, RowParallelLinear
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.transformers_utils.config import set_default_rope_theta
-from aphrodite.v1.attention.backend import AttentionType
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import QKVParallelLinear, RowParallelLinear
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
+from sonar.sequence import IntermediateTensors
+from sonar.transformers_utils.config import set_default_rope_theta
+from sonar.v1.attention.backend import AttentionType
 
 from .interfaces import (
     LocalArgmaxMixin,
@@ -267,16 +267,16 @@ ALL_DECODER_LAYER_TYPES = {
 class Qwen3Model(Qwen2Model):
     decoder_layer_type: type[nn.Module] = Qwen3DecoderLayer
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             prefix=prefix,
             decoder_layer_type=self.decoder_layer_type,
         )
 
 
 class Qwen3ForCausalLM(LocalArgmaxMixin, nn.Module, SupportsLoRA, SupportsPP, SupportsEagle, SupportsEagle3):
-    hf_to_aphrodite_mapper = Qwen3Model.hf_to_aphrodite_mapper
+    hf_to_sonar_mapper = Qwen3Model.hf_to_sonar_mapper
     packed_modules_mapping = {
         "qkv_proj": ["q_proj", "k_proj", "v_proj"],
         "gate_up_proj": ["gate_proj", "up_proj"],
@@ -286,16 +286,16 @@ class Qwen3ForCausalLM(LocalArgmaxMixin, nn.Module, SupportsLoRA, SupportsPP, Su
         "lm_head": "output_embeddings",
     }
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
 
         self.config = config
 
-        self.aphrodite_config = aphrodite_config
+        self.sonar_config = sonar_config
         self.quant_config = quant_config
-        self.model = Qwen3Model(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = Qwen3Model(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
 
         use_tied_lm_head = model_should_use_tied_lm_head(config, quant_config)
         if get_pp_group().is_last_rank:

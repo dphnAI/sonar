@@ -12,22 +12,22 @@ the constraint is purely about which kernel exists.
 import pytest
 import torch
 
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.model_executor.layers.fused_moe.router.fused_topk_bias_router import (
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.model_executor.layers.fused_moe.router.fused_topk_bias_router import (
     AITER_MAX_EXPERTS_PER_GROUP as MAX_EXPERTS_PER_GROUP,
 )
-from aphrodite.model_executor.layers.fused_moe.router.fused_topk_bias_router import (
+from sonar.model_executor.layers.fused_moe.router.fused_topk_bias_router import (
     AITER_SUPPORTED_NUM_GRP as SUPPORTED_NUM_GRP,
 )
-from aphrodite.model_executor.layers.fused_moe.router.fused_topk_bias_router import (
+from sonar.model_executor.layers.fused_moe.router.fused_topk_bias_router import (
     _aiter_can_use_biased_grouped_topk,
     _aiter_get_num_expert_group,
 )
-from aphrodite.model_executor.layers.fused_moe.router.grouped_topk_router import (
+from sonar.model_executor.layers.fused_moe.router.grouped_topk_router import (
     grouped_topk,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.platforms.rocm import on_cdna
+from sonar.platforms import current_platform
+from sonar.platforms.rocm import on_cdna
 
 pytestmark = pytest.mark.skipif(not current_platform.is_rocm(), reason="ROCm-specific tests")
 

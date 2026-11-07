@@ -14,7 +14,7 @@ import math
 
 import torch
 
-from aphrodite.triton_utils import tl, triton
+from sonar.triton_utils import tl, triton
 
 from .triton_turboquant_decode import _use_fp8_e4b15
 

@@ -10,67 +10,67 @@ import numpy as np
 import pytest
 import torch
 
-import aphrodite.model_executor.model_loader.reload.inplace as reload_inplace_module
-import aphrodite.v1.worker.gpu_model_runner as gpu_model_runner_module
-from aphrodite.config import (
-    AphroditeConfig,
+import sonar.model_executor.model_loader.reload.inplace as reload_inplace_module
+import sonar.v1.worker.gpu_model_runner as gpu_model_runner_module
+from sonar.config import (
     AttentionConfig,
     CacheConfig,
     ModelConfig,
     ParallelConfig,
     SchedulerConfig,
-    set_current_aphrodite_config,
+    SonarConfig,
+    set_current_sonar_config,
 )
-from aphrodite.config.reasoning import ReasoningConfig
-from aphrodite.distributed.parallel_state import (
+from sonar.config.reasoning import ReasoningConfig
+from sonar.distributed.parallel_state import (
     init_distributed_environment,
     initialize_model_parallel,
 )
-from aphrodite.lora.layers import LoRAMappingType
-from aphrodite.lora.request import LoRARequest
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.layers.mamba.abstract import MambaBase
-from aphrodite.model_executor.layers.mamba.mamba_mixer2 import MambaMixer2
-from aphrodite.multimodal.inputs import MultiModalFeatureSpec, PlaceholderRange
-from aphrodite.platforms import current_platform
-from aphrodite.platforms.interface import Platform
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.utils.mem_constants import GiB_bytes
-from aphrodite.utils.system_utils import update_environment_variables
-from aphrodite.utils.torch_utils import set_random_seed
-from aphrodite.v1.attention.backend import MultipleOf
-from aphrodite.v1.attention.backends.mla.indexer import DeepseekV32IndexerBackend
-from aphrodite.v1.attention.backends.mla.rocm_aiter_mla_sparse import (
+from sonar.lora.layers import LoRAMappingType
+from sonar.lora.request import LoRARequest
+from sonar.model_executor.layers.attention import Attention
+from sonar.model_executor.layers.mamba.abstract import MambaBase
+from sonar.model_executor.layers.mamba.mamba_mixer2 import MambaMixer2
+from sonar.multimodal.inputs import MultiModalFeatureSpec, PlaceholderRange
+from sonar.platforms import current_platform
+from sonar.platforms.interface import Platform
+from sonar.sampling_params import SamplingParams
+from sonar.utils.mem_constants import GiB_bytes
+from sonar.utils.system_utils import update_environment_variables
+from sonar.utils.torch_utils import set_random_seed
+from sonar.v1.attention.backend import MultipleOf
+from sonar.v1.attention.backends.mla.indexer import DeepseekV32IndexerBackend
+from sonar.v1.attention.backends.mla.rocm_aiter_mla_sparse import (
     ROCMAiterMLASparseBackend,
 )
-from aphrodite.v1.attention.backends.registry import (
+from sonar.v1.attention.backends.registry import (
     AttentionBackendEnum,
     MambaAttentionBackendEnum,
 )
-from aphrodite.v1.core.kv_cache_planning import estimate_max_model_len
-from aphrodite.v1.core.sched.output import CachedRequestData, NewRequestData, SchedulerOutput
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.core.kv_cache_planning import estimate_max_model_len
+from sonar.v1.core.sched.output import CachedRequestData, NewRequestData, SchedulerOutput
+from sonar.v1.kv_cache_interface import (
     FullAttentionSpec,
     KVCacheConfig,
     KVCacheGroupSpec,
     KVCacheSpec,
     KVCacheTensor,
 )
-from aphrodite.v1.outputs import EMPTY_MODEL_RUNNER_OUTPUT
-from aphrodite.v1.sample.metadata import SamplingMetadata
-from aphrodite.v1.spec_decode.metadata import SpecDecodeMetadata
-from aphrodite.v1.worker.block_table import (
+from sonar.v1.outputs import EMPTY_MODEL_RUNNER_OUTPUT
+from sonar.v1.sample.metadata import SamplingMetadata
+from sonar.v1.spec_decode.metadata import SpecDecodeMetadata
+from sonar.v1.worker.block_table import (
     MultiGroupBlockTable,
     SlotMappingMode,
     get_block_table_width,
 )
-from aphrodite.v1.worker.gpu.lora_utils import LoraState
-from aphrodite.v1.worker.gpu.mm.encoder_cache import EncoderCache
-from aphrodite.v1.worker.gpu.mm.lora import set_active_mm_loras
-from aphrodite.v1.worker.gpu_input_batch import InputBatch
-from aphrodite.v1.worker.gpu_model_runner import GPUModelRunner
-from aphrodite.v1.worker.gpu_worker import Worker
-from aphrodite.v1.worker.utils import select_common_block_size
+from sonar.v1.worker.gpu.lora_utils import LoraState
+from sonar.v1.worker.gpu.mm.encoder_cache import EncoderCache
+from sonar.v1.worker.gpu.mm.lora import set_active_mm_loras
+from sonar.v1.worker.gpu_input_batch import InputBatch
+from sonar.v1.worker.gpu_model_runner import GPUModelRunner
+from sonar.v1.worker.gpu_worker import Worker
+from sonar.v1.worker.utils import select_common_block_size
 from tests.v1.core.utils import get_kv_cache_configs
 
 BLOCK_SIZE = 16
@@ -122,7 +122,7 @@ def initialize_kv_cache(runner: GPUModelRunner):
     runner.initialize_attn_backend(kv_cache_config)
 
 
-def get_aphrodite_config():
+def get_sonar_config():
     model_config = ModelConfig(
         model="facebook/opt-125m",
         dtype="float16",
@@ -141,13 +141,13 @@ def get_aphrodite_config():
     )
     cache_config.kv_cache_layout = "LBNHC"
     parallel_config = ParallelConfig()
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         model_config=model_config,
         cache_config=cache_config,
         scheduler_config=scheduler_config,
         parallel_config=parallel_config,
     )
-    return aphrodite_config
+    return sonar_config
 
 
 @pytest.mark.parametrize("gc_initially_enabled", [True, False])
@@ -155,7 +155,7 @@ def test_freeze_gc_disables_and_restores_automatic_gc(
     monkeypatch: pytest.MonkeyPatch,
     gc_initially_enabled: bool,
 ):
-    monkeypatch.setenv("APHRODITE_ENABLE_CUDAGRAPH_GC", "0")
+    monkeypatch.setenv("SONAR_ENABLE_CUDAGRAPH_GC", "0")
     original_gc_state = gc.isenabled()
     try:
         if gc_initially_enabled:
@@ -194,13 +194,13 @@ def test_prepare_padding_mask_marks_sequence_parallel_padding():
 
 @pytest.fixture
 def model_runner():
-    aphrodite_config = get_aphrodite_config()
-    with set_current_aphrodite_config(aphrodite_config):
-        model_config = aphrodite_config.model_config
-        num_heads = model_config.get_num_kv_heads(aphrodite_config.parallel_config)
+    sonar_config = get_sonar_config()
+    with set_current_sonar_config(sonar_config):
+        model_config = sonar_config.model_config
+        num_heads = model_config.get_num_kv_heads(sonar_config.parallel_config)
         head_size = model_config.get_head_size()
-        aphrodite_config.compilation_config.static_forward_context["layer.0"] = Attention(num_heads, head_size, 0.1)
-        runner = GPUModelRunner(aphrodite_config, DEVICE_TYPE)
+        sonar_config.compilation_config.static_forward_context["layer.0"] = Attention(num_heads, head_size, 0.1)
+        runner = GPUModelRunner(sonar_config, DEVICE_TYPE)
         initialize_kv_cache(runner)
         yield runner
 
@@ -341,20 +341,20 @@ def test_select_common_block_size_accepts_rocm_sparse_block_size_16(monkeypatch)
 def test_reasoning_config_without_custom_logitsprocs_does_not_need_output_token_ids(
     dist_init,
 ):
-    aphrodite_config = get_aphrodite_config()
-    assert aphrodite_config.model_config.logits_processors is None
+    sonar_config = get_sonar_config()
+    assert sonar_config.model_config.logits_processors is None
     reasoning_config = ReasoningConfig(reasoning_start_str="<think>", reasoning_end_str="</think>")
     reasoning_config._reasoning_start_token_ids = [1]
     reasoning_config._reasoning_end_token_ids = [2]
-    aphrodite_config.reasoning_config = reasoning_config
+    sonar_config.reasoning_config = reasoning_config
 
-    with set_current_aphrodite_config(aphrodite_config):
-        model_config = aphrodite_config.model_config
-        num_heads = model_config.get_num_kv_heads(aphrodite_config.parallel_config)
+    with set_current_sonar_config(sonar_config):
+        model_config = sonar_config.model_config
+        num_heads = model_config.get_num_kv_heads(sonar_config.parallel_config)
         head_size = model_config.get_head_size()
-        static_forward_context = aphrodite_config.compilation_config.static_forward_context
+        static_forward_context = sonar_config.compilation_config.static_forward_context
         static_forward_context["layer.0"] = Attention(num_heads, head_size, 0.1)
-        runner = GPUModelRunner(aphrodite_config, torch.device("cpu"))
+        runner = GPUModelRunner(sonar_config, torch.device("cpu"))
 
     assert runner.input_batch.thinking_budget_state_holder is not None
     assert runner.input_batch.logitsprocs_need_output_token_ids is False
@@ -427,7 +427,7 @@ def test_select_common_block_size_no_valid_option():
 def _mock_backend(supported: list, *, exact: bool = False):
     """Backend accepting multiples of ``supported``, or only those exact sizes
     when ``exact`` (as CPU_MLA does)."""
-    from aphrodite.v1.attention.backend import AttentionBackend
+    from sonar.v1.attention.backend import AttentionBackend
 
     class _MockBackendCls(AttentionBackend):
         @staticmethod
@@ -489,17 +489,17 @@ def test_alignment_rejected_by_a_sibling_backend_raises(monkeypatch, cpu):
     backends = [_mock_backend([MultipleOf(16)]), _mock_backend([16], exact=True)]
     monkeypatch.setattr(Platform, "_find_non_ssm_backends", classmethod(lambda cls, c: backends))
 
-    def bump(cls, aphrodite_config, backend_cls):
-        aphrodite_config.cache_config.block_size = 32
+    def bump(cls, sonar_config, backend_cls):
+        sonar_config.cache_config.block_size = 32
 
     monkeypatch.setattr(Platform, "_align_hybrid_block_size", classmethod(bump))
     cache_config = SimpleNamespace(block_size=16, user_specified_block_size=True, kv_cache_dtype_skip_layers=None)
-    aphrodite_config = SimpleNamespace(cache_config=cache_config, model_config=SimpleNamespace(is_hybrid=True))
-    from aphrodite.platforms.cpu import CpuPlatform  # overrides the method; must check too
+    sonar_config = SimpleNamespace(cache_config=cache_config, model_config=SimpleNamespace(is_hybrid=True))
+    from sonar.platforms.cpu import CpuPlatform  # overrides the method; must check too
 
     platform = CpuPlatform if cpu else Platform
     with pytest.raises(ValueError, match="MOCK_EXACT"):
-        platform.update_block_size_for_backend(aphrodite_config)
+        platform.update_block_size_for_backend(sonar_config)
 
 
 class _CheckpointingMambaLayer(MambaBase):
@@ -519,15 +519,15 @@ class _CheckpointingMambaLayer(MambaBase):
 
 
 def _align_qwen3_5_blocks(*prefill_checkpoint_alignments: int | None):
-    from tests.v1.attention.utils import create_aphrodite_config
+    from tests.v1.attention.utils import create_sonar_config
 
-    aphrodite_config = create_aphrodite_config(model_name="Qwen/Qwen3.5-0.8B")
-    cache_config = aphrodite_config.cache_config
+    sonar_config = create_sonar_config(model_name="Qwen/Qwen3.5-0.8B")
+    cache_config = sonar_config.cache_config
     cache_config.mamba_cache_mode = "align"
-    forward_context = aphrodite_config.compilation_config.static_forward_context
+    forward_context = sonar_config.compilation_config.static_forward_context
     for i, alignment in enumerate(prefill_checkpoint_alignments):
         forward_context[f"mamba.{i}"] = _CheckpointingMambaLayer(alignment)
-    Platform._align_hybrid_block_size(aphrodite_config, _mock_backend([MultipleOf(16)]))
+    Platform._align_hybrid_block_size(sonar_config, _mock_backend([MultipleOf(16)]))
     return cache_config
 
 
@@ -550,7 +550,7 @@ def test_blocks_land_on_the_mamba_checkpoint_grid(prefill_checkpoint_alignments,
 def test_xpu_gdn_rounding_rejected_by_a_sibling_backend_raises(monkeypatch):
     # XPU's GDN rounding runs after super()'s check, so it must check again.
     try:
-        from aphrodite.platforms.xpu import XPUPlatform
+        from sonar.platforms.xpu import XPUPlatform
     except ImportError:
         pytest.skip("vllm_xpu_kernels not importable outside an XPU stack")
 
@@ -559,8 +559,8 @@ def test_xpu_gdn_rounding_rejected_by_a_sibling_backend_raises(monkeypatch):
     monkeypatch.setattr(Platform, "_find_non_ssm_backends", classmethod(lambda cls, c: backends))
     gdn_layer = SimpleNamespace(get_attn_backend=lambda: SimpleNamespace(get_name=lambda: "GDN_ATTN"))
     monkeypatch.setattr(
-        "aphrodite.config.aphrodite.get_layers_from_aphrodite_config",
-        lambda aphrodite_config, layer_type: {"gdn": gdn_layer},
+        "sonar.config.sonar.get_layers_from_sonar_config",
+        lambda sonar_config, layer_type: {"gdn": gdn_layer},
     )
     cache_config = SimpleNamespace(
         block_size=16,
@@ -569,9 +569,9 @@ def test_xpu_gdn_rounding_rejected_by_a_sibling_backend_raises(monkeypatch):
         user_specified_block_size=True,
         kv_cache_dtype_skip_layers=None,
     )
-    aphrodite_config = SimpleNamespace(cache_config=cache_config, model_config=SimpleNamespace(is_hybrid=True))
+    sonar_config = SimpleNamespace(cache_config=cache_config, model_config=SimpleNamespace(is_hybrid=True))
     with pytest.raises(ValueError, match="MOCK_EXACT"):
-        XPUPlatform.update_block_size_for_backend(aphrodite_config)
+        XPUPlatform.update_block_size_for_backend(sonar_config)
 
 
 def test_set_active_mm_loras_builds_tower_and_connector_mappings():
@@ -801,7 +801,7 @@ def test_update_states_request_resumed(model_runner, dist_init):
 
 
 def test_get_nans_in_logits(model_runner, dist_init, monkeypatch):
-    monkeypatch.setattr(gpu_model_runner_module.envs, "APHRODITE_RAISE_ON_LOGIT_NANS", False)
+    monkeypatch.setattr(gpu_model_runner_module.envs, "SONAR_RAISE_ON_LOGIT_NANS", False)
     req_ids = ("req_0", "req_1")
 
     scheduler_output = _schedule_new_request(*req_ids)
@@ -938,7 +938,7 @@ def test_update_states_pp_non_async_multi_request_keeps_token_buffers_consistent
 
     # Both ranks start from the same request set.
     monkeypatch.setattr(
-        "aphrodite.v1.worker.gpu_model_runner.get_pp_group",
+        "sonar.v1.worker.gpu_model_runner.get_pp_group",
         lambda: SimpleNamespace(is_last_rank=False, world_size=2),
     )
     non_last_runner._update_states(_schedule_new_request(*req_ids))
@@ -965,13 +965,13 @@ def test_update_states_pp_non_async_multi_request_keeps_token_buffers_consistent
     )
     # non-last rank appends new_token_ids in _update_states.
     monkeypatch.setattr(
-        "aphrodite.v1.worker.gpu_model_runner.get_pp_group",
+        "sonar.v1.worker.gpu_model_runner.get_pp_group",
         lambda: SimpleNamespace(is_last_rank=False, world_size=2),
     )
     non_last_runner._update_states(scheduler_output)
     # last rank should keep its already-bookkept CPU buffers unchanged.
     monkeypatch.setattr(
-        "aphrodite.v1.worker.gpu_model_runner.get_pp_group",
+        "sonar.v1.worker.gpu_model_runner.get_pp_group",
         lambda: SimpleNamespace(is_last_rank=True, world_size=2),
     )
     last_runner._update_states(scheduler_output)
@@ -1000,7 +1000,7 @@ def test_update_states_pp_async_multi_request_keeps_rank_state_consistent(
 
     # Both ranks start from the same request set.
     monkeypatch.setattr(
-        "aphrodite.v1.worker.gpu_model_runner.get_pp_group",
+        "sonar.v1.worker.gpu_model_runner.get_pp_group",
         lambda: SimpleNamespace(is_last_rank=False, world_size=2),
     )
     non_last_runner._update_states(_schedule_new_request(*req_ids))
@@ -1029,13 +1029,13 @@ def test_update_states_pp_async_multi_request_keeps_rank_state_consistent(
     )
     # non-last rank: async PP branch (new_token_ids empty).
     monkeypatch.setattr(
-        "aphrodite.v1.worker.gpu_model_runner.get_pp_group",
+        "sonar.v1.worker.gpu_model_runner.get_pp_group",
         lambda: SimpleNamespace(is_last_rank=False, world_size=2),
     )
     non_last_runner._update_states(scheduler_output)
     # last rank: keep already-bookkept state aligned with scheduler view.
     monkeypatch.setattr(
-        "aphrodite.v1.worker.gpu_model_runner.get_pp_group",
+        "sonar.v1.worker.gpu_model_runner.get_pp_group",
         lambda: SimpleNamespace(is_last_rank=True, world_size=2),
     )
     last_runner._update_states(scheduler_output)
@@ -1055,7 +1055,7 @@ def test_update_states_pp_async_multi_request_keeps_rank_state_consistent(
 def _update_config(model_runner: GPUModelRunner, overrides: dict) -> None:
     # Apply overrides via the worker without constructing a full worker.
     worker = object.__new__(Worker)
-    worker.aphrodite_config = model_runner.aphrodite_config
+    worker.sonar_config = model_runner.sonar_config
     worker.model_runner = model_runner
     worker.update_config(overrides)
 
@@ -1064,7 +1064,7 @@ def test_update_config(model_runner):
     # Simple update
     _update_config(model_runner, {"load_config": {"load_format": "dummy"}})
     assert model_runner.load_config.load_format == "dummy"
-    assert model_runner.aphrodite_config.load_config is model_runner.load_config
+    assert model_runner.sonar_config.load_config is model_runner.load_config
     # Raise error on non-existing config
     with pytest.raises(ValueError, match="do_not_exist_config"):
         _update_config(model_runner, {"do_not_exist_config": "dummy"})
@@ -1099,7 +1099,7 @@ def test_reload_weights_path_replaces_object_storage_source(monkeypatch):
     monkeypatch.setattr(reload_inplace_module, "start_reload", Mock())
     monkeypatch.setattr(reload_inplace_module, "finish_reload", Mock())
 
-    aphrodite_config = SimpleNamespace(
+    sonar_config = SimpleNamespace(
         lora_config=None,
         load_config=SimpleNamespace(load_format="runai_streamer", device=None),
         device_config=SimpleNamespace(device="cpu"),
@@ -1115,15 +1115,15 @@ def test_reload_weights_path_replaces_object_storage_source(monkeypatch):
     model.load_weights.return_value = None
 
     reload_inplace_module.reload_weights(
-        aphrodite_config,
+        sonar_config,
         model,
         weights_iterator=None,
         weights_path="org/new-model",
         is_checkpoint_format=True,
     )
 
-    loader.get_all_weights.assert_called_once_with(aphrodite_config.model_config, model)
-    cfg = aphrodite_config.model_config
+    loader.get_all_weights.assert_called_once_with(sonar_config.model_config, model)
+    cfg = sonar_config.model_config
     assert (cfg.model, cfg.model_weights, cfg.revision) == ("org/new-model", "", None)
 
 
@@ -1164,7 +1164,7 @@ def test_sample_passes_reordered_draft_probs_to_rejection_sampler():
 def test_dummy_sampler_run_warms_all_greedy_rejection_sampler(monkeypatch):
     runner = object.__new__(GPUModelRunner)
     runner.device = torch.device("cpu")
-    runner.aphrodite_config = SimpleNamespace(model_config=SimpleNamespace(multimodal_config=None))
+    runner.sonar_config = SimpleNamespace(model_config=SimpleNamespace(multimodal_config=None))
     runner.model = SimpleNamespace(compute_logits=Mock(return_value=torch.randn(3, 8)))
     runner.sampler = Mock(return_value="sampler_output")
     runner.sampler.logprobs_mode = "processed_logprobs"
@@ -1212,7 +1212,7 @@ def test_invalid_draft_suffixes_remain_rejected_in_metadata():
     assert metadata.draft_token_ids.tolist() == [10, -1, 12, 13, -1]
 
 
-def test_init_kv_cache_with_kv_sharing_invalid_target_layer_order(default_aphrodite_config):
+def test_init_kv_cache_with_kv_sharing_invalid_target_layer_order(default_sonar_config):
     torch.set_default_dtype(torch.float16)
     layer_0 = "model.layers.0.self_attn.attn"
     layer_1 = "model.layers.1.self_attn.attn"
@@ -1239,7 +1239,7 @@ def test_init_kv_cache_with_kv_sharing_invalid_target_layer_order(default_aphrod
         assert fwd_context is not None
 
 
-def test_init_kv_cache_with_kv_sharing_target_layer_not_exist(default_aphrodite_config):
+def test_init_kv_cache_with_kv_sharing_target_layer_not_exist(default_sonar_config):
     torch.set_default_dtype(torch.float16)
     layer_0 = "model.layers.0.self_attn.attn"
     layer_1 = "model.layers.1.self_attn.attn"
@@ -1266,7 +1266,7 @@ def test_init_kv_cache_with_kv_sharing_target_layer_not_exist(default_aphrodite_
         assert fwd_context is not None
 
 
-def test_init_kv_cache_with_kv_sharing_target_same_as_current(default_aphrodite_config):
+def test_init_kv_cache_with_kv_sharing_target_same_as_current(default_sonar_config):
     torch.set_default_dtype(torch.float16)
     layer_0 = "model.layers.0.self_attn.attn"
     layer_1 = "model.layers.1.self_attn.attn"
@@ -1293,12 +1293,12 @@ def test_init_kv_cache_with_kv_sharing_target_same_as_current(default_aphrodite_
         assert fwd_context is not None
 
 
-def test_init_kv_cache_without_kv_sharing(default_aphrodite_config):
+def test_init_kv_cache_without_kv_sharing(default_sonar_config):
     torch.set_default_dtype(torch.float16)
     layer_0 = "model.layers.0.self_attn.attn"
     layer_1 = "model.layers.1.self_attn.attn"
-    aphrodite_config = get_aphrodite_config()
-    with set_current_aphrodite_config(aphrodite_config):
+    sonar_config = get_sonar_config()
+    with set_current_sonar_config(sonar_config):
         fwd_context = {
             layer_0: Attention(
                 num_heads=8,
@@ -1316,9 +1316,9 @@ def test_init_kv_cache_without_kv_sharing(default_aphrodite_config):
         # suppress var not used error
         assert fwd_context is not None
     # Set high context length to test max context length estimation
-    aphrodite_config.model_config.max_model_len = 3_000_000
-    aphrodite_ctx = aphrodite_config.compilation_config.static_forward_context
-    runner = GPUModelRunner(aphrodite_config, DEVICE_TYPE)
+    sonar_config.model_config.max_model_len = 3_000_000
+    sonar_ctx = sonar_config.compilation_config.static_forward_context
+    runner = GPUModelRunner(sonar_config, DEVICE_TYPE)
     kv_cache_spec = runner.get_kv_cache_spec()
     assert len(kv_cache_spec) == 2
     assert len(runner.shared_kv_cache_layers) == 0
@@ -1326,12 +1326,12 @@ def test_init_kv_cache_without_kv_sharing(default_aphrodite_config):
     available_memory = 20 * GiB_bytes
     # page size for layer 0's kv_cache_spec is 32KB
     num_expected_blocks = 327680  # 20GB / 32KB / 2 (num layers)
-    kv_cache_config = get_kv_cache_configs(aphrodite_config, [kv_cache_spec], [available_memory])[0]
+    kv_cache_config = get_kv_cache_configs(sonar_config, [kv_cache_spec], [available_memory])[0]
     assert kv_cache_config.num_blocks == num_expected_blocks
     assert len(kv_cache_config.kv_cache_tensors) == 1
     assert kv_cache_config.kv_cache_tensors[0].size == available_memory
 
-    max_context_len = estimate_max_model_len(aphrodite_config, kv_cache_spec, 5 * GiB_bytes)
+    max_context_len = estimate_max_model_len(sonar_config, kv_cache_spec, 5 * GiB_bytes)
     # max context len with KV sharing should be 2x as large as without
     assert max_context_len == 1310720
 
@@ -1347,8 +1347,8 @@ def test_init_kv_cache_without_kv_sharing(default_aphrodite_config):
 
     runner.initialize_kv_cache(kv_cache_config)
 
-    layer_0_kv = aphrodite_ctx[layer_0].kv_cache
-    layer_1_kv = aphrodite_ctx[layer_1].kv_cache
+    layer_0_kv = sonar_ctx[layer_0].kv_cache
+    layer_1_kv = sonar_ctx[layer_1].kv_cache
     # check layer 1 kv cache does NOT share memory with layer 0
     assert id(layer_1_kv) != id(layer_0_kv)
 
@@ -1359,12 +1359,12 @@ def test_init_kv_cache_without_kv_sharing(default_aphrodite_config):
     assert kv_cache_config.kv_cache_groups[0].layer_names[1] == layer_1
 
 
-def test_init_kv_cache_with_kv_sharing_valid(default_aphrodite_config):
+def test_init_kv_cache_with_kv_sharing_valid(default_sonar_config):
     torch.set_default_dtype(torch.float16)
     layer_0 = "model.layers.0.self_attn.attn"
     layer_1 = "model.layers.1.self_attn.attn"
-    aphrodite_config = get_aphrodite_config()
-    with set_current_aphrodite_config(aphrodite_config):
+    sonar_config = get_sonar_config()
+    with set_current_sonar_config(sonar_config):
         fwd_context = {
             layer_0: Attention(
                 num_heads=8,
@@ -1383,9 +1383,9 @@ def test_init_kv_cache_with_kv_sharing_valid(default_aphrodite_config):
         # suppress var not used error
         assert fwd_context is not None
     # Set high context length to test max context length estimation
-    aphrodite_config.model_config.max_model_len = 3_000_000
-    aphrodite_ctx = aphrodite_config.compilation_config.static_forward_context
-    runner = GPUModelRunner(aphrodite_config, DEVICE_TYPE)
+    sonar_config.model_config.max_model_len = 3_000_000
+    sonar_ctx = sonar_config.compilation_config.static_forward_context
+    runner = GPUModelRunner(sonar_config, DEVICE_TYPE)
     kv_cache_spec = runner.get_kv_cache_spec()
     assert len(kv_cache_spec) == 1
     assert layer_0 in kv_cache_spec
@@ -1396,14 +1396,14 @@ def test_init_kv_cache_with_kv_sharing_valid(default_aphrodite_config):
     # with KV sharing, we can allocate (available_mem//page_size//1) blocks
     # which is twice as many as without KV sharing
     num_expected_blocks = 655360  # 20GB / 32KB
-    kv_cache_config = get_kv_cache_configs(aphrodite_config, [kv_cache_spec], [available_memory])[0]
+    kv_cache_config = get_kv_cache_configs(sonar_config, [kv_cache_spec], [available_memory])[0]
     assert kv_cache_config.num_blocks == num_expected_blocks
     assert len(kv_cache_config.kv_cache_tensors) == 1
     # Each layer now has twice the available memory for KV cache
     # compared to no KV sharing
     assert kv_cache_config.kv_cache_tensors[0].size == available_memory
 
-    max_context_len = estimate_max_model_len(aphrodite_config, kv_cache_spec, 5 * GiB_bytes)
+    max_context_len = estimate_max_model_len(sonar_config, kv_cache_spec, 5 * GiB_bytes)
     # max context len with KV sharing should be 2x as large as without
     assert max_context_len == 2 * 1310720
 
@@ -1417,8 +1417,8 @@ def test_init_kv_cache_with_kv_sharing_valid(default_aphrodite_config):
     runner.initialize_kv_cache(kv_cache_config)
     kv_cache_config_after_init = runner.kv_cache_config
 
-    layer_0_kv = aphrodite_ctx[layer_0].kv_cache
-    layer_1_kv = aphrodite_ctx[layer_1].kv_cache
+    layer_0_kv = sonar_ctx[layer_0].kv_cache
+    layer_1_kv = sonar_ctx[layer_1].kv_cache
     # check layer 1 kv cache shares memory with layer 0
     assert id(layer_1_kv) == id(layer_0_kv)
 
@@ -1451,9 +1451,9 @@ def test_hybrid_attention_mamba_tensor_shapes():
             "MASTER_PORT": "12345",
         }
     )
-    from tests.utils import ensure_current_aphrodite_config
+    from tests.utils import ensure_current_sonar_config
 
-    with ensure_current_aphrodite_config():
+    with ensure_current_sonar_config():
         init_distributed_environment()
         initialize_model_parallel(tensor_model_parallel_size=1)
     torch.set_default_dtype(torch.float16)
@@ -1476,7 +1476,7 @@ def test_hybrid_attention_mamba_tensor_shapes():
     cache_config.kv_cache_layout = "LBNHC"
     parallel_config = ParallelConfig()
     attention_config = AttentionConfig(backend=AttentionBackendEnum.FLASHINFER)
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         model_config=model_config,
         cache_config=cache_config,
         scheduler_config=scheduler_config,
@@ -1491,8 +1491,8 @@ def test_hybrid_attention_mamba_tensor_shapes():
     layer_4 = "model.layers.4.mixer"
     layer_5 = "model.layers.5.mixer"
 
-    with set_current_aphrodite_config(aphrodite_config):
-        hf_config = aphrodite_config.model_config.hf_config
+    with set_current_sonar_config(sonar_config):
+        hf_config = sonar_config.model_config.hf_config
         fwd_context = {}
         for key in [layer_0, layer_1]:
             fwd_context[key] = Attention(
@@ -1521,14 +1521,14 @@ def test_hybrid_attention_mamba_tensor_shapes():
             )
         # suppress var not used error
         assert fwd_context is not None
-        aphrodite_ctx = aphrodite_config.compilation_config.static_forward_context
+        sonar_ctx = sonar_config.compilation_config.static_forward_context
 
-        runner = GPUModelRunner(aphrodite_config, DEVICE_TYPE)
-        current_platform.update_block_size_for_backend(aphrodite_config)
+        runner = GPUModelRunner(sonar_config, DEVICE_TYPE)
+        current_platform.update_block_size_for_backend(sonar_config)
         kv_cache_spec = runner.get_kv_cache_spec()
 
         available_memory = 5 * GiB_bytes
-        kv_cache_config = get_kv_cache_configs(aphrodite_config, [kv_cache_spec], [available_memory])[0]
+        kv_cache_config = get_kv_cache_configs(sonar_config, [kv_cache_spec], [available_memory])[0]
         runner.initialize_kv_cache(kv_cache_config)
 
     # random partition of blocks
@@ -1539,9 +1539,9 @@ def test_hybrid_attention_mamba_tensor_shapes():
     np.random.shuffle(ind)
     blocks0, blocks1 = ind[: (num_blocks // 2)], ind[(num_blocks // 2) :]
 
-    attn_shape = aphrodite_ctx[layer_0].kv_cache.shape
-    conv_shape = aphrodite_ctx[layer_2].kv_cache[0].shape
-    ssm_shape = aphrodite_ctx[layer_2].kv_cache[1].shape
+    attn_shape = sonar_ctx[layer_0].kv_cache.shape
+    conv_shape = sonar_ctx[layer_2].kv_cache[0].shape
+    ssm_shape = sonar_ctx[layer_2].kv_cache[1].shape
 
     # assert we are using FlashInfer
     assert attn_shape[0] % num_blocks == 0
@@ -1576,19 +1576,19 @@ def test_hybrid_attention_mamba_tensor_shapes():
     for layer in [layer_0, layer_1]:
         # attention: kv_cache[kernel_block_idx, kv_idx, ...]
         for i, kernel_block in enumerate(kernel_blocks_for_attention):
-            aphrodite_ctx[layer].kv_cache[kernel_block, :] = attn_blocks_constant[i]
+            sonar_ctx[layer].kv_cache[kernel_block, :] = attn_blocks_constant[i]
 
     # fill mamba blocks with constants using kernel block indices
     for layer in [layer_2, layer_3, layer_4, layer_5]:
         # mamba: kv_cache[component][kernel_block_idx, ...]
         for i, kv_block in enumerate(kv_blocks_for_mamba):
-            aphrodite_ctx[layer].kv_cache[0][kv_block, :] = conv_blocks_constant[i]
-            aphrodite_ctx[layer].kv_cache[1][kv_block, :] = ssm_blocks_constant[i]
+            sonar_ctx[layer].kv_cache[0][kv_block, :] = conv_blocks_constant[i]
+            sonar_ctx[layer].kv_cache[1][kv_block, :] = ssm_blocks_constant[i]
 
     # verify attention and mamba contents are correct
     for layer in [layer_0, layer_1]:
         for i, kernel_block in enumerate(kernel_blocks_for_attention):
-            actual_kv = aphrodite_ctx[layer].kv_cache[kernel_block, :]
+            actual_kv = sonar_ctx[layer].kv_cache[kernel_block, :]
             expected = attn_blocks_constant[i]
 
             # Packed layout: (num_kv_heads, block_size, 2*head_size). Every
@@ -1598,8 +1598,8 @@ def test_hybrid_attention_mamba_tensor_shapes():
 
     for layer in [layer_2, layer_3, layer_4, layer_5]:
         for i, kv_block in enumerate(kv_blocks_for_mamba):
-            actual_conv = aphrodite_ctx[layer].kv_cache[0][kv_block, :]
-            actual_ssm = aphrodite_ctx[layer].kv_cache[1][kv_block, :]
+            actual_conv = sonar_ctx[layer].kv_cache[0][kv_block, :]
+            actual_ssm = sonar_ctx[layer].kv_cache[1][kv_block, :]
             expected_conv = conv_blocks_constant[i]
             expected_ssm = ssm_blocks_constant[i]
 
@@ -1608,8 +1608,8 @@ def test_hybrid_attention_mamba_tensor_shapes():
 
     for layer in [layer_2, layer_3, layer_4, layer_5]:
         for i, kv_block in enumerate(kv_blocks_for_mamba):
-            actual_conv = aphrodite_ctx[layer].kv_cache[0][kv_block, :]
-            actual_ssm = aphrodite_ctx[layer].kv_cache[1][kv_block, :]
+            actual_conv = sonar_ctx[layer].kv_cache[0][kv_block, :]
+            actual_ssm = sonar_ctx[layer].kv_cache[1][kv_block, :]
             expected_conv = conv_blocks_constant[i]
             expected_ssm = ssm_blocks_constant[i]
             assert torch.equal(actual_conv, expected_conv)
@@ -1618,7 +1618,7 @@ def test_hybrid_attention_mamba_tensor_shapes():
 
 def test_input_batch_reinitialized_after_late_interleave_adjustment(monkeypatch):
     runner = object.__new__(GPUModelRunner)
-    runner.aphrodite_config = SimpleNamespace(reasoning_config=None)
+    runner.sonar_config = SimpleNamespace(reasoning_config=None)
     runner.parallel_config = SimpleNamespace(cp_kv_cache_interleave_size=16)
     runner.cache_config = SimpleNamespace(use_replayssm=False)
     runner.model_config = SimpleNamespace(get_vocab_size=lambda: 32)
@@ -1661,7 +1661,7 @@ def test_input_batch_reinitialized_after_late_interleave_adjustment(monkeypatch)
 
 
 def test_v2_runner_snapshots_late_interleave_adjustment(monkeypatch):
-    from aphrodite.v1.worker.gpu import model_runner as v2_model_runner_module
+    from sonar.v1.worker.gpu import model_runner as v2_model_runner_module
 
     runner = object.__new__(v2_model_runner_module.GPUModelRunner)
     runner.parallel_config = SimpleNamespace(cp_kv_cache_interleave_size=16)
@@ -1700,20 +1700,20 @@ def test_mamba_state_table_width_is_not_aligned():
     assert block_tables[0].max_num_blocks_per_req == 1
 
 
-def test_hybrid_cache_integration(default_aphrodite_config, dist_init):
+def test_hybrid_cache_integration(default_sonar_config, dist_init):
     """Test hybrid cache architecture integration with GPUModelRunner."""
     # Create a new model runner with hybrid cache configuration
-    aphrodite_config = get_aphrodite_config()
+    sonar_config = get_sonar_config()
 
     # Configure hybrid cache with different kvcache_manager block size
-    aphrodite_config.cache_config.block_size = 32
+    sonar_config.cache_config.block_size = 32
 
-    model_config = aphrodite_config.model_config
-    num_heads = model_config.get_num_kv_heads(aphrodite_config.parallel_config)
+    model_config = sonar_config.model_config
+    num_heads = model_config.get_num_kv_heads(sonar_config.parallel_config)
     head_size = model_config.get_head_size()
-    aphrodite_config.compilation_config.static_forward_context["layer.0"] = Attention(num_heads, head_size, 0.1)
+    sonar_config.compilation_config.static_forward_context["layer.0"] = Attention(num_heads, head_size, 0.1)
 
-    runner = GPUModelRunner(aphrodite_config, DEVICE_TYPE)
+    runner = GPUModelRunner(sonar_config, DEVICE_TYPE)
 
     # Initialize KV cache with configuration
     attn_spec = FullAttentionSpec(
@@ -1869,9 +1869,9 @@ def test_mamba_cache_raises_when_max_num_seqs_exceeds_blocks():
             "MASTER_PORT": "12345",
         }
     )
-    from tests.utils import ensure_current_aphrodite_config
+    from tests.utils import ensure_current_sonar_config
 
-    with ensure_current_aphrodite_config():
+    with ensure_current_sonar_config():
         init_distributed_environment()
         initialize_model_parallel(tensor_model_parallel_size=1)
     torch.set_default_dtype(torch.float16)
@@ -1894,7 +1894,7 @@ def test_mamba_cache_raises_when_max_num_seqs_exceeds_blocks():
     cache_config.kv_cache_layout = "LBNHC"
     parallel_config = ParallelConfig()
     attention_config = AttentionConfig(backend=AttentionBackendEnum.FLASHINFER)
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         model_config=model_config,
         cache_config=cache_config,
         scheduler_config=scheduler_config,
@@ -1902,8 +1902,8 @@ def test_mamba_cache_raises_when_max_num_seqs_exceeds_blocks():
         attention_config=attention_config,
     )
 
-    with set_current_aphrodite_config(aphrodite_config):
-        hf_config = aphrodite_config.model_config.hf_config
+    with set_current_sonar_config(sonar_config):
+        hf_config = sonar_config.model_config.hf_config
         fwd_context = {}
         for key in ["model.layers.0.self_attn.attn", "model.layers.1.self_attn.attn"]:
             fwd_context[key] = Attention(
@@ -1937,12 +1937,12 @@ def test_mamba_cache_raises_when_max_num_seqs_exceeds_blocks():
             )
         assert fwd_context is not None
 
-        runner = GPUModelRunner(aphrodite_config, DEVICE_TYPE)
-        current_platform.update_block_size_for_backend(aphrodite_config)
+        runner = GPUModelRunner(sonar_config, DEVICE_TYPE)
+        current_platform.update_block_size_for_backend(sonar_config)
         kv_cache_spec = runner.get_kv_cache_spec()
 
         available_memory = 5 * GiB_bytes
-        kv_cache_config = get_kv_cache_configs(aphrodite_config, [kv_cache_spec], [available_memory])[0]
+        kv_cache_config = get_kv_cache_configs(sonar_config, [kv_cache_spec], [available_memory])[0]
         num_blocks = kv_cache_config.num_blocks
 
         # Force max_num_seqs to exceed num_blocks so the check triggers.

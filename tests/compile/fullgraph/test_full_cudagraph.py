@@ -6,12 +6,12 @@ import weakref
 
 import pytest
 
-from aphrodite import LLM, SamplingParams
-from aphrodite.config import CompilationConfig, CUDAGraphMode
-from aphrodite.outputs import RequestOutput
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import is_torch_equal_or_newer
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
+from sonar import LLM, SamplingParams
+from sonar.config import CompilationConfig, CUDAGraphMode
+from sonar.outputs import RequestOutput
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import is_torch_equal_or_newer
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
 from tests.utils import wait_for_gpu_memory_to_clear
 from tests.v1.attention.utils import full_cg_backend_configs as backend_configs
 
@@ -74,7 +74,7 @@ def llm_pair(request):
     env_vars = {
         # Force native sampler to avoid potential nondeterminism in FlashInfer
         # when per-request generators are not used in V1.
-        "APHRODITE_USE_FLASHINFER_SAMPLER": "0",
+        "SONAR_USE_FLASHINFER_SAMPLER": "0",
     }
     with temporary_environ(env_vars):
         full = LLM(
@@ -88,7 +88,7 @@ def llm_pair(request):
                 **backend_config.comp_config,
                 use_inductor_graph_partition=use_inductor_graph_partition,
             ),
-            generation_config="aphrodite",
+            generation_config="sonar",
             seed=42,
         )
         piecewise = LLM(
@@ -102,7 +102,7 @@ def llm_pair(request):
                 cudagraph_mode=CUDAGraphMode.PIECEWISE,
                 use_inductor_graph_partition=use_inductor_graph_partition,
             ),
-            generation_config="aphrodite",
+            generation_config="sonar",
             seed=42,
         )
 

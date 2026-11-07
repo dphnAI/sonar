@@ -19,13 +19,13 @@ from typing import Any
 
 import torch
 
-from aphrodite.config import AphroditeConfig, KVTransferConfig
-from aphrodite.distributed.kv_events import (
+from sonar.config import KVTransferConfig, SonarConfig
+from sonar.distributed.kv_events import (
     BlockStored,
     KVCacheEventType,
     KVConnectorKVEvents,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.base import (
+from sonar.distributed.kv_transfer.kv_connector.v1.base import (
     KVConnectorBase_V1,
     KVConnectorMetadata,
     KVConnectorRole,
@@ -33,22 +33,22 @@ from aphrodite.distributed.kv_transfer.kv_connector.v1.base import (
     KVConnectorWorkerMetadata,
     SupportsHMA,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.metrics import (
+from sonar.distributed.kv_transfer.kv_connector.v1.metrics import (
     KVConnectorPromMetrics,
     KVConnectorStats,
     PromMetric,
     PromMetricT,
 )
-from aphrodite.distributed.mooncake_store import MooncakeStoreConfig
-from aphrodite.forward_context import ForwardContext
-from aphrodite.logger import init_logger
-from aphrodite.v1.attention.backend import AttentionMetadata
-from aphrodite.v1.core.block_pool import BlockPool
-from aphrodite.v1.core.kv_cache_manager import KVCacheBlocks
-from aphrodite.v1.core.sched.output import SchedulerOutput
-from aphrodite.v1.kv_cache_interface import KVCacheConfig
-from aphrodite.v1.outputs import KVConnectorOutput
-from aphrodite.v1.request import Request
+from sonar.distributed.mooncake_store import MooncakeStoreConfig
+from sonar.forward_context import ForwardContext
+from sonar.logger import init_logger
+from sonar.v1.attention.backend import AttentionMetadata
+from sonar.v1.core.block_pool import BlockPool
+from sonar.v1.core.kv_cache_manager import KVCacheBlocks
+from sonar.v1.core.sched.output import SchedulerOutput
+from sonar.v1.kv_cache_interface import KVCacheConfig
+from sonar.v1.outputs import KVConnectorOutput
+from sonar.v1.request import Request
 
 from .data import MooncakeStoreConnectorMetadata
 from .metrics import MooncakeStoreConnectorStats, MooncakeStorePromMetrics
@@ -141,8 +141,8 @@ class MooncakeStoreConnector(KVConnectorBase_V1, SupportsHMA):
         return True
 
     @staticmethod
-    def _validate_kv_cache_config(aphrodite_config: AphroditeConfig, kv_cache_config: KVCacheConfig) -> None:
-        from aphrodite.v1.kv_cache_interface import CrossAttentionSpec, MambaSpec
+    def _validate_kv_cache_config(sonar_config: SonarConfig, kv_cache_config: KVCacheConfig) -> None:
+        from sonar.v1.kv_cache_interface import CrossAttentionSpec, MambaSpec
 
         unsupported: list[str] = []
         store_group_ids = kv_cache_config.prefix_cacheable_group_ids
@@ -154,7 +154,7 @@ class MooncakeStoreConnector(KVConnectorBase_V1, SupportsHMA):
                 unsupported.append(f"group {group_id}: CrossAttentionSpec")
             if isinstance(spec, MambaSpec) and spec.mamba_cache_mode != "align":
                 unsupported.append(f"group {group_id}: mamba_cache_mode={spec.mamba_cache_mode!r} != 'align'")
-        pcp = aphrodite_config.parallel_config.prefill_context_parallel_size
+        pcp = sonar_config.parallel_config.prefill_context_parallel_size
         if len(store_group_ids) > 1 and pcp > 1:
             unsupported.append(f"PCP > 1 (pcp={pcp}) with hybrid attention")
         if unsupported:
@@ -162,19 +162,19 @@ class MooncakeStoreConnector(KVConnectorBase_V1, SupportsHMA):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         role: KVConnectorRole,
         kv_cache_config: KVCacheConfig | None = None,
     ):
         super().__init__(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             role=role,
             kv_cache_config=kv_cache_config,  # type: ignore[arg-type]
         )
-        assert aphrodite_config.kv_transfer_config is not None
+        assert sonar_config.kv_transfer_config is not None
         assert kv_cache_config is not None, "kv_cache_config is required"
-        self.kv_role = aphrodite_config.kv_transfer_config.kv_role
-        extra_config = aphrodite_config.kv_transfer_config.kv_connector_extra_config
+        self.kv_role = sonar_config.kv_transfer_config.kv_role
+        extra_config = sonar_config.kv_transfer_config.kv_connector_extra_config
         save_decode_cache = extra_config.get("save_decode_cache", False)
         # Capacity-only: contributes its segment to the store pool but transfers
         # no KV, so the KV-cache-shape invariants below cannot be reached.
@@ -182,7 +182,7 @@ class MooncakeStoreConnector(KVConnectorBase_V1, SupportsHMA):
             self.kv_role == "kv_consumer" and not extra_config.get("enable_lookup", True) and not save_decode_cache
         )
         if not self._capacity_only:
-            self._validate_kv_cache_config(aphrodite_config, kv_cache_config)
+            self._validate_kv_cache_config(sonar_config, kv_cache_config)
         self._kv_cache_config = kv_cache_config
         self._kv_cache_events: MooncakeStoreKVEvents | None = None
 
@@ -190,9 +190,9 @@ class MooncakeStoreConnector(KVConnectorBase_V1, SupportsHMA):
         self.connector_worker: MooncakeStoreWorker | None = None
 
         if role == KVConnectorRole.SCHEDULER:
-            self.connector_scheduler = MooncakeStoreScheduler(aphrodite_config, kv_cache_config)
+            self.connector_scheduler = MooncakeStoreScheduler(sonar_config, kv_cache_config)
         else:
-            self.connector_worker = MooncakeStoreWorker(aphrodite_config, kv_cache_config)
+            self.connector_worker = MooncakeStoreWorker(sonar_config, kv_cache_config)
 
     def shutdown(self):
         """Release connector resources on teardown.
@@ -407,9 +407,9 @@ class MooncakeStoreConnector(KVConnectorBase_V1, SupportsHMA):
     @classmethod
     def build_prom_metrics(
         cls,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         metric_types: dict[type[PromMetric], type[PromMetricT]],
         labelnames: list[str],
         per_engine_labelvalues: dict[int, list[object]],
     ) -> KVConnectorPromMetrics:
-        return MooncakeStorePromMetrics(aphrodite_config, metric_types, labelnames, per_engine_labelvalues)
+        return MooncakeStorePromMetrics(sonar_config, metric_types, labelnames, per_engine_labelvalues)

@@ -10,7 +10,7 @@ from torchvision import transforms
 from torchvision.transforms.functional import InterpolationMode
 from transformers import BatchFeature, ImageProcessingMixin, ProcessorMixin, TensorType
 
-from aphrodite.tokenizers import TokenizerLike
+from sonar.tokenizers import TokenizerLike
 
 MAX_IMAGE_SIZE: int = 3024
 

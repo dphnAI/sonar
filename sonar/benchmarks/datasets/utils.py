@@ -7,7 +7,7 @@ import math
 
 import numpy as np
 
-from aphrodite.tokenizers import TokenizerLike
+from sonar.tokenizers import TokenizerLike
 
 logger = logging.getLogger(__name__)
 

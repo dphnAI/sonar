@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import pytest
 
-from aphrodite.assets.audio import AudioAsset
+from sonar.assets.audio import AudioAsset
 
 
 def add_attention_backend(server_args, attention_config):

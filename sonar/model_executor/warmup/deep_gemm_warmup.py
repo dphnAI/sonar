@@ -11,38 +11,38 @@ from typing import TYPE_CHECKING, TypeGuard
 import torch
 from tqdm import tqdm
 
-import aphrodite.envs as envs
-from aphrodite.distributed.parallel_state import (
+import sonar.envs as envs
+from sonar.distributed.parallel_state import (
     get_dp_group,
     is_global_first_rank,
 )
-from aphrodite.forward_context import ForwardContext, override_forward_context
-from aphrodite.model_executor.kernels.linear.scaled_mm.deep_gemm import (
+from sonar.forward_context import ForwardContext, override_forward_context
+from sonar.model_executor.kernels.linear.scaled_mm.deep_gemm import (
     DeepGemmFp8BlockScaledMMKernel,
 )
-from aphrodite.model_executor.layers.fused_moe import MoERunner
-from aphrodite.model_executor.layers.fused_moe.deep_gemm_utils import (
+from sonar.model_executor.layers.fused_moe import MoERunner
+from sonar.model_executor.layers.fused_moe.deep_gemm_utils import (
     compute_aligned_M_and_alignment,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.deep_gemm_moe import DeepGemmExperts
-from aphrodite.model_executor.layers.fused_moe.experts.triton_deep_gemm_moe import (
+from sonar.model_executor.layers.fused_moe.experts.deep_gemm_moe import DeepGemmExperts
+from sonar.model_executor.layers.fused_moe.experts.triton_deep_gemm_moe import (
     TritonOrDeepGemmExperts,
 )
-from aphrodite.tracing import instrument
-from aphrodite.utils.deep_gemm import (
+from sonar.tracing import instrument
+from sonar.utils.deep_gemm import (
     _import_deep_gemm,
     fp8_gemm_nt,
     get_mk_alignment_for_contiguous_layout,
     m_grouped_fp8_gemm_nt_contiguous,
     mk_alignment_scope,
 )
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.utils.platform_utils import num_compute_units
-from aphrodite.v1.worker.workspace import current_workspace_manager
+from sonar.utils.math_utils import cdiv
+from sonar.utils.platform_utils import num_compute_units
+from sonar.v1.worker.workspace import current_workspace_manager
 
 if TYPE_CHECKING:
-    from aphrodite.models.deepseek_v4.nvidia.model import DeepseekV4MoE
-    from aphrodite.models.kimi_k3.nvidia.model import KimiMoE
+    from sonar.models.deepseek_v4.nvidia.model import DeepseekV4MoE
+    from sonar.models.kimi_k3.nvidia.model import KimiMoE
 
 
 def _generate_optimal_warmup_m_values(max_tokens: int, n: int, device: torch.device) -> list[int]:
@@ -122,7 +122,7 @@ def _deep_gemm_linear_data(
 
 
 def _fused_moe_grouped_gemm_may_use_deep_gemm(module: torch.nn.Module) -> bool:
-    if not (envs.APHRODITE_USE_DEEP_GEMM and envs.APHRODITE_MOE_USE_DEEP_GEMM):
+    if not (envs.SONAR_USE_DEEP_GEMM and envs.SONAR_MOE_USE_DEEP_GEMM):
         return False
 
     if not isinstance(module, MoERunner):
@@ -149,7 +149,7 @@ def _fused_moe_grouped_gemm_may_use_deep_gemm(module: torch.nn.Module) -> bool:
 # Model construction already imports the model modules. Avoid importing them here.
 def _mega_moe_uses_mega_gate(module: torch.nn.Module) -> "TypeGuard[DeepseekV4MoE]":
     # DeepSeek-V4 routes with bf16_mega_gate, Kimi K3 with its GateLinear.
-    dsv4 = sys.modules.get("aphrodite.models.deepseek_v4.nvidia.model")
+    dsv4 = sys.modules.get("sonar.models.deepseek_v4.nvidia.model")
     return dsv4 is not None and isinstance(module, dsv4.DeepseekV4MoE)
 
 
@@ -158,7 +158,7 @@ def _mega_moe_may_use_deep_gemm(
 ) -> "TypeGuard[DeepseekV4MoE | KimiMoE]":
     if _mega_moe_uses_mega_gate(module):
         return module.use_native_mega_moe
-    kimi = sys.modules.get("aphrodite.models.kimi_k3.nvidia.model")
+    kimi = sys.modules.get("sonar.models.kimi_k3.nvidia.model")
     return kimi is not None and isinstance(module, kimi.KimiMoE) and module.use_mega_moe
 
 
@@ -170,13 +170,13 @@ def _get_fp8_gemm_nt_m_values(w: torch.Tensor, max_tokens: int) -> list[int]:
     n, _ = w.size()
     device = w.device
 
-    # Use optimal M values only if APHRODITE_DEEP_GEMM_WARMUP is set to "relax".
+    # Use optimal M values only if SONAR_DEEP_GEMM_WARMUP is set to "relax".
     # Otherwise warmup all token sizes to avoid JIT compilation in hotpath
-    if envs.APHRODITE_DEEP_GEMM_WARMUP == "relax":
+    if envs.SONAR_DEEP_GEMM_WARMUP == "relax":
         return _generate_optimal_warmup_m_values(max_tokens, n, device)
     else:
-        assert envs.APHRODITE_DEEP_GEMM_WARMUP == "full", (
-            f'Expected APHRODITE_DEEP_GEMM_WARMUP env to be set to "full" but got {envs.APHRODITE_DEEP_GEMM_WARMUP}'
+        assert envs.SONAR_DEEP_GEMM_WARMUP == "full", (
+            f'Expected SONAR_DEEP_GEMM_WARMUP env to be set to "full" but got {envs.SONAR_DEEP_GEMM_WARMUP}'
         )
         return list(range(1, max_tokens + 1))
 
@@ -354,7 +354,7 @@ def _deepgemm_fp8_fp4_mega_moe_warmup(
     max_tokens: int,
     pbar: tqdm | None = None,
 ):
-    from aphrodite.models.deepseek_v4.nvidia.model import (
+    from sonar.models.deepseek_v4.nvidia.model import (
         prepare_mega_gate_routing_metadata,
     )
 
@@ -371,7 +371,7 @@ def _deepgemm_fp8_fp4_mega_moe_warmup(
     is_padding = torch.zeros(max_m + 1, device=device, dtype=torch.bool)
     # With padding skip on, sequence parallel gives ranks > 0 a padding mask
     # slice at any alignment.
-    sp_masked = module.use_sequence_parallel and envs.APHRODITE_MOE_SKIP_PADDING
+    sp_masked = module.use_sequence_parallel and envs.SONAR_MOE_SKIP_PADDING
     offsets = (0, 1) if sp_masked else (0,)
 
     # Run the whole layer so the gate sees the same optional inputs as serving.

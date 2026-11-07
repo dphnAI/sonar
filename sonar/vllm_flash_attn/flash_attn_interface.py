@@ -36,7 +36,7 @@ try:
         os.path.dirname(__file__), "cute", "interface.py"
     )
     if not os.path.exists(_cute_interface_path):
-        raise ImportError("aphrodite.vllm_flash_attn.cute.interface not found")
+        raise ImportError("sonar.vllm_flash_attn.cute.interface not found")
 
     FA4_UNAVAILABLE_REASON = None
     FA4_AVAILABLE = True
@@ -52,7 +52,7 @@ DEFAULT_FA_VERSION = 2
 def _is_fa2_supported() -> tuple[bool, str | None]:
     if not FA2_AVAILABLE:
         return False, f"FA2 is unavailable due to: {FA2_UNAVAILABLE_REASON}"
-    from aphrodite.platforms import current_platform
+    from sonar.platforms import current_platform
 
     if not current_platform.has_device_capability(80):
         return False, "FA2 is only supported on devices with compute capability >= 8"
@@ -62,7 +62,7 @@ def _is_fa2_supported() -> tuple[bool, str | None]:
 def _is_fa3_supported() -> tuple[bool, str | None]:
     if not FA3_AVAILABLE:
         return False, f"FA3 is unavailable due to: {FA3_UNAVAILABLE_REASON}"
-    from aphrodite.platforms import current_platform
+    from sonar.platforms import current_platform
 
     if not current_platform.is_device_capability_family(90):
         return False, "FA3 is only supported on devices with compute capability 9.x"
@@ -72,7 +72,7 @@ def _is_fa3_supported() -> tuple[bool, str | None]:
 def _is_fa4_supported() -> tuple[bool, str | None]:
     if not FA4_AVAILABLE:
         return False, f"FA4 is unavailable due to: {FA4_UNAVAILABLE_REASON}"
-    from aphrodite.platforms import current_platform
+    from sonar.platforms import current_platform
 
     if not (
         current_platform.is_device_capability_family(90)
@@ -449,7 +449,7 @@ def flash_attn_varlen_func(
             for t in (q_descale, k_descale, v_descale)
         )
 
-        from aphrodite.vllm_flash_attn.cute.interface import _flash_attn_fwd
+        from sonar.vllm_flash_attn.cute.interface import _flash_attn_fwd
 
         # SM90 FA4 fp8-KV path: fp8 e4m3 paged K/V dequantized and the K/V descale folded
         # in-kernel; accepts bf16/fp16 Q and writes O in its native dtype (no Q cast, no
@@ -526,7 +526,7 @@ def compile_flash_attn_varlen_func_from_specs(
         raise NotImplementedError("FA4 compile-only wrapper does not support dropout")
     del deterministic
 
-    from aphrodite.vllm_flash_attn.cute.interface import (
+    from sonar.vllm_flash_attn.cute.interface import (
         _flash_attn_fwd,
         _make_compile_only_tensor_spec,
     )

@@ -7,23 +7,23 @@ from collections.abc import Iterable, Iterator
 import torch
 import torch.nn as nn
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed import (
+from sonar.config import SonarConfig
+from sonar.distributed import (
     tensor_model_parallel_all_gather,
     tensor_model_parallel_all_reduce,
 )
-from aphrodite.model_executor.layers.fused_embed_norm import (
+from sonar.model_executor.layers.fused_embed_norm import (
     fused_embed_eh_norm,
     has_full_vocab_on_rank,
 )
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import ReplicatedLinear
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.vocab_parallel_embedding import VocabParallelEmbedding
-from aphrodite.model_executor.models.deepseek_mtp import SharedHead
-from aphrodite.model_executor.models.utils import maybe_prefix
-from aphrodite.models.deepseek_v32.common.kernels import fused_eh_norm
-from aphrodite.models.deepseek_v32.nvidia.mtp import (
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import ReplicatedLinear
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.vocab_parallel_embedding import VocabParallelEmbedding
+from sonar.model_executor.models.deepseek_mtp import SharedHead
+from sonar.model_executor.models.utils import maybe_prefix
+from sonar.models.deepseek_v32.common.kernels import fused_eh_norm
+from sonar.models.deepseek_v32.nvidia.mtp import (
     DeepseekV32MTP,
     DeepseekV32MultiTokenPredictor,
 )
@@ -32,11 +32,11 @@ from .model import Dots3NoteDecoderLayer, _pad_dense_mlp_weight
 
 
 class Dots3NoteMultiTokenPredictorLayer(nn.Module):
-    def __init__(self, aphrodite_config: AphroditeConfig, prefix: str) -> None:
+    def __init__(self, sonar_config: SonarConfig, prefix: str) -> None:
         super().__init__()
-        assert aphrodite_config.speculative_config is not None
-        config = aphrodite_config.speculative_config.draft_model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        assert sonar_config.speculative_config is not None
+        config = sonar_config.speculative_config.draft_model_config.hf_config
+        quant_config = sonar_config.quant_config
 
         self.enorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.hnorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -49,7 +49,7 @@ class Dots3NoteMultiTokenPredictorLayer(nn.Module):
         )
         self.shared_head = SharedHead(config=config, prefix=prefix, quant_config=quant_config)
         self.mtp_block = Dots3NoteDecoderLayer(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             config=config,
             prefix=prefix,
         )
@@ -97,15 +97,15 @@ class Dots3NoteMultiTokenPredictorLayer(nn.Module):
 
 
 class Dots3NoteMultiTokenPredictor(DeepseekV32MultiTokenPredictor):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         nn.Module.__init__(self)
-        assert aphrodite_config.speculative_config is not None
-        config = aphrodite_config.speculative_config.draft_model_config.hf_config
+        assert sonar_config.speculative_config is not None
+        config = sonar_config.speculative_config.draft_model_config.hf_config
         self.mtp_start_layer_idx = config.num_hidden_layers
         self.num_mtp_layers = config.num_nextn_predict_layers
         self.layers = nn.ModuleDict(
             {
-                str(idx): Dots3NoteMultiTokenPredictorLayer(aphrodite_config, f"{prefix}.layers.{idx}")
+                str(idx): Dots3NoteMultiTokenPredictorLayer(sonar_config, f"{prefix}.layers.{idx}")
                 for idx in range(
                     self.mtp_start_layer_idx,
                     self.mtp_start_layer_idx + self.num_mtp_layers,
@@ -152,13 +152,11 @@ class Dots3NoteMTP(DeepseekV32MTP):
     has_own_embed_tokens = True
     has_own_lm_head = False
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         nn.Module.__init__(self)
-        self.config = aphrodite_config.model_config.hf_config
-        self.quant_config = aphrodite_config.quant_config
-        self.model = Dots3NoteMultiTokenPredictor(
-            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
-        )
+        self.config = sonar_config.model_config.hf_config
+        self.quant_config = sonar_config.quant_config
+        self.model = Dots3NoteMultiTokenPredictor(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
         self.set_moe_parameters()
 
     def _adapt_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> Iterator[tuple[str, torch.Tensor]]:

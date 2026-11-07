@@ -55,8 +55,8 @@ from flydsl.expr import const_expr, gpu, range_constexpr, rocdl
 from flydsl.expr import math as fmath
 from flydsl.expr.typing import Int32, Int64, T, as_ir_value
 
-from aphrodite.models.minimax_m3.amd.mono import config as mono_config
-from aphrodite.models.minimax_m3.amd.mono.config import (
+from sonar.models.minimax_m3.amd.mono import config as mono_config
+from sonar.models.minimax_m3.amd.mono.config import (
     BLOCKS,
     HEAD_DIM,
     HIDDEN,
@@ -77,7 +77,7 @@ from aphrodite.models.minimax_m3.amd.mono.config import (
     WAVES,
     IndexHeads,
 )
-from aphrodite.models.minimax_m3.amd.mono.kernels.common import (
+from sonar.models.minimax_m3.amd.mono.kernels.common import (
     CM_DEV,
     CM_SYS,
     Mailbox,
@@ -98,27 +98,27 @@ from aphrodite.models.minimax_m3.amd.mono.kernels.common import (
     wave_sum,
     xshfl,
 )
-from aphrodite.models.minimax_m3.amd.mono.kernels.common import (
+from sonar.models.minimax_m3.amd.mono.kernels.common import (
     block_max as block_max_of,
 )
-from aphrodite.models.minimax_m3.amd.mono.kernels.index_score import (
+from sonar.models.minimax_m3.amd.mono.kernels.index_score import (
     index_scale_log2e,
     step_rows,
 )
-from aphrodite.models.minimax_m3.amd.mono.kernels.pre_attn import (
+from sonar.models.minimax_m3.amd.mono.kernels.pre_attn import (
     K1_ARGS,
     emit_k1,
 )
-from aphrodite.models.minimax_m3.amd.mono.kernels.pre_attn import (
+from sonar.models.minimax_m3.amd.mono.kernels.pre_attn import (
     N_HEAD_TASKS as K1_HEAD_TASKS,
 )
-from aphrodite.models.minimax_m3.amd.mono.kernels.pre_attn import (
+from sonar.models.minimax_m3.amd.mono.kernels.pre_attn import (
     SCRATCH_HDONE as K1_SCRATCH_HDONE,
 )
-from aphrodite.models.minimax_m3.amd.mono.kernels.pre_attn import (
+from sonar.models.minimax_m3.amd.mono.kernels.pre_attn import (
     SCRATCH_RDONE as K1_SCRATCH_RDONE,
 )
-from aphrodite.models.minimax_m3.amd.mono.layout import (
+from sonar.models.minimax_m3.amd.mono.layout import (
     AG_RS_FROM,
     DN_ROWS,
     MID_ROW,

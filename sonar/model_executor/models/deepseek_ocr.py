@@ -10,60 +10,60 @@ import torch
 import torch.nn as nn
 from transformers import BatchFeature, CLIPVisionConfig
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.multimodal import MultiModalDummyOptions
-from aphrodite.inputs import MultiModalDataDict
-from aphrodite.model_executor.models.interfaces import (
+from sonar.config import SonarConfig
+from sonar.config.multimodal import MultiModalDummyOptions
+from sonar.inputs import MultiModalDataDict
+from sonar.model_executor.models.interfaces import (
     MultiModalEmbeddings,
     SupportsEncoderCudaGraph,
     SupportsLoRA,
     SupportsMultiModal,
     SupportsPP,
 )
-from aphrodite.model_executor.models.module_mapping import MultiModelKeys
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.models.module_mapping import MultiModelKeys
+from sonar.model_executor.models.utils import (
     AutoWeightsLoader,
     WeightsMapper,
-    init_aphrodite_registered_model,
+    init_sonar_registered_model,
     maybe_prefix,
 )
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import (
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import (
     MultiModalFieldConfig,
     MultiModalKwargsItems,
     NestedTensors,
 )
-from aphrodite.multimodal.parse import (
+from sonar.multimodal.parse import (
     ImageEmbeddingItems,
     ImageProcessorItems,
     ImageSize,
     MultiModalDataItems,
 )
-from aphrodite.multimodal.processing import (
+from sonar.multimodal.processing import (
     BaseDummyInputsBuilder,
     BaseMultiModalProcessor,
     BaseProcessingInfo,
     PromptReplacement,
     PromptUpdate,
 )
-from aphrodite.multimodal.processing.processor import HFMultiModalInputs
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.tokenizers import cached_tokenizer_from_config
-from aphrodite.transformers_utils.configs.deepseek_vl2 import DeepseekVLV2Config
-from aphrodite.transformers_utils.processors.deepseek_ocr import (
+from sonar.multimodal.processing.processor import HFMultiModalInputs
+from sonar.sampling_params import SamplingParams
+from sonar.sequence import IntermediateTensors
+from sonar.tokenizers import cached_tokenizer_from_config
+from sonar.transformers_utils.configs.deepseek_vl2 import DeepseekVLV2Config
+from sonar.transformers_utils.processors.deepseek_ocr import (
     BASE_SIZE,
     CROP_MODE,
     IMAGE_SIZE,
     DeepseekOCRProcessor,
     count_tiles,
 )
-from aphrodite.utils.tensor_schema import TensorSchema, TensorShape
-from aphrodite.v1.sample.logits_processor import (
+from sonar.utils.tensor_schema import TensorSchema, TensorShape
+from sonar.v1.sample.logits_processor import (
     AdapterLogitsProcessor,
     RequestLogitsProcessor,
 )
-from aphrodite.v1.worker.encoder_cudagraph_defs import (
+from sonar.v1.worker.encoder_cudagraph_defs import (
     EncoderCudaGraphCaptureInputs,
     EncoderCudaGraphConfig,
     EncoderCudaGraphPathConfig,
@@ -334,7 +334,7 @@ class DeepseekOCRMultiModalProcessor(BaseMultiModalProcessor[DeepseekOCRProcessi
     dummy_inputs=DeepseekOCRDummyInputsBuilder,
 )
 class DeepseekOCRForCausalLM(nn.Module, SupportsMultiModal, SupportsPP, SupportsLoRA, SupportsEncoderCudaGraph):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={
             # map prefix for language backbone
             "model.embed_tokens.": "language_model.model.embed_tokens.",
@@ -353,26 +353,26 @@ class DeepseekOCRForCausalLM(nn.Module, SupportsMultiModal, SupportsPP, Supports
 
         raise ValueError("Only image modality is supported")
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
 
-        config: DeepseekVLV2Config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
-        multimodal_config = aphrodite_config.model_config.multimodal_config
+        config: DeepseekVLV2Config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
+        multimodal_config = sonar_config.model_config.multimodal_config
 
         self.config = config
-        self.model_config = aphrodite_config.model_config
+        self.model_config = sonar_config.model_config
         self.multimodal_config = multimodal_config
 
         self.vision_config = config.vision_config
         self.projector_config = config.projector_config
         self.text_config = config.text_config
 
-        model_config = aphrodite_config.model_config
+        model_config = sonar_config.model_config
         tokenizer = cached_tokenizer_from_config(model_config)
         self.image_token_id = tokenizer.vocab[_IMAGE_TOKEN]
 
-        with self._mark_tower_model(aphrodite_config, "image"):
+        with self._mark_tower_model(sonar_config, "image"):
             self.sam_model = build_sam_vit_b()
             clip_vision_config = CLIPVisionConfig(
                 hidden_size=1024,
@@ -405,9 +405,9 @@ class DeepseekOCRForCausalLM(nn.Module, SupportsMultiModal, SupportsPP, Supports
             else:
                 raise ValueError(f"Only 2D tile_tag is supported currently, got: {self.tile_tag}")
 
-        with self._mark_language_model(aphrodite_config):
-            self.language_model = init_aphrodite_registered_model(
-                aphrodite_config=aphrodite_config,
+        with self._mark_language_model(sonar_config):
+            self.language_model = init_sonar_registered_model(
+                sonar_config=sonar_config,
                 hf_config=self.text_config,
                 prefix=maybe_prefix(prefix, "language_model"),
             )
@@ -569,7 +569,7 @@ class DeepseekOCRForCausalLM(nn.Module, SupportsMultiModal, SupportsPP, Supports
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        autoloaded_weights = loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        autoloaded_weights = loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
         return autoloaded_weights
 
     def get_mm_mapping(self) -> MultiModelKeys:
@@ -657,12 +657,12 @@ class DeepseekOCRForCausalLM(nn.Module, SupportsMultiModal, SupportsPP, Supports
 
     def get_encoder_cudagraph_budget_range(
         self,
-        aphrodite_config,
+        sonar_config,
     ) -> tuple[int, int]:
         # Min budget: at least one global image with newline tokens (without patches).
         min_budget = self.global_image_output_token
         max_budget = min(
-            aphrodite_config.scheduler_config.max_num_batched_tokens,
+            sonar_config.scheduler_config.max_num_batched_tokens,
             self.model_config.max_model_len,
         )
         return (min_budget, max_budget)

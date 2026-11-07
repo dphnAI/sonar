@@ -3,8 +3,8 @@
 
 use std::sync::Arc;
 
-use aphrodite_tokenizer::test_utils::TestTokenizer;
-use aphrodite_tokenizer::{DecodedText, DynTokenizer};
+use sonar_tokenizer::test_utils::TestTokenizer;
+use sonar_tokenizer::{DecodedText, DynTokenizer};
 
 use super::{Result, Tool, ToolCallDelta, ToolParser, ToolParserEvent, ToolParserOutput};
 use crate::tool::ToolParserTestExt as _;

@@ -29,18 +29,18 @@ import regex as re
 import torch
 from torch import nn
 
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.quantization.utils.flashinfer_fp4_moe import (
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.quantization.utils.flashinfer_fp4_moe import (
     interleave_linear_and_gate,
     nvfp4_swizzled_scale_to_cutedsl_mma_view,
     reorder_w13_to_w31_for_flashinfer_cutedsl,
 )
-from aphrodite.model_executor.layers.quantization.utils.nvfp4_utils import (
+from sonar.model_executor.layers.quantization.utils.nvfp4_utils import (
     swizzle_blockscale,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, tldevice, triton
-from aphrodite.utils.torch_utils import aux_stream, current_stream
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, tldevice, triton
+from sonar.utils.torch_utils import aux_stream, current_stream
 
 from . import moe_cute, moe_gemv
 from .norm import _rsqrt
@@ -788,7 +788,7 @@ def _start_shared(
 class FlintBf16DecodeMoE(nn.Module):
     """Decode path (few tokens) for Flint's BF16 routed experts.
 
-    Reads the expert weights of a Aphrodite FusedMoE layer that uses the FlashInfer
+    Reads the expert weights of a Sonar FusedMoE layer that uses the FlashInfer
     TRTLLM BF16 backend (BlockMajorK, rows shuffled), so no extra weight copy
     is needed; larger batches keep using that layer.
     """
@@ -809,7 +809,7 @@ class FlintBf16DecodeMoE(nn.Module):
         self._checked = False
 
     def _check(self, routed_experts: nn.Module) -> None:
-        from aphrodite.model_executor.layers.fused_moe.oracle.unquantized import (
+        from sonar.model_executor.layers.fused_moe.oracle.unquantized import (
             UnquantizedMoeBackend,
         )
 
@@ -1063,7 +1063,7 @@ def ll_weights_from_layers(
     experts: FlintMoEWeights,
 ) -> LLMoEWeights:
     """``LLMoEWeights`` viewing the loaded layers' tensors: the shared-expert
-    linears are Aphrodite linear layers holding the FlashInfer-prepared NVFP4
+    linears are Sonar linear layers holding the FlashInfer-prepared NVFP4
     tensors (ModelOpt-packed weight, 128x4-swizzled scales, fp32 global
     scale)."""
 

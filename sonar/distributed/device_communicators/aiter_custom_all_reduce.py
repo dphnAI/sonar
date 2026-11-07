@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Aphrodite-owned wrapper over AITER's ``CustomAllreduce``.
+"""Sonar-owned wrapper over AITER's ``CustomAllreduce``.
 
 ``CudaCommunicator`` stores one of these as ``aiter_ar_comm`` when
-``APHRODITE_ROCM_USE_AITER_CUSTOM_AR`` is set, so plain all-reduce and the
+``SONAR_ROCM_USE_AITER_CUSTOM_AR`` is set, so plain all-reduce and the
 fused all-reduce + RMSNorm path share a single AITER instance with its IPC
 buffers.
 """
@@ -11,7 +11,7 @@ buffers.
 import torch
 from torch.distributed import ProcessGroup
 
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 
@@ -58,7 +58,7 @@ class AiterCustomAllreduce:
     def registers_graph_buffers(self) -> bool:
         """Whether graph capture registers its inputs once expandable segments
         are off, which AITER decides when capture begins from v0.1.26."""
-        from aphrodite.platforms.rocm import on_gfx1250
+        from sonar.platforms.rocm import on_gfx1250
 
         return (
             self._register_graph_buffers

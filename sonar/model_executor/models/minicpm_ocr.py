@@ -29,9 +29,9 @@ from dataclasses import replace as dataclass_replace
 
 import torch
 
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.parse import ImageProcessorItems, ImageSize
-from aphrodite.multimodal.processing.processor import (
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.parse import ImageProcessorItems, ImageSize
+from sonar.multimodal.processing.processor import (
     PromptUpdateDetails,
     cached_encode,
 )
@@ -133,7 +133,7 @@ class MiniCPMOcrProcessingInfo(MiniCPMV4_6ProcessingInfo):
         token_divisor = 4 if image_processor.downsample_mode == "4x" else 16
         tokens_per_patch = patch_size * patch_size * token_divisor
 
-        # Aphrodite ImageSize is (width, height); transformers expects (height, width)
+        # Sonar ImageSize is (width, height); transformers expects (height, width)
         hf_image_size = (image_size.height, image_size.width)
 
         grids = image_processor.get_sliced_grid(

@@ -4,12 +4,12 @@
 
 import pytest
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 if not current_platform.is_cuda_alike():
     pytest.skip("NVIDIA dispatch tests require CUDA", allow_module_level=True)
 
-from aphrodite.v1.worker.block_table import ComputeSlotMappingKernel
+from sonar.v1.worker.block_table import ComputeSlotMappingKernel
 
 
 @pytest.mark.parametrize("kv_cache_block_size", [256, 64, 8, 4])

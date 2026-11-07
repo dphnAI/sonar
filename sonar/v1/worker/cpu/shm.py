@@ -11,7 +11,7 @@ import numpy as np
 
 # Patch torch APIs
 import torch
-from aphrodite.triton_utils import HAS_TRITON
+from sonar.triton_utils import HAS_TRITON
 
 
 def noop(*args: Any, **kwargs: Any) -> None:
@@ -51,7 +51,7 @@ class _StreamPlaceholder:
         pass
 
 
-from aphrodite.utils.cpu_resource_utils import get_memory_node_info
+from sonar.utils.cpu_resource_utils import get_memory_node_info
 
 
 def get_memory_info(*args: Any, **kwargs: Any) -> tuple[int, int]:
@@ -71,8 +71,8 @@ torch.Tensor.pin_memory = fake_pin_memory
 torch.Tensor.record_stream = noop
 torch.accelerator.get_memory_info = get_memory_info
 
-# Patch Aphrodite torch utils
-import aphrodite.utils.torch_utils as torch_utils
+# Patch Sonar torch utils
+import sonar.utils.torch_utils as torch_utils
 
 
 def async_tensor_h2d(
@@ -94,11 +94,11 @@ torch_utils.async_tensor_h2d = async_tensor_h2d
 
 if HAS_TRITON:
     # Patch model runner APIs used by the Triton CPU runner.
-    import aphrodite.v1.worker.cpu.buffer_utils as cpu_buffer_utils
-    import aphrodite.v1.worker.gpu.buffer_utils as gpu_buffer_utils
-    import aphrodite.v1.worker.gpu.sample.penalties as gpu_penalties
-    import aphrodite.v1.worker.gpu.structured_outputs as gpu_structured_outputs
-    from aphrodite.triton_utils import tl
+    import sonar.v1.worker.cpu.buffer_utils as cpu_buffer_utils
+    import sonar.v1.worker.gpu.buffer_utils as gpu_buffer_utils
+    import sonar.v1.worker.gpu.sample.penalties as gpu_penalties
+    import sonar.v1.worker.gpu.structured_outputs as gpu_structured_outputs
+    from sonar.triton_utils import tl
 
     gpu_buffer_utils.UvaBuffer = cpu_buffer_utils.UvaBuffer
 

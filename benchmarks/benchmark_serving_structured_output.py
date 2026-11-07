@@ -3,8 +3,8 @@
 r"""Benchmark online serving throughput with structured outputs.
 
 On the server side, run one of the following commands:
-    (Aphrodite OpenAI API server)
-    aphrodite run <your_model>
+    (Sonar OpenAI API server)
+    sonar run <your_model>
 
 On the client side, run:
     python benchmarks/benchmark_serving_structured_output.py \
@@ -46,16 +46,16 @@ from tqdm.asyncio import tqdm
 from transformers import PreTrainedTokenizerBase
 
 try:
-    from aphrodite.tokenizers import get_tokenizer
+    from sonar.tokenizers import get_tokenizer
 except ImportError:
     from backend_request_func import get_tokenizer
 
 try:
-    from aphrodite.utils.argparse_utils import FlexibleArgumentParser
+    from sonar.utils.argparse_utils import FlexibleArgumentParser
 except ImportError:
     from argparse import ArgumentParser as FlexibleArgumentParser
 
-from aphrodite.v1.structured_output.backend_xgrammar import (
+from sonar.v1.structured_output.backend_xgrammar import (
     has_xgrammar_unsupported_json_features,
 )
 
@@ -204,7 +204,7 @@ def sample_requests(tokenizer: PreTrainedTokenizerBase, args: argparse.Namespace
     elif args.dataset == "choice":
         choice = ["Positive", "Negative"]
         args.choice = choice
-        prompt = "Classify this sentiment: Aphrodite is wonderful!"
+        prompt = "Classify this sentiment: Sonar is wonderful!"
         input_len = len(tokenizer(prompt).input_ids)
         print(f"Input length of the prompt: {input_len} tokens")
         requests = [
@@ -785,7 +785,7 @@ def create_argument_parser():
     parser.add_argument(
         "--backend",
         type=str,
-        default="aphrodite",
+        default="sonar",
         choices=list(ASYNC_REQUEST_FUNCS.keys()),
     )
     parser.add_argument(
@@ -891,7 +891,7 @@ def create_argument_parser():
     parser.add_argument(
         "--profile",
         action="store_true",
-        help="Use Torch Profiler. The endpoint must be launched with APHRODITE_TORCH_PROFILER_DIR to enable profiler.",
+        help="Use Torch Profiler. The endpoint must be launched with SONAR_TORCH_PROFILER_DIR to enable profiler.",
     )
     parser.add_argument(
         "--result-dir",

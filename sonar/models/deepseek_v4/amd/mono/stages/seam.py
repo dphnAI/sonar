@@ -32,7 +32,7 @@ from flydsl.expr import const_expr, gpu, range_constexpr, rocdl
 from flydsl.expr import math as fmath
 from flydsl.expr.typing import T
 
-from aphrodite.models.deepseek_v4.amd.mono.common.ops import (
+from sonar.models.deepseek_v4.amd.mono.common.ops import (
     CM_DEV,
     batched_rounds,
     bf16_round,
@@ -47,14 +47,14 @@ from aphrodite.models.deepseek_v4.amd.mono.common.ops import (
     rsrc,
     traced,
 )
-from aphrodite.models.deepseek_v4.amd.mono.common.plan import (
+from sonar.models.deepseek_v4.amd.mono.common.plan import (
     THREADS,
     WAVES,
     cdiv,
     pair_layout,
 )
-from aphrodite.models.deepseek_v4.amd.mono.common.sync import preg
-from aphrodite.models.deepseek_v4.amd.mono.dims import (
+from sonar.models.deepseek_v4.amd.mono.common.sync import preg
+from sonar.models.deepseek_v4.amd.mono.dims import (
     HC,
     HC_EPS,
     HC_POST_MULT,
@@ -63,8 +63,8 @@ from aphrodite.models.deepseek_v4.amd.mono.dims import (
     NORM_EPS,
     Dims,
 )
-from aphrodite.models.deepseek_v4.amd.mono.stages import allreduce
-from aphrodite.models.deepseek_v4.amd.mono.stages.gemv import (
+from sonar.models.deepseek_v4.amd.mono.stages import allreduce
+from sonar.models.deepseek_v4.amd.mono.stages.gemv import (
     ld_bf,
     ld_f32,
     plus,

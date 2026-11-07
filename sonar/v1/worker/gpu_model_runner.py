@@ -19,53 +19,53 @@ import torch
 import torch.distributed
 import torch.nn as nn
 
-import aphrodite.envs as envs
-from aphrodite.compilation.breakable_cudagraph import (
+import sonar.envs as envs
+from sonar.compilation.breakable_cudagraph import (
     BreakableCUDAGraphWrapper,
     is_breakable_cudagraph_enabled,
 )
-from aphrodite.compilation.counter import compilation_counter
-from aphrodite.compilation.cuda_graph import CUDAGraphStat, CUDAGraphWrapper
-from aphrodite.compilation.monitor import set_cudagraph_capturing_enabled
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.compilation.counter import compilation_counter
+from sonar.compilation.cuda_graph import CUDAGraphStat, CUDAGraphWrapper
+from sonar.compilation.monitor import set_cudagraph_capturing_enabled
+from sonar.config import (
     CompilationMode,
     CUDAGraphMode,
-    get_layers_from_aphrodite_config,
-    set_current_aphrodite_config,
+    SonarConfig,
+    get_layers_from_sonar_config,
+    set_current_sonar_config,
 )
-from aphrodite.config.cache import CacheConfig
-from aphrodite.config.ec_manager_config import EncoderCacheManagerMetadata
-from aphrodite.distributed.ec_transfer import get_ec_transfer, has_ec_transfer
-from aphrodite.distributed.eplb.eplb_state import EplbState
-from aphrodite.distributed.kv_transfer import get_kv_transfer_group, has_kv_transfer_group
-from aphrodite.distributed.kv_transfer.kv_connector.utils import (
+from sonar.config.cache import CacheConfig
+from sonar.config.ec_manager_config import EncoderCacheManagerMetadata
+from sonar.distributed.ec_transfer import get_ec_transfer, has_ec_transfer
+from sonar.distributed.eplb.eplb_state import EplbState
+from sonar.distributed.kv_transfer import get_kv_transfer_group, has_kv_transfer_group
+from sonar.distributed.kv_transfer.kv_connector.utils import (
     copy_kv_blocks,
 )
-from aphrodite.distributed.parallel_state import (
+from sonar.distributed.parallel_state import (
     get_dcp_group,
     get_pp_group,
     get_tp_group,
     graph_capture,
     is_global_first_rank,
 )
-from aphrodite.forward_context import (
+from sonar.forward_context import (
     BatchDescriptor,
     set_forward_context,
 )
-from aphrodite.logger import init_logger
-from aphrodite.lora.layers import LoRAMapping, LoRAMappingType
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.layers.attention_layer_base import AttentionLayerBase
-from aphrodite.model_executor.layers.fused_moe.all2all_utils import get_ep_all2all_manager
-from aphrodite.model_executor.layers.mamba.mamba_utils import MambaStateCopyFuncsByType
-from aphrodite.model_executor.layers.mamba.ops.ssu_dispatch import (
+from sonar.logger import init_logger
+from sonar.lora.layers import LoRAMapping, LoRAMappingType
+from sonar.model_executor.layers.attention import Attention
+from sonar.model_executor.layers.attention_layer_base import AttentionLayerBase
+from sonar.model_executor.layers.fused_moe.all2all_utils import get_ep_all2all_manager
+from sonar.model_executor.layers.mamba.mamba_utils import MambaStateCopyFuncsByType
+from sonar.model_executor.layers.mamba.ops.ssu_dispatch import (
     initialize_mamba_ssu_backend,
 )
-from aphrodite.model_executor.layers.rotary_embedding import MRotaryEmbedding
-from aphrodite.model_executor.model_loader import get_model_loader
-from aphrodite.model_executor.model_loader.reload.inplace import reload_weights
-from aphrodite.model_executor.models.interfaces import (
+from sonar.model_executor.layers.rotary_embedding import MRotaryEmbedding
+from sonar.model_executor.model_loader import get_model_loader
+from sonar.model_executor.model_loader.reload.inplace import reload_weights
+from sonar.model_executor.models.interfaces import (
     MixtureOfExperts,
     MultiModalEmbeddings,
     SupportsMRoPE,
@@ -77,49 +77,49 @@ from aphrodite.model_executor.models.interfaces import (
     supports_realtime,
     supports_transcription,
 )
-from aphrodite.model_executor.models.interfaces_base import (
-    AphroditeModelForPooling,
+from sonar.model_executor.models.interfaces_base import (
+    SonarModelForPooling,
     is_pooling_model,
     is_text_generation_model,
 )
-from aphrodite.model_executor.offloader import (
+from sonar.model_executor.offloader import (
     create_offloader,
     get_offloader,
     set_offloader,
 )
-from aphrodite.model_executor.warmup.jit_warmup import JitWarmupRegistry
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.encoder_budget import MultiModalBudget
-from aphrodite.multimodal.inputs import (
+from sonar.model_executor.warmup.jit_warmup import JitWarmupRegistry
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.encoder_budget import MultiModalBudget
+from sonar.multimodal.inputs import (
     BatchedTensorInputs,
     MultiModalKwargsItem,
     PlaceholderRange,
 )
-from aphrodite.multimodal.utils import (
+from sonar.multimodal.utils import (
     copy_mm_embedding_modality,
     get_mm_features_in_window,
     group_and_batch_mm_kwargs,
     set_mm_embedding_modality,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.pooling_params import PoolingParams
-from aphrodite.sampling_params import SamplingType
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.tasks import GenerationTask, PoolingTask, SupportedTask
-from aphrodite.tracing import instrument
-from aphrodite.utils import length_from_prompt_token_ids_or_embeds
-from aphrodite.utils.gc_utils import freeze_gc_for_cudagraph_capture
-from aphrodite.utils.gpu_sync_debug import gpu_sync_allowed
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.utils.mem_utils import DeviceMemoryProfiler, format_gib
-from aphrodite.utils.nvtx_pytorch_hooks import PytHooks
-from aphrodite.utils.torch_utils import (
+from sonar.platforms import current_platform
+from sonar.pooling_params import PoolingParams
+from sonar.sampling_params import SamplingType
+from sonar.sequence import IntermediateTensors
+from sonar.tasks import GenerationTask, PoolingTask, SupportedTask
+from sonar.tracing import instrument
+from sonar.utils import length_from_prompt_token_ids_or_embeds
+from sonar.utils.gc_utils import freeze_gc_for_cudagraph_capture
+from sonar.utils.gpu_sync_debug import gpu_sync_allowed
+from sonar.utils.math_utils import cdiv
+from sonar.utils.mem_utils import DeviceMemoryProfiler, format_gib
+from sonar.utils.nvtx_pytorch_hooks import PytHooks
+from sonar.utils.torch_utils import (
     PIN_MEMORY,
     async_tensor_h2d,
     current_stream,
     kv_cache_dtype_str_to_dtype,
 )
-from aphrodite.v1.attention.backend import (
+from sonar.v1.attention.backend import (
     AttentionBackend,
     AttentionCGSupport,
     AttentionMetadata,
@@ -127,22 +127,22 @@ from aphrodite.v1.attention.backend import (
     AttentionType,
     CommonAttentionMetadata,
 )
-from aphrodite.v1.attention.backends.gdn_attn import GDNAttentionMetadataBuilder
-from aphrodite.v1.attention.backends.linear_attn import (
+from sonar.v1.attention.backends.gdn_attn import GDNAttentionMetadataBuilder
+from sonar.v1.attention.backends.linear_attn import (
     BailingLinearAttentionMetadataBuilder,
 )
-from aphrodite.v1.attention.backends.mamba2_attn import Mamba2AttentionMetadataBuilder
-from aphrodite.v1.attention.backends.short_conv_attn import ShortConvAttentionMetadataBuilder
-from aphrodite.v1.attention.backends.utils import (
+from sonar.v1.attention.backends.mamba2_attn import Mamba2AttentionMetadataBuilder
+from sonar.v1.attention.backends.short_conv_attn import ShortConvAttentionMetadataBuilder
+from sonar.v1.attention.backends.utils import (
     NULL_BLOCK_ID,
     compute_mm_prefix_ranges,
     create_fast_prefill_custom_backend,
     get_dcp_local_seq_lens,
     reorder_batch_to_split_decodes_and_prefills,
 )
-from aphrodite.v1.core.sched.output import NewRequestData
-from aphrodite.v1.cudagraph_dispatcher import CudagraphDispatcher
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.core.sched.output import NewRequestData
+from sonar.v1.cudagraph_dispatcher import CudagraphDispatcher
+from sonar.v1.kv_cache_interface import (
     AttentionSpec,
     CrossAttentionSpec,
     EncoderOnlyAttentionSpec,
@@ -153,8 +153,8 @@ from aphrodite.v1.kv_cache_interface import (
     UniformTypeKVCacheSpecs,
     get_kv_cache_spec_kind,
 )
-from aphrodite.v1.kv_cache_spec_registry import KVCacheSpecRegistry
-from aphrodite.v1.outputs import (
+from sonar.v1.kv_cache_spec_registry import KVCacheSpecRegistry
+from sonar.v1.outputs import (
     EMPTY_MODEL_RUNNER_OUTPUT,
     AsyncModelRunnerOutput,
     DraftTokenIds,
@@ -167,58 +167,58 @@ from aphrodite.v1.outputs import (
     SamplerOutput,
     make_empty_encoder_model_runner_output,
 )
-from aphrodite.v1.pool.late_interaction_runner import LateInteractionRunner
-from aphrodite.v1.pool.metadata import PoolingMetadata, PoolingStates
-from aphrodite.v1.sample.logits_processor import LogitsProcessors, build_logitsprocs
-from aphrodite.v1.sample.logits_processor.interface import LogitsProcessor
-from aphrodite.v1.sample.metadata import SamplingMetadata
-from aphrodite.v1.sample.ops.dry import update_dry_state
-from aphrodite.v1.sample.rejection_sampler import RejectionSampler
-from aphrodite.v1.sample.sampler import Sampler
-from aphrodite.v1.spec_decode.custom_class_proposer import create_custom_proposer
-from aphrodite.v1.spec_decode.dflash import DFlashProposer
-from aphrodite.v1.spec_decode.draft_model import DraftModelProposer
-from aphrodite.v1.spec_decode.eagle import EagleProposer
-from aphrodite.v1.spec_decode.extract_hidden_states import ExtractHiddenStatesProposer
-from aphrodite.v1.spec_decode.gemma4 import Gemma4Proposer
-from aphrodite.v1.spec_decode.metadata import SpecDecodeMetadata
-from aphrodite.v1.spec_decode.ngram_proposer_gpu import (
+from sonar.v1.pool.late_interaction_runner import LateInteractionRunner
+from sonar.v1.pool.metadata import PoolingMetadata, PoolingStates
+from sonar.v1.sample.logits_processor import LogitsProcessors, build_logitsprocs
+from sonar.v1.sample.logits_processor.interface import LogitsProcessor
+from sonar.v1.sample.metadata import SamplingMetadata
+from sonar.v1.sample.ops.dry import update_dry_state
+from sonar.v1.sample.rejection_sampler import RejectionSampler
+from sonar.v1.sample.sampler import Sampler
+from sonar.v1.spec_decode.custom_class_proposer import create_custom_proposer
+from sonar.v1.spec_decode.dflash import DFlashProposer
+from sonar.v1.spec_decode.draft_model import DraftModelProposer
+from sonar.v1.spec_decode.eagle import EagleProposer
+from sonar.v1.spec_decode.extract_hidden_states import ExtractHiddenStatesProposer
+from sonar.v1.spec_decode.gemma4 import Gemma4Proposer
+from sonar.v1.spec_decode.metadata import SpecDecodeMetadata
+from sonar.v1.spec_decode.ngram_proposer_gpu import (
     NgramProposerGPU,
     copy_num_valid_draft_tokens,
     update_ngram_gpu_tensors_incremental,
     update_scheduler_for_invalid_drafts,
 )
-from aphrodite.v1.spec_decode.step3p5 import Step3p5MTPProposer
-from aphrodite.v1.spec_decode.suffix_decoding import SuffixDecodingProposer
-from aphrodite.v1.spec_decode.utils import update_num_computed_tokens_for_batch_change
-from aphrodite.v1.structured_output.utils import apply_grammar_bitmask
-from aphrodite.v1.utils import CpuGpuBuffer, record_function_or_nullcontext
-from aphrodite.v1.worker import mamba_utils
-from aphrodite.v1.worker.block_table import SlotMappingMode
-from aphrodite.v1.worker.cp_utils import (
+from sonar.v1.spec_decode.step3p5 import Step3p5MTPProposer
+from sonar.v1.spec_decode.suffix_decoding import SuffixDecodingProposer
+from sonar.v1.spec_decode.utils import update_num_computed_tokens_for_batch_change
+from sonar.v1.structured_output.utils import apply_grammar_bitmask
+from sonar.v1.utils import CpuGpuBuffer, record_function_or_nullcontext
+from sonar.v1.worker import mamba_utils
+from sonar.v1.worker.block_table import SlotMappingMode
+from sonar.v1.worker.cp_utils import (
     check_attention_cp_compatibility,
 )
-from aphrodite.v1.worker.dp_utils import coordinate_batch_across_dp
-from aphrodite.v1.worker.ec_connector_model_runner_mixin import ECConnectorModelRunnerMixin
-from aphrodite.v1.worker.gpu.eplb_utils import (
+from sonar.v1.worker.dp_utils import coordinate_batch_across_dp
+from sonar.v1.worker.ec_connector_model_runner_mixin import ECConnectorModelRunnerMixin
+from sonar.v1.worker.gpu.eplb_utils import (
     draft_model_supports_eplb,
     eplb_draft_model_name,
 )
-from aphrodite.v1.worker.gpu_input_batch import CachedRequestState, InputBatch
-from aphrodite.v1.worker.gpu_ubatch_wrapper import UBatchWrapper
-from aphrodite.v1.worker.kv_connector_model_runner_mixin import KVConnectorModelRunnerMixin
-from aphrodite.v1.worker.lora_model_runner_mixin import LoRAModelRunnerMixin
-from aphrodite.v1.worker.ubatch_utils import (
+from sonar.v1.worker.gpu_input_batch import CachedRequestState, InputBatch
+from sonar.v1.worker.gpu_ubatch_wrapper import UBatchWrapper
+from sonar.v1.worker.kv_connector_model_runner_mixin import KVConnectorModelRunnerMixin
+from sonar.v1.worker.lora_model_runner_mixin import LoRAModelRunnerMixin
+from sonar.v1.worker.ubatch_utils import (
     UBatchSlices,
     check_ubatch_thresholds,
     maybe_create_ubatch_slices,
     split_attn_metadata,
 )
-from aphrodite.v1.worker.utils import (
+from sonar.v1.worker.utils import (
     EncoderTimingStats,
     raise_if_nan_logits,
 )
-from aphrodite.v1.worker.workspace import lock_workspace
+from sonar.v1.worker.workspace import lock_workspace
 
 from .utils import (
     AttentionGroup,
@@ -234,9 +234,9 @@ from .utils import (
 )
 
 if TYPE_CHECKING:
-    from aphrodite.v1.core.sched.output import GrammarOutput, SchedulerOutput
-    from aphrodite.v1.spec_decode.ngram_proposer import NgramProposer
-    from aphrodite.v1.worker.encoder_cudagraph import EncoderCudaGraphManager
+    from sonar.v1.core.sched.output import GrammarOutput, SchedulerOutput
+    from sonar.v1.spec_decode.ngram_proposer import NgramProposer
+    from sonar.v1.worker.encoder_cudagraph import EncoderCudaGraphManager
 
 logger = init_logger(__name__)
 
@@ -332,7 +332,7 @@ class AsyncGPUModelRunnerOutput(AsyncModelRunnerOutput):
 
         if self._num_nans_cpu is not None:
             output.num_nans_in_logits = nans_to_dict(self._num_nans_cpu.tolist(), output.req_id_to_index)
-            if envs.APHRODITE_RAISE_ON_LOGIT_NANS:
+            if envs.SONAR_RAISE_ON_LOGIT_NANS:
                 raise_if_nan_logits(output.num_nans_in_logits)
         del self._num_nans
 
@@ -452,20 +452,20 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
     @JitWarmupRegistry.capture
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
     ):
-        self.aphrodite_config = aphrodite_config
-        self.model_config = aphrodite_config.model_config
-        self.cache_config = aphrodite_config.cache_config
-        self.offload_config = aphrodite_config.offload_config
-        self.compilation_config = aphrodite_config.compilation_config
-        self.lora_config = aphrodite_config.lora_config
-        self.load_config = aphrodite_config.load_config
-        self.parallel_config = aphrodite_config.parallel_config
-        self.scheduler_config = aphrodite_config.scheduler_config
-        self.speculative_config = aphrodite_config.speculative_config
-        self.observability_config = aphrodite_config.observability_config
+        self.sonar_config = sonar_config
+        self.model_config = sonar_config.model_config
+        self.cache_config = sonar_config.cache_config
+        self.offload_config = sonar_config.offload_config
+        self.compilation_config = sonar_config.compilation_config
+        self.lora_config = sonar_config.lora_config
+        self.load_config = sonar_config.load_config
+        self.parallel_config = sonar_config.parallel_config
+        self.scheduler_config = sonar_config.scheduler_config
+        self.speculative_config = sonar_config.speculative_config
+        self.observability_config = sonar_config.observability_config
 
         model_config = self.model_config
         cache_config = self.cache_config
@@ -578,20 +578,20 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
             )
             if self.speculative_config.method == "custom_class":
                 self.drafter = create_custom_proposer(  # type: ignore[assignment]
-                    self.aphrodite_config
+                    self.sonar_config
                 )
             elif self.speculative_config.method == "ngram":
-                from aphrodite.v1.spec_decode.ngram_proposer import NgramProposer
+                from sonar.v1.spec_decode.ngram_proposer import NgramProposer
 
-                self.drafter = NgramProposer(self.aphrodite_config)
+                self.drafter = NgramProposer(self.sonar_config)
             elif self.speculative_config.uses_draft_model():
                 self.drafter = DraftModelProposer(
-                    aphrodite_config=self.aphrodite_config,
+                    sonar_config=self.sonar_config,
                     device=self.device,
                     runner=self,
                 )
             elif self.speculative_config.use_ngram_gpu():
-                self.drafter = NgramProposerGPU(self.aphrodite_config, self.device, self)
+                self.drafter = NgramProposerGPU(self.sonar_config, self.device, self)
                 self.num_tokens_no_spec_gpu = torch.zeros(self.max_num_reqs, dtype=torch.int32, device=device)
                 self.token_ids_gpu_tensor = torch.zeros(
                     self.max_num_reqs,
@@ -602,20 +602,20 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
                 self._ngram_pinned_idx_buf = torch.zeros(self.max_num_reqs, dtype=torch.long, pin_memory=True)
                 self._ngram_pinned_val_buf = torch.zeros(self.max_num_reqs, dtype=torch.int32, pin_memory=True)
             elif self.speculative_config.use_gemma4_mtp():
-                self.drafter = Gemma4Proposer(self.aphrodite_config, self.device, self)
+                self.drafter = Gemma4Proposer(self.sonar_config, self.device, self)
             elif self.speculative_config.use_step3p5_mtp():
-                self.drafter = Step3p5MTPProposer(self.aphrodite_config, self.device, self)
+                self.drafter = Step3p5MTPProposer(self.sonar_config, self.device, self)
             elif self.speculative_config.use_dflash():
-                self.drafter = DFlashProposer(self.aphrodite_config, self.device, self)
+                self.drafter = DFlashProposer(self.sonar_config, self.device, self)
                 self.use_aux_hidden_state_outputs = True
             elif self.speculative_config.method == "suffix":
-                self.drafter = SuffixDecodingProposer(self.aphrodite_config)
+                self.drafter = SuffixDecodingProposer(self.sonar_config)
             elif self.speculative_config.use_eagle():
-                self.drafter = EagleProposer(self.aphrodite_config, self.device, self)
+                self.drafter = EagleProposer(self.sonar_config, self.device, self)
                 if self.speculative_config.method == "eagle3":
                     self.use_aux_hidden_state_outputs = self.drafter.eagle3_use_aux_hidden_state
             elif self.speculative_config.method == "extract_hidden_states":
-                self.drafter = ExtractHiddenStatesProposer(aphrodite_config=self.aphrodite_config, device=self.device)
+                self.drafter = ExtractHiddenStatesProposer(sonar_config=self.sonar_config, device=self.device)
                 self.use_aux_hidden_state_outputs = True
             else:
                 raise ValueError(f"Unknown speculative decoding method: {self.speculative_config.method}")
@@ -672,7 +672,7 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
             max_num_blocks_per_req=[placeholder_max_num_blocks],
             num_spec_tokens=self.num_spec_tokens,
             logitsprocs=build_logitsprocs(
-                self.aphrodite_config,
+                self.sonar_config,
                 self.device,
                 PIN_MEMORY,
                 self.is_pooling_model,
@@ -685,7 +685,7 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
             logitsprocs_need_output_token_ids=bool(custom_logitsprocs),
             is_pooling_model=self.is_pooling_model,
             cp_kv_cache_interleave_size=self.parallel_config.cp_kv_cache_interleave_size,
-            reasoning_config=self.aphrodite_config.reasoning_config,
+            reasoning_config=self.sonar_config.reasoning_config,
             use_replayssm=self.cache_config.use_replayssm,
         )
 
@@ -791,9 +791,9 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
         self.uniform_decode_query_len = 1 + self.num_spec_tokens
 
         # Cudagraph dispatcher for runtime cudagraph dispatching.
-        self.cudagraph_dispatcher = CudagraphDispatcher(self.aphrodite_config)
+        self.cudagraph_dispatcher = CudagraphDispatcher(self.sonar_config)
 
-        self.mm_budget = MultiModalBudget(self.aphrodite_config, self.mm_registry) if self.supports_mm_inputs else None
+        self.mm_budget = MultiModalBudget(self.sonar_config, self.mm_registry) if self.supports_mm_inputs else None
 
         self.reorder_batch_threshold: int | None = None
 
@@ -1082,7 +1082,7 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
         new/resumed/paused/finished request in the batch.
         """
         if rewinds := getattr(scheduler_output, "phrase_rewinds", None):
-            from aphrodite.v1.phrase_guard.worker import restore_requests
+            from sonar.v1.phrase_guard.worker import restore_requests
 
             restore_requests(self, rewinds)
 
@@ -1171,7 +1171,7 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
                 task = pooling_params.task
                 assert task is not None, "You did not set `task` in the API"
 
-                model = cast(AphroditeModelForPooling, self.get_model())
+                model = cast(SonarModelForPooling, self.get_model())
                 to_update = model.pooler.get_pooling_updates(task)
                 to_update.apply(pooling_params)
 
@@ -2081,7 +2081,7 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
 
         # Hot-Swap lora model
         if self.lora_config:
-            assert np.sum(num_sampled_tokens) <= self.aphrodite_config.scheduler_config.max_num_batched_tokens
+            assert np.sum(num_sampled_tokens) <= self.sonar_config.scheduler_config.max_num_batched_tokens
             self.set_active_loras(self.input_batch, num_scheduled_tokens, num_sampled_tokens)
 
         return (
@@ -2942,7 +2942,7 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
             query_start_loc_gpu=self.query_start_loc.gpu[: num_reqs + 1],
         )
 
-        model = cast(AphroditeModelForPooling, self.model)
+        model = cast(SonarModelForPooling, self.model)
         raw_pooler_output: PoolerOutput = model.pooler(hidden_states=hidden_states, pooling_metadata=pooling_metadata)
 
         finished_mask = pooling_metadata.get_pooling_cursor().get_finished_mask()
@@ -3189,7 +3189,7 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
     ]:
         num_nans: torch.Tensor | None = None
         num_nans_in_logits: dict[str, int] = {}
-        if envs.APHRODITE_COMPUTE_NANS_IN_LOGITS:
+        if envs.SONAR_COMPUTE_NANS_IN_LOGITS:
             if self.use_async_scheduling:
                 # Keep the counts on device; they ride the async output copy
                 # stream rather than blocking here.
@@ -3470,7 +3470,7 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
         # Extra coordination when running data-parallel since we need to coordinate
         # across ranks
         should_ubatch, num_tokens_across_dp = False, None
-        if self.aphrodite_config.parallel_config.data_parallel_size > 1:
+        if self.sonar_config.parallel_config.data_parallel_size > 1:
             should_ubatch, num_tokens_across_dp, synced_cudagraph_mode = coordinate_batch_across_dp(
                 num_tokens_unpadded=num_tokens,
                 parallel_config=self.parallel_config,
@@ -3494,7 +3494,7 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
                 assert batch_descriptor.num_tokens == num_tokens_padded
 
         cudagraph_stats = None
-        if self.aphrodite_config.observability_config.cudagraph_metrics:
+        if self.sonar_config.observability_config.cudagraph_metrics:
             cudagraph_stats = CUDAGraphStat(
                 num_unpadded_tokens=num_tokens,
                 num_padded_tokens=batch_descriptor.num_tokens,
@@ -3515,7 +3515,7 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
         to trace detailed information of each layer or module in the model.
         """
         if (
-            self.aphrodite_config.observability_config.enable_layerwise_nvtx_tracing
+            self.sonar_config.observability_config.enable_layerwise_nvtx_tracing
             and not self.layerwise_nvtx_hooks_registered
         ):
             if self.compilation_config.cudagraph_mode != CUDAGraphMode.NONE:
@@ -3530,7 +3530,7 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
             # fullgraph=True. Since nvtx.range_push/pop are not traceable
             # by torch dynamo, we can't register hook functions here
             # because hook functions will also be traced by torch dynamo.
-            if self.aphrodite_config.compilation_config.mode == CompilationMode.STOCK_TORCH_COMPILE:
+            if self.sonar_config.compilation_config.mode == CompilationMode.STOCK_TORCH_COMPILE:
                 logger.debug_once(
                     "layerwise NVTX tracing is not supported when "
                     "CompilationMode is STOCK_TORCH_COMPILE, skipping "
@@ -3669,7 +3669,7 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
                 if not has_kv_transfer_group():
                     # Return empty ModelRunnerOutput if no work to do.
                     return EMPTY_MODEL_RUNNER_OUTPUT
-                return self.kv_connector_no_forward(scheduler_output, self.aphrodite_config)
+                return self.kv_connector_no_forward(scheduler_output, self.sonar_config)
 
             if self.cache_config.kv_sharing_fast_prefill:
                 assert not self.num_prompt_logprobs, (
@@ -3836,7 +3836,7 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
         with (
             set_forward_context(
                 attn_metadata,
-                self.aphrodite_config,
+                self.sonar_config,
                 num_tokens=num_tokens_padded,
                 num_tokens_across_dp=num_tokens_across_dp,
                 cudagraph_runtime_mode=cudagraph_mode,
@@ -4342,7 +4342,7 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
         self._draft_probs = None
         self._draft_prob_req_ids = None
         if spec_config.method == "ngram":
-            from aphrodite.v1.spec_decode.ngram_proposer import NgramProposer
+            from sonar.v1.spec_decode.ngram_proposer import NgramProposer
 
             assert isinstance(sampled_token_ids, list)
             assert isinstance(self.drafter, NgramProposer)
@@ -4583,14 +4583,14 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
                 # Capture warmup providers selected while constructing the model.
                 with self.jit_warmup_registry.activate():  # type: ignore[attr-defined]
                     self.model = model or model_loader.load_model(
-                        aphrodite_config=self.aphrodite_config,
+                        sonar_config=self.sonar_config,
                         model_config=self.model_config,
                     )
                 lookback_depth = getattr(self.model, "token_lookback_depth", 0)
                 if lookback_depth > 0:
                     self.lookback_token_ids = self._make_buffer(self.max_num_reqs, lookback_depth, dtype=torch.int32)
                 if self.lora_config:
-                    self.model = self.load_lora_model(self.model, self.aphrodite_config, self.device)
+                    self.model = self.load_lora_model(self.model, self.sonar_config, self.device)
                 if hasattr(self, "drafter"):
                     logger.info_once("Loading drafter model...")
                     if hasattr(self.drafter, "load_model"):
@@ -4599,7 +4599,7 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
                     if self.parallel_config.enable_eplb and hasattr(self.drafter, "model"):
                         drafter_moe_model = get_mixture_of_experts_model(self.drafter.model)
                         if not draft_model_supports_eplb(
-                            self.aphrodite_config.speculative_config,
+                            self.sonar_config.speculative_config,
                             drafter_moe_model,
                         ):
                             drafter_moe_model = None
@@ -4612,7 +4612,7 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
                         assert not self.parallel_config.enable_elastic_ep, (
                             "Elastic EP is not supported with drafter model."
                         )
-                        spec_config = self.aphrodite_config.speculative_config
+                        spec_config = self.sonar_config.speculative_config
                         assert spec_config is not None
                         draft_model_config = spec_config.draft_model_config
                         assert draft_model_config is not None
@@ -4658,7 +4658,7 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
                 "Failed to load model - not enough GPU memory. "
                 "Try lowering --gpu-memory-utilization to free memory for weights, "
                 "increasing --tensor-parallel-size, or using --quantization. "
-                "See https://docs.aphrodite.ai/en/latest/configuration/conserving_memory/ "
+                "See https://sonar.dphn.ai/en/latest/configuration/conserving_memory/ "
                 "for more tips."
             )
             combined_msg = f"{msg} (original error: {e})"
@@ -4689,16 +4689,16 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
         ):
             self.eplb_state.start_async_loop()
 
-        if self.aphrodite_config.compilation_config.mode == CompilationMode.STOCK_TORCH_COMPILE:
-            from aphrodite.env_override import _apply_constrain_to_fx_strides_patch
+        if self.sonar_config.compilation_config.mode == CompilationMode.STOCK_TORCH_COMPILE:
+            from sonar.env_override import _apply_constrain_to_fx_strides_patch
 
             _apply_constrain_to_fx_strides_patch()
-            backend = self.aphrodite_config.compilation_config.init_backend(self.aphrodite_config)
+            backend = self.sonar_config.compilation_config.init_backend(self.sonar_config)
             compilation_counter.stock_torch_compile_count += 1
             self.model.compile(fullgraph=True, backend=backend)
             return
         # for other compilation modes, cudagraph behavior is controlled by
-        # CudagraphWrapper and CudagraphDispatcher of aphrodite.
+        # CudagraphWrapper and CudagraphDispatcher of sonar.
 
         # wrap the model with full cudagraph wrapper if needed.
         cudagraph_mode = self.compilation_config.cudagraph_mode
@@ -4712,24 +4712,22 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
             # unaffected. PIECEWISE dispatch can also arise after wrapping
             # (drafters under a FULL target mode, or a later FULL ->
             # FULL_AND_PIECEWISE upgrade in _check_and_update_cudagraph_mode).
-            self.model = BreakableCUDAGraphWrapper(
-                self.model, self.aphrodite_config, runtime_mode=CUDAGraphMode.PIECEWISE
-            )
+            self.model = BreakableCUDAGraphWrapper(self.model, self.sonar_config, runtime_mode=CUDAGraphMode.PIECEWISE)
             drafter = getattr(self, "drafter", None)
             if drafter is not None and hasattr(drafter, "model"):
                 drafter.model = BreakableCUDAGraphWrapper(
                     drafter.model,
-                    self.aphrodite_config,
+                    self.sonar_config,
                     runtime_mode=CUDAGraphMode.PIECEWISE,
                 )
 
         if cudagraph_mode.has_full_cudagraphs() and not self.parallel_config.use_ubatching:
-            self.model = CUDAGraphWrapper(self.model, self.aphrodite_config, runtime_mode=CUDAGraphMode.FULL)
+            self.model = CUDAGraphWrapper(self.model, self.sonar_config, runtime_mode=CUDAGraphMode.FULL)
         elif self.parallel_config.use_ubatching:
             if cudagraph_mode.has_full_cudagraphs():
-                self.model = UBatchWrapper(self.model, self.aphrodite_config, CUDAGraphMode.FULL, self.device)
+                self.model = UBatchWrapper(self.model, self.sonar_config, CUDAGraphMode.FULL, self.device)
             else:
-                self.model = UBatchWrapper(self.model, self.aphrodite_config, CUDAGraphMode.NONE, self.device)
+                self.model = UBatchWrapper(self.model, self.sonar_config, CUDAGraphMode.NONE, self.device)
 
         get_offloader().post_init()
 
@@ -4790,9 +4788,9 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
         is_checkpoint_format: bool = True,
     ) -> None:
         """Reload weights in place; see `reload_weights` in
-        `aphrodite.model_executor.model_loader.reload.inplace` for details."""
+        `sonar.model_executor.model_loader.reload.inplace` for details."""
         reload_weights(
-            self.aphrodite_config,
+            self.sonar_config,
             self.get_model(),
             weights_iterator=weights_iterator,
             weights_path=weights_path,
@@ -4913,7 +4911,7 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
             with gpu_sync_allowed():
                 counts = [] if logits is None else count_nans_per_row(logits).tolist()
             num_nans_in_logits = nans_to_dict(counts, self.input_batch.req_id_to_index)
-            if envs.APHRODITE_RAISE_ON_LOGIT_NANS:
+            if envs.SONAR_RAISE_ON_LOGIT_NANS:
                 raise_if_nan_logits(num_nans_in_logits)
             return num_nans_in_logits
         except IndexError:
@@ -4926,7 +4924,7 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
         inputs_embeds: torch.Tensor | None,
         randomize_inputs: bool = False,
     ):
-        """Randomize input_ids if APHRODITE_RANDOMIZE_DP_DUMMY_INPUTS is set.
+        """Randomize input_ids if SONAR_RANDOMIZE_DP_DUMMY_INPUTS is set.
         This is to help balance expert-selection
          - during profile_run
          - during DP rank dummy run
@@ -4934,8 +4932,8 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
         # The worker also resolves this flag and passes randomize_inputs, but
         # V1 has internal dummy runs (e.g. CUDA graph capture) that don't go
         # through the worker, so keep the check here too.
-        dp_size = self.aphrodite_config.parallel_config.data_parallel_size
-        randomize_inputs = randomize_inputs or (envs.APHRODITE_RANDOMIZE_DP_DUMMY_INPUTS and dp_size > 1)
+        dp_size = self.sonar_config.parallel_config.data_parallel_size
+        randomize_inputs = randomize_inputs or (envs.SONAR_RANDOMIZE_DP_DUMMY_INPUTS and dp_size > 1)
         if not randomize_inputs:
             yield
         elif input_ids is not None:
@@ -5038,7 +5036,7 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
                 values rather than zeros.
 
         """
-        mm_config = self.aphrodite_config.model_config.multimodal_config
+        mm_config = self.sonar_config.model_config.multimodal_config
         if mm_config and mm_config.mm_encoder_only:
             # The current dummy run only covers LM execution, so we can skip it.
             # mm encoder dummy run may need to add in the future.
@@ -5136,7 +5134,7 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
             num_scheduled_tokens,
             num_tokens_padded,
             num_reqs_padded,
-            self.aphrodite_config.parallel_config.num_ubatches,
+            self.sonar_config.parallel_config.num_ubatches,
         )
         logger.debug(
             "ubatch_slices: %s, ubatch_slices_padded: %s",
@@ -5266,7 +5264,7 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
                 self.maybe_randomize_inputs(input_ids, inputs_embeds, randomize_inputs=randomize_inputs),
                 set_forward_context(
                     attn_metadata,
-                    self.aphrodite_config,
+                    self.sonar_config,
                     num_tokens=num_tokens_padded,
                     num_tokens_across_dp=num_tokens_across_dp,
                     cudagraph_runtime_mode=cudagraph_runtime_mode,
@@ -5328,7 +5326,7 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
         # We register layerwise NVTX hooks here after the first dynamo tracing is
         # done to avoid nvtx operations in hook functions being traced by
         # torch dynamo and causing graph breaks.
-        # Note that for DYNAMO_ONCE and APHRODITE_COMPILE mode,
+        # Note that for DYNAMO_ONCE and SONAR_COMPILE mode,
         # compiled model's dynamo tracing is only done once and the compiled model's
         # __call__ function is replaced by calling the compiled function.
         # So it's safe to register hooks here. Hooks will be registered to
@@ -5359,7 +5357,7 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
         # like `inf` or `nan`.
         # To avoid breaking the sampler, we use a random tensor here instead.
 
-        mm_config = self.aphrodite_config.model_config.multimodal_config
+        mm_config = self.sonar_config.model_config.multimodal_config
         if mm_config and mm_config.mm_encoder_only:
             # MM Encoder only model no need to run sampler.
             return torch.tensor([])
@@ -5377,7 +5375,7 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
             all_random=False,
             top_p=dummy_tensors(0.9),
             top_k=dummy_tensors(logits.size(1) - 1),
-            # Aphrodite extra-sampler fields (required, no dataclass defaults).
+            # Sonar extra-sampler fields (required, no dataclass defaults).
             dynatemp_min=None,
             dynatemp_max=None,
             dynatemp_exp=None,
@@ -5514,7 +5512,7 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
         dummy_prompt_lens = torch.from_numpy(num_scheduled_tokens_np)
         dummy_token_ids = torch.zeros((num_reqs, req_num_tokens), dtype=torch.int32, device=self.device)
 
-        model = cast(AphroditeModelForPooling, self.get_model())
+        model = cast(SonarModelForPooling, self.get_model())
         dummy_pooling_params = PoolingParams(task=task)
         dummy_pooling_params.verify(self.model_config)
         to_update = model.pooler.get_pooling_updates(task)
@@ -5552,7 +5550,7 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
         self,
         hidden_states: torch.Tensor,
     ) -> PoolerOutput:
-        mm_config = self.aphrodite_config.model_config.multimodal_config
+        mm_config = self.sonar_config.model_config.multimodal_config
         if mm_config and mm_config.mm_encoder_only:
             # MM Encoder only model not need to run pooler.
             return torch.tensor([])
@@ -5564,7 +5562,7 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
             raise RuntimeError(
                 f"Model {self.model_config.model} does not support "
                 "any pooling tasks. See "
-                "https://docs.aphrodite.ai/en/latest/models/pooling_models.html "
+                "https://sonar.dphn.ai/en/latest/models/pooling_models.html "
                 "to learn more."
             )
 
@@ -5647,17 +5645,17 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
         gc.collect()
 
     def _init_minimal_kv_cache_for_profiling(self) -> None:
-        from aphrodite.v1.core.kv_cache_config_builder import get_kv_cache_config_builder
-        from aphrodite.v1.core.kv_cache_planning import get_kv_cache_groups_from_builder
+        from sonar.v1.core.kv_cache_config_builder import get_kv_cache_config_builder
+        from sonar.v1.core.kv_cache_planning import get_kv_cache_groups_from_builder
 
         kv_cache_spec = self.get_kv_cache_spec()
         KVCacheSpecRegistry.check_kv_cache_spec_registry(kv_cache_spec)
-        builder = get_kv_cache_config_builder(self.aphrodite_config)
-        kv_cache_groups = get_kv_cache_groups_from_builder(builder, self.aphrodite_config, kv_cache_spec)
+        builder = get_kv_cache_config_builder(self.sonar_config)
+        kv_cache_groups = get_kv_cache_groups_from_builder(builder, self.sonar_config, kv_cache_spec)
         # the minimum number of blocks required is 1 block *per sequence*
         min_blocks = min(self.max_num_reqs, self.compilation_config.max_cudagraph_capture_size) or 1
         minimal_config = builder.get_kv_cache_config_from_groups(
-            self.aphrodite_config, kv_cache_groups, num_blocks=min_blocks
+            self.sonar_config, kv_cache_groups, num_blocks=min_blocks
         )
 
         self.initialize_kv_cache(minimal_config, is_profiling=True)
@@ -5670,8 +5668,8 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
     def shutdown(self) -> None:
         """Release GPU tensors (model weights, KV caches, workspace) so that
         memory is reclaimable when running in the same process."""
-        from aphrodite.model_executor.layers.rotary_embedding import _ROPE_DICT
-        from aphrodite.v1.worker.workspace import reset_workspace_manager
+        from sonar.model_executor.layers.rotary_embedding import _ROPE_DICT
+        from sonar.v1.worker.workspace import reset_workspace_manager
 
         # Calls torch.accelerator.synchronize()
         self._cleanup_profiling_kv_cache()
@@ -5731,11 +5729,11 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
         # Use get_model() to unwrap CUDAGraphWrapper/UBatchWrapper, because
         # @runtime_checkable Protocol isinstance() checks do not work through
         # __getattr__ forwarding.
-        from aphrodite.model_executor.models.interfaces import (
+        from sonar.model_executor.models.interfaces import (
             SupportsEncoderCudaGraph,
             supports_encoder_cudagraph,
         )
-        from aphrodite.v1.worker.encoder_cudagraph import (
+        from sonar.v1.worker.encoder_cudagraph import (
             EncoderCudaGraphManager,
         )
 
@@ -5744,7 +5742,7 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
             return None
 
         return EncoderCudaGraphManager(
-            aphrodite_config=self.aphrodite_config,
+            sonar_config=self.sonar_config,
             device=self.device,
             dtype=self.dtype,
             model=cast(SupportsEncoderCudaGraph, raw_model),
@@ -5759,7 +5757,7 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
 
     @torch.inference_mode()
     def profile_cudagraph_memory(self) -> int:
-        with set_current_aphrodite_config(self.aphrodite_config):
+        with set_current_sonar_config(self.sonar_config):
             self._init_minimal_kv_cache_for_profiling()
 
         saved_num_cudagraph_captured = compilation_counter.num_cudagraph_captured
@@ -5800,7 +5798,7 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
         per_graph_estimate = {}
         encoder_memory_estimate = 0
 
-        # On ROCm, capture these throwaway profiling graphs on Aphrodite's
+        # On ROCm, capture these throwaway profiling graphs on Sonar's
         # dedicated compute stream instead of the fresh side stream
         # graph_capture() allocates by default. torch's allocator pools free
         # blocks per stream, so a side-stream forward strands a persistent aiter
@@ -5809,7 +5807,7 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
         # decode ~20%. The graphs are discarded, so a side stream is unnecessary
         # here.
         # Use current_stream(), not torch.cuda.current_stream(): before
-        # Aphrodite initializes its dedicated stream, torch returns the
+        # Sonar initializes its dedicated stream, torch returns the
         # per-thread default stream (cuda_stream=0), which cannot be used for
         # cudagraph capture.
         # cap_stream=None keeps the side-stream path on CUDA.
@@ -5924,12 +5922,12 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
         # can reuse the memory pool allocated for the large shapes.
         set_cudagraph_capturing_enabled(True)
 
-        from aphrodite.distributed.parallel_state import get_world_group
+        from sonar.distributed.parallel_state import get_world_group
 
         local_rank = get_world_group().local_rank
-        enable_profiler = local_rank == 0 and self.aphrodite_config.profiler_config.capture_torch_profiler
+        enable_profiler = local_rank == 0 and self.sonar_config.profiler_config.capture_torch_profiler
         if enable_profiler:
-            trace_dir = self.aphrodite_config.profiler_config.torch_profiler_dir + "/capture_traces"
+            trace_dir = self.sonar_config.profiler_config.torch_profiler_dir + "/capture_traces"
             profiler = torch.profiler.profile(
                 activities=[
                     torch.profiler.ProfilerActivity.CPU,
@@ -6077,7 +6075,7 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
                 TimeElapsedColumn,
             )
 
-            from aphrodite.utils import get_progress_log_prefix
+            from sonar.utils import get_progress_log_prefix
 
             progress = Progress(
                 TextColumn(get_progress_log_prefix() + " [progress.description]{task.description}"),
@@ -6106,7 +6104,7 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
                 and cudagraph_runtime_mode == CUDAGraphMode.FULL
                 and uniform_decode
                 and check_ubatch_thresholds(
-                    config=self.aphrodite_config.parallel_config,
+                    config=self.sonar_config.parallel_config,
                     num_tokens=batch_desc.num_tokens,
                     uniform_decode=uniform_decode,
                 )
@@ -6143,7 +6141,7 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
             ``triton_attn``, ``num_qo_heads`` in FlashInfer) is sized by
             ``num_heads_q`` and assumes uniformity within the group; see
             ``get_num_attention_heads_from_layers`` in
-            ``aphrodite/v1/attention/backends/utils.py``.
+            ``sonar/v1/attention/backends/utils.py``.
             """
 
             attn_backend: type[AttentionBackend]
@@ -6154,9 +6152,7 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
             kv_cache_group_spec: KVCacheGroupSpec,
         ) -> tuple[dict[AttentionGroupKey, list[str]], set[type[AttentionBackend]]]:
             layer_type = cast(type[Any], AttentionLayerBase)
-            layers = get_layers_from_aphrodite_config(
-                self.aphrodite_config, layer_type, kv_cache_group_spec.layer_names
-            )
+            layers = get_layers_from_sonar_config(self.sonar_config, layer_type, kv_cache_group_spec.layer_names)
             attn_backends = {}
             attn_backend_layers = defaultdict(list)
             # Dedupe based on full class name; this is a bit safer than
@@ -6223,7 +6219,7 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
         )
 
         # Check if attention backend supports PCP&DCP and related features.
-        check_attention_cp_compatibility(self.aphrodite_config)
+        check_attention_cp_compatibility(self.sonar_config)
 
         for i, attn_backend_map in enumerate(attention_backend_maps):
             self.attn_groups.append(create_attn_groups(attn_backend_map, i))
@@ -6233,7 +6229,7 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
         for kv_cache_group_id in range(len(kv_cache_config.kv_cache_groups)):
             for attn_group in self.attn_groups[kv_cache_group_id]:
                 attn_group.create_metadata_builders(
-                    self.aphrodite_config,
+                    self.sonar_config,
                     self.device,
                     kernel_block_sizes[kv_cache_group_id] if kv_cache_group_id < len(kernel_block_sizes) else None,
                     num_metadata_builders=1
@@ -6275,7 +6271,7 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
             for attn_backend in attn_backend_set:
                 builder_cls = attn_backend.get_builder_cls()
 
-                cg_support = builder_cls.get_cudagraph_support(self.aphrodite_config, kv_cache_group.kv_cache_spec)
+                cg_support = builder_cls.get_cudagraph_support(self.sonar_config, kv_cache_group.kv_cache_spec)
                 if cg_support.value < min_cg_support.value:
                     min_cg_support = cg_support
                     min_cg_attn_backend = attn_backend.__name__
@@ -6353,7 +6349,7 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
                 if kv_cache_spec_kind == KVCacheSpecKind.MAMBA
                 else SlotMappingMode.TOKEN_TO_KV_SLOT
             )
-            max_num_blocks_per_req = kv_cache_spec.max_num_blocks_per_req(self.aphrodite_config, max_model_len)
+            max_num_blocks_per_req = kv_cache_spec.max_num_blocks_per_req(self.sonar_config, max_model_len)
             max_num_blocks.append(max_num_blocks_per_req)
 
         if (
@@ -6381,7 +6377,7 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
                     logitsprocs_need_output_token_ids=self.input_batch.logitsprocs_need_output_token_ids,
                     is_pooling_model=self.is_pooling_model,
                     cp_kv_cache_interleave_size=self.parallel_config.cp_kv_cache_interleave_size,
-                    reasoning_config=self.aphrodite_config.reasoning_config,
+                    reasoning_config=self.sonar_config.reasoning_config,
                     use_replayssm=self.cache_config.use_replayssm,
                     slot_mapping_modes=slot_mapping_modes,
                 )
@@ -6464,7 +6460,7 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
             # In You Only Cache Once (https://arxiv.org/abs/2405.05254) or other
             # similar KV sharing setups, only the layers that generate KV caches
             # are involved in the prefill phase, enabling prefill to early exit.
-            attn_layers = get_layers_from_aphrodite_config(self.aphrodite_config, Attention)
+            attn_layers = get_layers_from_sonar_config(self.sonar_config, Attention)
             for layer_name in reversed(attn_layers):
                 if layer_name in self.shared_kv_cache_layers:
                     self.kv_sharing_fast_prefill_eligible_layers.add(layer_name)
@@ -6495,9 +6491,9 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
         self.maybe_add_kv_sharing_layers_to_kv_cache_groups(kv_cache_config)
         self.initialize_attn_backend(kv_cache_config, is_profiling=is_profiling)
         initialize_mamba_ssu_backend(
-            self.aphrodite_config.mamba_config,
+            self.sonar_config.mamba_config,
             self.kv_cache_config,
-            use_replayssm=self.aphrodite_config.cache_config.use_replayssm,
+            use_replayssm=self.sonar_config.cache_config.use_replayssm,
         )
         # The kernel block size for all KV cache groups. For example, if
         # kv_cache_manager uses block_size 256 for a given group, but the attention
@@ -6539,9 +6535,9 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
 
     def may_add_encoder_only_layers_to_kv_cache_config(self) -> None:
         """Add encoder-only layers to the KV cache config."""
-        block_size = self.aphrodite_config.cache_config.block_size
+        block_size = self.sonar_config.cache_config.block_size
         encoder_only_attn_specs: dict[AttentionSpec, list[str]] = defaultdict(list)
-        attn_layers = get_layers_from_aphrodite_config(self.aphrodite_config, Attention)
+        attn_layers = get_layers_from_sonar_config(self.sonar_config, Attention)
         for layer_name, attn_module in attn_layers.items():
             if attn_module.attn_type == AttentionType.ENCODER_ONLY:
                 attn_spec: AttentionSpec = EncoderOnlyAttentionSpec(
@@ -6570,7 +6566,7 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
             return {}
         kv_cache_spec: dict[str, KVCacheSpec] = {}
         layer_type = cast(type[Any], AttentionLayerBase)
-        attn_layers = get_layers_from_aphrodite_config(self.aphrodite_config, layer_type)
+        attn_layers = get_layers_from_sonar_config(self.sonar_config, layer_type)
         for layer_name, attn_module in attn_layers.items():
             if isinstance(attn_module, Attention) and (kv_tgt_layer := attn_module.kv_sharing_target_layer_name):
                 # The layer doesn't need its own KV cache and will use that of
@@ -6583,7 +6579,7 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
                 self.shared_kv_cache_layers[layer_name] = kv_tgt_layer
                 continue
             # Skip modules that don't need KV cache (eg encoder-only attention)
-            if spec := attn_module.get_kv_cache_spec(self.aphrodite_config):
+            if spec := attn_module.get_kv_cache_spec(self.sonar_config):
                 if isinstance(spec, AttentionSpec):
                     spec = customize_attention_spec(attn_module.get_attn_backend(), spec)
                 if attn_module.is_draft_layer:

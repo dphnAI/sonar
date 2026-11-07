@@ -11,13 +11,13 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from aphrodite.model_executor.models.clef_joint_schema import (
+from sonar.model_executor.models.clef_joint_schema import (
     JointSchemaHead,
     JointSchemaPooler,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.pooling_params import PoolingParams
-from aphrodite.v1.pool.metadata import PoolingMetadata, PoolingStates
+from sonar.platforms import current_platform
+from sonar.pooling_params import PoolingParams
+from sonar.v1.pool.metadata import PoolingMetadata, PoolingStates
 
 DEVICE_TYPE = current_platform.device_type
 HIDDEN, VOCAB = 64, 500
@@ -94,7 +94,7 @@ def pooler():
     embedding = torch.randn(VOCAB, HIDDEN, device=DEVICE_TYPE)
     config = SimpleNamespace(scheduler_config=SimpleNamespace(enable_chunked_prefill=False, async_scheduling=False))
     with patch(
-        "aphrodite.model_executor.layers.pooler.tokwise.methods.get_current_aphrodite_config",
+        "sonar.model_executor.layers.pooler.tokwise.methods.get_current_sonar_config",
         return_value=config,
     ):
         pooler = JointSchemaPooler(head, lambda ids: embedding[ids])

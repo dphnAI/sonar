@@ -4,7 +4,7 @@
 
 from fastapi import APIRouter, WebSocket
 
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 from .connection import RealtimeConnection
 

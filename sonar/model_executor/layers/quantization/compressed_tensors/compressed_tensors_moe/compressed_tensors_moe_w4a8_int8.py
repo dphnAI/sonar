@@ -5,30 +5,30 @@
 import torch
 from compressed_tensors.quantization import QuantizationArgs
 
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe import (
     RoutedExperts,
     SharedExperts,
 )
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEQuantConfig,
 )
-from aphrodite.model_executor.layers.fused_moe.oracle.w4a8_int8 import (
+from sonar.model_executor.layers.fused_moe.oracle.w4a8_int8 import (
     convert_to_w4a8_int8_moe_format,
     make_w4a8_int8_moe_kernel,
     make_w4a8_int8_moe_quant_config,
     select_w4a8_int8_moe_backend,
 )
-from aphrodite.model_executor.layers.quantization.compressed_tensors.compressed_tensors_moe import (  # noqa E501
+from sonar.model_executor.layers.quantization.compressed_tensors.compressed_tensors_moe import (  # noqa E501
     CompressedTensorsMoEMethod,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     GroupShape,
     QuantKey,
     ScaleDesc,
 )
-from aphrodite.model_executor.utils import (
+from sonar.model_executor.utils import (
     move_parameter,
     replace_parameter,
     retire_parameter,

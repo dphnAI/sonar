@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Tests for translating Aphrodite cache metadata to native offloading config."""
+"""Tests for translating Sonar cache metadata to native offloading config."""
 
 from typing import Any, cast
 from unittest.mock import MagicMock, patch
@@ -8,17 +8,17 @@ from unittest.mock import MagicMock, patch
 import pytest
 import torch
 
-from aphrodite.config import AphroditeConfig, KVTransferConfig, ParallelConfig
-from aphrodite.distributed.kv_transfer.kv_connector.v1.offloading.config import (
+from sonar.config import KVTransferConfig, ParallelConfig, SonarConfig
+from sonar.distributed.kv_transfer.kv_connector.v1.offloading.config import (
     build_offloading_config,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.offloading.scheduler import (
+from sonar.distributed.kv_transfer.kv_connector.v1.offloading.scheduler import (
     SchedulerOffloadConfig,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.v1.core.kv_cache_planning import kv_cache_groups_tp_replicas
-from aphrodite.v1.core.kv_cache_utils import generate_scheduler_kv_cache_config
-from aphrodite.v1.kv_cache_interface import (
+from sonar.platforms import current_platform
+from sonar.v1.core.kv_cache_planning import kv_cache_groups_tp_replicas
+from sonar.v1.core.kv_cache_utils import generate_scheduler_kv_cache_config
+from sonar.v1.kv_cache_interface import (
     CircularBufferSpec,
     FullAttentionSpec,
     HiddenStateCacheSpec,
@@ -33,20 +33,20 @@ from aphrodite.v1.kv_cache_interface import (
     SlidingWindowSpec,
     UniformTypeKVCacheSpecs,
 )
-from aphrodite.v1.kv_cache_spec_registry import KVCacheSpecRegistry
-from aphrodite.v1.kv_offload.file_mapper import FileMapper
-from aphrodite.v1.kv_offload.tiering.spec import TieringOffloadingSpec
+from sonar.v1.kv_cache_spec_registry import KVCacheSpecRegistry
+from sonar.v1.kv_offload.file_mapper import FileMapper
+from sonar.v1.kv_offload.tiering.spec import TieringOffloadingSpec
 from tests.v1.kv_connector.unit.offloading_connector.utils import MockOffloadingSpec
 
 
-def _make_aphrodite_config(
+def _make_sonar_config(
     *,
     extra_config: dict[str, Any] | None = None,
     tensor_parallel_size: int = 1,
     pipeline_parallel_size: int = 1,
     prefill_context_parallel_size: int = 1,
     decode_context_parallel_size: int = 1,
-) -> AphroditeConfig:
+) -> SonarConfig:
     config = MagicMock()
     config.cache_config.block_size = 16
     config.cache_config.enable_prefix_caching = True
@@ -74,7 +74,7 @@ def _make_aphrodite_config(
         kv_role="kv_both",
         kv_connector_extra_config=dict(extra_config or {}),
     )
-    return cast(AphroditeConfig, config)
+    return cast(SonarConfig, config)
 
 
 def _make_kv_cache_config() -> KVCacheConfig:
@@ -300,7 +300,7 @@ def _parallelism_agnostic(
     canonical: bool = False,
     v2: bool = True,
 ) -> bool:
-    config = _make_aphrodite_config(extra_config={"canonical_layout": True} if canonical else None)
+    config = _make_sonar_config(extra_config={"canonical_layout": True} if canonical else None)
     config.use_v2_model_runner = v2
     kv_cache_config = KVCacheConfig(
         num_blocks=0,
@@ -323,7 +323,7 @@ def _replicated_layout(
     nnodes: int = 1,
     world_size: int | None = None,
 ) -> bool:
-    config = _make_aphrodite_config(
+    config = _make_sonar_config(
         tensor_parallel_size=tensor_parallel_size,
         pipeline_parallel_size=pipeline_parallel_size,
         prefill_context_parallel_size=prefill_context_parallel_size,
@@ -507,7 +507,7 @@ def _make_dsv3_2_kv_cache_config(num_blocks: int = 4) -> KVCacheConfig:
 
 @pytest.mark.parametrize("packed", [False, True])
 def test_worker_kv_bytes_preserves_tensor_layout(packed: bool):
-    config = _make_aphrodite_config(
+    config = _make_sonar_config(
         extra_config={"block_size": 32},
         tensor_parallel_size=3,
         pipeline_parallel_size=2,
@@ -538,7 +538,7 @@ def test_offloading_skips_scratch_group():
             block_stride=page_size,
         )
     ]
-    config = _make_aphrodite_config()
+    config = _make_sonar_config()
 
     offloading_config = build_offloading_config(config, kv_cache_config)
     scheduler_config = SchedulerOffloadConfig.from_spec(MockOffloadingSpec(offloading_config), config, kv_cache_config)
@@ -565,7 +565,7 @@ def test_hisparse_offloads_only_indexer_group():
         kv_cache_groups=[source, indexer],
         hisparse_host_num_blocks=4,
     )
-    config = _make_aphrodite_config()
+    config = _make_sonar_config()
 
     offloading_config = build_offloading_config(config, kv_cache_config)
     scheduler_config = SchedulerOffloadConfig.from_spec(MockOffloadingSpec(offloading_config), config, kv_cache_config)
@@ -600,7 +600,7 @@ def test_hisparse_partial_group_size_survives_scheduler_flattening():
             hisparse_host_num_blocks=4,
         )
 
-    config = _make_aphrodite_config()
+    config = _make_sonar_config()
     worker = build_offloading_config(config, make_config(worker_indexer))
     scheduler = build_offloading_config(config, make_config(scheduler_indexer))
 
@@ -612,13 +612,13 @@ def test_zero_blocks_skips_tensor_layout_validation():
     kv_cache_config = _make_sizing_kv_cache_config(packed=False)
     kv_cache_config.num_blocks = 0
 
-    offloading_config = build_offloading_config(_make_aphrodite_config(), kv_cache_config)
+    offloading_config = build_offloading_config(_make_sonar_config(), kv_cache_config)
 
     assert offloading_config.worker_kv_bytes_per_block == 0
 
 
 def test_prefill_context_parallelism_does_not_scale_group_blocks():
-    config = _make_aphrodite_config(
+    config = _make_sonar_config(
         extra_config={"block_size": 64},
         prefill_context_parallel_size=2,
     )
@@ -631,7 +631,7 @@ def test_prefill_context_parallelism_does_not_scale_group_blocks():
 
 
 def test_dcp_scales_attention_but_not_mamba_group_blocks():
-    config = _make_aphrodite_config(tensor_parallel_size=2, decode_context_parallel_size=2)
+    config = _make_sonar_config(tensor_parallel_size=2, decode_context_parallel_size=2)
     config.speculative_config = None
 
     offloading_config = build_offloading_config(config, _make_mamba_hybrid_kv_cache_config())
@@ -662,7 +662,7 @@ def test_dcp_scales_attention_but_not_mamba_group_blocks():
 
 @pytest.mark.parametrize("dcp_size,expected", [(1, 16), (2, 32)])
 def test_dcp_scales_uniform_type_attention_group_blocks(dcp_size, expected):
-    config = _make_aphrodite_config(tensor_parallel_size=2, decode_context_parallel_size=dcp_size)
+    config = _make_sonar_config(tensor_parallel_size=2, decode_context_parallel_size=dcp_size)
     kv_cache_config = KVCacheConfig(
         num_blocks=4,
         kv_cache_tensors=[
@@ -692,7 +692,7 @@ def test_dcp_scales_uniform_type_attention_group_blocks(dcp_size, expected):
     ],
 )
 def test_dcp_scales_uniform_type_group_alongside_mamba(spec_kind, expected):
-    config = _make_aphrodite_config(tensor_parallel_size=2, decode_context_parallel_size=2)
+    config = _make_sonar_config(tensor_parallel_size=2, decode_context_parallel_size=2)
     config.speculative_config = None
     kv_cache_config = KVCacheConfig(
         num_blocks=4,
@@ -753,7 +753,7 @@ def test_group_carries_the_chunks_the_tier_keeps_per_request(kv_cache_spec: KVCa
         kv_cache_groups=[KVCacheGroupSpec(["layer"], kv_cache_spec)],
     )
 
-    offloading_config = build_offloading_config(_make_aphrodite_config(), kv_cache_config)
+    offloading_config = build_offloading_config(_make_sonar_config(), kv_cache_config)
 
     assert offloading_config.groups[0].sliding_window_size_in_chunks == window_chunks
 
@@ -761,24 +761,24 @@ def test_group_carries_the_chunks_the_tier_keeps_per_request(kv_cache_spec: KVCa
 def test_model_config_carries_the_longest_request():
     """The capacity estimate of a tier holds at max_model_len, so it must travel.
 
-    CPUOffloadingInfo.from_config in aphrodite/v1/kv_offload/cpu/common.py reads it.
+    CPUOffloadingInfo.from_config in sonar/v1/kv_offload/cpu/common.py reads it.
     A model config without it leaves the estimate unknown.
     """
-    aphrodite_config = _make_aphrodite_config()
-    aphrodite_config.model_config.max_model_len = 32768
+    sonar_config = _make_sonar_config()
+    sonar_config.model_config.max_model_len = 32768
     kv_cache_config = KVCacheConfig(
         num_blocks=0,
         kv_cache_tensors=[],
         kv_cache_groups=[KVCacheGroupSpec(["layer"], _full_attention_spec())],
     )
 
-    offloading_config = build_offloading_config(aphrodite_config, kv_cache_config)
+    offloading_config = build_offloading_config(sonar_config, kv_cache_config)
 
     assert offloading_config.model.max_model_len == 32768
 
 
 def test_preserves_data_parallel_config():
-    config = _make_aphrodite_config()
+    config = _make_sonar_config()
     config.parallel_config.data_parallel_index = 2
     config.parallel_config.data_parallel_size = 4
     config.parallel_config.data_parallel_rank_local = 1
@@ -791,7 +791,7 @@ def test_preserves_data_parallel_config():
 
 
 def test_resolves_heterogeneous_hybrid_block_sizes():
-    config = _make_aphrodite_config()
+    config = _make_sonar_config()
     config.cache_config.block_size = 4
 
     offloading_config = build_offloading_config(config, _make_hybrid_kv_cache_config())
@@ -1228,7 +1228,7 @@ def test_canonical_layout_gate(kv_cache_groups, certified):
 )
 def test_uncertifiable_canonical_layout_resets_replication(spec: KVCacheSpec):
     def _get_offloading_config(canonical: bool):
-        config = _make_aphrodite_config(
+        config = _make_sonar_config(
             tensor_parallel_size=2,
             extra_config={"canonical_layout": True} if canonical else None,
         )
@@ -1297,7 +1297,7 @@ def test_canonical_mla_dsa_rows_are_tp_independent(tp_size, scheduler):
     )
     if scheduler:
         kv_cache_config = generate_scheduler_kv_cache_config([kv_cache_config])
-    config = _make_aphrodite_config(
+    config = _make_sonar_config(
         tensor_parallel_size=tp_size,
         extra_config={"canonical_layout": True, "cpu_bytes_to_use": 196608 * 8},
     )
@@ -1313,7 +1313,7 @@ def test_canonical_mla_dsa_rows_are_tp_independent(tp_size, scheduler):
 
 
 def test_parallelism_agnostic_disabled_on_v2_model_runner():
-    config = _make_aphrodite_config()
+    config = _make_sonar_config()
     kv_cache_config = KVCacheConfig(
         num_blocks=0,
         kv_cache_tensors=[],
@@ -1326,7 +1326,7 @@ def test_parallelism_agnostic_disabled_on_v2_model_runner():
 
 
 def test_accepts_blocks_per_chunk_for_heterogeneous_groups():
-    config = _make_aphrodite_config(extra_config={"blocks_per_chunk": 2})
+    config = _make_sonar_config(extra_config={"blocks_per_chunk": 2})
 
     offloading_config = build_offloading_config(config, _make_hybrid_kv_cache_config())
 
@@ -1338,14 +1338,14 @@ def test_accepts_blocks_per_chunk_for_heterogeneous_groups():
 
 
 def test_block_size_and_blocks_per_chunk_are_mutually_exclusive():
-    config = _make_aphrodite_config(extra_config={"block_size": 64, "blocks_per_chunk": 2})
+    config = _make_sonar_config(extra_config={"block_size": 64, "blocks_per_chunk": 2})
 
     with pytest.raises(ValueError, match="Specify only one"):
         build_offloading_config(config, _make_kv_cache_config())
 
 
 def test_blocks_per_chunk_must_be_positive():
-    config = _make_aphrodite_config(extra_config={"blocks_per_chunk": 0})
+    config = _make_sonar_config(extra_config={"blocks_per_chunk": 0})
 
     with pytest.raises(ValueError, match="greater than 0"):
         build_offloading_config(config, _make_kv_cache_config())

@@ -7,7 +7,7 @@
 CUTLASS ``fmha_sm100`` path by default for regular decode and speculative
 verification, with Triton split-K as the fallback.
 
-``MiniMaxM3SparseMSANvfp4Impl`` serves NVFP4 KV caches, reading Aphrodite's packed
+``MiniMaxM3SparseMSANvfp4Impl`` serves NVFP4 KV caches, reading Sonar's packed
 pages directly with only the E4M3 query: decode and prefill both run the CUTLASS
 Q8KV4 kernels.
 """
@@ -19,16 +19,16 @@ from typing import TYPE_CHECKING, ClassVar
 
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.attention import MiniMaxM3MSADecodeBackend
-from aphrodite.config.cache import CacheDType
-from aphrodite.forward_context import get_forward_context
-from aphrodite.logger import init_logger
-from aphrodite.models.minimax_m3.common.ops.sparse_attn import (
+from sonar.config import SonarConfig
+from sonar.config.attention import MiniMaxM3MSADecodeBackend
+from sonar.config.cache import CacheDType
+from sonar.forward_context import get_forward_context
+from sonar.logger import init_logger
+from sonar.models.minimax_m3.common.ops.sparse_attn import (
     SPARSE_BLOCK_SIZE,
     minimax_m3_sparse_attn_decode,
 )
-from aphrodite.models.minimax_m3.common.sparse_attention import (
+from sonar.models.minimax_m3.common.sparse_attention import (
     MiniMaxM3SparseBackend,
     MiniMaxM3SparseDecodeMetadata,
     MiniMaxM3SparseImpl,
@@ -36,7 +36,7 @@ from aphrodite.models.minimax_m3.common.sparse_attention import (
     MiniMaxM3SparseMetadataBuilder,
     MiniMaxM3SparsePrefillMetadata,
 )
-from aphrodite.models.minimax_m3.nvidia.msa_cutlass_sparse_decode import (
+from sonar.models.minimax_m3.nvidia.msa_cutlass_sparse_decode import (
     NVFP4_BLOCK_SCALE_SHIFT,
     MSACutlassDecodeMetadata,
     MSACutlassDecodePlanCache,
@@ -48,16 +48,16 @@ from aphrodite.models.minimax_m3.nvidia.msa_cutlass_sparse_decode import (
     supports_cutlass_sparse_decode,
     uses_q8kv4_decode,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import get_dtype_size, nvfp4_kv_cache_full_dim
-from aphrodite.v1.attention.backend import (
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import get_dtype_size, nvfp4_kv_cache_full_dim
+from sonar.v1.attention.backend import (
     AttentionLayer,
     CommonAttentionMetadata,
 )
-from aphrodite.v1.kv_cache_interface import AttentionSpec, KVCacheLayout
+from sonar.v1.kv_cache_interface import AttentionSpec, KVCacheLayout
 
 if TYPE_CHECKING:
-    from aphrodite.third_party.fmha_sm100.prefill_q8kv4 import PrefillWorkspace
+    from sonar.third_party.fmha_sm100.prefill_q8kv4 import PrefillWorkspace
 
 logger = init_logger(__name__)
 
@@ -65,7 +65,7 @@ logger = init_logger(__name__)
 @functools.cache
 def _q8kv4_prefill_blocker(num_q_heads: int, num_kv_heads: int, page_size: int, topk_blocks: int) -> str | None:
     """Why the Q8KV4 kernel cannot prefill this layout on this device, or None."""
-    from aphrodite.third_party.fmha_sm100.q8kv4_prefill_adapter import _plan_blocker
+    from sonar.third_party.fmha_sm100.q8kv4_prefill_adapter import _plan_blocker
 
     return _plan_blocker(
         num_qo_heads=num_q_heads,
@@ -79,7 +79,7 @@ def _q8kv4_prefill_blocker(num_q_heads: int, num_kv_heads: int, page_size: int, 
 
 
 def _get_msa_cutlass_min_batch_size() -> int | None:
-    value = os.getenv("APHRODITE_MINIMAX_M3_MSA_CUTLASS_MIN_BATCH")
+    value = os.getenv("SONAR_MINIMAX_M3_MSA_CUTLASS_MIN_BATCH")
     return int(value) if value is not None else None
 
 
@@ -156,19 +156,19 @@ class MiniMaxM3SparseMSAMetadataBuilder(MiniMaxM3SparseMetadataBuilder):
         self,
         kv_cache_spec: AttentionSpec,
         layer_names: list[str],
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
     ) -> None:
-        super().__init__(kv_cache_spec, layer_names, aphrodite_config, device)
-        config = aphrodite_config.model_config.hf_text_config
-        tp_size = aphrodite_config.parallel_config.tensor_parallel_size
+        super().__init__(kv_cache_spec, layer_names, sonar_config, device)
+        config = sonar_config.model_config.hf_text_config
+        tp_size = sonar_config.parallel_config.tensor_parallel_size
         self.num_q_heads = config.num_attention_heads // tp_size
         self.num_kv_heads = kv_cache_spec.num_kv_heads
         self.topk_blocks = config.sparse_attention_config["sparse_topk_blocks"]
         # AttentionSpec stores every FP8 mode as uint8, so retain the configured
         # format to distinguish E4M3 (supported) from E5M2 before planning.
-        self.kv_cache_dtype = aphrodite_config.cache_config.cache_dtype
-        self.decode_backend = aphrodite_config.attention_config.minimax_m3_msa_decode_backend
+        self.kv_cache_dtype = sonar_config.cache_config.cache_dtype
+        self.decode_backend = sonar_config.attention_config.minimax_m3_msa_decode_backend
         self.q8kv4_decode = uses_q8kv4_decode(
             kv_cache_dtype=self.kv_cache_dtype,
             num_q_heads=self.num_q_heads,
@@ -180,12 +180,12 @@ class MiniMaxM3SparseMSAMetadataBuilder(MiniMaxM3SparseMetadataBuilder):
         # locality domains, reserved for the largest batch.
         self.prefill_workspace: "PrefillWorkspace | None" = None  # noqa: UP037
         if is_nvfp4_kv_cache(self.kv_cache_dtype) and current_platform.is_device_capability(107):
-            from aphrodite.third_party.fmha_sm100.prefill_q8kv4 import PrefillWorkspace
+            from sonar.third_party.fmha_sm100.prefill_q8kv4 import PrefillWorkspace
 
             self.prefill_workspace = PrefillWorkspace(device, block_scale_shift=NVFP4_BLOCK_SCALE_SHIFT)
             self.prefill_workspace.split_buffers(
                 self.topk_blocks,
-                aphrodite_config.scheduler_config.max_num_batched_tokens,
+                sonar_config.scheduler_config.max_num_batched_tokens,
                 self.num_q_heads,
             )
 
@@ -271,7 +271,7 @@ class MiniMaxM3SparseMSABaseImpl(MiniMaxM3SparseImpl):
         num_tokens: int,
         p: MiniMaxM3SparsePrefillMetadata,
     ):
-        from aphrodite.third_party.fmha_sm100.sparse import build_k2q_csr
+        from sonar.third_party.fmha_sm100.sparse import build_k2q_csr
 
         # [H, prefill, MK] transposed view; build_k2q_csr consumes the strided
         # view directly (topK stays innermost-contiguous).
@@ -397,7 +397,7 @@ class MiniMaxM3SparseMSAImpl(MiniMaxM3SparseMSABaseImpl):
 
         # Prefill [nd:]: MSA sparse FMHA over the selected blocks.
         if main_md.num_prefills > 0:
-            from aphrodite.third_party.fmha_sm100.sparse import sparse_atten_func
+            from sonar.third_party.fmha_sm100.sparse import sparse_atten_func
 
             p = main_md.prefill
             assert p is not None
@@ -546,7 +546,7 @@ class MiniMaxM3SparseMSANvfp4Impl(MiniMaxM3SparseMSABaseImpl):
             )
 
         if main_md.num_prefills > 0:
-            from aphrodite.third_party.fmha_sm100.prefill_q8kv4 import run_prefill
+            from sonar.third_party.fmha_sm100.prefill_q8kv4 import run_prefill
 
             p = main_md.prefill
             assert p is not None

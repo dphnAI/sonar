@@ -9,9 +9,9 @@ slice of the logits, and torch.stack stands in for the all-gather.
 import pytest
 import torch
 
-from aphrodite.v1.worker.gpu.sample.vocab_parallel import VocabShard
-from aphrodite.v1.worker.gpu.spec_decode.draft_logits import DraftLogitsCache
-from aphrodite.v1.worker.gpu.spec_decode.rejection_sampler_utils import (
+from sonar.v1.worker.gpu.sample.vocab_parallel import VocabShard
+from sonar.v1.worker.gpu.spec_decode.draft_logits import DraftLogitsCache
+from sonar.v1.worker.gpu.spec_decode.rejection_sampler_utils import (
     VocabParallelRejection,
     rejection_sample,
     rejection_sample_vocab_parallel,

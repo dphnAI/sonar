@@ -6,7 +6,7 @@ from torch import nn
 
 
 class DeepseekV4ForConditionalGeneration(nn.Module):
-    def __init__(self, *, aphrodite_config, prefix: str = ""):
+    def __init__(self, *, sonar_config, prefix: str = ""):
         super().__init__()
         raise NotImplementedError(
             "DeepSeek-V4 vision (DeepseekV4ForConditionalGeneration) is not "

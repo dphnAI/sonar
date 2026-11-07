@@ -7,11 +7,11 @@ from collections.abc import Iterable
 import torch
 import torch.nn as nn
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.model_executor.models.interfaces import SupportsLoRA
-from aphrodite.model_executor.models.qwen3 import Qwen3Model
-from aphrodite.model_executor.models.utils import AutoWeightsLoader, maybe_prefix
-from aphrodite.sequence import IntermediateTensors
+from sonar.config import SonarConfig
+from sonar.model_executor.models.interfaces import SupportsLoRA
+from sonar.model_executor.models.qwen3 import Qwen3Model
+from sonar.model_executor.models.utils import AutoWeightsLoader, maybe_prefix
+from sonar.sequence import IntermediateTensors
 
 WeightItem = tuple[str, torch.Tensor]
 
@@ -25,7 +25,7 @@ class VoyageQwen3BidirectionalEmbedModel(nn.Module, SupportsLoRA):
       - Linear head: linear.weight
       - Weights prefixed with "model." (e.g., model.layers.0...)
 
-    Aphrodite Qwen3Model expects:
+    Sonar Qwen3Model expects:
       - mlp.gate_up_proj (fused)
       - self_attn.qkv_proj (fused)
       - No "model." prefix
@@ -36,10 +36,10 @@ class VoyageQwen3BidirectionalEmbedModel(nn.Module, SupportsLoRA):
         "gate_up_proj": ["gate_proj", "up_proj"],
     }
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        self.config = aphrodite_config.model_config.hf_config
-        self.model = Qwen3Model(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.config = sonar_config.model_config.hf_config
+        self.model = Qwen3Model(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
 
         # Embedding head (hidden_size -> num_labels, bias=False)
         self.linear = nn.Linear(

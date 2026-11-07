@@ -4,10 +4,10 @@
 
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.utils import replace_parameter
-from aphrodite.platforms import current_platform
-from aphrodite.scalar_type import scalar_types
+from sonar.logger import init_logger
+from sonar.model_executor.utils import replace_parameter
+from sonar.platforms import current_platform
+from sonar.scalar_type import scalar_types
 
 from .MPLinearKernel import MPLinearKernel, MPLinearLayerConfig
 
@@ -180,7 +180,7 @@ class XPUW4A8IntLinearKernel(MPLinearKernel):
         bias: torch.Tensor | None = None,
     ) -> torch.Tensor:
         reshaped_x = x.reshape(-1, x.shape[-1])  # [M, K]
-        from aphrodite._xpu_ops import xpu_ops as ops
+        from sonar._xpu_ops import xpu_ops as ops
 
         # TODO: static and asymmetric quantization case
         # Common code for CompressedTensorsW4A8Int does not read act symmetry data

@@ -75,14 +75,14 @@ guide: |
   contrastive losses, it produces 1024-dim embeddings that stay robust under
   truncation (Matryoshka dims: 32–1024) and binary quantization.
 
-  Aphrodite support landed in [PR #39575](https://github.com/vllm-project/vllm/pull/39575)
+  Sonar support landed in [PR #39575](https://github.com/vllm-project/vllm/pull/39575)
   via the `JinaEmbeddingsV5Model` architecture and the `--runner pooling` API.
 
   ### Task-specific adapters
 
   v5 ships four LoRA adapters — one per supported task. For each task, Jina AI
   publishes a sibling repo with that adapter **pre-merged into the base weights**;
-  these are the simplest path for Aphrodite and what this recipe serves. Pick a task
+  these are the simplest path for Sonar and what this recipe serves. Pick a task
   above; the recipe swaps the model id accordingly:
 
   | Task | Pre-merged repo |
@@ -96,13 +96,13 @@ guide: |
 
   - **Hardware**: any single GPU with ≥ 2 GB VRAM (T4 / L4 / A10 / A100 / H100 /
     H200 / B200 / MI300X all fine — bf16 weights are ~1.4 GB).
-  - **Aphrodite**: requires a build that includes PR #39575. Use the nightly wheel
+  - **Sonar**: requires a build that includes PR #39575. Use the nightly wheel
     until the next stable release ships:
 
     ```bash
-    uv pip install -U aphrodite-engine --pre \
-      --extra-index-url https://wheels.vllm.ai/nightly \
-      --index-strategy unsafe-best-match
+    uv pip install -U sonar --torch-backend cu130 --pre \
+      --extra-index-url https://sonar.dphn.ai/whl/nightly/cuda/x86_64/simple \
+      --index-strategy first-index
     ```
 
   ## Launch command
@@ -111,7 +111,7 @@ guide: |
   The full form looks like:
 
   ```bash
-  aphrodite serve jinaai/jina-embeddings-v5-text-small-retrieval \
+  sonar serve jinaai/jina-embeddings-v5-text-small-retrieval \
     --trust-remote-code \
     --runner pooling \
     --host 0.0.0.0 --port 8000
@@ -127,7 +127,7 @@ guide: |
   `--hf-overrides`:
 
   ```bash
-  aphrodite serve jinaai/jina-embeddings-v5-text-small \
+  sonar serve jinaai/jina-embeddings-v5-text-small \
     --trust-remote-code \
     --runner pooling \
     --hf-overrides '{"jina_task": "retrieval"}'
@@ -205,7 +205,7 @@ guide: |
   - [Model card](https://huggingface.co/jinaai/jina-embeddings-v5-text-small)
   - [Release blog](https://jina.ai/news/jina-embeddings-v5-text-distilling-4b-quality-into-sub-1b-multilingual-embeddings)
   - [Technical report (arXiv:2602.15547)](https://arxiv.org/abs/2602.15547)
-  - [Aphrodite PR #39575 — Add Jina Embeddings v5 model support](https://github.com/vllm-project/vllm/pull/39575)
+  - [Sonar PR #39575 — Add Jina Embeddings v5 model support](https://github.com/vllm-project/vllm/pull/39575)
   - [Pre-merged retrieval repo](https://huggingface.co/jinaai/jina-embeddings-v5-text-small-retrieval)
   - [Pre-merged text-matching repo](https://huggingface.co/jinaai/jina-embeddings-v5-text-small-text-matching)
   - [Pre-merged classification repo](https://huggingface.co/jinaai/jina-embeddings-v5-text-small-classification)

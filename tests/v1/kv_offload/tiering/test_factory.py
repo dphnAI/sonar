@@ -14,10 +14,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from aphrodite.v1.kv_offload.tiering.base import SecondaryTierManager
-from aphrodite.v1.kv_offload.tiering.example.manager import ExampleSecondaryTierManager
-from aphrodite.v1.kv_offload.tiering.factory import SecondaryTierFactory
-from aphrodite.v1.metrics.cache_hit_source import CacheHitSource
+from sonar.v1.kv_offload.tiering.base import SecondaryTierManager
+from sonar.v1.kv_offload.tiering.example.manager import ExampleSecondaryTierManager
+from sonar.v1.kv_offload.tiering.factory import SecondaryTierFactory
+from sonar.v1.metrics.cache_hit_source import CacheHitSource
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -109,7 +109,7 @@ def test_register_new_tier_type(tier_type):
     # Register a new tier type (reuse example manager for simplicity)
     SecondaryTierFactory.register_tier(
         tier_type,
-        "aphrodite.v1.kv_offload.tiering.example.manager",
+        "sonar.v1.kv_offload.tiering.example.manager",
         "ExampleSecondaryTierManager",
     )
 
@@ -170,7 +170,7 @@ def test_create_tier_from_module_path():
     primary_kv_view, offloading_spec = _make_mock_args()
     tier_config = {
         "type": "ExampleSecondaryTierManager",
-        "module_path": "aphrodite.v1.kv_offload.tiering.example.manager",
+        "module_path": "sonar.v1.kv_offload.tiering.example.manager",
         "custom_param": 42,
     }
 

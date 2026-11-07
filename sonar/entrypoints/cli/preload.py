@@ -1,20 +1,20 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""The `preload` subcommand for the Aphrodite CLI.
+"""The `preload` subcommand for the Sonar CLI.
 
 Launches one weight cache daemon per GPU; each daemon holds the
 post-quantized, TP-sharded weights of its rank in GPU memory and serves
-CUDA IPC handles to Aphrodite engines over a Unix domain socket, so restarting
+CUDA IPC handles to Sonar engines over a Unix domain socket, so restarting
 engines can map the weights via zero-copy IPC instead of reloading from disk:
 
-    aphrodite preload --model /path/to/model --tensor-parallel-size 4
+    sonar preload --model /path/to/model --tensor-parallel-size 4
 
 Engines then load from the daemons with:
 
-    aphrodite serve /path/to/model --tensor-parallel-size 4 --load-format ipc_cache
+    sonar serve /path/to/model --tensor-parallel-size 4 --load-format ipc_cache
 
 Tensor, expert and data parallelism are supported, including across nodes;
-see aphrodite/model_executor/model_loader/weight_cache/daemon.py for the rank
+see sonar/model_executor/model_loader/weight_cache/daemon.py for the rank
 layout and rendezvous details.
 """
 
@@ -34,19 +34,19 @@ from multiprocessing.process import BaseProcess
 from fastapi import FastAPI
 from fastapi.responses import Response
 
-from aphrodite.engine.arg_utils import EngineArgs
-from aphrodite.entrypoints.cli.types import CLISubcommand
-from aphrodite.entrypoints.common.startup import APHRODITE_SUBCMD_PARSER_EPILOG
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.model_loader.weight_cache.protocol import (
+from sonar.engine.arg_utils import EngineArgs
+from sonar.entrypoints.cli.types import CLISubcommand
+from sonar.entrypoints.common.startup import SONAR_SUBCMD_PARSER_EPILOG
+from sonar.logger import init_logger
+from sonar.model_executor.model_loader.weight_cache.protocol import (
     check_ipc_platform_support,
 )
-from aphrodite.usage.usage_lib import UsageContext
-from aphrodite.utils.network_utils import get_distributed_init_method, get_open_port
+from sonar.usage.usage_lib import UsageContext
+from sonar.utils.network_utils import get_distributed_init_method, get_open_port
 
 if typing.TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
-    from aphrodite.utils.argparse_utils import FlexibleArgumentParser
+    from sonar.config import SonarConfig
+    from sonar.utils.argparse_utils import FlexibleArgumentParser
 else:
     FlexibleArgumentParser = argparse.ArgumentParser
 
@@ -93,7 +93,7 @@ def _start_health_server(host: str, port: int, state: _HealthState) -> tuple[typ
     server = uvicorn.Server(config)
     thread = threading.Thread(
         target=server.run,
-        name="aphrodite-weight-cache-health",
+        name="sonar-weight-cache-health",
         daemon=True,
     )
     thread.start()
@@ -128,7 +128,7 @@ def _validate_seed_args(args: argparse.Namespace, *, world_size: int, num_groups
 
 
 class PreloadSubcommand(CLISubcommand):
-    """The `preload` subcommand for the Aphrodite CLI."""
+    """The `preload` subcommand for the Sonar CLI."""
 
     name = "preload"
 
@@ -206,15 +206,15 @@ class PreloadSubcommand(CLISubcommand):
 
     @staticmethod
     def cmd(args: argparse.Namespace) -> None:
-        # Imported here so `aphrodite --help` and friends stay free of torch.
-        from aphrodite.model_executor.model_loader.weight_cache.daemon import (
+        # Imported here so `sonar --help` and friends stay free of torch.
+        from sonar.model_executor.model_loader.weight_cache.daemon import (
             _reject_unsupported_parallelism,
             _run_daemon,
             get_draft_daemon_config,
             plan_local_ranks,
         )
-        from aphrodite.model_executor.model_loader.weight_cache.seed import SeedConfig
-        from aphrodite.model_executor.model_loader.weight_cache.utils import (
+        from sonar.model_executor.model_loader.weight_cache.seed import SeedConfig
+        from sonar.model_executor.model_loader.weight_cache.utils import (
             format_daemon_role,
         )
 
@@ -225,14 +225,14 @@ class PreloadSubcommand(CLISubcommand):
             if engine_args.kernel_config.enable_flashinfer_autotune is not False
             else None
         )
-        aphrodite_config = engine_args.create_engine_config(usage_context=usage_context)
-        if aphrodite_config.load_config.load_format == "ipc_cache":
+        sonar_config = engine_args.create_engine_config(usage_context=usage_context)
+        if sonar_config.load_config.load_format == "ipc_cache":
             raise ValueError("The weight cache daemon itself must load from disk; use the default --load-format")
         # Config-only so it can fail before any model loading; the quant
         # method check needs the created model and runs in
         # WeightCacheDaemon.get_model.
         check_ipc_platform_support()
-        parallel_config = aphrodite_config.parallel_config
+        parallel_config = sonar_config.parallel_config
         _reject_unsupported_parallelism(parallel_config)
         tp_size = parallel_config.tensor_parallel_size
         pp_size = parallel_config.pipeline_parallel_size
@@ -269,10 +269,10 @@ class PreloadSubcommand(CLISubcommand):
         master_port = args.weight_cache_master_port or get_open_port()
         distributed_init_method = get_distributed_init_method(master_addr, master_port)
 
-        # (is_draft, aphrodite_config, rendezvous) per daemon group.
-        groups: list[tuple[bool, AphroditeConfig, str]] = [(False, aphrodite_config, distributed_init_method)]
-        draft_aphrodite_config = get_draft_daemon_config(aphrodite_config)
-        if draft_aphrodite_config is not None:
+        # (is_draft, sonar_config, rendezvous) per daemon group.
+        groups: list[tuple[bool, SonarConfig, str]] = [(False, sonar_config, distributed_init_method)]
+        draft_sonar_config = get_draft_daemon_config(sonar_config)
+        if draft_sonar_config is not None:
             draft_master_port = args.weight_cache_draft_master_port or (
                 master_port + 1 if nnodes > 1 else get_open_port()
             )
@@ -281,7 +281,7 @@ class PreloadSubcommand(CLISubcommand):
             groups.append(
                 (
                     True,
-                    draft_aphrodite_config,
+                    draft_sonar_config,
                     get_distributed_init_method(master_addr, draft_master_port),
                 )
             )
@@ -332,7 +332,7 @@ class PreloadSubcommand(CLISubcommand):
                             pp_rank,
                             seed_config,
                         ),
-                        name=(f"aphrodite-weight-cache-{format_daemon_role(is_draft)}-{global_rank}"),
+                        name=(f"sonar-weight-cache-{format_daemon_role(is_draft)}-{global_rank}"),
                     )
                 )
         health_state = _HealthState(procs)
@@ -421,10 +421,10 @@ class PreloadSubcommand(CLISubcommand):
             description="Launch weight cache daemons (one per GPU) that "
             "keep post-quantized weights in GPU memory and serve them to "
             "engines over CUDA IPC.",
-            usage="aphrodite preload --model <model> [options]",
+            usage="sonar preload --model <model> [options]",
         )
         self.add_cli_args(preload_parser)
-        preload_parser.epilog = APHRODITE_SUBCMD_PARSER_EPILOG.format(subcmd=self.name)
+        preload_parser.epilog = SONAR_SUBCMD_PARSER_EPILOG.format(subcmd=self.name)
         return preload_parser
 
 

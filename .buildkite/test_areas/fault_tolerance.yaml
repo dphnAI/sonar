@@ -7,20 +7,20 @@ steps:
   timeout_in_minutes: 35
   device: h100
   num_devices: 2
-  working_dir: "/aphrodite-workspace/tests"
+  working_dir: "/sonar-workspace/tests"
   source_file_dependencies:
-  - aphrodite/v1/fault_tolerance/
-  - aphrodite/v1/worker/sentinel/
-  - aphrodite/entrypoints/serve/fault_tolerance/
-  - aphrodite/distributed/elastic_ep/
-  - aphrodite/distributed/device_communicators/
-  - aphrodite/v1/engine/
-  - aphrodite/v1/worker/
+  - sonar/v1/fault_tolerance/
+  - sonar/v1/worker/sentinel/
+  - sonar/entrypoints/serve/fault_tolerance/
+  - sonar/distributed/elastic_ep/
+  - sonar/distributed/device_communicators/
+  - sonar/v1/engine/
+  - sonar/v1/worker/
   - tests/v1/fault_tolerance/
   - tests/v1/distributed/test_external_lb_dp.py
   commands:
   # Base image has no nixl; install it or has_nixl_ep() skips the tests.
-  - bash /aphrodite-workspace/.buildkite/scripts/install-kv-connectors.sh
+  - bash /sonar-workspace/.buildkite/scripts/install-kv-connectors.sh
   # https://github.com/NVIDIA/nccl/issues/1838
   - export NCCL_CUMEM_HOST_ENABLE=0
   - pytest -v -s v1/fault_tolerance/test_fault_tolerance_e2e.py

@@ -18,31 +18,31 @@ from fastapi.testclient import TestClient
 from PIL import Image
 from starlette.datastructures import State
 
-from aphrodite.config import AphroditeConfig, ModelConfig
-from aphrodite.engine.protocol import EngineClient
-from aphrodite.entrypoints.generate.structured_decisions.api_router import (
+from sonar.config import ModelConfig, SonarConfig
+from sonar.engine.protocol import EngineClient
+from sonar.entrypoints.generate.structured_decisions.api_router import (
     register_structured_decisions_api_router,
 )
-from aphrodite.entrypoints.generate.structured_decisions.protocol import (
+from sonar.entrypoints.generate.structured_decisions.protocol import (
     StructuredDecisionRequest,
     StructuredDecisionResponse,
 )
-from aphrodite.entrypoints.generate.structured_decisions.serving import (
+from sonar.entrypoints.generate.structured_decisions.serving import (
     ServingStructuredDecisions,
     parse_questions,
 )
-from aphrodite.entrypoints.openai.decisions.api_router import register_decisions_api_router
-from aphrodite.entrypoints.openai.decisions.protocol import DecisionRequest
-from aphrodite.entrypoints.openai.decisions.question_types import (
+from sonar.entrypoints.openai.decisions.api_router import register_decisions_api_router
+from sonar.entrypoints.openai.decisions.protocol import DecisionRequest
+from sonar.entrypoints.openai.decisions.question_types import (
     LABELS,
     QUESTION_TYPES,
     StructuredDecisionError,
     build_question,
     label_softmax,
 )
-from aphrodite.entrypoints.openai.decisions.serving import OpenAIServingDecisions
-from aphrodite.entrypoints.openai.decisions.state import init_decisions_state
-from aphrodite.entrypoints.openai.decisions.strategies import (
+from sonar.entrypoints.openai.decisions.serving import OpenAIServingDecisions
+from sonar.entrypoints.openai.decisions.state import init_decisions_state
+from sonar.entrypoints.openai.decisions.strategies import (
     ClefFlashStrategy,
     D3Strategy,
     DiffusionGemmaCanvasStrategy,
@@ -56,26 +56,26 @@ from aphrodite.entrypoints.openai.decisions.strategies import (
     select_read_strategy,
     state_text,
 )
-from aphrodite.entrypoints.openai.models.protocol import BaseModelPath
-from aphrodite.entrypoints.openai.models.serving import OpenAIServingModels
-from aphrodite.entrypoints.serve.engine.protocol import ErrorResponse
-from aphrodite.entrypoints.serve.exception_handling.register import (
+from sonar.entrypoints.openai.models.protocol import BaseModelPath
+from sonar.entrypoints.openai.models.serving import OpenAIServingModels
+from sonar.entrypoints.serve.engine.protocol import ErrorResponse
+from sonar.entrypoints.serve.exception_handling.register import (
     init_exception_handler,
 )
-from aphrodite.entrypoints.serve.utils.request_logger import RequestLogger
-from aphrodite.inputs import mm_input
-from aphrodite.logprobs import Logprob
-from aphrodite.multimodal.inputs import PlaceholderRange
-from aphrodite.multimodal.media import MediaConnector, MediaWithBytes
-from aphrodite.outputs import (
+from sonar.entrypoints.serve.utils.request_logger import RequestLogger
+from sonar.inputs import mm_input
+from sonar.logprobs import Logprob
+from sonar.multimodal.inputs import PlaceholderRange
+from sonar.multimodal.media import MediaConnector, MediaWithBytes
+from sonar.outputs import (
     CompletionOutput,
     PoolingOutput,
     PoolingRequestOutput,
     RequestOutput,
 )
-from aphrodite.renderers.hf import HfRenderer
-from aphrodite.renderers.online_renderer import OnlineRenderer
-from aphrodite.sampling_params import MAX_LOGPROB_TOKEN_IDS
+from sonar.renderers.hf import HfRenderer
+from sonar.renderers.online_renderer import OnlineRenderer
+from sonar.sampling_params import MAX_LOGPROB_TOKEN_IDS
 
 TRACE_HEADERS = {
     "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01",
@@ -169,7 +169,7 @@ def test_structured_state_keeps_unicode_in_prompt():
 
 @pytest.fixture(scope="module")
 def qwen():
-    from aphrodite.tokenizers import get_tokenizer
+    from sonar.tokenizers import get_tokenizer
 
     tokenizer = get_tokenizer("Qwen/Qwen3-0.6B")
     prompt_ids = tokenizer.apply_chat_template(
@@ -248,7 +248,7 @@ def test_labels_start_the_reply(qwen):
     ],
 )
 def test_gemma4_labels_start_the_reply(model_name, reply_start):
-    from aphrodite.tokenizers import get_tokenizer
+    from sonar.tokenizers import get_tokenizer
 
     tokenizer = get_tokenizer(model_name)
     engine = SimpleNamespace(model_config=SimpleNamespace(supports_multimodal_inputs=True))
@@ -415,7 +415,7 @@ async def test_state_is_prefilled_once_before_the_reads(
 ):
     serving, engine = serving_and_engine
     monkeypatch.setattr(ModelConfig, "is_hybrid", property(lambda self: hybrid))
-    engine.aphrodite_config = SimpleNamespace(cache_config=SimpleNamespace(enable_prefix_caching=prefix_caching))
+    engine.sonar_config = SimpleNamespace(cache_config=SimpleNamespace(enable_prefix_caching=prefix_caching))
     questions = dict(list(two_choice_questions().items())[:n_questions])
     request = StructuredDecisionRequest(state="word " * state_words, questions=questions, cache_salt="tenant")
     response = await serving.create_decision(request)
@@ -1060,7 +1060,7 @@ def test_generation_failures_are_server_errors(decision_server, endpoint, failur
 
 
 def test_decisions_logging_includes_receipt_and_body(decision_server, caplog, monkeypatch):
-    logger_name = "aphrodite.entrypoints.serve.utils.request_logger"
+    logger_name = "sonar.entrypoints.serve.utils.request_logger"
     monkeypatch.setattr(logging.getLogger(logger_name), "propagate", True)
     with caplog.at_level(logging.DEBUG, logger=logger_name):
         response = decision_server.client.post("/v1/decisions", json=decision_body("decisions"))
@@ -1111,26 +1111,26 @@ async def canvas_generate(prompt, params, request_id, **kwargs):
 
 @pytest.fixture(scope="module")
 def dgemma_renderer():
-    from aphrodite.tokenizers import get_tokenizer
+    from sonar.tokenizers import get_tokenizer
 
-    aphrodite_config = AphroditeConfig(model_config=ModelConfig(model=DGEMMA, dtype="float32"))
-    renderer = HfRenderer(aphrodite_config, get_tokenizer(DGEMMA))
-    yield aphrodite_config, renderer
+    sonar_config = SonarConfig(model_config=ModelConfig(model=DGEMMA, dtype="float32"))
+    renderer = HfRenderer(sonar_config, get_tokenizer(DGEMMA))
+    yield sonar_config, renderer
     renderer.shutdown()
 
 
 @pytest.fixture
 def dgemma(dgemma_renderer):
-    aphrodite_config, renderer = dgemma_renderer
+    sonar_config, renderer = dgemma_renderer
     engine = MagicMock(spec=EngineClient)
     engine.errored = False
-    engine.model_config = aphrodite_config.model_config
-    engine.aphrodite_config = aphrodite_config
+    engine.model_config = sonar_config.model_config
+    engine.sonar_config = sonar_config
     engine.renderer = renderer
     engine.input_processor = MagicMock()
     engine.generate.side_effect = canvas_generate
     online_renderer = OnlineRenderer(
-        aphrodite_config.model_config,
+        sonar_config.model_config,
         renderer,
         request_logger=None,
         chat_template=None,
@@ -1286,7 +1286,7 @@ def test_joint_lines_put_each_label_in_one_slot(dgemma, monkeypatch):
     assert labels.keys() == {x for t in QUESTION_TYPES.values() for x in t.label_set}
     assert len(ids) <= MAX_LOGPROB_TOKEN_IDS
     monkeypatch.setattr(
-        "aphrodite.entrypoints.openai.decisions.strategies.MAX_LOGPROB_TOKEN_IDS",
+        "sonar.entrypoints.openai.decisions.strategies.MAX_LOGPROB_TOKEN_IDS",
         len(ids) - 1,
     )
     assert not strategy._init_joint_lines(tokenizer)

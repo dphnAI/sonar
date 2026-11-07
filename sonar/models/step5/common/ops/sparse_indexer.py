@@ -6,12 +6,12 @@ from typing import NamedTuple
 
 import torch
 
-from aphrodite.model_executor.layers.indexer_topk import (
+from sonar.model_executor.layers.indexer_topk import (
     get_indexer_topk,
     is_deep_select_supported,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
 
 
 class DecodeIndexerMetadata(NamedTuple):

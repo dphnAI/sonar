@@ -19,9 +19,9 @@ import json
 
 import regex as re
 
-from aphrodite.parser.engine.events import EventType
-from aphrodite.parser.engine.parser_engine import ParserEngine
-from aphrodite.parser.engine.parser_engine_config import (
+from sonar.parser.engine.events import EventType
+from sonar.parser.engine.parser_engine import ParserEngine
+from sonar.parser.engine.parser_engine_config import (
     ArgValueExtender,
     ParserEngineConfig,
     ParserState,

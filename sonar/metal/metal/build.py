@@ -14,18 +14,18 @@ import subprocess
 import sysconfig
 from pathlib import Path
 
-from aphrodite.metal.metal.constants import PARTITION_SIZE
+from sonar.metal.metal.constants import PARTITION_SIZE
 
 logger = logging.getLogger(__name__)
 
 _THIS_DIR = Path(__file__).resolve().parent
 _REPO_ROOT = _THIS_DIR.parents[2]
-_SOURCE_DIR = Path(os.getenv("APHRODITE_METAL_SOURCE_DIR", str(_REPO_ROOT / "csrc" / "metal"))).expanduser()
+_SOURCE_DIR = Path(os.getenv("SONAR_METAL_SOURCE_DIR", str(_REPO_ROOT / "csrc" / "metal"))).expanduser()
 _SRC = _SOURCE_DIR / "paged_ops.cpp"
 _BUILD = _THIS_DIR / "build.py"
 _CONSTANTS = _THIS_DIR / "constants.py"
 _EXT_SUFFIX = sysconfig.get_config_var("EXT_SUFFIX") or ".so"
-_CACHE_DIR = Path.home() / ".cache" / "aphrodite" / "metal"
+_CACHE_DIR = Path.home() / ".cache" / "sonar" / "metal"
 _CACHE_DIR.mkdir(parents=True, exist_ok=True)
 _OUT = _CACHE_DIR / f"_paged_ops{_EXT_SUFFIX}"
 
@@ -106,7 +106,7 @@ def build() -> Path:
         f"-Wl,-rpath,{mlx_lib}",
         "-D_METAL_",
         "-DACCELERATE_NEW_LAPACK",
-        f"-DAPHRODITE_METAL_PARTITION_SIZE={PARTITION_SIZE}",
+        f"-DSONAR_METAL_PARTITION_SIZE={PARTITION_SIZE}",
         "-undefined",
         "dynamic_lookup",
         str(nb_src),

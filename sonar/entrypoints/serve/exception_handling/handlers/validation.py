@@ -8,9 +8,9 @@ from fastapi import Request
 from fastapi.exceptions import RequestValidationError
 from starlette.responses import JSONResponse
 
-from aphrodite.entrypoints.serve.engine.protocol import ErrorInfo, ErrorResponse
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.logger import init_logger
+from sonar.entrypoints.serve.engine.protocol import ErrorInfo, ErrorResponse
+from sonar.exceptions import SonarValidationError
+from sonar.logger import init_logger
 
 from ..utils import sanitize_message
 
@@ -158,7 +158,7 @@ async def validation_exception_handler(req: Request, exc: RequestValidationError
     for error in errors:
         if "ctx" in error and "error" in error["ctx"]:
             ctx_error = error["ctx"]["error"]
-            if isinstance(ctx_error, AphroditeValidationError):
+            if isinstance(ctx_error, SonarValidationError):
                 param = ctx_error.parameter
                 break
 

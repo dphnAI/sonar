@@ -20,25 +20,25 @@ import msgspec.msgpack
 import zmq
 import zmq.asyncio
 
-from aphrodite import envs
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.kv_events import KVEventsConfig
-from aphrodite.distributed.elastic_ep.external_elastic_ep import (
+from sonar import envs
+from sonar.config import SonarConfig
+from sonar.config.kv_events import KVEventsConfig
+from sonar.distributed.elastic_ep.external_elastic_ep import (
     ExternalElasticEPScaleCoordinator,
 )
-from aphrodite.envs import APHRODITE_ENGINE_READY_TIMEOUT_S
-from aphrodite.logger import init_logger
-from aphrodite.lora.request import LoRARequest
-from aphrodite.renderers import BaseRenderer
-from aphrodite.tasks import SupportedTask
-from aphrodite.tracing import instrument
-from aphrodite.utils.async_utils import in_loop
-from aphrodite.utils.network_utils import (
+from sonar.envs import SONAR_ENGINE_READY_TIMEOUT_S
+from sonar.logger import init_logger
+from sonar.lora.request import LoRARequest
+from sonar.renderers import BaseRenderer
+from sonar.tasks import SupportedTask
+from sonar.tracing import instrument
+from sonar.utils.async_utils import in_loop
+from sonar.utils.network_utils import (
     close_sockets,
     get_open_zmq_inproc_path,
     make_zmq_socket,
 )
-from aphrodite.v1.engine import (
+from sonar.v1.engine import (
     EEP_NOTIFICATION_CALL_ID,
     FT_STATUS_CALL_ID,
     CheckpointState,
@@ -52,25 +52,25 @@ from aphrodite.v1.engine import (
     ReconfigureRankType,
     UtilityOutput,
 )
-from aphrodite.v1.engine.coordinator import DPCoordinator
-from aphrodite.v1.engine.core import EngineCore, EngineCoreProc
-from aphrodite.v1.engine.exceptions import EngineDeadError
-from aphrodite.v1.engine.tensor_ipc import TensorIpcSender
-from aphrodite.v1.engine.utils import (
+from sonar.v1.engine.coordinator import DPCoordinator
+from sonar.v1.engine.core import EngineCore, EngineCoreProc
+from sonar.v1.engine.exceptions import EngineDeadError
+from sonar.v1.engine.tensor_ipc import TensorIpcSender
+from sonar.v1.engine.utils import (
     CoreEngineActorManager,
     CoreEngineProcManager,
     EngineZmqAddresses,
     get_engine_zmq_bind_addresses,
     launch_core_engines,
 )
-from aphrodite.v1.executor import Executor
-from aphrodite.v1.fault_tolerance.engine_core_sentinel import FT_UTILITY_METHOD
-from aphrodite.v1.fault_tolerance.utils import (
+from sonar.v1.executor import Executor
+from sonar.v1.fault_tolerance.engine_core_sentinel import FT_UTILITY_METHOD
+from sonar.v1.fault_tolerance.utils import (
     FaultToleranceRequest,
     FaultToleranceResult,
 )
-from aphrodite.v1.pool.late_interaction import get_late_interaction_engine_index
-from aphrodite.v1.serial_utils import MsgpackDecoder, MsgpackEncoder, bytestr
+from sonar.v1.pool.late_interaction import get_late_interaction_engine_index
+from sonar.v1.serial_utils import MsgpackDecoder, MsgpackEncoder, bytestr
 
 logger = init_logger(__name__)
 
@@ -99,7 +99,7 @@ class EngineCoreClient(ABC):
     def make_client(
         multiprocess_mode: bool,
         asyncio_mode: bool,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         executor_class: type[Executor],
         log_stats: bool,
         renderer: BaseRenderer | None = None,
@@ -119,7 +119,7 @@ class EngineCoreClient(ABC):
 
         if multiprocess_mode and asyncio_mode:
             return EngineCoreClient.make_async_mp_client(
-                aphrodite_config,
+                sonar_config,
                 executor_class,
                 log_stats,
                 renderer=renderer,
@@ -127,18 +127,18 @@ class EngineCoreClient(ABC):
 
         if multiprocess_mode and not asyncio_mode:
             return SyncMPClient(
-                aphrodite_config,
+                sonar_config,
                 executor_class,
                 log_stats,
                 renderer=renderer,
             )
 
-        return InprocClient(aphrodite_config, executor_class, log_stats)
+        return InprocClient(sonar_config, executor_class, log_stats)
 
     @staticmethod
     @instrument(span_name="Overall Loading")
     def make_async_mp_client(
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         executor_class: type[Executor],
         log_stats: bool,
         client_addresses: dict[str, Any] | None = None,
@@ -146,9 +146,9 @@ class EngineCoreClient(ABC):
         client_index: int = 0,
         renderer: BaseRenderer | None = None,
     ) -> "AsyncMPClient":
-        parallel_config = aphrodite_config.parallel_config
+        parallel_config = sonar_config.parallel_config
         client_args = (
-            aphrodite_config,
+            sonar_config,
             executor_class,
             log_stats,
             client_addresses,
@@ -386,14 +386,14 @@ class InprocClient(EngineCoreClient):
     # this process and MM warmup runs synchronously inside renderer.warmup().
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         executor_class: type[Executor],
         log_stats: bool,
         *,
         executor_fail_callback: Callable | None = None,
     ):
         self.engine_core = EngineCore(
-            aphrodite_config,
+            sonar_config,
             executor_class,
             log_stats,
             executor_fail_callback=executor_fail_callback,
@@ -531,7 +531,7 @@ class BackgroundResources:
         logger.debug_once("[shutdown] MPClient: background resource cleanup start")
         self.engine_dead = True
         if self.engine_manager is not None:
-            self.engine_manager.shutdown(timeout=envs.APHRODITE_WORKER_SHUTDOWN_TIMEOUT_SECONDS)
+            self.engine_manager.shutdown(timeout=envs.SONAR_WORKER_SHUTDOWN_TIMEOUT_SECONDS)
         if self.coordinator is not None:
             self.coordinator.shutdown()
 
@@ -613,13 +613,13 @@ class MPClient(EngineCoreClient):
     def __init__(
         self,
         asyncio_mode: bool,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         executor_class: type[Executor],
         log_stats: bool,
         client_addresses: dict[str, Any] | None = None,
         renderer: BaseRenderer | None = None,
     ):
-        self.aphrodite_config = aphrodite_config
+        self.sonar_config = sonar_config
         self._renderer: BaseRenderer | None = renderer
         self._effective_attention_block_sizes: set[int | None] = set()
         self._kv_event_sources: dict[int, KVEventsConfig] = {}
@@ -637,7 +637,7 @@ class MPClient(EngineCoreClient):
         try:
             # State used for data parallel.
             self.engines_running = False
-            parallel_config = aphrodite_config.parallel_config
+            parallel_config = sonar_config.parallel_config
             # Elastic EP can remove a rank and later add it back with the same
             # identity. The client input ROUTER needs handover to allow the new
             # engine to replace the dead connection.
@@ -676,7 +676,7 @@ class MPClient(EngineCoreClient):
                 self._start_mm_warmup()
             else:
                 # Engines are managed by this client.
-                bind_addresses = get_engine_zmq_bind_addresses(aphrodite_config)
+                bind_addresses = get_engine_zmq_bind_addresses(sonar_config)
                 self.input_socket = self.resources.input_socket = make_zmq_socket(
                     self.ctx,
                     bind_addresses.inputs[0],
@@ -693,7 +693,7 @@ class MPClient(EngineCoreClient):
                     outputs=[self.resources.output_socket.getsockopt(zmq.LAST_ENDPOINT).decode()],
                 )
 
-                with launch_core_engines(aphrodite_config, executor_class, log_stats, addresses) as engine_launch:
+                with launch_core_engines(sonar_config, executor_class, log_stats, addresses) as engine_launch:
                     self.resources.coordinator = engine_launch.coordinator
                     self.resources.engine_manager = engine_launch.engine_manager
                     coordinator = engine_launch.coordinator
@@ -719,7 +719,7 @@ class MPClient(EngineCoreClient):
 
             # Serialization setup with tensor queues for multimodal tensor IPC.
             tensor_ipc_sender: TensorIpcSender | None = None
-            model_config = getattr(aphrodite_config, "model_config", None)
+            model_config = getattr(sonar_config, "model_config", None)
             if model_config is not None and model_config.multimodal_config is not None:
                 mm_tensor_ipc = model_config.multimodal_config.mm_tensor_ipc
                 if mm_tensor_ipc == "torch_shm" and tensor_queue is not None:
@@ -746,16 +746,16 @@ class MPClient(EngineCoreClient):
             sync_input_socket = zmq.Socket.shadow(self.input_socket)
             while identities:
                 if not sync_input_socket.poll(
-                    timeout=APHRODITE_ENGINE_READY_TIMEOUT_S * 1000  # convert to ms
+                    timeout=SONAR_ENGINE_READY_TIMEOUT_S * 1000  # convert to ms
                 ):
                     raise TimeoutError(
                         f"Timed out waiting for engine core processes to "
                         f"start. This is often caused by slow weight loading "
                         f"for large models. Waited "
-                        f"{APHRODITE_ENGINE_READY_TIMEOUT_S}s (configured by "
-                        f"APHRODITE_ENGINE_READY_TIMEOUT_S). To increase the "
+                        f"{SONAR_ENGINE_READY_TIMEOUT_S}s (configured by "
+                        f"SONAR_ENGINE_READY_TIMEOUT_S). To increase the "
                         f"timeout, set the environment variable: "
-                        f"APHRODITE_ENGINE_READY_TIMEOUT_S=<seconds>"
+                        f"SONAR_ENGINE_READY_TIMEOUT_S=<seconds>"
                     )
                 identity, payload = sync_input_socket.recv_multipart()
                 identities.remove(identity)
@@ -832,35 +832,33 @@ class MPClient(EngineCoreClient):
     def _apply_ready_response(self, payload: bytes) -> None:
         """Decode an EngineCoreReadyResponse and sync any post-initialization
         config changes (e.g. auto-fitted max_model_len) back to the frontend."""
-        aphrodite_config = self.aphrodite_config
+        sonar_config = self.sonar_config
         response = msgspec.msgpack.decode(payload, type=EngineCoreReadyResponse) if payload else None
         self._effective_attention_block_sizes.add(
             response.effective_attention_block_size if response is not None else None
         )
         sizes = self._effective_attention_block_sizes
-        aphrodite_config.cache_config.effective_attention_block_size = next(iter(sizes)) if len(sizes) == 1 else None
+        sonar_config.cache_config.effective_attention_block_size = next(iter(sizes)) if len(sizes) == 1 else None
         if response is None:
-            if aphrodite_config.dphn_network_config is not None:
+            if sonar_config.dphn_network_config is not None:
                 raise ValueError("DPHN weight-receipt mode requires engine readiness metadata")
             return
-        if response.dphn_network_enabled != (aphrodite_config.dphn_network_config is not None):
+        if response.dphn_network_enabled != (sonar_config.dphn_network_config is not None):
             raise ValueError("DPHN weight-receipt mode differs between frontend and engine")
         if not hasattr(self, "capacity_reports"):
             self.capacity_reports: dict[int, EngineCoreReadyResponse] = {}
         self.capacity_reports[response.data_parallel_rank] = response
-        aphrodite_config.model_config.max_model_len = min(
-            aphrodite_config.model_config.max_model_len, response.max_model_len
-        )
+        sonar_config.model_config.max_model_len = min(sonar_config.model_config.max_model_len, response.max_model_len)
 
         # Setup KV cache config with initialization state from
         # engine core process. Sum num_gpu_blocks from all engines in DP case.
-        num_gpu_blocks = aphrodite_config.cache_config.num_gpu_blocks or 0
+        num_gpu_blocks = sonar_config.cache_config.num_gpu_blocks or 0
         num_gpu_blocks += response.num_gpu_blocks
-        aphrodite_config.cache_config.num_gpu_blocks = num_gpu_blocks
+        sonar_config.cache_config.num_gpu_blocks = num_gpu_blocks
 
         # Sync block_size: may be enlarged by _align_hybrid_block_size in the
         # worker for hybrid Mamba models.
-        cache_config = aphrodite_config.cache_config
+        cache_config = sonar_config.cache_config
         cache_config.block_size = response.block_size
         cache_config.mamba_block_size = response.mamba_block_size
         # Keep these as per-engine cache_config_info values; do not sum across DP.
@@ -887,7 +885,7 @@ class MPClient(EngineCoreClient):
         if response.kv_events_config is not None:
             self._kv_event_sources[response.data_parallel_rank] = response.kv_events_config
 
-        parallel_config = aphrodite_config.parallel_config
+        parallel_config = sonar_config.parallel_config
         if response.coord_store_port:
             if parallel_config._coord_store_port:
                 assert response.coord_store_port == parallel_config._coord_store_port
@@ -936,20 +934,20 @@ class SyncMPClient(MPClient):
     @instrument(span_name="SyncMPClient init")
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         executor_class: type[Executor],
         log_stats: bool,
         renderer: BaseRenderer | None = None,
     ):
         super().__init__(
             asyncio_mode=False,
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             executor_class=executor_class,
             log_stats=log_stats,
             renderer=renderer,
         )
 
-        self.is_dp = self.aphrodite_config.parallel_config.data_parallel_size > 1
+        self.is_dp = self.sonar_config.parallel_config.data_parallel_size > 1
         self.outputs_queue = queue.Queue[EngineCoreOutputs | Exception]()
 
         # Ensure that the outputs socket processing thread does not have
@@ -1124,7 +1122,7 @@ class AsyncMPClient(MPClient):
     @instrument(span_name="AsyncMPClient init")
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         executor_class: type[Executor],
         log_stats: bool,
         client_addresses: dict[str, Any] | None = None,
@@ -1134,7 +1132,7 @@ class AsyncMPClient(MPClient):
     ):
         super().__init__(
             asyncio_mode=True,
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             executor_class=executor_class,
             log_stats=log_stats,
             client_addresses=client_addresses,
@@ -1147,7 +1145,7 @@ class AsyncMPClient(MPClient):
 
         # locally-cached engine status
         self._engine_status: dict[int, dict] = {}
-        if self.aphrodite_config.parallel_config.enable_fault_tolerance:
+        if self.sonar_config.parallel_config.enable_fault_tolerance:
             self._engine_status = {rank: {"id": rank, "status": "healthy"} for rank in self.engine_ranks_managed}
         try:
             # If we are running in an asyncio event loop, start the queue task.
@@ -1462,7 +1460,7 @@ class DPAsyncMPClient(AsyncMPClient):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         executor_class: type[Executor],
         log_stats: bool,
         client_addresses: dict[str, Any] | None = None,
@@ -1471,13 +1469,13 @@ class DPAsyncMPClient(AsyncMPClient):
         renderer: BaseRenderer | None = None,
     ):
         self.current_wave = 0
-        parallel_config = aphrodite_config.parallel_config
+        parallel_config = sonar_config.parallel_config
         self.external_eep_coordinator: ExternalElasticEPScaleCoordinator | None = None
         if parallel_config.enable_elastic_ep and (parallel_config.data_parallel_external_lb):
             self.external_eep_coordinator = ExternalElasticEPScaleCoordinator(self)
 
         super().__init__(
-            aphrodite_config,
+            sonar_config,
             executor_class,
             log_stats,
             client_addresses,
@@ -1536,7 +1534,7 @@ class DPAsyncMPClient(AsyncMPClient):
                         msg_type, new_engine_count = msgspec.msgpack.decode(buf)
                         assert msg_type == "SCALE_ELASTIC_EP"
                         # Update engine_ranks_managed and count_slice
-                        parallel_config = self.aphrodite_config.parallel_config
+                        parallel_config = self.sonar_config.parallel_config
                         dp_size = parallel_config.data_parallel_size
                         dp_rank = parallel_config.data_parallel_rank
                         assert dp_rank == 0
@@ -1595,22 +1593,22 @@ class DPAsyncMPClient(AsyncMPClient):
         return self.core_engine
 
     def _eep_commit_pause_mode(self) -> PauseMode:
-        from aphrodite.distributed.elastic_ep.elastic_execute import (
+        from sonar.distributed.elastic_ep.elastic_execute import (
             can_reuse_fused_moe_kernel,
         )
 
         # MRV2 re-warms through the request pool, so running requests must
         # finish first while new ones stay queued in the scheduler.
-        parallel_config = self.aphrodite_config.parallel_config
-        if self.aphrodite_config.use_v2_model_runner and not can_reuse_fused_moe_kernel(parallel_config):
+        parallel_config = self.sonar_config.parallel_config
+        if self.sonar_config.use_v2_model_runner and not can_reuse_fused_moe_kernel(parallel_config):
             return "wait"
         return "keep"
 
     def _setup_elastic_ep_reconfig_bootstrap(self) -> tuple[str, int]:
-        from aphrodite.distributed.utils import create_tcp_store
-        from aphrodite.utils.network_utils import get_open_ports_list
+        from sonar.distributed.utils import create_tcp_store
+        from sonar.utils.network_utils import get_open_ports_list
 
-        parallel_config = self.aphrodite_config.parallel_config
+        parallel_config = self.sonar_config.parallel_config
         parallel_config._data_parallel_master_port_list = get_open_ports_list(5)
         parallel_config.data_parallel_master_port = parallel_config._data_parallel_master_port_list.pop()
 
@@ -1632,7 +1630,7 @@ class DPAsyncMPClient(AsyncMPClient):
             await self.external_eep_coordinator.process_engine_core_notification(notification_data)
 
     def _get_external_eep_coordinator(self) -> ExternalElasticEPScaleCoordinator:
-        parallel_config = self.aphrodite_config.parallel_config
+        parallel_config = self.sonar_config.parallel_config
         if not parallel_config.enable_elastic_ep:
             raise NotImplementedError("Elastic EP scaling requires enable_elastic_ep=True.")
         if not parallel_config.data_parallel_external_lb:
@@ -1644,7 +1642,7 @@ class DPAsyncMPClient(AsyncMPClient):
         return coordinator
 
     async def prepare_elastic_ep(self, new_data_parallel_size: int) -> None:
-        cur_data_parallel_size = self.aphrodite_config.parallel_config.data_parallel_size
+        cur_data_parallel_size = self.sonar_config.parallel_config.data_parallel_size
 
         assert new_data_parallel_size != cur_data_parallel_size, (
             f"new_data_parallel_size {new_data_parallel_size} must be "
@@ -1671,7 +1669,7 @@ class DPLBAsyncMPClient(DPAsyncMPClient):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         executor_class: type[Executor],
         log_stats: bool,
         client_addresses: dict[str, Any] | None = None,
@@ -1690,7 +1688,7 @@ class DPLBAsyncMPClient(DPAsyncMPClient):
         self.engine_inflight: Counter[EngineIdentity] = Counter()
 
         super().__init__(
-            aphrodite_config,
+            sonar_config,
             executor_class,
             log_stats,
             client_addresses,
@@ -1802,7 +1800,7 @@ class DPLBAsyncMPClient(DPAsyncMPClient):
             raise ValueError(f"Unknown EEP notification type: {notification_type_str}") from e
 
         if notification_type == EEPNotificationType.RECONFIGURE_FINISHED:
-            from aphrodite.v1.engine import UtilityResult
+            from sonar.v1.engine import UtilityResult
 
             # NOTE(yongji): process a dummy UtilityOutput to resolve the future
             # awaited in _eep_wait_for_setup_switch_complete(), signaling that
@@ -1823,7 +1821,7 @@ class DPLBAsyncMPClient(DPAsyncMPClient):
             old_dp_size = len(cache.existing_core_engines)
             new_dp_size = old_dp_size + cache.num_new_core_engines
             engine_manager.scale_down_elastic_ep(old_dp_size, new_dp_size)
-            self.aphrodite_config.parallel_config.data_parallel_size_local = len(engine_manager.local_engine_actors)
+            self.sonar_config.parallel_config.data_parallel_size_local = len(engine_manager.local_engine_actors)
             self.eep_scaling_cache = None
 
     async def abort_requests_async(self, request_ids: list[str]) -> None:
@@ -1866,7 +1864,7 @@ class DPLBAsyncMPClient(DPAsyncMPClient):
             await self._commit_scale_up_elastic_ep(new_data_parallel_size)
         else:
             await self._commit_scale_down_elastic_ep(new_data_parallel_size)
-        self.aphrodite_config.parallel_config.eplb_config.num_redundant_experts = num_redundant_experts
+        self.sonar_config.parallel_config.eplb_config.num_redundant_experts = num_redundant_experts
         self._prepared_elastic_ep = None
 
     async def prepare_elastic_ep(self, new_data_parallel_size: int) -> None:
@@ -1876,17 +1874,17 @@ class DPLBAsyncMPClient(DPAsyncMPClient):
                 return
             raise RuntimeError("Elastic EP scaling is already prepared")
         cur_data_parallel_size = len(self.core_engines)
-        assert self.aphrodite_config.parallel_config.data_parallel_backend == "ray", (
+        assert self.sonar_config.parallel_config.data_parallel_backend == "ray", (
             "Only ray DP backend supports scaling elastic EP"
         )
-        parallel_config = self.aphrodite_config.parallel_config
+        parallel_config = self.sonar_config.parallel_config
         if new_data_parallel_size > parallel_config.elastic_ep_max_dp_size:
             raise ValueError(
                 f"Cannot scale to data_parallel_size {new_data_parallel_size}; "
                 "--elastic-ep-max-dp-size is "
                 f"{parallel_config.elastic_ep_max_dp_size}."
             )
-        num_experts = self.aphrodite_config.model_config.get_num_experts()
+        num_experts = self.sonar_config.model_config.get_num_experts()
         num_physical_experts = num_experts + parallel_config.eplb_config.num_redundant_experts
         num_redundant_experts = num_physical_experts * new_data_parallel_size // cur_data_parallel_size - num_experts
         if num_redundant_experts < 0:
@@ -1920,14 +1918,14 @@ class DPLBAsyncMPClient(DPAsyncMPClient):
         new_engine_identities = set(new_core_engines)
         sync_input_socket = zmq.Socket.shadow(self.input_socket)
         while new_engine_identities:
-            if not sync_input_socket.poll(timeout=APHRODITE_ENGINE_READY_TIMEOUT_S * 1000):
+            if not sync_input_socket.poll(timeout=SONAR_ENGINE_READY_TIMEOUT_S * 1000):
                 raise TimeoutError(
                     f"Timed out waiting for new engine core processes to "
                     f"start. Waited "
-                    f"{APHRODITE_ENGINE_READY_TIMEOUT_S}s (configured by "
-                    f"APHRODITE_ENGINE_READY_TIMEOUT_S). To increase the "
+                    f"{SONAR_ENGINE_READY_TIMEOUT_S}s (configured by "
+                    f"SONAR_ENGINE_READY_TIMEOUT_S). To increase the "
                     f"timeout, set the environment variable: "
-                    f"APHRODITE_ENGINE_READY_TIMEOUT_S=<seconds>"
+                    f"SONAR_ENGINE_READY_TIMEOUT_S=<seconds>"
                 )
             identity, payload = sync_input_socket.recv_multipart()
             new_engine_identities.discard(identity)
@@ -1938,7 +1936,7 @@ class DPLBAsyncMPClient(DPAsyncMPClient):
         new_data_parallel_size: int,
         rank_type: ReconfigureRankType = ReconfigureRankType.KEEP_CURRENT_RANK,
     ) -> ReconfigureDistributedRequest:
-        parallel_config = self.aphrodite_config.parallel_config
+        parallel_config = self.sonar_config.parallel_config
         return ReconfigureDistributedRequest(
             new_data_parallel_size=new_data_parallel_size,
             new_data_parallel_rank=rank_type,
@@ -1969,7 +1967,7 @@ class DPLBAsyncMPClient(DPAsyncMPClient):
         assert isinstance(self.resources.engine_manager, CoreEngineActorManager)
         start_new_worker_future = asyncio.to_thread(
             self.resources.engine_manager.scale_up_elastic_ep,
-            self.aphrodite_config,
+            self.sonar_config,
             new_data_parallel_size,
             num_redundant_experts,
         )
@@ -2003,7 +2001,7 @@ class DPLBAsyncMPClient(DPAsyncMPClient):
 
         self.core_engines.extend(new_core_engines)
         # Update the parallel config
-        parallel_config = self.aphrodite_config.parallel_config
+        parallel_config = self.sonar_config.parallel_config
         parallel_config.data_parallel_size = new_data_parallel_size
         if isinstance(self.resources.engine_manager, CoreEngineActorManager):
             parallel_config.data_parallel_size_local = len(self.resources.engine_manager.local_engine_actors)
@@ -2076,7 +2074,7 @@ class DPLBAsyncMPClient(DPAsyncMPClient):
         try:
             await asyncio.gather(*reconfig_futures)
 
-            self.aphrodite_config.parallel_config.data_parallel_size = new_data_parallel_size
+            self.sonar_config.parallel_config.data_parallel_size = new_data_parallel_size
             self._ensure_stats_update_task()
             scale_down_marker = msgspec.msgpack.encode(("SCALE_ELASTIC_EP", new_data_parallel_size))
             await self.scale_send_socket.send(scale_down_marker)

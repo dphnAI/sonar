@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import requests
 
-from aphrodite.utils.network_utils import get_open_port
+from sonar.utils.network_utils import get_open_port
 from tests.entrypoints.rl.conftest import pause, resume, server
 
 # Fresh connections, so the kernel spreads them across both API servers.

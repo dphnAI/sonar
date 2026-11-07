@@ -2,12 +2,12 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import numpy as np
 
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.config import (
     ModelConfig,
+    SonarConfig,
     SpeculativeConfig,
 )
-from aphrodite.v1.spec_decode.ngram_proposer import (
+from sonar.v1.spec_decode.ngram_proposer import (
     NgramProposer,
     _find_longest_matched_ngram_and_propose_tokens,
 )
@@ -67,7 +67,7 @@ def test_ngram_proposer():
         # Dummy model config. Just to set max_model_len.
         model_config = ModelConfig(model="facebook/opt-125m")
         return NgramProposer(
-            aphrodite_config=AphroditeConfig(
+            sonar_config=SonarConfig(
                 model_config=model_config,
                 speculative_config=SpeculativeConfig(
                     prompt_lookup_min=min_n,

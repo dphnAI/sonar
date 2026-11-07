@@ -11,39 +11,39 @@ from typing import TYPE_CHECKING, Literal
 import mlx.core as mx
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.metal.config import (
+from sonar.logger import init_logger
+from sonar.metal.config import (
     PAGED_ATTENTION_DEFAULT_MEMORY_FRACTION,
     PAGED_ATTENTION_MIN_BLOCKS,
     get_config,
 )
-from aphrodite.metal.metal_kernel_backend.turboquant import (
+from sonar.metal.metal_kernel_backend.turboquant import (
     BLOCK_SIZE as TQ_BLOCK_SIZE,
 )
-from aphrodite.metal.metal_kernel_backend.turboquant import (
+from sonar.metal.metal_kernel_backend.turboquant import (
     QUANT_PARAMS,
     V_QUANT_PARAMS,
     packed_dim,
 )
-from aphrodite.metal.paged_attention_backend.hybrid import (
+from sonar.metal.paged_attention_backend.hybrid import (
     HybridPagedAttentionBackend,
     _build_linear_layer_spec,
 )
-from aphrodite.metal.paged_attention_backend.mha import MHAPagedAttentionBackend
-from aphrodite.metal.paged_attention_backend.mla import MLAPagedAttentionBackend
-from aphrodite.metal.paged_attention_backend.protocol import PagedAttentionBackend
-from aphrodite.metal.pytorch_backend.tensor_bridge import MLX_TO_TORCH_DTYPE
-from aphrodite.metal.stt.policy import (
+from sonar.metal.paged_attention_backend.mha import MHAPagedAttentionBackend
+from sonar.metal.paged_attention_backend.mla import MLAPagedAttentionBackend
+from sonar.metal.paged_attention_backend.protocol import PagedAttentionBackend
+from sonar.metal.pytorch_backend.tensor_bridge import MLX_TO_TORCH_DTYPE
+from sonar.metal.stt.policy import (
     STT_SCHED_AVAILABLE_BYTES,
     STT_SCHED_BLOCK_BYTES,
     STT_SCHED_NOMINAL_HEAD_SIZE,
 )
-from aphrodite.metal.v1.model_adapter import ModelAdapter
-from aphrodite.v1.kv_cache_interface import FullAttentionSpec, KVCacheConfig, KVCacheSpec
+from sonar.metal.v1.model_adapter import ModelAdapter
+from sonar.v1.kv_cache_interface import FullAttentionSpec, KVCacheConfig, KVCacheSpec
 
 if TYPE_CHECKING:
-    from aphrodite.metal.v1.model_runner import MetalModelRunner
-    from aphrodite.v1.worker.metal_worker import MetalWorker
+    from sonar.metal.v1.model_runner import MetalModelRunner
+    from sonar.v1.worker.metal_worker import MetalWorker
 
 logger = init_logger(__name__)
 
@@ -143,8 +143,8 @@ def _build_turboquant_attention_spec(
 
 def _register_turboquant_spec_manager() -> None:
     """Use full-attention block scheduling for the Metal packed cache."""
-    from aphrodite.v1.core.single_type_kv_cache_manager import FullAttentionManager
-    from aphrodite.v1.kv_cache_spec_registry import KVCacheSpecRegistry
+    from sonar.v1.core.single_type_kv_cache_manager import FullAttentionManager
+    from sonar.v1.kv_cache_spec_registry import KVCacheSpecRegistry
 
     KVCacheSpecRegistry.register(TurboQuantAttentionSpec, FullAttentionManager)
 
@@ -528,14 +528,14 @@ class WorkerCachePlanner:
         n_patched = backend.patch_model(self._worker.model_runner.model)
         config = get_config()
         if config.kv_sharing_fast_prefill:
-            from aphrodite.metal.yoco_fast_prefill import try_enable_gemma4_yoco_fast_prefill
+            from sonar.metal.yoco_fast_prefill import try_enable_gemma4_yoco_fast_prefill
 
             try_enable_gemma4_yoco_fast_prefill(
                 self._worker.model_runner.model,
                 self._worker.model_runner.model_args,
                 use_paged_attention=config.use_paged_attention,
                 num_paged_layers=n_patched,
-                warn_on_skip="APHRODITE_METAL_KV_SHARING_FAST_PREFILL" in os.environ,
+                warn_on_skip="SONAR_METAL_KV_SHARING_FAST_PREFILL" in os.environ,
             )
         logger.info(
             "Paged attention enabled: %d layers patched, "
@@ -599,7 +599,7 @@ class WorkerCachePlanner:
 
         max_num_seqs = self._worker.model_runner.scheduler_config.max_num_seqs
         if self._worker.model_runner.is_hybrid:
-            block_size = self._worker.aphrodite_config.cache_config.block_size
+            block_size = self._worker.sonar_config.cache_config.block_size
             max_model_len = self._worker.model_config.max_model_len
             num_blocks = -(-max_model_len // block_size)
             block_size_bytes = self._worker.get_cache_block_size_bytes()
@@ -634,7 +634,7 @@ class WorkerCachePlanner:
         return runner.num_linear_layers * attention_page_size * runner.scheduler_config.max_num_seqs
 
     def _paged_attention_plan(self, *, overhead: int) -> _PagedAttentionPlan:
-        block_size = self._worker.aphrodite_config.cache_config.block_size
+        block_size = self._worker.sonar_config.cache_config.block_size
         fraction = self._memory_fraction()
         metal_limit = self._metal_limit_bytes()
         model_memory = self.get_model_memory_usage()
@@ -662,7 +662,7 @@ class WorkerCachePlanner:
                 f"model_memory={model_memory / 1e9:.2f}GB, "
                 f"overhead={overhead / 1e9:.2f}GB, "
                 f"kv_budget={kv_budget / 1e9:.2f}GB. "
-                "Mitigations: increase APHRODITE_METAL_MEMORY_FRACTION, "
+                "Mitigations: increase SONAR_METAL_MEMORY_FRACTION, "
                 "use a smaller or more quantized model."
             )
 
@@ -686,7 +686,7 @@ class WorkerCachePlanner:
                 f"overhead={overhead / 1e9:.2f}GB, "
                 f"kv_budget={kv_budget / 1e9:.2f}GB, "
                 f"per_block_bytes={per_block_bytes}. "
-                "Mitigations: increase APHRODITE_METAL_MEMORY_FRACTION, "
+                "Mitigations: increase SONAR_METAL_MEMORY_FRACTION, "
                 "use a smaller or more quantized model."
             )
         if num_blocks < memory_num_blocks:
@@ -714,7 +714,7 @@ class WorkerCachePlanner:
     def _memory_fraction(self) -> float:
         if self._worker.metal_config.is_auto_memory:
             logger.info(
-                "Paged attention: APHRODITE_METAL_MEMORY_FRACTION=auto, defaulting to %.2f for paged path",
+                "Paged attention: SONAR_METAL_MEMORY_FRACTION=auto, defaulting to %.2f for paged path",
                 PAGED_ATTENTION_DEFAULT_MEMORY_FRACTION,
             )
             return PAGED_ATTENTION_DEFAULT_MEMORY_FRACTION

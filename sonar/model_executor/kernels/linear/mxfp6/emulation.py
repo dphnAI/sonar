@@ -7,14 +7,14 @@ from functools import partial
 import torch
 import torch.nn.functional as F
 
-from aphrodite.model_executor.layers.quantization.utils.mxfp4_utils import (
+from sonar.model_executor.layers.quantization.utils.mxfp4_utils import (
     quant_dequant_mxfp4,
 )
-from aphrodite.model_executor.layers.quantization.utils.mxfp6_utils import (
+from sonar.model_executor.layers.quantization.utils.mxfp6_utils import (
     dequant_mxfp6,
     quant_dequant_mxfp6,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     kMxfp4Dynamic,
     kMxfp6E2M3Dynamic,

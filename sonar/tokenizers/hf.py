@@ -8,8 +8,8 @@ from typing import TypeAlias, TypeVar
 
 from transformers import AutoTokenizer, PythonBackend, TokenizersBackend
 
-from aphrodite.logger import init_logger
-from aphrodite.transformers_utils.config import get_sentence_transformer_tokenizer_config
+from sonar.logger import init_logger
+from sonar.transformers_utils.config import get_sentence_transformer_tokenizer_config
 
 from .protocol import TokenizerLike
 

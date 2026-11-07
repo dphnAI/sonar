@@ -23,7 +23,7 @@
 #include "cutlass_extensions/common.hpp"
 // clang-format on
 
-namespace aphrodite::c3x {
+namespace sonar::c3x {
 
 static inline cute::Shape<int, int, int, int> get_problem_shape(
     torch::stable::Tensor const& a, torch::stable::Tensor const& b) {
@@ -107,4 +107,4 @@ void cutlass_gemm_caller(torch::stable::Tensor& out,
                                   epilogue_args);
 }
 
-}  // namespace aphrodite::c3x
+}  // namespace sonar::c3x

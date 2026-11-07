@@ -49,66 +49,66 @@ from transformers.models.cohere_compass.image_processing_cohere_compass import (
     smart_resize as image_smart_resize,
 )
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, CacheConfig
-from aphrodite.config.multimodal import MultiModalDummyOptions
-from aphrodite.distributed import (
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import CacheConfig, SonarConfig
+from sonar.config.multimodal import MultiModalDummyOptions
+from sonar.distributed import (
     get_pp_group,
     get_tensor_model_parallel_world_size,
     parallel_state,
 )
-from aphrodite.distributed import utils as dist_utils
-from aphrodite.inputs import ModalityData, MultiModalDataDict
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.activation import _ACTIVATION_REGISTRY
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.layers.attention.mm_encoder_attention import (
+from sonar.distributed import utils as dist_utils
+from sonar.inputs import ModalityData, MultiModalDataDict
+from sonar.logger import init_logger
+from sonar.model_executor.layers.activation import _ACTIVATION_REGISTRY
+from sonar.model_executor.layers.attention import Attention
+from sonar.model_executor.layers.attention.mm_encoder_attention import (
     MMEncoderAttention,
 )
-from aphrodite.model_executor.layers.conv import Conv3dLayer
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.conv import Conv3dLayer
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     QKVParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.layers.rotary_embedding.common import ApplyRotaryEmb
-from aphrodite.model_executor.layers.vocab_parallel_embedding import VocabParallelEmbedding
-from aphrodite.model_executor.models.module_mapping import MultiModelKeys
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import (
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.layers.rotary_embedding.common import ApplyRotaryEmb
+from sonar.model_executor.layers.vocab_parallel_embedding import VocabParallelEmbedding
+from sonar.model_executor.models.module_mapping import MultiModelKeys
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import (
     ImageItem,
     MultiModalFeatureSpec,
     MultiModalFieldConfig,
     MultiModalKwargsItem,
     MultiModalKwargsItems,
 )
-from aphrodite.multimodal.parse import (
+from sonar.multimodal.parse import (
     DictEmbeddingItems,
     ImageSize,
     ModalityDataItems,
     MultiModalDataItems,
     MultiModalDataParser,
 )
-from aphrodite.multimodal.processing import (
+from sonar.multimodal.processing import (
     BaseDummyInputsBuilder,
     BaseMultiModalProcessor,
     BaseProcessingInfo,
     PromptReplacement,
     PromptUpdate,
 )
-from aphrodite.multimodal.video_prune.evs import (
+from sonar.multimodal.video_prune.evs import (
     compute_mrope_for_media,
     recompute_mrope_positions,
 )
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.tokenizers.registry import cached_tokenizer_from_config
-from aphrodite.triton_utils import HAS_TRITON, tl, triton
-from aphrodite.utils.math_utils import round_up
-from aphrodite.utils.tensor_schema import TensorSchema, TensorShape
-from aphrodite.v1.worker.encoder_cudagraph_defs import EncoderCudaGraphReplayBuffers
+from sonar.sequence import IntermediateTensors
+from sonar.tokenizers.registry import cached_tokenizer_from_config
+from sonar.triton_utils import HAS_TRITON, tl, triton
+from sonar.utils.math_utils import round_up
+from sonar.utils.tensor_schema import TensorSchema, TensorShape
+from sonar.v1.worker.encoder_cudagraph_defs import EncoderCudaGraphReplayBuffers
 
 from ...utils.torch_utils import async_tensor_h2d
 from .commandr import CohereForCausalLM, CohereMLP, LayerNorm
@@ -666,7 +666,7 @@ class Cohere_VisionPatchMerger(nn.Module):
 
 
 class Cohere_VisionTransformer(nn.Module):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_stacked={
             ".q.": (".qkv.", "q"),
             ".k.": (".qkv.", "k"),
@@ -970,7 +970,7 @@ class Cohere_VisionTransformer(nn.Module):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
 
 def _create_cohere_compass_field_factory(
@@ -1269,7 +1269,7 @@ class CohereCompassForConditionalGeneration(
     supports_encoder_tp_data = True
 
     # To ensure correct weight loading and mapping.
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={
             "model.visual.": "visual.",
             "lm_head.": "language_model.lm_head.",
@@ -1283,15 +1283,15 @@ class CohereCompassForConditionalGeneration(
             return "<|VISION_START|><|IMAGE_PAD|><|VISION_END|>"
         raise ValueError("Only image modality is supported")
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "model"):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "model"):
         nn.Module.__init__(self)
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
-        multimodal_config = aphrodite_config.model_config.multimodal_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
+        multimodal_config = sonar_config.model_config.multimodal_config
 
         self.config = config
-        self.model_config = aphrodite_config.model_config
-        self._tokenizer = cached_tokenizer_from_config(aphrodite_config.model_config)
+        self.model_config = sonar_config.model_config
+        self._tokenizer = cached_tokenizer_from_config(sonar_config.model_config)
         self.multimodal_config = multimodal_config
         assert multimodal_config is not None
         self.use_data_parallel = multimodal_config.mm_encoder_tp_mode == "data"
@@ -1302,7 +1302,7 @@ class CohereCompassForConditionalGeneration(
         self.visual_dim = config.vision_config.out_hidden_size
         self.multiscale_dim = self.visual_dim * self.deepstack_num_level
 
-        with self._mark_tower_model(aphrodite_config, {"image"}):
+        with self._mark_tower_model(sonar_config, {"image"}):
             self.visual = Cohere_VisionTransformer(
                 config.vision_config,
                 norm_eps=1e-6,
@@ -1312,16 +1312,16 @@ class CohereCompassForConditionalGeneration(
             if self.use_deepstack:
                 self.deepstack_input_embeds = [
                     torch.zeros(
-                        aphrodite_config.scheduler_config.max_num_batched_tokens,
+                        sonar_config.scheduler_config.max_num_batched_tokens,
                         config.text_config.hidden_size,
                     )
                     for _ in range(self.deepstack_num_level)
                 ]
                 self.deepstack_input_embeds_num_tokens = 0
 
-        with self._mark_language_model(aphrodite_config):
+        with self._mark_language_model(sonar_config):
             self.language_model = CohereCompassForCausalLM(
-                aphrodite_config=aphrodite_config.with_hf_config(config.text_config),
+                sonar_config=sonar_config.with_hf_config(config.text_config),
                 prefix=maybe_prefix(prefix, "language_model"),
             )
 
@@ -1402,7 +1402,7 @@ class CohereCompassForConditionalGeneration(
     # -- SupportsEncoderCudaGraph protocol methods --
 
     def get_encoder_cudagraph_config(self):
-        from aphrodite.v1.worker.encoder_cudagraph_defs import (
+        from sonar.v1.worker.encoder_cudagraph_defs import (
             EncoderCudaGraphConfig,
         )
 
@@ -1441,7 +1441,7 @@ class CohereCompassForConditionalGeneration(
 
     def get_encoder_cudagraph_budget_range(
         self,
-        aphrodite_config,
+        sonar_config,
     ) -> tuple[int, int]:
         # Min: estimated smallest possible encoder input.
         # 224x224 image → 16x16 patches (patch_size=14)
@@ -1450,7 +1450,7 @@ class CohereCompassForConditionalGeneration(
         # Max: capped by max_num_batched_tokens
         # TODO(shen-shanshan): the max_budget auto-infer needs to be optimized later.
         max_budget = min(
-            aphrodite_config.scheduler_config.max_num_batched_tokens,
+            sonar_config.scheduler_config.max_num_batched_tokens,
             self.model_config.max_model_len,
         )
         return (min_budget, max_budget)
@@ -1478,7 +1478,7 @@ class CohereCompassForConditionalGeneration(
         self,
         mm_kwargs: dict[str, Any],
     ):
-        from aphrodite.v1.worker.encoder_cudagraph_defs import EncoderItemSpec
+        from sonar.v1.worker.encoder_cudagraph_defs import EncoderItemSpec
 
         m = self.visual.spatial_merge_size
         grid_thw = self._get_grid_thw_by_modality(mm_kwargs)
@@ -1528,7 +1528,7 @@ class CohereCompassForConditionalGeneration(
         path: str = "default",
         axis_keys: tuple[Hashable, ...] | None = None,
     ):
-        from aphrodite.v1.worker.encoder_cudagraph_defs import (
+        from sonar.v1.worker.encoder_cudagraph_defs import (
             EncoderCudaGraphCaptureInputs,
         )
 
@@ -1968,7 +1968,7 @@ class CohereCompassForConditionalGeneration(
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
     def get_mm_mapping(self) -> MultiModelKeys:
         """Get the module prefix in multimodal models"""
@@ -2131,11 +2131,11 @@ class CohereCompassDecoderLayer(nn.Module):
     }
 )
 class CohereCompassTextModel(nn.Module):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        cache_config = aphrodite_config.cache_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        cache_config = sonar_config.cache_config
+        quant_config = sonar_config.quant_config
 
         self.config = config
         self.vocab_size = config.vocab_size
@@ -2149,7 +2149,7 @@ class CohereCompassTextModel(nn.Module):
                 config,
                 cache_config,
                 quant_config=quant_config,
-                max_position_embeddings=aphrodite_config.model_config.max_model_len,
+                max_position_embeddings=sonar_config.model_config.max_model_len,
                 prefix=prefix,
             ),
             prefix=f"{prefix}.layers",
@@ -2197,17 +2197,17 @@ class CohereCompassTextModel(nn.Module):
 
 
 class CohereCompassForCausalLM(CohereForCausalLM):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         nn.Module.__init__(self)
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
         assert config.tie_word_embeddings
 
         self.config = config
-        self.quant_config = aphrodite_config.quant_config
+        self.quant_config = sonar_config.quant_config
         logit_scale = 1.0 if config.logit_scale is None else config.logit_scale
         self.logits_processor = LogitsProcessor(config.vocab_size, scale=logit_scale)
         self.model = CohereCompassTextModel(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             prefix=maybe_prefix(prefix, "model"),
         )
         self.make_empty_intermediate_tensors = self.model.make_empty_intermediate_tensors

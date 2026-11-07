@@ -28,31 +28,31 @@ from safetensors.torch import load, load_file, safe_open
 from tqdm.auto import tqdm
 from transformers.utils import SAFE_WEIGHTS_INDEX_NAME
 
-from aphrodite import envs
-from aphrodite.config import ModelConfig
-from aphrodite.config.load import (
+from sonar import envs
+from sonar.config import ModelConfig
+from sonar.config.load import (
     DEFAULT_SAFETENSORS_PREFETCH_BLOCK_SIZE,
     DEFAULT_SAFETENSORS_PREFETCH_NUM_THREADS,
     LoadConfig,
 )
-from aphrodite.distributed import (
+from sonar.distributed import (
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
     get_world_group,
 )
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.quantization import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.quantization import (
     QuantizationConfig,
     get_quantization_config,
 )
-from aphrodite.model_executor.model_loader.ep_weight_filter import (
+from sonar.model_executor.model_loader.ep_weight_filter import (
     should_skip_weight,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.tracing import instrument
-from aphrodite.transformers_utils.repo_utils import hf_api, hf_fs
-from aphrodite.utils.cpu_resource_utils import get_available_memory
-from aphrodite.utils.import_utils import PlaceholderModule
+from sonar.platforms import current_platform
+from sonar.tracing import instrument
+from sonar.transformers_utils.repo_utils import hf_api, hf_fs
+from sonar.utils.cpu_resource_utils import get_available_memory
+from sonar.utils.import_utils import PlaceholderModule
 
 try:
     from runai_model_streamer import SafetensorsStreamer
@@ -66,10 +66,10 @@ except ImportError:
     fastsafetensors = PlaceholderModule("fastsafetensors")
     SingleGroup = fastsafetensors.placeholder_attr("SingleGroup")
 
-from aphrodite.model_executor.layers.quantization.torchao import torchao_version_at_least
+from sonar.model_executor.layers.quantization.torchao import torchao_version_at_least
 
 if TYPE_CHECKING:
-    from aphrodite.model_executor.models.utils import WeightsMapper
+    from sonar.model_executor.models.utils import WeightsMapper
 
 logger = init_logger(__name__)
 
@@ -160,11 +160,11 @@ def maybe_download_from_modelscope(
     ignore_patterns: str | list[str] | None = None,
     allow_patterns: list[str] | str | None = None,
 ) -> str | None:
-    """Download model from ModelScope hub if APHRODITE_USE_MODELSCOPE is True.
+    """Download model from ModelScope hub if SONAR_USE_MODELSCOPE is True.
 
     Returns the path to the downloaded model, or None if the model is not
     downloaded from ModelScope."""
-    if envs.APHRODITE_USE_MODELSCOPE:
+    if envs.SONAR_USE_MODELSCOPE:
         # download model from ModelScope hub,
         # lazy import so that modelscope is not required for normal use.
         # pylint: disable=C.
@@ -193,15 +193,15 @@ def get_quant_config(model_config: ModelConfig, load_config: LoadConfig) -> Quan
     if model_config.quantization is None:
         raise ValueError("Model quantization method is not specified in the config.")
     quant_cls = get_quantization_config(model_config.quantization)
-    from aphrodite.config.quantization import (
+    from sonar.config.quantization import (
         _ONLINE_SHORTHANDS,
         QuantizationConfigArgs,
         resolve_quantization_config,
     )
-    from aphrodite.model_executor.layers.quantization.modelopt import (
+    from sonar.model_executor.layers.quantization.modelopt import (
         ModelOptQuantConfigBase,
     )
-    from aphrodite.model_executor.layers.quantization.online.base import (
+    from sonar.model_executor.layers.quantization.online.base import (
         OnlineQuantizationConfig,
     )
 
@@ -661,7 +661,7 @@ def resolve_mm_encoder_only_lm_prefixes(
     *,
     weights_mapper: "WeightsMapper | None" = None,
 ) -> tuple[str, ...] | None:
-    """Resolve Aphrodite LM *module* prefixes for ``--mm-encoder-only`` shard skip.
+    """Resolve Sonar LM *module* prefixes for ``--mm-encoder-only`` shard skip.
 
     Prefixes come from ``_language_model_names``. Classification of HF index
     keys is done later via optional ``weights_mapper`` (see
@@ -704,7 +704,7 @@ def filter_mm_encoder_only_safetensors_files(
     pure LM shards from disk/DRAM.
 
     Each HF index key is classified by mapping through ``weights_mapper`` (when
-    provided) and testing the *Aphrodite* name against ``language_model_prefixes``.
+    provided) and testing the *Sonar* name against ``language_model_prefixes``.
     Without a mapper, HF names are compared directly (identity checkpoint
     layout, e.g. Kimi ``language_model.*``).
 
@@ -1097,7 +1097,7 @@ def safetensors_weights_iterator(
             logger.debug_once(
                 "Auto-prefetch is disabled because the filesystem (%s) is not a "
                 "recognized network FS (NFS/Lustre). If you want to force "
-                "prefetching, start Aphrodite with --safetensors-load-strategy=prefetch.",
+                "prefetching, start Sonar with --safetensors-load-strategy=prefetch.",
                 fs_name,
             )
         elif not is_net_fs and not fits_in_ram:
@@ -1263,7 +1263,7 @@ def fastsafetensors_weights_iterator(
     # unwanted CUDA contexts on every device.
     nogds = pg.size() > 1
 
-    queue_size = envs.APHRODITE_FASTSAFETENSORS_QUEUE_SIZE
+    queue_size = envs.SONAR_FASTSAFETENSORS_QUEUE_SIZE
     tqdm_enabled = enable_tqdm(use_tqdm_on_load)
 
     def _make_loader(nogds: bool) -> "ParallelLoader":
@@ -1323,7 +1323,7 @@ def instanttensor_weights_iterator(
     try:
         import instanttensor
     except ImportError as e:
-        raise ImportError("Please install instanttensor via `pip install aphrodite-engine[instanttensor]`") from e
+        raise ImportError("Please install sonar[instanttensor] from the Sonar wheel index") from e
 
     if not current_platform.is_cuda():
         raise ValueError("InstantTensor requires NVIDIA GPUs")
@@ -1634,7 +1634,7 @@ def maybe_remap_kv_scale_name(name: str, params_dict: dict) -> str | None:
         None: If the remapped name is not found in params_dict.
 
     """
-    # Already in Aphrodite's expected form (e.g. weights pre-renamed by a
+    # Already in Sonar's expected form (e.g. weights pre-renamed by a
     # `WeightsMapper` from the quant config). Skip the regex remap, which
     # would otherwise double-apply the `.attn` prefix and drop the weight.
     if name in params_dict:

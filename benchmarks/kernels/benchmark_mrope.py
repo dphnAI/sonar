@@ -35,10 +35,10 @@ from typing import Any
 import numpy as np
 import torch
 
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.platforms import current_platform
-from aphrodite.transformers_utils.config import get_config
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.platforms import current_platform
+from sonar.transformers_utils.config import get_config
+from sonar.utils.argparse_utils import FlexibleArgumentParser
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 

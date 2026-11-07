@@ -58,7 +58,7 @@
     "GIT_REPO_CHECK": {
       "default": "0"
     },
-    "aphrodite_target_device": {
+    "sonar_target_device": {
       "default": "cuda"
     },
     "MAX_JOBS": {
@@ -66,12 +66,6 @@
     },
     "NVCC_THREADS": {
       "default": "8"
-    },
-    "APHRODITE_MAX_SIZE_MB": {
-      "default": "500"
-    },
-    "RUN_WHEEL_CHECK": {
-      "default": "true"
     },
     "GDRCOPY_CUDA_VERSION": {
       "default": "12.8"

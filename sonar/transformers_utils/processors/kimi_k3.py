@@ -3,7 +3,7 @@
 from transformers import BaseImageProcessor, BatchFeature, TensorType
 from transformers.processing_utils import ProcessorMixin
 
-from aphrodite.tokenizers.hf import HfTokenizer
+from sonar.tokenizers.hf import HfTokenizer
 
 
 class KimiK3Processor(ProcessorMixin):

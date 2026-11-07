@@ -13,22 +13,22 @@ from typing import TYPE_CHECKING, Any, NamedTuple
 
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
+from sonar.logger import init_logger
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
 
 if TYPE_CHECKING:
     from torch.distributed import PrefixStore, ProcessGroup
 
-    from aphrodite.config import AphroditeConfig
-    from aphrodite.config.kernel import IrOpPriorityConfig
-    from aphrodite.inputs import EngineInput
-    from aphrodite.pooling_params import PoolingParams
-    from aphrodite.sampling_params import SamplingParams
-    from aphrodite.utils.argparse_utils import FlexibleArgumentParser
-    from aphrodite.v1.attention.backend import AttentionBackend
-    from aphrodite.v1.attention.backends.mla.prefill.base import MLAPrefillBackend
-    from aphrodite.v1.attention.backends.mla.prefill.selector import MLAPrefillSelectorConfig
-    from aphrodite.v1.attention.selector import AttentionSelectorConfig
+    from sonar.config import SonarConfig
+    from sonar.config.kernel import IrOpPriorityConfig
+    from sonar.inputs import EngineInput
+    from sonar.pooling_params import PoolingParams
+    from sonar.sampling_params import SamplingParams
+    from sonar.utils.argparse_utils import FlexibleArgumentParser
+    from sonar.v1.attention.backend import AttentionBackend
+    from sonar.v1.attention.backends.mla.prefill.base import MLAPrefillBackend
+    from sonar.v1.attention.backends.mla.prefill.selector import MLAPrefillSelectorConfig
+    from sonar.v1.attention.selector import AttentionSelectorConfig
 else:
     FlexibleArgumentParser = object
 
@@ -181,7 +181,7 @@ class Platform:
     # .e.g. CUDA_VISIBLE_DEVICES for CUDA.
     # hint: search for "get_visible_accelerator_ids_env_var" in
     # https://github.com/ray-project/ray/tree/master/python/ray/_private/accelerators # noqa
-    device_control_env_var: str = "APHRODITE_DEVICE_CONTROL_ENV_VAR_PLACEHOLDER"
+    device_control_env_var: str = "SONAR_DEVICE_CONTROL_ENV_VAR_PLACEHOLDER"
 
     # environment variables that need to be set to 1 to prevent ray from
     # setting the visible devices e.g.
@@ -191,7 +191,7 @@ class Platform:
     # The torch.compile backend for compiling simple and
     # standalone functions. The default value is "inductor" to keep
     # the same behavior as PyTorch.
-    # NOTE: for the forward part of the model, Aphrodite has another separate
+    # NOTE: for the forward part of the model, Sonar has another separate
     # compilation strategy.
     simple_compile_backend: str = "inductor"
 
@@ -241,7 +241,7 @@ class Platform:
         return self._enum == PlatformEnum.METAL
 
     def uses_host_device_handling(self) -> bool:
-        """Whether Aphrodite should leave DeviceConfig.device unset."""
+        """Whether Sonar should leave DeviceConfig.device unset."""
         return self.is_tpu()
 
     def is_zen_cpu(self) -> bool:
@@ -269,7 +269,7 @@ class Platform:
 
     def is_cumem_allocator_available(self) -> bool:
         try:
-            from aphrodite.device_allocator.cumem import cumem_available
+            from sonar.device_allocator.cumem import cumem_available
         except ImportError:
             return False
 
@@ -280,7 +280,7 @@ class Platform:
         """Get the pass manager class for this platform.
         It will be registered as a custom pass under the current_platform.pass_key.
         """
-        return "aphrodite.compilation.passes.pass_manager.PostGradPassManager"
+        return "sonar.compilation.passes.pass_manager.PostGradPassManager"
 
     @classmethod
     def seed_everything(cls, seed: int | None = None) -> None:
@@ -302,11 +302,11 @@ class Platform:
 
     @classmethod
     def import_ir_kernels(cls) -> None:
-        """The default implementation imports ``aphrodite.kernels``, which registers
+        """The default implementation imports ``sonar.kernels``, which registers
         the built-in IR op implementations. Out-of-tree (OOT) platforms should
         override this method to import their own kernel modules.
         """
-        import aphrodite.kernels  # noqa: F401
+        import sonar.kernels  # noqa: F401
 
     @classmethod
     def device_control_id_to_physical_device_id(cls, device_id: str) -> int:
@@ -318,7 +318,7 @@ class Platform:
 
     @classmethod
     def device_id_to_physical_device_id(cls, device_id: int):
-        """Map a Aphrodite-local logical device ID to a physical device ID.
+        """Map a Sonar-local logical device ID to a physical device ID.
 
         The input is a logical local ID (e.g. a local rank), NOT a visible
         device ordinal; for the latter use
@@ -345,10 +345,10 @@ class Platform:
 
     @classmethod
     def logical_device_id_to_visible_device_id(cls, device_id: int) -> int:
-        """Map a Aphrodite-local logical device ID to the current process's
+        """Map a Sonar-local logical device ID to the current process's
         visible accelerator ordinal.
 
-        Aphrodite internals use logical local IDs. Physical IDs are used only
+        Sonar internals use logical local IDs. Physical IDs are used only
         at platform/topology boundaries. This helper performs the final
         translation needed by APIs such as ``torch.device("cuda:N")``.
         """
@@ -392,11 +392,11 @@ class Platform:
     def import_kernels(cls) -> None:
         """Import any platform-specific C kernels."""
         try:
-            import aphrodite._C  # noqa: F401
+            import sonar._C  # noqa: F401
         except ImportError as e:
-            log_extension_import_failure("aphrodite._C", e)
+            log_extension_import_failure("sonar._C", e)
         with contextlib.suppress(ImportError):
-            import aphrodite._moe_C_stable_libtorch  # noqa: F401
+            import sonar._moe_C_stable_libtorch  # noqa: F401
 
     @classmethod
     def register_triton_kernel_overrides(cls) -> None:
@@ -405,7 +405,7 @@ class Platform:
         Platforms whose Triton kernels need replacement implementations
         (e.g. CPU fallbacks when the Triton-CPU backend is unavailable)
         override this method and call
-        :func:`aphrodite.triton_utils.dispatcher.register_kernels`
+        :func:`sonar.triton_utils.dispatcher.register_kernels`
         with their overrides. It runs during model runner init, before any
         kernel launch. The default implementation does nothing.
         """
@@ -474,8 +474,8 @@ class Platform:
                 configuration.
 
         """
-        from aphrodite.v1.attention.backends.mla.prefill.base import MLADimensions
-        from aphrodite.v1.attention.backends.mla.prefill.registry import (
+        from sonar.v1.attention.backends.mla.prefill.base import MLADimensions
+        from sonar.v1.attention.backends.mla.prefill.registry import (
             MLAPrefillBackendEnum,
         )
 
@@ -553,7 +553,7 @@ class Platform:
 
         - A tuple `(major, minor)`.
         - An integer `<major><minor>`. (See
-        [`DeviceCapability.to_int`][aphrodite.platforms.interface.DeviceCapability.to_int])
+        [`DeviceCapability.to_int`][sonar.platforms.interface.DeviceCapability.to_int])
         """
         current_capability = cls.get_device_capability(device_id=device_id)
         if current_capability is None:
@@ -576,7 +576,7 @@ class Platform:
 
         - A tuple `(major, minor)`.
         - An integer `<major><minor>`. (See
-        [`DeviceCapability.to_int`][aphrodite.platforms.interface.DeviceCapability.to_int])
+        [`DeviceCapability.to_int`][sonar.platforms.interface.DeviceCapability.to_int])
         """
         current_capability = cls.get_device_capability(device_id=device_id)
         if current_capability is None:
@@ -620,12 +620,12 @@ class Platform:
     def get_all_gpu_pci_bus_ids(cls) -> dict[int, str]:
         """Return a mapping of device index to PCI bus ID string.
 
-        Used by ``APHRODITE_GPU_NIC_PCIE_MAPPING`` for RDMA NIC selection.
+        Used by ``SONAR_GPU_NIC_PCIE_MAPPING`` for RDMA NIC selection.
         Subclasses should override with platform-specific discovery
         (e.g. pynvml for CUDA).
         """
         raise NotImplementedError(
-            f"APHRODITE_GPU_NIC_PCIE_MAPPING is not supported on the current platform ({cls.device_name})"
+            f"SONAR_GPU_NIC_PCIE_MAPPING is not supported on the current platform ({cls.device_name})"
         )
 
     @classmethod
@@ -652,7 +652,7 @@ class Platform:
     def pre_register_and_update(cls, parser: FlexibleArgumentParser | None = None) -> None:
         """Do some pre-registration or update action for the current platform.
 
-        This function is called before global AphroditeConfig is initialized or cli
+        This function is called before global SonarConfig is initialized or cli
         arguments are parsed. It's used for out-of-tree platforms to register or
         update the configuration.
 
@@ -662,10 +662,10 @@ class Platform:
         pass
 
     @classmethod
-    def apply_config_platform_defaults(cls, aphrodite_config: "AphroditeConfig") -> None:
+    def apply_config_platform_defaults(cls, sonar_config: "SonarConfig") -> None:
         """Apply the platform-specific default values to the config.
 
-        This function is called during the initialization of global AphroditeConfig, after
+        This function is called during the initialization of global SonarConfig, after
         parsing cli arguments.
         It can modify the defaults of the config according to the platform. For example,
         it can enable custom_ops based on the enabled features.
@@ -675,7 +675,7 @@ class Platform:
         pass
 
     @classmethod
-    def check_and_update_config(cls, aphrodite_config: "AphroditeConfig") -> None:
+    def check_and_update_config(cls, sonar_config: "SonarConfig") -> None:
         """Check and update the configuration for the current platform.
 
         It can raise an exception if the configuration is not compatible with
@@ -687,15 +687,15 @@ class Platform:
         pass
 
     @classmethod
-    def _find_non_ssm_backends(cls, aphrodite_config: "AphroditeConfig") -> "list[type[AttentionBackend]]":
+    def _find_non_ssm_backends(cls, sonar_config: "SonarConfig") -> "list[type[AttentionBackend]]":
         """Distinct non-SSM attention backends, in layer order."""
-        from aphrodite.config.aphrodite import get_layers_from_aphrodite_config
-        from aphrodite.model_executor.layers.attention_layer_base import (
+        from sonar.config.sonar import get_layers_from_sonar_config
+        from sonar.model_executor.layers.attention_layer_base import (
             AttentionLayerBase,
         )
 
-        attn_layers = get_layers_from_aphrodite_config(
-            aphrodite_config,
+        attn_layers = get_layers_from_sonar_config(
+            sonar_config,
             AttentionLayerBase,  # type: ignore[type-abstract]
         )
         backends: list[type[AttentionBackend]] = []
@@ -710,7 +710,7 @@ class Platform:
         cls,
         backend_classes: "list[type[AttentionBackend]]",
         default_block_size: int,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
     ) -> int:
         """Smallest block size every backend accepts.
 
@@ -722,11 +722,11 @@ class Platform:
             ValueError: If the backends share no supported block size.
 
         """
-        from aphrodite.config.aphrodite import set_current_aphrodite_config
-        from aphrodite.v1.attention.backend import MultipleOf
+        from sonar.config.sonar import set_current_sonar_config
+        from sonar.v1.attention.backend import MultipleOf
 
         # Backends may read the current config to decide a preference.
-        with set_current_aphrodite_config(aphrodite_config):
+        with set_current_sonar_config(sonar_config):
             if len(backend_classes) == 1:
                 return backend_classes[0].get_preferred_block_size(default_block_size)
             if all(b.supports_block_size(default_block_size) for b in backend_classes):
@@ -747,20 +747,20 @@ class Platform:
             )
 
     @classmethod
-    def update_block_size_for_backend(cls, aphrodite_config: "AphroditeConfig") -> None:
+    def update_block_size_for_backend(cls, sonar_config: "SonarConfig") -> None:
         """Ensure block_size is compatible with the attention backend.
         For hybrid models, also aligns block_size with mamba page sizes.
         """
-        from aphrodite.config.cache import CacheConfig
+        from sonar.config.cache import CacheConfig
 
-        cache_config = aphrodite_config.cache_config
-        model_config = aphrodite_config.model_config
+        cache_config = sonar_config.cache_config
+        model_config = sonar_config.model_config
 
         # model_config may be None during testing.
         if not model_config:
             return
 
-        backend_classes = cls._find_non_ssm_backends(aphrodite_config)
+        backend_classes = cls._find_non_ssm_backends(sonar_config)
         if not backend_classes:
             return
 
@@ -770,7 +770,7 @@ class Platform:
         # select_common_block_size().
         if not cache_config.user_specified_block_size:
             preferred = cls._preferred_block_size_for_backends(
-                backend_classes, CacheConfig.DEFAULT_BLOCK_SIZE, aphrodite_config
+                backend_classes, CacheConfig.DEFAULT_BLOCK_SIZE, sonar_config
             )
             if preferred != CacheConfig.DEFAULT_BLOCK_SIZE:
                 logger.info(
@@ -784,19 +784,19 @@ class Platform:
         # (may override user settings).
         pre_block_size = cache_config.block_size
         if model_config.is_hybrid:
-            cls._align_hybrid_block_size(aphrodite_config, backend_classes[0])
+            cls._align_hybrid_block_size(sonar_config, backend_classes[0])
 
         # Phase 3: Align block/page sizes when multiple KV dtypes share the
         # block pool (for example, nvfp4 primary plus unquantized skip layers).
         # This may override the user's --block-size.
         if cache_config.kv_cache_dtype_skip_layers:
-            cls._align_heterogeneous_kv_block_size(aphrodite_config, backend_classes[0])
-        cls._check_aligned_block_size(aphrodite_config, backend_classes, pre_block_size)
+            cls._align_heterogeneous_kv_block_size(sonar_config, backend_classes[0])
+        cls._check_aligned_block_size(sonar_config, backend_classes, pre_block_size)
 
     @classmethod
     def _check_aligned_block_size(
         cls,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
         backend_classes: "list[type[AttentionBackend]]",
         pre_block_size: int,
     ) -> None:
@@ -805,12 +805,12 @@ class Platform:
         Alignment rounds by the first backend's kernel block only, so it can
         land on a size a sibling backend rejects.
         """
-        from aphrodite.config.aphrodite import set_current_aphrodite_config
+        from sonar.config.sonar import set_current_sonar_config
 
-        block_size = aphrodite_config.cache_config.block_size
+        block_size = sonar_config.cache_config.block_size
         if block_size == pre_block_size:
             return
-        with set_current_aphrodite_config(aphrodite_config):
+        with set_current_sonar_config(sonar_config):
             rejecting = [b.get_name() for b in backend_classes if not b.supports_block_size(block_size)]
         if rejecting:
             raise ValueError(
@@ -821,19 +821,19 @@ class Platform:
     @classmethod
     def _align_heterogeneous_kv_block_size(
         cls,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
         backend_cls: "type[AttentionBackend]",
     ) -> None:
         """Align block size when several KV dtypes share one block pool."""
-        from aphrodite.config.aphrodite import set_current_aphrodite_config
-        from aphrodite.utils.math_utils import cdiv
-        from aphrodite.utils.torch_utils import STR_DTYPE_TO_TORCH_DTYPE
-        from aphrodite.v1.attention.backend import MultipleOf
-        from aphrodite.v1.kv_cache_interface import FullAttentionSpec, get_kv_quant_mode
+        from sonar.config.sonar import set_current_sonar_config
+        from sonar.utils.math_utils import cdiv
+        from sonar.utils.torch_utils import STR_DTYPE_TO_TORCH_DTYPE
+        from sonar.v1.attention.backend import MultipleOf
+        from sonar.v1.kv_cache_interface import FullAttentionSpec, get_kv_quant_mode
 
-        cache_config = aphrodite_config.cache_config
-        model_config = aphrodite_config.model_config
-        parallel_config = aphrodite_config.parallel_config
+        cache_config = sonar_config.cache_config
+        model_config = sonar_config.model_config
+        parallel_config = sonar_config.parallel_config
         if not model_config:
             return
 
@@ -847,7 +847,7 @@ class Platform:
                 kv_quant_mode=get_kv_quant_mode(cache_dtype),
             )
             # The backend owns its packing
-            with set_current_aphrodite_config(aphrodite_config):
+            with set_current_sonar_config(sonar_config):
                 return backend_cls.customize_spec(spec).page_size_bytes
 
         primary_dtype = (
@@ -872,7 +872,7 @@ class Platform:
         if largest_padded_page == primary_page:
             return
 
-        with set_current_aphrodite_config(aphrodite_config):
+        with set_current_sonar_config(sonar_config):
             supported = backend_cls.get_supported_kernel_block_sizes()
         smallest_kernel_block = min(s.base if isinstance(s, MultipleOf) else s for s in supported)
         block_alignment = max(smallest_kernel_block, cache_config.block_size)
@@ -900,7 +900,7 @@ class Platform:
     @classmethod
     def _align_hybrid_block_size(
         cls,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
         backend_cls: "type[AttentionBackend]",
     ) -> None:
         """For hybrid attention/mamba models, ensure that the attention page
@@ -908,24 +908,24 @@ class Platform:
         """
         from math import lcm
 
-        from aphrodite.config.aphrodite import set_current_aphrodite_config
-        from aphrodite.model_executor.layers.mamba.abstract import (
+        from sonar.config.sonar import set_current_sonar_config
+        from sonar.model_executor.layers.mamba.abstract import (
             get_mamba_prefill_checkpoint_alignment,
         )
-        from aphrodite.model_executor.models import ModelRegistry
-        from aphrodite.utils.math_utils import cdiv
-        from aphrodite.utils.torch_utils import STR_DTYPE_TO_TORCH_DTYPE
-        from aphrodite.v1.attention.backend import MultipleOf
-        from aphrodite.v1.kv_cache_interface import (
+        from sonar.model_executor.models import ModelRegistry
+        from sonar.utils.math_utils import cdiv
+        from sonar.utils.torch_utils import STR_DTYPE_TO_TORCH_DTYPE
+        from sonar.v1.attention.backend import MultipleOf
+        from sonar.v1.kv_cache_interface import (
             FullAttentionSpec,
             MambaSpec,
             MLAAttentionSpec,
             get_kv_quant_mode,
         )
 
-        cache_config = aphrodite_config.cache_config
-        model_config = aphrodite_config.model_config
-        parallel_config = aphrodite_config.parallel_config
+        cache_config = sonar_config.cache_config
+        model_config = sonar_config.model_config
+        parallel_config = sonar_config.parallel_config
 
         if cache_config.cache_dtype == "auto":
             kv_cache_dtype = model_config.dtype
@@ -953,13 +953,13 @@ class Platform:
             # actual page. Each dtype packs via its own backend.
             _pack_backend: type[AttentionBackend]
             if cache_config.cache_dtype == "ultraquant_4bit":
-                from aphrodite.v1.attention.backends.ultraquant_attn import (
+                from sonar.v1.attention.backends.ultraquant_attn import (
                     UltraQuantAttentionBackend,
                 )
 
                 _pack_backend = UltraQuantAttentionBackend
             else:
-                from aphrodite.v1.attention.backends.turboquant_attn import (
+                from sonar.v1.attention.backends.turboquant_attn import (
                     TurboQuantAttentionBackend,
                 )
 
@@ -995,7 +995,7 @@ class Platform:
                 kv_quant_mode=kv_quant_mode,
             )
             # customize_spec may read the model config (e.g. Octave's rotary dim).
-            with set_current_aphrodite_config(aphrodite_config):
+            with set_current_sonar_config(sonar_config):
                 attn_page_size_1_token = backend_cls.customize_spec(attn_spec).page_size_bytes
 
         # Compute mamba page size
@@ -1005,13 +1005,11 @@ class Platform:
         )
         # Qwen4Exp has multiple Mamba state layouts with different sizes.
         if hasattr(model_cls, "get_mamba_specs_from_config"):
-            mamba_page_size = max(
-                spec.page_size_bytes for spec in model_cls.get_mamba_specs_from_config(aphrodite_config)
-            )
+            mamba_page_size = max(spec.page_size_bytes for spec in model_cls.get_mamba_specs_from_config(sonar_config))
         else:
             mamba_page_size = MambaSpec(
-                shapes=model_cls.get_mamba_state_shape_from_config(aphrodite_config),
-                dtypes=model_cls.get_mamba_state_dtype_from_config(aphrodite_config),
+                shapes=model_cls.get_mamba_state_shape_from_config(sonar_config),
+                dtypes=model_cls.get_mamba_state_dtype_from_config(sonar_config),
                 block_size=-1,
             ).page_size_bytes
 
@@ -1019,7 +1017,7 @@ class Platform:
             return
 
         # Get kernel block alignment from the backend's supported sizes
-        with set_current_aphrodite_config(aphrodite_config):
+        with set_current_sonar_config(sonar_config):
             kernel_block_alignment_size = max(
                 min(s.base if isinstance(s, MultipleOf) else s for s in backend_cls.get_supported_kernel_block_sizes()),
                 cache_config.block_size,
@@ -1028,7 +1026,7 @@ class Platform:
             backend_block_alignment = lcm(
                 *(
                     min(s.base if isinstance(s, MultipleOf) else s for s in sizes)
-                    for b in cls._find_non_ssm_backends(aphrodite_config)
+                    for b in cls._find_non_ssm_backends(sonar_config)
                     if (sizes := b.get_supported_kernel_block_sizes())
                 )
             )
@@ -1042,7 +1040,7 @@ class Platform:
             # Internal prefill checkpoints land on block boundaries.
             kernel_block_alignment_size = lcm(
                 kernel_block_alignment_size,
-                get_mamba_prefill_checkpoint_alignment(aphrodite_config) or 1,
+                get_mamba_prefill_checkpoint_alignment(sonar_config) or 1,
             )
 
         # Use minimum block size that satisfies both backend alignment and
@@ -1081,7 +1079,7 @@ class Platform:
             )
 
     @classmethod
-    def register_custom_kv_cache_specs(cls, aphrodite_config: "AphroditeConfig") -> None:
+    def register_custom_kv_cache_specs(cls, sonar_config: "SonarConfig") -> None:
         """Register custom KVCacheSpec class on current platform."""
         pass
 
@@ -1158,7 +1156,7 @@ class Platform:
     @classmethod
     def get_device_communicator_cls(cls) -> str:
         """Get device specific communicator class for distributed communication."""
-        return "aphrodite.distributed.device_communicators.base_device_communicator.DeviceCommunicatorBase"  # noqa
+        return "sonar.distributed.device_communicators.base_device_communicator.DeviceCommunicatorBase"  # noqa
 
     @classmethod
     def is_integrated_gpu(cls, device_id: int = 0) -> bool:
@@ -1268,7 +1266,7 @@ class Platform:
     @classmethod
     def get_static_graph_wrapper_cls(cls) -> str:
         """Get static graph wrapper class for static graph."""
-        return "aphrodite.compilation.base_static_graph.AbstractStaticGraphWrapper"
+        return "sonar.compilation.base_static_graph.AbstractStaticGraphWrapper"
 
     @classmethod
     def stateless_init_device_torch_dist_pg(
@@ -1325,7 +1323,7 @@ class Platform:
 
     @classmethod
     def use_custom_op_collectives(cls) -> bool:
-        """Whether this platform should use torch.ops.aphrodite.* custom ops for collectives.
+        """Whether this platform should use torch.ops.sonar.* custom ops for collectives.
 
         Returns False by default - platforms must explicitly opt-in.
         """
@@ -1380,9 +1378,9 @@ class Platform:
         raise NotImplementedError("num_compute_units is not implemented for the current platform.")
 
     @classmethod
-    def get_default_ir_op_priority(cls, aphrodite_config: "AphroditeConfig") -> "IrOpPriorityConfig":
+    def get_default_ir_op_priority(cls, sonar_config: "SonarConfig") -> "IrOpPriorityConfig":
         """Get the default IR op priority for the current platform."""
-        from aphrodite.config.kernel import IrOpPriorityConfig
+        from sonar.config.kernel import IrOpPriorityConfig
 
         # Native always used by default. Platforms can override this behavior.
         return IrOpPriorityConfig.with_default(["native"])
@@ -1395,17 +1393,17 @@ class Platform:
     @classmethod
     def validate_environ(cls, hard_fail: bool) -> None:
         """Validate environment variables for the current platform."""
-        from aphrodite import envs
+        from sonar import envs
 
         for env in os.environ:
-            if env.startswith("APHRODITE_") and env not in envs.environment_variables:
+            if env.startswith("SONAR_") and env not in envs.environment_variables:
                 if hard_fail:
-                    raise ValueError(f"Unknown Aphrodite environment variable detected: {env}")
+                    raise ValueError(f"Unknown Sonar environment variable detected: {env}")
                 else:
-                    logger.warning("Unknown Aphrodite environment variable detected: %s", env)
+                    logger.warning("Unknown Sonar environment variable detected: %s", env)
 
     @classmethod
-    def get_kv_cache_config_builder_cls(cls, aphrodite_config: "AphroditeConfig") -> str:
+    def get_kv_cache_config_builder_cls(cls, sonar_config: "SonarConfig") -> str:
         """Resolve the fully-qualified class path of the platform's KV cache
         config builder.
 
@@ -1416,7 +1414,7 @@ class Platform:
         placement (``get_kv_cache_config_from_groups``). Vendors may override
         this to return a platform-specific builder. The default builder honors a
         model implementing
-        :class:`~aphrodite.model_executor.models.interfaces.SupportsKVCacheGrouping`;
+        :class:`~sonar.model_executor.models.interfaces.SupportsKVCacheGrouping`;
         a builder that overrides ``get_kv_cache_groups`` owns grouping and
         bypasses that model hook unless it calls ``super()``.
 
@@ -1424,7 +1422,7 @@ class Platform:
             Fully-qualified class path of a ``KVCacheConfigBuilder`` subclass.
 
         """
-        return "aphrodite.v1.core.kv_cache_planning.DefaultKVCacheConfigBuilder"
+        return "sonar.v1.core.kv_cache_planning.DefaultKVCacheConfigBuilder"
 
 
 class UnspecifiedPlatform(Platform):

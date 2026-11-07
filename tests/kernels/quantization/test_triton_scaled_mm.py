@@ -10,13 +10,13 @@ import importlib
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_random_seed
 
 device = current_platform.device_type
 
 triton_scaled_mm_module = importlib.import_module(
-    "aphrodite.model_executor.layers.quantization.compressed_tensors.triton_scaled_mm"
+    "sonar.model_executor.layers.quantization.compressed_tensors.triton_scaled_mm"
 )
 triton_scaled_mm = triton_scaled_mm_module.triton_scaled_mm
 
@@ -54,11 +54,11 @@ def get_8bit_types():
 @pytest.mark.parametrize("max_tokens", [32])
 @pytest.mark.parametrize("num_logprobs", [10])
 @pytest.mark.skipif(not current_platform.is_rocm(), reason="Should only run on ROCm")
-def test_rocm_compressed_tensors_w8a8(aphrodite_runner, example_prompts, model_path, max_tokens, num_logprobs):
+def test_rocm_compressed_tensors_w8a8(sonar_runner, example_prompts, model_path, max_tokens, num_logprobs):
     dtype = "bfloat16"
 
-    with aphrodite_runner(model_path, dtype=dtype) as aphrodite_model:
-        aphrodite_model.generate_greedy_logprobs(example_prompts, max_tokens, num_logprobs)
+    with sonar_runner(model_path, dtype=dtype) as sonar_model:
+        sonar_model.generate_greedy_logprobs(example_prompts, max_tokens, num_logprobs)
 
 
 MNK_FACTORS = [

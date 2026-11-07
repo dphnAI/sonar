@@ -3,16 +3,16 @@
 
 //! Adapts parsed assistant updates into structured chat events.
 //!
-//! This module remains the final assembly stage in `aphrodite-chat`. Token-to-text
+//! This module remains the final assembly stage in `sonar-chat`. Token-to-text
 //! decoding still lives in `decoded.rs`, while reasoning separation and tool
 //! parsing are handled earlier by their own adapters. This stage consumes those
 //! parsed deltas and assembles higher-level assistant content blocks.
 
-use aphrodite_engine_core_client::protocol::output::RequestSpecDecodeMetrics;
-use aphrodite_llm::{RequestTimestamps, WeightVersionSpan};
-use aphrodite_text::DecodedLogprobs;
 use asynk_strim_attr::{TryYielder, try_stream};
 use futures::{StreamExt as _, pin_mut};
+use sonar_engine_core_client::protocol::output::RequestSpecDecodeMetrics;
+use sonar_llm::{RequestTimestamps, WeightVersionSpan};
+use sonar_text::DecodedLogprobs;
 
 use super::{AssistantEvent, AssistantEventStream};
 use crate::error::Error;
@@ -366,7 +366,7 @@ mod tests {
                 delta: r#"{"city":"Paris"}"#.to_string(),
             }),
             Ok(AssistantEvent::Done {
-                usage: ChatTokenUsage::from(aphrodite_llm::TokenUsage {
+                usage: ChatTokenUsage::from(sonar_llm::TokenUsage {
                     prompt_token_count: 1,
                     output_token_count: 1,
                     prompt_cache_usage: Default::default(),
@@ -424,7 +424,7 @@ mod tests {
                 delta: r#"{"b":2}"#.to_string(),
             }),
             Ok(AssistantEvent::Done {
-                usage: ChatTokenUsage::from(aphrodite_llm::TokenUsage {
+                usage: ChatTokenUsage::from(sonar_llm::TokenUsage {
                     prompt_token_count: 1,
                     output_token_count: 1,
                     prompt_cache_usage: Default::default(),
@@ -480,7 +480,7 @@ mod tests {
                 delta: r#"{"city":"Paris"}"#.to_string(),
             }),
             Ok(AssistantEvent::Done {
-                usage: ChatTokenUsage::from(aphrodite_llm::TokenUsage {
+                usage: ChatTokenUsage::from(sonar_llm::TokenUsage {
                     prompt_token_count: 1,
                     output_token_count: 1,
                     prompt_cache_usage: Default::default(),
@@ -536,7 +536,7 @@ mod tests {
                 token_count: None,
             }),
             Ok(AssistantEvent::Done {
-                usage: ChatTokenUsage::from(aphrodite_llm::TokenUsage {
+                usage: ChatTokenUsage::from(sonar_llm::TokenUsage {
                     prompt_token_count: 1,
                     output_token_count: 1,
                     prompt_cache_usage: Default::default(),
@@ -607,7 +607,7 @@ mod tests {
                 delta: r#"{"b":2}"#.to_string(),
             }),
             Ok(AssistantEvent::Done {
-                usage: ChatTokenUsage::from(aphrodite_llm::TokenUsage {
+                usage: ChatTokenUsage::from(sonar_llm::TokenUsage {
                     prompt_token_count: 1,
                     output_token_count: 1,
                     prompt_cache_usage: Default::default(),
@@ -659,7 +659,7 @@ mod tests {
             }),
             Ok(AssistantEvent::Done {
                 usage: ChatTokenUsage {
-                    engine: aphrodite_llm::TokenUsage {
+                    engine: sonar_llm::TokenUsage {
                         prompt_token_count: 1,
                         output_token_count: 4,
                         prompt_cache_usage: Default::default(),

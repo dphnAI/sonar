@@ -6,7 +6,7 @@
 #include "../../dispatch_utils.h"
 #include "quant_conversions.cuh"
 
-namespace aphrodite {
+namespace sonar {
 
 // Logic: one thread block per (token, group) pair
 
@@ -98,11 +98,11 @@ __global__ void silu_and_mul_per_block_quant_kernel(
   float group_scale = shared_max[0];
 
   // Step 4: Quantize and write output
-  token_output[tid] = aphrodite::ScaledQuant<scalar_out_t, false>::quant_fn(
-      result, group_scale);
+  token_output[tid] =
+      sonar::ScaledQuant<scalar_out_t, false>::quant_fn(result, group_scale);
 }
 
-}  // namespace aphrodite
+}  // namespace sonar
 
 void silu_and_mul_per_block_quant(torch::stable::Tensor& out,
                                   torch::stable::Tensor const& input,
@@ -145,18 +145,18 @@ void silu_and_mul_per_block_quant(torch::stable::Tensor& out,
   dim3 grid(num_tokens, num_groups);
   dim3 block(group_size);
 
-  APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(
+  SONAR_STABLE_DISPATCH_FLOATING_TYPES(
       input.scalar_type(), "silu_and_mul_per_block_quant", [&] {
         using scalar_in_t = scalar_t;
 
-        APHRODITE_STABLE_DISPATCH_QUANT_TYPES(
+        SONAR_STABLE_DISPATCH_QUANT_TYPES(
             out.scalar_type(), "silu_and_mul_per_block_quant", [&] {
               using scalar_out_t = scalar_t;
 
-              APHRODITE_STABLE_DISPATCH_GROUP_SIZE(group_size, gs, [&] {
-                APHRODITE_STABLE_DISPATCH_BOOL(
+              SONAR_STABLE_DISPATCH_GROUP_SIZE(group_size, gs, [&] {
+                SONAR_STABLE_DISPATCH_BOOL(
                     is_scale_transposed, transpose_scale, [&] {
-                      aphrodite::silu_and_mul_per_block_quant_kernel<
+                      sonar::silu_and_mul_per_block_quant_kernel<
                           scalar_in_t, scalar_out_t, transpose_scale, gs>
                           <<<grid, block, 0, stream>>>(
                               out.mutable_data_ptr<scalar_out_t>(),

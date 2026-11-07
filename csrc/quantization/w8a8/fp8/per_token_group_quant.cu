@@ -55,7 +55,7 @@ __device__ __forceinline__ float ComputeGroupScale(
     dst = src;
   };
 
-  aphrodite::vectorize_with_alignment<vec_size>(
+  sonar::vectorize_with_alignment<vec_size>(
       group_input,        // in
       smem_group,         // out (shared)
       group_size,         // elements per group
@@ -90,7 +90,7 @@ __device__ __forceinline__ void QuantizeGroup(
     dst = DST_DTYPE(q);
   };
 
-  aphrodite::vectorize_with_alignment<vec_size>(
+  sonar::vectorize_with_alignment<vec_size>(
       smem_group,         // in (shared)
       group_output,       // out (global quant tensor)
       group_size,         // elements
@@ -200,7 +200,7 @@ __global__ void per_token_group_quant_8bit_register_kernel(
                 "the uint4 store packs one byte per element");
 
   // CanUseRegisterPath only routes 16-bit inputs here, but
-  // APHRODITE_STABLE_DISPATCH_FLOATING_TYPES instantiates every floating type,
+  // SONAR_STABLE_DISPATCH_FLOATING_TYPES instantiates every floating type,
   // so gate the body on the shape this schedule can actually serve instead of a
   // static_assert.
   if constexpr (GROUP_SIZE != THREADS_PER_GROUP * VEC_SIZE) {
@@ -514,12 +514,12 @@ static void per_token_group_quant_8bit(const torch::stable::Tensor& input,
     }                                                                   \
   } while (0)
 
-  APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(
+  SONAR_STABLE_DISPATCH_FLOATING_TYPES(
       input.scalar_type(), "per_token_group_quant_8bit", ([&] {
         if (dst_type == torch::headeronly::ScalarType::Char) {
           LAUNCH_KERNEL(scalar_t, int8_t);
         } else {
-          APHRODITE_STABLE_DISPATCH_FP8_TYPES(
+          SONAR_STABLE_DISPATCH_FP8_TYPES(
               dst_type, "per_token_group_quant_8bit_fp8",
               ([&] { LAUNCH_KERNEL(scalar_t, fp8_t); }));
         }
@@ -875,12 +875,12 @@ void per_token_group_quant_8bit_packed(const torch::stable::Tensor& input,
     }                                                  \
   } while (0)
 
-  APHRODITE_STABLE_DISPATCH_HALF_TYPES(
+  SONAR_STABLE_DISPATCH_HALF_TYPES(
       input.scalar_type(), "per_token_group_quant_8bit_packed_register", ([&] {
         if (dst_type == torch::headeronly::ScalarType::Char) {
           LAUNCH_REG_KERNEL(scalar_t, int8_t);
         } else {
-          APHRODITE_STABLE_DISPATCH_FP8_TYPES(
+          SONAR_STABLE_DISPATCH_FP8_TYPES(
               dst_type, "per_token_group_quant_8bit_packed_fp8",
               ([&] { LAUNCH_REG_KERNEL(scalar_t, fp8_t); }));
         }

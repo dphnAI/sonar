@@ -10,7 +10,7 @@
 #include <cuda_runtime.h>
 #include <cstdint>
 
-namespace aphrodite {
+namespace sonar {
 namespace topk_histogram_4096 {
 
 constexpr uint32_t kBlockSize = 1024;
@@ -640,6 +640,6 @@ __device__ __noinline__ void histogram_4096_topk_predicated(
 }
 
 }  // namespace topk_histogram_4096
-}  // namespace aphrodite
+}  // namespace sonar
 
 #endif  // TOPK_HISTOGRAM_4096_CUH_

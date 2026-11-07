@@ -5,7 +5,7 @@
 from PIL import Image
 from transformers import DeepseekV4Config
 
-from aphrodite.models.deepseek_v4.common.mm_preprocess import (
+from sonar.models.deepseek_v4.common.mm_preprocess import (
     DeepseekV4VLProcessingInfo,
     DeepseekV4VLProcessor,
     build_image_block_pad_free,

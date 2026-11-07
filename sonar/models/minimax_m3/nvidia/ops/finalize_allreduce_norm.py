@@ -28,15 +28,15 @@ from cutlass._mlir.dialects import llvm
 from cutlass.cute.runtime import make_fake_compact_tensor
 from cutlass.cutlass_dsl import T, dsl_user_op
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed import get_tensor_model_parallel_world_size, get_tp_group
-from aphrodite.model_executor.layers.fused_moe.moe_output import (
+from sonar.config import SonarConfig
+from sonar.distributed import get_tensor_model_parallel_world_size, get_tp_group
+from sonar.model_executor.layers.fused_moe.moe_output import (
     MoEOutput,
     UnfinalizedMoEOutput,
 )
-from aphrodite.model_executor.layers.fusion.quant_activation import QuantizedActivation
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import kMxfp8Dynamic
-from aphrodite.models.common.ops.moe_tail_fusion.primitives import (
+from sonar.model_executor.layers.fusion.quant_activation import QuantizedActivation
+from sonar.model_executor.layers.quantization.utils.quant_utils import kMxfp8Dynamic
+from sonar.models.common.ops.moe_tail_fusion.primitives import (
     ACTIVE_STAGE,
     LAMPORT_GENERATIONS,
     NEXT_STAGE,
@@ -58,10 +58,10 @@ from aphrodite.models.common.ops.moe_tail_fusion.primitives import (
     to_cute,
     to_cute_dynamic,
 )
-from aphrodite.models.deepseek_v41.nvidia.ops.cute_dsl.all_reduce_mhc import (
+from sonar.models.deepseek_v41.nvidia.ops.cute_dsl.all_reduce_mhc import (
     _QuadFinalizePublishDeviceKernel,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 MXFP8_BLOCK = 32
 # Fragments (of VEC_BF16 values) per MXFP8 block, held by adjacent lanes.
@@ -663,22 +663,22 @@ class FinalizeAllReduceGemmaRMSNormMxfp8:
 _fused_moe_finalize: FinalizeAllReduceGemmaRMSNormMxfp8 | None = None
 
 
-def supports_fused_moe_finalize(aphrodite_config: AphroditeConfig) -> bool:
+def supports_fused_moe_finalize(sonar_config: SonarConfig) -> bool:
     """Whether to build the fused MoE finalize kernel: tensor parallel without
     expert parallel, a BF16 model on SM100-family GPUs, and NVLink multicast on
     every TP rank. Every TP rank calls it; the multicast check is collective.
     """
-    from aphrodite.distributed.device_communicators.custom_all_reduce import (
+    from sonar.distributed.device_communicators.custom_all_reduce import (
         _all_ranks_true,
         _has_local_multicast_support,
     )
 
     if (
         get_tensor_model_parallel_world_size() <= 1
-        or aphrodite_config.parallel_config.enable_expert_parallel
+        or sonar_config.parallel_config.enable_expert_parallel
         or not current_platform.is_cuda()
         or not current_platform.is_device_capability_family(100)
-        or aphrodite_config.model_config.dtype != torch.bfloat16
+        or sonar_config.model_config.dtype != torch.bfloat16
     ):
         return False
     device = torch.device(current_platform.device_type, torch.accelerator.current_device_index())

@@ -18,7 +18,7 @@
 // clang-format on
 
 #include "cutlass_extensions/cute_utils.cuh"
-#include "cutlass_extensions/aphrodite_numeric_conversion.cuh"
+#include "cutlass_extensions/sonar_numeric_conversion.cuh"
 #include "cutlass_extensions/epilogue/scaled_mm_epilogues_c3x.hpp"
 #include "cutlass_extensions/torch_utils.hpp"
 #include "machete_collective_builder.cuh"
@@ -126,8 +126,8 @@ struct MacheteKernelTemplate {
 
   // Currently only supports float scales
   using ChTokScalesEpilogue =
-      typename aphrodite::c3x::ScaledEpilogue<ElementAccumulator, ElementD,
-                                              TileShape>;
+      typename sonar::c3x::ScaledEpilogue<ElementAccumulator, ElementD,
+                                          TileShape>;
   static_assert((with_channel_scales || with_token_scales) ||
                     (std::is_same_v<ElementSChannel, float> &&
                      std::is_same_v<ElementSToken, float>),
@@ -151,7 +151,7 @@ struct MacheteKernelTemplate {
           EVTCompute>::CollectiveOp;
 
   using CollectiveMainloop =
-      typename cutlass::gemm::collective::APHRODITECollectiveBuilder<
+      typename cutlass::gemm::collective::SONARCollectiveBuilder<
           cutlass::gemm::collective::MacheteKernelTag, ArchTag, OperatorClass,
           BTypeTuple, PrepackedLayoutB, AlignmentB, ElementA, LayoutA_Transpose,
           AlignmentA, ElementAccumulator, TileShape, ClusterShape,

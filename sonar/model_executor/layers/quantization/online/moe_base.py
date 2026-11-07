@@ -6,21 +6,21 @@ from collections.abc import Callable, Iterator
 
 import torch
 
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.model_executor.layers.fused_moe import (
     FusedMoEMethodBase,
     RoutedExperts,
     SharedExperts,
 )
-from aphrodite.model_executor.layers.fused_moe.config import FusedMoEConfig
-from aphrodite.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
-from aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 import triton_weight
-from aphrodite.model_executor.layers.quantization.online.requantization import (
+from sonar.model_executor.layers.fused_moe.config import FusedMoEConfig
+from sonar.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
+from sonar.model_executor.layers.fused_moe.oracle.mxfp4 import triton_weight
+from sonar.model_executor.layers.quantization.online.requantization import (
     OnlineRequantizationMixin,
 )
-from aphrodite.model_executor.model_loader.reload.layerwise import (
+from sonar.model_executor.model_loader.reload.layerwise import (
     initialize_online_processing,
 )
-from aphrodite.model_executor.utils import set_weight_attrs
+from sonar.model_executor.utils import set_weight_attrs
 
 
 class OnlineMoEMethodBase(OnlineRequantizationMixin, FusedMoEMethodBase):

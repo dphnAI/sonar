@@ -8,19 +8,19 @@ from typing import assert_never
 from fastapi import APIRouter, Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from aphrodite.entrypoints.serve.engine.protocol import ErrorResponse
-from aphrodite.entrypoints.serve.tokenize.protocol import (
+from sonar.entrypoints.serve.engine.protocol import ErrorResponse
+from sonar.entrypoints.serve.tokenize.protocol import (
     DetokenizeRequest,
     DetokenizeResponse,
     TokenizeRequest,
     TokenizeResponse,
 )
-from aphrodite.entrypoints.serve.tokenize.serving import ServingTokenization
-from aphrodite.entrypoints.serve.utils.api_utils import (
+from sonar.entrypoints.serve.tokenize.serving import ServingTokenization
+from sonar.entrypoints.serve.utils.api_utils import (
     validate_json_request,
     with_cancellation,
 )
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 

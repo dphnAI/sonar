@@ -7,7 +7,7 @@ Port of the reference ``inference/engram.py`` + ``Engram`` /
 checkpoint layout). Engram modules live on the backbone layers listed in
 ``engram_layer_ids`` only.
 
-Two pieces of cross-forward state are needed because Aphrodite streams tokens
+Two pieces of cross-forward state are needed because Sonar streams tokens
 chunk-by-chunk while an n-gram at position ``p`` needs the token ids at
 ``p-1..p-3``:
 
@@ -47,9 +47,9 @@ import numpy as np
 import torch
 from torch import nn
 
-from aphrodite.compilation.breakable_cudagraph import eager_break_during_capture
-from aphrodite.config import AphroditeConfig, get_current_aphrodite_config
-from aphrodite.distributed import (
+from sonar.compilation.breakable_cudagraph import eager_break_during_capture
+from sonar.config import SonarConfig, get_current_sonar_config
+from sonar.distributed import (
     get_dp_group,
     get_engram_dp_group,
     get_engram_dp_size,
@@ -57,32 +57,32 @@ from aphrodite.distributed import (
     get_tensor_model_parallel_world_size,
     tensor_model_parallel_all_gather,
 )
-from aphrodite.distributed.device_communicators.shm_broadcast import (
+from sonar.distributed.device_communicators.shm_broadcast import (
     SHM_PATH,
     check_shm_free_space,
 )
-from aphrodite.distributed.parallel_state import GroupCoordinator, in_the_same_node_as
-from aphrodite.forward_context import get_forward_context, is_forward_context_available
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fusion.quant_activation import QuantizedActivation
-from aphrodite.model_executor.layers.linear import ColumnParallelLinear
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import kMxfp8Dynamic
-from aphrodite.model_executor.utils import set_weight_attrs
-from aphrodite.models.deepseek_v41.common.ops.engram_sm120 import (
+from sonar.distributed.parallel_state import GroupCoordinator, in_the_same_node_as
+from sonar.forward_context import get_forward_context, is_forward_context_available
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fusion.quant_activation import QuantizedActivation
+from sonar.model_executor.layers.linear import ColumnParallelLinear
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.quantization.utils.quant_utils import kMxfp8Dynamic
+from sonar.model_executor.utils import set_weight_attrs
+from sonar.models.deepseek_v41.common.ops.engram_sm120 import (
     create_sm120_engram_wkv,
     sm120_engram_post,
 )
-from aphrodite.models.deepseek_v41.common.ops.query_quant import (
+from sonar.models.deepseek_v41.common.ops.query_quant import (
     can_fuse_query_quant,
     mxfp8_scale_bytes,
     mxfp8_scale_offset,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.cpu_resource_utils import get_available_memory
-from aphrodite.utils.platform_utils import is_uva_available
-from aphrodite.utils.torch_utils import get_accelerator_view_from_cpu_tensor
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
+from sonar.utils.cpu_resource_utils import get_available_memory
+from sonar.utils.platform_utils import is_uva_available
+from sonar.utils.torch_utils import get_accelerator_view_from_cpu_tensor
 
 logger = init_logger(__name__)
 
@@ -421,7 +421,7 @@ class NgramHashState(nn.Module):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         layout: EngramLayout,
         swa_cache_module: nn.Module,
     ) -> None:
@@ -430,11 +430,11 @@ class NgramHashState(nn.Module):
         self.swa_cache_module = swa_cache_module
         self.block_size: int = swa_cache_module.block_size
         self.lookback_depth: int = layout.max_ngram_size - 1
-        self.use_slot_cache: bool = not aphrodite_config.use_v2_model_runner
+        self.use_slot_cache: bool = not sonar_config.use_v2_model_runner
         self._cache: torch.Tensor | None = None
         self._kv_cache_ref: weakref.ReferenceType[torch.Tensor] | None = None
 
-        model_config = aphrodite_config.model_config
+        model_config = sonar_config.model_config
         from transformers import AutoTokenizer
 
         tokenizer = AutoTokenizer.from_pretrained(
@@ -809,7 +809,7 @@ class DPSharedEngramStorage:
 
         views = None
         if current_platform.is_cuda():
-            from aphrodite.models.deepseek_v41.nvidia.ops import engram_host_table
+            from sonar.models.deepseek_v41.nvidia.ops import engram_host_table
 
             views = engram_host_table.share_host_table(num_bytes, group)
         # The GPU maps cuMem host memory with 2M pages, /dev/shm with 64K pages.
@@ -829,7 +829,7 @@ class DPSharedEngramStorage:
             if group.rank_in_group == 0 and not (error := _shm_shortfall(num_bytes)):
                 try:
                     backing_file = stack.enter_context(
-                        tempfile.NamedTemporaryFile(prefix="aphrodite_engram_", dir=SHM_PATH)
+                        tempfile.NamedTemporaryFile(prefix="sonar_engram_", dir=SHM_PATH)
                     )
                     backing_file.truncate(num_bytes)
                     path = backing_file.name
@@ -1463,7 +1463,7 @@ class EngramBatch(nn.Module):
         max_peer_slot = min(max_tokens, ENGRAM_A2A_MIN_SLOT - 1)
         self.peer_exchange = None
         if table.cpu_offload:
-            from aphrodite.models.deepseek_v41.nvidia.ops.engram_peer import (
+            from sonar.models.deepseek_v41.nvidia.ops.engram_peer import (
                 EngramPeerExchange,
             )
 
@@ -1484,7 +1484,7 @@ class EngramBatch(nn.Module):
             table.dp_size == 1
             or table.tp_size > 1
             or table.dim % 128
-            or get_current_aphrodite_config().lora_config is not None
+            or get_current_sonar_config().lora_config is not None
             or not can_fuse_query_quant([layer.wkv for layer in layers])
         ):
             return None
@@ -1622,11 +1622,11 @@ class Engram(nn.Module):
             requires_grad=False,
         )
 
-        max_tokens = get_current_aphrodite_config().scheduler_config.max_num_batched_tokens
+        max_tokens = get_current_sonar_config().scheduler_config.max_num_batched_tokens
         self._init_staging(max_tokens, layout.head_dim)
 
     def _create_embedding(self, layout: EngramLayout, layer_hash_index: int) -> ParallelEngramEmbedding:
-        engram_config = get_current_aphrodite_config().engram_config
+        engram_config = get_current_sonar_config().engram_config
         assert engram_config is not None
         return ParallelEngramEmbedding(
             layout.num_embeddings[layer_hash_index],

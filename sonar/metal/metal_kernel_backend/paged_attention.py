@@ -22,11 +22,11 @@ from typing import Any
 import mlx.core as mx
 import mlx.nn as nn
 
-from aphrodite.metal.metal_kernel_backend.attention_sdpa import (
+from sonar.metal.metal_kernel_backend.attention_sdpa import (
     sdpa_forward,
 )
-from aphrodite.metal.metal_kernel_backend.cache import MetalPagedKVCache
-from aphrodite.metal.paged_attention_common import (
+from sonar.metal.metal_kernel_backend.cache import MetalPagedKVCache
+from sonar.metal.paged_attention_common import (
     find_attn_attr,
     find_layers,
     get_context,

@@ -8,29 +8,29 @@ import torch
 from torch import nn
 from transformers import Qwen3_5MoeTextConfig, Qwen3_5TextConfig
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed import tensor_model_parallel_all_gather
-from aphrodite.distributed.parallel_state import get_pp_group
-from aphrodite.kernels.triton.fused_pre_fc_norms import fused_pre_fc_norms
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_allreduce_gemma_rms_norm import (
+from sonar.config import SonarConfig
+from sonar.distributed import tensor_model_parallel_all_gather
+from sonar.distributed.parallel_state import get_pp_group
+from sonar.kernels.triton.fused_pre_fc_norms import fused_pre_fc_norms
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_allreduce_gemma_rms_norm import (
     fused_allreduce_gemma_rms_norm,
 )
-from aphrodite.model_executor.layers.linear import ColumnParallelLinear
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.linear import ColumnParallelLinear
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.models.interfaces import (
+from sonar.model_executor.models.interfaces import (
     LocalArgmaxMixin,
     MultiModalEmbeddings,
     SupportsMultiModal,
     SupportsPP,
     _require_is_multimodal,
 )
-from aphrodite.model_executor.models.qwen3_next import QwenNextMixtureOfExperts
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.models.qwen3_next import QwenNextMixtureOfExperts
+from sonar.model_executor.models.utils import (
     AutoWeightsLoader,
     PPMissingLayer,
     _merge_multimodal_embeddings,
@@ -38,7 +38,7 @@ from aphrodite.model_executor.models.utils import (
     maybe_prefix,
     sequence_parallel_chunk,
 )
-from aphrodite.sequence import IntermediateTensors
+from sonar.sequence import IntermediateTensors
 
 from .model import Qwen3_5DecoderLayer, Qwen3_5Model, Qwen3_5RMSNorm
 
@@ -46,13 +46,13 @@ logger = init_logger(__name__)
 
 
 class Qwen3_5MultiTokenPredictor(nn.Module):
-    hf_to_aphrodite_mapper = Qwen3_5Model.hf_to_aphrodite_mapper
+    hf_to_sonar_mapper = Qwen3_5Model.hf_to_sonar_mapper
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
 
-        model_config = aphrodite_config.model_config
-        quant_config = aphrodite_config.quant_config
+        model_config = sonar_config.model_config
+        quant_config = sonar_config.quant_config
 
         config: Qwen3_5TextConfig | Qwen3_5MoeTextConfig = model_config.hf_text_config
 
@@ -86,22 +86,22 @@ class Qwen3_5MultiTokenPredictor(nn.Module):
         # GPTQ: quantized checkpoints may exclude MTP from quantization via
         # quantization_config.dynamic with "-:pattern" entries. When detected,
         # disable quantization for MTP layers so they use unquantized params.
-        original_quant = aphrodite_config.quant_config
+        original_quant = sonar_config.quant_config
         if quant_config and quant_config.get_name() not in ("modelopt_fp4",):
             hf_qc = getattr(model_config.hf_config, "quantization_config", None)
             if isinstance(hf_qc, dict):
                 dynamic = hf_qc.get("dynamic", {})
                 if any(k.startswith("-:") and "mtp" in k for k in dynamic):
-                    aphrodite_config.quant_config = None
+                    sonar_config.quant_config = None
         self.layers = torch.nn.ModuleList(
             Qwen3_5DecoderLayer(
-                aphrodite_config,
+                sonar_config,
                 layer_type="full_attention",
                 prefix=f"{prefix}.layers.{idx}",
             )
             for idx in range(self.num_mtp_layers)
         )
-        aphrodite_config.quant_config = original_quant
+        sonar_config.quant_config = original_quant
         self.make_empty_intermediate_tensors = make_empty_intermediate_tensors_factory(
             ["hidden_states", "residual"], config.hidden_size
         )
@@ -168,7 +168,7 @@ class Qwen3_5MultiTokenPredictor(nn.Module):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
 
 class Qwen3_5MTP(LocalArgmaxMixin, nn.Module, SupportsMultiModal, SupportsPP):
@@ -181,14 +181,14 @@ class Qwen3_5MTP(LocalArgmaxMixin, nn.Module, SupportsMultiModal, SupportsPP):
         "gate_up_proj": ["gate_proj", "up_proj"],
     }
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
-        config = aphrodite_config.model_config.hf_text_config
-        self.aphrodite_config = aphrodite_config
-        self.quant_config = aphrodite_config.quant_config
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
+        config = sonar_config.model_config.hf_text_config
+        self.sonar_config = sonar_config
+        self.quant_config = sonar_config.quant_config
 
         super().__init__()
         self.config = config
-        self.model = Qwen3_5MultiTokenPredictor(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "mtp"))
+        self.model = Qwen3_5MultiTokenPredictor(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "mtp"))
 
         if get_pp_group().is_last_rank:
             self.lm_head = ParallelLMHead(
@@ -285,6 +285,6 @@ class Qwen3_5MTP(LocalArgmaxMixin, nn.Module, SupportsMultiModal, SupportsPP):
 
 
 class Qwen3_5MoeMTP(Qwen3_5MTP, QwenNextMixtureOfExperts):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
-        super().__init__(aphrodite_config=aphrodite_config, prefix=prefix)
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
+        super().__init__(sonar_config=sonar_config, prefix=prefix)
         self.set_moe_parameters()

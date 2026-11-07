@@ -22,17 +22,17 @@ from typing import ClassVar
 import torch
 from torch import nn
 
-from aphrodite.config import AphroditeConfig, get_current_aphrodite_config
-from aphrodite.distributed import get_tensor_model_parallel_world_size
-from aphrodite.model_executor.layers.attention_layer_base import AttentionLayerBase
-from aphrodite.v1.attention.backend import (
+from sonar.config import SonarConfig, get_current_sonar_config
+from sonar.distributed import get_tensor_model_parallel_world_size
+from sonar.model_executor.layers.attention_layer_base import AttentionLayerBase
+from sonar.v1.attention.backend import (
     AttentionBackend,
     AttentionCGSupport,
     AttentionMetadata,
     AttentionMetadataBuilder,
     CommonAttentionMetadata,
 )
-from aphrodite.v1.kv_cache_interface import AttentionSpec, KVCacheSpec, SlidingWindowSpec
+from sonar.v1.kv_cache_interface import AttentionSpec, KVCacheSpec, SlidingWindowSpec
 
 from .ops.sconv import sconv_seq_metadata
 
@@ -55,13 +55,13 @@ class InklingSconvMetadataBuilder(AttentionMetadataBuilder[InklingSconvMetadata]
         self,
         kv_cache_spec: AttentionSpec,
         layer_names: list[str],
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
     ) -> None:
-        super().__init__(kv_cache_spec, layer_names, aphrodite_config, device)
+        super().__init__(kv_cache_spec, layer_names, sonar_config, device)
         assert isinstance(kv_cache_spec, SlidingWindowSpec)
         # Persistent per-token buffers for CUDA graph capture.
-        max_num_tokens = aphrodite_config.scheduler_config.max_num_batched_tokens
+        max_num_tokens = sonar_config.scheduler_config.max_num_batched_tokens
         self.seq_idx_buffer = torch.empty(max_num_tokens, dtype=torch.int32, device=device)
         self.query_start_buffer = torch.empty(max_num_tokens, dtype=torch.int32, device=device)
 
@@ -158,12 +158,12 @@ class InklingConvState(nn.Module, AttentionLayerBase):
             (2 * head_dim, hidden_per_head),  # _ATTN
             (2 * head_dim + hidden_per_head, hidden_per_head),  # _MLP
         )
-        aphrodite_config = get_current_aphrodite_config()
-        self._dtype = aphrodite_config.model_config.dtype
+        sonar_config = get_current_sonar_config()
+        self._dtype = sonar_config.model_config.dtype
         assert self._dtype == torch.bfloat16, f"sconv SWA cache supports bfloat16 only, got {self._dtype}"
         # Register in the forward context so the runner enumerates this owner as
         # an attention-like layer (get_kv_cache_spec / get_attn_backend).
-        compilation_config = aphrodite_config.compilation_config
+        compilation_config = sonar_config.compilation_config
         if prefix in compilation_config.static_forward_context:
             raise ValueError(f"Duplicate layer name: {prefix}")
         compilation_config.static_forward_context[prefix] = self
@@ -180,7 +180,7 @@ class InklingConvState(nn.Module, AttentionLayerBase):
     def get_attn_backend(self) -> type[AttentionBackend]:
         return InklingSconvBackend
 
-    def get_kv_cache_spec(self, aphrodite_config: AphroditeConfig) -> KVCacheSpec:
+    def get_kv_cache_spec(self, sonar_config: SonarConfig) -> KVCacheSpec:
         return SlidingWindowSpec(
             block_size=self.block_size,
             num_kv_heads=self.num_kv_heads,

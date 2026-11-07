@@ -114,8 +114,8 @@ hardware_overrides:
       - "--moe-backend"
       - "aiter"
     extra_env:
-      APHRODITE_ROCM_USE_AITER: "1"
-      APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS: "1"
+      SONAR_ROCM_USE_AITER: "1"
+      SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS: "1"
 
 strategy_overrides: {}
 
@@ -141,7 +141,7 @@ guide: |
 
   ## Prerequisites
 
-  - **Aphrodite 0.25.0** (stable) — the `GlmMoeDsaForCausalLM` handler is the same one GLM-5.2 uses.
+  - **Sonar 0.25.0** (stable) — the `GlmMoeDsaForCausalLM` handler is the same one GLM-5.2 uses.
   - **GPU:** at full **BF16** precision (≈1786 GB) a single 8×H200 / 8×B200 node does not fit —
     run **multi-node** (e.g. 2× 8-GPU nodes, tensor-parallel 16), or pick the **FP8 (on-the-fly)**
     variant (≈893 GB, `--quantization fp8`; `fp8_per_channel` on AMD) to run single-node. The native FP8/NVFP4 GLM-5.2
@@ -179,7 +179,7 @@ guide: |
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install "aphrodite-engine==0.25.0" --torch-backend=auto
+  uv pip install "sonar==0.25.0" --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   uv pip install "transformers>=5.9.0"
   ```
 
@@ -198,7 +198,7 @@ guide: |
 
   ```bash
   # Node 0 (head)
-  aphrodite serve mindlab-research/Macaron-V1-Coding-Venti \
+  sonar serve mindlab-research/Macaron-V1-Coding-Venti \
     --kv-cache-dtype fp8 \
     --tensor-parallel-size 16 \
     --tool-call-parser glm47 \
@@ -207,7 +207,7 @@ guide: |
     --served-model-name macaron-v1-coding-venti
 
   # Node 1
-  aphrodite serve mindlab-research/Macaron-V1-Coding-Venti \
+  sonar serve mindlab-research/Macaron-V1-Coding-Venti \
     --kv-cache-dtype fp8 \
     --tensor-parallel-size 16 \
     --tool-call-parser glm47 \
@@ -228,7 +228,7 @@ guide: |
   runs at load; the accuracy / KV-cache trade-off is small (see the B300 numbers below).
 
   ```bash
-  aphrodite serve mindlab-research/Macaron-V1-Coding-Venti \
+  sonar serve mindlab-research/Macaron-V1-Coding-Venti \
     --quantization fp8 \
     --tensor-parallel-size 8 \
     --kv-cache-dtype fp8 \
@@ -261,7 +261,7 @@ guide: |
   **spec_decoding → MTP** in the builder:
 
   ```bash
-  aphrodite serve mindlab-research/Macaron-V1-Coding-Venti \
+  sonar serve mindlab-research/Macaron-V1-Coding-Venti \
     --kv-cache-dtype fp8 \
     --tensor-parallel-size 16 \
     --speculative-config '{"method":"mtp","num_speculative_tokens":5}' \
@@ -279,9 +279,9 @@ guide: |
   FP8 (on-the-fly):
 
   ```bash
-  APHRODITE_ROCM_USE_AITER=1 \
-  APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1 \
-  aphrodite serve mindlab-research/Macaron-V1-Coding-Venti \
+  SONAR_ROCM_USE_AITER=1 \
+  SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1 \
+  sonar serve mindlab-research/Macaron-V1-Coding-Venti \
     --kv-cache-dtype fp8_e4m3 \
     --tensor-parallel-size 8 \
     --quantization fp8_per_channel \
@@ -294,9 +294,9 @@ guide: |
   BF16:
 
   ```bash
-  APHRODITE_ROCM_USE_AITER=1 \
-  APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1 \
-  aphrodite serve mindlab-research/Macaron-V1-Coding-Venti \
+  SONAR_ROCM_USE_AITER=1 \
+  SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1 \
+  sonar serve mindlab-research/Macaron-V1-Coding-Venti \
     --kv-cache-dtype fp8_e4m3 \
     --tensor-parallel-size 8 \
     --max-model-len 262144 \
@@ -354,7 +354,7 @@ guide: |
   Add `--no-enable-prefix-caching` to the server command for a clean measurement.
 
   ```bash
-  aphrodite bench serve \
+  sonar bench serve \
     --model mindlab-research/Macaron-V1-Coding-Venti \
     --dataset-name random \
     --random-input 8000 \

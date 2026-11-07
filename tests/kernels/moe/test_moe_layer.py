@@ -20,53 +20,53 @@ from typing import get_args
 import pytest
 import torch
 
-import aphrodite.model_executor.layers.quantization.utils.w8a8_utils
-from aphrodite.config import (
-    AphroditeConfig,
+import sonar.model_executor.layers.quantization.utils.w8a8_utils
+from sonar.config import (
     CompilationConfig,
     EPLBConfig,
     ParallelConfig,
     SchedulerConfig,
-    set_current_aphrodite_config,
+    SonarConfig,
+    set_current_sonar_config,
 )
-from aphrodite.distributed import (
+from sonar.distributed import (
     get_ep_group,
     get_eplb_group,
     tensor_model_parallel_all_gather,
 )
-from aphrodite.distributed.device_communicators.all_reduce_utils import (
+from sonar.distributed.device_communicators.all_reduce_utils import (
     gpu_p2p_access_check,
 )
-from aphrodite.distributed.eplb.eplb_communicator import create_eplb_communicator
-from aphrodite.distributed.eplb.rebalance_execute import rearrange_expert_weights_inplace
-from aphrodite.forward_context import set_forward_context
-from aphrodite.model_executor.layers.fused_moe import FusedMoEFactory, MoERunner, fused_experts
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.config import FusedMoEQuantConfig
-from aphrodite.model_executor.layers.fused_moe.router.router_factory import (
+from sonar.distributed.eplb.eplb_communicator import create_eplb_communicator
+from sonar.distributed.eplb.rebalance_execute import rearrange_expert_weights_inplace
+from sonar.forward_context import set_forward_context
+from sonar.model_executor.layers.fused_moe import FusedMoEFactory, MoERunner, fused_experts
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.config import FusedMoEQuantConfig
+from sonar.model_executor.layers.fused_moe.router.router_factory import (
     create_fused_moe_router,
 )
-from aphrodite.model_executor.layers.quantization.base_config import QuantizationConfig
-from aphrodite.model_executor.layers.quantization.modelopt import (
+from sonar.model_executor.layers.quantization.base_config import QuantizationConfig
+from sonar.model_executor.layers.quantization.modelopt import (
     ModelOptFp8Config,
     ModelOptNvFp4Config,
 )
-from aphrodite.model_executor.models.utils import sequence_parallel_chunk
-from aphrodite.platforms import current_platform
-from aphrodite.utils.flashinfer import (
+from sonar.model_executor.models.utils import sequence_parallel_chunk
+from sonar.platforms import current_platform
+from sonar.utils.flashinfer import (
     has_flashinfer_nvlink_one_sided,
     has_flashinfer_nvlink_two_sided,
 )
-from aphrodite.utils.import_utils import has_deep_ep, has_mori, has_nixl_ep
-from aphrodite.utils.math_utils import cdiv, next_power_of_2
-from aphrodite.utils.torch_utils import set_random_seed
-from aphrodite.v1.worker.workspace import (
+from sonar.utils.import_utils import has_deep_ep, has_mori, has_nixl_ep
+from sonar.utils.math_utils import cdiv, next_power_of_2
+from sonar.utils.torch_utils import set_random_seed
+from sonar.v1.worker.workspace import (
     init_workspace_manager,
     is_workspace_manager_initialized,
 )
 from tests.kernels.moe.modular_kernel_tools.parallel_utils import (
     ProcessGroupInfo,
-    _set_aphrodite_config,
+    _set_sonar_config,
     parallel_launch_with_config,
 )
 from tests.kernels.moe.utils import TestMLP, make_test_weights, moe_quantize_weights
@@ -74,7 +74,7 @@ from tests.kernels.moe.utils import TestMLP, make_test_weights, moe_quantize_wei
 
 def on_gfx950() -> bool:
     if current_platform.is_rocm():
-        from aphrodite.platforms.rocm import on_gfx950 as rocm_on_gfx950
+        from sonar.platforms.rocm import on_gfx950 as rocm_on_gfx950
 
         return rocm_on_gfx950()
     return False
@@ -197,10 +197,10 @@ def mock_normalize_e4m3fn_to_e4m3fnuz(
 # _quantize_fp8_halves.
 # NOTE: Not able to use monkeypatch because of the spawned parallel workers.
 def override_normalize_e4m3fn_to_e4m3fnuz():
-    aphrodite.model_executor.layers.quantization.utils.w8a8_utils.normalize_e4m3fn_to_e4m3fnuz = (
+    sonar.model_executor.layers.quantization.utils.w8a8_utils.normalize_e4m3fn_to_e4m3fnuz = (
         mock_normalize_e4m3fn_to_e4m3fnuz  # noqa: E501
     )
-    aphrodite.model_executor.layers.quantization.fp8.normalize_e4m3fn_to_e4m3fnuz = mock_normalize_e4m3fn_to_e4m3fnuz  # noqa: E501
+    sonar.model_executor.layers.quantization.fp8.normalize_e4m3fn_to_e4m3fnuz = mock_normalize_e4m3fn_to_e4m3fnuz  # noqa: E501
 
 
 def sp_wrapper(fn: Callable | MoERunner, is_sequence_parallel: bool | None = None) -> Callable:
@@ -260,14 +260,14 @@ def maybe_roundup_layer_hidden_size(
 
     """
     if backend == "deepep_high_throughput":
-        from aphrodite.model_executor.layers.fused_moe.prepare_finalize.deepep_ht import (
+        from sonar.model_executor.layers.fused_moe.prepare_finalize.deepep_ht import (
             DeepEPHTPrepareAndFinalize,
         )
 
         hidden_size = DeepEPHTPrepareAndFinalize.maybe_roundup_layer_hidden_size(hidden_size, act_dtype)
 
     if backend == "deepep_low_latency":
-        from aphrodite.model_executor.layers.fused_moe.prepare_finalize.deepep_ll import (
+        from sonar.model_executor.layers.fused_moe.prepare_finalize.deepep_ll import (
             DeepEPLLPrepareAndFinalize,
         )
 
@@ -552,10 +552,10 @@ def is_valid_config(config: MoETestConfig) -> tuple[bool, str | None]:
             )
 
         if config.backend in MORI_BACKENDS:
-            if os.environ.get("APHRODITE_TEST_ENABLE_MORI_MOE_LAYER") != "1":
+            if os.environ.get("SONAR_TEST_ENABLE_MORI_MOE_LAYER") != "1":
                 return False, "mori MoE layer matrix is opt-in"
 
-            from aphrodite._aiter_ops import rocm_aiter_ops
+            from sonar._aiter_ops import rocm_aiter_ops
 
             if not rocm_aiter_ops.is_fused_moe_enabled():
                 return False, "mori requires AITER fused MoE"
@@ -563,7 +563,7 @@ def is_valid_config(config: MoETestConfig) -> tuple[bool, str | None]:
                 return False, "mori does not support AITER shared expert fusion"
 
         if config.backend == "deepep_low_latency":
-            from aphrodite.model_executor.layers.fused_moe.prepare_finalize.deepep_ll import (  # noqa: E501
+            from sonar.model_executor.layers.fused_moe.prepare_finalize.deepep_ll import (  # noqa: E501
                 DeepEPLLPrepareAndFinalize,
             )
 
@@ -574,7 +574,7 @@ def is_valid_config(config: MoETestConfig) -> tuple[bool, str | None]:
                 )
 
         if config.backend == "nixl_ep":
-            from aphrodite.model_executor.layers.fused_moe.prepare_finalize.nixl_ep import (  # noqa: E501
+            from sonar.model_executor.layers.fused_moe.prepare_finalize.nixl_ep import (  # noqa: E501
                 NixlEPPrepareAndFinalize,
             )
 
@@ -720,7 +720,7 @@ def make_quant_config(
     w2: torch.Tensor,
     num_experts: int,
 ) -> tuple[QuantizationConfig | None, QuantizedWeights]:
-    from aphrodite.model_executor.layers.quantization.fp8 import Fp8Config
+    from sonar.model_executor.layers.quantization.fp8 import Fp8Config
 
     if quantization is None:
         return None, QuantizedWeights(w13_weight=w1, w2_weight=w2)
@@ -1218,7 +1218,7 @@ def _test_body_regular(
     moe_layer: MoERunner,
     hidden_states: torch.Tensor,
     router_logits: torch.Tensor,
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     num_tokens: int,
     num_tokens_across_dp: torch.Tensor,
     **kwargs,
@@ -1228,7 +1228,7 @@ def _test_body_regular(
 
     with set_forward_context(
         None,
-        aphrodite_config,
+        sonar_config,
         num_tokens=num_tokens,
         num_tokens_across_dp=num_tokens_across_dp,
     ):
@@ -1241,7 +1241,7 @@ def _test_body_eplb(
     moe_layer: MoERunner,
     hidden_states: torch.Tensor,
     router_logits: torch.Tensor,
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     num_tokens: int,
     num_tokens_across_dp: torch.Tensor,
     cpu_group,
@@ -1271,7 +1271,7 @@ def _test_body_eplb(
     # Get "before" output with original weight arrangement
     with set_forward_context(
         None,
-        aphrodite_config,
+        sonar_config,
         num_tokens=num_tokens,
         num_tokens_across_dp=num_tokens_across_dp,
     ):
@@ -1280,7 +1280,7 @@ def _test_body_eplb(
     # Create a fresh FusedMoEFactory layer with enable_eplb=True
     # Delete the original layer's registration so the constructor can
     # re-use the same "from_forward_context" prefix
-    cc = aphrodite_config.compilation_config
+    cc = sonar_config.compilation_config
     del cc.static_forward_context["from_forward_context"]
     cc.static_all_moe_layers.remove("from_forward_context")
 
@@ -1316,12 +1316,12 @@ def _test_body_eplb(
     expert_weights = [list(eplb_moe_layer.get_expert_weights())]
 
     expert_buffer = [torch.empty_like(w) for w in expert_weights[0]]
-    assert aphrodite_config.parallel_config.eplb_config.communicator is not None, (
+    assert sonar_config.parallel_config.eplb_config.communicator is not None, (
         "EPLB communicator backend must be set by ParallelConfig"
     )
     communicator = create_eplb_communicator(
         group_coordinator=get_eplb_group(),
-        backend=aphrodite_config.parallel_config.eplb_config.communicator,
+        backend=sonar_config.parallel_config.eplb_config.communicator,
         expert_weights=expert_weights,
         expert_buffer=expert_buffer,
     )
@@ -1363,7 +1363,7 @@ def _test_body_eplb(
     # Get "after" output with rearranged weights and EPLB routing
     with set_forward_context(
         None,
-        aphrodite_config,
+        sonar_config,
         num_tokens=num_tokens,
         num_tokens_across_dp=num_tokens_across_dp,
     ):
@@ -1374,7 +1374,7 @@ def _test_body_eplb(
 
 # TODO: make this take a MoETestConfig
 def _run_one_config(
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     ep_size: int,  # Expert parallel size (total across all ranks)
     dp_size: int,  # Data parallel size (number of DP groups)
     tp_size: int,  # Tensor parallel size OR sequence parallel size (when use_ep=True)
@@ -1414,7 +1414,7 @@ def _run_one_config(
 
         use_ep = ep_size > 1
 
-        assert aphrodite_config.parallel_config.enable_expert_parallel == use_ep
+        assert sonar_config.parallel_config.enable_expert_parallel == use_ep
 
         in_dtype = torch.bfloat16
         device = torch.accelerator.current_accelerator()
@@ -1471,7 +1471,7 @@ def _run_one_config(
             is_sequence_parallel=is_sequence_parallel,
         )
 
-        with set_current_aphrodite_config(aphrodite_config):
+        with set_current_sonar_config(sonar_config):
             # Compute baseline output with SP wrapper if needed
             # sp_wrapper handles sequence chunking/gathering for SP
             baseline_output = sp_wrapper(baseline_layer, is_sequence_parallel)(hidden_states, router_logits)
@@ -1479,7 +1479,7 @@ def _run_one_config(
         del baseline_layer
         torch.accelerator.empty_cache()
 
-        with set_current_aphrodite_config(aphrodite_config):
+        with set_current_sonar_config(sonar_config):
             # Chunk weights for EP BEFORE creating FusedMoEFactory
             # FusedMoEFactory uses EP-chunked weights and handles reductions internally
             if ep_size > 1:
@@ -1549,7 +1549,7 @@ def _run_one_config(
                 moe_layer=moe_layer,
                 hidden_states=hidden_states,
                 router_logits=router_logits,
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 num_tokens=num_tokens,
                 num_tokens_across_dp=num_tokens_across_dp,
                 in_dtype=in_dtype,
@@ -1621,8 +1621,8 @@ def test_moe_layer_no_parallel(
     monkeypatch,
 ):
     """Test MoE layer without parallelism (dp_size=1, tp_size=1, use_ep=False)."""
-    if os.environ.get("APHRODITE_LOGGING_LEVEL") is None:
-        monkeypatch.setenv("APHRODITE_LOGGING_LEVEL", "ERROR")
+    if os.environ.get("SONAR_LOGGING_LEVEL") is None:
+        monkeypatch.setenv("SONAR_LOGGING_LEVEL", "ERROR")
 
     # Needed since weights will already be in e4m3fnuz format and the
     # normalize_e4m3fn_to_e4m3fnuz() function is not being tested here.
@@ -1652,13 +1652,13 @@ def test_moe_layer_no_parallel(
     compilation_config = CompilationConfig()
     compilation_config.pass_config.fuse_allreduce_rms = False
 
-    aphrodite_config = AphroditeConfig(parallel_config=parallel_config, compilation_config=compilation_config)
+    sonar_config = SonarConfig(parallel_config=parallel_config, compilation_config=compilation_config)
 
     # Initialize distributed environment for single GPU
-    _set_aphrodite_config(aphrodite_config, 1, rank=0, local_rank=0)
+    _set_sonar_config(sonar_config, 1, rank=0, local_rank=0)
 
     _run_one_config(
-        aphrodite_config,
+        sonar_config,
         test_config.ep_size,
         test_config.dp_size,
         test_config.tp_size,
@@ -1688,7 +1688,7 @@ def _test_body_config(test_config: MoETestConfig, cpu_group, **kwargs):
 
 def _parallel_worker(
     pgi: ProcessGroupInfo,
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     cpu_group,
     test_configs: list[MoETestConfig],
     verbosity: int,
@@ -1704,13 +1704,13 @@ def _parallel_worker(
     failed = 0
     failure_details = []
 
-    dp_rank = aphrodite_config.parallel_config.data_parallel_rank
+    dp_rank = sonar_config.parallel_config.data_parallel_rank
 
     if current_platform.is_fp8_fnuz():
         override_normalize_e4m3fn_to_e4m3fnuz()
 
     for test_config in test_configs:
-        cc = aphrodite_config.compilation_config
+        cc = sonar_config.compilation_config
         if "from_forward_context" in cc.static_forward_context:
             del cc.static_forward_context["from_forward_context"]
             cc.static_all_moe_layers.remove("from_forward_context")
@@ -1724,7 +1724,7 @@ def _parallel_worker(
         local_error: str | None = None
         try:
             _run_one_config(
-                aphrodite_config,
+                sonar_config,
                 test_config.ep_size,
                 test_config.dp_size,
                 test_config.tp_size,
@@ -1752,7 +1752,7 @@ def _parallel_worker(
             if test_config.backend == "flashinfer_nvlink_one_sided":
                 from flashinfer.comm.trtllm_moe_alltoall import MoeAlltoAll
 
-                from aphrodite.distributed.device_communicators.all2all import (
+                from sonar.distributed.device_communicators.all2all import (
                     FlashInferNVLinkOneSidedManager,
                 )
 
@@ -1852,7 +1852,7 @@ def _parallel_worker(
 
 def _parallel_worker_rocm_deepep(
     pgi: ProcessGroupInfo,
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     cpu_group,
     test_configs: list[MoETestConfig],
     verbosity: int,
@@ -1868,7 +1868,7 @@ def _parallel_worker_rocm_deepep(
     try:
         _parallel_worker(
             pgi,
-            aphrodite_config,
+            sonar_config,
             cpu_group,
             test_configs,
             verbosity,
@@ -1883,7 +1883,7 @@ def _parallel_worker_rocm_deepep(
     finally:
         try:
             torch.accelerator.synchronize()
-            # Do not run Aphrodite cleanup: it explicitly destroys the DeepEP
+            # Do not run Sonar cleanup: it explicitly destroys the DeepEP
             # buffer. Destroy only the default group, matching the accepted
             # ROCm workaround in tests/kernels/moe/parallel_utils.py.
             torch.distributed.destroy_process_group()
@@ -1902,16 +1902,16 @@ def _test_body_mori_graph(
     moe_layer: MoERunner,
     hidden_states: torch.Tensor,
     router_logits: torch.Tensor,
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     num_tokens: int,
     num_tokens_across_dp: torch.Tensor,
     baseline_output: torch.Tensor,
     **kwargs,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    from aphrodite.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
         AiterExperts,
     )
-    from aphrodite.model_executor.layers.fused_moe.prepare_finalize.mori import (
+    from sonar.model_executor.layers.fused_moe.prepare_finalize.mori import (
         MoriPrepareAndFinalize,
     )
 
@@ -1932,7 +1932,7 @@ def _test_body_mori_graph(
     # Forward-context metadata belongs on CPU, outside graph capture.
     with set_forward_context(
         None,
-        aphrodite_config,
+        sonar_config,
         num_tokens=num_tokens,
         num_tokens_across_dp=num_tokens_across_dp.cpu(),
     ):
@@ -1966,16 +1966,16 @@ def _test_body_mori_graph(
 
 def _mori_graph_worker(
     pgi: ProcessGroupInfo,
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     cpu_group,
     m: int,
     n: int,
 ) -> None:
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     rocm_aiter_ops.refresh_env_variables()
     _run_one_config(
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         ep_size=2,
         dp_size=2,
         tp_size=1,
@@ -2000,7 +2000,7 @@ def _mori_graph_worker(
 @pytest.mark.parametrize("m,n", [(1, 256), (32, 512), (45, 256)])
 def test_moe_layer_mori_graph(m: int, n: int, monkeypatch):
     """BF16 EP dispatch/combine preserves routing and outputs across replays."""
-    from aphrodite._aiter_ops import is_aiter_found_and_supported
+    from sonar._aiter_ops import is_aiter_found_and_supported
 
     if not current_platform.is_rocm() or not has_mori():
         pytest.skip("Requires ROCm and MoRI")
@@ -2009,12 +2009,12 @@ def test_moe_layer_mori_graph(m: int, n: int, monkeypatch):
     if current_platform.device_count() < 2:
         pytest.skip("Requires two GPUs")
 
-    monkeypatch.setenv("APHRODITE_ROCM_USE_AITER", "1")
-    monkeypatch.setenv("APHRODITE_ROCM_USE_AITER_MOE", "1")
-    monkeypatch.setenv("APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS", "0")
+    monkeypatch.setenv("SONAR_ROCM_USE_AITER", "1")
+    monkeypatch.setenv("SONAR_ROCM_USE_AITER_MOE", "1")
+    monkeypatch.setenv("SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS", "0")
     compilation_config = CompilationConfig()
     compilation_config.pass_config.fuse_allreduce_rms = False
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         parallel_config=ParallelConfig(
             data_parallel_size=2,
             tensor_parallel_size=1,
@@ -2024,7 +2024,7 @@ def test_moe_layer_mori_graph(m: int, n: int, monkeypatch):
         compilation_config=compilation_config,
         scheduler_config=SchedulerConfig.default_factory(max_num_batched_tokens=64, max_num_seqs=64),
     )
-    parallel_launch_with_config(2, _mori_graph_worker, aphrodite_config, None, m, n)
+    parallel_launch_with_config(2, _mori_graph_worker, sonar_config, None, m, n)
 
 
 # TODO: add torch.compile tests and graph coverage for other backends.
@@ -2067,20 +2067,20 @@ def test_moe_layer(
 
     verbosity = pytestconfig.getoption("verbose")
 
-    if os.environ.get("APHRODITE_LOGGING_LEVEL") is None:
-        monkeypatch.setenv("APHRODITE_LOGGING_LEVEL", "ERROR")
+    if os.environ.get("SONAR_LOGGING_LEVEL") is None:
+        monkeypatch.setenv("SONAR_LOGGING_LEVEL", "ERROR")
 
-    if backend in MORI_BACKENDS and os.environ.get("APHRODITE_TEST_ENABLE_MORI_MOE_LAYER") == "1":
-        monkeypatch.setenv("APHRODITE_ROCM_USE_AITER", "1")
-        monkeypatch.setenv("APHRODITE_ROCM_USE_AITER_MOE", "1")
-        monkeypatch.setenv("APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS", "0")
-        from aphrodite._aiter_ops import rocm_aiter_ops
+    if backend in MORI_BACKENDS and os.environ.get("SONAR_TEST_ENABLE_MORI_MOE_LAYER") == "1":
+        monkeypatch.setenv("SONAR_ROCM_USE_AITER", "1")
+        monkeypatch.setenv("SONAR_ROCM_USE_AITER_MOE", "1")
+        monkeypatch.setenv("SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS", "0")
+        from sonar._aiter_ops import rocm_aiter_ops
 
         rocm_aiter_ops.refresh_env_variables()
 
     # TODO: cover FlashInfer MoE backends via moe_backend, e.g.
     # moe_backend=flashinfer_trtllm / flashinfer_cutlass / flashinfer_cutedsl
-    # (BF16, FP8 and NVFP4 paths), and APHRODITE_USE_FLASHINFER_MOE_INT4=1.
+    # (BF16, FP8 and NVFP4 paths), and SONAR_USE_FLASHINFER_MOE_INT4=1.
 
     # Repeated NIXL memory registration in this broad layer matrix fails on
     # gfx950. NIXL EPLB is covered by dedicated tests, so use Gloo here to
@@ -2102,7 +2102,7 @@ def test_moe_layer(
     # compilation_config.mode = CompilationMode.NONE  # for now
     compilation_config.pass_config.fuse_allreduce_rms = False  # for now
 
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         parallel_config=parallel_config,
         compilation_config=compilation_config,
         scheduler_config=SchedulerConfig.default_factory(max_num_batched_tokens=next_power_of_2(MAX_M)),
@@ -2146,7 +2146,7 @@ def test_moe_layer(
                 parallel_launch_with_config(
                     world_size,
                     parallel_worker,
-                    aphrodite_config,
+                    sonar_config,
                     env_dict,
                     test_config_batch,
                     verbosity,

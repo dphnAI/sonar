@@ -4,9 +4,9 @@
 
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.platforms.rocm import on_gfx950
-from aphrodite.triton_utils import tl, triton
+from sonar.platforms import current_platform
+from sonar.platforms.rocm import on_gfx950
+from sonar.triton_utils import tl, triton
 
 _MAX_TOKENS = 32
 # From this many multiply-adds on, F.linear wins on MI355.

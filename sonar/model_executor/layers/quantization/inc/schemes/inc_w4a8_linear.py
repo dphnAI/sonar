@@ -3,7 +3,7 @@
 
 import torch
 
-from aphrodite.model_executor.utils import replace_parameter
+from sonar.model_executor.utils import replace_parameter
 
 from .inc_wna16_linear import INCXPULinearMethod
 
@@ -23,7 +23,7 @@ class INCXPUW4A8LinearMethod(INCXPULinearMethod):
     regardless of the activation dtype, so bf16 scales are silently
     misinterpreted. The activations themselves may be bf16 or fp16.
 
-    Opt in with ``APHRODITE_XPU_INC_WNA16_BACKEND=w4a8``. Whether this beats ARK is
+    Opt in with ``SONAR_XPU_INC_WNA16_BACKEND=w4a8``. Whether this beats ARK is
     device-dependent, so it is not the default: it was measured faster on B70
     (Xe2), where ARK cannot use its XMX int8 path and falls back to fp16.
     """
@@ -59,7 +59,7 @@ class INCXPUW4A8LinearMethod(INCXPULinearMethod):
         ]
         if unaligned:
             raise NotImplementedError(
-                "APHRODITE_XPU_INC_WNA16_BACKEND=w4a8 requires partitioned in/out "
+                "SONAR_XPU_INC_WNA16_BACKEND=w4a8 requires partitioned in/out "
                 f"sizes that are multiples of {self._DIM_ALIGNMENT}, got "
                 + ", ".join(f"{name}={size}" for name, size in unaligned)
                 + f". Partition shape: ({input_size_per_partition}, "
@@ -91,7 +91,7 @@ class INCXPUW4A8LinearMethod(INCXPULinearMethod):
         if reshaped_x.shape[0] < self._MIN_TOKENS_FOR_INT8:
             return super().apply_weights(layer, x, bias)
 
-        from aphrodite._xpu_ops import xpu_ops as ops
+        from sonar._xpu_ops import xpu_ops as ops
 
         out_shape = x.shape[:-1] + (layer.qweight.shape[1],)
         quant_x, x_scale, x_zero = ops.dynamic_per_token_int8_quant_ref(reshaped_x, True, 8)

@@ -43,8 +43,8 @@ from collections.abc import Collection, Iterable
 from dataclasses import dataclass, field
 from enum import Enum, auto
 
-from aphrodite.logger import init_logger
-from aphrodite.v1.kv_offload.base import OffloadKey, ReqContext
+from sonar.logger import init_logger
+from sonar.v1.kv_offload.base import OffloadKey, ReqContext
 
 logger = init_logger(__name__)
 
@@ -115,7 +115,7 @@ class AsyncLookupManager(ABC):
 
         self._thread = threading.Thread(
             target=self._worker,
-            name=f"aphrodite_offloading_lookup_{tier_type}",
+            name=f"sonar_offloading_lookup_{tier_type}",
             daemon=True,
         )
         self._thread.start()

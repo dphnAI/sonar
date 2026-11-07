@@ -5,15 +5,15 @@
 import pytest
 import torch
 
-from aphrodite.platforms import CpuArchEnum, current_platform
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.platforms import CpuArchEnum, current_platform
+from sonar.utils.torch_utils import set_random_seed
 from tests.kernels.allclose_default import get_default_atol, get_default_rtol
 from tests.kernels.utils import opcheck
 
 if not current_platform.is_cpu():
     pytest.skip("skipping CPU-only tests", allow_module_level=True)
 
-from aphrodite.model_executor.layers.activation import (
+from sonar.model_executor.layers.activation import (
     GELU,
     FastGELU,
     GeluAndMul,
@@ -42,7 +42,7 @@ SEEDS = [0]
 @pytest.mark.parametrize("seed", SEEDS)
 @torch.inference_mode()
 def test_cpu_act_and_mul(
-    default_aphrodite_config,
+    default_sonar_config,
     activation_cls: type[torch.nn.Module],
     fn: object,
     num_tokens: int,
@@ -87,7 +87,7 @@ def test_cpu_act_and_mul(
 @pytest.mark.parametrize("seed", SEEDS)
 @torch.inference_mode()
 def test_cpu_unary_activation(
-    default_aphrodite_config,
+    default_sonar_config,
     activation_cls: type[torch.nn.Module],
     fn: object,
     op_args: tuple[str, ...],
@@ -111,7 +111,7 @@ def test_cpu_unary_activation(
 @pytest.mark.parametrize("dtype", DTYPES)
 @torch.inference_mode()
 def test_cpu_gelu_tanh_and_mul(
-    default_aphrodite_config,
+    default_sonar_config,
     dtype: torch.dtype,
 ) -> None:
     gate = torch.tensor(

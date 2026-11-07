@@ -17,7 +17,7 @@ from collections import namedtuple
 
 import regex as re
 
-from aphrodite.envs import environment_variables
+from sonar.envs import environment_variables
 
 try:
     import torch
@@ -55,7 +55,7 @@ SystemEnv = namedtuple(
         "level_zero_driver_version",
         "oneccl_version",
         "libigdgmm_version",
-        "aphrodite_xpu_kernels_version",
+        "sonar_xpu_kernels_version",
         "sycl_version",
         "pip_version",  # 'pip' or 'pip3'
         "pip_packages",
@@ -66,10 +66,10 @@ SystemEnv = namedtuple(
         "caching_allocator_config",
         "is_xnnpack_available",
         "cpu_info",
-        "rocm_version",  # aphrodite specific field
-        "aphrodite_version",  # aphrodite specific field
-        "aphrodite_build_flags",  # aphrodite specific field
-        "gpu_topo",  # aphrodite specific field
+        "rocm_version",  # sonar specific field
+        "sonar_version",  # sonar specific field
+        "sonar_build_flags",  # sonar specific field
+        "gpu_topo",  # sonar specific field
         "env_vars",
     ],
 )
@@ -375,7 +375,7 @@ def get_libigdgmm_version(run_lambda):
     return get_pkg_version(run_lambda, "libigdgmm")
 
 
-def get_aphrodite_xpu_kernels_version(run_lambda):
+def get_sonar_xpu_kernels_version(run_lambda):
     return get_pkg_version(run_lambda, "vllm_xpu_kernels")
 
 
@@ -396,8 +396,8 @@ def get_sycl_version(run_lambda):
     return run_and_parse_first_match(run_lambda, "icpx --version", r"\((\d[\d.]+)\)")
 
 
-def get_aphrodite_version():
-    from aphrodite import __version__, __version_tuple__
+def get_sonar_version():
+    from sonar import __version__, __version_tuple__
 
     if __version__ == "dev":
         return "N/A (dev)"
@@ -416,7 +416,7 @@ def get_aphrodite_version():
     return __version__
 
 
-def summarize_aphrodite_build_flags():
+def summarize_sonar_build_flags():
     flags = "CUDA Archs: {}; ROCm: {}; XPU: {}".format(
         os.environ.get("TORCH_CUDA_ARCH_LIST", "Not Set"),
         "Enabled" if os.environ.get("ROCM_HOME") else "Disabled",
@@ -734,8 +734,8 @@ def get_env_info():
     conda_packages = get_conda_packages(run_lambda)
 
     rocm_version = get_rocm_version(run_lambda)
-    aphrodite_version = get_aphrodite_version()
-    aphrodite_build_flags = summarize_aphrodite_build_flags()
+    sonar_version = get_sonar_version()
+    sonar_build_flags = summarize_sonar_build_flags()
     gpu_topo = get_gpu_topo(run_lambda)
 
     return SystemEnv(
@@ -759,7 +759,7 @@ def get_env_info():
         level_zero_driver_version=get_level_zero_driver_version(run_lambda),
         oneccl_version=get_oneapi_ccl_version(run_lambda),
         libigdgmm_version=get_libigdgmm_version(run_lambda),
-        aphrodite_xpu_kernels_version=get_aphrodite_xpu_kernels_version(run_lambda),
+        sonar_xpu_kernels_version=get_sonar_xpu_kernels_version(run_lambda),
         sycl_version=get_sycl_version(run_lambda),
         hip_compiled_version=hip_compiled_version,
         hip_runtime_version=hip_runtime_version,
@@ -776,8 +776,8 @@ def get_env_info():
         is_xnnpack_available=is_xnnpack_available(),
         cpu_info=get_cpu_info(run_lambda),
         rocm_version=rocm_version,
-        aphrodite_version=aphrodite_version,
-        aphrodite_build_flags=aphrodite_build_flags,
+        sonar_version=sonar_version,
+        sonar_build_flags=sonar_build_flags,
         gpu_topo=gpu_topo,
         env_vars=get_env_vars(),
     )
@@ -828,12 +828,12 @@ env_info_fmt += "\n\n"
 
 env_info_fmt += """
 ==============================
-         Aphrodite Info
+         Sonar Info
 ==============================
 ROCM Version                 : {rocm_version}
-Aphrodite Version                 : {aphrodite_version}
-Aphrodite Build Flags:
-  {aphrodite_build_flags}
+Sonar Version                 : {sonar_version}
+Sonar Build Flags:
+  {sonar_build_flags}
 GPU Topology:
   {gpu_topo}
 
@@ -903,7 +903,7 @@ def pretty_str(envinfo):
         "level_zero_driver_version",
         "oneccl_version",
         "libigdgmm_version",
-        "aphrodite_xpu_kernels_version",
+        "sonar_xpu_kernels_version",
     ]
     all_xpu_fields = dynamic_xpu_fields + [
         "oneapi_compiler_version",
@@ -971,7 +971,7 @@ Intel Graphics Compiler (IGC): {intel_graphics_compiler_version}
 Intel GMM (libigdgmm)        : {libigdgmm_version}
 Level Zero loader version    : {level_zero_loader_version}
 Level Zero driver version    : {level_zero_driver_version}
-Aphrodite XPU kernels version     : {aphrodite_xpu_kernels_version}
+Sonar XPU kernels version     : {sonar_xpu_kernels_version}
 """.strip()
 
     invalid_vers = {"N/A", "Could not collect", "None"}

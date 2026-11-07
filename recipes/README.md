@@ -1,14 +1,14 @@
 # Sonar model recipes
 
 This directory carries upstream deployment recipes adapted to Sonar's
-`aphrodite` executable, Python namespace, and `APHRODITE_*` environment variables.
+`sonar` executable, Python namespace, and `SONAR_*` environment variables.
 There is one YAML per model at `models/<hf_org>/<hf_repo>.yaml`; the path mirrors
 the real Hugging Face model ID.
 
 The upstream site, command builder, JSON API, schema, and shared vocabulary
 (hardware profiles, serving strategies, and KV-offload deployments) are owned by
 [vllm-project/recipes](https://github.com/vllm-project/recipes). Published model
-IDs, container images, wheel indexes, URLs, and upstream schema fields such as
+IDs, container images, reference URLs, and upstream schema fields such as
 `min_vllm_version` retain their real names. That version field describes the
 upstream requirement, not a Sonar release number.
 
@@ -19,6 +19,16 @@ Do not install Sonar from an upstream vLLM wheel index or assume an upstream
 container tag is published for Sonar. See the
 [Sonar installation guide](https://sonar.dphn.ai/getting-started/installation/)
 for supported Sonar packages and containers.
+
+Sonar package commands use the platform indexes at
+`https://sonar.dphn.ai/whl/<release|nightly>/<backend>/<architecture>/simple`.
+CUDA commands select the `cu130` PyTorch backend. For CPU packages, use the
+installer so it also installs the matching Triton CPU dependency.
+
+Commands that invoke `dynamo.vllm` or an external router belong to those
+third-party runtimes. This rename does not add a Sonar backend to them.
+Their published images and upstream launch flags are reference material, not
+validated Sonar integrations.
 
 Omni recipes remain in the upstream recipes repository and are not part of
 Sonar's runtime. References to `vllm-omni`, `vllm-ascend`, and TPU integrations

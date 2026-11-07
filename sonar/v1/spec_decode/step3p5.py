@@ -5,20 +5,20 @@ from copy import copy
 
 import torch
 
-from aphrodite.config import AphroditeConfig, get_layers_from_aphrodite_config, replace
-from aphrodite.forward_context import set_forward_context
-from aphrodite.model_executor.layers.attention_layer_base import AttentionLayerBase
-from aphrodite.model_executor.models.utils import get_draft_quant_config
-from aphrodite.v1.attention.backend import CommonAttentionMetadata
-from aphrodite.v1.kv_cache_interface import (
+from sonar.config import SonarConfig, get_layers_from_sonar_config, replace
+from sonar.forward_context import set_forward_context
+from sonar.model_executor.layers.attention_layer_base import AttentionLayerBase
+from sonar.model_executor.models.utils import get_draft_quant_config
+from sonar.v1.attention.backend import CommonAttentionMetadata
+from sonar.v1.kv_cache_interface import (
     KVCacheConfig,
     KVCacheSpec,
     UniformTypeKVCacheSpecs,
 )
-from aphrodite.v1.sample.metadata import SamplingMetadata
-from aphrodite.v1.spec_decode.eagle import EagleProposer
-from aphrodite.v1.spec_decode.utils import PADDING_SLOT_ID
-from aphrodite.v1.worker.utils import AttentionGroup
+from sonar.v1.sample.metadata import SamplingMetadata
+from sonar.v1.spec_decode.eagle import EagleProposer
+from sonar.v1.spec_decode.utils import PADDING_SLOT_ID
+from sonar.v1.worker.utils import AttentionGroup
 
 
 class Step3p5MTPProposer(EagleProposer):
@@ -26,11 +26,11 @@ class Step3p5MTPProposer(EagleProposer):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
         runner=None,
     ):
-        super().__init__(aphrodite_config, device, runner)
+        super().__init__(sonar_config, device, runner)
         self._per_group_block_tables: dict[int, torch.Tensor] = {}
         self._per_group_slot_mappings: dict[int, torch.Tensor] = {}
         # Slot-mapping buffers for non-primary KV cache groups (the primary
@@ -157,8 +157,8 @@ class Step3p5MTPProposer(EagleProposer):
         # Step3.5 checkpoints carry per-MTP-layer shared_head weights.
         return
 
-    def _create_draft_aphrodite_config(self) -> AphroditeConfig:
-        base = super()._create_draft_aphrodite_config()
+    def _create_draft_sonar_config(self) -> SonarConfig:
+        base = super()._create_draft_sonar_config()
         return replace(
             base,
             model_config=self.draft_model_config,
@@ -174,8 +174,8 @@ class Step3p5MTPProposer(EagleProposer):
         kv_cache_config: KVCacheConfig,
         kernel_block_sizes: list[int] | None = None,
     ) -> None:
-        all_attn_layers = get_layers_from_aphrodite_config(
-            self.aphrodite_config,
+        all_attn_layers = get_layers_from_sonar_config(
+            self.sonar_config,
             AttentionLayerBase,  # type: ignore[type-abstract]
         )
 
@@ -224,7 +224,7 @@ class Step3p5MTPProposer(EagleProposer):
                     kv_cache_group_id=gid,
                 )
                 attn_group.create_metadata_builders(
-                    self.aphrodite_config,
+                    self.sonar_config,
                     self.device,
                     kernel_block_size=kernel_block_size,
                 )
@@ -298,7 +298,7 @@ class Step3p5MTPProposer(EagleProposer):
 
         with set_forward_context(
             per_layer_attn_metadata,
-            self.aphrodite_config,
+            self.sonar_config,
             num_tokens=num_input_tokens,
             num_tokens_across_dp=num_tokens_across_dp,
             cudagraph_runtime_mode=cudagraph_runtime_mode,
@@ -403,7 +403,7 @@ class Step3p5MTPProposer(EagleProposer):
 
             with set_forward_context(
                 per_layer_attn_metadata,
-                self.aphrodite_config,
+                self.sonar_config,
                 num_tokens=input_batch_size,
                 num_tokens_across_dp=batch_size_across_dp,
                 cudagraph_runtime_mode=cudagraph_runtime_mode,

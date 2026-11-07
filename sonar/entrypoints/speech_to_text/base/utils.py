@@ -4,9 +4,9 @@
 
 from fastapi import UploadFile
 
-import aphrodite.envs as envs
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.utils.mem_constants import KiB_bytes, MiB_bytes
+import sonar.envs as envs
+from sonar.exceptions import SonarValidationError
+from sonar.utils.mem_constants import KiB_bytes, MiB_bytes
 
 _READ_CHUNK_SIZE = 64 * KiB_bytes
 
@@ -26,22 +26,22 @@ async def read_upload_with_limit(
     Args:
         file: The FastAPI/Starlette ``UploadFile`` object.
         max_size_mb: Maximum allowed compressed file size in megabytes.
-            Defaults to ``envs.APHRODITE_MAX_AUDIO_CLIP_FILESIZE_MB``.
+            Defaults to ``envs.SONAR_MAX_AUDIO_CLIP_FILESIZE_MB``.
 
     Returns:
         The file content as ``bytes``.
 
     Raises:
-        AphroditeValidationError: If the file exceeds the configured size limit.
+        SonarValidationError: If the file exceeds the configured size limit.
 
     """
     if max_size_mb is None:
-        max_size_mb = envs.APHRODITE_MAX_AUDIO_CLIP_FILESIZE_MB
+        max_size_mb = envs.SONAR_MAX_AUDIO_CLIP_FILESIZE_MB
 
     max_bytes = int(max_size_mb * MiB_bytes)
 
     if file.size is not None and file.size > max_bytes:
-        raise AphroditeValidationError(
+        raise SonarValidationError(
             "Maximum file size exceeded",
             parameter="audio_filesize_mb",
             value=file.size / MiB_bytes,
@@ -55,7 +55,7 @@ async def read_upload_with_limit(
             break
         total += len(chunk)
         if total > max_bytes:
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 "Maximum file size exceeded",
                 parameter="audio_filesize_mb",
                 value=total / MiB_bytes,

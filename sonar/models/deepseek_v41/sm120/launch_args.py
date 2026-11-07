@@ -16,7 +16,7 @@ from typing import Any
 from cutlass.base_dsl.common import DSLUserCodeError
 from cutlass.base_dsl.diagnostics import DiagId
 
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 # SHA-256 of the dedented source. ast.dump() output differs across Python versions.

@@ -29,7 +29,7 @@ model:
 
 features:
   tool_calling:
-    description: "Surface LFM2.5's Pythonic tool calls (wrapped in <|tool_call_start|>…<|tool_call_end|>) as OpenAI tool_calls via Aphrodite's native lfm2 parser"
+    description: "Surface LFM2.5's Pythonic tool calls (wrapped in <|tool_call_start|>…<|tool_call_end|>) as OpenAI tool_calls via Sonar's native lfm2 parser"
     args:
       - "--enable-auto-tool-choice"
       - "--tool-call-parser"
@@ -49,7 +49,7 @@ hardware_overrides:
   # output identical). Inert (falls back to native) on non-Blackwell GPUs.
   blackwell:
     extra_env:
-      APHRODITE_USE_OINK_OPS: "1"
+      SONAR_USE_OINK_OPS: "1"
 strategy_overrides:
   single_node_tp:
     tp: 1
@@ -62,14 +62,14 @@ guide: |
   backbone**: short-range gated convolution blocks interleaved with grouped-query attention.
   The hybrid design keeps the KV cache small and decode fast, so the model serves comfortably on
   a single small GPU while supporting a 32K context window and Pythonic tool calling — all
-  through Aphrodite's OpenAI-compatible API.
+  through Sonar's OpenAI-compatible API.
 
   ### Key Features
   - **Hybrid backbone**: Gated short convolutions interleaved with grouped-query attention — a smaller KV cache and lower decode latency than a same-size full-attention transformer.
   - **32K context**: 32,768-token context window.
-  - **Tool calling**: Pythonic tool calls (`<|tool_call_start|>…<|tool_call_end|>`) surfaced as OpenAI `tool_calls` by Aphrodite's native `lfm2` parser.
-  - **Native Aphrodite support**: Served via the `Lfm2ForCausalLM` architecture.
-  - **Edge-ready family**: Day-one support across llama.cpp, MLX, ONNX, Aphrodite, and SGLang.
+  - **Tool calling**: Pythonic tool calls (`<|tool_call_start|>…<|tool_call_end|>`) surfaced as OpenAI `tool_calls` by Sonar's native `lfm2` parser.
+  - **Native Sonar support**: Served via the `Lfm2ForCausalLM` architecture.
+  - **Edge-ready family**: Day-one support across llama.cpp, MLX, ONNX, Sonar, and SGLang.
 
   ### Supported Variants
 
@@ -92,30 +92,30 @@ guide: |
   ## Prerequisites
 
   - **Hardware**: 1× GPU with ≥8 GB VRAM (e.g. L4, A10, RTX 4090, H100).
-  - **Aphrodite**: ≥ 0.23.0.
+  - **Sonar**: ≥ 0.23.0.
 
   ### pip (NVIDIA CUDA)
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U aphrodite-engine --torch-backend auto
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   ```
 
   ## Deployment Configurations
 
   ### Quick Start (Single GPU, BF16)
   ```bash
-  aphrodite serve LiquidAI/LFM2.5-1.2B-Instruct
+  sonar serve LiquidAI/LFM2.5-1.2B-Instruct
   ```
   Cap the context to fit a smaller GPU (the model supports up to 32K):
   ```bash
-  aphrodite serve LiquidAI/LFM2.5-1.2B-Instruct --max-model-len 32768
+  sonar serve LiquidAI/LFM2.5-1.2B-Instruct --max-model-len 32768
   ```
 
   ### Full-Featured Server Launch
   Enables tool calling:
   ```bash
-  aphrodite serve LiquidAI/LFM2.5-1.2B-Instruct \
+  sonar serve LiquidAI/LFM2.5-1.2B-Instruct \
     --enable-auto-tool-choice \
     --tool-call-parser lfm2 \
     --host 0.0.0.0 --port 8000
@@ -135,7 +135,7 @@ guide: |
 
   ### Text Generation
   The model card recommends temperature `0.1`, `top_k 50`, `repetition_penalty 1.05`. `top_k` and
-  `repetition_penalty` are Aphrodite extra sampling params — pass them via `extra_body`.
+  `repetition_penalty` are Sonar extra sampling params — pass them via `extra_body`.
   ```python
   from openai import OpenAI
   client = OpenAI(base_url="http://localhost:8000/v1", api_key="EMPTY")
@@ -170,17 +170,17 @@ guide: |
   ```
 
   ### Structured Outputs
-  Aphrodite's guided decoding constrains output to a JSON schema via `response_format`. The model does
+  Sonar's guided decoding constrains output to a JSON schema via `response_format`. The model does
   not see the schema itself — put semantic instructions (units, formatting) in the system prompt.
 
   ## Configuration Tips
   - Set `--max-model-len` to match your workload (up to 32K); lowering it frees VRAM for KV cache.
   - `--gpu-memory-utilization 0.90–0.95` maximizes KV cache capacity.
   - FP8 KV cache (`--kv-cache-dtype fp8`) roughly halves KV memory.
-  - Sampling presets are per-request client defaults — don't bake them into `aphrodite serve`.
+  - Sampling presets are per-request client defaults — don't bake them into `sonar serve`.
 
   ## References
   - [Model card](https://huggingface.co/LiquidAI/LFM2.5-1.2B-Instruct)
   - [LFM2.5 usage guide](../../LiquidAI/LFM2.5)
   - [Liquid AI](https://www.liquid.ai/)
-  - [Aphrodite supported models](https://docs.vllm.ai/en/latest/models/supported_models.html)
+  - [Sonar supported models](https://docs.vllm.ai/en/latest/models/supported_models.html)

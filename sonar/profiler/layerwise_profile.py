@@ -12,7 +12,7 @@ from torch._C._profiler import _EventType, _ExperimentalConfig, _ProfilerEvent
 from torch.autograd.profiler import FunctionEvent
 from torch.profiler import ProfilerActivity, profile
 
-from aphrodite.profiler.utils import (
+from sonar.profiler.utils import (
     TablePrinter,
     event_has_module,
     event_is_torch_op,
@@ -20,7 +20,7 @@ from aphrodite.profiler.utils import (
     event_torch_op_stack_trace,
     indent_string,
 )
-from aphrodite.utils.import_utils import PlaceholderModule
+from sonar.utils.import_utils import PlaceholderModule
 
 try:
     import pandas as pd

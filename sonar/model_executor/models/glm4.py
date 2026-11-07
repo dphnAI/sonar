@@ -29,18 +29,18 @@ import torch
 from torch import nn
 from transformers import Glm4Config
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, CacheConfig
-from aphrodite.distributed import get_pp_group, get_tensor_model_parallel_world_size
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import QKVParallelLinear, RowParallelLinear
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.v1.attention.backend import AttentionType
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import CacheConfig, SonarConfig
+from sonar.distributed import get_pp_group, get_tensor_model_parallel_world_size
+from sonar.model_executor.layers.attention import Attention
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import QKVParallelLinear, RowParallelLinear
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
+from sonar.sequence import IntermediateTensors
+from sonar.v1.attention.backend import AttentionType
 
 from .interfaces import SupportsLoRA, SupportsPP
 from .llama import LlamaMLP as Glm4MLP
@@ -139,15 +139,15 @@ class Glm4Attention(nn.Module):
 class Glm4DecoderLayer(nn.Module):
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
         config: Glm4Config | None = None,
     ) -> None:
         super().__init__()
 
-        config = config or aphrodite_config.model_config.hf_config
-        cache_config = aphrodite_config.cache_config
-        quant_config = aphrodite_config.quant_config
+        config = config or sonar_config.model_config.hf_config
+        cache_config = sonar_config.cache_config
+        quant_config = sonar_config.quant_config
 
         self.hidden_size = config.hidden_size
 
@@ -217,8 +217,8 @@ ALL_DECODER_LAYER_TYPES = {
     }
 )
 class Glm4Model(LlamaModel):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
-        super().__init__(aphrodite_config=aphrodite_config, prefix=prefix, layer_type=Glm4DecoderLayer)
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
+        super().__init__(sonar_config=sonar_config, prefix=prefix, layer_type=Glm4DecoderLayer)
 
 
 class Glm4ForCausalLM(nn.Module, SupportsLoRA, SupportsPP):
@@ -227,15 +227,15 @@ class Glm4ForCausalLM(nn.Module, SupportsLoRA, SupportsPP):
         "gate_up_proj": ["gate_proj", "up_proj"],
     }
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
 
         self.config = config
 
         self.quant_config = quant_config
-        self.model = Glm4Model(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = Glm4Model(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
 
         if get_pp_group().is_last_rank:
             self.lm_head = ParallelLMHead(
@@ -256,7 +256,7 @@ class Glm4ForCausalLM(nn.Module, SupportsLoRA, SupportsPP):
         # Drop the speculative (MTP) layers, which are loaded by the draft
         # model instead. They are appended after the main decoder layers.
         num_nextn_layers = getattr(config, "num_nextn_predict_layers", 0)
-        self.hf_to_aphrodite_mapper = WeightsMapper(
+        self.hf_to_sonar_mapper = WeightsMapper(
             orig_to_new_prefix={f"model.layers.{config.num_hidden_layers + i}.": None for i in range(num_nextn_layers)}
         )
 
@@ -282,4 +282,4 @@ class Glm4ForCausalLM(nn.Module, SupportsLoRA, SupportsPP):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)

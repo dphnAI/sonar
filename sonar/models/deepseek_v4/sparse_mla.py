@@ -7,19 +7,19 @@ from typing import Any, ClassVar
 
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.cache import CacheDType
-from aphrodite.model_executor.warmup.jit_warmup import kernel_launcher
-from aphrodite.model_executor.warmup.jit_warmup_triton_helper import (
-    AphroditeTritonJitKernel,
+from sonar.config import SonarConfig
+from sonar.config.cache import CacheDType
+from sonar.model_executor.warmup.jit_warmup import kernel_launcher
+from sonar.model_executor.warmup.jit_warmup_triton_helper import (
     LaunchSpec,
+    SonarTritonJitKernel,
     TritonWarmupTensor,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.platforms.interface import DeviceCapability
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.v1.attention.backend import (
+from sonar.platforms import current_platform
+from sonar.platforms.interface import DeviceCapability
+from sonar.triton_utils import tl, triton
+from sonar.utils.math_utils import cdiv
+from sonar.v1.attention.backend import (
     AttentionBackend,
     AttentionCGSupport,
     AttentionMetadata,
@@ -27,9 +27,9 @@ from aphrodite.v1.attention.backend import (
     CommonAttentionMetadata,
     MultipleOf,
 )
-from aphrodite.v1.attention.backends.mla.compressor_utils import get_compressed_slot_mapping
-from aphrodite.v1.attention.backends.utils import split_decodes_and_prefills
-from aphrodite.v1.kv_cache_interface import AttentionSpec
+from sonar.v1.attention.backends.mla.compressor_utils import get_compressed_slot_mapping
+from sonar.v1.attention.backends.utils import split_decodes_and_prefills
+from sonar.v1.kv_cache_interface import AttentionSpec
 
 # Pad C128A topk width to this alignment. 128 covers both h_q=64 (B_TOPK=64) and
 # h_q=128 (B_TOPK=128). FlashMLA decode asserts extra_topk % B_TOPK == 0;
@@ -126,17 +126,17 @@ class DeepseekV4SparseMLAMetadataBuilder(AttentionMetadataBuilder[DeepseekV4Flas
         self,
         kv_cache_spec: AttentionSpec,
         layer_names: list[str],
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
     ) -> None:
-        super().__init__(kv_cache_spec, layer_names, aphrodite_config, device)
-        self.model_config = aphrodite_config.model_config
+        super().__init__(kv_cache_spec, layer_names, sonar_config, device)
+        self.model_config = sonar_config.model_config
         # Classify single-token queries (plus num_speculative_tokens via
         # supports_spec_as_decode=True) as decodes; longer queries go to prefill.
         self._init_reorder_batch_threshold(1, supports_spec_as_decode=True)
         self.topk_tokens = self.model_config.hf_config.index_topk
 
-        max_num_batched_tokens = aphrodite_config.scheduler_config.max_num_batched_tokens
+        max_num_batched_tokens = sonar_config.scheduler_config.max_num_batched_tokens
         self.req_id_per_token_buffer = torch.empty((max_num_batched_tokens,), dtype=torch.int32, device=device)
 
         assert isinstance(self.kv_cache_spec.tokens_per_state, int)
@@ -336,7 +336,7 @@ def build_c128a_topk_metadata(
     return global_decode, decode_lens, prefill_local
 
 
-class BuildC128ATopkMetadataKernel(AphroditeTritonJitKernel["BuildC128ATopkMetadataKernel.CompileKey"]):
+class BuildC128ATopkMetadataKernel(SonarTritonJitKernel["BuildC128ATopkMetadataKernel.CompileKey"]):
     @dataclass(frozen=True)
     class CompileKey:
         compress_ratio: int
@@ -426,13 +426,13 @@ class BuildC128ATopkMetadataKernel(AphroditeTritonJitKernel["BuildC128ATopkMetad
     ) -> CompileKey:
         return self.CompileKey(**compile_key_fields)
 
-    def get_warmup_keys(self, aphrodite_config: Any) -> list[CompileKey]:
-        hf_config = aphrodite_config.model_config.hf_config
+    def get_warmup_keys(self, sonar_config: Any) -> list[CompileKey]:
+        hf_config = sonar_config.model_config.hf_config
         if getattr(hf_config, "model_type", None) != "deepseek_v4":
             return []
 
         compress_ratio = 128
-        max_model_len = aphrodite_config.model_config.max_model_len
+        max_model_len = sonar_config.model_config.max_model_len
         if max_model_len <= 0:
             return []
         max_compressed_tokens = cdiv(max_model_len, compress_ratio)

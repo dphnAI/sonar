@@ -21,7 +21,7 @@ approximate ``ex2`` / ``rcp`` SiLU of the TRTLLM MoE (see ``moe``).
 import torch
 from torch import nn
 
-from aphrodite.triton_utils import tl, tldevice, triton
+from sonar.triton_utils import tl, tldevice, triton
 
 
 @triton.jit

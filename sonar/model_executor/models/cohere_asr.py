@@ -10,38 +10,38 @@ import torch.nn.functional as F
 from torch import nn
 from transformers import PreTrainedConfig
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, CacheConfig, ModelConfig, SpeechToTextConfig
-from aphrodite.config.multimodal import MultiModalDummyOptions
-from aphrodite.config.speech_to_text import SpeechToTextParams
-from aphrodite.distributed import get_tensor_model_parallel_world_size
-from aphrodite.inputs import MultiModalDataDict, PromptType, TokensPrompt
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.activation import get_act_fn
-from aphrodite.model_executor.layers.attention import (
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import CacheConfig, ModelConfig, SonarConfig, SpeechToTextConfig
+from sonar.config.multimodal import MultiModalDummyOptions
+from sonar.config.speech_to_text import SpeechToTextParams
+from sonar.distributed import get_tensor_model_parallel_world_size
+from sonar.inputs import MultiModalDataDict, PromptType, TokensPrompt
+from sonar.logger import init_logger
+from sonar.model_executor.layers.activation import get_act_fn
+from sonar.model_executor.layers.attention import (
     Attention,
     CrossAttention,
 )
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     QKVParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import (
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
+from sonar.model_executor.model_loader.weight_utils import default_weight_loader
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import (
     MultiModalFieldConfig,
     MultiModalKwargsItems,
 )
-from aphrodite.multimodal.parse import (
+from sonar.multimodal.parse import (
     AudioProcessorItems,
     MultiModalDataItems,
     MultiModalDataParser,
 )
-from aphrodite.multimodal.processing import (
+from sonar.multimodal.processing import (
     BaseDummyInputsBuilder,
     BaseProcessingInfo,
     EncDecMultiModalProcessor,
@@ -50,20 +50,20 @@ from aphrodite.multimodal.processing import (
     PromptUpdate,
     TimingContext,
 )
-from aphrodite.multimodal.processing.processor import (
+from sonar.multimodal.processing.processor import (
     HFMultiModalInputs,
     MultiModalProcessingResult,
 )
-from aphrodite.renderers import TokenizeParams
-from aphrodite.tokenizers import cached_tokenizer_from_config
-from aphrodite.transformers_utils.processors.cohere_asr import (
+from sonar.renderers import TokenizeParams
+from sonar.tokenizers import cached_tokenizer_from_config
+from sonar.transformers_utils.processors.cohere_asr import (
     INF_VAL,
     CohereASRFeatureExtractor,
     CohereASRProcessor,
 )
-from aphrodite.utils.collection_utils import is_list_of
-from aphrodite.utils.gpu_sync_debug import gpu_sync_allowed
-from aphrodite.v1.attention.backend import (
+from sonar.utils.collection_utils import is_list_of
+from sonar.utils.gpu_sync_debug import gpu_sync_allowed
+from sonar.v1.attention.backend import (
     AttentionType,
 )
 
@@ -334,11 +334,11 @@ class FixedPositionalEncoding(nn.Module):
 
 
 class CohereASRDecoderLayer(nn.Module):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config.transf_decoder["config_dict"]
-        cache_config = aphrodite_config.cache_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config.transf_decoder["config_dict"]
+        cache_config = sonar_config.cache_config
+        quant_config = sonar_config.quant_config
 
         self.hidden_dim = config.get("hidden_size")
         self.ffn_dim = config.get("inner_size")
@@ -427,9 +427,9 @@ class TransformerEmbedding(nn.Module):
 
 @support_torch_compile(dynamic_arg_dims={"input_ids": 0, "positions": -1})
 class CohereASRDecoder(nn.Module):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
         self.padding_idx = 2
         config_dict = config.transf_decoder["config_dict"]
         self.max_target_positions = config_dict.get("max_sequence_length")
@@ -446,7 +446,7 @@ class CohereASRDecoder(nn.Module):
 
         self.start_layer, self.end_layer, self.layers = make_layers(
             self.num_decoder_layers,
-            lambda prefix: CohereASRDecoderLayer(aphrodite_config=aphrodite_config, prefix=f"{prefix}.layers"),
+            lambda prefix: CohereASRDecoderLayer(sonar_config=sonar_config, prefix=f"{prefix}.layers"),
             prefix=f"{prefix}.layers",
         )
         self.final_layer_norm = nn.LayerNorm(self.hidden_size)
@@ -1321,10 +1321,10 @@ class ConformerEncoder(nn.Module):
     https://arxiv.org/abs/2005.08100
     """
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig):
+    def __init__(self, *, sonar_config: SonarConfig):
         super().__init__()
 
-        self.hf_config = aphrodite_config.model_config.hf_config
+        self.hf_config = sonar_config.model_config.hf_config
 
         feat_in = self.hf_config.encoder["feat_in"]
         n_layers = self.hf_config.encoder["n_layers"]
@@ -1659,19 +1659,19 @@ class ConformerEncoder(nn.Module):
 # ----- Encoder END -----
 
 
-# This subclass is specific to Aphrodite in order for
+# This subclass is specific to Sonar in order for
 # `_mark_composite_model` to target this module
 class CohereASRProjector(nn.Linear):
     pass
 
 
 class CohereASRModel(nn.Module):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        self.encoder = ConformerEncoder(aphrodite_config=aphrodite_config)
+        self.encoder = ConformerEncoder(sonar_config=sonar_config)
 
         self.decoder = CohereASRDecoder(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             prefix=maybe_prefix(prefix, "decoder"),
         )
 
@@ -1947,7 +1947,7 @@ class CohereAsrForConditionalGeneration(nn.Module, SupportsTranscription, Suppor
         "encoder_attn.kv_proj": ["encoder_attn.k_proj", "encoder_attn.v_proj"],
     }
 
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_substr={
             ".fc1.": ".mlp.fc1.",
             ".fc2.": ".mlp.fc2.",
@@ -2090,19 +2090,19 @@ class CohereAsrForConditionalGeneration(nn.Module, SupportsTranscription, Suppor
     def get_num_encoder_cross_attn_tokens(self, num_encoder_input_tokens: int) -> int:
         return self.model.encoder.get_num_encoder_cross_attn_tokens(num_encoder_input_tokens)
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
         self.config = config
-        self.dtype = aphrodite_config.model_config.dtype
+        self.dtype = sonar_config.model_config.dtype
 
         with self._mark_composite_model(
-            aphrodite_config,
+            sonar_config,
             language_targets=CohereASRDecoder,
             tower_targets={"audio": (ConformerEncoder, CohereASRProjector)},
         ):
-            self.model = CohereASRModel(aphrodite_config=aphrodite_config, prefix=prefix)
+            self.model = CohereASRModel(sonar_config=sonar_config, prefix=prefix)
 
         head_config = config.head
 
@@ -2197,4 +2197,4 @@ class CohereAsrForConditionalGeneration(nn.Module, SupportsTranscription, Suppor
 
         loader = AutoWeightsLoader(self)
 
-        return loader.load_weights(map(transform, weights), mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(map(transform, weights), mapper=self.hf_to_sonar_mapper)

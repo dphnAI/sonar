@@ -23,9 +23,9 @@
 # limitations under the License.
 """Inference-only Erine model compatible with HuggingFace weights."""
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig
-from aphrodite.model_executor.models.llama import LlamaForCausalLM
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import SonarConfig
+from sonar.model_executor.models.llama import LlamaForCausalLM
 
 from .utils import PPMissingLayer
 
@@ -40,8 +40,8 @@ from .utils import PPMissingLayer
     }
 )
 class Ernie4_5ForCausalLM(LlamaForCausalLM):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
-        super().__init__(aphrodite_config=aphrodite_config, prefix=prefix)
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
+        super().__init__(sonar_config=sonar_config, prefix=prefix)
         # Hack Llama model to fit HF format Ernie4.5 dense implementation
         # Attention difference between Ernie and Llama:
         # 1. rotary_dim and no Neox style.

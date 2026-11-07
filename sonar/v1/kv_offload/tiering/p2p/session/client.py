@@ -17,9 +17,9 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, NamedTuple
 
-from aphrodite.logger import init_logger
-from aphrodite.v1.kv_offload.base import OffloadKey
-from aphrodite.v1.kv_offload.tiering.p2p.session.protocol import (
+from sonar.logger import init_logger
+from sonar.v1.kv_offload.base import OffloadKey
+from sonar.v1.kv_offload.tiering.p2p.session.protocol import (
     TYPE_KEY,
     AbortFetchMsg,
     FetchMsg,
@@ -27,7 +27,7 @@ from aphrodite.v1.kv_offload.tiering.p2p.session.protocol import (
 )
 
 if TYPE_CHECKING:
-    from aphrodite.v1.kv_offload.tiering.base import JobId
+    from sonar.v1.kv_offload.tiering.base import JobId
 
 logger = init_logger(__name__)
 

@@ -14,29 +14,29 @@ from unittest.mock import MagicMock, patch
 import pytest
 import torch
 
-from aphrodite.config import MultiModalConfig
-from aphrodite.distributed.ec_transfer.ec_connector.base import ECConnectorRole
-from aphrodite.distributed.ec_transfer.ec_connector.mooncake.config import MooncakeECConfig
-from aphrodite.distributed.ec_transfer.ec_connector.mooncake.metadata import (
+from sonar.config import MultiModalConfig
+from sonar.distributed.ec_transfer.ec_connector.base import ECConnectorRole
+from sonar.distributed.ec_transfer.ec_connector.mooncake.config import MooncakeECConfig
+from sonar.distributed.ec_transfer.ec_connector.mooncake.metadata import (
     ECMooncakeConnectorMetadata,
     ECMooncakePushSpec,
     ECMooncakeWorkerMetadata,
 )
-from aphrodite.distributed.ec_transfer.ec_connector.mooncake_ec_connector import (
+from sonar.distributed.ec_transfer.ec_connector.mooncake_ec_connector import (
     ECMooncakeConnector,
 )
-from aphrodite.distributed.ec_transfer.ec_connector.mooncake_store_embedding import (
+from sonar.distributed.ec_transfer.ec_connector.mooncake_store_embedding import (
     backend as store_backend,
 )
-from aphrodite.distributed.ec_transfer.ec_connector.mooncake_store_embedding import (
+from sonar.distributed.ec_transfer.ec_connector.mooncake_store_embedding import (
     store_client,
 )
-from aphrodite.distributed.ec_transfer.ec_connector.mooncake_store_embedding.data import (
+from sonar.distributed.ec_transfer.ec_connector.mooncake_store_embedding.data import (
     TensorSpec,
     build_embedding_namespace,
     make_embedding_key,
 )
-from tests.v1.ec_connector.unit.utils import create_ec_aphrodite_config
+from tests.v1.ec_connector.unit.utils import create_ec_sonar_config
 
 pytestmark = pytest.mark.cpu_test
 KEY = "test@embedding@model:model@revision:revision@encoder:encoder@dtype:torch.float32@protocol:v3"
@@ -45,11 +45,11 @@ SPEC = TensorSpec((2, 2), "torch.float32", 16)
 
 def test_push_shapes_follow_each_modality(monkeypatch):
     """Each push is sized at its modality's measured encoder output width."""
-    from aphrodite.distributed.ec_transfer.ec_connector.mooncake import scheduler
+    from sonar.distributed.ec_transfer.ec_connector.mooncake import scheduler
 
     monkeypatch.setattr(scheduler, "ensure_mooncake_available", lambda: None)
     widths = {"image": 8192, "audio": 2048}
-    config = create_ec_aphrodite_config(ec_role="ec_producer", encoder_output_widths=widths)
+    config = create_ec_sonar_config(ec_role="ec_producer", encoder_output_widths=widths)
     request = SimpleNamespace(
         request_id="mixed",
         mm_features=[SimpleNamespace(identifier=m, modality=m) for m in widths],
@@ -71,7 +71,7 @@ def test_push_shapes_follow_each_modality(monkeypatch):
 
 
 def test_embedding_key_combines_namespace_and_identifier():
-    config = create_ec_aphrodite_config(ec_role="ec_producer")
+    config = create_ec_sonar_config(ec_role="ec_producer")
     config.ec_transfer_config.ec_connector_extra_config.update(
         embedding_cache_prefix="team@cache", embedding_model_identity="shared/model"
     )
@@ -86,14 +86,14 @@ def test_embedding_key_combines_namespace_and_identifier():
 
 def test_shared_reuse_requires_content_stable_identifiers():
     """Encoder-only cache-off rendering uses process-local counter identifiers."""
-    config = create_ec_aphrodite_config(ec_role="ec_producer")
+    config = create_ec_sonar_config(ec_role="ec_producer")
     config.ec_transfer_config.ec_connector = "ECMooncakeConnector"
     config.ec_transfer_config.ec_connector_extra_config["cross_encoder_cache"] = True
     config.model_config.multimodal_config = MultiModalConfig(mm_processor_cache_gb=0)
     config.use_v2_model_runner = True
     config.lora_config = None
     with pytest.raises(ValueError, match="mm_processor_cache_gb"):
-        MooncakeECConfig.from_aphrodite_config(config)
+        MooncakeECConfig.from_sonar_config(config)
 
 
 class MemoryStore:
@@ -290,7 +290,7 @@ def test_non_matrix_output_is_rejected_before_registration(backend):
 
 
 def make_worker(backend, monkeypatch):
-    from aphrodite.distributed.ec_transfer.ec_connector.mooncake.worker import (
+    from sonar.distributed.ec_transfer.ec_connector.mooncake.worker import (
         ECMooncakeWorker,
     )
 
@@ -336,15 +336,15 @@ def make_worker(backend, monkeypatch):
     ],
 )
 def test_reuse_pipeline(backend, mode, monkeypatch):
-    from aphrodite.multimodal.inputs import (
+    from sonar.multimodal.inputs import (
         MultiModalFeatureSpec,
         MultiModalKwargsItem,
         PlaceholderRange,
     )
-    from aphrodite.v1.worker.gpu.ec_connector import ActiveECConnector
-    from aphrodite.v1.worker.gpu.mm.encoder_cache import EncoderCache
-    from aphrodite.v1.worker.gpu.mm.encoder_runner import EncoderRunner
-    from aphrodite.v1.worker.gpu.model_states.interface import ModelState
+    from sonar.v1.worker.gpu.ec_connector import ActiveECConnector
+    from sonar.v1.worker.gpu.mm.encoder_cache import EncoderCache
+    from sonar.v1.worker.gpu.mm.encoder_runner import EncoderRunner
+    from sonar.v1.worker.gpu.model_states.interface import ModelState
 
     native = backend.store_client.store
     values = {"a": 1.0, "b": 2.0, "c": 3.0}
@@ -415,7 +415,7 @@ def test_reuse_pipeline(backend, mode, monkeypatch):
     missing = [k for k in "abc" if k not in hits]
     runner.execute_mm_encoder = MagicMock(return_value=[torch.full((2, 2), values[k] + 10) for k in missing])
     state = SimpleNamespace(encoder_runner=runner, encoder_cache=cache)
-    with patch("aphrodite.v1.worker.gpu.ec_connector.get_ec_transfer", return_value=connector):
+    with patch("sonar.v1.worker.gpu.ec_connector.get_ec_transfer", return_value=connector):
         adapter = ActiveECConnector(SimpleNamespace(), cache.encoder_outputs)
     with adapter.maybe_get_output(SimpleNamespace(ec_connector_metadata=metadata, finished_req_ids=set())) as output:
         assert runner.prepare_mm_inputs({"req": [0, 1, 2]})[0] == missing

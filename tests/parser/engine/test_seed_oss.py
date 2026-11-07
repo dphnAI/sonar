@@ -16,11 +16,11 @@ import json
 
 import pytest
 
-from aphrodite.parser.engine.registered_adapters import (
+from sonar.parser.engine.registered_adapters import (
     SeedOssParserReasoningAdapter,
     SeedOssParserToolAdapter,
 )
-from aphrodite.parser.seed_oss import SeedOssParser
+from sonar.parser.seed_oss import SeedOssParser
 from tests.parser.engine.conftest import make_mock_tokenizer
 from tests.parser.engine.streaming_helpers import (
     collect_function_name,

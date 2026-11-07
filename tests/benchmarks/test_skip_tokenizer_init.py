@@ -10,8 +10,8 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-import aphrodite.benchmarks.serve as serve_module
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
+import sonar.benchmarks.serve as serve_module
+from sonar.utils.argparse_utils import FlexibleArgumentParser
 
 # Exact prompt payload from the failing benchmark run against a
 # Prithvi-EO-2.0 pooling endpoint (URL-in / base64-out format).
@@ -54,7 +54,7 @@ def _args(dataset_path: str) -> argparse.Namespace:
         trust_remote_code=False,
         skip_tokenizer_init=True,  # <-- the flag under test
         # backend / endpoint
-        backend="aphrodite-pooling",
+        backend="sonar-pooling",
         base_url="http://127.0.0.1:8000",
         host="127.0.0.1",
         port=8000,
@@ -128,7 +128,7 @@ def test_main_async_skip_tokenizer_init_with_custom_dataset(tmp_path: Path) -> N
     args = parser.parse_args(
         [
             "--backend",
-            "aphrodite-pooling",
+            "sonar-pooling",
             "--dataset-name",
             "custom",
             "--dataset-path",

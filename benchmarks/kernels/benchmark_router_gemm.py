@@ -4,11 +4,11 @@
 import torch
 import torch.nn.functional as F
 
-from aphrodite import _custom_ops as ops
-from aphrodite.platforms import current_platform
-from aphrodite.transformers_utils.config import get_config
-from aphrodite.triton_utils import triton
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
+from sonar import _custom_ops as ops
+from sonar.platforms import current_platform
+from sonar.transformers_utils.config import get_config
+from sonar.triton_utils import triton
+from sonar.utils.argparse_utils import FlexibleArgumentParser
 
 # Dimensions supported by the gpt-oss specialized kernel
 GPT_OSS_SUPPORTED_NUM_EXPERTS = [32, 128]
@@ -49,9 +49,9 @@ def get_benchmark(model, max_batch_size, trust_remote_code):
             line_arg="provider",
             line_vals=[
                 "torch",
-                "aphrodite",
+                "sonar",
             ],
-            line_names=["PyTorch", "Aphrodite"],
+            line_names=["PyTorch", "Sonar"],
             styles=([("blue", "-"), ("red", "-")]),
             ylabel="TFLOPs",
             plot_name=f"{model} router gemm throughput",
@@ -96,7 +96,7 @@ def get_benchmark(model, max_batch_size, trust_remote_code):
                     F.linear(mat_a, mat_b, bias)
                 else:
                     F.linear(mat_a, mat_b)
-        elif provider == "aphrodite":
+        elif provider == "sonar":
 
             def runner():
                 if allow_fp32_router_gemm:

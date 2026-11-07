@@ -26,7 +26,7 @@ namespace {
 
 // Gumbel-max: argmax_i(logit_i + g_i) with g_i ~ Gumbel(0, 1) matches
 // softmax. Noise is SplitMix64(seed, i), so tokens are independent and
-// consecutive seeds are not a 1-token table shift (aphrodite#59786).
+// consecutive seeds are not a 1-token table shift (sonar#59786).
 constexpr uint64_t SPLITMIX_GAMMA = 0x9E3779B97F4A7C15ULL;
 constexpr double GUMBEL_MAX = 37.5;  // 53-bit u in (0,1) => -log(-log u) < 37.5
 
@@ -196,16 +196,15 @@ torch::Tensor gumbel_sample_cpu(const torch::Tensor& logits,
 
   auto output =
       torch::empty({logits.size(0)}, logits.options().dtype(torch::kInt64));
-  APHRODITE_DISPATCH_FLOATING_TYPES(
-      logits.scalar_type(), "gumbel_sample_cpu", [&] {
-        using sampling_impl_t = SelectedSamplingImpl<scalar_t>;
-        cpu_sampling::SamplingMainLoop<sampling_impl_t> mainloop;
-        mainloop(output.data_ptr<int64_t>(), logits.data_ptr<scalar_t>(),
-                 logits.stride(0), expanded_idx_mapping.data_ptr<int64_t>(),
-                 temperature.data_ptr<float>(), seeds.data_ptr<int64_t>(),
-                 positions.data_ptr<int64_t>(), logits.size(0), logits.size(1),
-                 apply_temperature, is_drafting, use_fp64);
-      });
+  SONAR_DISPATCH_FLOATING_TYPES(logits.scalar_type(), "gumbel_sample_cpu", [&] {
+    using sampling_impl_t = SelectedSamplingImpl<scalar_t>;
+    cpu_sampling::SamplingMainLoop<sampling_impl_t> mainloop;
+    mainloop(output.data_ptr<int64_t>(), logits.data_ptr<scalar_t>(),
+             logits.stride(0), expanded_idx_mapping.data_ptr<int64_t>(),
+             temperature.data_ptr<float>(), seeds.data_ptr<int64_t>(),
+             positions.data_ptr<int64_t>(), logits.size(0), logits.size(1),
+             apply_temperature, is_drafting, use_fp64);
+  });
   return output;
 }
 

@@ -14,7 +14,7 @@ import torch
 from einops import rearrange
 from terratorch.datamodules import Sen1Floods11NonGeoDataModule
 
-from aphrodite import LLM
+from sonar import LLM
 
 torch.set_default_dtype(torch.float16)
 

@@ -9,7 +9,7 @@ import torch
 import torch.nn as nn
 from torch.utils._python_dispatch import is_traceable_wrapper_subclass
 
-from aphrodite.model_executor.parameter import SharedWeightParameter
+from sonar.model_executor.parameter import SharedWeightParameter
 
 
 def _tensors(name: str, tensor: torch.Tensor) -> Iterator[tuple[str, torch.Tensor]]:

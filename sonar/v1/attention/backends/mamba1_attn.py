@@ -4,8 +4,8 @@
 from dataclasses import dataclass
 from typing import Any
 
-from aphrodite.v1.attention.backend import AttentionBackend, CommonAttentionMetadata
-from aphrodite.v1.attention.backends.mamba_attn import (
+from sonar.v1.attention.backend import AttentionBackend, CommonAttentionMetadata
+from sonar.v1.attention.backends.mamba_attn import (
     BaseMambaAttentionMetadata,
     BaseMambaAttentionMetadataBuilder,
 )

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Zero-copy views (and two converted copies) of one Aphrodite ``MiniMaxM3DecoderLayer``
+"""Zero-copy views (and two converted copies) of one Sonar ``MiniMaxM3DecoderLayer``
 for the mono kernels.
 
 The kernels read tensors through raw pointers in fixed layouts: a differently
@@ -8,7 +8,7 @@ laid-out weight would not fault, it would produce plausible garbage. So every
 layout assumption is asserted once and a model that does not match is refused
 (``MonoUnsupported``). The experts already have the kernels' layout (MXFP4, aiter
 ``shuffle_weight(16, 16)`` + ``e8m0_shuffle`` scales, fused shared expert in slot
-128). The attention linears are MXFP8 in Aphrodite and the router gate is fp32, so
+128). The attention linears are MXFP8 in Sonar and the router gate is fp32, so
 those are converted once when the runner is built: MXFP8 -> bf16 -> per-channel
 fp8, preshuffled (16, 16); gate -> bf16.
 
@@ -26,10 +26,10 @@ from aiter import dtypes
 from aiter.ops.quant import pertoken_quant
 from aiter.ops.shuffle import shuffle_weight
 
-from aphrodite.model_executor.layers.quantization.utils.mxfp8_utils import (
+from sonar.model_executor.layers.quantization.utils.mxfp8_utils import (
     dequant_mxfp8_to_bf16,
 )
-from aphrodite.models.minimax_m3.amd.mono.config import (
+from sonar.models.minimax_m3.amd.mono.config import (
     HEAD_DIM,
     HIDDEN,
     INTER,
@@ -44,7 +44,7 @@ from aphrodite.models.minimax_m3.amd.mono.config import (
     IndexHeads,
     MonoUnsupported,
 )
-from aphrodite.models.minimax_m3.amd.mono.kernels.post_attn import SH_ARGS
+from sonar.models.minimax_m3.amd.mono.kernels.post_attn import SH_ARGS
 
 
 def _need(ok: bool, what: str) -> None:

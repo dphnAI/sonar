@@ -10,7 +10,7 @@ from typing import Any, Generic, TypeVar, cast
 
 import numpy as np
 
-import aphrodite.envs as envs
+import sonar.envs as envs
 
 _T = TypeVar("_T")
 
@@ -25,7 +25,7 @@ class MediaDecodedBudget:
 
     def reserve(self, max_bytes: int) -> int:
         """Reserve decoder capacity, waiting for in-flight decodes if needed."""
-        limit = envs.APHRODITE_MAX_MEDIA_REQUEST_DECODE_BYTES
+        limit = envs.SONAR_MAX_MEDIA_REQUEST_DECODE_BYTES
         if limit <= 0:
             return max_bytes
         max_bytes = max(0, max_bytes)
@@ -34,7 +34,7 @@ class MediaDecodedBudget:
                 available = limit - self.used - self._reserved
                 if available >= max_bytes or self._reserved == 0:
                     if available <= 0:
-                        raise ValueError("Request decoded media exceeds APHRODITE_MAX_MEDIA_REQUEST_DECODE_BYTES.")
+                        raise ValueError("Request decoded media exceeds SONAR_MAX_MEDIA_REQUEST_DECODE_BYTES.")
                     reserved = min(max_bytes, available)
                     self._reserved += reserved
                     return reserved
@@ -42,7 +42,7 @@ class MediaDecodedBudget:
 
     def settle(self, reserved: int, decoded_bytes: int) -> None:
         """Replace a decoder reservation with its actual decoded size."""
-        limit = envs.APHRODITE_MAX_MEDIA_REQUEST_DECODE_BYTES
+        limit = envs.SONAR_MAX_MEDIA_REQUEST_DECODE_BYTES
         if limit <= 0:
             return
         with self._condition:
@@ -51,16 +51,14 @@ class MediaDecodedBudget:
                 used = self.used + decoded_bytes
                 if decoded_bytes > reserved or used > limit:
                     raise ValueError(
-                        "Request decoded media exceeds "
-                        f"APHRODITE_MAX_MEDIA_REQUEST_DECODE_BYTES={limit} "
-                        f"({used} bytes)."
+                        f"Request decoded media exceeds SONAR_MAX_MEDIA_REQUEST_DECODE_BYTES={limit} ({used} bytes)."
                     )
                 self.used = used
             finally:
                 self._condition.notify_all()
 
     def charge(self, decoded_bytes: int) -> None:
-        limit = envs.APHRODITE_MAX_MEDIA_REQUEST_DECODE_BYTES
+        limit = envs.SONAR_MAX_MEDIA_REQUEST_DECODE_BYTES
         if limit <= 0 or decoded_bytes <= 0:
             return
         with self._condition:
@@ -73,7 +71,7 @@ class MediaDecodedBudget:
             used = self.used + decoded_bytes
             if used > limit:
                 raise ValueError(
-                    f"Request decoded media exceeds APHRODITE_MAX_MEDIA_REQUEST_DECODE_BYTES={limit} ({used} bytes)."
+                    f"Request decoded media exceeds SONAR_MAX_MEDIA_REQUEST_DECODE_BYTES={limit} ({used} bytes)."
                 )
             self.used = used
 

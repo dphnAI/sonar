@@ -5,25 +5,25 @@ from asyncio import Lock
 from collections import defaultdict
 from http import HTTPStatus
 
-from aphrodite.config import ModelConfig
-from aphrodite.engine.protocol import EngineClient
-from aphrodite.entrypoints.openai.models.protocol import BaseModelPath, LoRAModulePath
-from aphrodite.entrypoints.serve import create_error_response
-from aphrodite.entrypoints.serve.engine.protocol import (
+from sonar.config import ModelConfig
+from sonar.engine.protocol import EngineClient
+from sonar.entrypoints.openai.models.protocol import BaseModelPath, LoRAModulePath
+from sonar.entrypoints.serve import create_error_response
+from sonar.entrypoints.serve.engine.protocol import (
     ErrorResponse,
     ModelCard,
     ModelList,
     ModelPermission,
 )
-from aphrodite.entrypoints.serve.lora.protocol import (
+from sonar.entrypoints.serve.lora.protocol import (
     LoadLoRAAdapterRequest,
     UnloadLoRAAdapterRequest,
 )
-from aphrodite.exceptions import LoRAAdapterNotFoundError
-from aphrodite.logger import init_logger
-from aphrodite.lora.request import LoRARequest
-from aphrodite.lora.resolver import LoRAResolver, LoRAResolverRegistry
-from aphrodite.utils.counter import AtomicCounter
+from sonar.exceptions import LoRAAdapterNotFoundError
+from sonar.logger import init_logger
+from sonar.lora.request import LoRARequest
+from sonar.lora.resolver import LoRAResolver, LoRAResolverRegistry
+from sonar.utils.counter import AtomicCounter
 
 logger = init_logger(__name__)
 

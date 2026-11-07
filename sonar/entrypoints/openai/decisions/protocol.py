@@ -6,8 +6,8 @@ from typing import Annotated, Any, Literal
 
 from pydantic import ConfigDict, Field, StrictBool, StrictStr, model_validator
 
-from aphrodite.entrypoints.generate.base.protocol import validate_cache_salt
-from aphrodite.entrypoints.serve.engine.protocol import OpenAIBaseModel
+from sonar.entrypoints.generate.base.protocol import validate_cache_salt
+from sonar.entrypoints.serve.engine.protocol import OpenAIBaseModel
 
 ShortText = Annotated[StrictStr, Field(max_length=1048576)]
 InputText = Annotated[StrictStr, Field(max_length=10485760)]
@@ -90,7 +90,7 @@ class DecisionRequest(DecisionModel):
     input: InputText | Annotated[list[DecisionInputMessage], Field(max_length=131072)]
     questions: list[DecisionQuestion] = Field(min_length=1, max_length=200)
     safety_identifier: Annotated[StrictStr, Field(max_length=128)] | None = None
-    joint: StrictBool = Field(default=False, description="Aphrodite extension: joint reads, diffusion models only.")
+    joint: StrictBool = Field(default=False, description="Sonar extension: joint reads, diffusion models only.")
     cache_salt: str | None = Field(
         default=None,
         min_length=1,

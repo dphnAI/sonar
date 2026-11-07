@@ -90,7 +90,7 @@ LAYER_SLOTS = 128  # mailbox epochs: step * LAYER_SLOTS + layer + 1
 
 # host K/V cache geometry, set by the runner before the kernels are built: the
 # page-16 ids one sparse block spans (8: K and V as separate planes; 16: a block
-# interleaves K|V and V is reached from the same id at +8 pages, as Aphrodite lays
+# interleaves K|V and V is reached from the same id at +8 pages, as Sonar lays
 # it out) and
 # whether fp8 K/V carry the host's fixed unit scale instead of per-token scales
 KV_PAGE_STRIDE = SPARSE_BLOCK // PAGE16

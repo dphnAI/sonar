@@ -5,30 +5,30 @@
 import torch
 from transformers import PreTrainedConfig
 
-from aphrodite import envs
-from aphrodite.config import get_current_aphrodite_config
-from aphrodite.config.lora import LoRAConfig
-from aphrodite.distributed.utils import divide
-from aphrodite.forward_context import (
+from sonar import envs
+from sonar.config import get_current_sonar_config
+from sonar.config.lora import LoRAConfig
+from sonar.distributed.utils import divide
+from sonar.forward_context import (
     ForwardContext,
     get_forward_context,
     is_forward_context_available,
 )
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     LinearBase,
     QuantizeMethodBase,
     ReplicatedLinear,
     RowParallelLinear,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.multi_stream_utils import maybe_execute_in_parallel
-from aphrodite.utils.torch_utils import direct_register_custom_op
+from sonar.platforms import current_platform
+from sonar.utils.multi_stream_utils import maybe_execute_in_parallel
+from sonar.utils.torch_utils import direct_register_custom_op
 
 from .base import BaseLayerWithLoRA
 from .utils import _get_lora_aux_cuda_stream, _get_lora_device
 
-if envs.APHRODITE_LORA_ENABLE_DUAL_STREAM:
+if envs.SONAR_LORA_ENABLE_DUAL_STREAM:
 
     def lora_linear_async(
         layer_name: str,
@@ -75,7 +75,7 @@ class BaseLinearLayerWithLoRA(BaseLayerWithLoRA):
     def __init__(self, base_layer: LinearBase):
         super().__init__()
 
-        self._enable_aux_cuda_stream = envs.APHRODITE_LORA_ENABLE_DUAL_STREAM
+        self._enable_aux_cuda_stream = envs.SONAR_LORA_ENABLE_DUAL_STREAM
         self.base_layer = base_layer
         self.input_size = self.base_layer.input_size
         # Ensure tp_size and tp_rank consistency with the base_layer.
@@ -90,13 +90,13 @@ class BaseLinearLayerWithLoRA(BaseLayerWithLoRA):
     def _init_lora_stream_context(self) -> None:
         if not self._enable_aux_cuda_stream:
             return
-        aphrodite_config = get_current_aphrodite_config()
+        sonar_config = get_current_sonar_config()
         self._lora_stream = _get_lora_aux_cuda_stream()
         assert current_platform.is_cuda_alike()
         self._events = [torch.Event(), torch.Event()]
         # lora_linear avoids prefix conflicts with the base layer
         self.layer_name = self.base_layer.prefix + ".lora_linear_async"
-        compilation_config = aphrodite_config.compilation_config
+        compilation_config = sonar_config.compilation_config
         if self.layer_name in compilation_config.static_forward_context:
             raise ValueError("Duplicate layer name: {}".format(self.layer_name))
         compilation_config.static_forward_context[self.layer_name] = self
@@ -189,7 +189,7 @@ class BaseLinearLayerWithLoRA(BaseLayerWithLoRA):
         # is_forward_context_available for tower modules
         if self._enable_aux_cuda_stream and is_forward_context_available():
             output_size = sum(self.output_slices)
-            return torch.ops.aphrodite.lora_linear_async(self.layer_name, output_size, x, bias)
+            return torch.ops.sonar.lora_linear_async(self.layer_name, output_size, x, bias)
         else:
             return self._apply_sync(x, bias)
 
@@ -230,7 +230,7 @@ class BaseLinearLayerWithLoRA(BaseLayerWithLoRA):
         for overlap, using maybe_execute_in_parallel.
         Base layer runs on default stream; LoRA runs on aux stream.
         """
-        assert envs.APHRODITE_LORA_ENABLE_DUAL_STREAM
+        assert envs.SONAR_LORA_ENABLE_DUAL_STREAM
         assert x.ndim in (2, 3)
         num_tokens = x.size(0) if x.ndim == 2 else x.size(1)
         output_size = sum(self.output_slices)

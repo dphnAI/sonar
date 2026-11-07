@@ -19,14 +19,14 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.platforms.interface import DeviceCapability
-from aphrodite.v1.attention.backends.mla.flashmla_sparse import (
+from sonar.platforms import current_platform
+from sonar.platforms.interface import DeviceCapability
+from sonar.v1.attention.backends.mla.flashmla_sparse import (
     QUANTIZED_DS_MLA_CACHE_FORMATS,
     FlashMLASparseBackend,
     _fp8_kv_pages,
 )
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.kv_cache_interface import (
     KVCacheConfig,
     KVCacheGroupSpec,
     KVCacheLayout,
@@ -34,7 +34,7 @@ from aphrodite.v1.kv_cache_interface import (
     KVQuantMode,
     MLAAttentionSpec,
 )
-from aphrodite.v1.worker.utils import (
+from sonar.v1.worker.utils import (
     AttentionGroup,
     allocate_kv_cache,
     prepare_kernel_block_sizes,
@@ -64,24 +64,24 @@ def _supports_combination(head_size, kv_cache_dtype, capability):
 
 @pytest.fixture
 def rope_free_model(monkeypatch):
-    """Patch get_current_aphrodite_config so the model looks like GLM5Next NoPE."""
-    import aphrodite.config as cfg
+    """Patch get_current_sonar_config so the model looks like GLM5Next NoPE."""
+    import sonar.config as cfg
 
     monkeypatch.setattr(
         cfg,
-        "get_current_aphrodite_config",
+        "get_current_sonar_config",
         lambda: SimpleNamespace(model_config=SimpleNamespace(hf_text_config=SimpleNamespace(qk_rope_head_dim=0))),
     )
 
 
 @pytest.fixture
 def rope_carrying_model(monkeypatch):
-    """Patch get_current_aphrodite_config with a rope-carrying (576-style) model."""
-    import aphrodite.config as cfg
+    """Patch get_current_sonar_config with a rope-carrying (576-style) model."""
+    import sonar.config as cfg
 
     monkeypatch.setattr(
         cfg,
-        "get_current_aphrodite_config",
+        "get_current_sonar_config",
         lambda: SimpleNamespace(model_config=SimpleNamespace(hf_text_config=SimpleNamespace(qk_rope_head_dim=64))),
     )
 
@@ -214,7 +214,7 @@ def test_576_unchanged_for_all_dtypes(kv_cache_dtype, capability):
 
 def _sparse_order(kv_cache_dtype, head_size, num_heads=32, capability=SM100):
     try:
-        from aphrodite.platforms.cuda import _get_backend_priorities
+        from sonar.platforms.cuda import _get_backend_priorities
     except ImportError as e:  # pragma: no cover - depends on host
         pytest.skip(f"CUDA platform unavailable on this host: {e}")
 
@@ -260,7 +260,7 @@ def test_sm100_576_priority_unchanged():
 def test_sm90_nope_fp8_ds_mla_resolves_to_flashmla():
     """The sparse backends ranked ahead of FLASHMLA_SPARSE for SM90 NoPE-512
     reject fp8_ds_mla, so the auto-selector lands on FlashMLA."""
-    from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
+    from sonar.v1.attention.backends.registry import AttentionBackendEnum
 
     order = _sparse_order("fp8_ds_mla", 512, num_heads=64, capability=SM90)
     for name in order[: order.index("FLASHMLA_SPARSE")]:
@@ -271,9 +271,9 @@ def test_sm90_nope_fp8_ds_mla_resolves_to_flashmla():
 @pytest.mark.skipif(not current_platform.is_cuda(), reason="Requires CUDA backends")
 def test_sm100_576_bf16_low_heads_falls_back_from_fa4(monkeypatch):
     """With FA4 unusable, low-head bf16 selection lands on FlashInfer."""
-    import aphrodite.v1.attention.backends.mla.flashattn_mla_sparse as fa4_sparse
-    from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-    from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
+    import sonar.v1.attention.backends.mla.flashattn_mla_sparse as fa4_sparse
+    from sonar.config import SonarConfig, set_current_sonar_config
+    from sonar.v1.attention.backends.registry import AttentionBackendEnum
 
     monkeypatch.setattr(fa4_sparse, "_fa4_cute_mla_available", lambda: "no FA4")
 
@@ -294,7 +294,7 @@ def test_sm100_576_bf16_low_heads_falls_back_from_fa4(monkeypatch):
         )
 
     order = _sparse_order("auto", 576, num_heads=16)
-    with set_current_aphrodite_config(AphroditeConfig()):
+    with set_current_sonar_config(SonarConfig()):
         # The selector takes the first candidate with no rejection reasons.
         selected = next(name for name in order if not reasons(name))
     assert order[0] == "FLASH_ATTN_MLA_SPARSE_FA4", order

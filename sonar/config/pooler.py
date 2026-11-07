@@ -6,10 +6,10 @@ from typing import Any, Literal, get_args
 from pydantic import model_validator
 from pydantic_core import ArgsKwargs
 
-from aphrodite.config.utils import config
-from aphrodite.logger import init_logger
-from aphrodite.tasks import PoolingTask, check_removed_pooling_task
-from aphrodite.utils.hashing import safe_hash
+from sonar.config.utils import config
+from sonar.logger import init_logger
+from sonar.tasks import PoolingTask, check_removed_pooling_task
+from sonar.utils.hashing import safe_hash
 
 logger = init_logger(__name__)
 

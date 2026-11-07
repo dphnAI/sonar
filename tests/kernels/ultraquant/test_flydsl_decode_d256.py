@@ -5,18 +5,18 @@
 import pytest
 import torch
 
-from aphrodite.utils.torch_utils import set_random_seed
-from aphrodite.v1.attention.ops.flydsl_ultraquant_decode import (
+from sonar.utils.torch_utils import set_random_seed
+from sonar.v1.attention.ops.flydsl_ultraquant_decode import (
     flydsl_ultraquant_decode_attention,
     is_ultraquant_flydsl_available,
     ultraquant_flydsl_decode_eligible,
 )
-from aphrodite.v1.attention.ops.ultraquant.format import slot_size
-from aphrodite.v1.attention.ops.ultraquant.reference import (
+from sonar.v1.attention.ops.ultraquant.format import slot_size
+from sonar.v1.attention.ops.ultraquant.reference import (
     hadamard_matrix,
     reference_ultraquant_attention,
 )
-from aphrodite.v1.attention.ops.ultraquant.triton_store import ultraquant_store
+from sonar.v1.attention.ops.ultraquant.triton_store import ultraquant_store
 
 pytestmark = pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA/HIP device")
 

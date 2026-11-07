@@ -4,12 +4,12 @@
 from collections.abc import Iterable, Sequence
 from typing import TYPE_CHECKING
 
-from aphrodite.entrypoints.generate.base.protocol import DeltaMessage
-from aphrodite.reasoning.basic_parsers import BaseThinkingReasoningParser
+from sonar.entrypoints.generate.base.protocol import DeltaMessage
+from sonar.reasoning.basic_parsers import BaseThinkingReasoningParser
 
 if TYPE_CHECKING:
-    from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-    from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
+    from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+    from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
 
 
 class MiniMaxM3ReasoningParser(BaseThinkingReasoningParser):

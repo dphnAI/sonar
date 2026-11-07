@@ -32,7 +32,7 @@
   #include <cuda_bf16.h>
   #include <cuda_fp16.h>
 #endif
-namespace aphrodite {
+namespace sonar {
 namespace vptq {
 #if defined(USE_ROCM)
   #define VPTQ_LDG(arg) __ldg(arg)
@@ -1007,7 +1007,7 @@ torch::Tensor lauch_gemv_outliers_cuda_packkernel(
 }
 
 }  // namespace vptq
-}  // namespace aphrodite
+}  // namespace sonar
 
 #define gpuErrchk(ret) gpuAssert((ret), __FILE__, __LINE__);
 
@@ -1064,7 +1064,7 @@ torch::Tensor vptq_gemm(const torch::Tensor& input,
   at::cuda::OptionalCUDAGuard guard(q_indice.device());
   torch::Tensor output;
 
-  output = aphrodite::vptq::lauch_gemv_outliers_cuda_packkernel(
+  output = sonar::vptq::lauch_gemv_outliers_cuda_packkernel(
       out_features, input, q_indice, centroids, q_indice_residual,
       residual_centroids, q_indice_outliers, outliers_centroids, invperm,
       weight_scale, weight_bias, bias);
@@ -1122,7 +1122,7 @@ torch::Tensor vptq_dequant(
       output;  // = at::empty({out_features, in_features}, centroids.options());
   const int out_f_x_in_f[2] = {out_features, in_features};
 
-  output = aphrodite::vptq::lauch_deqantize_outliers_cuda_packkernel(
+  output = sonar::vptq::lauch_deqantize_outliers_cuda_packkernel(
       out_f_x_in_f, q_indice, centroids, q_indice_residual, residual_centroids,
       q_indice_outliers, outliers_centroids, invperm, weight_scale,
       weight_bias);

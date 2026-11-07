@@ -6,7 +6,7 @@ import tempfile
 
 from prometheus_client import REGISTRY, CollectorRegistry, multiprocess
 
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 
@@ -28,9 +28,9 @@ def setup_multiprocess_prometheus():
     else:
         logger.warning(
             "Found PROMETHEUS_MULTIPROC_DIR was set by user. "
-            "This directory must be wiped between Aphrodite runs or "
+            "This directory must be wiped between Sonar runs or "
             "you will find inaccurate metrics. Unset the variable "
-            "and Aphrodite will properly handle cleanup."
+            "and Sonar will properly handle cleanup."
         )
 
 
@@ -51,8 +51,8 @@ def get_prometheus_registry() -> CollectorRegistry:
     return REGISTRY
 
 
-def unregister_aphrodite_metrics():
-    """Unregister any existing Aphrodite collectors from the prometheus registry.
+def unregister_sonar_metrics():
+    """Unregister any existing Sonar collectors from the prometheus registry.
 
     This is useful for testing and CI/CD where metrics may be registered
     multiple times across test runs.
@@ -61,9 +61,9 @@ def unregister_aphrodite_metrics():
     global registry.
     """
     registry = REGISTRY
-    # Unregister any existing Aphrodite collectors
+    # Unregister any existing Sonar collectors
     for collector in list(registry._collector_to_names):
-        if hasattr(collector, "_name") and collector._name.startswith("aphrodite:"):
+        if hasattr(collector, "_name") and collector._name.startswith("sonar:"):
             registry.unregister(collector)
 
 

@@ -8,28 +8,28 @@ from typing import Any, cast
 import numpy as np
 import torch
 
-from aphrodite.config.reasoning import ReasoningConfig
-from aphrodite.lora.request import LoRARequest
-from aphrodite.multimodal.inputs import MultiModalFeatureSpec
-from aphrodite.pooling_params import PoolingParams
-from aphrodite.sampling_params import SamplingParams, SamplingType
-from aphrodite.utils import length_from_prompt_token_ids_or_embeds
-from aphrodite.utils.collection_utils import swap_dict_values
-from aphrodite.utils.torch_utils import PIN_MEMORY
-from aphrodite.v1.outputs import LogprobsTensors
-from aphrodite.v1.pool.metadata import PoolingMetadata, PoolingStates
-from aphrodite.v1.sample.logits_processor import (
+from sonar.config.reasoning import ReasoningConfig
+from sonar.lora.request import LoRARequest
+from sonar.multimodal.inputs import MultiModalFeatureSpec
+from sonar.pooling_params import PoolingParams
+from sonar.sampling_params import SamplingParams, SamplingType
+from sonar.utils import length_from_prompt_token_ids_or_embeds
+from sonar.utils.collection_utils import swap_dict_values
+from sonar.utils.torch_utils import PIN_MEMORY
+from sonar.v1.outputs import LogprobsTensors
+from sonar.v1.pool.metadata import PoolingMetadata, PoolingStates
+from sonar.v1.sample.logits_processor import (
     BatchUpdateBuilder,
     LogitsProcessors,
     MoveDirectionality,
 )
-from aphrodite.v1.sample.metadata import SamplingMetadata
-from aphrodite.v1.sample.ops.dry import init_dry_state
-from aphrodite.v1.sample.thinking_budget_state import (
+from sonar.v1.sample.metadata import SamplingMetadata
+from sonar.v1.sample.ops.dry import init_dry_state
+from sonar.v1.sample.thinking_budget_state import (
     maybe_create_thinking_budget_state_holder,
 )
-from aphrodite.v1.utils import copy_slice
-from aphrodite.v1.worker.block_table import MultiGroupBlockTable, SlotMappingMode
+from sonar.v1.utils import copy_slice
+from sonar.v1.worker.block_table import MultiGroupBlockTable, SlotMappingMode
 
 _SAMPLING_EPS = 1e-5
 

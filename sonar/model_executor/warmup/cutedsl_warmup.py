@@ -11,10 +11,10 @@ from dataclasses import dataclass
 import torch
 from tqdm import tqdm
 
-from aphrodite.distributed.parallel_state import is_global_first_rank
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.tracing import instrument
+from sonar.distributed.parallel_state import is_global_first_rank
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.tracing import instrument
 
 logger = init_logger(__name__)
 

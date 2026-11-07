@@ -4,9 +4,9 @@
 import time
 from types import SimpleNamespace
 
-from aphrodite.v1.engine import EngineCoreOutputs
-from aphrodite.v1.engine.core import EngineCore
-from aphrodite.v1.metrics.stats import SchedulerIterationDetails, SchedulerStats
+from sonar.v1.engine import EngineCoreOutputs
+from sonar.v1.engine.core import EngineCore
+from sonar.v1.metrics.stats import SchedulerIterationDetails, SchedulerStats
 
 
 class FakeEngineCore:
@@ -28,7 +28,7 @@ def make_iteration_details() -> SchedulerIterationDetails:
 def make_fake_engine(log_stats: bool = True) -> SimpleNamespace:
     return SimpleNamespace(
         log_stats=log_stats,
-        aphrodite_config=SimpleNamespace(
+        sonar_config=SimpleNamespace(
             observability_config=SimpleNamespace(
                 enable_logging_iteration_details=True,
             )

@@ -8,11 +8,11 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-import aphrodite._custom_ops as ops
-from aphrodite.model_executor.layers.mamba.ops.cpu import gdn_attention
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
-from aphrodite.v1.attention.backends.gdn_attn import GDNAttentionMetadata
+import sonar._custom_ops as ops
+from sonar.model_executor.layers.mamba.ops.cpu import gdn_attention
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_random_seed
+from sonar.v1.attention.backends.gdn_attn import GDNAttentionMetadata
 
 if not current_platform.is_cpu():
     pytest.skip("skipping CPU-only tests", allow_module_level=True)
@@ -816,7 +816,7 @@ def test_causal_conv1d_torch_two_call_split(total_tokens: int, split: int) -> No
     ``has_initial_state=True`` from the conv_states the first wrote back) must
     match the single-call result.
     """
-    from aphrodite.model_executor.layers.mamba.ops.cpu.causal_conv1d import (
+    from sonar.model_executor.layers.mamba.ops.cpu.causal_conv1d import (
         causal_conv1d_fn_cpu as causal_conv1d_torch,
     )
 
@@ -1133,14 +1133,14 @@ def test_batch_memcpy_cpu_fallback() -> None:
     copy each src into its dst, validating the (src_ptrs, dst_ptrs, sizes)
     argument order against ctypes.memmove(dst, src, size).
     """
-    from aphrodite.triton_utils.dispatcher import (
+    from sonar.triton_utils.dispatcher import (
         KernelOverride,
         register_kernels,
     )
-    from aphrodite.utils.cpu_triton_utils import _batch_memcpy_impl
+    from sonar.utils.cpu_triton_utils import _batch_memcpy_impl
 
-    register_kernels({"aphrodite.v1.worker.mamba_utils.batch_memcpy_kernel": _batch_memcpy_impl})
-    from aphrodite.v1.worker.mamba_utils import batch_memcpy_kernel
+    register_kernels({"sonar.v1.worker.mamba_utils.batch_memcpy_kernel": _batch_memcpy_impl})
+    from sonar.v1.worker.mamba_utils import batch_memcpy_kernel
 
     assert isinstance(batch_memcpy_kernel, KernelOverride)
 
@@ -1199,7 +1199,7 @@ def _conv_fp32_oracle(x, weight, bias, seq_lens, activation="silu"):
 
 
 def _run_prefill_torch(x, weight, bias, seq_lens):
-    from aphrodite.model_executor.layers.mamba.ops.cpu.causal_conv1d import (
+    from sonar.model_executor.layers.mamba.ops.cpu.causal_conv1d import (
         causal_conv1d_fn_cpu as causal_conv1d_torch,
     )
 
@@ -1244,7 +1244,7 @@ def _run_prefill_cpp(x, weight, bias, seq_lens, is_weight_packed=False):
 
 
 def _python_native_fwd(**kwargs):
-    from aphrodite.model_executor.layers.mamba.ops.cpu.causal_conv1d import (
+    from sonar.model_executor.layers.mamba.ops.cpu.causal_conv1d import (
         causal_conv1d_fn_cpu,
     )
 
@@ -1445,7 +1445,7 @@ def test_conv_cpp_weight_packed_matches_torch(seq_lens):
 @torch.inference_mode()
 def test_conv_update_cpp_matches_torch(batch, dim, has_bias, silu_activation, is_weight_packed):
     """Decode preserves indexed, padded state across successive signed inputs."""
-    from aphrodite.model_executor.layers.mamba.ops.cpu.causal_conv1d import (
+    from sonar.model_executor.layers.mamba.ops.cpu.causal_conv1d import (
         causal_conv1d_update_torch,
     )
 
@@ -1516,7 +1516,7 @@ def test_spec_decode_unpacked_conv_weight_stash():
     weight equals the original and that torch F.conv1d agrees with the C++ conv
     fed the packed weight.
     """
-    from aphrodite.model_executor.layers.utils import dispatch_cpu_unquantized_gemm
+    from sonar.model_executor.layers.utils import dispatch_cpu_unquantized_gemm
 
     torch.manual_seed(0)
     # conv1d weight is stored [dim, 1, width]; bias [dim].

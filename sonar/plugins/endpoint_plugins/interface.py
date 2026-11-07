@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Contract for `aphrodite.endpoint_plugins` entry points.
+"""Contract for `sonar.endpoint_plugins` entry points.
 
 An endpoint plugin adds HTTP routes to the OpenAI compatible API server.
 Its scope is HTTP surface only. It registers routes and optionally
@@ -10,17 +10,17 @@ via `EngineClient` (e.g. `engine_client.collective_rpc(...)`).
 
 If a plugin also needs engine side behavior (a new worker side RPC method,
 a custom stat, etc.) pair this entry point with one registered under
-`aphrodite.general_plugins` (see `aphrodite/plugins/__init__.py`). The
+`sonar.general_plugins` (see `sonar/plugins/__init__.py`). The
 `general_plugins` entry installs the engine side method and the
 `endpoint_plugins` entry exposes it over HTTP. The two are registered and
 loaded independently where neither implies the other.
 
-Plugins are opt-in. See `load_endpoint_plugins` in `aphrodite/plugins/__init__.py`
+Plugins are opt-in. See `load_endpoint_plugins` in `sonar/plugins/__init__.py`
 for the loading/gating rules and `docs/usage/security.md` for the security
 posture of exposing plugin defined routes.
 
 The CPU only render server (see `build_and_serve_renderer` in
-`aphrodite/entrypoints/launchers/render`) has no `EngineClient`. A plugin
+`sonar/entrypoints/launchers/render`) has no `EngineClient`. A plugin
 eligible for the `render` task (`required_tasks` is `None` or includes
 `"render"`) still gets `attach_router` called but `init_state` receives
 `engine_client=None`. Plugins that cannot function without an engine should
@@ -37,20 +37,20 @@ from fastapi.routing import APIRoute
 from starlette.datastructures import State
 from starlette.routing import BaseRoute
 
-from aphrodite.engine.protocol import EngineClient
-from aphrodite.logger import init_logger
+from sonar.engine.protocol import EngineClient
+from sonar.logger import init_logger
 
 if TYPE_CHECKING:
-    from aphrodite.tasks import SupportedTask
+    from sonar.tasks import SupportedTask
 
 logger = init_logger(__name__)
 
 
 @runtime_checkable
 class EndpointPlugin(Protocol):
-    """Protocol implemented by `aphrodite.endpoint_plugins` factories.
+    """Protocol implemented by `sonar.endpoint_plugins` factories.
 
-    An entry point registered under the `aphrodite.endpoint_plugins` group must
+    An entry point registered under the `sonar.endpoint_plugins` group must
     resolve to a zero-argument callable that returns an object satisfying this
     protocol.
     """
@@ -63,7 +63,7 @@ class EndpointPlugin(Protocol):
 
     The plugin is loaded only if this set intersects the server's
     `supported_tasks`. `None` means the plugin has no task requirement and is
-    always eligible, subject to the `APHRODITE_PLUGINS` allowlist.
+    always eligible, subject to the `SONAR_PLUGINS` allowlist.
     """
 
     def attach_router(self, app: FastAPI) -> None:
@@ -96,7 +96,7 @@ def attach_endpoint_plugins(app: FastAPI, supported_tasks: tuple["SupportedTask"
     replace earlier operations with the same path template and method in both
     routing and OpenAPI. No-ops when no plugins are discovered/allowlisted.
     """
-    from aphrodite.plugins import load_endpoint_plugins
+    from sonar.plugins import load_endpoint_plugins
 
     endpoint_plugins = load_endpoint_plugins(supported_tasks)
     existing_routes = {id(route): route for route in app.routes}

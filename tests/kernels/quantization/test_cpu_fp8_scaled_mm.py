@@ -12,20 +12,20 @@ Run `pytest tests/kernels/quantization/test_cpu_fp8_scaled_mm.py -v`.
 import pytest
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.model_executor.kernels.linear.scaled_mm.cpu import (
+from sonar import _custom_ops as ops
+from sonar.model_executor.kernels.linear.scaled_mm.cpu import (
     CPUFp8ChannelWiseScaledMMLinearKernel,
     CPUFp8PerTensorScaledMMLinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.scaled_mm.ScaledMMLinearKernel import (
+from sonar.model_executor.kernels.linear.scaled_mm.ScaledMMLinearKernel import (
     FP8ScaledMMLinearLayerConfig,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     kFp8DynamicTokenSym,
     kFp8StaticChannelSym,
     kFp8StaticTensorSym,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 if not current_platform.is_cpu():
     pytest.skip("skipping CPU-only tests", allow_module_level=True)
@@ -293,7 +293,7 @@ NK_SIZES_PER_TENSOR = [
 @pytest.mark.parametrize("M", [1, 64])
 @pytest.mark.parametrize("N,K", NK_SIZES_PER_TENSOR)
 @pytest.mark.parametrize("use_bias", [False, True])
-def test_cpu_fp8_per_tensor_scaled_mm_kernel(M: int, N: int, K: int, use_bias: bool, default_aphrodite_config):
+def test_cpu_fp8_per_tensor_scaled_mm_kernel(M: int, N: int, K: int, use_bias: bool, default_sonar_config):
     """CPUFp8PerTensorScaledMMLinearKernel correctness against float reference.
 
     Exercises the full kernel class (not just the raw op), including the
@@ -357,7 +357,7 @@ def test_cpu_fp8_per_tensor_kernel_rejects_non_multiple_of_32_n(n: int):
 @pytest.mark.parametrize("M", [1, 64])
 @pytest.mark.parametrize("N,K", [(32, 64), (4096, 2560)])
 @pytest.mark.parametrize("use_bias", [False, True])
-def test_cpu_fp8_channelwise_scaled_mm_kernel(M: int, N: int, K: int, use_bias: bool, default_aphrodite_config):
+def test_cpu_fp8_channelwise_scaled_mm_kernel(M: int, N: int, K: int, use_bias: bool, default_sonar_config):
     """CPUFp8ChannelWiseScaledMMLinearKernel against a dequantized reference."""
     torch.manual_seed(0)
     out_dtype = torch.bfloat16

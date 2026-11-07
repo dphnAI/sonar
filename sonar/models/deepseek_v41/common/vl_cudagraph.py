@@ -3,7 +3,7 @@
 """Encoder CUDA graph support for the DeepSeek-V4.1 vision tower.
 
 Mixin implementing the ``SupportsEncoderCudaGraph`` protocol
-(``aphrodite/model_executor/models/interfaces.py``) on top of the shared
+(``sonar/model_executor/models/interfaces.py``) on top of the shared
 ``DeepseekV4ViT``/``DeepseekV4Aligner``. The captured graph packs a whole
 batch of images into one varlen run: ViT blocks attend per image via
 ``cu_seqlens``, and the aligner's spatial merge becomes a gather+mask
@@ -12,7 +12,7 @@ IMAGE_END delimiters) stays eager in ``postprocess_encoder_output`` but is
 batched over all items of the packed batch.
 
 Enabled via ``--compilation-config '{"cudagraph_mm_encoder": true}'``; the
-manager (``aphrodite/v1/worker/encoder_cudagraph.py``) handles budget packing, DP
+manager (``sonar/v1/worker/encoder_cudagraph.py``) handles budget packing, DP
 sharding and eager fallback.
 """
 
@@ -21,12 +21,12 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 
-from aphrodite.models.deepseek_v4.common.vision import (
+from sonar.models.deepseek_v4.common.vision import (
     build_packed_merge_metadata,
     build_packed_vit_metadata,
 )
-from aphrodite.utils.torch_utils import async_tensor_h2d
-from aphrodite.v1.worker.encoder_cudagraph_defs import (
+from sonar.utils.torch_utils import async_tensor_h2d
+from sonar.v1.worker.encoder_cudagraph_defs import (
     EncoderCudaGraphCaptureInputs,
     EncoderCudaGraphConfig,
     EncoderCudaGraphReplayBuffers,
@@ -36,13 +36,13 @@ from aphrodite.v1.worker.encoder_cudagraph_defs import (
 from .mm_preprocess import IMAGE, IMAGE_END, IMAGE_NEW_LINE, IMAGE_START
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
-    from aphrodite.config.multimodal import MultiModalConfig
-    from aphrodite.models.deepseek_v4.common.vision import (
+    from sonar.config import SonarConfig
+    from sonar.config.multimodal import MultiModalConfig
+    from sonar.models.deepseek_v4.common.vision import (
         DeepseekV4Aligner,
         DeepseekV4ViT,
     )
-    from aphrodite.transformers_utils.configs.deepseek_v41 import DeepseekV41Config
+    from sonar.transformers_utils.configs.deepseek_v41 import DeepseekV41Config
 
 
 class DeepseekV4VLEncoderCudaGraphMixin:
@@ -105,7 +105,7 @@ class DeepseekV4VLEncoderCudaGraphMixin:
                 "cudagraph_mm_encoder."
             )
 
-        from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
+        from sonar.v1.attention.backends.registry import AttentionBackendEnum
 
         backend = self.vision.blocks[0].attn.attn.attn_backend
         # FlashInfer reads max_seqlen on the host and TORCH_SDPA calls
@@ -146,15 +146,15 @@ class DeepseekV4VLEncoderCudaGraphMixin:
 
     def get_encoder_cudagraph_budget_range(
         self,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
     ) -> tuple[int, int]:
         # Min: comfortably above the smallest possible image span (4 tokens
         # for a 1x1 grid); also sets max_batch_size = 64 via the manager's
         # auto-inference (max_batch_size <= min_budget invariant).
         min_budget = 64
         max_budget = min(
-            aphrodite_config.scheduler_config.max_num_batched_tokens,
-            aphrodite_config.model_config.max_model_len,
+            sonar_config.scheduler_config.max_num_batched_tokens,
+            sonar_config.model_config.max_model_len,
         )
         return (min_budget, max_budget)
 

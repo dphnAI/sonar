@@ -14,14 +14,14 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.utils.math_utils import cdiv
+from sonar.platforms import current_platform
+from sonar.utils.math_utils import cdiv
 
 
 def _fused_gather_available() -> bool:
     if not (current_platform.is_rocm() and torch.cuda.is_available()):
         return False
-    from aphrodite._aiter_ops import is_aiter_found_and_supported
+    from sonar._aiter_ops import is_aiter_found_and_supported
 
     return is_aiter_found_and_supported()
 
@@ -35,7 +35,7 @@ pytestmark = pytest.mark.skipif(
 def _on_gfx950() -> bool:
     if not _fused_gather_available():
         return False
-    from aphrodite.platforms.rocm import on_gfx950
+    from sonar.platforms.rocm import on_gfx950
 
     return on_gfx950()
 
@@ -68,7 +68,7 @@ ATOL, RTOL = 2e-2, 2e-2
 @pytest.fixture(autouse=True)
 def _workspace_manager():
     """The builder draws its context workspace from the global manager."""
-    from aphrodite.v1.worker.workspace import (
+    from sonar.v1.worker.workspace import (
         init_workspace_manager,
         reset_workspace_manager,
     )
@@ -79,7 +79,7 @@ def _workspace_manager():
 
 
 class _KVBProj(torch.nn.Module):
-    """Stand-in for kv_b_proj; Aphrodite linear layers return (output, bias)."""
+    """Stand-in for kv_b_proj; Sonar linear layers return (output, bias)."""
 
     def __init__(self, device: torch.device):
         super().__init__()
@@ -99,7 +99,7 @@ class _KVBProj(torch.nn.Module):
 
 def _make_impl(device: torch.device):
     """Minimal AiterMLAImpl exposing what the prefill-context paths read."""
-    from aphrodite.v1.attention.backends.mla.rocm_aiter_mla import AiterMLAImpl
+    from sonar.v1.attention.backends.mla.rocm_aiter_mla import AiterMLAImpl
 
     impl = object.__new__(AiterMLAImpl)
     impl.num_heads = NUM_HEADS
@@ -116,21 +116,21 @@ def _make_impl(device: torch.device):
 
 def _build_metadata(context_lens: list[int], device: torch.device):
     """Run the production builder; returns (metadata, num_blocks)."""
-    from aphrodite.config.aphrodite import set_current_aphrodite_config
-    from aphrodite.v1.attention.backends.mla.prefill import get_mla_prefill_backend
-    from aphrodite.v1.attention.backends.mla.rocm_aiter_mla import (
+    from sonar.config.sonar import set_current_sonar_config
+    from sonar.v1.attention.backends.mla.prefill import get_mla_prefill_backend
+    from sonar.v1.attention.backends.mla.rocm_aiter_mla import (
         AiterMLAMetadataBuilder,
     )
-    from aphrodite.v1.kv_cache_interface import MLAAttentionSpec
+    from sonar.v1.kv_cache_interface import MLAAttentionSpec
     from tests.v1.attention.utils import (
         BatchSpec,
-        create_aphrodite_config,
         create_common_attn_metadata,
+        create_sonar_config,
     )
 
     seq_lens = [context + QUERY_LEN for context in context_lens]
     num_blocks = len(seq_lens) * cdiv(max(seq_lens), BLOCK_SIZE)
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         model_name="deepseek-ai/DeepSeek-R1",
         max_model_len=MAX_MODEL_LEN,
         num_gpu_blocks=num_blocks,
@@ -143,18 +143,18 @@ def _build_metadata(context_lens: list[int], device: torch.device):
         num_kv_heads=1,
         head_size=HEAD_SIZE,
         dtype=DTYPE,
-        cache_dtype_str=aphrodite_config.cache_config.cache_dtype,
+        cache_dtype_str=sonar_config.cache_config.cache_dtype,
     )
-    prefill_backend = get_mla_prefill_backend(aphrodite_config)(
+    prefill_backend = get_mla_prefill_backend(sonar_config)(
         num_heads=NUM_HEADS,
         scale=SCALE,
         kv_lora_rank=KV_LORA_RANK,
         qk_nope_head_dim=QK_NOPE_HEAD_DIM,
         qk_rope_head_dim=QK_ROPE_HEAD_DIM,
         v_head_dim=V_HEAD_DIM,
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
     )
-    aphrodite_config.compilation_config.static_forward_context["placeholder"] = SimpleNamespace(
+    sonar_config.compilation_config.static_forward_context["placeholder"] = SimpleNamespace(
         prefill_backend=prefill_backend,
         q_lora_rank=None,
         kv_lora_rank=KV_LORA_RANK,
@@ -163,8 +163,8 @@ def _build_metadata(context_lens: list[int], device: torch.device):
         v_head_dim=V_HEAD_DIM,
     )
     batch_spec = BatchSpec(seq_lens=seq_lens, query_lens=[QUERY_LEN] * len(seq_lens))
-    with set_current_aphrodite_config(aphrodite_config):
-        builder = AiterMLAMetadataBuilder(spec, ["placeholder"], aphrodite_config, device)
+    with set_current_sonar_config(sonar_config):
+        builder = AiterMLAMetadataBuilder(spec, ["placeholder"], sonar_config, device)
         common_attn_metadata = create_common_attn_metadata(batch_spec, BLOCK_SIZE, device, arange_block_indices=True)
         metadata = builder.build(common_prefix_len=0, common_attn_metadata=common_attn_metadata)
     return metadata, num_blocks
@@ -205,7 +205,7 @@ def test_context_chunk_kv_indices_follow_the_block_table(context_lens):
 )
 def test_fused_prefill_context_matches_unfused(context_lens, expected_chunks, monkeypatch):
     """gather_kv_b_proj + LSE merge reproduce the gather -> GEMM -> copy path."""
-    from aphrodite.model_executor.layers.attention.mla_attention import MLACommonImpl
+    from sonar.model_executor.layers.attention.mla_attention import MLACommonImpl
 
     torch.manual_seed(0)
     device = torch.device("cuda")

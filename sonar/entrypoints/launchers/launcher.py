@@ -14,22 +14,22 @@ from typing import Any
 import uvicorn
 from fastapi import FastAPI
 
-from aphrodite import envs
-from aphrodite.engine.protocol import EngineClient
-from aphrodite.entrypoints.common.cli_args import (
+from sonar import envs
+from sonar.engine.protocol import EngineClient
+from sonar.entrypoints.common.cli_args import (
     init_parser_plugin,
     validate_api_server_args,
 )
-from aphrodite.entrypoints.common.startup import (
+from sonar.entrypoints.common.startup import (
     log_non_default_args,
     log_version_and_model,
 )
-from aphrodite.entrypoints.launchers.utils.ssl import SSLCertRefresher
-from aphrodite.logger import init_logger
-from aphrodite.tracing import instrument
-from aphrodite.utils.network_utils import find_process_using_port, is_valid_ipv6_address
-from aphrodite.utils.system_utils import set_ulimit
-from aphrodite.version import __version__ as APHRODITE_VERSION
+from sonar.entrypoints.launchers.utils.ssl import SSLCertRefresher
+from sonar.logger import init_logger
+from sonar.tracing import instrument
+from sonar.utils.network_utils import find_process_using_port, is_valid_ipv6_address
+from sonar.utils.system_utils import set_ulimit
+from sonar.version import __version__ as SONAR_VERSION
 
 from .utils.constants import (
     H11_MAX_HEADER_COUNT_DEFAULT,
@@ -208,13 +208,13 @@ _ROUTE_METHOD_COLORS = {
 
 
 def _use_route_log_color() -> bool:
-    if envs.NO_COLOR or envs.APHRODITE_LOGGING_COLOR == "0":
+    if envs.NO_COLOR or envs.SONAR_LOGGING_COLOR == "0":
         return False
-    if envs.APHRODITE_LOGGING_COLOR == "1":
+    if envs.SONAR_LOGGING_COLOR == "1":
         return True
-    if envs.APHRODITE_LOGGING_STREAM == "ext://sys.stdout":
+    if envs.SONAR_LOGGING_STREAM == "ext://sys.stdout":
         return hasattr(sys.stdout, "isatty") and sys.stdout.isatty()
-    if envs.APHRODITE_LOGGING_STREAM == "ext://sys.stderr":
+    if envs.SONAR_LOGGING_STREAM == "ext://sys.stderr":
         return hasattr(sys.stderr, "isatty") and sys.stderr.isatty()
     return False
 
@@ -325,7 +325,7 @@ def _log_compact_routes(app: FastAPI) -> None:
         _route_log_color("Available routes:", _ANSI_BOLD),
         route_count,
         alias_note,
-        _route_log_color("(set APHRODITE_LOG_ROUTES=full for details)", _ANSI_DIM),
+        _route_log_color("(set SONAR_LOG_ROUTES=full for details)", _ANSI_DIM),
     )
 
     for group in ("Core", "OpenAI", "Kobold", "Docs", "Other"):
@@ -357,7 +357,7 @@ def _log_route_paths(label: str, paths: list[str]) -> None:
 
 
 def _log_routes(app: FastAPI) -> None:
-    route_log_format = envs.APHRODITE_LOG_ROUTES
+    route_log_format = envs.SONAR_LOG_ROUTES
     if route_log_format == "off":
         return
     if route_log_format == "full":
@@ -430,7 +430,7 @@ async def serve_http(
         await shutdown_event.wait()
 
         if engine_client is not None:
-            timeout = engine_client.aphrodite_config.shutdown_timeout
+            timeout = engine_client.sonar_config.shutdown_timeout
             mode = "abort" if timeout == 0 else "drain"
 
             logger.info(
@@ -482,9 +482,9 @@ async def watchdog_loop(server: uvicorn.Server, engine: EngineClient):
     # for error state in the engine. Needed to trigger shutdown
     # if an exception arises is StreamingResponse() generator.
     """
-    APHRODITE_WATCHDOG_TIME_S = 5.0
+    SONAR_WATCHDOG_TIME_S = 5.0
     while True:
-        await asyncio.sleep(APHRODITE_WATCHDOG_TIME_S)
+        await asyncio.sleep(SONAR_WATCHDOG_TIME_S)
         terminate_if_errored(server, engine)
 
 
@@ -496,7 +496,7 @@ def terminate_if_errored(server: uvicorn.Server, engine: EngineClient):
     for this request.
     """
     engine_errored = engine.errored and not engine.is_running
-    keep_alive = envs.APHRODITE_KEEP_ALIVE_ON_ENGINE_DEATH or engine.should_keep_api_server_alive
+    keep_alive = envs.SONAR_KEEP_ALIVE_ON_ENGINE_DEATH or engine.should_keep_api_server_alive
     if not keep_alive and engine_errored:
         server.should_exit = True
 
@@ -528,7 +528,7 @@ def create_server_unix_socket(path: str) -> socket.socket:
 @instrument(span_name="API server setup")
 def setup_server(args, *, reuse_port: bool):
     """Validate API server args and create the server socket."""
-    log_version_and_model(logger, APHRODITE_VERSION, args.model)
+    log_version_and_model(logger, SONAR_VERSION, args.model)
     log_non_default_args(args)
     init_parser_plugin(args)
     validate_api_server_args(args)

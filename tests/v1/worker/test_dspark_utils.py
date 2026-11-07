@@ -7,12 +7,12 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.config import ParallelConfig
-from aphrodite.v1.kv_cache_interface import FullAttentionSpec
-from aphrodite.v1.worker.gpu import model_runner
-from aphrodite.v1.worker.gpu.spec_decode.dflash.speculator import DFlashSpeculator
-from aphrodite.v1.worker.gpu.spec_decode.dspark.utils import _get_dspark_parallel_config
-from aphrodite.v1.worker.gpu.spec_decode.speculator import DraftModelSpeculator
+from sonar.config import ParallelConfig
+from sonar.v1.kv_cache_interface import FullAttentionSpec
+from sonar.v1.worker.gpu import model_runner
+from sonar.v1.worker.gpu.spec_decode.dflash.speculator import DFlashSpeculator
+from sonar.v1.worker.gpu.spec_decode.dspark.utils import _get_dspark_parallel_config
+from sonar.v1.worker.gpu.spec_decode.speculator import DraftModelSpeculator
 
 
 @dataclass
@@ -122,12 +122,12 @@ def test_draft_context_parallelism_without_changing_target(monkeypatch, pcp_size
 
 @pytest.mark.parametrize("configured_dcp", [1, 4])
 def test_attention_uses_draft_dcp_setting_inside_target_process_group(monkeypatch, configured_dcp):
-    import aphrodite.config as config_module
-    from aphrodite.distributed import parallel_state
-    from aphrodite.v1.attention.backend import AttentionImplBase, AttentionMetadata
+    import sonar.config as config_module
+    from sonar.distributed import parallel_state
+    from sonar.v1.attention.backend import AttentionImplBase, AttentionMetadata
 
     config = SimpleNamespace(parallel_config=SimpleNamespace(decode_context_parallel_size=configured_dcp))
-    monkeypatch.setattr(config_module, "get_current_aphrodite_config_or_none", lambda: config)
+    monkeypatch.setattr(config_module, "get_current_sonar_config_or_none", lambda: config)
 
     monkeypatch.setattr(parallel_state, "_DCP", SimpleNamespace(world_size=4, rank_in_group=2))
     impl: AttentionImplBase[AttentionMetadata] = AttentionImplBase()
@@ -140,7 +140,7 @@ def test_runner_marks_only_replicated_draft_caches(monkeypatch, draft_dcp_size):
     spec = FullAttentionSpec(block_size=16, num_kv_heads=1, head_size=64, dtype=torch.bfloat16)
     monkeypatch.setattr(model_runner, "get_kv_cache_spec", lambda _: {"target": spec, "draft": spec})
     runner = object.__new__(model_runner.GPUModelRunner)
-    runner.aphrodite_config = None
+    runner.sonar_config = None
     runner.dcp_size = 4
     runner.speculator = object.__new__(DFlashSpeculator)
     runner.speculator.dcp_size = draft_dcp_size

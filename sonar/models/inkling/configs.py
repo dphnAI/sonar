@@ -178,7 +178,7 @@ class InklingModelConfig(PreTrainedConfig):
     @property
     def mamba2_cache_params(self) -> TMLConvCacheParams | None:
         try:
-            from aphrodite.distributed import get_tensor_model_parallel_world_size
+            from sonar.distributed import get_tensor_model_parallel_world_size
 
             tp_size = get_tensor_model_parallel_world_size()
         except (AssertionError, RuntimeError):

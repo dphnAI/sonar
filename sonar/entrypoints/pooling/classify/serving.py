@@ -6,9 +6,9 @@ from typing import TypeAlias
 import numpy as np
 from fastapi.responses import JSONResponse
 
-from aphrodite.entrypoints.serve.engine.protocol import UsageInfo
-from aphrodite.logger import init_logger
-from aphrodite.outputs import ClassificationOutput
+from sonar.entrypoints.serve.engine.protocol import UsageInfo
+from sonar.logger import init_logger
+from sonar.outputs import ClassificationOutput
 
 from ..base.serving import PoolingServing
 from ..typing import PoolingServeContext

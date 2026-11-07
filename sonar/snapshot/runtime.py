@@ -31,8 +31,8 @@ from typing import NoReturn
 import regex as re
 from pydantic import ValidationError
 
-from aphrodite.logger import init_logger
-from aphrodite.snapshot.manifest import (
+from sonar.logger import init_logger
+from sonar.snapshot.manifest import (
     ReadyMarker,
     SnapshotManifest,
     SnapshotRuntimeIdentity,
@@ -42,7 +42,7 @@ from aphrodite.snapshot.manifest import (
     validate_artifact_root,
     write_manifest_atomic,
 )
-from aphrodite.snapshot.types import Oracle
+from sonar.snapshot.types import Oracle
 
 logger = init_logger(__name__)
 
@@ -78,20 +78,20 @@ _CACHE_UNREADABLE = "unreadable"
 def _generated_cache_prefixes() -> tuple[str, ...]:
     """Path prefixes of the generated caches an engine process keeps open.
 
-    Aphrodite redirects Inductor and Triton under ``APHRODITE_CACHE_ROOT`` when it
+    Sonar redirects Inductor and Triton under ``SONAR_CACHE_ROOT`` when it
     compiles, but a process can still hold their upstream defaults open.
     A cache root is resolved and separator-terminated so that it still matches
     the kernel-canonical descriptor targets under a symlinked root, and so that
     a sibling directory sharing its name does not. Inductor's default location
     is a bare prefix instead, because its directory carries a per-user suffix.
     """
-    import aphrodite.envs as envs
+    import sonar.envs as envs
 
     inductor_root = os.environ.get("TORCHINDUCTOR_CACHE_DIR")
     roots = tuple(
         f"{os.path.realpath(os.path.expanduser(root)).rstrip(os.sep)}{os.sep}"
         for root in (
-            envs.APHRODITE_CACHE_ROOT,
+            envs.SONAR_CACHE_ROOT,
             os.environ.get("TRITON_CACHE_DIR") or "~/.triton/cache",
             "~/.cache/flashinfer",
             *((inductor_root,) if inductor_root else ()),
@@ -181,9 +181,9 @@ class LocalSnapshotTools:
         plugin_dir = os.environ.get("CRIU_CUDA_PLUGIN_DIR", "")
         self.plugin_dir = Path(plugin_dir) if plugin_dir else None
         self.shm_dir = Path("/dev/shm")
-        self.timeout_s = float(os.environ.get("APHRODITE_SNAPSHOT_TIMEOUT_S", "900"))
+        self.timeout_s = float(os.environ.get("SONAR_SNAPSHOT_TIMEOUT_S", "900"))
         if not 0 < self.timeout_s < float("inf"):
-            raise ValueError("APHRODITE_SNAPSHOT_TIMEOUT_S must be a positive finite number")
+            raise ValueError("SONAR_SNAPSHOT_TIMEOUT_S must be a positive finite number")
         self._children: dict[int, subprocess.Popen[bytes]] = {}
         self._restored_processes: dict[int, tuple[tuple[int, int], ...]] = {}
 
@@ -233,7 +233,7 @@ class LocalSnapshotTools:
         command = [
             sys.executable,
             "-m",
-            "aphrodite.snapshot.server",
+            "sonar.snapshot.server",
             "--ready-file",
             str(workdir / "ready.json"),
             "--release-file",
@@ -244,7 +244,7 @@ class LocalSnapshotTools:
             *engine_argv,
         ]
         child_environment = os.environ.copy()
-        child_environment.setdefault("APHRODITE_WORKER_MULTIPROC_METHOD", "spawn")
+        child_environment.setdefault("SONAR_WORKER_MULTIPROC_METHOD", "spawn")
         child_environment.setdefault("NCCL_IB_DISABLE", "1")
         with (workdir / "child.log").open("wb") as log_file:
             process = subprocess.Popen(
@@ -421,7 +421,7 @@ class LocalSnapshotTools:
             raise SnapshotCreateError(
                 "snapshot tree owns io_uring state that CRIU cannot dump; set "
                 "kernel.io_uring_disabled=1 before starting an unprivileged "
-                "Aphrodite process, or use =2 to disable it host-wide "
+                "Sonar process, or use =2 to disable it host-wide "
                 f"(pids: {', '.join(map(str, io_uring_pids))})"
             )
         _validate_tcp_connections(self._tcp_records(), socket_owners)
@@ -458,13 +458,13 @@ class LocalSnapshotTools:
             raise RuntimeError("CRIU_CUDA_PLUGIN_DIR is required")
         env = os.environ.copy()
         env["PATH"] = f"{Path(self.cuda_checkpoint).parent}:{env['PATH']}"
-        env["APHRODITE_SNAPSHOT_IGNORED_FD_MAP"] = str(artifact / "ignored-nvidia-fds.tsv")
-        env["RIG_CRIU_IGNORED_FD_MAP"] = env["APHRODITE_SNAPSHOT_IGNORED_FD_MAP"]
+        env["SONAR_SNAPSHOT_IGNORED_FD_MAP"] = str(artifact / "ignored-nvidia-fds.tsv")
+        env["RIG_CRIU_IGNORED_FD_MAP"] = env["SONAR_SNAPSHOT_IGNORED_FD_MAP"]
         command = [
             *self._privileged(),
             "env",
             f"PATH={env['PATH']}",
-            f"APHRODITE_SNAPSHOT_IGNORED_FD_MAP={env['APHRODITE_SNAPSHOT_IGNORED_FD_MAP']}",
+            f"SONAR_SNAPSHOT_IGNORED_FD_MAP={env['SONAR_SNAPSHOT_IGNORED_FD_MAP']}",
             f"RIG_CRIU_IGNORED_FD_MAP={env['RIG_CRIU_IGNORED_FD_MAP']}",
             self.criu,
             action,
@@ -736,7 +736,7 @@ class LocalSnapshotTools:
             raise RuntimeError("installed torch package could not be located")
         version_path = Path(next(iter(locations))) / "version.py"
         # Parse the version file rather than importing torch: snapshot create's
-        # CLI path stays import-light (aphrodite/entrypoints/cli/snapshot.py).
+        # CLI path stays import-light (sonar/entrypoints/cli/snapshot.py).
         syntax = ast.parse(version_path.read_text(), filename=str(version_path))
         cuda_runtime = ""
         for statement in syntax.body:
@@ -770,15 +770,15 @@ class LocalSnapshotTools:
         return sum(path.stat().st_size for path in workdir.rglob("*") if path.is_file())
 
     def _environment_identity(self) -> tuple[tuple[str, str], ...]:
-        prefixes = ("APHRODITE_", "CUDA_", "NCCL_", "TORCH_", "TRITON_")
+        prefixes = ("SONAR_", "CUDA_", "NCCL_", "TORCH_", "TRITON_")
         environment = os.environ.copy()
-        environment.setdefault("APHRODITE_WORKER_MULTIPROC_METHOD", "spawn")
+        environment.setdefault("SONAR_WORKER_MULTIPROC_METHOD", "spawn")
         environment.setdefault("NCCL_IB_DISABLE", "1")
         selected = tuple(
             sorted(
                 (key, hashlib.sha256(key.encode() + b"\0" + value.encode()).hexdigest())
                 for key, value in environment.items()
-                if key.startswith(prefixes) and key not in {"APHRODITE_API_KEY", "APHRODITE_SNAPSHOT_TIMEOUT_S"}
+                if key.startswith(prefixes) and key not in {"SONAR_API_KEY", "SONAR_SNAPSHOT_TIMEOUT_S"}
             )
         )
         return selected + self._plugin_identity()
@@ -816,7 +816,7 @@ class LocalSnapshotTools:
         revision = str(getattr(args, "revision", None) or "")
         tokenizer_revision = str(getattr(args, "tokenizer_revision", None) or revision)
         source_model = str(getattr(args, "model_tag", None) or args.model)
-        from aphrodite.config.model import get_served_model_name
+        from sonar.config.model import get_served_model_name
 
         served_model_name = get_served_model_name(source_model, getattr(args, "served_model_name", None))
         return SnapshotManifest(
@@ -847,7 +847,7 @@ class LocalSnapshotTools:
         torch_version, cuda_runtime = self._torch_identity()
         host_id = Path("/etc/machine-id").read_text().strip()
         return SnapshotRuntimeIdentity(
-            aphrodite_version=importlib.metadata.version("aphrodite-engine"),
+            sonar_version=importlib.metadata.version("sonar"),
             python_version=platform.python_version(),
             torch_version=torch_version,
             cuda_runtime=cuda_runtime,
@@ -941,7 +941,7 @@ class LocalSnapshotTools:
             command = self._process_command(root_pid)
             release_file = str(artifact / "release.json")
             if not any(
-                command[index : index + 2] == ("-m", "aphrodite.snapshot.server") for index in range(len(command) - 1)
+                command[index : index + 2] == ("-m", "sonar.snapshot.server") for index in range(len(command) - 1)
             ) or not any(
                 command[index : index + 2] == ("--release-file", release_file) for index in range(len(command) - 1)
             ):

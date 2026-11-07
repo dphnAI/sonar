@@ -11,23 +11,23 @@ from dataclasses import replace
 
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.mamba.checkpoint import (
+from sonar.config import SonarConfig
+from sonar.logger import init_logger
+from sonar.model_executor.layers.mamba.checkpoint import (
     MambaPrefillCheckpointMetadata,
 )
-from aphrodite.third_party.flash_linear_attention.ops.utils import FLA_CHUNK_SIZE
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.math_utils import next_power_of_2
-from aphrodite.utils.torch_utils import PIN_MEMORY
-from aphrodite.v1.attention.backend import max_decode_query_len
-from aphrodite.v1.attention.backends.gdn_attn import (
+from sonar.third_party.flash_linear_attention.ops.utils import FLA_CHUNK_SIZE
+from sonar.triton_utils import tl, triton
+from sonar.utils.math_utils import next_power_of_2
+from sonar.utils.torch_utils import PIN_MEMORY
+from sonar.v1.attention.backend import max_decode_query_len
+from sonar.v1.attention.backends.gdn_attn import (
     GDNAttentionBackend,
     GDNAttentionMetadata,
     GDNAttentionMetadataBuilder,
 )
-from aphrodite.v1.attention.backends.utils import CommonAttentionMetadata
-from aphrodite.v1.kv_cache_interface import KVCacheSpec
+from sonar.v1.attention.backends.utils import CommonAttentionMetadata
+from sonar.v1.kv_cache_interface import KVCacheSpec
 
 logger = init_logger(__name__)
 
@@ -118,8 +118,8 @@ def build_conv1d_chunk_schedule(
     }
 
 
-def _adaptive_verification_enabled(aphrodite_config: AphroditeConfig) -> bool:
-    speculative_config = aphrodite_config.speculative_config
+def _adaptive_verification_enabled(sonar_config: SonarConfig) -> bool:
+    speculative_config = sonar_config.speculative_config
     return speculative_config is not None and bool(getattr(speculative_config, "enable_adaptive_verification", False))
 
 
@@ -127,12 +127,12 @@ class KimiK3ROCmKDAMetadataBuilder(GDNAttentionMetadataBuilder):
     @classmethod
     def get_varlen_cudagraph_max_query_len(
         cls: type["KimiK3ROCmKDAMetadataBuilder"],
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         kv_cache_spec: KVCacheSpec,
     ) -> int | None:
-        if not _adaptive_verification_enabled(aphrodite_config):
+        if not _adaptive_verification_enabled(sonar_config):
             return None
-        return max_decode_query_len(aphrodite_config)
+        return max_decode_query_len(sonar_config)
 
     def build(  # type: ignore[override]
         self,
@@ -161,9 +161,7 @@ class KimiK3ROCmKDAMetadataBuilder(GDNAttentionMetadataBuilder):
                 PREFILL_CONV_BLOCK_M,
                 common_attn_metadata.query_start_loc.device,
             )
-        if attn_metadata.uniform_spec_sequence_length is not None and _adaptive_verification_enabled(
-            self.aphrodite_config
-        ):
+        if attn_metadata.uniform_spec_sequence_length is not None and _adaptive_verification_enabled(self.sonar_config):
             attn_metadata = replace(attn_metadata, uniform_spec_sequence_length=None)
         if attn_metadata.checkpoint is None:
             return attn_metadata

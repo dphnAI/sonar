@@ -19,8 +19,8 @@ from __future__ import annotations
 
 import mlx.core as mx
 
-from aphrodite.logger import init_logger
-from aphrodite.metal.metal_kernel_backend.turboquant import (
+from sonar.logger import init_logger
+from sonar.metal.metal_kernel_backend.turboquant import (
     BLOCK_SIZE,
     FWHT_SUPPORTED_HEAD_DIMS,
     QUANT_PARAMS,
@@ -186,7 +186,7 @@ class MetalPagedKVCache:
 
             # Log TurboQuant KV cache memory usage with comparison.
             # Single source of truth: _turboquant_page_size_bytes in cache_policy.
-            from aphrodite.metal.v1.cache_policy import _turboquant_page_size_bytes
+            from sonar.metal.v1.cache_policy import _turboquant_page_size_bytes
 
             assert k_quant is not None and v_quant is not None
             per_block_bytes = _turboquant_page_size_bytes(

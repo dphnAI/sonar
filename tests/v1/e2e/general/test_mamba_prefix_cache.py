@@ -11,31 +11,31 @@ import datasets
 import pytest
 import torch
 
-import aphrodite.envs as envs
-from aphrodite import LLM, SamplingParams, TokensPrompt
-from aphrodite.config import CacheConfig
-from aphrodite.distributed import cleanup_dist_env_and_memory
-from aphrodite.model_executor.layers.mamba.mamba_utils import (
+import sonar.envs as envs
+from sonar import LLM, SamplingParams, TokensPrompt
+from sonar.config import CacheConfig
+from sonar.distributed import cleanup_dist_env_and_memory
+from sonar.model_executor.layers.mamba.mamba_utils import (
     MambaStateCopyFunc,
     is_conv_state_dim_first,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.utils.gpu_sync_debug import gpu_sync_allowed
-from aphrodite.utils.torch_utils import async_tensor_h2d
-from aphrodite.v1.attention.backends.utils import CommonAttentionMetadata
-from aphrodite.v1.core.kv_cache_manager import KVCacheBlocks, KVCacheManager
-from aphrodite.v1.core.sched.output import SchedulerOutput
-from aphrodite.v1.engine.core_client import InprocClient
-from aphrodite.v1.kv_cache_interface import KVCacheConfig
-from aphrodite.v1.outputs import SamplerOutput
-from aphrodite.v1.request import Request
-from aphrodite.v1.sample.metadata import SamplingMetadata
-from aphrodite.v1.spec_decode.metadata import SpecDecodeMetadata
-from aphrodite.v1.worker import mamba_utils
-from aphrodite.v1.worker.gpu_input_batch import CachedRequestState, InputBatch
-from aphrodite.v1.worker.gpu_model_runner import GPUModelRunner
-from aphrodite.v1.worker.mamba_utils import get_mamba_groups
+from sonar.platforms import current_platform
+from sonar.sequence import IntermediateTensors
+from sonar.utils.gpu_sync_debug import gpu_sync_allowed
+from sonar.utils.torch_utils import async_tensor_h2d
+from sonar.v1.attention.backends.utils import CommonAttentionMetadata
+from sonar.v1.core.kv_cache_manager import KVCacheBlocks, KVCacheManager
+from sonar.v1.core.sched.output import SchedulerOutput
+from sonar.v1.engine.core_client import InprocClient
+from sonar.v1.kv_cache_interface import KVCacheConfig
+from sonar.v1.outputs import SamplerOutput
+from sonar.v1.request import Request
+from sonar.v1.sample.metadata import SamplingMetadata
+from sonar.v1.spec_decode.metadata import SpecDecodeMetadata
+from sonar.v1.worker import mamba_utils
+from sonar.v1.worker.gpu_input_batch import CachedRequestState, InputBatch
+from sonar.v1.worker.gpu_model_runner import GPUModelRunner
+from sonar.v1.worker.mamba_utils import get_mamba_groups
 from tests.utils import create_new_process_for_each_test
 
 
@@ -390,7 +390,7 @@ def run_ref_mamba_state_in_subprocess() -> None:
 
 def _run_ref_mamba_state_worker():
     try:
-        os.environ["APHRODITE_ENABLE_V1_MULTIPROCESSING"] = "0"
+        os.environ["SONAR_ENABLE_V1_MULTIPROCESSING"] = "0"
         num_generated_tokens = 8000
         num_prompt_tokens = 500
         sampling_params = SamplingParams(temperature=0.0, max_tokens=num_generated_tokens)
@@ -465,7 +465,7 @@ class TestConfig:
 
 
 def apply_patch(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
+    monkeypatch.setenv("SONAR_ENABLE_V1_MULTIPROCESSING", "0")
 
     fake_sample_fn = get_fake_sample_fn()
     monkeypatch.setattr(GPUModelRunner, "_sample", fake_sample_fn)
@@ -892,7 +892,7 @@ def get_internal_checkpoint_step_configs() -> dict[str, TestConfig]:
 def _run_mamba_prefix_cache_mrv1(monkeypatch: pytest.MonkeyPatch, async_scheduling: bool):
     # This test patches the V1 model runner, so pin V1 explicitly: MoE/hybrid
     # models like Qwen3-Next now default to the V2 runner.
-    monkeypatch.setenv("APHRODITE_USE_V2_MODEL_RUNNER", "0")
+    monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", "0")
     envs.disable_envs_cache()
     global async_scheduling_mode
     async_scheduling_mode = async_scheduling
@@ -969,15 +969,15 @@ def _run_mamba_prefix_cache_mrv2(
     internal_checkpoints = additional_config["gdn_prefill_backend"] == "flashinfer"
     global async_scheduling_mode
     async_scheduling_mode = async_scheduling
-    monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
-    monkeypatch.setenv("APHRODITE_USE_V2_MODEL_RUNNER", "1")
+    monkeypatch.setenv("SONAR_ENABLE_V1_MULTIPROCESSING", "0")
+    monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", "1")
     envs.disable_envs_cache()
 
-    from aphrodite.v1.worker.gpu.model_runner import GPUModelRunner as MRV2GPUModelRunner
-    from aphrodite.v1.worker.gpu.model_states.mamba_hybrid import (
+    from sonar.v1.worker.gpu.model_runner import GPUModelRunner as MRV2GPUModelRunner
+    from sonar.v1.worker.gpu.model_states.mamba_hybrid import (
         MambaHybridModelState,
     )
-    from aphrodite.v1.worker.gpu.sample.output import SamplerOutput as MRV2SamplerOutput
+    from sonar.v1.worker.gpu.sample.output import SamplerOutput as MRV2SamplerOutput
 
     events: list[int] = []
     original_execute_model = MRV2GPUModelRunner.execute_model
@@ -990,7 +990,7 @@ def _run_mamba_prefix_cache_mrv2(
 
     def temporal_states(model_state, block_tables, kv_cache_config):
         # Qwen3-Next keeps the temporal (ssm) state as the last Mamba cache.
-        forward_context = model_state.aphrodite_config.compilation_config.static_forward_context
+        forward_context = model_state.sonar_config.compilation_config.static_forward_context
         mamba_groups = get_mamba_groups(kv_cache_config)
         for group_ids in mamba_groups.values():
             for group_id in group_ids:
@@ -1092,7 +1092,7 @@ def _run_mamba_prefix_cache_mrv2(
     def block_states(runner: MRV2GPUModelRunner, col: int) -> list[list[torch.Tensor]]:
         # Each Mamba layer's (conv, temporal) states in block column col.
         kv_cache_config = captured["kv_cache_config"]
-        forward_context = runner.aphrodite_config.compilation_config.static_forward_context
+        forward_context = runner.sonar_config.compilation_config.static_forward_context
         return [
             [
                 temporal_block(state, captured["block_tables"][group_id], col).clone()

@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Aphrodite implementation for BailingMoeV3ForCausalLM.
+"""Sonar implementation for BailingMoeV3ForCausalLM.
 
 The HuggingFace reference model mixes MLA full-attention layers with Kimi
 Delta Attention linear layers and Bailing MoE blocks.  This file keeps the V3
 module/weight names aligned with the reference implementation while reusing
-Aphrodite's parallel linear layers, MLA kernel, KDA kernel and fused MoE loader.
+Sonar's parallel linear layers, MLA kernel, KDA kernel and fused MoE loader.
 """
 
 import copy
@@ -19,75 +19,75 @@ import torch.nn as nn
 from einops import rearrange
 from transformers.configuration_utils import PreTrainedConfig
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import (
     CacheConfig,
     ModelConfig,
-    get_current_aphrodite_config,
-    get_current_aphrodite_config_or_none,
+    SonarConfig,
+    get_current_sonar_config,
+    get_current_sonar_config_or_none,
 )
-from aphrodite.distributed import (
+from sonar.distributed import (
     get_pp_group,
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
 )
-from aphrodite.forward_context import ForwardContext, get_forward_context
-from aphrodite.model_executor.custom_op import PluggableLayer
-from aphrodite.model_executor.layers.activation import SiluAndMul, SwigluStepAndMul
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.forward_context import ForwardContext, get_forward_context
+from sonar.model_executor.custom_op import PluggableLayer
+from sonar.model_executor.layers.activation import SiluAndMul, SwigluStepAndMul
+from sonar.model_executor.layers.fused_moe import (
     FusedMoEFactory,
     GateLinear,
     fused_moe_make_expert_params_mapping,
 )
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     MergedColumnParallelLinear,
     ReplicatedLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.mamba.abstract import MambaBase
-from aphrodite.model_executor.layers.mamba.mamba_utils import (
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.mamba.abstract import MambaBase
+from sonar.model_executor.layers.mamba.mamba_utils import (
     MambaStateCopyFuncCalculator,
     MambaStateDtypeCalculator,
     MambaStateShapeCalculator,
     is_conv_state_dim_first,
 )
-from aphrodite.model_executor.layers.mamba.ops.causal_conv1d import (
+from sonar.model_executor.layers.mamba.ops.causal_conv1d import (
     causal_conv1d_fn,
     causal_conv1d_update,
 )
-from aphrodite.model_executor.layers.mla import (
+from sonar.model_executor.layers.mla import (
     MLAModules,
     MultiHeadLatentAttentionWrapper,
 )
-from aphrodite.model_executor.layers.quantization.base_config import QuantizationConfig
-from aphrodite.model_executor.layers.quantization.fp8 import Fp8Config
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import is_layer_skipped
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.quantization.base_config import QuantizationConfig
+from sonar.model_executor.layers.quantization.fp8 import Fp8Config
+from sonar.model_executor.layers.quantization.utils.quant_utils import is_layer_skipped
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.model_loader.weight_utils import (
+from sonar.model_executor.model_loader.weight_utils import (
     default_weight_loader,
     maybe_remap_kv_scale_name,
     sharded_weight_loader,
 )
-from aphrodite.model_executor.utils import set_weight_attrs
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.third_party.flash_linear_attention.ops.kda import (
+from sonar.model_executor.utils import set_weight_attrs
+from sonar.sequence import IntermediateTensors
+from sonar.third_party.flash_linear_attention.ops.kda import (
     FusedRMSNormGated,
     chunk_kda,
     fused_kda_gate,
     fused_recurrent_kda,
     fused_recurrent_kda_fwd,
 )
-from aphrodite.utils.torch_utils import direct_register_custom_op
-from aphrodite.v1.attention.backends.gdn_attn import GDNAttentionMetadata
-from aphrodite.v1.attention.backends.registry import MambaAttentionBackendEnum
+from sonar.utils.torch_utils import direct_register_custom_op
+from sonar.v1.attention.backends.gdn_attn import GDNAttentionMetadata
+from sonar.v1.attention.backends.registry import MambaAttentionBackendEnum
 
 from .interfaces import HasInnerState, IsHybrid, SupportsPP
 from .utils import (
@@ -135,12 +135,12 @@ def _is_kda_layer(layer_idx: int, layer_group_size: int, num_hidden_layers: int)
 
 
 def _get_kda_state_shape_for_config(
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
 ) -> tuple[tuple[int, int], tuple[int, int, int]]:
-    config = aphrodite_config.model_config.hf_config
-    num_spec = aphrodite_config.speculative_config.num_speculative_tokens if aphrodite_config.speculative_config else 0
+    config = sonar_config.model_config.hf_config
+    num_spec = sonar_config.speculative_config.num_speculative_tokens if sonar_config.speculative_config else 0
     shapes = MambaStateShapeCalculator.kda_state_shape(
-        aphrodite_config.parallel_config.tensor_parallel_size,
+        sonar_config.parallel_config.tensor_parallel_size,
         config.num_attention_heads,
         config.head_dim,
         conv_kernel_size=config.short_conv_kernel_size,
@@ -225,8 +225,8 @@ def _configure_ling_fp8_quant_config(
     quant_config.ignored_layers_match_mode = "suffix"
     hf_quant_config = getattr(config, "quantization_config", None)
     if hf_quant_config is None:
-        aphrodite_config = get_current_aphrodite_config_or_none()
-        model_config = getattr(aphrodite_config, "model_config", None)
+        sonar_config = get_current_sonar_config_or_none()
+        model_config = getattr(sonar_config, "model_config", None)
         hf_quant_config = getattr(getattr(model_config, "hf_config", None), "quantization_config", None)
     if not isinstance(hf_quant_config, dict):
         return
@@ -268,7 +268,7 @@ def _is_fp8_module_excluded(
     quant_config: QuantizationConfig | None,
     prefix: str,
 ) -> bool:
-    """Match Ling's abbreviated FP8 exclusions against mapped Aphrodite prefixes."""
+    """Match Ling's abbreviated FP8 exclusions against mapped Sonar prefixes."""
     if not _is_block_fp8_config(quant_config):
         return False
 
@@ -732,11 +732,11 @@ class BailingMoeV3KimiDeltaAttention(PluggableLayer, MambaBase):
             prefix=f"{prefix}.o_proj",
         )
 
-        compilation_config = get_current_aphrodite_config().compilation_config
+        compilation_config = get_current_sonar_config().compilation_config
         if prefix in compilation_config.static_forward_context:
             raise ValueError(f"Duplicate layer name: {prefix}")
         compilation_config.static_forward_context[prefix] = self
-        splitting_op = "aphrodite::bailing_v3_kda_attention"
+        splitting_op = "sonar::bailing_v3_kda_attention"
         if compilation_config.splitting_ops is not None and splitting_op not in compilation_config.splitting_ops:
             compilation_config.splitting_ops.append(splitting_op)
 
@@ -782,7 +782,7 @@ class BailingMoeV3KimiDeltaAttention(PluggableLayer, MambaBase):
             dtype=hidden_states.dtype,
             device=hidden_states.device,
         )
-        torch.ops.aphrodite.bailing_v3_kda_attention(q, k, v, g1, beta, core_attn_out, self.prefix)
+        torch.ops.sonar.bailing_v3_kda_attention(q, k, v, g1, beta, core_attn_out, self.prefix)
         core_attn_out = self.o_norm(core_attn_out, g2)
         core_attn_out = rearrange(core_attn_out, "1 n h d -> n (h d)")
         output[:] = self.o_proj(core_attn_out)[0]
@@ -1229,14 +1229,14 @@ class BailingMoeV3DecoderLayer(nn.Module):
     }
 )
 class BailingMoeV3Model(nn.Module):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        model_config = aphrodite_config.model_config
-        quant_config = aphrodite_config.quant_config
-        cache_config = aphrodite_config.cache_config
+        config = sonar_config.model_config.hf_config
+        model_config = sonar_config.model_config
+        quant_config = sonar_config.quant_config
+        cache_config = sonar_config.cache_config
         num_speculative_tokens = (
-            aphrodite_config.speculative_config.num_speculative_tokens if aphrodite_config.speculative_config else 0
+            sonar_config.speculative_config.num_speculative_tokens if sonar_config.speculative_config else 0
         )
 
         self.config = config
@@ -1318,7 +1318,7 @@ class BailingMoeV3Model(nn.Module):
 
 
 class BailingMoeV3ForCausalLM(nn.Module, HasInnerState, IsHybrid, SupportsPP):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_substr={".attention.": ".self_attn."},
         orig_to_new_prefix={"attention.": "self_attn."},
     )
@@ -1329,14 +1329,14 @@ class BailingMoeV3ForCausalLM(nn.Module, HasInnerState, IsHybrid, SupportsPP):
         "qkvb_proj": ["q_proj", "k_proj", "v_proj", "b_proj"],
     }
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
         _configure_ling_fp8_quant_config(quant_config, config)
         self.config = config
         self.quant_config = quant_config
-        self.model = BailingMoeV3Model(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = BailingMoeV3Model(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
         if get_pp_group().is_last_rank:
             self.lm_head = ParallelLMHead(
                 config.vocab_size,
@@ -1375,15 +1375,15 @@ class BailingMoeV3ForCausalLM(nn.Module, HasInnerState, IsHybrid, SupportsPP):
 
     @classmethod
     def get_mamba_state_shape_from_config(
-        cls, aphrodite_config: AphroditeConfig
+        cls, sonar_config: SonarConfig
     ) -> tuple[tuple[int, int], tuple[int, int, int]]:
-        return _get_kda_state_shape_for_config(aphrodite_config)
+        return _get_kda_state_shape_for_config(sonar_config)
 
     @classmethod
-    def get_mamba_state_dtype_from_config(cls, aphrodite_config: AphroditeConfig) -> tuple[torch.dtype, torch.dtype]:
+    def get_mamba_state_dtype_from_config(cls, sonar_config: SonarConfig) -> tuple[torch.dtype, torch.dtype]:
         return MambaStateDtypeCalculator.kda_state_dtype(
-            aphrodite_config.model_config.dtype,
-            aphrodite_config.cache_config.mamba_cache_dtype,
+            sonar_config.model_config.dtype,
+            sonar_config.cache_config.mamba_cache_dtype,
         )
 
     @classmethod
@@ -1394,7 +1394,7 @@ class BailingMoeV3ForCausalLM(nn.Module, HasInnerState, IsHybrid, SupportsPP):
         return self.model.get_expert_mapping()
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
-        weights = self.hf_to_aphrodite_mapper.apply(weights)
+        weights = self.hf_to_sonar_mapper.apply(weights)
         weights = _maybe_remap_ling_mxfp4_weight_names(weights, self.quant_config)
         params_dict = dict(self.named_parameters(remove_duplicate=False))
         loaded_params: set[str] = set()

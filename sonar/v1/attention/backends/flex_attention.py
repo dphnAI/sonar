@@ -22,18 +22,18 @@ from torch.nn.attention.flex_attention import (
     or_masks,
 )
 
-import aphrodite.envs as envs
-from aphrodite.config import AphroditeConfig, get_layers_from_aphrodite_config
-from aphrodite.config.cache import CacheDType
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.platforms import current_platform
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.utils.torch_utils import (
+import sonar.envs as envs
+from sonar.config import SonarConfig, get_layers_from_sonar_config
+from sonar.config.cache import CacheDType
+from sonar.logger import init_logger
+from sonar.model_executor.layers.attention import Attention
+from sonar.platforms import current_platform
+from sonar.utils.math_utils import cdiv
+from sonar.utils.torch_utils import (
     async_tensor_h2d,
     is_torch_equal_or_newer,
 )
-from aphrodite.v1.attention.backend import (
+from sonar.v1.attention.backend import (
     AttentionBackend,
     AttentionCGSupport,
     AttentionImpl,
@@ -42,7 +42,7 @@ from aphrodite.v1.attention.backend import (
     CommonAttentionMetadata,
     MultipleOf,
 )
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.kv_cache_interface import (
     AttentionSpec,
     EncoderOnlyAttentionSpec,
     KVCacheLayout,
@@ -786,14 +786,14 @@ class FlexAttentionMetadataBuilder(AttentionMetadataBuilder[FlexAttentionMetadat
         self,
         kv_cache_spec: AttentionSpec,
         layer_names: list[str],
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
     ):
-        super().__init__(kv_cache_spec, layer_names, aphrodite_config, device)
+        super().__init__(kv_cache_spec, layer_names, sonar_config, device)
 
-        self.model_config = aphrodite_config.model_config
-        self.parallel_config = aphrodite_config.parallel_config
-        self.cache_config = aphrodite_config.cache_config
+        self.model_config = sonar_config.model_config
+        self.parallel_config = sonar_config.parallel_config
+        self.cache_config = sonar_config.cache_config
 
         self.num_heads_q = self.model_config.get_num_attention_heads(self.parallel_config)
         self.num_heads_kv = self.model_config.get_num_kv_heads(self.parallel_config)
@@ -805,7 +805,7 @@ class FlexAttentionMetadataBuilder(AttentionMetadataBuilder[FlexAttentionMetadat
         self.direct_build: bool = supports_small_blocks
 
         self.q_block_size, self.kv_block_size = self._get_block_sizes(
-            aphrodite_config.attention_config,
+            sonar_config.attention_config,
             supports_small_blocks,
             self.block_size,
             uses_paged_kv,
@@ -815,8 +815,8 @@ class FlexAttentionMetadataBuilder(AttentionMetadataBuilder[FlexAttentionMetadat
             self.direct_build = False
 
         self.max_model_len = self.model_config.max_model_len
-        max_num_seqs = aphrodite_config.scheduler_config.max_num_seqs
-        max_num_batched_tokens = aphrodite_config.scheduler_config.max_num_batched_tokens
+        max_num_seqs = sonar_config.scheduler_config.max_num_seqs
+        max_num_batched_tokens = sonar_config.scheduler_config.max_num_batched_tokens
         self.max_num_query_groups = cdiv(max_num_batched_tokens, self.q_block_size)
         max_num_pages_per_seq = cdiv(self.max_model_len, self.block_size)
         self.max_num_kv_indices = self.q_block_size * max_num_pages_per_seq
@@ -855,7 +855,7 @@ class FlexAttentionMetadataBuilder(AttentionMetadataBuilder[FlexAttentionMetadat
 
         self.custom_logical_mask_mod: _mask_mod_signature | None = None
         if self._uses_full_cudagraphs():
-            layers = get_layers_from_aphrodite_config(aphrodite_config, Attention, self.layer_names)
+            layers = get_layers_from_sonar_config(sonar_config, Attention, self.layer_names)
             self.custom_logical_mask_mod = self._maybe_get_custom_mask_mod(layers)
 
     @staticmethod
@@ -913,7 +913,7 @@ class FlexAttentionMetadataBuilder(AttentionMetadataBuilder[FlexAttentionMetadat
         return next(iter(mask_mods), None)
 
     def _uses_full_cudagraphs(self) -> bool:
-        mode = self.aphrodite_config.compilation_config.cudagraph_mode
+        mode = self.sonar_config.compilation_config.cudagraph_mode
         return mode is not None and mode.has_full_cudagraphs()
 
     def build(
@@ -943,7 +943,7 @@ class FlexAttentionMetadataBuilder(AttentionMetadataBuilder[FlexAttentionMetadat
 
         inverse_block_table = physical_to_logical_mapping(block_table_tensor, seq_lens, block_size, num_gpu_blocks)
         if self.persistent_physical_to_logical is None:
-            max_num_seqs = self.aphrodite_config.scheduler_config.max_num_seqs
+            max_num_seqs = self.sonar_config.scheduler_config.max_num_seqs
             self.persistent_physical_to_logical = torch.empty(
                 max_num_seqs,
                 num_gpu_blocks,
@@ -1099,8 +1099,8 @@ class FlexAttentionImpl(AttentionImpl):
         if is_quantized_kv_cache(self.kv_cache_dtype):
             raise NotImplementedError("FlexAttention does not support quantized kv-cache. Yet")
 
-        self.block_m = 16 if envs.APHRODITE_BATCH_INVARIANT else None
-        self.block_n = 16 if envs.APHRODITE_BATCH_INVARIANT else None
+        self.block_m = 16 if envs.SONAR_BATCH_INVARIANT else None
+        self.block_n = 16 if envs.SONAR_BATCH_INVARIANT else None
 
         if block_m is not None:
             self.block_m = block_m
@@ -1259,7 +1259,7 @@ class FlexAttentionImpl(AttentionImpl):
             kernel_options["BLOCK_M"] = self.block_m
         if self.block_n is not None:
             kernel_options["BLOCK_N"] = self.block_n
-        if envs.APHRODITE_BATCH_INVARIANT:
+        if envs.SONAR_BATCH_INVARIANT:
             kernel_options["IS_DIVISIBLE"] = False
         out = flex_attention_compiled(
             query,

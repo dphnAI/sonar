@@ -4,7 +4,7 @@
 
 This file owns the ROCm-specific fused-MoE custom-op path:
 - custom-op registration and fake-tensor support
-- enablement gating for ``APHRODITE_ROCM_USE_AITER_MOE`` and shared experts
+- enablement gating for ``SONAR_ROCM_USE_AITER_MOE`` and shared experts
 - BF16 accuracy for the fused MoE kernel on representative shapes
 - AITER MXFP4 MoE support per arch (incl. the MXFP4 experts check), and the
   gfx950-only W4A16 accuracy and determinism
@@ -29,9 +29,9 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from aphrodite.platforms import current_platform
-from aphrodite.platforms.rocm import on_cdna, on_gfx942, on_gfx950
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.platforms import current_platform
+from sonar.platforms.rocm import on_cdna, on_gfx942, on_gfx950
+from sonar.utils.torch_utils import set_random_seed
 from tests.kernels.moe.utils import _interleave_gate_up_rows
 from tests.kernels.utils import _assert_deterministic
 
@@ -42,7 +42,7 @@ pytestmark = pytest.mark.skipif(not current_platform.is_rocm(), reason="ROCm-spe
 
 
 def _reload_envs():
-    import aphrodite.envs as envs
+    import sonar.envs as envs
 
     return importlib.reload(envs)
 
@@ -52,13 +52,13 @@ def _restore_rocm_env_state():
     """Restore global env + AITER flag state after every test."""
     yield
     _reload_envs()
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     rocm_aiter_ops.refresh_env_variables()
 
 
 def _assert_aiter_supported() -> None:
-    from aphrodite._aiter_ops import is_aiter_found_and_supported
+    from sonar._aiter_ops import is_aiter_found_and_supported
 
     assert is_aiter_found_and_supported(), "aiter is required on supported ROCm hardware for this test"
 
@@ -256,7 +256,7 @@ def _shuffle_moe_weights(
     w2: torch.Tensor,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Shuffle MoE weights into the AITER CK layout used in production."""
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     w1_shuffled, w2_shuffled = rocm_aiter_ops.shuffle_weights(w1, w2)
     w1_shuffled.is_shuffled = True
@@ -315,7 +315,7 @@ def _make_aiter_mxfp4_moe_case(
         upcast_from_mxfp,
     )
 
-    from aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 import (
+    from sonar.model_executor.layers.fused_moe.oracle.mxfp4 import (
         Mxfp4MoeBackend,
         convert_gpt_oss_weight_to_mxfp4_moe_kernel_format,
         make_mxfp4_moe_quant_config,
@@ -404,7 +404,7 @@ def _run_fused_moe(
     quant_method: int,
 ) -> torch.Tensor:
     w1_shuffled, w2_shuffled = _shuffle_moe_weights(w1, w2)
-    return torch.ops.aphrodite.rocm_aiter_fused_moe(
+    return torch.ops.sonar.rocm_aiter_fused_moe(
         hidden_states,
         w1_shuffled,
         w2_shuffled,
@@ -423,27 +423,27 @@ def _run_fused_moe(
 def test_aiter_fused_moe_custom_op_registered():
     """The main fused-MoE custom op should stay registered for runtime use."""
     _assert_aiter_supported()
-    import aphrodite._aiter_ops as aiter_ops  # noqa: F401
+    import sonar._aiter_ops as aiter_ops  # noqa: F401
 
-    assert hasattr(torch.ops.aphrodite, "rocm_aiter_fused_moe")
-    assert callable(torch.ops.aphrodite.rocm_aiter_fused_moe)
+    assert hasattr(torch.ops.sonar, "rocm_aiter_fused_moe")
+    assert callable(torch.ops.sonar.rocm_aiter_fused_moe)
 
 
 def test_aiter_asm_moe_tkw1_custom_op_registered():
     """The tkw1 custom op should stay registered for FP8 apply-router-weight
     paths."""
     _assert_aiter_supported()
-    import aphrodite._aiter_ops as aiter_ops  # noqa: F401
+    import sonar._aiter_ops as aiter_ops  # noqa: F401
 
-    assert hasattr(torch.ops.aphrodite, "rocm_aiter_asm_moe_tkw1")
-    assert callable(torch.ops.aphrodite.rocm_aiter_asm_moe_tkw1)
+    assert hasattr(torch.ops.sonar, "rocm_aiter_asm_moe_tkw1")
+    assert callable(torch.ops.sonar.rocm_aiter_asm_moe_tkw1)
 
 
 def test_aiter_fused_moe_fake_tensor_support():
     """The fused-MoE op should preserve fake-tensor compatibility for
     torch.compile-style tracing."""
     _assert_aiter_supported()
-    import aphrodite._aiter_ops  # noqa: F401
+    import sonar._aiter_ops  # noqa: F401
 
     num_tokens = 16
     hidden_dim = 1024
@@ -471,7 +471,7 @@ def test_aiter_fused_moe_fake_tensor_support():
     topk_ids = _make_topk_ids(num_tokens, num_experts, topk, device="cuda")
 
     torch.library.opcheck(
-        torch.ops.aphrodite.rocm_aiter_fused_moe,
+        torch.ops.sonar.rocm_aiter_fused_moe,
         (hidden_states, w1, w2, topk_weights, topk_ids),
         kwargs={
             "expert_mask": None,
@@ -503,13 +503,13 @@ def test_aiter_moe_enablement_follows_env(
 ):
     """The fused-MoE gate should depend only on the main AITER toggle and the
     MoE-specific toggle."""
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     _assert_aiter_supported()
 
     with monkeypatch.context() as mp:
-        mp.setenv("APHRODITE_ROCM_USE_AITER", "1" if use_aiter else "0")
-        mp.setenv("APHRODITE_ROCM_USE_AITER_MOE", "1" if use_moe else "0")
+        mp.setenv("SONAR_ROCM_USE_AITER", "1" if use_aiter else "0")
+        mp.setenv("SONAR_ROCM_USE_AITER_MOE", "1" if use_moe else "0")
         _reload_envs()
         rocm_aiter_ops.refresh_env_variables()
 
@@ -534,15 +534,15 @@ def test_aiter_moe_shared_experts_enablement_follows_env(
 ):
     """Shared-expert fusion should only be enabled when the fused-MoE path is
     enabled too."""
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     _assert_aiter_supported()
 
     with monkeypatch.context() as mp:
-        mp.setenv("APHRODITE_ROCM_USE_AITER", "1" if use_aiter else "0")
-        mp.setenv("APHRODITE_ROCM_USE_AITER_MOE", "1" if use_moe else "0")
+        mp.setenv("SONAR_ROCM_USE_AITER", "1" if use_aiter else "0")
+        mp.setenv("SONAR_ROCM_USE_AITER_MOE", "1" if use_moe else "0")
         mp.setenv(
-            "APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS",
+            "SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS",
             "1" if use_shared else "0",
         )
         _reload_envs()
@@ -573,20 +573,20 @@ def test_aiter_moe_situv2_activation_syncs_aiter_env(
     """Each SiTUv2 activation choice sets exactly its AITER dispatch env."""
     import os
 
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     _assert_aiter_supported()
 
     with monkeypatch.context() as mp:
-        # Stale AITER overrides must be replaced by the Aphrodite selection.
+        # Stale AITER overrides must be replaced by the Sonar selection.
         mp.setenv("AITER_SITUV2_A8W4", "1")
         mp.setenv("AITER_SITUV2_A4W4", "1")
-        mp.setenv("APHRODITE_ROCM_USE_AITER", "1")
-        mp.setenv("APHRODITE_ROCM_USE_AITER_MOE", "1")
+        mp.setenv("SONAR_ROCM_USE_AITER", "1")
+        mp.setenv("SONAR_ROCM_USE_AITER_MOE", "1")
         if value is None:
-            mp.delenv("APHRODITE_ROCM_USE_AITER_MOE_SITUV2", raising=False)
+            mp.delenv("SONAR_ROCM_USE_AITER_MOE_SITUV2", raising=False)
         else:
-            mp.setenv("APHRODITE_ROCM_USE_AITER_MOE_SITUV2", value)
+            mp.setenv("SONAR_ROCM_USE_AITER_MOE_SITUV2", value)
         _reload_envs()
         rocm_aiter_ops.refresh_env_variables()
 
@@ -601,12 +601,12 @@ def test_aiter_moe_situv2_rejects_unknown_activation(
     monkeypatch: pytest.MonkeyPatch,
 ):
     with monkeypatch.context() as mp:
-        mp.setenv("APHRODITE_ROCM_USE_AITER_MOE_SITUV2", "a8w8")
+        mp.setenv("SONAR_ROCM_USE_AITER_MOE_SITUV2", "a8w8")
         _reload_envs()
-        import aphrodite.envs as envs
+        import sonar.envs as envs
 
-        with pytest.raises(ValueError, match="APHRODITE_ROCM_USE_AITER_MOE_SITUV2"):
-            _ = envs.APHRODITE_ROCM_USE_AITER_MOE_SITUV2
+        with pytest.raises(ValueError, match="SONAR_ROCM_USE_AITER_MOE_SITUV2"):
+            _ = envs.SONAR_ROCM_USE_AITER_MOE_SITUV2
 
 
 @pytest.mark.parametrize("moe_padding", [True, False])
@@ -616,9 +616,9 @@ def test_aiter_moe_padding_env_var(
 ):
     """The ROCm MoE padding env var should keep its exact parse contract."""
     with monkeypatch.context() as mp:
-        mp.setenv("APHRODITE_ROCM_MOE_PADDING", "1" if moe_padding else "0")
+        mp.setenv("SONAR_ROCM_MOE_PADDING", "1" if moe_padding else "0")
         envs = _reload_envs()
-        assert envs.APHRODITE_ROCM_MOE_PADDING is moe_padding
+        assert envs.SONAR_ROCM_MOE_PADDING is moe_padding
 
 
 @pytest.mark.parametrize(
@@ -637,8 +637,8 @@ def test_aiter_moe_padding_env_var(
     ],
 )
 def test_aiter_moe_pads(activation, use_mxfp4_w4a4, tp_size, pads: tuple[int, int], expected):
-    from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-    from aphrodite.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
+    from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+    from sonar.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
         aiter_moe_pads,
     )
 
@@ -666,33 +666,33 @@ def test_aiter_moe_a4w4_dsv4_is_opt_in(
     monkeypatch: pytest.MonkeyPatch,
 ):
     """vllm-project/vllm#58819's a4w4 MoE activation path must stay a plain
-    explicit opt-in (APHRODITE_ROCM_USE_AITER_MOE_A4W4_DSV4=1), with no
+    explicit opt-in (SONAR_ROCM_USE_AITER_MOE_A4W4_DSV4=1), with no
     default-on behavior, but is still only permitted on the model types
     this flag has been validated for."""
     import types
 
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
     from tests.kernels.moe.utils import make_dummy_moe_config
 
     _assert_aiter_supported()
 
-    fake_aphrodite_config = types.SimpleNamespace(
+    fake_sonar_config = types.SimpleNamespace(
         model_config=types.SimpleNamespace(hf_config=types.SimpleNamespace(model_type=model_type))
     )
 
     with monkeypatch.context() as mp:
-        mp.setenv("APHRODITE_ROCM_USE_AITER", "1")
-        mp.setenv("APHRODITE_ROCM_USE_AITER_MOE", "1")
+        mp.setenv("SONAR_ROCM_USE_AITER", "1")
+        mp.setenv("SONAR_ROCM_USE_AITER_MOE", "1")
         if env_value is None:
-            mp.delenv("APHRODITE_ROCM_USE_AITER_MOE_A4W4_DSV4", raising=False)
+            mp.delenv("SONAR_ROCM_USE_AITER_MOE_A4W4_DSV4", raising=False)
         else:
-            mp.setenv("APHRODITE_ROCM_USE_AITER_MOE_A4W4_DSV4", env_value)
+            mp.setenv("SONAR_ROCM_USE_AITER_MOE_A4W4_DSV4", env_value)
         _reload_envs()
         rocm_aiter_ops.refresh_env_variables()
 
         with mock.patch(
-            "aphrodite.config.get_current_aphrodite_config_or_none",
-            return_value=fake_aphrodite_config,
+            "sonar.config.get_current_sonar_config_or_none",
+            return_value=fake_sonar_config,
         ):
             moe_config = make_dummy_moe_config(
                 num_experts=4,
@@ -718,28 +718,28 @@ def test_aiter_moe_a4w4_dsv4_rejects_unvalidated_model_type(
     V4.1 itself."""
     import types
 
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
     from tests.kernels.moe.utils import make_dummy_moe_config
 
     _assert_aiter_supported()
 
-    fake_aphrodite_config = types.SimpleNamespace(
+    fake_sonar_config = types.SimpleNamespace(
         model_config=types.SimpleNamespace(hf_config=types.SimpleNamespace(model_type=model_type))
     )
 
     with monkeypatch.context() as mp:
-        mp.setenv("APHRODITE_ROCM_USE_AITER", "1")
-        mp.setenv("APHRODITE_ROCM_USE_AITER_MOE", "1")
-        mp.setenv("APHRODITE_ROCM_USE_AITER_MOE_A4W4_DSV4", "1")
+        mp.setenv("SONAR_ROCM_USE_AITER", "1")
+        mp.setenv("SONAR_ROCM_USE_AITER_MOE", "1")
+        mp.setenv("SONAR_ROCM_USE_AITER_MOE_A4W4_DSV4", "1")
         _reload_envs()
         rocm_aiter_ops.refresh_env_variables()
 
         with (
             mock.patch(
-                "aphrodite.config.get_current_aphrodite_config_or_none",
-                return_value=fake_aphrodite_config,
+                "sonar.config.get_current_sonar_config_or_none",
+                return_value=fake_sonar_config,
             ),
-            pytest.raises(ValueError, match="APHRODITE_ROCM_USE_AITER_MOE_A4W4_DSV4"),
+            pytest.raises(ValueError, match="SONAR_ROCM_USE_AITER_MOE_A4W4_DSV4"),
         ):
             make_dummy_moe_config(
                 num_experts=4,
@@ -758,14 +758,14 @@ def test_aiter_moe_dispatch_policy_forwarded_to_fused_moe(
     dispatch_policy: int,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    """APHRODITE_ROCM_AITER_MOE_DISPATCH_POLICY should reach rocm_aiter_ops.fused_moe
+    """SONAR_ROCM_AITER_MOE_DISPATCH_POLICY should reach rocm_aiter_ops.fused_moe
     unchanged, the same forwarding AiterExperts.apply does via
     rocm_aiter_fused_experts, for every documented policy value (0=auto,
     1=always single-pass, 2=always multi-pass). See vllm-project/vllm#54966.
     """
-    from aphrodite._aiter_ops import rocm_aiter_ops
-    from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-    from aphrodite.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
+    from sonar._aiter_ops import rocm_aiter_ops
+    from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+    from sonar.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
         rocm_aiter_fused_experts,
     )
     from tests.kernels.moe.utils import make_dummy_moe_config
@@ -789,7 +789,7 @@ def test_aiter_moe_dispatch_policy_forwarded_to_fused_moe(
     )
 
     with monkeypatch.context() as mp:
-        mp.setenv("APHRODITE_ROCM_AITER_MOE_DISPATCH_POLICY", str(dispatch_policy))
+        mp.setenv("SONAR_ROCM_AITER_MOE_DISPATCH_POLICY", str(dispatch_policy))
         _reload_envs()
         rocm_aiter_ops.refresh_env_variables()
 
@@ -810,7 +810,7 @@ def test_aiter_moe_dispatch_policy_forwarded_to_fused_moe(
             )
 
         assert fused_moe_mock.call_args.kwargs["moe_sorting_dispatch_policy"] == dispatch_policy, (
-            "APHRODITE_ROCM_AITER_MOE_DISPATCH_POLICY was not forwarded to rocm_aiter_ops.fused_moe."
+            "SONAR_ROCM_AITER_MOE_DISPATCH_POLICY was not forwarded to rocm_aiter_ops.fused_moe."
         )
 
 
@@ -819,7 +819,7 @@ def test_aiter_moe_dispatch_policy_forwarded_to_fused_moe(
 
 def test_quant_method_enum_values():
     """The AITER quant-method bridge enum should keep its wire values."""
-    from aphrodite.model_executor.layers.fused_moe.experts.rocm_aiter_moe import QuantMethod
+    from sonar.model_executor.layers.fused_moe.experts.rocm_aiter_moe import QuantMethod
 
     assert QuantMethod.NO == 0
     assert QuantMethod.PER_TENSOR == 1
@@ -831,7 +831,7 @@ def test_quant_method_enum_values():
 
 def test_activation_method_enum_values():
     """The AITER activation-method bridge enum should keep its wire values."""
-    from aphrodite.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
         ActivationMethod,
     )
 
@@ -844,10 +844,10 @@ def test_activation_method_enum_values():
 
 def test_aiter_mxfp4_quant_scheme_support_matches_gfx950():
     """AITER MXFP4 MoE support should stay gfx950-only."""
-    from aphrodite.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
         AiterMxfp4Experts,
     )
-    from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+    from sonar.model_executor.layers.quantization.utils.quant_utils import (
         kMxfp4Static,
     )
 
@@ -855,7 +855,7 @@ def test_aiter_mxfp4_quant_scheme_support_matches_gfx950():
 
 
 def _fake_rocm_arch(monkeypatch: pytest.MonkeyPatch, arch: str) -> None:
-    from aphrodite.platforms import rocm
+    from sonar.platforms import rocm
 
     for name in ("gfx942", "gfx950", "gfx1250"):
         monkeypatch.setattr(rocm, f"on_{name}", lambda name=name: name == arch)
@@ -869,10 +869,10 @@ def test_aiter_mxfp4_experts_quant_scheme_support_by_arch(
     monkeypatch: pytest.MonkeyPatch, arch: str, int4: bool, mxfp4: bool
 ):
     """MXFP4 on gfx950 only; int4 on gfx942 only, for Kimi-K3's int4 requant."""
-    from aphrodite.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
         AiterMxfp4Experts,
     )
-    from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+    from sonar.model_executor.layers.quantization.utils.quant_utils import (
         kInt4Static32,
         kMxfp4Dynamic,
         kMxfp4Static,
@@ -907,10 +907,10 @@ def test_mxfp4_experts_check_accepts_aiter_deployments(
     AITER MXFP4 backend on the archs it is deployed on."""
     from dataclasses import replace
 
-    from aphrodite._aiter_ops import rocm_aiter_ops
-    from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-    from aphrodite.model_executor.layers.fused_moe.config import RoutingMethodType
-    from aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 import (
+    from sonar._aiter_ops import rocm_aiter_ops
+    from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+    from sonar.model_executor.layers.fused_moe.config import RoutingMethodType
+    from sonar.model_executor.layers.fused_moe.oracle.mxfp4 import (
         Mxfp4MoeBackend,
         _validate_mxfp4_experts_config,
         backend_to_kernel_cls,
@@ -939,8 +939,8 @@ def test_mxfp4_experts_check_accepts_aiter_deployments(
 def test_aiter_fused_moe_mi350_mxfp4_w4a16_accuracy():
     """The gfx950 AITER MXFP4 W4A16 MoE path should match the dequantized
     MXFP4 reference."""
-    from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-    from aphrodite.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
+    from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+    from sonar.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
         rocm_aiter_fused_experts,
     )
 
@@ -989,8 +989,8 @@ def test_aiter_fused_moe_mi350_mxfp4_w4a16_accuracy():
 def test_aiter_fused_moe_mi350_mxfp4_w4a16_determinism():
     """The gfx950 AITER MXFP4 W4A16 MoE path should stay bitwise
     deterministic."""
-    from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-    from aphrodite.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
+    from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+    from sonar.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
         rocm_aiter_fused_experts,
     )
 
@@ -1040,7 +1040,7 @@ def test_aiter_moe_group_fp8_quant_reconstructs_hidden_states(
     representative hidden-state sizes that the fused-MoE path actually cares
     about.
     """
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     _assert_aiter_supported()
     torch.set_default_device("cuda")
@@ -1082,7 +1082,7 @@ def test_aiter_fused_moe_bf16_accuracy(
 ):
     """The ROCm AITER fused-MoE BF16 path should match the float32 reference
     on representative shapes."""
-    from aphrodite.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
         ActivationMethod,
         QuantMethod,
     )
@@ -1127,7 +1127,7 @@ def test_aiter_fused_moe_bf16_accuracy(
 def test_aiter_fused_moe_gelu_accuracy():
     """The GELU activation variant should stay aligned with the float32
     reference."""
-    from aphrodite.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
         ActivationMethod,
         QuantMethod,
     )
@@ -1172,7 +1172,7 @@ def test_aiter_fused_moe_gelu_accuracy():
 def test_aiter_fused_moe_determinism():
     """The BF16 fused-MoE kernel should stay bitwise deterministic for the
     same inputs."""
-    from aphrodite.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
         ActivationMethod,
         QuantMethod,
     )
@@ -1218,7 +1218,7 @@ def test_aiter_fused_moe_end_to_end(
     topk: int,
 ):
     """The full router-logits to top-k to fused-MoE path should stay accurate."""
-    from aphrodite.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
         ActivationMethod,
         QuantMethod,
     )
@@ -1280,7 +1280,7 @@ def test_aiter_fused_moe_end_to_end(
     reason="gfx942/gfx950 ROCm only",
 )
 def test_aiter_fused_moe_mi3xx_bf16_accuracy():
-    from aphrodite.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
         ActivationMethod,
         QuantMethod,
     )
@@ -1327,8 +1327,8 @@ def test_aiter_fused_moe_mi3xx_bf16_accuracy():
 def test_aiter_fused_moe_mi3xx_fp8_accuracy():
     """The MI3xx FP8 per-tensor MoE path should stay within the measured FP8
     error budget."""
-    from aphrodite._aiter_ops import rocm_aiter_ops
-    from aphrodite.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
+    from sonar._aiter_ops import rocm_aiter_ops
+    from sonar.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
         ActivationMethod,
         QuantMethod,
     )
@@ -1371,7 +1371,7 @@ def test_aiter_fused_moe_mi3xx_fp8_accuracy():
     )
 
     w1_shuffled, w2_shuffled = _shuffle_moe_weights(w1_fp8, w2_fp8)
-    out = torch.ops.aphrodite.rocm_aiter_fused_moe(
+    out = torch.ops.sonar.rocm_aiter_fused_moe(
         hidden_states,
         w1_shuffled,
         w2_shuffled,
@@ -1428,22 +1428,22 @@ def _make_aiter_method(moe_config):
     """
     from unittest.mock import patch
 
-    from aphrodite.model_executor.layers.fused_moe.oracle.unquantized import (
+    from sonar.model_executor.layers.fused_moe.oracle.unquantized import (
         UnquantizedMoeBackend,
     )
-    from aphrodite.model_executor.layers.fused_moe.unquantized_fused_moe_method import (
+    from sonar.model_executor.layers.fused_moe.unquantized_fused_moe_method import (
         UnquantizedFusedMoEMethod,
     )
 
     with patch(
-        "aphrodite.model_executor.layers.fused_moe.unquantized_fused_moe_method.select_unquantized_moe_backend",
+        "sonar.model_executor.layers.fused_moe.unquantized_fused_moe_method.select_unquantized_moe_backend",
         return_value=(UnquantizedMoeBackend.AITER, None),
     ):
         return UnquantizedFusedMoEMethod(moe_config)
 
 
 def _roundup(method, moe_config, intermediate):
-    from aphrodite.model_executor.layers.fused_moe.config import FusedMoEParallelConfig
+    from sonar.model_executor.layers.fused_moe.config import FusedMoEParallelConfig
 
     return method.maybe_roundup_sizes(
         hidden_size=ALIGNMENT_HIDDEN,
@@ -1469,9 +1469,9 @@ def _roundup(method, moe_config, intermediate):
 def test_aiter_moe_roundup_pads_intermediate(
     intermediate,
     expected_padded,
-    default_aphrodite_config,
+    default_sonar_config,
 ):
-    from aphrodite.model_executor.layers.fused_moe.oracle.unquantized import (
+    from sonar.model_executor.layers.fused_moe.oracle.unquantized import (
         aiter_moe_intermediate_alignment,
     )
 
@@ -1491,10 +1491,10 @@ def test_aiter_moe_roundup_pads_intermediate(
 @pytest.mark.parametrize("backend_name", ["TRITON", "FLASHINFER_CUTLASS"])
 def test_aiter_moe_roundup_is_not_applied_to_other_backends(
     backend_name,
-    default_aphrodite_config,
+    default_sonar_config,
 ):
     """Backends with no alignment requirement keep the unaligned size."""
-    from aphrodite.model_executor.layers.fused_moe.oracle.unquantized import (
+    from sonar.model_executor.layers.fused_moe.oracle.unquantized import (
         UnquantizedMoeBackend,
     )
 
@@ -1512,7 +1512,7 @@ def test_aiter_moe_roundup_is_not_applied_to_other_backends(
 def test_aiter_moe_reload_zeroes_intermediate_padding(
     intermediate,
     monkeypatch,
-    default_aphrodite_config,
+    default_sonar_config,
 ):
     """A reload must re-zero pad lanes left dirty in the weight storage.
 
@@ -1522,7 +1522,7 @@ def test_aiter_moe_reload_zeroes_intermediate_padding(
     """
     from unittest.mock import MagicMock
 
-    from aphrodite.model_executor.layers.fused_moe.oracle.unquantized import (
+    from sonar.model_executor.layers.fused_moe.oracle.unquantized import (
         aiter_moe_intermediate_alignment,
     )
 
@@ -1548,7 +1548,7 @@ def test_aiter_moe_reload_zeroes_intermediate_padding(
 
     # Identity shuffle keeps pad lanes sliceable; both stubs need real ROCm.
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.fused_moe.oracle.unquantized.rocm_aiter_ops.shuffle_weights",
+        "sonar.model_executor.layers.fused_moe.oracle.unquantized.rocm_aiter_ops.shuffle_weights",
         lambda w13, w2: (w13, w2),
     )
     monkeypatch.setattr(
@@ -1585,7 +1585,7 @@ def test_aiter_moe_reload_zeroes_intermediate_padding(
 
 def _aiter_accepts_intermediate(intermediate: int, num_tokens: int) -> bool:
     """Run the real AITER CK MoE kernel and report whether it dispatched."""
-    from aphrodite.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
         ActivationMethod,
         QuantMethod,
     )
@@ -1628,7 +1628,7 @@ def test_aiter_moe_alignment_rule_holds_across_block_m(intermediate, num_tokens)
     ``block_m``, so a size validated at one tile size says nothing about the
     others.
     """
-    from aphrodite.model_executor.layers.fused_moe.oracle.unquantized import (
+    from sonar.model_executor.layers.fused_moe.oracle.unquantized import (
         aiter_moe_intermediate_alignment,
     )
 

@@ -7,33 +7,33 @@ from typing import Any
 from tqdm import tqdm
 from typing_extensions import TypeVar
 
-from aphrodite import (
+from sonar import (
     PoolingParams,
     PoolingRequestOutput,
     PromptType,
     RequestOutput,
     SamplingParams,
 )
-from aphrodite.config import ModelConfig
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.inputs import EngineInput
-from aphrodite.logger import init_logger
-from aphrodite.lora.request import LoRARequest
-from aphrodite.renderers import BaseRenderer, ChatParams, merge_kwargs
-from aphrodite.renderers.chat_utils import (
+from sonar.config import ModelConfig
+from sonar.exceptions import SonarValidationError
+from sonar.inputs import EngineInput
+from sonar.logger import init_logger
+from sonar.lora.request import LoRARequest
+from sonar.renderers import BaseRenderer, ChatParams, merge_kwargs
+from sonar.renderers.chat_utils import (
     ChatCompletionMessageParam,
     ChatTemplateContentFormatOption,
 )
-from aphrodite.renderers.inputs.preprocess import (
+from sonar.renderers.inputs.preprocess import (
     conversation_to_seq,
     parse_model_prompt,
     prompt_to_seq,
 )
-from aphrodite.sampling_params import RequestOutputKind
-from aphrodite.utils.counter import Counter
-from aphrodite.utils.mistral import is_mistral_tokenizer
-from aphrodite.utils.tqdm_utils import maybe_tqdm
-from aphrodite.v1.engine.llm_engine import LLMEngine
+from sonar.sampling_params import RequestOutputKind
+from sonar.utils.counter import Counter
+from sonar.utils.mistral import is_mistral_tokenizer
+from sonar.utils.tqdm_utils import maybe_tqdm
+from sonar.v1.engine.llm_engine import LLMEngine
 
 logger = init_logger(__name__)
 
@@ -64,7 +64,7 @@ class OfflineInferenceMixin:
         if prompt["type"] != "multimodal":
             return lora_request
 
-        lora_config = self.llm_engine.aphrodite_config.lora_config
+        lora_config = self.llm_engine.sonar_config.lora_config
         default_mm_loras = None if lora_config is None else lora_config.default_mm_loras
         if not default_mm_loras:
             return lora_request
@@ -240,7 +240,7 @@ class OfflineInferenceMixin:
     ) -> Sequence[_P]:
         if isinstance(params, Sequence):
             if len(params) != num_requests:
-                raise AphroditeValidationError(
+                raise SonarValidationError(
                     f"The lengths of prompts ({num_requests}) and params ({len(params)}) must be the same."
                 )
 
@@ -255,7 +255,7 @@ class OfflineInferenceMixin:
     ) -> Sequence[LoRARequest | None]:
         if isinstance(lora_request, Sequence):
             if len(lora_request) != num_requests:
-                raise AphroditeValidationError(
+                raise SonarValidationError(
                     f"The lengths of prompts ({num_requests}) and lora_request ({len(lora_request)}) must be the same."
                 )
 
@@ -273,7 +273,7 @@ class OfflineInferenceMixin:
 
         if isinstance(priority, Sequence):
             if len(priority) != num_requests:
-                raise AphroditeValidationError(
+                raise SonarValidationError(
                     f"The lengths of prompts ({num_requests}) and priority ({len(priority)}) must be the same."
                 )
 

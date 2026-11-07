@@ -11,18 +11,18 @@ from typing import Any
 
 import torch
 
-from aphrodite.model_executor.warmup.jit_warmup import kernel_launcher
-from aphrodite.model_executor.warmup.jit_warmup_triton_helper import (
-    AphroditeTritonJitKernel,
+from sonar.model_executor.warmup.jit_warmup import kernel_launcher
+from sonar.model_executor.warmup.jit_warmup_triton_helper import (
     LaunchSpec,
+    SonarTritonJitKernel,
     TritonWarmupTensor,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.torch_utils import direct_register_custom_op
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
+from sonar.utils.torch_utils import direct_register_custom_op
 
 
-class FusedInvRopeFP8QuantKernel(AphroditeTritonJitKernel["FusedInvRopeFP8QuantKernel.CompileKey"]):
+class FusedInvRopeFP8QuantKernel(SonarTritonJitKernel["FusedInvRopeFP8QuantKernel.CompileKey"]):
     @dataclass(frozen=True)
     class CompileKey:
         heads_per_group: int
@@ -200,12 +200,12 @@ class FusedInvRopeFP8QuantKernel(AphroditeTritonJitKernel["FusedInvRopeFP8QuantK
             half_rope=half_rope,
         )
 
-    def get_warmup_keys(self, aphrodite_config: Any) -> list[CompileKey]:
-        hf_config = aphrodite_config.model_config.hf_config
+    def get_warmup_keys(self, sonar_config: Any) -> list[CompileKey]:
+        hf_config = sonar_config.model_config.hf_config
         if hf_config is None:
             return []
 
-        tp_size = aphrodite_config.parallel_config.tensor_parallel_size
+        tp_size = sonar_config.parallel_config.tensor_parallel_size
         num_heads = int(getattr(hf_config, "num_attention_heads", 0) or 0)
         num_groups = int(getattr(hf_config, "o_groups", 0) or 0)
         if num_heads <= 0 or num_groups <= 0:
@@ -346,7 +346,7 @@ def fused_inv_rope_fp8_quant(
         empty when quantization is disabled.
 
     """
-    from aphrodite.utils.deep_gemm import get_tma_aligned_size
+    from sonar.utils.deep_gemm import get_tma_aligned_size
 
     num_tokens, num_heads, head_dim = o.shape
     assert num_heads == n_groups * heads_per_group
@@ -375,7 +375,7 @@ def fused_inv_rope_fp8_quant(
 
     # Run kernel through a custom op so inductor sees an opaque boundary.
     # It's a pytorch bug, see https://github.com/vllm-project/vllm/issues/41106
-    out_buf, scale_buf = torch.ops.aphrodite.fused_inv_rope_fp8_quant_kernel(
+    out_buf, scale_buf = torch.ops.sonar.fused_inv_rope_fp8_quant_kernel(
         o,
         positions,
         cos_sin_cache,

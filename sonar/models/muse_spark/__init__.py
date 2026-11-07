@@ -4,7 +4,7 @@
 
 from typing import TYPE_CHECKING
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 if TYPE_CHECKING or not current_platform.is_rocm():
     from .nvidia.model import MuseSpark1xForCausalLM

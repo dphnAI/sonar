@@ -20,7 +20,7 @@ class K3DSparkConfig(DeepseekV3Config):
         **kwargs,
     ) -> None:
         # DeepseekV3Config defaults to a MoE topology. Zero these fields so
-        # generic Aphrodite config logic also recognizes this draft as dense.
+        # generic Sonar config logic also recognizes this draft as dense.
         kwargs.setdefault("n_routed_experts", 0)
         kwargs.setdefault("n_shared_experts", 0)
         kwargs.setdefault("num_experts_per_tok", 0)

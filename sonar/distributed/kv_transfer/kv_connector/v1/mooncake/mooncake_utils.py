@@ -9,8 +9,8 @@ import uvicorn
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
-from aphrodite.distributed.kv_transfer.kv_connector.utils import EngineId
-from aphrodite.logger import init_logger
+from sonar.distributed.kv_transfer.kv_connector.utils import EngineId
+from sonar.logger import init_logger
 
 WorkerAddr = str
 

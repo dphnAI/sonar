@@ -26,10 +26,10 @@ from typing import Any
 
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.logger import init_logger
-from aphrodite.triton_utils import tl, triton
-from aphrodite.v1.attention.ops.triton_attention_helpers import (
+import sonar.envs as envs
+from sonar.logger import init_logger
+from sonar.triton_utils import tl, triton
+from sonar.v1.attention.ops.triton_attention_helpers import (
     apply_alibi_to_score,
     apply_softcap,
     cdiv_fn,
@@ -44,7 +44,7 @@ from aphrodite.v1.attention.ops.triton_attention_helpers import (
 
 logger = init_logger(__name__)
 
-is_batch_invariant = envs.APHRODITE_BATCH_INVARIANT
+is_batch_invariant = envs.SONAR_BATCH_INVARIANT
 
 # Whole-verify split-KV grouping: one program covers all q tokens of a
 # spec-decode verify request (BLOCK_M = q_len * GQA group, capped at 128).

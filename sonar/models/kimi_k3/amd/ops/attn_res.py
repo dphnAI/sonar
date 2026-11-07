@@ -10,8 +10,8 @@
 
 import torch
 
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import get_fp8_min_max
-from aphrodite.triton_utils import tl, triton
+from sonar.model_executor.layers.quantization.utils.quant_utils import get_fp8_min_max
+from sonar.triton_utils import tl, triton
 
 
 @triton.jit

@@ -7,9 +7,9 @@ from typing import cast
 import torch
 import torch.nn as nn
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.model_loader import get_model_loader
+from sonar.config import SonarConfig
+from sonar.logger import init_logger
+from sonar.model_executor.model_loader import get_model_loader
 
 from .lifecycle import finish_reload, start_reload
 
@@ -20,7 +20,7 @@ __all__ = ["get_parameter_for_reload", "reload_weights"]
 
 def get_parameter_for_reload(model: nn.Module, name: str) -> nn.Parameter:
     """Resolve checkpoint names without changing the model's module tree."""
-    from aphrodite.lora.layers import BaseLayerWithLoRA
+    from sonar.lora.layers import BaseLayerWithLoRA
 
     module_name, _, parameter_name = name.rpartition(".")
     module = model.get_submodule(module_name)
@@ -30,7 +30,7 @@ def get_parameter_for_reload(model: nn.Module, name: str) -> nn.Parameter:
 
 
 def reload_weights(
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     model: nn.Module,
     weights_iterator: Iterable[tuple[str, torch.Tensor]] | None,
     weights_path: str | None,
@@ -42,8 +42,8 @@ def reload_weights(
     weights (e.g. LoRA, encoder and multimodal caches).
 
     Args:
-        aphrodite_config: config of the model being reloaded. If `weights_path` is
-            given, `aphrodite_config.model_config` is updated to point at it.
+        sonar_config: config of the model being reloaded. If `weights_path` is
+            given, `sonar_config.model_config` is updated to point at it.
         model: model to load weights into
         weights_iterator: weights to load into model
         weights_path: path to load weights from if weights_iterator is not
@@ -61,11 +61,10 @@ def reload_weights(
             "to avoid weight reloading errors"
         )
 
-    model_config = aphrodite_config.model_config
-    load_config = aphrodite_config.load_config
+    model_config = sonar_config.model_config
+    load_config = sonar_config.load_config
     weights_to_load = {
-        name.replace(".base_layer.", ".") if aphrodite_config.lora_config else name
-        for name, _ in model.named_parameters()
+        name.replace(".base_layer.", ".") if sonar_config.lora_config else name for name, _ in model.named_parameters()
     }
     counter_before_reloading = time.perf_counter()
 
@@ -89,7 +88,7 @@ def reload_weights(
     logger.info_once("Reloading weights inplace...")
     if is_checkpoint_format:
         # load weights from checkpoint/ original model format
-        device = torch.device(load_config.device or aphrodite_config.device_config.device)
+        device = torch.device(load_config.device or sonar_config.device_config.device)
         start_reload(model)
         loaded_weights = model.load_weights(weights_iterator)
         finish_reload(model, model_config, device)

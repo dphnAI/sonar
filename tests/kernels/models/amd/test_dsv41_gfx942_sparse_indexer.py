@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """The gfx942 indexer op of DeepSeek-V4.1 (gfx942_sparse_attn_indexer in
-aphrodite/models/deepseek_v41/amd/ops/sparse_indexer.py) against Aphrodite's ROCm
+sonar/models/deepseek_v41/amd/ops/sparse_indexer.py) against Sonar's ROCm
 indexer op, rocm_aiter_sparse_attn_indexer, on a decode step.
 
-The gfx942 op runs its own copy of the decode path of Aphrodite's op, with the
-gfx942 top-512 launches in front of Aphrodite's kernels, so this test fails when
-the copy and Aphrodite's op stop agreeing. Both ops get the same FP8 queries, head
+The gfx942 op runs its own copy of the decode path of Sonar's op, with the
+gfx942 top-512 launches in front of Sonar's kernels, so this test fails when
+the copy and Sonar's op stop agreeing. Both ops get the same FP8 queries, head
 weights and paged indexer cache of one request with its 5 DSpark drafts, as
 the 6 flattened rows that the server's decode indexer uses. The layers are one
 without candidate blocks, layer 20, which writes the candidate blocks of
@@ -22,13 +22,13 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 
 def _on_gfx942() -> bool:
     if not current_platform.is_rocm():
         return False
-    from aphrodite.platforms.rocm import on_gfx942
+    from sonar.platforms.rocm import on_gfx942
 
     return on_gfx942()
 
@@ -48,13 +48,13 @@ RATIO = 1
 @pytest.fixture
 def gfx942_step(monkeypatch):
     """Turns on AITER and the gfx942 decode launches for one test, and makes
-    the workspace that Aphrodite's logits call takes its output from. The model
+    the workspace that Sonar's logits call takes its output from. The model
     records --monokernel when it is created, and this test has no model, so it
     sets the recorded flag itself."""
-    from aphrodite._aiter_ops import rocm_aiter_ops
-    from aphrodite.models.deepseek_v41.amd import ops
-    from aphrodite.v1.attention.ops.rocm_aiter_mla_sparse import paged_mqa_logits_module
-    from aphrodite.v1.worker.workspace import (
+    from sonar._aiter_ops import rocm_aiter_ops
+    from sonar.models.deepseek_v41.amd import ops
+    from sonar.v1.attention.ops.rocm_aiter_mla_sparse import paged_mqa_logits_module
+    from sonar.v1.worker.workspace import (
         init_workspace_manager,
         is_workspace_manager_initialized,
     )
@@ -95,13 +95,13 @@ def _use_metadata(monkeypatch, lens: torch.Tensor, tables: torch.Tensor) -> None
     """Gives both ops the metadata of a step of only decode rows, which the
     model runner passes through the forward context. Each of the 6 rows is
     its own decode row of length 1, as in the server's flattened layout."""
-    from aphrodite.config import CUDAGraphMode
-    from aphrodite.models.deepseek_v41.amd.ops import sparse_indexer
-    from aphrodite.v1.attention.backends.mla.indexer import (
+    from sonar.config import CUDAGraphMode
+    from sonar.models.deepseek_v41.amd.ops import sparse_indexer
+    from sonar.v1.attention.backends.mla.indexer import (
         DeepSeekV32IndexerDecodeMetadata,
         DeepseekV32IndexerMetadata,
     )
-    from aphrodite.v1.attention.ops import rocm_aiter_mla_sparse
+    from sonar.v1.attention.ops import rocm_aiter_mla_sparse
 
     decode = DeepSeekV32IndexerDecodeMetadata(
         block_table=tables,
@@ -127,7 +127,7 @@ def _use_metadata(monkeypatch, lens: torch.Tensor, tables: torch.Tensor) -> None
 
 def _run(op, step, cand=None, write: bool = False) -> torch.Tensor:
     """One call of an indexer op on the step, whose model already wrote the
-    K cache. The -7 marks an entry that the op did not write. Aphrodite's op
+    K cache. The -7 marks an entry that the op did not write. Sonar's op
     first fills the rows with -1, and the gfx942 op skips that fill because
     its top-k writes every entry."""
     q, weights, lens, tables, kv = step
@@ -156,7 +156,7 @@ def _run(op, step, cand=None, write: bool = False) -> torch.Tensor:
 
 
 def _assert_same_top512(dense, ref, got, ends, cand=None):
-    """Got must hold Aphrodite's columns, or other columns with the same logits
+    """Got must hold Sonar's columns, or other columns with the same logits
     where logits at the cut are equal. With candidate blocks, every column
     must also lie in one of the row's candidate blocks."""
     for r, e in enumerate(ends):
@@ -164,7 +164,7 @@ def _assert_same_top512(dense, ref, got, ends, cand=None):
         assert ((g >= -1) & (g < e)).all(), f"row {r}: an entry outside -1 to {e - 1}"
         gl, wl = g[g >= 0].long(), w[w >= 0].long()
         assert gl.unique().numel() == gl.numel(), f"row {r}: a column twice"
-        assert gl.numel() == wl.numel(), f"row {r}: {gl.numel()} columns, Aphrodite's op {wl.numel()}"
+        assert gl.numel() == wl.numel(), f"row {r}: {gl.numel()} columns, Sonar's op {wl.numel()}"
         if cand is not None:
             blocks = cand[r][cand[r] >= 0].long()
             assert torch.isin(gl // CAND_BLOCK, blocks).all(), f"row {r}: a column outside the candidate blocks"
@@ -175,7 +175,7 @@ def _assert_same_top512(dense, ref, got, ends, cand=None):
 
 
 def _block_scores(row: torch.Tensor, end: int) -> torch.Tensor:
-    """APHRODITE's block scores of one row before its end: the largest logit of a
+    """SONAR's block scores of one row before its end: the largest logit of a
     block, and +inf for the newest block."""
     nblocks = math.ceil(end / CAND_BLOCK)
     padded = torch.full((nblocks * CAND_BLOCK,), -math.inf, device=row.device)
@@ -186,7 +186,7 @@ def _block_scores(row: torch.Tensor, end: int) -> torch.Tensor:
 
 
 def _assert_same_candidates(dense, ref, got, ends):
-    """Got must hold Aphrodite's candidate blocks in any order, or other blocks
+    """Got must hold Sonar's candidate blocks in any order, or other blocks
     with the same scores where scores at the cut are equal."""
     for r, e in enumerate(ends):
         w, g = ref[r].tolist(), got[r].tolist()
@@ -200,12 +200,12 @@ def _assert_same_candidates(dense, ref, got, ends):
 
 
 @pytest.mark.parametrize("ctx", [8192, 131072])
-def test_decode_step_matches_aphrodite_op(gfx942_step, monkeypatch, ctx):
+def test_decode_step_matches_sonar_op(gfx942_step, monkeypatch, ctx):
     """At 8192 tokens a row has 1024 blocks of 8, so all of them are
     candidates. At 131072 tokens a row has 16384 blocks, and 2048 of them
     are candidates."""
-    from aphrodite.models.deepseek_v41.amd.ops import sparse_indexer, topk
-    from aphrodite.v1.attention.ops.rocm_aiter_mla_sparse import (
+    from sonar.models.deepseek_v41.amd.ops import sparse_indexer, topk
+    from sonar.v1.attention.ops.rocm_aiter_mla_sparse import (
         rocm_aiter_sparse_attn_indexer,
         rocm_fp8_paged_mqa_logits,
     )
@@ -215,7 +215,7 @@ def test_decode_step_matches_aphrodite_op(gfx942_step, monkeypatch, ctx):
     _use_metadata(monkeypatch, lens, tables)
     # Record that the gfx942 op ran its decode path and that the gfx942
     # launches of layer 20 and of layers 24 to 36 took their calls, so that
-    # the test cannot pass on Aphrodite's kernels alone.
+    # the test cannot pass on Sonar's kernels alone.
     taken = []
 
     def recorder(real, name):
@@ -245,11 +245,11 @@ def test_decode_step_matches_aphrodite_op(gfx942_step, monkeypatch, ctx):
         compress_ratio=RATIO,
     ).clone()
     ends = lens.tolist()
-    aphrodite_op = rocm_aiter_sparse_attn_indexer
+    sonar_op = rocm_aiter_sparse_attn_indexer
     gfx942_op = sparse_indexer.gfx942_sparse_attn_indexer
 
     # A layer without candidate blocks.
-    ref = _run(aphrodite_op, step)
+    ref = _run(sonar_op, step)
     got = _run(gfx942_op, step)
     _assert_same_top512(dense, ref, got, ends)
 
@@ -257,13 +257,13 @@ def test_decode_step_matches_aphrodite_op(gfx942_step, monkeypatch, ctx):
     # its logits.
     cand_ref = torch.full((ROWS, CAND_BLOCKS), -7, dtype=torch.int32, device="cuda")
     cand_got = torch.full_like(cand_ref, -7)
-    ref = _run(aphrodite_op, step, cand_ref, write=True)
+    ref = _run(sonar_op, step, cand_ref, write=True)
     got = _run(gfx942_op, step, cand_got, write=True)
     _assert_same_candidates(dense, cand_ref, cand_got, ends)
     _assert_same_top512(dense, ref, got, ends)
 
     # A layer of 24 to 36 takes its top 512 from the candidate blocks only.
-    ref = _run(aphrodite_op, step, cand_ref.clone())
+    ref = _run(sonar_op, step, cand_ref.clone())
     got = _run(gfx942_op, step, cand_ref.clone())
     _assert_same_top512(dense, ref, got, ends, cand_ref)
 

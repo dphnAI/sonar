@@ -24,18 +24,18 @@ from collections.abc import Iterable
 import pytest
 import torch
 
-from aphrodite.device_allocator.cumem import CuMemAllocator, cumem_available
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.device_allocator.cumem import CuMemAllocator, cumem_available
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEParallelConfig,
     RoutingMethodType,
 )
-from aphrodite.model_executor.layers.fused_moe.expert_map_manager import (
+from sonar.model_executor.layers.fused_moe.expert_map_manager import (
     ExpertMapManager,
 )
-from aphrodite.model_executor.layers.fused_moe.routed_experts import RoutedExperts
-from aphrodite.platforms import current_platform
+from sonar.model_executor.layers.fused_moe.routed_experts import RoutedExperts
+from sonar.platforms import current_platform
 
 aiter_available = importlib.util.find_spec("aiter") is not None
 
@@ -55,24 +55,24 @@ INTERMEDIATE_SIZE = 256
 
 def _moe_topk_softmax_available() -> bool:
     try:
-        importlib.import_module("aphrodite._moe_C_stable_libtorch")
+        importlib.import_module("sonar._moe_C_stable_libtorch")
     except ImportError:
         return False
     return hasattr(torch.ops, "_moe_C") and hasattr(torch.ops._moe_C, "topk_softmax")
 
 
 def _set_backend_env(monkeypatch: pytest.MonkeyPatch, backend: str) -> None:
-    monkeypatch.setenv("APHRODITE_ROCM_MOE_PADDING", "1")
+    monkeypatch.setenv("SONAR_ROCM_MOE_PADDING", "1")
     if backend == "aiter":
-        monkeypatch.setenv("APHRODITE_ROCM_USE_AITER", "1")
-        monkeypatch.setenv("APHRODITE_ROCM_USE_AITER_MOE", "1")
+        monkeypatch.setenv("SONAR_ROCM_USE_AITER", "1")
+        monkeypatch.setenv("SONAR_ROCM_USE_AITER_MOE", "1")
     elif backend == "triton":
-        monkeypatch.delenv("APHRODITE_ROCM_USE_AITER", raising=False)
-        monkeypatch.setenv("APHRODITE_ROCM_USE_AITER_MOE", "0")
+        monkeypatch.delenv("SONAR_ROCM_USE_AITER", raising=False)
+        monkeypatch.setenv("SONAR_ROCM_USE_AITER_MOE", "0")
     else:
         raise AssertionError(f"unknown backend {backend}")
 
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     rocm_aiter_ops.refresh_env_variables()
 
@@ -249,11 +249,11 @@ def _assert_backend(layer: RoutedExperts, backend: str) -> None:
 @torch.inference_mode()
 def test_moe_cuda_graph_replay_after_sleep_wake_weight_update(
     monkeypatch: pytest.MonkeyPatch,
-    default_aphrodite_config,
+    default_sonar_config,
     workspace_init,
     backend: str,
 ) -> None:
-    assert default_aphrodite_config is not None
+    assert default_sonar_config is not None
     assert workspace_init is None
     if not cumem_available:
         pytest.skip("sleep mode replay requires the cumem allocator extension")
@@ -279,7 +279,7 @@ def test_moe_cuda_graph_replay_after_sleep_wake_weight_update(
         torch.accelerator.synchronize()
         first_graph_output = graph_output.clone()
 
-        # Match Aphrodite level-2 sleep semantics: weights are discarded, then the
+        # Match Sonar level-2 sleep semantics: weights are discarded, then the
         # same virtual addresses are remapped on wake and refilled by replay.
         allocator.sleep(offload_tags=tuple())
         allocator.wake_up()

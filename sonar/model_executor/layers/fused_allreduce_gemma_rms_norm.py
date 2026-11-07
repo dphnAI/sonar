@@ -16,14 +16,14 @@ numerically identical to the unfused model path.
 
 import torch
 
-from aphrodite.distributed.communication_op import tensor_model_parallel_all_reduce
-from aphrodite.distributed.parallel_state import (
+from sonar.distributed.communication_op import tensor_model_parallel_all_reduce
+from sonar.distributed.parallel_state import (
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
     get_tp_group,
 )
-from aphrodite.model_executor.layers.layernorm import GemmaRMSNorm
-from aphrodite.platforms import current_platform
+from sonar.model_executor.layers.layernorm import GemmaRMSNorm
+from sonar.platforms import current_platform
 
 MiB = 1024 * 1024
 
@@ -31,10 +31,10 @@ MiB = 1024 * 1024
 # allreduce_rms_fusion; both that op and the workspace helpers only exist when
 # flashinfer.comm.allreduce_fusion is importable.
 try:
-    from aphrodite.compilation.passes.fusion.allreduce_rms_fusion import (
+    from sonar.compilation.passes.fusion.allreduce_rms_fusion import (
         flashinfer_trtllm_fused_allreduce_norm,
     )
-    from aphrodite.distributed.device_communicators.flashinfer_all_reduce import (
+    from sonar.distributed.device_communicators.flashinfer_all_reduce import (
         flashinfer_comm,
         get_fi_ar_workspace,
     )
@@ -54,7 +54,7 @@ _FI_SUPPORTED_DTYPES = (torch.bfloat16, torch.float16)
 def _max_token_num(tp_size: int, hidden_size: int, dtype: torch.dtype) -> int | None:
     """Workspace token budget for flashinfer fused all-reduce, or None if the
     current world size / device is unsupported. Mirrors ``FlashInferAllReduce``."""
-    from aphrodite.config.compilation import PassConfig
+    from sonar.config.compilation import PassConfig
 
     max_size_mb = PassConfig.default_fi_allreduce_fusion_max_size_mb().get(tp_size)
     if not max_size_mb:
@@ -109,7 +109,7 @@ def _can_use_flashinfer(hidden_states: torch.Tensor, tp_size: int) -> tuple[bool
 def _can_use_aiter_fused_ar_rms(hidden_states: torch.Tensor) -> bool:
     if not current_platform.is_rocm():
         return False
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     if not rocm_aiter_ops.is_custom_all_reduce_enabled():
         return False
@@ -165,7 +165,7 @@ def fused_allreduce_gemma_rms_norm(
         return norm_out, hidden_states
 
     if _can_use_aiter_fused_ar_rms(hidden_states):
-        from aphrodite._aiter_ops import rocm_aiter_ops
+        from sonar._aiter_ops import rocm_aiter_ops
 
         return rocm_aiter_ops.get_fused_allreduce_rmsnorm_op()(
             input_=hidden_states,

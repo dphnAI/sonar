@@ -17,12 +17,12 @@ from typing import TYPE_CHECKING, cast
 
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
 
 if TYPE_CHECKING:
-    from aphrodite.v1.watermarking.watermarker import Watermarker
-    from aphrodite.v1.worker.gpu_worker import Worker
+    from sonar.v1.watermarking.watermarker import Watermarker
+    from sonar.v1.worker.gpu_worker import Worker
 
 logger = init_logger(__name__)
 
@@ -31,8 +31,8 @@ _NUM_WARMUP_TOKENS = 1
 
 def _philox_key(watermarker: Watermarker) -> int | None:
     """None when the watermarker takes the torch path and compiles no kernel."""
-    from aphrodite.v1.watermarking.gumbel import GumbelWatermarker
-    from aphrodite.v1.watermarking.prfs import PhiloxPRF
+    from sonar.v1.watermarking.gumbel import GumbelWatermarker
+    from sonar.v1.watermarking.prfs import PhiloxPRF
 
     if not isinstance(watermarker, GumbelWatermarker):
         return None
@@ -42,7 +42,7 @@ def _philox_key(watermarker: Watermarker) -> int | None:
 
 def _philox_sampler_keys(watermarker: Watermarker) -> list[int]:
     """Philox keys the sampler launches the kernel with."""
-    from aphrodite.v1.watermarking.gumbel import DualKeyGumbelWatermarker
+    from sonar.v1.watermarking.gumbel import DualKeyGumbelWatermarker
 
     watermarkers: list[Watermarker] = [watermarker]
     if isinstance(watermarker, DualKeyGumbelWatermarker):
@@ -63,16 +63,16 @@ def _philox_sampler_keys(watermarker: Watermarker) -> list[int]:
 
 @torch.inference_mode()
 def watermark_sample_warmup(worker: Worker) -> None:
-    if getattr(worker.aphrodite_config, "watermark_config", None) is None:
+    if getattr(worker.sonar_config, "watermark_config", None) is None:
         return
     # ``GumbelWatermarker`` launches the kernel only on CUDA
-    # (aphrodite/v1/watermarking/gumbel.py:63,:82); elsewhere the sampler takes the
+    # (sonar/v1/watermarking/gumbel.py:63,:82); elsewhere the sampler takes the
     # torch path and warming here would compile a kernel nothing launches.
     if not current_platform.is_cuda_alike():
         return
 
-    from aphrodite.v1.watermarking.gpu_sampler import GPUWatermarkSampler
-    from aphrodite.v1.worker.gpu.sample.watermark import philox_gumbel_sample
+    from sonar.v1.watermarking.gpu_sampler import GPUWatermarkSampler
+    from sonar.v1.worker.gpu.sample.watermark import philox_gumbel_sample
 
     # Read the sampler the runner built instead of rebuilding it from config:
     # its watermarker (the target role under a speculative config), its context
@@ -83,7 +83,7 @@ def watermark_sample_warmup(worker: Worker) -> None:
     if not isinstance(sampler, GPUWatermarkSampler):
         return
 
-    model_config = worker.aphrodite_config.model_config
+    model_config = worker.sonar_config.model_config
     device = worker.device
     try:
         keys = _philox_sampler_keys(sampler.watermarker)

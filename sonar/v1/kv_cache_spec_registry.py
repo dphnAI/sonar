@@ -4,20 +4,20 @@
 """Registry for KVCacheSpec types and their associated managers.
 
 This module provides a pluggable architecture for registering custom KVCacheSpec
-subclasses without modifying Aphrodite core code. Out-of-tree platforms can define
+subclasses without modifying Sonar core code. Out-of-tree platforms can define
 custom specs and managers by using the @register_kv_cache_spec decorator.
 """
 
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 
 if TYPE_CHECKING:
-    from aphrodite.v1.core.single_type_kv_cache_manager import SingleTypeKVCacheManager
-    from aphrodite.v1.kv_cache_interface import KVCacheSpec
+    from sonar.v1.core.single_type_kv_cache_manager import SingleTypeKVCacheManager
+    from sonar.v1.kv_cache_interface import KVCacheSpec
 
 
 @dataclass(frozen=True)
@@ -40,22 +40,22 @@ class KVCacheSpecRegistry:
     """Global registry for KVCacheSpec types and their associated managers."""
 
     @classmethod
-    def _ensure_registered(cls, aphrodite_config=None) -> None:
+    def _ensure_registered(cls, sonar_config=None) -> None:
         """Run full KVCacheSpec registration if the registration is not done."""
         if _REGISTRY_KVCACHESPEC_LIST:
             return
 
-        if aphrodite_config is None:
-            from aphrodite.config import get_current_aphrodite_config_or_none
+        if sonar_config is None:
+            from sonar.config import get_current_sonar_config_or_none
 
-            aphrodite_config = get_current_aphrodite_config_or_none()
+            sonar_config = get_current_sonar_config_or_none()
 
         # lazy import to avoid circular dependency
-        from aphrodite.v1.core.single_type_kv_cache_manager import (
+        from sonar.v1.core.single_type_kv_cache_manager import (
             register_all_kvcache_specs,
         )
 
-        register_all_kvcache_specs(aphrodite_config)
+        register_all_kvcache_specs(sonar_config)
 
     @classmethod
     def register(

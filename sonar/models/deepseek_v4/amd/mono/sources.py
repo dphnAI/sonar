@@ -3,6 +3,6 @@
 """The mono layer's kernel sources, in every build's JIT cache key
 (``common.plan.key_tuple``): an edit anywhere in this package rebuilds."""
 
-from aphrodite.models.deepseek_v4.amd.mono.common.plan import source_digest
+from sonar.models.deepseek_v4.amd.mono.common.plan import source_digest
 
 SOURCES = source_digest(".")

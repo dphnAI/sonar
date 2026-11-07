@@ -8,22 +8,22 @@ from typing import Any
 import numpy as np
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed import get_dcp_group
-from aphrodite.model_executor.warmup.jit_warmup import (
+from sonar.config import SonarConfig
+from sonar.distributed import get_dcp_group
+from sonar.model_executor.warmup.jit_warmup import (
     kernel_launcher,
     zip_inputs,
 )
-from aphrodite.model_executor.warmup.jit_warmup_triton_helper import (
-    AphroditeTritonJitKernel,
+from sonar.model_executor.warmup.jit_warmup_triton_helper import (
     LaunchSpec,
+    SonarTritonJitKernel,
     TritonWarmupTensor,
     triton_scalar_specialization_rep,
 )
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.v1.kv_cache_interface import AttentionSpec
-from aphrodite.v1.worker.block_table import get_block_table_width
+from sonar.triton_utils import tl, triton
+from sonar.utils.math_utils import cdiv
+from sonar.v1.kv_cache_interface import AttentionSpec
+from sonar.v1.worker.block_table import get_block_table_width
 
 
 def request_row_bounds(req_idx: np.ndarray) -> np.ndarray:
@@ -69,7 +69,7 @@ def flat_kv_row_view(
 # Kernel with prefill workspace support and valid count tracking
 
 
-class ConvertReqIndexToGlobalIndexKernel(AphroditeTritonJitKernel["ConvertReqIndexToGlobalIndexKernel.CompileKey"]):
+class ConvertReqIndexToGlobalIndexKernel(SonarTritonJitKernel["ConvertReqIndexToGlobalIndexKernel.CompileKey"]):
     @dataclass(frozen=True)
     class CompileKey:
         block_size: int
@@ -265,22 +265,22 @@ class ConvertReqIndexToGlobalIndexKernel(AphroditeTritonJitKernel["ConvertReqInd
 
     def get_warmup_keys(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         *,
         block_stride_rows: int,
     ) -> list[CompileKey]:
-        block_size = aphrodite_config.cache_config.block_size
-        dcp_size = aphrodite_config.parallel_config.decode_context_parallel_size
-        dcp_interleave = aphrodite_config.parallel_config.cp_kv_cache_interleave_size
+        block_size = sonar_config.cache_config.block_size
+        dcp_size = sonar_config.parallel_config.decode_context_parallel_size
+        dcp_interleave = sonar_config.parallel_config.cp_kv_cache_interleave_size
         dcp_rank = get_dcp_group().rank_in_group if dcp_size > 1 else 0
-        num_topk_tokens = aphrodite_config.model_config.hf_text_config.index_topk
+        num_topk_tokens = sonar_config.model_config.hf_text_config.index_topk
         max_num_blocks = cdiv(
-            aphrodite_config.model_config.max_model_len,
+            sonar_config.model_config.max_model_len,
             block_size * dcp_size,
         )
         max_num_blocks_per_req = get_block_table_width(max_num_blocks, block_size)
         hisparse_combos: list[dict[str, Any]] = []
-        if aphrodite_config.attention_config.hisparse_config is not None:
+        if sonar_config.attention_config.hisparse_config is not None:
             hisparse_combos.extend(
                 dict(
                     HAS_PREFILL_WORKSPACE=False,
@@ -294,7 +294,7 @@ class ConvertReqIndexToGlobalIndexKernel(AphroditeTritonJitKernel["ConvertReqInd
                 for count_valid in (False, True)
             )
         pcp_dcp_combos = []
-        if aphrodite_config.parallel_config.prefill_context_parallel_size > 1 and dcp_size > 1:
+        if sonar_config.parallel_config.prefill_context_parallel_size > 1 and dcp_size > 1:
             # PCP + DCP attends prefill rows over a DCP-gathered workspace.
             pcp_dcp_combos.append(
                 dict(
@@ -638,7 +638,7 @@ def triton_filter_and_convert_dcp_index(
     assert dcp_size >= 1
     assert 0 <= dcp_rank < dcp_size
     # Interleave groups must align to KV blocks (globally enforced by
-    # AphroditeConfig: block_size % cp_kv_cache_interleave_size == 0); assert the
+    # SonarConfig: block_size % cp_kv_cache_interleave_size == 0); assert the
     # local invariant so local_idx // BLOCK_SIZE never straddles a group.
     assert BLOCK_SIZE % cp_kv_cache_interleave_size == 0, (
         f"BLOCK_SIZE ({BLOCK_SIZE}) must be divisible by cp_kv_cache_interleave_size ({cp_kv_cache_interleave_size})."

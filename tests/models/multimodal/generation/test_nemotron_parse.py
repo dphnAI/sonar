@@ -6,12 +6,12 @@ import pytest
 import regex as re
 from transformers import AutoModel
 
-from aphrodite.assets.image import ImageAsset
-from aphrodite.logprobs import Logprob, SampleLogprobs
-from aphrodite.tokenizers import TokenizerLike
+from sonar.assets.image import ImageAsset
+from sonar.logprobs import Logprob, SampleLogprobs
+from sonar.tokenizers import TokenizerLike
 from tests.models.utils import check_logprobs_close
 
-from ....conftest import AphroditeRunner, HfRunner, PromptImageInput
+from ....conftest import HfRunner, PromptImageInput, SonarRunner
 
 PROMPT = "</s><s><predict_bbox><predict_classes><output_markdown><predict_no_text_in_pic>"
 
@@ -48,7 +48,7 @@ def mask_bbox_tokens(
 
 def run_test(
     hf_runner: type[HfRunner],
-    aphrodite_runner: type[AphroditeRunner],
+    sonar_runner: type[SonarRunner],
     inputs: Sequence[tuple[list[str], PromptImageInput]],
     model: str,
     *,
@@ -56,8 +56,8 @@ def run_test(
     max_tokens: int,
     num_logprobs: int,
 ) -> None:
-    """Verify that the inference result is the same between hf and aphrodite."""
-    with aphrodite_runner(
+    """Verify that the inference result is the same between hf and sonar."""
+    with sonar_runner(
         model,
         dtype=dtype,
         max_model_len=1024,
@@ -65,9 +65,9 @@ def run_test(
         max_num_seqs=64,
         limit_mm_per_prompt={"image": 1},
         trust_remote_code=True,
-    ) as aphrodite_model:
-        aphrodite_outputs_per_case = [
-            aphrodite_model.generate_greedy_logprobs(
+    ) as sonar_model:
+        sonar_outputs_per_case = [
+            sonar_model.generate_greedy_logprobs(
                 prompts,
                 max_tokens,
                 num_logprobs=num_logprobs,
@@ -76,7 +76,7 @@ def run_test(
             for prompts, images in inputs
         ]
 
-        tokenizer = aphrodite_model.llm.get_tokenizer()
+        tokenizer = sonar_model.llm.get_tokenizer()
 
     with hf_runner(model, dtype=dtype, auto_cls=AutoModel) as hf_model:
         hf_outputs_per_case = [
@@ -90,12 +90,12 @@ def run_test(
             for prompts, images in inputs
         ]
 
-    for hf_outputs, aphrodite_outputs in zip(hf_outputs_per_case, aphrodite_outputs_per_case):
+    for hf_outputs, sonar_outputs in zip(hf_outputs_per_case, sonar_outputs_per_case):
         check_logprobs_close(
             outputs_0_lst=[mask_bbox_tokens(output, tokenizer) for output in hf_outputs],
-            outputs_1_lst=[mask_bbox_tokens(output, tokenizer) for output in aphrodite_outputs],
+            outputs_1_lst=[mask_bbox_tokens(output, tokenizer) for output in sonar_outputs],
             name_0="hf",
-            name_1="aphrodite",
+            name_1="sonar",
         )
 
 
@@ -111,11 +111,11 @@ def run_test(
 )
 @pytest.mark.parametrize("dtype", ["bfloat16"])
 @pytest.mark.parametrize("num_logprobs", [5])
-def test_models(hf_runner, aphrodite_runner, model: str, dtype: str, num_logprobs: int) -> None:
+def test_models(hf_runner, sonar_runner, model: str, dtype: str, num_logprobs: int) -> None:
     image = ImageAsset("paper-11").pil_image_ext(ext="png").convert("RGB")
     run_test(
         hf_runner,
-        aphrodite_runner,
+        sonar_runner,
         inputs=[
             ([PROMPT] * 10, [image] * 10),
         ],

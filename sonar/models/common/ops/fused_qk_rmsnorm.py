@@ -5,18 +5,18 @@ from typing import Any
 
 import torch
 
-from aphrodite.model_executor.warmup.jit_warmup import kernel_launcher
-from aphrodite.model_executor.warmup.jit_warmup_triton_helper import (
-    AphroditeTritonJitKernel,
+from sonar.model_executor.warmup.jit_warmup import kernel_launcher
+from sonar.model_executor.warmup.jit_warmup_triton_helper import (
     LaunchSpec,
+    SonarTritonJitKernel,
     TritonWarmupTensor,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.math_utils import next_power_of_2
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
+from sonar.utils.math_utils import next_power_of_2
 
 
-class FusedQKVRMSNormKernel(AphroditeTritonJitKernel["FusedQKVRMSNormKernel.CompileKey"]):
+class FusedQKVRMSNormKernel(SonarTritonJitKernel["FusedQKVRMSNormKernel.CompileKey"]):
     @dataclass(frozen=True)
     class CompileKey:
         dtype: torch.dtype
@@ -110,8 +110,8 @@ class FusedQKVRMSNormKernel(AphroditeTritonJitKernel["FusedQKVRMSNormKernel.Comp
             launch_pdl=launch_pdl,
         )
 
-    def get_warmup_keys(self, aphrodite_config: Any) -> list[CompileKey]:
-        hf_config = aphrodite_config.model_config.hf_config
+    def get_warmup_keys(self, sonar_config: Any) -> list[CompileKey]:
+        hf_config = sonar_config.model_config.hf_config
         q_size = int(getattr(hf_config, "q_lora_rank", 0) or 0)
         kv_size = int(getattr(hf_config, "head_dim", 0) or 0)
         if q_size <= 0 or kv_size <= 0:
@@ -119,7 +119,7 @@ class FusedQKVRMSNormKernel(AphroditeTritonJitKernel["FusedQKVRMSNormKernel.Comp
 
         input_stride = q_size + kv_size
         return self._trace_dispatch(self.dispatch)(
-            dtype=aphrodite_config.model_config.dtype,
+            dtype=sonar_config.model_config.dtype,
             q_size=q_size,
             kv_size=kv_size,
             q_in_stride=input_stride,

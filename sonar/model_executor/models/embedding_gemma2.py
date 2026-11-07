@@ -18,27 +18,27 @@ from transformers.models.embedding_gemma2.processing_embedding_gemma2 import (
 )
 from transformers.video_utils import VideoMetadata
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed import get_tensor_model_parallel_world_size
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.activation import get_act_fn
-from aphrodite.model_executor.layers.attention import EncoderOnlyAttention
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import SonarConfig
+from sonar.distributed import get_tensor_model_parallel_world_size
+from sonar.logger import init_logger
+from sonar.model_executor.layers.activation import get_act_fn
+from sonar.model_executor.layers.attention import EncoderOnlyAttention
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     QKVParallelLinear,
     ReplicatedLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.pooler import DispatchPooler
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.pooler import DispatchPooler
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.models.gemma4 import Gemma4MLP
-from aphrodite.model_executor.models.gemma4_mm import (
+from sonar.model_executor.models.gemma4 import Gemma4MLP
+from sonar.model_executor.models.gemma4_mm import (
     _SUPPORTED_SOFT_TOKENS,
     Gemma4DummyInputsBuilder,
     Gemma4ForConditionalGeneration,
@@ -47,40 +47,40 @@ from aphrodite.model_executor.models.gemma4_mm import (
     Gemma4ProcessingInfo,
     _get_max_soft_tokens,
 )
-from aphrodite.model_executor.models.interfaces import SupportsMultiModal
-from aphrodite.model_executor.models.interfaces_base import (
-    AphroditeModelForPooling,
+from sonar.model_executor.models.interfaces import SupportsMultiModal
+from sonar.model_executor.models.interfaces_base import (
+    SonarModelForPooling,
     default_pooling_type,
 )
-from aphrodite.model_executor.models.transformers.utils import (
+from sonar.model_executor.models.transformers.utils import (
     recursive_replace_linear,
 )
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.models.utils import (
     AutoWeightsLoader,
     WeightsMapper,
     maybe_prefix,
 )
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import (
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import (
     MultiModalKwargsItems,
     VideoItem,
 )
-from aphrodite.multimodal.parse import (
+from sonar.multimodal.parse import (
     AudioProcessorItems,
     ImageProcessorItems,
     MultiModalDataItems,
 )
-from aphrodite.multimodal.processing import (
+from sonar.multimodal.processing import (
     BaseProcessingInfo,
     PromptReplacement,
     PromptUpdate,
     PromptUpdateDetails,
 )
-from aphrodite.sequence import IntermediateTensors
+from sonar.sequence import IntermediateTensors
 
 logger = init_logger(__name__)
 
-_WINDOW_OFFSET = 1  # HF masks |q-k| <= W; Aphrodite ENCODER_ONLY masks <= W-1.
+_WINDOW_OFFSET = 1  # HF masks |q-k| <= W; Sonar ENCODER_ONLY masks <= W-1.
 _VIDEO_FRAME_WIDTH = 672
 _VIDEO_FRAME_HEIGHT = 480
 _VIDEO_MAX_FRAMES = 32
@@ -313,15 +313,15 @@ class EmbeddingGemma2TextPLE(nn.Module):
 class EmbeddingGemma2TextModel(nn.Module):
     """Text embedding backbone for EmbeddingGemma2 with bidirectional attention."""
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        cfg = aphrodite_config.model_config.hf_config.text_config
+        cfg = sonar_config.model_config.hf_config.text_config
         self.config = cfg
-        max_pos = min(cfg.max_position_embeddings, aphrodite_config.model_config.max_model_len)
+        max_pos = min(cfg.max_position_embeddings, sonar_config.model_config.max_model_len)
         self.embed_tokens = VocabParallelEmbedding(
             cfg.vocab_size,
             cfg.hidden_size,
-            quant_config=aphrodite_config.quant_config,
+            quant_config=sonar_config.quant_config,
             prefix=f"{prefix}.embed_tokens",
         )
         self.layers = nn.ModuleList(
@@ -329,8 +329,8 @@ class EmbeddingGemma2TextModel(nn.Module):
                 EmbeddingGemma2DecoderLayer(
                     cfg,
                     i,
-                    aphrodite_config.cache_config,
-                    aphrodite_config.quant_config,
+                    sonar_config.cache_config,
+                    sonar_config.quant_config,
                     max_pos,
                     f"{prefix}.layers.{i}",
                 )
@@ -340,14 +340,14 @@ class EmbeddingGemma2TextModel(nn.Module):
         self.norm = RMSNorm(cfg.hidden_size, eps=cfg.rms_norm_eps)
         self.ple = EmbeddingGemma2TextPLE(
             cfg,
-            quant_config=aphrodite_config.quant_config,
+            quant_config=sonar_config.quant_config,
             prefix=f"{prefix}.ple",
         )
         self.embedding_projection = ReplicatedLinear(
             cfg.hidden_size,
             cfg.embedding_dim,
             bias=False,
-            quant_config=aphrodite_config.quant_config,
+            quant_config=sonar_config.quant_config,
             prefix=f"{prefix}.embedding_projection",
             return_bias=False,
         )
@@ -888,12 +888,12 @@ def _embedding_gemma2_weights_mapper(
     dummy_inputs=EmbeddingGemma2DummyInputsBuilder,
 )
 @default_pooling_type(seq_pooling_type="MEAN", tok_pooling_type="ALL")
-class EmbeddingGemma2Model(nn.Module, SupportsMultiModal, AphroditeModelForPooling):
+class EmbeddingGemma2Model(nn.Module, SupportsMultiModal, SonarModelForPooling):
     """Multimodal pooling embedding model supporting text, vision, and audio."""
 
     is_pooling_model = True
 
-    hf_to_aphrodite_mapper = _embedding_gemma2_weights_mapper()
+    hf_to_sonar_mapper = _embedding_gemma2_weights_mapper()
     packed_modules_mapping = {
         "qkv_proj": [
             "q_proj",
@@ -920,18 +920,18 @@ class EmbeddingGemma2Model(nn.Module, SupportsMultiModal, AphroditeModelForPooli
     embed_multimodal = Gemma4ForConditionalGeneration.embed_multimodal
     _encoder_chunk = staticmethod(Gemma4ForConditionalGeneration._encoder_chunk)
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         nn.Module.__init__(self)
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
-        multimodal_config = aphrodite_config.model_config.multimodal_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
+        multimodal_config = sonar_config.model_config.multimodal_config
         self.config = config
         self.quant_config = quant_config
         self.multimodal_config = multimodal_config
-        self.model_dtype = aphrodite_config.model_config.dtype
-        self.aphrodite_config = aphrodite_config
-        self.hf_to_aphrodite_mapper = _embedding_gemma2_weights_mapper(config)
-        lora_config = aphrodite_config.lora_config
+        self.model_dtype = sonar_config.model_config.dtype
+        self.sonar_config = sonar_config
+        self.hf_to_sonar_mapper = _embedding_gemma2_weights_mapper(config)
+        lora_config = sonar_config.lora_config
         self._enable_mm_lora = bool(lora_config is not None and lora_config.enable_tower_connector_lora)
 
         tower_quant: QuantizationConfig | None
@@ -951,7 +951,7 @@ class EmbeddingGemma2Model(nn.Module, SupportsMultiModal, AphroditeModelForPooli
         # ---- Vision tower (shared by image and video) ----
         self.embed_vision: Gemma4MultimodalEmbedder | None
         if getattr(config, "vision_config", None) is not None:
-            with self._mark_tower_model(aphrodite_config, {"image", "video"}):
+            with self._mark_tower_model(sonar_config, {"image", "video"}):
                 self.vision_tower = AutoModel.from_config(config=config.vision_config)
                 self.embed_vision = Gemma4MultimodalEmbedder(
                     config.vision_config,
@@ -971,7 +971,7 @@ class EmbeddingGemma2Model(nn.Module, SupportsMultiModal, AphroditeModelForPooli
         # ---- Audio tower ----
         self.embed_audio: Gemma4MultimodalEmbedder | None
         if getattr(config, "audio_config", None) is not None:
-            with self._mark_tower_model(aphrodite_config, "audio"):
+            with self._mark_tower_model(sonar_config, "audio"):
                 self.audio_tower = AutoModel.from_config(config=config.audio_config)
                 self.audio_tower.post_init()
                 self.embed_audio = Gemma4MultimodalEmbedder(
@@ -990,14 +990,14 @@ class EmbeddingGemma2Model(nn.Module, SupportsMultiModal, AphroditeModelForPooli
             self.embed_audio = None
 
         # ---- Language model ----
-        with self._mark_language_model(aphrodite_config):
+        with self._mark_language_model(sonar_config):
             self.language_model = EmbeddingGemma2TextModel(
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 prefix=maybe_prefix(prefix, "language_model"),
             )
 
-        assert aphrodite_config.model_config.pooler_config is not None
-        self.pooler = DispatchPooler.for_embedding(aphrodite_config.model_config.pooler_config)
+        assert sonar_config.model_config.pooler_config is not None
+        self.pooler = DispatchPooler.for_embedding(sonar_config.model_config.pooler_config)
 
     def get_language_model(self) -> nn.Module:  # type: ignore[override]
         return self.language_model
@@ -1024,7 +1024,7 @@ class EmbeddingGemma2Model(nn.Module, SupportsMultiModal, AphroditeModelForPooli
         return AutoWeightsLoader(
             self,
             ignore_unexpected_prefixes=ignore_prefixes,
-        ).load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        ).load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
     @classmethod
     def get_placeholder_str(cls, modality: str, i: int = 0) -> str | None:

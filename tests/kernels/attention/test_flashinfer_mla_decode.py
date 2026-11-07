@@ -5,7 +5,7 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 FLASHINFER_WORKSPACE_BUFFER_SIZE = 128 * 1024 * 1024
 
@@ -131,8 +131,8 @@ def test_flashinfer_mla_decode(dtype: torch.dtype, bs: int, block_size: int):
 @requires_sm10x
 def test_flashinfer_trtllm_sparse_mla_decode_without_rope(dtype, mode, monkeypatch):
     """TP skips preparation; empty DCP contributions and HiSparse outputs vanish."""
-    import aphrodite.v1.attention.backends.mla.flashinfer_mla_sparse as backend
-    from aphrodite.v1.attention.backends.mla.index_group import HiSparseMLAIndexGroup
+    import sonar.v1.attention.backends.mla.flashinfer_mla_sparse as backend
+    from sonar.v1.attention.backends.mla.index_group import HiSparseMLAIndexGroup
 
     torch.set_default_device("cuda")
     torch.manual_seed(42)
@@ -198,7 +198,7 @@ def test_flashinfer_trtllm_sparse_mla_decode_without_rope(dtype, mode, monkeypat
         reference_lse.masked_fill_(empty[:, None], float("-inf"))
         torch.testing.assert_close(lse, reference_lse, atol=0, rtol=0)
 
-        from aphrodite.v1.attention.ops.dcp import CPTritonContext, correct_attn_out
+        from sonar.v1.attention.ops.dcp import CPTritonContext, correct_attn_out
 
         # The peer owns only our empty selections. Check our contribution after
         # the production merge, without zeroing the local attention output.
@@ -223,7 +223,7 @@ def test_flashinfer_trtllm_sparse_mla_decode_without_rope(dtype, mode, monkeypat
 
 @requires_sm10x
 def test_sparse_mla_safe_lengths():
-    from aphrodite.v1.attention.backends.mla.sparse_utils import (
+    from sonar.v1.attention.backends.mla.sparse_utils import (
         prepare_sparse_mla_safe_lengths,
     )
 
@@ -336,7 +336,7 @@ def test_flashinfer_sm90_fp8_mla_decode_without_rope():
 
 @requires_sm10x
 def test_flashinfer_mla_decode_workspace_supports_autotune():
-    """APHRODITE's FlashInfer MLA decode workspace must be int8 for autotuning.
+    """SONAR's FlashInfer MLA decode workspace must be int8 for autotuning.
 
     Model Runner V2's warmup autotunes ``trtllm_batch_decode_mla``, which makes
     the FlashInfer autotuner enumerate the CuteDSL tactic. That tactic asserts
@@ -348,7 +348,7 @@ def test_flashinfer_mla_decode_workspace_supports_autotune():
     """
     from flashinfer.autotuner import autotune
 
-    from aphrodite.v1.attention.backends.mla.flashinfer_mla import _get_workspace_buffer
+    from sonar.v1.attention.backends.mla.flashinfer_mla import _get_workspace_buffer
 
     torch.set_default_device("cuda")
     torch.manual_seed(0)

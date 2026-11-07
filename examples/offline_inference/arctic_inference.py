@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-from aphrodite import LLM, SamplingParams
+from sonar import LLM, SamplingParams
 
 # Sample prompts.
 prompts = [

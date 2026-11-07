@@ -4,10 +4,10 @@ import copy
 import time
 from typing import Self
 
-from aphrodite.distributed.kv_transfer.kv_connector.v1.metrics import KVConnectorProm
-from aphrodite.v1.metrics.loggers import PrometheusStatLogger
-from aphrodite.v1.metrics.perf import PerfMetricsProm
-from aphrodite.v1.spec_decode.metrics import SpecDecodingProm
+from sonar.distributed.kv_transfer.kv_connector.v1.metrics import KVConnectorProm
+from sonar.v1.metrics.loggers import PrometheusStatLogger
+from sonar.v1.metrics.perf import PerfMetricsProm
+from sonar.v1.spec_decode.metrics import SpecDecodingProm
 
 try:
     from ray import serve as ray_serve
@@ -206,6 +206,6 @@ class RayPrometheusStatLogger(PrometheusStatLogger):
     _perf_metrics_cls = RayPerfMetricsProm
 
     @staticmethod
-    def _unregister_aphrodite_metrics():
+    def _unregister_sonar_metrics():
         # No-op on purpose
         pass

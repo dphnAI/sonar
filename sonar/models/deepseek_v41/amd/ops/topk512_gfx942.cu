@@ -3,17 +3,17 @@
 //
 // The sparse indexer's decode top-512 for gfx942 (MI300X and MI325X).
 //
-// The helpers, processHistogramStep and topKPerRowJob in namespace aphrodite
-// are copied unchanged from Aphrodite's csrc/libtorch_stable/sampler.cu (lines
+// The helpers, processHistogramStep and topKPerRowJob in namespace sonar
+// are copied unchanged from Sonar's csrc/libtorch_stable/sampler.cu (lines
 // 48 to 571, the same from commit 92044241a02f to 72d59adc2c76). The installed
-// Aphrodite package has no csrc directory, so the extension that torch builds
-// at run time needs the whole source in this file. topK512Decode is Aphrodite's
-// topKPerRowDecode512DeviceLengthAware with two changes. Aphrodite compiles its
+// Sonar package has no csrc directory, so the extension that torch builds
+// at run time needs the whole source in this file. topK512Decode is Sonar's
+// topKPerRowDecode512DeviceLengthAware with two changes. Sonar compiles its
 // body for gfx950 only, so this file drops that guard. The number of blocks
-// that a row is split into comes from the launch, not from Aphrodite's gfx950
+// that a row is split into comes from the launch, not from Sonar's gfx950
 // table.
 //
-// Why this exists: on gfx942, Aphrodite's top_k_per_row_decode takes its
+// Why this exists: on gfx942, Sonar's top_k_per_row_decode takes its
 // generic 10-block path. That path adds every logit to a shared-memory
 // histogram bin with an atomic. The DSpark candidate mask leaves about 7 of
 // every 8 logits of a layer 24 to 36 row at -inf, and they all hit one bin, so
@@ -28,10 +28,10 @@
 #include <cfloat>
 #include <cub/cub.cuh>
 
-// gfx942 runs 64-lane waves. Aphrodite takes this from cuda_compat.h.
+// gfx942 runs 64-lane waves. Sonar takes this from cuda_compat.h.
 #define WARP_SIZE 64
 
-namespace aphrodite {
+namespace sonar {
 
 template <int step>
 static inline __device__ uint32_t extractBinIdx(float x) {
@@ -558,7 +558,7 @@ static __device__ void topKPerRowJob(const int* indices, const float* logits,
   }
 }
 
-}  // namespace aphrodite
+}  // namespace sonar
 
 namespace topk942 {
 
@@ -574,7 +574,7 @@ __device__ int activeBlocks(int rowLength, int maxBlocks, int minChunk) {
   return min(min(blocks, maxBlocks), max(1, rowLength / kTopK));
 }
 
-// Row r ends where Aphrodite's top_k_per_row_decode ends it. A 2D seqLens holds
+// Row r ends where Sonar's top_k_per_row_decode ends it. A 2D seqLens holds
 // each row's own end. A 1D seqLens holds the request's length, and row r is
 // draft position r % next_n of request r / next_n.
 __device__ int rowEndOf(const int* seqLens, int rowIdx, int next_n,
@@ -600,17 +600,16 @@ __global__ __launch_bounds__(kNumThreads) void topK512Decode(
   if constexpr (mergeBlocks) {
     if (blocks == 1) return;
     const int64_t offset = static_cast<int64_t>(rowIdx) * maxBlocks * kTopK;
-    aphrodite::topKPerRowJob<kNumThreads, kNumBins, true, false, true, false,
-                             true>(outIndicesAux + offset,
-                                   outLogitsAux + offset, 0, blocks * kTopK,
-                                   outIndices, nullptr, 1, kTopK);
+    sonar::topKPerRowJob<kNumThreads, kNumBins, true, false, true, false, true>(
+        outIndicesAux + offset, outLogitsAux + offset, 0, blocks * kTopK,
+        outIndices, nullptr, 1, kTopK);
   } else {
     if (blockIdx.y >= blocks) return;
     logits += static_cast<int64_t>(rowIdx) * stride0;
     if (blocks == 1) {
-      aphrodite::topKPerRowJob<kNumThreads, kNumBins, true, false, false, false,
-                               true>(nullptr, logits, 0, rowEnd, outIndices,
-                                     nullptr, 1, kTopK);
+      sonar::topKPerRowJob<kNumThreads, kNumBins, true, false, false, false,
+                           true>(nullptr, logits, 0, rowEnd, outIndices,
+                                 nullptr, 1, kTopK);
       return;
     }
     const int blockSize = rowEnd / blocks;
@@ -619,20 +618,19 @@ __global__ __launch_bounds__(kNumThreads) void topK512Decode(
         blockIdx.y + 1 == blocks ? rowEnd : rowStart + blockSize;
     const int64_t offset =
         (static_cast<int64_t>(rowIdx) * maxBlocks + blockIdx.y) * kTopK;
-    aphrodite::topKPerRowJob<kNumThreads, kNumBins, true, true, false, false,
-                             true>(nullptr, logits, rowStart, blockRowEnd,
-                                   outIndicesAux + offset,
-                                   outLogitsAux + offset, 1, kTopK);
+    sonar::topKPerRowJob<kNumThreads, kNumBins, true, true, false, false, true>(
+        nullptr, logits, rowStart, blockRowEnd, outIndicesAux + offset,
+        outLogitsAux + offset, 1, kTopK);
   }
 }
 
 // Layers 24 to 36 take their top 512 only from the candidate blocks that
-// layer 20 chose for the row. Aphrodite sets every other logit of the row to
+// layer 20 chose for the row. Sonar sets every other logit of the row to
 // -inf and then runs its top-k over the whole row. This kernel instead copies
 // the candidate logits of row r into a compact row: position i holds column
 // blockSize * cand[r][i / blockSize] + i % blockSize with that column as its
 // id, or -inf with id -1 when the block entry is -1 or the column is at or
-// past the row's end. The compact row has the same finite logits as Aphrodite's
+// past the row's end. The compact row has the same finite logits as Sonar's
 // masked row, so its top 512 are the same columns.
 __global__ void gatherCandidates(const float* logits, const int* seqLens,
                                  const int* cand, float* compactLogits,
@@ -673,14 +671,14 @@ __global__ __launch_bounds__(kNumThreads) void topK512Candidates(
     return;
   }
   const int64_t offset = static_cast<int64_t>(rowIdx) * len;
-  aphrodite::topKPerRowJob<kNumThreads, kNumBins, true, false, true, false,
-                           true>(compactIds + offset, compactLogits + offset, 0,
-                                 len, outIndices, nullptr, 1, kTopK);
+  sonar::topKPerRowJob<kNumThreads, kNumBins, true, false, true, false, true>(
+      compactIds + offset, compactLogits + offset, 0, len, outIndices, nullptr,
+      1, kTopK);
 }
 
 // The top 512 of rows that fit in the registers of one block
 // (selectFromRegisters). Each thread holds its items' order-preserving keys
-// and ids in registers, so the row is read from memory once. Aphrodite's radix
+// and ids in registers, so the row is read from memory once. Sonar's radix
 // job reads the row again in each of its up to 4 histogram passes.
 //
 // One CU does all the work of a row, and a CU retires 64 lanes of an
@@ -1154,7 +1152,7 @@ __global__ __launch_bounds__(kNumThreads) void topK512CompactRegs(
 }
 
 // The larger of two values, or NaN when either one is NaN, as Triton's
-// tl.maximum with propagate_nan=ALL in Aphrodite's block score kernel.
+// tl.maximum with propagate_nan=ALL in Sonar's block score kernel.
 __device__ inline float maxPropagatingNan(float a, float b) {
   return (a != a || b != b) ? NAN : fmaxf(a, b);
 }
@@ -1163,18 +1161,18 @@ __device__ inline float maxPropagatingNan(float a, float b) {
 // positions that layers 24 to 36 take their top 512 from. A block's score is
 // the largest of its logits before the row's end, the row's newest block
 // always scores +inf, and the list holds the topkBlocks blocks with the
-// largest scores, -1 for a pick whose score is -inf. Aphrodite does this with
+// largest scores, -1 for a pick whose score is -inf. Sonar does this with
 // three launches and torch.topk, which also sorts its picks
-// (select_candidate_blocks in aphrodite/model_executor/kernels/attention/dsa/
+// (select_candidate_blocks in sonar/model_executor/kernels/attention/dsa/
 // candidate_blocks.py). This kernel does it in one launch with one block per
 // row. Each thread scores whole blocks. With blocks of 8 and a 16-byte
 // aligned row, a block is two float4 loads, and the loop is unrolled so that
 // a thread has several blocks' loads in flight. The scores of the blocks
-// before the row's end go to the scores scratch, and Aphrodite's topKPerRowJob
-// picks the top topkBlocks of them. Aphrodite also scores the blocks past the
+// before the row's end go to the scores scratch, and Sonar's topKPerRowJob
+// picks the top topkBlocks of them. Sonar also scores the blocks past the
 // row's end, as -inf, so it only picks them when fewer than topkBlocks blocks
 // are left, and then writes -1 for them. Here those places get -1 directly.
-// So the list holds the same block ids as Aphrodite's, in no particular order,
+// So the list holds the same block ids as Sonar's, in no particular order,
 // unless two scores are equal at the cut. blockSize must be at least 1.
 __global__ __launch_bounds__(kNumThreads) void candidateBlocks(
     const float* logits, const int* visible, float* scores, int* out,
@@ -1213,9 +1211,8 @@ __global__ __launch_bounds__(kNumThreads) void candidateBlocks(
     rowScores[b] = b == newest ? INFINITY : v;
   }
   __syncthreads();
-  aphrodite::topKPerRowJob<kNumThreads, kNumBins, true, false, false, false,
-                           true>(nullptr, rowScores, 0, liveBlocks, outRow,
-                                 nullptr, 1, topkBlocks);
+  sonar::topKPerRowJob<kNumThreads, kNumBins, true, false, false, false, true>(
+      nullptr, rowScores, 0, liveBlocks, outRow, nullptr, 1, topkBlocks);
   __syncthreads();
   for (int i = threadIdx.x; i < topkBlocks; i += kNumThreads) {
     const int b = outRow[i];
@@ -1227,7 +1224,7 @@ __global__ __launch_bounds__(kNumThreads) void candidateBlocks(
 
 }  // namespace topk942
 
-// The same contract as Aphrodite's ops.top_k_per_row_decode with topK = 512 and
+// The same contract as Sonar's ops.top_k_per_row_decode with topK = 512 and
 // stride1 = 1: indices[r, :512] gets row r's top 512 column indices, in no
 // particular order, and -1 past the row's length when the row is shorter.
 void top_k_per_row_decode_512(const torch::Tensor& logits, int64_t next_n,
@@ -1316,7 +1313,7 @@ void top_k_per_row_decode_512_regs(const torch::Tensor& logits, int64_t next_n,
 // The top 512 of each row among its candidate blocks, without masking the
 // logits: candidates[r] holds row r's block ids (int32, -1 padded), and block
 // b keeps columns block_size * b to block_size * b + block_size - 1. The
-// result is that of Aphrodite's candidate mask followed by
+// result is that of Sonar's candidate mask followed by
 // top_k_per_row_decode, as sets, with the same row ends and the same -1
 // padding.
 void candidate_top_k_512(const torch::Tensor& logits, int64_t next_n,
@@ -1403,7 +1400,7 @@ void compact_top_k_512(const torch::Tensor& compact_logits,
       seqLensIs2D);
 }
 
-// compact_top_k_512 with selectFromRegisters instead of Aphrodite's
+// compact_top_k_512 with selectFromRegisters instead of Sonar's
 // topKPerRowJob. The same arguments and the same index sets, except for ties at
 // the cut.
 void compact_top_k_512_regs(const torch::Tensor& compact_logits,
@@ -1471,7 +1468,7 @@ void compact_top_k_512_regs_phase(const torch::Tensor& compact_logits,
 
 // Layer 20's candidate blocks for each decode row (topk942::candidateBlocks):
 // out[r, :out.size(1)] gets row r's block ids, -1 padded, in no particular
-// order. visible holds the row ends that Aphrodite's select_candidate_blocks
+// order. visible holds the row ends that Sonar's select_candidate_blocks
 // takes: one for each row, or one for each request of row_repeat rows.
 void candidate_blocks(const torch::Tensor& logits, const torch::Tensor& visible,
                       int64_t row_repeat, int64_t block_size,

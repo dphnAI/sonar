@@ -12,28 +12,28 @@ import torch.nn as nn
 from transformers import BatchFeature
 from transformers import WhisperConfig as HFWhisperConfig
 
-from aphrodite.config import AphroditeConfig, ModelConfig, SpeechToTextConfig
-from aphrodite.config.multimodal import MultiModalDummyOptions
-from aphrodite.config.speech_to_text import SpeechToTextParams
-from aphrodite.inputs import PromptType, TokensPrompt
-from aphrodite.model_executor.model_loader import DefaultModelLoader
-from aphrodite.model_executor.models.interfaces import (
+from sonar.config import ModelConfig, SonarConfig, SpeechToTextConfig
+from sonar.config.multimodal import MultiModalDummyOptions
+from sonar.config.speech_to_text import SpeechToTextParams
+from sonar.inputs import PromptType, TokensPrompt
+from sonar.model_executor.model_loader import DefaultModelLoader
+from sonar.model_executor.models.interfaces import (
     MultiModalEmbeddings,
     SupportsMultiModal,
     SupportsPP,
     SupportsTranscription,
 )
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.models.utils import (
     AutoWeightsLoader,
     WeightsMapper,
-    init_aphrodite_registered_model,
+    init_sonar_registered_model,
     maybe_prefix,
 )
-from aphrodite.model_executor.models.whisper import WhisperEncoder
-from aphrodite.model_executor.models.whisper_utils import ISO639_1_SUPPORTED_LANGS
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import MultiModalFieldConfig
-from aphrodite.multimodal.parse import (
+from sonar.model_executor.models.whisper import WhisperEncoder
+from sonar.model_executor.models.whisper_utils import ISO639_1_SUPPORTED_LANGS
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import MultiModalFieldConfig
+from sonar.multimodal.parse import (
     AudioItem,
     DictEmbeddingItems,
     ModalityData,
@@ -41,21 +41,21 @@ from aphrodite.multimodal.parse import (
     MultiModalDataItems,
     MultiModalDataParser,
 )
-from aphrodite.multimodal.processing import (
+from sonar.multimodal.processing import (
     BaseDummyInputsBuilder,
     BaseProcessingInfo,
     PromptReplacement,
 )
-from aphrodite.multimodal.processing.processor import (
+from sonar.multimodal.processing.processor import (
     BaseMultiModalProcessor,
     HFMultiModalInputs,
     ProcessorInputs,
 )
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.tokenizers import cached_get_tokenizer
-from aphrodite.tokenizers.kimi_audio import KimiAudioTokenizer
-from aphrodite.transformers_utils.processor import cached_feature_extractor_from_config
-from aphrodite.transformers_utils.processors.kimi_audio import KimiAudioProcessor
+from sonar.sequence import IntermediateTensors
+from sonar.tokenizers import cached_get_tokenizer
+from sonar.tokenizers.kimi_audio import KimiAudioTokenizer
+from sonar.transformers_utils.processor import cached_feature_extractor_from_config
+from sonar.transformers_utils.processors.kimi_audio import KimiAudioProcessor
 
 # Kimi-Audio constants
 KIMIA_WHISPER_SUBFOLDER = "whisper-large-v3"
@@ -81,7 +81,7 @@ class KimiAudioWhisperEncoder(WhisperEncoder):
         "qkv_proj": ["q_proj", "k_proj", "v_proj"],
     }
 
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_stacked={
             ".self_attn.q_proj": (".self_attn.qkv_proj", "q"),
             ".self_attn.k_proj": (".self_attn.qkv_proj", "k"),
@@ -89,27 +89,27 @@ class KimiAudioWhisperEncoder(WhisperEncoder):
         },
     )
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "", init_in_fp32: bool = False):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "", init_in_fp32: bool = False):
         # Load Whisper config from subfolder (authoritative source)
         # Kimi-Audio stores Whisper config in whisper-large-v3/config.json
-        model_path = aphrodite_config.model_config.model
+        model_path = sonar_config.model_config.model
 
         # Load WhisperConfig from the subfolder
         whisper_config = HFWhisperConfig.from_pretrained(
             model_path,
             subfolder=KIMIA_WHISPER_SUBFOLDER,
-            revision=aphrodite_config.model_config.revision,
+            revision=sonar_config.model_config.revision,
         )
 
         super().__init__(
-            aphrodite_config=aphrodite_config.with_hf_config(whisper_config),
+            sonar_config=sonar_config.with_hf_config(whisper_config),
             prefix=prefix,
             init_in_fp32=init_in_fp32,
         )
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
 
 # -----------------------------------------------------------------------------
@@ -119,7 +119,7 @@ class KimiAudioWhisperEncoder(WhisperEncoder):
 
 
 class KimiAudioProcessingInfo(BaseProcessingInfo):
-    """Processing info for Aphrodite registry."""
+    """Processing info for Sonar registry."""
 
     def get_hf_processor(self, **kwargs: object) -> KimiAudioProcessor:
         feature_extractor = cached_feature_extractor_from_config(
@@ -194,7 +194,7 @@ class KimiAudioMultiModalDataParser(MultiModalDataParser):
 
 
 class KimiAudioMultiModalProcessor(BaseMultiModalProcessor[KimiAudioProcessingInfo]):
-    """Aphrodite multi-modal processor wrapper for Kimi-Audio."""
+    """Sonar multi-modal processor wrapper for Kimi-Audio."""
 
     def get_dummy_inputs(
         self,
@@ -345,7 +345,7 @@ class KimiAudioForConditionalGeneration(
     }
     supports_transcription: ClassVar[Literal[True]] = True
 
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={
             # audio tower
             "model.encoder.": "audio_tower.",
@@ -379,24 +379,24 @@ class KimiAudioForConditionalGeneration(
     def get_placeholder_str(cls, modality: str, i: int) -> str | None:
         return cls.AUDIO_PLACEHOLDER if modality.startswith("audio") else None
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        self.config = aphrodite_config.model_config.hf_config
-        self.quant_config = aphrodite_config.quant_config
-        self.multimodal_config = aphrodite_config.model_config.multimodal_config
-        self.model_path = aphrodite_config.model_config.model
+        self.config = sonar_config.model_config.hf_config
+        self.quant_config = sonar_config.quant_config
+        self.multimodal_config = sonar_config.model_config.multimodal_config
+        self.model_path = sonar_config.model_config.model
 
         self.secondary_weights = [
             DefaultModelLoader.Source(
-                model_or_path=aphrodite_config.model_config.model,
+                model_or_path=sonar_config.model_config.model,
                 subfolder="whisper-large-v3",
-                revision=aphrodite_config.model_config.revision,
+                revision=sonar_config.model_config.revision,
             )
         ]
 
-        with self._mark_tower_model(aphrodite_config, "audio"):
+        with self._mark_tower_model(sonar_config, "audio"):
             self.audio_tower = KimiAudioWhisperEncoder(
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 prefix=maybe_prefix(prefix, "audio_tower"),
             )
             self.multi_modal_projector = KimiAudioMultiModalProjector(
@@ -405,9 +405,9 @@ class KimiAudioForConditionalGeneration(
                 prefix=maybe_prefix(prefix, "multi_modal_projector"),
             )
 
-        with self._mark_language_model(aphrodite_config):
-            self.language_model = init_aphrodite_registered_model(
-                aphrodite_config=aphrodite_config.with_hf_config(self.config, architectures=["Qwen2ForCausalLM"]),
+        with self._mark_language_model(sonar_config):
+            self.language_model = init_sonar_registered_model(
+                sonar_config=sonar_config.with_hf_config(self.config, architectures=["Qwen2ForCausalLM"]),
                 prefix=maybe_prefix(prefix, "language_model"),
             )
 
@@ -470,7 +470,7 @@ class KimiAudioForConditionalGeneration(
 
         Kimi-Audio fusion: inputs_embeds = (text_emb + audio_emb) × √2
 
-        For PP compatibility, we use the is_multimodal mask from Aphrodite engine
+        For PP compatibility, we use the is_multimodal mask from Sonar engine
         which is correctly computed per pipeline stage.
         """
         # Get text embeddings
@@ -494,7 +494,7 @@ class KimiAudioForConditionalGeneration(
 
         # In PP, audio_embeds count should match is_multimodal.sum()
         # For now, use embeddings sequentially
-        # (works for non-PP, PP needs Aphrodite infra fix)
+        # (works for non-PP, PP needs Sonar infra fix)
         num_mm_tokens = is_multimodal.sum().item()
         num_audio_embeds = audio_embeds.shape[0]
 
@@ -549,7 +549,7 @@ class KimiAudioForConditionalGeneration(
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
     @classmethod
     def get_speech_to_text_config(cls, model_config: ModelConfig, task_type: str) -> SpeechToTextConfig:

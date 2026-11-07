@@ -15,10 +15,10 @@ from torch._dynamo.utils import dynamo_timed
 from torch._inductor.runtime.triton_heuristics import CachingAutotuner
 from torch._logging._internal import trace_structured
 
-from aphrodite.compilation.backends import AphroditeBackend
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.utils import Range
-from aphrodite.logger import init_logger
+from sonar.compilation.backends import SonarBackend
+from sonar.config import SonarConfig
+from sonar.config.utils import Range
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 
@@ -86,11 +86,11 @@ class PiecewiseBackend:
     def __init__(
         self,
         graph: fx.GraphModule | None,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         piecewise_compile_index: int,
         total_piecewise_compiles: int,
         sym_shape_indices: list[int],
-        aphrodite_backend: AphroditeBackend,
+        sonar_backend: SonarBackend,
         returns_tuple: bool,
         compiled_runnables: dict[str, Callable[..., Any]] | None = None,
         submod_name: str = "",
@@ -118,11 +118,11 @@ class PiecewiseBackend:
         )
 
         self.graph = graph
-        self.aphrodite_config = aphrodite_config
-        self.compilation_config = aphrodite_config.compilation_config
+        self.sonar_config = sonar_config
+        self.compilation_config = sonar_config.compilation_config
         self.piecewise_compile_index = piecewise_compile_index
         self.total_piecewise_compiles = total_piecewise_compiles
-        self.aphrodite_backend = aphrodite_backend
+        self.sonar_backend = sonar_backend
         self.compiled_runnables = compiled_runnables
         self.submod_name = submod_name
 
@@ -130,7 +130,7 @@ class PiecewiseBackend:
         self.is_last_graph = piecewise_compile_index == total_piecewise_compiles - 1
 
         self.is_full_graph = total_piecewise_compiles == 1
-        self.is_encoder_compilation = aphrodite_backend.is_encoder
+        self.is_encoder_compilation = sonar_backend.is_encoder
 
         self.compile_ranges = self.compilation_config.get_compile_ranges()
         if self.is_encoder_compilation:
@@ -138,7 +138,7 @@ class PiecewiseBackend:
             # to set the upper bound of the compile ranges
             max_int32 = 2**31 - 1
             last_compile_range = self.compile_ranges[-1]
-            assert last_compile_range.end == aphrodite_config.scheduler_config.max_num_batched_tokens
+            assert last_compile_range.end == sonar_config.scheduler_config.max_num_batched_tokens
             self.compile_ranges[-1] = Range(start=last_compile_range.start, end=max_int32)  # type: ignore[call-arg]
 
         log_string = f"PiecewiseBackend: compile_ranges: {self.compile_ranges}"
@@ -189,7 +189,7 @@ class PiecewiseBackend:
             graph_output = compiled_graph(*args)
             # unpack the tuple if needed
             # TODO(rzou): the implication is that we're not
-            # reading the python bytecode correctly in Aphrodite?
+            # reading the python bytecode correctly in Sonar?
             if self.returns_tuple or not isinstance(graph_output, (tuple, list)):
                 return graph_output
             else:
@@ -252,20 +252,20 @@ class PiecewiseBackend:
             else:
                 args_list = get_fake_args_from_graph(self.graph)
 
-            range_entry.runnable = self.aphrodite_backend.compiler_manager.compile(
+            range_entry.runnable = self.sonar_backend.compiler_manager.compile(
                 self.graph,
                 args_list,
-                self.aphrodite_backend.inductor_config,
+                self.sonar_backend.inductor_config,
                 self.compilation_config,
                 compile_range=range_entry.compile_range,
                 graph_index=self.piecewise_compile_index,
                 num_graphs=self.total_piecewise_compiles,
-                is_encoder=self.aphrodite_backend.is_encoder,
+                is_encoder=self.sonar_backend.is_encoder,
             )
 
             range_entry.compiled = True
 
-    @dynamo_timed("aphrodite_log_compile_start_torch_trace_only")
+    @dynamo_timed("sonar_log_compile_start_torch_trace_only")
     def _log_compile_start(self, compile_range: Range):
         """Log compilation event for TORCH_TRACE/tlparse."""
         is_cudagraph_size = self.compile_sizes is not None and compile_range.start in self.compile_sizes
@@ -274,7 +274,7 @@ class PiecewiseBackend:
         trace_structured(
             "artifact",
             metadata_fn=lambda: {
-                "name": "aphrodite_piecewise_compile_start",
+                "name": "sonar_piecewise_compile_start",
                 "encoding": "json",
             },
             payload_fn=lambda: json.dumps(
@@ -298,7 +298,7 @@ class PiecewiseBackend:
             trace_structured(
                 "graph_dump",
                 metadata_fn=lambda: {
-                    "name": f"aphrodite_{submod_name}",
+                    "name": f"sonar_{submod_name}",
                 },
                 payload_fn=lambda: self.graph.print_readable(print_output=False),
             )

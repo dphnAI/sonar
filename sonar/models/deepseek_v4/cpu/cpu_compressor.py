@@ -15,14 +15,14 @@ from typing import Any, cast
 
 import torch
 
-from aphrodite._custom_ops import (
+from sonar._custom_ops import (
     compress_norm_rope_store_cpu,
     compress_norm_rope_store_indexer_cpu,
     save_partial_states_cpu,
 )
-from aphrodite.forward_context import get_forward_context
-from aphrodite.models.deepseek_v4.compressor import CompressorMetadata, DeepseekCompressor
-from aphrodite.models.deepseek_v4.cpu.cpu_utils import map_local_to_global_slots_cpu
+from sonar.forward_context import get_forward_context
+from sonar.models.deepseek_v4.compressor import CompressorMetadata, DeepseekCompressor
+from sonar.models.deepseek_v4.cpu.cpu_utils import map_local_to_global_slots_cpu
 
 
 class DeepseekV4CPUCompressor(DeepseekCompressor):

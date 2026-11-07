@@ -3,13 +3,13 @@
 
 import pytest
 
-from aphrodite.assets.video import VideoAsset
-from aphrodite.config import AphroditeConfig, ModelConfig
-from aphrodite.multimodal.utils import encode_video_url
-from aphrodite.renderers.chat_utils import ChatCompletionMessageParam
-from aphrodite.renderers.hf import HfRenderer
-from aphrodite.renderers.params import ChatParams
-from aphrodite.tokenizers.registry import cached_tokenizer_from_config
+from sonar.assets.video import VideoAsset
+from sonar.config import ModelConfig, SonarConfig
+from sonar.multimodal.utils import encode_video_url
+from sonar.renderers.chat_utils import ChatCompletionMessageParam
+from sonar.renderers.hf import HfRenderer
+from sonar.renderers.params import ChatParams
+from sonar.tokenizers.registry import cached_tokenizer_from_config
 
 pytestmark = pytest.mark.cpu_test
 
@@ -27,7 +27,7 @@ def _build_video_renderer() -> HfRenderer:
     )
 
     return HfRenderer(
-        AphroditeConfig(model_config=model_config),
+        SonarConfig(model_config=model_config),
         cached_tokenizer_from_config(model_config),
     )
 

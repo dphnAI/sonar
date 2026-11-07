@@ -8,8 +8,8 @@ from typing import TYPE_CHECKING, Any
 import regex as re
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     FP4_DTYPE,
     FP8_DTYPE,
     INT4_DTYPE,
@@ -19,18 +19,18 @@ from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     ScaleDesc,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.scalar_type import scalar_types
-from aphrodite.utils.import_utils import has_humming
+from sonar.platforms import current_platform
+from sonar.scalar_type import scalar_types
+from sonar.utils.import_utils import has_humming
 
 if TYPE_CHECKING:
-    from aphrodite.utils.humming import (
+    from sonar.utils.humming import (
         BaseInputSchema,
         BaseWeightSchema,
         HummingInputSchema,
         HummingWeightSchema,
     )
-    from aphrodite.utils.humming import dtypes as humming_dtypes
+    from sonar.utils.humming import dtypes as humming_dtypes
 
 
 def humming_update_schema_hadamard_block_size(
@@ -52,7 +52,7 @@ def humming_update_schema_hadamard_block_size(
 
 
 if has_humming():
-    from aphrodite.utils.humming import dtypes as humming_dtypes
+    from sonar.utils.humming import dtypes as humming_dtypes
 
     _HUMMING_TO_QUANT_DTYPE: dict[humming_dtypes.DataType, Any] = {
         humming_dtypes.float4e0m3: FP4_DTYPE,
@@ -104,7 +104,7 @@ def weight_schema_to_quant_key(
     schema: "BaseWeightSchema",
     param_dtype: torch.dtype | None = None,
 ) -> QuantKey:
-    from aphrodite.utils.humming import WeightScale2Type, WeightScaleType
+    from sonar.utils.humming import WeightScale2Type, WeightScaleType
 
     if param_dtype is None:
         param_dtype = torch.get_default_dtype()
@@ -150,7 +150,7 @@ def input_schema_to_quant_key(
     schema: "BaseInputSchema",
     param_dtype: torch.dtype | None = None,
 ) -> QuantKey | None:
-    from aphrodite.utils.humming import InputQuantizationMode
+    from sonar.utils.humming import InputQuantizationMode
 
     if param_dtype is None:
         param_dtype = torch.get_default_dtype()
@@ -210,7 +210,7 @@ def input_schema_to_quant_key(
 
 
 def quant_key_to_input_schema(key: QuantKey | None) -> "HummingInputSchema":
-    from aphrodite.utils.humming import HummingInputSchema, InputQuantizationMode
+    from sonar.utils.humming import HummingInputSchema, InputQuantizationMode
 
     if key is None:
         return HummingInputSchema(input_quant_mode=InputQuantizationMode.Disabled)
@@ -264,7 +264,7 @@ def check_and_fallback_input_schema(
     param_dtype: torch.dtype | None = None,
     allow_fallback: bool = True,
 ) -> "HummingInputSchema":
-    from aphrodite.utils.humming import HummingInputSchema, InputQuantizationMode
+    from sonar.utils.humming import HummingInputSchema, InputQuantizationMode
 
     capability = current_platform.get_device_capability()
     assert capability is not None

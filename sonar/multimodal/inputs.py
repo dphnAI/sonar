@@ -21,9 +21,9 @@ import numpy as np
 from PIL.Image import Image
 from typing_extensions import TypeVar
 
-from aphrodite.utils.collection_utils import is_list_of
-from aphrodite.utils.import_utils import LazyLoader
-from aphrodite.utils.jsontree import json_iter_leaves, json_map_leaves
+from sonar.utils.collection_utils import is_list_of
+from sonar.utils.import_utils import LazyLoader
+from sonar.utils.jsontree import json_iter_leaves, json_map_leaves
 
 from .media import MediaWithBytes
 
@@ -226,7 +226,7 @@ def nested_tensors_equal(
     check_dtype: bool = True,
 ) -> bool:
     """Equality check between
-    [`NestedTensors`][aphrodite.multimodal.inputs.NestedTensors] objects.
+    [`NestedTensors`][sonar.multimodal.inputs.NestedTensors] objects.
 
     If `check_dtype` is `True`, the tensors must have the same dtype.
     """
@@ -309,13 +309,13 @@ def _nested_tensors_h2d(
 BatchedTensorInputs: TypeAlias = dict[str, NestedTensors]
 """
 A dictionary containing nested tensors which have been batched via
-[`MultiModalKwargsItems.get_data`][aphrodite.multimodal.inputs.MultiModalKwargsItems.get_data].
+[`MultiModalKwargsItems.get_data`][sonar.multimodal.inputs.MultiModalKwargsItems.get_data].
 """
 
 
 def batched_tensors_equal(a: BatchedTensorInputs, b: BatchedTensorInputs) -> bool:
     """Equality check between
-    [`BatchedTensorInputs`][aphrodite.multimodal.inputs.BatchedTensorInputs] objects.
+    [`BatchedTensorInputs`][sonar.multimodal.inputs.BatchedTensorInputs] objects.
     """
     return all(k in b and nested_tensors_equal(a[k], b[k]) for k in a)
 
@@ -369,13 +369,13 @@ class MultiModalFeatureSpec:
 @dataclass
 class MultiModalFieldElem:
     """Represents a processed keyword argument to pass to a model for a
-    [`MultiModalKwargsItem`][aphrodite.multimodal.inputs.MultiModalKwargsItem].
+    [`MultiModalKwargsItem`][sonar.multimodal.inputs.MultiModalKwargsItem].
     """
 
     data: NestedTensors
     """
     The tensor data of this field in
-    [`MultiModalKwargsItem`][aphrodite.multimodal.inputs.MultiModalKwargsItem],
+    [`MultiModalKwargsItem`][sonar.multimodal.inputs.MultiModalKwargsItem],
     i.e. the value of the keyword argument to be passed to the model.
 
     It may be set to `None` if it is determined that the item is cached
@@ -405,14 +405,14 @@ class MultiModalFieldElem:
 @dataclass(frozen=True, kw_only=True)
 class BaseMultiModalField(ABC):
     """Defines how to interpret tensor data belonging to a keyword argument for
-    [`MultiModalKwargsItems`][aphrodite.multimodal.inputs.MultiModalKwargsItems],
+    [`MultiModalKwargsItems`][sonar.multimodal.inputs.MultiModalKwargsItems],
     and vice versa.
     """
 
     keep_on_cpu: bool = False
     """
     If `True`, then this field is excluded from being moved to the accelerator when
-    [`group_and_batch_mm_items`][aphrodite.multimodal.utils.group_and_batch_mm_items]
+    [`group_and_batch_mm_items`][sonar.multimodal.utils.group_and_batch_mm_items]
     is called to batch the data.
     """
 
@@ -433,11 +433,11 @@ class BaseMultiModalField(ABC):
         data: NestedTensors,
     ) -> Sequence[MultiModalFieldElem]:
         """Construct
-        [`MultiModalFieldElem`][aphrodite.multimodal.inputs.MultiModalFieldElem]
+        [`MultiModalFieldElem`][sonar.multimodal.inputs.MultiModalFieldElem]
         instances to represent the provided data.
 
         This is the inverse of
-        [`reduce_data`][aphrodite.multimodal.inputs.BaseMultiModalField.reduce_data].
+        [`reduce_data`][sonar.multimodal.inputs.BaseMultiModalField.reduce_data].
         """
         raise NotImplementedError
 
@@ -453,10 +453,10 @@ class BaseMultiModalField(ABC):
         pin_memory: bool = False,
     ) -> NestedTensors:
         """Merge the data from multiple instances of
-        [`MultiModalFieldElem`][aphrodite.multimodal.inputs.MultiModalFieldElem].
+        [`MultiModalFieldElem`][sonar.multimodal.inputs.MultiModalFieldElem].
 
         This is the inverse of
-        [`build_elems`][aphrodite.multimodal.inputs.BaseMultiModalField.build_elems].
+        [`build_elems`][sonar.multimodal.inputs.BaseMultiModalField.build_elems].
         """
         field_types = [type(item.field) for item in elems]
         if len(set(field_types)) > 1:
@@ -482,7 +482,7 @@ class BaseMultiModalField(ABC):
 @dataclass(frozen=True, kw_only=True)
 class MultiModalBatchedField(BaseMultiModalField):
     """Info:
-    [`MultiModalFieldConfig.batched`][aphrodite.multimodal.inputs.MultiModalFieldConfig.batched]
+    [`MultiModalFieldConfig.batched`][sonar.multimodal.inputs.MultiModalFieldConfig.batched]
     """
 
     def build_elems(
@@ -513,8 +513,8 @@ class MultiModalBatchedField(BaseMultiModalField):
 @dataclass(frozen=True, kw_only=True)
 class MultiModalFlatField(BaseMultiModalField):
     """Info:
-    [`MultiModalFieldConfig.flat`][aphrodite.multimodal.inputs.MultiModalFieldConfig.flat]
-    [`MultiModalFieldConfig.flat_from_sizes`][aphrodite.multimodal.inputs.MultiModalFieldConfig.flat_from_sizes]
+    [`MultiModalFieldConfig.flat`][sonar.multimodal.inputs.MultiModalFieldConfig.flat]
+    [`MultiModalFieldConfig.flat_from_sizes`][sonar.multimodal.inputs.MultiModalFieldConfig.flat_from_sizes]
     """
 
     slices: Sequence[slice] | Sequence[Sequence[slice]]
@@ -594,7 +594,7 @@ class MultiModalFlatField(BaseMultiModalField):
 @dataclass(frozen=True, kw_only=True)
 class MultiModalSharedField(BaseMultiModalField):
     """Info:
-    [`MultiModalFieldConfig.shared`][aphrodite.multimodal.inputs.MultiModalFieldConfig.shared]
+    [`MultiModalFieldConfig.shared`][sonar.multimodal.inputs.MultiModalFieldConfig.shared]
     """
 
     batch_size: int
@@ -757,7 +757,7 @@ class MultiModalFieldConfig:
         ```
 
         Info:
-            [`MultiModalFieldConfig.flat`][aphrodite.multimodal.inputs.MultiModalFieldConfig.flat]
+            [`MultiModalFieldConfig.flat`][sonar.multimodal.inputs.MultiModalFieldConfig.flat]
 
         """
         if size_per_item.ndim != 1:
@@ -832,7 +832,7 @@ class MultiModalFieldConfig:
 class MultiModalKwargsItem(UserDict[str, MultiModalFieldElem]):
     """A dictionary of processed keyword arguments to pass to the model,
     corresponding to a single item in
-    [`MultiModalDataItems`][aphrodite.multimodal.parse.MultiModalDataItems].
+    [`MultiModalDataItems`][sonar.multimodal.parse.MultiModalDataItems].
     """
 
     @staticmethod
@@ -887,7 +887,7 @@ class MultiModalKwargsItems(UserDict[str, Sequence[_I]]):
     we split up the items because some of them may already be cached.
     Also, items from multiple requests may be batched together to improve throughput,
     using the logic defined by the
-    [`BaseMultiModalField`][aphrodite.multimodal.inputs.BaseMultiModalField]
+    [`BaseMultiModalField`][sonar.multimodal.inputs.BaseMultiModalField]
     for each keyword argument.
     """
 
@@ -897,7 +897,7 @@ class MultiModalKwargsItems(UserDict[str, Sequence[_I]]):
         config_by_key: Mapping[str, MultiModalFieldConfig],
     ):
         # NOTE: This skips fields in `hf_inputs` that are not in `config_by_key`
-        # We assume that those fields are not used in Aphrodite
+        # We assume that those fields are not used in Sonar
         elems_by_key = dict[str, Sequence[MultiModalFieldElem]]()
         keys_by_modality = defaultdict[str, set[str]](set)
         for key, config in config_by_key.items():

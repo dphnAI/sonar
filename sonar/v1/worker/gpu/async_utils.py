@@ -8,21 +8,21 @@ from typing import TYPE_CHECKING
 import numpy as np
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.model_executor.layers.fused_moe.all2all_utils import get_ep_all2all_manager
-from aphrodite.v1.outputs import (
+import sonar.envs as envs
+from sonar.model_executor.layers.fused_moe.all2all_utils import get_ep_all2all_manager
+from sonar.v1.outputs import (
     AsyncModelRunnerOutput,
     KVConnectorOutput,
     LogprobsTensors,
     ModelRunnerOutput,
     PoolerOutput,
 )
-from aphrodite.v1.worker.gpu.sample.output import SamplerOutput, SamplingMaskTensors
-from aphrodite.v1.worker.utils import raise_if_nan_logits
+from sonar.v1.worker.gpu.sample.output import SamplerOutput, SamplingMaskTensors
+from sonar.v1.worker.utils import raise_if_nan_logits
 
 if TYPE_CHECKING:
-    from aphrodite.distributed.aux_output_connector.worker import PendingAuxOutput
-    from aphrodite.v1.worker.gpu.input_batch import InputBatch
+    from sonar.distributed.aux_output_connector.worker import PendingAuxOutput
+    from sonar.v1.worker.gpu.input_batch import InputBatch
 
 
 @dataclass(frozen=True)
@@ -220,7 +220,7 @@ class AsyncOutput(AsyncModelRunnerOutput):
             self.model_runner_output.num_nans_in_logits = dict(
                 zip(self.model_runner_output.req_ids, self.num_nans.tolist())
             )
-            if envs.APHRODITE_RAISE_ON_LOGIT_NANS:
+            if envs.SONAR_RAISE_ON_LOGIT_NANS:
                 raise_if_nan_logits(self.model_runner_output.num_nans_in_logits)
 
         if self.logprobs_tensors is not None:

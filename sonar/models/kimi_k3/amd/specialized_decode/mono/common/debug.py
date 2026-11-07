@@ -9,8 +9,8 @@ import zlib
 
 import torch
 
-from aphrodite.models.kimi_k3.amd.specialized_decode.mono.abi import RECORD_WORDS
-from aphrodite.models.kimi_k3.amd.specialized_decode.mono.common.plan import BLOCKS
+from sonar.models.kimi_k3.amd.specialized_decode.mono.abi import RECORD_WORDS
+from sonar.models.kimi_k3.amd.specialized_decode.mono.common.plan import BLOCKS
 
 
 def region_id(name: str) -> int:

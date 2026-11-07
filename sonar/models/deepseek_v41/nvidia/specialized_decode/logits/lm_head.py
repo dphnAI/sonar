@@ -12,14 +12,14 @@ gate is the row count alone.
 import torch
 from torch import nn
 
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.utils import _can_use_flashinfer_cutedsl_bf16
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.utils import _can_use_flashinfer_cutedsl_bf16
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     UnquantizedEmbeddingMethod,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.flashinfer import (
+from sonar.platforms import current_platform
+from sonar.utils.flashinfer import (
     flashinfer_bf16_mm,
     is_flashinfer_cutedsl_bf16_gemm_supported,
 )

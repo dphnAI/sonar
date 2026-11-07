@@ -7,9 +7,9 @@ from pathlib import Path
 
 import torch
 
-from aphrodite import envs
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
+from sonar import envs
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
 
 
 @cache
@@ -19,10 +19,10 @@ def use_sm120_dsa_indexer(page_size: int | None = None) -> bool:
         return False
     if page_size is not None and page_size not in (32, 64, 128):
         return True
-    if not envs.APHRODITE_USE_DEEP_GEMM:
+    if not envs.SONAR_USE_DEEP_GEMM:
         return True
 
-    from aphrodite.utils.deep_gemm import _import_deep_gemm
+    from sonar.utils.deep_gemm import _import_deep_gemm
 
     module = _import_deep_gemm()
     if module is None or not all(

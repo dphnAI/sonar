@@ -4,7 +4,7 @@
 #include <cstdint>
 #include <string_view>
 
-namespace aphrodite {
+namespace sonar {
 namespace vmm {
 
 using generic_ptr_t = void*;
@@ -22,4 +22,4 @@ static constexpr std::string_view v_prefix = "v_";
 static constexpr std::string_view kv_prefix = "kv_";
 
 }  // namespace vmm
-}  // namespace aphrodite
+}  // namespace sonar

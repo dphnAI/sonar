@@ -10,13 +10,13 @@ from typing import TYPE_CHECKING, ClassVar, Final, cast
 
 import torch
 
-from aphrodite import envs
-from aphrodite._aiter_ops import is_aiter_found_and_supported, rocm_aiter_ops
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.cache import CacheDType
-from aphrodite.distributed import get_dcp_group
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.attention.mla_attention import (
+from sonar import envs
+from sonar._aiter_ops import is_aiter_found_and_supported, rocm_aiter_ops
+from sonar.config import SonarConfig
+from sonar.config.cache import CacheDType
+from sonar.distributed import get_dcp_group
+from sonar.logger import init_logger
+from sonar.model_executor.layers.attention.mla_attention import (
     MLACommonBackend,
     MLACommonDecodeMetadata,
     MLACommonImpl,
@@ -27,42 +27,42 @@ from aphrodite.model_executor.layers.attention.mla_attention import (
     accumulate_mla_context_chunk,
     init_mla_context_partial,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.gpu_sync_debug import gpu_sync_allowed
-from aphrodite.utils.math_utils import cdiv, largest_power_of_2_divisor
-from aphrodite.v1.attention.backend import (
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
+from sonar.utils.gpu_sync_debug import gpu_sync_allowed
+from sonar.utils.math_utils import cdiv, largest_power_of_2_divisor
+from sonar.v1.attention.backend import (
     AttentionCGSupport,
     AttentionLayer,
     CommonAttentionMetadata,
     MultipleOf,
     max_decode_query_len,
 )
-from aphrodite.v1.attention.backends.mla.triton_mla import _compute_num_kv_splits
-from aphrodite.v1.attention.backends.utils import (
+from sonar.v1.attention.backends.mla.triton_mla import _compute_num_kv_splits
+from sonar.v1.attention.backends.utils import (
     get_dcp_local_seq_lens,
 )
-from aphrodite.v1.attention.ops.rocm_aiter_mla_merge import (
+from sonar.v1.attention.ops.rocm_aiter_mla_merge import (
     merge_mla_segments_triton,
 )
-from aphrodite.v1.attention.ops.rocm_aiter_mla_prefill import (
+from sonar.v1.attention.ops.rocm_aiter_mla_prefill import (
     context_row_indices,
     expand_context,
     gather_compressed_context,
 )
-from aphrodite.v1.attention.ops.triton_decode_attention import decode_attention_fwd
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.attention.ops.triton_decode_attention import decode_attention_fwd
+from sonar.v1.kv_cache_interface import (
     AttentionSpec,
     KVCacheSpec,
     is_quantized_kv_cache,
 )
-from aphrodite.v1.worker.workspace import (
+from sonar.v1.worker.workspace import (
     current_workspace_manager,
     is_workspace_manager_initialized,
 )
 
 if TYPE_CHECKING:
-    from aphrodite.platforms.interface import DeviceCapability
+    from sonar.platforms.interface import DeviceCapability
 
 logger = init_logger(__name__)
 
@@ -147,7 +147,7 @@ def _fp8_mla_prefill_supported() -> bool:
     either is missing we silently fall back to ``flash_attn_varlen_func``.
     """
     try:
-        from aphrodite.platforms.rocm import on_gfx950
+        from sonar.platforms.rocm import on_gfx950
     except Exception:  # noqa: BLE001
         return False
     if not on_gfx950():
@@ -165,11 +165,11 @@ def _fused_mla_prefill_qkv_supported() -> bool:
 
     Older AITER builds without the kernel fall back to the eager concat/cast.
     """
-    from aphrodite.platforms import current_platform
+    from sonar.platforms import current_platform
 
     if not current_platform.is_rocm():
         return False
-    from aphrodite.platforms.rocm import get_cdna_version
+    from sonar.platforms.rocm import get_cdna_version
 
     if get_cdna_version() != 4:
         return False
@@ -227,7 +227,7 @@ def _aiter_mla_non_causal_asm_kernels() -> bool:
     backend.
     """
     try:
-        from aphrodite.platforms.rocm import on_gfx950
+        from sonar.platforms.rocm import on_gfx950
     except Exception:  # noqa: BLE001
         return False
     return bool(on_gfx950())
@@ -244,7 +244,7 @@ def _gluon_mla_decode_supported() -> bool:
     correct for any 1..15 heads.
     """
     try:
-        from aphrodite.platforms.rocm import on_gfx950
+        from sonar.platforms.rocm import on_gfx950
     except Exception:  # noqa: BLE001
         return False
     return on_gfx950()
@@ -316,7 +316,7 @@ def _segmented_mla_fits_lds(num_heads: int, block_size: int, fp8_kv: bool) -> bo
     at TILE-128 and for fp8 KV past 64 heads, where its query block widens to
     128 heads. ``num_heads`` is the DCP-gathered count.
     """
-    from aphrodite.platforms.rocm import on_gfx942
+    from sonar.platforms.rocm import on_gfx942
 
     if not on_gfx942():
         return True
@@ -334,7 +334,7 @@ def _triton_dcp_verify_supported(dcp_world_size: int, cp_interleave: int) -> boo
     segmented MLA cannot (see _segmented_mla_fits_lds). qlen==1 and non-causal
     stay on the plain ASM decode.
     """
-    from aphrodite.platforms.rocm import on_gfx942
+    from sonar.platforms.rocm import on_gfx942
 
     return on_gfx942() and dcp_world_size > 1 and cp_interleave == 1
 
@@ -452,7 +452,7 @@ def _asm_dcp_verify_configured(dcp_world_size: int, cp_interleave: int, multi_to
     """
     if not (dcp_world_size > 1 and cp_interleave == 1 and multi_token_decode):
         return False
-    from aphrodite.platforms.rocm import on_gfx950
+    from sonar.platforms.rocm import on_gfx950
 
     return bool(on_gfx950())
 
@@ -460,7 +460,7 @@ def _asm_dcp_verify_configured(dcp_world_size: int, cp_interleave: int, multi_to
 def _aiter_mla_small_head_mode() -> str:
     """Small-head (<16) MLA decode kernel selection.
 
-    Controlled by ``APHRODITE_ROCM_AITER_MLA_ASM_PADDING``:
+    Controlled by ``SONAR_ROCM_AITER_MLA_ASM_PADDING``:
 
     - ``"auto"`` (default): let the arch decide -- divisor head counts keep the
       Gluon decode where a build exists (gfx950), everything else (non-divisor
@@ -472,20 +472,20 @@ def _aiter_mla_small_head_mode() -> str:
     On gfx942 (no Gluon build) the ASM path is always used regardless of this
     setting; ``"gluon"`` there falls back to ASM with a one-time warning.
     """
-    import aphrodite.envs as envs
+    import sonar.envs as envs
 
-    mode = (envs.APHRODITE_ROCM_AITER_MLA_ASM_PADDING or "auto").lower()
+    mode = (envs.SONAR_ROCM_AITER_MLA_ASM_PADDING or "auto").lower()
     if mode == "gluon" and not _gluon_mla_decode_supported():
         logger.warning_once(
-            "APHRODITE_ROCM_AITER_MLA_ASM_PADDING=gluon requested, but this device "
+            "SONAR_ROCM_AITER_MLA_ASM_PADDING=gluon requested, but this device "
             "has no Gluon MLA decode build (Gluon requires gfx950); using the "
             "padded persistent-scheduling ASM decode instead."
         )
     return mode
 
 
-def _adaptive_dcp_verify_unsupported_reason(aphrodite_config: AphroditeConfig) -> str | None:
-    parallel_config = aphrodite_config.parallel_config
+def _adaptive_dcp_verify_unsupported_reason(sonar_config: SonarConfig) -> str | None:
+    parallel_config = sonar_config.parallel_config
     dcp_world_size = parallel_config.decode_context_parallel_size
     if dcp_world_size == 1:
         return None
@@ -497,7 +497,7 @@ def _adaptive_dcp_verify_unsupported_reason(aphrodite_config: AphroditeConfig) -
         )
     asm_selected = (
         _asm_dcp_verify_configured(dcp_world_size, cp_interleave, True)
-        and max_decode_query_len(aphrodite_config) >= _MIN_CPRR_QLEN
+        and max_decode_query_len(sonar_config) >= _MIN_CPRR_QLEN
     )
     if not (
         asm_selected
@@ -511,13 +511,13 @@ def _adaptive_dcp_verify_unsupported_reason(aphrodite_config: AphroditeConfig) -
     return None
 
 
-def _adaptive_varlen_verify_enabled(aphrodite_config: AphroditeConfig) -> bool:
-    speculative_config = aphrodite_config.speculative_config
+def _adaptive_varlen_verify_enabled(sonar_config: SonarConfig) -> bool:
+    speculative_config = sonar_config.speculative_config
     return (
         speculative_config is not None
         and bool(getattr(speculative_config, "enable_adaptive_verification", False))
-        and max_decode_query_len(aphrodite_config) > 1
-        and _adaptive_dcp_verify_unsupported_reason(aphrodite_config) is None
+        and max_decode_query_len(sonar_config) > 1
+        and _adaptive_dcp_verify_unsupported_reason(sonar_config) is None
     )
 
 
@@ -606,10 +606,10 @@ class AiterMLABackend(MLACommonBackend):
         if use_non_causal and dtype == torch.float16 and kv_cache_dtype in (None, "auto", "float16"):
             invalid_reasons.append("non-causal fp16 MLA decode not supported")
         if use_adaptive_verification and use_dcp:
-            from aphrodite.config import get_current_aphrodite_config_or_none
+            from sonar.config import get_current_sonar_config_or_none
 
-            aphrodite_config = get_current_aphrodite_config_or_none()
-            reason = _adaptive_dcp_verify_unsupported_reason(aphrodite_config) if aphrodite_config is not None else None
+            sonar_config = get_current_sonar_config_or_none()
+            reason = _adaptive_dcp_verify_unsupported_reason(sonar_config) if sonar_config is not None else None
             if reason is not None:
                 raise ValueError(
                     f"{reason}. Disable enable_adaptive_verification in the "
@@ -799,23 +799,23 @@ class AiterMLAMetadataBuilder(MLACommonMetadataBuilder[AiterMLAMetadata]):
     @classmethod
     def get_varlen_cudagraph_max_query_len(
         cls: type["AiterMLAMetadataBuilder"],
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         kv_cache_spec: KVCacheSpec,
     ) -> int | None:
-        if not _adaptive_varlen_verify_enabled(aphrodite_config):
+        if not _adaptive_varlen_verify_enabled(sonar_config):
             return None
-        if cls.get_cudagraph_support(aphrodite_config, kv_cache_spec) != AttentionCGSupport.UNIFORM_BATCH:
+        if cls.get_cudagraph_support(sonar_config, kv_cache_spec) != AttentionCGSupport.UNIFORM_BATCH:
             return None
-        return max_decode_query_len(aphrodite_config)
+        return max_decode_query_len(sonar_config)
 
     def __init__(
         self,
         kv_cache_spec: AttentionSpec,
         layer_names: list[str],
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
     ):
-        parallel_config = aphrodite_config.parallel_config
+        parallel_config = sonar_config.parallel_config
         supports_segmented_dcp_verify = _segmented_dcp_verify_supported(
             parallel_config.decode_context_parallel_size,
             parallel_config.cp_kv_cache_interleave_size,
@@ -827,12 +827,12 @@ class AiterMLAMetadataBuilder(MLACommonMetadataBuilder[AiterMLAMetadata]):
         asm_dcp_verify_config = _asm_dcp_verify_configured(
             parallel_config.decode_context_parallel_size,
             parallel_config.cp_kv_cache_interleave_size,
-            multi_token_decode=aphrodite_config.speculative_config is not None,
+            multi_token_decode=sonar_config.speculative_config is not None,
         )
         super().__init__(
             kv_cache_spec,
             layer_names,
-            aphrodite_config,
+            sonar_config,
             device,
             AiterMLAMetadata,
             supports_dcp_with_varlen=(
@@ -858,7 +858,7 @@ class AiterMLAMetadataBuilder(MLACommonMetadataBuilder[AiterMLAMetadata]):
         self._supports_segmented_dcp_verify = supports_segmented_dcp_verify and _segmented_mla_fits_lds(
             self.num_heads * self.dcp_world_size,
             kv_cache_spec.block_size,
-            is_quantized_kv_cache(aphrodite_config.cache_config.cache_dtype),
+            is_quantized_kv_cache(sonar_config.cache_config.cache_dtype),
         )
         self._use_triton_dcp_verify = supports_triton_dcp_verify and not self._supports_segmented_dcp_verify
         self._mla_max_split_per_batch = 0
@@ -870,7 +870,7 @@ class AiterMLAMetadataBuilder(MLACommonMetadataBuilder[AiterMLAMetadata]):
         # Use the group's original format: decode normalizes E5M2 to "fp8".
         kv_cache_dtype = getattr(kv_cache_spec, "cache_dtype_str", None)
         if kv_cache_dtype is None:
-            kv_cache_dtype = aphrodite_config.cache_config.cache_dtype
+            kv_cache_dtype = sonar_config.cache_config.cache_dtype
         self._supports_fused_dcp_prefill = _supports_fused_dcp_prefill_config(
             kv_cache_dtype,
             self.q_data_type,
@@ -880,8 +880,8 @@ class AiterMLAMetadataBuilder(MLACommonMetadataBuilder[AiterMLAMetadata]):
             self.mla_dims.v_head_dim,
         )
 
-        self.compilation_config = aphrodite_config.compilation_config
-        self.decode_attn_out_dtype = aphrodite_config.model_config.dtype
+        self.compilation_config = sonar_config.compilation_config
+        self.decode_attn_out_dtype = sonar_config.model_config.dtype
 
         # Needed to place a verify row's causal window on this rank's KV shard.
         self.dcp_rank = get_dcp_group().rank_in_group if self.dcp_world_size > 1 else 0
@@ -893,14 +893,14 @@ class AiterMLAMetadataBuilder(MLACommonMetadataBuilder[AiterMLAMetadata]):
         self._mtp_decode_qlen = self.reorder_batch_threshold or 1
 
         self._varlen_decode_qlen = 0
-        if _adaptive_varlen_verify_enabled(aphrodite_config):
-            assert self._mtp_decode_qlen == max_decode_query_len(aphrodite_config), (
+        if _adaptive_varlen_verify_enabled(sonar_config):
+            assert self._mtp_decode_qlen == max_decode_query_len(sonar_config), (
                 self._mtp_decode_qlen,
-                max_decode_query_len(aphrodite_config),
+                max_decode_query_len(sonar_config),
             )
             self._varlen_decode_qlen = self._mtp_decode_qlen
             self.query_len_support = QueryLenSupport.VARLEN  # type: ignore[misc]
-            max_rows = aphrodite_config.scheduler_config.max_num_seqs * (self._varlen_decode_qlen)
+            max_rows = sonar_config.scheduler_config.max_num_seqs * (self._varlen_decode_qlen)
             row_ids = torch.arange(max_rows, dtype=torch.int64, device=device)
             self._varlen_row_req = row_ids // self._varlen_decode_qlen
             self._varlen_row_pos = row_ids % self._varlen_decode_qlen
@@ -923,7 +923,7 @@ class AiterMLAMetadataBuilder(MLACommonMetadataBuilder[AiterMLAMetadata]):
         # A DCP rank's shard of the longest sequence bounds every verify row.
         dcp_local_max_seq_len = (
             cdiv(
-                aphrodite_config.model_config.max_model_len,
+                sonar_config.model_config.max_model_len,
                 self.dcp_world_size * parallel_config.cp_kv_cache_interleave_size,
             )
             * parallel_config.cp_kv_cache_interleave_size
@@ -932,11 +932,11 @@ class AiterMLAMetadataBuilder(MLACommonMetadataBuilder[AiterMLAMetadata]):
         # In the flat view (.view(-1,1,1,H)), each token is its own page,
         # so max_num_pages_per_req = max_model_len regardless of
         # kernel_block_size.
-        max_num_pages_per_req = aphrodite_config.model_config.max_model_len
-        max_num_reqs = aphrodite_config.scheduler_config.max_num_seqs
+        max_num_pages_per_req = sonar_config.model_config.max_model_len
+        max_num_reqs = sonar_config.scheduler_config.max_num_seqs
         max_num_pages = max_num_reqs * max_num_pages_per_req
-        speculative_config = aphrodite_config.speculative_config
-        if _adaptive_varlen_verify_enabled(aphrodite_config) and not (self._varlen_right_align):
+        speculative_config = sonar_config.speculative_config
+        if _adaptive_varlen_verify_enabled(sonar_config) and not (self._varlen_right_align):
             assert speculative_config is not None
             max_num_pages += max_num_reqs * (speculative_config.num_speculative_tokens or 0)
 
@@ -967,7 +967,7 @@ class AiterMLAMetadataBuilder(MLACommonMetadataBuilder[AiterMLAMetadata]):
         # pad has to be applied here explicitly.
         if self._asm_dcp_verify:
             self._num_attention_heads = self._asm_dcp_verify_heads
-        kv_cache_dtype_str = getattr(aphrodite_config.cache_config, "cache_dtype", "auto")
+        kv_cache_dtype_str = getattr(sonar_config.cache_config, "cache_dtype", "auto")
         if kv_cache_dtype_str in ("fp8", "fp8_e4m3", "fp8_e5m2"):
             kv_cache_dtype_str = "fp8"
             kv_dtype = dtypes.fp8
@@ -980,9 +980,9 @@ class AiterMLAMetadataBuilder(MLACommonMetadataBuilder[AiterMLAMetadata]):
         # the normalized string instead of dropping it at the end of __init__.
         self._kv_cache_dtype_str = kv_cache_dtype_str
         # Sized per layer, matching the flat KV tensor the kernel is handed.
-        num_gpu_blocks = aphrodite_config.cache_config.num_gpu_blocks
+        num_gpu_blocks = sonar_config.cache_config.num_gpu_blocks
         self._kv_cache_bytes = None if num_gpu_blocks is None else num_gpu_blocks * kv_cache_spec.page_size_bytes
-        from aphrodite.platforms.rocm import on_gfx950
+        from sonar.platforms.rocm import on_gfx950
 
         self._supports_fused_gather = self._kv_cache_dtype_str != "fp8_ds_mla" and on_gfx950()
         # MLAAttention quantizes decode Q to FP8 before calling this backend
@@ -1034,19 +1034,19 @@ class AiterMLAMetadataBuilder(MLACommonMetadataBuilder[AiterMLAMetadata]):
         # are replicate-padded up to one in _mla_fp8_prefill_attn.
         self._fp8_prefill_enabled = _fp8_mla_prefill_supported() and (
             kv_cache_dtype_str == "fp8"
-            and aphrodite_config.model_config.dtype == torch.bfloat16
+            and sonar_config.model_config.dtype == torch.bfloat16
             and AiterMLAHelper.is_valid_fp8_prefill_num_heads(self.num_heads)
         )
         if self._fp8_prefill_enabled:
             max_prefill_qlen = min(
-                aphrodite_config.model_config.max_model_len,
-                aphrodite_config.scheduler_config.max_num_batched_tokens,
+                sonar_config.model_config.max_model_len,
+                sonar_config.scheduler_config.max_num_batched_tokens,
             )
             self._init_fp8_prefill_ps_buffers(
                 max_num_reqs,
                 max_prefill_qlen,
-                aphrodite_config.scheduler_config.max_num_batched_tokens,
-                aphrodite_config.model_config.dtype,
+                sonar_config.scheduler_config.max_num_batched_tokens,
+                sonar_config.model_config.dtype,
                 device,
             )
 
@@ -1204,8 +1204,8 @@ class AiterMLAMetadataBuilder(MLACommonMetadataBuilder[AiterMLAMetadata]):
         self._fp8_ps_staging_free = [torch.cuda.Event(), torch.cuda.Event()]
         self._fp8_ps_slot = 0
 
-        from aphrodite.platforms import current_platform
-        from aphrodite.v1.worker.workspace import current_workspace_manager
+        from sonar.platforms import current_platform
+        from sonar.v1.worker.workspace import current_workspace_manager
 
         # AITER metadata sizing assumes all requests can carry max_prefill_qlen tokens,
         # which is a loose worst case in the number of QO tiles. Rather, the sum of
@@ -2113,7 +2113,7 @@ class AiterMLAHelper:
     ) -> bool:
         # Small-head (<16) single-token decode takes either the Gluon kernel or
         # the padded asm persistent decode, selected by
-        # APHRODITE_ROCM_AITER_MLA_ASM_PADDING and the arch (Gluon is gfx950 only).
+        # SONAR_ROCM_AITER_MLA_ASM_PADDING and the arch (Gluon is gfx950 only).
         m = AiterMLAHelper._AITER_MIN_MLA_HEADS
         if num_heads >= m or max_qo_len != 1:
             return False
@@ -2313,7 +2313,7 @@ class AiterMLAImpl(MLACommonImpl[AiterMLAMetadata]):
         prefill_metadata: MLACommonPrefillMetadata,
         kv_c_and_k_pe_cache: torch.Tensor,
     ) -> bool:
-        from aphrodite.platforms import current_platform
+        from sonar.platforms import current_platform
 
         weight = getattr(self.kv_b_proj, "weight", None)
         return (
@@ -2462,7 +2462,7 @@ class AiterMLAImpl(MLACommonImpl[AiterMLAMetadata]):
                 dcp_world_size,
                 fused_mla_kv_concat_fn,
             )
-        from aphrodite.platforms import current_platform
+        from sonar.platforms import current_platform
 
         assert weight is not None
         assert attn_metadata.dcp_context_row_indices is not None
@@ -2537,8 +2537,8 @@ class AiterMLAImpl(MLACommonImpl[AiterMLAMetadata]):
         output buffer supplied by ``forward_mha``; no extra allocation or
         copy is required.
         """
-        from aphrodite.platforms import current_platform
-        from aphrodite.v1.worker.workspace import current_workspace_manager
+        from sonar.platforms import current_platform
+        from sonar.v1.worker.workspace import current_workspace_manager
 
         fp8_dtype = current_platform.fp8_dtype()
         total_q = q.shape[0]
@@ -2713,7 +2713,7 @@ class AiterMLAImpl(MLACommonImpl[AiterMLAMetadata]):
                 fused_mla_prefill_qkv_fp8,
             )
 
-            from aphrodite.platforms import current_platform
+            from sonar.platforms import current_platform
 
             # The k_pe concat, the head padding and the FP8 cast in one launch.
             q, k, v = fused_mla_prefill_qkv_fp8(
@@ -2802,7 +2802,7 @@ class AiterMLAImpl(MLACommonImpl[AiterMLAMetadata]):
         # Matches merge_mla_segments_triton and the fp32 LSE the DCP combine
         # kernel is warmed up for.
         lse = torch.empty(num_rows, num_heads, dtype=torch.float32, device=q_mla.device)
-        if envs.APHRODITE_BATCH_INVARIANT:
+        if envs.SONAR_BATCH_INVARIANT:
             num_kv_splits = 1
         else:
             num_kv_splits = _triton_dcp_verify_num_kv_splits(verify.max_kv_seq_len, num_rows, num_heads, self._sm_count)
@@ -3057,7 +3057,7 @@ class AiterMLAImpl(MLACommonImpl[AiterMLAMetadata]):
                 assert decode.mla_num_kv_splits > 0
                 mla_kwargs["num_kv_splits"] = decode.mla_num_kv_splits
                 mla_kwargs["intra_batch_mode"] = False
-            # The Aphrodite custom-op wrapper exposes only the in-place output and
+            # The Sonar custom-op wrapper exposes only the in-place output and
             # drops aiter's final LSE, which the cross-shard merge needs, so go
             # through aiter's native entry point on the DCP path.
             _, lse = _get_aiter_mla_decode()(

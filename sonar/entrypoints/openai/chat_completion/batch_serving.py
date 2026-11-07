@@ -9,29 +9,29 @@ from http import HTTPStatus
 
 from fastapi import Request
 
-from aphrodite.entrypoints.generate.base.protocol import RequestResponseMetadata
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.generate.base.protocol import RequestResponseMetadata
+from sonar.entrypoints.openai.chat_completion.protocol import (
     BatchChatCompletionRequest,
     ChatCompletionRequest,
     ChatCompletionResponse,
     ChatCompletionResponseChoice,
     ChatMessage,
 )
-from aphrodite.entrypoints.openai.chat_completion.serving import (
+from sonar.entrypoints.openai.chat_completion.serving import (
     OpenAIServingChat,
     _get_mm_token_counts,
     _make_prompt_tokens_details,
 )
-from aphrodite.entrypoints.serve.engine.protocol import ErrorResponse, UsageInfo
-from aphrodite.entrypoints.serve.utils.api_utils import get_max_tokens
-from aphrodite.inputs import EngineInput
-from aphrodite.logger import init_logger
-from aphrodite.outputs import RequestOutput
-from aphrodite.parser.abstract_parser import Parser
-from aphrodite.renderers.chat_utils import ConversationMessage
-from aphrodite.tokenizers import TokenizerLike
-from aphrodite.utils.async_utils import merge_async_iterators
-from aphrodite.utils.collection_utils import as_list
+from sonar.entrypoints.serve.engine.protocol import ErrorResponse, UsageInfo
+from sonar.entrypoints.serve.utils.api_utils import get_max_tokens
+from sonar.inputs import EngineInput
+from sonar.logger import init_logger
+from sonar.outputs import RequestOutput
+from sonar.parser.abstract_parser import Parser
+from sonar.renderers.chat_utils import ConversationMessage
+from sonar.tokenizers import TokenizerLike
+from sonar.utils.async_utils import merge_async_iterators
+from sonar.utils.collection_utils import as_list
 
 logger = init_logger(__name__)
 

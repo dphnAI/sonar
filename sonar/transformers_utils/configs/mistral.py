@@ -4,7 +4,7 @@ from typing import Any
 
 from transformers import PreTrainedConfig, WhisperConfig
 
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 

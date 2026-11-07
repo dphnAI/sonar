@@ -5,9 +5,9 @@
 //! `--revision`, `--tokenizer`, `--tokenizer-revision`, and `--hf-config-path`,
 //! shared by the OpenAI frontend and the render server.
 
-use aphrodite_text::backend::hf::{ModelFileSources, ModelSource};
 use clap::Args;
 use serde::Deserialize;
+use sonar_text::backend::hf::{ModelFileSources, ModelSource};
 
 /// The model and the sources of its tokenizer and config files, mirroring
 /// Python's `ModelConfig`.

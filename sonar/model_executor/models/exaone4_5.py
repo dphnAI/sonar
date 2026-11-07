@@ -27,36 +27,36 @@ from transformers.models.exaone4_5 import (
 )
 from transformers.models.exaone4_5.configuration_exaone4_5 import Exaone4_5_VisionConfig
 
-from aphrodite.compilation.decorators import (
+from sonar.compilation.decorators import (
     should_torch_compile_mm_encoder,
     support_torch_compile,
 )
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed import parallel_state
-from aphrodite.distributed import utils as dist_utils
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.attention.mm_encoder_attention import MMEncoderAttention
-from aphrodite.model_executor.layers.fusion.mm_input_norm import build_mm_input_norm
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import QKVParallelLinear, RowParallelLinear
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.rotary_embedding.common import (
+from sonar.config import SonarConfig
+from sonar.distributed import parallel_state
+from sonar.distributed import utils as dist_utils
+from sonar.logger import init_logger
+from sonar.model_executor.layers.attention.mm_encoder_attention import MMEncoderAttention
+from sonar.model_executor.layers.fusion.mm_input_norm import build_mm_input_norm
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import QKVParallelLinear, RowParallelLinear
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.rotary_embedding.common import (
     ApplyRotaryEmb,
 )
-from aphrodite.model_executor.models.exaone4 import Exaone4GatedMLP as Exaone4_5_VisionMLP
-from aphrodite.model_executor.models.qwen2_5_vl import (
+from sonar.model_executor.models.exaone4 import Exaone4GatedMLP as Exaone4_5_VisionMLP
+from sonar.model_executor.models.qwen2_5_vl import (
     Qwen2_5_VisionTransformer,
     Qwen2_5_VLForConditionalGeneration,
     Qwen2VLProcessingInfo,
 )
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal import MULTIMODAL_REGISTRY
 
 from .qwen2_vl import Qwen2VLDummyInputsBuilder as Exaone4_5_DummyInputsBuilder
 from .qwen2_vl import Qwen2VLMultiModalProcessor as Exaone4_5_MultiModalProcessor
 from .utils import (
     AutoWeightsLoader,
     WeightsMapper,
-    init_aphrodite_registered_model,
+    init_sonar_registered_model,
     maybe_prefix,
 )
 
@@ -313,26 +313,26 @@ class Exaone4_5_ProcessingInfo(Qwen2VLProcessingInfo):
     dummy_inputs=Exaone4_5_DummyInputsBuilder,
 )
 class Exaone4_5_ForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
-    hf_to_aphrodite_mapper = Qwen2_5_VLForConditionalGeneration.hf_to_aphrodite_mapper | (
+    hf_to_sonar_mapper = Qwen2_5_VLForConditionalGeneration.hf_to_sonar_mapper | (
         WeightsMapper(orig_to_new_prefix={"mtp.": None})
     )
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         nn.Module.__init__(self)
 
-        config: Exaone4_5_Config = aphrodite_config.model_config.hf_config
-        self.aphrodite_config = aphrodite_config
-        multimodal_config = aphrodite_config.model_config.multimodal_config
+        config: Exaone4_5_Config = sonar_config.model_config.hf_config
+        self.sonar_config = sonar_config
+        multimodal_config = sonar_config.model_config.multimodal_config
         assert multimodal_config is not None
 
         self.use_data_parallel = multimodal_config.mm_encoder_tp_mode == "data"
         self.config = config
-        self.model_config = aphrodite_config.model_config
+        self.model_config = sonar_config.model_config
         self.multimodal_config = multimodal_config
         self.video_pruning_rate = multimodal_config.video_pruning_rate
         self.is_multimodal_pruning_enabled = multimodal_config.is_multimodal_pruning_enabled()
 
-        with self._mark_tower_model(aphrodite_config, {"image", "video"}):
+        with self._mark_tower_model(sonar_config, {"image", "video"}):
             self.visual = EXAONE4_5_VisionTransformer(
                 config.vision_config,
                 norm_eps=getattr(config, "rms_norm_eps", 1e-6),
@@ -342,9 +342,9 @@ class Exaone4_5_ForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
                 use_data_parallel=self.use_data_parallel,
             )
 
-        with self._mark_language_model(aphrodite_config):
-            self.language_model = init_aphrodite_registered_model(
-                aphrodite_config=aphrodite_config,
+        with self._mark_language_model(sonar_config):
+            self.language_model = init_sonar_registered_model(
+                sonar_config=sonar_config,
                 prefix=maybe_prefix(prefix, "language_model"),
                 hf_config=config.get_text_config(),
                 architectures=["Exaone4ForCausalLM"],
@@ -354,7 +354,7 @@ class Exaone4_5_ForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
     @classmethod
     def get_placeholder_str(cls, modality: str, i: int) -> str | None:

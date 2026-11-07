@@ -93,8 +93,8 @@ features:
           - "--dbo-decode-token-threshold"
           - "32768"
         env:
-          APHRODITE_USE_V2_MODEL_RUNNER: "1"
-          APHRODITE_ROCM_MINIMAX_M3_SP_PREFILL: "1"
+          SONAR_USE_V2_MODEL_RUNNER: "1"
+          SONAR_ROCM_MINIMAX_M3_SP_PREFILL: "1"
         hardware:
           hopper: unsupported
           blackwell: unsupported
@@ -108,7 +108,7 @@ features:
           - "--dbo-decode-token-threshold"
           - "32768"
         env:
-          APHRODITE_USE_V2_MODEL_RUNNER: "1"
+          SONAR_USE_V2_MODEL_RUNNER: "1"
         hardware:
           hopper: unsupported
           blackwell: unsupported
@@ -118,7 +118,7 @@ features:
         description: "SP prefill on steps of 4096+ tokens, no DBO."
         args: []
         env:
-          APHRODITE_ROCM_MINIMAX_M3_SP_PREFILL: "1"
+          SONAR_ROCM_MINIMAX_M3_SP_PREFILL: "1"
         hardware:
           hopper: unsupported
           blackwell: unsupported
@@ -143,8 +143,8 @@ features:
           - "--gpu-memory-utilization"
           - "0.85"
         env:
-          APHRODITE_ROCM_SHUFFLE_KV_CACHE_LAYOUT: "1"
-          APHRODITE_ROCM_MINIMAX_M3_MONO: "1"
+          SONAR_ROCM_SHUFFLE_KV_CACHE_LAYOUT: "1"
+          SONAR_ROCM_MINIMAX_M3_MONO: "1"
         # Measured on MI355X only.
         hardware:
           hopper: unsupported
@@ -214,8 +214,8 @@ variants:
           - "--moe-backend"
           - "aiter"
         extra_env:
-          APHRODITE_ROCM_USE_AITER_MOE: "1"
-          APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS: "0"
+          SONAR_ROCM_USE_AITER_MOE: "1"
+          SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS: "0"
 
   fp8:
     # Same checkpoint on Hopper (no FP4 tensor cores): FP8 KV and indexer
@@ -256,7 +256,7 @@ hardware_overrides:
       - "--compilation-config"
       - '{"cudagraph_mode": "FULL_AND_PIECEWISE"}'
     extra_env:
-      APHRODITE_FLOAT32_MATMUL_PRECISION: "high"
+      SONAR_FLOAT32_MATMUL_PRECISION: "high"
   amd:
     extra_args:
       - "--kv-cache-dtype"
@@ -264,8 +264,8 @@ hardware_overrides:
       - "--attention-config"
       - '{"indexer_kv_dtype": "nvfp4", "indexer_decode_cp": true}'
     extra_env:
-      APHRODITE_ROCM_USE_AITER: "1"
-      APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS: "1"
+      SONAR_ROCM_USE_AITER: "1"
+      SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS: "1"
 
 strategy_overrides:
   # MI355X serves TP4 on half of an 8-GPU node; Hopper keeps the fp8 variant's TP8.
@@ -315,8 +315,8 @@ strategy_overrides:
             - "--kv-transfer-config"
             - '{"kv_connector":"NixlConnector","kv_role":"kv_producer","kv_load_failure_policy":"fail","kv_connector_extra_config":{"engine_ttl":0}}'
           extra_env:
-            APHRODITE_USE_V2_MODEL_RUNNER: "1"
-            APHRODITE_ENGINE_READY_TIMEOUT_S: "3600"
+            SONAR_USE_V2_MODEL_RUNNER: "1"
+            SONAR_ENGINE_READY_TIMEOUT_S: "3600"
         gb300: *m31_gb_prefill
         mi355x:
           extra_args:
@@ -330,7 +330,7 @@ strategy_overrides:
             - '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_producer","kv_connector_extra_config":{"num_threads":4}},{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":601295421440,"cpu_hugepage_block_size":"1GB","lazy_offload":false}}]}}'
           extra_env:
             CUDA_VISIBLE_DEVICES: "0,1,2,3"
-            APHRODITE_KV_CACHE_LAYOUT: "BLHNC"
+            SONAR_KV_CACHE_LAYOUT: "BLHNC"
     decode:
       nodes:
         gb200: 1
@@ -360,14 +360,14 @@ strategy_overrides:
             - "--kv-transfer-config"
             - '{"kv_connector":"NixlConnector","kv_role":"kv_consumer","kv_load_failure_policy":"fail","kv_connector_extra_config":{"engine_ttl":0}}'
           extra_env:
-            APHRODITE_USE_V2_MODEL_RUNNER: "1"
-            APHRODITE_ENGINE_READY_TIMEOUT_S: "3600"
+            SONAR_USE_V2_MODEL_RUNNER: "1"
+            SONAR_ENGINE_READY_TIMEOUT_S: "3600"
         gb300: *m31_gb_decode
         mi355x:
           extra_args:
             - "--tensor-parallel-size"
             - "4"
-            # The validated AMD decode node runs Aphrodite's default graphs, not the
+            # The validated AMD decode node runs Sonar's default graphs, not the
             # strategy's FULL_DECODE_ONLY.
             - "--compilation-config"
             - '{"cudagraph_mode": "FULL_AND_PIECEWISE"}'
@@ -375,7 +375,7 @@ strategy_overrides:
             - '{"kv_connector":"NixlConnector","kv_role":"kv_consumer","kv_connector_extra_config":{"num_threads":4}}'
           extra_env:
             CUDA_VISIBLE_DEVICES: "0,1,2,3"
-            APHRODITE_KV_CACHE_LAYOUT: "BLHNC"
+            SONAR_KV_CACHE_LAYOUT: "BLHNC"
 
 presets:
   # GB300 AgentX under Dynamo: aggregated TP4 workers, and DEP2 prefill
@@ -387,10 +387,10 @@ presets:
     strategy: single_node_tp
     variants: [default]
     workload: "Agentic (InferenceX AgentX)"
-    description: "Aggregated TP4 Aphrodite workers, one per 4-GPU GB300 tray, behind the Dynamo KV router with session affinity. Seven-token DSpark draft on FLASH_ATTN and prefill CUDA graphs up to 8192 tokens. KV stays in HBM, or spills to host DRAM through SimpleCPUOffloadConnector."
+    description: "Aggregated TP4 Sonar workers, one per 4-GPU GB300 tray, behind the Dynamo KV router with session affinity. Seven-token DSpark draft on FLASH_ATTN and prefill CUDA graphs up to 8192 tokens. KV stays in HBM, or spills to host DRAM through SimpleCPUOffloadConnector."
     source: { label: "InferenceX #4631", href: "https://github.com/SemiAnalysisAI/InferenceX/pull/4631", key: "minimaxm31flash-fp4-gb300-dynamo-vllm-agentic-dspark-agg", revision: 5d3aa21b680eb8fb66a72386bd8e85e435e15a8c }
     image:
-      aphrodite: "vllm/vllm-openai:minimax-m31-flash-arm64-cu134"
+      sonar: "vllm/vllm-openai:minimax-m31-flash-arm64-cu134"
       dynamo: "1.6.0.dev20261023"
       pip: ["ai-dynamo-runtime==1.6.0.dev20261023", "ai-dynamo==1.6.0.dev20261023"]
     tp: 4
@@ -406,9 +406,9 @@ presets:
       # Pins the prefix-block hashes, so they match across processes and restarts.
       PYTHONHASHSEED: "0"
       # A cold start (JIT builds, graph capture, autotune) takes more than 10 minutes.
-      APHRODITE_ENGINE_READY_TIMEOUT_S: "7200"
-      APHRODITE_HTTP_TIMEOUT_KEEP_ALIVE: "600"
-      APHRODITE_CHAT_TEMPLATE_RENDER_TIMEOUT: "600"
+      SONAR_ENGINE_READY_TIMEOUT_S: "7200"
+      SONAR_HTTP_TIMEOUT_KEEP_ALIVE: "600"
+      SONAR_CHAT_TEMPLATE_RENDER_TIMEOUT: "600"
     json_args:
       "--compilation-config": { cudagraph_capture_sizes: [8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120, 128, 136, 144, 152, 160, 168, 176, 184, 192, 200, 208, 216, 224, 232, 240, 248, 256, 320, 384, 448, 512, 576, 640, 704, 768, 832, 896, 960, 1024, 1536, 2048, 3072, 4096, 6144, 8192] }
       "--speculative-config": { attention_backend: "FLASH_ATTN" }
@@ -424,7 +424,7 @@ presets:
         label: "Host-DRAM KV offload"
         description: "Adds a host-DRAM KV tier (860 GB per worker) for about 40-56 sessions per worker."
         args: ["--max-num-seqs", "96", "--gpu-memory-utilization", "0.86"]
-        env: { APHRODITE_USE_SIMPLE_KV_OFFLOAD: "1" }
+        env: { SONAR_USE_SIMPLE_KV_OFFLOAD: "1" }
         select: { kv_offload: simple }
         json_args:
           "--kv-transfer-config": { kv_connector_extra_config: { cpu_bytes_to_use_per_rank: null, cpu_bytes_to_use: 860000000000, lazy_offload: true } }
@@ -437,7 +437,7 @@ presets:
 
       - `--max-num-seqs` is about twice the sessions one worker serves: 32 up to 16 sessions, 64 at 32-48, 96 at 56.
       - **GPU-resident KV** (`--gpu-memory-utilization 0.9`) is enough up to about 32 sessions per tray. Beyond that, multi-turn contexts outgrow HBM and evicted prefixes are recomputed.
-      - **Host-DRAM KV offload** adds `SimpleCPUOffloadConnector` with lazy offload (`APHRODITE_USE_SIMPLE_KV_OFFLOAD=1`). `cpu_bytes_to_use` is the budget for the whole worker, split across its four ranks: 860 GB pins 215 GB per rank. Size it from the host DRAM that is free after the engine processes are up. Lower `--gpu-memory-utilization` to 0.86 to leave room for the transfer buffers.
+      - **Host-DRAM KV offload** adds `SimpleCPUOffloadConnector` with lazy offload (`SONAR_USE_SIMPLE_KV_OFFLOAD=1`). `cpu_bytes_to_use` is the budget for the whole worker, split across its four ranks: 860 GB pins 215 GB per rank. Size it from the host DRAM that is free after the engine processes are up. Lower `--gpu-memory-utilization` to 0.86 to leave room for the transfer buffers.
       - The CUDA graph sizes go up to 8192 tokens, so prefill chunks of up to 8192 tokens also replay graphs. `--max-num-batched-tokens 32768` still allows larger mixed steps, which run piecewise.
 
       **Running under Dynamo.** Start etcd and NATS (32 MB max payload) once:
@@ -447,7 +447,7 @@ presets:
       printf 'max_payload: 33554432\n' > nats.conf && nats-server -c nats.conf
       ```
 
-      On each tray, export `ETCD_ENDPOINTS=http://<infra-host>:2379` and `NATS_SERVER=nats://<infra-host>:4222` together with the generated environment and `DYN_TCP_CONNECT_TIMEOUT=120`, `DYN_BACKEND_ADMISSION_ENGINE_REQUEST_LIMIT=1024`, `DYN_BACKEND_ADMISSION_ENGINE_REQUEST_WAITING_LIMIT=1024` and `DYN_BACKEND_ADMISSION_REQUEST_QUEUE_LIMIT=2048`. Then run the generated flags with `python3 -m dynamo.vllm --model MiniMaxAI/MiniMax-M3.1-Flash --served-model-name MiniMaxAI/MiniMax-M3.1-Flash --trust-remote-code` in place of `aphrodite serve MiniMaxAI/MiniMax-M3.1-Flash`. `dynamo.vllm` rejects Aphrodite's API-server flags, so leave out `--tool-call-parser minimax_m3 --enable-auto-tool-choice` and add:
+      On each tray, export `ETCD_ENDPOINTS=http://<infra-host>:2379` and `NATS_SERVER=nats://<infra-host>:4222` together with the generated environment and `DYN_TCP_CONNECT_TIMEOUT=120`, `DYN_BACKEND_ADMISSION_ENGINE_REQUEST_LIMIT=1024`, `DYN_BACKEND_ADMISSION_ENGINE_REQUEST_WAITING_LIMIT=1024` and `DYN_BACKEND_ADMISSION_REQUEST_QUEUE_LIMIT=2048`. Then run the generated flags with `python3 -m dynamo.vllm --model MiniMaxAI/MiniMax-M3.1-Flash --served-model-name MiniMaxAI/MiniMax-M3.1-Flash --trust-remote-code` in place of `sonar serve MiniMaxAI/MiniMax-M3.1-Flash`. `dynamo.vllm` rejects Sonar's API-server flags, so leave out `--tool-call-parser minimax_m3 --enable-auto-tool-choice` and add:
 
       ```bash
       --dyn-tool-call-parser minimax_m3 --dyn-reasoning-parser minimax_m3 \
@@ -477,7 +477,7 @@ presets:
     description: "DEP2 prefill workers, two per GB300 tray, feed one DEP8 decode worker (throughput) or DEP16 (lower latency) over NIXL. Both roles share a Mooncake KV store in host DRAM. The Dynamo KV router routes with session affinity. Seven-token DSpark draft on FLASHINFER_TS, DeepGEMM MegaMoE on both roles."
     source: { label: "InferenceX #4631", href: "https://github.com/SemiAnalysisAI/InferenceX/pull/4631", key: "minimaxm31flash-fp4-gb300-dynamo-vllm-agentic-dspark-disagg", revision: 5d3aa21b680eb8fb66a72386bd8e85e435e15a8c }
     image:
-      aphrodite: "vllm/vllm-openai:minimax-m31-flash-arm64-cu134"
+      sonar: "vllm/vllm-openai:minimax-m31-flash-arm64-cu134"
       dynamo: "1.6.0.dev20261023"
       pip: ["ai-dynamo-runtime==1.6.0.dev20261023", "ai-dynamo==1.6.0.dev20261023", "mooncake-transfer-engine-cuda13==0.3.13.post1"]
     # Dynamo workers take engine flags only; the tool-call parser moves to
@@ -496,9 +496,9 @@ presets:
     # The RDMA names are a GB300 tray's four NICs; use the host's own.
     env:
       PYTHONHASHSEED: "0"
-      APHRODITE_USE_V2_MODEL_RUNNER: "1"
-      APHRODITE_ENGINE_READY_TIMEOUT_S: "7200"
-      APHRODITE_HTTP_TIMEOUT_KEEP_ALIVE: "600"
+      SONAR_USE_V2_MODEL_RUNNER: "1"
+      SONAR_ENGINE_READY_TIMEOUT_S: "7200"
+      SONAR_HTTP_TIMEOUT_KEEP_ALIVE: "600"
       NCCL_NET_GDR_C2C: "1"
       NCCL_IB_HCA: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
       NVSHMEM_REMOTE_TRANSPORT: "none"
@@ -546,7 +546,7 @@ presets:
           - "--kv-transfer-config"
           - '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"backends":["UCX"],"enforce_handshake_compat":false,"kv_lease_duration":120}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_offload":false}}]}}'
         env:
-          APHRODITE_MOONCAKE_LOAD_RECV_THREADS: "8"
+          SONAR_MOONCAKE_LOAD_RECV_THREADS: "8"
       decode:
         nodes: 2
         parallelism: dep
@@ -574,10 +574,10 @@ presets:
           - "--kv-transfer-config"
           - '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"backends":["UCX"],"enforce_handshake_compat":false,"kv_lease_duration":120}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_offload":false,"save_decode_cache":true}}]}}'
         env:
-          APHRODITE_MOONCAKE_LOAD_RECV_THREADS: "4"
-          APHRODITE_MAX_ASYNC_KV_ADMITS_PER_STEP: "4"
-          APHRODITE_RANDOMIZE_DP_DUMMY_INPUTS: "1"
-          APHRODITE_ALLREDUCE_USE_SYMM_MEM: "0"
+          SONAR_MOONCAKE_LOAD_RECV_THREADS: "4"
+          SONAR_MAX_ASYNC_KV_ADMITS_PER_STEP: "4"
+          SONAR_RANDOMIZE_DP_DUMMY_INPUTS: "1"
+          SONAR_ALLREDUCE_USE_SYMM_MEM: "0"
           NCCL_CUMEM_ENABLE: "1"
           NCCL_MNNVL_ENABLE: "1"
           NCCL_NVLS_ENABLE: "1"
@@ -591,7 +591,7 @@ presets:
         description: "One DEP16 decode worker across four trays."
         roles: { decode: { nodes: 4 } }
     runbook: |
-      The GB300 disaggregated AgentX lane in [SemiAnalysis InferenceX](https://inferencex.semianalysis.com/) (`minimaxm31flash-fp4-gb300-dynamo-vllm-agentic-dspark-disagg`, [SemiAnalysisAI/InferenceX#4631](https://github.com/SemiAnalysisAI/InferenceX/pull/4631)) serves the default checkpoint text-only with Dynamo and Aphrodite. Six prefill workers, each DEP2 on two GPUs (two per 4-GPU tray, three trays), feed one decode worker that is DEP8 across two trays or DEP16 across four. KV moves from prefill to decode over NIXL (UCX over RDMA), and every rank contributes host DRAM to a shared Mooncake KV store, so a returning conversation's prefix is loaded from the store instead of recomputed. Both roles use expert parallelism with DeepGEMM MegaMoE, attention data parallelism, the V2 model runner and the seven-token DSpark draft on `FLASHINFER_TS`.
+      The GB300 disaggregated AgentX lane in [SemiAnalysis InferenceX](https://inferencex.semianalysis.com/) (`minimaxm31flash-fp4-gb300-dynamo-vllm-agentic-dspark-disagg`, [SemiAnalysisAI/InferenceX#4631](https://github.com/SemiAnalysisAI/InferenceX/pull/4631)) serves the default checkpoint text-only with Dynamo and Sonar. Six prefill workers, each DEP2 on two GPUs (two per 4-GPU tray, three trays), feed one decode worker that is DEP8 across two trays or DEP16 across four. KV moves from prefill to decode over NIXL (UCX over RDMA), and every rank contributes host DRAM to a shared Mooncake KV store, so a returning conversation's prefix is loaded from the store instead of recomputed. Both roles use expert parallelism with DeepGEMM MegaMoE, attention data parallelism, the V2 model runner and the seven-token DSpark draft on `FLASHINFER_TS`.
 
       | Prefill workers (DEP2) | Decode | GPUs | Sessions | tok/s/GPU | tok/s/user | TTFT p90 | E2E latency p90 |
       |---:|---|---:|---:|---:|---:|---:|---:|
@@ -602,7 +602,7 @@ presets:
       | 6 | DEP16 | 28 | 300 | 75.0k | 296 | 1.8 s | 9.3 s |
       | 6 | DEP16 | 28 | 360 | 85.8k | 285 | 2.4 s | 10.3 s |
 
-      The preset renders one prefill worker and the decode worker. Run more prefill workers with the same command. Two workers share a tray on GPUs 0-1 and 2-3 (`--device-ids 0,1` and `--device-ids 2,3` on `dynamo.vllm`). Give each its own `--data-parallel-rpc-port`, `APHRODITE_NIXL_SIDE_CHANNEL_PORT` and `--kv-events-config` endpoint port.
+      The preset renders one prefill worker and the decode worker. Run more prefill workers with the same command. Two workers share a tray on GPUs 0-1 and 2-3 (`--device-ids 0,1` and `--device-ids 2,3` on `dynamo.vllm`). Give each its own `--data-parallel-rpc-port`, `SONAR_NIXL_SIDE_CHANNEL_PORT` and `--kv-events-config` endpoint port.
 
       **Image and versions.** The lane used an arm64 CUDA 13 build of the `vllm/vllm-openai:minimax-m31-flash` image (tag `minimax-m31-flash-arm64-cu134`), with Dynamo `1.6.0.dev20261023` and Mooncake `mooncake-transfer-engine-cuda13==0.3.13.post1` installed on every worker and on the Mooncake master host: `pip install --extra-index-url https://pypi.nvidia.com ai-dynamo-runtime==1.6.0.dev20261023 ai-dynamo==1.6.0.dev20261023 mooncake-transfer-engine-cuda13==0.3.13.post1`.
 
@@ -613,9 +613,9 @@ presets:
       - **Prefill batching.** `--long-prefill-token-threshold 4096` chunks long prompts into 4096-token pieces. Short prompts then share each step with them instead of waiting behind a 100K-token context, which lowers the TTFT tail. The recipe's 1P1D section above uses 8192. `--max-num-batched-tokens 32768` bounds a prefill step. Prefill captures CUDA graphs up to 2048 tokens.
       - **Mooncake pool size.** `global_segment_size` is registered by every DP rank, prefill and decode alike, so a tray pins four times that value. The lane used 180 GB per rank (720 GB per tray), which leaves 80-100 GiB of a GB300 tray's host DRAM free with the engines up; 200 GB per rank ran trays out of host memory. A larger pool raises the hit rate at high session counts: going from 160 to 180 GB per rank, with the services moved off the engine trays, lowered TTFT p90 by 0.4-0.8 s at 280-360 sessions. Size it as (host DRAM free per tray after the engines are up - headroom for NIXL and the 4 GB local buffers) / ranks per tray. The decode ranks also write the KV they generate into the store (`save_decode_cache: true`), so the next turn's prefill can load the previous answer instead of recomputing it.
       - **Routing.** The KV router (`--router-mode kv`) reads the prefill workers' KV events and sends each request to the worker that already holds its prefix. Session affinity (`--router-session-affinity-ttl-secs 14400`) keeps a conversation on that worker for up to four hours. Send a stable conversation ID in the `X-Dynamo-Session-ID` header. The Mooncake store catches the prefixes that miss after a reroute.
-      - **Transport.** Cross-tray NIXL needs `UCX_TLS=rc,cuda_copy` with `UCX_NET_DEVICES` set to the tray's RDMA ports. Without them, UCX can fall back to TCP and transfers stall. Point `UCX_MODULE_DIR` at the UCX bundled with the NIXL wheel (`nixl_cu13.libs/ucx` in the image's `dist-packages`). `kv_lease_duration: 120` holds a prefill's blocks for up to 120 s until decode reads them (the default is 30 s). `APHRODITE_MAX_ASYNC_KV_ADMITS_PER_STEP=4` caps how many requests with finished KV loads decode admits per step.
+      - **Transport.** Cross-tray NIXL needs `UCX_TLS=rc,cuda_copy` with `UCX_NET_DEVICES` set to the tray's RDMA ports. Without them, UCX can fall back to TCP and transfers stall. Point `UCX_MODULE_DIR` at the UCX bundled with the NIXL wheel (`nixl_cu13.libs/ucx` in the image's `dist-packages`). `kv_lease_duration: 120` holds a prefill's blocks for up to 120 s until decode reads them (the default is 30 s). `SONAR_MAX_ASYNC_KV_ADMITS_PER_STEP=4` caps how many requests with finished KV loads decode admits per step.
       - **NUMA.** `--numa-bind` pins each rank to its GPU's NUMA node. Decode passes the tray's map, `--numa-bind-nodes 0 0 1 1`, explicitly.
-      - `--moe-backend deep_gemm_mega_moe` is the same as the lane's `--kernel-config '{"moe_backend":"deep_gemm_mega_moe"}'`. `--prefill-schedule-interval 1`, also set by the lane, is Aphrodite's default.
+      - `--moe-backend deep_gemm_mega_moe` is the same as the lane's `--kernel-config '{"moe_backend":"deep_gemm_mega_moe"}'`. `--prefill-schedule-interval 1`, also set by the lane, is Sonar's default.
 
       ### Services
 
@@ -638,7 +638,7 @@ presets:
 
       ### Workers
 
-      Export `ETCD_ENDPOINTS=http://<infra-host>:2379`, `NATS_SERVER=nats://<infra-host>:4222` and the generated environment on every tray, then run the generated `python3 -m dynamo.vllm` commands. Add `--served-model-name MiniMaxAI/MiniMax-M3.1-Flash --trust-remote-code --dyn-tool-call-parser minimax_m3 --dyn-reasoning-parser minimax_m3` to both roles. `dynamo.vllm` rejects Aphrodite's API-server flags `--tool-call-parser` and `--enable-auto-tool-choice`. Multi-node DEP decode runs one process per tray with `--data-parallel-start-rank` set to 0, 4, 8 and so on, and a shared `--data-parallel-address` and `--data-parallel-rpc-port`. `--data-parallel-hybrid-lb` lets every tray's Dynamo runtime register its own DP ranks with the frontend.
+      Export `ETCD_ENDPOINTS=http://<infra-host>:2379`, `NATS_SERVER=nats://<infra-host>:4222` and the generated environment on every tray, then run the generated `python3 -m dynamo.vllm` commands. Add `--served-model-name MiniMaxAI/MiniMax-M3.1-Flash --trust-remote-code --dyn-tool-call-parser minimax_m3 --dyn-reasoning-parser minimax_m3` to both roles. `dynamo.vllm` rejects Sonar's API-server flags `--tool-call-parser` and `--enable-auto-tool-choice`. Multi-node DEP decode runs one process per tray with `--data-parallel-start-rank` set to 0, 4, 8 and so on, and a shared `--data-parallel-address` and `--data-parallel-rpc-port`. `--data-parallel-hybrid-lb` lets every tray's Dynamo runtime register its own DP ranks with the frontend.
 
       ### Frontend
 
@@ -673,8 +673,8 @@ presets:
       - "--max-num-batched-tokens"
       - "8192"
     env:
-      APHRODITE_ENGINE_READY_TIMEOUT_S: "7200"
-      APHRODITE_CHAT_TEMPLATE_RENDER_TIMEOUT: "600"
+      SONAR_ENGINE_READY_TIMEOUT_S: "7200"
+      SONAR_CHAT_TEMPLATE_RENDER_TIMEOUT: "600"
     points:
       c1: { label: "1", concurrency: 1, args: ["--max-num-seqs", "2"] }
       c4: { label: "4", concurrency: 4, args: ["--max-num-seqs", "8"] }
@@ -806,7 +806,7 @@ presets:
           - "7168"
           - "7680"
           - "8192"
-        env: { APHRODITE_HTTP_TIMEOUT_KEEP_ALIVE: "600" }
+        env: { SONAR_HTTP_TIMEOUT_KEEP_ALIVE: "600" }
       c32: { label: "32", concurrency: 32, args: ["--max-num-seqs", "64"] }
       c40:
         label: "40"
@@ -924,7 +924,7 @@ presets:
           - "7168"
           - "7680"
           - "8192"
-        env: { APHRODITE_HTTP_TIMEOUT_KEEP_ALIVE: "600" }
+        env: { SONAR_HTTP_TIMEOUT_KEEP_ALIVE: "600" }
     runbook: |
       The GB300 TP4 points of the AgentX lane in [SemiAnalysis InferenceX](https://inferencex.semianalysis.com/) (`minimaxm31flash-fp4-gb300-vllm-agentic-dspark`, [SemiAnalysisAI/InferenceX#4662](https://github.com/SemiAnalysisAI/InferenceX/pull/4662)) serve the default checkpoint text-only on one TP4 engine per 4-GPU tray, with `--max-num-seqs` set per concurrency.
 
@@ -950,8 +950,8 @@ presets:
       - "--max-num-batched-tokens"
       - "8192"
     env:
-      APHRODITE_ENGINE_READY_TIMEOUT_S: "7200"
-      APHRODITE_CHAT_TEMPLATE_RENDER_TIMEOUT: "600"
+      SONAR_ENGINE_READY_TIMEOUT_S: "7200"
+      SONAR_CHAT_TEMPLATE_RENDER_TIMEOUT: "600"
     json_args:
       "--speculative-config": { num_speculative_tokens: 3 }
     points:
@@ -983,10 +983,10 @@ presets:
       - "--max-num-batched-tokens"
       - "32768"
     env:
-      APHRODITE_ENGINE_READY_TIMEOUT_S: "7200"
-      APHRODITE_CHAT_TEMPLATE_RENDER_TIMEOUT: "600"
-      APHRODITE_HTTP_TIMEOUT_KEEP_ALIVE: "600"
-      APHRODITE_USE_SIMPLE_KV_OFFLOAD: "1"
+      SONAR_ENGINE_READY_TIMEOUT_S: "7200"
+      SONAR_CHAT_TEMPLATE_RENDER_TIMEOUT: "600"
+      SONAR_HTTP_TIMEOUT_KEEP_ALIVE: "600"
+      SONAR_USE_SIMPLE_KV_OFFLOAD: "1"
     json_args:
       "--compilation-config": { cudagraph_capture_sizes: [1, 2, 4, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120, 128, 136, 144, 152, 160, 168, 176, 184, 192, 200, 208, 216, 224, 232, 240, 248, 256, 264, 272, 280, 288, 296, 304, 312, 320, 328, 336, 344, 352, 360, 368, 376, 384, 392, 400, 408, 416, 424, 432, 440, 448, 456, 464, 472, 480, 488, 496, 504, 512, 640, 768, 896, 1024, 1152, 1280, 1408, 1536, 1664, 1792, 1920, 2048, 2304, 2560, 2816, 3072, 3328, 3584, 3840, 4096, 4608, 5120, 5632, 6144, 6656, 7168, 7680, 8192] }
       "--kv-transfer-config": { kv_connector_extra_config: { cpu_bytes_to_use_per_rank: null, cpu_bytes_to_use: 482000000000, lazy_offload: true } }
@@ -1018,8 +1018,8 @@ presets:
       - "--stream-interval"
       - "20"
     env:
-      APHRODITE_HTTP_TIMEOUT_KEEP_ALIVE: "600"
-      APHRODITE_CHAT_TEMPLATE_RENDER_TIMEOUT: "600"
+      SONAR_HTTP_TIMEOUT_KEEP_ALIVE: "600"
+      SONAR_CHAT_TEMPLATE_RENDER_TIMEOUT: "600"
     json_args:
       "--compilation-config": { cudagraph_capture_sizes: [8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120, 128, 136, 144, 152, 160, 168, 176, 184, 192, 200, 208, 216, 224, 232, 240, 248, 256, 320, 384, 448, 512, 576, 640, 704, 768, 832, 896, 960, 1024, 1536, 2048, 3072, 4096, 6144, 8192] }
       "--speculative-config": { attention_backend: "FLASH_ATTN" }
@@ -1060,7 +1060,7 @@ presets:
         json_args:
           "--kv-transfer-config": { kv_connector_extra_config: { cpu_bytes_to_use_per_rank: null, cpu_bytes_to_use: 1499000000000, lazy_offload: true } }
     runbook: |
-      The B300 AgentX lane in [SemiAnalysis InferenceX](https://inferencex.semianalysis.com/) (`minimaxm31flash-fp4-b300-vllm-agentic-dspark`, [SemiAnalysisAI/InferenceX#4467](https://github.com/SemiAnalysisAI/InferenceX/pull/4467), run [40340506758](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/40340506758)) serves the default checkpoint (MXFP8 dense layers, NVFP4 experts, NVFP4 KV and indexer K caches) as one aggregated text-only Aphrodite engine on a single 8-GPU B300 node. Its TP4 points run the seven-token DSpark draft with `FLASH_ATTN` draft attention; the recipe's NVIDIA default, `FLASHINFER_TS`, is what the [AgentX TP2](#preset-b300_agentx_tp2) points run.
+      The B300 AgentX lane in [SemiAnalysis InferenceX](https://inferencex.semianalysis.com/) (`minimaxm31flash-fp4-b300-vllm-agentic-dspark`, [SemiAnalysisAI/InferenceX#4467](https://github.com/SemiAnalysisAI/InferenceX/pull/4467), run [40340506758](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/40340506758)) serves the default checkpoint (MXFP8 dense layers, NVFP4 experts, NVFP4 KV and indexer K caches) as one aggregated text-only Sonar engine on a single 8-GPU B300 node. Its TP4 points run the seven-token DSpark draft with `FLASH_ATTN` draft attention; the recipe's NVIDIA default, `FLASHINFER_TS`, is what the [AgentX TP2](#preset-b300_agentx_tp2) points run.
 
       - **GPU-resident points** (concurrency 1-16 and 32) keep the whole KV cache in HBM, with `--max-num-seqs` at twice the concurrency (64 at 32).
       - **KV offload points** (24 and 40-56) add a host-DRAM KV tier through `SimpleCPUOffloadConnector` with lazy offload. `cpu_bytes_to_use` (1,499 GB) is the budget for the whole engine: each of the four ranks pins 349 GiB of host memory, so the engine needs about 1.5 TB of free host RAM. Pinning takes a couple of minutes at startup.
@@ -1090,8 +1090,8 @@ presets:
       - "--stream-interval"
       - "20"
     env:
-      APHRODITE_HTTP_TIMEOUT_KEEP_ALIVE: "600"
-      APHRODITE_CHAT_TEMPLATE_RENDER_TIMEOUT: "600"
+      SONAR_HTTP_TIMEOUT_KEEP_ALIVE: "600"
+      SONAR_CHAT_TEMPLATE_RENDER_TIMEOUT: "600"
     json_args:
       "--compilation-config": { cudagraph_capture_sizes: [8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120, 128, 136, 144, 152, 160, 168, 176, 184, 192, 200, 208, 216, 224, 232, 240, 248, 256, 320, 384, 448, 512, 576, 640, 704, 768, 832, 896, 960, 1024, 1536, 2048, 3072, 4096, 6144, 8192] }
       "--kv-transfer-config": { kv_connector_extra_config: { cpu_bytes_to_use_per_rank: null, cpu_bytes_to_use: 749000000000, lazy_offload: true } }
@@ -1101,7 +1101,7 @@ presets:
       c40: { label: "40", concurrency: 40, args: ["--max-num-seqs", "60"] }
       c48: { label: "48", concurrency: 48, args: ["--max-num-seqs", "72"] }
     runbook: |
-      The TP2 points of the B300 AgentX lane in [SemiAnalysis InferenceX](https://inferencex.semianalysis.com/) (`minimaxm31flash-fp4-b300-vllm-agentic-dspark`, [SemiAnalysisAI/InferenceX#4467](https://github.com/SemiAnalysisAI/InferenceX/pull/4467), run [40340506758](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/40340506758)) serve the default checkpoint as one aggregated text-only Aphrodite engine on two GPUs of an 8-GPU B300 node, with the recipe's seven-token DSpark draft on `FLASHINFER_TS` (the [AgentX TP4](#preset-b300_agentx_tp4) points use `FLASH_ATTN`).
+      The TP2 points of the B300 AgentX lane in [SemiAnalysis InferenceX](https://inferencex.semianalysis.com/) (`minimaxm31flash-fp4-b300-vllm-agentic-dspark`, [SemiAnalysisAI/InferenceX#4467](https://github.com/SemiAnalysisAI/InferenceX/pull/4467), run [40340506758](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/40340506758)) serve the default checkpoint as one aggregated text-only Sonar engine on two GPUs of an 8-GPU B300 node, with the recipe's seven-token DSpark draft on `FLASHINFER_TS` (the [AgentX TP4](#preset-b300_agentx_tp4) points use `FLASH_ATTN`).
 
       Every point adds a host-DRAM KV tier through `SimpleCPUOffloadConnector` with lazy offload. `cpu_bytes_to_use` (749 GB) is the budget for the whole engine: each of the two ranks pins about 349 GiB of host memory. The lane ran one engine per node; several TP2 engines on one node each need their own share of host RAM.
 
@@ -1116,10 +1116,10 @@ presets:
     strategy: single_node_tp
     variants: [default]
     workload: "Agentic (InferenceX AgentX)"
-    description: "Aggregated TP4 Aphrodite workers, one per 4-GPU GB200 tray, behind the Dynamo KV router with session affinity. Seven-token DSpark draft on FLASH_ATTN and prefill CUDA graphs up to 8192 tokens. KV stays in HBM, or spills to host DRAM through SimpleCPUOffloadConnector."
+    description: "Aggregated TP4 Sonar workers, one per 4-GPU GB200 tray, behind the Dynamo KV router with session affinity. Seven-token DSpark draft on FLASH_ATTN and prefill CUDA graphs up to 8192 tokens. KV stays in HBM, or spills to host DRAM through SimpleCPUOffloadConnector."
     source: { label: "InferenceX #4632", href: "https://github.com/SemiAnalysisAI/InferenceX/pull/4632", key: "minimaxm31flash-fp4-gb200-dynamo-vllm-agentic-dspark-agg", revision: 936213146b79b55e8a11ffbc1d6010145995c6a6 }
     image:
-      aphrodite: "vllm/vllm-openai:minimax-m31-flash-arm64-cu134"
+      sonar: "vllm/vllm-openai:minimax-m31-flash-arm64-cu134"
       dynamo: "1.6.0.dev20261023"
       pip: ["ai-dynamo-runtime==1.6.0.dev20261023", "ai-dynamo==1.6.0.dev20261023"]
     tp: 4
@@ -1135,7 +1135,7 @@ presets:
       # Pins the prefix-block hashes, so they match across processes and restarts.
       PYTHONHASHSEED: "0"
       # A cold start (JIT builds, graph capture, autotune) takes more than 10 minutes.
-      APHRODITE_ENGINE_READY_TIMEOUT_S: "7200"
+      SONAR_ENGINE_READY_TIMEOUT_S: "7200"
     json_args:
       "--compilation-config": { cudagraph_capture_sizes: [8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120, 128, 136, 144, 152, 160, 168, 176, 184, 192, 200, 208, 216, 224, 232, 240, 248, 256, 320, 384, 448, 512, 576, 640, 704, 768, 832, 896, 960, 1024, 1536, 2048, 3072, 4096, 6144, 8192] }
       "--speculative-config": { attention_backend: "FLASH_ATTN" }
@@ -1173,7 +1173,7 @@ presets:
       printf 'max_payload: 33554432\n' > nats.conf && nats-server -c nats.conf
       ```
 
-      On each tray, export `ETCD_ENDPOINTS=http://<infra-host>:2379` and `NATS_SERVER=nats://<infra-host>:4222` together with the generated environment and `DYN_TCP_CONNECT_TIMEOUT=120`, `DYN_BACKEND_ADMISSION_ENGINE_REQUEST_LIMIT=1024`, `DYN_BACKEND_ADMISSION_ENGINE_REQUEST_WAITING_LIMIT=1024` and `DYN_BACKEND_ADMISSION_REQUEST_QUEUE_LIMIT=2048`. Then run the generated flags with `python3 -m dynamo.vllm --model MiniMaxAI/MiniMax-M3.1-Flash --served-model-name MiniMaxAI/MiniMax-M3.1-Flash --trust-remote-code` in place of `aphrodite serve MiniMaxAI/MiniMax-M3.1-Flash`. `dynamo.vllm` rejects Aphrodite's API-server flags, so leave out `--tool-call-parser minimax_m3 --enable-auto-tool-choice` and add:
+      On each tray, export `ETCD_ENDPOINTS=http://<infra-host>:2379` and `NATS_SERVER=nats://<infra-host>:4222` together with the generated environment and `DYN_TCP_CONNECT_TIMEOUT=120`, `DYN_BACKEND_ADMISSION_ENGINE_REQUEST_LIMIT=1024`, `DYN_BACKEND_ADMISSION_ENGINE_REQUEST_WAITING_LIMIT=1024` and `DYN_BACKEND_ADMISSION_REQUEST_QUEUE_LIMIT=2048`. Then run the generated flags with `python3 -m dynamo.vllm --model MiniMaxAI/MiniMax-M3.1-Flash --served-model-name MiniMaxAI/MiniMax-M3.1-Flash --trust-remote-code` in place of `sonar serve MiniMaxAI/MiniMax-M3.1-Flash`. `dynamo.vllm` rejects Sonar's API-server flags, so leave out `--tool-call-parser minimax_m3 --enable-auto-tool-choice` and add:
 
       ```bash
       --dyn-tool-call-parser minimax_m3 --dyn-reasoning-parser minimax_m3 \
@@ -1203,7 +1203,7 @@ presets:
     description: "DEP4 prefill workers, one per GB200 tray, feed one DEP8 decode worker (throughput) or DEP16 (lower latency) over NIXL. Both roles share a Mooncake KV store in host DRAM. The Dynamo KV router routes with session affinity. Seven-token DSpark draft on FLASHINFER_TS, DeepGEMM MegaMoE on both roles."
     source: { label: "InferenceX #4632", href: "https://github.com/SemiAnalysisAI/InferenceX/pull/4632", key: "minimaxm31flash-fp4-gb200-dynamo-vllm-agentic-dspark-disagg", revision: 936213146b79b55e8a11ffbc1d6010145995c6a6 }
     image:
-      aphrodite: "vllm/vllm-openai:minimax-m31-flash-arm64-cu134"
+      sonar: "vllm/vllm-openai:minimax-m31-flash-arm64-cu134"
       dynamo: "1.6.0.dev20261023"
       pip: ["ai-dynamo-runtime==1.6.0.dev20261023", "ai-dynamo==1.6.0.dev20261023", "mooncake-transfer-engine-cuda13==0.3.13.post1"]
     # Dynamo workers take engine flags only; the tool-call parser moves to
@@ -1224,10 +1224,10 @@ presets:
     # The RDMA names are a GB200 tray's four NICs; use the host's own.
     env:
       PYTHONHASHSEED: "0"
-      APHRODITE_USE_V2_MODEL_RUNNER: "1"
-      APHRODITE_ENGINE_READY_TIMEOUT_S: "7200"
-      APHRODITE_HTTP_TIMEOUT_KEEP_ALIVE: "600"
-      APHRODITE_RANDOMIZE_DP_DUMMY_INPUTS: "1"
+      SONAR_USE_V2_MODEL_RUNNER: "1"
+      SONAR_ENGINE_READY_TIMEOUT_S: "7200"
+      SONAR_HTTP_TIMEOUT_KEEP_ALIVE: "600"
+      SONAR_RANDOMIZE_DP_DUMMY_INPUTS: "1"
       NCCL_NET_GDR_C2C: "1"
       NCCL_IB_HCA: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
       NVSHMEM_REMOTE_TRANSPORT: "none"
@@ -1275,7 +1275,7 @@ presets:
           - "--kv-transfer-config"
           - '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"backends":["UCX"],"enforce_handshake_compat":false,"kv_lease_duration":120}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_offload":false}}]}}'
         env:
-          APHRODITE_MOONCAKE_LOAD_RECV_THREADS: "8"
+          SONAR_MOONCAKE_LOAD_RECV_THREADS: "8"
       decode:
         nodes: 2
         parallelism: dep
@@ -1303,8 +1303,8 @@ presets:
           - "--kv-transfer-config"
           - '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"backends":["UCX"],"enforce_handshake_compat":false,"kv_lease_duration":120}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_consumer","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_offload":false,"save_decode_cache":false,"enable_lookup":false}}]}}'
         env:
-          APHRODITE_MOONCAKE_LOAD_RECV_THREADS: "4"
-          APHRODITE_ALLREDUCE_USE_SYMM_MEM: "0"
+          SONAR_MOONCAKE_LOAD_RECV_THREADS: "4"
+          SONAR_ALLREDUCE_USE_SYMM_MEM: "0"
           NCCL_CUMEM_ENABLE: "1"
           NCCL_MNNVL_ENABLE: "1"
           NCCL_NVLS_ENABLE: "1"
@@ -1318,7 +1318,7 @@ presets:
         description: "One DEP16 decode worker across four trays."
         roles: { decode: { nodes: 4 } }
     runbook: |
-      The GB200 disaggregated AgentX lane in [SemiAnalysis InferenceX](https://inferencex.semianalysis.com/) (`minimaxm31flash-fp4-gb200-dynamo-vllm-agentic-dspark-disagg`, [SemiAnalysisAI/InferenceX#4632](https://github.com/SemiAnalysisAI/InferenceX/pull/4632)) serves the default checkpoint text-only with Dynamo and Aphrodite. Several prefill workers, each DEP4 on one 4-GPU tray, feed one decode worker that is DEP8 across two trays or DEP16 across four. KV moves from prefill to decode over NIXL (UCX over RDMA), and every rank contributes host DRAM to a shared Mooncake KV store, so a returning conversation's prefix is loaded from the store instead of recomputed. Both roles use expert parallelism with DeepGEMM MegaMoE, attention data parallelism, the V2 model runner and the seven-token DSpark draft on `FLASHINFER_TS`.
+      The GB200 disaggregated AgentX lane in [SemiAnalysis InferenceX](https://inferencex.semianalysis.com/) (`minimaxm31flash-fp4-gb200-dynamo-vllm-agentic-dspark-disagg`, [SemiAnalysisAI/InferenceX#4632](https://github.com/SemiAnalysisAI/InferenceX/pull/4632)) serves the default checkpoint text-only with Dynamo and Sonar. Several prefill workers, each DEP4 on one 4-GPU tray, feed one decode worker that is DEP8 across two trays or DEP16 across four. KV moves from prefill to decode over NIXL (UCX over RDMA), and every rank contributes host DRAM to a shared Mooncake KV store, so a returning conversation's prefix is loaded from the store instead of recomputed. Both roles use expert parallelism with DeepGEMM MegaMoE, attention data parallelism, the V2 model runner and the seven-token DSpark draft on `FLASHINFER_TS`.
 
       | Prefill workers (DEP4) | Decode | GPUs | Sessions | tok/s/GPU | tok/s/user | TTFT p90 | E2E latency p90 |
       |---:|---|---:|---:|---:|---:|---:|---:|
@@ -1344,7 +1344,7 @@ presets:
       - **Routing.** The KV router (`--router-mode kv`) reads the prefill workers' KV events and sends each request to the worker that already holds its prefix. Session affinity (`--router-session-affinity-ttl-secs 14400`) keeps a conversation on that worker for up to four hours. Send a stable conversation ID in the `X-Dynamo-Session-ID` header. The Mooncake store catches the prefixes that miss after a reroute.
       - **Transport.** Cross-tray NIXL needs `UCX_TLS=rc,cuda_copy` with `UCX_NET_DEVICES` set to the tray's RDMA ports. Without them, UCX can fall back to TCP and transfers stall. Point `UCX_MODULE_DIR` at the UCX bundled with the NIXL wheel (`nixl_cu13.libs/ucx` in the image's `dist-packages`). `kv_lease_duration: 120` holds a prefill's blocks for up to 120 s until decode reads them (the default is 30 s).
       - **NUMA.** `--numa-bind` pins each rank to its GPU's NUMA node. Decode passes the tray's map, `--numa-bind-nodes 0 0 1 1`, explicitly.
-      - `--moe-backend deep_gemm_mega_moe` is the same as the lane's `--kernel-config '{"moe_backend":"deep_gemm_mega_moe"}'`. `--prefill-schedule-interval 1`, also set by the lane, is Aphrodite's default.
+      - `--moe-backend deep_gemm_mega_moe` is the same as the lane's `--kernel-config '{"moe_backend":"deep_gemm_mega_moe"}'`. `--prefill-schedule-interval 1`, also set by the lane, is Sonar's default.
 
       ### Services
 
@@ -1367,7 +1367,7 @@ presets:
 
       ### Workers
 
-      Export `ETCD_ENDPOINTS=http://<infra-host>:2379`, `NATS_SERVER=nats://<infra-host>:4222` and the generated environment on every tray, then run the generated `python3 -m dynamo.vllm` commands. Add `--served-model-name MiniMaxAI/MiniMax-M3.1-Flash --trust-remote-code --dyn-tool-call-parser minimax_m3 --dyn-reasoning-parser minimax_m3` to both roles. `dynamo.vllm` rejects Aphrodite's API-server flags `--tool-call-parser` and `--enable-auto-tool-choice`. Multi-node DEP decode runs one process per tray with `--data-parallel-start-rank` set to 0, 4, 8 and so on, and a shared `--data-parallel-address` and `--data-parallel-rpc-port`. `--data-parallel-hybrid-lb` lets every tray's Dynamo runtime register its own DP ranks with the frontend.
+      Export `ETCD_ENDPOINTS=http://<infra-host>:2379`, `NATS_SERVER=nats://<infra-host>:4222` and the generated environment on every tray, then run the generated `python3 -m dynamo.vllm` commands. Add `--served-model-name MiniMaxAI/MiniMax-M3.1-Flash --trust-remote-code --dyn-tool-call-parser minimax_m3 --dyn-reasoning-parser minimax_m3` to both roles. `dynamo.vllm` rejects Sonar's API-server flags `--tool-call-parser` and `--enable-auto-tool-choice`. Multi-node DEP decode runs one process per tray with `--data-parallel-start-rank` set to 0, 4, 8 and so on, and a shared `--data-parallel-address` and `--data-parallel-rpc-port`. `--data-parallel-hybrid-lb` lets every tray's Dynamo runtime register its own DP ranks with the frontend.
 
       ### Frontend
 
@@ -1396,7 +1396,7 @@ presets:
     args:
       - "--enable-prefix-caching"
     env:
-      APHRODITE_HTTP_TIMEOUT_KEEP_ALIVE: "900"
+      SONAR_HTTP_TIMEOUT_KEEP_ALIVE: "900"
     json_args:
       "--speculative-config": { num_speculative_tokens: 7, rejection_sample_method: block }
     # The DBO points pass the DBO flags directly: the DBO / SP prefill feature's
@@ -1427,18 +1427,18 @@ presets:
         label: "16 (DBO)"
         concurrency: 16
         args: ["--max-num-seqs", "32", "--max-num-batched-tokens", "32768", "--gpu-memory-utilization", "0.85", "--enable-dbo", "--dbo-prefill-token-threshold", "16384", "--dbo-decode-token-threshold", "32768"]
-        env: { APHRODITE_USE_V2_MODEL_RUNNER: "1", DEBUG_HIP_DYNAMIC_QUEUES: "0" }
+        env: { SONAR_USE_V2_MODEL_RUNNER: "1", DEBUG_HIP_DYNAMIC_QUEUES: "0" }
       c32:
         label: "32 (DBO)"
         concurrency: 32
         args: ["--max-num-seqs", "64", "--max-num-batched-tokens", "32768", "--gpu-memory-utilization", "0.85", "--enable-dbo", "--dbo-prefill-token-threshold", "16384", "--dbo-decode-token-threshold", "32768"]
-        env: { APHRODITE_USE_V2_MODEL_RUNNER: "1", DEBUG_HIP_DYNAMIC_QUEUES: "0" }
+        env: { SONAR_USE_V2_MODEL_RUNNER: "1", DEBUG_HIP_DYNAMIC_QUEUES: "0" }
       c64:
         label: "64 (DBO, KV offload)"
         concurrency: 64
         select: { kv_offload: simple }
         args: ["--max-num-seqs", "128", "--max-num-batched-tokens", "32768", "--gpu-memory-utilization", "0.9", "--enable-dbo", "--dbo-prefill-token-threshold", "16384", "--dbo-decode-token-threshold", "32768"]
-        env: { APHRODITE_USE_V2_MODEL_RUNNER: "1", DEBUG_HIP_DYNAMIC_QUEUES: "0", PYTHONHASHSEED: "42" }
+        env: { SONAR_USE_V2_MODEL_RUNNER: "1", DEBUG_HIP_DYNAMIC_QUEUES: "0", PYTHONHASHSEED: "42" }
         json_args:
           "--speculative-config": { num_speculative_tokens: 3 }
           "--kv-transfer-config": { kv_connector_extra_config: { cpu_bytes_to_use_per_rank: null, cpu_bytes_to_use: 1349000000000, lazy_offload: false } }
@@ -1483,7 +1483,7 @@ presets:
         timeout) and was rerun once, which passed. Treat the offload point as less
         proven than the others.
       - **Sequence-parallel prefill does not apply to this checkpoint.** InferenceX also
-        set `APHRODITE_ROCM_MINIMAX_M3_SP_PREFILL=1` at concurrency 64, and the server logged
+        set `SONAR_ROCM_MINIMAX_M3_SP_PREFILL=1` at concurrency 64, and the server logged
         sequence-parallel prefill as off; it is omitted here. SP prefill is available on
         the default checkpoint through the DBO / SP prefill feature.
 
@@ -1516,8 +1516,8 @@ guide: |
   ### Single node (TP4, AMD MI355X)
 
   ```bash
-  APHRODITE_ROCM_USE_AITER=1 APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1 \
-  aphrodite serve MiniMaxAI/MiniMax-M3.1-Flash \
+  SONAR_ROCM_USE_AITER=1 SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1 \
+  sonar serve MiniMaxAI/MiniMax-M3.1-Flash \
     -tp 4 \
     --reasoning-parser minimax_m3 \
     --block-size 128 \
@@ -1543,9 +1543,9 @@ guide: |
   - **DBO** (dual-batch overlap): `--enable-dbo` splits a prefill step into two
     microbatches and runs one microbatch's all-reduce under the other's compute.
     `--dbo-decode-token-threshold 32768` keeps decode steps whole. DBO needs
-    `APHRODITE_USE_V2_MODEL_RUNNER=1`: without it, `--enable-dbo` selects the V1
+    `SONAR_USE_V2_MODEL_RUNNER=1`: without it, `--enable-dbo` selects the V1
     runner, which refuses the DSpark draft.
-  - **SP** (sequence-parallel prefill): `APHRODITE_ROCM_MINIMAX_M3_SP_PREFILL=1`
+  - **SP** (sequence-parallel prefill): `SONAR_ROCM_MINIMAX_M3_SP_PREFILL=1`
     keeps the residual stream sharded by tokens on steps of 4096+ tokens, so
     each layer's two all-reduces become an all-to-all and a reduce-scatter. It
     keeps a full `o_proj` copy per GPU, about 3.1 GB less KV cache.
@@ -1557,9 +1557,9 @@ guide: |
   `MiniMax-M3 sequence-parallel prefill (from 4096 tokens, DBO microbatches from 8192): on`.
 
   ```bash
-  APHRODITE_ROCM_USE_AITER=1 APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1 \
-  APHRODITE_USE_V2_MODEL_RUNNER=1 APHRODITE_ROCM_MINIMAX_M3_SP_PREFILL=1 \
-  aphrodite serve MiniMaxAI/MiniMax-M3.1-Flash \
+  SONAR_ROCM_USE_AITER=1 SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1 \
+  SONAR_USE_V2_MODEL_RUNNER=1 SONAR_ROCM_MINIMAX_M3_SP_PREFILL=1 \
+  sonar serve MiniMaxAI/MiniMax-M3.1-Flash \
     -tp 4 \
     --reasoning-parser minimax_m3 \
     --block-size 128 \
@@ -1576,8 +1576,8 @@ guide: |
   ### Single node (TP4, NVIDIA GB200)
 
   ```bash
-  APHRODITE_FLOAT32_MATMUL_PRECISION=high \
-  aphrodite serve MiniMaxAI/MiniMax-M3.1-Flash \
+  SONAR_FLOAT32_MATMUL_PRECISION=high \
+  sonar serve MiniMaxAI/MiniMax-M3.1-Flash \
     -tp 4 \
     --reasoning-parser minimax_m3 \
     --block-size 128 \
@@ -1597,7 +1597,7 @@ guide: |
   ### Single node (TP8, NVIDIA H100 / H200)
 
   ```bash
-  aphrodite serve MiniMaxAI/MiniMax-M3.1-Flash \
+  sonar serve MiniMaxAI/MiniMax-M3.1-Flash \
     --tensor-parallel-size 8 \
     --reasoning-parser minimax_m3 \
     --block-size 128 \
@@ -1626,9 +1626,9 @@ guide: |
   Prefill node:
 
   ```bash
-  APHRODITE_ROCM_USE_AITER=1 APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1 \
-  APHRODITE_KV_CACHE_LAYOUT=BLHNC APHRODITE_NIXL_SIDE_CHANNEL_HOST=<P_IP> \
-  aphrodite serve MiniMaxAI/MiniMax-M3.1-Flash \
+  SONAR_ROCM_USE_AITER=1 SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1 \
+  SONAR_KV_CACHE_LAYOUT=BLHNC SONAR_NIXL_SIDE_CHANNEL_HOST=<P_IP> \
+  sonar serve MiniMaxAI/MiniMax-M3.1-Flash \
     -tp 4 \
     --reasoning-parser minimax_m3 \
     --block-size 128 \
@@ -1647,9 +1647,9 @@ guide: |
   Decode node:
 
   ```bash
-  APHRODITE_ROCM_USE_AITER=1 APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1 \
-  APHRODITE_KV_CACHE_LAYOUT=BLHNC APHRODITE_NIXL_SIDE_CHANNEL_HOST=<D_IP> \
-  aphrodite serve MiniMaxAI/MiniMax-M3.1-Flash \
+  SONAR_ROCM_USE_AITER=1 SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1 \
+  SONAR_KV_CACHE_LAYOUT=BLHNC SONAR_NIXL_SIDE_CHANNEL_HOST=<D_IP> \
+  sonar serve MiniMaxAI/MiniMax-M3.1-Flash \
     -tp 4 \
     --reasoning-parser minimax_m3 \
     --block-size 128 \
@@ -1664,7 +1664,7 @@ guide: |
 
   - `<P_IP>` and `<D_IP>` are each node's own address, reachable from the
     other node (the NIXL side channel).
-  - `APHRODITE_KV_CACHE_LAYOUT=BLHNC` goes on both nodes. It keeps all layers of a
+  - `SONAR_KV_CACHE_LAYOUT=BLHNC` goes on both nodes. It keeps all layers of a
     block contiguous, so NIXL reads one region per block instead of one per
     layer.
   - The prefill node never decodes, so it leaves `indexer_decode_cp` off.
@@ -1690,9 +1690,9 @@ guide: |
   Prefill node:
 
   ```bash
-  APHRODITE_FLOAT32_MATMUL_PRECISION=high APHRODITE_USE_V2_MODEL_RUNNER=1 \
-  APHRODITE_ENGINE_READY_TIMEOUT_S=3600 APHRODITE_NIXL_SIDE_CHANNEL_HOST=<P_IP> \
-  aphrodite serve MiniMaxAI/MiniMax-M3.1-Flash \
+  SONAR_FLOAT32_MATMUL_PRECISION=high SONAR_USE_V2_MODEL_RUNNER=1 \
+  SONAR_ENGINE_READY_TIMEOUT_S=3600 SONAR_NIXL_SIDE_CHANNEL_HOST=<P_IP> \
+  sonar serve MiniMaxAI/MiniMax-M3.1-Flash \
     --data-parallel-size 2 \
     --enable-expert-parallel \
     --moe-backend deep_gemm_mega_moe \
@@ -1716,9 +1716,9 @@ guide: |
   Decode node:
 
   ```bash
-  APHRODITE_FLOAT32_MATMUL_PRECISION=high APHRODITE_USE_V2_MODEL_RUNNER=1 \
-  APHRODITE_ENGINE_READY_TIMEOUT_S=3600 APHRODITE_NIXL_SIDE_CHANNEL_HOST=<D_IP> \
-  aphrodite serve MiniMaxAI/MiniMax-M3.1-Flash \
+  SONAR_FLOAT32_MATMUL_PRECISION=high SONAR_USE_V2_MODEL_RUNNER=1 \
+  SONAR_ENGINE_READY_TIMEOUT_S=3600 SONAR_NIXL_SIDE_CHANNEL_HOST=<D_IP> \
+  sonar serve MiniMaxAI/MiniMax-M3.1-Flash \
     --data-parallel-size 4 \
     --enable-expert-parallel \
     --moe-backend deep_gemm_mega_moe \
@@ -1739,7 +1739,7 @@ guide: |
     --kv-transfer-config '{"kv_connector":"NixlConnector","kv_role":"kv_consumer","kv_load_failure_policy":"fail","kv_connector_extra_config":{"engine_ttl":0}}'
   ```
 
-  - `APHRODITE_ENGINE_READY_TIMEOUT_S=3600`: with data parallel, each API server
+  - `SONAR_ENGINE_READY_TIMEOUT_S=3600`: with data parallel, each API server
     waits this long for its engines to start (default 600 s). A cold prefill
     start (JIT builds, CUDA graph capture, FlashInfer autotune) takes longer
     than 10 minutes.
@@ -1758,7 +1758,7 @@ guide: |
     prefill node can also offload KV to host memory, 180 GiB per rank:
     `--kv-transfer-config '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_producer","kv_connector_extra_config":{"engine_ttl":0}},{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":193273528320,"lazy_offload":true}}]}}'`.
 
-  For a quick test, put the toy NIXL proxy from the Aphrodite repository in front of
+  For a quick test, put the toy NIXL proxy from the Sonar repository in front of
   the two nodes and send requests to port 8000:
 
   ```bash
@@ -1790,8 +1790,8 @@ guide: |
   ## Benchmarking
 
   ```bash
-  aphrodite bench serve \
-    --backend aphrodite \
+  sonar bench serve \
+    --backend sonar \
     --model MiniMaxAI/MiniMax-M3.1-Flash \
     --endpoint /v1/completions \
     --dataset-name random \
@@ -1803,7 +1803,7 @@ guide: |
 
   ## Troubleshooting
 
-  - **`--block-size` mismatch.** MSA's sparse block size is 128; the Aphrodite KV
+  - **`--block-size` mismatch.** MSA's sparse block size is 128; the Sonar KV
     cache block size must match (otherwise `No common block size for 16`).
   - **Parsers.** `--tool-call-parser` and `--reasoning-parser` both use
     `minimax_m3`.

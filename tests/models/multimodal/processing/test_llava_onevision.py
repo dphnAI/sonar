@@ -8,10 +8,10 @@ import pytest
 from PIL import Image
 from pqdm.threads import pqdm
 
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.parse import ImageSize
-from aphrodite.multimodal.processing import BaseMultiModalProcessor
-from aphrodite.tokenizers.hf import maybe_make_thread_pool
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.parse import ImageSize
+from sonar.multimodal.processing import BaseMultiModalProcessor
+from sonar.tokenizers.hf import maybe_make_thread_pool
 
 from ...utils import build_model_context
 

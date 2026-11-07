@@ -5,31 +5,31 @@
 import pytest
 import torch
 
-import aphrodite.config
-import aphrodite.ir.ops
-import aphrodite.plugins
-from aphrodite._aiter_ops import IS_AITER_FOUND, rocm_aiter_ops
-from aphrodite._custom_ops import cutlass_scaled_fp4_mm, scaled_fp4_quant
-from aphrodite.compilation.passes.fusion.matcher_utils import QUANT_OPS
-from aphrodite.compilation.passes.fusion.rms_quant_fusion import (
+import sonar.config
+import sonar.ir.ops
+import sonar.plugins
+from sonar._aiter_ops import IS_AITER_FOUND, rocm_aiter_ops
+from sonar._custom_ops import cutlass_scaled_fp4_mm, scaled_fp4_quant
+from sonar.compilation.passes.fusion.matcher_utils import QUANT_OPS
+from sonar.compilation.passes.fusion.rms_quant_fusion import (
     FUSED_OPS,
     FusedRMSQuantKey,
     RMSNormQuantFusionPass,
 )
-from aphrodite.compilation.passes.fx_utils import find_auto_fn_maybe
-from aphrodite.compilation.passes.utility.fix_functionalization import (
+from sonar.compilation.passes.fx_utils import find_auto_fn_maybe
+from sonar.compilation.passes.utility.fix_functionalization import (
     FixFunctionalizationPass,
 )
-from aphrodite.compilation.passes.utility.noop_elimination import NoOpEliminationPass
-from aphrodite.compilation.passes.utility.post_cleanup import PostCleanupPass
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.compilation.passes.utility.noop_elimination import NoOpEliminationPass
+from sonar.compilation.passes.utility.post_cleanup import PostCleanupPass
+from sonar.config import (
     CompilationConfig,
     CompilationMode,
     ModelConfig,
     PassConfig,
+    SonarConfig,
 )
-from aphrodite.model_executor.kernels.linear import (
+from sonar.model_executor.kernels.linear import (
     AiterFp8BlockScaledMMKernel,
     ChannelWiseTorchFP8ScaledMMLinearKernel,
     CutlassFp8BlockScaledMMKernel,
@@ -45,16 +45,16 @@ from aphrodite.model_executor.kernels.linear import (
     XPUW8A8FP8LinearKernel,
     _KernelT,
 )
-from aphrodite.model_executor.layers.layernorm import RMSNorm, RMSNormGated
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.layernorm import RMSNorm, RMSNormGated
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     GroupShape,
     create_fp8_quant_key,
 )
-from aphrodite.model_executor.layers.quantization.utils.w8a8_utils import (
+from sonar.model_executor.layers.quantization.utils.w8a8_utils import (
     cutlass_block_fp8_supported,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.deep_gemm import (
+from sonar.platforms import current_platform
+from sonar.utils.deep_gemm import (
     is_deep_gemm_e8m0_used,
     is_deep_gemm_supported,
 )
@@ -223,7 +223,7 @@ class TestModel(torch.nn.Module):
         if self.use_aiter_fusion:
             if self.group_shape.is_per_group():
                 # Blockwise aiter fusion
-                from aphrodite.compilation.passes.fusion.rocm_aiter_fusion import (
+                from sonar.compilation.passes.fusion.rocm_aiter_fusion import (
                     AiterFusedAddRMSFp8GroupQuantPattern,
                     AiterRMSFp8GroupQuantPattern,
                 )
@@ -234,7 +234,7 @@ class TestModel(torch.nn.Module):
                 ]
             elif self.group_shape.is_per_tensor():
                 # Static per-tensor aiter fusion
-                from aphrodite.compilation.passes.fusion.rocm_aiter_fusion import (
+                from sonar.compilation.passes.fusion.rocm_aiter_fusion import (
                     AiterFusedAddRMSNormStaticQuantPattern,
                     AiterRMSNormStaticQuantPattern,
                 )
@@ -245,7 +245,7 @@ class TestModel(torch.nn.Module):
                 ]
             else:
                 # Per-token aiter fusion
-                from aphrodite.compilation.passes.fusion.rocm_aiter_fusion import (
+                from sonar.compilation.passes.fusion.rocm_aiter_fusion import (
                     AiterFusedAddRMSNormDynamicQuantPattern,
                     AiterRMSNormDynamicQuantPattern,
                 )
@@ -263,8 +263,8 @@ class TestModel(torch.nn.Module):
 
     def ops_in_model_before_partial(self):
         return [
-            torch.ops.aphrodite_ir.rms_norm,
-            torch.ops.aphrodite_ir.fused_add_rms_norm.default,
+            torch.ops.sonar_ir.rms_norm,
+            torch.ops.sonar_ir.fused_add_rms_norm.default,
         ]
 
 
@@ -296,17 +296,17 @@ class AddRMSNormNvfp4Model(torch.nn.Module):
 def _run_fusion_test(
     model,
     fusion_pass,
-    aphrodite_config,
+    sonar_config,
     dtype,
     hidden_size,
     num_tokens,
 ):
     """Helper function for common fusion test logic.
 
-    Must be called within aphrodite_config context.
+    Must be called within sonar_config context.
     """
-    noop_pass = NoOpEliminationPass(aphrodite_config)
-    cleanup_pass = PostCleanupPass(aphrodite_config)
+    noop_pass = NoOpEliminationPass(sonar_config)
+    cleanup_pass = PostCleanupPass(sonar_config)
 
     backend = TestBackend(noop_pass, fusion_pass, cleanup_pass)
     backend2 = TestBackend(noop_pass, cleanup_pass)
@@ -382,25 +382,25 @@ def test_fusion_rmsnorm_quant(
     if enable_quant_fp8_custom_op:
         custom_ops.append("+quant_fp8")
 
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         model_config=ModelConfig(dtype=dtype),
         compilation_config=CompilationConfig(
-            mode=CompilationMode.APHRODITE_COMPILE,
+            mode=CompilationMode.SONAR_COMPILE,
             custom_ops=custom_ops,
             pass_config=PassConfig(fuse_norm_quant=True, fuse_act_quant=True, eliminate_noops=True),
         ),
     )
 
     with (
-        aphrodite.config.set_current_aphrodite_config(aphrodite_config),
-        aphrodite_config.kernel_config.ir_op_priority.set_priority(),
+        sonar.config.set_current_sonar_config(sonar_config),
+        sonar_config.kernel_config.ir_op_priority.set_priority(),
     ):
         # Setup device before model creation
         torch.set_default_device(current_platform.device_type)
         torch.set_default_dtype(dtype)
         torch.manual_seed(1)
 
-        fusion_pass = RMSNormQuantFusionPass(aphrodite_config)
+        fusion_pass = RMSNormQuantFusionPass(sonar_config)
 
         model = TestModel(
             hidden_size=hidden_size,
@@ -414,7 +414,7 @@ def test_fusion_rmsnorm_quant(
         if any(type(layer.kernel) is not force_kernel for layer in model.fp8_linear_layers):
             pytest.skip(f"{force_kernel.__name__} is not supported on this platform")
 
-        backend, _ = _run_fusion_test(model, fusion_pass, aphrodite_config, dtype, hidden_size, num_tokens)
+        backend, _ = _run_fusion_test(model, fusion_pass, sonar_config, dtype, hidden_size, num_tokens)
         backend.check_before_ops(model.ops_in_model_before_partial(), fully_replaced=False)
 
 
@@ -427,7 +427,7 @@ def test_fusion_rmsnorm_quant(
 @pytest.mark.skipif(not current_platform.is_cuda(), reason="CUDA only")
 def test_fusion_add_rmsnorm_nvfp4_quant(dtype: torch.dtype, eps: float, num_tokens: int, hidden_size: int):
     fused_op = getattr(
-        torch.ops.aphrodite,
+        torch.ops.sonar,
         "flashinfer_fused_add_rms_norm_nvfp4_quant",
         None,
     )
@@ -436,10 +436,10 @@ def test_fusion_add_rmsnorm_nvfp4_quant(dtype: torch.dtype, eps: float, num_toke
     assert fused_op is not None
     fused_op_default = fused_op.default
 
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         model_config=ModelConfig(dtype=dtype),
         compilation_config=CompilationConfig(
-            mode=CompilationMode.APHRODITE_COMPILE,
+            mode=CompilationMode.SONAR_COMPILE,
             pass_config=PassConfig(
                 fuse_norm_quant=True,
                 eliminate_noops=True,
@@ -448,24 +448,24 @@ def test_fusion_add_rmsnorm_nvfp4_quant(dtype: torch.dtype, eps: float, num_toke
     )
 
     with (
-        aphrodite.config.set_current_aphrodite_config(aphrodite_config),
-        aphrodite_config.kernel_config.ir_op_priority.set_priority(),
+        sonar.config.set_current_sonar_config(sonar_config),
+        sonar_config.kernel_config.ir_op_priority.set_priority(),
     ):
         torch.set_default_device("cuda")
         torch.set_default_dtype(dtype)
         torch.manual_seed(1)
 
-        fusion_pass = RMSNormQuantFusionPass(aphrodite_config)
+        fusion_pass = RMSNormQuantFusionPass(sonar_config)
         fused_backend = TestBackend(
-            NoOpEliminationPass(aphrodite_config),
+            NoOpEliminationPass(sonar_config),
             fusion_pass,
-            PostCleanupPass(aphrodite_config),
-            FixFunctionalizationPass(aphrodite_config),
+            PostCleanupPass(sonar_config),
+            FixFunctionalizationPass(sonar_config),
         )
         unfused_backend = TestBackend(
-            NoOpEliminationPass(aphrodite_config),
-            PostCleanupPass(aphrodite_config),
-            FixFunctionalizationPass(aphrodite_config),
+            NoOpEliminationPass(sonar_config),
+            PostCleanupPass(sonar_config),
+            FixFunctionalizationPass(sonar_config),
         )
 
         model = AddRMSNormNvfp4Model(hidden_size=hidden_size, eps=eps)
@@ -506,21 +506,21 @@ def test_aiter_fusion_rmsnorm_quant(
     monkeypatch: pytest.MonkeyPatch,
 ):
     force_kernel, group_shape, use_aiter_quant_op = kernel_groupshape_quant
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         model_config=ModelConfig(dtype=dtype),
         compilation_config=CompilationConfig(
-            mode=CompilationMode.APHRODITE_COMPILE,
+            mode=CompilationMode.SONAR_COMPILE,
             custom_ops=["+rms_norm", "+quant_fp8"],
             pass_config=PassConfig(fuse_norm_quant=True, eliminate_noops=True),
         ),
     )
 
-    with aphrodite.config.set_current_aphrodite_config(aphrodite_config), monkeypatch.context() as m:
-        from aphrodite.compilation.passes.fusion.rocm_aiter_fusion import (
+    with sonar.config.set_current_sonar_config(sonar_config), monkeypatch.context() as m:
+        from sonar.compilation.passes.fusion.rocm_aiter_fusion import (
             RocmAiterRMSNormQuantFusionPass,
         )
 
-        m.setenv("APHRODITE_ROCM_USE_AITER", "1")
+        m.setenv("SONAR_ROCM_USE_AITER", "1")
 
         rocm_aiter_ops.refresh_env_variables()
 
@@ -528,7 +528,7 @@ def test_aiter_fusion_rmsnorm_quant(
         torch.set_default_dtype(dtype)
         torch.manual_seed(1)
 
-        fusion_pass = RocmAiterRMSNormQuantFusionPass(aphrodite_config)
+        fusion_pass = RocmAiterRMSNormQuantFusionPass(sonar_config)
 
         model = TestModel(
             hidden_size=hidden_size,
@@ -540,7 +540,7 @@ def test_aiter_fusion_rmsnorm_quant(
             use_aiter_quant=use_aiter_quant_op,  # Toggle aiter quantization
         )
 
-        _run_fusion_test(model, fusion_pass, aphrodite_config, dtype, hidden_size, num_tokens)
+        _run_fusion_test(model, fusion_pass, sonar_config, dtype, hidden_size, num_tokens)
 
 
 class TestGatedModel(torch.nn.Module):
@@ -609,7 +609,7 @@ class TestGatedModel(torch.nn.Module):
         return out
 
     def ops_in_model_after(self):
-        from aphrodite.compilation.passes.fusion.rocm_aiter_fusion import (
+        from sonar.compilation.passes.fusion.rocm_aiter_fusion import (
             AiterRMSNormGatedFp8GroupQuantPattern,
         )
 
@@ -628,7 +628,7 @@ class _MockGDNLayer:
         self.head_v_dim = head_v_dim
         self.tp_size = tp_size
 
-        from aphrodite.model_executor.layers.mamba.gdn.base import (
+        from sonar.model_executor.layers.mamba.gdn.base import (
             GatedDeltaNetAttention,
         )
 
@@ -643,7 +643,7 @@ class _MockGDNLayer:
 @pytest.mark.parametrize("flatten_heads", [True, False])
 @pytest.mark.parametrize("quant_fp8_op", ["-quant_fp8", "+quant_fp8"])
 # The gated norm is matched either as its native decomposition or as the
-# aphrodite.fla_rms_norm_gated custom op (ROCm's default for unquantized models).
+# sonar.fla_rms_norm_gated custom op (ROCm's default for unquantized models).
 @pytest.mark.parametrize("rms_norm_gated_op", ["-rms_norm_gated", "+rms_norm_gated"])
 @pytest.mark.skipif(
     (not current_platform.is_rocm() or not IS_AITER_FOUND),
@@ -661,32 +661,32 @@ def test_aiter_fusion_rmsnorm_gated_quant(
     monkeypatch: pytest.MonkeyPatch,
 ):
     group_shape = GroupShape(1, 128)
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         model_config=ModelConfig(dtype=dtype),
         compilation_config=CompilationConfig(
-            mode=CompilationMode.APHRODITE_COMPILE,
+            mode=CompilationMode.SONAR_COMPILE,
             custom_ops=["-rms_norm", "-silu_and_mul", quant_fp8_op, rms_norm_gated_op],
             pass_config=PassConfig(fuse_norm_quant=True, eliminate_noops=True),
         ),
     )
 
-    with aphrodite.config.set_current_aphrodite_config(aphrodite_config), monkeypatch.context() as m:
-        from aphrodite.compilation.passes.fusion.rocm_aiter_fusion import (
+    with sonar.config.set_current_sonar_config(sonar_config), monkeypatch.context() as m:
+        from sonar.compilation.passes.fusion.rocm_aiter_fusion import (
             RocmAiterRMSNormQuantFusionPass,
         )
 
-        m.setenv("APHRODITE_ROCM_USE_AITER", "1")
+        m.setenv("SONAR_ROCM_USE_AITER", "1")
         rocm_aiter_ops.refresh_env_variables()
 
         # Register a mock GDN layer so the pass discovers num_heads/head_dim
         mock_gdn = _MockGDNLayer(num_v_heads=num_heads, head_v_dim=head_dim, tp_size=1)
-        aphrodite_config.compilation_config.static_forward_context["mock_gdn_layer"] = mock_gdn
+        sonar_config.compilation_config.static_forward_context["mock_gdn_layer"] = mock_gdn
 
         torch.set_default_device("cuda")
         torch.set_default_dtype(dtype)
         torch.manual_seed(1)
 
-        fusion_pass = RocmAiterRMSNormQuantFusionPass(aphrodite_config)
+        fusion_pass = RocmAiterRMSNormQuantFusionPass(sonar_config)
 
         model = TestGatedModel(
             num_heads=num_heads,
@@ -699,8 +699,8 @@ def test_aiter_fusion_rmsnorm_gated_quant(
             flatten_heads=flatten_heads,
         )
 
-        noop_pass = NoOpEliminationPass(aphrodite_config)
-        cleanup_pass = PostCleanupPass(aphrodite_config)
+        noop_pass = NoOpEliminationPass(sonar_config)
+        cleanup_pass = PostCleanupPass(sonar_config)
 
         backend = TestBackend(noop_pass, fusion_pass, cleanup_pass)
         backend2 = TestBackend(noop_pass, cleanup_pass)
@@ -747,21 +747,21 @@ def test_aiter_fusion_rmsnorm_gated_quant_no_gdn_layers(
     """Verify that without GDN layers in static_forward_context,
     the gated pattern is not registered and no matches occur."""
     group_shape = GroupShape(1, 128)
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         model_config=ModelConfig(dtype=dtype),
         compilation_config=CompilationConfig(
-            mode=CompilationMode.APHRODITE_COMPILE,
+            mode=CompilationMode.SONAR_COMPILE,
             custom_ops=["-rms_norm", "-silu_and_mul", "-quant_fp8"],
             pass_config=PassConfig(fuse_norm_quant=True, eliminate_noops=True),
         ),
     )
 
-    with aphrodite.config.set_current_aphrodite_config(aphrodite_config), monkeypatch.context() as m:
-        from aphrodite.compilation.passes.fusion.rocm_aiter_fusion import (
+    with sonar.config.set_current_sonar_config(sonar_config), monkeypatch.context() as m:
+        from sonar.compilation.passes.fusion.rocm_aiter_fusion import (
             RocmAiterRMSNormQuantFusionPass,
         )
 
-        m.setenv("APHRODITE_ROCM_USE_AITER", "1")
+        m.setenv("SONAR_ROCM_USE_AITER", "1")
         rocm_aiter_ops.refresh_env_variables()
 
         torch.set_default_device("cuda")
@@ -769,7 +769,7 @@ def test_aiter_fusion_rmsnorm_gated_quant_no_gdn_layers(
         torch.manual_seed(1)
 
         # No mock GDN layer registered -- pass should not register gated pattern
-        fusion_pass = RocmAiterRMSNormQuantFusionPass(aphrodite_config)
+        fusion_pass = RocmAiterRMSNormQuantFusionPass(sonar_config)
 
         model = TestGatedModel(
             num_heads=num_heads,
@@ -781,8 +781,8 @@ def test_aiter_fusion_rmsnorm_gated_quant_no_gdn_layers(
             use_aiter_quant=True,
         )
 
-        noop_pass = NoOpEliminationPass(aphrodite_config)
-        cleanup_pass = PostCleanupPass(aphrodite_config)
+        noop_pass = NoOpEliminationPass(sonar_config)
+        cleanup_pass = PostCleanupPass(sonar_config)
 
         backend = TestBackend(noop_pass, fusion_pass, cleanup_pass)
 

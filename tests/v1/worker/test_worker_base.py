@@ -5,8 +5,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from aphrodite.v1.worker import worker_base
-from aphrodite.v1.worker.worker_base import WorkerBase, WorkerWrapperBase
+from sonar.v1.worker import worker_base
+from sonar.v1.worker.worker_base import WorkerBase, WorkerWrapperBase
 
 pytestmark = pytest.mark.skip_global_cleanup
 
@@ -56,7 +56,7 @@ def make_wrapper(monkeypatch):
             enable_trace_function_call_for_thread=lambda: None,
         )
         wrapper = WorkerWrapperBase()
-        wrapper.init_worker([{"aphrodite_config": config}])
+        wrapper.init_worker([{"sonar_config": config}])
         wrapper.init_device()
         return wrapper
 
@@ -74,8 +74,8 @@ def test_worker_extension_hooks_follow_configured_class(make_wrapper):
         assert wrapper.worker.events == expected
 
 
-def test_failing_destroy_hook_is_logged_not_raised(make_wrapper, caplog_aphrodite):
+def test_failing_destroy_hook_is_logged_not_raised(make_wrapper, caplog_sonar):
     wrapper = make_wrapper("FailingExtension")
     wrapper.shutdown()
     assert wrapper.worker.events == ["device", "shutdown"]
-    assert "Worker extension destroy hook failed" in caplog_aphrodite.text
+    assert "Worker extension destroy hook failed" in caplog_sonar.text

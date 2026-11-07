@@ -4,7 +4,7 @@
 
 import torch
 
-from aphrodite.model_executor.custom_op import CustomOp
+from sonar.model_executor.custom_op import CustomOp
 
 from .common import rotate_gptj, rotate_neox
 

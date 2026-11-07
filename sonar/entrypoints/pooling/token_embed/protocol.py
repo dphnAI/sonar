@@ -6,10 +6,10 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from aphrodite.entrypoints.serve.engine.protocol import OpenAIBaseModel, UsageInfo
-from aphrodite.outputs import LateChunkingMetadata
-from aphrodite.pooling_params import LateChunkingParams, PoolingParams
-from aphrodite.utils import random_uuid
+from sonar.entrypoints.serve.engine.protocol import OpenAIBaseModel, UsageInfo
+from sonar.outputs import LateChunkingMetadata
+from sonar.pooling_params import LateChunkingParams, PoolingParams
+from sonar.utils import random_uuid
 
 from ..base.protocol import (
     CompletionRequestMixin,
@@ -63,7 +63,7 @@ class TokenEmbeddingResponseData(OpenAIBaseModel):
 
 
 class TokenEmbeddingResponse(OpenAIBaseModel):
-    """Aphrodite extension returning one matrix of token or chunk vectors per input."""
+    """Sonar extension returning one matrix of token or chunk vectors per input."""
 
     id: str = Field(default_factory=lambda: f"embd-{random_uuid()}")
     object: str = "list"

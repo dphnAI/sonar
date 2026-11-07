@@ -10,41 +10,41 @@ import torch
 from torch import nn
 from transformers import PreTrainedConfig
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, CacheConfig
-from aphrodite.distributed import (
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import CacheConfig, SonarConfig
+from sonar.distributed import (
     get_dp_group,
     get_ep_group,
     get_pp_group,
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
 )
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.activation import SiluAndMul, SwigluStepAndMul
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.activation import SiluAndMul, SwigluStepAndMul
+from sonar.model_executor.layers.attention import Attention
+from sonar.model_executor.layers.fused_moe import (
     FusedMoEFactory,
     GateLinear,
     MoERunner,
     fused_moe_make_expert_params_mapping,
 )
-from aphrodite.model_executor.layers.layernorm import GemmaRMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.layernorm import GemmaRMSNorm
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     MergedColumnParallelLinear,
     QKVParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization.base_config import QuantizationConfig
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization.base_config import QuantizationConfig
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.v1.attention.backend import AttentionType
+from sonar.model_executor.model_loader.weight_utils import default_weight_loader
+from sonar.sequence import IntermediateTensors
+from sonar.v1.attention.backend import AttentionType
 
 from .interfaces import MixtureOfExperts, SupportsPP
 from .utils import (
@@ -296,7 +296,7 @@ class Step3p5Attention(nn.Module):
 class FusedMoEBlock(nn.Module):
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
     ):
         super().__init__()
@@ -305,9 +305,9 @@ class FusedMoEBlock(nn.Module):
         self.layer_idx = extract_layer_index(prefix)
 
         self.ep_size = get_ep_group().device_group.size()
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
-        parallel_config = aphrodite_config.parallel_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
+        parallel_config = sonar_config.parallel_config
 
         self.hidden_size = config.hidden_size
         self.enable_eplb = parallel_config.enable_eplb
@@ -395,16 +395,16 @@ class FusedMoEBlock(nn.Module):
 class Step3p5DecoderLayer(nn.Module):
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
     ) -> None:
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
         self.hidden_size = config.hidden_size
         layer_idx = extract_layer_index(prefix)
         self.layer_idx = layer_idx
-        cache_config = aphrodite_config.cache_config
-        quant_config = aphrodite_config.quant_config
+        cache_config = sonar_config.cache_config
+        quant_config = sonar_config.quant_config
         if cache_config is not None:
             cache_config.sliding_window = None
         att_impl_type = getattr(config, "att_impl_type", "GQA")
@@ -438,7 +438,7 @@ class Step3p5DecoderLayer(nn.Module):
 
         if _is_moe_layer(config, layer_idx):
             self.moe = FusedMoEBlock(
-                aphrodite_config,
+                sonar_config,
                 prefix=f"{prefix}.moe",
             )
             self.use_moe = True
@@ -478,11 +478,11 @@ class Step3p5DecoderLayer(nn.Module):
 
 @support_torch_compile
 class Step3p5Model(nn.Module):
-    def __init__(self, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__()
 
-        self.aphrodite_config = aphrodite_config
-        config = aphrodite_config.model_config.hf_config
+        self.sonar_config = sonar_config
+        config = sonar_config.model_config.hf_config
         self.vocab_size = config.vocab_size
         self.config = config
 
@@ -499,7 +499,7 @@ class Step3p5Model(nn.Module):
         self.start_layer, self.end_layer, self.layers = make_layers(
             config.num_hidden_layers,
             lambda prefix: Step3p5DecoderLayer(
-                aphrodite_config,
+                sonar_config,
                 prefix=prefix,
             ),
             prefix=f"{prefix}.layers",
@@ -801,22 +801,22 @@ class Step3p5ForCausalLM(nn.Module, SupportsPP, MixtureOfExperts):
         "gate_up_proj": ["gate_proj", "up_proj"],
     }
 
-    hf_to_aphrodite_mapper = WeightsMapper(orig_to_new_substr={".share_expert.": ".moe.share_expert."})
+    hf_to_sonar_mapper = WeightsMapper(orig_to_new_substr={".share_expert.": ".moe.share_expert."})
 
     def __init__(
         self,
         *,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
     ):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        self.model = Step3p5Model(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        config = sonar_config.model_config.hf_config
+        self.model = Step3p5Model(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
         if get_pp_group().is_last_rank:
             self.lm_head = ParallelLMHead(
                 config.vocab_size,
                 config.hidden_size,
-                quant_config=aphrodite_config.quant_config,
+                quant_config=sonar_config.quant_config,
                 prefix=maybe_prefix(prefix, "lm_head"),
             )
             self.logits_processor = LogitsProcessor(config.vocab_size)
@@ -883,4 +883,4 @@ class Step3p5ForCausalLM(nn.Module, SupportsPP, MixtureOfExperts):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)

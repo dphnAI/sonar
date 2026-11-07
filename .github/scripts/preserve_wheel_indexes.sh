@@ -26,9 +26,9 @@ preserve() {
   rm -f "$output"
 }
 
-preserve "nightly/aphrodite-engine"
+preserve "nightly/sonar"
 preserve "whl"
-preserve "simple/aphrodite-engine"
+preserve "simple/sonar"
 
 for channel in release nightly; do
   for platform in \
@@ -41,7 +41,7 @@ for channel in release nightly; do
     fallback="${wheel_storage%/}/${channel}/${platform}/index.html"
     preserve "whl/${channel}/${platform}" "$fallback"
     preserve \
-      "whl/${channel}/${platform}/simple/aphrodite-engine" \
+      "whl/${channel}/${platform}/simple/sonar" \
       "$fallback"
     if [[ "$channel" == "nightly" ]]; then
       preserve "nightly/${platform}"

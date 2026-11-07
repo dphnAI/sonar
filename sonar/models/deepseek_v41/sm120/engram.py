@@ -11,23 +11,23 @@ from b12x.preparation import PreparedCall, require_prepared
 from b12x.sequence import engram as native
 from b12x.sequence._shared.disk_table import MappedHostAllocation
 
-from aphrodite.config import get_current_aphrodite_config
-from aphrodite.distributed import (
+from sonar.config import get_current_sonar_config
+from sonar.distributed import (
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
     tensor_model_parallel_all_reduce,
 )
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.linear import ReplicatedLinear
-from aphrodite.model_executor.utils import set_weight_attrs
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.b12x import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.linear import ReplicatedLinear
+from sonar.model_executor.utils import set_weight_attrs
+from sonar.triton_utils import tl, triton
+from sonar.utils.b12x import (
     B12xPreparationUnit,
     B12xWorkload,
     PreparationResourceUnavailableError,
     set_b12x_preparation_provider,
 )
-from aphrodite.v1.worker.workspace import retain_cuda_graph_capture_resource
+from sonar.v1.worker.workspace import retain_cuda_graph_capture_resource
 
 from ..common.engram import (
     EngramLayout as SonarEngramLayout,
@@ -70,7 +70,7 @@ class EngramLayout:
             raise ValueError("V4.1 Engram requires four-gram/eight-head/dim256 geometry")
         if self.geometry.num_embeddings != self.num_embeddings:
             raise ValueError("Engram checkpoint table rows do not match global hash geometry")
-        vc = get_current_aphrodite_config()
+        vc = get_current_sonar_config()
         mc = vc.model_config
         engram_config = vc.engram_config
         self.table_memory = "ram" if engram_config is not None and engram_config.cpu_offload else "device"

@@ -3,7 +3,7 @@
 """ColQwen3 configuration that extends Qwen3VLConfig with embedding projection
 fields. This allows ColQwen3 models to be loaded without trust_remote_code
 by mapping their custom model_type (colqwen3, ops_colqwen3, etc.) to a
-standard config class that Aphrodite understands.
+standard config class that Sonar understands.
 
 Supported model_types:
 - colqwen3 (TomoroAI/tomoro-colqwen3-embed-8b)

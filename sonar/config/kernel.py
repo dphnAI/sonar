@@ -7,21 +7,21 @@ from typing import TYPE_CHECKING, Any, Final, Literal
 
 from pydantic import Field, field_validator
 
-from aphrodite.config.utils import config, get_hash_factors, hash_factors
-from aphrodite.logger import init_logger
+from sonar.config.utils import config, get_hash_factors, hash_factors
+from sonar.logger import init_logger
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
-    from aphrodite.config.parallel import ParallelConfig
+    from sonar.config import SonarConfig
+    from sonar.config.parallel import ParallelConfig
 
 logger = init_logger(__name__)
 
 
 @config
 class IrOpPriorityConfig:
-    """Configuration for Aphrodite IR op priority for dispatching/lowering during the
+    """Configuration for Sonar IR op priority for dispatching/lowering during the
     forward pass. Each member is a list of strings, which will be installed
-    in worker init via aphrodite.ir.ops.<op_name>.set_default().
+    in worker init via sonar.ir.ops.<op_name>.set_default().
     A single comma-separated string is accepted as well,
 
     If specified manually, platform defaults will be appended to the lists.
@@ -29,13 +29,13 @@ class IrOpPriorityConfig:
     """
 
     rms_norm: list[str] = Field(default_factory=list)
-    """Priority list for aphrodite.ir.ops.rms_norm"""
+    """Priority list for sonar.ir.ops.rms_norm"""
 
     fused_add_rms_norm: list[str] = Field(default_factory=list)
-    """Priority list for aphrodite.ir.ops.fused_add_rms_norm"""
+    """Priority list for sonar.ir.ops.fused_add_rms_norm"""
 
     gelu_and_mul_sparse: list[str] = Field(default_factory=list)
-    """Priority list for aphrodite.ir.ops.gelu_and_mul_sparse"""
+    """Priority list for sonar.ir.ops.gelu_and_mul_sparse"""
 
     def compute_hash(self) -> str:
         """Produces a hash unique to the pass configuration.
@@ -48,8 +48,8 @@ class IrOpPriorityConfig:
 
         # Implementations are hidden from Dynamo,
         # so they don't show up in the traced files list.
-        from aphrodite.ir.op import IrOp
-        from aphrodite.platforms import current_platform
+        from sonar.ir.op import IrOp
+        from sonar.platforms import current_platform
 
         current_platform.import_ir_kernels()
 
@@ -74,8 +74,8 @@ class IrOpPriorityConfig:
         """Yield (IrOp, priority_list) for each field, after importing platform
         kernels and validating each entry.
         """
-        from aphrodite.ir.op import IrOp
-        from aphrodite.platforms import current_platform
+        from sonar.ir.op import IrOp
+        from sonar.platforms import current_platform
 
         current_platform.import_ir_kernels()
 
@@ -156,7 +156,7 @@ FLASHINFER_MOE_EP_BACKENDS = frozenset(
 PASSTHROUGH_ALL2ALL_BACKEND: Final = "passthrough"
 
 # "Native" here meaning that the backend does not use the fused MoE path.
-# Currently only relevant for the Aphrodite provided DeepGEMM MegaMoE.,
+# Currently only relevant for the Sonar provided DeepGEMM MegaMoE.,
 # TODO: migrate to the fused MoE path ultimately.
 NATIVE_MEGA_MOE_BACKENDS = frozenset({"deep_gemm_mega_moe"})
 
@@ -267,10 +267,10 @@ class KernelConfig:
 
     ir_op_priority: IrOpPriorityConfig = Field(default_factory=IrOpPriorityConfig)
     """
-    Aphrodite IR op priority for dispatching/lowering during the forward pass.
-    Platform defaults appended automatically during AphroditeConfig.__post_init__.
+    Sonar IR op priority for dispatching/lowering during the forward pass.
+    Platform defaults appended automatically during SonarConfig.__post_init__.
 
-    Deprecated: Aphrodite IR is being removed, and this option will be removed in
+    Deprecated: Sonar IR is being removed, and this option will be removed in
     v0.34.0. Kernels will be selected by the platform, as for other custom ops.
     """
 
@@ -305,7 +305,7 @@ class KernelConfig:
       activation format ([E_local, max_num_tokens, K])
     - "deep_gemm": Use DeepGEMM kernels (FP8 block-quantized only)
     - "deep_gemm_mega_moe": Use DeepGEMM mega MoE kernels
-    - "cutlass": Use Aphrodite CUTLASS kernels
+    - "cutlass": Use Sonar CUTLASS kernels
     - "flashinfer_trtllm": Use FlashInfer with TRTLLM-GEN kernels
     - "flashinfer_cutlass": Use FlashInfer with CUTLASS kernels
     - "flashinfer_cutedsl": Use FlashInfer with CuteDSL kernels (FP4 only)
@@ -345,13 +345,13 @@ class KernelConfig:
     - "auto": The pre-existing chain (cooperative -> persistent -> per_row);
       the other backends are opt-in
     - "deep_select": Use DeepSelect kernels (SM100a/SM103a only)
-    - "cooperative": Use Aphrodite's cooperative_topk kernel
-    - "persistent": Use Aphrodite's persistent_topk kernel
-    - "per_row": Use Aphrodite's top_k_per_row_decode kernel
+    - "cooperative": Use Sonar's cooperative_topk kernel
+    - "persistent": Use Sonar's persistent_topk kernel
+    - "per_row": Use Sonar's top_k_per_row_decode kernel
     - "flashinfer": Use FlashInfer's top_k_ragged_transform kernel
     - "torch": Use a plain torch.topk implementation (debug reference)
     - "aiter": Use AITER's top_k_per_row_decode kernel (ROCm gfx950 only,
-      requires APHRODITE_ROCM_USE_AITER)
+      requires SONAR_ROCM_USE_AITER)
 
     Explicit values raise RuntimeError when their constraints are not met.
 
@@ -469,15 +469,15 @@ class KernelConfig:
             return value
         return handler(value)
 
-    def set_platform_defaults(self, aphrodite_config: "AphroditeConfig") -> None:
+    def set_platform_defaults(self, sonar_config: "SonarConfig") -> None:
         """Set platform-specific defaults for the kernel config."""
-        from aphrodite.platforms import current_platform
+        from sonar.platforms import current_platform
 
-        if aphrodite_config.model_config is not None:
-            validate_flashinfer_moe_ep_model(self.moe_backend, aphrodite_config.model_config.architectures)
-        bind_passthrough_all2all_backend(self.moe_backend, aphrodite_config.parallel_config)
+        if sonar_config.model_config is not None:
+            validate_flashinfer_moe_ep_model(self.moe_backend, sonar_config.model_config.architectures)
+        bind_passthrough_all2all_backend(self.moe_backend, sonar_config.parallel_config)
 
-        platform_op_priority = current_platform.get_default_ir_op_priority(aphrodite_config)
+        platform_op_priority = current_platform.get_default_ir_op_priority(sonar_config)
         logger.debug(
             "Setting platform-specific IR op priority defaults: %s, user-defined: %s",
             platform_op_priority,
@@ -489,8 +489,8 @@ class KernelConfig:
                 setattr(self.ir_op_priority, op_name, op_priority)
             else:
                 # Append platform-specific priorities
-                # Must be idempotent because aphrodite_config.set_platform_defaults() may be
-                # called multiple times (due to AphroditeConfig.__post_init__ manual call).
+                # Must be idempotent because sonar_config.set_platform_defaults() may be
+                # called multiple times (due to SonarConfig.__post_init__ manual call).
                 unique_op_priority = [op for op in op_priority if op not in current_op_priority]
                 current_op_priority.extend(unique_op_priority)
 

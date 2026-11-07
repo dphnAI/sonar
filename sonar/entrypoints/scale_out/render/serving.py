@@ -5,50 +5,50 @@ from typing import TYPE_CHECKING, Any
 
 from fastapi import Request
 
-from aphrodite.entrypoints.anthropic.protocol import (
+from sonar.entrypoints.anthropic.protocol import (
     AnthropicDisabledThinkingEffortOption,
     AnthropicMessagesRequest,
 )
-from aphrodite.entrypoints.anthropic.serving import (
+from sonar.entrypoints.anthropic.serving import (
     AnthropicServingMessages,
     DisabledThinkingEffortResolver,
 )
-from aphrodite.entrypoints.generate.base.protocol import MMPayload
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-from aphrodite.entrypoints.openai.completion.protocol import CompletionRequest
-from aphrodite.entrypoints.openai.models.serving import (
+from sonar.entrypoints.generate.base.protocol import MMPayload
+from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+from sonar.entrypoints.openai.completion.protocol import CompletionRequest
+from sonar.entrypoints.openai.models.serving import (
     OpenAIModelRegistry,
     OpenAIServingModels,
 )
-from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
-from aphrodite.entrypoints.scale_out.token_in_token_out.mm_features import (
+from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
+from sonar.entrypoints.scale_out.token_in_token_out.mm_features import (
     extract_mm_features,
 )
-from aphrodite.entrypoints.scale_out.token_in_token_out.protocol import (
+from sonar.entrypoints.scale_out.token_in_token_out.protocol import (
     GenerateRequest,
     MultiModalFeatures,
     ParseContext,
     ReasoningParserKwargs,
 )
-from aphrodite.entrypoints.serve.engine.protocol import ErrorResponse
-from aphrodite.entrypoints.serve.engine.serving import BaseServing
-from aphrodite.entrypoints.serve.utils.api_utils import get_max_tokens
-from aphrodite.entrypoints.serve.utils.request_logger import RequestLogger
-from aphrodite.inputs import EngineInput
-from aphrodite.logger import init_logger
-from aphrodite.multimodal.parse import MultiModalDataParser
-from aphrodite.parser.utils import count_history_tool_calls
-from aphrodite.renderers.inputs.preprocess import (
+from sonar.entrypoints.serve.engine.protocol import ErrorResponse
+from sonar.entrypoints.serve.engine.serving import BaseServing
+from sonar.entrypoints.serve.utils.api_utils import get_max_tokens
+from sonar.entrypoints.serve.utils.request_logger import RequestLogger
+from sonar.inputs import EngineInput
+from sonar.logger import init_logger
+from sonar.multimodal.parse import MultiModalDataParser
+from sonar.parser.utils import count_history_tool_calls
+from sonar.renderers.inputs.preprocess import (
     extract_prompt_components,
     extract_prompt_len,
 )
-from aphrodite.renderers.online_renderer import OnlineRenderer
-from aphrodite.sampling_params import SamplingParams
+from sonar.renderers.online_renderer import OnlineRenderer
+from sonar.sampling_params import SamplingParams
 
 logger = init_logger(__name__)
 
 if TYPE_CHECKING:
-    from aphrodite.entrypoints.mcp.tool_server import ToolServer
+    from sonar.entrypoints.mcp.tool_server import ToolServer
 
 
 def _hoist_transfer_params(
@@ -61,7 +61,7 @@ def _hoist_transfer_params(
     """
     if not params.extra_args:
         return None, None
-    # to_sampling_params aliases request.aphrodite_xargs, so copy before popping.
+    # to_sampling_params aliases request.sonar_xargs, so copy before popping.
     extra = dict(params.extra_args)
     kv = extra.pop("kv_transfer_params", None)
     ec = extra.pop("ec_transfer_params", None)
@@ -104,7 +104,7 @@ class ServingRender(BaseServing):
         mc = online_renderer.model_config
         self.override_max_tokens = (
             self.default_sampling_params.get("max_tokens")
-            if mc.generation_config not in ("auto", "aphrodite")
+            if mc.generation_config not in ("auto", "sonar")
             else getattr(mc, "override_generation_config", {}).get("max_new_tokens")
         )
 
@@ -373,7 +373,7 @@ class ServingRender(BaseServing):
             return set()
         if self._placeholder_metadata_parser is None:
             try:
-                from aphrodite.multimodal import MULTIMODAL_REGISTRY
+                from sonar.multimodal import MULTIMODAL_REGISTRY
 
                 self._placeholder_metadata_parser = MULTIMODAL_REGISTRY.create_processor(
                     self.model_config

@@ -2,10 +2,10 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import torch
 
-from aphrodite.third_party.flash_linear_attention.ops.layernorm_guard import (
+from sonar.third_party.flash_linear_attention.ops.layernorm_guard import (
     calc_rows_per_block,
 )
-from aphrodite.triton_utils import tl, triton
+from sonar.triton_utils import tl, triton
 
 
 @triton.jit(do_not_specialize=["M"])

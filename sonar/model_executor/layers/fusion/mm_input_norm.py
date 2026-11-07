@@ -23,10 +23,10 @@ from typing import NamedTuple
 import torch
 from torch import nn
 
-from aphrodite.config import ModelConfig
-from aphrodite.model_executor.custom_op import CustomOp
-from aphrodite.transformers_utils.processor import get_processor_config
-from aphrodite.triton_utils import tl, triton
+from sonar.config import ModelConfig
+from sonar.model_executor.custom_op import CustomOp
+from sonar.transformers_utils.processor import get_processor_config
+from sonar.triton_utils import tl, triton
 
 
 @triton.jit
@@ -301,9 +301,9 @@ class FusedMMInputNorm(CustomOp):
             return self.forward_cuda(pixel_values, visual_dtype)
 
         # For uint8 input, falls to xpu_fused_input_norm from xpu kernels
-        import aphrodite._xpu_ops  # noqa: F401
+        import sonar._xpu_ops  # noqa: F401
 
-        return torch.ops.aphrodite.xpu_fused_input_norm(pixel_values, self.weight, self.bias, visual_dtype)
+        return torch.ops.sonar.xpu_fused_input_norm(pixel_values, self.weight, self.bias, visual_dtype)
 
     def forward_oot(self, pixel_values: torch.Tensor, visual_dtype: torch.dtype) -> torch.Tensor:
         """Out-of-tree platform override entrypoint."""

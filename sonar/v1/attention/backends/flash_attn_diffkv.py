@@ -4,23 +4,23 @@
 
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import (
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import (
     canonicalize_singleton_dim_strides,
 )
-from aphrodite.v1.attention.backend import AttentionType
-from aphrodite.v1.attention.backends.fa_utils import (
+from sonar.v1.attention.backend import AttentionType
+from sonar.v1.attention.backends.fa_utils import (
     get_flash_attn_version,
     is_flash_attn_varlen_func_available,
 )
-from aphrodite.v1.attention.ops.triton_reshape_and_cache_flash import (
+from sonar.v1.attention.ops.triton_reshape_and_cache_flash import (
     triton_reshape_and_cache_flash_diffkv,
 )
-from aphrodite.v1.kv_cache_interface import is_quantized_kv_cache
+from sonar.v1.kv_cache_interface import is_quantized_kv_cache
 
 if is_flash_attn_varlen_func_available():
-    from aphrodite.v1.attention.backends.fa_utils import flash_attn_varlen_func
+    from sonar.v1.attention.backends.fa_utils import flash_attn_varlen_func
 
 from .flash_attn import (
     FlashAttentionBackend,
@@ -193,7 +193,7 @@ class FlashAttentionDiffKVImpl(FlashAttentionImpl):
         key_cache, value_cache = kv_cache.transpose(1, 2).split(self.head_size, dim=-1)
         # Fix degenerate strides on size-1 dims (e.g. num_kv_heads=1 with TP).
         # FA3/4 on H100+ uses TMA, which requires ≥16-byte stride alignment.
-        # See aphrodite.utils.torch_utils.canonicalize_singleton_dim_strides.
+        # See sonar.utils.torch_utils.canonicalize_singleton_dim_strides.
         fixed_k = canonicalize_singleton_dim_strides(key_cache)
         fixed_v = canonicalize_singleton_dim_strides(value_cache)
         if fixed_k is not key_cache or fixed_v is not value_cache:

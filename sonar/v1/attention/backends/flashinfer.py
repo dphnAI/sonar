@@ -26,28 +26,28 @@ from flashinfer.utils import (
 )
 from typing_extensions import override
 
-from aphrodite import _custom_ops as custom_ops
-from aphrodite import envs
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar import _custom_ops as custom_ops
+from sonar import envs
+from sonar.config import (
     CUDAGraphMode,
-    get_current_aphrodite_config_or_none,
+    SonarConfig,
+    get_current_sonar_config_or_none,
 )
-from aphrodite.config.cache import CacheDType
-from aphrodite.distributed.parallel_state import (
+from sonar.config.cache import CacheDType
+from sonar.distributed.parallel_state import (
     get_dcp_group,
     get_dcp_world_size_and_rank,
 )
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     kFp8StaticTensorSym,
     kNvfp4Dynamic,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.platforms.interface import DeviceCapability
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.flashinfer import (
+from sonar.platforms import current_platform
+from sonar.platforms.interface import DeviceCapability
+from sonar.triton_utils import tl, triton
+from sonar.utils.flashinfer import (
     can_use_trtllm_attention,
     flashinfer_xqa_batch_decode_with_kv_cache,
     force_use_trtllm_attention,
@@ -55,9 +55,9 @@ from aphrodite.utils.flashinfer import (
     supports_trtllm_attention,
     use_trtllm_attention,
 )
-from aphrodite.utils.gpu_sync_debug import gpu_sync_allowed
-from aphrodite.utils.math_utils import cdiv, round_up
-from aphrodite.utils.torch_utils import (
+from sonar.utils.gpu_sync_debug import gpu_sync_allowed
+from sonar.utils.math_utils import cdiv, round_up
+from sonar.utils.torch_utils import (
     PIN_MEMORY,
     canonicalize_singleton_dim_strides,
     get_dtype_size,
@@ -65,7 +65,7 @@ from aphrodite.utils.torch_utils import (
     nvfp4_kv_cache_full_dim,
     nvfp4_split_data_scale,
 )
-from aphrodite.v1.attention.backend import (
+from sonar.v1.attention.backend import (
     AttentionBackend,
     AttentionCGSupport,
     AttentionImpl,
@@ -75,7 +75,7 @@ from aphrodite.v1.attention.backend import (
     MultipleOf,
     max_decode_query_len,
 )
-from aphrodite.v1.attention.backends.utils import (
+from sonar.v1.attention.backends.utils import (
     get_dcp_local_seq_lens,
     get_flashinfer_layout_string,
     get_kv_cache_dtype_from_layers,
@@ -85,13 +85,13 @@ from aphrodite.v1.attention.backends.utils import (
     log2_lse_to_ln,
     split_decodes_and_prefills,
 )
-from aphrodite.v1.attention.ops.dcp import (
+from sonar.v1.attention.ops.dcp import (
     cp_lse_ag_out_rs,
     dcp_a2a_lse_reduce,
     mask_dcp_empty_shards_,
 )
-from aphrodite.v1.attention.ops.merge_attn_states import merge_attn_states
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.attention.ops.merge_attn_states import merge_attn_states
+from sonar.v1.kv_cache_interface import (
     AttentionSpec,
     KVCacheLayout,
     KVCacheSpec,
@@ -99,7 +99,7 @@ from aphrodite.v1.kv_cache_interface import (
     is_quantized_kv_cache,
     iter_layer_specs,
 )
-from aphrodite.v1.utils import CpuGpuBuffer
+from sonar.v1.utils import CpuGpuBuffer
 
 FLASHINFER_WORKSPACE_BUFFER_SIZE_BATCH_INVARIANT = 2048 * 1024 * 1024
 FLASHINFER_PREFILL_WORKSPACE_BYTES_PER_ELEM = 16
@@ -149,7 +149,7 @@ def _get_trtllm_workspace_buffer():
     global trtllm_workspace_buffer
     if trtllm_workspace_buffer is None:
         trtllm_workspace_buffer = torch.zeros(
-            envs.APHRODITE_FLASHINFER_WORKSPACE_BUFFER_SIZE, dtype=torch.uint8, device="cuda"
+            envs.SONAR_FLASHINFER_WORKSPACE_BUFFER_SIZE, dtype=torch.uint8, device="cuda"
         )
     return trtllm_workspace_buffer
 
@@ -559,10 +559,10 @@ class FlashInferBackend(AttentionBackend):
         # on Blackwell); advertise them only when usable so selection never
         # picks a large kernel block we cannot serve.
         use_large_pages = False
-        aphrodite_config = get_current_aphrodite_config_or_none()
-        if aphrodite_config is not None and aphrodite_config.model_config is not None:
-            pc = aphrodite_config.parallel_config
-            mc = aphrodite_config.model_config
+        sonar_config = get_current_sonar_config_or_none()
+        if sonar_config is not None and sonar_config.model_config is not None:
+            pc = sonar_config.parallel_config
+            mc = sonar_config.model_config
             num_qo_heads = mc.get_num_attention_heads(pc)
             num_kv_heads = mc.get_num_kv_heads(pc)
             use_large_pages = (
@@ -590,11 +590,11 @@ class FlashInferBackend(AttentionBackend):
         # under DCP spec queries are routed to the prefill path.
         if not current_platform.is_device_capability_family(100):
             return False
-        aphrodite_config = get_current_aphrodite_config_or_none()
-        if aphrodite_config is None or aphrodite_config.model_config is None:
+        sonar_config = get_current_sonar_config_or_none()
+        if sonar_config is None or sonar_config.model_config is None:
             return True
-        pc = aphrodite_config.parallel_config
-        mc = aphrodite_config.model_config
+        pc = sonar_config.parallel_config
+        mc = sonar_config.model_config
         return pc.decode_context_parallel_size == 1 and can_use_trtllm_attention(
             mc.get_num_attention_heads(pc), mc.get_num_kv_heads(pc), is_prefill=False
         )
@@ -672,7 +672,7 @@ class FlashInferBackend(AttentionBackend):
     @classmethod
     def supports_sink(cls) -> bool:
         """Whether FlashInfer can serve attention sinks on this platform."""
-        from aphrodite.utils.flashinfer import (
+        from sonar.utils.flashinfer import (
             force_use_trtllm_attention,
         )
 
@@ -827,14 +827,14 @@ class FlashInferMetadataBuilder(AttentionMetadataBuilder[FlashInferMetadata]):
         self,
         kv_cache_spec: AttentionSpec,
         layer_names: list[str],
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
     ):
-        super().__init__(kv_cache_spec, layer_names, aphrodite_config, device)
-        self.cache_config = aphrodite_config.cache_config
-        self.model_config = aphrodite_config.model_config
-        self.attention_config = aphrodite_config.attention_config
-        self._num_speculative_tokens = aphrodite_config.num_speculative_tokens
+        super().__init__(kv_cache_spec, layer_names, sonar_config, device)
+        self.cache_config = sonar_config.cache_config
+        self.model_config = sonar_config.model_config
+        self.attention_config = sonar_config.attention_config
+        self._num_speculative_tokens = sonar_config.num_speculative_tokens
         self._workspace_buffer = None
         self._prefill_wrapper: BatchPrefillWithPagedKVCacheWrapper | BatchDCPPrefillWrapper | None = (
             None  # Wrapper for prefill/append
@@ -844,7 +844,7 @@ class FlashInferMetadataBuilder(AttentionMetadataBuilder[FlashInferMetadata]):
         )
         self._decode_wrapper = None  # Wrapper for decode (general shape)
 
-        if envs.APHRODITE_BATCH_INVARIANT:
+        if envs.SONAR_BATCH_INVARIANT:
             self.decode_fixed_split_size = 2048
             self.prefill_fixed_split_size = 4096
             self.disable_split_kv = True
@@ -853,15 +853,15 @@ class FlashInferMetadataBuilder(AttentionMetadataBuilder[FlashInferMetadata]):
             self.prefill_fixed_split_size = -1
             self.disable_split_kv = False
 
-        self.compilation_config = aphrodite_config.compilation_config
-        self.max_num_batched_tokens = aphrodite_config.scheduler_config.max_num_batched_tokens
+        self.compilation_config = sonar_config.compilation_config
+        self.max_num_batched_tokens = sonar_config.scheduler_config.max_num_batched_tokens
         max_num_pages_per_req = cdiv(self.model_config.max_model_len, self.kv_cache_spec.block_size)
-        max_num_reqs = aphrodite_config.scheduler_config.max_num_seqs
+        max_num_reqs = sonar_config.scheduler_config.max_num_seqs
         self.max_num_reqs = max_num_reqs
         max_num_pages = max_num_reqs * max_num_pages_per_req
         # Persistent uniform masks keep stable addresses for CUDA graphs.
         self._decode_mask_cache: dict[tuple[int, bool], torch.Tensor] = {}
-        speculative_config = aphrodite_config.speculative_config
+        speculative_config = sonar_config.speculative_config
         num_spec_tokens = speculative_config.num_speculative_tokens if speculative_config is not None else 0
         self.enable_cuda_graph = self.compilation_config.cudagraph_mode.decode_mode() == CUDAGraphMode.FULL
         if self.enable_cuda_graph:
@@ -875,14 +875,14 @@ class FlashInferMetadataBuilder(AttentionMetadataBuilder[FlashInferMetadata]):
                     self.compilation_config.max_cudagraph_capture_size,
                 )
         self.dcp_world_size, self.dcp_rank = get_dcp_world_size_and_rank(kv_cache_spec.dcp_sharded)
-        self.dcp_kv_cache_interleave_size = aphrodite_config.parallel_config.cp_kv_cache_interleave_size
+        self.dcp_kv_cache_interleave_size = sonar_config.parallel_config.cp_kv_cache_interleave_size
         self.use_dcp = self.dcp_world_size > 1
-        self.dcp_a2a = self.use_dcp and aphrodite_config.parallel_config.dcp_comm_backend == "a2a"
+        self.dcp_a2a = self.use_dcp and sonar_config.parallel_config.dcp_comm_backend == "a2a"
 
         # Compatible with models with non-uniform per-layer head counts.
         self.num_qo_heads = get_num_attention_heads_from_layers(
-            aphrodite_config, layer_names
-        ) or self.model_config.get_num_attention_heads(self.aphrodite_config.parallel_config)
+            sonar_config, layer_names
+        ) or self.model_config.get_num_attention_heads(self.sonar_config.parallel_config)
 
         self.num_kv_heads = self.kv_cache_spec.num_kv_heads
         self.head_dim = self.kv_cache_spec.head_size
@@ -971,7 +971,7 @@ class FlashInferMetadataBuilder(AttentionMetadataBuilder[FlashInferMetadata]):
             self.flashinfer_trtllm_api_decode_kernel = None
         self.use_xqa = self.flashinfer_trtllm_api_decode_kernel == FlashInferDecodeKernel.XQA
         self.use_trtllm_gen_varlen_decode = self._uses_trtllm_gen_varlen_decode(
-            aphrodite_config, self.flashinfer_trtllm_api_decode_kernel, self.use_dcp
+            sonar_config, self.flashinfer_trtllm_api_decode_kernel, self.use_dcp
         )
         # Fused draft steps advance seq_lens in place and keep block tables fixed,
         # so one trtllm-gen decode build serves every step (not DCP-local seq_lens).
@@ -996,7 +996,7 @@ class FlashInferMetadataBuilder(AttentionMetadataBuilder[FlashInferMetadata]):
 
         # Global hyperparameters shared by all attention layers
         # TODO: discard this for trtllm-gen backend
-        per_layer_parameters = get_per_layer_parameters(aphrodite_config, layer_names, FlashInferImpl)
+        per_layer_parameters = get_per_layer_parameters(sonar_config, layer_names, FlashInferImpl)
         self.global_hyperparameters = infer_global_hyperparameters(per_layer_parameters)
         self.sm_scale = self.global_hyperparameters.sm_scale
         self.window_left = self.global_hyperparameters.window_left
@@ -1046,7 +1046,7 @@ class FlashInferMetadataBuilder(AttentionMetadataBuilder[FlashInferMetadata]):
         if cache_dtype != "auto":
             return cache_dtype
 
-        layer_cache_dtype = get_kv_cache_dtype_from_layers(self.aphrodite_config, self.layer_names)
+        layer_cache_dtype = get_kv_cache_dtype_from_layers(self.sonar_config, self.layer_names)
         if layer_cache_dtype is not None and layer_cache_dtype != "auto":
             return layer_cache_dtype
 
@@ -1101,22 +1101,22 @@ class FlashInferMetadataBuilder(AttentionMetadataBuilder[FlashInferMetadata]):
     @classmethod
     def get_cudagraph_support(
         cls: type["FlashInferMetadataBuilder"],
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         kv_cache_spec: KVCacheSpec,
     ) -> AttentionCGSupport:
         """Get the cudagraph support level for FlashInfer attention."""
         # XQA lacks LSE for DCP; DCP also cannot graph variable-length trtllm-gen.
-        if aphrodite_config.parallel_config.decode_context_parallel_size > 1:
+        if sonar_config.parallel_config.decode_context_parallel_size > 1:
             return AttentionCGSupport.UNIFORM_SINGLE_TOKEN_DECODE
 
         kv_specs = iter_layer_specs(kv_cache_spec)
         if _use_fa2_native_decode():
             # fa2 decodes uniform causal spec queries.
-            if kv_specs and not aphrodite_config.attention_config.use_non_causal:
+            if kv_specs and not sonar_config.attention_config.use_non_causal:
                 return AttentionCGSupport.UNIFORM_BATCH
             return AttentionCGSupport.UNIFORM_SINGLE_TOKEN_DECODE
 
-        num_qo_heads = aphrodite_config.model_config.get_num_attention_heads(aphrodite_config.parallel_config)
+        num_qo_heads = sonar_config.model_config.get_num_attention_heads(sonar_config.parallel_config)
         is_xqa_arch = current_platform.is_device_capability(90) or current_platform.is_device_capability_family(120)
         has_uniform_batch_support: bool = len(kv_specs) > 0
         for spec in kv_specs:
@@ -1138,7 +1138,7 @@ class FlashInferMetadataBuilder(AttentionMetadataBuilder[FlashInferMetadata]):
                 has_uniform_batch_support = False
                 break
 
-        use_non_causal = aphrodite_config.attention_config.use_non_causal
+        use_non_causal = sonar_config.attention_config.use_non_causal
         if has_uniform_batch_support and (not use_non_causal or is_xqa_arch):
             return AttentionCGSupport.UNIFORM_BATCH
         else:
@@ -1148,7 +1148,7 @@ class FlashInferMetadataBuilder(AttentionMetadataBuilder[FlashInferMetadata]):
     @classmethod
     def get_varlen_cudagraph_max_query_len(
         cls: type["FlashInferMetadataBuilder"],
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         kv_cache_spec: KVCacheSpec,
     ) -> int | None:
         # The uniform gate already covers DCP, head geometry, the XQA head-dim
@@ -1156,24 +1156,24 @@ class FlashInferMetadataBuilder(AttentionMetadataBuilder[FlashInferMetadata]):
         # The native fa2 decode wrapper takes only uniform query lengths.
         if (
             _use_fa2_native_decode()
-            or cls.get_cudagraph_support(aphrodite_config, kv_cache_spec) != AttentionCGSupport.UNIFORM_BATCH
+            or cls.get_cudagraph_support(sonar_config, kv_cache_spec) != AttentionCGSupport.UNIFORM_BATCH
         ):
             return None
         # The kernel selector asserts off the trtllm-capable architectures, so
         # call it only past the gate, as get_cudagraph_support does.
         if not cls._uses_trtllm_gen_varlen_decode(
-            aphrodite_config,
+            sonar_config,
             cls._get_flashinfer_trtllm_api_decode_kernel(),
-            use_dcp=aphrodite_config.parallel_config.decode_context_parallel_size > 1,
+            use_dcp=sonar_config.parallel_config.decode_context_parallel_size > 1,
         ):
             return None
         # Longer requests are split off as prefills.
-        return max_decode_query_len(aphrodite_config)
+        return max_decode_query_len(sonar_config)
 
     def _get_workspace_buffer(self):
         if self._workspace_buffer is None:
-            buffer_size = envs.APHRODITE_FLASHINFER_WORKSPACE_BUFFER_SIZE
-            if envs.APHRODITE_BATCH_INVARIANT:
+            buffer_size = envs.SONAR_FLASHINFER_WORKSPACE_BUFFER_SIZE
+            if envs.SONAR_BATCH_INVARIANT:
                 buffer_size = FLASHINFER_WORKSPACE_BUFFER_SIZE_BATCH_INVARIANT
             else:
                 # FlashInfer prefill temp buffers (batch_prefill_tmp_v, ...)
@@ -1198,7 +1198,7 @@ class FlashInferMetadataBuilder(AttentionMetadataBuilder[FlashInferMetadata]):
 
     @staticmethod
     def _uses_trtllm_gen_varlen_decode(
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         decode_kernel: FlashInferDecodeKernel | None,
         use_dcp: bool,
     ) -> bool:
@@ -1206,7 +1206,7 @@ class FlashInferMetadataBuilder(AttentionMetadataBuilder[FlashInferMetadata]):
         qo_indptr. Adaptive verification trims drafts on device, and only
         trtllm-gen supports that (the selector already rejects the other
         configurations)."""
-        speculative_config = aphrodite_config.speculative_config
+        speculative_config = sonar_config.speculative_config
         return (
             speculative_config is not None
             and speculative_config.enable_adaptive_verification
@@ -1801,7 +1801,7 @@ class FlashInferMetadataBuilder(AttentionMetadataBuilder[FlashInferMetadata]):
                     num_kv_heads=self.num_kv_heads,
                     head_dim=self.head_dim,
                     page_size=self.page_size,
-                    # Disable flashinfer's pos encoding and use aphrodite's rope.
+                    # Disable flashinfer's pos encoding and use sonar's rope.
                     pos_encoding_mode="NONE",
                     sm_scale=self.sm_scale,
                     window_left=self.window_left,
@@ -1879,7 +1879,7 @@ class FlashInferImpl(AttentionImpl):
             self.sinks = sinks
 
         self.supports_xqa_or_trtllm_gen_decode = can_use_trtllm_attention(num_heads, num_kv_heads, is_prefill=False)
-        aphrodite_config = get_current_aphrodite_config_or_none()
+        sonar_config = get_current_sonar_config_or_none()
         # Query pre-quantization needs a single dtype for the whole query tensor.
         # SM90 XQA needs BF16/FP16-Q for decode and FP8 for prefill,
         # so only enable this for SM100 trtllm-gen where both use FP8-Q.
@@ -1887,8 +1887,8 @@ class FlashInferImpl(AttentionImpl):
             self.supports_xqa_or_trtllm_gen_decode
             and is_quantized_kv_cache(self.kv_cache_dtype)
             and current_platform.is_device_capability_family(100)
-            and aphrodite_config is not None
-            and not aphrodite_config.attention_config.disable_flashinfer_q_quantization
+            and sonar_config is not None
+            and not sonar_config.attention_config.disable_flashinfer_q_quantization
         )
         self.bmm1_scale: float | None = None
         self.bmm2_scale: float | None = None
@@ -1897,8 +1897,8 @@ class FlashInferImpl(AttentionImpl):
         # Allocated eagerly to stay out of CUDA-graph capture; DCP all-gathers
         # the decode query over heads.
         self._multi_ctas_kv_counter_buffer: torch.Tensor | None = None
-        if aphrodite_config is not None:
-            _sched = aphrodite_config.scheduler_config
+        if sonar_config is not None:
+            _sched = sonar_config.scheduler_config
             self._multi_ctas_kv_counter_buffer = _get_multi_ctas_kv_counter_buffer(
                 get_trtllm_gen_multi_ctas_kv_counter_bytes(
                     _sched.max_num_batched_tokens or _sched.max_num_seqs,
@@ -1909,8 +1909,8 @@ class FlashInferImpl(AttentionImpl):
             )
 
         # Pre-allocated FP8 output buffer for NVFP4 without fused output quant.
-        if self.nvfp4_trtllm and aphrodite_config is not None:
-            max_num_tokens = aphrodite_config.scheduler_config.max_num_batched_tokens
+        if self.nvfp4_trtllm and sonar_config is not None:
+            max_num_tokens = sonar_config.scheduler_config.max_num_batched_tokens
             self._nvfp4_fp8_out = torch.empty(
                 (max_num_tokens, num_heads, head_size),
                 dtype=FP8_DTYPE,
@@ -1920,9 +1920,9 @@ class FlashInferImpl(AttentionImpl):
             self._nvfp4_fp8_out = None
 
         dcp_a2a = (
-            aphrodite_config is not None
-            and aphrodite_config.parallel_config.decode_context_parallel_size > 1
-            and aphrodite_config.parallel_config.dcp_comm_backend == "a2a"
+            sonar_config is not None
+            and sonar_config.parallel_config.decode_context_parallel_size > 1
+            and sonar_config.parallel_config.dcp_comm_backend == "a2a"
         )
         if dcp_a2a:
             self.dcp_combine = partial(dcp_a2a_lse_reduce, is_lse_base_on_e=False)
@@ -2086,7 +2086,7 @@ class FlashInferImpl(AttentionImpl):
         num_actual_tokens = attn_metadata.num_actual_tokens
         kv_cache_layout = attn_metadata.kv_cache_layout
 
-        # FlashInfer treats uint8 KV cache as NVFP4. Aphrodite stores FP8 KV cache
+        # FlashInfer treats uint8 KV cache as NVFP4. Sonar stores FP8 KV cache
         # as uint8 bytes, so pass FP8 caches with their logical dtype.
         if not self.is_kvcache_nvfp4 and kv_cache.dtype == torch.uint8:
             fp8_view_dtype = None
@@ -2117,7 +2117,7 @@ class FlashInferImpl(AttentionImpl):
         # with TP=8).  PyTorch permits non-canonical strides on size-1 dims;
         # CUDA TMA requires ≥16-byte alignment on all non-outermost strides.
         # canonicalize_singleton_dim_strides patches metadata via as_strided —
-        # zero-copy.  See aphrodite.utils.torch_utils.
+        # zero-copy.  See sonar.utils.torch_utils.
         fixed = canonicalize_singleton_dim_strides(kv_cache_permute)
         if fixed is not kv_cache_permute:
             logger.debug(
@@ -2245,7 +2245,7 @@ class FlashInferImpl(AttentionImpl):
                 block_tables_prefill = attn_metadata.prefill.block_tables
                 seq_lens_prefill = attn_metadata.prefill.seq_lens
 
-                # This path needs to be enabled with APHRODITE_KV_CACHE_LAYOUT = HND
+                # This path needs to be enabled with SONAR_KV_CACHE_LAYOUT = HND
                 assert get_flashinfer_layout_string(kv_cache_layout) == "HND"
                 assert is_strictly_contiguous(prefill_query)
                 assert is_strictly_contiguous(workspace_buffer)
@@ -2642,7 +2642,7 @@ def fast_plan_decode(
     # Warm up with the original plan if it is first call, and always run the
     # original plan if we run for dynamic shape. For fixed shape (cudagraph),
     # this warm up is to generate the _cached_module for the decode wrapper.
-    if not self.is_cuda_graph_enabled or getattr(self, "aphrodite_first_call", True):
+    if not self.is_cuda_graph_enabled or getattr(self, "sonar_first_call", True):
         # plan() copies qo_indptr from flashinfer's internal cached host
         # arange buffer (_get_range_buf) with non_blocking=True; pin the
         # cache entry so the copy stays async.
@@ -2672,7 +2672,7 @@ def fast_plan_decode(
             disable_split_kv=disable_split_kv,
             q_len_per_req=q_len_per_req,
         )
-        self.aphrodite_first_call = False
+        self.sonar_first_call = False
         return
 
     assert self.is_cuda_graph_enabled, "Should be cudagraph only here"

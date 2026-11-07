@@ -8,52 +8,52 @@ from unittest.mock import MagicMock
 import pytest
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite.config import AphroditeConfig, ParallelConfig, set_current_aphrodite_config
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.all2all_utils import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar.config import ParallelConfig, SonarConfig, set_current_sonar_config
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.all2all_utils import (
     maybe_make_prepare_finalize,
 )
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEParallelConfig,
     FusedMoEQuantConfig,
     RoutingMethodType,
     fp8_w8a8_moe_quant_config,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.flashinfer_cutlass_moe import (
+from sonar.model_executor.layers.fused_moe.experts.flashinfer_cutlass_moe import (
     FlashInferExperts,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.trtllm_bf16_moe import (
+from sonar.model_executor.layers.fused_moe.experts.trtllm_bf16_moe import (
     view_as_block_major_k,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.trtllm_fp8_moe import (
+from sonar.model_executor.layers.fused_moe.experts.trtllm_fp8_moe import (
     TrtLlmFp8ExpertsModular,
     TrtLlmFp8ExpertsMonolithic,
 )
-from aphrodite.model_executor.layers.fused_moe.fused_moe import fused_experts
-from aphrodite.model_executor.layers.fused_moe.oracle.fp8 import (
+from sonar.model_executor.layers.fused_moe.fused_moe import fused_experts
+from sonar.model_executor.layers.fused_moe.oracle.fp8 import (
     Fp8MoeBackend,
     convert_to_fp8_moe_kernel_format,
     make_fp8_moe_quant_config,
 )
-from aphrodite.model_executor.layers.fused_moe.prepare_finalize.no_dp_ep import (
+from sonar.model_executor.layers.fused_moe.prepare_finalize.no_dp_ep import (
     MoEPrepareAndFinalizeNoDPEPModular,
 )
-from aphrodite.model_executor.layers.fused_moe.router.fused_topk_bias_router import (
+from sonar.model_executor.layers.fused_moe.router.fused_topk_bias_router import (
     fused_topk_bias,
 )
-from aphrodite.model_executor.layers.fused_moe.router.fused_topk_router import fused_topk
-from aphrodite.model_executor.layers.quantization.utils.flashinfer_utils import (
+from sonar.model_executor.layers.fused_moe.router.fused_topk_router import fused_topk
+from sonar.model_executor.layers.quantization.utils.flashinfer_utils import (
     rotate_weights_for_fi_trtllm_fp8_per_tensor_moe,
     swap_w13_to_w31,
 )
-from aphrodite.model_executor.layers.quantization.utils.fp8_utils import input_to_float8
-from aphrodite.model_executor.layers.quantization.utils.mxfp8_utils import (
+from sonar.model_executor.layers.quantization.utils.fp8_utils import input_to_float8
+from sonar.model_executor.layers.quantization.utils.mxfp8_utils import (
     dequant_mxfp8_to_bf16,
     mxfp8_e4m3_quantize,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     kFp8Dynamic128Sym,
     kFp8DynamicTensorSym,
@@ -62,10 +62,10 @@ from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
     kMxfp8Dynamic,
     kMxfp8Static,
 )
-from aphrodite.model_executor.models.llama4 import Llama4MoE
-from aphrodite.platforms import current_platform
-from aphrodite.utils.math_utils import next_power_of_2, round_up
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.model_executor.models.llama4 import Llama4MoE
+from sonar.platforms import current_platform
+from sonar.utils.math_utils import next_power_of_2, round_up
+from sonar.utils.torch_utils import set_random_seed
 from tests.kernels.moe.utils import (
     check_deferred_moe_finalize,
     make_dummy_moe_config,
@@ -73,10 +73,10 @@ from tests.kernels.moe.utils import (
 )
 
 try:
-    from aphrodite.utils.flashinfer import has_flashinfer_cutlass_fused_moe
+    from sonar.utils.flashinfer import has_flashinfer_cutlass_fused_moe
 except ImportError:
     if current_platform.is_rocm():
-        pytest.skip("flashinfer not supported for Aphrodite on ROCm", allow_module_level=True)
+        pytest.skip("flashinfer not supported for Sonar on ROCm", allow_module_level=True)
 
 if not has_flashinfer_cutlass_fused_moe() or not current_platform.has_device_capability(90):
     pytest.skip(
@@ -96,7 +96,7 @@ MNK_FACTORS = [
     (1, 4096, 5120),
 ]
 
-aphrodite_config = AphroditeConfig(parallel_config=ParallelConfig(pipeline_parallel_size=1))
+sonar_config = SonarConfig(parallel_config=ParallelConfig(pipeline_parallel_size=1))
 
 
 def quant_fp8_per_tensor_batches(a):
@@ -228,7 +228,7 @@ def test_flashinfer_per_tensor_moe_fp8_no_graph(
     if not current_platform.has_device_capability(100):
         pytest.skip("Test is only supported for sm >= 100")
     set_random_seed(7)
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         td = TestData.make_moe_tensors_8bit(m, k, n, e, is_trtllm=True, activation=activation)
 
         score = torch.randn((m, e), device="cuda", dtype=torch.bfloat16)
@@ -310,7 +310,7 @@ def test_flashinfer_cutlass_moe_fp8_no_graph(
     workspace_init,
 ):
     set_random_seed(7)
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         td = TestData.make_moe_tensors_8bit(m, k, n, e, is_trtllm=False, activation=activation)
 
         score = torch.randn((m, e), device="cuda", dtype=torch.bfloat16)
@@ -411,7 +411,7 @@ def test_flashinfer_cutlass_moe_fp8_no_graph(
     ],
 )
 def test_convert_moe_weights_to_flashinfer_trtllm_block_layout(num_experts, intermediate, hidden):
-    from aphrodite.model_executor.layers.quantization.utils.flashinfer_utils import (
+    from sonar.model_executor.layers.quantization.utils.flashinfer_utils import (
         convert_moe_weights_to_flashinfer_trtllm_block_layout,
     )
 
@@ -445,7 +445,7 @@ def test_convert_moe_weights_to_flashinfer_trtllm_block_layout_values(
         get_w2_permute_indices_with_cache,
     )
 
-    from aphrodite.model_executor.layers.quantization.utils.flashinfer_utils import (
+    from sonar.model_executor.layers.quantization.utils.flashinfer_utils import (
         convert_moe_weights_to_flashinfer_trtllm_block_layout,
     )
 
@@ -510,10 +510,10 @@ def test_convert_moe_weights_to_flashinfer_trtllm_block_layout_values(
 
 
 def _make_unquantized_flashinfer_test_layer(monkeypatch, intermediate, is_gated, *, device="cuda"):
-    from aphrodite.model_executor.layers.fused_moe.oracle.unquantized import (
+    from sonar.model_executor.layers.fused_moe.oracle.unquantized import (
         UnquantizedMoeBackend,
     )
-    from aphrodite.model_executor.layers.fused_moe.unquantized_fused_moe_method import (
+    from sonar.model_executor.layers.fused_moe.unquantized_fused_moe_method import (
         UnquantizedFusedMoEMethod,
     )
 
@@ -552,7 +552,7 @@ def _make_unquantized_flashinfer_test_layer(monkeypatch, intermediate, is_gated,
 @pytest.mark.parametrize("is_gated", [True, False])
 def test_unquantized_flashinfer_trtllm_weights_can_be_reprocessed(monkeypatch, intermediate, is_gated):
     """Each raw reload clears padding left dirty by prior in-place conversion."""
-    from aphrodite.model_executor.layers.quantization.utils.flashinfer_utils import (
+    from sonar.model_executor.layers.quantization.utils.flashinfer_utils import (
         convert_moe_weights_to_flashinfer_trtllm_block_layout,
     )
 
@@ -604,11 +604,11 @@ def test_unquantized_flashinfer_trtllm_weights_can_be_reprocessed(monkeypatch, i
 
 
 def _check_flashinfer_ipc_weights(entries, expected, mode, device_index):
-    from aphrodite.model_executor.model_loader.weight_cache.ipc_loader import IpcModelLoader
-    from aphrodite.model_executor.model_loader.weight_cache.protocol import (
+    from sonar.model_executor.model_loader.weight_cache.ipc_loader import IpcModelLoader
+    from sonar.model_executor.model_loader.weight_cache.protocol import (
         WeightCacheState,
     )
-    from aphrodite.model_executor.utils import weights_already_processed
+    from sonar.model_executor.utils import weights_already_processed
 
     torch.accelerator.set_device_index(device_index)
     with pytest.MonkeyPatch.context() as monkeypatch:
@@ -640,10 +640,10 @@ def _check_flashinfer_ipc_weights(entries, expected, mode, device_index):
 @pytest.mark.parametrize("mode", ["copy", "zero_copy"])
 def test_unquantized_flashinfer_trtllm_cached_weights_need_no_method_state(monkeypatch, cache_ndim, mode):
     """A spawned IPC consumer restores views without transient method state."""
-    from aphrodite.model_executor.layers.quantization.utils.flashinfer_utils import (
+    from sonar.model_executor.layers.quantization.utils.flashinfer_utils import (
         convert_moe_weights_to_flashinfer_trtllm_block_layout,
     )
-    from aphrodite.model_executor.model_loader.weight_cache.protocol import TensorEntry
+    from sonar.model_executor.model_loader.weight_cache.protocol import TensorEntry
 
     method, layer = _make_unquantized_flashinfer_test_layer(monkeypatch, 192, is_gated=True, device="meta")
     packed = convert_moe_weights_to_flashinfer_trtllm_block_layout(
@@ -770,7 +770,7 @@ def test_trtllm_fp8_block_moe_deferred_finalize(m: int, block_shape: list[int], 
         pytest.skip("column-major scales apply to fp8 [128, 128] block only")
     e, topk, n, k = 32, 4, 1024, 1024
     set_random_seed(7)
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         if block_shape == [1, 32]:
             w1, w2, w1_scale, w2_scale = _make_mxfp8_moe_weights(e, n, k)
         else:
@@ -883,11 +883,11 @@ def test_trtllm_fp8_block_moe_deferred_finalize(m: int, block_shape: list[int], 
 )
 def test_trtllm_mxfp8_minimax2_routing_applies_routed_scale(m: int, workspace_init):
     """FlashInfer's fused MiniMax2 routing must apply routed_scaling_factor,
-    matching Aphrodite's own sigmoid+bias top-k routing (MiniMax-M3 uses 2.0)."""
+    matching Sonar's own sigmoid+bias top-k routing (MiniMax-M3 uses 2.0)."""
     e, topk, n, k, scale = 32, 4, 1024, 1024, 2.0
     block_shape = [1, 32]
     set_random_seed(7)
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         w1, w2, w1_scale, w2_scale = convert_to_fp8_moe_kernel_format(
             Fp8MoeBackend.FLASHINFER_TRTLLM,
             SimpleNamespace(
@@ -995,7 +995,7 @@ def test_trtllm_mxfp8_moe_pads_intermediate(m: int, activation: MoEActivation, n
     is_gated = activation.is_gated
     block_shape = [1, 32]
     set_random_seed(7)
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         w1, w2, w1_scale, w2_scale = _make_mxfp8_moe_weights(e, n, k, is_gated)
         w1_ref = dequant_mxfp8_to_bf16(w1, w1_scale)
         w2_ref = dequant_mxfp8_to_bf16(w2, w2_scale)

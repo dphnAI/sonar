@@ -12,8 +12,8 @@ from unittest.mock import patch
 import pytest
 import torch
 
-from aphrodite.config import AphroditeConfig, KernelConfig, set_current_aphrodite_config
-from aphrodite.model_executor.kernels.linear import (
+from sonar.config import KernelConfig, SonarConfig, set_current_sonar_config
+from sonar.model_executor.kernels.linear import (
     _POSSIBLE_KERNELS,
     _POSSIBLE_NVFP4_KERNELS,
     AiterInt8ScaledMMLinearKernel,
@@ -31,13 +31,13 @@ from aphrodite.model_executor.kernels.linear import (
     init_int8_linear_kernel,
     register_linear_kernel,
 )
-from aphrodite.model_executor.layers.quantization.utils.humming import prioritize_humming
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.humming import prioritize_humming
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     kFp8Dynamic128Sym,
     kFp8Static128BlockSym,
     kFp8StaticTensorSym,
 )
-from aphrodite.platforms import PlatformEnum
+from sonar.platforms import PlatformEnum
 
 pytestmark = pytest.mark.cpu_test
 
@@ -56,40 +56,40 @@ def test_auto_linear_backend_is_unchanged_without_overrides():
         "nvfp4_w4a4",
         "nvfp4_w4a16",
     )
-    config = AphroditeConfig(kernel_config=KernelConfig(linear_backend="auto"))
+    config = SonarConfig(kernel_config=KernelConfig(linear_backend="auto"))
 
-    with set_current_aphrodite_config(config):
+    with set_current_sonar_config(config):
         for quantization in quantizations:
             assert _get_linear_backend(quantization=quantization) == "auto"
             assert _resolve_backend_kernels(kernels, "test", quantization=quantization) is kernels
 
 
 def test_linear_backend_override_is_quantization_specific():
-    config = AphroditeConfig(
+    config = SonarConfig(
         kernel_config=KernelConfig(
             linear_backend="cutlass",
             linear_backend_per_quant={"nvfp4_w4a16": "humming"},
         )
     )
 
-    with set_current_aphrodite_config(config):
+    with set_current_sonar_config(config):
         assert _get_linear_backend(quantization="nvfp4_w4a16") == "humming"
         assert _get_linear_backend(quantization="nvfp4_w4a4") == "cutlass"
         assert _get_linear_backend(quantization="fp8_w8a8") == "cutlass"
 
 
 @patch.object(HummingFP8ScaledMMLinearKernel, "is_supported", return_value=(True, None))
-@patch("aphrodite.model_executor.kernels.linear.current_platform")
+@patch("sonar.model_executor.kernels.linear.current_platform")
 def test_fp8_linear_backend_override(platform_mock, _):
     platform_mock._enum = PlatformEnum.CUDA
-    config = AphroditeConfig(
+    config = SonarConfig(
         kernel_config=KernelConfig(
             linear_backend="cutlass",
             linear_backend_per_quant={"fp8_w8a8": "humming"},
         )
     )
 
-    with set_current_aphrodite_config(config):
+    with set_current_sonar_config(config):
         kernel = init_fp8_linear_kernel(
             activation_quant_key=kFp8StaticTensorSym,
             weight_quant_key=kFp8StaticTensorSym,
@@ -175,7 +175,7 @@ def test_aiter_int8_kernel_can_implement_scale_layouts(
 def _make_compressed_tensors_per_tensor_int8_scheme():
     from compressed_tensors.quantization import QuantizationStrategy
 
-    from aphrodite.model_executor.layers.quantization.compressed_tensors.schemes import (
+    from sonar.model_executor.layers.quantization.compressed_tensors.schemes import (
         CompressedTensorsW8A8Int8,
     )
 
@@ -187,10 +187,10 @@ def _make_compressed_tensors_per_tensor_int8_scheme():
 
 
 def _make_quark_per_tensor_int8_scheme():
-    from aphrodite.model_executor.layers.quantization.quark.schemes.quark_w8a8_int8 import (
+    from sonar.model_executor.layers.quantization.quark.schemes.quark_w8a8_int8 import (
         QuarkW8A8Int8,
     )
-    from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+    from sonar.model_executor.layers.quantization.utils.quant_utils import (
         kInt8DynamicTokenSym,
         kInt8StaticTensorSym,
     )
@@ -209,9 +209,9 @@ def _make_quark_per_tensor_int8_scheme():
 @pytest.mark.parametrize("output_partition_sizes", [[16, 32], [48]], ids=str)
 @patch.object(TritonInt8ScaledMMLinearKernel, "is_supported", return_value=(True, None))
 @patch.object(AiterInt8ScaledMMLinearKernel, "is_supported", return_value=(True, None))
-@patch("aphrodite.model_executor.parameter.get_tensor_model_parallel_world_size", return_value=1)
-@patch("aphrodite.model_executor.parameter.get_tensor_model_parallel_rank", return_value=0)
-@patch("aphrodite.model_executor.kernels.linear.current_platform")
+@patch("sonar.model_executor.parameter.get_tensor_model_parallel_world_size", return_value=1)
+@patch("sonar.model_executor.parameter.get_tensor_model_parallel_rank", return_value=0)
+@patch("sonar.model_executor.kernels.linear.current_platform")
 def test_aiter_int8_per_tensor_weight_selection_and_loading(
     platform_mock,
     _tp_rank,
@@ -328,7 +328,7 @@ class OOTInt8ScaledMMLinearKernel(Int8ScaledMMLinearKernel):
         pass
 
 
-@patch("aphrodite.model_executor.kernels.linear.current_platform")
+@patch("sonar.model_executor.kernels.linear.current_platform")
 def test_register_oot_linear_kernel(platform_mock):
     """Test that the linear kernel registration works correctly."""
     platform_mock._enum = PlatformEnum.OOT
@@ -360,8 +360,8 @@ class OOTFp8BlockScaledMMLinearKernel(Fp8BlockScaledMMLinearKernel):
         pass
 
 
-@patch("aphrodite.model_executor.kernels.linear.current_platform")
-def test_register_oot_fp8_block_linear_kernel(platform_mock, default_aphrodite_config):
+@patch("sonar.model_executor.kernels.linear.current_platform")
+def test_register_oot_fp8_block_linear_kernel(platform_mock, default_sonar_config):
     """Test that block-scaled FP8 kernel registration works correctly."""
     platform_mock._enum = PlatformEnum.OOT
     register_linear_kernel(OOTFp8BlockScaledMMLinearKernel, PlatformEnum.OOT, "fp8_block")

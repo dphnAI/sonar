@@ -12,18 +12,18 @@ import torch.nn.functional as F
 from packaging import version
 from torch.nn.parameter import Parameter
 
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.linear import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.linear import (
     LinearBase,
     LinearMethodBase,
     UnquantizedLinearMethod,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationMethods
-from aphrodite.model_executor.layers.quantization.base_config import (
+from sonar.model_executor.layers.quantization import QuantizationMethods
+from sonar.model_executor.layers.quantization.base_config import (
     QuantizationConfig,
     QuantizeMethodBase,
 )
-from aphrodite.model_executor.utils import set_weight_attrs
+from sonar.model_executor.utils import set_weight_attrs
 
 logger = init_logger(__name__)
 
@@ -108,7 +108,7 @@ def _check_torchao_fp8_activation_capability(torchao_config) -> None:
     if "Float8" not in config_name or "Activation" not in config_name:
         return
 
-    from aphrodite.platforms import current_platform
+    from sonar.platforms import current_platform
 
     if current_platform.supports_fp8():
         return

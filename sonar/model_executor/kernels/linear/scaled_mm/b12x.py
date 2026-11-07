@@ -5,20 +5,20 @@ from __future__ import annotations
 
 import torch
 
-from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
+from sonar.model_executor.layers.quantization.utils.fp8_utils import (
     _upcast_e8m0_to_fp32,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import GroupShape
-from aphrodite.model_executor.utils import replace_parameter
-from aphrodite.platforms import current_platform
-from aphrodite.utils.b12x import B12xWarmupUnit, reuse_packed_weight_storage
-from aphrodite.utils.b12x import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import GroupShape
+from sonar.model_executor.utils import replace_parameter
+from sonar.platforms import current_platform
+from sonar.utils.b12x import B12xWarmupUnit, reuse_packed_weight_storage
+from sonar.utils.b12x import (
     get_b12x_blockscaled as _import_b12x_blockscaled,
 )
-from aphrodite.utils.b12x import (
+from sonar.utils.b12x import (
     get_b12x_tensor_fp8_linear as _import_b12x_tensor_fp8,
 )
-from aphrodite.utils.torch_utils import current_stream
+from sonar.utils.torch_utils import current_stream
 
 from .BlockScaledMMLinearKernel import (
     Fp8BlockScaledMMLinearKernel,
@@ -61,7 +61,7 @@ class B12xFp8BlockScaledMMKernel(Fp8BlockScaledMMLinearKernel):
             return False, "B12X FP8 kernels require a Blackwell 12x device"
         blockscaled = _import_b12x_blockscaled()
         if blockscaled is None:
-            return False, "Install the B12X backend with `pip install aphrodite[b12x]`"
+            return False, "Install sonar[b12x] from the Sonar wheel index"
         if not blockscaled.is_supported():
             return False, "B12X regular block-FP8 GEMM is not supported"
         return True, None
@@ -208,7 +208,7 @@ class B12xTensorFP8ScaledMMLinearKernel(FP8ScaledMMLinearKernel):
             return False, "b12x tensor FP8 kernels require a Blackwell 12x device"
         tensor_fp8 = _import_b12x_tensor_fp8()
         if tensor_fp8 is None:
-            return False, "Install the B12X backend with `pip install aphrodite[b12x]`"
+            return False, "Install sonar[b12x] from the Sonar wheel index"
         if not tensor_fp8.is_supported():
             return False, "b12x.gemm.tensor_fp8_linear is not supported"
         return True, None

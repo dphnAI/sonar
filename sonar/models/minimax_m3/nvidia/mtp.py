@@ -7,30 +7,30 @@ import regex as re
 import torch
 import torch.nn as nn
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed import get_pp_group
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.config import SonarConfig
+from sonar.distributed import get_pp_group
+from sonar.model_executor.layers.fused_moe import (
     fused_moe_make_expert_params_mapping,
 )
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.linear import (
     ReplicatedLinear,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.model_loader.mtp_validation import (
+from sonar.model_executor.model_loader.mtp_validation import (
     is_mtp_completeness_check_enabled,
 )
-from aphrodite.model_executor.model_loader.weight_utils import (
+from sonar.model_executor.model_loader.weight_utils import (
     default_weight_loader,
     maybe_remap_kv_scale_name,
 )
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.models.utils import (
     maybe_prefix,
 )
-from aphrodite.sequence import IntermediateTensors
+from sonar.sequence import IntermediateTensors
 
 from .model import (
     MiniMAXGemmaRMSNorm,
@@ -39,12 +39,12 @@ from .model import (
 
 
 class MiniMaxM3MultiTokenPredictorLayer(nn.Module):
-    def __init__(self, aphrodite_config: AphroditeConfig, prefix: str) -> None:
+    def __init__(self, sonar_config: SonarConfig, prefix: str) -> None:
         super().__init__()
 
-        assert aphrodite_config.speculative_config is not None
-        config = aphrodite_config.speculative_config.draft_model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        assert sonar_config.speculative_config is not None
+        config = sonar_config.speculative_config.draft_model_config.hf_config
+        quant_config = sonar_config.quant_config
 
         self.enorm = MiniMAXGemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.hnorm = MiniMAXGemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -56,7 +56,7 @@ class MiniMaxM3MultiTokenPredictorLayer(nn.Module):
             prefix=f"{prefix}.eh_proj",
         )
         self.transformer_layer = MiniMaxM3DecoderLayer(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             prefix=prefix,
             force_sparse_attn=True,
             force_moe=True,
@@ -94,17 +94,17 @@ class MiniMaxM3MultiTokenPredictorLayer(nn.Module):
 
 
 class MiniMaxM3MultiTokenPredictor(nn.Module):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
 
-        assert aphrodite_config.speculative_config is not None
+        assert sonar_config.speculative_config is not None
         # Use the draft (MTP) config, not the target model's. This is flat for a
         # standalone checkpoint, and the promoted text_config for a bundled one.
-        config = aphrodite_config.speculative_config.draft_model_config.hf_config
+        config = sonar_config.speculative_config.draft_model_config.hf_config
         self.num_mtp_layers = config.num_mtp_modules
         self.layers = torch.nn.ModuleDict(
             {
-                str(idx): MiniMaxM3MultiTokenPredictorLayer(aphrodite_config, f"{prefix}.layers.{idx}")
+                str(idx): MiniMaxM3MultiTokenPredictorLayer(sonar_config, f"{prefix}.layers.{idx}")
                 for idx in range(self.num_mtp_layers)
             }
         )
@@ -142,20 +142,18 @@ class MiniMaxM3MTP(nn.Module):
     # tracked under V2 PP, where the target's may not be available).
     has_own_embed_tokens = False
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
 
-        self._tracks_own_embed = aphrodite_config.use_v2_model_runner and get_pp_group().world_size > 1
+        self._tracks_own_embed = sonar_config.use_v2_model_runner and get_pp_group().world_size > 1
         if self._tracks_own_embed:
             # Preserve embeddings from loaders that bypass load_weights.
-            self.has_own_embed_tokens = aphrodite_config.load_config.load_format != "dummy"
+            self.has_own_embed_tokens = sonar_config.load_config.load_format != "dummy"
 
-        assert aphrodite_config.speculative_config is not None
-        self.config = aphrodite_config.speculative_config.draft_model_config.hf_config
-        self.quant_config = aphrodite_config.quant_config
-        self.model = MiniMaxM3MultiTokenPredictor(
-            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
-        )
+        assert sonar_config.speculative_config is not None
+        self.config = sonar_config.speculative_config.draft_model_config.hf_config
+        self.quant_config = sonar_config.quant_config
+        self.model = MiniMaxM3MultiTokenPredictor(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
         self.lm_head = ParallelLMHead(
             self.config.vocab_size,
             self.config.hidden_size,

@@ -9,11 +9,11 @@ from typing import TYPE_CHECKING, Any, Literal, cast, get_args
 import torch
 from pydantic import ConfigDict, Field, field_validator, model_validator
 
-import aphrodite.envs as envs
-from aphrodite.config.model_arch import (
+import sonar.envs as envs
+from sonar.config.model_arch import (
     ModelArchitectureConfig,
 )
-from aphrodite.config.multimodal import (
+from sonar.config.multimodal import (
     MMCacheType,
     MMEncoderTPMode,
     MMHasherAlgorithm,
@@ -21,14 +21,14 @@ from aphrodite.config.multimodal import (
     MMTensorIPC,
     MultiModalConfig,
 )
-from aphrodite.config.pooler import POOLER_CONFIG_LOG_FIELDS, PoolerConfig
-from aphrodite.config.quantization import QuantizationConfigArgs
-from aphrodite.config.scheduler import RunnerType
-from aphrodite.config.utils import config, getattr_iter
-from aphrodite.logger import init_logger
-from aphrodite.platforms import CpuArchEnum, current_platform
-from aphrodite.tasks import PoolingTask, ScoreType, SupportedTask
-from aphrodite.transformers_utils.config import (
+from sonar.config.pooler import POOLER_CONFIG_LOG_FIELDS, PoolerConfig
+from sonar.config.quantization import QuantizationConfigArgs
+from sonar.config.scheduler import RunnerType
+from sonar.config.utils import config, getattr_iter
+from sonar.logger import init_logger
+from sonar.platforms import CpuArchEnum, current_platform
+from sonar.tasks import PoolingTask, ScoreType, SupportedTask
+from sonar.transformers_utils.config import (
     ConfigFormat,
     checkpoint_has_lm_head,
     get_config,
@@ -44,30 +44,30 @@ from aphrodite.transformers_utils.config import (
     try_get_tokenizer_config,
     uses_mrope,
 )
-from aphrodite.transformers_utils.model_arch_config_convertor import (
+from sonar.transformers_utils.model_arch_config_convertor import (
     MODEL_ARCH_CONFIG_CONVERTORS,
     ModelArchConfigConvertorBase,
 )
-from aphrodite.transformers_utils.repo_utils import resolve_revision
-from aphrodite.transformers_utils.runai_utils import ObjectStorageModel, is_runai_obj_uri
-from aphrodite.transformers_utils.utils import maybe_model_redirect
-from aphrodite.utils.import_utils import LazyLoader
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
+from sonar.transformers_utils.repo_utils import resolve_revision
+from sonar.transformers_utils.runai_utils import ObjectStorageModel, is_runai_obj_uri
+from sonar.transformers_utils.utils import maybe_model_redirect
+from sonar.utils.import_utils import LazyLoader
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
 
 if TYPE_CHECKING:
     from transformers import PreTrainedConfig
 
-    import aphrodite.model_executor.layers.quantization as me_quant
-    import aphrodite.model_executor.models as me_models
-    from aphrodite.config.load import LoadConfig
-    from aphrodite.config.parallel import ParallelConfig
-    from aphrodite.model_executor.layers.quantization import QuantizationMethods
-    from aphrodite.v1.sample.logits_processor import LogitsProcessor
+    import sonar.model_executor.layers.quantization as me_quant
+    import sonar.model_executor.models as me_models
+    from sonar.config.load import LoadConfig
+    from sonar.config.parallel import ParallelConfig
+    from sonar.model_executor.layers.quantization import QuantizationMethods
+    from sonar.v1.sample.logits_processor import LogitsProcessor
 else:
     PreTrainedConfig = Any
 
-    me_quant = LazyLoader("model_executor", globals(), "aphrodite.model_executor.layers.quantization")
-    me_models = LazyLoader("model_executor", globals(), "aphrodite.model_executor.models")
+    me_quant = LazyLoader("model_executor", globals(), "sonar.model_executor.layers.quantization")
+    me_models = LazyLoader("model_executor", globals(), "sonar.model_executor.models")
     LoadConfig = Any
     ParallelConfig = Any
     QuantizationMethods = str
@@ -103,7 +103,7 @@ PROCESSED_LOGPROBS_MODES: tuple[LogprobsMode, ...] = (
     "processed_logprobs",
 )
 HfOverrides = dict[str, Any] | Callable[[PreTrainedConfig], PreTrainedConfig]
-ModelImpl = Literal["auto", "aphrodite", "transformers", "terratorch"]
+ModelImpl = Literal["auto", "sonar", "transformers", "terratorch"]
 LayerBlockType = Literal["attention", "linear_attention", "mamba"]
 
 _ATTENTION_LAYER_TYPES = frozenset(
@@ -153,11 +153,11 @@ class ModelConfig:
     storage (e.g., RunAI) to preserve the original URI while `model` points to
     the local directory."""
     runner: RunnerOption = "auto"
-    """The type of model runner to use. Each Aphrodite instance only supports one
+    """The type of model runner to use. Each Sonar instance only supports one
     model runner, even if the same model can be used for multiple types."""
     convert: ConvertOption = "auto"
     """Convert the model using adapters defined in
-    [aphrodite.model_executor.models.adapters][]. The most common use case is to
+    [sonar.model_executor.models.adapters][]. The most common use case is to
     adapt a text generation model to be used for pooling tasks."""
     tokenizer: str = None  # type: ignore[assignment]
     """Name or path of the Hugging Face tokenizer to use. If unspecified, model
@@ -188,11 +188,8 @@ class ModelConfig:
 
     To swap the Rust BPE backend that powers HF fast tokenizers for the
     [fastokens](https://github.com/crusoecloud/fastokens) implementation, set
-    `APHRODITE_USE_FASTOKENS=1` instead. `APHRODITE_USE_FASTOKENS` is available
-    in Aphrodite v0.23.0 and later; if your installed Aphrodite version does not
-    recognize the environment variable, upgrade Aphrodite before enabling the
-    override. The override applies to any mode that loads an HF fast tokenizer
-    (`hf`, `deepseek_v32`, `deepseek_v4`, …)."""
+    `SONAR_USE_FASTOKENS=1` instead. The override applies to any mode that loads
+    an HF fast tokenizer (`hf`, `deepseek_v32`, `deepseek_v4`, …)."""
     trust_remote_code: bool = False
     """Trust remote code (e.g., from HuggingFace) when downloading the model
     and tokenizer."""
@@ -217,7 +214,7 @@ class ModelConfig:
     hf_text_config: PreTrainedConfig = field(init=False)
     """The Hugging Face config of the text model (same as hf_config for text models)."""
     is_submodel_config: bool = field(default=False, init=False)
-    """Whether this is a submodule view derived by `AphroditeConfig.with_hf_config`
+    """Whether this is a submodule view derived by `SonarConfig.with_hf_config`
     (e.g. a multimodal model's text stack). Its architecture list is empty, so
     deployment-level validation must not run against it."""
     word_embeddings_untied_by_checkpoint: bool = field(default=False, init=False)
@@ -324,7 +321,7 @@ class ModelConfig:
     """If `True`, enables passing text embeddings as inputs via the
     `prompt_embeds` key.
 
-    WARNING: The Aphrodite engine may crash if incorrect shape of embeddings is passed.
+    WARNING: The Sonar engine may crash if incorrect shape of embeddings is passed.
     Only enable this flag for trusted users!"""
     served_model_name: str | list[str] | None = None
     """The model name(s) used in the API. If multiple names are provided, the
@@ -353,12 +350,12 @@ class ModelConfig:
     architecture name to a `"module:class"` target (the same format accepted by
     `ModelRegistry.register_model`). This registers the target class at runtime,
     e.g. `{"GlmMoeDsaForCausalLM":
-    "aphrodite.models.deepseek_v32.nvidia.model:DeepseekV32ForCausalLM"}`. This
+    "sonar.models.deepseek_v32.nvidia.model:DeepseekV32ForCausalLM"}`. This
     argument is for development and debugging purposes only."""
     generation_config: str = "auto"
     """The folder path to the generation config. Defaults to `"auto"`, the
-    generation config will be loaded from model path. If set to `"aphrodite"`, no
-    generation config is loaded, Aphrodite defaults will be used. If set to a folder
+    generation config will be loaded from model path. If set to `"sonar"`, no
+    generation config is loaded, Sonar defaults will be used. If set to a folder
     path, the generation config will be loaded from the specified folder path.
     If `max_new_tokens` is specified in generation config, then it sets a
     server-wide limit on the number of output tokens for all requests."""
@@ -366,7 +363,7 @@ class ModelConfig:
     """Overrides or sets generation config. e.g. `{"temperature": 0.5}`. If
     used with `--generation-config auto`, the override parameters will be
     merged with the default config from the model. If used with
-    `--generation-config aphrodite`, only the override parameters are used."""
+    `--generation-config sonar`, only the override parameters are used."""
     enable_sleep_mode: bool = False
     """Enable sleep mode for the engine (only cuda and
     hip platforms are supported)."""
@@ -402,9 +399,9 @@ class ModelConfig:
     model_impl: str | ModelImpl = "auto"
     """Which implementation of the model to use:
 
-    - "auto" will try to use the Aphrodite implementation, if it exists, and fall back to the
-      Transformers implementation if no Aphrodite implementation is available.
-    - "aphrodite" will use the Aphrodite model implementation.
+    - "auto" will try to use the Sonar implementation, if it exists, and fall back to the
+      Transformers implementation if no Sonar implementation is available.
+    - "sonar" will use the Sonar model implementation.
     - "transformers" will use the Transformers model implementation.
     - "terratorch" will use the TerraTorch model implementation.
     """
@@ -416,7 +413,7 @@ class ModelConfig:
     renderer_num_workers: int = 1
     """Number of worker threads in the renderer thread pool. The pool is
     consumed by the async renderer path (e.g. the OpenAI-compatible API
-    server started by `aphrodite serve`) to parallelize tokenization, chat
+    server started by `sonar serve`) to parallelize tokenization, chat
     template rendering, and multimodal preprocessing across concurrent
     requests.
 
@@ -511,7 +508,7 @@ class ModelConfig:
             "checkpoint_prepare_on_startup",
         }
 
-        from aphrodite.config.utils import get_hash_factors, hash_factors
+        from sonar.config.utils import get_hash_factors, hash_factors
 
         factors = get_hash_factors(self, ignored_factors)
 
@@ -799,7 +796,7 @@ class ModelConfig:
         )
 
         # Some checkpoints set sliding_window to 0 to indicate that sliding window is
-        # disabled, but Aphrodite uses None for that. Convert 0 to None to avoid errors.
+        # disabled, but Sonar uses None for that. Convert 0 to None to avoid errors.
         # Set before get_and_verify_max_len to ensure that max_model_len does not get
         # capped to 0.
         if self.get_sliding_window() == 0:
@@ -904,7 +901,7 @@ class ModelConfig:
         if not self.is_multimodal_model:
             return False
 
-        from aphrodite.multimodal import MULTIMODAL_REGISTRY
+        from sonar.multimodal import MULTIMODAL_REGISTRY
 
         mm_config = self.get_multimodal_config()
         try:
@@ -1045,9 +1042,9 @@ class ModelConfig:
 
     def _resolve_mm_device_do_normalize(self, mm_device_do_normalize: bool | None) -> bool:
         if mm_device_do_normalize is None:
-            if envs.APHRODITE_USE_RUST_FRONTEND:
+            if envs.SONAR_USE_RUST_FRONTEND:
                 logger.debug(
-                    "APHRODITE_USE_RUST_FRONTEND is set. "
+                    "SONAR_USE_RUST_FRONTEND is set. "
                     "Rust frontend does not currently support mm_device_do_normalize, "
                     "forcing mm_device_do_normalize = False."
                 )
@@ -1059,9 +1056,9 @@ class ModelConfig:
                     "enabled" if mm_device_do_normalize else "disabled",
                 )
         else:
-            if mm_device_do_normalize and envs.APHRODITE_USE_RUST_FRONTEND:
+            if mm_device_do_normalize and envs.SONAR_USE_RUST_FRONTEND:
                 logger.warning(
-                    "APHRODITE_USE_RUST_FRONTEND is set. "
+                    "SONAR_USE_RUST_FRONTEND is set. "
                     "Rust frontend does not currently support mm_device_do_normalize, "
                     "forcing mm_device_do_normalize = False."
                 )
@@ -1147,7 +1144,7 @@ class ModelConfig:
 
     @property
     def architecture(self) -> str:
-        """The architecture aphrodite actually used."""
+        """The architecture sonar actually used."""
         return self._architecture
 
     def maybe_pull_model_tokenizer_for_runai(self, model: str, tokenizer: str) -> None:
@@ -1206,7 +1203,7 @@ class ModelConfig:
         ships an `lm_head` of its own. Tying regardless would silently discard
         that tensor, so build the `lm_head` as if untied and let it load. The
         two are compared once loaded, and re-tied if they turn out to match, by
-        [maybe_retie_word_embeddings][aphrodite.model_executor.model_loader.weight_tying.maybe_retie_word_embeddings].
+        [maybe_retie_word_embeddings][sonar.model_executor.model_loader.weight_tying.maybe_retie_word_embeddings].
 
         Transformers makes the same decision in `PreTrainedModel.tie_weights`,
         where it can compare the two tensors directly.
@@ -1221,7 +1218,7 @@ class ModelConfig:
             "contains an lm_head. Loading it to find out whether they really are tied.",
             self.model,
         )
-        # Both levels must be updated: `AphroditeConfig.with_hf_config` reads the top
+        # Both levels must be updated: `SonarConfig.with_hf_config` reads the top
         # level, and the text config is what the language model itself sees.
         self.hf_config.tie_word_embeddings = False
         self.hf_config.get_text_config().tie_word_embeddings = False
@@ -1408,13 +1405,13 @@ class ModelConfig:
         if self.quantization in me_quant.DEPRECATED_QUANTIZATION_METHODS:
             if self.allow_deprecated_quantization:
                 logger.warning(
-                    "The quantization method %s is deprecated and will be removed in future versions of Aphrodite.",
+                    "The quantization method %s is deprecated and will be removed in future versions of Sonar.",
                     self.quantization,
                 )
             else:
                 raise ValueError(
                     "The quantization method %s is deprecated "
-                    "and will be removed in future versions of Aphrodite. To bypass, "
+                    "and will be removed in future versions of Sonar. To bypass, "
                     "set `--allow-deprecated-quantization`.",
                     self.quantization,
                 )
@@ -1449,7 +1446,7 @@ class ModelConfig:
         if architecture is None:
             return
 
-        from aphrodite.model_executor.models.config import (
+        from sonar.model_executor.models.config import (
             MODELS_CONFIG_MAP,
         )
 
@@ -1463,7 +1460,7 @@ class ModelConfig:
     ) -> None:
         if hasattr(self.hf_config, "dual_chunk_attention_config"):
             # Try loading the sparse attention config
-            from aphrodite.model_executor.model_loader.weight_utils import (
+            from sonar.model_executor.model_loader.weight_utils import (
                 get_sparse_attention_config,
             )
 
@@ -1633,7 +1630,7 @@ class ModelConfig:
         return self.model_arch_config.total_num_hidden_layers
 
     def get_layers_start_end_indices(self, parallel_config: ParallelConfig) -> tuple[int, int]:
-        from aphrodite.distributed.utils import get_pp_indices
+        from sonar.distributed.utils import get_pp_indices
 
         total_num_hidden_layers = self.get_total_num_hidden_layers()
 
@@ -1744,7 +1741,7 @@ class ModelConfig:
             A dictionary containing the non-default generation config.
 
         """
-        if self.generation_config in {"auto", "aphrodite"}:
+        if self.generation_config in {"auto", "sonar"}:
             config = try_get_generation_config(
                 self.hf_config_path or self.model,
                 trust_remote_code=self.trust_remote_code,
@@ -1773,7 +1770,7 @@ class ModelConfig:
 
         The default sampling parameters are:
 
-        - Aphrodite's neutral defaults if `self.generation_config="aphrodite"`
+        - Sonar's neutral defaults if `self.generation_config="sonar"`
         - the model's defaults if `self.generation_config="auto"`
         - as defined in `generation_config.json` if
             `self.generation_config="path/to/generation_config/dir"`
@@ -1784,7 +1781,7 @@ class ModelConfig:
         """
         src = self.generation_config
 
-        config = {} if src == "aphrodite" else self.try_get_generation_config()
+        config = {} if src == "sonar" else self.try_get_generation_config()
 
         # Overriding with given generation config
         config.update(self.override_generation_config)
@@ -1803,17 +1800,17 @@ class ModelConfig:
         if any(p in config for p in available_params):
             diff_sampling_param = {p: config.get(p) for p in available_params if config.get(p) is not None}
             # Huggingface definition of max_new_tokens is equivalent
-            # to Aphrodite's max_tokens
+            # to Sonar's max_tokens
             if "max_new_tokens" in diff_sampling_param:
                 diff_sampling_param["max_tokens"] = diff_sampling_param.pop("max_new_tokens")
         else:
             diff_sampling_param = {}
 
-        if diff_sampling_param and src != "aphrodite":
+        if diff_sampling_param and src != "sonar":
             logger.warning_once(
-                "Default Aphrodite sampling parameters have been overridden by %s: `%s`. "
-                "If this is not intended, please relaunch Aphrodite instance "
-                "with `--generation-config aphrodite`.",
+                "Default Sonar sampling parameters have been overridden by %s: `%s`. "
+                "If this is not intended, please relaunch Sonar instance "
+                "with `--generation-config sonar`.",
                 "the model's `generation_config.json`" if src == "auto" else src,
                 str(diff_sampling_param),
                 scope="local",
@@ -1967,12 +1964,12 @@ class ModelConfig:
 
     @property
     def use_mla(self) -> bool:
-        if envs.APHRODITE_MLA_DISABLE:
+        if envs.SONAR_MLA_DISABLE:
             return False
         if self.using_transformers_backend():
             # kv_lora_rank indicates that a Transformers model implementation uses MLA
             return getattr(self.hf_text_config, "kv_lora_rank", None) is not None
-        # Manually maintained list of model types for Aphrodite model implementations
+        # Manually maintained list of model types for Sonar model implementations
 
         # Bidirectional DeepSeek variants (is_causal=False, used by some
         # embedding models) must use the non-MLA attention path, since the
@@ -2108,7 +2105,7 @@ class ModelConfig:
                     )
                     return True
 
-            # aphrodite currently does not have pooling models using hybrid,
+            # sonar currently does not have pooling models using hybrid,
             # attention_free or encoder_decoder attn types.
             return attn_type != "encoder_decoder"
         else:
@@ -2146,7 +2143,7 @@ class ModelConfig:
                     )
                     return True
 
-            # aphrodite currently does not have pooling models using hybrid,
+            # sonar currently does not have pooling models using hybrid,
             # attention_free or encoder_decoder attn types.
             return False
         else:
@@ -2523,18 +2520,18 @@ def _get_and_verify_max_len(
                 f"{model_max_length} in model's config.json)."
             )
             warning = (
-                "APHRODITE_ALLOW_LONG_MAX_MODEL_LEN must be used with extreme "
+                "SONAR_ALLOW_LONG_MAX_MODEL_LEN must be used with extreme "
                 "caution. If the model uses relative position encoding (RoPE), "
                 "positions exceeding derived_max_model_len lead to nan. If the "
                 "model uses absolute position encoding, positions exceeding "
                 "derived_max_model_len will cause a CUDA array out-of-bounds "
                 "error."
             )
-            if envs.APHRODITE_ALLOW_LONG_MAX_MODEL_LEN:
+            if envs.SONAR_ALLOW_LONG_MAX_MODEL_LEN:
                 logger.warning_once("%s %s", msg, warning)
             else:
                 raise ValueError(
                     f"{msg} To allow overriding this maximum, set "
-                    f"the env var APHRODITE_ALLOW_LONG_MAX_MODEL_LEN=1. {warning}"
+                    f"the env var SONAR_ALLOW_LONG_MAX_MODEL_LEN=1. {warning}"
                 )
     return int(max_model_len)

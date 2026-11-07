@@ -20,8 +20,8 @@ import zmq
 import zmq.asyncio
 from urllib3.util import parse_url
 
-import aphrodite.envs as envs
-from aphrodite.logger import init_logger
+import sonar.envs as envs
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 
@@ -50,13 +50,13 @@ def close_sockets(sockets: Sequence[zmq.Socket | zmq.asyncio.Socket]):
 
 
 def get_ip() -> str:
-    host_ip = envs.APHRODITE_HOST_IP
-    if "HOST_IP" in os.environ and "APHRODITE_HOST_IP" not in os.environ:
+    host_ip = envs.SONAR_HOST_IP
+    if "HOST_IP" in os.environ and "SONAR_HOST_IP" not in os.environ:
         logger.warning(
             "The environment variable HOST_IP is deprecated and ignored, as"
             " it is often used by Docker and other software to"
             " interact with the container's network stack. Please "
-            "use APHRODITE_HOST_IP instead to set the IP address for Aphrodite processes"
+            "use SONAR_HOST_IP instead to set the IP address for Sonar processes"
             " to communicate with each other."
         )
     if host_ip:
@@ -85,7 +85,7 @@ def get_ip() -> str:
     warnings.warn(
         "Failed to get the IP address, using 0.0.0.0 by default. "
         "The value can be set by the environment variable"
-        " APHRODITE_HOST_IP or HOST_IP.",
+        " SONAR_HOST_IP or HOST_IP.",
         stacklevel=2,
     )
     return "0.0.0.0"
@@ -102,11 +102,11 @@ def test_loopback_bind(address: str, family: int) -> bool:
 
 
 def get_loopback_ip() -> str:
-    loopback_ip = envs.APHRODITE_LOOPBACK_IP
+    loopback_ip = envs.SONAR_LOOPBACK_IP
     if loopback_ip:
         return loopback_ip
 
-    # APHRODITE_LOOPBACK_IP is not set, try to get it based on network interface
+    # SONAR_LOOPBACK_IP is not set, try to get it based on network interface
 
     if test_loopback_bind("127.0.0.1", socket.AF_INET):
         return "127.0.0.1"
@@ -115,7 +115,7 @@ def get_loopback_ip() -> str:
     else:
         raise RuntimeError(
             "Neither 127.0.0.1 nor ::1 are bound to a local interface. "
-            "Set the APHRODITE_LOOPBACK_IP environment variable explicitly."
+            "Set the SONAR_LOOPBACK_IP environment variable explicitly."
         )
 
 
@@ -151,7 +151,7 @@ def get_distributed_init_method(ip: str, port: int) -> str:
 
 
 def get_file_store_init_method() -> str:
-    return f"file://{tempfile.gettempdir()}/aphrodite_dist_{uuid4().hex}"
+    return f"file://{tempfile.gettempdir()}/sonar_dist_{uuid4().hex}"
 
 
 def aiter_requires_tcp_store() -> bool:
@@ -160,7 +160,7 @@ def aiter_requires_tcp_store() -> bool:
     ``FileStore`` and trips that assertion. Prefer the TCP rendezvous
     (pre-#50999) for ROCm + AITER custom AR until AITER accepts FileStore.
     """
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     return rocm_aiter_ops.is_custom_all_reduce_enabled()
 
@@ -173,7 +173,7 @@ def get_tcp_uri(ip: str, port: int) -> str:
 
 
 def get_open_zmq_ipc_path() -> str:
-    base_rpc_path = envs.APHRODITE_RPC_BASE_PATH
+    base_rpc_path = envs.SONAR_RPC_BASE_PATH
     return f"ipc://{base_rpc_path}/{uuid4()}"
 
 
@@ -183,14 +183,14 @@ def get_open_zmq_inproc_path() -> str:
 
 def _get_reserved_port_range() -> range:
     """Ports reserved for the data parallel master process (empty if unset)."""
-    if "APHRODITE_DP_MASTER_PORT" not in os.environ:
+    if "SONAR_DP_MASTER_PORT" not in os.environ:
         return range(0)
-    dp_master_port = envs.APHRODITE_DP_MASTER_PORT
+    dp_master_port = envs.SONAR_DP_MASTER_PORT
     return range(dp_master_port, dp_master_port + 10)
 
 
 def get_open_port() -> int:
-    """Get an open port for the Aphrodite process to listen on.
+    """Get an open port for the Sonar process to listen on.
     An edge case to handle, is when we run data parallel,
     we need to avoid ports that are potentially used by
     the data parallel master process.
@@ -207,13 +207,13 @@ def get_open_port() -> int:
 def get_open_ports_list(count: int = 5) -> list[int]:
     """Get a list of unique open ports.
 
-    When APHRODITE_PORT is set, scans upward from that port, advancing
+    When SONAR_PORT is set, scans upward from that port, advancing
     the start position after each find so every port is unique.
     """
     ports_set = set[int]()
-    if envs.APHRODITE_PORT is not None:
+    if envs.SONAR_PORT is not None:
         reserved_port_range = _get_reserved_port_range()
-        next_port = envs.APHRODITE_PORT
+        next_port = envs.SONAR_PORT
         for _ in range(count):
             port = _get_open_port(start_port=next_port, max_attempts=1000)
             if port in reserved_port_range:
@@ -232,7 +232,7 @@ def _get_open_port(
     start_port: int | None = None,
     max_attempts: int | None = None,
 ) -> int:
-    start_port = start_port if start_port is not None else envs.APHRODITE_PORT
+    start_port = start_port if start_port is not None else envs.SONAR_PORT
     port = start_port
     if port is not None:
         attempts = 0
@@ -264,7 +264,7 @@ def _get_open_port(
 def find_process_using_port(port: int) -> psutil.Process | None:
     # TODO: We can not check for running processes with network
     # port on macOS. Therefore, we can not have a full graceful shutdown
-    # of Aphrodite. For now, let's not look for processes in this case.
+    # of Sonar. For now, let's not look for processes in this case.
     # Ref: https://www.florianreinhard.de/accessdenied-in-psutil/
     if sys.platform.startswith("darwin"):
         return None

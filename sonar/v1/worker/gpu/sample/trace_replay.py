@@ -2,10 +2,10 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import torch
 
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.triton_utils import tl, triton
-from aphrodite.v1.worker.gpu.buffer_utils import StagedWriteTensor, UvaBackedTensor
-from aphrodite.v1.worker.gpu.states import RequestState
+from sonar.sampling_params import SamplingParams
+from sonar.triton_utils import tl, triton
+from sonar.v1.worker.gpu.buffer_utils import StagedWriteTensor, UvaBackedTensor
+from sonar.v1.worker.gpu.states import RequestState
 
 
 class TraceReplayState:

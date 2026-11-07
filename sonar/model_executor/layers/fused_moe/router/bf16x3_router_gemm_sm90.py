@@ -29,13 +29,13 @@ from cutlass.cutlass_dsl import T, dsl_user_op
 from cutlass.pipeline import pipeline_init_arrive, pipeline_init_wait
 from quack.compile_utils import make_fake_tensor
 
-from aphrodite.model_executor.warmup.jit_warmup import WarmupIntRange, kernel_launcher
-from aphrodite.model_executor.warmup.jit_warmup_cutedsl_helper import (
-    AphroditeCuTeDSLJitKernel,
+from sonar.model_executor.warmup.jit_warmup import WarmupIntRange, kernel_launcher
+from sonar.model_executor.warmup.jit_warmup_cutedsl_helper import (
     CuTeDSLLaunchSpec,
+    SonarCuTeDSLJitKernel,
 )
-from aphrodite.utils.platform_utils import num_compute_units
-from aphrodite.utils.torch_utils import direct_register_custom_op
+from sonar.utils.platform_utils import num_compute_units
+from sonar.utils.torch_utils import direct_register_custom_op
 
 __all__ = ["bf16x3_router_gemm"]
 
@@ -497,7 +497,7 @@ def _pick_config(num_tokens: int, K: int, E: int, num_sms: int) -> tuple:
     return best[1]
 
 
-class Sm90BF16x3RouterGemmKernel(AphroditeCuTeDSLJitKernel["Sm90BF16x3RouterGemmKernel.CompileKey"]):
+class Sm90BF16x3RouterGemmKernel(SonarCuTeDSLJitKernel["Sm90BF16x3RouterGemmKernel.CompileKey"]):
     @dataclass(frozen=True)
     class CompileKey:
         k: int
@@ -590,4 +590,4 @@ direct_register_custom_op(
 
 def bf16x3_router_gemm(x: torch.Tensor, weight: torch.Tensor) -> torch.Tensor:
     """Return ``x @ weight.T`` in fp32 using the SM90 BF16x3 router GEMM."""
-    return torch.ops.aphrodite.sm90_bf16x3_router_gemm(x, weight)
+    return torch.ops.sonar.sm90_bf16x3_router_gemm(x, weight)

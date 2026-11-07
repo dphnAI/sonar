@@ -5,20 +5,20 @@ from collections.abc import Sequence
 from dataclasses import replace
 from typing import cast
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.outputs import LateChunk, LateChunkingMetadata, PoolingRequestOutput
-from aphrodite.renderers import TokenizeParams
+from sonar.config import SonarConfig
+from sonar.exceptions import SonarValidationError
+from sonar.outputs import LateChunk, LateChunkingMetadata, PoolingRequestOutput
+from sonar.renderers import TokenizeParams
 
 from ..typing import AnyRenderParam, EncodeCMPLRenderParams
 
 
-def prepare_late_chunking_input(config: AphroditeConfig, render_params: AnyRenderParam) -> tuple[str, TokenizeParams]:
+def prepare_late_chunking_input(config: SonarConfig, render_params: AnyRenderParam) -> tuple[str, TokenizeParams]:
     """Validate full-document text input before requesting tokenizer offsets."""
     params = render_params["params"]
     params.verify(config.model_config)
     if "prompts" not in render_params:
-        raise AphroditeValidationError("Late chunking requires plain-text input")
+        raise SonarValidationError("Late chunking requires plain-text input")
     prompt = cast(EncodeCMPLRenderParams, render_params)["prompts"]
     if (
         not isinstance(prompt, dict)
@@ -26,14 +26,14 @@ def prepare_late_chunking_input(config: AphroditeConfig, render_params: AnyRende
         or not isinstance(text := prompt.get("prompt"), str)
         or not text
     ):
-        raise AphroditeValidationError("Late chunking requires nonempty plain-text input")
+        raise SonarValidationError("Late chunking requires nonempty plain-text input")
     tok_params = render_params["tok_params"]
     if (
         tok_params.pad_prompt_tokens is not None
         or tok_params.truncate_prompt_tokens is not None
         or tok_params.do_lower_case
     ):
-        raise AphroditeValidationError(
+        raise SonarValidationError(
             "Late chunking does not support input padding, truncation or renderer text normalization"
         )
     return text, replace(tok_params, return_token_offsets=True)
@@ -47,16 +47,14 @@ def build_late_chunking_metadata(
 ) -> LateChunkingMetadata:
     """Map chunks to original text, keeping special-token-only chunks."""
     if num_tokens <= 0 or offsets is None or len(offsets) != num_tokens:
-        raise AphroditeValidationError(
-            "Late chunking requires a fast tokenizer with offsets aligned to all input tokens"
-        )
+        raise SonarValidationError("Late chunking requires a fast tokenizer with offsets aligned to all input tokens")
     previous_start = previous_end = 0
     for start, end in offsets:
         if not 0 <= start <= end <= len(text):
-            raise AphroditeValidationError("Token offsets are not aligned to the input text")
+            raise SonarValidationError("Token offsets are not aligned to the input text")
         if start < end:
             if start < previous_start or end < previous_end:
-                raise AphroditeValidationError("Token offsets are not in source-text order")
+                raise SonarValidationError("Token offsets are not in source-text order")
             previous_start, previous_end = start, end
 
     chunks = []

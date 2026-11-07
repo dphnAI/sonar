@@ -42,8 +42,8 @@ from flydsl._mlir.dialects import llvm as _llvm
 from flydsl.expr import const_expr, gpu, range_constexpr, rocdl
 from flydsl.expr.typing import T, as_ir_value
 
-from aphrodite.models.deepseek_v41.amd.mono.common.ops import memrealtime, traced
-from aphrodite.models.deepseek_v41.amd.mono.common.sync import Space
+from sonar.models.deepseek_v41.amd.mono.common.ops import memrealtime, traced
+from sonar.models.deepseek_v41.amd.mono.common.sync import Space
 
 WAIT_TICKS = 1_000_000_000  # 10 s
 ERROR_WORDS = 4

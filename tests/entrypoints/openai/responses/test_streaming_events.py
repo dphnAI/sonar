@@ -14,13 +14,13 @@ from openai.types.responses import (
 from openai_harmony import Message, Role
 from pydantic import TypeAdapter
 
-from aphrodite.entrypoints.generate.base.protocol import (
+from sonar.entrypoints.generate.base.protocol import (
     DeltaFunctionCall,
     DeltaMessage,
     DeltaToolCall,
 )
-from aphrodite.entrypoints.openai.responses import utils as responses_utils
-from aphrodite.entrypoints.openai.responses.streaming_events import (
+from sonar.entrypoints.openai.responses import utils as responses_utils
+from sonar.entrypoints.openai.responses.streaming_events import (
     SimpleStreamingEventProcessor,
     StreamingState,
     _StateType,
@@ -29,7 +29,7 @@ from aphrodite.entrypoints.openai.responses.streaming_events import (
     emit_reasoning_done_events,
     split_delta,
 )
-from aphrodite.entrypoints.openai.responses.utils import (
+from sonar.entrypoints.openai.responses.utils import (
     decode_custom_tool_input,
     decode_custom_tool_input_prefix,
 )
@@ -38,7 +38,7 @@ from aphrodite.entrypoints.openai.responses.utils import (
 def test_browser_find_uses_responses_action_type():
     """Both streaming output items must use the Responses find action type."""
     message = (
-        Message.from_role_and_content(Role.ASSISTANT, '{"pattern": "Aphrodite", "cursor": 42}')
+        Message.from_role_and_content(Role.ASSISTANT, '{"pattern": "Sonar", "cursor": 42}')
         .with_channel("analysis")
         .with_recipient("browser.find")
     )
@@ -51,7 +51,7 @@ def test_browser_find_uses_responses_action_type():
     for event in (added, done):
         assert isinstance(event.item, ResponseFunctionWebSearch)
         assert event.item.action.type == "find_in_page"
-        assert event.item.action.pattern == "Aphrodite"
+        assert event.item.action.pattern == "Sonar"
         assert event.item.action.url == "cursor:42"
 
 

@@ -13,7 +13,7 @@ from cuda.bindings.driver import CUstream
 from cutlass import Float32, Int32
 from cutlass.cute.runtime import make_ptr
 
-from aphrodite.utils.torch_utils import current_stream
+from sonar.utils.torch_utils import current_stream
 
 _DTYPES = {
     torch.float16: cutlass.Float16,

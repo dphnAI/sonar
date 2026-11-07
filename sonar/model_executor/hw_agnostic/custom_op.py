@@ -6,10 +6,10 @@ import inspect
 import torch
 import torch.nn as nn
 
-from aphrodite.config import get_cached_compilation_config
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.utils import maybe_disable_graph_partition
-from aphrodite.platforms import current_platform
+from sonar.config import get_cached_compilation_config
+from sonar.logger import init_logger
+from sonar.model_executor.utils import maybe_disable_graph_partition
+from sonar.platforms import current_platform
 
 logger = init_logger(__name__)
 
@@ -44,7 +44,7 @@ def _class_to_instantiate(cls: type, name: str) -> type:
     """
     override = op_registry_oot.get(name)
     if override is None:
-        from aphrodite.model_executor.custom_op import op_registry_oot as in_tree_oot
+        from sonar.model_executor.custom_op import op_registry_oot as in_tree_oot
 
         if name in in_tree_oot:
             logger.warning_once(
@@ -198,7 +198,7 @@ class CustomOp(nn.Module):
         NOTE: this does not enable fusion across ops, so opaque custom ops
         should still be unwrapped wherever possible.
         """
-        from aphrodite.config.compilation import CompilationMode
+        from sonar.config.compilation import CompilationMode
 
         # Do not compile if compilation disabled
         if not enable:

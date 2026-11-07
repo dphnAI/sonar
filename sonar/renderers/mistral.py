@@ -3,16 +3,16 @@
 
 from typing import Any
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.logger import init_logger
-from aphrodite.renderers.chat_utils import (
+from sonar.config import SonarConfig
+from sonar.logger import init_logger
+from sonar.renderers.chat_utils import (
     ChatCompletionMessageParam,
     ConversationMessage,
     parse_chat_messages,
     parse_chat_messages_async,
 )
-from aphrodite.tokenizers.mistral import MistralTokenizer
-from aphrodite.utils.async_utils import make_async
+from sonar.tokenizers.mistral import MistralTokenizer
+from sonar.utils.async_utils import make_async
 
 from .base import BaseRenderer
 from .inputs import DictPrompt
@@ -60,7 +60,7 @@ def _get_chat_template_kwargs(params: ChatParams) -> dict[str, Any]:
 class MistralRenderer(BaseRenderer[MistralTokenizer]):
     def __init__(
         self,
-        config: AphroditeConfig,
+        config: SonarConfig,
         tokenizer: MistralTokenizer | None,
     ) -> None:
         super().__init__(config, tokenizer)

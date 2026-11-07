@@ -115,8 +115,8 @@ def parse_args():
     p.add_argument(
         "--p2p-connector-port",
         type=int,
-        default=int(os.getenv("APHRODITE_P2P_SIDE_CHANNEL_PORT", "5710")),
-        help="Port of the prefiller's P2PConnector ZMQ socket (default: $APHRODITE_P2P_SIDE_CHANNEL_PORT or 5710)",
+        default=int(os.getenv("SONAR_P2P_SIDE_CHANNEL_PORT", "5710")),
+        help="Port of the prefiller's P2PConnector ZMQ socket (default: $SONAR_P2P_SIDE_CHANNEL_PORT or 5710)",
     )
     # P2PConnector coordinates of the decoder — injected into prefill requests
     # so the prefiller's submit_store can resolve the peer to push KV to.
@@ -129,8 +129,8 @@ def parse_args():
     p.add_argument(
         "--decoder-p2p-connector-port",
         type=int,
-        default=int(os.getenv("APHRODITE_P2P_SIDE_CHANNEL_PORT", "5710")) + 1,
-        help="Port of the decoder's P2PConnector ZMQ socket (default: $APHRODITE_P2P_SIDE_CHANNEL_PORT + 1 or 5711)",
+        default=int(os.getenv("SONAR_P2P_SIDE_CHANNEL_PORT", "5710")) + 1,
+        help="Port of the decoder's P2PConnector ZMQ socket (default: $SONAR_P2P_SIDE_CHANNEL_PORT + 1 or 5711)",
     )
     p.add_argument(
         "--decoder-first",

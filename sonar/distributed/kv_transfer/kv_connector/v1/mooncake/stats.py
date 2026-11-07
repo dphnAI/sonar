@@ -8,14 +8,14 @@ from typing import Any
 
 import numpy as np
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed.kv_transfer.kv_connector.v1.metrics import (
+from sonar.config import SonarConfig
+from sonar.distributed.kv_transfer.kv_connector.v1.metrics import (
     KVConnectorPromMetrics,
     KVConnectorStats,
     PromMetric,
     PromMetricT,
 )
-from aphrodite.v1.metrics.utils import create_metric_per_engine
+from sonar.v1.metrics.utils import create_metric_per_engine
 
 # Bucket edges for the per-transfer series, named after the series each feeds.
 # Timing covers 5ms to 5s; post time is not measured, so there is no
@@ -190,15 +190,15 @@ class MooncakePromMetrics(KVConnectorPromMetrics):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         metric_types: dict[type[PromMetric], type[PromMetricT]],
         labelnames: list[str],
         per_engine_labelvalues: dict[int, list[object]],
     ):
-        super().__init__(aphrodite_config, metric_types, labelnames, per_engine_labelvalues)
+        super().__init__(sonar_config, metric_types, labelnames, per_engine_labelvalues)
 
         mooncake_histogram_xfer_time = self._histogram_cls(
-            name="aphrodite:mooncake_xfer_time_seconds",
+            name="sonar:mooncake_xfer_time_seconds",
             documentation="Histogram of transfer duration for Mooncake KV Cache transfers.",
             buckets=_XFER_TIME_BUCKETS,
             labelnames=labelnames,
@@ -207,7 +207,7 @@ class MooncakePromMetrics(KVConnectorPromMetrics):
             mooncake_histogram_xfer_time, self.per_engine_labelvalues
         )
         mooncake_histogram_bytes_transferred = self._histogram_cls(
-            name="aphrodite:mooncake_bytes_transferred",
+            name="sonar:mooncake_bytes_transferred",
             documentation="Histogram of bytes transferred per Mooncake KV Cache transfer.",
             buckets=_BYTES_BUCKETS,
             labelnames=labelnames,
@@ -216,7 +216,7 @@ class MooncakePromMetrics(KVConnectorPromMetrics):
             mooncake_histogram_bytes_transferred, self.per_engine_labelvalues
         )
         mooncake_histogram_num_descriptors = self._histogram_cls(
-            name="aphrodite:mooncake_num_descriptors",
+            name="sonar:mooncake_num_descriptors",
             documentation="Histogram of number of descriptors per Mooncake KV Cache transfer.",
             buckets=_DESCRIPTOR_BUCKETS,
             labelnames=labelnames,
@@ -225,7 +225,7 @@ class MooncakePromMetrics(KVConnectorPromMetrics):
             mooncake_histogram_num_descriptors, self.per_engine_labelvalues
         )
         counter_mooncake_num_failed_transfers = self._counter_cls(
-            name="aphrodite:mooncake_num_failed_transfers",
+            name="sonar:mooncake_num_failed_transfers",
             documentation="Number of failed Mooncake KV Cache transfers.",
             labelnames=labelnames,
         )
@@ -233,7 +233,7 @@ class MooncakePromMetrics(KVConnectorPromMetrics):
             counter_mooncake_num_failed_transfers, self.per_engine_labelvalues
         )
         counter_mooncake_num_failed_recvs = self._counter_cls(
-            name="aphrodite:mooncake_num_failed_recvs",
+            name="sonar:mooncake_num_failed_recvs",
             documentation="Number of failed Mooncake KV Cache receives.",
             labelnames=labelnames,
         )
@@ -241,7 +241,7 @@ class MooncakePromMetrics(KVConnectorPromMetrics):
             counter_mooncake_num_failed_recvs, self.per_engine_labelvalues
         )
         counter_mooncake_num_kv_expired_reqs = self._counter_cls(
-            name="aphrodite:mooncake_num_kv_expired_reqs",
+            name="sonar:mooncake_num_kv_expired_reqs",
             documentation="Number of requests that had their KV expire. "
             "NOTE: This metric is tracked on the P instance.",
             labelnames=labelnames,

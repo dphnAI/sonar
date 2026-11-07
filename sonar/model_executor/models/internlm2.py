@@ -10,32 +10,32 @@ import torch
 from torch import nn
 from transformers import PreTrainedConfig
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, CacheConfig
-from aphrodite.distributed import (
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import CacheConfig, SonarConfig
+from sonar.distributed import (
     get_pp_group,
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
     split_tensor_along_last_dim,
     tensor_model_parallel_all_gather,
 )
-from aphrodite.model_executor.layers.activation import SiluAndMul
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.activation import SiluAndMul
+from sonar.model_executor.layers.attention import Attention
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     MergedColumnParallelLinear,
     QKVParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.pooler.tokwise import pooler_for_token_classify
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.pooler.tokwise import pooler_for_token_classify
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.sequence import IntermediateTensors
+from sonar.sequence import IntermediateTensors
 
 from .interfaces import SupportsLoRA, SupportsPP, SupportsQuant
 from .interfaces_base import default_pooling_type
@@ -244,7 +244,7 @@ class InternLMDecoderLayer(nn.Module):
 
 @support_torch_compile
 class InternLM2Model(nn.Module):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_stacked={
             # weight_name: (param_name, shard_id)
             ".w1": (".gate_up_proj", 0),
@@ -255,15 +255,15 @@ class InternLM2Model(nn.Module):
     def __init__(
         self,
         *,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
         layer_type: type[InternLMDecoderLayer] = InternLMDecoderLayer,
     ):
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_config
-        cache_config = aphrodite_config.cache_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        cache_config = sonar_config.cache_config
+        quant_config = sonar_config.quant_config
 
         self.config = config
         self.vocab_size = config.vocab_size
@@ -310,11 +310,11 @@ class InternLM2Model(nn.Module):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
 
 class InternLM2ForCausalLM(nn.Module, SupportsPP, SupportsLoRA, SupportsQuant):
-    hf_to_aphrodite_mapper = InternLM2Model.hf_to_aphrodite_mapper
+    hf_to_sonar_mapper = InternLM2Model.hf_to_sonar_mapper
     packed_modules_mapping: dict[str, list[str]] = {
         "wqkv": ["wqkv"],
         "gate_up_proj": ["w1", "w3"],
@@ -323,18 +323,18 @@ class InternLM2ForCausalLM(nn.Module, SupportsPP, SupportsLoRA, SupportsQuant):
     def __init__(
         self,
         *,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
         model_type: type[InternLM2Model] = InternLM2Model,
     ):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
 
         self.config = config
         self.quant_config = quant_config
 
-        self.model = model_type(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = model_type(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
         self.output = ParallelLMHead(
             config.vocab_size,
             config.hidden_size,
@@ -378,7 +378,7 @@ class InternLM2ForRewardModel(InternLM2ForCausalLM):
     def __init__(
         self,
         *,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
         model_type: type[InternLM2Model] = InternLM2Model,
     ):
@@ -388,13 +388,13 @@ class InternLM2ForRewardModel(InternLM2ForCausalLM):
             targets=(LogitsProcessor, ParallelLMHead),
         ):
             super().__init__(
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 prefix=prefix,
                 model_type=model_type,
             )
 
-        config = aphrodite_config.model_config.hf_config
-        self.head_dtype = aphrodite_config.model_config.head_dtype
+        config = sonar_config.model_config.hf_config
+        self.head_dtype = sonar_config.model_config.head_dtype
 
         self.v_head = RowParallelLinear(
             config.hidden_size,
@@ -406,7 +406,7 @@ class InternLM2ForRewardModel(InternLM2ForCausalLM):
             return_bias=False,
         )
 
-        pooler_config = aphrodite_config.model_config.pooler_config
+        pooler_config = sonar_config.model_config.pooler_config
         assert pooler_config is not None
 
         self.pooler = pooler_for_token_classify(pooler_config)

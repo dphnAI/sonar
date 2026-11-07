@@ -12,22 +12,20 @@
 
 import torch
 
-from aphrodite.third_party.flash_linear_attention.ops.op import exp2
-from aphrodite.triton_utils import tl, triton
+from sonar.third_party.flash_linear_attention.ops.op import exp2
+from sonar.triton_utils import tl, triton
 
 
-@triton.heuristics({
-    'IS_VARLEN': lambda args: args['cu_seqlens'] is not None,
-})
+@triton.heuristics(
+    {
+        "IS_VARLEN": lambda args: args["cu_seqlens"] is not None,
+    }
+)
 @triton.autotune(
-    configs=[
-        triton.Config({'BH': BH}, num_warps=num_warps)
-        for BH in [1, 2, 4, 8]
-        for num_warps in [1, 2, 4, 8]
-    ],
+    configs=[triton.Config({"BH": BH}, num_warps=num_warps) for BH in [1, 2, 4, 8] for num_warps in [1, 2, 4, 8]],
     key=["K", "H", "HV"],
 )
-@triton.jit(do_not_specialize=['T', 'N'])
+@triton.jit(do_not_specialize=["T", "N"])
 def chunk_kda_fwd_kernel_intra_token_parallel(
     q,
     k,
@@ -85,11 +83,11 @@ def chunk_kda_fwd_kernel_intra_token_parallel(
 
     G: tl.constexpr = HV // H
 
-    q += bos * H*K
-    k += bos * H*K
-    g += bos * HV*K
-    Aqk += bos * HV*BT
-    Akk += bos * HV*BC
+    q += bos * H * K
+    k += bos * H * K
+    g += bos * HV * K
+    Aqk += bos * HV * BT
+    Akk += bos * HV * BC
     beta += bos * HV
 
     BK: tl.constexpr = triton.next_power_of_2(K)
@@ -169,7 +167,9 @@ def chunk_kda_fwd_intra_token_parallel(
     BT = chunk_size
     BC = sub_chunk_size
 
-    def grid(meta): return (B * T, triton.cdiv(HV, meta['BH']))
+    def grid(meta):
+        return (B * T, triton.cdiv(HV, meta["BH"]))
+
     chunk_kda_fwd_kernel_intra_token_parallel[grid](
         q=q,
         k=k,

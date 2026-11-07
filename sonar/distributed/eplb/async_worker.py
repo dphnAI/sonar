@@ -8,8 +8,8 @@ from typing import TYPE_CHECKING
 
 import torch
 
-from aphrodite.distributed.parallel_state import get_eplb_group
-from aphrodite.logger import init_logger
+from sonar.distributed.parallel_state import get_eplb_group
+from sonar.logger import init_logger
 
 from .eplb_utils import CpuGpuEvent, device_stream
 from .migration_scheduler import schedule_migration_batches_for_layers

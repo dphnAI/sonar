@@ -5,8 +5,8 @@ import pytest
 import torch
 from transformers import Idefics3ImageProcessor
 
-from aphrodite.entrypoints.pooling.scoring.utils import compute_maxsim_score
-from aphrodite.model_executor.models.colultravbert import get_capped_longest_edge
+from sonar.entrypoints.pooling.scoring.utils import compute_maxsim_score
+from sonar.model_executor.models.colultravbert import get_capped_longest_edge
 
 MODEL_NAME = "athrael-soju/ColUltraVBERT"
 # Later revisions declare the UltraVBertModel architecture instead.
@@ -48,16 +48,16 @@ def test_colultravbert_tile_cap(width, height, grid):
 
 
 @pytest.fixture(scope="module")
-def colultravbert_model(aphrodite_runner):
-    with aphrodite_runner(
+def colultravbert_model(sonar_runner):
+    with sonar_runner(
         MODEL_NAME,
         revision=REVISION,
         runner="pooling",
         dtype=DTYPE,
         max_model_len=2048,
         enforce_eager=True,
-    ) as aphrodite_model:
-        yield aphrodite_model
+    ) as sonar_model:
+        yield sonar_model
 
 
 def test_colultravbert_text_token_embed(colultravbert_model):
@@ -94,10 +94,10 @@ def test_colultravbert_text_late_interaction(colultravbert_model):
     d_emb = torch.tensor(d_out[0])
     manual_score = compute_maxsim_score(q_emb, d_emb).item()
 
-    aphrodite_scores = colultravbert_model.score(query, doc)
+    sonar_scores = colultravbert_model.score(query, doc)
 
-    assert len(aphrodite_scores) == 1
-    assert aphrodite_scores[0] == pytest.approx(manual_score, rel=0.01)
+    assert len(sonar_scores) == 1
+    assert sonar_scores[0] == pytest.approx(manual_score, rel=0.01)
 
 
 def test_colultravbert_image_token_embed(colultravbert_model, image_assets):

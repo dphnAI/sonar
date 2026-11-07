@@ -7,17 +7,17 @@ from typing import TYPE_CHECKING, ClassVar, Optional
 import numpy as np
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.cache import CacheDType
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.attention.mla_attention import (
+from sonar.config import SonarConfig
+from sonar.config.cache import CacheDType
+from sonar.logger import init_logger
+from sonar.model_executor.layers.attention.mla_attention import (
     get_mla_dims,
 )
-from aphrodite.model_executor.layers.attention.sparse_mla_attention import (
+from sonar.model_executor.layers.attention.sparse_mla_attention import (
     SharedTopkIndicesBuffer,
 )
-from aphrodite.utils.torch_utils import np_to_pinned_tensor
-from aphrodite.v1.attention.backend import (
+from sonar.utils.torch_utils import np_to_pinned_tensor
+from sonar.v1.attention.backend import (
     AttentionBackend,
     AttentionCGSupport,
     AttentionLayer,
@@ -26,16 +26,16 @@ from aphrodite.v1.attention.backend import (
     CommonAttentionMetadata,
     MLAAttentionImpl,
 )
-from aphrodite.v1.attention.backends.mla.sparse_utils import (
+from sonar.v1.attention.backends.mla.sparse_utils import (
     align_blocks_to_rows,
     flat_kv_row_view,
     triton_convert_req_index_to_global_index,
 )
-from aphrodite.v1.attention.ops.xpu_mla_sparse import triton_bf16_mla_sparse_interface
-from aphrodite.v1.kv_cache_interface import AttentionSpec, is_quantized_kv_cache
+from sonar.v1.attention.ops.xpu_mla_sparse import triton_bf16_mla_sparse_interface
+from sonar.v1.kv_cache_interface import AttentionSpec, is_quantized_kv_cache
 
 if TYPE_CHECKING:
-    from aphrodite.model_executor.models.deepseek_v2 import Indexer
+    from sonar.model_executor.models.deepseek_v2 import Indexer
 logger = init_logger(__name__)
 
 
@@ -122,18 +122,18 @@ class XPUMLASparseMetadataBuilder(AttentionMetadataBuilder[XPUMLASparseMetadata]
         self,
         kv_cache_spec: AttentionSpec,
         layer_names: list[str],
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
     ):
         self.kv_cache_spec = kv_cache_spec
-        self.model_config = aphrodite_config.model_config
-        parallel_config = aphrodite_config.parallel_config
+        self.model_config = sonar_config.model_config
+        parallel_config = sonar_config.parallel_config
         self.device = device
-        max_num_batched_tokens = aphrodite_config.scheduler_config.max_num_batched_tokens
+        max_num_batched_tokens = sonar_config.scheduler_config.max_num_batched_tokens
 
         self.num_heads = self.model_config.get_num_attention_heads(parallel_config)
         self.mla_dims = get_mla_dims(self.model_config)
-        self.topk_tokens = aphrodite_config.model_config.hf_text_config.index_topk
+        self.topk_tokens = sonar_config.model_config.hf_text_config.index_topk
         self.topk_tokens_tensor = torch.tensor([self.topk_tokens], device=device, dtype=torch.int32)
         self.max_model_len_tensor = torch.tensor([self.model_config.max_model_len], device=device, dtype=torch.int32)
         # this is ignored by `flash_mla_with_kvcache` if indices not None

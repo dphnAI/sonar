@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Isolated GSM8K evaluation script for Aphrodite serve endpoint."""
+"""Isolated GSM8K evaluation script for Sonar serve endpoint."""
 
 import argparse
 import ast
@@ -18,7 +18,7 @@ import regex as re
 import requests
 from tqdm.asyncio import tqdm
 
-from aphrodite.assets.base import APHRODITE_S3_BUCKET_URL
+from sonar.assets.base import SONAR_S3_BUCKET_URL
 
 INVALID = -9999999
 
@@ -44,8 +44,8 @@ def download_and_cache_file(url: str, filename: str | None = None) -> str:
 
 def load_gsm8k_data() -> tuple[list[dict], list[dict]]:
     """Load GSM8K train and test data."""
-    train_url = f"{APHRODITE_S3_BUCKET_URL}/ci-datasets/gsm8k/train.jsonl"
-    test_url = f"{APHRODITE_S3_BUCKET_URL}/ci-datasets/gsm8k/test.jsonl"
+    train_url = f"{SONAR_S3_BUCKET_URL}/ci-datasets/gsm8k/train.jsonl"
+    test_url = f"{SONAR_S3_BUCKET_URL}/ci-datasets/gsm8k/test.jsonl"
 
     train_file = download_and_cache_file(train_url)
     test_file = download_and_cache_file(test_url)
@@ -80,7 +80,7 @@ def _optional_params(**params: object) -> dict[str, object]:
     return {k: v for k, v in params.items() if v is not None}
 
 
-async def call_aphrodite_api(
+async def call_sonar_api(
     session: aiohttp.ClientSession,
     prompt: str,
     temperature: float | None,
@@ -91,7 +91,7 @@ async def call_aphrodite_api(
     top_p: float | None = None,
     top_k: int | None = None,
 ) -> tuple[str, int]:
-    """Call Aphrodite's OpenAI-compatible completions endpoint.
+    """Call Sonar's OpenAI-compatible completions endpoint.
 
     Returns:
         Tuple of (response_text, completion_tokens)
@@ -112,11 +112,11 @@ async def call_aphrodite_api(
             completion_tokens = result.get("usage", {}).get("completion_tokens", 0)
             return text, completion_tokens
     except Exception as e:
-        print(f"Error calling Aphrodite API ({type(e).__name__}): {e}")
+        print(f"Error calling Sonar API ({type(e).__name__}): {e}")
         return "", 0
 
 
-async def call_aphrodite_chat_api(
+async def call_sonar_chat_api(
     session: aiohttp.ClientSession,
     model: str | None,
     prompt: str,
@@ -130,10 +130,10 @@ async def call_aphrodite_chat_api(
     reasoning_effort: str | None = None,
     chat_template_kwargs: dict[str, object] | None = None,
 ) -> tuple[str, int]:
-    """Call Aphrodite's OpenAI-compatible chat completions endpoint.
+    """Call Sonar's OpenAI-compatible chat completions endpoint.
 
     ``model``, ``temperature``, ``stop`` and the other optional fields are
-    omitted from the request when ``None``, so the server defaults apply (Aphrodite
+    omitted from the request when ``None``, so the server defaults apply (Sonar
     uses its served model when ``model`` is omitted).
 
     Returns:
@@ -166,7 +166,7 @@ async def call_aphrodite_chat_api(
             completion_tokens = result.get("usage", {}).get("completion_tokens", 0)
             return text, completion_tokens
     except Exception as e:
-        print(f"Error calling Aphrodite chat API ({type(e).__name__}): {e}")
+        print(f"Error calling Sonar chat API ({type(e).__name__}): {e}")
         return "", 0
 
 
@@ -243,7 +243,7 @@ def evaluate_gsm8k(
     reasoning_effort: str | None = None,
     chat_template_kwargs: dict[str, object] | None = None,
 ) -> dict[str, float | int]:
-    """Evaluate GSM8K accuracy using Aphrodite serve endpoint.
+    """Evaluate GSM8K accuracy using Sonar serve endpoint.
 
     ``temperature``, ``top_p`` and ``top_k`` are sent only when not ``None``;
     otherwise the server default applies. ``model`` is used only in chat mode,
@@ -268,7 +268,7 @@ def evaluate_gsm8k(
             if use_chat_completions:
                 # No stop strings: the chat template delimits the turn, and they
                 # would also cut off reasoning.
-                answer, tokens = await call_aphrodite_chat_api(
+                answer, tokens = await call_sonar_chat_api(
                     session=session,
                     model=model,
                     prompt=prompts[i],
@@ -282,7 +282,7 @@ def evaluate_gsm8k(
                     chat_template_kwargs=chat_template_kwargs,
                 )
             else:
-                answer, tokens = await call_aphrodite_api(
+                answer, tokens = await call_sonar_api(
                     session=session,
                     prompt=prompts[i],
                     temperature=temperature,
@@ -324,7 +324,7 @@ def evaluate_gsm8k_offline(
     use_chat_completions: bool = False,
     chat_template_kwargs: dict[str, object] | None = None,
 ) -> dict[str, float | int]:
-    """Evaluate GSM8K accuracy using an offline aphrodite.LLM object.
+    """Evaluate GSM8K accuracy using an offline sonar.LLM object.
 
     Same prompts and scoring as evaluate_gsm8k(), but runs generation
     directly via llm.generate() instead of calling a server over HTTP.
@@ -333,7 +333,7 @@ def evaluate_gsm8k_offline(
     ``llm.chat()`` instead of raw completion (for instruction-tuned models).
     ``chat_template_kwargs`` are forwarded to ``llm.chat()`` when provided.
     """
-    from aphrodite import SamplingParams
+    from sonar import SamplingParams
 
     prompts, labels = _build_gsm8k_prompts(num_questions, num_shots, gen_prefix)
     sampling_params = SamplingParams(
@@ -363,7 +363,7 @@ def evaluate_gsm8k_offline(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="GSM8K evaluation for Aphrodite serve")
+    parser = argparse.ArgumentParser(description="GSM8K evaluation for Sonar serve")
     parser.add_argument("--num-shots", type=int, default=5, help="Number of few-shot examples")
     parser.add_argument(
         "--num-questions",

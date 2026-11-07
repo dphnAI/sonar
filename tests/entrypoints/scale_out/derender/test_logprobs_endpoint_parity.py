@@ -13,19 +13,19 @@ greedy end-to-end parity tests never produce that case.
 
 import pytest
 
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-from aphrodite.entrypoints.openai.completion.protocol import CompletionRequest
-from aphrodite.entrypoints.scale_out.token_in_token_out.protocol import GenerateLogProbs
-from aphrodite.entrypoints.scale_out.token_in_token_out.serving import ServingTokens
-from aphrodite.logprobs import append_logprobs_for_next_position
-from aphrodite.renderers.online_derenderer import (
+from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+from sonar.entrypoints.openai.completion.protocol import CompletionRequest
+from sonar.entrypoints.scale_out.token_in_token_out.protocol import GenerateLogProbs
+from sonar.entrypoints.scale_out.token_in_token_out.serving import ServingTokens
+from sonar.logprobs import append_logprobs_for_next_position
+from sonar.renderers.online_derenderer import (
     _chat_top_logprobs_limit,
     _completion_top_logprobs_limit,
     _convert_chat_logprobs_to_completion_logprobs,
     _resolve_logprobs,
 )
-from aphrodite.tokenizers import get_tokenizer
-from aphrodite.tokenizers.detokenizer_utils import convert_ids_list_to_tokens
+from sonar.tokenizers import get_tokenizer
+from sonar.tokenizers.detokenizer_utils import convert_ids_list_to_tokens
 from tests.entrypoints.openai.chat_completion.test_serving_chat import (
     _build_mock_engine,
     _build_serving_chat,

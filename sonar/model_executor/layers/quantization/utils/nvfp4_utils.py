@@ -3,11 +3,11 @@
 
 import torch
 
-from aphrodite._custom_ops import (
+from sonar._custom_ops import (
     cutlass_scaled_mm_supports_fp4,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.math_utils import round_up
+from sonar.platforms import current_platform
+from sonar.utils.math_utils import round_up
 
 
 def swizzle_blockscale(scale: torch.Tensor) -> torch.Tensor:

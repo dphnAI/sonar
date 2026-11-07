@@ -7,7 +7,7 @@ import struct
 
 import torch
 
-from aphrodite.models.minimax_m3.amd.ops.flydsl_utils import (
+from sonar.models.minimax_m3.amd.ops.flydsl_utils import (
     run_compiled,
 )
 

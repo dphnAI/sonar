@@ -6,20 +6,20 @@ import torch
 import torch.nn as nn
 from transformers import PreTrainedConfig
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.layernorm import GemmaRMSNorm
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.config import SonarConfig
+from sonar.logger import init_logger
+from sonar.model_executor.layers.layernorm import GemmaRMSNorm
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.model_loader.mtp_validation import (
+from sonar.model_executor.model_loader.mtp_validation import (
     is_mtp_completeness_check_enabled,
 )
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
-from aphrodite.sequence import IntermediateTensors
+from sonar.model_executor.model_loader.weight_utils import default_weight_loader
+from sonar.sequence import IntermediateTensors
 
 from .step3p5 import Step3p5DecoderLayer
 from .utils import (
@@ -57,18 +57,18 @@ class SharedHead(nn.Module):
 class Step3p5AMultiTokenPredictorLayer(nn.Module):
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str,
     ) -> None:
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
         self.enorm = GemmaRMSNorm(config.hidden_size, config.rms_norm_eps)
         self.hnorm = GemmaRMSNorm(config.hidden_size, config.rms_norm_eps)
         self.eh_proj = nn.Linear(config.hidden_size * 2, config.hidden_size, bias=False)
         self.shared_head = SharedHead(config=config, quant_config=quant_config, prefix=f"{prefix}.shared_head")
         self.mtp_block = Step3p5DecoderLayer(
-            aphrodite_config,
+            sonar_config,
             prefix=f"{prefix}.mtp_block",
         )
 
@@ -91,9 +91,9 @@ class Step3p5AMultiTokenPredictorLayer(nn.Module):
 
 
 class Step3p5AMultiTokenPredictor(nn.Module):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
         self.embed_tokens = VocabParallelEmbedding(
             config.vocab_size,
             config.hidden_size,
@@ -104,7 +104,7 @@ class Step3p5AMultiTokenPredictor(nn.Module):
         self.layers = torch.nn.ModuleDict(
             {
                 str(idx): Step3p5AMultiTokenPredictorLayer(
-                    aphrodite_config,
+                    sonar_config,
                     f"{prefix}.layers.{idx}",
                 )
                 for idx in range(
@@ -153,21 +153,17 @@ class Step3p5MTP(nn.Module):
     # Each MTP layer's shared_head carries its own LM head weights.
     has_own_lm_head = True
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
         # The target config may be a multimodal wrapper (Step3.7); build the
         # draft from its own text and quant configs.
-        assert aphrodite_config.speculative_config is not None
-        draft_quant_config = get_draft_quant_config(aphrodite_config)
-        aphrodite_config = aphrodite_config.with_hf_config(
-            aphrodite_config.speculative_config.draft_model_config.hf_config
-        )
-        aphrodite_config.quant_config = draft_quant_config
-        self.config = aphrodite_config.model_config.hf_config
-        self.aphrodite_config = aphrodite_config
-        self.model = Step3p5AMultiTokenPredictor(
-            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
-        )
+        assert sonar_config.speculative_config is not None
+        draft_quant_config = get_draft_quant_config(sonar_config)
+        sonar_config = sonar_config.with_hf_config(sonar_config.speculative_config.draft_model_config.hf_config)
+        sonar_config.quant_config = draft_quant_config
+        self.config = sonar_config.model_config.hf_config
+        self.sonar_config = sonar_config
+        self.model = Step3p5AMultiTokenPredictor(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.model.embed_input_ids(input_ids)
@@ -282,7 +278,7 @@ class Step3p5MTP(nn.Module):
                     weight_loader(param, loaded_weight)
             loaded_params.add(name)
         params_need_to_load = set(params_dict.keys())
-        # Some KV cache scales are optional: checkpoints may omit them and Aphrodite
+        # Some KV cache scales are optional: checkpoints may omit them and Sonar
         # will fall back to default scales during initialization.
         optional_params = {
             name

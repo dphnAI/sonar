@@ -9,28 +9,28 @@ from weakref import WeakValueDictionary
 import torch
 from torch.nn import Parameter
 
-from aphrodite.distributed import (
+from sonar.distributed import (
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
 )
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 __all__ = [
-    "BaseAphroditeParameter",
-    "PackedAphroditeParameter",
+    "BaseSonarParameter",
+    "PackedSonarParameter",
     "PerTensorScaleParameter",
     "ModelWeightParameter",
     "ChannelQuantScaleParameter",
     "GroupQuantScaleParameter",
     "PackedColumnParameter",
-    "RowAphroditeParameter",
+    "RowSonarParameter",
 ]
 
 logger = init_logger(__name__)
 
 
-class BaseAphroditeParameter(Parameter):
-    """Base parameter for Aphrodite linear layers. Extends the torch.nn.parameter
+class BaseSonarParameter(Parameter):
+    """Base parameter for Sonar linear layers. Extends the torch.nn.parameter
     by taking in a linear weight loader. Will copy the loaded weight
     into the parameter when the provided weight loader is called.
     """
@@ -39,7 +39,7 @@ class BaseAphroditeParameter(Parameter):
         return super().__new__(cls, data=data, requires_grad=False)
 
     def __init__(self, data: torch.Tensor, weight_loader: Callable):
-        """Initialize the BaseAphroditeParameter.
+        """Initialize the BaseSonarParameter.
 
         Args:
             data: torch tensor with the parameter data
@@ -54,7 +54,7 @@ class BaseAphroditeParameter(Parameter):
         # tensor, which is param.data, leading to the redundant memory usage.
         # This sometimes causes OOM errors during model loading. To avoid this,
         # we sync the param tensor after its weight loader is called.
-        from aphrodite.platforms import current_platform
+        from sonar.platforms import current_platform
 
         if current_platform.use_sync_weight_loader():
             weight_loader = current_platform.make_synced_weight_loader(weight_loader)
@@ -114,7 +114,7 @@ class BaseAphroditeParameter(Parameter):
         return qkv_idxs[shard_id]
 
 
-class _ColumnAphroditeParameter(BaseAphroditeParameter):
+class _ColumnSonarParameter(BaseSonarParameter):
     """Private class defining weight loading functionality
     (load_merged_column_weight, load_qkv_weight)
     for parameters being loaded into linear layers with column
@@ -142,8 +142,8 @@ class _ColumnAphroditeParameter(BaseAphroditeParameter):
         shard_offset: int = kwargs["shard_offset"]
         shard_size: int = kwargs["shard_size"]
 
-        # TODO: move these to PackedColumnParameter and PackedAphroditeParameter
-        if isinstance(self, (PackedColumnParameter, PackedAphroditeParameter)) and self.packed_dim == self.output_dim:
+        # TODO: move these to PackedColumnParameter and PackedSonarParameter
+        if isinstance(self, (PackedColumnParameter, PackedSonarParameter)) and self.packed_dim == self.output_dim:
             shard_size, shard_offset = self.adjust_shard_indexes_for_packing(
                 shard_offset=shard_offset, shard_size=shard_size
             )
@@ -161,8 +161,8 @@ class _ColumnAphroditeParameter(BaseAphroditeParameter):
         shard_id: str = kwargs["shard_id"]
         num_heads: int = kwargs["num_heads"]
 
-        # TODO: move these to PackedColumnParameter and PackedAphroditeParameter
-        if isinstance(self, (PackedColumnParameter, PackedAphroditeParameter)) and self.output_dim == self.packed_dim:
+        # TODO: move these to PackedColumnParameter and PackedSonarParameter
+        if isinstance(self, (PackedColumnParameter, PackedSonarParameter)) and self.output_dim == self.packed_dim:
             shard_size, shard_offset = self.adjust_shard_indexes_for_packing(
                 shard_offset=shard_offset, shard_size=shard_size
             )
@@ -176,7 +176,7 @@ class _ColumnAphroditeParameter(BaseAphroditeParameter):
         param_data.copy_(loaded_weight)
 
 
-class RowAphroditeParameter(BaseAphroditeParameter):
+class RowSonarParameter(BaseSonarParameter):
     """Parameter class defining weight_loading functionality
     (load_row_parallel_weight) for parameters being loaded
     into linear layers with row parallel functionality.
@@ -202,7 +202,7 @@ class RowAphroditeParameter(BaseAphroditeParameter):
         self.data.copy_(loaded_weight)
 
 
-class ModelWeightParameter(_ColumnAphroditeParameter, RowAphroditeParameter):
+class ModelWeightParameter(_ColumnSonarParameter, RowSonarParameter):
     """Parameter class for linear layer weights. Uses both column and
     row parallelism.
     """
@@ -210,7 +210,7 @@ class ModelWeightParameter(_ColumnAphroditeParameter, RowAphroditeParameter):
     pass
 
 
-class GroupQuantScaleParameter(_ColumnAphroditeParameter, RowAphroditeParameter):
+class GroupQuantScaleParameter(_ColumnSonarParameter, RowSonarParameter):
     """Parameter class for weight scales loaded for weights with
     grouped quantization. Uses both column and row parallelism.
     """
@@ -218,15 +218,15 @@ class GroupQuantScaleParameter(_ColumnAphroditeParameter, RowAphroditeParameter)
     pass
 
 
-class ChannelQuantScaleParameter(_ColumnAphroditeParameter):
+class ChannelQuantScaleParameter(_ColumnSonarParameter):
     """Parameter class for weight scales loaded for weights with
-    channel-wise quantization. Equivalent to _ColumnAphroditeParameter.
+    channel-wise quantization. Equivalent to _ColumnSonarParameter.
     """
 
     pass
 
 
-class PerTensorScaleParameter(BaseAphroditeParameter):
+class PerTensorScaleParameter(BaseSonarParameter):
     """Parameter class for scales where the number of scales is
     equivalent to the number of logical matrices in fused linear
     layers (e.g. for QKV, there are 3 scales loaded from disk).
@@ -274,9 +274,9 @@ class PerTensorScaleParameter(BaseAphroditeParameter):
         param_data.copy_(loaded_weight)
 
 
-class PackedColumnParameter(_ColumnAphroditeParameter):
+class PackedColumnParameter(_ColumnSonarParameter):
     """Parameter for model parameters which are packed on disk
-    and support column parallelism only. See PackedAphroditeParameter
+    and support column parallelism only. See PackedSonarParameter
     for more details on the packed properties.
     """
 
@@ -313,7 +313,7 @@ class PackedColumnParameter(_ColumnAphroditeParameter):
         )
 
 
-class PackedAphroditeParameter(ModelWeightParameter):
+class PackedSonarParameter(ModelWeightParameter):
     """Parameter for model weights which are packed on disk.
     Example: GPTQ Marlin weights are int4 or int8, packed into int32.
     Extends the ModelWeightParameter to take in the
@@ -356,7 +356,7 @@ class PackedAphroditeParameter(ModelWeightParameter):
         )
 
 
-class BlockQuantScaleParameter(_ColumnAphroditeParameter, RowAphroditeParameter):
+class BlockQuantScaleParameter(_ColumnSonarParameter, RowSonarParameter):
     """Parameter class for weight scales loaded for weights with
     block-wise quantization. Uses both column and row parallelism.
     """
@@ -364,7 +364,7 @@ class BlockQuantScaleParameter(_ColumnAphroditeParameter, RowAphroditeParameter)
     pass
 
 
-class SharedWeightParameter(BaseAphroditeParameter):
+class SharedWeightParameter(BaseSonarParameter):
     """Parameter for weights with many shared tensors across a model.
 
     For example, when applying transforms to the "gate" and "up" partitions of
@@ -485,7 +485,7 @@ class SharedWeightParameter(BaseAphroditeParameter):
 
     def _fake_weight_loader(
         self,
-        param: BaseAphroditeParameter,
+        param: BaseSonarParameter,
         loaded_weight: torch.Tensor,
         loaded_weight_shard_id: str | int | None,
     ):
@@ -496,9 +496,7 @@ class SharedWeightParameter(BaseAphroditeParameter):
         )
 
 
-def permute_param_layout_(
-    param: BaseAphroditeParameter, input_dim: int, output_dim: int, **kwargs
-) -> BaseAphroditeParameter:
+def permute_param_layout_(param: BaseSonarParameter, input_dim: int, output_dim: int, **kwargs) -> BaseSonarParameter:
     """Permute a parameter's layout to the specified input and output dimensions,
     useful for forcing the parameter into a known layout, for example, if I need
     a packed (quantized) weight matrix to be in the layout

@@ -6,29 +6,29 @@ from typing import TYPE_CHECKING, ClassVar
 
 import torch
 
-from aphrodite.config import get_current_aphrodite_config
-from aphrodite.config.cache import CacheDType
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.attention.mla_attention import (
+from sonar.config import get_current_sonar_config
+from sonar.config.cache import CacheDType
+from sonar.logger import init_logger
+from sonar.model_executor.layers.attention.mla_attention import (
     MLACommonBackend,
     MLACommonImpl,
     MLACommonMetadata,
     MLACommonMetadataBuilder,
     QueryLenSupport,
 )
-from aphrodite.platforms.interface import DeviceCapability
-from aphrodite.v1.attention.backend import (
+from sonar.platforms.interface import DeviceCapability
+from sonar.v1.attention.backend import (
     AttentionCGSupport,
     AttentionLayer,
     AttentionType,
     MultipleOf,
 )
-from aphrodite.v1.kv_cache_interface import is_quantized_kv_cache
-from aphrodite.v1.worker.workspace import current_workspace_manager
+from sonar.v1.kv_cache_interface import is_quantized_kv_cache
+from sonar.v1.worker.workspace import current_workspace_manager
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
-    from aphrodite.v1.kv_cache_interface import AttentionSpec
+    from sonar.config import SonarConfig
+    from sonar.v1.kv_cache_interface import AttentionSpec
 
 logger = init_logger(__name__)
 
@@ -77,13 +77,13 @@ class TokenspeedMLAMetadataBuilder(MLACommonMetadataBuilder[MLACommonMetadata]):
         self,
         kv_cache_spec: "AttentionSpec",
         layer_names: list[str],
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
         device: torch.device,
     ) -> None:
         super().__init__(
             kv_cache_spec,
             layer_names,
-            aphrodite_config,
+            sonar_config,
             device,
             MLACommonMetadata,
             supports_dcp_with_varlen=True,
@@ -143,11 +143,11 @@ class TokenspeedMLABackend(MLACommonBackend):
 
         # tokenspeed_mla CuTe DSL kernel is shape-specialized for DeepSeek R1
         # MLA dimensions (qk_nope=128, qk_rope=64, v=128). Reject anything else.
-        from aphrodite.config import get_current_aphrodite_config
+        from sonar.config import get_current_sonar_config
 
-        aphrodite_config = get_current_aphrodite_config()
-        if aphrodite_config.model_config is not None:
-            hf_text_config = aphrodite_config.model_config.hf_text_config
+        sonar_config = get_current_sonar_config()
+        if sonar_config.model_config is not None:
+            hf_text_config = sonar_config.model_config.hf_text_config
             qk_nope_head_dim = getattr(hf_text_config, "qk_nope_head_dim", 0)
             qk_rope_head_dim = getattr(hf_text_config, "qk_rope_head_dim", 0)
             v_head_dim = getattr(hf_text_config, "v_head_dim", 0)
@@ -215,7 +215,7 @@ class TokenspeedMLAImpl(MLACommonImpl[MLACommonMetadata]):
                 f"got kv_cache_dtype={self.kv_cache_dtype!r}."
             )
 
-        config = get_current_aphrodite_config()
+        config = get_current_sonar_config()
         self._min_split_kv = config.attention_config.tokenspeed_mla_min_split_kv
         self._max_decode_tokens = 0
         if self._min_split_kv > 1:
@@ -309,7 +309,7 @@ class TokenspeedMLAImpl(MLACommonImpl[MLACommonMetadata]):
             self._max_decode_tokens,
         )
 
-        # Aphrodite kv_c_and_k_pe_cache is already (num_blocks, block_size, head_size).
+        # Sonar kv_c_and_k_pe_cache is already (num_blocks, block_size, head_size).
         # tokenspeed_mla_decode wants 3D — pass as-is (no unsqueeze, unlike trtllm).
         return_lse = self.need_to_return_lse_for_decode
         kernel_out = tokenspeed_mla_decode(

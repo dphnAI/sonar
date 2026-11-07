@@ -16,10 +16,10 @@ import numpy as np
 import pybase64 as base64
 from pydantic import BaseModel, BeforeValidator, Field, model_validator
 
-from aphrodite import PoolingParams
-from aphrodite.entrypoints.serve.engine.protocol import OpenAIBaseModel, UsageInfo
-from aphrodite.renderers.chat_utils import ChatCompletionMessageParam
-from aphrodite.utils import random_uuid
+from sonar import PoolingParams
+from sonar.entrypoints.serve.engine.protocol import OpenAIBaseModel, UsageInfo
+from sonar.renderers.chat_utils import ChatCompletionMessageParam
+from sonar.utils import random_uuid
 
 from ..base.protocol import (
     ChatRequestMixin,

@@ -7,9 +7,9 @@ from typing import Any, cast
 import pytest
 import torch
 
-from aphrodite.v1.worker.gpu.spec_decode import extract_hidden_states as spec_module
-from aphrodite.v1.worker.gpu.spec_decode import init_speculator
-from aphrodite.v1.worker.gpu.spec_decode.extract_hidden_states import (
+from sonar.v1.worker.gpu.spec_decode import extract_hidden_states as spec_module
+from sonar.v1.worker.gpu.spec_decode import init_speculator
+from sonar.v1.worker.gpu.spec_decode.extract_hidden_states import (
     ExtractHiddenStatesSpeculator,
 )
 from tests.v1.spec_decode.utils import fake_speculative_config
@@ -21,17 +21,17 @@ class _RecordingModel(torch.nn.Module):
 
 
 def test_init_requires_greedy_draft_sampling():
-    aphrodite_config = cast(
+    sonar_config = cast(
         Any,
         SimpleNamespace(speculative_config=SimpleNamespace(draft_sample_method="probabilistic")),
     )
 
     with pytest.raises(ValueError, match="only supports draft_sample_method='greedy'"):
-        ExtractHiddenStatesSpeculator(aphrodite_config, torch.device("cpu"))
+        ExtractHiddenStatesSpeculator(sonar_config, torch.device("cpu"))
 
 
 def test_init_speculator_dispatches_extract_hidden_states(monkeypatch):
-    aphrodite_config = cast(
+    sonar_config = cast(
         Any,
         SimpleNamespace(speculative_config=fake_speculative_config(method="extract_hidden_states")),
     )
@@ -43,9 +43,9 @@ def test_init_speculator_dispatches_extract_hidden_states(monkeypatch):
 
     monkeypatch.setattr(spec_module, "ExtractHiddenStatesSpeculator", FakeSpeculator)
 
-    speculator = init_speculator(aphrodite_config, device, cast(Any, None))
+    speculator = init_speculator(sonar_config, device, cast(Any, None))
     assert isinstance(speculator, FakeSpeculator)
-    assert speculator.args == (aphrodite_config, device)
+    assert speculator.args == (sonar_config, device)
 
 
 def test_propose_caches_hidden_states_and_returns_sampled_tokens(monkeypatch):
@@ -59,7 +59,7 @@ def test_propose_caches_hidden_states_and_returns_sampled_tokens(monkeypatch):
 
     layer_name = "cache_only_layers.2"
     speculator = object.__new__(ExtractHiddenStatesSpeculator)
-    speculator.aphrodite_config = cast(Any, SimpleNamespace())
+    speculator.sonar_config = cast(Any, SimpleNamespace())
     speculator.acceptance_estimator = None
     speculator.num_hidden_states = 2
     speculator.hidden_states = torch.zeros(4, 2, 3)

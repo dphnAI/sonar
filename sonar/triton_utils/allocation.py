@@ -3,7 +3,7 @@
 
 import torch
 
-from aphrodite.triton_utils import triton
+from sonar.triton_utils import triton
 
 
 def set_triton_allocator(device: torch.device):

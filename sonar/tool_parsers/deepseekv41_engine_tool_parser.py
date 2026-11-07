@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-from aphrodite.parser.engine.registered_adapters import DeepSeekV41ParserToolAdapter
+from sonar.parser.engine.registered_adapters import DeepSeekV41ParserToolAdapter
 
 
 class DeepSeekV41EngineToolParser(DeepSeekV41ParserToolAdapter):  # type: ignore[valid-type, misc]

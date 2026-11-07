@@ -4,17 +4,17 @@
 
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.model_executor.layers.quantization.input_quant_fp8 import QuantFP8
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar import _custom_ops as ops
+from sonar.model_executor.layers.quantization.input_quant_fp8 import QuantFP8
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     GroupShape,
     convert_bf16_scales_to_fp8,
     convert_packed_uint4b8_to_signed_int4_inplace,
 )
-from aphrodite.model_executor.parameter import BaseAphroditeParameter, permute_param_layout_
-from aphrodite.model_executor.utils import replace_parameter
-from aphrodite.platforms import current_platform
-from aphrodite.scalar_type import scalar_types
+from sonar.model_executor.parameter import BaseSonarParameter, permute_param_layout_
+from sonar.model_executor.utils import replace_parameter
+from sonar.platforms import current_platform
+from sonar.scalar_type import scalar_types
 
 from .MPLinearKernel import MPLinearKernel, MPLinearLayerConfig
 
@@ -72,7 +72,7 @@ class CutlassW4A8LinearKernel(MPLinearKernel):
     #  `weight_scale`  is: {input_dim = 0, output_dim = 1}
     def process_weights_after_loading(self, layer: torch.nn.Module):
         def transform_w_q(x):
-            assert isinstance(x, BaseAphroditeParameter)
+            assert isinstance(x, BaseSonarParameter)
             convert_packed_uint4b8_to_signed_int4_inplace(x.data)
             torch.accelerator.synchronize()
             permute_param_layout_(x, input_dim=0, output_dim=1, packed_dim=0)
@@ -80,7 +80,7 @@ class CutlassW4A8LinearKernel(MPLinearKernel):
             return x
 
         def transform_w_s(x):
-            assert isinstance(x, BaseAphroditeParameter)
+            assert isinstance(x, BaseSonarParameter)
             permute_param_layout_(x, input_dim=0, output_dim=1)
             x.data = x.data.contiguous().to(torch.float8_e4m3fn)
             x.data = ops.cutlass_pack_scale_fp8(x.data)

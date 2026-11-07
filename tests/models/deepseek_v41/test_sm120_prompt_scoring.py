@@ -7,9 +7,9 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.v1.worker.gpu.sample.prompt_logprob import PromptLogprobsWorker
+from sonar.platforms import current_platform
+from sonar.sampling_params import SamplingParams
+from sonar.v1.worker.gpu.sample.prompt_logprob import PromptLogprobsWorker
 
 pytestmark = pytest.mark.skipif(
     not current_platform.is_cuda() or not torch.cuda.is_available(), reason="requires CUDA row-packing kernels"
@@ -18,8 +18,8 @@ pytestmark = pytest.mark.skipif(
 
 @pytest.fixture
 def state():
-    from aphrodite.models.deepseek_v41.sm120.ced import CEDState
-    from aphrodite.models.deepseek_v41.sm120.model_state import DeepseekV41ModelState
+    from sonar.models.deepseek_v41.sm120.ced import CEDState
+    from sonar.models.deepseek_v41.sm120.model_state import DeepseekV41ModelState
 
     # Request bookkeeping and real CED buffers, without loading model weights.
     state = DeepseekV41ModelState.__new__(DeepseekV41ModelState)
@@ -30,14 +30,14 @@ def state():
     state._ced_prompt_logprobs = set()
     state._ced_prefix_start = {}
     state._ced_streaming_prefix_start = None
-    state.aphrodite_config = SimpleNamespace(aux_output_config=SimpleNamespace(enable_return_routed_experts=False))
+    state.sonar_config = SimpleNamespace(aux_output_config=SimpleNamespace(enable_return_routed_experts=False))
     state.ced_state = CEDState(2, 512, (128, 256, 384, 512), torch.device("cuda"))
     return state
 
 
 @pytest.mark.parametrize("mode", ["raw_logits", "raw_logprobs"])
 def test_fixed_token_prompt_scores_survive_ced_compaction(state, mode):
-    from aphrodite.models.deepseek_v41.sm120.ced import gather_rows, scatter_rows
+    from sonar.models.deepseek_v41.sm120.ced import gather_rows, scatter_rows
 
     rows = np.arange(255, dtype=np.int32)
     ids = np.stack((rows % 11, (rows + 3) % 11), axis=1)

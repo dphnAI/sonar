@@ -4,8 +4,8 @@
 
 from transformers import SmolVLMProcessor
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
+from sonar.config import SonarConfig
+from sonar.multimodal import MULTIMODAL_REGISTRY
 
 from .idefics3 import Idefics3DummyInputsBuilder as SmolVLMDummyInputsBuilder
 from .idefics3 import Idefics3ForConditionalGeneration, Idefics3ProcessingInfo
@@ -29,8 +29,8 @@ class SmolVLMProcessingInfo(Idefics3ProcessingInfo):
     dummy_inputs=SmolVLMDummyInputsBuilder,
 )
 class SmolVLMForConditionalGeneration(Idefics3ForConditionalGeneration):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             prefix=prefix,
         )

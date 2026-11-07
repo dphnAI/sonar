@@ -15,23 +15,23 @@ from packaging import version
 from torch import nn
 from transformers.utils import SAFE_WEIGHTS_INDEX_NAME
 
-from aphrodite.config import ModelConfig
-from aphrodite.config.load import LoadConfig
-from aphrodite.distributed import (
+from sonar.config import ModelConfig
+from sonar.config.load import LoadConfig
+from sonar.distributed import (
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
 )
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe import RoutedExperts
-from aphrodite.model_executor.layers.linear import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe import RoutedExperts
+from sonar.model_executor.layers.linear import (
     LinearBase,
     MergedColumnParallelLinear,
     QKVParallelLinear,
     ReplicatedLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.model_loader.base_loader import BaseModelLoader
-from aphrodite.model_executor.model_loader.weight_utils import (
+from sonar.model_executor.model_loader.base_loader import BaseModelLoader
+from sonar.model_executor.model_loader.weight_utils import (
     download_safetensors_index_file_from_hf,
     download_weights_from_hf,
     filter_duplicate_safetensors_files,
@@ -39,15 +39,15 @@ from aphrodite.model_executor.model_loader.weight_utils import (
     pt_weights_iterator,
     safetensors_weights_iterator,
 )
-from aphrodite.model_executor.models import is_pooling_model
-from aphrodite.model_executor.utils import (
+from sonar.model_executor.models import is_pooling_model
+from sonar.model_executor.utils import (
     get_moe_expert_mapping,
     get_packed_modules_mapping,
     set_weight_attrs,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.transformers_utils.repo_utils import hf_api
-from aphrodite.utils.torch_utils import set_default_torch_dtype
+from sonar.platforms import current_platform
+from sonar.transformers_utils.repo_utils import hf_api
+from sonar.utils.torch_utils import set_default_torch_dtype
 
 logger = init_logger(__name__)
 
@@ -73,7 +73,7 @@ class BitsAndBytesModelLoader(BaseModelLoader):
         self.tp_disabled_modules: list[str] = []
         # Store the mapping of expert parameters for MoE models.
         self.expert_params_mapping: list[tuple[str, str, int, str]] = []
-        # mapping weight names from transformers to aphrodite.
+        # mapping weight names from transformers to sonar.
         self.weight_mapper: Callable = lambda name: name
         self.pre_quant: bool = False
         self.load_8bit: bool = False
@@ -174,7 +174,7 @@ class BitsAndBytesModelLoader(BaseModelLoader):
                 self.load_config.pt_load_map_location,
             )
         for org_name, param in iterator:
-            # mapping weight names from transformers to aphrodite while preserving
+            # mapping weight names from transformers to sonar while preserving
             # original names.
             mapped_name = self.weight_mapper(org_name)
             mapped_name = _maybe_pool_model(mapped_name)
@@ -404,7 +404,7 @@ class BitsAndBytesModelLoader(BaseModelLoader):
         for name, module in model.named_modules():
             if isinstance(module, LinearBase) and hasattr(module.quant_method, "quant_config"):
                 if modules_info := self.modules_mapping.get_sub_modules(name):
-                    # Map aphrodite's names to transformers's names.
+                    # Map sonar's names to transformers's names.
                     rep_name, sub_modules = modules_info
                     for sub_name in sub_modules:
                         new_name = name.replace(rep_name, sub_name)
@@ -429,7 +429,7 @@ class BitsAndBytesModelLoader(BaseModelLoader):
                     rep_name = name.replace("experts", "") + weight_name.removesuffix(".")
                     self.target_modules.append(rep_name)
 
-        assert self.target_modules, "Aphrodite currently does not support BNB quantization for"
+        assert self.target_modules, "Sonar currently does not support BNB quantization for"
         f" {type(model).__name__}"
 
     def _classify_module_sharding(self, model: nn.Module):
@@ -498,14 +498,14 @@ class BitsAndBytesModelLoader(BaseModelLoader):
         self.is_pool_model = is_pooling_model(model)
         self.modules_mapping = ParamMapping(get_packed_modules_mapping(model))
 
-        from aphrodite.lora.utils import is_moe_model
+        from sonar.lora.utils import is_moe_model
 
         if is_moe_model(model):
             self.expert_params_mapping = get_moe_expert_mapping(model)
-        # For some models like Molmo, we need to use hf_to_aphrodite_mapper
+        # For some models like Molmo, we need to use hf_to_sonar_mapper
         # to ensure correct loading of weights.
-        if hf_to_aphrodite_mapper := getattr(model, "hf_to_aphrodite_mapper", None):
-            unstacked_mapper = hf_to_aphrodite_mapper.get_unstacked_mapper()
+        if hf_to_sonar_mapper := getattr(model, "hf_to_sonar_mapper", None):
+            unstacked_mapper = hf_to_sonar_mapper.get_unstacked_mapper()
             self.weight_mapper = lambda name, m=unstacked_mapper: m._map_name(name)
 
         self._get_bnb_target_modules(model)
@@ -626,7 +626,7 @@ class BitsAndBytesModelLoader(BaseModelLoader):
         stacked_quant_state_dict: dict[str, dict[int, Any]] = {}
         # TODO: Change this lazy import to normal import
         # after the checks are updated to run on a new version
-        from aphrodite.model_executor.models.utils import is_pp_missing_parameter
+        from sonar.model_executor.models.utils import is_pp_missing_parameter
 
         param_dict = dict(model.named_parameters())
         for quant_param_name in quant_state_dict:

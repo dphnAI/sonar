@@ -29,12 +29,12 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from aphrodite.model_executor.layers.pooler import Pooler, PoolingParamsUpdate
-from aphrodite.model_executor.layers.pooler.tokwise.methods import AllPool
-from aphrodite.tasks import PoolingTask
-from aphrodite.utils.torch_utils import async_tensor_h2d
-from aphrodite.v1.outputs import PoolerOutput
-from aphrodite.v1.pool.metadata import PoolingMetadata
+from sonar.model_executor.layers.pooler import Pooler, PoolingParamsUpdate
+from sonar.model_executor.layers.pooler.tokwise.methods import AllPool
+from sonar.tasks import PoolingTask
+from sonar.utils.torch_utils import async_tensor_h2d
+from sonar.v1.outputs import PoolerOutput
+from sonar.v1.pool.metadata import PoolingMetadata
 
 JOINT_HEAD_WEIGHTS = "joint_head.safetensors"
 NUM_QUESTION_TYPES = 3

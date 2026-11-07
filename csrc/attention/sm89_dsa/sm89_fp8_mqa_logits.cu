@@ -352,7 +352,7 @@ void sm89_fp8_mqa_logits(const torch::stable::Tensor& q,
 #endif
 }
 
-#ifdef APHRODITE_ENABLE_SM89_DSA
+#ifdef SONAR_ENABLE_SM89_DSA
 STABLE_TORCH_LIBRARY_IMPL(_C, CUDA, ops) {
   ops.impl("sm89_fp8_mqa_logits", TORCH_BOX(&sm89_fp8_mqa_logits));
 }

@@ -11,10 +11,10 @@ from flashinfer.utils import (
     get_trtllm_gen_multi_ctas_kv_counter_bytes,
 )
 
-from aphrodite.config import get_current_aphrodite_config
-from aphrodite.config.cache import CacheDType
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.attention.mla_attention import (
+from sonar.config import get_current_sonar_config
+from sonar.config.cache import CacheDType
+from sonar.logger import init_logger
+from sonar.model_executor.layers.attention.mla_attention import (
     MLACommonBackend,
     MLACommonDecodeMetadata,
     MLACommonImpl,
@@ -22,18 +22,18 @@ from aphrodite.model_executor.layers.attention.mla_attention import (
     MLACommonMetadataBuilder,
     QueryLenSupport,
 )
-from aphrodite.platforms.interface import DeviceCapability
-from aphrodite.v1.attention.backend import (
+from sonar.platforms.interface import DeviceCapability
+from sonar.v1.attention.backend import (
     AttentionCGSupport,
     AttentionLayer,
     AttentionType,
     MultipleOf,
 )
-from aphrodite.v1.kv_cache_interface import is_quantized_kv_cache
+from sonar.v1.kv_cache_interface import is_quantized_kv_cache
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
-    from aphrodite.v1.kv_cache_interface import AttentionSpec
+    from sonar.config import SonarConfig
+    from sonar.v1.kv_cache_interface import AttentionSpec
 
 logger = init_logger(__name__)
 
@@ -136,10 +136,10 @@ class FlashInferMLAMetadataBuilder(MLACommonMetadataBuilder[FlashInferMLAMetadat
         self,
         kv_cache_spec: "AttentionSpec",
         layer_names: list[str],
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
         device: torch.device,
     ) -> None:
-        parallel_config = aphrodite_config.parallel_config
+        parallel_config = sonar_config.parallel_config
         dcp_size = parallel_config.decode_context_parallel_size
         interleave_size = parallel_config.cp_kv_cache_interleave_size
         if dcp_size > 1 and interleave_size != 1:
@@ -149,7 +149,7 @@ class FlashInferMLAMetadataBuilder(MLACommonMetadataBuilder[FlashInferMLAMetadat
         super().__init__(
             kv_cache_spec,
             layer_names,
-            aphrodite_config,
+            sonar_config,
             device,
             FlashInferMLAMetadata,
             supports_dcp_with_varlen=True,
@@ -225,9 +225,9 @@ class FlashInferMLABackend(MLACommonBackend):
         device_capability: DeviceCapability,
     ) -> str | None:
         # FlashInfer MLA kernel requires qk_nope_head_dim in [64, 128, 192]
-        aphrodite_config = get_current_aphrodite_config()
-        if aphrodite_config.model_config is not None:
-            hf_text_config = aphrodite_config.model_config.hf_text_config
+        sonar_config = get_current_sonar_config()
+        if sonar_config.model_config is not None:
+            hf_text_config = sonar_config.model_config.hf_text_config
             qk_nope_head_dim = getattr(hf_text_config, "qk_nope_head_dim", 1)
             if qk_nope_head_dim not in [64, 128, 192]:
                 return f"FlashInfer MLA kernel requires qk_nope_head_dim in [64, 128, 192], but got {qk_nope_head_dim}"
@@ -288,7 +288,7 @@ class FlashInferMLAImpl(MLACommonImpl[FlashInferMLAMetadata]):
         # (config is in scope during construction) so the byte size can be
         # resolved once on the first decode and never grows after CUDA-graph
         # capture. The impl has no config reference, so use the active config.
-        _sched = get_current_aphrodite_config().scheduler_config
+        _sched = get_current_sonar_config().scheduler_config
         self._mla_counter_max_batch: int = _sched.max_num_batched_tokens or _sched.max_num_seqs
         self._mla_counter_bytes: int | None = None
 
@@ -329,7 +329,7 @@ class FlashInferMLAImpl(MLACommonImpl[FlashInferMLAMetadata]):
                 block_table, seq_lens, row_req = self._flattened_decode_metadata(attn_metadata, q.shape[0])
         elif attn_metadata.decode.max_query_len > 1 and self.dcp_world_size == 1:
             # Causal spec decode: keep q compact and let the kernel tile each
-            # request's length (uniform 1+k and adaptive ragged). Mirrors aphrodite #52157.
+            # request's length (uniform 1+k and adaptive ragged). Mirrors sonar #52157.
             # DCP keeps the uniform reshape below: it needs LSE, which the kernels
             # do not return on the ragged path (flashinfer #3238).
             cum_seq_lens_q = attn_metadata.decode.query_start_loc

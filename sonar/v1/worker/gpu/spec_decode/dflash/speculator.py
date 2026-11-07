@@ -8,31 +8,31 @@ from typing import Any, cast
 import torch
 import torch.nn as nn
 
-from aphrodite.config import AphroditeConfig, replace
-from aphrodite.config.compilation import CUDAGraphMode
-from aphrodite.forward_context import BatchDescriptor, set_forward_context
-from aphrodite.logger import init_logger
-from aphrodite.triton_utils import tl, triton
-from aphrodite.v1.attention.backend import AttentionCGSupport
-from aphrodite.v1.attention.backends.utils import PAD_SLOT_ID
-from aphrodite.v1.kv_cache_interface import (
+from sonar.config import SonarConfig, replace
+from sonar.config.compilation import CUDAGraphMode
+from sonar.forward_context import BatchDescriptor, set_forward_context
+from sonar.logger import init_logger
+from sonar.triton_utils import tl, triton
+from sonar.v1.attention.backend import AttentionCGSupport
+from sonar.v1.attention.backends.utils import PAD_SLOT_ID
+from sonar.v1.kv_cache_interface import (
     KVCacheConfig,
     get_kv_cache_spec_sliding_window,
 )
-from aphrodite.v1.worker.gpu.attn_utils import build_slot_mappings_by_layer
-from aphrodite.v1.worker.gpu.block_table import BlockTables
-from aphrodite.v1.worker.gpu.cp_utils import cp_local_slot
-from aphrodite.v1.worker.gpu.dp_utils import DPSyncState, dispatch_cg_and_sync_dp
-from aphrodite.v1.worker.gpu.input_batch import InputBatch, InputBuffers
-from aphrodite.v1.worker.gpu.model_states.interface import ModelState
-from aphrodite.v1.worker.gpu.spec_decode.dflash.cudagraph import DFlashCudaGraphManager
-from aphrodite.v1.worker.gpu.spec_decode.dflash.utils import load_dflash_model
-from aphrodite.v1.worker.gpu.spec_decode.eagle.eagle3_utils import (
+from sonar.v1.worker.gpu.attn_utils import build_slot_mappings_by_layer
+from sonar.v1.worker.gpu.block_table import BlockTables
+from sonar.v1.worker.gpu.cp_utils import cp_local_slot
+from sonar.v1.worker.gpu.dp_utils import DPSyncState, dispatch_cg_and_sync_dp
+from sonar.v1.worker.gpu.input_batch import InputBatch, InputBuffers
+from sonar.v1.worker.gpu.model_states.interface import ModelState
+from sonar.v1.worker.gpu.spec_decode.dflash.cudagraph import DFlashCudaGraphManager
+from sonar.v1.worker.gpu.spec_decode.dflash.utils import load_dflash_model
+from sonar.v1.worker.gpu.spec_decode.eagle.eagle3_utils import (
     get_eagle3_aux_layers_from_config,
 )
-from aphrodite.v1.worker.gpu.spec_decode.speculator import DraftModelSpeculator
-from aphrodite.v1.worker.gpu.spec_decode.utils import get_parallel_drafting_token_id
-from aphrodite.v1.worker.utils import AttentionGroup
+from sonar.v1.worker.gpu.spec_decode.speculator import DraftModelSpeculator
+from sonar.v1.worker.gpu.spec_decode.utils import get_parallel_drafting_token_id
+from sonar.v1.worker.utils import AttentionGroup
 
 logger = init_logger(__name__)
 
@@ -40,19 +40,19 @@ logger = init_logger(__name__)
 class DFlashSpeculator(DraftModelSpeculator):
     _speculator_name = "DFlash"  # For logging, so we can share methods with subclasses
 
-    def __init__(self, aphrodite_config: AphroditeConfig, device: torch.device):
-        parallel_config = aphrodite_config.parallel_config
-        speculative_config = aphrodite_config.speculative_config
+    def __init__(self, sonar_config: SonarConfig, device: torch.device):
+        parallel_config = sonar_config.parallel_config
+        speculative_config = sonar_config.speculative_config
         assert speculative_config is not None
-        aphrodite_config = copy.copy(aphrodite_config)
-        aphrodite_config.parallel_config = replace(
+        sonar_config = copy.copy(sonar_config)
+        sonar_config.parallel_config = replace(
             parallel_config,
             prefill_context_parallel_size=1,
             decode_context_parallel_size=(
                 parallel_config.decode_context_parallel_size if speculative_config.draft_model_config.use_mla else 1
             ),
         )
-        super().__init__(aphrodite_config, device)
+        super().__init__(sonar_config, device)
 
         self.hidden_states = torch.zeros(self.max_num_tokens, self.hidden_size, dtype=self.dtype, device=device)
 
@@ -64,7 +64,7 @@ class DFlashSpeculator(DraftModelSpeculator):
 
         self.parallel_drafting_token_id = get_parallel_drafting_token_id(self.draft_model_config.hf_config)
 
-        from aphrodite.model_executor.models.qwen3_dflash import dflash_has_any_non_causal
+        from sonar.model_executor.models.qwen3_dflash import dflash_has_any_non_causal
 
         self.requires_non_causal = dflash_has_any_non_causal(self.draft_model_config.hf_config)
 
@@ -89,11 +89,11 @@ class DFlashSpeculator(DraftModelSpeculator):
         self._aux_staging: torch.Tensor | None = None
         self._num_rejected: torch.Tensor | None = None
         aux_layers = get_eagle3_aux_layers_from_config(speculative_config)
-        cudagraph_mode = aphrodite_config.compilation_config.cudagraph_mode
+        cudagraph_mode = sonar_config.compilation_config.cudagraph_mode
         if aux_layers and cudagraph_mode.decode_mode() == CUDAGraphMode.FULL:
             self._aux_staging = torch.zeros(
                 self._num_graph_context_tokens(self.max_num_reqs),
-                len(aux_layers) * aphrodite_config.model_config.get_hidden_size(),
+                len(aux_layers) * sonar_config.model_config.get_hidden_size(),
                 dtype=self.dtype,
                 device=device,
             )
@@ -116,28 +116,28 @@ class DFlashSpeculator(DraftModelSpeculator):
         self.draft_kv_cache_group_id: int = -1
 
     @property
-    def attn_aphrodite_config(self) -> AphroditeConfig:
+    def attn_sonar_config(self) -> SonarConfig:
         # The draft's attention differs from the target's in causality.
-        from aphrodite.v1.worker.gpu.spec_decode.dflash.utils import (
+        from sonar.v1.worker.gpu.spec_decode.dflash.utils import (
             resolve_dflash_attention_backend,
         )
 
-        config = super().attn_aphrodite_config
+        config = super().attn_sonar_config
         config.attention_config = replace(
             config.attention_config,
             use_non_causal=self.requires_non_causal,
             # Without a DCP head-replication or explicit draft backend, keep the
             # backend the base config resolved so the KV cache layout matches.
-            backend=resolve_dflash_attention_backend(self.aphrodite_config) or config.attention_config.backend,
+            backend=resolve_dflash_attention_backend(self.sonar_config) or config.attention_config.backend,
         )
         return config
 
     def init_cudagraph_manager(self, cudagraph_mode: CUDAGraphMode) -> None:
-        from aphrodite.v1.worker.gpu.spec_decode.dflash.utils import (
+        from sonar.v1.worker.gpu.spec_decode.dflash.utils import (
             dflash_needs_dcp_kv_head_replication,
         )
 
-        if dflash_needs_dcp_kv_head_replication(self.aphrodite_config):
+        if dflash_needs_dcp_kv_head_replication(self.sonar_config):
             logger.warning(
                 "%s with DCP-replicated draft KV heads runs the draft eagerly; "
                 "full CUDA graph replay does not support the decoupled cache-head layout.",
@@ -160,7 +160,7 @@ class DFlashSpeculator(DraftModelSpeculator):
             cudagraph_mode = CUDAGraphMode.NONE
 
         self.query_cudagraph_manager = DFlashCudaGraphManager(
-            self.aphrodite_config,
+            self.sonar_config,
             self.device,
             cudagraph_mode,
             decode_query_len=self.num_query_per_req,
@@ -231,7 +231,7 @@ class DFlashSpeculator(DraftModelSpeculator):
         target_model: nn.Module,
         target_attn_layer_names: set[str],
     ) -> nn.Module:
-        return load_dflash_model(target_model, self.aphrodite_config)
+        return load_dflash_model(target_model, self.sonar_config)
 
     def set_num_cached_tokens(self, num_cached_tokens: torch.Tensor) -> None:
         """Register cache-restored token counts indexed by request-state slot."""
@@ -262,10 +262,10 @@ class DFlashSpeculator(DraftModelSpeculator):
                 if hasattr(builder, "num_heads_q"):
                     draft_builder = cast(Any, builder)
                     draft_builder.num_heads_q = self.draft_model_config.get_num_attention_heads(
-                        self.aphrodite_config.parallel_config
+                        self.sonar_config.parallel_config
                     )
                     draft_builder.num_heads_kv = self.draft_model_config.get_num_kv_heads(
-                        self.aphrodite_config.parallel_config
+                        self.sonar_config.parallel_config
                     )
                     draft_builder.headdim = self.draft_model_config.get_head_size()
                 if getattr(builder, "aot_schedule", False) and get_kv_cache_spec_sliding_window(builder.kv_cache_spec):
@@ -316,7 +316,7 @@ class DFlashSpeculator(DraftModelSpeculator):
         batch_descriptor = BatchDescriptor(num_tokens=num_tokens)
         with set_forward_context(
             attn_metadata,
-            self.aphrodite_config,
+            self.sonar_config,
             num_tokens=num_tokens,
             cudagraph_runtime_mode=cudagraph_runtime_mode,
             num_tokens_across_dp=num_tokens_across_dp,
@@ -568,7 +568,7 @@ class DFlashSpeculator(DraftModelSpeculator):
             dp_rank=self.dp_rank,
             need_eager=is_profile,
             dp_sync_state=batch_sync,
-            parallel_config=self.aphrodite_config.parallel_config,
+            parallel_config=self.sonar_config.parallel_config,
         )
         num_tokens_padded = batch_desc.num_tokens
         num_tokens_across_dp = batch_sync.num_tokens_across_dp if batch_sync is not None else None

@@ -11,19 +11,19 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.benchmarks.forward.batch import build_batch
-from aphrodite.benchmarks.forward.capture import write_input_ids
-from aphrodite.benchmarks.forward.kv_init import touched_kv_views, zero_kv_blocks
-from aphrodite.benchmarks.forward.main import run_case
-from aphrodite.benchmarks.forward.profile import summarize
-from aphrodite.benchmarks.forward.routing import RoutingFixture, zipf_topk_ids
-from aphrodite.benchmarks.forward.shapes import jitter_kv_lens, parse_case
-from aphrodite.platforms import current_platform
-from aphrodite.v1.attention.backends.mla.cpu_mla import CPUMLABackend
-from aphrodite.v1.attention.backends.registry import MambaAttentionBackendEnum
-from aphrodite.v1.kv_cache_interface import KVCacheGroupSpec, MambaSpec, MLAAttentionSpec
-from aphrodite.v1.worker.gpu.input_batch import InputBatch, InputBuffers
-from aphrodite.v1.worker.utils import AttentionGroup
+from sonar.benchmarks.forward.batch import build_batch
+from sonar.benchmarks.forward.capture import write_input_ids
+from sonar.benchmarks.forward.kv_init import touched_kv_views, zero_kv_blocks
+from sonar.benchmarks.forward.main import run_case
+from sonar.benchmarks.forward.profile import summarize
+from sonar.benchmarks.forward.routing import RoutingFixture, zipf_topk_ids
+from sonar.benchmarks.forward.shapes import jitter_kv_lens, parse_case
+from sonar.platforms import current_platform
+from sonar.v1.attention.backends.mla.cpu_mla import CPUMLABackend
+from sonar.v1.attention.backends.registry import MambaAttentionBackendEnum
+from sonar.v1.kv_cache_interface import KVCacheGroupSpec, MambaSpec, MLAAttentionSpec
+from sonar.v1.worker.gpu.input_batch import InputBatch, InputBuffers
+from sonar.v1.worker.utils import AttentionGroup
 
 MODEL_NAME = "meta-llama/Llama-3.2-1B-Instruct"
 
@@ -68,10 +68,10 @@ def test_bench_forward_muse_balanced_routing(tmp_path):
     )
     (tmp_path / "config.json").write_text(json.dumps(config))
     entrypoint = (
-        "from aphrodite.model_executor.models import ModelRegistry; "
+        "from sonar.model_executor.models import ModelRegistry; "
         "ModelRegistry.register_model('MuseSpark1xForCausalLM', "
-        "'aphrodite.models.muse_spark.nvidia.model:MuseSpark1xForCausalLM'); "
-        "from aphrodite.entrypoints.cli.main import main; main()"
+        "'sonar.models.muse_spark.nvidia.model:MuseSpark1xForCausalLM'); "
+        "from sonar.entrypoints.cli.main import main; main()"
     )
     output = tmp_path / "results.json"
     command = [
@@ -125,10 +125,10 @@ def test_bench_forward_muse_balanced_routing(tmp_path):
 
 def test_balanced_routing_restores_expert_bias(dist_init):
     """Fixture routes stay balanced despite selection bias, then restore it."""
-    from aphrodite.config import get_current_aphrodite_config
-    from aphrodite.forward_context import set_forward_context
-    from aphrodite.model_executor.layers.fused_moe.router.gate_linear import GateLinear
-    from aphrodite.models.muse_spark.common.moe import MuseSpark1xRouter
+    from sonar.config import get_current_sonar_config
+    from sonar.forward_context import set_forward_context
+    from sonar.model_executor.layers.fused_moe.router.gate_linear import GateLinear
+    from sonar.models.muse_spark.common.moe import MuseSpark1xRouter
 
     device = torch.device(current_platform.device_type)
     layer = torch.nn.Module()
@@ -148,7 +148,7 @@ def test_balanced_routing_restores_expert_bias(dist_init):
         gate.weight.zero_()
     fixture = RoutingFixture(layer, 64, 0, 1, 4, 0, device, mode="balanced")
     try:
-        with set_forward_context(None, get_current_aphrodite_config(), num_tokens=64):
+        with set_forward_context(None, get_current_sonar_config(), num_tokens=64):
             logits, _ = gate(hidden)
             _, ids = selector.select_experts(hidden, logits)
             fixture.check_applied()
@@ -200,7 +200,7 @@ def test_bench_forward_hybrid_verify(tmp_path, routing):
         [
             sys.executable,
             "-m",
-            "aphrodite.entrypoints.cli.main",
+            "sonar.entrypoints.cli.main",
             "bench",
             "forward",
             "--model",
@@ -323,7 +323,7 @@ def test_bench_forward_drafter(tmp_path, method):
     command = [
         sys.executable,
         "-m",
-        "aphrodite.entrypoints.cli.main",
+        "sonar.entrypoints.cli.main",
         "bench",
         "forward",
         "--model",
@@ -387,7 +387,7 @@ def test_bench_forward_pipeline(tmp_path):
         "--standalone",
         "--nproc-per-node=2",
         "-m",
-        "aphrodite.entrypoints.cli.main",
+        "sonar.entrypoints.cli.main",
         "bench",
         "forward",
         "--model",
@@ -637,7 +637,7 @@ def test_profile_summary():
 def test_bench_forward(tmp_path):
     output = tmp_path / "forward.json"
     command = [
-        "aphrodite",
+        "sonar",
         "bench",
         "forward",
         "--model",

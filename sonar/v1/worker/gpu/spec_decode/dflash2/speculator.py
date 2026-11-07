@@ -5,12 +5,12 @@ from typing import Any
 
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.compilation import CUDAGraphMode
-from aphrodite.triton_utils import tl, triton
-from aphrodite.v1.worker.gpu.sample.gumbel import gumbel_noised_argmax, spec_step_seed
-from aphrodite.v1.worker.gpu.spec_decode.dflash.speculator import DFlashSpeculator
-from aphrodite.v1.worker.gpu.spec_decode.draft_logits import (
+from sonar.config import SonarConfig
+from sonar.config.compilation import CUDAGraphMode
+from sonar.triton_utils import tl, triton
+from sonar.v1.worker.gpu.sample.gumbel import gumbel_noised_argmax, spec_step_seed
+from sonar.v1.worker.gpu.spec_decode.dflash.speculator import DFlashSpeculator
+from sonar.v1.worker.gpu.spec_decode.draft_logits import (
     DraftLogitsCache,
     draft_logits_row,
 )
@@ -189,13 +189,13 @@ class DFlash2Speculator(DFlashSpeculator):
     _speculator_name = "DFlash2"
     _candidate_top_k_key = "selector_top_k"
 
-    def __init__(self, aphrodite_config: AphroditeConfig, device: torch.device):
-        super().__init__(aphrodite_config, device)
+    def __init__(self, sonar_config: SonarConfig, device: torch.device):
+        super().__init__(sonar_config, device)
         draft_config = self.draft_model_config.hf_config.dflash_config
         self.top_k = int(draft_config[self._candidate_top_k_key])
         self.candidate_sampler = CandidateSampler(self.max_num_reqs, self.num_speculative_steps, self.top_k, device)
 
-    def draft_logits_spec(self, aphrodite_config: AphroditeConfig) -> tuple[torch.dtype, float]:
+    def draft_logits_spec(self, sonar_config: SonarConfig) -> tuple[torch.dtype, float]:
         # fp32 so the walk and the rejection that checks it read the same
         # distribution; -inf because the cache kernel writes only the K
         # candidates.

@@ -3,12 +3,12 @@
 
 use std::collections::HashMap;
 
-use aphrodite_text::Prompt;
-use aphrodite_text::backend::hf::{
-    HfChatTemplate, HfSpecialTokens, HfTokenizerConfig, ResolvedModelFiles, load_tokenizer_config,
-};
 use serde::Serialize;
 use serde_json::Value as JsonValue;
+use sonar_text::Prompt;
+use sonar_text::backend::hf::{
+    HfChatTemplate, HfSpecialTokens, HfTokenizerConfig, ResolvedModelFiles, load_tokenizer_config,
+};
 use thiserror_ext::AsReport as _;
 use tracing::{info, trace, warn};
 
@@ -107,7 +107,7 @@ impl HfChatRenderer {
             multimodal: None,
             trust_request_chat_template: false,
             request_template_fuel: request_template_fuel(
-                std::env::var_os("APHRODITE_CHAT_TEMPLATE_FUEL").as_deref(),
+                std::env::var_os("SONAR_CHAT_TEMPLATE_FUEL").as_deref(),
             )
             .map_err(|error| Error::ChatTemplate(error.to_report_string()))?,
         })
@@ -679,10 +679,10 @@ fn to_template_tools(tools: &[ChatTool]) -> Vec<TemplateTool> {
 mod tests {
     use std::collections::HashMap;
 
-    use aphrodite_text::Prompt;
-    use aphrodite_text::backend::hf::{HfSpecialTokens, NamedSpecialToken};
     use expect_test::expect;
     use serde_json::Value;
+    use sonar_text::Prompt;
+    use sonar_text::backend::hf::{HfSpecialTokens, NamedSpecialToken};
 
     use super::{ChatTemplateContentFormatOption, HfChatRenderer, MultimodalRenderInfo};
     use crate::EffortValue;
@@ -1207,7 +1207,7 @@ mod tests {
         let Err(Error::ChatTemplate(message)) = render(None, &request) else {
             panic!("expected the request template to run out of fuel");
         };
-        expect!["chat template exceeded its fuel budget; adjust APHRODITE_CHAT_TEMPLATE_FUEL to override: engine ran out of fuel (in chat:1)"].assert_eq(&message);
+        expect!["chat template exceeded its fuel budget; adjust SONAR_CHAT_TEMPLATE_FUEL to override: engine ran out of fuel (in chat:1)"].assert_eq(&message);
     }
 
     #[test]

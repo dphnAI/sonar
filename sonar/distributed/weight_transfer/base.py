@@ -21,10 +21,10 @@ from typing import (
 import torch
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
+    from sonar.config import SonarConfig
 
-from aphrodite.config.parallel import ParallelConfig
-from aphrodite.config.weight_transfer import WeightTransferConfig
+from sonar.config.parallel import ParallelConfig
+from sonar.config.weight_transfer import WeightTransferConfig
 
 TInitInfo = TypeVar("TInitInfo", bound="WeightTransferInitInfo")
 TUpdateInfo = TypeVar("TUpdateInfo", bound="WeightTransferUpdateInfo")
@@ -460,7 +460,7 @@ class WeightTransferEngine(ABC, Generic[TInitInfo, TUpdateInfo]):
     def __init__(
         self,
         config: WeightTransferConfig,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
         device: torch.device,
         model: torch.nn.Module,
     ) -> None:
@@ -468,15 +468,15 @@ class WeightTransferEngine(ABC, Generic[TInitInfo, TUpdateInfo]):
 
         Args:
             config: The configuration for the weight transfer engine
-            aphrodite_config: The full Aphrodite config (provides parallel/model config)
+            sonar_config: The full Sonar config (provides parallel/model config)
             device: The device this worker's model lives on
             model: The local model instance which will receive the weights
 
         """
         self.config = config
-        self.aphrodite_config = aphrodite_config
-        self.parallel_config: ParallelConfig = aphrodite_config.parallel_config
-        self.model_config = aphrodite_config.model_config
+        self.sonar_config = sonar_config
+        self.parallel_config: ParallelConfig = sonar_config.parallel_config
+        self.model_config = sonar_config.model_config
         self.device = device
         self.model = model
         self._default_model_config = self.model_config
@@ -549,7 +549,7 @@ class WeightTransferEngine(ABC, Generic[TInitInfo, TUpdateInfo]):
 
         Engines that receive weights in checkpoint format initialize layerwise reloading
         here, else this is typically a no-op.
-        See: https://docs.aphrodite.ai/en/latest/training/layerwise/ for more details.
+        See: https://sonar.dphn.ai/en/latest/training/layerwise/ for more details.
         """
         raise NotImplementedError
 
@@ -593,7 +593,7 @@ class WeightTransferEngine(ABC, Generic[TInitInfo, TUpdateInfo]):
 
 
 @runtime_checkable
-class AphroditeWeightSyncClient(Protocol):
+class SonarWeightSyncClient(Protocol):
     """Trainer-side stub for the inference engine's weight-sync control plane.
 
     Mirrors the weight-sync methods that the inference engine exposes
@@ -657,7 +657,7 @@ class TrainerWeightTransferEngine(ABC, Generic[TTrainerInitInfo]):
     def __init__(
         self,
         *,
-        client: "AphroditeWeightSyncClient",
+        client: "SonarWeightSyncClient",
         source: "WeightSource | None" = None,
         is_sender: bool = True,
         rank: int = 0,
@@ -675,7 +675,7 @@ class TrainerWeightTransferEngine(ABC, Generic[TTrainerInitInfo]):
         cls,
         init_info: TTrainerInitInfo,
         *,
-        client: "AphroditeWeightSyncClient",
+        client: "SonarWeightSyncClient",
         source: "WeightSource | None" = None,
     ) -> Self:
         """Rendezvous with the inference side and return a ready instance.

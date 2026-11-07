@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 pytest.importorskip("triton")
 if not (current_platform.is_cuda_alike() or current_platform.is_xpu()):
@@ -14,13 +14,13 @@ if not (current_platform.is_cuda_alike() or current_platform.is_xpu()):
         allow_module_level=True,
     )
 
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.v1.worker.gpu.sample.bad_words import BadWordsState
-from aphrodite.v1.worker.gpu.sample.logits_processor import (
+from sonar.sampling_params import SamplingParams
+from sonar.v1.worker.gpu.sample.bad_words import BadWordsState
+from sonar.v1.worker.gpu.sample.logits_processor import (
     LogitsContext,
     LogitsProcRequestState,
 )
-from aphrodite.v1.worker.gpu.states import RequestState
+from sonar.v1.worker.gpu.states import RequestState
 
 DEVICE = torch.device(current_platform.device_type)
 VOCAB_SIZE = 128

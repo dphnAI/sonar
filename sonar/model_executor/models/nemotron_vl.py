@@ -7,16 +7,16 @@ import torch
 import torch.nn as nn
 from transformers import AutoModel, PreTrainedConfig
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.model_executor.layers.fusion.mm_input_norm import (
+from sonar.config import SonarConfig
+from sonar.model_executor.layers.fusion.mm_input_norm import (
     FusedMMInputNorm,
     IdentityInputNorm,
 )
-from aphrodite.model_executor.layers.linear import ReplicatedLinear
-from aphrodite.model_executor.layers.pooler import DispatchPooler
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.quantization.auto_awq import AutoAWQConfig
-from aphrodite.model_executor.models.internvl import (
+from sonar.model_executor.layers.linear import ReplicatedLinear
+from sonar.model_executor.layers.pooler import DispatchPooler
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.quantization.auto_awq import AutoAWQConfig
+from sonar.model_executor.models.internvl import (
     BaseInternVLDummyInputsBuilder,
     BaseInternVLMultiModalProcessor,
     BaseInternVLProcessingInfo,
@@ -24,12 +24,12 @@ from aphrodite.model_executor.models.internvl import (
     InternVLImageInputs,
     InternVLImagePixelInputs,
 )
-from aphrodite.model_executor.models.module_mapping import MultiModelKeys
-from aphrodite.model_executor.models.siglip import SiglipVisionModel
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.transformers_utils.processor import cached_image_processor_from_config
-from aphrodite.transformers_utils.processors.nemotron_vl import (
+from sonar.model_executor.models.module_mapping import MultiModelKeys
+from sonar.model_executor.models.siglip import SiglipVisionModel
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.sequence import IntermediateTensors
+from sonar.transformers_utils.processor import cached_image_processor_from_config
+from sonar.transformers_utils.processors.nemotron_vl import (
     SIGLIP_MEAN,
     SIGLIP_STD,
     LlamaNemotronNanoVLImageProcessor,
@@ -37,7 +37,7 @@ from aphrodite.transformers_utils.processors.nemotron_vl import (
     LlamaNemotronVLEmbedImageProcessor,
     LlamaNemotronVLEmbedProcessor,
 )
-from aphrodite.transformers_utils.repo_utils import get_hf_file_to_dict
+from sonar.transformers_utils.repo_utils import get_hf_file_to_dict
 
 from .interfaces import (
     MultiModalEmbeddings,
@@ -46,11 +46,11 @@ from .interfaces import (
     SupportsMultiModal,
     SupportsPP,
 )
-from .interfaces_base import AphroditeModelForPooling
+from .interfaces_base import SonarModelForPooling
 from .utils import (
     AutoWeightsLoader,
     WeightsMapper,
-    init_aphrodite_registered_model,
+    init_sonar_registered_model,
     maybe_prefix,
 )
 
@@ -95,7 +95,7 @@ class NemotronVLProcessingInfo(BaseInternVLProcessingInfo):
 class LlamaNemotronVLChatModel(nn.Module, SupportsMultiModal, SupportsPP, SupportsLoRA):
     # Ignore registered buffers, see
     # https://huggingface.co/nvidia/C-RADIOv2-H/blob/main/input_conditioner.py#L28
-    hf_to_aphrodite_mapper = WeightsMapper(orig_to_new_substr={"norm_mean": None, "norm_std": None})
+    hf_to_sonar_mapper = WeightsMapper(orig_to_new_substr={"norm_mean": None, "norm_std": None})
 
     @classmethod
     def get_placeholder_str(cls, modality: str, i: int) -> str | None:
@@ -104,15 +104,15 @@ class LlamaNemotronVLChatModel(nn.Module, SupportsMultiModal, SupportsPP, Suppor
 
         raise ValueError("Only image modality is supported")
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
-        multimodal_config = aphrodite_config.model_config.multimodal_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
+        multimodal_config = sonar_config.model_config.multimodal_config
 
         self.config = config
-        self.model_config = aphrodite_config.model_config
+        self.model_config = sonar_config.model_config
         self.multimodal_config = multimodal_config
         self._patch_quant_config(config, quant_config)
 
@@ -123,7 +123,7 @@ class LlamaNemotronVLChatModel(nn.Module, SupportsMultiModal, SupportsPP, Suppor
         self.downsample_ratio = config.downsample_ratio
         self.ps_version = config.ps_version
 
-        with self._mark_tower_model(aphrodite_config, "image"):
+        with self._mark_tower_model(sonar_config, "image"):
             self.vision_model = self._init_vision_model(
                 config,
                 quant_config=quant_config,
@@ -131,9 +131,9 @@ class LlamaNemotronVLChatModel(nn.Module, SupportsMultiModal, SupportsPP, Suppor
             )
             self.mlp1 = self._init_mlp1(config)
 
-        with self._mark_language_model(aphrodite_config):
-            self.language_model = init_aphrodite_registered_model(
-                aphrodite_config=aphrodite_config,
+        with self._mark_language_model(sonar_config):
+            self.language_model = init_sonar_registered_model(
+                sonar_config=sonar_config,
                 hf_config=config.get_text_config(),
                 prefix=maybe_prefix(prefix, "language_model"),
             )
@@ -369,7 +369,7 @@ class LlamaNemotronVLChatModel(nn.Module, SupportsMultiModal, SupportsPP, Suppor
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
     def get_mm_mapping(self) -> MultiModelKeys:
         """Get the module prefix in multimodal models."""
@@ -449,7 +449,7 @@ class LlamaNemotronVLEmbedProcessingInfo(BaseInternVLProcessingInfo):
     info=LlamaNemotronVLEmbedProcessingInfo,
     dummy_inputs=BaseInternVLDummyInputsBuilder[LlamaNemotronVLEmbedProcessingInfo],
 )
-class LlamaNemotronVLForEmbedding(LlamaNemotronVLChatModel, AphroditeModelForPooling):
+class LlamaNemotronVLForEmbedding(LlamaNemotronVLChatModel, SonarModelForPooling):
     """LlamaNemotronVL model for embeddings.
 
     Inherits from LlamaNemotronVLChatModel and specializes it for embedding tasks:
@@ -461,9 +461,9 @@ class LlamaNemotronVLForEmbedding(LlamaNemotronVLChatModel, AphroditeModelForPoo
     is_pooling_model = True
     supports_mm_device_do_normalize = True
 
-    # Weight mapping from checkpoint format to Aphrodite format
+    # Weight mapping from checkpoint format to Sonar format
     # Different from parent class due to different vision model structure
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={
             # Language model mapping
             "language_model.layers.": "language_model.model.layers.",
@@ -476,10 +476,10 @@ class LlamaNemotronVLForEmbedding(LlamaNemotronVLChatModel, AphroditeModelForPoo
         }
     )
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
-        super().__init__(aphrodite_config=aphrodite_config, prefix=prefix)
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
+        super().__init__(sonar_config=sonar_config, prefix=prefix)
 
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
 
         # Override: get img_context_token_id from config (parent sets None)
         self.img_context_token_id = getattr(config, "img_context_token_id", None)
@@ -494,7 +494,7 @@ class LlamaNemotronVLForEmbedding(LlamaNemotronVLChatModel, AphroditeModelForPoo
             self.input_norm = IdentityInputNorm()
 
         # Initialize pooler for embedding output
-        pooler_config = aphrodite_config.model_config.pooler_config
+        pooler_config = sonar_config.model_config.pooler_config
         assert pooler_config is not None
         self.pooler = DispatchPooler.for_embedding(pooler_config)
 
@@ -539,7 +539,7 @@ class LlamaNemotronVLForEmbedding(LlamaNemotronVLChatModel, AphroditeModelForPoo
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         """Override to use different weight mapping for SigLIP."""
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
 
 class LlamaNemotronVLForSequenceClassification(LlamaNemotronVLForEmbedding, SupportsCrossEncoding):
@@ -547,16 +547,16 @@ class LlamaNemotronVLForSequenceClassification(LlamaNemotronVLForEmbedding, Supp
 
     # Reranker checkpoint places base model weights under `model.*`,
     # while `score.*` remains at the top level.
-    hf_to_aphrodite_mapper = WeightsMapper(orig_to_new_prefix={"model.": ""}) | (
-        LlamaNemotronVLForEmbedding.hf_to_aphrodite_mapper
+    hf_to_sonar_mapper = WeightsMapper(orig_to_new_prefix={"model.": ""}) | (
+        LlamaNemotronVLForEmbedding.hf_to_sonar_mapper
     )
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
-        super().__init__(aphrodite_config=aphrodite_config, prefix=prefix)
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
+        super().__init__(sonar_config=sonar_config, prefix=prefix)
 
-        text_config = aphrodite_config.model_config.hf_config.get_text_config()
-        model_config = aphrodite_config.model_config
-        quant_config = aphrodite_config.quant_config
+        text_config = sonar_config.model_config.hf_config.get_text_config()
+        model_config = sonar_config.model_config
+        quant_config = sonar_config.quant_config
 
         self.score = ReplicatedLinear(
             model_config.get_hidden_size(),

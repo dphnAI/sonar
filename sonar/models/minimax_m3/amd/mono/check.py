@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Debug tooling for the mono path.
 
-``forward_checked`` (``APHRODITE_ROCM_MINIMAX_M3_MONO_CHECK=1``, meant for
+``forward_checked`` (``SONAR_ROCM_MINIMAX_M3_MONO_CHECK=1``, meant for
 ``--enforce-eager``) runs every sparse layer twice on the same (ar, res): first
 the mono layer kernel, then the original decoder layer. Both insert the same cache
 slots (the kernel writes the same bytes up to the re-quantized attention weights),
@@ -12,8 +12,8 @@ difference of the residual stream and of the reduced MoE output.
 
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.models.minimax_m3.amd.mono.config import HIDDEN
+from sonar.logger import init_logger
+from sonar.models.minimax_m3.amd.mono.config import HIDDEN
 
 logger = init_logger(__name__)
 

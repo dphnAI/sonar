@@ -21,27 +21,27 @@ from typing import TYPE_CHECKING
 import torch.nn.functional as F
 from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
 
-from aphrodite.model_executor.models.transformers.base import APHRODITE_ATTN_ATTR
-from aphrodite.model_executor.models.transformers.causal import CausalMixin
-from aphrodite.model_executor.models.transformers.legacy import LegacyMixin
-from aphrodite.model_executor.models.transformers.moe import MoEMixin
-from aphrodite.model_executor.models.transformers.mtp import MTPMixin
-from aphrodite.model_executor.models.transformers.multimodal import (
+from sonar.model_executor.models.transformers.base import SONAR_ATTN_ATTR
+from sonar.model_executor.models.transformers.causal import CausalMixin
+from sonar.model_executor.models.transformers.legacy import LegacyMixin
+from sonar.model_executor.models.transformers.moe import MoEMixin
+from sonar.model_executor.models.transformers.mtp import MTPMixin
+from sonar.model_executor.models.transformers.multimodal import (
     MultiModalDummyInputsBuilder,
     MultiModalMixin,
     MultiModalProcessingInfo,
     MultiModalProcessor,
 )
-from aphrodite.model_executor.models.transformers.pooling import (
+from sonar.model_executor.models.transformers.pooling import (
     EmbeddingMixin,
     SequenceClassificationMixin,
 )
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal import MULTIMODAL_REGISTRY
 
 if TYPE_CHECKING:
     import torch
 
-    from aphrodite.model_executor.layers.attention import Attention, MLAAttention
+    from sonar.model_executor.layers.attention import Attention, MLAAttention
 
 
 def check_sinks(
@@ -60,12 +60,12 @@ def check_sinks(
         f"{type(module).__name__} applies attention sinks, but they were not passed "
         f"to {type(self_attn).__name__}, so the output would be wrong. Either the "
         "Transformers modeling backend could not find the parameter holding them, or "
-        "Aphrodite does not support sinks for this kind of attention. Please open an issue "
+        "Sonar does not support sinks for this kind of attention. Please open an issue "
         "at https://github.com/vllm-project/vllm/issues/new"
     )
 
 
-def aphrodite_attention_forward(
+def sonar_attention_forward(
     # Transformers args
     module: "torch.nn.Module",
     query: "torch.Tensor",
@@ -74,7 +74,7 @@ def aphrodite_attention_forward(
     attention_mask: "torch.Tensor",
     **kwargs,
 ):
-    self_attn = getattr(module, APHRODITE_ATTN_ATTR)
+    self_attn = getattr(module, SONAR_ATTN_ATTR)
     check_sinks(module, self_attn, kwargs.get("s_aux"))
     hidden = query.shape[-2]
     head_dim_qk = query.shape[-1]
@@ -95,7 +95,7 @@ def aphrodite_attention_forward(
     return attn_output, None
 
 
-def aphrodite_mla_attention_forward(
+def sonar_mla_attention_forward(
     # Transformers args
     module: "torch.nn.Module",
     query: "torch.Tensor",
@@ -104,7 +104,7 @@ def aphrodite_mla_attention_forward(
     attention_mask: "torch.Tensor",
     **kwargs,
 ):
-    self_attn = getattr(module, APHRODITE_ATTN_ATTR)
+    self_attn = getattr(module, SONAR_ATTN_ATTR)
     check_sinks(module, self_attn, kwargs.get("s_aux"))
     # [batch=1, heads, num_tokens, qk_head_dim] -> [num_tokens, heads, qk_head_dim]
     query = query.transpose(1, 2).flatten(0, 1)
@@ -122,8 +122,8 @@ def aphrodite_mla_attention_forward(
     return attn_output, None
 
 
-ALL_ATTENTION_FUNCTIONS.register("aphrodite", aphrodite_attention_forward)
-ALL_ATTENTION_FUNCTIONS.register("aphrodite_mla", aphrodite_mla_attention_forward)
+ALL_ATTENTION_FUNCTIONS.register("sonar", sonar_attention_forward)
+ALL_ATTENTION_FUNCTIONS.register("sonar_mla", sonar_mla_attention_forward)
 
 
 # Text only models

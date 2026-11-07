@@ -27,7 +27,7 @@
 #include <cstdint>
 #include <type_traits>
 
-namespace aphrodite {
+namespace sonar {
 namespace moe {
 namespace reduce_topk {
 namespace cg = cooperative_groups;
@@ -365,4 +365,4 @@ __forceinline__ __device__ void reduceTopKForLane(
 
 }  // namespace reduce_topk
 }  // namespace moe
-}  // namespace aphrodite
+}  // namespace sonar

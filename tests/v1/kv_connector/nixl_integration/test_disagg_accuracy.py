@@ -14,7 +14,7 @@ SAMPLE_PROMPTS = (
     "Red Hat is the best company in the world to work for because it works on "
     "open source software, which means that all the contributions are "
     "delivered to the community. As a result, when working on projects like "
-    "Aphrodite we are able to meet many amazing people from various organizations "
+    "Sonar we are able to meet many amazing people from various organizations "
     "like AMD, Google, NVIDIA, ",
     "We hold these truths to be self-evident, that all men are created equal, "
     "that they are endowed by their Creator with certain unalienable Rights, "
@@ -24,12 +24,12 @@ SAMPLE_PROMPTS = (
 )
 
 
-def check_aphrodite_server(url: str, timeout=5, retries=3) -> bool:
-    """Checks if the Aphrodite server is ready by sending a GET request to the
+def check_sonar_server(url: str, timeout=5, retries=3) -> bool:
+    """Checks if the Sonar server is ready by sending a GET request to the
     /health endpoint.
 
     Args:
-        url (str): The base URL of the Aphrodite server.
+        url (str): The base URL of the Sonar server.
         timeout (int): Timeout in seconds for the request.
         retries (int): Number of retries if the server is not ready.
 
@@ -78,13 +78,13 @@ def main():
     ("service_url" and "file_name") from the command line, each with a
     default value of an empty string, using the argparse module.
     """
-    parser = argparse.ArgumentParser(description="Aphrodite client script")
+    parser = argparse.ArgumentParser(description="Sonar client script")
 
     parser.add_argument(
         "--service_url",  # Name of the first argument
         type=str,
         required=True,
-        help="The Aphrodite service URL.",
+        help="The Sonar service URL.",
     )
 
     parser.add_argument(
@@ -104,7 +104,7 @@ def main():
     parser.add_argument(
         "--file_name",  # Name of the second argument
         type=str,
-        default=".aphrodite_output.txt",
+        default=".sonar_output.txt",
         help="the file that saves the output tokens ",
     )
 
@@ -126,8 +126,8 @@ def main():
 
     service_url = f"{args.service_url}/v1"
 
-    if not check_aphrodite_server(health_check_url):
-        raise RuntimeError(f"aphrodite server: {args.service_url} is not ready yet!")
+    if not check_sonar_server(health_check_url):
+        raise RuntimeError(f"sonar server: {args.service_url} is not ready yet!")
 
     output_strs = dict()
     for i, prompt in enumerate(SAMPLE_PROMPTS):

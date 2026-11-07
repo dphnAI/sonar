@@ -10,10 +10,10 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.model_executor.models import diffusion_gemma as dg
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.v1.worker.gpu.sample.logprob import LogprobTokenIdsState
-from aphrodite.v1.worker.gpu.sample.states import SamplingStates
+from sonar.model_executor.models import diffusion_gemma as dg
+from sonar.sampling_params import SamplingParams
+from sonar.v1.worker.gpu.sample.logprob import LogprobTokenIdsState
+from sonar.v1.worker.gpu.sample.states import SamplingStates
 
 pytestmark = pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
 

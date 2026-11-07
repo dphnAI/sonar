@@ -11,14 +11,14 @@ import regex as re
 import torch
 from torch.library import Library, infer_schema
 
-from aphrodite.ir.tolerances import DEFAULT_TOLERANCES, ToleranceSpec
-from aphrodite.ir.util import hash_source, weak_cache
-from aphrodite.logger import init_logger
-from aphrodite.logging_utils import lazy, tensors_str_no_data
+from sonar.ir.tolerances import DEFAULT_TOLERANCES, ToleranceSpec
+from sonar.ir.util import hash_source, weak_cache
+from sonar.logger import init_logger
+from sonar.logging_utils import lazy, tensors_str_no_data
 
 InputGenerator = Callable[..., tuple[Any, ...]]
 
-aphrodite_ir_torch_lib = Library("aphrodite_ir", "FRAGMENT")  # IR op lib; monkeypatch in tests.
+sonar_ir_torch_lib = Library("sonar_ir", "FRAGMENT")  # IR op lib; monkeypatch in tests.
 
 logger = init_logger(__name__)
 
@@ -28,7 +28,7 @@ def _torch_ops_subtree(lib: Any) -> Any:
     ns = getattr(lib, "ns", None)
     if isinstance(ns, str):
         return getattr(torch.ops, ns)
-    return torch.ops.aphrodite_ir
+    return torch.ops.sonar_ir
 
 
 _NAME_PATTERN = re.compile(r"^[a-z_][a-z_0-9]*$")
@@ -59,7 +59,7 @@ def set_default_torch_wrap(enable: bool = True) -> None:
 
 @contextlib.contextmanager
 def enable_torch_wrap(enable: bool = True):
-    """Context manager to enable/disable torch custom op wrapping for Aphrodite IR ops.
+    """Context manager to enable/disable torch custom op wrapping for Sonar IR ops.
     When torch wrapping is disabled, the torch custom op layer is skipped
     and IR ops dispatch directly to the implementation.
     Helpful for avoiding torch dispatch overhead in eager mode
@@ -106,7 +106,7 @@ def register_op(
     activations: list[str] | None = None,
     allow_inplace: bool = False,
 ) -> "IrOp | Callable[[Callable], IrOp]":
-    """Register a new Aphrodite IR op.
+    """Register a new Sonar IR op.
 
     Args:
         f: the native implementation of the op
@@ -119,12 +119,12 @@ def register_op(
 
     Example usage:
     ```python
-    @aphrodite.ir.register_op
+    @sonar.ir.register_op
     def my_add(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
         return x + y
 
 
-    @aphrodite.ir.register_op(name="custom_mul")
+    @sonar.ir.register_op(name="custom_mul")
     def multiply(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
         return x * y
     ```
@@ -204,7 +204,7 @@ class IrOp:
         self._fake_fn = native_impl
 
         # torch registration (resolve ``torch.ops`` subtree from ``lib.ns``)
-        lib = aphrodite_ir_torch_lib
+        lib = sonar_ir_torch_lib
         lib.define(self.name + self._schema_str)
         # CompositeExplicitAutograd is not decomposed
         # by ATen IR normalization in AOTAutograd
@@ -398,7 +398,7 @@ class IrOp:
         """
         self._priority_impls = self._filter_priority_impls(priority)
         logger.debug(
-            "Priority for aphrodite.ir.%s set to %s",
+            "Priority for sonar.ir.%s set to %s",
             self.name,
             lazy(lambda: [p.provider for p in self._priority_impls]),
         )
@@ -410,7 +410,7 @@ class IrOp:
         try:
             self._priority_impls = self._filter_priority_impls(priority)
             logger.debug(
-                "Priority for aphrodite.ir.%s set to %s",
+                "Priority for sonar.ir.%s set to %s",
                 self.name,
                 lazy(lambda: [p.provider for p in self._priority_impls]),
             )
@@ -486,7 +486,7 @@ class IrOpInplaceOverload:
         self._schema_str = infer_schema(op.impls["native"].impl_fn, mutates_args=op.activations)
 
         # torch registration (resolve ``torch.ops`` subtree from ``lib.ns``)
-        lib = aphrodite_ir_torch_lib
+        lib = sonar_ir_torch_lib
         lib.define(self.name + self._schema_str)
         lib.impl(self.name, self._inner_call, dispatch_key="CompositeExplicitAutograd")
         # fake goes to default overload for now
@@ -596,8 +596,8 @@ class IrOpImpl:
     @weak_cache
     def uuid(self):
         """Compile-time hash to uniquely determine whether the implementation has
-        changed. Used by aphrodite-compile hash mechanism and torch.compile lowering pass
-        uuid to control the Aphrodite compile cache and AOTAutograd/Inductor caches
+        changed. Used by sonar-compile hash mechanism and torch.compile lowering pass
+        uuid to control the Sonar compile cache and AOTAutograd/Inductor caches
         respectively.
 
         Source file contents do not change so we cache uuid.

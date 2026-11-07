@@ -10,7 +10,7 @@ Triton upcasts to BF16 (so this stays correct, just not faster) — but the
 oracle only selects this path on gfx950 and routes everything else to the
 BF16 ``Mxfp8EmulationTritonExperts`` fallback.
 
-Structure mirrors Aphrodite's ``fused_moe_kernel``: tokens are sorted by expert
+Structure mirrors Sonar's ``fused_moe_kernel``: tokens are sorted by expert
 (``moe_align_block_size``); each program computes a ``[BLOCK_M, BLOCK_N]`` tile
 for one expert, accumulating over K with ``dot_scaled``. SwiGLU-OAI activation
 and the top-k weighted reduction run in PyTorch between/after the two GEMMs.
@@ -18,18 +18,18 @@ and the top-k weighted reduction run in PyTorch between/after the two GEMMs.
 
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite.model_executor.layers.fused_moe.experts.mxfp8_emulation_moe import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar.model_executor.layers.fused_moe.experts.mxfp8_emulation_moe import (
     Mxfp8TritonExpertsBase,
 )
-from aphrodite.model_executor.layers.fused_moe.moe_align_block_size import (
+from sonar.model_executor.layers.fused_moe.moe_align_block_size import (
     moe_align_block_size,
 )
-from aphrodite.model_executor.layers.quantization.utils.mxfp8_utils import (
+from sonar.model_executor.layers.quantization.utils.mxfp8_utils import (
     mxfp8_e4m3_quantize,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
 
 
 def _select_cfg(M, N, K, block_m):
@@ -290,7 +290,7 @@ def fused_moe_mxfp8_native(
     # ``silu_and_mul_with_clamp`` op: it rounds intermediates to bf16, rel ~3e-3.)
     # Lazy import: the amd.ops package pulls in the minimax_m3 platform dispatch,
     # only resolvable after the model module finishes loading.
-    from aphrodite.models.minimax_m3.amd.ops import swiglu_oai_quantize_mxfp8
+    from sonar.models.minimax_m3.amd.ops import swiglu_oai_quantize_mxfp8
 
     # GEMM2: act (mxfp8) @ w2^T -> [M, H], weighted by topk_weights, then reduce.
     act_q, act_s = swiglu_oai_quantize_mxfp8(g1, alpha=alpha, beta=beta, limit=limit)

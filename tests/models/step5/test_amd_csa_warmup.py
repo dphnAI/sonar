@@ -7,14 +7,14 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 pytestmark = pytest.mark.skipif(not current_platform.is_rocm(), reason="Step5 CSA is the ROCm path")
 
 
 def _worker(context):
     return SimpleNamespace(
-        aphrodite_config=SimpleNamespace(
+        sonar_config=SimpleNamespace(
             model_config=SimpleNamespace(hf_text_config=SimpleNamespace(model_type="step5")),
             compilation_config=SimpleNamespace(static_forward_context=context),
         )
@@ -22,9 +22,9 @@ def _worker(context):
 
 
 def test_step5_warmup_dispatches_rocm_csa_topk():
-    from aphrodite.model_executor.warmup.step5_dsa_warmup import step5_dsa_warmup
-    from aphrodite.models.step5.amd import warmup
-    from aphrodite.models.step5.amd.model import Step5Attention
+    from sonar.model_executor.warmup.step5_dsa_warmup import step5_dsa_warmup
+    from sonar.models.step5.amd import warmup
+    from sonar.models.step5.amd.model import Step5Attention
 
     def layer(indexer):
         mock = MagicMock(indexer=indexer)

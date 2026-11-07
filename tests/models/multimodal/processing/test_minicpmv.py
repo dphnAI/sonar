@@ -6,9 +6,9 @@
 import numpy as np
 import pytest
 
-from aphrodite.model_executor.models.minicpmv import MiniCPMVProcessingInfo
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.parse import ImageSize
+from sonar.model_executor.models.minicpmv import MiniCPMVProcessingInfo
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.parse import ImageSize
 
 from ...utils import build_model_context
 

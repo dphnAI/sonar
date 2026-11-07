@@ -241,19 +241,19 @@ def generate_new_kernels():
             for config in config_list:
                 s_type = config["s_type"]
                 template_str = jinja2.Template(TEMPLATE).render(
-                    a_type_id=f"aphrodite::{a_type}.id()",
-                    b_type_id=f"aphrodite::{b_type}.id()",
-                    c_type_id=f"aphrodite::{c_type}.id()",
-                    s_type_id=f"aphrodite::{s_type}.id()",
+                    a_type_id=f"sonar::{a_type}.id()",
+                    b_type_id=f"sonar::{b_type}.id()",
+                    c_type_id=f"sonar::{c_type}.id()",
+                    s_type_id=f"sonar::{s_type}.id()",
                     **config,
                 )
                 all_template_str_list.append(template_str)
 
                 conditions = [
-                    f"a_type == aphrodite::{a_type}",
-                    f"b_type == aphrodite::{b_type}",
-                    f"c_type == aphrodite::{c_type}",
-                    f"s_type == aphrodite::{s_type}",
+                    f"a_type == sonar::{a_type}",
+                    f"b_type == sonar::{b_type}",
+                    f"c_type == sonar::{c_type}",
+                    f"s_type == sonar::{s_type}",
                     f"threads == {config['threads']}",
                     f"thread_m_blocks == {config['thread_m_blocks']}",
                     f"thread_n_blocks == {config['thread_n_blocks']}",
@@ -280,10 +280,10 @@ def generate_new_kernels():
 
                 kernel_selector_str += (
                     jinja2.Template(kernel_template2).render(
-                        a_type_id=f"aphrodite::{a_type}.id()",
-                        b_type_id=f"aphrodite::{b_type}.id()",
-                        c_type_id=f"aphrodite::{c_type}.id()",
-                        s_type_id=f"aphrodite::{s_type}.id()",
+                        a_type_id=f"sonar::{a_type}.id()",
+                        b_type_id=f"sonar::{b_type}.id()",
+                        c_type_id=f"sonar::{c_type}.id()",
+                        s_type_id=f"sonar::{s_type}.id()",
                         **config,
                     )
                     + "\n"
@@ -305,7 +305,7 @@ def generate_new_kernels():
 
     if not SUPPORT_FP8 and kernel_selector_str != FILE_HEAD_COMMENT:
         kernel_selector_str += (
-            "else if (a_type == aphrodite::kFE4M3fn)\n"
+            "else if (a_type == sonar::kFE4M3fn)\n"
             "  STD_TORCH_CHECK(false, "
             '"marlin kernel with fp8 activation is not built.");'
         )

@@ -5,8 +5,8 @@ import pytest
 from openai.types.responses import FunctionTool
 from openai_harmony import DeveloperContent, Message, Role
 
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionToolsParam
-from aphrodite.entrypoints.openai.parser.harmony_utils import (
+from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionToolsParam
+from sonar.entrypoints.openai.parser.harmony_utils import (
     auto_drop_analysis_messages,
     create_tool_definition,
     extract_function_from_recipient,
@@ -15,11 +15,11 @@ from aphrodite.entrypoints.openai.parser.harmony_utils import (
     is_function_recipient,
     parse_chat_input_to_harmony_message,
 )
-from aphrodite.entrypoints.openai.responses.harmony import (
+from sonar.entrypoints.openai.responses.harmony import (
     response_input_to_harmony,
     response_previous_input_to_harmony,
 )
-from aphrodite.exceptions import AphroditeValidationError
+from sonar.exceptions import SonarValidationError
 from tests.entrypoints.openai.utils import verify_harmony_messages
 
 _TOOL_PARAMETERS = {
@@ -928,7 +928,7 @@ class TestGetSystemMessage:
 
     def test_unsupported_reasoning_effort_raises_clear_error(self) -> None:
         with pytest.raises(
-            AphroditeValidationError,
+            SonarValidationError,
             match="reasoning_effort='max' is not supported by Harmony",
         ) as exc_info:
             get_system_message(reasoning_effort="max")

@@ -19,12 +19,12 @@ amount out of its KV-cache budget so the headroom physically exists.
 import threading
 from typing import TYPE_CHECKING
 
-from aphrodite.logger import init_logger
-from aphrodite.utils.mem_constants import GiB_bytes
-from aphrodite.utils.mem_utils import format_gib
+from sonar.logger import init_logger
+from sonar.utils.mem_constants import GiB_bytes
+from sonar.utils.mem_utils import format_gib
 
 if TYPE_CHECKING:
-    from aphrodite.config.multimodal import MultiModalConfig
+    from sonar.config.multimodal import MultiModalConfig
 
 logger = init_logger(__name__)
 
@@ -188,12 +188,12 @@ def reserve_mm_ipc_gpu_memory(
     if mm_config is None:
         return available_kv_cache_memory_bytes
 
-    from aphrodite import envs
-    from aphrodite.multimodal.video_decoders import (
+    from sonar import envs
+    from sonar.multimodal.video_decoders import (
         PYNVVIDEOCODEC_DEFAULT_HW_DECODERS,
         PYNVVIDEOCODEC_VIDEO_BACKEND,
     )
-    from aphrodite.multimodal.video_decoders.pynvvideocodec import (
+    from sonar.multimodal.video_decoders.pynvvideocodec import (
         PYNVVIDEOCODEC_CUDA_CONTEXT_BYTES,
         PYNVVIDEOCODEC_DECODER_GPU_MEMORY_BYTES,
         get_pynvvideocodec_decoder_gpu_memory_bytes,
@@ -206,7 +206,7 @@ def reserve_mm_ipc_gpu_memory(
     # per process so gpu_memory_utilization bounds total GPU usage across them.
     num_api_servers = max(1, api_process_count)
     video_kwargs = mm_config.media_io_kwargs.get("video", {})
-    video_loader_backend = video_kwargs.get("video_backend") or envs.APHRODITE_VIDEO_LOADER_BACKEND
+    video_loader_backend = video_kwargs.get("video_backend") or envs.SONAR_VIDEO_LOADER_BACKEND
     codec_backend = video_kwargs.get("backend")
     uses_pynvvideocodec = (
         video_loader_backend == PYNVVIDEOCODEC_VIDEO_BACKEND or codec_backend == PYNVVIDEOCODEC_VIDEO_BACKEND

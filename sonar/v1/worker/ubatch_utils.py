@@ -7,14 +7,14 @@ from typing import TypeAlias
 import numpy as np
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.config import ParallelConfig
-from aphrodite.distributed import get_ep_group
-from aphrodite.platforms import current_platform
-from aphrodite.utils.deep_gemm import set_num_sms as deep_gemm_set_num_sms
-from aphrodite.utils.import_utils import has_deep_gemm
-from aphrodite.utils.platform_utils import num_compute_units
-from aphrodite.v1.attention.backend import CommonAttentionMetadata
+import sonar.envs as envs
+from sonar.config import ParallelConfig
+from sonar.distributed import get_ep_group
+from sonar.platforms import current_platform
+from sonar.utils.deep_gemm import set_num_sms as deep_gemm_set_num_sms
+from sonar.utils.import_utils import has_deep_gemm
+from sonar.utils.platform_utils import num_compute_units
+from sonar.v1.attention.backend import CommonAttentionMetadata
 
 
 @dataclass
@@ -81,7 +81,7 @@ def create_sm_control_context(
     parallel_config: ParallelConfig,
 ) -> SMControlContextManager:
     """Reserve SMs for communication kernels while microbatches overlap."""
-    comm_sms: int = envs.APHRODITE_DBO_COMM_SMS
+    comm_sms: int = envs.SONAR_DBO_COMM_SMS
     rocm_deepep_ht_dbo = (
         current_platform.is_rocm()
         and parallel_config.enable_dbo

@@ -7,9 +7,9 @@ import pytest
 import torch
 from safetensors.torch import save_file
 
-from aphrodite import LLM, PoolingParams
-from aphrodite.distributed import cleanup_dist_env_and_memory
-from aphrodite.lora.request import LoRARequest
+from sonar import LLM, PoolingParams
+from sonar.distributed import cleanup_dist_env_and_memory
+from sonar.lora.request import LoRARequest
 from tests.utils import multi_gpu_test
 
 MODEL_NAME = "Qwen/Qwen3-0.6B"

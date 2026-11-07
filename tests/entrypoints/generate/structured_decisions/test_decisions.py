@@ -3,13 +3,13 @@
 import pytest
 from pydantic import ValidationError
 
-from aphrodite.entrypoints.openai.decisions.adapters import (
+from sonar.entrypoints.openai.decisions.adapters import (
     input_text,
     make_answer,
     make_read_question,
 )
-from aphrodite.entrypoints.openai.decisions.protocol import DecisionRequest
-from aphrodite.entrypoints.openai.decisions.question_types import (
+from sonar.entrypoints.openai.decisions.protocol import DecisionRequest
+from sonar.entrypoints.openai.decisions.question_types import (
     StructuredDecisionError,
 )
 

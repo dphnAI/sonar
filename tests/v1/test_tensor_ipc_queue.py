@@ -16,13 +16,13 @@ import pytest
 import torch
 import torch.multiprocessing as torch_mp
 
-from aphrodite.platforms import current_platform
-from aphrodite.v1.engine.tensor_ipc import (
+from sonar.platforms import current_platform
+from sonar.v1.engine.tensor_ipc import (
     TensorIpcData,
     TensorIpcReceiver,
     TensorIpcSender,
 )
-from aphrodite.v1.serial_utils import MsgpackDecoder, MsgpackEncoder
+from sonar.v1.serial_utils import MsgpackDecoder, MsgpackEncoder
 
 DEVICE_TYPE = current_platform.device_type
 _MP_CTX = torch_mp.get_context("spawn")
@@ -76,7 +76,7 @@ def _cleanup_processes(processes: list[BaseProcess]) -> list[str]:
 
 
 @dataclass
-# Use a typed container so the test covers the real Aphrodite path where tensor IPC
+# Use a typed container so the test covers the real Sonar path where tensor IPC
 # handles are encoded and decoded as fields nested inside larger msgpack payloads.
 class TensorEnvelope:
     tensor: torch.Tensor

@@ -3,7 +3,7 @@
 
 from typing import ClassVar
 
-from aphrodite.tool_parsers import ToolParser
+from sonar.tool_parsers import ToolParser
 
 
 class BaseCohereCommandToolParser(ToolParser):

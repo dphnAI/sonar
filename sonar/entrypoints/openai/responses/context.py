@@ -20,35 +20,35 @@ from openai.types.responses.response_output_text import ResponseOutputText
 from openai.types.responses.tool import Mcp
 from openai_harmony import Author, Message, Role, TextContent
 
-from aphrodite import envs
-from aphrodite.entrypoints.mcp.tool import Tool
-from aphrodite.entrypoints.mcp.tool_server import ToolServer
-from aphrodite.entrypoints.openai.parser.harmony_utils import render_for_completion
-from aphrodite.entrypoints.openai.responses.protocol import (
+from sonar import envs
+from sonar.entrypoints.mcp.tool import Tool
+from sonar.entrypoints.mcp.tool_server import ToolServer
+from sonar.entrypoints.openai.parser.harmony_utils import render_for_completion
+from sonar.entrypoints.openai.responses.protocol import (
     ResponseInputOutputItem,
     ResponseRawMessageAndToken,
     ResponsesRequest,
 )
-from aphrodite.entrypoints.openai.responses.utils import (
+from sonar.entrypoints.openai.responses.utils import (
     build_response_output_items,
     construct_tool_dicts,
     response_item_status,
 )
-from aphrodite.entrypoints.serve.utils.tool_calls_utils import (
+from sonar.entrypoints.serve.utils.tool_calls_utils import (
     maybe_filter_parallel_tool_calls,
 )
-from aphrodite.outputs import RequestOutput
-from aphrodite.parser.abstract_parser import Parser
-from aphrodite.renderers.chat_utils import (
+from sonar.outputs import RequestOutput
+from sonar.parser.abstract_parser import Parser
+from sonar.renderers.chat_utils import (
     ChatTemplateContentFormatOption,
 )
-from aphrodite.tokenizers import TokenizerLike
-from aphrodite.utils import random_uuid
+from sonar.tokenizers import TokenizerLike
+from sonar.utils import random_uuid
 
 if TYPE_CHECKING:
     from mcp.client import ClientSession
 
-    from aphrodite.v1.metrics.stats import RequestStateStats
+    from sonar.v1.metrics.stats import RequestStateStats
 
 logger = logging.getLogger(__name__)
 
@@ -469,7 +469,7 @@ class ParsableContext(ConversationContext):
         self.called_tools.add("browser")
         if isinstance(tool_session, Tool):
             return await tool_session.get_result_parsable_context(self)
-        if envs.APHRODITE_TOOL_JSON_ERROR_AUTOMATIC_RETRY:
+        if envs.SONAR_TOOL_JSON_ERROR_AUTOMATIC_RETRY:
             try:
                 args = json.loads(last_msg.arguments)
             except json.JSONDecodeError as e:
@@ -513,7 +513,7 @@ class ParsableContext(ConversationContext):
         if isinstance(tool_session, Tool):
             return await tool_session.get_result_parsable_context(self)
         # tool_name = last_msg.recipient.split(".")[1].split(" ")[0]
-        if envs.APHRODITE_TOOL_JSON_ERROR_AUTOMATIC_RETRY:
+        if envs.SONAR_TOOL_JSON_ERROR_AUTOMATIC_RETRY:
             try:
                 args = json.loads(last_msg.arguments)
             except json.JSONDecodeError as e:
@@ -616,7 +616,7 @@ class HarmonyContext(ConversationContext):
         response_parser: Parser | None = None,
         request: ResponsesRequest | None = None,
     ):
-        from aphrodite.parser.harmony import HarmonyParser, Segment
+        from sonar.parser.harmony import HarmonyParser, Segment
 
         assert isinstance(response_parser, HarmonyParser)
 
@@ -818,7 +818,7 @@ class HarmonyContext(ConversationContext):
         if isinstance(tool_session, Tool):
             return await tool_session.get_result(self)
         tool_name = last_msg.recipient.split(".")[1]
-        if envs.APHRODITE_TOOL_JSON_ERROR_AUTOMATIC_RETRY:
+        if envs.SONAR_TOOL_JSON_ERROR_AUTOMATIC_RETRY:
             try:
                 args = json.loads(last_msg.content[0].text)
             except json.JSONDecodeError as e:
@@ -901,7 +901,7 @@ class HarmonyContext(ConversationContext):
         if isinstance(tool_session, Tool):
             return await tool_session.get_result(self)
         tool_name = last_msg.recipient.split(".")[1].split(" ")[0]
-        if envs.APHRODITE_TOOL_JSON_ERROR_AUTOMATIC_RETRY:
+        if envs.SONAR_TOOL_JSON_ERROR_AUTOMATIC_RETRY:
             try:
                 args = json.loads(last_msg.content[0].text)
             except json.JSONDecodeError as e:

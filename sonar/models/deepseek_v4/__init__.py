@@ -9,7 +9,7 @@ classes used by the model registry and quantization config lookup.
 
 from typing import TYPE_CHECKING
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 from .quant_config import DeepseekV4FP8Config
 

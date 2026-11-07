@@ -4,17 +4,17 @@
 
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.model_executor.layers.quantization.utils import replace_parameter
-from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
+from sonar import _custom_ops as ops
+from sonar.model_executor.layers.quantization.utils import replace_parameter
+from sonar.model_executor.layers.quantization.utils.fp8_utils import (
     _upcast_e8m0_to_fp32,
 )
-from aphrodite.model_executor.layers.quantization.utils.w8a8_utils import (
+from sonar.model_executor.layers.quantization.utils.w8a8_utils import (
     convert_to_channelwise,
 )
-from aphrodite.model_executor.layers.utils import check_cpu_sgl_kernel
-from aphrodite.platforms import current_platform
-from aphrodite.platforms.interface import CpuArchEnum
+from sonar.model_executor.layers.utils import check_cpu_sgl_kernel
+from sonar.platforms import current_platform
+from sonar.platforms.interface import CpuArchEnum
 
 from .BlockScaledMMLinearKernel import (
     Fp8BlockScaledMMLinearKernel,
@@ -497,7 +497,7 @@ class CPUFp8W8A8BlockScaledMMKernel(Fp8BlockScaledMMLinearKernel):
         """Prepack block-quantized FP8 weight for W8A8 AMX BRGEMM.
 
         For block-quant FP8 models weight is stored as [N, K] (NOT transposed,
-        unlike non-block FP8 where Aphrodite stores [K, N]).
+        unlike non-block FP8 where Sonar stores [K, N]).
 
         float8_linear_prepack_cpu expects:
           weight:  [N, K]
@@ -629,7 +629,7 @@ class CPUFP8W8A8ScaledMMLinearKernel(FP8ScaledMMLinearKernel):
         weight = getattr(layer, w_name)
         weight_scale = getattr(layer, ws_name)
 
-        # Aphrodite stores linear weight as [K, N], while the CPU prepack op expects [N, K].
+        # Sonar stores linear weight as [K, N], while the CPU prepack op expects [N, K].
         N = weight.shape[-1]
 
         # Ensure scale is 2D [N, G]

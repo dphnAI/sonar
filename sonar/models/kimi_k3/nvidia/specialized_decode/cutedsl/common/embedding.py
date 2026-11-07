@@ -9,7 +9,7 @@ import cutlass.cute as cute
 import torch
 from cutlass.cute.runtime import make_fake_stream
 
-from aphrodite.distributed import get_tp_group
+from sonar.distributed import get_tp_group
 
 from .host import architecture, fake
 from .primitives import launch

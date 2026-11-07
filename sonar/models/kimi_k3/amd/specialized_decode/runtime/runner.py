@@ -14,19 +14,19 @@ stores anything else. The kernels see the buffer past the head.
 
 import torch
 
-from aphrodite.distributed import get_tp_group
-from aphrodite.models.kimi_k3.amd.specialized_decode.mono.abi import PEER_HEAD
-from aphrodite.models.kimi_k3.amd.specialized_decode.mono.common.plan import HEALTH_WORDS
-from aphrodite.models.kimi_k3.amd.specialized_decode.runtime import MAX_TOKENS
-from aphrodite.models.kimi_k3.amd.specialized_decode.runtime.peer import PeerBuffer
+from sonar.distributed import get_tp_group
+from sonar.models.kimi_k3.amd.specialized_decode.mono.abi import PEER_HEAD
+from sonar.models.kimi_k3.amd.specialized_decode.mono.common.plan import HEALTH_WORDS
+from sonar.models.kimi_k3.amd.specialized_decode.runtime import MAX_TOKENS
+from sonar.models.kimi_k3.amd.specialized_decode.runtime.peer import PeerBuffer
 
 
 class MonoRunner:
     """Collective: every TP rank builds it at the same point."""
 
     def __init__(self, device: torch.device):
-        from aphrodite.models.kimi_k3.amd.specialized_decode.mono import layer
-        from aphrodite.models.kimi_k3.amd.specialized_decode.mono.attention import kda
+        from sonar.models.kimi_k3.amd.specialized_decode.mono import layer
+        from sonar.models.kimi_k3.amd.specialized_decode.mono.attention import kda
 
         self.scratch = torch.zeros(
             max(

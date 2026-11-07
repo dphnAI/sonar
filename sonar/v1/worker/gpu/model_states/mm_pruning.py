@@ -3,16 +3,16 @@
 import torch
 import torch.nn as nn
 
-from aphrodite.config import ModelConfig
-from aphrodite.model_executor.models.interfaces import supports_multimodal_pruning
-from aphrodite.multimodal.utils import (
+from sonar.config import ModelConfig
+from sonar.model_executor.models.interfaces import supports_multimodal_pruning
+from sonar.multimodal.utils import (
     copy_mm_embedding_modality,
     get_mm_features_in_window,
 )
-from aphrodite.v1.worker.gpu.input_batch import InputBatch
-from aphrodite.v1.worker.gpu.mm.encoder_cache import EncoderCache
-from aphrodite.v1.worker.gpu.mm.rope import RopeState
-from aphrodite.v1.worker.gpu.states import RequestState
+from sonar.v1.worker.gpu.input_batch import InputBatch
+from sonar.v1.worker.gpu.mm.encoder_cache import EncoderCache
+from sonar.v1.worker.gpu.mm.rope import RopeState
+from sonar.v1.worker.gpu.states import RequestState
 
 
 class MultiModalPruner:

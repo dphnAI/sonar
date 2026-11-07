@@ -13,29 +13,29 @@ Weight format (per expert, same as the dense RDNA3 W4A16 kernel):
 
 import torch
 
-import aphrodite._custom_ops as ops
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite.model_executor.layers.fused_moe.activation import (
+import sonar._custom_ops as ops
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar.model_executor.layers.fused_moe.activation import (
     MoEActivation,
     apply_moe_activation_supported,
 )
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEParallelConfig,
     FusedMoEQuantConfig,
 )
-from aphrodite.model_executor.layers.fused_moe.moe_align_block_size import (
+from sonar.model_executor.layers.fused_moe.moe_align_block_size import (
     moe_align_block_size,
 )
-from aphrodite.model_executor.layers.fused_moe.topk_weight_and_reduce import (
+from sonar.model_executor.layers.fused_moe.topk_weight_and_reduce import (
     TopKWeightAndReduceNoOP,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     kInt4Static,
     kInt4Static32,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 
 def rdna3_moe_kernel_available() -> bool:
@@ -43,7 +43,7 @@ def rdna3_moe_kernel_available() -> bool:
     if not current_platform.is_rocm():
         return False
 
-    from aphrodite.platforms.rocm import on_gfx1100
+    from sonar.platforms.rocm import on_gfx1100
 
     return on_gfx1100() and hasattr(torch.ops, "_rocm_C") and hasattr(torch.ops._rocm_C, "moe_gptq_gemm_rdna3")
 

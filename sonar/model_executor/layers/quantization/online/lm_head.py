@@ -9,25 +9,25 @@ from weakref import WeakKeyDictionary
 import torch
 from torch.nn import Module
 
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.kernels.linear import init_nvfp4_linear_kernel
-from aphrodite.model_executor.layers.linear import UnquantizedLinearMethod
-from aphrodite.model_executor.layers.quantization.online.fp8 import (
+from sonar.logger import init_logger
+from sonar.model_executor.kernels.linear import init_nvfp4_linear_kernel
+from sonar.model_executor.layers.linear import UnquantizedLinearMethod
+from sonar.model_executor.layers.quantization.online.fp8 import (
     Fp8PtpcOnlineLinearMethod,
     OnlineLinearBase,
 )
-from aphrodite.model_executor.layers.quantization.utils.nvfp4_emulation_utils import (
+from sonar.model_executor.layers.quantization.utils.nvfp4_emulation_utils import (
     FLOAT4_E2M1_MAX,
     ref_nvfp4_quant,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import weight_amax
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import weight_amax
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     UnquantizedEmbeddingMethod,
 )
-from aphrodite.model_executor.model_loader.reload.layerwise import get_layerwise_info
-from aphrodite.model_executor.utils import replace_parameter
-from aphrodite.utils.torch_utils import set_default_torch_dtype
+from sonar.model_executor.model_loader.reload.layerwise import get_layerwise_info
+from sonar.model_executor.utils import replace_parameter
+from sonar.utils.torch_utils import set_default_torch_dtype
 
 logger = init_logger(__name__)
 

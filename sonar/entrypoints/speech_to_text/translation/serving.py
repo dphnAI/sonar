@@ -4,13 +4,13 @@ from collections.abc import AsyncGenerator
 
 from fastapi import Request
 
-from aphrodite.engine.protocol import EngineClient
-from aphrodite.entrypoints.generate.base.protocol import RequestResponseMetadata
-from aphrodite.entrypoints.openai.models.serving import OpenAIServingModels
-from aphrodite.entrypoints.serve.engine.protocol import ErrorResponse
-from aphrodite.entrypoints.serve.utils.request_logger import RequestLogger
-from aphrodite.logger import init_logger
-from aphrodite.outputs import RequestOutput
+from sonar.engine.protocol import EngineClient
+from sonar.entrypoints.generate.base.protocol import RequestResponseMetadata
+from sonar.entrypoints.openai.models.serving import OpenAIServingModels
+from sonar.entrypoints.serve.engine.protocol import ErrorResponse
+from sonar.entrypoints.serve.utils.request_logger import RequestLogger
+from sonar.logger import init_logger
+from sonar.outputs import RequestOutput
 
 from ..base.serving import SpeechToTextBaseServing
 from .protocol import (

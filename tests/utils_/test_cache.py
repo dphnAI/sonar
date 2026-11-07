@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import pytest
 
-from aphrodite.utils.cache import CacheInfo, LRUCache
+from sonar.utils.cache import CacheInfo, LRUCache
 
 
 class TestLRUCache(LRUCache):

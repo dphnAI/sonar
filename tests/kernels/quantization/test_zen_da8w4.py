@@ -12,17 +12,17 @@ import pytest
 import torch
 from compressed_tensors.compressors.pack_quantized.helpers import pack_to_int32
 
-from aphrodite.model_executor.kernels.linear.mixed_precision.MPLinearKernel import (
+from sonar.model_executor.kernels.linear.mixed_precision.MPLinearKernel import (
     MPLinearLayerConfig,
 )
-from aphrodite.model_executor.kernels.linear.mixed_precision.zentorch import (
+from sonar.model_executor.kernels.linear.mixed_precision.zentorch import (
     ZentorchWNA16LinearKernel,
     _import_unpack_from_int32,
 )
-from aphrodite.model_executor.layers.fused_moe.oracle import int_wna16
-from aphrodite.model_executor.layers.fused_moe.oracle.int_wna16 import WNA16MoEBackend
-from aphrodite.platforms import current_platform
-from aphrodite.scalar_type import scalar_types
+from sonar.model_executor.layers.fused_moe.oracle import int_wna16
+from sonar.model_executor.layers.fused_moe.oracle.int_wna16 import WNA16MoEBackend
+from sonar.platforms import current_platform
+from sonar.scalar_type import scalar_types
 from tests.kernels.quant_utils import ref_dynamic_per_token_quant
 
 if not current_platform.is_cpu():
@@ -194,7 +194,7 @@ def _make_kernel(config: MPLinearLayerConfig) -> ZentorchWNA16LinearKernel:
 
 def test_da8w4_eligible_for_symmetric_bf16_layer(mock_zentorch_ops, monkeypatch):
     monkeypatch.setattr(
-        "aphrodite.model_executor.kernels.linear.mixed_precision.zentorch.current_platform.is_zen_cpu",
+        "sonar.model_executor.kernels.linear.mixed_precision.zentorch.current_platform.is_zen_cpu",
         lambda: True,
     )
     layer, _ = _make_layer()
@@ -214,7 +214,7 @@ def test_da8w4_eligible_for_symmetric_bf16_layer(mock_zentorch_ops, monkeypatch)
 )
 def test_da8w4_not_eligible(mock_zentorch_ops, monkeypatch, config_kwargs, reason):
     monkeypatch.setattr(
-        "aphrodite.model_executor.kernels.linear.mixed_precision.zentorch.current_platform.is_zen_cpu",
+        "sonar.model_executor.kernels.linear.mixed_precision.zentorch.current_platform.is_zen_cpu",
         lambda: True,
     )
     layer, _ = _make_layer()
@@ -224,11 +224,11 @@ def test_da8w4_not_eligible(mock_zentorch_ops, monkeypatch, config_kwargs, reaso
 
 def test_da8w4_not_eligible_when_env_disabled(mock_zentorch_ops, monkeypatch):
     monkeypatch.setattr(
-        "aphrodite.model_executor.kernels.linear.mixed_precision.zentorch.current_platform.is_zen_cpu",
+        "sonar.model_executor.kernels.linear.mixed_precision.zentorch.current_platform.is_zen_cpu",
         lambda: True,
     )
     monkeypatch.setattr(
-        "aphrodite.model_executor.kernels.linear.mixed_precision.zentorch.envs.APHRODITE_CPU_INT4_W4A8",
+        "sonar.model_executor.kernels.linear.mixed_precision.zentorch.envs.SONAR_CPU_INT4_W4A8",
         False,
     )
     layer, _ = _make_layer()
@@ -238,7 +238,7 @@ def test_da8w4_not_eligible_when_env_disabled(mock_zentorch_ops, monkeypatch):
 
 def test_da8w4_process_weights_layout(mock_zentorch_ops, monkeypatch):
     monkeypatch.setattr(
-        "aphrodite.model_executor.kernels.linear.mixed_precision.zentorch.current_platform.is_zen_cpu",
+        "sonar.model_executor.kernels.linear.mixed_precision.zentorch.current_platform.is_zen_cpu",
         lambda: True,
     )
     layer, _ = _make_layer()
@@ -264,7 +264,7 @@ def test_da8w4_process_weights_layout(mock_zentorch_ops, monkeypatch):
 
 def test_da8w4_apply_weights_matches_dequantized_reference(mock_zentorch_ops, monkeypatch):
     monkeypatch.setattr(
-        "aphrodite.model_executor.kernels.linear.mixed_precision.zentorch.current_platform.is_zen_cpu",
+        "sonar.model_executor.kernels.linear.mixed_precision.zentorch.current_platform.is_zen_cpu",
         lambda: True,
     )
     layer, weight_deq = _make_layer()
@@ -283,7 +283,7 @@ def test_da8w4_apply_weights_matches_dequantized_reference(mock_zentorch_ops, mo
 def test_da8w4_falls_back_to_w4a16_when_op_missing(monkeypatch):
     """Without zentorch_dynamic_qlinear the layer must not take the DA8W4 path."""
     monkeypatch.setattr(
-        "aphrodite.model_executor.kernels.linear.mixed_precision.zentorch.has_zentorch_op",
+        "sonar.model_executor.kernels.linear.mixed_precision.zentorch.has_zentorch_op",
         lambda ops: "zentorch_dynamic_qlinear" not in ops,
     )
     layer, _ = _make_layer()
@@ -293,7 +293,7 @@ def test_da8w4_falls_back_to_w4a16_when_op_missing(monkeypatch):
 
 def test_can_implement_requires_zen_cpu(monkeypatch):
     monkeypatch.setattr(
-        "aphrodite.model_executor.kernels.linear.mixed_precision.zentorch.current_platform.is_zen_cpu",
+        "sonar.model_executor.kernels.linear.mixed_precision.zentorch.current_platform.is_zen_cpu",
         lambda: False,
     )
     ok, reason = ZentorchWNA16LinearKernel.can_implement(_make_config())
@@ -303,20 +303,20 @@ def test_can_implement_requires_zen_cpu(monkeypatch):
 
 def test_can_implement_accepts_shapes_cpuwna16_rejects(monkeypatch):
     """CPUWNA16's N/K % 32 rule is a oneDNN packing constraint zentorch lacks."""
-    from aphrodite.model_executor.kernels.linear.mixed_precision.cpu import (
+    from sonar.model_executor.kernels.linear.mixed_precision.cpu import (
         CPUWNA16LinearKernel,
     )
 
     monkeypatch.setattr(
-        "aphrodite.model_executor.kernels.linear.mixed_precision.zentorch.current_platform.is_zen_cpu",
+        "sonar.model_executor.kernels.linear.mixed_precision.zentorch.current_platform.is_zen_cpu",
         lambda: True,
     )
     monkeypatch.setattr(
-        "aphrodite.model_executor.kernels.linear.mixed_precision.cpu.current_platform.is_cpu",
+        "sonar.model_executor.kernels.linear.mixed_precision.cpu.current_platform.is_cpu",
         lambda: True,
     )
     monkeypatch.setattr(
-        "aphrodite.model_executor.kernels.linear.mixed_precision.zentorch.has_zentorch_op",
+        "sonar.model_executor.kernels.linear.mixed_precision.zentorch.has_zentorch_op",
         lambda ops: True,
     )
 
@@ -343,11 +343,11 @@ def test_can_implement_accepts_shapes_cpuwna16_rejects(monkeypatch):
 def test_can_implement_group_size_must_divide_k(monkeypatch, group_size, expected_ok):
     """ZenDNN WOQ groups along K, so a group that straddles the end is unusable."""
     monkeypatch.setattr(
-        "aphrodite.model_executor.kernels.linear.mixed_precision.zentorch.current_platform.is_zen_cpu",
+        "sonar.model_executor.kernels.linear.mixed_precision.zentorch.current_platform.is_zen_cpu",
         lambda: True,
     )
     monkeypatch.setattr(
-        "aphrodite.model_executor.kernels.linear.mixed_precision.zentorch.has_zentorch_op",
+        "sonar.model_executor.kernels.linear.mixed_precision.zentorch.has_zentorch_op",
         lambda ops: True,
     )
 
@@ -472,7 +472,7 @@ def test_zen_cpu_rejects_zero_points_but_takes_bias(may_have_zp, may_have_bias, 
 
 
 def test_zen_cpu_rejects_moe_wna16_layout():
-    from aphrodite.model_executor.layers.quantization.moe_wna16 import MoeWNA16Config
+    from sonar.model_executor.layers.quantization.moe_wna16 import MoeWNA16Config
 
     quant_config = MoeWNA16Config(
         linear_quant_method="gptq",
@@ -495,7 +495,7 @@ def test_zen_cpu_rejects_moe_wna16_layout():
 
 
 def test_zen_cpu_disabled_by_env(monkeypatch):
-    monkeypatch.setattr(int_wna16.envs, "APHRODITE_CPU_INT4_W4A8", False)
+    monkeypatch.setattr(int_wna16.envs, "SONAR_CPU_INT4_W4A8", False)
     quant_config = type("Args", (), {"group_size": 128})()
     reason = int_wna16._backend_incompatibility_reason(
         WNA16MoEBackend.ZEN_CPU,
@@ -509,7 +509,7 @@ def test_zen_cpu_disabled_by_env(monkeypatch):
 
 
 def test_zen_cpu_backend_maps_to_experts_class():
-    from aphrodite.model_executor.layers.fused_moe.experts.zentorch_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.zentorch_moe import (
         ZentorchExpertsInt4,
     )
 
@@ -517,14 +517,14 @@ def test_zen_cpu_backend_maps_to_experts_class():
 
 
 def test_zen_experts_support_predicates():
-    from aphrodite.model_executor.kernels.linear.zentorch_utils import (
+    from sonar.model_executor.kernels.linear.zentorch_utils import (
         _ZENTORCH_MOE_ACTIVATIONS,
     )
-    from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-    from aphrodite.model_executor.layers.fused_moe.experts.zentorch_moe import (
+    from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+    from sonar.model_executor.layers.fused_moe.experts.zentorch_moe import (
         ZentorchExpertsInt4,
     )
-    from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+    from sonar.model_executor.layers.quantization.utils.quant_utils import (
         kInt4Static,
         kInt4Static32,
         kInt8StaticChannelSym,
@@ -547,9 +547,9 @@ def test_zen_experts_take_custom_routing():
     config captured off the layer, since apply() cannot be handed the callable."""
     from types import SimpleNamespace
 
-    from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-    from aphrodite.model_executor.layers.fused_moe.config import RoutingMethodType
-    from aphrodite.model_executor.layers.fused_moe.experts.zentorch_moe import (
+    from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+    from sonar.model_executor.layers.fused_moe.config import RoutingMethodType
+    from sonar.model_executor.layers.fused_moe.experts.zentorch_moe import (
         ZentorchExpertsInt4,
     )
     from tests.kernels.moe.test_cpu_fused_moe import _StubMoELayer
@@ -575,10 +575,10 @@ def test_zen_experts_take_custom_routing():
 
 
 def _swigluoai_perm(activation, experts_cls=None):
-    from aphrodite.model_executor.layers.fused_moe.experts.cpu_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.cpu_moe import (
         swigluoai_w13_interleave_perm,
     )
-    from aphrodite.model_executor.layers.fused_moe.experts.zentorch_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.zentorch_moe import (
         ZentorchExpertsInt4,
     )
 
@@ -591,7 +591,7 @@ def _swigluoai_perm(activation, experts_cls=None):
 
 
 def test_swigluoai_perm_only_for_zen_swigluoai():
-    from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
+    from sonar.model_executor.layers.fused_moe.activation import MoEActivation
 
     assert _swigluoai_perm(MoEActivation.SWIGLUOAI) is not None
     # Other activations keep the half-split layout the loader leaves.
@@ -603,7 +603,7 @@ def test_swigluoai_perm_only_for_zen_swigluoai():
 def test_swigluoai_perm_interleaves_weights_scales_and_bias(mock_zentorch_ops):
     """The permutation is a gather on w13's output-channel axis, which is dim 1
     for the N-first packed weights and their group scales."""
-    from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
+    from sonar.model_executor.layers.fused_moe.activation import MoEActivation
 
     group_size = 32
     w13, w2, w13_scale, w2_scale = _make_moe_weights(group_size)

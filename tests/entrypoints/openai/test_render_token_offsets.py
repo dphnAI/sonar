@@ -9,11 +9,11 @@ storage is not retested here.
 
 from unittest.mock import Mock
 
-from aphrodite.config import ModelConfig
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-from aphrodite.entrypoints.openai.completion.protocol import CompletionRequest
-from aphrodite.entrypoints.scale_out.token_in_token_out.protocol import GenerateRequest
-from aphrodite.sampling_params import SamplingParams
+from sonar.config import ModelConfig
+from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+from sonar.entrypoints.openai.completion.protocol import CompletionRequest
+from sonar.entrypoints.scale_out.token_in_token_out.protocol import GenerateRequest
+from sonar.sampling_params import SamplingParams
 
 
 def _model_config() -> Mock:

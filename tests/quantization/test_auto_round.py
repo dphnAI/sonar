@@ -14,14 +14,14 @@ from typing import Any, cast
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.fused_moe import RoutedExperts
-from aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 import Mxfp4MoeBackend
-from aphrodite.model_executor.layers.linear import LinearBase, UnquantizedLinearMethod
-from aphrodite.model_executor.layers.quantization.auto_gptq import AutoGPTQConfig
-from aphrodite.model_executor.layers.quantization.inc import INCConfig
-from aphrodite.model_executor.layers.quantization.inc.config_parser import INCLayerConfig
-from aphrodite.model_executor.layers.quantization.inc.inc_linear import INCLinearMethod
-from aphrodite.model_executor.layers.quantization.inc.schemes import (
+from sonar.model_executor.layers.fused_moe import RoutedExperts
+from sonar.model_executor.layers.fused_moe.oracle.mxfp4 import Mxfp4MoeBackend
+from sonar.model_executor.layers.linear import LinearBase, UnquantizedLinearMethod
+from sonar.model_executor.layers.quantization.auto_gptq import AutoGPTQConfig
+from sonar.model_executor.layers.quantization.inc import INCConfig
+from sonar.model_executor.layers.quantization.inc.config_parser import INCLayerConfig
+from sonar.model_executor.layers.quantization.inc.inc_linear import INCLinearMethod
+from sonar.model_executor.layers.quantization.inc.schemes import (
     INCFp8Scheme,
     INCMxfp4Scheme,
     INCMxfp8Scheme,
@@ -29,25 +29,25 @@ from aphrodite.model_executor.layers.quantization.inc.schemes import (
     inc_wna16_moe,
     resolve_scheme,
 )
-from aphrodite.model_executor.layers.quantization.inc.schemes.inc_fp8_linear import (
+from sonar.model_executor.layers.quantization.inc.schemes.inc_fp8_linear import (
     INCFp8LinearScheme,
 )
-from aphrodite.model_executor.layers.quantization.inc.schemes.inc_mxfp8_linear import (
+from sonar.model_executor.layers.quantization.inc.schemes.inc_mxfp8_linear import (
     INCMxfp8LinearScheme,
 )
-from aphrodite.model_executor.layers.quantization.inc.schemes.inc_scheme import (
+from sonar.model_executor.layers.quantization.inc.schemes.inc_scheme import (
     INCLinearScheme,
 )
-from aphrodite.model_executor.layers.quantization.inc.schemes.inc_w4a8_linear import (
+from sonar.model_executor.layers.quantization.inc.schemes.inc_w4a8_linear import (
     INCXPUW4A8LinearMethod,
 )
-from aphrodite.model_executor.layers.quantization.inc.schemes.inc_wna16_linear import (
+from sonar.model_executor.layers.quantization.inc.schemes.inc_wna16_linear import (
     INCARKLinearMethod,
     INCWNA16LinearScheme,
     INCXPULinearMethod,
 )
-from aphrodite.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
-from aphrodite.platforms import current_platform
+from sonar.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
+from sonar.platforms import current_platform
 
 MODELS = [
     pytest.param(
@@ -149,8 +149,8 @@ MODEL_RUNNER_KWARGS: dict[str, dict[str, Any]] = {
     reason="Only supports CPU/XPU/CUDA backend.",
 )
 @pytest.mark.parametrize("model", MODELS)
-def test_auto_round_model(aphrodite_runner, model):
-    with aphrodite_runner(model, **MODEL_RUNNER_KWARGS.get(model, {})) as llm:
+def test_auto_round_model(sonar_runner, model):
+    with sonar_runner(model, **MODEL_RUNNER_KWARGS.get(model, {})) as llm:
         output = llm.generate_greedy(["The capital of France is"], max_tokens=8)
 
     assert output
@@ -391,7 +391,7 @@ def test_inc_get_quant_method_unquantized_routed_experts_with_model_prefix(
             self.moe_config = moe_config
 
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.inc.inc.UnquantizedFusedMoEMethod",
+        "sonar.model_executor.layers.quantization.inc.inc.UnquantizedFusedMoEMethod",
         DummyUnquantizedFusedMoEMethod,
     )
 
@@ -677,7 +677,7 @@ def test_wna16_cuda_low_bit_linear_routes_to_humming(monkeypatch, bits, packing_
     monkeypatch.setattr(current_platform, "is_xpu", lambda: False)
     monkeypatch.setattr(current_platform, "is_cpu", lambda: False)
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.inc.schemes.inc_wna16_scheme._build_humming_linear_method",
+        "sonar.model_executor.layers.quantization.inc.schemes.inc_wna16_scheme._build_humming_linear_method",
         lambda layer_config: captured.update({"layer_config": layer_config}) or expected_method,
     )
 
@@ -699,7 +699,7 @@ def test_wna16_cuda_low_bit_moe_routes_to_humming(monkeypatch, bits) -> None:
     monkeypatch.setattr(current_platform, "is_cuda", lambda: True)
     monkeypatch.setattr(current_platform, "is_cpu", lambda: False)
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.inc.schemes.inc_wna16_scheme._build_humming_moe_method",
+        "sonar.model_executor.layers.quantization.inc.schemes.inc_wna16_scheme._build_humming_moe_method",
         lambda layer, layer_config: captured.update({"layer": layer, "layer_config": layer_config}) or expected_method,
     )
 
@@ -727,7 +727,7 @@ def test_wna16_cuda_high_bit_skips_humming(monkeypatch, bits) -> None:
     monkeypatch.setattr(current_platform, "is_xpu", lambda: False)
     monkeypatch.setattr(current_platform, "is_cpu", lambda: False)
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.inc.schemes.inc_wna16_scheme._build_humming_linear_method",
+        "sonar.model_executor.layers.quantization.inc.schemes.inc_wna16_scheme._build_humming_linear_method",
         lambda layer_config: called.update({"humming": True}),
     )
 
@@ -749,11 +749,11 @@ def test_qwen3_1p7b_mxfp4_autoround_uses_mxfp4_linear_scheme(
         pass
 
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.inc.schemes.inc_mxfp4_linear.init_mxfp4_linear_kernel",
+        "sonar.model_executor.layers.quantization.inc.schemes.inc_mxfp4_linear.init_mxfp4_linear_kernel",
         lambda **kwargs: DummyKernel(),
     )
 
-    from aphrodite.model_executor.layers.quantization.inc.schemes.inc_mxfp4_linear import (  # noqa: E501
+    from sonar.model_executor.layers.quantization.inc.schemes.inc_mxfp4_linear import (  # noqa: E501
         INCMxfp4LinearMethod,
     )
 
@@ -828,7 +828,7 @@ def test_qwen3_30b_a3b_mxfp4_autoround_routes_to_mxfp4_moe(
             self.moe_config = moe_config
 
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.inc.schemes.inc_mxfp4_moe.INCMxfp4MoEMethod",
+        "sonar.model_executor.layers.quantization.inc.schemes.inc_mxfp4_moe.INCMxfp4MoEMethod",
         DummyMxfp4MoEMethod,
     )
 
@@ -861,7 +861,7 @@ def test_qwen3_30b_a3b_mxfp8_autoround_routes_to_mxfp8_moe(
         return expected_backend, expected_experts_cls
 
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.inc.schemes.inc_mxfp8_moe.select_mxfp8_moe_backend",
+        "sonar.model_executor.layers.quantization.inc.schemes.inc_mxfp8_moe.select_mxfp8_moe_backend",
         fake_select_mxfp8_moe_backend,
     )
 
@@ -873,7 +873,7 @@ def test_qwen3_30b_a3b_mxfp8_autoround_routes_to_mxfp8_moe(
     moe_method = config.get_quant_method(layer, "model.layers.0.mlp")
     gate_method = config.get_quant_method(object.__new__(LinearBase), "model.layers.0.mlp.gate")
 
-    from aphrodite.model_executor.layers.quantization.inc.schemes.inc_mxfp8_moe import (
+    from sonar.model_executor.layers.quantization.inc.schemes.inc_mxfp8_moe import (
         INCMxfp8MoEMethod,
     )
 
@@ -891,19 +891,19 @@ def test_inc_mxfp8_moe_method_registers_block_scaled_weights(monkeypatch) -> Non
     expected_experts_cls = object()
 
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.inc.schemes.inc_mxfp8_moe.select_mxfp8_moe_backend",
+        "sonar.model_executor.layers.quantization.inc.schemes.inc_mxfp8_moe.select_mxfp8_moe_backend",
         lambda *, config: (expected_backend, expected_experts_cls),
     )
     monkeypatch.setattr(
-        "aphrodite.model_executor.parameter.get_tensor_model_parallel_rank",
+        "sonar.model_executor.parameter.get_tensor_model_parallel_rank",
         lambda: 0,
     )
     monkeypatch.setattr(
-        "aphrodite.model_executor.parameter.get_tensor_model_parallel_world_size",
+        "sonar.model_executor.parameter.get_tensor_model_parallel_world_size",
         lambda: 1,
     )
 
-    from aphrodite.model_executor.layers.quantization.inc.schemes.inc_mxfp8_moe import (
+    from sonar.model_executor.layers.quantization.inc.schemes.inc_mxfp8_moe import (
         INCMxfp8MoEMethod,
     )
 
@@ -960,19 +960,19 @@ def test_inc_mxfp4_linear_method_registers_and_processes_weights(
             captured["processed_layer"] = layer
 
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.inc.schemes.inc_mxfp4_linear.init_mxfp4_linear_kernel",
+        "sonar.model_executor.layers.quantization.inc.schemes.inc_mxfp4_linear.init_mxfp4_linear_kernel",
         lambda **kwargs: DummyKernel(),
     )
     monkeypatch.setattr(
-        "aphrodite.model_executor.parameter.get_tensor_model_parallel_rank",
+        "sonar.model_executor.parameter.get_tensor_model_parallel_rank",
         lambda: 0,
     )
     monkeypatch.setattr(
-        "aphrodite.model_executor.parameter.get_tensor_model_parallel_world_size",
+        "sonar.model_executor.parameter.get_tensor_model_parallel_world_size",
         lambda: 1,
     )
 
-    from aphrodite.model_executor.layers.quantization.inc.schemes.inc_mxfp4_linear import (  # noqa: E501
+    from sonar.model_executor.layers.quantization.inc.schemes.inc_mxfp4_linear import (  # noqa: E501
         INCMxfp4LinearMethod,
     )
 
@@ -1027,29 +1027,29 @@ def test_inc_mxfp4_moe_method_preserves_checkpoint_packing(
     expected_experts_cls = object()
 
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.inc.schemes.inc_mxfp4_moe."
+        "sonar.model_executor.layers.quantization.inc.schemes.inc_mxfp4_moe."
         "CutlassExpertsMxfp4._supports_current_device",
         lambda: False,
     )
     monkeypatch.setattr(current_platform, "is_xpu", lambda: is_xpu)
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.inc.schemes.inc_mxfp4_moe.select_mxfp4_moe_backend",
+        "sonar.model_executor.layers.quantization.inc.schemes.inc_mxfp4_moe.select_mxfp4_moe_backend",
         lambda moe: (mxfp4_backend, expected_experts_cls),
     )
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.inc.schemes.inc_mxfp4_moe.prepare_moe_fp4_layer_for_marlin",
+        "sonar.model_executor.layers.quantization.inc.schemes.inc_mxfp4_moe.prepare_moe_fp4_layer_for_marlin",
         lambda layer: pytest.fail("packed backends must not use Marlin packing"),
     )
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.inc.schemes.inc_mxfp4_moe.make_mxfp4_moe_quant_config",
+        "sonar.model_executor.layers.quantization.inc.schemes.inc_mxfp4_moe.make_mxfp4_moe_quant_config",
         lambda **kwargs: captured.update({"quant_config_kwargs": kwargs}) or expected_quant_config,
     )
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.inc.schemes.inc_mxfp4_moe.make_mxfp4_moe_kernel",
+        "sonar.model_executor.layers.quantization.inc.schemes.inc_mxfp4_moe.make_mxfp4_moe_kernel",
         lambda **kwargs: captured.update({"kernel_kwargs": kwargs}) or expected_kernel,
     )
 
-    from aphrodite.model_executor.layers.quantization.inc.schemes.inc_mxfp4_moe import (
+    from sonar.model_executor.layers.quantization.inc.schemes.inc_mxfp4_moe import (
         INCMxfp4MoEMethod,
     )
 
@@ -1324,15 +1324,15 @@ def test_inc_mxfp8_linear_scheme_delegates_to_kernel(monkeypatch) -> None:
 
     kernel = DummyKernel()
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.inc.schemes.inc_mxfp8_linear.init_mxfp8_linear_kernel",
+        "sonar.model_executor.layers.quantization.inc.schemes.inc_mxfp8_linear.init_mxfp8_linear_kernel",
         lambda weight_shape: kernel,
     )
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.inc.schemes.inc_mxfp8_linear.ModelWeightParameter",
+        "sonar.model_executor.layers.quantization.inc.schemes.inc_mxfp8_linear.ModelWeightParameter",
         lambda **kwargs: torch.nn.Parameter(kwargs["data"], requires_grad=False),
     )
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.inc.schemes.inc_mxfp8_linear.GroupQuantScaleParameter",
+        "sonar.model_executor.layers.quantization.inc.schemes.inc_mxfp8_linear.GroupQuantScaleParameter",
         lambda **kwargs: torch.nn.Parameter(kwargs["data"], requires_grad=False),
     )
 
@@ -1363,7 +1363,7 @@ def test_inc_mxfp8_linear_scheme_delegates_to_kernel(monkeypatch) -> None:
 
 def test_inc_mxfp8_linear_scheme_requires_block_32_input(monkeypatch) -> None:
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.inc.schemes.inc_mxfp8_linear.init_mxfp8_linear_kernel",
+        "sonar.model_executor.layers.quantization.inc.schemes.inc_mxfp8_linear.init_mxfp8_linear_kernel",
         lambda weight_shape: object(),
     )
     scheme = INCMxfp8LinearScheme()
@@ -1447,11 +1447,11 @@ def test_inc_fp8_linear_scheme_delegates_to_fp8_linear_method(
             return "applied"
 
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.inc.schemes.inc_fp8_linear.Fp8LinearMethod",
+        "sonar.model_executor.layers.quantization.inc.schemes.inc_fp8_linear.Fp8LinearMethod",
         DummyMethod,
     )
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.inc.schemes.inc_fp8_linear.get_marlin_input_dtype",
+        "sonar.model_executor.layers.quantization.inc.schemes.inc_fp8_linear.get_marlin_input_dtype",
         lambda _prefix: "fp8-marlin",
     )
 
@@ -1492,7 +1492,7 @@ def test_wna16_xpu_prefers_ark_when_available(monkeypatch) -> None:
     monkeypatch.setattr(current_platform, "is_xpu", lambda: True)
     monkeypatch.setattr(current_platform, "is_cpu", lambda: False)
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.inc.schemes.inc_ark_ops.get_ark_state",
+        "sonar.model_executor.layers.quantization.inc.schemes.inc_ark_ops.get_ark_state",
         lambda: (True, None, object(), DummyQuantLinear),
     )
 
@@ -1537,7 +1537,7 @@ def test_wna16_xpu_int2_prefers_ark_when_available(monkeypatch) -> None:
     monkeypatch.setattr(current_platform, "is_xpu", lambda: True)
     monkeypatch.setattr(current_platform, "is_cpu", lambda: False)
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.inc.schemes.inc_ark_ops.get_ark_state",
+        "sonar.model_executor.layers.quantization.inc.schemes.inc_ark_ops.get_ark_state",
         lambda: (True, None, object(), DummyQuantLinear),
     )
 
@@ -1556,7 +1556,7 @@ def test_wna16_xpu_int2_requires_ark_when_unavailable(monkeypatch) -> None:
     monkeypatch.setattr(current_platform, "is_xpu", lambda: True)
     monkeypatch.setattr(current_platform, "is_cpu", lambda: False)
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.inc.schemes.inc_ark_ops.get_ark_state",
+        "sonar.model_executor.layers.quantization.inc.schemes.inc_ark_ops.get_ark_state",
         lambda: (False, "missing", None, None),
     )
 
@@ -1587,11 +1587,11 @@ def test_wna16_xpu_int2_unsupported_config_still_raises(monkeypatch) -> None:
 
 def test_inc_ark_linear_method_xpu_int2_create_weights(monkeypatch) -> None:
     monkeypatch.setattr(
-        "aphrodite.model_executor.parameter.get_tensor_model_parallel_rank",
+        "sonar.model_executor.parameter.get_tensor_model_parallel_rank",
         lambda: 0,
     )
     monkeypatch.setattr(
-        "aphrodite.model_executor.parameter.get_tensor_model_parallel_world_size",
+        "sonar.model_executor.parameter.get_tensor_model_parallel_world_size",
         lambda: 1,
     )
 
@@ -1602,7 +1602,7 @@ def test_inc_ark_linear_method_xpu_int2_create_weights(monkeypatch) -> None:
         pass
 
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.inc.schemes.inc_ark_ops.get_ark_state",
+        "sonar.model_executor.layers.quantization.inc.schemes.inc_ark_ops.get_ark_state",
         lambda: (True, None, object(), DummyQuantLinear),
     )
 
@@ -1636,7 +1636,7 @@ def test_wna16_xpu_falls_back_when_ark_unavailable(monkeypatch) -> None:
     monkeypatch.setattr(current_platform, "is_xpu", lambda: True)
     monkeypatch.setattr(current_platform, "is_cpu", lambda: False)
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.inc.schemes.inc_ark_ops.get_ark_state",
+        "sonar.model_executor.layers.quantization.inc.schemes.inc_ark_ops.get_ark_state",
         lambda: (False, "missing", None, None),
     )
 
@@ -1658,7 +1658,7 @@ def test_wna16_cpu_gptq_prefers_ark_when_available(monkeypatch) -> None:
     monkeypatch.setattr(current_platform, "is_xpu", lambda: False)
     monkeypatch.setattr(current_platform, "is_cpu", lambda: True)
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.inc.schemes.inc_ark_ops.get_ark_state",
+        "sonar.model_executor.layers.quantization.inc.schemes.inc_ark_ops.get_ark_state",
         lambda: (True, None, object(), DummyQuantLinear),
     )
 
@@ -1679,11 +1679,11 @@ def test_wna16_cpu_gptq_raises_when_ark_and_marlin_unavailable(
     monkeypatch.setattr(current_platform, "is_xpu", lambda: False)
     monkeypatch.setattr(current_platform, "is_cpu", lambda: True)
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.inc.schemes.inc_ark_ops.get_ark_state",
+        "sonar.model_executor.layers.quantization.inc.schemes.inc_ark_ops.get_ark_state",
         lambda: (False, "missing", None, None),
     )
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.inc.schemes.inc_wna16_linear.check_marlin_supported",
+        "sonar.model_executor.layers.quantization.inc.schemes.inc_wna16_linear.check_marlin_supported",
         lambda *args, **kwargs: False,
     )
 
@@ -1704,11 +1704,11 @@ def test_wna16_linear_gptq_uses_auto_gptq_when_supported(monkeypatch) -> None:
             captured["cfg"] = cfg
 
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.inc.schemes.inc_wna16_linear.check_marlin_supported",
+        "sonar.model_executor.layers.quantization.inc.schemes.inc_wna16_linear.check_marlin_supported",
         lambda *args, **kwargs: True,
     )
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.auto_gptq.AutoGPTQLinearMethod",
+        "sonar.model_executor.layers.quantization.auto_gptq.AutoGPTQLinearMethod",
         DummyMethod,
     )
 
@@ -1749,7 +1749,7 @@ def test_inc_get_quant_method_unquantized_moe_returns_unquantized(
             self.moe_config = moe_config
 
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.inc.inc.UnquantizedFusedMoEMethod",
+        "sonar.model_executor.layers.quantization.inc.inc.UnquantizedFusedMoEMethod",
         DummyUnquantizedFusedMoEMethod,
     )
 
@@ -1769,7 +1769,7 @@ def test_inc_get_quant_method_linear_uses_resolved_scheme(monkeypatch) -> None:
             return sentinel
 
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.inc.schemes.factory.resolve_scheme",
+        "sonar.model_executor.layers.quantization.inc.schemes.factory.resolve_scheme",
         lambda _layer_config: DummyScheme(),
     )
 
@@ -1797,7 +1797,7 @@ def test_inc_get_quant_method_lm_head_uses_suffix_match(monkeypatch) -> None:
             return sentinel
 
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.inc.schemes.factory.resolve_scheme",
+        "sonar.model_executor.layers.quantization.inc.schemes.factory.resolve_scheme",
         lambda _layer_config: DummyScheme(),
     )
 
@@ -1816,7 +1816,7 @@ def test_inc_get_quant_method_moe_uses_resolved_scheme(monkeypatch) -> None:
             return sentinel
 
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.inc.schemes.factory.resolve_scheme",
+        "sonar.model_executor.layers.quantization.inc.schemes.factory.resolve_scheme",
         lambda _layer_config: DummyScheme(),
     )
 
@@ -1845,15 +1845,15 @@ def test_resolve_gptq_moe_falls_back_to_moe_wna16(monkeypatch) -> None:
             captured["moe"] = moe
 
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.utils.marlin_utils.check_marlin_supported",
+        "sonar.model_executor.layers.quantization.utils.marlin_utils.check_marlin_supported",
         lambda *args, **kwargs: False,
     )
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.moe_wna16.MoeWNA16Config.from_config",
+        "sonar.model_executor.layers.quantization.moe_wna16.MoeWNA16Config.from_config",
         lambda cfg: captured.update({"from_config": cfg}) or built_config,
     )
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.moe_wna16.MoeWNA16Method",
+        "sonar.model_executor.layers.quantization.moe_wna16.MoeWNA16Method",
         DummyMethod,
     )
 
@@ -1895,15 +1895,15 @@ def test_resolve_gptq_moe_uses_auto_gptq_when_supported(monkeypatch) -> None:
             captured["moe"] = moe
 
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.utils.marlin_utils.check_marlin_supported",
+        "sonar.model_executor.layers.quantization.utils.marlin_utils.check_marlin_supported",
         lambda *args, **kwargs: True,
     )
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.utils.marlin_utils.check_moe_marlin_supports_layer",
+        "sonar.model_executor.layers.quantization.utils.marlin_utils.check_moe_marlin_supports_layer",
         lambda *args, **kwargs: True,
     )
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.auto_gptq.AutoGPTQMoEMethod",
+        "sonar.model_executor.layers.quantization.auto_gptq.AutoGPTQMoEMethod",
         DummyMethod,
     )
 
@@ -1931,19 +1931,19 @@ def test_resolve_awq_moe_uses_marlin_when_supported(monkeypatch) -> None:
             captured["moe"] = moe
 
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.utils.marlin_utils.check_marlin_supported",
+        "sonar.model_executor.layers.quantization.utils.marlin_utils.check_marlin_supported",
         lambda *args, **kwargs: True,
     )
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.utils.marlin_utils.check_moe_marlin_supports_layer",
+        "sonar.model_executor.layers.quantization.utils.marlin_utils.check_moe_marlin_supports_layer",
         lambda *args, **kwargs: True,
     )
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.auto_awq.verify_marlin_supported",
+        "sonar.model_executor.layers.quantization.auto_awq.verify_marlin_supported",
         lambda *args, **kwargs: None,
     )
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.auto_awq.AutoAWQMoEMethod",
+        "sonar.model_executor.layers.quantization.auto_awq.AutoAWQMoEMethod",
         DummyMethod,
     )
 
@@ -2066,7 +2066,7 @@ class TestGetLayerConfigFusedQKV:
 # The w4a8 path keeps int4 weights but dynamically quantizes activations to
 # per-token symmetric int8, so the GEMM stays on the int8 datapath instead of
 # upconverting weights to the activation dtype. It is opt-in through
-# APHRODITE_XPU_INC_WNA16_BACKEND because which kernel is fastest depends on the
+# SONAR_XPU_INC_WNA16_BACKEND because which kernel is fastest depends on the
 # device: ARK can use XMX int8 on some XPUs, and the default ("auto")
 # preference order is deliberately left unchanged.
 #
@@ -2076,15 +2076,15 @@ class TestGetLayerConfigFusedQKV:
 # (scale dtypes, argument order, weight reuse, batch-size gate), which is where
 # this path is easy to get silently wrong, since the kernel accepts bf16 scales
 # and returns plausible-looking garbage rather than raising. The ones that cross
-# the token threshold reach ``aphrodite._xpu_ops`` for the activation quantizer, so
+# the token threshold reach ``sonar._xpu_ops`` for the activation quantizer, so
 # they are XPU-image only; the small-batch fallback test returns before that
 # import and must stay unmarked to keep covering the gate off-XPU. The
 # end-to-end tests load a real int4 checkpoint and additionally need the op.
 # ---------------------------------------------------------------------------
 
-_BACKEND_ENV = "APHRODITE_XPU_INC_WNA16_BACKEND"
-_ARK_STATE = "aphrodite.model_executor.layers.quantization.inc.schemes.inc_ark_ops.get_ark_state"
-_QUANT_REF = "aphrodite._xpu_ops.xpu_ops.dynamic_per_token_int8_quant_ref"
+_BACKEND_ENV = "SONAR_XPU_INC_WNA16_BACKEND"
+_ARK_STATE = "sonar.model_executor.layers.quantization.inc.schemes.inc_ark_ops.get_ark_state"
+_QUANT_REF = "sonar._xpu_ops.xpu_ops.dynamic_per_token_int8_quant_ref"
 
 IN_FEATURES = 128
 OUT_FEATURES = 64
@@ -2099,16 +2099,16 @@ E2E_MODELS = [
 
 
 def _has_xpu_ops() -> bool:
-    """True when ``aphrodite._xpu_ops`` is importable.
+    """True when ``sonar._xpu_ops`` is importable.
 
     ``apply_weights`` imports it for the activation quantizer, and the stubs
     below patch through it, so tests that exercise that path cannot even be set
-    up on a build without aphrodite-xpu-kernels installed.
+    up on a build without sonar-xpu-kernels installed.
     """
     if not current_platform.is_xpu():
         return False
     try:
-        import aphrodite._xpu_ops  # noqa: F401
+        import sonar._xpu_ops  # noqa: F401
     except ImportError:
         return False
     return True
@@ -2117,7 +2117,7 @@ def _has_xpu_ops() -> bool:
 def _has_w4a8_kernel() -> bool:
     """True when this build can actually run the w4a8 GEMM.
 
-    The op is registered as a side effect of importing ``aphrodite._xpu_ops``, so it
+    The op is registered as a side effect of importing ``sonar._xpu_ops``, so it
     is not visible on ``torch.ops._xpu_C`` until that import happens.
     """
     return _has_xpu_ops() and hasattr(torch.ops._xpu_C, "int4_gemm_w4a8")
@@ -2125,7 +2125,7 @@ def _has_w4a8_kernel() -> bool:
 
 requires_xpu_ops = pytest.mark.skipif(
     not _has_xpu_ops(),
-    reason="needs an XPU image with aphrodite._xpu_ops available",
+    reason="needs an XPU image with sonar._xpu_ops available",
 )
 
 requires_w4a8_kernel = pytest.mark.skipif(
@@ -2163,11 +2163,11 @@ def _dispatch(layer_config=None):
 def single_tp_rank(monkeypatch):
     """Parameter creation reads the TP rank/size; there is no distributed init."""
     monkeypatch.setattr(
-        "aphrodite.model_executor.parameter.get_tensor_model_parallel_rank",
+        "sonar.model_executor.parameter.get_tensor_model_parallel_rank",
         lambda: 0,
     )
     monkeypatch.setattr(
-        "aphrodite.model_executor.parameter.get_tensor_model_parallel_world_size",
+        "sonar.model_executor.parameter.get_tensor_model_parallel_world_size",
         lambda: 1,
     )
 
@@ -2313,7 +2313,7 @@ def test_w4a8_accepts_aligned_group_size(monkeypatch, group_size) -> None:
 
 
 def test_w4a8_requires_the_kernel(monkeypatch) -> None:
-    """Older aphrodite-xpu-kernels builds lack the op entirely."""
+    """Older sonar-xpu-kernels builds lack the op entirely."""
     monkeypatch.setenv(_BACKEND_ENV, "w4a8")
     _fake_xpu(monkeypatch, ark_available=True)
 
@@ -2327,11 +2327,11 @@ def test_w4a8_requires_the_kernel(monkeypatch) -> None:
 
 
 def test_invalid_backend_value_raises(monkeypatch) -> None:
-    import aphrodite.envs as envs
+    import sonar.envs as envs
 
     monkeypatch.setenv(_BACKEND_ENV, "onednn")
     with pytest.raises(ValueError, match=_BACKEND_ENV):
-        _ = envs.APHRODITE_XPU_INC_WNA16_BACKEND
+        _ = envs.SONAR_XPU_INC_WNA16_BACKEND
 
 
 # ---------------------------------------------------------------------------
@@ -2601,7 +2601,7 @@ def test_batch_gate_uses_flattened_token_count(monkeypatch, w4a8_layer) -> None:
 
 @requires_w4a8_kernel
 @pytest.mark.parametrize("model", E2E_MODELS)
-def test_e2e_generates_with_real_weights(aphrodite_runner, monkeypatch, model) -> None:
+def test_e2e_generates_with_real_weights(sonar_runner, monkeypatch, model) -> None:
     """The whole path — real int4 checkpoint, real kernel, real output.
 
     The stubbed tests above cannot catch a wrong-but-plausible calling
@@ -2611,14 +2611,14 @@ def test_e2e_generates_with_real_weights(aphrodite_runner, monkeypatch, model) -
     """
     monkeypatch.setenv(_BACKEND_ENV, "w4a8")
 
-    with aphrodite_runner(model, max_model_len=512, enforce_eager=True, gpu_memory_utilization=0.55) as aphrodite_model:
-        out = aphrodite_model.generate_greedy(["The capital of France is"], max_tokens=8)
+    with sonar_runner(model, max_model_len=512, enforce_eager=True, gpu_memory_utilization=0.55) as sonar_model:
+        out = sonar_model.generate_greedy(["The capital of France is"], max_tokens=8)
 
     assert "Paris" in out[0][1]
 
 
 @requires_w4a8_kernel
-def test_e2e_selects_w4a8_for_every_linear(aphrodite_runner, monkeypatch) -> None:
+def test_e2e_selects_w4a8_for_every_linear(sonar_runner, monkeypatch) -> None:
     """Guard against the validation silently becoming dead code.
 
     If backend selection stopped routing here, the generation test above would
@@ -2627,14 +2627,14 @@ def test_e2e_selects_w4a8_for_every_linear(aphrodite_runner, monkeypatch) -> Non
     """
     monkeypatch.setenv(_BACKEND_ENV, "w4a8")
     # apply_model pickles the closure below.
-    monkeypatch.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
+    monkeypatch.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")
 
-    with aphrodite_runner(
+    with sonar_runner(
         E2E_MODELS[0].values[0],
         max_model_len=512,
         enforce_eager=True,
         gpu_memory_utilization=0.55,
-    ) as aphrodite_model:
+    ) as sonar_model:
 
         def check_model(model):
             shapes = []
@@ -2648,4 +2648,4 @@ def test_e2e_selects_w4a8_for_every_linear(aphrodite_runner, monkeypatch) -> Non
             assert shapes, "no linear layer used the w4a8 method"
             assert all(i % 8 == 0 and o % 8 == 0 for i, o in shapes), shapes
 
-        aphrodite_model.apply_model(check_model)
+        sonar_model.apply_model(check_model)

@@ -5,25 +5,25 @@ from typing import TYPE_CHECKING, Literal, Union
 
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite import envs
-from aphrodite.config import get_current_aphrodite_config
-from aphrodite.config.kernel import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar import envs
+from sonar.config import get_current_sonar_config
+from sonar.config.kernel import (
     FLASHINFER_MOE_EP_CUTEDSL,
     FLASHINFER_MOE_EP_DEEP_GEMM,
     MoEBackend,
 )
-from aphrodite.config.quantization import QuantizationConfigArgs
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.config.quantization import QuantizationConfigArgs
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe import (
     FusedMoEConfig,
     RoutedExperts,
 )
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.all2all_utils import (
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.all2all_utils import (
     maybe_make_prepare_finalize,
 )
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEQuantConfig,
     FusedMoEQuantDesc,
     RoutingMethodType,
@@ -32,20 +32,20 @@ from aphrodite.model_executor.layers.fused_moe.config import (
     mxfp4_w4a16_moe_quant_config,
     ocp_mx_moe_quant_config,
 )
-from aphrodite.model_executor.layers.quantization.utils.flashinfer_utils import (
+from sonar.model_executor.layers.quantization.utils.flashinfer_utils import (
     swap_w13_to_w31,
 )
-from aphrodite.model_executor.layers.quantization.utils.humming import prioritize_humming
-from aphrodite.model_executor.layers.quantization.utils.mxfp4_utils import (
+from sonar.model_executor.layers.quantization.utils.humming import prioritize_humming
+from sonar.model_executor.layers.quantization.utils.mxfp4_utils import (
     _swizzle_mxfp4,
 )
-from aphrodite.model_executor.layers.quantization.utils.mxfp4_utils import (
+from sonar.model_executor.layers.quantization.utils.mxfp4_utils import (
     mx_scale_kwargs as _mx_scale_kwargs,
 )
-from aphrodite.model_executor.layers.quantization.utils.ocp_mx_utils import (
+from sonar.model_executor.layers.quantization.utils.ocp_mx_utils import (
     OCP_MX_BLOCK_SIZE,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     kFp8Dynamic128Sym,
     kFp8StaticTensorSym,
@@ -54,14 +54,14 @@ from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
     kMxfp4Static,
     kMxfp8Dynamic,
 )
-from aphrodite.model_executor.layers.quantization.utils.w8a8_utils import all_close_1d
-from aphrodite.model_executor.utils import replace_parameter
-from aphrodite.platforms import current_platform
-from aphrodite.utils.import_utils import get_triton_kernels_version
-from aphrodite.utils.math_utils import round_up
+from sonar.model_executor.layers.quantization.utils.w8a8_utils import all_close_1d
+from sonar.model_executor.utils import replace_parameter
+from sonar.platforms import current_platform
+from sonar.utils.import_utils import get_triton_kernels_version
+from sonar.utils.math_utils import round_up
 
 if TYPE_CHECKING:
-    from aphrodite.model_executor.layers.fused_moe import RoutedExperts
+    from sonar.model_executor.layers.fused_moe import RoutedExperts
 
 
 logger = init_logger(__name__)
@@ -100,7 +100,7 @@ def _pack_deepgemm_mxfp4_scales(
     w13_weight_scale: torch.Tensor,
     w2_weight_scale: torch.Tensor,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
+    from sonar.model_executor.layers.quantization.utils.fp8_utils import (
         deepgemm_post_process_weight_scale_block,
     )
 
@@ -130,7 +130,7 @@ def _pack_deepgemm_mxfp4_scales(
 
 def _swizzle_cutlass_mxfp4_scales(scale: torch.Tensor) -> torch.Tensor:
     """Swizzle [E, N, K // 32] block scales into the CUTLASS tiled layout."""
-    from aphrodite.model_executor.layers.fused_moe.experts.cutlass_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.cutlass_moe import (
         swizzle_mxfp4_scales,
     )
 
@@ -151,7 +151,7 @@ class Mxfp4MoeBackend(Enum):
     # FlashInfer CUTLASS backends
     FLASHINFER_CUTLASS_MXFP4_MXFP8 = "FLASHINFER_CUTLASS_MXFP4_MXFP8"
     FLASHINFER_CUTLASS_MXFP4_BF16 = "FLASHINFER_CUTLASS_MXFP4_BF16"
-    # Aphrodite CUTLASS backend
+    # Sonar CUTLASS backend
     CUTLASS_MXFP4_MXFP4 = "CUTLASS_MXFP4_MXFP4"
     # Marlin
     BATCHED_MARLIN = "BATCHED_MARLIN"
@@ -202,7 +202,7 @@ B12X_BACKENDS = (
 )
 
 # Megakernels consume the checkpoint's MXFP4 tensors through the shared
-# FlashInfer MoE-EP adapter; Aphrodite does not convert their weight layout.
+# FlashInfer MoE-EP adapter; Sonar does not convert their weight layout.
 FLASHINFER_MOE_EP_MXFP4_BACKENDS = (
     Mxfp4MoeBackend.FLASHINFER_MOE_EP_CUTEDSL,
     Mxfp4MoeBackend.FLASHINFER_MOE_EP_DEEP_GEMM,
@@ -213,12 +213,12 @@ def backend_to_kernel_cls(
     backend: Mxfp4MoeBackend,
 ) -> list[type[mk.FusedMoEExperts]]:
     if backend in B12X_BACKENDS:
-        from aphrodite.model_executor.layers.fused_moe.b12x import B12xExperts
+        from sonar.model_executor.layers.fused_moe.b12x import B12xExperts
 
         return [B12xExperts]
 
     elif backend == Mxfp4MoeBackend.DEEPGEMM_MXFP4:
-        from aphrodite.model_executor.layers.fused_moe.experts.deep_gemm_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.deep_gemm_moe import (
             DeepGemmFP4Experts,
         )
 
@@ -228,7 +228,7 @@ def backend_to_kernel_cls(
         Mxfp4MoeBackend.FLASHINFER_TRTLLM_MXFP4_BF16,
         Mxfp4MoeBackend.FLASHINFER_TRTLLM_MXFP4_MXFP8,
     ):
-        from aphrodite.model_executor.layers.fused_moe.experts.trtllm_mxfp4_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.trtllm_mxfp4_moe import (
             TrtLlmMxfp4ExpertsModular,
             TrtLlmMxfp4ExpertsMonolithic,
         )
@@ -240,21 +240,21 @@ def backend_to_kernel_cls(
         Mxfp4MoeBackend.FLASHINFER_CUTLASS_MXFP4_BF16,
         Mxfp4MoeBackend.FLASHINFER_CUTLASS_MXFP4_MXFP8,
     ):
-        from aphrodite.model_executor.layers.fused_moe.experts.flashinfer_cutlass_moe import (  # noqa: E501
+        from sonar.model_executor.layers.fused_moe.experts.flashinfer_cutlass_moe import (  # noqa: E501
             FlashInferExperts,
         )
 
         return [FlashInferExperts]
 
     elif backend == Mxfp4MoeBackend.CUTLASS_MXFP4_MXFP4:
-        from aphrodite.model_executor.layers.fused_moe.experts.cutlass_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.cutlass_moe import (
             CutlassExpertsMxfp4,
         )
 
         return [CutlassExpertsMxfp4]
 
     elif backend == Mxfp4MoeBackend.TRITON:
-        from aphrodite.model_executor.layers.fused_moe.experts.gpt_oss_triton_kernels_moe import (  # noqa: E501
+        from sonar.model_executor.layers.fused_moe.experts.gpt_oss_triton_kernels_moe import (  # noqa: E501
             OAITritonExperts,
             OAITritonMxfp4ExpertsMonolithic,
         )
@@ -263,14 +263,14 @@ def backend_to_kernel_cls(
         return [OAITritonMxfp4ExpertsMonolithic, OAITritonExperts]
 
     elif backend == Mxfp4MoeBackend.TRITON_UNFUSED:
-        from aphrodite.model_executor.layers.fused_moe.experts.gpt_oss_triton_kernels_moe import (  # noqa: E501
+        from sonar.model_executor.layers.fused_moe.experts.gpt_oss_triton_kernels_moe import (  # noqa: E501
             UnfusedOAITritonExperts,
         )
 
         return [UnfusedOAITritonExperts]
 
     elif backend == Mxfp4MoeBackend.HUMMING:
-        from aphrodite.model_executor.layers.fused_moe.experts.fused_humming_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.fused_humming_moe import (
             BatchedHummingGroupedExperts,
             HummingGroupedExperts,
             HummingIndexedExperts,
@@ -283,73 +283,73 @@ def backend_to_kernel_cls(
         ]
 
     elif backend == Mxfp4MoeBackend.MARLIN:
-        from aphrodite.model_executor.layers.fused_moe.experts.marlin_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.marlin_moe import (
             MarlinExperts,
         )
 
         return [MarlinExperts]
 
     elif backend == Mxfp4MoeBackend.BATCHED_MARLIN:
-        from aphrodite.model_executor.layers.fused_moe.experts.marlin_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.marlin_moe import (
             BatchedMarlinExperts,
         )
 
         return [BatchedMarlinExperts]
 
     elif backend == Mxfp4MoeBackend.AITER_MXFP4_BF16:
-        from aphrodite.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
             AiterMxfp4Experts,
         )
 
         return [AiterMxfp4Experts]
 
     elif backend == Mxfp4MoeBackend.AITER_TRITON_MXFP4_BF16:
-        from aphrodite.model_executor.layers.fused_moe.experts.aiter_mxfp4_w4a16_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.aiter_mxfp4_w4a16_moe import (
             AiterW4A16ExpertsMonolithic,
         )
 
         return [AiterW4A16ExpertsMonolithic]
 
     elif backend == Mxfp4MoeBackend.AITER_MXFP4_FP8:
-        from aphrodite.model_executor.layers.fused_moe.experts.aiter_mxfp4_w4a8_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.aiter_mxfp4_w4a8_moe import (
             AiterW4A8ExpertsMonolithic,
         )
 
         return [AiterW4A8ExpertsMonolithic]
 
     elif backend == Mxfp4MoeBackend.AITER_MXFP4_MXFP4:
-        from aphrodite.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
             AiterMxfp4Experts,
         )
 
         return [AiterMxfp4Experts]
 
     elif backend == Mxfp4MoeBackend.AITER_TRITON_MXFP4_MXFP4:
-        from aphrodite.model_executor.layers.fused_moe.experts.aiter_mxfp4_w4a4_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.aiter_mxfp4_w4a4_moe import (
             AiterW4A4ExpertsMonolithic,
         )
 
         return [AiterW4A4ExpertsMonolithic]
 
     elif backend == Mxfp4MoeBackend.XPU:
-        from aphrodite.model_executor.layers.fused_moe.experts.xpu_moe import XPUExpertsMxFp4
+        from sonar.model_executor.layers.fused_moe.experts.xpu_moe import XPUExpertsMxFp4
 
         return [XPUExpertsMxFp4]
 
     elif backend == Mxfp4MoeBackend.CPU:
-        from aphrodite.model_executor.layers.fused_moe.experts.cpu_moe import CPUExpertsMxfp4
+        from sonar.model_executor.layers.fused_moe.experts.cpu_moe import CPUExpertsMxfp4
 
         return [CPUExpertsMxfp4]
 
     elif backend == Mxfp4MoeBackend.EMULATION:
-        from aphrodite.model_executor.layers.fused_moe.experts.ocp_mx_emulation_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.ocp_mx_emulation_moe import (
             OCP_MXQuantizationEmulationTritonExperts,
         )
 
         return [OCP_MXQuantizationEmulationTritonExperts]
 
     elif backend in FLASHINFER_MOE_EP_MXFP4_BACKENDS:
-        from aphrodite.model_executor.layers.fused_moe.experts.flashinfer_moe_ep import (  # noqa: E501
+        from sonar.model_executor.layers.fused_moe.experts.flashinfer_moe_ep import (  # noqa: E501
             FlashInferMoeEpExperts,
         )
 
@@ -496,7 +496,7 @@ def _backend_activation_key(backend: Mxfp4MoeBackend) -> QuantKey | None:
 
 def _user_moe_activation_override() -> QuantKey | None:
     """User's MoE activation override from quantization_config, or None."""
-    args = get_current_aphrodite_config().model_config.quantization_config
+    args = get_current_sonar_config().model_config.quantization_config
     if not isinstance(args, QuantizationConfigArgs) or args.moe is None:
         return None
     return args.moe.activation
@@ -522,9 +522,9 @@ def _resolve_activation_key(
 def _humming_input_schema(model_activation_key: QuantKey | None):
     """Humming input schema for the checkpoint activation combined with the
     user override, or None to keep Humming's default (BF16 or the
-    APHRODITE_HUMMING_INPUT_QUANT_CONFIG env override, which wins)."""
+    SONAR_HUMMING_INPUT_QUANT_CONFIG env override, which wins)."""
     activation_key = _resolve_activation_key(model_activation_key)
-    if activation_key is None or envs.APHRODITE_HUMMING_INPUT_QUANT_CONFIG:
+    if activation_key is None or envs.SONAR_HUMMING_INPUT_QUANT_CONFIG:
         return None
     if (
         activation_key == kMxfp8Dynamic
@@ -535,7 +535,7 @@ def _humming_input_schema(model_activation_key: QuantKey | None):
         # run a checkpoint's MXFP8 that way. An explicit request is honored.
         logger.info_once("Running checkpoint MXFP8 MoE activations as block FP8 (group 128) on Hopper.")
         activation_key = kFp8Dynamic128Sym
-    from aphrodite.model_executor.layers.quantization.utils.humming import (
+    from sonar.model_executor.layers.quantization.utils.humming import (
         quant_key_to_input_schema,
     )
 
@@ -581,7 +581,7 @@ def _requested_kernel_cls(
                 "expert LoRA is not supported with MXFP8 activations; use moe_backend='flashinfer_trtllm'",
             )
         )
-    from aphrodite.model_executor.layers.fused_moe.experts.trtllm_lora_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.trtllm_lora_moe import (
         TrtLlmMxfp4LoRAExperts,
     )
 
@@ -630,7 +630,7 @@ def _get_requested_backends(
 ) -> list[Mxfp4MoeBackend]:
     backends = map_mxfp4_backend(runner_backend)
     if runner_backend == "b12x":
-        if envs.APHRODITE_B12X_MOE_FP4_FORCE_A16:
+        if envs.SONAR_B12X_MOE_FP4_FORCE_A16:
             return [Mxfp4MoeBackend.B12X_MXFP4_BF16]
         # W4A8 is the high-throughput b12x path and is preferred when the
         # model does not request an activation format. Keep this as backend
@@ -847,7 +847,7 @@ def mxfp4_round_up_hidden_size_and_intermediate_size(
         intermediate_size = round_up(intermediate_size, 128)
         hidden_size = round_up(hidden_size, 128)
     elif current_platform.is_rocm():
-        from aphrodite.platforms.rocm import get_cdna_version
+        from sonar.platforms.rocm import get_cdna_version
 
         is_situ_or_silu = activation in (
             MoEActivation.SITU,
@@ -932,7 +932,7 @@ def convert_gpt_oss_weight_to_mxfp4_moe_kernel_format(
     sf_block_size = 32  # mxfp4 block size
 
     if mxfp4_backend == Mxfp4MoeBackend.HUMMING:
-        from aphrodite.model_executor.layers.quantization.utils.humming import (
+        from sonar.model_executor.layers.quantization.utils.humming import (
             convert_to_humming_moe_kernel_format,
         )
 
@@ -954,7 +954,7 @@ def convert_gpt_oss_weight_to_mxfp4_moe_kernel_format(
         Mxfp4MoeBackend.MARLIN,
         Mxfp4MoeBackend.BATCHED_MARLIN,
     ):
-        from aphrodite.model_executor.layers.quantization.utils.marlin_utils_fp4 import (
+        from sonar.model_executor.layers.quantization.utils.marlin_utils_fp4 import (
             prepare_moe_mxfp4_layer_for_marlin,
         )
 
@@ -1218,7 +1218,7 @@ def convert_gpt_oss_weight_to_mxfp4_moe_kernel_format(
         # e8m0_shuffle on weight scales (GFX950 swizzle layout)
         from aiter.utility.fp4_utils import e8m0_shuffle
 
-        from aphrodite._aiter_ops import rocm_aiter_ops
+        from sonar._aiter_ops import rocm_aiter_ops
 
         s0, s1, _ = w13_weight_scale.shape
         w13_weight_scale.data = e8m0_shuffle(w13_weight_scale.view(s0 * s1, -1)).view(s0, s1, -1)
@@ -1247,7 +1247,7 @@ def convert_gpt_oss_weight_to_mxfp4_moe_kernel_format(
         )
 
     elif mxfp4_backend == Mxfp4MoeBackend.AITER_MXFP4_BF16:
-        from aphrodite._aiter_ops import rocm_aiter_ops
+        from sonar._aiter_ops import rocm_aiter_ops
 
         if w13_bias is not None:
             w13_bias = w13_bias.data.to(torch.float32)
@@ -1400,7 +1400,7 @@ def convert_gpt_oss_weight_to_mxfp4_moe_kernel_format(
             w2_bias,
         )
     elif mxfp4_backend == Mxfp4MoeBackend.CPU:
-        from aphrodite.model_executor.layers.fused_moe.experts.cpu_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.cpu_moe import (
             prepare_mxfp4_moe_layer_for_cpu,
         )
 
@@ -1478,7 +1478,7 @@ def convert_weight_to_mxfp4_moe_kernel_format(
     """
     is_gfx1250 = False
     if current_platform.is_rocm():
-        from aphrodite.platforms.rocm import on_gfx1250
+        from sonar.platforms.rocm import on_gfx1250
 
         is_gfx1250 = on_gfx1250()
 
@@ -1520,7 +1520,7 @@ def convert_weight_to_mxfp4_moe_kernel_format(
         )
 
     if mxfp4_backend == Mxfp4MoeBackend.HUMMING:
-        from aphrodite.model_executor.layers.quantization.utils.humming import (
+        from sonar.model_executor.layers.quantization.utils.humming import (
             convert_to_humming_moe_kernel_format,
         )
 
@@ -1540,7 +1540,7 @@ def convert_weight_to_mxfp4_moe_kernel_format(
         )
 
     if mxfp4_backend in (Mxfp4MoeBackend.MARLIN, Mxfp4MoeBackend.BATCHED_MARLIN):
-        from aphrodite.model_executor.layers.quantization.utils.marlin_utils_fp4 import (
+        from sonar.model_executor.layers.quantization.utils.marlin_utils_fp4 import (
             prepare_moe_mxfp4_layer_for_marlin,
         )
 
@@ -1679,7 +1679,7 @@ def convert_weight_to_mxfp4_moe_kernel_format(
         if activation == MoEActivation.SITU:
             from aiter.utility.fp4_utils import e8m0_shuffle
 
-            from aphrodite._aiter_ops import rocm_aiter_ops
+            from sonar._aiter_ops import rocm_aiter_ops
 
             fp4_dtype = torch.float4_e2m1fn_x2
             e8m0_dtype = torch.float8_e8m0fnu
@@ -1894,7 +1894,7 @@ def convert_weight_to_mxfp4_moe_kernel_format(
             _cache_permute_indices=_cache_permute_indices,
         )
     elif mxfp4_backend in FLASHINFER_MOE_EP_MXFP4_BACKENDS:
-        from aphrodite.model_executor.layers.fused_moe.flashinfer_moe_ep import (
+        from sonar.model_executor.layers.fused_moe.flashinfer_moe_ep import (
             mxfp4_moe_ep_weights,
         )
 
@@ -1917,7 +1917,7 @@ def convert_weight_to_mxfp4_moe_kernel_format(
             w2_bias,
         )
     elif mxfp4_backend == Mxfp4MoeBackend.CPU:
-        from aphrodite.model_executor.layers.fused_moe.experts.cpu_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.cpu_moe import (
             prepare_mxfp4_moe_layer_for_cpu,
         )
 
@@ -1975,7 +1975,7 @@ def make_mxfp4_moe_quant_config(
             gemm1_clamp_limit=swiglu_limit,
         )
     if mxfp4_backend == Mxfp4MoeBackend.DEEPGEMM_MXFP4:
-        from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+        from sonar.model_executor.layers.quantization.utils.quant_utils import (
             GroupShape,
         )
 
@@ -2066,7 +2066,7 @@ def make_mxfp4_moe_quant_config(
             gemm1_clamp_limit=swiglu_limit,
         )
     elif mxfp4_backend == Mxfp4MoeBackend.HUMMING:
-        from aphrodite.model_executor.layers.quantization.utils.humming import (
+        from sonar.model_executor.layers.quantization.utils.humming import (
             get_humming_moe_quant_config,
         )
 

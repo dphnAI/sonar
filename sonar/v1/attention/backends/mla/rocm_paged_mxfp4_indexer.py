@@ -17,27 +17,27 @@ from dataclasses import dataclass, field, fields
 
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.logger import init_logger
-from aphrodite.v1.attention.backend import (
+from sonar.config import SonarConfig
+from sonar.logger import init_logger
+from sonar.v1.attention.backend import (
     AttentionCGSupport,
     CommonAttentionMetadata,
     MultipleOf,
 )
-from aphrodite.v1.attention.backends.mla.indexer import (
+from sonar.v1.attention.backends.mla.indexer import (
     DeepseekV4IndexerBackend,
     DeepseekV32IndexerMetadata,
     DeepseekV32IndexerMetadataBuilder,
     DeepseekV32IndexerPrefillChunkMetadata,
     DeepseekV41IndexerBackend,
 )
-from aphrodite.v1.attention.ops.rocm_paged_mxfp4_indexer import (
+from sonar.v1.attention.ops.rocm_paged_mxfp4_indexer import (
     build_rocm_mxfp4_decode_schedule,
     rocm_mxfp4_consumer_rows,
     rocm_mxfp4_decode_schedule_words,
     rocm_paged_mxfp4_cache_layout,
 )
-from aphrodite.v1.kv_cache_interface import AttentionSpec, KVCacheSpec
+from sonar.v1.kv_cache_interface import AttentionSpec, KVCacheSpec
 
 logger = init_logger(__name__)
 
@@ -316,7 +316,7 @@ class RocmMxfp4IndexerMetadataBuilder(DeepseekV32IndexerMetadataBuilder):
     @classmethod
     def get_cudagraph_support(
         cls,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         kv_cache_spec: KVCacheSpec,
     ) -> AttentionCGSupport:
         # Decode rows are flattened into persistent buffers, and whether a
@@ -328,15 +328,15 @@ class RocmMxfp4IndexerMetadataBuilder(DeepseekV32IndexerMetadataBuilder):
         self,
         kv_cache_spec: AttentionSpec,
         layer_names: list[str],
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
         **kwargs,
     ) -> None:
-        super().__init__(kv_cache_spec, layer_names, aphrodite_config, device, **kwargs)
+        super().__init__(kv_cache_spec, layer_names, sonar_config, device, **kwargs)
         name = "the ROCm MXFP4 indexer"
         if self.dcp_world_size > 1 or self.use_pcp:
             raise NotImplementedError(f"{name} does not support decode/prefill context parallel.")
-        hf_config = aphrodite_config.model_config.hf_text_config
+        hf_config = sonar_config.model_config.hf_text_config
         num_heads, head_dim = hf_config.index_n_heads, hf_config.index_head_dim
         self.num_heads, self.head_dim = num_heads, head_dim
         self.page_entries = kv_cache_spec.block_size // self.compress_ratio
@@ -351,13 +351,13 @@ class RocmMxfp4IndexerMetadataBuilder(DeepseekV32IndexerMetadataBuilder):
 
         self.decode_block_ends_buffer = torch.zeros(self.arange_buffer.shape[0], dtype=torch.int32, device=device)
         self.context_lens_buffer = torch.zeros(self.arange_buffer.shape[0], dtype=torch.int32, device=device)
-        spec_config = aphrodite_config.speculative_config
+        spec_config = sonar_config.speculative_config
         # Adaptive verification replays a FULL graph on drafts reallocated
         # across requests, so a step's shape does not fix its query lengths.
         adaptive = spec_config is not None and spec_config.enable_adaptive_verification
         self.native_next_n = 1 if adaptive else self.num_speculative_tokens + 1
         # The indexer's logits width, which the decode schedule sizes slices by.
-        max_model_len = aphrodite_config.model_config.max_model_len
+        max_model_len = sonar_config.model_config.max_model_len
         self.logits_width = max_model_len // self.compress_ratio
         # Every dense layer of this group reads the same rows through the same
         # page geometry, so the step builds their schedule once, not per layer.
@@ -444,15 +444,15 @@ class DeepseekV41RocmMxfp4IndexerMetadataBuilder(RocmMxfp4IndexerMetadataBuilder
         self,
         kv_cache_spec: AttentionSpec,
         layer_names: list[str],
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
         **kwargs,
     ) -> None:
-        super().__init__(kv_cache_spec, layer_names, aphrodite_config, device, **kwargs)
-        hf_config = aphrodite_config.model_config.hf_text_config
+        super().__init__(kv_cache_spec, layer_names, sonar_config, device, **kwargs)
+        hf_config = sonar_config.model_config.hf_text_config
         self.candidate_block_size = getattr(hf_config, "candidate_block_size", 0)
         self.num_candidate_cols = 0
-        if aphrodite_config.attention_config.indexer_sparse_logits:
+        if sonar_config.attention_config.indexer_sparse_logits:
             prefix = "attention_config.indexer_sparse_logits"
             block = self.candidate_block_size
             topk_blocks = getattr(hf_config, "candidate_topk_blocks", 0)

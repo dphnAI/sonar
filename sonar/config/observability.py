@@ -9,9 +9,9 @@ from typing import Any, Literal
 from packaging.version import parse
 from pydantic import Field, field_validator, model_validator
 
-from aphrodite import version
-from aphrodite.config.utils import config
-from aphrodite.utils.hashing import safe_hash
+from sonar import version
+from sonar.config.utils import config
+from sonar.utils.hashing import safe_hash
 
 DetailedTraceModules = Literal["model", "worker", "all"]
 
@@ -56,7 +56,7 @@ class ObservabilityConfig:
     single-sequence requests (`n == 1`), mirroring the timing metrics. No effect
     unless speculative decoding is enabled. Independent of `--disable-log-stats`.
     This is the per-request response-body counterpart of the aggregate
-    `aphrodite:spec_decode_*` Prometheus metrics. The response field is experimental
+    `sonar:spec_decode_*` Prometheus metrics. The response field is experimental
     and its shape may change in a future release."""
 
     kv_cache_metrics: bool = False
@@ -98,7 +98,7 @@ class ObservabilityConfig:
 
     enable_logging_iteration_details: bool = False
     """Enable detailed logging of iteration details.
-    If set, aphrodite EngineCore will log iteration details
+    If set, sonar EngineCore will log iteration details
     This includes number of context/generation requests and tokens
     and the elapsed cpu time for the iteration."""
 
@@ -152,7 +152,7 @@ class ObservabilityConfig:
     @classmethod
     def _validate_otlp_traces_endpoint(cls, value: str | None) -> str | None:
         if value is not None:
-            from aphrodite.tracing import is_tracing_available, otel_import_error_traceback
+            from sonar.tracing import is_tracing_available, otel_import_error_traceback
 
             if not is_tracing_available():
                 raise ValueError(
@@ -182,7 +182,7 @@ class ObservabilityConfig:
     def _validate_custom_histogram_buckets(cls, value: dict[str, list[float]] | None) -> dict[str, list[float]] | None:
         if value is None:
             return value
-        from aphrodite.v1.metrics.buckets import BUCKET_FAMILY_KEYS
+        from sonar.v1.metrics.buckets import BUCKET_FAMILY_KEYS
 
         for family, buckets in value.items():
             if family not in BUCKET_FAMILY_KEYS:

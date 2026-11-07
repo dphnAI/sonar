@@ -11,16 +11,16 @@ from typing import TYPE_CHECKING
 import torch
 from regex import escape as regex_escape
 
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.utils.import_utils import LazyLoader
-from aphrodite.utils.torch_utils import PIN_MEMORY
-from aphrodite.v1.structured_output.backend_types import (
+from sonar.exceptions import SonarValidationError
+from sonar.sampling_params import SamplingParams
+from sonar.utils.import_utils import LazyLoader
+from sonar.utils.torch_utils import PIN_MEMORY
+from sonar.v1.structured_output.backend_types import (
     StructuredOutputBackend,
     StructuredOutputGrammar,
     StructuredOutputOptions,
 )
-from aphrodite.v1.structured_output.utils import (
+from sonar.v1.structured_output.utils import (
     OutlinesVocabulary,
     compile_regex_with_timeout,
     get_outlines_cache,
@@ -72,8 +72,8 @@ class OutlinesBackend(StructuredOutputBackend):
             raise ValueError(f"Invalid request type for Outlines backend ({request_type!s})")
         index = self._compile_index(regex, self.vocabulary)
         max_rollback_tokens = (
-            self.aphrodite_config.speculative_config.num_speculative_tokens
-            if self.aphrodite_config.speculative_config is not None
+            self.sonar_config.speculative_config.num_speculative_tokens
+            if self.sonar_config.speculative_config is not None
             else 0
         )
         return OutlinesGrammar(
@@ -199,33 +199,29 @@ def validate_structured_output_request_outlines(params: SamplingParams):
                 json.loads(so_params.json)
                 schema = so_params.json
             except json.JSONDecodeError as e:
-                raise AphroditeValidationError("Invalid JSON grammar specification.") from e
+                raise SonarValidationError("Invalid JSON grammar specification.") from e
         else:
             try:
                 schema = json.dumps(so_params.json)
             except Exception as e:
-                raise AphroditeValidationError(f"Error serializing structured outputs jsonschema: {e}") from e
+                raise SonarValidationError(f"Error serializing structured outputs jsonschema: {e}") from e
         try:
             pattern = json_schema.build_regex_from_schema(schema)
         except Exception as e:
-            raise AphroditeValidationError(f"Failed to transform json schema into a regex: {e}") from e
+            raise SonarValidationError(f"Failed to transform json schema into a regex: {e}") from e
         validate_regex_is_buildable(pattern)
     elif so_params.choice:
         choices = [regex_escape(str(choice)) for choice in so_params.choice]
         regex = "(" + "|".join(choices) + ")"
         validate_regex_is_buildable(regex)
     elif so_params.json_object:
-        raise AphroditeValidationError(
-            "Outlines structured outputs backend does not support json_object specifications"
-        )
+        raise SonarValidationError("Outlines structured outputs backend does not support json_object specifications")
     elif so_params.grammar:
-        raise AphroditeValidationError("Outlines structured outputs backend does not support grammar specifications")
+        raise SonarValidationError("Outlines structured outputs backend does not support grammar specifications")
     elif so_params.structural_tag:
-        raise AphroditeValidationError(
-            "Outlines structured outputs backend does not support structural_tag specifications"
-        )
+        raise SonarValidationError("Outlines structured outputs backend does not support structural_tag specifications")
     else:
-        raise AphroditeValidationError(
+        raise SonarValidationError(
             "Outlines structured outputs backend does not support this structured outputs specification"
         )
 
@@ -336,19 +332,19 @@ def validate_regex_is_buildable(pattern: str) -> None:
         parsed = _parser.parse(pattern)
 
     except _constants.error as e:
-        raise AphroditeValidationError(f"Error parsing regex: {e}") from e
+        raise SonarValidationError(f"Error parsing regex: {e}") from e
 
     try:
         _check_unsupported(parsed)
     except ValueError as e:
-        raise AphroditeValidationError(
+        raise SonarValidationError(
             f"Regex uses unsupported feature for structured outputs: {e}. "
             "Only basic matching constructs are supported—lookarounds, "
             "backreferences, and unicode boundaries are not."
         ) from e
 
     if _prefix_needs_context(parsed):
-        raise AphroditeValidationError(
+        raise SonarValidationError(
             "Regex does not have a anchored universal start state"
             "This means that the Regex uses anchors (^) or look-arounds "
             "in a way which requires context before any token is matched."

@@ -68,7 +68,7 @@ features:
               - '{"method":"mtp","num_speculative_tokens":5}'
       qwen3_5_mtp:
         label: "MTP (Ascend)"
-        description: "MTP mode documented for Aphrodite Ascend."
+        description: "MTP mode documented for Sonar Ascend."
         variants: [ascend_w8a8_mxfp8, ascend_w8a8]
         args:
           - "--speculative-config"
@@ -90,7 +90,7 @@ features:
       - "--max-model-len"
       - "1010000"
     env:
-      APHRODITE_ALLOW_LONG_MAX_MODEL_LEN: "1"
+      SONAR_ALLOW_LONG_MAX_MODEL_LEN: "1"
 
 opt_in_features:
   - spec_decoding
@@ -129,7 +129,7 @@ variants:
           - '{"cudagraph_mode":"FULL_DECODE_ONLY"}'
           - "--async-scheduling"
         extra_env:
-          APHRODITE_USE_MODELSCOPE: "True"
+          SONAR_USE_MODELSCOPE: "True"
           PYTORCH_NPU_ALLOC_CONF: "expandable_segments:True"
           HCCL_BUFFSIZE: "512"
           OMP_PROC_BIND: "false"
@@ -146,10 +146,10 @@ variants:
     hardware_overrides:
       dgx_spark_gb10:
         extra_env:
-          APHRODITE_USE_DEEP_GEMM: "0"
+          SONAR_USE_DEEP_GEMM: "0"
       rtx_pro_6000:
         extra_env:
-          APHRODITE_USE_DEEP_GEMM: "0"
+          SONAR_USE_DEEP_GEMM: "0"
   nvfp4:
     model_id: "nvidia/Qwen3.6-27B-NVFP4"
     precision: nvfp4
@@ -240,7 +240,7 @@ variants:
           - "--async-scheduling"
           - "--skip-mm-profiling"
         extra_env:
-          APHRODITE_HAS_FLASHINFER_CUBIN: "1"  
+          SONAR_HAS_FLASHINFER_CUBIN: "1"  
   redhat_fp8:
     model_id: "RedHatAI/Qwen3.6-27B-FP8"
     precision: fp8
@@ -280,7 +280,7 @@ variants:
       - "--additional-config"
       - '{"enable_cpu_binding":true}'
     extra_env:
-      APHRODITE_USE_MODELSCOPE: "True"
+      SONAR_USE_MODELSCOPE: "True"
       PYTORCH_NPU_ALLOC_CONF: "expandable_segments:True"
       HCCL_BUFFSIZE: "512"
       OMP_PROC_BIND: "false"
@@ -321,7 +321,7 @@ variants:
       - '{"enable_cpu_binding":true}'
       - "--async-scheduling"
     extra_env:
-      APHRODITE_USE_MODELSCOPE: "True"
+      SONAR_USE_MODELSCOPE: "True"
       PYTORCH_NPU_ALLOC_CONF: "expandable_segments:True"
       HCCL_BUFFSIZE: "512"
       OMP_PROC_BIND: "false"
@@ -349,7 +349,7 @@ hardware_overrides:
       - "--attention-backend"
       - "ROCM_AITER_FA"
     extra_env:
-      APHRODITE_ROCM_USE_AITER: "1"
+      SONAR_ROCM_USE_AITER: "1"
   xpu:
     extra_args:
       - "--enforce-eager"
@@ -367,8 +367,8 @@ guide: |
 
   ## Prerequisites
 
-  - **Aphrodite version:** >= 0.17.0
-  - **NVFP4 Aphrodite version:** >= 0.28.0 (currently nightly). 0.24.0 loads the
+  - **Sonar version:** >= 0.17.0
+  - **NVFP4 Sonar version:** >= 0.28.0 (currently nightly). 0.24.0 loads the
     checkpoint, but FlashInfer only selects its XQA decode kernel on SM120
     GPUs from 0.28.0.
   - **Hardware (BF16):** 1x H200, 2x H100, 4x Intel Arc Pro B60, 2x Intel Arc Pro B70
@@ -377,12 +377,12 @@ guide: |
   - **Hardware (NVFP4):** single NVIDIA Blackwell GPU (B200/B300/GB10 DGX Spark)
   - **Hardware (AMD):** 1x MI300X (BF16 fits one 192 GB GPU)
 
-  ### Install Aphrodite
+  ### Install Sonar
 
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U aphrodite-engine --torch-backend=auto
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/nightly/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   ```
 
   ### Docker
@@ -395,7 +395,7 @@ guide: |
   ### Single-GPU FP8
 
   ```bash
-  aphrodite serve Qwen/Qwen3.6-27B-FP8 \
+  sonar serve Qwen/Qwen3.6-27B-FP8 \
     --max-model-len 262144 \
     --reasoning-parser qwen3
   ```
@@ -403,7 +403,7 @@ guide: |
   ### BF16 on 2xH100 (TP2)
 
   ```bash
-  aphrodite serve Qwen/Qwen3.6-27B \
+  sonar serve Qwen/Qwen3.6-27B \
     --tensor-parallel-size 2 \
     --max-model-len 262144 \
     --reasoning-parser qwen3
@@ -412,7 +412,7 @@ guide: |
   ### MTP speculative decoding
 
   ```bash
-  aphrodite serve Qwen/Qwen3.6-27B-FP8 \
+  sonar serve Qwen/Qwen3.6-27B-FP8 \
     --speculative-config '{"method": "mtp", "num_speculative_tokens": 1}' \
     --reasoning-parser qwen3
   ```
@@ -420,7 +420,7 @@ guide: |
   ### Text-only (skip vision encoder)
 
   ```bash
-  aphrodite serve Qwen/Qwen3.6-27B-FP8 \
+  sonar serve Qwen/Qwen3.6-27B-FP8 \
     --language-model-only \
     --reasoning-parser qwen3 \
     --enable-prefix-caching
@@ -431,9 +431,9 @@ guide: |
   The [`nvidia/Qwen3.6-27B-NVFP4`](https://huggingface.co/nvidia/Qwen3.6-27B-NVFP4)
   checkpoint is NVIDIA's ModelOpt re-quantization: MLP linears drop to NVFP4
   (W4A16) while the attention linears and KV cache stay FP8, so the ~22 GB
-  weights fit a single Blackwell GPU. Aphrodite auto-detects the ModelOpt
+  weights fit a single Blackwell GPU. Sonar auto-detects the ModelOpt
   quantization from the checkpoint, so no `--quantization` flag is needed, but
-  it does need Aphrodite 0.28.0+ (currently nightly) for FlashInfer's XQA decode path
+  it does need Sonar 0.28.0+ (currently nightly) for FlashInfer's XQA decode path
   on SM120. NVIDIA reports near-lossless accuracy versus the FP8 baseline.
 
   Select the NVFP4 variant in the command builder above and switch the hardware
@@ -455,7 +455,7 @@ guide: |
   export ETH_IF="enp1s0f1np1"            # CX7 ethernet interface which is UP
   export IB_IF="rocep1s0f1,roceP2p1s0f1" # BOTH matching RoCE interfaces
   export MASTER_PORT=29501               # Free port on the Head Node
-  export CONTAINER_NAME=aphrodite_node
+  export CONTAINER_NAME=sonar_node
   export IMAGE="vllm/vllm-openai:nightly"
   ```
 
@@ -472,11 +472,11 @@ guide: |
     -e GLOO_SOCKET_IFNAME="$ETH_IF" \
     -e TP_SOCKET_IFNAME="$ETH_IF" \
     -e NCCL_IGNORE_CPU_AFFINITY=1 \
-    -e APHRODITE_FLOAT32_MATMUL_PRECISION=high \
+    -e SONAR_FLOAT32_MATMUL_PRECISION=high \
     -e HEAD_IP="$HEAD_IP" \
     -e MASTER_PORT="$MASTER_PORT" \
     -v "$HOME/.cache/huggingface:/root/.cache/huggingface" \
-    "$IMAGE" aphrodite serve nvidia/Qwen3.6-27B-NVFP4 \
+    "$IMAGE" sonar serve nvidia/Qwen3.6-27B-NVFP4 \
     --host 0.0.0.0 \
     --port 8000 \
     --trust-remote-code \
@@ -512,11 +512,11 @@ guide: |
     -e GLOO_SOCKET_IFNAME="$ETH_IF" \
     -e TP_SOCKET_IFNAME="$ETH_IF" \
     -e NCCL_IGNORE_CPU_AFFINITY=1 \
-    -e APHRODITE_FLOAT32_MATMUL_PRECISION=high \
+    -e SONAR_FLOAT32_MATMUL_PRECISION=high \
     -e HEAD_IP="$HEAD_IP" \
     -e MASTER_PORT="$MASTER_PORT" \
     -v "$HOME/.cache/huggingface:/root/.cache/huggingface" \
-    "$IMAGE" aphrodite serve nvidia/Qwen3.6-27B-NVFP4 \
+    "$IMAGE" sonar serve nvidia/Qwen3.6-27B-NVFP4 \
     --host 0.0.0.0 \
     --port 8000 \
     --trust-remote-code \
@@ -546,12 +546,12 @@ guide: |
   ### AMD (MI300X, single GPU, BF16)
 
   BF16 fits one MI300X. Two settings matter on ROCm and neither is on by default:
-  `APHRODITE_ROCM_USE_AITER=1` and an explicit attention backend. The auto-selected
+  `SONAR_ROCM_USE_AITER=1` and an explicit attention backend. The auto-selected
   `ROCM_ATTN` cannot use its native kernel for this model and its decode slows
   sharply as the prompt grows; `ROCM_AITER_FA` stays flat.
 
   ```bash
-  APHRODITE_ROCM_USE_AITER=1 aphrodite serve Qwen/Qwen3.6-27B \
+  SONAR_ROCM_USE_AITER=1 sonar serve Qwen/Qwen3.6-27B \
     --attention-backend ROCM_AITER_FA \
     --enable-auto-tool-choice --tool-call-parser qwen3_coder \
     --reasoning-parser qwen3
@@ -578,7 +578,7 @@ guide: |
   ### Docker (Intel XPU B60 / B70)
 
   Validated on 4× Intel Arc Pro B60 or 2x Intel Arc Pro B70 (B60 24 GB, B70 32 GB per card) with the
-  official Aphrodite XPU image `vllm/vllm-openai-xpu:latest`.
+  official Sonar XPU image `vllm/vllm-openai-xpu:latest`.
 
   ```bash
   docker run --device /dev/dri \
@@ -621,7 +621,7 @@ guide: |
   ## Troubleshooting
 
   - **CUDA graph / Mamba cache size error:** reduce `--max-cudagraph-capture-size`
-    (default 512). See [Aphrodite PR #34571](https://github.com/vllm-project/vllm/pull/34571).
+    (default 512). See [Sonar PR #34571](https://github.com/vllm-project/vllm/pull/34571).
   - **Disable reasoning:** add `--default-chat-template-kwargs '{"enable_thinking": false}'`.
   - **Prefix Caching (Mamba):** currently experimental in "align" mode.
 
@@ -633,5 +633,5 @@ guide: |
   - [NVIDIA NVFP4 checkpoint](https://huggingface.co/nvidia/Qwen3.6-27B-NVFP4)
   - [Ascend W8A8 checkpoint](https://www.modelscope.cn/models/Eco-Tech/Qwen3.6-27B-w8a8-mxfp8)
   - [Ascend A3 W8A8 checkpoint](https://www.modelscope.cn/models/Eco-Tech/Qwen3.6-27B-w8a8)
-  - [Aphrodite Ascend tutorial](https://docs.vllm.ai/projects/ascend/en/latest/tutorials/models/Qwen3.5-27B-Qwen3.6-27B.html)
+  - [Sonar Ascend tutorial](https://docs.vllm.ai/projects/ascend/en/latest/tutorials/models/Qwen3.5-27B-Qwen3.6-27B.html)
   - [Qwen3.6-35B-A3B recipe](../Qwen3.6-35B-A3B)

@@ -23,7 +23,7 @@ model:
   base_args:
     - "--trust-remote-code"
   base_env:
-    APHRODITE_VIDEO_LOADER_BACKEND: "opencv"
+    SONAR_VIDEO_LOADER_BACKEND: "opencv"
 
 features:
   video_compression:
@@ -85,10 +85,10 @@ guide: |
   ## Prerequisites
 
   - Hardware: 1x GPU (A100/H100/B200, etc.)
-  - Aphrodite: 0.11.0 does NOT include this model; use latest nightly or install from source
+  - Sonar: 0.11.0 does NOT include this model; use latest nightly or install from source
   - DGX Spark: use `nvcr.io/nvidia/vllm:25.12.post1-py3`
 
-  ### Install Aphrodite
+  ### Install Sonar
 
   ```bash
   docker pull vllm/vllm-openai:nightly-8bff831f0aa239006f34b721e63e1340e3472067
@@ -99,11 +99,11 @@ guide: |
   ## Launch command
 
   ```bash
-  export APHRODITE_VIDEO_LOADER_BACKEND=opencv
+  export SONAR_VIDEO_LOADER_BACKEND=opencv
   export CHECKPOINT_PATH="nvidia/NVIDIA-Nemotron-Nano-12B-v2-VL-BF16"
   export CUDA_VISIBLE_DEVICES=0
 
-  python3 -m aphrodite.entrypoints.openai.api_server \
+  python3 -m sonar.entrypoints.openai.api_server \
     --model ${CHECKPOINT_PATH} \
     --trust-remote-code \
     --media-io-kwargs '{"video": {"fps": 2, "num_frames": 128}}' \
@@ -144,7 +144,7 @@ guide: |
   ## Offline / LLM API
 
   ```python
-  from aphrodite import LLM, SamplingParams
+  from sonar import LLM, SamplingParams
 
   llm = LLM(
       "nvidia/NVIDIA-Nemotron-Nano-12B-v2-VL-BF16",
@@ -158,7 +158,7 @@ guide: |
 
   ## Troubleshooting
 
-  - Set `APHRODITE_VIDEO_LOADER_BACKEND=opencv` (required for video inputs).
+  - Set `SONAR_VIDEO_LOADER_BACKEND=opencv` (required for video inputs).
   - OOM: lower `--max-model-len` or increase `--video-pruning-rate`.
 
   ## References

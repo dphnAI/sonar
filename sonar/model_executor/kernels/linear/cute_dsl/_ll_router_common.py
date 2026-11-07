@@ -45,13 +45,13 @@ def cute_context():
 
 def current_cuda_stream():
     _, CUstream = cute_context()
-    from aphrodite.utils.torch_utils import current_stream
+    from sonar.utils.torch_utils import current_stream
 
     return CUstream(current_stream().cuda_stream)
 
 
 def use_pdl() -> bool:
-    from aphrodite.platforms import current_platform
+    from sonar.platforms import current_platform
 
     return current_platform.is_arch_support_pdl()
 

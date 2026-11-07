@@ -13,19 +13,19 @@ import torch
 import torch._dynamo.exc
 from torch import nn
 
-import aphrodite.kernels  # noqa: F401 to register kernels
-from aphrodite.compilation.passes.inductor_pass import InductorPass, get_pass_context
-from aphrodite.compilation.passes.ir.clone_elimination import (
+import sonar.kernels  # noqa: F401 to register kernels
+from sonar.compilation.passes.inductor_pass import InductorPass, get_pass_context
+from sonar.compilation.passes.ir.clone_elimination import (
     UnsafeCloneEliminationPass,
 )
-from aphrodite.compilation.passes.ir.inplace_functionalization import (
-    AphroditeIRInplaceFunctionalizationPass,
+from sonar.compilation.passes.ir.inplace_functionalization import (
+    SonarIRInplaceFunctionalizationPass,
 )
-from aphrodite.compilation.passes.ir.lowering_pass import AphroditeIRLoweringPass
-from aphrodite.config import AphroditeConfig
-from aphrodite.ir import ops
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import HAS_TRITON, tl, triton
+from sonar.compilation.passes.ir.lowering_pass import SonarIRLoweringPass
+from sonar.config import SonarConfig
+from sonar.ir import ops
+from sonar.platforms import current_platform
+from sonar.triton_utils import HAS_TRITON, tl, triton
 
 from ...backend import TestBackend
 
@@ -153,7 +153,7 @@ skipif_no_triton = pytest.mark.skipif(not HAS_TRITON, reason="Requires Triton")
     ],
 )
 def test_inplace_functionalization(
-    default_aphrodite_config: AphroditeConfig,
+    default_sonar_config: SonarConfig,
     model_class,
     expected_functionalized: int,
     expected_clones: int,
@@ -162,17 +162,17 @@ def test_inplace_functionalization(
     """Test inplace functionalization, lowering, and clone cleanup."""
     torch.set_default_device(current_platform.device_type)
 
-    # Use aphrodite_c so inplace path is triggered
-    default_aphrodite_config.kernel_config.ir_op_priority.fused_add_rms_norm = [
-        "aphrodite_c",
+    # Use sonar_c so inplace path is triggered
+    default_sonar_config.kernel_config.ir_op_priority.fused_add_rms_norm = [
+        "sonar_c",
         "native",
     ]
 
     # Create passes in order they run during compilation
-    functionalization_pass = AphroditeIRInplaceFunctionalizationPass(default_aphrodite_config)
-    lowering_pass = AphroditeIRLoweringPass(default_aphrodite_config)
+    functionalization_pass = SonarIRInplaceFunctionalizationPass(default_sonar_config)
+    lowering_pass = SonarIRLoweringPass(default_sonar_config)
     donated_info_pass = StoreDonationInfoPass()
-    cleanup_pass = UnsafeCloneEliminationPass(default_aphrodite_config)
+    cleanup_pass = UnsafeCloneEliminationPass(default_sonar_config)
 
     # Set up backend with pre-grad pass
     backend = TestBackend(lowering_pass, donated_info_pass, cleanup_pass)
@@ -183,7 +183,7 @@ def test_inplace_functionalization(
     residual1 = torch.randn(8, 16, dtype=torch.bfloat16)
     residual2 = torch.randn(8, 16, dtype=torch.bfloat16)
 
-    with default_aphrodite_config.kernel_config.ir_op_priority.set_priority():
+    with default_sonar_config.kernel_config.ir_op_priority.set_priority():
         # Reference output without optimization
         ref_output = model(x.clone(), residual1.clone(), residual2.clone())
 
@@ -206,7 +206,7 @@ def test_inplace_functionalization(
     assert "fused_add_rms_norm" in lowering_pass.selected_impls
     assert len(lowering_pass.selected_impls["fused_add_rms_norm"]) == 2
     assert all(
-        provider == "aphrodite_c" for node, provider in lowering_pass.selected_impls["fused_add_rms_norm"].items()
+        provider == "sonar_c" for node, provider in lowering_pass.selected_impls["fused_add_rms_norm"].items()
     ), lowering_pass.selected_impls
 
     # Verify correct number of donated IDs
@@ -224,16 +224,16 @@ def test_inplace_functionalization(
     not current_platform.is_cuda_alike(),
     reason="Only test on cuda and rocm platform",
 )
-def test_donated_buffer_context_propagation(default_aphrodite_config):
+def test_donated_buffer_context_propagation(default_sonar_config):
     """Test that donated_input_ids propagates correctly through pass_context."""
     torch.set_default_device(current_platform.device_type)
 
     # Create a custom backend that inspects pass_context in cleanup pass
-    functionalization_pass = AphroditeIRInplaceFunctionalizationPass(default_aphrodite_config)
-    lowering_pass = AphroditeIRLoweringPass(default_aphrodite_config)
+    functionalization_pass = SonarIRInplaceFunctionalizationPass(default_sonar_config)
+    lowering_pass = SonarIRLoweringPass(default_sonar_config)
 
     donation_info_pass = StoreDonationInfoPass()
-    cleanup_pass = UnsafeCloneEliminationPass(default_aphrodite_config)
+    cleanup_pass = UnsafeCloneEliminationPass(default_sonar_config)
 
     backend = TestBackend(lowering_pass, donation_info_pass, cleanup_pass)
     backend.inductor_config["pre_grad_custom_pass"] = functionalization_pass
@@ -260,7 +260,7 @@ def test_donated_buffer_context_propagation(default_aphrodite_config):
     not current_platform.is_cuda_alike(),
     reason="Only test on cuda and rocm platform",
 )
-def test_maybe_inplace_reuse_error(default_aphrodite_config):
+def test_maybe_inplace_reuse_error(default_sonar_config):
     """Test that reusing a donated activation input raises ValueError."""
     torch.set_default_device(current_platform.device_type)
 
@@ -277,9 +277,9 @@ def test_maybe_inplace_reuse_error(default_aphrodite_config):
             # ERROR: x is used again after being donated
             return x_normed + x  # This should raise ValueError
 
-    functionalization_pass = AphroditeIRInplaceFunctionalizationPass(default_aphrodite_config)
-    lowering_pass = AphroditeIRLoweringPass(default_aphrodite_config)
-    cleanup_pass = UnsafeCloneEliminationPass(default_aphrodite_config)
+    functionalization_pass = SonarIRInplaceFunctionalizationPass(default_sonar_config)
+    lowering_pass = SonarIRLoweringPass(default_sonar_config)
+    cleanup_pass = UnsafeCloneEliminationPass(default_sonar_config)
 
     backend = TestBackend(lowering_pass, cleanup_pass)
     backend.inductor_config["pre_grad_custom_pass"] = functionalization_pass
@@ -300,7 +300,7 @@ def test_maybe_inplace_reuse_error(default_aphrodite_config):
 # Piecewise compilation tests with graph splitting
 
 
-@torch.library.custom_op("aphrodite::test_split_marker", mutates_args=())
+@torch.library.custom_op("sonar::test_split_marker", mutates_args=())
 def test_split_marker(x: torch.Tensor) -> torch.Tensor:
     """Identity op that marks a split point for piecewise compilation."""
     return x.clone()
@@ -342,7 +342,7 @@ class TransformerBlockWithSplits(nn.Module):
         normed1, residual1 = ops.fused_add_rms_norm.maybe_inplace(attn_out, residual1, self.post_attn_norm, 1e-5)
 
         # Force a graph split here
-        normed1 = torch.ops.aphrodite.test_split_marker(normed1)
+        normed1 = torch.ops.sonar.test_split_marker(normed1)
 
         # MLP block
         gate = self.gate_proj(normed1)
@@ -367,29 +367,29 @@ def with_dyn_arg(fn: Callable, arg_index: int, dim_index: int):
     not current_platform.is_cuda_alike(),
     reason="Only test on cuda and rocm platform",
 )
-def test_piecewise_compilation_with_donated_buffers(monkeypatch, fresh_aphrodite_cache):
+def test_piecewise_compilation_with_donated_buffers(monkeypatch, fresh_sonar_cache):
     """Test piecewise compilation with donated buffers across graph splits.
     Utilizes a custom splitting op. Uses fresh cache to avoid compilation caching.
     """
     torch.set_default_device(current_platform.device_type)
 
     # Disable compilation cache to avoid serialization issues
-    monkeypatch.setenv("APHRODITE_DISABLE_COMPILE_CACHE", "1")
+    monkeypatch.setenv("SONAR_DISABLE_COMPILE_CACHE", "1")
 
-    from aphrodite.compilation.backends import AphroditeBackend
-    from aphrodite.config import AphroditeConfig, CompilationConfig
+    from sonar.compilation.backends import SonarBackend
+    from sonar.config import CompilationConfig, SonarConfig
 
     # Create config with custom splitting op
     store_donation_info = StoreDonationInfoPass()
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         compilation_config=CompilationConfig(
             custom_ops=["all"],
-            splitting_ops=["aphrodite::test_split_marker"],
+            splitting_ops=["sonar::test_split_marker"],
             inductor_compile_config={"post_grad_custom_post_pass": store_donation_info},
         )
     )
 
-    backend = AphroditeBackend(aphrodite_config)
+    backend = SonarBackend(sonar_config)
 
     model = TransformerBlockWithSplits()
     x = torch.randn(8, 32, dtype=torch.bfloat16)

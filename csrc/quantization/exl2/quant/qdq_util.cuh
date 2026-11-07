@@ -23,7 +23,7 @@
 #ifndef _qdq_util_cuh
 #define _qdq_util_cuh
 
-namespace aphrodite {
+namespace sonar {
 namespace exl2 {
 
 union half2_uint32 {
@@ -72,5 +72,5 @@ __forceinline__ __device__ int exb(const uint32_t q1, const uint32_t q0,
 }
 
 }  // namespace exl2
-}  // namespace aphrodite
+}  // namespace sonar
 #endif

@@ -7,9 +7,9 @@ import itertools
 import torch
 from weight_shapes import WEIGHT_SHAPES
 
-from aphrodite._custom_ops import cutlass_scaled_mm as aphrodite_scaled_mm
-from aphrodite._custom_ops import scaled_int8_quant as aphrodite_scaled_int8_quant
-from aphrodite.triton_utils import triton
+from sonar._custom_ops import cutlass_scaled_mm as sonar_scaled_mm
+from sonar._custom_ops import scaled_int8_quant as sonar_scaled_int8_quant
+from sonar.triton_utils import triton
 
 PROVIDER_CFGS = {
     "torch-bf16": dict(enabled=True),
@@ -27,10 +27,10 @@ PROVIDER_CFGS = {
 def _quant_weight(b, w_type, device):
     if w_type == "tensor":
         scale_b = torch.ones(1, device=device, dtype=torch.float32)
-        b_int8, scale_b_int8, _ = aphrodite_scaled_int8_quant(b, scale_b)
+        b_int8, scale_b_int8, _ = sonar_scaled_int8_quant(b, scale_b)
         assert scale_b_int8.numel() == 1
     else:  # channel
-        b_int8, scale_b_int8, _ = aphrodite_scaled_int8_quant(b)
+        b_int8, scale_b_int8, _ = sonar_scaled_int8_quant(b)
         assert scale_b_int8.numel() == b.shape[0]
     return b_int8.t(), scale_b_int8
 
@@ -46,12 +46,12 @@ def build_int8_runner(cfg, a, b, dtype, device):
     # no quant, create activation ahead
     if cfg["no_a_quant"]:
         if cfg["a"] == "tensor":
-            a_int8, scale_a_int8, _ = aphrodite_scaled_int8_quant(a, scale_a_const)
+            a_int8, scale_a_int8, _ = sonar_scaled_int8_quant(a, scale_a_const)
         else:  # token
-            a_int8, scale_a_int8, _ = aphrodite_scaled_int8_quant(a)
+            a_int8, scale_a_int8, _ = sonar_scaled_int8_quant(a)
 
         def run_quant():
-            return aphrodite_scaled_mm(a_int8, b_int8, scale_a_int8, scale_b_int8, dtype)
+            return sonar_scaled_mm(a_int8, b_int8, scale_a_int8, scale_b_int8, dtype)
 
         return run_quant
 
@@ -59,14 +59,14 @@ def build_int8_runner(cfg, a, b, dtype, device):
     if cfg["a"] == "tensor":
 
         def run_quant():
-            a_int8, scale_a_int8, _ = aphrodite_scaled_int8_quant(a, scale_a_const)
-            return aphrodite_scaled_mm(a_int8, b_int8, scale_a_int8, scale_b_int8, dtype)
+            a_int8, scale_a_int8, _ = sonar_scaled_int8_quant(a, scale_a_const)
+            return sonar_scaled_mm(a_int8, b_int8, scale_a_int8, scale_b_int8, dtype)
 
     else:  # token
 
         def run_quant():
-            a_int8, scale_a_int8, _ = aphrodite_scaled_int8_quant(a)
-            return aphrodite_scaled_mm(a_int8, b_int8, scale_a_int8, scale_b_int8, dtype)
+            a_int8, scale_a_int8, _ = sonar_scaled_int8_quant(a)
+            return sonar_scaled_mm(a_int8, b_int8, scale_a_int8, scale_b_int8, dtype)
 
     return run_quant
 

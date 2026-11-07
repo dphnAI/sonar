@@ -3,9 +3,9 @@
 
 from typing import TYPE_CHECKING
 
-from aphrodite import envs
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
+from sonar import envs
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
 
 from ..inc_linear import INCLinearMethod
 from .inc_scheme import INCScheme
@@ -25,7 +25,7 @@ XPU_WNA16_SUPPORTED_BITS = {2, 4}
 # 5/6/7-bit biased scalar types also fall back to humming at kernel selection.
 CUDA_HUMMING_SUPPORTED_BITS = {2, 3, 5, 6, 7}
 
-# Backends selectable through APHRODITE_XPU_INC_WNA16_BACKEND that are served by the
+# Backends selectable through SONAR_XPU_INC_WNA16_BACKEND that are served by the
 # oneDNN int4 GEMMs rather than by ARK. These only cover int4.
 XPU_ONEDNN_BACKENDS = ("w4a16", "w4a8")
 
@@ -40,14 +40,14 @@ def _check_xpu_w4a8_supported(layer_config: "INCLayerConfig", prefix: str) -> No
 
     if not hasattr(torch.ops._xpu_C, "int4_gemm_w4a8"):
         raise NotImplementedError(
-            "APHRODITE_XPU_INC_WNA16_BACKEND=w4a8 requires the int4_gemm_w4a8 op, "
+            "SONAR_XPU_INC_WNA16_BACKEND=w4a8 requires the int4_gemm_w4a8 op, "
             "which this build of vllm-xpu-kernels does not provide. "
             f"Layer: {prefix}."
         )
     assert isinstance(layer_config.group_size, int), "WNA16 only supports integer group_size."
     if layer_config.group_size <= 0 or layer_config.group_size % 32 != 0:
         raise NotImplementedError(
-            "APHRODITE_XPU_INC_WNA16_BACKEND=w4a8 requires a group size that is a "
+            "SONAR_XPU_INC_WNA16_BACKEND=w4a8 requires a group size that is a "
             f"positive multiple of 32, got {layer_config.group_size}. "
             f"Layer: {prefix}."
         )
@@ -75,11 +75,11 @@ class INCWna16Scheme(INCScheme):
                     INCXPULinearMethod,
                 )
 
-                backend = envs.APHRODITE_XPU_INC_WNA16_BACKEND
+                backend = envs.SONAR_XPU_INC_WNA16_BACKEND
                 if backend in XPU_ONEDNN_BACKENDS:
                     if layer_config.bits != 4:
                         raise NotImplementedError(
-                            f"APHRODITE_XPU_INC_WNA16_BACKEND={backend} only supports "
+                            f"SONAR_XPU_INC_WNA16_BACKEND={backend} only supports "
                             f"int4, got int{layer_config.bits}. Layer: {prefix}."
                         )
                     if backend == "w4a8":
@@ -90,7 +90,7 @@ class INCWna16Scheme(INCScheme):
                 is_ark_available, ark_error, _, _ = get_ark_state()
                 if backend == "ark" and not is_ark_available:
                     raise NotImplementedError(
-                        "APHRODITE_XPU_INC_WNA16_BACKEND=ark was requested but "
+                        "SONAR_XPU_INC_WNA16_BACKEND=ark was requested but "
                         f"auto_round_kernel is unavailable: "
                         f"{ark_error or 'unknown error'}. Layer: {prefix}."
                     )
@@ -155,7 +155,7 @@ class INCWna16Scheme(INCScheme):
             from .inc_ark_ops import get_ark_state
             from .inc_wna16_moe import INCARKWNA16MoEMethod
 
-            backend = envs.APHRODITE_XPU_INC_WNA16_BACKEND
+            backend = envs.SONAR_XPU_INC_WNA16_BACKEND
             if backend not in XPU_ONEDNN_BACKENDS:
                 is_ark_available, ark_error, ark, _ = get_ark_state()
                 xpu_lib = getattr(ark, "xpu_lib", None) if ark is not None else None
@@ -165,13 +165,13 @@ class INCWna16Scheme(INCScheme):
                 ark_moe_error = ark_error or "ARK MoE kernels are unavailable"
                 if backend == "ark" and not is_ark_moe_available:
                     raise NotImplementedError(
-                        "APHRODITE_XPU_INC_WNA16_BACKEND=ark was requested but "
+                        "SONAR_XPU_INC_WNA16_BACKEND=ark was requested but "
                         f"ARK MoE kernels are unavailable: {ark_moe_error}. "
                         f"Layer: {prefix}."
                     )
 
                 if is_ark_moe_available:
-                    from aphrodite.model_executor.layers.quantization.moe_wna16 import (
+                    from sonar.model_executor.layers.quantization.moe_wna16 import (
                         MoeWNA16Config,
                     )
 
@@ -225,22 +225,22 @@ def _humming_weight_config(layer_config: "INCLayerConfig") -> dict:
 
 
 def _build_humming_quant_config(layer_config: "INCLayerConfig"):
-    from aphrodite.model_executor.layers.quantization.humming import (
+    from sonar.model_executor.layers.quantization.humming import (
         HummingLayerQuantizationConfig,
     )
-    from aphrodite.utils.humming import BaseWeightSchema
+    from sonar.utils.humming import BaseWeightSchema
 
     weight_schema = BaseWeightSchema.from_config(_humming_weight_config(layer_config))
     return HummingLayerQuantizationConfig(weight_schema=weight_schema)
 
 
 def _build_humming_linear_method(layer_config: "INCLayerConfig"):
-    from aphrodite.model_executor.layers.quantization.humming import HummingLinearMethod
+    from sonar.model_executor.layers.quantization.humming import HummingLinearMethod
 
     return HummingLinearMethod(_build_humming_quant_config(layer_config))
 
 
 def _build_humming_moe_method(layer: "torch.nn.Module", layer_config: "INCLayerConfig"):
-    from aphrodite.model_executor.layers.quantization.humming import HummingMoEMethod
+    from sonar.model_executor.layers.quantization.humming import HummingMoEMethod
 
     return HummingMoEMethod(_build_humming_quant_config(layer_config), layer.moe_config)

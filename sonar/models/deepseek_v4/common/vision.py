@@ -18,27 +18,27 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from aphrodite.distributed import (
+from sonar.distributed import (
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
     tensor_model_parallel_all_gather,
 )
-from aphrodite.model_executor.layers.activation import SiluAndMul
-from aphrodite.model_executor.layers.attention.mm_encoder_attention import (
+from sonar.model_executor.layers.activation import SiluAndMul
+from sonar.model_executor.layers.attention.mm_encoder_attention import (
     MMEncoderAttention,
 )
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     MergedColumnParallelLinear,
     QKVParallelLinear,
     ReplicatedLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.models.vision import (
+from sonar.model_executor.models.vision import (
     get_load_balance_assignment,
     is_vit_use_data_parallel,
 )
-from aphrodite.utils.torch_utils import async_tensor_h2d
+from sonar.utils.torch_utils import async_tensor_h2d
 
 
 def _compute_vision_cos_sin(n_h: int, n_w: int, dim: int, theta: float) -> tuple[torch.Tensor, torch.Tensor]:

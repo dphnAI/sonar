@@ -13,21 +13,21 @@ import torch
 
 pytest.importorskip("flydsl")
 
-from aphrodite.models.minimax_m3.amd.mono import config as mono_config  # noqa: E402
-from aphrodite.models.minimax_m3.amd.mono import dispatch as mono_dispatch  # noqa: E402
-from aphrodite.models.minimax_m3.amd.mono import envs as mono_envs  # noqa: E402
-from aphrodite.models.minimax_m3.amd.mono.config import (  # noqa: E402
+from sonar.models.minimax_m3.amd.mono import config as mono_config  # noqa: E402
+from sonar.models.minimax_m3.amd.mono import dispatch as mono_dispatch  # noqa: E402
+from sonar.models.minimax_m3.amd.mono import envs as mono_envs  # noqa: E402
+from sonar.models.minimax_m3.amd.mono.config import (  # noqa: E402
     MAX_CONTEXT,
     MAX_TOKENS,
     SPARSE_BLOCK,
     TP,
     MonoUnsupported,
 )
-from aphrodite.models.minimax_m3.amd.mono.dispatch import (  # noqa: E402
+from sonar.models.minimax_m3.amd.mono.dispatch import (  # noqa: E402
     _config_refusal,
     _step_refusal,
 )
-from aphrodite.models.minimax_m3.amd.mono.runner import (  # noqa: E402
+from sonar.models.minimax_m3.amd.mono.runner import (  # noqa: E402
     dense_prefix,
     token_rows,
 )
@@ -99,7 +99,7 @@ def test_configure_accepts_only_the_two_kv_page_strides():
         mono_config.configure(kv_page_stride=saved[0], static_kv_scale=saved[1])
 
 
-def _aphrodite_config(**overrides):
+def _sonar_config(**overrides):
     cg = SimpleNamespace(requires_piecewise_compilation=lambda: False)
     cfg = SimpleNamespace(
         parallel_config=SimpleNamespace(
@@ -135,21 +135,21 @@ def _model(fse: bool = True, shared_mlp: bool = True, aux=()):
 @pytest.mark.parametrize("fse", [True, False])
 @pytest.mark.parametrize("aux", [(), (2, 30, 57)])
 def test_config_refusal_accepts_the_supported_deployment(fse, aux):
-    assert _config_refusal(_aphrodite_config(), _model(fse=fse, aux=aux)) is None
+    assert _config_refusal(_sonar_config(), _model(fse=fse, aux=aux)) is None
 
 
 @pytest.mark.parametrize(
     "cfg, model, why",
     [
-        (_aphrodite_config(**{"parallel_config.tensor_parallel_size": 8}), _model(), "TP"),
-        (_aphrodite_config(**{"cache_config.cache_dtype": "auto"}), _model(), "kv cache"),
-        (_aphrodite_config(**{"cache_config.block_size": 64}), _model(), "block size"),
+        (_sonar_config(**{"parallel_config.tensor_parallel_size": 8}), _model(), "TP"),
+        (_sonar_config(**{"cache_config.cache_dtype": "auto"}), _model(), "kv cache"),
+        (_sonar_config(**{"cache_config.block_size": 64}), _model(), "block size"),
         (
-            _aphrodite_config(**{"model_config.max_model_len": MAX_CONTEXT + 1}),
+            _sonar_config(**{"model_config.max_model_len": MAX_CONTEXT + 1}),
             _model(),
             "max_model_len",
         ),
-        (_aphrodite_config(), _model(fse=False, shared_mlp=False), "neither fused nor"),
+        (_sonar_config(), _model(fse=False, shared_mlp=False), "neither fused nor"),
     ],
 )
 def test_config_refusal_names_the_unmet_condition(cfg, model, why):
@@ -233,7 +233,7 @@ def mono(monkeypatch):
     monkeypatch.setattr(mono_dispatch, "MonoDecodeRunner", _FakeRunner)
     monkeypatch.setattr(torch.cuda, "is_current_stream_capturing", lambda: False)
     _FakeRunner.built = 0
-    return mono_dispatch.MonoDecode(_model(), _aphrodite_config())
+    return mono_dispatch.MonoDecode(_model(), _sonar_config())
 
 
 def _fwd_shared(n: int, shared: bool = True):
@@ -245,22 +245,22 @@ def _fwd_shared(n: int, shared: bool = True):
 
 def test_env_flag_parsing(monkeypatch):
     for raw, want in (("1", True), ("true", True), ("True", True), ("0", False)):
-        monkeypatch.setenv("APHRODITE_ROCM_MINIMAX_M3_MONO_TESTFLAG", raw)
-        assert mono_envs._flag("APHRODITE_ROCM_MINIMAX_M3_MONO_TESTFLAG") is want
-    monkeypatch.delenv("APHRODITE_ROCM_MINIMAX_M3_MONO_TESTFLAG")
-    assert mono_envs._flag("APHRODITE_ROCM_MINIMAX_M3_MONO_TESTFLAG") is False
+        monkeypatch.setenv("SONAR_ROCM_MINIMAX_M3_MONO_TESTFLAG", raw)
+        assert mono_envs._flag("SONAR_ROCM_MINIMAX_M3_MONO_TESTFLAG") is want
+    monkeypatch.delenv("SONAR_ROCM_MINIMAX_M3_MONO_TESTFLAG")
+    assert mono_envs._flag("SONAR_ROCM_MINIMAX_M3_MONO_TESTFLAG") is False
 
 
 def test_disabled_without_the_switch(monkeypatch):
     monkeypatch.setattr(mono_dispatch.envs, "MONO_ENABLE", False)
-    mono = mono_dispatch.MonoDecode(_model(), _aphrodite_config())
+    mono = mono_dispatch.MonoDecode(_model(), _sonar_config())
     assert not mono._enabled
     assert not mono.supports(None, torch.zeros(1, dtype=torch.int64), None, None)
 
 
 def test_unsupported_deployment_falls_back(monkeypatch):
     monkeypatch.setattr(mono_dispatch.envs, "MONO_ENABLE", True)
-    bad = _aphrodite_config(**{"parallel_config.tensor_parallel_size": 8})
+    bad = _sonar_config(**{"parallel_config.tensor_parallel_size": 8})
     assert not mono_dispatch.MonoDecode(_model(), bad)._enabled
 
 

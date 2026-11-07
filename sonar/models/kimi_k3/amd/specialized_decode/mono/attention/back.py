@@ -25,7 +25,7 @@ from aiter.ops.flydsl.kernels import buffer_ops as bo
 from flydsl.expr import gpu, range_constexpr
 from flydsl.expr.typing import T
 
-from aphrodite.models.kimi_k3.amd.specialized_decode.mono.attention.kda import (
+from sonar.models.kimi_k3.amd.specialized_decode.mono.attention.kda import (
     COLS,
     HIDDEN,
     LDS_PAD,
@@ -33,7 +33,7 @@ from aphrodite.models.kimi_k3.amd.specialized_decode.mono.attention.kda import (
     PROJ,
     ROWS,
 )
-from aphrodite.models.kimi_k3.amd.specialized_decode.mono.common.ops import (
+from sonar.models.kimi_k3.amd.specialized_decode.mono.common.ops import (
     CM_NT,
     bf16_round,
     mfma_bf16,
@@ -41,13 +41,13 @@ from aphrodite.models.kimi_k3.amd.specialized_decode.mono.common.ops import (
     rsrc,
     traced,
 )
-from aphrodite.models.kimi_k3.amd.specialized_decode.mono.common.plan import (
+from sonar.models.kimi_k3.amd.specialized_decode.mono.common.plan import (
     BLOCKS,
     THREADS,
     WAVES,
     pair_layout,
 )
-from aphrodite.models.kimi_k3.amd.specialized_decode.mono.common.ranks import sum_partials
+from sonar.models.kimi_k3.amd.specialized_decode.mono.common.ranks import sum_partials
 
 TP = 8
 OROWS = HIDDEN  # o_proj rows (full hidden, a rank's K slice)

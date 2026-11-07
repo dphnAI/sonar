@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-//! Shared tracing subscriber and log formatting for Aphrodite Rust binaries.
+//! Shared tracing subscriber and log formatting for Sonar Rust binaries.
 
 pub mod timing;
 
@@ -27,17 +27,15 @@ const YELLOW: &str = "\x1b[33m";
 const RED: &str = "\x1b[31m";
 const WHITE: &str = "\x1b[37m";
 const RESET: &str = "\x1b[0m";
-const APHRODITE_TIME_FORMAT: &[time::format_description::FormatItem<'static>] =
+const SONAR_TIME_FORMAT: &[time::format_description::FormatItem<'static>] =
     format_description!("[month]-[day] [hour]:[minute]:[second]");
 
-/// Install the process-wide Aphrodite-style tracing subscriber.
+/// Install the process-wide Sonar-style tracing subscriber.
 pub fn init_tracing(process_label: &str) {
-    let _ = tracing_subscriber::registry()
-        .with(aphrodite_fmt_layer(process_label))
-        .try_init();
+    let _ = tracing_subscriber::registry().with(sonar_fmt_layer(process_label)).try_init();
 }
 
-/// Install the process-wide Aphrodite-style tracing subscriber, with an
+/// Install the process-wide Sonar-style tracing subscriber, with an
 /// additional layer (e.g. the multimodal preprocessing timing collector).
 pub fn init_tracing_with<L>(process_label: &str, layer: L)
 where
@@ -45,20 +43,20 @@ where
 {
     let _ = tracing_subscriber::registry()
         .with(layer)
-        .with(aphrodite_fmt_layer(process_label))
+        .with(sonar_fmt_layer(process_label))
         .try_init();
 }
 
-/// The Aphrodite-style fmt layer filtered by `APHRODITE_LOGGING_LEVEL` / `RUST_LOG`.
-fn aphrodite_fmt_layer<S>(process_label: &str) -> impl Layer<S> + Send + Sync + 'static + use<S>
+/// The Sonar-style fmt layer filtered by `SONAR_LOGGING_LEVEL` / `RUST_LOG`.
+fn sonar_fmt_layer<S>(process_label: &str) -> impl Layer<S> + Send + Sync + 'static + use<S>
 where
     S: Subscriber + for<'lookup> LookupSpan<'lookup>,
 {
     let filter = build_targets_filter(
-        env::var("APHRODITE_LOGGING_LEVEL").ok().as_deref(),
+        env::var("SONAR_LOGGING_LEVEL").ok().as_deref(),
         env::var("RUST_LOG").ok().as_deref(),
     );
-    let formatter = AphroditeEventFormatter::new(process_label);
+    let formatter = SonarEventFormatter::new(process_label);
 
     tracing_subscriber::fmt::layer()
         .event_format(formatter)
@@ -66,19 +64,18 @@ where
         .with_filter(filter)
 }
 
-/// Build the CLI log filter by merging the Aphrodite-style default level with
+/// Build the CLI log filter by merging the Sonar-style default level with
 /// Rust-style target overrides.
 ///
 /// Precedence:
-/// - Start from `APHRODITE_LOGGING_LEVEL` as the default level for all targets.
+/// - Start from `SONAR_LOGGING_LEVEL` as the default level for all targets.
 /// - If `RUST_LOG` contains a global default level such as `warn`, it overrides
-///   `APHRODITE_LOGGING_LEVEL`.
+///   `SONAR_LOGGING_LEVEL`.
 /// - Any explicit target directives in `RUST_LOG`, such as `hyper=info`, override whichever default
 ///   level is active for those targets only.
-fn build_targets_filter(aphrodite_logging_level: Option<&str>, rust_log: Option<&str>) -> Targets {
-    let mut filter = Targets::new().with_default(map_python_log_level(
-        aphrodite_logging_level.unwrap_or("INFO"),
-    ));
+fn build_targets_filter(sonar_logging_level: Option<&str>, rust_log: Option<&str>) -> Targets {
+    let mut filter =
+        Targets::new().with_default(map_python_log_level(sonar_logging_level.unwrap_or("INFO")));
 
     if let Some(rust_log) = rust_log
         && !rust_log.is_empty()
@@ -94,36 +91,36 @@ fn build_targets_filter(aphrodite_logging_level: Option<&str>, rust_log: Option<
 }
 
 #[derive(Debug, Clone, Copy)]
-struct AphroditeLocalTimer {
+struct SonarLocalTimer {
     local_offset: UtcOffset,
 }
 
-impl Default for AphroditeLocalTimer {
+impl Default for SonarLocalTimer {
     fn default() -> Self {
         let local_offset = UtcOffset::current_local_offset().unwrap_or(UtcOffset::UTC);
         Self { local_offset }
     }
 }
 
-impl FormatTime for AphroditeLocalTimer {
+impl FormatTime for SonarLocalTimer {
     fn format_time(&self, w: &mut Writer<'_>) -> fmt::Result {
         let now = time::OffsetDateTime::now_utc().to_offset(self.local_offset);
-        let formatted = now.format(APHRODITE_TIME_FORMAT).map_err(|_| fmt::Error)?;
+        let formatted = now.format(SONAR_TIME_FORMAT).map_err(|_| fmt::Error)?;
         w.write_str(&formatted)
     }
 }
 
 #[derive(Debug, Clone)]
-struct AphroditeEventFormatter {
+struct SonarEventFormatter {
     prefix: String,
-    timer: AphroditeLocalTimer,
+    timer: SonarLocalTimer,
 }
 
-impl AphroditeEventFormatter {
+impl SonarEventFormatter {
     fn new(process_label: &str) -> Self {
         Self {
             prefix: format!("({process_label} pid={})", process::id()),
-            timer: AphroditeLocalTimer::default(),
+            timer: SonarLocalTimer::default(),
         }
     }
 
@@ -218,7 +215,7 @@ impl AphroditeEventFormatter {
     }
 }
 
-impl<S, N> FormatEvent<S, N> for AphroditeEventFormatter
+impl<S, N> FormatEvent<S, N> for SonarEventFormatter
 where
     S: Subscriber + for<'lookup> LookupSpan<'lookup>,
     N: for<'writer> FormatFields<'writer> + 'static,
@@ -319,27 +316,27 @@ mod tests {
 
     #[test]
     fn formatter_prefix_uses_process_label() {
-        let formatter = AphroditeEventFormatter::new("Bench");
+        let formatter = SonarEventFormatter::new("Bench");
 
         assert_eq!(formatter.prefix, format!("(Bench pid={})", process::id()));
     }
 
     #[test]
-    fn rust_log_target_overrides_are_merged_with_aphrodite_default_level() {
+    fn rust_log_target_overrides_are_merged_with_sonar_default_level() {
         let filter = build_targets_filter(Some("DEBUG"), Some("hyper=warn,tower=error"));
 
         assert_eq!(filter.to_string(), "tower=error,hyper=warn,debug");
     }
 
     #[test]
-    fn rust_log_default_level_overrides_aphrodite_default_level() {
+    fn rust_log_default_level_overrides_sonar_default_level() {
         let filter = build_targets_filter(Some("DEBUG"), Some("warn,hyper=info"));
 
         assert_eq!(filter.to_string(), "hyper=info,warn");
     }
 
     #[test]
-    fn invalid_aphrodite_level_falls_back_to_info() {
+    fn invalid_sonar_level_falls_back_to_info() {
         let filter = build_targets_filter(Some("bogus"), None);
 
         assert_eq!(filter.to_string(), "info");

@@ -12,24 +12,24 @@ from aiter.ops.flydsl.kernels import buffer_ops as bo
 from flydsl.expr import const_expr, range_constexpr
 from flydsl.expr.typing import T
 
-from aphrodite.models.deepseek_v41.amd.mono.common.arch import GFX942
-from aphrodite.models.deepseek_v41.amd.mono.common.gfx942 import (
+from sonar.models.deepseek_v41.amd.mono.common.arch import GFX942
+from sonar.models.deepseek_v41.amd.mono.common.gfx942 import (
     mfma_fp8_scaled,
     pair_i64,
     pin_acc,
 )
-from aphrodite.models.deepseek_v41.amd.mono.common.mx import (
+from sonar.models.deepseek_v41.amd.mono.common.mx import (
     UNIT_SCALE,
     mfma_scaled,
 )
-from aphrodite.models.deepseek_v41.amd.mono.common.ops import (
+from sonar.models.deepseek_v41.amd.mono.common.ops import (
     CM_NT,
     fresh,
     rsrc,
     traced,
 )
-from aphrodite.models.deepseek_v41.amd.mono.common.plan import WAVES
-from aphrodite.models.deepseek_v41.amd.mono.common.sync import POLL_MAX
+from sonar.models.deepseek_v41.amd.mono.common.plan import WAVES
+from sonar.models.deepseek_v41.amd.mono.common.sync import POLL_MAX
 
 ROWS = 16  # GEMV rows a task
 # An MFMA's N: the tokens or picks that one 16x16 MFMA takes.
@@ -93,7 +93,7 @@ def _fp8_step_load(c, r_w, r_ws, k, rg, st, row_major=False):
     chunks (the upper clamped into the row) and the raw scale word. The (16, 16)
     shuffle lays a row group out in 32-column blocks of 16 rows, a chunk two of
     them (lanes 0-31, 32-63); ``k`` % 64 = 32 (a last quarter step): the lanes
-    of a block past the row read its last block. ``row_major`` (Aphrodite's dense
+    of a block past the row read its last block. ``row_major`` (Sonar's dense
     layout, k % 32 == 0): the same registers from a row-major [N, K] weight --
     lane l row 16 rg + l % 16, K bytes 128 st + 16 (l // 16) .. and + 64; with
     k % 64 == 32 (TP8's shared expert, K = 288) the last step's upper lanes are

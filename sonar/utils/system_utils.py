@@ -15,11 +15,11 @@ from pathlib import Path
 
 import psutil
 
-import aphrodite.envs as envs
-from aphrodite.logger import init_logger, set_aphrodite_process_name
-from aphrodite.platforms import current_platform
-from aphrodite.platforms.interface import in_wsl
-from aphrodite.ray.lazy_utils import is_in_ray_actor
+import sonar.envs as envs
+from sonar.logger import init_logger, set_sonar_process_name
+from sonar.platforms import current_platform
+from sonar.platforms.interface import in_wsl
+from sonar.ray.lazy_utils import is_in_ray_actor
 
 from .platform_utils import cuda_is_initialized, xpu_is_initialized
 
@@ -60,7 +60,7 @@ def suppress_stdout():
     """Suppress stdout from C libraries at the file descriptor level.
 
     Only suppresses stdout, not stderr, to preserve error messages.
-    Suppression is disabled when Aphrodite debug logging is enabled.
+    Suppression is disabled when Sonar debug logging is enabled.
 
     Example:
         with suppress_stdout():
@@ -115,7 +115,7 @@ def _sync_visible_devices_env_vars():
     if not current_platform.is_rocm():
         return
 
-    from aphrodite.platforms.rocm import _sync_hip_cuda_env_vars
+    from sonar.platforms.rocm import _sync_hip_cuda_env_vars
 
     _sync_hip_cuda_env_vars()
 
@@ -124,7 +124,7 @@ def _maybe_force_spawn():
     """Check if we need to force the use of the `spawn` multiprocessing start
     method.
     """
-    if os.environ.get("APHRODITE_WORKER_MULTIPROC_METHOD") == "spawn":
+    if os.environ.get("SONAR_WORKER_MULTIPROC_METHOD") == "spawn":
         return
 
     reasons = []
@@ -155,13 +155,13 @@ def _maybe_force_spawn():
     if reasons:
         logger.warning(
             "We must use the `spawn` multiprocessing start method. "
-            "Overriding APHRODITE_WORKER_MULTIPROC_METHOD to 'spawn'. "
-            "See https://docs.aphrodite.ai/en/latest/usage/"
+            "Overriding SONAR_WORKER_MULTIPROC_METHOD to 'spawn'. "
+            "See https://sonar.dphn.ai/en/latest/usage/"
             "troubleshooting.html#python-multiprocessing "
             "for more information. Reasons: %s",
             "; ".join(reasons),
         )
-        os.environ["APHRODITE_WORKER_MULTIPROC_METHOD"] = "spawn"
+        os.environ["SONAR_WORKER_MULTIPROC_METHOD"] = "spawn"
 
 
 _OMP_PAUSE_HARD = 2  # omp_pause_resource_t, OpenMP 5.0
@@ -186,17 +186,17 @@ def _release_libgomp_threads() -> None:
 
 def get_mp_context():
     """Get a multiprocessing context with a particular method (spawn or fork).
-    By default we follow the value of the APHRODITE_WORKER_MULTIPROC_METHOD to
+    By default we follow the value of the SONAR_WORKER_MULTIPROC_METHOD to
     determine the multiprocessing method (default is fork). However, under
     certain conditions, we may enforce spawn and override the value of
-    APHRODITE_WORKER_MULTIPROC_METHOD.
+    SONAR_WORKER_MULTIPROC_METHOD.
     """
     _maybe_force_spawn()
     # (ROCm): Sync GPU visibility env vars so spawned children inherit
     # consistent values. Must run after _maybe_force_spawn and regardless
     # of whether spawn was already set.
     _sync_visible_devices_env_vars()
-    mp_method = envs.APHRODITE_WORKER_MULTIPROC_METHOD
+    mp_method = envs.SONAR_WORKER_MULTIPROC_METHOD
     if mp_method == "fork":
         _release_libgomp_threads()
     return multiprocessing.get_context(mp_method)
@@ -205,7 +205,7 @@ def get_mp_context():
 def set_process_title(
     name: str,
     suffix: str = "",
-    prefix: str = envs.APHRODITE_PROCESS_NAME_PREFIX,
+    prefix: str = envs.SONAR_PROCESS_NAME_PREFIX,
 ) -> None:
     """Set the current process title with optional suffix."""
     try:
@@ -220,11 +220,11 @@ def set_process_title(
 
 
 def decorate_logs(process_name: str | None = None, *, skip_if_decorated: bool = False) -> None:
-    """Add process metadata without rewriting Aphrodite's console streams."""
+    """Add process metadata without rewriting Sonar's console streams."""
     if process_name is None:
         process_name = multiprocessing.current_process().name
 
-    set_aphrodite_process_name(process_name, skip_if_set=skip_if_decorated)
+    set_sonar_process_name(process_name, skip_if_set=skip_if_decorated)
 
 
 def kill_process_tree(pid: int):

@@ -10,20 +10,20 @@ from importlib.util import find_spec
 import torch
 import torch.nn.functional as F
 
-import aphrodite.envs as envs
-from aphrodite.compilation.breakable_cudagraph import eager_break_during_capture
-from aphrodite.config import CUDAGraphMode, get_current_aphrodite_config
-from aphrodite.forward_context import get_forward_context
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.torch_utils import LayerNameType, direct_register_custom_op
-from aphrodite.v1.attention.backends.mla.indexer import DeepseekV32IndexerMetadata
-from aphrodite.v1.attention.ops.common import pack_seq_triton, unpack_seq_triton
-from aphrodite.v1.worker.workspace import current_workspace_manager
+import sonar.envs as envs
+from sonar.compilation.breakable_cudagraph import eager_break_during_capture
+from sonar.config import CUDAGraphMode, get_current_sonar_config
+from sonar.forward_context import get_forward_context
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
+from sonar.utils.torch_utils import LayerNameType, direct_register_custom_op
+from sonar.v1.attention.backends.mla.indexer import DeepseekV32IndexerMetadata
+from sonar.v1.attention.ops.common import pack_seq_triton, unpack_seq_triton
+from sonar.v1.worker.workspace import current_workspace_manager
 
 if current_platform.is_rocm():
-    from aphrodite.platforms.rocm import _ON_GFX942, _ON_GFX950, _ON_GFX1151, _ON_RDNA
+    from sonar.platforms.rocm import _ON_GFX942, _ON_GFX950, _ON_GFX1151, _ON_RDNA
 else:
     _ON_GFX942 = False
     _ON_GFX950 = False
@@ -37,7 +37,7 @@ FP8_DTYPE = current_platform.fp8_dtype()
 
 @functools.cache
 def _get_aiter_sparse_prefill_opus() -> Callable[..., torch.Tensor] | None:
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     if not rocm_aiter_ops.is_mla_enabled():
         return None
@@ -102,7 +102,7 @@ def _launch_aiter_top_k_per_row_prefill(
     indices: torch.Tensor,
     topk_tokens: int,
 ) -> None:
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     rocm_aiter_ops.indexer_top_k_prefill(logits, row_starts, row_ends, indices, topk_tokens)
     _localize_aiter_prefill_topk(indices, row_starts)
@@ -427,7 +427,7 @@ def fp8_paged_mqa_logits_torch(
     block_tables: torch.Tensor,
     max_model_len: int,
 ):
-    from aphrodite.utils.math_utils import cdiv
+    from sonar.utils.math_utils import cdiv
 
     batch_size, next_n, _, dim = q.size()
     if next_n == 1:
@@ -740,7 +740,7 @@ def rocm_fp8_paged_mqa_logits(
         `torch.float32`.
 
     """
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     batch_size, next_n = q_fp8.shape[:2]
     block_size = kv_cache_fp8.shape[1]
@@ -804,7 +804,7 @@ def rocm_fp8_paged_mqa_logits(
     else:
         logger.warning_once(
             "AITER paged-MQA logits is unavailable; using the PyTorch "
-            "fallback. Set APHRODITE_ROCM_USE_AITER=1 and ensure "
+            "fallback. Set SONAR_ROCM_USE_AITER=1 and ensure "
             "aiter.ops.triton.attention.pa_mqa_logits is importable."
         )
         return fp8_paged_mqa_logits_torch(q_fp8, kv_cache_fp8, weights, context_lens, block_tables, max_model_len)
@@ -847,7 +847,7 @@ def fp8_mqa_logits_torch(
     mask = mask_lo & mask_hi
 
     # ``score`` is [H, M, N]; ``scale`` is the per-KV-token scale, which
-    # Aphrodite callers hand us as ``[N, 1]`` (a ``[N, 4]`` uint8 buffer cast
+    # Sonar callers hand us as ``[N, 1]`` (a ``[N, 4]`` uint8 buffer cast
     # to fp32). PyTorch right-aligns dimensions for broadcasting, so a
     # naked ``score * scale`` would align ``scale``'s leading dim with
     # ``score``'s M dim and raise a shape mismatch. Flatten to ``[N]`` so
@@ -901,7 +901,7 @@ def rocm_fp8_mqa_logits(
         Logits tensor of shape [M, N], dtype `torch.float32`.
 
     """
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     k_fp8, scale = kv
 
@@ -1096,7 +1096,7 @@ def _apply_candidate_mask_strided(
     programs themselves, each over only its own live tiles, so the whole mask
     is a single launch and the flags past each row's end are never cleared.
     """
-    from aphrodite.model_executor.kernels.attention.dsa.candidate_blocks import (
+    from sonar.model_executor.kernels.attention.dsa.candidate_blocks import (
         _candidate_flags_kernel,
     )
 
@@ -1183,14 +1183,14 @@ def _max_decode_logits_rows(num_batched_tokens: int) -> int:
     estimated.
     """
     try:
-        aphrodite_config = get_current_aphrodite_config()
+        sonar_config = get_current_sonar_config()
     except Exception:
         return num_batched_tokens
-    scheduler_config = getattr(aphrodite_config, "scheduler_config", None)
+    scheduler_config = getattr(sonar_config, "scheduler_config", None)
     max_num_seqs = getattr(scheduler_config, "max_num_seqs", None)
     if not max_num_seqs:
         return num_batched_tokens
-    speculative_config = getattr(aphrodite_config, "speculative_config", None)
+    speculative_config = getattr(sonar_config, "speculative_config", None)
     num_spec = getattr(speculative_config, "num_speculative_tokens", 0) or 0
     return min(num_batched_tokens, max_num_seqs * (1 + num_spec))
 
@@ -1239,12 +1239,12 @@ def rocm_aiter_sparse_attn_indexer(
     candidate_block_size: int = 0,
     candidate_write: bool = False,
 ) -> torch.Tensor:
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     # careful! this will be None in dummy run
     forward_context = get_forward_context()
     attn_metadata = forward_context.attn_metadata
-    from aphrodite.utils.torch_utils import _resolve_layer_name
+    from sonar.utils.torch_utils import _resolve_layer_name
 
     k_cache_prefix = _resolve_layer_name(k_cache_prefix)
     # assert isinstance(attn_metadata, dict)
@@ -1279,9 +1279,9 @@ def rocm_aiter_sparse_attn_indexer(
         # Transient logits tensor peak memory, produced by
         # rocm_fp8_mqa_logits (prefill) and rocm_fp8_paged_mqa_logits
         # (decode). Prefill logits are bounded by
-        # APHRODITE_SPARSE_INDEXER_MAX_LOGITS_MB via chunking in
+        # SONAR_SPARSE_INDEXER_MAX_LOGITS_MB via chunking in
         # split_indexer_prefill_chunks; decode logits are smaller.
-        max_logits_elems = envs.APHRODITE_SPARSE_INDEXER_MAX_LOGITS_MB * 1024 * 1024
+        max_logits_elems = envs.SONAR_SPARSE_INDEXER_MAX_LOGITS_MB * 1024 * 1024
         _ = torch.empty(max_logits_elems, dtype=torch.uint8, device=hidden_states.device)
 
         return rocm_aiter_sparse_attn_indexer_fake(
@@ -1360,7 +1360,7 @@ def rocm_aiter_sparse_attn_indexer(
                 chunk.cu_seqlen_ke,
             )
             if candidate_blocks is not None:
-                from aphrodite.model_executor.layers.sparse_attn_indexer import (
+                from sonar.model_executor.layers.sparse_attn_indexer import (
                     _apply_candidate_mask,
                     _select_candidate_blocks,
                 )
@@ -1446,7 +1446,7 @@ def rocm_aiter_sparse_attn_indexer(
         )
 
         if candidate_blocks is not None:
-            from aphrodite.model_executor.layers.sparse_attn_indexer import (
+            from sonar.model_executor.layers.sparse_attn_indexer import (
                 _select_candidate_blocks,
             )
 
@@ -1531,7 +1531,7 @@ def rocm_aiter_sparse_attn_indexer(
 
 def _decode_e8m0_scales(scale: torch.Tensor) -> torch.Tensor:
     if scale.dtype == torch.float8_e8m0fnu:
-        from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
+        from sonar.model_executor.layers.quantization.utils.fp8_utils import (
             _upcast_e8m0_to_fp32,
         )
 
@@ -1771,7 +1771,7 @@ def _get_cached_wo_a_bf16(
     cached = getattr(wo_a, "_dsv4_wo_a_bf16", None)
     if cached is not None:
         return cached
-    from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
+    from sonar.model_executor.layers.quantization.utils.fp8_utils import (
         get_fp8_block_weight_scale,
     )
 
@@ -1991,9 +1991,7 @@ def rocm_mxfp8_wo_a_bmm(
     scales, so there is no dequantized copy to keep.
     Returns [T, G * R].
     """
-    return torch.ops.aphrodite.rocm_dsv41_mxfp8_wo_a_bmm(
-        a, a_scale, wo_a.weight, wo_a.weight_scale, n_groups, o_lora_rank
-    )
+    return torch.ops.sonar.rocm_dsv41_mxfp8_wo_a_bmm(a, a_scale, wo_a.weight, wo_a.weight_scale, n_groups, o_lora_rank)
 
 
 _DSV4_SPARSE_NOPE_DIM = 448

@@ -2,8 +2,8 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Opt-in Linux/NVIDIA driver integration test, with exclusive GPU access.
 
-Run with APHRODITE_TEST_CUDA_PROCESS_CHECKPOINT=1. The driver must expose CUDA
-process checkpoint APIs. Override APHRODITE_TEST_MODEL and APHRODITE_TEST_SLEEP_CYCLES
+Run with SONAR_TEST_CUDA_PROCESS_CHECKPOINT=1. The driver must expose CUDA
+process checkpoint APIs. Override SONAR_TEST_MODEL and SONAR_TEST_SLEEP_CYCLES
 for larger-model validation; this test requires enough RAM for weight backups.
 The selected model must support batch invariance. Hybrid GDN models require
 separate paired accuracy evaluation because that mode is unsupported for GDN.
@@ -13,7 +13,7 @@ import os
 
 import pytest
 
-from aphrodite import LLM, SamplingParams
+from sonar import LLM, SamplingParams
 
 
 def _graph_identity(worker):
@@ -46,7 +46,7 @@ def _graph_identity(worker):
 
 
 @pytest.mark.skipif(
-    os.environ.get("APHRODITE_TEST_CUDA_PROCESS_CHECKPOINT") != "1",
+    os.environ.get("SONAR_TEST_CUDA_PROCESS_CHECKPOINT") != "1",
     reason="requires exclusive GPUs and a checkpoint-capable NVIDIA driver",
 )
 @pytest.mark.parametrize("tp,transport", [(1, "p2p"), (2, "p2p"), (4, "p2p"), (2, "shm"), (4, "shm")])
@@ -56,28 +56,28 @@ def test_process_checkpoint_preserves_outputs_and_graphs(tp, transport, monkeypa
     if torch.accelerator.device_count() < tp:
         pytest.skip(f"requires {tp} GPUs")
     config = {
-        "APHRODITE_USE_V2_MODEL_RUNNER": "1",
-        "APHRODITE_WORKER_MULTIPROC_METHOD": "spawn",
-        "APHRODITE_ALLOW_INSECURE_SERIALIZATION": "1",  # Test observation RPC only.
-        "APHRODITE_BATCH_INVARIANT": "1",
+        "SONAR_USE_V2_MODEL_RUNNER": "1",
+        "SONAR_WORKER_MULTIPROC_METHOD": "spawn",
+        "SONAR_ALLOW_INSECURE_SERIALIZATION": "1",  # Test observation RPC only.
+        "SONAR_BATCH_INVARIANT": "1",
         "NCCL_P2P_DISABLE": "1" if transport == "shm" else "0",
         "NCCL_SHM_DISABLE": "0" if transport == "shm" else "1",
         "NCCL_IB_DISABLE": "1",
         "NCCL_CUMEM_ENABLE": "1",
         "NCCL_CUMEM_HOST_ENABLE": "0",
         "NCCL_NVLS_ENABLE": "0",
-        "APHRODITE_ALLREDUCE_USE_FLASHINFER": "0",
-        "APHRODITE_ALLREDUCE_USE_SYMM_MEM": "0",
-        "APHRODITE_ALLREDUCE_USE_FLASHINFER_PCIE_IPC": "0",
-        "APHRODITE_USE_NCCL_SYMM_MEM": "0",
+        "SONAR_ALLREDUCE_USE_FLASHINFER": "0",
+        "SONAR_ALLREDUCE_USE_SYMM_MEM": "0",
+        "SONAR_ALLREDUCE_USE_FLASHINFER_PCIE_IPC": "0",
+        "SONAR_USE_NCCL_SYMM_MEM": "0",
     }
     for key, value in config.items():
         monkeypatch.setenv(key, value)
     llm = LLM(
-        os.environ.get("APHRODITE_TEST_MODEL", "Qwen/Qwen3-0.6B"),
+        os.environ.get("SONAR_TEST_MODEL", "Qwen/Qwen3-0.6B"),
         dtype="bfloat16",
         tensor_parallel_size=tp,
-        distributed_executor_backend=("aphrodite.v1.executor.cuda_checkpoint_executor.CUDACheckpointExecutor"),
+        distributed_executor_backend=("sonar.v1.executor.cuda_checkpoint_executor.CUDACheckpointExecutor"),
         disable_custom_all_reduce=tp > 1,
         enable_nccl_comm_suspend=tp > 1,
         enable_sleep_mode=True,
@@ -104,7 +104,7 @@ def test_process_checkpoint_preserves_outputs_and_graphs(tp, transport, monkeypa
         reference = generate()
         graphs = llm.collective_rpc(_graph_identity)
         assert all(rank["graphs"] for rank in graphs)
-        for cycle in range(int(os.environ.get("APHRODITE_TEST_SLEEP_CYCLES", "3"))):
+        for cycle in range(int(os.environ.get("SONAR_TEST_SLEEP_CYCLES", "3"))):
             assert generate() == reference
             llm.sleep(level=1)
             llm.sleep(level=1)

@@ -15,32 +15,32 @@ from b12x.norm import hyperconnection, mhc
 from b12x.preparation import FrozenMapping, Plan, PreparedCall, plan_from_handle
 from torch import nn
 
-import aphrodite.envs as envs
-from aphrodite.config import get_current_aphrodite_config
-from aphrodite.model_executor.layers.linear import LinearMethodBase, UnquantizedLinearMethod
-from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
+import sonar.envs as envs
+from sonar.config import get_current_sonar_config
+from sonar.model_executor.layers.linear import LinearMethodBase, UnquantizedLinearMethod
+from sonar.model_executor.layers.quantization.utils.fp8_utils import (
     create_fp8_scale_parameter,
     create_fp8_weight_parameter,
 )
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     UnquantizedEmbeddingMethod,
 )
-from aphrodite.model_executor.parameter import BlockQuantScaleParameter
-from aphrodite.utils.b12x import (
+from sonar.model_executor.parameter import BlockQuantScaleParameter
+from sonar.utils.b12x import (
     B12xPreparationUnit,
     B12xWorkload,
     PreparationResourceUnavailableError,
     b12x_layer,
     set_b12x_preparation_provider,
 )
-from aphrodite.utils.torch_utils import (
+from sonar.utils.torch_utils import (
     LayerNameType,
     _encode_layer_name,
     _resolve_layer_name,
     aux_stream,
     current_stream,
 )
-from aphrodite.v1.worker.workspace import (
+from sonar.v1.worker.workspace import (
     current_workspace_manager,
     retain_cuda_graph_capture_resource,
 )
@@ -49,11 +49,11 @@ from .mhc_split import join_mhc_split, lagged_post_pre, prepare_mhc_split, split
 
 
 def _capacity() -> int:
-    return get_current_aphrodite_config().scheduler_config.max_num_batched_tokens
+    return get_current_sonar_config().scheduler_config.max_num_batched_tokens
 
 
 def execution_capacities() -> tuple[int, ...]:
-    config = get_current_aphrodite_config()
+    config = get_current_sonar_config()
     capacity = _capacity()
     spec = config.speculative_config
     decode_capacity = min(
@@ -140,7 +140,7 @@ def block32_linear_prequantized(
     return output[:, :, 0]
 
 
-@torch.library.custom_op("aphrodite::dsv41_block32_linear", mutates_args=("out",))
+@torch.library.custom_op("sonar::dsv41_block32_linear", mutates_args=("out",))
 def _block32_linear(x: torch.Tensor, out: torch.Tensor, key: int) -> None:
     layer = _LINEARS[key]
     rows = x.numel() // layer.weight.shape[1]
@@ -422,7 +422,7 @@ class B12xFP8LinearMethod(LinearMethodBase):
             )
 
         aux_capacity = 0
-        threshold = envs.APHRODITE_SHARED_EXPERTS_STREAM_TOKEN_THRESHOLD
+        threshold = envs.SONAR_SHARED_EXPERTS_STREAM_TOKEN_THRESHOLD
         if self._shared_expert and threshold > 0:
             index = bisect_left(layer.b12x_capacities, min(threshold, layer.b12x_capacities[-1]))
             aux_capacity = layer.b12x_capacities[index]
@@ -465,7 +465,7 @@ class B12xFP8LinearMethod(LinearMethodBase):
         return out
 
 
-@torch.library.custom_op("aphrodite::dsv41_rmsnorm", mutates_args=("out",))
+@torch.library.custom_op("sonar::dsv41_rmsnorm", mutates_args=("out",))
 def _rmsnorm(
     x: torch.Tensor,
     weight: torch.Tensor,
@@ -572,7 +572,7 @@ class B12xRMSNorm(nn.Module):
         return out.view(shape)
 
 
-@torch.library.custom_op("aphrodite::dsv41_mhc_pre", mutates_args=("residual_out", "y", "post", "comb", "pre_out"))
+@torch.library.custom_op("sonar::dsv41_mhc_pre", mutates_args=("residual_out", "y", "post", "comb", "pre_out"))
 def _mhc_pre(
     residual: torch.Tensor,
     fn: torch.Tensor,
@@ -691,7 +691,7 @@ def _mhc_pre_fake(
     return None
 
 
-@torch.library.custom_op("aphrodite::dsv41_mhc_post", mutates_args=("out",))
+@torch.library.custom_op("sonar::dsv41_mhc_post", mutates_args=("out",))
 def _mhc_post(
     x: torch.Tensor,
     residual: torch.Tensor,

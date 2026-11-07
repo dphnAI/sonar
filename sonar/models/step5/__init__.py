@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 def __getattr__(name: str) -> Any:
     if name not in __all__:
         raise AttributeError(name)
-    from aphrodite.platforms import current_platform
+    from sonar.platforms import current_platform
 
     if current_platform.is_rocm():
         from .amd.model import Step5ForCausalLM

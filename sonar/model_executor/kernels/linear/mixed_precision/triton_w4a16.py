@@ -20,12 +20,12 @@ Checkpoint layout from compressed_tensors_wNa16 create_weights:
 
 import torch
 
-from aphrodite.model_executor.layers.quantization.utils import replace_parameter
-from aphrodite.model_executor.parameter import BaseAphroditeParameter, permute_param_layout_
-from aphrodite.platforms import current_platform
-from aphrodite.scalar_type import scalar_types
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.torch_utils import direct_register_custom_op
+from sonar.model_executor.layers.quantization.utils import replace_parameter
+from sonar.model_executor.parameter import BaseSonarParameter, permute_param_layout_
+from sonar.platforms import current_platform
+from sonar.scalar_type import scalar_types
+from sonar.triton_utils import tl, triton
+from sonar.utils.torch_utils import direct_register_custom_op
 
 from .MPLinearKernel import MPLinearKernel, MPLinearLayerConfig
 
@@ -203,7 +203,7 @@ def _triton_w4a16_gemm_impl(
     zeros_ptr = qzeros if has_zp else b_q
 
     if current_platform.is_rocm():
-        from aphrodite.platforms.rocm import on_gfx1x
+        from sonar.platforms.rocm import on_gfx1x
 
         if on_gfx1x():
             # Tuned for RDNA 3.5 (gfx1151, 40 CUs, 32-wide wavefronts).
@@ -291,7 +291,7 @@ def triton_w4a16_gemm(
     group_size: int,
     zp_bias: int = 8,
 ) -> torch.Tensor:
-    return torch.ops.aphrodite.triton_w4a16_gemm(a, b_q, scales, qzeros, group_size, zp_bias)
+    return torch.ops.sonar.triton_w4a16_gemm(a, b_q, scales, qzeros, group_size, zp_bias)
 
 
 class TritonW4A16LinearKernel(MPLinearKernel):
@@ -375,7 +375,7 @@ class TritonW4A16LinearKernel(MPLinearKernel):
         #
         # Simple approach: unpack → transpose the full [N, K] → repack as [K, N//8].
         # This is done CPU-side at load time (one-time cost).
-        def repack_w_q(x: BaseAphroditeParameter) -> BaseAphroditeParameter:
+        def repack_w_q(x: BaseSonarParameter) -> BaseSonarParameter:
             # x.data is [N, K//8] int32, K packed (GPTQ checkpoint format)
             # Step 1: bring to [N, K//8] with output(N) at dim 0
             permute_param_layout_(x, input_dim=1, output_dim=0, packed_dim=1)
@@ -398,7 +398,7 @@ class TritonW4A16LinearKernel(MPLinearKernel):
             x.data = w_repacked.contiguous()
             return x
 
-        def repack_w_s(x: BaseAphroditeParameter) -> BaseAphroditeParameter:
+        def repack_w_s(x: BaseSonarParameter) -> BaseSonarParameter:
             # x.data is [N, K//G] fp16, bring to [K//G, N]
             permute_param_layout_(x, input_dim=1, output_dim=0)
             x.data = x.data.t().contiguous()

@@ -7,9 +7,9 @@ from argparse import Namespace
 from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
 
-from aphrodite import envs
-from aphrodite.logger import init_logger
-from aphrodite.tasks import SupportedTask
+from sonar import envs
+from sonar.logger import init_logger
+from sonar.tasks import SupportedTask
 
 from .log_response import log_response
 
@@ -30,12 +30,12 @@ def init_entrypoints_middleware(
     )
 
     if getattr(args, "dphn_network", False):
-        from aphrodite.proof.http import DphnHTTPMiddleware
+        from sonar.proof.http import DphnHTTPMiddleware
 
         app.add_middleware(DphnHTTPMiddleware)
 
-    # Ensure --api-key option from CLI takes precedence over APHRODITE_API_KEY
-    if tokens := [key for key in (args.api_key or [envs.APHRODITE_API_KEY]) if key]:
+    # Ensure --api-key option from CLI takes precedence over SONAR_API_KEY
+    if tokens := [key for key in (args.api_key or [envs.SONAR_API_KEY]) if key]:
         from .authenticate import AuthenticationMiddleware
 
         app.add_middleware(AuthenticationMiddleware, tokens=tokens)
@@ -47,19 +47,19 @@ def init_entrypoints_middleware(
 
     if "generate" in supported_tasks:
         # Add scaling middleware to check for scaling state
-        from aphrodite.entrypoints.serve.elastic_ep.middleware import ScalingMiddleware
+        from sonar.entrypoints.serve.elastic_ep.middleware import ScalingMiddleware
 
         app.add_middleware(ScalingMiddleware)
 
     if "realtime" in supported_tasks:
         # Add WebSocket metrics middleware
-        from aphrodite.entrypoints.speech_to_text.realtime.metrics import (
+        from sonar.entrypoints.speech_to_text.realtime.metrics import (
             WebSocketMetricsMiddleware,
         )
 
         app.add_middleware(WebSocketMetricsMiddleware)
 
-    if envs.APHRODITE_DEBUG_LOG_API_SERVER_RESPONSE:
+    if envs.SONAR_DEBUG_LOG_API_SERVER_RESPONSE:
         logger.warning(
             "CAUTION: Enabling log response in the API Server. "
             "This can include sensitive information and should be "

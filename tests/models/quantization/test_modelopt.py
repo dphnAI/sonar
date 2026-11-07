@@ -12,7 +12,7 @@ import pytest
 from transformers import AutoTokenizer
 
 from tests.quantization.utils import is_quant_method_supported
-from aphrodite import LLM, SamplingParams
+from sonar import LLM, SamplingParams
 
 os.environ["TOKENIZERS_PARALLELISM"] = "true"
 
@@ -22,7 +22,7 @@ MODELS = ["nvidia/Llama-3.1-8B-Instruct-FP8"]
 
 EXPECTED_STRS_MAP = {
     "nvidia/Llama-3.1-8B-Instruct-FP8": [
-        "You're referring to APHRODITE, a high-performance Large Language Model (LLM) inference and",
+        "You're referring to SONAR, a high-performance Large Language Model (LLM) inference and",
         "Here are the major milestones in the development of artificial intelligence (AI) from 1950 to ",
         "The comparison between artificial intelligence (AI) and human intelligence in terms of processing information is a complex and",
         'A neural network is a complex system modeled after the human brain, consisting of interconnected nodes or "ne',
@@ -77,4 +77,4 @@ def test_models(example_prompts, model_name) -> None:
     for i in range(len(example_prompts)):
         generated_str = generations[i]
         expected_str = expected_strs[i]
-        assert expected_str == generated_str, f"Test{i}:\nExpected: {expected_str!r}\nAphrodite: {generated_str!r}"
+        assert expected_str == generated_str, f"Test{i}:\nExpected: {expected_str!r}\nSonar: {generated_str!r}"

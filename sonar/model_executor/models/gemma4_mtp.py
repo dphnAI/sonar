@@ -24,28 +24,28 @@ from collections.abc import Iterable
 import torch
 from torch import nn
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, CacheConfig
-from aphrodite.distributed import (
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import CacheConfig, SonarConfig
+from sonar.distributed import (
     get_tensor_model_parallel_world_size,
     tensor_model_parallel_all_gather,
 )
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.attention import Attention
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.v1.worker.gpu.spec_decode.gemma4.config import Gemma4MTPSpeculatorConfig
+from sonar.sequence import IntermediateTensors
+from sonar.v1.worker.gpu.spec_decode.gemma4.config import Gemma4MTPSpeculatorConfig
 
 from .gemma4 import Gemma4MLP, _get_text_config
 from .utils import (
@@ -327,14 +327,14 @@ class Gemma4MTPDecoderLayer(nn.Module):
 
 
 class Gemma4MultiTokenPredictor(nn.Module):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
 
-        speculative_config = aphrodite_config.speculative_config
+        speculative_config = sonar_config.speculative_config
         assert speculative_config is not None
         config = speculative_config.draft_model_config.hf_config
         text_config = _get_text_config(config)
-        quant_config = get_draft_quant_config(aphrodite_config)
+        quant_config = get_draft_quant_config(sonar_config)
         self.config = text_config
         self.quant_config = quant_config
 
@@ -371,7 +371,7 @@ class Gemma4MultiTokenPredictor(nn.Module):
         self.layers = nn.ModuleList(
             Gemma4MTPDecoderLayer(
                 text_config,
-                cache_config=aphrodite_config.cache_config,
+                cache_config=sonar_config.cache_config,
                 quant_config=quant_config,
                 prefix=f"{prefix}.layers.{idx}",
             )
@@ -442,7 +442,7 @@ class Gemma4MTP(nn.Module):
 
     has_own_lm_head = True
 
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={
             "pre_projection.": "model.pre_projection.",
             "post_projection.": "model.post_projection.",
@@ -453,18 +453,18 @@ class Gemma4MTP(nn.Module):
         },
     )
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        speculative_config = aphrodite_config.speculative_config
+        speculative_config = sonar_config.speculative_config
         assert speculative_config is not None
         config = speculative_config.draft_model_config.hf_config
         text_config = _get_text_config(config)
-        self.quant_config = get_draft_quant_config(aphrodite_config)
+        self.quant_config = get_draft_quant_config(sonar_config)
         self.config = config
         self._stable_full_lm_head_weight: torch.Tensor | None = None
 
         self.model = Gemma4MultiTokenPredictor(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             prefix=maybe_prefix(prefix, "draft_model"),
         )
 
@@ -582,7 +582,7 @@ class Gemma4MTP(nn.Module):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
     def process_weights_after_loading(self) -> None:
         self._stable_full_lm_head_weight = None

@@ -28,9 +28,9 @@ import json
 from pathlib import Path
 from typing import Any
 
-from aphrodite.kernels.helion.case_key import CaseKey
-from aphrodite.logger import init_logger
-from aphrodite.utils.import_utils import has_helion
+from sonar.kernels.helion.case_key import CaseKey
+from sonar.logger import init_logger
+from sonar.utils.import_utils import has_helion
 
 if not has_helion():
     raise ImportError("ConfigManager requires helion to be installed. Install it with: pip install helion")
@@ -70,7 +70,7 @@ class ConfigSet:
                 f"Available platforms: {avail_platforms or '(none)'}. "
                 f"If your GPU is a variant of a supported platform, "
                 f"consider adding a mapping in _GPU_NAME_ALIASES in "
-                f"aphrodite/kernels/helion/utils.py, or run "
+                f"sonar/kernels/helion/utils.py, or run "
                 f"tools/autotune_helion_kernels.py to generate configs "
                 f"for your platform."
             )

@@ -2,12 +2,12 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import argparse
 
-from aphrodite.entrypoints.cli.types import CLISubcommand
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
+from sonar.entrypoints.cli.types import CLISubcommand
+from sonar.utils.argparse_utils import FlexibleArgumentParser
 
 
 class BenchmarkSubcommandBase(CLISubcommand):
-    """The base class of subcommands for `aphrodite bench`."""
+    """The base class of subcommands for `sonar bench`."""
 
     help: str
 

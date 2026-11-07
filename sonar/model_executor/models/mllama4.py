@@ -30,39 +30,39 @@ from transformers.models.llama4.image_processing_llama4 import (
     get_best_fit,
 )
 
-from aphrodite.compilation.decorators import (
+from sonar.compilation.decorators import (
     should_torch_compile_mm_encoder,
     support_torch_compile,
 )
-from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-from aphrodite.config.multimodal import MultiModalDummyOptions
-from aphrodite.distributed import get_tensor_model_parallel_world_size
-from aphrodite.inputs import MultiModalDataDict
-from aphrodite.model_executor.layers.attention import MMEncoderAttention
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.config import SonarConfig, set_current_sonar_config
+from sonar.config.multimodal import MultiModalDummyOptions
+from sonar.distributed import get_tensor_model_parallel_world_size
+from sonar.inputs import MultiModalDataDict
+from sonar.model_executor.layers.attention import MMEncoderAttention
+from sonar.model_executor.layers.fused_moe import (
     fused_moe_make_expert_params_mapping,
 )
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     QKVParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.model_loader.utils import initialize_model
-from aphrodite.model_executor.model_loader.weight_utils import (
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.model_loader.utils import initialize_model
+from sonar.model_executor.model_loader.weight_utils import (
     default_weight_loader,
     maybe_remap_moe_expert_param_name,
 )
-from aphrodite.model_executor.models.module_mapping import MultiModelKeys
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import (
+from sonar.model_executor.models.module_mapping import MultiModelKeys
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import (
     MultiModalFieldConfig,
     MultiModalKwargsItem,
     MultiModalKwargsItems,
 )
-from aphrodite.multimodal.parse import ImageProcessorItems, ImageSize, MultiModalDataItems
-from aphrodite.multimodal.processing import (
+from sonar.multimodal.parse import ImageProcessorItems, ImageSize, MultiModalDataItems
+from sonar.multimodal.processing import (
     BaseDummyInputsBuilder,
     BaseMultiModalProcessor,
     BaseProcessingInfo,
@@ -71,8 +71,8 @@ from aphrodite.multimodal.processing import (
     PromptUpdateDetails,
     cached_encode,
 )
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.utils.tensor_schema import TensorSchema, TensorShape
+from sonar.sequence import IntermediateTensors
+from sonar.utils.tensor_schema import TensorSchema, TensorShape
 
 from .interfaces import (
     MixtureOfExperts,
@@ -530,7 +530,7 @@ class Mllama4ProcessingInfo(BaseProcessingInfo):
         return self.ctx.get_hf_processor(Llama4Processor, **kwargs)
 
     def get_supported_mm_limits(self) -> Mapping[str, int | None]:
-        # Although Aphrodite can support more images from an infra capability
+        # Although Sonar can support more images from an infra capability
         # perspective, we do not recommend using >10 images in practice.
         return {"image": None}
 
@@ -709,21 +709,21 @@ class Llama4ForConditionalGeneration(
 
         raise ValueError("Only image modality is supported")
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
-        multimodal_config = aphrodite_config.model_config.multimodal_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
+        multimodal_config = sonar_config.model_config.multimodal_config
         assert multimodal_config is not None
         self.use_data_parallel = multimodal_config.mm_encoder_tp_mode == "data"
 
-        self.aphrodite_config = aphrodite_config
+        self.sonar_config = sonar_config
         self.config = config
         self.quant_config = quant_config
         self.multimodal_config = multimodal_config
 
-        with self._mark_tower_model(aphrodite_config, "image"):
-            with set_current_aphrodite_config(aphrodite_config):
+        with self._mark_tower_model(sonar_config, "image"):
+            with set_current_sonar_config(sonar_config):
                 self.vision_model = Llama4VisionModel(
                     config=config.vision_config,
                     quant_config=None,
@@ -736,9 +736,9 @@ class Llama4ForConditionalGeneration(
                 prefix=maybe_prefix(prefix, "multi_modal_projector"),
             )
 
-        with self._mark_language_model(aphrodite_config):
+        with self._mark_language_model(sonar_config):
             self.language_model = initialize_model(
-                aphrodite_config=aphrodite_config.with_hf_config(config.text_config, ["LlamaForCausalLM"]),
+                sonar_config=sonar_config.with_hf_config(config.text_config, ["LlamaForCausalLM"]),
                 prefix=maybe_prefix(prefix, "language_model"),
                 model_class=Llama4ForCausalLM,
             )
@@ -786,7 +786,7 @@ class Llama4ForConditionalGeneration(
         return self.multi_modal_projector(vision_embeddings)
 
     def get_encoder_cudagraph_config(self):
-        from aphrodite.v1.worker.encoder_cudagraph_defs import (
+        from sonar.v1.worker.encoder_cudagraph_defs import (
             EncoderCudaGraphConfig,
         )
 
@@ -804,12 +804,12 @@ class Llama4ForConditionalGeneration(
 
     def get_encoder_cudagraph_budget_range(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
     ) -> tuple[int, int]:
         min_budget = self.get_image_patches_per_chunk()
         max_budget = min(
-            aphrodite_config.scheduler_config.max_num_batched_tokens,
-            self.aphrodite_config.model_config.max_model_len,
+            sonar_config.scheduler_config.max_num_batched_tokens,
+            self.sonar_config.model_config.max_model_len,
         )
         return (min_budget, max_budget)
 
@@ -817,7 +817,7 @@ class Llama4ForConditionalGeneration(
         self,
         mm_kwargs: dict[str, Any],
     ):
-        from aphrodite.v1.worker.encoder_cudagraph_defs import EncoderItemSpec
+        from sonar.v1.worker.encoder_cudagraph_defs import EncoderItemSpec
 
         patches_per_chunk = self.get_image_patches_per_chunk()
         return [
@@ -866,7 +866,7 @@ class Llama4ForConditionalGeneration(
         path: str = "default",
         axis_keys: tuple[Hashable, ...] | None = None,
     ):
-        from aphrodite.v1.worker.encoder_cudagraph_defs import (
+        from sonar.v1.worker.encoder_cudagraph_defs import (
             EncoderCudaGraphCaptureInputs,
         )
 
@@ -893,7 +893,7 @@ class Llama4ForConditionalGeneration(
         max_frames_per_batch: int,
         path: str = "default",
     ):
-        from aphrodite.v1.worker.encoder_cudagraph_defs import (
+        from sonar.v1.worker.encoder_cudagraph_defs import (
             EncoderCudaGraphReplayBuffers,
         )
 
@@ -976,13 +976,13 @@ class Llama4ForConditionalGeneration(
         return self.language_model.compute_logits(hidden_states)
 
     def _rename_weight_for_modelopt_checkpoint(self, name: str) -> str:
-        """Rename weights from ModelOpt llama4 fp8 checkpoints to Aphrodite
+        """Rename weights from ModelOpt llama4 fp8 checkpoints to Sonar
         format."""
         if name.startswith("model.") or name.startswith("language_model.model."):
             renamed = name.replace("model.", "language_model.model.", 1) if name.startswith("model.") else name
             # Handle expert scale parameters with flat naming
             if "feed_forward.experts." in name and ("_input_scale" in name or "_weight_scale" in name):
-                # Map checkpoint naming to Aphrodite's expected naming
+                # Map checkpoint naming to Sonar's expected naming
                 if "down_proj_input_scale" in renamed:
                     return renamed.replace("down_proj_input_scale", "w2_input_scale")
                 elif "down_proj_weight_scale" in renamed:
@@ -1095,7 +1095,7 @@ class Llama4ForConditionalGeneration(
 
                 # Handle expert scale parameters that need broadcasting.
                 # ModelOpt checkpoints use a single value tensor scalar for BMM
-                # style experts, Aphrodite expects the scale to be broadcasted across
+                # style experts, Sonar expects the scale to be broadcasted across
                 # all experts.
                 if "feed_forward.experts." in renamed and "scale" in renamed and ".shared_expert" not in renamed:
                     renamed = maybe_remap_moe_expert_param_name(renamed, params_dict)

@@ -1,6 +1,6 @@
 # Multi-LoRA Tuning
 
-**Note**: The LoRA configuration folder should be specified by exporting `APHRODITE_TUNED_CONFIG_FOLDER=/path/to/configs`.
+**Note**: The LoRA configuration folder should be specified by exporting `SONAR_TUNED_CONFIG_FOLDER=/path/to/configs`.
 Without this, the shrink/expand kernels will use default configurations.
 
 ## Tuning Process
@@ -41,7 +41,7 @@ Multi-lora shrink/expand Triton kernel tuning follows a similar methodology from
 
 3. Benchmark the shrink/expand kernel runtime with different kernel configurations generated from the pre-defined search space
    by performing a grid search to find the optimal kernel configuration.
-   Aphrodite's [benchmark_lora.py](https://github.com/vllm-project/vllm/blob/main/benchmarks/kernels/benchmark_lora.py)
+   Sonar's [benchmark_lora.py](https://github.com/vllm-project/vllm/blob/main/benchmarks/kernels/benchmark_lora.py)
    can be used to search for configurations for different shapes.
 
 ## Config Files

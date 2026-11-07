@@ -8,12 +8,12 @@ import torch
 import torch.distributed as dist
 from torch import nn
 
-from aphrodite.distributed import get_engram_dp_group
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
+from sonar.distributed import get_engram_dp_group
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
 
 if TYPE_CHECKING:
-    from aphrodite.models.deepseek_v41.common.engram import Engram
+    from sonar.models.deepseek_v41.common.engram import Engram
 
 
 @triton.jit(do_not_specialize=["num_tokens"])

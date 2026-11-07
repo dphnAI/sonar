@@ -5,12 +5,12 @@ from typing import Any, TypeAlias
 
 from pydantic import BaseModel, Field, model_validator
 
-from aphrodite import PoolingParams
-from aphrodite.config import ModelConfig
-from aphrodite.entrypoints.serve.engine.protocol import OpenAIBaseModel, UsageInfo
-from aphrodite.renderers import TokenizeParams
-from aphrodite.tasks import PoolingTask
-from aphrodite.utils import random_uuid
+from sonar import PoolingParams
+from sonar.config import ModelConfig
+from sonar.entrypoints.serve.engine.protocol import OpenAIBaseModel, UsageInfo
+from sonar.renderers import TokenizeParams
+from sonar.tasks import PoolingTask
+from sonar.utils import random_uuid
 
 from ..base.protocol import ClassifyRequestMixin, PoolingBasicRequestMixin
 from .typing import ScoreContentPartParam, ScoreInput

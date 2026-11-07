@@ -4,11 +4,11 @@ from typing import Any
 
 import numpy as np
 
-from aphrodite.lora.layers import LoRAMapping, LoRAMappingType
-from aphrodite.lora.worker_manager import WorkerLoRAManager
-from aphrodite.multimodal.inputs import MultiModalFeatureSpec
-from aphrodite.v1.worker.gpu.lora_utils import LoraState
-from aphrodite.v1.worker.gpu.mm.encoder_cache import EncoderCache
+from sonar.lora.layers import LoRAMapping, LoRAMappingType
+from sonar.lora.worker_manager import WorkerLoRAManager
+from sonar.multimodal.inputs import MultiModalFeatureSpec
+from sonar.v1.worker.gpu.lora_utils import LoraState
+from sonar.v1.worker.gpu.mm.encoder_cache import EncoderCache
 
 
 def set_active_mm_loras(

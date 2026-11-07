@@ -38,7 +38,7 @@ from collections.abc import Sequence
 import regex as re
 from openai.types.responses import ToolChoiceCustom, ToolChoiceFunction
 
-from aphrodite.entrypoints.generate.base.protocol import (
+from sonar.entrypoints.generate.base.protocol import (
     DeltaFunctionCall,
     DeltaMessage,
     DeltaToolCall,
@@ -46,15 +46,15 @@ from aphrodite.entrypoints.generate.base.protocol import (
     FunctionCall,
     ToolCall,
 )
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionNamedToolChoiceParam,
     ChatCompletionRequest,
 )
-from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.logger import init_logger
-from aphrodite.tokenizers import TokenizerLike
-from aphrodite.tool_parsers.abstract_tool_parser import Tool, ToolParser
+from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
+from sonar.exceptions import SonarValidationError
+from sonar.logger import init_logger
+from sonar.tokenizers import TokenizerLike
+from sonar.tool_parsers.abstract_tool_parser import Tool, ToolParser
 
 logger = init_logger(__name__)
 
@@ -72,9 +72,9 @@ def _partial_tag_overlap(text: str, tag: str) -> int:
 
 class KimiK3ToolParser(ToolParser):
     supports_required_and_named = False
-    # Enables the Aphrodite-side XTML structural tag builder
+    # Enables the Sonar-side XTML structural tag builder
     # (``get_kimi_k3_structural_tag`` in ``structural_tag_registry``). With
-    # ``APHRODITE_ENFORCE_STRICT_TOOL_CALLING`` on (default), ``_apply_structural_tag``
+    # ``SONAR_ENFORCE_STRICT_TOOL_CALLING`` on (default), ``_apply_structural_tag``
     # constrains generation to K3's ``<|open|>tools<|sep|>`` channel for
     # ``required`` (and ``auto`` when a tool sets ``strict``) instead of the
     # generic JSON guided decoding, which conflicts with the XTML format.
@@ -93,7 +93,7 @@ class KimiK3ToolParser(ToolParser):
         # from being stripped and suppresses spacing between adjacent token
         # pieces. As DEFENSE-IN-DEPTH we still tolerate optional whitespace
         # WITHIN a marker (e.g. "<|open|> tools <|sep|>") in case some serving
-        # path leaves Aphrodite's added-token spacing on -- this `\s*` is a no-op on
+        # path leaves Sonar's added-token spacing on -- this `\s*` is a no-op on
         # clean input, so the normal byte-exact path is unaffected. We do NOT
         # strip body whitespace, so clean content stays byte-exact.
         # All bodies use non-greedy (.*?) so each block stops at its own first
@@ -151,9 +151,9 @@ class KimiK3ToolParser(ToolParser):
             # Without the XTML structural tag there is no way to force the
             # named call (the generic JSON guided-decoding path conflicts
             # with the XTML channel format).
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 "Named tool choice for Kimi K3 requires strict tool calling "
-                "(APHRODITE_ENFORCE_STRICT_TOOL_CALLING) so the XTML structural "
+                "(SONAR_ENFORCE_STRICT_TOOL_CALLING) so the XTML structural "
                 "tag can force the call. Otherwise use `tool_choice` set to "
                 '"auto", "required", or "none".',
                 parameter="tool_choice",
@@ -176,10 +176,10 @@ class KimiK3ToolParser(ToolParser):
         # The XTML markers (<|open|>/<|close|>/<|sep|>,
         # <|open|>response<|sep|> ...) must
         # reach this parser as CONTIGUOUS literal text. Two request flags govern
-        # that, and Aphrodite's detokenizer couples them:
+        # that, and Sonar's detokenizer couples them:
         #   effective_spaces_between =
         #       skip_special_tokens OR spaces_between_special_tokens
-        #   (aphrodite/v1/engine/detokenizer.py).
+        #   (sonar/v1/engine/detokenizer.py).
         # The detokenizer treats these control tokens as separate sub-texts and,
         # when the effective flag is True, joins them with spaces ->
         # "<|open|> response <|sep|>", which the regexes below would NOT match.

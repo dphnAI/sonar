@@ -4,8 +4,8 @@
 import numpy as np
 import pytest
 
-from aphrodite.benchmarks.datasets.utils import get_sampling_params
-from aphrodite.tokenizers import TokenizerLike
+from sonar.benchmarks.datasets.utils import get_sampling_params
+from sonar.tokenizers import TokenizerLike
 
 
 class _FakeTokenizer(TokenizerLike):
@@ -94,7 +94,7 @@ class _FakeTokenizer(TokenizerLike):
 
 
 class TestGetSamplingParams:
-    """Tests for ``get_sampling_params`` in ``aphrodite.benchmarks.datasets.shared``."""
+    """Tests for ``get_sampling_params`` in ``sonar.benchmarks.datasets.shared``."""
 
     # -- helpers --
 

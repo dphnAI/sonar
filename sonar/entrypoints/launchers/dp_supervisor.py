@@ -22,14 +22,14 @@ import uvicorn
 import uvloop
 from fastapi import FastAPI, Response
 
-import aphrodite.envs as envs
-from aphrodite.logger import configure_logging_from_args, init_logger
-from aphrodite.utils.system_utils import (
+import sonar.envs as envs
+from sonar.logger import configure_logging_from_args, init_logger
+from sonar.utils.system_utils import (
     decorate_logs,
     kill_process_tree,
     set_process_title,
 )
-from aphrodite.v1.engine.utils import get_engine_process_shutdown_timeout
+from sonar.v1.engine.utils import get_engine_process_shutdown_timeout
 
 from .launcher import NoSignalServer
 from .utils.server_utils import get_uvicorn_log_config
@@ -92,7 +92,7 @@ def validate_multi_port_external_lb_args(args: argparse.Namespace) -> None:
         )
 
 
-def _build_aphrodite_dp_server_args(args: argparse.Namespace, local_rank: int) -> argparse.Namespace:
+def _build_sonar_dp_server_args(args: argparse.Namespace, local_rank: int) -> argparse.Namespace:
     child_args = copy.copy(args)
     child_args.port = args.port + local_rank
     child_args.data_parallel_rank = infer_multi_port_external_lb_start_rank(args) + local_rank
@@ -167,8 +167,8 @@ async def _probe_endpoint(
                 # localhost/127.0.0.1 deployments.
                 probe_ssl = False
             async with session.get(_child_base_url(args, port) + path, ssl=probe_ssl) as response:
-                # Aphrodite returns 503 on EngineDeadError, so we should return
-                # immediately if Aphrodite responds with a non-200 status code.
+                # Sonar returns 503 on EngineDeadError, so we should return
+                # immediately if Sonar responds with a non-200 status code.
                 return response.status == HTTPStatus.OK
         except (TimeoutError, aiohttp.ClientError) as e:
             # Allow retry of connection errors.
@@ -205,33 +205,33 @@ def _build_dp_supervisor_app(supervisor: DPSupervisor) -> FastAPI:
     return app
 
 
-def _run_python_aphrodite_dp_server(child_args: argparse.Namespace) -> None:
-    from aphrodite.entrypoints.launchers.api_server.entry import run_server
+def _run_python_sonar_dp_server(child_args: argparse.Namespace) -> None:
+    from sonar.entrypoints.launchers.api_server.entry import run_server
 
     uvloop.run(run_server(child_args))
 
 
-def _run_rust_aphrodite_dp_server(child_args: argparse.Namespace) -> None:
-    from aphrodite.entrypoints.cli.serve import run_multi_api_server
+def _run_rust_sonar_dp_server(child_args: argparse.Namespace) -> None:
+    from sonar.entrypoints.cli.serve import run_multi_api_server
 
     run_multi_api_server(child_args)
 
 
-def _run_aphrodite_dp_server(child_args: argparse.Namespace) -> None:
-    """Entrypoint function for the Aphrodite DP Server."""
+def _run_sonar_dp_server(child_args: argparse.Namespace) -> None:
+    """Entrypoint function for the Sonar DP Server."""
     configure_logging_from_args(child_args)
 
-    # Create a fresh process group for the Aphrodite DP Server,
+    # Create a fresh process group for the Sonar DP Server,
     # so that CTRL-C is propagated cleanly.
     os.setpgrp()
 
     name = f"APIServer_DP{child_args.data_parallel_rank}"
     set_process_title(name)
     decorate_logs(name)
-    if envs.APHRODITE_USE_RUST_FRONTEND and envs.APHRODITE_RUST_FRONTEND_PATH:
-        _run_rust_aphrodite_dp_server(child_args)
+    if envs.SONAR_USE_RUST_FRONTEND and envs.SONAR_RUST_FRONTEND_PATH:
+        _run_rust_sonar_dp_server(child_args)
     else:
-        _run_python_aphrodite_dp_server(child_args)
+        _run_python_sonar_dp_server(child_args)
 
 
 class DPSupervisor:
@@ -260,11 +260,11 @@ class DPSupervisor:
         supervisor_server: uvicorn.Server | None = None
         supervisor_server_task: asyncio.Task[None] | None = None
         try:
-            # Launch Aphrodite DP Servers and begin monitoring them.
+            # Launch Sonar DP Servers and begin monitoring them.
             self._start_children()
             monitor_task = asyncio.create_task(self._monitor_children(), name="dp-monitor")
 
-            # Only start the DPSupervisor server once the Aphrodite DP Servers
+            # Only start the DPSupervisor server once the Sonar DP Servers
             # are ready. This avoids the supervisor /health endpoint returning
             # 503 to external load balancer probes while the engines initialize.
             await self._wait_until_ready(monitor_task)
@@ -284,7 +284,7 @@ class DPSupervisor:
     async def _start_server(self) -> tuple[uvicorn.Server, asyncio.Task[None]]:
         """Launch the DPSupervisor HTTP server.
 
-        Called only after the Aphrodite DP Servers are ready so that /health
+        Called only after the Sonar DP Servers are ready so that /health
         does not return 503 to external probes while the engines are
         initializing.
         """
@@ -326,12 +326,12 @@ class DPSupervisor:
         return supervisor_server, supervisor_server_task
 
     async def _wait_until_ready(self, monitor_task: asyncio.Task[None]) -> None:
-        """Block until the Aphrodite DP Servers are ready or shutdown is triggered.
+        """Block until the Sonar DP Servers are ready or shutdown is triggered.
 
         Returns early if monitoring stops (e.g. a DP Server dies during
         startup), in which case the supervisor server is never started.
         """
-        logger.info("Waiting for Aphrodite DP Servers to become ready.")
+        logger.info("Waiting for Sonar DP Servers to become ready.")
         while not self._is_ready and not self._shutdown_event.is_set():
             if monitor_task.done():
                 return
@@ -342,7 +342,7 @@ class DPSupervisor:
 
         This catches the SIGTERM from K8s and begins graceful shutdown,
         by setting the _shutdown_event(), which is watched by the main
-        coroutine monitoring the Aphrodite DP Servers.
+        coroutine monitoring the Sonar DP Servers.
         """
         if self._shutdown_event.is_set():
             return
@@ -357,13 +357,13 @@ class DPSupervisor:
         self._is_ready = False
 
     def _start_children(self) -> None:
-        """Launch Aphrodite DP Servers on separate GPUs."""
-        logger.info("Launching Aphrodite DP Servers")
+        """Launch Sonar DP Servers on separate GPUs."""
+        logger.info("Launching Sonar DP Servers")
         context = multiprocessing.get_context("spawn")
         for local_rank in range(self.args.data_parallel_size_local):
-            child_args = _build_aphrodite_dp_server_args(self.args, local_rank)
+            child_args = _build_sonar_dp_server_args(self.args, local_rank)
             process = context.Process(
-                target=_run_aphrodite_dp_server,
+                target=_run_sonar_dp_server,
                 name=f"APIServer_DPRank_{child_args.data_parallel_rank}",
                 args=(child_args,),
             )
@@ -403,7 +403,7 @@ class DPSupervisor:
                     if not self._shutdown_event.is_set():
                         self._is_ready = True
                 elif self._is_ready:
-                    # Once ready, any failure in the probe means Aphrodite is dead.
+                    # Once ready, any failure in the probe means Sonar is dead.
                     num_unhealthy = sum(1 for r in results if r is not True)
                     logger.info(
                         "DPSupervisor probe found %s unhealthy DP Servers.",
@@ -424,13 +424,13 @@ class DPSupervisor:
                     )
 
     async def _monitor_children(self) -> None:
-        """Main coroutine task that monitors the children Aphrodite servers.
+        """Main coroutine task that monitors the children Sonar servers.
 
-        Before the Aphrodite servers are /ready:
+        Before the Sonar servers are /ready:
         - if the pid is dead, we will shut down
         - if the probe fails, we try again after dp_supervisor_probe_interval_s
 
-        After the Aphrodite servers are /ready:
+        After the Sonar servers are /ready:
         - if the pid is dead, we will shut down
         - if the probe fails, we will shut down
         """
@@ -470,7 +470,7 @@ class DPSupervisor:
                     await probe_task
 
     async def _shutdown_children(self) -> None:
-        """Terminate the Aphrodite DP servers."""
+        """Terminate the Sonar DP servers."""
         process_timeout = get_engine_process_shutdown_timeout(self.args.shutdown_timeout, self.args.shutdown_timeout)
         assert process_timeout is not None
         timeout = process_timeout + CHILD_EXIT_GRACE_S

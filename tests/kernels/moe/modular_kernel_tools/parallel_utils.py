@@ -11,15 +11,15 @@ import torch
 from torch.multiprocessing import spawn  # pyright: ignore[reportPrivateImportUsage]
 from typing_extensions import ParamSpec
 
-import aphrodite.envs as envs
-from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-from aphrodite.distributed import (
+import sonar.envs as envs
+from sonar.config import SonarConfig, set_current_sonar_config
+from sonar.distributed import (
     cleanup_dist_env_and_memory,
     init_distributed_environment,
     initialize_model_parallel,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.network_utils import get_open_port
+from sonar.platforms import current_platform
+from sonar.utils.network_utils import get_open_port
 
 ## Parallel Processes Utils
 
@@ -40,19 +40,19 @@ class ProcessGroupInfo:
     device: torch.device
 
 
-def _set_aphrodite_config(aphrodite_config: AphroditeConfig, world_size: int, rank: int, local_rank: int):
+def _set_sonar_config(sonar_config: SonarConfig, world_size: int, rank: int, local_rank: int):
     import tempfile
 
     temp_file = tempfile.mkstemp()[1]
 
     # When DP is enabled, processes are organized as:
     #  rank = dp_rank * tp_pp_world_size + tp_pp_rank
-    tp_pp_world_size = aphrodite_config.parallel_config.world_size
-    aphrodite_config.parallel_config.data_parallel_rank = rank // tp_pp_world_size
+    tp_pp_world_size = sonar_config.parallel_config.world_size
+    sonar_config.parallel_config.data_parallel_rank = rank // tp_pp_world_size
     tp_pp_rank = rank % tp_pp_world_size
-    aphrodite_config.parallel_config.rank = tp_pp_rank
+    sonar_config.parallel_config.rank = tp_pp_rank
 
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         init_distributed_environment(
             world_size=tp_pp_world_size,
             rank=tp_pp_rank,
@@ -62,10 +62,10 @@ def _set_aphrodite_config(aphrodite_config: AphroditeConfig, world_size: int, ra
         )
 
         initialize_model_parallel(
-            tensor_model_parallel_size=aphrodite_config.parallel_config.tensor_parallel_size,
-            pipeline_model_parallel_size=aphrodite_config.parallel_config.pipeline_parallel_size,
+            tensor_model_parallel_size=sonar_config.parallel_config.tensor_parallel_size,
+            pipeline_model_parallel_size=sonar_config.parallel_config.pipeline_parallel_size,
         )
-        if envs.APHRODITE_DISTRIBUTED_USE_SPLIT_GROUP:
+        if envs.SONAR_DISTRIBUTED_USE_SPLIT_GROUP:
             cpu_group = torch.distributed.split_group(
                 split_ranks=[list(range(world_size))],
                 group_desc="moe_test_cpu",
@@ -82,7 +82,7 @@ def _worker_parallel_launch(
     node_rank: int,
     init_method: str,
     worker: Callable[..., None],
-    aphrodite_config: AphroditeConfig | None,
+    sonar_config: SonarConfig | None,
     env_dict: dict | None,
     worker_kwargs: dict[str, Any],
     *args: Any,
@@ -105,8 +105,8 @@ def _worker_parallel_launch(
         os.environ.update(env_dict)
 
     cpu_group = None
-    if aphrodite_config is not None:
-        cpu_group = _set_aphrodite_config(aphrodite_config, world_size, rank, local_rank)
+    if sonar_config is not None:
+        cpu_group = _set_sonar_config(sonar_config, world_size, rank, local_rank)
 
     def _run_worker():
         worker(
@@ -118,15 +118,15 @@ def _worker_parallel_launch(
                 local_rank=local_rank,
                 device=device,
             ),
-            aphrodite_config,
+            sonar_config,
             cpu_group,
             *args,
             **worker_kwargs,
         )
 
     try:
-        if aphrodite_config is not None:
-            with set_current_aphrodite_config(aphrodite_config):
+        if sonar_config is not None:
+            with set_current_sonar_config(sonar_config):
                 _run_worker()
         else:
             _run_worker()
@@ -136,7 +136,7 @@ def _worker_parallel_launch(
         raise
     finally:
         torch.accelerator.synchronize()
-        if aphrodite_config is not None:
+        if sonar_config is not None:
             cleanup_dist_env_and_memory()
         else:
             torch.distributed.destroy_process_group()
@@ -144,8 +144,8 @@ def _worker_parallel_launch(
 
 def parallel_launch_with_config(
     world_size: int,
-    worker: Callable[Concatenate[ProcessGroupInfo, AphroditeConfig, Any, P], None],
-    aphrodite_config: AphroditeConfig,
+    worker: Callable[Concatenate[ProcessGroupInfo, SonarConfig, Any, P], None],
+    sonar_config: SonarConfig,
     env_dict: dict[Any, Any] | None,
     *args: P.args,
     **kwargs: P.kwargs,
@@ -158,7 +158,7 @@ def parallel_launch_with_config(
             0,
             f"tcp://{os.getenv('LOCALHOST', 'localhost')}:{get_open_port()}",
             worker,
-            aphrodite_config,
+            sonar_config,
             env_dict,
             kwargs,
         )

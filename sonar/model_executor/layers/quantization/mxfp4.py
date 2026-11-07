@@ -5,9 +5,9 @@ import os
 
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.attention import Attention
+from sonar.model_executor.layers.fused_moe import (
     FusedMoEConfig,
     FusedMoEMethodBase,
     FusedMoEParallelConfig,
@@ -15,12 +15,12 @@ from aphrodite.model_executor.layers.fused_moe import (
     RoutedExperts,
     SharedExperts,
 )
-from aphrodite.model_executor.layers.fused_moe import modular_kernel as mk
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe import modular_kernel as mk
+from sonar.model_executor.layers.fused_moe.config import (
     mxfp4_w4a16_moe_quant_config,
 )
-from aphrodite.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
-from aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 import (
+from sonar.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
+from sonar.model_executor.layers.fused_moe.oracle.mxfp4 import (
     TRITON_BACKENDS,
     Mxfp4MoeBackend,
     backend_to_kernel_cls,
@@ -33,22 +33,22 @@ from aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 import (
     select_mxfp4_moe_backend,
     triton_weight,
 )
-from aphrodite.model_executor.layers.linear import LinearBase, UnquantizedLinearMethod
-from aphrodite.model_executor.layers.quantization import QuantizationMethods
-from aphrodite.model_executor.layers.quantization.base_config import (
+from sonar.model_executor.layers.linear import LinearBase, UnquantizedLinearMethod
+from sonar.model_executor.layers.quantization import QuantizationMethods
+from sonar.model_executor.layers.quantization.base_config import (
     QuantizationConfig,
     QuantizeMethodBase,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     is_layer_skipped,
 )
-from aphrodite.model_executor.utils import (
+from sonar.model_executor.utils import (
     is_weights_pre_processed,
     replace_parameter,
     set_weight_attrs,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 logger = init_logger(__name__)
 
@@ -470,13 +470,13 @@ class GptOssMxfp4MoEMethod(FusedMoEMethodBase):
 
 def _use_k3_situ_aiter(moe: FusedMoEConfig) -> bool:
     """Route Kimi-K3 weight-only MXFP4 SiTU MoE to AITER A16W4 on gfx950."""
-    from aphrodite.platforms import current_platform
+    from sonar.platforms import current_platform
 
     if not current_platform.is_rocm():
         return False
-    from aphrodite._aiter_ops import rocm_aiter_ops
-    from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-    from aphrodite.platforms.rocm import on_gfx950
+    from sonar._aiter_ops import rocm_aiter_ops
+    from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+    from sonar.platforms.rocm import on_gfx950
 
     return (
         rocm_aiter_ops.is_fused_moe_enabled()
@@ -583,13 +583,13 @@ def _mxfp4_experts_to_int4_gfx942(
 
 def _use_k3_situ_int4_gfx942(moe: FusedMoEConfig) -> bool:
     """Opt-in gfx942 MXFP4-to-int4 requant for Kimi-K3 SiTU experts."""
-    from aphrodite.platforms import current_platform
+    from sonar.platforms import current_platform
 
     if not current_platform.is_rocm():
         return False
-    from aphrodite._aiter_ops import rocm_aiter_ops
-    from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-    from aphrodite.platforms.rocm import on_gfx942
+    from sonar._aiter_ops import rocm_aiter_ops
+    from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+    from sonar.platforms.rocm import on_gfx942
 
     return (
         rocm_aiter_ops.is_fused_moe_enabled()
@@ -602,17 +602,17 @@ def _use_k3_situ_int4_gfx942(moe: FusedMoEConfig) -> bool:
 
 def _moe_weight_override_is_int4() -> bool:
     """True when --quantization-config.moe.weight int4_per_group_32 was set."""
-    from aphrodite.config import get_current_aphrodite_config
+    from sonar.config import get_current_sonar_config
 
-    aphrodite_config = get_current_aphrodite_config()
-    if aphrodite_config is None:
+    sonar_config = get_current_sonar_config()
+    if sonar_config is None:
         return False
-    quant_args = getattr(aphrodite_config.model_config, "quantization_config", None)
+    quant_args = getattr(sonar_config.model_config, "quantization_config", None)
     moe_spec = getattr(quant_args, "moe", None)
     weight = getattr(moe_spec, "weight", None)
     if weight is None:
         return False
-    from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+    from sonar.model_executor.layers.quantization.utils.quant_utils import (
         kInt4Static32,
     )
 
@@ -645,7 +645,7 @@ class Mxfp4MoEMethod(FusedMoEMethodBase):
                 )
             else:
                 logger.info_once("Using AITER_MXFP4_BF16 for Kimi-K3 SiTU MXFP4 MoE.")
-            from aphrodite._aiter_ops import rocm_aiter_ops
+            from sonar._aiter_ops import rocm_aiter_ops
 
             if rocm_aiter_ops.is_fused_moe_situv2_enabled():
                 # a16w4 does not read this bound. Force 0 so leftover a8w4
@@ -853,7 +853,7 @@ class Mxfp4MoEMethod(FusedMoEMethodBase):
 
         # Shape assertions — skipped for SITU since its kernel handles native
         # (non-256-aligned) intermediate sizes without prior round-up.
-        from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
+        from sonar.model_executor.layers.fused_moe.activation import MoEActivation
 
         if self.moe.activation != MoEActivation.SITU:
             assert (
@@ -908,7 +908,7 @@ class Mxfp4MoEMethod(FusedMoEMethodBase):
         # that don't support .detach(). Manually assign parameters.
         is_gfx1250 = False
         if current_platform.is_rocm():
-            from aphrodite.platforms.rocm import on_gfx1250
+            from sonar.platforms.rocm import on_gfx1250
 
             is_gfx1250 = on_gfx1250()
 
@@ -1020,7 +1020,7 @@ class Mxfp4MoEMethod(FusedMoEMethodBase):
 
         is_gfx1250 = False
         if current_platform.is_rocm():
-            from aphrodite.platforms.rocm import on_gfx1250
+            from sonar.platforms.rocm import on_gfx1250
 
             is_gfx1250 = on_gfx1250()
 

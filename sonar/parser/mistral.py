@@ -20,7 +20,7 @@ from mistral_common.protocol.instruct.request import (
 from mistral_common.tokens.tokenizers.base import SpecialTokens
 from pydantic import Field, ValidationError
 
-from aphrodite.entrypoints.generate.base.protocol import (
+from sonar.entrypoints.generate.base.protocol import (
     DeltaFunctionCall,
     DeltaMessage,
     DeltaToolCall,
@@ -28,30 +28,30 @@ from aphrodite.entrypoints.generate.base.protocol import (
     FunctionCall,
     ToolCall,
 )
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionNamedToolChoiceParam,
 )
-from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.logger import init_logger
-from aphrodite.parser.engine.events import EventType
-from aphrodite.parser.engine.parser_engine import ParserEngine
-from aphrodite.parser.engine.parser_engine_config import (
+from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
+from sonar.exceptions import SonarValidationError
+from sonar.logger import init_logger
+from sonar.parser.engine.events import EventType
+from sonar.parser.engine.parser_engine import ParserEngine
+from sonar.parser.engine.parser_engine_config import (
     ParserEngineConfig,
     ParserState,
     Transition,
 )
-from aphrodite.sampling_params import StructuredOutputsParams, check_json_nesting
-from aphrodite.utils.mistral import is_mistral_tokenizer
+from sonar.sampling_params import StructuredOutputsParams, check_json_nesting
+from sonar.utils.mistral import is_mistral_tokenizer
 
 if TYPE_CHECKING:
-    from aphrodite.entrypoints.openai.chat_completion.protocol import (
+    from sonar.entrypoints.openai.chat_completion.protocol import (
         ChatCompletionRequest,
     )
-    from aphrodite.parser.engine.events import SemanticEvent
-    from aphrodite.parser.engine.parser_engine import ToolCallSlot
-    from aphrodite.tokenizers import TokenizerLike
-    from aphrodite.tool_parsers.abstract_tool_parser import Tool
+    from sonar.parser.engine.events import SemanticEvent
+    from sonar.parser.engine.parser_engine import ToolCallSlot
+    from sonar.tokenizers import TokenizerLike
+    from sonar.tool_parsers.abstract_tool_parser import Tool
 
 logger = init_logger(__name__)
 
@@ -118,7 +118,7 @@ def _mistral_response_format(request: ChatCompletionRequest) -> dict[str, Any]:
         if isinstance(schema, str):
             check_json_nesting(schema)
             schema = json.loads(schema)
-        # `structured_outputs.json` asks Aphrodite to enforce the schema.
+        # `structured_outputs.json` asks Sonar to enforce the schema.
         return {
             "type": "json_schema",
             "json_schema": {"name": "response", "schema": schema, "strict": True},
@@ -440,7 +440,7 @@ class MistralParser(ParserEngine):
             )
             lark_grammar = grammar_factory.get_grammar_for_chat_request(request=mistral_request, template=template)
         except (ValidationError, InvalidRequestException) as e:
-            raise AphroditeValidationError(str(e)) from e
+            raise SonarValidationError(str(e)) from e
 
         if lark_grammar is not None:
             request.structured_outputs = StructuredOutputsParams(  # type: ignore[call-arg]

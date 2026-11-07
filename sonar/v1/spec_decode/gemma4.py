@@ -13,19 +13,19 @@ from copy import copy
 import torch
 import torch.nn as nn
 
-from aphrodite.config import AphroditeConfig, get_layers_from_aphrodite_config, replace
-from aphrodite.distributed.parallel_state import get_pp_group
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.attention_layer_base import AttentionLayerBase
-from aphrodite.utils.torch_utils import current_stream
-from aphrodite.v1.attention.backend import CommonAttentionMetadata
-from aphrodite.v1.kv_cache_interface import (
+from sonar.config import SonarConfig, get_layers_from_sonar_config, replace
+from sonar.distributed.parallel_state import get_pp_group
+from sonar.logger import init_logger
+from sonar.model_executor.layers.attention_layer_base import AttentionLayerBase
+from sonar.utils.torch_utils import current_stream
+from sonar.v1.attention.backend import CommonAttentionMetadata
+from sonar.v1.kv_cache_interface import (
     KVCacheConfig,
     KVCacheSpec,
     UniformTypeKVCacheSpecs,
 )
-from aphrodite.v1.spec_decode.llm_base_proposer import SpecDecodeBaseProposer
-from aphrodite.v1.worker.utils import AttentionGroup
+from sonar.v1.spec_decode.llm_base_proposer import SpecDecodeBaseProposer
+from sonar.v1.worker.utils import AttentionGroup
 
 logger = init_logger(__name__)
 
@@ -33,12 +33,12 @@ logger = init_logger(__name__)
 class Gemma4Proposer(SpecDecodeBaseProposer):
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
         runner=None,
     ):
         super().__init__(
-            aphrodite_config,
+            sonar_config,
             device,
             pass_hidden_states_to_model=True,
             runner=runner,
@@ -145,7 +145,7 @@ class Gemma4Proposer(SpecDecodeBaseProposer):
             self._centroids_sizes,
         )
 
-    def _create_draft_aphrodite_config(self) -> AphroditeConfig:
+    def _create_draft_sonar_config(self) -> SonarConfig:
         """Preserve the target's forced TRITON_ATTN backend for draft layers.
 
         Gemma4 forces TRITON_ATTN due to heterogeneous head dimensions
@@ -154,8 +154,8 @@ class Gemma4Proposer(SpecDecodeBaseProposer):
         sliding layers to fall back to FLASH_ATTN which cannot handle
         KV-shared cache. Override to carry the target's backend through.
         """
-        base = super()._create_draft_aphrodite_config()
-        target_backend = self.aphrodite_config.attention_config.backend
+        base = super()._create_draft_sonar_config()
+        target_backend = self.sonar_config.attention_config.backend
         if target_backend is not None:
             base = replace(
                 base,
@@ -196,8 +196,8 @@ class Gemma4Proposer(SpecDecodeBaseProposer):
 
     def load_model(self, target_model: nn.Module) -> None:
         target_attn_layer_names = set(
-            get_layers_from_aphrodite_config(
-                self.aphrodite_config,
+            get_layers_from_sonar_config(
+                self.sonar_config,
                 AttentionLayerBase,  # type: ignore[type-abstract]
             ).keys()
         )
@@ -221,8 +221,8 @@ class Gemma4Proposer(SpecDecodeBaseProposer):
     ) -> None:
         """Create separate AttentionGroup objects per KV cache spec
         so that each head-dim variant gets its own metadata builder."""
-        all_attn_layers = get_layers_from_aphrodite_config(
-            self.aphrodite_config,
+        all_attn_layers = get_layers_from_sonar_config(
+            self.sonar_config,
             AttentionLayerBase,  # type: ignore[type-abstract]
         )
 
@@ -271,7 +271,7 @@ class Gemma4Proposer(SpecDecodeBaseProposer):
                     kv_cache_group_id=gid,
                 )
                 attn_group.create_metadata_builders(
-                    self.aphrodite_config,
+                    self.sonar_config,
                     self.device,
                     kernel_block_size=kernel_block_size,
                 )
@@ -299,7 +299,7 @@ class Gemma4Proposer(SpecDecodeBaseProposer):
         """
         draft_config = self.speculative_config.draft_model_config.hf_config
         draft_text_config = draft_config.get_text_config()
-        target_config = self.aphrodite_config.model_config.hf_config
+        target_config = self.sonar_config.model_config.hf_config
         target_text_config = target_config.get_text_config()
         target_layer_types = getattr(target_text_config, "layer_types", [])
 

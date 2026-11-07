@@ -6,21 +6,21 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.torch_utils import set_random_seed
-from aphrodite.v1.attention.backends.mla import rocm_aiter_mla_sparse as sparse_mod
-from aphrodite.v1.attention.backends.mla.rocm_aiter_mla_sparse import (
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
+from sonar.utils.torch_utils import set_random_seed
+from sonar.v1.attention.backends.mla import rocm_aiter_mla_sparse as sparse_mod
+from sonar.v1.attention.backends.mla.rocm_aiter_mla_sparse import (
     ROCMAiterMLASparseBackend,
     _use_rocm_sparse_triton,
     fit_kpool_indices_to_aiter,
 )
-from aphrodite.v1.attention.ops.rocm_aiter_mla_sparse import (
+from sonar.v1.attention.ops.rocm_aiter_mla_sparse import (
     _sparse_kv_row_offset,
     _validate_dsv4_sparse_dims,
     _validate_sparse_dims,
 )
-from aphrodite.v1.kv_cache_interface import KVCacheLayout
+from sonar.v1.kv_cache_interface import KVCacheLayout
 
 
 @triton.jit
@@ -165,7 +165,7 @@ def test_rocm_long_bf16_prefill_dispatch(
     monkeypatch, gfx942, fp8, num_prefills, num_decodes, prefill_max_seq_len, route
 ):
     """Check the new dispatch gate using CPU tensors and intercepted kernels."""
-    monkeypatch.setattr("aphrodite.platforms.rocm.on_gfx942", lambda: gfx942)
+    monkeypatch.setattr("sonar.platforms.rocm.on_gfx942", lambda: gfx942)
 
     class KernelSelected(Exception):
         pass
@@ -216,7 +216,7 @@ def test_rocm_long_bf16_prefill_dispatch(
 @pytest.mark.parametrize("gfx942", [False, True])
 @pytest.mark.parametrize("num_heads", [8, 12])
 def test_rocm_sparse_triton_route_preserves_padded_sinks(monkeypatch, num_heads, gfx942):
-    monkeypatch.setattr("aphrodite.platforms.rocm.on_gfx942", lambda: gfx942)
+    monkeypatch.setattr("sonar.platforms.rocm.on_gfx942", lambda: gfx942)
     captured = {}
 
     def fake_rocm_sparse_attn_prefill(**kwargs):

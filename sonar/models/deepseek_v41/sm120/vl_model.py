@@ -7,28 +7,28 @@ from collections.abc import Iterable
 import torch
 from torch import nn
 
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.models.utils import (
     AutoWeightsLoader,
     WeightsMapper,
     maybe_prefix,
 )
-from aphrodite.model_executor.models.vision import is_vit_use_data_parallel
-from aphrodite.models.deepseek_v4.common.vision import (
+from sonar.model_executor.models.vision import is_vit_use_data_parallel
+from sonar.models.deepseek_v4.common.vision import (
     DeepseekV4Aligner,
     DeepseekV4ViT,
 )
-from aphrodite.models.deepseek_v41.common.mm_preprocess import (
+from sonar.models.deepseek_v41.common.mm_preprocess import (
     DeepseekV4VLDummyInputsBuilder,
     DeepseekV4VLMultiModalProcessor,
     DeepseekV4VLProcessingInfo,
 )
-from aphrodite.models.deepseek_v41.nvidia.vl_model import (
+from sonar.models.deepseek_v41.nvidia.vl_model import (
     DeepseekV41ForCausalLM as UpstreamDeepseekV41ForCausalLM,
 )
-from aphrodite.models.deepseek_v41.nvidia.vl_model import (
+from sonar.models.deepseek_v41.nvidia.vl_model import (
     _make_deepseek_v4_vl_weights_mapper,
 )
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal import MULTIMODAL_REGISTRY
 
 from .model import DeepseekV41LLMForCausalLM
 
@@ -50,9 +50,9 @@ class DeepseekV41ForCausalLM(UpstreamDeepseekV41ForCausalLM):
     # The MoE router applies bias_vl to raw image-span token IDs.
     requires_raw_input_tokens = True
 
-    def __init__(self, *, aphrodite_config, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config, prefix: str = "") -> None:
         nn.Module.__init__(self)
-        model_config = aphrodite_config.model_config
+        model_config = sonar_config.model_config
         config = model_config.hf_config
         self.config = config
         self.multimodal_config = model_config.multimodal_config
@@ -60,7 +60,7 @@ class DeepseekV41ForCausalLM(UpstreamDeepseekV41ForCausalLM):
 
         # The tower is always built; _mark_tower_model stubs it out
         # (StageMissingLayer, weights skipped) when the image limit is 0.
-        with self._mark_tower_model(aphrodite_config, {"image"}):
+        with self._mark_tower_model(sonar_config, {"image"}):
             self.use_data_parallel = is_vit_use_data_parallel(config.vision_n_heads)
             self.vision = DeepseekV4ViT(config)
             self.aligner = DeepseekV4Aligner(config)
@@ -71,9 +71,9 @@ class DeepseekV41ForCausalLM(UpstreamDeepseekV41ForCausalLM):
             self.vision.to(dtype=model_config.dtype)
             self.aligner.to(dtype=model_config.dtype)
 
-        with self._mark_language_model(aphrodite_config):
+        with self._mark_language_model(sonar_config):
             self.language_model = DeepseekV41LLMForCausalLM(
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 prefix=maybe_prefix(prefix, "language_model"),
             )
         # The outer mapper (see load_weights) fully resolves HF names into
@@ -82,13 +82,13 @@ class DeepseekV41ForCausalLM(UpstreamDeepseekV41ForCausalLM):
         # so the child's own mapper must be a no-op. Its suffix rules are not
         # idempotent (e.g. "lm_head.weight".endswith("head.weight") would
         # re-fire "head.weight" -> "lm_head.weight").
-        self.language_model.hf_to_aphrodite_mapper = WeightsMapper()
+        self.language_model.hf_to_sonar_mapper = WeightsMapper()
         self.make_empty_intermediate_tensors = (  # type: ignore[method-assign]
             self.language_model.make_empty_intermediate_tensors
         )
 
         expert_dtype = getattr(config, "expert_dtype", "fp4")
-        self.hf_to_aphrodite_mapper = _make_deepseek_v4_vl_weights_mapper(expert_dtype, "weight_scale_inv")
+        self.hf_to_sonar_mapper = _make_deepseek_v4_vl_weights_mapper(expert_dtype, "weight_scale_inv")
 
     @staticmethod
     def get_model_state_cls():
@@ -120,7 +120,7 @@ class DeepseekV41ForCausalLM(UpstreamDeepseekV41ForCausalLM):
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         # Prefix groups may recur across checkpoint files. Consume each tensor
         # immediately; sorting payloads retains the entire checkpoint on device.
-        return AutoWeightsLoader(self).load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return AutoWeightsLoader(self).load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
     def process_weights_after_loading(self) -> None:
         self.language_model.process_weights_after_loading()

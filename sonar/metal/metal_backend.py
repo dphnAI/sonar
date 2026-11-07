@@ -2,18 +2,18 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Synthetic Metal attention backend.
 
-Kept in its own module so :mod:`aphrodite.metal.platform` (loaded during plugin
-discovery) does not transitively import :mod:`aphrodite.v1.attention.backend`
-and re-enter a partially initialized :mod:`aphrodite.distributed` in the
+Kept in its own module so :mod:`sonar.metal.platform` (loaded during plugin
+discovery) does not transitively import :mod:`sonar.v1.attention.backend`
+and re-enter a partially initialized :mod:`sonar.distributed` in the
 EngineCore subprocess.
 """
 
 from typing import TYPE_CHECKING
 
-from aphrodite.v1.attention.backend import AttentionBackend, MultipleOf
+from sonar.v1.attention.backend import AttentionBackend, MultipleOf
 
 if TYPE_CHECKING:
-    from aphrodite.v1.kv_cache_interface import KVCacheSpec
+    from sonar.v1.kv_cache_interface import KVCacheSpec
 
 
 class MetalBackend(AttentionBackend):
@@ -24,7 +24,7 @@ class MetalBackend(AttentionBackend):
     block_size, and the hybrid-block-size math via
     Platform._align_hybrid_block_size) can read Metal's MultipleOf(16)
     alignment constraint. The Metal paged-attention kernels are tuned for
-    block_size=16; advertising MultipleOf(16) makes Aphrodite's selector default
+    block_size=16; advertising MultipleOf(16) makes Sonar's selector default
     to 16 and lets hybrid models align to multiples of 16. It is never
     dispatched to as a real attention backend — the actual Metal paged
     attention lives in metal_kernel_backend/paged_attention.py. The

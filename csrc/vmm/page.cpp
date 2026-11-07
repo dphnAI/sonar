@@ -4,7 +4,7 @@
 #include "cuda_utils.hpp"
 #include "page.hpp"
 
-namespace aphrodite {
+namespace sonar {
 namespace vmm {
 
 GPUPage::GPUPage(page_id_t page_id, int dev_idx)
@@ -50,4 +50,4 @@ bool CPUPage::map(void* vaddr, bool set_access) {
 }
 
 }  // namespace vmm
-}  // namespace aphrodite
+}  // namespace sonar

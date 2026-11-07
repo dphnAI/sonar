@@ -7,19 +7,19 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.compilation import CUDAGraphMode
-from aphrodite.utils.torch_utils import PIN_MEMORY
-from aphrodite.v1.kv_cache_interface import CrossAttentionSpec, KVCacheConfig
-from aphrodite.v1.worker.gpu.attn_utils import build_attn_metadata
-from aphrodite.v1.worker.gpu.input_batch import InputBatch
-from aphrodite.v1.worker.gpu.mm.encoder_cache import EncoderCache
-from aphrodite.v1.worker.gpu.model_states.interface import (
+from sonar.config import SonarConfig
+from sonar.config.compilation import CUDAGraphMode
+from sonar.utils.torch_utils import PIN_MEMORY
+from sonar.v1.kv_cache_interface import CrossAttentionSpec, KVCacheConfig
+from sonar.v1.worker.gpu.attn_utils import build_attn_metadata
+from sonar.v1.worker.gpu.input_batch import InputBatch
+from sonar.v1.worker.gpu.mm.encoder_cache import EncoderCache
+from sonar.v1.worker.gpu.model_states.interface import (
     ModelSpecificAttnMetadata,
     ModelState,
 )
-from aphrodite.v1.worker.gpu.states import RequestState
-from aphrodite.v1.worker.utils import AttentionGroup
+from sonar.v1.worker.gpu.states import RequestState
+from sonar.v1.worker.utils import AttentionGroup
 
 
 @dataclass
@@ -44,15 +44,15 @@ class EncoderDecoderModelState(ModelState):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         model: nn.Module,
         encoder_cache: EncoderCache | None,
         device: torch.device,
     ) -> None:
         assert encoder_cache is not None
-        if aphrodite_config.model_config.enable_prompt_embeds:
+        if sonar_config.model_config.enable_prompt_embeds:
             raise ValueError("--enable-prompt-embeds is not supported with encoder-decoder models.")
-        super().__init__(aphrodite_config, model, encoder_cache, device)
+        super().__init__(sonar_config, model, encoder_cache, device)
 
         self.max_encoder_len = getattr(
             self.model_config.hf_config,

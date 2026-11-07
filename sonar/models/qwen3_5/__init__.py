@@ -4,13 +4,13 @@
 
 Only the NVIDIA variant migrates to the new eager + breakable CUDA-graph
 modelling code with explicit fused kernels. ROCm and all other platforms keep
-the previous torch.compile implementation in ``aphrodite/model_executor/models/``
+the previous torch.compile implementation in ``sonar/model_executor/models/``
 so their behavior is unchanged.
 """
 
 from typing import TYPE_CHECKING
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 if TYPE_CHECKING or current_platform.is_cuda():
     from .nvidia.model import (
@@ -23,7 +23,7 @@ if TYPE_CHECKING or current_platform.is_cuda():
     )
     from .nvidia.mtp import Qwen3_5MoeMTP, Qwen3_5MTP
 else:
-    from aphrodite.model_executor.models.qwen3_5 import (  # type: ignore[assignment]
+    from sonar.model_executor.models.qwen3_5 import (  # type: ignore[assignment]
         Qwen3_5ForCausalLM,
         Qwen3_5ForCausalLMBase,
         Qwen3_5ForConditionalGeneration,
@@ -31,7 +31,7 @@ else:
         Qwen3_5MoeForCausalLM,
         Qwen3_5MoeForConditionalGeneration,
     )
-    from aphrodite.model_executor.models.qwen3_5_mtp import (  # type: ignore[assignment]
+    from sonar.model_executor.models.qwen3_5_mtp import (  # type: ignore[assignment]
         Qwen3_5MoeMTP,
         Qwen3_5MTP,
     )

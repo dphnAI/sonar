@@ -10,7 +10,7 @@ MODEL_NAME = "meta-llama/Llama-3.2-1B-Instruct"
 @pytest.mark.benchmark
 def test_bench_latency():
     command = [
-        "aphrodite",
+        "sonar",
         "bench",
         "latency",
         "--model",

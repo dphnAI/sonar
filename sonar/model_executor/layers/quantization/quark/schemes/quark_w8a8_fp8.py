@@ -5,20 +5,20 @@ from collections.abc import Callable
 
 import torch
 
-from aphrodite.config import get_current_aphrodite_config
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.kernels.linear import init_fp8_linear_kernel
-from aphrodite.model_executor.layers.fusion.quant_activation import (
+from sonar.config import get_current_sonar_config
+from sonar.logger import init_logger
+from sonar.model_executor.kernels.linear import init_fp8_linear_kernel
+from sonar.model_executor.layers.fusion.quant_activation import (
     QuantizedActivation,
     expose_input_quant_key,
 )
-from aphrodite.model_executor.layers.quantization.quark.schemes import QuarkScheme
-from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
+from sonar.model_executor.layers.quantization.quark.schemes import QuarkScheme
+from sonar.model_executor.layers.quantization.utils.fp8_utils import (
     create_fp8_scale_parameter,
     create_fp8_weight_parameter,
     validate_fp8_block_shape,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     GroupShape,
     QuantKey,
     kFp8Dynamic128Sym,
@@ -29,18 +29,18 @@ from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
     kFp8StaticChannelSym,
     kFp8StaticTensorSym,
 )
-from aphrodite.model_executor.layers.quantization.utils.w8a8_utils import (
+from sonar.model_executor.layers.quantization.utils.w8a8_utils import (
     normalize_e4m3fn_to_e4m3fnuz,
     requantize_with_max_scale,
 )
-from aphrodite.model_executor.parameter import (
+from sonar.model_executor.parameter import (
     BlockQuantScaleParameter,
     ChannelQuantScaleParameter,
     ModelWeightParameter,
     PerTensorScaleParameter,
 )
-from aphrodite.model_executor.utils import replace_parameter
-from aphrodite.platforms import current_platform
+from sonar.model_executor.utils import replace_parameter
+from sonar.platforms import current_platform
 
 __all__ = ["QuarkW8A8Fp8", "QuarkW8A8Fp8PerBlock"]
 
@@ -67,7 +67,7 @@ class QuarkW8A8Fp8(QuarkScheme):
         self.weight_qscheme = "per_channel" if weight_quant_key == kFp8StaticChannelSym else "per_tensor"
         self.is_static_input_scheme = activation_quant_key == kFp8StaticTensorSym
         self.out_dtype = torch.get_default_dtype()
-        self.input_dtype = get_current_aphrodite_config().model_config.dtype
+        self.input_dtype = get_current_sonar_config().model_config.dtype
 
     @classmethod
     def get_min_capability(cls) -> int:
@@ -230,7 +230,7 @@ class QuarkW8A8Fp8PerBlock(QuarkScheme):
             self.weight_quant_key = kFp8Static128BlockSym
         self.weight_block_size = list(weight_quant_key.scale.group_shape)
         self.out_dtype = torch.get_default_dtype()
-        self.input_dtype = get_current_aphrodite_config().model_config.dtype
+        self.input_dtype = get_current_sonar_config().model_config.dtype
 
     @classmethod
     def get_min_capability(cls) -> int:

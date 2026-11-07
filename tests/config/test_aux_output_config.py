@@ -6,9 +6,9 @@ from typing import Any
 
 import pytest
 
-from aphrodite.config import AphroditeConfig, AuxOutputConfig
-from aphrodite.config.kv_transfer import KVRole, KVTransferConfig
-from aphrodite.engine.arg_utils import EngineArgs
+from sonar.config import AuxOutputConfig, SonarConfig
+from sonar.config.kv_transfer import KVRole, KVTransferConfig
+from sonar.engine.arg_utils import EngineArgs
 
 pytestmark = pytest.mark.cpu_test
 
@@ -97,7 +97,7 @@ def test_legacy_routed_experts_flag_updates_aux_output_config():
 )
 def test_aux_output_connector_rejects_unsupported_configuration(kwargs, error):
     with pytest.raises(ValueError, match=error):
-        AphroditeConfig._verify_aux_output_compatibility(_config(**kwargs))
+        SonarConfig._verify_aux_output_compatibility(_config(**kwargs))
 
 
 @pytest.mark.parametrize(
@@ -132,9 +132,9 @@ def test_aux_output_connector_policy_is_independent_of_role(connector, blocked, 
         )
     if blocked:
         with pytest.raises(ValueError, match=f"incompatible with {connector}"):
-            AphroditeConfig._verify_aux_output_compatibility(config)
+            SonarConfig._verify_aux_output_compatibility(config)
     else:
-        AphroditeConfig._verify_aux_output_compatibility(config)
+        SonarConfig._verify_aux_output_compatibility(config)
 
 
 @pytest.mark.parametrize(
@@ -142,11 +142,11 @@ def test_aux_output_connector_policy_is_independent_of_role(connector, blocked, 
     [{"sliding_window": 4096}, {"attention_chunk_size": 4096}],
 )
 def test_aux_output_config_defers_attention_layout_to_kv_config(kwargs):
-    AphroditeConfig._verify_aux_output_compatibility(_config(**kwargs))
+    SonarConfig._verify_aux_output_compatibility(_config(**kwargs))
 
 
 def test_aux_output_guards_are_inactive_when_capture_is_disabled():
-    config: Any = AphroditeConfig.__new__(AphroditeConfig)
+    config: Any = SonarConfig.__new__(SonarConfig)
     config.model_config = SimpleNamespace()
     config.aux_output_config = AuxOutputConfig()
 

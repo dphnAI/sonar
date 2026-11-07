@@ -19,8 +19,8 @@ from typing import Any
 import torch
 import zmq
 
-from aphrodite.logger import init_logger
-from aphrodite.utils.network_utils import make_zmq_path
+from sonar.logger import init_logger
+from sonar.utils.network_utils import make_zmq_path
 
 logger = init_logger(__name__)
 

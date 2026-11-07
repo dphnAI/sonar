@@ -8,32 +8,32 @@ from typing import TYPE_CHECKING, ClassVar
 
 import torch
 
-import aphrodite.envs as envs
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.config import AphroditeConfig, get_current_aphrodite_config
-from aphrodite.config.cache import CacheDType
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.v1.attention.backend import AttentionLayer, AttentionType
-from aphrodite.v1.attention.backends.rocm_attn import (
+import sonar.envs as envs
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.config import SonarConfig, get_current_sonar_config
+from sonar.config.cache import CacheDType
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.v1.attention.backend import AttentionLayer, AttentionType
+from sonar.v1.attention.backends.rocm_attn import (
     RocmAttentionBackend,
     RocmAttentionImpl,
     RocmAttentionMetadata,
     RocmAttentionMetadataBuilder,
 )
-from aphrodite.v1.attention.backends.utils import get_num_attention_heads_from_layers
-from aphrodite.v1.attention.ops.segmented_attention import (
+from sonar.v1.attention.backends.utils import get_num_attention_heads_from_layers
+from sonar.v1.attention.ops.segmented_attention import (
     get_segmented_attention_workspace,
     segmented_attention,
     segmented_attention_workspace_size,
 )
-from aphrodite.v1.attention.ops.triton_reshape_and_cache_flash import (
+from sonar.v1.attention.ops.triton_reshape_and_cache_flash import (
     triton_reshape_and_cache_flash,
 )
-from aphrodite.v1.kv_cache_interface import AttentionSpec, is_quantized_kv_cache
+from sonar.v1.kv_cache_interface import AttentionSpec, is_quantized_kv_cache
 
 if TYPE_CHECKING:
-    from aphrodite.platforms.interface import DeviceCapability
+    from sonar.platforms.interface import DeviceCapability
 
 logger = init_logger(__name__)
 
@@ -41,7 +41,7 @@ logger = init_logger(__name__)
 def is_rdna() -> bool:
     if not current_platform.is_rocm():
         return False
-    from aphrodite.platforms.rocm import on_gfx1x
+    from sonar.platforms.rocm import on_gfx1x
 
     return on_gfx1x()
 
@@ -51,14 +51,14 @@ class RocmSegmentedAttentionMetadataBuilder(RocmAttentionMetadataBuilder):
         self,
         kv_cache_spec: AttentionSpec,
         layer_names: list[str],
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
     ):
-        super().__init__(kv_cache_spec, layer_names, aphrodite_config, device)
-        model_config = aphrodite_config.model_config
+        super().__init__(kv_cache_spec, layer_names, sonar_config, device)
+        model_config = sonar_config.model_config
         self.num_heads_q = get_num_attention_heads_from_layers(
-            aphrodite_config, layer_names
-        ) or model_config.get_num_attention_heads(aphrodite_config.parallel_config)
+            sonar_config, layer_names
+        ) or model_config.get_num_attention_heads(sonar_config.parallel_config)
         self.num_heads_kv = kv_cache_spec.num_kv_heads
         self.headdim = kv_cache_spec.head_size
 
@@ -140,7 +140,7 @@ class RocmSegmentedAttentionBackend(RocmAttentionBackend):
         if not is_rdna():
             return "ROCM_SEGMENTED_ATTN requires AMD RDNA GPUs on ROCm"
 
-        from aphrodite.platforms.rocm import on_gfx12x
+        from sonar.platforms.rocm import on_gfx12x
 
         if kv_cache_dtype in ("fp8", "fp8_e4m3") and not on_gfx12x():
             return "FP8 segmented attention requires gfx12"
@@ -178,7 +178,7 @@ class RocmSegmentedAttentionImpl(RocmAttentionImpl):
             kv_sharing_target_layer_name,
             sinks,
         )
-        from aphrodite.platforms.rocm import on_gfx1x, on_gfx12x
+        from sonar.platforms.rocm import on_gfx1x, on_gfx12x
 
         fp8 = kv_cache_dtype in ("fp8", "fp8_e4m3")
         arch_supported = on_gfx12x() if fp8 else on_gfx1x()
@@ -199,16 +199,16 @@ class RocmSegmentedAttentionImpl(RocmAttentionImpl):
         # Startup tuning and target/draft compilation must share a Triton cache.
         cache_dir = os.environ.setdefault(
             "TRITON_CACHE_DIR",
-            str(Path(envs.APHRODITE_CACHE_ROOT) / "rocm_segmented_attention" / "triton"),
+            str(Path(envs.SONAR_CACHE_ROOT) / "rocm_segmented_attention" / "triton"),
         )
         Path(cache_dir).mkdir(parents=True, exist_ok=True)
         logger.info_once("Using token-major ROCm segmented Triton attention")
         self._segmented_attention_warmed_up = False
-        self._segmented_attention_config: AphroditeConfig | None = None
+        self._segmented_attention_config: SonarConfig | None = None
 
     def process_weights_after_loading(self, act_dtype: torch.dtype):
         super().process_weights_after_loading(act_dtype)
-        config = get_current_aphrodite_config()
+        config = get_current_sonar_config()
         self._segmented_attention_config = config
 
     def _autotune_enabled(self) -> bool:

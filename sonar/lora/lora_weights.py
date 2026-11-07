@@ -7,8 +7,8 @@ from dataclasses import dataclass
 import torch
 import torch.types
 
-from aphrodite.lora.peft_helper import PEFTHelper
-from aphrodite.utils.torch_utils import PIN_MEMORY
+from sonar.lora.peft_helper import PEFTHelper
+from sonar.utils.torch_utils import PIN_MEMORY
 
 
 class LoRALayerWeights:

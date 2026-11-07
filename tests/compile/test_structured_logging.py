@@ -8,16 +8,16 @@ import torch
 from torch import nn
 
 import tests.compile.silly_attention  # noqa
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-from aphrodite.config.compilation import (
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import SonarConfig, set_current_sonar_config
+from sonar.config.compilation import (
     CompilationConfig,
     CompilationMode,
     CUDAGraphMode,
 )
-from aphrodite.config.scheduler import SchedulerConfig
-from aphrodite.forward_context import set_forward_context
-from aphrodite.platforms import current_platform
+from sonar.config.scheduler import SchedulerConfig
+from sonar.forward_context import set_forward_context
+from sonar.platforms import current_platform
 
 MLP_SIZE = 64
 DEVICE_TYPE = current_platform.device_type
@@ -27,7 +27,7 @@ DEVICE_TYPE = current_platform.device_type
 class SimpleModel(nn.Module):
     """A simple model with a splitting op for piecewise compilation."""
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "", **kwargs):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "", **kwargs):
         super().__init__()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -71,15 +71,15 @@ class TraceStructuredCapture:
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
-def test_aphrodite_structured_logging_artifacts(use_fresh_inductor_cache):
-    """Test that all expected Aphrodite artifacts are logged during compilation."""
+def test_sonar_structured_logging_artifacts(use_fresh_inductor_cache):
+    """Test that all expected Sonar artifacts are logged during compilation."""
     torch.set_default_device(DEVICE_TYPE)
 
     capture = TraceStructuredCapture()
 
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         compilation_config=CompilationConfig(
-            mode=CompilationMode.APHRODITE_COMPILE,
+            mode=CompilationMode.SONAR_COMPILE,
             cudagraph_mode=CUDAGraphMode.PIECEWISE,
             compile_sizes=[8],
             splitting_ops=["silly::attention"],
@@ -93,27 +93,27 @@ def test_aphrodite_structured_logging_artifacts(use_fresh_inductor_cache):
 
     # Patch trace_structured to capture calls
     with (
-        patch("aphrodite.compilation.backends.trace_structured", capture),
-        patch("aphrodite.compilation.piecewise_backend.trace_structured", capture),
-        set_current_aphrodite_config(aphrodite_config),
+        patch("sonar.compilation.backends.trace_structured", capture),
+        patch("sonar.compilation.piecewise_backend.trace_structured", capture),
+        set_current_sonar_config(sonar_config),
     ):
-        model = SimpleModel(aphrodite_config=aphrodite_config, prefix="test")
-        with set_forward_context({}, aphrodite_config=aphrodite_config):
+        model = SimpleModel(sonar_config=sonar_config, prefix="test")
+        with set_forward_context({}, sonar_config=sonar_config):
             model(torch.randn(8, MLP_SIZE))
 
-    config_artifacts = capture.get("artifact", "aphrodite_compilation_config")
-    assert len(config_artifacts) == 1, f"Expected 1 aphrodite_compilation_config, got {len(config_artifacts)}"
-    aphrodite_piecewise_split_graph = capture.get("graph_dump", "aphrodite_piecewise_split_graph")
-    assert len(aphrodite_piecewise_split_graph) == 1, (
-        f"Expected 1 toplevel piecewise split graph, got {len(aphrodite_piecewise_split_graph)}"
+    config_artifacts = capture.get("artifact", "sonar_compilation_config")
+    assert len(config_artifacts) == 1, f"Expected 1 sonar_compilation_config, got {len(config_artifacts)}"
+    sonar_piecewise_split_graph = capture.get("graph_dump", "sonar_piecewise_split_graph")
+    assert len(sonar_piecewise_split_graph) == 1, (
+        f"Expected 1 toplevel piecewise split graph, got {len(sonar_piecewise_split_graph)}"
     )
-    compile_start_artifacts = capture.get("artifact", "aphrodite_piecewise_compile_start")
+    compile_start_artifacts = capture.get("artifact", "sonar_piecewise_compile_start")
     assert len(compile_start_artifacts) == 4, (
-        "Expected 4 aphrodite_piecewise_compile_start "
+        "Expected 4 sonar_piecewise_compile_start "
         "(2 subgraphs x 2 ranges each: dynamic + compile size), "
         f"got {len(compile_start_artifacts)}"
     )
-    submod_dumps = capture.get("graph_dump", r"aphrodite_submod_.*")
+    submod_dumps = capture.get("graph_dump", r"sonar_submod_.*")
     assert len(submod_dumps) == 2, (
         f"Expected 2 submods (one before attention, one after attention), got {len(submod_dumps)}"
     )

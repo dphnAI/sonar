@@ -4,17 +4,17 @@
 
 import torch
 
-import aphrodite.envs as envs
-from aphrodite import _custom_ops  # noqa: F401  # registers the torch.ops._C kernels
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.compilation.breakable_cudagraph import eager_break_during_capture
-from aphrodite.config import CUDAGraphMode, get_current_aphrodite_config_or_none
-from aphrodite.forward_context import get_forward_context
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.custom_op import CustomOp
-from aphrodite.model_executor.layers.indexer_topk import get_indexer_topk
-from aphrodite.models.glm5next.amd.ops import kpool_compress as kpool_ops
-from aphrodite.models.glm5next.common.sparse_indexer import (
+import sonar.envs as envs
+from sonar import _custom_ops  # noqa: F401  # registers the torch.ops._C kernels
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.compilation.breakable_cudagraph import eager_break_during_capture
+from sonar.config import CUDAGraphMode, get_current_sonar_config_or_none
+from sonar.forward_context import get_forward_context
+from sonar.logger import init_logger
+from sonar.model_executor.custom_op import CustomOp
+from sonar.model_executor.layers.indexer_topk import get_indexer_topk
+from sonar.models.glm5next.amd.ops import kpool_compress as kpool_ops
+from sonar.models.glm5next.common.sparse_indexer import (
     RADIX_TOPK_WORKSPACE_SIZE,
     _build_decode_scatter_indices,
     _decode_topk_seq_lens,
@@ -24,18 +24,18 @@ from aphrodite.models.glm5next.common.sparse_indexer import (
     _scatter_decode_tokens_by_request,
     kv_cache_as_quant_view,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.utils.torch_utils import (
+from sonar.platforms import current_platform
+from sonar.utils.math_utils import cdiv
+from sonar.utils.torch_utils import (
     LayerNameType,
     _encode_layer_name,
     _resolve_layer_name,
 )
-from aphrodite.v1.attention.backends.mla.indexer import (
+from sonar.v1.attention.backends.mla.indexer import (
     DeepseekV32IndexerMetadata,
 )
-from aphrodite.v1.attention.ops.common import pack_seq_triton, unpack_seq_triton
-from aphrodite.v1.worker.workspace import current_workspace_manager
+from sonar.v1.attention.ops.common import pack_seq_triton, unpack_seq_triton
+from sonar.v1.worker.workspace import current_workspace_manager
 
 logger = init_logger(__name__)
 
@@ -181,7 +181,7 @@ def sparse_attn_indexer_kpool(
         # Reserve profiler-visible memory for the worst-case decode logits,
         # whose shape is [B * next_n, max_pool_len]. This profiling branch
         # returns before invoking the logits kernel itself.
-        cfg = get_current_aphrodite_config_or_none()
+        cfg = get_current_sonar_config_or_none()
         worst_decode_tokens = 0
         if cfg is not None:
             sched = cfg.scheduler_config
@@ -192,7 +192,7 @@ def sparse_attn_indexer_kpool(
             )
         # float32 logits -> 4 bytes/element; uint8 sentinel so elems == bytes.
         decode_logits_elems = worst_decode_tokens * max_pool_len * 4
-        prefill_cap_elems = envs.APHRODITE_SPARSE_INDEXER_MAX_LOGITS_MB * 1024 * 1024
+        prefill_cap_elems = envs.SONAR_SPARSE_INDEXER_MAX_LOGITS_MB * 1024 * 1024
         max_logits_elems = max(decode_logits_elems, prefill_cap_elems)
         _ = torch.empty(max_logits_elems, dtype=torch.uint8, device=hidden_states.device)
 
@@ -261,7 +261,7 @@ def sparse_attn_indexer_kpool(
         else:
             # standard: per-token fp8 quant + scatter (all tokens).
             assert scale_fmt is not None
-            from aphrodite.v1.attention.ops.rocm_aiter_mla_sparse import (
+            from sonar.v1.attention.ops.rocm_aiter_mla_sparse import (
                 indexer_k_quant_and_cache_triton,
             )
 
@@ -320,7 +320,7 @@ def sparse_attn_indexer_kpool(
             k_scale = k_scale_full[: chunk.total_seq_lens]
 
             if not chunk.skip_kv_gather:
-                from aphrodite.v1.attention.ops.rocm_aiter_mla_sparse import (
+                from sonar.v1.attention.ops.rocm_aiter_mla_sparse import (
                     cp_gather_indexer_k_quant_cache_triton,
                 )
 
@@ -345,7 +345,7 @@ def sparse_attn_indexer_kpool(
                 q_slice_cast = q_slice
                 k_quant_cast = k_quant
                 k_scale_cast = k_scale.view(torch.float32).squeeze(-1)
-            from aphrodite.v1.attention.ops.rocm_aiter_mla_sparse import (
+            from sonar.v1.attention.ops.rocm_aiter_mla_sparse import (
                 rocm_fp8_mqa_logits,
             )
 
@@ -374,7 +374,7 @@ def sparse_attn_indexer_kpool(
                 compress_ratio=index_kpool,
                 num_rows=num_rows,
             ):
-                from aphrodite.v1.attention.ops.rocm_aiter_mla_sparse import (
+                from sonar.v1.attention.ops.rocm_aiter_mla_sparse import (
                     _launch_aiter_top_k_per_row_prefill,
                 )
 
@@ -567,7 +567,7 @@ def sparse_attn_indexer_kpool(
         padded_q_quant_cast = (
             padded_q_quant_decode_tokens.view(torch.int8) if use_fp4_cache else padded_q_quant_decode_tokens
         )
-        from aphrodite.v1.attention.ops.rocm_aiter_mla_sparse import (
+        from sonar.v1.attention.ops.rocm_aiter_mla_sparse import (
             rocm_fp8_paged_mqa_logits,
         )
 
@@ -685,7 +685,7 @@ class SparseAttnIndexerKpool(CustomOp):
         self.topk_indices_buffer = topk_indices_buffer
         self.skip_k_cache_insert = skip_k_cache_insert
         self.use_fp4_cache = use_fp4_cache
-        cfg = get_current_aphrodite_config_or_none()
+        cfg = get_current_sonar_config_or_none()
         self.topk_backend = cfg.kernel_config.sparse_indexer_topk_backend if cfg is not None else "auto"
         if cfg is not None and cfg.parallel_config.decode_context_parallel_size > 1:
             raise NotImplementedError("SparseAttnIndexerKpool on ROCm does not support DCP.")
@@ -707,10 +707,10 @@ class SparseAttnIndexerKpool(CustomOp):
         if not rocm_aiter_ops.is_enabled():
             raise RuntimeError(
                 "Sparse attention indexer ROCm path is only supported on AITER. "
-                "Please enable aiter with APHRODITE_ROCM_USE_AITER=1"
+                "Please enable aiter with SONAR_ROCM_USE_AITER=1"
             )
         if index_kpool <= 1:
-            return torch.ops.aphrodite.rocm_aiter_sparse_attn_indexer(
+            return torch.ops.sonar.rocm_aiter_sparse_attn_indexer(
                 hidden_states,
                 _encode_layer_name(self.k_cache.prefix),
                 self.k_cache.kv_cache,

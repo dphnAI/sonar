@@ -4,19 +4,19 @@
 
 import pytest
 
-from aphrodite.config.quantization import QuantizationConfigArgs
-from aphrodite.model_executor.layers.linear import LinearBase
-from aphrodite.model_executor.layers.quantization.compressed_tensors.utils import (
+from sonar.config.quantization import QuantizationConfigArgs
+from sonar.model_executor.layers.linear import LinearBase
+from sonar.model_executor.layers.quantization.compressed_tensors.utils import (
     should_ignore_layer,
 )
-from aphrodite.model_executor.layers.quantization.online.base import (
+from sonar.model_executor.layers.quantization.online.base import (
     OnlineQuantizationConfig,
     _find_matching_targets,
 )
-from aphrodite.model_executor.layers.quantization.quark.utils import (
+from sonar.model_executor.layers.quantization.quark.utils import (
     should_ignore_layer as quark_should_ignore_layer,
 )
-from aphrodite.model_executor.layers.quantization.utils.config_utils import (
+from sonar.model_executor.layers.quantization.utils.config_utils import (
     find_matching_patterns,
     get_layer_name_after_index,
     is_equal_or_regex_match,

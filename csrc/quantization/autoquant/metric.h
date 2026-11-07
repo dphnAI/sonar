@@ -23,7 +23,7 @@
 #include <string>
 #include <vector>
 
-namespace aphrodite {
+namespace sonar {
 namespace autoquant {
 
 struct Metric {
@@ -133,4 +133,4 @@ inline void DumpMetrics(std::ostream& os, const std::vector<Metric>& metrics,
 }
 
 }  // namespace autoquant
-}  // namespace aphrodite
+}  // namespace sonar

@@ -4,7 +4,7 @@
 import pytest
 import torch
 
-from aphrodite import _custom_ops as ops  # noqa: F401
+from sonar import _custom_ops as ops  # noqa: F401
 from tests.kernels.utils import opcheck
 
 
@@ -14,7 +14,7 @@ from tests.kernels.utils import opcheck
 )
 def test_awq_dequantize_opcheck(monkeypatch: pytest.MonkeyPatch):
     with monkeypatch.context() as m:
-        m.setenv("APHRODITE_USE_TRITON_AWQ", "0")
+        m.setenv("SONAR_USE_TRITON_AWQ", "0")
         qweight = torch.randint(-2000000000, 2000000000, (8192, 256), device="cuda", dtype=torch.int32)
         scales = torch.rand((64, 2048), device="cuda", dtype=torch.float16)
         zeros = torch.empty((64, 256), device="cuda", dtype=torch.int32)

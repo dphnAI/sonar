@@ -5,7 +5,7 @@ from typing import Required, TypeAlias
 
 from typing_extensions import TypedDict
 
-from aphrodite.renderers.chat_utils import (
+from sonar.renderers.chat_utils import (
     ChatCompletionContentPartImageEmbedsParam,
     ChatCompletionContentPartImageParam,
     ChatCompletionContentPartTextParam,

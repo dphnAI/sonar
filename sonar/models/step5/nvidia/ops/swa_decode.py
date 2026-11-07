@@ -10,7 +10,7 @@ window split, and a combine kernel merges splits and applies the gate.
 
 import torch
 
-from aphrodite.triton_utils import tl, triton
+from sonar.triton_utils import tl, triton
 
 from ...common.ops.sparse_decode_attention import _PDL, _gate
 

@@ -5,8 +5,8 @@ from collections.abc import Iterable
 import regex
 import torch
 
-from aphrodite.model_executor.models.deepseek_v2 import DeepseekV3ForCausalLM
-from aphrodite.model_executor.models.utils import AutoWeightsLoader, WeightsMapper
+from sonar.model_executor.models.deepseek_v2 import DeepseekV3ForCausalLM
+from sonar.model_executor.models.utils import AutoWeightsLoader, WeightsMapper
 
 
 class MistralLarge3ForCausalLM(DeepseekV3ForCausalLM):
@@ -14,7 +14,7 @@ class MistralLarge3ForCausalLM(DeepseekV3ForCausalLM):
     # match). This is safe here because every pattern is anchored at both ends
     # (\A...\Z) and after substitution the resulting key always starts with
     # "model." or "lm_head.", so no later pattern can accidentally match again.
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_regex={
             regex.compile(r"\Alayers\.(\d+)\.attention_norm\.weight\Z"): r"model.layers.\1.input_layernorm.weight",
             regex.compile(r"\Alayers\.(\d+)\.attention\.wq_a\.(\w+)\Z"): r"model.layers.\1.self_attn.q_a_proj.\2",
@@ -65,4 +65,4 @@ class MistralLarge3ForCausalLM(DeepseekV3ForCausalLM):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)

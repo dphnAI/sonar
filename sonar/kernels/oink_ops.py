@@ -1,19 +1,19 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""This file registers Oink implementations for Aphrodite IR ops.
+"""This file registers Oink implementations for Sonar IR ops.
 
-Aphrodite does not depend on the external Oink repository/package. When an external
+Sonar does not depend on the external Oink repository/package. When an external
 plugin registers torch.library.custom_op entrypoints under the `oink::`
-namespace (e.g. via Aphrodite's general_plugins mechanism), these ops will be marked
+namespace (e.g. via Sonar's general_plugins mechanism), these ops will be marked
  as supported. To dispatch to those ops, set kernel_config.ir_op_priority.<op> to oink.
-Alternatively, `APHRODITE_USE_OINK_OPS=1` will add this to priority by default.
+Alternatively, `SONAR_USE_OINK_OPS=1` will add this to priority by default.
 """
 
 import torch
 from torch import Tensor
 
-from aphrodite import ir
-from aphrodite.platforms import current_platform
+from sonar import ir
+from sonar.platforms import current_platform
 
 OINK_AVAILABLE = current_platform.has_device_capability(100) and hasattr(torch.ops, "oink")
 

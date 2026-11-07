@@ -6,12 +6,12 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.v1.phrase_guard.matcher import MAX_ZERO_WIDTH_TOKENS, PendingText, validate_phrases
-from aphrodite.v1.phrase_guard.processor import RETRY_KEY, PhraseRetryProcessor
-from aphrodite.v1.phrase_guard.worker import restore_requests
-from aphrodite.v1.sample.logits_processor.interface import BatchUpdate, MoveDirectionality
+from sonar.exceptions import SonarValidationError
+from sonar.sampling_params import SamplingParams
+from sonar.v1.phrase_guard.matcher import MAX_ZERO_WIDTH_TOKENS, PendingText, validate_phrases
+from sonar.v1.phrase_guard.processor import RETRY_KEY, PhraseRetryProcessor
+from sonar.v1.phrase_guard.worker import restore_requests
+from sonar.v1.sample.logits_processor.interface import BatchUpdate, MoveDirectionality
 
 pytestmark = pytest.mark.cpu_test
 
@@ -132,7 +132,7 @@ def test_case_sensitive_byte_budget_is_checked_before_native_compilation():
 
 
 def test_compiled_cache_has_weighted_budget(monkeypatch):
-    from aphrodite.v1.phrase_guard import matcher
+    from sonar.v1.phrase_guard import matcher
 
     matcher._pattern_cache.clear()
     monkeypatch.setattr(matcher._phrase_matcher, "compile", lambda _: object())
@@ -160,8 +160,8 @@ def test_runtime_requirements_are_validated_before_core_dispatch(case):
     from tokenizers import Tokenizer, models
     from transformers import TokenizersBackend
 
-    from aphrodite.v1.engine.input_processor import InputProcessor
-    from aphrodite.v1.phrase_guard.scheduler import PhraseScheduler
+    from sonar.v1.engine.input_processor import InputProcessor
+    from sonar.v1.phrase_guard.scheduler import PhraseScheduler
 
     tokenizer = TokenizersBackend(tokenizer_object=Tokenizer(models.WordLevel({"hello": 0}, unk_token="hello")))
     if case == "missing":
@@ -174,7 +174,7 @@ def test_runtime_requirements_are_validated_before_core_dispatch(case):
     )
     processor = SimpleNamespace(
         tokenizer=tokenizer,
-        aphrodite_config=SimpleNamespace(
+        sonar_config=SimpleNamespace(
             model_config=model_config,
             use_v2_model_runner=case != "v1_missing_processor",
             aux_output_config=SimpleNamespace(enabled=case == "routed"),
@@ -188,7 +188,7 @@ def test_runtime_requirements_are_validated_before_core_dispatch(case):
     )
     params = SamplingParams(extra_args={"banned_strings": ["hello"]})
     # A client error maps to HTTP 400 instead of an opaque engine failure.
-    with pytest.raises(AphroditeValidationError, match="--scheduler-cls" if case == "default_scheduler" else ""):
+    with pytest.raises(SonarValidationError, match="--scheduler-cls" if case == "default_scheduler" else ""):
         InputProcessor._validate_params(processor, params, ("generate",))
 
 

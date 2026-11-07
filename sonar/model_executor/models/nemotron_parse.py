@@ -4,7 +4,7 @@
 # Adapted from https://github.com/amalad/aphrodite/blob/nemotron_parse/aphrodite/model_executor/models/nemotron_parse.py
 # that's based on https://huggingface.co/nvidia/NVIDIA-Nemotron-Parse-v1.1/blob/main/hf_nemotron_parse_modeling.py
 #
-# Bart classes based on old Aphrodite codebase:
+# Bart classes based on old Sonar codebase:
 # https://github.com/vllm-project/vllm/blob/v0.10.2/vllm/model_executor/models/bart.py
 
 import math
@@ -22,44 +22,44 @@ from transformers import (
     PreTrainedConfig,
 )
 
-from aphrodite.config import AphroditeConfig, CacheConfig
-from aphrodite.config.lora import LoRAConfig
-from aphrodite.config.multimodal import MultiModalDummyOptions
-from aphrodite.inputs import MultiModalDataDict
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.activation import get_act_fn
-from aphrodite.model_executor.layers.fusion.mm_input_norm import build_mm_input_norm
-from aphrodite.model_executor.layers.linear import ColumnParallelLinear, RowParallelLinear
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization.base_config import QuantizationConfig
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.config import CacheConfig, SonarConfig
+from sonar.config.lora import LoRAConfig
+from sonar.config.multimodal import MultiModalDummyOptions
+from sonar.inputs import MultiModalDataDict
+from sonar.logger import init_logger
+from sonar.model_executor.layers.activation import get_act_fn
+from sonar.model_executor.layers.fusion.mm_input_norm import build_mm_input_norm
+from sonar.model_executor.layers.linear import ColumnParallelLinear, RowParallelLinear
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization.base_config import QuantizationConfig
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
-from aphrodite.model_executor.models.interfaces import (
+from sonar.model_executor.model_loader.weight_utils import default_weight_loader
+from sonar.model_executor.models.interfaces import (
     MultiModalEmbeddings,
     SupportsMultiModal,
 )
-from aphrodite.model_executor.models.radio import RadioModel
-from aphrodite.model_executor.models.whisper import WhisperAttention, WhisperCrossAttention
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import (
+from sonar.model_executor.models.radio import RadioModel
+from sonar.model_executor.models.whisper import WhisperAttention, WhisperCrossAttention
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import (
     MultiModalFieldConfig,
     MultiModalKwargsItems,
 )
-from aphrodite.multimodal.parse import MultiModalDataItems
-from aphrodite.multimodal.processing import (
+from sonar.multimodal.parse import MultiModalDataItems
+from sonar.multimodal.processing import (
     BaseDummyInputsBuilder,
     BaseProcessingInfo,
     EncDecMultiModalProcessor,
     PromptReplacement,
     PromptUpdate,
 )
-from aphrodite.renderers import TokenizeParams
-from aphrodite.transformers_utils.configs.radio import RadioConfig
-from aphrodite.utils.tensor_schema import TensorSchema, TensorShape
-from aphrodite.v1.attention.backend import AttentionType
+from sonar.renderers import TokenizeParams
+from sonar.transformers_utils.configs.radio import RadioConfig
+from sonar.utils.tensor_schema import TensorSchema, TensorShape
+from sonar.v1.attention.backend import AttentionType
 
 logger = init_logger(__name__)
 
@@ -599,20 +599,20 @@ class RadioWithNeck(nn.Module):
 class NemotronParseForConditionalGeneration(nn.Module, SupportsMultiModal):
     supports_mm_device_do_normalize = True
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
 
         self.config = config
         self.vision_config = config.encoder
-        cache_config = aphrodite_config.cache_config
-        quant_config = aphrodite_config.quant_config
-        self.input_norm = build_mm_input_norm(aphrodite_config.model_config)
+        cache_config = sonar_config.cache_config
+        quant_config = sonar_config.quant_config
+        self.input_norm = build_mm_input_norm(sonar_config.model_config)
 
-        with self._mark_tower_model(aphrodite_config, "image"):
+        with self._mark_tower_model(sonar_config, "image"):
             self.encoder = RadioWithNeck(config=config, quant_config=quant_config, prefix=f"{prefix}.encoder")
 
-        with self._mark_language_model(aphrodite_config):
+        with self._mark_language_model(sonar_config):
             self.decoder = MBartDecoderNoPos(
                 config.decoder,
                 cache_config=cache_config,

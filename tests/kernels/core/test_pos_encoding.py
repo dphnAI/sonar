@@ -7,8 +7,8 @@ from itertools import product
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.utils.torch_utils import set_random_seed
 from tests.kernels.allclose_default import get_default_atol, get_default_rtol
 
 IS_NEOX_STYLE = [True, False]
@@ -56,7 +56,7 @@ TENSORS_SHAPES_FN = [
 @pytest.mark.parametrize("use_key", USE_KEY)
 @torch.inference_mode()
 def test_rotary_embedding(
-    default_aphrodite_config,
+    default_sonar_config,
     is_neox_style: bool,
     tensor_shape_fn: Callable[[int, int, int, int], tuple[int, ...]],
     batch_size: int,
@@ -115,7 +115,7 @@ def test_rotary_embedding(
 
 
 @torch.inference_mode()
-def test_rope_module_cache(default_aphrodite_config):
+def test_rope_module_cache(default_sonar_config):
     MAX_POSITIONS = [123, 1234]
     ROPE_THETAS = [10000, 1000000]
     ROPE_PARAMETERS = (

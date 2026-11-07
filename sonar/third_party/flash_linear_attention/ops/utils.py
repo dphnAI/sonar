@@ -17,8 +17,8 @@ from typing import Any, Literal
 
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import triton
+from sonar.platforms import current_platform
+from sonar.triton_utils import triton
 
 logger = logging.getLogger(__name__)
 

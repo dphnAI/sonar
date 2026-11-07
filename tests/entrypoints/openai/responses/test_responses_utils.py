@@ -17,8 +17,8 @@ from openai.types.responses.response_reasoning_item import (
     Summary,
 )
 
-from aphrodite.entrypoints.generate.base.protocol import FunctionCall
-from aphrodite.entrypoints.openai.responses.utils import (
+from sonar.entrypoints.generate.base.protocol import FunctionCall
+from sonar.entrypoints.openai.responses.utils import (
     _construct_message_from_response_item,
     build_response_output_items,
     construct_chat_messages_with_tool_call,
@@ -27,7 +27,7 @@ from aphrodite.entrypoints.openai.responses.utils import (
     decode_custom_tool_input_prefix,
     should_continue_final_message,
 )
-from aphrodite.exceptions import AphroditeValidationError
+from sonar.exceptions import SonarValidationError
 
 
 def _single_chat_message(item):
@@ -225,7 +225,7 @@ class TestResponsesUtils:
             encrypted_content="TOP_SECRET_MESSAGE",
             status=None,
         )
-        with pytest.raises(AphroditeValidationError) as exc_info:
+        with pytest.raises(SonarValidationError) as exc_info:
             construct_chat_messages_with_tool_call([item])
         assert exc_info.value.parameter == "input"
 
@@ -367,7 +367,7 @@ class TestReasoningItemContentPriority:
         formatted = _single_chat_message(item)
         assert formatted["reasoning"] == "Content without summary"
 
-    @patch("aphrodite.entrypoints.openai.responses.utils.logger")
+    @patch("sonar.entrypoints.openai.responses.utils.logger")
     def test_summary_fallback_when_no_content(self, mock_logger):
         """When content is absent, summary is used as fallback with warning."""
         item = ResponseReasoningItem(
@@ -388,7 +388,7 @@ class TestReasoningItemContentPriority:
         mock_logger.warning.assert_called_once()
         assert "summary text as reasoning content" in mock_logger.warning.call_args[0][0]
 
-    @patch("aphrodite.entrypoints.openai.responses.utils.logger")
+    @patch("sonar.entrypoints.openai.responses.utils.logger")
     def test_summary_fallback_when_content_empty(self, mock_logger):
         """When content is an empty list, summary is used as fallback."""
         item = ResponseReasoningItem(
@@ -423,7 +423,7 @@ class TestReasoningItemContentPriority:
         assert formatted["reasoning"] == ""
 
     def test_encrypted_content_raises(self):
-        """Encrypted content should raise AphroditeValidationError."""
+        """Encrypted content should raise SonarValidationError."""
         item = ResponseReasoningItem(
             id="reasoning_6",
             summary=[
@@ -442,11 +442,11 @@ class TestReasoningItemContentPriority:
             encrypted_content="ENCRYPTED",
             status=None,
         )
-        with pytest.raises(AphroditeValidationError) as exc_info:
+        with pytest.raises(SonarValidationError) as exc_info:
             construct_chat_messages_with_tool_call([item])
         assert exc_info.value.parameter == "input"
 
-    @patch("aphrodite.entrypoints.openai.responses.utils.logger")
+    @patch("sonar.entrypoints.openai.responses.utils.logger")
     def test_summary_with_multiple_entries_uses_first(self, mock_logger):
         """When multiple summary entries exist, the first one is used."""
         item = ResponseReasoningItem(
@@ -471,7 +471,7 @@ class TestReasoningItemContentPriority:
         mock_logger.warning.assert_called_once()
         assert "summary text as reasoning content" in mock_logger.warning.call_args[0][0]
 
-    @patch("aphrodite.entrypoints.openai.responses.utils.logger")
+    @patch("sonar.entrypoints.openai.responses.utils.logger")
     def test_no_warning_when_content_used(self, mock_logger):
         """No warning should be emitted when content is available."""
         item = ResponseReasoningItem(

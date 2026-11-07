@@ -3,11 +3,11 @@
 r"""Benchmark online serving throughput.
 
 On the server side, run one of the following commands
-to launch the Aphrodite OpenAI API server:
-    aphrodite serve <your_model> <engine arguments>
+to launch the Sonar OpenAI API server:
+    sonar serve <your_model> <engine arguments>
 
 On the client side, run:
-    aphrodite bench serve \
+    sonar bench serve \
         --backend <backend or endpoint type. Default 'openai'> \
         --label <benchmark result label. Default using backend> \
         --model <your_model. Optional, defaults to first model from server> \
@@ -42,8 +42,8 @@ import aiohttp
 import numpy as np
 from tqdm.asyncio import tqdm
 
-from aphrodite.benchmarks.datasets import SampleRequest, add_dataset_parser, get_samples
-from aphrodite.benchmarks.lib.endpoint_request_func import (
+from sonar.benchmarks.datasets import SampleRequest, add_dataset_parser, get_samples
+from sonar.benchmarks.lib.endpoint_request_func import (
     ASYNC_REQUEST_FUNCS,
     OPENAI_COMPATIBLE_BACKENDS,
     POOLING_BACKENDS,
@@ -51,16 +51,16 @@ from aphrodite.benchmarks.lib.endpoint_request_func import (
     RequestFuncOutput,
     async_request_profile,
 )
-from aphrodite.benchmarks.lib.ready_checker import wait_for_endpoint
-from aphrodite.benchmarks.lib.utils import (
+from sonar.benchmarks.lib.ready_checker import wait_for_endpoint
+from sonar.benchmarks.lib.utils import (
     convert_to_pytorch_benchmark_format,
     redact_sensitive_namespace,
     write_to_json,
 )
-from aphrodite.tokenizers import TokenizerLike, get_tokenizer
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
-from aphrodite.utils.gc_utils import freeze_gc_heap
-from aphrodite.utils.network_utils import join_host_port
+from sonar.tokenizers import TokenizerLike, get_tokenizer
+from sonar.utils.argparse_utils import FlexibleArgumentParser
+from sonar.utils.gc_utils import freeze_gc_heap
+from sonar.utils.network_utils import join_host_port
 
 MILLISECONDS_TO_SECONDS_CONVERSION = 1000
 _SENSITIVE_ARG_FIELDS = ("header",)
@@ -217,7 +217,7 @@ async def fetch_spec_decode_metrics(base_url: str, session: aiohttp.ClientSessio
                 if not line or line.startswith("#"):
                     continue
 
-                if line.startswith("aphrodite:spec_decode"):
+                if line.startswith("sonar:spec_decode"):
                     # Extract metric name (before labels) to avoid matching
                     # substrings inside label values.
                     parts = line.split(None, 1)
@@ -286,7 +286,7 @@ async def fetch_diffusion_metrics(base_url: str, session: aiohttp.ClientSession)
                 if not line or line.startswith("#"):
                     continue
 
-                if line.startswith("aphrodite:diffusion"):
+                if line.startswith("sonar:diffusion"):
                     # Extract metric name (before labels) to avoid matching
                     # substrings inside label values.
                     parts = line.split(None, 1)
@@ -1588,7 +1588,7 @@ def add_cli_args(parser: FlexibleArgumentParser):
     parser.add_argument(
         "--profile",
         action="store_true",
-        help="Use Aphrodite Profiling. --profiler-config must be provided on the server.",
+        help="Use Sonar Profiling. --profiler-config must be provided on the server.",
     )
     parser.add_argument(
         "--save-result",
@@ -1969,10 +1969,10 @@ async def main_async(args: argparse.Namespace) -> dict[str, Any]:
         args.ignore_eos = True
 
     if args.dataset_name == "timed_trace":
-        if args.backend not in ("aphrodite", "openai"):
+        if args.backend not in ("sonar", "openai"):
             raise ValueError(
                 "timed_trace dataset passes pre-tokenized prompts (list[int])"
-                " and requires a completions backend ('aphrodite' or 'openai')."
+                " and requires a completions backend ('sonar' or 'openai')."
             )
         # timed_trace carries per-request timestamps;
         # ignore EOS so generation runs to the trace's specified output length,
@@ -2021,7 +2021,7 @@ async def main_async(args: argparse.Namespace) -> dict[str, Any]:
 
         if "temperature" not in sampling_params:
             print(
-                "WARNING: aphrodite bench serve no longer sets temperature==0 (greedy) "
+                "WARNING: sonar bench serve no longer sets temperature==0 (greedy) "
                 "in requests by default. The default will be determined on the "
                 "server side and can be model/API specific. "
                 "For the old behavior, include --temperature=0."
@@ -2115,7 +2115,7 @@ async def main_async(args: argparse.Namespace) -> dict[str, Any]:
     if args.plot_timeline:
         assert file_name is not None, "file_name must be set when plot_timeline is enabled"
         try:
-            from aphrodite.benchmarks.plot import generate_timeline_plot
+            from sonar.benchmarks.plot import generate_timeline_plot
 
             # Prepare per-request data for timeline
             per_request_data = []
@@ -2157,7 +2157,7 @@ async def main_async(args: argparse.Namespace) -> dict[str, Any]:
     if args.plot_dataset_stats:
         assert file_name is not None, "file_name must be set when plot_dataset_stats is enabled"
         try:
-            from aphrodite.benchmarks.plot import generate_dataset_stats_plot
+            from sonar.benchmarks.plot import generate_dataset_stats_plot
 
             # Prepare per-request data for dataset stats
             per_request_data = []

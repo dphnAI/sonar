@@ -9,18 +9,18 @@ from typing import Any
 
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.logger import init_logger
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.utils.torch_utils import async_tensor_h2d
-from aphrodite.v1.sample.logits_processor import (
+from sonar.config import SonarConfig
+from sonar.logger import init_logger
+from sonar.sampling_params import SamplingParams
+from sonar.utils.torch_utils import async_tensor_h2d
+from sonar.v1.sample.logits_processor import (
     LOGITSPROCS_GROUP,
     AdapterLogitsProcessor,
     BatchUpdate,
     LogitsProcessor,
     RequestLogitsProcessor,
 )
-from aphrodite.v1.sample.logits_processor.builtin import process_dict_updates
+from sonar.v1.sample.logits_processor.builtin import process_dict_updates
 from tests.utils import requires_spawn_multiprocessing
 
 logger = init_logger(__name__)
@@ -67,7 +67,7 @@ class DummyLogitsProcessor(LogitsProcessor):
     def validate_params(cls, params: SamplingParams):
         cls._get_target_token(params)
 
-    def __init__(self, aphrodite_config: "AphroditeConfig", device: torch.device, is_pin_memory: bool):
+    def __init__(self, sonar_config: "SonarConfig", device: torch.device, is_pin_memory: bool):
         self.req_info: dict[int, int] = {}
 
     def is_argmax_invariant(self) -> bool:
@@ -226,7 +226,7 @@ def setup_fake_entrypoint(monkeypatch) -> None:
     """Expose the dummy logitproc entrypoint for the current platform."""
     if requires_spawn_multiprocessing():
         register_fake_entrypoint(monkeypatch)
-        monkeypatch.setenv("APHRODITE_WORKER_MULTIPROC_METHOD", "spawn")
+        monkeypatch.setenv("SONAR_WORKER_MULTIPROC_METHOD", "spawn")
         return
 
     import importlib.metadata
@@ -240,4 +240,4 @@ def setup_fake_entrypoint(monkeypatch) -> None:
         return original_entry_points(**kwargs)
 
     monkeypatch.setattr(importlib.metadata, "entry_points", fake_entry_points)
-    monkeypatch.setenv("APHRODITE_WORKER_MULTIPROC_METHOD", "fork")
+    monkeypatch.setenv("SONAR_WORKER_MULTIPROC_METHOD", "fork")

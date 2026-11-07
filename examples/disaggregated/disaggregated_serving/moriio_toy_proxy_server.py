@@ -30,7 +30,7 @@ import msgpack
 import zmq
 from quart import Quart, Request, make_response, request
 
-from aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_common import (
+from sonar.distributed.kv_transfer.kv_connector.v1.moriio.moriio_common import (
     MoRIIOConstants,
 )
 

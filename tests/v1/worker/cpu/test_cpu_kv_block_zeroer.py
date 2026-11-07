@@ -6,11 +6,11 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.platforms import CpuArchEnum, current_platform
-from aphrodite.triton_utils import HAS_TRITON
-from aphrodite.v1.kv_cache_interface import FullAttentionSpec, KVCacheLayout
-from aphrodite.v1.worker.cpu.utils import CPUKVBlockZeroer
-from aphrodite.v1.worker.utils import AttentionGroup
+from sonar.platforms import CpuArchEnum, current_platform
+from sonar.triton_utils import HAS_TRITON
+from sonar.v1.kv_cache_interface import FullAttentionSpec, KVCacheLayout
+from sonar.v1.worker.cpu.utils import CPUKVBlockZeroer
+from sonar.v1.worker.utils import AttentionGroup
 from tests.v1.attention.utils import dense_kv_cache_views
 
 pytestmark = pytest.mark.skipif(

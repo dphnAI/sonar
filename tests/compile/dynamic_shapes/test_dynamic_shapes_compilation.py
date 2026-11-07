@@ -12,17 +12,17 @@ from torch._dynamo.source import LocalSource
 from torch._subclasses.fake_tensor import FakeTensorMode
 from torch.fx.experimental.symbolic_shapes import DimDynamic, ShapeEnv
 
-from aphrodite import SamplingParams
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.compilation.piecewise_backend import create_concrete_args
-from aphrodite.config import AphroditeConfig, CompilationConfig, set_current_aphrodite_config
-from aphrodite.config.compilation import (
+from sonar import SamplingParams
+from sonar.compilation.decorators import support_torch_compile
+from sonar.compilation.piecewise_backend import create_concrete_args
+from sonar.config import CompilationConfig, SonarConfig, set_current_sonar_config
+from sonar.config.compilation import (
     CompilationMode,
     DynamicShapesConfig,
     DynamicShapesType,
 )
-from aphrodite.forward_context import set_forward_context
-from aphrodite.utils.torch_utils import is_torch_equal_or_newer
+from sonar.forward_context import set_forward_context
+from sonar.utils.torch_utils import is_torch_equal_or_newer
 from tests.models.utils import check_logprobs_close
 
 
@@ -108,29 +108,29 @@ def get_dynamic_shapes_test_cases():
 TEST_PROMPTS = ["Hello, my name is", "The capital of France is"]
 
 
-def generate_outputs(aphrodite_model):
+def generate_outputs(sonar_model):
     sampling_params = SamplingParams(max_tokens=5, temperature=0, logprobs=10)
     outputs = []
     for prompt in TEST_PROMPTS:
-        output = aphrodite_model.llm.generate(prompt, sampling_params)[0].outputs[0]
+        output = sonar_model.llm.generate(prompt, sampling_params)[0].outputs[0]
         assert len(output.text.strip()) > 0, "Model produced empty output"
         outputs.append((output.token_ids, output.text, output.logprobs))
     return outputs
 
 
 @pytest.fixture(scope="module")
-def get_eager_outputs(aphrodite_runner):
+def get_eager_outputs(sonar_runner):
     cache = {}
 
     def get(model_name):
         if model_name not in cache:
-            with aphrodite_runner(
+            with sonar_runner(
                 model_name,
                 enforce_eager=True,
                 max_model_len=1024,
                 enable_chunked_prefill=None,
-            ) as aphrodite_model:
-                cache[model_name] = generate_outputs(aphrodite_model)
+            ) as sonar_model:
+                cache[model_name] = generate_outputs(sonar_model)
         return cache[model_name]
 
     return get
@@ -140,7 +140,7 @@ def get_eager_outputs(aphrodite_runner):
 @pytest.mark.skipif(not is_torch_equal_or_newer("2.10.0"), reason="requires torch 2.10")
 def test_dynamic_shapes_compilation(
     monkeypatch,
-    aphrodite_runner,
+    sonar_runner,
     get_eager_outputs,
     test_case,
 ):
@@ -152,24 +152,24 @@ def test_dynamic_shapes_compilation(
         # data-dependent and compilation blows up -- nothing to test.
         pytest.skip("unbacked dynamic shapes with shape_id require torch>=2.11")
 
-    monkeypatch.setenv("APHRODITE_USE_AOT_COMPILE", "1" if test_case.use_aot_compile else "0")
-    monkeypatch.setenv("APHRODITE_USE_BYTECODE_HOOK", "1" if test_case.use_bytecode_hook else "0")
+    monkeypatch.setenv("SONAR_USE_AOT_COMPILE", "1" if test_case.use_aot_compile else "0")
+    monkeypatch.setenv("SONAR_USE_BYTECODE_HOOK", "1" if test_case.use_bytecode_hook else "0")
 
     print(f"Testing {test_case.shapes_type.name} dynamic shapes...")
 
     # The compiled engine shuts down before an uncached eager baseline starts.
-    with aphrodite_runner(
+    with sonar_runner(
         test_case.model_name,
         compilation_config={
-            "mode": CompilationMode.APHRODITE_COMPILE,
+            "mode": CompilationMode.SONAR_COMPILE,
             "dynamic_shapes_config": {
                 "type": test_case.shapes_type.value,
             },
         },
         max_model_len=1024,
         enable_chunked_prefill=None,
-    ) as aphrodite_model:
-        compiled_outputs = generate_outputs(aphrodite_model)
+    ) as sonar_model:
+        compiled_outputs = generate_outputs(sonar_model)
 
     check_logprobs_close(
         outputs_0_lst=get_eager_outputs(test_case.model_name),
@@ -223,17 +223,17 @@ def test_model_specialization_with_evaluate_guards(monkeypatch, use_aot_compile,
                 return x * 10
 
     @contextmanager
-    def use_aphrodite_config(aphrodite_config: AphroditeConfig):
-        with set_forward_context({}, aphrodite_config), set_current_aphrodite_config(aphrodite_config):
+    def use_sonar_config(sonar_config: SonarConfig):
+        with set_forward_context({}, sonar_config), set_current_sonar_config(sonar_config):
             yield
 
     monkeypatch.setenv("TOKENIZERS_PARALLELISM", "true")
-    monkeypatch.setenv("APHRODITE_USE_AOT_COMPILE", "1" if use_aot_compile else "0")
-    monkeypatch.setenv("APHRODITE_USE_BYTECODE_HOOK", "0")
+    monkeypatch.setenv("SONAR_USE_AOT_COMPILE", "1" if use_aot_compile else "0")
+    monkeypatch.setenv("SONAR_USE_BYTECODE_HOOK", "0")
 
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         compilation_config=CompilationConfig(
-            mode=CompilationMode.APHRODITE_COMPILE,
+            mode=CompilationMode.SONAR_COMPILE,
             dynamic_shapes_config=DynamicShapesConfig(
                 type=dynamic_shapes_type,
                 evaluate_guards=evaluate_guards,
@@ -244,12 +244,12 @@ def test_model_specialization_with_evaluate_guards(monkeypatch, use_aot_compile,
     def test(model_class, input1, input2, is_01_specialization=False):
         with (
             torch.no_grad(),
-            use_aphrodite_config(aphrodite_config),
+            use_sonar_config(sonar_config),
             tempfile.TemporaryDirectory() as tmpdirname,
         ):
-            monkeypatch.setenv("APHRODITE_CACHE_ROOT", tmpdirname)
+            monkeypatch.setenv("SONAR_CACHE_ROOT", tmpdirname)
 
-            model = model_class(aphrodite_config=aphrodite_config).cuda()
+            model = model_class(sonar_config=sonar_config).cuda()
 
             model(input1)
 
@@ -279,7 +279,7 @@ def test_model_specialization_with_evaluate_guards(monkeypatch, use_aot_compile,
 
 
 @pytest.mark.skipif(not is_torch_equal_or_newer("2.10.0"), reason="requires torch 2.10")
-def test_piecewise_backend_empty_sym_shape_indices(aphrodite_runner):
+def test_piecewise_backend_empty_sym_shape_indices(sonar_runner):
     """Test that PiecewiseBackend handles empty sym_shape_indices correctly.
 
     When all inputs have static shapes (no torch.SymInt), sym_shape_indices
@@ -288,26 +288,26 @@ def test_piecewise_backend_empty_sym_shape_indices(aphrodite_runner):
     """
     # Use small max_model_len and max_num_batched_tokens to encourage
     # static shape compilation with empty sym_shape_indices
-    with aphrodite_runner(
+    with sonar_runner(
         "Qwen/Qwen3-0.6B",
         max_model_len=512,
         max_num_batched_tokens=1,
         enable_chunked_prefill=None,
         compilation_config={
-            "mode": CompilationMode.APHRODITE_COMPILE,
+            "mode": CompilationMode.SONAR_COMPILE,
             "dynamic_shapes_config": {
                 "type": DynamicShapesType.BACKED.value,
             },
         },
-    ) as aphrodite_model:
+    ) as sonar_model:
         sampling_params = SamplingParams(temperature=0, top_p=0.95, max_tokens=10)
 
         # Generate with static shape inputs
-        output = aphrodite_model.llm.generate("Hello, my name is", sampling_params=sampling_params)
+        output = sonar_model.llm.generate("Hello, my name is", sampling_params=sampling_params)
         result = output[0].outputs[0].text
         assert len(result) > 0, "Should generate non-empty output"
 
         # Generate again to verify compilation works with empty sym_shape_indices
-        output = aphrodite_model.llm.generate("The capital of France is", sampling_params=sampling_params)
+        output = sonar_model.llm.generate("The capital of France is", sampling_params=sampling_params)
         result = output[0].outputs[0].text
         assert len(result) > 0, "Should generate non-empty output on second run"

@@ -9,30 +9,30 @@ import torch
 from torch import nn
 from transformers import MambaConfig
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, CacheConfig, ModelConfig
-from aphrodite.distributed.parallel_state import get_pp_group
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.mamba.mamba_mixer import MambaMixer
-from aphrodite.model_executor.layers.mamba.mamba_utils import (
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import CacheConfig, ModelConfig, SonarConfig
+from sonar.distributed.parallel_state import get_pp_group
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.mamba.mamba_mixer import MambaMixer
+from sonar.model_executor.layers.mamba.mamba_utils import (
     MambaStateCopyFunc,
     MambaStateCopyFuncCalculator,
     MambaStateDtypeCalculator,
     MambaStateShapeCalculator,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.models.interfaces import (
+from sonar.model_executor.models.interfaces import (
     HasInnerState,
     IsAttentionFree,
     SupportsMambaPrefixCaching,
     SupportsPP,
 )
-from aphrodite.sequence import IntermediateTensors
+from sonar.sequence import IntermediateTensors
 
 from .utils import (
     AutoWeightsLoader,
@@ -99,14 +99,14 @@ class MambaDecoderLayer(nn.Module):
 
 @support_torch_compile
 class MambaModel(nn.Module):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_config
-        model_config = aphrodite_config.model_config
-        cache_config = aphrodite_config.cache_config
-        quant_config = aphrodite_config.quant_config
-        lora_config = aphrodite_config.lora_config
+        config = sonar_config.model_config.hf_config
+        model_config = sonar_config.model_config
+        cache_config = sonar_config.cache_config
+        quant_config = sonar_config.quant_config
+        lora_config = sonar_config.lora_config
         is_lora_enabled = bool(lora_config)
 
         self.config = config
@@ -167,18 +167,18 @@ class MambaModel(nn.Module):
 
 
 class MambaForCausalLM(nn.Module, HasInnerState, IsAttentionFree, SupportsPP, SupportsMambaPrefixCaching):
-    hf_to_aphrodite_mapper = WeightsMapper(orig_to_new_substr={".A_log": ".A"})
+    hf_to_sonar_mapper = WeightsMapper(orig_to_new_substr={".A_log": ".A"})
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
-        config = aphrodite_config.model_config.hf_config
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
+        config = sonar_config.model_config.hf_config
 
-        self.scheduler_config = aphrodite_config.scheduler_config
+        self.scheduler_config = sonar_config.scheduler_config
 
         super().__init__()
         self.config = config
-        self.aphrodite_config = aphrodite_config
-        self.model_config = aphrodite_config.model_config
-        self.backbone = MambaModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "backbone"))
+        self.sonar_config = sonar_config
+        self.model_config = sonar_config.model_config
+        self.backbone = MambaModel(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "backbone"))
 
         self.lm_head = ParallelLMHead(
             config.vocab_size,
@@ -210,21 +210,21 @@ class MambaForCausalLM(nn.Module, HasInnerState, IsAttentionFree, SupportsPP, Su
     @classmethod
     def get_mamba_state_dtype_from_config(
         cls,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
     ) -> tuple[torch.dtype, torch.dtype]:
         return MambaStateDtypeCalculator.mamba1_state_dtype(
-            aphrodite_config.model_config.dtype,
-            aphrodite_config.cache_config.mamba_cache_dtype,
-            aphrodite_config.cache_config.mamba_ssm_cache_dtype,
+            sonar_config.model_config.dtype,
+            sonar_config.cache_config.mamba_cache_dtype,
+            sonar_config.cache_config.mamba_ssm_cache_dtype,
         )
 
     @classmethod
     def get_mamba_state_shape_from_config(
         cls,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
     ) -> tuple[tuple[int, int], tuple[int, int]]:
-        parallel_config = aphrodite_config.parallel_config
-        hf_config = aphrodite_config.model_config.hf_config
+        parallel_config = sonar_config.parallel_config
+        hf_config = sonar_config.model_config.hf_config
 
         return MambaStateShapeCalculator.mamba1_state_shape(
             tp_world_size=parallel_config.tensor_parallel_size,
@@ -249,4 +249,4 @@ class MambaForCausalLM(nn.Module, HasInnerState, IsAttentionFree, SupportsPP, Su
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)

@@ -5,9 +5,9 @@ import dataclasses
 import pytest
 import torch
 
-from aphrodite import LLM
-from aphrodite.config import SpeculativeConfig
-from aphrodite.distributed import cleanup_dist_env_and_memory
+from sonar import LLM
+from sonar.config import SpeculativeConfig
+from sonar.distributed import cleanup_dist_env_and_memory
 from tests.evals.gsm8k.gsm8k_eval import evaluate_gsm8k_offline
 from tests.utils import large_gpu_mark
 
@@ -90,11 +90,11 @@ def compute_spec_decode_stats(metrics) -> dict:
     """Extract all spec-decode metrics and compute derived stats."""
     name2metric = {m.name: m for m in metrics}
 
-    n_drafts = name2metric["aphrodite:spec_decode_num_drafts"].value
-    n_draft_tokens = name2metric["aphrodite:spec_decode_num_draft_tokens"].value
-    n_accepted = name2metric["aphrodite:spec_decode_num_accepted_tokens"].value
+    n_drafts = name2metric["sonar:spec_decode_num_drafts"].value
+    n_draft_tokens = name2metric["sonar:spec_decode_num_draft_tokens"].value
+    n_accepted = name2metric["sonar:spec_decode_num_accepted_tokens"].value
 
-    per_pos_vec = name2metric["aphrodite:spec_decode_num_accepted_tokens_per_pos"].values
+    per_pos_vec = name2metric["sonar:spec_decode_num_accepted_tokens_per_pos"].values
 
     acceptance_len = 1 + (n_accepted / n_drafts) if n_drafts > 0 else 1.0
     draft_tokens_per_step = (n_draft_tokens / n_drafts) if n_drafts > 0 else 0
@@ -130,7 +130,7 @@ def print_spec_decode_stats(stats: dict) -> None:
 
 
 @pytest.mark.parametrize("config", SPECULATOR_CONFIGS)
-def test_speculators_model(aphrodite_runner, example_prompts, monkeypatch, config):
+def test_speculators_model(sonar_runner, example_prompts, monkeypatch, config):
     """Test speculators model properly initializes speculative decoding.
 
     Verifies:
@@ -141,20 +141,20 @@ def test_speculators_model(aphrodite_runner, example_prompts, monkeypatch, confi
     5. Speculative tokens count is valid
     6. Text generation works with speculative decoding enabled
     """
-    monkeypatch.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
+    monkeypatch.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")
 
     runner_kwargs = dict(dtype=torch.bfloat16, enforce_eager=True)
     if config.quantization:
         runner_kwargs["quantization"] = config.quantization
 
-    with aphrodite_runner(config.model_path, **runner_kwargs) as aphrodite_model:
-        aphrodite_config = aphrodite_model.llm.llm_engine.aphrodite_config
+    with sonar_runner(config.model_path, **runner_kwargs) as sonar_model:
+        sonar_config = sonar_model.llm.llm_engine.sonar_config
 
-        assert isinstance(aphrodite_config.speculative_config, SpeculativeConfig), (
+        assert isinstance(sonar_config.speculative_config, SpeculativeConfig), (
             "Speculative config should be initialized for speculators model"
         )
 
-        spec_config = aphrodite_config.speculative_config
+        spec_config = sonar_config.speculative_config
         assert spec_config.method == config.method, f"Expected method='{config.method}', got '{spec_config.method}'"
         if config.parallel_drafting is not None:
             assert spec_config.parallel_drafting is config.parallel_drafting, (
@@ -167,8 +167,8 @@ def test_speculators_model(aphrodite_runner, example_prompts, monkeypatch, confi
             f"Draft model should be {config.model_path}, got {spec_config.model}"
         )
 
-        aphrodite_outputs = aphrodite_model.generate_greedy(example_prompts, max_tokens=20)
-        assert aphrodite_outputs, f"No outputs generated for speculators model {config.model_path}"
+        sonar_outputs = sonar_model.generate_greedy(example_prompts, max_tokens=20)
+        assert sonar_outputs, f"No outputs generated for speculators model {config.model_path}"
 
 
 @pytest.mark.slow_test
@@ -181,7 +181,7 @@ def test_speculators_correctness(monkeypatch, config):
     correct outputs, and checks that acceptance length does not collapse under
     batched inference (lm-eval style).
     """
-    monkeypatch.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
+    monkeypatch.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")
 
     spec_llm = LLM(
         model=config.model_path,

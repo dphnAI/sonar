@@ -8,16 +8,16 @@ from unittest.mock import MagicMock
 import pytest
 import torch
 
-from aphrodite.v1.attention.backends.mla.prefill.base import MLAPrefillBackend
-from aphrodite.v1.attention.backends.mla.prefill.flashinfer import FlashInferPrefillBackend
-from aphrodite.v1.attention.backends.mla.prefill.registry import (
+from sonar.v1.attention.backends.mla.prefill.base import MLAPrefillBackend
+from sonar.v1.attention.backends.mla.prefill.flashinfer import FlashInferPrefillBackend
+from sonar.v1.attention.backends.mla.prefill.registry import (
     MLAPrefillBackendEnum,
     register_mla_prefill_backend,
 )
-from aphrodite.v1.attention.backends.mla.prefill.trtllm_ragged import (
+from sonar.v1.attention.backends.mla.prefill.trtllm_ragged import (
     TrtllmRaggedPrefillBackend,
 )
-from aphrodite.v1.worker.workspace import (
+from sonar.v1.worker.workspace import (
     current_workspace_manager,
     init_workspace_manager,
     reset_workspace_manager,
@@ -48,7 +48,7 @@ def test_prefill_backend_clone_has_isolated_metadata():
         qk_nope_head_dim=16,
         qk_rope_head_dim=8,
         v_head_dim=32,
-        aphrodite_config=object(),
+        sonar_config=object(),
     )
 
     clone = backend.clone()
@@ -66,7 +66,7 @@ def test_prefill_backend_clone_has_isolated_metadata():
 def test_prefill_backend_does_not_pin_grown_workspace(monkeypatch, backend_cls):
     """Reserving workspace at init must not keep a view of it: when another user
     grows the shared workspace, the old buffer must be freed."""
-    monkeypatch.setenv("APHRODITE_FLASHINFER_WORKSPACE_BUFFER_SIZE", "4096")
+    monkeypatch.setenv("SONAR_FLASHINFER_WORKSPACE_BUFFER_SIZE", "4096")
     init_workspace_manager(torch.device("cpu"))
     try:
         manager = current_workspace_manager()
@@ -77,7 +77,7 @@ def test_prefill_backend_does_not_pin_grown_workspace(monkeypatch, backend_cls):
             qk_nope_head_dim=16,
             qk_rope_head_dim=8,
             v_head_dim=32,
-            aphrodite_config=MagicMock(),
+            sonar_config=MagicMock(),
         )
         (view,) = manager.get_simultaneous(((1,), torch.uint8))
         old_storage = view.untyped_storage()._weak_ref()
@@ -190,7 +190,7 @@ def test_rocm_aiter_fa_registered():
     assert "ROCM_AITER_FA" in MLAPrefillBackendEnum.__members__
 
     path = MLAPrefillBackendEnum.ROCM_AITER_FA.get_path()
-    assert path == ("aphrodite.v1.attention.backends.mla.prefill.aiter_flash_attn.AiterFlashAttnPrefillBackend")
+    assert path == ("sonar.v1.attention.backends.mla.prefill.aiter_flash_attn.AiterFlashAttnPrefillBackend")
 
     backend_cls = MLAPrefillBackendEnum.ROCM_AITER_FA.get_class()
     assert backend_cls.get_name() == "ROCM_AITER_FA"

@@ -2,9 +2,9 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import os
 
-from aphrodite.ray.ray_env import RAY_NON_CARRY_OVER_ENV_VARS
+from sonar.ray.ray_env import RAY_NON_CARRY_OVER_ENV_VARS
 
-_RAY_WORKER_PRE_IMPORT_ENV_VARS = frozenset({"APHRODITE_USE_BREAKABLE_CUDAGRAPH"})
+_RAY_WORKER_PRE_IMPORT_ENV_VARS = frozenset({"SONAR_USE_BREAKABLE_CUDAGRAPH"})
 
 
 def get_driver_env_vars(
@@ -23,7 +23,7 @@ def get_driver_env_vars(
 def update_runtime_env_for_worker_import(runtime_env: dict) -> dict:
     """Expose driver environment variables needed before Ray actor import.
 
-    AphroditeConfig can auto-enable breakable CUDA graphs after Ray starts, while
+    SonarConfig can auto-enable breakable CUDA graphs after Ray starts, while
     eager_break_during_capture resolves the setting during model import.
     """
     for env_var in _RAY_WORKER_PRE_IMPORT_ENV_VARS:

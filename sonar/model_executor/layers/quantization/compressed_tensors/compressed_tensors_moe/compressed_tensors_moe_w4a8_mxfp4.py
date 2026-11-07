@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-from aphrodite.model_executor.layers.fused_moe import RoutedExperts
-from aphrodite.model_executor.layers.quantization.mxfp4 import Mxfp4MoEMethod
-from aphrodite.model_executor.utils import move_parameter
+from sonar.model_executor.layers.fused_moe import RoutedExperts
+from sonar.model_executor.layers.quantization.mxfp4 import Mxfp4MoEMethod
+from sonar.model_executor.utils import move_parameter
 
 _PACKED_WEIGHTS = ("w13_weight", "w2_weight")
 

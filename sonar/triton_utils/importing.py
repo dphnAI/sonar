@@ -5,9 +5,9 @@ import os
 import types
 from importlib.util import find_spec
 
-from aphrodite.logger import init_logger
-from aphrodite.platforms import aphrodite_version_matches_substr, current_platform
-from aphrodite.utils.math_utils import cdiv
+from sonar.logger import init_logger
+from sonar.platforms import current_platform, sonar_version_matches_substr
+from sonar.utils.math_utils import cdiv
 
 logger = init_logger(__name__)
 
@@ -31,7 +31,7 @@ if HAS_TRITON:
         ]
 
         # Check Triton CPU
-        if aphrodite_version_matches_substr("cpu"):
+        if sonar_version_matches_substr("cpu"):
             if "cpu" in backends:
                 HAS_TRITON = True
                 # Suppress following warnings on CPU-only platforms

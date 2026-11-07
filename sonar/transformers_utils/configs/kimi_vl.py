@@ -5,7 +5,7 @@
 from transformers import DeepseekV2Config
 from transformers.configuration_utils import PreTrainedConfig
 
-from aphrodite.transformers_utils.configs.moonvit import MoonViTConfig
+from sonar.transformers_utils.configs.moonvit import MoonViTConfig
 
 
 class KimiVLConfig(PreTrainedConfig):

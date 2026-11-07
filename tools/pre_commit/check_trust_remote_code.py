@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Lint: detect hardcoded `trust_remote_code=True` inside Aphrodite.
+"""Lint: detect hardcoded `trust_remote_code=True` inside Sonar.
 
 Passing a literal `True` silently overrides the user's `--trust-remote-code`
 setting, so a malicious model repository can execute code even when the user

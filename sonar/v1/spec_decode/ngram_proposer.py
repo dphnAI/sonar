@@ -6,35 +6,35 @@ import numpy as np
 import torch
 from numba import get_num_threads, jit, njit, prange, set_num_threads
 
-from aphrodite.config import AphroditeConfig
+from sonar.config import SonarConfig
 
 
 class NgramProposer:
-    def __init__(self, aphrodite_config: AphroditeConfig):
-        assert aphrodite_config.speculative_config is not None
-        assert aphrodite_config.speculative_config.prompt_lookup_min is not None
-        assert aphrodite_config.speculative_config.prompt_lookup_max is not None
+    def __init__(self, sonar_config: SonarConfig):
+        assert sonar_config.speculative_config is not None
+        assert sonar_config.speculative_config.prompt_lookup_min is not None
+        assert sonar_config.speculative_config.prompt_lookup_max is not None
 
         # Minimum length of the n-gram to match.
-        self.min_n = aphrodite_config.speculative_config.prompt_lookup_min
+        self.min_n = sonar_config.speculative_config.prompt_lookup_min
         # Maximum length of the n-gram to match.
-        self.max_n = aphrodite_config.speculative_config.prompt_lookup_max
+        self.max_n = sonar_config.speculative_config.prompt_lookup_max
         # Number of tokens follow the match. If there are less than k
         # tokens follow the match, we will return the maximum amount of
         # tokens until the end.
-        self.k = aphrodite_config.speculative_config.num_speculative_tokens
+        self.k = sonar_config.speculative_config.num_speculative_tokens
         # Maximum length of the model.
-        self.max_model_len = aphrodite_config.model_config.max_model_len
+        self.max_model_len = sonar_config.model_config.max_model_len
 
         # Pre-allocate buffers for numba batch propose.
-        max_num_seqs = aphrodite_config.scheduler_config.max_num_seqs
+        max_num_seqs = sonar_config.scheduler_config.max_num_seqs
         self.valid_ngram_draft = np.zeros((max_num_seqs, self.k), dtype=np.int32)
         self.valid_ngram_num_drafts = np.zeros((max_num_seqs), dtype=np.int32)
 
         # Threshold of total number of tokens in the batch to enable
         # multi-threading in numba batch propose.
         self.num_tokens_threshold = 8192
-        tp_size = aphrodite_config.parallel_config.tensor_parallel_size
+        tp_size = sonar_config.parallel_config.tensor_parallel_size
         cpu_count = os.cpu_count()
         # Max number of threads for numba parallel processing.
         if cpu_count:

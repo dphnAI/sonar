@@ -101,7 +101,7 @@ compatible_strategies:
 hardware_overrides:
   amd:
     extra_env:
-      APHRODITE_ROCM_USE_AITER: "1"
+      SONAR_ROCM_USE_AITER: "1"
 
 strategy_overrides:
   single_node_tp:
@@ -124,7 +124,7 @@ guide: |
 
   ## Prerequisites
 
-  - **Aphrodite:** 0.28.0 or newer, which includes native Bailing V3 support;
+  - **Sonar:** 0.28.0 or newer, which includes native Bailing V3 support;
   - **Validated hardware:** NVIDIA H20, H20-3e, H200, DGX Spark (FP4/INT4), and AMD MI300X / MI355X
   - **Precision:** BF16, serialized block FP8, mixed block-FP8/MXFP4, or compressed-tensors INT4 weights with BF16 compute
   - **Context length:** 262,144 tokens
@@ -132,7 +132,7 @@ guide: |
   ## Launching the Server
 
   ```bash
-  NCCL_DEBUG=WARN aphrodite serve inclusionAI/Ling-3.0-flash \
+  NCCL_DEBUG=WARN sonar serve inclusionAI/Ling-3.0-flash \
     --trust-remote-code \
     --dtype bfloat16 \
     --tensor-parallel-size 4 \
@@ -149,7 +149,7 @@ guide: |
   For the serialized FP8 variant on 2x H200, use:
 
   ```bash
-  aphrodite serve inclusionAI/Ling-3.0-flash-fp8 \
+  sonar serve inclusionAI/Ling-3.0-flash-fp8 \
     --trust-remote-code \
     --dtype bfloat16 \
     --tensor-parallel-size 2 \
@@ -165,7 +165,7 @@ guide: |
   For the validated TP4+EP4 alternative on 4x H200, use:
 
   ```bash
-  aphrodite serve inclusionAI/Ling-3.0-flash-fp8 \
+  sonar serve inclusionAI/Ling-3.0-flash-fp8 \
     --trust-remote-code \
     --dtype bfloat16 \
     --tensor-parallel-size 4 \
@@ -182,7 +182,7 @@ guide: |
   For the FP4 variant on one GPU, use:
 
   ```bash
-  aphrodite serve inclusionAI/Ling-3.0-flash-fp4 \
+  sonar serve inclusionAI/Ling-3.0-flash-fp4 \
     --trust-remote-code \
     --dtype bfloat16 \
     --tensor-parallel-size 1 \
@@ -198,7 +198,7 @@ guide: |
   For the INT4 variant on one GPU, use:
 
   ```bash
-  aphrodite serve inclusionAI/Ling-3.0-flash-int4 \
+  sonar serve inclusionAI/Ling-3.0-flash-int4 \
     --trust-remote-code \
     --dtype bfloat16 \
     --tensor-parallel-size 1 \
@@ -231,7 +231,7 @@ guide: |
   replace the served target checkpoint. It can be paired with any
   Ling-3.0-flash target variant; pass the DSpark repository through
   `--speculative-config.model` while keeping the selected target as the model
-  served by `aphrodite serve`.
+  served by `sonar serve`.
 
   The checkpoint was trained with query block size `Q=8`. Runtime
   `num_speculative_tokens` (`K`) may be any integer from 1 through 8. The recipe
@@ -254,7 +254,7 @@ guide: |
   only** — attention, `lm_head`, the shared expert and the dense projections are
   all in the config's `ignore` list. It is not covered by the model-specific
   quantization plumbing in `bailing_moe_v3.py` (which handles block FP8 and
-  MXFP4); it loads through Aphrodite's generic `compressed-tensors` path and runs at
+  MXFP4); it loads through Sonar's generic `compressed-tensors` path and runs at
   TP1 on H200 or DGX Spark.
 
   The engine names the mechanism at startup:
@@ -266,7 +266,7 @@ guide: |
   INFO [int_wna16.py:409] Using MarlinExperts
   ```
 
-  The vendor model card documents SGLang only, and there is no merged Aphrodite PR
+  The vendor model card documents SGLang only, and there is no merged Sonar PR
   specific to Ling INT4. This variant works through the generic quantization
   path; tool calling, reasoning parsing, chunked prefill and CUDA graph capture
   behave as they do on the other variants.
@@ -274,8 +274,8 @@ guide: |
   ## Running on MI300X/MI355X
 
   ```bash
-  export APHRODITE_ROCM_USE_AITER=1
-  aphrodite serve inclusionAI/Ling-3.0-flash \
+  export SONAR_ROCM_USE_AITER=1
+  sonar serve inclusionAI/Ling-3.0-flash \
     --trust-remote-code \
     --dtype bfloat16 \
     --tensor-parallel-size 4 \

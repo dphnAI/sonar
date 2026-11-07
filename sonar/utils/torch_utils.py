@@ -14,10 +14,10 @@ import numpy.typing as npt
 import torch
 from torch.library import Library, infer_schema
 
-import aphrodite.envs as envs
-from aphrodite.logger import init_logger
-from aphrodite.utils.platform_utils import is_pin_memory_available
-from aphrodite.utils.torch_version import (  # noqa: F401
+import sonar.envs as envs
+from sonar.logger import init_logger
+from sonar.utils.platform_utils import is_pin_memory_available
+from sonar.utils.torch_version import (  # noqa: F401
     _is_torch_equal,
     _is_torch_equal_or_newer,
     is_torch_equal,
@@ -25,8 +25,8 @@ from aphrodite.utils.torch_version import (  # noqa: F401
 )
 
 if TYPE_CHECKING:
-    from aphrodite.config import ModelConfig
-    from aphrodite.sequence import IntermediateTensors
+    from sonar.config import ModelConfig
+    from sonar.sequence import IntermediateTensors
 else:
     ModelConfig = object
     IntermediateTensors = object
@@ -87,7 +87,7 @@ for _dtype, _typecode in TORCH_DTYPE_TO_ARRAY_TYPECODE.items():
     assert array.array(_typecode).itemsize == _dtype.itemsize
 
 
-MODELOPT_TO_APHRODITE_KV_CACHE_DTYPE_MAP = {
+MODELOPT_TO_SONAR_KV_CACHE_DTYPE_MAP = {
     "fp8": "fp8_e4m3",
     "nvfp4": "nvfp4",
 }
@@ -245,9 +245,9 @@ def available_cpu_count() -> int:
     return max(1, count)
 
 
-# Marks OMP_NUM_THREADS as chosen by Aphrodite for its worker processes rather than
+# Marks OMP_NUM_THREADS as chosen by Sonar for its worker processes rather than
 # set by the user, so a worker knows it may drop the value once startup is done.
-OMP_NUM_THREADS_SET_BY_APHRODITE = "APHRODITE_OMP_NUM_THREADS_SET_BY_APHRODITE"
+OMP_NUM_THREADS_SET_BY_SONAR = "SONAR_OMP_NUM_THREADS_SET_BY_SONAR"
 
 
 def startup_omp_num_threads(num_local_procs: int) -> int:
@@ -272,7 +272,7 @@ def set_torch_threads_for_runtime() -> None:
     Respects an externally-set OMP_NUM_THREADS.
     """
     if (omp_num_threads := os.environ.get("OMP_NUM_THREADS")) is not None and os.environ.get(
-        OMP_NUM_THREADS_SET_BY_APHRODITE
+        OMP_NUM_THREADS_SET_BY_SONAR
     ) != "1":
         try:
             if int(omp_num_threads) > 1:
@@ -331,7 +331,7 @@ def set_default_torch_num_threads(num_threads: int | None = None):
 @contextlib.contextmanager
 def guard_cuda_initialization():
     """Avoid unexpected CUDA initialization."""
-    from aphrodite.platforms import current_platform
+    from sonar.platforms import current_platform
 
     if not current_platform.is_cuda():
         yield
@@ -415,7 +415,7 @@ def _generate_random_fp8(
     # -----|-------------|-------------------
     # Inf | N/A         | s.11111.00
     # NaN | s.1111.111  | s.11111.{01,10,11}
-    from aphrodite import _custom_ops as ops
+    from sonar import _custom_ops as ops
 
     tensor_tmp = torch.empty_like(tensor, dtype=torch.float16)
     tensor_tmp.uniform_(low, high)
@@ -449,11 +449,11 @@ def get_kv_cache_torch_dtype(
 def get_kv_cache_quant_algo_string(quant_cfg: dict[str, Any]) -> str | None:
     """Get the KV cache quantization algorithm string from the quantization config.
 
-    Maps various FP8 format names to Aphrodite's standard cache dtype strings.
+    Maps various FP8 format names to Sonar's standard cache dtype strings.
     Returns None if no kv_cache_quant_algo is specified.
     Returns "auto" if the value is not recognized/supported.
     """
-    # Mapping from model config values to Aphrodite cache_dtype strings
+    # Mapping from model config values to Sonar cache_dtype strings
 
     quant_method = quant_cfg.get("quant_method", "")
     if quant_method.startswith("modelopt"):
@@ -476,22 +476,22 @@ def get_kv_cache_quant_algo_string(quant_cfg: dict[str, Any]) -> str | None:
                     "WARNING: Unknown kv_cache_quant_algo '%s' in model "
                     "config. Supported values: %s. Falling back to 'auto'.",
                     f"{kv_algo}",
-                    list(MODELOPT_TO_APHRODITE_KV_CACHE_DTYPE_MAP.keys()),
+                    list(MODELOPT_TO_SONAR_KV_CACHE_DTYPE_MAP.keys()),
                 )
                 return "auto"
         if isinstance(kv_algo, str):
             kv_algo_lower = kv_algo.lower()
 
-            # Try to map to Aphrodite's standard format
-            if kv_algo_lower in MODELOPT_TO_APHRODITE_KV_CACHE_DTYPE_MAP:
-                return MODELOPT_TO_APHRODITE_KV_CACHE_DTYPE_MAP[kv_algo_lower]
+            # Try to map to Sonar's standard format
+            if kv_algo_lower in MODELOPT_TO_SONAR_KV_CACHE_DTYPE_MAP:
+                return MODELOPT_TO_SONAR_KV_CACHE_DTYPE_MAP[kv_algo_lower]
             else:
                 # Unknown/unsupported format - return "auto" as safe fallback
                 logger.warning(
                     "WARNING: Unknown kv_cache_quant_algo '%s' in model "
                     "config. Supported values: %s. Falling back to 'auto'.",
                     kv_algo,
-                    list(MODELOPT_TO_APHRODITE_KV_CACHE_DTYPE_MAP.keys()),
+                    list(MODELOPT_TO_SONAR_KV_CACHE_DTYPE_MAP.keys()),
                 )
                 return "auto"
     return None
@@ -532,7 +532,7 @@ def set_random_seed(seed: int | None, data_parallel_index: int = 0) -> None:
         random.seed(seed)
         np.random.seed(seed)
         torch.manual_seed(seed)
-        from aphrodite.platforms import current_platform
+        from sonar.platforms import current_platform
 
         current_platform.manual_seed_all(seed)
 
@@ -794,7 +794,7 @@ class _StreamPlaceholder:
 
 
 def current_stream() -> torch.cuda.Stream:
-    """Replace `torch.cuda.current_stream()` with `aphrodite.utils.current_stream()`.
+    """Replace `torch.cuda.current_stream()` with `sonar.utils.current_stream()`.
     it turns out that `torch.cuda.current_stream()` is quite expensive,
     as it will construct a new stream object at each call.
     here we patch `torch.cuda.set_stream` to keep track of the current stream
@@ -803,7 +803,7 @@ def current_stream() -> torch.cuda.Stream:
     the underlying hypothesis is that we do not call `torch._C._cuda_setStream`
     from C/C++ code.
     """
-    from aphrodite.platforms import current_platform
+    from sonar.platforms import current_platform
 
     if not hasattr(_current_stream_tls, "value") or _current_stream_tls.value is None:
         # when this function is called before any stream is set,
@@ -847,7 +847,7 @@ def aux_stream() -> torch.cuda.Stream | None:
     """Ensures aux_stream is initialized only once."""
     global _aux_stream
 
-    from aphrodite.platforms import current_platform
+    from sonar.platforms import current_platform
 
     if _aux_stream is None and current_platform.is_cuda_alike():
         _aux_stream = torch.cuda.Stream()
@@ -884,7 +884,7 @@ def weak_ref_tensors(
         return tensors
 
     # For IntermediateTensors used in pipeline parallelism
-    from aphrodite.sequence import IntermediateTensors
+    from sonar.sequence import IntermediateTensors
 
     if isinstance(tensors, IntermediateTensors):
         ret = IntermediateTensors({key: weak_ref_tensor(val) for key, val in tensors.tensors.items()})
@@ -894,7 +894,7 @@ def weak_ref_tensors(
 
 def get_accelerator_view_from_cpu_tensor(cpu_tensor: torch.Tensor) -> torch.Tensor:
     """Get an accelerator view of a CPU tensor via Unified Virtual Addressing."""
-    from aphrodite.platforms import current_platform
+    from sonar.platforms import current_platform
 
     if current_platform.is_xpu():
         # Remove once the vllm-xpu-kernels fix for empty and non-pinned inputs
@@ -924,8 +924,8 @@ HAS_OPAQUE_TYPE = is_torch_equal_or_newer("2.11.0.dev")
 
 # Allow toggling LayerName usage via environment variable.
 # Defaults to True on torch >= 2.11, False otherwise.
-# Set APHRODITE_USE_LAYERNAME=0 to disable even on torch >= 2.11.
-_USE_LAYERNAME = HAS_OPAQUE_TYPE and envs.APHRODITE_USE_LAYERNAME
+# Set SONAR_USE_LAYERNAME=0 to disable even on torch >= 2.11.
+_USE_LAYERNAME = HAS_OPAQUE_TYPE and envs.SONAR_USE_LAYERNAME
 
 if HAS_OPAQUE_TYPE:
     from torch._opaque_base import OpaqueBase
@@ -960,7 +960,7 @@ if HAS_OPAQUE_TYPE:
 
     register_opaque_type(LayerName, typ="value", hoist=True)
 
-# On torch >= 2.11 (with APHRODITE_USE_LAYERNAME enabled), custom op
+# On torch >= 2.11 (with SONAR_USE_LAYERNAME enabled), custom op
 # layer_name parameters use LayerName; otherwise they remain plain str.
 if TYPE_CHECKING:
     from typing import TypeAlias
@@ -986,7 +986,7 @@ def supports_xpu_graph() -> bool:
 
 
 # create a library to hold the custom op
-aphrodite_lib = Library("aphrodite", "FRAGMENT")  # noqa
+sonar_lib = Library("sonar", "FRAGMENT")  # noqa
 
 
 def direct_register_custom_op(
@@ -1004,7 +1004,7 @@ def direct_register_custom_op(
     See https://gist.github.com/youkaichao/ecbea9ec9fc79a45d2adce1784d7a9a5
     for more details.
 
-    By default, the custom op is registered to the Aphrodite library. If you
+    By default, the custom op is registered to the Sonar library. If you
     want to register it to a different library, you can pass the library
     object to the `target_lib` argument.
 
@@ -1016,13 +1016,13 @@ def direct_register_custom_op(
         mutates_args = []
 
     if dispatch_key is None:
-        from aphrodite.platforms import current_platform
+        from sonar.platforms import current_platform
 
         dispatch_key = current_platform.dispatch_key
 
     schema_str = infer_schema(op_func, mutates_args=mutates_args)
 
-    my_lib = target_lib or aphrodite_lib
+    my_lib = target_lib or sonar_lib
     my_lib.define(op_name + schema_str, tags=tags)
     my_lib.impl(op_name, op_func, dispatch_key=dispatch_key)
     if fake_impl is not None:

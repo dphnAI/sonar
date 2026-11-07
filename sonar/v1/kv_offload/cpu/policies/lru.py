@@ -6,8 +6,8 @@ from dataclasses import dataclass
 
 from typing_extensions import override
 
-from aphrodite.v1.kv_offload.base import OffloadKey, ReqContext
-from aphrodite.v1.kv_offload.cpu.policies.base import (
+from sonar.v1.kv_offload.base import OffloadKey, ReqContext
+from sonar.v1.kv_offload.cpu.policies.base import (
     CachePolicy,
     ChunkStatus,
     order_request_keys,

@@ -6,24 +6,24 @@ from typing import Any
 import numpy as np
 import torch
 
-from aphrodite.config import SpeculativeConfig
-from aphrodite.config.model import PROCESSED_LOGPROBS_MODES
-from aphrodite.triton_utils import tl, triton
-from aphrodite.v1.outputs import LogprobsTensors
-from aphrodite.v1.spec_decode.utils import unconditional_to_conditional_rates
-from aphrodite.v1.watermarking.gpu_sampler import GPUWatermarkSampler
-from aphrodite.v1.worker.gpu.input_batch import (
+from sonar.config import SpeculativeConfig
+from sonar.config.model import PROCESSED_LOGPROBS_MODES
+from sonar.triton_utils import tl, triton
+from sonar.v1.outputs import LogprobsTensors
+from sonar.v1.spec_decode.utils import unconditional_to_conditional_rates
+from sonar.v1.watermarking.gpu_sampler import GPUWatermarkSampler
+from sonar.v1.worker.gpu.input_batch import (
     InputBatch,
     get_num_sampled_and_rejected,
 )
-from aphrodite.v1.worker.gpu.metrics.logits import get_num_nans
-from aphrodite.v1.worker.gpu.sample.logprob import compute_topk_scores
-from aphrodite.v1.worker.gpu.sample.output import SamplerOutput, SamplingMaskTensors
-from aphrodite.v1.worker.gpu.sample.sampler import Sampler
-from aphrodite.v1.worker.gpu.sample.states import NO_LOGPROBS
-from aphrodite.v1.worker.gpu.sample.vocab_parallel import VocabShard
-from aphrodite.v1.worker.gpu.spec_decode.draft_logits import DraftLogitsCache
-from aphrodite.v1.worker.gpu.spec_decode.rejection_sampler_utils import (
+from sonar.v1.worker.gpu.metrics.logits import get_num_nans
+from sonar.v1.worker.gpu.sample.logprob import compute_topk_scores
+from sonar.v1.worker.gpu.sample.output import SamplerOutput, SamplingMaskTensors
+from sonar.v1.worker.gpu.sample.sampler import Sampler
+from sonar.v1.worker.gpu.sample.states import NO_LOGPROBS
+from sonar.v1.worker.gpu.sample.vocab_parallel import VocabShard
+from sonar.v1.worker.gpu.spec_decode.draft_logits import DraftLogitsCache
+from sonar.v1.worker.gpu.spec_decode.rejection_sampler_utils import (
     rejection_sample,
     rejection_sample_vocab_parallel,
 )

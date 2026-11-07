@@ -3,7 +3,7 @@
 
 import pytest
 
-from aphrodite import SamplingParams
+from sonar import SamplingParams
 
 from ...draft_model.test_draft_model import ArgsTest, assert_draft_model_correctness
 
@@ -35,6 +35,6 @@ QWEN3_XPRESS = ArgsTest(
 
 
 @pytest.mark.parametrize("args", [QWEN3_XPRESS], ids=["qwen3_xpress"])
-def test_xpress_correctness_and_acceptance_rate(args: ArgsTest, aphrodite_runner):
+def test_xpress_correctness_and_acceptance_rate(args: ArgsTest, sonar_runner):
     """Guard GSM8K accuracy and acceptance metrics for XPress models."""
-    assert_draft_model_correctness(args, aphrodite_runner)
+    assert_draft_model_correctness(args, sonar_runner)

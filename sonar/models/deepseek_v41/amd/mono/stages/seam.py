@@ -15,7 +15,7 @@ handing off through the tagged mailbox:
     reduce  (160): the FFN seam's attention output, the TP ranks' partials
             (pushed to every rank's ATTN region) summed in the all-reduce's
             order -> ``pend_lds``, where its slice reads it
-    push    (160): a rank's partial given in memory (an attention Aphrodite ran)
+    push    (160): a rank's partial given in memory (an attention Sonar ran)
             to every rank's ATTN region, ahead of the slice's reduce
 
 Every elementwise step follows aiter's ``mhc_fused_post_pre_delayed_rmsnorm``
@@ -31,7 +31,7 @@ from flydsl.expr import const_expr, gpu, range_constexpr, rocdl
 from flydsl.expr import math as fmath
 from flydsl.expr.typing import T
 
-from aphrodite.models.deepseek_v41.amd.mono.common.ops import (
+from sonar.models.deepseek_v41.amd.mono.common.ops import (
     batched_rounds,
     bf16_round,
     bf_hi,
@@ -45,9 +45,9 @@ from aphrodite.models.deepseek_v41.amd.mono.common.ops import (
     sum_partials,
     traced,
 )
-from aphrodite.models.deepseek_v41.amd.mono.common.plan import THREADS, WAVES, pair_layout
-from aphrodite.models.deepseek_v41.amd.mono.common.sync import preg
-from aphrodite.models.deepseek_v41.amd.mono.stages.gemv import (
+from sonar.models.deepseek_v41.amd.mono.common.plan import THREADS, WAVES, pair_layout
+from sonar.models.deepseek_v41.amd.mono.common.sync import preg
+from sonar.models.deepseek_v41.amd.mono.stages.gemv import (
     ld_bf,
     ld_f32,
     plus,
@@ -384,7 +384,7 @@ def reduce_attn_pair(c, task, idx):
 def stage_push(c, task, part):
     """This rank's attention partial (``part``: bf16 [S, HIDDEN], wo_b's
     unreduced output) at this slice's 32 columns, every token, to every rank's
-    ATTN region: the pairs ``stage_reduce`` polls, as the bits Aphrodite wrote."""
+    ATTN region: the pairs ``stage_reduce`` polls, as the bits Sonar wrote."""
     s, tid, tp = c["S"], c["tid"], c["d"].tp
     for pas in range_constexpr(0, s * COLS // 2, THREADS):
         idx = plus(pas, tid)

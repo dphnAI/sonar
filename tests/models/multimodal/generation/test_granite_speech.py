@@ -6,22 +6,22 @@ from collections.abc import Sequence
 import pytest
 from transformers import AutoModelForSpeechSeq2Seq
 
-from aphrodite.logprobs import SampleLogprobs
-from aphrodite.lora.request import LoRARequest
-from aphrodite.platforms import current_platform
+from sonar.logprobs import SampleLogprobs
+from sonar.lora.request import LoRARequest
+from sonar.platforms import current_platform
 
-from ....conftest import AphroditeRunner, AudioTestAssets, HfRunner, PromptAudioInput
+from ....conftest import AudioTestAssets, HfRunner, PromptAudioInput, SonarRunner
 from ...registry import HF_EXAMPLE_MODELS
 from ...utils import check_logprobs_close
 
 HF_AUDIO_PROMPT = "<|start_of_role|>system<|end_of_role|>Knowledge Cutoff Date: April 2024.\nToday's Date: December 19, 2024.\nYou are Granite, developed by IBM. You are a helpful AI assistant<|end_of_text|>\n<|start_of_role|>user<|end_of_role|><|audio|>can you transcribe the speech into a written format?<|end_of_text|>\n<|start_of_role|>assistant<|end_of_role|>"  # noqa: E501
 
 
-def aphrodite_to_hf_output(
-    aphrodite_output: tuple[list[int], str, SampleLogprobs | None],
+def sonar_to_hf_output(
+    sonar_output: tuple[list[int], str, SampleLogprobs | None],
 ) -> tuple[list[int], str, SampleLogprobs | None]:
-    """Sanitize hf output to be comparable with aphrodite output."""
-    output_ids, output_str, out_logprobs = aphrodite_output
+    """Sanitize hf output to be comparable with sonar output."""
+    output_ids, output_str, out_logprobs = sonar_output
 
     hf_output_str = output_str + "<|end_of_text|>"
 
@@ -45,7 +45,7 @@ models: dict[str, str | None] = {
 def granite_speech_attention_config():
     """Return attention config for Granite Speech tests on ROCm."""
     if current_platform.is_rocm():
-        from aphrodite.platforms.rocm import get_cdna_version
+        from sonar.platforms.rocm import get_cdna_version
 
         # -1 (unknown arch) is truthy; gate on CDNA3+ like other call sites.
         if get_cdna_version() > 2:
@@ -56,7 +56,7 @@ def granite_speech_attention_config():
 
 def run_test(
     hf_runner: type[HfRunner],
-    aphrodite_runner: type[AphroditeRunner],
+    sonar_runner: type[SonarRunner],
     inputs: Sequence[tuple[list[str], PromptAudioInput]],
     model: str,
     *,
@@ -69,21 +69,21 @@ def run_test(
     attention_config: dict | None = None,
     audio_lora_path: str | None = None,
 ):
-    """Inference result should be the same between hf and aphrodite.
+    """Inference result should be the same between hf and sonar.
 
     All the audio fixtures for the test are from AUDIO_ASSETS.
     For huggingface runner, we provide the audio as input.
-    For aphrodite runner, we provide MultiModalDataDict objects
+    For sonar runner, we provide MultiModalDataDict objects
     and corresponding MultiModalConfig as input.
-    Note, the text input is also adjusted to abide by aphrodite contract.
+    Note, the text input is also adjusted to abide by sonar contract.
     The text output is sanitized to be able to compare with hf.
     """
-    # NOTE: take care of the order. run Aphrodite first, and then run HF.
-    # Aphrodite needs a fresh new process without cuda initialization.
+    # NOTE: take care of the order. run Sonar first, and then run HF.
+    # Sonar needs a fresh new process without cuda initialization.
     # if we run HF first, the cuda initialization will be done and it
     # will hurt multiprocessing backend with fork method (the default method).
     # max_model_len should be greater than image_feature_size
-    with aphrodite_runner(
+    with sonar_runner(
         model,
         runner="generate",
         max_model_len=max_model_len,
@@ -96,10 +96,10 @@ def run_test(
         max_lora_rank=64,
         enforce_eager=True,
         attention_config=attention_config,
-    ) as aphrodite_model:
+    ) as sonar_model:
         lora_request = LoRARequest("audio", 1, audio_lora_path) if audio_lora_path else None
-        aphrodite_outputs_per_case = [
-            aphrodite_model.generate_greedy_logprobs(
+        sonar_outputs_per_case = [
+            sonar_model.generate_greedy_logprobs(
                 prompts,
                 max_tokens,
                 num_logprobs=num_logprobs,
@@ -124,12 +124,12 @@ def run_test(
             for prompts, audios in inputs
         ]
 
-    for hf_outputs, aphrodite_outputs in zip(hf_outputs_per_case, aphrodite_outputs_per_case):
+    for hf_outputs, sonar_outputs in zip(hf_outputs_per_case, sonar_outputs_per_case):
         check_logprobs_close(
             outputs_0_lst=hf_outputs,
-            outputs_1_lst=[aphrodite_to_hf_output(output) for output in aphrodite_outputs],
+            outputs_1_lst=[sonar_to_hf_output(output) for output in sonar_outputs],
             name_0="hf",
-            name_1="aphrodite",
+            name_1="sonar",
         )
 
 
@@ -140,7 +140,7 @@ def run_test(
 @pytest.mark.parametrize("num_logprobs", [10])
 def test_models(
     hf_runner,
-    aphrodite_runner,
+    sonar_runner,
     model: str,
     audio_lora_path: str | None,
     audio_assets: AudioTestAssets,
@@ -161,7 +161,7 @@ def test_models(
     assert sr == 16000
     run_test(
         hf_runner,
-        aphrodite_runner,
+        sonar_runner,
         [
             ([HF_AUDIO_PROMPT], [audio]),
         ],

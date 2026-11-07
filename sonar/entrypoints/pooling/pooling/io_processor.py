@@ -3,9 +3,9 @@
 from collections.abc import Sequence
 from typing import Any
 
-from aphrodite import PoolingParams, PoolingRequestOutput
-from aphrodite.plugins.io_processors import get_io_processor
-from aphrodite.renderers.inputs.preprocess import parse_model_prompt, prompt_to_seq
+from sonar import PoolingParams, PoolingRequestOutput
+from sonar.plugins.io_processors import get_io_processor
+from sonar.renderers.inputs.preprocess import parse_model_prompt, prompt_to_seq
 
 from ..base.io_processor import PoolingIOProcessor
 from ..typing import (
@@ -49,7 +49,7 @@ class PluginWithIOProcessorPlugins(PoolingIOProcessor):
         super().__init__(*args, **kwargs)
 
         io_processor = get_io_processor(
-            self.aphrodite_config,
+            self.sonar_config,
             self.renderer,
             self.model_config.io_processor_plugin,
         )

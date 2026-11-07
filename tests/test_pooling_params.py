@@ -8,13 +8,13 @@ import msgspec
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
-from aphrodite import PoolingParams
-from aphrodite.config import ModelConfig, PoolerConfig
-from aphrodite.entrypoints.pooling.classify.protocol import ClassificationRequest
-from aphrodite.entrypoints.pooling.embed.protocol import EmbeddingRequest
-from aphrodite.entrypoints.pooling.pooling.protocol import PoolingRequest
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.pooling_params import LateChunkingParams, LateInteractionParams
+from sonar import PoolingParams
+from sonar.config import ModelConfig, PoolerConfig
+from sonar.entrypoints.pooling.classify.protocol import ClassificationRequest
+from sonar.entrypoints.pooling.embed.protocol import EmbeddingRequest
+from sonar.entrypoints.pooling.pooling.protocol import PoolingRequest
+from sonar.exceptions import SonarValidationError
+from sonar.pooling_params import LateChunkingParams, LateInteractionParams
 from tests.models.utils import EmbedModelInfo
 
 EMBEDDING_MODELS = [
@@ -64,7 +64,7 @@ def test_removed_pooling_parameters(parameter: str, value: Any, message: str):
     assert len(exc_info.value.errors()) == 1
 
     if parameter == "task":
-        with pytest.raises(AphroditeValidationError, match=message):
+        with pytest.raises(SonarValidationError, match=message):
             PoolingParams(task=value)
 
 
@@ -206,7 +206,7 @@ def test_token_classify(pooling_type: str):
 
 @pytest.mark.parametrize("value", [0, -1, True, False, 1.5, "2", 2**63, 2**64])
 def test_late_chunk_size_rejects_invalid_values(value):
-    with pytest.raises(AphroditeValidationError, match="positive integer"):
+    with pytest.raises(SonarValidationError, match="positive integer"):
         PoolingParams(late_chunking_params=LateChunkingParams(chunk_size=value))
 
 
@@ -225,14 +225,14 @@ def test_late_interaction_rejects_unknown_mode(mode):
     # Construction accepts a work-in-progress: input processing fills fields
     # before the request is verified.
     assert late_params.mode == mode
-    with pytest.raises(AphroditeValidationError, match="cache_query.*score_doc"):
+    with pytest.raises(SonarValidationError, match="cache_query.*score_doc"):
         _late_interaction_pooling_params(late_params).verify(_late_chunking_model_config())
 
 
 @pytest.mark.parametrize("query_uses", [None, 0, -1, True, 1.5, "2"])
 def test_late_interaction_cache_query_rejects_bad_use_count(query_uses):
     late_params = LateInteractionParams(mode="cache_query", query_key="k", query_uses=query_uses)
-    with pytest.raises(AphroditeValidationError, match="positive integer"):
+    with pytest.raises(SonarValidationError, match="positive integer"):
         _late_interaction_pooling_params(late_params).verify(_late_chunking_model_config())
 
 
@@ -284,7 +284,7 @@ def test_late_chunking_params_preserve_defaults_clone_and_wire_format():
 
 @pytest.mark.parametrize("task", ["embed", "classify", "token_classify", "plugin", None])
 def test_late_chunking_rejects_other_tasks(task):
-    with pytest.raises(AphroditeValidationError, match="requires token_embed"):
+    with pytest.raises(SonarValidationError, match="requires token_embed"):
         PoolingParams(task=task, late_chunking_params=LateChunkingParams(chunk_size=2)).verify(
             _late_chunking_model_config()
         )
@@ -299,7 +299,7 @@ def test_late_chunking_uses_existing_dimension_validation():
     assert params.dimensions == 4
     assert params.use_activation is False
     params.dimensions = config.embedding_size + 1
-    with pytest.raises(AphroditeValidationError, match="dimensions in range"):
+    with pytest.raises(SonarValidationError, match="dimensions in range"):
         params.verify(config)
 
 
@@ -311,5 +311,5 @@ def test_late_chunking_rejects_token_filtering_after_resolving_defaults(from_con
         config.pooler_config.step_tag_id = 42
     else:
         params.step_tag_id = 42
-    with pytest.raises(AphroditeValidationError, match="all token rows"):
+    with pytest.raises(SonarValidationError, match="all token rows"):
         params.verify(config)

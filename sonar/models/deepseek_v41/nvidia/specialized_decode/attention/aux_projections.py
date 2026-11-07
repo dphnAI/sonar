@@ -16,8 +16,8 @@ from collections.abc import Iterable
 
 import torch
 
-from aphrodite.model_executor.kernels.linear.cute_dsl import ll_bf16
-from aphrodite.model_executor.kernels.linear.cute_dsl.ll_bf16 import LLBf16Gemm
+from sonar.model_executor.kernels.linear.cute_dsl import ll_bf16
+from sonar.model_executor.kernels.linear.cute_dsl.ll_bf16 import LLBf16Gemm
 
 from .. import LOW_BATCH_MAX_ROWS
 

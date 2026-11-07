@@ -6,13 +6,13 @@ from typing import List  # noqa: UP035
 
 import torch
 
-from aphrodite.distributed import (
+from sonar.distributed import (
     tensor_model_parallel_all_gather,
     tensor_model_parallel_all_reduce,
 )
-from aphrodite.lora.ops.triton_ops.utils import supports_pdl
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.torch_utils import direct_register_custom_op
+from sonar.lora.ops.triton_ops.utils import supports_pdl
+from sonar.triton_utils import tl, triton
+from sonar.utils.torch_utils import direct_register_custom_op
 
 
 @triton.jit
@@ -826,9 +826,9 @@ try:
         mutates_args=["output"],
     )
 
-    fused_moe_lora_fp8 = torch.ops.aphrodite.fused_moe_lora_fp8
-    fused_moe_lora_shrink_fp8 = torch.ops.aphrodite.fused_moe_lora_shrink_fp8
-    fused_moe_lora_expand_fp8 = torch.ops.aphrodite.fused_moe_lora_expand_fp8
+    fused_moe_lora_fp8 = torch.ops.sonar.fused_moe_lora_fp8
+    fused_moe_lora_shrink_fp8 = torch.ops.sonar.fused_moe_lora_shrink_fp8
+    fused_moe_lora_expand_fp8 = torch.ops.sonar.fused_moe_lora_expand_fp8
 
 except AttributeError:
     fused_moe_lora_fp8 = _fused_moe_lora_fp8

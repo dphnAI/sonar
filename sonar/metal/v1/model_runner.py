@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """
-Metal Aphrodite v1 model runner.
+Metal Sonar v1 model runner.
 
 Orchestration only: coordinates scheduling, dispatch, and output assembly.
 Model-specific behavior belongs in adapters; backend-specific kernels live in
@@ -21,22 +21,22 @@ import torch
 from mlx_lm import stream_generate
 from mlx_lm.generate import generate_step, generation_stream
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.logger import init_logger
-from aphrodite.metal.config import get_config
-from aphrodite.metal.paged_attention_backend.hybrid import HybridPagedAttentionBackend
-from aphrodite.metal.paged_attention_backend.mla import MLA_DEFAULT_QK_ROPE_HEAD_DIM
-from aphrodite.metal.paged_attention_backend.protocol import PagedAttentionBackend
-from aphrodite.metal.paged_attention_common import (
+from sonar.config import SonarConfig
+from sonar.logger import init_logger
+from sonar.metal.config import get_config
+from sonar.metal.paged_attention_backend.hybrid import HybridPagedAttentionBackend
+from sonar.metal.paged_attention_backend.mla import MLA_DEFAULT_QK_ROPE_HEAD_DIM
+from sonar.metal.paged_attention_backend.protocol import PagedAttentionBackend
+from sonar.metal.paged_attention_common import (
     OffsetCache,
     clear_context,
     prepare_unified,
 )
-from aphrodite.metal.stt.runtime import STTRuntimeAdapter
-from aphrodite.metal.stt.serve import AphroditeSTTRequestAdapter
-from aphrodite.metal.v1 import contiguous_cache
-from aphrodite.metal.v1.cache_policy import ModelCachePolicy
-from aphrodite.metal.v1.contiguous_cache import (
+from sonar.metal.stt.runtime import STTRuntimeAdapter
+from sonar.metal.stt.serve import SonarSTTRequestAdapter
+from sonar.metal.v1 import contiguous_cache
+from sonar.metal.v1.cache_policy import ModelCachePolicy
+from sonar.metal.v1.contiguous_cache import (
     _MIN_BATCH_SIZE_FOR_BATCHING,
     _PREFIX_CACHE_ENABLED,
     AnyCache,
@@ -45,9 +45,9 @@ from aphrodite.metal.v1.contiguous_cache import (
     _extract_kv_cache,
     _merge_kv_caches,
 )
-from aphrodite.metal.v1.model_adapter import DefaultModelAdapter, ModelAdapter
-from aphrodite.metal.v1.model_lifecycle import ModelLifecycle
-from aphrodite.metal.v1.sampling_batch import (
+from sonar.metal.v1.model_adapter import DefaultModelAdapter, ModelAdapter
+from sonar.metal.v1.model_lifecycle import ModelLifecycle
+from sonar.metal.v1.sampling_batch import (
     GREEDY_TEMPERATURE_EPS,
     MetalSamplerResult,
     SamplingBatch,
@@ -56,21 +56,21 @@ from aphrodite.metal.v1.sampling_batch import (
     sample_from_logits,
     sample_prefill_tokens,
 )
-from aphrodite.metal.v1.structured_output import MetalStructuredOutputApplier
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.tasks import SupportedTask
-from aphrodite.utils.platform_utils import is_pin_memory_available
-from aphrodite.v1.core.sched.output import (
+from sonar.metal.v1.structured_output import MetalStructuredOutputApplier
+from sonar.sampling_params import SamplingParams
+from sonar.tasks import SupportedTask
+from sonar.utils.platform_utils import is_pin_memory_available
+from sonar.v1.core.sched.output import (
     CachedRequestData,
     GrammarOutput,
     NewRequestData,
     SchedulerOutput,
 )
-from aphrodite.v1.kv_cache_interface import KVCacheConfig, KVCacheSpec
-from aphrodite.v1.outputs import LogprobsTensors, ModelRunnerOutput
-from aphrodite.v1.sample.logits_processor import build_logitsprocs
-from aphrodite.v1.sample.metadata import SamplingMetadata
-from aphrodite.v1.sample.sampler import Sampler
+from sonar.v1.kv_cache_interface import KVCacheConfig, KVCacheSpec
+from sonar.v1.outputs import LogprobsTensors, ModelRunnerOutput
+from sonar.v1.sample.logits_processor import build_logitsprocs
+from sonar.v1.sample.metadata import SamplingMetadata
+from sonar.v1.sample.sampler import Sampler
 
 logger = init_logger(__name__)
 
@@ -88,8 +88,8 @@ def _create_request_generator(
 ) -> torch.Generator | None:
     """Create a per-request generator for seeded sampling.
 
-    Aphrodite uses a per-request generator only when an explicit seed is provided.
-    For unseeded sampling, Aphrodite relies on the global RNG state.
+    Sonar uses a per-request generator only when an explicit seed is provided.
+    For unseeded sampling, Sonar relies on the global RNG state.
     """
     if sampling_params.seed is None:
         return None
@@ -106,7 +106,7 @@ class RequestState:
 
     token_ids: list[int]
     # Length of the original prompt (prefix) within `token_ids`.
-    # Aphrodite applies repetition penalties to both prompt+output tokens, but applies
+    # Sonar applies repetition penalties to both prompt+output tokens, but applies
     # presence/frequency penalties only to generated (output) tokens.
     prompt_len: int
     cache: list[AnyCache]  # Per-layer caches (KVCache, RotatingKVCache, or ArraysCache)
@@ -199,7 +199,7 @@ def _make_top_k_first_mlx_sampler(
     top_k: int,
     vocab_size: int,
 ):
-    """Build an MLX sampler matching Aphrodite's common sampler order."""
+    """Build an MLX sampler matching Sonar's common sampler order."""
     if temperature < 1e-5:
         return lambda logits: mx.argmax(logits, axis=-1)
 
@@ -304,7 +304,7 @@ def _slice_logprobs_row(
 class MetalModelRunner:
     """Model runner for MLX-based inference on Metal.
 
-    Implements the Aphrodite v1 model runner interface for Apple Silicon.
+    Implements the Sonar v1 model runner interface for Apple Silicon.
     Uses true batched decode with BatchKVCache for efficient parallel processing.
     """
 
@@ -332,19 +332,19 @@ class MetalModelRunner:
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
     ):
         """Initialize model runner.
 
         Args:
-            aphrodite_config: Aphrodite configuration
+            sonar_config: Sonar configuration
             device: PyTorch device (CPU for Metal interop)
         """
-        self.aphrodite_config = aphrodite_config
-        self.model_config = aphrodite_config.model_config
-        self.cache_config = aphrodite_config.cache_config
-        self.scheduler_config = aphrodite_config.scheduler_config
+        self.sonar_config = sonar_config
+        self.model_config = sonar_config.model_config
+        self.cache_config = sonar_config.cache_config
+        self.scheduler_config = sonar_config.scheduler_config
         self.use_async_scheduling = bool(self.scheduler_config.async_scheduling)
         self.device = device
         self.metal_config = get_config()
@@ -368,23 +368,23 @@ class MetalModelRunner:
         self._gdn_free_slots: list[int] = []
         self._gdn_needs_materialize = False
 
-        # Aphrodite Sampler for token sampling with temperature, top_k, top_p support
+        # Sonar Sampler for token sampling with temperature, top_k, top_p support
         self._sampler = Sampler()
 
         # Build logits processors (includes custom plugins from entry-points)
         is_pooling_model = getattr(self.model_config, "runner_type", None) == "pooling"
         pin_memory = is_pin_memory_available()
-        custom_lp = aphrodite_config.model_config.logits_processors
+        custom_lp = sonar_config.model_config.logits_processors
         custom_logitsprocs = tuple(custom_lp) if custom_lp is not None else ()
         self._logitsprocs = build_logitsprocs(
-            aphrodite_config,
+            sonar_config,
             device,
             pin_memory,
             is_pooling_model,
             custom_logitsprocs,
         )
 
-        # Aphrodite v1 async scheduling calls sample_tokens after execute_model.
+        # Sonar v1 async scheduling calls sample_tokens after execute_model.
         # Keep the latest execution output so sample_tokens can return it.
         self._pending_output: ModelRunnerOutput | None = None
 
@@ -1079,7 +1079,7 @@ class MetalModelRunner:
 
         # ---- GDN slot mapping (hybrid models) ----
         if self.is_hybrid:
-            from aphrodite.metal.paged_attention_common import get_context
+            from sonar.metal.paged_attention_common import get_context
 
             ctx = get_context()
             if ctx is not None:
@@ -1618,7 +1618,7 @@ class MetalModelRunner:
             raise NotImplementedError(
                 "Grammar/structured-output constraints are not supported on "
                 "the non-paged (legacy) Metal path. "
-                "Enable paged attention (APHRODITE_METAL_USE_PAGED_ATTENTION=1) "
+                "Enable paged attention (SONAR_METAL_USE_PAGED_ATTENTION=1) "
                 "to use structured output."
             )
 
@@ -1644,7 +1644,7 @@ class MetalModelRunner:
             )
             return None
 
-        # Defensive invariant: the Aphrodite scheduler sets has_structured_output_requests
+        # Defensive invariant: the Sonar scheduler sets has_structured_output_requests
         # only when at least one SO request is present in the *current* scheduled
         # batch (not the global queue). Any such request on the paged path must
         # contribute a paged decode or prefill entry, so has_paged_work() must be
@@ -1669,7 +1669,7 @@ class MetalModelRunner:
     def sample_tokens(self, grammar_output: GrammarOutput | None) -> ModelRunnerOutput | None:
         """Wait for GPU forward, sample tokens, and postprocess.
 
-        Called by the Aphrodite v1 engine after ``execute_model`` returns ``None``.
+        Called by the Sonar v1 engine after ``execute_model`` returns ``None``.
         For the paged path, this is where the actual GPU synchronization,
         token sampling, and request state updates happen — allowing the
         scheduler to run while the GPU was computing the forward pass.
@@ -1688,7 +1688,7 @@ class MetalModelRunner:
             return output
 
         # Async scheduling: execute_model may have failed; return None so
-        # Aphrodite can surface the original exception.
+        # Sonar can surface the original exception.
         logger.error(
             "sample_tokens called with no pending state — neither _execute_model_state nor _pending_output was set."
         )
@@ -1713,7 +1713,7 @@ class MetalModelRunner:
         eot_token = self._stt_runtime_adapter.eot_token
 
         for new_req in scheduler_output.scheduled_new_reqs:
-            stt_request = AphroditeSTTRequestAdapter.from_aphrodite_request(new_req)
+            stt_request = SonarSTTRequestAdapter.from_sonar_request(new_req)
             sampling_params = new_req.sampling_params or SamplingParams()
 
             # Only greedy decoding is supported for STT

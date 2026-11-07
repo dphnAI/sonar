@@ -6,15 +6,15 @@ from collections.abc import Callable
 import torch
 from compressed_tensors.quantization import QuantizationStrategy
 
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.kernels.linear import (
+from sonar.logger import init_logger
+from sonar.model_executor.kernels.linear import (
     init_int8_linear_kernel,
 )
-from aphrodite.model_executor.layers.quantization.compressed_tensors.schemes import (
+from sonar.model_executor.layers.quantization.compressed_tensors.schemes import (
     CompressedTensorsScheme,
 )
-from aphrodite.model_executor.parameter import (
-    BaseAphroditeParameter,
+from sonar.model_executor.parameter import (
+    BaseSonarParameter,
     ChannelQuantScaleParameter,
     ModelWeightParameter,
     PerTensorScaleParameter,
@@ -82,12 +82,12 @@ class CompressedTensorsW8A8Int8(CompressedTensorsScheme):
         input_zero_point = None
         input_scale = None
         if self.is_static_input_scheme:
-            input_scale = BaseAphroditeParameter(data=torch.empty(1, dtype=torch.float32), weight_loader=weight_loader)
+            input_scale = BaseSonarParameter(data=torch.empty(1, dtype=torch.float32), weight_loader=weight_loader)
             if not self.input_symmetric:
                 # Note: compressed-tensors stores the zp using the same dtype
                 # as the weights
                 # AZP loaded as int8 but used as int32
-                input_zero_point = BaseAphroditeParameter(
+                input_zero_point = BaseSonarParameter(
                     data=torch.empty(1, dtype=torch.int8), weight_loader=weight_loader
                 )
 

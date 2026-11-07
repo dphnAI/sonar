@@ -6,23 +6,23 @@ from typing import Any, ClassVar, cast
 import torch
 from transformers import DeepseekV4Config
 
-from aphrodite.config import AphroditeConfig, CacheConfig, get_current_aphrodite_config
-from aphrodite.model_executor.layers.attention_layer_base import AttentionLayerBase
-from aphrodite.model_executor.warmup.jit_warmup import (
+from sonar.config import CacheConfig, SonarConfig, get_current_sonar_config
+from sonar.model_executor.layers.attention_layer_base import AttentionLayerBase
+from sonar.model_executor.warmup.jit_warmup import (
     WarmupIntRange,
     kernel_launcher,
     zip_inputs,
 )
-from aphrodite.model_executor.warmup.jit_warmup_triton_helper import (
-    AphroditeTritonJitKernel,
+from sonar.model_executor.warmup.jit_warmup_triton_helper import (
     LaunchSpec,
+    SonarTritonJitKernel,
     TritonWarmupTensor,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.transformers_utils.deepseek_v4_utils import get_compress_ratios
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.math_utils import cdiv, next_power_of_2
-from aphrodite.v1.attention.backend import (
+from sonar.platforms import current_platform
+from sonar.transformers_utils.deepseek_v4_utils import get_compress_ratios
+from sonar.triton_utils import tl, triton
+from sonar.utils.math_utils import cdiv, next_power_of_2
+from sonar.v1.attention.backend import (
     AttentionBackend,
     AttentionCGSupport,
     AttentionMetadataBuilder,
@@ -30,13 +30,13 @@ from aphrodite.v1.attention.backend import (
     MultipleOf,
     max_decode_query_len,
 )
-from aphrodite.v1.attention.backends.mla.compressor_utils import (
+from sonar.v1.attention.backends.mla.compressor_utils import (
     get_dspark_swa_index_width,
 )
-from aphrodite.v1.attention.backends.utils import split_decodes_and_prefills
-from aphrodite.v1.attention.ops.flashmla import FlashMLASchedMeta, get_mla_metadata
-from aphrodite.v1.attention.ops.metadata import compute_token_to_req_indices
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.attention.backends.utils import split_decodes_and_prefills
+from sonar.v1.attention.ops.flashmla import FlashMLASchedMeta, get_mla_metadata
+from sonar.v1.attention.ops.metadata import compute_token_to_req_indices
+from sonar.v1.kv_cache_interface import (
     KVCacheSpec,
     MLAAttentionSpec,
     SlidingWindowMLASpec,
@@ -98,7 +98,7 @@ class DeepseekV4SWACache(torch.nn.Module, AttentionLayerBase):
         self.packed_bytes_per_token = packed_bytes_per_token
         self.packed_page_alignment = packed_page_alignment
         self.packed_block_stride_alignment = packed_block_stride_alignment
-        compilation_config = get_current_aphrodite_config().compilation_config
+        compilation_config = get_current_sonar_config().compilation_config
         if prefix in compilation_config.static_forward_context:
             raise ValueError(f"Duplicate layer name: {prefix}")
         compilation_config.static_forward_context[prefix] = self
@@ -114,7 +114,7 @@ class DeepseekV4SWACache(torch.nn.Module, AttentionLayerBase):
         # [B, H=1, N, C] -> [B, N, C]
         self.kv_cache = kv_cache.squeeze(1)
 
-    def get_kv_cache_spec(self, aphrodite_config: AphroditeConfig) -> KVCacheSpec:
+    def get_kv_cache_spec(self, sonar_config: SonarConfig) -> KVCacheSpec:
         # fp8_ds_mla's UE8M0 paged layout rounds its page up to the decode
         # kernel's TMA stride; contiguous bf16/fp8 cache uses the natural
         # element-size page.
@@ -165,13 +165,13 @@ class DeepseekSparseSWABackend(AttentionBackend):
     @staticmethod
     def get_builder_cls() -> type["DeepseekSparseSWAMetadataBuilder"]:
         if current_platform.is_rocm():
-            from aphrodite.models.deepseek_v4.amd.rocm import (
+            from sonar.models.deepseek_v4.amd.rocm import (
                 DeepseekV4ROCMAiterSparseSWAMetadataBuilder,
             )
 
             return DeepseekV4ROCMAiterSparseSWAMetadataBuilder
         if current_platform.is_cpu():
-            from aphrodite.models.deepseek_v4.cpu.cpu_mla import (
+            from sonar.models.deepseek_v4.cpu.cpu_mla import (
                 DeepseekV4CPUSparseSWAMetadataBuilder,
             )
 
@@ -328,7 +328,7 @@ class DeepseekSparseSWAMetadata:
         return chunk_plan
 
 
-class ComputePrefillMetadataKernel(AphroditeTritonJitKernel["ComputePrefillMetadataKernel.CompileKey"]):
+class ComputePrefillMetadataKernel(SonarTritonJitKernel["ComputePrefillMetadataKernel.CompileKey"]):
     @dataclass(frozen=True)
     class CompileKey:
         block_size: int
@@ -372,8 +372,8 @@ class ComputePrefillMetadataKernel(AphroditeTritonJitKernel["ComputePrefillMetad
             block_size=next_power_of_2(num_prefills),
         )
 
-    def get_warmup_keys(self, aphrodite_config: AphroditeConfig) -> list[CompileKey]:
-        scheduler_config = aphrodite_config.scheduler_config
+    def get_warmup_keys(self, sonar_config: SonarConfig) -> list[CompileKey]:
+        scheduler_config = sonar_config.scheduler_config
         max_prefills = max(
             1,
             min(
@@ -439,19 +439,19 @@ class DeepseekSparseSWAMetadataBuilder(AttentionMetadataBuilder):
         assert isinstance(mla_spec.tokens_per_state, int)
         self.compress_ratio = mla_spec.tokens_per_state
         self.block_size = mla_spec.block_size
-        self.max_model_len = self.aphrodite_config.model_config.max_model_len
-        self.max_num_batched_tokens = self.aphrodite_config.scheduler_config.max_num_batched_tokens
+        self.max_model_len = self.sonar_config.model_config.max_model_len
+        self.max_num_batched_tokens = self.sonar_config.scheduler_config.max_num_batched_tokens
 
         # Handle MTP: adjust decode_threshold like the indexer does
-        spec_config = self.aphrodite_config.speculative_config
+        spec_config = self.sonar_config.speculative_config
         self.num_speculative_tokens = spec_config.num_speculative_tokens if spec_config else 0
         # sparse_swa has no MQA-vs-dense-MHA routing, so multi-token queries take
         # the prefill path and the decode/prefill split stays at the widest
         # decode.
-        self.decode_threshold = max_decode_query_len(self.aphrodite_config)
+        self.decode_threshold = max_decode_query_len(self.sonar_config)
         self.reorder_batch_threshold = None
 
-        hf_config = self.aphrodite_config.model_config.hf_config
+        hf_config = self.sonar_config.model_config.hf_config
         assert hasattr(hf_config, "sliding_window")
         self.window_size = hf_config.sliding_window
 
@@ -475,7 +475,7 @@ class DeepseekSparseSWAMetadataBuilder(AttentionMetadataBuilder):
         for ratio in compress_ratios:
             self._layer_types.add(_layer_type_for(int(ratio)))
 
-        max_tokens = self.aphrodite_config.scheduler_config.max_num_batched_tokens
+        max_tokens = self.sonar_config.scheduler_config.max_num_batched_tokens
         self.token_to_req_indices = torch.zeros(
             max_tokens,
             dtype=torch.int32,
@@ -514,7 +514,7 @@ class DeepseekSparseSWAMetadataBuilder(AttentionMetadataBuilder):
             self.left_visible = torch.zeros(max_tokens, dtype=torch.int32, device=self.device)
             self.right_visible = torch.zeros(max_tokens, dtype=torch.int32, device=self.device)
             self.span_indptr = torch.zeros(
-                self.aphrodite_config.scheduler_config.max_num_seqs + 1,
+                self.sonar_config.scheduler_config.max_num_seqs + 1,
                 dtype=torch.int32,
                 device=self.device,
             )
@@ -544,7 +544,7 @@ class DeepseekSparseSWAMetadataBuilder(AttentionMetadataBuilder):
         self._max_tokens = max_tokens
         # replay_start when no group replays: no lower bound.
         self.no_replay_start = torch.zeros(
-            self.aphrodite_config.scheduler_config.max_num_seqs + 1,
+            self.sonar_config.scheduler_config.max_num_seqs + 1,
             dtype=torch.int32,
             device=self.device,
         )
@@ -558,7 +558,7 @@ class DeepseekSparseSWAMetadataBuilder(AttentionMetadataBuilder):
     ) -> DeepseekSparseSWAMetadata:
         """Build SWA metadata for mixed decode/prefill batches.
 
-        The batch is assumed to be reordered with decodes first (by Aphrodite scheduler).
+        The batch is assumed to be reordered with decodes first (by Sonar scheduler).
         We use split_decodes_and_prefills() to find the boundary, then build
         separate window_topk_idxs for each portion.
 
@@ -880,7 +880,7 @@ class DeepseekSparseSWAMetadataBuilder(AttentionMetadataBuilder):
         for layer_type in self._layer_types:
             # get_mla_metadata() is the official FlashMLA entry point that
             # returns a fresh empty FlashMLASchedMeta; using it keeps this
-            # call site aligned with the rest of the Aphrodite FlashMLA backends
+            # call site aligned with the rest of the Sonar FlashMLA backends
             # that already go through the same stub.
             out[layer_type] = get_mla_metadata()[0]
         return out
@@ -1069,7 +1069,7 @@ def _compute_swa_indices_and_lens_kernel(
         )
 
 
-class ComputeSWAIndicesAndLensKernel(AphroditeTritonJitKernel["ComputeSWAIndicesAndLensKernel.CompileKey"]):
+class ComputeSWAIndicesAndLensKernel(SonarTritonJitKernel["ComputeSWAIndicesAndLensKernel.CompileKey"]):
     @dataclass(frozen=True)
     class CompileKey:
         window_size: int
@@ -1163,9 +1163,7 @@ class ComputeSWAIndicesAndLensKernel(AphroditeTritonJitKernel["ComputeSWAIndices
         )
 
 
-class ComputeDSparkNoncausalSWAIndicesKernel(
-    AphroditeTritonJitKernel["ComputeDSparkNoncausalSWAIndicesKernel.CompileKey"]
-):
+class ComputeDSparkNoncausalSWAIndicesKernel(SonarTritonJitKernel["ComputeDSparkNoncausalSWAIndicesKernel.CompileKey"]):
     @dataclass(frozen=True)
     class CompileKey:
         window_size: int

@@ -5,8 +5,8 @@
 import numpy as np
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.scalar_type import ScalarType, scalar_types
+from sonar import _custom_ops as ops
+from sonar.scalar_type import ScalarType, scalar_types
 
 from .marlin_utils import GPTQ_MARLIN_TILE, marlin_permute_scales, marlin_zero_points
 from .quant_utils import (

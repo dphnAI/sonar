@@ -17,7 +17,7 @@ const HY_MARKER_STEMS: &[&str] = &[
 ];
 
 /// Detect the HY structural-token suffix from tokenizer added vocabulary.
-fn detect_hy_token_suffix(tokenizer: &dyn aphrodite_tokenizer::Tokenizer) -> String {
+fn detect_hy_token_suffix(tokenizer: &dyn sonar_tokenizer::Tokenizer) -> String {
     tokenizer
         .added_vocab()
         .iter()

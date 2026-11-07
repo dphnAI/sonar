@@ -6,18 +6,18 @@ from typing import TYPE_CHECKING
 
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed.ec_transfer import get_ec_transfer, has_ec_transfer
-from aphrodite.distributed.ec_transfer.ec_connector.base import ECConnectorBase
-from aphrodite.v1.outputs import (
+from sonar.config import SonarConfig
+from sonar.distributed.ec_transfer import get_ec_transfer, has_ec_transfer
+from sonar.distributed.ec_transfer.ec_connector.base import ECConnectorBase
+from sonar.v1.outputs import (
     EMPTY_MODEL_RUNNER_OUTPUT,
     ECConnectorOutput,
     ModelRunnerOutput,
 )
 
 if TYPE_CHECKING:
-    from aphrodite.v1.core.sched.output import SchedulerOutput
-    from aphrodite.v1.worker.gpu.mm.encoder_cache import EncoderCache
+    from sonar.v1.core.sched.output import SchedulerOutput
+    from sonar.v1.worker.gpu.mm.encoder_cache import EncoderCache
 
 
 class ECConnector:
@@ -34,7 +34,7 @@ class ECConnector:
 class ActiveECConnector(ECConnector):
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         encoder_cache: dict[str, torch.Tensor],
     ) -> None:
         self.encoder_cache = encoder_cache
@@ -86,8 +86,8 @@ class ActiveECConnector(ECConnector):
 NO_OP_EC_CONNECTOR = ECConnector()
 
 
-def get_ec_connector(aphrodite_config: AphroditeConfig, encoder_cache: "EncoderCache | None") -> ECConnector:
-    if not has_ec_transfer() or aphrodite_config.model_config.is_encoder_decoder or encoder_cache is None:
+def get_ec_connector(sonar_config: SonarConfig, encoder_cache: "EncoderCache | None") -> ECConnector:
+    if not has_ec_transfer() or sonar_config.model_config.is_encoder_decoder or encoder_cache is None:
         return NO_OP_EC_CONNECTOR
 
-    return ActiveECConnector(aphrodite_config, encoder_cache.encoder_outputs)
+    return ActiveECConnector(sonar_config, encoder_cache.encoder_outputs)

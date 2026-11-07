@@ -17,32 +17,32 @@ from transformers.models.gemma3n import (
 )
 from transformers.models.siglip import SiglipImageProcessor
 
-from aphrodite.config import AphroditeConfig, ModelConfig, SpeechToTextConfig
-from aphrodite.config.multimodal import MultiModalDummyOptions
-from aphrodite.config.speech_to_text import SpeechToTextParams
-from aphrodite.inputs import MultiModalDataDict, PromptType, TextPrompt
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import RowParallelLinear
-from aphrodite.model_executor.layers.vocab_parallel_embedding import VocabParallelEmbedding
-from aphrodite.model_executor.models.gemma3n import Gemma3nForCausalLM
-from aphrodite.model_executor.models.gemma3n_audio_utils import (
+from sonar.config import ModelConfig, SonarConfig, SpeechToTextConfig
+from sonar.config.multimodal import MultiModalDummyOptions
+from sonar.config.speech_to_text import SpeechToTextParams
+from sonar.inputs import MultiModalDataDict, PromptType, TextPrompt
+from sonar.logger import init_logger
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import RowParallelLinear
+from sonar.model_executor.layers.vocab_parallel_embedding import VocabParallelEmbedding
+from sonar.model_executor.models.gemma3n import Gemma3nForCausalLM
+from sonar.model_executor.models.gemma3n_audio_utils import (
     adjust_audio_features_to_expected_length,
 )
-from aphrodite.model_executor.models.module_mapping import MultiModelKeys
-from aphrodite.model_executor.models.whisper import ISO639_1_SUPPORTED_LANGS
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import (
+from sonar.model_executor.models.module_mapping import MultiModelKeys
+from sonar.model_executor.models.whisper import ISO639_1_SUPPORTED_LANGS
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import (
     MultiModalFieldConfig,
     MultiModalKwargsItems,
 )
-from aphrodite.multimodal.parse import (
+from sonar.multimodal.parse import (
     ImageProcessorItems,
     MultiModalDataItems,
     MultiModalDataParser,
 )
-from aphrodite.multimodal.processing import BaseDummyInputsBuilder
-from aphrodite.multimodal.processing.processor import (
+from sonar.multimodal.processing import BaseDummyInputsBuilder
+from sonar.multimodal.processing.processor import (
     BaseMultiModalProcessor,
     BaseProcessingInfo,
     MultiModalPromptUpdates,
@@ -54,15 +54,15 @@ from aphrodite.multimodal.processing.processor import (
     cached_encode,
     replace_token_matches,
 )
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.utils.tensor_schema import TensorSchema, TensorShape
-from aphrodite.utils.torch_utils import async_tensor_h2d
+from sonar.sequence import IntermediateTensors
+from sonar.utils.tensor_schema import TensorSchema, TensorShape
+from sonar.utils.torch_utils import async_tensor_h2d
 
 from .interfaces import MultiModalEmbeddings, SupportsMultiModal, SupportsTranscription
 from .utils import (
     AutoWeightsLoader,
     WeightsMapper,
-    init_aphrodite_registered_model,
+    init_sonar_registered_model,
     maybe_prefix,
 )
 
@@ -93,7 +93,7 @@ def batch_audio_features(
 
     Audio features are unpadded per item so that a multimodal cache entry does
     not depend on the batch it was first processed in.
-    [`MultiModalFieldConfig.batched`][aphrodite.multimodal.inputs.MultiModalFieldConfig.batched]
+    [`MultiModalFieldConfig.batched`][sonar.multimodal.inputs.MultiModalFieldConfig.batched]
     stacks items only when their shapes agree, so a batch of clips with
     differing durations reaches the model as a list and must be re-padded here.
 
@@ -556,7 +556,7 @@ class Gemma3nForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsTra
         ],
     }
 
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={
             # mapping for new names in checkpoint saved after transformers v4.52
             "model.embed_audio.": "embed_audio.",
@@ -570,27 +570,27 @@ class Gemma3nForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsTra
         }
     )
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
-        multimodal_config = aphrodite_config.model_config.multimodal_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
+        multimodal_config = sonar_config.model_config.multimodal_config
         self.config = config
         self.quant_config = quant_config
         self.multimodal_config = multimodal_config
         self.vocab_size = config.text_config.vocab_size
 
-        with self._mark_tower_model(aphrodite_config, "image"):
+        with self._mark_tower_model(sonar_config, "image"):
             self.vision_tower = AutoModel.from_config(config=config.vision_config)
             self.embed_vision = Gemma3nMultimodalEmbedder(config.vision_config, config.text_config)
 
-        with self._mark_tower_model(aphrodite_config, "audio"):
+        with self._mark_tower_model(sonar_config, "audio"):
             self.audio_tower = AutoModel.from_config(config=config.audio_config)
             self.embed_audio = Gemma3nMultimodalEmbedder(config.audio_config, config.text_config)
 
-        with self._mark_language_model(aphrodite_config):
-            self.language_model: Gemma3nForCausalLM = init_aphrodite_registered_model(
-                aphrodite_config=aphrodite_config,
+        with self._mark_language_model(sonar_config):
+            self.language_model: Gemma3nForCausalLM = init_sonar_registered_model(
+                sonar_config=sonar_config,
                 hf_config=config.text_config,
                 prefix=maybe_prefix(prefix, "language_model"),
                 architectures=["Gemma3nForCausalLM"],
@@ -599,7 +599,7 @@ class Gemma3nForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsTra
             # NOTE (NickLucche) In order to be compatible with cudagraph, the
             # buffer needs to be consistent, so we pre-allocate here.
             self.per_layer_embeddings = torch.zeros(
-                aphrodite_config.scheduler_config.max_num_batched_tokens,
+                sonar_config.scheduler_config.max_num_batched_tokens,
                 self.config.text_config.num_hidden_layers,
                 self.config.text_config.hidden_size_per_layer_input,
                 device=self.language_model.model.embed_tokens.weight.device,
@@ -808,7 +808,7 @@ class Gemma3nForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsTra
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
     def get_mm_mapping(self) -> MultiModelKeys:
         """Get the module prefix in multimodal models"""

@@ -5,21 +5,21 @@ from collections.abc import Callable
 
 import torch
 
-from aphrodite.distributed.utils import verify_group_size_divides_partition
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.kernels.linear import (
+from sonar.distributed.utils import verify_group_size_divides_partition
+from sonar.logger import init_logger
+from sonar.model_executor.kernels.linear import (
     MPLinearLayerConfig,
     choose_mp_linear_kernel,
 )
-from aphrodite.model_executor.layers.quantization.compressed_tensors.schemes import (
+from sonar.model_executor.layers.quantization.compressed_tensors.schemes import (
     CompressedTensorsScheme,
 )
-from aphrodite.model_executor.parameter import (
+from sonar.model_executor.parameter import (
     ChannelQuantScaleParameter,
     GroupQuantScaleParameter,
     ModelWeightParameter,
 )
-from aphrodite.scalar_type import scalar_types
+from sonar.scalar_type import scalar_types
 
 logger = init_logger(__name__)
 

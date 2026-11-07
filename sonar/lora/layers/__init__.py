@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-from aphrodite.lora.layers.base import BaseLayerWithLoRA
-from aphrodite.lora.layers.classifier import (
+from sonar.lora.layers.base import BaseLayerWithLoRA
+from sonar.lora.layers.classifier import (
     BaseClassificationHeadWithLoRA,
     ClassificationHeadWithLoRA,
     TokenClassificationHeadWithLoRA,
 )
-from aphrodite.lora.layers.column_parallel_linear import (
+from sonar.lora.layers.column_parallel_linear import (
     ColumnParallelLinearWithLoRA,
     ColumnParallelLinearWithShardedLoRA,
     MergedColumnParallelLinearVariableSliceWithLoRA,
@@ -17,19 +17,19 @@ from aphrodite.lora.layers.column_parallel_linear import (
     QKVParallelLinearWithLoRA,
     QKVParallelLinearWithShardedLoRA,
 )
-from aphrodite.lora.layers.custom_layer import (
+from sonar.lora.layers.custom_layer import (
     Step5FusedQKVIndexerWithLoRA,
     Step5SparseIndexerWWithLoRA,
 )
-from aphrodite.lora.layers.fused_moe import FusedMoE3DWithLoRA, FusedMoEWithLoRA
-from aphrodite.lora.layers.logits_processor import LogitsProcessorWithLoRA
-from aphrodite.lora.layers.replicated_linear import ReplicatedLinearWithLoRA
-from aphrodite.lora.layers.row_parallel_linear import (
+from sonar.lora.layers.fused_moe import FusedMoE3DWithLoRA, FusedMoEWithLoRA
+from sonar.lora.layers.logits_processor import LogitsProcessorWithLoRA
+from sonar.lora.layers.replicated_linear import ReplicatedLinearWithLoRA
+from sonar.lora.layers.row_parallel_linear import (
     RowParallelLinearWithLoRA,
     RowParallelLinearWithShardedLoRA,
 )
-from aphrodite.lora.layers.utils import LoRAMapping, LoRAMappingType
-from aphrodite.lora.layers.vocab_parallel_embedding import VocabParallelEmbeddingWithLoRA
+from sonar.lora.layers.utils import LoRAMapping, LoRAMappingType
+from sonar.lora.layers.vocab_parallel_embedding import VocabParallelEmbeddingWithLoRA
 
 __all__ = [
     "BaseLayerWithLoRA",

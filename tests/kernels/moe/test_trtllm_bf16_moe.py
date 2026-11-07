@@ -11,32 +11,32 @@ compare against a torch MoE reference using the original BF16 weights.
 import pytest
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite.config import AphroditeConfig, ParallelConfig, set_current_aphrodite_config
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.all2all_utils import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar.config import ParallelConfig, SonarConfig, set_current_sonar_config
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.all2all_utils import (
     maybe_make_prepare_finalize,
 )
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe.config import (
     FUSED_MOE_UNQUANTIZED_CONFIG,
     FusedMoEConfig,
     FusedMoEParallelConfig,
     RoutingMethodType,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.trtllm_bf16_moe import (
+from sonar.model_executor.layers.fused_moe.experts.trtllm_bf16_moe import (
     TrtLlmBf16ExpertsModular,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.trtllm_lora_moe import (
+from sonar.model_executor.layers.fused_moe.experts.trtllm_lora_moe import (
     TrtLlmBf16LoRAExperts,
 )
-from aphrodite.model_executor.layers.fused_moe.oracle.unquantized import (
+from sonar.model_executor.layers.fused_moe.oracle.unquantized import (
     UnquantizedMoeBackend,
     convert_to_unquantized_kernel_format,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.flashinfer import has_flashinfer_trtllm_fused_moe
-from aphrodite.utils.math_utils import next_power_of_2
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.platforms import current_platform
+from sonar.utils.flashinfer import has_flashinfer_trtllm_fused_moe
+from sonar.utils.math_utils import next_power_of_2
+from sonar.utils.torch_utils import set_random_seed
 from tests.kernels.moe.utils import make_dummy_moe_config
 from tests.kernels.utils import torch_moe
 
@@ -70,7 +70,7 @@ def test_trtllm_bf16_moe_modular_no_graph(
     workspace_init,
 ):
     set_random_seed(7)
-    with set_current_aphrodite_config(AphroditeConfig(parallel_config=ParallelConfig(pipeline_parallel_size=1))):
+    with set_current_sonar_config(SonarConfig(parallel_config=ParallelConfig(pipeline_parallel_size=1))):
         a = torch.randn((m, k), device="cuda", dtype=dtype) / 10
         w1 = torch.randn((e, 2 * n, k), device="cuda", dtype=dtype) / 10
         w2 = torch.randn((e, k, n), device="cuda", dtype=dtype) / 10

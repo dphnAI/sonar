@@ -8,12 +8,12 @@ from functools import lru_cache
 
 import torch
 
-from aphrodite.model_executor.warmup.jit_warmup_triton_helper import (
+from sonar.model_executor.warmup.jit_warmup_triton_helper import (
     TritonWarmupTensor,
     triton_scalar_specialization_rep,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import HAS_TRITON, tl, triton
+from sonar.platforms import current_platform
+from sonar.triton_utils import HAS_TRITON, tl, triton
 
 
 @lru_cache(maxsize=1)

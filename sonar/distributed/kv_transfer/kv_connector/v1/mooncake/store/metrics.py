@@ -12,8 +12,8 @@ from dataclasses import dataclass
 from statistics import fmean
 from typing import Any
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed.kv_transfer.kv_connector.v1.metrics import (
+from sonar.config import SonarConfig
+from sonar.distributed.kv_transfer.kv_connector.v1.metrics import (
     KVConnectorPromMetrics,
     KVConnectorStats,
     PromMetric,
@@ -91,17 +91,17 @@ class MooncakeStorePromMetrics(KVConnectorPromMetrics):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         metric_types: dict[type[PromMetric], type[PromMetricT]],
         labelnames: list[str],
         per_engine_labelvalues: dict[int, list[object]],
     ):
-        super().__init__(aphrodite_config, metric_types, labelnames, per_engine_labelvalues)
+        super().__init__(sonar_config, metric_types, labelnames, per_engine_labelvalues)
         metric_labelnames = labelnames + ["operation", "status"]
         self._metric_cache: dict[tuple[int, str, str], dict[str, PromMetric]] = {}
 
         self._histogram_operation_time = self._histogram_cls(
-            name="aphrodite:mooncake_store_operation_time_seconds",
+            name="sonar:mooncake_store_operation_time_seconds",
             documentation="Histogram of Mooncake store communication time.",
             buckets=[
                 1e-3,
@@ -123,22 +123,22 @@ class MooncakeStorePromMetrics(KVConnectorPromMetrics):
             labelnames=metric_labelnames,
         )
         self._counter_operation_calls = self._counter_cls(
-            name="aphrodite:mooncake_store_operation_total",
+            name="sonar:mooncake_store_operation_total",
             documentation="Number of Mooncake store communication operations.",
             labelnames=metric_labelnames,
         )
         self._counter_operation_keys = self._counter_cls(
-            name="aphrodite:mooncake_store_operation_keys_total",
+            name="sonar:mooncake_store_operation_keys_total",
             documentation="Number of Mooncake store keys touched by operations.",
             labelnames=metric_labelnames,
         )
         self._counter_operation_bytes = self._counter_cls(
-            name="aphrodite:mooncake_store_operation_bytes_total",
+            name="sonar:mooncake_store_operation_bytes_total",
             documentation="Number of bytes transferred by Mooncake store operations.",
             labelnames=metric_labelnames,
         )
         self._counter_failed_keys = self._counter_cls(
-            name="aphrodite:mooncake_store_operation_failed_keys_total",
+            name="sonar:mooncake_store_operation_failed_keys_total",
             documentation="Number of Mooncake store keys that failed in operations.",
             labelnames=metric_labelnames,
         )

@@ -6,25 +6,25 @@ from dataclasses import dataclass, field
 from functools import cached_property
 from typing import TYPE_CHECKING
 
-from aphrodite.config.ec_manager_config import EncoderCacheManagerMetadata
-from aphrodite.multimodal.utils import strip_covered_mm_data
+from sonar.config.ec_manager_config import EncoderCacheManagerMetadata
+from sonar.multimodal.utils import strip_covered_mm_data
 
 if TYPE_CHECKING:
     import numpy as np
     import numpy.typing as npt
     import torch
 
-    from aphrodite.distributed.aux_output_connector.connector import (
+    from sonar.distributed.aux_output_connector.connector import (
         AuxOutputConnectorMetadata,
     )
-    from aphrodite.distributed.ec_transfer.ec_connector.base import ECConnectorMetadata
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.base import KVConnectorMetadata
-    from aphrodite.lora.request import LoRARequest
-    from aphrodite.multimodal.inputs import MultiModalFeatureSpec, MultiModalKwargsItem
-    from aphrodite.pooling_params import PoolingParams
-    from aphrodite.sampling_params import SamplingParams
-    from aphrodite.v1.core.kv_cache_utils import KVCacheBlockCopy
-    from aphrodite.v1.request import Request
+    from sonar.distributed.ec_transfer.ec_connector.base import ECConnectorMetadata
+    from sonar.distributed.kv_transfer.kv_connector.v1.base import KVConnectorMetadata
+    from sonar.lora.request import LoRARequest
+    from sonar.multimodal.inputs import MultiModalFeatureSpec, MultiModalKwargsItem
+    from sonar.pooling_params import PoolingParams
+    from sonar.sampling_params import SamplingParams
+    from sonar.v1.core.kv_cache_utils import KVCacheBlockCopy
+    from sonar.v1.request import Request
 else:
     AuxOutputConnectorMetadata = object
     ECConnectorMetadata = object

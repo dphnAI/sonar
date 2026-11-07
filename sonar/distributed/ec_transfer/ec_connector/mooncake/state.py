@@ -9,10 +9,10 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
 from enum import Enum, auto
 
-from aphrodite.distributed.ec_transfer.ec_connector.mooncake.metadata import (
+from sonar.distributed.ec_transfer.ec_connector.mooncake.metadata import (
     ECMooncakeLoadSpec,
 )
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 

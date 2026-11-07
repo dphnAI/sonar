@@ -10,7 +10,7 @@ Sonar can convert BF16 or FP16 weights to OCP MXFP6 while it loads a model. The 
 Use `--quantization mxfp6` to select E2M3 weights and dynamic MXFP8 activations:
 
 ```sh
-aphrodite run Qwen/Qwen3.5-4B --quantization mxfp6
+sonar run Qwen/Qwen3.5-4B --quantization mxfp6
 ```
 
 The loader converts one layer at a time. It replaces each full-precision tensor with packed six-bit data and an E8M0 scale for each block of 32 values. This limits temporary memory use. The model does not have to fit in host memory twice.
@@ -22,7 +22,7 @@ Sonar keeps router gates and shared-expert gates in BF16 by default. These small
 The shorthand uses E2M3 weights. Use `--quantization online` with a JSON configuration to select E3M2:
 
 ```sh
-aphrodite run Qwen/Qwen3.5-4B \
+sonar run Qwen/Qwen3.5-4B \
   --quantization online \
   --quantization-config '{
     "linear":{"weight":"mxfp6_e3m2","activation":"mxfp8"},
@@ -37,7 +37,7 @@ E2M3 has more mantissa precision. E3M2 has a larger finite range. Start with E2M
 The native backend also accepts MXFP6 activations. This mode reduces activation precision and adds conversion work:
 
 ```sh
-aphrodite run Qwen/Qwen3.5-4B \
+sonar run Qwen/Qwen3.5-4B \
   --quantization online \
   --quantization-config '{
     "linear":{"weight":"mxfp6_e2m3","activation":"mxfp6_e2m3_dynamic"},
@@ -52,7 +52,7 @@ Benchmark W6A6 against the default W6A8 mode on the target workload. W6A8 is fas
 Use ordered overrides to control precision. Sonar applies the last matching rule:
 
 ```sh
-aphrodite run Qwen/Qwen3.5-4B \
+sonar run Qwen/Qwen3.5-4B \
   --quantization mxfp6 \
   --quantization-config '{
     "overrides":[

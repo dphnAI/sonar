@@ -11,14 +11,14 @@ from typing import Any, Final, cast
 
 from fastapi import Request
 
-from aphrodite.engine.protocol import EngineClient
-from aphrodite.entrypoints.generate.base.protocol import (
+from sonar.engine.protocol import EngineClient
+from sonar.entrypoints.generate.base.protocol import (
     DeltaMessage,
     FunctionCall,
     PerRequestMetrics,
     RequestResponseMetadata,
 )
-from aphrodite.entrypoints.generate.base.serving import (
+from sonar.entrypoints.generate.base.serving import (
     GenerateBaseServing,
     build_per_request_timing_metrics,
     build_spec_decoding_metrics,
@@ -26,10 +26,10 @@ from aphrodite.entrypoints.generate.base.serving import (
     clamp_prompt_logprobs,
     format_token_id_placeholder,
 )
-from aphrodite.entrypoints.openai.chat_completion.message_assembly import (
+from sonar.entrypoints.openai.chat_completion.message_assembly import (
     assemble_chat_message_fields,
 )
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionLogProb,
     ChatCompletionLogProbs,
     ChatCompletionLogProbsContent,
@@ -40,38 +40,38 @@ from aphrodite.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionStreamResponse,
     ChatMessage,
 )
-from aphrodite.entrypoints.openai.chat_completion.stream_processor import (
+from sonar.entrypoints.openai.chat_completion.stream_processor import (
     ChatStreamProcessor,
 )
-from aphrodite.entrypoints.openai.models.serving import OpenAIServingModels
-from aphrodite.entrypoints.serve.engine.protocol import (
+from sonar.entrypoints.openai.models.serving import OpenAIServingModels
+from sonar.entrypoints.serve.engine.protocol import (
     CompletionTokenUsageInfo,
     ErrorResponse,
     PromptTokenUsageInfo,
     UsageInfo,
 )
-from aphrodite.entrypoints.serve.utils.api_utils import get_max_tokens, should_include_usage
-from aphrodite.entrypoints.serve.utils.request_logger import RequestLogger
-from aphrodite.entrypoints.serve.utils.tool_calls_utils import (
+from sonar.entrypoints.serve.utils.api_utils import get_max_tokens, should_include_usage
+from sonar.entrypoints.serve.utils.request_logger import RequestLogger
+from sonar.entrypoints.serve.utils.tool_calls_utils import (
     resolve_finish_reason,
 )
-from aphrodite.exceptions import GenerationError
-from aphrodite.inputs import EngineInput, MultiModalPlaceholders
-from aphrodite.logger import init_logger
-from aphrodite.logprobs import Logprob
-from aphrodite.outputs import RequestOutput
-from aphrodite.parser import ParserManager
-from aphrodite.parser.abstract_parser import Parser
-from aphrodite.proof.http import DphnNonceError, DphnProofContext, DphnProofError, get_proof_nonce
-from aphrodite.renderers.chat_utils import (
+from sonar.exceptions import GenerationError
+from sonar.inputs import EngineInput, MultiModalPlaceholders
+from sonar.logger import init_logger
+from sonar.logprobs import Logprob
+from sonar.outputs import RequestOutput
+from sonar.parser import ParserManager
+from sonar.parser.abstract_parser import Parser
+from sonar.proof.http import DphnNonceError, DphnProofContext, DphnProofError, get_proof_nonce
+from sonar.renderers.chat_utils import (
     ChatTemplateContentFormatOption,
     ConversationMessage,
 )
-from aphrodite.renderers.online_renderer import OnlineRenderer
-from aphrodite.sampling_params import BeamSearchParams, SamplingParams
-from aphrodite.tokenizers import TokenizerLike
-from aphrodite.utils.collection_utils import as_list
-from aphrodite.utils.serial_utils import numpy2base64
+from sonar.renderers.online_renderer import OnlineRenderer
+from sonar.sampling_params import BeamSearchParams, SamplingParams
+from sonar.tokenizers import TokenizerLike
+from sonar.utils.collection_utils import as_list
+from sonar.utils.serial_utils import numpy2base64
 
 logger = init_logger(__name__)
 
@@ -172,11 +172,11 @@ class OpenAIServingChat(GenerateBaseServing):
         mc = self.model_config
         self.override_max_tokens = (
             self.default_sampling_params.get("max_tokens")
-            if mc.generation_config not in ("auto", "aphrodite")
+            if mc.generation_config not in ("auto", "sonar")
             else getattr(mc, "override_generation_config", {}).get("max_new_tokens")
         )
         # NOTE(woosuk): While OpenAI's chat completion API supports browsing
-        # for some models, currently Aphrodite doesn't support it. Please use the
+        # for some models, currently Sonar doesn't support it. Please use the
         # Responses API instead.
         self.supports_browsing = False
         self.browser_tool = None

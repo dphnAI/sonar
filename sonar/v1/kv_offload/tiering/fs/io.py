@@ -9,10 +9,10 @@ import random
 import threading
 
 try:
-    from aphrodite.fs_io_C import (  # pyright: ignore[reportMissingImports]
+    from sonar.fs_io_C import (  # pyright: ignore[reportMissingImports]
         batch_load_block as batch_load_block_C,
     )
-    from aphrodite.fs_io_C import (
+    from sonar.fs_io_C import (
         batch_store_block as batch_store_block_C,
     )
 

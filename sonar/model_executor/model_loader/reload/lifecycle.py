@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Begin and complete a checkpoint-format weight update in the reload mode
-``APHRODITE_RELOAD_MODE`` selects (fixed for the process)."""
+``SONAR_RELOAD_MODE`` selects (fixed for the process)."""
 
 import torch
 
-from aphrodite.config import ModelConfig
+from sonar.config import ModelConfig
 
 from .direct import begin_direct_reload, direct_reload_enabled, finish_direct_reload
 from .layerwise import finalize_layerwise_reload, initialize_layerwise_reload

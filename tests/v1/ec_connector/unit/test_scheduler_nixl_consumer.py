@@ -6,17 +6,17 @@ import uuid
 import pytest
 import torch
 
-import aphrodite.distributed.ec_transfer.ec_connector.cpu.scheduler as sched_mod
-from aphrodite.distributed.ec_transfer.ec_connector.cpu.ec_shared_region import (
+import sonar.distributed.ec_transfer.ec_connector.cpu.scheduler as sched_mod
+from sonar.distributed.ec_transfer.ec_connector.cpu.ec_shared_region import (
     ECSharedRegion,
 )
-from aphrodite.distributed.ec_transfer.ec_connector.cpu.scheduler import ECCPUScheduler
-from aphrodite.multimodal.inputs import (
+from sonar.distributed.ec_transfer.ec_connector.cpu.scheduler import ECCPUScheduler
+from sonar.multimodal.inputs import (
     MultiModalFieldElem,
     MultiModalKwargsItem,
     MultiModalSharedField,
 )
-from tests.v1.ec_connector.unit.utils import create_ec_aphrodite_config
+from tests.v1.ec_connector.unit.utils import create_ec_sonar_config
 
 _N, _BS, _HID, _ES = 16, 64, 32, 2
 
@@ -100,7 +100,7 @@ def _consumer_sched(monkeypatch):
     # ec_enable_nixl defaults to False, so this builds gate-off; the fields
     # below flip on the NIXL consumer state directly.
     # No measured widths: a consumer takes each shape from the announcement.
-    s = ECCPUScheduler(create_ec_aphrodite_config(ec_role="ec_consumer", encoder_output_widths={}))
+    s = ECCPUScheduler(create_ec_sonar_config(ec_role="ec_consumer", encoder_output_widths={}))
     # Turn on NIXL consumer state without constructing real transports.
     s._nixl_enabled = True
     s._transport = _FakeTransport()

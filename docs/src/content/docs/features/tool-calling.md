@@ -10,7 +10,7 @@ The model and parser must use the same tool-call format.
 Start the server with automatic tool selection and a parser.
 
 ```bash
-aphrodite serve MODEL \
+sonar serve MODEL \
   --enable-auto-tool-choice \
   --tool-call-parser hermes
 ```
@@ -117,7 +117,7 @@ supports all streaming edge cases.
 - If a streaming call has invalid JSON, confirm that the client joined all
   argument deltas in order.
 
-Read `aphrodite serve --help=tool-call-parser` for the current parser names.
+Read `sonar serve --help=tool-call-parser` for the current parser names.
 Use the parser recommended by the model publisher when one is available.
 See [Reasoning and tool parsers](/features/reasoning-and-tools/) for parser
 selection and reasoning-output behavior.

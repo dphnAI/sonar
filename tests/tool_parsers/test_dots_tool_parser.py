@@ -7,13 +7,13 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from aphrodite.entrypoints.generate.base.protocol import DeltaMessage
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.generate.base.protocol import DeltaMessage
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionRequest,
     ChatCompletionToolsParam,
 )
-from aphrodite.tool_parsers import ToolParserManager
-from aphrodite.tool_parsers.dots_tool_parser import DotsToolParser
+from sonar.tool_parsers import ToolParserManager
+from sonar.tool_parsers.dots_tool_parser import DotsToolParser
 from tests.tool_parsers.utils import get_function_delta
 
 

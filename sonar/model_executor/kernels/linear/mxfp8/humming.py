@@ -3,17 +3,17 @@
 
 import torch
 
-from aphrodite.model_executor.layers.quantization.utils.humming import (
+from sonar.model_executor.layers.quantization.utils.humming import (
     apply_humming_linear,
     convert_linear_layer_to_humming_standard,
     get_humming_linear_compute_config,
     prepare_humming_linear_layer_config,
     quant_key_to_input_schema,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import kMxfp8Dynamic
-from aphrodite.platforms import current_platform
-from aphrodite.utils.humming import create_humming_locks
-from aphrodite.utils.import_utils import has_humming
+from sonar.model_executor.layers.quantization.utils.quant_utils import kMxfp8Dynamic
+from sonar.platforms import current_platform
+from sonar.utils.humming import create_humming_locks
+from sonar.utils.import_utils import has_humming
 
 from .Mxfp8LinearKernel import Mxfp8LinearKernel, Mxfp8LinearLayerConfig
 

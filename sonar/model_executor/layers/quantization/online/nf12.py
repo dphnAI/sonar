@@ -5,12 +5,12 @@
 import torch
 from torch.nn import Module
 
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.linear import UnquantizedLinearMethod
-from aphrodite.model_executor.layers.quantization.online.fp8 import OnlineLinearBase
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import kNf12
-from aphrodite.model_executor.utils import replace_parameter
-from aphrodite.platforms import current_platform
+from sonar.logger import init_logger
+from sonar.model_executor.layers.linear import UnquantizedLinearMethod
+from sonar.model_executor.layers.quantization.online.fp8 import OnlineLinearBase
+from sonar.model_executor.layers.quantization.utils.quant_utils import kNf12
+from sonar.model_executor.utils import replace_parameter
+from sonar.platforms import current_platform
 
 logger = init_logger(__name__)
 

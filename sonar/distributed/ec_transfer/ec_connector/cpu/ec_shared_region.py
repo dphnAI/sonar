@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Lightweight mmap-backed shared memory region for encoder cache (EC) data.
 
-Modeled after SharedOffloadRegion (aphrodite/v1/kv_offload/cpu/) but simplified
+Modeled after SharedOffloadRegion (sonar/v1/kv_offload/cpu/) but simplified
 for EC: flat shared layout, no multi-tensor cursor, no block_size_factor.
 """
 
@@ -15,7 +15,7 @@ from collections.abc import Callable
 import numpy as np
 import torch
 
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 
@@ -70,7 +70,7 @@ class ECSharedRegion:
     Layout: (num_blocks, block_size_bytes) — contiguous, no per-worker
     interleaving. All workers map the same file and see identical data.
 
-    File path: /dev/shm/aphrodite_ec_{engine_id}.mmap
+    File path: /dev/shm/sonar_ec_{engine_id}.mmap
 
     This class owns only the shared memory substrate (mmap lifecycle, the
     `blocks` view, CUDA host registration). Block allocation and eviction
@@ -88,7 +88,7 @@ class ECSharedRegion:
 
         total_size_bytes = num_blocks * block_size_bytes
         # Path in /dev/shm (tmpfs); unique per engine instance.
-        self._mmap_path = f"/dev/shm/aphrodite_ec_{engine_id}.mmap"
+        self._mmap_path = f"/dev/shm/sonar_ec_{engine_id}.mmap"
         # True for the process that created the file (responsible for unlink).
         self._is_creator = False
         # True after successful cudaHostRegister (cleanup must unregister).

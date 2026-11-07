@@ -4,17 +4,17 @@ import importlib
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
-from aphrodite.logger import init_logger
-from aphrodite.v1.kv_offload.tiering.base import SecondaryTierManager
+from sonar.logger import init_logger
+from sonar.v1.kv_offload.tiering.base import SecondaryTierManager
 
 if TYPE_CHECKING:
-    from aphrodite.v1.kv_offload.base import OffloadingSpec
-    from aphrodite.v1.kv_offload.tiering.backpressure import BackpressureDetector
+    from sonar.v1.kv_offload.base import OffloadingSpec
+    from sonar.v1.kv_offload.tiering.backpressure import BackpressureDetector
 
 logger = init_logger(__name__)
 
 
-_DEFAULT_PACKAGE = "aphrodite.v1.kv_offload.tiering.backpressure"
+_DEFAULT_PACKAGE = "sonar.v1.kv_offload.tiering.backpressure"
 
 
 def _import_class(name: str) -> type:
@@ -23,7 +23,7 @@ def _import_class(name: str) -> type:
     If ``name`` contains a dot it is treated as a fully qualified path
     (e.g. ``'my_package.MyDetector'``).  Otherwise it is looked up in
     the default backpressure module
-    (``aphrodite.v1.kv_offload.tiering.backpressure``), so short names like
+    (``sonar.v1.kv_offload.tiering.backpressure``), so short names like
     ``'DropStorePolicy'`` or ``'EMABackpressureDetector'`` work out of
     the box.
     """
@@ -38,10 +38,10 @@ def _import_class(name: str) -> type:
 class SecondaryTierFactory:
     """Registry for SecondaryTierManager implementations, resolved by type.
 
-    Mirrors OffloadingSpecFactory (aphrodite/v1/kv_offload/factory.py): built-in
+    Mirrors OffloadingSpecFactory (sonar/v1/kv_offload/factory.py): built-in
     tiers are pre-registered below. External tiers can either
     register_tier() a friendly short name up front, or skip registration
-    entirely and pass a module_path at lookup time (out-of-tree, no Aphrodite
+    entirely and pass a module_path at lookup time (out-of-tree, no Sonar
     fork/patch required) -- see get_tier_class.
     """
 
@@ -142,30 +142,30 @@ class SecondaryTierFactory:
 
 SecondaryTierFactory.register_tier(
     "example",
-    "aphrodite.v1.kv_offload.tiering.example.manager",
+    "sonar.v1.kv_offload.tiering.example.manager",
     "ExampleSecondaryTierManager",
 )
 
 SecondaryTierFactory.register_tier(
     "fs",
-    "aphrodite.v1.kv_offload.tiering.fs.manager",
+    "sonar.v1.kv_offload.tiering.fs.manager",
     "FileSystemTierManager",
 )
 
 SecondaryTierFactory.register_tier(
     "p2p",
-    "aphrodite.v1.kv_offload.tiering.p2p.manager",
+    "sonar.v1.kv_offload.tiering.p2p.manager",
     "P2PSecondaryTierManager",
 )
 
 SecondaryTierFactory.register_tier(
     "obj",
-    "aphrodite.v1.kv_offload.tiering.obj.manager",
+    "sonar.v1.kv_offload.tiering.obj.manager",
     "ObjectStoreSecondaryTierManager",
 )
 
 SecondaryTierFactory.register_tier(
     "kvcr",
-    "aphrodite.v1.kv_offload.tiering.kvcr.manager",
+    "sonar.v1.kv_offload.tiering.kvcr.manager",
     "KVCRSecondaryTierManager",
 )

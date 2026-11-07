@@ -7,33 +7,33 @@ from typing import TYPE_CHECKING, Any, cast
 
 import torch
 
-from aphrodite.compilation.breakable_cudagraph import eager_break_during_capture
-from aphrodite.forward_context import get_forward_context
-from aphrodite.models.step5.amd.csa_cache import Step5CSAMetadata
-from aphrodite.models.step5.amd.ops.csa_paged import sparse_attention_paged
-from aphrodite.models.step5.common.ops.sparse_decode_attention import (
+from sonar.compilation.breakable_cudagraph import eager_break_during_capture
+from sonar.forward_context import get_forward_context
+from sonar.models.step5.amd.csa_cache import Step5CSAMetadata
+from sonar.models.step5.amd.ops.csa_paged import sparse_attention_paged
+from sonar.models.step5.common.ops.sparse_decode_attention import (
     sparse_decode_attention,
     sparse_decode_splits,
 )
-from aphrodite.models.step5.common.ops.sparse_indexer import (
+from sonar.models.step5.common.ops.sparse_indexer import (
     pack_summary_pages,
     select_all_regions,
     select_regions,
 )
-from aphrodite.models.step5.common.ops.sparse_indexer_scores import (
+from sonar.models.step5.common.ops.sparse_indexer_scores import (
     decode_summary_scores,
     paged_mqa_logits_sm90,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import (
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import (
     LayerNameType,
     _resolve_layer_name,
     direct_register_custom_op,
 )
-from aphrodite.v1.attention.backends.rocm_attn import RocmAttentionMetadata
+from sonar.v1.attention.backends.rocm_attn import RocmAttentionMetadata
 
 if TYPE_CHECKING:
-    from aphrodite.models.step5.amd.model import Step5Attention
+    from sonar.models.step5.amd.model import Step5Attention
 
 
 @eager_break_during_capture

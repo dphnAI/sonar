@@ -4,13 +4,13 @@ from typing import cast
 
 import torch
 
-from aphrodite.distributed import (
+from sonar.distributed import (
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
     tensor_model_parallel_all_reduce,
 )
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe.runner.moe_runner import MoERunner
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe.runner.moe_runner import MoERunner
 
 logger = init_logger(__name__)
 

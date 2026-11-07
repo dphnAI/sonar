@@ -29,7 +29,7 @@ model:
 
 features:
   tool_calling:
-    description: "Surface LFM2.5's Pythonic tool calls (wrapped in <|tool_call_start|>…<|tool_call_end|>) as OpenAI tool_calls via Aphrodite's native lfm2 parser"
+    description: "Surface LFM2.5's Pythonic tool calls (wrapped in <|tool_call_start|>…<|tool_call_end|>) as OpenAI tool_calls via Sonar's native lfm2 parser"
     args:
       - "--enable-auto-tool-choice"
       - "--tool-call-parser"
@@ -57,14 +57,14 @@ guide: |
   short-range gated convolution blocks interleaved with grouped-query attention. It was
   **distilled from LFM2.5-350M** and refined with multi-stage reinforcement learning, then
   trained on a 19T-token budget — keeping memory and latency low enough for the tightest edge and
-  on-device budgets while still supporting tool calling and a 32K context window through Aphrodite's
+  on-device budgets while still supporting tool calling and a 32K context window through Sonar's
   OpenAI-compatible API.
 
   ### Key Features
   - **Hybrid backbone**: 14 layers — 8 double-gated short-convolution blocks interleaved with 6 grouped-query attention blocks — for a smaller KV cache and lower decode latency than a same-size full-attention transformer.
   - **32K context**: Long-context support (`context_length = 32768`).
-  - **Tool calling**: Pythonic tool calls (`<|tool_call_start|>…<|tool_call_end|>`) surfaced as OpenAI `tool_calls` by Aphrodite's native `lfm2` parser.
-  - **Native Aphrodite support**: Served via the `Lfm2ForCausalLM` architecture — no `--trust-remote-code` required.
+  - **Tool calling**: Pythonic tool calls (`<|tool_call_start|>…<|tool_call_end|>`) surfaced as OpenAI `tool_calls` by Sonar's native `lfm2` parser.
+  - **Native Sonar support**: Served via the `Lfm2ForCausalLM` architecture — no `--trust-remote-code` required.
   - **Edge-ready**: ~0.5 GB of BF16 weights — runs from low-cost CPUs to production GPUs (213 tok/s decode on a Galaxy S25 Ultra, 42 tok/s on a Raspberry Pi 5).
 
   Best suited for data extraction and lightweight on-device agentic pipelines; the model card
@@ -92,26 +92,26 @@ guide: |
   ## Prerequisites
 
   - **Hardware**: 1× GPU (~1 GB VRAM for weights; any modern GPU works). Verified on H100.
-  - **Aphrodite**: ≥ 0.23.0 — the LFM2 architecture ships in the 0.23.0 stable release.
+  - **Sonar**: ≥ 0.23.0 — the LFM2 architecture ships in the 0.23.0 stable release.
 
   ### pip (NVIDIA CUDA)
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U aphrodite-engine --torch-backend auto
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   ```
 
   ## Deployment Configurations
 
   ### Quick Start (Single GPU, BF16)
   ```bash
-  aphrodite serve LiquidAI/LFM2.5-230M
+  sonar serve LiquidAI/LFM2.5-230M
   ```
 
   ### Full-Featured Server Launch
   Enables tool calling:
   ```bash
-  aphrodite serve LiquidAI/LFM2.5-230M \
+  sonar serve LiquidAI/LFM2.5-230M \
     --enable-auto-tool-choice \
     --tool-call-parser lfm2 \
     --host 0.0.0.0 --port 8000
@@ -166,7 +166,7 @@ guide: |
   ```
 
   ### Structured Outputs
-  Aphrodite's guided decoding constrains output to a JSON schema via `response_format`. The model does
+  Sonar's guided decoding constrains output to a JSON schema via `response_format`. The model does
   not see the schema itself — put semantic instructions in the system prompt. Data extraction is a
   primary use case for this model, so structured outputs pair naturally with it.
 
@@ -174,11 +174,11 @@ guide: |
   - At 230M the model fits any GPU; raise `--max-num-seqs` to push batch throughput.
   - Set `--max-model-len` to match your workload (up to 32K).
   - `--gpu-memory-utilization 0.90–0.95` maximizes KV cache capacity.
-  - Sampling presets are per-request client defaults — don't bake them into `aphrodite serve`.
+  - Sampling presets are per-request client defaults — don't bake them into `sonar serve`.
 
   ## References
   - [Model card](https://huggingface.co/LiquidAI/LFM2.5-230M)
   - [Blog post](https://www.liquid.ai/blog/lfm2-5-230m)
   - [LFM2.5 usage guide](../../LiquidAI/LFM2.5)
   - [Liquid AI](https://www.liquid.ai/)
-  - [Aphrodite supported models](https://docs.vllm.ai/en/latest/models/supported_models.html)
+  - [Sonar supported models](https://docs.vllm.ai/en/latest/models/supported_models.html)

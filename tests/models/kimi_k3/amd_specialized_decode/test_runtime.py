@@ -8,35 +8,35 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.config import (
     CompilationMode,
     CUDAGraphMode,
     KVTransferConfig,
     ModelConfig,
     ParallelConfig,
+    SonarConfig,
     SpeculativeConfig,
 )
-from aphrodite.models.kimi_k3.amd.specialized_decode import runtime
-from aphrodite.models.kimi_k3.amd.specialized_decode.runtime import (
+from sonar.models.kimi_k3.amd.specialized_decode import runtime
+from sonar.models.kimi_k3.amd.specialized_decode.runtime import (
     FFN,
     WHOLE,
     DecodeConfig,
     layer_kinds,
     specialized_decode_config,
 )
-from aphrodite.models.kimi_k3.amd.specialized_decode.runtime import decode as decode_mod
-from aphrodite.models.kimi_k3.amd.specialized_decode.runtime.decode import (
+from sonar.models.kimi_k3.amd.specialized_decode.runtime import decode as decode_mod
+from sonar.models.kimi_k3.amd.specialized_decode.runtime.decode import (
     SpecializedDecode,
     step_reason,
 )
-from aphrodite.models.kimi_k3.amd.specialized_decode.runtime.guards import (
+from sonar.models.kimi_k3.amd.specialized_decode.runtime.guards import (
     cache_reasons,
     weight_reasons,
 )
 
 
-def _aphrodite_config(**over) -> SimpleNamespace:
+def _sonar_config(**over) -> SimpleNamespace:
     """A supported config: TP8, DCP8, 7 speculative tokens, FULL graphs, MRV2.
     ``over`` sets dotted paths, e.g. ``{"parallel_config.data_parallel_size": 2}``."""
     spec = SimpleNamespace(
@@ -83,7 +83,7 @@ def _aphrodite_config(**over) -> SimpleNamespace:
         speculative_config=spec,
         use_v2_model_runner=True,
         compilation_config=SimpleNamespace(
-            mode=CompilationMode.APHRODITE_COMPILE,
+            mode=CompilationMode.SONAR_COMPILE,
             cudagraph_mode=CUDAGraphMode.FULL_AND_PIECEWISE,
         ),
     )
@@ -129,29 +129,29 @@ def test_kernel_layers_follow_the_k3_pattern():
 
 def test_auto_runs_the_stock_decode():
     """Without the switch nothing is checked, even on an unsupported deployment."""
-    cfg = _aphrodite_config(additional_config={}, **{"parallel_config.tensor_parallel_size": 4})
+    cfg = _sonar_config(additional_config={}, **{"parallel_config.tensor_parallel_size": 4})
     assert specialized_decode_config(cfg) is None
     cfg.additional_config = {"decode_backend": "auto"}
     assert specialized_decode_config(cfg) is None
 
 
 def test_an_unknown_backend_is_refused():
-    cfg = _aphrodite_config(additional_config={"decode_backend": "fast"})
+    cfg = _sonar_config(additional_config={"decode_backend": "fast"})
     with pytest.raises(ValueError, match="decode_backend must be"):
         specialized_decode_config(cfg)
 
 
-def test_supported_config_is_accepted(supported_aphrodite_config):
-    assert specialized_decode_config(supported_aphrodite_config) == DecodeConfig(q=8)
+def test_supported_config_is_accepted(supported_sonar_config):
+    assert specialized_decode_config(supported_sonar_config) == DecodeConfig(q=8)
 
 
 @pytest.fixture
-def supported_aphrodite_config(tmp_path, monkeypatch, on_mi355x):
-    from aphrodite.transformers_utils.configs.kimi_linear import KimiLinearConfig
+def supported_sonar_config(tmp_path, monkeypatch, on_mi355x):
+    from sonar.transformers_utils.configs.kimi_linear import KimiLinearConfig
 
-    monkeypatch.setenv("APHRODITE_USE_V2_MODEL_RUNNER", "1")
+    monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", "1")
     # CUDA must not auto-enable a process-wide setting in this ROCm fixture.
-    monkeypatch.setenv("APHRODITE_USE_BREAKABLE_CUDAGRAPH", "0")
+    monkeypatch.setenv("SONAR_USE_BREAKABLE_CUDAGRAPH", "0")
     KimiLinearConfig(
         architectures=["KimiLinearForCausalLM"],
         hidden_size=7168,
@@ -165,7 +165,7 @@ def supported_aphrodite_config(tmp_path, monkeypatch, on_mi355x):
             "short_conv_kernel_size": 4,
         },
     ).save_pretrained(tmp_path)
-    return AphroditeConfig(
+    return SonarConfig(
         model_config=ModelConfig(model=str(tmp_path), dtype=torch.bfloat16, max_model_len=1024, seed=0),
         # Config-only tests do not need executor auto-detection of local GPUs.
         parallel_config=ParallelConfig(tensor_parallel_size=8, distributed_executor_backend="mp"),
@@ -176,13 +176,13 @@ def supported_aphrodite_config(tmp_path, monkeypatch, on_mi355x):
 
 @pytest.mark.parametrize("read_mode", [False, True])
 @pytest.mark.parametrize("backend", ["rdma", "xgmi"])
-def test_moriio_consumer_is_supported(supported_aphrodite_config, read_mode, backend):
-    supported_aphrodite_config.kv_transfer_config = KVTransferConfig(
+def test_moriio_consumer_is_supported(supported_sonar_config, read_mode, backend):
+    supported_sonar_config.kv_transfer_config = KVTransferConfig(
         kv_connector="MoRIIOConnector",
         kv_role="kv_consumer",
         kv_connector_extra_config={"read_mode": read_mode, "backend": backend},
     )
-    assert specialized_decode_config(supported_aphrodite_config) == DecodeConfig(q=8)
+    assert specialized_decode_config(supported_sonar_config) == DecodeConfig(q=8)
 
 
 @pytest.mark.parametrize(
@@ -195,8 +195,8 @@ def test_moriio_consumer_is_supported(supported_aphrodite_config, read_mode, bac
         {"kv_role": "kv_both"},
     ],
 )
-def test_unsupported_kv_transfer_is_refused(supported_aphrodite_config, overrides):
-    supported_aphrodite_config.kv_transfer_config = KVTransferConfig(
+def test_unsupported_kv_transfer_is_refused(supported_sonar_config, overrides):
+    supported_sonar_config.kv_transfer_config = KVTransferConfig(
         **(
             {
                 "kv_connector": "MoRIIOConnector",
@@ -207,7 +207,7 @@ def test_unsupported_kv_transfer_is_refused(supported_aphrodite_config, override
         )
     )
     with pytest.raises(ValueError, match="KV transfer connectors"):
-        specialized_decode_config(supported_aphrodite_config)
+        specialized_decode_config(supported_sonar_config)
 
 
 @pytest.mark.parametrize(
@@ -241,13 +241,13 @@ def test_unsupported_kv_transfer_is_refused(supported_aphrodite_config, override
     ],
 )
 def test_refusals(on_mi355x, over, reason):
-    reasons = runtime.unsupported(_aphrodite_config(**over))
+    reasons = runtime.unsupported(_sonar_config(**over))
     assert len(reasons) == 1 and reason in reasons[0], reasons
 
 
 def test_every_refusal_is_reported_at_once(monkeypatch):
     monkeypatch.setattr(runtime, "platform_reasons", lambda: ["this GPU (gfx950 / MI355X only)"])
-    cfg = _aphrodite_config(**{"parallel_config.tensor_parallel_size": 4, "use_v2_model_runner": False})
+    cfg = _sonar_config(**{"parallel_config.tensor_parallel_size": 4, "use_v2_model_runner": False})
     with pytest.raises(ValueError) as e:
         specialized_decode_config(cfg)
     for reason in ("TP 4", "V1 model runner", "this GPU", "decode_backend=auto"):
@@ -256,7 +256,7 @@ def test_every_refusal_is_reported_at_once(monkeypatch):
 
 def test_piecewise_graphs_only_warn(on_mi355x):
     """They are not refused: plan() runs every PIECEWISE step stock."""
-    cfg = _aphrodite_config(**{"compilation_config.cudagraph_mode": CUDAGraphMode.PIECEWISE})
+    cfg = _sonar_config(**{"compilation_config.cudagraph_mode": CUDAGraphMode.PIECEWISE})
     assert runtime.piecewise_graphs_only(cfg)
     assert specialized_decode_config(cfg) is not None
 
@@ -369,7 +369,7 @@ def test_weight_views_reject_every_mismatch():
     """weight_reasons names each layer whose weights the kernels cannot read as
     they are, and a MoE backend that lays them out otherwise."""
     pytest.importorskip("flydsl")
-    from aphrodite.models.kimi_k3.amd.specialized_decode.mono.stages import moe
+    from sonar.models.kimi_k3.amd.specialized_decode.mono.stages import moe
 
     bad_moe = SimpleNamespace(
         use_latent_moe=True,

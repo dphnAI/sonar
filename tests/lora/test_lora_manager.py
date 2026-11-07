@@ -9,31 +9,31 @@ import torch
 from safetensors.torch import load_file
 from torch import nn
 
-from aphrodite.config import AphroditeConfig, ModelConfig
-from aphrodite.config.lora import LoRAConfig
-from aphrodite.lora.layers import (
+from sonar.config import ModelConfig, SonarConfig
+from sonar.config.lora import LoRAConfig
+from sonar.lora.layers import (
     BaseLayerWithLoRA,
     ColumnParallelLinearWithLoRA,
     MergedColumnParallelLinearWithLoRA,
     ReplicatedLinearWithLoRA,
     RowParallelLinearWithLoRA,
 )
-from aphrodite.lora.layers.fused_moe import FusedMoE3DWithLoRA, FusedMoEWithLoRA
-from aphrodite.lora.lora_model import LoRAModel
-from aphrodite.lora.lora_weights import LoRALayerWeights, PackedLoRALayerWeights
-from aphrodite.lora.model_manager import (
+from sonar.lora.layers.fused_moe import FusedMoE3DWithLoRA, FusedMoEWithLoRA
+from sonar.lora.lora_model import LoRAModel
+from sonar.lora.lora_weights import LoRALayerWeights, PackedLoRALayerWeights
+from sonar.lora.model_manager import (
     DEFAULT_LANGUAGE_WRAPPER_KEY,
     AdapterLRUCache,
     LoRAMapping,
     LoRAModelManager,
     LRUCacheLoRAModelManager,
 )
-from aphrodite.lora.peft_helper import PEFTHelper
-from aphrodite.lora.request import LoRARequest
-from aphrodite.lora.worker_manager import LRUCacheWorkerLoRAManager, WorkerLoRAManager
-from aphrodite.model_executor.layers.fused_moe import GateLinear
-from aphrodite.model_executor.models.module_mapping import MultiModelKeys
-from aphrodite.platforms import current_platform
+from sonar.lora.peft_helper import PEFTHelper
+from sonar.lora.request import LoRARequest
+from sonar.lora.worker_manager import LRUCacheWorkerLoRAManager, WorkerLoRAManager
+from sonar.model_executor.layers.fused_moe import GateLinear
+from sonar.model_executor.models.module_mapping import MultiModelKeys
+from sonar.platforms import current_platform
 
 from .utils import create_peft_lora
 
@@ -200,7 +200,7 @@ def create_packed_lora(
     return LoRAModel(lora_id, 8, loras)
 
 
-def test_replace_submodules(default_aphrodite_config, dist_init, dummy_model):
+def test_replace_submodules(default_sonar_config, dist_init, dummy_model):
     model = dummy_model
     manager = LoRAModelManager(
         model,
@@ -209,7 +209,7 @@ def test_replace_submodules(default_aphrodite_config, dist_init, dummy_model):
         1,
         LoRAConfig(max_lora_rank=8, max_cpu_loras=8, max_loras=8, lora_dtype=DEFAULT_DTYPE),
         torch.device(DEVICES[0]),
-        default_aphrodite_config,
+        default_sonar_config,
     )
     model = manager.model
     assert isinstance(model.get_submodule("dense1"), ColumnParallelLinearWithLoRA)
@@ -218,8 +218,8 @@ def test_replace_submodules(default_aphrodite_config, dist_init, dummy_model):
     assert isinstance(model.get_submodule("layer1.dense2"), RowParallelLinearWithLoRA)
 
 
-def test_wrap_replicated_linear_subclasses(default_aphrodite_config, dist_init, dummy_model):
-    from aphrodite.model_executor.layers.linear import ReplicatedLinear
+def test_wrap_replicated_linear_subclasses(default_sonar_config, dist_init, dummy_model):
+    from sonar.model_executor.layers.linear import ReplicatedLinear
 
     class CustomReplicatedLinear(ReplicatedLinear):
         pass
@@ -234,13 +234,13 @@ def test_wrap_replicated_linear_subclasses(default_aphrodite_config, dist_init, 
         1,
         LoRAConfig(max_lora_rank=8, max_cpu_loras=8, max_loras=8, lora_dtype=DEFAULT_DTYPE),
         torch.device(DEVICES[0]),
-        default_aphrodite_config,
+        default_sonar_config,
     )
 
     assert isinstance(manager.model.get_submodule("custom_gate"), ReplicatedLinearWithLoRA)
 
 
-def test_wrap_gate_linear(default_aphrodite_config, dist_init, dummy_model):
+def test_wrap_gate_linear(default_sonar_config, dist_init, dummy_model):
     model = dummy_model
     model.add_module("router_gate", GateLinear(10, 4, bias=False))
 
@@ -251,13 +251,13 @@ def test_wrap_gate_linear(default_aphrodite_config, dist_init, dummy_model):
         1,
         LoRAConfig(max_lora_rank=8, max_cpu_loras=8, max_loras=8, lora_dtype=DEFAULT_DTYPE),
         torch.device(DEVICES[0]),
-        default_aphrodite_config,
+        default_sonar_config,
     )
 
     assert isinstance(manager.model.get_submodule("router_gate"), ReplicatedLinearWithLoRA)
 
 
-def test_dedup_shared_module_across_paths(default_aphrodite_config, dist_init, dummy_model):
+def test_dedup_shared_module_across_paths(default_sonar_config, dist_init, dummy_model):
     """A module reachable from two attribute paths (e.g. a MoE gate held
     both directly on the block and inside its inner runner) must produce a
     single LoRA wrapper. Both paths must end up pointing to that same
@@ -265,7 +265,7 @@ def test_dedup_shared_module_across_paths(default_aphrodite_config, dist_init, d
     `manager.modules` — otherwise activate_adapter would call `reset_lora`
     on the alias and clobber weights set under the canonical name.
     """
-    from aphrodite.model_executor.layers.linear import ReplicatedLinear
+    from sonar.model_executor.layers.linear import ReplicatedLinear
 
     class AliasContainer(nn.Module):
         def __init__(self, gate: nn.Module):
@@ -295,7 +295,7 @@ def test_dedup_shared_module_across_paths(default_aphrodite_config, dist_init, d
         1,
         LoRAConfig(max_lora_rank=8, max_cpu_loras=8, max_loras=8, lora_dtype=DEFAULT_DTYPE),
         torch.device(DEVICES[0]),
-        default_aphrodite_config,
+        default_sonar_config,
     )
 
     canonical = manager.model.get_submodule("moe.gate")
@@ -313,7 +313,7 @@ def test_dedup_shared_module_across_paths(default_aphrodite_config, dist_init, d
     assert "moe.runner.gate" not in manager.modules
 
 
-def test_lm_head_exempt_from_dedup(default_aphrodite_config, dist_init, dummy_model):
+def test_lm_head_exempt_from_dedup(default_sonar_config, dist_init, dummy_model):
     """The dedup logic must NOT collapse `lm_head` even when it is reachable
     from another attribute path (tied-embedding models do
     `self.lm_head = self.model.embed_tokens`, sharing the same nn.Module
@@ -321,7 +321,7 @@ def test_lm_head_exempt_from_dedup(default_aphrodite_config, dist_init, dummy_mo
     into a `LogitsProcessorWithLoRA`, so skipping it would silently break
     LoRA on lm_head.
     """
-    from aphrodite.lora.layers import LogitsProcessorWithLoRA
+    from sonar.lora.layers import LogitsProcessorWithLoRA
 
     # Add a non-lm_head alias to the same module instance as lm_head. The
     # dedup keys on id(module); without the lm_head exemption the alias
@@ -338,7 +338,7 @@ def test_lm_head_exempt_from_dedup(default_aphrodite_config, dist_init, dummy_mo
         1,
         LoRAConfig(max_lora_rank=8, max_cpu_loras=8, max_loras=8, lora_dtype=DEFAULT_DTYPE),
         torch.device(DEVICES[0]),
-        default_aphrodite_config,
+        default_sonar_config,
     )
 
     # lm_head's special handling still ran: logits_processor got wrapped
@@ -347,7 +347,7 @@ def test_lm_head_exempt_from_dedup(default_aphrodite_config, dist_init, dummy_mo
     assert "lm_head" in manager.modules
 
 
-def test_skip_unsupported_matched_modules(default_aphrodite_config, dist_init, dummy_model):
+def test_skip_unsupported_matched_modules(default_sonar_config, dist_init, dummy_model):
     class UnsupportedContainer(nn.Module):
         def __init__(self):
             super().__init__()
@@ -365,7 +365,7 @@ def test_skip_unsupported_matched_modules(default_aphrodite_config, dist_init, d
         1,
         LoRAConfig(max_lora_rank=8, max_cpu_loras=8, max_loras=8, lora_dtype=DEFAULT_DTYPE),
         torch.device(DEVICES[0]),
-        default_aphrodite_config,
+        default_sonar_config,
     )
 
     # Should not crash and should keep unsupported matched modules unchanged.
@@ -373,7 +373,7 @@ def test_skip_unsupported_matched_modules(default_aphrodite_config, dist_init, d
     assert "unsupported.dense1" not in manager.modules
 
 
-def test_target_modules_fail_closed_on_unsupported_matched_modules(default_aphrodite_config, dist_init, dummy_model):
+def test_target_modules_fail_closed_on_unsupported_matched_modules(default_sonar_config, dist_init, dummy_model):
     class UnsupportedContainer(nn.Module):
         def __init__(self):
             super().__init__()
@@ -396,7 +396,7 @@ def test_target_modules_fail_closed_on_unsupported_matched_modules(default_aphro
                 target_modules=["dense1"],
             ),
             torch.device(DEVICES[0]),
-            default_aphrodite_config,
+            default_sonar_config,
         )
 
 
@@ -448,7 +448,7 @@ def count_pins(monkeypatch):
         pinned.append(self)
         return self.clone()
 
-    monkeypatch.setattr("aphrodite.lora.model_manager.PIN_MEMORY", True)
+    monkeypatch.setattr("sonar.lora.model_manager.PIN_MEMORY", True)
     monkeypatch.setattr(torch.Tensor, "pin_memory", fake_pin)
     return pinned
 
@@ -522,7 +522,7 @@ def test_dummy_3d_moe_lora_is_sized_by_global_experts(ep_size):
 
 
 @pytest.mark.parametrize("device", DEVICES)
-def test_lora_model_manager(default_aphrodite_config, dist_init, dummy_model, device):
+def test_lora_model_manager(default_sonar_config, dist_init, dummy_model, device):
     model = dummy_model
     model_lora1 = create_lora(1, model, ["layer1.dense1", "dense2", "lm_head"], device=device)
     model_lora2 = create_lora(2, model, ["dense1", "dense2", "lm_head"], device=device)
@@ -534,7 +534,7 @@ def test_lora_model_manager(default_aphrodite_config, dist_init, dummy_model, de
         2,
         LoRAConfig(max_lora_rank=8, max_cpu_loras=3, max_loras=2, lora_dtype=DEFAULT_DTYPE),
         device=device,
-        aphrodite_config=default_aphrodite_config,
+        sonar_config=default_sonar_config,
     )
     assert all(x is None for x in manager.lora_index_to_id)
     assert manager.add_adapter(model_lora1)
@@ -582,7 +582,7 @@ def test_lora_model_manager(default_aphrodite_config, dist_init, dummy_model, de
 
 
 @pytest.mark.parametrize("device", DEVICES)
-def test_lora_lru_cache_model_manager(default_aphrodite_config, dist_init, dummy_model, device):
+def test_lora_lru_cache_model_manager(default_sonar_config, dist_init, dummy_model, device):
     model = dummy_model
     model_lora1 = create_lora(1, model, ["layer1.dense1", "dense2", "lm_head"], device=device)
     model_lora2 = create_lora(2, model, ["dense1", "dense2", "lm_head"], device=device)
@@ -594,7 +594,7 @@ def test_lora_lru_cache_model_manager(default_aphrodite_config, dist_init, dummy
         2,
         LoRAConfig(max_lora_rank=8, max_cpu_loras=3, max_loras=2, lora_dtype=DEFAULT_DTYPE),
         device=device,
-        aphrodite_config=default_aphrodite_config,
+        sonar_config=default_sonar_config,
     )
     assert all(x is None for x in manager.lora_index_to_id)
     assert manager.add_adapter(model_lora1)
@@ -666,7 +666,7 @@ def test_lora_lru_cache_model_manager(default_aphrodite_config, dist_init, dummy
 
 
 @pytest.mark.parametrize("device", DEVICES)
-def test_lru_lora_model_manager(default_aphrodite_config, dist_init, dummy_model, device):
+def test_lru_lora_model_manager(default_sonar_config, dist_init, dummy_model, device):
     # This tests just the LRU cache functionality, everything else is
     # tested in test_lora_model_manager
     model = dummy_model
@@ -681,7 +681,7 @@ def test_lru_lora_model_manager(default_aphrodite_config, dist_init, dummy_model
         2,
         LoRAConfig(max_lora_rank=8, max_cpu_loras=2, max_loras=2, lora_dtype=DEFAULT_DTYPE),
         device=device,
-        aphrodite_config=default_aphrodite_config,
+        sonar_config=default_sonar_config,
     )
     assert all(x is None for x in manager.lora_index_to_id)
 
@@ -786,9 +786,7 @@ def test_lru_lora_model_manager(default_aphrodite_config, dist_init, dummy_model
 
 
 @pytest.mark.parametrize("device", DEVICES)
-def test_set_adapter_mapping_refreshes_after_slot_reassignment(
-    default_aphrodite_config, dist_init, dummy_model, device
-):
+def test_set_adapter_mapping_refreshes_after_slot_reassignment(default_sonar_config, dist_init, dummy_model, device):
     # An out-of-band add_lora() can LRU-evict and reassign GPU slots while the
     # running batch -- and therefore its LoRAMapping -- is unchanged. The
     # punica metadata must still be re-derived, otherwise in-flight requests
@@ -804,7 +802,7 @@ def test_set_adapter_mapping_refreshes_after_slot_reassignment(
         2,
         LoRAConfig(max_lora_rank=8, max_cpu_loras=3, max_loras=2, lora_dtype=DEFAULT_DTYPE),
         device=device,
-        aphrodite_config=default_aphrodite_config,
+        sonar_config=default_sonar_config,
     )
     punica_wrapper = manager.punica_wrapper_mapping[DEFAULT_LANGUAGE_WRAPPER_KEY]
 
@@ -850,16 +848,16 @@ def test_lru_cache_worker_adapter_manager(dist_init, dummy_model, device, tmp_pa
     )
 
     model_config = ModelConfig(max_model_len=16)
-    aphrodite_config = AphroditeConfig(model_config=model_config, lora_config=lora_config)
+    sonar_config = SonarConfig(model_config=model_config, lora_config=lora_config)
 
-    aphrodite_config.scheduler_config.max_num_seqs = 4
-    aphrodite_config.scheduler_config.max_num_batched_tokens = 2
-    worker_adapter_manager = LRUCacheWorkerLoRAManager(aphrodite_config, device, EMBEDDING_MODULES)
+    sonar_config.scheduler_config.max_num_seqs = 4
+    sonar_config.scheduler_config.max_num_batched_tokens = 2
+    worker_adapter_manager = LRUCacheWorkerLoRAManager(sonar_config, device, EMBEDDING_MODULES)
 
     worker_adapter_manager.max_num_seqs = 4
     worker_adapter_manager.max_num_batched_tokens = 2
 
-    worker_adapter_manager.create_lora_manager(dummy_model, aphrodite_config)
+    worker_adapter_manager.create_lora_manager(dummy_model, sonar_config)
 
     mapping = LoRAMapping([], [])
     worker_adapter_manager.set_active_adapters(
@@ -951,14 +949,14 @@ def test_worker_adapter_manager(dist_init, dummy_model_gate_up, device, tmp_path
     lora_config = LoRAConfig(max_lora_rank=8, max_cpu_loras=4, max_loras=4, lora_dtype=DEFAULT_DTYPE)
 
     model_config = ModelConfig(max_model_len=16)
-    aphrodite_config = AphroditeConfig(model_config=model_config, lora_config=lora_config)
+    sonar_config = SonarConfig(model_config=model_config, lora_config=lora_config)
 
-    aphrodite_config.scheduler_config.max_num_seqs = 4
-    aphrodite_config.scheduler_config.max_num_batched_tokens = 2
+    sonar_config.scheduler_config.max_num_seqs = 4
+    sonar_config.scheduler_config.max_num_batched_tokens = 2
 
-    worker_adapter_manager = WorkerLoRAManager(aphrodite_config, device, EMBEDDING_MODULES)
+    worker_adapter_manager = WorkerLoRAManager(sonar_config, device, EMBEDDING_MODULES)
     worker_adapter_manager.vocab_size = dummy_model_gate_up.unpadded_vocab_size
-    worker_adapter_manager.create_lora_manager(dummy_model_gate_up, aphrodite_config)
+    worker_adapter_manager.create_lora_manager(dummy_model_gate_up, sonar_config)
 
     dummy_lora_files = f"{tmp_path}/lora_adapter"
     os.makedirs(dummy_lora_files, exist_ok=True)
@@ -1049,7 +1047,7 @@ def test_worker_adapter_manager(dist_init, dummy_model_gate_up, device, tmp_path
 
 
 @pytest.mark.parametrize("device", DEVICES)
-def test_packed_loras(default_aphrodite_config, dist_init, dummy_model_gate_up, device):
+def test_packed_loras(default_sonar_config, dist_init, dummy_model_gate_up, device):
     model = dummy_model_gate_up
     model_lora = create_packed_lora(
         1,
@@ -1074,7 +1072,7 @@ def test_packed_loras(default_aphrodite_config, dist_init, dummy_model_gate_up, 
         2,
         LoRAConfig(max_lora_rank=8, max_cpu_loras=2, max_loras=2, lora_dtype=DEFAULT_DTYPE),
         device=device,
-        aphrodite_config=default_aphrodite_config,
+        sonar_config=default_sonar_config,
     )
     model = manager.model
 
@@ -1117,7 +1115,7 @@ def _test_target_modules(
     device: str,
     expected_lora: list[tuple[str, type]],
     expected_no_lora: list[tuple[str, type]],
-    aphrodite_config,
+    sonar_config,
 ):
     """Create a LoRAModelManager and assert which modules have LoRA applied."""
     LoRAModelManager(
@@ -1133,7 +1131,7 @@ def _test_target_modules(
             target_modules=target_modules,
         ),
         device=device,
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
     )
     for module_path, lora_cls in expected_lora:
         assert isinstance(model.get_submodule(module_path), lora_cls)
@@ -1142,7 +1140,7 @@ def _test_target_modules(
 
 
 @pytest.mark.parametrize("device", DEVICES)
-def test_target_modules_config(default_aphrodite_config, dist_init, dummy_model, device):
+def test_target_modules_config(default_sonar_config, dist_init, dummy_model, device):
     """Test that target_modules config restricts which modules get LoRA applied."""
     _test_target_modules(
         dummy_model,
@@ -1156,12 +1154,12 @@ def test_target_modules_config(default_aphrodite_config, dist_init, dummy_model,
             ("dense2", RowParallelLinearWithLoRA),
             ("layer1.dense2", RowParallelLinearWithLoRA),
         ],
-        aphrodite_config=default_aphrodite_config,
+        sonar_config=default_sonar_config,
     )
 
 
 @pytest.mark.parametrize("device", DEVICES)
-def test_target_modules_multiple(default_aphrodite_config, dist_init, dummy_model, device):
+def test_target_modules_multiple(default_sonar_config, dist_init, dummy_model, device):
     """Test that multiple target_modules work correctly."""
     _test_target_modules(
         dummy_model,
@@ -1174,12 +1172,12 @@ def test_target_modules_multiple(default_aphrodite_config, dist_init, dummy_mode
             ("layer1.dense2", RowParallelLinearWithLoRA),
         ],
         expected_no_lora=[],
-        aphrodite_config=default_aphrodite_config,
+        sonar_config=default_sonar_config,
     )
 
 
 @pytest.mark.parametrize("device", DEVICES)
-def test_target_modules_none_uses_all(default_aphrodite_config, dist_init, dummy_model, device):
+def test_target_modules_none_uses_all(default_sonar_config, dist_init, dummy_model, device):
     """Test that target_modules=None uses all supported modules."""
     _test_target_modules(
         dummy_model,
@@ -1192,12 +1190,12 @@ def test_target_modules_none_uses_all(default_aphrodite_config, dist_init, dummy
             ("layer1.dense2", RowParallelLinearWithLoRA),
         ],
         expected_no_lora=[],
-        aphrodite_config=default_aphrodite_config,
+        sonar_config=default_sonar_config,
     )
 
 
 @pytest.mark.parametrize("device", DEVICES)
-def test_target_modules_match_packed_runtime_modules(default_aphrodite_config, dist_init, dummy_model_gate_up, device):
+def test_target_modules_match_packed_runtime_modules(default_sonar_config, dist_init, dummy_model_gate_up, device):
     """Packed runtime modules should be selected by their adapter-visible names."""
     _test_target_modules(
         dummy_model_gate_up,
@@ -1210,5 +1208,5 @@ def test_target_modules_match_packed_runtime_modules(default_aphrodite_config, d
             ("layer1.dense1", ColumnParallelLinearWithLoRA),
             ("layer1.dense2", RowParallelLinearWithLoRA),
         ],
-        aphrodite_config=default_aphrodite_config,
+        sonar_config=default_sonar_config,
     )

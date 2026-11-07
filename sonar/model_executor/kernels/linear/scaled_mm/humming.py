@@ -3,16 +3,16 @@
 
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.quantization.utils.humming import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.quantization.utils.humming import (
     apply_humming_linear,
     convert_linear_layer_to_humming_standard,
     get_humming_linear_compute_config,
     prepare_humming_linear_layer_config,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.humming import create_humming_locks
-from aphrodite.utils.import_utils import has_humming
+from sonar.platforms import current_platform
+from sonar.utils.humming import create_humming_locks
+from sonar.utils.import_utils import has_humming
 
 from .ScaledMMLinearKernel import (
     FP8ScaledMMLinearKernel,
@@ -45,7 +45,7 @@ class HummingFP8ScaledMMLinearKernel(FP8ScaledMMLinearKernel):
         return True, None
 
     def process_weights_after_loading(self, layer: torch.nn.Module) -> None:
-        from aphrodite.utils.humming import dtypes
+        from sonar.utils.humming import dtypes
 
         name_map = {"weight": "weight", "weight_scale": "weight_scale"}
         scale_torch_dtype = self.config.weight_quant_key.scale.dtype

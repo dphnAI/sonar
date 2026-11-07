@@ -12,8 +12,8 @@ import time
 from collections import deque
 from collections.abc import Callable, Iterable
 
-from aphrodite.logger import init_logger
-from aphrodite.v1.kv_offload.tiering.base import JobId
+from sonar.logger import init_logger
+from sonar.v1.kv_offload.tiering.base import JobId
 
 logger = init_logger(__name__)
 

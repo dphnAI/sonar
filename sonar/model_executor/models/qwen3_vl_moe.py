@@ -32,16 +32,16 @@ from transformers.models.qwen3_vl_moe.configuration_qwen3_vl_moe import (
     Qwen3VLMoeConfig,
 )
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed import get_pp_group
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fusion.mm_input_norm import build_mm_input_norm
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.tokenizers.registry import cached_tokenizer_from_config
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import SonarConfig
+from sonar.distributed import get_pp_group
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fusion.mm_input_norm import build_mm_input_norm
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.sequence import IntermediateTensors
+from sonar.tokenizers.registry import cached_tokenizer_from_config
 
 from .interfaces import MixtureOfExperts
 from .qwen3_moe import (
@@ -69,12 +69,12 @@ class Qwen3VLMoeProcessingInfo(Qwen3VLProcessingInfo):
 
 
 class Qwen3VLMoeDecoderLayer(Qwen3MoeDecoderLayer):
-    def __init__(self, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             prefix=prefix,
             is_fused_checkpoint_transposed=True,
-            mrope_positions_factor=mrope_positions_factor(aphrodite_config),
+            mrope_positions_factor=mrope_positions_factor(sonar_config),
         )
 
 
@@ -94,12 +94,12 @@ class Qwen3MoeLLMModel(Qwen3MoeModel):
     def __init__(
         self,
         *,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
         decoder_layer_type: type[torch.nn.Module] = Qwen3VLMoeDecoderLayer,
     ):
         super().__init__(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             prefix=prefix,
             decoder_layer_type=decoder_layer_type,
         )
@@ -145,11 +145,11 @@ class Qwen3MoeLLMModel(Qwen3MoeModel):
 
 
 class Qwen3MoeLLMForCausalLM(Qwen3MoeForCausalLM):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super(Qwen3MoeForCausalLM, self).__init__()
-        self.config = aphrodite_config.model_config.hf_config
-        self.quant_config = aphrodite_config.quant_config
-        self.model = Qwen3MoeLLMModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.config = sonar_config.model_config.hf_config
+        self.quant_config = sonar_config.quant_config
+        self.model = Qwen3MoeLLMModel(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
         self.lm_head = ParallelLMHead(
             self.config.vocab_size,
             self.config.hidden_size,
@@ -220,20 +220,20 @@ class Qwen3VLMoeForConditionalGeneration(Qwen3VLForConditionalGeneration, Qwen3V
         ],
     }
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super(Qwen3VLForConditionalGeneration, self).__init__()
-        config: Qwen3VLMoeConfig = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
-        multimodal_config = aphrodite_config.model_config.get_multimodal_config()
+        config: Qwen3VLMoeConfig = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
+        multimodal_config = sonar_config.model_config.get_multimodal_config()
 
         self.config = config
-        self.model_config = aphrodite_config.model_config
-        self._tokenizer = cached_tokenizer_from_config(aphrodite_config.model_config)
+        self.model_config = sonar_config.model_config
+        self._tokenizer = cached_tokenizer_from_config(sonar_config.model_config)
         self.multimodal_config = multimodal_config
         self.use_data_parallel = multimodal_config.mm_encoder_tp_mode == "data"
         self._init_video_pruning(multimodal_config)
 
-        with self._mark_tower_model(aphrodite_config, {"image", "video"}):
+        with self._mark_tower_model(sonar_config, {"image", "video"}):
             self.visual = Qwen3_VisionTransformer(
                 config.vision_config,
                 norm_eps=getattr(config, "rms_norm_eps", 1e-6),
@@ -252,15 +252,15 @@ class Qwen3VLMoeForConditionalGeneration(Qwen3VLForConditionalGeneration, Qwen3V
         if self.use_deepstack:
             self.deepstack_input_embeds = [
                 torch.zeros(
-                    aphrodite_config.scheduler_config.max_num_batched_tokens,
+                    sonar_config.scheduler_config.max_num_batched_tokens,
                     config.text_config.hidden_size,
                 )
                 for _ in range(self.deepstack_num_level)
             ]
 
-        with self._mark_language_model(aphrodite_config):
+        with self._mark_language_model(sonar_config):
             self.language_model = Qwen3MoeLLMForCausalLM(
-                aphrodite_config=aphrodite_config.with_hf_config(
+                sonar_config=sonar_config.with_hf_config(
                     config.text_config,
                     architectures=["Qwen3MoeForCausalLM"],
                 ),

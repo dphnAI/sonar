@@ -4,27 +4,27 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed.kv_transfer import (
+from sonar.config import SonarConfig
+from sonar.distributed.kv_transfer import (
     get_kv_transfer_group,
     has_kv_transfer_group,
     kv_transfer_state,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.utils import copy_kv_blocks
-from aphrodite.forward_context import (
+from sonar.distributed.kv_transfer.kv_connector.utils import copy_kv_blocks
+from sonar.forward_context import (
     get_forward_context,
     is_forward_context_available,
     set_forward_context,
 )
-from aphrodite.v1.outputs import (
+from sonar.v1.outputs import (
     EMPTY_MODEL_RUNNER_OUTPUT,
     KVConnectorOutput,
     ModelRunnerOutput,
 )
 
 if TYPE_CHECKING:
-    from aphrodite.v1.core.sched.output import SchedulerOutput
-    from aphrodite.v1.worker.gpu.input_batch import InputBatch
+    from sonar.v1.core.sched.output import SchedulerOutput
+    from sonar.v1.worker.gpu.input_batch import InputBatch
 
 
 class KVConnector:
@@ -58,8 +58,8 @@ class KVConnector:
 
 
 class ActiveKVConnector(KVConnector):
-    def __init__(self, aphrodite_config: AphroditeConfig, kv_caches_dict: dict[str, torch.Tensor]):
-        self.aphrodite_config = aphrodite_config
+    def __init__(self, sonar_config: SonarConfig, kv_caches_dict: dict[str, torch.Tensor]):
+        self.sonar_config = sonar_config
         self.kv_connector = get_kv_transfer_group()
         # Register kv caches with KV Connector if applicable.
         self.kv_connector.register_kv_caches(kv_caches_dict)
@@ -117,7 +117,7 @@ class ActiveKVConnector(KVConnector):
         if is_forward_context_available():
             self.kv_connector.start_load_kv(get_forward_context(), **load_kwargs)
         else:
-            with set_forward_context(None, self.aphrodite_config):
+            with set_forward_context(None, self.sonar_config):
                 self.kv_connector.start_load_kv(get_forward_context(), **load_kwargs)
 
     def finish_forward(self) -> None:
@@ -174,9 +174,9 @@ class ActiveKVConnector(KVConnector):
 NO_OP_KV_CONNECTOR = KVConnector()
 
 
-def get_kv_connector(aphrodite_config: AphroditeConfig, kv_caches_dict: dict[str, torch.Tensor]) -> KVConnector:
+def get_kv_connector(sonar_config: SonarConfig, kv_caches_dict: dict[str, torch.Tensor]) -> KVConnector:
     if not has_kv_transfer_group():
         # No-op connector.
         return NO_OP_KV_CONNECTOR
 
-    return ActiveKVConnector(aphrodite_config, kv_caches_dict)
+    return ActiveKVConnector(sonar_config, kv_caches_dict)

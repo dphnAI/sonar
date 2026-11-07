@@ -5,8 +5,8 @@
 from collections.abc import Mapping
 from typing import Any
 
-import aphrodite.envs as envs
-from aphrodite.logger import init_logger
+import sonar.envs as envs
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 

@@ -13,8 +13,8 @@ from transformers import (
     Qwen3_5TextConfig,
 )
 
-from aphrodite.config import ModelConfig, ParallelConfig
-from aphrodite.config.speculative import SpeculativeConfig
+from sonar.config import ModelConfig, ParallelConfig
+from sonar.config.speculative import SpeculativeConfig
 
 _CHECKPOINTS = {
     "qwen3_5": "Qwen/Qwen3.8-27B",

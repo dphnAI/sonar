@@ -5,12 +5,12 @@ from typing import TYPE_CHECKING
 
 from fastapi import FastAPI
 
-from aphrodite.config import AphroditeConfig, ModelConfig
-from aphrodite.logger import init_logger
-from aphrodite.plugins.io_processors import has_io_processor
-from aphrodite.renderers import BaseRenderer
-from aphrodite.renderers.chat_utils import ChatTemplateConfig
-from aphrodite.tasks import POOLING_TASKS, SCORE_TYPE_MAP, SupportedTask
+from sonar.config import ModelConfig, SonarConfig
+from sonar.logger import init_logger
+from sonar.plugins.io_processors import has_io_processor
+from sonar.renderers import BaseRenderer
+from sonar.renderers.chat_utils import ChatTemplateConfig
+from sonar.tasks import POOLING_TASKS, SCORE_TYPE_MAP, SupportedTask
 
 from .base.io_processor import PoolingIOProcessor
 from .utils import enable_scoring_api
@@ -20,13 +20,13 @@ if TYPE_CHECKING:
 
     from starlette.datastructures import State
 
-    from aphrodite.engine.protocol import EngineClient
-    from aphrodite.entrypoints.serve.sagemaker.api_router import (
+    from sonar.engine.protocol import EngineClient
+    from sonar.entrypoints.serve.sagemaker.api_router import (
         EndpointFn,
         GetHandlerFn,
         RequestType,
     )
-    from aphrodite.entrypoints.serve.utils.request_logger import RequestLogger
+    from sonar.entrypoints.serve.utils.request_logger import RequestLogger
 
 else:
     RequestLogger = object
@@ -37,11 +37,11 @@ logger = init_logger(__name__)
 
 def init_pooling_io_processors(
     supported_tasks: tuple[SupportedTask, ...],
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     renderer: BaseRenderer,
     chat_template_config: ChatTemplateConfig,
 ) -> dict[str, PoolingIOProcessor]:
-    model_config = aphrodite_config.model_config
+    model_config = sonar_config.model_config
     processors: dict[str, type[PoolingIOProcessor]] = {}
     pooling_task = model_config.get_pooling_task(supported_tasks)
 
@@ -71,7 +71,7 @@ def init_pooling_io_processors(
         processors[pooling_task] = UnsupportedCombinedTaskIOProcessor
 
     has_plugin = has_io_processor(
-        aphrodite_config,
+        sonar_config,
         model_config.io_processor_plugin,
     )
     if has_plugin:
@@ -99,7 +99,7 @@ def init_pooling_io_processors(
 
     return {
         task: processor_cls(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             renderer=renderer,
             chat_template_config=chat_template_config,
         )
@@ -155,8 +155,8 @@ def init_pooling_state(
     if model_config is None:
         return
 
-    from aphrodite.renderers.chat_utils import load_chat_template
-    from aphrodite.tasks import POOLING_TASKS
+    from sonar.renderers.chat_utils import load_chat_template
+    from sonar.tasks import POOLING_TASKS
 
     from .classify.serving import ServingClassification
     from .embed.serving import ServingEmbedding

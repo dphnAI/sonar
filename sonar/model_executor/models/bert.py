@@ -8,39 +8,39 @@ import torch
 from torch import nn
 from transformers import BertConfig
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, CacheConfig, ModelConfig, PoolerConfig
-from aphrodite.distributed import get_tensor_model_parallel_world_size
-from aphrodite.model_executor.layers.activation import get_act_fn
-from aphrodite.model_executor.layers.attention import (
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import CacheConfig, ModelConfig, PoolerConfig, SonarConfig
+from sonar.distributed import get_tensor_model_parallel_world_size
+from sonar.model_executor.layers.activation import get_act_fn
+from sonar.model_executor.layers.attention import (
     EncoderOnlyAttention,
 )
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     QKVParallelLinear,
     ReplicatedLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.pooler import (
+from sonar.model_executor.layers.pooler import (
     DispatchPooler,
     Pooler,
     PoolingParamsUpdate,
 )
-from aphrodite.model_executor.layers.pooler.seqwise import (
+from sonar.model_executor.layers.pooler.seqwise import (
     EmbeddingPoolerHead,
     SequencePooler,
     SequencePoolerOutput,
     get_seq_pooling_method,
 )
-from aphrodite.model_executor.layers.pooler.tokwise import (
+from sonar.model_executor.layers.pooler.tokwise import (
     pooler_for_token_classify,
     pooler_for_token_embed,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.vocab_parallel_embedding import VocabParallelEmbedding
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.tasks import PoolingTask
-from aphrodite.v1.pool.metadata import PoolingMetadata
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.vocab_parallel_embedding import VocabParallelEmbedding
+from sonar.sequence import IntermediateTensors
+from sonar.tasks import PoolingTask
+from sonar.v1.pool.metadata import PoolingMetadata
 
 from .interfaces import SupportsCrossEncoding, SupportsLoRA, SupportsQuant
 from .interfaces_base import attn_type, default_pooling_type
@@ -115,11 +115,11 @@ class BertPooler(SequencePooler):
 
 
 class BertEncoder(nn.Module):
-    def __init__(self, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        cache_config = aphrodite_config.cache_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        cache_config = sonar_config.cache_config
+        quant_config = sonar_config.quant_config
         self.layer = nn.ModuleList(
             [
                 BertLayer(
@@ -357,9 +357,9 @@ class BertModel(nn.Module, SupportsQuant):
 
     packed_modules_mapping = {"qkv_proj": ["query", "key", "value"]}
 
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         # Original google-bert checkpoints use the legacy `gamma`/`beta`
-        # LayerNorm names; rename to Aphrodite's `weight`/`bias`.
+        # LayerNorm names; rename to Sonar's `weight`/`bias`.
         orig_to_new_substr={
             "LayerNorm.gamma": "LayerNorm.weight",
             "LayerNorm.beta": "LayerNorm.bias",
@@ -375,15 +375,15 @@ class BertModel(nn.Module, SupportsQuant):
     def __init__(
         self,
         *,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
         embedding_class: type[nn.Module] = BertEmbedding,
     ) -> None:
         super().__init__()
 
-        self.config = aphrodite_config.model_config.hf_config
+        self.config = sonar_config.model_config.hf_config
         self.embeddings = embedding_class(self.config)
-        self.encoder = BertEncoder(aphrodite_config=aphrodite_config, prefix=f"{prefix}.encoder")
+        self.encoder = BertEncoder(sonar_config=sonar_config, prefix=f"{prefix}.encoder")
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.embeddings.word_embeddings(input_ids)
@@ -405,33 +405,33 @@ class BertModel(nn.Module, SupportsQuant):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
 
 class BertPoolingModel(BertModel):
     is_pooling_model = True
 
     # Unlike `BertModel`, this model has a pooler to load weights into.
-    hf_to_aphrodite_mapper = replace(BertModel.hf_to_aphrodite_mapper, orig_to_new_prefix={})
+    hf_to_sonar_mapper = replace(BertModel.hf_to_sonar_mapper, orig_to_new_prefix={})
 
     def __init__(
         self,
         *,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
         embedding_class: type[nn.Module] = BertEmbedding,
     ) -> None:
         super().__init__(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             prefix=prefix,
             embedding_class=embedding_class,
         )
 
-        self.pooler = BertPooler(aphrodite_config.model_config)
+        self.pooler = BertPooler(sonar_config.model_config)
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
 
 @default_pooling_type(seq_pooling_type="CLS")
@@ -452,8 +452,8 @@ class BertEmbeddingModel(nn.Module, SupportsQuant, SupportsLoRA):
 
     packed_modules_mapping = {"qkv_proj": ["query", "key", "value"]}
     # PEFT adapters name modules relative to the HF backbone (optionally under
-    # `bert.`/`roberta.`), while Aphrodite nests the backbone under `model.`.
-    hf_to_aphrodite_mapper = WeightsMapper(
+    # `bert.`/`roberta.`), while Sonar nests the backbone under `model.`.
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={
             "bert.": "model.",
             "roberta.": "model.",
@@ -462,14 +462,14 @@ class BertEmbeddingModel(nn.Module, SupportsQuant, SupportsLoRA):
         }
     )
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
 
-        self.config = aphrodite_config.model_config.hf_config
-        pooler_config = aphrodite_config.model_config.pooler_config
+        self.config = sonar_config.model_config.hf_config
+        pooler_config = sonar_config.model_config.pooler_config
         assert pooler_config is not None
 
-        self.model = self._build_model(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = self._build_model(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
         self.pooler = self._build_pooler(pooler_config)
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
@@ -501,8 +501,8 @@ class BertEmbeddingModel(nn.Module, SupportsQuant, SupportsLoRA):
         loader = AutoWeightsLoader(self)
         return loader.load_weights(weights_list, mapper=mapper)
 
-    def _build_model(self, aphrodite_config: AphroditeConfig, prefix: str = "") -> BertModel:
-        return BertModel(aphrodite_config=aphrodite_config, prefix=prefix, embedding_class=self.embedding_class)
+    def _build_model(self, sonar_config: SonarConfig, prefix: str = "") -> BertModel:
+        return BertModel(sonar_config=sonar_config, prefix=prefix, embedding_class=self.embedding_class)
 
     def _build_pooler(self, pooler_config: PoolerConfig) -> Pooler:
         return DispatchPooler.for_embedding(pooler_config)
@@ -659,9 +659,9 @@ class BertSpladeSparseEmbeddingModel(BertEmbeddingModel):
     - pooler: SPLADESparsePooler(mlm_head...)
     """
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "", splade_pooling: str = "max"):
-        super().__init__(aphrodite_config=aphrodite_config, prefix=prefix)
-        cfg = aphrodite_config.model_config.hf_config
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "", splade_pooling: str = "max"):
+        super().__init__(sonar_config=sonar_config, prefix=prefix)
+        cfg = sonar_config.model_config.hf_config
 
         # MLM head
         self.mlm_head = BertMLMHead(
@@ -671,7 +671,7 @@ class BertSpladeSparseEmbeddingModel(BertEmbeddingModel):
         )
 
         self._splade_pooling = splade_pooling
-        pooler_config = aphrodite_config.model_config.pooler_config
+        pooler_config = sonar_config.model_config.pooler_config
         assert pooler_config is not None
         self.pooler = self._build_pooler(pooler_config)
 
@@ -685,7 +685,7 @@ class BertSpladeSparseEmbeddingModel(BertEmbeddingModel):
                 layer_norm_eps=getattr(cfg, "layer_norm_eps", 1e-12),
             )
 
-        # None of Aphrodite's built-in sequence pooling types are
+        # None of Sonar's built-in sequence pooling types are
         # applicable so it is overwritten by SPLADESparsePooler
         pooling_mode = getattr(self, "_splade_pooling", "max")
 
@@ -769,26 +769,26 @@ class BertForSequenceClassification(nn.Module, SupportsCrossEncoding, SupportsQu
     embedding_class: type[nn.Module] = BertEmbedding
     packed_modules_mapping = {"qkv_proj": ["query", "key", "value"]}
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
         self.config = config
 
         self.num_labels = config.num_labels
         self.bert = BertPoolingModel(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             prefix=maybe_prefix(prefix, "bert"),
             embedding_class=self.embedding_class,
         )
         self.classifier = ReplicatedLinear(
             config.hidden_size,
             config.num_labels,
-            params_dtype=aphrodite_config.model_config.head_dtype,
+            params_dtype=sonar_config.model_config.head_dtype,
             return_bias=False,
             prefix=maybe_prefix(prefix, "classifier"),
         )
 
-        pooler_config = aphrodite_config.model_config.pooler_config
+        pooler_config = sonar_config.model_config.pooler_config
         assert pooler_config is not None
 
         self.pooler = DispatchPooler.for_seq_cls(
@@ -833,14 +833,14 @@ class BertForTokenClassification(nn.Module, SupportsLoRA):
     embedding_class: type[nn.Module] = BertEmbedding
     packed_modules_mapping = BertModel.packed_modules_mapping
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
         self.config = config
-        self.head_dtype = aphrodite_config.model_config.head_dtype
+        self.head_dtype = sonar_config.model_config.head_dtype
         self.num_labels = config.num_labels
         self.bert = BertModel(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             prefix=maybe_prefix(prefix, "bert"),
             embedding_class=self.embedding_class,
         )
@@ -852,7 +852,7 @@ class BertForTokenClassification(nn.Module, SupportsLoRA):
             return_bias=False,
         )
 
-        pooler_config = aphrodite_config.model_config.pooler_config
+        pooler_config = sonar_config.model_config.pooler_config
         assert pooler_config is not None
 
         self.pooler = pooler_for_token_classify(pooler_config)
@@ -894,7 +894,7 @@ class BertForTokenClassification(nn.Module, SupportsLoRA):
 class BertForMaskedLM(nn.Module):
     """Bert with a masked-language-modeling head on top of ``BertModel``.
 
-    Produces per-token logits over the vocabulary. In Aphrodite terms this is a
+    Produces per-token logits over the vocabulary. In Sonar terms this is a
     token-level pooling model (``tok_pooling_type="ALL"``): the encoder output
     is projected by the MLM head to ``vocab_size`` logits for every position,
     and the token pooler returns one vector per token.
@@ -906,7 +906,7 @@ class BertForMaskedLM(nn.Module):
     # submodule. Order matters: the ``None`` (drop) rules and the more specific
     # names are listed before the broader ``cls.predictions.decoder`` rule so
     # that substring replacement doesn't rewrite them first.
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_substr={
             # Next-sentence-prediction head: not part of masked LM.
             "cls.seq_relationship": None,
@@ -926,11 +926,11 @@ class BertForMaskedLM(nn.Module):
 
     embedding_class: type[nn.Module] = BertEmbedding
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
         self.bert = BertModel(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             prefix=maybe_prefix(prefix, "bert"),
             embedding_class=self.embedding_class,
         )
@@ -940,7 +940,7 @@ class BertForMaskedLM(nn.Module):
             layer_norm_eps=getattr(config, "layer_norm_eps", 1e-12),
         )
 
-        pooler_config = aphrodite_config.model_config.pooler_config
+        pooler_config = sonar_config.model_config.pooler_config
         assert pooler_config is not None
 
         self.pooler = pooler_for_token_classify(pooler_config)
@@ -950,7 +950,7 @@ class BertForMaskedLM(nn.Module):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]):
         loader = AutoWeightsLoader(self)
-        loaded = loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        loaded = loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
         # The MLM decoder shares its weight with the input embeddings. When the
         # checkpoint relies on `tie_word_embeddings` (e.g. google-bert/*) it

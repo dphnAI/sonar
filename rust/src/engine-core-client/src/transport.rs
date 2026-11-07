@@ -611,7 +611,7 @@ async fn send_init_message(
 ///
 /// Each registration contains 2 frames: `[identity, ready-payload]`.
 ///
-/// Since Aphrodite commit `c8d98f81f676552c263f35bbde55e6edbe81b4e8` ("[Core]
+/// Since Sonar commit `c8d98f81f676552c263f35bbde55e6edbe81b4e8` ("[Core]
 /// Simplify API server handshake"), the payload is a msgpack-encoded
 /// [`EngineCoreReadyResponse`] carrying post-initialization values such as
 /// `max_model_len`.
@@ -790,7 +790,7 @@ mod tests {
     #[tokio::test]
     async fn inherited_unix_listener_is_adopted_without_rebinding() {
         let path = std::env::temp_dir().join(format!(
-            "aphrodite-inherited-listener-{}-{}.sock",
+            "sonar-inherited-listener-{}-{}.sock",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)

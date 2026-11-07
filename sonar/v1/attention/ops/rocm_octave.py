@@ -80,14 +80,14 @@ def rope_dim_from_hf_config(hf_text_config, head_size: int) -> int:
 
 def registered_rope_dim(head_size: int) -> int:
     if head_size not in _rope_dim_by_head_size:
-        from aphrodite.config import get_current_aphrodite_config_or_none
+        from sonar.config import get_current_sonar_config_or_none
 
-        aphrodite_config = get_current_aphrodite_config_or_none()
-        if aphrodite_config is None or aphrodite_config.model_config is None:
+        sonar_config = get_current_sonar_config_or_none()
+        if sonar_config is None or sonar_config.model_config is None:
             raise RuntimeError("Octave needs the model's rotary dim before sizing the KV cache")
         register_rope_dim(
             head_size,
-            rope_dim_from_hf_config(aphrodite_config.model_config.hf_text_config, head_size),
+            rope_dim_from_hf_config(sonar_config.model_config.hf_text_config, head_size),
         )
     return _rope_dim_by_head_size[head_size]
 

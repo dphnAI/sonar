@@ -8,8 +8,8 @@ FlyDSL launches (``mono``, this directory) on the layer's loaded
 weights, the TP reductions inside the kernels. Every backbone layer of the
 checkpoint runs whole (compress ratio 0, 1 or 2 over ``fp8_ds_mla`` records):
 the first layer and the Engram layers hand K1 a settled residual, and an index
-source runs Aphrodite's compressor and indexer between the two launches. A layer
-outside that (an MXFP8 KV cache, another indexer) keeps Aphrodite's attention seam
+source runs Sonar's compressor and indexer between the two launches. A layer
+outside that (an MXFP8 KV cache, another indexer) keeps Sonar's attention seam
 and attention and runs the rest as one launch, the FFN launch, from wo_b's
 unreduced output. A step takes the kernels when it is decode only, at most
 ``MAX_ROWS`` rows (eager or a FULL CUDA graph: the model is not torch.compiled);
@@ -21,7 +21,7 @@ interleave freely.
 On CDNA3 (gfx942) the kernels compute the same layer on their own copies of
 the weights (``mono/weights942.py``), at TP 4 and on steps of up to
 ``MAX_ROWS_GFX942`` rows. An index source's keys are written by
-``mono/keylist.py`` between Aphrodite's indexer and K2 there, and the DSpark draft
+``mono/keylist.py`` between Sonar's indexer and K2 there, and the DSpark draft
 layers also take the FFN launch, built for the draft's routing.
 
 Every TP rank must take the same path at every layer (the kernels wait on each
@@ -33,22 +33,22 @@ from typing import TYPE_CHECKING, Any, cast
 
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.config import CUDAGraphMode
-from aphrodite.distributed import (
+import sonar.envs as envs
+from sonar.config import CUDAGraphMode
+from sonar.distributed import (
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
     get_tp_group,
 )
-from aphrodite.forward_context import get_forward_context, is_forward_context_available
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
+from sonar.forward_context import get_forward_context, is_forward_context_available
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
 
 if TYPE_CHECKING:
-    from aphrodite.models.deepseek_v41.amd.model import DeepseekV4DecoderLayer
-    from aphrodite.models.deepseek_v41.amd.mono.runner import MonoLayerWeights
-    from aphrodite.models.deepseek_v41.amd.rocm import DeepseekV41ROCMAiterSparseSWAMetadata
-    from aphrodite.models.deepseek_v41.sparse_mla import DeepseekV4FlashMLAMetadata
+    from sonar.models.deepseek_v41.amd.model import DeepseekV4DecoderLayer
+    from sonar.models.deepseek_v41.amd.mono.runner import MonoLayerWeights
+    from sonar.models.deepseek_v41.amd.rocm import DeepseekV41ROCMAiterSparseSWAMetadata
+    from sonar.models.deepseek_v41.sparse_mla import DeepseekV4FlashMLAMetadata
 
 logger = init_logger(__name__)
 
@@ -57,11 +57,11 @@ SWA_WIDTH = 128  # a causal decode token's window slots
 MAX_ROWS = 48  # the kernels' step rows at most: 8 requests x (1 + 5 DSpark drafts)
 # A gfx942 workgroup has 64 KB of LDS, not 160 KB as on gfx950. Its kernels
 # take a step's tokens 6 at a time (``mono.stages.gemv.TILE``), and at TP 4 they
-# take up to 42 rows, 7 requests with 5 DSpark drafts each. With 5 drafts Aphrodite
+# take up to 42 rows, 7 requests with 5 DSpark drafts each. With 5 drafts Sonar
 # captures FULL CUDA graphs of 6, 12, 18, 24, 36 and 42 rows, so a step of 5
 # requests runs padded to 36 rows. At 48 rows the shared expert has 8 token
 # tiles of 36 tasks each, 288 units, and the MoE runs one unit a CTA on 256
-# CTAs. A larger step runs Aphrodite's path.
+# CTAs. A larger step runs Sonar's path.
 MAX_ROWS_GFX942 = 42
 # FP4 groups of an ug task: the draft's 128-expert unions are small
 DRAFT_UG_GROUPS = 1
@@ -69,7 +69,7 @@ DRAFT_UG_GROUPS = 1
 # (gfx942), where the kernels compute the same layer with FNUZ FP8 MFMAs on
 # their own copies of the weights (mono/weights942.py).
 CDNA_VERSIONS = (3, 4)
-# The routed experts' intermediate width a rank at TP 4 (2304 / 4). Aphrodite pads
+# The routed experts' intermediate width a rank at TP 4 (2304 / 4). Sonar pads
 # it to 640 on gfx942, and the gfx942 copies keep only the real columns.
 INTER_TP4 = 576
 
@@ -90,7 +90,7 @@ def _mono_runner(device: torch.device, draft: "MonoDecodeLayer | None" = None):
                     "--monokernel's draft runner was first reached inside a CUDA "
                     "graph capture, before an eager draft step."
                 )
-            from aphrodite.models.deepseek_v41.amd.mono.runner import DSV41MonoLayer
+            from sonar.models.deepseek_v41.amd.mono.runner import DSV41MonoLayer
 
             _draft_runner = DSV41MonoLayer(
                 get_tensor_model_parallel_world_size(),
@@ -105,12 +105,12 @@ def _mono_runner(device: torch.device, draft: "MonoDecodeLayer | None" = None):
         return _draft_runner
     if _runner is None:
         if torch.cuda.is_current_stream_capturing():
-            # its peer memory is allocated and exchanged eagerly; Aphrodite warms
+            # its peer memory is allocated and exchanged eagerly; Sonar warms
             # every graph up eagerly before capturing it
             raise RuntimeError(
                 "--monokernel was first reached inside a CUDA graph capture, before an eager decode step."
             )
-        from aphrodite.models.deepseek_v41.amd.mono.runner import MAX_TOKENS, DSV41MonoLayer
+        from sonar.models.deepseek_v41.amd.mono.runner import MAX_TOKENS, DSV41MonoLayer
 
         assert MAX_TOKENS >= MAX_ROWS, MAX_TOKENS
         _runner = DSV41MonoLayer(
@@ -135,7 +135,7 @@ def _scale_bytes(scale: torch.Tensor) -> torch.Tensor:
 
 
 def _on_gfx942() -> bool:
-    from aphrodite.platforms.rocm import get_cdna_version
+    from sonar.platforms.rocm import get_cdna_version
 
     return get_cdna_version() == 3
 
@@ -146,7 +146,7 @@ def _max_rows() -> int:
 
 
 def _capture_plain_experts(experts) -> None:
-    """gfx942: Aphrodite converts the routed experts to its Triton kernels' format
+    """gfx942: Sonar converts the routed experts to its Triton kernels' format
     when the weights are loaded and frees the plain scales. Wrap that step so
     the gfx942 copies (``weights942.moe_copies``) are made from the
     plain tensors first."""
@@ -155,7 +155,7 @@ def _capture_plain_experts(experts) -> None:
 
     def process_weights_after_loading(layer):
         if layer is experts:
-            from aphrodite.models.deepseek_v41.amd.mono.weights942 import moe_copies
+            from sonar.models.deepseek_v41.amd.mono.weights942 import moe_copies
 
             _keep_copies(
                 layer,
@@ -193,8 +193,8 @@ ATTN_LINEARS_942 = ("fused_wqa_wkv", "wq_b", "wo_a", "wo_b")
 
 def _copy_linear_at_load(linear) -> None:
     """gfx942: make the dense MXFP8 linear's ``weights942.linear_copy`` right
-    after Aphrodite has processed its weights at load. By default
-    (APHRODITE_MXFP8_EMULATION_DEQUANT_AT_LOAD) Aphrodite dequantizes them to bf16
+    after Sonar has processed its weights at load. By default
+    (SONAR_MXFP8_EMULATION_DEQUANT_AT_LOAD) Sonar dequantizes them to bf16
     there, and the copy re-encodes them as the gfx942 kernels read them.
     Weights that stay e4m3 are copied as they are."""
     qm = linear.quant_method
@@ -203,7 +203,7 @@ def _copy_linear_at_load(linear) -> None:
     def process_weights_after_loading(layer):
         out = original(layer)
         if layer is linear:
-            from aphrodite.models.deepseek_v41.amd.mono.weights942 import linear_copy
+            from sonar.models.deepseek_v41.amd.mono.weights942 import linear_copy
 
             _keep_copies(layer, linear_copy(layer.weight, layer.weight_scale))
         return out
@@ -213,8 +213,8 @@ def _copy_linear_at_load(linear) -> None:
 
 def _copy_942_at_load(layer: "DeepseekV4DecoderLayer", ffn_only: bool) -> None:
     """gfx942: the kernels read their own copies of the layer's weights. Make
-    them when Aphrodite processes the weights at load, so that they count as model
-    memory when Aphrodite sizes the KV cache. Copies made at the first decode step
+    them when Sonar processes the weights at load, so that they count as model
+    memory when Sonar sizes the KV cache. Copies made at the first decode step
     would count only when that step is also the CUDA graph memory profile, so
     with that profile off or with ``enforce_eager`` they would not count. A
     layer that takes only the FFN launch needs no attention copies."""
@@ -240,23 +240,23 @@ def _gpu_arch() -> str:
     return props.gcnArchName.split(":")[0].lower()
 
 
-def _unsupported_moe(layer: "DeepseekV4DecoderLayer", aphrodite_config) -> str | None:
+def _unsupported_moe(layer: "DeepseekV4DecoderLayer", sonar_config) -> str | None:
     """Why the kernels cannot run this deployment's MoE, or None. They read every
     one of the 384 experts on each rank, TP-sharded, in AITER's A8W4 MXFP4
     layout."""
-    from aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 import Mxfp4MoeBackend
+    from sonar.model_executor.layers.fused_moe.oracle.mxfp4 import Mxfp4MoeBackend
 
-    pc = aphrodite_config.parallel_config
+    pc = sonar_config.parallel_config
     if pc.enable_expert_parallel or pc.enable_eplb or pc.data_parallel_size > 1:
         return "needs tensor parallelism only: no expert or data parallelism"
-    if envs.APHRODITE_ROCM_USE_AITER_MOE_A4W4_DSV4:
-        return "needs AITER's A8W4 MoE (APHRODITE_ROCM_USE_AITER_MOE_A4W4_DSV4 unset)"
+    if envs.SONAR_ROCM_USE_AITER_MOE_A4W4_DSV4:
+        return "needs AITER's A8W4 MoE (SONAR_ROCM_USE_AITER_MOE_A4W4_DSV4 unset)"
     experts = getattr(getattr(layer.ffn, "experts", None), "routed_experts", None)
     if experts is None:
         return None  # not a routed MoE: the layer checks decline it
     if _on_gfx942():
         # The gfx942 kernels read their own copies of the experts. They are
-        # made from the loaded tensors before Aphrodite's MoE backend converts
+        # made from the loaded tensors before Sonar's MoE backend converts
         # them (_capture_plain_experts), and moe_copies checks those tensors.
         # So the backend matters on gfx950 only.
         return None
@@ -292,7 +292,7 @@ def _select(
 class MonoDecodeLayer:
     """One decoder layer's mono path (``create``: None when the layer is not
     eligible): the whole layer (``__call__``) or, with ``ffn_only``, the FFN
-    launch after Aphrodite's attention (``ffn``). Its weights are taken from the
+    launch after Sonar's attention (``ffn``). Its weights are taken from the
     layer at the first call, after loading."""
 
     def __init__(
@@ -315,29 +315,29 @@ class MonoDecodeLayer:
 
     @property
     def unfolded_entry(self) -> bool:
-        """gfx942: when this whole first layer runs Aphrodite's path, its entry seam
+        """gfx942: when this whole first layer runs Sonar's path, its entry seam
         projects the expanded residual with the unfolded hc_attn_fn, as K1
         does, and not the embedding with the folded copy (model.py). The
         folded form has no AITER kernel on gfx942."""
         return not self.ffn_only and _on_gfx942()
 
     @staticmethod
-    def create(layer: "DeepseekV4DecoderLayer", aphrodite_config) -> "MonoDecodeLayer | None":
-        from aphrodite.models.deepseek_v41.amd import ops
+    def create(layer: "DeepseekV4DecoderLayer", sonar_config) -> "MonoDecodeLayer | None":
+        from sonar.models.deepseek_v41.amd import ops
 
-        # The gfx942 decode helpers run in forward passes, where Aphrodite's
+        # The gfx942 decode helpers run in forward passes, where Sonar's
         # current config is not set, so they read the flag recorded here.
-        ops.record_monokernel(aphrodite_config)
-        mono = MonoDecodeLayer._create(layer, aphrodite_config)
+        ops.record_monokernel(sonar_config)
+        mono = MonoDecodeLayer._create(layer, sonar_config)
         if mono is not None and _on_gfx942():
             _copy_942_at_load(layer, mono.ffn_only)
         return mono
 
     @staticmethod
-    def _create(layer: "DeepseekV4DecoderLayer", aphrodite_config) -> "MonoDecodeLayer | None":
-        if not aphrodite_config.kernel_config.monokernel:
+    def _create(layer: "DeepseekV4DecoderLayer", sonar_config) -> "MonoDecodeLayer | None":
+        if not sonar_config.kernel_config.monokernel:
             return None
-        from aphrodite.platforms.rocm import get_cdna_version
+        from sonar.platforms.rocm import get_cdna_version
 
         # the deployment: an explicit opt-in that cannot run is an error
         why = None
@@ -346,14 +346,14 @@ class MonoDecodeLayer:
         elif get_tensor_model_parallel_world_size() not in (2, 4, 8):
             why = "needs tensor parallel size 2, 4 or 8"
         else:
-            why = _unsupported_moe(layer, aphrodite_config)
+            why = _unsupported_moe(layer, sonar_config)
         if why is None:
             try:
-                from aphrodite.models.deepseek_v41.amd.mono.runner import BLOCKS
+                from sonar.models.deepseek_v41.amd.mono.runner import BLOCKS
             except ImportError as err:
                 why = f"needs FlyDSL and AITER's FlyDSL helpers ({err})"
             else:
-                from aphrodite.models.deepseek_v41.amd.mono.common.arch import target_arch
+                from sonar.models.deepseek_v41.amd.mono.common.arch import target_arch
 
                 # every CTA of a launch stays resident: a partitioned GPU deadlocks
                 cus = _compute_units()
@@ -372,15 +372,15 @@ class MonoDecodeLayer:
         if why is not None:
             raise ValueError(f"--monokernel {why}.")
         # the layer: the kernels serve the backbone's seams and MoE
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
         attn, ffn = layer.attn, layer.ffn
         gfx942 = _on_gfx942()
         if gfx942:
             # The gfx942 indexer's top-k hooks need topk512_gfx942.cu. Build it
             # when the model is created, so that a failed build shows at
-            # startup and the hooks leave the top-k to Aphrodite from the first
+            # startup and the hooks leave the top-k to Sonar from the first
             # step on. Later layers get the result of the first build.
-            from aphrodite.models.deepseek_v41.amd.ops import topk as topk_ops
+            from sonar.models.deepseek_v41.amd.ops import topk as topk_ops
 
             topk_ops.build()
         draft = attn.layer_id >= config.num_hidden_layers
@@ -392,7 +392,7 @@ class MonoDecodeLayer:
         if layer.use_sequence_parallel:
             why = "sequence-parallel layer"
         elif not layer.fuse_seam_norm and not gfx942:
-            # gfx942 has no fused seam kernel. Aphrodite rounds the collapsed
+            # gfx942 has no fused seam kernel. Sonar rounds the collapsed
             # stream to bf16 before its RMSNorm there, which the kernels'
             # fused seam does not, so the two paths differ by that rounding.
             why = "needs aiter's fused mHC seam"
@@ -414,10 +414,10 @@ class MonoDecodeLayer:
             return None
         if draft and gfx942:
             # On gfx942 the DSpark draft layers take the FFN launch, built for
-            # the draft's routing, after Aphrodite's attention. It runs on the
+            # the draft's routing, after Sonar's attention. It runs on the
             # target's runner. The whole draft layer below, on a runner of its
             # own with the block's non-causal SWA rows, is checked on gfx950
-            # only. Aphrodite's draft MoE multiplies bf16 activations with the FP4
+            # only. Sonar's draft MoE multiplies bf16 activations with the FP4
             # experts, and the FFN launch quantizes them to MXFP8 as it does
             # for the target. That changes only how many drafts the target
             # accepts, not the target's output.
@@ -429,11 +429,11 @@ class MonoDecodeLayer:
             return MonoDecodeLayer(ffn_only=True, experts=experts, topk=topk)
         # the whole layer: the kernels' attention takes the standard layers; an
         # index source's compressor and indexer run between its two launches
-        from aphrodite.models.deepseek_v41.amd.rocm import DeepseekV41RocmMxfp4Indexer
-        from aphrodite.models.deepseek_v41.attention import DeepseekV4Indexer
+        from sonar.models.deepseek_v41.amd.rocm import DeepseekV41RocmMxfp4Indexer
+        from sonar.models.deepseek_v41.attention import DeepseekV4Indexer
 
         # The indexer that _select drives. The MXFP4 indexer cache needs CDNA4,
-        # so gfx942 has Aphrodite's FP8 indexer, whose wq_b also reads K1's bf16 qr.
+        # so gfx942 has Sonar's FP8 indexer, whose wq_b also reads K1's bf16 qr.
         indexer_cls = DeepseekV4Indexer if gfx942 else DeepseekV41RocmMxfp4Indexer
         if attn.compressor is not None and attn.indexer is None:
             why = "a compressor without an indexer"
@@ -452,11 +452,11 @@ class MonoDecodeLayer:
             logger.info_once("DSv4.1 mono decode: the FFN launch for layers with %s", why)
             return MonoDecodeLayer(ffn_only=True)
         if draft:
-            from aphrodite.v1.attention.backends.mla.compressor_utils import (
+            from sonar.v1.attention.backends.mla.compressor_utils import (
                 get_dspark_swa_index_width,
             )
 
-            spec = aphrodite_config.speculative_config
+            spec = sonar_config.speculative_config
             logger.info_once("DSv4.1 mono decode: the DSpark draft layers")
             return MonoDecodeLayer(
                 draft=True,
@@ -470,7 +470,7 @@ class MonoDecodeLayer:
     def weights(self, layer: "DeepseekV4DecoderLayer"):
         if self._weights is not None:
             return self._weights
-        from aphrodite.models.deepseek_v41.amd.mono.runner import MonoLayerWeights
+        from sonar.models.deepseek_v41.amd.mono.runner import MonoLayerWeights
 
         a, f = layer.attn, layer.ffn
         e, sh = f.experts.routed_experts, f.shared_experts
@@ -506,7 +506,7 @@ class MonoDecodeLayer:
         """gfx942: the layer's tensors as the gfx942 kernels read them. The
         dense MXFP8 linears and the routed experts as the copies made at load
         (``_copy_942_at_load``)."""
-        from aphrodite.models.deepseek_v41.amd.mono.runner import MonoLayerWeights
+        from sonar.models.deepseek_v41.amd.mono.runner import MonoLayerWeights
 
         f = layer.ffn
         e, sh = f.experts.routed_experts, f.shared_experts
@@ -540,8 +540,8 @@ class MonoDecodeLayer:
 
     @staticmethod
     def _attn_weights_942(a):
-        from aphrodite.models.deepseek_v41.amd.mono.attention.plan import Dims
-        from aphrodite.models.deepseek_v41.amd.mono.runner import AttnWeights
+        from sonar.models.deepseek_v41.amd.mono.attention.plan import Dims
+        from sonar.models.deepseek_v41.amd.mono.runner import AttnWeights
 
         wqkv, wq_b, wo_a, wo_b = (getattr(a, name).mono942 for name in ATTN_LINEARS_942)
         attn = AttnWeights(
@@ -565,8 +565,8 @@ class MonoDecodeLayer:
 
     @staticmethod
     def _attn_weights(a):
-        from aphrodite.models.deepseek_v41.amd.mono.attention.plan import Dims
-        from aphrodite.models.deepseek_v41.amd.mono.runner import AttnWeights
+        from sonar.models.deepseek_v41.amd.mono.attention.plan import Dims
+        from sonar.models.deepseek_v41.amd.mono.runner import AttnWeights
 
         attn = AttnWeights(
             layer_id=a.layer_id,

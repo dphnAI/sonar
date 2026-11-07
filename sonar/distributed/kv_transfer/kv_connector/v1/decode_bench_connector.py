@@ -10,7 +10,7 @@ Usage:
     To use this connector for benchmarking, configure it in the kv_transfer_config:
 
 Example:
-        aphrodite serve <model> --kv-transfer-config '{
+        sonar serve <model> --kv-transfer-config '{
             "kv_connector": "DecodeBenchConnector",
             "kv_role": "kv_both",
             "kv_connector_extra_config": {
@@ -20,7 +20,7 @@ Example:
         }'
 
     Then run your benchmark with desired input/output lengths:
-        aphrodite bench serve --base-url http://127.0.0.1:8000 --model <model> \\
+        sonar bench serve --base-url http://127.0.0.1:8000 --model <model> \\
             --dataset-name random --random-input-len 40000 \\
             --random-output-len 100 --max-concurrency 10
 
@@ -46,22 +46,22 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 
-from aphrodite.distributed.kv_transfer.kv_connector.v1 import (
+from sonar.distributed.kv_transfer.kv_connector.v1 import (
     KVConnectorBase_V1,
     KVConnectorRole,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.base import (
+from sonar.distributed.kv_transfer.kv_connector.v1.base import (
     KVConnectorMetadata,
     SupportsHMA,
 )
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.v1.attention.backend import AttentionMetadata
-from aphrodite.v1.core.kv_cache_utils import (
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.utils.math_utils import cdiv
+from sonar.v1.attention.backend import AttentionMetadata
+from sonar.v1.core.kv_cache_utils import (
     resolve_dcp_kv_block_size,
 )
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.kv_cache_interface import (
     AttentionSpec,
     CircularBufferSpec,
     KVCacheSpec,
@@ -71,12 +71,12 @@ from aphrodite.v1.kv_cache_interface import (
 )
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
-    from aphrodite.forward_context import ForwardContext
-    from aphrodite.v1.core.kv_cache_manager import KVCacheBlocks
-    from aphrodite.v1.core.sched.output import SchedulerOutput
-    from aphrodite.v1.kv_cache_interface import KVCacheConfig
-    from aphrodite.v1.request import Request
+    from sonar.config import SonarConfig
+    from sonar.forward_context import ForwardContext
+    from sonar.v1.core.kv_cache_manager import KVCacheBlocks
+    from sonar.v1.core.sched.output import SchedulerOutput
+    from sonar.v1.kv_cache_interface import KVCacheConfig
+    from sonar.v1.request import Request
 
 logger = init_logger(__name__)
 
@@ -145,19 +145,19 @@ class DecodeBenchConnector(KVConnectorBase_V1, SupportsHMA):
 
     def __init__(
         self,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
         role: KVConnectorRole,
         kv_cache_config: "KVCacheConfig",
     ):
-        super().__init__(aphrodite_config, role, kv_cache_config)
+        super().__init__(sonar_config, role, kv_cache_config)
 
         self.connector_scheduler: DecodeBenchConnectorScheduler | None = None
         self.connector_worker: DecodeBenchConnectorWorker | None = None
 
         if role == KVConnectorRole.SCHEDULER:
-            self.connector_scheduler = DecodeBenchConnectorScheduler(aphrodite_config, kv_cache_config)
+            self.connector_scheduler = DecodeBenchConnectorScheduler(sonar_config, kv_cache_config)
         elif role == KVConnectorRole.WORKER:
-            self.connector_worker = DecodeBenchConnectorWorker(aphrodite_config, kv_cache_config)
+            self.connector_worker = DecodeBenchConnectorWorker(sonar_config, kv_cache_config)
 
     # ==============================
     # Worker-side methods
@@ -237,8 +237,8 @@ class DecodeBenchConnector(KVConnectorBase_V1, SupportsHMA):
 class DecodeBenchConnectorScheduler:
     """Scheduler-side implementation for DecodeBenchConnector."""
 
-    def __init__(self, aphrodite_config: "AphroditeConfig", kv_cache_config: "KVCacheConfig"):
-        kv_transfer_config = aphrodite_config.kv_transfer_config
+    def __init__(self, sonar_config: "SonarConfig", kv_cache_config: "KVCacheConfig"):
+        kv_transfer_config = sonar_config.kv_transfer_config
         assert kv_transfer_config is not None
         self.startup_fill = kv_transfer_config.get_from_extra_config("startup_fill", False)
         self._startup_fill_group_ids = _get_startup_fill_group_ids(kv_cache_config) if self.startup_fill else set()
@@ -249,7 +249,7 @@ class DecodeBenchConnectorScheduler:
         self._non_transfer_group_ids = {
             group_idx for group_idx, group in enumerate(kv_cache_config.kv_cache_groups) if not group.enable_kv_transfer
         }
-        dcp_world_size = aphrodite_config.parallel_config.decode_context_parallel_size
+        dcp_world_size = sonar_config.parallel_config.decode_context_parallel_size
         self.kv_cache_groups = kv_cache_config.kv_cache_groups
         self.group_block_sizes = tuple(
             resolve_dcp_kv_block_size(group.kv_cache_spec, dcp_world_size) for group in self.kv_cache_groups
@@ -394,9 +394,9 @@ class DecodeBenchConnectorScheduler:
 class DecodeBenchConnectorWorker:
     """Worker-side implementation for DecodeBenchConnector."""
 
-    def __init__(self, aphrodite_config: "AphroditeConfig", kv_cache_config: "KVCacheConfig"):
+    def __init__(self, sonar_config: "SonarConfig", kv_cache_config: "KVCacheConfig"):
         # Get fill parameters from extra config
-        kv_transfer_config = aphrodite_config.kv_transfer_config
+        kv_transfer_config = sonar_config.kv_transfer_config
         assert kv_transfer_config is not None
         self.fill_mean = kv_transfer_config.get_from_extra_config("fill_mean", 0.015)
         self.fill_std = kv_transfer_config.get_from_extra_config("fill_std", 0.0)
@@ -413,7 +413,7 @@ class DecodeBenchConnectorWorker:
                 spec = group.kv_cache_spec
                 if isinstance(spec, UniformTypeKVCacheSpecs):
                     spec = spec.kv_cache_specs[layer_name]
-                fp8_dtype = _get_fp8_dtype(spec, aphrodite_config.cache_config.cache_dtype)
+                fp8_dtype = _get_fp8_dtype(spec, sonar_config.cache_config.cache_dtype)
                 if fp8_dtype is not None:
                     self._fp8_dtypes[layer_name] = fp8_dtype
 

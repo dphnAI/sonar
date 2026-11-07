@@ -11,48 +11,48 @@ import torch
 from torch import nn
 from transformers import PreTrainedConfig, Qwen3NextConfig
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed import (
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import SonarConfig
+from sonar.distributed import (
     get_ep_group,
     get_pp_group,
     get_tensor_model_parallel_world_size,
 )
-from aphrodite.model_executor.layers.fused_moe import FusedMoEFactory, GateLinear
-from aphrodite.model_executor.layers.fused_moe.utils import (
+from sonar.model_executor.layers.fused_moe import FusedMoEFactory, GateLinear
+from sonar.model_executor.layers.fused_moe.utils import (
     resolve_layer_fused_shared_expert,
 )
-from aphrodite.model_executor.layers.layernorm import GemmaRMSNorm
-from aphrodite.model_executor.layers.linear import ReplicatedLinear
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.mamba.gdn.kimi_gdn_linear_attn import (
+from sonar.model_executor.layers.layernorm import GemmaRMSNorm
+from sonar.model_executor.layers.linear import ReplicatedLinear
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.mamba.gdn.kimi_gdn_linear_attn import (
     KimiGatedDeltaNetAttention,
 )
-from aphrodite.model_executor.layers.mamba.mamba_utils import (
+from sonar.model_executor.layers.mamba.mamba_utils import (
     MambaStateCopyFunc,
     MambaStateCopyFuncCalculator,
     MambaStateDtypeCalculator,
     MambaStateShapeCalculator,
 )
-from aphrodite.model_executor.layers.quantization.utils.config_utils import (
+from sonar.model_executor.layers.quantization.utils.config_utils import (
     get_quark_ocp_mx_group_size,
 )
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.models.interfaces import (
+from sonar.model_executor.models.interfaces import (
     HasInnerState,
     IsHybrid,
     MixtureOfExperts,
     SupportsLoRA,
 )
-from aphrodite.model_executor.models.qwen2_moe import Qwen2MoeMLP
-from aphrodite.model_executor.models.qwen3_next import (
+from sonar.model_executor.models.qwen2_moe import Qwen2MoeMLP
+from sonar.model_executor.models.qwen3_next import (
     Qwen3NextAttention,
     _should_replicate_misaligned_shared_expert,
 )
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.models.utils import (
     AutoWeightsLoader,
     WeightsMapper,
     extract_layer_index,
@@ -61,14 +61,14 @@ from aphrodite.model_executor.models.utils import (
     maybe_fuse_shared_experts,
     maybe_prefix,
 )
-from aphrodite.model_executor.offloader import (
+from sonar.model_executor.offloader import (
     PrefetchOffloader,
     UVAOffloader,
     get_offloader,
 )
-from aphrodite.models.kimi_k3.nvidia.ops import attn_res
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.transformers_utils.configs.kimi_linear import KimiLinearConfig
+from sonar.models.kimi_k3.nvidia.ops import attn_res
+from sonar.sequence import IntermediateTensors
+from sonar.transformers_utils.configs.kimi_linear import KimiLinearConfig
 
 _SPLIT_KDA_CONV_SHARDS = {
     ".linear_attn.q_conv1d": (".linear_attn.conv1d", 0),
@@ -183,12 +183,12 @@ class _AttentionResidualFinal(nn.Module):
 
 
 class AliceAISparseMoeBlock(nn.Module):
-    def __init__(self, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_text_config
-        parallel_config = aphrodite_config.parallel_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_text_config
+        parallel_config = sonar_config.parallel_config
+        quant_config = sonar_config.quant_config
 
         self.tp_size = get_tensor_model_parallel_world_size()
         self.ep_size = get_ep_group().device_group.size()
@@ -295,17 +295,17 @@ class AliceAIDecoderBlock(nn.Module):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         layer_type: str,
         prefix: str = "",
     ) -> None:
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_text_config
-        model_config = aphrodite_config.model_config
-        cache_config = aphrodite_config.cache_config
-        parallel_config = aphrodite_config.parallel_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_text_config
+        model_config = sonar_config.model_config
+        cache_config = sonar_config.cache_config
+        parallel_config = sonar_config.parallel_config
+        quant_config = sonar_config.quant_config
 
         if config.num_experts <= 0:
             raise ValueError("AliceAI requires sparse experts")
@@ -320,7 +320,7 @@ class AliceAIDecoderBlock(nn.Module):
         if layer_type == "linear_attention":
             self.linear_attn = KimiGatedDeltaNetAttention(
                 config=_make_kimi_kda_config(config),
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 prefix=f"{prefix}.linear_attn",
             )
             self.linear_attn.o_norm.eps = float(config.rms_norm_eps)
@@ -336,7 +336,7 @@ class AliceAIDecoderBlock(nn.Module):
             raise ValueError(f"Invalid layer_type {layer_type}")
 
         self.mlp = AliceAISparseMoeBlock(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             prefix=f"{prefix}.mlp",
         )
         self.input_layernorm = GemmaRMSNorm(hidden_size=config.hidden_size, eps=config.rms_norm_eps)
@@ -435,7 +435,7 @@ class AliceAIDecoderBlock(nn.Module):
 
 @support_torch_compile
 class AliceAIModel(nn.Module):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_substr={
             ".linear_attn.a_log_bias": ".linear_attn.A_log",
         },
@@ -453,18 +453,18 @@ class AliceAIModel(nn.Module):
         },
     )
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__()
-        config = aphrodite_config.model_config.hf_text_config
+        config = sonar_config.model_config.hf_text_config
         self.config = config
         self.vocab_size = config.vocab_size
-        self.num_redundant_experts = aphrodite_config.parallel_config.eplb_config.num_redundant_experts
+        self.num_redundant_experts = sonar_config.parallel_config.eplb_config.num_redundant_experts
         self.attn_res_block_size = get_attn_res_block_size(config)
         self.embed_tokens = VocabParallelEmbedding(num_embeddings=config.vocab_size, embedding_dim=config.hidden_size)
 
         def get_layer(prefix: str) -> AliceAIDecoderBlock:
             return AliceAIDecoderBlock(
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 layer_type=config.layer_types[extract_layer_index(prefix)],
                 prefix=prefix,
             )
@@ -477,7 +477,7 @@ class AliceAIModel(nn.Module):
         self.fused_shared_expert_layers = get_fused_shared_expert_layers(
             self,
             AliceAISparseMoeBlock,
-            enable_eplb=aphrodite_config.parallel_config.enable_eplb,
+            enable_eplb=sonar_config.parallel_config.enable_eplb,
         )
         self.norm = GemmaRMSNorm(hidden_size=config.hidden_size, eps=config.rms_norm_eps)
         self.attnres_final = _AttentionResidualFinal(
@@ -546,11 +546,11 @@ class AliceAIModel(nn.Module):
             ckpt_prefix="mlp.shared_expert",
         )
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights=weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights=weights, mapper=self.hf_to_sonar_mapper)
 
 
 class AliceAIForCausalLM(nn.Module, HasInnerState, IsHybrid, SupportsLoRA, MixtureOfExperts):
-    hf_to_aphrodite_mapper = WeightsMapper(orig_to_new_prefix={"mtp.": None})
+    hf_to_sonar_mapper = WeightsMapper(orig_to_new_prefix={"mtp.": None})
 
     packed_modules_mapping = {
         "qkv_proj": ["q_proj", "k_proj", "v_proj"],
@@ -565,7 +565,7 @@ class AliceAIForCausalLM(nn.Module, HasInnerState, IsHybrid, SupportsLoRA, Mixtu
         "conv1d": ["q_conv1d", "k_conv1d", "v_conv1d"],
     }
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         # AttnRes calls bypass the per-layer forward hooks used by offloading.
         offloader = get_offloader()
         if isinstance(offloader, PrefetchOffloader):
@@ -574,13 +574,13 @@ class AliceAIForCausalLM(nn.Module, HasInnerState, IsHybrid, SupportsLoRA, Mixtu
             raise NotImplementedError("AliceAI CPU offloading requires UVA")
 
         super().__init__()
-        config = aphrodite_config.model_config.hf_text_config
-        self.aphrodite_config = aphrodite_config
-        self.model_config = aphrodite_config.model_config
-        self.scheduler_config = aphrodite_config.scheduler_config
-        self.quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_text_config
+        self.sonar_config = sonar_config
+        self.model_config = sonar_config.model_config
+        self.scheduler_config = sonar_config.scheduler_config
+        self.quant_config = sonar_config.quant_config
         self.config = config
-        self.model = AliceAIModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = AliceAIModel(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
         self.lm_head = ParallelLMHead(
             num_embeddings=config.vocab_size,
             embedding_dim=config.hidden_size,
@@ -639,22 +639,20 @@ class AliceAIForCausalLM(nn.Module, HasInnerState, IsHybrid, SupportsLoRA, Mixtu
         return self.logits_processor(lm_head=self.lm_head, hidden_states=hidden_states)
 
     @classmethod
-    def get_mamba_state_dtype_from_config(cls, aphrodite_config: AphroditeConfig) -> tuple[torch.dtype, torch.dtype]:
+    def get_mamba_state_dtype_from_config(cls, sonar_config: SonarConfig) -> tuple[torch.dtype, torch.dtype]:
         return MambaStateDtypeCalculator.kda_state_dtype(
-            model_dtype=aphrodite_config.model_config.dtype,
-            mamba_cache_dtype=aphrodite_config.cache_config.mamba_cache_dtype,
+            model_dtype=sonar_config.model_config.dtype,
+            mamba_cache_dtype=sonar_config.cache_config.mamba_cache_dtype,
         )
 
     @classmethod
     def get_mamba_state_shape_from_config(
-        cls, aphrodite_config: AphroditeConfig
+        cls, sonar_config: SonarConfig
     ) -> tuple[tuple[int, int], tuple[int, int, int]]:
-        config = aphrodite_config.model_config.hf_text_config
-        num_spec = (
-            aphrodite_config.speculative_config.num_speculative_tokens if aphrodite_config.speculative_config else 0
-        )
+        config = sonar_config.model_config.hf_text_config
+        num_spec = sonar_config.speculative_config.num_speculative_tokens if sonar_config.speculative_config else 0
         return MambaStateShapeCalculator.kda_state_shape(
-            tp_world_size=aphrodite_config.parallel_config.tensor_parallel_size,
+            tp_world_size=sonar_config.parallel_config.tensor_parallel_size,
             num_heads=config.linear_num_key_heads,
             head_dim=config.linear_key_head_dim,
             conv_kernel_size=config.linear_conv_kernel_dim,
@@ -668,7 +666,7 @@ class AliceAIForCausalLM(nn.Module, HasInnerState, IsHybrid, SupportsLoRA, Mixtu
         return MambaStateCopyFuncCalculator.gated_delta_net_state_copy_func()
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
-        weights = self.hf_to_aphrodite_mapper.apply(weights)
+        weights = self.hf_to_sonar_mapper.apply(weights)
         manually_loaded: set[str] = set()
         weights = _load_split_kda_conv_weights(
             weights=weights,

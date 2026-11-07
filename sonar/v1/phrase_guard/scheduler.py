@@ -3,14 +3,14 @@
 
 from dataclasses import dataclass, fields, replace
 
-from aphrodite.logger import init_logger
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.tokenizers.registry import cached_tokenizer_from_config
-from aphrodite.v1.core.sched.async_scheduler import AsyncScheduler
-from aphrodite.v1.core.sched.output import SchedulerOutput
-from aphrodite.v1.core.sched.utils import check_stop
-from aphrodite.v1.engine.detokenizer import FastIncrementalDetokenizer, IncrementalDetokenizer
-from aphrodite.v1.kv_cache_interface import (
+from sonar.logger import init_logger
+from sonar.sampling_params import SamplingParams
+from sonar.tokenizers.registry import cached_tokenizer_from_config
+from sonar.v1.core.sched.async_scheduler import AsyncScheduler
+from sonar.v1.core.sched.output import SchedulerOutput
+from sonar.v1.core.sched.utils import check_stop
+from sonar.v1.engine.detokenizer import FastIncrementalDetokenizer, IncrementalDetokenizer
+from sonar.v1.kv_cache_interface import (
     ChunkedLocalAttentionSpec,
     FullAttentionSpec,
     MambaSpec,
@@ -18,10 +18,10 @@ from aphrodite.v1.kv_cache_interface import (
     SlidingWindowMLASpec,
     SlidingWindowSpec,
 )
-from aphrodite.v1.phrase_guard.logprobs import PendingLogprobs, join_logprobs
-from aphrodite.v1.phrase_guard.matcher import MAX_RETRIES, PendingText, validate_phrases
-from aphrodite.v1.phrase_guard.processor import RETRY_KEY, PhraseRetryProcessor
-from aphrodite.v1.request import RequestStatus
+from sonar.v1.phrase_guard.logprobs import PendingLogprobs, join_logprobs
+from sonar.v1.phrase_guard.matcher import MAX_RETRIES, PendingText, validate_phrases
+from sonar.v1.phrase_guard.processor import RETRY_KEY, PhraseRetryProcessor
+from sonar.v1.request import RequestStatus
 
 logger = init_logger(__name__)
 
@@ -67,7 +67,7 @@ class PhraseScheduler(AsyncScheduler):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        config = self.aphrodite_config
+        config = self.sonar_config
         if not config.scheduler_config.async_scheduling:
             raise ValueError("PhraseScheduler requires async_scheduling=True")
         if self.connector is not None or self.ec_connector is not None:
@@ -97,7 +97,7 @@ class PhraseScheduler(AsyncScheduler):
         params = request.sampling_params
         if params and "banned_strings" in (params.extra_args or {}):
             PhraseRetryProcessor.validate_params(params)
-            processors = self.aphrodite_config.model_config.logits_processors or []
+            processors = self.sonar_config.model_config.logits_processors or []
             if not self.use_v2_model_runner and not any(
                 p is PhraseRetryProcessor or str(p).endswith("PhraseRetryProcessor") for p in processors
             ):
@@ -111,7 +111,7 @@ class PhraseScheduler(AsyncScheduler):
             ):
                 raise ValueError("Experimental banned_strings requires non-resumable plain text generation")
             if self.tokenizer is None:
-                self.tokenizer = cached_tokenizer_from_config(self.aphrodite_config.model_config)
+                self.tokenizer = cached_tokenizer_from_config(self.sonar_config.model_config)
             self.guards[request.request_id] = RequestGuard(request, self.tokenizer)
             if (
                 params.num_logprobs is not None

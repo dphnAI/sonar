@@ -8,9 +8,9 @@ from typing import Annotated, Any, Literal
 
 from pydantic import AliasChoices, Field, model_validator
 
-import aphrodite.envs as envs
-from aphrodite.config import ModelConfig
-from aphrodite.entrypoints.generate.base.protocol import (
+import sonar.envs as envs
+from sonar.config import ModelConfig
+from sonar.entrypoints.generate.base.protocol import (
     AnyResponseFormat,
     MMPayload,
     PerRequestMetrics,
@@ -22,14 +22,14 @@ from aphrodite.entrypoints.generate.base.protocol import (
     validate_structural_tag_response_format,
     validate_structured_outputs_structural_tag,
 )
-from aphrodite.entrypoints.openai.extended_sampling import ExtendedSamplingRequest
-from aphrodite.entrypoints.serve.engine.protocol import OpenAIBaseModel, UsageInfo
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.logger import init_logger
-from aphrodite.logprobs import Logprob
-from aphrodite.outputs import WeightVersionSpan
-from aphrodite.renderers import TokenizeParams
-from aphrodite.sampling_params import (
+from sonar.entrypoints.openai.extended_sampling import ExtendedSamplingRequest
+from sonar.entrypoints.serve.engine.protocol import OpenAIBaseModel, UsageInfo
+from sonar.exceptions import SonarValidationError
+from sonar.logger import init_logger
+from sonar.logprobs import Logprob
+from sonar.outputs import WeightVersionSpan
+from sonar.renderers import TokenizeParams
+from sonar.sampling_params import (
     BeamSearchParams,
     RepetitionDetectionParams,
     RequestOutputKind,
@@ -37,8 +37,8 @@ from aphrodite.sampling_params import (
     StructuredOutputsParams,
     ThinkingTokenBudget,
 )
-from aphrodite.utils import random_uuid
-from aphrodite.utils.collection_utils import is_list_of
+from sonar.utils import random_uuid
+from sonar.utils.collection_utils import is_list_of
 
 logger = init_logger(__name__)
 
@@ -243,9 +243,9 @@ class CompletionRequest(ExtendedSamplingRequest):
         description="ECTransfer parameters used for encoder-cache disaggregated serving.",
     )
 
-    aphrodite_xargs: dict[str, str | int | float | list[str | int | float]] | None = Field(
+    sonar_xargs: dict[str, str | int | float | list[str | int | float]] | None = Field(
         default=None,
-        validation_alias=AliasChoices("aphrodite_xargs", "aphrodite_xargs"),
+        validation_alias=AliasChoices("sonar_xargs", "sonar_xargs"),
         description=(
             "Additional request parameters with (list of) string or numeric values, used by custom extensions."
         ),
@@ -373,7 +373,7 @@ class CompletionRequest(ExtendedSamplingRequest):
         if (skip_special_tokens := self.skip_special_tokens) is None:
             skip_special_tokens = default_sampling_params.get("skip_special_tokens", True)
 
-        extra_args: dict[str, Any] = self.aphrodite_xargs if self.aphrodite_xargs else {}
+        extra_args: dict[str, Any] = self.sonar_xargs if self.sonar_xargs else {}
         if self.kv_transfer_params:
             # Pass in kv_transfer_params via extra_args
             extra_args["kv_transfer_params"] = self.kv_transfer_params
@@ -451,7 +451,7 @@ class CompletionRequest(ExtendedSamplingRequest):
                 else getattr(response_format, "json_schema", None)
             )
             if json_schema is None:
-                raise AphroditeValidationError(
+                raise SonarValidationError(
                     "When response_format type is 'json_schema', the 'json_schema' field must be provided.",
                     parameter="response_format",
                 )
@@ -479,7 +479,7 @@ class CompletionRequest(ExtendedSamplingRequest):
             for k in ("json", "regex", "choice")
         )
         if count > 1:
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 "You can only use one kind of constraints for structured outputs ('json', 'regex' or 'choice').",
                 parameter="structured_outputs",
             )
@@ -492,27 +492,27 @@ class CompletionRequest(ExtendedSamplingRequest):
         if not isinstance(data, dict):
             return data
         if data.get("logprob_token_ids") and data.get("use_beam_search"):
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 "`logprob_token_ids` is not supported with beam search.",
                 parameter="logprob_token_ids",
             )
 
         if data.get("use_beam_search") and data.get("echo") and data.get("logprobs") is not None:
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 "`echo` with `logprobs` is not supported with beam search "
                 "because beam search does not compute prompt logprobs.",
                 parameter="echo",
             )
 
         if data.get("logprob_token_ids") and data.get("echo") and data.get("max_tokens") == 0:
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 "`logprob_token_ids` is not supported when `echo=True` and "
                 "`max_tokens=0` because no output tokens are generated.",
                 parameter="logprob_token_ids",
             )
 
         if data.get("logprob_token_ids") and data.get("logprobs") is None:
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 "when using `logprob_token_ids`, `logprobs` must be set.",
                 parameter="logprob_token_ids",
             )
@@ -524,7 +524,7 @@ class CompletionRequest(ExtendedSamplingRequest):
         for field_name in ("prompt_logprobs", "logprobs"):
             field_value = data.get(field_name)
             if field_value is not None and not isinstance(field_value, (int, float)):
-                raise AphroditeValidationError(
+                raise SonarValidationError(
                     f"`{field_name}` must be an integer.",
                     parameter=field_name,
                     value=field_value,
@@ -532,19 +532,19 @@ class CompletionRequest(ExtendedSamplingRequest):
 
         if (prompt_logprobs := data.get("prompt_logprobs")) is not None:
             if data.get("stream") and (prompt_logprobs > 0 or prompt_logprobs == -1):
-                raise AphroditeValidationError(
+                raise SonarValidationError(
                     "`prompt_logprobs` are not available when `stream=True`.",
                     parameter="prompt_logprobs",
                 )
 
             if prompt_logprobs < 0 and prompt_logprobs != -1:
-                raise AphroditeValidationError(
+                raise SonarValidationError(
                     "`prompt_logprobs` must be a positive value or -1.",
                     parameter="prompt_logprobs",
                     value=prompt_logprobs,
                 )
         if (logprobs := data.get("logprobs")) is not None and logprobs < 0 and logprobs != -1:
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 "`logprobs` must be a positive value or -1.",
                 parameter="logprobs",
                 value=logprobs,
@@ -558,7 +558,7 @@ class CompletionRequest(ExtendedSamplingRequest):
         if not isinstance(data, dict):
             return data
         if data.get("stream_options") and not data.get("stream"):
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 "Stream options can only be defined when `stream=True`.",
                 parameter="stream_options",
             )
@@ -577,7 +577,7 @@ class CompletionRequest(ExtendedSamplingRequest):
         embeds_is_empty = prompt_embeds is None or (isinstance(prompt_embeds, list) and len(prompt_embeds) == 0)
 
         if prompt_is_empty and embeds_is_empty:
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 "Either prompt or prompt_embeds must be provided and non-empty.",
                 parameter="prompt",
             )
@@ -589,24 +589,24 @@ class CompletionRequest(ExtendedSamplingRequest):
     def validate_prompt_list_length(cls, data):
         if not isinstance(data, dict):
             return data
-        max_prompts = envs.APHRODITE_MAX_COMPLETION_PROMPTS
+        max_prompts = envs.SONAR_MAX_COMPLETION_PROMPTS
 
         prompt = data.get("prompt")
         if isinstance(prompt, list) and len(prompt) > 0 and not is_list_of(prompt, int) and len(prompt) > max_prompts:
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 f"prompt list length {len(prompt)} exceeds the maximum "
                 f"allowed count of {max_prompts}. To increase this "
-                "limit, set the APHRODITE_MAX_COMPLETION_PROMPTS "
+                "limit, set the SONAR_MAX_COMPLETION_PROMPTS "
                 "environment variable.",
                 parameter="prompt",
             )
 
         prompt_embeds = data.get("prompt_embeds")
         if isinstance(prompt_embeds, list) and len(prompt_embeds) > max_prompts:
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 f"prompt_embeds list length {len(prompt_embeds)} exceeds "
                 f"the maximum allowed count of {max_prompts}. To increase "
-                "this limit, set the APHRODITE_MAX_COMPLETION_PROMPTS "
+                "this limit, set the SONAR_MAX_COMPLETION_PROMPTS "
                 "environment variable.",
                 parameter="prompt_embeds",
             )
@@ -663,7 +663,7 @@ class CompletionResponse(OpenAIBaseModel):
     system_fingerprint: str | None = None
     usage: UsageInfo
 
-    # Aphrodite-specific fields that are not in OpenAI spec
+    # Sonar-specific fields that are not in OpenAI spec
     kv_transfer_params: dict[str, Any] | None = Field(default=None, description="KVTransfer parameters.")
     ec_transfer_params: dict[str, Any] | None = Field(default=None, description="ECTransfer parameters.")
     metrics: PerRequestMetrics | None = None
@@ -702,5 +702,5 @@ class CompletionStreamResponse(OpenAIBaseModel):
     # without the per-chunk serialization overhead.
     system_fingerprint: str | None = None
     metrics: PerRequestMetrics | None = None
-    # Aphrodite-specific: KV transfer params returned with the final chunk
+    # Sonar-specific: KV transfer params returned with the final chunk
     kv_transfer_params: dict[str, Any] | None = Field(default=None, description="KVTransfer parameters.")

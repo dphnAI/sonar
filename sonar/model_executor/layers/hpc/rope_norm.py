@@ -13,15 +13,15 @@ from typing import Any
 
 import torch
 
-from aphrodite.config import get_current_aphrodite_config_or_none
-from aphrodite.forward_context import ForwardContext, get_forward_context
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.custom_op import CustomOp
-from aphrodite.model_executor.layers.hpc.hpc_module import HpcModule
-from aphrodite.utils.torch_utils import direct_register_custom_op
-from aphrodite.v1.attention.backends.hpc_attn import HpcAttnMetadata
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
-from aphrodite.v1.attention.backends.utils import NULL_BLOCK_ID
+from sonar.config import get_current_sonar_config_or_none
+from sonar.forward_context import ForwardContext, get_forward_context
+from sonar.logger import init_logger
+from sonar.model_executor.custom_op import CustomOp
+from sonar.model_executor.layers.hpc.hpc_module import HpcModule
+from sonar.utils.torch_utils import direct_register_custom_op
+from sonar.v1.attention.backends.hpc_attn import HpcAttnMetadata
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
+from sonar.v1.attention.backends.utils import NULL_BLOCK_ID
 
 logger = init_logger(__name__)
 
@@ -92,7 +92,7 @@ class HpcRopeNorm(CustomOp, HpcModule):
     (built in float32 when HPC is active), eliminating the derived copy.
 
     forward() is dispatched by CustomOp framework:
-    - In compiled mode: forward_cuda() calls torch.ops.aphrodite.hpc_rope_norm_forward
+    - In compiled mode: forward_cuda() calls torch.ops.sonar.hpc_rope_norm_forward
       as a splitting point — internal Python control flow is opaque
       to torch.compile (its kernel launches can still be CUDA-graph captured).
     - In eager/native mode: forward_native() falls back to forward_cuda().
@@ -168,8 +168,8 @@ class HpcRopeNorm(CustomOp, HpcModule):
     ) -> bool:
         """Check whether HpcRopeNorm is supported for the given config."""
         # HpcRopeNorm is only enabled together with the HPC attention backend.
-        aphrodite_config = get_current_aphrodite_config_or_none()
-        if aphrodite_config is None or aphrodite_config.attention_config.backend != AttentionBackendEnum.HPC_ATTN:
+        sonar_config = get_current_sonar_config_or_none()
+        if sonar_config is None or sonar_config.attention_config.backend != AttentionBackendEnum.HPC_ATTN:
             return False
 
         if kv_cache_dtype not in ("fp8_e4m3", "auto", "bfloat16"):
@@ -229,7 +229,7 @@ class HpcRopeNorm(CustomOp, HpcModule):
             device=qkv.device,
         )
 
-        torch.ops.aphrodite.hpc_rope_norm_forward(qkv, output, layer_name)
+        torch.ops.sonar.hpc_rope_norm_forward(qkv, output, layer_name)
         return output
 
     def _kv_write_scratch(self, cache: torch.Tensor) -> torch.Tensor:

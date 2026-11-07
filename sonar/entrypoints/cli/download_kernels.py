@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""The `download-kernels` subcommand for the Aphrodite CLI.
+"""The `download-kernels` subcommand for the Sonar CLI.
 
-Installs the precompiled kernels that Aphrodite's dependencies would otherwise
-download or compile at startup. Run it after installing or upgrading Aphrodite:
+Installs the precompiled kernels that Sonar's dependencies would otherwise
+download or compile at startup. Run it after installing or upgrading Sonar:
 
-    aphrodite download-kernels
+    sonar download-kernels
 """
 
 import argparse
@@ -15,11 +15,11 @@ import sys
 import typing
 from importlib.util import find_spec
 
-from aphrodite.entrypoints.cli.types import CLISubcommand
-from aphrodite.logger import init_logger
+from sonar.entrypoints.cli.types import CLISubcommand
+from sonar.logger import init_logger
 
 if typing.TYPE_CHECKING:
-    from aphrodite.utils.argparse_utils import FlexibleArgumentParser
+    from sonar.utils.argparse_utils import FlexibleArgumentParser
 else:
     FlexibleArgumentParser = argparse.ArgumentParser
 
@@ -30,7 +30,7 @@ def _download_flashinfer_kernels(dry_run: bool) -> int:
     if find_spec("flashinfer") is None:
         logger.info("FlashInfer is not installed; skipping its kernels.")
         return 0
-    from aphrodite.utils.flashinfer import has_flashinfer_jit_cache_wheels
+    from sonar.utils.flashinfer import has_flashinfer_jit_cache_wheels
 
     cmd = [sys.executable, "-m", "flashinfer"]
     if has_flashinfer_jit_cache_wheels():
@@ -49,7 +49,7 @@ def _download_flashinfer_kernels(dry_run: bool) -> int:
 
 
 class DownloadKernelsSubcommand(CLISubcommand):
-    """The `download-kernels` subcommand for the Aphrodite CLI."""
+    """The `download-kernels` subcommand for the Sonar CLI."""
 
     name = "download-kernels"
 
@@ -71,11 +71,11 @@ class DownloadKernelsSubcommand(CLISubcommand):
             self.name,
             help="Install precompiled kernels for faster startup.",
             description=(
-                "Install the precompiled kernels that Aphrodite's dependencies would "
+                "Install the precompiled kernels that Sonar's dependencies would "
                 "otherwise download or compile at startup. Run it after "
-                "installing or upgrading Aphrodite."
+                "installing or upgrading Sonar."
             ),
-            usage="aphrodite download-kernels [--dry-run]",
+            usage="sonar download-kernels [--dry-run]",
         )
         return DownloadKernelsSubcommand.add_cli_args(parser)
 

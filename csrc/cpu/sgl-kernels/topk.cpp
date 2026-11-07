@@ -6,7 +6,7 @@
 // `sigmoid`/`softmax`/`apply_bias`/`sqrtsoftplus` scoring helpers. See
 // `biased_topk_cpu`/`hash_topk_cpu` below for the one deliberate deviation
 // from the upstream kernel (routed_scaling_factor handling when no shared
-// expert is fused into routing, Aphrodite's CPU DeepSeek-V4 calling
+// expert is fused into routing, Sonar's CPU DeepSeek-V4 calling
 // convention).
 //
 // clang-format off
@@ -339,7 +339,7 @@ void hash_topk_kernel_impl(
 
       // renormalize routed weights (for non-softmax scoring). Unlike the
       // upstream kernel, always fold routed_scaling_factor in here rather
-      // than only applying it to the fused-shared-expert slot below: Aphrodite's
+      // than only applying it to the fused-shared-expert slot below: Sonar's
       // DeepSeek-V4 CPU hash-routed layers never fuse a shared expert into
       // this routing table (num_fused_shared_experts is always 0 on this
       // call path), so this is the only place the scaling factor can be
@@ -657,7 +657,7 @@ std::tuple<at::Tensor, at::Tensor> hash_topk_cpu(
 //
 // Differences from upstream:
 // - `out_page_indices` is still computed (required by the kernel contract)
-//   but Aphrodite's caller only consumes `out_raw_indices` (local/compressed-
+//   but Sonar's caller only consumes `out_raw_indices` (local/compressed-
 //   context positions -- `DeepseekV4CPUAttention.forward_mqa` resolves those
 //   to physical slots itself via `map_local_to_global_slots_cpu`).
 // - `page_size` was already a runtime argument upstream, unlike

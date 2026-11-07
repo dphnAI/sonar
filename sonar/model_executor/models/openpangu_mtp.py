@@ -23,40 +23,40 @@ from collections.abc import Iterable
 import torch
 import torch.nn as nn
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import SonarConfig
 
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.model_executor.layers.fused_moe import (
     fused_moe_make_expert_params_mapping,
 )
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
-from aphrodite.model_executor.models.deepseek_mtp import (
+from sonar.model_executor.model_loader.weight_utils import default_weight_loader
+from sonar.model_executor.models.deepseek_mtp import (
     DeepSeekMultiTokenPredictor,
     DeepSeekMultiTokenPredictorLayer,
     SharedHead,
 )
-from aphrodite.model_executor.models.utils import maybe_prefix
-from aphrodite.sequence import IntermediateTensors
+from sonar.model_executor.models.utils import maybe_prefix
+from sonar.sequence import IntermediateTensors
 
 from .openpangu import OpenPanguDecoderLayer
 
 
 class OpenPanguMultiTokenPredictorLayer(DeepSeekMultiTokenPredictorLayer):
-    def __init__(self, aphrodite_config: AphroditeConfig, prefix: str) -> None:
+    def __init__(self, sonar_config: SonarConfig, prefix: str) -> None:
         nn.Module.__init__(self)
 
-        speculative_config = aphrodite_config.speculative_config
+        speculative_config = sonar_config.speculative_config
         assert speculative_config is not None
         config = speculative_config.draft_model_config.hf_config
         self.config = config
-        quant_config = aphrodite_config.quant_config
+        quant_config = sonar_config.quant_config
 
         self.enorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.hnorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -66,19 +66,19 @@ class OpenPanguMultiTokenPredictorLayer(DeepSeekMultiTokenPredictorLayer):
             quant_config=quant_config,
             prefix=maybe_prefix(prefix, "shared_head"),
         )
-        self.mtp_block = OpenPanguDecoderLayer(config, prefix, aphrodite_config)
+        self.mtp_block = OpenPanguDecoderLayer(config, prefix, sonar_config)
 
 
 class OpenPanguMultiTokenPredictor(DeepSeekMultiTokenPredictor):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         nn.Module.__init__(self)
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
         self.mtp_start_layer_idx = config.num_hidden_layers
         self.num_mtp_layers = config.num_nextn_predict_layers
         # to map the exact layer index from weights
         self.layers = torch.nn.ModuleDict(
             {
-                str(idx): OpenPanguMultiTokenPredictorLayer(aphrodite_config, f"{prefix}.layers.{idx}")
+                str(idx): OpenPanguMultiTokenPredictorLayer(sonar_config, f"{prefix}.layers.{idx}")
                 for idx in range(
                     self.mtp_start_layer_idx,
                     self.mtp_start_layer_idx + self.num_mtp_layers,
@@ -94,12 +94,10 @@ class OpenPanguMultiTokenPredictor(DeepSeekMultiTokenPredictor):
 
 @support_torch_compile
 class OpenPanguMTP(nn.Module):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        self.config = aphrodite_config.model_config.hf_config
-        self.model = OpenPanguMultiTokenPredictor(
-            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
-        )
+        self.config = sonar_config.model_config.hf_config
+        self.model = OpenPanguMultiTokenPredictor(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.model.embed_input_ids(input_ids)

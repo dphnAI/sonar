@@ -60,7 +60,7 @@
   #define __HIP__RDNA3__
 #endif
 
-namespace aphrodite {
+namespace sonar {
 namespace gptq_rdna3 {
 
 // BLOCK_KN_SIZE = 256 (was 128 in exllama). Each block covers 256 K
@@ -916,7 +916,7 @@ void launch_gemm_q4_deterministic(const T* a, const uint32_t* b_q_weight,
 }
 
 }  // namespace gptq_rdna3
-}  // namespace aphrodite
+}  // namespace sonar
 
 // ---------------------------------------------------------------------------
 // Public entry point.
@@ -1021,19 +1021,18 @@ torch::Tensor gptq_gemm_rdna3(torch::Tensor a, torch::Tensor b_q_weight,
   // this replaces was order-dependent and produced different results for
   // identical inputs on gfx11 once more than a few split blocks contended.
   if (a.scalar_type() == torch::kHalf) {
-    aphrodite::gptq_rdna3::launch_gemm_q4_deterministic<half>(
+    sonar::gptq_rdna3::launch_gemm_q4_deterministic<half>(
         (const half*)a.data_ptr(), (const uint32_t*)b_q_weight.data_ptr(),
         (const uint32_t*)b_qzeros.data_ptr(), (const half*)b_scales.data_ptr(),
         (half*)c.data_ptr(), size_m, size_n, size_k, groups, use_v2_format,
         stream);
   } else {
-    aphrodite::gptq_rdna3::launch_gemm_q4_deterministic<
-        aphrodite::gptq_rdna3::bf16_t>(
-        (const aphrodite::gptq_rdna3::bf16_t*)a.data_ptr(),
+    sonar::gptq_rdna3::launch_gemm_q4_deterministic<sonar::gptq_rdna3::bf16_t>(
+        (const sonar::gptq_rdna3::bf16_t*)a.data_ptr(),
         (const uint32_t*)b_q_weight.data_ptr(),
         (const uint32_t*)b_qzeros.data_ptr(),
-        (const aphrodite::gptq_rdna3::bf16_t*)b_scales.data_ptr(), g_idx_ptr,
-        (aphrodite::gptq_rdna3::bf16_t*)c.data_ptr(), size_m, size_n, size_k,
+        (const sonar::gptq_rdna3::bf16_t*)b_scales.data_ptr(), g_idx_ptr,
+        (sonar::gptq_rdna3::bf16_t*)c.data_ptr(), size_m, size_n, size_k,
         groups, use_v2_format, stream);
   }
 

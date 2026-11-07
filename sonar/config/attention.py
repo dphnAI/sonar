@@ -6,9 +6,9 @@ from typing import Any, Literal
 
 from pydantic import Field, field_validator
 
-from aphrodite.config.utils import config
-from aphrodite.v1.attention.backends.mla.prefill.registry import MLAPrefillBackendEnum
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
+from sonar.config.utils import config
+from sonar.v1.attention.backends.mla.prefill.registry import MLAPrefillBackendEnum
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
 
 IndexerKVDType = Literal["auto", "bf16", "fp8", "mxfp4", "nvfp4"]
 MiniMaxM3MSADecodeBackend = Literal["triton", "cutlass"]
@@ -35,7 +35,7 @@ class HiSparseConfig:
 
 @config
 class AttentionConfig:
-    """Configuration for attention mechanisms in Aphrodite."""
+    """Configuration for attention mechanisms in Sonar."""
 
     backend: AttentionBackendEnum | None = None
     """Attention backend to use. Use "auto" or None for automatic selection."""
@@ -57,7 +57,7 @@ class AttentionConfig:
     that is invalid for that kind raises at startup."""
 
     flash_attn_version: Literal[2, 3, 4] | None = None
-    """Force aphrodite to use a specific flash-attention version (2, 3, or 4).
+    """Force sonar to use a specific flash-attention version (2, 3, or 4).
     Only valid when using the flash-attention backend."""
 
     flash_attn_max_num_splits_for_cuda_graph: int = 32
@@ -167,12 +167,12 @@ class AttentionConfig:
 
     flex_attn_block_m: int | None = None
     """Triton kernel BLOCK_M tile size for flex attention.
-    Must be a power of 2 >= 16. If None and APHRODITE_BATCH_INVARIANT=1,
+    Must be a power of 2 >= 16. If None and SONAR_BATCH_INVARIANT=1,
     defaults to 16."""
 
     flex_attn_block_n: int | None = None
     """Triton kernel BLOCK_N tile size for flex attention.
-    Must be a power of 2 >= 16. If None and APHRODITE_BATCH_INVARIANT=1,
+    Must be a power of 2 >= 16. If None and SONAR_BATCH_INVARIANT=1,
     defaults to 16."""
 
     flex_attn_q_block_size: int | None = None
@@ -227,7 +227,7 @@ class AttentionConfig:
         excluding anything before input ids/embeddings and after
         the final hidden states.
         """
-        from aphrodite.config.utils import get_hash_factors, hash_factors
+        from sonar.config.utils import get_hash_factors, hash_factors
 
         factors = get_hash_factors(self, set())
         return hash_factors(factors)
@@ -262,7 +262,7 @@ class AttentionConfig:
         Keys must be valid `KVCacheSpecKind` values; values are parsed like
         `backend` (enum name, case-insensitive).
         """
-        from aphrodite.v1.kv_cache_interface import KVCacheSpecKind
+        from sonar.v1.kv_cache_interface import KVCacheSpecKind
 
         if not isinstance(value, dict):
             return value

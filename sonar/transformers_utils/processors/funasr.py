@@ -16,7 +16,7 @@ from transformers.feature_extraction_sequence_utils import SequenceFeatureExtrac
 from transformers.processing_utils import ProcessorMixin
 from transformers.utils import TensorType
 
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 

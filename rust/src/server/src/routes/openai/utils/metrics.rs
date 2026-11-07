@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-use aphrodite_engine_core_client::protocol::output::RequestSpecDecodeMetrics;
-use aphrodite_llm::RequestTimestamps;
 use serde::Serialize;
+use sonar_engine_core_client::protocol::output::RequestSpecDecodeMetrics;
+use sonar_llm::RequestTimestamps;
 
 /// Per-request response timing fields matching Python's `PerRequestMetrics`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
@@ -93,7 +93,7 @@ impl From<PerRequestMetrics> for StreamPerRequestMetrics {
     }
 }
 
-/// Mirrors the Python Aphrodite `SpeculativeDecodingMetrics` class.
+/// Mirrors the Python Sonar `SpeculativeDecodingMetrics` class.
 ///
 /// Derived from the raw engine accumulator the same way as Python
 /// `RequestSpecDecodeMetrics.to_dict`.

@@ -3,15 +3,15 @@
 
 import torch
 
-from aphrodite.distributed import (
+from sonar.distributed import (
     tensor_model_parallel_all_gather,
     tensor_model_parallel_all_reduce,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
-from aphrodite.triton_utils.allocation import set_triton_allocator
-from aphrodite.utils.mem_utils import get_max_shared_memory_bytes
-from aphrodite.utils.torch_utils import async_tensor_h2d, direct_register_custom_op
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
+from sonar.triton_utils.allocation import set_triton_allocator
+from sonar.utils.mem_utils import get_max_shared_memory_bytes
+from sonar.utils.torch_utils import async_tensor_h2d, direct_register_custom_op
 
 from .utils import FUSED_MOE_LORA_TWO_KERNEL_MAX_TOKENS, supports_pdl, supports_tma
 
@@ -1623,9 +1623,9 @@ try:
         mutates_args=["output"],
     )
 
-    fused_moe_lora = torch.ops.aphrodite.fused_moe_lora
-    fused_moe_lora_shrink = torch.ops.aphrodite.fused_moe_lora_shrink
-    fused_moe_lora_expand = torch.ops.aphrodite.fused_moe_lora_expand
+    fused_moe_lora = torch.ops.sonar.fused_moe_lora
+    fused_moe_lora_shrink = torch.ops.sonar.fused_moe_lora_shrink
+    fused_moe_lora_expand = torch.ops.sonar.fused_moe_lora_expand
 
 except AttributeError:
     fused_moe_lora = _fused_moe_lora

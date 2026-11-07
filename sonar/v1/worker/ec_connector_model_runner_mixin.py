@@ -8,13 +8,13 @@ from typing import TYPE_CHECKING
 
 import torch
 
-from aphrodite.distributed.ec_transfer import get_ec_transfer, has_ec_transfer
-from aphrodite.distributed.ec_transfer.ec_connector.base import ECConnectorBase
-from aphrodite.logger import init_logger
-from aphrodite.v1.outputs import ECConnectorOutput
+from sonar.distributed.ec_transfer import get_ec_transfer, has_ec_transfer
+from sonar.distributed.ec_transfer.ec_connector.base import ECConnectorBase
+from sonar.logger import init_logger
+from sonar.v1.outputs import ECConnectorOutput
 
 if TYPE_CHECKING:
-    from aphrodite.v1.core.sched.output import SchedulerOutput
+    from sonar.v1.core.sched.output import SchedulerOutput
 
 logger = init_logger(__name__)
 

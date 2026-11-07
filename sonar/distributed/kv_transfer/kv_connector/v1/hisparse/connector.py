@@ -9,46 +9,46 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed.kv_transfer.kv_connector.v1.base import (
+from sonar.config import SonarConfig
+from sonar.distributed.kv_transfer.kv_connector.v1.base import (
     KVConnectorBase_V1,
     KVConnectorMetadata,
     KVConnectorRole,
     KVConnectorWorkerMetadata,
     SupportsHMA,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.hisparse.stats import (
+from sonar.distributed.kv_transfer.kv_connector.v1.hisparse.stats import (
     HiSparseKVConnectorStats,
     HiSparsePromMetrics,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.hisparse.worker import (
+from sonar.distributed.kv_transfer.kv_connector.v1.hisparse.worker import (
     HiSparseConnectorWorker,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.metrics import (
+from sonar.distributed.kv_transfer.kv_connector.v1.metrics import (
     KVConnectorPromMetrics,
     KVConnectorStats,
     PromMetric,
     PromMetricT,
 )
-from aphrodite.logger import init_logger
-from aphrodite.v1.attention.backend import AttentionMetadata
-from aphrodite.v1.core.kv_cache_utils import KVCacheBlockCopy
-from aphrodite.v1.core.sched.output import SchedulerOutput
-from aphrodite.v1.hisparse.coordinator import get_hisparse_coordinator
-from aphrodite.v1.hisparse.layout import get_hisparse_steady_state_concurrency
-from aphrodite.v1.hisparse.types import (
+from sonar.logger import init_logger
+from sonar.v1.attention.backend import AttentionMetadata
+from sonar.v1.core.kv_cache_utils import KVCacheBlockCopy
+from sonar.v1.core.sched.output import SchedulerOutput
+from sonar.v1.hisparse.coordinator import get_hisparse_coordinator
+from sonar.v1.hisparse.layout import get_hisparse_steady_state_concurrency
+from sonar.v1.hisparse.types import (
     SparseKVOffloadCommand,
     SparseKVResidencyUpdate,
     SparseKVRowMirror,
 )
-from aphrodite.v1.outputs import KVConnectorOutput
+from sonar.v1.outputs import KVConnectorOutput
 
 if TYPE_CHECKING:
-    from aphrodite.forward_context import ForwardContext
-    from aphrodite.v1.core.kv_cache_manager import KVCacheBlocks, KVCacheManager
-    from aphrodite.v1.hisparse.coordinator import HiSparseCoordinator
-    from aphrodite.v1.kv_cache_interface import KVCacheConfig
-    from aphrodite.v1.request import Request
+    from sonar.forward_context import ForwardContext
+    from sonar.v1.core.kv_cache_manager import KVCacheBlocks, KVCacheManager
+    from sonar.v1.hisparse.coordinator import HiSparseCoordinator
+    from sonar.v1.kv_cache_interface import KVCacheConfig
+    from sonar.v1.request import Request
 
 logger = init_logger(__name__)
 
@@ -202,35 +202,35 @@ class HiSparseConnector(KVConnectorBase_V1, SupportsHMA):
     """Join the scheduler coordinator to the worker's transfer engine."""
 
     @classmethod
-    def get_required_kvcache_layout(cls, aphrodite_config: AphroditeConfig) -> str:
+    def get_required_kvcache_layout(cls, sonar_config: SonarConfig) -> str:
         return "BLHNC"
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         role: KVConnectorRole,
         kv_cache_config: KVCacheConfig,
     ) -> None:
-        super().__init__(aphrodite_config, role, kv_cache_config)
+        super().__init__(sonar_config, role, kv_cache_config)
         if kv_cache_config.hisparse_host_num_blocks is None:
             raise ValueError("HiSparseConnector requires a HiSparse host pool")
         self.connector_scheduler: HiSparseConnectorScheduler | None = None
         self.connector_worker: HiSparseConnectorWorker | None = None
         if role == KVConnectorRole.SCHEDULER:
-            speculative_config = aphrodite_config.speculative_config
+            speculative_config = sonar_config.speculative_config
             self.connector_scheduler = HiSparseConnectorScheduler(
                 async_speculative=bool(
-                    aphrodite_config.scheduler_config.async_scheduling and speculative_config is not None
+                    sonar_config.scheduler_config.async_scheduling and speculative_config is not None
                 ),
-                draft_kv_lookahead=aphrodite_config.num_lookahead_tokens,
+                draft_kv_lookahead=sonar_config.num_lookahead_tokens,
                 import_step_tokens=(
-                    1 + aphrodite_config.num_speculative_tokens + aphrodite_config.num_lookahead_tokens
-                    if aphrodite_config.num_speculative_tokens
+                    1 + sonar_config.num_speculative_tokens + sonar_config.num_lookahead_tokens
+                    if sonar_config.num_speculative_tokens
                     else 0
                 ),
             )
-            max_model_len = aphrodite_config.model_config.max_model_len
-            steady_concurrency = get_hisparse_steady_state_concurrency(aphrodite_config, kv_cache_config)
+            max_model_len = sonar_config.model_config.max_model_len
+            steady_concurrency = get_hisparse_steady_state_concurrency(sonar_config, kv_cache_config)
             logger.info_once(
                 "HiSparse steady-state maximum concurrency for %s tokens per "
                 "request: %.2fx (running requests reading from host).",
@@ -238,7 +238,7 @@ class HiSparseConnector(KVConnectorBase_V1, SupportsHMA):
                 steady_concurrency,
             )
         elif role == KVConnectorRole.WORKER:
-            self.connector_worker = HiSparseConnectorWorker(aphrodite_config, kv_cache_config)
+            self.connector_worker = HiSparseConnectorWorker(sonar_config, kv_cache_config)
         else:
             raise ValueError(f"Unsupported KV connector role: {role}")
 
@@ -291,12 +291,12 @@ class HiSparseConnector(KVConnectorBase_V1, SupportsHMA):
     @classmethod
     def build_prom_metrics(
         cls,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         metric_types: dict[type[PromMetric], type[PromMetricT]],
         labelnames: list[str],
         per_engine_labelvalues: dict[int, list[object]],
     ) -> KVConnectorPromMetrics:
-        return HiSparsePromMetrics(aphrodite_config, metric_types, labelnames, per_engine_labelvalues)
+        return HiSparsePromMetrics(sonar_config, metric_types, labelnames, per_engine_labelvalues)
 
     def start_load_kv(self, forward_context: ForwardContext, **kwargs: Any) -> None:
         assert self.connector_worker is not None

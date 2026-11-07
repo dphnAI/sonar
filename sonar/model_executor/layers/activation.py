@@ -8,12 +8,12 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from aphrodite import ir
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.custom_op import CustomOp
-from aphrodite.platforms import CpuArchEnum, current_platform
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.collection_utils import LazyDict
+from sonar import ir
+from sonar.logger import init_logger
+from sonar.model_executor.custom_op import CustomOp
+from sonar.platforms import CpuArchEnum, current_platform
+from sonar.triton_utils import tl, triton
+from sonar.utils.collection_utils import LazyDict
 
 logger = init_logger(__name__)
 

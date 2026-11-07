@@ -12,7 +12,7 @@ consumes.
 
 import torch
 
-from aphrodite.triton_utils import LOGE2, tl, triton
+from sonar.triton_utils import LOGE2, tl, triton
 
 
 @triton.jit

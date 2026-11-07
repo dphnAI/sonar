@@ -10,15 +10,15 @@ import torch
 from safetensors.torch import load as safetensors_load
 from torch import nn
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.pooler import PoolingParamsUpdate
-from aphrodite.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.tasks import PoolingTask
-from aphrodite.transformers_utils.repo_utils import get_hf_file_bytes
-from aphrodite.utils.torch_utils import async_tensor_h2d
-from aphrodite.v1.pool.metadata import PoolingMetadata
+from sonar.config import SonarConfig
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.pooler import PoolingParamsUpdate
+from sonar.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
+from sonar.sequence import IntermediateTensors
+from sonar.tasks import PoolingTask
+from sonar.transformers_utils.repo_utils import get_hf_file_bytes
+from sonar.utils.torch_utils import async_tensor_h2d
+from sonar.v1.pool.metadata import PoolingMetadata
 
 from ..layers.pooler import DispatchPooler
 from ..layers.pooler.tokwise import (
@@ -27,7 +27,7 @@ from ..layers.pooler.tokwise import (
     TokenPoolingMethodOutputItem,
 )
 from .interfaces import SupportsLateInteraction
-from .interfaces_base import AphroditeModelForPooling
+from .interfaces_base import SonarModelForPooling
 from .llama import LlamaForCausalLM
 from .qwen3 import Qwen3ForCausalLM, Qwen3Model
 from .utils import (
@@ -44,19 +44,19 @@ logger = logging.getLogger(__name__)
 class JinaForRanking(nn.Module, SupportsLateInteraction):
     is_pooling_model = True
 
-    hf_to_aphrodite_mapper = WeightsMapper(orig_to_new_prefix={"lm_head.": None})
+    hf_to_sonar_mapper = WeightsMapper(orig_to_new_prefix={"lm_head.": None})
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
 
         self.config = config
         self.projector_dim: int = config.embedding_size
 
-        self.aphrodite_config = aphrodite_config
+        self.sonar_config = sonar_config
         self.quant_config = quant_config
-        self.model = Qwen3Model(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = Qwen3Model(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
 
         self.projector = nn.Sequential(
             nn.Linear(config.hidden_size, config.hidden_size // 2, bias=False),
@@ -87,7 +87,7 @@ class JinaForRanking(nn.Module, SupportsLateInteraction):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
 
 class JinaForRankingPool(StepPool):
@@ -201,12 +201,12 @@ def _build_lora_pairs(
     return dict(lora_pairs)
 
 
-def _setup_jina_v5_task_and_pooler(model: nn.Module, aphrodite_config: AphroditeConfig) -> None:
+def _setup_jina_v5_task_and_pooler(model: nn.Module, sonar_config: SonarConfig) -> None:
     """Shared init for jina-embeddings-v5 wrappers: select task + build pooler."""
-    model._model_name = aphrodite_config.model_config.model
-    model._revision = aphrodite_config.model_config.revision
+    model._model_name = sonar_config.model_config.model
+    model._revision = sonar_config.model_config.revision
 
-    model._task = getattr(aphrodite_config.model_config.hf_config, "jina_task", _DEFAULT_TASK)
+    model._task = getattr(sonar_config.model_config.hf_config, "jina_task", _DEFAULT_TASK)
     if model._task not in _SUPPORTED_TASKS:
         logger.warning(
             "Unknown jina_task=%r. Falling back to %r.",
@@ -215,7 +215,7 @@ def _setup_jina_v5_task_and_pooler(model: nn.Module, aphrodite_config: Aphrodite
         )
         model._task = _DEFAULT_TASK
 
-    pooler_config = aphrodite_config.model_config.pooler_config
+    pooler_config = sonar_config.model_config.pooler_config
     assert pooler_config is not None
     model.pooler = DispatchPooler.for_embedding(pooler_config)
 
@@ -262,10 +262,10 @@ def _load_jina_v5_weights(model: nn.Module, weights: Iterable[tuple[str, torch.T
 
     loader = AutoWeightsLoader(model, ignore_unexpected_prefixes=["lm_head."])
     weights = _merge_weights(weights)
-    return loader.load_weights(weights, mapper=model.hf_to_aphrodite_mapper)
+    return loader.load_weights(weights, mapper=model.hf_to_sonar_mapper)
 
 
-class JinaEmbeddingsV5DecoderModel(Qwen3ForCausalLM, AphroditeModelForPooling):
+class JinaEmbeddingsV5DecoderModel(Qwen3ForCausalLM, SonarModelForPooling):
     """jina-embeddings-v5 with a Qwen3 decoder backbone (e.g. -small).
 
     Task-specific LoRA adapters are merged into the base weights at load time.
@@ -273,22 +273,22 @@ class JinaEmbeddingsV5DecoderModel(Qwen3ForCausalLM, AphroditeModelForPooling):
     """
 
     is_pooling_model = True
-    hf_to_aphrodite_mapper = Qwen3ForCausalLM.hf_to_aphrodite_mapper | WeightsMapper(orig_to_new_prefix={"": "model."})
+    hf_to_sonar_mapper = Qwen3ForCausalLM.hf_to_sonar_mapper | WeightsMapper(orig_to_new_prefix={"": "model."})
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         with no_init_weights(
             self,
             lambda mod: StageMissingLayer("output", mod),
             targets=(LogitsProcessor, ParallelLMHead),
         ):
-            super().__init__(aphrodite_config=aphrodite_config, prefix=prefix)
-        _setup_jina_v5_task_and_pooler(self, aphrodite_config)
+            super().__init__(sonar_config=sonar_config, prefix=prefix)
+        _setup_jina_v5_task_and_pooler(self, sonar_config)
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         return _load_jina_v5_weights(self, weights)
 
 
-class JinaEmbeddingsV5EncoderModel(LlamaForCausalLM, AphroditeModelForPooling):
+class JinaEmbeddingsV5EncoderModel(LlamaForCausalLM, SonarModelForPooling):
     """jina-embeddings-v5 with a bidirectional EuroBERT (Llama) encoder backbone.
 
     Used by encoder checkpoints such as jina-embeddings-v5-text-nano
@@ -298,16 +298,16 @@ class JinaEmbeddingsV5EncoderModel(LlamaForCausalLM, AphroditeModelForPooling):
     """
 
     is_pooling_model = True
-    hf_to_aphrodite_mapper = LlamaForCausalLM.hf_to_aphrodite_mapper | WeightsMapper(orig_to_new_prefix={"": "model."})
+    hf_to_sonar_mapper = LlamaForCausalLM.hf_to_sonar_mapper | WeightsMapper(orig_to_new_prefix={"": "model."})
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         with no_init_weights(
             self,
             lambda mod: StageMissingLayer("output", mod),
             targets=(LogitsProcessor, ParallelLMHead),
         ):
-            super().__init__(aphrodite_config=aphrodite_config, prefix=prefix)
-        _setup_jina_v5_task_and_pooler(self, aphrodite_config)
+            super().__init__(sonar_config=sonar_config, prefix=prefix)
+        _setup_jina_v5_task_and_pooler(self, sonar_config)
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         return _load_jina_v5_weights(self, weights)
@@ -323,8 +323,8 @@ class JinaEmbeddingsV5Model(JinaEmbeddingsV5DecoderModel):
     variant for encoder checkpoints.
     """
 
-    def __new__(cls, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
-        is_decoder = getattr(aphrodite_config.model_config.hf_config, "is_decoder", True)
+    def __new__(cls, *, sonar_config: SonarConfig, prefix: str = ""):
+        is_decoder = getattr(sonar_config.model_config.hf_config, "is_decoder", True)
         if not is_decoder:
-            return JinaEmbeddingsV5EncoderModel(aphrodite_config=aphrodite_config, prefix=prefix)
+            return JinaEmbeddingsV5EncoderModel(sonar_config=sonar_config, prefix=prefix)
         return super().__new__(cls)

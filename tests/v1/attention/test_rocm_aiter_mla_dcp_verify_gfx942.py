@@ -4,7 +4,7 @@
 
 Reproduces the attention shape of
 
-    aphrodite serve moonshotai/Kimi-K3 --tensor-parallel-size 8 \
+    sonar serve moonshotai/Kimi-K3 --tensor-parallel-size 8 \
         --decode-context-parallel-size 8 \
         --speculative-config '{"method": "dspark", "num_speculative_tokens": 5}'
 
@@ -25,13 +25,13 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.utils.math_utils import cdiv
+from sonar.platforms import current_platform
+from sonar.utils.math_utils import cdiv
 
 if not current_platform.is_rocm():
     pytest.skip("ROCm AITER MLA tests", allow_module_level=True)
 
-from aphrodite._aiter_ops import is_aiter_found  # noqa: E402
+from sonar._aiter_ops import is_aiter_found  # noqa: E402
 
 # DeepSeek-R1 supplies the MLA dims, which Kimi-K3 and DeepSeek-V3 share; only
 # the head count is overridden.
@@ -48,7 +48,7 @@ FP8_KV_SCALE = 0.05
 def _on_gfx942() -> bool:
     if not (is_aiter_found() and torch.accelerator.is_available()):
         return False
-    from aphrodite.platforms.rocm import on_gfx942
+    from sonar.platforms.rocm import on_gfx942
 
     return on_gfx942()
 
@@ -68,9 +68,9 @@ class _FakeGroup:
 @pytest.fixture
 def fake_dcp_groups(monkeypatch):
     """Point every importer of get_dcp_group at a settable rank stub."""
-    import aphrodite.distributed.parallel_state as ps
-    import aphrodite.model_executor.layers.attention.mla_attention as mla_attention
-    import aphrodite.v1.attention.backends.mla.rocm_aiter_mla as backend
+    import sonar.distributed.parallel_state as ps
+    import sonar.model_executor.layers.attention.mla_attention as mla_attention
+    import sonar.v1.attention.backends.mla.rocm_aiter_mla as backend
 
     group = _FakeGroup(DCP, 0)
     for module in (ps, mla_attention, backend):
@@ -79,10 +79,10 @@ def fake_dcp_groups(monkeypatch):
     return group
 
 
-def _aphrodite_config(heads_per_rank: int, qlen: int, fp8_kv: bool):
-    from tests.v1.attention.utils import create_aphrodite_config
+def _sonar_config(heads_per_rank: int, qlen: int, fp8_kv: bool):
+    from tests.v1.attention.utils import create_sonar_config
 
-    config = create_aphrodite_config(
+    config = create_sonar_config(
         model_name=MODEL,
         max_model_len=CTX + qlen,
         max_num_seqs=NUM_REQS,
@@ -101,7 +101,7 @@ def _aphrodite_config(heads_per_rank: int, qlen: int, fp8_kv: bool):
 
 def _ctx_layer(monkeypatch: pytest.MonkeyPatch):
     """The registered-layer fields MLACommonMetadataBuilder.__init__ reads."""
-    from aphrodite.v1.attention.ops.dcp import MLADCPManager
+    from sonar.v1.attention.ops.dcp import MLADCPManager
 
     dcp_manager = object.__new__(MLADCPManager)
     monkeypatch.setattr(dcp_manager, "init_kv_gather", lambda *args, **kwargs: None)
@@ -122,7 +122,7 @@ def _ctx_layer(monkeypatch: pytest.MonkeyPatch):
 
 def _impl(dcp_rank: int, heads_per_rank: int, fp8_kv: bool):
     """forward_mqa needs these attributes, not the weight-loading __init__."""
-    from aphrodite.v1.attention.backends.mla.rocm_aiter_mla import AiterMLAImpl
+    from sonar.v1.attention.backends.mla.rocm_aiter_mla import AiterMLAImpl
 
     impl = object.__new__(AiterMLAImpl)
     impl.num_heads = heads_per_rank
@@ -139,8 +139,8 @@ def _impl(dcp_rank: int, heads_per_rank: int, fp8_kv: bool):
 
 def _run_rank(config, spec, layer_name, group, rank, q, kv_cache_src, k_scale):
     """Shard the KV round-robin onto ``rank`` and run its verify step."""
-    from aphrodite.v1.attention.backend import CommonAttentionMetadata
-    from aphrodite.v1.attention.backends.mla.rocm_aiter_mla import AiterMLAMetadataBuilder
+    from sonar.v1.attention.backend import CommonAttentionMetadata
+    from sonar.v1.attention.backends.mla.rocm_aiter_mla import AiterMLAMetadataBuilder
 
     device = q.device
     qlen, heads = q.shape[1], q.shape[2] // DCP
@@ -203,9 +203,9 @@ def _run_rank(config, spec, layer_name, group, rank, q, kv_cache_src, k_scale):
 )
 @torch.inference_mode()
 def test_dcp_verify_matches_attention(monkeypatch, fake_dcp_groups, heads_per_rank, qlen, block_size, fp8_kv, route):
-    from aphrodite.config import set_current_aphrodite_config
-    from aphrodite.v1.kv_cache_interface import MLAAttentionSpec
-    from aphrodite.v1.worker.workspace import (
+    from sonar.config import set_current_sonar_config
+    from sonar.v1.kv_cache_interface import MLAAttentionSpec
+    from sonar.v1.worker.workspace import (
         init_workspace_manager,
         is_workspace_manager_initialized,
     )
@@ -232,9 +232,9 @@ def test_dcp_verify_matches_attention(monkeypatch, fake_dcp_groups, heads_per_ra
         kv_cache_src = kv.to(torch.bfloat16)
     kv_ref = kv_cache_src.float() * k_scale
 
-    config = _aphrodite_config(heads_per_rank, qlen, fp8_kv)
+    config = _sonar_config(heads_per_rank, qlen, fp8_kv)
     layer_name = "model.layers.0.self_attn.attn"
-    with set_current_aphrodite_config(config):
+    with set_current_sonar_config(config):
         config.compilation_config.static_forward_context[layer_name] = _ctx_layer(monkeypatch)
         spec = MLAAttentionSpec(
             block_size=block_size,
@@ -284,8 +284,8 @@ def test_dcp_verify_matches_attention(monkeypatch, fake_dcp_groups, heads_per_ra
 )
 def test_segmented_lds_gate_matches_the_kernel(fp8_kv, num_heads, block_size):
     """The gate must flag exactly the shapes AITER segmented MLA cannot compile."""
-    from aphrodite.triton_utils import triton
-    from aphrodite.v1.attention.backends.mla.rocm_aiter_mla import (
+    from sonar.triton_utils import triton
+    from sonar.v1.attention.backends.mla.rocm_aiter_mla import (
         _get_segmented_mla_decode,
         _segmented_mla_fits_lds,
         _segmented_mla_page_size,

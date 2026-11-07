@@ -6,16 +6,16 @@ from typing import Annotated, Any, TypeAlias
 
 from pydantic import ConfigDict, Field, model_validator
 
-from aphrodite.config import ModelConfig
-from aphrodite.entrypoints.generate.base.protocol import AnyResponseFormat
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.config import ModelConfig
+from sonar.entrypoints.generate.base.protocol import AnyResponseFormat
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionRequest,
     ChatCompletionToolsParam,
 )
-from aphrodite.entrypoints.serve.engine.protocol import OpenAIBaseModel
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.renderers import ChatParams, TokenizeParams, merge_kwargs
-from aphrodite.renderers.chat_utils import (
+from sonar.entrypoints.serve.engine.protocol import OpenAIBaseModel
+from sonar.exceptions import SonarValidationError
+from sonar.renderers import ChatParams, TokenizeParams, merge_kwargs
+from sonar.renderers.chat_utils import (
     ChatCompletionMessageParam,
     ChatTemplateContentFormatOption,
 )
@@ -119,7 +119,7 @@ class TokenizeChatRequest(OpenAIBaseModel):
         if not isinstance(data, dict):
             return data
         if data.get("continue_final_message") and data.get("add_generation_prompt"):
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 "Cannot set both `continue_final_message` and `add_generation_prompt` to True.",
             )
         return data

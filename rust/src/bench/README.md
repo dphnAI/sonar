@@ -1,9 +1,9 @@
-# aphrodite-bench
+# sonar-bench
 
-High-performance Rust benchmark client for Aphrodite serving endpoints. A drop-in replacement for `aphrodite bench serve` with near-instant startup, parallel dataset generation, and a fraction of the memory overhead — and no Python at runtime.
+High-performance Rust benchmark client for Sonar serving endpoints. A drop-in replacement for `sonar bench serve` with near-instant startup, parallel dataset generation, and a fraction of the memory overhead — and no Python at runtime.
 
 ```bash
-aphrodite-bench --backend aphrodite --base-url http://127.0.0.1:8000 \
+sonar-bench --backend sonar --base-url http://127.0.0.1:8000 \
   --model <model> --dataset-name random \
   --random-input-len 1024 --random-output-len 128 \
   --num-prompts 1000 --max-concurrency 200
@@ -17,14 +17,14 @@ aphrodite-bench --backend aphrodite --base-url http://127.0.0.1:8000 \
 - **Many backends** — completions, chat, embeddings, pooling, and rerank.
 - **Beyond a single run** — concurrency/rate **sweeps**, **multi-run** stats, **multi-turn** conversations, **LoRA** multi-adapter, and result **comparison**.
 - **Steady-state metrics** — throughput/latency measured over the saturated plateau, excluding ramp-up and drain.
-- **Parity** — JSON output schema and timing semantics match Python `aphrodite bench serve` exactly.
-- **Multimodal preprocessing** — `mm-processor` subcommand measures per-stage VLM preprocessing latency against a managed headless engine (mirrors `aphrodite bench mm-processor`).
+- **Parity** — JSON output schema and timing semantics match Python `sonar bench serve` exactly.
+- **Multimodal preprocessing** — `mm-processor` subcommand measures per-stage VLM preprocessing latency against a managed headless engine (mirrors `sonar bench mm-processor`).
 
 ### Performance vs. Python
 
 | Metric | Python | Rust |
 | -------- | -------- | ------ |
-| Startup time | Multi-second (import aphrodite + numpy + aiohttp) | ~7 ms |
+| Startup time | Multi-second (import sonar + numpy + aiohttp) | ~7 ms |
 | 100k random prompts (input_len=8192) | Minutes | Seconds (rayon parallelism) |
 | Binary size | — | ~7 MB |
 | Peak memory at 1400 concurrency | High (GIL + per-object overhead) | <100 MB (`Arc<str>` prompt sharing) |
@@ -56,17 +56,17 @@ cd sonar
 cargo install --path rust/src/bench --locked
 ```
 
-The `aphrodite-bench` binary is installed to `~/.cargo/bin/`. To build without
-installing it, run `cargo build --manifest-path rust/Cargo.toml --release -p aphrodite-bench`;
-the binary is written to `rust/target/release/aphrodite-bench`.
+The `sonar-bench` binary is installed to `~/.cargo/bin/`. To build without
+installing it, run `cargo build --manifest-path rust/Cargo.toml --release -p sonar-bench`;
+the binary is written to `rust/target/release/sonar-bench`.
 
 ## Quick Start
 
-Point it at a running Aphrodite server and benchmark with synthetic prompts:
+Point it at a running Sonar server and benchmark with synthetic prompts:
 
 ```bash
-aphrodite-bench \
-  --backend aphrodite \
+sonar-bench \
+  --backend sonar \
   --base-url http://127.0.0.1:8000 \
   --model <model-name> \
   --dataset-name random \
@@ -76,7 +76,7 @@ aphrodite-bench \
   --max-concurrency 200
 ```
 
-> **Tip:** prefer `127.0.0.1` over `localhost` — some systems resolve `localhost` to IPv6 `::1` while Aphrodite listens on IPv4 only.
+> **Tip:** prefer `127.0.0.1` over `localhost` — some systems resolve `localhost` to IPv6 `::1` while Sonar listens on IPv4 only.
 
 Add `--save-result` to write a JSON file, or `--dry-run` to generate and inspect the dataset without sending any requests.
 
@@ -87,8 +87,8 @@ Add `--save-result` to write a JSON file, or `--dry-run` to generate and inspect
 
 ```bash
 # Full production-style run with percentile metrics and result file
-aphrodite-bench \
-  --backend aphrodite \
+sonar-bench \
+  --backend sonar \
   --base-url http://127.0.0.1:8000 \
   --model nvidia/Kimi-K2.5-NVFP4 \
   --dataset-name random \
@@ -100,10 +100,10 @@ aphrodite-bench \
   --save-result \
   --max-concurrency 1400
 
-# Send token IDs instead of text (pure Aphrodite: skips server-side tokenization,
+# Send token IDs instead of text (pure Sonar: skips server-side tokenization,
 # exact token counts, faster). Random dataset only.
-aphrodite-bench \
-  --backend aphrodite \
+sonar-bench \
+  --backend sonar \
   --base-url http://127.0.0.1:8000 \
   --model <model-name> \
   --dataset-name random \
@@ -119,44 +119,44 @@ aphrodite-bench \
 
 ```bash
 # ShareGPT (auto-downloads from HuggingFace on first run, cached afterwards)
-aphrodite-bench \
+sonar-bench \
   --backend openai-chat --base-url http://127.0.0.1:8000 --model <model-name> \
   --dataset-name sharegpt --num-prompts 500 --save-result
 
 # ShareGPT with an explicit local file
-aphrodite-bench \
+sonar-bench \
   --backend openai-chat --base-url http://127.0.0.1:8000 --model <model-name> \
   --dataset-name sharegpt --dataset-path /path/to/ShareGPT_V3.json \
   --num-prompts 500 --save-result
 
 # Any HuggingFace dataset (downloads parquet shards into the standard HF hub
 # cache — shared with `hf download` and Python tooling — auto-detects columns)
-aphrodite-bench \
+sonar-bench \
   --backend openai-chat --base-url http://127.0.0.1:8000 --model <model-name> \
   --dataset-name hf --dataset-path allenai/WildChat-4.8M \
   --hf-split train --num-prompts 1000 --save-result
 
 # HuggingFace dataset with subset + fixed output length (LongBench)
-aphrodite-bench \
+sonar-bench \
   --backend openai-chat --base-url http://127.0.0.1:8000 --model <model-name> \
   --dataset-name hf --dataset-path THUDM/LongBench \
   --hf-subset narrativeqa --hf-split test --hf-output-len 512 --num-prompts 200
 
 # Gated HuggingFace dataset (auth via HF_TOKEN or the `hf auth login` token file).
 # Private datasets work too when the repo stores native parquet/json/jsonl files.
-HF_TOKEN=hf_xxx aphrodite-bench \
+HF_TOKEN=hf_xxx sonar-bench \
   --backend openai-chat --base-url http://127.0.0.1:8000 --model <model-name> \
   --dataset-name hf --dataset-path lmsys/lmsys-chat-1m \
   --hf-split train --hf-output-len 256 --num-prompts 1000
 
 # SPEED-Bench for speculative decoding evaluation (auto-downloads, cached)
-aphrodite-bench \
+sonar-bench \
   --backend openai-chat --base-url http://127.0.0.1:8000 --model <model-name> \
   --dataset-name speed-bench --speed-bench-config qualitative \
   --num-prompts 200 --output-len 256 --save-result
 
 # SPEED-Bench throughput split with entropy category filter + input truncation
-aphrodite-bench \
+sonar-bench \
   --backend openai-chat --base-url http://127.0.0.1:8000 --model <model-name> \
   --dataset-name speed-bench --speed-bench-config throughput_16k \
   --speed-bench-max-input-len 10240 --speed-bench-category low_entropy \
@@ -170,7 +170,7 @@ aphrodite-bench \
 
 ```bash
 # One synthetic image per request
-aphrodite-bench \
+sonar-bench \
   --backend openai-chat --base-url http://127.0.0.1:8000 \
   --model Qwen/Qwen2.5-VL-7B-Instruct \
   --dataset-name random-mm \
@@ -180,7 +180,7 @@ aphrodite-bench \
   --random-mm-bucket-config '{(1024, 800, 1): 1.0}'
 
 # Multiple images per request, mixed resolutions
-aphrodite-bench \
+sonar-bench \
   --backend openai-chat --base-url http://127.0.0.1:8000 \
   --model Qwen/Qwen2.5-VL-7B-Instruct \
   --dataset-name random-mm \
@@ -197,27 +197,27 @@ aphrodite-bench \
 
 ```bash
 # Text embedding
-aphrodite-bench \
+sonar-bench \
   --backend openai-embeddings --base-url http://127.0.0.1:8000 \
   --model BAAI/bge-large-en-v1.5 \
   --dataset-name random --random-input-len 512 --num-prompts 1000 \
   --max-concurrency 200 --save-result
 
 # Chat-format embedding (supports multimodal content)
-aphrodite-bench \
+sonar-bench \
   --backend openai-embeddings-chat --base-url http://127.0.0.1:8000 \
   --model BAAI/bge-large-en-v1.5 \
   --dataset-name sharegpt --num-prompts 500 --save-result
 
-# Aphrodite native pooling endpoint
-aphrodite-bench \
-  --backend aphrodite-pooling --base-url http://127.0.0.1:8000 \
+# Sonar native pooling endpoint
+sonar-bench \
+  --backend sonar-pooling --base-url http://127.0.0.1:8000 \
   --model BAAI/bge-large-en-v1.5 \
   --dataset-name random --random-input-len 256 --num-prompts 1000 --save-result
 
 # Rerank (query from dataset, documents via --extra-body)
-aphrodite-bench \
-  --backend aphrodite-rerank --base-url http://127.0.0.1:8000 \
+sonar-bench \
+  --backend sonar-rerank --base-url http://127.0.0.1:8000 \
   --model BAAI/bge-reranker-v2-m3 \
   --dataset-name sharegpt --num-prompts 500 \
   --extra-body '{"documents": ["document to rerank"]}' --save-result
@@ -230,16 +230,16 @@ aphrodite-bench \
 
 ```bash
 # Ramp from 10 → 100 RPS with goodput SLO tracking
-aphrodite-bench \
-  --backend aphrodite --base-url http://127.0.0.1:8000 --model <model-name> \
+sonar-bench \
+  --backend sonar --base-url http://127.0.0.1:8000 --model <model-name> \
   --num-prompts 2000 \
   --ramp-up-strategy linear --ramp-up-start-rps 10 --ramp-up-end-rps 100 \
   --goodput ttft:200 e2el:5000 \
   --save-result
 
 # Fixed Poisson arrival rate at 50 RPS
-aphrodite-bench \
-  --backend aphrodite --base-url http://127.0.0.1:8000 --model <model-name> \
+sonar-bench \
+  --backend sonar --base-url http://127.0.0.1:8000 --model <model-name> \
   --num-prompts 2000 --request-rate 50 --burstiness 1.0
 ```
 
@@ -250,22 +250,22 @@ aphrodite-bench \
 
 ```bash
 # Sweep over concurrency values
-aphrodite-bench \
-  --backend aphrodite --base-url http://127.0.0.1:8000 --model <model-name> \
+sonar-bench \
+  --backend sonar --base-url http://127.0.0.1:8000 --model <model-name> \
   --num-prompts 500 \
   --sweep-max-concurrency 1,10,50,100,200,500,1000
 
 # Sweep over request rates
-aphrodite-bench \
-  --backend aphrodite --base-url http://127.0.0.1:8000 --model <model-name> \
+sonar-bench \
+  --backend sonar --base-url http://127.0.0.1:8000 --model <model-name> \
   --num-prompts 500 \
   --sweep-request-rate 1,10,50,100,inf
 
 # Scale work with concurrency and reset the prefix cache between points
 # (--sweep-num-prompts-factor sets num_prompts = concurrency * factor;
-#  --reset-prefix-cache requires APHRODITE_SERVER_DEV_MODE=1 on the server)
-aphrodite-bench \
-  --backend aphrodite --base-url http://127.0.0.1:8000 --model <model-name> \
+#  --reset-prefix-cache requires SONAR_SERVER_DEV_MODE=1 on the server)
+sonar-bench \
+  --backend sonar --base-url http://127.0.0.1:8000 --model <model-name> \
   --sweep-max-concurrency 1,10,50,100 \
   --sweep-num-prompts-factor 20 \
   --reset-prefix-cache
@@ -278,12 +278,12 @@ aphrodite-bench \
 
 ```bash
 # Run 5 times, report mean/std/min/max with coefficient of variation
-aphrodite-bench \
-  --backend aphrodite --base-url http://127.0.0.1:8000 --model <model-name> \
+sonar-bench \
+  --backend sonar --base-url http://127.0.0.1:8000 --model <model-name> \
   --num-prompts 1000 --max-concurrency 200 --num-runs 5
 
 # Compare two saved result files side-by-side (no server needed)
-aphrodite-bench --compare baseline.json optimized.json
+sonar-bench --compare baseline.json optimized.json
 ```
 
 </details>
@@ -293,7 +293,7 @@ aphrodite-bench --compare baseline.json optimized.json
 
 ```bash
 # Synthetic multi-turn (controllable per-turn token lengths)
-aphrodite-bench \
+sonar-bench \
   --backend openai-chat --base-url http://127.0.0.1:8000 --model <model-name> \
   --dataset-name random --multi-turn --multi-turn-num-turns 5 \
   --random-input-len 512 --random-output-len 256 \
@@ -301,7 +301,7 @@ aphrodite-bench \
   --percentile-metrics "ttft,tpot,itl,e2el" --save-result
 
 # Variable turn count per conversation + per-turn input length for turns 1+
-aphrodite-bench \
+sonar-bench \
   --backend openai-chat --base-url http://127.0.0.1:8000 --model <model-name> \
   --dataset-name random --multi-turn \
   --multi-turn-min-turns 2 --multi-turn-max-turns 8 \
@@ -309,13 +309,13 @@ aphrodite-bench \
   --num-prompts 100 --multi-turn-concurrency 20
 
 # ShareGPT conversations (loads all turns, not just the first two)
-aphrodite-bench \
+sonar-bench \
   --backend openai-chat --base-url http://127.0.0.1:8000 --model <model-name> \
   --dataset-name sharegpt --multi-turn \
   --num-prompts 50 --multi-turn-concurrency 10 --save-result
 
 # Think time between turns
-aphrodite-bench \
+sonar-bench \
   --backend openai-chat --base-url http://127.0.0.1:8000 --model <model-name> \
   --multi-turn --multi-turn-num-turns 3 --multi-turn-delay-ms 500 \
   --num-prompts 100 --multi-turn-concurrency 20
@@ -330,7 +330,7 @@ aphrodite-bench \
 # Distribute requests across N adapters registered on the server.
 # --model stays the BASE model (tokenizer / readiness / /tokenize use it);
 # the per-request `model` field is rewritten to one of --lora-modules.
-aphrodite-bench \
+sonar-bench \
   --backend openai-chat --base-url http://127.0.0.1:8000 \
   --model Qwen/Qwen3-30B-A3B \
   --lora-modules sql-lora-1 sql-lora-2 sql-lora-3 sql-lora-4 \
@@ -340,7 +340,7 @@ aphrodite-bench \
   --num-prompts 1000 --max-concurrency 64 --save-result
 
 # Deterministic round-robin assignment (request i -> adapter[i % N])
-aphrodite-bench \
+sonar-bench \
   --backend openai-chat --base-url http://127.0.0.1:8000 \
   --model Qwen/Qwen3-30B-A3B \
   --lora-modules sql-lora-1 sql-lora-2 sql-lora-3 sql-lora-4 \
@@ -348,10 +348,10 @@ aphrodite-bench \
   --dataset-name random --num-prompts 1000
 ```
 
-Server side — start Aphrodite with `--enable-lora` and one `name=path` pair per adapter:
+Server side — start Sonar with `--enable-lora` and one `name=path` pair per adapter:
 
 ```bash
-aphrodite serve <base-model> \
+sonar serve <base-model> \
   --enable-lora --max-loras 8 --max-lora-rank 16 \
   --lora-modules \
     sql-lora-1=jeeejeee/qwen3-moe-text2sql-spider \
@@ -367,19 +367,19 @@ Set `--max-loras` ≥ number of adapter names to keep them all resident (clean s
 <summary><b>Profiling &amp; dry-run</b></summary>
 
 ```bash
-# Trigger Aphrodite server-side profiling (start before, stop after the benchmark)
-aphrodite-bench \
-  --backend aphrodite --base-url http://127.0.0.1:8000 --model <model-name> \
+# Trigger Sonar server-side profiling (start before, stop after the benchmark)
+sonar-bench \
+  --backend sonar --base-url http://127.0.0.1:8000 --model <model-name> \
   --num-prompts 100 --profile
 
 # Defer profiling until the server batch is full, then capture for 10s
-aphrodite-bench \
-  --backend aphrodite --base-url http://127.0.0.1:8000 --model <model-name> \
+sonar-bench \
+  --backend sonar --base-url http://127.0.0.1:8000 --model <model-name> \
   --num-prompts 2000 --max-concurrency 256 \
   --profile --profile-batch-threshold 200 --profile-duration 10
 
 # Dry run: generate dataset, print stats, send nothing
-aphrodite-bench \
+sonar-bench \
   --model <model-name> --num-prompts 100000 --random-input-len 8192 --dry-run
 ```
 
@@ -390,12 +390,12 @@ aphrodite-bench \
 
 The `mm-processor` subcommand benchmarks the multimodal preprocessing pipeline
 itself (media fetch → per-modality preprocess → prompt expansion), mirroring
-`aphrodite bench mm-processor`. It spawns a managed headless Python engine (real
+`sonar bench mm-processor`. It spawns a managed headless Python engine (real
 weights, real encoder) — no serving endpoint needed — and reports per-stage
 timing (mean/median/std/percentiles) plus end-to-end latency.
 
 ```bash
-aphrodite-bench mm-processor \
+sonar-bench mm-processor \
   --model Qwen/Qwen2.5-VL-7B-Instruct \
   --num-prompts 100 --num-warmups 5 \
   --random-input-len 512 --random-output-len 128 \
@@ -417,7 +417,7 @@ to measure a concurrent serving-style workload.
 
 | Backend | API Endpoint | Description |
 | --------- | ------------- | ------------- |
-| `aphrodite` / `openai` | `/v1/completions` | OpenAI-compatible completions (streaming) |
+| `sonar` / `openai` | `/v1/completions` | OpenAI-compatible completions (streaming) |
 | `openai-chat` | `/v1/chat/completions` | OpenAI-compatible chat completions (streaming, multimodal) |
 | `openai-responses` | `/v1/responses` | OpenAI Responses API (streaming; reasoning deltas count toward TTFT and ITL) |
 
@@ -427,8 +427,8 @@ to measure a concurrent serving-style workload.
 | --------- | ------------- | ------------- |
 | `openai-embeddings` | `/v1/embeddings` | Text embedding (accepts text or token IDs) |
 | `openai-embeddings-chat` | `/v1/embeddings` | Chat-format embedding (supports multimodal content) |
-| `aphrodite-pooling` | `/pooling` | Sonar native pooling endpoint |
-| `aphrodite-rerank` | `/v1/rerank` | Sonar reranking (query from prompt, documents via `--extra-body`) |
+| `sonar-pooling` | `/pooling` | Sonar native pooling endpoint |
+| `sonar-rerank` | `/v1/rerank` | Sonar reranking (query from prompt, documents via `--extra-body`) |
 
 Pooling backends are non-streaming and report E2EL (end-to-end latency) only. Use `--dataset-name sharegpt` or `hf` for text-based embedding/rerank benchmarks, or `random` for token-ID-based embedding benchmarks.
 
@@ -468,14 +468,14 @@ The block reports request/input/output/total token throughput plus TTFT (mean, m
 
 ## CLI Reference
 
-Run `aphrodite-bench --help` for the authoritative list. Grouped reference below.
+Run `sonar-bench --help` for the authoritative list. Grouped reference below.
 
 <details>
 <summary><b>Server connection</b></summary>
 
 | Flag | Default | Description |
 | ------ | --------- | ------------- |
-| `--backend` | `openai` | Backend type (`aphrodite`, `openai`, `openai-chat`, `openai-responses`, `openai-embeddings`, `openai-embeddings-chat`, `aphrodite-pooling`, `aphrodite-rerank`) |
+| `--backend` | `openai` | Backend type (`sonar`, `openai`, `openai-chat`, `openai-responses`, `openai-embeddings`, `openai-embeddings-chat`, `sonar-pooling`, `sonar-rerank`) |
 | `--base-url` | — | Server base URL (overrides `--host`/`--port`) |
 | `--host` | `127.0.0.1` | Server host |
 | `--port` | `8000` | Server port |
@@ -565,7 +565,7 @@ Run `aphrodite-bench --help` for the authoritative list. Grouped reference below
 | `--presence-penalty` | Presence penalty |
 | `--repetition-penalty` | Repetition penalty |
 
-Merged into the request body. Only effective with generation backends (`aphrodite`, `openai`, `openai-chat`, `openai-responses`); ignored by pooling/embedding backends.
+Merged into the request body. Only effective with generation backends (`sonar`, `openai`, `openai-chat`, `openai-responses`); ignored by pooling/embedding backends.
 
 </details>
 
@@ -623,7 +623,7 @@ Computed only when `--max-concurrency` is set and `--request-rate` is `inf`.
 
 | Flag | Default | Description |
 | ------ | --------- | ------------- |
-| `--profile` | `false` | Trigger Aphrodite server-side profiling (`/start_profile` before, `/stop_profile` after) |
+| `--profile` | `false` | Trigger Sonar server-side profiling (`/start_profile` before, `/stop_profile` after) |
 | `--profile-batch-threshold` | — | Defer profiling until `/metrics` reports ≥ N running requests, then capture. Requires `--profile` |
 | `--profile-duration` | `5.0` | Seconds to capture once the batch threshold is reached. Requires `--profile-batch-threshold` |
 
@@ -637,7 +637,7 @@ Computed only when `--max-concurrency` is set and `--request-rate` is `inf`.
 | `--sweep-max-concurrency` | — | Comma-separated concurrency values to sweep (e.g. `1,10,50,100,500`) |
 | `--sweep-request-rate` | — | Comma-separated rate values to sweep, supports `inf` (e.g. `1,10,100,inf`) |
 | `--sweep-num-prompts-factor` | — | Set `num_prompts = concurrency × factor` per concurrency sweep point |
-| `--reset-prefix-cache` | `false` | Reset the server's prefix cache before each sweep iteration (requires `APHRODITE_SERVER_DEV_MODE=1`) |
+| `--reset-prefix-cache` | `false` | Reset the server's prefix cache before each sweep iteration (requires `SONAR_SERVER_DEV_MODE=1`) |
 
 Runs the benchmark once per value, then prints a summary table comparing throughput and latency across all sweep points and identifies the best-throughput configuration. Works in multi-turn mode too. `--sweep-summary-percentiles` appends extra TTFT/TPOT/E2EL columns to the summary, auto-adding any missing percentiles to the computed set so they also appear in result JSON.
 
@@ -674,7 +674,7 @@ With `--multi-turn`, `--num-prompts` controls the number of **conversations**, n
 
 **Prefix sharing** (random dataset): when `--multi-turn-prefix-global-ratio` or `--multi-turn-prefix-conversation-ratio` is > 0, each turn sends a fixed-length message (no history accumulation) composed of a global prefix + per-conversation prefix + unique suffix. The two ratios must sum to < 1.0.
 
-**Router affinity:** every turn sends `X-Session-ID: {conversation_id}` for KV-cache reuse behind a Aphrodite router.
+**Router affinity:** every turn sends `X-Session-ID: {conversation_id}` for KV-cache reuse behind a Sonar router.
 
 **Output:** overall metrics plus a per-turn breakdown (TTFT/TPOT/ITL/E2EL by turn index). Expect TTFT to climb across turns due to growing context. JSON includes a `per_turn_metrics` array.
 
@@ -685,10 +685,10 @@ With `--multi-turn`, `--num-prompts` controls the number of **conversations**, n
 
 | Flag | Default | Description |
 | ------ | --------- | ------------- |
-| `--lora-modules` | — | Adapter names registered on the server (`aphrodite serve --lora-modules name=path`). Each request's `model` field is rewritten to one of these. Repeatable |
+| `--lora-modules` | — | Adapter names registered on the server (`sonar serve --lora-modules name=path`). Each request's `model` field is rewritten to one of these. Repeatable |
 | `--lora-assignment` | `random` | Distribution: `random` (uniform, seeded by `--seed`) or `round-robin` (deterministic `i % N`) |
 
-`--model` must stay the **base** model — its tokenizer builds prompts, and `/v1/models`, `/tokenize`, ready check, and warmup all use it. Only the per-request `model` field in completions/chat payloads is rewritten to the assigned adapter (Aphrodite routes by name).
+`--model` must stay the **base** model — its tokenizer builds prompts, and `/v1/models`, `/tokenize`, ready check, and warmup all use it. Only the per-request `model` field in completions/chat payloads is rewritten to the assigned adapter (Sonar routes by name).
 
 **Assignment scope:** per request in single-shot mode; **per conversation** (sticky across all turns) in multi-turn mode, to avoid breaking prefix-cache reuse mid-dialog.
 
@@ -711,7 +711,7 @@ With `--multi-turn`, `--num-prompts` controls the number of **conversations**, n
 <details>
 <summary><b><code>mm-processor</code> subcommand</b></summary>
 
-Offline multimodal preprocessing latency benchmark (mirrors `aphrodite bench mm-processor`). Spawns a managed headless Python engine and drives the full chat preprocessing pipeline.
+Offline multimodal preprocessing latency benchmark (mirrors `sonar bench mm-processor`). Spawns a managed headless Python engine and drives the full chat preprocessing pipeline.
 
 | Flag | Default | Description |
 | ------ | --------- | ------------- |
@@ -734,7 +734,7 @@ Offline multimodal preprocessing latency benchmark (mirrors `aphrodite bench mm-
 | `--trust-remote-code` | `false` | Trust remote code for the tokenizer and the managed engine |
 | `--chat-template` | — | Chat-template override (inline text or path) |
 
-Managed headless-engine options (e.g. `--python`, `--data-parallel-address`, `--data-parallel-rpc-port`, `--data-parallel-size`, `--max-model-len`, `--python-args`) are shared with other managed-engine commands; see `aphrodite-bench mm-processor --help`.
+Managed headless-engine options (e.g. `--python`, `--data-parallel-address`, `--data-parallel-rpc-port`, `--data-parallel-size`, `--max-model-len`, `--python-args`) are shared with other managed-engine commands; see `sonar-bench mm-processor --help`.
 
 </details>
 
@@ -752,7 +752,7 @@ Models without `tokenizer.json` (e.g. `nvidia/Kimi-K2.5-NVFP4`) fall back to ser
 
 ## Output Format
 
-JSON output is compatible with the `aphrodite bench serve` Python schema. Result files are named:
+JSON output is compatible with the `sonar bench serve` Python schema. Result files are named:
 
 ```text
 {label}-{rate}qps-concurrency{max_concurrency}-{model}-{timestamp}.json
@@ -823,7 +823,7 @@ src/
 
 ### Behavioral parity with Python
 
-The Rust implementation matches Python `aphrodite bench serve` in:
+The Rust implementation matches Python `sonar bench serve` in:
 
 - SSE streaming protocol handling (including speculative parse for split TCP segments)
 - Timing semantics (monotonic `Instant` matching Python's `time.perf_counter()`)
@@ -836,7 +836,7 @@ The Rust implementation matches Python `aphrodite bench serve` in:
 - CLI flags: a superset of Python's, enforced by `tests/cli_parity.rs` against a
   snapshot of the Python parser (`tests/python_serve_flags.txt`, regenerated by
   `tests/benchmarks/test_rust_bench_cli_parity.py` in the repo root) with an
-  explicit allowlist for the Python-only remainder — so `APHRODITE_USE_RUST_BENCH=1`
+  explicit allowlist for the Python-only remainder — so `SONAR_USE_RUST_BENCH=1`
   delegation cannot silently reject documented flags
 
 ## Environment Variables

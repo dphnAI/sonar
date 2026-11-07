@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Unit tests for ``aphrodite/entrypoints/cohere/protocol.py``.
+"""Unit tests for ``sonar/entrypoints/cohere/protocol.py``.
 
 The module is mostly a thin wrapper around the official ``cohere`` SDK
 types plus a few local additions:
@@ -16,8 +16,8 @@ types plus a few local additions:
 import pytest
 from pydantic import ValidationError
 
-import aphrodite.envs as envs
-from aphrodite.entrypoints.cohere.protocol import (
+import sonar.envs as envs
+from sonar.entrypoints.cohere.protocol import (
     AssistantMessageResponse,
     CitationEndEvent,
     CitationStartEvent,
@@ -35,7 +35,7 @@ from aphrodite.entrypoints.cohere.protocol import (
     ToolCallStartEvent,
     ToolPlanDeltaEvent,
 )
-from aphrodite.exceptions import AphroditeValidationError
+from sonar.exceptions import SonarValidationError
 
 # ======================================================================
 # CohereError
@@ -55,13 +55,13 @@ class TestCohereError:
 
 class TestCohereChatV2Request:
     def test_empty_model_rejected(self):
-        with pytest.raises(AphroditeValidationError, match="model is required") as exc_info:
+        with pytest.raises(SonarValidationError, match="model is required") as exc_info:
             CohereChatV2Request(model="", messages=[{"role": "user", "content": "hi"}])
         assert exc_info.value.parameter == "model"
         assert exc_info.value.value is None
 
     def test_negative_max_tokens_rejected(self):
-        with pytest.raises(AphroditeValidationError, match="non-negative") as exc_info:
+        with pytest.raises(SonarValidationError, match="non-negative") as exc_info:
             CohereChatV2Request(
                 model="m",
                 messages=[{"role": "user", "content": "hi"}],
@@ -71,7 +71,7 @@ class TestCohereChatV2Request:
         assert exc_info.value.value == -1
 
     def test_empty_messages_rejected(self):
-        with pytest.raises(AphroditeValidationError, match="messages must contain at least one message") as exc_info:
+        with pytest.raises(SonarValidationError, match="messages must contain at least one message") as exc_info:
             CohereChatV2Request(model="m", messages=[])
         assert exc_info.value.parameter == "messages"
         assert exc_info.value.value is None
@@ -95,7 +95,7 @@ class TestCohereChatV2Request:
 
     @pytest.mark.parametrize("tool_fields", [{}, {"tools": None}, {"tools": []}])
     def test_required_tool_choice_requires_tools(self, tool_fields):
-        with pytest.raises(AphroditeValidationError, match="REQUIRED.*tools") as exc_info:
+        with pytest.raises(SonarValidationError, match="REQUIRED.*tools") as exc_info:
             CohereChatV2Request(
                 model="m",
                 messages=[{"role": "user", "content": "hi"}],
@@ -116,7 +116,7 @@ class TestCohereChatV2Request:
 
     def test_stop_sequences_bounded_by_env_limit(self):
         messages = [{"role": "user", "content": "hi"}]
-        limit = envs.APHRODITE_MAX_STOP_STRINGS
+        limit = envs.SONAR_MAX_STOP_STRINGS
 
         req = CohereChatV2Request(
             model="m",

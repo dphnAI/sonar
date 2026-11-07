@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Compatibility wrapper for FlashInfer API changes.
 
-Users of Aphrodite should always import **only** these wrappers.
+Users of Sonar should always import **only** these wrappers.
 """
 
 import contextlib
@@ -20,11 +20,11 @@ import requests
 import torch
 from packaging.version import Version
 
-import aphrodite.envs as envs
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.utils.torch_utils import PIN_MEMORY
+import sonar.envs as envs
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.utils.math_utils import cdiv
+from sonar.utils.torch_utils import PIN_MEMORY
 
 logger = init_logger(__name__)
 
@@ -82,7 +82,7 @@ def _flashinfer_nvcc_path() -> str | None:
 @functools.cache
 def has_flashinfer_cubin() -> bool:
     """Return `True` if flashinfer-cubin package is available."""
-    if envs.APHRODITE_HAS_FLASHINFER_CUBIN:
+    if envs.SONAR_HAS_FLASHINFER_CUBIN:
         return True
     if importlib.util.find_spec("flashinfer_cubin") is not None:
         return True
@@ -104,7 +104,7 @@ def has_flashinfer() -> bool:
             "FlashInfer kernels are disabled: flashinfer-cubin is not installed "
             "and nvcc (CUDA_HOME, CUDA_PATH, PATH or /usr/local/cuda) or ninja "
             "(PATH) is missing. Set CUDA_HOME to a CUDA toolkit and put ninja on "
-            "PATH, or run `aphrodite download-kernels`."
+            "PATH, or run `sonar download-kernels`."
         )
         return False
     return True
@@ -131,7 +131,7 @@ def warn_if_flashinfer_kernels_missing() -> None:
         return
     flashinfer_version = _installed_version("flashinfer-python")
     packages = []
-    if not envs.APHRODITE_HAS_FLASHINFER_CUBIN:
+    if not envs.SONAR_HAS_FLASHINFER_CUBIN:
         packages.append("flashinfer-cubin")
     if has_flashinfer_jit_cache_wheels():
         packages.append("flashinfer-jit-cache")
@@ -142,7 +142,7 @@ def warn_if_flashinfer_kernels_missing() -> None:
         "FlashInfer's precompiled kernels are missing or do not match "
         "flashinfer-python %s (%s). FlashInfer then downloads and compiles "
         "kernels at startup, which can take several minutes, or fails to import "
-        "mismatched ones. Run `aphrodite download-kernels` in this Python environment "
+        "mismatched ones. Run `sonar download-kernels` in this Python environment "
         "to install them.",
         flashinfer_version,
         ", ".join(f"{name} {version or 'not installed'}" for name, version in installed.items()),
@@ -461,7 +461,7 @@ def has_flashinfer_sparse_mla_sm120_config(num_q_heads: int, top_k: int) -> bool
 
     The public sparse MLA API predates some DSV4 shapes, so checking only that
     the callable exists can select a package that later aborts or rejects a
-    valid Aphrodite configuration. Inspect FlashInfer's dispatch table until it
+    valid Sonar configuration. Inspect FlashInfer's dispatch table until it
     exposes a public capability query.
     """
     if not has_flashinfer_sparse_mla_sm120():
@@ -681,7 +681,7 @@ def supports_trtllm_attention(is_prefill: bool = False) -> bool:
     prefill. SM100+ supports TRTLLM for both phases. All others are unsupported.
     """
     # Batch-invariant mode disables TRTLLM attention
-    if envs.APHRODITE_BATCH_INVARIANT:
+    if envs.SONAR_BATCH_INVARIANT:
         return False
 
     # Requires NVIDIA artifactory to be accessible to download cubins
@@ -697,16 +697,16 @@ def supports_trtllm_attention(is_prefill: bool = False) -> bool:
 
 
 def force_use_trtllm_attention() -> bool | None:
-    """This function should only be called during initialization stage when aphrodite config
+    """This function should only be called during initialization stage when sonar config
     is set.
     Return `None` if --attention-config.use_trtllm_attention is not set,
     return `True` if TRTLLM attention is forced to be used,
     return `False` if TRTLLM attention is forced to be not used.
     """
-    from aphrodite.config import get_current_aphrodite_config
+    from sonar.config import get_current_sonar_config
 
-    aphrodite_config = get_current_aphrodite_config()
-    return aphrodite_config.attention_config.use_trtllm_attention
+    sonar_config = get_current_sonar_config()
+    return sonar_config.attention_config.use_trtllm_attention
 
 
 def can_use_trtllm_attention(num_qo_heads: int, num_kv_heads: int, is_prefill: bool = False) -> bool:
@@ -805,7 +805,7 @@ def use_trtllm_attention(
 
 
 if has_flashinfer():
-    from aphrodite.utils.torch_utils import direct_register_custom_op
+    from sonar.utils.torch_utils import direct_register_custom_op
 
     def _flashinfer_concat_mla_k(
         k: torch.Tensor,
@@ -847,7 +847,7 @@ if has_flashinfer():
     )
 
     @torch.library.custom_op(
-        "aphrodite::flashinfer_mm_fp4",
+        "sonar::flashinfer_mm_fp4",
         mutates_args=[],
         device_types="cuda",
     )
@@ -879,7 +879,7 @@ if has_flashinfer():
         )
 
     @torch.library.register_fake(
-        "aphrodite::flashinfer_mm_fp4",
+        "sonar::flashinfer_mm_fp4",
     )
     def flashinfer_mm_fp4_fake(
         A: torch.Tensor,
@@ -896,7 +896,7 @@ if has_flashinfer():
         return torch.empty(A.shape[0], B.shape[1], dtype=dtype, device=A.device)
 
     @torch.library.custom_op(
-        "aphrodite::flashinfer_mm_bf16_fp4",
+        "sonar::flashinfer_mm_bf16_fp4",
         mutates_args=[],
         device_types="cuda",
     )
@@ -917,7 +917,7 @@ if has_flashinfer():
         )
 
     @torch.library.register_fake(
-        "aphrodite::flashinfer_mm_bf16_fp4",
+        "sonar::flashinfer_mm_bf16_fp4",
     )
     def flashinfer_mm_bf16_fp4_fake(
         A: torch.Tensor,
@@ -929,7 +929,7 @@ if has_flashinfer():
         return torch.empty(A.shape[0], output_size, dtype=A.dtype, device=A.device)
 
     @torch.library.custom_op(
-        "aphrodite::flashinfer_mxfp4_quantize",
+        "sonar::flashinfer_mxfp4_quantize",
         mutates_args=[],
         device_types="cuda",
     )
@@ -941,7 +941,7 @@ if has_flashinfer():
 
         return _mxfp4_quantize(a, backend=backend)
 
-    @torch.library.register_fake("aphrodite::flashinfer_mxfp4_quantize")
+    @torch.library.register_fake("sonar::flashinfer_mxfp4_quantize")
     def flashinfer_mxfp4_quantize_fake(
         a: torch.Tensor,
         backend: str,
@@ -956,7 +956,7 @@ if has_flashinfer():
         )
 
     @torch.library.custom_op(
-        "aphrodite::bmm_fp8",
+        "sonar::bmm_fp8",
         mutates_args=[],
         device_types="cuda",
     )
@@ -973,7 +973,7 @@ if has_flashinfer():
         return bmm_fp8_(A, B, A_scale, B_scale, dtype, None, backend)
 
     @torch.library.register_fake(
-        "aphrodite::bmm_fp8",
+        "sonar::bmm_fp8",
     )
     def bmm_fp8_fake(
         A: torch.Tensor,
@@ -986,7 +986,7 @@ if has_flashinfer():
         return torch.empty(A.shape[0], A.shape[1], B.shape[2], dtype=dtype, device=A.device)
 
     @torch.library.custom_op(
-        "aphrodite::flashinfer_nvfp4_quantize",
+        "sonar::flashinfer_nvfp4_quantize",
         mutates_args=[],
         device_types="cuda",
     )
@@ -997,7 +997,7 @@ if has_flashinfer():
         return nvfp4_quantize_(a, a_global_sf, sfLayout=SfLayout.layout_8x4, do_shuffle=False)
 
     @torch.library.register_fake(
-        "aphrodite::flashinfer_nvfp4_quantize",
+        "sonar::flashinfer_nvfp4_quantize",
     )
     def flashinfer_nvfp4_quantize_fake(a: torch.Tensor, a_global_sf: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         m, n = a.shape
@@ -1013,7 +1013,7 @@ if has_flashinfer():
         )
 
     @torch.library.custom_op(
-        "aphrodite::flashinfer_mxfp8_quantize_8x4",
+        "sonar::flashinfer_mxfp8_quantize_8x4",
         mutates_args=[],
         device_types="cuda",
     )
@@ -1030,7 +1030,7 @@ if has_flashinfer():
         )
 
     @torch.library.register_fake(
-        "aphrodite::flashinfer_mxfp8_quantize_8x4",
+        "sonar::flashinfer_mxfp8_quantize_8x4",
     )
     def flashinfer_mxfp8_quantize_8x4_fake(
         a: torch.Tensor,
@@ -1043,7 +1043,7 @@ if has_flashinfer():
         )
 
     @torch.library.custom_op(
-        "aphrodite::mm_mxfp8",
+        "sonar::mm_mxfp8",
         mutates_args=[],
         device_types="cuda",
     )
@@ -1070,7 +1070,7 @@ if has_flashinfer():
         )
 
     @torch.library.register_fake(
-        "aphrodite::mm_mxfp8",
+        "sonar::mm_mxfp8",
     )
     def mm_mxfp8_fake(
         A: torch.Tensor,
@@ -1147,7 +1147,7 @@ def flashinfer_scaled_fp8_mm(
         scale_b,
         out_dtype,
         # Autotuned "auto" can switch backends between M buckets.
-        "cutlass" if envs.APHRODITE_BATCH_INVARIANT else "auto",
+        "cutlass" if envs.SONAR_BATCH_INVARIANT else "auto",
     ).view(a.shape[0], b.shape[1])
 
     if bias is not None:
@@ -1177,7 +1177,7 @@ def has_flashinfer_fp8_blockscale_gemm() -> bool:
 @functools.cache
 def is_flashinfer_fp8_blockscale_gemm_supported() -> bool:
     """Return `True` if FlashInfer block-scale FP8 GEMM is supported."""
-    return envs.APHRODITE_BLOCKSCALE_FP8_GEMM_FLASHINFER and has_flashinfer_fp8_blockscale_gemm()
+    return envs.SONAR_BLOCKSCALE_FP8_GEMM_FLASHINFER and has_flashinfer_fp8_blockscale_gemm()
 
 
 def should_use_flashinfer_for_blockscale_fp8_gemm(
@@ -1224,7 +1224,7 @@ def is_flashinfer_cudnn_fp8_prefill_attn_supported() -> bool:
     even when the installed cuDNN is new enough. See PR #38065 for the
     original Blackwell-only design intent.
     """
-    from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
+    from sonar.v1.attention.backends.registry import AttentionBackendEnum
 
     # cuDNN SDPA FP8 with bf16/fp16 output requires Blackwell (SM 100) or newer.
     if not current_platform.has_device_capability(100):

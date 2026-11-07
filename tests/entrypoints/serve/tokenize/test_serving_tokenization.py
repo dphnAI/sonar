@@ -11,20 +11,20 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from aphrodite.config.multimodal import MultiModalConfig
-from aphrodite.entrypoints.openai.models.protocol import BaseModelPath
-from aphrodite.entrypoints.openai.models.serving import OpenAIServingModels
-from aphrodite.entrypoints.serve.exception_handling.register import init_exception_handler
-from aphrodite.entrypoints.serve.tokenize.api_router import attach_router
-from aphrodite.entrypoints.serve.tokenize.protocol import (
+from sonar.config.multimodal import MultiModalConfig
+from sonar.entrypoints.openai.models.protocol import BaseModelPath
+from sonar.entrypoints.openai.models.serving import OpenAIServingModels
+from sonar.entrypoints.serve.exception_handling.register import init_exception_handler
+from sonar.entrypoints.serve.tokenize.api_router import attach_router
+from sonar.entrypoints.serve.tokenize.protocol import (
     TokenizeChatRequest,
     TokenizeCompletionRequest,
     TokenizeResponse,
 )
-from aphrodite.entrypoints.serve.tokenize.serving import ServingTokenization
-from aphrodite.exceptions import AphroditeNotFoundError, AphroditeValidationError
-from aphrodite.renderers.online_renderer import OnlineRenderer
-from aphrodite.v1.engine.async_llm import AsyncLLM
+from sonar.entrypoints.serve.tokenize.serving import ServingTokenization
+from sonar.exceptions import SonarNotFoundError, SonarValidationError
+from sonar.renderers.online_renderer import OnlineRenderer
+from sonar.v1.engine.async_llm import AsyncLLM
 
 MODEL_NAME = "openai-community/gpt2"
 BASE_MODEL_PATHS = [
@@ -196,9 +196,9 @@ class TestDetokenizeClientErrorResponses:
         with TestClient(app, raise_server_exceptions=False) as client:
             return client.post(path, json=body)
 
-    def test_aphrodite_validation_error_returns_bad_request(self):
+    def test_sonar_validation_error_returns_bad_request(self):
         handler = MagicMock(spec=ServingTokenization)
-        handler.create_detokenize.side_effect = AphroditeValidationError("invalid token ids", parameter="tokens")
+        handler.create_detokenize.side_effect = SonarValidationError("invalid token ids", parameter="tokens")
 
         response = self._post(handler)
 
@@ -207,9 +207,9 @@ class TestDetokenizeClientErrorResponses:
         assert error["type"] == "BadRequestError"
         assert error["param"] == "tokens"
 
-    def test_aphrodite_not_found_error_returns_not_found(self):
+    def test_sonar_not_found_error_returns_not_found(self):
         handler = MagicMock(spec=ServingTokenization)
-        handler.create_detokenize.side_effect = AphroditeNotFoundError("LoRA adapter nonexistent-lora not found")
+        handler.create_detokenize.side_effect = SonarNotFoundError("LoRA adapter nonexistent-lora not found")
 
         response = self._post(handler)
 
@@ -257,7 +257,7 @@ class TestDetokenizeClientErrorResponses:
             ("/detokenize", "create_detokenize"),
         ):
             handler = MagicMock(spec=ServingTokenization)
-            getattr(handler, method).side_effect = AphroditeValidationError("invalid input", parameter="model")
+            getattr(handler, method).side_effect = SonarValidationError("invalid input", parameter="model")
             statuses[path] = self._post(handler, path=path).status_code
 
         assert statuses["/tokenize"] == HTTPStatus.BAD_REQUEST

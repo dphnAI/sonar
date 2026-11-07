@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, NamedTuple
 
 import regex as re
 
-from aphrodite.entrypoints.generate.base.protocol import (
+from sonar.entrypoints.generate.base.protocol import (
     DeltaFunctionCall,
     DeltaMessage,
     DeltaToolCall,
@@ -21,17 +21,17 @@ from aphrodite.entrypoints.generate.base.protocol import (
     FunctionCall,
     ToolCall,
 )
-from aphrodite.logger import init_logger
-from aphrodite.parser.abstract_parser import Parser, StreamState
-from aphrodite.parser.engine.events import EventType, SemanticEvent
-from aphrodite.parser.engine.parser_engine_config import (
+from sonar.logger import init_logger
+from sonar.parser.abstract_parser import Parser, StreamState
+from sonar.parser.engine.events import EventType, SemanticEvent
+from sonar.parser.engine.parser_engine_config import (
     ArgValueExtender,
     ParserEngineConfig,
     ParserState,
 )
-from aphrodite.parser.engine.streaming_parser_engine import StreamingParserEngine
-from aphrodite.renderers.chat_utils import get_tool_call_id_type, make_tool_call_id
-from aphrodite.tool_parsers.utils import (
+from sonar.parser.engine.streaming_parser_engine import StreamingParserEngine
+from sonar.renderers.chat_utils import get_tool_call_id_type, make_tool_call_id
+from sonar.tool_parsers.utils import (
     coerce_to_schema_type,
     extract_types_from_schema,
     find_tool_name,
@@ -39,12 +39,12 @@ from aphrodite.tool_parsers.utils import (
 )
 
 if TYPE_CHECKING:
-    from aphrodite.entrypoints.openai.chat_completion.protocol import (
+    from sonar.entrypoints.openai.chat_completion.protocol import (
         ChatCompletionRequest,
     )
-    from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
-    from aphrodite.tokenizers import TokenizerLike
-    from aphrodite.tool_parsers.abstract_tool_parser import Tool
+    from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
+    from sonar.tokenizers import TokenizerLike
+    from sonar.tool_parsers.abstract_tool_parser import Tool
 
 logger = init_logger(__name__)
 

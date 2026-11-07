@@ -5,7 +5,7 @@
 import openai
 import pytest
 
-from aphrodite.entrypoints.pooling.embed.protocol import EmbeddingResponse
+from sonar.entrypoints.pooling.embed.protocol import EmbeddingResponse
 from tests.conftest import HfRunner
 from tests.models.language.pooling.embed_utils import (
     float_embeddings,
@@ -90,8 +90,8 @@ async def test_matryoshka(model_info: EmbedModelInfo, server: RemoteOpenAIServer
         if dimensions is not None:
             assert len(embeddings.data[0].embedding) == dimensions
 
-        aphrodite_outputs = float_embeddings(embeddings)
-        run_embedding_correctness_test(hf_model, prompts, aphrodite_outputs, dimensions)
+        sonar_outputs = float_embeddings(embeddings)
+        run_embedding_correctness_test(hf_model, prompts, sonar_outputs, dimensions)
 
     if model_info.is_matryoshka:
         valid_dimensions: list[int | None] = [None]

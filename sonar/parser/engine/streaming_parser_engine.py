@@ -8,21 +8,21 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from aphrodite.parser.engine.events import EventType, SemanticEvent
-from aphrodite.parser.engine.incremental_lexer import (
+from sonar.parser.engine.events import EventType, SemanticEvent
+from sonar.parser.engine.incremental_lexer import (
     CONTENT_TERMINAL,
     IncrementalLexer,
     LexerShape,
     LexToken,
     TerminalDef,
 )
-from aphrodite.parser.engine.parser_engine_config import (
+from sonar.parser.engine.parser_engine_config import (
     ParserEngineConfig,
     ParserState,
     ToolCallBodyCollection,
     Transition,
 )
-from aphrodite.parser.engine.token_id_scanner import (
+from sonar.parser.engine.token_id_scanner import (
     DROP_TERMINAL,
     LexerInput,
     PreLexedTerminal,

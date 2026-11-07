@@ -13,19 +13,19 @@ from typing import TYPE_CHECKING, Any, NamedTuple
 import numpy as np
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed.kv_transfer.kv_connector.v1.hisparse.stats import (
+from sonar.config import SonarConfig
+from sonar.distributed.kv_transfer.kv_connector.v1.hisparse.stats import (
     HiSparseKVConnectorStats,
 )
-from aphrodite.distributed.parallel_state import (
+from sonar.distributed.parallel_state import (
     get_tensor_model_parallel_rank,
     get_tp_group,
 )
-from aphrodite.utils.gpu_sync_debug import gpu_sync_allowed
-from aphrodite.v1.core.kv_cache_utils import KVCacheBlockCopy
-from aphrodite.v1.hisparse.backend import get_hisparse_backend
-from aphrodite.v1.hisparse.layout import HISPARSE_HOT_SUFFIX
-from aphrodite.v1.hisparse.runtime import (
+from sonar.utils.gpu_sync_debug import gpu_sync_allowed
+from sonar.v1.core.kv_cache_utils import KVCacheBlockCopy
+from sonar.v1.hisparse.backend import get_hisparse_backend
+from sonar.v1.hisparse.layout import HISPARSE_HOT_SUFFIX
+from sonar.v1.hisparse.runtime import (
     HiSparseCacheHandle,
     HiSparseHostPool,
     HiSparseSlotInvalidator,
@@ -33,18 +33,18 @@ from aphrodite.v1.hisparse.runtime import (
     release_pinned_state,
     update_hisparse_residency,
 )
-from aphrodite.v1.hisparse.types import SparseKVPageTransfer, SparseKVRowMirror
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.hisparse.types import SparseKVPageTransfer, SparseKVRowMirror
+from sonar.v1.kv_cache_interface import (
     HiSparseHotSpec,
     KVCacheConfig,
 )
-from aphrodite.v1.worker.utils import copy_kv_cache_blocks_inplace
+from sonar.v1.worker.utils import copy_kv_cache_blocks_inplace
 
 if TYPE_CHECKING:
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.hisparse.connector import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.hisparse.connector import (
         HiSparseConnectorMetadata,
     )
-    from aphrodite.v1.kv_offload.cpu.shared_offload_region import SharedOffloadRegion
+    from sonar.v1.kv_offload.cpu.shared_offload_region import SharedOffloadRegion
 
 
 class _DMADescriptors(NamedTuple):
@@ -184,14 +184,14 @@ def _create_hisparse_host_events(
 class HiSparseConnectorWorker:
     """Own HiSparse host/hot state and execute its worker-side transfers."""
 
-    def __init__(self, aphrodite_config: AphroditeConfig, kv_cache_config: KVCacheConfig) -> None:
+    def __init__(self, sonar_config: SonarConfig, kv_cache_config: KVCacheConfig) -> None:
         self.backend = get_hisparse_backend()
-        self.aphrodite_config = aphrodite_config
+        self.sonar_config = sonar_config
         self.kv_cache_config = kv_cache_config
         self._initialized = False
 
     def register_kv_caches(self, kv_caches: dict[str, torch.Tensor]) -> None:
-        forward_context = self.aphrodite_config.compilation_config.static_forward_context
+        forward_context = self.sonar_config.compilation_config.static_forward_context
         cache_handles: list[HiSparseCacheHandle] = []
         cache_layer_names: list[str] = []
         for group in self.kv_cache_config.kv_cache_groups:
@@ -231,7 +231,7 @@ class HiSparseConnectorWorker:
                 cache_handles,
                 cache_layer_names,
                 hot_backing,
-                self.aphrodite_config.scheduler_config.max_num_seqs,
+                self.sonar_config.scheduler_config.max_num_seqs,
                 host_num_blocks,
                 hot_backing.device,
                 pinned_host_pools,
@@ -244,7 +244,7 @@ class HiSparseConnectorWorker:
                 pinned_host_pools,
                 shared_host_region,
             )
-            drop_hisparse_host_pool(self.aphrodite_config)
+            drop_hisparse_host_pool(self.sonar_config)
             raise
 
     def initialize(
@@ -272,8 +272,8 @@ class HiSparseConnectorWorker:
         self.dma_stream = torch.Stream(device=device) if self.is_host_writer else None
         self._slot_mapping_staging = None
         if self.is_host_writer:
-            max_mirror_rows = self.aphrodite_config.scheduler_config.max_num_batched_tokens + max_num_reqs * (
-                self.aphrodite_config.num_lookahead_tokens + 1
+            max_mirror_rows = self.sonar_config.scheduler_config.max_num_batched_tokens + max_num_reqs * (
+                self.sonar_config.num_lookahead_tokens + 1
             )
             self._slot_mapping_staging = _SlotMappingStaging(
                 stream=torch.Stream(device=device),
@@ -893,5 +893,5 @@ class HiSparseConnectorWorker:
             self.pinned_host_pools,
             self.shared_host_region,
         )
-        drop_hisparse_host_pool(self.aphrodite_config)
+        drop_hisparse_host_pool(self.sonar_config)
         self._initialized = False

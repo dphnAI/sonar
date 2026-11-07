@@ -6,7 +6,7 @@ from collections.abc import Sequence
 
 import torch
 
-from aphrodite.pooling_params import LateInteractionParams, PoolingParams
+from sonar.pooling_params import LateInteractionParams, PoolingParams
 
 LATE_INTERACTION_MODE_CACHE_QUERY = "cache_query"
 LATE_INTERACTION_MODE_SCORE_DOC = "score_doc"

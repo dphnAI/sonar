@@ -26,27 +26,27 @@ import torch
 from torch import nn
 from torch.nn.parameter import Parameter
 
-import aphrodite.envs as envs
-from aphrodite.config import get_current_aphrodite_config
-from aphrodite.distributed import (
+import sonar.envs as envs
+from sonar.config import get_current_sonar_config
+from sonar.distributed import (
     get_dp_group,
     get_pcp_group,
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
 )
-from aphrodite.model_executor.kernels.linear.cute_dsl import ll_bf16
-from aphrodite.model_executor.layers.fused_moe import FusedMoEFactory
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.utils import set_weight_attrs
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, tldevice, triton
-from aphrodite.utils.multi_stream_utils import maybe_execute_in_parallel
-from aphrodite.utils.torch_utils import aux_stream
+from sonar.model_executor.kernels.linear.cute_dsl import ll_bf16
+from sonar.model_executor.layers.fused_moe import FusedMoEFactory
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.utils import set_weight_attrs
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, tldevice, triton
+from sonar.utils.multi_stream_utils import maybe_execute_in_parallel
+from sonar.utils.torch_utils import aux_stream
 
 from ..configs import InklingModelConfig
 
 if TYPE_CHECKING:
-    from aphrodite.model_executor.layers.fused_moe.routed_experts import (
+    from sonar.model_executor.layers.fused_moe.routed_experts import (
         RoutedExperts,
     )
 
@@ -260,7 +260,7 @@ def _inkling_moe_ep_size() -> int:
     """EP size the FusedMoEFactory layer will run with (mirrors
     FusedMoEParallelConfig.make: experts shard over tp * dp * pcp when
     expert parallelism is enabled)."""
-    parallel_config = get_current_aphrodite_config().parallel_config
+    parallel_config = get_current_sonar_config().parallel_config
     if not parallel_config.enable_expert_parallel:
         return 1
     world = get_tensor_model_parallel_world_size() * get_dp_group().world_size * get_pcp_group().world_size
@@ -338,7 +338,7 @@ class InklingSinkExpertsLinear(nn.Module):
         prefix: str = "",
     ) -> None:
         super().__init__()
-        from aphrodite.model_executor.layers.linear import (
+        from sonar.model_executor.layers.linear import (
             MergedColumnParallelLinear,
             RowParallelLinear,
         )
@@ -459,7 +459,7 @@ class InklingMoE(nn.Module):
 
         self._routed_sel: tuple[torch.Tensor, torch.Tensor, torch.Tensor] | None = None
         sink_experts_cls = (
-            InklingSinkExpertsLinear if get_current_aphrodite_config().lora_config is not None else InklingSinkExperts
+            InklingSinkExpertsLinear if get_current_sonar_config().lora_config is not None else InklingSinkExperts
         )
         self.sink_experts = sink_experts_cls(
             n_experts=n_shared,
@@ -519,7 +519,7 @@ class InklingMoE(nn.Module):
             lambda: self.sink_experts(x, gammas),
             self._sink_events[0],
             self._sink_events[1],
-            self._sink_stream if num_tokens <= envs.APHRODITE_SHARED_EXPERTS_STREAM_TOKEN_THRESHOLD else None,
+            self._sink_stream if num_tokens <= envs.SONAR_SHARED_EXPERTS_STREAM_TOKEN_THRESHOLD else None,
         )
         self._routed_sel = None
 

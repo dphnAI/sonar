@@ -24,8 +24,8 @@ from contextvars import ContextVar
 
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.platforms import current_platform
+import sonar.envs as envs
+from sonar.platforms import current_platform
 
 SYNC_ERROR_MESSAGE = "GPU<->CPU sync detected - avoid it or wrap with gpu_sync_allowed()"
 
@@ -37,12 +37,12 @@ _GPU_SYNC_ALLOWED_FIRST_SEEN: set[tuple[str, int]] = set()
 # Read once: `envs.__getattr__` re-evaluates the env lambda on every access,
 # which dominates the cost of a disabled `gpu_sync_allowed()`. Tests toggling
 # the env var must patch this attribute instead.
-_SYNC_CHECK_MODE: str | None = envs.APHRODITE_GPU_SYNC_CHECK if current_platform.is_cuda_alike() else None
+_SYNC_CHECK_MODE: str | None = envs.SONAR_GPU_SYNC_CHECK if current_platform.is_cuda_alike() else None
 
 # Configured mode while a thread is inside a checked call, else None.
-_checking: ContextVar[str | None] = ContextVar("aphrodite_gpu_sync_checking", default=None)
+_checking: ContextVar[str | None] = ContextVar("sonar_gpu_sync_checking", default=None)
 # Depth of nested `gpu_sync_allowed()` regions on this thread.
-_allow_depth: ContextVar[int] = ContextVar("aphrodite_gpu_sync_allow_depth", default=0)
+_allow_depth: ContextVar[int] = ContextVar("sonar_gpu_sync_allow_depth", default=0)
 
 # Off during engine setup so model load, KV cache init and warmup may sync
 # freely; flipped on by `enable_gpu_sync_check()` once warmup completes.

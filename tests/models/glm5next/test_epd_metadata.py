@@ -5,7 +5,7 @@
 import pytest
 import torch
 
-from aphrodite.model_executor.models.glm4_1v import Glm4vMultiModalDataParser
+from sonar.model_executor.models.glm4_1v import Glm4vMultiModalDataParser
 
 
 @pytest.mark.parametrize("allow_missing", [False, True])

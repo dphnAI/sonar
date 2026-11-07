@@ -8,8 +8,8 @@ from typing import Any
 from fastapi import APIRouter, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
 
-from aphrodite.engine.protocol import EngineClient
-from aphrodite.logger import init_logger
+from sonar.engine.protocol import EngineClient
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 

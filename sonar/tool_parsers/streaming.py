@@ -5,16 +5,16 @@ import json
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from aphrodite.entrypoints.generate.base.protocol import (
+from sonar.entrypoints.generate.base.protocol import (
     DeltaFunctionCall,
     DeltaMessage,
     DeltaToolCall,
 )
-from aphrodite.renderers.chat_utils import make_tool_call_id
-from aphrodite.utils.mistral import is_mistral_tokenizer
+from sonar.renderers.chat_utils import make_tool_call_id
+from sonar.utils.mistral import is_mistral_tokenizer
 
 if TYPE_CHECKING:
-    from aphrodite.tokenizers import TokenizerLike
+    from sonar.tokenizers import TokenizerLike
 else:
     TokenizerLike = object
 
@@ -38,7 +38,7 @@ def extract_named_tool_call_streaming(
     else:
         if is_mistral_tokenizer(tokenizer):
             # Import mistral_common only if we need it.
-            from aphrodite.parser.mistral import MistralToolCall
+            from sonar.parser.mistral import MistralToolCall
 
             tool_call_id = MistralToolCall.generate_random_id()
         else:

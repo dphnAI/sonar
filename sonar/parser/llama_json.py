@@ -8,18 +8,18 @@ import json
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
-from aphrodite.parser.engine.parser_engine import ParserEngine
-from aphrodite.parser.engine.parser_engine_config import (
+from sonar.parser.engine.parser_engine import ParserEngine
+from sonar.parser.engine.parser_engine_config import (
     ParserEngineConfig,
     ParserState,
     ToolCallBodyCollection,
     Transition,
 )
-from aphrodite.parser.utils import extract_json_member_object
+from sonar.parser.utils import extract_json_member_object
 
 if TYPE_CHECKING:
-    from aphrodite.tokenizers import TokenizerLike
-    from aphrodite.tool_parsers.abstract_tool_parser import Tool
+    from sonar.tokenizers import TokenizerLike
+    from sonar.tool_parsers.abstract_tool_parser import Tool
 
 TOOL_START = "<|python_tag|>"
 LLAMA_OUTPUT_END_TOKENS = (

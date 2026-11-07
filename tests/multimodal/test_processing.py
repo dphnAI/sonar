@@ -11,18 +11,18 @@ from typing import TypedDict
 import numpy as np
 import pytest
 
-from aphrodite.config import ModelConfig, SchedulerConfig
-from aphrodite.config.multimodal import MultiModalConfig
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.hasher import MultiModalHasher
-from aphrodite.multimodal.parse import MultiModalDataParser
-from aphrodite.multimodal.processing.context import (
+from sonar.config import ModelConfig, SchedulerConfig
+from sonar.config.multimodal import MultiModalConfig
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.hasher import MultiModalHasher
+from sonar.multimodal.parse import MultiModalDataParser
+from sonar.multimodal.processing.context import (
     BaseProcessingInfo,
     InputProcessingContext,
     _resolve_mm_processor_kwargs,
 )
-from aphrodite.multimodal.processing.inputs import ProcessorInputs
-from aphrodite.multimodal.processing.processor import (
+from sonar.multimodal.processing.inputs import ProcessorInputs
+from sonar.multimodal.processing.processor import (
     BaseMultiModalProcessor,
     PlaceholderFeaturesInfo,
     PromptIndexTargets,
@@ -35,7 +35,7 @@ from aphrodite.multimodal.processing.processor import (
     iter_token_matches,
     replace_token_matches,
 )
-from aphrodite.utils.collection_utils import flatten_2d_lists
+from sonar.utils.collection_utils import flatten_2d_lists
 
 from ..models.utils import build_model_context
 from .utils import random_image

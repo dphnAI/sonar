@@ -3,9 +3,9 @@
 """draft_lm_head.compute_logits, the DSpark draft's base logits on gfx942.
 
 With --monokernel on gfx942, the draft's 5 rows of one request get a sixth
-row of zeros, so that Aphrodite's dispatch (rocm_unquantized_gemm) takes the torch
+row of zeros, so that Sonar's dispatch (rocm_unquantized_gemm) takes the torch
 GEMM instead of wvSplitK, and the logits of the first 5 rows come back. Every
-other row count, and every call without --monokernel, keeps Aphrodite's dispatch,
+other row count, and every call without --monokernel, keeps Sonar's dispatch,
 which sends up to 5 rows to wvSplitK. This shard is 315 MiB, over the
 memory-side cache, so the skinny-GEMM guard would skip wvSplitK for n > 1.
 The counting test lifts that cap to the shard. The guard has its own tests.
@@ -16,7 +16,7 @@ are compared with an fp32 GEMM.
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 pytestmark = pytest.mark.skipif(not current_platform.is_rocm(), reason="the helper is for ROCm")
 
@@ -25,14 +25,14 @@ VOCAB_SHARD, HIDDEN = 32320, 5120
 
 
 def _skip_unless_gfx942():
-    from aphrodite.platforms.rocm import on_gfx942
+    from sonar.platforms.rocm import on_gfx942
 
     if not on_gfx942():
         pytest.skip("the helper runs on gfx942 only")
 
 
 def _set_gate(monkeypatch, on: bool):
-    from aphrodite.models.deepseek_v41.amd import ops
+    from sonar.models.deepseek_v41.amd import ops
 
     # The model records --monokernel when it is created. These tests have no
     # model, so they set the recorded flag themselves.
@@ -41,10 +41,10 @@ def _set_gate(monkeypatch, on: bool):
 
 
 class _LMHead(torch.nn.Module):
-    """The parts of ParallelLMHead that Aphrodite's GEMM dispatch uses."""
+    """The parts of ParallelLMHead that Sonar's GEMM dispatch uses."""
 
     def __init__(self, w):
-        from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+        from sonar.model_executor.layers.vocab_parallel_embedding import (
             UnquantizedEmbeddingMethod,
         )
 
@@ -61,8 +61,8 @@ def _processor(head, x):
 
 @pytest.fixture
 def wvsplitk_rows(monkeypatch):
-    """The row counts of the wvSplitK calls that Aphrodite's dispatch makes."""
-    from aphrodite.model_executor.layers import utils
+    """The row counts of the wvSplitK calls that Sonar's dispatch makes."""
+    from sonar.model_executor.layers import utils
 
     rows: list[int] = []
     real = utils.ops.wvSplitK
@@ -83,11 +83,11 @@ def _shard_under_skinny_cap(monkeypatch):
     skips wvSplitK for n > 1. The cap here is the shard itself. The
     accessor caches its one evaluation, so clear it on the way in and out.
     """
-    import aphrodite.envs as envs
-    from aphrodite.model_executor.layers.utils import _skinny_gemm_max_weight_bytes
+    import sonar.envs as envs
+    from sonar.model_executor.layers.utils import _skinny_gemm_max_weight_bytes
 
     monkeypatch.setenv(
-        "APHRODITE_SKINNY_GEMM_MAX_WEIGHT_BYTES",
+        "SONAR_SKINNY_GEMM_MAX_WEIGHT_BYTES",
         str(VOCAB_SHARD * HIDDEN * torch.bfloat16.itemsize),
     )
     envs.disable_envs_cache()
@@ -101,7 +101,7 @@ def _shard_under_skinny_cap(monkeypatch):
 @pytest.mark.parametrize("monokernel", [False, True])
 @pytest.mark.parametrize("rows", [1, 4, 5, 6, 10])
 def test_draft_lm_head_takes_5_rows_off_wvsplitk(monkeypatch, wvsplitk_rows, rows, monokernel):
-    from aphrodite.models.deepseek_v41.amd.ops import draft_lm_head
+    from sonar.models.deepseek_v41.amd.ops import draft_lm_head
 
     _skip_unless_gfx942()
     g = torch.Generator(device="cuda").manual_seed(rows)
@@ -117,7 +117,7 @@ def test_draft_lm_head_takes_5_rows_off_wvsplitk(monkeypatch, wvsplitk_rows, row
         _set_gate(monkeypatch, on=False)
 
     # Only the 5 rows with --monokernel leave wvSplitK. Every other call
-    # keeps Aphrodite's dispatch, which takes wvSplitK for up to 5 rows.
+    # keeps Sonar's dispatch, which takes wvSplitK for up to 5 rows.
     padded = monokernel and rows == draft_lm_head.ROWS
     assert wvsplitk_rows == ([] if padded or rows > 5 else [rows])
     assert got.shape == (rows, VOCAB_SHARD)
@@ -126,7 +126,7 @@ def test_draft_lm_head_takes_5_rows_off_wvsplitk(monkeypatch, wvsplitk_rows, row
 
 
 def test_draft_lm_head_passes_on_a_rank_without_logits(monkeypatch):
-    from aphrodite.models.deepseek_v41.amd.ops import draft_lm_head
+    from sonar.models.deepseek_v41.amd.ops import draft_lm_head
 
     _skip_unless_gfx942()
     # The logits processor returns None on a rank that does not get the

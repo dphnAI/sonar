@@ -8,36 +8,36 @@ from unittest.mock import MagicMock, call
 import pytest
 import torch
 
-from aphrodite import SamplingParams
-from aphrodite.config import KVEventsConfig, KVTransferConfig
-from aphrodite.distributed.kv_events import MEDIUM_CPU, BlockRemoved, BlockStored
-from aphrodite.distributed.kv_transfer.kv_connector.v1.offloading import (
+from sonar import SamplingParams
+from sonar.config import KVEventsConfig, KVTransferConfig
+from sonar.distributed.kv_events import MEDIUM_CPU, BlockRemoved, BlockStored
+from sonar.distributed.kv_transfer.kv_connector.v1.offloading import (
     scheduler as scheduler_module,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.offloading.common import (
+from sonar.distributed.kv_transfer.kv_connector.v1.offloading.common import (
     OffloadingConnectorMetadata,
     OffloadingWorkerMetadata,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.offloading.config import (
+from sonar.distributed.kv_transfer.kv_connector.v1.offloading.config import (
     build_offloading_config,
     get_sliding_window_size_in_chunks,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.offloading.metrics import (
+from sonar.distributed.kv_transfer.kv_connector.v1.offloading.metrics import (
     OffloadingConnectorStats,
     _ConnectorMetricName,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.offloading.scheduler import (
+from sonar.distributed.kv_transfer.kv_connector.v1.offloading.scheduler import (
     OffloadingConnectorScheduler,
     RequestOffloadState,
     _create_req_context,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.offloading_connector import (
+from sonar.distributed.kv_transfer.kv_connector.v1.offloading_connector import (
     OffloadingConnector,
 )
-from aphrodite.utils.hashing import sha256
-from aphrodite.v1.core.block_pool import BlockPool
-from aphrodite.v1.core.kv_cache_manager import KVCacheBlocks
-from aphrodite.v1.core.kv_cache_utils import (
+from sonar.utils.hashing import sha256
+from sonar.v1.core.block_pool import BlockPool
+from sonar.v1.core.kv_cache_manager import KVCacheBlocks
+from sonar.v1.core.kv_cache_utils import (
     BlockHash,
     KVCacheBlock,
     KVCacheBlockCopy,
@@ -45,16 +45,16 @@ from aphrodite.v1.core.kv_cache_utils import (
     init_none_hash,
     make_block_hash_with_group_id,
 )
-from aphrodite.v1.core.sched.output import (
+from sonar.v1.core.sched.output import (
     KVConnectorBlockState,
     NewRequestData,
     SchedulerOutput,
 )
-from aphrodite.v1.core.single_type_kv_cache_manager import (
+from sonar.v1.core.single_type_kv_cache_manager import (
     FullAttentionManager,
     SlidingWindowManager,
 )
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.kv_cache_interface import (
     ChunkedLocalAttentionSpec,
     FullAttentionSpec,
     KVCacheConfig,
@@ -62,9 +62,9 @@ from aphrodite.v1.kv_cache_interface import (
     MambaSpec,
     SlidingWindowSpec,
 )
-from aphrodite.v1.kv_cache_spec_registry import KVCacheSpecRegistry
-from aphrodite.v1.kv_hints import KvHintsEnvelope
-from aphrodite.v1.kv_offload.base import (
+from sonar.v1.kv_cache_spec_registry import KVCacheSpecRegistry
+from sonar.v1.kv_hints import KvHintsEnvelope
+from sonar.v1.kv_offload.base import (
     GPULoadStoreSpec,
     LookupResult,
     Medium,
@@ -79,16 +79,16 @@ from aphrodite.v1.kv_offload.base import (
     get_offload_group_idx,
     make_offload_key,
 )
-from aphrodite.v1.kv_offload.cpu.manager import CPUOffloadingManager
-from aphrodite.v1.kv_offload.cpu.shared_offload_region import SharedOffloadRegion
-from aphrodite.v1.kv_offload.tiering.example.manager import ExampleSecondaryTierManager
-from aphrodite.v1.metrics.cache_hit_source import CacheHitSource
-from aphrodite.v1.outputs import KVConnectorOutput, ModelRunnerOutput
-from aphrodite.v1.request import Request, RequestStatus
-from aphrodite.v1.worker.gpu.spec_decode.mtp.config import MTPSpeculatorConfig
+from sonar.v1.kv_offload.cpu.manager import CPUOffloadingManager
+from sonar.v1.kv_offload.cpu.shared_offload_region import SharedOffloadRegion
+from sonar.v1.kv_offload.tiering.example.manager import ExampleSecondaryTierManager
+from sonar.v1.metrics.cache_hit_source import CacheHitSource
+from sonar.v1.outputs import KVConnectorOutput, ModelRunnerOutput
+from sonar.v1.request import Request, RequestStatus
+from sonar.v1.worker.gpu.spec_decode.mtp.config import MTPSpeculatorConfig
 from tests.v1.kv_connector.unit.offloading_connector.test_config import (
-    _make_aphrodite_config,
     _make_mamba_hybrid_kv_cache_config,
+    _make_sonar_config,
 )
 from tests.v1.kv_connector.unit.offloading_connector.utils import (
     MockOffloadingSpec,
@@ -97,10 +97,10 @@ from tests.v1.kv_connector.unit.offloading_connector.utils import (
 )
 from tests.v1.kv_connector.unit.utils import (
     EOS_TOKEN_ID,
-    create_aphrodite_config,
     create_model_runner_output,
     create_request,
     create_scheduler,
+    create_sonar_config,
 )
 from tests.v1.spec_decode.utils import attach_speculator_config
 
@@ -250,10 +250,10 @@ def _make_partial_tail_scheduler(
     cache_hit_alignment_tokens: int | None = 4,
     manager: OffloadingManager | None = None,
 ) -> OffloadingConnectorScheduler:
-    aphrodite_config = _make_aphrodite_config(extra_config={"self_describing_kv_events": True})
-    aphrodite_config.cache_config.prefix_match_unit = None if recurrent_only else 4
-    aphrodite_config.speculative_config = None
-    aphrodite_config.kv_events_config = KVEventsConfig(enable_kv_cache_events=True, publisher="null")
+    sonar_config = _make_sonar_config(extra_config={"self_describing_kv_events": True})
+    sonar_config.cache_config.prefix_match_unit = None if recurrent_only else 4
+    sonar_config.speculative_config = None
+    sonar_config.kv_events_config = KVEventsConfig(enable_kv_cache_events=True, publisher="null")
     kv_cache_config = _make_mamba_hybrid_kv_cache_config()
     # Core resolves fine-grained hits for this layout at prefix_match_unit.
     kv_cache_config.cache_hit_alignment_tokens = cache_hit_alignment_tokens
@@ -261,10 +261,10 @@ def _make_partial_tail_scheduler(
     kv_cache_config.kv_cache_groups[0].is_eagle_group = eagle
     if recurrent_only:
         kv_cache_config.kv_cache_groups = kv_cache_config.kv_cache_groups[1:]
-    spec = MockOffloadingSpec(build_offloading_config(aphrodite_config, kv_cache_config))
+    spec = MockOffloadingSpec(build_offloading_config(sonar_config, kv_cache_config))
     if manager is not None:
         spec.manager = manager
-    return OffloadingConnectorScheduler(spec, aphrodite_config, kv_cache_config)
+    return OffloadingConnectorScheduler(spec, sonar_config, kv_cache_config)
 
 
 def _make_partial_tail_request(
@@ -975,16 +975,16 @@ def test_external_cache_hit_sources_use_loaded_attention_ranges(
     groups = [KVCacheGroupSpec(["sparse"], sparse_spec)]
     if full_attention:
         groups.insert(0, KVCacheGroupSpec(["full"], FullAttentionSpec(**spec_kwargs)))
-    aphrodite_config = _make_aphrodite_config(extra_config={"block_size": chunk_size})
-    aphrodite_config.cache_config.block_size = block_size
-    aphrodite_config.speculative_config = None
+    sonar_config = _make_sonar_config(extra_config={"block_size": chunk_size})
+    sonar_config.cache_config.block_size = block_size
+    sonar_config.speculative_config = None
     kv_cache_config = KVCacheConfig(
         num_blocks=100,
         kv_cache_tensors=[],
         kv_cache_groups=groups,
     )
-    spec = MockOffloadingSpec(build_offloading_config(aphrodite_config, kv_cache_config))
-    scheduler = OffloadingConnectorScheduler(spec, aphrodite_config, kv_cache_config)
+    spec = MockOffloadingSpec(build_offloading_config(sonar_config, kv_cache_config))
+    scheduler = OffloadingConnectorScheduler(spec, sonar_config, kv_cache_config)
     request = MagicMock(request_id="sparse")
     req_status = RequestOffloadState(
         config=scheduler.config,
@@ -1427,9 +1427,9 @@ def test_eagle_partial_tail_store_needs_offload_load(host_hit):
 def _make_tiering_engine_scheduler(secondary_tiers: list[dict[str, Any]]):
     """A real engine scheduler whose OffloadingConnector runs the real
     TieringOffloadingSpec manager; tests play the workers' reports."""
-    aphrodite_config = create_aphrodite_config(block_size=4, max_num_batched_tokens=64)
-    aphrodite_config.scheduler_config.async_scheduling = False
-    aphrodite_config.kv_transfer_config = KVTransferConfig(
+    sonar_config = create_sonar_config(block_size=4, max_num_batched_tokens=64)
+    sonar_config.scheduler_config.async_scheduling = False
+    sonar_config.kv_transfer_config = KVTransferConfig(
         kv_connector="OffloadingConnector",
         kv_role="kv_both",
         kv_connector_extra_config={
@@ -1438,7 +1438,7 @@ def _make_tiering_engine_scheduler(secondary_tiers: list[dict[str, Any]]):
             "secondary_tiers": secondary_tiers,
         },
     )
-    scheduler = create_scheduler(aphrodite_config, num_blocks=64)
+    scheduler = create_scheduler(sonar_config, num_blocks=64)
     connector = scheduler.connector
     assert isinstance(connector, OffloadingConnector)
     assert connector.connector_scheduler is not None
@@ -5079,13 +5079,13 @@ class TestEagle:
 
     def test_dcp_abort_reconsiders_final_swa_tail(self):
         """DCP-expanded SWA blocks are not scaled twice during abort."""
-        aphrodite_config = _make_aphrodite_config(
+        sonar_config = _make_sonar_config(
             extra_config={"offload_prompt_only": False},
             tensor_parallel_size=2,
             decode_context_parallel_size=2,
         )
-        aphrodite_config.speculative_config = None
-        aphrodite_config.kv_events_config = KVEventsConfig(enable_kv_cache_events=True, publisher="null")
+        sonar_config.speculative_config = None
+        sonar_config.kv_events_config = KVEventsConfig(enable_kv_cache_events=True, publisher="null")
         kv_cache_config = KVCacheConfig(
             num_blocks=0,
             kv_cache_tensors=[],
@@ -5111,8 +5111,8 @@ class TestEagle:
                 ),
             ],
         )
-        spec = MockOffloadingSpec(build_offloading_config(aphrodite_config, kv_cache_config))
-        scheduler = OffloadingConnectorScheduler(spec, aphrodite_config, kv_cache_config)
+        spec = MockOffloadingSpec(build_offloading_config(sonar_config, kv_cache_config))
+        scheduler = OffloadingConnectorScheduler(spec, sonar_config, kv_cache_config)
         _as_mock(scheduler.manager.prepare_store).side_effect = lambda keys, req_context: (generate_store_output(keys))
 
         request = MagicMock()
@@ -5774,11 +5774,11 @@ class TestMambaHybridOffloadServing:
     PROMPT_TOKENS = 28  # 7 hash blocks; 1 full mamba chunk
 
     def _make_scheduler(self, speculative_config, mamba_eagle=False):
-        aphrodite_config = _make_aphrodite_config(extra_config={"self_describing_kv_events": True})
-        aphrodite_config.cache_config.block_size = self.BLOCK
-        aphrodite_config.cache_config.prefix_match_unit = self.BLOCK
-        aphrodite_config.speculative_config = speculative_config
-        aphrodite_config.kv_events_config = KVEventsConfig(enable_kv_cache_events=True, publisher="null")
+        sonar_config = _make_sonar_config(extra_config={"self_describing_kv_events": True})
+        sonar_config.cache_config.block_size = self.BLOCK
+        sonar_config.cache_config.prefix_match_unit = self.BLOCK
+        sonar_config.speculative_config = speculative_config
+        sonar_config.kv_events_config = KVEventsConfig(enable_kv_cache_events=True, publisher="null")
         kv_cache_config = KVCacheConfig(
             num_blocks=64,
             kv_cache_tensors=[],
@@ -5804,8 +5804,8 @@ class TestMambaHybridOffloadServing:
                 ),
             ],
         )
-        spec = MockOffloadingSpec(build_offloading_config(aphrodite_config, kv_cache_config))
-        return OffloadingConnectorScheduler(spec, aphrodite_config, kv_cache_config)
+        spec = MockOffloadingSpec(build_offloading_config(sonar_config, kv_cache_config))
+        return OffloadingConnectorScheduler(spec, sonar_config, kv_cache_config)
 
     def _roundtrip_served_tokens(self, scheduler) -> int:
         """Request A: prompt-only store, finish; request A2: served tokens."""

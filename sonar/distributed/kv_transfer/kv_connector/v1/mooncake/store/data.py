@@ -11,18 +11,18 @@ from typing import NamedTuple, cast
 
 import torch
 
-from aphrodite.distributed.kv_transfer.kv_connector.v1.base import (
+from sonar.distributed.kv_transfer.kv_connector.v1.base import (
     KVConnectorMetadata,
     KVConnectorWorkerMetadata,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.layout import (
+from sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.layout import (
     KeyMetadata,
     RankLocalStoreLayout,
     StoreLayout,
 )
-from aphrodite.logger import init_logger
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.v1.core.kv_cache_utils import (
+from sonar.logger import init_logger
+from sonar.utils.math_utils import cdiv
+from sonar.v1.core.kv_cache_utils import (
     BlockHash,
     BlockHashListWithBlockSize,
 )
@@ -211,7 +211,7 @@ class MooncakeLookupResult:
 class LoadSpec:
     """Specification for loading KV cache from external store."""
 
-    aphrodite_cached_tokens: int
+    sonar_cached_tokens: int
     kvpool_cached_tokens: int
     can_load: bool
     token_len: int = 0

@@ -6,34 +6,34 @@ from collections.abc import Callable, Mapping
 from functools import partial
 from typing import Any, Literal
 
-import aphrodite.envs as envs
-from aphrodite.config import AphroditeConfig
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.inputs import (
+import sonar.envs as envs
+from sonar.config import SonarConfig
+from sonar.exceptions import SonarValidationError
+from sonar.inputs import (
     EngineInput,
     PromptType,
     SingletonInput,
     split_enc_dec_input,
 )
-from aphrodite.logger import init_logger
-from aphrodite.lora.request import LoRARequest
-from aphrodite.multimodal import MULTIMODAL_REGISTRY, MultiModalRegistry
-from aphrodite.multimodal.encoder_budget import MultiModalBudget
-from aphrodite.multimodal.inputs import MultiModalFeatureSpec
-from aphrodite.multimodal.utils import argsort_mm_positions
-from aphrodite.platforms import current_platform
-from aphrodite.pooling_params import PoolingParams
-from aphrodite.renderers import BaseRenderer, renderer_from_config
-from aphrodite.renderers.inputs.preprocess import parse_model_prompt
-from aphrodite.sampling_params import BeamSearchParams, SamplingParams
-from aphrodite.tasks import GENERATION_TASKS, POOLING_TASKS, SupportedTask
-from aphrodite.tokenizers import TokenizerLike
-from aphrodite.utils import length_from_prompt_token_ids_or_embeds, random_uuid
-from aphrodite.utils.async_utils import make_async
-from aphrodite.utils.diffusion import validate_diffusion_sampling_params
-from aphrodite.utils.jsontree import json_iter_leaves
-from aphrodite.v1.engine import EngineCoreRequest
-from aphrodite.v1.kv_hints import KvHintsEnvelope
+from sonar.logger import init_logger
+from sonar.lora.request import LoRARequest
+from sonar.multimodal import MULTIMODAL_REGISTRY, MultiModalRegistry
+from sonar.multimodal.encoder_budget import MultiModalBudget
+from sonar.multimodal.inputs import MultiModalFeatureSpec
+from sonar.multimodal.utils import argsort_mm_positions
+from sonar.platforms import current_platform
+from sonar.pooling_params import PoolingParams
+from sonar.renderers import BaseRenderer, renderer_from_config
+from sonar.renderers.inputs.preprocess import parse_model_prompt
+from sonar.sampling_params import BeamSearchParams, SamplingParams
+from sonar.tasks import GENERATION_TASKS, POOLING_TASKS, SupportedTask
+from sonar.tokenizers import TokenizerLike
+from sonar.utils import length_from_prompt_token_ids_or_embeds, random_uuid
+from sonar.utils.async_utils import make_async
+from sonar.utils.diffusion import validate_diffusion_sampling_params
+from sonar.utils.jsontree import json_iter_leaves
+from sonar.v1.engine import EngineCoreRequest
+from sonar.v1.kv_hints import KvHintsEnvelope
 
 logger = init_logger(__name__)
 
@@ -41,33 +41,33 @@ logger = init_logger(__name__)
 class InputProcessor:
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         renderer: BaseRenderer | None = None,
         *,
         mm_registry: MultiModalRegistry = MULTIMODAL_REGISTRY,
     ) -> None:
-        self.aphrodite_config = aphrodite_config
-        self.model_config = model_config = aphrodite_config.model_config
-        self.cache_config = aphrodite_config.cache_config
-        self.lora_config = aphrodite_config.lora_config
-        self.scheduler_config = aphrodite_config.scheduler_config
-        self.speculative_config = aphrodite_config.speculative_config
-        self.structured_outputs_config = aphrodite_config.structured_outputs_config
-        self.observability_config = aphrodite_config.observability_config
-        self.diffusion_config = aphrodite_config.diffusion_config
+        self.sonar_config = sonar_config
+        self.model_config = model_config = sonar_config.model_config
+        self.cache_config = sonar_config.cache_config
+        self.lora_config = sonar_config.lora_config
+        self.scheduler_config = sonar_config.scheduler_config
+        self.speculative_config = sonar_config.speculative_config
+        self.structured_outputs_config = sonar_config.structured_outputs_config
+        self.observability_config = sonar_config.observability_config
+        self.diffusion_config = sonar_config.diffusion_config
         # Load the custom logits processor classes once; the returned callable
         # runs their validate_params hooks per request at admission.
         self.validate_logits_processors_params = self._build_logits_processors_params_validator()
 
         self.generation_config_fields = model_config.try_get_generation_config()
 
-        self.renderer = renderer or renderer_from_config(aphrodite_config)
+        self.renderer = renderer or renderer_from_config(sonar_config)
 
         self.supports_mm_inputs = model_config.supports_multimodal_inputs
         self.mm_encoder_cache_size = 0
         self.skip_prompt_length_check = False
         if self.supports_mm_inputs:
-            mm_budget = MultiModalBudget(aphrodite_config, mm_registry)
+            mm_budget = MultiModalBudget(sonar_config, mm_registry)
             self.mm_encoder_cache_size = mm_budget.encoder_cache_size
             self.skip_prompt_length_check = mm_budget.processor.info.skip_prompt_length_check
             mm_budget.reset_cache()  # Not used anymore
@@ -90,17 +90,17 @@ class InputProcessor:
         """Load the custom logits processor classes and return the per-request
         params validator for the active model runner."""
         custom_logitsprocs = self.model_config.logits_processors
-        if self.aphrodite_config.use_v2_model_runner:
+        if self.sonar_config.use_v2_model_runner:
             if self.model_config.runner_type == "pooling" and not custom_logitsprocs:
                 return lambda _: None
 
-            from aphrodite.v1.worker.gpu.sample.logits_processor import (
+            from sonar.v1.worker.gpu.sample.logits_processor import (
                 build_custom_logits_processors_params_validator,
             )
 
             return build_custom_logits_processors_params_validator(custom_logitsprocs)
 
-        from aphrodite.v1.sample.logits_processor import (
+        from sonar.v1.sample.logits_processor import (
             validate_logits_processors_parameters,
         )
 
@@ -113,7 +113,7 @@ class InputProcessor:
         If watermarking is unavailable or incompatible with the request, emit
         a warning and return ``False``.
         """
-        return self.aphrodite_config._check_supports_watermarking(params)
+        return self.sonar_config._check_supports_watermarking(params)
 
     def apply_watermarking(self, params: SamplingParams, watermarking: bool) -> None:
         """Store the resolved `watermarking` on request-local params.
@@ -123,7 +123,7 @@ class InputProcessor:
         """
         # Sticky, so resolving an already resolved request keeps the flag.
         params._watermarking_skipped = params._watermarking_skipped or (
-            self.aphrodite_config.watermark_config is not None and params.watermarking is not False and not watermarking
+            self.sonar_config.watermark_config is not None and params.watermarking is not False and not watermarking
         )
         params.watermarking = watermarking
 
@@ -141,23 +141,23 @@ class InputProcessor:
         watermarking: bool | None = None
         if isinstance(params, SamplingParams):
             if "banned_strings" in (params.extra_args or {}) or "_sonar_phrase_retry" in (params.extra_args or {}):
-                from aphrodite.v1.phrase_guard.processor import PhraseRetryProcessor
-                from aphrodite.v1.phrase_guard.scheduler import PhraseScheduler
+                from sonar.v1.phrase_guard.processor import PhraseRetryProcessor
+                from sonar.v1.phrase_guard.scheduler import PhraseScheduler
 
-                if not issubclass(self.aphrodite_config.scheduler_config.get_scheduler_cls(), PhraseScheduler):
-                    raise AphroditeValidationError(
+                if not issubclass(self.sonar_config.scheduler_config.get_scheduler_cls(), PhraseScheduler):
+                    raise SonarValidationError(
                         "banned_strings requires starting the server with "
-                        "--scheduler-cls aphrodite.v1.phrase_guard.scheduler.PhraseScheduler",
+                        "--scheduler-cls sonar.v1.phrase_guard.scheduler.PhraseScheduler",
                         parameter="banned_strings",
                     )
                 try:
                     PhraseRetryProcessor.validate_params(params)
-                    PhraseRetryProcessor.validate_runtime(self.aphrodite_config, self.tokenizer)
+                    PhraseRetryProcessor.validate_runtime(self.sonar_config, self.tokenizer)
                 except ValueError as error:
-                    raise AphroditeValidationError(str(error), parameter="banned_strings") from error
+                    raise SonarValidationError(str(error), parameter="banned_strings") from error
             supported_generation_tasks = [task for task in supported_tasks if task in GENERATION_TASKS]
             if not supported_generation_tasks:
-                raise AphroditeValidationError("This model does not support generation")
+                raise SonarValidationError("This model does not support generation")
 
             params.verify(
                 self.model_config,
@@ -165,19 +165,19 @@ class InputProcessor:
                 self.structured_outputs_config,
                 self.tokenizer,
             )
-            if params.prompt_logprob_start is not None and not self.aphrodite_config.use_v2_model_runner:
-                raise AphroditeValidationError(
-                    "prompt_logprob_start requires the V2 model runner (APHRODITE_USE_V2_MODEL_RUNNER=1).",
+            if params.prompt_logprob_start is not None and not self.sonar_config.use_v2_model_runner:
+                raise SonarValidationError(
+                    "prompt_logprob_start requires the V2 model runner (SONAR_USE_V2_MODEL_RUNNER=1).",
                     parameter="prompt_logprob_start",
                 )
             if params.prompt_logprob_token_ids is not None:
-                if not self.aphrodite_config.use_v2_model_runner:
-                    raise AphroditeValidationError(
-                        "prompt_logprob_token_ids requires the V2 model runner (APHRODITE_USE_V2_MODEL_RUNNER=1).",
+                if not self.sonar_config.use_v2_model_runner:
+                    raise SonarValidationError(
+                        "prompt_logprob_token_ids requires the V2 model runner (SONAR_USE_V2_MODEL_RUNNER=1).",
                         parameter="prompt_logprob_token_ids",
                     )
-                if self.aphrodite_config.cache_config.kv_sharing_fast_prefill:
-                    raise AphroditeValidationError(
+                if self.sonar_config.cache_config.kv_sharing_fast_prefill:
+                    raise SonarValidationError(
                         "prompt_logprob_token_ids is incorrect with --kv-sharing-fast-prefill; disable it for scoring.",
                         parameter="prompt_logprob_token_ids",
                     )
@@ -203,15 +203,15 @@ class InputProcessor:
                         "and avoid potential OOMs"
                     )
             if params.thinking_token_budget is not None and (
-                self.aphrodite_config.reasoning_config is None or not self.aphrodite_config.reasoning_config.enabled
+                self.sonar_config.reasoning_config is None or not self.sonar_config.reasoning_config.enabled
             ):
-                raise AphroditeValidationError(
+                raise SonarValidationError(
                     "thinking_token_budget is set but reasoning_config is "
                     "not configured. Please set --reasoning-parser "
                     "and/or --reasoning-config to use thinking_token_budget."
                 )
             if params.trace_decode_token_ids and not self.model_config.enable_trace_replay:
-                raise AphroditeValidationError(
+                raise SonarValidationError(
                     "trace_decode_token_ids is set but trace replay is not "
                     "enabled. Start the engine with --enable-trace-replay "
                     "to use it."
@@ -222,7 +222,7 @@ class InputProcessor:
         elif isinstance(params, PoolingParams):
             supported_pooling_tasks = [task for task in supported_tasks if task in POOLING_TASKS]
             if not supported_pooling_tasks:
-                raise AphroditeValidationError("This model does not support pooling")
+                raise SonarValidationError("This model does not support pooling")
 
             if params.task is None:
                 if "token_embed" in supported_pooling_tasks:
@@ -233,7 +233,7 @@ class InputProcessor:
                     params.task = "plugin"
 
             if params.task not in supported_pooling_tasks:
-                raise AphroditeValidationError(
+                raise SonarValidationError(
                     f"Unsupported task: {params.task!r} Supported tasks: {supported_pooling_tasks}"
                 )
 
@@ -269,12 +269,12 @@ class InputProcessor:
 
         # LoRA request passed in while LoRA is not enabled
         if not self.lora_config:
-            raise AphroditeValidationError(f"Got lora_request {lora_request} but LoRA is not enabled!")
+            raise SonarValidationError(f"Got lora_request {lora_request} but LoRA is not enabled!")
 
         if self.tokenizer is not None:
             logger.warning_once(
-                "Aphrodite has deprecated support for supporting different "
-                "tokenizers for different LoRAs. By default, Aphrodite uses base "
+                "Sonar has deprecated support for supporting different "
+                "tokenizers for different LoRAs. By default, Sonar uses base "
                 "model's tokenizer. If you are using a LoRA "
                 "with its own tokenizer, consider specifying `--tokenizer "
                 "[lora_path]` to use the LoRA tokenizer."
@@ -340,12 +340,12 @@ class InputProcessor:
         if request.external_req_id is not None:
             raise ValueError(
                 "The external_req_id field should not be set on EngineCoreRequests"
-                " passed to Aphrodite; use the request_id field."
+                " passed to Sonar; use the request_id field."
             )
         request.external_req_id = request.request_id
-        if envs.APHRODITE_DISABLE_REQUEST_ID_RANDOMIZATION:
+        if envs.SONAR_DISABLE_REQUEST_ID_RANDOMIZATION:
             logger.warning_once(
-                "APHRODITE_DISABLE_REQUEST_ID_RANDOMIZATION is set and will be "
+                "SONAR_DISABLE_REQUEST_ID_RANDOMIZATION is set and will be "
                 "removed in a future release. Duplicate externally-provided "
                 "request IDs may cause failures and/or subtle correctness errors."
             )
@@ -371,12 +371,12 @@ class InputProcessor:
         watermarking = self._validate_params(params, supported_tasks)
         self._validate_lora(lora_request)
 
-        parallel_config = self.aphrodite_config.parallel_config
+        parallel_config = self.sonar_config.parallel_config
         dp_size = parallel_config.data_parallel_size
         dp_local_size = parallel_config.data_parallel_size_local
         num_ranks = dp_local_size if parallel_config.local_engines_only else dp_size
         if data_parallel_rank is not None and not (0 <= data_parallel_rank < num_ranks):
-            raise AphroditeValidationError(f"data_parallel_rank {data_parallel_rank} is out of range [0, {num_ranks}).")
+            raise SonarValidationError(f"data_parallel_rank {data_parallel_rank} is out of range [0, {num_ranks}).")
 
         if isinstance(prompt, dict) and "type" in prompt:
             if arrival_time is None:
@@ -430,14 +430,14 @@ class InputProcessor:
             self.apply_watermarking(sampling_params, watermarking)
             prompt_len = length_from_prompt_token_ids_or_embeds(prompt_token_ids, prompt_embeds)
             if not 0 <= sampling_params.routed_experts_prompt_start <= prompt_len:
-                raise AphroditeValidationError(
+                raise SonarValidationError(
                     f"routed_experts_prompt_start must be between 0 and the prompt length ({prompt_len}), inclusive.",
                     parameter="routed_experts_prompt_start",
                     value=sampling_params.routed_experts_prompt_start,
                 )
             start = sampling_params.prompt_logprob_start or 0
             if start and start >= prompt_len - 1:
-                raise AphroditeValidationError(
+                raise SonarValidationError(
                     f"prompt_logprob_start must be less than prompt_len - 1 "
                     f"({prompt_len - 1}) so at least one prompt row is scored.",
                     parameter="prompt_logprob_start",
@@ -447,7 +447,7 @@ class InputProcessor:
             if rows is not None:
                 num_rows = max(prompt_len - 1 - start, 0)
                 if len(rows) != num_rows:
-                    raise AphroditeValidationError(
+                    raise SonarValidationError(
                         f"prompt_logprob_token_ids has {len(rows)} rows, but the "
                         f"prompt has {num_rows} scored rows "
                         f"(prompt_len - 1 - prompt_logprob_start).",
@@ -459,7 +459,7 @@ class InputProcessor:
                 sampling_params.max_tokens = self.model_config.max_model_len - prompt_len
                 # min_tokens is not checked while max_tokens is unset.
                 if sampling_params.min_tokens > sampling_params.max_tokens:
-                    raise AphroditeValidationError(
+                    raise SonarValidationError(
                         f"min_tokens must be less than or equal to "
                         f"max_tokens={sampling_params.max_tokens}, got "
                         f"{sampling_params.min_tokens}."
@@ -513,14 +513,14 @@ class InputProcessor:
                 )
 
         if sampling_params is not None and "banned_strings" in (sampling_params.extra_args or {}):
-            from aphrodite.v1.phrase_guard.processor import PhraseRetryProcessor
+            from sonar.v1.phrase_guard.processor import PhraseRetryProcessor
 
             try:
                 PhraseRetryProcessor.validate_input(
                     resumable, bool(mm_features) or encoder_input is not None, prompt_embeds
                 )
             except ValueError as error:
-                raise AphroditeValidationError(str(error), parameter="banned_strings") from error
+                raise SonarValidationError(str(error), parameter="banned_strings") from error
 
         return EngineCoreRequest(
             request_id=request_id,
@@ -550,7 +550,7 @@ class InputProcessor:
             return
 
         if prompt_len == 0 and prompt_type == "decoder":
-            raise AphroditeValidationError(f"The {prompt_type} prompt cannot be empty")
+            raise SonarValidationError(f"The {prompt_type} prompt cannot be empty")
 
         model_config = self.model_config
         max_prompt_len = model_config.max_model_len if prompt_type == "decoder" else self.mm_encoder_cache_size
@@ -565,7 +565,7 @@ class InputProcessor:
             else:
                 suggestion = "Make sure that `max_model_len` is no smaller than the number of text tokens."
 
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 f"The {prompt_type} prompt (length {prompt_len}) is "
                 f"longer than the maximum model length of {max_prompt_len}. "
                 f"{suggestion}"
@@ -575,7 +575,7 @@ class InputProcessor:
                 "Make sure that `max_model_len` is no smaller than the "
                 "number of text tokens (prompt + requested output tokens)."
             )
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 f"The {prompt_type} prompt (length {prompt_len}) plus the number of "
                 f"requested output tokens (at least 1) is longer than the maximum "
                 f"model length of {max_prompt_len}. {suggestion}"
@@ -595,7 +595,7 @@ class InputProcessor:
         if prompt_input["type"] == "embeds":
             is_token_ids = prompt_input.get("is_token_ids")
             if is_token_ids is not None and len(is_token_ids) != prompt_len:
-                raise AphroditeValidationError(
+                raise SonarValidationError(
                     "prompt_is_token_ids must have the same length as prompt_embeds "
                     f"(expected {prompt_len}, got {len(is_token_ids)}).",
                     parameter="prompt_is_token_ids",
@@ -607,7 +607,7 @@ class InputProcessor:
                 for mm_position in mm_positions:
                     num_embeds = mm_position.get_num_embeds()
                     if num_embeds > self.mm_encoder_cache_size:
-                        raise AphroditeValidationError(
+                        raise SonarValidationError(
                             f"The {prompt_type} prompt contains a(n) {modality} item "
                             f"with {num_embeds} embedding tokens, which exceeds the "
                             f"pre-allocated encoder cache size "

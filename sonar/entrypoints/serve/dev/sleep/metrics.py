@@ -18,14 +18,14 @@ class SleepModeOperationMetrics:
     def __init__(self, registry: CollectorRegistry | None = None):
         registry = REGISTRY if registry is None else registry
         self.duration = Histogram(
-            "aphrodite:sleep_mode_operation_duration_seconds",
+            "sonar:sleep_mode_operation_duration_seconds",
             "Duration of one sleep-mode operation.",
             ["operation"],
             buckets=BUCKETS,
             registry=registry,
         )
         self.in_flight = Gauge(
-            "aphrodite:sleep_mode_operations_in_flight",
+            "sonar:sleep_mode_operations_in_flight",
             "Sleep-mode operations currently awaited.",
             ["operation"],
             multiprocess_mode="livesum",

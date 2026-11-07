@@ -7,15 +7,15 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from aphrodite.distributed.ec_transfer.ec_connector.base import (
+from sonar.distributed.ec_transfer.ec_connector.base import (
     ECConnectorBase,
     ECConnectorMetadata,
 )
-from aphrodite.v1.outputs import EMPTY_MODEL_RUNNER_OUTPUT
-from aphrodite.v1.worker.ec_connector_model_runner_mixin import (
+from sonar.v1.outputs import EMPTY_MODEL_RUNNER_OUTPUT
+from sonar.v1.worker.ec_connector_model_runner_mixin import (
     ECConnectorModelRunnerMixin,
 )
-from aphrodite.v1.worker.gpu.ec_connector import NO_OP_EC_CONNECTOR, ActiveECConnector
+from sonar.v1.worker.gpu.ec_connector import NO_OP_EC_CONNECTOR, ActiveECConnector
 
 pytestmark = pytest.mark.cpu_test
 
@@ -38,7 +38,7 @@ def _connector(
     fake.get_finished.return_value = (None, None)
     fake.build_connector_worker_meta.return_value = WORKER_META
     fake.get_ec_connector_stats.return_value = CONNECTOR_STATS
-    with patch("aphrodite.v1.worker.gpu.ec_connector.get_ec_transfer", return_value=fake):
+    with patch("sonar.v1.worker.gpu.ec_connector.get_ec_transfer", return_value=fake):
         return ActiveECConnector(SimpleNamespace(), encoder_cache or {}), fake
 
 
@@ -89,7 +89,7 @@ def test_v1_producer_receives_existing_encoder_cache():
     fake.is_consumer = False
     fake.get_finished.return_value = (None, None)
 
-    module = "aphrodite.v1.worker.ec_connector_model_runner_mixin"
+    module = "sonar.v1.worker.ec_connector_model_runner_mixin"
     with (
         patch(f"{module}.has_ec_transfer", return_value=True),
         patch(f"{module}.get_ec_transfer", return_value=fake),

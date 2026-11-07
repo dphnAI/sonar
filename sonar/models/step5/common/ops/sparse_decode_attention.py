@@ -10,8 +10,8 @@ combine kernel merges splits and clears inactive rows.
 
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, tldevice, triton
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, tldevice, triton
 
 # PDL: kernels launch during the producer's tail and gdc_wait before reading
 # its outputs. No early trigger, so their writes stay visible downstream.

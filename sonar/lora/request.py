@@ -13,7 +13,7 @@ class LoRARequest(
     """Request for a LoRA adapter.
 
     lora_int_id must be globally unique for a given adapter.
-    This is currently not enforced in Aphrodite.
+    This is currently not enforced in Sonar.
 
     load_inplace: If True, forces reloading the adapter even if one
         with the same lora_int_id already exists in the cache. This replaces

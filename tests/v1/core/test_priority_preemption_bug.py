@@ -3,26 +3,26 @@
 
 import torch
 
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.config import (
     CacheConfig,
     ModelConfig,
     ParallelConfig,
     SchedulerConfig,
+    SonarConfig,
 )
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.utils.hashing import sha256
-from aphrodite.v1.core.kv_cache_utils import get_request_block_hasher, init_none_hash
-from aphrodite.v1.core.sched.scheduler import Scheduler
-from aphrodite.v1.core.single_type_kv_cache_manager import register_all_kvcache_specs
-from aphrodite.v1.kv_cache_interface import (
+from sonar.sampling_params import SamplingParams
+from sonar.utils.hashing import sha256
+from sonar.v1.core.kv_cache_utils import get_request_block_hasher, init_none_hash
+from sonar.v1.core.sched.scheduler import Scheduler
+from sonar.v1.core.single_type_kv_cache_manager import register_all_kvcache_specs
+from sonar.v1.kv_cache_interface import (
     FullAttentionSpec,
     KVCacheConfig,
     KVCacheGroupSpec,
 )
-from aphrodite.v1.outputs import ModelRunnerOutput
-from aphrodite.v1.request import Request, RequestStatus
-from aphrodite.v1.structured_output import StructuredOutputManager
+from sonar.v1.outputs import ModelRunnerOutput
+from sonar.v1.request import Request, RequestStatus
+from sonar.v1.structured_output import StructuredOutputManager
 
 BLOCK_SIZE = 16
 NUM_BLOCKS = 6
@@ -57,7 +57,7 @@ def build_scheduler():
         cache_dtype="auto",
         enable_prefix_caching=False,
     )
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         scheduler_config=scheduler_config,
         model_config=model_config,
         cache_config=cache_config,
@@ -70,13 +70,13 @@ def build_scheduler():
         kv_cache_groups=[KVCacheGroupSpec(["layer"], kv_cache_spec)],
     )
     cache_config.num_gpu_blocks = NUM_BLOCKS
-    register_all_kvcache_specs(aphrodite_config)
+    register_all_kvcache_specs(sonar_config)
     return Scheduler(
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         kv_cache_config=kv_cache_config,
         block_size=BLOCK_SIZE,
         log_stats=True,
-        structured_output_manager=StructuredOutputManager(aphrodite_config),
+        structured_output_manager=StructuredOutputManager(sonar_config),
     )
 
 

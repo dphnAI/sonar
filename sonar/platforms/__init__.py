@@ -6,35 +6,35 @@ import traceback
 from itertools import chain
 from typing import TYPE_CHECKING
 
-from aphrodite import envs
-from aphrodite.plugins import PLATFORM_PLUGINS_GROUP, load_plugins_by_group
-from aphrodite.utils.import_utils import resolve_obj_by_qualname
+from sonar import envs
+from sonar.plugins import PLATFORM_PLUGINS_GROUP, load_plugins_by_group
+from sonar.utils.import_utils import resolve_obj_by_qualname
 
 from .interface import CpuArchEnum, Platform, PlatformEnum, in_wsl
 
 logger = logging.getLogger(__name__)
 
 
-def aphrodite_version_matches_substr(substr: str) -> bool:
-    """Check to see if the Aphrodite version matches a substring."""
+def sonar_version_matches_substr(substr: str) -> bool:
+    """Check to see if the Sonar version matches a substring."""
     from importlib.metadata import PackageNotFoundError, version
 
     try:
-        aphrodite_version = version("aphrodite-engine")
+        sonar_version = version("sonar")
     except PackageNotFoundError as e:
         logger.warning(
-            "The Aphrodite package was not found, so its version could not be "
+            "The Sonar package was not found, so its version could not be "
             "inspected. This may cause platform detection to fail."
         )
         raise e
-    return substr in aphrodite_version
+    return substr in sonar_version
 
 
 def tpu_platform_plugin() -> str | None:
     logger.debug("Checking if TPU platform is available.")
 
     # Check for Pathways TPU proxy
-    if envs.APHRODITE_TPU_USING_PATHWAYS:
+    if envs.SONAR_TPU_USING_PATHWAYS:
         logger.debug("Confirmed TPU platform is available via Pathways proxy.")
         return "tpu_inference.platforms.tpu_platform.TpuPlatform"
 
@@ -48,7 +48,7 @@ def tpu_platform_plugin() -> str | None:
         import libtpu  # noqa: F401
 
         logger.debug("Confirmed TPU platform is available.")
-        return "aphrodite.platforms.tpu.TpuPlatform"
+        return "sonar.platforms.tpu.TpuPlatform"
     except Exception as e:
         logger.debug("TPU platform is not available because: %s", str(e))
         return None
@@ -58,21 +58,21 @@ def cuda_platform_plugin() -> str | None:
     is_cuda = False
     logger.debug("Checking if CUDA platform is available.")
     try:
-        from aphrodite.utils.import_utils import import_pynvml
+        from sonar.utils.import_utils import import_pynvml
 
         pynvml = import_pynvml()
         pynvml.nvmlInit()
         try:
-            # NOTE: Edge case: aphrodite cpu build on a GPU machine.
+            # NOTE: Edge case: sonar cpu build on a GPU machine.
             # Third-party pynvml can be imported in cpu build,
-            # we need to check if aphrodite is built with cpu too.
-            # Otherwise, aphrodite will always activate cuda plugin
+            # we need to check if sonar is built with cpu too.
+            # Otherwise, sonar will always activate cuda plugin
             # on a GPU machine, even if in a cpu build.
-            is_cuda = pynvml.nvmlDeviceGetCount() > 0 and not aphrodite_version_matches_substr("cpu")
+            is_cuda = pynvml.nvmlDeviceGetCount() > 0 and not sonar_version_matches_substr("cpu")
             if pynvml.nvmlDeviceGetCount() <= 0:
                 logger.debug("CUDA platform is not available because no GPU is found.")
-            if aphrodite_version_matches_substr("cpu"):
-                logger.debug("CUDA platform is not available because Aphrodite is built with CPU.")
+            if sonar_version_matches_substr("cpu"):
+                logger.debug("CUDA platform is not available because Sonar is built with CPU.")
             if is_cuda:
                 logger.debug("Confirmed CUDA platform is available.")
         finally:
@@ -95,7 +95,7 @@ def cuda_platform_plugin() -> str | None:
         else:
             logger.debug("CUDA platform is not available because: %s", str(e))
 
-    return "aphrodite.platforms.cuda.CudaPlatform" if is_cuda else None
+    return "sonar.platforms.cuda.CudaPlatform" if is_cuda else None
 
 
 def rocm_platform_plugin() -> str | None:
@@ -121,7 +121,7 @@ def rocm_platform_plugin() -> str | None:
             import torch
 
             if (
-                not aphrodite_version_matches_substr("cpu")
+                not sonar_version_matches_substr("cpu")
                 and getattr(torch.version, "hip", None)
                 and torch.accelerator.is_available()
             ):
@@ -130,7 +130,7 @@ def rocm_platform_plugin() -> str | None:
         except Exception as e:
             logger.debug("WSL ROCm fallback detection failed because: %s", str(e))
 
-    return "aphrodite.platforms.rocm.RocmPlatform" if is_rocm else None
+    return "sonar.platforms.rocm.RocmPlatform" if is_rocm else None
 
 
 def xpu_platform_plugin() -> str | None:
@@ -141,7 +141,7 @@ def xpu_platform_plugin() -> str | None:
 
         if torch.distributed.is_xccl_available():
             dist_backend = "xccl"
-            from aphrodite.platforms.xpu import XPUPlatform
+            from sonar.platforms.xpu import XPUPlatform
 
             XPUPlatform.dist_backend = dist_backend
             logger.debug("Confirmed %s backend is available.", XPUPlatform.dist_backend)
@@ -152,21 +152,21 @@ def xpu_platform_plugin() -> str | None:
     except Exception as e:
         logger.debug("XPU platform is not available because: %s", str(e))
 
-    return "aphrodite.platforms.xpu.XPUPlatform" if is_xpu else None
+    return "sonar.platforms.xpu.XPUPlatform" if is_xpu else None
 
 
 def metal_platform_plugin() -> str | None:
     logger.debug("Checking if Metal platform is available.")
     try:
-        from aphrodite.metal import _apply_macos_defaults
-        from aphrodite.metal.envs import environment_variables as metal_env_vars
-        from aphrodite.metal.platform import MetalPlatform
+        from sonar.metal import _apply_macos_defaults
+        from sonar.metal.envs import environment_variables as metal_env_vars
+        from sonar.metal.platform import MetalPlatform
 
         envs.environment_variables.update(metal_env_vars)
         _apply_macos_defaults()
         if MetalPlatform.is_available():
             logger.debug("Confirmed Metal platform is available.")
-            return "aphrodite.platforms.metal.MetalPlatform"
+            return "sonar.platforms.metal.MetalPlatform"
     except Exception as e:
         logger.debug("Metal platform is not available because: %s", str(e))
     return None
@@ -183,22 +183,22 @@ def _is_amd_zen_cpu() -> bool:
 
 def cpu_platform_plugin() -> str | None:
     logger.debug("Checking if CPU platform is available.")
-    is_cpu = envs.APHRODITE_TARGET_DEVICE == "cpu"
+    is_cpu = envs.SONAR_TARGET_DEVICE == "cpu"
     if is_cpu:
-        logger.debug("Confirmed CPU platform is available because APHRODITE_TARGET_DEVICE is set to CPU.")
+        logger.debug("Confirmed CPU platform is available because SONAR_TARGET_DEVICE is set to CPU.")
     else:
         try:
             import sys
 
             if sys.platform.startswith("darwin"):
-                from aphrodite.metal.platform import MetalPlatform
+                from sonar.metal.platform import MetalPlatform
 
                 if MetalPlatform.is_available():
                     logger.debug("CPU platform is not activated because Metal is available.")
                     return None
-            is_cpu = aphrodite_version_matches_substr("cpu")
+            is_cpu = sonar_version_matches_substr("cpu")
             if is_cpu:
-                logger.debug("Confirmed CPU platform is available because Aphrodite is built with CPU.")
+                logger.debug("Confirmed CPU platform is available because Sonar is built with CPU.")
             if not is_cpu:
                 import sys
 
@@ -216,7 +216,7 @@ def cpu_platform_plugin() -> str | None:
             import zentorch  # noqa: F401
 
             logger.info("AMD Zen CPU detected with zentorch installed, using ZenCpuPlatform.")
-            return "aphrodite.platforms.zen_cpu.ZenCpuPlatform"
+            return "sonar.platforms.zen_cpu.ZenCpuPlatform"
         except ImportError:
             logger.debug("AMD Zen CPU detected but zentorch not installed, falling back to CpuPlatform.")
         except OSError:
@@ -229,7 +229,7 @@ def cpu_platform_plugin() -> str | None:
                 exc_info=True,
             )
 
-    return "aphrodite.platforms.cpu.CpuPlatform"
+    return "sonar.platforms.cpu.CpuPlatform"
 
 
 builtin_platform_plugins = {
@@ -246,7 +246,7 @@ def resolve_current_platform_cls_qualname() -> str:
     # An explicit CPU target is authoritative. Native CPU-only CI jobs reuse
     # an accelerator wheel and can run on accelerator hosts, so probing every
     # plugin would otherwise activate both CPU and the host accelerator.
-    if envs.APHRODITE_TARGET_DEVICE == "cpu":
+    if envs.SONAR_TARGET_DEVICE == "cpu":
         cpu_platform_cls_qualname = cpu_platform_plugin()
         assert cpu_platform_cls_qualname is not None
         logger.debug("Explicitly selected CPU platform.")
@@ -282,8 +282,8 @@ def resolve_current_platform_cls_qualname() -> str:
         platform_cls_qualname = builtin_platform_plugins[activated_builtin_plugins[0]]()
         logger.debug("Automatically detected platform %s.", activated_builtin_plugins[0])
     else:
-        platform_cls_qualname = "aphrodite.platforms.interface.UnspecifiedPlatform"
-        logger.debug("No platform detected, Aphrodite is running on UnspecifiedPlatform")
+        platform_cls_qualname = "sonar.platforms.interface.UnspecifiedPlatform"
+        logger.debug("No platform detected, Sonar is running on UnspecifiedPlatform")
     return platform_cls_qualname
 
 
@@ -297,12 +297,12 @@ if TYPE_CHECKING:
 def __getattr__(name: str):
     if name == "current_platform":
         # lazy init current_platform.
-        # 1. out-of-tree platform plugins need `from aphrodite.platforms import
+        # 1. out-of-tree platform plugins need `from sonar.platforms import
         #    Platform` so that they can inherit `Platform` class. Therefore,
         #    we cannot resolve `current_platform` during the import of
-        #    `aphrodite.platforms`.
+        #    `sonar.platforms`.
         # 2. when users use out-of-tree platform plugins, they might run
-        #    `import aphrodite`, some aphrodite internal code might access
+        #    `import sonar`, some sonar internal code might access
         #    `current_platform` during the import, and we need to make sure
         #    `current_platform` is only resolved after the plugins are loaded
         #    (we have tests for this, if any developer violate this, they will

@@ -5,12 +5,12 @@ from typing import Any
 
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite.distributed import get_dp_group
-from aphrodite.forward_context import get_forward_context, is_forward_context_available
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe.config import FusedMoEQuantConfig
-from aphrodite.model_executor.layers.fused_moe.topk_weight_and_reduce import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar.distributed import get_dp_group
+from sonar.forward_context import get_forward_context, is_forward_context_available
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe.config import FusedMoEQuantConfig
+from sonar.model_executor.layers.fused_moe.topk_weight_and_reduce import (
     TopKWeightAndReduceNoOP,
 )
 
@@ -44,14 +44,14 @@ class MoriEPv2PrepareAndFinalize(mk.FusedMoEPrepareAndFinalizeModular):
         return mk.FusedMoEActivationFormat.Standard
 
     def post_init_setup(self, fused_experts: mk.FusedMoEExperts):
-        from aphrodite.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
+        from sonar.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
             AiterExperts,
         )
 
         if fused_experts.moe_config.in_dtype != torch.bfloat16:
             raise ValueError(
                 "MORI EPv2 only dispatches BF16 activations; got "
-                f"{fused_experts.moe_config.in_dtype}. Set APHRODITE_MORI_EP_V2=0 to "
+                f"{fused_experts.moe_config.in_dtype}. Set SONAR_MORI_EP_V2=0 to "
                 "use MORI EPv1."
             )
         quant_dtype = fused_experts.quant_config.quant_dtype
@@ -60,15 +60,15 @@ class MoriEPv2PrepareAndFinalize(mk.FusedMoEPrepareAndFinalizeModular):
                 "MORI EPv2 dispatches unquantized BF16 activations, but "
                 f"{type(fused_experts).__name__} expects {quant_dtype} "
                 "activations quantized before dispatch. Use AITER fused MoE experts "
-                "(APHRODITE_ROCM_USE_AITER=1 APHRODITE_ROCM_USE_AITER_MOE=1), or set "
-                "APHRODITE_MORI_EP_V2=0 for MORI EPv1, which also requires AITER fused MoE."
+                "(SONAR_ROCM_USE_AITER=1 SONAR_ROCM_USE_AITER_MOE=1), or set "
+                "SONAR_MORI_EP_V2=0 for MORI EPv1, which also requires AITER fused MoE."
             )
 
         if quant_dtype is not None and fused_experts.quant_config.is_per_tensor:
             raise ValueError(
                 "MORI EPv2 does not support per-tensor activation quantization: "
                 "the experts would quantize the received rows, which AITER's "
-                "per-tensor quant does not support. Set APHRODITE_MORI_EP_V2=0 to use "
+                "per-tensor quant does not support. Set SONAR_MORI_EP_V2=0 to use "
                 "MORI EPv1, which quantizes before dispatch."
             )
 
@@ -113,7 +113,7 @@ class MoriEPv2PrepareAndFinalize(mk.FusedMoEPrepareAndFinalizeModular):
         return False
 
     def _route_padding_locally(self, topk_ids: torch.Tensor) -> torch.Tensor:
-        # DP padding tokens carry expert id -1 (APHRODITE_MOE_SKIP_PADDING) and zero
+        # DP padding tokens carry expert id -1 (SONAR_MOE_SKIP_PADDING) and zero
         # weight. MORI EPv2 has no invalid-expert slot and its FlyDSL dispatch
         # faults on -1, so send them to this rank's own experts instead.
         if self._padding_expert_ids is None:

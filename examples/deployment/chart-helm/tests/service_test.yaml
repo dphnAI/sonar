@@ -6,11 +6,11 @@ release:
 tests:
   - it: should honor the configured service name
     set:
-      serviceName: aphrodite-api
+      serviceName: sonar-api
     asserts:
       - equal:
           path: metadata.name
-          value: aphrodite-api
+          value: sonar-api
 
   - it: should select pods using the configured labels
     set:

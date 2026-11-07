@@ -17,12 +17,12 @@ import functools
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
-from aphrodite.parser.engine.parser_engine_config import ParserEngineConfig
-from aphrodite.parser.qwen3 import CHATML_TURN_BOUNDARIES, Qwen3Parser, qwen3_config
+from sonar.parser.engine.parser_engine_config import ParserEngineConfig
+from sonar.parser.qwen3 import CHATML_TURN_BOUNDARIES, Qwen3Parser, qwen3_config
 
 if TYPE_CHECKING:
-    from aphrodite.tokenizers import TokenizerLike
-    from aphrodite.tool_parsers.abstract_tool_parser import Tool
+    from sonar.tokenizers import TokenizerLike
+    from sonar.tool_parsers.abstract_tool_parser import Tool
 
 
 @functools.cache

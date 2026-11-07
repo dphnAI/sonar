@@ -11,8 +11,8 @@ writes for that row's BF16 GEMM output, without a separate cast launch.
 
 import torch
 
-from aphrodite.models.deepseek_v41.common.ops import MXFP4_BLOCK_SIZE, _fp32x2_to_fp4x2
-from aphrodite.triton_utils import tl, triton
+from sonar.models.deepseek_v41.common.ops import MXFP4_BLOCK_SIZE, _fp32x2_to_fp4x2
+from sonar.triton_utils import tl, triton
 
 
 def indexer_k_norm_rope_store_fp32(

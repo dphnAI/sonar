@@ -15,31 +15,31 @@ from unittest.mock import MagicMock
 import pytest
 import regex as re
 
-from aphrodite.entrypoints.generate.base.protocol import (
+from sonar.entrypoints.generate.base.protocol import (
     DeltaFunctionCall,
     DeltaToolCall,
     FunctionDefinition,
 )
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionRequest,
     ChatCompletionToolsParam,
 )
-from aphrodite.parser.abstract_parser import DelegatingParser
-from aphrodite.parser.engine.adapters import (
+from sonar.parser.abstract_parser import DelegatingParser
+from sonar.parser.engine.adapters import (
     ParserEngineReasoningAdapter,
     ParserEngineToolAdapter,
     make_adapters,
 )
-from aphrodite.parser.engine.events import EventType, SemanticEvent
-from aphrodite.parser.engine.parser_engine import ParserEngine, ReasoningEnd
-from aphrodite.parser.engine.parser_engine_config import (
+from sonar.parser.engine.events import EventType, SemanticEvent
+from sonar.parser.engine.parser_engine import ParserEngine, ReasoningEnd
+from sonar.parser.engine.parser_engine_config import (
     ParserEngineConfig,
     ParserState,
     Transition,
 )
-from aphrodite.parser.glm47_moe import glm47_moe_config
-from aphrodite.parser.parser_manager import ParserManager
-from aphrodite.parser.qwen3 import Qwen3Parser
+from sonar.parser.glm47_moe import glm47_moe_config
+from sonar.parser.parser_manager import ParserManager
+from sonar.parser.qwen3 import Qwen3Parser
 from tests.parser.engine.conftest import make_mock_tokenizer
 
 # ── Shared test configs ──────────────────────────────────────────────
@@ -1377,7 +1377,7 @@ class TestToolAdapterForwardsKwargs:
         ],
     )
     def test_kwargs_forwarded_to_parser_engine(self, enable_thinking, expected_state):
-        from aphrodite.parser.qwen3 import Qwen3Parser
+        from sonar.parser.qwen3 import Qwen3Parser
 
         vocab = {"<think>": 100, "</think>": 101}
         tokenizer = make_mock_tokenizer(vocab)
@@ -2030,7 +2030,7 @@ class TestTruncatedToolOpenerStreamParity:
     }
 
     def _make_parser(self):
-        from aphrodite.parser.parser_manager import ParserManager
+        from sonar.parser.parser_manager import ParserManager
 
         parser_cls = ParserManager.get_parser(
             tool_parser_name="qwen3_coder",
@@ -2130,7 +2130,7 @@ class TestThinkMarkupWithoutReasoningParser:
     _PARSERS = ["qwen3_coder", "deepseek_v4"]
 
     def _make_parser(self, tool_parser_name):
-        from aphrodite.parser.parser_manager import ParserManager
+        from sonar.parser.parser_manager import ParserManager
 
         parser_cls = ParserManager.get_parser(
             tool_parser_name=tool_parser_name,

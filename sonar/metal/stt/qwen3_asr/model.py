@@ -13,7 +13,7 @@ import math
 import mlx.core as mx
 import mlx.nn as nn
 
-from aphrodite.metal.stt.runtime import STTRuntimeAdapter
+from sonar.metal.stt.runtime import STTRuntimeAdapter
 
 from .config import Qwen3ASRAudioConfig, Qwen3ASRConfig, Qwen3ASRTextConfig
 
@@ -517,7 +517,7 @@ class Qwen3ASRModel(nn.Module):
         return self.language_model.forward_embeds(embeds, cache)
 
     def create_runtime_adapter(self, model_path: str, trust_remote_code: bool) -> STTRuntimeAdapter:
-        """Create the model-owned runtime adapter used by the Aphrodite runner."""
+        """Create the model-owned runtime adapter used by the Sonar runner."""
         # Local import: avoid import-time cycles (adapter imports transcriber).
         from .adapter import Qwen3ASRRuntimeAdapter
 

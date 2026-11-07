@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
 
-from aphrodite.logprobs import (
+from sonar.logprobs import (
     FlatLogprobs,
     Logprob,
     LogprobsOnePosition,

@@ -5,8 +5,8 @@ from typing import get_args
 
 from transformers import PreTrainedConfig
 
-from aphrodite.config.speculative import MTPModelTypes, SpeculativeConfig
-from aphrodite.transformers_utils.model_arch_config_convertor import (
+from sonar.config.speculative import MTPModelTypes, SpeculativeConfig
+from sonar.transformers_utils.model_arch_config_convertor import (
     BailingHybridMTPModelArchConfigConvertor,
 )
 

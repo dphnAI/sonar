@@ -5,10 +5,10 @@ from unittest.mock import patch
 import pytest
 import torch
 
-from aphrodite.assets.image import ImageAsset
-from aphrodite.config import ModelConfig
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.cache import MultiModalProcessorOnlyCache
+from sonar.assets.image import ImageAsset
+from sonar.config import ModelConfig
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.cache import MultiModalProcessorOnlyCache
 
 
 @pytest.mark.parametrize("model_id", ["llava-hf/llava-onevision-qwen2-0.5b-ov-hf"])
@@ -232,7 +232,7 @@ def test_repeated_image_hits_the_processor_cache():
             "<image> and more text",
             marks=pytest.mark.xfail(
                 reason="Emu3Processor prepends the BOS token itself because the "
-                "tokenizer doesn't, so the unexpanded prompt Aphrodite tokenizes "
+                "tokenizer doesn't, so the unexpanded prompt Sonar tokenizes "
                 "never gets one.",
                 strict=False,
             ),

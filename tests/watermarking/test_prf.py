@@ -4,8 +4,8 @@
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.v1.watermarking.prfs import PhiloxPRF
+from sonar.platforms import current_platform
+from sonar.v1.watermarking.prfs import PhiloxPRF
 
 
 def test_philox_compatibility_vector():

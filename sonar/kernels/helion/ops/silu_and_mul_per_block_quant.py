@@ -6,19 +6,19 @@ from typing import Any
 
 import torch
 
-from aphrodite.kernels.helion.case_key import CaseKey
-from aphrodite.kernels.helion.utils import (
+from sonar.kernels.helion.case_key import CaseKey
+from sonar.kernels.helion.utils import (
     get_fp8_dtype,
     get_int8_min_max,
     get_int8_min_scaling_factor,
 )
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.activation import SiluAndMul
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.activation import SiluAndMul
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     get_fp8_min_max,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.import_utils import has_helion
+from sonar.platforms import current_platform
+from sonar.utils.import_utils import has_helion
 
 if not has_helion():
     raise ImportError("Helion kernel requires helion to be installed. Install it with: pip install helion")
@@ -26,7 +26,7 @@ if not has_helion():
 import helion
 import helion.language as hl
 
-from aphrodite.kernels.helion.register import register_kernel
+from sonar.kernels.helion.register import register_kernel
 
 logger = init_logger(__name__)
 

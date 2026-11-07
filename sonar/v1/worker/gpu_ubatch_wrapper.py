@@ -9,21 +9,21 @@ from typing import Any
 
 import torch
 
-from aphrodite.compilation.cuda_graph import CUDAGraphWrapper
-from aphrodite.config import AphroditeConfig, CUDAGraphMode
-from aphrodite.distributed.device_communicators.pynccl_allocator import set_graph_pool_id
-from aphrodite.forward_context import (
+from sonar.compilation.cuda_graph import CUDAGraphWrapper
+from sonar.config import CUDAGraphMode, SonarConfig
+from sonar.distributed.device_communicators.pynccl_allocator import set_graph_pool_id
+from sonar.forward_context import (
     DPMetadata,
     create_forward_context,
     get_forward_context,
     override_forward_context,
 )
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.offloader.base import get_offloader
-from aphrodite.platforms import current_platform
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.v1.worker.ubatch_utils import create_sm_control_context
-from aphrodite.v1.worker.ubatching import UBatchContext, make_ubatch_contexts
+from sonar.logger import init_logger
+from sonar.model_executor.offloader.base import get_offloader
+from sonar.platforms import current_platform
+from sonar.sequence import IntermediateTensors
+from sonar.v1.worker.ubatch_utils import create_sm_control_context
+from sonar.v1.worker.ubatching import UBatchContext, make_ubatch_contexts
 
 logger = init_logger(__name__)
 
@@ -66,24 +66,24 @@ class UBatchWrapper:
     def __init__(
         self,
         runnable: Callable,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         runtime_mode: CUDAGraphMode,
         device: torch.cuda.device,
     ):
         self.runnable = runnable
-        self.aphrodite_config = aphrodite_config
-        self.compilation_config = aphrodite_config.compilation_config
+        self.sonar_config = sonar_config
+        self.compilation_config = sonar_config.compilation_config
         self.comm_stream = torch.cuda.Stream(device=device)
         # Ubatch threads plus the main thread
-        self.ready_barrier = threading.Barrier(self.aphrodite_config.parallel_config.num_ubatches + 1)
+        self.ready_barrier = threading.Barrier(self.sonar_config.parallel_config.num_ubatches + 1)
 
         self.cudagraphs: dict[int, CUDAGraphMetaData] = {}
 
         self.cudagraph_wrapper = None
         if runtime_mode is not CUDAGraphMode.NONE:
-            self.cudagraph_wrapper = CUDAGraphWrapper(runnable, aphrodite_config, runtime_mode=runtime_mode)
+            self.cudagraph_wrapper = CUDAGraphWrapper(runnable, sonar_config, runtime_mode=runtime_mode)
 
-        self.sm_control = create_sm_control_context(aphrodite_config.parallel_config)
+        self.sm_control = create_sm_control_context(sonar_config.parallel_config)
         self.device = device
         self.is_debugging_mode = logger.isEnabledFor(logging.DEBUG)
         self._runnable_str = str(runnable) if self.is_debugging_mode else None
@@ -268,7 +268,7 @@ class UBatchWrapper:
             forward_contexts.append(
                 create_forward_context(
                     attn_metadata[i] if attn_metadata is not None else None,
-                    self.aphrodite_config,
+                    self.sonar_config,
                     dp_metadata=dp_metadata[i],
                     batch_descriptor=batch_descriptor,
                     cudagraph_runtime_mode=cudagraph_runtime_mode,
@@ -379,13 +379,13 @@ class UBatchWrapper:
         assert dp_metadata is not None
         ubatch_dp_metadata = []
         for ubatch_slice in ubatch_slices:
-            dp_size = self.aphrodite_config.parallel_config.data_parallel_size
+            dp_size = self.sonar_config.parallel_config.data_parallel_size
             ubatch_num_tokens_across_dp = torch.tensor(
                 [ubatch_slice.num_tokens] * dp_size, device="cpu", dtype=torch.int32
             )
             ubatch_dp_metadata.append(
                 DPMetadata.make(
-                    self.aphrodite_config.parallel_config,
+                    self.sonar_config.parallel_config,
                     ubatch_slice.num_tokens,
                     ubatch_num_tokens_across_dp,
                 )

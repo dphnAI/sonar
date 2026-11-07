@@ -5,9 +5,9 @@ import random
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.sparse_attn_indexer import as_fp32_logits
-from aphrodite.platforms import current_platform
-from aphrodite.utils.deep_gemm import (
+from sonar.model_executor.layers.sparse_attn_indexer import as_fp32_logits
+from sonar.platforms import current_platform
+from sonar.utils.deep_gemm import (
     _ceil_to_ue8m0,
     calc_diff,
     fp8_fp4_mqa_logits,
@@ -18,8 +18,8 @@ from aphrodite.utils.deep_gemm import (
     mqa_logits_use_mx_scales,
     native_next_n_supported,
 )
-from aphrodite.utils.import_utils import has_deep_gemm
-from aphrodite.utils.math_utils import cdiv
+from sonar.utils.import_utils import has_deep_gemm
+from sonar.utils.math_utils import cdiv
 
 
 def encode_indexer_scales(sf: torch.Tensor) -> torch.Tensor:

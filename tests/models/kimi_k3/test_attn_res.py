@@ -7,20 +7,20 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from aphrodite.models.kimi_k3.common.mtp import fused_mtp_input
-from aphrodite.models.kimi_k3.nvidia.ops import attn_res
-from aphrodite.platforms import current_platform
+from sonar.models.kimi_k3.common.mtp import fused_mtp_input
+from sonar.models.kimi_k3.nvidia.ops import attn_res
+from sonar.platforms import current_platform
 
 HIDDEN_SIZE = 7168
 MAX_BLOCKS = 8
 EPS = 1e-5
-attn_res_module = importlib.import_module("aphrodite.models.kimi_k3.nvidia.ops.attn_res")
+attn_res_module = importlib.import_module("sonar.models.kimi_k3.nvidia.ops.attn_res")
 
 
 def _on_rocm_below_10() -> bool:
     if not current_platform.is_rocm():
         return False
-    from aphrodite.platforms.rocm import get_rocm_version
+    from sonar.platforms.rocm import get_rocm_version
 
     return (get_rocm_version() or (0,)) < (10,)
 
@@ -28,7 +28,7 @@ def _on_rocm_below_10() -> bool:
 # The Triton bundled with ROCm < 10 (3.7.x) crashes in the AMD
 # CanonicalizePointers pass on the kernel's tl.where over pointer tensors. Only
 # the num_blocks > 0 loop contains it. ROCm serves AttnRes from
-# aphrodite/models/kimi_k3/amd/ops/attn_res.py instead, so nothing real is lost.
+# sonar/models/kimi_k3/amd/ops/attn_res.py instead, so nothing real is lost.
 _OLD_ROCM = _on_rocm_below_10()
 
 

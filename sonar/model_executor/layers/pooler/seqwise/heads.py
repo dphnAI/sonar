@@ -7,9 +7,9 @@ from typing import TypeAlias
 import torch
 import torch.nn as nn
 
-from aphrodite.model_executor.layers.pooler import ActivationFn, ClassifierFn, ProjectorFn
-from aphrodite.tasks import PoolingTask
-from aphrodite.v1.pool.metadata import PoolingMetadata
+from sonar.model_executor.layers.pooler import ActivationFn, ClassifierFn, ProjectorFn
+from sonar.tasks import PoolingTask
+from sonar.v1.pool.metadata import PoolingMetadata
 
 from .methods import SequencePoolingMethodOutput
 

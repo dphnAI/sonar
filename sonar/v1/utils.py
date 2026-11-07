@@ -26,19 +26,19 @@ import torch
 import uvloop
 from torch.autograd.profiler import record_function
 
-import aphrodite.envs as envs
-from aphrodite.logger import init_logger
-from aphrodite.usage.usage_lib import UsageContext, is_usage_stats_enabled, usage_message
-from aphrodite.utils.network_utils import ZmqListener, get_open_zmq_ipc_path, get_tcp_uri
-from aphrodite.utils.system_utils import decorate_logs, kill_process_tree, set_process_title
-from aphrodite.utils.torch_utils import PIN_MEMORY, TORCH_DTYPE_TO_NUMPY_DTYPE
-from aphrodite.v1.core.sched.output import SchedulerOutput
+import sonar.envs as envs
+from sonar.logger import init_logger
+from sonar.usage.usage_lib import UsageContext, is_usage_stats_enabled, usage_message
+from sonar.utils.network_utils import ZmqListener, get_open_zmq_ipc_path, get_tcp_uri
+from sonar.utils.system_utils import decorate_logs, kill_process_tree, set_process_title
+from sonar.utils.torch_utils import PIN_MEMORY, TORCH_DTYPE_TO_NUMPY_DTYPE
+from sonar.v1.core.sched.output import SchedulerOutput
 
 if TYPE_CHECKING:
     import numpy as np
 
-    from aphrodite.v1.engine.coordinator import DPCoordinator
-    from aphrodite.v1.engine.utils import CoreEngineActorManager, CoreEngineProcManager
+    from sonar.v1.engine.coordinator import DPCoordinator
+    from sonar.v1.engine.utils import CoreEngineActorManager, CoreEngineProcManager
 
 logger = init_logger(__name__)
 
@@ -204,7 +204,7 @@ class APIServerProcessManager:
 
         admission_counters = None
         if num_servers > 1 and getattr(args, "max_num_queued_reqs", None) is not None:
-            from aphrodite.v1.engine.admission_control import SharedAdmissionStats
+            from sonar.v1.engine.admission_control import SharedAdmissionStats
 
             admission_counters = spawn_context.RawArray(
                 "q",
@@ -270,7 +270,7 @@ class APIServerProcessManager:
 class RustFrontendProcessManager:
     """Manages a single Rust frontend subprocess.
 
-    Launches the Rust aphrodite-rs binary in 'frontend' mode, passing the
+    Launches the Rust sonar-rs binary in 'frontend' mode, passing the
     HTTP and ZMQ listener file descriptors. Provides the same
     interface as APIServerProcessManager for process monitoring.
     """
@@ -321,7 +321,7 @@ class RustFrontendProcessManager:
             inherited_fds.append(grpc_fd)
         if stats_update_address is not None:
             cmd.extend(["--coordinator-address", stats_update_address])
-        from aphrodite.entrypoints.common.startup import jsonify_non_default_args
+        from sonar.entrypoints.common.startup import jsonify_non_default_args
 
         args_dict = jsonify_non_default_args(
             args,
@@ -338,7 +338,7 @@ class RustFrontendProcessManager:
         # explicit; environment defaults must not enable the frontend by accident.
         from dataclasses import asdict
 
-        from aphrodite.config.dphn import DphnNetworkConfig
+        from sonar.config.dphn import DphnNetworkConfig
 
         dphn_enabled = bool(getattr(args, "dphn_network", False))
         dphn_config = DphnNetworkConfig.resolve(dphn_enabled, getattr(args, "dphn_network_config", None))
@@ -351,7 +351,7 @@ class RustFrontendProcessManager:
         else:
             args_dict.pop("dphn_network_config", None)
 
-        # `model_tag` is the positional `aphrodite serve` model argument. When the
+        # `model_tag` is the positional `sonar serve` model argument. When the
         # model is supplied only through `--config`, argparse populates `model`
         # while leaving `model_tag` unset. The Rust frontend requires
         # `model_tag` in its JSON bootstrap payload, so use the resolved model
@@ -363,17 +363,17 @@ class RustFrontendProcessManager:
         # The Rust `frontend` subcommand parses --args-json via serde_json,
         # which bypasses clap and therefore ignores any `#[arg(env = ...)]`
         # declarations on SharedRuntimeArgs fields. Forward the env-driven
-        # values explicitly so APHRODITE_ENGINE_READY_TIMEOUT_S and
-        # APHRODITE_HTTP_TIMEOUT_KEEP_ALIVE behave the same on both Python and Rust
+        # values explicitly so SONAR_ENGINE_READY_TIMEOUT_S and
+        # SONAR_HTTP_TIMEOUT_KEEP_ALIVE behave the same on both Python and Rust
         # frontends.
-        args_dict["engine_ready_timeout_secs"] = envs.APHRODITE_ENGINE_READY_TIMEOUT_S
-        args_dict["http_timeout_keep_alive"] = envs.APHRODITE_HTTP_TIMEOUT_KEEP_ALIVE
+        args_dict["engine_ready_timeout_secs"] = envs.SONAR_ENGINE_READY_TIMEOUT_S
+        args_dict["http_timeout_keep_alive"] = envs.SONAR_HTTP_TIMEOUT_KEEP_ALIVE
         args_json = json.dumps(args_dict, sort_keys=True)
         cmd.extend(["--args-json", args_json])
 
         # The subprocess needs the real values, but the log must not carry
         # credentials such as api_key or hf_token.
-        from aphrodite.entrypoints.common.startup import redact_sensitive_args
+        from sonar.entrypoints.common.startup import redact_sensitive_args
 
         redacted_json = json.dumps(redact_sensitive_args(args_dict), sort_keys=True)
         logger.info("Launching Rust frontend: %s", " ".join(cmd[:-1] + [redacted_json]))
@@ -506,11 +506,11 @@ def _shutdown_subprocesses_and_cleanup_listeners(
 def run_api_server_worker_proc(listen_address, sock, args, client_config=None, **uvicorn_kwargs) -> None:
     """Entrypoint for individual API server worker processes."""
     if logging_config := getattr(args, "logging_config", None):
-        from aphrodite.logger import configure_logging
+        from sonar.logger import configure_logging
 
         configure_logging(logging_config)
 
-    from aphrodite.entrypoints.launchers.api_server.entry import run_server_worker
+    from sonar.entrypoints.launchers.api_server.entry import run_server_worker
 
     client_config = client_config or {}
     server_index = client_config.get("client_index", 0)
@@ -663,24 +663,24 @@ def copy_slice(from_tensor: torch.Tensor, to_tensor: torch.Tensor, length: int) 
     return to_tensor[:length].copy_(from_tensor[:length], non_blocking=True)
 
 
-def report_usage_stats(aphrodite_config, usage_context: UsageContext = UsageContext.ENGINE_CONTEXT) -> None:
+def report_usage_stats(sonar_config, usage_context: UsageContext = UsageContext.ENGINE_CONTEXT) -> None:
     """Report usage statistics if enabled."""
     if not is_usage_stats_enabled():
         return
 
-    from aphrodite.model_executor.model_loader import get_architecture_class_name
+    from sonar.model_executor.model_loader import get_architecture_class_name
 
-    model_config = aphrodite_config.model_config
-    scheduler_config = aphrodite_config.scheduler_config
-    parallel_config = aphrodite_config.parallel_config
-    attention_config = aphrodite_config.attention_config
-    compilation_config = aphrodite_config.compilation_config
-    speculative_config = aphrodite_config.speculative_config
+    model_config = sonar_config.model_config
+    scheduler_config = sonar_config.scheduler_config
+    parallel_config = sonar_config.parallel_config
+    attention_config = sonar_config.attention_config
+    compilation_config = sonar_config.compilation_config
+    speculative_config = sonar_config.speculative_config
 
     # Prepare KV connector string if applicable
     kv_connector = None
-    if aphrodite_config.kv_transfer_config is not None:
-        kv_connector = aphrodite_config.kv_transfer_config.kv_connector
+    if sonar_config.kv_transfer_config is not None:
+        kv_connector = sonar_config.kv_transfer_config.kv_connector
 
     # Attention backend is None when set to "auto" (resolved at runtime per platform).
     attention_backend = attention_config.backend.name if attention_config.backend is not None else None
@@ -705,15 +705,15 @@ def report_usage_stats(aphrodite_config, usage_context: UsageContext = UsageCont
         extra_kvs={
             # Common configuration
             "dtype": str(model_config.dtype),
-            "block_size": aphrodite_config.cache_config.block_size,
-            "gpu_memory_utilization": aphrodite_config.cache_config.gpu_memory_utilization,
-            "kv_cache_memory_bytes": aphrodite_config.cache_config.kv_cache_memory_bytes,
+            "block_size": sonar_config.cache_config.block_size,
+            "gpu_memory_utilization": sonar_config.cache_config.gpu_memory_utilization,
+            "kv_cache_memory_bytes": sonar_config.cache_config.kv_cache_memory_bytes,
             # Quantization
             "quantization": model_config.quantization,
-            "kv_cache_dtype": str(aphrodite_config.cache_config.cache_dtype),
+            "kv_cache_dtype": str(sonar_config.cache_config.cache_dtype),
             # Feature flags
-            "enable_lora": bool(aphrodite_config.lora_config),
-            "enable_prefix_caching": aphrodite_config.cache_config.enable_prefix_caching,
+            "enable_lora": bool(sonar_config.lora_config),
+            "enable_prefix_caching": sonar_config.cache_config.enable_prefix_caching,
             "enforce_eager": model_config.enforce_eager,
             "disable_custom_all_reduce": parallel_config.disable_custom_all_reduce,
             # Distributed parallelism settings
@@ -731,7 +731,7 @@ def report_usage_stats(aphrodite_config, usage_context: UsageContext = UsageCont
             "max_num_batched_tokens": scheduler_config.max_num_batched_tokens,
             # Attention backend (user-requested; None = auto-selected at runtime)
             "attention_backend": attention_backend,
-            # torch.compile mode (e.g. NONE, STOCK_TORCH_COMPILE, APHRODITE_COMPILE)
+            # torch.compile mode (e.g. NONE, STOCK_TORCH_COMPILE, SONAR_COMPILE)
             "compilation_mode": compilation_mode,
             # Speculative decoding configuration
             "spec_decode_method": spec_decode_method,
@@ -755,9 +755,9 @@ def record_function_or_nullcontext(name: str) -> AbstractContextManager:
         return _PROFILER_FUNC(name)
 
     func = contextlib.nullcontext
-    if envs.APHRODITE_CUSTOM_SCOPES_FOR_PROFILING:
+    if envs.SONAR_CUSTOM_SCOPES_FOR_PROFILING:
         func = record_function
-    elif envs.APHRODITE_NVTX_SCOPES_FOR_PROFILING:
+    elif envs.SONAR_NVTX_SCOPES_FOR_PROFILING:
         import nvtx
 
         func = nvtx.annotate

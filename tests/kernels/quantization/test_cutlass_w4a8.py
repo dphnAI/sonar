@@ -10,16 +10,16 @@ from dataclasses import dataclass
 import pytest
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar import _custom_ops as ops
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     convert_packed_uint4b8_to_signed_int4_inplace,
     pack_cols,
     pack_rows,
     quantize_weights,
     unpack_quantized_values_into_int32,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.scalar_type import ScalarType, scalar_types
+from sonar.platforms import current_platform
+from sonar.scalar_type import ScalarType, scalar_types
 
 if not current_platform.is_cuda():
     pytest.skip("These tests use CUTLASS which requires CUDA", allow_module_level=True)

@@ -12,7 +12,7 @@ import tests.ci_envs as ci_envs
 from tests.models.utils import (
     EmbedModelInfo,
     check_embeddings_close,
-    get_aphrodite_extra_kwargs,
+    get_sonar_extra_kwargs,
 )
 
 # Most embedding models on the STS12 task (See #17175):
@@ -26,7 +26,7 @@ MTEB_EMBED_TOL = 5e-4
 
 _empty_model_meta = ModelMeta(
     loader=None,
-    name="aphrodite/model",
+    name="sonar/model",
     revision="1",
     release_date=None,
     languages=None,
@@ -86,9 +86,9 @@ class HfMtebEncoder(MtebEmbedMixin):
         return self.model.encode(sentences)
 
 
-class AphroditeMtebEncoder(MtebEmbedMixin):
-    def __init__(self, aphrodite_model, prompt_prefix: str | None = None):
-        self.llm = aphrodite_model
+class SonarMtebEncoder(MtebEmbedMixin):
+    def __init__(self, sonar_model, prompt_prefix: str | None = None):
+        self.llm = sonar_model
         self.rng = np.random.default_rng(seed=42)
         self.prompt_prefix = prompt_prefix
 
@@ -151,34 +151,34 @@ def run_mteb_embed_task(encoder: mteb.EncoderProtocol, tasks):
 
 def mteb_test_embed_models(
     hf_runner,
-    aphrodite_runner,
+    sonar_runner,
     model_info: EmbedModelInfo,
-    aphrodite_extra_kwargs=None,
+    sonar_extra_kwargs=None,
     hf_model_callback=None,
     atol: float | None = None,
     prompt_prefix: str | None = None,
-    aphrodite_model_callback=None,
+    sonar_model_callback=None,
 ):
     if atol is None:
         atol = model_info.mteb_tol if model_info.mteb_tol is not None else MTEB_EMBED_TOL
-    aphrodite_extra_kwargs = get_aphrodite_extra_kwargs(model_info, aphrodite_extra_kwargs)
+    sonar_extra_kwargs = get_sonar_extra_kwargs(model_info, sonar_extra_kwargs)
 
     # Test embed_dims, isnan and whether to use normalize
     example_prompts = ["The chef prepared a delicious meal." * 1000]
 
-    with aphrodite_runner(
+    with sonar_runner(
         model_info.name,
         revision=model_info.revision,
         runner="pooling",
         max_model_len=model_info.max_model_len,
-        **aphrodite_extra_kwargs,
-    ) as aphrodite_model:
-        model_config = aphrodite_model.llm.llm_engine.model_config
+        **sonar_extra_kwargs,
+    ) as sonar_model:
+        model_config = sonar_model.llm.llm_engine.model_config
 
-        if aphrodite_model_callback is not None:
-            aphrodite_model_callback(aphrodite_model)
+        if sonar_model_callback is not None:
+            sonar_model_callback(sonar_model)
 
-        # Confirm whether aphrodite is using the correct architecture
+        # Confirm whether sonar is using the correct architecture
         if model_info.architecture:
             assert model_info.architecture in model_config.architectures
 
@@ -195,26 +195,26 @@ def mteb_test_embed_models(
         if model_info.is_chunked_prefill_supported is not None:
             assert model_config.is_chunked_prefill_supported == model_info.is_chunked_prefill_supported
 
-        aphrodite_main_score = run_mteb_embed_task(
-            AphroditeMtebEncoder(aphrodite_model, prompt_prefix=prompt_prefix), MTEB_EMBED_TASKS
+        sonar_main_score = run_mteb_embed_task(
+            SonarMtebEncoder(sonar_model, prompt_prefix=prompt_prefix), MTEB_EMBED_TASKS
         )
-        aphrodite_dtype = aphrodite_model.llm.llm_engine.model_config.dtype
+        sonar_dtype = sonar_model.llm.llm_engine.model_config.dtype
         head_dtype = model_config.head_dtype
 
         # Test embedding_size, isnan and whether to use normalize.
         # Apply the same prompt_prefix used for scoring so this check compares
         # identical effective inputs: HF's SentenceTransformer.encode() applies
-        # the model's default prompt (e.g. "Document: "), so Aphrodite must receive it
-        # too. This mirrors AphroditeMtebEncoder and changes no production behavior.
+        # the model's default prompt (e.g. "Document: "), so Sonar must receive it
+        # too. This mirrors SonarMtebEncoder and changes no production behavior.
         consistency_prompts = [prompt_prefix + p for p in example_prompts] if prompt_prefix else example_prompts
-        aphrodite_outputs = aphrodite_model.embed(
+        sonar_outputs = sonar_model.embed(
             consistency_prompts,
             tokenization_kwargs=dict(truncate_prompt_tokens=-1),
         )
-        outputs_tensor = torch.tensor(aphrodite_outputs)
+        outputs_tensor = torch.tensor(sonar_outputs)
         assert not torch.any(torch.isnan(outputs_tensor))
         embedding_size = model_config.embedding_size
-        assert torch.tensor(aphrodite_outputs).shape[-1] == embedding_size
+        assert torch.tensor(sonar_outputs).shape[-1] == embedding_size
 
     # Accelerate mteb test by setting
     # SentenceTransformers mteb score to a constant
@@ -223,7 +223,7 @@ def mteb_test_embed_models(
             model_info.name,
             revision=model_info.revision,
             is_sentence_transformer=True,
-            dtype=ci_envs.APHRODITE_CI_HF_DTYPE or model_info.hf_dtype,
+            dtype=ci_envs.SONAR_CI_HF_DTYPE or model_info.hf_dtype,
         ) as hf_model:
             # e.g. setting default parameters for the encode method of hf_runner
             if hf_model_callback is not None:
@@ -236,9 +236,9 @@ def mteb_test_embed_models(
             hf_outputs = hf_model.encode(example_prompts)
             check_embeddings_close(
                 embeddings_0_lst=hf_outputs,
-                embeddings_1_lst=aphrodite_outputs,
+                embeddings_1_lst=sonar_outputs,
                 name_0="hf",
-                name_1="aphrodite",
+                name_1="sonar",
                 tol=1e-2,
             )
     else:
@@ -246,13 +246,13 @@ def mteb_test_embed_models(
         st_dtype = "Constant"
 
     print("Model:", model_info.name)
-    print("APHRODITE:", f"dtype:{aphrodite_dtype}", f"head_dtype:{head_dtype}", aphrodite_main_score)
+    print("SONAR:", f"dtype:{sonar_dtype}", f"head_dtype:{head_dtype}", sonar_main_score)
     print("SentenceTransformers:", st_dtype, st_main_score)
-    print("Difference:", st_main_score - aphrodite_main_score)
+    print("Difference:", st_main_score - sonar_main_score)
 
-    # We are not concerned that the aphrodite mteb results are better
+    # We are not concerned that the sonar mteb results are better
     # than SentenceTransformers, so we only perform one-sided testing.
-    diff = st_main_score - aphrodite_main_score
+    diff = st_main_score - sonar_main_score
     assert diff < atol, (
-        f"diff={diff:.6g} tol={atol} model={model_info.name} (st={st_main_score}, aphrodite={aphrodite_main_score})"
+        f"diff={diff:.6g} tol={atol} model={model_info.name} (st={st_main_score}, sonar={sonar_main_score})"
     )

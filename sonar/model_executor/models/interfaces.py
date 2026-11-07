@@ -34,43 +34,43 @@ from torch import Tensor
 from transformers.models.whisper.tokenization_whisper import LANGUAGES
 from typing_extensions import TypeIs
 
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.models.interfaces_base import AphroditeModel
-from aphrodite.utils.collection_utils import common_prefix
-from aphrodite.utils.func_utils import supports_kw
+from sonar.logger import init_logger
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.models.interfaces_base import SonarModel
+from sonar.utils.collection_utils import common_prefix
+from sonar.utils.func_utils import supports_kw
 
 if TYPE_CHECKING:
-    from aphrodite.config import (
-        AphroditeConfig,
+    from sonar.config import (
         ModelConfig,
+        SonarConfig,
         SpeechToTextConfig,
         SpeechToTextParams,
     )
-    from aphrodite.inputs import PromptType, TokensPrompt
-    from aphrodite.lora.model_manager import LoRAModelManager
-    from aphrodite.model_executor.layers.fused_moe import MoERunner
-    from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-    from aphrodite.model_executor.layers.mamba.mamba_utils import (
+    from sonar.inputs import PromptType, TokensPrompt
+    from sonar.lora.model_manager import LoRAModelManager
+    from sonar.model_executor.layers.fused_moe import MoERunner
+    from sonar.model_executor.layers.logits_processor import LogitsProcessor
+    from sonar.model_executor.layers.mamba.mamba_utils import (
         MambaStateCopyFunc,
         MambaStateCopyFuncsByType,
     )
-    from aphrodite.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
-    from aphrodite.model_executor.models.utils import WeightsMapper
-    from aphrodite.multimodal.inputs import MultiModalFeatureSpec, MultiModalKwargsItem
-    from aphrodite.multimodal.registry import _ProcessorFactories
-    from aphrodite.sequence import IntermediateTensors
-    from aphrodite.tasks import ScoreType
-    from aphrodite.tokenizers import TokenizerLike
-    from aphrodite.v1.attention.backends.registry import MambaAttentionBackendEnum
-    from aphrodite.v1.kv_cache_interface import KVCacheGroupSpec, KVCacheSpec
-    from aphrodite.v1.worker.encoder_cudagraph_defs import (
+    from sonar.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
+    from sonar.model_executor.models.utils import WeightsMapper
+    from sonar.multimodal.inputs import MultiModalFeatureSpec, MultiModalKwargsItem
+    from sonar.multimodal.registry import _ProcessorFactories
+    from sonar.sequence import IntermediateTensors
+    from sonar.tasks import ScoreType
+    from sonar.tokenizers import TokenizerLike
+    from sonar.v1.attention.backends.registry import MambaAttentionBackendEnum
+    from sonar.v1.kv_cache_interface import KVCacheGroupSpec, KVCacheSpec
+    from sonar.v1.worker.encoder_cudagraph_defs import (
         EncoderCudaGraphCaptureInputs,
         EncoderCudaGraphConfig,
         EncoderCudaGraphReplayBuffers,
         EncoderItemSpec,
     )
-    from aphrodite.v1.worker.gpu.spec_decode.speculator_config import SpeculatorConfig
+    from sonar.v1.worker.gpu.spec_decode.speculator_config import SpeculatorConfig
 
 logger = init_logger(__name__)
 
@@ -123,7 +123,7 @@ class StreamingTranscriptionPostProcessor:
 
 def _require_is_multimodal(is_multimodal: Tensor | None) -> Tensor:
     """A helper function to be used in the context of
-    [aphrodite.model_executor.models.interfaces.SupportsMultiModal.embed_input_ids][]
+    [sonar.model_executor.models.interfaces.SupportsMultiModal.embed_input_ids][]
     to provide a better error message.
     """
     if is_multimodal is None:
@@ -137,10 +137,10 @@ def _require_is_multimodal(is_multimodal: Tensor | None) -> Tensor:
 
 
 # Cache results of `SupportsMultiModal.get_language_model`
-_language_model_by_module: "weakref.WeakKeyDictionary[nn.Module, AphroditeModel]" = weakref.WeakKeyDictionary()
+_language_model_by_module: "weakref.WeakKeyDictionary[nn.Module, SonarModel]" = weakref.WeakKeyDictionary()
 
 
-def _is_language_model(model: object) -> TypeIs[AphroditeModel]:
+def _is_language_model(model: object) -> TypeIs[SonarModel]:
     # Text towers can use config/position_ids signatures and omit loader hooks.
     return callable(getattr(model, "embed_input_ids", None)) and callable(getattr(model, "forward", None))
 
@@ -263,7 +263,7 @@ class SupportsMultiModal(SupportsMultiModalEmbeddings, Protocol):
             self._has_oov_mm_tokens,
         )
 
-    def get_language_model(self) -> "AphroditeModel":
+    def get_language_model(self) -> "SonarModel":
         """Returns the underlying language model used for text generation.
 
         This is typically the `torch.nn.Module` instance responsible for
@@ -306,7 +306,7 @@ class SupportsMultiModal(SupportsMultiModalEmbeddings, Protocol):
     @contextmanager
     def _mark_language_model(
         self,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
         *,
         targets: type[nn.Module] | tuple[type[nn.Module], ...] | None = None,
     ):
@@ -321,7 +321,7 @@ class SupportsMultiModal(SupportsMultiModalEmbeddings, Protocol):
         """
         from .utils import StageMissingLayer, collect_children, no_init_weights
 
-        mm_config = aphrodite_config.model_config.get_multimodal_config()
+        mm_config = sonar_config.model_config.get_multimodal_config()
 
         with collect_children(self, targets=targets) as children_names:  # noqa: SIM117
             with (
@@ -340,7 +340,7 @@ class SupportsMultiModal(SupportsMultiModalEmbeddings, Protocol):
     @contextmanager
     def _mark_tower_model(
         self,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
         modalities: set[str] | str,
         *,
         targets: type[nn.Module] | tuple[type[nn.Module], ...] | None = None,
@@ -359,8 +359,8 @@ class SupportsMultiModal(SupportsMultiModalEmbeddings, Protocol):
         it supports tower offloading), since `make_layers` only ever sees the
         decoder layer stack.
         """
-        from aphrodite.distributed import get_pp_group
-        from aphrodite.model_executor.offloader import get_offloader
+        from sonar.distributed import get_pp_group
+        from sonar.model_executor.offloader import get_offloader
 
         from .utils import StageMissingLayer, collect_children, no_init_weights
 
@@ -372,7 +372,7 @@ class SupportsMultiModal(SupportsMultiModalEmbeddings, Protocol):
         else:
             stage_name = "_".join([*modalities, "tower"])
 
-        mm_config = aphrodite_config.model_config.get_multimodal_config()
+        mm_config = sonar_config.model_config.get_multimodal_config()
 
         with collect_children(self, targets=targets) as children_names:  # noqa: SIM117
             with (
@@ -382,7 +382,7 @@ class SupportsMultiModal(SupportsMultiModalEmbeddings, Protocol):
                     targets=targets,
                 )
                 if all(mm_config.get_limit_per_prompt(m) == 0 for m in modalities)
-                or (aphrodite_config.use_v2_model_runner and not get_pp_group().is_first_rank)
+                or (sonar_config.use_v2_model_runner and not get_pp_group().is_first_rank)
                 else nullcontext()
             ):
                 yield
@@ -401,7 +401,7 @@ class SupportsMultiModal(SupportsMultiModalEmbeddings, Protocol):
     @contextmanager
     def _mark_composite_model(
         self,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
         *,
         language_targets: type[nn.Module] | tuple[type[nn.Module], ...],
         tower_targets: dict[str, type[nn.Module] | tuple[type[nn.Module], ...]],
@@ -412,7 +412,7 @@ class SupportsMultiModal(SupportsMultiModalEmbeddings, Protocol):
         with ExitStack() as stack:
             stack.enter_context(
                 self._mark_language_model(
-                    aphrodite_config,
+                    sonar_config,
                     targets=language_targets,
                 )
             )
@@ -420,7 +420,7 @@ class SupportsMultiModal(SupportsMultiModalEmbeddings, Protocol):
             for modality, modality_targets in tower_targets.items():
                 stack.enter_context(
                     self._mark_tower_model(
-                        aphrodite_config,
+                        sonar_config,
                         modality,
                         targets=modality_targets,
                     )
@@ -674,7 +674,7 @@ class SupportsKVCacheGrouping(Protocol):
     @classmethod
     def get_kv_cache_groups(
         cls,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
         kv_cache_spec: dict[str, "KVCacheSpec"],
     ) -> list["KVCacheGroupSpec"]:
         """Split the model's layers into logical KV cache groups."""
@@ -808,10 +808,10 @@ class SupportsPP(Protocol):
         *,
         intermediate_tensors: "IntermediateTensors | None",
     ) -> "Tensor | IntermediateTensors | tuple[Tensor, list[Tensor]]":
-        """Accept [`IntermediateTensors`][aphrodite.sequence.IntermediateTensors] when
+        """Accept [`IntermediateTensors`][sonar.sequence.IntermediateTensors] when
         PP rank > 0.
 
-        Return [`IntermediateTensors`][aphrodite.sequence.IntermediateTensors] only
+        Return [`IntermediateTensors`][sonar.sequence.IntermediateTensors] only
         for the last PP rank.
         """
         ...
@@ -980,12 +980,12 @@ class IsHybrid(Protocol):
     @classmethod
     def get_mamba_state_shape_from_config(
         cls,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
     ) -> MambaStateShapes:
         """Calculate shapes for Mamba's convolutional and state caches.
 
         Args:
-            aphrodite_config: Aphrodite config
+            sonar_config: Sonar config
 
         Returns:
             Shapes for each state cache used by the model.
@@ -1232,7 +1232,7 @@ class SupportsLateInteraction(Protocol):
 class SupportsQuant:
     """The interface required for all models that support quantization."""
 
-    hf_to_aphrodite_mapper: "WeightsMapper | None" = None
+    hf_to_sonar_mapper: "WeightsMapper | None" = None
     packed_modules_mapping: dict[str, list[str]]
     quant_config: QuantizationConfig | None = None
 
@@ -1249,11 +1249,11 @@ class SupportsQuant:
     @staticmethod
     def _find_quant_config(*args, **kwargs) -> QuantizationConfig | None:
         """Find quant config passed through model constructor args"""
-        from aphrodite.config import AphroditeConfig  # avoid circular import
+        from sonar.config import SonarConfig  # avoid circular import
 
         args_values = list(args) + list(kwargs.values())
         for arg in args_values:
-            if isinstance(arg, AphroditeConfig):
+            if isinstance(arg, SonarConfig):
                 return arg.quant_config
 
             if isinstance(arg, QuantizationConfig):
@@ -1265,8 +1265,8 @@ class SupportsQuant:
         """Apply model mappings to config for proper config-model matching"""
         if self.quant_config is None:
             return
-        if (hf_to_aphrodite_mapper := self.hf_to_aphrodite_mapper) is not None:
-            self.quant_config.apply_aphrodite_mapper(hf_to_aphrodite_mapper.get_rename_mapper())
+        if (hf_to_sonar_mapper := self.hf_to_sonar_mapper) is not None:
+            self.quant_config.apply_sonar_mapper(hf_to_sonar_mapper.get_rename_mapper())
         if packed_modules_mapping := getattr(self, "packed_modules_mapping", None):
             self.quant_config.packed_modules_mapping.update(packed_modules_mapping)
 
@@ -1604,7 +1604,7 @@ class EagleModelMixin:
         self._cache_aux_pp_layout()
 
     def _cache_aux_pp_layout(self) -> None:
-        from aphrodite.distributed.parallel_state import (
+        from sonar.distributed.parallel_state import (
             get_pp_group,
             model_parallel_is_initialized,
         )
@@ -1840,7 +1840,7 @@ class SupportsEncoderCudaGraph(Protocol):
 
     def get_encoder_cudagraph_budget_range(
         self,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
     ) -> tuple[int, int]:
         """Return (min_token_budget, max_token_budget) for auto-inference.
 
@@ -1906,7 +1906,7 @@ class SupportsEncoderCudaGraph(Protocol):
         encoder output prior to scattering, e.g. Step3-VL, which merges features
         according to dynamic patch counts before scattering.
         """
-        from aphrodite.model_executor.models.utils import scatter_output_slices
+        from sonar.model_executor.models.utils import scatter_output_slices
 
         scatter_output_slices(outputs["default"], indices, per_item_out_tokens, dest, clone)
 

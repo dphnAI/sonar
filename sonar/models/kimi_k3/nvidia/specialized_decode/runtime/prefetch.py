@@ -36,7 +36,7 @@ from functools import partial
 import cuda.bindings.driver as cuda
 import torch
 
-from aphrodite.models.common.ops.moe_tail_fusion.primitives import to_cute
+from sonar.models.common.ops.moe_tail_fusion.primitives import to_cute
 
 from ..cutedsl.common.host import _checked, resolve_kernel
 from ..cutedsl.common.policy import batch_table

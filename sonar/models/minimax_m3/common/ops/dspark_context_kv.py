@@ -24,8 +24,8 @@ safe.
 
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.platforms import current_platform
+from sonar import _custom_ops as ops
+from sonar.platforms import current_platform
 
 _SUPPORTED_KV_DTYPES = ("auto", "bfloat16", "fp8", "fp8_e4m3")
 _HEAD_DIM = 128

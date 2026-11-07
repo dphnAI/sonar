@@ -4,10 +4,10 @@
 
 import pytest
 
-from aphrodite import SamplingParams
-from aphrodite.config import ModelConfig, ParallelConfig, SpeculativeConfig
-from aphrodite.platforms import current_platform
-from aphrodite.sampling_params import StructuredOutputsParams
+from sonar import SamplingParams
+from sonar.config import ModelConfig, ParallelConfig, SpeculativeConfig
+from sonar.platforms import current_platform
+from sonar.sampling_params import StructuredOutputsParams
 from tests.utils import get_attn_backend_list_based_on_platform
 
 _PROMPTS = [
@@ -18,8 +18,8 @@ _PROMPTS = [
 
 
 @pytest.mark.parametrize("num_speculative_tokens", [1, 3, 10])
-def test_ngram_max_len(num_speculative_tokens: int, aphrodite_runner):
-    with aphrodite_runner(
+def test_ngram_max_len(num_speculative_tokens: int, sonar_runner):
+    with sonar_runner(
         "facebook/opt-125m",
         trust_remote_code=False,
         max_model_len=100,
@@ -41,12 +41,12 @@ def test_ngram_max_len(num_speculative_tokens: int, aphrodite_runner):
 def test_ngram_gpu_max_len(
     method: str,
     num_speculative_tokens: int,
-    aphrodite_runner,
+    sonar_runner,
     monkeypatch: pytest.MonkeyPatch,
 ):
     """V2 n-gram decoding stops at max_model_len."""
-    monkeypatch.setenv("APHRODITE_USE_V2_MODEL_RUNNER", "1")
-    with aphrodite_runner(
+    monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", "1")
+    with sonar_runner(
         "facebook/opt-125m",
         trust_remote_code=False,
         max_model_len=100,
@@ -59,7 +59,7 @@ def test_ngram_gpu_max_len(
             "num_speculative_tokens": num_speculative_tokens,
         },
     ) as runner:
-        assert runner.llm.llm_engine.aphrodite_config.use_v2_model_runner
+        assert runner.llm.llm_engine.sonar_config.use_v2_model_runner
         sampling_params = SamplingParams(max_tokens=100, ignore_eos=True)
         outputs = runner.llm.generate(_PROMPTS, sampling_params)
         for output in outputs:
@@ -73,12 +73,12 @@ def test_eagle_max_len(
     monkeypatch: pytest.MonkeyPatch,
     num_speculative_tokens: int,
     attn_backend: str,
-    aphrodite_runner,
+    sonar_runner,
 ):
     if attn_backend == "ROCM_AITER_FA" and current_platform.is_rocm():
-        monkeypatch.setenv("APHRODITE_ROCM_USE_AITER", "1")
+        monkeypatch.setenv("SONAR_ROCM_USE_AITER", "1")
 
-    with aphrodite_runner(
+    with sonar_runner(
         "meta-llama/Meta-Llama-3-8B-Instruct",
         trust_remote_code=False,
         enable_chunked_prefill=None,

@@ -8,15 +8,15 @@ import pytest
 import torch
 import torch.nn as nn
 
-from aphrodite.compilation.wrapper import TorchCompileWithNoGuardsWrapper
-from aphrodite.model_executor.layers.linear import MergedColumnParallelLinear
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.models.qwen3_dspark import DSparkMarkovHead
-from aphrodite.model_executor.models.registry import ModelRegistry
-from aphrodite.models.deepseek_v4.nvidia import dspark as dsv4_dspark
-from aphrodite.models.deepseek_v41.nvidia import dspark as dsv41_dspark
-from aphrodite.models.kimi_k3.nvidia import dspark_mla
-from aphrodite.models.kimi_k3.nvidia.dspark_mla import K3DSparkForCausalLM, K3DSparkModel
+from sonar.compilation.wrapper import TorchCompileWithNoGuardsWrapper
+from sonar.model_executor.layers.linear import MergedColumnParallelLinear
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.models.qwen3_dspark import DSparkMarkovHead
+from sonar.model_executor.models.registry import ModelRegistry
+from sonar.models.deepseek_v4.nvidia import dspark as dsv4_dspark
+from sonar.models.deepseek_v41.nvidia import dspark as dsv41_dspark
+from sonar.models.kimi_k3.nvidia import dspark_mla
+from sonar.models.kimi_k3.nvidia.dspark_mla import K3DSparkForCausalLM, K3DSparkModel
 
 
 def test_dspark_mla_uses_compile_free_model_entrypoint():
@@ -51,13 +51,13 @@ def test_dspark_mla_uses_compile_free_model_entrypoint():
     ],
 )
 def test_dspark_mla_checkpoint_weight_mapping(checkpoint_name, runtime_name, shard_id):
-    assert K3DSparkForCausalLM.hf_to_aphrodite_mapper._map_name_with_shard(checkpoint_name) == (runtime_name, shard_id)
+    assert K3DSparkForCausalLM.hf_to_sonar_mapper._map_name_with_shard(checkpoint_name) == (runtime_name, shard_id)
 
 
 def test_dspark_mla_shares_frozen_target_weights_and_skips_training_head():
     assert not K3DSparkForCausalLM.has_own_embed_tokens
     assert not K3DSparkForCausalLM.has_own_lm_head
-    mapper = K3DSparkForCausalLM.hf_to_aphrodite_mapper
+    mapper = K3DSparkForCausalLM.hf_to_sonar_mapper
     for name in ("confidence_head.weight", "embed_tokens.weight", "lm_head.weight"):
         assert mapper._map_name(name) is None
 
@@ -66,7 +66,7 @@ def test_dspark_mla_shares_frozen_target_weights_and_skips_training_head():
 def test_dspark_markov_head_is_replicated(
     monkeypatch: pytest.MonkeyPatch,
 ):
-    from aphrodite.model_executor.layers import logits_processor, vocab_parallel_embedding
+    from sonar.model_executor.layers import logits_processor, vocab_parallel_embedding
 
     monkeypatch.setattr(vocab_parallel_embedding, "get_tensor_model_parallel_rank", lambda: 3)
     monkeypatch.setattr(
@@ -76,7 +76,7 @@ def test_dspark_markov_head_is_replicated(
     )
     monkeypatch.setattr(
         logits_processor,
-        "get_current_aphrodite_config_or_none",
+        "get_current_sonar_config_or_none",
         lambda: SimpleNamespace(model_config=None),
     )
 
@@ -139,13 +139,13 @@ def test_k3_dspark_uses_replicated_markov_head(monkeypatch: pytest.MonkeyPatch):
         draft_vocab_size=128,
         markov_rank=4,
     )
-    aphrodite_config = SimpleNamespace(
+    sonar_config = SimpleNamespace(
         speculative_config=SimpleNamespace(draft_model_config=SimpleNamespace(hf_config=config)),
         scheduler_config=SimpleNamespace(max_num_batched_tokens=16),
     )
 
     K3DSparkModel(
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         start_layer_id=0,
         prefix="model",
     )
@@ -178,7 +178,7 @@ def test_context_kv_weights_are_loaded_as_merged_linear_shards():
     ]
 
     duplicated = dspark_mla._duplicate_context_kv_weights(weights, 2)
-    mapped = list(K3DSparkForCausalLM.hf_to_aphrodite_mapper.apply(duplicated))
+    mapped = list(K3DSparkForCausalLM.hf_to_sonar_mapper.apply(duplicated))
 
     assert [name for name, _ in mapped] == [
         "model.layers.0.self_attn.fused_qkv_a_proj.weight_packed",
@@ -215,7 +215,7 @@ def test_v41_dspark_loads_linear_scales(monkeypatch, scale_dtype, checkpoint_nam
     """Checkpoint ``.scale`` maps to the quant method's scale parameter and
     loads untouched. MXFP8 block-scale expansion lives in the KMxfp8Static
     loader (see tests/quantization/test_modelopt.py), not in load_weights."""
-    from aphrodite.models.deepseek_v41.nvidia import dspark
+    from sonar.models.deepseek_v41.nvidia import dspark
 
     mxfp8 = scale_dtype != torch.float32
     scale_name = "weight_scale" if mxfp8 else "weight_scale_inv"
@@ -273,7 +273,7 @@ def test_v41_dspark_loads_linear_scales(monkeypatch, scale_dtype, checkpoint_nam
 def test_dsv4_dspark_fused_moe_expert_mapping_includes_redundant_experts(
     monkeypatch,
 ):
-    from aphrodite.models.deepseek_v4.nvidia import dspark
+    from sonar.models.deepseek_v4.nvidia import dspark
 
     captured: dict[str, int] = {}
 
@@ -344,7 +344,7 @@ def test_dsv4_context_wkv_weights_are_duplicated_by_draft_layer():
 @pytest.mark.cpu_test
 def test_v41_context_wkv_loads_each_layer_into_both_projections(monkeypatch):
     """Duplicating context weights must preserve query WKV and layer order."""
-    from aphrodite.model_executor import parameter
+    from sonar.model_executor import parameter
 
     monkeypatch.setattr(parameter, "get_tensor_model_parallel_rank", lambda: 3)
     monkeypatch.setattr(parameter, "get_tensor_model_parallel_world_size", lambda: 4)
@@ -429,11 +429,11 @@ def test_dsv4_context_kv_uses_one_stacked_wkv_projection(monkeypatch, dspark_mod
 @pytest.mark.cpu_test
 def test_k3_dspark_mla_kv_cache_spec_groups_with_target_mla():
     """The draft's MLA layers must share a KV cache group with the target's."""
-    from aphrodite.model_executor.layers.attention.mla_attention import MLAAttention
-    from aphrodite.models.kimi_k3.nvidia.mla import MultiHeadLatentAttention
-    from aphrodite.v1.core.kv_cache_planning import _get_kv_cache_groups_uniform_page_size
+    from sonar.model_executor.layers.attention.mla_attention import MLAAttention
+    from sonar.models.kimi_k3.nvidia.mla import MultiHeadLatentAttention
+    from sonar.v1.core.kv_cache_planning import _get_kv_cache_groups_uniform_page_size
 
-    aphrodite_config = SimpleNamespace(model_config=None, cache_config=SimpleNamespace(block_size=64))
+    sonar_config = SimpleNamespace(model_config=None, cache_config=SimpleNamespace(block_size=64))
     target_attn = SimpleNamespace(
         topk_buffer_width=None,
         kv_cache_dtype="fp8",
@@ -445,8 +445,8 @@ def test_k3_dspark_mla_kv_cache_spec_groups_with_target_mla():
         _uses_flat_kv_cache=lambda: False,
     )
     draft_attn = SimpleNamespace(kv_cache_dtype="fp8", head_size=576, non_causal_multi_token_decode=True)
-    target_spec = MLAAttention.get_kv_cache_spec(target_attn, aphrodite_config)
-    draft_spec = MultiHeadLatentAttention.get_kv_cache_spec(draft_attn, aphrodite_config)
+    target_spec = MLAAttention.get_kv_cache_spec(target_attn, sonar_config)
+    draft_spec = MultiHeadLatentAttention.get_kv_cache_spec(draft_attn, sonar_config)
 
     kv_cache_spec = {f"model.layers.{i}.attn": target_spec for i in range(24)}
     kv_cache_spec |= {f"draft.layers.{i}.attn": draft_spec for i in range(5)}

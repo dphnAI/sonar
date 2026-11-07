@@ -4,31 +4,31 @@
 
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe import (
     FusedMoeWeightScaleSupported,
     RoutedExperts,
     SharedExperts,
 )
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEQuantConfig,
     mxfp4_moe_quant_config,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.cutlass_moe import (
+from sonar.model_executor.layers.fused_moe.experts.cutlass_moe import (
     CutlassExpertsMxfp4,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.marlin_moe import (
+from sonar.model_executor.layers.fused_moe.experts.marlin_moe import (
     MarlinExperts,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.xpu_moe import (
+from sonar.model_executor.layers.fused_moe.experts.xpu_moe import (
     XPUExpertsMxFp4,
 )
-from aphrodite.model_executor.layers.fused_moe.flashinfer_moe_ep import (
+from sonar.model_executor.layers.fused_moe.flashinfer_moe_ep import (
     is_flashinfer_moe_ep_backend,
 )
-from aphrodite.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
-from aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 import (
+from sonar.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
+from sonar.model_executor.layers.fused_moe.oracle.mxfp4 import (
     B12X_BACKENDS,
     FLASHINFER_MOE_EP_MXFP4_BACKENDS,
     Mxfp4MoeBackend,
@@ -37,18 +37,18 @@ from aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 import (
     make_mxfp4_moe_quant_config,
     select_mxfp4_moe_backend,
 )
-from aphrodite.model_executor.layers.quantization.compressed_tensors.compressed_tensors_moe import (  # noqa E501
+from sonar.model_executor.layers.quantization.compressed_tensors.compressed_tensors_moe import (  # noqa E501
     CompressedTensorsMoEMethod,
 )
-from aphrodite.model_executor.layers.quantization.utils.marlin_utils_fp4 import (
+from sonar.model_executor.layers.quantization.utils.marlin_utils_fp4 import (
     prepare_moe_fp4_layer_for_marlin,
 )
-from aphrodite.model_executor.utils import (
+from sonar.model_executor.utils import (
     move_parameter,
     replace_parameter,
     set_weight_attrs,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 logger = init_logger(__name__)
 
@@ -174,7 +174,7 @@ class CompressedTensorsW4A4Mxfp4MoEMethod(CompressedTensorsMoEMethod):
         if self.use_cutlass_mxfp4:
             # Swizzle weight scales from flat checkpoint layout [E, N, K//32]
             # to CUTLASS tiled layout [E, numMTiles*numKTiles*512].
-            from aphrodite.model_executor.layers.fused_moe.experts.cutlass_moe import (
+            from sonar.model_executor.layers.fused_moe.experts.cutlass_moe import (
                 swizzle_mxfp4_scales,
             )
 

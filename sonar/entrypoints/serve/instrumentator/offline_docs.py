@@ -11,7 +11,7 @@ from fastapi.openapi.docs import (
 )
 from fastapi.staticfiles import StaticFiles
 
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 

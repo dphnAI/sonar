@@ -32,11 +32,11 @@ from typing import cast
 
 import pytest
 
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
-from aphrodite.reasoning.muse_reasoning_parser import MuseReasoningParser
-from aphrodite.tool_parsers.muse_glimmer_tool_parser import MuseGlimmerToolParser
-from aphrodite.tool_parsers.muse_tool_parser import MuseToolParser
+from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
+from sonar.reasoning.muse_reasoning_parser import MuseReasoningParser
+from sonar.tool_parsers.muse_glimmer_tool_parser import MuseGlimmerToolParser
+from sonar.tool_parsers.muse_tool_parser import MuseToolParser
 
 R: MuseReasoningParser
 T: MuseToolParser

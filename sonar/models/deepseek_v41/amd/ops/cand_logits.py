@@ -3,7 +3,7 @@
 """The indexer logits of the DSpark candidate positions on gfx942.
 
 Layers 24 to 36 take their top 512 only from the 2048 candidate blocks of 8
-positions that layer 20 chose for each decode row. Aphrodite computes such a
+positions that layer 20 chose for each decode row. Sonar computes such a
 layer's logits for every position of the row with AITER's
 deepgemm_fp8_paged_mqa_logits. Then topk942's gatherCandidates copies the
 16384 candidate logits of each row into a compact row, and topK512Candidates
@@ -33,9 +33,9 @@ import torch
 from aiter.ops.triton.gluon import pa_mqa_logits as _aiter_logits
 from aiter.ops.triton.gluon.pa_decode_gluon import get_cdna_version
 
-from aphrodite.triton_utils import tl
+from sonar.triton_utils import tl
 
-# Aphrodite has no wrapper for Gluon, so the kernel uses the Gluon modules that
+# Sonar has no wrapper for Gluon, so the kernel uses the Gluon modules that
 # AITER's dense kernel was built with. Gluon's constexpr is Triton's
 # tl.constexpr, so the kernel's annotations use tl.constexpr.
 gluon = _aiter_logits.gluon

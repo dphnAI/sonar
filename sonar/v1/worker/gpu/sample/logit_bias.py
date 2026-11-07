@@ -5,17 +5,17 @@ from typing import TYPE_CHECKING
 import numpy as np
 import torch
 
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.triton_utils import tl, triton
-from aphrodite.v1.worker.gpu.buffer_utils import StagedWriteTensor, UvaBackedTensor
-from aphrodite.v1.worker.gpu.sample.logits_processor.interface import (
+from sonar.sampling_params import SamplingParams
+from sonar.triton_utils import tl, triton
+from sonar.v1.worker.gpu.buffer_utils import StagedWriteTensor, UvaBackedTensor
+from sonar.v1.worker.gpu.sample.logits_processor.interface import (
     LogitsContext,
     LogitsProcessor,
     LogitsProcRequestState,
 )
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
+    from sonar.config import SonarConfig
 
 MAX_NUM_ALLOWED_TOKEN_IDS = 1024
 MAX_NUM_LOGIT_BIAS_TOKENS = 1024
@@ -23,7 +23,7 @@ MAX_NUM_STOP_TOKEN_IDS = 128
 
 
 class LogitBiasState(LogitsProcessor):
-    def __init__(self, aphrodite_config: "AphroditeConfig", req_states: LogitsProcRequestState):
+    def __init__(self, sonar_config: "SonarConfig", req_states: LogitsProcRequestState):
         self.prompt_len_np = req_states.prompt_len.np
         max_num_reqs = req_states.max_num_reqs
         device = req_states.device

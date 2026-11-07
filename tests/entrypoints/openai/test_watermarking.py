@@ -6,17 +6,17 @@ from io import BytesIO
 import pytest
 from fastapi import UploadFile
 
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import (
     BatchChatCompletionRequest,
     ChatCompletionRequest,
 )
-from aphrodite.entrypoints.openai.completion.protocol import CompletionRequest
-from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
-from aphrodite.entrypoints.speech_to_text.transcription.protocol import (
+from sonar.entrypoints.openai.completion.protocol import CompletionRequest
+from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
+from sonar.entrypoints.speech_to_text.transcription.protocol import (
     TranscriptionRequest,
 )
-from aphrodite.entrypoints.speech_to_text.translation.protocol import TranslationRequest
-from aphrodite.sampling_params import StructuredOutputsParams
+from sonar.entrypoints.speech_to_text.translation.protocol import TranslationRequest
+from sonar.sampling_params import StructuredOutputsParams
 
 
 def test_chat_request_preserves_watermarking_opt_out():

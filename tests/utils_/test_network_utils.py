@@ -6,8 +6,8 @@ import threading
 import pytest
 import zmq
 
-from aphrodite.utils import network_utils
-from aphrodite.utils.network_utils import (
+from sonar.utils import network_utils
+from sonar.utils.network_utils import (
     get_file_store_init_method,
     get_open_port,
     get_open_ports_list,
@@ -50,7 +50,7 @@ def _call_with_timeout(func, timeout: float = 10.0):
 
 def test_get_open_port(monkeypatch: pytest.MonkeyPatch):
     with monkeypatch.context() as m:
-        m.setenv("APHRODITE_PORT", "5678")
+        m.setenv("SONAR_PORT", "5678")
         # make sure we can get multiple ports, even if the env var is set
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s1:
             s1.bind(("localhost", get_open_port()))
@@ -60,23 +60,23 @@ def test_get_open_port(monkeypatch: pytest.MonkeyPatch):
                     s3.bind(("localhost", get_open_port()))
 
 
-def test_get_open_port_aphrodite_port_in_dp_reserved_range(
+def test_get_open_port_sonar_port_in_dp_reserved_range(
     monkeypatch: pytest.MonkeyPatch,
 ):
-    # APHRODITE_PORT falling inside the data-parallel reserved window used to make
+    # SONAR_PORT falling inside the data-parallel reserved window used to make
     # get_open_port() loop forever (issue #50024). It must instead return a
     # port outside the reserved range.
     with monkeypatch.context() as m:
-        m.setenv("APHRODITE_DP_MASTER_PORT", "5680")
+        m.setenv("SONAR_DP_MASTER_PORT", "5680")
         # 5682 is inside [5680, 5690).
-        m.setenv("APHRODITE_PORT", "5682")
+        m.setenv("SONAR_PORT", "5682")
         port = _call_with_timeout(get_open_port)
         assert port not in range(5680, 5690)
 
 
-def test_get_open_ports_list_with_aphrodite_port(monkeypatch: pytest.MonkeyPatch):
+def test_get_open_ports_list_with_sonar_port(monkeypatch: pytest.MonkeyPatch):
     with monkeypatch.context() as m:
-        m.setenv("APHRODITE_PORT", "5678")
+        m.setenv("SONAR_PORT", "5678")
         ports = get_open_ports_list(5)
         assert len(ports) == 5
         assert len(set(ports)) == 5, "ports must be unique"
@@ -96,12 +96,12 @@ def test_get_open_ports_list_with_aphrodite_port(monkeypatch: pytest.MonkeyPatch
 def test_get_open_port_skips_reserved_dp_master_ports(
     monkeypatch: pytest.MonkeyPatch,
 ):
-    """APHRODITE_PORT == APHRODITE_DP_MASTER_PORT must not livelock by returning the
+    """SONAR_PORT == SONAR_DP_MASTER_PORT must not livelock by returning the
     same free-but-reserved port forever (upstream issue #50024)."""
     base = 42123
     with monkeypatch.context() as m:
-        m.setenv("APHRODITE_PORT", str(base))
-        m.setenv("APHRODITE_DP_MASTER_PORT", str(base))
+        m.setenv("SONAR_PORT", str(base))
+        m.setenv("SONAR_DP_MASTER_PORT", str(base))
         port = _call_with_timeout(get_open_port)
         assert port >= base + 10
 
@@ -109,13 +109,13 @@ def test_get_open_port_skips_reserved_dp_master_ports(
 def test_get_open_ports_list_skips_reserved_dp_master_ports(
     monkeypatch: pytest.MonkeyPatch,
 ):
-    """The APHRODITE_PORT band scan must not hand out ports inside the window
+    """The SONAR_PORT band scan must not hand out ports inside the window
     reserved for the data parallel master process."""
     base = 42223
     reserved = range(base, base + 10)
     with monkeypatch.context() as m:
-        m.setenv("APHRODITE_PORT", str(base))
-        m.setenv("APHRODITE_DP_MASTER_PORT", str(base))
+        m.setenv("SONAR_PORT", str(base))
+        m.setenv("SONAR_DP_MASTER_PORT", str(base))
         ports = _call_with_timeout(lambda: get_open_ports_list(5))
         assert len(ports) == 5
         assert len(set(ports)) == 5, "ports must be unique"
@@ -129,8 +129,8 @@ def test_get_open_port_ephemeral_skips_reserved_range(
     replaced by a rescan starting past the range."""
     base = 42323
     with monkeypatch.context() as m:
-        m.delenv("APHRODITE_PORT", raising=False)
-        m.setenv("APHRODITE_DP_MASTER_PORT", str(base))
+        m.delenv("SONAR_PORT", raising=False)
+        m.setenv("SONAR_DP_MASTER_PORT", str(base))
         m.setattr(
             network_utils,
             "_get_open_port",
@@ -142,11 +142,11 @@ def test_get_open_port_ephemeral_skips_reserved_range(
 def test_get_open_port_ephemeral_without_dp_master_port(
     monkeypatch: pytest.MonkeyPatch,
 ):
-    """Without APHRODITE_PORT and APHRODITE_DP_MASTER_PORT, an ephemeral port is
+    """Without SONAR_PORT and SONAR_DP_MASTER_PORT, an ephemeral port is
     returned as before."""
     with monkeypatch.context() as m:
-        m.delenv("APHRODITE_PORT", raising=False)
-        m.delenv("APHRODITE_DP_MASTER_PORT", raising=False)
+        m.delenv("SONAR_PORT", raising=False)
+        m.delenv("SONAR_DP_MASTER_PORT", raising=False)
         port = _call_with_timeout(get_open_port)
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.bind(("localhost", port))

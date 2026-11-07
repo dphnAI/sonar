@@ -8,16 +8,16 @@ from dataclasses import dataclass
 import pytest
 import torch
 
-from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-from aphrodite.distributed.eplb.eplb_communicator import create_eplb_communicator
-from aphrodite.distributed.eplb.rebalance_execute import rearrange_expert_weights_inplace
-from aphrodite.distributed.parallel_state import (
+from sonar.config import SonarConfig, set_current_sonar_config
+from sonar.distributed.eplb.eplb_communicator import create_eplb_communicator
+from sonar.distributed.eplb.rebalance_execute import rearrange_expert_weights_inplace
+from sonar.distributed.parallel_state import (
     ensure_model_parallel_initialized,
     get_eplb_group,
     get_tp_group,
 )
-from aphrodite.model_executor.layers.fused_moe import FusedMoEFactory, MoERunner
-from aphrodite.platforms import current_platform
+from sonar.model_executor.layers.fused_moe import FusedMoEFactory, MoERunner
+from sonar.platforms import current_platform
 
 from .eplb_utils import distributed_run, set_env_vars_and_device
 
@@ -182,12 +182,12 @@ def _test_eplb_fml(env, world_size: int, test_config: TestConfig):
     # to expert parallel)
     set_env_vars_and_device(env)
 
-    aphrodite_config = AphroditeConfig()
-    aphrodite_config.parallel_config.tensor_parallel_size = world_size
-    aphrodite_config.parallel_config.enable_expert_parallel = True
-    aphrodite_config.parallel_config.enable_eplb = True
+    sonar_config = SonarConfig()
+    sonar_config.parallel_config.tensor_parallel_size = world_size
+    sonar_config.parallel_config.enable_expert_parallel = True
+    sonar_config.parallel_config.enable_eplb = True
 
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         ensure_model_parallel_initialized(tensor_model_parallel_size=world_size, pipeline_model_parallel_size=1)
 
         ep_group = get_tp_group().device_group

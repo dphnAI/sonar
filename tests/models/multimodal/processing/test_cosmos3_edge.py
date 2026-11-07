@@ -5,9 +5,9 @@ import os
 
 import pytest
 
-from aphrodite.assets.video import VideoAsset
-from aphrodite.config import ModelConfig
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
+from sonar.assets.video import VideoAsset
+from sonar.config import ModelConfig
+from sonar.multimodal import MULTIMODAL_REGISTRY
 
 from ....conftest import ImageTestAssets
 from ...utils import build_model_context

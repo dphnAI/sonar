@@ -4,13 +4,13 @@ import importlib
 from types import ModuleType
 from typing import Any
 
-import aphrodite.envs as envs
-from aphrodite.logger import init_logger
+import sonar.envs as envs
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 
-_HW_AGNOSTIC_PKG = "aphrodite.model_executor.hw_agnostic.layers"
-_IN_TREE_PKG = "aphrodite.model_executor.layers"
+_HW_AGNOSTIC_PKG = "sonar.model_executor.hw_agnostic.layers"
+_IN_TREE_PKG = "sonar.model_executor.layers"
 
 
 def _import_hw_agnostic(module: str) -> ModuleType | None:
@@ -31,15 +31,15 @@ def _import_hw_agnostic(module: str) -> ModuleType | None:
 def resolve(module: str, name: str) -> Any:
     """Return layer `name` from `module` for the active path.
 
-    Returns `aphrodite.model_executor.hw_agnostic.layers.<module>.<name>` if
-    `APHRODITE_USE_HW_AGNOSTIC` is set and that layer exists, else
-    `aphrodite.model_executor.layers.<module>.<name>`. Falling back to the in-tree
-    layer while `APHRODITE_USE_HW_AGNOSTIC` is set logs a warning.
+    Returns `sonar.model_executor.hw_agnostic.layers.<module>.<name>` if
+    `SONAR_USE_HW_AGNOSTIC` is set and that layer exists, else
+    `sonar.model_executor.layers.<module>.<name>`. Falling back to the in-tree
+    layer while `SONAR_USE_HW_AGNOSTIC` is set logs a warning.
 
     The Transformers backend builds its layers through this function, so an
     out-of-tree plugin that subclasses the result and registers it with its
     `register_oot` overrides the class that backend builds on either path.
-    Models with a native Aphrodite implementation always build the in-tree class, and
+    Models with a native Sonar implementation always build the in-tree class, and
     overrides do not yet reach the backend's norms, which are subclasses of
     `RMSNorm` and `GemmaRMSNorm`.
 
@@ -50,7 +50,7 @@ def resolve(module: str, name: str) -> Any:
         class MySiluAndMul(SiluAndMul): ...
 
     Args:
-        module: Module path relative to `aphrodite.model_executor.layers`, e.g.
+        module: Module path relative to `sonar.model_executor.layers`, e.g.
             `"layernorm"`.
         name: Name of the layer in that module, e.g. `"RMSNorm"`.
 
@@ -63,7 +63,7 @@ def resolve(module: str, name: str) -> Any:
             in-tree module does not exist.
 
     """
-    if envs.APHRODITE_USE_HW_AGNOSTIC:
+    if envs.SONAR_USE_HW_AGNOSTIC:
         hw_module = _import_hw_agnostic(module)
         if (layer := getattr(hw_module, name, None)) is not None:
             logger.info_once("Using hardware agnostic layer %s.%s", module, name)

@@ -9,15 +9,15 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.platforms import current_platform
-from aphrodite.sampling_params import (
+from sonar.config import SonarConfig
+from sonar.platforms import current_platform
+from sonar.sampling_params import (
     SamplingParams,
     StructuredOutputsParams,
     validate_thinking_token_budget,
 )
-from aphrodite.utils.platform_utils import is_pin_memory_available
-from aphrodite.v1.sample.logits_processor import (
+from sonar.utils.platform_utils import is_pin_memory_available
+from sonar.v1.sample.logits_processor import (
     BatchUpdate,
     BatchUpdateBuilder,
     LogitBiasLogitsProcessor,
@@ -27,8 +27,8 @@ from aphrodite.v1.sample.logits_processor import (
     MoveDirectionality,
     build_logitsprocs,
 )
-from aphrodite.v1.sample.metadata import SamplingMetadata
-from aphrodite.v1.sample.thinking_budget_state import (
+from sonar.v1.sample.metadata import SamplingMetadata
+from sonar.v1.sample.thinking_budget_state import (
     ThinkingBudgetStateHolder,
     maybe_create_thinking_budget_state_holder,
 )
@@ -116,19 +116,19 @@ def _generate_fake_sampling_metadata(
             np.random.randint(0, vocab_size, size=np.random.randint(1, MAX_NUM_PROMPT_TOKENS)).tolist()
         )
 
-    aphrodite_config = AphroditeConfig()
-    aphrodite_config.reasoning_config = create_mock_reasoning_config([THINK_START_TOKEN_ID], [THINK_END_TOKEN_ID])
+    sonar_config = SonarConfig()
+    sonar_config.reasoning_config = create_mock_reasoning_config([THINK_START_TOKEN_ID], [THINK_END_TOKEN_ID])
 
     logitsprocs = build_logitsprocs(
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         device=device,
         is_pin_memory=PIN_MEMORY_AVAILABLE,
         is_pooling_model=False,
     )
-    num_spec = aphrodite_config.speculative_config.num_speculative_tokens if aphrodite_config.speculative_config else 0
+    num_spec = sonar_config.speculative_config.num_speculative_tokens if sonar_config.speculative_config else 0
     thinking_holder = maybe_create_thinking_budget_state_holder(
-        aphrodite_config.reasoning_config,
-        aphrodite_config.scheduler_config.max_num_seqs,
+        sonar_config.reasoning_config,
+        sonar_config.scheduler_config.max_num_seqs,
         num_spec,
         device,
         is_pin_memory=False,
@@ -425,7 +425,7 @@ def _min_tokens_validate(
 
 
 def _make_min_tokens_processor() -> MinTokensLogitsProcessor:
-    return MinTokensLogitsProcessor(AphroditeConfig(), torch.device("cpu"), False)
+    return MinTokensLogitsProcessor(SonarConfig(), torch.device("cpu"), False)
 
 
 # Constructing the processor allocates pinned host memory, which creates a
@@ -900,7 +900,7 @@ def test_logitsprocs(device: str, reqs_per_logitproc: int, logitsprocs_under_tes
 
 
 def test_maybe_create_thinking_budget_holder_without_reasoning():
-    cfg = AphroditeConfig()
+    cfg = SonarConfig()
     assert cfg.reasoning_config is None
     assert (
         maybe_create_thinking_budget_state_holder(
@@ -915,7 +915,7 @@ def test_maybe_create_thinking_budget_holder_without_reasoning():
 
 
 def test_thinking_budget_holder_has_tracked_after_sync_add():
-    vc = AphroditeConfig()
+    vc = SonarConfig()
     vc.reasoning_config = create_mock_reasoning_config([THINK_START_TOKEN_ID], [THINK_END_TOKEN_ID])
     h = ThinkingBudgetStateHolder(
         vc.reasoning_config,
@@ -945,7 +945,7 @@ def test_thinking_budget_holder_has_tracked_after_sync_add():
 
 
 def test_thinking_budget_holder_sync_remove_clears_state():
-    vc = AphroditeConfig()
+    vc = SonarConfig()
     vc.reasoning_config = create_mock_reasoning_config([THINK_START_TOKEN_ID], [THINK_END_TOKEN_ID])
     h = ThinkingBudgetStateHolder(
         vc.reasoning_config,
@@ -975,7 +975,7 @@ def test_thinking_budget_holder_sync_remove_clears_state():
 
 
 def test_thinking_budget_holder_sync_add_without_budget_drops_row():
-    vc = AphroditeConfig()
+    vc = SonarConfig()
     vc.reasoning_config = create_mock_reasoning_config([THINK_START_TOKEN_ID], [THINK_END_TOKEN_ID])
     h = ThinkingBudgetStateHolder(
         vc.reasoning_config,
@@ -996,7 +996,7 @@ def test_thinking_budget_holder_sync_add_without_budget_drops_row():
 
 
 def test_thinking_budget_holder_swap_exchanges_state():
-    vc = AphroditeConfig()
+    vc = SonarConfig()
     vc.reasoning_config = create_mock_reasoning_config([THINK_START_TOKEN_ID], [THINK_END_TOKEN_ID])
     h = ThinkingBudgetStateHolder(
         vc.reasoning_config,
@@ -1040,7 +1040,7 @@ def test_thinking_budget_holder_swap_exchanges_state():
 
 
 def test_thinking_budget_holder_unidirectional_move():
-    vc = AphroditeConfig()
+    vc = SonarConfig()
     vc.reasoning_config = create_mock_reasoning_config([THINK_START_TOKEN_ID], [THINK_END_TOKEN_ID])
     h = ThinkingBudgetStateHolder(
         vc.reasoning_config,
@@ -1078,7 +1078,7 @@ def test_thinking_budget_holder_unidirectional_move():
 
 
 def test_thinking_budget_holder_update_state_repeat_indices_last_row_wins():
-    vc = AphroditeConfig()
+    vc = SonarConfig()
     vc.reasoning_config = create_mock_reasoning_config([THINK_START_TOKEN_ID], [THINK_END_TOKEN_ID])
     h = ThinkingBudgetStateHolder(
         vc.reasoning_config,
@@ -1124,7 +1124,7 @@ def test_thinking_budget_holder_spec_mode_tensor_layout():
 
 
 def test_thinking_budget_holder_empty_end_tokens_disables_row():
-    vc = AphroditeConfig()
+    vc = SonarConfig()
     vc.reasoning_config = create_mock_reasoning_config([THINK_START_TOKEN_ID], [])
     h = ThinkingBudgetStateHolder(
         vc.reasoning_config,
@@ -1168,7 +1168,7 @@ def test_thinking_budget_enforced_without_penalties():
     (setting in_end=True) when given the real output_token_ids, and that
     passing an empty list (the pre-fix behavior) prevents budget enforcement.
     """
-    vc = AphroditeConfig()
+    vc = SonarConfig()
     vc.reasoning_config = create_mock_reasoning_config([THINK_START_TOKEN_ID], [THINK_END_TOKEN_ID])
     budget = 3  # allow 3 thinking tokens
 
@@ -1241,17 +1241,17 @@ def test_sampling_params_minus_one_normalizes_to_none():
 
 @pytest.mark.parametrize("invalid_budget", [-2, 0.6, 10.5, True])
 def test_validate_thinking_token_budget_rejects_invalid(invalid_budget):
-    from aphrodite.exceptions import AphroditeValidationError
+    from sonar.exceptions import SonarValidationError
 
-    with pytest.raises(AphroditeValidationError, match="thinking_token_budget"):
+    with pytest.raises(SonarValidationError, match="thinking_token_budget"):
         validate_thinking_token_budget(invalid_budget)
 
 
 @pytest.mark.parametrize("invalid_budget", [-2, 0.6, 10.5])
 def test_thinking_budget_invalid_budget_rejected(invalid_budget):
-    from aphrodite.exceptions import AphroditeValidationError
+    from sonar.exceptions import SonarValidationError
 
-    with pytest.raises(AphroditeValidationError, match="thinking_token_budget"):
+    with pytest.raises(SonarValidationError, match="thinking_token_budget"):
         SamplingParams(thinking_token_budget=invalid_budget)
 
 
@@ -1426,7 +1426,7 @@ class TestThinkingBudgetNaturalEndReentry:
 
     @staticmethod
     def _make_holder(end_token_ids):
-        from aphrodite.v1.sample.thinking_budget_state import (
+        from sonar.v1.sample.thinking_budget_state import (
             ThinkingBudgetStateHolder,
         )
 

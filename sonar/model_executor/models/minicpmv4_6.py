@@ -13,34 +13,34 @@ from PIL import Image as PILImage
 from torch import nn
 from transformers import MiniCPMV4_6Config
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed import get_tensor_model_parallel_world_size
-from aphrodite.model_executor.layers.activation import get_act_fn
-from aphrodite.model_executor.layers.attention import MMEncoderAttention
-from aphrodite.model_executor.layers.linear import (
+from sonar.config import SonarConfig
+from sonar.distributed import get_tensor_model_parallel_world_size
+from sonar.model_executor.layers.activation import get_act_fn
+from sonar.model_executor.layers.attention import MMEncoderAttention
+from sonar.model_executor.layers.linear import (
     QKVParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.mamba.mamba_utils import (
+from sonar.model_executor.layers.mamba.mamba_utils import (
     MambaStateCopyFuncCalculator,
     MambaStateDtypeCalculator,
     MambaStateShapeCalculator,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import (
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import (
     MultiModalFeatureSpec,
     MultiModalFieldConfig,
     NestedTensors,
 )
-from aphrodite.multimodal.parse import ImageProcessorItems, ImageSize, VideoProcessorItems
-from aphrodite.multimodal.processing.processor import (
+from sonar.multimodal.parse import ImageProcessorItems, ImageSize, VideoProcessorItems
+from sonar.multimodal.processing.processor import (
     PromptReplacement,
     PromptUpdateDetails,
     ResolvedPromptUpdate,
     cached_encode,
 )
-from aphrodite.sequence import IntermediateTensors
+from sonar.sequence import IntermediateTensors
 
 from .idefics2_vision_model import Idefics2VisionTransformer
 from .interfaces import (
@@ -320,7 +320,7 @@ class MiniCPMV4_6MultiModalProcessor(MiniCPMVMultiModalProcessor):
 
         # transformers v5.7+ MiniCPMV4_6ImageProcessor returns
         # `pixel_values` (1, C, P, sum_W) where all slices are fused along W
-        # (NaViT-style), and `target_sizes` (n_slices, 2). Aphrodite expects each
+        # (NaViT-style), and `target_sizes` (n_slices, 2). Sonar expects each
         # image entry to be a 4D tensor (n_slices, C, P, L_max_padded).
         n_images = len(parsed_images)
         image_processor = self.info.get_image_processor()
@@ -722,7 +722,7 @@ class MiniCPMV4_6ProcessingInfo(MiniCPMVProcessingInfo):
         token_divisor = 4 if downsample_mode == "4x" else 16
         resize_kwargs = {"downsample_mode": downsample_mode} if RESIZE_TAKES_DOWNSAMPLE_MODE else {}
 
-        # Aphrodite ImageSize is (width, height); transformers expects (height, width)
+        # Sonar ImageSize is (width, height); transformers expects (height, width)
         hf_image_size = (image_size.height, image_size.width)
 
         # transformers v5.7+ requires `scale_resolution` arg
@@ -835,7 +835,7 @@ def _stack_vit_merger_qkv(
     """Fold separate vit_merger q/k/v projections into the fused qkv_proj module.
 
     HF checkpoints store the window-attention projections separately, while
-    Aphrodite keeps them fused. The shard_id mechanism on the submodule's
+    Sonar keeps them fused. The shard_id mechanism on the submodule's
     WeightsMapper cannot do this: AutoWeightsLoader still recurses over every
     incoming key after calling a submodule's load_weights, so a "k_proj" key
     with no matching child raises before the mapping is honoured.
@@ -1140,7 +1140,7 @@ class MiniCPMV4_6ForConditionalGeneration(
 ):
     supports_encoder_tp_data = True
 
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_stacked={
             ".q_proj": (".qkv_proj", "q"),
             ".k_proj": (".qkv_proj", "k"),
@@ -1191,11 +1191,11 @@ class MiniCPMV4_6ForConditionalGeneration(
         positions = torch.arange(seq_len).unsqueeze(0).expand(3, -1)
         return positions, 0
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config: MiniCPMV4_6Config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
-        multimodal_config = aphrodite_config.model_config.multimodal_config
+        config: MiniCPMV4_6Config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
+        multimodal_config = sonar_config.model_config.multimodal_config
         assert multimodal_config is not None
 
         self.config = config
@@ -1203,7 +1203,7 @@ class MiniCPMV4_6ForConditionalGeneration(
         self.use_data_parallel = multimodal_config.mm_encoder_tp_mode == "data"
 
         # --- Vision tower ---
-        with self._mark_tower_model(aphrodite_config, {"image"}):
+        with self._mark_tower_model(sonar_config, {"image"}):
             self.vpm = Idefics2VisionTransformer(
                 config.vision_config,
                 quant_config=quant_config,
@@ -1226,12 +1226,12 @@ class MiniCPMV4_6ForConditionalGeneration(
         # --- Language model ---
         # Temporarily swap top-level model_type so that Qwen3_5ForCausalLM
         # picks up the expected text config when introspecting the hf config.
-        with self._mark_language_model(aphrodite_config):
+        with self._mark_language_model(sonar_config):
             saved_model_type = config.model_type
             config.model_type = "qwen3_5_text"
             try:
                 self.language_model = Qwen3_5ForCausalLM(
-                    aphrodite_config=aphrodite_config,
+                    sonar_config=sonar_config,
                     prefix=maybe_prefix(prefix, "language_model"),
                 )
             finally:
@@ -1475,7 +1475,7 @@ class MiniCPMV4_6ForConditionalGeneration(
         loader = AutoWeightsLoader(self)
         return loader.load_weights(
             _stack_vit_merger_qkv(weights),
-            mapper=self.hf_to_aphrodite_mapper,
+            mapper=self.hf_to_sonar_mapper,
         )
 
     def get_mm_mapping(self) -> MultiModelKeys:
@@ -1488,21 +1488,19 @@ class MiniCPMV4_6ForConditionalGeneration(
     # ----- Mamba / Hybrid state helpers (same as Qwen3.5 VLM) -----
 
     @classmethod
-    def get_mamba_state_dtype_from_config(cls, aphrodite_config):
+    def get_mamba_state_dtype_from_config(cls, sonar_config):
         return MambaStateDtypeCalculator.gated_delta_net_state_dtype(
-            aphrodite_config.model_config.dtype,
-            aphrodite_config.cache_config.mamba_cache_dtype,
-            aphrodite_config.cache_config.mamba_ssm_cache_dtype,
+            sonar_config.model_config.dtype,
+            sonar_config.cache_config.mamba_cache_dtype,
+            sonar_config.cache_config.mamba_ssm_cache_dtype,
         )
 
     @classmethod
-    def get_mamba_state_shape_from_config(cls, aphrodite_config):
-        parallel_config = aphrodite_config.parallel_config
-        hf_config = aphrodite_config.model_config.hf_text_config
+    def get_mamba_state_shape_from_config(cls, sonar_config):
+        parallel_config = sonar_config.parallel_config
+        hf_config = sonar_config.model_config.hf_text_config
         tp_size = parallel_config.tensor_parallel_size
-        num_spec = (
-            aphrodite_config.speculative_config.num_speculative_tokens if aphrodite_config.speculative_config else 0
-        )
+        num_spec = sonar_config.speculative_config.num_speculative_tokens if sonar_config.speculative_config else 0
         return MambaStateShapeCalculator.gated_delta_net_state_shape(
             tp_size,
             hf_config.linear_num_key_heads,

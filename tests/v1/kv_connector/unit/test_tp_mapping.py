@@ -14,15 +14,15 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from aphrodite.distributed.kv_transfer.kv_connector.utils import TransferTopology
-from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.tp_mapping import (
+from sonar.distributed.kv_transfer.kv_connector.utils import TransferTopology
+from sonar.distributed.kv_transfer.kv_connector.v1.nixl.tp_mapping import (
     TPMapping,
     compute_tp_mapping,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.worker import (
+from sonar.distributed.kv_transfer.kv_connector.v1.nixl.worker import (
     NixlConnectorWorker,
 )
-from aphrodite.v1.kv_cache_interface import FullAttentionSpec, MambaSpec
+from sonar.v1.kv_cache_interface import FullAttentionSpec, MambaSpec
 
 # ======================================================================
 # Test fixtures / helpers

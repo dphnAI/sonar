@@ -12,7 +12,7 @@ so it cannot change results; callers join the side stream once per forward.
 
 import torch
 
-from aphrodite.triton_utils import tl, triton
+from sonar.triton_utils import tl, triton
 
 CTAS = 96
 BLOCK = 2048

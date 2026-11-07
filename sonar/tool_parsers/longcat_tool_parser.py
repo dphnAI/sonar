@@ -3,9 +3,9 @@
 
 import regex as re
 
-from aphrodite.tokenizers import TokenizerLike
-from aphrodite.tool_parsers.abstract_tool_parser import Tool
-from aphrodite.tool_parsers.hermes_tool_parser import Hermes2ProToolParser
+from sonar.tokenizers import TokenizerLike
+from sonar.tool_parsers.abstract_tool_parser import Tool
+from sonar.tool_parsers.hermes_tool_parser import Hermes2ProToolParser
 
 
 class LongcatFlashToolParser(Hermes2ProToolParser):

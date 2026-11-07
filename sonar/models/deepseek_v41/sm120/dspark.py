@@ -18,33 +18,33 @@ import torch
 import torch.nn as nn
 from b12x.gemm import block_fp8_linear
 
-from aphrodite.config import AphroditeConfig, get_current_aphrodite_config
-from aphrodite.distributed import (
+from sonar.config import SonarConfig, get_current_sonar_config
+from sonar.distributed import (
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
 )
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe import (
     fused_moe_make_expert_params_mapping,
 )
-from aphrodite.model_executor.layers.linear import ReplicatedLinear
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
-from aphrodite.model_executor.models.qwen3_dspark import (
+from sonar.model_executor.layers.linear import ReplicatedLinear
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.model_loader.weight_utils import default_weight_loader
+from sonar.model_executor.models.qwen3_dspark import (
     DSparkConfidenceHead,
     DSparkMarkovHead,
 )
-from aphrodite.model_executor.models.utils import maybe_prefix
-from aphrodite.models.deepseek_v41.nvidia.model import (
+from sonar.model_executor.models.utils import maybe_prefix
+from sonar.models.deepseek_v41.nvidia.model import (
     make_deepseek_v4_expert_params_mapping,
     prepare_mega_gate_routing_metadata,
 )
-from aphrodite.utils.b12x import (
+from sonar.utils.b12x import (
     B12xPreparationUnit,
     B12xWorkload,
     register_b12x_unit_provider,
 )
-from aphrodite.v1.worker.workspace import (
+from sonar.v1.worker.workspace import (
     current_workspace_manager,
     retain_cuda_graph_capture_resource,
 )
@@ -183,16 +183,16 @@ class _ContextKVProjection:
 
 
 class DSparkDeepseekV4Model(nn.Module):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__()
-        assert aphrodite_config.speculative_config is not None
-        config = aphrodite_config.speculative_config.draft_model_config.hf_config
+        assert sonar_config.speculative_config is not None
+        config = sonar_config.speculative_config.draft_model_config.hf_config
         self.config = config
         self.hidden_size = config.hidden_size
         self.hc_mult = config.hc_mult
         self.num_hidden_layers = config.num_hidden_layers
         self.target_layer_ids = tuple(config.dspark_target_layer_ids)
-        self.context_capacity = aphrodite_config.scheduler_config.max_num_batched_tokens
+        self.context_capacity = sonar_config.scheduler_config.max_num_batched_tokens
         self._context_kv_projection: _ContextKVProjection | None = None
 
         self.num_dspark_layers = (
@@ -208,22 +208,22 @@ class DSparkDeepseekV4Model(nn.Module):
             config.hidden_size,
             bias=False,
             return_bias=False,
-            quant_config=aphrodite_config.quant_config,
+            quant_config=sonar_config.quant_config,
             prefix=maybe_prefix(prefix, "main_proj"),
         )
         self.main_norm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.topk_indices_buffer = torch.empty(
-            aphrodite_config.scheduler_config.max_num_batched_tokens,
+            sonar_config.scheduler_config.max_num_batched_tokens,
             config.index_topk,
             dtype=torch.int32,
         )
 
-        current_aphrodite_config = get_current_aphrodite_config()
+        current_sonar_config = get_current_sonar_config()
         self.layers = nn.ModuleList(
             [
                 DeepseekV4DecoderLayer(
-                    current_aphrodite_config,
+                    current_sonar_config,
                     prefix=maybe_prefix(prefix, f"layers.{self.num_hidden_layers + i}"),
                     topk_indices_buffer=self.topk_indices_buffer,
                 )
@@ -353,14 +353,14 @@ class DSparkDeepseekV4ForCausalLM(nn.Module):
     draft_id_to_target_id = None
     supports_b12x_native_preparation = True
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__()
-        assert aphrodite_config.speculative_config is not None
-        self.draft_model_config = aphrodite_config.speculative_config.draft_model_config
+        assert sonar_config.speculative_config is not None
+        self.draft_model_config = sonar_config.speculative_config.draft_model_config
         self.config = self.draft_model_config.hf_config
-        self.quant_config = aphrodite_config.quant_config
+        self.quant_config = sonar_config.quant_config
         self.linear_scale_name = "weight_scale_inv"
-        self.model = DSparkDeepseekV4Model(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = DSparkDeepseekV4Model(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
         # Bound by load_dspark_model after loading. An unused online-quantized
         # head otherwise remains on meta and cannot be natively precompiled.
         self.lm_head: nn.Module | None = None
@@ -430,7 +430,7 @@ class DSparkDeepseekV4ForCausalLM(nn.Module):
         The shard path forms the Markov bias inside its sampling kernel, so it
         needs a logits processor that neither scales nor soft-caps.
         """
-        from aphrodite.v1.worker.gpu.sample.vocab_parallel import vocab_shard_for
+        from sonar.v1.worker.gpu.sample.vocab_parallel import vocab_shard_for
 
         processor = self.logits_processor
         if self.lm_head is None or processor.scale != 1.0 or processor.soft_cap is not None:

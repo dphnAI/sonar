@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Keep the `aphrodite bench serve` flag snapshot in sync for the Rust CLI parity test.
+"""Keep the `sonar bench serve` flag snapshot in sync for the Rust CLI parity test.
 
 `rust/src/bench/tests/cli_parity.rs` asserts that every flag in the snapshot is
-either a known `aphrodite-bench` clap flag/alias or explicitly allowlisted as
-Python-only, so `APHRODITE_USE_RUST_BENCH=1` delegation cannot silently reject
+either a known `sonar-bench` clap flag/alias or explicitly allowlisted as
+Python-only, so `SONAR_USE_RUST_BENCH=1` delegation cannot silently reject
 documented flags. This test keeps the snapshot itself current.
 
 Run this file directly to regenerate the snapshot:
@@ -17,17 +17,17 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SNAPSHOT = REPO_ROOT / "rust" / "src" / "bench" / "tests" / "python_serve_flags.txt"
 HEADER = """\
-# Long CLI flags of the Python `aphrodite bench serve` parser
-# (aphrodite.benchmarks.serve.add_cli_args), sorted; --help excluded.
+# Long CLI flags of the Python `sonar bench serve` parser
+# (sonar.benchmarks.serve.add_cli_args), sorted; --help excluded.
 # Regenerate: .venv/bin/python tests/benchmarks/test_rust_bench_cli_parity.py
 # Consumed by rust/src/bench/tests/cli_parity.rs, which requires every flag
-# below to be a known aphrodite-bench flag/alias or a PYTHON_ONLY allowlist entry.
+# below to be a known sonar-bench flag/alias or a PYTHON_ONLY allowlist entry.
 """
 
 
 def _current_flags() -> list[str]:
-    from aphrodite.benchmarks.serve import add_cli_args
-    from aphrodite.utils.argparse_utils import FlexibleArgumentParser
+    from sonar.benchmarks.serve import add_cli_args
+    from sonar.utils.argparse_utils import FlexibleArgumentParser
 
     parser = FlexibleArgumentParser()
     add_cli_args(parser)
@@ -44,7 +44,7 @@ def _snapshot_flags() -> list[str]:
 def test_serve_flag_snapshot_is_current():
     assert SNAPSHOT.is_file(), f"missing snapshot {SNAPSHOT}"
     assert _current_flags() == _snapshot_flags(), (
-        "`aphrodite bench serve` flags changed. Regenerate the snapshot with "
+        "`sonar bench serve` flags changed. Regenerate the snapshot with "
         "`.venv/bin/python tests/benchmarks/test_rust_bench_cli_parity.py`, "
         "then for any added flag either support it in rust/src/bench/src/cli.rs "
         "or add it to PYTHON_ONLY in rust/src/bench/tests/cli_parity.rs"

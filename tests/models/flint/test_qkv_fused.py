@@ -8,17 +8,17 @@ replaces, Flint's ``fused_add_rms_norm`` / ``rms_norm`` -> Flint GEMV ->
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 if not current_platform.is_cuda() or not current_platform.is_device_capability_family(100):
     pytest.skip("Flint fused qkv targets SM100", allow_module_level=True)
 
-from aphrodite.model_executor.layers.quantization.utils.nvfp4_utils import (  # noqa: E402
+from sonar.model_executor.layers.quantization.utils.nvfp4_utils import (  # noqa: E402
     swizzle_blockscale,
 )
-from aphrodite.models.flint.ops import norm, nvfp4_gemv  # noqa: E402
-from aphrodite.models.flint.ops.qk_norm_rope import qk_norm_rope_cache  # noqa: E402
-from aphrodite.models.flint.ops.qkv_fused import flint_qkv_fused  # noqa: E402
+from sonar.models.flint.ops import norm, nvfp4_gemv  # noqa: E402
+from sonar.models.flint.ops.qk_norm_rope import qk_norm_rope_cache  # noqa: E402
+from sonar.models.flint.ops.qkv_fused import flint_qkv_fused  # noqa: E402
 
 HQ, HKV, D, K = 32, 4, 128, 2048
 N = (HQ + 2 * HKV) * D

@@ -8,11 +8,11 @@ from unittest.mock import Mock, patch
 import pytest
 import torch
 
-from aphrodite.utils.import_utils import has_helion
+from sonar.utils.import_utils import has_helion
 
 if not has_helion():
     pytest.skip(
-        "Helion is not installed. Install with: pip install aphrodite[helion]",
+        "Helion is not installed. Install sonar[helion] from the Sonar wheel index.",
         allow_module_level=True,
     )
 
@@ -38,9 +38,9 @@ from torch._inductor.pattern_matcher import (
 )
 from torch.fx.experimental.proxy_tensor import make_fx
 
-from aphrodite.kernels.helion.case_key import CaseKey
-from aphrodite.kernels.helion.config_manager import ConfigManager
-from aphrodite.kernels.helion.register import HelionKernelWrapper
+from sonar.kernels.helion.case_key import CaseKey
+from sonar.kernels.helion.config_manager import ConfigManager
+from sonar.kernels.helion.register import HelionKernelWrapper
 
 
 @contextlib.contextmanager
@@ -53,11 +53,11 @@ def _helion_mock_context():
 
     with (
         patch(
-            "aphrodite.kernels.helion.config_manager.ConfigManager",
+            "sonar.kernels.helion.config_manager.ConfigManager",
             return_value=mock_config_manager,
         ),
         patch(
-            "aphrodite.kernels.helion.utils.get_canonical_gpu_name",
+            "sonar.kernels.helion.utils.get_canonical_gpu_name",
             return_value="nvidia_h200",
         ),
     ):

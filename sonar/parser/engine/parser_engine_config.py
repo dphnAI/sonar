@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 from enum import Enum, auto
 from functools import cached_property
 
-from aphrodite.parser.engine.events import EventType
+from sonar.parser.engine.events import EventType
 
 # Maps a raw argument delta to the JSON text it appends to the open trailing
 # value, or returns None when the delta may change anything else.
@@ -158,12 +158,12 @@ class ParserEngineConfig:
 
     @cached_property
     def terminal_defs(self):
-        from aphrodite.parser.engine.incremental_lexer import terminals_from_literals
+        from sonar.parser.engine.incremental_lexer import terminals_from_literals
 
         return terminals_from_literals(self.terminals)
 
     @cached_property
     def lexer_shape(self):
-        from aphrodite.parser.engine.incremental_lexer import LexerShape
+        from sonar.parser.engine.incremental_lexer import LexerShape
 
         return LexerShape(self.terminal_defs)

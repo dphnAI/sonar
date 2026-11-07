@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-from aphrodite.v1.worker.gpu.spec_decode.speculator_config import (
+from sonar.v1.worker.gpu.spec_decode.speculator_config import (
     DraftModelSpeculatorConfig,
 )
 
@@ -9,7 +9,7 @@ class StandaloneARSpeculatorConfig(DraftModelSpeculatorConfig):
     """A speculator that drafts autoregressively with its own draft model."""
 
     base_method = "draft_model"
-    speculator_class = "aphrodite.v1.worker.gpu.spec_decode.standalone_ar.speculator.StandaloneARSpeculator"
+    speculator_class = "sonar.v1.worker.gpu.spec_decode.standalone_ar.speculator.StandaloneARSpeculator"
     draft_has_own_vocab = True
     # An independent model with its own positional limit.
     shares_target_positions = False

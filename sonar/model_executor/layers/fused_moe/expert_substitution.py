@@ -18,14 +18,14 @@ from typing import TYPE_CHECKING, Any
 import torch
 from torch import nn
 
-from aphrodite.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
-from aphrodite.model_executor.layers.fused_moe.routed_experts import RoutedExperts
-from aphrodite.model_executor.layers.fused_moe.unquantized_fused_moe_method import (
+from sonar.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
+from sonar.model_executor.layers.fused_moe.routed_experts import RoutedExperts
+from sonar.model_executor.layers.fused_moe.unquantized_fused_moe_method import (
     UnquantizedFusedMoEMethod,
 )
 
 if TYPE_CHECKING:
-    from aphrodite.model_executor.layers.fused_moe.runner.shared_experts import SharedExperts
+    from sonar.model_executor.layers.fused_moe.runner.shared_experts import SharedExperts
 
 APPROX_VALUE_SUFFIX = ".approx_value"
 

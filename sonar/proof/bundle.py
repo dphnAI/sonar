@@ -10,8 +10,8 @@ from typing import Any
 
 from cryptography.exceptions import InvalidTag
 
-from aphrodite.proof import PROOF_VERSION, rank_worker_id
-from aphrodite.proof.verifier import (
+from sonar.proof import PROOF_VERSION, rank_worker_id
+from sonar.proof.verifier import (
     _load_x25519_private_key,
     compute_registry_hash,
     decrypt_payload,
@@ -19,7 +19,7 @@ from aphrodite.proof.verifier import (
 )
 
 # Closed schemas of the per-choice bundle and its per-rank receipts, as emitted
-# by both the Python (aphrodite/proof/http.py) and Rust frontends.
+# by both the Python (sonar/proof/http.py) and Rust frontends.
 BUNDLE_FIELDS = frozenset({"version", "request_id", "nonce", "output_token_ids", "proofs"})
 RECEIPT_FIELDS = frozenset({"rank", "dp_rank", "worker_id", "proof"})
 

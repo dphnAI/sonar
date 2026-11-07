@@ -20,16 +20,16 @@ from torch import nn
 from torch.utils._python_dispatch import TorchDispatchMode
 from transformers import PreTrainedConfig
 
-import aphrodite.envs as envs
-from aphrodite.config import AphroditeConfig, ModelConfig, ParallelConfig, set_current_aphrodite_config
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.transformers_utils.repo_utils import hf_api
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
-from aphrodite.utils.import_utils import PlaceholderModule
+import sonar.envs as envs
+from sonar.config import ModelConfig, ParallelConfig, SonarConfig, set_current_sonar_config
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.transformers_utils.repo_utils import hf_api
+from sonar.utils.argparse_utils import FlexibleArgumentParser
+from sonar.utils.import_utils import PlaceholderModule
 
 if TYPE_CHECKING:
-    from aphrodite.engine.arg_utils import EngineArgs
+    from sonar.engine.arg_utils import EngineArgs
 
 try:
     from tensorizer import (
@@ -159,7 +159,7 @@ class _NoInitOrTensorImpl:
 class TensorizerConfig(MutableMapping):
     tensorizer_uri: str | None = None
     tensorizer_dir: str | None = None
-    aphrodite_tensorized: bool | None = None
+    sonar_tensorized: bool | None = None
     verify_hash: bool | None = None
     num_readers: int | None = None
     encryption_keyfile: str | None = None
@@ -190,13 +190,13 @@ class TensorizerConfig(MutableMapping):
             configs and tokenizer files. Can be passed instead of 
             `tensorizer_uri` where the `model.tensors` file will be assumed 
             to be in this directory.
-        aphrodite_tensorized: If True, indicates that the serialized model is a 
-            Aphrodite model. This is used to determine the behavior of the 
+        sonar_tensorized: If True, indicates that the serialized model is a 
+            Sonar model. This is used to determine the behavior of the 
             TensorDeserializer when loading tensors from a serialized model.
-            It is far faster to deserialize a Aphrodite model as it utilizes
+            It is far faster to deserialize a Sonar model as it utilizes
             tensorizer's optimized GPU loading. Note that this is now
-            deprecated, as serialized Aphrodite models are now automatically
-            inferred as Aphrodite models.
+            deprecated, as serialized Sonar models are now automatically
+            inferred as Sonar models.
         verify_hash: If True, the hashes of each tensor will be verified 
             against the hashes stored in the metadata. A `HashMismatchError` 
             will be raised if any of the hashes do not match.
@@ -207,7 +207,7 @@ class TensorizerConfig(MutableMapping):
         encryption_keyfile: File path to a binary file containing a  
             binary key to use for decryption. `None` (the default) means 
             no decryption. See the example script in 
-            examples/features/tensorize_aphrodite_model.py. 
+            examples/features/tensorize_sonar_model.py. 
         s3_access_key_id: The access key for the S3 bucket. Can also be set via
             the S3_ACCESS_KEY_ID environment variable.
         s3_secret_access_key: The secret access key for the S3 bucket. Can also
@@ -217,7 +217,7 @@ class TensorizerConfig(MutableMapping):
     """
 
     def __post_init__(self):
-        # check if the configuration is for a sharded Aphrodite model
+        # check if the configuration is for a sharded Sonar model
         self._is_sharded = isinstance(self.tensorizer_uri, str) and re.search(r"%0\dd", self.tensorizer_uri) is not None
 
         if self.tensorizer_dir and self.tensorizer_uri:
@@ -288,7 +288,7 @@ class TensorizerConfig(MutableMapping):
     def verify_with_model_config(self, model_config: "ModelConfig") -> None:
         if model_config.quantization is not None and self.tensorizer_uri is not None:
             logger.warning(
-                "Loading a model using Tensorizer with quantization on Aphrodite is unstable and may lead to errors."
+                "Loading a model using Tensorizer with quantization on Sonar is unstable and may lead to errors."
             )
 
     def open_stream(self, tensorizer_args: "TensorizerArgs | None" = None):
@@ -375,7 +375,7 @@ class TensorizerArgs:
                 " tensorizer deserializer when "
                 "load_format=tensorizer is specified when "
                 "initializing an LLMEngine, either via the CLI "
-                "when running the Aphrodite OpenAI inference server "
+                "when running the Sonar OpenAI inference server "
                 "with a JSON string passed to "
                 "--model-loader-extra-config or as arguments given "
                 "to TensorizerConfig when passed to "
@@ -453,14 +453,14 @@ def _check_tensors_on_meta_device(model: nn.Module) -> None:
             )
 
 
-def init_tensorizer_model(tensorizer_config: TensorizerConfig, aphrodite_config: AphroditeConfig) -> nn.Module:
+def init_tensorizer_model(tensorizer_config: TensorizerConfig, sonar_config: SonarConfig) -> nn.Module:
     assert tensorizer_config.hf_config is not None
     model_args = tensorizer_config.hf_config
     model_args.dtype = tensorizer_config.dtype
     assert tensorizer_config.model_class is not None
     # TODO: Do we need to consider old-style model class?
-    with meta_tensor_mode(), set_current_aphrodite_config(aphrodite_config, check_compile=True):
-        return tensorizer_config.model_class(aphrodite_config=aphrodite_config)
+    with meta_tensor_mode(), set_current_sonar_config(sonar_config, check_compile=True):
+        return tensorizer_config.model_class(sonar_config=sonar_config)
 
 
 def deserialize_tensorizer_model(model: nn.Module, tensorizer_config: TensorizerConfig) -> None:
@@ -498,7 +498,7 @@ def deserialize_tensorizer_model(model: nn.Module, tensorizer_config: Tensorizer
     logger.info("Memory usage after: %s", after_mem)
 
     _check_tensors_on_meta_device(model)
-    del model.aphrodite_tensorized_marker
+    del model.sonar_tensorized_marker
 
 
 def tensorizer_weights_iterator(
@@ -506,11 +506,11 @@ def tensorizer_weights_iterator(
 ) -> Generator[tuple[str, torch.Tensor], None, None]:
     logger.warning(
         "Deserializing HuggingFace models is not optimized for "
-        "loading on Aphrodite, as tensorizer is forced to load to CPU. "
-        "Consider deserializing a Aphrodite model instead for faster "
+        "loading on Sonar, as tensorizer is forced to load to CPU. "
+        "Consider deserializing a Sonar model instead for faster "
         "load times. See the "
-        "examples/features/tensorize_aphrodite_model.py example script "
-        "for serializing Aphrodite models."
+        "examples/features/tensorize_sonar_model.py example script "
+        "for serializing Sonar models."
     )
 
     deserializer_args = tensorizer_args.deserialization_kwargs
@@ -521,16 +521,16 @@ def tensorizer_weights_iterator(
     del state
 
 
-def is_aphrodite_tensorized(tensorizer_config: "TensorizerConfig") -> bool:
-    """Infer if the model is a Aphrodite model by checking the weights for
-    a Aphrodite tensorized marker.
+def is_sonar_tensorized(tensorizer_config: "TensorizerConfig") -> bool:
+    """Infer if the model is a Sonar model by checking the weights for
+    a Sonar tensorized marker.
 
     Args:
         tensorizer_config: The TensorizerConfig object containing the
             tensorizer_uri to the serialized model.
 
     Returns:
-        bool: True if the model is a Aphrodite model, False otherwise.
+        bool: True if the model is a Sonar model, False otherwise.
 
     """
     tensorizer_args = tensorizer_config._construct_tensorizer_args()
@@ -539,14 +539,14 @@ def is_aphrodite_tensorized(tensorizer_config: "TensorizerConfig") -> bool:
         **tensorizer_args.deserialization_kwargs,
         lazy_load=True,
     )
-    if tensorizer_config.aphrodite_tensorized:
+    if tensorizer_config.sonar_tensorized:
         logger.warning(
-            "Please note that newly serialized Aphrodite models are automatically "
-            "inferred as Aphrodite models, so setting aphrodite_tensorized=True is "
+            "Please note that newly serialized Sonar models are automatically "
+            "inferred as Sonar models, so setting sonar_tensorized=True is "
             "only necessary for models serialized prior to this change."
         )
         return True
-    return ".aphrodite_tensorized_marker" in deserializer
+    return ".sonar_tensorized_marker" in deserializer
 
 
 def serialize_extra_artifacts(
@@ -588,13 +588,13 @@ def serialize_extra_artifacts(
                 stream.write(f.read())
 
 
-def serialize_aphrodite_model(
+def serialize_sonar_model(
     model: nn.Module,
     tensorizer_config: TensorizerConfig,
     model_config: "ModelConfig",
 ) -> nn.Module:
     model.register_parameter(
-        "aphrodite_tensorized_marker",
+        "sonar_tensorized_marker",
         nn.Parameter(torch.tensor((1,), device="meta"), requires_grad=False),
     )
 
@@ -609,7 +609,7 @@ def serialize_aphrodite_model(
     if (output_file := tensorizer_args.tensorizer_uri) is None:
         raise ValueError("tensorizer_uri must be specified for serialization.")
     if tensorizer_config._is_sharded:
-        from aphrodite.distributed import get_tensor_model_parallel_rank
+        from sonar.distributed import get_tensor_model_parallel_rank
 
         output_file = output_file % get_tensor_model_parallel_rank()
 
@@ -632,14 +632,14 @@ def serialize_aphrodite_model(
     return model
 
 
-def tensorize_aphrodite_model(
+def tensorize_sonar_model(
     engine_args: "EngineArgs",
     tensorizer_config: TensorizerConfig,
     generate_keyfile: bool = True,
 ):
     """Utility to load a model and then serialize it with Tensorizer.
 
-    Intended to be used separately from running a Aphrodite server since it
+    Intended to be used separately from running a Sonar server since it
     creates its own Engine instance.
     """
     engine_config = engine_args.create_engine_config()
@@ -658,9 +658,9 @@ def tensorize_aphrodite_model(
         ) as stream:
             stream.write(encryption_params.key)
 
-    from aphrodite.v1.engine.llm_engine import LLMEngine
+    from sonar.v1.engine.llm_engine import LLMEngine
 
-    engine = LLMEngine.from_aphrodite_config(engine_config)
+    engine = LLMEngine.from_sonar_config(engine_config)
     error: BaseException | None = None
     try:
         engine.collective_rpc(
@@ -672,7 +672,7 @@ def tensorize_aphrodite_model(
 
     def shutdown_engine_core() -> None:
         engine.engine_core.shutdown(
-            timeout=(envs.APHRODITE_WORKER_SHUTDOWN_TIMEOUT_SECONDS + _TENSORIZER_ENGINE_CLEANUP_GRACE_S)
+            timeout=(envs.SONAR_WORKER_SHUTDOWN_TIMEOUT_SECONDS + _TENSORIZER_ENGINE_CLEANUP_GRACE_S)
         )
 
     for name, callback in (

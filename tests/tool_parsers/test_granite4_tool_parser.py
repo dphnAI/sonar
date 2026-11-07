@@ -7,11 +7,11 @@ from typing import Any
 import pytest
 from transformers import AutoTokenizer
 
-from aphrodite.entrypoints.generate.base.protocol import (
+from sonar.entrypoints.generate.base.protocol import (
     DeltaMessage,
 )
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-from aphrodite.tool_parsers.granite4_tool_parser import Granite4ToolParser
+from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+from sonar.tool_parsers.granite4_tool_parser import Granite4ToolParser
 
 MODEL = "ibm-granite/granite-4.0-h-tiny"
 

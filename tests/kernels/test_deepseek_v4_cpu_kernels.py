@@ -11,8 +11,8 @@ from unittest import mock
 import pytest
 import torch
 
-import aphrodite.model_executor.kernels.mhc as mhc_kernels
-from aphrodite._custom_ops import (
+import sonar.model_executor.kernels.mhc as mhc_kernels
+from sonar._custom_ops import (
     compress_norm_rope_store_cpu,
     compress_norm_rope_store_indexer_cpu,
     flash_mla_with_kvcache_cpu,
@@ -22,9 +22,9 @@ from aphrodite._custom_ops import (
     inverse_gptj_rope_o_proj_cpu,
     save_partial_states_cpu,
 )
-from aphrodite.models.deepseek_v4.common.ops import fused_indexer_q_rope_quant
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.models.deepseek_v4.common.ops import fused_indexer_q_rope_quant
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_random_seed
 from tests.kernels.test_fused_deepseek_v4_qnorm_rope_kv_insert import (
     HEAD_DIM,
     NOPE_DIM,
@@ -1242,7 +1242,7 @@ def test_fused_indexer_q_rope_quant_dispatches_to_cpu_kernel():
         positions, q, cos_sin_cache, weights, softmax_scale, head_scale
     )
 
-    with mock.patch("aphrodite._custom_ops.fused_indexer_q_rope_quant_cpu") as mocked:
+    with mock.patch("sonar._custom_ops.fused_indexer_q_rope_quant_cpu") as mocked:
         fused_indexer_q_rope_quant(
             positions,
             q.clone(),

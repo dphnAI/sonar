@@ -8,10 +8,10 @@ import torch
 import torch.nn as nn
 from transformers import PreTrainedConfig
 
-from aphrodite.config.lora import LoRAConfig
+from sonar.config.lora import LoRAConfig
 
 if TYPE_CHECKING:
-    from aphrodite.lora.punica_wrapper import PunicaWrapperBase
+    from sonar.lora.punica_wrapper import PunicaWrapperBase
 
 
 class BaseLayerWithLoRA(nn.Module):
@@ -37,7 +37,7 @@ class BaseLayerWithLoRA(nn.Module):
         if callable(base_load_weights):
             return base_load_weights(weights)
 
-        from aphrodite.model_executor.models.utils import AutoWeightsLoader
+        from sonar.model_executor.models.utils import AutoWeightsLoader
 
         return AutoWeightsLoader(self.base_layer).load_weights(weights)
 

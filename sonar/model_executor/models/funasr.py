@@ -13,34 +13,34 @@ from transformers import (
     Qwen3Config,
 )
 
-from aphrodite.config import AphroditeConfig, ModelConfig, SpeechToTextConfig
-from aphrodite.config.multimodal import MultiModalDummyOptions
-from aphrodite.config.speech_to_text import SpeechToTextParams
-from aphrodite.distributed import get_tensor_model_parallel_world_size
-from aphrodite.inputs import MultiModalDataDict, PromptType
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.activation import _ACTIVATION_REGISTRY
-from aphrodite.model_executor.layers.attention.mm_encoder_attention import (
+from sonar.config import ModelConfig, SonarConfig, SpeechToTextConfig
+from sonar.config.multimodal import MultiModalDummyOptions
+from sonar.config.speech_to_text import SpeechToTextParams
+from sonar.distributed import get_tensor_model_parallel_world_size
+from sonar.inputs import MultiModalDataDict, PromptType
+from sonar.logger import init_logger
+from sonar.model_executor.layers.activation import _ACTIVATION_REGISTRY
+from sonar.model_executor.layers.attention.mm_encoder_attention import (
     MMEncoderAttention,
 )
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     QKVParallelLinear,
     ReplicatedLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
-from aphrodite.model_executor.models.whisper_utils import (
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
+from sonar.model_executor.models.whisper_utils import (
     ISO639_1_SUPPORTED_LANGS,
 )
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import (
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import (
     MultiModalFieldConfig,
     MultiModalKwargsItems,
 )
-from aphrodite.multimodal.parse import MultiModalDataItems, MultiModalDataParser
-from aphrodite.multimodal.processing import (
+from sonar.multimodal.parse import MultiModalDataItems, MultiModalDataParser
+from sonar.multimodal.processing import (
     BaseDummyInputsBuilder,
     BaseMultiModalProcessor,
     BaseProcessingInfo,
@@ -49,13 +49,13 @@ from aphrodite.multimodal.processing import (
     PromptUpdate,
     TimingContext,
 )
-from aphrodite.multimodal.processing.processor import (
+from sonar.multimodal.processing.processor import (
     HFMultiModalInputs,
     MultiModalProcessingResult,
 )
-from aphrodite.transformers_utils.processor import cached_processor_from_config
-from aphrodite.transformers_utils.processors.funasr import FunASRFeatureExtractor
-from aphrodite.utils.tensor_schema import TensorSchema, TensorShape
+from sonar.transformers_utils.processor import cached_processor_from_config
+from sonar.transformers_utils.processors.funasr import FunASRFeatureExtractor
+from sonar.utils.tensor_schema import TensorSchema, TensorShape
 
 from .interfaces import (
     MultiModalEmbeddings,
@@ -609,7 +609,7 @@ class FunASRAudioInputs(TensorSchema):
 
 
 class FunASREncoder(nn.Module):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_stacked={
             ".self_attn.q_proj": (".self_attn.qkv", "q"),
             ".self_attn.k_proj": (".self_attn.qkv", "k"),
@@ -617,10 +617,10 @@ class FunASREncoder(nn.Module):
         }
     )
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "", init_in_fp32: bool = False):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "", init_in_fp32: bool = False):
         super().__init__()
         self.audio_encoder = SenseVoiceEncoderSmall(
-            input_size=560, **aphrodite_config.model_config.hf_config.audio_encoder_conf
+            input_size=560, **sonar_config.model_config.hf_config.audio_encoder_conf
         )
         self.audio_adaptor = Transformer(
             downsample_rate=1,
@@ -635,14 +635,14 @@ class FunASREncoder(nn.Module):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
 
 class FunASRModel(nn.Module):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        self.encoder = FunASREncoder(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "encoder"))
-        self.decoder = Qwen3Model(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "decoder"))
+        self.encoder = FunASREncoder(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "encoder"))
+        self.decoder = Qwen3Model(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "decoder"))
 
     def forward(
         self,
@@ -807,7 +807,7 @@ class FunASRMultiModalProcessor(BaseMultiModalProcessor[FunASRProcessingInfo]):
     dummy_inputs=FunASRDummyInputsBuilder,
 )
 class FunASRForConditionalGeneration(nn.Module, SupportsTranscription, SupportsMultiModal):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_substr={
             "linear_q.": "q_proj.",
             "linear_k.": "k_proj.",
@@ -887,15 +887,15 @@ class FunASRForConditionalGeneration(nn.Module, SupportsTranscription, SupportsM
         assert hop_length is not None
         return math.ceil(audio_duration_s * stt_config.sample_rate / hop_length)
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
         self.config = config
-        self.dtype = aphrodite_config.model_config.dtype
+        self.dtype = sonar_config.model_config.dtype
 
         self.model = FunASRModel(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             prefix=maybe_prefix(prefix, "model"),
         )
         logit_scale = getattr(config, "logit_scale", 1.0)
@@ -972,4 +972,4 @@ class FunASRForConditionalGeneration(nn.Module, SupportsTranscription, SupportsM
             self,
         )
 
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)

@@ -18,43 +18,43 @@ import regex as re
 import torch
 import torch.nn as nn
 
-import aphrodite.envs as envs
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.kernel import NATIVE_MEGA_MOE_BACKENDS
-from aphrodite.distributed import get_tensor_model_parallel_world_size
-from aphrodite.forward_context import get_forward_context, is_forward_context_available
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.kernels.mhc.tilelang import (
+import sonar.envs as envs
+from sonar.config import SonarConfig
+from sonar.config.kernel import NATIVE_MEGA_MOE_BACKENDS
+from sonar.distributed import get_tensor_model_parallel_world_size
+from sonar.forward_context import get_forward_context, is_forward_context_available
+from sonar.logger import init_logger
+from sonar.model_executor.kernels.mhc.tilelang import (
     hc_head_fused_kernel_tilelang,
     mhc_post_tilelang,
 )
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.model_executor.layers.fused_moe import (
     fused_moe_make_expert_params_mapping,
 )
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import ReplicatedLinear
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import ReplicatedLinear
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.model_loader.mtp_validation import (
+from sonar.model_executor.model_loader.mtp_validation import (
     is_mtp_completeness_check_enabled,
 )
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
-from aphrodite.model_executor.models.deepseek_mtp import SharedHead
-from aphrodite.model_executor.models.deepseek_v2 import get_spec_layer_idx_from_weight_name
-from aphrodite.model_executor.models.utils import maybe_prefix
-from aphrodite.models.common.ops.sequence_parallel import (
+from sonar.model_executor.model_loader.weight_utils import default_weight_loader
+from sonar.model_executor.models.deepseek_mtp import SharedHead
+from sonar.model_executor.models.deepseek_v2 import get_spec_layer_idx_from_weight_name
+from sonar.model_executor.models.utils import maybe_prefix
+from sonar.models.common.ops.sequence_parallel import (
     sp_all_gather,
     sp_padding_mask,
     sp_shard,
 )
-from aphrodite.models.deepseek_v4.common.mm_preprocess import IMAGE_SENTINEL_BASE_ID
-from aphrodite.models.deepseek_v4.common.ops.fused_mtp_input_rmsnorm import (
+from sonar.models.deepseek_v4.common.mm_preprocess import IMAGE_SENTINEL_BASE_ID
+from sonar.models.deepseek_v4.common.ops.fused_mtp_input_rmsnorm import (
     _FUSED_MTP_INPUT_RMSNORM_KERNEL,
     _MTP_SHARED_HEAD_RMSNORM_KERNEL,
 )
-from aphrodite.sequence import IntermediateTensors
+from sonar.sequence import IntermediateTensors
 
 from .model import (
     DeepseekV4DecoderLayer,
@@ -81,7 +81,7 @@ _EXPERT_SCALE_RE = re.compile(r"\.experts\.\d+\.w[123]\.scale$")
 class DeepSeekV4MultiTokenPredictorLayer(nn.Module):
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         topk_indices_buffer: torch.Tensor,
         q_workspace: torch.Tensor,
         prefix: str,
@@ -89,12 +89,12 @@ class DeepSeekV4MultiTokenPredictorLayer(nn.Module):
     ) -> None:
         super().__init__()
 
-        assert aphrodite_config.speculative_config is not None
-        config = aphrodite_config.speculative_config.draft_model_config.hf_config
+        assert sonar_config.speculative_config is not None
+        config = sonar_config.speculative_config.draft_model_config.hf_config
         self.config = config
-        quant_config = aphrodite_config.quant_config
+        quant_config = sonar_config.quant_config
         self.rms_norm_eps = config.rms_norm_eps
-        self.use_native_mega_moe = aphrodite_config.kernel_config.moe_backend in NATIVE_MEGA_MOE_BACKENDS
+        self.use_native_mega_moe = sonar_config.kernel_config.moe_backend in NATIVE_MEGA_MOE_BACKENDS
 
         self.enorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.hnorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -136,14 +136,14 @@ class DeepSeekV4MultiTokenPredictorLayer(nn.Module):
 
         self.shared_head = SharedHead(config=config, prefix=prefix, quant_config=quant_config)
         self.mtp_block = DeepseekV4DecoderLayer(
-            aphrodite_config,
+            sonar_config,
             prefix,
             topk_indices_buffer=topk_indices_buffer,
             q_workspace=q_workspace,
             aux_stream_list=aux_stream_list,
         )
 
-        if aphrodite_config.kernel_config.enable_jit_warmup:
+        if sonar_config.kernel_config.enable_jit_warmup:
             _FUSED_MTP_INPUT_RMSNORM_KERNEL.register_warmup()
             _MTP_SHARED_HEAD_RMSNORM_KERNEL.register_warmup()
 
@@ -171,7 +171,7 @@ class DeepSeekV4MultiTokenPredictorLayer(nn.Module):
             self.hc_mult,
         )
         if self.mtp_block.use_sequence_parallel:
-            if envs.APHRODITE_MOE_SKIP_PADDING and is_forward_context_available():
+            if envs.SONAR_MOE_SKIP_PADDING and is_forward_context_available():
                 forward_context = get_forward_context()
                 forward_context.is_padding = sp_padding_mask(forward_context.is_padding, inputs_embeds)
             inputs_embeds = sp_shard(inputs_embeds)
@@ -205,25 +205,25 @@ class DeepSeekV4MultiTokenPredictorLayer(nn.Module):
 
 
 class DeepSeekV4MultiTokenPredictor(nn.Module):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
         self.mtp_start_layer_idx = config.num_hidden_layers
         self.num_mtp_layers = config.num_nextn_predict_layers
 
         topk_tokens = config.index_topk
         self.topk_indices_buffer = torch.empty(
-            aphrodite_config.scheduler_config.max_num_batched_tokens,
+            sonar_config.scheduler_config.max_num_batched_tokens,
             topk_tokens,
             dtype=torch.int32,
         )
-        attn_cls = _select_dsv4_attn_cls(aphrodite_config)
+        attn_cls = _select_dsv4_attn_cls(sonar_config)
         local_heads = config.num_attention_heads // get_tensor_model_parallel_world_size()
         self.q_workspace = torch.empty(
-            aphrodite_config.scheduler_config.max_num_batched_tokens,
+            sonar_config.scheduler_config.max_num_batched_tokens,
             attn_cls.get_padded_num_q_heads(local_heads),
             config.head_dim,
-            dtype=aphrodite_config.model_config.dtype,
+            dtype=sonar_config.model_config.dtype,
         )
 
         # Three aux streams shared across all MTP layers, mirroring DeepseekV4Model.
@@ -233,7 +233,7 @@ class DeepSeekV4MultiTokenPredictor(nn.Module):
         self.layers = torch.nn.ModuleDict(
             {
                 str(idx): DeepSeekV4MultiTokenPredictorLayer(
-                    aphrodite_config,
+                    sonar_config,
                     self.topk_indices_buffer,
                     self.q_workspace,
                     f"{prefix}.layers.{idx}",
@@ -302,16 +302,14 @@ class DeepSeekV4MultiTokenPredictor(nn.Module):
 
 
 class DeepSeekV4MTP(nn.Module):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        self.config = aphrodite_config.model_config.hf_config
-        self.quant_config = aphrodite_config.quant_config
+        self.config = sonar_config.model_config.hf_config
+        self.quant_config = sonar_config.quant_config
         self.pad_shared_expert = getattr(
             self.quant_config, "weight_block_size", None
-        ) is not None and not _use_sequence_parallel(aphrodite_config)
-        self.model = DeepSeekV4MultiTokenPredictor(
-            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
-        )
+        ) is not None and not _use_sequence_parallel(sonar_config)
+        self.model = DeepSeekV4MultiTokenPredictor(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.model.embed_input_ids(input_ids)

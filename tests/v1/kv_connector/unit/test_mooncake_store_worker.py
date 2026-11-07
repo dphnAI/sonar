@@ -17,18 +17,18 @@ from unittest.mock import MagicMock, patch
 import pytest
 import torch
 
-from aphrodite.distributed import mooncake_store
-from aphrodite.distributed.kv_events import KVEventAggregator
-from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake import (
+from sonar.distributed import mooncake_store
+from sonar.distributed.kv_events import KVEventAggregator
+from sonar.distributed.kv_transfer.kv_connector.v1.mooncake import (
     rdma_utils,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store import (
+from sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store import (
     worker,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store import (
+from sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store import (
     worker as mooncake_store_worker,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.data import (  # noqa: E501
+from sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.data import (  # noqa: E501
     BlobBlockHashes,
     BoundaryPut,
     ChunkedTokenDatabase,
@@ -38,7 +38,7 @@ from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.data impor
     RequestTracker,
     TailKeyBoundary,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.layout import (  # noqa: E501
+from sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.layout import (  # noqa: E501
     HeadMajorStoreLayout,
     KeyMetadata,
     MambaStoreLayout,
@@ -46,23 +46,23 @@ from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.layout imp
     RankLocalStoreLayout,
     TokenMajorStoreLayout,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.metrics import (
+from sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.metrics import (
     MooncakeStoreConnectorStats,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.scheduler import (  # noqa: E501
+from sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.scheduler import (  # noqa: E501
     _partial_tail_non_mamba_puts,
 )
-from aphrodite.model_executor.layers.mamba.mamba_utils import get_conv_state_layout
-from aphrodite.v1.attention.backends.utils import NULL_BLOCK_ID
-from aphrodite.v1.core.kv_cache_utils import BlockHash, maybe_convert_block_hash
-from aphrodite.v1.kv_cache_interface import (
+from sonar.model_executor.layers.mamba.mamba_utils import get_conv_state_layout
+from sonar.v1.attention.backends.utils import NULL_BLOCK_ID
+from sonar.v1.core.kv_cache_utils import BlockHash, maybe_convert_block_hash
+from sonar.v1.kv_cache_interface import (
     CircularBufferSpec,
     FullAttentionSpec,
     KVCacheConfig,
     KVCacheGroupSpec,
     MambaSpec,
 )
-from aphrodite.v1.kv_cache_layout import KVCacheLayout
+from sonar.v1.kv_cache_layout import KVCacheLayout
 from tests.v1.attention.utils import dense_kv_cache_views
 
 
@@ -108,7 +108,7 @@ class _RecordingBlockHashes:
 
 
 def _default_send_coord() -> mooncake_store_worker.MooncakeStoreCoordinator:
-    from aphrodite.v1.kv_cache_interface import FullAttentionSpec, KVCacheGroupSpec
+    from sonar.v1.kv_cache_interface import FullAttentionSpec, KVCacheGroupSpec
 
     spec = FullAttentionSpec(block_size=16, num_kv_heads=8, head_size=64, dtype=None)
     return mooncake_store_worker.MooncakeStoreCoordinator(
@@ -214,7 +214,7 @@ def _make_store_recving_thread(
     disk_offload_buffer_budget_bytes: int | None = None,
     is_hma_required: bool = False,
 ) -> mooncake_store_worker.KVCacheStoreRecvingThread:
-    from aphrodite.v1.kv_cache_interface import FullAttentionSpec, KVCacheGroupSpec
+    from sonar.v1.kv_cache_interface import FullAttentionSpec, KVCacheGroupSpec
 
     token_database = ChunkedTokenDatabase(KeyMetadata("test-model", 0, 0, 0, 0), chunk_size=16)
     token_database.set_kv_caches_base_addr([0x1000])
@@ -244,7 +244,7 @@ def _make_load_req(
     block_hashes: list[bytes],
     *,
     token_len: int,
-    aphrodite_cached_tokens: int = 0,
+    sonar_cached_tokens: int = 0,
     tail_key_boundaries: tuple[TailKeyBoundary, ...] = (),
 ) -> ReqMeta:
     return ReqMeta(
@@ -253,7 +253,7 @@ def _make_load_req(
         block_ids=(list(range(len(block_hashes))),),
         block_hashes=block_hashes,
         load_spec=LoadSpec(
-            aphrodite_cached_tokens=aphrodite_cached_tokens,
+            sonar_cached_tokens=sonar_cached_tokens,
             kvpool_cached_tokens=token_len,
             can_load=True,
             token_len=token_len,
@@ -356,7 +356,7 @@ class _FakeModelConfig:
         return 1
 
 
-def _make_aphrodite_config(
+def _make_sonar_config(
     *,
     extra_config: dict[str, object] | None = None,
     rank: int = 0,
@@ -400,7 +400,7 @@ def _make_kv_cache_config(
     prefix_cache_retention_interval: int | None = 0,
 ) -> object:
     """Minimal single-group KVCacheConfig for topology tests."""
-    from aphrodite.v1.kv_cache_interface import KVCacheConfig
+    from sonar.v1.kv_cache_interface import KVCacheConfig
 
     spec = FullAttentionSpec(
         block_size=block_size,
@@ -417,8 +417,8 @@ def _make_kv_cache_config(
 
 
 def _make_hybrid_gdn_kv_cache_config(tp_size: int, conv_layout: str = "DS") -> KVCacheConfig:
-    from aphrodite.v1.attention.backends.registry import MambaAttentionBackendEnum
-    from aphrodite.v1.kv_cache_interface import MambaSpec
+    from sonar.v1.attention.backends.registry import MambaAttentionBackendEnum
+    from sonar.v1.kv_cache_interface import MambaSpec
 
     full = FullAttentionSpec(
         block_size=1600 // tp_size,
@@ -681,7 +681,7 @@ def test_tp_shared_kv_event_counts_existing_shards_as_satisfied():
 
 
 def test_tp_shared_receiving_reads_each_local_store_shard():
-    from aphrodite.v1.kv_cache_interface import FullAttentionSpec, KVCacheGroupSpec
+    from sonar.v1.kv_cache_interface import FullAttentionSpec, KVCacheGroupSpec
 
     store = MagicMock()
     store.batch_get_into_multi_buffers.return_value = [1, 1, 1, 1]
@@ -1194,7 +1194,7 @@ def test_partial_tail_offload_writes_each_local_store_shard(chunk_size):
 
 
 def test_store_sending_thread_skips_null_sparse_group_blocks():
-    from aphrodite.v1.kv_cache_interface import (
+    from sonar.v1.kv_cache_interface import (
         FullAttentionSpec,
         KVCacheGroupSpec,
     )
@@ -1251,7 +1251,7 @@ def test_store_sending_thread_skips_null_sparse_group_blocks():
 def test_partial_tail_offload_skips_cap_omitted_mamba_group():
     """A Mamba group omitted by the handoff cap must not fall back to the
     connector's positional block table."""
-    from aphrodite.v1.kv_cache_interface import (
+    from sonar.v1.kv_cache_interface import (
         FullAttentionSpec,
         KVCacheGroupSpec,
         MambaSpec,
@@ -1345,9 +1345,9 @@ def test_partial_tail_offload_replaces_stale_group_ids_after_filtering():
     ]
     assert config is replicate_config
     assert config.group_ids == [
-        "aphrodite-mooncake-store:test-model@6131",
-        "aphrodite-mooncake-store:test-model@6132",
-        "aphrodite-mooncake-store:test-model@6132",
+        "sonar-mooncake-store:test-model@6131",
+        "sonar-mooncake-store:test-model@6132",
+        "sonar-mooncake-store:test-model@6132",
     ]
 
 
@@ -1383,7 +1383,7 @@ def test_normal_save_excludes_mamba_group_and_null_blocks():
     """The positional normal save must never cover mamba chunks (align-mode
     block tables are not append-only) and must skip chunks whose block is the
     reserved null block, for any group."""
-    from aphrodite.v1.kv_cache_interface import (
+    from sonar.v1.kv_cache_interface import (
         FullAttentionSpec,
         KVCacheGroupSpec,
         MambaSpec,
@@ -2048,8 +2048,8 @@ def test_store_sending_thread_sets_group_ids_when_enabled():
     keys, _addrs, _sizes, config = store.batch_put_from_multi_buffers.call_args.args
     assert config is replicate_config
     assert config.group_ids == [
-        "aphrodite-mooncake-store:test-model@6130",
-        "aphrodite-mooncake-store:test-model@6131",
+        "sonar-mooncake-store:test-model@6130",
+        "sonar-mooncake-store:test-model@6131",
     ]
     assert len(config.group_ids) == len(keys)
 
@@ -2105,7 +2105,7 @@ def test_mooncake_group_id_uses_logical_chunk_and_excludes_physical_ranks():
         "abcdef",
     )
 
-    assert group_id == "aphrodite-mooncake-store:test-model@abcdef"
+    assert group_id == "sonar-mooncake-store:test-model@abcdef"
     assert "tp_rank" not in group_id
     assert "pp_rank" not in group_id
     assert "pcp" not in group_id
@@ -2120,8 +2120,8 @@ def test_mooncake_group_id_uses_cache_prefix_namespace():
     group_id_a = worker._make_mooncake_group_id(metadata_a, "abcdef")
     group_id_b = worker._make_mooncake_group_id(metadata_b, "abcdef")
 
-    assert group_id_a == "aphrodite-mooncake-store:deployment-a@test-model@abcdef"
-    assert group_id_b == "aphrodite-mooncake-store:deployment-b@test-model@abcdef"
+    assert group_id_a == "sonar-mooncake-store:deployment-a@test-model@abcdef"
+    assert group_id_b == "sonar-mooncake-store:deployment-b@test-model@abcdef"
     assert group_id_a != group_id_b
 
 
@@ -2160,8 +2160,8 @@ def test_store_sending_thread_group_id_excludes_physical_sharding():
         "test-model@tp_rank:2@pcp0@dcp0@pp_rank:0@group:0@6131",
     ]
     assert config.group_ids == [
-        "aphrodite-mooncake-store:test-model@6130",
-        "aphrodite-mooncake-store:test-model@6131",
+        "sonar-mooncake-store:test-model@6130",
+        "sonar-mooncake-store:test-model@6131",
     ]
 
 
@@ -2191,13 +2191,13 @@ def test_store_sending_thread_multiple_segments_share_logical_group_id():
     assert addrs == [[0x1100, 0x2100], [0x1200, 0x2200]]
     assert sizes == [[256, 256], [256, 256]]
     assert config.group_ids == [
-        "aphrodite-mooncake-store:test-model@6130",
-        "aphrodite-mooncake-store:test-model@6131",
+        "sonar-mooncake-store:test-model@6130",
+        "sonar-mooncake-store:test-model@6131",
     ]
 
 
 def test_store_sending_thread_group_ids_share_across_kv_cache_groups():
-    from aphrodite.v1.kv_cache_interface import FullAttentionSpec, KVCacheGroupSpec
+    from sonar.v1.kv_cache_interface import FullAttentionSpec, KVCacheGroupSpec
 
     store = MagicMock()
     store.batch_is_exist.return_value = [0, 0, 0, 0]
@@ -2241,13 +2241,13 @@ def test_store_sending_thread_group_ids_share_across_kv_cache_groups():
     ]
     assert addrs == [[0x1100], [0x1200], [0x3300], [0x3400]]
     assert sizes == [[256], [256], [256], [256]]
-    # Different Aphrodite KV cache groups for the same prefix chunk share the
+    # Different Sonar KV cache groups for the same prefix chunk share the
     # same Mooncake lifecycle group id.
     assert config.group_ids == [
-        "aphrodite-mooncake-store:test-model@6130",
-        "aphrodite-mooncake-store:test-model@6131",
-        "aphrodite-mooncake-store:test-model@6130",
-        "aphrodite-mooncake-store:test-model@6131",
+        "sonar-mooncake-store:test-model@6130",
+        "sonar-mooncake-store:test-model@6131",
+        "sonar-mooncake-store:test-model@6130",
+        "sonar-mooncake-store:test-model@6131",
     ]
     assert config.group_ids[0] == config.group_ids[2]
     assert config.group_ids[1] == config.group_ids[3]
@@ -2269,7 +2269,7 @@ def test_store_sending_thread_group_ids_follow_missing_key_filter():
 
     keys, _addrs, _sizes, config = store.batch_put_from_multi_buffers.call_args.args
     assert keys == ["test-model@tp_rank:0@pcp0@dcp0@pp_rank:0@group:0@6131"]
-    assert config.group_ids == ["aphrodite-mooncake-store:test-model@6131"]
+    assert config.group_ids == ["sonar-mooncake-store:test-model@6131"]
 
 
 def test_estimate_disk_offload_staging_bytes_sums_multi_segment_sizes():
@@ -2277,7 +2277,7 @@ def test_estimate_disk_offload_staging_bytes_sums_multi_segment_sizes():
 
 
 def test_recv_thread_uses_single_batch_when_no_disk_offload_budget(monkeypatch):
-    monkeypatch.delenv("APHRODITE_MOONCAKE_STORE_TIER_LOG", raising=False)
+    monkeypatch.delenv("SONAR_MOONCAKE_STORE_TIER_LOG", raising=False)
     store = MagicMock()
     store.batch_get_into_multi_buffers.return_value = [256, 256, 256]
     thread = _make_store_recving_thread(store, disk_offload_buffer_budget_bytes=None)
@@ -2324,9 +2324,9 @@ def test_recv_thread_keys_chunk_by_lookup_selected_boundary():
     ]
 
 
-def test_recv_thread_logs_tier_summary_when_enabled(monkeypatch, caplog_aphrodite):
-    monkeypatch.setenv("APHRODITE_MOONCAKE_STORE_TIER_LOG", "1")
-    caplog_aphrodite.set_level(logging.INFO, logger=worker.logger.name)
+def test_recv_thread_logs_tier_summary_when_enabled(monkeypatch, caplog_sonar):
+    monkeypatch.setenv("SONAR_MOONCAKE_STORE_TIER_LOG", "1")
+    caplog_sonar.set_level(logging.INFO, logger=worker.logger.name)
 
     store = MagicMock()
     store.batch_get_into_multi_buffers.return_value = [256, 256, -10]
@@ -2354,7 +2354,7 @@ def test_recv_thread_logs_tier_summary_when_enabled(monkeypatch, caplog_aphrodit
     assert store.method_calls[0][0] == "batch_get_replica_desc"
     assert store.method_calls[1][0] == "batch_get_into_multi_buffers"
 
-    messages = [record.getMessage() for record in caplog_aphrodite.records]
+    messages = [record.getMessage() for record in caplog_sonar.records]
     assert any(
         "Mooncake load tier summary" in message
         and "req_id=req-a" in message
@@ -2370,7 +2370,7 @@ def test_recv_thread_logs_tier_summary_when_enabled(monkeypatch, caplog_aphrodit
 
 
 def test_recv_thread_records_partial_failure_metrics(monkeypatch):
-    monkeypatch.delenv("APHRODITE_MOONCAKE_STORE_TIER_LOG", raising=False)
+    monkeypatch.delenv("SONAR_MOONCAKE_STORE_TIER_LOG", raising=False)
     store = MagicMock()
     store.batch_get_into_multi_buffers.return_value = [256, -10]
     thread = _make_store_recving_thread(store, disk_offload_buffer_budget_bytes=None)
@@ -2588,12 +2588,12 @@ def test_worker_init_excludes_nonprefix_cache_groups(monkeypatch):
         "load_from_config",
         staticmethod(lambda: _make_config()),
     )
-    aphrodite_config = _make_aphrodite_config()
-    aphrodite_config.cache_config.block_size = 800
-    aphrodite_config.cache_config.enable_prefix_caching = True
-    aphrodite_config.cache_config.prefix_match_unit = None
+    sonar_config = _make_sonar_config()
+    sonar_config.cache_config.block_size = 800
+    sonar_config.cache_config.enable_prefix_caching = True
+    sonar_config.cache_config.prefix_match_unit = None
 
-    store_worker = worker.MooncakeStoreWorker(aphrodite_config, _make_qsa_hybrid_kv_cache_config())
+    store_worker = worker.MooncakeStoreWorker(sonar_config, _make_qsa_hybrid_kv_cache_config())
 
     assert [group.kv_cache_spec.block_size for group in store_worker._kv_cache_groups] == [800, 800]
     assert [db.chunk_size for db in store_worker.token_dbs] == [800, 800]
@@ -2637,12 +2637,12 @@ def test_worker_is_hma_required_from_kv_cache_groups(monkeypatch, make_config, e
         "load_from_config",
         staticmethod(lambda: _make_config()),
     )
-    aphrodite_config = _make_aphrodite_config()
-    aphrodite_config.cache_config.block_size = 800
-    aphrodite_config.cache_config.enable_prefix_caching = True
-    aphrodite_config.cache_config.prefix_match_unit = None
+    sonar_config = _make_sonar_config()
+    sonar_config.cache_config.block_size = 800
+    sonar_config.cache_config.enable_prefix_caching = True
+    sonar_config.cache_config.prefix_match_unit = None
 
-    store_worker = worker.MooncakeStoreWorker(aphrodite_config, make_config())
+    store_worker = worker.MooncakeStoreWorker(sonar_config, make_config())
 
     assert store_worker._is_hma_required is expected_is_hma_required
 
@@ -2667,7 +2667,7 @@ def test_requester_worker_init_uses_positional_setup(tmp_path, monkeypatch):
             },
         ),
     )
-    w = worker.MooncakeStoreWorker(_make_aphrodite_config(), _make_kv_cache_config())
+    w = worker.MooncakeStoreWorker(_make_sonar_config(), _make_kv_cache_config())
 
     assert not hasattr(w, "_isolate_offload_resources")
     assert store.setup.call_args.args == (
@@ -2704,7 +2704,7 @@ def test_requester_worker_init_prefers_local_hostname_override(
             },
         ),
     )
-    worker.MooncakeStoreWorker(_make_aphrodite_config(rank=1), _make_kv_cache_config())
+    worker.MooncakeStoreWorker(_make_sonar_config(rank=1), _make_kv_cache_config())
 
     assert store.setup.call_args.args[0] == "worker-a:50053"
 
@@ -2732,7 +2732,7 @@ def test_requester_worker_init_skips_disk_budget_when_offload_disabled(
             },
         ),
     )
-    w = worker.MooncakeStoreWorker(_make_aphrodite_config(), _make_kv_cache_config())
+    w = worker.MooncakeStoreWorker(_make_sonar_config(), _make_kv_cache_config())
 
     assert w.disk_offload_buffer_budget_bytes is None
 
@@ -2758,7 +2758,7 @@ def test_worker_enables_store_tp_layout(tmp_path, monkeypatch, cache_layout, lay
 
     with patch.object(worker.logger, "warning_once") as warning_once:
         w = worker.MooncakeStoreWorker(
-            _make_aphrodite_config(extra_config={"store_tp_size": 4}, kv_cache_layout=cache_layout),
+            _make_sonar_config(extra_config={"store_tp_size": 4}, kv_cache_layout=cache_layout),
             _make_kv_cache_config(num_kv_heads=4),
         )
 
@@ -2783,7 +2783,7 @@ def test_hybrid_gdn_workers_share_group_aware_store_tp_namespace(tmp_path, monke
     store.setup.return_value = 0
     _install_fake_mooncake(monkeypatch, store)
     monkeypatch.setattr(_FakeModelConfig, "get_total_num_kv_heads", lambda _self: 2)
-    monkeypatch.setenv("APHRODITE_SSM_CONV_STATE_LAYOUT", conv_layout)
+    monkeypatch.setenv("SONAR_SSM_CONV_STATE_LAYOUT", conv_layout)
     monkeypatch.setenv(
         "MOONCAKE_CONFIG_PATH",
         _write_mooncake_config(
@@ -2799,14 +2799,14 @@ def test_hybrid_gdn_workers_share_group_aware_store_tp_namespace(tmp_path, monke
     workers = []
     for tp_size, tp_rank in ((2, 0), (4, 1)):
         _patch_worker_runtime(monkeypatch, tp_size=tp_size, tp_rank=tp_rank)
-        config = _make_aphrodite_config(
+        config = _make_sonar_config(
             extra_config={"store_tp_size": 4},
             tensor_parallel_size=tp_size,
             prefix_match_unit=16,
         )
         kv_cache_config = _make_hybrid_gdn_kv_cache_config(tp_size, conv_layout)
         if with_scratch:
-            from aphrodite.v1.kv_cache_interface import CircularBufferSpec
+            from sonar.v1.kv_cache_interface import CircularBufferSpec
 
             kv_cache_config.kv_cache_groups.append(
                 KVCacheGroupSpec(
@@ -2853,7 +2853,7 @@ def test_hybrid_gdn_falls_back_from_incompatible_store_config(tmp_path, monkeypa
     _install_fake_mooncake(monkeypatch, store)
     monkeypatch.setattr(_FakeModelConfig, "get_total_num_kv_heads", lambda _self: 2)
     _patch_worker_runtime(monkeypatch, tp_size=2)
-    monkeypatch.setenv("APHRODITE_SSM_CONV_STATE_LAYOUT", "DS")
+    monkeypatch.setenv("SONAR_SSM_CONV_STATE_LAYOUT", "DS")
     monkeypatch.setenv(
         "MOONCAKE_CONFIG_PATH",
         _write_mooncake_config(
@@ -2866,7 +2866,7 @@ def test_hybrid_gdn_falls_back_from_incompatible_store_config(tmp_path, monkeypa
         ),
     )
 
-    config = _make_aphrodite_config(
+    config = _make_sonar_config(
         extra_config={"store_tp_size": store_tp_size},
         prefix_match_unit=prefix_match_unit,
     )
@@ -2946,7 +2946,7 @@ def test_lcm_store_tp_gives_prefill_and_decode_common_namespace(tmp_path, monkey
         if kv_role == "kv_consumer":
             extra_config["save_decode_cache"] = True
         store_worker = worker.MooncakeStoreWorker(
-            _make_aphrodite_config(extra_config=extra_config, kv_role=kv_role),
+            _make_sonar_config(extra_config=extra_config, kv_role=kv_role),
             _make_kv_cache_config(num_kv_heads=8 // tp_size),
         )
         assert store_worker.store_tp_size == 4
@@ -2992,7 +2992,7 @@ def test_lcm_store_tp_falls_back_when_topology_is_incompatible(
     )
 
     store_worker = worker.MooncakeStoreWorker(
-        _make_aphrodite_config(
+        _make_sonar_config(
             extra_config={
                 "enable_store_tp_lcm": True,
                 "prefill_tp_sizes": prefill_tp_sizes,
@@ -3030,7 +3030,7 @@ def test_worker_keeps_rank_local_layout_for_unsupported_store_tp(
     )
 
     w = worker.MooncakeStoreWorker(
-        _make_aphrodite_config(
+        _make_sonar_config(
             extra_config={"store_tp_size": store_tp_size},
             kv_cache_layout=KVCacheLayout.LBNHC,
         ),
@@ -3075,7 +3075,7 @@ def test_store_tp_opt_in_isolates_different_pp_sizes(tmp_path, monkeypatch):
     keys = []
     for pp_size in (1, 2):
         w = worker.MooncakeStoreWorker(
-            _make_aphrodite_config(
+            _make_sonar_config(
                 extra_config={"store_tp_size": 4},
                 pipeline_parallel_size=pp_size,
             ),
@@ -3097,7 +3097,7 @@ def test_hybrid_lookup_uses_each_pp_stage_schema(tmp_path, monkeypatch, tp_size,
     _install_fake_mooncake(monkeypatch, store)
     _patch_worker_runtime(monkeypatch, tp_size=tp_size)
     monkeypatch.setattr(_FakeModelConfig, "get_total_num_kv_heads", lambda _self: 2)
-    monkeypatch.setenv("APHRODITE_SSM_CONV_STATE_LAYOUT", "DS")
+    monkeypatch.setenv("SONAR_SSM_CONV_STATE_LAYOUT", "DS")
     monkeypatch.setenv(
         "MOONCAKE_CONFIG_PATH",
         _write_mooncake_config(
@@ -3125,7 +3125,7 @@ def test_hybrid_lookup_uses_each_pp_stage_schema(tmp_path, monkeypatch, tp_size,
             ]
             stages.append(
                 worker.MooncakeStoreWorker(
-                    _make_aphrodite_config(
+                    _make_sonar_config(
                         extra_config={"store_tp_size": 4},
                         rank=pp_rank * tp_size,
                         pipeline_parallel_size=2,
@@ -3192,7 +3192,7 @@ def test_save_decode_cache_keeps_transfer_path_enabled(tmp_path, monkeypatch):
     )
 
     w = worker.MooncakeStoreWorker(
-        _make_aphrodite_config(
+        _make_sonar_config(
             kv_role="kv_consumer",
             extra_config={
                 "enable_lookup": False,
@@ -3227,7 +3227,7 @@ def test_requester_worker_init_builds_replicate_config_for_preferred_segment(
         ),
     )
     w = worker.MooncakeStoreWorker(
-        _make_aphrodite_config(
+        _make_sonar_config(
             extra_config={
                 "preferred_segment": "10.0.0.7:50053",
             }
@@ -3240,7 +3240,7 @@ def test_requester_worker_init_builds_replicate_config_for_preferred_segment(
 
 
 def test_worker_scales_uniform_attention_group_under_dcp(tmp_path, monkeypatch):
-    from aphrodite.v1.kv_cache_interface import (
+    from sonar.v1.kv_cache_interface import (
         KVCacheConfig,
         UniformTypeKVCacheSpecs,
     )
@@ -3276,7 +3276,7 @@ def test_worker_scales_uniform_attention_group_under_dcp(tmp_path, monkeypatch):
     )
 
     w = worker.MooncakeStoreWorker(
-        _make_aphrodite_config(decode_context_parallel_size=4),
+        _make_sonar_config(decode_context_parallel_size=4),
         kv_cache_config,
     )
 
@@ -3322,7 +3322,7 @@ def test_worker_put_striding_covers_every_rank_get_namespace(tmp_path, monkeypat
     for tp_rank in range(tp_size):
         _patch_worker_runtime(monkeypatch, tp_rank=tp_rank, tp_size=tp_size, dcp_size=dcp_size)
         w = worker.MooncakeStoreWorker(
-            _make_aphrodite_config(rank=tp_rank, decode_context_parallel_size=dcp_size),
+            _make_sonar_config(rank=tp_rank, decode_context_parallel_size=dcp_size),
             _make_kv_cache_config(),
         )
         db = w.token_dbs[0]
@@ -3369,7 +3369,7 @@ def test_mqa_p4_to_d2_uses_shared_rank_zero_namespace(tmp_path, monkeypatch):
         for tp_rank in range(tp_size):
             _patch_worker_runtime(monkeypatch, tp_rank=tp_rank, tp_size=tp_size)
             w = worker.MooncakeStoreWorker(
-                _make_aphrodite_config(
+                _make_sonar_config(
                     rank=tp_rank,
                     extra_config={"store_tp_size": 4},
                 ),
@@ -3418,7 +3418,7 @@ def test_requester_worker_group_semantics_falls_back_without_group_ids(
     )
 
     w = worker.MooncakeStoreWorker(
-        _make_aphrodite_config(
+        _make_sonar_config(
             extra_config={
                 "enable_group_semantics": True,
             }
@@ -3455,7 +3455,7 @@ def test_requester_worker_group_semantics_string_false_does_not_enable(
     )
 
     w = worker.MooncakeStoreWorker(
-        _make_aphrodite_config(
+        _make_sonar_config(
             extra_config={
                 "enable_group_semantics": "false",
             }
@@ -3501,7 +3501,7 @@ def test_requester_worker_group_semantics_string_true_enables(
     )
 
     w = worker.MooncakeStoreWorker(
-        _make_aphrodite_config(
+        _make_sonar_config(
             extra_config={
                 "enable_group_semantics": "true",
             }
@@ -3545,7 +3545,7 @@ def test_store_sending_thread_clamps_token_len_to_lcm():
 
 @pytest.mark.parametrize("failure", ["partial", "exception"])
 def test_store_sending_thread_waits_for_hybrid_checkpoint_and_retries(failure):
-    from aphrodite.v1.kv_cache_interface import MambaSpec
+    from sonar.v1.kv_cache_interface import MambaSpec
 
     store = MagicMock()
     full = FullAttentionSpec(
@@ -3716,7 +3716,7 @@ def test_store_sending_thread_missing_source_keeps_checkpoint(block_ids, first_e
 def test_store_sending_thread_skips_when_token_len_below_lcm():
     """Requests shorter than lcm_block_size cannot produce any aligned chunk,
     so neither the existence check nor the put should be issued."""
-    from aphrodite.v1.kv_cache_interface import FullAttentionSpec, KVCacheGroupSpec
+    from sonar.v1.kv_cache_interface import FullAttentionSpec, KVCacheGroupSpec
 
     store = MagicMock()
     # lcm=64 via single full-attn block_size=64.
@@ -3760,7 +3760,7 @@ def test_store_sending_thread_only_stores_swa_blocks_in_window():
     the SWA group should store exactly one block per boundary: the block
     ending at 32 and the block ending at 64.
     """
-    from aphrodite.v1.kv_cache_interface import (
+    from sonar.v1.kv_cache_interface import (
         FullAttentionSpec,
         KVCacheGroupSpec,
         SlidingWindowSpec,
@@ -3835,7 +3835,7 @@ def test_store_sending_thread_only_stores_swa_blocks_in_window():
 
 
 def test_store_sending_thread_delta_saves_only_new_swa_boundary_chunks():
-    from aphrodite.v1.kv_cache_interface import (
+    from sonar.v1.kv_cache_interface import (
         FullAttentionSpec,
         KVCacheGroupSpec,
         SlidingWindowSpec,
@@ -3902,8 +3902,8 @@ def test_store_sending_thread_delta_saves_only_new_swa_boundary_chunks():
 
 
 def test_store_sending_thread_kv_events_use_group_chunk_metadata():
-    from aphrodite.v1.core.kv_cache_utils import BlockHash, maybe_convert_block_hash
-    from aphrodite.v1.kv_cache_interface import (
+    from sonar.v1.core.kv_cache_utils import BlockHash, maybe_convert_block_hash
+    from sonar.v1.kv_cache_interface import (
         FullAttentionSpec,
         KVCacheGroupSpec,
         SlidingWindowSpec,
@@ -4071,7 +4071,7 @@ def _register_with_mocked_threads(
     kv_caches: dict[str, torch.Tensor],
 ) -> None:
     """Call register_kv_caches with the I/O transfer threads mocked out."""
-    prefix = "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.worker."
+    prefix = "sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.worker."
     with (
         patch(prefix + "KVCacheStoreSendingThread", side_effect=_auto_set_ready_event),
         patch(prefix + "KVCacheStoreRecvingThread", side_effect=_auto_set_ready_event),
@@ -4128,7 +4128,7 @@ def _make_bare_worker(
     # Minimal single-full-attention-group config so the coordinator-based
     # lookup path works (the connector no longer carries a legacy single-group
     # path; everything flows through the coordinator).
-    from aphrodite.v1.kv_cache_interface import (
+    from sonar.v1.kv_cache_interface import (
         FullAttentionSpec,
         KVCacheConfig,
         KVCacheGroupSpec,
@@ -4184,10 +4184,10 @@ def _make_bare_worker(
 def test_mooncake_lookup_reuses_resolved_hash_checkpoint(
     use_eagle, prefix_match_unit, dcp_world_size, mamba_block_size
 ):
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store import (
         coordinator as mooncake_coordinator,
     )
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.scheduler import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.scheduler import (
         MooncakeStoreScheduler,
     )
 
@@ -4218,7 +4218,7 @@ def test_mooncake_lookup_reuses_resolved_hash_checkpoint(
         ),
         parallel_config=SimpleNamespace(decode_context_parallel_size=dcp_world_size, world_size=dcp_world_size),
     )
-    with patch("aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.scheduler.LookupKeyClient"):
+    with patch("sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.scheduler.LookupKeyClient"):
         scheduler = MooncakeStoreScheduler(
             config,
             KVCacheConfig(
@@ -4252,7 +4252,7 @@ def test_scheduler_follows_core_hit_alignment(alignment, expected):
     """The store takes partial hits from core's resolved alignment, not from its
     own groups: these Mamba specs alone would allow them, but core may still
     keep hits on the block (e.g. for a sliding-window group it never sees)."""
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.scheduler import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.scheduler import (
         MooncakeStoreScheduler,
     )
 
@@ -4278,7 +4278,7 @@ def test_scheduler_follows_core_hit_alignment(alignment, expected):
         cache_config=SimpleNamespace(block_size=32, enable_prefix_caching=True, prefix_match_unit=8),
         parallel_config=SimpleNamespace(decode_context_parallel_size=1, world_size=1),
     )
-    with patch("aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.scheduler.LookupKeyClient"):
+    with patch("sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.scheduler.LookupKeyClient"):
         scheduler = MooncakeStoreScheduler(
             config,
             KVCacheConfig(
@@ -4363,7 +4363,7 @@ def test_lookup_key_prefixes_cover_pcp_rank_namespaces():
 
 def test_lookup_key_prefixes_expand_tp_sharded_groups_per_rank():
     """Replicated attention needs one namespace; sharded Mamba needs every rank."""
-    from aphrodite.v1.kv_cache_interface import (
+    from sonar.v1.kv_cache_interface import (
         FullAttentionSpec,
         KVCacheGroupSpec,
         MambaSpec,
@@ -4397,7 +4397,7 @@ def test_lookup_key_prefixes_expand_tp_sharded_groups_per_rank():
 
 
 def test_group_tp_replication_factors_mixed_mla_gqa_mamba():
-    from aphrodite.v1.kv_cache_interface import (
+    from sonar.v1.kv_cache_interface import (
         FullAttentionSpec,
         KVCacheGroupSpec,
         MambaSpec,
@@ -4447,7 +4447,7 @@ def test_group_tp_replication_factors_mixed_mla_gqa_mamba():
 
 @pytest.mark.parametrize("spec_order", [("mla", "gqa"), ("gqa", "mla")])
 def test_uniform_group_uses_common_inner_replication_factor(spec_order):
-    from aphrodite.v1.kv_cache_interface import (
+    from sonar.v1.kv_cache_interface import (
         FullAttentionSpec,
         KVCacheGroupSpec,
         MLAAttentionSpec,
@@ -4480,8 +4480,8 @@ def test_uniform_group_uses_common_inner_replication_factor(spec_order):
 
 
 def test_store_group_plans_cover_kimi_k3_and_deepseek_v4_specs(monkeypatch):
-    from aphrodite.v1.attention.backends.registry import MambaAttentionBackendEnum
-    from aphrodite.v1.kv_cache_interface import (
+    from sonar.v1.attention.backends.registry import MambaAttentionBackendEnum
+    from sonar.v1.kv_cache_interface import (
         KVCacheGroupSpec,
         MambaSpec,
         MLAAttentionSpec,
@@ -4493,7 +4493,7 @@ def test_store_group_plans_cover_kimi_k3_and_deepseek_v4_specs(monkeypatch):
     worker.tp_size = 4
     worker.tp_rank = 3
     worker.num_kv_head = 1
-    monkeypatch.setenv("APHRODITE_SSM_CONV_STATE_LAYOUT", "DS")
+    monkeypatch.setenv("SONAR_SSM_CONV_STATE_LAYOUT", "DS")
 
     mla_specs = {
         name: MLAAttentionSpec(
@@ -4556,7 +4556,7 @@ def test_store_group_plans_cover_kimi_k3_and_deepseek_v4_specs(monkeypatch):
 
 
 def test_attention_store_plan_uses_value_schema():
-    from aphrodite.v1.kv_cache_interface import FullAttentionSpec, KVCacheGroupSpec
+    from sonar.v1.kv_cache_interface import FullAttentionSpec, KVCacheGroupSpec
 
     worker = _make_bare_worker(block_size=16)
     worker.tp_size = 2
@@ -4589,7 +4589,7 @@ def test_attention_store_plan_uses_value_schema():
 
 
 def test_lookup_rejects_boundary_missing_one_mamba_shard():
-    from aphrodite.v1.kv_cache_interface import (
+    from sonar.v1.kv_cache_interface import (
         FullAttentionSpec,
         KVCacheGroupSpec,
         MambaSpec,
@@ -4703,7 +4703,7 @@ def test_lookup_partial_prefix_returns_first_hit_length():
 
 def test_lookup_partial_tail_uses_hash_alignment():
     """A stored sub-block tail can serve a request extending past it."""
-    from aphrodite.v1.kv_cache_interface import (
+    from sonar.v1.kv_cache_interface import (
         FullAttentionSpec,
         KVCacheGroupSpec,
         MambaSpec,
@@ -4773,7 +4773,7 @@ def test_lookup_full_hit_with_eagle_pops_once_not_twice():
 
 
 def test_lookup_skips_tail_key_for_empty_chunked_local_window():
-    from aphrodite.v1.kv_cache_interface import ChunkedLocalAttentionSpec
+    from sonar.v1.kv_cache_interface import ChunkedLocalAttentionSpec
 
     worker = _make_bare_worker(block_size=16)
     worker._kv_cache_groups.append(
@@ -4809,7 +4809,7 @@ def test_lookup_skips_tail_key_for_empty_chunked_local_window():
 
 
 def test_lookup_plan_resolves_group_tail_keys_from_existing_hashes():
-    from aphrodite.v1.kv_cache_interface import (
+    from sonar.v1.kv_cache_interface import (
         FullAttentionSpec,
         KVCacheGroupSpec,
         MambaSpec,
@@ -4874,7 +4874,7 @@ def test_lookup_plan_resolves_group_tail_keys_from_existing_hashes():
 
 
 def test_lookup_plan_recovers_tail_key_after_multi_chunk_convergence():
-    from aphrodite.v1.kv_cache_interface import (
+    from sonar.v1.kv_cache_interface import (
         FullAttentionSpec,
         KVCacheGroupSpec,
         MambaSpec,
@@ -4934,7 +4934,7 @@ def test_lookup_plan_recovers_tail_key_after_multi_chunk_convergence():
 
 def test_lookup_full_hit_swa_degrades_when_no_stored_boundary_is_usable():
     """A full SWA hit must be re-derived on an actually stored boundary."""
-    from aphrodite.v1.kv_cache_interface import KVCacheGroupSpec, SlidingWindowSpec
+    from sonar.v1.kv_cache_interface import KVCacheGroupSpec, SlidingWindowSpec
 
     worker = _make_bare_worker(block_size=16)
     swa = SlidingWindowSpec(block_size=16, num_kv_heads=8, head_size=64, dtype=None, sliding_window=32)
@@ -4954,7 +4954,7 @@ def test_lookup_swa_single_group_returns_full_when_tail_window_present():
     """Single-SWA, sliding_window=32 (= 2 blocks): producer stored only the
     tail. Coordinator-driven lookup returns full prefix even though the
     pre-window blocks are absent."""
-    from aphrodite.v1.kv_cache_interface import KVCacheGroupSpec, SlidingWindowSpec
+    from sonar.v1.kv_cache_interface import KVCacheGroupSpec, SlidingWindowSpec
 
     worker = _make_bare_worker(block_size=16)
     swa = SlidingWindowSpec(block_size=16, num_kv_heads=8, head_size=64, dtype=None, sliding_window=32)
@@ -4973,7 +4973,7 @@ def test_lookup_checks_all_potential_swa_hit_boundaries():
     check earlier aligned boundaries when sparse retention stores only the
     current request's replay boundary.
     """
-    from aphrodite.v1.kv_cache_interface import (
+    from sonar.v1.kv_cache_interface import (
         FullAttentionSpec,
         KVCacheGroupSpec,
         SlidingWindowSpec,
@@ -5032,7 +5032,7 @@ def test_lookup_applies_swa_mask_before_accessing_hashes():
     """Lookup must apply the sparse SWA mask before touching group hashes, so
     false-mask chunks pay neither the hash access nor the key-construction cost.
     """
-    from aphrodite.v1.kv_cache_interface import (
+    from sonar.v1.kv_cache_interface import (
         FullAttentionSpec,
         KVCacheGroupSpec,
         SlidingWindowSpec,
@@ -5210,7 +5210,7 @@ def test_register_kv_caches_shared_storage(layout: KVCacheLayout):
 )
 def test_register_kv_caches_uses_transfer_group_memory_domain(extra_config):
     """Derived GPU caches must not change host-source transfer addresses."""
-    from aphrodite.v1.kv_cache_interface import (
+    from sonar.v1.kv_cache_interface import (
         KVCacheConfig,
         KVCacheGroupRole,
         KVCacheGroupSpec,
@@ -5367,7 +5367,7 @@ def _registered_worker(kind: str = "dense"):
         worker.token_dbs[0].store_layout = MagicMock()
         caches = {n: torch.zeros(2, 4) for n in ("layer0", "__cross_layer__")}
     else:  # one host region and one device region
-        from aphrodite.v1.kv_cache_interface import KVCacheTensor
+        from sonar.v1.kv_cache_interface import KVCacheTensor
 
         spec = FullAttentionSpec(block_size=16, num_kv_heads=1, head_size=1, dtype=torch.float16)
         config = KVCacheConfig(
@@ -5602,7 +5602,7 @@ def test_topology_standalone_store_with_disk_offload(tmp_path, monkeypatch):
     )
 
     w = worker.MooncakeStoreWorker(
-        _make_aphrodite_config(extra_config={"preferred_segment": "10.0.0.7:50053"}),
+        _make_sonar_config(extra_config={"preferred_segment": "10.0.0.7:50053"}),
         _make_kv_cache_config(),
     )
 
@@ -5648,7 +5648,7 @@ def test_topology_embedded_cpu_only(tmp_path, monkeypatch):
         ),
     )
 
-    w = worker.MooncakeStoreWorker(_make_aphrodite_config(), _make_kv_cache_config())
+    w = worker.MooncakeStoreWorker(_make_sonar_config(), _make_kv_cache_config())
 
     # setup() receives global_segment_size=4 GiB (rank contributes a segment).
     assert store.setup.call_args.args == (
@@ -5672,12 +5672,12 @@ def test_topology_embedded_cpu_only(tmp_path, monkeypatch):
 
 def _create_store_client_for_tenant_test(consumer):
     if consumer == "ec":
-        from aphrodite.distributed.ec_transfer.ec_connector.mooncake_store_embedding.store_client import (  # noqa: E501
+        from sonar.distributed.ec_transfer.ec_connector.mooncake_store_embedding.store_client import (  # noqa: E501
             create_mooncake_embedding_store_client,
         )
 
         return create_mooncake_embedding_store_client()
-    return worker.MooncakeStoreWorker(_make_aphrodite_config(rank=1), _make_kv_cache_config())
+    return worker.MooncakeStoreWorker(_make_sonar_config(rank=1), _make_kv_cache_config())
 
 
 @pytest.mark.parametrize("consumer", ["kv", "ec"])

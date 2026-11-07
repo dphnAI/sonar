@@ -4,7 +4,7 @@
 DeepSeek-V4-Pro at TP8 on CDNA4, served with ``--monokernel`` on and off on
 the same random weights: every decoder layer's outputs at every decode step
 must match. Unlike ``test_dsv4_mono_numerics.py``, which checks the kernels
-against Aphrodite's ops one stage at a time, this runs
+against Sonar's ops one stage at a time, this runs
 ``DeepseekV4DecoderLayer.forward`` in the engine -- the model's hook, the
 per-step path choice, the weights taken off the layer, the metadata, the
 compressor and the indexer's top-k -- so a change to the decoder layer that
@@ -17,11 +17,11 @@ The checkpoint's own first five layers (``compress_ratios`` 128, 128, 4, 128,
 whole layer (K1 + K2):
 - 0: hash-routed HCA, the first layer (K1 takes the embedding, no fold)
 - 1: hash-routed HCA
-- 2: hash-routed CSA (Aphrodite's indexer between K1 and K2)
+- 2: hash-routed CSA (Sonar's indexer between K1 and K2)
 - 3: bias-routed HCA
 - 4: bias-routed CSA
 A 32K ``max_model_len`` builds the HCA kernels 256 keys wide; the prompts
-(under 8.3K) keep Aphrodite's c128a decode table at its 128-wide floor, so the
+(under 8.3K) keep Sonar's c128a decode table at its 128-wide floor, so the
 kernels read a table narrower than they are built for.
 """
 
@@ -30,9 +30,9 @@ import zlib
 import pytest
 import torch
 
-from aphrodite.model_executor.model_loader import register_model_loader
-from aphrodite.model_executor.model_loader.dummy_loader import DummyModelLoader
-from aphrodite.platforms import current_platform
+from sonar.model_executor.model_loader import register_model_loader
+from sonar.model_executor.model_loader.dummy_loader import DummyModelLoader
+from sonar.platforms import current_platform
 
 MODEL = "deepseek-ai/DeepSeek-V4-Pro"
 TP = 8
@@ -49,7 +49,7 @@ STEPS = 5  # decode steps after the prefill's token
 def _on_cdna4() -> bool:
     if not current_platform.is_rocm():
         return False
-    from aphrodite.platforms.rocm import get_cdna_version
+    from sonar.platforms.rocm import get_cdna_version
 
     return get_cdna_version() == 4
 
@@ -68,7 +68,7 @@ def _fill(name: str, t: torch.Tensor) -> None:
     if t.dtype in (torch.uint8, torch.float8_e8m0fnu) and "scale" in name:
         # E8M0 2^-12 .. 2^-8: one a 128 x 128 FP8 block, one a 32 MXFP4
         # values. Larger random layers make the stack chaotic: atomics' order
-        # alone moves Aphrodite's own logits run to run.
+        # alone moves Sonar's own logits run to run.
         u8 = t.view(torch.uint8)
         u8.copy_(torch.randint(115, 120, u8.shape, generator=g, device=t.device))
     elif t.dtype in (torch.uint8, torch.float4_e2m1fn_x2):
@@ -101,7 +101,7 @@ class RandomWeightLoader(DummyModelLoader):
     E8M0 scales zero, and both paths would agree on zeros)."""
 
     def load_weights(self, model, model_config) -> None:
-        from aphrodite.distributed import get_tensor_model_parallel_world_size
+        from sonar.distributed import get_tensor_model_parallel_world_size
 
         super().load_weights(model, model_config)
         for name, t in model.state_dict().items():
@@ -127,8 +127,8 @@ class MonoProbe:
     and so the loader, into the workers."""
 
     def _decoder_layers(self) -> dict:
-        from aphrodite.model_executor.models.utils import extract_layer_index
-        from aphrodite.models.deepseek_v4.amd.model import DeepseekV4DecoderLayer
+        from sonar.model_executor.models.utils import extract_layer_index
+        from sonar.models.deepseek_v4.amd.model import DeepseekV4DecoderLayer
 
         model = self.model_runner.model  # type: ignore[attr-defined]
         return {extract_layer_index(m.attn.prefix): m for m in model.modules() if isinstance(m, DeepseekV4DecoderLayer)}
@@ -141,7 +141,7 @@ class MonoProbe:
         and position cannot.
         ``lens``: the prompt lengths, more than ``STEPS`` apart; a row's
         request is the longest prompt not past its position."""
-        from aphrodite.forward_context import get_forward_context
+        from sonar.forward_context import get_forward_context
 
         self._captured: dict = {}
         self._gaps: dict = {}
@@ -171,9 +171,9 @@ class MonoProbe:
 
         def gap_hook(layer_id, layer):
             def keep(ffn, args, kwargs):
-                # Aphrodite's path of a bias-routed layer only (the mono kernels
+                # Sonar's path of a bias-routed layer only (the mono kernels
                 # route inside): each row's top-6 margin, sqrt(softplus(logits))
-                # + bias as Aphrodite routes
+                # + bias as Sonar routes
                 if ffn.gate.tid2eid is not None or not decode_only(layer):
                     return
                 h = args[0] if args else kwargs["hidden_states"]
@@ -201,7 +201,7 @@ class MonoProbe:
         torch.save((self._captured, self._gaps), f"{path}.rank{rank}")
 
     def mono_layers(self) -> dict:
-        from aphrodite.models.deepseek_v4.amd import mono_decode
+        from sonar.models.deepseek_v4.amd import mono_decode
 
         layers = {i: None if m.mono is None else m.mono._weights is not None for i, m in self._decoder_layers().items()}
         runner = mono_decode._runner
@@ -211,21 +211,21 @@ class MonoProbe:
         }
 
 
-def _decode(aphrodite_runner, monkeypatch, mono: bool, prompts, path: str):
+def _decode(sonar_runner, monkeypatch, mono: bool, prompts, path: str):
     """Greedy decode of ``prompts`` with the mono path on or off: (each
     prompt's output, the workers' mono layers); each decoder layer's outputs
-    for the decode tokens of decode-only steps, and Aphrodite's routing margins,
+    for the decode tokens of decode-only steps, and Sonar's routing margins,
     saved under ``path``."""
-    from aphrodite import SamplingParams
-    from aphrodite.inputs import TokensPrompt
+    from sonar import SamplingParams
+    from sonar.inputs import TokensPrompt
 
     # the deployment the mono path takes (``MonoDecodeLayer.create``)
-    monkeypatch.setenv("APHRODITE_ROCM_USE_AITER", "1")
-    monkeypatch.setenv("APHRODITE_ROCM_USE_AITER_MOE", "1")
-    monkeypatch.setenv("APHRODITE_ROCM_USE_AITER_LINEAR", "1")
-    monkeypatch.setenv("APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS", "0")
-    monkeypatch.setenv("APHRODITE_ROCM_FP8_PADDING", "1")
-    with aphrodite_runner(
+    monkeypatch.setenv("SONAR_ROCM_USE_AITER", "1")
+    monkeypatch.setenv("SONAR_ROCM_USE_AITER_MOE", "1")
+    monkeypatch.setenv("SONAR_ROCM_USE_AITER_LINEAR", "1")
+    monkeypatch.setenv("SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS", "0")
+    monkeypatch.setenv("SONAR_ROCM_FP8_PADDING", "1")
+    with sonar_runner(
         MODEL,
         tensor_parallel_size=TP,
         load_format=LOAD_FORMAT,
@@ -234,7 +234,7 @@ def _decode(aphrodite_runner, monkeypatch, mono: bool, prompts, path: str):
         moe_backend="aiter",
         monokernel=mono,
         kv_cache_dtype="fp8",
-        # the serving page (aphrodite_runner's default 16 holds no C128 row)
+        # the serving page (sonar_runner's default 16 holds no C128 row)
         block_size=256,
         tokenizer_mode="deepseek_v4",
         # eager: the hooks read every step (the kernels take eager steps as
@@ -242,7 +242,7 @@ def _decode(aphrodite_runner, monkeypatch, mono: bool, prompts, path: str):
         enforce_eager=True,
         max_model_len=32768,
         max_num_seqs=len(prompts),
-        # the steps mixing prefill and decode take Aphrodite's path and are not
+        # the steps mixing prefill and decode take Sonar's path and are not
         # captured (the runner turns chunked prefill off: a step's tokens
         # must cover the model length)
         max_num_batched_tokens=32768,
@@ -263,7 +263,7 @@ def _rel(a: torch.Tensor, b: torch.Tensor) -> float:
 
 
 @pytest.mark.skipif(not _on_cdna4(), reason="the mono kernels target CDNA4")
-def test_mono_decode_matches_the_model(aphrodite_runner, monkeypatch, tmp_path):
+def test_mono_decode_matches_the_model(sonar_runner, monkeypatch, tmp_path):
     if torch.accelerator.device_count() < TP:
         pytest.skip(f"needs {TP} GPUs")
     pytest.importorskip("flydsl")
@@ -274,8 +274,8 @@ def test_mono_decode_matches_the_model(aphrodite_runner, monkeypatch, tmp_path):
     lens = [4400 + 512 * i + r for i, r in enumerate(jitter)]
     prompts = [torch.randint(1000, 60000, (n,), generator=g).tolist() for n in lens]
 
-    on, probe_on = _decode(aphrodite_runner, monkeypatch, True, prompts, f"{tmp_path}/on")
-    off, probe_off = _decode(aphrodite_runner, monkeypatch, False, prompts, f"{tmp_path}/off")
+    on, probe_on = _decode(sonar_runner, monkeypatch, True, prompts, f"{tmp_path}/on")
+    off, probe_off = _decode(sonar_runner, monkeypatch, False, prompts, f"{tmp_path}/off")
 
     # every layer took the mono path on every rank, at every decode step
     for rank in probe_on:
@@ -292,14 +292,14 @@ def test_mono_decode_matches_the_model(aphrodite_runner, monkeypatch, tmp_path):
                 break
             same.add((len(prompt), len(prompt) + step))
 
-    # each layer's outputs for those tokens, mono against Aphrodite's path, token by
+    # each layer's outputs for those tokens, mono against Sonar's path, token by
     # token. Layer 0 sees the same inputs on both paths, but its FFN input and
     # output differ by up to test_dsv4_mono_numerics' 2% / 3% (MXFP8
-    # activations against Aphrodite's FP8 a 128), which random weights amplify
+    # activations against Sonar's FP8 a 128), which random weights amplify
     # through the MoE: 5%. Each later layer takes the previous one's slightly
     # different output: 10%. The hash layers' (0-2) experts are fixed by the
     # token; a bias-routed layer's token (3, 4: past the hash layers, its input
-    # carries their differences) whose top-6 routing is a near-tie on Aphrodite's
+    # carries their differences) whose top-6 routing is a near-tie on Sonar's
     # path may pick another expert. The margin: the FFN input's own MXFP8
     # difference (2e-2), plus twice the token's residual difference (a
     # logit moves by its std, 1.7, times the input's relative difference, a

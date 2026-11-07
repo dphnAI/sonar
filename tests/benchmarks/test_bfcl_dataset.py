@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from transformers import AutoTokenizer, PreTrainedTokenizerBase
 
-from aphrodite.benchmarks.datasets import BFCLDataset, get_samples
+from sonar.benchmarks.datasets import BFCLDataset, get_samples
 
 
 def _patch_hf_api(side_effect):
@@ -16,7 +16,7 @@ def _patch_hf_api(side_effect):
     `.hf_hub_download` attribute uses `side_effect`."""
     fake_api = MagicMock()
     fake_api.hf_hub_download.side_effect = side_effect
-    return patch("aphrodite.benchmarks.datasets.datasets.hf_api", return_value=fake_api)
+    return patch("sonar.benchmarks.datasets.datasets.hf_api", return_value=fake_api)
 
 
 @pytest.fixture(scope="session")
@@ -187,7 +187,7 @@ def test_chat_backend_uses_messages_field_when_set() -> None:
     it verbatim and skip default content construction from `prompt`."""
     import asyncio
 
-    from aphrodite.benchmarks.lib.endpoint_request_func import (
+    from sonar.benchmarks.lib.endpoint_request_func import (
         RequestFuncInput,
         async_request_openai_chat_completions,
     )

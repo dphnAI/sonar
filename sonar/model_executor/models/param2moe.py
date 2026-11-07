@@ -24,32 +24,32 @@ from itertools import islice
 import torch
 from torch import nn
 
-from aphrodite.config import AphroditeConfig, CacheConfig
-from aphrodite.distributed import (
+from sonar.config import CacheConfig, SonarConfig
+from sonar.distributed import (
     get_pp_group,
     get_tensor_model_parallel_world_size,
 )
-from aphrodite.model_executor.layers.activation import SiluAndMul
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.model_executor.layers.activation import SiluAndMul
+from sonar.model_executor.layers.attention import Attention
+from sonar.model_executor.layers.fused_moe import (
     FusedMoEFactory,
     GateLinear,
     MoERunner,
 )
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     MergedColumnParallelLinear,
     QKVParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.sequence import IntermediateTensors
+from sonar.sequence import IntermediateTensors
 
 from .interfaces import MixtureOfExperts, SupportsLoRA, SupportsPP
 from .utils import (
@@ -88,7 +88,7 @@ class Param2MoEAttention(nn.Module):
 
     Notable differences from a vanilla GQA layer:
       * The checkpoint fuses Q, K, V into a single ``query_key_value`` weight.
-        Aphrodite receives it already renamed to ``qkv_proj`` by the weight-name
+        Sonar receives it already renamed to ``qkv_proj`` by the weight-name
         translator and splits it during ``load_weights``.
       * Optional per-head RMS norms on Q and K (``use_qk_norm=True``).
     """
@@ -156,7 +156,7 @@ class Param2MoEAttention(nn.Module):
         }
         if config.rope_scaling is not None:
             rope_parameters.update(config.rope_scaling)
-            # Normalise key: some checkpoints use "type", Aphrodite wants "rope_type"
+            # Normalise key: some checkpoints use "type", Sonar wants "rope_type"
             if "type" in rope_parameters and "rope_type" not in rope_parameters:
                 rope_parameters["rope_type"] = rope_parameters.pop("type")
 
@@ -357,14 +357,14 @@ class Param2MoEDecoderLayer(nn.Module):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
     ) -> None:
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_config
-        cache_config = aphrodite_config.cache_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        cache_config = sonar_config.cache_config
+        quant_config = sonar_config.quant_config
 
         hidden_size = config.hidden_size
         # Derive the layer index from the prefix (e.g. "model.layers.3")
@@ -422,7 +422,7 @@ class Param2MoEDecoderLayer(nn.Module):
 
 
 class Param2MoEModel(nn.Module):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_substr={
             "word_embeddings.": "embed_tokens.",
             ".attention.query_key_value.": ".self_attn.qkv_proj.",
@@ -443,20 +443,20 @@ class Param2MoEModel(nn.Module):
     def __init__(
         self,
         *,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
     ) -> None:
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
 
         self.config = config
         self.vocab_size = config.vocab_size
         self.embed_dim = config.hidden_size
         self.tie_word_embeddings: bool = getattr(config, "tie_word_embeddings", False)
 
-        # Embedding  (HF name: word_embeddings → Aphrodite name: embed_tokens)
+        # Embedding  (HF name: word_embeddings → Sonar name: embed_tokens)
         if get_pp_group().is_first_rank or (self.tie_word_embeddings and get_pp_group().is_last_rank):
             self.embed_tokens = VocabParallelEmbedding(
                 self.vocab_size,
@@ -470,7 +470,7 @@ class Param2MoEModel(nn.Module):
         self.start_layer, self.end_layer, self.layers = make_layers(
             config.num_hidden_layers,
             lambda prefix: Param2MoEDecoderLayer(
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 prefix=prefix,
             ),
             prefix=f"{prefix}.layers",
@@ -523,11 +523,11 @@ class Param2MoEModel(nn.Module):
         weights: Iterable[tuple[str, torch.Tensor]],
     ) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(_normalize_expert_bias(weights), mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(_normalize_expert_bias(weights), mapper=self.hf_to_sonar_mapper)
 
 
 class Param2MoEMixtureOfExperts(MixtureOfExperts):
-    """Implements the Aphrodite MixtureOfExperts protocol for Param2MoE."""
+    """Implements the Sonar MixtureOfExperts protocol for Param2MoE."""
 
     moe_mlp_layers: list[Param2MoEMoEBlock]
 
@@ -570,7 +570,7 @@ class Param2MoEMixtureOfExperts(MixtureOfExperts):
 
 
 class Param2MoEForCausalLM(nn.Module, SupportsPP, SupportsLoRA, Param2MoEMixtureOfExperts):
-    """Aphrodite-native Param2MoE CausalLM.
+    """Sonar-native Param2MoE CausalLM.
 
     Uses Grouped-Query Attention (GQA) with a Sigmoid-scored,
     grouped-topk Mixture-of-Experts MLP.
@@ -600,17 +600,17 @@ class Param2MoEForCausalLM(nn.Module, SupportsPP, SupportsLoRA, Param2MoEMixture
     # Modules that need vocab-size padding for LoRA.
     embedding_padding_modules = ["lm_head"]
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__()
 
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
 
         self.config = config
         self.quant_config = quant_config
 
         self.model = Param2MoEModel(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             prefix=maybe_prefix(prefix, "model"),
         )
 

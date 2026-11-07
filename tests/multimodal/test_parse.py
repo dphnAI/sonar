@@ -5,7 +5,7 @@ import pytest
 import torch
 from PIL import Image
 
-from aphrodite.multimodal.parse import (
+from sonar.multimodal.parse import (
     AudioProcessorItems,
     ImageProcessorItems,
     MultiModalDataParser,

@@ -10,11 +10,11 @@ from collections.abc import Callable
 from enum import Enum, EnumMeta
 from typing import TYPE_CHECKING
 
-from aphrodite.logger import init_logger
-from aphrodite.utils.import_utils import resolve_obj_by_qualname
+from sonar.logger import init_logger
+from sonar.utils.import_utils import resolve_obj_by_qualname
 
 if TYPE_CHECKING:
-    from aphrodite.v1.attention.backends.mla.prefill.base import MLAPrefillBackend
+    from sonar.v1.attention.backends.mla.prefill.base import MLAPrefillBackend
 
 logger = init_logger(__name__)
 
@@ -34,13 +34,13 @@ class _MLAPrefillBackendEnumMeta(EnumMeta):
 class MLAPrefillBackendEnum(Enum, metaclass=_MLAPrefillBackendEnumMeta):
     """Enumeration of all supported MLA prefill backends."""
 
-    FLASH_ATTN = "aphrodite.v1.attention.backends.mla.prefill.flash_attn.FlashAttnPrefillBackend"
-    FLASHINFER = "aphrodite.v1.attention.backends.mla.prefill.flashinfer.FlashInferPrefillBackend"
-    TRTLLM_RAGGED = "aphrodite.v1.attention.backends.mla.prefill.trtllm_ragged.TrtllmRaggedPrefillBackend"
-    TOKENSPEED_MLA = "aphrodite.v1.attention.backends.mla.prefill.tokenspeed_mla.TokenspeedMLAPrefillBackend"
-    ROCM_AITER_FA = "aphrodite.v1.attention.backends.mla.prefill.aiter_flash_attn.AiterFlashAttnPrefillBackend"
-    CPU = "aphrodite.v1.attention.backends.mla.prefill.cpu_sdpa.CPUSDPAMLAPrefillBackend"
-    ZEN_CPU = "aphrodite.v1.attention.backends.mla.prefill.zen_cpu_sdpa.ZenCPUSDPAMLAPrefillBackend"
+    FLASH_ATTN = "sonar.v1.attention.backends.mla.prefill.flash_attn.FlashAttnPrefillBackend"
+    FLASHINFER = "sonar.v1.attention.backends.mla.prefill.flashinfer.FlashInferPrefillBackend"
+    TRTLLM_RAGGED = "sonar.v1.attention.backends.mla.prefill.trtllm_ragged.TrtllmRaggedPrefillBackend"
+    TOKENSPEED_MLA = "sonar.v1.attention.backends.mla.prefill.tokenspeed_mla.TokenspeedMLAPrefillBackend"
+    ROCM_AITER_FA = "sonar.v1.attention.backends.mla.prefill.aiter_flash_attn.AiterFlashAttnPrefillBackend"
+    CPU = "sonar.v1.attention.backends.mla.prefill.cpu_sdpa.CPUSDPAMLAPrefillBackend"
+    ZEN_CPU = "sonar.v1.attention.backends.mla.prefill.zen_cpu_sdpa.ZenCPUSDPAMLAPrefillBackend"
     # Placeholder for third-party/custom backends - must be registered before use
     # set to None to avoid alias with other backend, whose value is an empty string
     CUSTOM = None

@@ -14,9 +14,9 @@ Each case allocates ~5 GiB of GPU memory.
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.v1.worker.gpu.spec_decode.draft_logits import DraftLogitsCache
-from aphrodite.v1.worker.gpu.spec_decode.rejection_sampler_utils import (
+from sonar.platforms import current_platform
+from sonar.v1.worker.gpu.spec_decode.draft_logits import DraftLogitsCache
+from sonar.v1.worker.gpu.spec_decode.rejection_sampler_utils import (
     rejection_sample,
 )
 

@@ -9,9 +9,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 from transformers import PreTrainedConfig
 
-from aphrodite.config import ModelConfig
-from aphrodite.logger import init_logger
-from aphrodite.utils.import_utils import resolve_obj_by_qualname
+from sonar.config import ModelConfig
+from sonar.logger import init_logger
+from sonar.utils.import_utils import resolve_obj_by_qualname
 
 logger = init_logger(__name__)
 

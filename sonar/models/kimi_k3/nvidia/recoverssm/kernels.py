@@ -20,11 +20,11 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.v1.attention.backends.utils import NULL_BLOCK_ID
+from sonar.platforms import current_platform
+from sonar.v1.attention.backends.utils import NULL_BLOCK_ID
 
 if TYPE_CHECKING:
-    from aphrodite.models.kimi_k3.nvidia.ops.recoverssm import (
+    from sonar.models.kimi_k3.nvidia.ops.recoverssm import (
         KDARecoverSSMCommitContext,
         KDARecoverSSMRecords,
     )
@@ -66,7 +66,7 @@ def can_use_cute_recoverssm(
 
 
 def _architecture(device: torch.device) -> str:
-    from aphrodite.models.kimi_k3.nvidia.specialized_decode.cutedsl.common.host import (
+    from sonar.models.kimi_k3.nvidia.specialized_decode.cutedsl.common.host import (
         architecture,
     )
 
@@ -91,7 +91,7 @@ def _compile_verify(
     import cutlass.cute as cute
     from cutlass.cute.runtime import make_fake_stream
 
-    from aphrodite.models.kimi_k3.nvidia.specialized_decode.cutedsl.common.host import (
+    from sonar.models.kimi_k3.nvidia.specialized_decode.cutedsl.common.host import (
         dynamic_fake,
     )
 
@@ -291,7 +291,7 @@ def _compile_commit(heads: int, window: int, arch: str, param_dtype: torch.dtype
     import cutlass.cute as cute
     from cutlass.cute.runtime import make_fake_stream
 
-    from aphrodite.models.kimi_k3.nvidia.specialized_decode.cutedsl.common.host import (
+    from sonar.models.kimi_k3.nvidia.specialized_decode.cutedsl.common.host import (
         dynamic_fake,
     )
 

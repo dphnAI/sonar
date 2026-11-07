@@ -25,28 +25,28 @@ import regex as re
 import torch
 import torch.nn as nn
 
-from aphrodite.config import AphroditeConfig, get_current_aphrodite_config
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.config import SonarConfig, get_current_sonar_config
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe import (
     fused_moe_make_expert_params_mapping,
 )
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import ReplicatedLinear
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.mhc import HCHeadOp
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import ReplicatedLinear
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.mhc import HCHeadOp
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.model_loader.mtp_validation import (
+from sonar.model_executor.model_loader.mtp_validation import (
     is_mtp_completeness_check_enabled,
 )
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
-from aphrodite.model_executor.models.qwen3_dspark import (
+from sonar.model_executor.model_loader.weight_utils import default_weight_loader
+from sonar.model_executor.models.qwen3_dspark import (
     DSparkConfidenceHead,
     DSparkMarkovHead,
 )
-from aphrodite.model_executor.models.utils import maybe_prefix
+from sonar.model_executor.models.utils import maybe_prefix
 
 from .mega_moe import finalize_mega_moe_weights
 from .model import DeepseekV4DecoderLayer
@@ -59,10 +59,10 @@ _EXPERT_SCALE_RE = re.compile(r"\.experts\.\d+\.w[123]\.scale$")
 
 
 class DSparkDeepseekV4Model(nn.Module):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__()
-        assert aphrodite_config.speculative_config is not None
-        config = aphrodite_config.speculative_config.draft_model_config.hf_config
+        assert sonar_config.speculative_config is not None
+        config = sonar_config.speculative_config.draft_model_config.hf_config
         self.config = config
         self.hidden_size = config.hidden_size
         self.hc_mult = config.hc_mult
@@ -85,16 +85,16 @@ class DSparkDeepseekV4Model(nn.Module):
             config.hidden_size,
             bias=False,
             return_bias=False,
-            quant_config=aphrodite_config.quant_config,
+            quant_config=sonar_config.quant_config,
             prefix=maybe_prefix(prefix, "main_proj"),
         )
         self.main_norm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-        current_aphrodite_config = get_current_aphrodite_config()
+        current_sonar_config = get_current_sonar_config()
         self.layers = nn.ModuleList(
             [
                 DeepseekV4DecoderLayer(
-                    current_aphrodite_config,
+                    current_sonar_config,
                     prefix=maybe_prefix(prefix, f"layers.{self.num_hidden_layers + i}"),
                 )
                 for i in range(self.num_dspark_layers)
@@ -285,12 +285,12 @@ class DSparkDeepseekV4ForCausalLM(nn.Module):
     # Full-vocab draft: draft ids are target ids, no remapping needed.
     draft_id_to_target_id = None
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__()
-        assert aphrodite_config.speculative_config is not None
-        self.draft_model_config = aphrodite_config.speculative_config.draft_model_config
+        assert sonar_config.speculative_config is not None
+        self.draft_model_config = sonar_config.speculative_config.draft_model_config
         self.config = self.draft_model_config.hf_config
-        self.model = DSparkDeepseekV4Model(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = DSparkDeepseekV4Model(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
         # Shared with the target (aliased by the speculator's load utility).
         self.lm_head = ParallelLMHead(
             self.config.vocab_size,

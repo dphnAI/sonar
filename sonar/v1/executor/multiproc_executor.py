@@ -25,13 +25,13 @@ from typing import Any, cast
 import cloudpickle
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed import destroy_distributed_environment, destroy_model_parallel
-from aphrodite.distributed.device_communicators.shm_broadcast import Handle, MessageQueue
-from aphrodite.distributed.ec_transfer.ec_connector.utils import ECOutputAggregator
-from aphrodite.distributed.kv_transfer.kv_connector.utils import KVOutputAggregator
-from aphrodite.distributed.parallel_state import (
+import sonar.envs as envs
+from sonar.config import SonarConfig
+from sonar.distributed import destroy_distributed_environment, destroy_model_parallel
+from sonar.distributed.device_communicators.shm_broadcast import Handle, MessageQueue
+from sonar.distributed.ec_transfer.ec_connector.utils import ECOutputAggregator
+from sonar.distributed.kv_transfer.kv_connector.utils import KVOutputAggregator
+from sonar.distributed.parallel_state import (
     get_dcp_group,
     get_dp_group,
     get_ep_group,
@@ -41,12 +41,12 @@ from aphrodite.distributed.parallel_state import (
     get_tp_group,
     model_parallel_is_initialized,
 )
-from aphrodite.envs import enable_envs_cache
-from aphrodite.logger import configure_logging, init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.tracing import instrument, maybe_init_worker_tracer
-from aphrodite.utils import numa_utils
-from aphrodite.utils.network_utils import (
+from sonar.envs import enable_envs_cache
+from sonar.logger import configure_logging, init_logger
+from sonar.platforms import current_platform
+from sonar.tracing import instrument, maybe_init_worker_tracer
+from sonar.utils import numa_utils
+from sonar.utils.network_utils import (
     aiter_requires_tcp_store,
     get_distributed_init_method,
     get_file_store_init_method,
@@ -54,29 +54,29 @@ from aphrodite.utils.network_utils import (
     get_loopback_ip,
     get_open_port,
 )
-from aphrodite.utils.ompmultiprocessing import OMPProcessManager
-from aphrodite.utils.system_utils import (
+from sonar.utils.ompmultiprocessing import OMPProcessManager
+from sonar.utils.system_utils import (
     _maybe_force_spawn,
     decorate_logs,
     get_mp_context,
     set_process_title,
 )
-from aphrodite.utils.torch_utils import (
-    OMP_NUM_THREADS_SET_BY_APHRODITE,
+from sonar.utils.torch_utils import (
+    OMP_NUM_THREADS_SET_BY_SONAR,
     set_torch_threads_for_runtime,
     startup_omp_num_threads,
 )
-from aphrodite.utils.watch_dog import get_watch_dog, start_watch_dog
-from aphrodite.v1.core.sched.output import GrammarOutput, SchedulerOutput
-from aphrodite.v1.executor.abstract import Executor, FailureCallback
-from aphrodite.v1.executor.aphrodite_net_devices import set_worker_net_device
-from aphrodite.v1.outputs import (
+from sonar.utils.watch_dog import get_watch_dog, start_watch_dog
+from sonar.v1.core.sched.output import GrammarOutput, SchedulerOutput
+from sonar.v1.executor.abstract import Executor, FailureCallback
+from sonar.v1.executor.sonar_net_devices import set_worker_net_device
+from sonar.v1.outputs import (
     AsyncModelRunnerOutput,
     DraftTokenIds,
     KVConnectorOutput,
     ModelRunnerOutput,
 )
-from aphrodite.v1.worker.worker_base import WorkerWrapperBase
+from sonar.v1.worker.worker_base import WorkerWrapperBase
 
 logger = init_logger(__name__)
 
@@ -125,9 +125,9 @@ class FutureWrapper(Future):
 class MultiprocExecutor(Executor):
     supports_pp: bool = True
 
-    def __init__(self, aphrodite_config: AphroditeConfig, monitor_workers: bool = True):
+    def __init__(self, sonar_config: SonarConfig, monitor_workers: bool = True):
         self.monitor_workers = monitor_workers
-        super().__init__(aphrodite_config)
+        super().__init__(sonar_config)
 
     def _init_executor(self) -> None:
         # Call self.shutdown at exit to clean up
@@ -158,7 +158,7 @@ class MultiprocExecutor(Executor):
         if self.parallel_config.node_rank_within_dp == 0:
             # For leader node within each dp rank,
             # each dp will have its own leader multiproc executor.
-            max_chunk_bytes = envs.APHRODITE_MQ_MAX_CHUNK_BYTES_MB * 1024 * 1024
+            max_chunk_bytes = envs.SONAR_MQ_MAX_CHUNK_BYTES_MB * 1024 * 1024
             mq_connect_ip = get_ip()
             logger.info(
                 "DP group leader: node_rank=%d, node_rank_within_dp=%d, "
@@ -192,13 +192,13 @@ class MultiprocExecutor(Executor):
             inherited_fds: list[int] | None = [] if context.get_start_method() == "fork" else None
 
             # For CPU backend only, to setup OpenMP threads affinity
-            cpu_omp_manager = OMPProcessManager(self.aphrodite_config)
+            cpu_omp_manager = OMPProcessManager(self.sonar_config)
 
             def start_worker(local_rank: int) -> UnreadyWorkerProcHandle:
                 global_rank = global_start_rank + local_rank
                 with cpu_omp_manager.configure_omp_envs(rank=global_rank, local_rank=local_rank):
                     return WorkerProc.make_worker_process(
-                        aphrodite_config=self.aphrodite_config,
+                        sonar_config=self.sonar_config,
                         local_rank=local_rank,
                         rank=global_rank,
                         distributed_init_method=distributed_init_method,
@@ -391,7 +391,7 @@ class MultiprocExecutor(Executor):
             args=(scheduler_output,),
             unique_reply_rank=self.output_rank,
             non_block=non_block,
-            timeout=envs.APHRODITE_EXECUTE_MODEL_TIMEOUT_SECONDS,
+            timeout=envs.SONAR_EXECUTE_MODEL_TIMEOUT_SECONDS,
             kv_output_aggregator=self.kv_output_aggregator,
             ec_output_aggregator=self.ec_output_aggregator,
         )
@@ -404,7 +404,7 @@ class MultiprocExecutor(Executor):
             args=(grammar_output,),
             unique_reply_rank=self.output_rank,
             non_block=non_block,
-            timeout=envs.APHRODITE_EXECUTE_MODEL_TIMEOUT_SECONDS,
+            timeout=envs.SONAR_EXECUTE_MODEL_TIMEOUT_SECONDS,
             kv_output_aggregator=self.kv_output_aggregator,
             ec_output_aggregator=self.ec_output_aggregator,
         )
@@ -413,7 +413,7 @@ class MultiprocExecutor(Executor):
         self.collective_rpc(
             "execute_dummy_batch",
             unique_reply_rank=self.output_rank,
-            timeout=envs.APHRODITE_EXECUTE_MODEL_TIMEOUT_SECONDS,
+            timeout=envs.SONAR_EXECUTE_MODEL_TIMEOUT_SECONDS,
         )
 
     def take_draft_token_ids(self) -> DraftTokenIds | None:
@@ -421,7 +421,7 @@ class MultiprocExecutor(Executor):
         return self.collective_rpc(
             "take_draft_token_ids",
             unique_reply_rank=self.output_rank,
-            timeout=envs.APHRODITE_EXECUTE_MODEL_TIMEOUT_SECONDS,
+            timeout=envs.SONAR_EXECUTE_MODEL_TIMEOUT_SECONDS,
         )
 
     def collective_rpc(  # type: ignore[override]
@@ -485,13 +485,13 @@ class MultiprocExecutor(Executor):
                     raise TimeoutError(f"RPC call to {method} timed out.") from e
 
                 if status == WorkerProc.ResponseStatus.FAILURE_WITH_KV_OUTPUT:
-                    if not self.aphrodite_config.parallel_config.enable_fault_tolerance or self.is_failed:
+                    if not self.sonar_config.parallel_config.enable_fault_tolerance or self.is_failed:
                         raise RuntimeError("Worker failed with KV connector output")
                     has_failure = True
                     assert isinstance(result, KVConnectorOutput)
                     responses.append(result)
                 elif status != WorkerProc.ResponseStatus.SUCCESS:
-                    if not self.aphrodite_config.parallel_config.enable_fault_tolerance or self.is_failed:
+                    if not self.sonar_config.parallel_config.enable_fault_tolerance or self.is_failed:
                         raise RuntimeError(
                             f"Worker failed with error '{result}', please check the"
                             " stack trace above for the root cause"
@@ -547,7 +547,7 @@ class MultiprocExecutor(Executor):
             "[shutdown] Executor: waiting for worker exit count=%d",
             initial_count,
         )
-        if wait_for_termination(active_procs(), timeout=envs.APHRODITE_WORKER_SHUTDOWN_TIMEOUT_SECONDS):
+        if wait_for_termination(active_procs(), timeout=envs.SONAR_WORKER_SHUTDOWN_TIMEOUT_SECONDS):
             logger.info_once("[shutdown] Executor: all workers exited gracefully")
             return
 
@@ -673,8 +673,8 @@ class WorkerProc:
     rpc_broadcast_mq: MessageQueue | None
     worker_response_mq: MessageQueue | None
 
-    def _init_message_queues(self, input_shm_handle: Handle, aphrodite_config: AphroditeConfig) -> None:
-        if aphrodite_config.parallel_config.nnodes_within_dp == 1:
+    def _init_message_queues(self, input_shm_handle: Handle, sonar_config: SonarConfig) -> None:
+        if sonar_config.parallel_config.nnodes_within_dp == 1:
             # Initialize MessageQueue for receiving SchedulerOutput
             self.rpc_broadcast_mq = MessageQueue.create_from_handle(input_shm_handle, self.worker.rank)
 
@@ -702,7 +702,7 @@ class WorkerProc:
     @instrument(span_name="Worker init")
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         local_rank: int,
         rank: int,
         distributed_init_method: str,
@@ -713,9 +713,9 @@ class WorkerProc:
         self.rank = rank
         wrapper = WorkerWrapperBase(rpc_rank=local_rank, global_rank=rank)
         # TODO: move `init_worker` to executor level as a collective rpc call
-        all_kwargs: list[dict] = [{} for _ in range(aphrodite_config.parallel_config.world_size)]
+        all_kwargs: list[dict] = [{} for _ in range(sonar_config.parallel_config.world_size)]
         all_kwargs[local_rank] = {
-            "aphrodite_config": aphrodite_config,
+            "sonar_config": sonar_config,
             "local_rank": local_rank,
             "rank": rank,
             "distributed_init_method": distributed_init_method,
@@ -725,18 +725,18 @@ class WorkerProc:
         wrapper.init_worker(all_kwargs)
         self.worker = wrapper
 
-        self.setup_proc_title_and_log_prefix(enable_ep=aphrodite_config.parallel_config.enable_expert_parallel)
+        self.setup_proc_title_and_log_prefix(enable_ep=sonar_config.parallel_config.enable_expert_parallel)
 
         # Load model
         self.worker.init_device()
         # Update process title now that parallel groups are initialized
-        self.setup_proc_title_and_log_prefix(enable_ep=aphrodite_config.parallel_config.enable_expert_parallel)
-        if envs.APHRODITE_ELASTIC_EP_SCALE_UP_LAUNCH:
+        self.setup_proc_title_and_log_prefix(enable_ep=sonar_config.parallel_config.enable_expert_parallel)
+        if envs.SONAR_ELASTIC_EP_SCALE_UP_LAUNCH:
             self.worker.elastic_ep_execute("load_model")
         else:
             self.worker.load_model()
 
-        scheduler_config = aphrodite_config.scheduler_config
+        scheduler_config = sonar_config.scheduler_config
         self.use_async_scheduling = scheduler_config.async_scheduling
         if self.use_async_scheduling:
             self.async_output_queue: queue.Queue = queue.Queue()
@@ -748,11 +748,11 @@ class WorkerProc:
             self.async_output_copy_thread.start()
 
         # Set block size based on the attention backends
-        current_platform.update_block_size_for_backend(aphrodite_config)
+        current_platform.update_block_size_for_backend(sonar_config)
 
         # Initialize message queues after init_device() since multi-node setups
         # (nnodes_within_dp > 1) require distributed groups to be initialized
-        self._init_message_queues(input_shm_handle, aphrodite_config)
+        self._init_message_queues(input_shm_handle, sonar_config)
 
         # Enable environment variable cache (e.g. assume no more
         # environment variable overrides after this point)
@@ -760,7 +760,7 @@ class WorkerProc:
 
     @staticmethod
     def make_worker_process(
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         local_rank: int,
         rank: int,
         distributed_init_method: str,
@@ -778,7 +778,7 @@ class WorkerProc:
             inherited_fds = inherited_fds.copy()
             inherited_fds.extend((ready_reader.fileno(), death_writer.fileno()))
         process_kwargs = {
-            "aphrodite_config": aphrodite_config,
+            "sonar_config": sonar_config,
             "local_rank": local_rank,
             "rank": rank,
             "distributed_init_method": distributed_init_method,
@@ -794,12 +794,12 @@ class WorkerProc:
         proc = context.Process(
             target=WorkerProc.worker_main,
             kwargs=process_kwargs,
-            name=f"AphroditeWorker-{rank}",
-            daemon=aphrodite_config.model_config.quantization != "deepseek_v41_fp8",
+            name=f"SonarWorker-{rank}",
+            daemon=sonar_config.model_config.quantization != "deepseek_v41_fp8",
         )
 
         # Apply NUMA binding if configured
-        with numa_utils.configure_subprocess(aphrodite_config, local_rank, process_kind="worker"):
+        with numa_utils.configure_subprocess(sonar_config, local_rank, process_kind="worker"):
             proc.start()
 
         # Close child ends of pipes here in the parent
@@ -903,7 +903,7 @@ class WorkerProc:
     def worker_main(*args, **kwargs):
         """Worker initialization and execution loops.
         This runs a background process"""
-        if logging_config := getattr(kwargs["aphrodite_config"], "logging_config", None):
+        if logging_config := getattr(kwargs["sonar_config"], "logging_config", None):
             configure_logging(logging_config)
 
         # Triton's cache writes are not atomic across processes. Give each
@@ -932,15 +932,15 @@ class WorkerProc:
 
         # Publish the logical-to-physical mapping early so topology helpers
         # work before init_device (needed by set_worker_net_device below).
-        aphrodite_config = kwargs["aphrodite_config"]
-        assigned_physical_gpu_ids = aphrodite_config.parallel_config.assigned_physical_gpu_ids
+        sonar_config = kwargs["sonar_config"]
+        assigned_physical_gpu_ids = sonar_config.parallel_config.assigned_physical_gpu_ids
         if assigned_physical_gpu_ids is not None:
-            from aphrodite.platforms.interface import set_assigned_physical_gpu_ids
+            from sonar.platforms.interface import set_assigned_physical_gpu_ids
 
             set_assigned_physical_gpu_ids(assigned_physical_gpu_ids)
 
-        # Set net device env vars for the worker if APHRODITE_GPU_NIC_PCIE_MAPPING is set
-        set_worker_net_device(kwargs.get("local_rank", 0), kwargs["aphrodite_config"])
+        # Set net device env vars for the worker if SONAR_GPU_NIC_PCIE_MAPPING is set
+        set_worker_net_device(kwargs.get("local_rank", 0), kwargs["sonar_config"])
 
         worker = None
         ready_writer = kwargs.pop("ready_pipe")
@@ -959,14 +959,14 @@ class WorkerProc:
         try:
             # Initialize tracer
             maybe_init_worker_tracer(
-                instrumenting_module_name="aphrodite.worker",
+                instrumenting_module_name="sonar.worker",
                 process_kind="worker",
                 process_name=f"Worker_{rank}",
             )
 
             worker = WorkerProc(*args, **kwargs)
             assert worker.worker_response_mq is not None
-            if kwargs["aphrodite_config"].parallel_config.numa_bind:
+            if kwargs["sonar_config"].parallel_config.numa_bind:
                 numa_utils.log_current_affinity_state(f"Worker_{worker.rank}")
 
             worker.monitor_death_pipe(death_pipe, shutdown_requested)
@@ -988,7 +988,7 @@ class WorkerProc:
             ready_writer.close()
             ready_writer = None
 
-            start_watch_dog(f"worker_{rank}", aphrodite_config.watchdog_config, logger)
+            start_watch_dog(f"worker_{rank}", sonar_config.watchdog_config, logger)
             worker.worker_busy_loop()
 
         except Exception:
@@ -1079,7 +1079,7 @@ class WorkerProc:
         # create a new cuda context on device 0, consuming extra memory.
         # here we set the device to the worker device for the thread,
         # enforcing the context to be the same as the main thread.
-        from aphrodite.platforms import current_platform
+        from sonar.platforms import current_platform
 
         if hasattr(self.worker, "device"):
             current_platform.set_device(self.worker.device)
@@ -1182,7 +1182,7 @@ def set_multiprocessing_worker_envs(local_world_size: int = 1):
     # is not fork-safe).
     num_threads = startup_omp_num_threads(local_world_size)
     os.environ["OMP_NUM_THREADS"] = str(num_threads)
-    os.environ[OMP_NUM_THREADS_SET_BY_APHRODITE] = "1"
+    os.environ[OMP_NUM_THREADS_SET_BY_SONAR] = "1"
 
     # A spawned worker picks the count up from the environment when it imports
     # torch. A forked worker instead inherits it from this process, so set it

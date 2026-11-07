@@ -9,10 +9,10 @@ import mlx.core as mx
 import mlx.nn as nn
 from mlx_lm.models.base import scaled_dot_product_attention
 
-from aphrodite.logger import init_logger
-from aphrodite.metal.metal_kernel_backend.packed_prefill_compat import apply_packed_rope
-from aphrodite.metal.mlx_backend.mla_cache import MLAPagedLatentCache
-from aphrodite.metal.paged_attention_common import find_attn_attr, find_layers, get_context
+from sonar.logger import init_logger
+from sonar.metal.metal_kernel_backend.packed_prefill_compat import apply_packed_rope
+from sonar.metal.mlx_backend.mla_cache import MLAPagedLatentCache
+from sonar.metal.paged_attention_common import find_attn_attr, find_layers, get_context
 
 logger = init_logger(__name__)
 

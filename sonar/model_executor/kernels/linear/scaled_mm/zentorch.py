@@ -10,10 +10,10 @@ kernel in ``_POSSIBLE_INT8_KERNELS[PlatformEnum.CPU]``.
 
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.kernels.linear.zentorch_utils import has_zentorch_op
-from aphrodite.model_executor.layers.quantization.utils import replace_parameter
-from aphrodite.platforms import current_platform
+from sonar.logger import init_logger
+from sonar.model_executor.kernels.linear.zentorch_utils import has_zentorch_op
+from sonar.model_executor.layers.quantization.utils import replace_parameter
+from sonar.platforms import current_platform
 
 from .ScaledMMLinearKernel import (
     Int8ScaledMMLinearKernel,

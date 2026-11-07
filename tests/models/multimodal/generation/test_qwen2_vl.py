@@ -8,15 +8,15 @@ import pytest
 import torch
 from PIL import Image
 
-from aphrodite.multimodal.image import rescale_image_size
-from aphrodite.multimodal.video import rescale_video_size, sample_frames_from_video
+from sonar.multimodal.image import rescale_image_size
+from sonar.multimodal.video import rescale_video_size, sample_frames_from_video
 
 from ....conftest import (
     IMAGE_ASSETS,
     VIDEO_ASSETS,
-    AphroditeRunner,
     PromptImageInput,
     PromptVideoInput,
+    SonarRunner,
 )
 from ...utils import check_logprobs_close
 
@@ -24,7 +24,7 @@ from ...utils import check_logprobs_close
 @pytest.fixture(scope="function", autouse=True)
 def enable_pickle(monkeypatch):
     """`LLM.apply_model` requires pickling a function."""
-    monkeypatch.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
+    monkeypatch.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")
 
 
 models = ["Qwen/Qwen2-VL-2B-Instruct"]
@@ -95,7 +95,7 @@ class Qwen2VLPromptVideoEmbeddingInput(TypedDict):
 def batch_make_image_embeddings(
     image_batches: list[Image.Image | list[Image.Image]],
     processor,
-    llm: AphroditeRunner,
+    llm: SonarRunner,
 ) -> list[Qwen2VLPromptImageEmbeddingInput]:
     """Batched image embeddings for Qwen2-VL.
 
@@ -173,7 +173,7 @@ def batch_make_image_embeddings(
 
 
 def batch_make_video_embeddings(
-    video_batches: PromptVideoInput, processor, llm: AphroditeRunner
+    video_batches: PromptVideoInput, processor, llm: SonarRunner
 ) -> list[Qwen2VLPromptVideoEmbeddingInput]:
     """Batched video embeddings for Qwen2-VL.
 
@@ -251,7 +251,7 @@ def batch_make_video_embeddings(
 
 
 def run_embedding_input_test(
-    aphrodite_runner: type[AphroditeRunner],
+    sonar_runner: type[SonarRunner],
     inputs: list[tuple[list[str], PromptImageInput, PromptVideoInput]],
     model: str,
     *,
@@ -270,7 +270,7 @@ def run_embedding_input_test(
     processor = AutoProcessor.from_pretrained(model)
 
     # max_model_len should be greater than image_feature_size
-    with aphrodite_runner(
+    with sonar_runner(
         model,
         runner="generate",
         max_model_len=4000,
@@ -281,9 +281,9 @@ def run_embedding_input_test(
         distributed_executor_backend=distributed_executor_backend,
         default_torch_num_threads=1,
         enable_mm_embeds=True,
-    ) as aphrodite_model:
+    ) as sonar_model:
         outputs_per_case_for_original_input = [
-            aphrodite_model.generate_greedy_logprobs(
+            sonar_model.generate_greedy_logprobs(
                 prompts,
                 max_tokens,
                 num_logprobs=num_logprobs,
@@ -294,12 +294,12 @@ def run_embedding_input_test(
         ]
 
         outputs_per_case_for_embeddings_input = [
-            aphrodite_model.generate_greedy_logprobs(
+            sonar_model.generate_greedy_logprobs(
                 prompts,
                 max_tokens,
                 num_logprobs=num_logprobs,
-                images=batch_make_image_embeddings(images, processor, aphrodite_model) if images else None,
-                videos=batch_make_video_embeddings(videos, processor, aphrodite_model) if videos else None,
+                images=batch_make_image_embeddings(images, processor, sonar_model) if images else None,
+                videos=batch_make_video_embeddings(videos, processor, sonar_model) if videos else None,
             )
             for prompts, images, videos in inputs
         ]
@@ -321,7 +321,7 @@ def run_embedding_input_test(
 @pytest.mark.parametrize("max_tokens", [128])
 @pytest.mark.parametrize("num_logprobs", [10])
 def test_qwen2_vl_image_embeddings_input(
-    aphrodite_runner,
+    sonar_runner,
     image_assets,
     model,
     dtype,
@@ -342,7 +342,7 @@ def test_qwen2_vl_image_embeddings_input(
     ]
 
     run_embedding_input_test(
-        aphrodite_runner,
+        sonar_runner,
         inputs_per_case,
         model,
         dtype=dtype,
@@ -359,7 +359,7 @@ def test_qwen2_vl_image_embeddings_input(
 @pytest.mark.parametrize("max_tokens", [128])
 @pytest.mark.parametrize("num_logprobs", [10])
 def test_qwen2_vl_multiple_image_embeddings_input(
-    aphrodite_runner,
+    sonar_runner,
     image_assets,
     model,
     dtype: str,
@@ -378,7 +378,7 @@ def test_qwen2_vl_multiple_image_embeddings_input(
     ]
 
     run_embedding_input_test(
-        aphrodite_runner,
+        sonar_runner,
         inputs_per_case,
         model,
         dtype=dtype,
@@ -395,7 +395,7 @@ def test_qwen2_vl_multiple_image_embeddings_input(
 @pytest.mark.parametrize("max_tokens", [128])
 @pytest.mark.parametrize("num_logprobs", [10])
 def test_qwen2_vl_video_embeddings_input(
-    aphrodite_runner,
+    sonar_runner,
     video_assets,
     model,
     dtype: str,
@@ -416,7 +416,7 @@ def test_qwen2_vl_video_embeddings_input(
     ]
 
     run_embedding_input_test(
-        aphrodite_runner,
+        sonar_runner,
         inputs_per_case,
         model,
         dtype=dtype,

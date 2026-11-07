@@ -1,5 +1,5 @@
 [package]
-name = "aphrodite-llm"
+name = "sonar-llm"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -19,8 +19,8 @@ tokio.workspace = true
 tokio-util.workspace = true
 tracing.workspace = true
 uuid.workspace = true
-aphrodite-engine-core-client.workspace = true
-aphrodite-metrics.workspace = true
+sonar-engine-core-client.workspace = true
+sonar-metrics.workspace = true
 
 [dev-dependencies]
 anyhow.workspace = true
@@ -31,8 +31,8 @@ rmp-serde.workspace = true
 tokio.workspace = true
 tracing-subscriber.workspace = true
 uuid.workspace = true
-aphrodite-engine-core-client = { workspace = true, features = ["test-util"] }
-aphrodite-metrics.workspace = true
+sonar-engine-core-client = { workspace = true, features = ["test-util"] }
+sonar-metrics.workspace = true
 zeromq.workspace = true
 
 [lints]

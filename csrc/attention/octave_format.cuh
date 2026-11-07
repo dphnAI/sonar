@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 //
 // Byte layout of one Octave slot (one token, one KV head). The PyTorch
-// reference in aphrodite/v1/attention/ops/rocm_octave.py is the source of
+// reference in sonar/v1/attention/ops/rocm_octave.py is the source of
 // truth.
 //
 //   [0, OFF_KN)       K RoPE block (dims 0-63), rotated, 4-bit codes

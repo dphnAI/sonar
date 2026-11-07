@@ -5,8 +5,8 @@ from collections.abc import Callable
 
 import torch
 
-from aphrodite.distributed.eplb.eplb_state import EplbLayerState
-from aphrodite.model_executor.layers.fused_moe.config import RoutingMethodType
+from sonar.distributed.eplb.eplb_state import EplbLayerState
+from sonar.model_executor.layers.fused_moe.config import RoutingMethodType
 
 
 class FusedMoERouter(ABC):

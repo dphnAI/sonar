@@ -43,7 +43,7 @@ import regex as re
 from openai.types.responses import ToolChoiceCustom, ToolChoiceFunction
 from transformers import PreTrainedTokenizerBase
 
-from aphrodite.entrypoints.generate.base.protocol import (
+from sonar.entrypoints.generate.base.protocol import (
     DeltaFunctionCall,
     DeltaMessage,
     DeltaToolCall,
@@ -51,14 +51,14 @@ from aphrodite.entrypoints.generate.base.protocol import (
     FunctionCall,
     ToolCall,
 )
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionNamedToolChoiceParam,
     ChatCompletionRequest,
 )
-from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
-from aphrodite.logger import init_logger
-from aphrodite.renderers.chat_utils import make_tool_call_id
-from aphrodite.tool_parsers.abstract_tool_parser import (
+from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
+from sonar.logger import init_logger
+from sonar.renderers.chat_utils import make_tool_call_id
+from sonar.tool_parsers.abstract_tool_parser import (
     Tool,
     ToolParser,
 )
@@ -182,7 +182,7 @@ class MuseToolParser(ToolParser):
     _non_tool_recipients: tuple[str, ...] = ("self", "user", "commentary", "developer")
 
     # Muse emits ATEM markup around tool-call arguments. The generic
-    # named/required tool_choice path in aphrodite/parser/abstract_parser.py assigns
+    # named/required tool_choice path in sonar/parser/abstract_parser.py assigns
     # the raw model text straight to FunctionCall.arguments, which leaks that
     # framing and yields invalid JSON; the "required" branch then silently
     # swallows the ValidationError and returns tool_calls=null. Opting out
@@ -196,7 +196,7 @@ class MuseToolParser(ToolParser):
         tools: list[Tool] | None = None,
     ) -> None:
         super().__init__(tokenizer, tools)
-        # Streaming cursors. Aphrodite constructs one ToolParser per request, so
+        # Streaming cursors. Sonar constructs one ToolParser per request, so
         # instance state is per-stream.
         self._streamed_content_len: int = 0
         self._streamed_reasoning_len: int = 0
@@ -447,7 +447,7 @@ class MuseToolParser(ToolParser):
         """Incremental ATEM streaming for tool calls AND content.
 
         This parser owns every delta once reasoning has ended: in
-        aphrodite/parser/abstract_parser.py::parse_delta the "pass through as
+        sonar/parser/abstract_parser.py::parse_delta the "pass through as
         content" fallback is guarded by ``not self._in_tool_call_phase(state)``,
         and ``_in_tool_call_phase`` is simply ``tool_parser is not None and
         state.reasoning_ended``. So with a tool parser loaded that fallback is

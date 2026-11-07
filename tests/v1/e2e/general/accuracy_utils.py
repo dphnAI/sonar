@@ -12,11 +12,11 @@ import torch
 import xgrammar as xgr
 from tokenizers.decoders import DecodeStream
 
-from aphrodite import SamplingParams
-from aphrodite.logprobs import Logprob
-from aphrodite.outputs import RequestOutput
-from aphrodite.tokenizers.detokenizer_utils import convert_ids_list_to_tokens
-from aphrodite.v1.engine.logprobs import LogprobsProcessor
+from sonar import SamplingParams
+from sonar.logprobs import Logprob
+from sonar.outputs import RequestOutput
+from sonar.tokenizers.detokenizer_utils import convert_ids_list_to_tokens
+from sonar.v1.engine.logprobs import LogprobsProcessor
 from tests.conftest import HfRunner
 
 

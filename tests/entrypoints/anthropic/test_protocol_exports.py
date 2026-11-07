@@ -3,12 +3,12 @@
 """Regression tests for Anthropic protocol exports used by serving.
 
 Guards against Docker/nightly images shipping a stale protocol module that is
-missing symbols imported by ``aphrodite.entrypoints.anthropic.serving`` (issue #44759).
+missing symbols imported by ``sonar.entrypoints.anthropic.serving`` (issue #44759).
 """
 
 import pytest
 
-from aphrodite.entrypoints.anthropic.protocol import (
+from sonar.entrypoints.anthropic.protocol import (
     AnthropicContentBlock,
     AnthropicContextManagement,
     AnthropicCountTokensRequest,

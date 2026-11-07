@@ -31,25 +31,25 @@ import torch
 from torch import nn
 from transformers import PreTrainedConfig
 
-from aphrodite.config import AphroditeConfig, CacheConfig, ModelConfig
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.config import CacheConfig, ModelConfig, SonarConfig
+from sonar.model_executor.layers.fused_moe import (
     fused_moe_make_expert_params_mapping,
 )
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.model_loader.weight_utils import (
+from sonar.model_executor.model_loader.weight_utils import (
     default_weight_loader,
     maybe_remap_kv_scale_name,
 )
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.v1.outputs import SamplerOutput
-from aphrodite.v1.sample.metadata import SamplingMetadata
-from aphrodite.v1.sample.sampler import Sampler
+from sonar.sequence import IntermediateTensors
+from sonar.v1.outputs import SamplerOutput
+from sonar.v1.sample.metadata import SamplingMetadata
+from sonar.v1.sample.sampler import Sampler
 
 from .hy_v3 import HYV3DecoderLayer
 from .utils import (
@@ -137,9 +137,9 @@ class HYV3MultiTokenPredictorLayer(nn.Module):
 
 
 class HYV3MultiTokenPredictor(nn.Module):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
         self.mtp_start_layer_idx = config.num_hidden_layers
         self.num_mtp_layers = config.num_nextn_predict_layers
 
@@ -149,9 +149,9 @@ class HYV3MultiTokenPredictor(nn.Module):
                 str(idx): HYV3MultiTokenPredictorLayer(
                     config,
                     f"{prefix}.layers.{idx}",
-                    model_config=aphrodite_config.model_config,
-                    cache_config=aphrodite_config.cache_config,
-                    quant_config=aphrodite_config.quant_config,
+                    model_config=sonar_config.model_config,
+                    cache_config=sonar_config.cache_config,
+                    quant_config=sonar_config.quant_config,
                 )
                 for idx in range(
                     self.mtp_start_layer_idx,
@@ -198,11 +198,11 @@ class HYV3MultiTokenPredictor(nn.Module):
 
 
 class HYV3MTP(nn.Module):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        self.config = aphrodite_config.model_config.hf_config
-        self.quant_config = aphrodite_config.quant_config
-        self.model = HYV3MultiTokenPredictor(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.config = sonar_config.model_config.hf_config
+        self.quant_config = sonar_config.quant_config
+        self.model = HYV3MultiTokenPredictor(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
 
         self.sampler = Sampler()
 
@@ -433,7 +433,7 @@ class HYV3MTP(nn.Module):
                     weight_loader(param, loaded_weight)
 
     def _rewrite_spec_layer_name(self, spec_layer: int, name: str) -> str:
-        """Rewrite spec layer weight names to match Aphrodite module structure."""
+        """Rewrite spec layer weight names to match Sonar module structure."""
         # Skip embed_tokens (doesn't exist in V3 MTP checkpoint under spec
         # layer) and shared_head (we use main model's lm_head instead)
         if f"model.layers.{spec_layer}.embed_tokens" in name:

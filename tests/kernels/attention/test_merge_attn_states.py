@@ -4,14 +4,14 @@
 import pytest
 import torch
 
-from aphrodite._custom_ops import (
+from sonar._custom_ops import (
     merge_attn_states as merge_attn_states_native,
 )
-from aphrodite._custom_ops import (
+from sonar._custom_ops import (
     scaled_fp8_quant,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.v1.attention.ops.triton_merge_attn_states import (
+from sonar.platforms import current_platform
+from sonar.v1.attention.ops.triton_merge_attn_states import (
     merge_attn_states as merge_attn_states_triton,
 )
 

@@ -2,10 +2,10 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Tests that validation_exception_handler populates the `param` field
 in its error response using the Pydantic error's `loc`, even when no
-custom AphroditeValidationError context is present.
+custom SonarValidationError context is present.
 
 Previously, `param` was only populated for errors carrying a custom
-AphroditeValidationError in their Pydantic `ctx`. Plain validation failures
+SonarValidationError in their Pydantic `ctx`. Plain validation failures
 (missing fields, wrong types) left `param` as None, even though the
 field name was readily available from `error['loc']`.
 """
@@ -16,7 +16,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi.exceptions import RequestValidationError
 
-from aphrodite.entrypoints.serve.exception_handling.handlers.validation import (
+from sonar.entrypoints.serve.exception_handling.handlers.validation import (
     clean_loc_for_param,
     validation_exception_handler,
 )
@@ -33,7 +33,7 @@ def _fake_request(log_error_stack: bool = False) -> SimpleNamespace:
 
 class TestValidationErrorParamFallback:
     """Ensure `param` falls back to the Pydantic error's `loc` when no
-    custom AphroditeValidationError context is present."""
+    custom SonarValidationError context is present."""
 
     @pytest.mark.parametrize(
         ("error_type", "msg"),
@@ -116,7 +116,7 @@ class TestValidationErrorDoesNotLeakServerPaths:
             }
         ]
         exc = RequestValidationError(errors)
-        exc.endpoint_file = "/usr/local/lib/python3.12/dist-packages/aphrodite/entrypoints/serve/utils/api_utils.py"
+        exc.endpoint_file = "/usr/local/lib/python3.12/dist-packages/sonar/entrypoints/serve/utils/api_utils.py"
         exc.endpoint_line = 40
         exc.endpoint_function = "create_chat_completion"
         exc.endpoint_path = "POST /v1/chat/completions"

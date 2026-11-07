@@ -17,28 +17,28 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from aphrodite.config import ModelConfig
-from aphrodite.config.speech_to_text import SpeechToTextConfig
-from aphrodite.entrypoints.generate.base.protocol import RequestResponseMetadata
-from aphrodite.entrypoints.openai.models.serving import OpenAIServingModels
-from aphrodite.entrypoints.serve.engine.protocol import ErrorResponse
-from aphrodite.entrypoints.speech_to_text.base.serving import (
+from sonar.config import ModelConfig
+from sonar.config.speech_to_text import SpeechToTextConfig
+from sonar.entrypoints.generate.base.protocol import RequestResponseMetadata
+from sonar.entrypoints.openai.models.serving import OpenAIServingModels
+from sonar.entrypoints.serve.engine.protocol import ErrorResponse
+from sonar.entrypoints.speech_to_text.base.serving import (
     SpeechToTextBaseServing,
     asr_inter_chunk_separator,
 )
-from aphrodite.entrypoints.speech_to_text.transcription.protocol import (
+from sonar.entrypoints.speech_to_text.transcription.protocol import (
     TranscriptionRequest,
     TranscriptionResponse,
 )
-from aphrodite.entrypoints.speech_to_text.transcription.serving import (
+from sonar.entrypoints.speech_to_text.transcription.serving import (
     OpenAIServingTranscription,
 )
-from aphrodite.model_executor.models.interfaces import (
+from sonar.model_executor.models.interfaces import (
     StreamingTranscriptionPostProcessor,
     SupportsTranscription,
 )
-from aphrodite.model_executor.models.qwen3_asr import Qwen3ASRForConditionalGeneration
-from aphrodite.outputs import CompletionOutput, RequestOutput
+from sonar.model_executor.models.qwen3_asr import Qwen3ASRForConditionalGeneration
+from sonar.outputs import CompletionOutput, RequestOutput
 
 # --- Unit: helper + protocol -------------------------------------------------
 
@@ -329,7 +329,7 @@ async def test_create_transcription_non_streaming_joins_chunks_by_language():
 
     with (
         patch(
-            "aphrodite.model_executor.model_loader.get_model_cls",
+            "sonar.model_executor.model_loader.get_model_cls",
             return_value=_StubTranscriptionModel,
         ),
         patch.object(SpeechToTextBaseServing, "_preprocess_speech_to_text", preprocess_mock),

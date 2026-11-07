@@ -55,7 +55,7 @@ guide: |
   **MiniCPM5-1B** is the first checkpoint in OpenBMB's MiniCPM5 series — a dense
   1B model built for on-device and resource-constrained deployment, reaching
   1B-class open-source SOTA on agentic tool use, code generation, and difficult
-  reasoning. It uses the **standard `LlamaForCausalLM` architecture**, so Aphrodite
+  reasoning. It uses the **standard `LlamaForCausalLM` architecture**, so Sonar
   loads it natively with no custom kernels or model-code fork.
 
   Its headline feature is **hybrid reasoning**: a single checkpoint serves as
@@ -64,8 +64,8 @@ guide: |
 
   ## Prerequisites
 
-  - **Aphrodite ≥ 0.21.0** — MiniCPM5-1B is supported natively as of the v0.21.0
-    release. (For CUDA 12.x driver hosts, the cookbook suggests `aphrodite==0.10.1.1`
+  - **Sonar ≥ 0.21.0** — MiniCPM5-1B is supported natively as of the v0.21.0
+    release. (For CUDA 12.x driver hosts, the cookbook suggests `sonar==0.10.1.1`
     as a fallback.)
 
   ## Launch command
@@ -73,7 +73,7 @@ guide: |
   Use the command builder above. The baseline is simply:
 
   ```bash
-  aphrodite serve openbmb/MiniCPM5-1B --port 8000
+  sonar serve openbmb/MiniCPM5-1B --port 8000
   ```
 
   At ~1.1B params the model fits on a single GPU (TP=1). It supports the full
@@ -105,14 +105,14 @@ guide: |
 
   ## Tool calling
 
-  MiniCPM5-1B emits **XML-style** tool calls. The Aphrodite-side `minicpm5` parser
+  MiniCPM5-1B emits **XML-style** tool calls. The Sonar-side `minicpm5` parser
   ([PR #43175](https://github.com/vllm-project/vllm/pull/43175)) merged to `main`
   on 2026-05-27 but is **not in v0.21.0 or v0.22.0** — those releases were cut
   before the merge. Until a release bakes it in (v0.23+), load it as a plugin
   from the [MiniCPM repo](https://github.com/OpenBMB/MiniCPM):
 
   ```bash
-  aphrodite serve openbmb/MiniCPM5-1B --port 8000 \
+  sonar serve openbmb/MiniCPM5-1B --port 8000 \
     --enable-auto-tool-choice \
     --tool-parser-plugin /path/to/MiniCPM/tool_parsers/minicpm5xml_tool_parser.py \
     --tool-call-parser minicpm5
@@ -124,5 +124,5 @@ guide: |
   ## References
 
   - [Model card](https://huggingface.co/openbmb/MiniCPM5-1B)
-  - [Aphrodite deployment cookbook](https://github.com/OpenBMB/MiniCPM/blob/main/docs/deployment/vllm.md)
+  - [Sonar deployment cookbook](https://github.com/OpenBMB/MiniCPM/blob/main/docs/deployment/vllm.md)
   - [MiniCPM Tech Report](https://arxiv.org/pdf/2506.07900)

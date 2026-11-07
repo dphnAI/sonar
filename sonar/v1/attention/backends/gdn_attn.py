@@ -8,27 +8,27 @@ from typing import Literal
 
 import torch
 
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.config import AphroditeConfig
-from aphrodite.model_executor.layers.mamba.checkpoint import (
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.config import SonarConfig
+from sonar.model_executor.layers.mamba.checkpoint import (
     MambaPrefillCheckpointBuilder,
     MambaPrefillCheckpointMetadata,
 )
-from aphrodite.utils.torch_utils import async_tensor_h2d
-from aphrodite.v1.attention.backend import (
+from sonar.utils.torch_utils import async_tensor_h2d
+from sonar.v1.attention.backend import (
     AttentionBackend,
     AttentionCGSupport,
     AttentionMetadataBuilder,
     CommonAttentionMetadata,
     max_decode_query_len,
 )
-from aphrodite.v1.attention.backends.utils import (
+from sonar.v1.attention.backends.utils import (
     NULL_BLOCK_ID,
     compute_causal_conv1d_metadata,
     mamba_get_block_table_tensor,
     split_decodes_and_prefills,
 )
-from aphrodite.v1.kv_cache_interface import KVCacheSpec, MambaSpec
+from sonar.v1.kv_cache_interface import KVCacheSpec, MambaSpec
 
 # FlashInfer's GDN prefill emits states every N tokens, N a multiple of its
 # 64-token chunk, so checkpoint offsets must be multiples of 64.
@@ -137,11 +137,11 @@ class GDNAttentionMetadataBuilder(AttentionMetadataBuilder[GDNAttentionMetadata]
     @classmethod
     def get_varlen_cudagraph_max_query_len(
         cls,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         kv_cache_spec: KVCacheSpec,
     ) -> int | None:
         del kv_cache_spec
-        return max_decode_query_len(aphrodite_config)
+        return max_decode_query_len(sonar_config)
 
     reorder_batch_threshold: int = 1
 
@@ -149,22 +149,22 @@ class GDNAttentionMetadataBuilder(AttentionMetadataBuilder[GDNAttentionMetadata]
         self,
         kv_cache_spec: MambaSpec,
         layer_names: list[str],
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
     ):
-        super().__init__(kv_cache_spec, layer_names, aphrodite_config, device)
-        self.compilation_config = aphrodite_config.compilation_config
-        self.speculative_config = aphrodite_config.speculative_config
+        super().__init__(kv_cache_spec, layer_names, sonar_config, device)
+        self.compilation_config = sonar_config.compilation_config
+        self.speculative_config = sonar_config.speculative_config
         self._adaptive_verification = bool(
             self.speculative_config and self.speculative_config.enable_adaptive_verification
         )
-        self.checkpoint_builder = MambaPrefillCheckpointBuilder(aphrodite_config, kv_cache_spec)
-        from aphrodite.model_executor.layers.mamba.gdn.qwen_gdn_linear_attn import (
+        self.checkpoint_builder = MambaPrefillCheckpointBuilder(sonar_config, kv_cache_spec)
+        from sonar.model_executor.layers.mamba.gdn.qwen_gdn_linear_attn import (
             _resolve_gdn_prefill_backend,
         )
 
         self.gdn_prefill_backend: Literal["triton", "flashinfer", "cutedsl", "aiter_flydsl", "sycl"]
-        _, self.gdn_prefill_backend = _resolve_gdn_prefill_backend(aphrodite_config)
+        _, self.gdn_prefill_backend = _resolve_gdn_prefill_backend(sonar_config)
         self._check_chunk_metadata_override(type(self), self.gdn_prefill_backend)
         # Only the Qwen GDN layer opts in on FlashInfer; KDA layers sharing this
         # backend export checkpoints their own way.
@@ -188,7 +188,7 @@ class GDNAttentionMetadataBuilder(AttentionMetadataBuilder[GDNAttentionMetadata]
         # buffers, so only MRV2, which also reuses metadata at capture, may use
         # it.
         self.supports_update_block_table = (
-            aphrodite_config.use_v2_model_runner
+            sonar_config.use_v2_model_runner
             and device.type == "cuda"
             # Not isinstance: KDA's RecoverSSM/checkpoint metadata is per group.
             and type(self) is GDNAttentionMetadataBuilder
@@ -197,7 +197,7 @@ class GDNAttentionMetadataBuilder(AttentionMetadataBuilder[GDNAttentionMetadata]
             # Opts into MRV2's CUDA-only aligned-index precompute.
             self.mamba_aligned_state_indices: torch.Tensor | None = None
 
-        self.decode_cudagraph_max_bs: int = self.aphrodite_config.scheduler_config.max_num_seqs * (self.num_spec + 1)
+        self.decode_cudagraph_max_bs: int = self.sonar_config.scheduler_config.max_num_seqs * (self.num_spec + 1)
         if self.compilation_config.max_cudagraph_capture_size is not None:
             self.decode_cudagraph_max_bs = min(
                 self.decode_cudagraph_max_bs,
@@ -272,10 +272,10 @@ class GDNAttentionMetadataBuilder(AttentionMetadataBuilder[GDNAttentionMetadata]
         prefill_query_start_loc_cpu: torch.Tensor,
         device: torch.device,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        from aphrodite.third_party.flash_linear_attention.ops.utils import FLA_CHUNK_SIZE
+        from sonar.third_party.flash_linear_attention.ops.utils import FLA_CHUNK_SIZE
 
         if self.gdn_prefill_backend == "cutedsl":
-            from aphrodite.model_executor.layers.mamba.ops.gdn_chunk_cutedsl import (
+            from sonar.model_executor.layers.mamba.ops.gdn_chunk_cutedsl import (
                 prepare_metadata_cutedsl,
             )
 
@@ -291,7 +291,7 @@ class GDNAttentionMetadataBuilder(AttentionMetadataBuilder[GDNAttentionMetadata]
         # Only prefill batches use FLA chunk ops.
         # Pre-compute on CPU and async-copy to GPU to avoid
         # GPU→CPU sync (.tolist()) in prepare_chunk_indices.
-        from aphrodite.third_party.flash_linear_attention.ops.index import (
+        from sonar.third_party.flash_linear_attention.ops.index import (
             prepare_chunk_indices,
             prepare_chunk_offsets,
         )
@@ -329,7 +329,7 @@ class GDNAttentionMetadataBuilder(AttentionMetadataBuilder[GDNAttentionMetadata]
                 m.block_table_tensor,
                 m.seq_lens,
                 self.kv_cache_spec,
-                self.aphrodite_config.cache_config.mamba_cache_mode,
+                self.sonar_config.cache_config.mamba_cache_mode,
             )
 
         uniform_spec_sequence_length = None
@@ -683,7 +683,7 @@ class GDNAttentionMetadataBuilder(AttentionMetadataBuilder[GDNAttentionMetadata]
         batch-level and stay shared with ``metadata``."""
         m = metadata
         checkpoint = m.checkpoint.regather_state_indices(blk_table) if m.checkpoint is not None else None
-        if self.aphrodite_config.cache_config.mamba_cache_mode == "align":
+        if self.sonar_config.cache_config.mamba_cache_mode == "align":
             assert self.mamba_aligned_state_indices is not None
             blk_table = self.mamba_aligned_state_indices
         masks = m.spec_sequence_masks_cpu

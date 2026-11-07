@@ -2,14 +2,14 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 from typing import TYPE_CHECKING
 
-from aphrodite.distributed.ec_transfer.ec_connector.base import (
+from sonar.distributed.ec_transfer.ec_connector.base import (
     ECConnectorBase,
     ECConnectorRole,
 )
-from aphrodite.distributed.ec_transfer.ec_connector.factory import ECConnectorFactory
+from sonar.distributed.ec_transfer.ec_connector.factory import ECConnectorFactory
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
+    from sonar.config import SonarConfig
 
 _EC_CONNECTOR_AGENT: ECConnectorBase | None = None
 
@@ -23,15 +23,15 @@ def has_ec_transfer() -> bool:
     return _EC_CONNECTOR_AGENT is not None
 
 
-def ensure_ec_transfer_initialized(aphrodite_config: "AphroditeConfig") -> None:
+def ensure_ec_transfer_initialized(sonar_config: "SonarConfig") -> None:
     """Initialize EC cache connector."""
     global _EC_CONNECTOR_AGENT
 
-    if aphrodite_config.ec_transfer_config is None:
+    if sonar_config.ec_transfer_config is None:
         return
 
-    if aphrodite_config.ec_transfer_config.is_ec_transfer_instance and _EC_CONNECTOR_AGENT is None:
-        _EC_CONNECTOR_AGENT = ECConnectorFactory.create_connector(config=aphrodite_config, role=ECConnectorRole.WORKER)
+    if sonar_config.ec_transfer_config.is_ec_transfer_instance and _EC_CONNECTOR_AGENT is None:
+        _EC_CONNECTOR_AGENT = ECConnectorFactory.create_connector(config=sonar_config, role=ECConnectorRole.WORKER)
 
 
 def ensure_ec_transfer_shutdown() -> None:

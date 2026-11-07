@@ -17,10 +17,10 @@ pub(crate) struct VersionResponse {
 
 /// Get engine and Rust frontend version metadata.
 pub async fn version(State(state): State<Arc<AppState>>) -> Json<VersionResponse> {
-    let version = state.engine_core_client().aphrodite_version().to_string();
+    let version = state.engine_core_client().sonar_version().to_string();
 
     Json(VersionResponse {
         version,
-        rust_frontend_version: aphrodite_build_info::VERSION,
+        rust_frontend_version: sonar_build_info::VERSION,
     })
 }

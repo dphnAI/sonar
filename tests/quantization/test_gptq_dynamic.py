@@ -15,9 +15,9 @@ MODELS = [
 
 
 @pytest.mark.parametrize("model_id", MODELS)
-def test_gptq_with_dynamic_desc_act_rejected(aphrodite_runner, model_id: str):
+def test_gptq_with_dynamic_desc_act_rejected(sonar_runner, model_id: str):
     with (
         pytest.raises(ValueError, match="desc_act=True"),
-        aphrodite_runner(model_id, max_model_len=2048, enforce_eager=True),
+        sonar_runner(model_id, max_model_len=2048, enforce_eager=True),
     ):
         pass

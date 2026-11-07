@@ -6,10 +6,10 @@ from typing import Any
 import pytest
 from transformers import AutoModelForImageTextToText
 
-from aphrodite.assets.video import VideoAsset
-from aphrodite.envs import disable_envs_cache
+from sonar.assets.video import VideoAsset
+from sonar.envs import disable_envs_cache
 
-from ....conftest import AphroditeRunner, HfRunner
+from ....conftest import HfRunner, SonarRunner
 from ...utils import check_logprobs_close
 from .vlm_utils import model_utils
 
@@ -52,33 +52,33 @@ def use_spawn_for_video_models(monkeypatch):
     """Single-process workaround for V1 fork safety deadlock issue
     (vllm-project/vllm/issues/17676). Running multiple video models together
     under pytest can cause (possibly flaky) hangs, so they are grouped under
-    the same config. Using APHRODITE_WORKER_MULTIPROC_METHOD=spawn avoids the
+    the same config. Using SONAR_WORKER_MULTIPROC_METHOD=spawn avoids the
     deadlock and allows worker processes to terminate cleanly, and release
     GPU memory between test runs until the issue is fixed."""
     # TODO: Remove monkeypatch once
     # https://github.com/vllm-project/vllm/issues/17676 is fixed.
     disable_envs_cache()
-    monkeypatch.setenv("APHRODITE_WORKER_MULTIPROC_METHOD", "spawn")
+    monkeypatch.setenv("SONAR_WORKER_MULTIPROC_METHOD", "spawn")
 
 
 @pytest.mark.parametrize("model_id", list(VIDEO_MODEL_SETTINGS))
 def test_transformers_video_generation(
     hf_runner: type[HfRunner],
-    aphrodite_runner: type[AphroditeRunner],
+    sonar_runner: type[SonarRunner],
     model_id: str,
 ):
     prompt = VIDEO_MODEL_SETTINGS[model_id]["prompt"]
     video = (VIDEO_ASSET.np_ndarrays, VIDEO_ASSET.metadata)
 
-    with aphrodite_runner(
+    with sonar_runner(
         model_id,
         model_impl="transformers",
         dtype="bfloat16",
         max_model_len=8192,
         enforce_eager=True,
         limit_mm_per_prompt={"video": 1},
-    ) as aphrodite_model:
-        aphrodite_outputs = aphrodite_model.generate_greedy_logprobs([prompt], 128, num_logprobs=10, videos=[video])
+    ) as sonar_model:
+        sonar_outputs = sonar_model.generate_greedy_logprobs([prompt], 128, num_logprobs=10, videos=[video])
 
     with hf_runner(model_id, dtype="bfloat16", auto_cls=AutoModelForImageTextToText) as hf_model:
         hf_model = model_utils.qwen3_vl_patch_hf_runner(hf_model)
@@ -89,7 +89,7 @@ def test_transformers_video_generation(
 
     check_logprobs_close(
         outputs_0_lst=hf_outputs,
-        outputs_1_lst=aphrodite_outputs,
+        outputs_1_lst=sonar_outputs,
         name_0="hf",
-        name_1="aphrodite",
+        name_1="sonar",
     )

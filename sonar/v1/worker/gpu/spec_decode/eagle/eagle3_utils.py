@@ -5,9 +5,9 @@ from typing import cast
 import torch
 import torch.nn as nn
 
-from aphrodite.config import SpeculativeConfig
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.models.interfaces import SupportsEagle3, supports_eagle3
+from sonar.config import SpeculativeConfig
+from sonar.logger import init_logger
+from sonar.model_executor.models.interfaces import SupportsEagle3, supports_eagle3
 
 logger = init_logger(__name__)
 
@@ -49,7 +49,7 @@ def verify_supports_aux_hidden_states_over_pp(model: nn.Module, method: str) -> 
 
 
 def aux_hidden_state_relay_keys(model: nn.Module) -> tuple[str, ...]:
-    from aphrodite.distributed.parallel_state import get_pp_group
+    from sonar.distributed.parallel_state import get_pp_group
 
     pp = get_pp_group()
     if pp.world_size < 2 or pp.is_first_rank or pp.is_last_rank:
@@ -60,7 +60,7 @@ def aux_hidden_state_relay_keys(model: nn.Module) -> tuple[str, ...]:
 
 
 def reserve_aux_intermediate_tensor_slots(model: nn.Module) -> None:
-    from aphrodite.distributed.parallel_state import (
+    from sonar.distributed.parallel_state import (
         get_pp_group,
         model_parallel_is_initialized,
     )

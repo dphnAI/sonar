@@ -17,18 +17,18 @@ import torch
 from torch import nn
 from transformers import LongcatFlashConfig
 
-from aphrodite import _custom_ops as ops
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed import get_pp_group
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar import _custom_ops as ops
+from sonar.config import SonarConfig
+from sonar.distributed import get_pp_group
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.v1.core.sched.output import NewRequestData
-from aphrodite.v1.worker.gpu.input_batch import InputBatch
-from aphrodite.v1.worker.gpu.model_states.default import DefaultModelState
-from aphrodite.v1.worker.gpu.states import RequestState
+from sonar.v1.core.sched.output import NewRequestData
+from sonar.v1.worker.gpu.input_batch import InputBatch
+from sonar.v1.worker.gpu.model_states.default import DefaultModelState
+from sonar.v1.worker.gpu.states import RequestState
 
 from .interfaces import SupportsLoRA, SupportsPP
 from .longcat_flash import FlashModel
@@ -158,8 +158,8 @@ class NgramEmbedding(nn.Module):
 class FlashNgramModel(FlashModel):
     """FlashModel whose input embedding is an :class:`NgramEmbedding`."""
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
-        super().__init__(aphrodite_config=aphrodite_config, prefix=prefix)
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
+        super().__init__(sonar_config=sonar_config, prefix=prefix)
         self.ngram_embeddings: NgramEmbedding | None
         if get_pp_group().is_first_rank and uses_ngram_embedding(self.config):
             self.ngram_embeddings = NgramEmbedding(self.config, self.embed_tokens)
@@ -187,26 +187,26 @@ class LongcatFlashNgramForCausalLM(nn.Module, SupportsLoRA, SupportsPP):
     """LongCat-Flash-Lite for causal LM (MRV2-only, n-gram embedding)."""
 
     # MTP weights are not part of this model.
-    hf_to_aphrodite_mapper = WeightsMapper(orig_to_new_prefix={"model.mtp.": None})
+    hf_to_sonar_mapper = WeightsMapper(orig_to_new_prefix={"model.mtp.": None})
 
     packed_modules_mapping = {
         "qkv_proj": ["q_proj", "k_proj", "v_proj"],
         "gate_up_proj": ["gate_proj", "up_proj"],
     }
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__()
-        if not aphrodite_config.use_v2_model_runner:
+        if not sonar_config.use_v2_model_runner:
             raise NotImplementedError(
                 "LongcatFlashNgramForCausalLM (LongCat-Flash-Lite) requires the "
                 "V2 model runner for its n-gram embedding state; it is selected "
-                "automatically unless APHRODITE_USE_V2_MODEL_RUNNER=0 is set."
+                "automatically unless SONAR_USE_V2_MODEL_RUNNER=0 is set."
             )
-        config = aphrodite_config.model_config.hf_config
+        config = sonar_config.model_config.hf_config
         self.config = config
-        self.quant_config = aphrodite_config.quant_config
+        self.quant_config = sonar_config.quant_config
 
-        self.model = FlashNgramModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = FlashNgramModel(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
         if get_pp_group().is_last_rank:
             self.lm_head = ParallelLMHead(
                 config.vocab_size,
@@ -246,7 +246,7 @@ class LongcatFlashNgramForCausalLM(nn.Module, SupportsLoRA, SupportsPP):
         # AutoWeightsLoader routes ``model.*`` to FlashNgramModel.load_weights
         # (which handles the ngram split) and ``lm_head.*`` to the head.
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
 
 class LongcatNgramModelState(DefaultModelState):
@@ -261,8 +261,8 @@ class LongcatNgramModelState(DefaultModelState):
     forward as ``inputs_embeds``.
     """
 
-    def __init__(self, aphrodite_config, model, encoder_cache, device) -> None:
-        super().__init__(aphrodite_config, model, encoder_cache, device)
+    def __init__(self, sonar_config, model, encoder_cache, device) -> None:
+        super().__init__(sonar_config, model, encoder_cache, device)
         config = model.config
         self.ngram = model.model.ngram_embeddings
         self.n = int(config.emb_neighbor_num)

@@ -11,24 +11,24 @@ from typing import ClassVar
 
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.cache import CacheDType
-from aphrodite.logger import init_logger
-from aphrodite.utils.math_utils import next_power_of_2
-from aphrodite.v1.attention.backend import AttentionLayer, AttentionType
-from aphrodite.v1.attention.backends.triton_attn import (
+from sonar.config import SonarConfig
+from sonar.config.cache import CacheDType
+from sonar.logger import init_logger
+from sonar.utils.math_utils import next_power_of_2
+from sonar.v1.attention.backend import AttentionLayer, AttentionType
+from sonar.v1.attention.backends.triton_attn import (
     TritonAttentionBackend,
     TritonAttentionImpl,
     TritonAttentionMetadata,
     TritonAttentionMetadataBuilder,
 )
-from aphrodite.v1.attention.ops.triton_reshape_and_cache_flash import (
+from sonar.v1.attention.ops.triton_reshape_and_cache_flash import (
     triton_reshape_and_cache_flash_diffkv,
 )
-from aphrodite.v1.attention.ops.triton_unified_attention_diffkv import (
+from sonar.v1.attention.ops.triton_unified_attention_diffkv import (
     unified_attention_diffkv,
 )
-from aphrodite.v1.kv_cache_interface import AttentionSpec, is_quantized_kv_cache
+from sonar.v1.kv_cache_interface import AttentionSpec, is_quantized_kv_cache
 
 logger = init_logger(__name__)
 
@@ -46,10 +46,10 @@ class TritonAttentionDiffKVMetadataBuilder(TritonAttentionMetadataBuilder):
         self,
         kv_cache_spec: AttentionSpec,
         layer_names: list[str],
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
     ):
-        super().__init__(kv_cache_spec, layer_names, aphrodite_config, device)
+        super().__init__(kv_cache_spec, layer_names, sonar_config, device)
 
         head_size_v = TritonAttentionDiffKVBackend.head_size_v
         head_size_v_padded = next_power_of_2(head_size_v)

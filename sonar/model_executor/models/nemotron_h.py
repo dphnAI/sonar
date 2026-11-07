@@ -25,47 +25,47 @@ import torch
 from torch import nn
 from transformers import NemotronHConfig
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import (
     CacheConfig,
     ModelConfig,
+    SonarConfig,
 )
-from aphrodite.config.parallel import ParallelConfig
-from aphrodite.distributed import get_ep_group, get_tensor_model_parallel_world_size
-from aphrodite.distributed.communication_op import tensor_model_parallel_all_gather
-from aphrodite.distributed.parallel_state import get_pp_group
-from aphrodite.model_executor.layers.activation import get_act_fn
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.config.parallel import ParallelConfig
+from sonar.distributed import get_ep_group, get_tensor_model_parallel_world_size
+from sonar.distributed.communication_op import tensor_model_parallel_all_gather
+from sonar.distributed.parallel_state import get_pp_group
+from sonar.model_executor.layers.activation import get_act_fn
+from sonar.model_executor.layers.attention import Attention
+from sonar.model_executor.layers.fused_moe import (
     FusedMoEFactory,
     GateLinear,
     activation_without_mul,
     fused_moe_make_expert_params_mapping,
 )
-from aphrodite.model_executor.layers.fusion.fused_act_quant import maybe_fused_act_quant
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.fusion.fused_act_quant import maybe_fused_act_quant
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     QKVParallelLinear,
     ReplicatedLinear,
     RowParallelLinear,
     UnquantizedLinearMethod,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.mamba.mamba_mixer2 import MambaMixer2
-from aphrodite.model_executor.layers.mamba.mamba_utils import (
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.mamba.mamba_mixer2 import MambaMixer2
+from sonar.model_executor.layers.mamba.mamba_utils import (
     MambaStateCopyFunc,
     MambaStateCopyFuncCalculator,
     MambaStateDtypeCalculator,
     MambaStateShapeCalculator,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.models.interfaces import (
+from sonar.model_executor.models.interfaces import (
     EagleModelMixin,
     HasInnerState,
     IsHybrid,
@@ -78,7 +78,7 @@ from aphrodite.model_executor.models.interfaces import (
     SupportsQuant,
     SupportsReplaySSM,
 )
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.models.utils import (
     AutoWeightsLoader,
     WeightsMapper,
     make_empty_intermediate_tensors_factory,
@@ -86,7 +86,7 @@ from aphrodite.model_executor.models.utils import (
     maybe_prefix,
     sequence_parallel_chunk,
 )
-from aphrodite.sequence import IntermediateTensors
+from sonar.sequence import IntermediateTensors
 
 
 class NemotronHMLP(nn.Module):
@@ -552,17 +552,17 @@ class NemotronHModel(nn.Module, EagleModelMixin):
     def __init__(
         self,
         *,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
         decoder_layer_types: Mapping[str, type[nn.Module]] | None = None,
     ):
         super().__init__()
 
-        config: NemotronHConfig = aphrodite_config.model_config.hf_config
-        model_config = aphrodite_config.model_config
-        cache_config = aphrodite_config.cache_config
-        quant_config = aphrodite_config.quant_config
-        parallel_config = aphrodite_config.parallel_config
+        config: NemotronHConfig = sonar_config.model_config.hf_config
+        model_config = sonar_config.model_config
+        cache_config = sonar_config.cache_config
+        quant_config = sonar_config.quant_config
+        parallel_config = sonar_config.parallel_config
 
         self.config = config
 
@@ -708,7 +708,7 @@ class NemotronHForCausalLM(
     # Relevant only if self.has_moe is True
     is_non_gated_moe = True
 
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={"backbone": "model", "mtp": None},
         orig_to_new_substr={"A_log": "A", "embeddings": "embed_tokens"},
         orig_to_new_stacked={
@@ -738,30 +738,30 @@ class NemotronHForCausalLM(
     @classmethod
     def get_mamba_state_dtype_from_config(
         cls,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
     ) -> tuple[torch.dtype, ...]:
-        cache_config = aphrodite_config.cache_config
+        cache_config = sonar_config.cache_config
         base_dtype = MambaStateDtypeCalculator.mamba2_state_dtype(
-            aphrodite_config.model_config.dtype,
+            sonar_config.model_config.dtype,
             cache_config.mamba_cache_dtype,
             cache_config.mamba_ssm_cache_dtype,
         )
         if cache_config.use_replayssm:
             return MambaStateDtypeCalculator.append_replayssm_ring(
                 base_dtype,
-                aphrodite_config.model_config.dtype,
+                sonar_config.model_config.dtype,
             )
         return base_dtype
 
     @classmethod
     def get_mamba_state_shape_from_config(
         cls,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
     ) -> MambaStateShapes:
         """Calculate shapes for Mamba's convolutional and state caches.
 
         Args:
-            aphrodite_config: Aphrodite config
+            sonar_config: Sonar config
 
         Returns:
             Tuple containing:
@@ -770,9 +770,9 @@ class NemotronHForCausalLM(
             - x_cache/dt_cache/B_cache ring-buffer shapes (use_replayssm only)
 
         """
-        parallel_config = aphrodite_config.parallel_config
-        cache_config = aphrodite_config.cache_config
-        hf_config = aphrodite_config.model_config.hf_config
+        parallel_config = sonar_config.parallel_config
+        cache_config = sonar_config.cache_config
+        hf_config = sonar_config.model_config.hf_config
         intermediate_size = hf_config.mamba_num_heads * hf_config.mamba_head_dim
 
         base_shape = MambaStateShapeCalculator.mamba2_state_shape(
@@ -783,7 +783,7 @@ class NemotronHForCausalLM(
             head_dim=hf_config.mamba_head_dim,
             state_size=hf_config.ssm_state_size,
             conv_kernel=hf_config.conv_kernel,
-            num_spec=aphrodite_config.num_speculative_tokens,
+            num_spec=sonar_config.num_speculative_tokens,
         )
         if cache_config.use_replayssm:
             return MambaStateShapeCalculator.append_replayssm_ring(
@@ -791,8 +791,8 @@ class NemotronHForCausalLM(
                 n_groups=hf_config.n_groups,
                 tp_world_size=parallel_config.tensor_parallel_size,
                 logical_window=cache_config.replayssm_buffer_len,
-                backend=aphrodite_config.mamba_config.backend,
-                num_speculative_tokens=aphrodite_config.num_speculative_tokens,
+                backend=sonar_config.mamba_config.backend,
+                num_speculative_tokens=sonar_config.num_speculative_tokens,
             )
         return base_shape
 
@@ -800,19 +800,19 @@ class NemotronHForCausalLM(
     def get_mamba_state_copy_func(cls) -> tuple[MambaStateCopyFunc, MambaStateCopyFunc]:
         return MambaStateCopyFuncCalculator.mamba2_state_copy_func()
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
-        config = aphrodite_config.model_config.hf_config
-        self.aphrodite_config = aphrodite_config
-        self.model_config = aphrodite_config.model_config
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
+        config = sonar_config.model_config.hf_config
+        self.sonar_config = sonar_config
+        self.model_config = sonar_config.model_config
 
-        scheduler_config = aphrodite_config.scheduler_config
+        scheduler_config = sonar_config.scheduler_config
 
-        self.quant_config = aphrodite_config.quant_config
+        self.quant_config = sonar_config.quant_config
 
         super().__init__()
         self.config = config
         self.scheduler_config = scheduler_config
-        self.model = NemotronHModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = NemotronHModel(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
 
         self.lm_head = ParallelLMHead(
             config.vocab_size,
@@ -888,4 +888,4 @@ class NemotronHForCausalLM(
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)

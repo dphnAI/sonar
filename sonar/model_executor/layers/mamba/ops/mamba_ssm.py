@@ -13,17 +13,17 @@ from typing import Any
 import torch
 from packaging import version
 
-import aphrodite.envs as envs
-from aphrodite import _custom_ops as ops
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.mamba.ops.triton_helpers import fast_exp
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import HAS_TRITON, tl, triton
-from aphrodite.utils.platform_utils import get_device_name_as_file_name
-from aphrodite.v1.attention.backends.utils import NULL_BLOCK_ID
+import sonar.envs as envs
+from sonar import _custom_ops as ops
+from sonar.logger import init_logger
+from sonar.model_executor.layers.mamba.ops.triton_helpers import fast_exp
+from sonar.platforms import current_platform
+from sonar.triton_utils import HAS_TRITON, tl, triton
+from sonar.utils.platform_utils import get_device_name_as_file_name
+from sonar.v1.attention.backends.utils import NULL_BLOCK_ID
 
 if current_platform.is_xpu():
-    from aphrodite._xpu_ops import xpu_ops
+    from sonar._xpu_ops import xpu_ops
 
 logger = init_logger(__name__)
 
@@ -72,7 +72,7 @@ def get_ssm_configs(headdim: int, dstate: int, cache_dtype: str) -> dict[int, An
     config_file_paths: list[str] = []
 
     # User-supplied override
-    user_defined_config_folder = envs.APHRODITE_TUNED_CONFIG_FOLDER
+    user_defined_config_folder = envs.SONAR_TUNED_CONFIG_FOLDER
     if user_defined_config_folder is not None:
         config_file_paths.append(os.path.join(user_defined_config_folder, json_file_name))
 
@@ -791,10 +791,10 @@ def selective_scan_fn(
         return z  # output written inplace to z
 
 
-from aphrodite.platforms import current_platform  # noqa: E402
+from sonar.platforms import current_platform  # noqa: E402
 
 if current_platform.is_cpu():
-    from aphrodite.model_executor.layers.mamba.ops.cpu.mamba_ssm import (
+    from sonar.model_executor.layers.mamba.ops.cpu.mamba_ssm import (
         selective_state_update as selective_state_update_cpu,
     )
 

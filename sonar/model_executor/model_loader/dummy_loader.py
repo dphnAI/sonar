@@ -2,18 +2,18 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import torch.nn as nn
 
-from aphrodite.config import ModelConfig
-from aphrodite.config.load import LoadConfig
-from aphrodite.model_executor.layers.quantization.base_config import QuantizeMethodBase
-from aphrodite.model_executor.model_loader.base_loader import BaseModelLoader
-from aphrodite.model_executor.model_loader.reload.layerwise import (
+from sonar.config import ModelConfig
+from sonar.config.load import LoadConfig
+from sonar.model_executor.layers.quantization.base_config import QuantizeMethodBase
+from sonar.model_executor.model_loader.base_loader import BaseModelLoader
+from sonar.model_executor.model_loader.reload.layerwise import (
     _get_original_loader,
     get_layerwise_info,
 )
-from aphrodite.model_executor.model_loader.reload.meta import materialize_layer
-from aphrodite.model_executor.model_loader.reload.types import LayerReloadingInfo
-from aphrodite.model_executor.model_loader.reload.utils import get_layer_tensors
-from aphrodite.model_executor.model_loader.weight_utils import (
+from sonar.model_executor.model_loader.reload.meta import materialize_layer
+from sonar.model_executor.model_loader.reload.types import LayerReloadingInfo
+from sonar.model_executor.model_loader.reload.utils import get_layer_tensors
+from sonar.model_executor.model_loader.weight_utils import (
     initialize_single_dummy_weight,
 )
 

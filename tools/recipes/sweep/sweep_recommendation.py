@@ -76,7 +76,7 @@ def _scheduler_sort_value(value: int | None) -> int:
 
 
 def _scheduler_preference_key(value: object) -> tuple[int, int]:
-    """Prefer Aphrodite default, then the smaller explicit value on exact ties."""
+    """Prefer Sonar default, then the smaller explicit value on exact ties."""
     if value is None:
         return (1, 0)
     if isinstance(value, int) and not isinstance(value, bool):
@@ -102,7 +102,7 @@ def _select_near_equivalent_scheduler_candidate(
     return max(
         near_equivalent,
         key=lambda candidate: (
-            len(candidate["aphrodite_default_parameters"]),
+            len(candidate["sonar_default_parameters"]),
             candidate["combined_compliance_ratio"] or 0.0,
             candidate["mean_request_goodput"] or 0.0,
             candidate["mean_output_throughput"],
@@ -209,7 +209,7 @@ def _aggregate_candidates(
                 "max_num_seqs": seqs,
                 "max_num_batched_tokens": batch,
                 "run_count": len(runs),
-                "aphrodite_default_parameters": [
+                "sonar_default_parameters": [
                     name
                     for name, value in (
                         ("max_num_seqs", seqs),
@@ -350,7 +350,7 @@ def _build_recommended_config(
 
 def _format_scheduler_value(value: object) -> str:
     if value is None:
-        return "Aphrodite default"
+        return "Sonar default"
     return str(value)
 
 
@@ -368,7 +368,7 @@ def _write_config(
         allow_unicode=True,
     )
     header = (
-        "# Generated from the initial recipe config after a Aphrodite parameter sweep.\n"
+        "# Generated from the initial recipe config after a Sonar parameter sweep.\n"
         f"# Initial config: {source_path}\n"
         f"# Selection objective: {objective}\n"
     )
@@ -377,9 +377,7 @@ def _write_config(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description=(
-            "Select one recommended TP/DP layout and scheduler setting from generated Aphrodite sweep results."
-        )
+        description=("Select one recommended TP/DP layout and scheduler setting from generated Sonar sweep results.")
     )
     parser.add_argument(
         "--results-dir",
@@ -503,7 +501,7 @@ def main() -> int:
             "data_parallel_size": winner["data_parallel_size"],
             "max_num_seqs": winner["max_num_seqs"],
             "max_num_batched_tokens": winner["max_num_batched_tokens"],
-            "aphrodite_default_parameters": winner["aphrodite_default_parameters"],
+            "sonar_default_parameters": winner["sonar_default_parameters"],
         }
         measured = {
             key: winner[key]
@@ -547,7 +545,7 @@ def main() -> int:
             "data_parallel_size": best_effort["data_parallel_size"],
             "max_num_seqs": best_effort["max_num_seqs"],
             "max_num_batched_tokens": best_effort["max_num_batched_tokens"],
-            "aphrodite_default_parameters": best_effort["aphrodite_default_parameters"],
+            "sonar_default_parameters": best_effort["sonar_default_parameters"],
             "mean_request_goodput": best_effort["mean_request_goodput"],
             "combined_compliance_ratio": best_effort["combined_compliance_ratio"],
             "p99_sla_eligible": best_effort["p99_sla_eligible"],
@@ -588,7 +586,7 @@ def main() -> int:
     print("Deploy:")
     if env_path is not None:
         print(f"  source {env_path}")
-    print(f"  aphrodite serve --config {output_config}")
+    print(f"  sonar serve --config {output_config}")
     return 0
 
 

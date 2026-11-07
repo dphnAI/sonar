@@ -5,13 +5,13 @@ cmake_minimum_required(VERSION 3.26)
 #
 # Example:
 # mkdir build && cd build
-# cmake -G Ninja -DAPHRODITE_PYTHON_EXECUTABLE=`which python3` -DCMAKE_INSTALL_PREFIX=.. ..
+# cmake -G Ninja -DSONAR_PYTHON_EXECUTABLE=`which python3` -DCMAKE_INSTALL_PREFIX=.. ..
 # cmake --build . --target install
 #
 # If you want to only build one target, make sure to install it manually:
 # cmake --build . --target _C
 # cmake --install . --component _C
-project(aphrodite_extensions LANGUAGES C CXX)
+project(sonar_extensions LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -23,24 +23,24 @@ set(CMAKE_HIP_STANDARD_REQUIRED ON)
 # PyTorch headers require C++20; GCC < 11.3 has incomplete C++20 support.
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS "11.3")
   message(FATAL_ERROR
-    "GCC >= 11.3 is required to build Aphrodite (found ${CMAKE_CXX_COMPILER_VERSION}). "
+    "GCC >= 11.3 is required to build Sonar (found ${CMAKE_CXX_COMPILER_VERSION}). "
     "PyTorch's C++20 headers require a compiler with full C++20 support. "
     "See: https://github.com/pytorch/pytorch/pull/167929")
 endif()
 
 
-# CUDA by default, can be overridden by using -DAPHRODITE_TARGET_DEVICE=... (used by setup.py)
-set(APHRODITE_TARGET_DEVICE "cuda" CACHE STRING "Target device backend for Aphrodite")
-if (APHRODITE_TARGET_DEVICE STREQUAL "rocm" OR "$ENV{APHRODITE_KERNEL_SYMBOL_MAP}" STREQUAL "1")
+# CUDA by default, can be overridden by using -DSONAR_TARGET_DEVICE=... (used by setup.py)
+set(SONAR_TARGET_DEVICE "cuda" CACHE STRING "Target device backend for Sonar")
+if (SONAR_TARGET_DEVICE STREQUAL "rocm" OR "$ENV{SONAR_KERNEL_SYMBOL_MAP}" STREQUAL "1")
   set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 endif()
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
-message(STATUS "Target device: ${APHRODITE_TARGET_DEVICE}")
+message(STATUS "Target device: ${SONAR_TARGET_DEVICE}")
 
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/utils.cmake)
 
 # Suppress potential warnings about unused manually-specified variables
-set(ignoreMe "${APHRODITE_PYTHON_PATH}")
+set(ignoreMe "${SONAR_PYTHON_PATH}")
 
 # Prevent installation of dependencies (cutlass) by default.
 install(CODE "set(CMAKE_INSTALL_LOCAL_ONLY TRUE)" ALL_COMPONENTS)
@@ -85,13 +85,13 @@ endif()
 
 #
 # Try to find python package with an executable that exactly matches
-# `APHRODITE_PYTHON_EXECUTABLE` and is one of the supported versions.
+# `SONAR_PYTHON_EXECUTABLE` and is one of the supported versions.
 #
-if (APHRODITE_PYTHON_EXECUTABLE)
-  find_python_from_executable(${APHRODITE_PYTHON_EXECUTABLE} "${PYTHON_SUPPORTED_VERSIONS}")
+if (SONAR_PYTHON_EXECUTABLE)
+  find_python_from_executable(${SONAR_PYTHON_EXECUTABLE} "${PYTHON_SUPPORTED_VERSIONS}")
 else()
   message(FATAL_ERROR
-    "Please set APHRODITE_PYTHON_EXECUTABLE to the path of the desired python version"
+    "Please set SONAR_PYTHON_EXECUTABLE to the path of the desired python version"
     " before running cmake configure.")
 endif()
 
@@ -139,7 +139,7 @@ endif()
 #
 define_extension_target(
   _phrase_matcher
-  DESTINATION aphrodite
+  DESTINATION sonar
   LANGUAGE CXX
   SOURCES csrc/phrase_matcher.cpp
   NO_TORCH
@@ -151,16 +151,16 @@ define_extension_target(
 # CPU builds define the target before the early return)
 # This extension requires SABI 3.11 since it relies on Py_buffer support.
 #
-set(APHRODITE_SPINLOOP_EXT_SRC "csrc/spinloop.cpp")
+set(SONAR_SPINLOOP_EXT_SRC "csrc/spinloop.cpp")
 set(SPINLOOP_COMPILE_FLAGS "")
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|amd64")
   list(APPEND SPINLOOP_COMPILE_FLAGS "-mmwaitx")
 endif()
 define_extension_target(
   spinloop
-  DESTINATION aphrodite
+  DESTINATION sonar
   LANGUAGE CXX
-  SOURCES ${APHRODITE_SPINLOOP_EXT_SRC}
+  SOURCES ${SONAR_SPINLOOP_EXT_SRC}
   COMPILE_FLAGS ${SPINLOOP_COMPILE_FLAGS}
   USE_SABI 3.11
   WITH_SOABI)
@@ -172,7 +172,7 @@ define_extension_target(
 #
 define_extension_target(
   fs_io_C
-  DESTINATION aphrodite
+  DESTINATION sonar
   LANGUAGE CXX
   SOURCES csrc/fs_io.cpp
   USE_SABI 3.11
@@ -184,11 +184,11 @@ include(${CMAKE_CURRENT_LIST_DIR}/cmake/external_projects/proof.cmake)
 #
 # Forward the non-CUDA device extensions to external CMake scripts.
 #
-if (NOT APHRODITE_TARGET_DEVICE STREQUAL "cuda" AND
-    NOT APHRODITE_TARGET_DEVICE STREQUAL "rocm")
-    if (APHRODITE_TARGET_DEVICE STREQUAL "cpu")
+if (NOT SONAR_TARGET_DEVICE STREQUAL "cuda" AND
+    NOT SONAR_TARGET_DEVICE STREQUAL "rocm")
+    if (SONAR_TARGET_DEVICE STREQUAL "cpu")
         include(${CMAKE_CURRENT_LIST_DIR}/cmake/cpu_extension.cmake)
-    elseif (APHRODITE_TARGET_DEVICE STREQUAL "metal")
+    elseif (SONAR_TARGET_DEVICE STREQUAL "metal")
         include(${CMAKE_CURRENT_LIST_DIR}/cmake/metal_extension.cmake)
     else()
         return()
@@ -201,14 +201,14 @@ endif()
 # what is expected.
 #
 if (NOT HIP_FOUND AND NOT PYTORCH_FOUND_HIP AND CUDA_FOUND)
-  set(APHRODITE_GPU_LANG "CUDA")
+  set(SONAR_GPU_LANG "CUDA")
 
   if (NOT TORCH_NIGHTLY_BUILD AND NOT Torch_VERSION VERSION_EQUAL ${TORCH_SUPPORTED_VERSION_CUDA})
     message(WARNING "Pytorch version ${TORCH_SUPPORTED_VERSION_CUDA} "
       "expected for CUDA build, saw ${Torch_VERSION} instead.")
   endif()
 elseif(HIP_FOUND OR PYTORCH_FOUND_HIP)
-  set(APHRODITE_GPU_LANG "HIP")
+  set(SONAR_GPU_LANG "HIP")
 
   # Importing torch recognizes and sets up some HIP/ROCm configuration but does
   # not let cmake recognize .hip files. In order to get cmake to understand the
@@ -226,7 +226,7 @@ else()
 endif()
 
 
-if(APHRODITE_GPU_LANG STREQUAL "CUDA")
+if(SONAR_GPU_LANG STREQUAL "CUDA")
   #
   # For cuda we want to be able to control which architectures we compile for on
   # a per-file basis in order to cut down on compile time. So here we extract
@@ -256,40 +256,40 @@ else()
   #
   # For other GPU targets override the GPU architectures detected by cmake/torch
   # and filter them by the supported versions for the current language.
-  # The final set of arches is stored in `APHRODITE_GPU_ARCHES`.
+  # The final set of arches is stored in `SONAR_GPU_ARCHES`.
   #
-  override_gpu_arches(APHRODITE_GPU_ARCHES
-    ${APHRODITE_GPU_LANG}
-    "${${APHRODITE_GPU_LANG}_SUPPORTED_ARCHS}")
+  override_gpu_arches(SONAR_GPU_ARCHES
+    ${SONAR_GPU_LANG}
+    "${${SONAR_GPU_LANG}_SUPPORTED_ARCHS}")
 endif()
 
 #
 # Query torch for additional GPU compilation flags for the given
-# `APHRODITE_GPU_LANG`.
-# The final set of arches is stored in `APHRODITE_GPU_FLAGS`.
+# `SONAR_GPU_LANG`.
+# The final set of arches is stored in `SONAR_GPU_FLAGS`.
 #
-get_torch_gpu_compiler_flags(APHRODITE_GPU_FLAGS ${APHRODITE_GPU_LANG})
+get_torch_gpu_compiler_flags(SONAR_GPU_FLAGS ${SONAR_GPU_LANG})
 
 #
 # Set nvcc parallelism.
 #
-if(NVCC_THREADS AND APHRODITE_GPU_LANG STREQUAL "CUDA")
-  list(APPEND APHRODITE_GPU_FLAGS "--threads=${NVCC_THREADS}")
+if(NVCC_THREADS AND SONAR_GPU_LANG STREQUAL "CUDA")
+  list(APPEND SONAR_GPU_FLAGS "--threads=${NVCC_THREADS}")
 endif()
 
 #
 # Set compression mode for CUDA >=13.x.
 #
-if(APHRODITE_GPU_LANG STREQUAL "CUDA" AND
+if(SONAR_GPU_LANG STREQUAL "CUDA" AND
    DEFINED CMAKE_CUDA_COMPILER_VERSION AND
    CMAKE_CUDA_COMPILER_VERSION VERSION_GREATER_EQUAL 13.0)
-  list(APPEND APHRODITE_GPU_FLAGS "--compress-mode=size")
+  list(APPEND SONAR_GPU_FLAGS "--compress-mode=size")
 endif()
 
 #
 # Set CUDA include flags for CXX compiler.
 #
-if(APHRODITE_GPU_LANG STREQUAL "CUDA")
+if(SONAR_GPU_LANG STREQUAL "CUDA")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -I${CUDA_TOOLKIT_ROOT_DIR}/include")
   if(CUDA_VERSION VERSION_GREATER_EQUAL 13.0)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -I${CUDA_TOOLKIT_ROOT_DIR}/include/cccl")
@@ -297,7 +297,7 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA")
 endif()
 
 #
-# Use FetchContent for C++ dependencies that are compiled as part of Aphrodite's build process.
+# Use FetchContent for C++ dependencies that are compiled as part of Sonar's build process.
 # setup.py will override FETCHCONTENT_BASE_DIR to play nicely with sccache.
 # Each dependency that produces build artifacts should override its BINARY_DIR to avoid
 # conflicts between build types. It should instead be set to ${CMAKE_BINARY_DIR}/<dependency>.
@@ -306,18 +306,18 @@ include(FetchContent)
 file(MAKE_DIRECTORY ${FETCHCONTENT_BASE_DIR}) # Ensure the directory exists
 message(STATUS "FetchContent base directory: ${FETCHCONTENT_BASE_DIR}")
 
-if(APHRODITE_GPU_LANG STREQUAL "HIP")
+if(SONAR_GPU_LANG STREQUAL "HIP")
   #
   # Overriding the default -O set up by cmake, adding ggdb3 for the most verbose devug info
   #
-  set(CMAKE_${APHRODITE_GPU_LANG}_FLAGS_DEBUG "${CMAKE_${APHRODITE_GPU_LANG}_FLAGS_DEBUG} -O0 -ggdb3")
+  set(CMAKE_${SONAR_GPU_LANG}_FLAGS_DEBUG "${CMAKE_${SONAR_GPU_LANG}_FLAGS_DEBUG} -O0 -ggdb3")
   set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0 -ggdb3")
 
   #
-  # Certain HIP functions are marked as [[nodiscard]], yet aphrodite ignores the result which generates
+  # Certain HIP functions are marked as [[nodiscard]], yet sonar ignores the result which generates
   # a lot of warnings that always mask real issues. Suppressing until this is properly addressed.
   #
-  set(CMAKE_${APHRODITE_GPU_LANG}_FLAGS "${CMAKE_${APHRODITE_GPU_LANG}_FLAGS} -Wno-unused-result -Wno-unused-value")
+  set(CMAKE_${SONAR_GPU_LANG}_FLAGS "${CMAKE_${SONAR_GPU_LANG}_FLAGS} -Wno-unused-result -Wno-unused-value")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unused-result -Wno-unused-value")
 
   # When using LTO then *.cpp files must be compiled with same compiler as used linker
@@ -339,16 +339,16 @@ endif()
 # cumem_allocator extension
 #
 
-set(APHRODITE_CUMEM_EXT_SRC
+set(SONAR_CUMEM_EXT_SRC
   "csrc/cumem_allocator.cpp")
 
 set_gencode_flags_for_srcs(
-  SRCS "${APHRODITE_CUMEM_EXT_SRC}"
+  SRCS "${SONAR_CUMEM_EXT_SRC}"
   CUDA_ARCHS "${CUDA_ARCHS}")
 
-if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
+if(SONAR_GPU_LANG STREQUAL "CUDA" OR SONAR_GPU_LANG STREQUAL "HIP")
   message(STATUS "Enabling cumem allocator extension.")
-  if(APHRODITE_GPU_LANG STREQUAL "CUDA")
+  if(SONAR_GPU_LANG STREQUAL "CUDA")
     # link against cuda driver library
     list(APPEND CUMEM_LIBS CUDA::cuda_driver)
   else()
@@ -369,9 +369,9 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
   endif()
   define_extension_target(
     cumem_allocator
-    DESTINATION aphrodite
+    DESTINATION sonar
     LANGUAGE CXX
-    SOURCES ${APHRODITE_CUMEM_EXT_SRC}
+    SOURCES ${SONAR_CUMEM_EXT_SRC}
     LIBRARIES ${CUMEM_LIBS}
     USE_SABI 3.8
     WITH_SOABI)
@@ -381,16 +381,16 @@ endif()
 # Legacy _C extension (ROCm only — CUDA ops migrated to _C_stable_libtorch)
 #
 
-if(APHRODITE_GPU_LANG STREQUAL "HIP")
-  set(APHRODITE_EXT_SRC
+if(SONAR_GPU_LANG STREQUAL "HIP")
+  set(SONAR_EXT_SRC
     "csrc/rocm/quickreduce/torch_bindings.cpp"
     "csrc/rocm/quickreduce/custom_quickreduce.cu")
   # Octave KV cache (store, decode, rotation, prefill): only built for the
   # validated architectures, gfx1100 (RDNA3) and gfx942 (MI300).
-  set(APHRODITE_OCTAVE_KV OFF)
-  if(APHRODITE_GPU_ARCHES MATCHES "gfx942|gfx1100")
-    set(APHRODITE_OCTAVE_KV ON)
-    list(APPEND APHRODITE_EXT_SRC
+  set(SONAR_OCTAVE_KV OFF)
+  if(SONAR_GPU_ARCHES MATCHES "gfx942|gfx1100")
+    set(SONAR_OCTAVE_KV ON)
+    list(APPEND SONAR_EXT_SRC
       "csrc/attention/octave_torch_bindings.cpp"
       "csrc/attention/octave_attn.cu"
       "csrc/attention/octave_decode_wmma_rdna3.cu"
@@ -403,14 +403,14 @@ if(APHRODITE_GPU_LANG STREQUAL "HIP")
   message(STATUS "Enabling C extension.")
   define_extension_target(
     _C
-    DESTINATION aphrodite
-    LANGUAGE ${APHRODITE_GPU_LANG}
-    SOURCES ${APHRODITE_EXT_SRC}
-    COMPILE_FLAGS ${APHRODITE_GPU_FLAGS}
-    ARCHITECTURES ${APHRODITE_GPU_ARCHES}
+    DESTINATION sonar
+    LANGUAGE ${SONAR_GPU_LANG}
+    SOURCES ${SONAR_EXT_SRC}
+    COMPILE_FLAGS ${SONAR_GPU_FLAGS}
+    ARCHITECTURES ${SONAR_GPU_ARCHES}
     USE_SABI 3
     WITH_SOABI)
-  if(APHRODITE_OCTAVE_KV)
+  if(SONAR_OCTAVE_KV)
     # MFMA accumulators in VGPRs: in AGPRs every online-softmax rescale of the
     # output copies it through 64 extra VGPRs and halves the occupancy.
     set_source_files_properties(
@@ -419,7 +419,7 @@ if(APHRODITE_GPU_LANG STREQUAL "HIP")
   endif()
 endif() # _C HIP endif
 
-if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
+if(SONAR_GPU_LANG STREQUAL "CUDA" OR SONAR_GPU_LANG STREQUAL "HIP")
   #
   # _C_stable_libtorch extension (ops registered via STABLE_TORCH_LIBRARY)
   #
@@ -470,7 +470,7 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
     endif()
   endif()
 
-  set(APHRODITE_STABLE_EXT_SRC
+  set(SONAR_STABLE_EXT_SRC
     "csrc/torch_bindings.cpp"
     "csrc/cpu/dry.cpp"
     "csrc/cuda_view.cu"
@@ -504,15 +504,15 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
     "csrc/fused_deepseek_v4_qnorm_rope_kv_insert_kernel.cu"
     "csrc/fused_kimi_k3_mla_key_concat_kv_cache_kernel.cu")
 
-  if(APHRODITE_GPU_LANG STREQUAL "CUDA")
-    list(APPEND APHRODITE_STABLE_EXT_SRC
+  if(SONAR_GPU_LANG STREQUAL "CUDA")
+    list(APPEND SONAR_STABLE_EXT_SRC
       "csrc/collectives/pcie_pull_all_reduce.cu"
       "csrc/fused_qknorm_rope_cache_kernel.cu")
     set_property(SOURCE "csrc/collectives/pcie_pull_all_reduce.cu" APPEND PROPERTY
       COMPILE_OPTIONS "$<$<COMPILE_LANGUAGE:CUDA>:--ftz=false;--fmad=false>")
   endif()
 
-  if(APHRODITE_GPU_LANG STREQUAL "CUDA" AND
+  if(SONAR_GPU_LANG STREQUAL "CUDA" AND
      DEFINED CMAKE_CUDA_COMPILER_VERSION AND
      CMAKE_CUDA_COMPILER_VERSION VERSION_GREATER_EQUAL 12.0)
 
@@ -525,13 +525,13 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
     endif()
 
     if(COOPERATIVE_TOPK_ARCHS)
-      list(APPEND APHRODITE_GPU_FLAGS "-DAPHRODITE_ENABLE_COOPERATIVE_TOPK=1")
+      list(APPEND SONAR_GPU_FLAGS "-DSONAR_ENABLE_COOPERATIVE_TOPK=1")
 
     endif()
   endif()
 
-  if(APHRODITE_GPU_LANG STREQUAL "CUDA")
-    list(APPEND APHRODITE_STABLE_EXT_SRC
+  if(SONAR_GPU_LANG STREQUAL "CUDA")
+    list(APPEND SONAR_STABLE_EXT_SRC
       "csrc/hisparse_kernels.cu"
       "csrc/attention/dcp_utils/dcp_direct_a2a_lse_reduce.cu"
       "csrc/attention/dcp_utils/dcp_direct_kv_gather.cu"
@@ -542,17 +542,17 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
     # Set CUTLASS_REVISION. Used for FetchContent. Also fixes some bogus messages when building.
     set(CUTLASS_REVISION "v4.7.1")
 
-    # Use the specified CUTLASS source directory for compilation if APHRODITE_CUTLASS_SRC_DIR is provided
-    if (DEFINED ENV{APHRODITE_CUTLASS_SRC_DIR})
-      set(APHRODITE_CUTLASS_SRC_DIR $ENV{APHRODITE_CUTLASS_SRC_DIR})
+    # Use the specified CUTLASS source directory for compilation if SONAR_CUTLASS_SRC_DIR is provided
+    if (DEFINED ENV{SONAR_CUTLASS_SRC_DIR})
+      set(SONAR_CUTLASS_SRC_DIR $ENV{SONAR_CUTLASS_SRC_DIR})
     endif()
 
-    if(APHRODITE_CUTLASS_SRC_DIR)
-      if(NOT IS_ABSOLUTE APHRODITE_CUTLASS_SRC_DIR)
-        get_filename_component(APHRODITE_CUTLASS_SRC_DIR "${APHRODITE_CUTLASS_SRC_DIR}" ABSOLUTE)
+    if(SONAR_CUTLASS_SRC_DIR)
+      if(NOT IS_ABSOLUTE SONAR_CUTLASS_SRC_DIR)
+        get_filename_component(SONAR_CUTLASS_SRC_DIR "${SONAR_CUTLASS_SRC_DIR}" ABSOLUTE)
       endif()
-      message(STATUS "The APHRODITE_CUTLASS_SRC_DIR is set, using ${APHRODITE_CUTLASS_SRC_DIR} for compilation")
-      FetchContent_Declare(cutlass SOURCE_DIR ${APHRODITE_CUTLASS_SRC_DIR})
+      message(STATUS "The SONAR_CUTLASS_SRC_DIR is set, using ${SONAR_CUTLASS_SRC_DIR} for compilation")
+      FetchContent_Declare(cutlass SOURCE_DIR ${SONAR_CUTLASS_SRC_DIR})
     else()
       FetchContent_Declare(
           cutlass
@@ -569,7 +569,7 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
     endif()
     FetchContent_MakeAvailable(cutlass)
 
-    list(APPEND APHRODITE_STABLE_EXT_SRC
+    list(APPEND SONAR_STABLE_EXT_SRC
       "csrc/quantization/w8a8/cutlass/scaled_mm_entry.cu"
       "csrc/quantization/fp4/nvfp4_quant_entry.cu"
       "csrc/quantization/fp4/nvfp4_scaled_mm_entry.cu"
@@ -590,7 +590,7 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
       set(MACHETE_GEN_SCRIPT
         ${CMAKE_CURRENT_SOURCE_DIR}/csrc/quantization/machete/generate.py)
       set(MACHETE_GEN_SUPPORT
-        ${CMAKE_CURRENT_SOURCE_DIR}/csrc/cutlass_extensions/aphrodite_cutlass_library_extension.py)
+        ${CMAKE_CURRENT_SOURCE_DIR}/csrc/cutlass_extensions/sonar_cutlass_library_extension.py)
       set(MACHETE_GEN_SENTINEL
         ${CMAKE_CURRENT_SOURCE_DIR}/csrc/quantization/machete/generated/.complete)
       file(MD5 ${MACHETE_GEN_SCRIPT} MACHETE_GEN_SCRIPT_HASH)
@@ -605,7 +605,7 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
           OR NOT EXISTS ${MACHETE_GEN_SENTINEL})
         execute_process(
           COMMAND ${CMAKE_COMMAND} -E env
-          PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}/csrc/cutlass_extensions/:${CUTLASS_DIR}/python/:${APHRODITE_PYTHON_PATH}:$ENV{PYTHONPATH}
+          PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}/csrc/cutlass_extensions/:${CUTLASS_DIR}/python/:${SONAR_PYTHON_PATH}:$ENV{PYTHONPATH}
             ${Python_EXECUTABLE} ${MACHETE_GEN_SCRIPT}
           RESULT_VARIABLE machete_generation_result
           OUTPUT_VARIABLE machete_generation_output
@@ -629,14 +629,14 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
 
       # Add machete generated sources
       file(GLOB MACHETE_GEN_SOURCES "csrc/quantization/machete/generated/*.cu")
-      list(APPEND APHRODITE_STABLE_EXT_SRC ${MACHETE_GEN_SOURCES})
+      list(APPEND SONAR_STABLE_EXT_SRC ${MACHETE_GEN_SOURCES})
 
       # forward compatible
       set_gencode_flags_for_srcs(
         SRCS "${MACHETE_GEN_SOURCES}"
         CUDA_ARCHS "${MACHETE_ARCHS}")
 
-      list(APPEND APHRODITE_STABLE_EXT_SRC
+      list(APPEND SONAR_STABLE_EXT_SRC
         csrc/quantization/machete/machete_pytorch.cu)
       message(STATUS "Building Machete kernels for archs: ${MACHETE_ARCHS}")
     else()
@@ -656,9 +656,9 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
     # cvt instructions, so its SM10x/11x code is built for the family targets.
     set(MINIMAX_M3_FUSED_SRC
       "csrc/fused_minimax_m3_qknorm_rope_kv_insert_kernel.cu")
-    list(REMOVE_ITEM APHRODITE_STABLE_EXT_SRC "${MINIMAX_M3_FUSED_SRC}")
+    list(REMOVE_ITEM SONAR_STABLE_EXT_SRC "${MINIMAX_M3_FUSED_SRC}")
     set_gencode_flags_for_srcs(
-      SRCS "${APHRODITE_STABLE_EXT_SRC}"
+      SRCS "${SONAR_STABLE_EXT_SRC}"
       CUDA_ARCHS "${CUDA_ARCHS}")
     if(${CMAKE_CUDA_COMPILER_VERSION} VERSION_GREATER_EQUAL 13.0)
       cuda_archs_loose_intersection(MINIMAX_M3_FUSED_ARCHS
@@ -675,7 +675,7 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
     set_gencode_flags_for_srcs(
       SRCS "${MINIMAX_M3_FUSED_SRC}"
       CUDA_ARCHS "${MINIMAX_M3_FUSED_ARCHS}")
-    list(APPEND APHRODITE_STABLE_EXT_SRC "${MINIMAX_M3_FUSED_SRC}")
+    list(APPEND SONAR_STABLE_EXT_SRC "${MINIMAX_M3_FUSED_SRC}")
 
     set(SM120_ENGRAM_ARCHS)
     if(CMAKE_CUDA_COMPILER_VERSION VERSION_GREATER_EQUAL 12.8)
@@ -696,8 +696,8 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
       set_property(SOURCE ${SM120_ENGRAM_SRC} APPEND PROPERTY COMPILE_OPTIONS
         "$<$<COMPILE_LANGUAGE:CUDA>:--ftz=false;--prec-div=true;--prec-sqrt=true>")
       set_property(SOURCE "${SM120_ENGRAM_SRC}"
-        APPEND PROPERTY COMPILE_DEFINITIONS APHRODITE_ENABLE_SM120_ENGRAM=1)
-      list(APPEND APHRODITE_STABLE_EXT_SRC "${SM120_ENGRAM_SRC}")
+        APPEND PROPERTY COMPILE_DEFINITIONS SONAR_ENABLE_SM120_ENGRAM=1)
+      list(APPEND SONAR_STABLE_EXT_SRC "${SM120_ENGRAM_SRC}")
     endif()
 
     # DeepSeek-V4.1 SM120 decode kernels: the sparse MLA decode (E2M1 converts)
@@ -715,10 +715,10 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
         SRCS "${SM120_SPARSE_DECODE_SRC}" "${SM120_MOE_FUSED_SRC}"
         CUDA_ARCHS "${SM120_FAMILY_ARCHS}")
       set_property(SOURCE "${SM120_SPARSE_DECODE_SRC}"
-        APPEND PROPERTY COMPILE_DEFINITIONS APHRODITE_ENABLE_SM120_SPARSE_DECODE=1)
+        APPEND PROPERTY COMPILE_DEFINITIONS SONAR_ENABLE_SM120_SPARSE_DECODE=1)
       set_property(SOURCE "${SM120_MOE_FUSED_SRC}"
-        APPEND PROPERTY COMPILE_DEFINITIONS APHRODITE_ENABLE_SM120_MOE_FUSED=1)
-      list(APPEND APHRODITE_STABLE_EXT_SRC "${SM120_SPARSE_DECODE_SRC}" "${SM120_MOE_FUSED_SRC}")
+        APPEND PROPERTY COMPILE_DEFINITIONS SONAR_ENABLE_SM120_MOE_FUSED=1)
+      list(APPEND SONAR_STABLE_EXT_SRC "${SM120_SPARSE_DECODE_SRC}" "${SM120_MOE_FUSED_SRC}")
     endif()
 
     #
@@ -743,7 +743,7 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
       set_gencode_flags_for_srcs(
         SRCS "${SWORDFISH_SRCS}"
         CUDA_ARCHS "${SWORDFISH_ARCHS}")
-      list(APPEND APHRODITE_STABLE_EXT_SRC "${SWORDFISH_SRCS}")
+      list(APPEND SONAR_STABLE_EXT_SRC "${SWORDFISH_SRCS}")
       message(STATUS "Building Swordfish kernels for archs: ${SWORDFISH_ARCHS}")
     else()
       message(STATUS "Not building Swordfish kernels as no compatible archs "
@@ -751,7 +751,7 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
     endif()
 
     if(COOPERATIVE_TOPK_ARCHS)
-      list(APPEND APHRODITE_STABLE_EXT_SRC
+      list(APPEND SONAR_STABLE_EXT_SRC
         "csrc/cooperative_topk.cu")
       set_gencode_flags_for_srcs(
         SRCS "csrc/cooperative_topk.cu"
@@ -768,7 +768,7 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
         "csrc/attention/sm89_dsa/sm89_fp8_paged_mqa_logits.cu"
         "csrc/attention/sm89_dsa/sm89_fp8_mqa_logits.cu"
         "csrc/attention/sm89_dsa/sm89_sparse_mla_fwd.cu")
-      list(APPEND APHRODITE_STABLE_EXT_SRC ${SM89_DSA_SRC})
+      list(APPEND SONAR_STABLE_EXT_SRC ${SM89_DSA_SRC})
       set_gencode_flags_for_srcs(
         SRCS "${SM89_DSA_SRC}"
         CUDA_ARCHS "${DSA_SM89_ARCHS}")
@@ -859,7 +859,7 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
           set_source_files_properties(${MARLIN_TEMPLATE_KERNEL_SRC}
             PROPERTIES COMPILE_FLAGS "-static-global-template-stub=false")
         endif()
-        list(APPEND APHRODITE_STABLE_EXT_SRC ${MARLIN_TEMPLATE_KERNEL_SRC})
+        list(APPEND SONAR_STABLE_EXT_SRC ${MARLIN_TEMPLATE_KERNEL_SRC})
 
         file(GLOB MARLIN_TEMPLATE_BF16_KERNEL_SRC "csrc/quantization/marlin/sm80_kernel_*_bfloat16.cu")
         set_gencode_flags_for_srcs(
@@ -869,7 +869,7 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
           set_source_files_properties(${MARLIN_TEMPLATE_BF16_KERNEL_SRC}
             PROPERTIES COMPILE_FLAGS "-static-global-template-stub=false")
         endif()
-        list(APPEND APHRODITE_STABLE_EXT_SRC ${MARLIN_TEMPLATE_BF16_KERNEL_SRC})
+        list(APPEND SONAR_STABLE_EXT_SRC ${MARLIN_TEMPLATE_BF16_KERNEL_SRC})
       endif()
 
       if (MARLIN_SM75_ARCHS)
@@ -881,7 +881,7 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
           set_source_files_properties(${MARLIN_TEMPLATE_SM75_KERNEL_SRC}
             PROPERTIES COMPILE_FLAGS "-static-global-template-stub=false")
         endif()
-        list(APPEND APHRODITE_STABLE_EXT_SRC ${MARLIN_TEMPLATE_SM75_KERNEL_SRC})
+        list(APPEND SONAR_STABLE_EXT_SRC ${MARLIN_TEMPLATE_SM75_KERNEL_SRC})
       endif()
 
       if (MARLIN_FP8_ARCHS)
@@ -893,7 +893,7 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
           set_source_files_properties(${MARLIN_TEMPLATE_FP8_KERNEL_SRC}
             PROPERTIES COMPILE_FLAGS "-static-global-template-stub=false")
         endif()
-        list(APPEND APHRODITE_STABLE_EXT_SRC ${MARLIN_TEMPLATE_FP8_KERNEL_SRC})
+        list(APPEND SONAR_STABLE_EXT_SRC ${MARLIN_TEMPLATE_FP8_KERNEL_SRC})
       endif()
 
       set(MARLIN_SRCS
@@ -908,7 +908,7 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
         set_source_files_properties(${MARLIN_SRCS}
           PROPERTIES COMPILE_FLAGS "-static-global-template-stub=false")
       endif()
-      list(APPEND APHRODITE_STABLE_EXT_SRC "${MARLIN_SRCS}")
+      list(APPEND SONAR_STABLE_EXT_SRC "${MARLIN_SRCS}")
 
       message(STATUS "Building Marlin kernels for archs: ${MARLIN_OTHER_ARCHS}")
     else()
@@ -927,7 +927,7 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
     set_gencode_flags_for_srcs(
       SRCS "${DSV3_FUSED_A_GEMM_SRCS}"
       CUDA_ARCHS "${DSV3_FUSED_A_GEMM_ARCHS}")
-    list(APPEND APHRODITE_STABLE_EXT_SRC "${DSV3_FUSED_A_GEMM_SRCS}")
+    list(APPEND SONAR_STABLE_EXT_SRC "${DSV3_FUSED_A_GEMM_SRCS}")
     message(STATUS "Building dsv3_fused_a_gemm for archs: ${DSV3_FUSED_A_GEMM_ARCHS}")
   else()
     message(STATUS "Not building dsv3_fused_a_gemm as no compatible archs found "
@@ -943,7 +943,7 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
     set_gencode_flags_for_srcs(
       SRCS "${FP32_ROUTER_GEMM_SRCS}"
       CUDA_ARCHS "${FP32_ROUTER_GEMM_ARCHS}")
-    list(APPEND APHRODITE_STABLE_EXT_SRC "${FP32_ROUTER_GEMM_SRCS}")
+    list(APPEND SONAR_STABLE_EXT_SRC "${FP32_ROUTER_GEMM_SRCS}")
     message(STATUS "Building fp32_router_gemm for archs: ${FP32_ROUTER_GEMM_ARCHS}")
   else()
     message(STATUS "Not building fp32_router_gemm as no compatible archs found "
@@ -967,8 +967,8 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
     set_gencode_flags_for_srcs(
       SRCS "${SCALED_MM_SM90_SRCS}"
       CUDA_ARCHS "${SCALED_MM_ARCHS}")
-    list(APPEND APHRODITE_STABLE_EXT_SRC "${SCALED_MM_SM90_SRCS}")
-    list(APPEND APHRODITE_GPU_FLAGS "-DENABLE_SCALED_MM_SM90=1")
+    list(APPEND SONAR_STABLE_EXT_SRC "${SCALED_MM_SM90_SRCS}")
+    list(APPEND SONAR_GPU_FLAGS "-DENABLE_SCALED_MM_SM90=1")
     # Let scaled_mm_c2x know it doesn't need to build these arches
     list(APPEND SCALED_MM_3X_ARCHS "${SCALED_MM_ARCHS}")
     message(STATUS "Building scaled_mm_c3x_sm90 for archs: ${SCALED_MM_ARCHS}")
@@ -1001,8 +1001,8 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
     set_gencode_flags_for_srcs(
       SRCS "${SCALED_MM_SM120_SRCS}"
       CUDA_ARCHS "${SCALED_MM_ARCHS}")
-    list(APPEND APHRODITE_STABLE_EXT_SRC "${SCALED_MM_SM120_SRCS}")
-    list(APPEND APHRODITE_GPU_FLAGS "-DENABLE_SCALED_MM_SM120=1")
+    list(APPEND SONAR_STABLE_EXT_SRC "${SCALED_MM_SM120_SRCS}")
+    list(APPEND SONAR_GPU_FLAGS "-DENABLE_SCALED_MM_SM120=1")
     # Let scaled_mm_c2x know it doesn't need to build these arches
     list(APPEND SCALED_MM_3X_ARCHS "${SCALED_MM_ARCHS}")
     message(STATUS "Building scaled_mm_c3x_sm120 for archs: ${SCALED_MM_ARCHS}")
@@ -1035,8 +1035,8 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
     set_gencode_flags_for_srcs(
       SRCS "${SCALED_MM_SM100_SRCS}"
       CUDA_ARCHS "${SCALED_MM_ARCHS}")
-    list(APPEND APHRODITE_STABLE_EXT_SRC "${SCALED_MM_SM100_SRCS}")
-    list(APPEND APHRODITE_GPU_FLAGS "-DENABLE_SCALED_MM_SM100=1")
+    list(APPEND SONAR_STABLE_EXT_SRC "${SCALED_MM_SM100_SRCS}")
+    list(APPEND SONAR_GPU_FLAGS "-DENABLE_SCALED_MM_SM100=1")
     # Let scaled_mm_c2x know it doesn't need to build these arches
     list(APPEND SCALED_MM_3X_ARCHS "${SCALED_MM_ARCHS}")
     message(STATUS "Building scaled_mm_c3x_sm100 for archs: ${SCALED_MM_ARCHS}")
@@ -1065,8 +1065,8 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
     set_gencode_flags_for_srcs(
       SRCS "${SCALED_MM_C2X_SRCS}"
       CUDA_ARCHS "${SCALED_MM_2X_ARCHS}")
-    list(APPEND APHRODITE_STABLE_EXT_SRC "${SCALED_MM_C2X_SRCS}")
-    list(APPEND APHRODITE_GPU_FLAGS "-DENABLE_SCALED_MM_C2X=1")
+    list(APPEND SONAR_STABLE_EXT_SRC "${SCALED_MM_C2X_SRCS}")
+    list(APPEND SONAR_GPU_FLAGS "-DENABLE_SCALED_MM_C2X=1")
     message(STATUS "Building scaled_mm_c2x for archs: ${SCALED_MM_2X_ARCHS}")
   else()
     if (SCALED_MM_3X_ARCHS)
@@ -1091,8 +1091,8 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
     set_gencode_flags_for_srcs(
       SRCS "${CUTLASS_MOE_SM90_SRCS}"
       CUDA_ARCHS "${SCALED_MM_ARCHS}")
-    list(APPEND APHRODITE_STABLE_EXT_SRC "${CUTLASS_MOE_SM90_SRCS}")
-    list(APPEND APHRODITE_GPU_FLAGS "-DENABLE_CUTLASS_MOE_SM90=1")
+    list(APPEND SONAR_STABLE_EXT_SRC "${CUTLASS_MOE_SM90_SRCS}")
+    list(APPEND SONAR_GPU_FLAGS "-DENABLE_CUTLASS_MOE_SM90=1")
     message(STATUS "Building grouped_mm_c3x for archs: ${SCALED_MM_ARCHS}")
   else()
     if (NOT ${CMAKE_CUDA_COMPILER_VERSION} VERSION_GREATER_EQUAL 12.3 AND SCALED_MM_ARCHS)
@@ -1115,8 +1115,8 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
     set_gencode_flags_for_srcs(
       SRCS "${CUTLASS_MOE_SM100_SRCS}"
       CUDA_ARCHS "${SCALED_MM_ARCHS}")
-    list(APPEND APHRODITE_STABLE_EXT_SRC "${CUTLASS_MOE_SM100_SRCS}")
-    list(APPEND APHRODITE_GPU_FLAGS "-DENABLE_CUTLASS_MOE_SM100=1")
+    list(APPEND SONAR_STABLE_EXT_SRC "${CUTLASS_MOE_SM100_SRCS}")
+    list(APPEND SONAR_GPU_FLAGS "-DENABLE_CUTLASS_MOE_SM100=1")
     message(STATUS "Building grouped_mm_c3x for archs: ${SCALED_MM_ARCHS}")
   else()
     if (NOT ${CMAKE_CUDA_COMPILER_VERSION} VERSION_GREATER_EQUAL 12.8 AND SCALED_MM_ARCHS)
@@ -1140,7 +1140,7 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
     set_gencode_flags_for_srcs(
       SRCS "${CUTLASS_MOE_DATA_SRCS}"
       CUDA_ARCHS "${CUTLASS_MOE_DATA_ARCHS}")
-    list(APPEND APHRODITE_STABLE_EXT_SRC "${CUTLASS_MOE_DATA_SRCS}")
+    list(APPEND SONAR_STABLE_EXT_SRC "${CUTLASS_MOE_DATA_SRCS}")
     message(STATUS "Building moe_data for archs: ${CUTLASS_MOE_DATA_ARCHS}")
   else()
     if (NOT ${CMAKE_CUDA_COMPILER_VERSION} VERSION_GREATER_EQUAL 12.3 AND CUTLASS_MOE_DATA_ARCHS)
@@ -1177,9 +1177,9 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
     set_gencode_flags_for_srcs(
       SRCS "${FP4_SM120_SRCS}"
       CUDA_ARCHS "${FP4_SM120_ARCHS}")
-    list(APPEND APHRODITE_STABLE_EXT_SRC "${FP4_SM120_SRCS}")
-    list(APPEND APHRODITE_GPU_FLAGS "-DENABLE_NVFP4_SM120=1")
-    list(APPEND APHRODITE_GPU_FLAGS "-DENABLE_CUTLASS_MOE_SM120=1")
+    list(APPEND SONAR_STABLE_EXT_SRC "${FP4_SM120_SRCS}")
+    list(APPEND SONAR_GPU_FLAGS "-DENABLE_NVFP4_SM120=1")
+    list(APPEND SONAR_GPU_FLAGS "-DENABLE_CUTLASS_MOE_SM120=1")
     message(STATUS "Building SM12x NVFP4 for archs: ${FP4_SM120_ARCHS}")
   else()
     message(STATUS "Not building SM12x NVFP4 as no compatible archs were found.")
@@ -1210,9 +1210,9 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
     set_gencode_flags_for_srcs(
       SRCS "${FP4_SM100_SRCS}"
       CUDA_ARCHS "${FP4_SM100_ARCHS}")
-    list(APPEND APHRODITE_STABLE_EXT_SRC "${FP4_SM100_SRCS}")
-    list(APPEND APHRODITE_GPU_FLAGS "-DENABLE_NVFP4_SM100=1")
-    list(APPEND APHRODITE_GPU_FLAGS "-DENABLE_CUTLASS_MOE_SM100=1")
+    list(APPEND SONAR_STABLE_EXT_SRC "${FP4_SM100_SRCS}")
+    list(APPEND SONAR_GPU_FLAGS "-DENABLE_NVFP4_SM100=1")
+    list(APPEND SONAR_GPU_FLAGS "-DENABLE_CUTLASS_MOE_SM100=1")
     message(STATUS "Building SM10x/11x NVFP4/MXFP4 for archs: ${FP4_SM100_ARCHS}")
   else()
     message(STATUS "Not building SM10x/11x NVFP4/MXFP4 as no compatible archs were found.")
@@ -1235,7 +1235,7 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
       SRCS "${W4A8_SRCS}"
       CUDA_ARCHS "${W4A8_ARCHS}")
 
-    list(APPEND APHRODITE_STABLE_EXT_SRC "${W4A8_SRCS}")
+    list(APPEND SONAR_STABLE_EXT_SRC "${W4A8_SRCS}")
 
     message(STATUS "Building W4A8 kernels for archs: ${W4A8_ARCHS}")
   else()
@@ -1253,7 +1253,7 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
 
   # CUTLASS MLA Archs and flags.
   # Runtime dispatch is gated in
-  # aphrodite/v1/attention/backends/mla/cutlass_mla.py.
+  # sonar/v1/attention/backends/mla/cutlass_mla.py.
   if(${CMAKE_CUDA_COMPILER_VERSION} VERSION_GREATER_EQUAL 13.0)
     cuda_archs_loose_intersection(MLA_ARCHS "10.0f;10.7f;11.0f" "${CUDA_ARCHS}")
   else()
@@ -1265,8 +1265,8 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
     set_gencode_flags_for_srcs(
       SRCS "${CUTLASS_MLA_SRCS}"
       CUDA_ARCHS "${MLA_ARCHS}")
-    list(APPEND APHRODITE_STABLE_EXT_SRC "${CUTLASS_MLA_SRCS}")
-    list(APPEND APHRODITE_GPU_FLAGS "-DENABLE_CUTLASS_MLA=1")
+    list(APPEND SONAR_STABLE_EXT_SRC "${CUTLASS_MLA_SRCS}")
+    list(APPEND SONAR_GPU_FLAGS "-DENABLE_CUTLASS_MLA=1")
     # Add MLA-specific include directories only to MLA source files
     set_source_files_properties(${CUTLASS_MLA_SRCS}
       PROPERTIES INCLUDE_DIRECTORIES "${CUTLASS_DIR}/examples/77_blackwell_fmha;${CUTLASS_DIR}/examples/common")
@@ -1296,7 +1296,7 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
       CUDA_ARCHS "${FUSED_KDA_DECODE_ARCHS}")
     set_property(SOURCE ${FUSED_KDA_DECODE_SRC} APPEND PROPERTY
       COMPILE_OPTIONS "$<$<COMPILE_LANGUAGE:CUDA>:--use_fast_math>")
-    list(APPEND APHRODITE_STABLE_EXT_SRC "${FUSED_KDA_DECODE_SRC}")
+    list(APPEND SONAR_STABLE_EXT_SRC "${FUSED_KDA_DECODE_SRC}")
     message(STATUS
       "Building fused KDA decode for archs: ${FUSED_KDA_DECODE_ARCHS}")
   endif()
@@ -1308,7 +1308,7 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
       CUDA_ARCHS "${FUSED_GDN_DECODE_ARCHS}")
     set_property(SOURCE ${FUSED_GDN_DECODE_SRC} APPEND PROPERTY
       COMPILE_OPTIONS "$<$<COMPILE_LANGUAGE:CUDA>:--use_fast_math>")
-    list(APPEND APHRODITE_STABLE_EXT_SRC "${FUSED_GDN_DECODE_SRC}")
+    list(APPEND SONAR_STABLE_EXT_SRC "${FUSED_GDN_DECODE_SRC}")
     message(STATUS
       "Building fused GDN decode for archs: ${FUSED_GDN_DECODE_ARCHS}")
   endif()
@@ -1329,7 +1329,7 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
       CUDA_ARCHS "${BEAM_KERNEL_ARCHS}")
     set_property(SOURCE ${BEAM_KERNEL_SRCS} APPEND PROPERTY
       COMPILE_OPTIONS "$<$<COMPILE_LANGUAGE:CUDA>:--fmad=false>")
-    list(APPEND APHRODITE_STABLE_EXT_SRC "${BEAM_KERNEL_SRCS}")
+    list(APPEND SONAR_STABLE_EXT_SRC "${BEAM_KERNEL_SRCS}")
     message(STATUS "Building Beam kernels for archs: ${BEAM_KERNEL_ARCHS}")
   endif()
 
@@ -1346,7 +1346,7 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
     set_property(SOURCE ${KIMI_K3_ATTN_RES_SRC} APPEND PROPERTY
       COMPILE_OPTIONS
       "$<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr;--expt-extended-lambda;--use_fast_math>")
-    list(APPEND APHRODITE_STABLE_EXT_SRC "${KIMI_K3_ATTN_RES_SRC}")
+    list(APPEND SONAR_STABLE_EXT_SRC "${KIMI_K3_ATTN_RES_SRC}")
     message(STATUS
       "Building Kimi K3 AttnRes for archs: ${KIMI_K3_ATTN_RES_ARCHS}")
   endif()
@@ -1358,7 +1358,7 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
     set_gencode_flags_for_srcs(
       SRCS "${HADACORE_SRCS}"
       CUDA_ARCHS "${HADACORE_ARCHS}")
-    list(APPEND APHRODITE_STABLE_EXT_SRC "${HADACORE_SRCS}")
+    list(APPEND SONAR_STABLE_EXT_SRC "${HADACORE_SRCS}")
     message(STATUS "Building hadacore")
   endif()
 
@@ -1376,7 +1376,7 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
     set_property(SOURCE ${FUSED_MQA_TOPK_SRC} APPEND PROPERTY INCLUDE_DIRECTORIES
       "${deepgemm_SOURCE_DIR}/deep_gemm/include"
       "${deepgemm_SOURCE_DIR}/third-party/cutlass/include")
-    list(APPEND APHRODITE_STABLE_EXT_SRC "${FUSED_MQA_TOPK_SRC}")
+    list(APPEND SONAR_STABLE_EXT_SRC "${FUSED_MQA_TOPK_SRC}")
     message(STATUS
       "Building fused MQA top-k for archs: ${FUSED_MQA_TOPK_ARCHS}")
   endif()
@@ -1384,14 +1384,14 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
   # if CUDA endif
   endif()
 
-  if(APHRODITE_GPU_LANG STREQUAL "CUDA")
-    file(GLOB APHRODITE_EXL3_GEMM_UNITS CONFIGURE_DEPENDS
+  if(SONAR_GPU_LANG STREQUAL "CUDA")
+    file(GLOB SONAR_EXL3_GEMM_UNITS CONFIGURE_DEPENDS
       "csrc/quantization/exl3/exllamav3_ext/quant/comp_units/exl3_comp_unit_*_cb*.cu")
-    file(GLOB APHRODITE_EXL3_GEMV_INT8_UNITS CONFIGURE_DEPENDS
+    file(GLOB SONAR_EXL3_GEMV_INT8_UNITS CONFIGURE_DEPENDS
       "csrc/quantization/exl3/exllamav3_ext/quant/comp_units/exl3_gemv_int8_inst_*.cu")
-    file(GLOB APHRODITE_EXL3_MOE_UNITS CONFIGURE_DEPENDS
+    file(GLOB SONAR_EXL3_MOE_UNITS CONFIGURE_DEPENDS
       "csrc/quantization/exl3/exllamav3_ext/quant/comp_units/exl3_moe_inst_*.cu")
-    set(APHRODITE_EXL3_SRC
+    set(SONAR_EXL3_SRC
       "csrc/exl3_torch_bindings.cpp"
       "csrc/quantization/exl3/exllamav3_ext/graph.cu"
       "csrc/quantization/exl3/exllamav3_ext/hgemm.cu"
@@ -1405,9 +1405,9 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
       "csrc/quantization/exl3/exllamav3_ext/quant/hadamard.cu"
       "csrc/quantization/exl3/exllamav3_ext/quant/reconstruct.cu"
       "csrc/quantization/exl3/exllamav3_ext/quant/util.cu"
-      ${APHRODITE_EXL3_GEMM_UNITS}
-      ${APHRODITE_EXL3_GEMV_INT8_UNITS}
-      ${APHRODITE_EXL3_MOE_UNITS})
+      ${SONAR_EXL3_GEMM_UNITS}
+      ${SONAR_EXL3_GEMV_INT8_UNITS}
+      ${SONAR_EXL3_MOE_UNITS})
 
     # EXL3 requires Ampere+ instructions. Preserve all configured SM80+
     # architectures, including native Thor SM110 cubins.
@@ -1421,51 +1421,51 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
     message(STATUS "EXL3_ARCHS (SM80+ subset of CUDA_ARCHS): ${EXL3_ARCHS}")
     if(EXL3_ARCHS)
       set_gencode_flags_for_srcs(
-        SRCS "${APHRODITE_EXL3_SRC}"
+        SRCS "${SONAR_EXL3_SRC}"
         CUDA_ARCHS "${EXL3_ARCHS}")
-      list(APPEND APHRODITE_STABLE_EXT_SRC "${APHRODITE_EXL3_SRC}")
+      list(APPEND SONAR_STABLE_EXT_SRC "${SONAR_EXL3_SRC}")
     endif()
   endif()
 
   # HIP counterpart of the FUSED_KDA_DECODE block above: same `fused_kda_decode`
-  # op, same APHRODITE_ENABLE_FUSED_KDA_DECODE guard in torch_bindings.cpp 
+  # op, same SONAR_ENABLE_FUSED_KDA_DECODE guard in torch_bindings.cpp 
   # Built for the CDNA archs the kernel supports 
   # (gfx942 / gfx950), so it is only emitted when one of those is in the arch 
   # list. A multi-arch build that includes them still emits this source for 
   # every arch in that list. The runtime gate in kda_decode.py keeps the kernel
   # off unsupported devices. Fused prefill KDA kernels is Only measured on 
   # gfx950, so it is only built when gfx950 is in the arch list.
-  if(APHRODITE_GPU_LANG STREQUAL "HIP")
-    set(FUSED_KDA_DECODE_HIP_ARCHS ${APHRODITE_GPU_ARCHES})
+  if(SONAR_GPU_LANG STREQUAL "HIP")
+    set(FUSED_KDA_DECODE_HIP_ARCHS ${SONAR_GPU_ARCHES})
     list(FILTER FUSED_KDA_DECODE_HIP_ARCHS INCLUDE REGEX "gfx942|gfx950")
     if(FUSED_KDA_DECODE_HIP_ARCHS)
       set(FUSED_KDA_DECODE_HIP_SRC
         "csrc/kimi_k3/fused_kda_decode_kernel_rocm.cu")
-      list(APPEND APHRODITE_STABLE_EXT_SRC "${FUSED_KDA_DECODE_HIP_SRC}")
+      list(APPEND SONAR_STABLE_EXT_SRC "${FUSED_KDA_DECODE_HIP_SRC}")
       message(STATUS
         "Building fused KDA decode for HIP archs: ${FUSED_KDA_DECODE_HIP_ARCHS}")
     endif()
 
-    set(FUSED_KDA_CHUNK_HIP_ARCHS ${APHRODITE_GPU_ARCHES})
+    set(FUSED_KDA_CHUNK_HIP_ARCHS ${SONAR_GPU_ARCHES})
     list(FILTER FUSED_KDA_CHUNK_HIP_ARCHS INCLUDE REGEX "gfx950")
     if(FUSED_KDA_CHUNK_HIP_ARCHS)
       set(FUSED_KDA_CHUNK_HIP_SRC
         "csrc/kimi_k3/fused_kda_chunk_kernel_rocm.cu")
-      list(APPEND APHRODITE_STABLE_EXT_SRC "${FUSED_KDA_CHUNK_HIP_SRC}")
+      list(APPEND SONAR_STABLE_EXT_SRC "${FUSED_KDA_CHUNK_HIP_SRC}")
       message(STATUS
         "Building fused KDA chunk for HIP archs: ${FUSED_KDA_CHUNK_HIP_ARCHS}")
     endif()
   endif()
 
   message(STATUS "Enabling C_stable extension.")
-  list(REMOVE_DUPLICATES APHRODITE_STABLE_EXT_SRC)
+  list(REMOVE_DUPLICATES SONAR_STABLE_EXT_SRC)
   define_extension_target(
     _C_stable_libtorch
-    DESTINATION aphrodite
-    LANGUAGE ${APHRODITE_GPU_LANG}
-    SOURCES ${APHRODITE_STABLE_EXT_SRC}
-    COMPILE_FLAGS ${APHRODITE_GPU_FLAGS}
-    ARCHITECTURES ${APHRODITE_GPU_ARCHES}
+    DESTINATION sonar
+    LANGUAGE ${SONAR_GPU_LANG}
+    SOURCES ${SONAR_STABLE_EXT_SRC}
+    COMPILE_FLAGS ${SONAR_GPU_FLAGS}
+    ARCHITECTURES ${SONAR_GPU_ARCHES}
     INCLUDE_DIRECTORIES ${CUTLASS_INCLUDE_DIR} ${CUTLASS_TOOLS_UTIL_INCLUDE_DIR}
     USE_SABI 3
     WITH_SOABI)
@@ -1478,48 +1478,48 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
     TORCH_TARGET_VERSION=0x020B000000000000ULL)
 
   # Needed to use cuda/hip APIs from C-shim
-  if(APHRODITE_GPU_LANG STREQUAL "CUDA")
+  if(SONAR_GPU_LANG STREQUAL "CUDA")
     target_compile_definitions(_C_stable_libtorch PRIVATE USE_CUDA)
     if(COOPERATIVE_TOPK_ARCHS)
       target_compile_definitions(_C_stable_libtorch PRIVATE
-        APHRODITE_ENABLE_COOPERATIVE_TOPK=1)
+        SONAR_ENABLE_COOPERATIVE_TOPK=1)
     endif()
     if(DSA_SM89_ARCHS)
       target_compile_definitions(_C_stable_libtorch PRIVATE
-        APHRODITE_ENABLE_SM89_DSA=1)
+        SONAR_ENABLE_SM89_DSA=1)
     endif()
     if(FUSED_KDA_DECODE_ARCHS)
       target_compile_definitions(_C_stable_libtorch PRIVATE
-        APHRODITE_ENABLE_FUSED_KDA_DECODE=1)
+        SONAR_ENABLE_FUSED_KDA_DECODE=1)
     endif()
     if(FUSED_MQA_TOPK_ARCHS)
       target_compile_definitions(_C_stable_libtorch PRIVATE
-        APHRODITE_ENABLE_FUSED_MQA_TOPK=1)
+        SONAR_ENABLE_FUSED_MQA_TOPK=1)
     endif()
     if(FUSED_GDN_DECODE_ARCHS)
       target_compile_definitions(_C_stable_libtorch PRIVATE
-        APHRODITE_ENABLE_FUSED_GDN_DECODE=1)
+        SONAR_ENABLE_FUSED_GDN_DECODE=1)
     endif()
     if(KIMI_K3_ATTN_RES_ARCHS)
       target_compile_definitions(_C_stable_libtorch PRIVATE
-        APHRODITE_ENABLE_KIMI_K3_ATTN_RES=1)
+        SONAR_ENABLE_KIMI_K3_ATTN_RES=1)
     endif()
     if(BEAM_KERNEL_ARCHS)
       target_compile_definitions(_C_stable_libtorch PRIVATE
-        APHRODITE_ENABLE_BEAM_KERNELS=1)
+        SONAR_ENABLE_BEAM_KERNELS=1)
     endif()
     # Needed by CUTLASS kernels
     target_compile_definitions(_C_stable_libtorch PRIVATE
       CUTLASS_ENABLE_DIRECT_CUDA_DRIVER_CALL=1)
-  elseif(APHRODITE_GPU_LANG STREQUAL "HIP")
+  elseif(SONAR_GPU_LANG STREQUAL "HIP")
     target_compile_definitions(_C_stable_libtorch PRIVATE USE_ROCM)
     if(FUSED_KDA_DECODE_HIP_SRC)
       target_compile_definitions(_C_stable_libtorch PRIVATE
-        APHRODITE_ENABLE_FUSED_KDA_DECODE=1)
+        SONAR_ENABLE_FUSED_KDA_DECODE=1)
     endif()
     if(FUSED_KDA_CHUNK_HIP_SRC)
       target_compile_definitions(_C_stable_libtorch PRIVATE
-        APHRODITE_ENABLE_FUSED_KDA_CHUNK=1)
+        SONAR_ENABLE_FUSED_KDA_CHUNK=1)
     endif()
   endif()
 
@@ -1533,7 +1533,7 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
   # If PyTorch doesn't bundle libamdhip64 (built from source against system
   # ROCm), there is only one copy in the process and no action is needed —
   # the HIP compiler already links the system libamdhip64 automatically.
-  if(APHRODITE_GPU_LANG STREQUAL "HIP")
+  if(SONAR_GPU_LANG STREQUAL "HIP")
     find_library(_STABLE_TORCH_AMDHIP64 amdhip64
       PATHS "${TORCH_INSTALL_PREFIX}/lib" NO_DEFAULT_PATH)
     if(_STABLE_TORCH_AMDHIP64)
@@ -1547,32 +1547,32 @@ endif()
 # _moe_C_stable_libtorch extension
 #
 
-set(APHRODITE_MOE_EXT_SRC
+set(SONAR_MOE_EXT_SRC
   "csrc/moe/torch_bindings.cpp"
   "csrc/moe/moe_align_sum_kernels.cu"
   "csrc/moe/topk_softmax_kernels.cu"
   "csrc/moe/topk_softplus_sqrt_kernels.cu")
 
-if(APHRODITE_GPU_LANG STREQUAL "CUDA")
-  list(APPEND APHRODITE_MOE_EXT_SRC
+if(SONAR_GPU_LANG STREQUAL "CUDA")
+  list(APPEND SONAR_MOE_EXT_SRC
     "csrc/moe/moe_wna16.cu"
     "csrc/moe/grouped_topk_kernels.cu"
     "csrc/moe/fused_globalize_align_block_size.cu")
 endif()
 
-if(APHRODITE_GPU_LANG STREQUAL "CUDA")
+if(SONAR_GPU_LANG STREQUAL "CUDA")
   set(MOE_PERMUTE_SRC
       "csrc/moe/permute_unpermute_kernels/moe_permute_unpermute_kernel.cu"
       "csrc/moe/moe_permute_unpermute_op.cu")
 
-  list(APPEND APHRODITE_MOE_EXT_SRC "${MOE_PERMUTE_SRC}")
+  list(APPEND SONAR_MOE_EXT_SRC "${MOE_PERMUTE_SRC}")
 endif()
 
 set_gencode_flags_for_srcs(
-  SRCS "${APHRODITE_MOE_EXT_SRC}"
+  SRCS "${SONAR_MOE_EXT_SRC}"
   CUDA_ARCHS "${CUDA_ARCHS}")
 
-if(APHRODITE_GPU_LANG STREQUAL "CUDA")
+if(SONAR_GPU_LANG STREQUAL "CUDA")
   set(MUSE_SPARK_ROUTING_ARCHS "${CUDA_ARCHS}")
   if(CMAKE_CUDA_COMPILER_VERSION VERSION_GREATER_EQUAL 13.0)
     # Native FP32 warp-max reduction requires the Blackwell family target.
@@ -1582,18 +1582,18 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA")
   set_gencode_flags_for_srcs(
     SRCS "csrc/moe/muse_spark_routing.cu"
     CUDA_ARCHS "${MUSE_SPARK_ROUTING_ARCHS}")
-  list(APPEND APHRODITE_MOE_EXT_SRC "csrc/moe/muse_spark_routing.cu")
+  list(APPEND SONAR_MOE_EXT_SRC "csrc/moe/muse_spark_routing.cu")
 endif()
 
-if(APHRODITE_GPU_LANG STREQUAL "CUDA")
-  set(APHRODITE_MOE_WNA16_SRC
+if(SONAR_GPU_LANG STREQUAL "CUDA")
+  set(SONAR_MOE_WNA16_SRC
     "csrc/moe/moe_wna16.cu")
 
   set_gencode_flags_for_srcs(
-    SRCS "${APHRODITE_MOE_WNA16_SRC}"
+    SRCS "${SONAR_MOE_WNA16_SRC}"
     CUDA_ARCHS "${CUDA_ARCHS}")
 
-  list(APPEND APHRODITE_MOE_EXT_SRC "${APHRODITE_MOE_WNA16_SRC}")
+  list(APPEND SONAR_MOE_EXT_SRC "${SONAR_MOE_WNA16_SRC}")
   # moe marlin arches
   # note that we always set `use_atomic_add=False` for moe marlin now,
   # so we don't need 9.0 for bf16 atomicAdd PTX
@@ -1668,7 +1668,7 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA")
         set_source_files_properties(${MARLIN_MOE_SRC}
           PROPERTIES COMPILE_FLAGS "-static-global-template-stub=false")
       endif()
-      list(APPEND APHRODITE_MOE_EXT_SRC ${MARLIN_MOE_SRC})
+      list(APPEND SONAR_MOE_EXT_SRC ${MARLIN_MOE_SRC})
     endif()
 
     if (MARLIN_MOE_SM75_ARCHS)
@@ -1680,7 +1680,7 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA")
         set_source_files_properties(${MARLIN_MOE_SM75_SRC}
           PROPERTIES COMPILE_FLAGS "-static-global-template-stub=false")
       endif()
-      list(APPEND APHRODITE_MOE_EXT_SRC ${MARLIN_MOE_SM75_SRC})
+      list(APPEND SONAR_MOE_EXT_SRC ${MARLIN_MOE_SM75_SRC})
     endif()
 
     if (MARLIN_MOE_FP8_ARCHS)
@@ -1692,7 +1692,7 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA")
         set_source_files_properties(${MARLIN_MOE_FP8_SRC}
           PROPERTIES COMPILE_FLAGS "-static-global-template-stub=false")
       endif()
-      list(APPEND APHRODITE_MOE_EXT_SRC ${MARLIN_MOE_FP8_SRC})
+      list(APPEND SONAR_MOE_EXT_SRC ${MARLIN_MOE_FP8_SRC})
     endif()
 
     set(MARLIN_MOE_OTHER_SRC "csrc/moe/marlin_moe_wna16/ops.cu")
@@ -1703,7 +1703,7 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA")
       set_source_files_properties(${MARLIN_MOE_OTHER_SRC}
         PROPERTIES COMPILE_FLAGS "-static-global-template-stub=false")
     endif()
-    list(APPEND APHRODITE_MOE_EXT_SRC "${MARLIN_MOE_OTHER_SRC}")
+    list(APPEND SONAR_MOE_EXT_SRC "${MARLIN_MOE_OTHER_SRC}")
 
     message(STATUS "Building Marlin MOE kernels for archs: ${MARLIN_MOE_OTHER_ARCHS}")
   else()
@@ -1715,11 +1715,11 @@ endif()
 message(STATUS "Enabling MoE C_stable extension.")
 define_extension_target(
   _moe_C_stable_libtorch
-  DESTINATION aphrodite
-  LANGUAGE ${APHRODITE_GPU_LANG}
-  SOURCES ${APHRODITE_MOE_EXT_SRC}
-  COMPILE_FLAGS ${APHRODITE_GPU_FLAGS}
-  ARCHITECTURES ${APHRODITE_GPU_ARCHES}
+  DESTINATION sonar
+  LANGUAGE ${SONAR_GPU_LANG}
+  SOURCES ${SONAR_MOE_EXT_SRC}
+  COMPILE_FLAGS ${SONAR_GPU_FLAGS}
+  ARCHITECTURES ${SONAR_GPU_ARCHES}
   INCLUDE_DIRECTORIES ${CUTLASS_INCLUDE_DIR}
   INCLUDE_DIRECTORIES ${CUTLASS_TOOLS_UTIL_INCLUDE_DIR}
   USE_SABI 3
@@ -1733,12 +1733,12 @@ target_compile_definitions(_moe_C_stable_libtorch PRIVATE
   TORCH_TARGET_VERSION=0x020B000000000000ULL)
 
 # Needed to use cuda/hip APIs from C-shim
-if(APHRODITE_GPU_LANG STREQUAL "CUDA")
+if(SONAR_GPU_LANG STREQUAL "CUDA")
   target_compile_definitions(_moe_C_stable_libtorch PRIVATE USE_CUDA)
   # Needed by CUTLASS kernels
   target_compile_definitions(_moe_C_stable_libtorch PRIVATE
     CUTLASS_ENABLE_DIRECT_CUDA_DRIVER_CALL=1)
-elseif(APHRODITE_GPU_LANG STREQUAL "HIP")
+elseif(SONAR_GPU_LANG STREQUAL "HIP")
   target_compile_definitions(_moe_C_stable_libtorch PRIVATE USE_ROCM)
 endif()
 
@@ -1752,7 +1752,7 @@ endif()
 # If PyTorch doesn't bundle libamdhip64 (built from source against system
 # ROCm), there is only one copy in the process and no action is needed —
 # the HIP compiler already links the system libamdhip64 automatically.
-if(APHRODITE_GPU_LANG STREQUAL "HIP")
+if(SONAR_GPU_LANG STREQUAL "HIP")
   find_library(_MOE_STABLE_TORCH_AMDHIP64 amdhip64
     PATHS "${TORCH_INSTALL_PREFIX}/lib" NO_DEFAULT_PATH)
   if(_MOE_STABLE_TORCH_AMDHIP64)
@@ -1761,7 +1761,7 @@ if(APHRODITE_GPU_LANG STREQUAL "HIP")
   endif()
 endif()
 
-if(APHRODITE_GPU_LANG STREQUAL "HIP")
+if(SONAR_GPU_LANG STREQUAL "HIP")
   #
   # _rocm_C extension
   #
@@ -1771,7 +1771,7 @@ if(APHRODITE_GPU_LANG STREQUAL "HIP")
   # attention_dispatch.cu only holds the runtime dispatch, attention_kernels.cuh
   # the kernels and launchers. A file listed here is dead weight unless
   # attention_dispatch.cu also dispatches its entry point (guarded below).
-  set(APHRODITE_ROCM_EXT_SRC
+  set(SONAR_ROCM_EXT_SRC
     "csrc/rocm/torch_bindings.cpp"
     "csrc/rocm/skinny_gemms.cu"
     "csrc/rocm/skinny_gemms_int4.cu"
@@ -1802,7 +1802,7 @@ if(APHRODITE_GPU_LANG STREQUAL "HIP")
       "update the instantiation guard in CMakeLists.txt accordingly.")
   endif()
   string(SUBSTRING "${_attn_dispatch}" ${_attn_arms_pos} -1 _attn_arms)
-  foreach (_attn_src ${APHRODITE_ROCM_EXT_SRC})
+  foreach (_attn_src ${SONAR_ROCM_EXT_SRC})
     if (_attn_src MATCHES "^csrc/rocm/attention_paged_attn_.*\\.cu$")
       file(READ "${CMAKE_SOURCE_DIR}/${_attn_src}" _attn_tu)
       string(REGEX MATCHALL "ATTN_ENTRY\\([A-Za-z0-9_]+\\)" _attn_entries
@@ -1827,43 +1827,43 @@ if(APHRODITE_GPU_LANG STREQUAL "HIP")
   # .eh_frame out of range". --offload-compress keeps the device debug info
   # (so the RelWithDebInfo build type is unchanged) while shrinking the
   # fatbin ~20x (2103 MiB -> 95.8 MiB, module ~2200 MiB -> 125.9 MiB).
-  set(APHRODITE_ROCM_EXT_FLAGS ${APHRODITE_GPU_FLAGS} --offload-compress)
+  set(SONAR_ROCM_EXT_FLAGS ${SONAR_GPU_FLAGS} --offload-compress)
 
   # skinny_gemms*.cu are built on gfx9/gfx11 ISA (MFMA, dot2/dot4, legacy
   # s_waitcnt asm) that gfx1250 (gfx12) does not provide. Exclude them from the
-  # gfx1250 build and disable their op registrations (APHRODITE_SKIP_SKINNY_GEMMS);
-  # Aphrodite falls back to default/Triton GEMM for those ops on gfx1250.
-  list(REMOVE_ITEM APHRODITE_ROCM_EXT_SRC "csrc/rocm/skinny_gemms.cu")
-  list(REMOVE_ITEM APHRODITE_ROCM_EXT_SRC "csrc/rocm/skinny_gemms_int4.cu")
-  set(APHRODITE_SKINNY_ARCHES ${APHRODITE_GPU_ARCHES})
-  list(FILTER APHRODITE_SKINNY_ARCHES EXCLUDE REGEX "gfx1250")
-  if(APHRODITE_SKINNY_ARCHES)
-    message(STATUS "Building skinny_gemms for archs: ${APHRODITE_SKINNY_ARCHES}")
-    set(APHRODITE_SKINNY_SRC
+  # gfx1250 build and disable their op registrations (SONAR_SKIP_SKINNY_GEMMS);
+  # Sonar falls back to default/Triton GEMM for those ops on gfx1250.
+  list(REMOVE_ITEM SONAR_ROCM_EXT_SRC "csrc/rocm/skinny_gemms.cu")
+  list(REMOVE_ITEM SONAR_ROCM_EXT_SRC "csrc/rocm/skinny_gemms_int4.cu")
+  set(SONAR_SKINNY_ARCHES ${SONAR_GPU_ARCHES})
+  list(FILTER SONAR_SKINNY_ARCHES EXCLUDE REGEX "gfx1250")
+  if(SONAR_SKINNY_ARCHES)
+    message(STATUS "Building skinny_gemms for archs: ${SONAR_SKINNY_ARCHES}")
+    set(SONAR_SKINNY_SRC
       "csrc/rocm/skinny_gemms.cu"
       "csrc/rocm/skinny_gemms_int4.cu")
-    hipify_sources_target(APHRODITE_SKINNY_HIP_SRCS _rocm_C_skinny "${APHRODITE_SKINNY_SRC}")
-    unset(_APHRODITE_LAST_HIPIFY_TARGET)
-    add_library(_rocm_C_skinny OBJECT ${APHRODITE_SKINNY_HIP_SRCS})
+    hipify_sources_target(SONAR_SKINNY_HIP_SRCS _rocm_C_skinny "${SONAR_SKINNY_SRC}")
+    unset(_SONAR_LAST_HIPIFY_TARGET)
+    add_library(_rocm_C_skinny OBJECT ${SONAR_SKINNY_HIP_SRCS})
     add_dependencies(_rocm_C_skinny hipify_all)
-    set_source_files_properties(${APHRODITE_SKINNY_HIP_SRCS} PROPERTIES LANGUAGE ${APHRODITE_GPU_LANG})
+    set_source_files_properties(${SONAR_SKINNY_HIP_SRCS} PROPERTIES LANGUAGE ${SONAR_GPU_LANG})
     set_target_properties(_rocm_C_skinny PROPERTIES
-      ${APHRODITE_GPU_LANG}_ARCHITECTURES "${APHRODITE_SKINNY_ARCHES}"
+      ${SONAR_GPU_LANG}_ARCHITECTURES "${SONAR_SKINNY_ARCHES}"
       POSITION_INDEPENDENT_CODE ON)
     target_include_directories(_rocm_C_skinny PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/csrc)
     target_compile_options(_rocm_C_skinny PRIVATE
-      $<$<COMPILE_LANGUAGE:${APHRODITE_GPU_LANG}>:${APHRODITE_ROCM_EXT_FLAGS}>)
+      $<$<COMPILE_LANGUAGE:${SONAR_GPU_LANG}>:${SONAR_ROCM_EXT_FLAGS}>)
     target_compile_definitions(_rocm_C_skinny PRIVATE "-DTORCH_EXTENSION_NAME=_rocm_C")
     target_link_libraries(_rocm_C_skinny PRIVATE torch)
   else()
     message(STATUS "Only gfx1250, skipping skinny_gemms")
-    list(APPEND APHRODITE_ROCM_EXT_FLAGS "-DAPHRODITE_SKIP_SKINNY_GEMMS")
+    list(APPEND SONAR_ROCM_EXT_FLAGS "-DSONAR_SKIP_SKINNY_GEMMS")
   endif()
 
-  set(APHRODITE_ROCM_HAS_GFX1100 OFF)
-  if(APHRODITE_GPU_ARCHES MATCHES "gfx1100")
-    set(APHRODITE_ROCM_HAS_GFX1100 ON)
-    list(APPEND APHRODITE_ROCM_EXT_SRC
+  set(SONAR_ROCM_HAS_GFX1100 OFF)
+  if(SONAR_GPU_ARCHES MATCHES "gfx1100")
+    set(SONAR_ROCM_HAS_GFX1100 ON)
+    list(APPEND SONAR_ROCM_EXT_SRC
       "csrc/rocm/q_gemm_rdna3.cu"
       "csrc/rocm/q_gemm_rdna3_wmma.cu"
       "csrc/rocm/moe_q_gemm_rdna3.cu"
@@ -1872,50 +1872,50 @@ if(APHRODITE_GPU_LANG STREQUAL "HIP")
 
   define_extension_target(
     _rocm_C
-    DESTINATION aphrodite
-    LANGUAGE ${APHRODITE_GPU_LANG}
-    SOURCES ${APHRODITE_ROCM_EXT_SRC}
-    COMPILE_FLAGS ${APHRODITE_ROCM_EXT_FLAGS}
-    ARCHITECTURES ${APHRODITE_GPU_ARCHES}
+    DESTINATION sonar
+    LANGUAGE ${SONAR_GPU_LANG}
+    SOURCES ${SONAR_ROCM_EXT_SRC}
+    COMPILE_FLAGS ${SONAR_ROCM_EXT_FLAGS}
+    ARCHITECTURES ${SONAR_GPU_ARCHES}
     USE_SABI 3
     WITH_SOABI)
   
   if(TARGET _rocm_C_skinny)
     target_link_libraries(_rocm_C PRIVATE _rocm_C_skinny)
   else()
-    target_compile_definitions(_rocm_C PRIVATE APHRODITE_SKIP_SKINNY_GEMMS)
+    target_compile_definitions(_rocm_C PRIVATE SONAR_SKIP_SKINNY_GEMMS)
   endif()
 
-  if(APHRODITE_ROCM_HAS_GFX1100)
-    target_compile_definitions(_rocm_C PRIVATE APHRODITE_ROCM_GFX1100)
+  if(SONAR_ROCM_HAS_GFX1100)
+    target_compile_definitions(_rocm_C PRIVATE SONAR_ROCM_GFX1100)
   endif()
 endif()
 
 # Must run after the last HIP `define_extension_target` so every extension
 # has registered its sources.
-if (APHRODITE_GPU_LANG STREQUAL "HIP")
-  aphrodite_finalize_hipify_target()
+if (SONAR_GPU_LANG STREQUAL "HIP")
+  sonar_finalize_hipify_target()
 endif()
 
 # For CUDA and HIP builds also build the triton_kernels external package.
-if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
+if(SONAR_GPU_LANG STREQUAL "CUDA" OR SONAR_GPU_LANG STREQUAL "HIP")
     include(cmake/external_projects/triton_kernels.cmake)
 endif()
 
 # DeepGEMM and DeepSelect host code uses C++20 <format>, which libstdc++
 # provides only from GCC 13 onward.
-if (APHRODITE_GPU_LANG STREQUAL "CUDA"
+if (SONAR_GPU_LANG STREQUAL "CUDA"
     AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU"
     AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS "13")
   message(FATAL_ERROR
-    "GCC >= 13 is required to build Aphrodite with CUDA (found ${CMAKE_CXX_COMPILER_VERSION}). "
+    "GCC >= 13 is required to build Sonar with CUDA (found ${CMAKE_CXX_COMPILER_VERSION}). "
     "The DeepGEMM and DeepSelect dependencies use C++20 <format> in host code, "
     "which libstdc++ does not provide before GCC 13. "
     "See: https://github.com/vllm-project/vllm/issues/58158")
 endif()
 
 # For CUDA we also build and ship some external projects.
-if (APHRODITE_GPU_LANG STREQUAL "CUDA")
+if (SONAR_GPU_LANG STREQUAL "CUDA")
     include(cmake/external_projects/deepselect.cmake)
     include(cmake/external_projects/fmha_sm100.cmake)
     include(cmake/external_projects/flashmla.cmake)
@@ -1923,6 +1923,6 @@ if (APHRODITE_GPU_LANG STREQUAL "CUDA")
     include(cmake/external_projects/qutlass.cmake)
     include(cmake/external_projects/tml_fa4.cmake)
 
-    # aphrodite-flash-attn should be last as it overwrites some CMake functions
+    # sonar-flash-attn should be last as it overwrites some CMake functions
     include(cmake/external_projects/vllm_flash_attn.cmake)
 endif ()

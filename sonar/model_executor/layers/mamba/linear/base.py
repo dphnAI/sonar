@@ -3,33 +3,33 @@
 import torch
 from transformers import PreTrainedConfig
 
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.config import (
+    SonarConfig,
 )
-from aphrodite.distributed.parallel_state import (
+from sonar.distributed.parallel_state import (
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
 )
-from aphrodite.model_executor.custom_op import PluggableLayer
-from aphrodite.model_executor.layers.mamba.abstract import MambaBase
-from aphrodite.model_executor.layers.mamba.mamba_utils import (
+from sonar.model_executor.custom_op import PluggableLayer
+from sonar.model_executor.layers.mamba.abstract import MambaBase
+from sonar.model_executor.layers.mamba.mamba_utils import (
     MambaStateDtypeCalculator,
     MambaStateShapeCalculator,
 )
-from aphrodite.model_executor.models.utils import extract_layer_index
-from aphrodite.v1.attention.backends.registry import MambaAttentionBackendEnum
+from sonar.model_executor.models.utils import extract_layer_index
+from sonar.v1.attention.backends.registry import MambaAttentionBackendEnum
 
 
 class LinearAttention(PluggableLayer, MambaBase):
     """Base class for Linear attention layer."""
 
-    def __init__(self, config: PreTrainedConfig, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, config: PreTrainedConfig, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
         self.layer_idx = extract_layer_index(prefix)
         self.prefix = prefix
-        self.model_config = aphrodite_config.model_config
-        self.cache_config = aphrodite_config.cache_config
-        self.quant_config = aphrodite_config.quant_config
+        self.model_config = sonar_config.model_config
+        self.cache_config = sonar_config.cache_config
+        self.quant_config = sonar_config.quant_config
 
         self.BLOCK = getattr(config, "block", 256)
         self.hidden_size = config.hidden_size

@@ -3,7 +3,7 @@
 
 import pytest
 
-from aphrodite.device_allocator import alloc_conf
+from sonar.device_allocator import alloc_conf
 
 pytestmark = pytest.mark.cpu_test
 

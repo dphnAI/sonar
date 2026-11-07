@@ -31,7 +31,7 @@ Visualization is an independent analysis step. It reads completed sweep
 results and does not start a server, run a benchmark, or change a tuning
 recommendation.
 
-Install the plotting dependencies in the same environment as Aphrodite:
+Install the plotting dependencies in the same environment as Sonar:
 
 ```bash
 python3 -m pip install -r requirements.txt
@@ -68,6 +68,6 @@ The analysis produces output-throughput, P99 TTFT, and P99 TPOT figures. The
 concurrency stage also produces a throughput/TTFT tradeoff figure and a goodput
 figure when the benchmark results contain that metric.
 
-The native Aphrodite Pareto command is intentionally not used because its efficiency
+The native Sonar Pareto command is intentionally not used because its efficiency
 axis is expressed as tokens per second per GPU, which is not an accurate label
 for Xeon CPU layouts.

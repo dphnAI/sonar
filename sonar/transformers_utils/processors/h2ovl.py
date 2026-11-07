@@ -11,7 +11,7 @@
 import torch
 from PIL import Image
 
-from aphrodite.tokenizers.hf import HfTokenizer
+from sonar.tokenizers.hf import HfTokenizer
 
 from .internvl import (
     InternVLChatImageProcessor,

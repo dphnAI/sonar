@@ -19,12 +19,12 @@ from unittest.mock import patch
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.mamba.gdn import qwen_gdn_linear_attn
-from aphrodite.model_executor.layers.mamba.gdn.qwen_gdn_linear_attn import (
+from sonar.model_executor.layers.mamba.gdn import qwen_gdn_linear_attn
+from sonar.model_executor.layers.mamba.gdn.qwen_gdn_linear_attn import (
     QwenGatedDeltaNetAttention,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.v1.attention.backends.gdn_attn import GDNAttentionMetadata
+from sonar.platforms import current_platform
+from sonar.v1.attention.backends.gdn_attn import GDNAttentionMetadata
 
 pytestmark = pytest.mark.skipif(not current_platform.is_rocm(), reason="ROCm-specific tests")
 
@@ -160,11 +160,11 @@ def _prefill_reference(q, k, v, g, beta, initial_state, lengths):
 )
 @torch.inference_mode()
 def test_rocm_prefill_numerics_and_output_layout(state_dtype, correlated):
-    from aphrodite.config import AphroditeConfig, ModelConfig, set_current_aphrodite_config
-    from aphrodite.model_executor.layers.mamba.gdn.qwen_gdn_linear_attn import (
+    from sonar.config import ModelConfig, SonarConfig, set_current_sonar_config
+    from sonar.model_executor.layers.mamba.gdn.qwen_gdn_linear_attn import (
         ChunkGatedDeltaRule,
     )
-    from aphrodite.third_party.flash_linear_attention.ops.index import (
+    from sonar.third_party.flash_linear_attention.ops.index import (
         prepare_chunk_indices,
         prepare_chunk_offsets,
     )
@@ -172,7 +172,7 @@ def test_rocm_prefill_numerics_and_output_layout(state_dtype, correlated):
     if not torch.cuda.is_available():
         pytest.skip("ROCm prefill numerics require a GPU")
     # Only the config is needed for production backend selection; no weights.
-    config = AphroditeConfig(
+    config = SonarConfig(
         model_config=ModelConfig(
             model="Qwen/Qwen3.5-0.8B",
             revision="2fc06364715b967f1860aea9cf38778875588b17",
@@ -181,7 +181,7 @@ def test_rocm_prefill_numerics_and_output_layout(state_dtype, correlated):
         # auto picks AITER FlyDSL on gfx942/gfx950; this pins the Triton path.
         additional_config={"gdn_prefill_backend": "triton"},
     )
-    with set_current_aphrodite_config(config):
+    with set_current_sonar_config(config):
         prefill = ChunkGatedDeltaRule()
     assert prefill.gdn_prefill_backend == "triton"
     assert prefill._forward_method == prefill.forward_native

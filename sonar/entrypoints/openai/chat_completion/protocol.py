@@ -18,8 +18,8 @@ from pydantic import (
     model_validator,
 )
 
-from aphrodite.config import ModelConfig
-from aphrodite.entrypoints.generate.base.protocol import (
+from sonar.config import ModelConfig
+from sonar.entrypoints.generate.base.protocol import (
     AnyResponseFormat,
     DeltaMessage,
     FunctionCall,
@@ -36,25 +36,25 @@ from aphrodite.entrypoints.generate.base.protocol import (
     validate_structural_tag_response_format,
     validate_structured_outputs_structural_tag,
 )
-from aphrodite.entrypoints.openai.extended_sampling import ExtendedSamplingRequest
-from aphrodite.entrypoints.serve.engine.protocol import OpenAIBaseModel, UsageInfo
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.logger import init_logger
-from aphrodite.logprobs import Logprob
-from aphrodite.outputs import WeightVersionSpan
-from aphrodite.renderers import (
+from sonar.entrypoints.openai.extended_sampling import ExtendedSamplingRequest
+from sonar.entrypoints.serve.engine.protocol import OpenAIBaseModel, UsageInfo
+from sonar.exceptions import SonarValidationError
+from sonar.logger import init_logger
+from sonar.logprobs import Logprob
+from sonar.outputs import WeightVersionSpan
+from sonar.renderers import (
     ChatParams,
     ReasoningEffort,
     TokenizeParams,
     map_reasoning_effort,
     merge_kwargs,
 )
-from aphrodite.renderers.chat_utils import (
+from sonar.renderers.chat_utils import (
     ChatCompletionMessageParam,
     ChatTemplateContentFormatOption,
     has_non_text_content,
 )
-from aphrodite.sampling_params import (
+from sonar.sampling_params import (
     BeamSearchParams,
     RepetitionDetectionParams,
     RequestOutputKind,
@@ -62,10 +62,10 @@ from aphrodite.sampling_params import (
     StructuredOutputsParams,
     ThinkingTokenBudget,
 )
-from aphrodite.utils import random_uuid
+from sonar.utils import random_uuid
 
 if TYPE_CHECKING:
-    from aphrodite.parser.abstract_parser import Parser
+    from sonar.parser.abstract_parser import Parser
 
 logger = init_logger(__name__)
 
@@ -83,7 +83,7 @@ class ChatMessage(OpenAIBaseModel):
     function_call: FunctionCall | None = None
     tool_calls: list[ToolCall] = Field(default_factory=list)
 
-    # Aphrodite-specific fields that are not in OpenAI spec
+    # Sonar-specific fields that are not in OpenAI spec
     reasoning: str | None = None
 
     @model_serializer(mode="wrap")
@@ -114,7 +114,7 @@ class ChatCompletionLogProbs(OpenAIBaseModel):
 class ChatCompletionResponseChoice(OpenAIBaseModel):
     index: int
     # ``SerializeAsAny`` lets pydantic honor subclasses of ``ChatMessage``
-    # (e.g. ``aphrodite.entrypoints.cohere.cohere_chat_message.CohereChatMessage``)
+    # (e.g. ``sonar.entrypoints.cohere.cohere_chat_message.CohereChatMessage``)
     # so that added fields like ``citations`` survive JSON serialization
     # instead of being stripped down to the base schema. Plain
     # ``ChatMessage`` instances serialize identically to before.
@@ -122,7 +122,7 @@ class ChatCompletionResponseChoice(OpenAIBaseModel):
     logprobs: ChatCompletionLogProbs | None = None
     # per OpenAI spec this is the default
     finish_reason: str | None = "stop"
-    # not part of the OpenAI spec but included in Aphrodite for legacy reasons
+    # not part of the OpenAI spec but included in Sonar for legacy reasons
     stop_reason: int | str | None = None
     # not part of the OpenAI spec but is useful for tracing the tokens
     # in agent scenarios
@@ -153,7 +153,7 @@ class ChatCompletionResponse(OpenAIBaseModel):
     system_fingerprint: str | None = None
     usage: UsageInfo
 
-    # Aphrodite-specific fields that are not in OpenAI spec
+    # Sonar-specific fields that are not in OpenAI spec
     prompt_logprobs: list[dict[int, Logprob] | None] | None = None
     prompt_token_ids: list[int] | None = None
     # Rendered prompt text from chat templating (only set when
@@ -167,7 +167,7 @@ class ChatCompletionResponse(OpenAIBaseModel):
 class ChatCompletionResponseStreamChoice(OpenAIBaseModel):
     index: int
     # ``SerializeAsAny`` lets pydantic honor subclasses of ``DeltaMessage``
-    # (e.g. ``aphrodite.entrypoints.cohere.cohere_chat_message.CohereDeltaMessage``)
+    # (e.g. ``sonar.entrypoints.cohere.cohere_chat_message.CohereDeltaMessage``)
     # so streaming ``citations`` survive JSON serialization. Plain
     # ``DeltaMessage`` instances serialize identically to before.
     delta: SerializeAsAny[DeltaMessage]
@@ -197,7 +197,7 @@ class ChatCompletionStreamResponse(OpenAIBaseModel):
     # ``return_prompt_text=True`` on the request); only sent on the first chunk.
     prompt_text: str | None = None
     metrics: PerRequestMetrics | None = None
-    # Aphrodite-specific: KV transfer params returned with the final chunk
+    # Sonar-specific: KV transfer params returned with the final chunk
     kv_transfer_params: dict[str, Any] | None = Field(default=None, description="KVTransfer parameters.")
 
 
@@ -272,7 +272,7 @@ class ChatCompletionRequest(ExtendedSamplingRequest):
     include_reasoning: bool = True
     parallel_tool_calls: bool | None = True
 
-    # NOTE this will be ignored by Aphrodite
+    # NOTE this will be ignored by Sonar
     user: str | None = None
 
     # --8<-- [start:chat-completion-sampling-params]
@@ -516,7 +516,7 @@ class ChatCompletionRequest(ExtendedSamplingRequest):
         description=("ECTransfer parameters used for encoder-cache disaggregated serving."),
     )
 
-    aphrodite_xargs: dict[str, str | int | float | list[str | int | float]] | None = Field(
+    sonar_xargs: dict[str, str | int | float | list[str | int | float]] | None = Field(
         default=None,
         description=(
             "Additional request parameters with (list of) string or numeric values, used by custom extensions."
@@ -747,7 +747,7 @@ class ChatCompletionRequest(ExtendedSamplingRequest):
         if prompt_logprobs is None and self.echo:
             prompt_logprobs = self.top_logprobs
 
-        extra_args: dict[str, Any] = self.aphrodite_xargs if self.aphrodite_xargs else {}
+        extra_args: dict[str, Any] = self.sonar_xargs if self.sonar_xargs else {}
         if self.kv_transfer_params:
             # Pass in kv_transfer_params via extra_args
             extra_args["kv_transfer_params"] = self.kv_transfer_params
@@ -804,7 +804,7 @@ class ChatCompletionRequest(ExtendedSamplingRequest):
                 else getattr(response_format, "json_schema", None)
             )
             if json_schema is None:
-                raise AphroditeValidationError(
+                raise SonarValidationError(
                     "When response_format type is 'json_schema', the 'json_schema' field must be provided.",
                     parameter="response_format",
                 )
@@ -820,7 +820,7 @@ class ChatCompletionRequest(ExtendedSamplingRequest):
         if not isinstance(data, dict):
             return data
         if data.get("stream_options") and not data.get("stream"):
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 "Stream options can only be defined when `stream=True`.",
                 parameter="stream_options",
             )
@@ -833,13 +833,13 @@ class ChatCompletionRequest(ExtendedSamplingRequest):
         if not isinstance(data, dict):
             return data
         if data.get("logprob_token_ids") and data.get("use_beam_search"):
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 "`logprob_token_ids` is not supported with beam search.",
                 parameter="logprob_token_ids",
             )
 
         if data.get("logprob_token_ids") and not data.get("logprobs"):
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 "when using `logprob_token_ids`, `logprobs` must be set to true.",
                 parameter="logprob_token_ids",
             )
@@ -851,34 +851,34 @@ class ChatCompletionRequest(ExtendedSamplingRequest):
         for field_name in ("prompt_logprobs", "top_logprobs"):
             field_value = data.get(field_name)
             if field_value is not None and not isinstance(field_value, (int, float)):
-                raise AphroditeValidationError(
+                raise SonarValidationError(
                     f"`{field_name}` must be an integer.",
                     parameter=field_name,
                     value=field_value,
                 )
         if (prompt_logprobs := data.get("prompt_logprobs")) is not None:
             if data.get("stream") and (prompt_logprobs > 0 or prompt_logprobs == -1):
-                raise AphroditeValidationError(
+                raise SonarValidationError(
                     "`prompt_logprobs` are not available when `stream=True`.",
                     parameter="prompt_logprobs",
                 )
 
             if prompt_logprobs < 0 and prompt_logprobs != -1:
-                raise AphroditeValidationError(
+                raise SonarValidationError(
                     "`prompt_logprobs` must be a positive value or -1.",
                     parameter="prompt_logprobs",
                     value=prompt_logprobs,
                 )
         if (top_logprobs := data.get("top_logprobs")) is not None:
             if top_logprobs < 0 and top_logprobs != -1:
-                raise AphroditeValidationError(
+                raise SonarValidationError(
                     "`top_logprobs` must be a positive value or -1.",
                     parameter="top_logprobs",
                     value=top_logprobs,
                 )
 
             if (top_logprobs == -1 or top_logprobs > 0) and not data.get("logprobs"):
-                raise AphroditeValidationError(
+                raise SonarValidationError(
                     "when using `top_logprobs`, `logprobs` must be set to true.",
                     parameter="top_logprobs",
                 )
@@ -907,7 +907,7 @@ class ChatCompletionRequest(ExtendedSamplingRequest):
         )
         # you can only use one kind of constraints for structured outputs
         if count > 1:
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 "You can only use one kind of constraints for structured outputs ('json', 'regex' or 'choice').",
             )
         # you can only either use structured outputs or tools, not both
@@ -916,7 +916,7 @@ class ChatCompletionRequest(ExtendedSamplingRequest):
             "auto",
             "required",
         ):
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 "You can only either use constraints for structured outputs or tools, not both.",
             )
         validate_structured_outputs_structural_tag(structured_outputs_kwargs)
@@ -932,7 +932,7 @@ class ChatCompletionRequest(ExtendedSamplingRequest):
 
         # Reject empty tools array, matching OpenAI API behavior
         if data.get("tools") == []:
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 "`tools` must not be an empty array. Either provide at least one tool or omit the field entirely.",
                 parameter="tools",
             )
@@ -950,7 +950,7 @@ class ChatCompletionRequest(ExtendedSamplingRequest):
         if "tool_choice" in data and data["tool_choice"] is not None:
             # ensure that if "tool choice" is specified, tools are present
             if "tools" not in data or data["tools"] is None:
-                raise AphroditeValidationError(
+                raise SonarValidationError(
                     "When using `tool_choice`, `tools` must be set.",
                     parameter="tool_choice",
                 )
@@ -958,7 +958,7 @@ class ChatCompletionRequest(ExtendedSamplingRequest):
             # make sure that tool choice is either a named tool
             # OR that it's set to "auto" or "required"
             if data["tool_choice"] not in ["auto", "required"] and not isinstance(data["tool_choice"], dict):
-                raise AphroditeValidationError(
+                raise SonarValidationError(
                     f"Invalid value for `tool_choice`: {data['tool_choice']}! "
                     'Only named tools, "none", "auto" or "required" '
                     "are supported.",
@@ -972,18 +972,18 @@ class ChatCompletionRequest(ExtendedSamplingRequest):
                 valid_tool = False
                 function = data["tool_choice"].get("function")
                 if not isinstance(function, dict):
-                    raise AphroditeValidationError(
+                    raise SonarValidationError(
                         f"Invalid value for `function`: `{function}` in `tool_choice`! {correct_usage_message}",
                         parameter="tool_choice.function",
                     )
                 if "name" not in function:
-                    raise AphroditeValidationError(
+                    raise SonarValidationError(
                         f"Expected field `name` in `function` in `tool_choice`! {correct_usage_message}",
                         parameter="tool_choice.function.name",
                     )
                 function_name = function["name"]
                 if not isinstance(function_name, str) or len(function_name) == 0:
-                    raise AphroditeValidationError(
+                    raise SonarValidationError(
                         f"Invalid `name` in `function`: `{function_name}` in `tool_choice`! {correct_usage_message}",
                         parameter="tool_choice.function.name",
                     )
@@ -992,7 +992,7 @@ class ChatCompletionRequest(ExtendedSamplingRequest):
                         valid_tool = True
                         break
                 if not valid_tool:
-                    raise AphroditeValidationError(
+                    raise SonarValidationError(
                         "The tool specified in `tool_choice` does not match any of the specified `tools`",
                         parameter="tool_choice",
                     )
@@ -1004,7 +1004,7 @@ class ChatCompletionRequest(ExtendedSamplingRequest):
         if not isinstance(data, dict):
             return data
         if data.get("continue_final_message") and data.get("add_generation_prompt"):
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 "Cannot set both `continue_final_message` and `add_generation_prompt` to True.",
             )
         return data
@@ -1124,7 +1124,7 @@ class BatchChatCompletionRequest(ExtendedSamplingRequest):
     tool_choice: Literal["none"] | None = "none"
     include_reasoning: bool = True
 
-    # Aphrodite extensions
+    # Sonar extensions
     best_of: int | None = None
     use_beam_search: bool = False
     top_k: int | None = None
@@ -1159,18 +1159,18 @@ class BatchChatCompletionRequest(ExtendedSamplingRequest):
         if not isinstance(data, dict):
             return data
         if data.get("use_beam_search"):
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 "Batch chat completions do not support beam search. Please set `use_beam_search` to False.",
                 parameter="use_beam_search",
             )
         if data.get("logprob_token_ids") and not data.get("logprobs"):
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 "when using `logprob_token_ids`, `logprobs` must be set to true.",
                 parameter="logprob_token_ids",
             )
         kv_transfer_params = data.get("kv_transfer_params")
         if isinstance(kv_transfer_params, dict) and kv_transfer_params.get("prompt_token_ids") is not None:
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 "Batch chat completions do not support "
                 "`kv_transfer_params['prompt_token_ids']`: one pre-tokenized "
                 "prompt cannot serve several conversations.",
@@ -1189,7 +1189,7 @@ class BatchChatCompletionRequest(ExtendedSamplingRequest):
             validate_structured_outputs_structural_tag(structured_outputs)
         n = data.get("n", 1)
         if n is not None and n != 1:
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 "Batch chat completions do not support `n > 1`. Please set `n` to 1.",
                 parameter="n",
                 value=n,

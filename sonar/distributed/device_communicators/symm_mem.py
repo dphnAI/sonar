@@ -5,12 +5,12 @@ import torch
 import torch.distributed as dist
 from torch.distributed import ProcessGroup
 
-import aphrodite.envs as envs
-from aphrodite.distributed.device_communicators.all_reduce_utils import (
+import sonar.envs as envs
+from sonar.distributed.device_communicators.all_reduce_utils import (
     SYMM_MEM_ALL_REDUCE_MAX_SIZES,
 )
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
 
 try:
     import torch.distributed._symmetric_memory as torch_symm_mem
@@ -92,7 +92,7 @@ class SymmMemCommunicator:
             logger.warning_once(
                 "SymmMemCommunicator: symmetric memory initialization failed: %s "
                 "Communicator is not available. To suppress this warning set "
-                "APHRODITE_ALLREDUCE_USE_SYMM_MEM=0",
+                "SONAR_ALLREDUCE_USE_SYMM_MEM=0",
                 str(e),
             )
             return
@@ -101,7 +101,7 @@ class SymmMemCommunicator:
             return
         self.force_multimem = force_multimem
         self.disabled = False
-        if envs.APHRODITE_BATCH_INVARIANT:
+        if envs.SONAR_BATCH_INVARIANT:
             self.disabled = True
 
     def should_use_symm_mem(self, inp: torch.Tensor):

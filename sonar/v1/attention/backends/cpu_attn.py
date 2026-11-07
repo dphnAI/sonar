@@ -5,21 +5,21 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
 if TYPE_CHECKING:
-    from aphrodite.config.cache import CacheDType
+    from sonar.config.cache import CacheDType
 
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite import envs
-from aphrodite.config import (
-    AphroditeConfig,
-    get_current_aphrodite_config,
-    get_layers_from_aphrodite_config,
+from sonar import _custom_ops as ops
+from sonar import envs
+from sonar.config import (
+    SonarConfig,
+    get_current_sonar_config,
+    get_layers_from_sonar_config,
 )
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.platforms import CpuArchEnum, current_platform
-from aphrodite.v1.attention.backend import (
+from sonar.logger import init_logger
+from sonar.model_executor.layers.attention import Attention
+from sonar.platforms import CpuArchEnum, current_platform
+from sonar.v1.attention.backend import (
     AttentionBackend,
     AttentionImpl,
     AttentionLayer,
@@ -28,14 +28,14 @@ from aphrodite.v1.attention.backend import (
     CommonAttentionMetadata,
     MultipleOf,
 )
-from aphrodite.v1.attention.backends.utils import (
+from sonar.v1.attention.backends.utils import (
     get_num_attention_heads_from_layers,
 )
-from aphrodite.v1.attention.backends.zentorch_sdpa import (
+from sonar.v1.attention.backends.zentorch_sdpa import (
     should_use_zentorch_sdpa,
     zentorch_sdpa_attn,
 )
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.kv_cache_interface import (
     AttentionSpec,
     CrossAttentionSpec,
     KVCacheLayout,
@@ -141,27 +141,27 @@ class CPUAttentionMetadataBuilder(AttentionMetadataBuilder[CPUAttentionMetadata]
         self,
         kv_cache_spec: AttentionSpec,
         layer_names: list[str],
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
     ) -> None:
-        super().__init__(kv_cache_spec, layer_names, aphrodite_config, device)
+        super().__init__(kv_cache_spec, layer_names, sonar_config, device)
 
         self.kv_cache_spec = kv_cache_spec
-        self.aphrodite_config = aphrodite_config
+        self.sonar_config = sonar_config
 
-        parallel_config = aphrodite_config.parallel_config
+        parallel_config = sonar_config.parallel_config
         self.num_kv_heads = kv_cache_spec.num_kv_heads
         # The scheduler metadata built here sizes a scratchpad from the query
         # head count, so it must come from this group's layers: the model-wide
         # count is wrong for models that vary it per layer (e.g. Laguna).
         self.num_heads = get_num_attention_heads_from_layers(
-            aphrodite_config, layer_names
-        ) or aphrodite_config.model_config.get_num_attention_heads(parallel_config)
+            sonar_config, layer_names
+        ) or sonar_config.model_config.get_num_attention_heads(parallel_config)
         self.head_dim = kv_cache_spec.head_size
-        self.dtype = aphrodite_config.model_config.dtype
+        self.dtype = sonar_config.model_config.dtype
         self.window_size = self._group_sliding_window()
         self.block_size = kv_cache_spec.block_size
-        self.kv_cache_dtype = aphrodite_config.cache_config.cache_dtype
+        self.kv_cache_dtype = sonar_config.cache_config.cache_dtype
         self.isa = _get_attn_isa(
             self.dtype,
             self.block_size,
@@ -170,14 +170,14 @@ class CPUAttentionMetadataBuilder(AttentionMetadataBuilder[CPUAttentionMetadata]
         )
         self._set_isa_to_layers(layer_names)
         self.is_cross_attention = isinstance(kv_cache_spec, CrossAttentionSpec)
-        attn_layers = get_layers_from_aphrodite_config(aphrodite_config, Attention, layer_names)
+        attn_layers = get_layers_from_sonar_config(sonar_config, Attention, layer_names)
         self.is_encoder_only_attention = any(
             layer.attn_type == AttentionType.ENCODER_ONLY for layer in attn_layers.values()
         )
 
     def _set_isa_to_layers(self, layer_names: list[str]) -> None:
-        attn_layers = get_layers_from_aphrodite_config(
-            self.aphrodite_config,
+        attn_layers = get_layers_from_sonar_config(
+            self.sonar_config,
             Attention,
             layer_names,
         )
@@ -192,7 +192,7 @@ class CPUAttentionMetadataBuilder(AttentionMetadataBuilder[CPUAttentionMetadata]
         cache manager disabled), and the scheduler metadata built here is shared
         by the whole group, so it may only assume a window all of them agree on.
         """
-        layers = get_layers_from_aphrodite_config(self.aphrodite_config, Attention, self.layer_names)
+        layers = get_layers_from_sonar_config(self.sonar_config, Attention, self.layer_names)
         windows = {
             layer.impl.sliding_window for layer in layers.values() if isinstance(layer.impl, CPUAttentionBackendImpl)
         }
@@ -264,7 +264,7 @@ class CPUAttentionMetadataBuilder(AttentionMetadataBuilder[CPUAttentionMetadata]
             causal=causal,
             sliding_window_size=self.window_size,
             isa=self.isa,
-            enable_kv_split=envs.APHRODITE_CPU_ATTN_SPLIT_KV,
+            enable_kv_split=envs.SONAR_CPU_ATTN_SPLIT_KV,
             dynamic_causal=dynamic_casual,
             kv_cache_dtype=self.kv_cache_dtype,
         )
@@ -336,10 +336,10 @@ class CPUAttentionBackendImpl(AttentionImpl):
                 "Sinks must have the same number of heads as the number of heads in the layer"
             )
 
-        aphrodite_config = get_current_aphrodite_config()
+        sonar_config = get_current_sonar_config()
         self.use_zentorch_sdpa = should_use_zentorch_sdpa(
             attn_type,
-            aphrodite_config.model_config.dtype,
+            sonar_config.model_config.dtype,
         )
 
     def forward(

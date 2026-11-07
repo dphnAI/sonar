@@ -5,15 +5,15 @@
 import pytest
 import torch
 
-from aphrodite.model_executor.kernels.linear.mixed_precision.MPLinearKernel import (
+from sonar.model_executor.kernels.linear.mixed_precision.MPLinearKernel import (
     MPLinearKernel,
 )
-from aphrodite.model_executor.parameter import (
+from sonar.model_executor.parameter import (
     ModelWeightParameter,
-    PackedAphroditeParameter,
+    PackedSonarParameter,
     permute_param_layout_,
 )
-from aphrodite.model_executor.utils import (
+from sonar.model_executor.utils import (
     get_live_param,
     kernel_parameters,
     move_parameter,
@@ -25,11 +25,11 @@ from aphrodite.model_executor.utils import (
 
 @pytest.fixture
 def single_rank_tp(monkeypatch: pytest.MonkeyPatch) -> None:
-    """`BaseAphroditeParameter.__init__` queries the TP group, which is not
+    """`BaseSonarParameter.__init__` queries the TP group, which is not
     initialized in a unit test. Pin it to a single rank.
     """
-    monkeypatch.setattr("aphrodite.model_executor.parameter.get_tensor_model_parallel_rank", lambda: 0)
-    monkeypatch.setattr("aphrodite.model_executor.parameter.get_tensor_model_parallel_world_size", lambda: 1)
+    monkeypatch.setattr("sonar.model_executor.parameter.get_tensor_model_parallel_rank", lambda: 0)
+    monkeypatch.setattr("sonar.model_executor.parameter.get_tensor_model_parallel_world_size", lambda: 1)
 
 
 @pytest.mark.parametrize("wrap_in_parameter", [False, True])
@@ -130,7 +130,7 @@ def test_replace_parameter_online_quantization_frees_source() -> None:
 def test_humming_replace_keeps_loaded_params(single_rank_tp: None) -> None:
     """A new tensor in a leftover's storage, or taking a large leftover's place,
     is written to that leftover param, registered under both names."""
-    from aphrodite.model_executor.layers.quantization.utils.humming.linear import (
+    from sonar.model_executor.layers.quantization.utils.humming.linear import (
         replace_layer_parameters,
     )
 
@@ -193,7 +193,7 @@ def test_replace_parameter_weight_loader_comes_from_old_parameter() -> None:
     in `set_weight_attrs`, and the other attributes must still be carried over.
 
     `_weight_loader` is excluded for the same reason: it is the backing field
-    of `BaseAphroditeParameter.weight_loader`, so leaving it in would smuggle a
+    of `BaseSonarParameter.weight_loader`, so leaving it in would smuggle a
     stale loader past the `weight_loader` exclusion.
     """
     calls: list[str] = []
@@ -337,7 +337,7 @@ def test_replace_parameter_with_own_parameter_keeps_layout(single_rank_tp) -> No
         pass
 
     layer = torch.nn.Module()
-    old_param = PackedAphroditeParameter(
+    old_param = PackedSonarParameter(
         data=torch.zeros(4, 4),
         input_dim=1,
         output_dim=0,
@@ -351,7 +351,7 @@ def test_replace_parameter_with_own_parameter_keeps_layout(single_rank_tp) -> No
     replace_parameter(layer, "weight", old_param)
 
     assert layer.weight is old_param
-    assert type(layer.weight) is PackedAphroditeParameter
+    assert type(layer.weight) is PackedSonarParameter
     assert layer.weight.weight_loader is weight_loader
     assert (layer.weight.input_dim, layer.weight.output_dim) == (1, 0)
     assert (layer.weight.packed_dim, layer.weight.packed_factor) == (0, 8)
@@ -359,7 +359,7 @@ def test_replace_parameter_with_own_parameter_keeps_layout(single_rank_tp) -> No
 
 
 def test_kept_param_ops_skip_python_torch_function(single_rank_tp: None) -> None:
-    """Kept Aphrodite params must dispatch eager ops like a plain Parameter: a Python
+    """Kept Sonar params must dispatch eager ops like a plain Parameter: a Python
     `__torch_function__` would put every op on them through the interpreter."""
     layer = torch.nn.Module()
     layer.register_parameter(

@@ -6,7 +6,7 @@ The implementation lives under ``nvidia/`` and ``amd/`` (with shared helpers
 in ``common/``); this module picks the right one for the current platform.
 """
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 if current_platform.is_rocm():
     from .amd.sparse_indexer import (

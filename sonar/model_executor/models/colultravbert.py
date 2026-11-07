@@ -13,36 +13,36 @@ from transformers.models.idefics3.image_processing_idefics3 import (
     _resize_output_size_scale_below_upper_bound,
 )
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.multimodal import MultiModalDummyOptions
-from aphrodite.distributed import get_tensor_model_parallel_world_size
-from aphrodite.inputs import MultiModalDataDict
-from aphrodite.model_executor.layers.activation import get_act_and_mul_fn
-from aphrodite.model_executor.layers.attention import EncoderOnlyAttention
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import SonarConfig
+from sonar.config.multimodal import MultiModalDummyOptions
+from sonar.distributed import get_tensor_model_parallel_world_size
+from sonar.inputs import MultiModalDataDict
+from sonar.model_executor.layers.activation import get_act_and_mul_fn
+from sonar.model_executor.layers.attention import EncoderOnlyAttention
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     MergedColumnParallelLinear,
     QKVParallelLinear,
     ReplicatedLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.pooler.tokwise import pooler_for_token_embed
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.layers.vocab_parallel_embedding import VocabParallelEmbedding
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.parse import (
+from sonar.model_executor.layers.pooler.tokwise import pooler_for_token_embed
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.layers.vocab_parallel_embedding import VocabParallelEmbedding
+from sonar.model_executor.model_loader.weight_utils import default_weight_loader
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.parse import (
     ImageProcessorItems,
     ImageSize,
 )
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.transformers_utils.configs.colultravbert import (
+from sonar.sequence import IntermediateTensors
+from sonar.transformers_utils.configs.colultravbert import (
     ColUltraVBertConfig,
     UltraBertConfig,
 )
-from aphrodite.transformers_utils.processor import cached_get_image_processor
+from sonar.transformers_utils.processor import cached_get_image_processor
 
 from .idefics3 import (
     Idefics3DummyInputsBuilder,
@@ -102,7 +102,7 @@ class UltraBertAttention(nn.Module):
             max_position=config.max_position_embeddings,
             rope_parameters=config.rope_parameters[layer_type],
         )
-        # `sliding_window` is an inclusive radius; Aphrodite's window counts the
+        # `sliding_window` is an inclusive radius; Sonar's window counts the
         # query token, so radius r becomes r + 1.
         sliding_window = config.sliding_window + 1 if layer_type == "sliding_attention" else None
         self.attn = EncoderOnlyAttention(
@@ -182,10 +182,10 @@ class UltraBertLayer(nn.Module):
 
 @support_torch_compile
 class UltraBertModel(nn.Module):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config: UltraBertConfig = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        config: UltraBertConfig = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
 
         self.embed_tokens = VocabParallelEmbedding(config.vocab_size, config.hidden_size)
         self.layers = nn.ModuleList(
@@ -428,20 +428,20 @@ class ColUltraVBertForRetrieval(nn.Module, SupportsMultiModal, SupportsLateInter
 
     # transformers >= 5.10 saves SigLIP without its inner `vision_model.`
     # prefix; the longer prefix must stay first.
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={
             "vision_model.vision_model.": "vision_model.vision_model.",
             "vision_model.": "vision_model.vision_model.",
         },
     )
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config: ColUltraVBertConfig = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        config: ColUltraVBertConfig = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
         self.config = config
 
-        with self._mark_tower_model(aphrodite_config, "image"):
+        with self._mark_tower_model(sonar_config, "image"):
             self.vision_model = SiglipVisionModel(
                 config.vision_config,
                 quant_config,
@@ -449,13 +449,13 @@ class ColUltraVBertForRetrieval(nn.Module, SupportsMultiModal, SupportsLateInter
             )
             self.connector = ColUltraVBertConnector(config, quant_config, prefix=maybe_prefix(prefix, "connector"))
 
-        with self._mark_language_model(aphrodite_config):
+        with self._mark_language_model(sonar_config):
             self.text_model = UltraBertModel(
-                aphrodite_config=aphrodite_config.with_hf_config(config.text_config),
+                sonar_config=sonar_config.with_hf_config(config.text_config),
                 prefix=maybe_prefix(prefix, "text_model"),
             )
 
-        pooler_config = aphrodite_config.model_config.pooler_config
+        pooler_config = sonar_config.model_config.pooler_config
         assert pooler_config is not None
         self.pooler = pooler_for_token_embed(pooler_config)
 
@@ -497,7 +497,7 @@ class ColUltraVBertForRetrieval(nn.Module, SupportsMultiModal, SupportsLateInter
         weights: Iterable[tuple[str, torch.Tensor]],
     ) -> set[str]:
         loader = AutoWeightsLoader(self)
-        loaded = loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        loaded = loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
         projector = getattr(self.pooler.head, "projector", None)
         if isinstance(projector, nn.Module):
             loaded |= {f"pooler.head.projector.{name}" for name, _ in projector.named_parameters()}

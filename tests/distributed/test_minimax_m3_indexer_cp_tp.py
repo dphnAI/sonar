@@ -18,8 +18,8 @@ import pytest
 import ray
 import torch
 
-from aphrodite.distributed.parallel_state import get_tp_group
-from aphrodite.platforms import current_platform
+from sonar.distributed.parallel_state import get_tp_group
+from sonar.platforms import current_platform
 
 from ..utils import (
     ensure_model_parallel_initialized,
@@ -36,7 +36,7 @@ INIT_BLOCKS = 0
 LOCAL_BLOCKS = 1
 MAX_MODEL_LEN = 131072
 SEQ_LENS = [49_229, 65_523, 32_773, 81_920, 40_001, 70_000]
-_QUERY_LEN_ENV = "APHRODITE_TEST_M3_CP_QUERY_LEN"
+_QUERY_LEN_ENV = "SONAR_TEST_M3_CP_QUERY_LEN"
 
 
 def _global_inputs(query_len: int, device: torch.device):
@@ -102,7 +102,7 @@ def _run_cp_topk_matches_non_cp(
     distributed_init_port,
 ):
     query_len = int(os.environ[_QUERY_LEN_ENV])
-    use_aiter = os.environ.get("APHRODITE_ROCM_USE_AITER") == "1"
+    use_aiter = os.environ.get("SONAR_ROCM_USE_AITER") == "1"
     with monkeypatch.context() as m:
         m.delenv("CUDA_VISIBLE_DEVICES", raising=False)
         m.delenv("HIP_VISIBLE_DEVICES", raising=False)
@@ -111,11 +111,11 @@ def _run_cp_topk_matches_non_cp(
         init_test_distributed_environment(tp_size, pp_size, rank, distributed_init_port)
         ensure_model_parallel_initialized(tp_size, pp_size)
 
-        from aphrodite._aiter_ops import rocm_aiter_ops
-        from aphrodite.models.minimax_m3.amd.indexer_context_parallel import (
+        from sonar._aiter_ops import rocm_aiter_ops
+        from sonar.models.minimax_m3.amd.indexer_context_parallel import (
             IndexerCPDecode,
         )
-        from aphrodite.models.minimax_m3.amd.ops.index_topk import (
+        from sonar.models.minimax_m3.amd.ops.index_topk import (
             minimax_m3_index_decode,
         )
 
@@ -179,10 +179,10 @@ def test_cp_topk_matches_non_cp_per_head(monkeypatch: pytest.MonkeyPatch, query_
         pytest.skip(f"Need at least {tp_size} GPUs to run the test.")
     if use_aiter:
         pytest.importorskip("aiter")
-        # Read when Aphrodite is imported, so it must be set before ray starts.
-        monkeypatch.setenv("APHRODITE_ROCM_USE_AITER", "1")
+        # Read when Sonar is imported, so it must be set before ray starts.
+        monkeypatch.setenv("SONAR_ROCM_USE_AITER", "1")
     else:
-        monkeypatch.setenv("APHRODITE_ROCM_USE_AITER", "0")
+        monkeypatch.setenv("SONAR_ROCM_USE_AITER", "0")
     # Ray workers inherit the driver environment; multi_process_parallel
     # passes no per-test arguments.
     monkeypatch.setenv(_QUERY_LEN_ENV, str(query_len))

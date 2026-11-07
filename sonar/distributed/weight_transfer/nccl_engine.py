@@ -10,29 +10,29 @@ from typing import TYPE_CHECKING, ClassVar, Self
 import torch
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
-    from aphrodite.distributed.device_communicators.pynccl import PyNcclCommunicator
+    from sonar.config import SonarConfig
+    from sonar.distributed.device_communicators.pynccl import PyNcclCommunicator
 
-from aphrodite.config.weight_transfer import WeightTransferConfig
-from aphrodite.distributed.weight_transfer.base import (
-    AphroditeWeightSyncClient,
+from sonar.config.weight_transfer import WeightTransferConfig
+from sonar.distributed.weight_transfer.base import (
     ParamMeta,
+    SonarWeightSyncClient,
     TrainerInitInfo,
     TrainerWeightTransferEngine,
     WeightSource,
     WeightTransferEngine,
     WeightTransferUpdateInfo,
 )
-from aphrodite.distributed.weight_transfer.nccl_common import (
+from sonar.distributed.weight_transfer.nccl_common import (
     NCCLWeightTransferInitInfo,
     build_worker_init_payload,
     run_trainer_rendezvous,
     worker_init_process_group,
 )
-from aphrodite.distributed.weight_transfer.nccl_common import (
+from sonar.distributed.weight_transfer.nccl_common import (
     trainer_init as open_trainer_endpoint,
 )
-from aphrodite.distributed.weight_transfer.packed_tensor import (
+from sonar.distributed.weight_transfer.packed_tensor import (
     DEFAULT_PACKED_BUFFER_SIZE_BYTES,
     DEFAULT_PACKED_NUM_BUFFERS,
     packed_nccl_broadcast_consumer,
@@ -125,11 +125,11 @@ class NCCLWeightTransferEngine(WeightTransferEngine[NCCLWeightTransferInitInfo, 
     def __init__(
         self,
         config: WeightTransferConfig,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
         device: torch.device,
         model: torch.nn.Module,
     ) -> None:
-        super().__init__(config, aphrodite_config, device, model)
+        super().__init__(config, sonar_config, device, model)
         self.model_update_group: PyNcclCommunicator | None = None
         # Set from the trainer-supplied init info at the handshake; defaults are
         # only for the (unreachable) receive-before-init case.
@@ -159,13 +159,13 @@ class NCCLWeightTransferEngine(WeightTransferEngine[NCCLWeightTransferInitInfo, 
 
     def start_weight_update(self) -> None:
         """Begin reloading the incoming checkpoint weights."""
-        from aphrodite.model_executor.model_loader.reload import start_reload
+        from sonar.model_executor.model_loader.reload import start_reload
 
         start_reload(self.model)
 
     def finish_weight_update(self) -> None:
         """Finish reloading after all weights have been received."""
-        from aphrodite.model_executor.model_loader.reload import finish_reload
+        from sonar.model_executor.model_loader.reload import finish_reload
 
         finish_reload(self.model, self.model_config, self.device)
         # Release the cached receive buffers and post-load temporaries so memory
@@ -196,7 +196,7 @@ class NCCLWeightTransferEngine(WeightTransferEngine[NCCLWeightTransferInitInfo, 
         else:
             update_info = self._last_update_info.get(key, update_info)
 
-        from aphrodite.model_executor.model_loader.mtp_validation import (
+        from sonar.model_executor.model_loader.mtp_validation import (
             disable_mtp_completeness_check,
         )
 
@@ -259,7 +259,7 @@ class NCCLTrainerWeightTransferEngine(TrainerWeightTransferEngine[NCCLTrainerIni
     def __init__(
         self,
         *,
-        client: AphroditeWeightSyncClient,
+        client: SonarWeightSyncClient,
         source: WeightSource,
         is_sender: bool = True,
         rank: int = 0,
@@ -306,7 +306,7 @@ class NCCLTrainerWeightTransferEngine(TrainerWeightTransferEngine[NCCLTrainerIni
         cls,
         init_info: NCCLTrainerInitInfo,
         *,
-        client: AphroditeWeightSyncClient,
+        client: SonarWeightSyncClient,
         source: WeightSource | None = None,
     ) -> Self:
         if source is None:

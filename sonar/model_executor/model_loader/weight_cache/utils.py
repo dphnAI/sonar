@@ -11,13 +11,13 @@ from typing import TYPE_CHECKING, Any, cast
 
 import torch
 
-from aphrodite.config import AphroditeConfig, SpeculativeConfig, replace, set_current_aphrodite_config
-from aphrodite.model_executor.models.interfaces import SupportsEagleBase
-from aphrodite.platforms import current_platform
+from sonar.config import SonarConfig, SpeculativeConfig, replace, set_current_sonar_config
+from sonar.model_executor.models.interfaces import SupportsEagleBase
+from sonar.platforms import current_platform
 
 if TYPE_CHECKING:
-    from aphrodite.config import ModelConfig
-    from aphrodite.v1.worker.gpu_model_runner import GPUModelRunner
+    from sonar.config import ModelConfig
+    from sonar.v1.worker.gpu_model_runner import GPUModelRunner
 
 # Speculative methods whose draft model the daemon caches in its own group.
 # Other drafts keep loading from disk in the engine.
@@ -52,7 +52,7 @@ def format_socket_role_suffix(is_draft: bool) -> str:
 
 
 def build_warmup_runner(
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     local_rank: int,
     *,
     is_draft: bool,
@@ -60,14 +60,14 @@ def build_warmup_runner(
 ) -> "GPUModelRunner":
     """Create a model runner for the daemon's warmup dummy runs."""
     if is_draft:
-        aphrodite_config = replace(aphrodite_config, model_config=model_config, speculative_config=None)
+        sonar_config = replace(sonar_config, model_config=model_config, speculative_config=None)
     device = torch.device(current_platform.device_type, local_rank)
-    with set_current_aphrodite_config(aphrodite_config):
-        if aphrodite_config.use_v2_model_runner:
-            from aphrodite.v1.worker.gpu.model_runner import GPUModelRunner as Runner
+    with set_current_sonar_config(sonar_config):
+        if sonar_config.use_v2_model_runner:
+            from sonar.v1.worker.gpu.model_runner import GPUModelRunner as Runner
         else:
-            from aphrodite.v1.worker.gpu_model_runner import GPUModelRunner as Runner
-        runner = Runner(aphrodite_config, device)
+            from sonar.v1.worker.gpu_model_runner import GPUModelRunner as Runner
+        runner = Runner(sonar_config, device)
     # The two runner classes share the warmup surface; the nominal type
     # stays V1's GPUModelRunner.
     return cast("GPUModelRunner", runner)

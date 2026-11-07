@@ -9,9 +9,9 @@ mod tests;
 
 use std::collections::HashMap;
 
-use aphrodite_text::Prompt;
-use aphrodite_text::tokenizer::DynTokenizer;
 use serde_json::Value;
+use sonar_text::Prompt;
+use sonar_text::tokenizer::DynTokenizer;
 
 use super::{ChatRenderer, RenderedPrompt};
 use crate::Result;

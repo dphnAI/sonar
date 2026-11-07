@@ -10,19 +10,19 @@ from typing import TYPE_CHECKING, Any, Literal, Self, get_args
 
 from pydantic import Field, SkipValidation, field_validator, model_validator
 
-from aphrodite.config.cache import CacheDType
-from aphrodite.config.kernel import MoEBackend
-from aphrodite.config.load import LoadConfig
-from aphrodite.config.model import HfOverrides, ModelConfig
-from aphrodite.config.parallel import ParallelConfig
-from aphrodite.config.utils import config, replace
-from aphrodite.logger import init_logger
-from aphrodite.transformers_utils.config import get_hf_text_config, iter_rope_parameters
-from aphrodite.transformers_utils.repo_utils import get_subfolder_path
-from aphrodite.utils.hashing import safe_hash
-from aphrodite.utils.import_utils import LazyLoader, has_arctic_inference
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
-from aphrodite.v1.worker.gpu.spec_decode.speculator_config import (
+from sonar.config.cache import CacheDType
+from sonar.config.kernel import MoEBackend
+from sonar.config.load import LoadConfig
+from sonar.config.model import HfOverrides, ModelConfig
+from sonar.config.parallel import ParallelConfig
+from sonar.config.utils import config, replace
+from sonar.logger import init_logger
+from sonar.transformers_utils.config import get_hf_text_config, iter_rope_parameters
+from sonar.transformers_utils.repo_utils import get_subfolder_path
+from sonar.utils.hashing import safe_hash
+from sonar.utils.import_utils import LazyLoader, has_arctic_inference
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
+from sonar.v1.worker.gpu.spec_decode.speculator_config import (
     SpeculatorConfig,
     get_custom_speculator_config_class,
     get_method_config_class,
@@ -33,13 +33,13 @@ from aphrodite.v1.worker.gpu.spec_decode.speculator_config import (
 if TYPE_CHECKING:
     from transformers import PreTrainedConfig
 
-    import aphrodite.model_executor.layers.quantization as me_quant
-    from aphrodite.config.aphrodite import AphroditeConfig
+    import sonar.model_executor.layers.quantization as me_quant
+    from sonar.config.sonar import SonarConfig
 else:
     PreTrainedConfig = Any
-    AphroditeConfig = Any
+    SonarConfig = Any
 
-    me_quant = LazyLoader("model_executor", globals(), "aphrodite.model_executor.layers.quantization")
+    me_quant = LazyLoader("model_executor", globals(), "sonar.model_executor.layers.quantization")
 
 logger = init_logger(__name__)
 
@@ -394,8 +394,8 @@ def _validate_qwen3_omni_dspark(
         )
 
 
-# (SpeculativeConfig field, AphroditeConfig sub-config, overridden field)
-_DRAFT_APHRODITE_CONFIG_OVERRIDES = (
+# (SpeculativeConfig field, SonarConfig sub-config, overridden field)
+_DRAFT_SONAR_CONFIG_OVERRIDES = (
     # Otherwise the draft inherits the target's --moe-backend, which fails
     # when the draft is unquantized and that backend is not.
     ("moe_backend", "kernel_config", "moe_backend"),
@@ -432,8 +432,8 @@ class SpeculativeConfig:
     requires an MTP draft, and `draft_model` rejects one).
 
     Besides the built-in methods, this can be a custom method registered with
-    `aphrodite.v1.worker.gpu.spec_decode.speculator_config.register_speculative_method`
-    (e.g. by a Aphrodite plugin), which requires the V2 model runner. It is then
+    `sonar.v1.worker.gpu.spec_decode.speculator_config.register_speculative_method`
+    (e.g. by a Sonar plugin), which requires the V2 model runner. It is then
     moved to `custom_method`, and this is set to the built-in method that its
     config is based on (None if it isn't based on one)."""
     custom_method: str | None = field(default=None, init=False)
@@ -820,7 +820,7 @@ class SpeculativeConfig:
             "MiMoV2ForCausalLM",
             "MiMoV2OmniForCausalLM",
         ):
-            from aphrodite.model_executor.models.mimo_v2_mtp import (
+            from sonar.model_executor.models.mimo_v2_mtp import (
                 _MIMO_V2_PRO_NUM_MTP_LAYERS,
             )
 
@@ -830,7 +830,7 @@ class SpeculativeConfig:
             }
 
             hf_config.model_type = "mimo_v2_mtp"
-            # Aphrodite currently supports only the first MiMo-V2 MTP layer.
+            # Sonar currently supports only the first MiMo-V2 MTP layer.
             n_predict = _MIMO_V2_PRO_NUM_MTP_LAYERS
             hf_config.update(
                 {
@@ -842,12 +842,12 @@ class SpeculativeConfig:
             )
 
         if hf_config.architectures[0] == "MiMoV2FlashForCausalLM":
-            from aphrodite.model_executor.models.mimo_v2_mtp import (
+            from sonar.model_executor.models.mimo_v2_mtp import (
                 _MIMO_V2_FLASH_NUM_MTP_LAYERS,
             )
 
             hf_config.model_type = "mimo_v2_mtp"
-            # Aphrodite currently supports only the first MiMo-V2 MTP layer.
+            # Sonar currently supports only the first MiMo-V2 MTP layer.
             n_predict = _MIMO_V2_FLASH_NUM_MTP_LAYERS
             hf_config.update(
                 {
@@ -1225,7 +1225,7 @@ class SpeculativeConfig:
             logger.warning_once(
                 "Using custom speculative method '%s'. This is an experimental "
                 "feature and the speculator interface is subject to breaking "
-                "changes in future Aphrodite releases.",
+                "changes in future Sonar releases.",
                 self.method,
             )
             self.custom_method = self.method
@@ -1390,7 +1390,7 @@ class SpeculativeConfig:
         if draft_max_position_embeddings is None or draft_max_position_embeddings >= target_max_model_len:
             return
         if not _rope_only_sizes_cache(draft_hf_config):
-            # AphroditeConfig limits max_model_len to the draft's instead.
+            # SonarConfig limits max_model_len to the draft's instead.
             return
         logger.info(
             "Overriding draft model max_position_embeddings from %d to the "
@@ -1464,17 +1464,17 @@ class SpeculativeConfig:
 
         return draft_parallel_config
 
-    def apply_draft_overrides(self, aphrodite_config: AphroditeConfig) -> AphroditeConfig:
-        """Overlay this config's kernel overrides onto a target AphroditeConfig.
+    def apply_draft_overrides(self, sonar_config: SonarConfig) -> SonarConfig:
+        """Overlay this config's kernel overrides onto a target SonarConfig.
 
         Only non-None fields override, so an unset field keeps whatever the
         target resolved.
         """
-        for src, config_name, dst in _DRAFT_APHRODITE_CONFIG_OVERRIDES:
+        for src, config_name, dst in _DRAFT_SONAR_CONFIG_OVERRIDES:
             if (value := getattr(self, src)) is not None:
-                sub_config = replace(getattr(aphrodite_config, config_name), **{dst: value})
-                aphrodite_config = replace(aphrodite_config, **{config_name: sub_config})
-        return aphrodite_config
+                sub_config = replace(getattr(sonar_config, config_name), **{dst: value})
+                sonar_config = replace(sonar_config, **{config_name: sub_config})
+        return sonar_config
 
     @field_validator("method")
     @classmethod

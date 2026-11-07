@@ -5,19 +5,19 @@ from functools import cache
 import torch
 from torch.nn.parameter import Parameter
 
-import aphrodite._custom_ops as ops
-import aphrodite.envs as envs
-from aphrodite.config import get_current_aphrodite_config_or_none
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.custom_op import PluggableLayer
-from aphrodite.model_executor.layers.linear import (
+import sonar._custom_ops as ops
+import sonar.envs as envs
+from sonar.config import get_current_sonar_config_or_none
+from sonar.logger import init_logger
+from sonar.model_executor.custom_op import PluggableLayer
+from sonar.model_executor.layers.linear import (
     ReplicatedLinear,
     UnquantizedLinearMethod,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.quantization.base_config import QuantizeMethodBase
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import direct_register_custom_op
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.quantization.base_config import QuantizeMethodBase
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import direct_register_custom_op
 
 logger = init_logger(__name__)
 
@@ -46,7 +46,7 @@ class GateLinear(ReplicatedLinear):
     A ``quant_config`` that actually quantizes the gate disables every
     specialized tier, leaving plain ``ReplicatedLinear`` behavior.
 
-    ``APHRODITE_BATCH_INVARIANT`` also disables tiers 1-5: they pick kernels and
+    ``SONAR_BATCH_INVARIANT`` also disables tiers 1-5: they pick kernels and
     split-K from the token count and skip the batch-invariant linear path.
     """
 
@@ -84,10 +84,10 @@ class GateLinear(ReplicatedLinear):
         is_sm120 = current_platform.is_device_capability((12, 0))
         is_gfx950 = False
         if current_platform.is_rocm():
-            from aphrodite.platforms.rocm import on_gfx950
+            from sonar.platforms.rocm import on_gfx950
 
             is_gfx950 = on_gfx950()
-        batch_invariant = envs.APHRODITE_BATCH_INVARIANT
+        batch_invariant = envs.SONAR_BATCH_INVARIANT
         can_use_specialized_kernels = (
             current_platform.is_cuda() and (is_hopper or is_blackwell) and not bias and not batch_invariant
         )
@@ -169,7 +169,7 @@ class GateLinear(ReplicatedLinear):
         # ROCm bf16x3 router GEMM eligibility. out_dtype may still be None here
         # and is folded in by set_out_dtype; the split itself is only built
         # once the tier is known to be on (see _GateLinearMethod).
-        from aphrodite.model_executor.layers.fused_moe.router import (
+        from sonar.model_executor.layers.fused_moe.router import (
             bf16x3_router_gemm_rocm,
         )
 
@@ -205,7 +205,7 @@ class GateLinear(ReplicatedLinear):
 
     def _update_cutedsl_gemm_eligibility(self) -> None:
         if self.allow_ll_bf16_router_gemm:
-            from aphrodite.model_executor.kernels.linear.cute_dsl.ll_bf16 import (
+            from sonar.model_executor.kernels.linear.cute_dsl.ll_bf16 import (
                 is_available as is_ll_bf16_gemm_available,
             )
 
@@ -213,7 +213,7 @@ class GateLinear(ReplicatedLinear):
                 is_ll_bf16_gemm_available() and self.weight.dtype == torch.bfloat16 and self.out_dtype == torch.float32
             )
         if self.allow_specialized_router_gemm:
-            from aphrodite.model_executor.kernels.linear.cute_dsl.ll_fp32w import (
+            from sonar.model_executor.kernels.linear.cute_dsl.ll_fp32w import (
                 is_available as is_ll_fp32w_gemm_available,
             )
 
@@ -223,18 +223,18 @@ class GateLinear(ReplicatedLinear):
             self._register_ll_fp32w_warmup()
 
     def _register_sm90_bf16x3_warmup(self) -> None:
-        aphrodite_config = get_current_aphrodite_config_or_none()
-        if aphrodite_config is None:
+        sonar_config = get_current_sonar_config_or_none()
+        if sonar_config is None:
             return
 
-        from aphrodite.model_executor.layers.fused_moe.router.bf16x3_router_gemm_sm90 import (  # noqa: E501
+        from sonar.model_executor.layers.fused_moe.router.bf16x3_router_gemm_sm90 import (  # noqa: E501
             _SM90_BF16X3_ROUTER_GEMM_KERNEL,
         )
 
         _SM90_BF16X3_ROUTER_GEMM_KERNEL.register_warmup(
             K=self.weight.shape[1],
             E=self.weight.shape[0],
-            max_tokens=aphrodite_config.scheduler_config.max_num_batched_tokens,
+            max_tokens=sonar_config.scheduler_config.max_num_batched_tokens,
         )
 
     def _register_ll_fp32w_warmup(self) -> None:
@@ -243,7 +243,7 @@ class GateLinear(ReplicatedLinear):
         if not self.allow_ll_fp32w_gemm or self.allow_fp32_router_gemm:
             return
 
-        from aphrodite.model_executor.kernels.linear.cute_dsl.ll_fp32w import (
+        from sonar.model_executor.kernels.linear.cute_dsl.ll_fp32w import (
             LL_FP32W_GEMM_KERNEL,
         )
 
@@ -280,7 +280,7 @@ class GateLinear(ReplicatedLinear):
         # Tier 1: cuteDSL ll_bf16_gemm (SM90+ and SM120, bf16 in, fp32 out,
         # any dims w/ K divisible by 8)
         if self.allow_ll_bf16_gemm and x.shape[0] <= self.LL_BF16_MAX_TOKENS and x.dtype == torch.bfloat16:
-            from aphrodite.model_executor.kernels.linear.cute_dsl.ll_bf16 import (
+            from sonar.model_executor.kernels.linear.cute_dsl.ll_bf16 import (
                 ll_bf16_gemm,
             )
 
@@ -298,7 +298,7 @@ class GateLinear(ReplicatedLinear):
                     self.prefix,
                 )
             else:
-                output = torch.ops.aphrodite.rocm_bf16x3_router_gemm_dispatch(x, self.weight, self._bf16x3_weight)
+                output = torch.ops.sonar.rocm_bf16x3_router_gemm_dispatch(x, self.weight, self._bf16x3_weight)
                 return self._return(output)
 
         # Tier 2: fp32 specialized kernel (model-specific shapes, M<=32)
@@ -308,12 +308,12 @@ class GateLinear(ReplicatedLinear):
             torch.float32,
             torch.bfloat16,
         ):
-            output = torch.ops.aphrodite.fp32_router_gemm_dispatch(x, self.weight, self.allow_bf16x3_router_gemm)
+            output = torch.ops.sonar.fp32_router_gemm_dispatch(x, self.weight, self.allow_bf16x3_router_gemm)
             return self._return(output)
 
         # Tier 3: cuteDSL ll_fp32w_gemm (SM90+, bf16/fp32 in, fp32 out)
         if self.allow_ll_fp32w_gemm and x.shape[0] <= 32 and x.dtype in (torch.bfloat16, torch.float16, torch.float32):
-            from aphrodite.model_executor.kernels.linear.cute_dsl.ll_fp32w import (
+            from sonar.model_executor.kernels.linear.cute_dsl.ll_fp32w import (
                 LL_FP32W_GEMM_KERNEL,
             )
 
@@ -324,13 +324,13 @@ class GateLinear(ReplicatedLinear):
         # from __init__: a device query here breaks fullgraph torch.compile.
         if self.allow_bf16x3_router_gemm and x.dtype == torch.bfloat16:
             if self.is_hopper:
-                from aphrodite.model_executor.layers.fused_moe.router.bf16x3_router_gemm_sm90 import (  # noqa: E501
+                from sonar.model_executor.layers.fused_moe.router.bf16x3_router_gemm_sm90 import (  # noqa: E501
                     bf16x3_router_gemm as sm90_bf16x3_router_gemm,
                 )
 
                 output = sm90_bf16x3_router_gemm(x, self.weight)
             else:
-                from aphrodite.model_executor.layers.fused_moe.router.bf16x3_router_gemm_sm100 import (  # noqa: E501
+                from sonar.model_executor.layers.fused_moe.router.bf16x3_router_gemm_sm100 import (  # noqa: E501
                     bf16x3_router_gemm,
                 )
 
@@ -340,7 +340,7 @@ class GateLinear(ReplicatedLinear):
         # Tier 6: cuBLAS bf16→fp32
         if self.allow_cublas_router_gemm and x.dtype == torch.bfloat16:
             if self.is_gfx950:
-                output = torch.ops.aphrodite.fp32_router_gemm_dispatch(x, self.weight, False)
+                output = torch.ops.sonar.fp32_router_gemm_dispatch(x, self.weight, False)
             else:
                 output = torch.mm(x, self.weight.T, out_dtype=torch.float32)
             return self._return(output)
@@ -380,7 +380,7 @@ class _GateLinearMethod(UnquantizedLinearMethod):
         if not layer.allow_rocm_bf16x3_router_gemm:
             return
         try:
-            from aphrodite.model_executor.layers.fused_moe.router import (
+            from sonar.model_executor.layers.fused_moe.router import (
                 bf16x3_router_gemm_rocm,
             )
 
@@ -409,12 +409,12 @@ def bf16x3_router_gemm_module():
     ignores ``@cache`` and would trace the device query.
     """
     if _is_hopper():
-        from aphrodite.model_executor.layers.fused_moe.router import (
+        from sonar.model_executor.layers.fused_moe.router import (
             bf16x3_router_gemm_sm90,
         )
 
         return bf16x3_router_gemm_sm90
-    from aphrodite.model_executor.layers.fused_moe.router import (
+    from sonar.model_executor.layers.fused_moe.router import (
         bf16x3_router_gemm_sm100,
     )
 
@@ -431,10 +431,10 @@ def rocm_bf16x3_router_gemm_dispatch_impl(
     This must be a custom op because our torch.compile integration does not
     support runtime dispatching on num_tokens: models carrying fp32 router
     weights (MiniMax-M2, HunYuan-V3) call the gate from
-    ``@support_torch_compile`` model code and Aphrodite drops all Dynamo guards, so
+    ``@support_torch_compile`` model code and Sonar drops all Dynamo guards, so
     a plain Python branch on ``x.shape[0]`` would be frozen at first trace.
     """
-    from aphrodite.model_executor.layers.fused_moe.router import (
+    from sonar.model_executor.layers.fused_moe.router import (
         bf16x3_router_gemm_rocm,
     )
 
@@ -443,7 +443,7 @@ def rocm_bf16x3_router_gemm_dispatch_impl(
     # Below MIN_TOKENS, hand back to the low-M gfx950 kernel this tier is
     # checked ahead of.
     if x.shape[0] <= _FP32_ROUTER_GEMM_MAX_TOKENS:
-        from aphrodite.model_executor.layers.fused_moe.router.rocm_fp32_router_gemm import (  # noqa: E501
+        from sonar.model_executor.layers.fused_moe.router.rocm_fp32_router_gemm import (  # noqa: E501
             can_use_rocm_fp32_router_gemm,
             rocm_fp32_router_gemm,
         )
@@ -482,7 +482,7 @@ def fp32_router_gemm_dispatch_impl(
     does not support runtime dispatching on num_tokens.
     """
     if current_platform.is_rocm():
-        from aphrodite.model_executor.layers.fused_moe.router.rocm_fp32_router_gemm import (  # noqa: E501
+        from sonar.model_executor.layers.fused_moe.router.rocm_fp32_router_gemm import (  # noqa: E501
             can_use_rocm_fp32_router_gemm,
             rocm_fp32_router_gemm,
         )

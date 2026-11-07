@@ -3,12 +3,12 @@
 import numpy as np
 import torch
 
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.utils.torch_utils import PIN_MEMORY, async_tensor_h2d
-from aphrodite.v1.worker.gpu.input_batch import InputBatch
+from sonar.triton_utils import tl, triton
+from sonar.utils.math_utils import cdiv
+from sonar.utils.torch_utils import PIN_MEMORY, async_tensor_h2d
+from sonar.v1.worker.gpu.input_batch import InputBatch
 
-# Overridden on CPU in aphrodite/v1/worker/cpu/shm.py.
+# Overridden on CPU in sonar/v1/worker/cpu/shm.py.
 GRAMMAR_BITMASK_BLOCK_SIZE = 8192
 
 

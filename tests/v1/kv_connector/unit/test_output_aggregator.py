@@ -3,22 +3,22 @@
 
 import pytest
 
-from aphrodite.distributed.kv_events import (
+from sonar.distributed.kv_events import (
     BlockStored,
     KVCacheEvent,
     KVConnectorKVEvents,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.utils import KVOutputAggregator
-from aphrodite.distributed.kv_transfer.kv_connector.v1.base import (
+from sonar.distributed.kv_transfer.kv_connector.utils import KVOutputAggregator
+from sonar.distributed.kv_transfer.kv_connector.v1.base import (
     KVConnectorWorkerMetadata,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.lmcache_connector import (
+from sonar.distributed.kv_transfer.kv_connector.v1.lmcache_connector import (
     LMCacheKVEvents,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.connector import (
+from sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.connector import (
     MooncakeStoreKVEvents,
 )
-from aphrodite.v1.outputs import KVConnectorOutput, ModelRunnerOutput
+from sonar.v1.outputs import KVConnectorOutput, ModelRunnerOutput
 
 pytestmark = pytest.mark.cpu_test
 

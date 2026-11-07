@@ -10,13 +10,13 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.config import AttentionConfig, CUDAGraphMode
-from aphrodite.forward_context import ForwardContext, override_forward_context
-from aphrodite.models.minimax_m3.common.ops.sparse_attn import (
+from sonar import _custom_ops as ops
+from sonar.config import AttentionConfig, CUDAGraphMode
+from sonar.forward_context import ForwardContext, override_forward_context
+from sonar.models.minimax_m3.common.ops.sparse_attn import (
     minimax_m3_sparse_attn_decode,
 )
-from aphrodite.models.minimax_m3.common.sparse_attention import (
+from sonar.models.minimax_m3.common.sparse_attention import (
     MiniMaxM3SparseBackend,
     MiniMaxM3SparseMetadata,
     MiniMaxM3SparseMetadataBuilder,
@@ -24,11 +24,11 @@ from aphrodite.models.minimax_m3.common.sparse_attention import (
     MiniMaxM3SparseTritonImpl,
     select_main_backend_and_impl_cls,
 )
-from aphrodite.models.minimax_m3.nvidia import (
+from sonar.models.minimax_m3.nvidia import (
     sparse_attention_msa as sparse_attention_msa_module,
 )
-from aphrodite.models.minimax_m3.nvidia.model import MiniMaxM3SparseAttention
-from aphrodite.models.minimax_m3.nvidia.msa_cutlass_sparse_decode import (
+from sonar.models.minimax_m3.nvidia.model import MiniMaxM3SparseAttention
+from sonar.models.minimax_m3.nvidia.msa_cutlass_sparse_decode import (
     NVFP4_BLOCK_SCALE_SHIFT,
     MSACutlassDecodePlanCache,
     msa_cutlass_sparse_decode,
@@ -37,7 +37,7 @@ from aphrodite.models.minimax_m3.nvidia.msa_cutlass_sparse_decode import (
     should_prepare_decode_metadata,
     uses_q8kv4_decode,
 )
-from aphrodite.models.minimax_m3.nvidia.sparse_attention_msa import (
+from sonar.models.minimax_m3.nvidia.sparse_attention_msa import (
     MiniMaxM3SparseMSABackend,
     MiniMaxM3SparseMSADecodeMetadata,
     MiniMaxM3SparseMSAImpl,
@@ -46,8 +46,8 @@ from aphrodite.models.minimax_m3.nvidia.sparse_attention_msa import (
     MiniMaxM3SparseMSANvfp4Impl,
     MiniMaxM3SparseMSAPrefillMetadata,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
+from sonar.platforms import current_platform
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
 from tests.kernels.quantization.nvfp4_utils import dequant_nvfp4_kv_cache
 
 if not current_platform.is_device_capability_family(100):
@@ -352,7 +352,7 @@ def test_msa_metadata_builder_reserves_prefill_workspace_only_on_sm107(
         "is_device_capability",
         lambda capability: is_sm107 and capability == 107,
     )
-    aphrodite_config = SimpleNamespace(
+    sonar_config = SimpleNamespace(
         model_config=SimpleNamespace(
             hf_text_config=SimpleNamespace(
                 num_attention_heads=16,
@@ -365,9 +365,7 @@ def test_msa_metadata_builder_reserves_prefill_workspace_only_on_sm107(
         scheduler_config=SimpleNamespace(max_num_batched_tokens=256),
     )
 
-    builder = MiniMaxM3SparseMSAMetadataBuilder(
-        SimpleNamespace(num_kv_heads=1), [], aphrodite_config, torch.device("cuda")
-    )
+    builder = MiniMaxM3SparseMSAMetadataBuilder(SimpleNamespace(num_kv_heads=1), [], sonar_config, torch.device("cuda"))
 
     assert (builder.prefill_workspace is not None) == is_sm107
 
@@ -440,13 +438,13 @@ def test_msa_cutlass_plan_cache_keys_query_len(
 def test_query_stays_valid_when_cutlass_plan_appears_on_replay(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import aphrodite.envs as envs
-    from aphrodite.compilation.breakable_cudagraph import (
+    import sonar.envs as envs
+    from sonar.compilation.breakable_cudagraph import (
         BreakableCUDAGraphCapture,
         eager_break_during_capture,
     )
 
-    monkeypatch.setenv("APHRODITE_USE_BREAKABLE_CUDAGRAPH", "1")
+    monkeypatch.setenv("SONAR_USE_BREAKABLE_CUDAGRAPH", "1")
     envs.disable_envs_cache()
 
     num_tokens = 16
@@ -854,7 +852,7 @@ def _assert_close_fp8_prefill(actual: torch.Tensor, expected: torch.Tensor) -> N
 
 def _record_query_dtypes(monkeypatch: pytest.MonkeyPatch, kernel_name: str) -> list[torch.dtype]:
     """Record the query dtype of every ``fmha_sm100.sparse.<kernel_name>`` call."""
-    from aphrodite.third_party.fmha_sm100 import sparse as msa_sparse
+    from sonar.third_party.fmha_sm100 import sparse as msa_sparse
 
     kernel = getattr(msa_sparse, kernel_name)
     query_dtypes: list[torch.dtype] = []
@@ -901,7 +899,7 @@ def test_msa_cutlass_decode_nvfp4_matches_triton_on_dequantized_cache(
     query_len: int,
     capture: bool,
 ) -> None:
-    """Q8KV4 decode reads Aphrodite's packed NVFP4 pages, including swizzled V
+    """Q8KV4 decode reads Sonar's packed NVFP4 pages, including swizzled V
     scales and device global scales, as their exact dequantized values, and a
     reused plan follows new lengths and zero-length padding requests."""
     torch.manual_seed(0)
@@ -1139,7 +1137,7 @@ def test_msa_prefill_nvfp4_uses_the_builders_workspace(
     """The NVFP4 prefill hands the builder's split workspace to ``run_prefill``:
     a workspace reserved for the step's token budget is neither replaced nor
     grown by the call, and the output equals the per-call-allocation path's."""
-    from aphrodite.third_party.fmha_sm100.prefill_q8kv4 import PrefillWorkspace
+    from sonar.third_party.fmha_sm100.prefill_q8kv4 import PrefillWorkspace
 
     _skip_without_q8kv4_prefill(num_q_heads, num_kv_heads)
     torch.manual_seed(0)
@@ -1290,9 +1288,9 @@ def test_nvfp4_kv_cache_with_tp8_fails_at_config_time(architecture: str) -> None
     """An NVFP4 KV cache needs 16 query heads per KV head on each rank: the config
     check rejects TP8 (8 per KV head) before the workers start; TP1/2/4 and other
     KV cache dtypes pass."""
-    from aphrodite.model_executor.models.config import MODELS_CONFIG_MAP
+    from sonar.model_executor.models.config import MODELS_CONFIG_MAP
 
-    def aphrodite_config(tensor_parallel_size: int, cache_dtype: str) -> SimpleNamespace:
+    def sonar_config(tensor_parallel_size: int, cache_dtype: str) -> SimpleNamespace:
         text_config = SimpleNamespace(num_attention_heads=64, num_key_value_heads=4)
         return SimpleNamespace(
             model_config=SimpleNamespace(hf_text_config=text_config),
@@ -1302,10 +1300,10 @@ def test_nvfp4_kv_cache_with_tp8_fails_at_config_time(architecture: str) -> None
 
     verify = MODELS_CONFIG_MAP[architecture].verify_and_update_config
     for tensor_parallel_size in (1, 2, 4):
-        verify(aphrodite_config(tensor_parallel_size, "nvfp4"))
-    verify(aphrodite_config(8, "fp8"))
+        verify(sonar_config(tensor_parallel_size, "nvfp4"))
+    verify(sonar_config(8, "fp8"))
     with pytest.raises(ValueError, match="NVFP4 KV cache with tensor_parallel_size=8"):
-        verify(aphrodite_config(8, "nvfp4"))
+        verify(sonar_config(8, "nvfp4"))
 
 
 def test_msa_triton_decode_fallback_reads_dequantized_query_fp8() -> None:

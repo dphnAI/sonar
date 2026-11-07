@@ -4,13 +4,13 @@
 import pytest
 import torch
 
-import aphrodite._custom_ops as ops
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+import sonar._custom_ops as ops
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     GroupShape,
     scaled_quantize,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_random_seed
 from tests.kernels.quant_utils import (
     FP8_DTYPE,
     ref_dynamic_per_tensor_fp8_quant,

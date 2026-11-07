@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """The mono decode layer's two launches (README): K1 = the attention seam
-(``stages.seam``: slice, gate, the norm into Aphrodite's MXFP8) + the attention front
+(``stages.seam``: slice, gate, the norm into Sonar's MXFP8) + the attention front
 (``attention.front``); K2 = the attention back (``attention.back``, wo_b pushed
 to every rank) + the FFN seam (the TP sum folded in) + the MoE (``stages.moe``,
 its all-reduce in-kernel too).
@@ -155,12 +155,12 @@ def _epoch(epoch):
 @traced
 def store_x8(c, t, col, ys, live):
     """The attention seam's norm output (``seam.stage_norm``'s 8 columns at
-    ``col``) -> Aphrodite's MXFP8 of each 32 (the attention's input quant) -> the
+    ``col``) -> Sonar's MXFP8 of each 32 (the attention's input quant) -> the
     front's X8 / X8S, plain at device scope."""
     amax = abs(ys[0])
     for y in ys[1:]:
         amax = fx.max(amax, abs(y))
-    code = moe.aphrodite_mx_code(butterfly(amax, (1, 2), fx.max))
+    code = moe.sonar_mx_code(butterfly(amax, (1, 2), fx.max))
     mul = ((254 - code) << 23).bitcast(fx.Float32)
     w0 = fp8_pack4(*[clamp_fp8(ys[i] * mul) for i in range(4)])
     w1 = fp8_pack4(*[clamp_fp8(ys[4 + i] * mul) for i in range(4)])
@@ -744,7 +744,7 @@ def build_mono_k2(key: MonoBuild):
         if const_expr(key.timeline):
             c["tl"], c["tl_points"] = tl, K2_POINTS
         mb_back.epoch_begin(c, epoch, ep)
-        # the key table, from the top-k Aphrodite's indexer selected after K1,
+        # the key table, from the top-k Sonar's indexer selected after K1,
         # on the last CTAs: each split task waits on its token's
         ckt = {
             "S": s,

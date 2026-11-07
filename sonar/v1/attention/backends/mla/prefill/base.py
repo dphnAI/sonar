@@ -9,13 +9,13 @@ from typing import TYPE_CHECKING, ClassVar
 import torch
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig
-    from aphrodite.model_executor.layers.attention.mla_attention import (
+    from sonar.config import SonarConfig
+    from sonar.model_executor.layers.attention.mla_attention import (
         MLACommonPrefillMetadata,
     )
-    from aphrodite.model_executor.layers.quantization.utils.quant_utils import QuantKey
-    from aphrodite.platforms.interface import DeviceCapability
-    from aphrodite.v1.attention.backends.mla.prefill.selector import (
+    from sonar.model_executor.layers.quantization.utils.quant_utils import QuantKey
+    from sonar.platforms.interface import DeviceCapability
+    from sonar.v1.attention.backends.mla.prefill.selector import (
         MLAPrefillSelectorConfig,
     )
 
@@ -127,7 +127,7 @@ class MLAPrefillBackend(ABC):
         qk_nope_head_dim: int,
         qk_rope_head_dim: int,
         v_head_dim: int,
-        aphrodite_config: "AphroditeConfig",
+        sonar_config: "SonarConfig",
     ) -> None:
         self.num_heads = num_heads
         self.scale = scale
@@ -135,7 +135,7 @@ class MLAPrefillBackend(ABC):
         self.qk_nope_head_dim = qk_nope_head_dim
         self.qk_rope_head_dim = qk_rope_head_dim
         self.v_head_dim = v_head_dim
-        self.aphrodite_config = aphrodite_config
+        self.sonar_config = sonar_config
 
     def clone(self) -> "MLAPrefillBackend":
         return self.__class__(
@@ -145,7 +145,7 @@ class MLAPrefillBackend(ABC):
             qk_nope_head_dim=self.qk_nope_head_dim,
             qk_rope_head_dim=self.qk_rope_head_dim,
             v_head_dim=self.v_head_dim,
-            aphrodite_config=self.aphrodite_config,
+            sonar_config=self.sonar_config,
         )
 
     def prepare_metadata(  # noqa: B027

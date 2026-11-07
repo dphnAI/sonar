@@ -28,7 +28,7 @@ model:
 
 features:
   tool_calling:
-    description: "Surface LFM2.5's Pythonic tool calls (wrapped in <|tool_call_start|>…<|tool_call_end|>) as OpenAI tool_calls via Aphrodite's native lfm2 parser"
+    description: "Surface LFM2.5's Pythonic tool calls (wrapped in <|tool_call_start|>…<|tool_call_end|>) as OpenAI tool_calls via Sonar's native lfm2 parser"
     args:
       - "--enable-auto-tool-choice"
       - "--tool-call-parser"
@@ -48,7 +48,7 @@ hardware_overrides:
   # output identical). Inert (falls back to native) on non-Blackwell GPUs.
   blackwell:
     extra_env:
-      APHRODITE_USE_OINK_OPS: "1"
+      SONAR_USE_OINK_OPS: "1"
 strategy_overrides:
   single_node_tp:
     tp: 1
@@ -60,14 +60,14 @@ guide: |
   (June 2026) Japanese-specialized 1.2B chat model from [Liquid AI](https://www.liquid.ai/),
   adding tool calling on top of the **LFM2 hybrid backbone** (short-range gated convolution
   blocks interleaved with grouped-query attention). It serves on a single small GPU through
-  Aphrodite's OpenAI-compatible API.
+  Sonar's OpenAI-compatible API.
 
   ### Key Features
   - **Japanese-specialized**: Updated June 2026 checkpoint tuned for Japanese chat.
   - **Hybrid backbone**: Gated short convolutions interleaved with grouped-query attention — a smaller KV cache and lower decode latency than a same-size full-attention transformer.
-  - **Tool calling**: Pythonic tool calls (`<|tool_call_start|>…<|tool_call_end|>`) surfaced as OpenAI `tool_calls` by Aphrodite's native `lfm2` parser.
+  - **Tool calling**: Pythonic tool calls (`<|tool_call_start|>…<|tool_call_end|>`) surfaced as OpenAI `tool_calls` by Sonar's native `lfm2` parser.
   - **32K context**: 32,768-token context window.
-  - **Native Aphrodite support**: Served via the `Lfm2ForCausalLM` architecture.
+  - **Native Sonar support**: Served via the `Lfm2ForCausalLM` architecture.
 
   ### Supported Variants
 
@@ -90,26 +90,26 @@ guide: |
   ## Prerequisites
 
   - **Hardware**: 1× GPU with ≥8 GB VRAM.
-  - **Aphrodite**: ≥ 0.23.0.
+  - **Sonar**: ≥ 0.23.0.
 
   ### pip (NVIDIA CUDA)
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U aphrodite-engine --torch-backend auto
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   ```
 
   ## Deployment Configurations
 
   ### Quick Start (Single GPU, BF16)
   ```bash
-  aphrodite serve LiquidAI/LFM2.5-1.2B-JP-202606
+  sonar serve LiquidAI/LFM2.5-1.2B-JP-202606
   ```
 
   ### Full-Featured Server Launch
   Enables tool calling:
   ```bash
-  aphrodite serve LiquidAI/LFM2.5-1.2B-JP-202606 \
+  sonar serve LiquidAI/LFM2.5-1.2B-JP-202606 \
     --enable-auto-tool-choice \
     --tool-call-parser lfm2 \
     --host 0.0.0.0 --port 8000
@@ -149,10 +149,10 @@ guide: |
   ## Configuration Tips
   - Set `--max-model-len` to match your workload (up to 32K); lowering it frees VRAM for KV cache.
   - `--gpu-memory-utilization 0.90–0.95` maximizes KV cache capacity.
-  - Sampling presets are per-request client defaults — don't bake them into `aphrodite serve`.
+  - Sampling presets are per-request client defaults — don't bake them into `sonar serve`.
 
   ## References
   - [Model card](https://huggingface.co/LiquidAI/LFM2.5-1.2B-JP-202606)
   - [LFM2.5 usage guide](../../LiquidAI/LFM2.5)
   - [Liquid AI](https://www.liquid.ai/)
-  - [Aphrodite supported models](https://docs.vllm.ai/en/latest/models/supported_models.html)
+  - [Sonar supported models](https://docs.vllm.ai/en/latest/models/supported_models.html)

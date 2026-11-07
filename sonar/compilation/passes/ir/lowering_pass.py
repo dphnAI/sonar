@@ -11,27 +11,27 @@ from torch._inductor.pattern_matcher import (
     register_graph_pattern,
 )
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.ir.op import IrOp
-from aphrodite.logger import init_logger
-from aphrodite.logging_utils import lazy
+from sonar.config import SonarConfig
+from sonar.ir.op import IrOp
+from sonar.logger import init_logger
+from sonar.logging_utils import lazy
 
-from ..aphrodite_inductor_pass import AphroditeInductorPass
+from ..sonar_inductor_pass import SonarInductorPass
 from .utils import get_ir_op
 
 logger = init_logger(__name__)
 
 
-class AphroditeIRLoweringPass(AphroditeInductorPass):
-    """This pass lowers Aphrodite IR ops to their implementations the priority list."""
+class SonarIRLoweringPass(SonarInductorPass):
+    """This pass lowers Sonar IR ops to their implementations the priority list."""
 
-    def __init__(self, aphrodite_config: AphroditeConfig) -> None:
-        super().__init__(aphrodite_config)
+    def __init__(self, sonar_config: SonarConfig) -> None:
+        super().__init__(sonar_config)
         self.patterns = PatternMatcherPass(self.pass_name)
         self.selected_impls: dict[str, dict[str, str]] = defaultdict(lambda: {})
         self.ops = [ir_op.torch_op for ir_op in IrOp.registry.values()]
 
-        # Look for any call_function node where the target is a Aphrodite IR op.
+        # Look for any call_function node where the target is a Sonar IR op.
         # Then, lower_matched_op will select, trace, and insert the implementation.
         register_graph_pattern(
             CallFunctionVarArgs(self.ops),
@@ -44,7 +44,7 @@ class AphroditeIRLoweringPass(AphroditeInductorPass):
         assert len(match.nodes) == 1, "Expected single node match"
         node = match.nodes[0]
         ir_op = get_ir_op(node)  # TODO is node.target always an overload?
-        assert ir_op is not None, "Expected Aphrodite IR op"
+        assert ir_op is not None, "Expected Sonar IR op"
         assert not node.kwargs  # I think there should never be kwargs here
 
         # Select and record the implementation, using fake args
@@ -64,13 +64,13 @@ class AphroditeIRLoweringPass(AphroditeInductorPass):
         # as they might not be functional.
         match.replace_by_example(ir_op_impl.func_impl_fn, bound_args.args, run_functional_passes=False)
 
-    @AphroditeInductorPass.time_and_log
+    @SonarInductorPass.time_and_log
     def __call__(self, graph: fx.Graph) -> None:
         # clear at the beginning instead of end, so that tests can inspect
         self.selected_impls.clear()
 
         count = self.patterns.apply(graph)
-        logger.debug("AphroditeIRLoweringPass lowered %d Aphrodite IR nodes", count)
+        logger.debug("SonarIRLoweringPass lowered %d Sonar IR nodes", count)
 
         # TODO write self.selected_impls to depyf/tlparse dir
         def count_items(impls: Iterable[str]) -> dict[str, int]:
@@ -96,7 +96,7 @@ class AphroditeIRLoweringPass(AphroditeInductorPass):
 
         failed_nodes: list[fx.Node] = []
         failed_ops: set[str] = set()
-        # Check no aphrodite_ir nodes were left in the graph
+        # Check no sonar_ir nodes were left in the graph
         for node in graph.nodes:
             if (ir_op := get_ir_op(node)) is None:
                 continue
@@ -105,7 +105,7 @@ class AphroditeIRLoweringPass(AphroditeInductorPass):
             failed_ops.add(ir_op.name)
 
         if failed_nodes or failed_ops:
-            logger.warning("Failed to lower Aphrodite IR ops: %s", ",".join(failed_ops))
+            logger.warning("Failed to lower Sonar IR ops: %s", ",".join(failed_ops))
             logger.warning("Full node list: %s", ",".join(str(n) for n in failed_nodes))
 
     def uuid(self) -> str:

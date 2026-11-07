@@ -4,7 +4,7 @@
 
 import torch
 
-from aphrodite.triton_utils import tl, triton
+from sonar.triton_utils import tl, triton
 
 # Workgroups the score grid aims for, and the floor on how few blocks one
 # chunk may walk: the query tile is loaded once outside the block loop, so a

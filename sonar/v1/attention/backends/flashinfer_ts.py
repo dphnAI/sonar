@@ -9,7 +9,7 @@ reason this backend exists is that ``mask_type="dense"`` expresses a
 *non-causal* draft block directly -- the trtllm-gen paged decode kernel is
 bottom-right causal and silently ignores a supplied mask.
 
-Layout. No KV cache change: K and V are the two halves of Aphrodite's ordinary
+Layout. No KV cache change: K and V are the two halves of Sonar's ordinary
 ``[pages, Hkv, page_size, 2 * D]`` page, so their token stride is ``2 * D``.
 The kernel builds its TMA descriptors from the tensors' own strides
 (``_validate_native_hnd_tma_strides``), so the only requirement is a
@@ -31,11 +31,11 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.v1.attention.backend import (
+from sonar.config import SonarConfig
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.utils.math_utils import cdiv
+from sonar.v1.attention.backend import (
     AttentionBackend,
     AttentionCGSupport,
     AttentionImpl,
@@ -47,11 +47,11 @@ from aphrodite.v1.attention.backend import (
     MultipleOf,
     max_decode_query_len,
 )
-from aphrodite.v1.kv_cache_interface import AttentionSpec, KVCacheSpec
+from sonar.v1.kv_cache_interface import AttentionSpec, KVCacheSpec
 
 if TYPE_CHECKING:
-    from aphrodite.config.cache import CacheDType
-    from aphrodite.platforms.interface import DeviceCapability
+    from sonar.config.cache import CacheDType
+    from sonar.platforms.interface import DeviceCapability
 
 logger = init_logger(__name__)
 
@@ -129,10 +129,10 @@ class FlashInferTSMetadataBuilder(AttentionMetadataBuilder[FlashInferTSMetadata]
         self,
         kv_cache_spec: KVCacheSpec,
         layer_names: list[str],
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         device: torch.device,
     ):
-        super().__init__(kv_cache_spec, layer_names, aphrodite_config, device)
+        super().__init__(kv_cache_spec, layer_names, sonar_config, device)
         assert isinstance(kv_cache_spec, AttentionSpec)
         self.page_size = kv_cache_spec.block_size
         self.num_kv_heads = kv_cache_spec.num_kv_heads
@@ -143,12 +143,12 @@ class FlashInferTSMetadataBuilder(AttentionMetadataBuilder[FlashInferTSMetadata]
         # q_fp8_out), so the attention layer does not quantize it again.
         self.kv_dtype = _kv_kernel_dtype(kv_cache_spec)
         self.q_dtype = self.kv_dtype
-        self.out_dtype = aphrodite_config.model_config.dtype
-        self.num_qo_heads = aphrodite_config.model_config.get_num_attention_heads(aphrodite_config.parallel_config)
+        self.out_dtype = sonar_config.model_config.dtype
+        self.num_qo_heads = sonar_config.model_config.get_num_attention_heads(sonar_config.parallel_config)
         # FullAttentionSpec records the window when the hybrid KV cache manager
         # is disabled; SlidingWindowSpec carries it directly.
         self.sliding_window: int | None = getattr(kv_cache_spec, "sliding_window", None)
-        self.query_len = max_decode_query_len(aphrodite_config)
+        self.query_len = max_decode_query_len(sonar_config)
         self._plans: dict[tuple[int, int, bool], Any] = {}
         self._init_reorder_batch_threshold(1, supports_spec_as_decode=True)
 
@@ -158,8 +158,8 @@ class FlashInferTSMetadataBuilder(AttentionMetadataBuilder[FlashInferTSMetadata]
         # fresh tensors per step would leave a replayed graph reading freed
         # memory, so every build writes into these buffers in place.
         max_reqs = max(
-            aphrodite_config.scheduler_config.max_num_seqs,
-            aphrodite_config.scheduler_config.max_num_batched_tokens // max(self.query_len, 1),
+            sonar_config.scheduler_config.max_num_seqs,
+            sonar_config.scheduler_config.max_num_batched_tokens // max(self.query_len, 1),
         )
         self._buf_seq_lens = torch.zeros(max_reqs, dtype=torch.int32, device=device)
         self._buf_block_table = torch.zeros(
@@ -171,7 +171,7 @@ class FlashInferTSMetadataBuilder(AttentionMetadataBuilder[FlashInferTSMetadata]
     def _window_pages(self, query_len: int) -> int:
         """Page-table width a restricted (windowed) batch needs."""
         if self.sliding_window is None:
-            return cdiv(self.aphrodite_config.model_config.max_model_len, self.page_size)
+            return cdiv(self.sonar_config.model_config.max_model_len, self.page_size)
         return cdiv(self.sliding_window + query_len - 1, self.page_size) + 1
 
     def _max_kv_len(self) -> int:
@@ -185,7 +185,7 @@ class FlashInferTSMetadataBuilder(AttentionMetadataBuilder[FlashInferTSMetadata]
             # _restrict_to_window leaves at most one partial page in front of
             # the window plus the query block itself.
             return self.sliding_window + self.query_len + self.page_size
-        return self.aphrodite_config.model_config.max_model_len
+        return self.sonar_config.model_config.max_model_len
 
     def _get_plan(self, num_reqs: int, query_len: int, causal: bool) -> Any:
         key = (num_reqs, query_len, causal)
@@ -350,7 +350,7 @@ class FlashInferTSImpl(AttentionImpl[FlashInferTSMetadata]):
         self.supports_quant_query_input = kv_cache_dtype.startswith("fp8")
 
     def _kv_views(self, kv_cache: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        """HND K/V views of Aphrodite's ``[pages, Hkv, page, 2 * D]`` page.
+        """HND K/V views of Sonar's ``[pages, Hkv, page, 2 * D]`` page.
 
         Their token stride is ``2 * D`` rather than ``D``; the kernel builds its
         TMA descriptors from the tensor's own strides, so no repacking and no
@@ -368,7 +368,7 @@ class FlashInferTSImpl(AttentionImpl[FlashInferTSMetadata]):
         kv_cache: torch.Tensor,
         slot_mapping: torch.Tensor,
     ) -> None:
-        from aphrodite._custom_ops import reshape_and_cache_flash
+        from sonar._custom_ops import reshape_and_cache_flash
 
         key_cache, value_cache = kv_cache.transpose(1, 2).split(self.head_size, dim=-1)
         reshape_and_cache_flash(

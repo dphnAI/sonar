@@ -8,19 +8,19 @@ from collections.abc import Callable, Sequence
 import torch
 from tqdm import tqdm
 
-from aphrodite import RequestOutput, TextPrompt, TokensPrompt
-from aphrodite.entrypoints.common.offline import OfflineInferenceMixin
-from aphrodite.logger import init_logger
-from aphrodite.lora.request import LoRARequest
-from aphrodite.pooling_params import PoolingParams
-from aphrodite.sampling_params import (
+from sonar import RequestOutput, TextPrompt, TokensPrompt
+from sonar.entrypoints.common.offline import OfflineInferenceMixin
+from sonar.logger import init_logger
+from sonar.lora.request import LoRARequest
+from sonar.pooling_params import PoolingParams
+from sonar.sampling_params import (
     BeamSearchParams,
     SamplingParams,
     StructuredOutputsParams,
 )
-from aphrodite.tokenizers import TokenizerLike
-from aphrodite.v1.structured_output.backend_types import StructuredOutputBackend
-from aphrodite.v1.structured_output.request import get_structured_output_key
+from sonar.tokenizers import TokenizerLike
+from sonar.v1.structured_output.backend_types import StructuredOutputBackend
+from sonar.v1.structured_output.request import get_structured_output_key
 
 from .utils import (
     BeamSearchInstance,
@@ -33,7 +33,7 @@ from .utils import (
 logger = init_logger(__name__)
 
 # Engine-side cap on `SamplingParams.allowed_token_ids`; keep in sync with
-# MAX_NUM_ALLOWED_TOKEN_IDS in aphrodite/v1/worker/gpu/sample/logit_bias.py.
+# MAX_NUM_ALLOWED_TOKEN_IDS in sonar/v1/worker/gpu/sample/logit_bias.py.
 _MAX_NUM_ALLOWED_TOKEN_IDS = 1024
 
 
@@ -117,7 +117,7 @@ class BeamSearchOfflineMixin(OfflineInferenceMixin):
             detokenize=False,
             skip_clone=True,  # Internal beam search, safe to skip clone
         )
-        params.configure_logprobs(base_sampling_params, self.llm_engine.input_processor.aphrodite_config)
+        params.configure_logprobs(base_sampling_params, self.llm_engine.input_processor.sonar_config)
         if params.structured_outputs is not None:
             (
                 structured_output_backend,
@@ -351,8 +351,8 @@ class BeamSearchOfflineMixin(OfflineInferenceMixin):
         tokenizer: TokenizerLike,
     ) -> tuple[StructuredOutputBackend, tuple, torch.Tensor]:
         """Initialize the structured output backend for beam search."""
-        aphrodite_config = self.llm_engine.aphrodite_config
-        so_config = aphrodite_config.structured_outputs_config
+        sonar_config = self.llm_engine.sonar_config
+        so_config = sonar_config.structured_outputs_config
         if so_config is None:
             raise ValueError("structured_outputs_config is required for beam search with structured outputs")
 
@@ -365,42 +365,42 @@ class BeamSearchOfflineMixin(OfflineInferenceMixin):
 
         backend: StructuredOutputBackend
         if backend_name == "xgrammar":
-            from aphrodite.v1.structured_output.backend_xgrammar import (
+            from sonar.v1.structured_output.backend_xgrammar import (
                 XgrammarBackend,
             )
 
             backend = XgrammarBackend(
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 tokenizer=tokenizer,
                 vocab_size=vocab_size,
             )
         elif backend_name == "guidance":
-            from aphrodite.v1.structured_output.backend_guidance import (
+            from sonar.v1.structured_output.backend_guidance import (
                 GuidanceBackend,
             )
 
             backend = GuidanceBackend(
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 tokenizer=tokenizer,
                 vocab_size=vocab_size,
             )
         elif backend_name == "outlines":
-            from aphrodite.v1.structured_output.backend_outlines import (
+            from sonar.v1.structured_output.backend_outlines import (
                 OutlinesBackend,
             )
 
             backend = OutlinesBackend(
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 tokenizer=tokenizer,
                 vocab_size=vocab_size,
             )
         elif backend_name == "lm-format-enforcer":
-            from aphrodite.v1.structured_output.backend_lm_format_enforcer import (
+            from sonar.v1.structured_output.backend_lm_format_enforcer import (
                 LMFormatEnforcerBackend,
             )
 
             backend = LMFormatEnforcerBackend(
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 tokenizer=tokenizer,
                 vocab_size=vocab_size,
             )

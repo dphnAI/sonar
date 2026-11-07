@@ -104,8 +104,8 @@ hardware_overrides:
       - "--attention-backend"
       - "ROCM_AITER_FA"
     extra_env:
-      APHRODITE_ROCM_USE_AITER: "1"
-      APHRODITE_ROCM_SHUFFLE_KV_CACHE_LAYOUT: "1"
+      SONAR_ROCM_USE_AITER: "1"
+      SONAR_ROCM_SHUFFLE_KV_CACHE_LAYOUT: "1"
 
 strategy_overrides:
   single_node_tp:
@@ -121,7 +121,7 @@ guide: |
   [MiniMax-M2.7](https://huggingface.co/MiniMaxAI/MiniMax-M2.7) is the latest release
   in the MiniMax M2 series. Like earlier M2 variants, it ships with 10B active
   parameters out of 230B total, and supports a 196K context per sequence. MiniMax has
-  verified M2.7 accuracy on AIME25, GPQA-D, and GSM8K at Aphrodite commit
+  verified M2.7 accuracy on AIME25, GPQA-D, and GSM8K at Sonar commit
   `0f3ce4c74b1875791d6604e006b6e905fde9f698`.
 
   ## Prerequisites
@@ -131,16 +131,16 @@ guide: |
   - **NVIDIA:** compute capability >= 7.0; ~220 GB for weights + 240 GB per 1M context tokens
   - **AMD:** MI300X / MI325X / MI350X / MI355X with ROCm 7.0+
 
-  ### Install Aphrodite (NVIDIA)
+  ### Install Sonar (NVIDIA)
 
   ```bash
-  uv pip install -U aphrodite-engine --extra-index-url https://wheels.vllm.ai/nightly
+  uv pip install -U sonar --index-strategy first-index --torch-backend cu130 --extra-index-url https://sonar.dphn.ai/whl/nightly/cuda/x86_64/simple
   ```
 
-  ### Install Aphrodite (AMD ROCm)
+  ### Install Sonar (AMD ROCm)
 
   ```bash
-  uv pip install aphrodite-engine --extra-index-url https://wheels.vllm.ai/rocm/
+  uv pip install sonar --index-strategy first-index --extra-index-url https://sonar.dphn.ai/whl/release/rocm/x86_64/simple
   ```
 
   ### Docker (dedicated M2-series image)
@@ -163,7 +163,7 @@ guide: |
   ### NVIDIA — TP4 (4x H200/H20/H100 or 4x A100/A800)
 
   ```bash
-  aphrodite serve MiniMaxAI/MiniMax-M2.7 \
+  sonar serve MiniMaxAI/MiniMax-M2.7 \
     --tensor-parallel-size 4 \
     --tool-call-parser minimax_m2 \
     --reasoning-parser minimax_m2 \
@@ -176,7 +176,7 @@ guide: |
   ### DP8+EP
 
   ```bash
-  aphrodite serve MiniMaxAI/MiniMax-M2.7 \
+  sonar serve MiniMaxAI/MiniMax-M2.7 \
     --data-parallel-size 8 \
     --enable-expert-parallel \
     --tool-call-parser minimax_m2 \
@@ -187,7 +187,7 @@ guide: |
   ### TP4+EP (recommended for H100)
 
   ```bash
-  aphrodite serve MiniMaxAI/MiniMax-M2.7 \
+  sonar serve MiniMaxAI/MiniMax-M2.7 \
     --tensor-parallel-size 4 \
     --enable-expert-parallel \
     --tool-call-parser minimax_m2 \
@@ -198,7 +198,7 @@ guide: |
   ### TP8+EP
 
   ```bash
-  aphrodite serve MiniMaxAI/MiniMax-M2.7 \
+  sonar serve MiniMaxAI/MiniMax-M2.7 \
     --tensor-parallel-size 8 \
     --enable-expert-parallel \
     --tool-call-parser minimax_m2 \
@@ -209,7 +209,7 @@ guide: |
   ### AMD ROCm — TP2
 
   ```bash
-  APHRODITE_ROCM_USE_AITER=1 aphrodite serve MiniMaxAI/MiniMax-M2.7 \
+  SONAR_ROCM_USE_AITER=1 sonar serve MiniMaxAI/MiniMax-M2.7 \
     --tensor-parallel-size 2 \
     --tool-call-parser minimax_m2 \
     --reasoning-parser minimax_m2 \
@@ -220,8 +220,8 @@ guide: |
   ## Benchmarking
 
   ```bash
-  aphrodite bench serve \
-    --backend aphrodite \
+  sonar bench serve \
+    --backend sonar \
     --model MiniMaxAI/MiniMax-M2.7 \
     --endpoint /v1/completions \
     --dataset-name random \
@@ -233,14 +233,14 @@ guide: |
 
   ## Troubleshooting
 
-  - **MiniMax QK norm fusion:** Latest Aphrodite applies the fusion automatically at
-    runtime when the fused CUDA op is available; older Aphrodite builds used an
+  - **MiniMax QK norm fusion:** Latest Sonar applies the fusion automatically at
+    runtime when the fused CUDA op is available; older Sonar builds used an
     explicit `fuse_minimax_qk_norm` compile pass.
   - **Corrupted output on stable release:** Upgrade to a nightly after commit
     `cf3eacfe58fa9e745c2854782ada884a9f992cf7`.
   - **Verified accuracy:** Use the pinned commit
     `0f3ce4c74b1875791d6604e006b6e905fde9f698` if reproducing MiniMax's reported results.
-  - **DeepGEMM:** Aphrodite uses DeepGEMM by default; install via
+  - **DeepGEMM:** Sonar uses DeepGEMM by default; install via
     [install_deepgemm.sh](https://github.com/vllm-project/vllm/blob/main/tools/install_deepgemm.sh)
     if missing.
   - **AITER first launch:** Initial AMD launch JIT-compiles optimized kernels; subsequent launches reuse cached kernels.
@@ -249,4 +249,4 @@ guide: |
 
   - [Model card](https://huggingface.co/MiniMaxAI/MiniMax-M2.7)
   - [MiniMax](https://www.minimax.io/)
-  - [Aphrodite PR #43410 (automatic MiniMax QK norm fusion)](https://github.com/vllm-project/vllm/pull/43410)
+  - [Sonar PR #43410 (automatic MiniMax QK norm fusion)](https://github.com/vllm-project/vllm/pull/43410)

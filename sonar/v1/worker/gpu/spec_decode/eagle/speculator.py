@@ -3,8 +3,8 @@
 
 import torch.nn as nn
 
-from aphrodite.v1.worker.gpu.spec_decode.eagle.utils import load_eagle_model
-from aphrodite.v1.worker.gpu.spec_decode.target_dependent_ar.speculator import (
+from sonar.v1.worker.gpu.spec_decode.eagle.utils import load_eagle_model
+from sonar.v1.worker.gpu.spec_decode.target_dependent_ar.speculator import (
     TargetDependentARSpeculator,
 )
 
@@ -15,4 +15,4 @@ class EagleSpeculator(TargetDependentARSpeculator):
         target_model: nn.Module,
         target_attn_layer_names: set[str],
     ) -> nn.Module:
-        return load_eagle_model(target_model, self.aphrodite_config)
+        return load_eagle_model(target_model, self.sonar_config)

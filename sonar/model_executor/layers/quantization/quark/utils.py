@@ -7,7 +7,7 @@ from typing import Any
 
 import torch
 
-from aphrodite.model_executor.layers.quantization.utils.config_utils import (
+from sonar.model_executor.layers.quantization.utils.config_utils import (
     find_matching_patterns,
 )
 
@@ -59,7 +59,7 @@ def should_ignore_layer(
     if any(shards_ignored) and not all(shards_ignored):
         raise ValueError(
             f"Found different quantization schemes for the shards of "
-            f"{layer_name}. Aphrodite requires all to use the same scheme."
+            f"{layer_name}. Sonar requires all to use the same scheme."
         )
     return all(shards_ignored)
 
@@ -90,7 +90,7 @@ def canonicalize_quark_packed_int4(
     pack_factor: int = 8,
 ) -> torch.Tensor:
     """Convert Quark export nibble layout to AWQ checkpoint layout."""
-    from aphrodite.model_executor.layers.quantization.auto_awq import (
+    from sonar.model_executor.layers.quantization.auto_awq import (
         _REVERSE_AWQ_PACK_ORDER,
     )
 

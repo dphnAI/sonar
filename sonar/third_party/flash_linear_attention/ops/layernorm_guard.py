@@ -20,15 +20,15 @@ import torch.nn as nn
 import torch.nn.functional as F
 from einops import rearrange
 
-from aphrodite.model_executor.warmup.jit_warmup import AphroditeJitKernel
-from aphrodite.model_executor.warmup.jit_warmup_triton_helper import (
+from sonar.model_executor.warmup.jit_warmup import SonarJitKernel
+from sonar.model_executor.warmup.jit_warmup_triton_helper import (
     TritonPointerInputVariant,
     TritonWarmupTensor,
     triton_scalar_specialization_rep,
 )
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.math_utils import cdiv, next_power_of_2
-from aphrodite.utils.platform_utils import num_compute_units
+from sonar.triton_utils import tl, triton
+from sonar.utils.math_utils import cdiv, next_power_of_2
+from sonar.utils.platform_utils import num_compute_units
 
 from .utils import input_guard
 
@@ -183,7 +183,7 @@ def calc_rows_per_block(M: int, device: torch.device) -> int:
     return rows_per_block
 
 
-class LayerNormFwdKernel(AphroditeJitKernel["LayerNormFwdKernel.CompileKey"]):
+class LayerNormFwdKernel(SonarJitKernel["LayerNormFwdKernel.CompileKey"]):
     """Own the runtime and compile-only dispatch for FLA layer norm."""
 
     @dataclass(frozen=True)
@@ -507,7 +507,7 @@ def _layer_norm_fn_impl(
 
     This calls the triton kernel directly. The original code wrapped this
     in a torch.autograd.Function (LayerNormFn) to save tensors for a
-    backward pass, but Aphrodite is inference-only so there is no backward pass.
+    backward pass, but Sonar is inference-only so there is no backward pass.
     The autograd wrapper also prevented torch.compile/dynamo from tracing
     through the function due to its @staticmethod forward.
     """

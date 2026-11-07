@@ -14,7 +14,7 @@ mod xgrammar;
 
 /// Structured-output backend selected for EngineCore grammar compilation.
 ///
-/// Python Aphrodite stores this in `StructuredOutputsParams._backend` after request
+/// Python Sonar stores this in `StructuredOutputsParams._backend` after request
 /// validation. The Rust frontend has no request-level selection: every
 /// request uses the server's configured backend, set when the request is
 /// lowered to [`EngineCoreStructuredOutputsParams`].

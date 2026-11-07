@@ -7,12 +7,12 @@ from typing import Any
 import pytest
 from transformers import AutoModelForSeq2SeqLM
 
-from aphrodite.assets.audio import AudioAsset
-from aphrodite.envs import disable_envs_cache
-from aphrodite.lora.request import LoRARequest
-from aphrodite.multimodal.audio import AudioResampler
+from sonar.assets.audio import AudioAsset
+from sonar.envs import disable_envs_cache
+from sonar.lora.request import LoRARequest
+from sonar.multimodal.audio import AudioResampler
 
-from ....conftest import AphroditeRunner, HfRunner
+from ....conftest import HfRunner, SonarRunner
 from ...utils import check_logprobs_close
 
 AUDIO_ASSET = AudioAsset("mary_had_lamb")
@@ -37,7 +37,7 @@ AUDIO_MODEL_SETTINGS: dict[str, dict[str, Any]] = {
             "<sound>Transcribe the input speech.<|im_end|>\n"
             "<|im_start|>assistant\n"
         ),
-        "aphrodite_runner_kwargs": {
+        "sonar_runner_kwargs": {
             "gpu_memory_utilization": 0.85,
         },
     },
@@ -54,7 +54,7 @@ AUDIO_MODEL_SETTINGS: dict[str, dict[str, Any]] = {
             "<|im_start|>assistant\n"
         ),
         "sampling_rate": 24000,
-        "aphrodite_runner_kwargs": {
+        "sonar_runner_kwargs": {
             "max_num_batched_tokens": 2048,
             "gpu_memory_utilization": 0.85,
         },
@@ -75,19 +75,19 @@ def use_spawn_for_audio_models(monkeypatch):
     """Single-process workaround for V1 fork safety deadlock issue
     (https://github.com/vllm-project/vllm/issues/17676). Running multiple audio models together
     under pytest can cause (possibly flaky) hangs, so they are grouped under
-    the same config. Using APHRODITE_WORKER_MULTIPROC_METHOD=spawn avoids the
+    the same config. Using SONAR_WORKER_MULTIPROC_METHOD=spawn avoids the
     deadlock and allows worker processes to terminate cleanly, and release
     GPU memory between test runs until the issue is fixed."""
     # TODO: Remove monkeypatch once
     # https://github.com/vllm-project/vllm/issues/17676 is fixed.
     disable_envs_cache()
-    monkeypatch.setenv("APHRODITE_WORKER_MULTIPROC_METHOD", "spawn")
+    monkeypatch.setenv("SONAR_WORKER_MULTIPROC_METHOD", "spawn")
 
 
 @pytest.mark.parametrize("model_id", list(AUDIO_MODEL_SETTINGS))
 def test_transformers_audio_generation(
     hf_runner: type[HfRunner],
-    aphrodite_runner: type[AphroditeRunner],
+    sonar_runner: type[SonarRunner],
     model_id: str,
 ):
     settings = AUDIO_MODEL_SETTINGS[model_id]
@@ -99,7 +99,7 @@ def test_transformers_audio_generation(
         audio = AudioResampler(target_sr=target_sr).resample(audio, orig_sr=orig_sr)
     audio = (audio, target_sr)
 
-    with aphrodite_runner(
+    with sonar_runner(
         model_id,
         model_impl="transformers",
         dtype="bfloat16",
@@ -108,10 +108,10 @@ def test_transformers_audio_generation(
         limit_mm_per_prompt={"audio": 1},
         enable_lora=audio_lora_path is not None,
         max_lora_rank=64,
-        **settings.get("aphrodite_runner_kwargs", {}),
-    ) as aphrodite_model:
+        **settings.get("sonar_runner_kwargs", {}),
+    ) as sonar_model:
         lora_request = LoRARequest("audio", 1, audio_lora_path) if audio_lora_path else None
-        aphrodite_outputs = aphrodite_model.generate_greedy_logprobs(
+        sonar_outputs = sonar_model.generate_greedy_logprobs(
             [settings["prompt"]],
             128,
             num_logprobs=10,
@@ -124,7 +124,7 @@ def test_transformers_audio_generation(
 
     check_logprobs_close(
         outputs_0_lst=hf_outputs,
-        outputs_1_lst=aphrodite_outputs,
+        outputs_1_lst=sonar_outputs,
         name_0="hf",
-        name_1="aphrodite",
+        name_1="sonar",
     )

@@ -4,14 +4,14 @@
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
-from aphrodite.entrypoints.generate.base.protocol import DeltaMessage
-from aphrodite.parser.engine.registered_adapters import MinimaxM2ParserReasoningAdapter
-from aphrodite.reasoning.abs_reasoning_parsers import ReasoningParser
-from aphrodite.tokenizers import TokenizerLike
+from sonar.entrypoints.generate.base.protocol import DeltaMessage
+from sonar.parser.engine.registered_adapters import MinimaxM2ParserReasoningAdapter
+from sonar.reasoning.abs_reasoning_parsers import ReasoningParser
+from sonar.tokenizers import TokenizerLike
 
 if TYPE_CHECKING:
-    from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-    from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
+    from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+    from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
 
 
 class MiniMaxM2ReasoningParser(MinimaxM2ParserReasoningAdapter):  # type: ignore[valid-type, misc]

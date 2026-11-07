@@ -7,18 +7,18 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
-from aphrodite.entrypoints.generate.base.protocol import (
+from sonar.entrypoints.generate.base.protocol import (
     DeltaMessage,
     FunctionCall,
 )
-from aphrodite.parser.abstract_parser import DelegatingParser
-from aphrodite.reasoning.kimi_k3_reasoning_parser import KimiK3ReasoningParser
+from sonar.parser.abstract_parser import DelegatingParser
+from sonar.reasoning.kimi_k3_reasoning_parser import KimiK3ReasoningParser
 
 if TYPE_CHECKING:
-    from aphrodite.entrypoints.openai.chat_completion.protocol import (
+    from sonar.entrypoints.openai.chat_completion.protocol import (
         ChatCompletionRequest,
     )
-    from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
+    from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
 
 
 class KimiK3Parser(DelegatingParser):

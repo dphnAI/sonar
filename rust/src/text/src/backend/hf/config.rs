@@ -403,7 +403,7 @@ mod tests {
     }
 
     #[test]
-    fn generation_config_normalizes_aphrodite_top_k_values() {
+    fn generation_config_normalizes_sonar_top_k_values() {
         for (input, expected) in [
             (r#"{"top_k":null}"#, None),
             (r#"{"top_k":-1}"#, None),

@@ -13,11 +13,11 @@ from mistral_common.protocol.instruct.messages import (
 from mistral_common.protocol.instruct.request import InstructRequest
 from mistral_common.protocol.instruct.tool_calls import FunctionCall, ToolCall
 
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-from aphrodite.parser.parser_manager import ParserManager
-from aphrodite.reasoning import ReasoningParser, ReasoningParserManager
-from aphrodite.tokenizers.detokenizer_utils import detokenize_incrementally
-from aphrodite.tokenizers.mistral import MistralTokenizer
+from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+from sonar.parser.parser_manager import ParserManager
+from sonar.reasoning import ReasoningParser, ReasoningParserManager
+from sonar.tokenizers.detokenizer_utils import detokenize_incrementally
+from sonar.tokenizers.mistral import MistralTokenizer
 from tests.reasoning.utils import run_reasoning_extraction_mistral
 
 _PARSER_NAME = "mistral"

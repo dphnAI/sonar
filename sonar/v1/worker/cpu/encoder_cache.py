@@ -5,7 +5,7 @@ from dataclasses import replace
 
 import torch
 
-from aphrodite.multimodal.inputs import MultiModalFeatureSpec, MultiModalKwargsItem
+from sonar.multimodal.inputs import MultiModalFeatureSpec, MultiModalKwargsItem
 
 
 class EncoderCache:

@@ -3,18 +3,18 @@
 """Weight cache daemon for fast engine restarts.
 
 One daemon process per GPU holds the post-quantized, TP-sharded weights of its
-rank in GPU memory and serves CUDA IPC handles to Aphrodite engines over a Unix
+rank in GPU memory and serves CUDA IPC handles to Sonar engines over a Unix
 domain socket. Restarting engines map the weights via zero-copy IPC instead of
 reloading from disk.
 
 Launch one daemon per TP rank with a single command:
 
-    aphrodite preload \\
+    sonar preload \\
         --model /path/to/model --tensor-parallel-size 4
 
 Engines then load from the daemons with:
 
-    aphrodite serve /path/to/model --tensor-parallel-size 4 \\
+    sonar serve /path/to/model --tensor-parallel-size 4 \\
         --load-format ipc_cache
 
 Tensor, expert, data and pipeline parallelism are supported.
@@ -26,18 +26,18 @@ node-local, so each node serves only its local GPUs' shards). Reuse the same
 ``--weight-cache-master-port`` distinct from the engine's ``--master-port``:
 
     # node 0 (8 local GPUs)
-    aphrodite preload \\
+    sonar preload \\
         --model /path/to/model --tensor-parallel-size 16 \\
         --nnodes 2 --node-rank 0 --master-addr 10.0.0.1 \\
         --weight-cache-master-port 29600
     # node 1 (8 local GPUs)
-    aphrodite preload \\
+    sonar preload \\
         --model /path/to/model --tensor-parallel-size 16 \\
         --nnodes 2 --node-rank 1 --master-addr 10.0.0.1 \\
         --weight-cache-master-port 29600
 
 The global TP rank of local GPU ``i`` on node ``r`` is
-``r * (tp_size // nnodes) + i``, matching Aphrodite's contiguous per-node rank
+``r * (tp_size // nnodes) + i``, matching Sonar's contiguous per-node rank
 assignment, so each engine worker maps its shard from the daemon on its own
 node. With pipeline parallelism each node additionally runs one daemon per PP
 stage; the global rank is ``pp_rank * tp_size + tp_rank``.
@@ -50,7 +50,7 @@ node with the engine's DP placement flags. Local GPU ``i`` serves DP rank
 shards are laid out exactly as in the engine:
 
     # node r (4 local GPUs)
-    aphrodite preload \\
+    sonar preload \\
         --model /path/to/model --tensor-parallel-size 1 --enable-expert-parallel \\
         --data-parallel-size 16 --data-parallel-size-local 4 \\
         --data-parallel-start-rank 4r --data-parallel-address 10.0.0.1 \\
@@ -62,7 +62,7 @@ a reachable ``--data-parallel-address``). Each node then serves a contiguous
 block of the ``dp_size * tp_size`` global ranks, e.g. TP8 x DP2 on 4 nodes:
 
     # node r (4 local GPUs)
-    aphrodite preload \\
+    sonar preload \\
         --model /path/to/model --tensor-parallel-size 8 --enable-expert-parallel \\
         --nnodes 4 --node-rank r --master-addr 10.0.0.1 \\
         --data-parallel-size 2 --data-parallel-address 10.0.0.1 \\
@@ -88,26 +88,26 @@ from collections.abc import Callable
 
 import torch
 
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.config import (
     ParallelConfig,
+    SonarConfig,
     replace,
-    set_current_aphrodite_config,
+    set_current_sonar_config,
 )
-from aphrodite.distributed import (
+from sonar.distributed import (
     destroy_distributed_environment,
     destroy_model_parallel,
     ensure_model_parallel_initialized,
     get_world_group,
     init_distributed_environment,
 )
-from aphrodite.distributed.device_communicators.flashinfer_all_reduce import (
+from sonar.distributed.device_communicators.flashinfer_all_reduce import (
     destroy_fi_ar_workspace,
 )
-from aphrodite.logger import configure_logging, init_logger
-from aphrodite.model_executor.model_loader import get_model_loader
-from aphrodite.model_executor.model_loader.utils import process_weights_after_loading
-from aphrodite.model_executor.model_loader.weight_cache.protocol import (
+from sonar.logger import configure_logging, init_logger
+from sonar.model_executor.model_loader import get_model_loader
+from sonar.model_executor.model_loader.utils import process_weights_after_loading
+from sonar.model_executor.model_loader.weight_cache.protocol import (
     TensorEntry,
     WeightCacheKey,
     WeightCacheUnavailableError,
@@ -120,25 +120,25 @@ from aphrodite.model_executor.model_loader.weight_cache.protocol import (
     send_msg,
     verify_peer_is_owner,
 )
-from aphrodite.model_executor.model_loader.weight_cache.seed import (
+from sonar.model_executor.model_loader.weight_cache.seed import (
     SeedConfig,
     SeedTransport,
 )
-from aphrodite.model_executor.model_loader.weight_cache.utils import (
+from sonar.model_executor.model_loader.weight_cache.utils import (
     export_model_attrs,
     format_daemon_role,
     is_draft_model_cacheable,
 )
-from aphrodite.model_executor.model_loader.weight_cache.warmup_cache import (
+from sonar.model_executor.model_loader.weight_cache.warmup_cache import (
     FlashInferWarmupCache,
 )
-from aphrodite.model_executor.utils import weight_cache_model_construction
-from aphrodite.platforms import current_platform
-from aphrodite.utils.mem_utils import format_gib
-from aphrodite.utils.torch_utils import set_default_torch_dtype
-from aphrodite.v1.worker.workspace import init_workspace_manager
+from sonar.model_executor.utils import weight_cache_model_construction
+from sonar.platforms import current_platform
+from sonar.utils.mem_utils import format_gib
+from sonar.utils.torch_utils import set_default_torch_dtype
+from sonar.v1.worker.workspace import init_workspace_manager
 
-logger = init_logger("aphrodite.model_executor.model_loader.weight_cache.daemon")
+logger = init_logger("sonar.model_executor.model_loader.weight_cache.daemon")
 
 
 def export_entries(
@@ -210,7 +210,7 @@ class WeightCacheDaemon:
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         global_rank: int,
         local_rank: int,
         distributed_init_method: str,
@@ -220,7 +220,7 @@ class WeightCacheDaemon:
         pp_rank: int = 0,
         seed_config: SeedConfig | None = None,
     ):
-        parallel_config = aphrodite_config.parallel_config
+        parallel_config = sonar_config.parallel_config
         if parallel_config.enable_eplb:
             raise ValueError("The weight cache daemon does not support EPLB.")
         self.warmup_caches = [FlashInferWarmupCache()]
@@ -242,22 +242,22 @@ class WeightCacheDaemon:
                 data_parallel_rank=dp_rank,
                 data_parallel_rank_local=dp_rank - start_dp_rank,
             )
-            aphrodite_config = replace(aphrodite_config, parallel_config=parallel_config)
-        self.aphrodite_config = aphrodite_config
-        # A draft daemon builds the draft with the target's AphroditeConfig, like
+            sonar_config = replace(sonar_config, parallel_config=parallel_config)
+        self.sonar_config = sonar_config
+        # A draft daemon builds the draft with the target's SonarConfig, like
         # the engine does; only the ModelConfig differs.
         if is_draft:
-            spec = aphrodite_config.speculative_config
+            spec = sonar_config.speculative_config
             assert spec is not None and spec.draft_model_config is not None
             self.model_config = spec.draft_model_config
         else:
-            self.model_config = aphrodite_config.model_config
+            self.model_config = sonar_config.model_config
         self.global_rank = global_rank
         rank_in_dp = global_rank - dp_rank * self.pp_size * self.tp_size
         # Set like the engine's workers do: per-rank state such as the
         # torch.compile cache is keyed by it, and a compiled artifact shared
         # across ranks would run every rank's kernels on rank 0's device.
-        aphrodite_config.parallel_config.rank = rank_in_dp
+        sonar_config.parallel_config.rank = rank_in_dp
         self.tp_rank = rank_in_dp % self.tp_size
         self.pp_rank = rank_in_dp // self.tp_size
         self.dp_rank = dp_rank
@@ -270,12 +270,12 @@ class WeightCacheDaemon:
         self.model: torch.nn.Module | None = None
         # Engine watch connections, held open for the daemon's lifetime.
         self._watchers: list[socket.socket] = []
-        key_dp_size, key_dp_rank = get_engine_dp_placement(aphrodite_config, dp_rank)
+        key_dp_size, key_dp_rank = get_engine_dp_placement(sonar_config, dp_rank)
         # Fingerprint before loading: process_weights_after_loading may
         # mutate hf_config.quantization_config.
         self.cache_key = WeightCacheKey.from_model_config(
             self.model_config,
-            cache_config=aphrodite_config.cache_config,
+            cache_config=sonar_config.cache_config,
             tp_size=self.tp_size,
             tp_rank=self.tp_rank,
             pp_size=self.pp_size,
@@ -285,7 +285,7 @@ class WeightCacheDaemon:
             is_draft=is_draft,
             enable_expert_parallel=parallel_config.enable_expert_parallel,
             expert_placement_strategy=parallel_config.expert_placement_strategy,
-            kernel_config=aphrodite_config.kernel_config,
+            kernel_config=sonar_config.kernel_config,
         )
 
     def warmup(self) -> None:
@@ -305,7 +305,7 @@ class WeightCacheDaemon:
             local_rank=self.local_rank,
             backend=current_platform.dist_backend,
         )
-        with set_current_aphrodite_config(self.aphrodite_config):
+        with set_current_sonar_config(self.sonar_config):
             ensure_model_parallel_initialized(self.tp_size, self.pp_size)
             self.model = self.get_model()
         # In-place reloads use configs already normalized by model construction.
@@ -362,18 +362,18 @@ class WeightCacheDaemon:
         always fails the check, so load_model's finalize step for it is
         unnecessary here.
         """
-        aphrodite_config = self.aphrodite_config
+        sonar_config = self.sonar_config
         model_config = self.model_config
-        load_config = aphrodite_config.load_config
+        load_config = sonar_config.load_config
         loader = get_model_loader(load_config)
-        device_config = aphrodite_config.device_config
+        device_config = sonar_config.device_config
         target_device = torch.device(device_config.device if load_config.device is None else load_config.device)
         # Attention backends may take workspace at construction, like in the
         # engine's worker init.
         init_workspace_manager(target_device)
         with set_default_torch_dtype(model_config.dtype):
             with target_device, weight_cache_model_construction():
-                model = loader.create_model(aphrodite_config, model_config)
+                model = loader.create_model(sonar_config, model_config)
             check_ipc_quant_support(model)
             loader.load_weights(model, model_config)
             process_weights_after_loading(model, model_config, target_device)
@@ -556,7 +556,7 @@ class WeightCacheDaemon:
 def _run_daemon(
     global_rank: int,
     local_rank: int,
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     distributed_init_method: str,
     socket_dir: str | None,
     ready_queue: "multiprocessing.Queue[tuple[str, int]]",
@@ -566,10 +566,10 @@ def _run_daemon(
     seed_config: SeedConfig | None = None,
 ) -> None:
     # Spawned daemons start with logging unconfigured, like engine workers.
-    if logging_config := getattr(aphrodite_config, "logging_config", None):
+    if logging_config := getattr(sonar_config, "logging_config", None):
         configure_logging(logging_config)
     daemon = WeightCacheDaemon(
-        aphrodite_config,
+        sonar_config,
         global_rank,
         local_rank,
         distributed_init_method,
@@ -615,23 +615,23 @@ def plan_local_ranks(
     return placements
 
 
-def get_engine_dp_placement(aphrodite_config: AphroditeConfig, dp_rank: int) -> tuple[int, int]:
+def get_engine_dp_placement(sonar_config: SonarConfig, dp_rank: int) -> tuple[int, int]:
     """``(dp_size, dp_rank)`` as the engine fingerprints this DP rank.
 
     The engine runs the DP ranks of a non-MoE target as independent DP=1
     replicas, so their workers all report ``(1, 0)``.
     """
-    if aphrodite_config.model_config.is_moe:
-        return aphrodite_config.parallel_config.data_parallel_size, dp_rank
+    if sonar_config.model_config.is_moe:
+        return sonar_config.parallel_config.data_parallel_size, dp_rank
     return 1, 0
 
 
-def get_draft_daemon_config(aphrodite_config: AphroditeConfig) -> AphroditeConfig | None:
-    """AphroditeConfig for the draft daemon group"""
-    if not is_draft_model_cacheable(aphrodite_config.speculative_config):
+def get_draft_daemon_config(sonar_config: SonarConfig) -> SonarConfig | None:
+    """SonarConfig for the draft daemon group"""
+    if not is_draft_model_cacheable(sonar_config.speculative_config):
         return None
-    assert aphrodite_config.speculative_config is not None
-    return aphrodite_config.speculative_config.apply_draft_overrides(aphrodite_config)
+    assert sonar_config.speculative_config is not None
+    return sonar_config.speculative_config.apply_draft_overrides(sonar_config)
 
 
 def _reject_unsupported_parallelism(parallel_config: ParallelConfig) -> None:

@@ -6,12 +6,12 @@ from openai_harmony import (
 )
 from pydantic import ValidationError
 
-from aphrodite.entrypoints.openai.responses.protocol import (
+from sonar.entrypoints.openai.responses.protocol import (
     ResponsesRequest,
     serialize_message,
     serialize_messages,
 )
-from aphrodite.exceptions import AphroditeValidationError
+from sonar.exceptions import SonarValidationError
 
 
 def test_serialize_message() -> None:
@@ -45,7 +45,7 @@ def test_serialize_messages() -> None:
 
 def test_custom_tool_grammar_format_rejected() -> None:
     grammar = {"type": "grammar", "syntax": "lark", "definition": 'start: "pwd"'}
-    with pytest.raises(AphroditeValidationError) as exc_info:
+    with pytest.raises(SonarValidationError) as exc_info:
         ResponsesRequest(input="hi", tools=[{"type": "custom", "name": "emit", "format": grammar}])
     assert exc_info.value.parameter == "tools"
 

@@ -7,7 +7,7 @@ Python SDK so we stay in sync with the upstream specification and
 avoid re-declaring the schema. We only own three things locally:
 
 1. The top-level request body model (the SDK doesn't ship one — its
-   ``ClientV2.chat`` takes the body as kwargs), with Aphrodite-specific
+   ``ClientV2.chat`` takes the body as kwargs), with Sonar-specific
    extensions (``kv_transfer_params`` / ``chat_template_kwargs``).
 2. The non-streaming response envelope (the SDK exposes the message
    shape via :class:`AssistantMessageResponse` but no full response
@@ -17,7 +17,7 @@ avoid re-declaring the schema. We only own three things locally:
    discriminator]``).
 
 Importing this module pulls in the ``cohere`` package. The router that
-mounts ``POST /cohere/v2/chat`` guards on that import succeeding so Aphrodite still
+mounts ``POST /cohere/v2/chat`` guards on that import succeeding so Sonar still
 boots without the SDK installed.
 
 See https://docs.cohere.com/reference/chat for the upstream spec.
@@ -46,11 +46,11 @@ from cohere.types import (
 )
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-import aphrodite.envs as envs
-from aphrodite.exceptions import AphroditeValidationError
+import sonar.envs as envs
+from sonar.exceptions import SonarValidationError
 
 # Re-export the SDK wire-format types alongside our local extensions so
-# ``aphrodite.entrypoints.cohere.serving`` and friends can import everything
+# ``sonar.entrypoints.cohere.serving`` and friends can import everything
 # they need from this module.
 __all__ = [
     "AssistantChatMessageV2",
@@ -153,7 +153,7 @@ class CohereChatV2Request(BaseModel):
     response_format: ResponseFormatV2 | None = None
     safety_mode: ChatRequestSafetyMode | None = None
     max_tokens: int | None = None
-    stop_sequences: Annotated[list[str], Field(max_length=envs.APHRODITE_MAX_STOP_STRINGS)] | None = None
+    stop_sequences: Annotated[list[str], Field(max_length=envs.SONAR_MAX_STOP_STRINGS)] | None = None
 
     # Sampling
     temperature: float | None = None
@@ -170,7 +170,7 @@ class CohereChatV2Request(BaseModel):
     # Scheduling
     priority: int | None = Field(default=None, ge=-(2**63), le=2**63 - 1)
 
-    # Aphrodite-specific extensions (not in Cohere spec). These mirror what the
+    # Sonar-specific extensions (not in Cohere spec). These mirror what the
     # Anthropic and OpenAI surfaces already expose so V2 callers can reach
     # the same engine knobs when needed.
     watermarking: bool | None = Field(
@@ -192,14 +192,14 @@ class CohereChatV2Request(BaseModel):
     @classmethod
     def _validate_model(cls, v: str) -> str:
         if not v:
-            raise AphroditeValidationError("model is required", parameter="model")
+            raise SonarValidationError("model is required", parameter="model")
         return v
 
     @field_validator("max_tokens")
     @classmethod
     def _validate_max_tokens(cls, v: int | None) -> int | None:
         if v is not None and v < 0:
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 "max_tokens must be non-negative",
                 parameter="max_tokens",
                 value=v,
@@ -209,7 +209,7 @@ class CohereChatV2Request(BaseModel):
     @model_validator(mode="after")
     def _validate_tool_choice(self) -> CohereChatV2Request:
         if self.tool_choice == "REQUIRED" and not self.tools:
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 'tool_choice="REQUIRED" requires at least one tool in tools.',
                 parameter="tool_choice",
                 value=self.tool_choice,
@@ -248,7 +248,7 @@ class CohereChatV2Request(BaseModel):
     @classmethod
     def _validate_messages(cls, v: list[ChatMessageV2]) -> list[ChatMessageV2]:
         if not v:
-            raise AphroditeValidationError("messages must contain at least one message", parameter="messages")
+            raise SonarValidationError("messages must contain at least one message", parameter="messages")
         return v
 
 
@@ -307,7 +307,7 @@ class CohereChatV2Response(BaseModel):
     usage: CohereUsage | None = None
     logprobs: list[CohereLogprobItem] | None = None
 
-    # Aphrodite-specific extension.
+    # Sonar-specific extension.
     kv_transfer_params: dict[str, Any] | None = Field(default=None, description="KVTransfer parameters.")
 
 

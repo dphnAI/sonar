@@ -5,8 +5,8 @@
 import json
 from collections.abc import Mapping
 
-from aphrodite.logger import init_logger
-from aphrodite.v1.metrics.reader import Gauge, get_metrics_snapshot
+from sonar.logger import init_logger
+from sonar.v1.metrics.reader import Gauge, get_metrics_snapshot
 
 logger = init_logger(__name__)
 
@@ -81,8 +81,8 @@ def get_named_metrics_from_prometheus() -> list[tuple[str, float]]:
     named_metrics: list[tuple[str, float]] = []
     # Map from prometheus metric names to ORCA named metrics.
     prometheus_to_orca_metrics = {
-        "aphrodite:kv_cache_usage_perc": "kv_cache_usage_perc",
-        "aphrodite:num_requests_waiting": "num_requests_waiting",
+        "sonar:kv_cache_usage_perc": "kv_cache_usage_perc",
+        "sonar:num_requests_waiting": "num_requests_waiting",
     }
     metrics = get_metrics_snapshot()
     for metric in metrics:

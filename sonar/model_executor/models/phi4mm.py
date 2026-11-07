@@ -16,24 +16,24 @@ from transformers import (
     SiglipVisionConfig,
 )
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.multimodal import MultiModalDummyOptions
-from aphrodite.distributed import get_pp_group
-from aphrodite.inputs import MultiModalDataDict
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.config import SonarConfig
+from sonar.config.multimodal import MultiModalDummyOptions
+from sonar.distributed import get_pp_group
+from sonar.inputs import MultiModalDataDict
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
 )
-from aphrodite.model_executor.models.llama import LlamaModel
-from aphrodite.model_executor.models.module_mapping import MultiModelKeys
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import (
+from sonar.model_executor.models.llama import LlamaModel
+from sonar.model_executor.models.module_mapping import MultiModelKeys
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import (
     MultiModalFieldConfig,
     MultiModalKwargsItems,
     NestedTensors,
 )
-from aphrodite.multimodal.parse import (
+from sonar.multimodal.parse import (
     AudioProcessorItems,
     ImageEmbeddingItems,
     ImageProcessorItems,
@@ -41,8 +41,8 @@ from aphrodite.multimodal.parse import (
     MultiModalDataItems,
     MultiModalDataParser,
 )
-from aphrodite.multimodal.processing import BaseDummyInputsBuilder
-from aphrodite.multimodal.processing.processor import (
+from sonar.multimodal.processing import BaseDummyInputsBuilder
+from sonar.multimodal.processing.processor import (
     BaseMultiModalProcessor,
     BaseProcessingInfo,
     HFMultiModalInputs,
@@ -51,9 +51,9 @@ from aphrodite.multimodal.processing.processor import (
     ResolvedPromptUpdate,
     cached_encode,
 )
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.utils.gpu_sync_debug import gpu_sync_allowed
-from aphrodite.utils.tensor_schema import TensorSchema, TensorShape
+from sonar.sequence import IntermediateTensors
+from sonar.utils.gpu_sync_debug import gpu_sync_allowed
+from sonar.utils.tensor_schema import TensorSchema, TensorShape
 
 from .idefics2_vision_model import Idefics2VisionTransformer
 from .interfaces import MultiModalEmbeddings, SupportsLoRA, SupportsMultiModal
@@ -952,7 +952,7 @@ class Phi4MMMultiModalProcessor(BaseMultiModalProcessor[Phi4MMProcessingInfo]):
     dummy_inputs=Phi4MMDummyInputsBuilder,
 )
 class Phi4MMForCausalLM(nn.Module, SupportsLoRA, SupportsMultiModal):
-    """Implements the Phi-4-multimodal-instruct model in Aphrodite."""
+    """Implements the Phi-4-multimodal-instruct model in Sonar."""
 
     packed_modules_mapping = {
         "qkv_proj": [
@@ -963,7 +963,7 @@ class Phi4MMForCausalLM(nn.Module, SupportsLoRA, SupportsMultiModal):
         ],
     }
 
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_substr={
             "base_layer.": "",
             "lora": None,
@@ -985,12 +985,12 @@ class Phi4MMForCausalLM(nn.Module, SupportsLoRA, SupportsMultiModal):
 
         raise ValueError("Only image or audio modality is supported")
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        multimodal_config = aphrodite_config.model_config.multimodal_config
+        config = sonar_config.model_config.hf_config
+        multimodal_config = sonar_config.model_config.multimodal_config
         assert multimodal_config, "multimodal_config is required"
-        quant_config = aphrodite_config.quant_config
+        quant_config = sonar_config.quant_config
 
         self.config = config
         self.multimodal_config = multimodal_config
@@ -999,7 +999,7 @@ class Phi4MMForCausalLM(nn.Module, SupportsLoRA, SupportsMultiModal):
         # Tensor/Pipeline parallel not supported for now.
         assert get_pp_group().world_size == 1, "pipeline parallel is not supported"
 
-        with self._mark_tower_model(aphrodite_config, {"image", "video"}):
+        with self._mark_tower_model(sonar_config, {"image", "video"}):
             self.vision_encoder = Phi4MMImageEncoder(
                 config,
                 quant_config,
@@ -1015,11 +1015,11 @@ class Phi4MMForCausalLM(nn.Module, SupportsLoRA, SupportsMultiModal):
         else:
             embedding_config = {"embedding_cls": self.config.embd_layer["embedding_cls"]}
 
-        with self._mark_tower_model(aphrodite_config, "audio"):
+        with self._mark_tower_model(sonar_config, "audio"):
             self.embed_tokens_extend = AudioEmbedding(config, **embedding_config)
 
-        with self._mark_language_model(aphrodite_config):
-            self.model = LlamaModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        with self._mark_language_model(sonar_config):
+            self.model = LlamaModel(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
 
         self.lm_head = ParallelLMHead(
             config.vocab_size,
@@ -1192,7 +1192,7 @@ class Phi4MMForCausalLM(nn.Module, SupportsLoRA, SupportsMultiModal):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
     def get_mm_mapping(self) -> MultiModelKeys:
         """Get the module prefix in multimodal models."""

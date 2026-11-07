@@ -12,11 +12,11 @@ from unittest.mock import MagicMock
 import pytest
 from openai.types.responses.function_tool import FunctionTool
 
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionToolsParam,
     FunctionDefinition,
 )
-from aphrodite.tool_parsers.deepseekv32_engine_tool_parser import (
+from sonar.tool_parsers.deepseekv32_engine_tool_parser import (
     DeepSeekV32EngineToolParser,
 )
 from tests.tool_parsers.utils import run_tool_extraction_streaming
@@ -1148,7 +1148,7 @@ class TestDelimiterPreservation:
         adjusted = parser.adjust_request(request)
         assert adjusted.skip_special_tokens is False
 
-        full_text = build_tool_call("search", {"query": "aphrodite documentation"})
+        full_text = build_tool_call("search", {"query": "sonar documentation"})
 
         # Non-streaming extraction
         non_stream_result = parser.extract_tool_calls(full_text, request)
@@ -1156,7 +1156,7 @@ class TestDelimiterPreservation:
         assert len(non_stream_result.tool_calls) == 1
         assert non_stream_result.tool_calls[0].function.name == "search"
         ns_args = json.loads(non_stream_result.tool_calls[0].function.arguments)
-        assert ns_args == {"query": "aphrodite documentation"}
+        assert ns_args == {"query": "sonar documentation"}
 
         # Streaming extraction: drive the parser line-by-line
         chunks: list[str] = []

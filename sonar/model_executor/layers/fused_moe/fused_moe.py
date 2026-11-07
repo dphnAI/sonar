@@ -9,34 +9,34 @@ from typing import Any
 
 import torch
 
-import aphrodite.envs as envs
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite import _custom_ops as ops
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe.activation import (
+import sonar.envs as envs
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar import _custom_ops as ops
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe.activation import (
     MoEActivation,
     apply_moe_activation,
 )
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe.config import (
     FUSED_MOE_UNQUANTIZED_CONFIG,
     FusedMoEQuantConfig,
     _get_config_dtype_str,
 )
-from aphrodite.model_executor.layers.fused_moe.moe_align_block_size import (
+from sonar.model_executor.layers.fused_moe.moe_align_block_size import (
     moe_align_block_size,
 )
-from aphrodite.model_executor.layers.fused_moe.utils import (
+from sonar.model_executor.layers.fused_moe.utils import (
     enable_swap_ab,
     moe_kernel_quantize_input,
     resolve_moe_use_td,
     warn_if_moe_use_td_ineffective,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
-from aphrodite.triton_utils.allocation import set_triton_allocator
-from aphrodite.utils.math_utils import next_power_of_2
-from aphrodite.utils.platform_utils import get_device_name_as_file_name
-from aphrodite.utils.torch_utils import direct_register_custom_op
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
+from sonar.triton_utils.allocation import set_triton_allocator
+from sonar.utils.math_utils import next_power_of_2
+from sonar.utils.platform_utils import get_device_name_as_file_name
+from sonar.utils.torch_utils import direct_register_custom_op
 
 logger = init_logger(__name__)
 
@@ -821,7 +821,7 @@ def invoke_fused_moe_triton_kernel(
         b_desc = TensorDescriptor.from_tensor(B, [1, config["BLOCK_SIZE_N"], BLOCK_SIZE_K])
     if use_td and A.size(1) % BLOCK_SIZE_K != 0:
         logger.warning_once(
-            "Disabling APHRODITE_TRITON_USE_TD for this MoE launch: K=%d is not "
+            "Disabling SONAR_TRITON_USE_TD for this MoE launch: K=%d is not "
             "a multiple of BLOCK_SIZE_K=%d, which triggers a known Triton "
             "tensor-descriptor + tl.dot miscompilation.",
             A.size(1),
@@ -1089,7 +1089,7 @@ def get_moe_configs(
     be picked and the associated configuration chosen to invoke the kernel.
     """
     # Avoid optimizing for the batch invariant case. Use default config
-    if envs.APHRODITE_BATCH_INVARIANT:
+    if envs.SONAR_BATCH_INVARIANT:
         return None
 
     # First look up if an optimized configuration is available in the configs
@@ -1100,7 +1100,7 @@ def get_moe_configs(
     config_file_paths = []
 
     # note that we prioritize user defined config
-    user_defined_config_folder = envs.APHRODITE_TUNED_CONFIG_FOLDER
+    user_defined_config_folder = envs.SONAR_TUNED_CONFIG_FOLDER
     if user_defined_config_folder is not None:
         user_defined_config_file_path = os.path.join(user_defined_config_folder, json_file_name)
         config_file_paths.append(user_defined_config_file_path)
@@ -1242,7 +1242,7 @@ def get_moe_wna16_block_config(
 
 
 def should_moe_wna16_use_cuda(num_valid_tokens: int, group_size: int, num_experts: int, bit: int):
-    if envs.APHRODITE_BATCH_INVARIANT:
+    if envs.SONAR_BATCH_INVARIANT:
         return False
     return (
         current_platform.is_cuda() and bit == 4 and group_size in [32, 64, 128] and num_valid_tokens / num_experts <= 6
@@ -1258,7 +1258,7 @@ def get_default_config(
     dtype: str | None,
     block_shape: list[int] | None = None,
 ) -> dict[str, int]:
-    if envs.APHRODITE_BATCH_INVARIANT:
+    if envs.SONAR_BATCH_INVARIANT:
         return {
             "BLOCK_SIZE_M": 64,
             "BLOCK_SIZE_N": 64,
@@ -1395,7 +1395,7 @@ def _get_configured_moe_config(
     block_shape: list[int] | None = None,
 ) -> dict[str, int] | None:
     """Config from an override or a tuned file, or None if neither applies."""
-    from aphrodite.model_executor.layers.fused_moe import get_config
+    from sonar.model_executor.layers.fused_moe import get_config
 
     override_config = get_config()
     if override_config:
@@ -1533,7 +1533,7 @@ direct_register_custom_op(
 def _weights_host_resident(*weights: torch.Tensor) -> bool:
     """True when any of the expert weights is read from host memory in place,
     as UVA weight offloading (``--offload-backend uva``) leaves them."""
-    return any(getattr(w, "_aphrodite_is_uva_offloaded", False) for w in weights)
+    return any(getattr(w, "_sonar_is_uva_offloaded", False) for w in weights)
 
 
 def _prepare_expert_assignment(
@@ -1601,7 +1601,7 @@ def fused_experts(
     if quant_config is None:
         quant_config = FUSED_MOE_UNQUANTIZED_CONFIG
 
-    return torch.ops.aphrodite.fused_experts(
+    return torch.ops.sonar.fused_experts(
         hidden_states=hidden_states,
         w1=w1,
         w2=w2,

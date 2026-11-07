@@ -10,28 +10,28 @@ from typing import TYPE_CHECKING, Any, get_type_hints, overload
 import torch
 from typing_extensions import TypeVar
 
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.inputs import MultiModalDataDict
-from aphrodite.logger import init_logger
-from aphrodite.multimodal.parse import (
+from sonar.exceptions import SonarValidationError
+from sonar.inputs import MultiModalDataDict
+from sonar.logger import init_logger
+from sonar.multimodal.parse import (
     DictEmbeddingItems,
     EmbeddingItems,
     MultiModalDataItems,
     MultiModalDataParser,
 )
-from aphrodite.tokenizers import TokenizerLike
-from aphrodite.transformers_utils.processor import cached_processor_from_config
-from aphrodite.utils.func_utils import get_allowed_kwarg_only_overrides
-from aphrodite.utils.jsontree import JSONTree, json_map_leaves
-from aphrodite.utils.mistral import is_mistral_tokenizer
+from sonar.tokenizers import TokenizerLike
+from sonar.transformers_utils.processor import cached_processor_from_config
+from sonar.utils.func_utils import get_allowed_kwarg_only_overrides
+from sonar.utils.jsontree import JSONTree, json_map_leaves
+from sonar.utils.mistral import is_mistral_tokenizer
 
 if TYPE_CHECKING:
     from transformers.configuration_utils import PreTrainedConfig
     from transformers.feature_extraction_utils import BatchFeature
     from transformers.processing_utils import ProcessorMixin
 
-    from aphrodite.config import ModelConfig
-    from aphrodite.renderers import TokenizeParams
+    from sonar.config import ModelConfig
+    from sonar.renderers import TokenizeParams
 else:
     PreTrainedConfig = object
     BatchFeature = object
@@ -44,7 +44,7 @@ logger = init_logger(__name__)
 
 # HuggingFace processors accept a shared flat namespace in addition to the
 # nested processor kwarg scopes ``text_kwargs`` / ``images_kwargs`` /
-# ``videos_kwargs`` / ``audio_kwargs``. Aphrodite recognizes these scopes when
+# ``videos_kwargs`` / ``audio_kwargs``. Sonar recognizes these scopes when
 # resolving ``mm_processor_kwargs``.
 _HF_PROCESSOR_KWARG_SCOPES = (
     "text_kwargs",
@@ -491,7 +491,7 @@ class BaseProcessingInfo:
 
     def get_default_tok_params(self) -> TokenizeParams:
         """Construct the default parameters for tokenization."""
-        from aphrodite.renderers import TokenizeParams
+        from sonar.renderers import TokenizeParams
 
         model_config = self.ctx.model_config
         encoder_config = model_config.encoder_config or {}
@@ -529,10 +529,10 @@ class BaseProcessingInfo:
     def get_data_parser(self) -> MultiModalDataParser:
         """Constructs a parser to preprocess multi-modal data items
         before passing them to
-        [`_get_hf_mm_inputs`][aphrodite.multimodal.processing.BaseMultiModalProcessor._get_hf_mm_inputs].
+        [`_get_hf_mm_inputs`][sonar.multimodal.processing.BaseMultiModalProcessor._get_hf_mm_inputs].
 
         You can support additional modalities by creating a subclass
-        of [`MultiModalDataParser`][aphrodite.multimodal.parse.MultiModalDataParser]
+        of [`MultiModalDataParser`][sonar.multimodal.parse.MultiModalDataParser]
         that has additional subparsers.
         """
         return MultiModalDataParser(
@@ -594,7 +594,7 @@ class BaseProcessingInfo:
             if num_items <= supported_limit:
                 msg += " Set `--limit-mm-per-prompt` to increase this limit."
 
-            raise AphroditeValidationError(msg, parameter=modality)
+            raise SonarValidationError(msg, parameter=modality)
 
     def parse_mm_data(
         self,
@@ -602,10 +602,10 @@ class BaseProcessingInfo:
         *,
         validate: bool = True,
     ) -> MultiModalDataItems:
-        """Normalize [`MultiModalDataDict`][aphrodite.inputs.MultiModalDataDict]
-        to [`MultiModalDataItems`][aphrodite.multimodal.parse.MultiModalDataItems]
+        """Normalize [`MultiModalDataDict`][sonar.inputs.MultiModalDataDict]
+        to [`MultiModalDataItems`][sonar.multimodal.parse.MultiModalDataItems]
         before passing them to
-        [`_get_hf_mm_inputs`][aphrodite.multimodal.processing.BaseMultiModalProcessor._get_hf_mm_inputs].
+        [`_get_hf_mm_inputs`][sonar.multimodal.processing.BaseMultiModalProcessor._get_hf_mm_inputs].
         """
         mm_items = self.data_parser.parse_mm_data(mm_data)
 
@@ -633,7 +633,7 @@ class BaseProcessingInfo:
     ) -> Mapping[str, int] | None:
         """Return the maximum number of tokens per item of for each modality.
 
-        When `None` (the default) is returned, Aphrodite will generate dummy inputs
+        When `None` (the default) is returned, Sonar will generate dummy inputs
         (images/videos) at maximum possible sizes and process them to determine
         the maximum token count per modality.
 

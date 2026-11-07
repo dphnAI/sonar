@@ -4,7 +4,7 @@
 import pytest
 import torch
 
-from aphrodite import SamplingParams
+from sonar import SamplingParams
 
 from .utils import greedy_sampling
 

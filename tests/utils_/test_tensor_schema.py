@@ -6,10 +6,10 @@ from typing import Annotated, Literal
 import pytest
 import torch
 
-from aphrodite.model_executor.models.glm4_1v import Glm4vImageEmbeddingInputs
-from aphrodite.model_executor.models.granite_speech import GraniteSpeechAudioInputs
-from aphrodite.model_executor.models.phi3v import Phi3VImagePixelInputs
-from aphrodite.utils.tensor_schema import TensorSchema, TensorShape
+from sonar.model_executor.models.glm4_1v import Glm4vImageEmbeddingInputs
+from sonar.model_executor.models.granite_speech import GraniteSpeechAudioInputs
+from sonar.model_executor.models.phi3v import Phi3VImagePixelInputs
+from sonar.utils.tensor_schema import TensorSchema, TensorShape
 
 
 class _DoubleNestedVideoPixelInputs(TensorSchema):

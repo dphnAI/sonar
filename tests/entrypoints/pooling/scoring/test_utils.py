@@ -5,12 +5,12 @@ import pytest
 from tokenizers import Tokenizer, models, pre_tokenizers
 from transformers import TokenizersBackend
 
-from aphrodite.entrypoints.pooling.scoring.typing import ScoreInput
-from aphrodite.entrypoints.pooling.scoring.utils import (
+from sonar.entrypoints.pooling.scoring.typing import ScoreInput
+from sonar.entrypoints.pooling.scoring.utils import (
     truncate_text_to_tokens,
     validate_score_input,
 )
-from aphrodite.exceptions import AphroditeValidationError
+from sonar.exceptions import SonarValidationError
 
 
 @pytest.mark.parametrize(
@@ -57,7 +57,7 @@ def test_validate_score_input_rejects_invalid_inputs(
     architecture: str,
     message: str,
 ):
-    with pytest.raises(AphroditeValidationError) as exc_info:
+    with pytest.raises(SonarValidationError) as exc_info:
         validate_score_input(
             data_1,
             data_2,

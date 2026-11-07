@@ -8,12 +8,12 @@ from dataclasses import replace
 
 import torch
 
-from aphrodite.compilation.breakable_cudagraph import BreakableCUDAGraphWrapper
-from aphrodite.config import AphroditeConfig, CUDAGraphMode
-from aphrodite.config.kernel import NATIVE_MEGA_MOE_BACKENDS
-from aphrodite.forward_context import get_forward_context, override_forward_context
-from aphrodite.models.deepseek_v41.decoder_replay_layers import DecoderReplayLayers
-from aphrodite.v1.worker.gpu.cudagraph_utils import (
+from sonar.compilation.breakable_cudagraph import BreakableCUDAGraphWrapper
+from sonar.config import CUDAGraphMode, SonarConfig
+from sonar.config.kernel import NATIVE_MEGA_MOE_BACKENDS
+from sonar.forward_context import get_forward_context, override_forward_context
+from sonar.models.deepseek_v41.decoder_replay_layers import DecoderReplayLayers
+from sonar.v1.worker.gpu.cudagraph_utils import (
     BatchExecutionDescriptor,
     CudaGraphManager,
 )
@@ -23,9 +23,9 @@ class DecoderReplayCudaGraphManager(CudaGraphManager):
     """Breakable PIECEWISE graphs of the replay layers keyed by the replay batch's
     padded size. They read the layer inputs from static buffers."""
 
-    def __init__(self, aphrodite_config: AphroditeConfig, device, layers: DecoderReplayLayers):
-        compilation = copy(aphrodite_config.compilation_config)
-        scheduler = aphrodite_config.scheduler_config
+    def __init__(self, sonar_config: SonarConfig, device, layers: DecoderReplayLayers):
+        compilation = copy(sonar_config.compilation_config)
+        scheduler = sonar_config.scheduler_config
         sizes = compilation.decoder_replay_cudagraph_capture_sizes
         if not sizes:
             bound = min(
@@ -43,18 +43,18 @@ class DecoderReplayCudaGraphManager(CudaGraphManager):
             raise ValueError("decoder_replay_cudagraph_capture_sizes must not exceed max_num_batched_tokens")
         compilation.cudagraph_capture_sizes = sizes
         compilation.max_cudagraph_capture_size = max(sizes)
-        replay_config = copy(aphrodite_config)
+        replay_config = copy(sonar_config)
         replay_config.compilation_config = compilation
         super().__init__(replay_config, device, CUDAGraphMode.PIECEWISE, 1)
         self.layers = layers
         self.breakable_cg_runner: BreakableCUDAGraphWrapper = BreakableCUDAGraphWrapper(
             layers.run_layers, replay_config
         )
-        config, act = aphrodite_config.model_config.hf_config, aphrodite_config.model_config.dtype
+        config, act = sonar_config.model_config.hf_config, sonar_config.model_config.dtype
         assert isinstance(act, torch.dtype)
         hc, h, f32 = config.hc_mult, config.hidden_size, torch.float32
         # DeepseekV4Model.forward casts input_ids to int64 for native MegaMoE only.
-        native = aphrodite_config.kernel_config.moe_backend in NATIVE_MEGA_MOE_BACKENDS
+        native = sonar_config.kernel_config.moe_backend in NATIVE_MEGA_MOE_BACKENDS
         ids = torch.int64 if native else torch.int32
         # hidden_states, positions, input_ids, pre_mix, post_mix, res_mix, residual
         shapes = [(h,), (), (), (hc,), (hc, 1), (hc, hc), (hc, h)]

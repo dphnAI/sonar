@@ -14,9 +14,9 @@ from pathlib import Path
 
 from transformers import AutoTokenizer
 
-from aphrodite.tokenizers.hf import HfTokenizer, get_cached_tokenizer
-from aphrodite.tokenizers.protocol import TokenizerLike
-from aphrodite.transformers_utils.configs.alpamayo2_super import Alpamayo2SuperConfig
+from sonar.tokenizers.hf import HfTokenizer, get_cached_tokenizer
+from sonar.tokenizers.protocol import TokenizerLike
+from sonar.transformers_utils.configs.alpamayo2_super import Alpamayo2SuperConfig
 
 # The order defines the token ids that follow the trajectory tokens.
 SPECIAL_TOKENS = tuple(

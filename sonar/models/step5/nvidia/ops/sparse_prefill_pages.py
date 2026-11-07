@@ -7,7 +7,7 @@ from typing import NamedTuple
 import numpy as np
 import torch
 
-from aphrodite.triton_utils import tl, triton
+from sonar.triton_utils import tl, triton
 
 from ...common.ops.sparse_indexer import PagedPrefillMetadata
 

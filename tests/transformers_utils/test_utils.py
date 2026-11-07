@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-from aphrodite.transformers_utils.utils import (
+from sonar.transformers_utils.utils import (
     is_azure,
     is_cloud_storage,
     is_gcs,

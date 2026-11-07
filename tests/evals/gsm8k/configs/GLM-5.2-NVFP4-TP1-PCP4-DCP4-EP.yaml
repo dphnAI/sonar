@@ -19,5 +19,5 @@ server_args: >-
   --kv-cache-dtype fp8
 env:
   PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
-  APHRODITE_LOGGING_LEVEL: "DEBUG"
-  APHRODITE_USE_V2_MODEL_RUNNER: "1"
+  SONAR_LOGGING_LEVEL: "DEBUG"
+  SONAR_USE_V2_MODEL_RUNNER: "1"

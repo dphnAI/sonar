@@ -8,9 +8,9 @@ from collections import deque
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from aphrodite.v1.core.kv_cache_utils import KVCacheBlock
+    from sonar.v1.core.kv_cache_utils import KVCacheBlock
 
-from aphrodite.v1.metrics.stats import KVCacheEvictionEvent
+from sonar.v1.metrics.stats import KVCacheEvictionEvent
 
 
 class BlockMetricsState:

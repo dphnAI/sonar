@@ -17,7 +17,7 @@
 #include <algorithm>
 #include <type_traits>
 
-namespace aphrodite {
+namespace sonar {
 
 namespace {
 
@@ -131,7 +131,7 @@ __global__ void qknorm_rope_cache_kernel(
         int64_t block;
         int64_t page;
         if (block_size_shift >= 0) {
-          // Aphrodite production cache blocks are powers of two. Avoid the
+          // Sonar production cache blocks are powers of two. Avoid the
           // costly runtime int64 division on that path while retaining generic
           // block sizes through the fallback below.
           block = slot >> block_size_shift;
@@ -525,13 +525,13 @@ void fused_qknorm_rope_cache(
   const torch::stable::accelerator::DeviceGuard device_guard(
       qkv.get_device_index());
   const cudaStream_t stream = get_current_cuda_stream(qkv.get_device_index());
-  APHRODITE_STABLE_DISPATCH_HALF_TYPES(
+  SONAR_STABLE_DISPATCH_HALF_TYPES(
       qkv.scalar_type(), "qknorm_rope_cache_input", [&] {
         using input_t = scalar_t;
-        APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(
+        SONAR_STABLE_DISPATCH_FLOATING_TYPES(
             q_weight.scalar_type(), "qknorm_rope_cache_weight", [&] {
               using norm_weight_t = scalar_t;
-              APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(
+              SONAR_STABLE_DISPATCH_FLOATING_TYPES(
                   cos.scalar_type(), "qknorm_rope_cache_rope", [&] {
                     using rope_cache_t = scalar_t;
                     auto launch = [&](auto fp8_tag) {
@@ -564,4 +564,4 @@ void fused_qknorm_rope_cache(
   STD_CUDA_KERNEL_LAUNCH_CHECK();
 }
 
-}  // namespace aphrodite
+}  // namespace sonar

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""TurboQuant attention backend for Aphrodite.
+"""TurboQuant attention backend for Sonar.
 
 Prefill: Standard scaled dot-product attention on uncompressed K/V,
          then quantize K and store K+V into combined cache slot.
@@ -25,15 +25,15 @@ from typing import Any, ClassVar
 import torch
 import torch.nn.functional as F
 
-from aphrodite.config import get_current_aphrodite_config
-from aphrodite.config.cache import CacheDType
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.quantization.turboquant.centroids import (
+from sonar.config import get_current_sonar_config
+from sonar.config.cache import CacheDType
+from sonar.logger import init_logger
+from sonar.model_executor.layers.quantization.turboquant.centroids import (
     get_centroids,
 )
-from aphrodite.triton_utils import triton
-from aphrodite.utils.math_utils import round_up
-from aphrodite.v1.attention.backend import (
+from sonar.triton_utils import triton
+from sonar.utils.math_utils import round_up
+from sonar.v1.attention.backend import (
     AttentionBackend,
     AttentionCGSupport,
     AttentionImpl,
@@ -44,28 +44,28 @@ from aphrodite.v1.attention.backend import (
     CommonAttentionMetadata,
     MultipleOf,
 )
-from aphrodite.v1.attention.backends.fa_utils import (
+from sonar.v1.attention.backends.fa_utils import (
     get_flash_attn_version,
     is_flash_attn_varlen_func_available,
 )
-from aphrodite.v1.attention.backends.utils import split_decodes_and_prefills
+from sonar.v1.attention.backends.utils import split_decodes_and_prefills
 
 # FlyDSL TurboQuant decode (AMD gfx950). Auto-selected when FlyDSL is available
 # for eligible layers (SoA store + FlyDSL decode + SoA-aware continuation);
 # non-gfx950 or ineligible layers use the SoA Triton decode.
-from aphrodite.v1.attention.ops.flydsl_turboquant_decode import (
+from sonar.v1.attention.ops.flydsl_turboquant_decode import (
     flydsl_turboquant_decode_attention,
     is_flydsl_available,
     is_flydsl_gqa6_available,
 )
-from aphrodite.v1.attention.ops.triton_turboquant_decode import (
+from sonar.v1.attention.ops.triton_turboquant_decode import (
     _tq_full_dequant_kv,
     _use_fp8_e4b15,
     triton_turboquant_decode_attention,
 )
-from aphrodite.v1.attention.ops.triton_turboquant_store import triton_turboquant_store
-from aphrodite.v1.kv_cache_interface import AttentionSpec, KVCacheLayout
-from aphrodite.v1.worker.workspace import (
+from sonar.v1.attention.ops.triton_turboquant_store import triton_turboquant_store
+from sonar.v1.kv_cache_interface import AttentionSpec, KVCacheLayout
+from sonar.v1.worker.workspace import (
     current_workspace_manager,
     is_workspace_manager_initialized,
 )
@@ -74,7 +74,7 @@ logger = init_logger(__name__)
 
 _HAS_FLASH_ATTN = is_flash_attn_varlen_func_available()
 if _HAS_FLASH_ATTN:
-    from aphrodite.v1.attention.backends.fa_utils import flash_attn_varlen_func
+    from sonar.v1.attention.backends.fa_utils import flash_attn_varlen_func
 
 # Continuation prefill: for small continuation chunks (q_len ≤ threshold),
 # use the TQ decode kernel directly instead of full-dequant + flash_attn.
@@ -89,13 +89,13 @@ def _soa_imports():
 
     Kept lazy so the default (FlyDSL-off) path never imports these modules.
     """
-    from aphrodite.v1.attention.ops.turboquant_soa.triton_turboquant_decode import (
+    from sonar.v1.attention.ops.turboquant_soa.triton_turboquant_decode import (
         _tq_full_dequant_kv as soa_dequant,
     )
-    from aphrodite.v1.attention.ops.turboquant_soa.triton_turboquant_store import (
+    from sonar.v1.attention.ops.turboquant_soa.triton_turboquant_store import (
         triton_turboquant_store as soa_store,
     )
-    from aphrodite.v1.attention.ops.turboquant_soa.triton_turboquant_unified_attention import (  # noqa: E501
+    from sonar.v1.attention.ops.turboquant_soa.triton_turboquant_unified_attention import (  # noqa: E501
         triton_turboquant_decode_attention_soa as soa_decode,
     )
 
@@ -142,7 +142,7 @@ class TurboQuantAttentionBackend(AttentionBackend):
         """TurboQuant packs K+V into one slot per head."""
         if spec.state_content_bytes is not None or not spec.kv_quant_mode.is_turboquant:
             return spec
-        from aphrodite.model_executor.layers.quantization.turboquant.config import (
+        from sonar.model_executor.layers.quantization.turboquant.config import (
             TurboQuantConfig,
         )
 
@@ -217,8 +217,8 @@ class TurboQuantMetadataBuilder(AttentionMetadataBuilder[TurboQuantMetadata]):
     kv_cache_spec: AttentionSpec
     _cudagraph_support: ClassVar[AttentionCGSupport] = AttentionCGSupport.UNIFORM_BATCH
 
-    def __init__(self, kv_cache_spec, layer_names, aphrodite_config, device):
-        super().__init__(kv_cache_spec, layer_names, aphrodite_config, device)
+    def __init__(self, kv_cache_spec, layer_names, sonar_config, device):
+        super().__init__(kv_cache_spec, layer_names, sonar_config, device)
         self._init_reorder_batch_threshold(1, supports_spec_as_decode=False)
         self._reserve_workspace()
 
@@ -226,15 +226,15 @@ class TurboQuantMetadataBuilder(AttentionMetadataBuilder[TurboQuantMetadata]):
         if not is_workspace_manager_initialized():
             return
 
-        scheduler_config = self.aphrodite_config.scheduler_config
-        model_config = self.aphrodite_config.model_config
-        parallel_config = self.aphrodite_config.parallel_config
+        scheduler_config = self.sonar_config.scheduler_config
+        model_config = self.sonar_config.model_config
+        parallel_config = self.sonar_config.parallel_config
 
         max_num_reqs = scheduler_config.max_num_seqs
         num_heads = model_config.get_num_attention_heads(parallel_config)
         num_kv_heads = self.kv_cache_spec.num_kv_heads
         head_size = self.kv_cache_spec.head_size
-        max_num_splits = self.aphrodite_config.attention_config.tq_max_kv_splits_for_cuda_graph
+        max_num_splits = self.sonar_config.attention_config.tq_max_kv_splits_for_cuda_graph
 
         current_workspace_manager().get_simultaneous(
             ((max_num_reqs, num_heads, max_num_splits, head_size + 1), torch.float32),
@@ -326,7 +326,7 @@ class TurboQuantAttentionImpl(AttentionImpl["TurboQuantMetadata"]):
         self.num_kv_groups = num_heads // self.num_kv_heads
         self.kv_cache_dtype = kv_cache_dtype
 
-        from aphrodite.model_executor.layers.quantization.turboquant.config import (
+        from sonar.model_executor.layers.quantization.turboquant.config import (
             TurboQuantConfig,
         )
 
@@ -343,15 +343,15 @@ class TurboQuantAttentionImpl(AttentionImpl["TurboQuantMetadata"]):
 
         # Fixed NUM_KV_SPLITS (grid dims must be constant for cudagraph,
         # and benchmarks show no regression vs dynamic in eager mode).
-        aphrodite_config = get_current_aphrodite_config()
-        self.max_num_kv_splits = aphrodite_config.attention_config.tq_max_kv_splits_for_cuda_graph
+        sonar_config = get_current_sonar_config()
+        self.max_num_kv_splits = sonar_config.attention_config.tq_max_kv_splits_for_cuda_graph
 
         # FlyDSL decode state. Auto-enabled on gfx950 when FlyDSL is available.
         self.sliding_window = sliding_window
         self.sinks = kwargs.get("sinks")
         # Cache max_model_len now (config is available at __init__ but NOT
         # during CUDA-graph capture when _ensure_on_device is re-entered).
-        self._max_model_len = aphrodite_config.model_config.max_model_len
+        self._max_model_len = sonar_config.model_config.max_model_len
         # SoA store is required by the FlyDSL decode/continuation path, so it
         # tracks FlyDSL availability (single switch for the whole pipeline).
         self._use_flydsl = is_flydsl_available()
@@ -460,7 +460,7 @@ class TurboQuantAttentionImpl(AttentionImpl["TurboQuantMetadata"]):
         sizes up to max_num_seqs. Falls back to 1024 if config is unavailable.
         """
         try:
-            cfg = get_current_aphrodite_config()
+            cfg = get_current_sonar_config()
             candidates: list[int] = []
             sizes = cfg.compilation_config.cudagraph_capture_sizes
             if sizes:

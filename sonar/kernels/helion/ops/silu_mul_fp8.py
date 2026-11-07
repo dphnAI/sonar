@@ -7,16 +7,16 @@ from typing import Any
 
 import torch
 
-from aphrodite.kernels.helion.case_key import CaseKey
-from aphrodite.logger import init_logger
-from aphrodite.utils.import_utils import has_helion
+from sonar.kernels.helion.case_key import CaseKey
+from sonar.logger import init_logger
+from sonar.utils.import_utils import has_helion
 
 if not has_helion():
     raise ImportError("silu_mul_fp8 Helion kernel requires helion to be installed. Install it with: pip install helion")
 
 import helion.language as hl
 
-from aphrodite.kernels.helion.register import register_kernel
+from sonar.kernels.helion.register import register_kernel
 
 logger = init_logger(__name__)
 
@@ -24,8 +24,8 @@ logger = init_logger(__name__)
 def generate_silu_mul_fp8_inputs() -> dict[CaseKey, tuple[Any, ...]]:
     intermediate_sizes = [2048, 2880, 4096, 8192, 11008, 14336]
 
-    # Use the same num_tokens values as Aphrodite's default cudagraph capture sizes.
-    # See aphrodite/config/aphrodite.py _set_cudagraph_sizes() for the canonical formula.
+    # Use the same num_tokens values as Sonar's default cudagraph capture sizes.
+    # See sonar/config/sonar.py _set_cudagraph_sizes() for the canonical formula.
     num_tokens_list = [1, 2, 4] + list(range(8, 256, 8)) + list(range(256, 513, 16))
 
     inputs: dict[CaseKey, tuple[Any, ...]] = {}

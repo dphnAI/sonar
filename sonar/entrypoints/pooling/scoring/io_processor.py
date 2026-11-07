@@ -7,21 +7,21 @@ from typing import Any, TypeAlias, cast
 
 import torch.nn.functional as F
 
-from aphrodite import PoolingParams, PoolingRequestOutput, TokensPrompt
-from aphrodite.exceptions import AphroditeValidationError, ChatTemplateResolutionError
-from aphrodite.logger import init_logger
-from aphrodite.renderers import TokenizeParams, merge_kwargs
-from aphrodite.renderers.hf import resolve_chat_template, safe_apply_chat_template
-from aphrodite.renderers.inputs.preprocess import (
+from sonar import PoolingParams, PoolingRequestOutput, TokensPrompt
+from sonar.exceptions import ChatTemplateResolutionError, SonarValidationError
+from sonar.logger import init_logger
+from sonar.renderers import TokenizeParams, merge_kwargs
+from sonar.renderers.hf import resolve_chat_template, safe_apply_chat_template
+from sonar.renderers.inputs.preprocess import (
     extract_target_prompt,
     parse_model_prompt,
     prompt_to_seq,
 )
-from aphrodite.tasks import PoolingTask
-from aphrodite.transformers_utils.config import (
+from sonar.tasks import PoolingTask
+from sonar.transformers_utils.config import (
     get_sentence_transformers_chat_template_kwargs,
 )
-from aphrodite.utils.mistral import is_mistral_tokenizer
+from sonar.utils.mistral import is_mistral_tokenizer
 
 from ..base.io_processor import PoolingIOProcessor
 from ..pooling.protocol import PoolingCompletionRequest
@@ -409,8 +409,8 @@ class CrossEncoderIOProcessor(ScoringIOProcessor):
         if is_mistral_tokenizer(self.tokenizer):
             raise ValueError("MistralTokenizer not supported for cross-encoding")
 
-        from aphrodite.model_executor.model_loader import get_model_cls
-        from aphrodite.model_executor.models.interfaces import supports_score_template
+        from sonar.model_executor.model_loader import get_model_cls
+        from sonar.model_executor.models.interfaces import supports_score_template
 
         model = get_model_cls(self.model_config)
         self.supports_score_template = supports_score_template(model)
@@ -751,7 +751,7 @@ class CrossEncoderIOProcessor(ScoringIOProcessor):
 class JinaRankingIOProcessorMixin(PoolingIOProcessor):
     def render(self, render_params: AnyRenderParam) -> PoolingEngineInput:
         if render_params["tok_params"].truncate_prompt_tokens is not None:
-            raise AphroditeValidationError(
+            raise SonarValidationError(
                 "JinaForRanking does not support truncate_prompt_tokens. Use "
                 "max_tokens_per_query and max_tokens_per_doc for scoring, or "
                 "truncate each input text on the client.",

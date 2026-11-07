@@ -14,13 +14,13 @@ import importlib.util
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 if not current_platform.is_rocm():
     pytest.skip("This test can only run on ROCm.", allow_module_level=True)
 
 # this import statement is needed to ensure the ops are registered
-import aphrodite.model_executor.layers.fused_moe.experts.rocm_aiter_moe  # noqa: F401
+import sonar.model_executor.layers.fused_moe.experts.rocm_aiter_moe  # noqa: F401
 
 # need to import once to ensure the ops are registered
 # Check if aiter package is installed
@@ -32,20 +32,20 @@ if not aiter_available:
 
 def test_rocm_aiter_biased_grouped_topk_custom_op_registration():
     """Test that the custom op is correctly registered."""
-    # Check if the op exists in torch.ops.aphrodite
-    assert hasattr(torch.ops.aphrodite, "rocm_aiter_biased_grouped_topk")
+    # Check if the op exists in torch.ops.sonar
+    assert hasattr(torch.ops.sonar, "rocm_aiter_biased_grouped_topk")
 
     # Check if the op is callable
-    assert callable(torch.ops.aphrodite.rocm_aiter_biased_grouped_topk)
+    assert callable(torch.ops.sonar.rocm_aiter_biased_grouped_topk)
 
 
 def test_rocm_aiter_grouped_topk_custom_op_registration():
     """Test that the custom op is correctly registered."""
-    # Check if the op exists in torch.ops.aphrodite
-    assert hasattr(torch.ops.aphrodite, "rocm_aiter_grouped_topk")
+    # Check if the op exists in torch.ops.sonar
+    assert hasattr(torch.ops.sonar, "rocm_aiter_grouped_topk")
 
     # Check if the op is callable
-    assert callable(torch.ops.aphrodite.rocm_aiter_grouped_topk)
+    assert callable(torch.ops.sonar.rocm_aiter_grouped_topk)
 
 
 def test_rocm_aiter_biased_grouped_topk_torch_compile_compatibility():
@@ -68,7 +68,7 @@ def test_rocm_aiter_biased_grouped_topk_torch_compile_compatibility():
 
     # Define a function that uses the op
     def biased_grouped_topk_fn(gating_output, e_score_correction_bias, topk_weights, topk_ids):
-        return torch.ops.aphrodite.rocm_aiter_biased_grouped_topk(
+        return torch.ops.sonar.rocm_aiter_biased_grouped_topk(
             gating_output,
             e_score_correction_bias,
             topk_weights,
@@ -81,7 +81,7 @@ def test_rocm_aiter_biased_grouped_topk_torch_compile_compatibility():
 
     # Verify the op's fake implementation
     torch.library.opcheck(
-        torch.ops.aphrodite.rocm_aiter_biased_grouped_topk,
+        torch.ops.sonar.rocm_aiter_biased_grouped_topk,
         (gating_output, e_score_correction_bias, topk_weights, topk_ids),
         kwargs={
             "num_expert_group": num_expert_group,
@@ -143,7 +143,7 @@ def test_rocm_aiter_grouped_topk_torch_compile_compatibility():
 
     # Define a function that uses the op
     def grouped_topk_fn(gating_output, topk_weights, topk_ids, scoring_func):
-        return torch.ops.aphrodite.rocm_aiter_grouped_topk(
+        return torch.ops.sonar.rocm_aiter_grouped_topk(
             gating_output,
             topk_weights,
             topk_ids,
@@ -156,7 +156,7 @@ def test_rocm_aiter_grouped_topk_torch_compile_compatibility():
 
     # Verify the op's fake implementation
     torch.library.opcheck(
-        torch.ops.aphrodite.rocm_aiter_grouped_topk,
+        torch.ops.sonar.rocm_aiter_grouped_topk,
         (gating_output, topk_weights, topk_ids),
         kwargs={
             "num_expert_group": num_expert_group,
@@ -200,7 +200,7 @@ def test_rocm_aiter_grouped_topk_torch_compile_compatibility():
 
 
 def test_rocm_aiter_topk_gating_custom_op_registration():
-    assert callable(torch.ops.aphrodite.rocm_aiter_topk_gating)
+    assert callable(torch.ops.sonar.rocm_aiter_topk_gating)
 
 
 def _sort_routing(weights: torch.Tensor, ids: torch.Tensor):
@@ -228,7 +228,7 @@ def test_rocm_aiter_topk_gating_matches_softmax_reference(
     topk_weights = torch.empty((num_tokens, topk), dtype=torch.float32, device="cuda")
     topk_ids = torch.empty((num_tokens, topk), dtype=torch.int32, device="cuda")
     token_expert_indices = torch.empty((num_tokens, topk), dtype=torch.int32, device="cuda")
-    torch.ops.aphrodite.rocm_aiter_topk_gating(
+    torch.ops.sonar.rocm_aiter_topk_gating(
         topk_weights,
         topk_ids,
         token_expert_indices,
@@ -271,7 +271,7 @@ def test_rocm_aiter_topk_gating_shared_expert_suffix():
     topk_weights = torch.empty((num_tokens, width), dtype=torch.float32, device="cuda")
     token_expert_indices = torch.empty((num_tokens, topk), dtype=torch.int32, device="cuda")
 
-    torch.ops.aphrodite.rocm_aiter_topk_gating(
+    torch.ops.sonar.rocm_aiter_topk_gating(
         topk_weights,
         topk_ids[:, :topk],
         token_expert_indices,
@@ -306,7 +306,7 @@ def test_rocm_aiter_topk_gating_torch_compile_compatibility():
     device = gating_output.device
 
     def gating_fn(gating_output, topk_weights, topk_ids, token_expert_indices):
-        return torch.ops.aphrodite.rocm_aiter_topk_gating(
+        return torch.ops.sonar.rocm_aiter_topk_gating(
             topk_weights,
             topk_ids,
             token_expert_indices,
@@ -317,7 +317,7 @@ def test_rocm_aiter_topk_gating_torch_compile_compatibility():
         )
 
     torch.library.opcheck(
-        torch.ops.aphrodite.rocm_aiter_topk_gating,
+        torch.ops.sonar.rocm_aiter_topk_gating,
         (
             torch.empty((token, topk), dtype=torch.float32, device=device),
             torch.empty((token, topk), dtype=torch.int32, device=device),

@@ -17,7 +17,7 @@ from unittest.mock import patch
 
 import torch
 
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 
@@ -355,8 +355,8 @@ class ObjectSerde(ABC):
 class MsgpackSerde(ObjectSerde):
     def __init__(self):
         # Delayed import to avoid circular dependency
-        from aphrodite.multimodal.inputs import MultiModalKwargsItem
-        from aphrodite.v1.serial_utils import MsgpackDecoder, MsgpackEncoder
+        from sonar.multimodal.inputs import MultiModalKwargsItem
+        from sonar.v1.serial_utils import MsgpackDecoder, MsgpackEncoder
 
         self.encoder = MsgpackEncoder()
         self.tensor_decoder = MsgpackDecoder(torch.Tensor, share_mem=False)

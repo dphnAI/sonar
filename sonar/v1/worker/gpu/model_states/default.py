@@ -5,23 +5,23 @@ from typing import Any
 import torch
 import torch.nn as nn
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.compilation import CUDAGraphMode
-from aphrodite.v1.attention.backends.utils import compute_mm_prefix_ranges
-from aphrodite.v1.core.sched.output import NewRequestData
-from aphrodite.v1.kv_cache_interface import KVCacheConfig
-from aphrodite.v1.worker.gpu.attn_utils import build_attn_metadata
-from aphrodite.v1.worker.gpu.input_batch import InputBatch
-from aphrodite.v1.worker.gpu.mm.encoder_cache import EncoderCache
-from aphrodite.v1.worker.gpu.mm.rope import get_rope_state
-from aphrodite.v1.worker.gpu.model_states.interface import (
+from sonar.config import SonarConfig
+from sonar.config.compilation import CUDAGraphMode
+from sonar.v1.attention.backends.utils import compute_mm_prefix_ranges
+from sonar.v1.core.sched.output import NewRequestData
+from sonar.v1.kv_cache_interface import KVCacheConfig
+from sonar.v1.worker.gpu.attn_utils import build_attn_metadata
+from sonar.v1.worker.gpu.input_batch import InputBatch
+from sonar.v1.worker.gpu.mm.encoder_cache import EncoderCache
+from sonar.v1.worker.gpu.mm.rope import get_rope_state
+from sonar.v1.worker.gpu.model_states.interface import (
     ModelSpecificAttnMetadata,
     ModelState,
 )
-from aphrodite.v1.worker.gpu.model_states.mm_pruning import maybe_create_mm_pruner
-from aphrodite.v1.worker.gpu.model_states.prompt_embeds import PromptEmbedsState
-from aphrodite.v1.worker.gpu.states import RequestState
-from aphrodite.v1.worker.utils import AttentionGroup
+from sonar.v1.worker.gpu.model_states.mm_pruning import maybe_create_mm_pruner
+from sonar.v1.worker.gpu.model_states.prompt_embeds import PromptEmbedsState
+from sonar.v1.worker.gpu.states import RequestState
+from sonar.v1.worker.utils import AttentionGroup
 
 
 class DefaultModelState(ModelState):
@@ -29,12 +29,12 @@ class DefaultModelState(ModelState):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         model: nn.Module,
         encoder_cache: EncoderCache | None,
         device: torch.device,
     ):
-        super().__init__(aphrodite_config, model, encoder_cache, device)
+        super().__init__(sonar_config, model, encoder_cache, device)
 
         self.prompt_embeds_state: PromptEmbedsState | None = None
         if self.model_config.enable_prompt_embeds:

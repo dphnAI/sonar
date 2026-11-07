@@ -3,9 +3,9 @@
 
 from transformers import AutoTokenizer
 
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.v1.engine import EngineCoreRequest
-from aphrodite.v1.engine.detokenizer import IncrementalDetokenizer
+from sonar.sampling_params import SamplingParams
+from sonar.v1.engine import EngineCoreRequest
+from sonar.v1.engine.detokenizer import IncrementalDetokenizer
 
 # ruff: noqa: E501
 

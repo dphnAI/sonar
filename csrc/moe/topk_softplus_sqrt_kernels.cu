@@ -41,7 +41,7 @@ typedef __hip_bfloat162 __nv_bfloat162;
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
-namespace aphrodite {
+namespace sonar {
 namespace moe {
 
 template <typename HashIndType>
@@ -140,8 +140,8 @@ __launch_bounds__(128) __global__
       // Warp argmax reduce; ties go to the lower expert id.
   #pragma unroll
       for (int mask = 16; mask > 0; mask >>= 1) {
-        const float other_best = APHRODITE_SHFL_XOR_SYNC(best, mask);
-        const int other_e = APHRODITE_SHFL_XOR_SYNC(best_e, mask);
+        const float other_best = SONAR_SHFL_XOR_SYNC(best, mask);
+        const int other_e = SONAR_SHFL_XOR_SYNC(best_e, mask);
         if (other_best > best || (other_best == best && other_e < best_e)) {
           best = other_best;
           best_e = other_e;
@@ -157,7 +157,7 @@ __launch_bounds__(128) __global__
       }
   #pragma unroll
       for (int mask = 16; mask > 0; mask >>= 1) {
-        w += APHRODITE_SHFL_XOR_SYNC(w, mask);
+        w += SONAR_SHFL_XOR_SYNC(w, mask);
       }
       slot_expert[j] = best_e;
       slot_weight[j] = w;
@@ -179,7 +179,7 @@ __launch_bounds__(128) __global__
   #pragma unroll
   for (int mask = 16; mask > 0; mask >>= 1) {
     // sum in warp
-    weight_sum += APHRODITE_SHFL_XOR_SYNC(weight_sum, mask);
+    weight_sum += SONAR_SHFL_XOR_SYNC(weight_sum, mask);
   }
 
   #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 900)
@@ -461,7 +461,7 @@ __launch_bounds__(WARPS_PER_CTA* WARP_SIZE_PARAM) __global__
 #pragma unroll
       for (int mask = THREADS_PER_ROW / 2; mask > 0; mask /= 2) {
         selected_sum +=
-            APHRODITE_SHFL_XOR_SYNC_WIDTH(selected_sum, mask, THREADS_PER_ROW);
+            SONAR_SHFL_XOR_SYNC_WIDTH(selected_sum, mask, THREADS_PER_ROW);
       }
     }
     float scale = static_cast<float>(routed_scaling_factor);
@@ -553,9 +553,9 @@ __launch_bounds__(WARPS_PER_CTA* WARP_SIZE_PARAM) __global__
 #pragma unroll
       for (int mask = THREADS_PER_ROW / 2; mask > 0; mask /= 2) {
         float other_max =
-            APHRODITE_SHFL_XOR_SYNC_WIDTH(max_val, mask, THREADS_PER_ROW);
+            SONAR_SHFL_XOR_SYNC_WIDTH(max_val, mask, THREADS_PER_ROW);
         int other_expert =
-            APHRODITE_SHFL_XOR_SYNC_WIDTH(expert, mask, THREADS_PER_ROW);
+            SONAR_SHFL_XOR_SYNC_WIDTH(expert, mask, THREADS_PER_ROW);
 
         // We want lower indices to "win" in every thread so we break ties this
         // way
@@ -844,7 +844,7 @@ void topkGatingSoftplusSqrtKernelLauncher(
 }
 
 }  // namespace moe
-}  // namespace aphrodite
+}  // namespace sonar
 
 template <typename ComputeType>
 void dispatch_topk_softplus_sqrt_launch(
@@ -906,8 +906,8 @@ void dispatch_topk_softplus_sqrt_launch(
           "input_ids and tid2eid must have the same dtype");
       if (tid2eid.value().scalar_type() ==
           torch::headeronly::ScalarType::Long) {
-        aphrodite::moe::topkGatingSoftplusSqrtKernelLauncher<
-            OutIndType, ComputeType, int64_t>(
+        sonar::moe::topkGatingSoftplusSqrtKernelLauncher<OutIndType,
+                                                         ComputeType, int64_t>(
             gating_output, topk_weights.mutable_data_ptr<float>(),
             topk_indices_ptr, token_expert_indices.mutable_data_ptr<int>(),
             num_tokens, num_experts, topk, renormalize, routed_scaling_factor,
@@ -917,8 +917,8 @@ void dispatch_topk_softplus_sqrt_launch(
       } else {
         STD_TORCH_CHECK(tid2eid.value().scalar_type() ==
                         torch::headeronly::ScalarType::Int);
-        aphrodite::moe::topkGatingSoftplusSqrtKernelLauncher<OutIndType,
-                                                             ComputeType, int>(
+        sonar::moe::topkGatingSoftplusSqrtKernelLauncher<OutIndType,
+                                                         ComputeType, int>(
             gating_output, topk_weights.mutable_data_ptr<float>(),
             topk_indices_ptr, token_expert_indices.mutable_data_ptr<int>(),
             num_tokens, num_experts, topk, renormalize, routed_scaling_factor,
@@ -933,8 +933,8 @@ void dispatch_topk_softplus_sqrt_launch(
       // dispatch the hash-index type on its dtype.
       if (input_ids.value().scalar_type() ==
           torch::headeronly::ScalarType::Long) {
-        aphrodite::moe::topkGatingSoftplusSqrtKernelLauncher<
-            OutIndType, ComputeType, int64_t>(
+        sonar::moe::topkGatingSoftplusSqrtKernelLauncher<OutIndType,
+                                                         ComputeType, int64_t>(
             gating_output, topk_weights.mutable_data_ptr<float>(),
             topk_indices_ptr, token_expert_indices.mutable_data_ptr<int>(),
             num_tokens, num_experts, topk, renormalize, routed_scaling_factor,
@@ -944,8 +944,8 @@ void dispatch_topk_softplus_sqrt_launch(
       } else {
         STD_TORCH_CHECK(input_ids.value().scalar_type() ==
                         torch::headeronly::ScalarType::Int);
-        aphrodite::moe::topkGatingSoftplusSqrtKernelLauncher<OutIndType,
-                                                             ComputeType, int>(
+        sonar::moe::topkGatingSoftplusSqrtKernelLauncher<OutIndType,
+                                                         ComputeType, int>(
             gating_output, topk_weights.mutable_data_ptr<float>(),
             topk_indices_ptr, token_expert_indices.mutable_data_ptr<int>(),
             num_tokens, num_experts, topk, renormalize, routed_scaling_factor,
@@ -954,8 +954,7 @@ void dispatch_topk_softplus_sqrt_launch(
             bias_vl_ptr, image_sentinel_lo);
       }
     } else {
-      aphrodite::moe::topkGatingSoftplusSqrtKernelLauncher<OutIndType,
-                                                           ComputeType>(
+      sonar::moe::topkGatingSoftplusSqrtKernelLauncher<OutIndType, ComputeType>(
           gating_output, topk_weights.mutable_data_ptr<float>(),
           topk_indices_ptr, token_expert_indices.mutable_data_ptr<int>(),
           num_tokens, num_experts, topk, renormalize, routed_scaling_factor,

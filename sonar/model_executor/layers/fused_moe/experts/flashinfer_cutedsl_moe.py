@@ -3,32 +3,32 @@
 
 import torch
 
-import aphrodite.envs as envs
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite.distributed.localization import get_localized_resources
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.config import (
+import sonar.envs as envs
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar.distributed.localization import get_localized_resources
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEParallelConfig,
     FusedMoEQuantConfig,
 )
-from aphrodite.model_executor.layers.fused_moe.topk_weight_and_reduce import (
+from sonar.model_executor.layers.fused_moe.topk_weight_and_reduce import (
     TopKWeightAndReduceNoOP,
 )
-from aphrodite.model_executor.layers.quantization.utils.flashinfer_utils import (
+from sonar.model_executor.layers.quantization.utils.flashinfer_utils import (
     NVFP4_PER_TOKEN_BASE_GLOBAL_SCALE,
     activation_to_flashinfer_int,
     quantize_nvfp4_per_token_input,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     kNvfp4Dynamic,
     kNvfp4DynamicToken,
     kNvfp4Static,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.flashinfer import (
+from sonar.platforms import current_platform
+from sonar.utils.flashinfer import (
     flashinfer_cute_dsl_fused_moe_nvfp4,
     has_flashinfer_cutedsl_moe_nvfp4,
 )
@@ -124,11 +124,11 @@ class FlashInferCuteDSLExperts(mk.FusedMoEExpertsModular):
             # FlashInfer expects one shared per-domain SM count.
             "localized_sm_count": _one_sm_count(res),
             # Retained full weights let autotuning compare both paths.
-            "localized_allow_nonlocalized": (not envs.APHRODITE_FLASHINFER_CUTEDSL_MOE_LOCALIZE_FREE_FULL_WEIGHTS),
+            "localized_allow_nonlocalized": (not envs.SONAR_FLASHINFER_CUTEDSL_MOE_LOCALIZE_FREE_FULL_WEIGHTS),
             # Optionally overlap output zeroing on the auxiliary stream.
             **(
                 {"localized_memset_stream": res.aux_stream}
-                if envs.APHRODITE_FLASHINFER_CUTEDSL_MOE_LOCALIZE_MEMSET_OVERLAP
+                if envs.SONAR_FLASHINFER_CUTEDSL_MOE_LOCALIZE_MEMSET_OVERLAP
                 else {}
             ),
         }

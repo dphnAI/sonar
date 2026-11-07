@@ -4,15 +4,15 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed.kv_transfer.kv_connector.v1.metrics import (
+from sonar.config import SonarConfig
+from sonar.distributed.kv_transfer.kv_connector.v1.metrics import (
     KVConnectorPromMetrics,
     KVConnectorStats,
     PromMetric,
     PromMetricT,
 )
-from aphrodite.logger import init_logger
-from aphrodite.v1.kv_offload.base import (
+from sonar.logger import init_logger
+from sonar.v1.kv_offload.base import (
     ConfigInfoMapping,
     OffloadingCounterMetadata,
     OffloadingGaugeMetadata,
@@ -20,11 +20,11 @@ from aphrodite.v1.kv_offload.base import (
     OffloadingMetricMetadata,
     OffloadingSpec,
 )
-from aphrodite.v1.kv_offload.factory import OffloadingSpecFactory
+from sonar.v1.kv_offload.factory import OffloadingSpecFactory
 
 logger = init_logger(__name__)
 
-KV_OFFLOAD_CONFIG_INFO = "aphrodite:kv_offload_config_info"
+KV_OFFLOAD_CONFIG_INFO = "sonar:kv_offload_config_info"
 
 _INFO_METRIC_HELP = (
     "Static configuration of the KV offload managers of this engine instance. "
@@ -39,20 +39,20 @@ _INFO_METRIC_HELP = (
 class _TransferMetricName:
     """Flat metric names for GPU↔offload-medium transfer operations."""
 
-    LOAD_BYTES = "aphrodite:kv_offload_load_bytes"
-    LOAD_TIME = "aphrodite:kv_offload_load_time"
-    LOAD_SIZE = "aphrodite:kv_offload_load_size"
-    STORE_BYTES = "aphrodite:kv_offload_store_bytes"
-    STORE_TIME = "aphrodite:kv_offload_store_time"
-    STORE_SIZE = "aphrodite:kv_offload_store_size"
+    LOAD_BYTES = "sonar:kv_offload_load_bytes"
+    LOAD_TIME = "sonar:kv_offload_load_time"
+    LOAD_SIZE = "sonar:kv_offload_load_size"
+    STORE_BYTES = "sonar:kv_offload_store_bytes"
+    STORE_TIME = "sonar:kv_offload_store_time"
+    STORE_SIZE = "sonar:kv_offload_store_size"
 
 
 class _ConnectorMetricName:
     """Connector-side metrics emitted by scheduler-side offloading code."""
 
-    LOOKUP_SYNC_DELAY = "aphrodite:kv_offload_lookup_sync_delay_seconds"
-    LOOKUP_ASYNC_DELAY = "aphrodite:kv_offload_lookup_async_delay_seconds"
-    ALLOCATION_FAILURE = "aphrodite:kv_offload_allocation_failure"
+    LOOKUP_SYNC_DELAY = "sonar:kv_offload_lookup_sync_delay_seconds"
+    LOOKUP_ASYNC_DELAY = "sonar:kv_offload_lookup_async_delay_seconds"
+    ALLOCATION_FAILURE = "sonar:kv_offload_allocation_failure"
 
 
 class _TransferType:
@@ -141,9 +141,9 @@ def get_connector_metric_definitions() -> dict[str, OffloadingMetricMetadata]:
     }
 
 
-_DEPRECATED_TOTAL_BYTES = "aphrodite:kv_offload_total_bytes"
-_DEPRECATED_TOTAL_TIME = "aphrodite:kv_offload_total_time"
-_DEPRECATED_SIZE = "aphrodite:kv_offload_size"
+_DEPRECATED_TOTAL_BYTES = "sonar:kv_offload_total_bytes"
+_DEPRECATED_TOTAL_TIME = "sonar:kv_offload_total_time"
+_DEPRECATED_SIZE = "sonar:kv_offload_size"
 
 # Deprecated legacy transfer metrics, kept during the migration to the flat
 # metric names above. These stay in a separate definition block because they
@@ -354,17 +354,17 @@ class OffloadingConnectorStats(KVConnectorStats):
 class OffloadPromMetrics(KVConnectorPromMetrics):
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         metric_types: dict[type[PromMetric], type[PromMetricT]],
         labelnames: list[str],
         per_engine_labelvalues: dict[int, list[object]],
     ):
-        super().__init__(aphrodite_config, metric_types, labelnames, per_engine_labelvalues)
+        super().__init__(sonar_config, metric_types, labelnames, per_engine_labelvalues)
         # (engine_idx, transfer_type) -> (metric with bounded labels)
         self.histogram_transfer_size: dict[tuple[int, str], PromMetricT] = {}
         self.counter_kv_bytes: dict[tuple[int, str], PromMetricT] = {}
         self.counter_kv_transfer_time: dict[tuple[int, str], PromMetricT] = {}
-        kv_transfer_config = aphrodite_config.kv_transfer_config
+        kv_transfer_config = sonar_config.kv_transfer_config
         assert kv_transfer_config is not None
         extra_config = kv_transfer_config.kv_connector_extra_config
         self._spec_cls: type[OffloadingSpec] = OffloadingSpecFactory.get_spec_cls(extra_config)
@@ -378,7 +378,7 @@ class OffloadPromMetrics(KVConnectorPromMetrics):
                 documentation=_INFO_METRIC_HELP, labelnames=self._info_keys
             ),
         }
-        from aphrodite.v1.kv_offload.cpu.spec import CPUOffloadingSpec
+        from sonar.v1.kv_offload.cpu.spec import CPUOffloadingSpec
 
         self._observe_deprecated_metrics = issubclass(self._spec_cls, CPUOffloadingSpec)
         self._offloading_metric_defs: dict[str, PromMetricT] = {}

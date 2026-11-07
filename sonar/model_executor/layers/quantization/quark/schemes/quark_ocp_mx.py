@@ -6,8 +6,8 @@ from fractions import Fraction
 
 import torch
 
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.kernels.linear import (
+from sonar.logger import init_logger
+from sonar.model_executor.kernels.linear import (
     MxFp4LinearKernel,
     MxFp6LinearKernel,
     Mxfp8LinearKernel,
@@ -15,32 +15,32 @@ from aphrodite.model_executor.kernels.linear import (
     init_mxfp6_linear_kernel,
     init_mxfp8_linear_kernel,
 )
-from aphrodite.model_executor.layers.fusion.quant_activation import (
+from sonar.model_executor.layers.fusion.quant_activation import (
     expose_input_quant_key,
 )
-from aphrodite.model_executor.layers.quantization.utils.mxfp8_utils import (
+from sonar.model_executor.layers.quantization.utils.mxfp8_utils import (
     MXFP8_SCALE_DTYPE,
     MXFP8_VALUE_DTYPE,
 )
-from aphrodite.model_executor.layers.quantization.utils.ocp_mx_utils import (
+from sonar.model_executor.layers.quantization.utils.ocp_mx_utils import (
     _ACTIVATION_QUANT_KEY_MAP,
     _WEIGHT_QUANT_KEY_MAP,
     OCP_MX_BLOCK_SIZE,
     OCP_MX_UNPACKED_DTYPES,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     kMxfp4Static,
     kMxfp6E2M3Static,
     kMxfp6E3M2Static,
     kMxfp8Static,
 )
-from aphrodite.model_executor.parameter import (
+from sonar.model_executor.parameter import (
     GroupQuantScaleParameter,
     ModelWeightParameter,
-    PackedAphroditeParameter,
+    PackedSonarParameter,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 from .quark_scheme import QuarkScheme
 
@@ -97,7 +97,7 @@ class QuarkOCP_MX(QuarkScheme):
                 "The current platform supports native MXFP4/MXFP6 "
                 f"computation, but kernels for input_dtype={self.input_dtype} "
                 f"and weight_dtype={self.weight_dtype} are not yet integrated "
-                "in Aphrodite. Simulated weight dequantization and activation "
+                "in Sonar. Simulated weight dequantization and activation "
                 "QDQ (quantize and dequantize) will be used, with the linear "
                 "layers computed in high precision."
             )
@@ -199,7 +199,7 @@ class QuarkOCP_MX(QuarkScheme):
             layer.logical_widths = output_partition_sizes
 
             # WEIGHT
-            weight = PackedAphroditeParameter(
+            weight = PackedSonarParameter(
                 data=torch.empty(
                     output_size_per_partition,
                     self.get_packed_dim(input_size_per_partition, self.weight_dtype),

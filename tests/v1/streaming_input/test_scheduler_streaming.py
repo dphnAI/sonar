@@ -9,30 +9,30 @@ import numpy as np
 import pytest
 import torch
 
-import aphrodite.v1.core.kv_cache_utils as kv_cache_utils
-from aphrodite.config import AphroditeConfig, DeviceConfig
-from aphrodite.multimodal.inputs import (
+import sonar.v1.core.kv_cache_utils as kv_cache_utils
+from sonar.config import DeviceConfig, SonarConfig
+from sonar.multimodal.inputs import (
     MultiModalFeatureSpec,
     MultiModalKwargsItem,
     PlaceholderRange,
 )
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.utils.hashing import sha256
-from aphrodite.v1.core.kv_cache_utils import (
+from sonar.sampling_params import SamplingParams
+from sonar.utils.hashing import sha256
+from sonar.v1.core.kv_cache_utils import (
     get_request_block_hasher,
     hash_block_tokens,
     init_none_hash,
 )
-from aphrodite.v1.core.sched.scheduler import Scheduler
-from aphrodite.v1.engine import FinishReason
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.core.sched.scheduler import Scheduler
+from sonar.v1.engine import FinishReason
+from sonar.v1.kv_cache_interface import (
     FullAttentionSpec,
     KVCacheConfig,
     KVCacheGroupSpec,
 )
-from aphrodite.v1.outputs import DraftTokenIds, LogprobsLists, ModelRunnerOutput
-from aphrodite.v1.request import Request, RequestStatus, StreamingUpdate
-from aphrodite.v1.structured_output import StructuredOutputManager
+from sonar.v1.outputs import DraftTokenIds, LogprobsLists, ModelRunnerOutput
+from sonar.v1.request import Request, RequestStatus, StreamingUpdate
+from sonar.v1.structured_output import StructuredOutputManager
 from tests.v1.core.utils import create_scheduler as create_async_scheduler
 from tests.v1.core.utils import create_scheduler as create_spec_scheduler
 
@@ -68,18 +68,18 @@ class DummyRequest(Request):
 
 
 def create_scheduler() -> Scheduler:
-    aphrodite_config = AphroditeConfig(device_config=DeviceConfig("cpu"))
-    aphrodite_config.model_config = MagicMock()
-    aphrodite_config.model_config.skip_tokenizer_init = True
-    aphrodite_config.model_config.is_multimodal_model = False
-    aphrodite_config.model_config.supports_multimodal_inputs = False
-    aphrodite_config.model_config.is_encoder_decoder = False
-    aphrodite_config.model_config.is_diffusion = False
-    aphrodite_config.model_config.max_model_len = 1024
-    aphrodite_config.model_config.enable_return_routed_experts = False
-    aphrodite_config.cache_config = MagicMock()
-    aphrodite_config.cache_config.num_gpu_blocks = 1000
-    aphrodite_config.cache_config.enable_prefix_caching = False
+    sonar_config = SonarConfig(device_config=DeviceConfig("cpu"))
+    sonar_config.model_config = MagicMock()
+    sonar_config.model_config.skip_tokenizer_init = True
+    sonar_config.model_config.is_multimodal_model = False
+    sonar_config.model_config.supports_multimodal_inputs = False
+    sonar_config.model_config.is_encoder_decoder = False
+    sonar_config.model_config.is_diffusion = False
+    sonar_config.model_config.max_model_len = 1024
+    sonar_config.model_config.enable_return_routed_experts = False
+    sonar_config.cache_config = MagicMock()
+    sonar_config.cache_config.num_gpu_blocks = 1000
+    sonar_config.cache_config.enable_prefix_caching = False
     kv_cache_config = KVCacheConfig(
         num_blocks=1000,
         kv_cache_tensors=[],
@@ -91,10 +91,10 @@ def create_scheduler() -> Scheduler:
         ],
     )
     return Scheduler(
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         kv_cache_config=kv_cache_config,
         log_stats=True,
-        structured_output_manager=StructuredOutputManager(aphrodite_config),
+        structured_output_manager=StructuredOutputManager(sonar_config),
         block_size=16,
         hash_block_size=16,
     )

@@ -14,11 +14,11 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 from starlette.background import BackgroundTask, BackgroundTasks
 
-from aphrodite.entrypoints.generate.base.protocol import StreamOptions
-from aphrodite.entrypoints.openai.models.protocol import LoRAModulePath
-from aphrodite.entrypoints.serve.engine.protocol import ErrorResponse
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
+from sonar.entrypoints.generate.base.protocol import StreamOptions
+from sonar.entrypoints.openai.models.protocol import LoRAModulePath
+from sonar.entrypoints.serve.engine.protocol import ErrorResponse
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
 
 logger = init_logger(__name__)
 
@@ -261,7 +261,7 @@ def should_include_usage(stream_options: StreamOptions | None, enable_force_incl
 def process_lora_modules(
     args_lora_modules: list[LoRAModulePath], default_mm_loras: dict[str, str] | None
 ) -> list[LoRAModulePath]:
-    from aphrodite.entrypoints.openai.models.serving import LoRAModulePath
+    from sonar.entrypoints.openai.models.serving import LoRAModulePath
 
     lora_modules = args_lora_modules
     if default_mm_loras:

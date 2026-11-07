@@ -11,8 +11,8 @@ import torch.utils.benchmark as TBenchmark
 from torch.utils.benchmark import Measurement as TMeasurement
 from tqdm import tqdm
 
-import aphrodite._custom_ops as ops
-from aphrodite.model_executor.layers.layernorm import RMSNorm
+import sonar._custom_ops as ops
+from sonar.model_executor.layers.layernorm import RMSNorm
 
 
 @dataclass

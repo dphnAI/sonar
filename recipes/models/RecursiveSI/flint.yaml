@@ -22,7 +22,7 @@ model:
     pip:
       note: "Use a nightly wheel. The NVFP4 GGUF checkpoint also needs `pip install 'gguf>=0.19.0'`."
     docker:
-      note: "Use the Aphrodite nightly image."
+      note: "Use the Sonar nightly image."
   architecture: moe
   parameter_count: "39.8B"
   active_parameters: "2.5B"
@@ -78,14 +78,14 @@ guide: |
   Tested end to end on one GB200 (TP=1, BF16 KV cache, CUDA graphs, no torch.compile) for both
   checkpoints. On a single GPU the Flint kernels are always used (fused MoE, small-batch CuTe GEMV,
   CuTe decode attention, low-latency decode path for <= 8 requests); TP > 1 and expert parallelism
-  fall back to stock Aphrodite layers and are not validated.
+  fall back to stock Sonar layers and are not validated.
 
   ## Launch
 
   BF16:
 
   ```bash
-  aphrodite serve RecursiveSI/flint --served-model-name flint \
+  sonar serve RecursiveSI/flint --served-model-name flint \
     --enable-auto-tool-choice --tool-call-parser glm47 --reasoning-parser glm47 \
     --exclude-tools-when-tool-choice-none
   ```
@@ -93,7 +93,7 @@ guide: |
   NVFP4 (requires `gguf>=0.19.0`):
 
   ```bash
-  aphrodite serve RecursiveSI/flint-nvfp4-gguf \
+  sonar serve RecursiveSI/flint-nvfp4-gguf \
     --hf-config-path RecursiveSI/flint --tokenizer RecursiveSI/flint \
     --served-model-name flint \
     --enable-auto-tool-choice --tool-call-parser glm47 --reasoning-parser glm47 \
@@ -121,7 +121,7 @@ guide: |
 
   ## Benchmarking
 
-  Forward time on one GB200 (`aphrodite bench forward`, batch x context, us):
+  Forward time on one GB200 (`sonar bench forward`, batch x context, us):
 
   | shape | BF16 | NVFP4 |
   |---|---|---|
@@ -130,7 +130,7 @@ guide: |
   | decode 32 x 100K | 19580 | 16716 |
   | prefill 8K @ 100K | 145617 | 144765 |
 
-  Serving (NVFP4, `aphrodite bench serve`, random 1000 in / 1000 out): TPOT 2.0 ms at concurrency 1,
+  Serving (NVFP4, `sonar bench serve`, random 1000 in / 1000 out): TPOT 2.0 ms at concurrency 1,
   2.8 ms at 8, 4.9 ms at 32, 8.5 ms at 128; median inter-token latency 2.06 ms at batch 1 with
   100K context. Prefill runs eagerly and is CPU-bound on kernel-launch overhead: TTFT is ~60 ms
   for a short prompt and ~125 ms for an 8K-token prompt.
@@ -139,7 +139,7 @@ guide: |
 
   - Rust frontend: not supported for this recipe. It rejects `--exclude-tools-when-tool-choice-none`,
     and for NVFP4 also `--hf-config-path` / `--tokenizer`; keep the default Python frontend.
-  - Reasoning parser: the reference runtime's `deepseek-v3` name maps to Aphrodite's `deepseek_v3`
+  - Reasoning parser: the reference runtime's `deepseek-v3` name maps to Sonar's `deepseek_v3`
     parser, which only extracts reasoning when the request enables `thinking`; with Flint the
     reasoning then stays in `content`. Use `glm47`.
   - If `content` contains literal `<think>` or `<tool_call>` text, the server was started without

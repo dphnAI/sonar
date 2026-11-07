@@ -5,8 +5,8 @@ import pytest
 import torch
 from transformers import AutoModelForMaskedLM, AutoModelForTokenClassification
 
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_random_seed
 from tests.models.registry import HF_EXAMPLE_MODELS
 from tests.models.utils import softmax
 
@@ -33,7 +33,7 @@ def seed_everything():
 @torch.inference_mode
 def test_bert_model_runner_v2(
     hf_runner,
-    aphrodite_runner,
+    sonar_runner,
     example_prompts,
     monkeypatch,
     model: str,
@@ -41,10 +41,10 @@ def test_bert_model_runner_v2(
 ) -> None:
     prompt_batches = [[example_prompts[0]], example_prompts]
 
-    monkeypatch.setenv("APHRODITE_USE_V2_MODEL_RUNNER", "1")
-    with aphrodite_runner(model, max_model_len=None, dtype=dtype) as aphrodite_model:
-        assert aphrodite_model.llm.llm_engine.aphrodite_config.use_v2_model_runner
-        aphrodite_output_batches = [aphrodite_model.token_classify(prompts) for prompts in prompt_batches]
+    monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", "1")
+    with sonar_runner(model, max_model_len=None, dtype=dtype) as sonar_model:
+        assert sonar_model.llm.llm_engine.sonar_config.use_v2_model_runner
+        sonar_output_batches = [sonar_model.token_classify(prompts) for prompts in prompt_batches]
 
     with hf_runner(
         model,
@@ -61,11 +61,11 @@ def test_bert_model_runner_v2(
         hf_output_batches = [[hf_outputs[0]], hf_outputs]
 
     # check logits difference
-    for hf_outputs, aphrodite_outputs in zip(hf_output_batches, aphrodite_output_batches):
-        for hf_output, aphrodite_output in zip(hf_outputs, aphrodite_outputs):
+    for hf_outputs, sonar_outputs in zip(hf_output_batches, sonar_output_batches):
+        for hf_output, sonar_output in zip(hf_outputs, sonar_outputs):
             hf_output = hf_output.detach().clone().cpu().float()
-            aphrodite_output = aphrodite_output.detach().clone().cpu().float()
-            torch.testing.assert_close(hf_output, aphrodite_output, atol=3.2e-2, rtol=1e-3)
+            sonar_output = sonar_output.detach().clone().cpu().float()
+            torch.testing.assert_close(hf_output, sonar_output, atol=3.2e-2, rtol=1e-3)
 
 
 @pytest.mark.parametrize("model", ["disham993/electrical-ner-ModernBERT-base"])
@@ -74,7 +74,7 @@ def test_bert_model_runner_v2(
 @torch.inference_mode
 def test_modernbert_models(
     hf_runner,
-    aphrodite_runner,
+    sonar_runner,
     example_prompts,
     model: str,
     dtype: str,
@@ -88,8 +88,8 @@ def test_modernbert_models(
         "flaky tolerance enabled due to numerical precision variance."
     )
 
-    with aphrodite_runner(model, max_model_len=None, dtype=dtype) as aphrodite_model:
-        aphrodite_outputs = aphrodite_model.token_classify(example_prompts)
+    with sonar_runner(model, max_model_len=None, dtype=dtype) as sonar_model:
+        sonar_outputs = sonar_model.token_classify(example_prompts)
 
     with hf_runner(
         model,
@@ -105,10 +105,10 @@ def test_modernbert_models(
             hf_outputs.append(softmax(output.logits[0]))
 
     # check logits difference
-    for hf_output, aphrodite_output in zip(hf_outputs, aphrodite_outputs):
+    for hf_output, sonar_output in zip(hf_outputs, sonar_outputs):
         hf_output = hf_output.detach().clone().cpu().float()
-        aphrodite_output = aphrodite_output.detach().clone().cpu().float()
-        torch.testing.assert_close(hf_output, aphrodite_output, atol=6e-2, rtol=1e-3)
+        sonar_output = sonar_output.detach().clone().cpu().float()
+        torch.testing.assert_close(hf_output, sonar_output, atol=6e-2, rtol=1e-3)
 
 
 @pytest.mark.parametrize("model", ["Davlan/xlm-roberta-base-ner-hrl"])
@@ -117,13 +117,13 @@ def test_modernbert_models(
 @torch.inference_mode
 def test_xlm_roberta_models(
     hf_runner,
-    aphrodite_runner,
+    sonar_runner,
     example_prompts,
     model: str,
     dtype: str,
 ) -> None:
-    with aphrodite_runner(model, max_model_len=None, dtype=dtype) as aphrodite_model:
-        aphrodite_outputs = aphrodite_model.token_classify(example_prompts)
+    with sonar_runner(model, max_model_len=None, dtype=dtype) as sonar_model:
+        sonar_outputs = sonar_model.token_classify(example_prompts)
 
     with hf_runner(
         model,
@@ -139,10 +139,10 @@ def test_xlm_roberta_models(
             hf_outputs.append(softmax(output.logits[0]))
 
     # check logits difference
-    for hf_output, aphrodite_output in zip(hf_outputs, aphrodite_outputs):
+    for hf_output, sonar_output in zip(hf_outputs, sonar_outputs):
         hf_output = hf_output.detach().clone().cpu().float()
-        aphrodite_output = aphrodite_output.detach().clone().cpu().float()
-        torch.testing.assert_close(hf_output, aphrodite_output, atol=3.2e-2, rtol=1e-3)
+        sonar_output = sonar_output.detach().clone().cpu().float()
+        torch.testing.assert_close(hf_output, sonar_output, atol=3.2e-2, rtol=1e-3)
 
 
 PRIVACY_FILTER_PROMPTS = [
@@ -165,15 +165,15 @@ PRIVACY_FILTER_PROMPTS = [
 @torch.inference_mode
 def test_openai_privacy_filter(
     hf_runner,
-    aphrodite_runner,
+    sonar_runner,
     model: str,
     dtype: str,
 ) -> None:
     model_info = HF_EXAMPLE_MODELS.find_hf_info(model)
     model_info.check_transformers_version(on_fail="skip")
 
-    with aphrodite_runner(model, max_model_len=None, dtype=dtype) as aphrodite_model:
-        aphrodite_outputs = aphrodite_model.token_classify(PRIVACY_FILTER_PROMPTS)
+    with sonar_runner(model, max_model_len=None, dtype=dtype) as sonar_model:
+        sonar_outputs = sonar_model.token_classify(PRIVACY_FILTER_PROMPTS)
 
     with hf_runner(
         model,
@@ -188,10 +188,10 @@ def test_openai_privacy_filter(
             output = hf_model.model(**inputs)
             hf_outputs.append(softmax(output.logits[0]))
 
-    for hf_output, aphrodite_output in zip(hf_outputs, aphrodite_outputs):
+    for hf_output, sonar_output in zip(hf_outputs, sonar_outputs):
         hf_output = hf_output.detach().clone().cpu().float()
-        aphrodite_output = aphrodite_output.detach().clone().cpu().float()
-        torch.testing.assert_close(hf_output, aphrodite_output, atol=0.1, rtol=1e-2)
+        sonar_output = sonar_output.detach().clone().cpu().float()
+        torch.testing.assert_close(hf_output, sonar_output, atol=0.1, rtol=1e-2)
 
 
 @pytest.mark.parametrize("model", ["bd2lcco/Qwen3-0.6B-finetuned"])
@@ -200,13 +200,13 @@ def test_openai_privacy_filter(
 @torch.inference_mode
 def test_auto_conversion(
     hf_runner,
-    aphrodite_runner,
+    sonar_runner,
     example_prompts,
     model: str,
     dtype: str,
 ) -> None:
-    with aphrodite_runner(model, max_model_len=1024, dtype=dtype) as aphrodite_model:
-        aphrodite_outputs = aphrodite_model.token_classify(example_prompts)
+    with sonar_runner(model, max_model_len=1024, dtype=dtype) as sonar_model:
+        sonar_outputs = sonar_model.token_classify(example_prompts)
 
     with hf_runner(model, dtype=dtype, auto_cls=AutoModelForTokenClassification) as hf_model:
         tokenizer = hf_model.tokenizer
@@ -218,10 +218,10 @@ def test_auto_conversion(
             hf_outputs.append(softmax(output.logits[0]))
 
     # check logits difference
-    for hf_output, aphrodite_output in zip(hf_outputs, aphrodite_outputs):
+    for hf_output, sonar_output in zip(hf_outputs, sonar_outputs):
         hf_output = hf_output.detach().clone().cpu().float()
-        aphrodite_output = aphrodite_output.detach().clone().cpu().float()
-        assert torch.allclose(hf_output, aphrodite_output, atol=1e-2)
+        sonar_output = sonar_output.detach().clone().cpu().float()
+        assert torch.allclose(hf_output, sonar_output, atol=1e-2)
 
 
 @pytest.mark.parametrize(
@@ -237,7 +237,7 @@ def test_auto_conversion(
 @torch.inference_mode
 def test_bert_for_masked_lm(
     hf_runner,
-    aphrodite_runner,
+    sonar_runner,
     example_prompts,
     model: str,
     dtype: str,
@@ -245,11 +245,11 @@ def test_bert_for_masked_lm(
     # BertForMaskedLM exposes its MLM head as a token-level pooling task; the
     # head applies softmax over the vocabulary, so each output row is a
     # distribution (matching HF's softmax(logits) below).
-    with aphrodite_runner(model, max_model_len=None, dtype=dtype) as aphrodite_model:
-        aphrodite_outputs = aphrodite_model.token_classify(example_prompts)
+    with sonar_runner(model, max_model_len=None, dtype=dtype) as sonar_model:
+        sonar_outputs = sonar_model.token_classify(example_prompts)
 
     # Run hf_runner reference with "highest" fp32 precision to match
-    # default behavior of Aphrodite. This is needed on ROCm since the
+    # default behavior of Sonar. This is needed on ROCm since the
     # pooling tests set matmul precision to "high" in conftest.py.
     prev_matmul_precision = torch.get_float32_matmul_precision()
     torch.set_float32_matmul_precision("highest")
@@ -270,9 +270,9 @@ def test_bert_for_masked_lm(
         torch.set_float32_matmul_precision(prev_matmul_precision)
 
     # Compare the per-token vocabulary distributions position by position.
-    for hf_output, aphrodite_output in zip(hf_outputs, aphrodite_outputs):
+    for hf_output, sonar_output in zip(hf_outputs, sonar_outputs):
         hf_output = hf_output.detach().clone().cpu().float()
-        aphrodite_output = aphrodite_output.detach().clone().cpu().float()
-        assert hf_output.shape == aphrodite_output.shape
-        assert torch.equal(hf_output.argmax(dim=-1), aphrodite_output.argmax(dim=-1))
-        torch.testing.assert_close(hf_output, aphrodite_output, atol=3.2e-2, rtol=1e-3)
+        sonar_output = sonar_output.detach().clone().cpu().float()
+        assert hf_output.shape == sonar_output.shape
+        assert torch.equal(hf_output.argmax(dim=-1), sonar_output.argmax(dim=-1))
+        torch.testing.assert_close(hf_output, sonar_output, atol=3.2e-2, rtol=1e-3)

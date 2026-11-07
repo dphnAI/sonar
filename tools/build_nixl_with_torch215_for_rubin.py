@@ -4,8 +4,8 @@
 # TODO(arpera):
 # This script is temporary. It builds nixl from source code against torch 2.15
 # because currently there is no nixl wheel built against torch 2.15 which
-# Aphrodite docker image for Rubin requires.
-# Remove this script from Aphrodite once there is nixl wheel built against torch 2.15.
+# Sonar docker image for Rubin requires.
+# Remove this script from Sonar once there is nixl wheel built against torch 2.15.
 
 import argparse
 import glob
@@ -74,7 +74,7 @@ def get_latest_nixl_version():
 
 
 def get_pinned_nixl_version():
-    """Returns the NIXL version pinned in the Aphrodite requirements, if there is one."""
+    """Returns the NIXL version pinned in the Sonar requirements, if there is one."""
     try:
         with open(NIXL_REQUIREMENTS_FILE) as requirements:
             for line in requirements:

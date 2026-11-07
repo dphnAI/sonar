@@ -6,41 +6,41 @@ from typing import Any
 
 import torch
 
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.config import ParallelConfig, get_current_aphrodite_config
-from aphrodite.distributed import (
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.config import ParallelConfig, get_current_sonar_config
+from sonar.distributed import (
     get_dp_group,
     get_pcp_group,
     get_tensor_model_parallel_world_size,
 )
-from aphrodite.distributed.eplb.eplb_state import EplbLayerState
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.distributed.eplb.eplb_state import EplbLayerState
+from sonar.logger import init_logger
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEParallelConfig,
 )
-from aphrodite.model_executor.layers.fused_moe.expert_map_manager import (
+from sonar.model_executor.layers.fused_moe.expert_map_manager import (
     ExpertMapManager,
 )
-from aphrodite.model_executor.layers.fused_moe.expert_substitution import (
+from sonar.model_executor.layers.fused_moe.expert_substitution import (
     SubstitutedRoutedExperts,
     make_expert_substitution,
 )
-from aphrodite.model_executor.layers.fused_moe.routed_experts import RoutedExperts
-from aphrodite.model_executor.layers.fused_moe.router.fused_moe_router import (
+from sonar.model_executor.layers.fused_moe.routed_experts import RoutedExperts
+from sonar.model_executor.layers.fused_moe.router.fused_moe_router import (
     FusedMoERouter,
 )
-from aphrodite.model_executor.layers.fused_moe.router.router_factory import (
+from sonar.model_executor.layers.fused_moe.router.router_factory import (
     create_fused_moe_router,
 )
-from aphrodite.model_executor.layers.fused_moe.runner.moe_runner import (
+from sonar.model_executor.layers.fused_moe.runner.moe_runner import (
     MoERunner,
 )
-from aphrodite.model_executor.layers.quantization.base_config import (
+from sonar.model_executor.layers.quantization.base_config import (
     QuantizationConfig,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import QuantKey
+from sonar.model_executor.layers.quantization.utils.quant_utils import QuantKey
 
 logger = init_logger(__name__)
 
@@ -62,7 +62,7 @@ def make_parallel_config(
         pcp_size_=pcp_size_,
         dp_size_=dp_size_,
         sp_size_=sp_size,
-        aphrodite_parallel_config=parallel_config,
+        sonar_parallel_config=parallel_config,
     )
 
     assert moe_parallel_config.is_sequence_parallel == is_sequence_parallel
@@ -228,7 +228,7 @@ def FusedMoEFactory(
         MoERunner: Configured MoE execution pipeline ready for forward passes
 
     """
-    aphrodite_config = get_current_aphrodite_config()
+    sonar_config = get_current_sonar_config()
 
     layer_name = prefix
 
@@ -240,7 +240,7 @@ def FusedMoEFactory(
         dp_size=dp_size,
         pcp_size=pcp_size,
         is_sequence_parallel=is_sequence_parallel,
-        parallel_config=aphrodite_config.parallel_config,
+        parallel_config=sonar_config.parallel_config,
     )
 
     # Resolve the deferred all-reduce request against the parallel config.
@@ -258,7 +258,7 @@ def FusedMoEFactory(
         fuse_shared_experts,
     )
     expert_substitution = make_expert_substitution(
-        aphrodite_config.model_config, layer_name, num_experts, hidden_size, params_dtype
+        sonar_config.model_config, layer_name, num_experts, hidden_size, params_dtype
     )
     if expert_substitution is not None:
         # Route over all logical experts but allocate only the retained ones.
@@ -279,7 +279,7 @@ def FusedMoEFactory(
     else:
         assert num_redundant_experts == 0, "Redundant experts are only supported with EPLB."
 
-    max_num_batched_tokens = aphrodite_config.scheduler_config.max_num_batched_tokens
+    max_num_batched_tokens = sonar_config.scheduler_config.max_num_batched_tokens
 
     # Create ExpertMapManager to handle expert mapping and placement for EP.
     # See ExpertMapManager for a detailed description of what it does and when
@@ -291,7 +291,7 @@ def FusedMoEFactory(
         num_redundant_experts=num_redundant_experts,
         num_expert_group=num_expert_group,
         moe_parallel_config=moe_parallel_config,
-        placement_strategy=aphrodite_config.parallel_config.expert_placement_strategy,
+        placement_strategy=sonar_config.parallel_config.expert_placement_strategy,
         enable_eplb=eplb_state is not None,
         num_fused_shared_experts=num_fused_shared_experts,
         rocm_aiter_enabled=rocm_aiter_ops.is_fused_moe_enabled() and is_act_and_mul,
@@ -341,8 +341,8 @@ def FusedMoEFactory(
     # FIXME (varun): We should have a better way of inferring the activation
     # datatype. This works for now as the tensor datatype entering the MoE
     # operation is typically unquantized (i.e. float16/bfloat16).
-    if aphrodite_config.model_config is not None:
-        moe_in_dtype = aphrodite_config.model_config.dtype
+    if sonar_config.model_config is not None:
+        moe_in_dtype = sonar_config.model_config.dtype
     else:
         # TODO (bnell): This is a hack to get test_mixtral_moe to work
         # since model_config is not set in the pytest test.
@@ -358,15 +358,15 @@ def FusedMoEFactory(
         num_logical_experts=logical_num_experts,
         moe_parallel_config=moe_parallel_config,
         in_dtype=moe_in_dtype,
-        moe_backend=aphrodite_config.kernel_config.moe_backend,
+        moe_backend=sonar_config.kernel_config.moe_backend,
         router_logits_dtype=router_logits_dtype,
         max_num_tokens=max_num_batched_tokens,
-        elastic_ep_max_dp_size=aphrodite_config.parallel_config.elastic_ep_max_dp_size,
+        elastic_ep_max_dp_size=sonar_config.parallel_config.elastic_ep_max_dp_size,
         has_bias=has_bias,
-        is_lora_enabled=aphrodite_config.lora_config is not None,
+        is_lora_enabled=sonar_config.lora_config is not None,
         shared_expert_prefix=shared_expert_prefix,
         activation=moe_activation,
-        device=aphrodite_config.device_config.device,
+        device=sonar_config.device_config.device,
         routing_method=router.kernel_routing_method_type,
         has_hash_routing=hash_indices_table is not None,
         require_decomposed_backend=(expert_substitution is not None or not router.supports_monolithic_kernels),
@@ -376,7 +376,7 @@ def FusedMoEFactory(
         activation_situ_beta=activation_situ_beta,
         activation_situ_linear_beta=activation_situ_linear_beta,
         qat_activation_key=qat_activation_key,
-        max_capture_size=aphrodite_config.compilation_config.max_cudagraph_capture_size,
+        max_capture_size=sonar_config.compilation_config.max_cudagraph_capture_size,
         skip_final_all_reduce=skip_final_all_reduce,
     )
 
@@ -438,7 +438,7 @@ def FusedMoEFactory(
         moe_config=moe_config,
         router=router,
         routed_experts=routed_experts,
-        enable_dbo=aphrodite_config.parallel_config.enable_dbo,
+        enable_dbo=sonar_config.parallel_config.enable_dbo,
         gate=gate,
         shared_expert_gate=shared_expert_gate,
         shared_experts=shared_experts,

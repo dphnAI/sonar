@@ -5,8 +5,8 @@ import contextlib
 import time
 from collections.abc import Generator
 
-from aphrodite.config import AphroditeConfig, CompilationMode
-from aphrodite.logger import init_logger
+from sonar.config import CompilationMode, SonarConfig
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 
@@ -16,7 +16,7 @@ torch_compile_start_time: float = 0.0
 
 @contextlib.contextmanager
 def monitor_torch_compile(
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     message: str = "%storch.compile took %.2f s in total",
     is_encoder: bool = False,
     tag: str = "",
@@ -34,14 +34,14 @@ def monitor_torch_compile(
     global torch_compile_start_time
     torch_compile_start_time = time.perf_counter()
 
-    compilation_config = aphrodite_config.compilation_config
+    compilation_config = sonar_config.compilation_config
     log_prefix = f"[{tag}] " if tag else ""
-    if announce_start and compilation_config.mode == CompilationMode.APHRODITE_COMPILE:
+    if announce_start and compilation_config.mode == CompilationMode.SONAR_COMPILE:
         logger.info("%sStarting torch.compile", log_prefix)
     depyf_cm = None
-    path = aphrodite_config.compile_debug_dump_path()
-    if compilation_config.mode == CompilationMode.APHRODITE_COMPILE and path:
-        from aphrodite.compilation import depyf_compat
+    path = sonar_config.compile_debug_dump_path()
+    if compilation_config.mode == CompilationMode.SONAR_COMPILE and path:
+        from sonar.compilation import depyf_compat
 
         path.mkdir(parents=True, exist_ok=True)
         logger.debug("Dumping depyf output to %s", path)
@@ -54,7 +54,7 @@ def monitor_torch_compile(
         raise
     else:
         total_compile_time = time.perf_counter() - torch_compile_start_time
-        if compilation_config.mode == CompilationMode.APHRODITE_COMPILE:
+        if compilation_config.mode == CompilationMode.SONAR_COMPILE:
             if is_encoder:
                 compilation_config.encoder_compilation_time += total_compile_time
             else:
@@ -75,7 +75,7 @@ def monitor_profiling_run(tag: str = "") -> Generator[None, None, None]:
     Asserts that no backend compilation occurs during the profiling run
     (all compilation should have completed before this point).
     """
-    from aphrodite.compilation.counter import compilation_counter
+    from sonar.compilation.counter import compilation_counter
 
     backend_compilations_before = compilation_counter.num_backend_compilations
     start = time.perf_counter()

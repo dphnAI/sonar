@@ -14,11 +14,11 @@ import pytest
 from fastapi import HTTPException
 from prometheus_client import CollectorRegistry
 
-from aphrodite.entrypoints.launchers.api_server.entry import build_app
-from aphrodite.exceptions import (
-    AphroditeNotFoundError,
-    AphroditeServerError,
-    AphroditeValidationError,
+from sonar.entrypoints.launchers.api_server.entry import build_app
+from sonar.exceptions import (
+    SonarNotFoundError,
+    SonarServerError,
+    SonarValidationError,
 )
 
 
@@ -54,13 +54,13 @@ def registry():
 
 @pytest.fixture(scope="module")
 def app(registry):
-    """Build the real Aphrodite FastAPI app once and attach probe routes that raise.
+    """Build the real Sonar FastAPI app once and attach probe routes that raise.
 
     Patch the name used by ``attach_router`` (imported into the instrumentator
-    metrics module), not ``aphrodite.v1.metrics.prometheus`` alone — that binding is
+    metrics module), not ``sonar.v1.metrics.prometheus`` alone — that binding is
     captured at import time.
     """
-    import aphrodite.entrypoints.serve.instrumentator.metrics as metrics_mod
+    import sonar.entrypoints.serve.instrumentator.metrics as metrics_mod
 
     original = metrics_mod.get_prometheus_registry
     metrics_mod.get_prometheus_registry = lambda: registry
@@ -82,20 +82,20 @@ def app(registry):
         # Invalid ``n`` triggers FastAPI's RequestValidationError.
         return {"n": n}
 
-    @app.get("/raise_aphrodite_validation_error")
-    async def raise_aphrodite_validation_error():
-        raise AphroditeValidationError("bad parameter", parameter="temperature")
+    @app.get("/raise_sonar_validation_error")
+    async def raise_sonar_validation_error():
+        raise SonarValidationError("bad parameter", parameter="temperature")
 
-    @app.get("/raise_aphrodite_not_found_error")
-    async def raise_aphrodite_not_found_error():
-        raise AphroditeNotFoundError("model not found")
+    @app.get("/raise_sonar_not_found_error")
+    async def raise_sonar_not_found_error():
+        raise SonarNotFoundError("model not found")
 
-    @app.get("/raise_aphrodite_server_error")
-    async def raise_aphrodite_server_error():
-        # Bare AphroditeServerError goes through aphrodite_error_handler → 500.
+    @app.get("/raise_sonar_server_error")
+    async def raise_sonar_server_error():
+        # Bare SonarServerError goes through sonar_error_handler → 500.
         # EngineGenerateError / EngineDeadError are not used here: they call
         # terminate_if_errored and need engine/server state.
-        raise AphroditeServerError("internal server failure")
+        raise SonarServerError("internal server failure")
 
     @app.get("/raise_value_error")
     async def raise_value_error():
@@ -150,9 +150,9 @@ def _get_http_requests_total(registry, method: str, handler: str):
         ("/raise_http_exception_400", "4xx", 400, {}),
         ("/raise_http_exception_404", "4xx", 404, {}),
         ("/raise_request_validation_error", "4xx", 400, {"params": {"n": "x"}}),
-        ("/raise_aphrodite_validation_error", "4xx", 400, {}),
-        ("/raise_aphrodite_not_found_error", "4xx", 404, {}),
-        ("/raise_aphrodite_server_error", "5xx", 500, {}),
+        ("/raise_sonar_validation_error", "4xx", 400, {}),
+        ("/raise_sonar_not_found_error", "4xx", 404, {}),
+        ("/raise_sonar_server_error", "5xx", 500, {}),
         ("/raise_value_error", "4xx", 400, {}),
         ("/raise_type_error", "4xx", 400, {}),
         ("/raise_overflow_error", "4xx", 400, {}),
@@ -164,9 +164,9 @@ def _get_http_requests_total(registry, method: str, handler: str):
         "HTTPException(400)->4xx",
         "HTTPException(404)->4xx",
         "RequestValidationError->4xx",
-        "AphroditeValidationError->4xx",
-        "AphroditeNotFoundError->4xx",
-        "AphroditeServerError->5xx",
+        "SonarValidationError->4xx",
+        "SonarNotFoundError->4xx",
+        "SonarServerError->5xx",
         "ValueError->4xx",
         "TypeError->4xx",
         "OverflowError->4xx",

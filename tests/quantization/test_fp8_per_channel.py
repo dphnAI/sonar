@@ -15,29 +15,29 @@ from unittest import mock
 import pytest
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.config.quantization import (
+from sonar import _custom_ops as ops
+from sonar.config.quantization import (
     _ONLINE_SHORTHANDS,
     QUANT_KEY_NAMES,
     QuantizationConfigArgs,
 )
-from aphrodite.model_executor.layers.quantization.online.base import (
+from sonar.model_executor.layers.quantization.online.base import (
     _ONLINE_LINEAR_METHODS,
     _ONLINE_MOE_METHODS,
 )
-from aphrodite.model_executor.layers.quantization.online.fp8 import (
+from sonar.model_executor.layers.quantization.online.fp8 import (
     Fp8PtpcOnlineLinearMethod,
     Fp8PtpcOnlineMoEMethod,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     get_fp8_min_max,
     kFp8StaticChannelSym,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 from tests.quantization.utils import is_quant_method_supported
 
 if current_platform.is_rocm():
-    from aphrodite.platforms.rocm import on_gfx942
+    from sonar.platforms.rocm import on_gfx942
 else:
 
     def on_gfx942() -> bool:

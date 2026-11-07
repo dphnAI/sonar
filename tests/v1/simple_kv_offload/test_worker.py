@@ -17,21 +17,21 @@ import pytest
 import torch
 import torch.distributed as dist
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 if not current_platform.is_cuda_alike():
     pytest.skip("Requires CUDA or ROCm", allow_module_level=True)
 
-from aphrodite.config import CacheConfig
-from aphrodite.distributed.kv_transfer.kv_connector.v1.simple_cpu_offload_connector import (
+from sonar.config import CacheConfig
+from sonar.distributed.kv_transfer.kv_connector.v1.simple_cpu_offload_connector import (
     SimpleCPUOffloadConnector,
 )
-from aphrodite.v1.core.kv_cache_planning import (
+from sonar.v1.core.kv_cache_planning import (
     get_kv_cache_config_from_groups,
     is_kv_cache_spec_uniform,
 )
-from aphrodite.v1.core.kv_cache_utils import resolve_kv_cache_block_sizes
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.core.kv_cache_utils import resolve_kv_cache_block_sizes
+from sonar.v1.kv_cache_interface import (
     FullAttentionSpec,
     KVCacheConfig,
     KVCacheGroupSpec,
@@ -41,22 +41,22 @@ from aphrodite.v1.kv_cache_interface import (
     MLAAttentionSpec,
     UniformTypeKVCacheSpecs,
 )
-from aphrodite.v1.simple_kv_offload.copy_backend import DmaCopyBackend
-from aphrodite.v1.simple_kv_offload.cuda_mem_ops import (
+from sonar.v1.simple_kv_offload.copy_backend import DmaCopyBackend
+from sonar.v1.simple_kv_offload.cuda_mem_ops import (
     CU_MEMCPY_SRC_ACCESS_ORDER_ANY,
     CU_MEMCPY_SRC_ACCESS_ORDER_STREAM,
     build_params,
 )
-from aphrodite.v1.simple_kv_offload.disk_backend import DiskBackend
-from aphrodite.v1.simple_kv_offload.metadata import (
+from sonar.v1.simple_kv_offload.disk_backend import DiskBackend
+from sonar.v1.simple_kv_offload.metadata import (
     SimpleCPUOffloadMetadata,
     SimpleCPUOffloadWorkerMetadata,
 )
-from aphrodite.v1.simple_kv_offload.sizing import sync_num_offload_blocks_across_workers
-from aphrodite.v1.simple_kv_offload.worker import SimpleCPUOffloadWorker
-from aphrodite.v1.worker.gpu.kv_connector import ActiveKVConnector
-from aphrodite.v1.worker.kv_connector_model_runner_mixin import KVConnectorModelRunnerMixin
-from aphrodite.v1.worker.utils import allocate_kv_cache
+from sonar.v1.simple_kv_offload.sizing import sync_num_offload_blocks_across_workers
+from sonar.v1.simple_kv_offload.worker import SimpleCPUOffloadWorker
+from sonar.v1.worker.gpu.kv_connector import ActiveKVConnector
+from sonar.v1.worker.kv_connector_model_runner_mixin import KVConnectorModelRunnerMixin
+from sonar.v1.worker.utils import allocate_kv_cache
 from tests.v1.attention.utils import dense_kv_cache_tensor, dense_kv_cache_views
 from tests.v1.kv_connector.unit.test_kv_connector_lifecycle import (
     _make_empty_scheduler_output,
@@ -99,7 +99,7 @@ def test_no_forward_step_completes_cpu_store(monkeypatch, use_v2):
     connector.worker_handler = worker
     output = _make_empty_scheduler_output()
     output.kv_connector_metadata = SimpleCPUOffloadMetadata(store_event=0, store_gpu_blocks=[0], store_cpu_blocks=[0])
-    module = "aphrodite.v1.worker.kv_connector_model_runner_mixin"
+    module = "sonar.v1.worker.kv_connector_model_runner_mixin"
     monkeypatch.setattr(f"{module}.get_kv_transfer_group", lambda: connector)
     monkeypatch.setattr(f"{module}.set_forward_context", lambda *a: nullcontext())
     monkeypatch.setattr(f"{module}.get_forward_context", lambda: None)
@@ -110,7 +110,7 @@ def test_no_forward_step_completes_cpu_store(monkeypatch, use_v2):
             active.kv_connector = connector
             active._disabled = False
             active._pending_load_kwargs = None
-            module = "aphrodite.v1.worker.gpu.kv_connector"
+            module = "sonar.v1.worker.gpu.kv_connector"
             monkeypatch.setattr(f"{module}.is_forward_context_available", lambda: True)
             monkeypatch.setattr(f"{module}.get_forward_context", lambda: None)
             result = active.no_forward(output)
@@ -141,7 +141,7 @@ def test_deferred_store_waits_for_draft_forward(monkeypatch):
     connector.worker_handler = worker
     output = _make_empty_scheduler_output()
     output.kv_connector_metadata = SimpleCPUOffloadMetadata(store_event=0, store_gpu_blocks=[0], store_cpu_blocks=[0])
-    module = "aphrodite.v1.worker.kv_connector_model_runner_mixin"
+    module = "sonar.v1.worker.kv_connector_model_runner_mixin"
     monkeypatch.setattr(f"{module}.get_kv_transfer_group", lambda: connector)
     monkeypatch.setattr(f"{module}.has_kv_transfer_group", lambda: True)
     monkeypatch.setattr(f"{module}.get_forward_context", lambda: None)
@@ -330,7 +330,7 @@ def test_register_shared_kv_cache_storage(monkeypatch, layout: KVCacheLayout):
         cpu_capacity_bytes=raw.nbytes,
     )
     worker._backend = MagicMock()
-    monkeypatch.setattr("aphrodite.v1.simple_kv_offload.worker.PIN_MEMORY", False)
+    monkeypatch.setattr("sonar.v1.simple_kv_offload.worker.PIN_MEMORY", False)
 
     worker.register_kv_caches({f"layer.{layer_idx}": cache for layer_idx, cache in enumerate(caches)})
 
@@ -368,7 +368,7 @@ def test_explicit_cpu_blocks_bound_live_worker_allocation(monkeypatch, num_layer
     )
     caches = dict(zip(names, raw.view(num_layers, num_blocks, BLOCK_BYTES)))
     worker = SimpleCPUOffloadWorker(None, config, 8 * BLOCK_BYTES, num_cpu_blocks=4)
-    monkeypatch.setattr("aphrodite.v1.simple_kv_offload.worker.PIN_MEMORY", False)
+    monkeypatch.setattr("sonar.v1.simple_kv_offload.worker.PIN_MEMORY", False)
     try:
         worker.register_kv_caches(caches)
         assert worker.num_cpu_blocks == 4
@@ -428,7 +428,7 @@ def test_register_kv_cache_storage_with_trailing_padding(monkeypatch):
         cpu_capacity_bytes=cache_bytes,
     )
     worker._backend = MagicMock()
-    monkeypatch.setattr("aphrodite.v1.simple_kv_offload.worker.PIN_MEMORY", False)
+    monkeypatch.setattr("sonar.v1.simple_kv_offload.worker.PIN_MEMORY", False)
 
     worker.register_kv_caches({"layer.0": cache})
 
@@ -466,7 +466,7 @@ def test_register_separate_kv_head_groups(monkeypatch):
         cpu_capacity_bytes=raw.nbytes,
     )
     worker._backend = MagicMock()
-    monkeypatch.setattr("aphrodite.v1.simple_kv_offload.worker.PIN_MEMORY", False)
+    monkeypatch.setattr("sonar.v1.simple_kv_offload.worker.PIN_MEMORY", False)
 
     worker.register_kv_caches({f"layer.{layer_idx}": cache for layer_idx, cache in enumerate(caches)})
 
@@ -480,7 +480,7 @@ def test_sync_num_cpu_blocks_across_workers_noop_when_dist_uninitialized(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "aphrodite.v1.simple_kv_offload.sizing.dist.is_initialized",
+        "sonar.v1.simple_kv_offload.sizing.dist.is_initialized",
         lambda: False,
     )
     assert sync_num_offload_blocks_across_workers(42) == 42
@@ -493,11 +493,11 @@ def test_sync_num_cpu_blocks_across_workers_noop_when_world_size_one(
         world_size = 1
 
     monkeypatch.setattr(
-        "aphrodite.v1.simple_kv_offload.sizing.dist.is_initialized",
+        "sonar.v1.simple_kv_offload.sizing.dist.is_initialized",
         lambda: True,
     )
     monkeypatch.setattr(
-        "aphrodite.distributed.parallel_state.get_world_group",
+        "sonar.distributed.parallel_state.get_world_group",
         lambda: FakeGroup(),
     )
     assert sync_num_offload_blocks_across_workers(42) == 42
@@ -515,15 +515,15 @@ def test_sync_num_cpu_blocks_across_workers_all_reduce_min(
         tensor.fill_(5)
 
     monkeypatch.setattr(
-        "aphrodite.v1.simple_kv_offload.sizing.dist.is_initialized",
+        "sonar.v1.simple_kv_offload.sizing.dist.is_initialized",
         lambda: True,
     )
     monkeypatch.setattr(
-        "aphrodite.distributed.parallel_state.get_world_group",
+        "sonar.distributed.parallel_state.get_world_group",
         lambda: FakeGroup(),
     )
     monkeypatch.setattr(
-        "aphrodite.v1.simple_kv_offload.sizing.dist.all_reduce",
+        "sonar.v1.simple_kv_offload.sizing.dist.all_reduce",
         fake_all_reduce,
     )
     assert sync_num_offload_blocks_across_workers(10) == 5
@@ -581,16 +581,16 @@ def test_register_mixed_page_sizes_in_one_cache_group(monkeypatch):
     # DEEPSEEK_V32_INDEXER declares no supported layouts, so resolution lands on
     # the default preference: layer-outermost, one region per layer.
     layout = KVCacheLayout.LBNHC
-    aphrodite_config = MagicMock()
-    aphrodite_config.cache_config = CacheConfig()
-    aphrodite_config.cache_config.kv_cache_layout = layout.name
-    aphrodite_config.cache_config.num_gpu_blocks_override = None
-    aphrodite_config.attention_config.hisparse_config = None
-    aphrodite_config.kv_transfer_config = None
+    sonar_config = MagicMock()
+    sonar_config.cache_config = CacheConfig()
+    sonar_config.cache_config.kv_cache_layout = layout.name
+    sonar_config.cache_config.num_gpu_blocks_override = None
+    sonar_config.attention_config.hisparse_config = None
+    sonar_config.kv_transfer_config = None
 
     pages = [spec.page_size_bytes for spec in specs.values()]
     num_blocks = 4
-    kv_cache_config = get_kv_cache_config_from_groups(aphrodite_config, [group], sum(pages) * num_blocks)
+    kv_cache_config = get_kv_cache_config_from_groups(sonar_config, [group], sum(pages) * num_blocks)
     assert kv_cache_config.num_blocks == num_blocks
     assert len(set(pages)) > 1, "the mixed page sizes are what this test covers"
 
@@ -600,7 +600,7 @@ def test_register_mixed_page_sizes_in_one_cache_group(monkeypatch):
         cpu_capacity_bytes=sum(pages) * num_blocks,
     )
     worker._backend = MagicMock()
-    monkeypatch.setattr("aphrodite.v1.simple_kv_offload.worker.PIN_MEMORY", False)
+    monkeypatch.setattr("sonar.v1.simple_kv_offload.worker.PIN_MEMORY", False)
 
     worker.register_kv_caches(kv_caches)
 
@@ -638,15 +638,15 @@ def test_register_mixed_page_sizes_odd_block_counts(monkeypatch, rank_blocks):
         UniformTypeKVCacheSpecs(block_size=block_size, kv_cache_specs=specs),
     )
     layout = KVCacheLayout.LBNHC
-    aphrodite_config = MagicMock()
-    aphrodite_config.cache_config = CacheConfig()
-    aphrodite_config.cache_config.kv_cache_layout = layout.name
-    aphrodite_config.cache_config.num_gpu_blocks_override = None
-    aphrodite_config.attention_config.hisparse_config = None
-    aphrodite_config.kv_transfer_config = None
+    sonar_config = MagicMock()
+    sonar_config.cache_config = CacheConfig()
+    sonar_config.cache_config.kv_cache_layout = layout.name
+    sonar_config.cache_config.num_gpu_blocks_override = None
+    sonar_config.attention_config.hisparse_config = None
+    sonar_config.kv_transfer_config = None
 
     pages = [spec.page_size_bytes for spec in specs.values()]
-    kv_cache_config = get_kv_cache_config_from_groups(aphrodite_config, [group], sum(pages) * rank_blocks)
+    kv_cache_config = get_kv_cache_config_from_groups(sonar_config, [group], sum(pages) * rank_blocks)
     assert kv_cache_config.num_blocks == rank_blocks
 
     kv_caches = allocate_kv_cache(kv_cache_config, torch.device("cuda"), layout)
@@ -655,7 +655,7 @@ def test_register_mixed_page_sizes_odd_block_counts(monkeypatch, rank_blocks):
         cpu_capacity_bytes=sum(pages) * rank_blocks,
     )
     worker._backend = MagicMock()
-    monkeypatch.setattr("aphrodite.v1.simple_kv_offload.worker.PIN_MEMORY", False)
+    monkeypatch.setattr("sonar.v1.simple_kv_offload.worker.PIN_MEMORY", False)
 
     worker.register_kv_caches(kv_caches)
 
@@ -684,18 +684,18 @@ def test_mixed_page_byte_placement_is_dcp_invariant():
             list(specs),
             UniformTypeKVCacheSpecs(block_size=128, kv_cache_specs=specs),
         )
-        aphrodite_config = MagicMock()
-        aphrodite_config.cache_config = CacheConfig()
-        aphrodite_config.cache_config.block_size = 128
-        aphrodite_config.cache_config.kv_cache_layout = KVCacheLayout.LBNHC.name
-        aphrodite_config.cache_config.num_gpu_blocks_override = None
-        aphrodite_config.parallel_config.decode_context_parallel_size = dcp_size
-        aphrodite_config.attention_config.hisparse_config = None
-        aphrodite_config.kv_transfer_config = None
+        sonar_config = MagicMock()
+        sonar_config.cache_config = CacheConfig()
+        sonar_config.cache_config.block_size = 128
+        sonar_config.cache_config.kv_cache_layout = KVCacheLayout.LBNHC.name
+        sonar_config.cache_config.num_gpu_blocks_override = None
+        sonar_config.parallel_config.decode_context_parallel_size = dcp_size
+        sonar_config.attention_config.hisparse_config = None
+        sonar_config.kv_transfer_config = None
 
         page_bytes = sum(spec.page_size_bytes for spec in specs.values())
-        config = get_kv_cache_config_from_groups(aphrodite_config, [group], page_bytes * 4)
-        scheduler_block_size, _ = resolve_kv_cache_block_sizes(config, aphrodite_config)
+        config = get_kv_cache_config_from_groups(sonar_config, [group], page_bytes * 4)
+        scheduler_block_size, _ = resolve_kv_cache_block_sizes(config, sonar_config)
         assert scheduler_block_size == 128 * dcp_size
         placements.append(
             [(t.size, tuple(t.layers), t.layer_stride, t.block_stride, t.offset) for t in config.kv_cache_tensors]
@@ -723,9 +723,9 @@ def test_disk_backend_alignment_only_required_for_direct_io(
     """
     # Host pinning is a separate lifecycle concern with its own tests; the
     # alignment gate must not depend on registration state, so stub both ends.
-    monkeypatch.setattr("aphrodite.v1.simple_kv_offload.disk_backend.pin_tensor", lambda t: None)
+    monkeypatch.setattr("sonar.v1.simple_kv_offload.disk_backend.pin_tensor", lambda t: None)
     monkeypatch.setattr(
-        "aphrodite.v1.simple_kv_offload.disk_backend.unpin_tensor",
+        "sonar.v1.simple_kv_offload.disk_backend.unpin_tensor",
         lambda t: None,
         raising=False,  # harmless on branches without teardown-side unpins
     )

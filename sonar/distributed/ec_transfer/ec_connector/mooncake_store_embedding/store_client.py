@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Thin Mooncake Store client for embedding objects.
 
-Originally adapted from Aphrodite PR #47302 (0d1f71f5d36c). The v3 key namespace
+Originally adapted from Sonar PR #47302 (0d1f71f5d36c). The v3 key namespace
 uses a compact header for complete 2D embeddings, not that PR's tensor format.
 """
 
@@ -18,12 +18,12 @@ from typing import Any
 
 import torch
 
-from aphrodite.distributed.ec_transfer.ec_connector.mooncake_store_embedding.data import (
+from sonar.distributed.ec_transfer.ec_connector.mooncake_store_embedding.data import (
     TensorSpec,
 )
-from aphrodite.distributed.mooncake_store import MooncakeStoreConfig, setup_mooncake_store
-from aphrodite.logger import init_logger
-from aphrodite.utils.network_utils import get_ip
+from sonar.distributed.mooncake_store import MooncakeStoreConfig, setup_mooncake_store
+from sonar.logger import init_logger
+from sonar.utils.network_utils import get_ip
 
 logger = init_logger(__name__)
 
@@ -94,7 +94,7 @@ def create_mooncake_embedding_store_client(
     except ImportError as e:
         raise ImportError("Install mooncake with Store support to enable cross_encoder_cache.") from e
 
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake import rdma_utils
+    from sonar.distributed.kv_transfer.kv_connector.v1.mooncake import rdma_utils
 
     config = MooncakeStoreConfig.load_from_config()
     if config.enable_offload:

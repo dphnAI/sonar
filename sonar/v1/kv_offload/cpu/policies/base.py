@@ -4,7 +4,7 @@ import ctypes
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Sequence
 
-from aphrodite.v1.kv_offload.base import OffloadKey, ReqContext
+from sonar.v1.kv_offload.base import OffloadKey, ReqContext
 
 
 def order_request_keys(key_groups: Sequence[Sequence[OffloadKey]], req_context: ReqContext) -> list[OffloadKey]:

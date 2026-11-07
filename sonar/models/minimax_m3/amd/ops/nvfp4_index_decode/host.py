@@ -6,9 +6,9 @@ import functools
 
 import torch
 
-from aphrodite.models.minimax_m3.amd.ops.flydsl_utils import run_compiled
-from aphrodite.models.minimax_m3.amd.ops.nvfp4_index_prefill.host import nvfp4_e4m3_lut
-from aphrodite.utils.math_utils import cdiv
+from sonar.models.minimax_m3.amd.ops.flydsl_utils import run_compiled
+from sonar.models.minimax_m3.amd.ops.nvfp4_index_prefill.host import nvfp4_e4m3_lut
+from sonar.utils.math_utils import cdiv
 
 from . import kernel as _kernel
 
@@ -49,7 +49,7 @@ def _supported(
     seq_lens: torch.Tensor,
     query_len: int,
 ) -> bool:
-    from aphrodite.platforms.rocm import on_gfx950
+    from sonar.platforms.rocm import on_gfx950
 
     num_heads = q_idx.shape[1]
     return (

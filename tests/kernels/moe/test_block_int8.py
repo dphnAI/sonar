@@ -4,13 +4,13 @@
 import pytest
 import torch
 
-from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-from aphrodite.model_executor.layers.activation import SiluAndMul
-from aphrodite.model_executor.layers.fused_moe import fused_experts, fused_topk
-from aphrodite.model_executor.layers.quantization.utils.int8_utils import (
+from sonar.config import SonarConfig, set_current_sonar_config
+from sonar.model_executor.layers.activation import SiluAndMul
+from sonar.model_executor.layers.fused_moe import fused_experts, fused_topk
+from sonar.model_executor.layers.quantization.utils.int8_utils import (
     per_token_group_quant_int8,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 from tests.kernels.moe.utils import make_test_quant_config
 from tests.kernels.quant_utils import (
     native_per_token_group_quant_int8,
@@ -21,7 +21,7 @@ device_capability = current_platform.get_device_capability()
 if device_capability is None or device_capability < (7, 0):
     pytest.skip("INT8 Triton requires CUDA 7.0 or higher", allow_module_level=True)
 
-aphrodite_config = AphroditeConfig()
+sonar_config = SonarConfig()
 
 DTYPES = [torch.bfloat16]
 
@@ -117,7 +117,7 @@ def test_w8a8_block_int8_fused_moe(M, N, K, E, topk, block_size, dtype, seed):
     )
 
     # Set the context to avoid lots of warning spam.
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         out = fused_experts(a, w1, w2, topk_weights, topk_ids, quant_config=quant_config)
         ref_out = torch_w8a8_block_int8_moe(
             a,

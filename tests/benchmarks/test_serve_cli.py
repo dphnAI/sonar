@@ -80,7 +80,7 @@ def server():
 
 @pytest.fixture(scope="function")
 def ssl_server():
-    """Start a Aphrodite server with SSL enabled using a self-signed certificate."""
+    """Start a Sonar server with SSL enabled using a self-signed certificate."""
     with tempfile.TemporaryDirectory() as cert_dir:
         cert_file, key_file = generate_self_signed_cert(Path(cert_dir))
         args = [
@@ -103,7 +103,7 @@ def ssl_server():
 def test_bench_serve(server):
     # Test default model detection and input/output len
     command = [
-        "aphrodite",
+        "sonar",
         "bench",
         "serve",
         "--host",
@@ -129,7 +129,7 @@ def test_bench_serve_insecure(ssl_server):
     """Test --insecure flag with an HTTPS server using a self-signed certificate."""
     base_url = f"https://{ssl_server.host}:{ssl_server.port}"
     command = [
-        "aphrodite",
+        "sonar",
         "bench",
         "serve",
         "--base-url",
@@ -156,7 +156,7 @@ def test_bench_serve_insecure(ssl_server):
 @pytest.mark.benchmark
 def test_bench_serve_chat(server):
     command = [
-        "aphrodite",
+        "sonar",
         "bench",
         "serve",
         "--model",

@@ -4,16 +4,16 @@
 
 import torch
 
-from aphrodite.config.cache import CacheDType
-from aphrodite.platforms import current_platform
-from aphrodite.platforms.interface import DeviceCapability
-from aphrodite.v1.attention.backends.composite import (
+from sonar.config.cache import CacheDType
+from sonar.platforms import current_platform
+from sonar.platforms.interface import DeviceCapability
+from sonar.v1.attention.backends.composite import (
     MMPrefixAttentionRouting,
     create_composite_attention_backend,
 )
-from aphrodite.v1.attention.backends.fa_utils import get_flash_attn_version
-from aphrodite.v1.attention.backends.flash_attn import FlashAttentionBackend
-from aphrodite.v1.attention.backends.triton_attn import TritonAttentionBackend
+from sonar.v1.attention.backends.fa_utils import get_flash_attn_version
+from sonar.v1.attention.backends.flash_attn import FlashAttentionBackend
+from sonar.v1.attention.backends.triton_attn import TritonAttentionBackend
 
 
 class _FABackend(FlashAttentionBackend):

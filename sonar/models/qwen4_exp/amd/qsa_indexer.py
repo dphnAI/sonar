@@ -10,13 +10,13 @@ import torch
 from torch import nn
 from transformers import Qwen4ExpTextConfig
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.forward_context import get_forward_context
-from aphrodite.model_executor.layers.layernorm import GemmaRMSNorm
-from aphrodite.model_executor.layers.linear import ReplicatedLinear
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.rotary_embedding.mrope import triton_mrope
-from aphrodite.platforms import current_platform
+from sonar.config import SonarConfig
+from sonar.forward_context import get_forward_context
+from sonar.model_executor.layers.layernorm import GemmaRMSNorm
+from sonar.model_executor.layers.linear import ReplicatedLinear
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.rotary_embedding.mrope import triton_mrope
+from sonar.platforms import current_platform
 
 from ..common.qsa_indexer import (
     QSACompressedKeyCache,
@@ -68,7 +68,7 @@ def apply_qsa_rmsnorm(
     norm: GemmaRMSNorm,
     tensor: torch.Tensor,
 ) -> torch.Tensor:
-    """Use Aphrodite's portable RMSNorm implementation on ROCm."""
+    """Use Sonar's portable RMSNorm implementation on ROCm."""
     return cast(torch.Tensor, norm(tensor))
 
 
@@ -83,7 +83,7 @@ class QSAIndexer(nn.Module):
     def __init__(
         self,
         *,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         config: Qwen4ExpTextConfig,
         layer_id: int,
         rotary_emb: nn.Module,
@@ -91,9 +91,9 @@ class QSAIndexer(nn.Module):
         prefix: str = "",
     ) -> None:
         super().__init__()
-        if aphrodite_config.cache_config is None:
+        if sonar_config.cache_config is None:
             raise ValueError("QSA requires a paged KV cache")
-        if aphrodite_config.model_config.dtype != torch.bfloat16:
+        if sonar_config.model_config.dtype != torch.bfloat16:
             raise NotImplementedError("Qwen4Exp QSA currently requires BF16")
 
         self.layer_id = int(layer_id)
@@ -130,9 +130,9 @@ class QSAIndexer(nn.Module):
             eps=float(getattr(config, "rms_norm_eps", 1e-6)),
         )
 
-        cache_config = aphrodite_config.cache_config
+        cache_config = sonar_config.cache_config
         cache_prefix = f"{prefix}." if prefix else ""
-        self.indexer_kv_dtype = aphrodite_config.attention_config.resolve_indexer_kv_dtype(default="bf16")
+        self.indexer_kv_dtype = sonar_config.attention_config.resolve_indexer_kv_dtype(default="bf16")
         if self.indexer_kv_dtype == "fp8":
             indexer_dtype = current_platform.fp8_dtype()
         elif self.indexer_kv_dtype == "bf16":
@@ -146,11 +146,11 @@ class QSAIndexer(nn.Module):
         self.raw_key_cache = QSARawKeyCache(
             head_size=self.index_head_dim,
             dtype=torch.bfloat16,
-            cache_rope_positions=aphrodite_config.model_config.uses_mrope,
+            cache_rope_positions=sonar_config.model_config.uses_mrope,
             prefix=f"{cache_prefix}raw_key_cache",
             cache_config=cache_config,
             compress_ratio=self.compress_ratio,
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
         )
         self.compressed_key_cache = QSACompressedKeyCache(
             head_size=self.index_head_dim,
@@ -158,7 +158,7 @@ class QSAIndexer(nn.Module):
             compress_ratio=self.compress_ratio,
             prefix=f"{cache_prefix}compressed_key_cache",
             cache_config=cache_config,
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
         )
 
     @property

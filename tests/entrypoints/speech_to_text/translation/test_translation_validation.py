@@ -13,8 +13,8 @@ import pytest
 import pytest_asyncio
 import soundfile as sf
 
-from aphrodite.logger import init_logger
-from aphrodite.multimodal.media.audio import load_audio
+from sonar.logger import init_logger
+from sonar.multimodal.media.audio import load_audio
 from tests.entrypoints.speech_to_text.conftest import add_attention_backend
 from tests.utils import RemoteOpenAIServer
 
@@ -31,13 +31,13 @@ def _get_rocm_attention_config(model_name):
     as fallback). Other models use ROCM_AITER_FA only on supported CDNA3+
     hardware and otherwise use the platform default.
     """
-    from aphrodite.platforms import current_platform
+    from sonar.platforms import current_platform
 
     if not current_platform.is_rocm():
         return None
 
     try:
-        from aphrodite.platforms.rocm import get_cdna_version
+        from sonar.platforms.rocm import get_cdna_version
 
         cdna_version = get_cdna_version()
     except ImportError:
@@ -96,7 +96,7 @@ async def test_basic_audio_with_lora(mary_had_lamb):
     # ROCm SPECIFIC CONFIGURATION:
     # To ensure the test passes on ROCm, we modify the max model length to 512.
     # We DO NOT apply this to other platforms to maintain strict upstream parity.
-    from aphrodite.platforms import current_platform
+    from sonar.platforms import current_platform
 
     # NOTE - careful to call this test before the module scoped server
     # fixture, otherwise it'll OOMkill the CI

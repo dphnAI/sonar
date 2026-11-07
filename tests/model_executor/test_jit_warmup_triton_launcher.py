@@ -8,24 +8,24 @@ from typing import Any
 import pytest
 import torch
 
-from aphrodite import envs
-from aphrodite.model_executor.warmup import jit_warmup_triton_helper
-from aphrodite.model_executor.warmup.jit_warmup import (
+from sonar import envs
+from sonar.model_executor.warmup import jit_warmup_triton_helper
+from sonar.model_executor.warmup.jit_warmup import (
     JitWarmupRegistry,
     WarmupChoices,
     WarmupIntRange,
     kernel_launcher,
 )
-from aphrodite.model_executor.warmup.jit_warmup_triton_helper import (
-    AphroditeTritonJitKernel,
+from sonar.model_executor.warmup.jit_warmup_triton_helper import (
     LaunchSpec,
+    SonarTritonJitKernel,
     TritonJitKey,
     TritonWarmupTensor,
     triton_kernel_dispatcher_with_warmup,
     triton_warmup_inputs,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
 
 
 @triton.jit
@@ -71,7 +71,7 @@ def _patch_key_deriver(
     )
 
 
-class _TestTritonKernel(AphroditeTritonJitKernel["_TestTritonKernel.CompileKey"]):
+class _TestTritonKernel(SonarTritonJitKernel["_TestTritonKernel.CompileKey"]):
     kernel = _FakeTritonKernel()
 
     @dataclass(frozen=True)
@@ -124,7 +124,7 @@ def test_triton_launcher_supports_compile_and_runtime_adapters() -> None:
 def test_failed_parallel_warmup_does_not_leak_into_runtime(monkeypatch) -> None:
     active_mode = triton.runtime._async_compile.active_mode
 
-    monkeypatch.setattr(envs, "APHRODITE_TRITON_JIT_WARMUP_NUM_THREADS", 2)
+    monkeypatch.setattr(envs, "SONAR_TRITON_JIT_WARMUP_NUM_THREADS", 2)
     owner = _TestTritonKernel()
     owner.kernel = _FakeTritonKernel()
 
@@ -147,7 +147,7 @@ def test_autotuning_warmup_stays_serial(monkeypatch) -> None:
     owner = _TestTritonKernel()
     owner.kernel = _FakeTritonKernel()
     owner._run_autotune = True
-    monkeypatch.setattr(envs, "APHRODITE_TRITON_JIT_WARMUP_NUM_THREADS", 4)
+    monkeypatch.setattr(envs, "SONAR_TRITON_JIT_WARMUP_NUM_THREADS", 4)
 
     def unexpected_async(*args):
         pytest.fail("Autotuning must not use asynchronous compilation")
@@ -171,7 +171,7 @@ def test_registered_warmup_overlaps_kernels_and_runtime_stays_serial(
 ) -> None:
     active_mode = triton.runtime._async_compile.active_mode
 
-    monkeypatch.setattr(envs, "APHRODITE_TRITON_JIT_WARMUP_NUM_THREADS", 2)
+    monkeypatch.setattr(envs, "SONAR_TRITON_JIT_WARMUP_NUM_THREADS", 2)
 
     def make_store(value):
         def warmup_inputs():
@@ -271,7 +271,7 @@ def test_triton_kernel_decorator_returns_launcher(
     _patch_key_deriver(monkeypatch, fake_keys)
 
     keys = launch.get_warmup_keys()
-    keys_with_config = launch.get_warmup_keys(aphrodite_config=object())
+    keys_with_config = launch.get_warmup_keys(sonar_config=object())
     assert keys_with_config == keys
     assert [dict(key.inputs)["second"] for key in keys] == [1, 2]
     launch.compile(keys[0])
@@ -531,8 +531,8 @@ def test_triton_key_derivation_covers_autotune_configs_and_jit_identity(
 
 
 def test_compute_slot_mapping_uses_named_launcher_inputs(monkeypatch) -> None:
-    from aphrodite.v1.attention.backends.utils import PAD_SLOT_ID
-    from aphrodite.v1.worker.block_table import ComputeSlotMappingKernel
+    from sonar.v1.attention.backends.utils import PAD_SLOT_ID
+    from sonar.v1.worker.block_table import ComputeSlotMappingKernel
 
     owner = ComputeSlotMappingKernel()
     compile_key = owner.CompileKey(

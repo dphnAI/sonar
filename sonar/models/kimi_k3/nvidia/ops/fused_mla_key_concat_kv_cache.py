@@ -24,8 +24,8 @@ sm_90+.
 
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.utils.flashinfer import has_flashinfer_concat_mla_kv_quant_fp8
+from sonar.platforms import current_platform
+from sonar.utils.flashinfer import has_flashinfer_concat_mla_kv_quant_fp8
 
 
 def fused_mla_key_concat_kv_cache_insert(

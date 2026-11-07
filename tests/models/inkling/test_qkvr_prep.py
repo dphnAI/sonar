@@ -4,9 +4,9 @@
 import pytest
 import torch
 
-import aphrodite.models.inkling.nvidia.ops.sconv as sconv
-from aphrodite.models.inkling.nvidia.ops import qkvr_prep
-from aphrodite.platforms import current_platform
+import sonar.models.inkling.nvidia.ops.sconv as sconv
+from sonar.models.inkling.nvidia.ops import qkvr_prep
+from sonar.platforms import current_platform
 
 _cap = current_platform.get_device_capability() if current_platform.is_cuda() else None
 

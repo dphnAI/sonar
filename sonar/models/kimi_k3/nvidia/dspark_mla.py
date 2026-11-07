@@ -7,30 +7,30 @@ from collections.abc import Iterable
 import torch
 import torch.nn as nn
 
-import aphrodite._custom_ops as ops
-from aphrodite.config import AphroditeConfig
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import (
+import sonar._custom_ops as ops
+from sonar.config import SonarConfig
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.linear import (
     MergedColumnParallelLinear,
     ReplicatedLinear,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.models.qwen3_dspark import (
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.models.qwen3_dspark import (
     DSparkConfidenceHead,
     DSparkMarkovHead,
 )
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.models.utils import (
     AutoWeightsLoader,
     WeightsMapper,
     get_draft_quant_config,
     maybe_prefix,
 )
-from aphrodite.models.common.ops.fused_allreduce_rms_norm import fused_allreduce_rms_norm
-from aphrodite.models.kimi_k3.nvidia.mla import MultiHeadLatentAttention
-from aphrodite.models.kimi_k3.nvidia.model import KimiMLP
-from aphrodite.v1.kv_cache_interface import is_quantized_kv_cache
-from aphrodite.v1.worker.gpu.spec_decode.dspark.config import DSparkSpeculatorConfig
-from aphrodite.v1.worker.workspace import current_workspace_manager
+from sonar.models.common.ops.fused_allreduce_rms_norm import fused_allreduce_rms_norm
+from sonar.models.kimi_k3.nvidia.mla import MultiHeadLatentAttention
+from sonar.models.kimi_k3.nvidia.model import KimiMLP
+from sonar.v1.kv_cache_interface import is_quantized_kv_cache
+from sonar.v1.worker.gpu.spec_decode.dspark.config import DSparkSpeculatorConfig
+from sonar.v1.worker.workspace import current_workspace_manager
 
 _GROUPED_KV_CACHE_DTYPES = frozenset({"auto", "bfloat16", "fp8", "fp8_e4m3", "fp8_e5m2"})
 
@@ -59,14 +59,14 @@ class K3DSparkDecoderLayer(nn.Module):
     def __init__(
         self,
         *,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         config,
         layer_idx: int,
         start_layer_id: int,
         prefix: str,
     ) -> None:
         super().__init__()
-        quant_config = get_draft_quant_config(aphrodite_config)
+        quant_config = get_draft_quant_config(sonar_config)
         self.self_attn = MultiHeadLatentAttention(
             config=config,
             hidden_size=config.hidden_size,
@@ -76,7 +76,7 @@ class K3DSparkDecoderLayer(nn.Module):
             v_head_dim=config.v_head_dim,
             q_lora_rank=config.q_lora_rank,
             kv_lora_rank=config.kv_lora_rank,
-            cache_config=aphrodite_config.cache_config,
+            cache_config=sonar_config.cache_config,
             quant_config=quant_config,
             prefix=maybe_prefix(prefix, f"layers.{start_layer_id + layer_idx}.self_attn"),
             use_rope=True,
@@ -124,14 +124,14 @@ class K3DSparkModel(nn.Module):
     def __init__(
         self,
         *,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         start_layer_id: int,
         prefix: str,
     ) -> None:
         super().__init__()
-        assert aphrodite_config.speculative_config is not None
-        self.config = aphrodite_config.speculative_config.draft_model_config.hf_config
-        self.quant_config = get_draft_quant_config(aphrodite_config)
+        assert sonar_config.speculative_config is not None
+        self.config = sonar_config.speculative_config.draft_model_config.hf_config
+        self.quant_config = get_draft_quant_config(sonar_config)
 
         # The frozen target embedding is aliased after the draft checkpoint loads.
         self.embed_tokens: nn.Module | None = None
@@ -149,7 +149,7 @@ class K3DSparkModel(nn.Module):
         self.layers = nn.ModuleList(
             [
                 K3DSparkDecoderLayer(
-                    aphrodite_config=aphrodite_config,
+                    sonar_config=sonar_config,
                     config=self.config,
                     layer_idx=layer_idx,
                     start_layer_id=start_layer_id,
@@ -188,7 +188,7 @@ class K3DSparkModel(nn.Module):
                 bias=True,
                 with_markov=with_markov,
             )
-        self._max_num_context_tokens = aphrodite_config.scheduler_config.max_num_batched_tokens
+        self._max_num_context_tokens = sonar_config.scheduler_config.max_num_batched_tokens
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
         assert self.embed_tokens is not None
@@ -404,7 +404,7 @@ class K3DSparkForCausalLM(nn.Module):
     has_own_embed_tokens = False
     has_own_lm_head = False
     draft_id_to_target_id = None
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         # confidence_head is training-only. The frozen target embedding and LM
         # head are shared after this draft-specific checkpoint is loaded.
         orig_to_new_substr={
@@ -421,20 +421,20 @@ class K3DSparkForCausalLM(nn.Module):
         },
     )
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__()
-        assert aphrodite_config.speculative_config is not None
-        self.draft_model_config = aphrodite_config.speculative_config.draft_model_config
+        assert sonar_config.speculative_config is not None
+        self.draft_model_config = sonar_config.speculative_config.draft_model_config
         self.config = self.draft_model_config.hf_config
         if getattr(self.config, "enable_confidence_head", False):
             # The class mapper drops the head as training-only; keep it for drafts
             # that actually built one, since adaptive verification reads it.
-            self.hf_to_aphrodite_mapper = self.hf_to_aphrodite_mapper | WeightsMapper(
+            self.hf_to_sonar_mapper = self.hf_to_sonar_mapper | WeightsMapper(
                 orig_to_new_substr={"confidence_head": "confidence_head"}
             )
-        target_layer_num = aphrodite_config.model_config.get_total_num_hidden_layers()
+        target_layer_num = sonar_config.model_config.get_total_num_hidden_layers()
         self.model = K3DSparkModel(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             start_layer_id=target_layer_num,
             prefix=maybe_prefix(prefix, "model"),
         )
@@ -495,7 +495,7 @@ class K3DSparkForCausalLM(nn.Module):
         loader = AutoWeightsLoader(self)
         # read: 1. all weights. 2. context kv weights
         weights = _duplicate_context_kv_weights(weights, len(self.model.layers))
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
     def process_weights_after_loading(self) -> None:
         self.model._build_fused_context_kv_metadata()

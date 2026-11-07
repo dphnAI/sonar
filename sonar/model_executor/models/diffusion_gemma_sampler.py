@@ -13,7 +13,7 @@ inline, and writes the probabilities once.
 
 import torch
 
-from aphrodite.triton_utils import tl, triton
+from sonar.triton_utils import tl, triton
 
 
 @triton.jit

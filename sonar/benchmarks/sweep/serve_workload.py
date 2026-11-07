@@ -8,9 +8,9 @@ from typing import ClassVar, Literal, assert_never, get_args
 
 import numpy as np
 
-from aphrodite.benchmarks.datasets import DEFAULT_NUM_PROMPTS
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
-from aphrodite.utils.import_utils import PlaceholderModule
+from sonar.benchmarks.datasets import DEFAULT_NUM_PROMPTS
+from sonar.utils.argparse_utils import FlexibleArgumentParser
+from sonar.utils.import_utils import PlaceholderModule
 
 from .param_sweep import ParameterSweep, ParameterSweepItem
 from .serve import (

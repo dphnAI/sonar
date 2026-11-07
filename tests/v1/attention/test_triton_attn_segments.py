@@ -6,13 +6,13 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.config import CUDAGraphMode
-from aphrodite.platforms import current_platform
-from aphrodite.v1.attention.backends.triton_attn import TritonAttentionMetadataBuilder
-from aphrodite.v1.attention.backends.triton_attn_diffkv import (
+from sonar.config import CUDAGraphMode
+from sonar.platforms import current_platform
+from sonar.v1.attention.backends.triton_attn import TritonAttentionMetadataBuilder
+from sonar.v1.attention.backends.triton_attn_diffkv import (
     TritonAttentionDiffKVMetadataBuilder,
 )
-from aphrodite.v1.kv_cache_interface import FullAttentionSpec, KVQuantMode
+from sonar.v1.kv_cache_interface import FullAttentionSpec, KVQuantMode
 from tests.v1.attention.utils import BatchSpec, create_common_attn_metadata
 
 

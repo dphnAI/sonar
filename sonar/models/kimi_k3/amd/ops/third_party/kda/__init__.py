@@ -3,7 +3,7 @@
 #
 # AMD/ROCm vendored copy of the Kimi-K3 KDA triton kernels.
 #
-# Provenance: mirror of aphrodite/models/kimi_k3/nvidia/ops/third_party/kda (tracker
+# Provenance: mirror of sonar/models/kimi_k3/nvidia/ops/third_party/kda (tracker
 # mke-tracker @ 7adebfcf9; FLA vendored per PRs #39/#86). Split per-vendor so
 # AMD can carry gfx950-specific kernel changes without touching the NVIDIA copy.
 #

@@ -7,8 +7,8 @@ from typing import Any
 
 import torch
 
-from aphrodite.v1.sample.logits_processor import LogitsProcessors
-from aphrodite.v1.sample.thinking_budget_state import ThinkingBudgetStateHolder
+from sonar.v1.sample.logits_processor import LogitsProcessors
+from sonar.v1.sample.thinking_budget_state import ThinkingBudgetStateHolder
 
 
 @dataclass(kw_only=True)

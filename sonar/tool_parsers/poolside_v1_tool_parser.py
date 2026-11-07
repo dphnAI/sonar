@@ -19,7 +19,7 @@ import regex as re
 from openai.types.responses import ToolChoiceCustom, ToolChoiceFunction
 from partial_json_parser.core.options import Allow
 
-from aphrodite.entrypoints.generate.base.protocol import (
+from sonar.entrypoints.generate.base.protocol import (
     DeltaFunctionCall,
     DeltaMessage,
     DeltaToolCall,
@@ -27,21 +27,21 @@ from aphrodite.entrypoints.generate.base.protocol import (
     FunctionCall,
     ToolCall,
 )
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionNamedToolChoiceParam,
     ChatCompletionRequest,
 )
-from aphrodite.entrypoints.openai.responses.protocol import (
+from sonar.entrypoints.openai.responses.protocol import (
     ResponsesRequest,
 )
-from aphrodite.logger import init_logger
-from aphrodite.renderers.chat_utils import make_tool_call_id
-from aphrodite.tokenizers import TokenizerLike
-from aphrodite.tool_parsers.abstract_tool_parser import (
+from sonar.logger import init_logger
+from sonar.renderers.chat_utils import make_tool_call_id
+from sonar.tokenizers import TokenizerLike
+from sonar.tool_parsers.abstract_tool_parser import (
     Tool,
     ToolParser,
 )
-from aphrodite.tool_parsers.utils import safe_literal_eval
+from sonar.tool_parsers.utils import safe_literal_eval
 
 logger = init_logger(__name__)
 

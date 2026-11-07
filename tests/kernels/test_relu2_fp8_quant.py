@@ -4,17 +4,17 @@
 import pytest
 import torch
 
-from aphrodite.config import AphroditeConfig, CompilationConfig, set_current_aphrodite_config
-from aphrodite.config.aphrodite import OptimizationLevel
-from aphrodite.model_executor.layers.activation import ReLUSquaredActivation
-from aphrodite.model_executor.layers.fusion.fused_act_quant import maybe_fused_act_quant
-from aphrodite.model_executor.layers.fusion.quant_activation import QuantizedActivation
-from aphrodite.model_executor.layers.quantization.input_quant_fp8 import QuantFP8
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.config import CompilationConfig, SonarConfig, set_current_sonar_config
+from sonar.config.sonar import OptimizationLevel
+from sonar.model_executor.layers.activation import ReLUSquaredActivation
+from sonar.model_executor.layers.fusion.fused_act_quant import maybe_fused_act_quant
+from sonar.model_executor.layers.fusion.quant_activation import QuantizedActivation
+from sonar.model_executor.layers.quantization.input_quant_fp8 import QuantFP8
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     GroupShape,
     kFp8StaticTensorSym,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 requires_sm90 = pytest.mark.skipif(
     not (current_platform.is_cuda() and current_platform.has_device_capability(90)),
@@ -43,11 +43,11 @@ def _assert_quantized_activation(result: QuantizedActivation, x: torch.Tensor, s
 
 @pytest.fixture(scope="module")
 def o2_relu2_fp8_ops():
-    config = AphroditeConfig(
+    config = SonarConfig(
         optimization_level=OptimizationLevel.O2,
         compilation_config=CompilationConfig(custom_ops=["none"]),
     )
-    with set_current_aphrodite_config(config):
+    with set_current_sonar_config(config):
         yield (
             ReLUSquaredActivation(),
             QuantFP8(static=True, group_shape=GroupShape.PER_TENSOR),
@@ -79,11 +79,11 @@ def test_relu2_static_fp8_quant(o2_relu2_fp8_ops, shape) -> None:
 @torch.inference_mode()
 def test_relu2_static_fp8_quant_ignores_custom_op_dispatch(enabled_ops) -> None:
     custom_ops = ["none", *(f"+{op}" for op in enabled_ops)]
-    config = AphroditeConfig(
+    config = SonarConfig(
         optimization_level=OptimizationLevel.O2,
         compilation_config=CompilationConfig(custom_ops=custom_ops),
     )
-    with set_current_aphrodite_config(config):
+    with set_current_sonar_config(config):
         torch.manual_seed(0)
         relu2 = ReLUSquaredActivation()
         quant_fp8 = QuantFP8(static=True, group_shape=GroupShape.PER_TENSOR)
@@ -101,8 +101,8 @@ def test_relu2_static_fp8_quant_ignores_custom_op_dispatch(enabled_ops) -> None:
 @requires_sm90
 @torch.inference_mode()
 def test_relu2_static_fp8_quant_without_compilation() -> None:
-    config = AphroditeConfig(optimization_level=OptimizationLevel.O0)
-    with set_current_aphrodite_config(config):
+    config = SonarConfig(optimization_level=OptimizationLevel.O0)
+    with set_current_sonar_config(config):
         torch.manual_seed(0)
         relu2 = ReLUSquaredActivation()
         quant_fp8 = QuantFP8(static=True, group_shape=GroupShape.PER_TENSOR)

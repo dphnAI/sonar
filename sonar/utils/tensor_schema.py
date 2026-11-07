@@ -5,7 +5,7 @@ from typing import Annotated, Any, Union, get_args, get_origin, get_type_hints
 
 import torch
 
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 

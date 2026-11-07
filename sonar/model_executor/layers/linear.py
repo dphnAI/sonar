@@ -10,9 +10,9 @@ import torch
 from torch.nn.parameter import Parameter
 from typing_extensions import TypeIs
 
-import aphrodite.envs as envs
-from aphrodite.config import get_current_aphrodite_config, get_current_aphrodite_config_or_none
-from aphrodite.distributed import (
+import sonar.envs as envs
+from sonar.config import get_current_sonar_config, get_current_sonar_config_or_none
+from sonar.distributed import (
     divide,
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
@@ -20,33 +20,33 @@ from aphrodite.distributed import (
     tensor_model_parallel_all_gather,
     tensor_model_parallel_all_reduce,
 )
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.custom_op import PluggableLayer
-from aphrodite.model_executor.determinism.batch_invariant import (
+from sonar.logger import init_logger
+from sonar.model_executor.custom_op import PluggableLayer
+from sonar.model_executor.determinism.batch_invariant import (
     linear_batch_invariant,
 )
-from aphrodite.model_executor.layers.quantization import resolve_quant_method
-from aphrodite.model_executor.layers.quantization.base_config import (
+from sonar.model_executor.layers.quantization import resolve_quant_method
+from sonar.model_executor.layers.quantization.base_config import (
     QuantizationConfig,
     QuantizeMethodBase,
 )
-from aphrodite.model_executor.layers.utils import (
+from sonar.model_executor.layers.utils import (
     cuda_unquantized_gemm,
     dispatch_unquantized_gemm,
     maybe_pad_weight_avoid_cache_aliasing,
     maybe_use_skinny_gemm,
 )
-from aphrodite.model_executor.parameter import (
-    BaseAphroditeParameter,
+from sonar.model_executor.parameter import (
+    BaseSonarParameter,
     BlockQuantScaleParameter,
     ModelWeightParameter,
-    PackedAphroditeParameter,
     PackedColumnParameter,
+    PackedSonarParameter,
     PerTensorScaleParameter,
-    RowAphroditeParameter,
+    RowSonarParameter,
 )
-from aphrodite.model_executor.utils import set_weight_attrs
-from aphrodite.platforms import current_platform
+from sonar.model_executor.utils import set_weight_attrs
+from sonar.platforms import current_platform
 
 logger = init_logger(__name__)
 
@@ -189,7 +189,7 @@ class UnquantizedLinearMethod(LinearMethodBase):
     supports_pre_processed_weights = True
 
     def __init__(self) -> None:
-        config = get_current_aphrodite_config_or_none()
+        config = get_current_sonar_config_or_none()
         linear_backend = config.kernel_config.linear_backend if config is not None else "auto"
         self._gemm_impl = dispatch_unquantized_gemm(linear_backend)
 
@@ -230,7 +230,7 @@ class UnquantizedLinearMethod(LinearMethodBase):
                 layer.cpu_linear = torch.nn.functional.linear
                 return
 
-            from aphrodite.model_executor.layers.utils import dispatch_cpu_unquantized_gemm
+            from sonar.model_executor.layers.utils import dispatch_cpu_unquantized_gemm
 
             dispatch_cpu_unquantized_gemm(layer, remove_weight=True)
         elif current_platform.is_xpu():
@@ -238,7 +238,7 @@ class UnquantizedLinearMethod(LinearMethodBase):
             # when K > N, but oneDNN's ab-weights matmul is not run-to-run bitwise
             # bitwise reproducible. Off by default.
             weight = layer.weight.data
-            if envs.APHRODITE_XPU_FORCE_N_CONTIG_WEIGHT and weight.ndim == 2 and weight.stride(0) != 1:
+            if envs.SONAR_XPU_FORCE_N_CONTIG_WEIGHT and weight.ndim == 2 and weight.stride(0) != 1:
                 layer.weight.data = weight.t().contiguous().t()
         elif current_platform.is_rocm():
             layer.weight.data = maybe_pad_weight_avoid_cache_aliasing(layer.weight.data)
@@ -251,7 +251,7 @@ class UnquantizedLinearMethod(LinearMethodBase):
         x: torch.Tensor,
         bias: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        if envs.APHRODITE_BATCH_INVARIANT and (current_platform.is_cuda_alike() or current_platform.is_xpu()):
+        if envs.SONAR_BATCH_INVARIANT and (current_platform.is_cuda_alike() or current_platform.is_xpu()):
             return linear_batch_invariant(x, layer.weight, bias)
         return self._gemm_impl(layer, x, layer.weight, bias)
 
@@ -318,7 +318,7 @@ class LinearBase(PluggableLayer):
 
     def update_param_tp_status(self):
         # Single source of truth for a parameter's TP state.
-        # BaseAphroditeParameter stamps self.tp_rank with the global rank in
+        # BaseSonarParameter stamps self.tp_rank with the global rank in
         # __init__; this reconciles every child parameter to the layer's
         # tp_rank/tp_size, which correctly accounts for disable_tp.
         #
@@ -327,7 +327,7 @@ class LinearBase(PluggableLayer):
         # swaps in fresh Parameters. Otherwise a later load_weights()/weight
         # refit would narrow a replicated weight at global_rank * shard_size.
         for param in self.parameters():
-            if isinstance(param, BaseAphroditeParameter):
+            if isinstance(param, BaseSonarParameter):
                 param.tp_rank = self.tp_rank
                 param.tp_size = self.tp_size
 
@@ -518,7 +518,7 @@ class ColumnParallelLinear(LinearBase):
         self._maybe_allow_fp8_block_shape_mismatch()
         self.gather_output = gather_output
 
-        from aphrodite.model_executor.layers.quantization.online.fp8 import OnlineLinearBase
+        from sonar.model_executor.layers.quantization.online.fp8 import OnlineLinearBase
 
         quant_method = self.quant_method
         if isinstance(quant_method, OnlineLinearBase) and quant_method.requantization_source is not None:
@@ -601,7 +601,7 @@ class ColumnParallelLinear(LinearBase):
         assert param_data.shape == loaded_weight.shape
         param_data.copy_(loaded_weight)
 
-    def weight_loader_v2(self, param: BaseAphroditeParameter, loaded_weight: torch.Tensor):
+    def weight_loader_v2(self, param: BaseSonarParameter, loaded_weight: torch.Tensor):
         # Special case for loading scales off disk, which often do not
         # have a shape (such as in the case of AutoFP8).
         if len(loaded_weight.shape) == 0:
@@ -652,7 +652,7 @@ class DCPGroupColumnParallelLinear(ColumnParallelLinear):
     """
 
     def __init__(self, *args, **kwargs):
-        dcp_world_size = get_current_aphrodite_config().parallel_config.decode_context_parallel_size
+        dcp_world_size = get_current_sonar_config().parallel_config.decode_context_parallel_size
         rank = get_tensor_model_parallel_rank()
         world_size = get_tensor_model_parallel_world_size()
         self.group_size = max(dcp_world_size, 1)
@@ -876,7 +876,7 @@ class MergedColumnParallelLinear(ColumnParallelLinear):
 
     def _load_fused_module_from_checkpoint(
         self,
-        param: BaseAphroditeParameter,
+        param: BaseSonarParameter,
         loaded_weight: torch.Tensor,
         output_sizes: list[int] | None = None,
     ):
@@ -900,7 +900,7 @@ class MergedColumnParallelLinear(ColumnParallelLinear):
             # If quantized, we need to adjust the offset and size to account
             # for the packing.
             if (
-                isinstance(param, (PackedColumnParameter, PackedAphroditeParameter))
+                isinstance(param, (PackedColumnParameter, PackedSonarParameter))
                 and param.packed_dim == param.output_dim
             ):
                 shard_size, shard_offset = param.adjust_shard_indexes_for_packing(
@@ -912,7 +912,7 @@ class MergedColumnParallelLinear(ColumnParallelLinear):
 
     def weight_loader_v2(
         self,
-        param: BaseAphroditeParameter,
+        param: BaseSonarParameter,
         loaded_weight: torch.Tensor,
         loaded_shard_id: tuple[int, ...] | int | None = None,
     ):
@@ -931,7 +931,7 @@ class MergedColumnParallelLinear(ColumnParallelLinear):
                     for idx in range(param.data.shape[0]):
                         param.load_merged_column_weight(loaded_weight=loaded_weight, shard_id=idx)
                 return
-            elif type(param) in (RowAphroditeParameter, BaseAphroditeParameter):
+            elif type(param) in (RowSonarParameter, BaseSonarParameter):
                 param.load_merged_column_weight(loaded_weight=loaded_weight)
                 return
             output_sizes = [self.output_sizes[idx] for idx in loaded_shard_id] if loaded_shard_id else None
@@ -1091,7 +1091,7 @@ class QKVParallelLinear(ColumnParallelLinear):
         }
         return shard_size_mapping.get(loaded_shard_id)
 
-    def _load_fused_module_from_checkpoint(self, param: BaseAphroditeParameter, loaded_weight: torch.Tensor):
+    def _load_fused_module_from_checkpoint(self, param: BaseSonarParameter, loaded_weight: torch.Tensor):
         """Handle special case for models where QKV layers are already
         fused on disk. In this case, we have no shard id. This function
         determines the shard id by splitting these layers and then calls
@@ -1123,7 +1123,7 @@ class QKVParallelLinear(ColumnParallelLinear):
                 weight_block_size = getattr(self, "weight_block_size", None)
                 shard_size, shard_offset = adjust_block_scale_shard(weight_block_size, shard_size, shard_offset)
             elif (
-                isinstance(param, (PackedColumnParameter, PackedAphroditeParameter))
+                isinstance(param, (PackedColumnParameter, PackedSonarParameter))
                 and param.packed_dim == param.output_dim
             ):
                 shard_size, shard_offset = param.adjust_shard_indexes_for_packing(
@@ -1135,7 +1135,7 @@ class QKVParallelLinear(ColumnParallelLinear):
 
     def weight_loader_v2(
         self,
-        param: BaseAphroditeParameter,
+        param: BaseSonarParameter,
         loaded_weight: torch.Tensor,
         loaded_shard_id: str | None = None,
     ):
@@ -1150,7 +1150,7 @@ class QKVParallelLinear(ColumnParallelLinear):
                 for idx in range(param.data.shape[0]):
                     param.load_qkv_weight(loaded_weight=loaded_weight, shard_id=idx)
                 return
-            elif type(param) in (RowAphroditeParameter, BaseAphroditeParameter):
+            elif type(param) in (RowSonarParameter, BaseSonarParameter):
                 param.load_qkv_weight(loaded_weight=loaded_weight)
                 return
             # TODO: @dsikka - move to parameter.py
@@ -1481,7 +1481,7 @@ class MinimaxM3QKVParallelLinearWithIndexer(QKVParallelLinear):
 
     def weight_loader_v2(
         self,
-        param: BaseAphroditeParameter,
+        param: BaseSonarParameter,
         loaded_weight: torch.Tensor,
         loaded_shard_id: str | None = None,
     ) -> None:
@@ -1620,7 +1620,7 @@ class KimiK3MergedQKVGateLinear(MergedColumnParallelLinear):
 
     def weight_loader_v2(
         self,
-        param: BaseAphroditeParameter,
+        param: BaseSonarParameter,
         loaded_weight: torch.Tensor,
         loaded_shard_id: tuple[int, ...] | int | None = None,
     ) -> None:
@@ -1703,7 +1703,7 @@ class RowParallelLinear(LinearBase):
         self.input_is_parallel = input_is_parallel
         self.reduce_results = reduce_results
 
-        from aphrodite.model_executor.layers.quantization.online.fp8 import OnlineLinearBase
+        from sonar.model_executor.layers.quantization.online.fp8 import OnlineLinearBase
 
         quant_method = self.quant_method
         if isinstance(quant_method, OnlineLinearBase) and quant_method.requantization_source is not None:
@@ -1764,7 +1764,7 @@ class RowParallelLinear(LinearBase):
         assert param_data.shape == loaded_weight.shape
         param_data.copy_(loaded_weight)
 
-    def weight_loader_v2(self, param: BaseAphroditeParameter, loaded_weight: torch.Tensor):
+    def weight_loader_v2(self, param: BaseSonarParameter, loaded_weight: torch.Tensor):
         # Special case for loading scales off disk, which often do not
         # have a shape (such as in the case of AutoFP8).
         if len(loaded_weight.shape) == 0:

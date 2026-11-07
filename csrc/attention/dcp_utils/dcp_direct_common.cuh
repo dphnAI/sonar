@@ -10,7 +10,7 @@
 
 #include "../../torch_utils.h"
 
-namespace aphrodite::direct_dcp {
+namespace sonar::direct_dcp {
 
 constexpr uint64_t kSpinLimit = 100000000;
 
@@ -89,4 +89,4 @@ inline void check_cuda_launch(const char* operation) {
                       " kernel launch failed: " + cudaGetErrorString(error));
 }
 
-}  // namespace aphrodite::direct_dcp
+}  // namespace sonar::direct_dcp

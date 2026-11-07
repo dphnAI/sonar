@@ -11,7 +11,7 @@ from typing import Literal
 
 import torch
 
-from aphrodite.model_executor.layers.quantization.utils.mxfp8_utils import (
+from sonar.model_executor.layers.quantization.utils.mxfp8_utils import (
     swizzle_mxfp8_scale,
 )
 
@@ -23,7 +23,7 @@ Mxfp6Format = Literal["e2m3", "e3m2"]
 
 @lru_cache
 def _mxfp6_quantize_triton_kernel():
-    from aphrodite.triton_utils import tl, triton
+    from sonar.triton_utils import tl, triton
 
     @triton.jit
     def kernel(
@@ -94,7 +94,7 @@ def quantize_mxfp6_cuda(
         raise ValueError("MXFP6 CUDA quantization expects a 2D/3D CUDA tensor")
     if x.shape[-1] % MXFP6_BLOCK_SIZE:
         raise ValueError("MXFP6 requires K to be divisible by 32")
-    from aphrodite.triton_utils import triton
+    from sonar.triton_utils import triton
 
     k = x.shape[-1]
     rows = x.numel() // k

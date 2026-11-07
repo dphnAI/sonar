@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-from aphrodite.reasoning.abs_reasoning_parsers import ReasoningParser, ReasoningParserManager
+from sonar.reasoning.abs_reasoning_parsers import ReasoningParser, ReasoningParserManager
 
 __all__ = [
     "ReasoningParser",
@@ -13,7 +13,7 @@ Register a lazy module mapping.
 Example:
     ReasoningParserManager.register_lazy_module(
         name="qwen3",
-        module_path="aphrodite.reasoning.qwen3_engine_reasoning_parser",
+        module_path="sonar.reasoning.qwen3_engine_reasoning_parser",
         class_name="Qwen3ParserReasoningAdapter",
     )
 """
@@ -194,7 +194,7 @@ _REASONING_PARSERS_TO_REGISTER = {
 
 def register_lazy_reasoning_parsers():
     for name, (file_name, class_name) in _REASONING_PARSERS_TO_REGISTER.items():
-        module_path = f"aphrodite.reasoning.{file_name}"
+        module_path = f"sonar.reasoning.{file_name}"
         ReasoningParserManager.register_lazy_module(name, module_path, class_name)
 
 

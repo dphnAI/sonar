@@ -10,10 +10,10 @@ and at most 256 requests score context-parallel (``ops/index_cp``).
 
 import torch
 
-from aphrodite.config import get_current_aphrodite_config
-from aphrodite.forward_context import get_forward_context
-from aphrodite.logger import init_logger
-from aphrodite.models.minimax_m3.amd.indexer_msa import (
+from sonar.config import get_current_sonar_config
+from sonar.forward_context import get_forward_context
+from sonar.logger import init_logger
+from sonar.models.minimax_m3.amd.indexer_msa import (
     MSA_INDEX_HEAD_DIM,
     MSA_SCORE_TYPE,
     MSA_SPARSE_BLOCK_SIZE,
@@ -22,9 +22,9 @@ from aphrodite.models.minimax_m3.amd.indexer_msa import (
     MiniMaxM3IndexerMSAMetadata,
     _score_width,
 )
-from aphrodite.models.minimax_m3.common.indexer import MiniMaxM3IndexerImpl
-from aphrodite.platforms import current_platform
-from aphrodite.v1.worker.ubatching import dbo_enabled
+from sonar.models.minimax_m3.common.indexer import MiniMaxM3IndexerImpl
+from sonar.platforms import current_platform
+from sonar.v1.worker.ubatching import dbo_enabled
 
 logger = init_logger(__name__)
 
@@ -46,7 +46,7 @@ def rocm_nvfp4_indexer_unsupported_reason(
     """Why the ROCm NVFP4 indexer cannot serve this config, None when it can."""
     if not current_platform.is_rocm():
         return "needs ROCm"
-    from aphrodite.platforms.rocm import on_gfx950
+    from sonar.platforms.rocm import on_gfx950
 
     if not on_gfx950():
         return "needs gfx950"
@@ -68,11 +68,11 @@ def rocm_nvfp4_indexer_unsupported_reason(
 
 def init_rocm_nvfp4_indexer_decode_cp(max_model_len: int) -> bool:
     """Set up decode CP if configured (a TP collective); returns whether it is on."""
-    from aphrodite.distributed import get_tensor_model_parallel_world_size
+    from sonar.distributed import get_tensor_model_parallel_world_size
 
     from .ops.index_cp import host as index_cp
 
-    if not get_current_aphrodite_config().attention_config.indexer_decode_cp:
+    if not get_current_sonar_config().attention_config.indexer_decode_cp:
         return False
     if get_tensor_model_parallel_world_size() != index_cp.WORLD:
         logger.warning_once(

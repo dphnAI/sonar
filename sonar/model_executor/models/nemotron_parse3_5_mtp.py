@@ -7,10 +7,10 @@ from collections.abc import Iterable
 import torch
 import torch.nn as nn
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
-from aphrodite.model_executor.models.utils import AutoWeightsLoader, WeightsMapper
+from sonar.config import SonarConfig
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
+from sonar.model_executor.models.utils import AutoWeightsLoader, WeightsMapper
 
 
 class _ParseAuxMTPInner(nn.Module):
@@ -31,7 +31,7 @@ class ParseAuxMTPModel(nn.Module):
     has_own_embed_tokens = False
     has_own_lm_head = False
 
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={
             "decoder.embed_tokens.": "model.embed_tokens.",
             "decoder.extra_heads.0.": "model.extra_head.",
@@ -39,10 +39,10 @@ class ParseAuxMTPModel(nn.Module):
         }
     )
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
         del prefix
-        self.config = aphrodite_config.model_config.hf_config
+        self.config = sonar_config.model_config.hf_config
         decoder_config = self.config.decoder
         vocab_size = int(decoder_config.vocab_size)
         hidden_size = int(decoder_config.d_model)
@@ -78,4 +78,4 @@ class ParseAuxMTPModel(nn.Module):
                     yield name, weight
 
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(mtp_weights(), mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(mtp_weights(), mapper=self.hf_to_sonar_mapper)

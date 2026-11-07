@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Benchmark the cold and warm startup time of Aphrodite models.
+"""Benchmark the cold and warm startup time of Sonar models.
 
 This script measures total startup time (including model loading, compilation,
 and cache operations) for both cold and warm scenarios:
@@ -21,12 +21,12 @@ from typing import Any, NamedTuple
 import numpy as np
 from tqdm import tqdm
 
-from aphrodite.benchmarks.lib.utils import (
+from sonar.benchmarks.lib.utils import (
     convert_to_pytorch_benchmark_format,
     write_to_json,
 )
-from aphrodite.engine.arg_utils import EngineArgs
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
+from sonar.engine.arg_utils import EngineArgs
+from sonar.utils.argparse_utils import FlexibleArgumentParser
 
 PERCENTAGES = [10, 25, 50, 75, 90, 99]
 
@@ -108,26 +108,26 @@ def _metric_to_json(m: MetricStats) -> dict[str, Any]:
 @contextmanager
 def cold_startup():
     """Context manager to measure cold startup time:
-    1. Uses a temporary directory for Aphrodite cache to avoid any pollution
+    1. Uses a temporary directory for Sonar cache to avoid any pollution
        between cold startup iterations.
     2. Uses inductor's fresh_cache to clear torch.compile caches.
     """
     from torch._inductor.utils import fresh_cache
 
     # Use temporary directory for caching to avoid any pollution between cold startups
-    original_cache_root = os.environ.get("APHRODITE_CACHE_ROOT")
-    temp_cache_dir = tempfile.mkdtemp(prefix="aphrodite_startup_bench_cold_")
+    original_cache_root = os.environ.get("SONAR_CACHE_ROOT")
+    temp_cache_dir = tempfile.mkdtemp(prefix="sonar_startup_bench_cold_")
     try:
-        os.environ["APHRODITE_CACHE_ROOT"] = temp_cache_dir
+        os.environ["SONAR_CACHE_ROOT"] = temp_cache_dir
         with fresh_cache():
             yield
     finally:
         # Clean up temporary cache directory
         shutil.rmtree(temp_cache_dir, ignore_errors=True)
         if original_cache_root:
-            os.environ["APHRODITE_CACHE_ROOT"] = original_cache_root
+            os.environ["SONAR_CACHE_ROOT"] = original_cache_root
         else:
-            os.environ.pop("APHRODITE_CACHE_ROOT", None)
+            os.environ.pop("SONAR_CACHE_ROOT", None)
 
 
 def run_startup_in_subprocess(engine_args, result_queue):
@@ -136,7 +136,7 @@ def run_startup_in_subprocess(engine_args, result_queue):
     """
     try:
         # Import inside the subprocess to avoid issues with forking
-        from aphrodite import LLM
+        from sonar import LLM
 
         # Measure total startup time
         start_time = time.perf_counter()
@@ -148,11 +148,11 @@ def run_startup_in_subprocess(engine_args, result_queue):
         # Extract compilation time if available
         compilation_time = 0.0
         encoder_compilation_time = 0.0
-        if hasattr(llm.llm_engine, "aphrodite_config"):
-            aphrodite_config = llm.llm_engine.aphrodite_config
-            if hasattr(aphrodite_config, "compilation_config") and aphrodite_config.compilation_config is not None:
-                compilation_time = aphrodite_config.compilation_config.compilation_time
-                encoder_compilation_time = aphrodite_config.compilation_config.encoder_compilation_time
+        if hasattr(llm.llm_engine, "sonar_config"):
+            sonar_config = llm.llm_engine.sonar_config
+            if hasattr(sonar_config, "compilation_config") and sonar_config.compilation_config is not None:
+                compilation_time = sonar_config.compilation_config.compilation_time
+                encoder_compilation_time = sonar_config.compilation_config.encoder_compilation_time
 
         result_queue.put(
             {
@@ -247,8 +247,8 @@ def main(args: argparse.Namespace):
         else:
             raise RuntimeError("Subprocess did not return a result")
 
-    os.environ["APHRODITE_ENABLE_V1_MULTIPROCESSING"] = "0"
-    print("Setting APHRODITE_ENABLE_V1_MULTIPROCESSING=0 to collect startup metrics.\n")
+    os.environ["SONAR_ENABLE_V1_MULTIPROCESSING"] = "0"
+    print("Setting SONAR_ENABLE_V1_MULTIPROCESSING=0 to collect startup metrics.\n")
 
     # Collect cold startup iterations
     print("Measuring cold startup time...\n")

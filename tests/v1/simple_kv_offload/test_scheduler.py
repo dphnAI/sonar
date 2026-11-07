@@ -11,41 +11,41 @@ from unittest.mock import Mock
 import pytest
 import torch
 
-from aphrodite import SamplingParams
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar import SamplingParams
+from sonar.config import (
     CacheConfig,
     DeviceConfig,
     KVTransferConfig,
     ModelConfig,
     SchedulerConfig,
+    SonarConfig,
     SpeculativeConfig,
 )
-from aphrodite.config.cache import MambaCacheMode
-from aphrodite.config.kv_events import KVEventsConfig
-from aphrodite.distributed.kv_transfer.kv_connector.v1 import KVConnectorRole
-from aphrodite.distributed.kv_transfer.kv_connector.v1.simple_cpu_offload_connector import (
+from sonar.config.cache import MambaCacheMode
+from sonar.config.kv_events import KVEventsConfig
+from sonar.distributed.kv_transfer.kv_connector.v1 import KVConnectorRole
+from sonar.distributed.kv_transfer.kv_connector.v1.simple_cpu_offload_connector import (
     SimpleCPUOffloadConnector,
 )
-from aphrodite.utils.hashing import sha256
-from aphrodite.v1.core.block_pool import BlockPool
-from aphrodite.v1.core.kv_cache_manager import KVCacheBlocks, KVCacheManager
-from aphrodite.v1.core.kv_cache_utils import (
+from sonar.utils.hashing import sha256
+from sonar.v1.core.block_pool import BlockPool
+from sonar.v1.core.kv_cache_manager import KVCacheBlocks, KVCacheManager
+from sonar.v1.core.kv_cache_utils import (
     KVCacheBlock,
     get_request_block_hasher,
     init_none_hash,
     make_block_hash_with_group_id,
 )
-from aphrodite.v1.core.sched.output import (
+from sonar.v1.core.sched.output import (
     CachedRequestData,
     KVConnectorBlockState,
     NewRequestData,
     SchedulerOutput,
 )
-from aphrodite.v1.core.single_type_kv_cache_manager import (
+from sonar.v1.core.single_type_kv_cache_manager import (
     register_all_kvcache_specs,
 )
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.kv_cache_interface import (
     ChunkedLocalAttentionSpec,
     CircularBufferSpec,
     FullAttentionSpec,
@@ -57,13 +57,13 @@ from aphrodite.v1.kv_cache_interface import (
     SlidingWindowMLASpec,
     SlidingWindowSpec,
 )
-from aphrodite.v1.metrics.cache_hit_source import CacheHitSource
-from aphrodite.v1.outputs import KVConnectorOutput
-from aphrodite.v1.request import Request
-from aphrodite.v1.simple_kv_offload.manager import SimpleCPUOffloadScheduler
-from aphrodite.v1.simple_kv_offload.metadata import SimpleCPUOffloadWorkerMetadata
-from aphrodite.v1.worker.gpu.spec_decode.mtp.config import MTPSpeculatorConfig
-from aphrodite.v1.worker.gpu.spec_decode.multi_module_mtp.config import (
+from sonar.v1.metrics.cache_hit_source import CacheHitSource
+from sonar.v1.outputs import KVConnectorOutput
+from sonar.v1.request import Request
+from sonar.v1.simple_kv_offload.manager import SimpleCPUOffloadScheduler
+from sonar.v1.simple_kv_offload.metadata import SimpleCPUOffloadWorkerMetadata
+from sonar.v1.worker.gpu.spec_decode.mtp.config import MTPSpeculatorConfig
+from sonar.v1.worker.gpu.spec_decode.multi_module_mtp.config import (
     MultiModuleMTPSpeculatorConfig,
 )
 from tests.v1.spec_decode.utils import attach_speculator_config
@@ -98,7 +98,7 @@ def _make_kv_cache_config(
     """Build a KVCacheConfig with non-empty kv_cache_tensors."""
     groups = []
     tensors = []
-    register_all_kvcache_specs(aphrodite_config=None)  # Ensure specs are registered for tests
+    register_all_kvcache_specs(sonar_config=None)  # Ensure specs are registered for tests
     total_size = _BYTES_PER_BLOCK * num_blocks * num_groups
     byte_offset = 0
     for g in range(num_groups):
@@ -150,7 +150,7 @@ def _make_scratch_kv_cache_config(num_blocks: int, scratch_block_size: int = 4) 
     caching, so its block size neither divides nor is divided by the
     hash block size in general.
     """
-    register_all_kvcache_specs(aphrodite_config=None)
+    register_all_kvcache_specs(sonar_config=None)
     fa_config = _make_kv_cache_config(num_blocks, num_groups=1)
     scratch_layers = ["layer_scratch"]
     scratch_spec = CircularBufferSpec(
@@ -177,8 +177,8 @@ def _make_scratch_kv_cache_config(num_blocks: int, scratch_block_size: int = 4) 
     )
 
 
-def _make_aphrodite_config(block_size: int = BLOCK_SIZE) -> AphroditeConfig:
-    """Minimal AphroditeConfig for scheduler tests (no GPU)."""
+def _make_sonar_config(block_size: int = BLOCK_SIZE) -> SonarConfig:
+    """Minimal SonarConfig for scheduler tests (no GPU)."""
     model_config = ModelConfig(
         model="facebook/opt-125m",
         trust_remote_code=True,
@@ -201,7 +201,7 @@ def _make_aphrodite_config(block_size: int = BLOCK_SIZE) -> AphroditeConfig:
         kv_connector="SimpleCPUOffloadConnector",
         kv_role="kv_both",
     )
-    return AphroditeConfig(
+    return SonarConfig(
         scheduler_config=scheduler_config,
         model_config=model_config,
         cache_config=cache_config,
@@ -216,7 +216,7 @@ class SchedulerFixture:
 
     scheduler: SimpleCPUOffloadScheduler
     gpu_block_pool: BlockPool
-    aphrodite_config: AphroditeConfig
+    sonar_config: SonarConfig
     kv_cache_config: KVCacheConfig
     num_groups: int = 1
 
@@ -227,7 +227,7 @@ class SchedulerFixture:
 )
 def test_connector_reports_configured_cache_source(tmp_path, backend: str, source: CacheHitSource):
     kv_cache_config = _make_kv_cache_config(num_blocks=4)
-    aphrodite_config = _make_aphrodite_config()
+    sonar_config = _make_sonar_config()
     extra_config = {
         "cpu_bytes_to_use_per_rank": _BYTES_PER_BLOCK * 4,
         "kv_offload_backend": backend,
@@ -237,11 +237,11 @@ def test_connector_reports_configured_cache_source(tmp_path, backend: str, sourc
             disk_path=str(tmp_path / "kv-offload.bin"),
             disk_capacity_bytes=_BYTES_PER_BLOCK * 4,
         )
-    assert aphrodite_config.kv_transfer_config is not None
-    aphrodite_config.kv_transfer_config.kv_connector_extra_config = extra_config
+    assert sonar_config.kv_transfer_config is not None
+    sonar_config.kv_transfer_config.kv_connector_extra_config = extra_config
 
     connector = SimpleCPUOffloadConnector(
-        aphrodite_config,
+        sonar_config,
         KVConnectorRole.SCHEDULER,
         kv_cache_config,
     )
@@ -259,7 +259,7 @@ def test_connector_explicit_cpu_blocks_align_uneven_stages(tmp_path, num_layers:
     config.kv_cache_groups[0].layer_names = names
     config.kv_cache_tensors[0].layers = names
     config.kv_cache_tensors[0].size *= num_layers
-    aphrodite_config = _make_aphrodite_config()
+    sonar_config = _make_sonar_config()
     extra = {
         "cpu_bytes_to_use_per_rank": _BYTES_PER_BLOCK * 8,
         "num_cpu_blocks": 4,
@@ -270,9 +270,9 @@ def test_connector_explicit_cpu_blocks_align_uneven_stages(tmp_path, num_layers:
             disk_path=str(tmp_path / "offload.bin"),
             disk_capacity_bytes=_BYTES_PER_BLOCK * 8,
         )
-    assert aphrodite_config.kv_transfer_config is not None
-    aphrodite_config.kv_transfer_config.kv_connector_extra_config = extra
-    connector = SimpleCPUOffloadConnector(aphrodite_config, KVConnectorRole.SCHEDULER, config)
+    assert sonar_config.kv_transfer_config is not None
+    sonar_config.kv_transfer_config.kv_connector_extra_config = extra
+    connector = SimpleCPUOffloadConnector(sonar_config, KVConnectorRole.SCHEDULER, config)
     assert connector.scheduler_manager is not None
     assert connector.scheduler_manager.num_cpu_blocks == 4
     assert len(connector.scheduler_manager.cpu_block_pool.blocks) == 4
@@ -284,14 +284,14 @@ def test_connector_explicit_cpu_blocks_align_uneven_stages(tmp_path, num_layers:
 )
 def test_connector_rejects_invalid_explicit_cpu_blocks(count, capacity_bytes):
     config = _make_kv_cache_config(num_blocks=16)
-    aphrodite_config = _make_aphrodite_config()
-    assert aphrodite_config.kv_transfer_config is not None
-    aphrodite_config.kv_transfer_config.kv_connector_extra_config = {
+    sonar_config = _make_sonar_config()
+    assert sonar_config.kv_transfer_config is not None
+    sonar_config.kv_transfer_config.kv_connector_extra_config = {
         "cpu_bytes_to_use_per_rank": capacity_bytes,
         "num_cpu_blocks": count,
     }
     with pytest.raises(ValueError, match="num_cpu_blocks"):
-        SimpleCPUOffloadConnector(aphrodite_config, KVConnectorRole.SCHEDULER, config)
+        SimpleCPUOffloadConnector(sonar_config, KVConnectorRole.SCHEDULER, config)
 
 
 def make_scheduler(
@@ -306,11 +306,11 @@ def make_scheduler(
         kv_cache_config = _make_kv_cache_config(num_gpu_blocks, num_groups)
     else:
         num_groups = len(kv_cache_config.kv_cache_groups)
-    aphrodite_config = _make_aphrodite_config()
+    sonar_config = _make_sonar_config()
     cpu_capacity_bytes = _BYTES_PER_BLOCK * num_cpu_blocks * num_groups
 
     sched = SimpleCPUOffloadScheduler(
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         kv_cache_config=kv_cache_config,
         cpu_capacity_bytes=cpu_capacity_bytes,
         scheduler_block_size=BLOCK_SIZE,
@@ -329,7 +329,7 @@ def make_scheduler(
     return SchedulerFixture(
         scheduler=sched,
         gpu_block_pool=gpu_block_pool,
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         kv_cache_config=kv_cache_config,
         num_groups=num_groups,
     )
@@ -2189,12 +2189,12 @@ def test_reset_pending_loads() -> None:
     assert num_used == 1, f"Expected only null block in use, got {num_used}"
 
 
-def _make_cp_aphrodite_config(
+def _make_cp_sonar_config(
     dcp_world_size: int = 1,
     pcp_world_size: int = 1,
-) -> AphroditeConfig:
-    """AphroditeConfig with context-parallel sizes set for scheduler-only tests."""
-    cfg = _make_aphrodite_config()
+) -> SonarConfig:
+    """SonarConfig with context-parallel sizes set for scheduler-only tests."""
+    cfg = _make_sonar_config()
 
     cfg.parallel_config.decode_context_parallel_size = dcp_world_size
     cfg.parallel_config.prefill_context_parallel_size = pcp_world_size
@@ -2213,11 +2213,11 @@ def _make_cp_scheduler(
     virtual_block_size = BLOCK_SIZE * dcp_world_size
 
     kv_cache_config = _make_kv_cache_config(num_gpu_blocks)
-    aphrodite_config = _make_cp_aphrodite_config(dcp_world_size, pcp_world_size)
+    sonar_config = _make_cp_sonar_config(dcp_world_size, pcp_world_size)
     cpu_capacity_bytes = _BYTES_PER_BLOCK * num_cpu_blocks
 
     sched = SimpleCPUOffloadScheduler(
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         kv_cache_config=kv_cache_config,
         cpu_capacity_bytes=cpu_capacity_bytes,
         scheduler_block_size=virtual_block_size,
@@ -2235,7 +2235,7 @@ def _make_cp_scheduler(
     return SchedulerFixture(
         scheduler=sched,
         gpu_block_pool=gpu_block_pool,
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         kv_cache_config=kv_cache_config,
     )
 
@@ -2490,7 +2490,7 @@ def test_scheduler_uses_worker_aligned_num_cpu_blocks() -> None:
     light = _make_kv_cache_config(num_gpu_blocks, num_groups=1)
 
     sched = SimpleCPUOffloadScheduler(
-        aphrodite_config=_make_aphrodite_config(),
+        sonar_config=_make_sonar_config(),
         kv_cache_config=light,
         cpu_capacity_bytes=cpu_capacity,
         scheduler_block_size=BLOCK_SIZE,
@@ -2573,17 +2573,17 @@ def _make_two_group_scheduler(
         kv_cache_tensors=tensors,
         kv_cache_groups=groups,
     )
-    aphrodite_config = _make_cp_aphrodite_config(dcp_world_size=dcp_world_size)
-    aphrodite_config.cache_config.prefix_cache_retention_interval = 0
-    aphrodite_config.cache_config.mamba_cache_mode = mamba_cache_mode
+    sonar_config = _make_cp_sonar_config(dcp_world_size=dcp_world_size)
+    sonar_config.cache_config.prefix_cache_retention_interval = 0
+    sonar_config.cache_config.mamba_cache_mode = mamba_cache_mode
     if enable_kv_cache_events:
-        aphrodite_config.kv_events_config = KVEventsConfig(enable_kv_cache_events=True)
+        sonar_config.kv_events_config = KVEventsConfig(enable_kv_cache_events=True)
     # _derive_cpu_config() scales the requested capacity against
     # kv_cache_tensors[0].size, so express it as a multiple of that tensor's
     # per-block size to get exactly num_cpu_blocks.
     cpu_capacity_bytes = tensors[0].size // num_gpu_blocks * num_cpu_blocks
     sched = SimpleCPUOffloadScheduler(
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         kv_cache_config=kv_cache_config,
         cpu_capacity_bytes=cpu_capacity_bytes,
         scheduler_block_size=scheduler_block_size,
@@ -2599,7 +2599,7 @@ def _make_two_group_scheduler(
     return SchedulerFixture(
         scheduler=sched,
         gpu_block_pool=gpu_block_pool,
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         kv_cache_config=kv_cache_config,
     )
 
@@ -2975,18 +2975,18 @@ def test_gpu_prefix_hit_refreshes_cpu_mamba_boundary() -> None:
     assert lru_order.index(mamba[0]) < lru_order.index(newer[0])
 
 
-def test_external_lookup_rejects_misaligned_local_prefix(caplog_aphrodite) -> None:
+def test_external_lookup_rejects_misaligned_local_prefix(caplog_sonar) -> None:
     scheduler_block_size = 4 * BLOCK_SIZE
     fix = _make_hybrid_attention_mamba_scheduler(block_size=scheduler_block_size)
 
     request = _make_cp_request(num_blocks=2, virtual_block_size=scheduler_block_size)
-    # The ``aphrodite`` logger sets propagate=False, so plain ``caplog`` can observe
-    # nothing; ``caplog_aphrodite`` re-enables propagation for the duration.
-    with caplog_aphrodite.at_level(logging.WARNING):
+    # The ``sonar`` logger sets propagate=False, so plain ``caplog`` can observe
+    # nothing; ``caplog_sonar`` re-enables propagation for the duration.
+    with caplog_sonar.at_level(logging.WARNING):
         hit_tokens, is_async = fix.scheduler.get_num_new_matched_tokens(request, num_computed_tokens=BLOCK_SIZE)
 
     assert (hit_tokens, is_async) == (0, False)
-    assert "requires scheduler-block-aligned local tokens" in caplog_aphrodite.text
+    assert "requires scheduler-block-aligned local tokens" in caplog_sonar.text
 
 
 def test_fine_grained_external_hits_require_eager_offload() -> None:
@@ -3213,7 +3213,7 @@ QSA_RING_BLOCK_SIZE = 4
 
 
 def _make_qsa_hybrid_kv_cache_config(num_blocks: int) -> KVCacheConfig:
-    register_all_kvcache_specs(aphrodite_config=None)
+    register_all_kvcache_specs(sonar_config=None)
     full_spec = FullAttentionSpec(
         block_size=BLOCK_SIZE,
         num_kv_heads=NUM_KV_HEADS,
@@ -3252,7 +3252,7 @@ def _make_qsa_scheduler(
 ) -> tuple[SimpleCPUOffloadScheduler, BlockPool]:
     kv_cache_config = _make_qsa_hybrid_kv_cache_config(num_blocks=16)
     sched = SimpleCPUOffloadScheduler(
-        aphrodite_config=_make_aphrodite_config(),
+        sonar_config=_make_sonar_config(),
         kv_cache_config=kv_cache_config,
         cpu_capacity_bytes=_BYTES_PER_BLOCK * 8 * 2,
         scheduler_block_size=BLOCK_SIZE,
@@ -3366,8 +3366,8 @@ def test_eager_store_matches_gpu_cacheable_prefix(
         )
     kv_cache_config.kv_cache_groups[1].is_eagle_group = True
     kv_cache_config.prefix_cache_retention_interval = retention_interval
-    aphrodite_config = _make_cp_aphrodite_config(dcp_world_size=8)
-    aphrodite_config.model_config.max_model_len = 16384
+    sonar_config = _make_cp_sonar_config(dcp_world_size=8)
+    sonar_config.model_config.max_model_len = 16384
     speculative_config = Mock(spec=SpeculativeConfig)
     speculative_config.num_speculative_tokens = 3
     speculative_config.use_eagle.return_value = True
@@ -3377,9 +3377,9 @@ def test_eager_store_matches_gpu_cacheable_prefix(
         speculative_config,
         MultiModuleMTPSpeculatorConfig if prefill_lookahead > 1 else MTPSpeculatorConfig,
     )
-    aphrodite_config.speculative_config = speculative_config
+    sonar_config.speculative_config = speculative_config
     scheduler = SimpleCPUOffloadScheduler(
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         kv_cache_config=kv_cache_config,
         cpu_capacity_bytes=kv_cache_config.kv_cache_tensors[0].size,
         scheduler_block_size=scheduler_block_size,

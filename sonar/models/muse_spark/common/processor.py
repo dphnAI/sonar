@@ -15,16 +15,16 @@ from PIL import Image
 from transformers import BatchFeature
 from transformers.models.auto.video_processing_auto import VIDEO_PROCESSOR_MAPPING_NAMES
 
-from aphrodite.config.multimodal import (
+from sonar.config.multimodal import (
     AudioDummyOptions,
     BaseDummyOptions,
     ImageDummyOptions,
     VideoDummyOptions,
 )
-from aphrodite.inputs import MultiModalDataDict
-from aphrodite.multimodal.inputs import MultiModalFieldConfig, MultiModalKwargsItems
-from aphrodite.multimodal.parse import MultiModalDataItems, MultiModalDataParser
-from aphrodite.multimodal.processing import (
+from sonar.inputs import MultiModalDataDict
+from sonar.multimodal.inputs import MultiModalFieldConfig, MultiModalKwargsItems
+from sonar.multimodal.parse import MultiModalDataItems, MultiModalDataParser
+from sonar.multimodal.processing import (
     BaseDummyInputsBuilder,
     BaseMultiModalProcessor,
     BaseProcessingInfo,
@@ -32,12 +32,12 @@ from aphrodite.multimodal.processing import (
     PromptUpdate,
     PromptUpdateDetails,
 )
-from aphrodite.multimodal.video import VIDEO_LOADER_REGISTRY, VideoBackend
-from aphrodite.multimodal.video_decoders import (
+from sonar.multimodal.video import VIDEO_LOADER_REGISTRY, VideoBackend
+from sonar.multimodal.video_decoders import (
     VideoSourceMetadata,
     VideoTargetMetadata,
 )
-from aphrodite.transformers_utils.processor import get_processor_config
+from sonar.transformers_utils.processor import get_processor_config
 
 AUDIO_TARGET_SAMPLE_RATE = 24000
 

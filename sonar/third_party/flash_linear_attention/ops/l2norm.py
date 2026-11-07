@@ -11,7 +11,7 @@ import os
 
 import torch
 
-from aphrodite.triton_utils import tl, triton
+from sonar.triton_utils import tl, triton
 
 BT_LIST = [8, 16, 32, 64, 128]
 

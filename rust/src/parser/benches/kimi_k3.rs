@@ -4,10 +4,10 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use aphrodite_parser::unified::KimiK3UnifiedParser;
-use aphrodite_tokenizer::Tokenizer;
-use aphrodite_tokenizer::test_utils::TestTokenizer;
 use criterion::{BatchSize, Criterion, Throughput, black_box, criterion_group, criterion_main};
+use sonar_parser::unified::KimiK3UnifiedParser;
+use sonar_tokenizer::Tokenizer;
+use sonar_tokenizer::test_utils::TestTokenizer;
 
 mod utils;
 use utils::{attributed_chunks, feed_unified_parser};

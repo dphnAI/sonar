@@ -10,8 +10,8 @@ from typing import TYPE_CHECKING, Any, cast
 import numpy as np
 import torch
 
-from aphrodite.lora.request import LoRARequest
-from aphrodite.outputs import (
+from sonar.lora.request import LoRARequest
+from sonar.outputs import (
     STREAM_FINISHED,
     CompletionOutput,
     PoolingOutput,
@@ -21,30 +21,30 @@ from aphrodite.outputs import (
     SamplingMask,
     WeightVersionSpan,
 )
-from aphrodite.sampling_params import RequestOutputKind
-from aphrodite.tokenizers import TokenizerLike
-from aphrodite.tracing import (
+from sonar.sampling_params import RequestOutputKind
+from sonar.tokenizers import TokenizerLike
+from sonar.tracing import (
     SpanAttributes,
     SpanKind,
     extract_trace_context,
     instrument_manual,
 )
-from aphrodite.utils import length_from_prompt_token_ids_or_embeds
-from aphrodite.v1.engine import EngineCoreOutput, EngineCoreRequest, FinishReason
-from aphrodite.v1.engine.detokenizer import IncrementalDetokenizer
-from aphrodite.v1.engine.logprobs import LogprobsProcessor
-from aphrodite.v1.engine.parallel_sampling import ParentRequest
-from aphrodite.v1.metrics.stats import (
+from sonar.utils import length_from_prompt_token_ids_or_embeds
+from sonar.v1.engine import EngineCoreOutput, EngineCoreRequest, FinishReason
+from sonar.v1.engine.detokenizer import IncrementalDetokenizer
+from sonar.v1.engine.logprobs import LogprobsProcessor
+from sonar.v1.engine.parallel_sampling import ParentRequest
+from sonar.v1.metrics.stats import (
     IterationStats,
     LoRARequestStates,
     RequestSpecDecodeMetrics,
     RequestStateStats,
     SchedulerStats,
 )
-from aphrodite.v1.outputs import SamplingMaskLists
+from sonar.v1.outputs import SamplingMaskLists
 
 if TYPE_CHECKING:
-    from aphrodite.v1.engine.admission_control import SharedAdmissionStats
+    from sonar.v1.engine.admission_control import SharedAdmissionStats
 
 # shared empty CPU tensor used as a placeholder pooling output
 EMPTY_CPU_TENSOR = torch.empty(0, device="cpu")
@@ -714,7 +714,7 @@ class OutputProcessor:
 
         NOTE FOR DEVELOPERS
 
-        Aphrodite V1 minimizes the number of python loops over the full
+        Sonar V1 minimizes the number of python loops over the full
         batch to ensure system overheads are minimized. This is the
         only function that should loop over EngineCoreOutputs.
 

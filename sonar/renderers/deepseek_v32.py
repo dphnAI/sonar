@@ -1,15 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.renderers.chat_utils import (
+from sonar.config import SonarConfig
+from sonar.renderers.chat_utils import (
     ChatCompletionMessageParam,
     ConversationMessage,
     parse_chat_messages,
     parse_chat_messages_async,
 )
-from aphrodite.tokenizers.deepseek_v32 import DeepseekV32Tokenizer
-from aphrodite.utils.async_utils import make_async
+from sonar.tokenizers.deepseek_v32 import DeepseekV32Tokenizer
+from sonar.utils.async_utils import make_async
 
 from .base import BaseRenderer
 from .inputs import DictPrompt
@@ -20,7 +20,7 @@ from .params import ChatParams
 class DeepseekV32Renderer(BaseRenderer[DeepseekV32Tokenizer]):
     def __init__(
         self,
-        config: AphroditeConfig,
+        config: SonarConfig,
         tokenizer: DeepseekV32Tokenizer | None,
     ) -> None:
         super().__init__(config, tokenizer)

@@ -5,13 +5,13 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from aphrodite.distributed.kv_events import BlockStored
-from aphrodite.distributed.kv_transfer.kv_connector.v1.base import KVConnectorMetadata
-from aphrodite.distributed.kv_transfer.kv_connector.v1.lmcache_connector import (
+from sonar.distributed.kv_events import BlockStored
+from sonar.distributed.kv_transfer.kv_connector.v1.base import KVConnectorMetadata
+from sonar.distributed.kv_transfer.kv_connector.v1.lmcache_connector import (
     LMCacheConnectorV1,
     LMCacheKVEvents,
 )
-from aphrodite.v1.outputs import KVConnectorOutput
+from sonar.v1.outputs import KVConnectorOutput
 
 
 @pytest.fixture
@@ -660,8 +660,8 @@ class TestIntegrationScenarios:
         """Test LMCacheKVEvents aggregation across TP ranks using
         KVOutputAggregator (used by MultiprocExecutor).
         """
-        from aphrodite.distributed.kv_transfer.kv_connector.utils import KVOutputAggregator
-        from aphrodite.v1.outputs import ModelRunnerOutput
+        from sonar.distributed.kv_transfer.kv_connector.utils import KVOutputAggregator
+        from sonar.v1.outputs import ModelRunnerOutput
 
         # Create KVOutputAggregator for 3 workers (simulating TP=3)
         aggregator = KVOutputAggregator(expected_finished_count=3)

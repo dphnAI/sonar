@@ -1,4 +1,4 @@
-// Aphrodite-native CPU cache-write op for MLA's single-latent-buffer KV cache.
+// Sonar-native CPU cache-write op for MLA's single-latent-buffer KV cache.
 // `concat_and_cache_mla` (the generic op used by every GPU backend) is
 // CUDA-only; this is the CPU counterpart, adapted in spirit from SGLang's
 // `store_cache_cpu` (csrc/cpu/kvcache.cpp).

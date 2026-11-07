@@ -7,7 +7,7 @@ Three bf16 planes sum exactly to the fp32 weight; split-K sums in fixed order.
 
 import torch
 
-from aphrodite.triton_utils import tl, triton
+from sonar.triton_utils import tl, triton
 
 # (max tokens, BLOCK_M, BLOCK_N, BLOCK_K, splits, num_warps), tuned on MI350X
 # for the Muse router shape (N=256, K=8192).

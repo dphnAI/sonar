@@ -7,7 +7,7 @@ from collections.abc import Sequence
 import partial_json_parser
 from partial_json_parser.core.options import Allow
 
-from aphrodite.entrypoints.generate.base.protocol import (
+from sonar.entrypoints.generate.base.protocol import (
     DeltaFunctionCall,
     DeltaMessage,
     DeltaToolCall,
@@ -15,18 +15,18 @@ from aphrodite.entrypoints.generate.base.protocol import (
     FunctionCall,
     ToolCall,
 )
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionRequest,
 )
-from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
-from aphrodite.logger import init_logger
-from aphrodite.renderers.chat_utils import make_tool_call_id
-from aphrodite.tokenizers import TokenizerLike
-from aphrodite.tool_parsers.abstract_tool_parser import (
+from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
+from sonar.logger import init_logger
+from sonar.renderers.chat_utils import make_tool_call_id
+from sonar.tokenizers import TokenizerLike
+from sonar.tool_parsers.abstract_tool_parser import (
     Tool,
     ToolParser,
 )
-from aphrodite.tool_parsers.utils import find_common_prefix, is_complete_json
+from sonar.tool_parsers.utils import find_common_prefix, is_complete_json
 
 logger = init_logger(__name__)
 

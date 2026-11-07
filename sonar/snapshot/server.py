@@ -13,8 +13,8 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from aphrodite.snapshot.manifest import ReleaseMarker, _validation_path, _write_json_atomic
-from aphrodite.snapshot.types import Oracle, oracles_match
+from sonar.snapshot.manifest import ReleaseMarker, _validation_path, _write_json_atomic
+from sonar.snapshot.types import Oracle, oracles_match
 
 _CANARY_PROMPT = "The capital of France is"
 
@@ -116,7 +116,7 @@ def oracle_from_request_output(request_output: Any) -> Oracle:
 
 
 async def run_engine_canary(engine: Any) -> Oracle:
-    from aphrodite import SamplingParams
+    from sonar import SamplingParams
 
     final_output = None
     sampling_params = SamplingParams(
@@ -129,7 +129,7 @@ async def run_engine_canary(engine: Any) -> Oracle:
     async for output in engine.generate(
         _CANARY_PROMPT,
         sampling_params,
-        request_id="aphrodite-snapshot-canary",
+        request_id="sonar-snapshot-canary",
     ):
         final_output = output
     if final_output is None:
@@ -169,14 +169,14 @@ async def wait_for_release_marker(
     return read_release_marker(path)
 
 
-def parse_aphrodite_args(argv: list[str]) -> Any:
-    from aphrodite.entrypoints.common.cli_args import (
+def parse_sonar_args(argv: list[str]) -> Any:
+    from sonar.entrypoints.common.cli_args import (
         make_arg_parser,
         validate_parsed_serve_args,
     )
-    from aphrodite.utils.argparse_utils import FlexibleArgumentParser
+    from sonar.utils.argparse_utils import FlexibleArgumentParser
 
-    parser = FlexibleArgumentParser(prog="python -m aphrodite.snapshot.server")
+    parser = FlexibleArgumentParser(prog="python -m sonar.snapshot.server")
     args = make_arg_parser(parser).parse_args(argv)
     if args.model_tag is not None:
         args.model = args.model_tag
@@ -189,12 +189,12 @@ def parse_aphrodite_args(argv: list[str]) -> Any:
     return args
 
 
-async def run_aphrodite_snapshot_child(control: ControlArgs, args: Any) -> None:
-    from aphrodite.entrypoints.launchers.api_server.entry import (
+async def run_sonar_snapshot_child(control: ControlArgs, args: Any) -> None:
+    from sonar.entrypoints.launchers.api_server.entry import (
         build_and_serve,
         build_async_engine_client,
     )
-    from aphrodite.entrypoints.launchers.launcher import setup_server
+    from sonar.entrypoints.launchers.launcher import setup_server
 
     args.enable_sleep_mode = True
 
@@ -236,10 +236,10 @@ async def run_aphrodite_snapshot_child(control: ControlArgs, args: Any) -> None:
 
 def main(argv: list[str] | None = None) -> None:
     control, remaining = parse_control_args(sys.argv[1:] if argv is None else argv)
-    args = parse_aphrodite_args(remaining)
+    args = parse_sonar_args(remaining)
     import uvloop
 
-    uvloop.run(run_aphrodite_snapshot_child(control, args))
+    uvloop.run(run_sonar_snapshot_child(control, args))
 
 
 if __name__ == "__main__":

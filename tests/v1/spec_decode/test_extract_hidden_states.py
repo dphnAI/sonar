@@ -9,24 +9,24 @@ import pytest
 import torch
 from transformers import CLIPVisionConfig, LlamaConfig, LlavaConfig, PreTrainedConfig
 
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.config import (
     AttentionConfig,
     CacheConfig,
     DeviceConfig,
     ModelConfig,
     ParallelConfig,
     SchedulerConfig,
+    SonarConfig,
     SpeculativeConfig,
 )
-from aphrodite.config.load import LoadConfig
-from aphrodite.platforms import current_platform
-from aphrodite.transformers_utils.config import get_hf_text_config
-from aphrodite.transformers_utils.configs.extract_hidden_states import (
+from sonar.config.load import LoadConfig
+from sonar.platforms import current_platform
+from sonar.transformers_utils.config import get_hf_text_config
+from sonar.transformers_utils.configs.extract_hidden_states import (
     ExtractHiddenStatesConfig,
 )
-from aphrodite.v1.spec_decode.extract_hidden_states import ExtractHiddenStatesProposer
-from aphrodite.v1.worker.gpu_input_batch import CachedRequestState, InputBatch
+from sonar.v1.spec_decode.extract_hidden_states import ExtractHiddenStatesProposer
+from sonar.v1.worker.gpu_input_batch import CachedRequestState, InputBatch
 from tests.v1.attention.utils import (
     BatchSpec,
     create_common_attn_metadata,
@@ -59,7 +59,7 @@ def _create_proposer(
     )
 
     device = DEVICE_TYPE
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         model_config=model_config,
         cache_config=CacheConfig(),
         speculative_config=speculative_config,
@@ -73,7 +73,7 @@ def _create_proposer(
         attention_config=AttentionConfig(),
     )
 
-    return ExtractHiddenStatesProposer(aphrodite_config=aphrodite_config, device=device)
+    return ExtractHiddenStatesProposer(sonar_config=sonar_config, device=device)
 
 
 def test_proposer_initialization():
@@ -82,8 +82,8 @@ def test_proposer_initialization():
     proposer = _create_proposer(num_speculative_tokens=1, layer_ids=layer_ids)
 
     assert proposer.num_hidden_states == len(layer_ids)
-    assert proposer.aphrodite_config.speculative_config is not None
-    assert proposer.aphrodite_config.speculative_config.num_speculative_tokens == 1
+    assert proposer.sonar_config.speculative_config is not None
+    assert proposer.sonar_config.speculative_config.num_speculative_tokens == 1
 
     # Verify the hidden states buffer is correctly shaped
     expected_shape = (
@@ -109,7 +109,7 @@ def test_proposer_initialization_missing_layer_ids():
     )
 
     device = DEVICE_TYPE
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         model_config=model_config,
         cache_config=CacheConfig(),
         speculative_config=speculative_config,
@@ -124,7 +124,7 @@ def test_proposer_initialization_missing_layer_ids():
     )
 
     with pytest.raises(ValueError, match="eagle_aux_hidden_state_layer_ids must be set"):
-        ExtractHiddenStatesProposer(aphrodite_config=aphrodite_config, device=device)
+        ExtractHiddenStatesProposer(sonar_config=sonar_config, device=device)
 
 
 def test_prepare_next_token_ids_padded():

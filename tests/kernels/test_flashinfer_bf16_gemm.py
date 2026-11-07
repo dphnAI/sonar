@@ -5,8 +5,8 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from aphrodite.model_executor.layers import utils as layer_utils
-from aphrodite.utils.flashinfer import is_flashinfer_cutedsl_bf16_gemm_supported
+from sonar.model_executor.layers import utils as layer_utils
+from sonar.utils.flashinfer import is_flashinfer_cutedsl_bf16_gemm_supported
 
 
 @pytest.fixture(scope="module", autouse=True)

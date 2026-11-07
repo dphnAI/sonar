@@ -5,12 +5,12 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.v1.attention.backends.utils import get_dcp_local_seq_lens
-from aphrodite.v1.worker.cp_utils import should_skip_dcp_context_attention
+from sonar.v1.attention.backends.utils import get_dcp_local_seq_lens
+from sonar.v1.worker.cp_utils import should_skip_dcp_context_attention
 
 
 def test_cp_checks_allow_a_replicated_draft_backend_without_dcp(monkeypatch):
-    from aphrodite.v1.worker import cp_utils
+    from sonar.v1.worker import cp_utils
 
     config = SimpleNamespace(
         parallel_config=SimpleNamespace(
@@ -35,7 +35,7 @@ def test_cp_checks_allow_a_replicated_draft_backend_without_dcp(monkeypatch):
         )
     )
     layers = {"target": target, "draft": draft}
-    monkeypatch.setattr(cp_utils, "get_layers_from_aphrodite_config", lambda *args: layers)
+    monkeypatch.setattr(cp_utils, "get_layers_from_sonar_config", lambda *args: layers)
     cp_utils.check_attention_cp_compatibility(config, target_layer_names={"target"})
     with pytest.raises(AssertionError, match="MTP with cp_kv_cache_interleave_size"):
         cp_utils.check_attention_cp_compatibility(config)

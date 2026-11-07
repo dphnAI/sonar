@@ -9,10 +9,10 @@ from typing import TYPE_CHECKING
 import torch
 import torch.nn.functional as F
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 if TYPE_CHECKING:
-    from aphrodite.model_executor.layers.fused_moe.config import (
+    from sonar.model_executor.layers.fused_moe.config import (
         FusedMoEConfig,
         FusedMoEQuantConfig,
     )
@@ -56,7 +56,7 @@ class MoEActivation(Enum):
     @property
     def custom_op_name(self) -> str:
         """Maps to the CustomOp name of activations
-        in aphrodite/model_executor/layers/activation.py."""
+        in sonar/model_executor/layers/activation.py."""
         return _CUSTOM_OP_NAMES[self]
 
     def without_mul(self) -> "MoEActivation":
@@ -288,7 +288,7 @@ def silu_and_mul_with_clamp(
         up = torch.clamp(input[..., d:], min=-clamp_limit, max=clamp_limit)
         output.copy_(gate * torch.sigmoid(gate) * up)
     elif topk_ids is not None and expert_map is not None:
-        from aphrodite.model_executor.layers.fused_moe.utils import swiglu_limit_func
+        from sonar.model_executor.layers.fused_moe.utils import swiglu_limit_func
 
         swiglu_limit_func(output, input, clamp_limit, topk_ids, expert_map)
     else:
@@ -359,7 +359,7 @@ def apply_moe_activation(
         assert config.clamp_limit is not None, "SWIGLUOAI_UNINTERLEAVE requires clamp_limit"
         torch.ops._C.silu_and_mul_with_clamp(output, input, config.clamp_limit, config.alpha, config.beta)
     elif activation == MoEActivation.SWIGLUSTEP:
-        from aphrodite.model_executor.layers.activation import swiglustep_and_mul_triton
+        from sonar.model_executor.layers.activation import swiglustep_and_mul_triton
 
         swiglustep_and_mul_triton(output, input)
 

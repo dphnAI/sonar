@@ -6,9 +6,9 @@ uniformly across DP ranks."""
 
 from unittest import mock
 
-from aphrodite.config.compilation import CUDAGraphMode
-from aphrodite.v1.worker.gpu import dp_utils
-from aphrodite.v1.worker.gpu.cudagraph_utils import BatchExecutionDescriptor
+from sonar.config.compilation import CUDAGraphMode
+from sonar.v1.worker.gpu import dp_utils
+from sonar.v1.worker.gpu.cudagraph_utils import BatchExecutionDescriptor
 
 
 def _run_sync(local_allow_skip: bool, other_allow_skip: bool) -> bool:

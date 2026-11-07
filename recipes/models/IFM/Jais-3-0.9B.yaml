@@ -65,7 +65,7 @@ guide: |
   Jais-3-0.9B's `config.json` already enables YaRN, so the full 131,072-token context needs no RoPE override.
 
   ```bash
-  aphrodite serve IFM/Jais-3-0.9B \
+  sonar serve IFM/Jais-3-0.9B \
     --trust-remote-code \
     --chat-template-content-format string \
     --dtype bfloat16 \

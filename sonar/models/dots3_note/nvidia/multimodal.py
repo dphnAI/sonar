@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Aphrodite composition layer for Dots3Note image and audio encoders."""
+"""Sonar composition layer for Dots3Note image and audio encoders."""
 
 from collections.abc import Iterable
 from contextlib import contextmanager
@@ -8,21 +8,21 @@ from contextlib import contextmanager
 import torch
 from torch import nn
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.model_executor.models.interfaces import (
+from sonar.config import SonarConfig
+from sonar.model_executor.models.interfaces import (
     MultiModalEmbeddings,
     SupportsMultiModal,
     SupportsPP,
 )
-from aphrodite.model_executor.models.module_mapping import MultiModelKeys
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.models.module_mapping import MultiModelKeys
+from sonar.model_executor.models.utils import (
     AutoWeightsLoader,
     IntermediateTensors,
     WeightsMapper,
     maybe_prefix,
 )
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.transformers_utils.repo_utils import get_hf_file_to_dict
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.transformers_utils.repo_utils import get_hf_file_to_dict
 
 from ..common.processor import (
     AUDIO_END,
@@ -67,7 +67,7 @@ class Dots3NoteForCausalLM(nn.Module, SupportsMultiModal, SupportsPP):
 
     supports_encoder_tp_data = True
 
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_prefix={
             "model.": "language_model.model.",
             "lm_head.": "language_model.lm_head.",
@@ -87,11 +87,11 @@ class Dots3NoteForCausalLM(nn.Module, SupportsMultiModal, SupportsPP):
             return VIDEO_PLACEHOLDER
         raise ValueError(f"Unsupported modality: {modality}")
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__()
-        model_config = aphrodite_config.model_config
+        model_config = sonar_config.model_config
         self.config = model_config.hf_config
-        self.quant_config = aphrodite_config.quant_config
+        self.quant_config = sonar_config.quant_config
         self.multimodal_config = model_config.multimodal_config
         assert self.multimodal_config is not None
 
@@ -122,7 +122,7 @@ class Dots3NoteForCausalLM(nn.Module, SupportsMultiModal, SupportsPP):
             self.multimodal_config.get_limit_per_prompt("audio") > 0 or video_enabled
         )
 
-        with self._mark_tower_model(aphrodite_config, {"image", "audio", "video"}):
+        with self._mark_tower_model(sonar_config, {"image", "audio", "video"}):
             self.visual: DotsMoEVitModel | None
             if image_enabled:
                 assert vision_config_dict is not None
@@ -139,14 +139,14 @@ class Dots3NoteForCausalLM(nn.Module, SupportsMultiModal, SupportsPP):
             # The native encoder service casts each complete tower before
             # loading its checkpoint.  This also converts explicitly-created
             # floating buffers (for example RoPE tables and router state),
-            # which merely constructing under Aphrodite's default dtype does not.
+            # which merely constructing under Sonar's default dtype does not.
             if self.visual is not None:
                 self.visual.to(dtype=model_config.dtype)
             if self.audio_tower is not None:
                 self.audio_tower.to(dtype=model_config.dtype)
-        with self._mark_language_model(aphrodite_config):
+        with self._mark_language_model(sonar_config):
             self.language_model = Dots3NoteLanguageModelForCausalLM(
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 prefix=maybe_prefix(prefix, "language_model"),
             )
         self.make_empty_intermediate_tensors = self.language_model.make_empty_intermediate_tensors
@@ -157,9 +157,7 @@ class Dots3NoteForCausalLM(nn.Module, SupportsMultiModal, SupportsPP):
         if self.audio_tower is None:
             orig_to_new_prefix["audio_tower."] = None
         if orig_to_new_prefix:
-            self.hf_to_aphrodite_mapper = self.hf_to_aphrodite_mapper | WeightsMapper(
-                orig_to_new_prefix=orig_to_new_prefix
-            )
+            self.hf_to_sonar_mapper = self.hf_to_sonar_mapper | WeightsMapper(orig_to_new_prefix=orig_to_new_prefix)
 
     def _process_image_input(
         self,
@@ -291,7 +289,7 @@ class Dots3NoteForCausalLM(nn.Module, SupportsMultiModal, SupportsPP):
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         return AutoWeightsLoader(self).load_weights(
             weights,
-            mapper=self.hf_to_aphrodite_mapper,
+            mapper=self.hf_to_sonar_mapper,
         )
 
     def process_weights_after_loading(self) -> None:

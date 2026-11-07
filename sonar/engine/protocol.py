@@ -6,26 +6,26 @@ from collections.abc import AsyncGenerator, Iterable, Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from aphrodite.config import AphroditeConfig, ModelConfig
-from aphrodite.config.kv_events import KVEventsConfig
-from aphrodite.distributed.weight_transfer.base import (
+from sonar.config import ModelConfig, SonarConfig
+from sonar.config.kv_events import KVEventsConfig
+from sonar.distributed.weight_transfer.base import (
     WeightTransferInitRequest,
     WeightTransferUpdateRequest,
 )
-from aphrodite.inputs import EngineInput, PromptType
-from aphrodite.lora.request import LoRARequest
-from aphrodite.outputs import PoolingRequestOutput, RequestOutput
-from aphrodite.pooling_params import PoolingParams
-from aphrodite.renderers import BaseRenderer
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.tasks import SupportedTask
-from aphrodite.v1.engine import CheckpointState, EngineCoreRequest
-from aphrodite.v1.engine.input_processor import InputProcessor
-from aphrodite.v1.fault_tolerance.utils import FaultToleranceRequest, FaultToleranceResult
-from aphrodite.v1.kv_hints import KvHintsEnvelope
+from sonar.inputs import EngineInput, PromptType
+from sonar.lora.request import LoRARequest
+from sonar.outputs import PoolingRequestOutput, RequestOutput
+from sonar.pooling_params import PoolingParams
+from sonar.renderers import BaseRenderer
+from sonar.sampling_params import SamplingParams
+from sonar.tasks import SupportedTask
+from sonar.v1.engine import CheckpointState, EngineCoreRequest
+from sonar.v1.engine.input_processor import InputProcessor
+from sonar.v1.fault_tolerance.utils import FaultToleranceRequest, FaultToleranceResult
+from sonar.v1.kv_hints import KvHintsEnvelope
 
 if TYPE_CHECKING:
-    from aphrodite.v1.engine import PauseMode
+    from sonar.v1.engine import PauseMode
 
 
 @dataclass
@@ -43,7 +43,7 @@ class StreamingInput:
 class EngineClient(ABC):
     """Protocol class for Clients to Engine."""
 
-    aphrodite_config: AphroditeConfig
+    sonar_config: SonarConfig
     model_config: ModelConfig
     renderer: BaseRenderer
     input_processor: InputProcessor

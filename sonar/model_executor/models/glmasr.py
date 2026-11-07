@@ -10,33 +10,33 @@ from transformers import BatchFeature
 from transformers.models.glmasr import GlmAsrConfig, GlmAsrProcessor
 from transformers.models.whisper import WhisperFeatureExtractor
 
-from aphrodite.config import AphroditeConfig, ModelConfig, SpeechToTextConfig
-from aphrodite.config.multimodal import MultiModalDummyOptions
-from aphrodite.config.speech_to_text import SpeechToTextParams
-from aphrodite.distributed.parallel_state import get_tensor_model_parallel_world_size
-from aphrodite.inputs import ModalityData, MultiModalDataDict, PromptType, TokensPrompt
-from aphrodite.model_executor.layers.activation import get_act_fn
-from aphrodite.model_executor.layers.attention import MMEncoderAttention
-from aphrodite.model_executor.layers.linear import (
+from sonar.config import ModelConfig, SonarConfig, SpeechToTextConfig
+from sonar.config.multimodal import MultiModalDummyOptions
+from sonar.config.speech_to_text import SpeechToTextParams
+from sonar.distributed.parallel_state import get_tensor_model_parallel_world_size
+from sonar.inputs import ModalityData, MultiModalDataDict, PromptType, TokensPrompt
+from sonar.model_executor.layers.activation import get_act_fn
+from sonar.model_executor.layers.attention import MMEncoderAttention
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     QKVParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.rotary_embedding.common import ApplyRotaryEmb
-from aphrodite.model_executor.models.module_mapping import MultiModelKeys
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import (
+from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.rotary_embedding.common import ApplyRotaryEmb
+from sonar.model_executor.models.module_mapping import MultiModelKeys
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import (
     MultiModalFieldConfig,
     MultiModalKwargsItems,
 )
-from aphrodite.multimodal.parse import (
+from sonar.multimodal.parse import (
     DictEmbeddingItems,
     ModalityDataItems,
     MultiModalDataItems,
     MultiModalDataParser,
 )
-from aphrodite.multimodal.processing import (
+from sonar.multimodal.processing import (
     BaseDummyInputsBuilder,
     BaseMultiModalProcessor,
     BaseProcessingInfo,
@@ -44,11 +44,11 @@ from aphrodite.multimodal.processing import (
     PromptUpdate,
     PromptUpdateDetails,
 )
-from aphrodite.multimodal.processing.processor import HFMultiModalInputs
-from aphrodite.sequence import IntermediateTensors
-from aphrodite.tokenizers import cached_tokenizer_from_config
-from aphrodite.transformers_utils.processor import cached_processor_from_config
-from aphrodite.utils.tensor_schema import TensorSchema, TensorShape
+from sonar.multimodal.processing.processor import HFMultiModalInputs
+from sonar.sequence import IntermediateTensors
+from sonar.tokenizers import cached_tokenizer_from_config
+from sonar.transformers_utils.processor import cached_processor_from_config
+from sonar.utils.tensor_schema import TensorSchema, TensorShape
 
 from .glmasr_utils import (
     DEFAULT_CONV_PARAMS,
@@ -69,7 +69,7 @@ from .interfaces import (
 from .utils import (
     AutoWeightsLoader,
     WeightsMapper,
-    init_aphrodite_registered_model,
+    init_sonar_registered_model,
     maybe_prefix,
 )
 from .whisper import ISO639_1_SUPPORTED_LANGS, _create_fake_bias_for_k_proj
@@ -128,7 +128,7 @@ class GlmAsrEncoderRotaryEmbedding(nn.Module):
 class GlmAsrEncoderAttention(nn.Module):
     """Optimized Multi-headed Grouped Query Attention for GLM-ASR encoder.
 
-    Uses Aphrodite's QKVParallelLinear for fused projections, ApplyRotaryEmb for
+    Uses Sonar's QKVParallelLinear for fused projections, ApplyRotaryEmb for
     rotary position embeddings, and MMEncoderAttention for hardware-optimized
     attention computation with automatic backend selection.
     """
@@ -171,7 +171,7 @@ class GlmAsrEncoderAttention(nn.Module):
             prefix=f"{prefix}.o_proj",
         )
 
-        # Use Aphrodite's ApplyRotaryEmb CustomOp
+        # Use Sonar's ApplyRotaryEmb CustomOp
         # enforce_enable=True ensures the op is always enabled (important for ViT)
         rope_params = getattr(config, "rope_parameters", None)
         if rope_params:
@@ -181,7 +181,7 @@ class GlmAsrEncoderAttention(nn.Module):
         self.rotary_dim = int(self.head_dim * partial_rotary_factor)
         self.apply_rotary_emb = ApplyRotaryEmb(enforce_enable=True)
 
-        # Use Aphrodite's MMEncoderAttention for hardware-optimized attention
+        # Use Sonar's MMEncoderAttention for hardware-optimized attention
         # Automatically selects Flash Attention, SDPA, or Pallas based on device
         self.attn = MMEncoderAttention(
             num_heads=self.num_heads_per_rank,
@@ -221,7 +221,7 @@ class GlmAsrEncoderAttention(nn.Module):
         k = k.view(batch_size, seq_len, self.num_kv_heads_per_rank, self.head_dim)
         v = v.view(batch_size, seq_len, self.num_kv_heads_per_rank, self.head_dim)
 
-        # Apply rotary position embeddings using Aphrodite's ApplyRotaryEmb
+        # Apply rotary position embeddings using Sonar's ApplyRotaryEmb
         # ApplyRotaryEmb expects x: [batch, seq, heads, head_dim]
         # cos/sin: [seq_len, rotary_dim/2]
         q[..., : self.rotary_dim] = self.apply_rotary_emb(
@@ -245,7 +245,7 @@ class GlmAsrEncoderAttention(nn.Module):
 
 class GlmAsrEncoderMLP(nn.Module):
     """Optimized MLP for GLM-ASR encoder.
-    Uses Aphrodite's parallel linear layers for better performance.
+    Uses Sonar's parallel linear layers for better performance.
     """
 
     def __init__(
@@ -368,7 +368,7 @@ class _GlmAsrEncoderOutput:
 
 
 class GlmAsrEncoder(nn.Module):
-    """Optimized GLM-ASR Audio Encoder with Aphrodite native implementation.
+    """Optimized GLM-ASR Audio Encoder with Sonar native implementation.
 
     This encoder processes audio features through convolutional layers
     followed by transformer layers with rotary position embeddings.
@@ -384,7 +384,7 @@ class GlmAsrEncoder(nn.Module):
         "qkv_proj": ["q_proj", "k_proj", "v_proj"],
     }
 
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_sonar_mapper = WeightsMapper(
         orig_to_new_stacked={
             ".q_proj": (".qkv_proj", "q"),
             ".k_proj": (".qkv_proj", "k"),
@@ -491,7 +491,7 @@ class GlmAsrEncoder(nn.Module):
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         weights = _create_fake_bias_for_k_proj(weights, ".k_proj.weight")
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
 
 class GlmAsrFeatureInputs(TensorSchema):
@@ -539,7 +539,7 @@ class GlmAsrMultiModalProjector(nn.Module):
 
     This projector uses a two-layer MLP to map audio features from the
     encoder's intermediate size to the language model's hidden size.
-    Uses Aphrodite's parallel linear layers for tensor parallelism support.
+    Uses Sonar's parallel linear layers for tensor parallelism support.
 
     Architecture:
         - Linear layer: intermediate_size -> hidden_size * 2
@@ -867,23 +867,23 @@ class GlmAsrMultiModalProcessor(BaseMultiModalProcessor["GlmAsrProcessingInfo"])
 class GlmAsrForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsPP, SupportsLoRA, SupportsTranscription):
     supported_languages = ISO639_1_SUPPORTED_LANGS
 
-    hf_to_aphrodite_mapper = WeightsMapper(orig_to_new_prefix={"audio_tower.embed_positions": None})
+    hf_to_sonar_mapper = WeightsMapper(orig_to_new_prefix={"audio_tower.embed_positions": None})
 
     packed_modules_mapping = {
         "qkv_proj": ["q_proj", "k_proj", "v_proj"],
         "gate_up_proj": ["gate_proj", "up_proj"],
     }
 
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
-        multimodal_config = aphrodite_config.model_config.multimodal_config
+        config = sonar_config.model_config.hf_config
+        quant_config = sonar_config.quant_config
+        multimodal_config = sonar_config.model_config.multimodal_config
         self.config = config
         self.multimodal_config = multimodal_config
         self.quant_config = quant_config
 
-        with self._mark_tower_model(aphrodite_config, "audio"):
+        with self._mark_tower_model(sonar_config, "audio"):
             self.audio_tower = GlmAsrEncoder(
                 config.audio_config,
                 quant_config=quant_config,
@@ -895,9 +895,9 @@ class GlmAsrForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsPP, 
                 prefix=maybe_prefix(prefix, "multi_modal_projector"),
             )
 
-        with self._mark_language_model(aphrodite_config):
-            self.language_model = init_aphrodite_registered_model(
-                aphrodite_config=aphrodite_config,
+        with self._mark_language_model(sonar_config):
+            self.language_model = init_sonar_registered_model(
+                sonar_config=sonar_config,
                 hf_config=config.text_config,
                 prefix=maybe_prefix(prefix, "language_model"),
                 architectures=["LlamaForCausalLM"],
@@ -1027,7 +1027,7 @@ class GlmAsrForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsPP, 
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_sonar_mapper)
 
     @classmethod
     def _get_audio_token(cls, model_config: ModelConfig) -> str:

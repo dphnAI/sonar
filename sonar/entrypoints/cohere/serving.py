@@ -7,14 +7,14 @@
 Implements ``POST /cohere/v2/chat`` by translating the incoming Cohere v2 request
 into a standard :class:`ChatCompletionRequest` and delegating to
 :class:`OpenAIServingChat`. The actual prompt rendering is handled by
-Aphrodite's renderer pipeline (``aphrodite.renderers``):
+Sonar's renderer pipeline (``sonar.renderers``):
 
 - For Cohere Command-family models, set ``--tokenizer-mode cohere`` and the
-  :class:`aphrodite.renderers.cohere.CohereRenderer` will template the request
+  :class:`sonar.renderers.cohere.CohereRenderer` will template the request
   via the ``cohere_melody`` library (``render_cmd3`` / ``render_cmd4``)
   and surface citations through the Cohere-scoped
   :class:`CohereChatMessage` / :class:`CohereDeltaMessage` subclasses
-  (see :mod:`aphrodite.entrypoints.cohere.cohere_chat_message`).
+  (see :mod:`sonar.entrypoints.cohere.cohere_chat_message`).
 - For any other model the default Jinja-based :class:`HfRenderer` is used,
   and the endpoint behaves as a plain v2-shaped wrapper around chat
   completions.
@@ -44,14 +44,14 @@ from cohere.types import (
 from fastapi import Request
 from pydantic import BaseModel
 
-from aphrodite.engine.protocol import EngineClient
-from aphrodite.entrypoints.cohere.cohere_chat_message import (
+from sonar.engine.protocol import EngineClient
+from sonar.entrypoints.cohere.cohere_chat_message import (
     CitationSource as InternalCitationSource,
 )
-from aphrodite.entrypoints.cohere.cohere_chat_message import (
+from sonar.entrypoints.cohere.cohere_chat_message import (
     CohereChatMessage,
 )
-from aphrodite.entrypoints.cohere.protocol import (
+from sonar.entrypoints.cohere.protocol import (
     CitationEndEvent,
     CitationStartEvent,
     CohereChatV2Request,
@@ -71,12 +71,12 @@ from aphrodite.entrypoints.cohere.protocol import (
     ToolCallStartEvent,
     ToolPlanDeltaEvent,
 )
-from aphrodite.entrypoints.generate.base.protocol import (
+from sonar.entrypoints.generate.base.protocol import (
     JsonSchemaResponseFormat,
     ResponseFormat,
     StreamOptions,
 )
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionRequest,
     ChatCompletionResponse,
     ChatCompletionResponseChoice,
@@ -84,21 +84,21 @@ from aphrodite.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionToolsParam,
     ChatMessage,
 )
-from aphrodite.entrypoints.openai.chat_completion.serving import OpenAIServingChat
-from aphrodite.entrypoints.openai.models.serving import OpenAIServingModels
-from aphrodite.entrypoints.serve.engine.protocol import ErrorInfo, ErrorResponse
-from aphrodite.entrypoints.serve.exception_handling.utils import sanitize_message
-from aphrodite.entrypoints.serve.utils.request_logger import RequestLogger
-from aphrodite.parser.abstract_parser import Parser
-from aphrodite.renderers.chat_utils import ChatTemplateContentFormatOption
-from aphrodite.renderers.cohere import (
+from sonar.entrypoints.openai.chat_completion.serving import OpenAIServingChat
+from sonar.entrypoints.openai.models.serving import OpenAIServingModels
+from sonar.entrypoints.serve.engine.protocol import ErrorInfo, ErrorResponse
+from sonar.entrypoints.serve.exception_handling.utils import sanitize_message
+from sonar.entrypoints.serve.utils.request_logger import RequestLogger
+from sonar.parser.abstract_parser import Parser
+from sonar.renderers.chat_utils import ChatTemplateContentFormatOption
+from sonar.renderers.cohere import (
     MESSAGES_CITATIONS_KEY,
     POSITION_TO_SOURCE_KEY,
     TOOL_MESSAGE_V2_CONTENT_KEY,
 )
 
 if TYPE_CHECKING:
-    from aphrodite.renderers.online_renderer import OnlineRenderer
+    from sonar.renderers.online_renderer import OnlineRenderer
 
 logger = logging.getLogger(__name__)
 
@@ -141,7 +141,7 @@ _DONE_FRAME = _sse("[DONE]")
 def _emit(event: BaseModel) -> str:
     """Serialize a typed stream event into an SSE frame.
 
-    The typed event classes in ``aphrodite.entrypoints.cohere.protocol``
+    The typed event classes in ``sonar.entrypoints.cohere.protocol``
     (``MessageStartEvent``, ``ContentStartEvent``, ``CitationStartEvent``,
     ...) bake the wire-format ``type`` field into the model definition,
     so a plain ``model_dump_json()`` already carries the discriminator.
@@ -163,7 +163,7 @@ class ContentBlockType(str, Enum):
     TOOL_CALL = "tool_call"
 
 
-# Mapping of Aphrodite/OpenAI finish reasons to Cohere's enum.
+# Mapping of Sonar/OpenAI finish reasons to Cohere's enum.
 _FINISH_REASON_MAP: dict[str | None, CohereFinishReason] = {
     "stop": "COMPLETE",
     "length": "MAX_TOKENS",
@@ -175,7 +175,7 @@ _FINISH_REASON_MAP: dict[str | None, CohereFinishReason] = {
 
 
 def _map_finish_reason(reason: str | None, stop_reason: int | str | None = None) -> CohereFinishReason:
-    # Aphrodite reports both EOS and matched stop strings as finish_reason="stop".
+    # Sonar reports both EOS and matched stop strings as finish_reason="stop".
     # The latter is distinguished by the matched string in stop_reason.
     if reason == "stop" and isinstance(stop_reason, str):
         return "STOP_SEQUENCE"
@@ -224,11 +224,11 @@ class CohereServingChatV2(OpenAIServingChat):
     as ``documents``, ``safety_mode`` and ``citation_options`` via
     ``chat_template_kwargs``) and delegates to the underlying chat
     completion machinery. All Cohere-specific templating happens in the
-    renderer (:class:`aphrodite.renderers.cohere.CohereRenderer`) when the
+    renderer (:class:`sonar.renderers.cohere.CohereRenderer`) when the
     engine is started with ``--tokenizer-mode cohere``.
 
     Citations flow through ``CohereChatMessage`` / ``CohereDeltaMessage``
-    subclasses (see :mod:`aphrodite.entrypoints.cohere.cohere_chat_message`) so
+    subclasses (see :mod:`sonar.entrypoints.cohere.cohere_chat_message`) so
     the OpenAI-shared :class:`ChatMessage` / :class:`DeltaMessage` keep
     their declared schemas unchanged. Non-streaming responses pick up
     the subclass by overriding :meth:`_create_chat_message`; streaming
@@ -328,7 +328,7 @@ class CohereServingChatV2(OpenAIServingChat):
         Exposed for callers that need the converted request without
         running generation - notably the render endpoint
         (``POST /cohere/v2/chat/render``), which hands the result to
-        :meth:`aphrodite.entrypoints.scale_out.render.serving.ServingRender.render_chat_request`
+        :meth:`sonar.entrypoints.scale_out.render.serving.ServingRender.render_chat_request`
         so that Cohere requests tokenize through exactly the same path
         as ``/v1/chat/completions/render``.
         """
@@ -489,7 +489,7 @@ class CohereServingChatV2(OpenAIServingChat):
 
         # Map every content block to a plain ``{"type": "text", "text":
         # ...}`` part, mirroring the shape :meth:`_convert_user_message`
-        # emits for multi-part user content. Aphrodite's
+        # emits for multi-part user content. Sonar's
         # ``parse_chat_message_content`` collapses a text-only tool
         # part list back into ``"\n".join(...)`` on the way to the
         # renderer, so simple chat templates that expect string tool
@@ -500,8 +500,8 @@ class CohereServingChatV2(OpenAIServingChat):
         # Tool message content uses ``ToolMessageV2Content``, a union of
         # ``TextToolContent`` and ``DocumentToolContent``. The latter
         # produces ``{"type": "document", "document": {...}}`` blocks,
-        # which Aphrodite's shared ``parse_chat_message_content_parts`` in
-        # ``aphrodite/renderers/chat_utils.py`` rejects because the OpenAI
+        # which Sonar's shared ``parse_chat_message_content_parts`` in
+        # ``sonar/renderers/chat_utils.py`` rejects because the OpenAI
         # ``ChatCompletionContentPartParam`` union only knows text /
         # image / audio / etc. Emitting them anyway triggers a Pydantic
         # ``ValidatorIterator`` failure at chat-parsing time, so we
@@ -511,7 +511,7 @@ class CohereServingChatV2(OpenAIServingChat):
         # :meth:`_collect_v2_tool_message_content` forwards the
         # original v2 content blocks under
         # :data:`TOOL_MESSAGE_V2_CONTENT_KEY`, and the renderer applies
-        # :func:`aphrodite.renderers.cohere._v2_tool_content_to_melody_block`
+        # :func:`sonar.renderers.cohere._v2_tool_content_to_melody_block`
         # to produce the melody-shape ``document`` blocks cmd3/cmd4
         # tool-result rendering expects. Outbound citation binding is
         # unaffected either way: sources resolve through the
@@ -647,7 +647,7 @@ class CohereServingChatV2(OpenAIServingChat):
     ) -> None:
         """Forward Cohere-specific request fields into ``chat_template_kwargs``.
 
-        The :class:`aphrodite.renderers.cohere.CohereRenderer` consumes these
+        The :class:`sonar.renderers.cohere.CohereRenderer` consumes these
         kwargs to drive ``cohere_melody.render_cmd3`` / ``render_cmd4``.
         Other renderers ignore unknown kwargs, so this is also a no-op for
         non-cohere ``--tokenizer-mode`` settings.
@@ -705,7 +705,7 @@ class CohereServingChatV2(OpenAIServingChat):
         # emits, so citation deltas already carry SDK-shape sources by
         # the time they reach the streaming loop. See
         # ``_build_position_to_source`` for the numbering rule and
-        # ``_melody_sources_to_aphrodite`` in ``aphrodite.parser.cohere_command`` for
+        # ``_melody_sources_to_sonar`` in ``sonar.parser.cohere_command`` for
         # the consumer.
         position_to_source = cls._build_position_to_source(request)
         if position_to_source:
@@ -1087,7 +1087,7 @@ class CohereServingChatV2(OpenAIServingChat):
     ) -> ChatMessage:
         """Copy grounding citations off the unified parser onto the message.
 
-        :class:`aphrodite.parser.cohere_command.CohereCommandParser` caches the
+        :class:`sonar.parser.cohere_command.CohereCommandParser` caches the
         citations produced by its most recent unary ``parse`` call on
         ``last_unary_citations``. We surface them here on
         :class:`CohereChatMessage` so downstream response conversion can
@@ -1112,12 +1112,12 @@ class CohereServingChatV2(OpenAIServingChat):
         """Coerce ``CohereChatMessage.citations`` into the Cohere v2 wire shape.
 
         :class:`CohereChatMessage` carries a
-        ``citations: list[aphrodite...Citation] | None`` field populated by
+        ``citations: list[sonar...Citation] | None`` field populated by
         :meth:`_finalize_response_message` (which reads it off the
         unified parser's ``last_unary_citations`` cache). Sources are
         already fully resolved by the parser (see
-        :func:`_melody_sources_to_aphrodite` in
-        :mod:`aphrodite.parser.cohere_command`) using
+        :func:`_melody_sources_to_sonar` in
+        :mod:`sonar.parser.cohere_command`) using
         the position map forwarded via ``chat_template_kwargs``. This
         method's remaining job is:
 
@@ -1203,7 +1203,7 @@ class CohereServingChatV2(OpenAIServingChat):
 
         Outbound helper: forwarded to the reasoning parser via
         ``chat_template_kwargs[POSITION_TO_SOURCE_KEY]`` so
-        :func:`_melody_sources_to_aphrodite` can attach real document ids /
+        :func:`_melody_sources_to_sonar` can attach real document ids /
         types / payloads to each melody source it emits. Each entry
         carries the fully-resolved wire-shape info: ``type``
         (``"document"`` for the reserved top-level bucket 0, ``"tool"``
@@ -1308,7 +1308,7 @@ class CohereServingChatV2(OpenAIServingChat):
         :meth:`_apply_cohere_template_kwargs` stashes under
         :data:`TOOL_MESSAGE_V2_CONTENT_KEY` for the renderer to
         consume (see the constant definition in
-        :mod:`aphrodite.renderers.cohere` for why the map exists). Walks
+        :mod:`sonar.renderers.cohere` for why the map exists). Walks
         ``request.messages`` -- not the OpenAI-shape messages built by
         :meth:`_convert_messages` -- because that flattening step
         already threw away the structural distinction between text and
@@ -1322,7 +1322,7 @@ class CohereServingChatV2(OpenAIServingChat):
         Only emits an entry for a tool message whose content is a
         non-empty list of blocks; a bare-string tool message renders
         fine through the default text-block path in
-        :func:`aphrodite.renderers.cohere._content_blocks`, so no forwarded
+        :func:`sonar.renderers.cohere._content_blocks`, so no forwarded
         blocks are needed there. Returns an empty dict when there is
         nothing to forward, so the caller can use truthiness to decide
         whether to stash the key at all.
@@ -1618,10 +1618,10 @@ class CohereServingChatV2(OpenAIServingChat):
 
         The reasoning parser populates
         :class:`CohereDeltaMessage.citations` (see
-        :mod:`aphrodite.entrypoints.cohere.cohere_chat_message`) with
+        :mod:`sonar.entrypoints.cohere.cohere_chat_message`) with
         sources whose ``id`` / ``type`` / ``document`` / ``tool_output``
         are already resolved against the request's document context
-        (see :func:`_melody_sources_to_aphrodite` in the parser). This
+        (see :func:`_melody_sources_to_sonar` in the parser). This
         method only coerces to the SDK wire shape, applies the
         ``THINKING_CONTENT`` -> ``PLAN`` rewrite for non-reasoning
         models, and drops citations whose sources didn't resolve --

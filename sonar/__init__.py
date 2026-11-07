@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Aphrodite: a high-throughput and memory-efficient inference engine for LLMs."""
+"""Sonar: a high-throughput and memory-efficient inference engine for LLMs."""
 
 # The version.py should be independent library, and we always import the
 # version library first.  Such assumption is critical for some customization.
@@ -11,7 +11,7 @@ import typing
 # The environment variables override should be imported before any other
 # modules to ensure that the environment variables are set before any
 # other modules are imported.
-import aphrodite.env_override  # noqa: F401
+import sonar.env_override  # noqa: F401
 
 MODULE_ATTRS = {
     "AsyncEngineArgs": ".engine.arg_utils:AsyncEngineArgs",
@@ -39,13 +39,13 @@ MODULE_ATTRS = {
 }
 
 if typing.TYPE_CHECKING:
-    from aphrodite.engine.arg_utils import AsyncEngineArgs, EngineArgs
-    from aphrodite.engine.async_llm_engine import AsyncLLMEngine
-    from aphrodite.engine.llm_engine import LLMEngine
-    from aphrodite.entrypoints.llm import LLM
-    from aphrodite.inputs import PromptType, TextPrompt, TokensPrompt
-    from aphrodite.model_executor.models import ModelRegistry
-    from aphrodite.outputs import (
+    from sonar.engine.arg_utils import AsyncEngineArgs, EngineArgs
+    from sonar.engine.async_llm_engine import AsyncLLMEngine
+    from sonar.engine.llm_engine import LLMEngine
+    from sonar.entrypoints.llm import LLM
+    from sonar.inputs import PromptType, TextPrompt, TokensPrompt
+    from sonar.model_executor.models import ModelRegistry
+    from sonar.outputs import (
         ClassificationOutput,
         ClassificationRequestOutput,
         CompletionOutput,
@@ -57,9 +57,9 @@ if typing.TYPE_CHECKING:
         ScoringOutput,
         ScoringRequestOutput,
     )
-    from aphrodite.pooling_params import PoolingParams
-    from aphrodite.sampling_params import SamplingParams
-    from aphrodite.v1.executor.ray_utils import initialize_ray_cluster
+    from sonar.pooling_params import PoolingParams
+    from sonar.sampling_params import SamplingParams
+    from sonar.v1.executor.ray_utils import initialize_ray_cluster
 else:
 
     def __getattr__(name: str) -> typing.Any:

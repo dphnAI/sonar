@@ -21,45 +21,45 @@ import msgspec
 import pydantic
 import zmq
 
-import aphrodite.envs as envs
-from aphrodite.config import AphroditeConfig, ParallelConfig
-from aphrodite.config.pooler import POOLER_CONFIG_LOG_FIELDS
-from aphrodite.distributed import (
+import sonar.envs as envs
+from sonar.config import ParallelConfig, SonarConfig
+from sonar.config.pooler import POOLER_CONFIG_LOG_FIELDS
+from sonar.distributed import (
     cleanup_dist_env_and_memory,
     stateless_destroy_torch_distributed_process_group,
 )
-from aphrodite.distributed.ec_transfer.ec_connector.encoder_output_width import (
+from sonar.distributed.ec_transfer.ec_connector.encoder_output_width import (
     measure_encoder_output_widths,
 )
-from aphrodite.envs import enable_envs_cache
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.logger import configure_logging, init_logger
-from aphrodite.logging_utils.dump_input import dump_engine_exception
-from aphrodite.lora.request import LoRARequest
-from aphrodite.multimodal.cache import (
+from sonar.envs import enable_envs_cache
+from sonar.exceptions import SonarValidationError
+from sonar.logger import configure_logging, init_logger
+from sonar.logging_utils.dump_input import dump_engine_exception
+from sonar.lora.request import LoRARequest
+from sonar.multimodal.cache import (
     MultiModalCacheMissError,
     engine_receiver_cache_from_config,
 )
-from aphrodite.outputs import RequestError
-from aphrodite.tasks import POOLING_TASKS, SupportedTask
-from aphrodite.tracing import instrument, maybe_init_worker_tracer
-from aphrodite.transformers_utils.config import maybe_register_config_serialize_by_value
-from aphrodite.utils import numa_utils
-from aphrodite.utils.gc_utils import (
+from sonar.outputs import RequestError
+from sonar.tasks import POOLING_TASKS, SupportedTask
+from sonar.tracing import instrument, maybe_init_worker_tracer
+from sonar.transformers_utils.config import maybe_register_config_serialize_by_value
+from sonar.utils import numa_utils
+from sonar.utils.gc_utils import (
     freeze_gc_heap,
     maybe_attach_gc_debug_callback,
 )
-from aphrodite.utils.hashing import get_hash_fn_by_name
-from aphrodite.utils.network_utils import make_zmq_socket
-from aphrodite.utils.system_utils import decorate_logs, set_process_title
-from aphrodite.utils.watch_dog import get_watch_dog, start_watch_dog
-from aphrodite.v1.attention.backends.utils import resolve_kv_cache_layout
-from aphrodite.v1.core import kv_cache_utils
-from aphrodite.v1.core.kv_cache_planning import (
+from sonar.utils.hashing import get_hash_fn_by_name
+from sonar.utils.network_utils import make_zmq_socket
+from sonar.utils.system_utils import decorate_logs, set_process_title
+from sonar.utils.watch_dog import get_watch_dog, start_watch_dog
+from sonar.v1.attention.backends.utils import resolve_kv_cache_layout
+from sonar.v1.core import kv_cache_utils
+from sonar.v1.core.kv_cache_planning import (
     get_global_kv_cache_groups,
     get_kv_cache_configs,
 )
-from aphrodite.v1.core.kv_cache_utils import (
+from sonar.v1.core.kv_cache_utils import (
     BlockHash,
     frontend_block_hashes,
     generate_scheduler_kv_cache_config,
@@ -69,10 +69,10 @@ from aphrodite.v1.core.kv_cache_utils import (
     resolve_kv_cache_block_sizes,
     update_kv_cache_capacity,
 )
-from aphrodite.v1.core.sched.interface import PauseState, SchedulerInterface
-from aphrodite.v1.core.sched.output import SchedulerOutput
-from aphrodite.v1.core.single_type_kv_cache_manager import register_all_kvcache_specs
-from aphrodite.v1.engine import (
+from sonar.v1.core.sched.interface import PauseState, SchedulerInterface
+from sonar.v1.core.sched.output import SchedulerOutput
+from sonar.v1.core.single_type_kv_cache_manager import register_all_kvcache_specs
+from sonar.v1.engine import (
     EEP_NOTIFICATION_CALL_ID,
     CheckpointState,
     EEPNotificationType,
@@ -89,31 +89,31 @@ from aphrodite.v1.engine import (
     UtilityOutput,
     UtilityResult,
 )
-from aphrodite.v1.engine.tensor_ipc import TensorIpcReceiver
-from aphrodite.v1.engine.utils import (
+from sonar.v1.engine.tensor_ipc import TensorIpcReceiver
+from sonar.v1.engine.utils import (
     EngineHandshakeMetadata,
     EngineZmqAddresses,
     SignalCallback,
     get_physical_gpu_ids_for_local_dp_rank,
 )
-from aphrodite.v1.executor import Executor
-from aphrodite.v1.fault_tolerance.engine_core_sentinel import (
+from sonar.v1.executor import Executor
+from sonar.v1.fault_tolerance.engine_core_sentinel import (
     FT_UTILITY_METHOD,
     EngineCoreSentinel,
     fault_tolerant_wrapper,
 )
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.kv_cache_interface import (
     KVCacheConfig,
     get_kv_cache_spec_kind,
     is_full_attention_spec,
 )
-from aphrodite.v1.metrics.stats import SchedulerIterationDetails, SchedulerStats
-from aphrodite.v1.outputs import ModelRunnerOutput
-from aphrodite.v1.request import Request, RequestStatus
-from aphrodite.v1.serial_utils import MsgpackDecoder, MsgpackEncoder, bytestr
-from aphrodite.v1.structured_output import StructuredOutputManager
-from aphrodite.v1.utils import compute_iteration_details
-from aphrodite.version import __version__ as APHRODITE_VERSION
+from sonar.v1.metrics.stats import SchedulerIterationDetails, SchedulerStats
+from sonar.v1.outputs import ModelRunnerOutput
+from sonar.v1.request import Request, RequestStatus
+from sonar.v1.serial_utils import MsgpackDecoder, MsgpackEncoder, bytestr
+from sonar.v1.structured_output import StructuredOutputManager
+from sonar.v1.utils import compute_iteration_details
+from sonar.version import __version__ as SONAR_VERSION
 
 logger = init_logger(__name__)
 
@@ -123,7 +123,7 @@ _R = TypeVar("_R")  # Return type for collective_rpc
 
 
 class EngineCore:
-    """Inner loop of Aphrodite's Engine."""
+    """Inner loop of Sonar's Engine."""
 
     # Class-level defaults so tests can build an EngineCore with
     # object.__new__.
@@ -132,23 +132,23 @@ class EngineCore:
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         executor_class: type[Executor],
         log_stats: bool,
         executor_fail_callback: Callable | None = None,
         include_finished_set: bool = False,
     ):
         # plugins need to be loaded at the engine/scheduler level too
-        from aphrodite.plugins import load_general_plugins
+        from sonar.plugins import load_general_plugins
 
         load_general_plugins()
 
-        self.aphrodite_config = aphrodite_config
-        if not aphrodite_config.parallel_config.data_parallel_rank_local:
+        self.sonar_config = sonar_config
+        if not sonar_config.parallel_config.data_parallel_rank_local:
             logger.debug(
-                "Initializing the Aphrodite V1 engine (v%s) with config: %s",
-                APHRODITE_VERSION,
-                aphrodite_config,
+                "Initializing the Sonar V1 engine (v%s) with config: %s",
+                SONAR_VERSION,
+                sonar_config,
             )
 
         self.log_stats = log_stats
@@ -156,36 +156,36 @@ class EngineCore:
         self._weight_version = "default"
 
         # Setup Model.
-        self.model_executor = executor_class(aphrodite_config)
+        self.model_executor = executor_class(sonar_config)
         self._pooler_config_logged = False
         if executor_fail_callback is not None:
             self.model_executor.register_failure_callback(executor_fail_callback)
 
         self.available_gpu_memory_for_kv_cache = -1
 
-        if envs.APHRODITE_ELASTIC_EP_SCALE_UP_LAUNCH:
+        if envs.SONAR_ELASTIC_EP_SCALE_UP_LAUNCH:
             self._eep_scale_up_before_kv_init()
 
-        measure_encoder_output_widths(aphrodite_config, self.collective_rpc)
+        measure_encoder_output_widths(sonar_config, self.collective_rpc)
 
         # Setup KV Caches and update CacheConfig after profiling.
-        kv_cache_config = self._initialize_kv_caches(aphrodite_config)
-        self.structured_output_manager = StructuredOutputManager(aphrodite_config)
+        kv_cache_config = self._initialize_kv_caches(sonar_config)
+        self.structured_output_manager = StructuredOutputManager(sonar_config)
 
         # Setup scheduler.
-        Scheduler = aphrodite_config.scheduler_config.get_scheduler_cls()
+        Scheduler = sonar_config.scheduler_config.get_scheduler_cls()
 
         if len(kv_cache_config.kv_cache_groups) == 0:  # noqa: SIM102
             # Encoder models without KV cache don't support
             # chunked prefill. But do SSM models?
-            if aphrodite_config.scheduler_config.enable_chunked_prefill:
+            if sonar_config.scheduler_config.enable_chunked_prefill:
                 logger.warning("Disabling chunked prefill for model without KVCache")
-                aphrodite_config.scheduler_config.enable_chunked_prefill = False
+                sonar_config.scheduler_config.enable_chunked_prefill = False
 
-        scheduler_block_size, hash_block_size = resolve_kv_cache_block_sizes(kv_cache_config, aphrodite_config)
+        scheduler_block_size, hash_block_size = resolve_kv_cache_block_sizes(kv_cache_config, sonar_config)
 
         self.scheduler: SchedulerInterface = Scheduler(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             kv_cache_config=kv_cache_config,
             structured_output_manager=self.structured_output_manager,
             include_finished_set=include_finished_set,
@@ -194,14 +194,14 @@ class EngineCore:
             hash_block_size=hash_block_size,
         )
         self._initialize_effective_attention_block_size()
-        self.use_spec_decode = aphrodite_config.speculative_config is not None
-        self.check_for_draft_tokens = self.use_spec_decode or aphrodite_config.model_config.is_diffusion
+        self.use_spec_decode = sonar_config.speculative_config is not None
+        self.check_for_draft_tokens = self.use_spec_decode or sonar_config.model_config.is_diffusion
         if self.scheduler.connector is not None:  # type: ignore
             self.model_executor.init_kv_output_aggregator(self.scheduler.connector)  # type: ignore
         if self.scheduler.ec_connector is not None:  # type: ignore
             self.model_executor.init_ec_output_aggregator()
 
-        self.mm_receiver_cache = engine_receiver_cache_from_config(aphrodite_config)
+        self.mm_receiver_cache = engine_receiver_cache_from_config(sonar_config)
 
         kv_connector = self.scheduler.get_kv_connector()
         self._set_kv_connector_handshake_metadata()
@@ -210,36 +210,36 @@ class EngineCore:
         # Batch queue for scheduled batches. This enables us to asynchronously
         # schedule and execute batches, and is required by pipeline parallelism
         # to eliminate pipeline bubbles.
-        self.batch_queue_size = aphrodite_config.max_concurrent_batches
+        self.batch_queue_size = sonar_config.max_concurrent_batches
         self.batch_queue: deque[tuple[Future[ModelRunnerOutput], SchedulerOutput, Future[Any]]] | None = None
         if self.batch_queue_size > 1:
             logger.debug("Batch queue is enabled with size %d", self.batch_queue_size)
             self.batch_queue = deque(maxlen=self.batch_queue_size)
 
-        self.is_mm_encoder_only = aphrodite_config.is_mm_encoder_only
-        self.is_pooling_model = aphrodite_config.model_config.runner_type == "pooling"
+        self.is_mm_encoder_only = sonar_config.is_mm_encoder_only
+        self.is_pooling_model = sonar_config.model_config.runner_type == "pooling"
 
         self.request_block_hasher: Callable[[Request], list[BlockHash]] | None = None
         # Lets frontends hash prompt blocks; see EngineCoreRequest.block_hashes.
         self.prefix_hash_config: PrefixHashConfig | None = None
-        if aphrodite_config.cache_config.enable_prefix_caching or kv_connector is not None:
-            caching_hash_fn = get_hash_fn_by_name(aphrodite_config.cache_config.prefix_caching_hash_algo)
+        if sonar_config.cache_config.enable_prefix_caching or kv_connector is not None:
+            caching_hash_fn = get_hash_fn_by_name(sonar_config.cache_config.prefix_caching_hash_algo)
             init_none_hash(caching_hash_fn)
 
             self.request_block_hasher = get_request_block_hasher(
                 hash_block_size,
                 caching_hash_fn,
-                aphrodite_config.num_hash_lookahead_tokens,
+                sonar_config.num_hash_lookahead_tokens,
             )
             self.prefix_hash_config = PrefixHashConfig(
-                hash_algo=aphrodite_config.cache_config.prefix_caching_hash_algo,
+                hash_algo=sonar_config.cache_config.prefix_caching_hash_algo,
                 hash_block_size=hash_block_size,
                 none_hash=kv_cache_utils.NONE_HASH,
-                num_lookahead_tokens=aphrodite_config.num_hash_lookahead_tokens,
+                num_lookahead_tokens=sonar_config.num_hash_lookahead_tokens,
             )
 
         self.step_fn = self.step if self.batch_queue is None else self.step_with_batch_queue
-        self.async_scheduling = aphrodite_config.scheduler_config.async_scheduling
+        self.async_scheduling = sonar_config.scheduler_config.async_scheduling
 
         self.aborts_queue = queue.Queue[list[str]]()
 
@@ -255,11 +255,11 @@ class EngineCore:
         enable_envs_cache()
 
     @instrument(span_name="Prepare model")
-    def _initialize_kv_caches(self, aphrodite_config: AphroditeConfig) -> KVCacheConfig:
+    def _initialize_kv_caches(self, sonar_config: SonarConfig) -> KVCacheConfig:
         start = time.time()
 
         # register all kvcache specs in enginecore process.
-        register_all_kvcache_specs(aphrodite_config)
+        register_all_kvcache_specs(sonar_config)
 
         # Get all kv cache needed by the model
         kv_cache_specs = self.model_executor.get_kv_cache_specs()
@@ -271,32 +271,30 @@ class EngineCore:
         # signal into a scheduling policy: chunked prefill and prefix caching
         # both assume causal attention and would corrupt non-causal prefill.
         if any(getattr(spec, "non_causal", False) for worker_specs in kv_cache_specs for spec in worker_specs.values()):
-            if aphrodite_config.scheduler_config.enable_chunked_prefill:
+            if sonar_config.scheduler_config.enable_chunked_prefill:
                 logger.info("Disabling chunked prefill: model has non-causal attention layers.")
-                aphrodite_config.scheduler_config.enable_chunked_prefill = False
-            if aphrodite_config.cache_config.enable_prefix_caching:
+                sonar_config.scheduler_config.enable_chunked_prefill = False
+            if sonar_config.cache_config.enable_prefix_caching:
                 logger.info("Disabling prefix caching: model has non-causal attention layers.")
-                aphrodite_config.cache_config.enable_prefix_caching = False
+                sonar_config.cache_config.enable_prefix_caching = False
 
         # Resolve the KV cache layout before memory profiling: workers that
         # capture full cudagraphs initialize a minimal KV cache during it.
         # Attention-free models resolve the default so layout reads never precede
         # resolution.
         layout = resolve_kv_cache_layout(
-            aphrodite_config,
+            sonar_config,
             self.model_executor.get_supported_kv_cache_layouts(),
             [s for specs in kv_cache_specs for s in specs.values()],
         )
 
-        global_kv_cache_groups = get_global_kv_cache_groups(aphrodite_config, kv_cache_specs)
-        aphrodite_config.adjust_dcp_kv_cache_interleave_size(global_kv_cache_groups)
-        self.model_executor.set_kv_cache_layout(
-            layout.name, aphrodite_config.parallel_config.cp_kv_cache_interleave_size
-        )
+        global_kv_cache_groups = get_global_kv_cache_groups(sonar_config, kv_cache_specs)
+        sonar_config.adjust_dcp_kv_cache_interleave_size(global_kv_cache_groups)
+        self.model_executor.set_kv_cache_layout(layout.name, sonar_config.parallel_config.cp_kv_cache_interleave_size)
 
         has_kv_cache = any(kv_cache_spec for kv_cache_spec in kv_cache_specs)
         if has_kv_cache:
-            if envs.APHRODITE_ELASTIC_EP_SCALE_UP_LAUNCH:
+            if envs.SONAR_ELASTIC_EP_SCALE_UP_LAUNCH:
                 # NOTE(yongji): should already be set
                 # during _eep_scale_up_before_kv_init
                 assert self.available_gpu_memory_for_kv_cache > 0
@@ -313,23 +311,23 @@ class EngineCore:
         assert len(kv_cache_specs) == len(available_gpu_memory)
 
         # Track max_model_len before KV cache config to detect auto-fit changes
-        max_model_len_before = aphrodite_config.model_config.max_model_len
+        max_model_len_before = sonar_config.model_config.max_model_len
 
         kv_cache_configs = get_kv_cache_configs(
-            aphrodite_config, kv_cache_specs, available_gpu_memory, global_kv_cache_groups
+            sonar_config, kv_cache_specs, available_gpu_memory, global_kv_cache_groups
         )
         for kv_cache_config in kv_cache_configs:
-            kv_cache_config.kv_cache_layout = aphrodite_config.cache_config.kv_cache_layout
+            kv_cache_config.kv_cache_layout = sonar_config.cache_config.kv_cache_layout
 
         # If auto-fit reduced max_model_len, sync the new value to workers.
         # This is needed because workers were spawned before memory profiling
         # and have the original (larger) max_model_len cached.
-        max_model_len_after = aphrodite_config.model_config.max_model_len
+        max_model_len_after = sonar_config.model_config.max_model_len
         if max_model_len_after != max_model_len_before:
             self.collective_rpc("update_max_model_len", args=(max_model_len_after,))
 
         scheduler_kv_cache_config = generate_scheduler_kv_cache_config(kv_cache_configs)
-        aphrodite_config.cache_config.num_gpu_blocks = scheduler_kv_cache_config.num_blocks
+        sonar_config.cache_config.num_gpu_blocks = scheduler_kv_cache_config.num_blocks
         kv_cache_groups = scheduler_kv_cache_config.kv_cache_groups
         if kv_cache_groups:
             # Exclude groups that opt out of prefix caching (e.g. a circular
@@ -337,19 +335,17 @@ class EngineCore:
             # their small block_size would otherwise drag the global block_size
             # below the real allocator block size and desync it from mamba.
             participating = [g.kv_cache_spec.block_size for g in kv_cache_groups if g.kv_cache_spec.prefix_cacheable]
-            aphrodite_config.cache_config.block_size = min(
+            sonar_config.cache_config.block_size = min(
                 participating if participating else [g.kv_cache_spec.block_size for g in kv_cache_groups]
             )
-            update_kv_cache_capacity(aphrodite_config, scheduler_kv_cache_config)
+            update_kv_cache_capacity(sonar_config, scheduler_kv_cache_config)
 
-        aphrodite_config.validate_block_size()
+        sonar_config.validate_block_size()
 
-        scheduler_block_size, hash_block_size = resolve_kv_cache_block_sizes(
-            scheduler_kv_cache_config, aphrodite_config
-        )
+        scheduler_block_size, hash_block_size = resolve_kv_cache_block_sizes(scheduler_kv_cache_config, sonar_config)
         cache_hit_alignment_tokens = resolve_cache_hit_alignment_tokens(
             scheduler_kv_cache_config,
-            aphrodite_config,
+            sonar_config,
             scheduler_block_size,
             hash_block_size,
         )
@@ -361,21 +357,21 @@ class EngineCore:
             kv_cache_config.cache_hit_alignment_tokens = cache_hit_alignment_tokens
 
         self.model_executor.initialize_from_config(kv_cache_configs)
-        kv_transfer_config = aphrodite_config.kv_transfer_config
+        kv_transfer_config = sonar_config.kv_transfer_config
         if (
             kv_transfer_config is not None
             and kv_transfer_config.has_connector("SimpleCPUOffloadConnector")
-            and aphrodite_config.cache_config.enable_prefix_caching
+            and sonar_config.cache_config.enable_prefix_caching
         ):
             aligned_num_cpu_blocks = self.model_executor.get_simple_cpu_offload_num_blocks()
             assert aligned_num_cpu_blocks is not None, "SimpleCPUOffloadConnector workers must report their block count"
-            aphrodite_config.cache_config.simple_cpu_offload_num_blocks = aligned_num_cpu_blocks
-        if not envs.APHRODITE_ELASTIC_EP_SCALE_UP_LAUNCH:
+            sonar_config.cache_config.simple_cpu_offload_num_blocks = aligned_num_cpu_blocks
+        if not envs.SONAR_ELASTIC_EP_SCALE_UP_LAUNCH:
             self.model_executor.compile_or_warm_up_model()
 
         elapsed = time.time() - start
-        compile_time = aphrodite_config.compilation_config.compilation_time
-        encoder_compile_time = aphrodite_config.compilation_config.encoder_compilation_time
+        compile_time = sonar_config.compilation_config.compilation_time
+        encoder_compile_time = sonar_config.compilation_config.encoder_compilation_time
         if encoder_compile_time > 0:
             logger.info_once(
                 "init engine (profile, create kv cache, warmup model) took "
@@ -400,7 +396,7 @@ class EngineCore:
         return scheduler_kv_cache_config
 
     def _initialize_effective_attention_block_size(self) -> None:
-        cache_config = self.aphrodite_config.cache_config
+        cache_config = self.sonar_config.cache_config
         cache_config.effective_attention_block_size = None
         cache_manager = getattr(self.scheduler, "kv_cache_manager", None)
         if cache_manager is None:
@@ -421,10 +417,10 @@ class EngineCore:
         if self._pooler_config_logged:
             return
 
-        model_config = self.aphrodite_config.model_config
+        model_config = self.sonar_config.model_config
         pooler_config = model_config.pooler_config
         if (
-            self.aphrodite_config.parallel_config.data_parallel_rank_local
+            self.sonar_config.parallel_config.data_parallel_rank_local
             or model_config.runner_type != "pooling"
             or pooler_config is None
         ):
@@ -459,7 +455,7 @@ class EngineCore:
 
     def get_kv_cache_group_metadata(self) -> list[dict[str, int | str | None]]:
         """Return serializable KV cache metadata for external event consumers
-        (e.g., Dynamo). This function has no call sites within Aphrodite but needs to
+        (e.g., Dynamo). This function has no call sites within Sonar but needs to
         be kept.
         """
         kv_cache_config = getattr(self.scheduler, "kv_cache_config", None)
@@ -529,14 +525,14 @@ class EngineCore:
             # error from execute_model itself.
 
             # NOTE: This method is exception-free
-            dump_engine_exception(self.aphrodite_config, scheduler_output, self.scheduler.make_stats())
+            dump_engine_exception(self.sonar_config, scheduler_output, self.scheduler.make_stats())
             raise err
 
     @contextmanager
     def capture_iteration_details(
         self, scheduler_output: SchedulerOutput | None
     ) -> Generator[SchedulerIterationDetails | None, None, None]:
-        enable_details = self.aphrodite_config.observability_config.enable_logging_iteration_details
+        enable_details = self.sonar_config.observability_config.enable_logging_iteration_details
         if not self.log_stats or not enable_details:
             yield None
             return
@@ -1105,7 +1101,7 @@ class EngineCoreProc(EngineCore):
     @instrument(span_name="EngineCoreProc init")
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         local_client: bool,
         handshake_address: str,
         executor_class: type[Executor],
@@ -1136,7 +1132,7 @@ class EngineCoreProc(EngineCore):
             handshake_address,
             identity,
             local_client,
-            aphrodite_config,
+            sonar_config,
             client_handshake_address,
         ) as addresses:
             # Set up data parallel environment.
@@ -1147,9 +1143,7 @@ class EngineCoreProc(EngineCore):
                 self.has_coordinator,
                 self.frontend_stats_publish_address,
             )
-            internal_dp_balancing = (
-                self.has_coordinator and not aphrodite_config.parallel_config.data_parallel_external_lb
-            )
+            internal_dp_balancing = self.has_coordinator and not sonar_config.parallel_config.data_parallel_external_lb
             # Only publish request queue stats to coordinator for "internal"
             # and "hybrid" LB modes.
             self.publish_dp_lb_stats = internal_dp_balancing
@@ -1157,10 +1151,10 @@ class EngineCoreProc(EngineCore):
 
             self.addresses = addresses
             self.process_input_queue_block = True
-            self._init_data_parallel(aphrodite_config)
+            self._init_data_parallel(sonar_config)
 
             super().__init__(
-                aphrodite_config,
+                sonar_config,
                 executor_class,
                 log_stats,
                 executor_fail_callback,
@@ -1168,11 +1162,11 @@ class EngineCoreProc(EngineCore):
             )
 
             # Initialize fault tolerance settings.
-            self.enable_fault_tolerance = aphrodite_config.parallel_config.enable_fault_tolerance
+            self.enable_fault_tolerance = sonar_config.parallel_config.enable_fault_tolerance
             if self.enable_fault_tolerance:
                 self.ft_sentinel = EngineCoreSentinel(
                     engine=self,
-                    parallel_config=aphrodite_config.parallel_config,
+                    parallel_config=sonar_config.parallel_config,
                 )
 
             # Background Threads and Queues for IO. These enable us to
@@ -1213,7 +1207,7 @@ class EngineCoreProc(EngineCore):
                 logger.info("Waiting for READY message from DP Coordinator...")
 
             # Completes once the drain does, which for DP happens in the busy loop.
-            if aphrodite_config.model_config.checkpoint_prepare_on_startup and (refusal := self.checkpoint_prepare()):
+            if sonar_config.model_config.checkpoint_prepare_on_startup and (refusal := self.checkpoint_prepare()):
                 raise RuntimeError(refusal)
 
     @contextmanager
@@ -1222,7 +1216,7 @@ class EngineCoreProc(EngineCore):
         handshake_address: str,
         identity: bytes,
         local_client: bool,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         client_handshake_address: str | None,
     ) -> Generator[EngineZmqAddresses, None, None]:
         """Perform startup handshakes.
@@ -1255,8 +1249,8 @@ class EngineCoreProc(EngineCore):
             identity,
             is_local,
             headless,
-            aphrodite_config,
-            aphrodite_config.parallel_config,
+            sonar_config,
+            sonar_config.parallel_config,
         )
         if client_handshake_address is None:
             # We only need to handshake with one party.
@@ -1266,7 +1260,7 @@ class EngineCoreProc(EngineCore):
             # We need to handshake with rank 0 front-end and our colocated frontend.
             assert local_client
             local_handshake = self._perform_handshake(
-                input_ctx, client_handshake_address, identity, True, False, aphrodite_config
+                input_ctx, client_handshake_address, identity, True, False, sonar_config
             )
             with handshake as addresses, local_handshake as client_addresses:
                 # 1. Obtain DP Coordinator zmq address and DP process group address
@@ -1278,7 +1272,7 @@ class EngineCoreProc(EngineCore):
                 yield addresses
 
         # Update config which may have changed from the handshake
-        aphrodite_config.__post_init__()
+        sonar_config.__post_init__()
 
     @contextmanager
     def _perform_handshake(
@@ -1288,7 +1282,7 @@ class EngineCoreProc(EngineCore):
         identity: bytes,
         local_client: bool,
         headless: bool,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         parallel_config_to_update: ParallelConfig | None = None,
     ) -> Generator[EngineZmqAddresses, None, None]:
         with make_zmq_socket(
@@ -1310,12 +1304,12 @@ class EngineCoreProc(EngineCore):
                 "headless": headless,
             }
             # Include config hash for DP configuration validation
-            if aphrodite_config.parallel_config.data_parallel_size > 1:
-                ready_msg["parallel_config_hash"] = aphrodite_config.parallel_config.compute_hash()
-            if aphrodite_config.parallel_config.enable_elastic_ep:
-                ready_msg["coord_store_port"] = aphrodite_config.parallel_config._coord_store_port
-                ready_msg["elastic_ep_max_dp_size"] = aphrodite_config.parallel_config.elastic_ep_max_dp_size
-                ready_msg["num_redundant_experts"] = aphrodite_config.parallel_config.eplb_config.num_redundant_experts
+            if sonar_config.parallel_config.data_parallel_size > 1:
+                ready_msg["parallel_config_hash"] = sonar_config.parallel_config.compute_hash()
+            if sonar_config.parallel_config.enable_elastic_ep:
+                ready_msg["coord_store_port"] = sonar_config.parallel_config._coord_store_port
+                ready_msg["elastic_ep_max_dp_size"] = sonar_config.parallel_config.elastic_ep_max_dp_size
+                ready_msg["num_redundant_experts"] = sonar_config.parallel_config.eplb_config.num_redundant_experts
 
             handshake_socket.send(msgspec.msgpack.encode(ready_msg))
 
@@ -1346,11 +1340,11 @@ class EngineCoreProc(EngineCore):
         init_bytes = handshake_socket.recv()
         num_redundant_experts: int | None = None
         if (
-            envs.APHRODITE_ELASTIC_EP_SCALE_UP_LAUNCH
+            envs.SONAR_ELASTIC_EP_SCALE_UP_LAUNCH
             and parallel_config is not None
             and parallel_config.data_parallel_external_lb
         ):
-            from aphrodite.distributed.elastic_ep.external_elastic_ep import (
+            from sonar.distributed.elastic_ep.external_elastic_ep import (
                 ExternalElasticEPScaleUpHandshakeMetadata,
             )
 
@@ -1373,8 +1367,8 @@ class EngineCoreProc(EngineCore):
     @staticmethod
     def run_engine_core(*args, dp_rank: int = 0, local_dp_rank: int = 0, **kwargs):
         """Launch EngineCore busy loop in background process."""
-        aphrodite_config: AphroditeConfig = kwargs["aphrodite_config"]
-        if logging_config := getattr(aphrodite_config, "logging_config", None):
+        sonar_config: SonarConfig = kwargs["sonar_config"]
+        if logging_config := getattr(sonar_config, "logging_config", None):
             configure_logging(logging_config)
 
         # Ensure we can serialize transformer config after spawning
@@ -1384,7 +1378,7 @@ class EngineCoreProc(EngineCore):
         signal_callback: SignalCallback | None = None
         clean_shutdown = False
         try:
-            parallel_config: ParallelConfig = aphrodite_config.parallel_config
+            parallel_config: ParallelConfig = sonar_config.parallel_config
             data_parallel = parallel_config.data_parallel_size > 1 or dp_rank > 0
             if data_parallel:
                 parallel_config.data_parallel_rank_local = local_dp_rank
@@ -1392,20 +1386,18 @@ class EngineCoreProc(EngineCore):
             else:
                 process_title = "EngineCore"
             set_process_title(process_title)
-            maybe_init_worker_tracer("aphrodite.engine_core", "engine_core", process_title)
+            maybe_init_worker_tracer("sonar.engine_core", "engine_core", process_title)
             decorate_logs()
             if parallel_config.numa_bind:
                 numa_utils.log_current_affinity_state(process_title)
 
-            if data_parallel and aphrodite_config.kv_transfer_config is not None:
+            if data_parallel and sonar_config.kv_transfer_config is not None:
                 # modify the engine_id and append the dp_rank to it to ensure
                 # that the kv_transfer_config is unique for each DP rank.
-                aphrodite_config.kv_transfer_config.engine_id = (
-                    f"{aphrodite_config.kv_transfer_config.engine_id}_dp{dp_rank}"
-                )
+                sonar_config.kv_transfer_config.engine_id = f"{sonar_config.kv_transfer_config.engine_id}_dp{dp_rank}"
                 logger.debug(
                     "Setting kv_transfer_config.engine_id to %s",
-                    aphrodite_config.kv_transfer_config.engine_id,
+                    sonar_config.kv_transfer_config.engine_id,
                 )
 
             # declare engine core as None and register signal handler before
@@ -1455,7 +1447,7 @@ class EngineCoreProc(EngineCore):
             signal.signal(signal.SIGINT, signal_handler)
 
             parallel_config.data_parallel_index = dp_rank
-            if data_parallel and aphrodite_config.model_config.is_moe:
+            if data_parallel and sonar_config.model_config.is_moe:
                 # Set data parallel rank for this engine process.
                 parallel_config.data_parallel_rank = dp_rank
                 engine_core = DPEngineCoreProc(*args, **kwargs)
@@ -1478,7 +1470,7 @@ class EngineCoreProc(EngineCore):
             # later signal can still wake an idle busy loop.
             signal_callback = SignalCallback(wakeup_engine)
 
-            start_watch_dog(f"engine_{dp_rank}", aphrodite_config.watchdog_config, logger)
+            start_watch_dog(f"engine_{dp_rank}", sonar_config.watchdog_config, logger)
             engine_core.run_busy_loop()
 
         except SystemExit as e:
@@ -1488,7 +1480,7 @@ class EngineCoreProc(EngineCore):
                 and engine_core is not None
                 and engine_core.shutdown_state == EngineShutdownState.SHUTTING_DOWN
                 and not engine_core.has_work()
-                and engine_core.aphrodite_config.shutdown_timeout == 0
+                and engine_core.sonar_config.shutdown_timeout == 0
             )
             raise
         except Exception as e:
@@ -1506,7 +1498,7 @@ class EngineCoreProc(EngineCore):
             if engine_core is not None:
                 engine_core.shutdown()
             if clean_shutdown:
-                from aphrodite.platforms import current_platform
+                from sonar.platforms import current_platform
 
                 if current_platform.is_rocm():
                     # Cleanup above already unfreezes and collects the heap.
@@ -1514,7 +1506,7 @@ class EngineCoreProc(EngineCore):
                     # scan during finalization; process exit reclaims it.
                     gc.freeze()
 
-    def _init_data_parallel(self, aphrodite_config: AphroditeConfig):
+    def _init_data_parallel(self, sonar_config: SonarConfig):
         pass
 
     def has_work(self) -> bool:
@@ -1613,7 +1605,7 @@ class EngineCoreProc(EngineCore):
             return True
 
         if self.shutdown_state == EngineShutdownState.REQUESTED:
-            shutdown_timeout = self.aphrodite_config.shutdown_timeout
+            shutdown_timeout = self.sonar_config.shutdown_timeout
             mode = "abort" if shutdown_timeout == 0 else "drain"
 
             logger.info(
@@ -1757,56 +1749,54 @@ class EngineCoreProc(EngineCore):
         # Wait until msg sent by the daemon before shutdown.
         self.output_thread.join(timeout=5.0)
         if self.output_thread.is_alive():
-            logger.fatal("Aphrodite shutdown signal from EngineCore failed to send. Please report this issue.")
+            logger.fatal("Sonar shutdown signal from EngineCore failed to send. Please report this issue.")
 
     def _make_ready_response(self) -> EngineCoreReadyResponse:
-        parallel_config = self.aphrodite_config.parallel_config
-        scheduler_config = self.aphrodite_config.scheduler_config
+        parallel_config = self.sonar_config.parallel_config
+        scheduler_config = self.sonar_config.scheduler_config
         return EngineCoreReadyResponse(
-            max_model_len=self.aphrodite_config.model_config.max_model_len,
-            num_gpu_blocks=self.aphrodite_config.cache_config.num_gpu_blocks or 0,
-            block_size=self.aphrodite_config.cache_config.block_size,
-            mamba_block_size=self.aphrodite_config.cache_config.mamba_block_size,
-            effective_attention_block_size=(self.aphrodite_config.cache_config.effective_attention_block_size),
+            max_model_len=self.sonar_config.model_config.max_model_len,
+            num_gpu_blocks=self.sonar_config.cache_config.num_gpu_blocks or 0,
+            block_size=self.sonar_config.cache_config.block_size,
+            mamba_block_size=self.sonar_config.cache_config.mamba_block_size,
+            effective_attention_block_size=(self.sonar_config.cache_config.effective_attention_block_size),
             dp_stats_address=self.frontend_stats_publish_address,
-            dtype=str(self.aphrodite_config.model_config.dtype).removeprefix("torch."),
-            aphrodite_version=APHRODITE_VERSION,
+            dtype=str(self.sonar_config.model_config.dtype).removeprefix("torch."),
+            sonar_version=SONAR_VERSION,
             world_size=parallel_config.world_size,
             data_parallel_size=parallel_config.data_parallel_size,
-            kv_cache_size_tokens=self.aphrodite_config.cache_config.kv_cache_size_tokens,
-            kv_cache_max_concurrency=self.aphrodite_config.cache_config.kv_cache_max_concurrency,
+            kv_cache_size_tokens=self.sonar_config.cache_config.kv_cache_size_tokens,
+            kv_cache_max_concurrency=self.sonar_config.cache_config.kv_cache_max_concurrency,
             tensor_parallel_size=parallel_config.tensor_parallel_size,
             pipeline_parallel_size=parallel_config.pipeline_parallel_size,
             decode_context_parallel_size=parallel_config.decode_context_parallel_size,
             data_parallel_rank=self.engine_index,
             max_num_seqs=scheduler_config.max_num_seqs,
             max_num_batched_tokens=scheduler_config.max_num_batched_tokens,
-            instance_id=self.aphrodite_config.instance_id,
-            supports_lora=self.aphrodite_config.lora_config is not None,
-            max_loras=(
-                self.aphrodite_config.lora_config.max_loras if self.aphrodite_config.lora_config is not None else 0
-            ),
+            instance_id=self.sonar_config.instance_id,
+            supports_lora=self.sonar_config.lora_config is not None,
+            max_loras=(self.sonar_config.lora_config.max_loras if self.sonar_config.lora_config is not None else 0),
             kv_events_config=self.scheduler.get_kv_event_publisher_config(),
             weight_transfer_backend=(
-                self.aphrodite_config.weight_transfer_config.backend
-                if self.aphrodite_config.weight_transfer_config is not None
+                self.sonar_config.weight_transfer_config.backend
+                if self.sonar_config.weight_transfer_config is not None
                 else None
             ),
-            enable_sleep_mode=self.aphrodite_config.model_config.enable_sleep_mode,
-            dphn_network_enabled=self.aphrodite_config.dphn_network_config is not None,
+            enable_sleep_mode=self.sonar_config.model_config.enable_sleep_mode,
+            dphn_network_enabled=self.sonar_config.dphn_network_config is not None,
             supports_draft_weight_updates=(
                 self.model_executor.supports_draft_weight_updates()
-                if self.aphrodite_config.weight_transfer_config is not None
+                if self.sonar_config.weight_transfer_config is not None
                 else False
             ),
             coord_store_port=parallel_config._coord_store_port,
             coordinator_input_address=self.addresses.coordinator_input,
             coordinator_output_address=self.addresses.coordinator_output,
-            aphrodite_config=(
+            sonar_config=(
                 # fallback=str is needed to handle e.g. torch.dtype, as in the
                 # Python `/server_info`.
-                pydantic.TypeAdapter(AphroditeConfig).dump_python(self.aphrodite_config, mode="json", fallback=str)
-                if envs.APHRODITE_SERVER_DEV_MODE
+                pydantic.TypeAdapter(SonarConfig).dump_python(self.sonar_config, mode="json", fallback=str)
+                if envs.SONAR_SERVER_DEV_MODE
                 else None
             ),
             prefix_hash_config=self.prefix_hash_config,
@@ -1884,7 +1874,7 @@ class EngineCoreProc(EngineCore):
                             # drops the stale entry, client resends with data).
                             self._handle_mm_cache_miss(req, e)
                             continue
-                        except AphroditeValidationError as e:
+                        except SonarValidationError as e:
                             # Note(arpera):
                             # Currently we validate in engine core
                             # only if request uses the same structured output backend
@@ -2025,7 +2015,7 @@ class EngineCoreProc(EngineCore):
         logger.exception("Unexpected error pre-processing request %s", request.request_id)
         self._send_error_outputs_to_client([request.request_id], request.client_index)
 
-    def _handle_request_validation_error(self, request: EngineCoreRequest, error: AphroditeValidationError) -> None:
+    def _handle_request_validation_error(self, request: EngineCoreRequest, error: SonarValidationError) -> None:
         logger.info("Request %s failed validation: %s", request.request_id, error)
         self._send_finish_outputs_to_client(
             [request.request_id],
@@ -2101,7 +2091,7 @@ class EngineCoreProc(EngineCore):
             return None
         if state != CheckpointState.RUNNING:
             return f"Cannot prepare while the checkpoint state is {state}"
-        if not self.aphrodite_config.model_config.enable_sleep_mode:
+        if not self.sonar_config.model_config.enable_sleep_mode:
             return "Preparing for a checkpoint requires --enable-sleep-mode"
         if self.model_executor.is_sleeping:
             return "Preparing for a checkpoint requires an awake engine"
@@ -2172,7 +2162,7 @@ class DPEngineCoreProc(EngineCoreProc):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         local_client: bool,
         handshake_address: str,
         executor_class: type[Executor],
@@ -2180,11 +2170,11 @@ class DPEngineCoreProc(EngineCoreProc):
         client_handshake_address: str | None = None,
         tensor_queue: Queue | None = None,
     ):
-        assert aphrodite_config.model_config.is_moe, "DPEngineCoreProc should only be used for MoE models"
+        assert sonar_config.model_config.is_moe, "DPEngineCoreProc should only be used for MoE models"
 
-        scheduler_config = aphrodite_config.scheduler_config
+        scheduler_config = sonar_config.scheduler_config
         self.prefill_schedule_interval = scheduler_config.prefill_schedule_interval
-        self.dp_sync_interval = aphrodite_config.parallel_config.dp_sync_interval
+        self.dp_sync_interval = sonar_config.parallel_config.dp_sync_interval
 
         # Counts forward-passes of the model so that we can synchronize
         # finished with DP peers every N steps.
@@ -2199,14 +2189,14 @@ class DPEngineCoreProc(EngineCoreProc):
         self.pending_pause = False
         self.ignore_start_dp_wave = False
 
-        from aphrodite.distributed.elastic_ep.elastic_state import ElasticEPScalingState
+        from sonar.distributed.elastic_ep.elastic_state import ElasticEPScalingState
 
         self.eep_scaling_state: ElasticEPScalingState | None = None
 
         # Initialize the engine.
-        dp_rank = aphrodite_config.parallel_config.data_parallel_rank
+        dp_rank = sonar_config.parallel_config.data_parallel_rank
         super().__init__(
-            aphrodite_config,
+            sonar_config,
             local_client,
             handshake_address,
             executor_class,
@@ -2216,9 +2206,9 @@ class DPEngineCoreProc(EngineCoreProc):
             tensor_queue=tensor_queue,
         )
 
-    def _init_data_parallel(self, aphrodite_config: AphroditeConfig):
+    def _init_data_parallel(self, sonar_config: SonarConfig):
         # Configure GPUs and stateless process group for data parallel.
-        parallel_config = aphrodite_config.parallel_config
+        parallel_config = sonar_config.parallel_config
         dp_rank = parallel_config.data_parallel_rank
         dp_size = parallel_config.data_parallel_size
         local_dp_rank = parallel_config.data_parallel_rank_local
@@ -2354,7 +2344,7 @@ class DPEngineCoreProc(EngineCoreProc):
                 if state.is_complete():
                     if state.worker_type == "removing":
                         raise SystemExit
-                    if state.worker_type == "new" and self.aphrodite_config.parallel_config.data_parallel_external_lb:
+                    if state.worker_type == "new" and self.sonar_config.parallel_config.data_parallel_external_lb:
                         # An independently launched rank has no external utility
                         # caller to join the post-commit resume barrier.
                         self.resume_scheduler()
@@ -2416,7 +2406,7 @@ class DPEngineCoreProc(EngineCoreProc):
         if self.step_counter != 1 and self.step_counter % self.dp_sync_interval != 0:
             return True
 
-        parallel_config = self.aphrodite_config.parallel_config
+        parallel_config = self.sonar_config.parallel_config
         has_unfinished, pause_consensus = parallel_config.sync_dp_state(
             self.dp_group,
             has_unfinished=local_unfinished,
@@ -2436,9 +2426,9 @@ class DPEngineCoreProc(EngineCoreProc):
     def reinitialize_distributed(self, reconfig_request: ReconfigureDistributedRequest) -> str:
         from copy import deepcopy
 
-        from aphrodite.distributed.elastic_ep.elastic_state import ElasticEPScalingState
+        from sonar.distributed.elastic_ep.elastic_state import ElasticEPScalingState
 
-        new_parallel_config = deepcopy(self.aphrodite_config.parallel_config)
+        new_parallel_config = deepcopy(self.sonar_config.parallel_config)
         old_dp_size = new_parallel_config.data_parallel_size
         new_parallel_config.data_parallel_size = reconfig_request.new_data_parallel_size
         if reconfig_request.new_data_parallel_rank != ReconfigureRankType.KEEP_CURRENT_RANK:
@@ -2457,7 +2447,7 @@ class DPEngineCoreProc(EngineCoreProc):
         state = ElasticEPScalingState(
             model_executor=self.model_executor,
             engine_core=self,
-            aphrodite_config=self.aphrodite_config,
+            sonar_config=self.sonar_config,
             new_parallel_config=new_parallel_config,
             worker_type="removing" if is_shutdown else "existing",
             scale_type="scale_down" if is_scale_down else "scale_up",
@@ -2485,7 +2475,7 @@ class DPEngineCoreProc(EngineCoreProc):
         2) Both scale up/down: to notify EngineCoreClient that existing
            core engines have already switched to the new parallel setup.
         """
-        dp_rank = self.aphrodite_config.parallel_config.data_parallel_rank
+        dp_rank = self.sonar_config.parallel_config.data_parallel_rank
         notification_data = (notification_type.value, dp_rank)
         outputs = EngineCoreOutputs(
             utility_output=UtilityOutput(
@@ -2504,14 +2494,14 @@ class DPEngineCoreProc(EngineCoreProc):
                 socket.send_multipart(encoder.encode(outputs))
 
     def _eep_scale_up_before_kv_init(self):
-        from aphrodite.distributed.elastic_ep.elastic_state import ElasticEPScalingState
+        from sonar.distributed.elastic_ep.elastic_state import ElasticEPScalingState
 
         self.ignore_start_dp_wave = True
         state = ElasticEPScalingState(
             model_executor=self.model_executor,
             engine_core=self,
-            aphrodite_config=self.aphrodite_config,
-            new_parallel_config=self.aphrodite_config.parallel_config,
+            sonar_config=self.sonar_config,
+            new_parallel_config=self.sonar_config.parallel_config,
             worker_type="new",
             scale_type="scale_up",
             reconfig_request=None,
@@ -2528,24 +2518,24 @@ class EngineCoreActorMixin:
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         addresses: EngineZmqAddresses,
         dp_rank: int = 0,
         local_dp_rank: int = 0,
     ):
-        if logging_config := getattr(aphrodite_config, "logging_config", None):
+        if logging_config := getattr(sonar_config, "logging_config", None):
             configure_logging(logging_config)
 
         # Initialize tracer for distributed tracing if configured.
         maybe_init_worker_tracer(
-            instrumenting_module_name="aphrodite.engine_core",
+            instrumenting_module_name="sonar.engine_core",
             process_kind="engine_core",
             process_name=f"DPEngineCoreActor_DP{dp_rank}",
         )
 
         self.addresses = addresses
-        aphrodite_config.parallel_config.data_parallel_index = dp_rank
-        aphrodite_config.parallel_config.data_parallel_rank_local = local_dp_rank
+        sonar_config.parallel_config.data_parallel_index = dp_rank
+        sonar_config.parallel_config.data_parallel_rank_local = local_dp_rank
 
         self._set_nixl_side_channel_host()
 
@@ -2556,17 +2546,17 @@ class EngineCoreActorMixin:
         # DPEngineCoreActor)
         # 2) Ray sets CUDA_VISIBLE_DEVICES based on num_gpus configuration
         # To bypass 2, we need to also set
-        # RAY_EXPERIMENTAL_NOSET_CUDA_VISIBLE_DEVICES, but Aphrodite workers created
+        # RAY_EXPERIMENTAL_NOSET_CUDA_VISIBLE_DEVICES, but Sonar workers created
         # thereafter would have CUDA_VISIBLE_DEVICES set, which is sticky:
         # https://github.com/ray-project/ray/blob/e752fc319ddedd9779a0989b6d3613909bad75c9/python/ray/_private/worker.py#L456 # noqa: E501
-        # This is problematic because when the Aphrodite worker (a Ray actor)
+        # This is problematic because when the Sonar worker (a Ray actor)
         # executes a task, it indexes into the sticky CUDA_VISIBLE_DEVICES
         # rather than directly using the GPU ID, potentially resulting in
         # index out of bounds error. See:
         # https://github.com/ray-project/ray/pull/40461/files#diff-31e8159767361e4bc259b6d9883d9c0d5e5db780fcea4a52ead4ee3ee4a59a78R1860 # noqa: E501
         # and get_accelerator_ids_for_accelerator_resource() in worker.py
         # of ray.
-        self._set_visible_devices(aphrodite_config, local_dp_rank)
+        self._set_visible_devices(sonar_config, local_dp_rank)
 
     @staticmethod
     def _set_nixl_side_channel_host():
@@ -2574,29 +2564,29 @@ class EngineCoreActorMixin:
 
         # The driver-side value is excluded from Ray actor env propagation.
         # Fill in an actor-local default while preserving explicit overrides.
-        os.environ.setdefault("APHRODITE_NIXL_SIDE_CHANNEL_HOST", ray.util.get_node_ip_address())
+        os.environ.setdefault("SONAR_NIXL_SIDE_CHANNEL_HOST", ray.util.get_node_ip_address())
 
-    def _set_visible_devices(self, aphrodite_config: AphroditeConfig, local_dp_rank: int):
-        from aphrodite.platforms import current_platform
+    def _set_visible_devices(self, sonar_config: SonarConfig, local_dp_rank: int):
+        from sonar.platforms import current_platform
 
         device_control_env_var = current_platform.device_control_env_var
-        self._set_assigned_physical_gpu_ids(aphrodite_config, local_dp_rank, device_control_env_var)
+        self._set_assigned_physical_gpu_ids(sonar_config, local_dp_rank, device_control_env_var)
 
     def _set_assigned_physical_gpu_ids(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         local_dp_rank: int,
         device_control_env_var: str,
     ):
-        world_size = aphrodite_config.parallel_config.world_size
+        world_size = sonar_config.parallel_config.world_size
         try:
             physical_gpu_ids = get_physical_gpu_ids_for_local_dp_rank(
                 device_control_env_var,
                 local_dp_rank,
                 world_size,
-                user_assigned_gpu_ids=(aphrodite_config.parallel_config.assigned_physical_gpu_ids),
+                user_assigned_gpu_ids=(sonar_config.parallel_config.assigned_physical_gpu_ids),
             )
-            aphrodite_config.parallel_config.assigned_physical_gpu_ids = physical_gpu_ids
+            sonar_config.parallel_config.assigned_physical_gpu_ids = physical_gpu_ids
         except IndexError as e:
             raise Exception(
                 f"Error computing assigned_physical_gpu_ids: "
@@ -2611,7 +2601,7 @@ class EngineCoreActorMixin:
         handshake_address: str,
         identity: bytes,
         local_client: bool,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         client_handshake_address: str | None,
     ):
         """For Ray, we don't need to actually perform handshake.
@@ -2648,7 +2638,7 @@ class DPMoEEngineCoreActor(EngineCoreActorMixin, DPEngineCoreProc):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         local_client: bool,
         addresses: EngineZmqAddresses,
         executor_class: type[Executor],
@@ -2656,10 +2646,10 @@ class DPMoEEngineCoreActor(EngineCoreActorMixin, DPEngineCoreProc):
         dp_rank: int = 0,
         local_dp_rank: int = 0,
     ):
-        aphrodite_config.parallel_config.data_parallel_rank = dp_rank
+        sonar_config.parallel_config.data_parallel_rank = dp_rank
 
-        EngineCoreActorMixin.__init__(self, aphrodite_config, addresses, dp_rank, local_dp_rank)
-        DPEngineCoreProc.__init__(self, aphrodite_config, local_client, "", executor_class, log_stats)
+        EngineCoreActorMixin.__init__(self, sonar_config, addresses, dp_rank, local_dp_rank)
+        DPEngineCoreProc.__init__(self, sonar_config, local_client, "", executor_class, log_stats)
 
 
 class EngineCoreActor(EngineCoreActorMixin, EngineCoreProc):
@@ -2667,7 +2657,7 @@ class EngineCoreActor(EngineCoreActorMixin, EngineCoreProc):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         local_client: bool,
         addresses: EngineZmqAddresses,
         executor_class: type[Executor],
@@ -2675,11 +2665,11 @@ class EngineCoreActor(EngineCoreActorMixin, EngineCoreProc):
         dp_rank: int = 0,
         local_dp_rank: int = 0,
     ):
-        aphrodite_config.parallel_config.reconfigure_for_independent_dp_rank()
-        EngineCoreActorMixin.__init__(self, aphrodite_config, addresses, dp_rank, local_dp_rank)
+        sonar_config.parallel_config.reconfigure_for_independent_dp_rank()
+        EngineCoreActorMixin.__init__(self, sonar_config, addresses, dp_rank, local_dp_rank)
         EngineCoreProc.__init__(
             self,
-            aphrodite_config,
+            sonar_config,
             local_client,
             "",
             executor_class,
